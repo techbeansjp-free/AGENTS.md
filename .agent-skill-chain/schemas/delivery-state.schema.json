@@ -1,0 +1,518 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/techbeansjp-free/AGENTS.md/.agent-skill-chain/schemas/delivery-state.schema.json",
+  "title": "PR delivery状態",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "revision",
+    "state",
+    "create",
+    "pr",
+    "merge",
+    "step11",
+    "reconciliation"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "agent-skill-chain/delivery-state/v1"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "state": {
+      "enum": [
+        "create-prepared",
+        "pr-bound",
+        "merge-prepared",
+        "merge-observed",
+        "step11-recorded",
+        "reconciliation-required"
+      ]
+    },
+    "create": { "$ref": "#/$defs/create" },
+    "pr": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/pr" }]
+    },
+    "merge": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/merge" }]
+    },
+    "step11": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/step11" }]
+    },
+    "reconciliation": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/reconciliation" }]
+    }
+  },
+  "$defs": {
+    "oid": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "instant": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "repository": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "create": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "issue",
+        "issueUrl",
+        "headRef",
+        "headSha",
+        "baseRef",
+        "baseSha",
+        "bodyClosingDigest",
+        "preparedAt",
+        "dispatchClaimedAt"
+      ],
+      "properties": {
+        "repository": { "$ref": "#/$defs/repository" },
+        "issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "issueUrl": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[^/\\s]+/[^/\\s]+/issues/[1-9][0-9]*$"
+        },
+        "headRef": { "type": "string", "minLength": 1 },
+        "headSha": { "$ref": "#/$defs/oid" },
+        "baseRef": { "type": "string", "minLength": 1 },
+        "baseSha": { "$ref": "#/$defs/oid" },
+        "bodyClosingDigest": { "$ref": "#/$defs/digest" },
+        "preparedAt": { "$ref": "#/$defs/instant" },
+        "dispatchClaimedAt": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/instant" }]
+        }
+      }
+    },
+    "pr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "url", "boundAt"],
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[^/\\s]+/[^/\\s]+/pull/[1-9][0-9]*$"
+        },
+        "boundAt": { "$ref": "#/$defs/instant" }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "prNumber",
+        "prUrl",
+        "headSha",
+        "issue",
+        "issueUrl",
+        "bodyClosingDigest",
+        "providerState",
+        "providerRequest",
+        "providerMergedAt",
+        "observedAt",
+        "observationId",
+        "mergeCommitSha"
+      ],
+      "properties": {
+        "repository": { "$ref": "#/$defs/repository" },
+        "prNumber": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "prUrl": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[^/\\s]+/[^/\\s]+/pull/[1-9][0-9]*$"
+        },
+        "headSha": { "$ref": "#/$defs/oid" },
+        "issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "issueUrl": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[^/\\s]+/[^/\\s]+/issues/[1-9][0-9]*$"
+        },
+        "bodyClosingDigest": { "$ref": "#/$defs/digest" },
+        "providerState": { "enum": ["merge-requested", "merged"] },
+        "providerRequest": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/autoMergeRequest" },
+            { "$ref": "#/$defs/mergeQueueRequest" }
+          ]
+        },
+        "providerMergedAt": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/instant" }]
+        },
+        "observedAt": { "$ref": "#/$defs/instant" },
+        "observationId": { "$ref": "#/$defs/digest" },
+        "mergeCommitSha": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/oid" }]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "providerState": { "const": "merged" } },
+            "required": ["providerState"]
+          },
+          "then": {
+            "properties": {
+              "providerMergedAt": { "$ref": "#/$defs/instant" },
+              "providerRequest": {
+                "oneOf": [
+                  { "type": "null" },
+                  { "$ref": "#/$defs/autoMergeRequest" },
+                  { "$ref": "#/$defs/mergeQueueRequest" }
+                ]
+              },
+              "mergeCommitSha": { "$ref": "#/$defs/oid" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "providerState": { "const": "merge-requested" }
+            },
+            "required": ["providerState"]
+          },
+          "then": {
+            "properties": {
+              "providerMergedAt": { "type": "null" },
+              "providerRequest": {
+                "oneOf": [
+                  { "$ref": "#/$defs/autoMergeRequest" },
+                  { "$ref": "#/$defs/mergeQueueRequest" }
+                ]
+              },
+              "mergeCommitSha": { "type": "null" }
+            }
+          }
+        }
+      ]
+    },
+    "autoMergeRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "requestedAt", "method", "headSha", "baseSha"],
+      "properties": {
+        "kind": { "const": "auto-merge" },
+        "requestedAt": { "$ref": "#/$defs/instant" },
+        "method": { "enum": ["merge", "squash", "rebase"] },
+        "headSha": { "$ref": "#/$defs/oid" },
+        "baseSha": { "$ref": "#/$defs/oid" }
+      }
+    },
+    "mergeQueueRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "requestId",
+        "requestedAt",
+        "queueState",
+        "headSha",
+        "baseSha"
+      ],
+      "properties": {
+        "kind": { "const": "merge-queue" },
+        "requestId": { "type": "string", "minLength": 1 },
+        "requestedAt": { "$ref": "#/$defs/instant" },
+        "queueState": {
+          "enum": [
+            "AWAITING_CHECKS",
+            "LOCKED",
+            "MERGEABLE",
+            "QUEUED",
+            "UNMERGEABLE"
+          ]
+        },
+        "headSha": { "$ref": "#/$defs/oid" },
+        "baseSha": { "$ref": "#/$defs/oid" }
+      }
+    },
+    "merge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "authorizedHeadSha",
+        "authorizedBaseRef",
+        "authorizedBaseSha",
+        "trustedPolicyCommitSha",
+        "implementationCommitSha",
+        "reviewArtifactPath",
+        "reviewArtifactDigest",
+        "ciRunId",
+        "reviewId",
+        "reviewEvidenceId",
+        "intentId",
+        "preparedAt",
+        "dispatchClaimedAt",
+        "observation"
+      ],
+      "properties": {
+        "method": { "enum": ["merge", "squash", "rebase"] },
+        "authorizedHeadSha": { "$ref": "#/$defs/oid" },
+        "authorizedBaseRef": { "type": "string", "minLength": 1 },
+        "authorizedBaseSha": { "$ref": "#/$defs/oid" },
+        "trustedPolicyCommitSha": { "$ref": "#/$defs/oid" },
+        "implementationCommitSha": { "$ref": "#/$defs/oid" },
+        "reviewArtifactPath": {
+          "type": "string",
+          "pattern": "^(?:docs/reviews/|\\.agent-skill-chain/reviews/).+"
+        },
+        "reviewArtifactDigest": { "$ref": "#/$defs/digest" },
+        "ciRunId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "reviewId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "reviewEvidenceId": { "$ref": "#/$defs/digest" },
+        "intentId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32,64}$"
+        },
+        "preparedAt": { "$ref": "#/$defs/instant" },
+        "dispatchClaimedAt": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/instant" }]
+        },
+        "observation": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/observation" }]
+        }
+      }
+    },
+    "step11": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "recordedAt", "journalDigest", "evidenceId"],
+      "properties": {
+        "outcome": { "enum": ["pull-request", "merged"] },
+        "recordedAt": { "$ref": "#/$defs/instant" },
+        "journalDigest": { "$ref": "#/$defs/digest" },
+        "evidenceId": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "reconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "reason", "enteredAt"],
+      "properties": {
+        "phase": { "enum": ["create", "merge"] },
+        "reason": { "type": "string", "minLength": 1 },
+        "enteredAt": { "$ref": "#/$defs/instant" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "state": { "const": "create-prepared" } },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "pr": { "type": "null" },
+          "merge": { "type": "null" },
+          "step11": { "type": "null" },
+          "reconciliation": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "state": { "const": "pr-bound" } },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "pr": { "$ref": "#/$defs/pr" },
+          "merge": { "type": "null" },
+          "step11": { "type": "null" },
+          "reconciliation": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "state": { "const": "merge-prepared" } },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "pr": { "$ref": "#/$defs/pr" },
+          "merge": {
+            "allOf": [
+              { "$ref": "#/$defs/merge" },
+              {
+                "properties": { "observation": { "type": "null" } }
+              }
+            ]
+          },
+          "step11": { "type": "null" },
+          "reconciliation": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "state": { "const": "merge-observed" } },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "pr": { "$ref": "#/$defs/pr" },
+          "merge": {
+            "allOf": [
+              { "$ref": "#/$defs/merge" },
+              {
+                "properties": {
+                  "observation": { "$ref": "#/$defs/observation" }
+                }
+              }
+            ]
+          },
+          "step11": { "type": "null" },
+          "reconciliation": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "state": { "const": "step11-recorded" } },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "pr": { "$ref": "#/$defs/pr" },
+          "step11": { "$ref": "#/$defs/step11" },
+          "reconciliation": { "type": "null" }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "merge": { "type": "null" },
+              "step11": {
+                "allOf": [
+                  { "$ref": "#/$defs/step11" },
+                  { "properties": { "outcome": { "const": "pull-request" } } }
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "merge": {
+                "allOf": [
+                  { "$ref": "#/$defs/merge" },
+                  {
+                    "properties": {
+                      "observation": {
+                        "allOf": [
+                          { "$ref": "#/$defs/observation" },
+                          {
+                            "properties": {
+                              "providerState": { "const": "merged" },
+                              "mergeCommitSha": { "$ref": "#/$defs/oid" }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "step11": {
+                "allOf": [
+                  { "$ref": "#/$defs/step11" },
+                  { "properties": { "outcome": { "const": "merged" } } }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": { "const": "reconciliation-required" }
+        },
+        "required": ["state"]
+      },
+      "then": {
+        "properties": {
+          "step11": { "type": "null" },
+          "reconciliation": { "$ref": "#/$defs/reconciliation" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": { "const": "reconciliation-required" },
+          "reconciliation": {
+            "properties": { "phase": { "const": "create" } },
+            "required": ["phase"]
+          }
+        },
+        "required": ["state", "reconciliation"]
+      },
+      "then": {
+        "properties": {
+          "pr": { "type": "null" },
+          "merge": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": { "const": "reconciliation-required" },
+          "reconciliation": {
+            "properties": { "phase": { "const": "merge" } },
+            "required": ["phase"]
+          }
+        },
+        "required": ["state", "reconciliation"]
+      },
+      "then": {
+        "properties": {
+          "pr": { "$ref": "#/$defs/pr" },
+          "merge": {
+            "allOf": [
+              { "$ref": "#/$defs/merge" },
+              {
+                "properties": { "observation": { "type": "null" } }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

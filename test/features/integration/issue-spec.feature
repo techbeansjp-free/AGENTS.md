@@ -43,6 +43,12 @@ Feature: Issue stagingとsystem specificationを安全に統合する
     Then validationはinvalidである
     And errorにplaceholderが含まれる
 
+  Scenario: SCN-INT-ISSUE-006 staging prefixは実行環境によらず日本標準時を使う
+    Given local time比較用の同一instantがある
+    When UTC環境とAsia/Tokyo環境のissue stagingを作成する
+    Then UTCのprefixは"20260823_003045"である
+    And Asia/Tokyoのprefixは"20260823_003045"である
+
   Scenario: SCN-INT-SPEC-001 新規CLI projectはcodeより先に体系化したsystem specificationを生成する
     Given 空の新規project directoryがある
     When CLI project bootstrapをapplyする

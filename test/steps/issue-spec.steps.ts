@@ -18,12 +18,14 @@ interface IssueSpecWorld extends WorkflowWorld {
   specIndex: string;
   specValidation?: ReturnType<typeof validateSpecs>;
   title: string;
+  timezoneInstant: Date;
+  timezoneStagingNames: Record<string, string>;
   validGlossary: ReturnType<typeof validateSpecs>;
 }
 
 const { Given, When, Then } = stepDefinitions<IssueSpecWorld>();
 
-const fixedNow = new Date("2026-08-23T01:00:00Z");
+const fixedNow = new Date("2026-08-22T15:30:45Z");
 
 Given("GitHub remoteを持たない一時repositoryがある", function () {
   this.root = this.initRepo();
@@ -138,6 +140,34 @@ Then("errorにplaceholderが含まれる", function () {
       error.includes("placeholder"),
     ),
   );
+});
+
+Given("local time比較用の同一instantがある", function () {
+  this.timezoneInstant = fixedNow;
+});
+When(/^UTC環境とAsia\/Tokyo環境のissue stagingを作成する$/u, function () {
+  const originalTimezone = process.env.TZ;
+  this.timezoneStagingNames = {};
+  try {
+    for (const timezone of ["UTC", "Asia/Tokyo"] as const) {
+      process.env.TZ = timezone;
+      const issue = createIssueStaging(this.temp(), {
+        title: "timezone",
+        answers: this.answers,
+        now: this.timezoneInstant,
+      });
+      this.timezoneStagingNames[timezone] = path.basename(issue.path);
+    }
+  } finally {
+    if (originalTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTimezone;
+  }
+});
+Then("UTCのprefixは{string}である", function (expected: string) {
+  assert.ok(this.timezoneStagingNames.UTC.startsWith(`${expected}_`));
+});
+Then(/^Asia\/Tokyoのprefixは"([^"]+)"である$/u, function (expected: string) {
+  assert.ok(this.timezoneStagingNames["Asia/Tokyo"].startsWith(`${expected}_`));
 });
 
 When(

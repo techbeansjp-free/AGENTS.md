@@ -20,3 +20,18 @@ Feature: PR作成後のworkflow journal記録を復旧可能にする
     Given ワークフローStep単体検査の準備がある
     When "SCN-UNIT-PRJRNL-004"の単体検査を実行する
     Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-PRJRNL-005 merge要求後の記録失敗はmerge再実行を禁止する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-PRJRNL-005"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-PRJRNL-006 明示stagingが別repositoryまたはIssueならPR作成前に拒否する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-PRJRNL-006"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-PRJRNL-007 別projectまたはsymlink祖先の明示stagingをPR作成前に拒否する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-PRJRNL-007"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる

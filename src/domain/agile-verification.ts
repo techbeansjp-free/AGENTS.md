@@ -1,4 +1,5 @@
 import { isRecord } from "../types.js";
+import { POC_HIGH_RISK_IDS, QUICK_DISQUALIFIER_IDS } from "./mode.js";
 
 export type ChangeType =
   | "bug-fix"
@@ -282,8 +283,10 @@ export function selectVerificationSet(
 }
 
 export interface ImplementationDiscovery {
+  discoveryId: string;
   workflowMode: "full" | "quick" | "poc";
   modeDisqualifiers: readonly ModeDisqualifierEvidence[];
+  changedContractKinds: readonly ChangedContractKind[];
   changesGoal: boolean;
   changesScope: boolean;
   changesAcceptanceCriteria: boolean;
@@ -295,6 +298,31 @@ export interface ModeDisqualifierEvidence {
   id: string;
   evidence: string;
 }
+
+export type ChangedContractKind =
+  | "domain-invariant"
+  | "requirement"
+  | "interface"
+  | "data"
+  | "design-responsibility"
+  | "non-functional"
+  | "operations";
+
+export const CHANGED_CONTRACT_KINDS: readonly ChangedContractKind[] =
+  Object.freeze([
+    "domain-invariant",
+    "requirement",
+    "interface",
+    "data",
+    "design-responsibility",
+    "non-functional",
+    "operations",
+  ]);
+
+const CANONICAL_MODE_DISQUALIFIER_IDS: ReadonlySet<string> = new Set([
+  ...QUICK_DISQUALIFIER_IDS,
+  ...POC_HIGH_RISK_IDS,
+]);
 
 function parseModeDisqualifiers(
   value: unknown,
@@ -313,6 +341,10 @@ function parseModeDisqualifiers(
       if (typeof evidence !== "string" || evidence.trim() === "")
         throw new Error(`${label}.evidenceは空でない文字列が必要です`);
       const normalizedId = id.trim();
+      if (!CANONICAL_MODE_DISQUALIFIER_IDS.has(normalizedId))
+        throw new Error(
+          `実装中発見入力.modeDisqualifiersの未知idを拒否しました: ${normalizedId}`,
+        );
       if (ids.has(normalizedId))
         throw new Error(
           `実装中発見入力.modeDisqualifiersの重複idを拒否しました: ${normalizedId}`,
@@ -323,12 +355,40 @@ function parseModeDisqualifiers(
   );
 }
 
+function parseChangedContractKinds(
+  value: unknown,
+): readonly ChangedContractKind[] {
+  if (!Array.isArray(value))
+    throw new Error("実装中発見入力.changedContractKindsは配列が必要です");
+  const seen = new Set<ChangedContractKind>();
+  const kinds: ChangedContractKind[] = [];
+  for (const candidate of value as unknown[]) {
+    if (
+      typeof candidate !== "string" ||
+      !CHANGED_CONTRACT_KINDS.some((kind) => kind === candidate)
+    )
+      throw new Error(
+        `実装中発見入力.changedContractKindsの未知値を拒否しました: ${String(candidate)}`,
+      );
+    const kind = candidate as ChangedContractKind;
+    if (seen.has(kind))
+      throw new Error(
+        `実装中発見入力.changedContractKindsの重複値を拒否しました: ${kind}`,
+      );
+    seen.add(kind);
+    kinds.push(kind);
+  }
+  return Object.freeze(kinds);
+}
+
 export function parseImplementationDiscoveryInput(
   value: unknown,
 ): ImplementationDiscovery {
   const input = exactInputObject(value, "実装中発見入力", [
+    "discoveryId",
     "workflowMode",
     "modeDisqualifiers",
+    "changedContractKinds",
     "changesGoal",
     "changesScope",
     "changesAcceptanceCriteria",
@@ -341,9 +401,18 @@ export function parseImplementationDiscoveryInput(
     input.workflowMode !== "poc"
   )
     throw new Error("実装中発見入力.workflowModeが不正です");
+  if (
+    typeof input.discoveryId !== "string" ||
+    !/^DISC-[A-Z0-9][A-Z0-9._-]{0,122}$/u.test(input.discoveryId)
+  )
+    throw new Error(
+      "実装中発見入力.discoveryIdはDISC-で始まる安定IDが必要です",
+    );
   return Object.freeze({
+    discoveryId: input.discoveryId,
     workflowMode: input.workflowMode,
     modeDisqualifiers: parseModeDisqualifiers(input.modeDisqualifiers),
+    changedContractKinds: parseChangedContractKinds(input.changedContractKinds),
     changesGoal: requiredBoolean(input, "changesGoal", "実装中発見入力"),
     changesScope: requiredBoolean(input, "changesScope", "実装中発見入力"),
     changesAcceptanceCriteria: requiredBoolean(
@@ -371,20 +440,30 @@ export type DiscoveryDisposition =
   | "stop-or-promote-full";
 
 export interface DiscoveryAssessment {
+  discoveryId: string;
   workflowMode: ImplementationDiscovery["workflowMode"];
   modeDisqualifiers: readonly ModeDisqualifierEvidence[];
   disposition: DiscoveryDisposition;
   affectedArtifacts: readonly string[];
+  promotionArtifacts?: readonly string[];
   requiredRecordFields: readonly string[];
 }
 
 const DISCOVERY_RECORD_FIELDS = Object.freeze([
+  "discoveryId",
   "fact",
   "impact",
   "decision",
   "action",
   "verification",
   "specificationUpdate",
+]);
+
+const FULL_CONTRACT_ARTIFACTS = Object.freeze([
+  "00_要求定義.md",
+  "01_要件定義.md",
+  "02_設計.md",
+  "03_実装計画.md",
 ]);
 
 export function assessImplementationDiscovery(
@@ -400,9 +479,11 @@ export function assessImplementationDiscovery(
     discovery.changesAcceptanceCriteria ||
     discovery.expandsSecurityBoundary ||
     discovery.introducesIrreversibleOperation ||
+    discovery.changedContractKinds.length > 0 ||
     discovery.modeDisqualifiers.length > 0;
   if (!contractChanged)
     return {
+      discoveryId: discovery.discoveryId,
       workflowMode,
       modeDisqualifiers,
       disposition: "continue",
@@ -416,15 +497,14 @@ export function assessImplementationDiscovery(
       discovery.introducesIrreversibleOperation ||
       discovery.modeDisqualifiers.length > 0;
     return {
+      discoveryId: discovery.discoveryId,
       workflowMode,
       modeDisqualifiers,
       disposition: mustPromote
         ? "promote-to-full"
         : "rebaseline-affected-contracts",
       affectedArtifacts: Object.freeze(
-        mustPromote
-          ? ["00_要求定義.md", "01_要件定義.md", "02_設計.md", "03_実装計画.md"]
-          : ["00_要求定義.md"],
+        mustPromote ? FULL_CONTRACT_ARTIFACTS : ["00_要求定義.md"],
       ),
       requiredRecordFields: DISCOVERY_RECORD_FIELDS,
     };
@@ -436,16 +516,14 @@ export function assessImplementationDiscovery(
       discovery.introducesIrreversibleOperation ||
       discovery.modeDisqualifiers.length > 0;
     return {
+      discoveryId: discovery.discoveryId,
       workflowMode,
       modeDisqualifiers,
       disposition: unsafeForPoc
         ? "stop-or-promote-full"
         : "rebaseline-affected-contracts",
-      affectedArtifacts: Object.freeze(
-        unsafeForPoc
-          ? ["00_要求定義.md", "01_要件定義.md", "02_設計.md", "03_実装計画.md"]
-          : ["00_要求定義.md"],
-      ),
+      affectedArtifacts: Object.freeze(unsafeForPoc ? [] : ["00_要求定義.md"]),
+      ...(unsafeForPoc ? { promotionArtifacts: FULL_CONTRACT_ARTIFACTS } : {}),
       requiredRecordFields: DISCOVERY_RECORD_FIELDS,
     };
   }
@@ -459,6 +537,7 @@ export function assessImplementationDiscovery(
     discovery.changesAcceptanceCriteria ||
     discovery.expandsSecurityBoundary ||
     discovery.introducesIrreversibleOperation ||
+    discovery.changedContractKinds.length > 0 ||
     discovery.modeDisqualifiers.length > 0
   ) {
     affected.add("01_要件定義.md");
@@ -466,6 +545,7 @@ export function assessImplementationDiscovery(
     affected.add("03_実装計画.md");
   }
   return {
+    discoveryId: discovery.discoveryId,
     workflowMode,
     modeDisqualifiers,
     disposition: "rebaseline-affected-contracts",

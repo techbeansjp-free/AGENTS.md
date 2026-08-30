@@ -18,6 +18,7 @@ import {
   listStagingArtifacts,
   readStoredStagingRecord,
   STAGING_RECORD_FILE,
+  withStagingMutationLock,
   type StoredStagingRecord,
 } from "./staging.js";
 import {
@@ -240,8 +241,12 @@ function hasUnresolvedPlaceholder(text: string): boolean {
   );
 }
 
-function timestamp(date: Date): string {
-  return date.toISOString().replace(/[-:]/g, "").replace("T", "_").slice(0, 15);
+function jstTimestamp(date: Date): string {
+  if (Number.isNaN(date.getTime())) throw new RangeError("Invalid time value");
+  const japan = new Date(date.getTime() + 9 * 60 * 60 * 1_000);
+  const pad = (value: number, width = 2): string =>
+    String(value).padStart(width, "0");
+  return `${pad(japan.getUTCFullYear(), 4)}${pad(japan.getUTCMonth() + 1)}${pad(japan.getUTCDate())}_${pad(japan.getUTCHours())}${pad(japan.getUTCMinutes())}${pad(japan.getUTCSeconds())}`;
 }
 
 function requirementDocument(
@@ -349,7 +354,7 @@ export function createIssueStaging(
     ".agent-skill-chain",
     "tmp",
     "issues",
-    `${timestamp(options.now)}_${slug}`,
+    `${jstTimestamp(options.now)}_${slug}`,
   );
   publishDirectoryAtomic(finalPath, (temporary) => {
     const decidedAt = options.now.toISOString();
@@ -440,13 +445,16 @@ export function createIssueStaging(
  * 同期記録の書き込み可否を、**同期の副作用より前に**判定できる部分だけで確かめる。
  *
  * **不整合を後で拒否すると、Issueは同期済みなのにcommandが失敗する**（Issue #994）。
- * 判定できるのは配置・symlink・modeとcheckpointの対応までで、body digestは
+ * 配置・symlink・modeとcheckpointの対応に加え、`promotion-active`は
+ * 昇格前のabsolute trackerと再同期対象の完全一致まで判定する。body digestは
  * 同期後にしか確かめられない。呼び出し側が事前検査に使い、`recordStagingSync`も
- * 同じ関数を通るため、二重の規則を持たない。
+ * 同じ関数を通るため、trackerの抜け道を作らない。
  */
 export function assertStagingSyncTarget(
   stagingPath: string,
   checkpoint: number,
+  target?: Readonly<{ repository: string; issue: number }>,
+  options: Readonly<{ allowPromotionStep4?: boolean }> = {},
 ): StoredStagingRecord {
   const resolved = path.resolve(stagingPath);
   const repositoryRoot = path.dirname(
@@ -470,25 +478,75 @@ export function assertStagingSyncTarget(
     throw new Error("同期記録の対象にsymlink祖先を使用できません");
   const current = readStoredStagingRecord(resolved);
   const expectedCheckpoint = current.mode === "full" ? 8 : 4;
-  if (checkpoint !== expectedCheckpoint)
+  const promotionStep4 =
+    options.allowPromotionStep4 === true &&
+    current.mode === "full" &&
+    current.state === "promotion-active" &&
+    checkpoint === 4;
+  if (checkpoint !== expectedCheckpoint && !promotionStep4)
     throw new Error(
       `mode=${current.mode}の最終同期checkpointはStep ${expectedCheckpoint}です`,
     );
+  if (current.state === "promotion-active") {
+    if (
+      target === undefined ||
+      !/^[^/\s]+\/[^/\s]+$/u.test(target.repository) ||
+      !Number.isSafeInteger(target.issue) ||
+      target.issue <= 0
+    )
+      throw new Error(
+        "promotion-activeの再同期には元GitHub IssueのrepositoryとIssue番号が必要です",
+      );
+    const expectedTracker = `https://github.com/${target.repository}/issues/${target.issue}`;
+    if (current.tracker !== expectedTracker)
+      throw new Error(
+        `promotion-activeは元Issueだけに再同期できます: 記録値=${current.tracker ?? "なし"} 対象=${expectedTracker}`,
+      );
+  }
   return current;
+}
+
+export interface StagingSyncInput {
+  tracker: string;
+  checkpoint: number;
+  syncedAt: string;
+  bodyDigest: string;
+  readBackDigest: string;
 }
 
 export function recordStagingSync(
   stagingPath: string,
-  input: {
-    tracker: string;
-    checkpoint: number;
-    syncedAt: string;
-    bodyDigest: string;
-    readBackDigest: string;
-  },
+  input: StagingSyncInput,
 ): StoredStagingRecord {
   const resolved = path.resolve(stagingPath);
-  const current = assertStagingSyncTarget(resolved, input.checkpoint);
+  return withStagingMutationLock(resolved, () =>
+    recordStagingSyncLocked(resolved, input),
+  );
+}
+
+function recordStagingSyncLocked(
+  resolved: string,
+  input: StagingSyncInput,
+): StoredStagingRecord {
+  if (
+    !/^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/[1-9]\d*$/u.test(
+      input.tracker,
+    )
+  )
+    throw new Error("trackerはabsolute GitHub Issue URLが必要です");
+  const absoluteTracker =
+    /^https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/issues\/([1-9]\d*)$/u.exec(
+      input.tracker,
+    );
+  const target = absoluteTracker
+    ? {
+        repository: absoluteTracker[1]!,
+        issue: Number(absoluteTracker[2]),
+      }
+    : undefined;
+  const current = assertStagingSyncTarget(resolved, input.checkpoint, target);
+  if (current.state === "promotion-active" && input.tracker !== current.tracker)
+    throw new Error("promotion-activeの同期結果trackerが元Issueと一致しません");
   const expectedCheckpoint = current.mode === "full" ? 8 : 4;
   if (!/^[a-f0-9]{64}$/u.test(input.bodyDigest))
     throw new Error("bodyDigestは64桁SHA-256でなければなりません");
@@ -497,12 +555,6 @@ export function recordStagingSync(
     input.bodyDigest !== input.readBackDigest
   )
     throw new Error("書き込み後読み取りbody digestが同期内容と一致しません");
-  if (
-    !/^(?:https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/[1-9]\d*|#?[1-9]\d*)$/u.test(
-      input.tracker,
-    )
-  )
-    throw new Error("trackerはGitHub Issue URLまたはIssue番号が必要です");
   const syncedAt = Date.parse(input.syncedAt);
   if (
     !Number.isFinite(syncedAt) ||

@@ -34,6 +34,7 @@ interface PullRequestInput {
   relatedIssues?: number[];
   head: string;
   base: string;
+  baseSha?: string;
   repository: string;
   /** 配布templateの構造を満たすPR本文。**自由形式の本文で代替しない。** */
   body: string;
@@ -42,6 +43,48 @@ interface PullRequestInput {
   trustedPolicy?: Policy;
   candidatePolicy?: Policy;
 }
+export interface PullRequestReadBack {
+  number?: number;
+  url?: string;
+  body?: string;
+  headRefName?: string;
+  baseRefName?: string;
+  headRefOid?: string;
+  baseRefOid?: string;
+  closingIssuesReferences?: Array<{ number?: number; url?: string }>;
+}
+export type CreatePullRequestResult =
+  | {
+      state: "preview";
+      preview: {
+        operation: "pr.create";
+        authorityStatus: string;
+        repository: string;
+        issue: number;
+        head: string;
+        headSha: string;
+        base: string;
+        baseSha: string;
+        title: string;
+        body: string;
+      };
+      url: undefined;
+    }
+  | {
+      state: "rollback_required";
+      url: string;
+      reason: string;
+      observation?: PullRequestReadBack;
+      preview?: undefined;
+      next: string;
+    }
+  | {
+      state: "waiting_for_human_review";
+      url: string;
+      observation?: PullRequestReadBack;
+      preview?: undefined;
+      next: string;
+    };
 interface Approval {
   state?: string;
   commitSha?: string;
@@ -234,20 +277,21 @@ export function assertPullRequestTrackerBinding(input: {
   if (typeof input.tracker !== "string")
     throw new Error("staging recordに同期済みIssue trackerがありません");
 
-  const short = /^#?([1-9]\d*)$/u.exec(input.tracker);
   const absolute =
     /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/issues\/([1-9]\d*)$/iu.exec(
       input.tracker,
     );
-  if (!short && !absolute)
-    throw new Error("staging recordのIssue trackerが不正です");
+  if (!absolute)
+    throw new Error(
+      "staging recordのIssue trackerはrepositoryを拘束する完全なGitHub Issue URLが必要です",
+    );
   if (
     absolute &&
     `${absolute[1]}/${absolute[2]}`.toLowerCase() !== repository.toLowerCase()
   )
     throw new Error("staging recordのIssue repositoryが対象PRと一致しません");
 
-  const issue = Number(short?.[1] ?? absolute?.[3]);
+  const issue = Number(absolute[3]);
   const issueUrl = `https://github.com/${repository}/issues/${issue}`;
   if (!Array.isArray(input.closingIssueReferences))
     throw new Error("PRのclosing Issueをtrusted providerから観測できません");
@@ -258,9 +302,9 @@ export function assertPullRequestTrackerBinding(input: {
       typeof reference.url === "string" &&
       reference.url.toLowerCase() === issueUrl.toLowerCase(),
   );
-  if (matches.length !== 1)
+  if (matches.length !== 1 || input.closingIssueReferences.length !== 1)
     throw new Error(
-      `PRがstagingのcanonical Issue #${issue}を一意にcloseしていません`,
+      `PRはstagingのcanonical Issue #${issue}だけを一意にcloseしなければなりません`,
     );
   return { issue, issueUrl };
 }
@@ -367,13 +411,23 @@ export function createPullRequest(
       head: string;
       headSha: string;
       base: string;
+      baseSha: string;
       title: string;
       body: string;
     },
   ) =>
-    | { url: string; state?: "created" }
-    | { url: string; state: "rollback_required"; reason: string },
-) {
+    | {
+        url: string;
+        state?: "created";
+        observation?: PullRequestReadBack;
+      }
+    | {
+        url: string;
+        state: "rollback_required";
+        reason: string;
+        observation?: PullRequestReadBack;
+      },
+): CreatePullRequestResult {
   const [owner, repositoryName, extra] = input.repository.split("/");
   if (
     extra ||
@@ -480,27 +534,32 @@ export function createPullRequest(
     head: input.head,
     headSha: input.headSha,
     base: input.base,
+    baseSha: input.baseSha ?? "",
     title,
     body,
   };
-  if (!input.apply) return { state: "preview", preview };
+  if (!input.apply) return { state: "preview", preview, url: undefined };
   if (!input.trustedPolicy)
     throw new Error(
       "外部PR作成には既定ブランチから取得したtrusted policyが必要です",
     );
   if (input.authorization !== "approved")
     throw new Error("外部書き込みには明示的な承認が必要です");
+  if (!/^[a-f0-9]{40}$/u.test(input.baseSha ?? ""))
+    throw new Error("外部PR作成には事前観測したbase SHAが必要です");
   const result = external("pr.create", preview);
   if (result.state === "rollback_required")
     return {
       state: "rollback_required",
       url: result.url,
       reason: result.reason,
+      ...(result.observation ? { observation: result.observation } : {}),
       next: "作成済みPRを確認し、明示authorityでcloseまたは正しいHEAD/baseへ修正する",
     };
   return {
     state: "waiting_for_human_review",
     url: result.url,
+    ...(result.observation ? { observation: result.observation } : {}),
     next: "独立したpr mergeコマンドを使う。暗黙のマージ・完了処理・後片付けは行わない",
   };
 }

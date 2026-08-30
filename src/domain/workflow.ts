@@ -92,7 +92,8 @@ export const WORKFLOW_STEPS: readonly WorkflowStep[] = Object.freeze([
     step: 11,
     skillId: "step-11-pr",
     responsibility: "PRを作成しdelivery policyの終端まで進行",
-    artifact: "PR URLと`waiting / merge-queued / merged`の観測証拠",
+    artifact:
+      "`outcome=pull-request / merged`の終端Evidence。authority待ちと`merge-observed`は未完了",
   },
 ]);
 
@@ -433,10 +434,23 @@ export function validateStepJournal(input: {
     .filter((step) => !expectedSet.has(step))
     .sort((left, right) => left - right);
   const outOfOrder: number[] = [];
+  const firstFullIndex = input.entries.findIndex(
+    (entry) => entry.mode === "full",
+  );
   let previousIndex = -1;
   for (const step of expected) {
     const record = lastByStep.get(step);
     if (!record) continue;
+    // fullへの単調昇格前にquick/pocで完了したStep 4/9は履歴として
+    // 保持するが、fullの補完中は再実施が必要である。通常fullの未来Stepまで
+    // 無条件に無視すると過去Stepの後付けを受理するため、昇格前履歴だけを除外する。
+    const inheritedFutureHistory =
+      input.mode === "full" &&
+      step > maximum &&
+      firstFullIndex >= 0 &&
+      record.entry.mode !== "full" &&
+      record.index < firstFullIndex;
+    if (inheritedFutureHistory) continue;
     if (record.entry.humanOverride) continue;
     if (record.index < previousIndex) outOfOrder.push(step);
     else previousIndex = record.index;
@@ -687,7 +701,25 @@ export function inspectWorkflowStagingArtifacts(input: {
     input.journalSource === undefined
       ? { entries: [], errors: [`${STEP_JOURNAL_FILE}がありません`] }
       : parseStepJournal(input.journalSource);
-  const completedSteps = [...new Set(journal.entries.map(({ step }) => step))];
+  const lastByStep = new Map<
+    number,
+    { entry: StepJournalEntry; index: number }
+  >();
+  journal.entries.forEach((entry, index) =>
+    lastByStep.set(entry.step, { entry, index }),
+  );
+  const firstFullIndex = journal.entries.findIndex(
+    (entry) => entry.mode === "full",
+  );
+  const completedSteps = requiredSteps(input.mode).filter((step) => {
+    const record = lastByStep.get(step);
+    if (!record) return false;
+    if (input.mode !== "full" || record.entry.mode === "full") return true;
+    return (
+      (step === 0 || step === 1) &&
+      (firstFullIndex < 0 || record.index < firstFullIndex)
+    );
+  });
   const currentStep = completedSteps.at(-1);
   const validation = validateStepJournal({
     mode: input.mode,
@@ -735,7 +767,20 @@ export function inspectWorkflowStagingArtifacts(input: {
 export function completePullRequestWorkflow<
   Created extends { url?: string },
   Recorded,
->(created: Created, staging: string, record: () => Recorded) {
+>(
+  created: Created,
+  staging: string,
+  record: () => Recorded,
+  recovery: {
+    operation: string;
+    repeatAction: string;
+    recoveryEvidence: string;
+  } = {
+    operation: "PR作成",
+    repeatAction: "PR作成",
+    recoveryEvidence: "PR作成確認",
+  },
+) {
   try {
     return {
       exitCode: 0,
@@ -751,8 +796,10 @@ export function completePullRequestWorkflow<
           recorded: false,
           diagnostic: {
             ruleId: "ASC-WORKFLOW-JOURNAL-001",
-            reasons: [`PR作成後のStep 11記録に失敗しました: ${reason}`],
-            next: `作成済みPR ${created.url ?? "（URL不明）"} を確認し、PR作成を再実行せず、workflow record --staging=${staging} --step=11 --artifact=<PR URL> --evidence=<PR作成確認>で記録だけを再実行した後、workflow verify --staging=${staging} --up-to=11で確認してください`,
+            reasons: [
+              `${recovery.operation}後のStep 11記録に失敗しました: ${reason}`,
+            ],
+            next: `${recovery.operation}済みPR ${created.url ?? "（URL不明）"} を確認し、${recovery.repeatAction}を再実行せず、workflow record --staging=${staging} --step=11 --artifact=<PR URL> --evidence=<${recovery.recoveryEvidence}>で記録だけを再実行した後、workflow verify --staging=${staging} --up-to=11で確認してください`,
           },
         },
       },

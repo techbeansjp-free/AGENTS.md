@@ -45,3 +45,43 @@ Feature: ワークフローStepの記録と正本一致を統合検証する
     Given ワークフローStep統合検査の隔離環境がある
     When "SCN-INT-WFSTEP-009"の統合検査を実行する
     Then ワークフローStep統合検査は期待結果になる
+
+  Scenario: SCN-INT-WFSTEP-010 同じIssueとStep履歴を保持してquickからfullへ永続昇格する
+    Given ワークフローStep統合検査の隔離環境がある
+    When "SCN-INT-WFSTEP-010"の統合検査を実行する
+    Then ワークフローStep統合検査は期待結果になる
+
+  Scenario: SCN-INT-WFSTEP-011 PoCの停止または昇格判定から明示commandでfull昇格を選ぶ
+    Given ワークフローStep統合検査の隔離環境がある
+    When "SCN-INT-WFSTEP-011"の統合検査を実行する
+    Then ワークフローStep統合検査は期待結果になる
+
+  Scenario: SCN-INT-WFSTEP-012 full昇格はstaging外を指すsymlink成果物を変更前に拒否する
+    Given ワークフローStep統合検査の隔離環境がある
+    When "SCN-INT-WFSTEP-012"の統合検査を実行する
+    Then ワークフローStep統合検査は期待結果になる
+
+  Scenario: SCN-INT-WFSTEP-013 full昇格は記録digestと一致しない成果物を変更前に拒否する
+    Given ワークフローStep統合検査の隔離環境がある
+    When "SCN-INT-WFSTEP-013"の統合検査を実行する
+    Then ワークフローStep統合検査は期待結果になる
+
+  Scenario: SCN-INT-WFSTEP-014 full昇格はprocess停止後の永続transactionを復旧して再実行する
+    Given ワークフローStep統合検査の隔離環境がある
+    When "SCN-INT-WFSTEP-014"の統合検査を実行する
+    Then ワークフローStep統合検査は期待結果になる
+
+  Scenario: SCN-INT-WFSTEP-015 full昇格の再実行は永続Evidence一致時だけ同じ結果へ収束する
+    Given ワークフローStep統合検査の隔離環境がある
+    When "SCN-INT-WFSTEP-015"の統合検査を実行する
+    Then ワークフローStep統合検査は期待結果になる
+
+  Scenario: SCN-INT-WFSTEP-016 generic workflow recordはdelivery専用のStep 11を記録できない
+    Given ワークフローStep統合検査の隔離環境がある
+    When "SCN-INT-WFSTEP-016"の統合検査を実行する
+    Then ワークフローStep統合検査は期待結果になる
+
+  Scenario: SCN-INT-WFSTEP-017 delivery開始後のstagingをfull昇格しない
+    Given ワークフローStep統合検査の隔離環境がある
+    When "SCN-INT-WFSTEP-017"の統合検査を実行する
+    Then ワークフローStep統合検査は期待結果になる

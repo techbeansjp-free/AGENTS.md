@@ -299,11 +299,41 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "workflow",
+    subcommand: "promote-full",
+    summary:
+      "実装中発見の判定を同じIssue stagingへ適用しquickまたはpocをfullへ単調昇格する。既定は副作用なしのpreview",
+    requiredFlags: [
+      flag("staging", "path", "昇格するIssue staging directory"),
+      flag("input", "path", "repository root内の実装中発見入力JSON file"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [
+      ROOT_FLAG,
+      optional("promoted-at", "ISO8601", "昇格記録の時刻", "実行時刻"),
+      optional(
+        "dry-run",
+        "",
+        "書き込まずに昇格計画だけを出力する",
+        "省略時もpreview",
+      ),
+      optional(
+        "apply",
+        "",
+        "previewした昇格計画を実際に適用する",
+        "指定しない限りpreview",
+      ),
+    ],
+    example:
+      "npx agent-skill-chain workflow promote-full --staging=.agent-skill-chain/tmp/issues/20260830_120000-change --input=.asc/discovery.json --root=. --apply",
+    acceptsSpaceSeparatedFlags: true,
+  },
+  {
+    command: "workflow",
     subcommand: "record",
     summary: "Step実施をstep journalへ追記する",
     requiredFlags: [
       flag("staging", "path", "staging directory"),
-      flag("step", "0..11", "記録するStep番号"),
+      flag("step", "1..10", "記録するStep番号"),
       flag("evidence", "text", "Stepの証跡"),
       flag("artifact", "path", "成果物。1件以上を繰り返し指定する"),
     ],

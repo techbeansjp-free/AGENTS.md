@@ -115,3 +115,23 @@ Feature: 実装中の発見を前向きに処理しrisk比例で検証する
     Given 重複した失格IDを含む実装中発見入力JSONがrepository内にある
     When workflow assess-discovery CLIで評価する
     Then 重複した失格IDをfail-closedで拒否する
+
+  Scenario: SCN-UNIT-AGILE-024 実装中発見の未知の失格IDを受理しない
+    Given 未知の失格IDを含む実装中発見入力JSONがrepository内にある
+    When workflow assess-discovery CLIで評価する
+    Then 未知の失格IDをfail-closedで拒否する
+
+  Scenario: SCN-UNIT-AGILE-025 fullのその他契約変更は要件から計画だけを再確定する
+    Given fullでdomain invariantの契約変更を発見した
+    When 実装中発見の処理を判定する
+    Then fullのその他契約変更は01から03だけを再確定する
+
+  Scenario: SCN-UNIT-AGILE-026 PoCの停止とfull昇格の成果物を混同しない
+    Given pocでhigh risk条件を検出した実装中の発見がある
+    When 実装中発見の処理を判定する
+    Then PoC停止の更新対象とfull昇格の補完成果物を分離する
+
+  Scenario: SCN-UNIT-AGILE-027 不安定または不正な発見IDを受理しない
+    Given 不正なdiscoveryIdを含む実装中発見入力JSONがrepository内にある
+    When workflow assess-discovery CLIで評価する
+    Then 不正なdiscoveryIdをfail-closedで拒否する

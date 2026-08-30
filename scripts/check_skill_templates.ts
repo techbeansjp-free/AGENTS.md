@@ -15,6 +15,12 @@ const DEVELOPMENT_CONSIDERATION_TEMPLATES = [
   "issue/04_レビュー.md",
 ];
 
+const IMPLEMENTATION_DISCOVERY_TEMPLATES = [
+  "issue/00_要求定義_quick.md",
+  "issue/00_要求定義_poc.md",
+  "issue/03_実装計画.md",
+] as const;
+
 const ARTIFACT_VOCABULARY_TERMS = [
   "要求",
   "要件",
@@ -219,7 +225,7 @@ const EXPECTED_OUTPUT_MARKERS = new Map<string, string>([
   ["step-08-design-sync", "書き込み後読み取り検証"],
   ["step-09-implement", "docs/specs/"],
   ["step-10-review", "04_レビュー.md"],
-  ["step-11-pr", "merge-queued"],
+  ["step-11-pr", "merge-observed"],
 ]);
 
 const uniqueSorted = (values: string[]): string[] =>
@@ -369,6 +375,26 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
         errors.push(`${relative}: ${id}の判定・理由・証拠欄が不正です`);
       }
     }
+  }
+  for (const relative of IMPLEMENTATION_DISCOVERY_TEMPLATES) {
+    const template = path.join(templatesRoot, relative);
+    if (!fs.existsSync(template)) {
+      errors.push(`実装中発見の記録templateがありません: ${relative}`);
+      continue;
+    }
+    const markdown = fs.readFileSync(template, "utf8");
+    for (const marker of [
+      "実装中発見の前向き記録",
+      "発見ID",
+      "事実",
+      "影響",
+      "判断",
+      "対処",
+      "検証",
+      "仕様更新",
+    ])
+      if (!markdown.includes(marker))
+        errors.push(`${relative}: 実装中発見の${marker}欄がありません`);
   }
   const workflowFile = path.resolve(
     root,

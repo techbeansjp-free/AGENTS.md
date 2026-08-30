@@ -95,7 +95,13 @@ Q-01〜Q-08の内容は[モード判定質問](../../docs/01_開発ワークフ�
 
 - cycle/self-loop/unknown nodeを拒否するSCNと観測結果:
 
-- 実装中発見は目的・scope・AC変更、security境界拡大、不可逆操作、根拠付きモード失格条件`{ id, evidence }[]`を`workflow assess-discovery --input=<JSON>`で判定する。通常の契約変更はこの集約成果物00だけを再確定し、失格条件は`full`へ単調昇格して00〜03を補完する。
+- 実装中発見は目的・scope・AC変更、security境界拡大、不可逆操作、`changedContractKinds`、根拠付きcanonicalモード失格条件`{ id, evidence }[]`を`workflow assess-discovery --input=<JSON>`で判定する。通常の契約変更はこの集約成果物00だけを再確定し、`promote-to-full`は同じ入力とstagingを`workflow promote-full`へ渡して同じIssueのまま00〜03を補完する。
+
+### 実装中発見の前向き記録
+
+| 発見ID | 事実 | 影響 | 判断 | 対処 | 検証 | 仕様更新 | CLI disposition |
+|---|---|---|---|---|---|---|---|
+| DISC-001 | （観測事実） | （境界・AC） | （継続 / 契約再確定 / full昇格） | （実施内容） | （再現可能なEvidence） | （更新先 / no-spec-impact根拠） | continue / rebaseline-affected-contracts / promote-to-full |
 
 - project policyが選択したtest layerごとの検証:
 - 型検査・既存テスト一式:

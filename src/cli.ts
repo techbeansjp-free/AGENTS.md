@@ -6,6 +6,7 @@ import {
   assertStagingSyncTarget,
   recordStagingSync,
   validateIssue,
+  withoutMarkdownCode,
   type IssueValidationStage,
 } from "./domain/issue.js";
 import {
@@ -44,8 +45,11 @@ import {
 } from "./domain/hygiene.js";
 import {
   applyStagingCleanup,
+  calculateStagingDigest,
+  listStagingArtifacts,
   planStagingCleanup,
   readStoredStagingRecord,
+  withStagingMutationLock,
 } from "./domain/staging.js";
 import {
   buildFinalizeReport,
@@ -92,11 +96,20 @@ import {
   github,
   GitHubProviderUnavailableError,
   samePolicyAuthorityObservation,
+  type ApprovalObservation,
+  type CommitTopologyObservation,
+  type PolicyAuthorityObservation,
+  type PullRequestInspection,
+  type PullRequestQueueObservation,
 } from "./adapters/github.js";
 import { git } from "./lib/process.js";
 import { writeFileAtomic } from "./lib/atomic.js";
 import { validateRepositoryConformance } from "./domain/conformance.js";
-import { parseJsonStrict, resolveContained } from "./lib/security.js";
+import {
+  parseJsonStrict,
+  resolveContained,
+  stableJson,
+} from "./lib/security.js";
 import {
   canonicalLifecycleCommand,
   CLI_USAGE,
@@ -157,16 +170,40 @@ import {
   readSpecReview,
 } from "./adapters/json-input.js";
 import {
+  appendDeliveryTerminalJournalEntry,
   appendWorkflowJournalEntry,
+  assertWorkflowStaging,
   inspectWorkflowStaging,
+  previewWorkflowStagingPromotion,
+  promoteWorkflowStagingToFull,
   readWorkflowJournal,
   resolvePullRequestStaging,
   workflowStep,
 } from "./adapters/workflow-journal.js";
 import {
+  bindStoredPullRequest,
+  claimStoredMergeDispatch,
+  claimStoredPullRequestCreationDispatch,
+  observeStoredMerge,
+  prepareStoredMergeIntent,
+  prepareStoredPullRequestCreation,
+  readStoredDeliveryState,
+  recordStoredStep11,
+  requireStoredDeliveryReconciliation,
+} from "./adapters/delivery-state.js";
+import {
+  DELIVERY_STATE_FILE,
+  assertImmutablePullRequestBinding,
+  canonicalDigest,
+  closingContractDigest,
+  pullRequestTerminalEvidenceId,
+  type DeliveryState,
+  type MergeProviderRequest,
+  type MergeObservation,
+} from "./domain/delivery-state.js";
+import {
   MODE_STEP_SEQUENCES,
   NEVER_SKIPPABLE_STEPS,
-  completePullRequestWorkflow,
   requiredSteps,
   skippableSteps,
   validateJournalHumanOverride,
@@ -185,6 +222,7 @@ function workflowArguments(args: string[]): {
 } {
   const flags: Record<string, string> = {};
   const artifacts: string[] = [];
+  const booleanFlags = new Set(["apply", "dry-run"]);
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index] ?? "";
     if (!argument.startsWith("--"))
@@ -194,6 +232,12 @@ function workflowArguments(args: string[]): {
     const equal = argument.indexOf("=");
     const key = argument.slice(2, equal === -1 ? undefined : equal);
     let value = equal === -1 ? undefined : argument.slice(equal + 1);
+    if (value === undefined && booleanFlags.has(key)) {
+      if (flags[key] !== undefined)
+        throw new Error(`オプションが重複しています: --${key}`);
+      flags[key] = "__present__";
+      continue;
+    }
     if (value === undefined) {
       const following = args[index + 1];
       if (!following || following.startsWith("--"))
@@ -210,6 +254,15 @@ function workflowArguments(args: string[]): {
     }
   }
   return { flags, artifacts };
+}
+
+function workflowLifecycleApplyMode(flags: Record<string, string>): boolean {
+  for (const key of ["apply", "dry-run"])
+    if (flags[key] !== undefined && flags[key] !== "__present__")
+      throw new Error(`--${key}は値を付けずに指定してください`);
+  if (flags.apply === "__present__" && flags["dry-run"] === "__present__")
+    throw new Error("--applyと--dry-runは同時に指定できません");
+  return flags.apply === "__present__";
 }
 
 function workflowMode(value: string): Mode {
@@ -280,6 +333,1487 @@ function workflowDiagnostic(
       rollback: "PRを作成せずstagingとjournalを保持する",
     },
   };
+}
+
+function assertWorkflowReadyForDelivery(
+  staging: string,
+): ReturnType<typeof inspectWorkflowStaging> {
+  const stored = readStoredStagingRecord(staging);
+  const currentArtifacts = listStagingArtifacts(staging);
+  const currentDigest = calculateStagingDigest(staging, currentArtifacts);
+  if (
+    stableJson(stored.artifacts) !== stableJson(currentArtifacts) ||
+    stored.digest !== currentDigest
+  )
+    throw new Error(
+      "delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています",
+    );
+  const inspection = inspectWorkflowStaging(staging, 10);
+  if (
+    !inspection.modeDecision.valid ||
+    !inspection.validation.valid ||
+    inspection.state !== "sync-verified"
+  )
+    throw new Error(
+      `delivery直前のworkflow再検証に失敗しました: ${[
+        ...inspection.modeDecision.errors,
+        ...inspection.validation.errors,
+        ...inspection.validation.modeConflicts,
+        ...(inspection.validation.missingSteps.length > 0
+          ? [`missingSteps=${inspection.validation.missingSteps.join(",")}`]
+          : []),
+        ...(inspection.state === "sync-verified"
+          ? []
+          : ["staging recordがsync-verifiedではありません"]),
+      ].join("; ")}`,
+    );
+  return inspection;
+}
+
+function assertObservedClosingContract(input: {
+  state: DeliveryState;
+  observed: PullRequestInspection;
+  tracker: string | null;
+}): { issue: number; issueUrl: string; bodyClosingDigest: string } {
+  const binding = assertPullRequestTrackerBinding({
+    repository: input.state.create.repository,
+    tracker: input.tracker,
+    closingIssueReferences: input.observed.closingIssuesReferences,
+  });
+  if (
+    binding.issue !== input.state.create.issue ||
+    binding.issueUrl.toLowerCase() !== input.state.create.issueUrl.toLowerCase()
+  )
+    throw new Error(
+      "PRのclosing Issueが準備済みdelivery identityと一致しません",
+    );
+  if (typeof input.observed.body !== "string")
+    throw new Error("PR本文をtrusted providerから再観測できません");
+  const closes = [
+    ...withoutMarkdownCode(input.observed.body).matchAll(
+      /\b(?:closes?|closed|fixes|resolves)\s+#(\d+)\b/giu,
+    ),
+  ].map((match) => Number(match[1]));
+  const bodyClosingDigest = closingContractDigest({
+    canonicalIssue: binding.issue,
+    canonicalIssueUrl: binding.issueUrl,
+    closingIssueNumbers: closes,
+  });
+  if (bodyClosingDigest !== input.state.create.bodyClosingDigest)
+    throw new Error("PR本文のclosing契約がPR作成時の固定値から変化しました");
+  return { ...binding, bodyClosingDigest };
+}
+
+function bindingFromCreatedPullRequest(input: {
+  state: DeliveryState;
+  observed: PullRequestInspection;
+  tracker: string | null;
+  boundAt: string;
+}) {
+  const { state, observed } = input;
+  if (
+    typeof observed.number !== "number" ||
+    !Number.isSafeInteger(observed.number) ||
+    observed.number <= 0 ||
+    typeof observed.url !== "string"
+  )
+    throw new Error("PR作成後に番号とURLを固定できません");
+  if (
+    observed.headRefName !== state.create.headRef ||
+    observed.headRefOid !== state.create.headSha ||
+    observed.baseRefName !== state.create.baseRef
+  )
+    throw new Error(
+      "PR作成後のbase ref/head identityが準備済み値と一致しません",
+    );
+  assertObservedClosingContract({ state, observed, tracker: input.tracker });
+  return { number: observed.number, url: observed.url, boundAt: input.boundAt };
+}
+
+function assertBoundPullRequestObservation(input: {
+  state: DeliveryState;
+  observed: PullRequestInspection;
+  tracker: string | null;
+}): ReturnType<typeof assertObservedClosingContract> {
+  const { state, observed } = input;
+  if (!state.pr) throw new Error("固定済みPR bindingがありません");
+  if (
+    observed.number !== state.pr.number ||
+    observed.url?.toLowerCase() !== state.pr.url.toLowerCase() ||
+    observed.headRefName !== state.create.headRef ||
+    observed.headRefOid !== state.create.headSha ||
+    observed.baseRefName !== state.create.baseRef
+  )
+    throw new Error(
+      "PR再観測が固定済みrepository・PR・base ref・headと一致しません",
+    );
+  assertImmutablePullRequestBinding(state, {
+    repository: state.create.repository,
+    issue: state.create.issue,
+    issueUrl: state.create.issueUrl,
+    prNumber: state.pr.number,
+    prUrl: state.pr.url,
+    headSha: state.create.headSha,
+  });
+  return assertObservedClosingContract(input);
+}
+
+function mergeObservationFromProvider(input: {
+  state: DeliveryState;
+  observed: PullRequestInspection;
+  queue?: PullRequestQueueObservation;
+  tracker: string | null;
+  observedAt: string;
+}): Omit<MergeObservation, "observationId"> {
+  if (!input.state.pr) throw new Error("固定済みPR bindingがありません");
+  const closing = assertBoundPullRequestObservation(input);
+  const merged = String(input.observed.state ?? "").toUpperCase() === "MERGED";
+  const autoMergeRequest = isRecord(input.observed.autoMergeRequest)
+    ? input.observed.autoMergeRequest
+    : null;
+  const autoMergeRequested = autoMergeRequest !== null;
+  const queueEntry = input.queue?.entry ?? null;
+  if (
+    input.queue &&
+    (input.queue.repository.toLowerCase() !==
+      input.state.create.repository.toLowerCase() ||
+      input.queue.prNumber !== input.state.pr.number ||
+      input.queue.headRefOid !== input.state.create.headSha)
+  )
+    throw new Error("merge queue観測が固定済みPR bindingと一致しません");
+  if (!merged && !autoMergeRequested && !queueEntry)
+    throw new Error(
+      "merge要求またはnative auto-merge登録をproviderのread-backで観測できません",
+    );
+  let mergeCommitSha: string | null = null;
+  let providerMergedAt: string | null = null;
+  let providerRequest: MergeProviderRequest | null = null;
+  const canonicalProviderTime = (value: unknown, label: string): string => {
+    const parsed = typeof value === "string" ? Date.parse(value) : Number.NaN;
+    if (
+      typeof value !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.test(
+        value,
+      ) ||
+      !Number.isFinite(parsed)
+    )
+      throw new Error(`${label}を再現可能に観測できません`);
+    return new Date(parsed).toISOString();
+  };
+  if (merged) {
+    const mergedAt = input.observed.mergedAt;
+    providerMergedAt = canonicalProviderTime(mergedAt, "merged PRのmergedAt");
+    const oid = input.observed.mergeCommit?.oid;
+    if (typeof oid !== "string" || !/^[a-f0-9]{40}$/u.test(oid))
+      throw new Error("merged PRのmerge commit OIDを観測できません");
+    mergeCommitSha = oid;
+    providerRequest = input.state.merge?.observation?.providerRequest ?? null;
+  } else {
+    if (!input.state.merge)
+      throw new Error("merge要求の観測には固定済みmerge intentが必要です");
+    if (autoMergeRequested) {
+      const expectedMethod = input.state.merge.method.toUpperCase();
+      if (autoMergeRequest?.mergeMethod !== expectedMethod)
+        throw new Error(
+          "providerのauto-merge methodが固定済みmerge intentと一致しません",
+        );
+      providerRequest = {
+        kind: "auto-merge",
+        requestedAt: canonicalProviderTime(
+          autoMergeRequest?.enabledAt,
+          "auto-merge enabledAt",
+        ),
+        method: input.state.merge.method,
+        headSha: input.state.create.headSha,
+        baseSha: input.state.merge.authorizedBaseSha,
+      };
+    }
+    if (queueEntry) {
+      providerRequest = {
+        kind: "merge-queue",
+        requestId: queueEntry.id,
+        requestedAt: queueEntry.enqueuedAt,
+        queueState: queueEntry.state,
+        headSha: queueEntry.headCommitOid,
+        baseSha: queueEntry.baseCommitOid,
+      };
+    }
+  }
+  return {
+    repository: input.state.create.repository,
+    prNumber: input.state.pr.number,
+    prUrl: input.state.pr.url,
+    headSha: input.state.create.headSha,
+    issue: closing.issue,
+    issueUrl: closing.issueUrl,
+    bodyClosingDigest: closing.bodyClosingDigest,
+    providerState: merged ? "merged" : "merge-requested",
+    providerRequest,
+    providerMergedAt,
+    observedAt: input.observedAt,
+    mergeCommitSha,
+  };
+}
+
+function finishObservedMerge(
+  staging: string,
+  current: DeliveryState,
+  mode: Mode,
+): { exitCode: number; output: Record<string, unknown> } {
+  if (!current.pr || !current.merge?.observation)
+    throw new Error("Step 11記録には固定PRとmerge observationが必要です");
+  const observation = current.merge.observation;
+  const journal = readWorkflowJournal(staging);
+  if (journal.errors.length > 0)
+    throw new Error(
+      `Step 11再開前のjournalが不正です: ${journal.errors.join("; ")}`,
+    );
+  const existingEntries = journal.entries.filter((entry) => entry.step === 11);
+  if (existingEntries.length > 1)
+    throw new Error("Step 11 journal entryが重複しています");
+  const existing = existingEntries[0];
+  let workflow: {
+    entry: StepJournalEntry;
+    journalDigest: string;
+    stagingDigest?: string;
+  };
+  if (existing) {
+    if (
+      !existing.artifacts.includes(current.pr.url) ||
+      !existing.artifacts.includes(DELIVERY_STATE_FILE) ||
+      !existing.evidence.includes(observation.observationId) ||
+      !existing.evidence.includes("outcome=merged")
+    )
+      throw new Error("既存Step 11が固定済みmerge observationと一致しません");
+    workflow = {
+      entry: existing,
+      journalDigest: crypto
+        .createHash("sha256")
+        .update(journal.source)
+        .digest("hex"),
+    };
+  } else {
+    const definition = workflowStep(11);
+    if (!definition) throw new Error("step 11の定義がありません");
+    workflow = appendDeliveryTerminalJournalEntry({
+      staging,
+      entry: {
+        step: 11,
+        skillId: definition.skillId,
+        mode,
+        recordedAt: new Date().toISOString(),
+        artifacts: [current.pr.url, DELIVERY_STATE_FILE],
+        evidence: `outcome=merged delivery observation ${observation.observationId}でrepository=${observation.repository} PR #${observation.prNumber} HEAD=${observation.headSha} Issue=${observation.issueUrl} provider=${observation.providerState}を再観測した`,
+      },
+    });
+  }
+  const completed = recordStoredStep11(staging, {
+    outcome: "merged",
+    recordedAt: workflow.entry.recordedAt,
+    journalDigest: workflow.journalDigest,
+  });
+  return {
+    exitCode: 0,
+    output: {
+      state: observation.providerState === "merged" ? "merged" : "merge-queued",
+      url: current.pr.url,
+      observation,
+      workflow,
+      deliveryState: completed,
+    },
+  };
+}
+
+function finishBoundPullRequest(
+  staging: string,
+  current: DeliveryState,
+  mode: Mode,
+  created: Record<string, unknown> & { url?: string },
+): { exitCode: number; output: Record<string, unknown> } {
+  if (!current.pr || current.merge || current.state !== "pr-bound")
+    throw new Error("PR停止終端にはmerge前の固定済みPR bindingが必要です");
+  const evidenceId = pullRequestTerminalEvidenceId(current.create, current.pr);
+  const journal = readWorkflowJournal(staging);
+  if (journal.errors.length > 0)
+    throw new Error(
+      `PR停止終端のStep 11再開前journalが不正です: ${journal.errors.join("; ")}`,
+    );
+  const existingEntries = journal.entries.filter((entry) => entry.step === 11);
+  if (existingEntries.length > 1)
+    throw new Error("Step 11 journal entryが重複しています");
+  let workflow: {
+    entry: StepJournalEntry;
+    journalDigest: string;
+    stagingDigest?: string;
+  };
+  const existing = existingEntries[0];
+  if (existing) {
+    if (
+      !existing.artifacts.includes(current.pr.url) ||
+      !existing.artifacts.includes(DELIVERY_STATE_FILE) ||
+      !existing.evidence.includes(evidenceId) ||
+      !existing.evidence.includes("outcome=pull-request")
+    )
+      throw new Error("既存Step 11が固定済みPR停止Evidenceと一致しません");
+    workflow = {
+      entry: existing,
+      journalDigest: crypto
+        .createHash("sha256")
+        .update(journal.source)
+        .digest("hex"),
+    };
+  } else {
+    const definition = workflowStep(11);
+    if (!definition) throw new Error("step 11の定義がありません");
+    workflow = appendDeliveryTerminalJournalEntry({
+      staging,
+      entry: {
+        step: 11,
+        skillId: definition.skillId,
+        mode,
+        recordedAt: new Date().toISOString(),
+        artifacts: [current.pr.url, DELIVERY_STATE_FILE],
+        evidence: `outcome=pull-request evidence=${evidenceId} repository=${current.create.repository} PR #${current.pr.number} HEAD=${current.create.headSha}を停止終端として固定した`,
+      },
+    });
+  }
+  const completed = recordStoredStep11(staging, {
+    outcome: "pull-request",
+    recordedAt: workflow.entry.recordedAt,
+    journalDigest: workflow.journalDigest,
+  });
+  return {
+    exitCode: 0,
+    output: {
+      ...created,
+      state: "pull_request_complete",
+      continuation: "stop-at-pr",
+      workflow,
+      deliveryState: completed,
+      next: "PR停止点をStep 11として完了しました。mergeはこのworkflowの範囲外です",
+    },
+  };
+}
+
+function assertStoredStagingContentDigest(
+  staging: string,
+  context: string,
+): void {
+  const stored = readStoredStagingRecord(staging);
+  const artifacts = listStagingArtifacts(staging);
+  if (
+    stableJson(stored.artifacts) !== stableJson(artifacts) ||
+    stored.digest !== calculateStagingDigest(staging, artifacts)
+  )
+    throw new Error(
+      `${context}のstaging成果物一覧またはcontent digestが保存値と一致しません`,
+    );
+}
+
+function assertRecordedStep11Evidence(
+  staging: string,
+  current: DeliveryState,
+): void {
+  if (!current.pr || !current.step11)
+    throw new Error("step11-recordedの固定Evidenceが不完全です");
+  assertStoredStagingContentDigest(staging, "固定済みStep 11後");
+  const journal = readWorkflowJournal(staging);
+  if (journal.errors.length > 0)
+    throw new Error(
+      `Step 11 journalの再検証に失敗しました: ${journal.errors.join("; ")}`,
+    );
+  const matches = journal.entries.filter(
+    (entry) =>
+      entry.step === 11 && entry.recordedAt === current.step11?.recordedAt,
+  );
+  if (matches.length !== 1)
+    throw new Error("固定済みStep 11 entryが実journalに一意に存在しません");
+  const entry = matches[0]!;
+  if (
+    !entry.artifacts.includes(current.pr.url) ||
+    !entry.artifacts.includes(DELIVERY_STATE_FILE) ||
+    !entry.evidence.includes(current.step11.evidenceId) ||
+    !entry.evidence.includes(`outcome=${current.step11.outcome}`)
+  )
+    throw new Error("固定済みStep 11がPRまたは終端Evidenceと一致しません");
+  if (
+    (current.step11.outcome === "merged" &&
+      current.step11.evidenceId !==
+        current.merge?.observation?.observationId) ||
+    (current.step11.outcome === "pull-request" &&
+      (current.merge !== null ||
+        current.step11.evidenceId !==
+          pullRequestTerminalEvidenceId(current.create, current.pr)))
+  )
+    throw new Error("固定済みStep 11のoutcomeとdelivery stateが一致しません");
+  const digest = crypto
+    .createHash("sha256")
+    .update(journal.source)
+    .digest("hex");
+  if (digest !== current.step11.journalDigest)
+    throw new Error(
+      "固定済みStep 11 journal digestが現在のjournalと一致しません",
+    );
+}
+
+type PullRequestMergeMethod = "merge" | "squash" | "rebase";
+
+function deliveryEventTime(lowerBound?: string): string {
+  const now = new Date().toISOString();
+  return lowerBound && now < lowerBound ? lowerBound : now;
+}
+
+/**
+ * H_finalはreview artifactだけを加えた単一親commitでなければならない。
+ * merge認可ではcurrent HEAD authorではなく、その親H_implのprovider authorを使う。
+ */
+interface MergeCandidateEvidence {
+  implementationCommitSha: string;
+  finalHeadSha: string;
+  reviewArtifactPath: string;
+  reviewArtifactDigest: string;
+}
+
+interface MergeReviewEvidence extends MergeCandidateEvidence {
+  ciRunId: string;
+  reviewId: string;
+  reviewEvidenceId: string;
+}
+
+function resolveImplementationCommitForMerge(
+  root: string,
+  finalHeadSha: string,
+): MergeCandidateEvidence {
+  const localHead = git(["rev-parse", "--verify", "HEAD^{commit}"], root)
+    .stdout.trim()
+    .toLowerCase();
+  if (localHead !== finalHeadSha.toLowerCase())
+    throw new Error(
+      "merge認可のlocal HEADがproviderのcurrent H_finalと一致しません",
+    );
+  const ancestry = git(["rev-list", "--parents", "-n", "1", finalHeadSha], root)
+    .stdout.trim()
+    .split(/\s+/u);
+  if (ancestry.length !== 2 || ancestry[0]?.toLowerCase() !== localHead)
+    throw new Error(
+      "H_finalはreview artifactだけを加えた単一親commitでなければなりません",
+    );
+  const implementationCommitSha = ancestry[1]!.toLowerCase();
+  const changedPaths = git(
+    [
+      "diff",
+      "--name-only",
+      "-z",
+      `${implementationCommitSha}..${finalHeadSha}`,
+      "--",
+    ],
+    root,
+  )
+    .stdout.split("\0")
+    .filter(Boolean);
+  if (
+    changedPaths.length !== 1 ||
+    !(
+      changedPaths[0]!.startsWith("docs/reviews/") ||
+      changedPaths[0]!.startsWith(".agent-skill-chain/reviews/")
+    )
+  )
+    throw new Error(
+      "H_impl..H_finalは許可されたreview artifact 1件だけでなければなりません",
+    );
+  const reviewArtifactPath = changedPaths[0]!;
+  const artifactContent = git(
+    ["show", `${finalHeadSha}:${reviewArtifactPath}`],
+    root,
+  ).stdout;
+  return {
+    implementationCommitSha,
+    finalHeadSha: finalHeadSha.toLowerCase(),
+    reviewArtifactPath,
+    reviewArtifactDigest: crypto
+      .createHash("sha256")
+      .update(artifactContent)
+      .digest("hex"),
+  };
+}
+
+function observeMergeReviewEvidence(input: {
+  root: string;
+  repository: string;
+  pr: number;
+  state: DeliveryState;
+  observed: PullRequestInspection;
+}): {
+  reviewEvidence: MergeReviewEvidence;
+  approvals: ApprovalObservation[];
+  implementationAuthorActorId: string | undefined;
+} {
+  if (typeof input.observed.headRefOid !== "string")
+    throw new Error("PR HEAD SHAが不正です");
+  const candidate = resolveImplementationCommitForMerge(
+    input.root,
+    input.observed.headRefOid,
+  );
+  const implementation = github(
+    "commit.inspect",
+    {
+      repository: input.repository,
+      sha: candidate.implementationCommitSha,
+    },
+    input.root,
+  );
+  if (implementation.sha !== candidate.implementationCommitSha)
+    throw new Error("実装commitのtrusted観測がH_implと一致しません");
+  const approvals = github(
+    "pr.reviews",
+    { repository: input.repository, pr: input.pr },
+    input.root,
+  );
+  const ci = github(
+    "pr.ci-runs",
+    {
+      repository: input.repository,
+      pr: input.pr,
+      headSha: input.observed.headRefOid,
+    },
+    input.root,
+  )
+    .filter(
+      (run) =>
+        run.repository.toLowerCase() === input.repository.toLowerCase() &&
+        /^[1-9]\d*$/u.test(run.runId) &&
+        run.event === "pull_request" &&
+        run.headSha === input.observed.headRefOid &&
+        run.conclusion === "success" &&
+        run.pullRequestNumbers.length === 1 &&
+        run.pullRequestNumbers[0] === input.pr,
+    )
+    .sort((left, right) =>
+      left.runId.localeCompare(right.runId, "en", { numeric: true }),
+    )[0];
+  if (!ci)
+    throw new Error(
+      "current H_finalと対象PRへ直接関連するsuccessful pull_request CI runがありません",
+    );
+  const independentReview = approvals
+    .filter(
+      (approval) =>
+        approval.state === "APPROVED" &&
+        approval.commitSha === input.observed.headRefOid &&
+        typeof approval.actorId === "string" &&
+        approval.actorId !== "" &&
+        approval.actorId !== input.observed.author?.id &&
+        approval.actorId !== implementation.authorActorId &&
+        typeof approval.reviewId === "string" &&
+        /^[1-9]\d*$/u.test(approval.reviewId),
+    )
+    .sort((left, right) =>
+      left.reviewId!.localeCompare(right.reviewId!, "en", { numeric: true }),
+    )[0];
+  if (!independentReview?.reviewId)
+    throw new Error(
+      "current H_finalに対するPR author・H_impl authorと独立したreviewがありません",
+    );
+  const identity = {
+    domain: "agent-skill-chain/merge-review-evidence/v1",
+    repository: input.state.create.repository,
+    prNumber: input.state.pr!.number,
+    finalHeadSha: candidate.finalHeadSha,
+    implementationCommitSha: candidate.implementationCommitSha,
+    reviewArtifactPath: candidate.reviewArtifactPath,
+    reviewArtifactDigest: candidate.reviewArtifactDigest,
+    ciRunId: ci.runId,
+    reviewId: independentReview.reviewId,
+  };
+  return {
+    reviewEvidence: {
+      ...candidate,
+      ciRunId: ci.runId,
+      reviewId: independentReview.reviewId,
+      reviewEvidenceId: canonicalDigest(identity),
+    },
+    approvals,
+    implementationAuthorActorId: implementation.authorActorId,
+  };
+}
+
+function assertFixedMergeReviewEvidence(
+  state: DeliveryState,
+  evidence: MergeReviewEvidence,
+): void {
+  const intent = state.merge;
+  if (!intent)
+    throw new Error("固定review Evidenceの照合対象merge intentがありません");
+  if (
+    intent.implementationCommitSha !== evidence.implementationCommitSha ||
+    intent.reviewArtifactPath !== evidence.reviewArtifactPath ||
+    intent.reviewArtifactDigest !== evidence.reviewArtifactDigest ||
+    intent.ciRunId !== evidence.ciRunId ||
+    intent.reviewId !== evidence.reviewId ||
+    intent.reviewEvidenceId !== evidence.reviewEvidenceId
+  )
+    throw new Error(
+      "current provider review Evidenceが固定済みmerge review identityと一致しません",
+    );
+}
+
+function inspectAuthorizedPullRequestMerge(input: {
+  root: string;
+  repository: string;
+  pr: number;
+  method: PullRequestMergeMethod;
+  base: string;
+  state: DeliveryState;
+  tracker: string | null;
+  trustedSet: ReturnType<typeof loadEffectiveTrustedPolicySet>;
+  allowMerged?: boolean;
+}): {
+  observed: PullRequestInspection;
+  authority: PolicyAuthorityObservation;
+  implementationCommitSha: string;
+  reviewEvidence: MergeReviewEvidence;
+  authorization: ReturnType<typeof authorizeMerge>;
+} {
+  const observed = github(
+    "pr.inspect",
+    { repository: input.repository, pr: input.pr },
+    input.root,
+  );
+  if (observed.number !== input.pr)
+    throw new Error("PR観測の番号が固定済みPRと一致しません");
+  assertBoundPullRequestObservation({
+    state: input.state,
+    observed,
+    tracker: input.tracker,
+  });
+  if (observed.baseRefName !== input.base)
+    throw new Error("PRの基点が検証済み既定ブランチではありません");
+  const authority = github(
+    "policy.authority",
+    { repository: input.repository, pr: input.pr },
+    input.root,
+  );
+  const trustedCommitSha = input.trustedSet.provenance?.commitSha;
+  if (
+    typeof trustedCommitSha !== "string" ||
+    !/^[a-f0-9]{40}$/u.test(trustedCommitSha) ||
+    authority.repository !== input.repository ||
+    authority.prNumber !== input.pr ||
+    authority.defaultBranch !== input.base ||
+    authority.baseRefName !== input.base ||
+    authority.defaultBranchTipOid !== authority.baseRefOid ||
+    authority.baseRefOid !== observed.baseRefOid ||
+    authority.headRefOid !== observed.headRefOid ||
+    authority.defaultBranchTipOid !== trustedCommitSha
+  )
+    throw new Error(
+      "provider authorityのrepository・既定branch・base・headがtrusted policy setと一致しません",
+    );
+  const protection = github(
+    "branch.protection",
+    { repository: input.repository, branch: input.base },
+    input.root,
+  );
+  const checks = (observed.statusCheckRollup ?? [])
+    .filter((item) => (item.conclusion ?? item.status) === "SUCCESS")
+    .map((item) => item.name ?? item.context)
+    .filter((item): item is string => typeof item === "string");
+  const reviewed = observeMergeReviewEvidence({
+    root: input.root,
+    repository: input.repository,
+    pr: input.pr,
+    state: input.state,
+    observed,
+  });
+  return {
+    observed,
+    authority,
+    implementationCommitSha: reviewed.reviewEvidence.implementationCommitSha,
+    reviewEvidence: reviewed.reviewEvidence,
+    authorization: authorizeMerge({
+      trustedPolicy: input.trustedSet.policy,
+      method: input.method,
+      checks,
+      approvals: reviewed.approvals,
+      headSha: observed.headRefOid,
+      prAuthorActorId: observed.author?.id,
+      implementationAuthorActorId: reviewed.implementationAuthorActorId,
+      branch: observed.headRefName ?? "",
+      baseRef: observed.baseRefName ?? "",
+      headRef: observed.headRefName ?? "",
+      repositoryVerified: true,
+      shaVerified: Boolean(observed.headRefOid && observed.baseRefOid),
+      protectionVerified: protection.known && protection.protected,
+      mergeableVerified:
+        (input.allowMerged === true &&
+          String(observed.state ?? "").toUpperCase() === "MERGED") ||
+        (observed.isDraft === false && observed.mergeStateStatus === "CLEAN"),
+    }),
+  };
+}
+
+function assertTerminalMergeProof(input: {
+  state: DeliveryState;
+  observation: Omit<MergeObservation, "observationId">;
+  topology: CommitTopologyObservation;
+}): void {
+  const intent = input.state.merge;
+  const claim = intent?.dispatchClaimedAt;
+  if (!intent || !claim)
+    throw new Error("merged終端には消費済みdispatch claimが必要です");
+  if (
+    input.observation.providerState !== "merged" ||
+    !input.observation.providerMergedAt ||
+    !input.observation.mergeCommitSha
+  )
+    throw new Error("merged終端のprovider observationが不完全です");
+  if (input.observation.providerMergedAt < claim)
+    throw new Error("provider mergedAtがASC dispatch claimより前です");
+  if (
+    input.topology.repository.toLowerCase() !==
+      input.state.create.repository.toLowerCase() ||
+    input.topology.sha !== input.observation.mergeCommitSha
+  )
+    throw new Error(
+      "merge commit topologyが固定repository・merge SHAと不一致です",
+    );
+
+  const request = input.observation.providerRequest;
+  if (request) {
+    if (
+      request.requestedAt < claim ||
+      request.headSha !== intent.authorizedHeadSha ||
+      request.baseSha !== intent.authorizedBaseSha
+    )
+      throw new Error(
+        "provider requestがdispatch claimまたは固定head/baseと不一致です",
+      );
+    if (request.kind === "auto-merge" && request.method !== intent.method)
+      throw new Error("auto-merge methodが固定intentと一致しません");
+  }
+
+  const parents = input.topology.parentShas;
+  if (intent.method === "merge") {
+    if (
+      parents.length !== 2 ||
+      parents[0] !== intent.authorizedBaseSha ||
+      parents[1] !== intent.authorizedHeadSha
+    )
+      throw new Error(
+        "merge commitの親が固定済みbase/head認可tupleと一致しません",
+      );
+    return;
+  }
+  if (!request || request.kind !== "auto-merge")
+    throw new Error(
+      `${intent.method}終端はmethod付きauto-merge request Evidenceなしでは確定できません`,
+    );
+  if (intent.method === "squash") {
+    if (parents.length !== 1 || parents[0] !== intent.authorizedBaseSha)
+      throw new Error("squash commitの親が固定済みbase SHAと一致しません");
+    return;
+  }
+  if (parents.length !== 1)
+    throw new Error("rebase終端のcommit topologyが単一親ではありません");
+}
+
+function readBackPreparedPullRequestMerge(input: {
+  root: string;
+  staging: string;
+  repository: string;
+  pr: number;
+  state: DeliveryState;
+  tracker: string | null;
+  mode: Mode;
+  apply: boolean;
+}): { exitCode: number; output: Record<string, unknown> } {
+  try {
+    if (!input.state.merge)
+      throw new Error("provider read-backより前のmerge intentがありません");
+    let observed = github(
+      "pr.inspect",
+      { repository: input.repository, pr: input.pr },
+      input.root,
+    );
+    const merged = String(observed.state ?? "").toUpperCase() === "MERGED";
+    if (merged) {
+      assertBoundPullRequestObservation({
+        state: input.state,
+        observed,
+        tracker: input.tracker,
+      });
+      const reviewed = observeMergeReviewEvidence({
+        root: input.root,
+        repository: input.repository,
+        pr: input.pr,
+        state: input.state,
+        observed,
+      });
+      assertFixedMergeReviewEvidence(input.state, reviewed.reviewEvidence);
+    } else {
+      const base = defaultBranch(input.root);
+      const trustedSet = loadEffectiveTrustedPolicySet(input.root, base);
+      const inspected = inspectAuthorizedPullRequestMerge({
+        root: input.root,
+        repository: input.repository,
+        pr: input.pr,
+        method: input.state.merge.method,
+        base,
+        state: input.state,
+        tracker: input.tracker,
+        trustedSet,
+      });
+      if (!inspected.authorization.allowed)
+        throw new Error(
+          `provider read-back時のcurrent authority再認可を拒否しました: ${inspected.authorization.reason}`,
+        );
+      if (
+        input.state.merge.implementationCommitSha !==
+        inspected.implementationCommitSha
+      )
+        throw new Error("provider read-back時に固定H_implが変化しました");
+      assertFixedMergeReviewEvidence(input.state, inspected.reviewEvidence);
+      observed = inspected.observed;
+    }
+    const queue =
+      String(observed.state ?? "").toUpperCase() !== "MERGED" &&
+      !isRecord(observed.autoMergeRequest)
+        ? github(
+            "pr.queue",
+            { repository: input.repository, pr: input.pr },
+            input.root,
+          )
+        : undefined;
+    const merge = mergeObservationFromProvider({
+      state: input.state,
+      observed,
+      queue,
+      tracker: input.tracker,
+      observedAt: deliveryEventTime(input.state.merge?.preparedAt),
+    });
+    if (merge.providerState === "merged") {
+      const topology = github(
+        "commit.topology",
+        { repository: input.repository, sha: merge.mergeCommitSha! },
+        input.root,
+      );
+      assertTerminalMergeProof({
+        state: input.state,
+        observation: merge,
+        topology,
+      });
+    }
+    if (merge.providerState === "merge-requested") {
+      const persisted =
+        input.apply && input.state.state !== "merge-observed"
+          ? observeStoredMerge(input.staging, merge)
+          : input.state;
+      return {
+        exitCode: 0,
+        output: {
+          state: input.apply ? "merge_pending" : "preview",
+          url: input.state.pr?.url,
+          observation: merge,
+          deliveryState: persisted,
+          next: "native auto-merge要求を再観測しました。pr mergeを再送せず、同じコマンドでmerged状態を後から再観測してください",
+        },
+      };
+    }
+    if (!input.apply)
+      return {
+        exitCode: 0,
+        output: {
+          state: "preview",
+          operation: "record-observed-merge",
+          observation: merge,
+          deliveryState: input.state,
+        },
+      };
+    const persisted = observeStoredMerge(input.staging, merge);
+    return finishObservedMerge(input.staging, persisted, input.mode);
+  } catch (error) {
+    let retained = readStoredDeliveryState(input.staging) ?? input.state;
+    if (
+      input.apply &&
+      (retained.state === "merge-prepared" ||
+        retained.state === "merge-observed")
+    )
+      retained = requireStoredDeliveryReconciliation(input.staging, {
+        phase: "merge",
+        reason: `merge要求後のprovider照合に失敗したため再送を禁止した: ${error instanceof Error ? error.message : String(error)}`,
+        enteredAt: deliveryEventTime(retained.merge?.preparedAt),
+      });
+    return {
+      exitCode: 1,
+      output: {
+        state: input.apply ? "reconciliation_required" : "rejected",
+        reason: error instanceof Error ? error.message : String(error),
+        deliveryState: retained,
+        next: "固定済みrepository・PR・HEAD・Issue・closing契約をproviderで照合してください。pr mergeは再実行しません",
+      },
+    };
+  }
+}
+
+function retryPreparedMergeAfterConfirmedAbsence(input: {
+  root: string;
+  staging: string;
+  repository: string;
+  pr: number;
+  method: PullRequestMergeMethod;
+  state: DeliveryState;
+  tracker: string | null;
+  mode: Mode;
+  apply: boolean;
+}): { exitCode: number; output: Record<string, unknown> } {
+  if (input.state.merge?.dispatchClaimedAt !== null)
+    return readBackPreparedPullRequestMerge(input);
+  let dispatchAttempted = false;
+  try {
+    const initialReadBack = github(
+      "pr.inspect",
+      { repository: input.repository, pr: input.pr },
+      input.root,
+    );
+    assertBoundPullRequestObservation({
+      state: input.state,
+      observed: initialReadBack,
+      tracker: input.tracker,
+    });
+    const initialQueue =
+      String(initialReadBack.state ?? "").toUpperCase() !== "MERGED" &&
+      !isRecord(initialReadBack.autoMergeRequest)
+        ? github(
+            "pr.queue",
+            { repository: input.repository, pr: input.pr },
+            input.root,
+          )
+        : undefined;
+    if (
+      String(initialReadBack.state ?? "").toUpperCase() === "MERGED" ||
+      isRecord(initialReadBack.autoMergeRequest) ||
+      initialQueue?.entry
+    )
+      return readBackPreparedPullRequestMerge(input);
+    if (String(initialReadBack.state ?? "").toUpperCase() !== "OPEN")
+      throw new Error(
+        "provider上のPRがOPENでないためmerge要求不存在を確定できません",
+      );
+    if (!input.state.merge)
+      throw new Error("再試行対象の固定merge intentがありません");
+
+    const base = defaultBranch(input.root);
+    const trustedSet = loadEffectiveTrustedPolicySet(input.root, base);
+    const inspected = inspectAuthorizedPullRequestMerge({
+      root: input.root,
+      repository: input.repository,
+      pr: input.pr,
+      method: input.method,
+      base,
+      state: input.state,
+      tracker: input.tracker,
+      trustedSet,
+    });
+    if (!inspected.authorization.allowed)
+      return {
+        exitCode: 1,
+        output: inspected.authorization.diagnostic
+          ? (serializeDiagnostic(inspected.authorization) as Record<
+              string,
+              unknown
+            >)
+          : {
+              state: "rejected",
+              reason: inspected.authorization.reason,
+              deliveryState: input.state,
+            },
+      };
+    assertFixedMergeReviewEvidence(input.state, inspected.reviewEvidence);
+    if (!input.apply)
+      return {
+        exitCode: 0,
+        output: {
+          state: "preview",
+          operation: "retry-merge-after-confirmed-absence",
+          pr: inspected.observed.url,
+          headSha: inspected.observed.headRefOid,
+          deliveryState: input.state,
+        },
+      };
+    const rechecked = inspectAuthorizedPullRequestMerge({
+      root: input.root,
+      repository: input.repository,
+      pr: input.pr,
+      method: input.method,
+      base,
+      state: input.state,
+      tracker: input.tracker,
+      trustedSet,
+    });
+    if (
+      !rechecked.authorization.allowed ||
+      rechecked.observed.headRefOid !== inspected.observed.headRefOid ||
+      rechecked.observed.baseRefOid !== inspected.observed.baseRefOid ||
+      rechecked.observed.headRefName !== inspected.observed.headRefName ||
+      rechecked.observed.baseRefName !== inspected.observed.baseRefName ||
+      rechecked.observed.author?.id !== inspected.observed.author?.id ||
+      rechecked.implementationCommitSha !== inspected.implementationCommitSha ||
+      rechecked.reviewEvidence.reviewEvidenceId !==
+        inspected.reviewEvidence.reviewEvidenceId ||
+      !samePolicyAuthorityObservation(inspected.authority, rechecked.authority)
+    )
+      throw new Error(
+        "merge intent再試行直前のidentityまたは認可が初回照合から変化しました",
+      );
+    if (
+      typeof rechecked.observed.headRefOid !== "string" ||
+      rechecked.observed.headRefOid !== input.state.merge.authorizedHeadSha
+    )
+      throw new Error(
+        "merge intent再試行のHEADが固定済み認可HEADと一致しません",
+      );
+    const retryTrustedCommitSha = trustedSet.provenance?.commitSha;
+    if (
+      rechecked.authority.baseRefName !== input.state.merge.authorizedBaseRef ||
+      rechecked.authority.baseRefOid !== input.state.merge.authorizedBaseSha ||
+      retryTrustedCommitSha !== input.state.merge.trustedPolicyCommitSha ||
+      rechecked.implementationCommitSha !==
+        input.state.merge.implementationCommitSha ||
+      rechecked.reviewEvidence.reviewEvidenceId !==
+        input.state.merge.reviewEvidenceId
+    )
+      throw new Error(
+        "merge intent再試行のbase・trusted policy・H_implが固定済み認可tupleと一致しません",
+      );
+    if (
+      String(rechecked.observed.state ?? "").toUpperCase() === "MERGED" ||
+      isRecord(rechecked.observed.autoMergeRequest)
+    )
+      return readBackPreparedPullRequestMerge(input);
+    const recheckedQueue = github(
+      "pr.queue",
+      { repository: input.repository, pr: input.pr },
+      input.root,
+    );
+    if (recheckedQueue.entry) return readBackPreparedPullRequestMerge(input);
+    github(
+      "repository.assert-write",
+      { repository: input.repository },
+      input.root,
+    );
+    const claimed = claimStoredMergeDispatch(
+      input.staging,
+      deliveryEventTime(input.state.merge.preparedAt),
+    );
+    if (!claimed.dispatchAllowed)
+      return readBackPreparedPullRequestMerge({
+        ...input,
+        state: claimed.state,
+      });
+    dispatchAttempted = true;
+    github(
+      "pr.merge",
+      {
+        repository: input.repository,
+        pr: input.pr,
+        method: input.method,
+        headSha: rechecked.observed.headRefOid,
+      },
+      input.root,
+    );
+    return readBackPreparedPullRequestMerge({ ...input, state: claimed.state });
+  } catch (error) {
+    const retained = dispatchAttempted
+      ? requireStoredDeliveryReconciliation(input.staging, {
+          phase: "merge",
+          reason: `再試行したmerge provider呼び出しの成否を断定できないため以後の再送を禁止した: ${error instanceof Error ? error.message : String(error)}`,
+          enteredAt: deliveryEventTime(input.state.merge?.preparedAt),
+        })
+      : input.state;
+    return {
+      exitCode: 1,
+      output: {
+        state: dispatchAttempted ? "reconciliation_required" : "rejected",
+        reason: error instanceof Error ? error.message : String(error),
+        deliveryState: retained,
+        next: dispatchAttempted
+          ? "providerのPR状態を照合してください。同じmerge要求は再送しません"
+          : "固定済みmerge intentを保持したまま認可またはprovider状態を是正してください",
+      },
+    };
+  }
+}
+
+function handlePullRequestMerge(flags: Flags): number {
+  const apply = applyMode(flags);
+  const root = path.resolve(
+    typeof flags.root === "string" ? flags.root : process.cwd(),
+  );
+  const requestedStaging = resolveContained(root, required(flags, "staging"));
+  const issuesRoot = path.join(root, ".agent-skill-chain", "tmp", "issues");
+  if (path.dirname(path.resolve(requestedStaging)) !== issuesRoot)
+    throw new Error(
+      "pr mergeのstagingは対象rootの.agent-skill-chain/tmp/issues/直下が必要です",
+    );
+  const candidate = assertWorkflowStaging(requestedStaging);
+  const earlyInspection = inspectWorkflowStaging(candidate);
+  assertWorkflowMergeAllowed(earlyInspection.mode);
+
+  const repository = required(flags, "repo");
+  const prRaw = required(flags, "pr");
+  if (!/^[1-9]\d*$/u.test(prRaw))
+    throw new Error("--prは正の整数で指定してください");
+  const pr = Number(prRaw);
+  const rawMethod = required(flags, "method");
+  if (rawMethod !== "merge" && rawMethod !== "squash" && rawMethod !== "rebase")
+    throw new Error("--methodが不正です");
+  const method: PullRequestMergeMethod = rawMethod;
+
+  const initial = readStoredDeliveryState(candidate);
+  if (!initial?.pr)
+    throw new Error(
+      "pr mergeにはpr createで永続化した固定済みdelivery stateが必要です",
+    );
+  const staging = resolvePullRequestStaging({
+    root,
+    staging: candidate,
+    issue: initial.create.issue,
+    repository,
+  });
+  assertImmutablePullRequestBinding(initial, {
+    repository,
+    issue: initial.create.issue,
+    issueUrl: initial.create.issueUrl,
+    prNumber: pr,
+    prUrl: `https://github.com/${repository}/pull/${pr}`,
+    headSha: initial.create.headSha,
+  });
+  if (initial.merge && initial.merge.method !== method)
+    throw new Error("固定済みmerge intentのmethodを変更できません");
+
+  if (initial.state === "step11-recorded") {
+    assertRecordedStep11Evidence(staging, initial);
+    const pullRequestTerminal = initial.step11?.outcome === "pull-request";
+    print({
+      state: pullRequestTerminal ? "pull_request_complete" : "merged",
+      url: initial.pr.url,
+      deliveryState: initial,
+      next: pullRequestTerminal
+        ? "このworkflowはPR停止点で完了済みです。mergeする場合はownerが別のdelivery判断を開始してください"
+        : "固定済みmerge observationによるStep 11記録は完了しています",
+    });
+    return pullRequestTerminal ? 1 : 0;
+  }
+  const initialJournal = readWorkflowJournal(staging);
+  const initialStep11 = initialJournal.entries.filter(
+    (entry) => entry.step === 11,
+  );
+  if (
+    initial.state === "merge-observed" &&
+    initial.merge?.observation?.providerState === "merged" &&
+    initialStep11.length > 0
+  ) {
+    assertStoredStagingContentDigest(staging, "merged終端journalからの復旧前");
+    const recoveryInspection = inspectWorkflowStaging(staging, 11);
+    if (
+      initialJournal.errors.length > 0 ||
+      initialStep11.length !== 1 ||
+      !recoveryInspection.validation.valid
+    )
+      throw new Error(
+        "merged終端のStep 11 journalからdelivery stateを安全に復旧できません",
+      );
+    if (!apply) {
+      print({
+        state: "preview",
+        operation: "recover-merged-terminal-state",
+        url: initial.pr.url,
+        deliveryState: initial,
+      });
+      return 0;
+    }
+    const recovered = withStagingMutationLock(staging, () => {
+      assertStoredStagingContentDigest(
+        staging,
+        "merged終端journalからの復旧直前",
+      );
+      return finishObservedMerge(
+        staging,
+        readStoredDeliveryState(staging) ?? initial,
+        recoveryInspection.mode,
+      );
+    });
+    print(recovered.output);
+    return recovered.exitCode;
+  }
+
+  const result = withStagingMutationLock(staging, () => {
+    const workflowInspection = assertWorkflowReadyForDelivery(staging);
+    assertWorkflowMergeAllowed(workflowInspection.mode);
+    const stagingRecord = readStoredStagingRecord(staging);
+    const current = readStoredDeliveryState(staging);
+    if (!current?.pr)
+      throw new Error("writer lock取得後に固定済みPR bindingを確認できません");
+    assertImmutablePullRequestBinding(current, {
+      repository,
+      issue: current.create.issue,
+      issueUrl: current.create.issueUrl,
+      prNumber: pr,
+      prUrl: `https://github.com/${repository}/pull/${pr}`,
+      headSha: current.create.headSha,
+    });
+    if (current.merge && current.merge.method !== method)
+      throw new Error("固定済みmerge intentのmethodを変更できません");
+
+    if (current.state === "step11-recorded") {
+      assertRecordedStep11Evidence(staging, current);
+      if (current.step11?.outcome === "pull-request")
+        return {
+          exitCode: 1,
+          output: {
+            state: "pull_request_complete",
+            url: current.pr.url,
+            deliveryState: current,
+            next: "このworkflowはPR停止点で完了済みです。mergeする場合はownerが別のdelivery判断を開始してください",
+          },
+        };
+      return {
+        exitCode: 0,
+        output: {
+          state: "merged",
+          url: current.pr.url,
+          deliveryState: current,
+          next: "固定済みmerge observationによるStep 11記録は完了しています",
+        },
+      };
+    }
+    if (current.state === "merge-observed") {
+      if (current.merge?.observation?.providerState === "merged")
+        return readBackPreparedPullRequestMerge({
+          root,
+          staging,
+          repository,
+          pr,
+          state: current,
+          tracker: stagingRecord.tracker,
+          mode: workflowInspection.mode,
+          apply,
+        });
+      return readBackPreparedPullRequestMerge({
+        root,
+        staging,
+        repository,
+        pr,
+        state: current,
+        tracker: stagingRecord.tracker,
+        mode: workflowInspection.mode,
+        apply,
+      });
+    }
+    if (current.state === "merge-prepared")
+      return retryPreparedMergeAfterConfirmedAbsence({
+        root,
+        staging,
+        repository,
+        pr,
+        method,
+        state: current,
+        tracker: stagingRecord.tracker,
+        mode: workflowInspection.mode,
+        apply,
+      });
+    if (
+      current.state === "reconciliation-required" &&
+      current.reconciliation?.phase === "merge"
+    )
+      return readBackPreparedPullRequestMerge({
+        root,
+        staging,
+        repository,
+        pr,
+        state: current,
+        tracker: stagingRecord.tracker,
+        mode: workflowInspection.mode,
+        apply,
+      });
+    if (current.state !== "pr-bound")
+      throw new Error(
+        `${current.state}からmergeを開始できません。create照合を先に完了してください`,
+      );
+
+    const base = defaultBranch(root);
+    const trustedSet = loadEffectiveTrustedPolicySet(root, base);
+    const inspected = inspectAuthorizedPullRequestMerge({
+      root,
+      repository,
+      pr,
+      method,
+      base,
+      state: current,
+      tracker: stagingRecord.tracker,
+      trustedSet,
+    });
+    if (!inspected.authorization.allowed) {
+      if (inspected.authorization.diagnostic) {
+        return {
+          exitCode: 1,
+          output: serializeDiagnostic(inspected.authorization) as Record<
+            string,
+            unknown
+          >,
+        };
+      }
+      throw new Error(
+        `マージを拒否しました: ${inspected.authorization.reason}`,
+      );
+    }
+    if (!apply)
+      return {
+        exitCode: 0,
+        output: {
+          state: "preview",
+          authorization: inspected.authorization,
+          pr: inspected.observed.url,
+          headSha: inspected.observed.headRefOid,
+          baseSha: inspected.observed.baseRefOid,
+          deliveryState: current,
+        },
+      };
+
+    const rechecked = inspectAuthorizedPullRequestMerge({
+      root,
+      repository,
+      pr,
+      method,
+      base,
+      state: current,
+      tracker: stagingRecord.tracker,
+      trustedSet,
+    });
+    if (
+      rechecked.observed.headRefOid !== inspected.observed.headRefOid ||
+      rechecked.observed.baseRefOid !== inspected.observed.baseRefOid ||
+      rechecked.observed.headRefName !== inspected.observed.headRefName ||
+      rechecked.observed.baseRefName !== inspected.observed.baseRefName ||
+      rechecked.observed.author?.id !== inspected.observed.author?.id ||
+      rechecked.implementationCommitSha !== inspected.implementationCommitSha ||
+      rechecked.reviewEvidence.reviewEvidenceId !==
+        inspected.reviewEvidence.reviewEvidenceId ||
+      !samePolicyAuthorityObservation(inspected.authority, rechecked.authority)
+    )
+      throw new Error("マージ直前にPR identityが変化しました（TOCTOU）");
+    if (!rechecked.authorization.allowed) {
+      if (rechecked.authorization.diagnostic)
+        return {
+          exitCode: 1,
+          output: serializeDiagnostic(rechecked.authorization) as Record<
+            string,
+            unknown
+          >,
+        };
+      throw new Error(
+        `マージ直前の再認可を拒否しました: ${rechecked.authorization.reason}`,
+      );
+    }
+    if (typeof rechecked.observed.headRefOid !== "string")
+      throw new Error("merge要求前に固定HEADを確認できません");
+
+    if (
+      String(rechecked.observed.state ?? "").toUpperCase() === "MERGED" ||
+      isRecord(rechecked.observed.autoMergeRequest)
+    )
+      throw new Error(
+        "ASC merge intent作成前にprovider上の既存merge要求またはmerged状態を観測しました",
+      );
+    const existingQueue = github("pr.queue", { repository, pr }, root);
+    if (existingQueue.entry)
+      throw new Error(
+        "ASC merge intent作成前にprovider上の既存merge queue entryを観測しました",
+      );
+
+    github("repository.assert-write", { repository }, root);
+
+    const prepared = prepareStoredMergeIntent(staging, {
+      method,
+      authorizedHeadSha: rechecked.observed.headRefOid,
+      authorizedBaseRef: rechecked.authority.baseRefName,
+      authorizedBaseSha: rechecked.authority.baseRefOid,
+      trustedPolicyCommitSha: rechecked.authority.defaultBranchTipOid,
+      implementationCommitSha: rechecked.implementationCommitSha,
+      reviewArtifactPath: rechecked.reviewEvidence.reviewArtifactPath,
+      reviewArtifactDigest: rechecked.reviewEvidence.reviewArtifactDigest,
+      ciRunId: rechecked.reviewEvidence.ciRunId,
+      reviewId: rechecked.reviewEvidence.reviewId,
+      reviewEvidenceId: rechecked.reviewEvidence.reviewEvidenceId,
+      intentId: crypto.randomBytes(16).toString("hex"),
+      preparedAt: deliveryEventTime(current.pr.boundAt),
+    });
+    if (!prepared.requestAllowed)
+      return readBackPreparedPullRequestMerge({
+        root,
+        staging,
+        repository,
+        pr,
+        state: prepared.state,
+        tracker: stagingRecord.tracker,
+        mode: workflowInspection.mode,
+        apply,
+      });
+    const claimed = claimStoredMergeDispatch(
+      staging,
+      deliveryEventTime(prepared.state.merge?.preparedAt),
+    );
+    if (!claimed.dispatchAllowed)
+      return readBackPreparedPullRequestMerge({
+        root,
+        staging,
+        repository,
+        pr,
+        state: claimed.state,
+        tracker: stagingRecord.tracker,
+        mode: workflowInspection.mode,
+        apply,
+      });
+    try {
+      github(
+        "pr.merge",
+        {
+          repository,
+          pr,
+          method,
+          headSha: rechecked.observed.headRefOid,
+        },
+        root,
+      );
+    } catch (error) {
+      const reconciled = requireStoredDeliveryReconciliation(staging, {
+        phase: "merge",
+        reason: `merge provider呼び出しの成否を断定できないため再送を禁止した: ${error instanceof Error ? error.message : String(error)}`,
+        enteredAt: deliveryEventTime(prepared.state.merge?.preparedAt),
+      });
+      return {
+        exitCode: 1,
+        output: {
+          state: "reconciliation_required",
+          reason: error instanceof Error ? error.message : String(error),
+          deliveryState: reconciled,
+          next: "providerのPR状態を照合してください。同じmerge要求は再送しません",
+        },
+      };
+    }
+    return readBackPreparedPullRequestMerge({
+      root,
+      staging,
+      repository,
+      pr,
+      state: claimed.state,
+      tracker: stagingRecord.tracker,
+      mode: workflowInspection.mode,
+      apply,
+    });
+  });
+  print(result.output);
+  return result.exitCode;
 }
 
 function readJournalOverride(file: string): JournalHumanOverride {
@@ -1770,6 +3304,50 @@ export async function main(
     );
     return 0;
   }
+  if (command === "workflow" && subcommand === "promote-full") {
+    const { flags, artifacts } = workflowArguments(rest);
+    if (artifacts.length > 0)
+      throw new Error("workflow promote-fullで--artifactは使用できません");
+    const unknown = Object.keys(flags).filter(
+      (flag) =>
+        ![
+          "staging",
+          "input",
+          "root",
+          "promoted-at",
+          "apply",
+          "dry-run",
+        ].includes(flag),
+    );
+    if (unknown.length > 0)
+      throw new Error(
+        `workflow promote-fullの未知optionです: --${unknown.join(", --")}`,
+      );
+    const root = path.resolve(flags.root ?? process.cwd());
+    const stagingInput = flags.staging;
+    if (!stagingInput)
+      throw new Error("workflow promote-fullには--stagingが必要です");
+    const staging = resolveContained(
+      root,
+      path.relative(root, path.resolve(root, stagingInput)),
+    );
+    const discovery = parseImplementationDiscoveryInput(
+      readJsonInput(resolveContained(root, flags.input ?? "")),
+    );
+    const apply = workflowLifecycleApplyMode(flags);
+    if (!apply) {
+      print(previewWorkflowStagingPromotion({ staging, discovery }));
+      return 0;
+    }
+    print(
+      promoteWorkflowStagingToFull({
+        staging,
+        discovery,
+        promotedAt: flags["promoted-at"] ?? new Date().toISOString(),
+      }),
+    );
+    return 0;
+  }
   if (command === "workflow" && subcommand === "steps") {
     const { flags, artifacts } = workflowArguments(rest);
     if (artifacts.length > 0)
@@ -1827,6 +3405,10 @@ export async function main(
     const journal = readWorkflowJournal(staging);
     const step = workflowStep(workflowStepNumber(stepNumber, "step"));
     if (!step) throw new Error("workflow step定義がありません");
+    if (step.step === 11)
+      throw new Error(
+        "Step 11はdelivery終端専用です。workflow recordでは記録できません",
+      );
     const entry: StepJournalEntry = {
       step: step.step,
       skillId: step.skillId,
@@ -1879,7 +3461,7 @@ export async function main(
   }
   if (command === "workflow")
     throw new Error(
-      "workflowにはsteps、verification-set、assess-discovery、record、verifyのいずれかが必要です",
+      "workflowにはsteps、verification-set、assess-discovery、promote-full、record、verifyのいずれかが必要です",
     );
   if (command === "issue" && subcommand === "create") {
     const { flags } = parse(rest);
@@ -1954,14 +3536,34 @@ export async function main(
       (typeof checkpointRaw !== "string" || !/^(?:4|8)$/u.test(checkpointRaw))
     )
       throw new Error("--checkpointは4または8で指定してください");
-    /**
-     * **staging記録の書き込み可否も同期の前に確かめる。**
-     * modeとcheckpointの不一致を同期後に拒否すると、Issueだけが更新された状態になる。
-     */
-    if (stagingPath !== undefined)
-      assertStagingSyncTarget(stagingPath, Number(checkpointRaw));
-    const result = github("issue.sync", input, process.cwd());
-    if (stagingPath !== undefined) {
+    const syncAndRecord = () => {
+      /**
+       * **staging記録の書き込み可否も同期の前に確かめる。**
+       * writer lockを副作用と記録の両方へ保持し、途中で昇格やjournal追記を割り込ませない。
+       */
+      const stagingBefore =
+        stagingPath === undefined
+          ? undefined
+          : assertStagingSyncTarget(
+              stagingPath,
+              Number(checkpointRaw),
+              {
+                repository: input.repository,
+                issue: input.issue,
+              },
+              { allowPromotionStep4: true },
+            );
+      const result = github("issue.sync", input, process.cwd());
+      if (stagingPath === undefined) return result;
+      if (
+        Number(checkpointRaw) === 4 &&
+        stagingBefore?.state === "promotion-active"
+      )
+        return {
+          ...result,
+          staging: stagingBefore,
+          stagingRecordUpdated: false,
+        };
       const bodyAfter = fs
         .readFileSync(input.bodyFile, "utf8")
         .replace(/\r\n/g, "\n")
@@ -1984,9 +3586,12 @@ export async function main(
         bodyDigest,
         readBackDigest,
       });
-      print({ ...result, staging: record });
-      return 0;
-    }
+      return { ...result, staging: record };
+    };
+    const result =
+      stagingPath === undefined
+        ? syncAndRecord()
+        : withStagingMutationLock(stagingPath, syncAndRecord);
     print(result);
     return 0;
   }
@@ -3058,11 +4663,98 @@ export async function main(
     if (!/^[1-9]\d*$/u.test(issueRaw))
       throw new Error("--issueは正のIssue番号で指定してください");
     const issue = Number(issueRaw);
+    const repository = required(flags, "repo");
     const staging = resolvePullRequestStaging({
       root,
       staging: typeof flags.staging === "string" ? flags.staging : undefined,
       issue,
+      repository,
     });
+    const replayState = readStoredDeliveryState(staging);
+    if (replayState?.pr) {
+      const replayHead = required(flags, "head");
+      const replayHeadSha = required(flags, "head-sha");
+      const replayBase = required(flags, "base");
+      if (
+        replayState.create.repository !== repository.toLowerCase() ||
+        replayState.create.issue !== issue ||
+        replayState.create.headRef !== replayHead ||
+        replayState.create.headSha !== replayHeadSha ||
+        replayState.create.baseRef !== replayBase
+      )
+        throw new Error(
+          "PR create再開入力が固定済みdelivery identityと一致しません",
+        );
+      if (replayState.state === "step11-recorded") {
+        assertRecordedStep11Evidence(staging, replayState);
+        print({
+          state:
+            replayState.step11?.outcome === "merged"
+              ? "merged"
+              : "pull_request_complete",
+          url: replayState.pr.url,
+          deliveryState: replayState,
+          next: "固定済みStep 11終端Evidenceを再検証しました",
+        });
+        return 0;
+      }
+      const replayJournal = readWorkflowJournal(staging);
+      const replayStep11 = replayJournal.entries.filter(
+        (entry) => entry.step === 11,
+      );
+      if (replayState.state === "pr-bound" && replayStep11.length > 0) {
+        assertStoredStagingContentDigest(
+          staging,
+          "PR停止終端journalからの復旧前",
+        );
+        const replayInspection = inspectWorkflowStaging(staging, 11);
+        const replayTrustedSet = loadEffectiveTrustedPolicySet(
+          root,
+          replayBase,
+        );
+        const replayContinuation = decideDeliveryContinuation({
+          workflowMode: replayInspection.mode,
+          trustedMergeMode: replayTrustedSet.policy.merge.mode,
+          assistedAuthorityVerified: false,
+          mergeReadyVerified: false,
+        });
+        if (
+          replayJournal.errors.length > 0 ||
+          !replayInspection.validation.valid ||
+          replayStep11.length !== 1 ||
+          replayContinuation !== "stop-at-pr"
+        )
+          throw new Error(
+            "PR停止終端のStep 11 journalからdelivery stateを安全に復旧できません",
+          );
+        if (!apply) {
+          print({
+            state: "preview",
+            operation: "recover-pull-request-terminal-state",
+            url: replayState.pr.url,
+            deliveryState: replayState,
+          });
+          return 0;
+        }
+        const recovered = withStagingMutationLock(staging, () => {
+          assertStoredStagingContentDigest(
+            staging,
+            "PR停止終端journalからの復旧直前",
+          );
+          return finishBoundPullRequest(
+            staging,
+            readStoredDeliveryState(staging) ?? replayState,
+            replayInspection.mode,
+            {
+              state: "waiting_for_human_review",
+              url: replayState.pr!.url,
+            },
+          );
+        });
+        print(recovered.output);
+        return recovered.exitCode;
+      }
+    }
     const inspection = inspectWorkflowStaging(staging, 10);
     const journal = readWorkflowJournal(staging);
     let workflowValidation = inspection.validation;
@@ -3148,8 +4840,10 @@ export async function main(
     const evidenceFile = path.resolve(required(flags, "evidence"));
     const evidence = readDeliveryEvidence(evidenceFile);
     const headSha = required(flags, "head-sha");
-    if (!/^[a-f0-9]{40}$/iu.test(headSha))
-      throw new Error("--head-shaは完全な40桁Git SHAで指定してください");
+    if (!/^[a-f0-9]{40}$/u.test(headSha))
+      throw new Error(
+        "--head-shaは小文字の完全な40桁Git SHAで指定してください",
+      );
     const canonicalRaw =
       typeof flags["canonical-issue"] === "string"
         ? flags["canonical-issue"]
@@ -3162,263 +4856,376 @@ export async function main(
     const bodyFile = path.resolve(required(flags, "body-file"));
     if (!fs.existsSync(bodyFile))
       throw new Error(`--body-fileがありません: ${bodyFile}`);
-    const input = {
+    const head = required(flags, "head");
+    const base = required(flags, "base");
+    const localDefaultBranch = defaultBranch(root);
+    if (base !== localDefaultBranch)
+      throw new Error(
+        `PR base ${base}がlocal origin/HEADの既定branch ${localDefaultBranch}と一致しません`,
+      );
+    const trustedSet = loadEffectiveTrustedPolicySet(root, base);
+    const commonInput = {
       apply,
       authorization:
         typeof flags.authorize === "string" ? flags.authorize : undefined,
-      repository: required(flags, "repo"),
+      repository,
       issue,
       canonicalIssue,
       relatedIssues: positiveIssueList(flags.relates),
-      head: required(flags, "head"),
+      head,
       headSha,
-      base: required(flags, "base"),
+      base,
       body: fs.readFileSync(bodyFile, "utf8"),
       title: typeof flags.title === "string" ? flags.title : undefined,
       evidence,
-      trustedPolicy: loadOperationPolicy(root).policy,
+      trustedPolicy: trustedSet.policy,
       candidatePolicy: loadConsumerPolicyAtCommit(root, headSha),
     };
-    const created = createPullRequest(input, (operation, payload) =>
-      github(operation, payload, root),
+    if (!apply) {
+      const preview = createPullRequest(commonInput, () => {
+        throw new Error("previewでGitHub操作を呼び出してはなりません");
+      });
+      print(preview);
+      return 0;
+    }
+    if (flags.authorize !== "approved")
+      throw new Error(
+        "外部書き込みには明示的な承認--authorize=approvedが必要です",
+      );
+    /** 外部副作用より前に、同じ入力をpreview経路で完全検証する。 */
+    createPullRequest({ ...commonInput, apply: false }, () => {
+      throw new Error("PR作成の事前検証でGitHub操作を呼び出してはなりません");
+    });
+    github("repository.assert-write", { repository }, root);
+    const repositoryAuthority = github(
+      "repository.authority",
+      { repository },
+      root,
     );
-    if (apply && created.state === "waiting_for_human_review") {
+    const currentHead = github(
+      "ref.inspect",
+      { repository, branch: head },
+      root,
+    );
+    const existingBefore = readStoredDeliveryState(staging);
+    if (
+      repositoryAuthority.repository !== repository ||
+      repositoryAuthority.defaultBranch !== base
+    )
+      throw new Error("providerの既定branchが要求されたbaseと一致しません");
+    if (
+      !existingBefore &&
+      trustedSet.provenance?.commitSha?.toLowerCase() !==
+        repositoryAuthority.defaultBranchTipOid.toLowerCase()
+    )
+      throw new Error(
+        "providerの既定branch tipがtrusted policy provenanceと一致しません",
+      );
+    if (currentHead.sha.toLowerCase() !== headSha.toLowerCase())
+      throw new Error(
+        "providerのremote head SHAがPR作成Evidenceと一致しません",
+      );
+    const observedBaseSha =
+      existingBefore?.create.baseSha ?? repositoryAuthority.defaultBranchTipOid;
+    const result = withStagingMutationLock(staging, () => {
+      const lockedInspection = assertWorkflowReadyForDelivery(staging);
+      const stagingRecord = readStoredStagingRecord(staging);
+      const issueUrl = stagingRecord.tracker;
+      if (
+        typeof issueUrl !== "string" ||
+        issueUrl.toLowerCase() !==
+          `https://github.com/${repository}/issues/${issue}`.toLowerCase()
+      )
+        throw new Error(
+          "PR作成時のstaging trackerがcanonical Issueと一致しません",
+        );
+      const currentBefore = readStoredDeliveryState(staging);
+      const baseSha = currentBefore?.create.baseSha ?? observedBaseSha;
+      const createIntent = {
+        repository,
+        issue,
+        issueUrl,
+        headRef: head,
+        headSha,
+        baseRef: base,
+        baseSha,
+        bodyClosingDigest: closingContractDigest({
+          canonicalIssue,
+          canonicalIssueUrl: issueUrl,
+          closingIssueNumbers: [canonicalIssue],
+        }),
+        preparedAt:
+          currentBefore?.create.preparedAt ?? new Date().toISOString(),
+      };
+      const prepared = prepareStoredPullRequestCreation(staging, createIntent);
+      let effectivePrepared = prepared;
+      let providerConfirmedAbsent = false;
+      if (currentBefore && !prepared.pr) {
+        let recoveryReason =
+          "PR作成要求がproviderへ到達したか断定できないため、自動再作成を禁止した";
+        try {
+          let mergedMatches = 0;
+          let closedMatches = 0;
+          const matching = github(
+            "pr.find",
+            { repository, head, base },
+            root,
+          ).flatMap((observed) => {
+            try {
+              if (
+                observed.state !== "OPEN" &&
+                observed.state !== "MERGED" &&
+                observed.state !== "CLOSED"
+              )
+                return [];
+              const binding = bindingFromCreatedPullRequest({
+                state: prepared,
+                observed,
+                tracker: stagingRecord.tracker,
+                boundAt: deliveryEventTime(prepared.create.preparedAt),
+              });
+              if (observed.state === "MERGED") {
+                mergedMatches += 1;
+                return [];
+              }
+              if (observed.state === "CLOSED") {
+                closedMatches += 1;
+                return [];
+              }
+              return [binding];
+            } catch {
+              return [];
+            }
+          });
+          if (matching.length === 1) {
+            effectivePrepared = bindStoredPullRequest(staging, matching[0]!);
+          } else if (mergedMatches > 0) {
+            recoveryReason = `固定済みidentityに一致するmerged PRを${mergedMatches}件観測したが、ASC merge authorization provenanceがないため自動完了できません`;
+          } else if (closedMatches > 0) {
+            recoveryReason = `固定済みidentityに一致するclosed PRを${closedMatches}件観測したため、重複PRの自動作成を禁止した`;
+          } else if (
+            matching.length === 0 &&
+            prepared.state === "create-prepared" &&
+            prepared.create.dispatchClaimedAt === null &&
+            prepared.create.baseSha === repositoryAuthority.defaultBranchTipOid
+          ) {
+            providerConfirmedAbsent = true;
+            recoveryReason =
+              "固定済みidentityのPRがproviderに存在しないことを確認したため、同一intentを一度だけ再試行する";
+          } else if (
+            matching.length === 0 &&
+            prepared.state === "create-prepared" &&
+            prepared.create.dispatchClaimedAt !== null
+          ) {
+            recoveryReason =
+              "PR create dispatch claimは消費済みだがprovider反映を確認できないため、自動再送を禁止した";
+          } else if (
+            matching.length === 0 &&
+            prepared.state === "create-prepared"
+          ) {
+            recoveryReason =
+              "PR create intent固定後にprovider baseが前進し、固定baseへの新規PR作成を再認可できないため自動再送を禁止した";
+          } else {
+            recoveryReason = `固定済みidentityに一致する既存PRが一意ではありません: matches=${matching.length}`;
+          }
+        } catch (error) {
+          recoveryReason = `既存PRのread-only照合に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
+        }
+        effectivePrepared =
+          readStoredDeliveryState(staging) ?? effectivePrepared;
+        if (!effectivePrepared.pr && !providerConfirmedAbsent) {
+          const reconciled =
+            effectivePrepared.state === "create-prepared"
+              ? requireStoredDeliveryReconciliation(staging, {
+                  phase: "create",
+                  reason: recoveryReason,
+                  enteredAt: deliveryEventTime(
+                    effectivePrepared.create.preparedAt,
+                  ),
+                })
+              : effectivePrepared;
+          return {
+            exitCode: 1,
+            output: {
+              state: "reconciliation_required",
+              reason: recoveryReason,
+              deliveryState: reconciled,
+              next: `head=${head}、base=${base}、HEAD=${headSha}に完全一致する既存PRをGitHubで照合してください。pr createは再実行しません`,
+            },
+          };
+        }
+      }
+      let created:
+        | ReturnType<typeof createPullRequest>
+        | {
+            state: "waiting_for_human_review";
+            url: string;
+            observation?: undefined;
+            next: string;
+          };
+      let bound = effectivePrepared;
+      if (effectivePrepared.pr) {
+        created = {
+          state: "waiting_for_human_review",
+          url: effectivePrepared.pr.url,
+          next:
+            prepared.pr === null
+              ? "provider read-backで既存PR bindingを復旧した"
+              : "永続化済みPR bindingから再開した",
+        };
+      } else {
+        if (
+          trustedSet.provenance?.commitSha?.toLowerCase() !==
+          repositoryAuthority.defaultBranchTipOid.toLowerCase()
+        )
+          throw new Error(
+            "provider create再試行には現在の既定branch tipと一致するtrusted policy provenanceが必要です",
+          );
+        const claimed = claimStoredPullRequestCreationDispatch(
+          staging,
+          deliveryEventTime(effectivePrepared.create.preparedAt),
+        );
+        if (!claimed.dispatchAllowed) {
+          const retained =
+            claimed.state.state === "create-prepared"
+              ? requireStoredDeliveryReconciliation(staging, {
+                  phase: "create",
+                  reason:
+                    "PR create dispatch claimは既に消費済みのためprovider createを再送しません",
+                  enteredAt: deliveryEventTime(claimed.state.create.preparedAt),
+                })
+              : claimed.state;
+          return {
+            exitCode: 1,
+            output: {
+              state: "reconciliation_required",
+              reason:
+                "PR create dispatch claimは既に消費済みのためprovider createを再送しません",
+              deliveryState: retained,
+              next: "固定済みhead/base/Issueに一致するPRをproviderで照合してください",
+            },
+          };
+        }
+        effectivePrepared = claimed.state;
+        try {
+          created = createPullRequest(
+            { ...commonInput, baseSha },
+            (operation, payload) => github(operation, payload, root),
+          );
+        } catch (error) {
+          const reconciled = requireStoredDeliveryReconciliation(staging, {
+            phase: "create",
+            reason: `provider createの成否を断定できないため同じ要求の自動再送を禁止した: ${error instanceof Error ? error.message : String(error)}`,
+            enteredAt: deliveryEventTime(prepared.create.preparedAt),
+          });
+          return {
+            exitCode: 1,
+            output: {
+              state: "reconciliation_required",
+              reason: error instanceof Error ? error.message : String(error),
+              deliveryState: reconciled,
+              next: "固定済みhead/base/Issueに一致するPRをproviderで照合してください",
+            },
+          };
+        }
+        if (created.state === "rollback_required") {
+          const reconciled = requireStoredDeliveryReconciliation(staging, {
+            phase: "create",
+            reason: `${created.reason}; createdUrl=${created.url}`,
+            enteredAt: deliveryEventTime(prepared.create.preparedAt),
+          });
+          return {
+            exitCode: 1,
+            output: { ...created, deliveryState: reconciled },
+          };
+        }
+        if (
+          created.state !== "waiting_for_human_review" ||
+          !created.observation
+        )
+          throw new Error("PR作成後のtrusted observationがありません");
+        try {
+          bound = bindStoredPullRequest(
+            staging,
+            bindingFromCreatedPullRequest({
+              state: effectivePrepared,
+              observed: created.observation,
+              tracker: stagingRecord.tracker,
+              boundAt: deliveryEventTime(prepared.create.preparedAt),
+            }),
+          );
+        } catch (error) {
+          const afterFailure = readStoredDeliveryState(staging);
+          if (afterFailure?.pr) {
+            bound = afterFailure;
+          } else {
+            const retained =
+              afterFailure?.state === "create-prepared"
+                ? requireStoredDeliveryReconciliation(staging, {
+                    phase: "create",
+                    reason: `作成済みPRのbinding永続化に失敗したため再作成を禁止した: ${error instanceof Error ? error.message : String(error)}`,
+                    enteredAt: deliveryEventTime(
+                      afterFailure.create.preparedAt,
+                    ),
+                  })
+                : afterFailure;
+            return {
+              exitCode: 1,
+              output: {
+                ...created,
+                state: "binding_recovery_required",
+                reason: error instanceof Error ? error.message : String(error),
+                deliveryState: retained,
+                next: `作成済みPR ${created.url ?? "（URL不明）"} を確認し、pr createを再実行せず同じstagingでidentity照合を復旧してください`,
+              },
+            };
+          }
+        }
+      }
       const continuation = decideDeliveryContinuation({
-        workflowMode: inspection.mode,
-        trustedMergeMode: input.trustedPolicy.merge.mode,
+        workflowMode: lockedInspection.mode,
+        trustedMergeMode: commonInput.trustedPolicy.merge.mode,
         assistedAuthorityVerified: false,
         mergeReadyVerified: false,
       });
-      if (continuation === "wait-merge-ready") {
-        print({
-          ...created,
-          state: "merge_pending",
-          continuation,
-          next: `PR ${created.url ?? "（URL不明）"} のrequired checks、review、HEAD、ruleset、mergeable状態を観測し、同じstagingを指定して独立したpr merge操作へ進んでください。Step 11はまだ完了していません`,
-        });
-        return 0;
-      }
-      const completion = completePullRequestWorkflow(created, staging, () => {
-        const definition = workflowStep(11);
-        if (!definition) throw new Error("step 11の定義がありません");
-        const createdUrl = created.url;
-        if (typeof createdUrl !== "string" || createdUrl.trim() === "")
-          throw new Error("PR作成後のURLがありません");
-        return appendWorkflowJournalEntry({
-          staging,
-          entry: {
-            step: 11,
-            skillId: definition.skillId,
-            mode: inspection.mode,
-            recordedAt: new Date().toISOString(),
-            artifacts: [createdUrl],
-            evidence: `PR作成後のURLを確認し${continuation}をdelivery終端として観測した`,
+      if (
+        continuation === "wait-merge-ready" ||
+        continuation === "wait-authority"
+      )
+        return {
+          exitCode: 0,
+          output: {
+            ...created,
+            state: "merge_pending",
+            continuation,
+            deliveryState: bound,
+            next:
+              continuation === "wait-authority"
+                ? `PR ${created.url ?? "（URL不明）"} のowner authorityを待ち、Step 11を記録せずpr-boundから再開してください`
+                : `PR ${created.url ?? "（URL不明）"} のrequired checks、review、HEAD、ruleset、mergeable状態を観測し、同じstagingを指定して独立したpr merge操作へ進んでください。Step 11はまだ完了していません`,
           },
-        });
-      });
-      print(completion.output);
-      return completion.exitCode;
-    }
-    print(created);
-    return 0;
+        };
+      if (continuation !== "stop-at-pr")
+        throw new Error(`未対応のdelivery continuationです: ${continuation}`);
+      return finishBoundPullRequest(
+        staging,
+        bound,
+        lockedInspection.mode,
+        created,
+      );
+    });
+    print(result.output);
+    return result.exitCode;
   }
   if (command === "pr" && subcommand === "merge") {
     const { flags } = parse(rest);
-    const apply = applyMode(flags);
-    const root = path.resolve(
-      typeof flags.root === "string" ? flags.root : process.cwd(),
-    );
-    const staging = resolveContained(root, required(flags, "staging"));
-    const workflowInspection = inspectWorkflowStaging(staging);
-    const workflowJournal = readWorkflowJournal(staging);
-    const stagingRecord = readStoredStagingRecord(staging);
-    const prerequisiteValidation = validateStepJournal({
-      mode: workflowInspection.mode,
-      entries: workflowJournal.entries.filter((entry) => entry.step <= 10),
-      upToStep: 10,
-    });
-    if (
-      !workflowInspection.modeDecision.valid ||
-      workflowJournal.errors.length > 0 ||
-      !prerequisiteValidation.valid ||
-      workflowInspection.state !== "sync-verified"
-    )
-      throw new Error(
-        `pr mergeのworkflow前提が未成立です: ${[
-          ...workflowInspection.modeDecision.errors,
-          ...workflowJournal.errors,
-          ...prerequisiteValidation.errors,
-          ...prerequisiteValidation.modeConflicts,
-          ...(prerequisiteValidation.missingSteps.length > 0
-            ? [`missingSteps=${prerequisiteValidation.missingSteps.join(",")}`]
-            : []),
-          ...(workflowInspection.state === "sync-verified"
-            ? []
-            : ["staging recordがsync-verifiedではありません"]),
-        ].join("; ")}`,
-      );
-    assertWorkflowMergeAllowed(workflowInspection.mode);
-    const repository = required(flags, "repo");
-    const prRaw = required(flags, "pr");
-    if (!/^[1-9]\d*$/u.test(prRaw))
-      throw new Error("--prは正の整数で指定してください");
-    const pr = Number(prRaw);
-    const method = required(flags, "method");
-    if (!["merge", "squash", "rebase"].includes(method))
-      throw new Error("--methodが不正です");
-    const base = defaultBranch(root);
-    const trustedSet = loadEffectiveTrustedPolicySet(root, base);
-    const trustedPolicy = trustedSet.policy;
-    const inspected = github("pr.inspect", { repository, pr }, root);
-    if (inspected.number !== pr)
-      throw new Error("PR観測の番号が指定したPRと一致しません");
-    assertPullRequestTrackerBinding({
-      repository,
-      tracker: stagingRecord.tracker,
-      closingIssueReferences: inspected.closingIssuesReferences,
-    });
-    if (inspected.baseRefName !== base)
-      throw new Error("PRの基点が検証済み既定ブランチではありません");
-    if (
-      trustedSet.provenance?.commitSha &&
-      inspected.baseRefOid !== trustedSet.provenance.commitSha
-    )
-      throw new Error(
-        "PR base SHAがtrusted policy setのcommit SHAと一致しません",
-      );
-    const protection = github(
-      "branch.protection",
-      { repository, branch: base },
-      root,
-    );
-    const checks = (inspected.statusCheckRollup ?? [])
-      .filter((item) => (item.conclusion ?? item.status) === "SUCCESS")
-      .map((item) => item.name ?? item.context)
-      .filter((item): item is string => typeof item === "string");
-    const approvals = github("pr.reviews", { repository, pr }, root);
-    if (typeof inspected.headRefOid !== "string")
-      throw new Error("PR HEAD SHAが不正です");
-    const implementation = github(
-      "commit.inspect",
-      { repository, sha: inspected.headRefOid },
-      root,
-    );
-    if (implementation.sha !== inspected.headRefOid)
-      throw new Error("実装commitのtrusted観測がPR HEADと一致しません");
-    const authorization = authorizeMerge({
-      trustedPolicy,
-      method: method as "merge" | "squash" | "rebase",
-      checks,
-      approvals,
-      headSha: inspected.headRefOid,
-      prAuthorActorId: inspected.author?.id,
-      implementationAuthorActorId: implementation.authorActorId,
-      branch: inspected.headRefName ?? "",
-      baseRef: inspected.baseRefName ?? "",
-      headRef: inspected.headRefName ?? "",
-      repositoryVerified: true,
-      shaVerified: Boolean(inspected.headRefOid && inspected.baseRefOid),
-      protectionVerified: protection.known && protection.protected,
-      mergeableVerified:
-        inspected.isDraft === false && inspected.mergeStateStatus === "CLEAN",
-    });
-    if (!authorization.allowed) {
-      if (authorization.diagnostic) {
-        print(serializeDiagnostic(authorization));
-        return 1;
-      }
-      throw new Error(`マージを拒否しました: ${authorization.reason}`);
-    }
-    if (!apply) {
-      print({
-        state: "preview",
-        authorization,
-        pr: inspected.url,
-        headSha: inspected.headRefOid,
-        baseSha: inspected.baseRefOid,
-      });
-      return 0;
-    }
-    const rechecked = github("pr.inspect", { repository, pr }, root);
-    if (
-      rechecked.headRefOid !== inspected.headRefOid ||
-      rechecked.baseRefOid !== inspected.baseRefOid ||
-      rechecked.headRefName !== inspected.headRefName ||
-      rechecked.baseRefName !== inspected.baseRefName ||
-      rechecked.author?.id !== inspected.author?.id
-    )
-      throw new Error("マージ直前にPR状態が変化しました（TOCTOU）");
-    if (rechecked.number !== pr)
-      throw new Error("マージ直前のPR番号が指定したPRと一致しません");
-    assertPullRequestTrackerBinding({
-      repository,
-      tracker: stagingRecord.tracker,
-      closingIssueReferences: rechecked.closingIssuesReferences,
-    });
-    const recheckedProtection = github(
-      "branch.protection",
-      { repository, branch: base },
-      root,
-    );
-    const recheckedApprovals = github("pr.reviews", { repository, pr }, root);
-    const recheckedChecks = (rechecked.statusCheckRollup ?? [])
-      .filter((item) => (item.conclusion ?? item.status) === "SUCCESS")
-      .map((item) => item.name ?? item.context)
-      .filter((item): item is string => typeof item === "string");
-    const reauthorization = authorizeMerge({
-      trustedPolicy,
-      method: method as "merge" | "squash" | "rebase",
-      checks: recheckedChecks,
-      approvals: recheckedApprovals,
-      headSha: rechecked.headRefOid,
-      prAuthorActorId: rechecked.author?.id,
-      implementationAuthorActorId: implementation.authorActorId,
-      branch: rechecked.headRefName ?? "",
-      baseRef: rechecked.baseRefName ?? "",
-      headRef: rechecked.headRefName ?? "",
-      repositoryVerified: true,
-      shaVerified: true,
-      protectionVerified:
-        recheckedProtection.known && recheckedProtection.protected,
-      mergeableVerified:
-        rechecked.isDraft === false && rechecked.mergeStateStatus === "CLEAN",
-    });
-    if (!reauthorization.allowed) {
-      if (reauthorization.diagnostic) {
-        print(serializeDiagnostic(reauthorization));
-        return 1;
-      }
-      throw new Error(
-        `マージ直前の再認可を拒否しました: ${reauthorization.reason}`,
-      );
-    }
-    const merged = github(
-      "pr.merge",
-      { repository, pr, method: method as "merge" | "squash" | "rebase" },
-      root,
-    );
-    if (typeof rechecked.url !== "string" || rechecked.url.trim() === "")
-      throw new Error("merge要求後に記録するPR URLがありません");
-    const definition = workflowStep(11);
-    if (!definition) throw new Error("step 11の定義がありません");
-    const workflow = appendWorkflowJournalEntry({
-      staging,
-      entry: {
-        step: 11,
-        skillId: definition.skillId,
-        mode: workflowInspection.mode,
-        recordedAt: new Date().toISOString(),
-        artifacts: [rechecked.url],
-        evidence: `trusted再認可後にpr mergeを適用し${String(merged.state ?? "merge-requested")}を観測した`,
-      },
-    });
-    print({
-      ...merged,
-      state: "merge-queued",
-      pr: rechecked.url,
-      workflow,
-    });
-    return 0;
+    // Keep the public dispatch contract explicit; the handler performs the
+    // semantic validation after these presence checks.
+    required(flags, "repo");
+    required(flags, "pr");
+    required(flags, "method");
+    required(flags, "staging");
+    return handlePullRequestMerge(flags);
   }
   const lifecycleCommand = canonicalLifecycleCommand(command);
   if (["install", "update", "delete"].includes(lifecycleCommand)) {

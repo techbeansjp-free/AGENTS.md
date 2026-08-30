@@ -90,8 +90,10 @@ const verificationInput = (
 
 Given("契約を変更しない実装中の発見がある", function () {
   discovery = {
+    discoveryId: "DISC-TEST-001",
     workflowMode: "full",
     modeDisqualifiers: [],
+    changedContractKinds: [],
     changesGoal: false,
     changesScope: false,
     changesAcceptanceCriteria: false,
@@ -102,8 +104,10 @@ Given("契約を変更しない実装中の発見がある", function () {
 
 Given("受け入れ条件を変更する実装中の発見がある", function () {
   discovery = {
+    discoveryId: "DISC-TEST-002",
     workflowMode: "full",
     modeDisqualifiers: [],
+    changedContractKinds: [],
     changesGoal: false,
     changesScope: false,
     changesAcceptanceCriteria: true,
@@ -114,8 +118,10 @@ Given("受け入れ条件を変更する実装中の発見がある", function (
 
 Given("目的を変更する実装中の発見がある", function () {
   discovery = {
+    discoveryId: "DISC-TEST-003",
     workflowMode: "full",
     modeDisqualifiers: [],
+    changedContractKinds: [],
     changesGoal: true,
     changesScope: false,
     changesAcceptanceCriteria: false,
@@ -126,8 +132,10 @@ Given("目的を変更する実装中の発見がある", function () {
 
 Given("fullでscopeを変更する実装中の発見がある", function () {
   discovery = {
+    discoveryId: "DISC-TEST-004",
     workflowMode: "full",
     modeDisqualifiers: [],
+    changedContractKinds: [],
     changesGoal: false,
     changesScope: true,
     changesAcceptanceCriteria: false,
@@ -138,8 +146,10 @@ Given("fullでscopeを変更する実装中の発見がある", function () {
 
 Given("quickで受け入れ条件を変更する実装中の発見がある", function () {
   discovery = {
+    discoveryId: "DISC-TEST-005",
     workflowMode: "quick",
     modeDisqualifiers: [],
+    changedContractKinds: [],
     changesGoal: false,
     changesScope: false,
     changesAcceptanceCriteria: true,
@@ -150,8 +160,10 @@ Given("quickで受け入れ条件を変更する実装中の発見がある", fu
 
 Given("quickでsecurity境界を拡大する実装中の発見がある", function () {
   discovery = {
+    discoveryId: "DISC-TEST-006",
     workflowMode: "quick",
     modeDisqualifiers: [],
+    changedContractKinds: [],
     changesGoal: false,
     changesScope: false,
     changesAcceptanceCriteria: false,
@@ -162,8 +174,10 @@ Given("quickでsecurity境界を拡大する実装中の発見がある", functi
 
 Given("pocで不可逆操作を導入する実装中の発見がある", function () {
   discovery = {
+    discoveryId: "DISC-TEST-007",
     workflowMode: "poc",
     modeDisqualifiers: [],
+    changedContractKinds: [],
     changesGoal: false,
     changesScope: false,
     changesAcceptanceCriteria: false,
@@ -174,10 +188,12 @@ Given("pocで不可逆操作を導入する実装中の発見がある", functio
 
 Given("quickでpublic API変更を検出した実装中の発見がある", function () {
   discovery = {
+    discoveryId: "DISC-TEST-008",
     workflowMode: "quick",
     modeDisqualifiers: [
       { id: "public-api", evidence: "公開API contractの差分を検出した" },
     ],
+    changedContractKinds: [],
     changesGoal: false,
     changesScope: false,
     changesAcceptanceCriteria: false,
@@ -188,10 +204,26 @@ Given("quickでpublic API変更を検出した実装中の発見がある", func
 
 Given("pocでhigh risk条件を検出した実装中の発見がある", function () {
   discovery = {
+    discoveryId: "DISC-TEST-009",
     workflowMode: "poc",
     modeDisqualifiers: [
-      { id: "high-risk", evidence: "critical dataへの影響を検出した" },
+      { id: "personal-data", evidence: "個人dataへの影響を検出した" },
     ],
+    changedContractKinds: [],
+    changesGoal: false,
+    changesScope: false,
+    changesAcceptanceCriteria: false,
+    expandsSecurityBoundary: false,
+    introducesIrreversibleOperation: false,
+  };
+});
+
+Given("fullでdomain invariantの契約変更を発見した", function () {
+  discovery = {
+    discoveryId: "DISC-TEST-010",
+    workflowMode: "full",
+    modeDisqualifiers: [],
+    changedContractKinds: ["domain-invariant"],
     changesGoal: false,
     changesScope: false,
     changesAcceptanceCriteria: false,
@@ -216,6 +248,7 @@ Then("実装を継続して事実と影響と対処と検証と仕様更新を�
   assert.equal(assessment.disposition, "continue");
   assert.deepEqual(assessment.affectedArtifacts, []);
   assert.deepEqual(assessment.requiredRecordFields, [
+    "discoveryId",
     "fact",
     "impact",
     "decision",
@@ -285,7 +318,28 @@ Then("fullへ昇格し失格Evidenceを保持して00から03を確定する", f
 
 Then("PoCを停止するかfullへ昇格する", function () {
   assert.equal(assessment.disposition, "stop-or-promote-full");
+  assert.deepEqual(assessment.affectedArtifacts, []);
+  assert.deepEqual(assessment.promotionArtifacts, [
+    "00_要求定義.md",
+    "01_要件定義.md",
+    "02_設計.md",
+    "03_実装計画.md",
+  ]);
+});
+
+Then("fullのその他契約変更は01から03だけを再確定する", function () {
+  assert.equal(assessment.disposition, "rebaseline-affected-contracts");
   assert.deepEqual(assessment.affectedArtifacts, [
+    "01_要件定義.md",
+    "02_設計.md",
+    "03_実装計画.md",
+  ]);
+});
+
+Then("PoC停止の更新対象とfull昇格の補完成果物を分離する", function () {
+  assert.equal(assessment.disposition, "stop-or-promote-full");
+  assert.deepEqual(assessment.affectedArtifacts, []);
+  assert.deepEqual(assessment.promotionArtifacts, [
     "00_要求定義.md",
     "01_要件定義.md",
     "02_設計.md",
@@ -467,8 +521,10 @@ Then("production CLIがVerification Setを機械可読に返す", function () {
 
 Given("有効な実装中発見入力JSONがrepository内にある", function () {
   writeCliInput(this, {
+    discoveryId: "DISC-CLI-001",
     workflowMode: "quick",
     modeDisqualifiers: [],
+    changedContractKinds: [],
     changesGoal: false,
     changesScope: false,
     changesAcceptanceCriteria: true,
@@ -491,11 +547,13 @@ When("workflow assess-discovery CLIで評価する", async function () {
 Then("production CLIがmode別の前向きな処理先を返す", function () {
   assert.equal(this.error, undefined);
   assert.deepEqual(this.value, {
+    discoveryId: "DISC-CLI-001",
     workflowMode: "quick",
     modeDisqualifiers: [],
     disposition: "rebaseline-affected-contracts",
     affectedArtifacts: ["00_要求定義.md"],
     requiredRecordFields: [
+      "discoveryId",
       "fact",
       "impact",
       "decision",
@@ -541,8 +599,10 @@ Then("未知fieldをfail-closedで拒否する", function () {
 
 Given("必須fieldが欠けた実装中発見入力JSONがrepository内にある", function () {
   writeCliInput(this, {
+    discoveryId: "DISC-CLI-002",
     workflowMode: "full",
     modeDisqualifiers: [],
+    changedContractKinds: [],
     changesGoal: false,
     changesScope: false,
     changesAcceptanceCriteria: false,
@@ -563,11 +623,13 @@ Given(
   "重複した失格IDを含む実装中発見入力JSONがrepository内にある",
   function () {
     writeCliInput(this, {
+      discoveryId: "DISC-CLI-003",
       workflowMode: "quick",
       modeDisqualifiers: [
         { id: "public-api", evidence: "公開API差分" },
         { id: " public-api ", evidence: "同じ差分の別観測" },
       ],
+      changedContractKinds: [],
       changesGoal: false,
       changesScope: false,
       changesAcceptanceCriteria: false,
@@ -580,5 +642,50 @@ Given(
 Then("重複した失格IDをfail-closedで拒否する", function () {
   assert.ok(this.error instanceof Error);
   assert.match(this.error.message, /重複id.*public-api/u);
+  assert.equal(this.value, undefined);
+});
+
+Given("未知の失格IDを含む実装中発見入力JSONがrepository内にある", function () {
+  writeCliInput(this, {
+    discoveryId: "DISC-CLI-004",
+    workflowMode: "quick",
+    modeDisqualifiers: [
+      { id: "invented-risk", evidence: "canonicalでない分類" },
+    ],
+    changedContractKinds: [],
+    changesGoal: false,
+    changesScope: false,
+    changesAcceptanceCriteria: false,
+    expandsSecurityBoundary: false,
+    introducesIrreversibleOperation: false,
+  });
+});
+
+Then("未知の失格IDをfail-closedで拒否する", function () {
+  assert.ok(this.error instanceof Error);
+  assert.match(this.error.message, /未知id.*invented-risk/u);
+  assert.equal(this.value, undefined);
+});
+
+Given(
+  "不正なdiscoveryIdを含む実装中発見入力JSONがrepository内にある",
+  function () {
+    writeCliInput(this, {
+      discoveryId: "DSC-CLI-005",
+      workflowMode: "quick",
+      modeDisqualifiers: [],
+      changedContractKinds: [],
+      changesGoal: false,
+      changesScope: false,
+      changesAcceptanceCriteria: false,
+      expandsSecurityBoundary: false,
+      introducesIrreversibleOperation: false,
+    });
+  },
+);
+
+Then("不正なdiscoveryIdをfail-closedで拒否する", function () {
+  assert.ok(this.error instanceof Error);
+  assert.match(this.error.message, /discoveryId.*DISC-/u);
   assert.equal(this.value, undefined);
 });

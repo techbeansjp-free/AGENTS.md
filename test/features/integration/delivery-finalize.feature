@@ -191,6 +191,35 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When 短縮OIDと応答不一致と完全一致をcommit inspectへ渡す
     Then 完全一致だけがcommit観測に成功する
 
+  Scenario: SCN-INT-GITHUB-011 merge要求を再認可済みHEADへ拘束する
+    Given merge操作を記録するwrite権限のgh stubがある
+    When 再認可済みHEADを指定してPR merge adapterを実行する
+    Then merge操作はmatch-head-commitで同じHEADへ拘束される
+
+  Scenario: SCN-INT-GITHUB-012 classic protectionが404でrulesetがあればprotectedと判定する
+    Given classic protectionが404で有効なrulesetを返すgh stubがある
+    When branch protection adapterを実行する
+    Then branch protectionはrulesetによりprotectedと判定される
+    And classic protection後にrulesetを確認する
+
+  Scenario: SCN-INT-GITHUB-013 classic protectionが404でrulesetが空ならunprotectedと確定する
+    Given classic protectionが404で空なrulesetを返すgh stubがある
+    When branch protection adapterを実行する
+    Then branch protectionはknownかつunprotectedである
+    And classic protection後にrulesetを確認する
+
+  Scenario: SCN-INT-GITHUB-014 classic protectionが404でrules APIも失敗したらunknownにする
+    Given classic protectionが404でrules APIが失敗するgh stubがある
+    When branch protection adapterを実行する
+    Then branch protectionはrules API失敗をunknownにする
+    And classic protection後にrulesetを確認する
+
+  Scenario: SCN-INT-GITHUB-015 deletionだけのrulesetをbranch protectionと誤認しない
+    Given classic protectionが404でdeletionだけのrulesetを返すgh stubがある
+    When branch protection adapterを実行する
+    Then deletionだけのrulesetはknownかつunprotectedである
+    And classic protection後にrulesetを確認する
+
   Scenario: SCN-INT-MERGE-001 candidate PR自身のautomatic policyで自己承認できない
     Given trusted policyはdisabledでcandidate policyはautomaticである
     When candidate branchのmerge authorizationを評価する
@@ -246,6 +275,11 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
 
   Scenario: SCN-INT-MERGE-011 別Issueの有効なstagingをpr mergeへ流用できない
     Given staging trackerと異なるIssueをcloseするPR観測がある
+    When PRとstagingの同一性を検証する
+    Then PRとstagingの同一性検証は失敗する
+
+  Scenario: SCN-INT-MERGE-012 canonical以外のIssueを追加でcloseするPRを拒否する
+    Given staging trackerとcanonical以外もcloseするPR観測がある
     When PRとstagingの同一性を検証する
     Then PRとstagingの同一性検証は失敗する
 

@@ -159,7 +159,7 @@ Given("pass済みreview、tests、specのPR引数がある", function () {
     });
   }
   recordStagingSync(staging, {
-    tracker: "#824",
+    tracker: "https://github.com/o/r/issues/824",
     checkpoint: 4,
     syncedAt: "2026-08-25T13:00:00.000Z",
     bodyDigest: "a".repeat(64),
