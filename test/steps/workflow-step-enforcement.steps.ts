@@ -785,6 +785,120 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
       }
       break;
     }
+    case "SCN-UNIT-WFJRNL-019": {
+      const root = this.temp("asc-journal-staging-observation-");
+      const staging = createIssueStaging(root, {
+        title: "journal-staging-observation",
+        answers: answers(),
+        now: new Date(fixtureInstantMs()),
+        requestedMode: "quick",
+      }).path;
+      const journal = path.join(staging, STEP_JOURNAL_FILE);
+      const before = parseStepJournal(fs.readFileSync(journal, "utf8"));
+      fs.appendFileSync(path.join(staging, "00_要求定義.md"), "\n追記内容\n");
+
+      const appended = appendWorkflowJournalEntry({
+        staging,
+        entry: entry(1),
+      });
+
+      const after = parseStepJournal(fs.readFileSync(journal, "utf8"));
+      assert.equal(after.entries.length, before.entries.length + 1);
+      const stored = readStoredStagingRecord(staging);
+      const artifacts = listStagingArtifacts(staging);
+      assert.deepEqual(stored.artifacts, artifacts);
+      assert.equal(stored.digest, calculateStagingDigest(staging, artifacts));
+      assert.equal(appended.stagingDigest, stored.digest);
+      break;
+    }
+    case "SCN-UNIT-WFJRNL-020": {
+      const root = this.temp("asc-journal-unrecoverable-");
+      const staging = createIssueStaging(root, {
+        title: "journal-unrecoverable",
+        answers: answers(),
+        now: new Date(fixtureInstantMs()),
+        requestedMode: "quick",
+      }).path;
+      const journal = path.join(staging, STEP_JOURNAL_FILE);
+      const before = parseStepJournal(fs.readFileSync(journal, "utf8"));
+      const stored = readStoredStagingRecord(staging);
+      const transaction = path.join(
+        path.dirname(staging),
+        `.${path.basename(staging)}.workflow-journal-transaction.json`,
+      );
+      fs.writeFileSync(
+        transaction,
+        `${stableJson({
+          schemaVersion: "agent-skill-chain/workflow-journal-transaction/v1",
+          journalBeforeDigest: "a".repeat(64),
+          journalAfterDigest: "b".repeat(64),
+          stagingDigestBefore: stored.digest,
+          artifacts: stored.artifacts,
+          otherArtifactsDigest: calculateStagingDigest(
+            staging,
+            stored.artifacts.filter(
+              (artifact) => artifact !== STEP_JOURNAL_FILE,
+            ),
+          ),
+        })}\n`,
+        { mode: 0o600 },
+      );
+
+      assert.throws(
+        () => appendWorkflowJournalEntry({ staging, entry: entry(1) }),
+        /workflow journalがtransactionの旧版・新版いずれとも一致しません/u,
+      );
+      const after = parseStepJournal(fs.readFileSync(journal, "utf8"));
+      assert.equal(after.entries.length, before.entries.length);
+      break;
+    }
+    case "SCN-UNIT-WFJRNL-021": {
+      const root = this.temp("asc-journal-staging-mismatch-");
+      const staging = createIssueStaging(root, {
+        title: "journal-staging-mismatch",
+        answers: answers(),
+        now: new Date(fixtureInstantMs()),
+        requestedMode: "quick",
+      }).path;
+      const stored = readStoredStagingRecord(staging);
+      fs.appendFileSync(path.join(staging, "00_要求定義.md"), "\n編集済み\n");
+      const artifacts = listStagingArtifacts(staging);
+      const currentDigest = calculateStagingDigest(staging, artifacts);
+      assert.notEqual(currentDigest, stored.digest);
+      const journal = path.join(staging, STEP_JOURNAL_FILE);
+      const transaction = path.join(
+        path.dirname(staging),
+        `.${path.basename(staging)}.workflow-journal-transaction.json`,
+      );
+      fs.writeFileSync(
+        transaction,
+        `${stableJson({
+          schemaVersion: "agent-skill-chain/workflow-journal-transaction/v1",
+          journalBeforeDigest: crypto
+            .createHash("sha256")
+            .update(fs.readFileSync(journal))
+            .digest("hex"),
+          journalAfterDigest: "f".repeat(64),
+          stagingDigestBefore: currentDigest,
+          artifacts,
+          otherArtifactsDigest: calculateStagingDigest(
+            staging,
+            artifacts.filter((artifact) => artifact !== STEP_JOURNAL_FILE),
+          ),
+        })}\n`,
+        { mode: 0o600 },
+      );
+
+      // markerのstagingDigestBeforeは現在の実内容と一致し、staging recordだけが
+      // 旧値のまま残る。before-publishの3条件のうち
+      // `stored.digest === stagingDigestBefore`だけが偽になる入力である。
+      assert.notEqual(readStoredStagingRecord(staging).digest, currentDigest);
+      assert.throws(
+        () => inspectPendingJournalTransaction(staging),
+        /workflow journalがtransactionの旧版・新版いずれとも一致しません/u,
+      );
+      break;
+    }
     case "SCN-UNIT-WFMODE-001": {
       const rendered = renderModeDecision({
         requestedMode: "quick",
@@ -1517,6 +1631,56 @@ When("{string}の統合検査を実行する", async function (scenarioId: strin
         /symlink|通常file/u,
       );
       assert.equal(fs.readFileSync(targetJournal, "utf8"), before);
+      break;
+    }
+    case "SCN-INT-WFSTEP-019": {
+      const staging = createQuickStaging(root);
+      const journal = path.join(staging, STEP_JOURNAL_FILE);
+      const before = parseStepJournal(fs.readFileSync(journal, "utf8"));
+      fs.appendFileSync(path.join(staging, "00_要求定義.md"), "\n統合追記\n");
+
+      appendWorkflowJournalEntry({ staging, entry: entry(1) });
+
+      const after = parseStepJournal(fs.readFileSync(journal, "utf8"));
+      assert.equal(after.entries.length, before.entries.length + 1);
+      break;
+    }
+    case "SCN-INT-WFSTEP-020": {
+      const staging = createQuickStaging(root);
+      const stored = readStoredStagingRecord(staging);
+      const journal = path.join(staging, STEP_JOURNAL_FILE);
+      const beforeSource = fs.readFileSync(journal, "utf8");
+      const transaction = path.join(
+        path.dirname(staging),
+        `.${path.basename(staging)}.workflow-journal-transaction.json`,
+      );
+      fs.writeFileSync(
+        transaction,
+        `${stableJson({
+          schemaVersion: "agent-skill-chain/workflow-journal-transaction/v1",
+          journalBeforeDigest: crypto
+            .createHash("sha256")
+            .update(beforeSource)
+            .digest("hex"),
+          journalAfterDigest: "f".repeat(64),
+          stagingDigestBefore: stored.digest,
+          artifacts: stored.artifacts,
+          otherArtifactsDigest: calculateStagingDigest(
+            staging,
+            stored.artifacts.filter(
+              (artifact) => artifact !== STEP_JOURNAL_FILE,
+            ),
+          ),
+        })}\n`,
+        { mode: 0o600 },
+      );
+      fs.appendFileSync(path.join(staging, "00_要求定義.md"), "\n未記録変更\n");
+
+      assert.throws(
+        () => appendWorkflowJournalEntry({ staging, entry: entry(1) }),
+        /workflow journal transaction以外のstaging成果物が変更されています/u,
+      );
+      assert.equal(fs.readFileSync(journal, "utf8"), beforeSource);
       break;
     }
     default:
@@ -4006,6 +4170,36 @@ if (exact(["auth", "status"])) {
           0,
         );
       }
+      break;
+    }
+    case "SCN-E2E-WFSTEP-039": {
+      const root = this.temp("asc-workflow-record-cli-");
+      const staging = createQuickStaging(root);
+      const journal = path.join(staging, STEP_JOURNAL_FILE);
+      const before = parseStepJournal(fs.readFileSync(journal, "utf8"));
+      fs.appendFileSync(path.join(staging, "00_要求定義.md"), "\nCLI追記\n");
+
+      const checked = await executeMain([
+        "workflow",
+        "record",
+        `--staging=${staging}`,
+        "--step=1",
+        "--artifact=00_要求定義.md",
+        "--evidence=編集済みstagingの受理",
+        `--recorded-at=${instant}`,
+      ]);
+
+      assert.equal(checked.status, 0, checked.stdout);
+      const output = JSON.parse(checked.stdout) as {
+        entry?: StepJournalEntry;
+        journalDigest?: string;
+        stagingDigest?: string;
+      };
+      assert.ok(output.entry);
+      assert.match(output.journalDigest ?? "", /^[a-f0-9]{64}$/u);
+      assert.match(output.stagingDigest ?? "", /^[a-f0-9]{64}$/u);
+      const after = parseStepJournal(fs.readFileSync(journal, "utf8"));
+      assert.equal(after.entries.length, before.entries.length + 1);
       break;
     }
     default:
