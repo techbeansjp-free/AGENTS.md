@@ -698,7 +698,7 @@ function parseMerge(
       parsed.preparedAt,
       "merge.observation.observedAt",
     );
-  if (parsed.observation && parsed.dispatchClaimedAt) {
+  if (parsed.observation) {
     const request = parsed.observation.providerRequest;
     if (
       request &&
@@ -708,13 +708,13 @@ function parseMerge(
       throw new Error(
         "merge providerRequestのhead/baseが固定済み認可tupleと一致しません",
       );
-    if (parsed.observation.providerMergedAt)
+    if (parsed.dispatchClaimedAt && parsed.observation.providerMergedAt)
       notBefore(
         parsed.observation.providerMergedAt,
         parsed.dispatchClaimedAt,
         "merge.observation.providerMergedAt",
       );
-    if (request)
+    if (parsed.dispatchClaimedAt && request)
       notBefore(
         request.requestedAt,
         parsed.dispatchClaimedAt,
@@ -831,7 +831,7 @@ function validateShape(state: DeliveryState): void {
     throw new Error(
       `delivery state ${state.state}が不正です: reconciliation記録が必要です`,
     );
-  if (state.step11) fail("reconciliation記録が必要です");
+  if (state.step11) fail("reconciliation中はstep11がnullでなければなりません");
   if (reconciliation.phase === "create") {
     if (state.pr || state.merge) fail("create照合中はprとmergeがnullです");
     notBefore(

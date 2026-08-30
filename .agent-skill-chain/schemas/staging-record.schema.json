@@ -51,7 +51,7 @@
     },
     "tracker": {
       "type": ["string", "null"],
-      "pattern": "^https://github\\.com/[^/\\s]+/[^/\\s]+/issues/[1-9][0-9]*$"
+      "pattern": "^(?:https://github\\.com/[^/\\s]+/[^/\\s]+/issues/[1-9][0-9]*|#?[1-9][0-9]*)$"
     },
     "checkpoint": {
       "enum": [4, 8, null]

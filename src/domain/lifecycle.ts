@@ -6,6 +6,11 @@ import { parseJsonStrict, resolveContained } from "../lib/security.js";
 import { findPackageRoot } from "../lib/package-root.js";
 import { PACKAGE_VERSION } from "../lib/version.js";
 import { isRecord } from "../types.js";
+import {
+  inspectExecutableVersion,
+  MINIMUM_GH_VERSION,
+  MINIMUM_GIT_VERSION,
+} from "../lib/executable-version.js";
 import { loadProjectPolicySet } from "./policy.js";
 import {
   DEPRECATED_POLICY_SCHEMA_ALIASES,
@@ -549,6 +554,23 @@ export function doctor(target: string, worktreeObservations?: unknown) {
     }
   }
   const workflowHealthy = workflowStagings.every((staging) => staging.valid);
+  const tooling = {
+    git: inspectExecutableVersion(
+      "git",
+      ["--version"],
+      target,
+      MINIMUM_GIT_VERSION,
+    ),
+    gh: inspectExecutableVersion(
+      "gh",
+      ["--version"],
+      target,
+      MINIMUM_GH_VERSION,
+    ),
+  };
+  const toolingDiagnostics = [tooling.git, tooling.gh].flatMap((tool) =>
+    tool.diagnostic ? [tool.diagnostic] : [],
+  );
   return {
     healthy: installed && diagnostics.length === 0,
     installed,
@@ -561,6 +583,12 @@ export function doctor(target: string, worktreeObservations?: unknown) {
     legacyRuntimeEnabled: false,
     projectPolicyStatus,
     projectPolicyMessage,
+    tooling: {
+      healthy: toolingDiagnostics.length === 0,
+      diagnostics: toolingDiagnostics,
+      git: tooling.git,
+      gh: tooling.gh,
+    },
     workflow: {
       healthy: workflowHealthy,
       stagings: workflowStagings,

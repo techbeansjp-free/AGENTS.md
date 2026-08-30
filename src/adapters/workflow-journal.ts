@@ -5,6 +5,7 @@ import {
   calculateStagingDigest,
   finalizeStoredStagingPromotion,
   listStagingArtifacts,
+  migrateLegacyStagingTracker,
   promoteStoredStagingModeToFull,
   refreshStoredStagingDigest,
   readStoredStagingRecord,
@@ -1019,6 +1020,7 @@ export function resolvePullRequestStaging(input: {
   issue: number;
   repository: string;
 }): string {
+  const legacyTracker = /^#?([1-9]\d*)$/u;
   const trackerMatches = (staging: string): boolean => {
     const tracker = readStoredStagingRecord(staging).tracker;
     const matched =
@@ -1027,12 +1029,21 @@ export function resolvePullRequestStaging(input: {
             tracker,
           )
         : null;
-    return Boolean(
-      matched &&
-      `${matched[1]}/${matched[2]}`.toLowerCase() ===
-        input.repository.toLowerCase() &&
-      Number(matched[3]) === input.issue,
-    );
+    if (matched)
+      return (
+        `${matched[1]}/${matched[2]}`.toLowerCase() ===
+          input.repository.toLowerCase() && Number(matched[3]) === input.issue
+      );
+    const legacy =
+      typeof tracker === "string" ? legacyTracker.exec(tracker) : null;
+    return Boolean(legacy && Number(legacy[1]) === input.issue);
+  };
+  const canonicalizeTracker = (staging: string): string => {
+    migrateLegacyStagingTracker(staging, {
+      repository: input.repository,
+      issue: input.issue,
+    });
+    return staging;
   };
   const issuesRoot = path.join(
     path.resolve(input.root),
@@ -1051,7 +1062,7 @@ export function resolvePullRequestStaging(input: {
       throw new Error(
         "明示stagingのtrackerが対象repository・Issueと一致しません",
       );
-    return staging;
+    return canonicalizeTracker(staging);
   }
   if (!fs.existsSync(issuesRoot))
     throw new Error("PR作成に必要なIssue staging directoryがありません");
@@ -1070,5 +1081,5 @@ export function resolvePullRequestStaging(input: {
     throw new Error(
       "PR作成対象のIssue stagingを一意に解決できません。--stagingで明示してください",
     );
-  return assertWorkflowStaging(candidates[0] as string);
+  return canonicalizeTracker(assertWorkflowStaging(candidates[0] as string));
 }

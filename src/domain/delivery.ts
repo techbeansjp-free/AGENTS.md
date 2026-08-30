@@ -233,7 +233,7 @@ export function validateIssueClosingReferences(
 } {
   const extract = (pattern: RegExp): number[] =>
     [...body.matchAll(pattern)].map((match) => Number(match[1]));
-  const closes = extract(/\b(?:closes?|closed|fixes|resolves)\s+#(\d+)\b/giu);
+  const closes = extractIssueClosingNumbers(body);
   const relates = extract(/\brelates\s+to\s+#(\d+)\b/giu);
   const errors: string[] = [];
   const canonicalCount = closes.filter(
@@ -257,6 +257,15 @@ export function validateIssueClosingReferences(
       errors.push(`後続Issue #${issue}に終端keywordを使用できません`);
   }
   return { valid: errors.length === 0, errors, closes, relates };
+}
+
+const ISSUE_CLOSING_REFERENCE =
+  /\b(?:close(?:s|d)?|fix(?:es|ed)?|resolve(?:s|d)?)(?:\s+|\s*:\s*)#(\d+)\b/giu;
+
+export function extractIssueClosingNumbers(body: string): number[] {
+  return [...body.matchAll(ISSUE_CLOSING_REFERENCE)].map((match) =>
+    Number(match[1]),
+  );
 }
 
 /**
@@ -655,6 +664,7 @@ export function authorizeMerge(input: MergeInput) {
     )
       return deny("同一review IDの観測内容が矛盾しています");
     if (!sameId) byReviewId.set(approval.reviewId, approval);
+    if (approval.state === "COMMENTED") continue;
     const current = latestByActor.get(approval.actorId);
     if (!current) {
       latestByActor.set(approval.actorId, approval);

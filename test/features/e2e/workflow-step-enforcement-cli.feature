@@ -56,7 +56,7 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-011"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
-  Scenario: SCN-E2E-WFSTEP-012 providerにmerge要求がないmerge intentを同じidentityで安全に再試行する
+  Scenario: SCN-E2E-WFSTEP-012 merge intentを安全に再試行し未対応ghをdispatch前に拒否する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-012"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
@@ -71,7 +71,7 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-014"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
-  Scenario: SCN-E2E-WFSTEP-015 merge queue entryを要求済みEvidenceとして永続化しmergeを再送しない
+  Scenario: SCN-E2E-WFSTEP-015 merge queue entryを永続化して再送せずmerged終端まで検証する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-015"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
@@ -156,7 +156,7 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-031"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
-  Scenario: SCN-E2E-WFSTEP-032 同じreviewerの旧APPROVEDを後続CHANGES_REQUESTEDより優先しない
+  Scenario: SCN-E2E-WFSTEP-032 同じreviewerの最新状態変更を採用しCOMMENTEDではAPPROVEDを失効させない
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-032"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる

@@ -1350,6 +1350,7 @@ interface PreparedPullRequest {
 
 interface DeliveryProviderControl {
   phase: "ready" | "merge-requested" | "queue-requested" | "merged";
+  ghVersion: string;
   closingChanged: boolean;
   failMerge: boolean;
   mergedAt: string;
@@ -1368,10 +1369,12 @@ interface DeliveryProviderControl {
     | "malformed-node";
   prAuthorId: string | null;
   implementationAuthorId: string | null;
-  reviewDisposition: "approved" | "changes-requested";
+  reviewDisposition:
+    "approved" | "changes-requested" | "commented-after-approval";
   mergeTreeTampered: boolean;
   mergeOnDefaultBranch: boolean;
   mergeImmediately: boolean;
+  queueOnMerge: boolean;
   retainAutoMergeRequestWhenMerged: boolean;
   headRepository: string;
   isCrossRepository: boolean;
@@ -1647,6 +1650,7 @@ function prepareDeliveryCli(
   const observedBody = path.join(stubDirectory, "observed-pr-body.md");
   const control: DeliveryProviderControl = {
     phase: "ready",
+    ghVersion: "2.97.0",
     closingChanged: false,
     failMerge: false,
     mergedAt: fixtureInstant({ secondsAhead: 1 }),
@@ -1661,6 +1665,7 @@ function prepareDeliveryCli(
     mergeTreeTampered: false,
     mergeOnDefaultBranch: true,
     mergeImmediately: false,
+    queueOnMerge: false,
     retainAutoMergeRequestWhenMerged: false,
     headRepository: "o/r",
     isCrossRepository: false,
@@ -1749,7 +1754,9 @@ const observation = () => ({
     : [{ number: 877, url: issueUrl }],
 });
 
-if (exact(["auth", "status"])) {
+if (exact(["--version"])) {
+  process.stdout.write("gh version " + control.ghVersion + "\\n");
+} else if (exact(["auth", "status"])) {
   process.exitCode = 0;
 } else if (
   exact(["repo", "view", "o/r", "--json", "nameWithOwner,viewerPermission"])
@@ -1913,10 +1920,12 @@ if (exact(["auth", "status"])) {
         user: { node_id: "independent-reviewer" },
         submitted_at: control.requestedAt,
       },
-      ...(control.reviewDisposition === "changes-requested"
+      ...(control.reviewDisposition !== "approved"
         ? [{
             id: 8,
-            state: "CHANGES_REQUESTED",
+            state: control.reviewDisposition === "changes-requested"
+              ? "CHANGES_REQUESTED"
+              : "COMMENTED",
             commit_id: sha,
             user: { node_id: "independent-reviewer" },
             submitted_at: new Date(Date.parse(control.requestedAt) + 1000).toISOString(),
@@ -1987,7 +1996,11 @@ if (exact(["auth", "status"])) {
     controlFile,
     JSON.stringify({
       ...control,
-      phase: control.mergeImmediately ? "merged" : "merge-requested",
+      phase: control.queueOnMerge
+        ? "queue-requested"
+        : control.mergeImmediately
+          ? "merged"
+          : "merge-requested",
       failMerge: false,
       requestedAt,
       mergedAt: control.mergeImmediately
@@ -2562,6 +2575,18 @@ if (exact(["auth", "status"])) {
       assert.equal(retried.status, 0, retried.stdout + retried.stderr);
       const calls = deliveryProviderCalls(prepared);
       assert.equal(calls.filter(isPullRequestFindCall).length, 1);
+      const findCall = calls.find(isPullRequestFindCall);
+      assert.ok(findCall);
+      for (const variable of [
+        "owner=o",
+        "repo=r",
+        "head=feature/x",
+        "base=main",
+      ]) {
+        const index = findCall.indexOf(variable);
+        assert.ok(index > 0, `GraphQL変数がありません: ${variable}`);
+        assert.equal(findCall[index - 1], "-f");
+      }
       assert.equal(
         calls.filter(isCreateCall).length,
         1,
@@ -2609,6 +2634,29 @@ if (exact(["auth", "status"])) {
         delta.filter(isMergeCall).length,
         1,
         "providerがmerge要求なしを確定した同一intentは一度だけ再送する",
+      );
+
+      const unsupported = prepareDeliveryCli(this, { ghVersion: "2.12.1" });
+      createDeliveryPullRequest(unsupported);
+      const unsupportedResult = executeDeliveryMerge(unsupported);
+      assert.notEqual(unsupportedResult.status, 0);
+      assert.match(
+        unsupportedResult.stdout + unsupportedResult.stderr,
+        /gh 2\.13\.0以上/u,
+      );
+      assert.equal(
+        deliveryProviderCalls(unsupported).filter(isMergeCall).length,
+        0,
+        "未対応ghではdispatch claim取得前にmergeを拒否する",
+      );
+      assert.equal(
+        parseDeliveryState(
+          fs.readFileSync(
+            path.join(unsupported.staging, ...DELIVERY_STATE_FILE.split("/")),
+            "utf8",
+          ),
+        ).state,
+        "pr-bound",
       );
       break;
     }
@@ -2660,34 +2708,34 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-E2E-WFSTEP-015": {
-      const prepared = prepareDeliveryCli(this);
-      createDeliveryPullRequest(prepared);
-      const bound = parseDeliveryState(
-        fs.readFileSync(
-          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
-          "utf8",
-        ),
+      const prepared = prepareDeliveryCli(
+        this,
+        { autoMergeMethod: "SQUASH", queueOnMerge: true },
+        "automatic",
+        "squash",
       );
-      prepareStoredMergeIntent(prepared.staging, {
-        method: "merge",
-        authorizedHeadSha: prepared.headSha,
-        authorizedBaseRef: "main",
-        authorizedBaseSha: prepared.baseSha,
-        trustedPolicyCommitSha: prepared.baseSha,
-        ...preparedMergeReviewEvidence(prepared),
-        intentId: "8".repeat(32),
-        preparedAt: bound.pr?.boundAt ?? fixtureInstant(),
-      });
-      writeDeliveryProviderControl(prepared, { phase: "queue-requested" });
+      createDeliveryPullRequest(prepared);
       const before = deliveryProviderCalls(prepared);
-      const observed = executeDeliveryMerge(prepared);
+      const observed = executeDeliveryMerge(prepared, { method: "squash" });
       assert.equal(observed.status, 0, observed.stdout + observed.stderr);
       const delta = deliveryProviderCalls(prepared).slice(before.length);
-      assert.equal(delta.filter(isMergeCall).length, 0);
+      assert.equal(delta.filter(isMergeCall).length, 1);
       assert.equal(
         delta.some((args) => args[0] === "api" && args[1] === "graphql"),
         true,
       );
+      const queueGraphql = delta.find(
+        (args) =>
+          args[0] === "api" &&
+          args[1] === "graphql" &&
+          args.some((argument) => argument.includes("ExactPullRequestQueue")),
+      );
+      assert.ok(queueGraphql);
+      assert.ok(queueGraphql.includes("-f"));
+      assert.ok(queueGraphql.includes("owner=o"));
+      assert.ok(queueGraphql.includes("repo=r"));
+      assert.ok(queueGraphql.includes("-F"));
+      assert.ok(queueGraphql.includes("number=1"));
       const state = parseDeliveryState(
         fs.readFileSync(
           path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
@@ -2699,6 +2747,7 @@ if (exact(["auth", "status"])) {
         state.merge?.observation?.providerRequest?.kind,
         "merge-queue",
       );
+      assert.ok(state.merge?.dispatchClaimedAt);
       assert.equal(
         parseStepJournal(
           fs.readFileSync(
@@ -2707,6 +2756,36 @@ if (exact(["auth", "status"])) {
           ),
         ).entries.some((entry) => entry.step === 11),
         false,
+      );
+
+      const callsBeforeTerminal = deliveryProviderCalls(prepared);
+      const providerControl = JSON.parse(
+        fs.readFileSync(prepared.controlFile, "utf8"),
+      ) as DeliveryProviderControl;
+      writeDeliveryProviderControl(prepared, {
+        phase: "merged",
+        mergedAt: new Date(
+          Date.parse(providerControl.requestedAt) + 1000,
+        ).toISOString(),
+      });
+      const terminal = executeDeliveryMerge(prepared, { method: "squash" });
+      assert.equal(terminal.status, 0, terminal.stdout + terminal.stderr);
+      assert.equal(
+        deliveryProviderCalls(prepared)
+          .slice(callsBeforeTerminal.length)
+          .filter(isMergeCall).length,
+        0,
+      );
+      const completed = parseDeliveryState(
+        fs.readFileSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+          "utf8",
+        ),
+      );
+      assert.equal(completed.state, "step11-recorded");
+      assert.equal(
+        completed.merge?.observation?.providerRequest?.kind,
+        "merge-queue",
       );
       break;
     }
@@ -3278,20 +3357,32 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-E2E-WFSTEP-032": {
-      const prepared = prepareDeliveryCli(this);
-      createDeliveryPullRequest(prepared);
-      writeDeliveryProviderControl(prepared, {
+      const rejectedPrepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(rejectedPrepared);
+      writeDeliveryProviderControl(rejectedPrepared, {
         reviewDisposition: "changes-requested",
       });
-      const rejected = executeDeliveryMerge(prepared);
+      const rejected = executeDeliveryMerge(rejectedPrepared);
       assert.notEqual(rejected.status, 0);
       assert.match(
         rejected.stdout + rejected.stderr,
         /独立review|review|承認/u,
       );
       assert.equal(
-        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        deliveryProviderCalls(rejectedPrepared).filter(isMergeCall).length,
         0,
+      );
+
+      const acceptedPrepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(acceptedPrepared);
+      writeDeliveryProviderControl(acceptedPrepared, {
+        reviewDisposition: "commented-after-approval",
+      });
+      const accepted = executeDeliveryMerge(acceptedPrepared);
+      assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+      assert.equal(
+        deliveryProviderCalls(acceptedPrepared).filter(isMergeCall).length,
+        1,
       );
       break;
     }

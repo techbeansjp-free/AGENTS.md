@@ -129,6 +129,12 @@ Then("doctorはhost adapterをhealthyと診断する", function () {
   assert.equal(result.healthy, true);
   assert.equal(result.adapters.healthy, true);
   assert.deepEqual(result.adapters.diagnostics, []);
+  assert.equal(result.tooling.git.minimumVersion, "2.38.0");
+  assert.equal(result.tooling.git.supported, true);
+  assert.equal(result.tooling.gh.minimumVersion, "2.13.0");
+  assert.equal(result.tooling.gh.supported, true);
+  assert.equal(result.tooling.healthy, true);
+  assert.deepEqual(result.tooling.diagnostics, []);
 });
 
 Given(

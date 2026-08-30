@@ -16,6 +16,7 @@ import {
   createIssueStaging,
   recordStagingSync,
 } from "../../src/domain/issue.js";
+import { resolvePullRequestStaging } from "../../src/adapters/workflow-journal.js";
 import { stableJson } from "../../src/lib/security.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
@@ -419,6 +420,13 @@ Given("未同期のquick stagingがある", function () {
   }).path;
 });
 
+Given("absolute trackerで同期済みのquick stagingがある", function () {
+  this.root = this.temp("asc-staging-legacy-tracker-");
+  this.target = createRecordedStaging(this.root, "legacy-tracker", {
+    synced: true,
+  });
+});
+
 When("不一致と一致の読み取りdigestで同期記録を順に試みる", function () {
   const expected = sha256("body\n");
   const errors: Error[] = [];
@@ -478,7 +486,7 @@ Then("absolute GitHub Issue URLでないtrackerは拒否される", function () 
   );
 });
 
-When("保存済みstaging recordのtrackerを短縮番号へ改ざんする", function () {
+When("保存済みstaging recordのtrackerをlegacy短縮番号にする", function () {
   const recordFile = path.join(this.target ?? "", "staging-record.json");
   const record = JSON.parse(fs.readFileSync(recordFile, "utf8")) as Record<
     string,
@@ -488,21 +496,19 @@ When("保存済みstaging recordのtrackerを短縮番号へ改ざんする", fu
     recordFile,
     `${JSON.stringify({ ...record, tracker: "#860" }, null, 2)}\n`,
   );
-  this.syncErrors = [];
-  try {
-    readStoredStagingRecord(this.target ?? "");
-  } catch (error) {
-    this.syncErrors.push(
-      error instanceof Error ? error : new Error(String(error)),
-    );
-  }
+  this.other = resolvePullRequestStaging({
+    root: this.root ?? "",
+    staging: this.target,
+    issue: 860,
+    repository: "example/repository",
+  });
 });
 
-Then("改ざんされた短縮trackerの読み取りは拒否される", function () {
-  assert.equal(this.syncErrors?.length, 1);
-  assert.match(
-    this.syncErrors?.[0]?.message ?? "",
-    /absolute GitHub Issue URL/u,
+Then("legacy trackerはPR対象解決時にabsolute URLへ移行される", function () {
+  assert.equal(this.other, this.target);
+  assert.equal(
+    readStoredStagingRecord(this.target ?? "").tracker,
+    "https://github.com/example/repository/issues/860",
   );
 });
 
@@ -593,7 +599,6 @@ When("元Issueへの再同期を適用する", function () {
       issue: 860,
     }),
   );
-  this.sideEffectCount = 1;
   recordStagingSync(this.target ?? "", {
     tracker: "https://github.com/example/repository/issues/860",
     checkpoint: 8,
@@ -605,7 +610,6 @@ When("元Issueへの再同期を適用する", function () {
 });
 
 Then("元Issueだけが同期されsync-verifiedになる", function () {
-  assert.equal(this.sideEffectCount, 1);
   const stored = readStoredStagingRecord(this.target ?? "");
   assert.equal(stored.state, "sync-verified");
   assert.equal(

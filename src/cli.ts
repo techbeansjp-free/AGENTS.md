@@ -19,6 +19,7 @@ import {
   assertPullRequestTrackerBinding,
   createPullRequest,
   authorizeMerge,
+  extractIssueClosingNumbers,
 } from "./domain/delivery.js";
 import {
   assessImplementationDiscovery,
@@ -93,6 +94,7 @@ import {
 } from "./domain/migration.js";
 import { validateScenarioTrace } from "./domain/trace.js";
 import {
+  canonicalProviderInstant,
   github,
   GitHubProviderUnavailableError,
   samePolicyAuthorityObservation,
@@ -103,6 +105,11 @@ import {
   type PullRequestInspection,
   type PullRequestQueueObservation,
 } from "./adapters/github.js";
+import {
+  assertMinimumExecutableVersion,
+  MINIMUM_GH_VERSION,
+  MINIMUM_GIT_VERSION,
+} from "./lib/executable-version.js";
 import { git } from "./lib/process.js";
 import { writeFileAtomic } from "./lib/atomic.js";
 import { validateRepositoryConformance } from "./domain/conformance.js";
@@ -410,10 +417,10 @@ function assertObservedClosingContract(input: {
       "PRのclosing Issueが準備済みdelivery identityと一致しません",
     );
   const closes = [
-    ...withoutMarkdownCode(input.observed.body).matchAll(
-      /\b(?:closes?|closed|fixes|resolves)\s+#(\d+)\b/giu,
+    ...new Set(
+      extractIssueClosingNumbers(withoutMarkdownCode(input.observed.body)),
     ),
-  ].map((match) => Number(match[1]));
+  ];
   const bodyClosingDigest = closingContractDigest({
     canonicalIssue: binding.issue,
     canonicalIssueUrl: binding.issueUrl,
@@ -508,18 +515,6 @@ function mergeObservationFromProvider(input: {
   let mergeCommitSha: string | null = null;
   let providerMergedAt: string | null = null;
   let providerRequest: MergeProviderRequest | null = null;
-  const canonicalProviderTime = (value: unknown, label: string): string => {
-    const parsed = typeof value === "string" ? Date.parse(value) : Number.NaN;
-    if (
-      typeof value !== "string" ||
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.test(
-        value,
-      ) ||
-      !Number.isFinite(parsed)
-    )
-      throw new Error(`${label}を再現可能に観測できません`);
-    return new Date(parsed).toISOString();
-  };
   const currentAutoMergeRequest = (): MergeProviderRequest | null => {
     if (!autoMergeRequest) return null;
     if (!input.state.merge)
@@ -531,7 +526,7 @@ function mergeObservationFromProvider(input: {
       );
     return {
       kind: "auto-merge",
-      requestedAt: canonicalProviderTime(
+      requestedAt: canonicalProviderInstant(
         autoMergeRequest.enabledAt,
         "auto-merge enabledAt",
       ),
@@ -542,7 +537,10 @@ function mergeObservationFromProvider(input: {
   };
   if (merged) {
     const mergedAt = input.observed.mergedAt;
-    providerMergedAt = canonicalProviderTime(mergedAt, "merged PRのmergedAt");
+    providerMergedAt = canonicalProviderInstant(
+      mergedAt,
+      "merged PRのmergedAt",
+    );
     const oid = input.observed.mergeCommit?.oid;
     if (typeof oid !== "string" || !/^[a-f0-9]{40}$/u.test(oid))
       throw new Error("merged PRのmerge commit OIDを観測できません");
@@ -592,6 +590,8 @@ function finishObservedMerge(
   if (!current.pr || !current.merge?.observation)
     throw new Error("Step 11記録には固定PRとmerge observationが必要です");
   const observation = current.merge.observation;
+  if (observation.providerState !== "merged")
+    throw new Error("Step 11記録にはproviderのmerged終端観測が必要です");
   const journal = readWorkflowJournal(staging);
   if (journal.errors.length > 0)
     throw new Error(
@@ -644,7 +644,7 @@ function finishObservedMerge(
   return {
     exitCode: 0,
     output: {
-      state: observation.providerState === "merged" ? "merged" : "merge-queued",
+      state: "merged",
       url: current.pr.url,
       observation,
       workflow,
@@ -812,7 +812,8 @@ interface MergeReviewEvidence extends MergeCandidateEvidence {
 /**
  * GitHub review履歴は現在状態の一覧ではなくevent列である。古いAPPROVEDを後続の
  * CHANGES_REQUESTED/DISMISSEDより先に拾うと失効reviewを固定できるため、全eventを
- * 検証したうえでactorごとの最新eventだけを候補にする。
+ * 検証したうえでactorごとの最新の承認状態変更eventだけを候補にする。COMMENTEDは
+ * approval状態を変更しないため、後続コメントだけで有効なAPPROVEDを失効させない。
  */
 function currentIndependentApprovals(input: {
   approvals: readonly ApprovalObservation[];
@@ -860,6 +861,7 @@ function currentIndependentApprovals(input: {
     )
       throw new Error("provider review履歴で同じreview IDが矛盾しています");
     if (!sameId) byReviewId.set(approval.reviewId, approval);
+    if (approval.state === "COMMENTED") continue;
     const current = latestByActor.get(approval.actorId);
     if (!current) {
       latestByActor.set(approval.actorId, approval);
@@ -1195,6 +1197,10 @@ function assertTerminalMergeProof(input: {
     );
 
   const request = input.observation.providerRequest;
+  const terminalBaseSha =
+    request?.kind === "merge-queue"
+      ? request.baseSha
+      : intent.authorizedBaseSha;
   if (request) {
     if (
       request.requestedAt < claim ||
@@ -1212,7 +1218,7 @@ function assertTerminalMergeProof(input: {
   if (intent.method === "merge") {
     if (
       parents.length !== 2 ||
-      parents[0] !== intent.authorizedBaseSha ||
+      parents[0] !== terminalBaseSha ||
       parents[1] !== intent.authorizedHeadSha
     )
       throw new Error(
@@ -1220,29 +1226,38 @@ function assertTerminalMergeProof(input: {
       );
     return;
   }
-  if (!request || request.kind !== "auto-merge")
+  if (!request)
     throw new Error(
-      `${intent.method}終端はmethod付きauto-merge request Evidenceなしでは確定できません`,
+      `${intent.method}終端はauto-mergeまたはmerge-queue request Evidenceなしでは確定できません`,
     );
   if (intent.method === "squash") {
-    if (parents.length !== 1 || parents[0] !== intent.authorizedBaseSha)
-      throw new Error("squash commitの親が固定済みbase SHAと一致しません");
+    if (parents.length !== 1 || parents[0] !== terminalBaseSha)
+      throw new Error("squash commitの親が終端検証base SHAと一致しません");
     return;
   }
   if (parents.length !== 1)
     throw new Error("rebase終端のcommit topologyが単一親ではありません");
 }
 
-function expectedMergeResultTree(root: string, state: DeliveryState): string {
+function expectedMergeResultTree(
+  root: string,
+  state: DeliveryState,
+  observation: Omit<MergeObservation, "observationId">,
+): string {
   const intent = state.merge;
   if (!intent) throw new Error("期待merge treeの固定intentがありません");
+  assertMinimumExecutableVersion(
+    "git",
+    ["--version"],
+    root,
+    MINIMUM_GIT_VERSION,
+  );
+  const baseSha =
+    observation.providerRequest?.kind === "merge-queue"
+      ? observation.providerRequest.baseSha
+      : intent.authorizedBaseSha;
   const source = git(
-    [
-      "merge-tree",
-      "--write-tree",
-      intent.authorizedBaseSha,
-      intent.authorizedHeadSha,
-    ],
+    ["merge-tree", "--write-tree", baseSha, intent.authorizedHeadSha],
     root,
   ).stdout.trim();
   if (!/^[a-f0-9]{40}$/u.test(source))
@@ -1354,7 +1369,11 @@ function readBackPreparedPullRequestMerge(input: {
         state: input.state,
         observation: merge,
         topology,
-        expectedTreeSha: expectedMergeResultTree(input.root, input.state),
+        expectedTreeSha: expectedMergeResultTree(
+          input.root,
+          input.state,
+          merge,
+        ),
         defaultBranchTip: repositoryAuthority.defaultBranchTipOid,
         ancestry,
       });
@@ -1557,6 +1576,12 @@ function retryPreparedMergeAfterConfirmedAbsence(input: {
       { repository: input.repository },
       input.root,
     );
+    assertMinimumExecutableVersion(
+      "gh",
+      ["--version"],
+      input.root,
+      MINIMUM_GH_VERSION,
+    );
     const claimed = claimStoredMergeDispatch(
       input.staging,
       deliveryEventTime(input.state.merge.preparedAt),
@@ -1744,17 +1769,6 @@ function handlePullRequestMerge(flags: Flags): number {
       };
     }
     if (current.state === "merge-observed") {
-      if (current.merge?.observation?.providerState === "merged")
-        return readBackPreparedPullRequestMerge({
-          root,
-          staging,
-          repository,
-          pr,
-          state: current,
-          tracker: stagingRecord.tracker,
-          mode: workflowInspection.mode,
-          apply,
-        });
       return readBackPreparedPullRequestMerge({
         root,
         staging,
@@ -1888,6 +1902,12 @@ function handlePullRequestMerge(flags: Flags): number {
       );
 
     github("repository.assert-write", { repository }, root);
+    assertMinimumExecutableVersion(
+      "gh",
+      ["--version"],
+      root,
+      MINIMUM_GH_VERSION,
+    );
 
     const prepared = prepareStoredMergeIntent(staging, {
       method,

@@ -75,7 +75,9 @@ const STORED_FIELDS = new Set([
 ]);
 const SHA256 = /^[a-f0-9]{64}$/u;
 const ROOT_META = /[\0\p{Cc}\p{Cf}%$*?{}~]/u;
-const TRACKER = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/[1-9]\d*$/u;
+const CURRENT_TRACKER =
+  /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/[1-9]\d*$/u;
+const LEGACY_TRACKER = /^#?([1-9]\d*)$/u;
 const heldMutationLocks = new Set<string>();
 
 function processIsAlive(pid: number): boolean {
@@ -547,8 +549,14 @@ function parseStoredRecord(source: string): StoredStagingRecord {
     parsed.checkpoint !== 8
   )
     throw new Error("checkpointが不正です");
-  if (parsed.tracker !== null && !TRACKER.test(parsed.tracker))
-    throw new Error("trackerはabsolute GitHub Issue URLが必要です");
+  if (
+    parsed.tracker !== null &&
+    !CURRENT_TRACKER.test(parsed.tracker) &&
+    !LEGACY_TRACKER.test(parsed.tracker)
+  )
+    throw new Error(
+      "trackerはabsolute GitHub Issue URLまたはlegacy Issue番号が必要です",
+    );
   if (parsed.syncedAt !== null) parseInstant(parsed.syncedAt, "syncedAt");
   for (const digest of [parsed.syncDigest, parsed.readBackDigest])
     if (digest !== null && !SHA256.test(digest))
@@ -606,6 +614,46 @@ export function readStoredStagingRecord(
   return parseStoredRecord(
     fs.readFileSync(path.join(directory, STAGING_RECORD_FILE), "utf8"),
   );
+}
+
+/**
+ * v0.3.1以前に保存された`#123`/`123` trackerを、trustedなrepository・Issue入力へ
+ * 一致する場合だけ現行のabsolute URLへ一度だけ移行する。新規writeの入力契約は
+ * `recordStagingSync`が引き続きabsolute URLだけに制限する。
+ */
+export function migrateLegacyStagingTracker(
+  directory: string,
+  input: Readonly<{ repository: string; issue: number }>,
+): StoredStagingRecord {
+  if (
+    !/^[^/\s]+\/[^/\s]+$/u.test(input.repository) ||
+    !Number.isSafeInteger(input.issue) ||
+    input.issue <= 0
+  )
+    throw new Error("legacy tracker移行対象のrepositoryまたはIssueが不正です");
+  const resolved = path.resolve(directory);
+  return withStagingMutationLock(resolved, () => {
+    const current = readStoredStagingRecord(resolved);
+    const expected = `https://github.com/${input.repository}/issues/${input.issue}`;
+    if (current.tracker?.toLowerCase() === expected.toLowerCase())
+      return current;
+    const legacy =
+      typeof current.tracker === "string"
+        ? LEGACY_TRACKER.exec(current.tracker)
+        : null;
+    if (!legacy || Number(legacy[1]) !== input.issue)
+      throw new Error(
+        "legacy trackerが移行対象のrepository・Issueと一致しません",
+      );
+    writeFileAtomic(
+      path.join(resolved, STAGING_RECORD_FILE),
+      `${stableJson({ ...current, tracker: expected })}\n`,
+    );
+    const reread = readStoredStagingRecord(resolved);
+    if (reread.tracker !== expected)
+      throw new Error("legacy trackerの移行後read-backが一致しません");
+    return reread;
+  });
 }
 
 export function refreshStoredStagingDigest(

@@ -36,7 +36,7 @@ Feature: 一時ステージングのpreviewと適用を分離する
     When 短縮Issue番号で同期記録を試みる
     Then absolute GitHub Issue URLでないtrackerは拒否される
 
-  Scenario: SCN-INT-STAGING-008 保存済みstagingの短縮Issue番号も読み取らない
-    Given 未同期のquick stagingがある
-    When 保存済みstaging recordのtrackerを短縮番号へ改ざんする
-    Then 改ざんされた短縮trackerの読み取りは拒否される
+  Scenario: SCN-INT-STAGING-008 保存済みlegacy trackerをPR対象解決時にabsolute URLへ移行する
+    Given absolute trackerで同期済みのquick stagingがある
+    When 保存済みstaging recordのtrackerをlegacy短縮番号にする
+    Then legacy trackerはPR対象解決時にabsolute URLへ移行される

@@ -176,11 +176,9 @@ const CHECKS: Readonly<Record<string, () => void>> = {
       ],
       [1, 2, 3, 4, 5],
     );
-    assert.deepEqual(
-      parseDeliveryState(renderDeliveryState(recorded)),
-      recorded,
-    );
-    assert.equal(deliveryStateDigest(recorded), deliveryStateDigest(recorded));
+    const roundTrip = parseDeliveryState(renderDeliveryState(recorded));
+    assert.deepEqual(roundTrip, recorded);
+    assert.equal(deliveryStateDigest(recorded), deliveryStateDigest(roundTrip));
 
     const uppercaseObservation = observation();
     uppercaseObservation.repository = "TechBeansJP-Free/AGENTS.md";
@@ -297,6 +295,20 @@ const CHECKS: Readonly<Record<string, () => void>> = {
     assert.throws(
       () => parseDeliveryState(tampered),
       /観測内容と一致しません/u,
+    );
+    const requested = observation("merge-requested");
+    const providerRequest = requested.providerRequest;
+    assert.ok(providerRequest);
+    assert.throws(
+      () =>
+        observeMerge(mergePrepared(), {
+          ...requested,
+          providerRequest: {
+            ...providerRequest,
+            baseSha: "f".repeat(40),
+          },
+        }),
+      /認可tuple/u,
     );
   },
   "SCN-UNIT-DELSTATE-007": () => {

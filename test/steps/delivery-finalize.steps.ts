@@ -11,6 +11,8 @@ import {
   assertPullRequestTrackerBinding,
   createPullRequest,
   authorizeMerge,
+  extractIssueClosingNumbers,
+  validateIssueClosingReferences,
   type MergeInput,
 } from "../../src/domain/delivery.js";
 import {
@@ -301,6 +303,26 @@ Then("PR previewのbodyは必須見出しをすべて含む", function () {
   const body = this.deliveryResult.preview?.body ?? "";
   for (const heading of pullRequestRequiredHeadings())
     assert.ok(body.includes(`## ${heading}`), `見出しがありません: ${heading}`);
+  for (const keyword of [
+    "close",
+    "closes",
+    "closed",
+    "fix",
+    "fixes",
+    "fixed",
+    "resolve",
+    "resolves",
+    "resolved",
+  ])
+    assert.deepEqual(extractIssueClosingNumbers(`${keyword}: #824`), [824]);
+  assert.deepEqual(extractIssueClosingNumbers("FIXES #824"), [824]);
+  assert.equal(
+    validateIssueClosingReferences("Fixes #824\nResolved: #824", {
+      canonicalIssue: 824,
+      relatedIssues: [],
+    }).valid,
+    false,
+  );
 });
 
 Given(

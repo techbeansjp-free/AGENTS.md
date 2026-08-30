@@ -157,7 +157,10 @@ function parseObject<T extends object>(source: string, label: string): T {
   return parsed as T;
 }
 
-function canonicalProviderInstant(value: unknown, label: string): string {
+export function canonicalProviderInstant(
+  value: unknown,
+  label: string,
+): string {
   if (typeof value !== "string") throw new Error(`${label}が不正です`);
   const parsed = Date.parse(value);
   if (
@@ -400,9 +403,9 @@ function observePullRequestQueue(
         "graphql",
         "-f",
         `query=${EXACT_PULL_REQUEST_QUEUE_QUERY}`,
-        "-F",
+        "-f",
         `owner=${owner}`,
-        "-F",
+        "-f",
         `repo=${name}`,
         "-F",
         `number=${prNumber}`,
@@ -853,13 +856,13 @@ export function github(
           "--slurp",
           "-f",
           `query=${EXACT_PULL_REQUESTS_QUERY}`,
-          "-F",
+          "-f",
           `owner=${owner}`,
-          "-F",
+          "-f",
           `repo=${name}`,
-          "-F",
+          "-f",
           `head=${input.head}`,
-          "-F",
+          "-f",
           `base=${input.base}`,
         ],
         cwd,
