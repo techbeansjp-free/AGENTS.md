@@ -100,10 +100,18 @@ export function calculatePocFixtureDigest(root: string): string {
   return sha256(stableJson(inspectPocFixture(root)));
 }
 
-function fixedExecutable(file: string, label: string): void {
-  const stat = fs.lstatSync(file);
+export function fixedExecutable(file: string, label: string): void {
+  const diagnostic = `PoC隔離実行には固定${file} (${label}) が必要です`;
+  let stat: ReturnType<typeof fs.lstatSync>;
+  try {
+    stat = fs.lstatSync(file);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT")
+      throw new Error(diagnostic, { cause: error });
+    throw error;
+  }
   if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o111) === 0)
-    throw new Error(`PoC隔離実行には固定${file} (${label}) が必要です`);
+    throw new Error(diagnostic);
 }
 
 function gitDirectories(repositoryRoot: string): {

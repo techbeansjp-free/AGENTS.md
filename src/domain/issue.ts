@@ -279,7 +279,7 @@ function requirementDocument(
         `^\\|[ \\t]*${id}[ \\t]*\\|[^\\n|]+\\|[^\\n|]+\\|[ \\t]*$`,
         "m",
       ),
-      `| ${id} | ${answer} | ${evidence} |`,
+      () => `| ${id} | ${answer} | ${evidence} |`,
     );
   }
   if (mode === "poc" && poc) {
@@ -298,8 +298,7 @@ function requirementDocument(
     ];
     for (const [label, value] of replacements)
       content = replaceTwoColumnRow(content, label, value);
-    content = content.replace(
-      /^\|[ \t]*UC-\.\.\.[ \t]*\|[^\n]*$/mu,
+    content = content.replace(/^\|[ \t]*UC-\.\.\.[ \t]*\|[^\n]*$/mu, () =>
       poc.useCases
         .map(
           (item) =>
@@ -307,8 +306,7 @@ function requirementDocument(
         )
         .join("\n"),
     );
-    content = content.replace(
-      /^\|[ \t]*SCN-\.\.\.[ \t]*\|[^\n]*$/mu,
+    content = content.replace(/^\|[ \t]*SCN-\.\.\.[ \t]*\|[^\n]*$/mu, () =>
       poc.scenarios
         .map(
           (item) =>
@@ -316,8 +314,7 @@ function requirementDocument(
         )
         .join("\n"),
     );
-    content = content.replace(
-      /^\|[ \t]*OBS-\.\.\.[ \t]*\|[^\n]*$/mu,
+    content = content.replace(/^\|[ \t]*OBS-\.\.\.[ \t]*\|[^\n]*$/mu, () =>
       poc.observables
         .map(
           (item) =>
@@ -331,7 +328,8 @@ function requirementDocument(
           `^\\|[ \\t]*${escapeRegExp(risk.id)}[ \\t]*\\|[^\\n|]+\\|[^\\n|]+\\|[ \\t]*$`,
           "m",
         ),
-        `| ${risk.id} | ${risk.present ? "あり" : "なし"} | ${escapeCell(risk.evidence)} |`,
+        () =>
+          `| ${risk.id} | ${risk.present ? "あり" : "なし"} | ${escapeCell(risk.evidence)} |`,
       );
     }
   }
@@ -352,7 +350,7 @@ function replaceTwoColumnRow(
       `^\\|[ \\t]*${escapeRegExp(label)}[ \\t]*\\|[^\\n|]+\\|[ \\t]*$`,
       "m",
     ),
-    `| ${label} | ${value} |`,
+    () => `| ${label} | ${value} |`,
   );
 }
 

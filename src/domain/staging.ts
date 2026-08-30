@@ -490,7 +490,12 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
-function parseStoredRecord(source: string): StoredStagingRecord {
+type StoredTrackerContract = "current" | "legacy-migration";
+
+function parseStoredRecordWithTrackerContract(
+  source: string,
+  trackerContract: StoredTrackerContract,
+): StoredStagingRecord {
   const parsed = parseJsonStrict(source, STAGING_RECORD_FILE);
   if (!isRecord(parsed)) throw new Error("記録はobjectでなければなりません");
   const unknown = Object.keys(parsed).filter(
@@ -552,10 +557,15 @@ function parseStoredRecord(source: string): StoredStagingRecord {
   if (
     parsed.tracker !== null &&
     !CURRENT_TRACKER.test(parsed.tracker) &&
-    !LEGACY_TRACKER.test(parsed.tracker)
+    !(
+      trackerContract === "legacy-migration" &&
+      LEGACY_TRACKER.test(parsed.tracker)
+    )
   )
     throw new Error(
-      "trackerはabsolute GitHub Issue URLまたはlegacy Issue番号が必要です",
+      trackerContract === "legacy-migration"
+        ? "trackerはabsolute GitHub Issue URLまたはlegacy Issue番号が必要です"
+        : "trackerはabsolute GitHub Issue URLが必要です",
     );
   if (parsed.syncedAt !== null) parseInstant(parsed.syncedAt, "syncedAt");
   for (const digest of [parsed.syncDigest, parsed.readBackDigest])
@@ -608,6 +618,16 @@ function parseStoredRecord(source: string): StoredStagingRecord {
   };
 }
 
+function parseStoredRecord(source: string): StoredStagingRecord {
+  return parseStoredRecordWithTrackerContract(source, "current");
+}
+
+function parseLegacyStoredRecordForMigration(
+  source: string,
+): StoredStagingRecord {
+  return parseStoredRecordWithTrackerContract(source, "legacy-migration");
+}
+
 export function readStoredStagingRecord(
   directory: string,
 ): StoredStagingRecord {
@@ -656,7 +676,9 @@ export function migrateLegacyStagingTrackerLocked(
   )
     throw new Error("legacy tracker移行対象のrepositoryまたはIssueが不正です");
   const resolved = path.resolve(directory);
-  const current = readStoredStagingRecord(resolved);
+  const current = parseLegacyStoredRecordForMigration(
+    fs.readFileSync(path.join(resolved, STAGING_RECORD_FILE), "utf8"),
+  );
   const expected = `https://github.com/${input.repository}/issues/${input.issue}`;
   if (current.tracker?.toLowerCase() === expected.toLowerCase()) return current;
   const legacy =

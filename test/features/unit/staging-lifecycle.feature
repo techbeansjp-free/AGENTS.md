@@ -6,10 +6,10 @@ Feature: 一時ステージング・ライフサイクルを安全側に判定�
     When staging cleanupをpreviewする
     Then 未同期stagingは削除候補にならず理由付きで保持される
 
-  Scenario: SCN-UNIT-STAGING-002 sync-verifiedかつ保持期限経過だけをdeletion-readyにする
-    Given 同期確認済みと未同期のstagingがある
-    When 保持期限経過後のstagingを検査する
-    Then 同期確認済みstagingだけがdeletion-readyになる
+  Scenario: SCN-UNIT-STAGING-002 absolute trackerでsync-verifiedかつ保持期限経過だけをdeletion-readyにする
+    Given 同期確認済みと未同期と短縮trackerのstagingがある
+    When 保持期限経過後のstagingを検査してcleanupをpreviewする
+    Then absolute trackerの同期確認済みstagingだけがdeletion-readyになる
 
   Scenario: SCN-UNIT-STAGING-003 必要成果物が揃っていないstagingをretainedにする
     Given 必須成果物が欠けたfull stagingがある
@@ -30,4 +30,3 @@ Feature: 一時ステージング・ライフサイクルを安全側に判定�
     Given staging境界を逸脱する候補がある
     When staging cleanupをpreviewする
     Then staging境界外とsymlinkと予約領域は候補にならない
-

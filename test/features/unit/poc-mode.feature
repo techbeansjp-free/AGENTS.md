@@ -62,3 +62,8 @@ Feature: PoCモードをfail-closedで判定する
     When pocを明示してモード判定する
     Then PoC判定結果はfullである
     And PoC判定理由にbehavior observableが含まれる
+
+  Scenario: SCN-UNIT-POC-011 固定実行物の通常fileを受理し欠落を固定診断へ正規化する
+    Given 固定実行物を検査する一時directoryがある
+    When 通常fileと欠落pathを固定実行物として検査する
+    Then 通常fileは受理され欠落pathは日本語の固定実行物診断で拒否される

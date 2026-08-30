@@ -2021,7 +2021,6 @@ export function resolvePullRequestStaging(input: {
   issue: number;
   repository: string;
 }): string {
-  const legacyTracker = /^#?([1-9]\d*)$/u;
   const trackerMatches = (staging: string): boolean => {
     const tracker = readStoredStagingRecord(staging).tracker;
     const matched =
@@ -2030,14 +2029,12 @@ export function resolvePullRequestStaging(input: {
             tracker,
           )
         : null;
-    if (matched)
-      return (
-        `${matched[1]}/${matched[2]}`.toLowerCase() ===
-          input.repository.toLowerCase() && Number(matched[3]) === input.issue
-      );
-    const legacy =
-      typeof tracker === "string" ? legacyTracker.exec(tracker) : null;
-    return Boolean(legacy && Number(legacy[1]) === input.issue);
+    return Boolean(
+      matched &&
+      `${matched[1]}/${matched[2]}`.toLowerCase() ===
+        input.repository.toLowerCase() &&
+      Number(matched[3]) === input.issue,
+    );
   };
   const issuesRoot = path.join(
     path.resolve(input.root),

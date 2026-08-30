@@ -31,17 +31,17 @@ Feature: 一時ステージングのpreviewと適用を分離する
     When full補完中のStep 4を元Issueへ同期する
     Then 元Issueだけを更新しstaging記録はpromotion-activeを維持する
 
-  Scenario: SCN-INT-STAGING-007 短縮Issue番号を将来再同期不能なtrackerとして保存しない
+  Scenario: SCN-INT-STAGING-007 通常writeとschemaは短縮Issue番号をtrackerとして受理しない
     Given 未同期のquick stagingがある
     When 短縮Issue番号で同期記録を試みる
-    Then absolute GitHub Issue URLでないtrackerは拒否される
+    Then 通常writeとschemaはabsolute GitHub Issue URLでないtrackerを拒否する
 
   Scenario: SCN-INT-STAGING-008 保存済みlegacy trackerを認可済みwrite時だけabsolute URLへ移行する
     Given absolute trackerで同期済みのquick stagingがある
     When 保存済みlegacy trackerを認可済みwriteとして移行する
-    Then read-only解決は変更せずlegacy trackerはabsolute URLへ移行される
+    Then 専用migration経路でlegacy trackerはabsolute URLへ移行される
 
-  Scenario: SCN-INT-STAGING-009 legacy trackerのread-only対象解決は誤ったrepositoryでも永続状態を変更しない
+  Scenario: SCN-INT-STAGING-009 legacy trackerを通常のread-only対象解決では受理しない
     Given absolute trackerで同期済みのquick stagingがある
-    When 保存済みlegacy trackerを誤ったrepositoryでread-only解決する
-    Then staging recordはbyte単位で変更されない
+    When 保存済みlegacy trackerを通常のread-only経路で解決する
+    Then read-only解決は拒否されstaging recordをbyte単位で変更しない

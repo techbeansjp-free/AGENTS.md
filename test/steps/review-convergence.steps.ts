@@ -603,6 +603,11 @@ Given(
       }),
     );
     this.providerMarker = path.join(fixture, "provider-called");
+    fs.writeFileSync(
+      path.join(fixture, "gh"),
+      `#!/bin/sh\nprintf 'called\\n' > ${JSON.stringify(this.providerMarker)}\nexit 1\n`,
+      { mode: 0o700 },
+    );
     this.prArgs = [
       "pr",
       "create",
@@ -632,10 +637,15 @@ When(
       argument.startsWith("--head-sha=") ? `--head-sha=${candidate}` : argument,
     );
     this.error = undefined;
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${path.dirname(this.providerMarker)}${path.delimiter}${originalPath ?? ""}`;
     try {
       await captureMain([...this.prArgs, "--apply", "--authorize=approved"]);
     } catch (error) {
       this.error = error;
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
     }
   },
 );

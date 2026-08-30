@@ -185,33 +185,66 @@ Then("未同期stagingは削除候補にならず理由付きで保持される"
   assert.equal(fs.existsSync(this.target ?? ""), true);
 });
 
-Given("同期確認済みと未同期のstagingがある", function () {
+Given("同期確認済みと未同期と短縮trackerのstagingがある", function () {
   this.root = this.initRepo();
   this.target = createRecordedStaging(this.root, "verified", { synced: true });
   this.other = createRecordedStaging(this.root, "unsynced");
+  const shortened = createRecordedStaging(this.root, "short-tracker", {
+    synced: true,
+  });
+  const recordFile = path.join(shortened, "staging-record.json");
+  const record = JSON.parse(fs.readFileSync(recordFile, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  fs.writeFileSync(
+    recordFile,
+    `${JSON.stringify({ ...record, tracker: "#860" }, null, 2)}\n`,
+  );
 });
 
-When("保持期限経過後のstagingを検査する", function () {
+When("保持期限経過後のstagingを検査してcleanupをpreviewする", function () {
   this.records = inspectStaging({
+    root: rootOf(this),
+    now,
+    retentionDays: 30,
+  });
+  this.plan = planStagingCleanup({
     root: rootOf(this),
     now,
     retentionDays: 30,
   });
 });
 
-Then("同期確認済みstagingだけがdeletion-readyになる", function () {
-  assert.deepEqual(
-    this.records
-      ?.filter((record) => record.state === "deletion-ready")
-      .map((record) => record.relative),
-    [".agent-skill-chain/tmp/issues/verified"],
-  );
-  assert.equal(
-    this.records?.find((record) => record.relative.endsWith("/unsynced"))
-      ?.state,
-    "retained",
-  );
-});
+Then(
+  "absolute trackerの同期確認済みstagingだけがdeletion-readyになる",
+  function () {
+    assert.deepEqual(
+      this.records
+        ?.filter((record) => record.state === "deletion-ready")
+        .map((record) => record.relative),
+      [".agent-skill-chain/tmp/issues/verified"],
+    );
+    assert.equal(
+      this.records?.find((record) => record.relative.endsWith("/unsynced"))
+        ?.state,
+      "retained",
+    );
+    const shortened = this.records?.find((record) =>
+      record.relative.endsWith("/short-tracker"),
+    );
+    assert.equal(shortened?.state, "retained");
+    assert.ok(
+      shortened?.reasons.some((reason) =>
+        reason.includes("absolute GitHub Issue URL"),
+      ),
+    );
+    assert.deepEqual(
+      planOf(this).candidates.map((record) => record.relative),
+      [".agent-skill-chain/tmp/issues/verified"],
+    );
+  },
+);
 
 Given("必須成果物が欠けたfull stagingがある", function () {
   this.root = this.initRepo();
@@ -475,17 +508,37 @@ When("短縮Issue番号で同期記録を試みる", function () {
   }
 });
 
-Then("absolute GitHub Issue URLでないtrackerは拒否される", function () {
-  assert.equal(this.syncErrors?.length, 1);
-  assert.match(
-    this.syncErrors?.[0]?.message ?? "",
-    /absolute GitHub Issue URL/u,
-  );
-  assert.equal(
-    readStoredStagingRecord(this.target ?? "").state,
-    "local-active",
-  );
-});
+Then(
+  "通常writeとschemaはabsolute GitHub Issue URLでないtrackerを拒否する",
+  function () {
+    assert.equal(this.syncErrors?.length, 1);
+    assert.match(
+      this.syncErrors?.[0]?.message ?? "",
+      /absolute GitHub Issue URL/u,
+    );
+    assert.equal(
+      readStoredStagingRecord(this.target ?? "").state,
+      "local-active",
+    );
+    const schema = JSON.parse(
+      fs.readFileSync(
+        path.resolve(".agent-skill-chain/schemas/staging-record.schema.json"),
+        "utf8",
+      ),
+    ) as {
+      properties?: { tracker?: { pattern?: unknown } };
+    };
+    const trackerPattern = schema.properties?.tracker?.pattern;
+    assert.equal(typeof trackerPattern, "string");
+    const trackerContract = new RegExp(String(trackerPattern), "u");
+    assert.equal(trackerContract.test("#860"), false);
+    assert.equal(trackerContract.test("860"), false);
+    assert.equal(
+      trackerContract.test("https://github.com/example/repository/issues/860"),
+      true,
+    );
+  },
+);
 
 When("保存済みlegacy trackerを認可済みwriteとして移行する", function () {
   const recordFile = path.join(this.target ?? "", "staging-record.json");
@@ -498,13 +551,6 @@ When("保存済みlegacy trackerを認可済みwriteとして移行する", func
     `${JSON.stringify({ ...record, tracker: "#860" }, null, 2)}\n`,
   );
   this.before = fs.readFileSync(recordFile, "utf8");
-  this.other = resolvePullRequestStaging({
-    root: this.root ?? "",
-    staging: this.target,
-    issue: 860,
-    repository: "example/repository",
-  });
-  assert.equal(fs.readFileSync(recordFile, "utf8"), this.before);
   migrateLegacyStagingTracker(this.target ?? "", {
     repository: "example/repository",
     issue: 860,
@@ -512,9 +558,9 @@ When("保存済みlegacy trackerを認可済みwriteとして移行する", func
 });
 
 Then(
-  "read-only解決は変更せずlegacy trackerはabsolute URLへ移行される",
+  "専用migration経路でlegacy trackerはabsolute URLへ移行される",
   function () {
-    assert.equal(this.other, this.target);
+    assert.match(this.before ?? "", /"tracker": "#860"/u);
     assert.equal(
       readStoredStagingRecord(this.target ?? "").tracker,
       "https://github.com/example/repository/issues/860",
@@ -522,38 +568,49 @@ Then(
   },
 );
 
-When(
-  "保存済みlegacy trackerを誤ったrepositoryでread-only解決する",
-  function () {
-    const recordFile = path.join(this.target ?? "", "staging-record.json");
-    const record = JSON.parse(fs.readFileSync(recordFile, "utf8")) as Record<
-      string,
-      unknown
-    >;
-    fs.writeFileSync(
-      recordFile,
-      `${JSON.stringify({ ...record, tracker: "#860" }, null, 2)}\n`,
-    );
-    this.before = fs.readFileSync(recordFile, "utf8");
-    this.other = resolvePullRequestStaging({
+When("保存済みlegacy trackerを通常のread-only経路で解決する", function () {
+  const recordFile = path.join(this.target ?? "", "staging-record.json");
+  const record = JSON.parse(fs.readFileSync(recordFile, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  fs.writeFileSync(
+    recordFile,
+    `${JSON.stringify({ ...record, tracker: "#860" }, null, 2)}\n`,
+  );
+  this.before = fs.readFileSync(recordFile, "utf8");
+  this.syncErrors = [];
+  try {
+    resolvePullRequestStaging({
       root: this.root ?? "",
       staging: this.target,
       issue: 860,
-      repository: "attacker/repository",
+      repository: "example/repository",
     });
+  } catch (error) {
+    this.syncErrors.push(
+      error instanceof Error ? error : new Error(String(error)),
+    );
+  }
+});
+
+Then(
+  "read-only解決は拒否されstaging recordをbyte単位で変更しない",
+  function () {
+    assert.equal(this.syncErrors?.length, 1);
+    assert.match(
+      this.syncErrors?.[0]?.message ?? "",
+      /absolute GitHub Issue URL/u,
+    );
+    assert.equal(
+      fs.readFileSync(
+        path.join(this.target ?? "", "staging-record.json"),
+        "utf8",
+      ),
+      this.before,
+    );
   },
 );
-
-Then("staging recordはbyte単位で変更されない", function () {
-  assert.equal(this.other, this.target);
-  assert.equal(
-    fs.readFileSync(
-      path.join(this.target ?? "", "staging-record.json"),
-      "utf8",
-    ),
-    this.before,
-  );
-});
 
 Given("promotion-activeの元Issue同期stagingがある", function () {
   this.root = this.temp("asc-promotion-sync-");

@@ -34,6 +34,7 @@ import {
   calculatePocFixtureDigest,
   executePocObservation,
 } from "../../src/adapters/workflow-journal.js";
+import { fixedExecutable } from "../../src/adapters/poc-execution.js";
 import {
   STEP_JOURNAL_FILE,
   WORKFLOW_STEPS,
@@ -62,9 +63,16 @@ interface PocModeWorld extends WorkflowWorld {
   validations: Array<ReturnType<typeof validateIssue>>;
   headSha: string;
   observationSource: string;
+  replacementTitle: string;
 }
 
 const { Given, When, Then } = stepDefinitions<PocModeWorld>();
+
+const REPLACE_METASYNTAX = "$& $` $' $$";
+
+function literalReplacementInput(label: string): string {
+  return `${label}:${REPLACE_METASYNTAX}`;
+}
 
 function completeAnswers(): Record<string, ModeAnswer> {
   return Object.fromEntries(
@@ -460,6 +468,42 @@ Then("PoC判定理由にbehavior observableが含まれる", function () {
   assert.match(this.modeResult.reasons.join(" "), /behavior observable/u);
 });
 
+Given("固定実行物を検査する一時directoryがある", function () {
+  this.root = this.temp("asc-poc-fixed-executable-");
+});
+
+When("通常fileと欠落pathを固定実行物として検査する", function () {
+  const executable = path.join(this.root, "runner");
+  fs.writeFileSync(executable, "#!/bin/sh\n", { mode: 0o700 });
+  fixedExecutable(executable, "test runner");
+
+  const missing = path.join(this.root, "missing");
+  this.value = { executable, missing };
+  this.error = undefined;
+  try {
+    fixedExecutable(missing, "test runner");
+  } catch (error) {
+    this.error = error;
+  }
+});
+
+Then(
+  "通常fileは受理され欠落pathは日本語の固定実行物診断で拒否される",
+  function () {
+    const { executable, missing } = this.value as {
+      executable: string;
+      missing: string;
+    };
+    assert.equal(fs.existsSync(executable), true);
+    assert.ok(this.error instanceof Error);
+    assert.equal(
+      this.error.message,
+      `PoC隔離実行には固定${missing} (test runner) が必要です`,
+    );
+    assert.doesNotMatch(this.error.message, /ENOENT/u);
+  },
+);
+
 Given("PoC検証用の隔離repositoryと完全宣言がある", function () {
   this.root = this.temp("asc-poc-int-");
   this.answers = completeAnswers();
@@ -472,6 +516,83 @@ Given("PoCの最小stagingを生成する条件が揃っている", function () 
   assert.equal(
     this.declaration.highRisk.every((risk) => !risk.present),
     true,
+  );
+});
+
+Given("PoCの自由入力にreplaceの全メタ構文がある", function () {
+  this.replacementTitle = literalReplacementInput("title");
+  this.declaration.purpose = literalReplacementInput("purpose");
+  this.declaration.fixture.isolationEvidence =
+    literalReplacementInput("isolation");
+  this.declaration.fixture.resetEvidence = literalReplacementInput("reset");
+  this.declaration.successCriteria = literalReplacementInput("success");
+  this.declaration.abortCriteria = literalReplacementInput("abort");
+  this.declaration.outOfScope = literalReplacementInput("out-of-scope");
+  this.declaration.owner = literalReplacementInput("owner");
+
+  const useCase = this.declaration.useCases[0];
+  const scenario = this.declaration.scenarios[0];
+  const risk = this.declaration.highRisk[0];
+  assert.ok(useCase && scenario && risk);
+  useCase.actor = literalReplacementInput("actor");
+  useCase.goal = literalReplacementInput("goal");
+  scenario.given = literalReplacementInput("given");
+  scenario.when = literalReplacementInput("when");
+  scenario.then = literalReplacementInput("then");
+  scenario.argv = [literalReplacementInput("argv")];
+  risk.evidence = literalReplacementInput("risk");
+  this.declaration.observables.push({
+    id: "OBS-SEARCH-FILE",
+    scenarioId: scenario.id,
+    kind: "file-digest",
+    target: `artifacts/${literalReplacementInput("target")}.json`,
+    expected: "d".repeat(64),
+  });
+});
+
+When("メタ構文を含むpocのissue stagingを作成する", function () {
+  this.issue = createIssueStaging(this.root, {
+    title: this.replacementTitle,
+    answers: this.answers,
+    requestedMode: "poc",
+    poc: this.declaration,
+    now: new Date("2026-08-25T00:00:00Z"),
+  });
+});
+
+Then("00要求定義はreplaceメタ構文を展開せず各欄へ記録する", function () {
+  assert.equal(this.issue.mode, "poc");
+  const document = fs.readFileSync(
+    path.join(this.issue.path, "00_要求定義.md"),
+    "utf8",
+  );
+  const useCase = this.declaration.useCases[0];
+  const scenario = this.declaration.scenarios[0];
+  const observable = this.declaration.observables.find(
+    ({ id }) => id === "OBS-SEARCH-FILE",
+  );
+  const risk = this.declaration.highRisk[0];
+  assert.ok(useCase && scenario && observable && risk);
+
+  const expectedRows = [
+    `| 件名 | ${this.replacementTitle} |`,
+    `| PoC目的 | ${this.declaration.purpose} |`,
+    `| 隔離境界Evidence | ${this.declaration.fixture.isolationEvidence} |`,
+    `| 初期化Evidence | ${this.declaration.fixture.resetEvidence} |`,
+    `| 成功条件 | ${this.declaration.successCriteria} |`,
+    `| 中止条件 | ${this.declaration.abortCriteria} |`,
+    `| 非対象 | ${this.declaration.outOfScope} |`,
+    `| 責任者 | ${this.declaration.owner} |`,
+    `| ${useCase.id} | ${useCase.actor} | ${useCase.goal} |`,
+    `| ${scenario.id} | ${scenario.useCaseId} | ${scenario.given} | ${scenario.when} | ${scenario.then} | ${JSON.stringify(scenario.argv)} |`,
+    `| ${observable.id} | ${observable.scenarioId} | ${observable.kind} | ${observable.target} | ${observable.expected} |`,
+    `| ${risk.id} | なし | ${risk.evidence} |`,
+  ];
+  const lines = new Set(document.split("\n"));
+  for (const row of expectedRows) assert.ok(lines.has(row), row);
+  assert.equal(
+    [...document.matchAll(/^# 00 要求定義（PoC集約版）$/gmu)].length,
+    1,
   );
 });
 

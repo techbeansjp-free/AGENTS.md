@@ -58,3 +58,8 @@ Feature: PoCの最小成果物と停止点を統合する
     Given pocのStep 4までを記録済みである
     When provider baseからfixture-only差分と起票前fixture外commitを検査する
     Then provider baseのactual diffだけがPoC scopeのEvidenceになる
+
+  Scenario: SCN-INT-POC-011 PoC自由入力のreplaceメタ構文を文字列として保持する
+    Given PoCの自由入力にreplaceの全メタ構文がある
+    When メタ構文を含むpocのissue stagingを作成する
+    Then 00要求定義はreplaceメタ構文を展開せず各欄へ記録する
