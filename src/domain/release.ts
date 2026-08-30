@@ -298,7 +298,7 @@ function validateAutoReleaseInput(value: unknown): {
   };
 }
 
-function nextAutoReleaseVersion(version: string): string | undefined {
+export function nextAutoReleaseVersion(version: string): string | undefined {
   const withoutBuild = version.split("+", 1)[0] ?? version;
   const prereleaseSeparator = withoutBuild.indexOf("-");
   if (prereleaseSeparator >= 0) {
@@ -875,8 +875,20 @@ export function validateReleaseWorkflow(yaml: string): {
     checks.push(
       "bump_version jobが配布前品質検証とaudit:checkを含まないことを確認した",
     );
-  if (!/git\s+commit\b[^\n]*\[skip ci\]/u.test(yaml))
-    errors.push("version bump commit messageに[skip ci]が必要です");
+  /**
+   * 再帰releaseを止めるのは、**既定branchへ着地するcommitのmessageに`[skip ci]`があること**である。
+   *
+   * bump commitはbranch上に留まり、mainへはPRのmerge commitとして着地する。GitHubは
+   * merge commit messageへPR titleを含めるため、`gh pr create`・`gh pr edit`の
+   * `--title`に`[skip ci]`があれば条件は成立する。bump commit自体を`git commit`で
+   * 作るか専用scriptで作るかは、この性質を変えない（Issue #1051のDISC-201）。
+   */
+  if (
+    !/(?:git\s+commit|gh\s+pr\s+(?:create|edit))\b[^\n]*\[skip ci\]/u.test(yaml)
+  )
+    errors.push(
+      "既定branchへ着地するcommit messageへ[skip ci]を載せる指定が必要です",
+    );
   else checks.push("version bump commitの[skip ci]を確認した");
   if (
     !/gh\s+pr\s+(?:create|edit)\b[^\n]*--title\s+[^\n]*\[skip ci\]/u.test(yaml)

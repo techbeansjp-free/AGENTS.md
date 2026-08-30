@@ -296,7 +296,13 @@ jobs:
             --new-session \
             --ro-bind / / \
             -- /bin/true
-      - name: bump branchとPRを作成してadmin mergeする
+      - name: 固定ファイルどおりに開発依存を導入する
+        run: npm ci
+      - name: bump branchを基準SHAから作り直す
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: node --import tsx scripts/prepare_release_bump.ts
+      - name: bump branchでgateを実行しPRをadmin mergeする
         id: bump_operation
         continue-on-error: true
         env:
@@ -304,30 +310,11 @@ jobs:
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
         run: |
           branch="release/bump-v$RELEASE_VERSION"
-          git fetch origin main
           main_version="$(git show "origin/main:package.json" | node --input-type=module -e 'import fs from "node:fs"; process.stdout.write(JSON.parse(fs.readFileSync(0, "utf8")).version)')"
-          if [ "$main_version" = "$RELEASE_VERSION" ]; then
-            git switch --detach origin/main
-            pr_url="$(gh pr list --head "$branch" --base main --state all --json url --jq '.[0].url')"
-          else
-            if git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
-              git fetch origin "$branch"
-              git switch --detach FETCH_HEAD
-            else
-              git switch --create "$branch" origin/main
-              npm version "$RELEASE_VERSION" --no-git-tag-version
-              git config user.name "github-actions[bot]"
-              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-              git add package.json package-lock.json
-              git commit --message "chore(release): bump version to $RELEASE_VERSION [skip ci]"
-              git push origin "HEAD:refs/heads/$branch"
-            fi
-          fi
           observed_version="$(node --input-type=module -e 'import fs from "node:fs"; process.stdout.write(JSON.parse(fs.readFileSync("package.json", "utf8")).version)')"
           if [ "$observed_version" != "$RELEASE_VERSION" ]; then
             exit 1
           fi
-          npm ci
           npm run project:quality
           npm run quality
           npm run build
@@ -344,6 +331,8 @@ jobs:
             fi
             gh pr edit "$pr_url" --title "chore(release): bump version to $RELEASE_VERSION [skip ci]"
             gh pr merge "$pr_url" --admin --merge
+          else
+            pr_url="$(gh pr list --head "$branch" --base main --state all --json url --jq '.[0].url')"
           fi
           printf 'pr_url=%s\n' "$pr_url" >> "$GITHUB_OUTPUT"
       - name: merge後のmain SHAとversionを読み直す
