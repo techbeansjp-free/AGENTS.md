@@ -196,6 +196,29 @@
           "afterSha256": "2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-POC-SANDBOX-CI-001",
+      "status": "staged",
+      "fromVersion": 8,
+      "toVersion": 9,
+      "owner": "repository maintainer",
+      "rationale": "PoC隔離観測がLinuxの固定/usr/bin/bwrapを必須とする一方、GitHub hosted runnerにはbubblewrapが既定導入されていない。品質CIのtest前にbubblewrapを明示導入し、隔離fallbackやtest skipを設けず、ローカルとCIで同じfail-closed境界を検証する",
+      "rollback": "登録済みproposalは削除できず、qualityContractVersionの減少も受理されない。適用前は有効化しないまま維持する。適用後に戻す場合は、ci.ymlを本proposal適用前の内容へ戻す新規proposalを次versionとして登録し、同じ二段階手順で前進させる",
+      "targets": [
+        {
+          "kind": "file",
+          "name": ".github/workflows/ci.yml",
+          "beforeSha256": "73ab0558c7b59239acdd446db92a6477a03b34e40aac3074a8471c8d91b3eb6c",
+          "afterSha256": "db215ea983971d11fe731c68b4cd35b75fef9874b6579e17baf0119150736e28"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "2c624232cdd221771294dfbb310aca000a0df6ac8b66b696d90ef06fdefb64a3",
+          "afterSha256": "19581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7"
+        }
+      ]
     }
   ]
 }
