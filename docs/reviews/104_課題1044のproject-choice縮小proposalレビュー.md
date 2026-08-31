@@ -10,10 +10,10 @@
 | 対象Issue | #1044 |
 | ラウンド | Step 10 ラウンド1〜3 |
 | 比較基点 | `d3b3690a652b08806a7b44ee0ad4d321f97ec455` |
-| H_impl | `488524290cadfbd8e1e8cef02a77c128bf300b65` |
+| H_impl | `047fb3f63d94ec8204248dbe6c89899ed88eb589` |
 | 比較基点の由来 | worktree作成時点の`origin/main`のtip。**本artifact commitまでの間に`origin/main`は動いていない** |
 | モード | full |
-| 対象差分 | 20 path。`src/domain/project-choice-shrink.ts`（新規）、`src/domain/enforcement.ts`、`src/domain/policy.ts`、`src/domain/migration.ts`、`src/domain/delivery.ts`、`src/domain/project-choice-diff.ts`、`src/cli.ts`、`src/types.ts`、schema 2件、配布案内1件、仕様4件、test 5件。commitは`4c92cc9a`・`48852429` |
+| 対象差分 | 21 path。本artifactのラウンド3版を含む。`src/domain/project-choice-shrink.ts`（新規）、`src/domain/enforcement.ts`、`src/domain/policy.ts`、`src/domain/migration.ts`、`src/domain/delivery.ts`、`src/domain/project-choice-diff.ts`、`src/cli.ts`、`src/types.ts`、schema 2件、配布案内1件、仕様4件、test 5件。commitは`4c92cc9a`・`f6c2f5fb`・`48852429`・`4b17208a`・`047fb3f6`の5件で、最後が`H_impl`である |
 | 対象外 | (a) 適用済み提案の自動削除規則。(b) 対象3 field以外への受理条件の適用。(c) `classifyProjectChoiceDiff`の単調性判定そのものの変更。(d) 提案の登録UI・登録commandの新設。(e) `policy evaluate`とlegacy monolith migrate経路への配線 |
 | 残り予算 | **0**（同一範囲で最大3ラウンド。総2ラウンドで設計し予算1を残していたが、**ラウンド3でCI赤の是正に使い切った**。6節を参照する） |
 | ラウンド数 | 3。ラウンド1は実装差分、ラウンド2は本artifactを加えた版、**ラウンド3はCI赤の是正**が対象である |
@@ -44,11 +44,11 @@
 | 差分 | `1900497b..d3630255` | **20 file、+1195 / −22行**（`git diff --numstat`の実測値。製品+343/−9、仕様・schema+76/−3、支援層+776/−10の合計と一致する） | 既存コード |
 | テスト | `npm test` | `1347 scenarios (1331 passed, 16 skipped)`、失敗0 | テスト出力 |
 | 仕様 | `docs/specs/`配下4 file | updated | 既存文書 |
-| Phase A artifact | `docs/reviews/104_課題1044のproject-choice縮小proposalレビュー.md` | `H_impl` = `48852429`。`H_impl..H_final`の差分pathは本file 1件 | Git観測 |
+| Phase A artifact | `docs/reviews/104_課題1044のproject-choice縮小proposalレビュー.md` | `H_impl` = `047fb3f6`。`H_impl..H_final`の差分pathは本file 1件 | Git観測 |
 | commit後external | PR、CI run、review | Step 11で観測する。**本節はPR作成前に書いており、外部証拠はまだ無い** | 外部のimmutable証拠 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **成立する。** `trusted_policy → shrink_proposal → shrink_acceptance → trust_enforcement`の一方向で、`choice_diff`は`shrink_acceptance`の入力だが`shrink_proposal`へ依存しない。本artifactへ自身のcommit SHAを書いていない。
-- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: `H_impl` = `48852429`は`H_final`のancestorであり、差分は本artifact 1 fileだけである。
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: `H_impl` = `047fb3f6`は`H_final`のancestorであり、差分は本artifact 1 fileだけである。**本artifactのラウンド3版は`比較基点..H_impl`に、ラウンド4版は`H_impl..H_final`にある。** 前進commitを重ねたため同じfileが両方の範囲に現れるが、指す版が異なる。
 - reviewer stable IDがPR author/provider観測済み`H_impl` author stable IDと異なる: **いいえ。同一である。** 本repositoryの全sessionが単一アカウントで走る。**providerの差はcontextの独立性であってidentityの独立性ではない。** 9節で成立条件を正確に記録した。
 - 既定branch追随を行った場合: **行っていない。** 基点`d3b3690a`は`origin/main`のtipであり、追随mergeを作っていない。`比較基点..H_impl`は2 commitの一直線である。
 
@@ -76,8 +76,9 @@
 | `test/steps/project-choice-diff.steps.ts` | M | package | package | step定義とhelper 681行 | pass | 全SCN | 実fileを読むだけで書かない | pass |
 | `test/features/unit/project-policy-satisfiability.feature` | M | package | package | SCN-UNIT-SAT-015の主張を新しい契約へ改めた2行 | pass | AC-1044-07 | **#1043が固定した「適用経路が無い」という主張は本Issueで偽になった。** 経路が実在するようになったため、拒否理由が登録手順を案内することを測る形へ改めた | pass |
 | `test/steps/project-policy-satisfiability.steps.ts` | M | package | package | 同上11行 | pass | 同上 | 同上 | pass |
+| `docs/reviews/104_課題1044のproject-choice縮小proposalレビュー.md` | A | project | evidence | **本artifact自身のラウンド3版である。** 外部reviewerの指摘の是正を前進commitで積んだため`比較基点..H_impl`の範囲へ入った。まとめ行にせず1 file 1行で記録する | pass。evidence層であり実行authorityを持たない | 全AC | 内容はreview記録のみ。rollbackは本fileのrevert | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: **一致する。** `git diff --name-only 1900497b d3630255`が返す**20 path**が上表の20行と同じである。**本artifactは`H_impl..H_final`にあり監査範囲へ入らない。**
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: **一致する。** 基準SHAと`H_impl`の間の差分が返す**21 path**が上表の21行と同じである。**21件目は本artifactのラウンド3版であり、外部reviewerの指摘の是正を前進commitで積んだ結果として監査範囲へ入った。**
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: **成立する。** 対象3 fieldは`src/domain/project-choice-shrink.ts`の閉じた定数であり、project policyから読まない。owner決裁が3つに限ると定めているためである。
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: **ラウンド1のfinding 6件のうち5件を修正した。** 修正範囲は`src/domain/enforcement.ts`・`src/domain/project-choice-diff.ts`・`src/domain/project-choice-shrink.ts`・test 2 file・追跡表である。
 
@@ -139,7 +140,7 @@
 
 | 観点 | 判定 | 根拠 |
 |---|---|---|
-| 反例 | pass | 変異11点がいずれも対象scenarioを殺す（7.1節）。うち4点はラウンド1の是正で殺せるようになった |
+| 反例 | pass | **変異13点のうちM1〜M10とM8-b・M8-cを含む12点が対象scenarioを殺す。M11は等価変異で0件である**（7.1節）。うち4点はラウンド1の是正で殺せるようになった |
 | 失敗 | pass | 提案の欠落・型不正・raw未取得・fragment path未取得・対象field外のすべてでfail-closedへ倒れる |
 | 境界 | pass | 値の内側の空白1個の差、同一fieldPathの複数提案、legacy monolith経路を観測した |
 | 悪用 | pass | **候補branchの内容だけを操作して受理を得る経路が無い。** 提案は`trusted`引数からのみ読み、effective合成は`options.trusted`が真のときだけ持ち越す。SCN-INT-CHOICE-007が合成経路で反例を固定する |
@@ -172,7 +173,7 @@
 - **すべての指摘を受け入れる前に実測で検証した。** R1-F01は`src/domain/enforcement.ts:966-975`の返却literalと`src/domain/policy.ts:1531`の`effectivePolicy`を原文で読み、提案fieldが両方から欠落していることを確認した。R1-F02は当該stepが第3引数を渡していないことを原文で確認した。
 - **F-03の提案（実行時shape検証の追加）はそのまま採らなかった。** fail-closedは`isProposal`で既に成立しており、検証の二重化は支援層を成果物より大きくする。指摘が示す実害（登録側の誤りに気付けない）だけを診断で解いた。
 - **変異M11は等価変異と判定した。** effective合成でcandidate側の提案も持ち越す変異を入れたが、`projectChoiceShrinkProposals`を読む箇所が`enforcement.ts:584`の`trusted`側1つだけであることを`grep`で確認した。候補側の提案はどこからも読まれないため観測可能な差が生じない。**反射的にfixtureを足さず、等価であることの根拠を記録する。**
-- 是正は前進commit `48852429`で積んだ。
+- 是正は前進commitで積んだ。**rebaseで全commitのSHAが変わったため、本節では個々のSHAを書かない。** 0節の`H_impl`とcommit一覧が正本である。
 
 ### ラウンド2
 
@@ -191,6 +192,17 @@
 **製品差分はラウンド3でも1行も変えていない。** 変えたのはtest 1 fileと本artifactだけである。
 
 **この是正は「赤を通す理屈」ではない。** CIが検出したのは**testが実行環境のGit状態に依存していた**という実在の欠陥であり、判定条件を緩めていない。同じ2 scenarioは是正後も同じ主張を測る。
+
+**あわせて外部reviewer（CodeRabbit）の指摘3件を判定した。**
+
+| ID | 判定 | 内容 |
+|---|---|---|
+| R3-F02 | **有効・是正した** | schemaの`reason`と`owner`が`minLength: 1`であり、空白のみの値を通す。一方`isProposal`はtrim後に空なら落とす。**既定branchへ登録する時点のschema検証は通るのに、次のPRだけが拒否される。** patternを`\S`へ改め、登録時と受理時の検証条件を揃えた |
+| R3-F03 | **有効・是正した** | 8節が「次の10件」と書きながら11件を列挙していた。また`package.json`の`files`は`src/`ではなく`dist/src/`を配布対象とする。件数を11件へ直し、`src/`配下がbuild成果物として配布境界へ入ることを明記した |
+| R3-F04 | **前提が誤り・退ける** | 0節の実施日`2026-08-31〜2026-09-01`について「2026年9月1日は未来の日付である」という指摘。**実行環境の現在日は2026-09-01である。** ラウンド1の敵対reviewとラウンド3のCI是正が日付をまたいだため、期間表記は事実に一致する |
+| R3-F05 | **有効・是正した** | 1節と2.3節に**rebase前の古い`H_impl`**が残っていた。0節が`047fb3f6`を指す一方、これらが`48852429`を指しており、同一のcommit graphから再現できない状態だった。**SHAを書き換えた際の取り残しである。** 全箇所を`047fb3f6`へ揃え、ラウンド3版とラウンド4版が別の範囲に現れる理由を明記した |
+| R3-F06 | **有効・是正した** | 4節の反例行が「変異11点がいずれも対象scenarioを殺す」と書いていたが、7.1節のM11は0件で等価変異である。**総括が表と食い違っていた。** 13点中12点が殺し、M11は等価変異であることを明記した |
+| R3-F07 | **有効・是正した** | 7.2節が「受理条件の撤去で従来の拒否へ戻ることをM2・M3で確認した」と書いていたが、**M2・M3は受理を広げる方向の変異**でありrollbackの検証ではない。記述を実際の検証内容へ直し、撤去方向の担保がSCN-UNIT-CHOICE-012・015・016であることを明記した |
 
 ## 7. テスト結果
 
@@ -229,7 +241,11 @@
 
 ### 7.2 差し戻し検証（rollback-validation）
 
-受理判定は読み取りのみで状態を書かないため、不可逆操作のrollback-validationは該当しない。代わりに**受理条件の撤去で従来の拒否へ戻ること**を変異M2・M3で確認した。いずれも受理が起きなくなる方向ではなく、受理が広がる方向の変異であり、対象scenarioが赤になる。
+受理判定は読み取りのみで状態を書かないため、不可逆操作のrollback-validationは該当しない。
+
+**M2・M3をrollbackの検証として数えない。** 両者は受理条件を外して**受理を広げる**変異であり、fail-open化を検出する検査である。rollbackの方向（受理経路を撤去して従来の拒否へ戻る）とは逆である。
+
+**受理経路の撤去で従来の拒否へ戻ることは、SCN-UNIT-CHOICE-012・015・016が実質的に固定する。** 提案が存在しない入力、提案を持たない既存policyの分類、対象3 field以外の弱化分類のいずれも、本変更の前後で同一の結果になることを観測している。**提案を1件も持たないpolicyに対する判定は、受理条件を撤去した状態と同一である。**
 
 ### 7.3 成果物行数の逸脱
 
@@ -267,7 +283,9 @@ T01完了時点で**8件が赤**であった。AC-1044-04、08、09、11、12、
 
 ## 8. 配布物影響
 
-配布境界へ入る変更pathは次の10件である。いずれも`package.json`の`files`が配布対象とする。`docs/specs/`と`test/`は配布対象外である。
+配布境界へ入る変更pathは次の**11件**である。`docs/specs/`と`test/`は配布対象外である。
+
+**`src/`自体は配布されない。** `package.json`の`files`は`dist/bin/`・`dist/src/`・`dist/vendor/`と`.agent-skill-chain/`配下を挙げる。下の`src/`配下8件は`npm run build`で`dist/src/`へ写った成果物として配布境界へ入る。`.agent-skill-chain/schemas/`配下3件はそのまま配布される。
 
 - `src/domain/project-choice-shrink.ts`
 - `src/domain/enforcement.ts`
@@ -283,7 +301,7 @@ T01完了時点で**8件が赤**であった。AC-1044-04、08、09、11、12、
 
 判断: 配布物を更新した
 
-根拠: 利用側のproject policyへ`projectChoiceShrinkProposals`という新しい任意fieldを受け入れるようになり、schemaと利用案内が変わる。**既存policyへの影響は無い。** fieldを持たない既存policyの判定は変更前と完全に同一であり、legacy monolith policyでは受理が構造的に起きない。
+根拠: 利用側のproject policyへ`projectChoiceShrinkProposals`という新しい任意fieldを受け入れるようになり、schemaと利用案内が変わる。**schemaの`reason`と`owner`は空白のみの値を拒否する。** `isProposal`がtrim後に空の値を落とすため、`minLength: 1`のままだと登録時のschema検証は通るのに次のPRで受理されないという食い違いが生じる。**既存policyへの影響は無い。** fieldを持たない既存policyの判定は変更前と完全に同一であり、legacy monolith policyでは受理が構造的に起きない。
 
 ## 9. 独立reviewの成立
 
