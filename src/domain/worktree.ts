@@ -461,6 +461,7 @@ export function createWorktree(input: {
   remoteDefaultSha: string;
   expectedRepository?: string;
   trustedPolicy?: Policy;
+  preview?: boolean;
 }) {
   const boundary = enforceTrustedWorktreeBoundary(input);
   const {
@@ -538,6 +539,13 @@ export function createWorktree(input: {
     throw new Error(
       "基点は取得済みremote default branch commitと一致しなければなりません",
     );
+  if (input.preview === true)
+    return {
+      state: "preview" as const,
+      path: destination,
+      branch: input.branch,
+      base: baseCheck.stdout.trim(),
+    };
   const dirtyBefore = sourceStatusExcludingTarget(input.repoRoot, destination);
   git(
     ["worktree", "add", "-b", input.branch, destination, input.base],

@@ -30,13 +30,15 @@ GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報�
 
 | コマンド | 入力 | 出力・終了code |
 |---|---|---|
-| `worktree create` | `--issue --slug --branch --base --remote-default-branch --remote-default-sha`、任意の`--root --path --repo` | `--path`省略時はCLI層の現在local time、Issue番号、slugから`.worktrees/{YYYYMMDD_HHMMSS}-{issueNumber}-{slug}`を構成する。明示pathは未来または10分超の過去を拒否する。作成結果は絶対path、branch、base、作成元状態の保持を返す |
+| `worktree create` | `--issue --slug --branch --base --remote-default-branch --remote-default-sha`と`--dry-run`または`--apply`、任意の`--root --path --repo` | `--path`省略時はCLI層の現在local time、Issue番号、slugから`.worktrees/{YYYYMMDD_HHMMSS}-{issueNumber}-{slug}`を構成する。明示pathは未来または10分超の過去を拒否する。`--dry-run`と`--apply`はどちらか一方の指定が必須で、同時指定は拒否する。`--dry-run`は全検証を通したうえでworktreeもbranchも作成せず、`state`が`preview`の計画として絶対path、branch、解決済みbaseを返す。`--apply`だけが作成し、絶対path、branch、base、作成元状態の保持を返す |
 | `worktree survey` | `--root=<repository root>`、任意の`--format=json\|text`。`--apply`は拒否 | 登録済みworktreeの`primary / in-progress / cleanup-ready / retain`、日本語理由、分類別path、走査errorをJSONまたは日本語要約表で返す。追跡対象変更、未追跡file、stash、未push・remote branch、既定branchへのmerge、復旧到達性、配置、ignore対象をfinalizeと同じ判定で評価し、cleanup-readyはfinalizeの同じ安全事実を満たす。directory名とbranch名のIssue番号・slug不一致は`reasons`へ加えるが分類を変えない。候補の存在だけでは終了codeを非0にせず、走査失敗だけを非0にする。**無視対象資産はNUL区切りで観測し、実行環境の`core.quotepath`設定に結果が依存しない。** |
 | `worktree finalize --dry-run` | `--root --path --evidence` | 対象を削除せず、finalize report、保持理由、cleanup計画を返す。allowlist外のignore対象はpathごとに`allowlist外`と報告し、allowlist内のpathは理由へ含めない。**無視対象資産はNUL区切りで観測するため、非ASCII名や改行を含む名前でもpath種別の判定へ到達する。** reportとcleanupがともにsafe／readyなら0、それ以外は非0 |
 | `worktree finalize --complete --dry-run` | `--root --path --evidence --merge-sha`。cleanup authorityと承認digestは任意 | 副作用なしで全phase、`state`、`requiredAuthority`、日本語`recovery`、最新`previewDigest`、対象pathをJSONで返す。未承認は`pending`かつ非0 |
 | `worktree finalize --complete --apply` | preview入力に`--authorize=approved`を加える。cleanup適用にはさらに`--cleanup-authority --approved-digest=<64桁hex>`が必要 | merge確認後にrootを更新する。cleanup authorityなしはroot更新済み・cleanup pendingで非0。全検証成功は`completed`で0、拒否または部分完了は非0 |
 
 `--authorize=approved`は既存finalizeとroot更新のauthorityであり、cleanup operationのauthorityとして流用しない。`--cleanup-authority`は実行ごとの明示authorityで、project policyへ保存しない。apply直前にfinalize reportを再生成し、そのSHA-256 hashを最新cleanup preview digestとして`--approved-digest`と完全一致させる。cleanupは既存`applyFinalize`が発行する対象1件の`worktree.remove`だけをGit公式commandへ渡し、branch削除、prune、他worktree探索を行わない。
+
+`worktree create`の`--dry-run`は検証を省略しない。base commitの解決、originのrepository同一性、remote default branchと`origin/HEAD`の一致、baseと取得済みremote default branch commitの一致まで`--apply`と同一の規則を通し、`git worktree add`の直前で停止して計画を返す。previewの成功はapplyの成功を保証しない。`git worktree add`自身しか判定しない条件、たとえば同名branchがworktree未登録のまま既存であることは、applyで初めて拒否される。
 
 `worktree create`は現在時刻を1回だけ取得し、path構成と明示path検証へ同じ値を渡す。明示`--path`はGit内部領域などのtrusted boundaryへ最初に通し、その後で配置、directory名、timestamp、Issue番号、slugを検証する。domainは現在時刻を取得しない。現在時刻が未指定または不正ならtimestamp検証をskipせずfail-closedで拒否する。`YYYYMMDD_HHMMSS`は実行環境のlocal timeとして暦上の実在性まで検証し、未来には猶予を設けない。
 

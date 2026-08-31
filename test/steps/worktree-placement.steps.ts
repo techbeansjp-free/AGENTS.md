@@ -775,6 +775,7 @@ When("pathを省略してworktree create CLIを実行する", function () {
       "--slug=worktree-placement",
       "--remote-default-branch=main",
       `--remote-default-sha=${requireSha(this)}`,
+      "--apply",
     ],
     { cwd: process.cwd(), encoding: "utf8" },
   );
@@ -846,6 +847,7 @@ When(
         "--slug=worktree-placement",
         "--remote-default-branch=main",
         `--remote-default-sha=${requireSha(this)}`,
+        "--dry-run",
       ],
       WTTS_CURRENT_TIME,
     );
@@ -876,6 +878,7 @@ When(
         "--slug=worktree-placement",
         "--remote-default-branch=main",
         `--remote-default-sha=${requireSha(this)}`,
+        "--apply",
       ],
       WTTS_CURRENT_TIME,
     );
