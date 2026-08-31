@@ -1535,7 +1535,7 @@ Given(
         "",
         "| Requirement | Acceptance | Scenario | Feature | Implementation |",
         "| --- | --- | --- | --- | --- |",
-        "| REQ-OBS-FULL-001 | AC-OBS-FULL-001 | SCN-OBS-FULL-001 | `test/features/full.feature` `.feature` | `src/full.ts` `src/components/` `src/**/*.css` `ci:quality` `z-index` `.gitignore` `AGENTS.md` |",
+        "| REQ-OBS-FULL-001 | AC-OBS-FULL-001 | SCN-OBS-FULL-001 | `test/features/full.feature` `.feature` | `src/full.ts` `src/components/` `src/**/*.css` `src/**/*.{ts,tsx}` `src/pages/[slug].astro` `src/?.ts` `ci:quality` `z-index` `.gitignore` `AGENTS.md` |",
         "",
       ].join("\n"),
     );
