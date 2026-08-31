@@ -5071,12 +5071,25 @@ export async function main(
       );
       return result.valid ? 0 : 1;
     }
-    const parsed = readJsonInput(file);
+    const manifestRaw = fs.readFileSync(file, "utf8");
+    const parsed = parseJsonStrict(manifestRaw, file);
     if (
       isRecord(parsed) &&
       parsed.schemaVersion === "agent-skill-chain/project-policy-manifest/v1"
     ) {
-      const candidateSet = loadProjectPolicySet(root);
+      let candidateSet;
+      try {
+        candidateSet = loadProjectPolicySet(root, {
+          manifest: parsed,
+          manifestRaw,
+        });
+      } catch (error) {
+        print({
+          valid: false,
+          errors: [error instanceof Error ? error.message : String(error)],
+        });
+        return 1;
+      }
       const trustedSet = loadOperationPolicy(root);
       const effective = resolveEffectivePolicy(
         trustedSet.policy,

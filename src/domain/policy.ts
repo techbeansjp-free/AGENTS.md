@@ -1223,14 +1223,21 @@ function assemblePolicySet(
   };
 }
 
-export function loadProjectPolicySet(root: string): PolicySet {
+export function loadProjectPolicySet(
+  root: string,
+  override?: { manifest: unknown; manifestRaw: string },
+): PolicySet {
   const namespace = path.join(root, ".agent-skill-chain");
-  const manifestFile = resolveContained(
-    root,
-    ".agent-skill-chain/project-policy.json",
-  );
-  const manifestRaw = fs.readFileSync(manifestFile, "utf8");
-  const manifest = parseJsonStrict(manifestRaw, "project policy manifest");
+  const manifestRaw =
+    override?.manifestRaw ??
+    fs.readFileSync(
+      resolveContained(root, ".agent-skill-chain/project-policy.json"),
+      "utf8",
+    );
+  const manifest =
+    override === undefined
+      ? parseJsonStrict(manifestRaw, "project policy manifest")
+      : override.manifest;
   if (isRecord(manifest) && manifest.schemaVersion !== MANIFEST_VERSION) {
     if (fs.existsSync(path.join(namespace, "project")))
       throw new Error("legacy monolithとproject directoryの混在を拒否しました");
