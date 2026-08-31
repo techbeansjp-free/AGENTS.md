@@ -1485,6 +1485,71 @@ Given("存在しない実装pathを含むtrace rowがある", function () {
   commitFixture(root, "add missing trace endpoint");
 });
 
+Given("trackedな.astroを実装列へ持つtrace rowがある", function () {
+  const root = createModeFixture(this, "Full");
+  writeFixture(root, "src/pages/index.astro", "<main>Astro page</main>\n");
+  writeFixture(
+    root,
+    "docs/specs/15_要件追跡/00_追跡表.md",
+    [
+      "# Astro endpoint trace",
+      "",
+      "| Requirement | Acceptance | Scenario | Feature | Implementation |",
+      "| --- | --- | --- | --- | --- |",
+      "| REQ-OBS-FULL-001 | AC-OBS-FULL-001 | SCN-OBS-FULL-001 | `test/features/full.feature` | `src/pages/index.astro` |",
+      "",
+    ].join("\n"),
+  );
+  commitFixture(root, "add tracked Astro trace endpoint");
+});
+
+Given("trackedな.astro.bakを実装列へ持つtrace rowがある", function () {
+  const root = createModeFixture(this, "Full");
+  writeFixture(root, "src/pages/index.astro.bak", "Astro backup\n");
+  writeFixture(
+    root,
+    "docs/specs/15_要件追跡/00_追跡表.md",
+    [
+      "# Astro backup endpoint trace",
+      "",
+      "| Requirement | Acceptance | Scenario | Feature | Implementation |",
+      "| --- | --- | --- | --- | --- |",
+      "| REQ-OBS-FULL-001 | AC-OBS-FULL-001 | SCN-OBS-FULL-001 | `test/features/full.feature` | `src/pages/index.astro.bak` |",
+      "",
+    ].join("\n"),
+  );
+  commitFixture(root, "add tracked Astro backup trace endpoint");
+});
+
+When("trace endpoint観測用のsemantic graphを構築する", function () {
+  assert.ok(this.fixtureRoot);
+  try {
+    this.snapshots = [buildRepositorySemanticGraph(this.fixtureRoot)];
+  } catch (error) {
+    this.cliError = error instanceof Error ? error.message : String(error);
+  }
+});
+
+Then(".astroのtrace endpointは実在と判定され投影が成立する", function () {
+  assert.equal(this.cliError, undefined);
+  const snapshot = this.snapshots?.[0];
+  assert.ok(snapshot);
+  assert.equal(
+    snapshot.nodes.some(({ id }) => id === "file:src/pages/index.astro"),
+    true,
+  );
+});
+
+Then(
+  ".astro.bakのtrace endpointはstableな診断でfail closedになる",
+  function () {
+    assert.match(
+      this.cliError ?? "",
+      /semantic graph projection診断 trace-endpoint-missing: docs\/specs\/15_要件追跡\/00_追跡表\.md:5: 存在しないrepository path=src\/pages\/index\.astro\.bak/u,
+    );
+  },
+);
+
 When("endpoint不足のsemantic graphを構築する", function () {
   assert.ok(this.fixtureRoot);
   try {
