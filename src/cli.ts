@@ -5372,6 +5372,7 @@ export async function main(
   }
   if (command === "worktree" && subcommand === "create") {
     const { flags } = parse(rest);
+    const apply = applyMode(flags);
     const root = path.resolve(
       typeof flags.root === "string" ? flags.root : process.cwd(),
     );
@@ -5448,6 +5449,7 @@ export async function main(
         expectedRepository:
           typeof flags.repo === "string" ? flags.repo : undefined,
         trustedPolicy: trustedSet.policy,
+        preview: !apply,
       }),
     );
     return 0;
