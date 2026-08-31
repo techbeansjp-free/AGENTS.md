@@ -30,6 +30,7 @@ const MAX_SOURCE_FILES = 200_000;
 const MAX_TRACE_IDS_PER_CELL = 1_000;
 const MAX_ECMASCRIPT_IMPORT_SCAN_TOKENS = 250_000;
 const SOURCE_EXTENSIONS = new Set([
+  ".astro",
   ".c",
   ".cc",
   ".cjs",
