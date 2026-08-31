@@ -6,11 +6,7 @@ import { inspectFinalizeState } from "../../src/domain/worktree.js";
 import { buildFinalizeReport } from "../../src/domain/finalize.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
-interface FinalizeReport {
-  safe: boolean;
-  reasons: string[];
-  snapshot: { ignoredArtifacts?: unknown };
-}
+type FinalizeReport = ReturnType<typeof buildFinalizeReport>;
 
 class IgnoredArtifactsWorld extends WorkflowWorld {
   repositoryRoot = "";
@@ -47,7 +43,11 @@ function ignoredNamesFor(kind: string): string[] {
   if (kind === "改行を含む名前") return ["ignored/a\nb.txt"];
   if (kind === "ASCII名のみ") return ["ignored/alpha.txt", "ignored/beta.txt"];
   if (kind === "危険なpath")
-    return ["ignored/tab\tname.txt", `ignored/${"ガ".normalize("NFD")}.txt`];
+    return [
+      "ignored/tab\tname.txt",
+      `ignored/${"ガ".normalize("NFD")}.txt`,
+      "ignored/back\\slash.txt",
+    ];
   if (kind === "allowlist済み非ASCII名") return ["node_modules/メモ.txt"];
   throw new Error(`未知の無視対象種別です: ${kind}`);
 }
@@ -105,7 +105,7 @@ function report(world: IgnoredArtifactsWorld, kind: string): FinalizeReport {
     EVIDENCE,
     allowlistFor(kind),
   );
-  return buildFinalizeReport(state as never) as unknown as FinalizeReport;
+  return buildFinalizeReport(state);
 }
 
 Given("{string}の無視対象を持つ隔離worktreeがある", function (kind: string) {
@@ -144,6 +144,7 @@ When("隔離repositoryへworktree survey CLIを実行する", function () {
     { cwd: path.resolve("."), encoding: "utf8" },
   );
   assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
   this.cliStdout = result.stdout;
 });
 
@@ -159,15 +160,40 @@ Then("後片付け判定は{string}である", function (expectation: string) {
   if (expectation === "種別不明の理由を含まない") {
     const found = unknownKind(this.reports[0]!);
     assert.deepEqual(found, [], found.join("; "));
+    /**
+     * **観測列が空になる退行を空振り合格させない。** 種別不明が消えるだけでなく、
+     * 生の名前がallowlist診断へ現れることまで見る。
+     */
+    assert.deepEqual(
+      this.reports[0]!.snapshot.ignoredArtifacts,
+      this.ignoredNames,
+    );
+    assert.ok(
+      this.reports[0]!.reasons.some((reason) =>
+        reason.includes(
+          `allowlist外の無視対象資産です: ${this.ignoredNames[0]}`,
+        ),
+      ),
+      this.reports[0]!.reasons.join("; "),
+    );
     return;
   }
   if (expectation === "種別不明の理由を含む") {
-    assert.notEqual(unknownKind(this.reports[0]!).length, 0);
+    const found = unknownKind(this.reports[0]!);
+    assert.equal(
+      found.length,
+      this.ignoredNames.length,
+      `危険なpath ${this.ignoredNames.length}件のうち拒否されたのは${found.length}件です: ${found.join("; ")}`,
+    );
     return;
   }
   if (expectation === "無視対象を理由にblockingしない") {
     const found = ignoredBlocking(this.reports[0]!);
     assert.deepEqual(found, [], found.join("; "));
+    assert.deepEqual(
+      this.reports[0]!.snapshot.ignoredArtifacts,
+      this.ignoredNames,
+    );
     return;
   }
   if (expectation === "2値で一致する") {
@@ -197,8 +223,26 @@ Then("無視対象資産の観測列は{string}である", function (expectation
 
 Then("survey CLIの出力は{string}である", function (expectation: string) {
   assert.equal(expectation, "種別不明の理由を含まない");
+  /**
+   * **走査失敗による空振り合格を防ぐ。** 対象worktreeのentryが出力に存在することを
+   * 先に確かめてから、種別不明が無いことを主張する。
+   */
+  const parsed: unknown = JSON.parse(this.cliStdout);
+  assert.ok(isRecord(parsed));
+  const entries = parsed.entries;
+  assert.ok(Array.isArray(entries));
+  assert.ok(
+    entries.some(
+      (entry) => isRecord(entry) && entry.path === path.resolve(this.worktree),
+    ),
+    `対象worktreeのentryが出力にありません: ${this.cliStdout.slice(0, 400)}`,
+  );
   assert.ok(
     !this.cliStdout.includes("種別が不明"),
     `survey CLIが種別不明を返しています: ${this.cliStdout.slice(0, 400)}`,
   );
 });
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
