@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import path from "node:path";
 import {
   classifyProjectChoiceDiff,
   type ProjectChoiceDiff,
@@ -15,12 +16,12 @@ import {
 } from "../../src/domain/project-choice-shrink.js";
 import {
   choicesFragmentSource,
-  loadOperationPolicy,
   loadProjectPolicySet,
   readProjectChoices,
   type PolicySet,
 } from "../../src/domain/policy.js";
 import { planFileMigration } from "../../src/domain/migration.js";
+import { readPolicyJson } from "../../src/adapters/json-input.js";
 import {
   isRecord,
   type Diagnostic,
@@ -399,6 +400,17 @@ Then("policy比較はrelease変更を日本語のauthority診断で拒否する"
 const CHOICES_FRAGMENT = "choices/development.json";
 
 /**
+ * package既定のfloor policyをfileから直接読む。
+ *
+ * **`loadOperationPolicy`を使わない。** 同関数は`origin/HEAD`をtrusted branchへ
+ * 解決できることを要求するauthority経路であり、CIのcheckout形では解決できずに
+ * 停止する。floor policyの内容だけが要るなら実行環境のGit状態に依存させない。
+ */
+function packageFloorPolicy(): Policy {
+  return readPolicyJson(path.resolve(".agent-skill-chain/policy/default.json"));
+}
+
+/**
  * 縮小後のchoices fragment fileのraw textを作る。
  *
  * **受理判定はこのraw textのsha256だけを見る。** 提案はこのtextを承認した事実を
@@ -745,7 +757,7 @@ Given("候補側にだけ縮小提案を置いたpolicy setがある", function 
 When("effective policyを合成してから候補側提案で判定する", function () {
   assert.ok(this.trustedPolicySet);
   assert.ok(this.candidatePolicySet);
-  const floor = loadOperationPolicy(process.cwd()).policy;
+  const floor = packageFloorPolicy();
   const trustedEffective = resolveEffectivePolicy(
     floor,
     this.trustedPolicySet.policy,
@@ -1006,7 +1018,7 @@ When("effective policyを合成してから縮小の互換性を判定する", f
   assert.ok(this.trustedPolicySet);
   assert.ok(this.candidatePolicySet);
   /** `policy validate`と同じ合成順序を再現する。 */
-  const floor = loadOperationPolicy(process.cwd()).policy;
+  const floor = packageFloorPolicy();
   const trustedEffective = resolveEffectivePolicy(
     floor,
     this.trustedPolicySet.policy,
