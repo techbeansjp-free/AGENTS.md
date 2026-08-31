@@ -8,15 +8,15 @@
 |---|---|
 | 対象 | 実装 |
 | 対象Issue | #1037 |
-| ラウンド | Step 10 ラウンド1〜2 |
+| ラウンド | Step 10 ラウンド1〜3 |
 | 比較基点 | `ba9f3e043251454be84f69479a49d03ea6030036` |
-| H_impl | `e15c59f4e9e33cf01b8fe7e901f8b4278eed1c4c` |
+| H_impl | `d3e4975d19f5a8a742dc6bfc8ea68b616ec684b0` |
 | 比較基点の由来 | worktree作成時点の`origin/main`のtip。**本artifact commitまでの間に`origin/main`は動いていない**（`git fetch`後に同一SHAであることを確認した） |
 | モード | full |
-| 対象差分 | `src/domain/worktree.ts`、`src/cli.ts`、`test/features/integration/worktree-create-dry-run.feature`、`test/steps/worktree-create-dry-run.steps.ts`、`test/steps/worktree-placement.steps.ts`、`scripts/check_test_determinism.ts`、`docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md`、`docs/specs/02_要件/02_プロジェクトライフサイクル要件.md`、`docs/specs/15_要件追跡/00_追跡表.md`、および本artifact。commitは`174c7699`・`e15c59f4` |
+| 対象差分 | 本artifactのラウンド2版を含む10 path。`src/domain/worktree.ts`、`src/cli.ts`、`test/features/integration/worktree-create-dry-run.feature`、`test/steps/worktree-create-dry-run.steps.ts`、`test/steps/worktree-placement.steps.ts`、`scripts/check_test_determinism.ts`、`docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md`、`docs/specs/02_要件/02_プロジェクトライフサイクル要件.md`、`docs/specs/15_要件追跡/00_追跡表.md`、および本artifact。commitは`174c7699`・`e15c59f4`・`d3e4975d` |
 | 対象外 | (a) preview成功がapply成功を保証しない残差の機構的解消。(b) `createWorktree`の`preview`引数を必須にする変更（5節のR1-F01）。(c) `worktree create`以外のcommandのflag契約。(d) `applyMode`自身の実装 |
-| 残り予算 | **1**（同一範囲で最大3ラウンド。総2ラウンドで設計し、CI是正のために予算1を残す） |
-| ラウンド数 | 2。ラウンド1は実装差分、ラウンド2は本artifactを加えた版が対象である |
+| 残り予算 | **0**（同一範囲で最大3ラウンド。総2ラウンドで設計し予算1を残していたが、**ラウンド3で外部reviewerの指摘3件を判定して使い切った**。6節を参照する） |
+| ラウンド数 | 3。ラウンド1は実装差分、ラウンド2は本artifactを加えた版、**ラウンド3は外部reviewer（CodeRabbit）の指摘3件の判定**が対象である |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260831_203535_worktree-createが-dry-runを無視してworktreeとbranchを実際に作成する |
 | 仕様の所有箇所 | `docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md`の`worktree create`行と`docs/specs/02_要件/02_プロジェクトライフサイクル要件.md`のREQ-LC-003。**着手時点でこの2箇所は`worktree create`の承認要求を規定していなかった。** その欠落を埋めることが本Issueの要求の一部である |
 | 成果物行数 | 製品 **+10 / −0行**（`src/domain/worktree.ts` +8、`src/cli.ts` +2）。仕様 **+5 / −2行**。検査script **+6 / −0行**。支援層 **+264行**（feature +35、新規steps +226、既存steps +3） |
@@ -40,16 +40,16 @@
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | https://github.com/techbeansjp-free/AGENTS.md/issues/1037 | Step 8で00〜03を同期。`syncDigest`と`readBackDigest`が一致し`sync-verified`のcheckpoint 8へ遷移した | 一次資料 |
-| 差分 | `ba9f3e04..e15c59f4` | **9 file、+285 / −2行**（`git diff --numstat`の実測値）。**製品差分は+10 / −0行** | 既存コード |
+| 差分 | `ba9f3e04..d3e4975d` | **9 file、+285 / −2行**（`git diff --numstat`の実測値）。**製品差分は+10 / −0行** | 既存コード |
 | テスト | `npm test` | `1331 scenarios (1315 passed, 16 skipped)`、失敗0 | テスト出力 |
 | 仕様 | `docs/specs/`配下3 file | updated | 既存文書 |
-| Phase A artifact | `docs/reviews/103_課題1037のworktree-create承認要求レビュー.md` | `H_impl` = `e15c59f4`。`H_impl..H_final`の差分pathは本file 1件 | Git観測 |
+| Phase A artifact | `docs/reviews/103_課題1037のworktree-create承認要求レビュー.md` | `H_impl` = `d3e4975d`。`H_impl..H_final`の差分pathは本file 1件 | Git観測 |
 | commit後external | PR、CI run、review | Step 11で観測する。**本節はPR作成前に書いており、外部証拠はまだ無い** | 外部のimmutable証拠 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **成立する。** 本artifactへ自身のcommit SHAを書いていない。
-- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: `H_impl` = `e15c59f4`は`H_final`のancestorであり、差分は本artifact 1 fileだけである。
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: `H_impl` = `d3e4975d`は`H_final`のancestorであり、差分は本artifact 1 fileだけである。
 - reviewer stable IDがPR author/provider観測済み`H_impl` author stable IDと異なる: **いいえ。同一である。** 本repositoryの全sessionが単一アカウントで走る。**providerの差はcontextの独立性であってidentityの独立性ではない。** 9節で成立条件を正確に記録した。
-- 既定branch追随を行った場合: **行っていない。** 基点`ba9f3e04`は`origin/main`のtipであり、追随mergeを作っていない。`比較基点..H_impl`は2 commitの一直線である。
+- 既定branch追随を行った場合: **行っていない。** 基点`ba9f3e04`は`origin/main`のtipであり、追随mergeを作っていない。`比較基点..H_impl`は3 commitの一直線である。
 
 ## 変更ファイル個別監査
 
@@ -64,8 +64,9 @@
 | `docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md` | M | project | spec | `worktree create`行の入力列と出力列を書き換え、直後へpreviewの検証範囲と残差を1段落足した。他のcommand行に触れていない | pass | REQ-LC-003 / AC-LC-003 | 規則の記述だけで実行authorityを持たない | pass |
 | `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md` | M | project | spec | REQ-LC-003の本文へ明示承認の要求を2文足した。他の要件に触れていない | pass | REQ-LC-003 / AC-LC-003 | 同上 | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | project | spec | REQ-LC-003の既存行を書き換えず、1行追加した | pass | REQ-LC-003 / AC-LC-003 / SCN-INT-WTDRY-001〜006 | 追跡の追加だけで実行authorityを持たない | pass |
+| `docs/reviews/103_課題1037のworktree-create承認要求レビュー.md` | A | project | evidence | **本artifact自身のラウンド2版である。** ラウンド3の是正を前進commitで積んだため`比較基点..H_impl`の範囲へ入った。まとめ行にせず1 file 1行で記録する | pass。evidence層であり実行authorityを持たない | 全AC。review sessionの`7b77bfea…` | 内容はreview記録のみ。rollbackは本fileのrevert | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: **一致する。** `git diff --name-only ba9f3e04 e15c59f4`が返す**9 path**が上表の9行と同じである。**本artifactは`H_impl..H_final`にあり監査範囲へ入らない。** ラウンド1の是正を前進commitで積んだが、その時点ではまだ本artifactを書いていないため`比較基点..H_impl`へ混入していない。
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: **一致する。** `git diff --name-only ba9f3e04 d3e4975d`が返す**10 path**が上表の10行と同じである。**10件目は本artifactのラウンド2版であり、ラウンド3の是正を前進commitで積んだ結果として監査範囲へ入った。** `amend`で畳まなかったのは、`review round`が前ラウンドのHEADをancestorとして要求するためである。**amendするとラウンド3を記録できなくなる。**
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: **成立する。** `preview`はdomainの制御引数であり、承認という概念をdomainへ持ち込んでいない。承認判定は`applyMode`が担うCLI層の責務のままである。
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: **ラウンド1のfindingのうち2件を修正した。** 修正範囲は`test/steps/worktree-placement.steps.ts`と`docs/specs/15_要件追跡/00_追跡表.md`の2 fileだけであり、**製品差分は1行も変わっていない。**
 
@@ -115,7 +116,7 @@
 | 反例 | pass | 変異5件がいずれも対象scenarioを殺す（7.1節） |
 | 失敗 | pass | 検証失敗時の既存の振る舞いを変えていない。previewは検証を通過した場合だけ計画を返し、失敗は従来どおり例外として上がる |
 | 境界 | pass | flagの4状態（`--dry-run`のみ・`--apply`のみ・両方・無し）をすべてscenarioで観測した |
-| 悪用 | pass | previewはread-onlyであり、`git rev-parse`・`symbolic-ref`・`status`しか実行しない。`worktree add`へ到達しない |
+| 悪用 | pass | previewはread-onlyであり、`git remote get-url origin`・`git rev-parse`・`git symbolic-ref`しか実行しない。`worktree add`へ到達しない。**`git status`は実行しない**（`sourceStatusExcludingTarget`はpreview分岐より後にある） |
 | 安全性 | pass | **previewがapplyより弱い検査で通ることはない。** 分岐は全検証の後にあり、飛ばす検査が存在しないことを原文で確認した（7.4節） |
 | 損失 | not-applicable | previewは書き込みを行わない。applyの副作用は従来と同一である |
 | 復旧 | pass | rollback-validationを実測した（7.2節） |
@@ -149,6 +150,18 @@
 - 対象は本artifactを加えた版である。
 - 0.1節の逸脱3件、5節のR1-F01の未是正、7節の実測値が本文の主張と一致することを確認した。
 - **新規findingは0件である。** 未解決blockingは0件である。
+
+### ラウンド3
+
+**外部reviewer（CodeRabbit）の指摘3件を受けて実施した。** 残していた予算1をここで使った。**CI全chainはこの時点で緑である。**
+
+| ID | 判定 | 内容 |
+|---|---|---|
+| R3-F01 | **前提が誤り・退ける** | 4節の悪用行が「previewは`git rev-parse`・`symbolic-ref`・`status`しか実行しない」と書いていた点の指摘に付随して、`sourceStatusExcludingTarget`をpreview分岐の前へ移し、dry-runでも`dirtyBefore`を取得せよという提案があった。**採らない。** `sourceStatusExcludingTarget`は検証ではなく、副作用の前後を比較するための基準値の観測である。previewは副作用を起こさないため比較対象の`dirtyAfter`が存在せず、取得した値をどの判定にも使えない。**「全検証を実行する」契約に`status`観測は含まれない。** 実行すれば読み取り費用だけが増える |
+| R3-F02 | **有効・是正した** | 同じ4節の悪用行が実装と食い違っていた。preview経路は`git status`を実行せず（`sourceStatusExcludingTarget`はpreview分岐より後にある）、逆に`git remote get-url origin`を`enforceTrustedWorktreeBoundary`の中で実行する。**この誤りがR3-F01の提案の前提を作っていた。** 原文を実装と突合して書き直した |
+| R3-F03 | **退ける** | 0節の縮小評価が書く「`flags["dry-run"]`を直接読む案」を「直接参照する案」へ改めよという指摘。LanguageToolの`MEISI_YOMU`規則による文法指摘だが、flagの値を「読む」は日本語として正しく、意味も変わらない。**文体上の好みであり欠陥ではない** |
+
+**製品差分はラウンド3でも1行も変えていない。** 変えたのは本artifactだけである。
 
 ## 7. テスト結果
 
@@ -245,7 +258,7 @@ preview分岐の**後**にあるのは`sourceStatusExcludingTarget`（副作用�
 
 ## 11. 総合判定と再開地点
 
-**approved。** 未解決のCritical/Highは0件、blockingは0件である。**この`approved`は、人間による独立approvalを伴わないAIの最終裁定である**（9節）。
+**approved。** 未解決のCritical/Highは0件、blockingは0件である。**CI全chainが緑であることをmerge前に確認した。****この`approved`は、人間による独立approvalを伴わないAIの最終裁定である**（9節）。
 
 - 再開地点はStep 11の`pr create`である。
 - **`pr create`は作成直後のread-backで`reconciliation-required`へ落ちることが既知である。** このとき副作用を再送しない。`pr create`を再実行するとread-only照合で既存PRを1件だけ束ね、`step11-recorded`まで進む。一致が0件または2件以上なら停止して人へ返す。
