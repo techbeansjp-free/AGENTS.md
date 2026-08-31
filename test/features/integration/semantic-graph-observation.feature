@@ -143,3 +143,13 @@ Feature: 隔離疑似projectでsemantic graphを即時観測する
     Given trackedなFeatureとImplementationをworking treeから削除したtrace rowがある
     When endpoint不足のsemantic graphを構築する
     Then 削除済みtrace endpointのstableな診断でfail closedになる
+
+  Scenario: SCN-INT-SEMGRAPH-029 trackedな.astroのtrace endpointを実在扱いする
+    Given trackedな.astroを実装列へ持つtrace rowがある
+    When trace endpoint観測用のsemantic graphを構築する
+    Then .astroのtrace endpointは実在と判定され投影が成立する
+
+  Scenario: SCN-INT-SEMGRAPH-030 意味source集合に無い拡張子のtrace endpointは実在扱いしない
+    Given trackedな.astro.bakを実装列へ持つtrace rowがある
+    When trace endpoint観測用のsemantic graphを構築する
+    Then .astro.bakのtrace endpointはstableな診断でfail closedになる
