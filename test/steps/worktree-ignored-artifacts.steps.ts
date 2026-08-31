@@ -69,6 +69,11 @@ function createIsolatedWorktree(world: IgnoredArtifactsWorld): void {
   );
   runGit(world.repositoryRoot, ["add", ".gitignore"]);
   runGit(world.repositoryRoot, ["commit", "-q", "-m", "ignore"]);
+  /**
+   * **`core.quotepath`をfixture側で既定値へ固定する。** 固定しないと実行環境の
+   * global設定を継承し、`false`の環境では修正前でも生名が返って回帰を検出できない。
+   */
+  runGit(world.repositoryRoot, ["config", "core.quotepath", "true"]);
   const remote = world.temp("asc-wtign-remote-");
   runGit(remote, ["init", "--bare"]);
   runGit(world.repositoryRoot, ["remote", "add", "origin", remote]);
@@ -96,6 +101,7 @@ function createIsolatedWorktree(world: IgnoredArtifactsWorld): void {
   runGit(world.worktree, ["add", "tracked.txt"]);
   runGit(world.worktree, ["commit", "-q", "-m", "fixture"]);
   runGit(world.worktree, ["push", "-u", "origin", "bugfix/1034-ignored"]);
+  runGit(world.worktree, ["config", "core.quotepath", "true"]);
 }
 
 function report(world: IgnoredArtifactsWorld, kind: string): FinalizeReport {
