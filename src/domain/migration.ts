@@ -5,6 +5,7 @@ import { writeFileAtomic } from "../lib/atomic.js";
 import { resolveContained, stableJson } from "../lib/security.js";
 import { compareTrustedPolicy, diagnostic } from "./enforcement.js";
 import {
+  choicesFragmentSource,
   loadProjectPolicySet,
   validatePolicy,
   type PolicySet,
@@ -123,6 +124,23 @@ function fragmentedSet(input: PolicyInput): input is PolicySet {
     typeof input.setHash === "string" &&
     typeof input.semanticPolicyHash === "string"
   );
+}
+
+/**
+ * candidate policy inputからchoices fragmentのpathとraw byte列を取り出す。
+ *
+ * **fragmented setでない入力では`undefined`を返す。** legacy monolith policyは
+ * fragmentのraw byte列を持たないため、この経路では縮小の受理が起きない。
+ */
+function candidateChoicesSource(candidate: PolicyInput): {
+  candidateChoicesRaw?: string;
+  choicesFragmentPath?: string;
+} {
+  if (!fragmentedSet(candidate)) return {};
+  const source = choicesFragmentSource(candidate);
+  return source === undefined
+    ? {}
+    : { candidateChoicesRaw: source.raw, choicesFragmentPath: source.path };
 }
 
 function rejected(reasons: string[]): GateResult {
@@ -411,7 +429,11 @@ export function planFileMigration(
       ? digest(candidate.rawEntries)
       : undefined,
     manifestHash: digest(manifest),
-    compatibility: compareTrustedPolicy(trustedPolicy, candidatePolicy),
+    compatibility: compareTrustedPolicy(
+      trustedPolicy,
+      candidatePolicy,
+      candidateChoicesSource(candidate),
+    ),
     manifest,
     artifacts,
     changes: [...new Set(manifest.map((item) => item.kind))],
@@ -509,7 +531,11 @@ function verify(
     reasons.push("immutable plan fingerprintが一致しません");
   if (!approvedPlanHash || approvedPlanHash !== state.planFingerprint)
     reasons.push("approved plan hashが一致しません");
-  const compatibility = compareTrustedPolicy(trustedPolicy, candidatePolicy);
+  const compatibility = compareTrustedPolicy(
+    trustedPolicy,
+    candidatePolicy,
+    candidateChoicesSource(candidate),
+  );
   if (!compatibility.allowed)
     reasons.push(...compatibility.rejected.flatMap((item) => item.reasons));
   for (const artifact of state.artifacts ?? []) {

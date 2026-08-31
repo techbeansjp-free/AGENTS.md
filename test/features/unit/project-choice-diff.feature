@@ -41,3 +41,60 @@ Feature: project choice差分をfield単位で分類する
     Given 未知fieldを持つ入力とobjectでない入力がある
     When 不正なproject choice差分をfield単位で分類する
     Then 未知fieldとobjectでない事実は検証弱化として分類される
+
+  Scenario: SCN-UNIT-CHOICE-009 登録済み提案に従って禁止test suffixを縮小できる
+    Given 既定branch側に禁止test suffixの縮小提案が登録されている
+    When 提案と一致する縮小を判定する
+    Then 分類は弱化のままで最終判定は受理となりfield pathが記録される
+
+  Scenario: SCN-UNIT-CHOICE-010 登録済み提案に従ってtest層を縮小できる
+    Given 既定branch側にtest層の縮小提案が登録されている
+    When 提案と一致する縮小を判定する
+    Then 分類は弱化のままで最終判定は受理となりfield pathが記録される
+
+  Scenario: SCN-UNIT-CHOICE-011 登録済み提案に従って禁止型を縮小できる
+    Given 既定branch側に禁止型の縮小提案が登録されている
+    When 提案と一致する縮小を判定する
+    Then 分類は弱化のままで最終判定は受理となりfield pathが記録される
+
+  Scenario: SCN-UNIT-CHOICE-012 提案が存在しない縮小を拒否する
+    Given 既定branch側に縮小提案が登録されていない
+    When 提案と一致する縮小を判定する
+    Then 縮小はASC-TRUST-001で拒否される
+
+  Scenario: SCN-UNIT-CHOICE-013 提案と1 byteだけ違う縮小を拒否する
+    Given 既定branch側に禁止test suffixの縮小提案が登録されている
+    When 提案と値の内側の空白1個だけが違う候補の縮小を判定する
+    Then 縮小はASC-TRUST-001で拒否され比較したfragment file pathと両sha256が記録される
+
+  Scenario: SCN-UNIT-CHOICE-014 拒否診断が縮小提案の登録手順を案内する
+    Given 既定branch側に縮小提案が登録されていない
+    When 提案と一致する縮小を判定する
+    Then 拒否診断は提案の登録先と次の操作を含む
+
+  Scenario: SCN-UNIT-CHOICE-015 提案が無い場合の分類結果が変更前と一致する
+    Given test層を削除したproject choice差分がある
+    When project choice差分をfield単位で分類する
+    Then test層の縮小は検証弱化として分類される
+
+  Scenario: SCN-UNIT-CHOICE-016 対象3 field以外の弱化分類が変更前と一致する
+    Given 対象3 field以外を弱化した入力の一覧がある
+    When 一覧の各入力をfield単位で分類する
+    Then 対象3 field以外の弱化分類は全件が変更前と一致する
+
+  Scenario: SCN-UNIT-CHOICE-017 提案の型不正とraw byte列の欠落をfail-closedで拒否する
+    Given 型不正な縮小提案とraw byte列を取得できない入力がある
+    When 不正な提案で縮小を判定する
+    Then 縮小はASC-TRUST-001で拒否される
+    And 正当な提案でもraw byte列が無ければ受理されない
+
+  Scenario: SCN-UNIT-CHOICE-018 3 fieldの単調性検知が維持されている
+    Given test層を削除したproject choice差分がある
+    When project choice差分をfield単位で分類する
+    Then test層の縮小は検証弱化として分類される
+
+  Scenario: SCN-UNIT-CHOICE-019 対象3 field以外を対象とする提案では受理されない
+    Given 既定branch側に対象外fieldを指す縮小提案が登録されている
+    When 対象外fieldの弱化を判定する
+    Then 縮小はASC-TRUST-001で拒否される
+    And 対象外fieldの縮小entryは提案が一致しても受理されない

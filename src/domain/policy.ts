@@ -669,6 +669,7 @@ export function validatePolicy(policy: unknown) {
       "budgets",
       "worktree",
       "projectChoices",
+      "projectChoiceShrinkProposals",
     ],
     "policy",
     errors,
@@ -940,7 +941,14 @@ export function validateProjectPolicyManifest(manifest: unknown) {
     errors.push("conformanceScopeが不正です");
   rejectUnknownKeys(
     manifest.policy,
-    ["schemaVersion", "delivery", "merge", "budgets", "worktree"],
+    [
+      "schemaVersion",
+      "delivery",
+      "merge",
+      "budgets",
+      "worktree",
+      "projectChoiceShrinkProposals",
+    ],
     "manifest.policy",
     errors,
   );
@@ -1750,4 +1758,58 @@ export function loadConsumerPolicyAtCommit(
   );
   if (exists.status !== 0) return undefined;
   return loadProjectPolicySetAtCommit(root, resolved.stdout.trim()).policy;
+}
+
+/**
+ * 固定commitのcandidate policy setからchoices fragmentのpathとraw byte列を取り出す。
+ *
+ * `pr create`の受理判定へ渡す。**policy fileが無いcommitでは`undefined`を返す。**
+ */
+export function loadConsumerChoicesFragmentAtCommit(
+  root: string,
+  ref: string,
+): { path: string; raw: string } | undefined {
+  const resolved = git(["rev-parse", "--verify", `${ref}^{commit}`], root, {
+    allowFailure: true,
+  });
+  if (
+    resolved.status !== 0 ||
+    resolved.stdout.trim().toLowerCase() !== ref.toLowerCase()
+  )
+    return undefined;
+  const exists = git(
+    [
+      "cat-file",
+      "-e",
+      `${resolved.stdout.trim()}:.agent-skill-chain/project-policy.json`,
+    ],
+    root,
+    { allowFailure: true },
+  );
+  if (exists.status !== 0) return undefined;
+  return choicesFragmentSource(
+    loadProjectPolicySetAtCommit(root, resolved.stdout.trim()),
+  );
+}
+
+/**
+ * policy setからchoices fragmentのpathとraw byte列を取り出す。
+ *
+ * **legacy monolith policyでは`undefined`を返す。** `manifest.choiceFiles`を持たず
+ * fragmentのraw byte列が存在しないためで、この経路では縮小の受理が構造的に起きない。
+ * これは提案なしの場合と同じ挙動であり、変更前と一致する（Issue #1044）。
+ */
+export function choicesFragmentSource(
+  policySet: PolicySet,
+): { path: string; raw: string } | undefined {
+  const manifest = policySet.manifest;
+  const choiceFiles: unknown = isRecord(manifest)
+    ? manifest.choiceFiles
+    : undefined;
+  if (!Array.isArray(choiceFiles)) return undefined;
+  const relative: unknown = choiceFiles[0];
+  if (typeof relative !== "string") return undefined;
+  const raw = policySet.rawEntries[relative];
+  if (typeof raw !== "string") return undefined;
+  return { path: relative, raw };
 }

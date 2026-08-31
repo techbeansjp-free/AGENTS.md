@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { CURRENT_POLICY_SCHEMA_VERSION } from "../lib/version.js";
 import { redactSecrets, stableJson } from "../lib/security.js";
 import { classifyProjectChoiceDiff } from "./project-choice-diff.js";
+import { acceptApprovedShrinks } from "./project-choice-shrink.js";
 import {
   classifyConformanceDeclarationDiff,
   type ConformanceDeclaration,
@@ -385,6 +386,8 @@ export function compareTrustedPolicy(
   options: {
     trustedConformance?: ConformanceDeclaration;
     candidateConformance?: ConformanceDeclaration;
+    candidateChoicesRaw?: string;
+    choicesFragmentPath?: string;
   } = {},
 ) {
   const trustedRules = new Map(
@@ -398,6 +401,7 @@ export function compareTrustedPolicy(
   const projectChoiceChanges: string[] = [];
   const conformanceChanges: string[] = [];
   const authorityReasons: string[] = [];
+  const acceptedShrinks: string[] = [];
   const mergeStrength: Record<Policy["merge"]["mode"], number> = {
     disabled: 3,
     assisted: 2,
@@ -569,13 +573,26 @@ export function compareTrustedPolicy(
           "trusted projectChoicesのauthority fieldを復元する",
         ),
       );
-    if (choiceDiff.weakened.length > 0)
+    /**
+     * **分類結果を書き換えない。** 弱化の検出はそのまま残し、既定branch側の
+     * 登録済み提案とchoices fragment fileのraw byteが一致するものだけを
+     * 受理へ移す。提案は`trusted`からのみ読むため、候補が同一PRで登録した
+     * 提案を受理判断に使う経路が構造として存在しない（Issue #1044）。
+     */
+    const shrink = acceptApprovedShrinks({
+      diff: choiceDiff,
+      trustedProposals: trusted.projectChoiceShrinkProposals,
+      candidateChoicesRaw: options.candidateChoicesRaw,
+      choicesFragmentPath: options.choicesFragmentPath,
+    });
+    acceptedShrinks.push(...shrink.accepted.map((item) => item.fieldPath));
+    if (shrink.remaining.length > 0)
       rejected.push(
         diagnostic(
           "ASC-TRUST-001",
           "project choiceによる検証弱化を防止する",
           "authority",
-          choiceDiff.weakened,
+          shrink.remaining,
           ["projectChoices"],
           ["projectChoicesの単調性契約と未知fieldを検証した"],
           [],
@@ -585,7 +602,7 @@ export function compareTrustedPolicy(
            * 「trusted側を先に更新せよ」とだけ返すと、その更新手段が製品内に無いため
            * 利用者を循環させる。**owner authorityの操作であることまで返す**（Issue #982、#998）。
            */
-          "弱化を取り消すか、既定branchのproject policyを先に更新してください。縮小は既定branchのproject policy ownerのauthority操作であり、候補側から適用する経路は製品CLIにありません",
+          "弱化を取り消すか、既定branchのproject policyの`projectChoiceShrinkProposals`へ縮小提案を先に登録してください。提案は対象field pathと縮小後のchoices fragment fileのsha256を持ち、既定branchへ登録するPRと縮小を適用するPRの二段階に分けます。候補側へ登録した提案は受理判断に使えません",
           "既定ブランチのproject policy owner",
           "candidateのprojectChoices弱化差分を取り消す",
         ),
@@ -619,6 +636,7 @@ export function compareTrustedPolicy(
     stagedAdditions,
     projectChoiceChanges,
     conformanceChanges,
+    acceptedShrinks,
   };
 }
 
