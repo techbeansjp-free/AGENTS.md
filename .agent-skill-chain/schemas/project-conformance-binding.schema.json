@@ -156,6 +156,7 @@
                   "properties": {
                     "kind": { "const": "check-ref" },
                     "checkId": {
+                      "description": "project ruleのruleIdから接頭辞ASC-を除いて小文字化した値。規則の正本は .agent-skill-chain/docs/00_運用ポリシー.md の「conformance scopeと適用可否」節。",
                       "type": "string",
                       "pattern": "^[a-z][a-z0-9-]{0,63}$"
                     }
