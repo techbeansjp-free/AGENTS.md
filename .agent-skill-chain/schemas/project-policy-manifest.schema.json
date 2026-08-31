@@ -214,8 +214,8 @@
                 ]
               },
               "afterSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-              "reason": { "type": "string", "minLength": 1 },
-              "owner": { "type": "string", "minLength": 1 }
+              "reason": { "type": "string", "pattern": "\\S" },
+              "owner": { "type": "string", "pattern": "\\S" }
             }
           }
         }
