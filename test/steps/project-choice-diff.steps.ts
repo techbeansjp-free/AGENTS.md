@@ -1,13 +1,31 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
+import path from "node:path";
 import {
   classifyProjectChoiceDiff,
   type ProjectChoiceDiff,
 } from "../../src/domain/project-choice-diff.js";
-import { compareTrustedPolicy } from "../../src/domain/enforcement.js";
-import { readProjectChoices } from "../../src/domain/policy.js";
 import {
+  compareTrustedPolicy,
+  resolveEffectivePolicy,
+} from "../../src/domain/enforcement.js";
+import {
+  acceptApprovedShrinks,
+  type ShrinkAcceptance,
+} from "../../src/domain/project-choice-shrink.js";
+import {
+  choicesFragmentSource,
+  loadProjectPolicySet,
+  readProjectChoices,
+  type PolicySet,
+} from "../../src/domain/policy.js";
+import { planFileMigration } from "../../src/domain/migration.js";
+import { readPolicyJson } from "../../src/adapters/json-input.js";
+import {
+  isRecord,
   type Diagnostic,
+  type ProjectChoiceShrinkProposal,
   type ModelMappingChoice,
   type Policy,
   type ProjectChoices,
@@ -19,6 +37,7 @@ interface PolicyComparison {
   rejected: Diagnostic[];
   stagedAdditions: string[];
   projectChoiceChanges: string[];
+  acceptedShrinks?: string[];
 }
 
 class ProjectChoiceDiffWorld extends WorkflowWorld {
@@ -29,6 +48,14 @@ class ProjectChoiceDiffWorld extends WorkflowWorld {
   trustedPolicy: Policy | undefined = undefined;
   candidatePolicy: Policy | undefined = undefined;
   comparison: PolicyComparison | undefined = undefined;
+  candidateChoicesRaw: string | undefined = undefined;
+  trustedPolicySet: PolicySet | undefined = undefined;
+  candidatePolicySet: PolicySet | undefined = undefined;
+  migrationPlan: unknown = undefined;
+  distributedFiles: string[] = [];
+  distributedContents: string[] = [];
+  shrinkFieldPath = "";
+  weakenedBaseline: string[][] = [];
 }
 
 const { Given, When, Then } = stepDefinitions<ProjectChoiceDiffWorld>();
@@ -368,4 +395,668 @@ Then("policy比較はrelease変更を日本語のauthority診断で拒否する"
   assert.match(diagnostic.reasons.join(" "), /[ぁ-んァ-ヶ一-龠]/u);
   assert.match(diagnostic.requiredAuthority, /[ぁ-んァ-ヶ一-龠]/u);
   assert.match(diagnostic.rollback, /[ぁ-んァ-ヶ一-龠]/u);
+});
+
+const CHOICES_FRAGMENT = "choices/development.json";
+
+/**
+ * package既定のfloor policyをfileから直接読む。
+ *
+ * **`loadOperationPolicy`を使わない。** 同関数は`origin/HEAD`をtrusted branchへ
+ * 解決できることを要求するauthority経路であり、CIのcheckout形では解決できずに
+ * 停止する。floor policyの内容だけが要るなら実行環境のGit状態に依存させない。
+ */
+function packageFloorPolicy(): Policy {
+  return readPolicyJson(path.resolve(".agent-skill-chain/policy/default.json"));
+}
+
+/**
+ * 縮小後のchoices fragment fileのraw textを作る。
+ *
+ * **受理判定はこのraw textのsha256だけを見る。** 提案はこのtextを承認した事実を
+ * `afterSha256`として持つ。textの整形が1 byteでも違えば別の承認になる。
+ */
+function shrunkChoicesRaw(shrink: (value: ProjectChoices) => void): string {
+  const value = choices();
+  shrink(value);
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function sha256(value: string): string {
+  return crypto.createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function proposal(
+  fieldPath: string,
+  afterSha256: string,
+): ProjectChoiceShrinkProposal {
+  return {
+    fieldPath,
+    afterSha256,
+    reason: "採用していない方針の宣言を取り除く",
+    owner: "利用側project owner",
+  };
+}
+
+function registerShrink(
+  world: ProjectChoiceDiffWorld,
+  fieldPath: string,
+  shrink: (value: ProjectChoices) => void,
+  options: { register?: boolean; candidateSideOnly?: boolean } = {},
+): void {
+  const trustedChoice = choices();
+  const candidateChoice = choices();
+  shrink(candidateChoice);
+  const raw = shrunkChoicesRaw(shrink);
+  const trustedPolicy = policy(trustedChoice);
+  const candidatePolicy = policy(candidateChoice);
+  const declared = proposal(fieldPath, sha256(raw));
+  if (options.register !== false) {
+    if (options.candidateSideOnly === true)
+      candidatePolicy.projectChoiceShrinkProposals = [declared];
+    else trustedPolicy.projectChoiceShrinkProposals = [declared];
+  }
+  world.trustedPolicy = trustedPolicy;
+  world.candidatePolicy = candidatePolicy;
+  world.candidateChoicesRaw = raw;
+  world.shrinkFieldPath = fieldPath;
+}
+
+Given("既定branch側に禁止test suffixの縮小提案が登録されている", function () {
+  registerShrink(this, "projectChoices.forbiddenTestFileSuffixes", (value) => {
+    value.forbiddenTestFileSuffixes = [];
+  });
+});
+
+Given("既定branch側にtest層の縮小提案が登録されている", function () {
+  registerShrink(this, "projectChoices.testLayers", (value) => {
+    value.testLayers = ["unit"];
+  });
+});
+
+Given("既定branch側に禁止型の縮小提案が登録されている", function () {
+  registerShrink(this, "projectChoices.quality.forbiddenTypes", (value) => {
+    value.quality.forbiddenTypes = [];
+  });
+});
+
+Given("既定branch側に縮小提案が登録されていない", function () {
+  registerShrink(
+    this,
+    "projectChoices.forbiddenTestFileSuffixes",
+    (value) => {
+      value.forbiddenTestFileSuffixes = [];
+    },
+    { register: false },
+  );
+});
+
+Given("既定branch側に対象外fieldを指す縮小提案が登録されている", function () {
+  registerShrink(this, "projectChoices.capabilities", (value) => {
+    value.capabilities.observability = {
+      status: "not-applicable",
+      reason: "観測を止める",
+      evidence: "宣言のみ",
+    };
+  });
+});
+
+Given("型不正な縮小提案とraw byte列を取得できない入力がある", function () {
+  registerShrink(this, "projectChoices.forbiddenTestFileSuffixes", (value) => {
+    value.forbiddenTestFileSuffixes = [];
+  });
+  assert.ok(this.trustedPolicy);
+  this.trustedPolicy.projectChoiceShrinkProposals = [
+    { fieldPath: 1, afterSha256: [], reason: null, owner: undefined },
+  ] as never;
+  this.candidateChoicesRaw = undefined;
+});
+
+Given("対象3 field以外を弱化した入力の一覧がある", function () {
+  const weaken: Array<(value: ProjectChoices) => void> = [
+    (value) => {
+      value.quality.strictTypecheck = {
+        status: "not-applicable",
+        reason: "検査を止める",
+        evidence: "宣言のみ",
+      };
+    },
+    (value) => {
+      value.capabilities.privacySecurity = {
+        status: "not-applicable",
+        reason: "検討しない",
+        evidence: "宣言のみ",
+      };
+    },
+    (value) => {
+      value.quality.auxiliaryLanguages = {};
+    },
+    (value) => {
+      const structured = mapping();
+      structured.roles.reviewer.logicalTier = "cheapest_available" as never;
+      value.modelMapping = structured;
+    },
+    (value) => {
+      (value as unknown as Record<string, unknown>).unknownField = "x";
+    },
+    (value) => {
+      (value as unknown as Record<string, unknown>).quality = "文字列";
+    },
+  ];
+  this.invalidInputs = weaken.map((mutate) => {
+    const trusted = choices();
+    trusted.modelMapping = mapping();
+    const candidate = structuredClone(trusted);
+    mutate(candidate);
+    return [trusted, candidate] as [unknown, unknown];
+  });
+});
+
+When("一覧の各入力をfield単位で分類する", function () {
+  this.diffs = this.invalidInputs.map(([trusted, candidate]) =>
+    classifyProjectChoiceDiff(trusted, candidate),
+  );
+});
+
+Then("対象3 field以外の弱化分類は全件が変更前と一致する", function () {
+  assert.equal(this.diffs.length, 6);
+  const targets = [
+    "projectChoices.testLayers",
+    "projectChoices.forbiddenTestFileSuffixes",
+    "projectChoices.quality.forbiddenTypes",
+  ];
+  for (const diff of this.diffs) {
+    assert.ok(
+      diff.weakened.length > 0,
+      `弱化が検出されていません: ${JSON.stringify(diff)}`,
+    );
+    for (const entry of diff.weakened)
+      assert.ok(
+        !targets.some((target) =>
+          entry.startsWith(`${target}: trusted側の要素を削除している: `),
+        ),
+        `対象3 fieldの縮小が混入しています: ${entry}`,
+      );
+  }
+});
+
+function compareWithShrink(world: ProjectChoiceDiffWorld): void {
+  assert.ok(world.trustedPolicy);
+  assert.ok(world.candidatePolicy);
+  world.comparison = compareTrustedPolicy(
+    world.trustedPolicy,
+    world.candidatePolicy,
+    {
+      candidateChoicesRaw: world.candidateChoicesRaw,
+      choicesFragmentPath: CHOICES_FRAGMENT,
+    },
+  );
+}
+
+When("提案と一致する縮小を判定する", function () {
+  compareWithShrink(this);
+});
+
+When("対象外fieldの弱化を判定する", function () {
+  compareWithShrink(this);
+});
+
+When("不正な提案で縮小を判定する", function () {
+  compareWithShrink(this);
+});
+
+When("提案と値の内側の空白1個だけが違う候補の縮小を判定する", function () {
+  assert.ok(this.candidateChoicesRaw);
+  this.candidateChoicesRaw = this.candidateChoicesRaw.replace(
+    '"language": "日本語"',
+    '"language":  "日本語"',
+  );
+  compareWithShrink(this);
+});
+
+Then(
+  "分類は弱化のままで最終判定は受理となりfield pathが記録される",
+  function () {
+    assert.ok(this.trustedPolicy?.projectChoices);
+    assert.ok(this.candidatePolicy?.projectChoices);
+    const diff = classifyProjectChoiceDiff(
+      this.trustedPolicy.projectChoices,
+      this.candidatePolicy.projectChoices,
+    );
+    assert.ok(
+      diff.weakened.some((entry) =>
+        entry.startsWith(`${this.shrinkFieldPath}: `),
+      ),
+      `分類器が弱化を検出していません: ${JSON.stringify(diff.weakened)}`,
+    );
+    assert.equal(
+      this.comparison?.allowed,
+      true,
+      JSON.stringify(this.comparison?.rejected),
+    );
+    assert.deepEqual(this.comparison?.acceptedShrinks, [this.shrinkFieldPath]);
+  },
+);
+
+function shrinkRejection(world: ProjectChoiceDiffWorld): Diagnostic {
+  assert.equal(world.comparison?.allowed, false);
+  const diagnostic = world.comparison?.rejected.find(
+    (item) => item.purpose === "project choiceによる検証弱化を防止する",
+  );
+  assert.ok(diagnostic, JSON.stringify(world.comparison?.rejected));
+  assert.equal(diagnostic.ruleId, "ASC-TRUST-001");
+  return diagnostic;
+}
+
+Then("縮小はASC-TRUST-001で拒否される", function () {
+  shrinkRejection(this);
+  assert.deepEqual(this.comparison?.acceptedShrinks ?? [], []);
+});
+
+Then(
+  "縮小はASC-TRUST-001で拒否され比較したfragment file pathと両sha256が記録される",
+  function () {
+    const diagnostic = shrinkRejection(this);
+    const reasons = diagnostic.reasons.join(" ");
+    assert.match(
+      reasons,
+      new RegExp(CHOICES_FRAGMENT.replace("/", "\\/"), "u"),
+    );
+    assert.ok(this.candidateChoicesRaw);
+    const observed = sha256(this.candidateChoicesRaw);
+    const proposed = sha256(
+      shrunkChoicesRaw((value) => {
+        value.forbiddenTestFileSuffixes = [];
+      }),
+    );
+    assert.notEqual(observed, proposed);
+    assert.match(reasons, new RegExp(observed, "u"));
+    assert.match(reasons, new RegExp(proposed, "u"));
+  },
+);
+
+Then("拒否診断は提案の登録先と次の操作を含む", function () {
+  const diagnostic = shrinkRejection(this);
+  assert.match(diagnostic.next, /projectChoiceShrinkProposals/u);
+  assert.match(diagnostic.next, /既定branch/u);
+  assert.match(diagnostic.next, /[ぁ-んァ-ヶ一-龠]/u);
+});
+
+/**
+ * 実repositoryのpolicy setを土台に、choices fragmentを縮小したcandidate setを作る。
+ *
+ * **fragmentのraw textは実物をそのまま書き換えて作る。** 受理判定はこのtextの
+ * sha256だけを見るため、整形の再現がずれると別の承認になる。
+ */
+function realPolicySets(options: { registerOn: "trusted" | "candidate" }): {
+  trusted: Policy;
+  candidate: Policy;
+  candidateChoicesRaw: string;
+  fragmentPath: string;
+} {
+  const fragmentPath = "project/choices/development.json";
+  const raw = fs.readFileSync(`.agent-skill-chain/${fragmentPath}`, "utf8");
+  const trustedChoice = readProjectChoices(raw);
+  const candidateChoice = structuredClone(trustedChoice);
+  candidateChoice.forbiddenTestFileSuffixes = [];
+  /**
+   * **raw textの整形をそのまま尊重して置換する。** 実fileは`[".test.js", ".test.ts"]`の
+   * ようにカンマの後へ空白を持つ一方、`JSON.stringify`は空白を入れない。値として
+   * 同じでもbyte列が違うため、`JSON.stringify`の出力で置換すると一致しない。
+   */
+  const candidateRaw = raw.replace(
+    /"forbiddenTestFileSuffixes":\s*\[[^\]]*\]/u,
+    '"forbiddenTestFileSuffixes": []',
+  );
+  assert.notEqual(candidateRaw, raw, "縮小後のfragment textを作れていません");
+  const trusted = policy(trustedChoice);
+  const candidate = policy(candidateChoice);
+  const declared = proposal(
+    "projectChoices.forbiddenTestFileSuffixes",
+    sha256(candidateRaw),
+  );
+  if (options.registerOn === "trusted")
+    trusted.projectChoiceShrinkProposals = [declared];
+  else candidate.projectChoiceShrinkProposals = [declared];
+  return {
+    trusted,
+    candidate,
+    candidateChoicesRaw: candidateRaw,
+    fragmentPath,
+  };
+}
+
+Given("候補側にだけ縮小提案を置いたpolicy setがある", function () {
+  const sets = realPolicySets({ registerOn: "candidate" });
+  this.trustedPolicy = sets.trusted;
+  this.candidatePolicy = sets.candidate;
+  this.candidateChoicesRaw = sets.candidateChoicesRaw;
+  const trustedSet = loadProjectPolicySet(process.cwd());
+  this.trustedPolicySet = trustedSet;
+  this.candidatePolicySet = {
+    ...trustedSet,
+    policy: {
+      ...trustedSet.policy,
+      projectChoices: readProjectChoices(sets.candidateChoicesRaw),
+      projectChoiceShrinkProposals: sets.candidate.projectChoiceShrinkProposals,
+    },
+    rawEntries: {
+      ...trustedSet.rawEntries,
+      [sets.fragmentPath]: sets.candidateChoicesRaw,
+    },
+  };
+});
+
+/**
+ * **候補側の提案を合成へ通しても受理されないことを測る。**
+ *
+ * `resolveEffectivePolicy`がcandidate合成でも提案を持ち越す変異を入れると、
+ * 候補が自分で登録した提案を承認の出所にできる。owner決裁が禁じる形であり、
+ * 実測でこの変異が生存したため反例を追加した。
+ */
+When("effective policyを合成してから候補側提案で判定する", function () {
+  assert.ok(this.trustedPolicySet);
+  assert.ok(this.candidatePolicySet);
+  const floor = packageFloorPolicy();
+  const trustedEffective = resolveEffectivePolicy(
+    floor,
+    this.trustedPolicySet.policy,
+    { trusted: true },
+  );
+  const candidateEffective = resolveEffectivePolicy(
+    trustedEffective.policy,
+    this.candidatePolicySet.policy,
+  );
+  assert.equal(
+    candidateEffective.valid,
+    true,
+    JSON.stringify(candidateEffective.diagnostic),
+  );
+  const source = choicesFragmentSource(this.candidatePolicySet);
+  assert.ok(source);
+  this.comparison = compareTrustedPolicy(
+    trustedEffective.policy,
+    candidateEffective.policy,
+    {
+      candidateChoicesRaw: source.raw,
+      choicesFragmentPath: source.path,
+    },
+  );
+});
+
+/**
+ * **rawとfragment pathを渡したうえで拒否されることを測る。**
+ *
+ * 第3引数を渡さないと「rawが無いから拒否」で通ってしまい、提案をcandidate側から
+ * 読む取り違えの変異を検出できない。実測でその空振りを確認したため引数を足した。
+ */
+When("候補側提案を入力として縮小の互換性を判定する", function () {
+  assert.ok(this.trustedPolicy);
+  assert.ok(this.candidatePolicy);
+  assert.ok(this.candidateChoicesRaw);
+  this.comparison = compareTrustedPolicy(
+    this.trustedPolicy,
+    this.candidatePolicy,
+    {
+      candidateChoicesRaw: this.candidateChoicesRaw,
+      choicesFragmentPath: "project/choices/development.json",
+    },
+  );
+});
+
+Then("policy比較は縮小をASC-TRUST-001で拒否する", function () {
+  shrinkRejection(this);
+  assert.deepEqual(this.comparison?.acceptedShrinks ?? [], []);
+  /**
+   * **同じ入力のうち提案の置き場所だけをtrusted側へ移すと受理される**ことを
+   * 同一シナリオで確かめる。これが成立しなければ、上の拒否は「提案の出所が
+   * 候補側だから」ではなく別の理由で起きていることになる。
+   */
+  assert.ok(this.trustedPolicy);
+  assert.ok(this.candidatePolicy);
+  const proposals = this.candidatePolicy.projectChoiceShrinkProposals;
+  assert.ok(proposals, "候補側に提案が置かれていません");
+  const moved = compareTrustedPolicy(
+    { ...this.trustedPolicy, projectChoiceShrinkProposals: proposals },
+    { ...this.candidatePolicy, projectChoiceShrinkProposals: undefined },
+    {
+      candidateChoicesRaw: this.candidateChoicesRaw,
+      choicesFragmentPath: "project/choices/development.json",
+    },
+  );
+  assert.equal(
+    moved.allowed,
+    true,
+    `提案をtrusted側へ移しても受理されません: ${JSON.stringify(moved.rejected)}`,
+  );
+});
+
+Given("既定branch側へ縮小提案を登録したpolicy setがある", function () {
+  const trustedSet = loadProjectPolicySet(process.cwd());
+  const fragment = "project/choices/development.json";
+  const raw = trustedSet.rawEntries[fragment];
+  assert.ok(raw, "choices fragmentのraw textがありません");
+  const candidateRaw = raw.replace(
+    /"forbiddenTestFileSuffixes":\s*\[[^\]]*\]/u,
+    '"forbiddenTestFileSuffixes": []',
+  );
+  assert.notEqual(candidateRaw, raw, "縮小後のfragment textを作れていません");
+  const candidateChoice = readProjectChoices(candidateRaw);
+  this.trustedPolicySet = {
+    ...trustedSet,
+    policy: {
+      ...trustedSet.policy,
+      projectChoiceShrinkProposals: [
+        proposal(
+          "projectChoices.forbiddenTestFileSuffixes",
+          sha256(candidateRaw),
+        ),
+      ],
+    },
+  };
+  this.candidatePolicySet = {
+    ...trustedSet,
+    policy: { ...trustedSet.policy, projectChoices: candidateChoice },
+    rawEntries: { ...trustedSet.rawEntries, [fragment]: candidateRaw },
+  };
+});
+
+/**
+ * **`planFileMigration`を実際に通す。** `compareTrustedPolicy`を直接呼ぶと
+ * migrate経路の配線を外す変異を検出できない。実測でその変異が生存したため、
+ * 製品の関数を経由する形へ改めた。
+ */
+When("migrate経路で縮小の互換性を判定する", function () {
+  assert.ok(this.trustedPolicySet);
+  assert.ok(this.candidatePolicySet);
+  const entries = Object.keys(this.candidatePolicySet.rawEntries)
+    .sort()
+    .map((relative) => ({
+      kind: "policy" as const,
+      path: `.agent-skill-chain/${relative}`,
+      after: this.candidatePolicySet!.rawEntries[relative]!,
+    }));
+  const plan = planFileMigration(
+    process.cwd(),
+    this.trustedPolicySet,
+    this.candidatePolicySet,
+    entries,
+  );
+  this.migrationPlan = plan;
+});
+
+Then("migrate経路の判定は縮小を受理する", function () {
+  const plan = this.migrationPlan;
+  assert.ok(plan, "migration planがありません");
+  const compatibility = (plan as { compatibility?: PolicyComparison })
+    .compatibility;
+  assert.ok(
+    compatibility,
+    `migrate経路が拒否しました: ${JSON.stringify(plan)}`,
+  );
+  assert.equal(
+    compatibility.allowed,
+    true,
+    JSON.stringify(compatibility.rejected),
+  );
+  assert.deepEqual(compatibility.acceptedShrinks, [
+    "projectChoices.forbiddenTestFileSuffixes",
+  ]);
+});
+
+Given("配布物のschemaと利用案内がある", function () {
+  this.distributedFiles = [
+    ".agent-skill-chain/schemas/project-policy.schema.json",
+    ".agent-skill-chain/schemas/project-policy-manifest.schema.json",
+    ".agent-skill-chain/schemas/00_利用案内.md",
+  ];
+});
+
+When("配布物から縮小提案の宣言形式を探す", function () {
+  this.distributedContents = this.distributedFiles.map((file) =>
+    fs.readFileSync(file, "utf8"),
+  );
+});
+
+Then("配布物は縮小提案のschemaと二段階手順の案内を含む", function () {
+  const [policySchema, manifestSchema, guide] = this.distributedContents;
+  for (const schema of [policySchema, manifestSchema]) {
+    assert.ok(schema);
+    const parsed = JSON.parse(schema) as Record<string, unknown>;
+    const node = (
+      "properties" in parsed && isRecord(parsed.properties)
+        ? isRecord(parsed.properties.policy) &&
+          isRecord(parsed.properties.policy.properties)
+          ? parsed.properties.policy.properties
+          : parsed.properties
+        : {}
+    ) as Record<string, unknown>;
+    const field = node.projectChoiceShrinkProposals;
+    assert.ok(field, "schemaへprojectChoiceShrinkProposalsがありません");
+    assert.match(JSON.stringify(field), /afterSha256/u);
+    assert.match(
+      JSON.stringify(field),
+      /projectChoices\.quality\.forbiddenTypes/u,
+    );
+  }
+  assert.ok(guide);
+  assert.match(guide, /projectChoiceShrinkProposals/u);
+  assert.match(guide, /二段階/u);
+});
+
+/**
+ * 合成した弱化entryを直接受理判定へ渡す。
+ *
+ * **`classifyProjectChoiceDiff`は3 field以外へ縮小理由のentryを出さない**ため、
+ * 分類器を経由する入力では対象field限定の検査へ到達できない。将来4つ目の
+ * 単調性fieldが増えたときに受理が漏れないことを、合成入力で先に固定する。
+ */
+function acceptSynthetic(input: {
+  fieldPath: string;
+  raw: string | undefined;
+}): ShrinkAcceptance {
+  return acceptApprovedShrinks({
+    diff: {
+      authority: [],
+      weakened: [
+        `${input.fieldPath}: trusted側の要素を削除している: 除去した値`,
+      ],
+      allowed: [],
+    },
+    trustedProposals: [
+      proposal(input.fieldPath, sha256(input.raw ?? "縮小後のfragment")),
+    ],
+    candidateChoicesRaw: input.raw,
+    choicesFragmentPath: CHOICES_FRAGMENT,
+  });
+}
+
+Then("対象外fieldの縮小entryは提案が一致しても受理されない", function () {
+  const raw = "縮小後のfragment";
+  for (const fieldPath of [
+    "projectChoices.quality.lintCommand",
+    "projectChoices.capabilities",
+    "projectChoices.testLayersExtra",
+  ]) {
+    const result = acceptSynthetic({ fieldPath, raw });
+    assert.deepEqual(
+      result.accepted,
+      [],
+      `対象外fieldが受理されました: ${fieldPath}`,
+    );
+    assert.equal(result.remaining.length, 1);
+  }
+  const target = acceptSynthetic({
+    fieldPath: "projectChoices.testLayers",
+    raw,
+  });
+  assert.equal(
+    target.accepted.length,
+    1,
+    "対象fieldが受理されず、検査が空振りしています",
+  );
+});
+
+Then("正当な提案でもraw byte列が無ければ受理されない", function () {
+  const result = acceptSynthetic({
+    fieldPath: "projectChoices.testLayers",
+    raw: undefined,
+  });
+  assert.deepEqual(result.accepted, []);
+  assert.equal(result.remaining.length, 1);
+});
+
+/**
+ * **`resolveEffectivePolicy`を実際に通す。**
+ *
+ * `policy validate`と`pr create`のtrustedはpackage floorとproject policyの
+ * 合成結果である。合成が縮小提案を落とすと、既定branchへ登録した提案が
+ * 受理判断へ届かず新設経路が機能しない。実測でその欠落を確認したため、
+ * 合成を経由する経路を反例として固定する。
+ */
+When("effective policyを合成してから縮小の互換性を判定する", function () {
+  assert.ok(this.trustedPolicySet);
+  assert.ok(this.candidatePolicySet);
+  /** `policy validate`と同じ合成順序を再現する。 */
+  const floor = packageFloorPolicy();
+  const trustedEffective = resolveEffectivePolicy(
+    floor,
+    this.trustedPolicySet.policy,
+    { trusted: true },
+  );
+  assert.equal(
+    trustedEffective.valid,
+    true,
+    JSON.stringify(trustedEffective.diagnostic),
+  );
+  const candidateEffective = resolveEffectivePolicy(
+    trustedEffective.policy,
+    this.candidatePolicySet.policy,
+  );
+  assert.equal(
+    candidateEffective.valid,
+    true,
+    JSON.stringify(candidateEffective.diagnostic),
+  );
+  const source = choicesFragmentSource(this.candidatePolicySet);
+  assert.ok(source, "candidate setのchoices fragmentがありません");
+  this.comparison = compareTrustedPolicy(
+    trustedEffective.policy,
+    candidateEffective.policy,
+    {
+      candidateChoicesRaw: source.raw,
+      choicesFragmentPath: source.path,
+    },
+  );
+});
+
+Then("合成後の判定は縮小を受理する", function () {
+  assert.equal(
+    this.comparison?.allowed,
+    true,
+    JSON.stringify(this.comparison?.rejected),
+  );
+  assert.deepEqual(this.comparison?.acceptedShrinks, [
+    "projectChoices.forbiddenTestFileSuffixes",
+  ]);
 });

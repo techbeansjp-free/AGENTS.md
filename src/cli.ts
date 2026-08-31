@@ -67,9 +67,11 @@ import {
 } from "./domain/finalize.js";
 import { init, upgrade, uninstall, doctor } from "./domain/lifecycle.js";
 import {
+  loadConsumerChoicesFragmentAtCommit,
   loadConsumerPolicyAtCommit,
   conformanceDeclarationFromPolicySet,
   loadEffectiveTrustedPolicySet,
+  choicesFragmentSource,
   loadOperationPolicy,
   loadProjectPolicySet,
   loadProjectPolicySetAtCommit,
@@ -4999,6 +5001,7 @@ export async function main(
         );
         return 1;
       }
+      const candidateChoices = choicesFragmentSource(candidateSet);
       const comparison = compareTrustedPolicy(
         trustedSet.policy,
         effective.policy,
@@ -5006,6 +5009,8 @@ export async function main(
           trustedConformance: conformanceDeclarationFromPolicySet(trustedSet),
           candidateConformance:
             conformanceDeclarationFromPolicySet(candidateSet),
+          candidateChoicesRaw: candidateChoices?.raw,
+          choicesFragmentPath: candidateChoices?.path,
         },
       );
       if (!comparison.allowed) {
@@ -5103,6 +5108,7 @@ export async function main(
         );
         return 1;
       }
+      const candidateChoices = choicesFragmentSource(candidateSet);
       const comparison = compareTrustedPolicy(
         trustedSet.policy,
         effective.policy,
@@ -5110,6 +5116,8 @@ export async function main(
           trustedConformance: conformanceDeclarationFromPolicySet(trustedSet),
           candidateConformance:
             conformanceDeclarationFromPolicySet(candidateSet),
+          candidateChoicesRaw: candidateChoices?.raw,
+          choicesFragmentPath: candidateChoices?.path,
         },
       );
       const result = {
@@ -5895,6 +5903,10 @@ export async function main(
         `PR base ${base}がlocal origin/HEADの既定branch ${localDefaultBranch}と一致しません`,
       );
     const trustedSet = loadEffectiveTrustedPolicySet(root, base);
+    const prCandidateChoices = loadConsumerChoicesFragmentAtCommit(
+      root,
+      headSha,
+    );
     const commonInput = {
       apply,
       authorization:
@@ -5911,6 +5923,8 @@ export async function main(
       evidence,
       trustedPolicy: trustedSet.policy,
       candidatePolicy: loadConsumerPolicyAtCommit(root, headSha),
+      candidateChoicesRaw: prCandidateChoices?.raw,
+      choicesFragmentPath: prCandidateChoices?.path,
     };
     if (!apply) {
       const preview = createPullRequest(commonInput, () => {

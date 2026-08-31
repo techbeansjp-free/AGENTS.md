@@ -142,6 +142,20 @@ export interface ProjectChoices {
   };
 }
 
+/**
+ * 利用側project ownerが既定branch側へ事前登録する縮小提案。
+ *
+ * **`projectChoices`の内側へ置かない。** `classifyProjectChoiceDiff`が
+ * `rejectUnknownFields`で未知fieldをfail-closedに弱化へ分類するため、
+ * 内側へ置くと提案の存在自体が拒否を生む。
+ */
+export interface ProjectChoiceShrinkProposal {
+  fieldPath: string;
+  afterSha256: string;
+  reason: string;
+  owner: string;
+}
+
 export interface Policy {
   schemaVersion: string;
   delivery: { stopAt: "pull_request" };
@@ -168,6 +182,7 @@ export interface Policy {
   };
   rules: Rule[];
   projectChoices?: ProjectChoices;
+  projectChoiceShrinkProposals?: ProjectChoiceShrinkProposal[];
 }
 
 export interface AutoFix {

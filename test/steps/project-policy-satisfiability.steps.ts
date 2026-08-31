@@ -1179,17 +1179,22 @@ Given("testLayersを縮小したcandidate policyがある", function () {
 
 When("trusted policyから縮小差分を比較する", function () {});
 
-Then("縮小の拒否理由は候補側に適用経路が無いことを示す", function () {
+/**
+ * **#1044で経路が新設されたため、示すべき内容が変わった。**
+ * 以前は「候補側から適用する経路は製品CLIにありません」と返していたが、
+ * 既定branch側へ縮小提案を登録する二段階の経路が実在するようになった。
+ * 拒否理由はその登録手順を案内しなければならない。
+ */
+Then("縮小の拒否理由は縮小提案の登録手順を示す", function () {
   assert.equal(this.narrowComparison?.allowed, false);
   const rejected = this.narrowComparison?.rejected.find(
     (entry) => entry.ruleId === "ASC-TRUST-001",
   );
   assert.ok(rejected, "ASC-TRUST-001の拒否がありません");
-  assert.match(
-    rejected.next,
-    /既定branchのproject policyを先に更新してください/u,
-  );
-  assert.match(rejected.next, /候補側から適用する経路は製品CLIにありません/u);
+  assert.match(rejected.next, /projectChoiceShrinkProposals/u);
+  assert.match(rejected.next, /既定branch/u);
+  assert.match(rejected.next, /二段階/u);
+  assert.match(rejected.next, /候補側へ登録した提案は受理判断に使えません/u);
   assert.equal(
     rejected.requiredAuthority,
     "既定ブランチのproject policy owner",

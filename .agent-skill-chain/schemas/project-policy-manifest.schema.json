@@ -195,6 +195,29 @@
               }
             }
           }
+        },
+        "projectChoiceShrinkProposals": {
+          "type": "array",
+          "description": "利用側project ownerが既定branch側へ事前登録する縮小提案。次のPRでこの宣言とchoices fragment fileのraw byteが一致する縮小だけを受理する。候補側へ登録した提案は受理判断に使わない。",
+          "uniqueItems": true,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["fieldPath", "afterSha256", "reason", "owner"],
+            "properties": {
+              "fieldPath": {
+                "enum": [
+                  "projectChoices.testLayers",
+                  "projectChoices.forbiddenTestFileSuffixes",
+                  "projectChoices.quality.forbiddenTypes"
+                ]
+              },
+              "afterSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "reason": { "type": "string", "pattern": "\\S" },
+              "owner": { "type": "string", "pattern": "\\S" }
+            }
+          }
         }
       }
     },

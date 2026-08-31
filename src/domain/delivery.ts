@@ -42,6 +42,15 @@ interface PullRequestInput {
   title?: string;
   trustedPolicy?: Policy;
   candidatePolicy?: Policy;
+  /**
+   * candidate policy setのchoices fragmentのraw byte列とpath。
+   *
+   * **省略すると縮小の受理が起きない。** `policy validate`で受理された縮小が
+   * PR作成で拒否される経路依存の不整合を避けるため、呼び出し側は
+   * `choicesFragmentSource`の結果を渡す（Issue #1044）。
+   */
+  candidateChoicesRaw?: string;
+  choicesFragmentPath?: string;
 }
 export interface PullRequestReadBack {
   number?: number;
@@ -462,7 +471,10 @@ export function createPullRequest(
       input.candidatePolicy,
     );
     const comparison = effective.valid
-      ? compareTrustedPolicy(input.trustedPolicy, effective.policy)
+      ? compareTrustedPolicy(input.trustedPolicy, effective.policy, {
+          candidateChoicesRaw: input.candidateChoicesRaw,
+          choicesFragmentPath: input.choicesFragmentPath,
+        })
       : { allowed: false, rejected: [effective.diagnostic] };
     const ownership = input.evidence?.ownership;
     const observations = input.trustedPolicy.rules
