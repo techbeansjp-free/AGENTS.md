@@ -586,10 +586,10 @@ export function inspectFinalizeState(
     .filter((line) => line.startsWith("?? "))
     .map((line) => line.slice(3));
   const ignoredArtifacts = git(
-    ["ls-files", "--others", "--ignored", "--exclude-standard"],
+    ["ls-files", "--others", "--ignored", "--exclude-standard", "-z"],
     worktreePath,
   )
-    .stdout.split("\n")
+    .stdout.split("\0")
     .filter(Boolean);
   const temporaryArtifacts = [...untracked, ...ignoredArtifacts].filter(
     (file) => /(^|\/)(\.pending-|.*\.tmp-|tmp\/|.*\.log$)/.test(file),
