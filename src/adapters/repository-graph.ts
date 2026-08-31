@@ -712,6 +712,16 @@ function safeRepositoryPath(candidate: string): boolean {
   );
 }
 
+function isTraceEndpointCandidate(candidate: string): boolean {
+  if (/[*?[\]{}]/u.test(candidate)) return false;
+  if (candidate.endsWith("/")) return false;
+  if (candidate.includes("/")) return true;
+  return (
+    SOURCE_BASENAMES.has(candidate) ||
+    SOURCE_EXTENSIONS.has(path.posix.extname(candidate).toLowerCase())
+  );
+}
+
 function sourcePaths(root: string): string[] {
   const listed = git(
     ["ls-files", "-co", "--exclude-standard", "-z", "--"],
@@ -1139,7 +1149,9 @@ export function buildRepositorySemanticGraph(
       const implementationCell = cells.length >= 9 ? cells[6] : cells[5];
       const referencedPaths = [
         ...`${featureCell} ${implementationCell}`.matchAll(/`([^`]+)`/gu),
-      ].map((match) => match[1]!);
+      ]
+        .map((match) => match[1]!)
+        .filter(isTraceEndpointCandidate);
       const missingPaths = referencedPaths.filter(
         (candidate) => !existingRegularFiles.has(candidate),
       );
