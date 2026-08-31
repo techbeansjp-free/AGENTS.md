@@ -25,6 +25,7 @@ const BINDING_FIELDS = [
 const SAFE_BINDING_PATH =
   /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*\/\/)(?!.*\\)(?!.*\/$)[^\u0000]+$/u;
 const CHECK_ID = /^[a-z][a-z0-9-]{0,63}$/u;
+const CHECK_ID_MAX_LENGTH = 64;
 
 export type ConformanceScope = "repository-bound" | "package-attested";
 
@@ -575,6 +576,56 @@ export function checkIdForRuleId(ruleId: string): string | undefined {
   return CHECK_ID.test(checkId) ? checkId : undefined;
 }
 
+const DIAGNOSTIC_CHECK_ID_LIMIT = 20;
+const DIAGNOSTIC_RULE_ID_LIMIT = 3;
+
+function diagnosticRuleId(ruleId: string): string {
+  return JSON.stringify(ruleId.slice(0, CHECK_ID_MAX_LENGTH));
+}
+
+function unregisteredCheckRefMessage(input: {
+  prefix: string;
+  checkId: string;
+  registeredCheckIds: ReadonlySet<string>;
+  rules: readonly unknown[];
+}): string {
+  const underivableRuleIds = new Set<string>();
+  for (const rule of input.rules) {
+    if (!isRecord(rule) || typeof rule.ruleId !== "string") continue;
+    if (checkIdForRuleId(rule.ruleId) === undefined)
+      underivableRuleIds.add(rule.ruleId);
+  }
+  const sortedCheckIds = [...input.registeredCheckIds].sort();
+  const shownCheckIds = sortedCheckIds.slice(0, DIAGNOSTIC_CHECK_ID_LIMIT);
+  const registered =
+    sortedCheckIds.length === 0
+      ? "登録済みcheckIdは0件です"
+      : `登録済みcheckId(${sortedCheckIds.length}件): ${shownCheckIds.join(
+          ", ",
+        )}${
+          sortedCheckIds.length > shownCheckIds.length
+            ? `, ほか${sortedCheckIds.length - shownCheckIds.length}件`
+            : ""
+        }`;
+  const parts = [
+    `${input.prefix}check-refがproject ruleへ登録されていません: ${input.checkId}`,
+    "checkIdはproject ruleのruleIdから接頭辞ASC-を除いて小文字化した値です",
+    "規則の正本は`.agent-skill-chain/docs/00_運用ポリシー.md`の「conformance scopeと適用可否」節です",
+    registered,
+  ];
+  if (underivableRuleIds.size > 0)
+    parts.push(
+      `導出できないruleId(${underivableRuleIds.size}件): ${[
+        ...underivableRuleIds,
+      ]
+        .sort()
+        .slice(0, DIAGNOSTIC_RULE_ID_LIMIT)
+        .map(diagnosticRuleId)
+        .join(", ")}`,
+    );
+  return parts.join("。");
+}
+
 export function validateConformanceContract(contract: unknown) {
   const errors: string[] = [];
   if (!isRecord(contract))
@@ -747,7 +798,12 @@ export function validateProjectConformanceBinding(
           !registeredCheckIds.has(point.checkId)
         )
           errors.push(
-            `${item.id}.check-refがproject ruleへ登録されていません: ${point.checkId}`,
+            unregisteredCheckRefMessage({
+              prefix: `${item.id}.`,
+              checkId: point.checkId,
+              registeredCheckIds,
+              rules: Array.isArray(rulesInput) ? rulesInput : [],
+            }),
           );
       } else errors.push(`${item.id}.enforcement.kindが不正です`);
     }
@@ -1060,10 +1116,16 @@ export function validateRepositoryConformance(
       if (kind === "check-ref") {
         if (
           typeof point.checkId === "string" &&
+          CHECK_ID.test(point.checkId) &&
           !registeredCheckIds.has(point.checkId)
         )
           errors.push(
-            `${String(item.id)}のcheck-refがproject ruleへ登録されていません: ${point.checkId}`,
+            unregisteredCheckRefMessage({
+              prefix: `${String(item.id)}.`,
+              checkId: point.checkId,
+              registeredCheckIds,
+              rules: Array.isArray(rulesInput) ? rulesInput : [],
+            }),
           );
         continue;
       }
