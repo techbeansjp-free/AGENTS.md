@@ -2512,10 +2512,10 @@ function collectWorktreeSurvey(root: string): WorktreeSurvey {
         ? { recoveryReachable: true, pushed: true, remoteBranch: true }
         : inspectRecoveryState(worktree.path);
       const ignoredArtifacts = git(
-        ["ls-files", "--others", "--ignored", "--exclude-standard"],
+        ["ls-files", "--others", "--ignored", "--exclude-standard", "-z"],
         worktree.path,
       )
-        .stdout.split(/\r?\n/u)
+        .stdout.split("\0")
         .filter(Boolean);
       const stashes = git(["stash", "list"], worktree.path)
         .stdout.split(/\r?\n/u)
