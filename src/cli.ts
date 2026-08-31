@@ -223,6 +223,7 @@ import {
   appendEvidenceReanchor,
   readEvidenceReanchorChain,
 } from "./adapters/evidence-reanchor.js";
+import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
 import {
   bindStoredPullRequest,
   claimStoredMergeDispatch,
@@ -415,7 +416,7 @@ function assertWorkflowReadyForDelivery(
   return inspection;
 }
 
-function assertCurrentReviewJournalBinding(
+export function assertCurrentReviewJournalBinding(
   staging: string,
   headSha: string,
 ): void {
@@ -430,7 +431,18 @@ function assertCurrentReviewJournalBinding(
   if (!step10?.reviewSession)
     throw new Error("PR作成には最新Step 10のreviewSession bindingが必要です");
   const binding = step10.reviewSession;
-  if (binding.headSha !== headSha)
+  /**
+   * **照合対象は生の記録headではなく、再固定chainから導出した実効HEADである。**
+   *
+   * 既定branchが動いてrebaseするとjournalのStep 10 bindingは旧headを指したままになる。
+   * 内容等価性を実証した再固定記録があるなら、その終端を照合対象にする。
+   * 記録が無ければchainは空で、実効HEADは記録headそのものになり判定は変更前と同一である。
+   */
+  const bindingEffectiveHead = deriveEffectiveHead({
+    records: readEvidenceReanchorChain(staging),
+    anchoredHeadSha: binding.headSha,
+  }).effectiveHeadSha;
+  if (bindingEffectiveHead !== headSha)
     throw new Error(
       "Step 10のreviewSession binding HEADがPR作成対象HEADと一致しません",
     );
@@ -439,10 +451,14 @@ function assertCurrentReviewJournalBinding(
     expectedDigest: binding.roundDigest,
     currentHeadSha: headSha,
   });
+  const sessionEffectiveHead = deriveEffectiveHead({
+    records: readEvidenceReanchorChain(staging),
+    anchoredHeadSha: session.latestCandidateHeadSha,
+  }).effectiveHeadSha;
   if (
     session.sessionId !== binding.sessionId ||
     session.latestRoundDigest !== binding.roundDigest ||
-    session.latestCandidateHeadSha !== binding.headSha
+    sessionEffectiveHead !== bindingEffectiveHead
   )
     throw new Error(
       "Step 10のreviewSession bindingが保存済み収束sessionと一致しません",

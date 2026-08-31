@@ -1,9 +1,6 @@
-import crypto from "node:crypto";
-import fs from "node:fs";
 import path from "node:path";
 import {
   advanceReviewSession,
-  parseReviewSessionState,
   type ReviewRoundInput,
   type ReviewSessionState,
 } from "../domain/review-convergence.js";
@@ -16,10 +13,17 @@ import {
 } from "../domain/staging.js";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
-import { parseJsonStrict, stableJson } from "../lib/security.js";
+import { stableJson } from "../lib/security.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
+import { observeReviewDiff } from "./review-diff.js";
+import {
+  REVIEW_SESSION_FILE,
+  readStoredReviewSession,
+} from "./review-session-store.js";
 
-export const REVIEW_SESSION_FILE = "review-session.json";
+export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
+import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
+import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
 
 const GIT_ENV: NodeJS.ProcessEnv = {
   PATH: process.env.PATH ?? "/usr/bin:/bin",
@@ -31,59 +35,6 @@ const GIT_ENV: NodeJS.ProcessEnv = {
   GIT_OPTIONAL_LOCKS: "0",
 };
 
-export function observeReviewDiff(
-  root: string,
-  baseSha: string,
-  headSha: string,
-): { digest: string; changedPaths: readonly string[] } {
-  for (const [label, oid] of [
-    ["base", baseSha],
-    ["head", headSha],
-  ] as const) {
-    const observed = git(["rev-parse", "--verify", `${oid}^{commit}`], root, {
-      env: GIT_ENV,
-    }).stdout.trim();
-    if (observed !== oid)
-      throw new Error(`review diff ${label} SHAをexact commitへ解決できません`);
-  }
-  if (
-    git(["merge-base", "--is-ancestor", baseSha, headSha], root, {
-      env: GIT_ENV,
-      allowFailure: true,
-    }).status !== 0
-  )
-    throw new Error("review diff baseがcandidate HEADのancestorではありません");
-  const source = git(
-    [
-      "diff",
-      "--binary",
-      "--full-index",
-      "--no-ext-diff",
-      "--no-textconv",
-      "--no-renames",
-      baseSha,
-      headSha,
-      "--",
-    ],
-    root,
-    { env: GIT_ENV },
-  ).stdout;
-  const names = git(
-    ["diff", "--name-only", "-z", "--no-renames", baseSha, headSha, "--"],
-    root,
-    { env: GIT_ENV },
-  )
-    .stdout.split("\0")
-    .filter(Boolean)
-    .sort();
-  if (new Set(names).size !== names.length)
-    throw new Error("review diff path観測に重複があります");
-  return {
-    digest: crypto.createHash("sha256").update(source).digest("hex"),
-    changedPaths: Object.freeze(names),
-  };
-}
-
 function assertStoredStagingDigest(staging: string): void {
   const stored = readStoredStagingRecord(staging);
   const artifacts = listStagingArtifacts(staging);
@@ -94,32 +45,6 @@ function assertStoredStagingDigest(staging: string): void {
     throw new Error(
       "review session更新前のstaging成果物一覧またはdigestが一致しません",
     );
-}
-
-function assertRegularSessionFile(file: string): void {
-  const stat = fs.lstatSync(file);
-  if (
-    stat.isSymbolicLink() ||
-    !stat.isFile() ||
-    stat.nlink !== 1 ||
-    stat.size > 2 * 1024 * 1024 ||
-    fs.realpathSync(file) !== file
-  )
-    throw new Error(
-      "review sessionはsymlink・hardlinkでない2MiB以下の通常fileが必要です",
-    );
-}
-
-export function readStoredReviewSession(
-  stagingInput: string,
-): ReviewSessionState | null {
-  const staging = assertWorkflowStaging(stagingInput);
-  const file = path.join(staging, REVIEW_SESSION_FILE);
-  if (!fs.existsSync(file)) return null;
-  assertRegularSessionFile(file);
-  return parseReviewSessionState(
-    parseJsonStrict(fs.readFileSync(file, "utf8"), "review session"),
-  );
 }
 
 export function previewReviewRound(input: {
@@ -199,7 +124,15 @@ export function assertConvergedReviewSession(input: {
     throw new Error(
       "Step 10のreview session digestが保存済みlatest roundと一致しません",
     );
-  if (session.latestCandidateHeadSha !== input.currentHeadSha)
+  /**
+   * **照合対象は再固定chainから導出した実効HEADである。**
+   * chainが空なら`latestCandidateHeadSha`そのものになり、判定は変更前と同一である。
+   */
+  const effectiveHeadSha = deriveEffectiveHead({
+    records: readEvidenceReanchorChain(staging),
+    anchoredHeadSha: session.latestCandidateHeadSha,
+  }).effectiveHeadSha;
+  if (effectiveHeadSha !== input.currentHeadSha)
     throw new Error(
       "review sessionのcandidate HEADがcurrent HEADと一致しません",
     );

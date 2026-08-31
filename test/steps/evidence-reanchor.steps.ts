@@ -25,10 +25,13 @@ import { createIssueStaging } from "../../src/domain/issue.js";
 import { parseReviewRoundInput } from "../../src/domain/review-convergence.js";
 import {
   observeReviewDiff,
+  readStoredReviewSession,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
+import { appendWorkflowJournalEntry } from "../../src/adapters/workflow-journal.js";
+import { WORKFLOW_STEPS } from "../../src/domain/workflow.js";
 import { QUESTIONS } from "../../src/domain/mode.js";
-import { main } from "../../src/cli.js";
+import { assertCurrentReviewJournalBinding, main } from "../../src/cli.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
 class ReanchorWorld extends WorkflowWorld {
@@ -46,6 +49,7 @@ class ReanchorWorld extends WorkflowWorld {
   before: Record<string, string> = {};
   providerCalls = 0;
   unconverged = false;
+  bindingPassed = false;
 }
 
 const { Given, When, Then } = stepDefinitions<ReanchorWorld>();
@@ -199,6 +203,44 @@ function applyReanchor(
   } catch (error) {
     world.error = error;
     world.applied = false;
+  }
+}
+
+/**
+ * Step 1・4・9・10のjournal entryを実APIで書く。
+ *
+ * **Step 10 bindingは旧headを指す。** rebase前に記録された状態を再現するためである。
+ * `assertCurrentReviewJournalBinding`が実効HEADで照合するようになっていなければ、
+ * この状態から新headでの検査は必ず落ちる。
+ */
+function recordStep10Binding(world: ReanchorWorld): void {
+  const session = readStoredReviewSession(world.staging);
+  assert.ok(session, "review sessionがありません");
+  for (const step of [1, 4, 9, 10]) {
+    const definition = WORKFLOW_STEPS.find(
+      (candidate) => candidate.step === step,
+    );
+    assert.ok(definition, `step ${step}がありません`);
+    appendWorkflowJournalEntry({
+      staging: world.staging,
+      entry: {
+        step,
+        skillId: definition.skillId,
+        mode: "quick",
+        recordedAt: INSTANT.toISOString(),
+        artifacts: [`artifact-${step}`],
+        evidence: `step ${step}の固定証拠`,
+        ...(step === 10
+          ? {
+              reviewSession: {
+                sessionId: session.sessionId,
+                roundDigest: session.latestRoundDigest,
+                headSha: session.latestCandidateHeadSha,
+              },
+            }
+          : {}),
+      },
+    });
   }
 }
 
@@ -400,7 +442,15 @@ Then("delivery stateとjournalは1 byteも変わらない", function () {
 Then("再固定は拒否され両側のdiff digestが理由に含まれる", function () {
   assert.equal(this.applied, false, "拒否されていません");
   const message = String(this.error);
-  assert.match(message, /[0-9a-f]{64}/u);
+  /**
+   * **両側のdigestが揃って出ることを測る。** 1件だけの検査では、
+   * `before`か`after`の一方を出力しない回帰を通してしまう。
+   */
+  assert.match(message, /before=[0-9a-f]{64}/u);
+  assert.match(message, /after=[0-9a-f]{64}/u);
+  const before = /before=([0-9a-f]{64})/u.exec(message)?.[1];
+  const after = /after=([0-9a-f]{64})/u.exec(message)?.[1];
+  assert.notEqual(before, after, "両側のdigestが同一です");
 });
 
 Then("実効HEADは固定済み記録headのままになる", function () {
@@ -566,12 +616,18 @@ When("到達性を観測する", function () {
     records: chain,
     anchoredHeadSha: this.oldHeadSha,
   });
+  /**
+   * **provider境界をfakeへ差し替えて実呼び出し数を数える。**
+   * `observeReachability`はproviderの観測結果を引数で受け取る純関数であり、
+   * 自分では呼ばない。数えるのは呼び出し側の責務である。
+   */
+  const providerHeadSha = ((): string => {
+    this.providerCalls += 1;
+    return this.newHeadSha;
+  })();
   this.reachability = observeReachability({
     effectiveHeadSha: derived.effectiveHeadSha,
-    providerHeadSha: (() => {
-      this.providerCalls += 1;
-      return this.newHeadSha;
-    })(),
+    providerHeadSha,
     isAncestor: (descendant: string) => {
       try {
         execFileSync(
@@ -589,6 +645,24 @@ When("到達性を観測する", function () {
 
 When("review層の再固定のあとにpr createのbinding検査を通す", function () {
   applyReanchor(this, "review");
+  assert.equal(
+    this.applied,
+    true,
+    `再固定が失敗しました: ${String(this.error)}`,
+  );
+  /**
+   * **製品の`assertCurrentReviewJournalBinding`を実際に呼ぶ。**
+   * 再固定しただけで「通過した」と見なすと、`src/cli.ts:429`の照合を
+   * 差し替え忘れた回帰を検出できない。
+   */
+  recordStep10Binding(this);
+  try {
+    assertCurrentReviewJournalBinding(this.staging, this.newHeadSha);
+    this.bindingPassed = true;
+  } catch (error) {
+    this.bindingPassed = false;
+    this.error = error;
+  }
 });
 
 Then("provider呼び出しは0件になる", function () {
@@ -610,4 +684,9 @@ Then("provider観測は1回になる", function () {
 Then("binding検査は停止しない", function () {
   assert.equal(this.applied, true, String(this.error));
   assert.equal(this.effectiveHead, this.newHeadSha);
+  assert.equal(
+    this.bindingPassed,
+    true,
+    `binding検査が停止しました: ${String(this.error)}`,
+  );
 });

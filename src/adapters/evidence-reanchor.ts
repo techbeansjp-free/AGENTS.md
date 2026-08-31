@@ -14,10 +14,8 @@ import {
   withStagingMutationLock,
 } from "../domain/staging.js";
 import { readStoredDeliveryState } from "./delivery-state.js";
-import {
-  observeReviewDiff,
-  readStoredReviewSession,
-} from "./review-session.js";
+import { observeReviewDiff } from "./review-diff.js";
+import { readStoredReviewSession } from "./review-session-store.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
 
 export const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
