@@ -153,3 +153,13 @@ Feature: 隔離疑似projectでsemantic graphを即時観測する
     Given trackedな.astro.bakを実装列へ持つtrace rowがある
     When trace endpoint観測用のsemantic graphを構築する
     Then .astro.bakのtrace endpointはstableな診断でfail closedになる
+
+  Scenario: SCN-INT-SEMGRAPH-031 path以外のinline codeをtrace endpoint候補にしない
+    Given path以外のinline codeをFeature列・実装列へ持つtrace rowがある
+    When trace endpoint観測用のsemantic graphを構築する
+    Then path以外のinline codeは実在検査の対象にならず投影が成立する
+
+  Scenario: SCN-INT-SEMGRAPH-032 実在しないpathは判別規則の両側で引き続き拒否する
+    Given 実在しないpathをFeature列・実装列へ持つtrace rowがある
+    When trace endpoint観測用のsemantic graphを構築する
+    Then 実在しないpathは既存の診断文言でfail closedになる
