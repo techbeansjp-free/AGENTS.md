@@ -28,6 +28,12 @@ export const REPOSITORY_READ_EXCEPTIONS: readonly RepositoryReadException[] =
         "製品自身のproject設定一式を隔離repositoryへ複製し、充足可能性をdogfoodingで検証する",
     },
     {
+      file: "test/steps/project-policy-file-target.steps.ts",
+      target: ".agent-skill-chain/project",
+      reason:
+        "製品自身のproject設定一式を隔離rootへ複製し、--fileで渡した候補manifestが実際に検証されることをdogfoodingで検証する",
+    },
+    {
       file: "test/steps/risk-policy.steps.ts",
       target: ".agent-skill-chain/project",
       reason:
