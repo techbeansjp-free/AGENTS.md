@@ -575,6 +575,48 @@ export function checkIdForRuleId(ruleId: string): string | undefined {
   return CHECK_ID.test(checkId) ? checkId : undefined;
 }
 
+function unregisteredCheckRefMessage(input: {
+  prefix: string;
+  checkId: string;
+  rules: readonly unknown[];
+}): string {
+  const registeredCheckIds = new Set<string>();
+  const underivableRuleIds: string[] = [];
+  for (const rule of input.rules) {
+    if (!isRecord(rule) || typeof rule.ruleId !== "string") continue;
+    const checkId = checkIdForRuleId(rule.ruleId);
+    if (checkId) registeredCheckIds.add(checkId);
+    else underivableRuleIds.push(rule.ruleId);
+  }
+  const sortedCheckIds = [...registeredCheckIds].sort();
+  const shownCheckIds = sortedCheckIds.slice(0, 20);
+  const registered =
+    sortedCheckIds.length === 0
+      ? "登録済みcheckIdは0件です"
+      : `登録済みcheckId(${sortedCheckIds.length}件): ${shownCheckIds.join(
+          ", ",
+        )}${
+          sortedCheckIds.length > shownCheckIds.length
+            ? `, ほか${sortedCheckIds.length - shownCheckIds.length}件`
+            : ""
+        }`;
+  const parts = [
+    `${input.prefix}check-refがproject ruleへ登録されていません: ${input.checkId}`,
+    "checkIdはproject ruleのruleIdから接頭辞ASC-を除いて小文字化した値です",
+    "規則の正本は`.agent-skill-chain/docs/00_運用ポリシー.md`の「conformance scopeと適用可否」節です",
+    registered,
+  ];
+  if (underivableRuleIds.length > 0) {
+    underivableRuleIds.sort();
+    parts.push(
+      `導出できないruleId(${underivableRuleIds.length}件): ${underivableRuleIds
+        .slice(0, 3)
+        .join(", ")}`,
+    );
+  }
+  return parts.join("。");
+}
+
 export function validateConformanceContract(contract: unknown) {
   const errors: string[] = [];
   if (!isRecord(contract))
@@ -747,7 +789,11 @@ export function validateProjectConformanceBinding(
           !registeredCheckIds.has(point.checkId)
         )
           errors.push(
-            `${item.id}.check-refがproject ruleへ登録されていません: ${point.checkId}`,
+            unregisteredCheckRefMessage({
+              prefix: `${item.id}.`,
+              checkId: point.checkId,
+              rules: Array.isArray(rulesInput) ? rulesInput : [],
+            }),
           );
       } else errors.push(`${item.id}.enforcement.kindが不正です`);
     }
@@ -1063,7 +1109,11 @@ export function validateRepositoryConformance(
           !registeredCheckIds.has(point.checkId)
         )
           errors.push(
-            `${String(item.id)}のcheck-refがproject ruleへ登録されていません: ${point.checkId}`,
+            unregisteredCheckRefMessage({
+              prefix: `${String(item.id)}.`,
+              checkId: point.checkId,
+              rules: Array.isArray(rulesInput) ? rulesInput : [],
+            }),
           );
         continue;
       }
