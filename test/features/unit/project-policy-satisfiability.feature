@@ -42,10 +42,15 @@ Feature: 一般利用projectが正直な適用可否でpolicyを充足する
     When project ruleを与えてapplicability bindingを検証する
     Then check-ref診断は導出規則と登録済みcheckIdを示す
 
-  Scenario: SCN-UNIT-SAT-023 登録済みcheckIdが上限を超えるとき件数を示して打ち切る
-    Given 未登録check-refと上限を超えるruleを持つbindingがある
+  Scenario Outline: SCN-UNIT-SAT-023 登録済みcheckIdは上限ちょうどで全件、上限超で打ち切る
+    Given 未登録check-refと<件数>件のruleを持つbindingがある
     When project ruleを与えてapplicability bindingを検証する
     Then check-ref診断は導出規則と登録済みcheckIdを示す
+
+    Examples:
+      | 件数 |
+      | 20 |
+      | 21 |
 
   Scenario: SCN-UNIT-SAT-024 2経路の未登録check-ref診断が文字列として一致する
     Given 未登録check-refと登録済みruleを持つbindingがある
@@ -53,7 +58,7 @@ Feature: 一般利用projectが正直な適用可否でpolicyを充足する
     And repository conformanceを新しいenforcement pointで検証する
     Then check-ref診断は2経路で文字列として一致する
 
-  Scenario: SCN-UNIT-SAT-025 導出できないruleIdの件数と例を診断が示す
+  Scenario: SCN-UNIT-SAT-025 導出できないruleIdを上限件数まで安全な形で示す
     Given 未登録check-refと導出できないruleIdを持つbindingがある
     When project ruleを与えてapplicability bindingを検証する
     Then check-ref診断は導出できないruleIdの件数と例を示す

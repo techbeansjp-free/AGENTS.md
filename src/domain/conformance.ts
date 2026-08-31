@@ -25,6 +25,7 @@ const BINDING_FIELDS = [
 const SAFE_BINDING_PATH =
   /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*\/\/)(?!.*\\)(?!.*\/$)[^\u0000]+$/u;
 const CHECK_ID = /^[a-z][a-z0-9-]{0,63}$/u;
+const CHECK_ID_MAX_LENGTH = 64;
 
 export type ConformanceScope = "repository-bound" | "package-attested";
 
@@ -575,21 +576,27 @@ export function checkIdForRuleId(ruleId: string): string | undefined {
   return CHECK_ID.test(checkId) ? checkId : undefined;
 }
 
+const DIAGNOSTIC_CHECK_ID_LIMIT = 20;
+const DIAGNOSTIC_RULE_ID_LIMIT = 3;
+
+function diagnosticRuleId(ruleId: string): string {
+  return JSON.stringify(ruleId.slice(0, CHECK_ID_MAX_LENGTH));
+}
+
 function unregisteredCheckRefMessage(input: {
   prefix: string;
   checkId: string;
+  registeredCheckIds: ReadonlySet<string>;
   rules: readonly unknown[];
 }): string {
-  const registeredCheckIds = new Set<string>();
-  const underivableRuleIds: string[] = [];
+  const underivableRuleIds = new Set<string>();
   for (const rule of input.rules) {
     if (!isRecord(rule) || typeof rule.ruleId !== "string") continue;
-    const checkId = checkIdForRuleId(rule.ruleId);
-    if (checkId) registeredCheckIds.add(checkId);
-    else underivableRuleIds.push(rule.ruleId);
+    if (checkIdForRuleId(rule.ruleId) === undefined)
+      underivableRuleIds.add(rule.ruleId);
   }
-  const sortedCheckIds = [...registeredCheckIds].sort();
-  const shownCheckIds = sortedCheckIds.slice(0, 20);
+  const sortedCheckIds = [...input.registeredCheckIds].sort();
+  const shownCheckIds = sortedCheckIds.slice(0, DIAGNOSTIC_CHECK_ID_LIMIT);
   const registered =
     sortedCheckIds.length === 0
       ? "登録済みcheckIdは0件です"
@@ -606,14 +613,16 @@ function unregisteredCheckRefMessage(input: {
     "規則の正本は`.agent-skill-chain/docs/00_運用ポリシー.md`の「conformance scopeと適用可否」節です",
     registered,
   ];
-  if (underivableRuleIds.length > 0) {
-    underivableRuleIds.sort();
+  if (underivableRuleIds.size > 0)
     parts.push(
-      `導出できないruleId(${underivableRuleIds.length}件): ${underivableRuleIds
-        .slice(0, 3)
+      `導出できないruleId(${underivableRuleIds.size}件): ${[
+        ...underivableRuleIds,
+      ]
+        .sort()
+        .slice(0, DIAGNOSTIC_RULE_ID_LIMIT)
+        .map(diagnosticRuleId)
         .join(", ")}`,
     );
-  }
   return parts.join("。");
 }
 
@@ -792,6 +801,7 @@ export function validateProjectConformanceBinding(
             unregisteredCheckRefMessage({
               prefix: `${item.id}.`,
               checkId: point.checkId,
+              registeredCheckIds,
               rules: Array.isArray(rulesInput) ? rulesInput : [],
             }),
           );
@@ -1106,12 +1116,14 @@ export function validateRepositoryConformance(
       if (kind === "check-ref") {
         if (
           typeof point.checkId === "string" &&
+          CHECK_ID.test(point.checkId) &&
           !registeredCheckIds.has(point.checkId)
         )
           errors.push(
             unregisteredCheckRefMessage({
               prefix: `${String(item.id)}.`,
               checkId: point.checkId,
+              registeredCheckIds,
               rules: Array.isArray(rulesInput) ? rulesInput : [],
             }),
           );
