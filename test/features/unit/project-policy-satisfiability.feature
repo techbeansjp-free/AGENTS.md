@@ -32,6 +32,37 @@ Feature: 一般利用projectが正直な適用可否でpolicyを充足する
     When repository conformanceを新しいenforcement pointで検証する
     Then 不正なenforcement pointをすべて拒否する
 
+  Scenario: SCN-UNIT-SAT-021 未登録check-refの診断が導出規則と登録済みcheckIdを示す
+    Given 未登録check-refと登録済みruleを持つbindingがある
+    When project ruleを与えてapplicability bindingを検証する
+    Then check-ref診断は導出規則と登録済みcheckIdを示す
+
+  Scenario: SCN-UNIT-SAT-022 rule 0件のときも診断が導出規則を示す
+    Given 未登録check-refとruleを1件も持たないbindingがある
+    When project ruleを与えてapplicability bindingを検証する
+    Then check-ref診断は導出規則と登録済みcheckIdを示す
+
+  Scenario: SCN-UNIT-SAT-023 登録済みcheckIdが上限を超えるとき件数を示して打ち切る
+    Given 未登録check-refと上限を超えるruleを持つbindingがある
+    When project ruleを与えてapplicability bindingを検証する
+    Then check-ref診断は導出規則と登録済みcheckIdを示す
+
+  Scenario: SCN-UNIT-SAT-024 2経路の未登録check-ref診断が文字列として一致する
+    Given 未登録check-refと登録済みruleを持つbindingがある
+    When project ruleを与えてapplicability bindingを検証する
+    And repository conformanceを新しいenforcement pointで検証する
+    Then check-ref診断は2経路で文字列として一致する
+
+  Scenario: SCN-UNIT-SAT-025 導出できないruleIdの件数と例を診断が示す
+    Given 未登録check-refと導出できないruleIdを持つbindingがある
+    When project ruleを与えてapplicability bindingを検証する
+    Then check-ref診断は導出できないruleIdの件数と例を示す
+
+  Scenario: SCN-UNIT-SAT-026 binding schemaのcheckIdが導出規則の正本を参照する
+    Given 配布するconformance binding schemaがある
+    When project ruleを与えてapplicability bindingを検証する
+    Then checkIdのdescriptionは導出規則の正本を参照する
+
   # executableSourceが正規表現literalを認識しないと、引用符の偶奇が反転してliteralの中身が
   # codeとして漏れ出す。実在しないexportを実在と誤認し、enforcementの存在確認を迂回できる。
   Scenario Outline: SCN-UNIT-SAT-014 enforcement exportの走査が正規表現literalに壊されない

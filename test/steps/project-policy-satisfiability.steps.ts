@@ -40,6 +40,7 @@ class SatisfiabilityWorld extends WorkflowWorld {
   binding: unknown = undefined;
   evidence: unknown = undefined;
   rules: Rule[] = [];
+  expectedCheckIds: string[] = [];
   repositoryResult: ValidationResult | undefined = undefined;
   repositoryResults: ValidationResult[] = [];
   choice: unknown = undefined;
@@ -423,6 +424,200 @@ Given(
     };
   },
 );
+
+Given("未登録check-refと登録済みruleを持つbindingがある", function () {
+  this.root = process.cwd();
+  this.contract = readJson(".agent-skill-chain/policy/conformance.json");
+  const document = notApplicableBinding();
+  const bindings: unknown[] = document.bindings;
+  bindings[0] = {
+    id: "I1",
+    sourcePaths: ["src/domain/conformance.ts"],
+    enforcement: [{ kind: "check-ref", checkId: "main-branch-protection" }],
+    counterexampleScenarios: ["SCN-UNIT-SAT-024"],
+  };
+  this.bindingInputs = [document];
+  this.rules = [
+    "ASC-PROJ-MAIN-PROTECT-001",
+    "ASC-PROJ-QUALITY-001",
+    "ASC-PROJ-TRACE-001",
+  ].map((ruleId) => ({ ...rule(), ruleId }));
+  this.expectedCheckIds = [
+    "proj-main-protect-001",
+    "proj-quality-001",
+    "proj-trace-001",
+  ];
+  this.evidence = {
+    tool: "cucumber-js",
+    passedScenarioIds: ["SCN-UNIT-SAT-024"],
+  };
+});
+
+Given("未登録check-refとruleを1件も持たないbindingがある", function () {
+  const document = notApplicableBinding();
+  const bindings: unknown[] = document.bindings;
+  bindings[0] = {
+    id: "I1",
+    sourcePaths: ["src/domain/conformance.ts"],
+    enforcement: [{ kind: "check-ref", checkId: "main-branch-protection" }],
+    counterexampleScenarios: ["SCN-UNIT-SAT-022"],
+  };
+  this.bindingInputs = [document];
+  this.rules = [];
+  this.expectedCheckIds = [];
+});
+
+Given("未登録check-refと上限を超えるruleを持つbindingがある", function () {
+  const document = notApplicableBinding();
+  const bindings: unknown[] = document.bindings;
+  bindings[0] = {
+    id: "I1",
+    sourcePaths: ["src/domain/conformance.ts"],
+    enforcement: [{ kind: "check-ref", checkId: "main-branch-protection" }],
+    counterexampleScenarios: ["SCN-UNIT-SAT-023"],
+  };
+  this.bindingInputs = [document];
+  this.rules = Array.from({ length: 21 }, (_, index) => ({
+    ...rule(),
+    ruleId: `ASC-CHECK-${String(index + 1).padStart(2, "0")}`,
+  }));
+  this.expectedCheckIds = Array.from(
+    { length: 21 },
+    (_, index) => `check-${String(index + 1).padStart(2, "0")}`,
+  );
+});
+
+Given("未登録check-refと導出できないruleIdを持つbindingがある", function () {
+  const document = notApplicableBinding();
+  const bindings: unknown[] = document.bindings;
+  bindings[0] = {
+    id: "I1",
+    sourcePaths: ["src/domain/conformance.ts"],
+    enforcement: [{ kind: "check-ref", checkId: "main-branch-protection" }],
+    counterexampleScenarios: ["SCN-UNIT-SAT-025"],
+  };
+  this.bindingInputs = [document];
+  this.rules = [
+    "ASC-PROJ-MAIN-PROTECT-001",
+    "ASC-FOO--BAR",
+    `ASC-${"A".repeat(70)}`,
+  ].map((ruleId) => ({ ...rule(), ruleId }));
+});
+
+Given("配布するconformance binding schemaがある", function () {
+  this.contract = readJson(
+    ".agent-skill-chain/schemas/project-conformance-binding.schema.json",
+  );
+  const document = notApplicableBinding();
+  const bindings: unknown[] = document.bindings;
+  bindings[0] = {
+    id: "I1",
+    sourcePaths: ["src/domain/conformance.ts"],
+    enforcement: [{ kind: "check-ref", checkId: "main-branch-protection" }],
+    counterexampleScenarios: ["SCN-UNIT-SAT-026"],
+  };
+  this.bindingInputs = [document];
+  this.rules = [
+    "ASC-PROJ-MAIN-PROTECT-001",
+    "ASC-PROJ-QUALITY-001",
+    "ASC-PROJ-TRACE-001",
+  ].map((ruleId) => ({ ...rule(), ruleId }));
+});
+
+When("project ruleを与えてapplicability bindingを検証する", function () {
+  this.bindingResults = this.bindingInputs.map((value) =>
+    validateProjectConformanceBinding(value, this.rules),
+  );
+});
+
+Then("check-ref診断は導出規則と登録済みcheckIdを示す", function () {
+  const diagnostic = this.bindingResults[0]?.errors.find((error) =>
+    error.includes("main-branch-protection"),
+  );
+  assert.ok(typeof diagnostic === "string");
+  if (this.rules.length === 0)
+    assert.match(diagnostic, /登録済みcheckIdは0件です/u);
+  else if (this.rules.length > 20) {
+    assert.match(diagnostic, /登録済みcheckId\(21件\):/u);
+    assert.match(diagnostic, /ほか1件/u);
+  }
+  assert.match(
+    diagnostic,
+    /checkIdはproject ruleのruleIdから接頭辞ASC-を除いて小文字化した値です/u,
+  );
+  assert.match(diagnostic, /\.agent-skill-chain\/docs\/00_運用ポリシー\.md/u);
+  if (this.rules.length > 0)
+    assert.match(diagnostic, /登録済みcheckId\([0-9]+件\):/u);
+  assert.match(diagnostic, /main-branch-protection/u);
+  const expectedCheckIds: string[] = [...this.expectedCheckIds].sort();
+  for (const checkId of expectedCheckIds.slice(0, 20))
+    assert.ok(
+      diagnostic.includes(checkId),
+      `導出checkId ${checkId} が診断に現れていません: ${diagnostic}`,
+    );
+  for (const ruleId of this.rules.map((entry) => entry.ruleId))
+    assert.ok(
+      !diagnostic.includes(ruleId),
+      `導出前のruleId ${ruleId} が診断に現れています: ${diagnostic}`,
+    );
+});
+
+Then("check-ref診断は2経路で文字列として一致する", function () {
+  const bindingDiagnostic = this.bindingResults[0]?.errors.find((error) =>
+    error.includes("main-branch-protection"),
+  );
+  const repositoryDiagnostics = (
+    this.repositoryResults[0]?.errors ?? []
+  ).filter((error) => error.includes("main-branch-protection"));
+  assert.equal(repositoryDiagnostics.length, 2);
+  assert.equal(bindingDiagnostic, repositoryDiagnostics[1]);
+});
+
+Then("check-ref診断は導出できないruleIdの件数と例を示す", function () {
+  const diagnostic = this.bindingResults[0]?.errors.find((error) =>
+    error.includes("main-branch-protection"),
+  );
+  assert.ok(typeof diagnostic === "string");
+  const invalidRuleIds = ["ASC-FOO--BAR", `ASC-${"A".repeat(70)}`].sort();
+  assert.match(
+    diagnostic,
+    new RegExp(
+      `導出できないruleId\\(2件\\): ${invalidRuleIds.join(", ")}`,
+      "u",
+    ),
+  );
+});
+
+Then("checkIdのdescriptionは導出規則の正本を参照する", function () {
+  assert.ok(isRecord(this.contract));
+  const properties = this.contract.properties;
+  assert.ok(isRecord(properties));
+  const bindings = properties.bindings;
+  assert.ok(isRecord(bindings));
+  const items = bindings.items;
+  assert.ok(isRecord(items));
+  const itemProperties = items.properties;
+  assert.ok(isRecord(itemProperties));
+  const enforcement = itemProperties.enforcement;
+  assert.ok(isRecord(enforcement));
+  const enforcementItems = enforcement.items;
+  assert.ok(isRecord(enforcementItems));
+  const oneOf: unknown = enforcementItems.oneOf;
+  assert.ok(Array.isArray(oneOf));
+  const checkRef: unknown = oneOf.find(
+    (candidate: unknown) =>
+      isRecord(candidate) &&
+      isRecord(candidate.properties) &&
+      isRecord(candidate.properties.kind) &&
+      candidate.properties.kind.const === "check-ref",
+  );
+  assert.ok(isRecord(checkRef));
+  assert.ok(isRecord(checkRef.properties));
+  assert.ok(isRecord(checkRef.properties.checkId));
+  const description = checkRef.properties.checkId.description;
+  assert.ok(typeof description === "string");
+  assert.match(description, /\.agent-skill-chain\/docs\/00_運用ポリシー\.md/u);
+});
 
 When("repository conformanceを新しいenforcement pointで検証する", function () {
   const inputs =
