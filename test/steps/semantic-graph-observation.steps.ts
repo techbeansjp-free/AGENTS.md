@@ -1521,6 +1521,46 @@ Given("trackedな.astro.bakを実装列へ持つtrace rowがある", function ()
   commitFixture(root, "add tracked Astro backup trace endpoint");
 });
 
+Given(
+  "path以外のinline codeをFeature列・実装列へ持つtrace rowがある",
+  function () {
+    const root = createModeFixture(this, "Full");
+    writeFixture(root, ".gitignore", "dist/\n");
+    writeFixture(root, "AGENTS.md", "# エージェント案内\n");
+    writeFixture(
+      root,
+      "docs/specs/15_要件追跡/00_追跡表.md",
+      [
+        "# Trace endpoint candidate observation",
+        "",
+        "| Requirement | Acceptance | Scenario | Feature | Implementation |",
+        "| --- | --- | --- | --- | --- |",
+        "| REQ-OBS-FULL-001 | AC-OBS-FULL-001 | SCN-OBS-FULL-001 | `test/features/full.feature` `.feature` | `src/full.ts` `src/components/` `src/**/*.css` `ci:quality` `z-index` `.gitignore` `AGENTS.md` |",
+        "",
+      ].join("\n"),
+    );
+    commitFixture(root, "add non-path inline code trace endpoints");
+  },
+);
+
+Given("実在しないpathをFeature列・実装列へ持つtrace rowがある", function () {
+  const root = createModeFixture(this, "Full");
+  fs.rmSync(path.join(root, "README.md"));
+  writeFixture(
+    root,
+    "docs/specs/15_要件追跡/00_追跡表.md",
+    [
+      "# Missing trace endpoint candidates",
+      "",
+      "| Requirement | Acceptance | Scenario | Feature | Implementation |",
+      "| --- | --- | --- | --- | --- |",
+      "| REQ-OBS-FULL-001 | AC-OBS-FULL-001 | SCN-OBS-FULL-001 | `test/features/full.feature` | `src/proces.ts` `README.md` |",
+      "",
+    ].join("\n"),
+  );
+  commitFixture(root, "add missing trace endpoint candidates");
+});
+
 When("trace endpoint観測用のsemantic graphを構築する", function () {
   assert.ok(this.fixtureRoot);
   try {
@@ -1549,6 +1589,45 @@ Then(
     );
   },
 );
+
+Then(
+  "path以外のinline codeは実在検査の対象にならず投影が成立する",
+  function () {
+    assert.equal(this.cliError, undefined);
+    const snapshot = this.snapshots?.[0];
+    assert.ok(snapshot);
+    assert.equal(
+      snapshot.nodes.some(({ id }) => id === "file:src/full.ts"),
+      true,
+    );
+    for (const candidate of [
+      "src/components/",
+      "src/**/*.css",
+      "ci:quality",
+      "z-index",
+      ".feature",
+    ]) {
+      const id = `file:${candidate}`;
+      assert.equal(
+        snapshot.nodes.some((node) => node.id === id),
+        false,
+        `${id} nodeが投影されています`,
+      );
+      assert.equal(
+        snapshot.edges.some((edge) => edge.from === id || edge.to === id),
+        false,
+        `${id} edgeが投影されています`,
+      );
+    }
+  },
+);
+
+Then("実在しないpathは既存の診断文言でfail closedになる", function () {
+  assert.match(
+    this.cliError ?? "",
+    /semantic graph projection診断 trace-endpoint-missing: docs\/specs\/15_要件追跡\/00_追跡表\.md:5: 存在しないrepository path=README\.md,src\/proces\.ts/u,
+  );
+});
 
 When("endpoint不足のsemantic graphを構築する", function () {
   assert.ok(this.fixtureRoot);
