@@ -30,4 +30,4 @@ Feature: policy検証が利用者の指定したmanifestを実際に検証する
     Given 実project policy setのrootと"inventory不一致"の候補manifestがある
     When 候補manifestを与えてproject policy setを検証する
     Then 候補manifestの検証結果は"不合格"である
-    And 候補setのhashは"作業treeのsetと一致しない"
+    And 候補setのhashは"存在しない"

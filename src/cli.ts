@@ -5079,10 +5079,7 @@ export async function main(
     ) {
       let candidateSet;
       try {
-        candidateSet = loadProjectPolicySet(root, {
-          manifest: parsed,
-          manifestRaw,
-        });
+        candidateSet = loadProjectPolicySet(root, { manifestRaw });
       } catch (error) {
         print({
           valid: false,

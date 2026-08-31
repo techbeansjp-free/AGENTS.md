@@ -1225,7 +1225,7 @@ function assemblePolicySet(
 
 export function loadProjectPolicySet(
   root: string,
-  override?: { manifest: unknown; manifestRaw: string },
+  override?: { manifestRaw: string },
 ): PolicySet {
   const namespace = path.join(root, ".agent-skill-chain");
   const manifestRaw =
@@ -1234,10 +1234,7 @@ export function loadProjectPolicySet(
       resolveContained(root, ".agent-skill-chain/project-policy.json"),
       "utf8",
     );
-  const manifest =
-    override === undefined
-      ? parseJsonStrict(manifestRaw, "project policy manifest")
-      : override.manifest;
+  const manifest = parseJsonStrict(manifestRaw, "project policy manifest");
   if (isRecord(manifest) && manifest.schemaVersion !== MANIFEST_VERSION) {
     if (fs.existsSync(path.join(namespace, "project")))
       throw new Error("legacy monolithとproject directoryの混在を拒否しました");

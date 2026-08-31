@@ -18,6 +18,7 @@ class PolicyFileTargetWorld extends WorkflowWorld {
   outcomes: CandidateOutcome[] = [];
   workspaceSetHash = "";
   cliStatus: number | undefined = undefined;
+  cliStdout = "";
 }
 
 const { Given, When, Then } = stepDefinitions<PolicyFileTargetWorld>();
@@ -140,10 +141,7 @@ Given(
 When("候補manifestを与えてproject policy setを検証する", function () {
   this.outcomes = this.candidateManifests.map((manifestRaw) => {
     try {
-      const set = loadProjectPolicySet(this.policyRoot, {
-        manifest: JSON.parse(manifestRaw) as unknown,
-        manifestRaw,
-      });
+      const set = loadProjectPolicySet(this.policyRoot, { manifestRaw });
       return { valid: true, errors: [], setHash: set.setHash };
     } catch (error) {
       return {
@@ -158,7 +156,12 @@ When("候補manifestへpolicy validate CLIを実行する", async function () {
   const candidate = path.join(this.policyRoot, "candidate.json");
   fs.writeFileSync(candidate, this.candidateManifests[0] ?? "");
   const write = process.stdout.write;
-  process.stdout.write = (() => true) as typeof process.stdout.write;
+  this.cliStdout = "";
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    this.cliStdout +=
+      typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+    return true;
+  }) as typeof process.stdout.write;
   try {
     this.cliStatus = await main([
       "policy",
@@ -202,18 +205,32 @@ Then("候補setのhashは{string}", function (expectation: string) {
     assert.equal(hashes[0], this.workspaceSetHash);
     return;
   }
-  if (expectation === "作業treeのsetと一致しない") {
-    assert.notEqual(hashes[0], this.workspaceSetHash);
+  if (expectation === "存在しない") {
+    assert.equal(hashes[0], undefined);
     return;
   }
   throw new Error(`未知のhash期待値です: ${expectation}`);
 });
 
-Then(
-  "policy validate CLIの終了値は{string}である",
-  function (expected: string) {
-    assert.equal(typeof this.cliStatus, "number");
-    if (expected === "0") assert.equal(this.cliStatus, 0);
-    else assert.notEqual(this.cliStatus, 0);
-  },
-);
+Then("policy validate CLIの結果は{string}である", function (expected: string) {
+  assert.equal(typeof this.cliStatus, "number");
+  const output: unknown = JSON.parse(this.cliStdout);
+  assert.ok(output !== null && typeof output === "object");
+  const record = output as Record<string, unknown>;
+  if (expected === "合格") {
+    assert.equal(this.cliStatus, 0);
+    assert.equal(record.valid, true);
+    assert.equal(typeof record.candidateSetHash, "string");
+    return;
+  }
+  assert.notEqual(this.cliStatus, 0);
+  assert.equal(record.valid, false);
+  assert.ok(
+    !Object.prototype.hasOwnProperty.call(record, "candidateSetHash"),
+    `組み立て不能な入力へcandidateSetHashを返しています: ${this.cliStdout}`,
+  );
+  assert.ok(
+    !Object.prototype.hasOwnProperty.call(record, "trustedSetHash"),
+    `組み立て不能な入力へtrustedSetHashを返しています: ${this.cliStdout}`,
+  );
+});
