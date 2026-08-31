@@ -5,12 +5,17 @@ import {
   classifyProjectChoiceDiff,
   type ProjectChoiceDiff,
 } from "../../src/domain/project-choice-diff.js";
-import { compareTrustedPolicy } from "../../src/domain/enforcement.js";
+import {
+  compareTrustedPolicy,
+  resolveEffectivePolicy,
+} from "../../src/domain/enforcement.js";
 import {
   acceptApprovedShrinks,
   type ShrinkAcceptance,
 } from "../../src/domain/project-choice-shrink.js";
 import {
+  choicesFragmentSource,
+  loadOperationPolicy,
   loadProjectPolicySet,
   readProjectChoices,
   type PolicySet,
@@ -677,11 +682,8 @@ function realPolicySets(options: { registerOn: "trusted" | "candidate" }): {
   candidateChoicesRaw: string;
   fragmentPath: string;
 } {
-  const fragmentPath = "choices/development.json";
-  const raw = fs.readFileSync(
-    `.agent-skill-chain/project/${fragmentPath}`,
-    "utf8",
-  );
+  const fragmentPath = "project/choices/development.json";
+  const raw = fs.readFileSync(`.agent-skill-chain/${fragmentPath}`, "utf8");
   const trustedChoice = readProjectChoices(raw);
   const candidateChoice = structuredClone(trustedChoice);
   candidateChoice.forbiddenTestFileSuffixes = [];
@@ -717,11 +719,104 @@ Given("候補側にだけ縮小提案を置いたpolicy setがある", function 
   this.trustedPolicy = sets.trusted;
   this.candidatePolicy = sets.candidate;
   this.candidateChoicesRaw = sets.candidateChoicesRaw;
+  const trustedSet = loadProjectPolicySet(process.cwd());
+  this.trustedPolicySet = trustedSet;
+  this.candidatePolicySet = {
+    ...trustedSet,
+    policy: {
+      ...trustedSet.policy,
+      projectChoices: readProjectChoices(sets.candidateChoicesRaw),
+      projectChoiceShrinkProposals: sets.candidate.projectChoiceShrinkProposals,
+    },
+    rawEntries: {
+      ...trustedSet.rawEntries,
+      [sets.fragmentPath]: sets.candidateChoicesRaw,
+    },
+  };
+});
+
+/**
+ * **候補側の提案を合成へ通しても受理されないことを測る。**
+ *
+ * `resolveEffectivePolicy`がcandidate合成でも提案を持ち越す変異を入れると、
+ * 候補が自分で登録した提案を承認の出所にできる。owner決裁が禁じる形であり、
+ * 実測でこの変異が生存したため反例を追加した。
+ */
+When("effective policyを合成してから候補側提案で判定する", function () {
+  assert.ok(this.trustedPolicySet);
+  assert.ok(this.candidatePolicySet);
+  const floor = loadOperationPolicy(process.cwd()).policy;
+  const trustedEffective = resolveEffectivePolicy(
+    floor,
+    this.trustedPolicySet.policy,
+    { trusted: true },
+  );
+  const candidateEffective = resolveEffectivePolicy(
+    trustedEffective.policy,
+    this.candidatePolicySet.policy,
+  );
+  assert.equal(
+    candidateEffective.valid,
+    true,
+    JSON.stringify(candidateEffective.diagnostic),
+  );
+  const source = choicesFragmentSource(this.candidatePolicySet);
+  assert.ok(source);
+  this.comparison = compareTrustedPolicy(
+    trustedEffective.policy,
+    candidateEffective.policy,
+    {
+      candidateChoicesRaw: source.raw,
+      choicesFragmentPath: source.path,
+    },
+  );
+});
+
+/**
+ * **rawとfragment pathを渡したうえで拒否されることを測る。**
+ *
+ * 第3引数を渡さないと「rawが無いから拒否」で通ってしまい、提案をcandidate側から
+ * 読む取り違えの変異を検出できない。実測でその空振りを確認したため引数を足した。
+ */
+When("候補側提案を入力として縮小の互換性を判定する", function () {
+  assert.ok(this.trustedPolicy);
+  assert.ok(this.candidatePolicy);
+  assert.ok(this.candidateChoicesRaw);
+  this.comparison = compareTrustedPolicy(
+    this.trustedPolicy,
+    this.candidatePolicy,
+    {
+      candidateChoicesRaw: this.candidateChoicesRaw,
+      choicesFragmentPath: "project/choices/development.json",
+    },
+  );
 });
 
 Then("policy比較は縮小をASC-TRUST-001で拒否する", function () {
   shrinkRejection(this);
   assert.deepEqual(this.comparison?.acceptedShrinks ?? [], []);
+  /**
+   * **同じ入力のうち提案の置き場所だけをtrusted側へ移すと受理される**ことを
+   * 同一シナリオで確かめる。これが成立しなければ、上の拒否は「提案の出所が
+   * 候補側だから」ではなく別の理由で起きていることになる。
+   */
+  assert.ok(this.trustedPolicy);
+  assert.ok(this.candidatePolicy);
+  const proposals = this.candidatePolicy.projectChoiceShrinkProposals;
+  assert.ok(proposals, "候補側に提案が置かれていません");
+  const moved = compareTrustedPolicy(
+    { ...this.trustedPolicy, projectChoiceShrinkProposals: proposals },
+    { ...this.candidatePolicy, projectChoiceShrinkProposals: undefined },
+    {
+      candidateChoicesRaw: this.candidateChoicesRaw,
+      choicesFragmentPath: "project/choices/development.json",
+    },
+  );
+  assert.equal(
+    moved.allowed,
+    true,
+    `提案をtrusted側へ移しても受理されません: ${JSON.stringify(moved.rejected)}`,
+  );
 });
 
 Given("既定branch側へ縮小提案を登録したpolicy setがある", function () {
@@ -897,4 +992,59 @@ Then("正当な提案でもraw byte列が無ければ受理されない", functi
   });
   assert.deepEqual(result.accepted, []);
   assert.equal(result.remaining.length, 1);
+});
+
+/**
+ * **`resolveEffectivePolicy`を実際に通す。**
+ *
+ * `policy validate`と`pr create`のtrustedはpackage floorとproject policyの
+ * 合成結果である。合成が縮小提案を落とすと、既定branchへ登録した提案が
+ * 受理判断へ届かず新設経路が機能しない。実測でその欠落を確認したため、
+ * 合成を経由する経路を反例として固定する。
+ */
+When("effective policyを合成してから縮小の互換性を判定する", function () {
+  assert.ok(this.trustedPolicySet);
+  assert.ok(this.candidatePolicySet);
+  /** `policy validate`と同じ合成順序を再現する。 */
+  const floor = loadOperationPolicy(process.cwd()).policy;
+  const trustedEffective = resolveEffectivePolicy(
+    floor,
+    this.trustedPolicySet.policy,
+    { trusted: true },
+  );
+  assert.equal(
+    trustedEffective.valid,
+    true,
+    JSON.stringify(trustedEffective.diagnostic),
+  );
+  const candidateEffective = resolveEffectivePolicy(
+    trustedEffective.policy,
+    this.candidatePolicySet.policy,
+  );
+  assert.equal(
+    candidateEffective.valid,
+    true,
+    JSON.stringify(candidateEffective.diagnostic),
+  );
+  const source = choicesFragmentSource(this.candidatePolicySet);
+  assert.ok(source, "candidate setのchoices fragmentがありません");
+  this.comparison = compareTrustedPolicy(
+    trustedEffective.policy,
+    candidateEffective.policy,
+    {
+      candidateChoicesRaw: source.raw,
+      choicesFragmentPath: source.path,
+    },
+  );
+});
+
+Then("合成後の判定は縮小を受理する", function () {
+  assert.equal(
+    this.comparison?.allowed,
+    true,
+    JSON.stringify(this.comparison?.rejected),
+  );
+  assert.deepEqual(this.comparison?.acceptedShrinks, [
+    "projectChoices.forbiddenTestFileSuffixes",
+  ]);
 });

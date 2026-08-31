@@ -1,7 +1,10 @@
 import crypto from "node:crypto";
 
 import { isRecord, type ProjectChoiceShrinkProposal } from "../types.js";
-import { type ProjectChoiceDiff } from "./project-choice-diff.js";
+import {
+  MONOTONIC_SHRINK_REASON_PREFIX,
+  type ProjectChoiceDiff,
+} from "./project-choice-diff.js";
 
 /**
  * 縮小提案で受理できる対象field。
@@ -18,9 +21,9 @@ const SHRINKABLE_FIELD_PATHS: readonly string[] = Object.freeze([
  * 要素削除を表す弱化entryの理由接頭辞。
  *
  * **同じfieldPathでも型契約違反のentryは受理候補にしない。** 決裁が受理を許すのは
- * 縮小だけであり、型契約違反は縮小ではない。
+ * 縮小だけであり、型契約違反は縮小ではない。文言は分類器から共有し複製しない。
  */
-const SHRINK_REASON_PREFIX = "trusted側の要素を削除している: ";
+const SHRINK_REASON_PREFIX = MONOTONIC_SHRINK_REASON_PREFIX;
 
 const SHA256 = /^[a-f0-9]{64}$/u;
 
@@ -77,6 +80,7 @@ function describeRejection(
     fragmentPath: string | undefined;
     observedSha256: string | undefined;
     proposedSha256: string | undefined;
+    malformed: number;
   },
 ): string {
   if (
@@ -88,7 +92,11 @@ function describeRejection(
     observation.proposedSha256 === undefined
       ? "登録済み提案なし"
       : `提案のsha256は${observation.proposedSha256}`;
-  return `${entry}（比較したchoices fragmentは${observation.fragmentPath}、観測したsha256は${observation.observedSha256}、${proposed}）`;
+  const malformed =
+    observation.malformed > 0
+      ? `、形が不正で無視した提案が${observation.malformed}件`
+      : "";
+  return `${entry}（比較したchoices fragmentは${observation.fragmentPath}、観測したsha256は${observation.observedSha256}、${proposed}${malformed}）`;
 }
 
 export function acceptApprovedShrinks(input: {
@@ -99,9 +107,16 @@ export function acceptApprovedShrinks(input: {
 }): ShrinkAcceptance {
   const accepted: AcceptedShrink[] = [];
   const remaining: string[] = [];
-  const proposals = Array.isArray(input.trustedProposals)
-    ? input.trustedProposals.filter(isProposal)
+  const declared = Array.isArray(input.trustedProposals)
+    ? input.trustedProposals
     : [];
+  const proposals = declared.filter(isProposal);
+  /**
+   * **形が不正な提案は落とすが、落とした事実は診断へ残す。**
+   *
+   * 黙って「登録済み提案なし」と返すと、登録側の誤りに気付けない。
+   */
+  const malformed = declared.length - proposals.length;
   const observedSha256 =
     input.candidateChoicesRaw === undefined
       ? undefined
@@ -111,10 +126,20 @@ export function acceptApprovedShrinks(input: {
           .digest("hex");
   for (const entry of input.diff.weakened) {
     const fieldPath = shrinkFieldPath(entry);
-    const proposal =
+    /**
+     * **同一fieldPathの提案が複数あれば全件と照合する。**
+     *
+     * 先頭だけを見ると、旧提案を残したまま再登録した場合に陳腐化した提案だけが
+     * 比較され、正しい新提案があっても拒否される。
+     */
+    const candidates =
       fieldPath === undefined
-        ? undefined
-        : proposals.find((item) => item.fieldPath === fieldPath);
+        ? []
+        : proposals.filter((item) => item.fieldPath === fieldPath);
+    const proposal =
+      candidates.find(
+        (item) => item.afterSha256.toLowerCase() === observedSha256,
+      ) ?? candidates[0];
     if (
       fieldPath === undefined ||
       proposal === undefined ||
@@ -127,6 +152,7 @@ export function acceptApprovedShrinks(input: {
           fragmentPath: input.choicesFragmentPath,
           observedSha256,
           proposedSha256: proposal?.afterSha256.toLowerCase(),
+          malformed,
         }),
       );
       continue;

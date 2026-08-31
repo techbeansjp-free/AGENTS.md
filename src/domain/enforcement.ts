@@ -971,6 +971,17 @@ export function resolveEffectivePolicy(
       merge: options.trusted ? (project.merge ?? floor.merge) : floor.merge,
       budgets: project.budgets ?? floor.budgets,
       projectChoices: project.projectChoices,
+      /**
+       * **trusted合成のときだけ縮小提案を持ち越す。**
+       *
+       * 提案が落ちると`policy validate`と`pr create`のtrustedが常に提案なしになり、
+       * 既定branchへ登録した提案が受理判断へ届かない。逆にcandidate合成へ持ち越すと
+       * 候補が自分で登録した提案を承認の出所にできてしまう。owner決裁が禁じる
+       * 同一PR自己提案の遮断は、ここでtrustedに限ることで成立する（Issue #1044）。
+       */
+      projectChoiceShrinkProposals: options.trusted
+        ? project.projectChoiceShrinkProposals
+        : undefined,
       rules: [...effectiveRules, ...additions],
     },
   };

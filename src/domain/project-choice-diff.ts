@@ -267,6 +267,14 @@ function classifyQualityValue(
   if (!sameValue(trusted, candidate)) pushUnique(diff.allowed, fieldPath);
 }
 
+/**
+ * 要素削除を表す弱化理由の接頭辞。
+ *
+ * **受理判定がこの文言で縮小entryを識別する。** 同じfieldPathでも型契約違反の
+ * entryを受理候補にしないため、literalを複製せずここから共有する。
+ */
+export const MONOTONIC_SHRINK_REASON_PREFIX = "trusted側の要素を削除している: ";
+
 function classifyMonotonicArray(
   trusted: unknown,
   candidate: unknown,
@@ -281,7 +289,7 @@ function classifyMonotonicArray(
     weaken(
       diff,
       fieldPath,
-      `trusted側の要素を削除している: ${missing.join("、")}`,
+      `${MONOTONIC_SHRINK_REASON_PREFIX}${missing.join("、")}`,
     );
   else if (!sameValue(trusted, candidate)) pushUnique(diff.allowed, fieldPath);
 }
