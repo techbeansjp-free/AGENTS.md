@@ -847,7 +847,7 @@ When(
         "--slug=worktree-placement",
         "--remote-default-branch=main",
         `--remote-default-sha=${requireSha(this)}`,
-        "--dry-run",
+        "--apply",
       ],
       WTTS_CURRENT_TIME,
     );
