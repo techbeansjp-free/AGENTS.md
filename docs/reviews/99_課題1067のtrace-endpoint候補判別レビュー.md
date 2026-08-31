@@ -8,19 +8,19 @@
 |---|---|
 | 対象 | 実装 |
 | 対象Issue | #1067 |
-| ラウンド | Step 10 ラウンド1〜2 |
+| ラウンド | Step 10 ラウンド1〜3 |
 | 比較基点 | `d4c79be46b97552b1f803bb4c01dba0106f882d9` |
-| H_impl | `a53613f6abec765260f273a2d674d15f5707a50f` |
+| H_impl | `a5436f10a6c300dc12faa3b9b321873ca34cbe10` |
 | 比較基点の由来 | review開始時点の`origin/main`のtip。PR #1078（`v0.3.1-beta.47`のrelease bump）のmerge commitである |
 | Step 10のreview session ID | `88c83142d70152021aaa422c7700a472b8389f7de335c9b6adb7f137c33fac8d` |
 | モード | full |
-| 対象差分 | `src/adapters/repository-graph.ts`、`test/features/integration/semantic-graph-observation.feature`、`test/steps/semantic-graph-observation.steps.ts`、`docs/specs/01_システム概要/02_用語・略語.md`、`docs/specs/02_要件/05_グラフ投影要件.md`、`docs/specs/15_要件追跡/00_追跡表.md`。commitは`703ee66f`・`6c9aace3`・`a53613f6` |
+| 対象差分 | `src/adapters/repository-graph.ts`、`test/features/integration/semantic-graph-observation.feature`、`test/steps/semantic-graph-observation.steps.ts`、`docs/specs/01_システム概要/02_用語・略語.md`、`docs/specs/02_要件/05_グラフ投影要件.md`、`docs/specs/15_要件追跡/00_追跡表.md`、および本artifactのラウンド2版。commitは`703ee66f`・`6c9aace3`・`a53613f6`・`190d982a`・`a5436f10` |
 | 対象外 | `trace-endpoint-missing`のwarning降格（01の1節）。追跡表の列構成の変更。Feature列・実装列以外のcellの解釈。`resolveImport`のimport解決規則。判別述語の`export`（02の1.2節）。`docs/reviews/`のrole authority不整合（#1047） |
-| 残り予算 | **1**（同一範囲で最大3ラウンド。本artifactは総2ラウンドで設計している。**残り1ラウンドはCIが赤になった場合の是正のために意図的に残す**） |
-| ラウンド数 | 2。ラウンド1は`H_impl`の実装差分、ラウンド2は本artifactを加えた`H_final`が対象である |
+| 残り予算 | **0**（同一範囲で最大3ラウンド。総2ラウンドで設計し予算1を残していたが、**ラウンド3で外部reviewerの指摘2件を是正して使い切った**。6節を参照する） |
+| ラウンド数 | 3。ラウンド1は実装差分、ラウンド2は本artifactを加えた版、**ラウンド3は外部reviewer（CodeRabbit）の指摘2件の是正**が対象である |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260831_110148_trace-endpoint検査がinline-code区間をすべてfile-pathとして扱う |
 | 仕様の所有箇所 | `docs/specs/02_要件/05_グラフ投影要件.md`のREQ-GR-005。**着手時点でこの節は「追跡表のどの記法をrepository pathとして解釈するか」を規定していなかった。** その欠落を埋めること自体が本Issueの要求の一部である（00のRQ-BR-03） |
-| 成果物行数 | 製品 **+14 / −1行**（`isTraceEndpointCandidate`の新設10行と`referencedPaths`への`.filter`追加）。仕様 **+4行**（用語台帳+1、グラフ投影要件+2、追跡表+1）。支援層 **+89行**（feature +10、steps +79）。合計 +106 / −1行 |
+| 成果物行数 | 製品 **+14 / −1行**（`isTraceEndpointCandidate`の新設10行と`referencedPaths`への`.filter`追加）。仕様 **+4行**（用語台帳+1、グラフ投影要件+2、追跡表+1）。支援層 **+89 / −1行**（feature +10、steps +79、ラウンド3のfixture 1行差し替え）。**製品差分はラウンド3で1行も変えていない** |
 | 縮小の先行評価 | 3案を先に評価した。(1) `missingPaths`側で除外する案は、`featurePaths`・`implementationPaths`に除外区間が残りINV-02に反するため不採用（02の12節）。(2) 判別述語をexportしてunit scenarioを書く案は、本Issueが要求していない公開面を増やすため不採用。(3) `When`の新設は、#1066が追加した`trace endpoint観測用のsemantic graphを構築する`を再利用できるため行わなかった。**step定義の新設は01の9節が事前に固定した4件（Given 2・Then 2）で、実装もちょうど4件である。** |
 | 実施者・日時 | reviewer（claude）、2026-08-31 |
 
@@ -62,8 +62,9 @@
 | `docs/specs/02_要件/05_グラフ投影要件.md` | M | project | spec | REQ-GR-005節へ判別規則を2文で追加した。他の要件節に触れていない | pass | REQ-GR-005 / AC-GR-005 | 規則の記述だけで実行authorityを持たない | pass |
 | `docs/specs/01_システム概要/02_用語・略語.md` | M | project | spec | `TERM-ASC-082`を1行追加した。既存行の列構成に完全に合わせている | pass | REQ-GR-005 / Issue #1067 | 同上 | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | project | spec | REQ-GR-005のintegration行の下へ1行追加した。既存行のSCN列を書き換えていない | pass | REQ-GR-005 / AC-GR-005 / SCN-INT-SEMGRAPH-031、032 | 追跡の追加だけで実行authorityを持たない | pass |
+| `docs/reviews/99_課題1067のtrace-endpoint候補判別レビュー.md` | A | project | evidence | **本artifact自身のラウンド2版である。** ラウンド3の是正を前進commitで積んだため、`比較基点..H_impl`の範囲へ入った。まとめ行にせず1 file 1行で記録する | pass。evidence層であり実行authorityを持たない | 全AC。review sessionの`88c83142…` | 内容はreview記録のみ。rollbackは本fileのrevert | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: **一致する。** `git diff --name-only d4c79be4 a53613f6`が返す6 pathが上表の6行と同じである。
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: **一致する。** `git diff --name-only d4c79be4 a5436f10`が返す7 pathが上表の7行と同じである。**7件目は本artifactのラウンド2版であり、ラウンド3の是正を前進commitで積んだ結果として監査範囲へ入った。** `amend`で畳まなかったのは、`review round`が前ラウンドのHEADをancestorとして要求するためである（`src/adapters/review-session.ts`の`previewReviewRound`が`observeReviewDiff(previous.latestCandidateHeadSha, candidateHeadSha)`を呼ぶ）。**amendすると残り予算1のラウンド3を実行できなくなる。**
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: **成立する。** 判別規則はpackageの投影機構の一部であり、`.agent-skill-chain/project/rules/`のproject ruleにしていない（02の12節で不採用と決めた）。project ruleにすると利用側が検査を任意に縮小できる経路になる。
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: **修正した個別findingは無い。** ラウンド1のfindingは4件ともrecord-onlyである。
 
@@ -95,7 +96,7 @@
 
 | 観点 | 確認内容 | 判定 | 根拠 |
 |---|---|---|---|
-| 正しさ | 要件と観測結果が一致するか | pass | BR-01〜BR-04の4条が実装の4段（glob → 末尾`/` → `/`を含む → basename/extension）と過不足なく対応する。変異時の赤の実出力が報告された症状と同型である |
+| 正しさ | 要件と観測結果が一致するか | pass | BR-01〜BR-04の4条が実装の4段（glob → 末尾`/` → `/`を含む → basename/extension）と過不足なく対応する。**BR-01が挙げる6文字（`*` `?` `[` `]` `{` `}`）はすべてSCN-INT-SEMGRAPH-031のfixtureで実際に検査している。** 変異時の赤の実出力に`src/**/*.css`・`src/**/*.{ts,tsx}`・`src/?.ts`・`src/pages/[slug].astro`の4件が並ぶことで、6文字すべてが判別に依存していることを観測した。ラウンド2までは`*`だけしか検査しておらず、この欄は証拠を超えた記述だった（6節のラウンド3を参照） |
 | 価値 | 利用者・運用上の目的を満たすか | pass | Issue #1067が挙げた区間（`src/components/`・`test/`・`docs/specs/`・`dist/`・`src/**/*.css`・`src/**/*.scss`・`src/**/*.{ts,tsx}`・`.steps.{ts,tsx}`・`ci:quality`・`lint:scss`・`z-index`・`.feature`）がすべて候補から外れる。**利用側へ追跡表の書き換えを要求しない** |
 | 実現可能性 | 実行環境・依存・権限で成立するか | pass | 依存package、lockfile、実行時に必要な外部の存在を1件も変えていない。判別はfilesystemを走査しない純関数である |
 | 整合性 | 設計、コード、テスト、仕様が一致するか | pass | 02の1.1の設計目標と実差分が一致する。03のT01〜T04の完了条件をすべて観測した。**判別規則が`docs/specs/`と実装の2箇所に置かれ、実装のリテラルだけが規則を持つ状態が解消された**（RQ-BR-03）。追跡表の追加行の各列を人が原文で突合した |
@@ -123,7 +124,10 @@
 | AFF-01 | Low | 判別を`referencedPaths`生成時点で適用したことでINV-02が追加コードなしで成立し、既存の潜在不具合も消えた（肯定的所見） | 修正前は`.feature`という断片が`endsWith(".feature")`に一致しfeature nodeを作り得た | 製品 | 対応不要 | resolved | なし |
 | AFF-02 | Low | 変異時の赤の実出力がIssue #1067の報告と同型である（肯定的所見） | `存在しないrepository path=.feature,ci:quality,src/**/*.css,src/components/,z-index` | test | 対応不要 | resolved | なし |
 
-**未解決のCritical / Highは0件である。**
+| CR-01 | Medium | 3節の「正しさ」欄が「BR-01〜BR-04が過不足なく対応する」と断定していたが、SCN-INT-SEMGRAPH-031のfixtureはglob metacharacterのうち`*`しか含んでいなかった。`?`・`[`・`]`・`{`・`}`は未検査だった | ラウンド2時点のfixtureの実装列は`` `src/components/` `src/**/*.css` `ci:quality` `z-index` `.gitignore` `AGENTS.md` `` | test層と本artifactの記述 | **修正した。** fixtureへ`` `src/**/*.{ts,tsx}` ``・`` `src/pages/[slug].astro` ``・`` `src/?.ts` ``を追加し、6文字すべてを検査するようにした。3節の記述も実測へ揃えた | valid / resolved | なし。変異時に4件のglob区間が診断へ並ぶことで6文字すべての依存を観測した |
+| CR-02 | Medium | 9節が`.agent-skill-chain/review-exceptions.json`の`independent-reviewer-absent`区分を適用すると書いていたが、**その区分は正本に存在しない** | 正本の`exceptions`は`RVX-REPORTED-SUCCESS-WITHOUT-REVIEW-001`（kind `reported-success-without-review`）の1件だけである | 本artifactの記述 | **修正した。** 存在しない区分の引用を削除し、9節を実観測へ書き換えた。**適用できる例外が無いことを明記した** | valid / resolved | 独立approvalが0件であることは変わらない。9節に事実として記録した |
+
+**未解決のCritical / Highは0件である。CR-01・CR-02はいずれもラウンド3で`resolved`にした。**
 
 ## 6. ラウンド固有の確認
 
@@ -142,14 +146,33 @@
 
 ### ラウンド3
 
-**実施しない。予算1を残す。** #1068（artifact 97の10.1・10.2）と#1051（artifact 96）で「予算3を使い切った後にCIが赤になると、是正を載せる正規のラウンドが存在しない」が2回起きており、#1074がこの構造問題を所有している。**本Issueでは総ラウンド数を2に設計し、CI是正のために予算1を明示的に残す。** #1066でも同じ設計を採り、rebase後にCIが赤になった際に実際に役立った。これは前例であって機構ではない。
+**実施した。残していた予算1を、外部reviewer（CodeRabbit）の指摘2件の是正に使った。**
+
+| 項目 | 内容 |
+|---|---|
+| 契機 | PR #1079 作成後、外部reviewer（CodeRabbit）が本artifactへinline commentを2件付けた。checkの結論は`pass`だが、**review commentが実体として存在する** |
+| 指摘1（CR-01） | 3節の「正しさ」欄がBR-01の全metacharacterを検証済みと記録しているが、fixtureは`*`しか含まない |
+| 指摘2（CR-02） | 9節が正本に存在しない`independent-reviewer-absent`区分を適用主張していた |
+| 判定 | **2件とも実体を確認して有効と判定した。** 指摘1はfixtureの実装列を原文で確認、指摘2は`.agent-skill-chain/review-exceptions.json`を全文読んで確認した |
+| 是正 | 指摘1はfixtureへ3区間を追加して6文字すべてを検査するようにし、3節の記述も実測へ揃えた。指摘2は9節を実観測へ書き換えた。**製品コードを1行も変えていない** |
+| 反映方法 | **前進commit。** `a5436f10`（test）と本artifactの更新commit。`amend`にすると`review round`が前ラウンドHEADをancestorとして要求するため、ラウンド3自体を実行できなくなる |
+| 未解決Critical/High | 0件 |
+| 予算 | **使い切った。** 以降CIが赤になった場合、是正を載せる正規のラウンドは存在しない。#1074が所有する構造問題である |
+
+- 未解決Critical/High: **0件。**
+- 修正差分: `test/steps/semantic-graph-observation.steps.ts`（fixture 1行の差し替え）と本artifact。**製品コード・仕様・feature fileを変更していない。**
+- 修正で触れた隣接範囲: **なし。** fixtureの差し替えはSCN-INT-SEMGRAPH-031だけに影響し、他scenarioのfixtureを共有していない。
+- 全指摘の最終分類: ADV-01・ADV-02はLow・record-only。AFF-01・AFF-02はresolved。CR-01・CR-02はresolved。
+- 任意の危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: 該当なし。危険範囲を新設していない。
+- 同じ範囲の予算を自動更新していない: **していない。** 予算3のうち3を使い、4ラウンド目を作っていない。
+- AIによる最終裁定: **approved。** 未解決Critical/High 0件。
 
 ## 7. テスト結果
 
 | 層・検査 | コマンド | シナリオ・件数 | 成功 | 失敗 | スキップ | 判定 |
 |---|---|---:|---:|---:|---:|---|
 | 形式 | `npm run docs:format`、`npm run test:format` | 2 | 2 | 0 | 0 | pass |
-| unit・integration・e2e（runner `cucumber-js`、dialect `en`） | `npm test` | 1303 | 1287 | 0 | 16 | pass |
+| unit・integration・e2e（runner `cucumber-js`、dialect `en`） | `npm test` | 1303 | 1287 | 0 | 16 | pass。**ラウンド3のfixture差し替え後に再実行した値である** |
 | 型・既存一式・配布物 | `npm run project:quality`・`npm run quality`・`npm run trace:check`・`npm run architecture:check`・`npm run build`・`npm run package:check`・`npm run conformance:check` | 7 | 7 | 0 | 0 | pass |
 
 **上の全commandをCI（`.github/workflows/ci.yml`）と同じ順序で1本のchainとして実行し、途中終了なしで完走した。** `npm test`と`conformance:check`は直列である。
@@ -175,20 +198,17 @@
 
 | 項目 | 内容 |
 |---|---|
-| 独立reviewの外部証拠 | なし |
-| reviewerがPR author・実装commit authorと異なる | いいえ |
-| 観測したreview commentとapprovalの件数 | 0件（PR未作成のため） |
+| 独立reviewの外部証拠 | **あり。** 外部reviewer（CodeRabbit）がPR #1079 の本artifactへinline commentを2件付けた。checkの結論ではなくcommentの実体を観測している |
+| reviewerがPR author・実装commit authorと異なる | いいえ。PR authorと`H_impl` commit authorがいずれも`adachi-tatsuru`であり、本artifactを書いたreviewerも同じhuman authorityの下で動く |
+| 観測したreview commentとapprovalの件数 | **review comment 2件、approval 0件。** commentは`docs/reviews/99_課題1067のtrace-endpoint候補判別レビュー.md`の3節と9節に対するもので、いずれもラウンド3で`resolved`にした（5節のCR-01・CR-02） |
 
-外部証拠が無いため、正本の例外を参照する。
+**適用する例外は無い。** `.agent-skill-chain/review-exceptions.json`が持つ例外は`RVX-REPORTED-SUCCESS-WITHOUT-REVIEW-001`（kind `reported-success-without-review`）の1件だけである。その`condition`は「外部reviewerのcheckがpassと表示されるが、review commentもapprovalも存在せずreviewが実行されていない」であり、**本PRではreview commentが2件存在するため条件を満たさない。** したがってこの例外を適用しない。
 
-| 項目 | 内容 |
-|---|---|
-| 適用する例外の識別子 | `.agent-skill-chain/review-exceptions.json`の`independent-reviewer-absent`区分 |
-| 観測値 | 本PRのapproval reviewは0件である。本repositoryは単一のhuman ownerが運用しており、PR authorと`H_impl` commit authorがいずれも`adachi-tatsuru`である |
+**ラウンド2までの本節の記述は事実に反していた。** `independent-reviewer-absent`という区分を適用すると書いていたが、**その区分は正本に存在しない。** 外部reviewerの指摘（CR-02）を受けて実fileを読み、削除した。
 
-**承認元、承認者、承認日時、失効日時は正本を参照し、ここへ複製しない。**
+**残る事実を隠さず記録する。** approval reviewは0件であり、`H_final`への独立approval IDは存在しない。したがって本artifactの`approved`は**AIによる最終裁定**（6節のラウンド3）であって、人間の独立approvalではない。**mergeはrepository ownerのauthorityに依存する。** 本sessionのmerge authorityはrepository ownerから明示付与されている。
 
-**implementerとreviewerの分離は成立している。** implementerは`codex`の別invocation（別provider・別context）、reviewerは`claude`である。0.1節に開示した2件の逸脱を承認根拠に含めていない。
+**implementerとreviewerの分離は成立している。** implementerは`codex`の別invocation（別provider・別context）、reviewerは`claude`である。0.1節に開示した2件の逸脱を承認根拠に含めていない。**加えて、外部reviewerの指摘2件を受理して是正したことは、self_approveだけで閉じていないことの外部観測可能な証拠である。**
 
 ## 10. 仕様整合性
 
@@ -205,8 +225,8 @@
 
 - 未解決Critical/High: **0件。**
 - Medium/Lowの記録: ADV-01・ADV-02（いずれもLow、record-only）。AFF-01・AFF-02はresolved。
-- 判定: **approved**
+- 判定: **approved**（AIによる最終裁定。人間の独立approvalは0件であり、9節に事実として記録した）
 - 新しい権限が必要な事項: **なし。**
-- 残存リスク: 3件。(1) glob metacharacterの集合が6文字でありextglobを含まない（ADV-01）。(2) file名にglob metacharacterを含む実在fileは候補から外れて無検査になる（ADV-02）。(3) `docs/reviews/`のrole authority不整合（#1047へ委譲）。
+- 残存リスク: 3件。**CR-01・CR-02はラウンド3で解消したため残存リスクに数えない。** (1) glob metacharacterの集合が6文字でありextglobを含まない（ADV-01）。(2) file名にglob metacharacterを含む実在fileは候補から外れて無検査になる（ADV-02）。(3) `docs/reviews/`のrole authority不整合（#1047へ委譲）。
 - 次に許可される操作: **Step 11（`pr create`）。** その後CIが緑になってからmergeする。
-- 次回の再開地点: PR作成後、CIの結果確認から。CIが赤になった場合は**残り予算1のラウンド3**で是正を載せる。**mainが動いていた場合は`git rebase --onto origin/main <旧base> HEAD`で追随し、本artifactの`H_impl`・`比較基点`を更新して`amend`し、CIと同じmerge refを手元で再現して`audit:check`を確認してからpushする。**
+- 次回の再開地点: ラウンド3の是正をpushした後、CIの結果確認から。**予算を使い切ったため、以降CIが赤になった場合の正規のラウンドは存在しない**（#1074）。その場合は#1051・#1068の前例に倣い、最小是正をverifierの機械観測で再測して本artifactへ記録する。**mainが動いていた場合は`git rebase --onto origin/main <旧base> HEAD`で追随し、本artifactの`H_impl`・`比較基点`を更新して`amend`し、CIと同じmerge refを手元で再現して`audit:check`を確認してからpushする。**
