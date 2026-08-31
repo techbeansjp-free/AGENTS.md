@@ -902,6 +902,36 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       "npx agent-skill-chain pr merge --repo=owner/name --pr=909 --method=merge --staging=.agent-skill-chain/tmp/issues/20260830_120000_909-example --dry-run",
   },
   {
+    command: "pr",
+    subcommand: "reanchor",
+    summary: "rebase後のPR証跡を内容等価性つきで新headへ再固定する",
+    requiredFlags: [
+      flag("staging", "path", "対象Issue staging"),
+      flag("new-head", "sha", "rebase後のhead SHA"),
+      flag("new-base", "sha", "rebase後のbase SHA"),
+      flag("reason", "text", "再固定の理由"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG, ...APPLY_MODE],
+    example:
+      "npx agent-skill-chain pr reanchor --staging=.agent-skill-chain/tmp/issues/20260901_120000_example --new-head=$(git rev-parse HEAD) --new-base=$(git rev-parse origin/main) --reason=既定branchが動いたためrebaseした --dry-run",
+  },
+  {
+    command: "review",
+    subcommand: "reanchor",
+    summary: "PR作成前のreview証跡を内容等価性つきで新headへ再固定する",
+    requiredFlags: [
+      flag("staging", "path", "対象Issue staging"),
+      flag("new-head", "sha", "rebase後のhead SHA"),
+      flag("new-base", "sha", "rebase後のbase SHA"),
+      flag("reason", "text", "再固定の理由"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG, ...APPLY_MODE],
+    example:
+      "npx agent-skill-chain review reanchor --staging=.agent-skill-chain/tmp/issues/20260901_120000_example --new-head=$(git rev-parse HEAD) --new-base=$(git rev-parse origin/main) --reason=既定branchが動いたためrebaseした --dry-run",
+  },
+  {
     command: "install",
     summary: "host skillとmanaged assetを展開する",
     positional: "[root] 対象repositoryのroot。--rootの代わりに使える",

@@ -220,6 +220,11 @@ import {
   recordReviewRound,
 } from "./adapters/review-session.js";
 import {
+  appendEvidenceReanchor,
+  readEvidenceReanchorChain,
+} from "./adapters/evidence-reanchor.js";
+import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
+import {
   bindStoredPullRequest,
   claimStoredMergeDispatch,
   claimStoredPullRequestCreationDispatch,
@@ -411,7 +416,7 @@ function assertWorkflowReadyForDelivery(
   return inspection;
 }
 
-function assertCurrentReviewJournalBinding(
+export function assertCurrentReviewJournalBinding(
   staging: string,
   headSha: string,
 ): void {
@@ -426,7 +431,18 @@ function assertCurrentReviewJournalBinding(
   if (!step10?.reviewSession)
     throw new Error("PR作成には最新Step 10のreviewSession bindingが必要です");
   const binding = step10.reviewSession;
-  if (binding.headSha !== headSha)
+  /**
+   * **照合対象は生の記録headではなく、再固定chainから導出した実効HEADである。**
+   *
+   * 既定branchが動いてrebaseするとjournalのStep 10 bindingは旧headを指したままになる。
+   * 内容等価性を実証した再固定記録があるなら、その終端を照合対象にする。
+   * 記録が無ければchainは空で、実効HEADは記録headそのものになり判定は変更前と同一である。
+   */
+  const bindingEffectiveHead = deriveEffectiveHead({
+    records: readEvidenceReanchorChain(staging),
+    anchoredHeadSha: binding.headSha,
+  }).effectiveHeadSha;
+  if (bindingEffectiveHead !== headSha)
     throw new Error(
       "Step 10のreviewSession binding HEADがPR作成対象HEADと一致しません",
     );
@@ -435,10 +451,14 @@ function assertCurrentReviewJournalBinding(
     expectedDigest: binding.roundDigest,
     currentHeadSha: headSha,
   });
+  const sessionEffectiveHead = deriveEffectiveHead({
+    records: readEvidenceReanchorChain(staging),
+    anchoredHeadSha: session.latestCandidateHeadSha,
+  }).effectiveHeadSha;
   if (
     session.sessionId !== binding.sessionId ||
     session.latestRoundDigest !== binding.roundDigest ||
-    session.latestCandidateHeadSha !== binding.headSha
+    sessionEffectiveHead !== bindingEffectiveHead
   )
     throw new Error(
       "Step 10のreviewSession bindingが保存済み収束sessionと一致しません",
@@ -2368,6 +2388,55 @@ function printableMigration(value: unknown): unknown {
       return printable;
     }),
   };
+}
+
+/**
+ * `pr reanchor`と`review reanchor`の共通処理。
+ *
+ * **層の違いは`layer`だけである。** 判定と拒否条件はadapterが層ごとに決める。
+ * dispatch側で分岐を複製しない。
+ */
+function dispatchEvidenceReanchor(
+  input: {
+    apply: boolean;
+    root: string | undefined;
+    staging: string;
+    newHeadSha: string;
+    newBaseSha: string;
+    reason: string;
+    layer: "delivery" | "review";
+  },
+  dependencies: { now?: () => Date },
+): number {
+  const { apply, staging, newHeadSha, newBaseSha, reason, layer } = input;
+  const root = path.resolve(input.root ?? process.cwd());
+  if (!apply) {
+    print({
+      state: "preview",
+      layer,
+      chainLength: readEvidenceReanchorChain(staging).length,
+      newHeadSha,
+      newBaseSha,
+      next: "--applyで再固定を記録します",
+    });
+    return 0;
+  }
+  const result = appendEvidenceReanchor({
+    staging,
+    root,
+    layer,
+    newHeadSha,
+    newBaseSha,
+    reason,
+    recordedAt: (dependencies.now ?? (() => new Date()))().toISOString(),
+  });
+  print({
+    state: result.appended ? "reanchored" : "unchanged",
+    layer,
+    chainLength: result.chain.length,
+    effectiveHeadSha: result.effectiveHeadSha,
+  });
+  return 0;
 }
 
 function applyMode(flags: Flags): boolean {
@@ -6296,6 +6365,36 @@ export async function main(
     });
     print(result.output);
     return result.exitCode;
+  }
+  if (command === "pr" && subcommand === "reanchor") {
+    const { flags } = parse(rest);
+    return dispatchEvidenceReanchor(
+      {
+        apply: applyMode(flags),
+        root: typeof flags.root === "string" ? flags.root : undefined,
+        staging: required(flags, "staging"),
+        newHeadSha: required(flags, "new-head"),
+        newBaseSha: required(flags, "new-base"),
+        reason: required(flags, "reason"),
+        layer: "delivery",
+      },
+      dependencies,
+    );
+  }
+  if (command === "review" && subcommand === "reanchor") {
+    const { flags } = parse(rest);
+    return dispatchEvidenceReanchor(
+      {
+        apply: applyMode(flags),
+        root: typeof flags.root === "string" ? flags.root : undefined,
+        staging: required(flags, "staging"),
+        newHeadSha: required(flags, "new-head"),
+        newBaseSha: required(flags, "new-base"),
+        reason: required(flags, "reason"),
+        layer: "review",
+      },
+      dependencies,
+    );
   }
   if (command === "pr" && subcommand === "merge") {
     const { flags } = parse(rest);
