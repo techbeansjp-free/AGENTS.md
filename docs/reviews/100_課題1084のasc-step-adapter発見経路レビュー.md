@@ -8,17 +8,17 @@
 |---|---|
 | 対象 | 実装 |
 | 対象Issue | #1084 |
-| ラウンド | Step 10 ラウンド1〜2 |
+| ラウンド | Step 10 ラウンド1〜3 |
 | 比較基点 | `88358243f661fcb2b5bc32ec39f82e69a736d264` |
-| H_impl | `5a52107c53b938e3407a96e5f12ec9ab264ea59a` |
-| 比較基点の由来 | review開始時点の`origin/main`のtip。PR #1095（`v0.3.1-beta.54`のrelease bump）のmerge commitである |
+| H_impl | `fe2e9e9ca10fce87b8887a91256781714c7a6f75` |
+| 比較基点の由来 | review開始時点の`origin/main`のtip。PR #1095（`v0.3.1-beta.54`のrelease bump）のmerge commitである。前へ進めていない |
 | Step 10のreview session ID | `e07ba9953d554f0fd951491ee33b18ec6d8bb443d79c2db9ccc1d8646a3e5341` |
 | モード | full |
-| 対象差分 | `.agent-skill-chain/skills/asc-step/SKILL.md`、`test/features/unit/host-skill-adapter.feature`、`test/steps/host-skill-adapter.steps.ts`、`docs/specs/02_要件/02_プロジェクトライフサイクル要件.md`、`docs/specs/04_機能/01_ワークフローv0.3.md`、`docs/specs/15_要件追跡/00_追跡表.md`、`docs/specs/15_要件追跡/01_変更履歴.md`、および本artifact。commitは`51dffbd3`・`5a52107c` |
+| 対象差分 | `.agent-skill-chain/skills/asc-step/SKILL.md`、`test/features/unit/host-skill-adapter.feature`、`test/steps/host-skill-adapter.steps.ts`、`docs/specs/02_要件/02_プロジェクトライフサイクル要件.md`、`docs/specs/04_機能/01_ワークフローv0.3.md`、`docs/specs/15_要件追跡/00_追跡表.md`、`docs/specs/15_要件追跡/01_変更履歴.md`、および本artifact。commitは`51dffbd3`（実装）・`5a52107c`（ラウンド1是正）・`fe2e9e9c`（ラウンド2 artifact）。**ラウンド3の是正は本artifactのcommit自身であり、`H_impl`はその親`fe2e9e9c`になる。** |
 | 対象外 | `skills/00_利用案内.md`の表の中身と`WORKFLOW_STEPS`の機械照合（5節R1-N03）。hostのhook配布による読了強制（01のINV-04）。`description`の意味の機械検証（5節R1-B04の残余）。documentation変更に対するmode判定の粒度（5節R1-N07） |
-| 残り予算 | **1**（同一範囲で最大3ラウンド。総2ラウンドで設計している） |
-| ラウンド数 | 2。ラウンド1は実装差分`51dffbd3`、ラウンド2は是正`5a52107c`と本artifactを加えた版が対象である |
-| Step chain | 経由: `.agent-skill-chain/tmp/issues/20260901_100158_asc-step-adapterが一覧を指さずdescriptionが単発起動を誘発する` |
+| 残り予算 | **0**（同一範囲で最大3ラウンド。総2ラウンドで設計していたが、**ラウンド3で本artifactの書式不備2件を是正して使い切った**。6節を参照する） |
+| ラウンド数 | 3。ラウンド1は実装差分`51dffbd3`、ラウンド2は是正`5a52107c`と本artifactを加えた版、**ラウンド3は`audit:check`が検出した本artifactの書式不備2件の是正**が対象である |
+| Step chain | 経由: .agent-skill-chain/tmp/issues/20260901_100158_asc-step-adapterが一覧を指さずdescriptionが単発起動を誘発する |
 | 仕様の所有箇所 | `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md`のREQ-LC-002。**着手時点でこの節はadapter正本の内容契約を規定していなかった。** doctorの検証対象としてfrontmatter・正本link・hash・配置を挙げるのみである |
 | 成果物行数 | 製品 **+2 / −2行**（`asc-step/SKILL.md`の`description`行と手順3行）。仕様 **+4 / −3行**（要件+1/−1、機能+1/−1、追跡表+1/−1、変更履歴+1）。支援層 **+94行**（feature +7、steps +87）。staging 4文書は855行 |
 | 縮小の先行評価 | 5案を先に評価し全件不採用とした。(1) 一覧12件をadapterへ複製する案は`check_workflow_steps.ts:73`の唯一正本性を侵しdriftの起点を増やすため不採用。(2) hookを配布して読了を強制する案は、hostのhook設定が利用者所有・host固有形式で製品が握れず、読んだの自己申告を検証する独立oracleを持てないため不採用。(3) `skills/00_利用案内.md`へ追記する案は、同fileの「目的」節と「使い方」節が既にadapterの責務と12 Stepの一覧表を記述しており重複になるため不採用。(4) 配布先展開の新規SCNは、既存`SCN-INT-HOST-SKILL-001`が`deepEqual`でbyte一致を検査しており検出力を1 bitも足さないため不採用。(5) `directories:check`へadapterを足す案は、`GUIDE_DOCUMENTS`が入口文書8件の契約でありadapterがその類型でないため対象外。**新規のfeature fileもstep fileも作らず、既存2 fileへ1 scenarioだけを足した。** |
@@ -52,7 +52,7 @@
 - reviewer stable IDがPR author/provider観測済み`H_impl` author stable IDと異なる: **codex側は別provider。fable側は別contextだがproviderは同一である。** 0.1節の逸脱1に記載した。
 - 既定branch追随を行った場合: **行っていない。** `88358243`はreview開始時点の`origin/main`のtipである。
 
-### 1.1 変更ファイル個別監査
+## 変更ファイル個別監査
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
@@ -63,9 +63,9 @@
 | `docs/specs/04_機能/01_ワークフローv0.3.md` | M | package | spec | T09行のSCN範囲を`001〜002`から`001〜003`へ広げる | pass | 同上 | 同上 | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | package | spec | REQ-LC-002 unit行へSCN-003を登録し、実装列へ`asc-step/SKILL.md`を足す | pass。`trace:check`が`orphanScenarios: []` | 同上 | 同上 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | package | spec | 1行追記 | pass | 同上 | 同上 | pass |
-| `docs/reviews/100_課題1084のasc-step-adapter発見経路レビュー.md` | A | package | evidence | 本artifact。`H_impl..H_final`の唯一の差分 | pass | 全AC | — | pass |
+| `docs/reviews/100_課題1084のasc-step-adapter発見経路レビュー.md` | A | package | evidence | 本artifactのラウンド2版。**ラウンド3で書式を是正したため`H_impl`が`fe2e9e9c`へ動き、ラウンド2版が監査対象に入る** | pass。実行codeを持たない | 全AC | 内容を戻せば復旧する | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: **`git diff --name-status 88358243 HEAD`の7 pathと本artifactの合計8 pathが一致する。**
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: **`比較基点..H_impl`すなわち`88358243..fe2e9e9c`の8 pathと本表の8行が一致する。** ラウンド3が本artifactへの前進commitであるため`H_impl`はラウンド2のartifact commitになり、ラウンド2版のartifactが監査対象へ入る。`H_impl..H_final`は本artifactの1 fileだけである。
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: **成立する。** 追加したのは文書と受け入れtestだけで、実行authorityを持つcodeを1行も変えていない。
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: **ラウンド1の是正は`SKILL.md`・`steps.ts`・仕様2 fileに閉じており、他のpathへ波及していない。**
 
@@ -137,6 +137,8 @@
 | R1-N05 | Medium | `00_要求定義.md`の対象外根拠「この索引が劣化しても発見経路は壊れない」を本差分自身が無効化した | R1-N03と同じ穴を要求定義側から見たもの | staging | 00の対象外根拠を実態へ書き換えた | resolved | R1-N03と同じ |
 | R1-N06 | Low | 追跡表の実装列に`asc-step/SKILL.md`が無い | 同表のREQ-LC-009行が非TS資産を実装列へ列挙している前例と不整合 | `docs/specs/15_要件追跡/00_追跡表.md` | 実装列へ追加 | resolved | なし |
 | R1-N07 | Medium | 支援層と成果物構築の所要時間比が運用ポリシーの観測1を僅かに超える | journalの`recordedAt`実測。Step 0が`01:01:58Z`、Step 8が`01:30:04Z`、Step 9が`01:57:16Z`。支援層28分06秒、成果物構築27分12秒、比1.03倍 | 全体 | 縮小案2件を03へ記録 | valid（owner決裁事項） | **modeを進行役が単独で縮小できない。** Q-01〜Q-08は配布物への外部契約変更をfull条件としており、2行のmarkdown変更でも855行のstagingを要求する |
+| R3-B01 | Medium | 本artifactの個別監査表の見出しが`audit:check`のparserにmatchせず表の行が0件と読まれた | `npm run audit:check`が`個別監査とGit差分path集合が一致しません: expected=7 actual=0`を返した。`scripts/check_file_audit.ts:694`は`## 変更ファイル個別監査`で分割する | 本artifact | 見出しを`## 変更ファイル個別監査`へ直し、artifact自身の行を表から除いた | resolved | なし |
+| R3-B02 | Medium | Step chainのcell値をbacktickで囲んだため申告が読まれなかった | `audit:check`がStep chainの申告が無いと報告した。`identitySection`が`withoutMarkdownCode`でcode spanを除去する | 本artifact | backtickを外した | resolved | なし |
 
 ## 6. ラウンド固有の確認
 
@@ -155,7 +157,10 @@
 
 ### ラウンド3
 
-- 未実施。予算1を残す。
+- 全指摘の最終分類: **15件のうちresolved 11件、valid（対象外または記録）4件。** 未解決のCritical/Highはない。
+- 任意の危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: **縮小した危険範囲はない。** 本変更は状態を書き込まず不可逆操作を持たない。
+- 同じ範囲の予算を自動更新していない: **成立する。** 総3ラウンドで打ち切る。
+- AIによる最終裁定: **approved。** ラウンド3は`npm run audit:check`が検出した本artifactの書式不備2件の是正である。製品・仕様・testの差分は1行も変えていない。
 
 ## 7. テスト結果
 
