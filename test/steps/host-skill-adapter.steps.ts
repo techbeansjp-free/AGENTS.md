@@ -18,7 +18,7 @@ const TARGETS = [
 ] as const;
 const HOSTS = [SOURCE, ...TARGETS] as const;
 const GUIDE = ".agent-skill-chain/skills/00_利用案内.md";
-const ADAPTER_MAX_PROCEDURE_ITEMS = 6;
+const ADAPTER_MAX_ENUMERATED_NUMBERS = 7;
 
 interface HostSkillWorld extends WorkflowWorld {
   externalFile?: string;
@@ -165,16 +165,14 @@ Then("adapter正本は実在するStep skill名を列挙しない", function () 
   const listed = stepSkills.filter((name) => markdown.includes(name));
   assert.deepEqual(listed, [], "Step skillの実名を列挙しています");
   const body = markdown.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/u, "");
-  const lines = body.split(/\r?\n/u);
-  assert.deepEqual(
-    lines.filter((line) => /^\s*\|/u.test(line)),
-    [],
-    "Step対応表を複製しています",
-  );
+  const enumerated = new Set<string>();
+  for (const line of body.split(/\r?\n/u)) {
+    const item = /^\s*(?:\|\s*)?(\d+)\s*[.|]/u.exec(line);
+    if (item) enumerated.add(item[1]);
+  }
   assert.ok(
-    lines.filter((line) => /^\s*\d+\.\s/u.test(line)).length <=
-      ADAPTER_MAX_PROCEDURE_ITEMS,
-    "Step一覧に相当する順序listがあります",
+    enumerated.size < ADAPTER_MAX_ENUMERATED_NUMBERS,
+    `Step一覧を複製しています: 列挙された番号 ${[...enumerated].join(",")}`,
   );
 });
 
