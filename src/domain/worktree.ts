@@ -628,6 +628,7 @@ export function inspectFinalizeState(
     reviewApproved: evidence.reviewApproved,
     recoveryRef: recovery.recoveryRef,
     recoveryReachable: recovery.recoveryReachable,
+    reachableFromDefaultBranch: recovery.reachableFromDefaultBranch,
   };
 }
 
@@ -656,21 +657,19 @@ export function inspectRecoveryState(
       allowFailure: true,
     }).status === 0;
   /**
-   * **既定branchから到達できるなら、upstream refの状態にかかわらずcommitはremoteに在る。**
+   * **`pushed`・`remoteBranch`・`recoveryRef`の意味は変えない。**
    *
-   * `pushed`と`remoteBranch`と`recoveryRef`はどれも「commitがremoteに在るか」の代理でしかない。
-   * PRがmergeされてremote branchが削除されると代理は不成立になるが、commitは既定branchの
-   * 履歴に残っている（Issue #1097）。**代理ではなく実際に測る。**
+   * これらはupstream refについての独立した観測である。既定branchからの到達可能性を
+   * 根拠にこれらを真へ書き換えると、観測の意味を上書きすることになり、判定側で
+   * 他fieldから安全を推定するのと同じ誤りになる（Issue #1097のreview指摘）。
    *
-   * 判定側（`assessWorktreeRemovalSafety`）は変更しない。REQ-LC-009が「他の観測から
-   * 安全状態を推定せずretainとする」と定めており、判定側で別fieldを根拠に理由を抑制すると
-   * 同要件に反する。**是正するのは観測の側である。**
+   * 到達可能性は`reachableFromDefaultBranch`という**独立したfield**として報告し、
+   * それをどう使うかは判定側の責務にする。
    */
   return {
-    pushed: pushed || reachableFromDefaultBranch,
-    remoteBranch: upstream.status === 0 || reachableFromDefaultBranch,
-    recoveryRef:
-      recoveryRef ?? (reachableFromDefaultBranch ? defaultRef : undefined),
+    pushed,
+    remoteBranch: upstream.status === 0,
+    recoveryRef,
     reachableFromDefaultBranch,
     recoveryReachable:
       (Boolean(recoveryRef) && pushed) || reachableFromDefaultBranch,

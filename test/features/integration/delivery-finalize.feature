@@ -333,3 +333,15 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When finalize reportを作成する
     Then finalize reportはsafeである
 
+  Scenario: SCN-INT-FINALIZE-007 既定branch到達が不明ならremote branch削除後もsafeにしない
+    Given merged、clean、pushed、recoveryありのworktree stateがある
+    And finalize stateをmerged-remote-deleted-unknownにする
+    When finalize reportを作成する
+    Then finalize reportはsafeでない
+
+  Scenario: SCN-INT-FINALIZE-008 復旧参照の不在は既定branch到達が不明なら免除しない
+    Given merged、clean、pushed、recoveryありのworktree stateがある
+    And finalize stateをrecovery-ref-missing-unknownにする
+    When finalize reportを作成する
+    Then finalize reportはsafeでない
+

@@ -101,8 +101,13 @@ Feature: 登録済みworktreeを安全側に分類する
     When 復旧可能性を観測する
     Then 既定branch到達は"偽"である
 
-  Scenario: SCN-UNIT-WTSURVEY-021 既定branch到達が成立するとupstream由来の観測も成立する
-    Given 既定branchへmerge済みでupstreamを失ったworktreeがある
-    When 復旧可能性を観測する
-    Then upstream由来の観測はすべて成立する
+  Scenario: SCN-UNIT-WTSURVEY-021 既定branch到達を観測できたときupstream由来の拒否理由を出さない
+    Given 既定branch到達を観測できupstream由来の観測が偽の入力がある
+    When worktree削除の安全性を判定する
+    Then 拒否理由にupstream由来は含まれない
+
+  Scenario: SCN-UNIT-WTSURVEY-022 既定branch到達が不明ならupstream由来の拒否理由を出す
+    Given 既定branch到達が不明でupstream由来の観測が偽の入力がある
+    When worktree削除の安全性を判定する
+    Then 拒否理由にupstream由来が含まれる
 

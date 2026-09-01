@@ -838,7 +838,12 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "計画報告の承認hash",
         "--applyを指定するとき",
       ),
-      conditional("merge-sha", "sha", "merge済みSHA", "常に必要"),
+      conditional(
+        "merge-sha",
+        "sha",
+        "merge済みSHA",
+        "--completeまたは--update-rootを指定するとき",
+      ),
       conditional(
         "approved-digest",
         "sha256",

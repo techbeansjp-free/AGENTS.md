@@ -26,6 +26,7 @@ export interface WorktreeObservation {
   pushed: boolean;
   remoteBranch: boolean;
   recoveryReachable: boolean;
+  reachableFromDefaultBranch?: boolean;
 }
 
 export interface WorktreeSurveyEntry {
@@ -57,6 +58,7 @@ const OBSERVATION_FIELDS = new Set([
   "pushed",
   "remoteBranch",
   "recoveryReachable",
+  "reachableFromDefaultBranch",
 ]);
 
 function emptySurvey(errors: string[] = []): WorktreeSurvey {
@@ -113,6 +115,18 @@ function validationErrors(value: unknown, index: number): string[] {
     Number(value.unpushedCommits) < 0
   )
     errors.push(`${prefix}.unpushedCommitsは0以上の整数でなければなりません`);
+  /**
+   * `reachableFromDefaultBranch`は省略可能だが、与えるならbooleanでなければならない。
+   * **不正値をundefinedとして扱わない。** 免除の根拠になるfieldであり、
+   * 不明を免除へ倒すとREQ-LC-009のfail-closedに反する（Issue #1097）。
+   */
+  if (
+    value.reachableFromDefaultBranch !== undefined &&
+    typeof value.reachableFromDefaultBranch !== "boolean"
+  )
+    errors.push(
+      `${prefix}.reachableFromDefaultBranchはbooleanでなければなりません`,
+    );
   return errors;
 }
 
@@ -139,6 +153,7 @@ function classify(
     remoteBranch: observation.remoteBranch,
     merged: observation.mergedIntoDefault,
     recoveryReachable: observation.recoveryReachable,
+    reachableFromDefaultBranch: observation.reachableFromDefaultBranch,
     unpushedCommits: observation.unpushedCommits,
   });
   const reasons = assessment.reasons;

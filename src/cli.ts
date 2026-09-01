@@ -2575,14 +2575,8 @@ function collectWorktreeSurvey(root: string): WorktreeSurvey {
             reachableFromDefaultBranch: true,
           }
         : inspectRecoveryState(worktree.path);
-      /**
-       * **既定branchから到達できるcommitは未pushではない。**
-       * upstream refが削除・陳腐化していても、commitは既定branchの履歴に在る（Issue #1097）。
-       */
       let unpushedCommits = 0;
-      if (recovery.reachableFromDefaultBranch) {
-        unpushedCommits = 0;
-      } else if (upstream.status === 0) {
+      if (upstream.status === 0) {
         const count = git(
           [
             "rev-list",
@@ -2627,6 +2621,7 @@ function collectWorktreeSurvey(root: string): WorktreeSurvey {
         pushed: recovery.pushed,
         remoteBranch: recovery.remoteBranch,
         recoveryReachable: recovery.recoveryReachable,
+        reachableFromDefaultBranch: recovery.reachableFromDefaultBranch,
       });
     } catch (error) {
       errors.push(

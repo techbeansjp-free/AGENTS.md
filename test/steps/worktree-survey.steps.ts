@@ -13,11 +13,17 @@ import {
   type WorktreeSurvey,
 } from "../../src/domain/worktree-survey.js";
 import { inspectRecoveryState } from "../../src/domain/worktree.js";
+import {
+  assessWorktreeRemovalSafety,
+  type WorktreeRemovalSafetyObservation,
+} from "../../src/domain/worktree-removal-safety.js";
 import { init } from "../../src/domain/lifecycle.js";
 
 interface SurveyWorld extends WorkflowWorld {
   remote: string;
   recovery: ReturnType<typeof inspectRecoveryState>;
+  safety: ReturnType<typeof assessWorktreeRemovalSafety>;
+  removalObservation: WorktreeRemovalSafetyObservation;
   ignoredOutputBytes: number;
   input: unknown;
   survey: WorktreeSurvey;
@@ -478,8 +484,63 @@ Then("既定branch到達は{string}である", function (expected: string) {
   assert.equal(this.recovery.reachableFromDefaultBranch, expected === "真");
 });
 
-Then("upstream由来の観測はすべて成立する", function () {
-  assert.equal(this.recovery.pushed, true);
-  assert.equal(this.recovery.remoteBranch, true);
-  assert.notEqual(this.recovery.recoveryRef, undefined);
+const UPSTREAM_DERIVED = [
+  "未pushのcommit",
+  "コミットがpushされていません",
+  "リモートブランチがありません",
+];
+
+function removalObservation(
+  overrides: Partial<WorktreeRemovalSafetyObservation> = {},
+): WorktreeRemovalSafetyObservation {
+  return {
+    repositoryRoot: "/repo",
+    worktreePath: "/repo/.worktrees/20260825_120000-883-survey",
+    worktreeRoot: "/repo/.worktrees",
+    trackedChanges: false,
+    untracked: [],
+    ignoredArtifacts: [],
+    ignoredPathAllowlist: [],
+    stashes: [],
+    pushed: false,
+    remoteBranch: false,
+    merged: true,
+    recoveryReachable: true,
+    unpushedCommits: 2,
+    ...overrides,
+  };
+}
+
+Given(
+  "既定branch到達を観測できupstream由来の観測が偽の入力がある",
+  function () {
+    this.removalObservation = removalObservation({
+      reachableFromDefaultBranch: true,
+    });
+  },
+);
+
+Given("既定branch到達が不明でupstream由来の観測が偽の入力がある", function () {
+  this.removalObservation = removalObservation();
+});
+
+When("worktree削除の安全性を判定する", function () {
+  this.safety = assessWorktreeRemovalSafety(this.removalObservation);
+});
+
+Then("拒否理由にupstream由来は含まれない", function () {
+  const reasons: readonly string[] = this.safety.reasons;
+  const matched = reasons.filter((reason: string) =>
+    UPSTREAM_DERIVED.some((needle) => reason.includes(needle)),
+  );
+  assert.deepEqual(matched, []);
+});
+
+Then("拒否理由にupstream由来が含まれる", function () {
+  const reasons: readonly string[] = this.safety.reasons;
+  for (const needle of UPSTREAM_DERIVED.slice(0, 1).concat(UPSTREAM_DERIVED[2]))
+    assert.ok(
+      reasons.some((reason: string) => reason.includes(needle)),
+      `${needle}がありません: ${reasons.join(" / ")}`,
+    );
 });
