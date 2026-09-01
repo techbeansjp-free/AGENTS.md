@@ -198,10 +198,43 @@ export function normalizeLockfileForProtection(raw: string): string {
   return stableJson(normalized);
 }
 
-function protectedFileContent(root: string, relative: string): string | Buffer {
+type ProtectedFileRead =
+  { readonly content: string | Buffer } | { readonly reason: string };
+
+/**
+ * 保護対象fileの内容を読む。
+ *
+ * **欠損を未捕捉例外にしない。** この関数はenforcement exportである
+ * `checkProjectQualityContract`の内側で呼ばれ、同exportは構造化された`errors`を返す契約を持つ。
+ * 例外はその契約に反し、「保護対象fileが候補で削除された」という現実の事故・攻撃の形を
+ * error名ではなくstack traceとして現す。読めない場合は理由を返し、呼び出し側がerrorへ積む。
+ *
+ * **欠損と読めないことを区別する。** 前者は削除、後者は権限・種別の異常であり、
+ * 次に採る操作が違う。
+ */
+function protectedFileContent(
+  root: string,
+  relative: string,
+): ProtectedFileRead {
   const absolute = path.join(root, relative);
-  if (relative !== "package-lock.json") return fs.readFileSync(absolute);
-  return normalizeLockfileForProtection(fs.readFileSync(absolute, "utf8"));
+  let raw: Buffer;
+  try {
+    raw = fs.readFileSync(absolute);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return {
+      reason:
+        code === "ENOENT"
+          ? "存在しません"
+          : `読み取れません（${code ?? "不明"}）`,
+    };
+  }
+  return {
+    content:
+      relative === "package-lock.json"
+        ? normalizeLockfileForProtection(raw.toString("utf8"))
+        : raw,
+  };
 }
 
 /**
@@ -220,16 +253,33 @@ function candidateProtectedFiles(root: string): readonly string[] | undefined {
   return [...block[1].matchAll(/"([^"]+)"/gu)].map((match) => match[1]!);
 }
 
+/**
+ * 保護対象のsnapshotを作る。
+ *
+ * **読めなかったfileはsnapshotへ載せず、どちら側かを名指しして`errors`へ積む。**
+ * trusted側の欠損は基準の破損、candidate側の欠損は候補の異常であり意味が違う。
+ *
+ * **fail-closedを成立させるのは`errors`への追加であって、snapshotへ載せないことではない。**
+ * 後段の`actualChanges`は`after === undefined`をskipするため、載せないだけなら
+ * 候補による保護対象fileの削除が変更として検出されずに通る。空hashや既定値で
+ * 代替しないのは偽の一致を作らないためであり、それ自体は安全側の根拠にならない。
+ */
 function protectedSnapshot(
   root: string,
   metadata: Record<string, unknown>,
+  side: "trusted" | "candidate",
+  errors: string[],
 ): Map<string, string> {
   const snapshot = new Map<string, string>();
-  for (const relative of PROTECTED_FILES)
-    snapshot.set(
-      `file:${relative}`,
-      sha256(protectedFileContent(root, relative)),
-    );
+  const sideLabel = side === "trusted" ? "trusted base" : "候補";
+  for (const relative of PROTECTED_FILES) {
+    const read = protectedFileContent(root, relative);
+    if ("reason" in read) {
+      errors.push(`${sideLabel}の保護対象file ${relative} が${read.reason}`);
+      continue;
+    }
+    snapshot.set(`file:${relative}`, sha256(read.content));
+  }
   for (const field of PROTECTED_PACKAGE_FIELDS)
     snapshot.set(
       `packageField:${field}`,
@@ -458,8 +508,18 @@ function validateTrustedQualityMigration(
   }
   const trustedVersion = qualityContractVersion(trustedMetadata);
   const candidateVersion = qualityContractVersion(metadata);
-  const trustedSnapshot = protectedSnapshot(trustedRoot, trustedMetadata);
-  const candidateSnapshot = protectedSnapshot(root, metadata);
+  const trustedSnapshot = protectedSnapshot(
+    trustedRoot,
+    trustedMetadata,
+    "trusted",
+    errors,
+  );
+  const candidateSnapshot = protectedSnapshot(
+    root,
+    metadata,
+    "candidate",
+    errors,
+  );
   errors.push(...validateProtectionBootstrap(root, trustedRoot));
   for (const proposal of candidateRegistry.proposals) {
     if (trustedById.has(proposal.proposalId)) continue;

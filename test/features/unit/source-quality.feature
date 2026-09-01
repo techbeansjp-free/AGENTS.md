@@ -51,3 +51,23 @@ Feature: project固有の型品質と汎用開発考慮事項
     Given 型不正なmigration manifestとstateの外部JSONがある
     When CLIの入力種別別runtime validatorを実行する
     Then 型不正と未知fieldを副作用前に拒否する
+
+  Scenario: SCN-UNIT-QUALITY-011 候補側の保護対象file欠損を構造化errorとして拒否する
+    Given 候補から保護対象fileを1件削除したprojectがある
+    When trusted品質契約migrationを検証する
+    Then 候補側の保護対象file欠損をerrorとして名指しする
+
+  Scenario: SCN-UNIT-QUALITY-012 trusted側の保護対象file欠損を候補側と区別して報告する
+    Given trusted baseから保護対象fileを1件削除したprojectがある
+    When trusted品質契約migrationを検証する
+    Then trusted base側の保護対象file欠損をerrorとして名指しする
+
+  Scenario: SCN-UNIT-QUALITY-013 存在しないことと読み取れないことを区別する
+    Given 候補の保護対象fileをdirectoryへ置き換えたprojectがある
+    When trusted品質契約migrationを検証する
+    Then 候補側の読み取り不能をerrno付きで報告する
+
+  Scenario: SCN-UNIT-QUALITY-014 正規化経路を持つ保護対象fileの欠損も報告する
+    Given 候補からpackage-lock.jsonを削除したprojectがある
+    When trusted品質契約migrationを検証する
+    Then 候補側のpackage-lock.json欠損をerrorとして名指しする
