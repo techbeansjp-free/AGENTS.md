@@ -167,7 +167,7 @@ Then("adapter正本は実在するStep skill名を列挙しない", function () 
   const body = markdown.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/u, "");
   const enumerated = new Set<string>();
   for (const line of body.split(/\r?\n/u)) {
-    const item = /^\s*(?:\|\s*)?(\d+)\s*[.|]/u.exec(line);
+    const item = /^\s*(?:\|\s*)?(\d+)\s*[.)|]/u.exec(line);
     if (item) enumerated.add(item[1]);
   }
   assert.ok(
