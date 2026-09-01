@@ -118,6 +118,7 @@ export interface WorktreeCleanupPlanInput {
   pushed: boolean | undefined;
   remoteBranch?: boolean | undefined;
   recoveryReachable: boolean | undefined;
+  reachableFromDefaultBranch?: boolean;
   consumerAssets?: string[];
   untracked?: unknown;
   stashes?: unknown;
@@ -263,6 +264,7 @@ export function planWorktreeCleanup(input: WorktreeCleanupPlanInput): {
     remoteBranch: input.remoteBranch,
     merged: input.prMerged,
     recoveryReachable: input.recoveryReachable,
+    reachableFromDefaultBranch: input.reachableFromDefaultBranch,
   });
   reasons.push(...safety.reasons);
   return {
@@ -715,6 +717,7 @@ interface FinalizeState {
   testsPassed?: boolean | "unknown";
   reviewApproved?: boolean | "unknown";
   recoveryReachable?: boolean;
+  reachableFromDefaultBranch?: boolean;
   recoveryRef?: string;
   [key: string]: unknown;
 }
@@ -761,6 +764,7 @@ export function buildFinalizeReport(state: FinalizeState) {
     remoteBranch: state.remoteBranch,
     merged: state.prMerged === "unknown" ? undefined : state.prMerged,
     recoveryReachable: state.recoveryReachable,
+    reachableFromDefaultBranch: state.reachableFromDefaultBranch,
   });
   reasons.push(...safety.reasons);
   const requiredTruth: Array<[keyof FinalizeState, string]> = [
@@ -770,7 +774,12 @@ export function buildFinalizeReport(state: FinalizeState) {
   ];
   for (const [field, label] of requiredTruth)
     if (state[field] !== true) reasons.push(label);
-  if (!state.recoveryRef) reasons.push("復旧参照がありません");
+  /**
+   * 復旧参照の不在も、既定branchからの到達を**明示的に観測できたとき**だけ免除する
+   * （Issue #1097）。`undefined`は免除しない。
+   */
+  if (!state.recoveryRef && state.reachableFromDefaultBranch !== true)
+    reasons.push("復旧参照がありません");
   const snapshot = structuredClone({
     ...state,
     ignoredPathAllowlist:

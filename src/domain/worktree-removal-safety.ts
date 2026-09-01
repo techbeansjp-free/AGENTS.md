@@ -89,6 +89,7 @@ export interface WorktreeRemovalSafetyObservation {
   remoteBranch: boolean | undefined;
   merged: boolean | undefined;
   recoveryReachable: boolean | undefined;
+  reachableFromDefaultBranch?: boolean;
   unpushedCommits?: number;
 }
 
@@ -154,15 +155,30 @@ export function assessWorktreeRemovalSafety(
     reasons.push("stashがあるか状態が不明です");
   else if (observation.stashes.length > 0) reasons.push("stashがあります");
 
-  if (
-    typeof observation.unpushedCommits === "number" &&
-    observation.unpushedCommits > 0
-  )
-    reasons.push(`未pushのcommitが${observation.unpushedCommits}件あります`);
-  else if (observation.pushed !== true)
-    reasons.push("コミットがpushされていません");
-  if (observation.remoteBranch !== true)
-    reasons.push("リモートブランチがありません");
+  /**
+   * **upstream ref由来の理由は、既定branchからの到達を明示的に観測できたときだけ免除する。**
+   *
+   * 未push、push未実施、remote branch不在はいずれも「commitがremoteに在るか」の代理である。
+   * HEADが既定branchから到達できると**観測できた**なら、その代理が不成立でもcommitは
+   * remoteに存在する（Issue #1097）。
+   *
+   * **免除の根拠は`reachableFromDefaultBranch`が真であることだけに限る。** `undefined`は
+   * 免除しない。REQ-LC-009が「観測が不正または不明な場合は他の観測から安全状態を推定せず
+   * retainとする」と定めており、不明を免除に使うとその要件に反する。
+   */
+  const recoverableFromDefaultBranch =
+    observation.reachableFromDefaultBranch === true;
+  if (!recoverableFromDefaultBranch) {
+    if (
+      typeof observation.unpushedCommits === "number" &&
+      observation.unpushedCommits > 0
+    )
+      reasons.push(`未pushのcommitが${observation.unpushedCommits}件あります`);
+    else if (observation.pushed !== true)
+      reasons.push("コミットがpushされていません");
+    if (observation.remoteBranch !== true)
+      reasons.push("リモートブランチがありません");
+  }
   if (observation.merged !== true)
     reasons.push("対象PRがマージ済みではないか観測が不明です");
   if (observation.recoveryReachable !== true)

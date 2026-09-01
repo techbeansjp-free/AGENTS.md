@@ -628,6 +628,7 @@ export function inspectFinalizeState(
     reviewApproved: evidence.reviewApproved,
     recoveryRef: recovery.recoveryRef,
     recoveryReachable: recovery.recoveryReachable,
+    reachableFromDefaultBranch: recovery.reachableFromDefaultBranch,
   };
 }
 
@@ -649,12 +650,48 @@ export function inspectRecoveryState(
   const recoveryRef =
     upstream.status === 0 ? upstream.stdout.trim() : undefined;
   const pushed = remoteSha.status === 0 && remoteSha.stdout.trim() === headSha;
+  const defaultRef = resolveDefaultBranchRef(worktreePath);
+  const reachableFromDefaultBranch =
+    defaultRef !== undefined &&
+    git(["merge-base", "--is-ancestor", headSha, defaultRef], worktreePath, {
+      allowFailure: true,
+    }).status === 0;
+  /**
+   * **`pushed`・`remoteBranch`・`recoveryRef`の意味は変えない。**
+   *
+   * これらはupstream refについての独立した観測である。既定branchからの到達可能性を
+   * 根拠にこれらを真へ書き換えると、観測の意味を上書きすることになり、判定側で
+   * 他fieldから安全を推定するのと同じ誤りになる（Issue #1097のreview指摘）。
+   *
+   * 到達可能性は`reachableFromDefaultBranch`という**独立したfield**として報告し、
+   * それをどう使うかは判定側の責務にする。
+   */
   return {
     pushed,
     remoteBranch: upstream.status === 0,
     recoveryRef,
-    recoveryReachable: Boolean(recoveryRef) && pushed,
+    reachableFromDefaultBranch,
+    recoveryReachable:
+      (Boolean(recoveryRef) && pushed) || reachableFromDefaultBranch,
   };
+}
+
+/**
+ * 既定branchのremote-tracking refを解決する。
+ *
+ * 既定branch名は利用側が所有するため`refs/remotes/origin/HEAD`から解決し、hard codeしない。
+ * **解決できない場合は`undefined`を返し、呼び出し側で到達不成立へ倒す。** 観測できないことを
+ * 到達可能の根拠にしない（Issue #1097）。
+ */
+function resolveDefaultBranchRef(worktreePath: string): string | undefined {
+  const symbolic = git(
+    ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+    worktreePath,
+    { allowFailure: true },
+  );
+  if (symbolic.status !== 0) return undefined;
+  const ref = symbolic.stdout.trim();
+  return ref.length === 0 ? undefined : ref;
 }
 
 export { githubRepository };

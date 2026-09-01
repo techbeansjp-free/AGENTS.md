@@ -842,7 +842,19 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "merge-sha",
         "sha",
         "merge済みSHA",
-        "--update-rootを指定するとき",
+        "--completeまたは--update-rootを指定するとき",
+      ),
+      conditional(
+        "approved-digest",
+        "sha256",
+        "cleanup previewの承認digest",
+        "--completeで実際に後片付けするとき",
+      ),
+      conditional(
+        "cleanup-authority",
+        "",
+        "worktree cleanup操作の明示authority",
+        "--completeで実際に後片付けするとき",
       ),
     ],
     optionalFlags: [

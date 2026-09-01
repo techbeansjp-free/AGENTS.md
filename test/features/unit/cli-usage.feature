@@ -70,3 +70,9 @@ Feature: CLIの必須flagとusageを1回の実行で提示する
     Given CLI usage単体検査の準備がある
     When "SCN-UNIT-CLIUSAGE-014"のCLI usage単体検査を実行する
     Then CLI usage単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-CLIUSAGE-015 worktree finalizeのusageが完了処理に要るflagを宣言する
+    Given CLI usage正本がある
+    When "worktree finalize"のusage宣言を検査する
+    Then usageは"--merge-sha"と"--approved-digest"と"--cleanup-authority"を宣言する
+

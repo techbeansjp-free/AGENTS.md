@@ -2567,6 +2567,14 @@ function collectWorktreeSurvey(root: string): WorktreeSurvey {
         worktree.path,
         { allowFailure: true },
       );
+      const recovery = isPrimary
+        ? {
+            recoveryReachable: true,
+            pushed: true,
+            remoteBranch: true,
+            reachableFromDefaultBranch: true,
+          }
+        : inspectRecoveryState(worktree.path);
       let unpushedCommits = 0;
       if (upstream.status === 0) {
         const count = git(
@@ -2579,9 +2587,6 @@ function collectWorktreeSurvey(root: string): WorktreeSurvey {
         ).stdout.trim();
         unpushedCommits = Number(count);
       } else withoutUpstream.add(worktree.path);
-      const recovery = isPrimary
-        ? { recoveryReachable: true, pushed: true, remoteBranch: true }
-        : inspectRecoveryState(worktree.path);
       const ignoredArtifacts = git(
         ["ls-files", "--others", "--ignored", "--exclude-standard", "-z"],
         worktree.path,
@@ -2616,6 +2621,7 @@ function collectWorktreeSurvey(root: string): WorktreeSurvey {
         pushed: recovery.pushed,
         remoteBranch: recovery.remoteBranch,
         recoveryReachable: recovery.recoveryReachable,
+        reachableFromDefaultBranch: recovery.reachableFromDefaultBranch,
       });
     } catch (error) {
       errors.push(
@@ -2976,28 +2982,35 @@ function cleanupEmptyWorktreeContainer(root: string): {
   }
 }
 
+/**
+ * 完了処理で使う入力は呼び出し元が明示的に渡す。
+ *
+ * 以前は`flags`から`merge-sha`・`approved-digest`・`cleanup-authority`をこの関数の中で
+ * 掘り出していた。`scripts/check_cli_usage.ts`はdispatch blockの中しか走査しないため、
+ * **3つのflagがusage契約の検査から不可視になり、usage正本が宣言しないまま実装だけが
+ * 読む状態が残っていた**（Issue #1097）。明示的な入力にして検査へ露出させる。
+ */
 function executeCompletionFlow(input: {
-  flags: Flags;
   apply: boolean;
   root: string;
   target: string;
   evidence: ReturnType<typeof readFinalizeEvidence>;
+  mergeSha: string;
+  approvedDigest: string;
+  cleanupAuthorityGranted: boolean;
+  authorized: boolean;
 }): number {
-  const { flags, apply, root, target, evidence } = input;
-  if (flags.complete !== true)
-    throw new Error("--completeは値を付けずに指定してください");
-  if (
-    flags["cleanup-authority"] !== undefined &&
-    flags["cleanup-authority"] !== true
-  )
-    throw new Error("--cleanup-authorityは値を付けずに指定してください");
-  const cleanupAuthorityGranted = flags["cleanup-authority"] === true;
+  const {
+    apply,
+    root,
+    target,
+    evidence,
+    mergeSha,
+    approvedDigest,
+    cleanupAuthorityGranted,
+    authorized,
+  } = input;
   const ignoredPathAllowlist = finalizeIgnoredPathAllowlist(root);
-  const mergeSha = required(flags, "merge-sha");
-  const approvedDigest =
-    typeof flags["approved-digest"] === "string"
-      ? flags["approved-digest"]
-      : "";
   const initialRootObservation = observeRootUpdate(root, mergeSha);
   const initialRootPlan = planRootUpdate(initialRootObservation);
   const targetPresent = pathExists(target);
@@ -3066,7 +3079,7 @@ function executeCompletionFlow(input: {
     });
     return initialPlan.state === "ready" ? 0 : 1;
   }
-  if (flags.authorize !== "approved")
+  if (!authorized)
     throw new Error(
       "root更新を含む完了処理の適用には--authorize=approvedが必要です",
     );
@@ -5574,8 +5587,28 @@ export async function main(
     const root = path.resolve(required(flags, "root"));
     const target = path.resolve(required(flags, "path"));
     const evidence = readFinalizeEvidence(required(flags, "evidence"));
-    if (flags.complete !== undefined)
-      return executeCompletionFlow({ flags, apply, root, target, evidence });
+    if (flags.complete !== undefined) {
+      if (flags.complete !== true)
+        throw new Error("--completeは値を付けずに指定してください");
+      if (
+        flags["cleanup-authority"] !== undefined &&
+        flags["cleanup-authority"] !== true
+      )
+        throw new Error("--cleanup-authorityは値を付けずに指定してください");
+      return executeCompletionFlow({
+        apply,
+        root,
+        target,
+        evidence,
+        mergeSha: required(flags, "merge-sha"),
+        approvedDigest:
+          typeof flags["approved-digest"] === "string"
+            ? flags["approved-digest"]
+            : "",
+        cleanupAuthorityGranted: flags["cleanup-authority"] === true,
+        authorized: flags.authorize === "approved",
+      });
+    }
     if (flags["update-root"] !== undefined && flags["update-root"] !== true)
       throw new Error("--update-rootは値を付けずに指定してください");
     const updateRoot = flags["update-root"] === true;

@@ -1266,6 +1266,42 @@ Given("finalize stateを{word}にする", function (condition: string) {
     unpushed: { pushed: false },
     unmerged: { prMerged: false },
     "recovery-unknown": { recoveryReachable: false },
+    /**
+     * PRがmergeされremote branchが削除された着地形の**観測結果**。
+     * upstream由来の観測はすべて偽のままで、`reachableFromDefaultBranch`だけが真になる。
+     * **判定側はこの独立fieldが真であると観測できたときだけupstream由来の理由を免除する**
+     * （Issue #1097）。観測の意味は上書きしない。
+     */
+    "merged-remote-deleted": {
+      pushed: false,
+      remoteBranch: false,
+      recoveryRef: undefined,
+      recoveryReachable: true,
+      reachableFromDefaultBranch: true,
+      unpushedCommits: 2,
+    },
+    /**
+     * 到達を**観測できていない**同型の入力。`reachableFromDefaultBranch`が
+     * `undefined`なら免除せず拒否する（Issue #1097のfail-closed）。
+     */
+    "merged-remote-deleted-unknown": {
+      pushed: false,
+      remoteBranch: false,
+      recoveryRef: undefined,
+      recoveryReachable: true,
+      unpushedCommits: 2,
+    },
+    /**
+     * 復旧参照の不在**だけ**が拒否理由になる入力。到達が不明なので免除しない。
+     * `finalize.ts`の免除条件を無条件にする変異をこの入力だけが落とす。
+     *
+     * **`merged-remote-deleted-unknown`と本fixtureは`inspectRecoveryState`が生成し得ない
+     * 観測の組み合わせを含む。** 判定側の免除gateを単独で隔離するための入力であり、
+     * 観測器の出力を模したものではない。
+     */
+    "recovery-ref-missing-unknown": {
+      recoveryRef: undefined,
+    },
     "spec-unknown": { specConsistent: "unknown" },
     "ignored-artifact": { ignoredArtifacts: ["output.bin"] },
   };
@@ -1277,6 +1313,16 @@ Given("safe finalize reportを作成済みである", function () {
 });
 When("finalize reportを作成する", function () {
   this.finalizeReport = buildFinalizeReport(this.finalizeState);
+});
+Then("finalize reportはsafeでない", function () {
+  assert.equal(this.finalizeReport.safe, false);
+});
+Then("finalize reportはsafeである", function () {
+  assert.equal(
+    this.finalizeReport.safe,
+    true,
+    `safeではありません: ${this.finalizeReport.reasons.join(" / ")}`,
+  );
 });
 When("report hashを承認してfinalize applyを試みる", function () {
   this.finalizeReport = buildFinalizeReport(this.finalizeState);
