@@ -108,8 +108,9 @@ function createFinalizeFixture(
     /**
      * 既定branchから到達できない状態。**免除してはならない入力である。**
      * remote branchを消したうえでworktreeへ既定branchに無いcommitを積む。
-     * `undefined`や偽を真へ倒す変異（`?? true`など）をこのfixtureが落とす
-     * （Issue #1099のreview指摘）。
+     * **定数`true`へ置換する変異**をこのfixtureが落とす（Issue #1099のreview指摘）。
+     * `?? true`型は落とせない。同fieldは`false`であり`false ?? true`は`false`のままで、
+     * 観測される挙動が変わらないためである（等価変異）。
      */
     git(world.remote, ["update-ref", "-d", "refs/heads/bugfix/894-finalign"]);
     fs.writeFileSync(path.join(world.worktree, "unreachable.txt"), "x\n");
