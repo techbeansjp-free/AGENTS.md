@@ -25,3 +25,24 @@ Feature: CLIがignore対象を分類してworktree finalizeを判定する
     Given 未追跡fileを持つmerge済みfinalize fixtureがある
     When fixture worktreeをfinalize dry-runする
     Then finalize dry-runは拒否しfixture worktreeを保持する
+
+  Scenario: SCN-INT-FINALIGN-006 cleanup計画でも既定branch到達の免除が働く
+    Given remote branchを失ったmerge済みfinalize fixtureがある
+    When fixture worktreeをfinalize dry-runする
+    Then cleanup計画はreadyである
+
+  Scenario: SCN-INT-FINALIGN-007 --complete経路でも既定branch到達の免除が働く
+    Given remote branchを失ったmerge済みfinalize fixtureがある
+    When fixture worktreeを--completeでfinalize dry-runする
+    Then cleanup preview phaseは拒否されない
+
+  Scenario: SCN-INT-FINALIGN-008 apply経路でも既定branch到達の免除が働く
+    Given remote branchを失ったmerge済みfinalize fixtureがある
+    When fixture worktreeを--completeでfinalize applyする
+    Then apply時のcleanup preview phaseも拒否されない
+
+  Scenario: SCN-INT-FINALIGN-009 --complete無しのapply経路でも免除が働く
+    Given remote branchを失ったmerge済みfinalize fixtureがある
+    When fixture worktreeをfinalize applyする
+    Then applyはworktreeを削除しbranchを保持する
+

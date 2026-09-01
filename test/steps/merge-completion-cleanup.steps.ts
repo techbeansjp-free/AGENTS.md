@@ -496,92 +496,114 @@ Then("空containerだけが除去され非空containerは保持される", funct
   );
 });
 
+function buildMergedCliFixture(world: MergeCompletionWorld): void {
+  const fixture = world.temp("asc-wtclean-cli-");
+  const remote = path.join(fixture, "remote.git");
+  const seed = path.join(fixture, "seed");
+  const root = path.join(fixture, "root");
+  fs.mkdirSync(remote);
+  fixtureGit(remote, ["init", "-q", "--bare", "--initial-branch=main"]);
+  fs.mkdirSync(seed);
+  fixtureGit(seed, ["init", "-q", "-b", "main"]);
+  configureFixtureRepository(seed);
+  fs.writeFileSync(path.join(seed, "README.md"), "# fixture\n");
+  fs.copyFileSync(path.resolve(".gitignore"), path.join(seed, ".gitignore"));
+  fs.mkdirSync(path.join(seed, ".agent-skill-chain", "policy"), {
+    recursive: true,
+  });
+  fs.copyFileSync(
+    path.resolve(".agent-skill-chain", "policy", "default.json"),
+    path.join(seed, ".agent-skill-chain", "policy", "default.json"),
+  );
+  fs.copyFileSync(
+    path.resolve(".agent-skill-chain", "project-policy.json"),
+    path.join(seed, ".agent-skill-chain", "project-policy.json"),
+  );
+  fs.cpSync(
+    path.resolve(".agent-skill-chain", "project"),
+    path.join(seed, ".agent-skill-chain", "project"),
+    { recursive: true },
+  );
+  fixtureGit(seed, ["add", "README.md", ".gitignore", ".agent-skill-chain"]);
+  fixtureGit(seed, ["commit", "-q", "-m", "trusted base"]);
+  fixtureGit(seed, ["remote", "add", "origin", remote]);
+  fixtureGit(seed, ["push", "-q", "-u", "origin", "main"]);
+  fixtureGit(fixture, ["clone", "-q", remote, root]);
+  configureFixtureRepository(root);
+  fs.mkdirSync(path.join(root, ".worktrees"));
+  world.targetWorktree = path.join(root, ".worktrees", "target");
+  world.otherWorktree = path.join(root, ".worktrees", "other");
+  fixtureGit(root, [
+    "worktree",
+    "add",
+    "-q",
+    "-b",
+    "feature/856",
+    world.targetWorktree,
+  ]);
+  fs.appendFileSync(path.join(world.targetWorktree, "README.md"), "merged\n");
+  fixtureGit(world.targetWorktree, ["add", "README.md"]);
+  fixtureGit(world.targetWorktree, ["commit", "-q", "-m", "feature"]);
+  fixtureGit(world.targetWorktree, [
+    "push",
+    "-q",
+    "-u",
+    "origin",
+    "feature/856",
+  ]);
+  fixtureGit(root, [
+    "worktree",
+    "add",
+    "-q",
+    "-b",
+    "feature/other",
+    world.otherWorktree,
+    "main",
+  ]);
+  fixtureGit(seed, ["fetch", "-q", "origin", "feature/856"]);
+  fixtureGit(seed, ["merge", "--ff-only", "origin/feature/856"]);
+  fixtureGit(seed, ["push", "-q", "origin", "main"]);
+  world.mergeSha = fixtureGit(seed, ["rev-parse", "HEAD"]);
+  fixtureGit(root, ["fetch", "-q", "origin", "main"]);
+  world.evidenceFile = path.join(fixture, "evidence.json");
+  fs.writeFileSync(
+    world.evidenceFile,
+    `${JSON.stringify({
+      repository: "owner/repository",
+      base: "main",
+      specConsistent: true,
+      testsPassed: true,
+      reviewApproved: true,
+      prMerged: true,
+    })}\n`,
+  );
+  world.repositoryRoot = root;
+}
+
 Given(
   "merge済みmainとsafeな対象worktreeを持つ隔離CLI repositoryがある",
   function () {
-    const fixture = this.temp("asc-wtclean-cli-");
-    const remote = path.join(fixture, "remote.git");
-    const seed = path.join(fixture, "seed");
-    const root = path.join(fixture, "root");
-    fs.mkdirSync(remote);
-    fixtureGit(remote, ["init", "-q", "--bare", "--initial-branch=main"]);
-    fs.mkdirSync(seed);
-    fixtureGit(seed, ["init", "-q", "-b", "main"]);
-    configureFixtureRepository(seed);
-    fs.writeFileSync(path.join(seed, "README.md"), "# fixture\n");
-    fs.copyFileSync(path.resolve(".gitignore"), path.join(seed, ".gitignore"));
-    fs.mkdirSync(path.join(seed, ".agent-skill-chain", "policy"), {
-      recursive: true,
-    });
-    fs.copyFileSync(
-      path.resolve(".agent-skill-chain", "policy", "default.json"),
-      path.join(seed, ".agent-skill-chain", "policy", "default.json"),
-    );
-    fs.copyFileSync(
-      path.resolve(".agent-skill-chain", "project-policy.json"),
-      path.join(seed, ".agent-skill-chain", "project-policy.json"),
-    );
-    fs.cpSync(
-      path.resolve(".agent-skill-chain", "project"),
-      path.join(seed, ".agent-skill-chain", "project"),
-      { recursive: true },
-    );
-    fixtureGit(seed, ["add", "README.md", ".gitignore", ".agent-skill-chain"]);
-    fixtureGit(seed, ["commit", "-q", "-m", "trusted base"]);
-    fixtureGit(seed, ["remote", "add", "origin", remote]);
-    fixtureGit(seed, ["push", "-q", "-u", "origin", "main"]);
-    fixtureGit(fixture, ["clone", "-q", remote, root]);
-    configureFixtureRepository(root);
-    fs.mkdirSync(path.join(root, ".worktrees"));
-    this.targetWorktree = path.join(root, ".worktrees", "target");
-    this.otherWorktree = path.join(root, ".worktrees", "other");
-    fixtureGit(root, [
-      "worktree",
-      "add",
-      "-q",
-      "-b",
-      "feature/856",
-      this.targetWorktree,
-    ]);
-    fs.appendFileSync(path.join(this.targetWorktree, "README.md"), "merged\n");
-    fixtureGit(this.targetWorktree, ["add", "README.md"]);
-    fixtureGit(this.targetWorktree, ["commit", "-q", "-m", "feature"]);
-    fixtureGit(this.targetWorktree, [
-      "push",
-      "-q",
-      "-u",
-      "origin",
-      "feature/856",
-    ]);
-    fixtureGit(root, [
-      "worktree",
-      "add",
-      "-q",
-      "-b",
-      "feature/other",
-      this.otherWorktree,
-      "main",
-    ]);
-    fixtureGit(seed, ["fetch", "-q", "origin", "feature/856"]);
-    fixtureGit(seed, ["merge", "--ff-only", "origin/feature/856"]);
-    fixtureGit(seed, ["push", "-q", "origin", "main"]);
-    this.mergeSha = fixtureGit(seed, ["rev-parse", "HEAD"]);
-    fixtureGit(root, ["fetch", "-q", "origin", "main"]);
-    this.evidenceFile = path.join(fixture, "evidence.json");
-    fs.writeFileSync(
-      this.evidenceFile,
-      `${JSON.stringify({
-        repository: "owner/repository",
-        base: "main",
-        specConsistent: true,
-        testsPassed: true,
-        reviewApproved: true,
-        prMerged: true,
-      })}\n`,
-    );
-    this.repositoryRoot = root;
+    buildMergedCliFixture(this);
   },
 );
+
+/**
+ * PRがmergeされremote branchが削除された着地形。**remote側のrefだけを消す。**
+ * `push --delete`はlocalのremote-tracking refまで消してしまい、実運用で頻出する
+ * 「prune前の陳腐化したtracking refが残る」形にならない（Issue #1097の実測）。
+ *
+ * cli層が`reachableFromDefaultBranch`をcleanup計画へ渡さないと、**apply経路でも**
+ * `コミットがpushされていません`で拒否される（Issue #1099）。
+ */
+Given("remote branchを削除したmerge済みCLI repositoryがある", function () {
+  buildMergedCliFixture(this);
+  fixtureGit(path.join(path.dirname(this.repositoryRoot), "remote.git"), [
+    "update-ref",
+    "-d",
+    "refs/heads/feature/856",
+  ]);
+  fixtureGit(this.targetWorktree, ["merge", "--ff-only", "origin/main"]);
+});
 
 When("cleanup previewを承認してmerge完了CLIをapplyする", function () {
   const preview = completionCli(this, ["--dry-run"]);
