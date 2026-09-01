@@ -4,7 +4,7 @@
   "description": "人とAIエージェントが使う、安全側に倒す軽量開発ワークフロー。",
   "type": "module",
   "agentSkillChain": {
-    "qualityContractVersion": 9,
+    "qualityContractVersion": 10,
     "policySchemaVersion": "0.3.1",
     "compatiblePolicySchemaVersions": [
       "0.3.0"

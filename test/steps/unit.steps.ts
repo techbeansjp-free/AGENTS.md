@@ -229,6 +229,7 @@ interface UnitWorld extends WorkflowWorld {
   projectQualityResult: ReturnType<typeof checkProjectQualityContract>;
   projectQualityRoot: string;
   projectQualityTrustedRoot: string;
+  removedProtectedFile: string;
   releaseVersion: string;
   runtimeInputErrors: string[];
   runtimeManifestFile: string;
@@ -806,6 +807,139 @@ Then("candidateによる同一PR内の自己承認を拒否する", function () 
     this.projectQualityResult.errors.some((error: string) =>
       error.includes("baseで事前登録済み"),
     ),
+  );
+});
+
+/**
+ * 保護対象fileを1件だけ消したfixtureを作る。
+ *
+ * **削除するfileを`PROTECTED_FILES`の先頭・末尾以外にしない理由は無い。**
+ * `scripts/check_source_quality.ts`を選ぶのは、`candidateProtectedFiles`が読む
+ * `scripts/check_project_quality.ts`とは別fileであり、削除しても列挙の取り出し自体は
+ * 成立するためである。列挙が壊れると別のerrorが先に出て、本scenarioが測る量が変わる。
+ */
+function removeOneProtectedFile(root: string): string {
+  const relative = "scripts/check_source_quality.ts";
+  fs.rmSync(path.join(root, relative));
+  return relative;
+}
+
+Given("候補から保護対象fileを1件削除したprojectがある", function () {
+  this.projectQualityTrustedRoot = this.temp("asc-quality-trusted-");
+  this.projectQualityRoot = this.temp("asc-quality-candidate-");
+  copyQualityContractFixture(this.projectQualityTrustedRoot);
+  copyQualityContractFixture(this.projectQualityRoot);
+  this.removedProtectedFile = removeOneProtectedFile(this.projectQualityRoot);
+});
+
+Given("trusted baseから保護対象fileを1件削除したprojectがある", function () {
+  this.projectQualityTrustedRoot = this.temp("asc-quality-trusted-");
+  this.projectQualityRoot = this.temp("asc-quality-candidate-");
+  copyQualityContractFixture(this.projectQualityTrustedRoot);
+  copyQualityContractFixture(this.projectQualityRoot);
+  this.removedProtectedFile = removeOneProtectedFile(
+    this.projectQualityTrustedRoot,
+  );
+});
+
+Given("候補の保護対象fileをdirectoryへ置き換えたprojectがある", function () {
+  this.projectQualityTrustedRoot = this.temp("asc-quality-trusted-");
+  this.projectQualityRoot = this.temp("asc-quality-candidate-");
+  copyQualityContractFixture(this.projectQualityTrustedRoot);
+  copyQualityContractFixture(this.projectQualityRoot);
+  this.removedProtectedFile = removeOneProtectedFile(this.projectQualityRoot);
+  /**
+   * **ENOENT以外のerrnoを実際に発生させる。** 同名のdirectoryを置くと
+   * `readFileSync`はEISDIRで失敗する。errnoを文字列で注入すると、
+   * 製品が本当にerrnoを添えているかではなくfixtureの中身を測ることになる。
+   */
+  fs.mkdirSync(path.join(this.projectQualityRoot, this.removedProtectedFile));
+});
+
+Given("候補からpackage-lock.jsonを削除したprojectがある", function () {
+  this.projectQualityTrustedRoot = this.temp("asc-quality-trusted-");
+  this.projectQualityRoot = this.temp("asc-quality-candidate-");
+  copyQualityContractFixture(this.projectQualityTrustedRoot);
+  copyQualityContractFixture(this.projectQualityRoot);
+  this.removedProtectedFile = "package-lock.json";
+  fs.rmSync(path.join(this.projectQualityRoot, this.removedProtectedFile));
+});
+
+Then("候補側の読み取り不能をerrno付きで報告する", function () {
+  assert.equal(
+    this.projectQualityResult.valid,
+    false,
+    JSON.stringify(this.projectQualityResult),
+  );
+  const expected = `候補の保護対象file ${this.removedProtectedFile} が読み取れません（EISDIR）`;
+  assert.ok(
+    this.projectQualityResult.errors.includes(expected),
+    `期待するerrorがありません: ${expected} / 実際: ${JSON.stringify(this.projectQualityResult.errors)}`,
+  );
+  /**
+   * **「存在しません」と混同していないことも測る。** 分岐を潰して常に
+   * 「存在しません」を返す変異は、件数だけを見る検査では素通りする。
+   */
+  assert.ok(
+    !this.projectQualityResult.errors.some((error: string) =>
+      error.endsWith("が存在しません"),
+    ),
+    JSON.stringify(this.projectQualityResult.errors),
+  );
+});
+
+Then("候補側のpackage-lock.json欠損をerrorとして名指しする", function () {
+  assert.equal(
+    this.projectQualityResult.valid,
+    false,
+    JSON.stringify(this.projectQualityResult),
+  );
+  const expected = "候補の保護対象file package-lock.json が存在しません";
+  assert.ok(
+    this.projectQualityResult.errors.includes(expected),
+    `期待するerrorがありません: ${expected} / 実際: ${JSON.stringify(this.projectQualityResult.errors)}`,
+  );
+});
+
+Then("候補側の保護対象file欠損をerrorとして名指しする", function () {
+  assert.equal(
+    this.projectQualityResult.valid,
+    false,
+    JSON.stringify(this.projectQualityResult),
+  );
+  const expected = `候補の保護対象file ${this.removedProtectedFile} が存在しません`;
+  assert.ok(
+    this.projectQualityResult.errors.includes(expected),
+    `期待するerrorがありません: ${expected} / 実際: ${JSON.stringify(this.projectQualityResult.errors)}`,
+  );
+  /**
+   * **どちら側かの区別まで測る。** 側のlabelを取り違えてもerror件数は変わらないため、
+   * 反対側のlabelが出ていないことを合わせて確認する。
+   */
+  assert.ok(
+    !this.projectQualityResult.errors.some((error: string) =>
+      error.startsWith("trusted baseの保護対象file"),
+    ),
+    JSON.stringify(this.projectQualityResult.errors),
+  );
+});
+
+Then("trusted base側の保護対象file欠損をerrorとして名指しする", function () {
+  assert.equal(
+    this.projectQualityResult.valid,
+    false,
+    JSON.stringify(this.projectQualityResult),
+  );
+  const expected = `trusted baseの保護対象file ${this.removedProtectedFile} が存在しません`;
+  assert.ok(
+    this.projectQualityResult.errors.includes(expected),
+    `期待するerrorがありません: ${expected} / 実際: ${JSON.stringify(this.projectQualityResult.errors)}`,
+  );
+  assert.ok(
+    !this.projectQualityResult.errors.some((error: string) =>
+      error.startsWith("候補の保護対象file"),
+    ),
+    JSON.stringify(this.projectQualityResult.errors),
   );
 });
 
