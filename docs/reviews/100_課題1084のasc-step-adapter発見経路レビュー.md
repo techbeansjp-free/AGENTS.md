@@ -8,21 +8,21 @@
 |---|---|
 | 対象 | 実装 |
 | 対象Issue | #1084 |
-| ラウンド | Step 10 ラウンド1〜3 |
+| ラウンド | Step 10 ラウンド1〜3、および外部reviewer対応 |
 | 比較基点 | `88358243f661fcb2b5bc32ec39f82e69a736d264` |
-| H_impl | `fe2e9e9ca10fce87b8887a91256781714c7a6f75` |
+| H_impl | `d30eafe0c858ddd5f3ea98a5fc4ee42f77d784f4` |
 | 比較基点の由来 | review開始時点の`origin/main`のtip。PR #1095（`v0.3.1-beta.54`のrelease bump）のmerge commitである。前へ進めていない |
 | Step 10のreview session ID | `e07ba9953d554f0fd951491ee33b18ec6d8bb443d79c2db9ccc1d8646a3e5341` |
 | モード | full |
 | 対象差分 | `.agent-skill-chain/skills/asc-step/SKILL.md`、`test/features/unit/host-skill-adapter.feature`、`test/steps/host-skill-adapter.steps.ts`、`docs/specs/02_要件/02_プロジェクトライフサイクル要件.md`、`docs/specs/04_機能/01_ワークフローv0.3.md`、`docs/specs/15_要件追跡/00_追跡表.md`、`docs/specs/15_要件追跡/01_変更履歴.md`、および本artifact。commitは`51dffbd3`（実装）・`5a52107c`（ラウンド1是正）・`fe2e9e9c`（ラウンド2 artifact）。**ラウンド3の是正は本artifactのcommit自身であり、`H_impl`はその親`fe2e9e9c`になる。** |
 | 対象外 | `skills/00_利用案内.md`の表の中身と`WORKFLOW_STEPS`の機械照合（5節R1-N03）。hostのhook配布による読了強制（01のINV-04）。`description`の意味の機械検証（5節R1-B04の残余）。documentation変更に対するmode判定の粒度（5節R1-N07） |
-| 残り予算 | **0**（同一範囲で最大3ラウンド。総2ラウンドで設計していたが、**ラウンド3で本artifactの書式不備2件を是正して使い切った**。6節を参照する） |
+| 残り予算 | **0**（同一範囲で最大3ラウンド。総2ラウンドで設計していたが、**ラウンド3で本artifactの書式不備を是正して使い切った**。**PR作成後に受けたCodeRabbitの指摘3件は、予算を超えるためラウンドを追加せず本artifactの6.1節へ記録した**。`workflow record --step=10`もStep 11記録後は再実行できない） |
 | ラウンド数 | 3。ラウンド1は実装差分`51dffbd3`、ラウンド2は是正`5a52107c`と本artifactを加えた版、**ラウンド3は`audit:check`が検出した本artifactの書式不備2件の是正**が対象である |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260901_100158_asc-step-adapterが一覧を指さずdescriptionが単発起動を誘発する |
 | 仕様の所有箇所 | `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md`のREQ-LC-002。**着手時点でこの節はadapter正本の内容契約を規定していなかった。** doctorの検証対象としてfrontmatter・正本link・hash・配置を挙げるのみである |
 | 成果物行数 | 製品 **+2 / −2行**（`asc-step/SKILL.md`の`description`行と手順3行）。仕様 **+4 / −3行**（要件+1/−1、機能+1/−1、追跡表+1/−1、変更履歴+1）。支援層 **+94行**（feature +7、steps +87）。staging 4文書は855行 |
 | 縮小の先行評価 | 5案を先に評価し全件不採用とした。(1) 一覧12件をadapterへ複製する案は`check_workflow_steps.ts:73`の唯一正本性を侵しdriftの起点を増やすため不採用。(2) hookを配布して読了を強制する案は、hostのhook設定が利用者所有・host固有形式で製品が握れず、読んだの自己申告を検証する独立oracleを持てないため不採用。(3) `skills/00_利用案内.md`へ追記する案は、同fileの「目的」節と「使い方」節が既にadapterの責務と12 Stepの一覧表を記述しており重複になるため不採用。(4) 配布先展開の新規SCNは、既存`SCN-INT-HOST-SKILL-001`が`deepEqual`でbyte一致を検査しており検出力を1 bitも足さないため不採用。(5) `directories:check`へadapterを足す案は、`GUIDE_DOCUMENTS`が入口文書8件の契約でありadapterがその類型でないため対象外。**新規のfeature fileもstep fileも作らず、既存2 fileへ1 scenarioだけを足した。** |
-| 実施者・日時 | reviewer（codexとClaude fableの2体）、統合はcoordinator（claude）、2026-09-01 |
+| 実施者・日時 | reviewer（codexとClaude fableの2体、および外部reviewerのCodeRabbit）、統合はcoordinator（claude）、2026-09-01 |
 
 ### 0.1 routing入力契約
 
@@ -40,15 +40,19 @@
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | https://github.com/techbeansjp-free/AGENTS.md/issues/1084 | AC-1084-01〜04。Step 8で36829文字の本文を同期し、書き込み後読み取りのdigestが`d755a152…`で一致 | 人間判断 |
-| 差分 | `88358243..5a52107c` | 7 file、`+100 / −5`行 | 既存コード |
+| 差分 | `88358243..d30eafe0` | 8 file（review artifactを含む） | 既存コード |
 | テスト | `npm test` / `npm run conformance:check` | 1369 scenarios、1353 passed、16 skipped、0 failed | テスト出力 |
 | 仕様 | `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md`ほか3 file | updated | 既存文書 |
 | commit前candidate | 対象差分7 path | `git status --short`が7 file、意図しないpath 0件 | Git index |
 | Phase A artifact | `docs/reviews/100_課題1084のasc-step-adapter発見経路レビュー.md` | `H_impl..H_final`は本artifact 1 fileだけ | Git観測 |
-| commit後external | PRは本artifact確定後に作成する | Step 11で観測する | 外部のimmutable証拠 |
+| commit後external | PR #1096、Actions run `33466776806`・`33466776129`、review ID `5073504914`・`5073670630`・`5073670941`・`5073671917` | repository `techbeansjp-free/AGENTS.md`、actorは`coderabbitai[bot]`、verdictはすべて`COMMENTED`。run 2件はいずれも本artifact commitのSHAに対して`success` | 外部のimmutable証拠 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **成立する。** 本artifactへ自身のcommit SHAを書いていない。
-- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: **`H_impl = 5a52107c`はartifact commitの親である。** PR/CIの観測はStep 11で行う。
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: **`H_impl = d30eafe0`は本artifact commitの親である。** `npm run audit:check`が`H_impl..current`をreview artifact 1 fileだけと観測する。CIは`H_final`に対して3 checkすべてpassである。
+
+**外部reviewの被覆範囲を正確に述べる。** 外部reviewer `coderabbitai[bot]`が最後に指摘とその確認を行ったのは`cd480e50`である。それ以降の差分は`git diff --name-only cd480e50 <H_final>`が示すとおり**本artifact 1 fileだけ**であり、製品・仕様・testを1行も含まない。**したがって`H_final`に対する外部reviewは存在しない。**
+
+**これは記録の再帰であって隠蔽ではない。** 外部reviewの観測結果をartifactへ書くとcommitが増えてheadが動き、その新しいheadは未reviewになる。もう一度書けばまた動く。**この再帰は終端しない。** 終端させるため、本節は「外部reviewが被覆したcommit」と「それ以降の差分がartifactだけであること」の2つを述べるに留める。この2命題はartifactを何度改訂しても真であり続けるので固定点になる。**製品差分に対する外部reviewの被覆は完全である。**
 - reviewer stable IDがPR author/provider観測済み`H_impl` author stable IDと異なる: **codex側は別provider。fable側は別contextだがproviderは同一である。** 0.1節の逸脱1に記載した。
 - 既定branch追随を行った場合: **行っていない。** `88358243`はreview開始時点の`origin/main`のtipである。
 
@@ -65,7 +69,7 @@
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | package | spec | 1行追記 | pass | 同上 | 同上 | pass |
 | `docs/reviews/100_課題1084のasc-step-adapter発見経路レビュー.md` | A | package | evidence | 本artifactのラウンド2版。**ラウンド3で書式を是正したため`H_impl`が`fe2e9e9c`へ動き、ラウンド2版が監査対象に入る** | pass。実行codeを持たない | 全AC | 内容を戻せば復旧する | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: **`比較基点..H_impl`すなわち`88358243..fe2e9e9c`の8 pathと本表の8行が一致する。** ラウンド3が本artifactへの前進commitであるため`H_impl`はラウンド2のartifact commitになり、ラウンド2版のartifactが監査対象へ入る。`H_impl..H_final`は本artifactの1 fileだけである。
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: **`比較基点..H_impl`すなわち`88358243..d30eafe0`の8 pathと本表の8行が一致する。** artifactへの是正を前進commitで重ねているため`H_impl`が前へ動き、以前のartifact版が監査対象へ入る。`H_impl..H_final`は本artifactの1 fileだけである。
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: **成立する。** 追加したのは文書と受け入れtestだけで、実行authorityを持つcodeを1行も変えていない。
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: **ラウンド1の是正は`SKILL.md`・`steps.ts`・仕様2 fileに閉じており、他のpathへ波及していない。**
 
@@ -118,7 +122,7 @@
 | 安全性 | 認証、承認、秘密情報、Zero Trust | not-applicable | 認証・認可・秘密情報を扱わない。承認契約を変えていない |
 | データ損失 | 上書き、削除、部分公開、履歴消失 | pass | fileを1つも削除していない。既存の2 scenarioと既存5手順を変えていない |
 | ロールバック | 復旧参照、状態保持、再開可能性 | pass | PRのrevertでadapter本文が戻り、配布先は次の`update`で追随する |
-| 範囲漏れ | 呼び出し元、利用側、配布物、文書 | **finding** | **R1-N03・R1-N05。** `skills/00_利用案内.md`の表の中身は機械照合されていない。`scripts/check_directory_guides.ts`はGUIDE_DOCUMENTS所属と5見出しとlink実在だけを見る。adapterが同案内へlinkする以上、表のdriftは利用者の目に触れる。**adapterの手順3で「索引であってStepの選択根拠にしない」と明示して緩和した**が、照合の追加は対象外として残す |
+| 範囲漏れ | 呼び出し元、利用側、配布物、文書 | **finding** | **R1-N03。** R1-N05は同じ穴を要求定義側から見たもので`resolved`である。 `skills/00_利用案内.md`の表の中身は機械照合されていない。`scripts/check_directory_guides.ts`はGUIDE_DOCUMENTS所属と5見出しとlink実在だけを見る。adapterが同案内へlinkする以上、表のdriftは利用者の目に触れる。**adapterの手順3で「索引であってStepの選択根拠にしない」と明示して緩和した**が、照合の追加は対象外として残す |
 
 ## 5. 指摘
 
@@ -145,8 +149,8 @@
 ### ラウンド1
 
 - 全評価基準を確認した: **はい。** 肯定5観点と敵対8観点を対象差分`51dffbd3`へ適用した。reviewerはcodexとClaude fableの2体で、観点8件を明示的に指定した。
-- 指摘を確定した: **blocking 3件（R1-B01・R1-B03・R1-B04）、record-only 10件。** `review-session.json`のラウンド1に13件を記録した。
-- 次ラウンド対象のCritical/High: **R1-B01・R1-B02・R1-B03・R1-B04・R1-N07。** うちR1-N07はowner決裁事項として記録に留める。
+- 指摘を確定した: **blocking 3件（R1-B01・R1-B03・R1-B04）、record-only 10件。** `review-session.json`のラウンド1に13件を記録した。**R1-B02はHighだが`relation`が`invariant-violation`のため`admission`が`record-only`になり、blockingには入らない。** 是正の要否はseverityで判断しており、R1-B02もラウンド2で`resolved`にしている。
+- 次ラウンド対象のCritical/High: **R1-B01・R1-B02・R1-B03・R1-B04・R1-N07の5件。** blockingの3件に、record-onlyだがHighのR1-B02とR1-N07を加えた集合である。うちR1-N07はowner決裁事項として記録に留める。
 
 ### ラウンド2
 
@@ -161,6 +165,22 @@
 - 任意の危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: **縮小した危険範囲はない。** 本変更は状態を書き込まず不可逆操作を持たない。
 - 同じ範囲の予算を自動更新していない: **成立する。** 総3ラウンドで打ち切る。
 - AIによる最終裁定: **approved。** ラウンド3は`npm run audit:check`が検出した本artifactの書式不備2件の是正である。製品・仕様・testの差分は1行も変えていない。
+
+## 6.1 PR作成後の外部reviewer対応
+
+**予算3を使い切っているためラウンドを追加しない。** `workflow record --step=10`もStep 11記録後は再実行できないため、記録先は本節と`git log`である。CodeRabbitの指摘3件をすべて実測で検証し、2件を是正、1件を狭めた形で採用した。
+
+| ID | 重大度 | 内容 | 検証結果 | 対応 |
+|---|---|---|---|---|
+| CR-01 | Minor | 本artifact内でH_implとfinding分類が食い違う | **valid。** 1節の`H_impl`と`差分`行が`5a52107c`のまま、識別情報の`H_impl`が`fe2e9e9c`だった。4節がR1-N05を未解決findingとして挙げる一方5節は`resolved`。6節はblocking 3件とCritical/High 5件を並記して差の説明が無かった | すべて是正した。`H_impl`は是正commitに合わせて`d30eafe0`へ、4節はR1-N03のみへ、6節はR1-B02が`invariant-violation`のため`record-only`になる旨を明示 |
+| CR-02 | Minor | 追跡表がSCN-UNIT-HOST-SKILL-003の結果を`基準commitで合格`と記録している | **valid。** 同SCNは本変更で新規追加したもので基準commitに存在しない。**存在しないSCNの合格を記録していた** | 結果欄を本作業treeでの実行結果へ直した |
+| CR-03 | Minor | Step一覧の複製判定がすべてのmarkdown表と7項目以上の順序listを拒否し、無関係な表や手順まで落とす | **valid。** 記法を測っており、Step集合の列挙を測っていない | **狭めた形で採用した。** 判定を「7個以上の相異なる番号を列挙しない」へ変えた。番号は順序listのmarkerと表の第1 cellから採る |
+
+**3件とも外部reviewerが是正を確認した。** `cd480e50`に対する再reviewで新規findingは0件である。
+
+**CR-03を採用した理由。** これはラウンド1で是正したのと同じ類型である。ラウンド1では検査が弱すぎて別の量を測っていた。CR-03は逆に強すぎるが、**記法を測っていてStep集合の列挙を測っていない**点は同じである。より狭い判定が既存の検出力を落とさずに偽陽性を消せることを変異試験で確認したため、予算外でも採った。
+
+**AC-1084-03の文言を変えたが、目的・scope・security境界・不可逆操作は変わらない。** 判定対象は一貫して「Step一覧の複製」である。
 
 ## 7. テスト結果
 
@@ -190,6 +210,10 @@ runnerは`@cucumber/cucumber` 13系、`projectChoices.gherkinDialect`は英語�
 | M9 | Step番号と和名で一覧を複製する（実名なし） | 未実施 | kill |
 | M10 | markdown表で一覧を複製する | 未実施 | kill |
 | M11 | 順序listを7項目へ増やす | 未実施 | kill |
+| M10' | **番号付き12行の対応表**で一覧を複製する | 未実施 | kill |
+| M12 | **番号を持たない無関係な3行表**を足す（偽陽性であってはならない） | 未実施 | **通過（期待どおり）** |
+
+M10とM12はCR-03の是正で意味が変わった。**当初のM10（1行だけの表）は、狭めた判定のもとでは等価変異になる。** 1行の表はStep一覧の複製ではない。実際のriskを測る変異へ差し替えたのがM10'であり、偽陽性が消えたことを確かめるのがM12である。
 
 **M5が生存したことがラウンド1の最大の成果である。** 変異試験4件で全件killを得た時点では検出力が十分に見えたが、reviewer 2体がそれぞれ別の同型変異を独立に構成した。**「同名fileがある」と「一覧に到達する」は別の量である。**
 
@@ -214,11 +238,13 @@ runnerは`@cucumber/cucumber` 13系、`projectChoices.gherkinDialect`は英語�
 
 | 項目 | 内容 |
 |---|---|
-| 独立reviewの外部証拠 | Step 11のPR作成後に観測する |
-| reviewerがPR author・実装commit authorと異なる | codexは別provider・別contextで異なる。fableは同一providerの別contextである |
-| 観測したreview commentとapprovalの件数 | Step 11で観測する |
+| 独立reviewの外部証拠 | **あり。** PR #1096 に外部reviewer `coderabbitai[bot]` のreviewが4件（`a4cf7546`へ1件、`cd480e50`へ3件）、review commentが9件ある |
+| reviewerがPR author・実装commit authorと異なる | **異なる。** PR authorは`adachi-tatsuru`、実装commit authorは`tatsuru <info@ruaprom.jp>`、外部reviewerは`coderabbitai[bot]`である。Step 10のreviewerはcodexの別invocationとClaude fableの別contextで、いずれもPR authorでも実装commit authorでもない |
+| 観測したreview commentとapprovalの件数 | **review comment 9件、approval 0件。** 内訳は外部reviewerの指摘3件、それへの返信3件、外部reviewerの確認3件である。reviewの`state`はすべて`COMMENTED`で`APPROVED`は0件 |
 
-**外部reviewerのcheckがpassでもreview commentとapprovalの実体を観測する。** 両方0件だった場合だけ`RVX-REPORTED-SUCCESS-WITHOUT-REVIEW-001`の条件に当たる。**現時点では例外を適用していない。**
+**外部reviewerのcheckがpassでもreview commentとapprovalの実体を観測した。** review commentが9件あるため、**両方0件**を条件とする`RVX-REPORTED-SUCCESS-WITHOUT-REVIEW-001`には当たらない。**例外を適用していない。**
+
+**`gh pr checks`のCodeRabbit行は`Review rate limited`と表示するが、これはreviewの実体と食い違う。** 実際には`cd480e50`に対して3件のreviewが記録され、指摘3件それぞれへ確認の返信がある。**checkの結論を証拠にせず実体を観測するという例外正本の`detection`をそのまま適用した結果である。** review threadは3件ともresolvedである。
 
 ## 10. 仕様整合性
 
