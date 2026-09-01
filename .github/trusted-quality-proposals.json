@@ -242,6 +242,29 @@
           "afterSha256": "19581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-PROTECTED-READ-DIAGNOSIS-001",
+      "status": "staged",
+      "fromVersion": 9,
+      "toVersion": 10,
+      "owner": "repository maintainer",
+      "rationale": "protectedSnapshotが保護対象fileを無条件に読み、欠損時に未捕捉例外で終了する。候補が保護対象fileを削除した場合の診断がerror名ではなくstack traceとして現れ、trusted base側の破損と候補側の異常を区別できない。保護対象fileの読み取り失敗に限り、例外ではなく側を名指ししたerrorとして返し、読めなかったfileをsnapshotへ載せないことでfail-closedを保つ。registry自体のschema違反を例外で拒否する既存の扱いは変えない",
+      "rollback": "登録済みproposalは削除できず、qualityContractVersionの減少も受理されない。適用前は有効化しないまま維持する。適用後に戻す場合は、check_project_quality.tsを本proposal適用前の内容へ戻す新規proposalを次versionとして登録し、同じ二段階手順で前進させる",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "scripts/check_project_quality.ts",
+          "beforeSha256": "3f910b022f50052651b3684b7b95e99a4d8acbdb2fc696fabe8cfb4898d1c292",
+          "afterSha256": "edc2d9b9baf7ecd53ea1648dd2202dcf20490d8095dbe3c4c6454cb9aa79b737"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "19581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7",
+          "afterSha256": "4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5"
+        }
+      ]
     }
   ]
 }
