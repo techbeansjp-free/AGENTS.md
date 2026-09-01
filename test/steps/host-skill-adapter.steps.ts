@@ -16,6 +16,9 @@ const TARGETS = [
   ".claude/skills/asc-step/SKILL.md",
   ".agents/skills/asc-step/SKILL.md",
 ] as const;
+const HOSTS = [SOURCE, ...TARGETS] as const;
+const GUIDE = ".agent-skill-chain/skills/00_利用案内.md";
+const ADAPTER_MAX_PROCEDURE_ITEMS = 6;
 
 interface HostSkillWorld extends WorkflowWorld {
   externalFile?: string;
@@ -97,24 +100,56 @@ When("adapter正本の発見経路契約を検査する", function () {
 
 Then("adapter正本は配布先でも解決するStep skill一覧linkを持つ", function () {
   const markdown = this.result as string;
-  const match = /\]\((\.\.\/[^)]*00_利用案内\.md)\)/u.exec(markdown);
-  assert.ok(match, "Step skill一覧へのlinkがありません");
-  const link = match[1];
-  assert.ok(
-    link.startsWith("../../../"),
-    `一覧linkは配布先でも解決する../../../基点が必要です: ${link}`,
+  const guide = path.join(this.root, GUIDE);
+  assert.equal(fs.existsSync(guide), true, `一覧正本がありません: ${GUIDE}`);
+  const links = [...markdown.matchAll(/\]\(([^)\s]+)\)/gu)].map(
+    (match) => match[1],
   );
-  const resolved = path.resolve(path.join(this.root, SOURCE), "..", link);
-  assert.equal(fs.existsSync(resolved), true, `解決先がありません: ${link}`);
+  const resolved = links.map((link) =>
+    HOSTS.map((host) => path.resolve(path.join(this.root, host), "..", link)),
+  );
+  const reaching = links.filter((_, index) =>
+    resolved[index].every((candidate) => candidate === guide),
+  );
+  assert.notEqual(
+    reaching.length,
+    0,
+    `全host位置からStep skill一覧へ解決するlinkがありません: ${links.join(", ")}`,
+  );
+  const sourceOnly = links.filter((_, index) => {
+    const [fromSource, ...fromTargets] = resolved[index];
+    return (
+      fs.existsSync(fromSource) &&
+      fromTargets.some((candidate) => candidate !== fromSource)
+    );
+  });
+  assert.deepEqual(sourceOnly, [], "正本でだけ解決するlinkがあります");
 });
 
 Then(
   "adapter正本のdescriptionは各Step境界での起動を促す単一行である",
   function () {
     const markdown = this.result as string;
-    const description = /^description:\s*(\S.*)$/mu.exec(markdown)?.[1];
-    assert.ok(description, "descriptionがありません");
-    assert.match(description, /各Step|Stepごと|Stepの開始/u);
+    const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/u.exec(markdown)?.[1];
+    assert.ok(frontmatter, "frontmatterがありません");
+    const lines = frontmatter.split(/\r?\n/u);
+    const indexes = lines
+      .map((line, index) => (/^description:/u.test(line) ? index : -1))
+      .filter((index) => index >= 0);
+    assert.deepEqual(indexes.length, 1, "descriptionは1行だけ必要です");
+    const value = lines[indexes[0]].slice("description:".length).trim();
+    assert.notEqual(value, "", "descriptionが空です");
+    assert.doesNotMatch(
+      value,
+      /^[>|]/u,
+      "descriptionにblock scalarは使えません",
+    );
+    const next = lines[indexes[0] + 1];
+    assert.ok(
+      next === undefined || /^\S+:/u.test(next),
+      `descriptionの継続行があります: ${next ?? ""}`,
+    );
+    assert.match(value, /各Step|Stepごと|Stepの開始/u);
   },
 );
 
@@ -126,9 +161,21 @@ Then("adapter正本は実在するStep skill名を列挙しない", function () 
     })
     .filter((entry) => entry.isDirectory() && /^step-\d{2}-/u.test(entry.name))
     .map((entry) => entry.name);
-  assert.equal(stepSkills.length, 12);
+  assert.notEqual(stepSkills.length, 0, "Step skillが見つかりません");
   const listed = stepSkills.filter((name) => markdown.includes(name));
-  assert.deepEqual(listed, []);
+  assert.deepEqual(listed, [], "Step skillの実名を列挙しています");
+  const body = markdown.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/u, "");
+  const lines = body.split(/\r?\n/u);
+  assert.deepEqual(
+    lines.filter((line) => /^\s*\|/u.test(line)),
+    [],
+    "Step対応表を複製しています",
+  );
+  assert.ok(
+    lines.filter((line) => /^\s*\d+\.\s/u.test(line)).length <=
+      ADAPTER_MAX_PROCEDURE_ITEMS,
+    "Step一覧に相当する順序listがあります",
+  );
 });
 
 Given("package内容検査scriptがある", function () {
