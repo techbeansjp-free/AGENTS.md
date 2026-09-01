@@ -16,6 +16,9 @@ const TARGETS = [
   ".claude/skills/asc-step/SKILL.md",
   ".agents/skills/asc-step/SKILL.md",
 ] as const;
+const HOSTS = [SOURCE, ...TARGETS] as const;
+const GUIDE = ".agent-skill-chain/skills/00_利用案内.md";
+const ADAPTER_MAX_ENUMERATED_NUMBERS = 7;
 
 interface HostSkillWorld extends WorkflowWorld {
   externalFile?: string;
@@ -90,6 +93,182 @@ Then(
     assert.match(markdown, /\.agent-skill-chain\/skills\/step-NN-/u);
   },
 );
+
+When("adapter正本の発見経路契約を検査する", function () {
+  this.result = fs.readFileSync(path.join(this.root, SOURCE), "utf8");
+});
+
+Then("adapter正本は配布先でも解決するStep skill一覧linkを持つ", function () {
+  const markdown = this.result as string;
+  const guide = path.join(this.root, GUIDE);
+  assert.equal(fs.existsSync(guide), true, `一覧正本がありません: ${GUIDE}`);
+  const links = [...markdown.matchAll(/\]\(([^)\s]+)\)/gu)].map(
+    (match) => match[1],
+  );
+  const resolved = links.map((link) =>
+    HOSTS.map((host) => path.resolve(path.join(this.root, host), "..", link)),
+  );
+  const reaching = links.filter((_, index) =>
+    resolved[index].every((candidate) => candidate === guide),
+  );
+  assert.notEqual(
+    reaching.length,
+    0,
+    `全host位置からStep skill一覧へ解決するlinkがありません: ${links.join(", ")}`,
+  );
+  const sourceOnly = links.filter((_, index) => {
+    const [fromSource, ...fromTargets] = resolved[index];
+    return (
+      fs.existsSync(fromSource) &&
+      fromTargets.some((candidate) => candidate !== fromSource)
+    );
+  });
+  assert.deepEqual(sourceOnly, [], "正本でだけ解決するlinkがあります");
+});
+
+Then(
+  "adapter正本のdescriptionは各Step境界での起動を促す単一行である",
+  function () {
+    const markdown = this.result as string;
+    const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/u.exec(markdown)?.[1];
+    assert.ok(frontmatter, "frontmatterがありません");
+    const lines = frontmatter.split(/\r?\n/u);
+    const indexes = lines
+      .map((line, index) => (/^description:/u.test(line) ? index : -1))
+      .filter((index) => index >= 0);
+    assert.deepEqual(indexes.length, 1, "descriptionは1行だけ必要です");
+    const value = lines[indexes[0]].slice("description:".length).trim();
+    assert.notEqual(value, "", "descriptionが空です");
+    assert.doesNotMatch(
+      value,
+      /^[>|]/u,
+      "descriptionにblock scalarは使えません",
+    );
+    const next = lines[indexes[0] + 1];
+    assert.ok(
+      next === undefined || /^\S+:/u.test(next),
+      `descriptionの継続行があります: ${next ?? ""}`,
+    );
+    assert.match(value, /各Step|Stepごと|Stepの開始/u);
+  },
+);
+
+function adapterBody(markdown: string): string {
+  return markdown.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/u, "");
+}
+
+function enumeratedNumbers(body: string): readonly string[] {
+  const numbers = new Set<string>();
+  for (const line of body.split(/\r?\n/u)) {
+    const item = /^\s*(?:\|\s*)?(\d+)\s*[.)|]/u.exec(line);
+    if (item) numbers.add(item[1]);
+  }
+  return [...numbers];
+}
+
+function duplicatesStepList(body: string): boolean {
+  return enumeratedNumbers(body).length >= ADAPTER_MAX_ENUMERATED_NUMBERS;
+}
+
+Then("adapter正本は実在するStep skill名を列挙しない", function () {
+  const markdown = this.result as string;
+  const stepSkills = fs
+    .readdirSync(path.join(this.root, ".agent-skill-chain", "skills"), {
+      withFileTypes: true,
+    })
+    .filter((entry) => entry.isDirectory() && /^step-\d{2}-/u.test(entry.name))
+    .map((entry) => entry.name);
+  assert.notEqual(stepSkills.length, 0, "Step skillが見つかりません");
+  const listed = stepSkills.filter((name) => markdown.includes(name));
+  assert.deepEqual(listed, [], "Step skillの実名を列挙しています");
+  const body = adapterBody(markdown);
+  assert.equal(
+    duplicatesStepList(body),
+    false,
+    `Step一覧を複製しています: 列挙された番号 ${enumeratedNumbers(body).join(",")}`,
+  );
+});
+
+const STEP_NUMBERS = Array.from({ length: 12 }, (_, index) => index);
+
+const ENUMERATION_FIXTURES: ReadonlyArray<{
+  name: string;
+  body: string;
+  duplicates: boolean;
+}> = [
+  {
+    name: "ピリオド形式の順序listでStep一覧を並べる",
+    body: STEP_NUMBERS.map((number) => `${number}. 手順`).join("\n"),
+    duplicates: true,
+  },
+  {
+    name: "閉じ括弧形式の順序listでStep一覧を並べる",
+    body: STEP_NUMBERS.map((number) => `${number}) 手順`).join("\n"),
+    duplicates: true,
+  },
+  {
+    name: "ピリオドと閉じ括弧を混在させてStep一覧を並べる",
+    body: STEP_NUMBERS.map((number) =>
+      number % 2 === 0 ? `${number}. 手順` : `${number}) 手順`,
+    ).join("\n"),
+    duplicates: true,
+  },
+  {
+    name: "表の第1 cellでStep一覧を並べる",
+    body: ["| Step | skill |", "|---|---|"]
+      .concat(STEP_NUMBERS.map((number) => `| ${number} | 手順 |`))
+      .join("\n"),
+    duplicates: true,
+  },
+  {
+    name: "番号を持たない表を置く",
+    body: [
+      "| host | path |",
+      "|---|---|",
+      "| Claude Code | .claude/skills/asc-step/SKILL.md |",
+      "| Codex | .agents/skills/asc-step/SKILL.md |",
+    ].join("\n"),
+    duplicates: false,
+  },
+  {
+    name: "上限未満の短い手順を置く",
+    body: STEP_NUMBERS.slice(0, ADAPTER_MAX_ENUMERATED_NUMBERS - 1)
+      .map((number) => `${number}. 手順`)
+      .join("\n"),
+    duplicates: false,
+  },
+];
+
+Given("Step一覧複製の判定fixtureがある", function () {
+  this.result = ENUMERATION_FIXTURES;
+});
+
+When("各fixtureをStep一覧複製の判定にかける", function () {
+  const fixtures = this.result as typeof ENUMERATION_FIXTURES;
+  this.result = fixtures.map((fixture) => ({
+    name: fixture.name,
+    expected: fixture.duplicates,
+    actual: duplicatesStepList(fixture.body),
+  }));
+});
+
+Then("判定は順序listのmarker形式に依存しない", function () {
+  const observed = this.result as ReadonlyArray<{
+    name: string;
+    expected: boolean;
+    actual: boolean;
+  }>;
+  assert.equal(observed.length, ENUMERATION_FIXTURES.length);
+  assert.deepEqual(
+    observed.filter((entry) => entry.actual !== entry.expected),
+    [],
+  );
+  assert.equal(
+    observed.filter((entry) => entry.expected).length,
+    4,
+    "複製とみなすfixtureが4件必要です",
+  );
+});
 
 Given("package内容検査scriptがある", function () {
   this.root = process.cwd();
