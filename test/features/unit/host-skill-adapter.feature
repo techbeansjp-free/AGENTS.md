@@ -17,3 +17,8 @@ Feature: host skill登録アダプターのpackage契約
     Then adapter正本は配布先でも解決するStep skill一覧linkを持つ
     And adapter正本のdescriptionは各Step境界での起動を促す単一行である
     And adapter正本は実在するStep skill名を列挙しない
+
+  Scenario: SCN-UNIT-HOST-SKILL-004 Step一覧複製の判定は順序listのmarker形式に依存しない
+    Given Step一覧複製の判定fixtureがある
+    When 各fixtureをStep一覧複製の判定にかける
+    Then 判定は順序listのmarker形式に依存しない

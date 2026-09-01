@@ -153,6 +153,23 @@ Then(
   },
 );
 
+function adapterBody(markdown: string): string {
+  return markdown.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/u, "");
+}
+
+function enumeratedNumbers(body: string): readonly string[] {
+  const numbers = new Set<string>();
+  for (const line of body.split(/\r?\n/u)) {
+    const item = /^\s*(?:\|\s*)?(\d+)\s*[.)|]/u.exec(line);
+    if (item) numbers.add(item[1]);
+  }
+  return [...numbers];
+}
+
+function duplicatesStepList(body: string): boolean {
+  return enumeratedNumbers(body).length >= ADAPTER_MAX_ENUMERATED_NUMBERS;
+}
+
 Then("adapter正本は実在するStep skill名を列挙しない", function () {
   const markdown = this.result as string;
   const stepSkills = fs
@@ -164,15 +181,92 @@ Then("adapter正本は実在するStep skill名を列挙しない", function () 
   assert.notEqual(stepSkills.length, 0, "Step skillが見つかりません");
   const listed = stepSkills.filter((name) => markdown.includes(name));
   assert.deepEqual(listed, [], "Step skillの実名を列挙しています");
-  const body = markdown.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/u, "");
-  const enumerated = new Set<string>();
-  for (const line of body.split(/\r?\n/u)) {
-    const item = /^\s*(?:\|\s*)?(\d+)\s*[.)|]/u.exec(line);
-    if (item) enumerated.add(item[1]);
-  }
-  assert.ok(
-    enumerated.size < ADAPTER_MAX_ENUMERATED_NUMBERS,
-    `Step一覧を複製しています: 列挙された番号 ${[...enumerated].join(",")}`,
+  const body = adapterBody(markdown);
+  assert.equal(
+    duplicatesStepList(body),
+    false,
+    `Step一覧を複製しています: 列挙された番号 ${enumeratedNumbers(body).join(",")}`,
+  );
+});
+
+const STEP_NUMBERS = Array.from({ length: 12 }, (_, index) => index);
+
+const ENUMERATION_FIXTURES: ReadonlyArray<{
+  name: string;
+  body: string;
+  duplicates: boolean;
+}> = [
+  {
+    name: "ピリオド形式の順序listでStep一覧を並べる",
+    body: STEP_NUMBERS.map((number) => `${number}. 手順`).join("\n"),
+    duplicates: true,
+  },
+  {
+    name: "閉じ括弧形式の順序listでStep一覧を並べる",
+    body: STEP_NUMBERS.map((number) => `${number}) 手順`).join("\n"),
+    duplicates: true,
+  },
+  {
+    name: "ピリオドと閉じ括弧を混在させてStep一覧を並べる",
+    body: STEP_NUMBERS.map((number) =>
+      number % 2 === 0 ? `${number}. 手順` : `${number}) 手順`,
+    ).join("\n"),
+    duplicates: true,
+  },
+  {
+    name: "表の第1 cellでStep一覧を並べる",
+    body: ["| Step | skill |", "|---|---|"]
+      .concat(STEP_NUMBERS.map((number) => `| ${number} | 手順 |`))
+      .join("\n"),
+    duplicates: true,
+  },
+  {
+    name: "番号を持たない表を置く",
+    body: [
+      "| host | path |",
+      "|---|---|",
+      "| Claude Code | .claude/skills/asc-step/SKILL.md |",
+      "| Codex | .agents/skills/asc-step/SKILL.md |",
+    ].join("\n"),
+    duplicates: false,
+  },
+  {
+    name: "上限未満の短い手順を置く",
+    body: STEP_NUMBERS.slice(0, ADAPTER_MAX_ENUMERATED_NUMBERS - 1)
+      .map((number) => `${number}. 手順`)
+      .join("\n"),
+    duplicates: false,
+  },
+];
+
+Given("Step一覧複製の判定fixtureがある", function () {
+  this.result = ENUMERATION_FIXTURES;
+});
+
+When("各fixtureをStep一覧複製の判定にかける", function () {
+  const fixtures = this.result as typeof ENUMERATION_FIXTURES;
+  this.result = fixtures.map((fixture) => ({
+    name: fixture.name,
+    expected: fixture.duplicates,
+    actual: duplicatesStepList(fixture.body),
+  }));
+});
+
+Then("判定は順序listのmarker形式に依存しない", function () {
+  const observed = this.result as ReadonlyArray<{
+    name: string;
+    expected: boolean;
+    actual: boolean;
+  }>;
+  assert.equal(observed.length, ENUMERATION_FIXTURES.length);
+  assert.deepEqual(
+    observed.filter((entry) => entry.actual !== entry.expected),
+    [],
+  );
+  assert.equal(
+    observed.filter((entry) => entry.expected).length,
+    4,
+    "複製とみなすfixtureが4件必要です",
   );
 });
 
