@@ -265,6 +265,29 @@
           "afterSha256": "4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-PROTECTED-READ-DIAGNOSIS-002",
+      "status": "staged",
+      "fromVersion": 9,
+      "toVersion": 10,
+      "owner": "repository maintainer",
+      "rationale": "TQP-PROTECTED-READ-DIAGNOSIS-001のafterSha256が指す内容には、fail-closedの因果を逆に述べたsource commentが含まれていた。読めなかったfileをsnapshotへ載せないことがfail-closedを成立させると書いていたが、後段のactualChangesはafter === undefinedをskipするため、載せないだけでは候補による保護対象fileの削除が検出されずに通る。安全不変条件の誤った説明を保護fileへ固定しないため、commentと要件本文を実際の因果へ直し、非ENOENTのerrnoとlockfile欠損を覆うscenarioを2件加えた内容で代替proposalを登録する。001は適用せず残る",
+      "rollback": "登録済みproposalは削除できず、qualityContractVersionの減少も受理されない。適用前は有効化しないまま維持する。適用後に戻す場合は、check_project_quality.tsを本proposal適用前の内容へ戻す新規proposalを次versionとして登録し、同じ二段階手順で前進させる",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "scripts/check_project_quality.ts",
+          "beforeSha256": "3f910b022f50052651b3684b7b95e99a4d8acbdb2fc696fabe8cfb4898d1c292",
+          "afterSha256": "13e98bff1ed8d5b62a98003da9c335fffa40961cd1c94f82802ac22c9739150c"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "19581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7",
+          "afterSha256": "4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5"
+        }
+      ]
     }
   ]
 }
