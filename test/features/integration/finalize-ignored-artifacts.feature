@@ -46,3 +46,23 @@ Feature: CLIがignore対象を分類してworktree finalizeを判定する
     When fixture worktreeをfinalize applyする
     Then applyはworktreeを削除しbranchを保持する
 
+  Scenario: SCN-INT-FINALIGN-010 既定branchから到達できなければ免除しない
+    Given 既定branchから到達できないfinalize fixtureがある
+    When fixture worktreeをfinalize dry-runする
+    Then cleanup計画はupstream由来の理由で拒否される
+
+  Scenario: SCN-INT-FINALIGN-011 --complete経路でも到達できなければ免除しない
+    Given 既定branchから到達できないfinalize fixtureがある
+    When fixture worktreeを--completeでfinalize dry-runする
+    Then cleanup preview phaseはupstream由来の理由で拒否される
+
+  Scenario: SCN-INT-FINALIGN-012 --complete applyでも到達できなければ免除しない
+    Given 既定branchから到達できないfinalize fixtureがある
+    When fixture worktreeを--completeでfinalize applyする
+    Then applyは到達不能を理由に完了しない
+
+  Scenario: SCN-INT-FINALIGN-013 --complete無しのapplyでも到達できなければ免除しない
+    Given 既定branchから到達できないfinalize fixtureがある
+    When fixture worktreeをfinalize applyする
+    Then applyは到達不能を理由に完了しない
+

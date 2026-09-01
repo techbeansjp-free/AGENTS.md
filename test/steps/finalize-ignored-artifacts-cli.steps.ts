@@ -34,7 +34,8 @@ function runCli(args: string[]): SpawnSyncReturns<string> {
 
 function createFinalizeFixture(
   world: FinalizeIgnoredCliWorld,
-  artifact: "dist" | "ignored-env" | "untracked" | "remote-deleted",
+  artifact:
+    "dist" | "ignored-env" | "untracked" | "remote-deleted" | "unreachable",
 ): void {
   world.root = world.initRepo();
   const remote = world.temp("asc-finalign-remote-");
@@ -103,7 +104,18 @@ function createFinalizeFixture(
     fs.writeFileSync(path.join(world.worktree, "dist", "src", "cli.js"), "x\n");
   } else if (artifact === "ignored-env")
     fs.writeFileSync(path.join(world.worktree, ".env"), "SECRET=fixture\n");
-  else if (artifact === "remote-deleted") {
+  else if (artifact === "unreachable") {
+    /**
+     * 既定branchから到達できない状態。**免除してはならない入力である。**
+     * remote branchを消したうえでworktreeへ既定branchに無いcommitを積む。
+     * `undefined`や偽を真へ倒す変異（`?? true`など）をこのfixtureが落とす
+     * （Issue #1099のreview指摘）。
+     */
+    git(world.remote, ["update-ref", "-d", "refs/heads/bugfix/894-finalign"]);
+    fs.writeFileSync(path.join(world.worktree, "unreachable.txt"), "x\n");
+    git(world.worktree, ["add", "unreachable.txt"]);
+    git(world.worktree, ["commit", "-m", "fixture: unreachable"]);
+  } else if (artifact === "remote-deleted") {
     /**
      * PRがmergeされremote branchが削除された着地形。**remote側のrefだけを消す。**
      * `push --delete`はlocalのremote-tracking refまで消してしまい、実運用で頻出する
@@ -158,6 +170,10 @@ Given("distだけを持つmerge済みfinalize fixtureがある", function () {
 
 Given("ignore済み.envを持つmerge済みfinalize fixtureがある", function () {
   createFinalizeFixture(this, "ignored-env");
+});
+
+Given("既定branchから到達できないfinalize fixtureがある", function () {
+  createFinalizeFixture(this, "unreachable");
 });
 
 Given("remote branchを失ったmerge済みfinalize fixtureがある", function () {
@@ -219,9 +235,6 @@ When("fixture worktreeを--completeでfinalize applyする", function () {
  * **apply実行時に再計算されるcleanup計画**を観測する。`executeCompletionFlow`は
  * apply経路でstateを取り直して`planWorktreeCleanup`を呼び直すため、dry-runとは
  * 別の呼び出しを通る（Issue #1099）。
- *
- * 完了そのものは検査しない。fixtureにtrusted policyのsafety floorが無く
- * `cleanup-apply`が別理由で止まるためで、本scenarioが測る量ではない。
  */
 When("fixture worktreeをfinalize applyする", function () {
   const preview = runCli([
@@ -248,8 +261,59 @@ When("fixture worktreeをfinalize applyする", function () {
 
 /**
  * **`--complete`を伴わないapply経路**で再計算されるcleanup計画を観測する。
- * `executeCompletionFlow`とは別の呼び出しを通る（Issue #1099）。
+ * `main()`内の`worktree finalize`分岐が`planWorktreeCleanup`を呼び直す経路であり、
+ * `executeCompletionFlow`とは別の呼び出しである（Issue #1099）。
  */
+Then("cleanup計画はupstream由来の理由で拒否される", function () {
+  const parsed = parsedFinalize(this) as {
+    cleanup?: { state?: string; reasons?: string[] };
+  };
+  const reasons = parsed.cleanup?.reasons ?? [];
+  assert.equal(parsed.cleanup?.state, "rejected");
+  assert.ok(
+    reasons.some((reason) => reason.includes("pushされていません")),
+    `upstream由来の拒否理由がありません: ${reasons.join(" / ")}`,
+  );
+});
+
+Then("cleanup preview phaseはupstream由来の理由で拒否される", function () {
+  const parsed = parsedFinalize(this) as {
+    phases?: Array<{ phase: string; state: string; reasons?: string[] }>;
+  };
+  const preview = parsed.phases?.find(
+    (phase) => phase.phase === "cleanup-preview",
+  );
+  assert.ok(preview, "cleanup-preview phaseがありません");
+  assert.equal(preview.state, "rejected");
+  /**
+   * **stateだけでなく理由文字列を検査する。** `reachableFromDefaultBranch`を
+   * 定数`true`にする変異はverdictを反転させないが、upstream由来の理由だけを
+   * 消す。stateだけを見ると素通りする（Issue #1099のreview指摘）。
+   */
+  assert.ok(
+    (preview.reasons ?? []).some((reason) =>
+      reason.includes("pushされていません"),
+    ),
+    `upstream由来の拒否理由がありません: ${(preview.reasons ?? []).join(" / ")}`,
+  );
+});
+
+Then("applyは到達不能を理由に完了しない", function () {
+  const stdout = this.finalizeProcess.stdout;
+  const parsed = JSON.parse(stdout) as { state?: string };
+  assert.notEqual(parsed.state, "finalized");
+  assert.equal(fs.existsSync(this.worktree), true, "worktreeが削除されました");
+  /**
+   * **出力全体に理由文字列が現れることを検査する。** `state`だけを見ると、
+   * `reachableFromDefaultBranch`を定数`true`にする変異がverdictを反転させずに
+   * upstream由来の理由だけを消す形を通してしまう（Issue #1099のreview指摘）。
+   */
+  assert.ok(
+    stdout.includes("pushされていません"),
+    `upstream由来の拒否理由がありません: ${stdout.slice(0, 500)}`,
+  );
+});
+
 Then("applyはworktreeを削除しbranchを保持する", function () {
   const parsed = JSON.parse(this.finalizeProcess.stdout) as {
     state?: string;
@@ -261,7 +325,22 @@ Then("applyはworktreeを削除しbranchを保持する", function () {
     `finalizeされません: ${this.finalizeProcess.stdout.slice(0, 400)}`,
   );
   assert.equal(parsed.branchPreserved, true);
+  /**
+   * **製品の自己申告だけで判定しない。** `state`と`branchPreserved`はいずれも
+   * 製品の出力である。Gitの実状態を独立に観測する（Issue #1099のreview指摘）。
+   */
   assert.equal(fs.existsSync(this.worktree), false);
+  assert.equal(
+    git(this.root, ["worktree", "list", "--porcelain"]).includes(this.worktree),
+    false,
+    "worktree登録が残っています",
+  );
+  assert.ok(
+    git(this.root, ["branch", "--list", "bugfix/894-finalign"]).includes(
+      "bugfix/894-finalign",
+    ),
+    "branchが保持されていません",
+  );
 });
 
 Then("apply時のcleanup preview phaseも拒否されない", function () {
