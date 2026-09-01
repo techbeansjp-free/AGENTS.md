@@ -60,3 +60,9 @@ Feature: CLIで登録済みworktreeを事後走査する
     Given ignored出力が1MiBを超える走査用worktreeがある
     When worktree surveyをJSON形式で実行する
     Then 走査はerrorなしで登録済みworktreeを分類する
+
+  Scenario: SCN-INT-WTSURVEY-013 remote branch削除後もmerge済みworktreeをcleanup-readyとして報告する
+    Given remote branchを削除したmerge済みの走査用worktreeがある
+    When worktree surveyをJSON形式で実行する
+    Then 対象worktreeはcleanup-readyとして報告される
+

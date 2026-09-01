@@ -12,9 +12,12 @@ import {
   type WorktreeObservation,
   type WorktreeSurvey,
 } from "../../src/domain/worktree-survey.js";
+import { inspectRecoveryState } from "../../src/domain/worktree.js";
 import { init } from "../../src/domain/lifecycle.js";
 
 interface SurveyWorld extends WorkflowWorld {
+  remote: string;
+  recovery: ReturnType<typeof inspectRecoveryState>;
   ignoredOutputBytes: number;
   input: unknown;
   survey: WorktreeSurvey;
@@ -64,6 +67,7 @@ function createSurveyRepository(
     runGit(world.root, ["commit", "-q", "-m", "ignore"]);
   }
   const remote = world.temp("asc-survey-remote-");
+  world.remote = remote;
   runGit(remote, ["init", "--bare"]);
   runGit(world.root, ["remote", "add", "origin", remote]);
   runGit(world.root, ["push", "-u", "origin", "main"]);
@@ -172,7 +176,13 @@ Given("merge済みで未追跡fileを2件持つworktree観測がある", functio
   this.input = [observation({ untracked: ["a", "b"] })];
 });
 Given("merge済みで未pushのcommitを3件持つworktree観測がある", function () {
-  this.input = [observation({ unpushedCommits: 3 })];
+  /**
+   * `recoveryReachable`を偽にする。既定branchから到達できるなら未pushのcommitも
+   * remoteに存在するため、Issue #1097以降は保持理由にならない。**未pushを保持理由に
+   * するのは復旧可能性が成立しないときだけである。** この scenario が守るのは
+   * 「復旧できないときに件数を理由へ含める」ことであり、その意図は変わらない。
+   */
+  this.input = [observation({ unpushedCommits: 3, recoveryReachable: false })];
 });
 Given("merge済みで復旧参照のないworktree観測がある", function () {
   this.input = [observation({ recoveryReachable: false })];
@@ -253,7 +263,7 @@ Then("判定はretainで未push3件の理由を含む", function () {
 Then("判定はretainで復旧不能理由を含む", function () {
   assert.equal(this.survey.entries[0]?.disposition, "retain");
   assert.ok(
-    this.survey.entries[0]?.reasons.some((reason) =>
+    this.survey.entries[0]?.reasons.some((reason: string) =>
       reason.includes("復旧手段"),
     ),
   );
@@ -292,14 +302,14 @@ Then("errorのない空の走査結果を返す", function () {
 });
 Then("slug不一致を理由として報告する", function () {
   assert.ok(
-    this.survey.entries[0]?.reasons.some((reason) =>
+    this.survey.entries[0]?.reasons.some((reason: string) =>
       reason.includes("slugが一致しません"),
     ),
   );
 });
 Then("Issue番号不一致を理由として報告する", function () {
   assert.ok(
-    this.survey.entries[0]?.reasons.some((reason) =>
+    this.survey.entries[0]?.reasons.some((reason: string) =>
       reason.includes("Issue番号が一致しません"),
     ),
   );
@@ -307,7 +317,7 @@ Then("Issue番号不一致を理由として報告する", function () {
 Then("slug不一致を報告しても判定はcleanup-readyである", function () {
   assert.equal(this.survey.entries[0]?.disposition, "cleanup-ready");
   assert.ok(
-    this.survey.entries[0]?.reasons.some((reason) =>
+    this.survey.entries[0]?.reasons.some((reason: string) =>
       reason.includes("slugが一致しません"),
     ),
   );
@@ -338,6 +348,23 @@ Given("ignored出力が1MiBを超える走査用worktreeがある", function () 
   createSurveyRepository(this, true, "node_modules/\n");
   this.ignoredOutputBytes = fillIgnoredArtifacts(this.worktree);
 });
+/**
+ * PRがmergeされremote branchが削除された着地形。upstream refは陳腐化し
+ * `rev-list --count @{upstream}..HEAD`は0でなくなるが、**HEADは既定branchから到達できる**
+ * ためcommitは失われない（Issue #1097）。survey CLIが未pushを保持理由にしないことを確かめる。
+ */
+Given("remote branchを削除したmerge済みの走査用worktreeがある", function () {
+  createSurveyRepository(this, true);
+  /**
+   * 実物#996と同じ形にする。remote側のrefだけを消してlocalのremote-tracking refを
+   * 陳腐化させ、branchをmergeの結果へ追随させる。`rev-list --count @{upstream}..HEAD`は
+   * 0でなくなるが、**HEADは既定branchから到達できるためcommitは失われない**（Issue #1097）。
+   * `push --delete`ではlocalのtracking refも消えてこの形にならない。
+   */
+  runGit(this.remote, ["update-ref", "-d", "refs/heads/feature/883-survey"]);
+  runGit(this.worktree, ["merge", "--ff-only", "main"]);
+});
+
 When("worktree surveyをJSON形式で実行する", function () {
   runCli(this, ["worktree", "survey", `--root=${this.root}`]);
 });
@@ -419,4 +446,40 @@ Then("走査はerrorなしで登録済みworktreeを分類する", function () {
   const entries = survey.entries as Array<Record<string, unknown>>;
   assert.equal(entries.length, 2);
   assert.ok(entries.some((entry) => entry.path === this.worktree));
+});
+
+Given("既定branchへmerge済みでupstreamを失ったworktreeがある", function () {
+  createSurveyRepository(this, true);
+  runGit(this.root, ["push", "origin", "--delete", "feature/883-survey"]);
+  runGit(this.worktree, ["fetch", "--prune", "origin"]);
+});
+
+Given("既定branchから到達できないcommitを持つworktreeがある", function () {
+  createSurveyRepository(this, false);
+  fs.writeFileSync(path.join(this.worktree, "unmerged.txt"), "unmerged\n");
+  runGit(this.worktree, ["add", "unmerged.txt"]);
+  runGit(this.worktree, ["commit", "-m", "fixture: unmerged"]);
+});
+
+Given("既定branch refを解決できないworktreeがある", function () {
+  createSurveyRepository(this, true);
+  runGit(this.root, ["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"]);
+});
+
+When("復旧可能性を観測する", function () {
+  this.recovery = inspectRecoveryState(this.worktree);
+});
+
+Then("復旧可能性は{string}である", function (expected: string) {
+  assert.equal(this.recovery.recoveryReachable, expected === "真");
+});
+
+Then("既定branch到達は{string}である", function (expected: string) {
+  assert.equal(this.recovery.reachableFromDefaultBranch, expected === "真");
+});
+
+Then("upstream由来の観測はすべて成立する", function () {
+  assert.equal(this.recovery.pushed, true);
+  assert.equal(this.recovery.remoteBranch, true);
+  assert.notEqual(this.recovery.recoveryRef, undefined);
 });

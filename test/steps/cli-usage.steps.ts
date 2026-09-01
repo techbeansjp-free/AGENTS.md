@@ -13,7 +13,11 @@ import {
 } from "../../src/cli-usage.js";
 import { checkCliUsage } from "../../scripts/check_cli_usage.js";
 
-const { Given, When, Then } = stepDefinitions<WorkflowWorld>();
+interface CliUsageWorld extends WorkflowWorld {
+  usageEntry: unknown;
+}
+
+const { Given, When, Then } = stepDefinitions<CliUsageWorld>();
 
 interface CapturedRun {
   readonly status: number | undefined;
@@ -371,3 +375,32 @@ When(
 Then("CLI usage単体検査は期待結果になる", function () {
   assert.equal(this.validationOutcome?.valid, true);
 });
+
+Given("CLI usage正本がある", function () {
+  this.usageEntry = COMMAND_USAGE;
+});
+
+When("{string}のusage宣言を検査する", function (target: string) {
+  const [command, subcommand] = target.split(" ");
+  const usage = (this.usageEntry as typeof COMMAND_USAGE).find(
+    (entry) => entry.command === command && entry.subcommand === subcommand,
+  );
+  assert.ok(usage, `usage entryがありません: ${target}`);
+  this.usageEntry = [
+    ...usage.requiredFlags,
+    ...usage.conditionalFlags,
+    ...usage.optionalFlags,
+  ].map((entry) => `--${entry.name}`);
+});
+
+Then(
+  "usageは{string}と{string}と{string}を宣言する",
+  function (first: string, second: string, third: string) {
+    const declared = this.usageEntry as readonly string[];
+    for (const name of [first, second, third])
+      assert.ok(
+        declared.includes(name),
+        `${name}が宣言されていません: ${declared.join(", ")}`,
+      );
+  },
+);

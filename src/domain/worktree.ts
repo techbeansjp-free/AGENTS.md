@@ -649,12 +649,50 @@ export function inspectRecoveryState(
   const recoveryRef =
     upstream.status === 0 ? upstream.stdout.trim() : undefined;
   const pushed = remoteSha.status === 0 && remoteSha.stdout.trim() === headSha;
+  const defaultRef = resolveDefaultBranchRef(worktreePath);
+  const reachableFromDefaultBranch =
+    defaultRef !== undefined &&
+    git(["merge-base", "--is-ancestor", headSha, defaultRef], worktreePath, {
+      allowFailure: true,
+    }).status === 0;
+  /**
+   * **既定branchから到達できるなら、upstream refの状態にかかわらずcommitはremoteに在る。**
+   *
+   * `pushed`と`remoteBranch`と`recoveryRef`はどれも「commitがremoteに在るか」の代理でしかない。
+   * PRがmergeされてremote branchが削除されると代理は不成立になるが、commitは既定branchの
+   * 履歴に残っている（Issue #1097）。**代理ではなく実際に測る。**
+   *
+   * 判定側（`assessWorktreeRemovalSafety`）は変更しない。REQ-LC-009が「他の観測から
+   * 安全状態を推定せずretainとする」と定めており、判定側で別fieldを根拠に理由を抑制すると
+   * 同要件に反する。**是正するのは観測の側である。**
+   */
   return {
-    pushed,
-    remoteBranch: upstream.status === 0,
-    recoveryRef,
-    recoveryReachable: Boolean(recoveryRef) && pushed,
+    pushed: pushed || reachableFromDefaultBranch,
+    remoteBranch: upstream.status === 0 || reachableFromDefaultBranch,
+    recoveryRef:
+      recoveryRef ?? (reachableFromDefaultBranch ? defaultRef : undefined),
+    reachableFromDefaultBranch,
+    recoveryReachable:
+      (Boolean(recoveryRef) && pushed) || reachableFromDefaultBranch,
   };
+}
+
+/**
+ * 既定branchのremote-tracking refを解決する。
+ *
+ * 既定branch名は利用側が所有するため`refs/remotes/origin/HEAD`から解決し、hard codeしない。
+ * **解決できない場合は`undefined`を返し、呼び出し側で到達不成立へ倒す。** 観測できないことを
+ * 到達可能の根拠にしない（Issue #1097）。
+ */
+function resolveDefaultBranchRef(worktreePath: string): string | undefined {
+  const symbolic = git(
+    ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+    worktreePath,
+    { allowFailure: true },
+  );
+  if (symbolic.status !== 0) return undefined;
+  const ref = symbolic.stdout.trim();
+  return ref.length === 0 ? undefined : ref;
 }
 
 export { githubRepository };

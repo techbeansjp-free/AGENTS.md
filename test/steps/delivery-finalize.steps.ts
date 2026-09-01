@@ -1266,6 +1266,19 @@ Given("finalize stateを{word}にする", function (condition: string) {
     unpushed: { pushed: false },
     unmerged: { prMerged: false },
     "recovery-unknown": { recoveryReachable: false },
+    /**
+     * PRがmergeされremote branchが削除された着地形の**観測結果**。
+     * upstream refは無いが、`inspectRecoveryState`が既定branchからの到達を観測して
+     * `pushed`・`remoteBranch`・`recoveryRef`を成立させる（Issue #1097）。
+     * **判定側はこの観測をそのまま受け取るだけで、他fieldから安全を推定しない。**
+     */
+    "merged-remote-deleted": {
+      pushed: true,
+      remoteBranch: true,
+      recoveryRef: "origin/main",
+      recoveryReachable: true,
+      unpushedCommits: 0,
+    },
     "spec-unknown": { specConsistent: "unknown" },
     "ignored-artifact": { ignoredArtifacts: ["output.bin"] },
   };
@@ -1277,6 +1290,13 @@ Given("safe finalize reportを作成済みである", function () {
 });
 When("finalize reportを作成する", function () {
   this.finalizeReport = buildFinalizeReport(this.finalizeState);
+});
+Then("finalize reportはsafeである", function () {
+  assert.equal(
+    this.finalizeReport.safe,
+    true,
+    `safeではありません: ${this.finalizeReport.reasons.join(" / ")}`,
+  );
 });
 When("report hashを承認してfinalize applyを試みる", function () {
   this.finalizeReport = buildFinalizeReport(this.finalizeState);

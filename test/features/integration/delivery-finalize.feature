@@ -326,3 +326,10 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When trusted policyなしでfinalize applyを試みる
     Then finalize applyは失敗する
     And destructive operation callは0件である
+
+  Scenario: SCN-INT-FINALIZE-006 既定branch到達が成立すればremote branch削除後もsafeになる
+    Given merged、clean、pushed、recoveryありのworktree stateがある
+    And finalize stateをmerged-remote-deletedにする
+    When finalize reportを作成する
+    Then finalize reportはsafeである
+

@@ -85,3 +85,24 @@ Feature: 登録済みworktreeを安全側に分類する
     Given cleanup-readyでslugだけが異なるworktree観測がある
     When worktree走査を純粋判定する
     Then slug不一致を報告しても判定はcleanup-readyである
+
+  Scenario: SCN-UNIT-WTSURVEY-018 upstreamが無くても既定branchから到達できれば復旧可能とする
+    Given 既定branchへmerge済みでupstreamを失ったworktreeがある
+    When 復旧可能性を観測する
+    Then 復旧可能性は"真"である
+
+  Scenario: SCN-UNIT-WTSURVEY-019 既定branchから到達できずupstreamも一致しなければ復旧不能とする
+    Given 既定branchから到達できないcommitを持つworktreeがある
+    When 復旧可能性を観測する
+    Then 復旧可能性は"偽"である
+
+  Scenario: SCN-UNIT-WTSURVEY-020 既定branch refを解決できないときは到達不可として扱う
+    Given 既定branch refを解決できないworktreeがある
+    When 復旧可能性を観測する
+    Then 既定branch到達は"偽"である
+
+  Scenario: SCN-UNIT-WTSURVEY-021 既定branch到達が成立するとupstream由来の観測も成立する
+    Given 既定branchへmerge済みでupstreamを失ったworktreeがある
+    When 復旧可能性を観測する
+    Then upstream由来の観測はすべて成立する
+
