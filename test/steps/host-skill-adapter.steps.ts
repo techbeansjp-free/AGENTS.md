@@ -91,6 +91,46 @@ Then(
   },
 );
 
+When("adapter正本の発見経路契約を検査する", function () {
+  this.result = fs.readFileSync(path.join(this.root, SOURCE), "utf8");
+});
+
+Then("adapter正本は配布先でも解決するStep skill一覧linkを持つ", function () {
+  const markdown = this.result as string;
+  const match = /\]\((\.\.\/[^)]*00_利用案内\.md)\)/u.exec(markdown);
+  assert.ok(match, "Step skill一覧へのlinkがありません");
+  const link = match[1];
+  assert.ok(
+    link.startsWith("../../../"),
+    `一覧linkは配布先でも解決する../../../基点が必要です: ${link}`,
+  );
+  const resolved = path.resolve(path.join(this.root, SOURCE), "..", link);
+  assert.equal(fs.existsSync(resolved), true, `解決先がありません: ${link}`);
+});
+
+Then(
+  "adapter正本のdescriptionは各Step境界での起動を促す単一行である",
+  function () {
+    const markdown = this.result as string;
+    const description = /^description:\s*(\S.*)$/mu.exec(markdown)?.[1];
+    assert.ok(description, "descriptionがありません");
+    assert.match(description, /各Step|Stepごと|Stepの開始/u);
+  },
+);
+
+Then("adapter正本は実在するStep skill名を列挙しない", function () {
+  const markdown = this.result as string;
+  const stepSkills = fs
+    .readdirSync(path.join(this.root, ".agent-skill-chain", "skills"), {
+      withFileTypes: true,
+    })
+    .filter((entry) => entry.isDirectory() && /^step-\d{2}-/u.test(entry.name))
+    .map((entry) => entry.name);
+  assert.equal(stepSkills.length, 12);
+  const listed = stepSkills.filter((name) => markdown.includes(name));
+  assert.deepEqual(listed, []);
+});
+
 Given("package内容検査scriptがある", function () {
   this.root = process.cwd();
 });
