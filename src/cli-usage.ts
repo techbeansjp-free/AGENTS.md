@@ -601,7 +601,11 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     subcommand: "evidence",
     summary: "reviewの外部証拠を記録する",
     requiredFlags: [
-      flag("artifact", "path", "review成果物"),
+      flag(
+        "artifact",
+        "path",
+        "版管理下のreview成果物。final commitのgit treeから読むため一時ステージング内のpathは受理しない",
+      ),
       flag("review-id", "text", "review識別子"),
       flag("run-id", "text", "CI run識別子"),
       flag("pr", "整数", "PR番号"),
