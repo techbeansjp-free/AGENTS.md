@@ -11,6 +11,8 @@ description: 検証済みトラッカーとモード別実装計画に従い、�
 
 role欄の担当roleが`implementer`であること、許可path・操作、必要証拠、要求能力tier、provider欄の上限、model設定欄、fallback欄、独立性証拠欄を実装開始前に検証する。providerとmodel設定はproject choiceの解決結果を入力とし、汎用skillは固有のmodel slugを要求しない。要求能力を満たす解決、ACに対応するVerification Set、または別identity・contextのreviewer割当が欠ける場合は実装を開始せず、停止点と再開条件を報告する。implementerは自分の差分を最終承認せず、mergeを裁定しない。
 
+[ASC本体の是正を作業scopeへ入れない](../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない)を作業開始前に全文読む。**発見した欠陥がASC本体のものであれば、その作業のscope内で是正しない。** 記録して前進し、作業が進まない場合だけ停止・記録・別Issueへの分離・owner決裁の順に扱う。作業の成果物をASCの契約へ合わせることは従来どおり必須である。
+
 実装中に発見した問題は、fullでは03、quickとpocでは集約00の「実装中発見の前向き記録」へ発見ID・事実・影響・判断・対処・検証・仕様更新を追記する。発見ごとに一度だけ`DISC-*`形式の安定した`discoveryId`を割り当て、再評価・昇格・reviewで変更または別の発見へ再利用しない。`discoveryId`、現在モード、目的・scope・ACの変更有無、security境界拡大、不可逆操作、`changedContractKinds`、発見したモード失格条件の`{ id, evidence }`配列をJSON化し、`workflow assess-discovery --input=<JSON>`の出力で影響成果物を確定する。失格条件と契約種別はcanonical IDだけを使い、空値、重複、未知ID・未知fieldを拒否する。
 
 `continue`は記録して実装を継続する。`rebaseline-affected-contracts`は出力された影響成果物だけを再確定する。`promote-to-full`でquickをfullへ昇格する場合は、まず`workflow promote-full --staging=<同じstaging> --input=<同じ発見JSON>`をflagなしで実行する。既定は副作用のないpreviewであり、対象と診断を確認後、同じstaging・発見JSONへ`--apply`を付けた明示実行だけが00〜03を補完する。`stop-or-promote-full`は判定時点ではfileを変更せず、停止を記録するか、同じpreviewと明示`--apply`でPoCからfullへの昇格を選ぶ。昇格は元のモード判定と00をbackupし、排他lock・永続transaction・digest検証で途中停止から再実行可能にする。既同期stagingは`promotion-active`となり、同じIssueのStep 8再同期までPRへ進めない。昇格後は旧modeのStep 0・1だけを継承し、fullのStep 2〜10を補完する。Issueや変更のない成果物を作り直さない。
