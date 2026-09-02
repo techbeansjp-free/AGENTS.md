@@ -228,6 +228,118 @@ const EXPECTED_OUTPUT_MARKERS = new Map<string, string>([
   ["step-11-pr", "merge-observed"],
 ]);
 
+/**
+ * 見出し文字列から照合keyを導く。
+ *
+ * **GitHubの見出しslug規則のうち、現行linkが使う範囲だけを再現する。** 全記号への
+ * 対応は過剰であり、規則が複雑になるほど誤判定の原因になる（Issue #1117）。
+ * 小文字化し、空白を`-`へ畳み、それ以外の記号を落とす。
+ */
+function headingSlug(heading: string): string {
+  return heading
+    .trim()
+    .toLowerCase()
+    .replace(/[`*_~]/gu, "")
+    .replace(/\s+/gu, "-")
+    .replace(/[^\p{L}\p{N}\-_]/gu, "");
+}
+
+/**
+ * `SKILL.md`から規範文書へ向けた相対linkの到達性を検証する。
+ *
+ * **`templates/`向けlinkと共通化しない。** 境界rootが異なり、`templates/`側は
+ * 対応表との完全一致も課している。責務を混ぜると片方の判定条件が読めなくなる。
+ *
+ * **anchorが無いlinkはfileの実在だけを見る。** 見出しを持たない文書への
+ * link自体は壊れていない。
+ */
+function checkDocumentLinks(input: {
+  skill: string;
+  skillFile: string;
+  markdown: string;
+  docsRoot: string;
+  namespaceRoot: string;
+}): string[] {
+  const errors: string[] = [];
+  /**
+   * **docs root自身のsymlink脱出を先に拒否する。** link先の境界判定はdocs rootの
+   * realpathを基準にするため、docs root自体がnamespace外を指すsymlinkなら、
+   * どのlinkもその外側で「境界内」と判定されてしまう（Issue #1117）。
+   */
+  let docsRootReal: string;
+  try {
+    docsRootReal = fs.realpathSync(input.docsRoot);
+    const namespaceReal = fs.realpathSync(input.namespaceRoot);
+    if (!docsRootReal.startsWith(`${namespaceReal}${path.sep}`))
+      return [
+        `${input.skill}/SKILL.mdのdocs rootがsymlinkでnamespace境界外です`,
+      ];
+  } catch {
+    return [`${input.skill}/SKILL.mdのdocs rootを解決できません`];
+  }
+  const links = uniqueSorted(
+    [...input.markdown.matchAll(/\]\((\.\.\/\.\.\/docs\/[^)\s]+)\)/gu)].map(
+      (match) => match[1]!,
+    ),
+  );
+  for (const relativeLink of links) {
+    const [target = "", anchor] = relativeLink.split("#");
+    const resolved = path.resolve(path.dirname(input.skillFile), target);
+    if (!resolved.startsWith(`${input.docsRoot}${path.sep}`)) {
+      errors.push(
+        `${input.skill}/SKILL.mdのリンクがdocs境界外です: ${relativeLink}`,
+      );
+      continue;
+    }
+    /**
+     * **`existsSync`で分岐しない。** 同名のdirectoryが置かれた場合に真を返し、
+     * 続く読み取りがEISDIRで未捕捉throwになる。読み取り結果で分岐する。
+     */
+    let document: string;
+    try {
+      const stat = fs.statSync(resolved);
+      if (!stat.isFile()) throw new Error("not a file");
+      document = fs.readFileSync(resolved, "utf8");
+    } catch {
+      errors.push(
+        `${input.skill}/SKILL.mdのリンク先がありません: ${relativeLink}`,
+      );
+      continue;
+    }
+    const real = fs.realpathSync(resolved);
+    if (!real.startsWith(`${docsRootReal}${path.sep}`)) {
+      errors.push(
+        `${input.skill}/SKILL.mdのリンク先がsymlinkでdocs境界外です: ${relativeLink}`,
+      );
+      continue;
+    }
+    if (anchor === undefined || anchor === "") continue;
+    const slugs = new Set(
+      [...document.matchAll(/^#{1,6}\s+(.+?)\s*$/gmu)].map((match) =>
+        headingSlug(match[1]!),
+      ),
+    );
+    /**
+     * **percent-encodingの復号失敗を例外にしない。** `#bad%`のような不正なanchorで
+     * `decodeURIComponent`が投げると、対象skillとlinkを含む診断を返せなくなる。
+     */
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(anchor);
+    } catch {
+      errors.push(
+        `${input.skill}/SKILL.mdのリンクのanchorを復号できません: ${relativeLink}`,
+      );
+      continue;
+    }
+    if (!slugs.has(headingSlug(decoded)))
+      errors.push(
+        `${input.skill}/SKILL.mdのリンク先に見出しがありません: ${relativeLink}`,
+      );
+  }
+  return errors;
+}
+
 const uniqueSorted = (values: string[]): string[] =>
   [...new Set(values)].sort();
 
@@ -540,6 +652,15 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
         `${skill}/SKILL.mdに正規成果物${outputMarker ?? ""}がありません`,
       );
 
+    errors.push(
+      ...checkDocumentLinks({
+        skill,
+        skillFile,
+        markdown,
+        docsRoot: path.resolve(namespaceRoot, "docs"),
+        namespaceRoot,
+      }),
+    );
     for (const relativeLink of links) {
       const resolved = path.resolve(path.dirname(skillFile), relativeLink);
       if (!resolved.startsWith(`${templatesRoot}${path.sep}`)) {

@@ -212,6 +212,21 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     When 正規契約とリンク切れ・対応漏れ・経路欠落契約を検証する
     Then 正規契約だけが合格しリンク切れ・対応漏れ・経路欠落は拒否される
 
+  Scenario: SCN-UNIT-PACKAGE-017 Step skillのdocs向けlinkはlink先fileの不在を失敗にする
+    Given Step skillから規範文書へのlinkを壊したpackageがある
+    When Step skillの規範文書linkを検証する
+    Then link先fileの不在が拒否される
+
+  Scenario: SCN-UNIT-PACKAGE-018 Step skillのdocs向けlinkはanchor見出しの不在を失敗にする
+    Given Step skillから規範文書へのlinkを壊したpackageがある
+    When Step skillの規範文書linkを検証する
+    Then anchorに対応する見出しの不在が拒否される
+
+  Scenario: SCN-UNIT-PACKAGE-019 現行skillのdocs向けlinkとtemplates向け既存診断は判定を変えない
+    Given Step skillから規範文書へのlinkを壊したpackageがある
+    When Step skillの規範文書linkを検証する
+    Then 現行のStep skillと既存のtemplate診断は判定を変えない
+
   Scenario: SCN-UNIT-PACKAGE-014 全directoryはownerと使い方が分かる入口文書を持つ
     Given packageのdirectory利用案内契約がある
     When 正規契約と入口欠落・未知directory・リンク切れ契約を検証する
