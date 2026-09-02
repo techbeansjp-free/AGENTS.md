@@ -311,6 +311,29 @@
           "afterSha256": "4fc82b26aecb47d2868c4efbe3581732a3e7cbcc6c2efb32062c08170a05eeb8"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-TRUSTED-READ-CONTINUE-001",
+      "status": "staged",
+      "fromVersion": 11,
+      "toVersion": 12,
+      "owner": "repository maintainer",
+      "rationale": "checkProjectQualityContractは.github/workflows/trusted-quality.ymlの読み取りに失敗すると構造化errorを積んだうえで即座にreturnする。このreturnにより、trustedRootが指定されていてもvalidateTrustedQualityMigrationが実行されない。同関数はworkflow fileの内容に一切依存しないため、読み取れなかった値に依存しない検査まで飛ばしている。trusted-quality.ymlが欠損または権限異常のとき、品質契約の二段階承認違反が同時に存在しても診断へ現れず、読み取り失敗を直して再実行するまで気付けない。REQ-SQ-030はその値に依存する検査だけを飛ばして残りを続行すると定めており、現状はこれに反する。早期returnをelse分岐へ置き換え、workflow本文に依存する4件の必須拘束検査とcandidate directory実行の拒否とchecks追記だけをskipし、trustedRoot指定時のmigration検査と最終判定まで継続させる。読み取り成功時の判定は1件も変えない",
+      "rollback": "登録済みproposalは削除できず、qualityContractVersionの減少も受理されない。適用前は有効化しないまま維持する。適用後に戻す場合は、check_project_quality.tsを本proposal適用前の内容へ戻す新規proposalを次versionとして登録し、同じ二段階手順で前進させる",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "scripts/check_project_quality.ts",
+          "beforeSha256": "0702604760f7eb6b3083467a34e6c0b1319f5e3d4b4c1f0f560b71d13f9a1305",
+          "afterSha256": "403607b341ca5586852750ee430675c47dd3e5e43e005fd8de8ca0a1972595f9"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "4fc82b26aecb47d2868c4efbe3581732a3e7cbcc6c2efb32062c08170a05eeb8",
+          "afterSha256": "6b51d431df5d7f141cbececcf79edf3dd861c3b4069f0b11661a3eefacbba918"
+        }
+      ]
     }
   ]
 }
