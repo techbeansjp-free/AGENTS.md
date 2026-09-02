@@ -31,6 +31,7 @@
       "properties": {
         "mode": { "enum": ["disabled", "assisted", "automatic"] },
         "branches": {
+          "description": "3つの役割を兼ねる。1) head allowlist。PRのhead branch名を * をワイルドカードとして照合し、一致しないmergeを拒否する。主用途であり worktree.allowedBranchTypes と揃える。2) 長命branchペアの判定。baseとheadの双方が完全一致するとき長命branch間のmergeとして扱う。3) 長命branch警告のbase候補。ワイルドカードを含む要素はbaseにならないため候補から外れ、残りが2件以上のときだけ長命branch間のsquash/rebaseに対する警告が発火する。",
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
           "maxItems": 32,

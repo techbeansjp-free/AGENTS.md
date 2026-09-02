@@ -181,6 +181,57 @@ Given("長命branchへsquashだけを解決する有効なpolicy fileがある",
   fs.writeFileSync(this.policyFile, `${JSON.stringify(this.policy)}\n`);
 });
 
+/**
+ * head allowlistとして短命branchのglobだけを列挙した実利用構成を再現する。
+ *
+ * **`merge.branches`は3役を兼ねる。** この構成は役割1を満たすが、役割3の
+ * base候補としては1件も成立しない（Issue #1035）。
+ */
+Given(
+  "短命branchのglobだけを列挙しsquashだけを許可したpolicy fileがある",
+  function () {
+    const root = this.temp("asc-merge-method-glob-");
+    this.policy = mergePolicy({
+      branches: ["feature/*", "fix/*", "bugfix/*", "chore/*"],
+      methods: ["squash"],
+    });
+    this.policyFile = path.join(root, "policy.json");
+    fs.writeFileSync(this.policyFile, `${JSON.stringify(this.policy)}\n`);
+  },
+);
+
+/**
+ * 除外後のbase候補がちょうど1件になる構成。
+ *
+ * **長命branch「間」のmergeは2件以上でしか成立しない。** 1件で警告を出すと、
+ * 相手のいないbranchを「長命branchのbase候補」と呼ぶことになる（Issue #1035）。
+ */
+Given(
+  "globと具体名1件を列挙しsquashだけを許可したpolicy fileがある",
+  function () {
+    const root = this.temp("asc-merge-method-single-");
+    this.policy = mergePolicy({
+      branches: ["feature/*", "fix/*", "main"],
+      methods: ["squash"],
+    });
+    this.policyFile = path.join(root, "policy.json");
+    fs.writeFileSync(this.policyFile, `${JSON.stringify(this.policy)}\n`);
+  },
+);
+
+Given(
+  "globと具体名を混在させsquashだけを許可したpolicy fileがある",
+  function () {
+    const root = this.temp("asc-merge-method-mixed-");
+    this.policy = mergePolicy({
+      branches: ["feature/*", "fix/*", "develop", "master"],
+      methods: ["squash"],
+    });
+    this.policyFile = path.join(root, "policy.json");
+    fs.writeFileSync(this.policyFile, `${JSON.stringify(this.policy)}\n`);
+  },
+);
+
 When("policy validate CLIを実行する", async function () {
   this.cliResult = await runCli(["policy", "validate", this.policyFile]);
 });
@@ -204,6 +255,55 @@ Then("policy validate結果にwarn診断がある", function () {
 
 Then("policy validate CLIの終了コードは0である", function () {
   assert.equal(this.cliResult.status, 0, this.cliResult.stderr);
+});
+
+function mergeMethodWarnings(raw: string): Record<string, unknown>[] {
+  const output: unknown = JSON.parse(raw);
+  assert.ok(output && typeof output === "object" && "warnings" in output);
+  const warnings = Reflect.get(output, "warnings");
+  assert.ok(Array.isArray(warnings));
+  return warnings.filter(
+    (warning): warning is Record<string, unknown> =>
+      typeof warning === "object" &&
+      warning !== null &&
+      Reflect.get(warning, "ruleId") === "ASC-MERGE-METHOD-001",
+  );
+}
+
+Then("policy validate結果に長命branch警告がない", function () {
+  assert.equal(this.cliResult.status, 0, this.cliResult.stderr);
+  const warnings = mergeMethodWarnings(this.cliResult.stdout);
+  assert.equal(
+    warnings.length,
+    0,
+    `globだけの構成で長命branch警告が出ました: ${JSON.stringify(warnings)}`,
+  );
+});
+
+Then("長命branch警告のbase候補は具体名だけになる", function () {
+  assert.equal(this.cliResult.status, 0, this.cliResult.stderr);
+  const warnings = mergeMethodWarnings(this.cliResult.stdout);
+  assert.equal(warnings.length, 1, this.cliResult.stdout);
+  const reasons = (
+    Reflect.get(warnings[0]!, "reasons") as string[] | undefined
+  )?.join(" ");
+  assert.ok(reasons, "reasonsがありません");
+  /**
+   * **globがbase候補として名指しされていないことまで見る。** 件数だけを数えると、
+   * 除外せずに警告を出す実装でも通ってしまう。
+   */
+  assert.match(reasons, /develop/u);
+  assert.match(reasons, /master/u);
+  assert.ok(
+    !reasons.includes("feature/*") && !reasons.includes("fix/*"),
+    `globがbase候補として列挙されています: ${reasons}`,
+  );
+  const scope = Reflect.get(warnings[0]!, "scope") as string[] | undefined;
+  assert.ok(Array.isArray(scope));
+  assert.ok(
+    !scope.some((entry) => entry.includes("*")),
+    `scopeにglobが含まれます: ${scope.join(", ")}`,
+  );
 });
 
 Given(

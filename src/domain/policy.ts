@@ -166,11 +166,30 @@ function resolvedPolicyMethodsForBase(
   );
 }
 
+/**
+ * `merge.branches`の要素がbase branchになり得るかを判定する。
+ *
+ * **`merge.branches`は3役を兼ねる。** head allowlist、長命branchペアの判定、
+ * この警告のbase候補である。head allowlistは`*`をワイルドカードとして照合するため、
+ * 短命branchのglobを列挙する使い方が正しい。**globはbaseにならない。**
+ * `pr merge`はbaseを既定branchへ強制するためである（Issue #1035）。
+ *
+ * **除外は構文だけで決める。** 判定側は既定branch名を知らないため、
+ * 「既定branch以外を外す」判定は書けない。ワイルドカードを含む要素だけを外す。
+ */
+function isMergeBaseCandidate(branchRef: string): boolean {
+  return !branchRef.includes("*");
+}
+
 export function mergeMethodPolicyWarnings(
   policy: Policy,
 ): MergeMethodPolicyWarning[] {
-  if (policy.merge.branches.length < 2) return [];
-  const unsafeBases = policy.merge.branches.filter((baseRef) => {
+  /**
+   * **長命branch「間」のmergeは2件以上でしか成立しない。** 除外後の件数で判定する。
+   */
+  const baseCandidates = policy.merge.branches.filter(isMergeBaseCandidate);
+  if (baseCandidates.length < 2) return [];
+  const unsafeBases = baseCandidates.filter((baseRef) => {
     const methods = resolvedPolicyMethodsForBase(policy.merge, baseRef);
     return (
       methods.length > 0 &&
