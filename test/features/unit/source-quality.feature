@@ -71,3 +71,39 @@ Feature: project固有の型品質と汎用開発考慮事項
     Given 候補からpackage-lock.jsonを削除したprojectがある
     When trusted品質契約migrationを検証する
     Then 候補側のpackage-lock.json欠損をerrorとして名指しする
+
+  Scenario Outline: SCN-UNIT-QUALITY-015 snapshot外の候補保護file欠損を構造化errorで返す
+    Given candidateのsnapshot外保護file "<path>" を欠損させたprojectがある
+    When project品質bindingを検証する
+    Then candidate側の "<path>" と存在しない理由を含むinvalid resultを返す
+
+    Examples:
+      | path |
+      | scripts/check_project_quality.ts |
+      | tsconfig.json |
+      | eslint.config.mjs |
+      | .github/workflows/ci.yml |
+      | .github/workflows/trusted-quality.yml |
+
+  Scenario Outline: SCN-UNIT-QUALITY-016 snapshot外の候補保護file非通常化を構造化errorで返す
+    Given candidateのsnapshot外保護file "<path>" をdirectoryへ置換したprojectがある
+    When project品質bindingを検証する
+    Then candidate側の "<path>" と存在しない以外の理由を含むinvalid resultを返す
+
+    Examples:
+      | path |
+      | scripts/check_project_quality.ts |
+      | tsconfig.json |
+      | eslint.config.mjs |
+      | .github/workflows/ci.yml |
+      | .github/workflows/trusted-quality.yml |
+
+  Scenario: SCN-UNIT-QUALITY-017 candidate scriptを実行せず保護一覧を静的に読む
+    Given 実行副作用を持つcandidateのcheck_project_quality sourceがある
+    When project品質bindingを検証する
+    Then candidate sourceの副作用を実行せず静的な読み取り結果だけで判定する
+
+  Scenario: SCN-UNIT-QUALITY-018 読み取り成功後の内容不正policyを維持する
+    Given 読み取り可能だがmalformedなcandidateのtsconfigがある
+    When project品質bindingを検証する
+    Then file読み取り失敗へ変換せず既存の内容不正policyで拒否する
