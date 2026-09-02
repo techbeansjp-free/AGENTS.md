@@ -57,6 +57,16 @@ interface ReviewBoundary {
    * どちらも「検証すべき場所で検証できなかった」状態であり、合格へ倒さない。
    */
   base: string | undefined;
+  /**
+   * 各親を候補branch側と仮定したときの`H_impl..review head`のpath数。
+   *
+   * **選択そのものには使わない。** 既定branchへのPR mergeの親順は
+   * `[取り込み先tip, 候補head]`、既定branch追随mergeの親順は`[候補head, 取り込み先tip]`
+   * であり、位置だけでは区別できない（Issue #1004）。着地形で選び直す案は
+   * `SCN-INT-AUDITBUMP-004`で従来の不合格を合格へ倒したため採らない。
+   * ここで持つのは診断のためだけである。
+   */
+  candidateFinalPathCounts: readonly number[];
 }
 
 function lines(output: string): string[] {
@@ -499,6 +509,19 @@ function uniqueMergeBase(
   return candidates.length === 1 ? candidates[0] : undefined;
 }
 
+/**
+ * `parent`を候補branch側と仮定したときの`H_impl..review head`のfile数。
+ *
+ * **診断のためだけに数える。** 本体の判定と同じ`finalAuditPaths`を使うため、
+ * 1件ならその親が候補branch側の着地形になっている。0件や複数件なら、その親を
+ * 候補側と見なす読み方が成立していない。
+ */
+function candidateFinalPathCount(root: string, parent: string): number {
+  const reviewHead = withoutFinalReleaseBumps(root, parent);
+  const [implementation = reviewHead] = commitParents(root, reviewHead);
+  return finalAuditPaths(root, implementation, reviewHead).length;
+}
+
 function inferReviewBoundary(root: string, current: string): ReviewBoundary {
   const boundary = withoutFinalReleaseBumps(root, current);
   const boundaryParents = commitParents(root, boundary);
@@ -525,6 +548,10 @@ function inferReviewBoundary(root: string, current: string): ReviewBoundary {
     boundaryParents.length === 2
       ? uniqueMergeBase(root, implementation, boundaryParents[0]!)
       : undefined;
+  const candidateFinalPathCounts =
+    boundaryParents.length === 2
+      ? boundaryParents.map((parent) => candidateFinalPathCount(root, parent))
+      : [];
   return {
     implementation,
     reviewHead,
@@ -532,11 +559,41 @@ function inferReviewBoundary(root: string, current: string): ReviewBoundary {
     boundaryParentCount: boundaryParents.length,
     boundaryFirstParent: boundaryParents[0],
     base,
+    candidateFinalPathCounts,
   };
 }
 
 function isAuditPath(auditPath: string): boolean {
   return auditPath.startsWith(`${AUDIT_DIRECTORY}/`);
+}
+
+/**
+ * 選択した親の着地形が成立しないときに、両親の観測を診断へ添える。
+ *
+ * 既定branch追随merge（親順`[候補head, 取り込み先tip]`）をHEADにすると、選択した
+ * 取り込み先側の差分がそのまま「余分なpath」として並び、真の理由が読み取れない
+ * （Issue #1004）。**選択は変えずに、両側の観測と是正方法を足す。**
+ */
+function candidateSideNote(inferred: ReviewBoundary): string[] {
+  /**
+   * **選択した親の着地形が成立するかで分岐しない。** 成立するなら差分は
+   * review artifact 1 fileになり、注記を付ける4つの経路のどれにも到達しない。
+   * 分岐を置くと、常に注記を付ける変異が生存する死んだ条件になる。
+   *
+   * **親の個数ではなく観測配列の長さを見る。** 観測は親2個のときだけ作られるため、
+   * 個数と長さの二重管理をやめて、注記が使う配列そのものを条件にする。
+   */
+  if (inferred.candidateFinalPathCounts.length !== 2) return [];
+  return [
+    "",
+    "**上のpathは候補branch側の差分でない可能性がある。** 親を候補側と仮定したときのH_impl..review headのfile数は" +
+      inferred.candidateFinalPathCounts
+        .map((count, index) => `第${index + 1}親=${count}件`)
+        .join("、") +
+      "であり、選択した最後の親はreview artifactちょうど1 fileの着地形になっていない。",
+    "既定branchを取り込む追随merge（親順が[候補head, 取り込み先tip]）をHEADにしている場合、選択した親は取り込み先側である。候補branchのreview artifact commitをHEADにして再実行してほしい。",
+    "review artifactをまだcommitしていない場合は、実装commitの後にreview artifactだけをcommitしてほしい。",
+  ];
 }
 
 function invalidFinalPathsError(finalPaths: string[]): string {
@@ -732,27 +789,41 @@ export function checkFileAudit(root: string) {
     return {
       valid: false,
       errors: [
-        "review artifactのcommitがありません。実装commitの後にreview artifactだけをcommitしてください",
+        [
+          "review artifactのcommitがありません。実装commitの後にreview artifactだけをcommitしてください",
+          ...candidateSideNote(inferred),
+        ].join("\n"),
       ],
     };
   if (finalPaths.length > 1)
     return {
       valid: false,
-      errors: [invalidFinalPathsError(finalPaths)],
+      errors: [
+        [
+          invalidFinalPathsError(finalPaths),
+          ...candidateSideNote(inferred),
+        ].join("\n"),
+      ],
     };
   const auditPath = finalPaths[0]!;
   if (!isAuditPath(auditPath))
     return {
       valid: false,
       errors: [
-        `H_impl..currentの差分path ${auditPath} は${AUDIT_DIRECTORY}/配下ではありません。実装commitの後にreview artifactだけをcommitしてください`,
+        [
+          `H_impl..currentの差分path ${auditPath} は${AUDIT_DIRECTORY}/配下ではありません。実装commitの後にreview artifactだけをcommitしてください`,
+          ...candidateSideNote(inferred),
+        ].join("\n"),
       ],
     };
   if (!AUDIT_NAME_PATTERN.test(path.posix.basename(auditPath)))
     return {
       valid: false,
       errors: [
-        `${auditPath}はreview artifactのfile名書式に一致しません。連番_課題番号…レビュー.mdの書式へ直してください`,
+        [
+          `${auditPath}はreview artifactのfile名書式に一致しません。連番_課題番号…レビュー.mdの書式へ直してください`,
+          ...candidateSideNote(inferred),
+        ].join("\n"),
       ],
     };
   const artifact = path.join(root, auditPath);

@@ -323,6 +323,109 @@ function checkoutMergeRef(
   ]);
 }
 
+/**
+ * 既定branch追随mergeを作る。**親順は`[候補head, 既定branch tip]`である。**
+ *
+ * `gh pr update-branch`と`git merge origin/main`がこの形を作る。既定branchへのPR merge
+ * （親順`[取り込み先tip, 候補head]`）と親の個数が同じで順序だけが逆であり、位置では
+ * 区別できない（Issue #1004）。
+ */
+function checkoutFollowMergeRef(
+  root: string,
+  candidateHead: string,
+  defaultBranchTip: string,
+): void {
+  const tree = git(root, [
+    "merge-tree",
+    "--write-tree",
+    candidateHead,
+    defaultBranchTip,
+  ]);
+  const mergeRef = git(root, [
+    "commit-tree",
+    tree,
+    "-p",
+    candidateHead,
+    "-p",
+    defaultBranchTip,
+    "-m",
+    "Merge remote-tracking branch 'origin/main' into feature/1004-follow",
+  ]);
+  git(root, [
+    "-c",
+    "advice.detachedHead=false",
+    "checkout",
+    "-q",
+    "--detach",
+    mergeRef,
+  ]);
+}
+
+Given(
+  "既定branchを取り込んだ追随merge commitをHEADにした監査選択repository",
+  function () {
+    const root = this.initRepo();
+    this.auditRoot = root;
+    writeFile(root, "keep.txt", "base\n");
+    const start = commitPaths(root, "test: 既定branchの基点を作る", [
+      "keep.txt",
+    ]);
+    git(root, ["checkout", "-q", "-b", "candidate", start]);
+    writeFile(root, "keep.txt", "changed\n");
+    const implementation = commitPaths(root, "feat: 申告する変更", [
+      "keep.txt",
+    ]);
+    const auditPath = "docs/reviews/42_課題1004実装レビュー.md";
+    writeFile(
+      root,
+      auditPath,
+      auditMarkdown(start, implementation, "keep.txt", "M"),
+    );
+    const candidateHead = commitPaths(root, "docs: review artifactを記録する", [
+      auditPath,
+    ]);
+    git(root, ["checkout", "-q", "main", "--"]);
+    git(root, ["checkout", "-q", "main"]);
+    /**
+     * **既定branch側の変更を2 fileにする。** 候補側の着地形（review artifact 1件）と
+     * 件数が同じだと、件数を常に同じ値にする実装でも診断のassertionが通る。
+     */
+    writeFile(root, "other.txt", "既定branch側の別変更\n");
+    writeFile(root, "another.txt", "既定branch側の2件目\n");
+    const defaultTip = commitPaths(root, "feat: 既定branch側を進める", [
+      "other.txt",
+      "another.txt",
+    ]);
+    this.expectedAuditPath = auditPath;
+    checkoutFollowMergeRef(root, candidateHead, defaultTip);
+  },
+);
+
+Given(
+  "どちらの親も着地形でない境界commitをHEADにした監査選択repository",
+  function () {
+    const root = this.initRepo();
+    this.auditRoot = root;
+    writeFile(root, "keep.txt", "base\n");
+    const start = commitPaths(root, "test: 既定branchの基点を作る", [
+      "keep.txt",
+    ]);
+    git(root, ["checkout", "-q", "-b", "candidate", start]);
+    writeFile(root, "keep.txt", "changed\n");
+    writeFile(root, "extra.txt", "artifactと同じcommitに混ぜた変更\n");
+    const candidateHead = commitPaths(root, "feat: 申告する変更", [
+      "keep.txt",
+      "extra.txt",
+    ]);
+    git(root, ["checkout", "-q", "main"]);
+    writeFile(root, "other.txt", "既定branch側の別変更\n");
+    const defaultTip = commitPaths(root, "feat: 既定branch側を進める", [
+      "other.txt",
+    ]);
+    checkoutFollowMergeRef(root, candidateHead, defaultTip);
+  },
+);
+
 Given("親が3個の境界commitをHEADにした監査選択repository", function () {
   const root = this.initRepo();
   this.auditRoot = root;
@@ -734,6 +837,37 @@ Given(
     );
   },
 );
+
+Then(
+  "file監査は選択した親が候補側でない可能性と両親の着地形file数を示す",
+  function () {
+    assert.equal(this.auditResult?.valid, false);
+    const joined = this.auditResult?.errors.join("\n") ?? "";
+    assert.match(joined, /候補branch側の差分でない可能性がある/u);
+    // **file数を両側とも示すことまで要求する。** 注記の存在だけでは、
+    // 片側しか観測していない実装でも通る
+    // **実値まで要求する。** 桁だけを見ると、件数を常に0にする実装でも通る。
+    // fixtureは候補側=review artifact 1件、既定branch側=other.txtとkeep.txtの2件
+    assert.match(joined, /第1親=1件、第2親=2件/u);
+    assert.match(joined, /追随merge/u);
+  },
+);
+
+Then("file監査は候補側の注記を付けない", function () {
+  // 親が2個でない境界では、両親の観測を持たないため注記を付けない
+  assert.doesNotMatch(
+    this.auditResult?.errors.join("\n") ?? "",
+    /候補branch側の差分でない可能性がある/u,
+  );
+});
+
+Then("file監査は不合格になり候補側の注記を付けない", function () {
+  // **不合格まで確認する。** 合格して`errors`が空なら、注記の不在は自明であり
+  // 常に注記を付ける実装でも通ってしまう
+  assert.equal(this.auditResult?.valid, false);
+  const joined = this.auditResult?.errors.join("\n") ?? "";
+  assert.doesNotMatch(joined, /候補branch側の差分でない可能性がある/u);
+});
 
 Then("file監査は比較基点の導出不能を報告する", function () {
   assert.equal(this.auditResult?.valid, false);
