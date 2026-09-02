@@ -322,6 +322,8 @@ Then("review sessionはbudget-exhaustedになる", function () {
 });
 
 Then("round 4への自動継続を拒否する", function () {
+  // **budget-exhaustedからの取り直しを拒否する。** 上限4への引き上げは収束後の
+  // HEAD移動に限る。未解決blockerを抱えたまま新品の予算をもらえてはならない
   assert.throws(
     () =>
       recordReviewRound({
@@ -334,8 +336,119 @@ Then("round 4への自動継続を拒否する", function () {
           findings: [finding()],
         }),
       }),
-    /3 round/u,
+    /budget終了済み/u,
   );
+});
+
+When("収束後にHEADを進めてround 4で取り直す", function () {
+  const candidate = commitFile(
+    this.root,
+    "export const reviewed = 4;\n",
+    "fix: post-convergence recovery",
+  );
+  this.session = recordReviewRound({
+    staging: this.staging,
+    round: roundInput({
+      world: this,
+      round: 4,
+      candidateHeadSha: candidate,
+      previousRoundDigest: this.session.latestRoundDigest,
+      fixedDiff: [reviewedPath],
+      findings: [],
+    }),
+  });
+});
+
+Then("review sessionはround 4で再収束する", function () {
+  assert.equal(this.session.status, "converged");
+  assert.equal(this.session.rounds.length, 4);
+});
+
+Then("round 5への自動継続を拒否する", function () {
+  const candidate = commitFile(
+    this.root,
+    "export const reviewed = 5;\n",
+    "fix: beyond recovery",
+  );
+  assert.throws(
+    () =>
+      recordReviewRound({
+        staging: this.staging,
+        round: roundInput({
+          world: this,
+          round: 5,
+          candidateHeadSha: candidate,
+          previousRoundDigest: this.session.latestRoundDigest,
+          fixedDiff: [reviewedPath],
+          findings: [],
+        }),
+      }),
+    /4 roundを超えて/u,
+  );
+});
+
+When("収束後にHEADを進めてround 4で未解決を残す", function () {
+  const candidate = commitFile(
+    this.root,
+    "export const reviewed = 4;\n",
+    "fix: post-convergence recovery with finding",
+  );
+  this.session = recordReviewRound({
+    staging: this.staging,
+    round: roundInput({
+      world: this,
+      round: 4,
+      candidateHeadSha: candidate,
+      previousRoundDigest: this.session.latestRoundDigest,
+      fixedDiff: [reviewedPath],
+      findings: [finding()],
+    }),
+  });
+});
+
+Then("review sessionはround 4でbudget-exhaustedになる", function () {
+  // **取り直しラウンドの終端をactiveにしない。** activeのままだと、上限を超えた
+  // 次roundを要求できる状態が残る
+  assert.equal(this.session.status, "budget-exhausted");
+  assert.equal(this.session.rounds.length, 4);
+});
+
+Then("budget終了後の追記を拒否する", function () {
+  assert.throws(
+    () =>
+      recordReviewRound({
+        staging: this.staging,
+        round: roundInput({
+          world: this,
+          round: 5,
+          candidateHeadSha: head(this.root),
+          previousRoundDigest: this.session.latestRoundDigest,
+          findings: [finding()],
+        }),
+      }),
+    /budget終了済み|4 roundを超えて/u,
+  );
+});
+
+When("収束させずにround 3まで進める", function () {
+  for (const round of [2, 3]) {
+    const candidate = commitFile(
+      this.root,
+      `export const reviewed = ${round};\n`,
+      `fix: review round ${round}`,
+    );
+    this.session = recordReviewRound({
+      staging: this.staging,
+      round: roundInput({
+        world: this,
+        round,
+        candidateHeadSha: candidate,
+        previousRoundDigest: this.session.latestRoundDigest,
+        fixedDiff: [reviewedPath],
+        findings: [],
+      }),
+    });
+  }
 });
 
 Given("findingなしでround 1が収束したreview sessionがある", function () {

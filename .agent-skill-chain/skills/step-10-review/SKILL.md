@@ -19,6 +19,8 @@ role欄の担当roleが`reviewer`であること、必要能力tier、provider�
 
 作業開始前に[04_レビュー.md](../../templates/issue/04_レビュー.md)を全文読み、その見出し構造・変更ファイル個別監査・評価欄を使ってレビュー成果物を作る。独自の要約だけで代替しない。
 
+**`pr create`より後に届いた外部reviewerの指摘を、同じPRへ取り込まない。** Step 11の記録でworkflow journalが封じられ、Step 10を再記録できない。判定と分離先をreviewスレッドへ返信して解決し、取り込みはfollow-up Issueで行う。**収束後のHEAD移動に対する取り直し1ラウンドが使えるのは`pr create`より前だけである。**
+
 **成果物は版管理下へ置く。** 一時ステージングは版管理外であり、そこに置いたままでは`review evidence`も履歴監査も成立しない。収束後に`docs/reviews/`または`.agent-skill-chain/reviews/`配下へ複写し、実装commitの後にその1 fileだけをcommitして`H_final`にする。
 
 project choicesと対象成果物のDC行を読む。**DC判定が`applicable`の領域と、対象差分が実際に触れた領域だけ**、作業開始前に対応するtemplateの全文を読む。[脅威・対策・監査](../../templates/specs/10_セキュリティ/02_脅威・対策・監査.md)はDC-PRIVACYが`applicable`のとき、[利用性・互換性・保守性](../../templates/specs/11_非機能/02_利用性・互換性・保守性.md)と[監視・障害対応](../../templates/specs/12_運用保守/01_監視・障害対応.md)はDC-OBSERVABILITYが`applicable`のとき、[コーディング標準](../../templates/specs/14_開発・品質/01_コーディング標準.md)と[テスト標準](../../templates/specs/14_開発・品質/02_テスト標準.md)は差分がsourceまたはtestを含むときに読む。**`not-applicable`と判定した領域のtemplateの全文を読む固定費を課さない。** 判定自体の妥当性は§2.2のDC欄でreviewする。UIまたはtoken capabilityが`not-applicable`でない場合は[デザイントークン](../../templates/specs/17_デザイン/00_デザイントークン.md)と[レイアウトトークン](../../templates/specs/18_レイアウト/00_レイアウトトークン.md)も全文読み、判定・理由・実測証拠の欠落をfindingにする。

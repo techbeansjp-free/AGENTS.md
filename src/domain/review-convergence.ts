@@ -2,6 +2,22 @@ import crypto from "node:crypto";
 import { stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 
+/**
+ * 通常のreviewラウンド予算。round 1で全scopeを見て、2と3で未解決blockerを追う。
+ */
+const REVIEW_ROUND_BUDGET = 3;
+/**
+ * 収束後にHEADが動いたときの取り直しへ、予算とは別枠で1 roundだけ許す上限。
+ *
+ * **外部reviewerが何回reviewするかを利用側は制御できない。** 3 roundで収束した後に
+ * 指摘が届いてHEADが進むと、`round > REVIEW_ROUND_BUDGET`だけを見る実装では
+ * 是正を記録する経路が1つも残らない（Issue #1140）。
+ *
+ * **増分は収束後の取り直しに限る。** 未解決blockerを抱えたまま予算を使い切った
+ * `budget-exhausted`からは開かない。開くと、任意の1 pushで新品の予算をもらえる。
+ */
+const REVIEW_RECOVERY_ROUND = REVIEW_ROUND_BUDGET + 1;
+
 const OID = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const STABLE_ID = /^[A-Z][A-Z0-9._-]{1,127}$/u;
@@ -420,8 +436,10 @@ export function advanceReviewSession(
     throw new Error(
       `review round resetまたは飛び越しを拒否しました: expected=${expectedRound} actual=${round.round}`,
     );
-  if (round.round > 3)
-    throw new Error("同一review sessionは3 roundを超えて自動拡大できません");
+  if (round.round > REVIEW_RECOVERY_ROUND)
+    throw new Error(
+      `同一review sessionは${REVIEW_RECOVERY_ROUND} roundを超えて自動拡大できません`,
+    );
   if (previous === null) {
     if (round.previousRoundDigest !== null)
       throw new Error("round 1にpreviousRoundDigestを指定できません");
@@ -433,6 +451,15 @@ export function advanceReviewSession(
     )
       throw new Error("round 1は固定initial HEADの全scope reviewで開始します");
   } else {
+    /**
+     * **取り直しの1 roundが収束後だけに開くことは、この1行が担っている。**
+     *
+     * `REVIEW_ROUND_BUDGET`到達後の非収束状態は`budget-exhausted`しか取り得ない
+     * （status導出を参照）。したがって`round === REVIEW_RECOVERY_ROUND`かつ
+     * `status !== "converged"`を別に判定しても到達しない。**到達しない条件を置くと、
+     * それを外す変異が生存する死んだ分岐になる。** status導出の`>=`が
+     * この含意を保証しており、`SCN-UNIT-REVIEWCONV-007`が固定する。
+     */
     if (previous.status === "budget-exhausted")
       throw new Error("budget終了済みreview sessionは更新できません");
     if (previous.sessionId !== sessionId)
@@ -510,10 +537,15 @@ export function advanceReviewSession(
     rounds,
     latestRoundDigest: roundDigest,
     latestCandidateHeadSha: round.candidateHeadSha,
+    /**
+     * **取り直しのroundで未解決が残ればそこで終端にする。** `round === 3`だけを
+     * 見ると`REVIEW_RECOVERY_ROUND`が`active`になり、上限を超えた次roundを
+     * 要求できる状態が残る。
+     */
     status:
       blocking.length === 0
         ? "converged"
-        : round.round === 3
+        : round.round >= REVIEW_ROUND_BUDGET
           ? "budget-exhausted"
           : "active",
   });
@@ -538,9 +570,11 @@ export function parseReviewSessionState(value: unknown): ReviewSessionState {
   if (
     !Array.isArray(state.rounds) ||
     state.rounds.length < 1 ||
-    state.rounds.length > 3
+    state.rounds.length > REVIEW_RECOVERY_ROUND
   )
-    throw new Error("review session.roundsは1〜3件が必要です");
+    throw new Error(
+      `review session.roundsは1〜${REVIEW_RECOVERY_ROUND}件が必要です`,
+    );
   let rebuilt: ReviewSessionState | null = null;
   for (const [index, candidate] of state.rounds.entries()) {
     const record = exactObject(candidate, `review session.rounds[${index}]`, [
