@@ -66,6 +66,7 @@
           "test/",
           "docs/specs/",
           ".agent-skill-chain/",
+          "scripts/check_project_quality.ts",
           "scripts/prepare_release_bump.ts",
           ".github/workflows/release.yml"
         ],
