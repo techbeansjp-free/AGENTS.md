@@ -20,3 +20,13 @@ Feature: project固有rule台帳のrepository結合契約
     Given 配布外project資産をfilesへ含めた隔離packageがある
     When 隔離packageの配布境界を検証する
     Then project policyと実行記録の配布が拒否される
+
+  Scenario: SCN-INT-LEDGER-005 宣言した個別検査がすべて公開入口のerrorsへ合成されている
+    Given 適合性検査scriptの本体がある
+    When 公開入口へ合成されている個別検査を読む
+    Then 宣言した個別検査がすべて合成されている
+
+  Scenario: SCN-INT-LEDGER-006 合成されている個別検査がすべて宣言へ登録されている
+    Given 適合性検査scriptの本体がある
+    When 公開入口へ合成されている個別検査を読む
+    Then 合成されている個別検査がすべて宣言されている
