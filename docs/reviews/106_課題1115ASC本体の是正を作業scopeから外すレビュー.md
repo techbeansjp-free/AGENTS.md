@@ -63,7 +63,7 @@
 
 - 基準SHAとの差分path集合と表のpath集合が完全一致する: pass（`git diff --name-status`が`M`5件）
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: pass
-- 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: 製品差分の修正は発生していない
+- 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: **ラウンド2で製品差分5 fileを修正した**（R2-C01・R2-H01の是正）。ラウンド3では製品差分の修正は発生していない
 
 ## 2. 受け入れ条件の確認
 
@@ -118,7 +118,7 @@
 | 悪用 | 注入、経路脱出、権限外操作等 | pass | **禁止を盾に成果物側の是正まで拒む**という逆方向の悪用を、必須側の箇条書きが防ぐ。**「必要な追随」と言い換えて作業scope内で是正する**経路は、出口が4項に限られることで塞がる |
 | 安全性 | 認証、承認、秘密情報、Zero Trust | pass | 追加節の末段が安全条件・authority分離・fail-closed不変条件を緩和しないと明記する。authority境界を新設も緩和もしない |
 | データ損失 | 上書き、削除、部分公開、履歴消失 | not-applicable | 5 fileへの追記のみ。既存節・既存行を1つも削除・改変していない |
-| ロールバック | 復旧参照、状態保持、再開可能性 | pass | 当該commitのrevertで完全復旧する |
+| ロールバック | 復旧参照、状態保持、再開可能性 | pass | **当該commitのrevertでrepository状態は復旧する。配布済みartifactは取り消せない。** 本変更は配布digestを変えるためmergeを契機にtagとGitHub Releaseが作られる。revertは次のreleaseで前進的に反映され、既に配布したtagとReleaseの削除は別operationになる |
 | 範囲漏れ | 呼び出し元、利用側、配布物、文書 | pass | 配布境界に入る（§8）。**ただし機械強制が無いことは範囲漏れではなく明示した設計判断である**（§5のM-01） |
 
 ## 5. 指摘
@@ -201,7 +201,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 独立reviewの外部証拠 | **本artifact作成時点では無い。** exact-headは`c63aa9dc`。immutable GitHub reviewは0件 |
+| 独立reviewの外部証拠 | **本artifact作成時点では無い。** exact-headは`e6231316`（`H_final`）。immutable GitHub reviewは0件。**PR作成後にCodeRabbitがMajor 4件・Minor 1件を投稿したが、mergeが11秒先行した。指摘は#1119が引き受けた** |
 | reviewerがPR author・実装commit authorと異なる | **異ならない。** implementerもreviewerも本sessionの同一AI agentであり、Git commit authorも同一である |
 | 観測したreview commentとapprovalの件数 | 本session内のreview 1件（Critical/High 0、Medium 1・Low 1を検出しいずれも`out-of-scope`として記録のみ）。GitHub review 0件 |
 
