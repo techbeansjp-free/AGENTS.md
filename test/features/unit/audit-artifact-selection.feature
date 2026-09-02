@@ -61,3 +61,14 @@ Feature: review artifactの差分選択
     Given 親が3個の境界commitをHEADにした監査選択repository
     When 監査選択repositoryのfile監査を実行する
     Then file監査は比較基点の導出不能を報告する
+    And file監査は候補側の注記を付けない
+
+  Scenario: SCN-UNIT-AUDITSEL-013 既定branch追随merge上では選択した親が候補側でない可能性を診断へ示す
+    Given 既定branchを取り込んだ追随merge commitをHEADにした監査選択repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査は選択した親が候補側でない可能性と両親の着地形file数を示す
+
+  Scenario: SCN-UNIT-AUDITSEL-014 境界commitの親が1個のときは候補側の注記を付けない
+    Given review artifactと2件の余分なpathを同時にcommitした監査選択repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査は不合格になり候補側の注記を付けない
