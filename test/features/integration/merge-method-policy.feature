@@ -15,3 +15,18 @@ Feature: policy検証とPR merge境界で危険なmerge方式を扱う
     Given 長命branch同士のsquashを許可したtrusted policyとGitHub観測がある
     When pr merge経路で長命branch同士のsquashを認可する
     Then pr merge経路はrule ID付きで拒否し外部mergeを呼ばない
+
+  Scenario: SCN-INT-MERGEMETHOD-004 短命branchのglobだけを列挙したpolicyは長命branch警告を出さない
+    Given 短命branchのglobだけを列挙しsquashだけを許可したpolicy fileがある
+    When policy validate CLIを実行する
+    Then policy validate結果に長命branch警告がない
+
+  Scenario: SCN-INT-MERGEMETHOD-005 globと具体名が混在する場合は具体名だけをbase候補にする
+    Given globと具体名を混在させsquashだけを許可したpolicy fileがある
+    When policy validate CLIを実行する
+    Then 長命branch警告のbase候補は具体名だけになる
+
+  Scenario: SCN-INT-MERGEMETHOD-006 除外後のbase候補が1件なら長命branch警告を出さない
+    Given globと具体名1件を列挙しsquashだけを許可したpolicy fileがある
+    When policy validate CLIを実行する
+    Then policy validate結果に長命branch警告がない
