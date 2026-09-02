@@ -32,3 +32,17 @@ Feature: Review sessionを固定契約へ収束させる
     Then review sessionはround 2で再収束する
     When 同じHEADをround 3として追記する
     Then review session更新は同じHEADと空fixedDiffで拒否される
+
+  Scenario: SCN-UNIT-REVIEWCONV-006 収束後のHEAD移動へ取り直し1ラウンドを別枠で許す
+    Given findingなしでround 1が収束したreview sessionがある
+    When 収束させずにround 3まで進める
+    And 収束後にHEADを進めてround 4で取り直す
+    Then review sessionはround 4で再収束する
+    And round 5への自動継続を拒否する
+
+  Scenario: SCN-UNIT-REVIEWCONV-007 取り直しラウンドで未解決が残ればbudget-exhaustedにする
+    Given findingなしでround 1が収束したreview sessionがある
+    When 収束させずにround 3まで進める
+    And 収束後にHEADを進めてround 4で未解決を残す
+    Then review sessionはround 4でbudget-exhaustedになる
+    And budget終了後の追記を拒否する
