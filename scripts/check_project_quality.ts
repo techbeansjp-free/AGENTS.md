@@ -238,19 +238,72 @@ function protectedFileContent(
 }
 
 /**
+ * 保護対象fileの読み取り失敗を、どちら側かとrelative pathと理由で名指しする。
+ *
+ * **文言をここだけが持つ。** snapshot経路と値取り出し経路が別々の文言を持つと、
+ * 同じ失敗が呼び出し位置ごとに違う診断になる（Issue #1111）。
+ *
+ * **絶対pathとfile内容を含めない。** 相対pathと理由だけで次の操作は決まり、
+ * 絶対pathはhost構成を、内容は保護対象の中身を漏らす。
+ */
+function protectedReadError(
+  side: "trusted" | "candidate",
+  relative: string,
+  reason: string,
+): string {
+  return `${side === "trusted" ? "trusted base" : "候補"}の保護対象file ${relative} が${reason}`;
+}
+
+/**
+ * 保護対象fileをtextとして読む。
+ *
+ * **読み取り失敗だけを理由へ変換する。** 読み取れたあとの内容検証は呼び出し側が
+ * 従来どおり行う。両者を同じcatchへ入れると、削除・権限異常と内容不正が同じ
+ * 診断になり、次に採る操作を選べなくなる（FR-1111-03）。
+ */
+function protectedFileText(
+  root: string,
+  relative: string,
+): { text: string } | { reason: string } {
+  const read = protectedFileContent(root, relative);
+  if ("reason" in read) return { reason: read.reason };
+  return {
+    text:
+      typeof read.content === "string"
+        ? read.content
+        : read.content.toString("utf8"),
+  };
+}
+
+/**
  * 候補側の`PROTECTED_FILES`をsourceから静的に取り出す。
  *
  * **候補のcodeを実行しない。** base validatorはcandidateのscriptもその依存も走らせない。
  * 取り出せない場合は`undefined`を返し、呼び出し側がfail-closedで拒否する。
  */
-function candidateProtectedFiles(root: string): readonly string[] | undefined {
-  const file = path.join(root, "scripts/check_project_quality.ts");
-  if (!fs.existsSync(file)) return undefined;
+function candidateProtectedFiles(
+  root: string,
+): { files: readonly string[] } | { reason: string } {
+  const relative = "scripts/check_project_quality.ts";
+  /**
+   * **`existsSync`で分岐しない。** 同名のdirectoryが置かれた場合は真を返し、
+   * 続く`readFileSync`がEISDIRで未捕捉throwになる（Issue #1111）。
+   * 読み取りそのものの結果で分岐する。
+   */
+  const read = protectedFileText(root, relative);
+  if ("reason" in read)
+    return { reason: protectedReadError("candidate", relative, read.reason) };
   const block = /const PROTECTED_FILES = \[([^\]]*)\] as const;/u.exec(
-    fs.readFileSync(file, "utf8"),
+    read.text,
   );
-  if (!block?.[1]) return undefined;
-  return [...block[1].matchAll(/"([^"]+)"/gu)].map((match) => match[1]!);
+  if (!block?.[1])
+    return {
+      reason:
+        "候補のPROTECTED_FILESを読み取れません。保護対象の追加を検証できないため拒否します",
+    };
+  return {
+    files: [...block[1].matchAll(/"([^"]+)"/gu)].map((match) => match[1]!),
+  };
 }
 
 /**
@@ -271,11 +324,10 @@ function protectedSnapshot(
   errors: string[],
 ): Map<string, string> {
   const snapshot = new Map<string, string>();
-  const sideLabel = side === "trusted" ? "trusted base" : "候補";
   for (const relative of PROTECTED_FILES) {
     const read = protectedFileContent(root, relative);
     if ("reason" in read) {
-      errors.push(`${sideLabel}の保護対象file ${relative} が${read.reason}`);
+      errors.push(protectedReadError(side, relative, read.reason));
       continue;
     }
     snapshot.set(`file:${relative}`, sha256(read.content));
@@ -436,12 +488,9 @@ function validateProtectionBootstrap(
   trustedRoot: string,
 ): string[] {
   const candidateProtected = candidateProtectedFiles(root);
-  if (candidateProtected === undefined)
-    return [
-      "候補のPROTECTED_FILESを読み取れません。保護対象の追加を検証できないため拒否します",
-    ];
+  if ("reason" in candidateProtected) return [candidateProtected.reason];
   const errors: string[] = [];
-  for (const relative of candidateProtected) {
+  for (const relative of candidateProtected.files) {
     if (PROTECTED_FILES.some((item) => item === relative)) continue;
     const trustedFile = path.join(trustedRoot, relative);
     const candidateFile = path.join(root, relative);
@@ -623,37 +672,57 @@ export function checkProjectQualityContract(
   errors.push(...validateDistributionScripts(scripts));
   checks.push("project choiceとpackage scriptの完全一致");
 
-  const tsconfig = readObject(path.join(root, "tsconfig.json"));
-  const compilerOptions = isRecord(tsconfig.compilerOptions)
-    ? tsconfig.compilerOptions
-    : {};
-  const include = Array.isArray(tsconfig.include)
-    ? (tsconfig.include as unknown[])
-    : [];
-  if (
-    compilerOptions.strict !== true ||
-    compilerOptions.noImplicitAny !== true ||
-    compilerOptions.allowJs !== false ||
-    !include.includes("test/**/*.ts")
-  )
+  const tsconfigRead = protectedFileText(root, "tsconfig.json");
+  if ("reason" in tsconfigRead) {
     errors.push(
-      "tsconfigはstrict・noImplicitAny・allowJs=false・test型検査が必要です",
+      protectedReadError("candidate", "tsconfig.json", tsconfigRead.reason),
     );
-  checks.push("TypeScript compiler option");
+  } else {
+    /**
+     * **読み取れた後のparseは従来どおりthrowさせる。** 内容不正は読み取り失敗と
+     * 別のpolicyであり、同じ診断へ倒すと削除と書式誤りを区別できない。
+     */
+    const tsconfig = parseJsonStrict(tsconfigRead.text, "tsconfig.json");
+    if (!isRecord(tsconfig))
+      throw new Error("tsconfig.jsonはobjectでなければなりません");
+    const compilerOptions = isRecord(tsconfig.compilerOptions)
+      ? tsconfig.compilerOptions
+      : {};
+    const include = Array.isArray(tsconfig.include)
+      ? (tsconfig.include as unknown[])
+      : [];
+    if (
+      compilerOptions.strict !== true ||
+      compilerOptions.noImplicitAny !== true ||
+      compilerOptions.allowJs !== false ||
+      !include.includes("test/**/*.ts")
+    )
+      errors.push(
+        "tsconfigはstrict・noImplicitAny・allowJs=false・test型検査が必要です",
+      );
+    checks.push("TypeScript compiler option");
+  }
 
-  const eslint = fs.readFileSync(path.join(root, "eslint.config.mjs"), "utf8");
-  for (const rule of [
-    "no-explicit-any",
-    "no-unsafe-argument",
-    "no-unsafe-assignment",
-    "no-unsafe-call",
-    "no-unsafe-member-access",
-    "no-unsafe-return",
-  ])
-    if (!eslint.includes(`@typescript-eslint/${rule}`))
-      errors.push(`ESLintに${rule}がありません`);
-  if (!eslint.includes('files: ["{src,bin,scripts,test}/**/*.ts"]'))
-    errors.push("ESLintの型認識ruleはtestを含む全TypeScriptへ適用が必要です");
+  const eslintRead = protectedFileText(root, "eslint.config.mjs");
+  if ("reason" in eslintRead) {
+    errors.push(
+      protectedReadError("candidate", "eslint.config.mjs", eslintRead.reason),
+    );
+  } else {
+    const eslint = eslintRead.text;
+    for (const rule of [
+      "no-explicit-any",
+      "no-unsafe-argument",
+      "no-unsafe-assignment",
+      "no-unsafe-call",
+      "no-unsafe-member-access",
+      "no-unsafe-return",
+    ])
+      if (!eslint.includes(`@typescript-eslint/${rule}`))
+        errors.push(`ESLintに${rule}がありません`);
+    if (!eslint.includes('files: ["{src,bin,scripts,test}/**/*.ts"]'))
+      errors.push("ESLintの型認識ruleはtestを含む全TypeScriptへ適用が必要です");
+  }
   const stepsRoot = path.join(root, "test/steps");
   if (!fs.existsSync(stepsRoot)) {
     errors.push("型付きCucumber stepを検証するtest/stepsがありません");
@@ -681,20 +750,42 @@ export function checkProjectQualityContract(
   checks.push("ESLint explicit・propagated any rule");
   checks.push("testの型認識lint・型付きCucumber World binding");
 
-  const workflow = fs.readFileSync(
-    path.join(root, ".github/workflows/ci.yml"),
-    "utf8",
-  );
-  const projectGate = workflow.indexOf("run: npm run project:quality");
-  const qualityGate = workflow.indexOf("run: npm run quality");
-  if (projectGate < 0 || qualityGate < 0 || projectGate > qualityGate)
-    errors.push("CIはproject品質契約をqualityより先に実行しなければなりません");
-  checks.push("CI gate order");
+  const workflowRead = protectedFileText(root, ".github/workflows/ci.yml");
+  if ("reason" in workflowRead) {
+    errors.push(
+      protectedReadError(
+        "candidate",
+        ".github/workflows/ci.yml",
+        workflowRead.reason,
+      ),
+    );
+  } else {
+    const projectGate = workflowRead.text.indexOf(
+      "run: npm run project:quality",
+    );
+    const qualityGate = workflowRead.text.indexOf("run: npm run quality");
+    if (projectGate < 0 || qualityGate < 0 || projectGate > qualityGate)
+      errors.push(
+        "CIはproject品質契約をqualityより先に実行しなければなりません",
+      );
+    checks.push("CI gate order");
+  }
 
-  const trustedWorkflow = fs.readFileSync(
-    path.join(root, ".github/workflows/trusted-quality.yml"),
-    "utf8",
+  const trustedRead = protectedFileText(
+    root,
+    ".github/workflows/trusted-quality.yml",
   );
+  if ("reason" in trustedRead) {
+    errors.push(
+      protectedReadError(
+        "candidate",
+        ".github/workflows/trusted-quality.yml",
+        trustedRead.reason,
+      ),
+    );
+    return { valid: errors.length === 0, errors, checks };
+  }
+  const trustedWorkflow = trustedRead.text;
   for (const required of [
     "pull_request_target:",
     "ref: ${{ github.event.pull_request.base.sha }}",

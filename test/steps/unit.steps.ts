@@ -228,8 +228,11 @@ interface UnitWorld extends WorkflowWorld {
   processSecret: "ghp_abcdefghijklmnopqrstuvwxyz1234567890";
   projectQualityResult: ReturnType<typeof checkProjectQualityContract>;
   projectQualityRoot: string;
+  projectQualityThrown: Error | undefined;
   projectQualityTrustedRoot: string;
   removedProtectedFile: string;
+  sideEffectMarker: string;
+  snapshotOuterPath: string;
   releaseVersion: string;
   runtimeInputErrors: string[];
   runtimeManifestFile: string;
@@ -644,10 +647,20 @@ Given(
   },
 );
 When("project品質bindingを検証する", function () {
-  this.projectQualityResult = checkProjectQualityContract(
-    this.projectQualityRoot,
-    process.cwd(),
-  );
+  /**
+   * **throwを捕捉して観測対象にする。** 検査対象は「読み取り失敗を構造化errorへ
+   * 統合したか」であり、未捕捉throwはその失敗形である。捕捉せずに落とすと
+   * Scenarioが「未実装」ではなく「例外」で終わり、どのpathが落ちたか表に残らない。
+   */
+  this.projectQualityThrown = undefined;
+  try {
+    this.projectQualityResult = checkProjectQualityContract(
+      this.projectQualityRoot,
+      process.cwd(),
+    );
+  } catch (error) {
+    this.projectQualityThrown = error as Error;
+  }
 });
 
 function copyQualityContractFixture(root: string): void {
@@ -898,6 +911,260 @@ Then("候補側のpackage-lock.json欠損をerrorとして名指しする", func
   assert.ok(
     this.projectQualityResult.errors.includes(expected),
     `期待するerrorがありません: ${expected} / 実際: ${JSON.stringify(this.projectQualityResult.errors)}`,
+  );
+});
+
+/**
+ * snapshot外で直接読まれる保護対象path。`protectedSnapshot`が扱う集合とは別に、
+ * `check_project_quality.ts`が値を取り出すために個別に読むpathである（Issue #1111）。
+ */
+const SNAPSHOT_OUTER_PROTECTED_PATHS = [
+  "scripts/check_project_quality.ts",
+  "tsconfig.json",
+  "eslint.config.mjs",
+  ".github/workflows/ci.yml",
+  ".github/workflows/trusted-quality.yml",
+] as const;
+
+/**
+ * trusted baseを渡さない経路でも読まれるpath。
+ *
+ * **`scripts/check_project_quality.ts`は含まない。** 候補の`PROTECTED_FILES`一覧は
+ * trusted baseとの比較にだけ使うため、`trustedRoot`未指定では読まれない。
+ * これは本Issueの欠陥ではなく既存の設計であり、solo経路の期待を全5 pathへ
+ * 広げると充足不能な受け入れ条件になる。
+ */
+const SOLO_READ_PROTECTED_PATHS = [
+  "tsconfig.json",
+  "eslint.config.mjs",
+  ".github/workflows/ci.yml",
+  ".github/workflows/trusted-quality.yml",
+] as const;
+
+function prepareSnapshotOuterCandidate(
+  world: UnitWorld,
+  relative: string,
+): void {
+  /**
+   * **path表をstep側にも持ち、Scenario Outlineの値が実在pathであることを測る。**
+   * 打ち間違えたpathをそのまま流すと、欠損させていないprojectを検証して緑になる。
+   */
+  assert.ok(
+    (SNAPSHOT_OUTER_PROTECTED_PATHS as readonly string[]).includes(relative),
+    `snapshot外保護pathではありません: ${relative}`,
+  );
+  world.projectQualityRoot = world.temp("asc-quality-candidate-");
+  copyQualityContractFixture(world.projectQualityRoot);
+  world.snapshotOuterPath = relative;
+  fs.rmSync(path.join(world.projectQualityRoot, relative));
+}
+
+Given(
+  "candidateのsnapshot外保護file {string} を欠損させたprojectがある",
+  function (relative: string) {
+    prepareSnapshotOuterCandidate(this, relative);
+  },
+);
+
+Given(
+  "candidateのsnapshot外保護file {string} をdirectoryへ置換したprojectがある",
+  function (relative: string) {
+    prepareSnapshotOuterCandidate(this, relative);
+    /**
+     * **ENOENT以外のerrnoを実際に発生させる。** 同名directoryを置くと
+     * `readFileSync`はEISDIRで失敗する。errnoを文字列で偽装しない。
+     */
+    fs.mkdirSync(path.join(this.projectQualityRoot, relative));
+  },
+);
+
+function assertSnapshotOuterRead(world: UnitWorld, missing: boolean): void {
+  assert.equal(
+    world.projectQualityThrown,
+    undefined,
+    `未捕捉throwが残っています: ${world.projectQualityThrown?.message ?? ""}`,
+  );
+  const result = world.projectQualityResult;
+  assert.ok(result, "結果がありません");
+  assert.equal(result.valid, false, JSON.stringify(result));
+  const expected = missing
+    ? `候補の保護対象file ${world.snapshotOuterPath} が存在しません`
+    : `候補の保護対象file ${world.snapshotOuterPath} が読み取れません（EISDIR）`;
+  assert.ok(
+    result.errors.includes(expected),
+    `期待するerrorがありません: ${expected} / 実際: ${JSON.stringify(result.errors)}`,
+  );
+  /**
+   * **反対の理由が出ていないことも測る。** 分岐を潰して常に片側を返す変異は、
+   * 件数だけを見る検査では素通りする。
+   */
+  const opposite = missing
+    ? `候補の保護対象file ${world.snapshotOuterPath} が読み取れません`
+    : `候補の保護対象file ${world.snapshotOuterPath} が存在しません`;
+  assert.ok(
+    !result.errors.some((error: string) => error.includes(opposite)),
+    `反対の理由が混入しています: ${JSON.stringify(result.errors)}`,
+  );
+  /**
+   * **絶対pathとfile内容を診断へ出さない。** 相対pathだけを名指しする。
+   */
+  assert.ok(
+    !result.errors.some((error: string) =>
+      error.includes(world.projectQualityRoot),
+    ),
+    `診断に絶対pathが含まれています: ${JSON.stringify(result.errors)}`,
+  );
+  /**
+   * **trusted base無しの経路でも同じ診断を出す。** 対象5 pathはいずれも
+   * `PROTECTED_FILES`にも属するため、trusted baseを渡した比較経路が同じ文言を
+   * 別経路から出す。値取り出し側の診断を落としても、その経路が隠してしまう。
+   *
+   * **実CIの`npm run project:quality`はtrusted baseを渡さない**（`check_project_quality.ts`は
+   * `--trusted-root`未指定なら`trustedRoot=undefined`で走り、snapshot比較を行わない）。
+   * この経路では直接読みが唯一の保護であり、ここを測らないと本Issueの主目的が
+   * 検査されない。
+   */
+  if (
+    !(SOLO_READ_PROTECTED_PATHS as readonly string[]).includes(
+      world.snapshotOuterPath,
+    )
+  )
+    return;
+  let soloThrown: Error | undefined;
+  let soloResult: ReturnType<typeof checkProjectQualityContract> | undefined;
+  try {
+    soloResult = checkProjectQualityContract(world.projectQualityRoot);
+  } catch (error) {
+    soloThrown = error as Error;
+  }
+  assert.equal(
+    soloThrown,
+    undefined,
+    `trusted base無しの経路で未捕捉throwが残っています: ${soloThrown?.message ?? ""}`,
+  );
+  assert.ok(soloResult, "trusted base無しの結果がありません");
+  assert.equal(soloResult.valid, false, JSON.stringify(soloResult));
+  assert.ok(
+    soloResult.errors.includes(expected),
+    `trusted base無しの経路に期待するerrorがありません: ${expected} / 実際: ${JSON.stringify(soloResult.errors)}`,
+  );
+}
+
+Then(
+  "candidate側の {string} と存在しない理由を含むinvalid resultを返す",
+  function (relative: string) {
+    assert.equal(this.snapshotOuterPath, relative);
+    assertSnapshotOuterRead(this, true);
+  },
+);
+
+Then(
+  "candidate側の {string} と存在しない以外の理由を含むinvalid resultを返す",
+  function (relative: string) {
+    assert.equal(this.snapshotOuterPath, relative);
+    assertSnapshotOuterRead(this, false);
+  },
+);
+
+Given(
+  "実行副作用を持つcandidateのcheck_project_quality sourceがある",
+  function () {
+    this.projectQualityRoot = this.temp("asc-quality-candidate-");
+    copyQualityContractFixture(this.projectQualityRoot);
+    this.sideEffectMarker = path.join(
+      this.projectQualityRoot,
+      "executed.marker",
+    );
+    /**
+     * **top-levelで書き込む候補scriptを置く。** import・実行すればmarkerが残る。
+     * 静的抽出だけならmarkerは生まれない。**候補側にだけ存在する保護対象を1件足す。**
+     * 抽出が実際に行われたことは、その新規pathに対するbootstrap拒否errorでしか示せない。
+     * 既存pathだけを宣言すると、抽出せずhash差分だけでも判定が偽になる。
+     */
+    fs.writeFileSync(
+      path.join(this.projectQualityRoot, "scripts/check_project_quality.ts"),
+      [
+        'import fs from "node:fs";',
+        `fs.writeFileSync(${JSON.stringify(this.sideEffectMarker)}, "executed");`,
+        'const PROTECTED_FILES = ["tsconfig.json", "new-protected.txt"] as const;',
+        "void PROTECTED_FILES;",
+        "",
+      ].join("\n"),
+    );
+  },
+);
+
+Then(
+  "candidate sourceの副作用を実行せず静的な読み取り結果だけで判定する",
+  function () {
+    assert.equal(
+      this.projectQualityThrown,
+      undefined,
+      `未捕捉throwが残っています: ${this.projectQualityThrown?.message ?? ""}`,
+    );
+    assert.equal(
+      fs.existsSync(this.sideEffectMarker),
+      false,
+      "候補scriptが実行されmarkerが生成されました",
+    );
+    const result = this.projectQualityResult;
+    assert.ok(result, "結果がありません");
+    assert.equal(result.valid, false, JSON.stringify(result));
+    /**
+     * **抽出結果そのものを名指しで観測する。** 候補scriptだけが宣言する
+     * `new-protected.txt`への拒否errorは、静的抽出が実際に走った場合にしか現れない。
+     */
+    assert.ok(
+      result.errors.some((error: string) =>
+        error.includes("new-protected.txt"),
+      ),
+      `静的抽出の結果が判定へ反映されていません: ${JSON.stringify(result.errors)}`,
+    );
+  },
+);
+
+Given("読み取り可能だがmalformedなcandidateのtsconfigがある", function () {
+  this.projectQualityRoot = this.temp("asc-quality-candidate-");
+  copyQualityContractFixture(this.projectQualityRoot);
+  fs.writeFileSync(
+    path.join(this.projectQualityRoot, "tsconfig.json"),
+    "{ not json",
+  );
+});
+
+Then("file読み取り失敗へ変換せず既存の内容不正policyで拒否する", function () {
+  /**
+   * **既存policyを維持する。** 読み取りは成功しており、拒否するのは内容である。
+   * 読み取り失敗の診断へ倒すと、削除・権限異常と内容不正が同じ文言になる。
+   */
+  const thrown = this.projectQualityThrown;
+  const result = this.projectQualityResult;
+  const readFailure = "tsconfig.json が存在しません";
+  const readFailure2 = "tsconfig.json が読み取れません";
+  if (thrown) {
+    assert.ok(
+      !thrown.message.includes(readFailure) &&
+        !thrown.message.includes(readFailure2),
+      `内容不正を読み取り失敗へ偽装しています: ${thrown.message}`,
+    );
+    /**
+     * **任意のthrowを受理しない。** 拒否理由がtsconfigの内容不正であることまで
+     * 見ないと、内容検証を消して無関係な例外へ置き換えても本Scenarioが通る。
+     */
+    assert.ok(
+      thrown.message.startsWith("tsconfig.json:"),
+      `内容不正以外の例外です: ${thrown.message}`,
+    );
+    return;
+  }
+  assert.ok(result, "結果がありません");
+  assert.equal(result.valid, false, JSON.stringify(result));
+  assert.ok(
+    !result.errors.some(
+      (error: string) =>
+        error.includes(readFailure) || error.includes(readFailure2),
+    ),
+    `内容不正を読み取り失敗へ偽装しています: ${JSON.stringify(result.errors)}`,
   );
 });
 
