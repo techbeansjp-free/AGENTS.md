@@ -288,6 +288,29 @@
           "afterSha256": "4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-SNAPSHOT-OUTER-READ-001",
+      "status": "staged",
+      "fromVersion": 10,
+      "toVersion": 11,
+      "owner": "repository maintainer",
+      "rationale": "checkProjectQualityContractは保護snapshotとは別に、検査へ使う値を取り出すため5 fileを個別に読む。scripts/check_project_quality.ts、tsconfig.json、eslint.config.mjs、.github/workflows/ci.yml、.github/workflows/trusted-quality.ymlである。この直接読みが失敗すると未捕捉例外になり、構造化errorsを返す契約に反する。失敗形を9件実測した。4 pathの欠損がENOENT、5 path全部のdirectory化がEISDIRでthrowする。共有のprotectedReadErrorとprotectedFileTextを入れ、snapshot経路と同じside・relative path・理由の書式へ5箇所を統合する。読み取り成功後の内容不正は既存policyのまま維持しread failureの診断へ倒さない。trusted baseを渡さない経路でも成立させる。SCN-UNIT-QUALITY-015から018を追加し変異7件を全てkillした",
+      "rollback": "登録済みproposalは削除できず、qualityContractVersionの減少も受理されない。適用前は有効化しないまま維持する。適用後に戻す場合は、check_project_quality.tsを本proposal適用前の内容へ戻す新規proposalを次versionとして登録し、同じ二段階手順で前進させる",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "scripts/check_project_quality.ts",
+          "beforeSha256": "13e98bff1ed8d5b62a98003da9c335fffa40961cd1c94f82802ac22c9739150c",
+          "afterSha256": "0702604760f7eb6b3083467a34e6c0b1319f5e3d4b4c1f0f560b71d13f9a1305"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5",
+          "afterSha256": "4fc82b26aecb47d2868c4efbe3581732a3e7cbcc6c2efb32062c08170a05eeb8"
+        }
+      ]
     }
   ]
 }
