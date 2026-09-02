@@ -23,6 +23,59 @@ import {
 } from "../../scripts/check_conformance.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
+/**
+ * `checkRepositoryRuleLedger`の本体へ合成されている個別検査の宣言。
+ *
+ * **この集合と実際の合成を双方向で突き合わせる**（Issue #988）。片方向だと、
+ * 合成行がrefactoringで落ちたときか、新しい検査が登録されないまま増えたときの
+ * どちらかを見逃す。製品repositoryは違反を持たないため、合成から外しても
+ * `conformance:check`はexit 0のままであり、実行結果からは検出できない。
+ *
+ * **配線の存在で回帰を検出する。** 個別検査それぞれに違反treeを作る案は、
+ * `replicate`がrepository全体の複写とproject policy一式を要求するため、
+ * 支援層の所要時間が成果物構築を上回る。
+ */
+const LEDGER_COMPOSED_CHECKS: readonly string[] = [
+  "checkCanonicalDuplication",
+  "checkCanonicalScopeAlignment",
+  "checkDistributionGateReachability",
+  "checkExecutionEntry",
+  "checkLifecycleIgnore",
+  "checkModeQuestionText",
+  "checkNodeRuntimeAlignment",
+  "checkPackageDistributionBoundary",
+  "checkPackageManagerBoundary",
+  "checkQualityCiPermissions",
+  "checkQualityCiTriggers",
+  "checkQualityCommands",
+  "checkRequirementIdScheme",
+  "checkTrustedPolicyBoundary",
+  "checkTrustedScriptPinning",
+  "checkWorkflowStepDocument",
+  "checkWorktreeContract",
+  "validateReviewExceptions",
+];
+
+/**
+ * `checkRepositoryRuleLedger`の本体で`errors`へ合成されている検査名を実際に読む。
+ *
+ * **`errors.push(`の直後だけを見ない。** 1回の`push`へ複数の検査を並べる書き方が
+ * 実在し、2件目以降を見落とす。本体全体からspread呼び出しを拾う。
+ */
+export function observeLedgerComposition(source: string): string[] {
+  const start = source.indexOf("export function checkRepositoryRuleLedger");
+  if (start < 0) return [];
+  const end = source.indexOf("\nexport function ", start + 1);
+  const body = end < 0 ? source.slice(start) : source.slice(start, end);
+  return [
+    ...new Set(
+      [...body.matchAll(/\.\.\.((?:check|validate)\w+)\s*\(/gu)].map(
+        (match) => match[1]!,
+      ),
+    ),
+  ].sort();
+}
+
 function ruleFixture(overrides: Record<string, unknown> = {}) {
   return {
     ruleId: "ASC-DOGFOOD-FIXTURE-001",
@@ -59,6 +112,10 @@ class ProjectRuleLedgerWorld extends WorkflowWorld {
   runtimeRuleValidations: Array<ReturnType<typeof validateRule>> = [];
   metadataComparison: ReturnType<typeof compareTrustedPolicy> | undefined =
     undefined;
+  /** 適合性検査scriptの本体。 */
+  ledgerSource = "";
+  /** 本体から実際に読み取った合成済み検査名。 */
+  composedChecks: string[] = [];
 }
 
 const { Given, When, Then } = stepDefinitions<ProjectRuleLedgerWorld>();
@@ -344,4 +401,37 @@ Then("project ruleと固定Markdownの全境界が合格する", function () {
   assert.ok(this.ledger);
   assert.equal(this.ledger.valid, true, this.ledger.errors.join("; "));
   assert.deepEqual(this.fixedMarkdownErrors, []);
+});
+
+Given("適合性検査scriptの本体がある", function () {
+  this.ledgerSource = fs.readFileSync(
+    path.join(process.cwd(), "scripts/check_conformance.ts"),
+    "utf8",
+  );
+});
+
+When("公開入口へ合成されている個別検査を読む", function () {
+  this.composedChecks = observeLedgerComposition(this.ledgerSource);
+});
+
+Then("宣言した個別検査がすべて合成されている", function () {
+  const observed = new Set(this.composedChecks);
+  const missing = LEDGER_COMPOSED_CHECKS.filter((name) => !observed.has(name));
+  assert.deepEqual(
+    missing,
+    [],
+    `公開入口のerrorsへ合成されていない個別検査があります: ${missing.join(", ")}`,
+  );
+});
+
+Then("合成されている個別検査がすべて宣言されている", function () {
+  const declared = new Set<string>(LEDGER_COMPOSED_CHECKS);
+  const unregistered = this.composedChecks.filter(
+    (name) => !declared.has(name),
+  );
+  assert.deepEqual(
+    unregistered,
+    [],
+    `LEDGER_COMPOSED_CHECKSへ未登録の個別検査があります: ${unregistered.join(", ")}`,
+  );
 });
