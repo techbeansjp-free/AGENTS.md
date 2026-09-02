@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import {
+  EVIDENCE_REANCHOR_FILE,
   appendEvidenceReanchor,
   readEvidenceReanchorChain,
 } from "../../src/adapters/evidence-reanchor.js";
@@ -31,7 +32,12 @@ import {
 import { appendWorkflowJournalEntry } from "../../src/adapters/workflow-journal.js";
 import { WORKFLOW_STEPS } from "../../src/domain/workflow.js";
 import { QUESTIONS } from "../../src/domain/mode.js";
-import { assertCurrentReviewJournalBinding, main } from "../../src/cli.js";
+import {
+  assertBoundPullRequestObservation,
+  assertCurrentReviewJournalBinding,
+  main,
+} from "../../src/cli.js";
+import { readStoredDeliveryState } from "../../src/adapters/delivery-state.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
 class ReanchorWorld extends WorkflowWorld {
@@ -607,6 +613,104 @@ When("再固定をCLIから適用する", async function () {
     "--apply",
   ]);
   this.applied = status === 0;
+});
+
+/**
+ * `pr merge`が再観測するPRを、固定済みdelivery identityと同じ内容で組み立てる。
+ *
+ * **headだけを引数で変える。** 他の項目を一致させておかないと、head照合を
+ * 通過したのか別の理由で落ちたのかを区別できない（Issue #1101）。
+ */
+function observedPullRequest(headRefOid: string): Record<string, unknown> {
+  return {
+    number: 1093,
+    url: "https://github.com/example/repository/pull/1093",
+    title: "証跡再固定",
+    body: "Closes #1093",
+    headRefName: "bugfix/1093-evidence-reanchor",
+    baseRefName: "main",
+    headRefOid,
+    headRepository: { nameWithOwner: "example/repository" },
+    isCrossRepository: false,
+    closingIssuesReferences: [
+      {
+        number: 1093,
+        url: "https://github.com/example/repository/issues/1093",
+      },
+    ],
+  };
+}
+
+function observeBoundPullRequest(
+  world: ReanchorWorld,
+  headRefOid: string,
+): void {
+  const state = readStoredDeliveryState(world.staging);
+  assert.ok(state, "delivery stateがありません");
+  try {
+    assertBoundPullRequestObservation({
+      staging: world.staging,
+      state,
+      observed: observedPullRequest(headRefOid) as never,
+      tracker: "https://github.com/example/repository/issues/1093",
+    });
+    world.bindingPassed = true;
+  } catch (error) {
+    world.bindingPassed = false;
+    world.error = error;
+  }
+}
+
+When("delivery層の再固定のあとにpr mergeのbinding検査を通す", function () {
+  applyReanchor(this, "delivery");
+  assert.equal(
+    this.applied,
+    true,
+    `再固定が失敗しました: ${String(this.error)}`,
+  );
+  observeBoundPullRequest(this, this.newHeadSha);
+});
+
+When("再固定せずに新headでpr mergeのbinding検査を通す", function () {
+  observeBoundPullRequest(this, this.newHeadSha);
+});
+
+When("連鎖しない記録を積んで新headでpr mergeのbinding検査を通す", function () {
+  /**
+   * **先頭の`oldHeadSha`が固定済みheadと一致しない記録を直接置く。**
+   * `pr reanchor`は等価性を要求するため、連鎖破綻はCLI経由では作れない。
+   */
+  fs.mkdirSync(path.join(this.staging, "journal"), { recursive: true });
+  fs.writeFileSync(
+    path.join(this.staging, EVIDENCE_REANCHOR_FILE),
+    `${JSON.stringify({
+      oldHeadSha: "a".repeat(40),
+      newHeadSha: this.newHeadSha,
+      oldBaseSha: this.baseSha,
+      newBaseSha: this.newBaseSha,
+      diffDigest: "d".repeat(64),
+      method: "rebase",
+      reason: "連鎖しない記録",
+      recordedAt: INSTANT.toISOString(),
+    })}\n`,
+  );
+  observeBoundPullRequest(this, this.newHeadSha);
+});
+
+Then("pr mergeのbinding検査は通過する", function () {
+  assert.equal(
+    this.bindingPassed,
+    true,
+    `binding検査が停止しました: ${String(this.error)}`,
+  );
+});
+
+Then("pr mergeのbinding検査は固定済みheadとの不一致で停止する", function () {
+  assert.equal(this.bindingPassed, false, "binding検査が通過しました");
+  assert.match(
+    String((this.error as Error)?.message ?? ""),
+    /PR再観測が固定済みrepository・PR・base ref・headと一致しません/u,
+  );
 });
 
 When("到達性を観測する", function () {

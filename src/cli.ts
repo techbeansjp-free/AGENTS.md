@@ -543,18 +543,34 @@ function bindingFromCreatedPullRequest(input: {
   return { number: observed.number, url: observed.url, boundAt: input.boundAt };
 }
 
-function assertBoundPullRequestObservation(input: {
+/**
+ * 固定済みPR bindingと再観測を照合する。
+ *
+ * **headの照合対象は再固定chainの実効HEADである。** 固定済み`create.headSha`を
+ * 直接使うと、既定branchが動いてrebaseし`pr reanchor`を規定どおり実行しても
+ * `pr merge`が通らない（Issue #1101）。REQ-WF-005は「照合対象を新headへ移す」と
+ * 定めており、`pr create`後はその移送を`pr reanchor`が受け持つ。
+ *
+ * **chainが空なら実効HEADは`create.headSha`そのものになる。** 再固定記録を
+ * 持たない既存stateの判定は変更前と完全に同一である。
+ */
+export function assertBoundPullRequestObservation(input: {
+  staging: string;
   state: DeliveryState;
   observed: PullRequestInspection;
   tracker: string | null;
 }): ReturnType<typeof assertObservedClosingContract> {
   const { state, observed } = input;
   if (!state.pr) throw new Error("固定済みPR bindingがありません");
+  const effectiveHeadSha = deriveEffectiveHead({
+    records: readEvidenceReanchorChain(input.staging),
+    anchoredHeadSha: state.create.headSha,
+  }).effectiveHeadSha;
   if (
     observed.number !== state.pr.number ||
     observed.url?.toLowerCase() !== state.pr.url.toLowerCase() ||
     observed.headRefName !== state.create.headRef ||
-    observed.headRefOid !== state.create.headSha ||
+    observed.headRefOid !== effectiveHeadSha ||
     observed.baseRefName !== state.create.baseRef
   )
     throw new Error(
@@ -572,6 +588,7 @@ function assertBoundPullRequestObservation(input: {
 }
 
 function mergeObservationFromProvider(input: {
+  staging: string;
   state: DeliveryState;
   observed: PullRequestInspection;
   queue?: PullRequestQueueObservation;
@@ -1152,6 +1169,7 @@ function assertFixedMergeReviewEvidence(
 
 function inspectAuthorizedPullRequestMerge(input: {
   root: string;
+  staging: string;
   repository: string;
   pr: number;
   method: PullRequestMergeMethod;
@@ -1175,6 +1193,7 @@ function inspectAuthorizedPullRequestMerge(input: {
   if (observed.number !== input.pr)
     throw new Error("PR観測の番号が固定済みPRと一致しません");
   assertBoundPullRequestObservation({
+    staging: input.staging,
     state: input.state,
     observed,
     tracker: input.tracker,
@@ -1467,6 +1486,7 @@ function readBackPreparedPullRequestMerge(input: {
     const merged = String(observed.state ?? "").toUpperCase() === "MERGED";
     if (merged) {
       assertBoundPullRequestObservation({
+        staging: input.staging,
         state: input.state,
         observed,
         tracker: input.tracker,
@@ -1484,6 +1504,7 @@ function readBackPreparedPullRequestMerge(input: {
       const trustedSet = loadEffectiveTrustedPolicySet(input.root, base);
       const inspected = inspectAuthorizedPullRequestMerge({
         root: input.root,
+        staging: input.staging,
         repository: input.repository,
         pr: input.pr,
         method: input.state.merge.method,
@@ -1514,6 +1535,7 @@ function readBackPreparedPullRequestMerge(input: {
           )
         : undefined;
     const merge = mergeObservationFromProvider({
+      staging: input.staging,
       state: input.state,
       observed,
       queue,
@@ -1668,6 +1690,7 @@ function retryPreparedMergeAfterConfirmedAbsence(input: {
       input.root,
     );
     assertBoundPullRequestObservation({
+      staging: input.staging,
       state: input.state,
       observed: initialReadBack,
       tracker: input.tracker,
@@ -1698,6 +1721,7 @@ function retryPreparedMergeAfterConfirmedAbsence(input: {
     const trustedSet = loadEffectiveTrustedPolicySet(input.root, base);
     const inspected = inspectAuthorizedPullRequestMerge({
       root: input.root,
+      staging: input.staging,
       repository: input.repository,
       pr: input.pr,
       method: input.method,
@@ -1734,6 +1758,7 @@ function retryPreparedMergeAfterConfirmedAbsence(input: {
       };
     const rechecked = inspectAuthorizedPullRequestMerge({
       root: input.root,
+      staging: input.staging,
       repository: input.repository,
       pr: input.pr,
       method: input.method,
@@ -2064,6 +2089,7 @@ function handlePullRequestMerge(flags: Flags): number {
     const trustedSet = loadEffectiveTrustedPolicySet(root, base);
     const inspected = inspectAuthorizedPullRequestMerge({
       root,
+      staging,
       repository,
       pr,
       method,
@@ -2101,6 +2127,7 @@ function handlePullRequestMerge(flags: Flags): number {
 
     const rechecked = inspectAuthorizedPullRequestMerge({
       root,
+      staging,
       repository,
       pr,
       method,
