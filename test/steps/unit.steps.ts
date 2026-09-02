@@ -156,6 +156,10 @@ interface UnitWorld extends WorkflowWorld {
     guides: number;
     entries: { [k: string]: string };
   };
+  missingDocumentLinkRoots: { [k: string]: string };
+  documentLinkContracts: {
+    [k: string]: { valid: boolean; errors: string[]; skills: number };
+  };
   missingDomainGlossaryContractRoot: string;
   missingDomainGlossaryContracts: {
     valid: boolean;
@@ -2241,6 +2245,196 @@ Then("製品は0.3.1 betaでpolicyはv0.3.0からv0.3.1へ移行する", functio
   for (const version of ["0.3.01", "0.3.1-beta.1", "0.3"])
     assert.equal(isPolicySchemaPatchVersion(version), false, version);
   assert.equal(packageReleaseVersion("0.3.1+build.7"), "0.3.1");
+});
+
+/**
+ * Step skillから規範文書へ向けたlinkの壊し方を、境界ごとに1件ずつ定義する。
+ *
+ * **link先を実在させたまま壊す。** file不在とanchor不在は別の失敗であり、
+ * 一方だけを検出する実装が通らないようにする（Issue #1117）。
+ */
+const DOCUMENT_LINK_BREAKS: {
+  readonly key: string;
+  readonly from: string;
+  readonly to: string;
+  readonly prepare?: (root: string) => void;
+}[] = [
+  {
+    key: "missingHeading",
+    from: "#asc本体の是正を作業scopeへ入れない",
+    to: "#実在しない見出し",
+  },
+  {
+    key: "missingFile",
+    from: "../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない",
+    to: "../../docs/99_実在しない規範文書.md",
+  },
+  {
+    key: "outsideBoundary",
+    from: "../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない",
+    to: "../../docs/../../etc/passwd",
+  },
+  {
+    key: "badPercentEncoding",
+    from: "#asc本体の是正を作業scopeへ入れない",
+    to: "#bad%",
+  },
+  {
+    key: "docsRootSymlink",
+    from: "../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない",
+    to: "../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない",
+    /**
+     * **docs root自体をnamespace外へのsymlinkへ置き換える。** linkの文字列は
+     * 正常なままであり、境界の基準そのものが外へ出る形を検査する。
+     */
+    prepare: (root: string): void => {
+      const namespace = path.join(root, ".agent-skill-chain");
+      const outside = path.join(root, "外部docs");
+      fs.mkdirSync(outside, { recursive: true });
+      fs.copyFileSync(
+        path.join(namespace, "docs/01_開発ワークフロー.md"),
+        path.join(outside, "01_開発ワークフロー.md"),
+      );
+      fs.rmSync(path.join(namespace, "docs"), { recursive: true });
+      fs.symlinkSync(outside, path.join(namespace, "docs"));
+    },
+  },
+  {
+    key: "symlinkOutside",
+    from: "../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない",
+    to: "../../docs/外部参照.md",
+    /**
+     * **docs配下に見えるsymlinkが境界外を指す。** path文字列だけの判定は
+     * これを通してしまう。
+     */
+    prepare: (root: string): void => {
+      const outside = path.join(root, "外部の規範文書.md");
+      fs.writeFileSync(outside, "# 外部\n");
+      fs.symlinkSync(
+        outside,
+        path.join(root, ".agent-skill-chain/docs/外部参照.md"),
+      );
+    },
+  },
+];
+
+Given("Step skillから規範文書へのlinkを壊したpackageがある", function () {
+  this.missingDocumentLinkRoots = {};
+  for (const { key, from, to, prepare } of DOCUMENT_LINK_BREAKS) {
+    const root = this.temp(`asc-skill-doc-link-${key}-`);
+    fs.mkdirSync(path.join(root, ".agent-skill-chain/docs"), {
+      recursive: true,
+    });
+    fs.cpSync(
+      ".agent-skill-chain/skills",
+      path.join(root, ".agent-skill-chain/skills"),
+      { recursive: true },
+    );
+    fs.cpSync(
+      ".agent-skill-chain/templates",
+      path.join(root, ".agent-skill-chain/templates"),
+      { recursive: true },
+    );
+    fs.copyFileSync(
+      ".agent-skill-chain/docs/01_開発ワークフロー.md",
+      path.join(root, ".agent-skill-chain/docs/01_開発ワークフロー.md"),
+    );
+    const skillFile = path.join(
+      root,
+      ".agent-skill-chain/skills/step-09-implement/SKILL.md",
+    );
+    prepare?.(root);
+    const before = fs.readFileSync(skillFile, "utf8");
+    assert.ok(before.includes(from), `壊す対象のlinkが見つかりません: ${from}`);
+    if (from !== to) fs.writeFileSync(skillFile, before.replace(from, to));
+    this.missingDocumentLinkRoots[key] = root;
+  }
+});
+
+When("Step skillの規範文書linkを検証する", function () {
+  this.documentLinkContracts = {
+    intact: checkSkillTemplateContracts(process.cwd()),
+  };
+  for (const [key, root] of Object.entries(this.missingDocumentLinkRoots))
+    this.documentLinkContracts[key] = checkSkillTemplateContracts(root);
+});
+
+Then("link先fileの不在が拒否される", function () {
+  const observed = this.documentLinkContracts.missingFile!;
+  assert.equal(observed.valid, false);
+  assert.ok(
+    observed.errors.some(
+      (error) =>
+        error.includes("step-09-implement/SKILL.md") &&
+        error.includes("../../docs/99_実在しない規範文書.md"),
+    ),
+    observed.errors.join(" "),
+  );
+  const boundary = this.documentLinkContracts.outsideBoundary!;
+  assert.equal(boundary.valid, false);
+  assert.ok(
+    boundary.errors.some((error) => error.includes("docs境界外です")),
+    boundary.errors.join(" "),
+  );
+  const symlink = this.documentLinkContracts.symlinkOutside!;
+  assert.equal(symlink.valid, false);
+  assert.ok(
+    symlink.errors.some((error) =>
+      error.includes("symlinkでdocs境界外です: ../../docs/外部参照.md"),
+    ),
+    symlink.errors.join(" "),
+  );
+  /**
+   * **境界の基準そのものが外へ出る形も拒否する。** docs rootがnamespace外への
+   * symlinkなら、個別linkのrealpath判定はすべてその外側で成立してしまう。
+   */
+  const rootSymlink = this.documentLinkContracts.docsRootSymlink!;
+  assert.equal(rootSymlink.valid, false);
+  assert.ok(
+    rootSymlink.errors.some((error) =>
+      error.includes("docs rootがsymlinkでnamespace境界外です"),
+    ),
+    rootSymlink.errors.join(" "),
+  );
+});
+
+Then("anchorに対応する見出しの不在が拒否される", function () {
+  const observed = this.documentLinkContracts.missingHeading!;
+  assert.equal(observed.valid, false);
+  assert.ok(
+    observed.errors.some(
+      (error) =>
+        error.includes("step-09-implement/SKILL.md") &&
+        error.includes("#実在しない見出し"),
+    ),
+    observed.errors.join(" "),
+  );
+  /**
+   * **file不在の診断へ倒れていないことまで見る。** 両者を同じ文言へ畳むと、
+   * 利用者は見出しを直すのかfileを作るのか決められない。
+   */
+  assert.ok(
+    !observed.errors.some((error) => error.includes("リンク先がありません")),
+    observed.errors.join(" "),
+  );
+  /**
+   * **不正なpercent-encodingを例外にしない。** 復号失敗は構造化された診断へ倒す。
+   */
+  const malformed = this.documentLinkContracts.badPercentEncoding!;
+  assert.equal(malformed.valid, false);
+  assert.ok(
+    malformed.errors.some(
+      (error) =>
+        error.includes("anchorを復号できません") && error.includes("#bad%"),
+    ),
+    malformed.errors.join(" "),
+  );
+});
+
+Then("現行のStep skillと既存のtemplate診断は判定を変えない", function () {
+  const intact = this.documentLinkContracts.intact!;
+  assert.equal(intact.valid, true, intact.errors.join("; "));
+  assert.equal(intact.skills, 12);
 });
 
 Given("packageのStep skillとtemplate契約がある", function () {
