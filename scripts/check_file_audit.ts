@@ -914,9 +914,33 @@ function splitTableRow(line: string): string[] {
   return cells.map((cell) => cell.trim());
 }
 
-/** Markdown装飾を除いた判定値。 */
+/**
+ * Markdown装飾を除いた判定値。
+ *
+ * **内部文字を削らない。** `/[*`\s]/gu`で全除去すると`p ass`や`p*ass`まで`pass`になり、
+ * 判定列を厳密な`pass`に限る仕様から外れる（Issue #1188のF-04）。前後の空白と
+ * **外側の**装飾だけを剥がす。
+ */
 function verdictValue(cell: string): string {
-  return cell.replace(/[*`\s]/gu, "");
+  let value = cell.trim();
+  let previous = "";
+  while (value !== previous) {
+    previous = value;
+    value = value.replace(/^\*\*(.*)\*\*$/su, "$1").trim();
+    value = value.replace(/^\*(.*)\*$/su, "$1").trim();
+    value = value.replace(/^`(.*)`$/su, "$1").trim();
+  }
+  return value;
+}
+
+/**
+ * 行がcode fenceの開始・終了記号か。**行頭の3文字以上の ``` または ~~~ に限る。**
+ *
+ * 表のcell内に現れるbacktickを誤って開始と読まないよう、行頭に限定する。
+ */
+function fenceMarker(line: string): string | undefined {
+  const match = /^\s{0,3}(`{3,}|~{3,})/u.exec(line);
+  return match?.[1]?.[0];
 }
 
 /**
@@ -935,7 +959,24 @@ export function unsupportedClaimRows(markdown: string): string[] {
   const findings: string[] = [];
   let headerCells: string[] | undefined;
   let verdictIndex = -1;
+  /**
+   * **開いたfenceは同じ記号でだけ閉じる。閉じない場合は以降すべてを対象外にする。**
+   *
+   * 「閉じていないので本文として扱う」とすると、fenceを開くだけで残り全体を
+   * 検査対象へ戻せる。偽陽性を塞ぐ変更なので、開いたら閉じるまで対象外が安全側である
+   * （Issue #1188のF-01）。
+   */
+  let openFence: string | undefined;
   for (const line of markdown.split("\n")) {
+    const marker = fenceMarker(line);
+    if (marker !== undefined) {
+      if (openFence === undefined) openFence = marker;
+      else if (openFence === marker) openFence = undefined;
+      headerCells = undefined;
+      verdictIndex = -1;
+      continue;
+    }
+    if (openFence !== undefined) continue;
     if (!line.trim().startsWith("|")) {
       headerCells = undefined;
       verdictIndex = -1;
@@ -958,24 +999,51 @@ export function unsupportedClaimRows(markdown: string): string[] {
      */
     if (verdictIndex < 0) continue;
     if (verdictValue(cells[verdictIndex] ?? "") !== "pass") continue;
-    const token = HIGH_RISK_CLAIM_TOKENS.find((candidate) =>
-      line.includes(candidate),
-    );
-    if (token === undefined) continue;
     /**
-     * **併記は登録語彙と同じcell内で数える。**
+     * **登録語彙とcellの直積をすべて見る。**
      *
-     * 行のどこかにbacktickがあれば通す形にすると、個別監査表のpath列
-     * （`src/a.ts`）だけで受理されてしまう。**主張と証拠が同じcellに
-     * 並んでいることを要求する。**
+     * `HIGH_RISK_CLAIM_TOKENS.find`は宣言順で最初に一致した1語しか返さず、
+     * `cells.find`は最初の1 cellしか見ない。`| idempotent | pass | pure function。SCN-… |`
+     * では`pure function`が選ばれてSCN併記で通り、**1列目の裸の`idempotent`が
+     * 検査されなかった**（Issue #1188のF-02）。
+     *
+     * **併記は登録語彙と同じcell内で数える。** 行のどこかにbacktickがあれば通す形に
+     * すると、個別監査表のpath列（`src/a.ts`）だけで受理されてしまう。
      */
-    const claimCell = cells.find((cell) => cell.includes(token)) ?? "";
-    const hasScenario = /SCN-[A-Z0-9-]+/u.test(claimCell);
-    const hasQuotation = (claimCell.match(/`/gu) ?? []).length >= 2;
-    if (hasScenario || hasQuotation) continue;
-    findings.push(
-      `pass判定の根拠へ検証を伴わない性質の主張があります: 「${token}」。同じ行へSCN IDか対象コードの原文引用を併記してください。cell: ${claimCell.slice(0, 120)}`,
-    );
+    for (const [index, claimCell] of cells.entries()) {
+      /**
+       * **判定列を対象から外す。** この行を消しても挙動は変わらない。判定列のcellは
+       * `verdictValue`で厳密に`pass`へ正規化されたものだけがここへ来るため、
+       * 登録語彙を含み得ない（`pass`はどの登録語彙の部分文字列でもない）。
+       * **変異試験で等価と確認済み。** 責務を明示するために残す。
+       */
+      if (index === verdictIndex) continue;
+      for (const token of HIGH_RISK_CLAIM_TOKENS) {
+        if (!claimCell.includes(token)) continue;
+        if (/SCN-[A-Z0-9-]+/u.test(claimCell)) continue;
+        /**
+         * **登録語彙そのものの引用は併記にしない。** 「純関数である。根拠は `純関数`」
+         * という循環は、引用が証拠として機能していないことが字面だけで確定する
+         * （Issue #1188のF-03）。実測で16件中2件が該当した。
+         *
+         * **引用が対象コードに実在するかは判定しない。** `grep -n "純関数"`や
+         * `[skip ci]`のように対象source本文に無い正当な引用があり、実在検査は
+         * F-01と逆向きの偽陽性を作る。
+         */
+        const quotations = [...claimCell.matchAll(/`([^`]+)`/gu)].map(
+          (match) => match[1] ?? "",
+        );
+        if (
+          quotations.some(
+            (quotation) => !HIGH_RISK_CLAIM_TOKENS.includes(quotation.trim()),
+          )
+        )
+          continue;
+        findings.push(
+          `pass判定の根拠へ検証を伴わない性質の主張があります: 「${token}」。同じ行へSCN IDか対象コードの原文引用を併記してください。cell: ${claimCell.slice(0, 120)}`,
+        );
+      }
+    }
   }
   return findings;
 }
