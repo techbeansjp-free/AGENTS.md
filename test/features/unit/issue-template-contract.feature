@@ -75,6 +75,22 @@ Feature: Issue templateと段階別検証の契約
     Given validなquick Issueの本文にテンプレート由来のplaceholderがある
     When quick Issueのplaceholderを検証する
     Then placeholder errorを示してIssue検証が失敗する
+    And placeholder errorが原因の字面"（人が識別できる件名）"を示す
+
+  Scenario: SCN-UNIT-ISSUEPLC-006 placeholderが6件のとき先頭5件とほか1件を示す
+    Given validなquick Issueの本文にplaceholder6件がある
+    When quick Issueのplaceholderを検証する
+    Then placeholder errorが字面"<a>、<b>、<e>、{c}、{d}"と"ほか1件"を示す
+
+  Scenario: SCN-UNIT-ISSUEPLC-007 placeholderが5件のとき省略を示さない
+    Given validなquick Issueの本文にplaceholder5件がある
+    When quick Issueのplaceholderを検証する
+    Then placeholder errorが字面"<a>、<b>、<e>、{c}、{d}"を示し省略を示さない
+
+  Scenario: SCN-UNIT-ISSUEPLC-008 templateのラベル行を残した文書は合格する
+    Given validなquick Issueの本文にtemplateのラベル行がある
+    When quick Issueのplaceholderを検証する
+    Then placeholder errorなしでIssue検証は合格する
 
   Scenario Outline: SCN-UNIT-ISSUETPL-010 要求定義templateが仕様の所有箇所を宣言する
     Given 出荷Issue templateと検証器の見出し契約がある
