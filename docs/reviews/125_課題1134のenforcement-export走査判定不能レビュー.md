@@ -58,7 +58,7 @@
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
-| `src/domain/conformance.ts` | M | package | package | `findExport`は「file・export名 → 3値」の純関数1つ。`hasExport`と同じ位置へ置き、診断文の組み立ては呼び出し側に残した。`export`していない | pass。`executableSource`へ一方向で依存し、逆依存が無い。`npm run architecture:check`合格 | REQ-WF-008 / AC-01・02・03 / SCN-UNIT-SAT-014 | **判定不能を合格へ倒さない。** `unparsable`・`absent`はいずれも従来どおり`errors`へ積む。受理する宣言の集合を1件も広げていない。rollbackは当該2箇所のrevert | pass |
+| `src/domain/conformance.ts` | M | package | package | `findExport`は「file・export名 → 3値」の関数1つ。**`fs.readFileSync`を実行するため純関数ではない。** 読み取りに失敗すると例外を投げ、呼び出し側の`try/catch`が`enforcement pathが実在しません`という別のpath診断へ変換する。`hasExport`と同じ位置へ置き、診断文の組み立ては呼び出し側に残した。`export`していない | pass。`executableSource`へ一方向で依存し、逆依存が無い。`npm run architecture:check`合格 | REQ-WF-008 / AC-01・02・03 / SCN-UNIT-SAT-014 | **判定不能を合格へ倒さない。** `unparsable`・`absent`はいずれも従来どおり`errors`へ積む。受理する宣言の集合を1件も広げていない。rollbackは当該2箇所のrevert | pass |
 | `test/features/unit/project-policy-satisfiability.feature` | M | package | package | 既存`SCN-UNIT-SAT-014`のExamplesの`verdict`列を広げた。scenarioを新設していない | pass | AC-01・02 / SCN-UNIT-SAT-014 | fixtureは一時directory内に閉じ、実workspace・実remote・他worktreeへ到達しない | pass |
 | `test/steps/project-policy-satisfiability.steps.ts` | M | package | package | 既存Thenを3判定へ広げ、`missing`と`unparsable`の集合を**別々に**assertする。step定義を新設していない | pass。他のstep定義を書き換えていない | AC-01・02・03 / SCN-UNIT-SAT-014 | 同上 | pass |
 | `docs/specs/02_要件/01_ワークフロー要件.md` | M | project | spec | REQ-WF-008へ3値報告の要求を追記した。他の要件節に触れていない | pass | REQ-WF-008 | 記述だけで実行authorityを持たない | pass |
@@ -99,14 +99,14 @@
 | 価値 | 利用者・運用上の目的を満たすか | pass | 診断を読んだ利用者が次に採る操作が決まる。実在しないならbindingを直すかexportを実装し、解析できないならsourceの記法を直す。**従来はこの2つが同じ文言だった** |
 | 実現可能性 | 実行環境・依存・権限で成立するか | pass | 依存package、lockfile、実行時に必要な外部の存在を1件も変えていない。走査回数も変わらない |
 | 整合性 | 設計、コード、テスト、仕様が一致するか | pass | 00の6節の設計と実差分が一致する。REQ-WF-008の追記と実装が一致する。`npm run trace:check`合格 |
-| 保守性 | 責務、命名、変更容易性が妥当か | pass | 判別は3値を返す純関数1つ。診断文の組み立ては呼び出し側に残しており、判別と表示を混ぜていない。rollbackは2箇所のrevertで完結する |
+| 保守性 | 責務、命名、変更容易性が妥当か | pass | 判別は3値を返す関数1つ。**読み取りを内包するため純関数ではない。** 診断文の組み立ては呼び出し側に残しており、判別と表示を混ぜていない。rollbackは2箇所のrevertで完結する |
 
 ## 4. 敵対的評価
 
 | 観点 | 確認内容 | 判定 | 根拠 |
 |---|---|---|---|
 | 反例 | 要件を破る入力・状態がないか | pass | 5 fixtureが`unparsable`、実在しないexportが`absent`、実在するexportが`present`である。**3値それぞれに反例を持つ** |
-| 失敗経路 | 外部失敗・部分失敗を安全に扱うか | pass | 失敗経路を1つも追加していない。`findExport`は例外を投げず全入力に3値のいずれかを返す |
+| 失敗経路 | 外部失敗・部分失敗を安全に扱うか | pass | 失敗経路を1つも追加していない。**3値を返すのは読み取りに成功した後の解析結果だけである。** 読み取り失敗は`fs.readFileSync`の例外として3値の外側を通り、呼び出し側の既存`try/catch`が`enforcement pathが実在しません`へ変換する。**この経路は変更前から存在し、本変更で増えても減ってもいない** |
 | 境界値 | 空、最大、最小、重複、Unicode等 | pass | `executableSource`の入力・出力を1文字も変えていない。空sourceは従来どおり`absent`である |
 | 悪用 | 注入、経路脱出、権限外操作等 | pass | **解析できないsourceをexport実在の根拠にしない既存の性質を保つ。** 意図的に未終端のliteralを置いて検査を素通しさせる経路は、`unparsable`が`errors`へ積むため成立しない |
 | 安全性 | 認証、承認、秘密情報、Zero Trust | pass | 読み取るfileを1件も増やさない。`fs.readFileSync`の呼び出し回数と対象は変更前と同一である |
@@ -201,5 +201,6 @@
 - 判定: **approved**（AIによる最終裁定。人間の独立approvalは0件であり、9節に事実として記録した）
 - 新しい権限が必要な事項: **なし。**
 - 残存リスク: 2件。(1) `unparsable`と`absent`をerror件数だけでは区別できない（ADV-01）。(2) `docs/reviews/`のrole authority不整合（#1047へ委譲）。
+- **2026-09-03の訂正（#1165）。** 本artifactは`findExport`を「純関数」「例外を投げず全入力に3値」と記述していたが、実装は`fs.readFileSync`を実行するため純関数ではなく、読み取り失敗時に例外を投げる。外部reviewer（CodeRabbit）がPR #1164 へ指摘し、`pr create`より後の指摘であるため`02_品質基準.md`の規定に従い #1165 へ分離して是正した。**製品の振る舞いは正しく、誤っていたのは証跡の記述である。**
 - 次に許可される操作: **Step 11（`pr create`）。** その後CIが緑になってからmergeする。
 - 次回の再開地点: pushした後、CIの結果確認から。**予算を使い切ったため、以降CIが赤になった場合の正規のラウンドは存在しない**（#1074）。その場合は最小是正をverifierの機械観測で再測して本artifactへ記録する。**mainが動いていた場合は`git rebase --onto origin/main <旧base> HEAD`で追随し、本artifactの`比較基点`・`H_impl`を更新して`amend`し、CIと同じmerge refを手元で再現して`audit:check`を確認してからpushする。**
