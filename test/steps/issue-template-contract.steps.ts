@@ -271,6 +271,10 @@ Given(/^validなquick Issueの本文に(.+)がある$/u, function (kind: string)
       "\nScenario Outline: SCN-FIXTURE-ISSUE-002 入力を検証する\n  Given <parameter>を受け取る\n  Then 正常に扱う\n\n  Examples:\n    | parameter |\n    | value |\n",
     テンプレート由来のplaceholder:
       "\n件名は（人が識別できる件名）のままである。\n",
+    placeholder6件: "\n未解決は<a>と<b>と<e>と{c}と{d}と{f}である。\n",
+    placeholder5件: "\n未解決は<a>と<b>と<e>と{c}と{d}である。\n",
+    templateのラベル行:
+      "\n- ドメイン用語台帳の候補差分。列は用語ID、標準語候補、定義、コンテキスト、出典、類義語・禁止表現、状態とする: 追加しない\n- project policyが選択した静的検査。対象外なら理由を書く: lint\n",
   };
   fs.appendFileSync(
     path.join(this.issuePath, "00_要求定義.md"),
@@ -294,6 +298,41 @@ Then("placeholder errorを示してIssue検証が失敗する", function () {
   assert.equal(this.validation.valid, false);
   assert.match(this.validation.errors.join(" "), /placeholder/u);
 });
+
+function placeholderError(world: { validation: { errors: string[] } }): string {
+  const found = world.validation.errors.filter((error) =>
+    error.includes("未解決のplaceholder"),
+  );
+  assert.equal(found.length, 1, world.validation.errors.join("; "));
+  return found[0] as string;
+}
+
+Then(
+  /^placeholder errorが原因の字面"(.+)"を示す$/u,
+  function (literal: string) {
+    assert.ok(placeholderError(this).includes(literal), placeholderError(this));
+  },
+);
+
+Then(
+  /^placeholder errorが字面"(.+)"と"(.+)"を示す$/u,
+  function (literals: string, remainder: string) {
+    const error = placeholderError(this);
+    assert.equal(this.validation.valid, false);
+    assert.ok(error.includes(literals), error);
+    assert.ok(error.includes(remainder), error);
+  },
+);
+
+Then(
+  /^placeholder errorが字面"(.+)"を示し省略を示さない$/u,
+  function (literals: string) {
+    const error = placeholderError(this);
+    assert.equal(this.validation.valid, false);
+    assert.ok(error.includes(literals), error);
+    assert.equal(/ほか\d+件/u.test(error), false, error);
+  },
+);
 
 Given(
   /^出荷(full|quick) templateを埋めたIssueがある$/u,

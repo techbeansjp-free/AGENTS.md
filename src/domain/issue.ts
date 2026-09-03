@@ -104,8 +104,9 @@ export function validatePullRequestBody(body: string): {
   for (const heading of pullRequestRequiredHeadings())
     if (!headings.has(heading))
       errors.push(`PR本文に必須見出しがありません: ${heading}`);
-  if (hasUnresolvedPlaceholder(body))
-    errors.push("PR本文に未解決のplaceholderが残っています");
+  const bodyPlaceholders = unresolvedPlaceholders(body);
+  if (bodyPlaceholders.length > 0)
+    errors.push(unresolvedPlaceholderError("PR本文に", bodyPlaceholders));
   return { valid: errors.length === 0, errors };
 }
 
@@ -235,12 +236,27 @@ function withoutGherkin(text: string): string {
     .join("\n");
 }
 
-function hasUnresolvedPlaceholder(text: string): boolean {
+const UNRESOLVED_PLACEHOLDER_SAMPLE_LIMIT = 5;
+
+function unresolvedPlaceholders(text: string): string[] {
   const prose = withoutGherkin(withoutCode(text));
-  if (/<[^>\n]+>|\{[^}\n]+\}/u.test(prose)) return true;
-  return [...prose.matchAll(/（[^）\n]+）/gu)].some((match) =>
-    TEMPLATE_PARENTHETICAL_PLACEHOLDERS.has(match[0]),
-  );
+  const found = new Set<string>();
+  for (const match of prose.matchAll(/<[^>\n]+>|\{[^}\n]+\}/gu))
+    found.add(match[0]);
+  for (const match of prose.matchAll(/（[^）\n]+）/gu))
+    if (TEMPLATE_PARENTHETICAL_PLACEHOLDERS.has(match[0])) found.add(match[0]);
+  return [...found].sort();
+}
+
+function unresolvedPlaceholderError(
+  subject: string,
+  found: readonly string[],
+): string {
+  const shown = found.slice(0, UNRESOLVED_PLACEHOLDER_SAMPLE_LIMIT);
+  const remaining = found.length - shown.length;
+  return `${subject}未解決のplaceholderが残っています: ${shown.join("、")}${
+    remaining > 0 ? `、ほか${remaining}件` : ""
+  }`;
 }
 
 function jstTimestamp(date: Date): string {
@@ -672,8 +688,9 @@ export function validateIssue(
       .filter((name) => fs.existsSync(path.join(issuePath, name)))
       .map((name) => fs.readFileSync(path.join(issuePath, name), "utf8")),
   ].join("\n");
-  if (hasUnresolvedPlaceholder(allText))
-    errors.push("未解決のplaceholderが残っています");
+  const documentPlaceholders = unresolvedPlaceholders(allText);
+  if (documentPlaceholders.length > 0)
+    errors.push(unresolvedPlaceholderError("", documentPlaceholders));
   for (let index = 1; index <= 7; index += 1) {
     const id = `P-${String(index).padStart(2, "0")}`;
     if (!text.includes(id)) errors.push(`${id}の証拠がありません`);
