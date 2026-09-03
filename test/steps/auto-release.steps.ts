@@ -1805,6 +1805,56 @@ Given(
   },
 );
 
+Given(
+  "行末コメントつきのjobs見出しとjob keyを持つrelease workflowと、空の権限境界表がある",
+  function () {
+    /**
+     * **`jobs: # …`も`validate: # …`も正当なYAMLである。** 行末コメントを許さないと、
+     * コメントを付けたjobが集合から落ち、**未記載のjobを検出できない**。
+     * PR #1195 のjob ID文法と同じfail-openである（PR #1197 の外部指摘）。
+     */
+    this.releaseJobYaml = [
+      "jobs: # release全体のjob定義",
+      "  validate: # 品質自己緩和の拒否",
+      "    name: 検証",
+      "  tag:",
+      "    name: tag",
+      "",
+    ].join("\n");
+    this.releaseJobMarkdown = permissionTable([]);
+  },
+);
+
+Given(
+  "行末コメントに見える値を持つkeyだけのrelease workflowと、空の権限境界表がある",
+  function () {
+    /**
+     * **行末コメントの許可でkey-valueまで拾ってはならない。** `runs-on: ubuntu`のような
+     * 値つきkeyをjob名として拾うと、逆向きの偽陽性になる。
+     */
+    this.releaseJobYaml = [
+      "jobs:",
+      "  validate:",
+      "    name: 検証",
+      "  runs_here: ubuntu-latest # 値つきなのでjobではない",
+      "",
+    ].join("\n");
+    this.releaseJobMarkdown = permissionTable([]);
+  },
+);
+
+Then("2件のjobを載せていないことを理由に拒否する", function () {
+  assert.deepEqual(this.releaseJobMismatch, [
+    "運用設計の権限境界表がrelease workflowのjobを載せていません: tag、validate",
+  ]);
+});
+
+Then("validateだけを載せていないことを理由に拒否する", function () {
+  assert.deepEqual(this.releaseJobMismatch, [
+    "運用設計の権限境界表がrelease workflowのjobを載せていません: validate",
+  ]);
+});
+
 Given("権限境界表の外に同形式の表があるreview文書がある", function () {
   /**
    * **走査は`### 権限境界`節の中だけに限る。** 文書全体を走査すると、

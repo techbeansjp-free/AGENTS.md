@@ -171,3 +171,13 @@ Feature: main mergeの自動release計画と配布digest
     Given 権限境界表の外に同形式の表があるreview文書がある
     When release jobと権限境界表の一致を検証する
     Then release jobと権限境界表の不一致は0件である
+
+  Scenario: SCN-UNIT-RELWF-P10 行末コメントつきのjobs見出しとjob keyを取りこぼさない
+    Given 行末コメントつきのjobs見出しとjob keyを持つrelease workflowと、空の権限境界表がある
+    When release jobと権限境界表の一致を検証する
+    Then 2件のjobを載せていないことを理由に拒否する
+
+  Scenario: SCN-UNIT-RELWF-P11 値を持つkeyをjobとして拾わない
+    Given 行末コメントに見える値を持つkeyだけのrelease workflowと、空の権限境界表がある
+    When release jobと権限境界表の一致を検証する
+    Then validateだけを載せていないことを理由に拒否する

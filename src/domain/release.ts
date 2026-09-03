@@ -764,11 +764,20 @@ function blockHasNpmRun(block: string[], scriptName: string): boolean {
  */
 const JOB_ID = "[A-Za-z_][A-Za-z0-9_-]*";
 
+/**
+ * 行末のYAMLコメント。**`jobs: # …`と`validate: # …`はどちらも正当なYAMLである。**
+ *
+ * 許さないと、コメントを付けたjobが集合から落ちて**未記載のjobを検出できない**
+ * （PR #1197 の外部指摘）。PR #1195 のjob ID文法と同じfail-openである。
+ */
+const TRAILING_COMMENT = "\\s*(?:#.*)?";
+
 export function releaseWorkflowJobNames(yaml: string): string[] {
   const lines = yaml.split(/\r?\n/u);
-  const jobsIndex = lines.findIndex((line) => /^jobs:\s*$/u.test(line));
+  const jobsHeader = new RegExp(`^jobs:${TRAILING_COMMENT}$`, "u");
+  const jobsIndex = lines.findIndex((line) => jobsHeader.test(line));
   if (jobsIndex < 0) return [];
-  const pattern = new RegExp(`^ {2}(${JOB_ID}):\\s*$`, "u");
+  const pattern = new RegExp(`^ {2}(${JOB_ID}):${TRAILING_COMMENT}$`, "u");
   const names: string[] = [];
   for (const line of lines.slice(jobsIndex + 1)) {
     if (/^\S/u.test(line)) break;
