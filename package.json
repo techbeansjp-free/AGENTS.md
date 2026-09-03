@@ -1,6 +1,6 @@
 {
   "name": "agent-skill-chain",
-  "version": "0.3.1-beta.72",
+  "version": "0.3.1-beta.73",
   "description": "人とAIエージェントが使う、安全側に倒す軽量開発ワークフロー。",
   "type": "module",
   "agentSkillChain": {
