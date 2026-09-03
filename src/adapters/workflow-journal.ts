@@ -414,9 +414,28 @@ function appendWorkflowJournalEntryLocked(
     throw new Error(
       `journalの追記前検査に失敗しました: ${current.errors.join("; ")}`,
     );
-  if (current.entries.some(({ step }) => step === 11))
-    throw new Error("Step 11記録後はworkflow journalへ追記できません");
-  if (entry.step < 11) {
+  /**
+   * **Step 11記録後に追記できるのはpost-terminal intakeのStep 10だけである。**
+   *
+   * `pr create`後に届いた外部reviewer指摘を同じPRへ取り込む経路（Issue #1194）が、
+   * この追記を要する。他のStepと通常のStep 10は引き続き拒否する。**封印そのものは
+   * 残し、1種類だけ通す。**
+   */
+  if (
+    current.entries.some(({ step }) => step === 11) &&
+    !entry.postTerminalIntake
+  )
+    throw new Error(
+      "Step 11記録後にworkflow journalへ追記できるのはpost-terminal intakeのStep 10だけです",
+    );
+  /**
+   * **post-terminal intakeはterminal delivery stateの後に置く記録である。**
+   *
+   * `step11-recorded`はまさにintakeの前提条件であり、ここで拒否すると
+   * Issue #1194 の取り込み経路が成立しない。**intake以外のStep 0〜10は
+   * 引き続き拒否する。**
+   */
+  if (entry.step < 11 && !entry.postTerminalIntake) {
     const deliveryFile = path.join(staging, DELIVERY_STATE_FILE);
     if (fs.existsSync(deliveryFile)) {
       const delivery = parseDeliveryState(

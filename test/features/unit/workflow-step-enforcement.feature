@@ -225,3 +225,8 @@ Feature: ワークフローStepの定義とjournalを決定的に検証する
     Given ワークフローStep単体検査の準備がある
     When "SCN-UNIT-WFJRNL-027"の単体検査を実行する
     Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-028 Step 11記録後の追記はpost-terminal intakeのStep 10だけ通す
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-028"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる

@@ -268,7 +268,7 @@ function workflowArguments(args: string[]): {
 } {
   const flags: Record<string, string> = {};
   const artifacts: string[] = [];
-  const booleanFlags = new Set(["apply", "dry-run"]);
+  const booleanFlags = new Set(["apply", "dry-run", "post-terminal-intake"]);
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index] ?? "";
     if (!argument.startsWith("--"))
