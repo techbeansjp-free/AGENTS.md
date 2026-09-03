@@ -139,6 +139,17 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     Then Issue syncは成功する
     And gh操作順にauth、repo確認、edit、read-backが含まれる
 
+  Scenario: SCN-INT-GITHUB-017 Issue read adapterが更新前本文とdigestを返す
+    Given exact repositoryと同じbodyを返すgh stubがある
+    When Issue read adapterを実行する
+    Then Issue readは本文とsha256を返す
+    And gh操作順にauth、repo確認、read-onlyのissue viewだけが含まれる
+
+  Scenario: SCN-INT-GITHUB-018 Issue read adapterはread権限だけで成立する
+    Given read権限だけを返すgh stubがある
+    When Issue read adapterを実行する
+    Then Issue readは成功する
+
   Scenario: SCN-INT-GITHUB-002 Issue syncのread-after-write不一致を拒否する
     Given exact repositoryだが異なるbodyを返すgh stubがある
     When Issue sync adapterを実行する

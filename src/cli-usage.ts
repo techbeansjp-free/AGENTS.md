@@ -503,6 +503,18 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "issue",
+    subcommand: "read",
+    summary: "更新前のIssue本文とdigestを読む",
+    requiredFlags: [
+      flag("issue", "整数", "対象Issue番号"),
+      flag("repo", "owner/name", "対象repository"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG],
+    example: "npx agent-skill-chain issue read --issue=886 --repo=owner/name",
+  },
+  {
+    command: "issue",
     subcommand: "sync",
     summary: "Issue本文をGitHubへ反映する",
     requiredFlags: [
