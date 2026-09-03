@@ -750,6 +750,100 @@ function blockHasNpmRun(block: string[], scriptName: string): boolean {
   return npmRunPattern(scriptName).test(block.join("\n"));
 }
 
+/**
+ * release workflowが定義するjob名の集合。
+ *
+ * `jobs:`直下の2 space indentのkeyだけを拾う。`on:`・`concurrency:`・`permissions:`は
+ * top-levelなので混ざらない。
+ */
+/**
+ * GitHub Actionsのjob ID。**英字または`_`で始まり、英数字・`-`・`_`を使える。**
+ *
+ * `[a-z][a-z0-9_]*`へ狭めると`deploy-docs`・`Deploy`・`_shared`が両方の集合から
+ * 同時に落ち、集合差が空になって**未記載も廃止済みも検出できない**（PR #1195 の外部指摘）。
+ */
+const JOB_ID = "[A-Za-z_][A-Za-z0-9_-]*";
+
+/**
+ * 行末のYAMLコメント。**`jobs: # …`と`validate: # …`はどちらも正当なYAMLである。**
+ *
+ * 許さないと、コメントを付けたjobが集合から落ちて**未記載のjobを検出できない**
+ * （PR #1197 の外部指摘）。PR #1195 のjob ID文法と同じfail-openである。
+ */
+const TRAILING_COMMENT = "\\s*(?:#.*)?";
+
+export function releaseWorkflowJobNames(yaml: string): string[] {
+  const lines = yaml.split(/\r?\n/u);
+  const jobsHeader = new RegExp(`^jobs:${TRAILING_COMMENT}$`, "u");
+  const jobsIndex = lines.findIndex((line) => jobsHeader.test(line));
+  if (jobsIndex < 0) return [];
+  const pattern = new RegExp(`^ {2}(${JOB_ID}):${TRAILING_COMMENT}$`, "u");
+  const names: string[] = [];
+  for (const line of lines.slice(jobsIndex + 1)) {
+    if (/^\S/u.test(line)) break;
+    const match = pattern.exec(line);
+    if (match?.[1]) names.push(match[1]);
+  }
+  return names;
+}
+
+/**
+ * 運用設計の権限境界表が列挙するjob名の集合。
+ *
+ * 表の1列目が`` `<job>` ``形式の行だけを拾う。見出しと区切り行は形が合わない。
+ */
+/** 権限境界表を持つ節の見出し。 */
+const PERMISSION_BOUNDARY_HEADING = "### 権限境界";
+
+export function documentedReleaseJobNames(markdown: string): string[] {
+  const lines = markdown.split(/\r?\n/u);
+  const start = lines.findIndex(
+    (line) => line.trim() === PERMISSION_BOUNDARY_HEADING,
+  );
+  if (start < 0) return [];
+  const pattern = new RegExp(`^\\|\\s*\`(${JOB_ID})\`\\s*\\|`, "u");
+  const names: string[] = [];
+  /**
+   * **節の外の表を拾わない。** 次の見出しで走査を打ち切る。文書全体を走査すると、
+   * 復旧手順表のような他の表の1列目をjob名と誤認する（PR #1195 の外部指摘）。
+   */
+  for (const line of lines.slice(start + 1)) {
+    if (/^#{1,6}\s/u.test(line.trim())) break;
+    const match = pattern.exec(line.trim());
+    if (match?.[1]) names.push(match[1]);
+  }
+  return names;
+}
+
+/**
+ * release workflowのjob集合と運用設計の権限境界表を突き合わせる。
+ *
+ * **両方向を検査する。** 廃止したjobが文書へ残る形（Issue #1184でbump_versionが残った）と、
+ * 新設したjobを文書へ書き忘れる形の両方を拒否する。**片方向だけでは、文書を空にすれば
+ * 通ってしまう。**
+ *
+ * 判定するのは名前の集合一致だけであり、権限や開始条件の記述内容は判定しない。
+ */
+export function releaseJobDocumentationMismatch(input: {
+  yaml: string;
+  markdown: string;
+}): string[] {
+  const defined = new Set(releaseWorkflowJobNames(input.yaml));
+  const documented = new Set(documentedReleaseJobNames(input.markdown));
+  const errors: string[] = [];
+  const stale = [...documented].filter((name) => !defined.has(name)).sort();
+  const missing = [...defined].filter((name) => !documented.has(name)).sort();
+  if (stale.length > 0)
+    errors.push(
+      `運用設計の権限境界表がrelease workflowに存在しないjobを載せています: ${stale.join("、")}`,
+    );
+  if (missing.length > 0)
+    errors.push(
+      `運用設計の権限境界表がrelease workflowのjobを載せていません: ${missing.join("、")}`,
+    );
+  return errors;
+}
+
 export function validateReleaseWorkflow(yaml: string): {
   valid: boolean;
   errors: string[];

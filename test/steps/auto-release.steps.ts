@@ -7,6 +7,7 @@ import {
   computeDistributionDigest,
   normalizeDistributionContent,
   planAutoRelease,
+  releaseJobDocumentationMismatch,
   validateReleaseWorkflow,
   type AutoReleaseInput,
   type AutoReleasePlan,
@@ -104,6 +105,9 @@ class AutoReleaseWorld extends WorkflowWorld {
   autoPlan: AutoReleasePlan | undefined = undefined;
   autoPlans: AutoReleasePlan[] = [];
   autoWorkflowYaml = "";
+  releaseJobMarkdown = "";
+  releaseJobYaml = "";
+  releaseJobMismatch: string[] = [];
   autoWorkflowValidation: WorkflowValidation | undefined = undefined;
   entrypointInputs: AutoReleaseInput[] = [];
   entrypointPlans: AutoReleasePlan[] = [];
@@ -1724,4 +1728,175 @@ Then("bump branchとPRのremote状態は変化しない", function () {
     refs.filter((line) => line.startsWith("refs/heads/release/")),
     [],
   );
+});
+
+/** 権限境界表の一致検査用の最小fixture。 */
+const RELEASE_JOB_FIXTURE_YAML = [
+  "jobs:",
+  "  validate:",
+  "    name: 検証",
+  // **値を持たないnested keyを入れる。** indent限定を外す変異は、これをjob名として拾う。
+  "    permissions:",
+  "      contents: read",
+  "  tag:",
+  "    name: tag",
+  "    steps:",
+  "",
+].join("\n");
+
+function permissionTable(jobs: readonly string[]): string {
+  return [
+    "### 権限境界",
+    "",
+    "| job | 開始条件 | 権限 | 外部更新 |",
+    "|---|---|---|---|",
+    ...jobs.map((job) => `| \`${job}\` | 条件 | \`contents: read\` | なし |`),
+    "",
+  ].join("\n");
+}
+
+Given("release workflowと、廃止済みjobを載せた権限境界表がある", function () {
+  this.releaseJobMarkdown = permissionTable([
+    "validate",
+    "tag",
+    "bump_version",
+  ]);
+});
+
+Given("release workflowと、jobを載せ落とした権限境界表がある", function () {
+  this.releaseJobMarkdown = permissionTable(["validate"]);
+});
+
+Given("release workflowと、一致する権限境界表がある", function () {
+  /**
+   * **権限境界表の外にjob名を含む行を置く。** 表の1列目限定を外す変異は、
+   * 復旧表の`bump_version`を廃止済みjobとして拾う。
+   */
+  this.releaseJobMarkdown = [
+    permissionTable(["validate", "tag"]),
+    "### 途中失敗時の復旧",
+    "",
+    "| 確認済み状態 | 復旧 |",
+    "|---|---|",
+    "| `bump_version`は廃止した経路である | 参照しない |",
+    "",
+  ].join("\n");
+});
+
+Given(
+  "ハイフンと大文字とアンダースコア始まりのjobを持つrelease workflowと、空の権限境界表がある",
+  function () {
+    /**
+     * **GitHub Actionsのjob IDは英字または`_`で始まり、英数字・`-`・`_`を使える。**
+     * `[a-z][a-z0-9_]*`へ狭めると3件とも両方の集合から同時に落ち、
+     * 集合差が空になって検出できない。
+     */
+    this.releaseJobYaml = [
+      "jobs:",
+      "  deploy-docs:",
+      "    name: docs",
+      "  Deploy:",
+      "    name: deploy",
+      "  _shared:",
+      "    name: shared",
+      "",
+    ].join("\n");
+    this.releaseJobMarkdown = permissionTable([]);
+  },
+);
+
+Given(
+  "行末コメントつきのjobs見出しとjob keyを持つrelease workflowと、空の権限境界表がある",
+  function () {
+    /**
+     * **`jobs: # …`も`validate: # …`も正当なYAMLである。** 行末コメントを許さないと、
+     * コメントを付けたjobが集合から落ち、**未記載のjobを検出できない**。
+     * PR #1195 のjob ID文法と同じfail-openである（PR #1197 の外部指摘）。
+     */
+    this.releaseJobYaml = [
+      "jobs: # release全体のjob定義",
+      "  validate: # 品質自己緩和の拒否",
+      "    name: 検証",
+      "  tag:",
+      "    name: tag",
+      "",
+    ].join("\n");
+    this.releaseJobMarkdown = permissionTable([]);
+  },
+);
+
+Given(
+  "行末コメントに見える値を持つkeyだけのrelease workflowと、空の権限境界表がある",
+  function () {
+    /**
+     * **行末コメントの許可でkey-valueまで拾ってはならない。** `runs-on: ubuntu`のような
+     * 値つきkeyをjob名として拾うと、逆向きの偽陽性になる。
+     */
+    this.releaseJobYaml = [
+      "jobs:",
+      "  validate:",
+      "    name: 検証",
+      "  runs_here: ubuntu-latest # 値つきなのでjobではない",
+      "",
+    ].join("\n");
+    this.releaseJobMarkdown = permissionTable([]);
+  },
+);
+
+Then("2件のjobを載せていないことを理由に拒否する", function () {
+  assert.deepEqual(this.releaseJobMismatch, [
+    "運用設計の権限境界表がrelease workflowのjobを載せていません: tag、validate",
+  ]);
+});
+
+Then("validateだけを載せていないことを理由に拒否する", function () {
+  assert.deepEqual(this.releaseJobMismatch, [
+    "運用設計の権限境界表がrelease workflowのjobを載せていません: validate",
+  ]);
+});
+
+Given("権限境界表の外に同形式の表があるreview文書がある", function () {
+  /**
+   * **走査は`### 権限境界`節の中だけに限る。** 文書全体を走査すると、
+   * 別の節の表の1列目をjob名と誤認する。
+   */
+  this.releaseJobMarkdown = [
+    permissionTable(["validate", "tag"]),
+    "### 途中失敗時の復旧",
+    "",
+    "| 状態 | 復旧 |",
+    "|---|---|",
+    "| `bump_version` | 参照しない |",
+    "| `deploy-docs` | 参照しない |",
+    "",
+  ].join("\n");
+});
+
+When("release jobと権限境界表の一致を検証する", function () {
+  this.releaseJobMismatch = releaseJobDocumentationMismatch({
+    yaml: this.releaseJobYaml || RELEASE_JOB_FIXTURE_YAML,
+    markdown: this.releaseJobMarkdown,
+  });
+});
+
+Then("3件のjobを載せていないことを理由に拒否する", function () {
+  assert.deepEqual(this.releaseJobMismatch, [
+    "運用設計の権限境界表がrelease workflowのjobを載せていません: Deploy、_shared、deploy-docs",
+  ]);
+});
+
+Then("存在しないjobを載せていることを理由に拒否する", function () {
+  assert.deepEqual(this.releaseJobMismatch, [
+    "運用設計の権限境界表がrelease workflowに存在しないjobを載せています: bump_version",
+  ]);
+});
+
+Then("jobを載せていないことを理由に拒否する", function () {
+  assert.deepEqual(this.releaseJobMismatch, [
+    "運用設計の権限境界表がrelease workflowのjobを載せていません: tag",
+  ]);
+});
+
+Then("release jobと権限境界表の不一致は0件である", function () {
+  assert.deepEqual(this.releaseJobMismatch, []);
 });
