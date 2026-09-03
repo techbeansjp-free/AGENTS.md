@@ -6,7 +6,7 @@
 |---|---|
 | `scripts/check_consumer_acceptance.ts` | `08cbde239552af94f97485a09e3173fb6e72855e7f4cffbc80629122f5bff5fc` |
 | `scripts/check_package_contents.ts` | `6a290077da33b65c4ce4b053f5f39385e548d085469639da8c1a47556619bbfb` |
-| `src/lib/process.ts` | `654dc62cad93de1e73e47a545bc46f38740cb759586d4f8d0f67434ae59f561d` |
+| `src/lib/process.ts` | `888c3467dec10e0f5b62c746fe7929e0391bf071039ea6d9fdd2b03b37f2742d` |
 
 この3件を記録するのは、consumer acceptanceの判定、package検査への接続、process出力上限という、この証跡が主張する振る舞いの実体だからである。`package.json`はmainの自動releaseでversionが変わり、主張する振る舞いが同じでもhashが変わるため対象に含めない。
 
@@ -60,4 +60,4 @@ npm run build --silent && npm_config_cache=/tmp/asc-1024-seg12.kkZ231/mechanism-
 
 ## 復元確認
 
-変異前copyを `cp` で `src/lib/process.ts` へ戻し、`cmp -s` の終了値0を確認した。復元fileとcopyのSHA-256はともに `654dc62cad93de1e73e47a545bc46f38740cb759586d4f8d0f67434ae59f561d` でbyte単位一致した。復元sourceからのbuildも終了値0だった。故障状態の配布digestを再算出した2回目の注入後にも同じcopy復元、SHA-256一致、build成功を確認した。`git checkout` は使用していない。
+変異前copyを `cp` で `src/lib/process.ts` へ戻し、`cmp -s` の終了値0を確認した。復元fileとcopyのSHA-256は、**#1024実施時点の内容について**ともに `654dc62cad93de1e73e47a545bc46f38740cb759586d4f8d0f67434ae59f561d` でbyte単位一致した。復元sourceからのbuildも終了値0だった。故障状態の配布digestを再算出した2回目の注入後にも同じcopy復元、SHA-256一致、build成功を確認した。`git checkout` は使用していない。
