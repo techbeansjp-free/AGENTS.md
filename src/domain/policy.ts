@@ -197,6 +197,26 @@ function isMergeBaseCandidate(branchRef: string): boolean {
  * **既定branchは宣言の有無によらず常にbaseとして受理する。** 宣言を空にした
  * projectが既定branchすら使えなくなると、正規構成に成功経路が無くなる。
  */
+/**
+ * literalなbranch名だけをbase候補にする。
+ *
+ * **revision syntaxを拒否する。** `main~1`は`*`を含まないため
+ * `isMergeBaseCandidate`を通るが、`refs/remotes/origin/main~1^{commit}`は
+ * `origin/main`の親commitへ解決される。**branch tipでないcommitをbaseに
+ * できてしまう**（Issue #1179）。
+ *
+ * 同じ理由で`^`・`:`・`@{`・`..`・`HEAD`・`refs/`前置も拒否する。Gitの
+ * refname規則そのものを再実装せず、**baseとして受理してよい形を狭く列挙する。**
+ */
+function isLiteralBranchName(branch: string): boolean {
+  if (branch.length === 0 || branch.length > 255) return false;
+  if (branch === "HEAD") return false;
+  if (branch.startsWith("refs/") || branch.startsWith("-")) return false;
+  if (/[~^:?[\\\s]|@\{|\.\.|\/\/|^\/|\/$|\.$|\.lock$/u.test(branch))
+    return false;
+  return /^[A-Za-z0-9][A-Za-z0-9._\-/]*$/u.test(branch);
+}
+
 export function acceptedBaseBranches(
   policy: Policy,
   defaultBranchName: string,
@@ -204,7 +224,9 @@ export function acceptedBaseBranches(
   const declared = Array.isArray(policy.merge?.branches)
     ? policy.merge.branches.filter(
         (branch): branch is string =>
-          typeof branch === "string" && isMergeBaseCandidate(branch),
+          typeof branch === "string" &&
+          isMergeBaseCandidate(branch) &&
+          isLiteralBranchName(branch),
       )
     : [];
   return [...new Set([defaultBranchName, ...declared])];

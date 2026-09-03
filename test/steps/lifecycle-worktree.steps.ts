@@ -840,6 +840,17 @@ When("基点をbranch名で渡しworktreeを作成する", function () {
   this.expectedBaseCommit = this.developSha;
   try {
     createWorktree({
+      /**
+       * **検査完了後にrefを動かす。** `git worktree add`へ検査済み固定SHAでなく
+       * 可変refを渡す実装なら、ここで動かした先のcommitで分岐してしまう。
+       */
+      afterVerification: () => {
+        execFileSync(
+          "git",
+          ["branch", "-f", "asc-base-probe", this.defaultSha],
+          { cwd: this.root },
+        );
+      },
       repoRoot: this.root,
       worktreePath: path.relative(this.root, worktree),
       branch: "fix/1139-declared-base",
