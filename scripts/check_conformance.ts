@@ -27,6 +27,7 @@ import { checkWorkflowSteps } from "./check_workflow_steps.js";
 import { checkWorktreeContract } from "./check_worktree_contract.js";
 import { checkRequirementIdScheme } from "./check_requirement_id_scheme.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
+import { releaseJobDocumentationMismatch } from "../src/domain/release.js";
 
 const CANONICAL_CONTRACTS_FILE = ".agent-skill-chain/canonical-contracts.json";
 
@@ -114,6 +115,31 @@ export function checkCanonicalDuplication(root: string): string[] {
       (violation) => `${violation.path}: ${violation.remediation}`,
     ),
   ];
+}
+
+const RELEASE_WORKFLOW_FILE = ".github/workflows/release.yml";
+const RELEASE_OPERATIONS_DOCUMENT = "docs/specs/12_運用保守/00_運用設計.md";
+
+/**
+ * release workflowのjob集合と運用設計の権限境界表の一致を検査する。
+ *
+ * **PR #1190 で運用設計が同一file内で矛盾した。** 64行が「bump branchは作らない」と
+ * 書きながら、権限境界表は削除済みの`bump_version` jobを載せていた。`docs/`は配布境界に
+ * 入るため、運用者が存在しない経路を実行しうる（Issue #1191）。
+ *
+ * **judgementは`src/domain/release.ts`が所有する。** ここはfileを読んで渡すだけである。
+ */
+export function checkReleaseJobDocumentation(root: string): string[] {
+  const workflowFile = path.join(root, RELEASE_WORKFLOW_FILE);
+  const documentFile = path.join(root, RELEASE_OPERATIONS_DOCUMENT);
+  if (!fs.existsSync(workflowFile))
+    return [`${RELEASE_WORKFLOW_FILE}がありません`];
+  if (!fs.existsSync(documentFile))
+    return [`${RELEASE_OPERATIONS_DOCUMENT}がありません`];
+  return releaseJobDocumentationMismatch({
+    yaml: fs.readFileSync(workflowFile, "utf8"),
+    markdown: fs.readFileSync(documentFile, "utf8"),
+  });
 }
 
 const PACKAGE_MODEL_SLUG_PATHS = [
@@ -492,6 +518,7 @@ export function checkRepositoryRuleLedger(
   errors.push(...checkRequirementIdScheme(root).errors);
   errors.push(...checkCanonicalScopeAlignment(root));
   errors.push(...checkCanonicalDuplication(root));
+  errors.push(...checkReleaseJobDocumentation(root));
   errors.push(
     ...coverage.orphans.map((orphan) => `${orphan.ruleId}: ${orphan.reason}`),
     ...checkQualityCiTriggers(

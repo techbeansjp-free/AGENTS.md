@@ -750,6 +750,68 @@ function blockHasNpmRun(block: string[], scriptName: string): boolean {
   return npmRunPattern(scriptName).test(block.join("\n"));
 }
 
+/**
+ * release workflowが定義するjob名の集合。
+ *
+ * `jobs:`直下の2 space indentのkeyだけを拾う。`on:`・`concurrency:`・`permissions:`は
+ * top-levelなので混ざらない。
+ */
+export function releaseWorkflowJobNames(yaml: string): string[] {
+  const lines = yaml.split(/\r?\n/u);
+  const jobsIndex = lines.findIndex((line) => /^jobs:\s*$/u.test(line));
+  if (jobsIndex < 0) return [];
+  const names: string[] = [];
+  for (const line of lines.slice(jobsIndex + 1)) {
+    if (/^\S/u.test(line)) break;
+    const match = /^ {2}([a-z][a-z0-9_]*):\s*$/u.exec(line);
+    if (match?.[1]) names.push(match[1]);
+  }
+  return names;
+}
+
+/**
+ * 運用設計の権限境界表が列挙するjob名の集合。
+ *
+ * 表の1列目が`` `<job>` ``形式の行だけを拾う。見出しと区切り行は形が合わない。
+ */
+export function documentedReleaseJobNames(markdown: string): string[] {
+  const names: string[] = [];
+  for (const line of markdown.split(/\r?\n/u)) {
+    const match = /^\|\s*`([a-z][a-z0-9_]*)`\s*\|/u.exec(line.trim());
+    if (match?.[1]) names.push(match[1]);
+  }
+  return names;
+}
+
+/**
+ * release workflowのjob集合と運用設計の権限境界表を突き合わせる。
+ *
+ * **両方向を検査する。** 廃止したjobが文書へ残る形（Issue #1184でbump_versionが残った）と、
+ * 新設したjobを文書へ書き忘れる形の両方を拒否する。**片方向だけでは、文書を空にすれば
+ * 通ってしまう。**
+ *
+ * 判定するのは名前の集合一致だけであり、権限や開始条件の記述内容は判定しない。
+ */
+export function releaseJobDocumentationMismatch(input: {
+  yaml: string;
+  markdown: string;
+}): string[] {
+  const defined = new Set(releaseWorkflowJobNames(input.yaml));
+  const documented = new Set(documentedReleaseJobNames(input.markdown));
+  const errors: string[] = [];
+  const stale = [...documented].filter((name) => !defined.has(name)).sort();
+  const missing = [...defined].filter((name) => !documented.has(name)).sort();
+  if (stale.length > 0)
+    errors.push(
+      `運用設計の権限境界表がrelease workflowに存在しないjobを載せています: ${stale.join("、")}`,
+    );
+  if (missing.length > 0)
+    errors.push(
+      `運用設計の権限境界表がrelease workflowのjobを載せていません: ${missing.join("、")}`,
+    );
+  return errors;
+}
+
 export function validateReleaseWorkflow(yaml: string): {
   valid: boolean;
   errors: string[];

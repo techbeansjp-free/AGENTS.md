@@ -146,3 +146,18 @@ Feature: main mergeの自動release計画と配布digest
     Given 配布前品質検証の入口へ接尾辞を付けたrelease workflow本文がある
     When 自動release workflow契約を検証する
     Then 自動release workflow検証は配布前品質検証の欠落を理由に拒否する
+
+  Scenario: SCN-UNIT-RELWF-P05 権限境界表が存在しないjobを載せる文書を拒否する
+    Given release workflowと、廃止済みjobを載せた権限境界表がある
+    When release jobと権限境界表の一致を検証する
+    Then 存在しないjobを載せていることを理由に拒否する
+
+  Scenario: SCN-UNIT-RELWF-P06 権限境界表がjobを載せ落とした文書を拒否する
+    Given release workflowと、jobを載せ落とした権限境界表がある
+    When release jobと権限境界表の一致を検証する
+    Then jobを載せていないことを理由に拒否する
+
+  Scenario: SCN-UNIT-RELWF-P07 job集合と権限境界表が一致する文書を受理する
+    Given release workflowと、一致する権限境界表がある
+    When release jobと権限境界表の一致を検証する
+    Then release jobと権限境界表の不一致は0件である

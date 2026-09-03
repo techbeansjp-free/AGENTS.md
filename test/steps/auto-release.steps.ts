@@ -7,6 +7,7 @@ import {
   computeDistributionDigest,
   normalizeDistributionContent,
   planAutoRelease,
+  releaseJobDocumentationMismatch,
   validateReleaseWorkflow,
   type AutoReleaseInput,
   type AutoReleasePlan,
@@ -104,6 +105,8 @@ class AutoReleaseWorld extends WorkflowWorld {
   autoPlan: AutoReleasePlan | undefined = undefined;
   autoPlans: AutoReleasePlan[] = [];
   autoWorkflowYaml = "";
+  releaseJobMarkdown = "";
+  releaseJobMismatch: string[] = [];
   autoWorkflowValidation: WorkflowValidation | undefined = undefined;
   entrypointInputs: AutoReleaseInput[] = [];
   entrypointPlans: AutoReleasePlan[] = [];
@@ -1724,4 +1727,80 @@ Then("bump branchとPRのremote状態は変化しない", function () {
     refs.filter((line) => line.startsWith("refs/heads/release/")),
     [],
   );
+});
+
+/** 権限境界表の一致検査用の最小fixture。 */
+const RELEASE_JOB_FIXTURE_YAML = [
+  "jobs:",
+  "  validate:",
+  "    name: 検証",
+  // **値を持たないnested keyを入れる。** indent限定を外す変異は、これをjob名として拾う。
+  "    permissions:",
+  "      contents: read",
+  "  tag:",
+  "    name: tag",
+  "    steps:",
+  "",
+].join("\n");
+
+function permissionTable(jobs: readonly string[]): string {
+  return [
+    "### 権限境界",
+    "",
+    "| job | 開始条件 | 権限 | 外部更新 |",
+    "|---|---|---|---|",
+    ...jobs.map((job) => `| \`${job}\` | 条件 | \`contents: read\` | なし |`),
+    "",
+  ].join("\n");
+}
+
+Given("release workflowと、廃止済みjobを載せた権限境界表がある", function () {
+  this.releaseJobMarkdown = permissionTable([
+    "validate",
+    "tag",
+    "bump_version",
+  ]);
+});
+
+Given("release workflowと、jobを載せ落とした権限境界表がある", function () {
+  this.releaseJobMarkdown = permissionTable(["validate"]);
+});
+
+Given("release workflowと、一致する権限境界表がある", function () {
+  /**
+   * **権限境界表の外にjob名を含む行を置く。** 表の1列目限定を外す変異は、
+   * 復旧表の`bump_version`を廃止済みjobとして拾う。
+   */
+  this.releaseJobMarkdown = [
+    permissionTable(["validate", "tag"]),
+    "### 途中失敗時の復旧",
+    "",
+    "| 確認済み状態 | 復旧 |",
+    "|---|---|",
+    "| `bump_version`は廃止した経路である | 参照しない |",
+    "",
+  ].join("\n");
+});
+
+When("release jobと権限境界表の一致を検証する", function () {
+  this.releaseJobMismatch = releaseJobDocumentationMismatch({
+    yaml: RELEASE_JOB_FIXTURE_YAML,
+    markdown: this.releaseJobMarkdown,
+  });
+});
+
+Then("存在しないjobを載せていることを理由に拒否する", function () {
+  assert.deepEqual(this.releaseJobMismatch, [
+    "運用設計の権限境界表がrelease workflowに存在しないjobを載せています: bump_version",
+  ]);
+});
+
+Then("jobを載せていないことを理由に拒否する", function () {
+  assert.deepEqual(this.releaseJobMismatch, [
+    "運用設計の権限境界表がrelease workflowのjobを載せていません: tag",
+  ]);
+});
+
+Then("release jobと権限境界表の不一致は0件である", function () {
+  assert.deepEqual(this.releaseJobMismatch, []);
 });
