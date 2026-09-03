@@ -25,17 +25,17 @@ Feature: main mergeの自動release計画と配布digest
   Scenario: SCN-UNIT-AUTORELEASE-005 既存tagと配布差分があるversionはbump後にreleaseする
     Given 現在tagが存在して配布digestが異なる自動release入力がある
     When 自動release計画を作成する
-    Then 自動release計画は次のprereleaseへbumpしてからreleaseする
+    Then 自動release計画は次のprerelease tagでreleaseする
 
   Scenario: SCN-UNIT-AUTORELEASE-006 prereleaseとpatchのbump規則が0.3.xの範囲を出ない
     Given prereleaseと通常versionと解決不能versionの衝突入力がある
     When 衝突した自動release計画を作成する
-    Then 解決可能なversionは0.3.x内でbumpし解決不能なversionは停止する
+    Then 解決可能なversionは0.3.x内で次tagへ進み解決不能なversionは停止する
 
-  Scenario: SCN-UNIT-AUTORELEASE-007 bump経路のgateがaudit:checkを含まない
-    Given audit:checkを含むbump経路のworkflow本文がある
+  Scenario: SCN-UNIT-AUTORELEASE-007 bump_version jobを持つworkflowを拒否する
+    Given bump_version jobを持つworkflow本文がある
     When 自動release workflow契約を検証する
-    Then 自動release workflow検証はbump経路のaudit:checkを根拠に拒否する
+    Then 自動release workflow検証はbump_version jobの存在を根拠に拒否する
 
   Scenario: SCN-UNIT-DIGEST-001 配布entryをpath昇順に正準化して同一digestを返す
     Given 入力順だけが異なる同じ配布entry集合がある
@@ -100,12 +100,12 @@ Feature: main mergeの自動release計画と配布digest
   Scenario: SCN-UNIT-AUTOREL-D03 currentTag存在かつdigest相違でbump後にreleaseする
     Given 現在tagが存在して配布digestが異なる自動release入力がある
     When 自動release計画を作成する
-    Then 自動release計画は次のprereleaseへbumpしてからreleaseする
+    Then 自動release計画は次のprerelease tagでreleaseする
 
   Scenario: SCN-UNIT-AUTOREL-D04 前回digestが空ならfail-openする
     Given 現在tagが存在して前回配布digestが空の入力がある
     When 自動release計画を作成する
-    Then 自動release計画は次のprereleaseへbumpしてからreleaseする
+    Then 自動release計画は次のprerelease tagでreleaseする
 
   Scenario: SCN-UNIT-AUTOREL-D05 現在digestが空なら停止する
     Given 現在tagが存在して現在の配布digestが空の入力がある

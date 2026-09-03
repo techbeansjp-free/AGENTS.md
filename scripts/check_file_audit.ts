@@ -470,18 +470,71 @@ function finalAuditPaths(
   );
 }
 
-function releaseBumpParent(root: string, commit: string): string | undefined {
-  return commitParents(root, commit).find((parent) =>
-    isReleaseBumpTransition(root, { commit, parent }),
+/**
+ * 旧release bump除外を認める境界commit。**最後の旧bump merge commitである。**
+ *
+ * releaseは既定branchへbump commitを push しなくなった（Issue #1184）。除外logicを
+ * 無期限に残すと、移行後に作られた「bump風のcommit」まで監査対象から外せてしまう。
+ * **この commit のancestorに限って旧logicを適用する。**
+ *
+ * 日時やsubjectで判定しない。**移行PRのmerge直前に、その時点の最後の旧bump merge
+ * commitで確定する。** 確定後に新しい旧bumpが着地した場合は、そのbumpが除外されずに
+ * `audit:check`が落ちるため、取り違えは無言では通らない。
+ */
+const LEGACY_RELEASE_BUMP_CUTOFF = "7a0fff678e99483baf0f25dd4132c67172a61f7e";
+
+/**
+ * `commit`がcutoffのancestorまたはcutoff自身か。
+ *
+ * **解決できない場合は判定不能として例外にする。** 「解決できないので除外しない」と
+ * すると、cutoffをrepositoryから消すだけで除外を止められる。逆に「解決できないので
+ * 除外する」とすると、浅い履歴で移行後のbump風commitを素通しできる。
+ */
+function withinLegacyBumpWindow(
+  root: string,
+  commit: string,
+  cutoff: string,
+): boolean {
+  const resolved = git(["rev-parse", "--verify", `${cutoff}^{commit}`], root, {
+    allowFailure: true,
+  });
+  if (resolved.status !== 0 || resolved.stdout.trim().length !== 40)
+    throw new Error(
+      `release bump除外のcutoff commit ${cutoff} を解決できないため監査できません。履歴を完全に取得してください`,
+    );
+  return (
+    git(["merge-base", "--is-ancestor", commit, cutoff], root, {
+      allowFailure: true,
+    }).status === 0
   );
 }
 
-function withoutFinalReleaseBumps(root: string, current: string): string {
+function releaseBumpParent(
+  root: string,
+  commit: string,
+  cutoff: string,
+): string | undefined {
+  const parent = commitParents(root, commit).find((candidate) =>
+    isReleaseBumpTransition(root, { commit, parent: candidate }),
+  );
+  if (parent === undefined) return undefined;
+  /**
+   * **cutoff以後のbump風commitは通常の変更として監査する。** 除外はcutoff以前の
+   * 実在した旧bumpのためだけに残す。
+   */
+  return withinLegacyBumpWindow(root, commit, cutoff) ? parent : undefined;
+}
+
+function withoutFinalReleaseBumps(
+  root: string,
+  current: string,
+  cutoff: string,
+): string {
   let cursor = current;
   const visited = new Set<string>();
   while (!visited.has(cursor)) {
     visited.add(cursor);
-    const parent = releaseBumpParent(root, cursor);
+    const parent = releaseBumpParent(root, cursor, cutoff);
     if (!parent) break;
     cursor = parent;
   }
@@ -517,18 +570,26 @@ function uniqueMergeBase(
  * 1件ならその親が候補branch側の着地形になっている。0件や複数件なら、その親を
  * 候補側と見なす読み方が成立していない。
  */
-function candidateFinalPathCount(root: string, parent: string): number {
-  const reviewHead = withoutFinalReleaseBumps(root, parent);
+function candidateFinalPathCount(
+  root: string,
+  parent: string,
+  cutoff: string,
+): number {
+  const reviewHead = withoutFinalReleaseBumps(root, parent, cutoff);
   const [implementation = reviewHead] = commitParents(root, reviewHead);
   return finalAuditPaths(root, implementation, reviewHead).length;
 }
 
-function inferReviewBoundary(root: string, current: string): ReviewBoundary {
-  const boundary = withoutFinalReleaseBumps(root, current);
+function inferReviewBoundary(
+  root: string,
+  current: string,
+  cutoff: string,
+): ReviewBoundary {
+  const boundary = withoutFinalReleaseBumps(root, current, cutoff);
   const boundaryParents = commitParents(root, boundary);
   const reviewHead =
     boundaryParents.length > 1
-      ? withoutFinalReleaseBumps(root, boundaryParents.at(-1)!)
+      ? withoutFinalReleaseBumps(root, boundaryParents.at(-1)!, cutoff)
       : boundary;
   const [implementation = reviewHead] = commitParents(root, reviewHead);
   /**
@@ -551,7 +612,9 @@ function inferReviewBoundary(root: string, current: string): ReviewBoundary {
       : undefined;
   const candidateFinalPathCounts =
     boundaryParents.length === 2
-      ? boundaryParents.map((parent) => candidateFinalPathCount(root, parent))
+      ? boundaryParents.map((parent) =>
+          candidateFinalPathCount(root, parent, cutoff),
+        )
       : [];
   return {
     implementation,
@@ -902,10 +965,19 @@ export function unsupportedClaimRows(markdown: string): string[] {
   return findings;
 }
 
-export function checkFileAudit(root: string) {
+/**
+ * @param legacyReleaseBumpCutoff 旧release bump除外を認める境界commit。
+ *   **既定は本repositoryの`LEGACY_RELEASE_BUMP_CUTOFF`である。** 隔離fixtureは
+ *   自分の履歴に存在する境界を渡す。**環境変数では受け取らない。** 実行時の値で
+ *   除外窓を動かせるようにすると、cutoffを後ろへずらすだけで監査を外せる。
+ */
+export function checkFileAudit(
+  root: string,
+  legacyReleaseBumpCutoff: string = LEGACY_RELEASE_BUMP_CUTOFF,
+) {
   const errors: string[] = [];
   const current = git(["rev-parse", "HEAD"], root).stdout.trim();
-  const inferred = inferReviewBoundary(root, current);
+  const inferred = inferReviewBoundary(root, current, legacyReleaseBumpCutoff);
   const finalPaths = finalAuditPaths(
     root,
     inferred.implementation,

@@ -16,6 +16,18 @@ class AuditSelectionWorld extends WorkflowWorld {
 
 const { Given, When, Then } = stepDefinitions<AuditSelectionWorld>();
 
+/**
+ * 隔離fixtureの旧bump除外境界。**fixtureのHEADを使う。**
+ * 本repositoryの`LEGACY_RELEASE_BUMP_CUTOFF`はfixture履歴に存在しないため、
+ * 既定値のまま渡すと解決不能でfail-closedになる（Issue #1184）。
+ */
+function isolatedCutoff(root: string): string {
+  return execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+  }).trim();
+}
+
 function git(root: string, args: string[]): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 }
@@ -980,7 +992,7 @@ Given(
       "-m",
       "merge parallel-a",
     ]);
-    this.auditResults.push(checkFileAudit(root));
+    this.auditResults.push(checkFileAudit(root, isolatedCutoff(root)));
     git(root, [
       "merge",
       "--no-ff",
@@ -989,7 +1001,7 @@ Given(
       "-m",
       "merge parallel-b",
     ]);
-    this.auditResults.push(checkFileAudit(root));
+    this.auditResults.push(checkFileAudit(root, isolatedCutoff(root)));
     this.auditRoot = root;
   },
 );
@@ -1011,7 +1023,10 @@ Given("既存41件のreview artifactを持つ統合監査repository", function (
 });
 
 When("監査選択repositoryのfile監査を実行する", function () {
-  this.auditResult = checkFileAudit(this.auditRoot);
+  this.auditResult = checkFileAudit(
+    this.auditRoot,
+    isolatedCutoff(this.auditRoot),
+  );
 });
 
 When("各branchのmerge後にfile監査を実行する", function () {

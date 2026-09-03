@@ -2197,57 +2197,70 @@ Given("package metadataとpolicy version artifactがある", function () {
 When("version正本との一致を検証する", function () {
   this.releaseVersion = packageReleaseVersion(this.packageMetadata.version);
 });
-Then("製品は0.3.1 betaでpolicyはv0.3.0からv0.3.1へ移行する", function () {
-  assert.equal(PACKAGE_VERSION, this.packageMetadata.version);
-  assert.match(PACKAGE_VERSION, /^0\.3\.1-beta\./u);
-  assert.equal(
-    CURRENT_POLICY_SCHEMA_VERSION,
-    `agent-skill-chain/project-policy/v${this.releaseVersion}`,
-  );
-  assert.deepEqual(COMPATIBLE_POLICY_SCHEMA_VERSIONS, [
-    "agent-skill-chain/project-policy/v0.3.0",
-  ]);
-  assert.deepEqual(DEPRECATED_POLICY_SCHEMA_ALIASES, {
-    "agent-skill-chain/project-policy/v0.3":
+Then(
+  "製品versionはrelease追随のsentinelでpolicyはv0.3.0からv0.3.1へ移行する",
+  function () {
+    assert.equal(PACKAGE_VERSION, this.packageMetadata.version);
+    /**
+     * **release番号を焼き込まない。** package.jsonのversionはreleaseに追随しない
+     * sentinelであり（Issue #1184）、正本はGit tagである。ここで検証する契約は
+     * 「coreがpolicy schemaのpatch lineと一致すること」と「release番号を含まないこと」
+     * の2つである。`-beta.N`を要求すると、release追随をやめた事実とtestが矛盾する。
+     */
+    assert.equal(this.releaseVersion, "0.3.1");
+    assert.doesNotMatch(PACKAGE_VERSION, /-beta\.\d+$/u);
+    assert.equal(
+      CURRENT_POLICY_SCHEMA_VERSION,
+      `agent-skill-chain/project-policy/v${this.releaseVersion}`,
+    );
+    assert.deepEqual(COMPATIBLE_POLICY_SCHEMA_VERSIONS, [
       "agent-skill-chain/project-policy/v0.3.0",
-  });
-  assert.deepEqual(
-    this.policySchema.properties.schemaVersion.enum,
-    SUPPORTED_POLICY_SCHEMA_VERSIONS,
-  );
-  assert.equal(this.defaultPolicy.schemaVersion, CURRENT_POLICY_SCHEMA_VERSION);
-  const legacyAlias = validatePolicy({
-    schemaVersion: "agent-skill-chain/project-policy/v0.3",
-    delivery: { stopAt: "pull_request" },
-    merge: {
-      mode: "disabled",
-      branches: [],
-      methods: [],
-      requiredChecks: [],
-      requiredReviews: 0,
-    },
-  });
-  assert.equal(legacyAlias.valid, true);
-  assert.ok(legacyAlias.migration);
-  assert.deepEqual(legacyAlias.migration.deprecatedAlias, {
-    input: "agent-skill-chain/project-policy/v0.3",
-    canonical: "agent-skill-chain/project-policy/v0.3.0",
-  });
-  for (const version of [
-    "0.3.0",
-    "0.3.1-beta.1",
-    "0.3.1+build.7",
-    "0.3.1-beta.1+build.7",
-  ])
-    assert.equal(isPackageVersion(version), true, version);
-  for (const version of ["0.3.01", "0.3.1-01", "0.3.1-beta..1", "0.3.1+"])
-    assert.equal(isPackageVersion(version), false, version);
-  for (const version of ["0.3.0", "0.3.1"])
-    assert.equal(isPolicySchemaPatchVersion(version), true, version);
-  for (const version of ["0.3.01", "0.3.1-beta.1", "0.3"])
-    assert.equal(isPolicySchemaPatchVersion(version), false, version);
-  assert.equal(packageReleaseVersion("0.3.1+build.7"), "0.3.1");
-});
+    ]);
+    assert.deepEqual(DEPRECATED_POLICY_SCHEMA_ALIASES, {
+      "agent-skill-chain/project-policy/v0.3":
+        "agent-skill-chain/project-policy/v0.3.0",
+    });
+    assert.deepEqual(
+      this.policySchema.properties.schemaVersion.enum,
+      SUPPORTED_POLICY_SCHEMA_VERSIONS,
+    );
+    assert.equal(
+      this.defaultPolicy.schemaVersion,
+      CURRENT_POLICY_SCHEMA_VERSION,
+    );
+    const legacyAlias = validatePolicy({
+      schemaVersion: "agent-skill-chain/project-policy/v0.3",
+      delivery: { stopAt: "pull_request" },
+      merge: {
+        mode: "disabled",
+        branches: [],
+        methods: [],
+        requiredChecks: [],
+        requiredReviews: 0,
+      },
+    });
+    assert.equal(legacyAlias.valid, true);
+    assert.ok(legacyAlias.migration);
+    assert.deepEqual(legacyAlias.migration.deprecatedAlias, {
+      input: "agent-skill-chain/project-policy/v0.3",
+      canonical: "agent-skill-chain/project-policy/v0.3.0",
+    });
+    for (const version of [
+      "0.3.0",
+      "0.3.1-beta.1",
+      "0.3.1+build.7",
+      "0.3.1-beta.1+build.7",
+    ])
+      assert.equal(isPackageVersion(version), true, version);
+    for (const version of ["0.3.01", "0.3.1-01", "0.3.1-beta..1", "0.3.1+"])
+      assert.equal(isPackageVersion(version), false, version);
+    for (const version of ["0.3.0", "0.3.1"])
+      assert.equal(isPolicySchemaPatchVersion(version), true, version);
+    for (const version of ["0.3.01", "0.3.1-beta.1", "0.3"])
+      assert.equal(isPolicySchemaPatchVersion(version), false, version);
+    assert.equal(packageReleaseVersion("0.3.1+build.7"), "0.3.1");
+  },
+);
 
 /**
  * Step skillから規範文書へ向けたlinkの壊し方を、境界ごとに1件ずつ定義する。

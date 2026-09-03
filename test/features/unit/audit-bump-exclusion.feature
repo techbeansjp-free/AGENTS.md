@@ -21,3 +21,13 @@ Feature: release bump commitの監査対象除外
     Given release bump以外のmessageでpackage.jsonを変更した隔離repository
     When 隔離repositoryのfile監査を実行する
     Then file監査はreview artifact以外のpathを理由に失敗する
+
+  Scenario: SCN-UNIT-AUDITBUMP-005 cutoffより後のrelease bump形式commitは除外しない
+    Given 監査artifact後に正規のrelease bump commitがある隔離repository
+    When cutoffをbump commitの直前に置いてfile監査を実行する
+    Then file監査はbump commitを境界に含めたことを理由に失敗する
+
+  Scenario: SCN-UNIT-AUDITBUMP-006 cutoffを解決できない履歴では監査を停止する
+    Given 監査artifact後に正規のrelease bump commitがある隔離repository
+    When 履歴に存在しないcutoffでfile監査を実行する
+    Then file監査はcutoffを解決できないことを理由に停止する

@@ -202,10 +202,10 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     When 個別監査gateを正規表と余分なpathで検証する
     Then 正規表だけが合格し余分なpathと空差分基点は拒否される
 
-  Scenario: SCN-UNIT-PACKAGE-012 製品versionはpackage.jsonを正本としpolicy patch移行と一致する
+  Scenario: SCN-UNIT-PACKAGE-012 製品versionはreleaseに追随せずpolicy patch移行と一致する
     Given package metadataとpolicy version artifactがある
     When version正本との一致を検証する
-    Then 製品は0.3.1 betaでpolicyはv0.3.0からv0.3.1へ移行する
+    Then 製品versionはrelease追随のsentinelでpolicyはv0.3.0からv0.3.1へ移行する
 
   Scenario: SCN-UNIT-PACKAGE-013 全Step skillは正確なtemplate・成果物・統制語彙・ドメイン用語台帳へ拘束される
     Given packageのStep skillとtemplate契約がある
