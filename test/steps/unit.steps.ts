@@ -35,7 +35,7 @@ import {
 } from "../../scripts/check_source_quality.js";
 import { checkProjectQualityContract } from "../../scripts/check_project_quality.js";
 import { validateDevelopmentConsiderations } from "../../src/domain/conformance.js";
-import { run } from "../../src/lib/process.js";
+import { run, runJsonlSession } from "../../src/lib/process.js";
 import { main } from "../../src/cli.js";
 import {
   COMPATIBLE_POLICY_SCHEMA_VERSIONS,
@@ -145,6 +145,8 @@ interface UnitWorld extends WorkflowWorld {
         auditedFiles: number;
       };
   largeOutputArgs: string[];
+  /** session境界の反例で起動する子processの引数。 */
+  sessionArgs: string[];
   legacyCliContract: { valid: boolean; errors: string[]; commands: number };
   legacyCliContractRoot: string;
   missingCommand: string;
@@ -3018,6 +3020,85 @@ Given("1MiBを超える出力を返すcommandがある", function () {
     `process.stdout.write("x".repeat(${LARGE_OUTPUT_BYTES}))`,
   ];
 });
+Given("1MiBを超える出力を返すsessionがある", function () {
+  this.sessionArgs = [
+    "-e",
+    `process.stdout.write("y".repeat(${LARGE_OUTPUT_BYTES}))`,
+  ];
+});
+
+Given("応答しないsessionがある", function () {
+  // stdinを読み続けて何も書かない。isCompleteが真にならずtimeoutへ到達する
+  this.sessionArgs = ["-e", "process.stdin.resume()"];
+});
+
+When("session境界で上限を超える出力を受け取る", async function () {
+  this.processResult = await runJsonlSession(
+    process.execPath,
+    this.sessionArgs,
+    process.cwd(),
+    {
+      input: "",
+      timeoutMs: 30_000,
+      isComplete: () => false,
+      allowFailure: true,
+    },
+  );
+});
+
+When("session境界でtimeoutまで待つ", async function () {
+  this.processResult = await runJsonlSession(
+    process.execPath,
+    this.sessionArgs,
+    process.cwd(),
+    {
+      input: "",
+      timeoutMs: 200,
+      isComplete: () => false,
+      allowFailure: true,
+    },
+  );
+});
+
+When("session境界で実在しないcommandを起動する", async function () {
+  this.processResult = await runJsonlSession(
+    this.missingCommand,
+    [],
+    process.cwd(),
+    {
+      input: "",
+      timeoutMs: 5_000,
+      isComplete: () => false,
+      allowFailure: true,
+    },
+  );
+});
+
+Then("session失敗理由に出力上限の超過が残る", function () {
+  assert.equal(this.processResult?.status, 1);
+  // **実バイト数まで要求する。** 理由の存在だけでは、どの上限を超えたのか読めない
+  assert.match(
+    this.processResult?.stderr ?? "",
+    /stdoutが上限1048576バイトを超えたため打ち切りました/u,
+  );
+});
+
+Then("session失敗理由にtimeoutが残る", function () {
+  assert.equal(this.processResult?.status, 1);
+  assert.match(
+    this.processResult?.stderr ?? "",
+    /200ミリ秒で応答がないため打ち切りました/u,
+  );
+});
+
+Then("session失敗理由に起動できなかった原因が残る", function () {
+  assert.equal(this.processResult?.status, 1);
+  assert.match(
+    this.processResult?.stderr ?? "",
+    /子processを起動できません: /u,
+  );
+});
+
 Given("実在しないcommandがある", function () {
   this.missingCommand = "agent-skill-chain-absent-command";
 });

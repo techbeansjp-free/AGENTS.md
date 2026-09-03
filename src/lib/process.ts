@@ -86,11 +86,30 @@ export function runJsonlSession(
     let stderr = "";
     let settled = false;
     let completed = false;
-    const appendWithinLimit = (current: string, chunk: string): string => {
+    /**
+     * 打ち切りの理由を`stderr`へ残す。
+     *
+     * **理由を載せずにkillすると、呼び出し側には「終了値1・理由なし」としてだけ
+     * 現れる。** 上限超過、timeout、spawn失敗、本物の終了値1が区別できない
+     * （Issue #1027）。`finish`は`stderr`をそのまま結果へ載せるため、
+     * `finish`より前に追記する。
+     */
+    const failWithReason = (reason: string): void => {
+      if (settled) return;
+      stderr = `${stderr}${stderr.endsWith("\n") || stderr === "" ? "" : "\n"}${reason}\n`;
+      child.kill("SIGKILL");
+      finish(1);
+    };
+    const appendWithinLimit = (
+      stream: "stdout" | "stderr",
+      current: string,
+      chunk: string,
+    ): string => {
       const combined = current + chunk;
       if (Buffer.byteLength(combined) > MAX_STREAM_BYTES) {
-        child.kill("SIGKILL");
-        finish(1);
+        failWithReason(
+          `${stream}が上限${MAX_STREAM_BYTES}バイトを超えたため打ち切りました`,
+        );
         return current;
       }
       return combined;
@@ -116,13 +135,14 @@ export function runJsonlSession(
       resolve(output);
     };
     const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      finish(1);
+      failWithReason(
+        `${options.timeoutMs}ミリ秒で応答がないため打ち切りました`,
+      );
     }, options.timeoutMs);
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
-      stdout = appendWithinLimit(stdout, chunk);
+      stdout = appendWithinLimit("stdout", stdout, chunk);
       if (settled) return;
       if (!completed && options.isComplete(stdout)) {
         completed = true;
@@ -130,9 +150,11 @@ export function runJsonlSession(
       }
     });
     child.stderr.on("data", (chunk: string) => {
-      stderr = appendWithinLimit(stderr, chunk);
+      stderr = appendWithinLimit("stderr", stderr, chunk);
     });
-    child.on("error", () => finish(1));
+    child.on("error", (error: Error) =>
+      failWithReason(`子processを起動できません: ${error.message}`),
+    );
     child.on("close", (code) => finish(code ?? 1));
     child.stdin.on("error", () => undefined);
     child.stdin.write(options.input);
