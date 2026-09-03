@@ -195,3 +195,33 @@ Feature: ワークフローStepの定義とjournalを決定的に検証する
     Given ワークフローStep単体検査の準備がある
     When "SCN-UNIT-WFJRNL-021"の単体検査を実行する
     Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-022 Step 11後のpost-terminal intake記録を順序違反にしない
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-022"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-023 Step 11より前のpost-terminal intake記録を拒否する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-023"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-024 intake指定のないStep 11後のStep 10再記録は順序違反にする
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-024"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-025 Step 10以外のpost-terminal intake指定を拒否する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-025"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-026 post-terminal intakeはtrue以外を受理しない
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-026"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-027 post-terminal intakeがjournalの往復で保持される
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-027"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる

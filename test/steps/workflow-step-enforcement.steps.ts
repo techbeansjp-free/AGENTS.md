@@ -852,6 +852,103 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
       assert.equal(after.entries.length, before.entries.length);
       break;
     }
+    case "SCN-UNIT-WFJRNL-022": {
+      /**
+       * **post-terminal intakeの記録は順序判定から外す。**
+       *
+       * `pr create`後に届いた外部指摘を同じPRで取り込んだroundは、定義上Step 11より
+       * 後に現れる。除外しないとStep 11がout-of-orderになり、規範が許した取り込みを
+       * 記録できない（Issue #1194）。
+       */
+      const entries = [
+        ...[0, 1, 4, 9, 10].map((step) => entry(step)),
+        entry(11),
+        { ...entry(10), postTerminalIntake: true as const },
+      ];
+      const outcome = result("quick", entries, 11);
+      assert.deepEqual(outcome.outOfOrder, []);
+      assert.equal(outcome.valid, true, outcome.errors.join("; "));
+      break;
+    }
+    case "SCN-UNIT-WFJRNL-023": {
+      /**
+       * **intakeはStep 11より後にだけ置ける。** 前に置けると、終端を経ていない工程で
+       * 順序判定を外す抜け道になる。
+       */
+      const entries = [
+        ...[0, 1, 4, 9].map((step) => entry(step)),
+        { ...entry(10), postTerminalIntake: true as const },
+        entry(10),
+        entry(11),
+      ];
+      const outcome = result("quick", entries, 11);
+      assert.equal(outcome.valid, false);
+      assert.ok(
+        outcome.errors.some((message) =>
+          message.includes("Step 11より後に置いてください"),
+        ),
+        outcome.errors.join("; "),
+      );
+      break;
+    }
+    case "SCN-UNIT-WFJRNL-027": {
+      /**
+       * **parseを通した往復で残ることを固定する。** 直接構築したentryだけを検査すると、
+       * field許可一覧から`postTerminalIntake`を外す変異が生存する。
+       */
+      const rendered = JSON.stringify({
+        ...entry(10),
+        postTerminalIntake: true,
+      });
+      const parsed = parseStepJournal(`${rendered}\n`);
+      assert.deepEqual(parsed.errors, []);
+      assert.equal(parsed.entries[0]?.postTerminalIntake, true);
+      break;
+    }
+    case "SCN-UNIT-WFJRNL-025": {
+      /**
+       * **postTerminalIntakeはStep 10にだけ許す。** 他のStepへ許すと、そのStepを
+       * 順序判定から外せてしまう。
+       */
+      const rendered = JSON.stringify({
+        ...entry(9),
+        postTerminalIntake: true,
+      });
+      assert.match(
+        parseStepJournal(`${rendered}\n`).errors.join("\n"),
+        /postTerminalIntakeはStep 10にだけ指定できます/u,
+      );
+      break;
+    }
+    case "SCN-UNIT-WFJRNL-026": {
+      /**
+       * **postTerminalIntakeはtrueだけを受理する。** 任意値を許すと、falsyな値で
+       * 記録しながらfield自体は存在する状態を作れる。
+       */
+      const rendered = JSON.stringify({
+        ...entry(10),
+        postTerminalIntake: "yes",
+      });
+      assert.match(
+        parseStepJournal(`${rendered}\n`).errors.join("\n"),
+        /postTerminalIntakeはtrueだけを受理します/u,
+      );
+      break;
+    }
+    case "SCN-UNIT-WFJRNL-024": {
+      /**
+       * **intakeを外すと順序判定が壊れる。** この反例が、除外そのものを消す変異を殺す。
+       */
+      const entries = [
+        ...[0, 1, 4, 9, 10].map((step) => entry(step)),
+        entry(11),
+        entry(10),
+      ];
+      const outcome = result("quick", entries, 11);
+      assert.deepEqual(outcome.outOfOrder, [11]);
+      assert.equal(outcome.valid, false);
+      break;
+    }
     case "SCN-UNIT-WFJRNL-021": {
       const root = this.temp("asc-journal-staging-mismatch-");
       const staging = createIssueStaging(root, {

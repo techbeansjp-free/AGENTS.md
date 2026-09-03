@@ -432,7 +432,15 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "step=10のとき",
       ),
     ],
-    optionalFlags: [optional("recorded-at", "ISO8601", "記録時刻", "実行時刻")],
+    optionalFlags: [
+      optional("recorded-at", "ISO8601", "記録時刻", "実行時刻"),
+      optional(
+        "post-terminal-intake",
+        "",
+        "Step 11記録後に外部reviewer指摘を同じPRで取り込んだroundとして記録する",
+        "通常のStep記録",
+      ),
+    ],
     example:
       "npx agent-skill-chain workflow record --staging=.asc/886 --step=4 --evidence=実装完了 --artifact=src/cli-usage.ts",
     acceptsSpaceSeparatedFlags: true,
