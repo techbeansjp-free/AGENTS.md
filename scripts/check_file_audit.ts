@@ -933,14 +933,44 @@ function verdictValue(cell: string): string {
   return value;
 }
 
+/** code fenceのdelimiter。**文字と長さの両方を保持する。** */
+interface FenceDelimiter {
+  character: string;
+  length: number;
+  infoString: string;
+}
+
 /**
- * 行がcode fenceの開始・終了記号か。**行頭の3文字以上の ``` または ~~~ に限る。**
+ * 行がcode fenceのdelimiterか。**行頭の3文字以上の ``` または ~~~ に限る。**
  *
  * 表のcell内に現れるbacktickを誤って開始と読まないよう、行頭に限定する。
+ * **先頭1文字へ潰さない。** 潰すと4個で開いたfenceを3個で閉じてしまい、
+ * fence内の表が監査対象になる（PR #1192 の外部指摘）。
  */
-function fenceMarker(line: string): string | undefined {
-  const match = /^\s{0,3}(`{3,}|~{3,})/u.exec(line);
-  return match?.[1]?.[0];
+function fenceDelimiter(line: string): FenceDelimiter | undefined {
+  const match = /^\s{0,3}(`{3,}|~{3,})(.*)$/u.exec(line);
+  const run = match?.[1];
+  if (!run) return undefined;
+  return {
+    character: run[0]!,
+    length: run.length,
+    infoString: (match[2] ?? "").trim(),
+  };
+}
+
+/**
+ * `candidate`が`open`を閉じるdelimiterか。
+ *
+ * CommonMarkに合わせて3条件を要求する。**同じ文字であること、開始以上の長さであること、
+ * info stringを持たないこと。** ` ```typescript `のようなinfo string付きの行は
+ * 閉鎖ではなく、閉鎖判定に使うと後続の表が監査対象になる。
+ */
+function closesFence(open: FenceDelimiter, candidate: FenceDelimiter): boolean {
+  return (
+    candidate.character === open.character &&
+    candidate.length >= open.length &&
+    candidate.infoString.length === 0
+  );
 }
 
 /**
@@ -966,12 +996,12 @@ export function unsupportedClaimRows(markdown: string): string[] {
    * 検査対象へ戻せる。偽陽性を塞ぐ変更なので、開いたら閉じるまで対象外が安全側である
    * （Issue #1188のF-01）。
    */
-  let openFence: string | undefined;
+  let openFence: FenceDelimiter | undefined;
   for (const line of markdown.split("\n")) {
-    const marker = fenceMarker(line);
-    if (marker !== undefined) {
-      if (openFence === undefined) openFence = marker;
-      else if (openFence === marker) openFence = undefined;
+    const delimiter = fenceDelimiter(line);
+    if (delimiter !== undefined) {
+      if (openFence === undefined) openFence = delimiter;
+      else if (closesFence(openFence, delimiter)) openFence = undefined;
       headerCells = undefined;
       verdictIndex = -1;
       continue;

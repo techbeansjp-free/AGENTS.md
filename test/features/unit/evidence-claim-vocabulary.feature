@@ -80,3 +80,13 @@ Feature: pass根拠の性質主張へ検証の併記を要求する
     Given cell内にfence記号を含む裸の性質主張があるreview artifactがある
     When pass根拠の性質主張を検査する
     Then 検証を伴わない主張として拒否される
+
+  Scenario: SCN-UNIT-CLAIMVOCAB-017 短いdelimiterでは長いfenceを閉じない
+    Given 4個のbacktickで開き途中に3個の行がある裸の性質主張があるreview artifactがある
+    When pass根拠の性質主張を検査する
+    Then 検証を伴わない主張は0件である
+
+  Scenario: SCN-UNIT-CLAIMVOCAB-018 info string付きの行ではfenceを閉じない
+    Given fence内にinfo string付きのdelimiter行がある裸の性質主張があるreview artifactがある
+    When pass根拠の性質主張を検査する
+    Then 検証を伴わない主張は0件である

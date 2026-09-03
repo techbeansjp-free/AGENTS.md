@@ -237,3 +237,47 @@ Given(
     );
   },
 );
+
+Given(
+  "4個のbacktickで開き途中に3個の行がある裸の性質主張があるreview artifactがある",
+  function () {
+    /**
+     * **閉鎖delimiterは開始以上の長さを要する。** 先頭1文字へ潰す実装では、
+     * 4個で開いたfenceを途中の3個が閉じ、以降の表が監査対象になる。
+     * Markdownの例示として4個で3個を包む書き方はreview artifactが実際に使う。
+     */
+    this.artifact = [
+      "## 3. 肯定的評価",
+      "",
+      "````markdown",
+      "```",
+      "| 観点 | 判定 | 根拠 |",
+      "|---|---|---|",
+      "| 保守性 | pass | 判定は純関数へ分離した |",
+      "```",
+      "````",
+      "",
+    ].join("\n");
+  },
+);
+
+Given(
+  "fence内にinfo string付きのdelimiter行がある裸の性質主張があるreview artifactがある",
+  function () {
+    /**
+     * **閉鎖delimiterはinfo stringを持てない。** CommonMarkの規則であり、
+     * `` ```typescript `` を閉鎖として扱うと以降の表が監査対象になる。
+     */
+    this.artifact = [
+      "## 3. 肯定的評価",
+      "",
+      "```",
+      "```typescript",
+      "| 観点 | 判定 | 根拠 |",
+      "|---|---|---|",
+      "| 保守性 | pass | 判定は純関数へ分離した |",
+      "```",
+      "",
+    ].join("\n");
+  },
+);
