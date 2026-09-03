@@ -784,6 +784,124 @@ export function parseFileAudit(markdown: string) {
   return { base, implementation, entries };
 }
 
+/**
+ * `pass`根拠として書いてよい主張の語彙。**人が明示登録した語だけを見る。**
+ *
+ * 規範性を推測して拡張しない。契約正本registryが「検出tokenは人が明示登録した
+ * 語だけとし、規範性を推測して拡張しない」と定めるのと同じ設計である
+ * （`docs/specs/02_要件/04_仕様・品質管理要件.md`）。
+ *
+ * **`常に`・`必ず`・`すべて`のような一般的全称語は入れない。** 誤検出が急増し、
+ * 「散文の論理検査器は作らない」という打ち切り線を越える。
+ */
+const HIGH_RISK_CLAIM_TOKENS: readonly string[] = Object.freeze([
+  "純関数",
+  "pure function",
+  "副作用を持たない",
+  "副作用がない",
+  "例外を投げ",
+  "never throws",
+  "全入力",
+  "全ての入力",
+  "すべての入力",
+  "all inputs",
+  "冪等",
+  "idempotent",
+  "決定的",
+  "deterministic",
+]);
+
+/**
+ * 表のcellを分割する。エスケープ済みの`\|`は区切りにしない。
+ */
+function splitTableRow(line: string): string[] {
+  const body = line.trim().replace(/^\|/u, "").replace(/\|$/u, "");
+  const cells: string[] = [];
+  let current = "";
+  for (let index = 0; index < body.length; index += 1) {
+    const char = body[index];
+    if (char === "\\" && body[index + 1] === "|") {
+      current += "|";
+      index += 1;
+      continue;
+    }
+    if (char === "|") {
+      cells.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current);
+  return cells.map((cell) => cell.trim());
+}
+
+/** Markdown装飾を除いた判定値。 */
+function verdictValue(cell: string): string {
+  return cell.replace(/[*`\s]/gu, "");
+}
+
+/**
+ * `pass`判定の根拠行に、検証不能な性質の主張が裸で置かれていないか検査する。
+ *
+ * **真偽は判定しない。** 判定するのは「登録語彙を含む`pass`行に、SCN参照か
+ * 原文引用のどちらかがあるか」だけである。原文引用があってもそれが本当に
+ * 実装の原文であることは証明できない。**機構が塞ぐのは、未検証の主張が黙って
+ * `pass`根拠として使われる経路である**（Issue #1169）。
+ *
+ * 対象は判定列が厳密に`pass`である表の行だけとする。finding表・not-applicable・
+ * 説明文・訂正記録は対象外である。**範囲を構造で限定することで、根拠らしさの
+ * 推測を要さない。**
+ */
+export function unsupportedClaimRows(markdown: string): string[] {
+  const findings: string[] = [];
+  let headerCells: string[] | undefined;
+  let verdictIndex = -1;
+  for (const line of markdown.split("\n")) {
+    if (!line.trim().startsWith("|")) {
+      headerCells = undefined;
+      verdictIndex = -1;
+      continue;
+    }
+    const cells = splitTableRow(line);
+    if (headerCells === undefined) {
+      headerCells = cells;
+      verdictIndex = cells.findIndex(
+        (cell) => cell === "判定" || cell === "個別判定",
+      );
+      continue;
+    }
+    if (/^[-:\s|]+$/u.test(line.replace(/\|/gu, ""))) continue;
+    /**
+     * **防御的な早期returnである。** `verdictIndex`が-1のとき
+     * `cells[-1]`は`undefined`になり直後のpass判定で必ず弾かれるため、
+     * この行を消しても挙動は変わらない（変異試験で等価と確認済み）。
+     * 判定列を持たない表を対象にしない意図を明示するために残す。
+     */
+    if (verdictIndex < 0) continue;
+    if (verdictValue(cells[verdictIndex] ?? "") !== "pass") continue;
+    const token = HIGH_RISK_CLAIM_TOKENS.find((candidate) =>
+      line.includes(candidate),
+    );
+    if (token === undefined) continue;
+    /**
+     * **併記は登録語彙と同じcell内で数える。**
+     *
+     * 行のどこかにbacktickがあれば通す形にすると、個別監査表のpath列
+     * （`src/a.ts`）だけで受理されてしまう。**主張と証拠が同じcellに
+     * 並んでいることを要求する。**
+     */
+    const claimCell = cells.find((cell) => cell.includes(token)) ?? "";
+    const hasScenario = /SCN-[A-Z0-9-]+/u.test(claimCell);
+    const hasQuotation = (claimCell.match(/`/gu) ?? []).length >= 2;
+    if (hasScenario || hasQuotation) continue;
+    findings.push(
+      `pass判定の根拠へ検証を伴わない性質の主張があります: 「${token}」。同じ行へSCN IDか対象コードの原文引用を併記してください。cell: ${claimCell.slice(0, 120)}`,
+    );
+  }
+  return findings;
+}
+
 export function checkFileAudit(root: string) {
   const errors: string[] = [];
   const current = git(["rev-parse", "HEAD"], root).stdout.trim();
@@ -947,6 +1065,7 @@ export function checkFileAudit(root: string) {
   if (ancestry.status !== 0)
     errors.push("H_implがcurrent HEADのancestorではありません");
   const artifactText = fs.readFileSync(artifact, "utf8");
+  errors.push(...unsupportedClaimRows(artifactText));
   const identity = identitySection(artifactText);
   if (identity === undefined)
     errors.push(
