@@ -148,7 +148,15 @@ interface WorkflowStep {
   unparsed: boolean;
 }
 
-const BUMP_SCRIPT_RUN = "node --import tsx scripts/prepare_release_bump.ts";
+/**
+ * 合成を検査する対象script。**version注入stepである**（Issue #1184）。
+ *
+ * bump経路が消えたため、`prepare_release_bump.ts`はもう実行経路に無い。
+ * `npm publish <tgz>`が`prepack`を実行しない以上、注入漏れを公開前に検出する
+ * 機会はこのstepだけであり、**ifやcontinue-on-errorで飛ばせないことを固定する。**
+ */
+const BUMP_SCRIPT_RUN =
+  "node --import tsx scripts/inject_publish_version.ts\nnpm run build";
 
 /**
  * `bump_version` jobで使ってよいgit sub commandの**allowlist**。
@@ -349,7 +357,7 @@ function evaluateComposition(world: AutoReleaseWorld): string[] {
   if (target?.hasShell)
     errors.push("C-6: script呼び出しstepがshell keyを持っています");
   if (world.bumpJobDefaultsShell)
-    errors.push("C-6: bump_version jobがdefaults.run.shellを持っています");
+    errors.push("C-6: npm_publish jobがdefaults.run.shellを持っています");
   if (world.workflowDefaultsShell)
     errors.push("C-6: workflowがdefaults.run.shellを持っています");
   return errors;
@@ -433,11 +441,11 @@ Then("自動release計画はbranch不一致を理由に停止する", function (
   assert.match(this.autoPlan.reasons.join(" "), /既定branch/u);
 });
 
-Then("自動release計画は次のprereleaseへbumpしてからreleaseする", function () {
-  assert.equal(this.autoPlan?.state, "bump-then-release");
+Then("自動release計画は次のprerelease tagでreleaseする", function () {
+  assert.equal(this.autoPlan?.state, "release");
   assert.equal(this.autoPlan.version, "0.3.1-beta.2");
   assert.equal(this.autoPlan.tag, "v0.3.1-beta.2");
-  assert.equal(this.autoPlan.needsVersionBump, true);
+  assert.equal(this.autoPlan.needsVersionBump, false);
 });
 
 Given(
@@ -483,10 +491,10 @@ When("自動release entrypointを入力ごとに実行する", function () {
   });
 });
 
-Then("entrypointはreleaseと停止とbumpを外部更新なしで返す", function () {
+Then("entrypointはreleaseと停止を外部更新なしで返す", function () {
   assert.deepEqual(
     this.entrypointPlans.map(({ state }) => state),
-    ["release", "skipped", "skipped", "bump-then-release"],
+    ["release", "skipped", "skipped", "release"],
   );
   assert.match(this.entrypointPlans[1]?.reasons.join(" ") ?? "", /配布物/u);
   assert.match(this.entrypointPlans[2]?.reasons.join(" ") ?? "", /再帰/u);
@@ -520,10 +528,17 @@ When("現在versionを省略して自動release entrypointを実行する", func
   });
 });
 
-Then("entrypointはpackage.jsonのversionを使用する", function () {
+Then("entrypointは既存tagから現在versionを導く", function () {
+  /**
+   * **package.jsonのversionを使わない。** sentinelになったため、正本は既存tagである
+   * （Issue #1184）。tagが1件も無い入力では初期値の`0.3.0-0`から次のtagを導く。
+   */
   assert.equal(this.fallbackEntrypointPlan?.state, "release");
-  assert.equal(this.fallbackEntrypointPlan.version, PACKAGE_VERSION);
-  assert.equal(this.fallbackEntrypointPlan.tag, `v${PACKAGE_VERSION}`);
+  assert.notEqual(this.fallbackEntrypointPlan.version, PACKAGE_VERSION);
+  assert.equal(
+    this.fallbackEntrypointPlan.tag,
+    `v${this.fallbackEntrypointPlan.version}`,
+  );
 });
 
 Given("現在tagが存在する自動release entrypoint入力がある", function () {
@@ -568,18 +583,19 @@ When(
 Then("欠落した現在digestは停止し壊れた前回digestはfail-openする", function () {
   assert.deepEqual(
     this.entrypointPlans.map(({ state }) => state),
-    ["skipped", "bump-then-release"],
+    ["skipped", "release"],
   );
 });
 
 Then(
-  "解決可能なversionは0.3.x内でbumpし解決不能なversionは停止する",
+  "解決可能なversionは0.3.x内で次tagへ進み解決不能なversionは停止する",
   function () {
     assert.equal(this.autoPlans.length, 3);
     assert.equal(this.autoPlans[0]?.version, "0.3.1-beta.10");
     assert.equal(this.autoPlans[1]?.version, "0.3.10");
     for (const plan of this.autoPlans.slice(0, 2)) {
-      assert.equal(plan.state, "bump-then-release");
+      assert.equal(plan.state, "release");
+      assert.equal(plan.needsVersionBump, false);
       assert.equal(isPackageVersion(plan.version), true);
       assert.match(plan.version, /^0\.3\./u);
     }
@@ -790,28 +806,18 @@ Given("自動release用の実workflow本文を読み込む", function () {
   );
 });
 
-Given("audit:checkを含むbump経路のworkflow本文がある", function () {
+Given("bump_version jobを持つworkflow本文がある", function () {
+  /**
+   * **実workflowへbump jobを1件足しただけの本文にする。** 他の条件は満たしたまま
+   * bump jobの存在だけで拒否されることを固定する（Issue #1184）。
+   */
   const workflow = fs.readFileSync(
     path.resolve(".github", "workflows", "release.yml"),
     "utf8",
   );
-  const bumpStart = workflow.indexOf("\n  bump_version:");
-  const bumpEnd = workflow.indexOf("\n  tag:", bumpStart);
-  assert.ok(bumpStart >= 0);
-  assert.ok(bumpEnd > bumpStart);
-  const bumpJob = workflow.slice(bumpStart, bumpEnd);
-  let unsafeBumpJob = bumpJob;
-  if (
-    !bumpJob.includes("npm run prepack") &&
-    !bumpJob.includes("npm run verify:distribution")
-  ) {
-    unsafeBumpJob = bumpJob.replace(
-      "npm run package:check",
-      "npm run audit:check\n          npm run package:check",
-    );
-    assert.notEqual(unsafeBumpJob, bumpJob);
-  }
-  this.autoWorkflowYaml = `${workflow.slice(0, bumpStart)}${unsafeBumpJob}${workflow.slice(bumpEnd)}`;
+  const tagStart = workflow.indexOf("\n  tag:");
+  assert.ok(tagStart >= 0);
+  this.autoWorkflowYaml = `${workflow.slice(0, tagStart)}\n  bump_version:\n    name: versionをmainへ反映する\n    runs-on: ubuntu-latest\n    steps:\n      - name: 何もしない\n        run: "true"\n${workflow.slice(tagStart)}`;
 });
 
 Given("無条件main pushと自動npm公開を含むworkflow本文がある", function () {
@@ -862,11 +868,90 @@ Then("自動release workflow検証は有効になる", function () {
       "validate jobの配布前品質検証の実行を確認した",
     ),
   );
+  /**
+   * **checks配列の中身だけでは条件の存在を固定できない。** 条件式を`false`へ倒す変異でも
+   * else側のcheckは積まれるため生存する。**本文から該当行を消して拒否されることを
+   * 確かめる。**
+   */
+  const workflow = this.autoWorkflowYaml;
+  /**
+   * **remote tip照合は2箇所を個別に消す。** 両方を一度に消す反例では、
+   * どちらか1件だけを残したworkflowが通る形の緩さを検出できない。
+   */
+  const tipLines = [
+    ...workflow.matchAll(/^.*git ls-remote origin "refs\/heads\/.*$/gmu),
+  ];
+  assert.equal(tipLines.length, 2);
+  for (const [index, expected] of [
+    "validate jobにtrigger SHAとremote既定branch tipを照合するstepが必要です",
+    "tag jobにtag書き込み直前のremote既定branch tip再照合stepが必要です",
+  ].entries()) {
+    /**
+     * **位置で消す。** 2行は字面が同一なので`replace`では常に先頭が消え、
+     * tag側を消したつもりでvalidate側が消える。
+     */
+    const match = tipLines[index]!;
+    const start = match.index ?? -1;
+    assert.ok(start >= 0, expected);
+    const removed = `${workflow.slice(0, start)}${workflow.slice(start + match[0].length)}`;
+    assert.notEqual(removed, workflow, expected);
+    assert.ok(
+      validateReleaseWorkflow(removed).errors.includes(expected),
+      expected,
+    );
+  }
+  for (const [expected, pattern] of [
+    [
+      "release対象commitの親が2つであることを確認するstepが必要です",
+      /^.*git rev-list --parents -n 1 .*$/gmu,
+    ],
+  ] as const) {
+    const removed = workflow.replace(pattern, "");
+    assert.notEqual(removed, workflow, expected);
+    /**
+     * **`valid === false`では足りない。** 該当行を消すと他の条件も同時に崩れるため、
+     * 条件式を`false`へ倒す変異でも`valid`は`false`のままになる。**その条件が出す
+     * 診断そのものを要求する。**
+     */
+    assert.ok(
+      validateReleaseWorkflow(removed).errors.includes(expected),
+      expected,
+    );
+  }
+  /**
+   * **checkoutより前へ戻す変異も殺す。** checkout前の`git ls-remote origin`は
+   * workspaceにrepositoryが無いため必ず失敗する。
+   */
+  const tagJobStart = workflow.indexOf("\n  tag:");
+  const tagJobEnd = workflow.indexOf("\n  github_release:");
+  const tagJob = workflow.slice(tagJobStart, tagJobEnd);
+  const tipStep = tipLines[1]![0];
+  const movedTagJob = tagJob
+    .replace(`${tipStep}\n`, "")
+    .replace(
+      "      - name: 検証済みrelease対象commitを取得する",
+      `${tipStep}\n      - name: 検証済みrelease対象commitを取得する`,
+    );
+  assert.notEqual(movedTagJob, tagJob);
   assert.ok(
-    this.autoWorkflowValidation?.checks.includes(
-      "bump_version jobが配布前品質検証とaudit:checkを含まないことを確認した",
+    validateReleaseWorkflow(
+      `${workflow.slice(0, tagJobStart)}${movedTagJob}${workflow.slice(tagJobEnd)}`,
+    ).errors.includes(
+      "tag jobのremote既定branch tip再照合はactions/checkoutより後に置いてください",
     ),
   );
+  for (const check of [
+    "bump_version jobが存在しないことを確認した",
+    "validate jobのremote既定branch tip照合stepを確認した",
+    "tag jobのremote既定branch tip再照合stepを確認した",
+    "tag jobの再照合がcheckoutより後にあることを確認した",
+    "RELEASE_MAIN_PATを使わないことを確認した",
+    "releaseがPRをmergeしないことを確認した",
+    "releaseがPRを作成しないことを確認した",
+    "既定branchへの直接pushがないことを確認した",
+    "2-parent判定を確認した",
+  ])
+    assert.ok(this.autoWorkflowValidation?.checks.includes(check), check);
 });
 
 Then(
@@ -912,46 +997,71 @@ Then("自動release workflow検証はdigest step欠落を理由に拒否する",
 });
 
 Then(
-  "自動release workflow検証はbump経路のaudit:checkを根拠に拒否する",
+  "自動release workflow検証はbump_version jobの存在を根拠に拒否する",
   function () {
     assert.equal(this.autoWorkflowValidation?.valid, false);
     assert.match(
       this.autoWorkflowValidation?.errors.join(" ") ?? "",
-      /bump_version.*audit:check/u,
+      /bump_version jobを置かないでください/u,
     );
   },
 );
 
-Then("bump経路はaudit:check以外のrelease gateをすべて含む", function () {
+Then("実workflowは既定branchへ書き込まない", function () {
   assert.equal(this.autoWorkflowValidation?.valid, true);
   const workflow = this.autoWorkflowYaml;
-  const bumpStart = workflow.indexOf("\n  bump_version:");
-  const bumpEnd = workflow.indexOf("\n  tag:", bumpStart);
-  assert.ok(bumpStart >= 0);
-  assert.ok(bumpEnd > bumpStart);
-  const bumpJob = workflow.slice(bumpStart, bumpEnd);
-  for (const command of [
-    "npm run project:quality",
-    "npm run quality",
-    "npm run build",
-    "npm run docs:format",
-    "npm run test:format",
-    "npm run trace:check",
-    "npm run architecture:check",
-    "npm run conformance:check",
-    "npm run package:check",
-  ]) {
-    assert.ok(bumpJob.includes(command));
-    const missingGateWorkflow = `${workflow.slice(0, bumpStart)}${bumpJob.replace(command, "npm run omitted:check")}${workflow.slice(bumpEnd)}`;
-    assert.equal(validateReleaseWorkflow(missingGateWorkflow).valid, false);
+  /**
+   * **書き込み経路を1件ずつ入れて拒否されることを確かめる。** 「現在の本文に無い」
+   * ことの確認だけでは、条件を消す変異が生き残る。
+   */
+  for (const [injected, expected] of [
+    [
+      "  bump_version:\n    name: dummy\n",
+      "bump_version jobを置かないでください。releaseは既定branchへ書き込まずtagとGitHub Releaseだけを作ります",
+    ],
+    [
+      "        run: gh pr create --base main --head x --title y\n",
+      "releaseからPRを作成しないでください",
+    ],
+    [
+      "        run: gh pr merge 1 --admin --merge\n",
+      "releaseからPRをmergeしないでください",
+    ],
+    [
+      "        run: git push origin main\n",
+      "release workflowから既定branchへpushしないでください",
+    ],
+    [
+      "        run: git push --force origin main\n",
+      "release workflowから既定branchへpushしないでください",
+    ],
+    [
+      "        run: git -C /tmp/worktree push origin main\n",
+      "release workflowから既定branchへpushしないでください",
+    ],
+    [
+      "        run: git push origin HEAD:main\n",
+      "release workflowから既定branchへpushしないでください",
+    ],
+    [
+      "        run: git push origin +main\n",
+      "release workflowから既定branchへpushしないでください",
+    ],
+    [
+      "          TOKEN: ${{ secrets.RELEASE_MAIN_PAT }}\n",
+      "RELEASE_MAIN_PATを使わないでください。既定branchへの書き込み権限をreleaseへ与えません",
+    ],
+  ] as const) {
+    assert.ok(
+      validateReleaseWorkflow(`${workflow}\n${injected}`).errors.includes(
+        expected,
+      ),
+      expected,
+    );
   }
-  assert.doesNotMatch(
-    bumpJob,
-    /npm run (?:prepack|verify:distribution|audit:check)\b/u,
-  );
   const validateJob = workflow.slice(
     workflow.indexOf("\n  validate:"),
-    workflow.indexOf("\n  bump_version:"),
+    workflow.indexOf("\n  tag:"),
   );
   assert.match(validateJob, /npm run (?:prepack|verify:distribution)\b/u);
 });
@@ -1079,7 +1189,7 @@ Then(
 );
 
 Given(
-  "release.ymlのbump_version jobをYAMLのstep構造として読み込む",
+  "release.ymlのnpm_publish jobをYAMLのstep構造として読み込む",
   function () {
     const yaml = fs.readFileSync(
       path.resolve(".github", "workflows", "release.yml"),
@@ -1092,15 +1202,15 @@ Given(
      */
     this.workflowDefaultsShell = hasDefaultsRunShell(lines, 0);
     const jobIndex = lines.findIndex((line) =>
-      /^\s{2}bump_version:\s*$/u.test(line),
+      /^\s{2}npm_publish:\s*$/u.test(line),
     );
-    assert.ok(jobIndex >= 0, "bump_version jobが見つかりません");
+    assert.ok(jobIndex >= 0, "npm_publish jobが見つかりません");
     const jobBlock = blockAfter(lines, jobIndex);
     this.bumpJobDefaultsShell = hasDefaultsRunShell(jobBlock, 4);
     const stepsIndex = jobBlock.findIndex((line) =>
       /^\s*steps:\s*$/u.test(line),
     );
-    assert.ok(stepsIndex >= 0, "bump_version jobのstepsが見つかりません");
+    assert.ok(stepsIndex >= 0, "npm_publish jobのstepsが見つかりません");
     this.bumpJobSteps = parseSteps(blockAfter(jobBlock, stepsIndex));
     assert.ok(this.bumpJobSteps.length > 0, "stepを1件も読み取れませんでした");
   },

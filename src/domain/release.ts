@@ -59,7 +59,14 @@ export interface DistributionDigest {
 }
 
 export interface AutoReleasePlan {
-  state: "release" | "bump-then-release" | "skipped";
+  /**
+   * **`bump-then-release`は存在しない。**
+   *
+   * releaseは既定branchへ書き込まず、tagとGitHub Releaseだけを作る（Issue #1184）。
+   * versionの正本はtagであり、`package.json`はrelease追随をやめたsentinelを持つ。
+   * bump commitを作る状態を残すと、それを要求するworkflow jobも残ってしまう。
+   */
+  state: "release" | "skipped";
   version: string;
   tag: string;
   needsVersionBump: boolean;
@@ -367,12 +374,12 @@ export function planAutoRelease(value: unknown): AutoReleasePlan {
       `version「${input.currentVersion}」を0.3.x内で安全にbumpできないため停止します`,
     ]);
   return {
-    state: "bump-then-release",
+    state: "release",
     version: nextVersion,
     tag: `v${nextVersion}`,
-    needsVersionBump: true,
+    needsVersionBump: false,
     reasons: [
-      `tag「${currentTag}」が既に存在するためversionを「${nextVersion}」へbumpしてからreleaseします`,
+      `tag「${currentTag}」が既に存在し配布物が変わったためtag「v${nextVersion}」を作成します`,
     ],
   };
 }
@@ -743,10 +750,6 @@ function blockHasNpmRun(block: string[], scriptName: string): boolean {
   return npmRunPattern(scriptName).test(block.join("\n"));
 }
 
-function blockHasNpmTest(block: string[]): boolean {
-  return /\bnpm\s+(?:run\s+)?test(?=\s|$)/u.test(block.join("\n"));
-}
-
 export function validateReleaseWorkflow(yaml: string): {
   valid: boolean;
   errors: string[];
@@ -831,83 +834,102 @@ export function validateReleaseWorkflow(yaml: string): {
   )
     errors.push("validate jobに[skip ci]のhead commit message guardが必要です");
   else checks.push("job-levelの[skip ci]再帰防止guardを確認した");
-  const bumpVersionJobIndex = lines.findIndex((line) =>
-    /^ {2}bump_version:\s*$/u.test(line),
-  );
-  const bumpVersionJobBlock =
-    bumpVersionJobIndex < 0 ? [] : yamlBlock(lines, bumpVersionJobIndex);
-  const requiredBumpGateScripts = [
-    "project:quality",
-    "build",
-    "docs:format",
-    "test:format",
-    "trace:check",
-    "architecture:check",
-    "conformance:check",
-    "package:check",
-  ];
-  const missingBumpGateScripts = requiredBumpGateScripts.filter(
-    (scriptName) => !blockHasNpmRun(bumpVersionJobBlock, scriptName),
-  );
-  if (missingBumpGateScripts.length > 0)
-    errors.push(
-      `bump_version jobに必要な品質gateがありません: ${missingBumpGateScripts
-        .map((scriptName) => `npm run ${scriptName}`)
-        .join(", ")}`,
-    );
-  else checks.push("bump_version jobの必須release gateを確認した");
-  if (
-    !blockHasNpmRun(bumpVersionJobBlock, "quality") &&
-    !blockHasNpmTest(bumpVersionJobBlock)
-  )
-    errors.push(
-      "bump_version jobはnpm run qualityまたは同等のtest実行stepを含めてください",
-    );
-  else checks.push("bump_version jobのtest実行gateを確認した");
-  if (
-    blockHasDistributionVerification(bumpVersionJobBlock) ||
-    blockHasNpmRun(bumpVersionJobBlock, "audit:check")
-  )
-    errors.push(
-      "bump_version jobはnpm run prepack、npm run verify:distribution、audit:checkを含めないでください",
-    );
-  else
-    checks.push(
-      "bump_version jobが配布前品質検証とaudit:checkを含まないことを確認した",
-    );
   /**
-   * 再帰releaseを止めるのは、**既定branchへ着地するcommitのmessageに`[skip ci]`があること**である。
+   * **bump jobそのものを禁止する。**
    *
-   * bump commitはbranch上に留まり、mainへはPRのmerge commitとして着地する。GitHubは
-   * merge commit messageへPR titleを含めるため、`gh pr create`・`gh pr edit`の
-   * `--title`に`[skip ci]`があれば条件は成立する。bump commit自体を`git commit`で
-   * 作るか専用scriptで作るかは、この性質を変えない（Issue #1051のDISC-201）。
+   * releaseは既定branchへ書き込まない（Issue #1184）。version bump jobを「gateを備えていれば
+   * よい」形で許すと、mainを動かす経路が残る。**存在しないことを要求する。**
+   */
+  if (lines.some((line) => /^ {2}bump_version:\s*$/u.test(line)))
+    errors.push(
+      "bump_version jobを置かないでください。releaseは既定branchへ書き込まずtagとGitHub Releaseだけを作ります",
+    );
+  else checks.push("bump_version jobが存在しないことを確認した");
+  if (/secrets\.RELEASE_MAIN_PAT/u.test(yaml))
+    errors.push(
+      "RELEASE_MAIN_PATを使わないでください。既定branchへの書き込み権限をreleaseへ与えません",
+    );
+  else checks.push("RELEASE_MAIN_PATを使わないことを確認した");
+  if (/gh\s+pr\s+merge\b/u.test(yaml))
+    errors.push("releaseからPRをmergeしないでください");
+  else checks.push("releaseがPRをmergeしないことを確認した");
+  if (/gh\s+pr\s+create\b/u.test(yaml))
+    errors.push("releaseからPRを作成しないでください");
+  else checks.push("releaseがPRを作成しないことを確認した");
+  /**
+   * **`git push`のoptionとrefspecの書き方を数え上げない。** `--force`、`-C <dir>`、
+   * `HEAD:main`、`main:main`、`+main`のいずれも既定branchを動かす。
+   * **`git push`から既定branch名へ到達する形をまとめて拒否する。**
    */
   if (
-    !/(?:git\s+commit|gh\s+pr\s+(?:create|edit))\b[^\n]*\[skip ci\]/u.test(yaml)
+    /\bgit\b[^\n]*\bpush\b[^\n]*(?:^|[\s:+])(?:refs\/heads\/)?main\b/mu.test(
+      yaml,
+    )
   )
+    errors.push("release workflowから既定branchへpushしないでください");
+  else checks.push("既定branchへの直接pushがないことを確認した");
+  /**
+   * **後続のmain更新で追い越されたrunを止める。**
+   *
+   * trigger SHAがremote既定branch tipと異なるrunは、最新runが同じ配布物を再評価する。
+   * 止めないと、重いgateを走らせたうえで古いtreeへtagを付けうる。
+   * **tag書き込み直前にも同じ再読取を要求する**（validate通過後のmerge競合を塞ぐ）。
+   */
+  /**
+   * **2箇所を別々に要求する。** 存在件数を見ないと、validate側かtag側の
+   * どちらか1件だけを残すworkflowが通る。tag側だけを消せば重いgateの前で止まらず、
+   * validate側だけを消せば**検証通過後にmainが動いても古いcommitへtagを付けられる。**
+   */
+  const validateJobTipCheck = validateJobBlock.some((line) =>
+    /git\s+ls-remote\s+(?:--exit-code\s+)?origin\s+["']?refs\/heads\//u.test(
+      line,
+    ),
+  );
+  const tagJobIndex = lines.findIndex((line) => /^ {2}tag:\s*$/u.test(line));
+  const tagJobBlock = tagJobIndex < 0 ? [] : yamlBlock(lines, tagJobIndex);
+  const tagJobTipCheck = tagJobBlock.some((line) =>
+    /git\s+ls-remote\s+(?:--exit-code\s+)?origin\s+["']?refs\/heads\//u.test(
+      line,
+    ),
+  );
+  if (!validateJobTipCheck)
     errors.push(
-      "既定branchへ着地するcommit messageへ[skip ci]を載せる指定が必要です",
+      "validate jobにtrigger SHAとremote既定branch tipを照合するstepが必要です",
     );
-  else checks.push("version bump commitの[skip ci]を確認した");
+  else checks.push("validate jobのremote既定branch tip照合stepを確認した");
+  if (!tagJobTipCheck)
+    errors.push(
+      "tag jobにtag書き込み直前のremote既定branch tip再照合stepが必要です",
+    );
+  else checks.push("tag jobのremote既定branch tip再照合stepを確認した");
+  /**
+   * **再照合stepはcheckoutの後に置く。** checkout前の`git ls-remote origin`は
+   * workspaceにrepositoryも`origin`も無いため解決できず、空の観測値で必ず停止する。
+   * 外部reviewerがPR #1189 でCriticalとして検出した。
+   */
+  const tagCheckoutIndex = tagJobBlock.findIndex((line) =>
+    /uses:\s*actions\/checkout@/u.test(line),
+  );
+  const tagTipCheckIndex = tagJobBlock.findIndex((line) =>
+    /git\s+ls-remote\s+(?:--exit-code\s+)?origin\s+["']?refs\/heads\//u.test(
+      line,
+    ),
+  );
   if (
-    !/gh\s+pr\s+(?:create|edit)\b[^\n]*--title\s+[^\n]*\[skip ci\]/u.test(yaml)
+    tagJobTipCheck &&
+    (tagCheckoutIndex < 0 || tagTipCheckIndex < tagCheckoutIndex)
   )
     errors.push(
-      "bump PR titleに[skip ci]を含めてmerge commitの再帰を防いでください",
+      "tag jobのremote既定branch tip再照合はactions/checkoutより後に置いてください",
     );
-  else checks.push("bump PR titleの[skip ci]を確認した");
+  else checks.push("tag jobの再照合がcheckoutより後にあることを確認した");
   if (
-    !/secrets\.RELEASE_MAIN_PAT/u.test(yaml) ||
-    !/gh\s+pr\s+merge\b[^\n]*--admin/u.test(yaml)
+    !/rev-list\s+--parents\s+-n\s*1|--pretty=%P|\bgit\s+show\b[^\n]*%P/u.test(
+      yaml,
+    )
   )
-    errors.push(
-      "version bumpはRELEASE_MAIN_PATを使うPRのadmin mergeが必要です",
-    );
-  else checks.push("version bumpのPR経由admin mergeを確認した");
-  if (/git\s+push\s+origin\s+(?:main|HEAD:refs\/heads\/main)\b/u.test(yaml))
-    errors.push("version bumpをmainへ直接pushしないでください");
-  else checks.push("mainへの直接pushがないことを確認した");
+    errors.push("release対象commitの親が2つであることを確認するstepが必要です");
+  else checks.push("2-parent判定を確認した");
   const permissionsDeclared = lines.some((line) =>
     /^\s*permissions:\s*$/u.test(line),
   );
