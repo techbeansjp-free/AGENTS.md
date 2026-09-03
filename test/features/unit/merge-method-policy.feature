@@ -40,3 +40,9 @@ Feature: branch関係に応じて安全なmerge方式を解決する
     Given branchMethodsを持たずsquashを許可する既存policyがある
     When "feature/topic"から"develop"へ"squash"方式を解決する
     Then merge方式は許可されresolved methodsは"squash"である
+
+
+  Scenario: SCN-UNIT-MERGEMETHOD-010 配布するpolicy雛形がsquashを許可しない
+    Given 配布するpolicy雛形がある
+    When policy雛形のmerge方式を読む
+    Then policy雛形のmerge方式は"merge"だけである

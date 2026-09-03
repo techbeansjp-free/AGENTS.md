@@ -24,6 +24,10 @@ interface MergeMethodWorld extends WorkflowWorld {
   policy: Policy;
   policyFile: string;
   validation: ReturnType<typeof validatePolicy>;
+  adapterSource: string;
+  squashFlagCount: number;
+  policyTemplate: Record<string, unknown>;
+  templateMethods: string[];
 }
 
 const { Given, When, Then } = stepDefinitions<MergeMethodWorld>();
@@ -340,4 +344,71 @@ Then("pr merge経路はrule ID付きで拒否し外部mergeを呼ばない", fun
     "ASC-MERGE-METHOD-001",
   );
   assert.deepEqual(this.mergeAuthorization.operations, []);
+});
+
+/**
+ * gh adapterのmerge方式解決に`--squash`が残っていないことを、sourceの字面で観測する。
+ *
+ * **`mergeMethodFlag`をexportしないための観測経路である。** 既定値をsquashへ戻す変異は
+ * この字面の再出現として現れる。
+ */
+Given("gh adapterのmerge方式解決のsourceがある", function () {
+  this.adapterSource = fs.readFileSync(
+    path.join(process.cwd(), "src/adapters/github.ts"),
+    "utf8",
+  );
+});
+
+When("merge方式解決のsourceからsquash flagの出現を数える", function () {
+  this.squashFlagCount = [
+    ...String(this.adapterSource).matchAll(/"--squash"/gu),
+  ].length;
+});
+
+Then("squash flagの出現は0件である", function () {
+  assert.equal(
+    this.squashFlagCount,
+    0,
+    "gh adapterへ--squashが再出現しています。既定値をsquashへ戻すとaudit:checkの2区間導出が壊れます",
+  );
+});
+
+Given("配布するpolicy雛形がある", function () {
+  this.policyTemplate = JSON.parse(
+    fs.readFileSync(
+      path.join(process.cwd(), ".agent-skill-chain/policy/sample.json"),
+      "utf8",
+    ),
+  ) as Record<string, unknown>;
+});
+
+function declaredMethods(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+When("policy雛形のmerge方式を読む", function () {
+  const root = this.policyTemplate;
+  const policy = (root.policy ?? root) as Record<string, unknown>;
+  const merge = policy.merge as {
+    methods?: unknown;
+    branchMethods?: unknown;
+  };
+  const entries = Array.isArray(merge.branchMethods)
+    ? (merge.branchMethods as Record<string, unknown>[])
+    : [];
+  const declared = [
+    ...declaredMethods(merge.methods),
+    ...entries.flatMap((entry) => declaredMethods(entry.methods)),
+  ];
+  this.templateMethods = [...new Set(declared)].sort();
+});
+
+Then(/^policy雛形のmerge方式は"(.+)"だけである$/u, function (expected: string) {
+  assert.deepEqual(
+    this.templateMethods,
+    [expected],
+    `配布雛形が${expected}以外のmerge方式を宣言しています: ${JSON.stringify(this.templateMethods)}`,
+  );
 });

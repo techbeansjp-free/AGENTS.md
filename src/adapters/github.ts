@@ -4,6 +4,27 @@ import path from "node:path";
 import { run } from "../lib/process.js";
 import { isRecord } from "../types.js";
 
+/**
+ * merge方式をgh CLIのflagへ写す。
+ *
+ * **未知値は例外にする。既定値を持たせない。** 以前は`merge`と`rebase`以外を
+ * すべて`--squash`へ倒しており、値を解決できなかった場合に取り込み先branch上の
+ * commitの親が1個になって`audit:check`の2区間導出が壊れる事象が、診断なしで
+ * 起きていた。
+ *
+ * **squashの受理可否はここで決めない。** 方式の許可は`resolveMergeMethod`が
+ * project policyの`merge.methods`と長命branchペア判定で決める。adapterが
+ * 宣言済みの方式を上書きすると、policyで許可した構成が実行段で不能になる。
+ */
+function mergeMethodFlag(method: string): "--merge" | "--rebase" | "--squash" {
+  if (method === "merge") return "--merge";
+  if (method === "rebase") return "--rebase";
+  if (method === "squash") return "--squash";
+  throw new Error(
+    `merge方式を解決できません: ${method}。merge、rebase、squashのいずれかを指定してください`,
+  );
+}
+
 interface GitHubInput {
   repository: string;
   issue: number;
@@ -1351,12 +1372,14 @@ export function github(
       input.headSha,
       "merge対象の再認可済みHEAD SHA",
     );
-    const methodFlag =
-      input.method === "rebase"
-        ? "--rebase"
-        : input.method === "merge"
-          ? "--merge"
-          : "--squash";
+    /**
+     * **既定をsquashへ倒さない。**
+     *
+     * squashは取り込み先branch上のcommitの親を1個にするため、`audit:check`が
+     * `比較基点..H_impl`と`H_impl..H_final`の2区間を導出できなくなる。未知値を
+     * 黙ってsquashにすると、その破壊が診断なしで起きる。
+     */
+    const methodFlag = mergeMethodFlag(input.method);
     run(
       "gh",
       [
