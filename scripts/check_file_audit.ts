@@ -21,6 +21,7 @@ import {
   type JsonValue,
 } from "../src/lib/security.js";
 import { isPackageVersion } from "../src/lib/version.js";
+import { REVIEW_RECOVERY_ROUND } from "../src/domain/review-convergence.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const AUDIT_DIRECTORY = "docs/reviews";
@@ -622,8 +623,15 @@ function packageDistributionFiles(root: string): string[] | undefined {
   );
 }
 
-/** 上限は`.agent-skill-chain/docs/02_品質基準.md`が所有する。ここは同じ値を強制するだけ。 */
-const MAX_REVIEW_ROUNDS = 3;
+/**
+ * 上限は`.agent-skill-chain/docs/02_品質基準.md`が所有する。ここは同じ値を強制するだけ。
+ *
+ * **同じ値を2箇所で持たない。** 以前はここへ`3`を直書きしており、
+ * PR #1150 が上限を4へ引き上げたときに追随しなかった。`review round`が受理する
+ * ラウンドを`audit:check`が拒否し、取り直し1ラウンドが使えなかった（Issue #1159）。
+ * 判定の正本である`review-convergence.ts`からimportして乖離を構造的に断つ。
+ */
+const MAX_REVIEW_ROUNDS = REVIEW_RECOVERY_ROUND;
 const STEP_CHAIN_VIA = "経由";
 const STEP_CHAIN_BYPASS = "迂回";
 

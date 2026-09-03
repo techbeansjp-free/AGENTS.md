@@ -5,7 +5,7 @@ import { isRecord } from "../types.js";
 /**
  * 通常のreviewラウンド予算。round 1で全scopeを見て、2と3で未解決blockerを追う。
  */
-const REVIEW_ROUND_BUDGET = 3;
+export const REVIEW_ROUND_BUDGET = 3;
 /**
  * 収束後にHEADが動いたときの取り直しへ、予算とは別枠で1 roundだけ許す上限。
  *
@@ -16,7 +16,7 @@ const REVIEW_ROUND_BUDGET = 3;
  * **増分は収束後の取り直しに限る。** 未解決blockerを抱えたまま予算を使い切った
  * `budget-exhausted`からは開かない。開くと、任意の1 pushで新品の予算をもらえる。
  */
-const REVIEW_RECOVERY_ROUND = REVIEW_ROUND_BUDGET + 1;
+export const REVIEW_RECOVERY_ROUND = REVIEW_ROUND_BUDGET + 1;
 
 const OID = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
