@@ -43,6 +43,7 @@ import {
   recordStagingSync,
 } from "../../src/domain/issue.js";
 import {
+  appendDeliveryTerminalJournalEntry,
   appendWorkflowJournalEntry,
   inspectPendingJournalTransaction,
   inspectWorkflowStaging,
@@ -947,6 +948,45 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
       const outcome = result("quick", entries, 11);
       assert.deepEqual(outcome.outOfOrder, [11]);
       assert.equal(outcome.valid, false);
+      break;
+    }
+    case "SCN-UNIT-WFJRNL-028": {
+      /**
+       * **adapterの第1封印を診断文字列ごと固定する。** 公開CLIはこの手前で
+       * `--post-terminal-intake`の欠落を止めるため、adapter側の封印はAPI経由でしか
+       * 観測できない。**封印を消す変異はCLI経路の検査だけでは生存する。**
+       */
+      const root = this.temp("asc-journal-intake-append-");
+      const staging = createIssueStaging(root, {
+        title: "journal-intake-append",
+        answers: answers(),
+        now: new Date(fixtureInstantMs()),
+        requestedMode: "quick",
+      }).path;
+      for (const step of [1, 4, 9, 10])
+        appendWorkflowJournalEntry({ staging, entry: entry(step) });
+      appendDeliveryTerminalJournalEntry({ staging, entry: entry(11) });
+      assert.throws(
+        () => appendWorkflowJournalEntry({ staging, entry: entry(10) }),
+        /Step 11記録後にworkflow journalへ追記できるのはpost-terminal intakeのStep 10だけです/u,
+      );
+      assert.throws(
+        () =>
+          appendWorkflowJournalEntry({
+            staging,
+            entry: { ...entry(9), postTerminalIntake: true as const },
+          }),
+        /postTerminalIntake/u,
+      );
+      const appended = appendWorkflowJournalEntry({
+        staging,
+        entry: { ...entry(10), postTerminalIntake: true as const },
+      });
+      assert.equal(appended.entry.postTerminalIntake, true);
+      const stored = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(stored.entries.at(-1)?.postTerminalIntake, true);
       break;
     }
     case "SCN-UNIT-WFJRNL-021": {
@@ -4297,6 +4337,134 @@ if (exact(["auth", "status"])) {
       assert.match(output.stagingDigest ?? "", /^[a-f0-9]{64}$/u);
       const after = parseStepJournal(fs.readFileSync(journal, "utf8"));
       assert.equal(after.entries.length, before.entries.length + 1);
+      break;
+    }
+    case "SCN-E2E-WFSTEP-040": {
+      /**
+       * **`pr create`後のpost-terminal intakeを公開CLIで通す。**
+       *
+       * Issue #1194 は順序判定だけを直しており、追記経路そのものは
+       * `appendWorkflowJournalEntryLocked`の2つの封印とCLIのboolean flag未登録で
+       * 塞がったままだった。**判定関数だけを呼ぶ検査では3件とも生存する。**
+       */
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      createDeliveryPullRequest(prepared);
+      const stateFile = path.join(
+        prepared.staging,
+        ...DELIVERY_STATE_FILE.split("/"),
+      );
+      assert.equal(
+        parseDeliveryState(fs.readFileSync(stateFile, "utf8")).state,
+        "step11-recorded",
+      );
+      const journalFile = path.join(prepared.staging, STEP_JOURNAL_FILE);
+      const before = parseStepJournal(fs.readFileSync(journalFile, "utf8"));
+      const step10 = before.entries.find((item) => item.step === 10);
+      assert.ok(step10?.reviewSession);
+      const recorded = executeCli(
+        [
+          "workflow",
+          "record",
+          `--staging=${prepared.staging}`,
+          "--step=10",
+          "--evidence=外部reviewer指摘を同じPRで取り込んだround",
+          "--artifact=00_要求定義.md",
+          `--review-session-digest=${step10.reviewSession.roundDigest}`,
+          `--recorded-at=${fixtureInstant({ minutesAhead: 5 })}`,
+          "--post-terminal-intake",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(recorded.status, 0, recorded.stdout + recorded.stderr);
+      const after = parseStepJournal(fs.readFileSync(journalFile, "utf8"));
+      assert.equal(after.entries.length, before.entries.length + 1);
+      assert.equal(after.entries.at(-1)?.step, 10);
+      assert.equal(after.entries.at(-1)?.postTerminalIntake, true);
+      assert.deepEqual(
+        validateStepJournal({
+          mode: after.entries[0]?.mode ?? "full",
+          entries: after.entries,
+          upToStep: 11,
+        }).errors,
+        [],
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-041": {
+      /**
+       * **intakeでないStep記録は封印されたままである。** 封印を「外した」のではなく
+       * 「1種類だけ通した」ことを、診断文字列を名指しして固定する。
+       */
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      createDeliveryPullRequest(prepared);
+      const journalFile = path.join(prepared.staging, STEP_JOURNAL_FILE);
+      const before = parseStepJournal(fs.readFileSync(journalFile, "utf8"));
+      const step10 = before.entries.find((item) => item.step === 10);
+      assert.ok(step10?.reviewSession);
+      const rejected = executeCli(
+        [
+          "workflow",
+          "record",
+          `--staging=${prepared.staging}`,
+          "--step=10",
+          "--evidence=intake指定のない通常のStep 10再記録",
+          "--artifact=00_要求定義.md",
+          `--review-session-digest=${step10.reviewSession.roundDigest}`,
+          `--recorded-at=${fixtureInstant({ minutesAhead: 5 })}`,
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /Step 11記録後のStep 10再記録には--post-terminal-intakeが必要です/u,
+      );
+      assert.equal(
+        parseStepJournal(fs.readFileSync(journalFile, "utf8")).entries.length,
+        before.entries.length,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-042": {
+      /**
+       * **terminal delivery state側の封印も残す。** Step 11 entryを取り除いて
+       * 第1封印を外すと、この記録は第2封印だけに当たる。**intakeを通す変更が
+       * 両方を開けていないことは、この経路でしか観測できない。**
+       */
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      createDeliveryPullRequest(prepared);
+      const journalFile = path.join(prepared.staging, STEP_JOURNAL_FILE);
+      const before = parseStepJournal(fs.readFileSync(journalFile, "utf8"));
+      const step10 = before.entries.find((item) => item.step === 10);
+      assert.ok(step10?.reviewSession);
+      const withoutTerminal = fs
+        .readFileSync(journalFile, "utf8")
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .filter((line) => (JSON.parse(line) as { step: number }).step !== 11);
+      fs.writeFileSync(journalFile, `${withoutTerminal.join("\n")}\n`);
+      refreshStoredStagingDigest(prepared.staging);
+      const rejected = executeCli(
+        [
+          "workflow",
+          "record",
+          `--staging=${prepared.staging}`,
+          "--step=10",
+          "--evidence=terminal delivery state後の通常のStep 10記録",
+          "--artifact=00_要求定義.md",
+          `--review-session-digest=${step10.reviewSession.roundDigest}`,
+          `--recorded-at=${fixtureInstant({ minutesAhead: 5 })}`,
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /terminal delivery state後はStep 0〜10を追記できません/u,
+      );
       break;
     }
     default:
