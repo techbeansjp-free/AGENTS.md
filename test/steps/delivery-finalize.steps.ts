@@ -42,6 +42,7 @@ interface DeliveryFinalizeWorld extends WorkflowWorld {
   mergeInput: MergeInput;
   mergeResult: ReturnType<typeof authorizeMerge>;
   mergeOperationResult: { state: string };
+  mergeMethodError: string | undefined;
   omitTrustedPolicy: boolean;
   prCreationResult: PullRequestCreationResult;
   prInspection: PullRequestInspection;
@@ -660,6 +661,51 @@ When("再認可済みHEADを指定してPR merge adapterを実行する", functi
     process.env.PATH = original;
   }
 });
+When("未知のmerge方式を指定してPR merge adapterを実行する", function () {
+  const original = process.env.PATH;
+  process.env.PATH = this.stubPath;
+  try {
+    github(
+      "pr.merge",
+      {
+        repository: "o/r",
+        pr: 9,
+        /**
+         * **型が塞いでいる値を実行時に渡す。**
+         *
+         * `method`の型は3値へ絞られているためTS呼び出し元からは未知値が入らない。
+         * 実行時の防御はJSON入力とJS呼び出し元のためにあり、その経路を再現する。
+         */
+        method: "fast-forward" as "merge",
+        headSha: "a".repeat(40),
+      },
+      process.cwd(),
+    );
+    this.mergeMethodError = undefined;
+  } catch (error) {
+    this.mergeMethodError =
+      error instanceof Error ? error.message : String(error);
+  } finally {
+    process.env.PATH = original;
+  }
+});
+
+Then("PR merge adapterは方式を解決できず例外になりghを呼ばない", function () {
+  assert.match(
+    String(this.mergeMethodError),
+    /merge方式を解決できません: fast-forward/u,
+    "未知のmerge方式が例外にならず既定値で実行されています",
+  );
+  const log = fs.existsSync(this.ghLog)
+    ? fs.readFileSync(this.ghLog, "utf8")
+    : "";
+  assert.equal(
+    log.includes("pr merge"),
+    false,
+    `例外の前にghのpr mergeを呼んでいます: ${log}`,
+  );
+});
+
 Then("merge操作はmatch-head-commitで同じHEADへ拘束される", function () {
   assert.equal(
     this.mergeOperationResult.state,

@@ -196,6 +196,11 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When 再認可済みHEADを指定してPR merge adapterを実行する
     Then merge操作はmatch-head-commitで同じHEADへ拘束される
 
+  Scenario: SCN-INT-GITHUB-016 未知のmerge方式をsquashへ倒さず例外にする
+    Given merge操作を記録するwrite権限のgh stubがある
+    When 未知のmerge方式を指定してPR merge adapterを実行する
+    Then PR merge adapterは方式を解決できず例外になりghを呼ばない
+
   Scenario: SCN-INT-GITHUB-012 classic protectionが404でrulesetがあればprotectedと判定する
     Given classic protectionが404で有効なrulesetを返すgh stubがある
     When branch protection adapterを実行する
