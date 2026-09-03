@@ -46,3 +46,28 @@ Feature: branch関係に応じて安全なmerge方式を解決する
     Given 配布するpolicy雛形がある
     When policy雛形のmerge方式を読む
     Then policy雛形のmerge方式は"merge"だけである
+
+  Scenario: SCN-UNIT-BASEBRANCH-001 既定branchは宣言の有無によらずbaseとして受理する
+    Given merge.branchesが空のpolicyがある
+    When 既定branch"master"をそのままbaseとして受理判定する
+    Then baseは受理される
+
+  Scenario: SCN-UNIT-BASEBRANCH-002 完全一致で宣言した長命branchをbaseとして受理する
+    Given "develop"と"master"を長命branchとするpolicyがある
+    When 既定branch"master"のもとで"develop"をbaseとして受理判定する
+    Then baseは受理される
+
+  Scenario: SCN-UNIT-BASEBRANCH-003 宣言していないbranchをbaseとして拒否する
+    Given "develop"と"master"を長命branchとするpolicyがある
+    When 既定branch"master"のもとで"staging"をbaseとして受理判定する
+    Then baseは拒否され受理集合を示す診断が返る
+
+  Scenario: SCN-UNIT-BASEBRANCH-004 wildcardを含む宣言はbaseにしない
+    Given "feature/*"だけを宣言したpolicyがある
+    When 既定branch"master"のもとで"feature/*"をbaseとして受理判定する
+    Then baseは拒否されwildcardを理由に示す診断が返る
+
+  Scenario: SCN-UNIT-BASEBRANCH-005 wildcard宣言は受理集合へ入らない
+    Given "feature/*"だけを宣言したpolicyがある
+    When 既定branch"master"の受理集合を読む
+    Then 受理集合は"master"だけである
