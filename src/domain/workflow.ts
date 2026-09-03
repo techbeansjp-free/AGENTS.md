@@ -190,6 +190,16 @@ export interface StepJournalEntry {
     headSha: string;
   };
   humanOverride?: JournalHumanOverride;
+  /**
+   * `pr create`（Step 11）記録後に届いた外部reviewer指摘を、同じPRで取り込んだ
+   * Step 10 roundの記録であることを示す。**Step 10にだけ許す。**
+   *
+   * 守る性質は「独立reviewerが確認した内容とmergeされる内容が一致すること」である。
+   * その性質は**新しいroundで同じHEADを再reviewすれば保たれる**（`review round`が
+   * 前roundのcandidate HEADをancestorに要求するため、前進commitでのみ成立する）。
+   * 封印していたのは記録側だけであり、性質そのものではなかった（Issue #1194）。
+   */
+  postTerminalIntake?: true;
 }
 
 export interface ModeDecision {
@@ -213,6 +223,7 @@ const JOURNAL_FIELDS = new Set([
   "pocObservation",
   "reviewSession",
   "humanOverride",
+  "postTerminalIntake",
 ]);
 const POC_OBSERVATION_BINDING_FIELDS = new Set(["headSha", "evidenceDigest"]);
 const REVIEW_SESSION_BINDING_FIELDS = new Set([
@@ -421,6 +432,14 @@ function parseJournalEntry(
     errors.push(`${label}のStep 10にreviewSession bindingが必要です`);
   if (Number(value.step) !== 10 && reviewSession)
     errors.push(`${label}ではreviewSession bindingを使用できません`);
+  let postTerminalIntake: true | undefined;
+  if (value.postTerminalIntake !== undefined) {
+    if (value.postTerminalIntake !== true)
+      errors.push(`${label}のpostTerminalIntakeはtrueだけを受理します`);
+    else if (Number(value.step) !== 10)
+      errors.push(`${label}のpostTerminalIntakeはStep 10にだけ指定できます`);
+    else postTerminalIntake = true;
+  }
   if (errors.length > 0) return { errors };
   return {
     entry: {
@@ -433,6 +452,7 @@ function parseJournalEntry(
       ...(pocObservation ? { pocObservation } : {}),
       ...(reviewSession ? { reviewSession } : {}),
       ...(parsedOverride.value ? { humanOverride: parsedOverride.value } : {}),
+      ...(postTerminalIntake ? { postTerminalIntake } : {}),
     },
     errors,
   };
@@ -513,9 +533,25 @@ export function validateStepJournal(input: {
     number,
     { entry: StepJournalEntry; index: number }
   >();
-  input.entries.forEach((entry, index) =>
-    lastByStep.set(entry.step, { entry, index }),
-  );
+  /**
+   * **post-terminal intakeの記録は順序判定から外す。**
+   *
+   * `pr create`後に届いた外部指摘を同じPRで取り込んだroundは、定義上Step 11より
+   * 後に現れる。順序判定へ入れるとStep 11がout-of-orderになる。**外すのは順序の
+   * 判定だけであり、記録は残る**（Issue #1194）。
+   */
+  input.entries.forEach((entry, index) => {
+    if (entry.postTerminalIntake) return;
+    lastByStep.set(entry.step, { entry, index });
+  });
+  const terminalIndex = input.entries.findIndex((entry) => entry.step === 11);
+  input.entries.forEach((entry, index) => {
+    if (!entry.postTerminalIntake) return;
+    if (terminalIndex < 0 || index < terminalIndex)
+      errors.push(
+        "post-terminal intakeのStep 10記録はStep 11より後に置いてください",
+      );
+  });
   const maximum = errors.length === 0 ? input.upToStep : 11;
   const missingSteps = expected.filter(
     (step) => step <= maximum && !lastByStep.has(step),

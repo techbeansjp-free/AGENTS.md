@@ -4148,6 +4148,7 @@ export async function main(
           "evidence",
           "recorded-at",
           "review-session-digest",
+          "post-terminal-intake",
         ].includes(flag),
     );
     if (unknown.length > 0)
@@ -4186,12 +4187,32 @@ export async function main(
           repositoryRoot,
         ).stdout.trim()
       : undefined;
+    const intake = flags["post-terminal-intake"] !== undefined;
+    if (intake && step.step !== 10)
+      throw new Error(
+        "--post-terminal-intakeはworkflow record --step=10だけに指定できます",
+      );
     if (step.step === 10) {
       const session = assertConvergedReviewSession({
         staging,
         expectedDigest: required(flags, "review-session-digest"),
         currentHeadSha: headSha!,
       });
+      /**
+       * **Step 11の記録済みが、intakeの前提条件である。**
+       *
+       * `pr create`前のStep 10再記録は通常の順序で行う。intakeを前提なしに許すと、
+       * Step 11を経ていない工程で順序判定を外す抜け道になる（Issue #1194）。
+       */
+      const hasTerminal = journal.entries.some((item) => item.step === 11);
+      if (intake && !hasTerminal)
+        throw new Error(
+          "--post-terminal-intakeはStep 11記録後にだけ指定できます",
+        );
+      if (!intake && hasTerminal)
+        throw new Error(
+          "Step 11記録後のStep 10再記録には--post-terminal-intakeが必要です。外部reviewer指摘を同じPRで取り込んだroundであることを明示してください",
+        );
       entry = {
         ...entry,
         reviewSession: {
@@ -4199,6 +4220,7 @@ export async function main(
           roundDigest: session.latestRoundDigest,
           headSha: session.latestCandidateHeadSha,
         },
+        ...(intake ? { postTerminalIntake: true as const } : {}),
       };
     } else if (flags["review-session-digest"] !== undefined) {
       throw new Error(
