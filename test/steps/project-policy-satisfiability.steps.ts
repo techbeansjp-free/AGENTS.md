@@ -794,14 +794,31 @@ Then("enforcement exportの判定は{string}になる", function (verdict: strin
   const missing = errors.filter((error: string) =>
     error.includes("enforcement exportが実在しません"),
   );
-  if (verdict === "valid")
+  // **「解析できなかった」を「実在しない」と同じ数え方にしない。** 同じ集合へ
+  // 混ぜると、利用者が次に採る操作が違う2つを区別しないtestになる（Issue #1134）
+  const unparsable = errors.filter((error: string) =>
+    error.includes("enforcement sourceを解析できないため"),
+  );
+  if (verdict === "valid") {
     assert.deepEqual(missing, [], "実在するexportを見落としています");
-  else
+    assert.deepEqual(unparsable, [], "解析できるsourceを判定不能にしています");
+    return;
+  }
+  if (verdict === "unparsable") {
     assert.equal(
-      missing.length,
+      unparsable.length,
       1,
-      `実在しないexportを実在と誤認しています: ${errors.join(" | ")}`,
+      `解析不能を実在しないと同じ診断で報告しています: ${errors.join(" | ")}`,
     );
+    assert.deepEqual(missing, [], "解析不能を実在しない側へ倒しています");
+    return;
+  }
+  assert.equal(
+    missing.length,
+    1,
+    `実在しないexportを実在と誤認しています: ${errors.join(" | ")}`,
+  );
+  assert.deepEqual(unparsable, [], "実在しないexportを解析不能にしています");
 });
 
 Given("quality検査項目をapplicable objectにしたchoiceがある", function () {
