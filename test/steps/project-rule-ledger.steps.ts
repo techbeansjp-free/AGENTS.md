@@ -48,6 +48,7 @@ const LEDGER_COMPOSED_CHECKS: readonly string[] = [
   "checkQualityCiPermissions",
   "checkQualityCiTriggers",
   "checkQualityCommands",
+  "checkReleaseJobDocumentation",
   "checkRequirementIdScheme",
   "checkTrustedPolicyBoundary",
   "checkTrustedScriptPinning",
