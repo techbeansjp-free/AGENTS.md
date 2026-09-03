@@ -72,3 +72,43 @@ Feature: Packageとworktree lifecycleでconsumer dataを保護する
     When symlink祖先配下へworktreeを作成する
     Then worktree createは失敗する
     And 専用pathは存在しない
+
+  Scenario: SCN-INT-WORKTREE-010 宣言済み長命branchを基点にworktreeを作れる
+    Given "develop"を長命branchとして宣言したtrusted policyと一時Git repositoryがある
+    When "develop"を基点にworktreeを作成する
+    Then 宣言済みbaseのworktreeが作られる
+
+  Scenario: SCN-INT-WORKTREE-011 宣言していないbranchを基点にできない
+    Given "develop"を長命branchとして宣言したtrusted policyと一時Git repositoryがある
+    When "staging"を基点にworktreeを作成する
+    Then worktree createは失敗する
+    And errorに受理するbaseの一覧が含まれる
+
+  Scenario: SCN-INT-WORKTREE-012 trusted policyを観測せず既定branch以外を基点にできない
+    Given trusted policyなしで"develop"を持つ一時Git repositoryがある
+    When trusted policyを渡さず"develop"を基点にworktreeを作成する
+    Then worktree createは失敗する
+    And errorにtrusted policyの観測が必要である旨が含まれる
+
+  Scenario: SCN-INT-WORKTREE-013 base branchのtipが取得済みSHAと異なれば作らない
+    Given "develop"を長命branchとして宣言したtrusted policyと一時Git repositoryがある
+    When 誤ったbase SHAで"develop"を基点にworktreeを作成する
+    Then worktree createは失敗する
+    And errorにbase branchのtip不一致が含まれる
+
+  Scenario: SCN-INT-WORKTREE-014 基点commitがbase branchのtipと異なれば作らない
+    Given "develop"を長命branchとして宣言したtrusted policyと一時Git repositoryがある
+    When base branchのtipでない基点で"develop"を基点にworktreeを作成する
+    Then worktree createは失敗する
+    And errorに基点とbase branch commitの不一致が含まれる
+
+  Scenario: SCN-INT-WORKTREE-015 既定branchを明示しても別SHAを基点にできない
+    Given "develop"を長命branchとして宣言したtrusted policyと一時Git repositoryがある
+    When 既定branchを明示し別SHAを指定してworktreeを作成する
+    Then worktree createは失敗する
+    And errorに既定branch SHAの不一致が含まれる
+
+  Scenario: SCN-INT-WORKTREE-016 検査後にrefが動いても検査した基点で分岐する
+    Given "develop"を長命branchとして宣言したtrusted policyと一時Git repositoryがある
+    When 基点をbranch名で渡しworktreeを作成する
+    Then worktreeのHEADは検査した基点commitである

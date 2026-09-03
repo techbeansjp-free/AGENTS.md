@@ -5591,6 +5591,19 @@ export async function main(
         worktreePolicy: policy,
         remoteDefaultBranch: required(flags, "remote-default-branch"),
         remoteDefaultSha: required(flags, "remote-default-sha"),
+        /**
+         * **既定branch以外をbaseにするときだけ指定する。**
+         *
+         * 省略時は既定branchをbaseとして扱い、従来と同じ束縛になる。指定した
+         * 場合はtrusted policyの`merge.branches`へ完全一致で宣言されていること
+         * と、その branch のprovider観測tipへの一致を要求する（Issue #1139）。
+         */
+        baseBranch:
+          typeof flags["base-branch"] === "string"
+            ? flags["base-branch"]
+            : undefined,
+        baseSha:
+          typeof flags["base-sha"] === "string" ? flags["base-sha"] : undefined,
         expectedRepository:
           typeof flags.repo === "string" ? flags.repo : undefined,
         trustedPolicy: trustedSet.policy,

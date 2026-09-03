@@ -181,6 +181,65 @@ function isMergeBaseCandidate(branchRef: string): boolean {
   return !branchRef.includes("*");
 }
 
+/**
+ * baseとして受理できるbranchを、trusted policyの宣言から解決する。
+ *
+ * **policy authorityとbase authorityは別である。** trusted policy自身は常に
+ * provider default branchのtipから読む。本関数が答えるのは「そのtrusted policyが
+ * baseとして許可したbranchはどれか」だけであり、policyをどこから読むかには
+ * 関与しない。両者を1つの等式へ潰すと、宣言の正本を候補branch側から差し替える
+ * 経路が生まれる（Issue #1139）。
+ *
+ * **wildcardを含む要素はbaseにしない。** `feature/*`のような短命branchのglobは
+ * head allowlistとしてのみ意味を持ち、baseの同一性を決められない。既存の
+ * `isMergeBaseCandidate`と同じ判定を共有する。
+ *
+ * **既定branchは宣言の有無によらず常にbaseとして受理する。** 宣言を空にした
+ * projectが既定branchすら使えなくなると、正規構成に成功経路が無くなる。
+ */
+export function acceptedBaseBranches(
+  policy: Policy,
+  defaultBranchName: string,
+): string[] {
+  const declared = Array.isArray(policy.merge?.branches)
+    ? policy.merge.branches.filter(
+        (branch): branch is string =>
+          typeof branch === "string" && isMergeBaseCandidate(branch),
+      )
+    : [];
+  return [...new Set([defaultBranchName, ...declared])];
+}
+
+/**
+ * 指定baseが受理集合に含まれるかを判定し、含まれない場合の理由を返す。
+ *
+ * **拒否の理由を、受理集合の実値とともに返す。** 「宣言したのに使えない」と
+ * 「そもそも宣言していない」を利用側が区別できるようにする。
+ */
+export function inspectBaseBranchAcceptance(input: {
+  policy: Policy;
+  defaultBranch: string;
+  base: string;
+}): { accepted: boolean; acceptedBases: string[]; reasons: string[] } {
+  const acceptedBases = acceptedBaseBranches(input.policy, input.defaultBranch);
+  if (acceptedBases.includes(input.base))
+    return { accepted: true, acceptedBases, reasons: [] };
+  const declaredWithWildcard = Array.isArray(input.policy.merge?.branches)
+    ? input.policy.merge.branches.some(
+        (branch) => typeof branch === "string" && branch === input.base,
+      )
+    : false;
+  return {
+    accepted: false,
+    acceptedBases,
+    reasons: [
+      declaredWithWildcard
+        ? `base branch ${input.base}はwildcardを含むためbaseにできません。baseは完全一致で宣言してください`
+        : `base branch ${input.base}はtrusted policyのmerge.branchesへ完全一致で宣言されていません。受理するbaseは${acceptedBases.join("、")}です`,
+    ],
+  };
+}
+
 export function mergeMethodPolicyWarnings(
   policy: Policy,
 ): MergeMethodPolicyWarning[] {

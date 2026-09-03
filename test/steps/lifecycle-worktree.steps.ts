@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
+import { type Policy } from "../../src/types.js";
 import {
   init,
   upgrade,
@@ -27,7 +28,13 @@ interface LifecycleWorld extends WorkflowWorld {
   uninstallResult: ReturnType<typeof uninstall>;
   upgradeResult: ReturnType<typeof upgrade>;
   worktree: string;
+  declaredPolicy: Policy | undefined;
+  defaultSha: string;
+  developSha: string;
+  expectedBaseCommit: string;
 }
+
+type LifecycleWorktreeWorld = LifecycleWorld;
 
 const { Given, When, Then } = stepDefinitions<LifecycleWorld>();
 
@@ -560,4 +567,307 @@ When("finalize stateをread-onlyで検査する", function () {
 Then("recovery参照は上流branchで到達可能である", function () {
   assert.equal(this.finalizeState.recoveryRef, "origin/feature/835-recovery");
   assert.equal(this.finalizeState.recoveryReachable, true);
+});
+
+/**
+ * 長命branchを宣言したtrusted policyと、その branch を持つ repository を用意する。
+ *
+ * **`develop`のtipは既定branchと別のcommitにする。** 同一commitだと「baseが
+ * 既定branchのtipと一致している」だけで通ってしまい、branch固有の束縛を
+ * 検査したことにならない。
+ */
+function packageRootDir(): string {
+  return path.resolve(process.cwd());
+}
+
+function prepareDeclaredBaseRepository(
+  world: LifecycleWorktreeWorld,
+  declared: string[],
+): { defaultSha: string; developSha: string } {
+  world.root = world.temp();
+  execFileSync("git", ["init", "-b", "main"], { cwd: world.root });
+  execFileSync("git", ["config", "user.email", "t@example.com"], {
+    cwd: world.root,
+  });
+  execFileSync("git", ["config", "user.name", "t"], { cwd: world.root });
+  fs.writeFileSync(path.join(world.root, "seed.txt"), "seed\n");
+  execFileSync("git", ["add", "."], { cwd: world.root });
+  execFileSync("git", ["commit", "-m", "seed"], { cwd: world.root });
+  const defaultSha = configureRemoteDefault(world.root);
+  fs.writeFileSync(path.join(world.root, "develop.txt"), "develop\n");
+  execFileSync("git", ["add", "."], { cwd: world.root });
+  execFileSync("git", ["commit", "-m", "develop"], { cwd: world.root });
+  const developSha = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: world.root,
+    encoding: "utf8",
+  }).trim();
+  execFileSync(
+    "git",
+    ["update-ref", "refs/remotes/origin/develop", developSha],
+    { cwd: world.root },
+  );
+  execFileSync("git", ["reset", "--hard", defaultSha], { cwd: world.root });
+  /**
+   * **配布されるdefault policyを土台にし、`merge.branches`だけを差し替える。**
+   *
+   * fixtureを手書きすると`rules`必須や`worktree.allowedBranchTypes`のような
+   * 既存契約を落とし、検査したい境界と別の理由で落ちる。
+   */
+  const base = JSON.parse(
+    fs.readFileSync(
+      path.join(
+        packageRootDir(),
+        ".agent-skill-chain",
+        "policy",
+        "default.json",
+      ),
+      "utf8",
+    ),
+  ) as { policy?: Record<string, unknown> } & Record<string, unknown>;
+  const policy = (base.policy ?? base) as Record<string, unknown>;
+  const merge = { ...(policy.merge as Record<string, unknown>) };
+  merge.mode = "assisted";
+  merge.branches = declared;
+  merge.methods = ["merge"];
+  world.declaredPolicy = { ...policy, merge } as unknown as Policy;
+  world.defaultSha = defaultSha;
+  world.developSha = developSha;
+  return { defaultSha, developSha };
+}
+
+Given(
+  /^"(.+)"を長命branchとして宣言したtrusted policyと一時Git repositoryがある$/u,
+  function (branch: string) {
+    prepareDeclaredBaseRepository(this, [branch, "main"]);
+  },
+);
+
+Given(
+  /^trusted policyなしで"(.+)"を持つ一時Git repositoryがある$/u,
+  function (branch: string) {
+    prepareDeclaredBaseRepository(this, [branch, "main"]);
+    this.declaredPolicy = undefined;
+  },
+);
+
+function createWithBase(
+  world: LifecycleWorktreeWorld,
+  base: string,
+  overrides: { baseSha?: string; withPolicy?: boolean } = {},
+) {
+  const worktree = path.join(
+    world.root,
+    ".worktrees",
+    "20260825_090000-1139-declared-base",
+  );
+  try {
+    createWorktree({
+      repoRoot: world.root,
+      worktreePath: path.relative(world.root, worktree),
+      branch: "fix/1139-declared-base",
+      base: world.developSha,
+      issueNumber: 1139,
+      slug: "declared-base",
+      currentTime: new Date(2026, 7, 25, 9, 0, 30),
+      remoteDefaultBranch: "main",
+      remoteDefaultSha: world.defaultSha,
+      baseBranch: base,
+      baseSha: overrides.baseSha ?? world.developSha,
+      trustedPolicy:
+        overrides.withPolicy === false ? undefined : world.declaredPolicy,
+    });
+    world.worktree = worktree;
+  } catch (error) {
+    world.error = error;
+  }
+}
+
+When(/^"(.+)"を基点にworktreeを作成する$/u, function (base: string) {
+  createWithBase(this, base);
+});
+
+When(
+  /^trusted policyを渡さず"(.+)"を基点にworktreeを作成する$/u,
+  function (base: string) {
+    createWithBase(this, base, { withPolicy: false });
+  },
+);
+
+When(
+  /^誤ったbase SHAで"(.+)"を基点にworktreeを作成する$/u,
+  function (base: string) {
+    createWithBase(this, base, { baseSha: "0".repeat(40) });
+  },
+);
+
+/**
+ * base branchの宣言・tip照合はすべて通しつつ、**基点commitだけを別commitにする**。
+ *
+ * base SHAを誤らせる`SCN-INT-WORKTREE-013`とは別の境界である。あちらは
+ * 「申告したtipがproviderの観測と違う」を検出し、こちらは「申告どおりのtipを
+ * 持つbranchなのに、実際に分岐する基点がそこでない」を検出する。
+ */
+When(
+  /^base branchのtipでない基点で"(.+)"を基点にworktreeを作成する$/u,
+  function (base: string) {
+    const worktree = path.join(
+      this.root,
+      ".worktrees",
+      "20260825_090000-1139-declared-base",
+    );
+    try {
+      createWorktree({
+        repoRoot: this.root,
+        worktreePath: path.relative(this.root, worktree),
+        branch: "fix/1139-declared-base",
+        base: this.defaultSha,
+        issueNumber: 1139,
+        slug: "declared-base",
+        currentTime: new Date(2026, 7, 25, 9, 0, 30),
+        remoteDefaultBranch: "main",
+        remoteDefaultSha: this.defaultSha,
+        baseBranch: base,
+        baseSha: this.developSha,
+        trustedPolicy: this.declaredPolicy,
+      });
+      this.worktree = worktree;
+    } catch (error) {
+      this.error = error;
+    }
+  },
+);
+
+Then("errorに基点とbase branch commitの不一致が含まれる", function () {
+  assert.match(
+    String(this.error),
+    /基点は取得済みbase branch commitと一致しなければなりません/u,
+  );
+});
+
+Then("errorに受理するbaseの一覧が含まれる", function () {
+  assert.match(String(this.error), /受理するbaseは/u);
+});
+
+Then("errorにtrusted policyの観測が必要である旨が含まれる", function () {
+  assert.match(String(this.error), /trusted policyの観測が必要です/u);
+});
+
+Then("errorにbase branchのtip不一致が含まれる", function () {
+  assert.match(String(this.error), /tipが取得済みSHAと一致しません/u);
+});
+
+Then("宣言済みbaseのworktreeが作られる", function () {
+  assert.equal(this.error, undefined, String(this.error));
+  const head = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: this.worktree,
+    encoding: "utf8",
+  }).trim();
+  assert.equal(
+    head,
+    this.developSha,
+    "worktreeのHEADがbase branchのtipと一致していません",
+  );
+  const branch = execFileSync("git", ["symbolic-ref", "--short", "HEAD"], {
+    cwd: this.worktree,
+    encoding: "utf8",
+  }).trim();
+  assert.equal(branch, "fix/1139-declared-base");
+  assert.notEqual(
+    this.developSha,
+    this.defaultSha,
+    "fixtureのdevelopが既定branchと同一commitでは、branch固有の束縛を検査したことにならない",
+  );
+});
+
+/**
+ * **`--base-branch <既定branch> --base-sha <別commit>`の迂回を固定する。**
+ *
+ * SHAの正本を「`baseBranch`の指定有無」で決めると、既定branchを明示した経路が
+ * 分岐を素通りし、任意commitを基点にできる。実CLIで再現した迂回である。
+ */
+When("既定branchを明示し別SHAを指定してworktreeを作成する", function () {
+  const worktree = path.join(
+    this.root,
+    ".worktrees",
+    "20260825_090000-1139-declared-base",
+  );
+  try {
+    createWorktree({
+      repoRoot: this.root,
+      worktreePath: path.relative(this.root, worktree),
+      branch: "fix/1139-declared-base",
+      base: this.developSha,
+      issueNumber: 1139,
+      slug: "declared-base",
+      currentTime: new Date(2026, 7, 25, 9, 0, 30),
+      remoteDefaultBranch: "main",
+      remoteDefaultSha: this.defaultSha,
+      baseBranch: "main",
+      baseSha: this.developSha,
+      trustedPolicy: this.declaredPolicy,
+    });
+    this.worktree = worktree;
+  } catch (error) {
+    this.error = error;
+  }
+});
+
+Then("errorに既定branch SHAの不一致が含まれる", function () {
+  assert.match(
+    String(this.error),
+    /base branch SHAはremote default branch SHAと一致しなければなりません/u,
+  );
+});
+
+/**
+ * **`--base`へbranch名を渡し、`worktree add`が固定SHAで分岐することを固定する。**
+ *
+ * 検査は`baseCheck`が解決したcommitに対して行う。`worktree add`へ可変refを
+ * 渡し直すと、検査から作成までの間にrefが動いた場合に基点がずれる。ここでは
+ * **`worktree add`の直前にlocal branchを別commitへ動かし**、それでも検査時の
+ * commitで分岐することを観測する。
+ */
+When("基点をbranch名で渡しworktreeを作成する", function () {
+  const worktree = path.join(
+    this.root,
+    ".worktrees",
+    "20260825_090000-1139-declared-base",
+  );
+  // 検査対象にする local branch を develop の tip へ向ける
+  execFileSync("git", ["branch", "-f", "asc-base-probe", this.developSha], {
+    cwd: this.root,
+  });
+  this.expectedBaseCommit = this.developSha;
+  try {
+    createWorktree({
+      repoRoot: this.root,
+      worktreePath: path.relative(this.root, worktree),
+      branch: "fix/1139-declared-base",
+      base: "asc-base-probe",
+      issueNumber: 1139,
+      slug: "declared-base",
+      currentTime: new Date(2026, 7, 25, 9, 0, 30),
+      remoteDefaultBranch: "main",
+      remoteDefaultSha: this.defaultSha,
+      baseBranch: "develop",
+      baseSha: this.developSha,
+      trustedPolicy: this.declaredPolicy,
+    });
+    this.worktree = worktree;
+  } catch (error) {
+    this.error = error;
+  }
+});
+
+Then("worktreeのHEADは検査した基点commitである", function () {
+  assert.equal(this.error, undefined, String(this.error));
+  const head = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: this.worktree,
+    encoding: "utf8",
+  }).trim();
+  assert.equal(
+    head,
+    this.expectedBaseCommit,
+    "worktreeのHEADが検査した基点commitと一致していません",
+  );
 });

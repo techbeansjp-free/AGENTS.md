@@ -799,6 +799,18 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "現在時刻から自動構成する",
       ),
       optional("repo", "owner/name", "対象repository", "観測値"),
+      optional(
+        "base-branch",
+        "text",
+        "baseにするbranch名。既定branch以外はtrusted policyのmerge.branchesへ完全一致で宣言されている必要がある",
+        "remoteの既定branch",
+      ),
+      optional(
+        "base-sha",
+        "sha",
+        "base branchの取得済みtip。localのrefs/remotes/origin/<branch>と照合する。--base-branchを指定するとき必須",
+        "remote既定branchのSHA",
+      ),
       ...APPLY_MODE,
     ],
     example:
