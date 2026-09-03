@@ -51,6 +51,43 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # 重い導入とgateの前に置く。追い越されたrunと、既定branchのmerge commitでない
+      # trigger commitを、費用を払う前に落とす。
+      - name: 後続のmain更新に追い越されたrunを停止する
+        env:
+          EVENT_SHA: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$RELEASE_EVENT" != "push" ]; then
+            echo "手動releaseはtrigger SHA照合の対象外である"
+            exit 0
+          fi
+          remote_sha="$(git ls-remote origin "refs/heads/$DEFAULT_BRANCH" | cut -f1)"
+          if [ -z "$remote_sha" ]; then
+            echo "remote既定branch tipを読み取れなかったため停止する" >&2
+            exit 1
+          fi
+          if [ "$remote_sha" != "$EVENT_SHA" ]; then
+            echo "trigger SHA $EVENT_SHA はremote既定branch tip $remote_sha と異なる。後続のmain更新が最新runで回収するため停止する" >&2
+            exit 1
+          fi
+          echo "trigger SHA $EVENT_SHA はremote既定branch tipと一致する"
+      - name: release対象commitがmerge commitであることを確認する
+        env:
+          EVENT_SHA: ${{ github.sha }}
+          RELEASE_EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$RELEASE_EVENT" != "push" ]; then
+            echo "手動releaseは親数判定の対象外である"
+            exit 0
+          fi
+          parents="$(git rev-list --parents -n 1 "$EVENT_SHA" | wc -w)"
+          if [ "$parents" != "3" ]; then
+            echo "release対象commit $EVENT_SHA の親が2つではないため停止する（観測 $((parents - 1)) 個）" >&2
+            exit 1
+          fi
+          echo "release対象commit $EVENT_SHA の親は2つである"
       - name: Node.js実行環境を準備する
         uses: actions/setup-node@v4
         with:
@@ -219,7 +256,7 @@ jobs:
               `- 現在の配布digest: ${distribution.digest || "算出なし"}`,
               `- 直前release: ${previousDistribution.digest ? `${previousTag} / ${previousDistribution.digest}` : `${previousTag}の配布digestなし`}`,
               `- 配布file件数: ${distribution.entryCount ?? 0}`,
-              `- release要否: ${plan.state === "release" || plan.state === "bump-then-release" || plan.state === "ready" ? "必要" : "不要"}`,
+              `- release要否: ${plan.state === "release" || plan.state === "ready" ? "必要" : "不要"}`,
               `- release判定理由: ${Array.isArray(plan.reasons) && plan.reasons.length > 0 ? plan.reasons.join(" / ") : "理由なし"}`,
               "",
               "## release計画",
@@ -238,7 +275,7 @@ jobs:
               "",
               stopped
                 ? "外部更新は未実行です。理由を確認し、必要なら新しいrunで再計画してください。"
-                : "検証だけが完了し、version bump PR・Git tag・GitHub Releaseは後続jobで個別に記録します。",
+                : "検証だけが完了し、Git tagとGitHub Releaseは後続jobで個別に記録します。既定branchへは書き込みません。",
               "",
             ].join("\n"),
           );
@@ -252,151 +289,17 @@ jobs:
           node --input-type=module <<'NODE'
           const event = process.env.RELEASE_EVENT;
           const state = process.env.RELEASE_STATE;
-          if (event === "push" && !["release", "bump-then-release", "skipped"].includes(state ?? "")) process.exit(1);
+          if (event === "push" && !["release", "skipped"].includes(state ?? "")) process.exit(1);
           if (event === "workflow_dispatch" && !["ready", "dry-run"].includes(state ?? "")) process.exit(1);
-          NODE
-
-  bump_version:
-    name: version bumpをPR経由でmainへ反映する
-    needs: validate
-    if: ${{ github.event_name == 'push' && needs.validate.outputs.state == 'bump-then-release' && needs.validate.outputs.needs_version_bump == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: write
-      pull-requests: write
-    outputs:
-      state: ${{ steps.bump_status.outputs.state }}
-      release_sha: ${{ steps.bump_status.outputs.release_sha }}
-      pr_url: ${{ steps.bump_operation.outputs.pr_url }}
-    steps:
-      - name: PATでmainの最新状態を取得する
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: main
-          token: ${{ secrets.RELEASE_MAIN_PAT }}
-      - name: Node.js実行環境を準備する
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - name: PoC隔離実行に必要なbubblewrapを準備する
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            apparmor-profiles \
-            bubblewrap
-          test -r /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
-          sudo apparmor_parser -r \
-            /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
-          /usr/bin/bwrap \
-            --unshare-all \
-            --die-with-parent \
-            --new-session \
-            --ro-bind / / \
-            -- /bin/true
-      - name: 固定ファイルどおりに開発依存を導入する
-        run: npm ci
-      - name: bump branchを基準SHAから作り直す
-        env:
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-        run: node --import tsx scripts/prepare_release_bump.ts
-      - name: bump branchでgateを実行しPRをadmin mergeする
-        id: bump_operation
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_MAIN_PAT }}
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-        run: |
-          branch="release/bump-v$RELEASE_VERSION"
-          main_version="$(git show "origin/main:package.json" | node --input-type=module -e 'import fs from "node:fs"; process.stdout.write(JSON.parse(fs.readFileSync(0, "utf8")).version)')"
-          observed_version="$(node --input-type=module -e 'import fs from "node:fs"; process.stdout.write(JSON.parse(fs.readFileSync("package.json", "utf8")).version)')"
-          if [ "$observed_version" != "$RELEASE_VERSION" ]; then
-            exit 1
-          fi
-          npm run project:quality
-          npm run quality
-          npm run build
-          npm run docs:format
-          npm run test:format
-          npm run trace:check
-          npm run architecture:check
-          npm run conformance:check
-          npm run package:check
-          if [ "$main_version" != "$RELEASE_VERSION" ]; then
-            pr_url="$(gh pr list --head "$branch" --base main --state open --json url --jq '.[0].url')"
-            if [ -z "$pr_url" ]; then
-              pr_url="$(gh pr create --base main --head "$branch" --title "chore(release): bump version to $RELEASE_VERSION [skip ci]" --body "自動releaseのため、package.jsonを正本としてversionを$RELEASE_VERSIONへ更新します。")"
-            fi
-            gh pr edit "$pr_url" --title "chore(release): bump version to $RELEASE_VERSION [skip ci]"
-            gh pr merge "$pr_url" --admin --merge
-          else
-            pr_url="$(gh pr list --head "$branch" --base main --state all --json url --jq '.[0].url')"
-          fi
-          printf 'pr_url=%s\n' "$pr_url" >> "$GITHUB_OUTPUT"
-      - name: merge後のmain SHAとversionを読み直す
-        id: bump_status
-        if: always()
-        env:
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-          BUMP_OPERATION_OUTCOME: ${{ steps.bump_operation.outcome }}
-        run: |
-          git fetch origin main
-          release_sha="$(git rev-parse origin/main)"
-          export RELEASE_SHA="$release_sha"
-          git show "$release_sha:package.json" > released-package.json
-          node --input-type=module <<'NODE'
-          import fs from "node:fs";
-          const output = process.env.GITHUB_OUTPUT;
-          if (!output) process.exit(1);
-          const metadata = JSON.parse(fs.readFileSync("released-package.json", "utf8"));
-          const succeeded = process.env.BUMP_OPERATION_OUTCOME === "success" && metadata.version === process.env.RELEASE_VERSION;
-          fs.appendFileSync(output, `state=${succeeded ? "succeeded" : "failed"}\nrelease_sha=${succeeded ? process.env.RELEASE_SHA ?? "" : ""}\n`);
-          NODE
-      - name: version bump PRの結果と復旧方法を記録する
-        if: always()
-        env:
-          BUMP_STATE: ${{ steps.bump_status.outputs.state }}
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-          PR_URL: ${{ steps.bump_operation.outputs.pr_url }}
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from "node:fs";
-          const summary = process.env.GITHUB_STEP_SUMMARY;
-          if (!summary) process.exit(1);
-          const succeeded = process.env.BUMP_STATE === "succeeded";
-          fs.appendFileSync(summary, [
-            "# version bump PRの結果",
-            "",
-            `- version: ${process.env.RELEASE_VERSION ?? "不明"}`,
-            `- PR: ${process.env.PR_URL || "作成または取得できず"}`,
-            `- 状態: ${succeeded ? "succeeded" : "failed"}`,
-            succeeded ? "- 完了: 品質gate、bump branch、PR、admin merge、main再読取" : "- 完了: workflow summaryに記録済みの操作まで",
-            succeeded ? "- 未完了: Git tag、GitHub Release" : "- 未完了: PR merge、Git tag、GitHub Release",
-            succeeded ? "- 復旧: mainのversionと後続tag・Releaseを確認する" : "- 復旧: branchとPRの実状態を確認し、同じrunを再実行する",
-            "",
-          ].join("\n"));
-          NODE
-      - name: bump PR未確認時に後続releaseを停止する
-        if: always()
-        env:
-          BUMP_STATE: ${{ steps.bump_status.outputs.state }}
-        run: |
-          node --input-type=module <<'NODE'
-          if (process.env.BUMP_STATE !== "succeeded") process.exit(1);
           NODE
 
   tag:
     name: 検証済みcommitへGit tagを冪等に作成する
-    needs: [validate, bump_version]
+    needs: validate
     if: >-
       ${{ always() &&
           (needs.validate.outputs.state == 'ready' ||
-           needs.validate.outputs.state == 'release' ||
-           needs.validate.outputs.state == 'bump-then-release') &&
-          (needs.validate.outputs.needs_version_bump != 'true' ||
-           needs.bump_version.outputs.state == 'succeeded') }}
+           needs.validate.outputs.state == 'release') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -405,18 +308,16 @@ jobs:
       state: ${{ steps.tag_status.outputs.state }}
       release_sha: ${{ steps.release_target.outputs.release_sha }}
     steps:
-      - name: release対象SHAをbump結果から解決する
+      - name: release対象SHAを検証結果から解決する
         id: release_target
         env:
-          BUMP_REQUIRED: ${{ needs.validate.outputs.needs_version_bump }}
-          BUMP_SHA: ${{ needs.bump_version.outputs.release_sha }}
           ORIGINAL_SHA: ${{ needs.validate.outputs.release_sha }}
         run: |
           node --input-type=module <<'NODE'
           import fs from "node:fs";
           const output = process.env.GITHUB_OUTPUT;
           if (!output) process.exit(1);
-          const releaseSha = process.env.BUMP_REQUIRED === "true" ? process.env.BUMP_SHA : process.env.ORIGINAL_SHA;
+          const releaseSha = process.env.ORIGINAL_SHA;
           if (!releaseSha) process.exit(1);
           fs.appendFileSync(output, `release_sha=${releaseSha}\n`);
           NODE
@@ -425,6 +326,25 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ steps.release_target.outputs.release_sha }}
+      - name: tag書き込み直前にremote既定branch tipを読み直す
+        env:
+          RELEASE_SHA: ${{ steps.release_target.outputs.release_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$RELEASE_EVENT" != "push" ]; then
+            echo "手動releaseはtrigger SHA照合の対象外である"
+            exit 0
+          fi
+          remote_sha="$(git ls-remote origin "refs/heads/$DEFAULT_BRANCH" | cut -f1)"
+          if [ -z "$remote_sha" ]; then
+            echo "remote既定branch tipを読み取れなかったため停止する" >&2
+            exit 1
+          fi
+          if [ "$remote_sha" != "$RELEASE_SHA" ]; then
+            echo "release対象SHA $RELEASE_SHA がremote既定branch tip $remote_sha と一致しないため停止する" >&2
+            exit 1
+          fi
       - name: remote確認後に注釈付きtagを必要な場合だけ作成する
         id: tag_operation
         continue-on-error: true
@@ -648,6 +568,15 @@ jobs:
         run: npm ci
       - name: tag内容で全release gateを再検証する
         run: npm run verify:distribution
+      # 版管理下のtreeはsentinelを持つ。npmが読むversionはここでだけ与える。
+      # 注入がversion 3 fieldだけを変えたことをcanonicalBumpDiffで検査し、
+      # 注入後のtreeでbuildをやり直してからpackする。
+      - name: release tagのversionを公開treeへ注入する
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          node --import tsx scripts/inject_publish_version.ts
+          npm run build
       - name: 検査対象のnpm artifactを一度だけ作成する
         id: pack_artifact
         run: |

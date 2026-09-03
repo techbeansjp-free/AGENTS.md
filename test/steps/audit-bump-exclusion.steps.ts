@@ -9,6 +9,13 @@ type AuditResult = ReturnType<typeof checkFileAudit>;
 
 class AuditBumpWorld extends WorkflowWorld {
   auditRoot = "";
+  /**
+   * 隔離fixtureの旧bump除外境界。**fixtureのHEADを既定にする。**
+   * 本repositoryの`LEGACY_RELEASE_BUMP_CUTOFF`はfixture履歴に存在しないため、
+   * 既定値のまま渡すと解決不能でfail-closedになる（Issue #1184）。
+   */
+  auditCutoff = "";
+  auditError: string | undefined;
   auditResult: AuditResult | undefined = undefined;
 }
 
@@ -158,6 +165,15 @@ Given(
   },
 );
 
+Given("release bump commitを持たない隔離repository", function () {
+  /**
+   * **bumpを含まない履歴でもfail-closedにする。** cutoffの解決をrelease bump
+   * transitionを見つけた後にだけ行うと、この形では解決不能なcutoffでも合格する
+   * （PR #1189 の外部指摘）。
+   */
+  createAuditedRepository(this);
+});
+
 Given("正規のrelease bumpをmergeした隔離repository", function () {
   mergePackageChange(
     this,
@@ -272,7 +288,53 @@ Given("bump以外のpackage変更をmergeした隔離repository", function () {
 });
 
 When("隔離repositoryのfile監査を実行する", function () {
-  this.auditResult = checkFileAudit(this.auditRoot);
+  this.auditResult = checkFileAudit(
+    this.auditRoot,
+    this.auditCutoff || git(this.auditRoot, ["rev-parse", "HEAD"]),
+  );
+});
+
+When("cutoffをbump commitの直前に置いてfile監査を実行する", function () {
+  /**
+   * **cutoffをbump commit直前（review artifact commit）へ置く。**
+   * bumpはcutoffのancestorでなくなるため除外されず、`package.json`が
+   * `H_impl..current`へ現れる。**除外窓を広げる変異でも、cutoff判定を消す変異でも落ちる。**
+   */
+  this.auditResult = checkFileAudit(
+    this.auditRoot,
+    git(this.auditRoot, ["rev-parse", "HEAD~1"]),
+  );
+});
+
+When("履歴に存在しないcutoffでfile監査を実行する", function () {
+  try {
+    this.auditResult = checkFileAudit(
+      this.auditRoot,
+      "0123456789012345678901234567890123456789",
+    );
+    this.auditError = undefined;
+  } catch (error) {
+    this.auditError = error instanceof Error ? error.message : String(error);
+  }
+});
+
+Then("file監査はbump commitを境界に含めたことを理由に失敗する", function () {
+  /**
+   * **除外されなかったbumpがreview境界そのものになる。** `H_impl..current`の差分は
+   * `package.json`だけになり、review artifactが1件も無い形で拒否される。
+   * 除外が効いている場合はこの経路へ到達しない。
+   */
+  assert.match(
+    (this.auditResult?.errors ?? []).join(" "),
+    /review artifactのcommitがありません/u,
+  );
+});
+
+Then("file監査はcutoffを解決できないことを理由に停止する", function () {
+  assert.match(
+    this.auditError ?? "",
+    /cutoff commit .* を解決できないため監査できません/u,
+  );
 });
 
 Then("file監査は合格する", function () {

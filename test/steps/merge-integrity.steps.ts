@@ -959,7 +959,12 @@ Given(
 );
 
 When("追随を含む隔離repositoryのfile監査を実行する", function () {
-  this.audit = checkFileAudit(this.root);
+  /**
+   * 隔離fixtureの旧bump除外境界。**fixtureのHEADを渡す。**
+   * 本repositoryの`LEGACY_RELEASE_BUMP_CUTOFF`はfixture履歴に存在せず、
+   * `checkFileAudit`は監査開始時にcutoffを解決してfail-closedにする（Issue #1184）。
+   */
+  this.audit = checkFileAudit(this.root, git(this.root, ["rev-parse", "HEAD"]));
 });
 
 When("監査範囲のmerge観測を集める", function () {

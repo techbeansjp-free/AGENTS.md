@@ -6,7 +6,11 @@ import {
   type AutoReleasePlan,
   type ReleasePlan,
 } from "../src/domain/release.js";
-import { isPackageVersion, PACKAGE_VERSION } from "../src/lib/version.js";
+import {
+  isPackageVersion,
+  PACKAGE_VERSION,
+  packageReleaseVersion,
+} from "../src/lib/version.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 function requiredEnvironment(
@@ -81,14 +85,25 @@ function latestReleasedVersion(existingTags: string[]): string {
   return currentVersion;
 }
 
+/**
+ * 自動releaseの現在versionは**既存tagから導く。**
+ *
+ * `package.json`のversionはrelease追随をやめてsentinelになった（Issue #1184）。
+ * package.jsonを正本にすると、sentinelとtagの差だけで毎回releaseが必要と判定される。
+ * **手動release経路が既に使っている`latestReleasedVersion`と同じ導出を使い、
+ * 新しい機構を足さない。**
+ */
 export function planAutoReleaseFromEnvironment(
   environment: NodeJS.ProcessEnv,
 ): AutoReleasePlan {
+  const existingTags = linesFromFile(
+    requiredEnvironment(environment, "RELEASE_EXISTING_TAGS_FILE"),
+  );
   return planAutoRelease({
-    currentVersion: environment.RELEASE_CURRENT_VERSION ?? PACKAGE_VERSION,
-    existingTags: linesFromFile(
-      requiredEnvironment(environment, "RELEASE_EXISTING_TAGS_FILE"),
-    ),
+    currentVersion:
+      environment.RELEASE_CURRENT_VERSION ??
+      latestReleasedVersion(existingTags),
+    existingTags,
     distributionDigest: digestFromFile(
       environment.RELEASE_DISTRIBUTION_DIGEST_FILE,
     ),
@@ -131,8 +146,19 @@ function planManualReleaseFromEnvironment(
     gates,
   });
 
-  if (plan.version !== PACKAGE_VERSION) {
-    const reason = `指定version「${plan.version}」はpackage.json.version「${PACKAGE_VERSION}」と一致しません`;
+  /**
+   * **完全一致ではなくcore一致を要求する。**
+   *
+   * `package.json`のversionはreleaseに追随しないsentinelになった（Issue #1184）。
+   * 完全一致を要求すると、tagが正本である以上どの手動releaseも通らなくなる。
+   * 残す安全性は「宣言済みのpatch lineの外側へ手動releaseできないこと」であり、
+   * これはprereleaseを剥いだcoreの一致で表現できる。
+   */
+  if (
+    packageReleaseVersion(plan.version) !==
+    packageReleaseVersion(PACKAGE_VERSION)
+  ) {
+    const reason = `指定version「${plan.version}」はpackage.jsonが宣言するrelease line「${packageReleaseVersion(PACKAGE_VERSION)}」の外です`;
     plan.state = "rejected";
     plan.reasons.push(reason);
     plan.diagnostic = {
@@ -144,7 +170,7 @@ function planManualReleaseFromEnvironment(
       enabled: false,
       reason:
         stage === "validate"
-          ? "package versionの検証に失敗した"
+          ? "release lineの検証に失敗した"
           : "計画が拒否されたため外部更新しない",
     }));
   }
