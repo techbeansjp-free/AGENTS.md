@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { git } from "../lib/process.js";
 import { enforceTrustedBoundary } from "./enforcement.js";
+import { inspectBaseBranchAcceptance } from "./policy.js";
 import { type Policy, type RuleObservation } from "../types.js";
 import {
   isSafeFinalizeIgnoredPathPrefix,
@@ -459,6 +460,16 @@ export function createWorktree(input: {
   worktreePolicy?: WorktreePlacementPolicy;
   remoteDefaultBranch: string;
   remoteDefaultSha: string;
+  /**
+   * baseとして選んだbranch名。省略時は既定branchを使う。
+   *
+   * **既定branch以外を選ぶには、trusted policyの`merge.branches`へ完全一致で
+   * 宣言されている必要がある。** 宣言の正本は常にprovider default branchのtipから
+   * 読む（Issue #1139）。
+   */
+  baseBranch?: string;
+  /** `baseBranch`のprovider観測tip。`baseBranch`を指定するとき必須。 */
+  baseSha?: string;
   expectedRepository?: string;
   trustedPolicy?: Policy;
   preview?: boolean;
@@ -532,12 +543,76 @@ export function createWorktree(input: {
   if (
     remoteDefault.status !== 0 ||
     remoteDefault.stdout.trim().toLowerCase() !==
-      input.remoteDefaultSha.toLowerCase() ||
-    baseCheck.stdout.trim().toLowerCase() !==
       input.remoteDefaultSha.toLowerCase()
   )
+    throw new Error("remote default branchのtipが取得済みSHAと一致しません");
+  /**
+   * **base authorityはpolicy authorityと別である。**
+   *
+   * 上のremote default検査はtrusted policyをどこから読むかを固定する。ここで
+   * 決めるのは「どのbranchをbaseにできるか」だけであり、既定branchのtipと
+   * 一致することは要求しない。両者を1つの等式へ潰すと、既定branch以外を
+   * 宣言したprojectに成功経路が無くなる（Issue #1139）。
+   *
+   * **束縛の形は既定branchのときと同一である。** branchがoriginに実在し、
+   * その観測tipと基点commitが完全一致することを要求する。
+   */
+  const selectedBaseBranch = input.baseBranch ?? input.remoteDefaultBranch;
+  /**
+   * **SHAの正本はbranch名で決める。`--base-branch`の指定有無で決めない。**
+   *
+   * 選んだbranchが既定branchなら、SHAは常に`remoteDefaultSha`である。指定有無で
+   * 分けると`--base-branch <既定branch> --base-sha <別commit>`が、既定branchの
+   * 分岐を素通りして任意commitを基点にできる。**本変更が足そうとしている束縛
+   * そのものを迂回する経路であり、実際に再現した。**
+   */
+  const selectedBaseSha =
+    selectedBaseBranch === input.remoteDefaultBranch
+      ? input.remoteDefaultSha
+      : (input.baseSha ?? "");
+  if (
+    selectedBaseBranch === input.remoteDefaultBranch &&
+    input.baseSha !== undefined &&
+    input.baseSha.toLowerCase() !== input.remoteDefaultSha.toLowerCase()
+  )
     throw new Error(
-      "基点は取得済みremote default branch commitと一致しなければなりません",
+      "既定branchをbaseにするとき、base branch SHAはremote default branch SHAと一致しなければなりません",
+    );
+  if (selectedBaseBranch !== input.remoteDefaultBranch) {
+    if (!/^[0-9a-f]{40}$/iu.test(selectedBaseSha))
+      throw new Error("base branch SHAは40桁hexで指定してください");
+    const acceptance = inspectBaseBranchAcceptance({
+      policy:
+        input.trustedPolicy ??
+        (() => {
+          throw new Error(
+            "既定branch以外をbaseにするにはtrusted policyの観測が必要です",
+          );
+        })(),
+      defaultBranch: input.remoteDefaultBranch,
+      base: selectedBaseBranch,
+    });
+    if (!acceptance.accepted) throw new Error(acceptance.reasons.join("; "));
+    const observedBase = git(
+      [
+        "rev-parse",
+        "--verify",
+        `refs/remotes/origin/${selectedBaseBranch}^{commit}`,
+      ],
+      input.repoRoot,
+      { allowFailure: true },
+    );
+    if (
+      observedBase.status !== 0 ||
+      observedBase.stdout.trim().toLowerCase() !== selectedBaseSha.toLowerCase()
+    )
+      throw new Error(
+        `base branch ${selectedBaseBranch}のtipが取得済みSHAと一致しません`,
+      );
+  }
+  if (baseCheck.stdout.trim().toLowerCase() !== selectedBaseSha.toLowerCase())
+    throw new Error(
+      "基点は取得済みbase branch commitと一致しなければなりません",
     );
   if (input.preview === true)
     return {

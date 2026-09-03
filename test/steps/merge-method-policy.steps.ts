@@ -7,7 +7,11 @@ import {
   resolveMergeMethod,
   type MergeMethodDecision,
 } from "../../src/domain/delivery.js";
-import { validatePolicy } from "../../src/domain/policy.js";
+import {
+  acceptedBaseBranches,
+  inspectBaseBranchAcceptance,
+  validatePolicy,
+} from "../../src/domain/policy.js";
 import { type Policy } from "../../src/types.js";
 import { main } from "../../src/cli.js";
 
@@ -28,6 +32,8 @@ interface MergeMethodWorld extends WorkflowWorld {
   squashFlagCount: number;
   policyTemplate: Record<string, unknown>;
   templateMethods: string[];
+  baseAcceptance: ReturnType<typeof inspectBaseBranchAcceptance>;
+  acceptedBases: string[];
 }
 
 const { Given, When, Then } = stepDefinitions<MergeMethodWorld>();
@@ -411,4 +417,73 @@ Then(/^policy雛形のmerge方式は"(.+)"だけである$/u, function (expected
     [expected],
     `配布雛形が${expected}以外のmerge方式を宣言しています: ${JSON.stringify(this.templateMethods)}`,
   );
+});
+
+Given("merge.branchesが空のpolicyがある", function () {
+  this.policy = mergePolicy({ branches: [] });
+});
+
+Given(/^"(.+)"だけを宣言したpolicyがある$/u, function (branch: string) {
+  this.policy = mergePolicy({ branches: [branch] });
+});
+
+When(
+  /^既定branch"([^"]+)"をそのままbaseとして受理判定する$/u,
+  function (name: string) {
+    this.baseAcceptance = inspectBaseBranchAcceptance({
+      policy: this.policy,
+      defaultBranch: name,
+      base: name,
+    });
+  },
+);
+
+When(
+  /^既定branch"(.+)"のもとで"(.+)"をbaseとして受理判定する$/u,
+  function (defaultName: string, base: string) {
+    this.baseAcceptance = inspectBaseBranchAcceptance({
+      policy: this.policy,
+      defaultBranch: defaultName,
+      base,
+    });
+  },
+);
+
+When(/^既定branch"(.+)"の受理集合を読む$/u, function (defaultName: string) {
+  this.acceptedBases = acceptedBaseBranches(this.policy, defaultName);
+});
+
+Then("baseは受理される", function () {
+  assert.equal(
+    this.baseAcceptance.accepted,
+    true,
+    this.baseAcceptance.reasons.join("; "),
+  );
+  assert.deepEqual(this.baseAcceptance.reasons, []);
+});
+
+Then("baseは拒否され受理集合を示す診断が返る", function () {
+  assert.equal(this.baseAcceptance.accepted, false);
+  assert.equal(this.baseAcceptance.reasons.length, 1);
+  assert.match(
+    this.baseAcceptance.reasons[0] as string,
+    /完全一致で宣言されていません/u,
+  );
+  for (const accepted of this.baseAcceptance.acceptedBases)
+    assert.ok(
+      (this.baseAcceptance.reasons[0] as string).includes(accepted),
+      `受理集合${accepted}が診断に含まれていません: ${this.baseAcceptance.reasons[0]}`,
+    );
+});
+
+Then("baseは拒否されwildcardを理由に示す診断が返る", function () {
+  assert.equal(this.baseAcceptance.accepted, false);
+  assert.match(
+    this.baseAcceptance.reasons[0] as string,
+    /wildcardを含むためbaseにできません/u,
+  );
+});
+
+Then(/^受理集合は"(.+)"だけである$/u, function (expected: string) {
+  assert.deepEqual(this.acceptedBases, [expected]);
 });
