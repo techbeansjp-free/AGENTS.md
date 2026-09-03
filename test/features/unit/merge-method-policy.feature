@@ -71,3 +71,30 @@ Feature: branch関係に応じて安全なmerge方式を解決する
     Given "feature/*"だけを宣言したpolicyがある
     When 既定branch"master"の受理集合を読む
     Then 受理集合は"master"だけである
+
+  Scenario Outline: SCN-UNIT-BASEBRANCH-006 revision syntaxをbase候補にしない
+    Given "<declared>"だけを宣言したpolicyがある
+    When 既定branch"master"のもとで"<declared>"をbaseとして受理判定する
+    Then baseは拒否される
+
+    Examples:
+      | declared |
+      | main~1   |
+      | main^    |
+      | a..b     |
+      | x@{1}    |
+      | -bad     |
+      | HEAD     |
+      | refs/heads/main |
+
+  Scenario Outline: SCN-UNIT-BASEBRANCH-007 正当なbranch名は受理する
+    Given "<declared>"だけを宣言したpolicyがある
+    When 既定branch"master"のもとで"<declared>"をbaseとして受理判定する
+    Then baseは受理される
+
+    Examples:
+      | declared    |
+      | develop     |
+      | release/1.0 |
+      | feat.x      |
+      | ok/nested   |

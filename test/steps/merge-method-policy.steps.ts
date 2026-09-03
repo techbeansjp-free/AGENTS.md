@@ -487,3 +487,11 @@ Then("baseは拒否されwildcardを理由に示す診断が返る", function ()
 Then(/^受理集合は"(.+)"だけである$/u, function (expected: string) {
   assert.deepEqual(this.acceptedBases, [expected]);
 });
+
+Then("baseは拒否される", function () {
+  assert.equal(
+    this.baseAcceptance.accepted,
+    false,
+    `baseとして受理されました: ${JSON.stringify(this.baseAcceptance.acceptedBases)}`,
+  );
+});

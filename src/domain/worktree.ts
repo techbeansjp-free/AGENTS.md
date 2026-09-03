@@ -478,6 +478,13 @@ export function createWorktree(input: {
   expectedRepository?: string;
   trustedPolicy?: Policy;
   preview?: boolean;
+  /**
+   * **検査完了から`git worktree add`までの間へ差し込むseam。testだけが使う。**
+   *
+   * TOCTOUの回帰を観測するには、この窓でrefが動く状況を決定的に再現する必要が
+   * ある。呼び出し元が指定しなければ何もしない（Issue #1179）。
+   */
+  afterVerification?: () => void;
 }) {
   const boundary = enforceTrustedWorktreeBoundary(input);
   const {
@@ -628,6 +635,7 @@ export function createWorktree(input: {
       branch: input.branch,
       base: baseCheck.stdout.trim(),
     };
+  input.afterVerification?.();
   const dirtyBefore = sourceStatusExcludingTarget(input.repoRoot, destination);
   /**
    * **検査した固定SHAで分岐する。`input.base`を再解決しない。**
