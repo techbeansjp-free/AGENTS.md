@@ -70,6 +70,11 @@ Feature: 一般利用projectが正直な適用可否でpolicyを充足する
 
   # executableSourceが正規表現literalを認識しないと、引用符の偶奇が反転してliteralの中身が
   # codeとして漏れ出す。実在しないexportを実在と誤認し、enforcementの存在確認を迂回できる。
+  #
+  # verdictは3値である。valid（exportが実在する）、invalid（実在しない）、
+  # unparsable（sourceを解析できず実在を判定できない）。**invalidとunparsableを
+  # 同じ値へ潰さない。** 利用者が次に採る操作が異なる（Issue #1134）。
+  # いずれの場合もerrorを積むため、判定不能を合格へ倒す経路は無い。
   Scenario Outline: SCN-UNIT-SAT-014 enforcement exportの走査が正規表現literalに壊されない
     Given "<fixture>"のenforcement exportを参照するbindingがある
     When repository conformanceを新しいenforcement pointで検証する
@@ -80,13 +85,13 @@ Feature: 一般利用projectが正直な適用可否でpolicyを充足する
       | odd-quote-regex | valid |
       | ghost-in-comment | invalid |
       | division | valid |
-      | unterminated-string | invalid |
+      | unterminated-string | unparsable |
       | keyword-regex | invalid |
       | division-assign | valid |
-      | decimal-divide | invalid |
-      | string-divide | invalid |
-      | postfix-divide | invalid |
-      | regex-divide | invalid |
+      | decimal-divide | unparsable |
+      | string-divide | unparsable |
+      | postfix-divide | unparsable |
+      | regex-divide | unparsable |
       | nested-template | invalid |
       | eof-line-comment | valid |
 

@@ -1020,10 +1020,22 @@ const REGEX_ALLOWING_KEYWORDS = new Set([
 ]);
 
 /** `/`の直前がこの形なら除算である。 */
-function hasExport(file: string, name: string): boolean {
+/**
+ * exportの実在を3値で返す。
+ *
+ * **「解析できなかった」と「実在しない」を同じ値へ潰さない。** 利用者が次に採る操作が
+ * 異なるためである。実在しないならenforcement宣言を直すかexportを実装する。
+ * 解析できないならsourceの記法を直す。**exportは実在するかもしれない**（Issue #1134）。
+ *
+ * 判定不能を合格へ倒さない点は変えない。呼び出し側はどちらの値でもerrorを積む。
+ */
+function findExport(
+  file: string,
+  name: string,
+): "present" | "absent" | "unparsable" {
   const source = executableSource(fs.readFileSync(file, "utf8"));
   /** 解析できないsourceをexport実在の根拠にしない。 */
-  if (source === undefined) return false;
+  if (source === undefined) return "unparsable";
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (
     new RegExp(
@@ -1031,11 +1043,11 @@ function hasExport(file: string, name: string): boolean {
       "mu",
     ).test(source)
   )
-    return true;
+    return "present";
   if (
     new RegExp(`^\\s*export\\s*\\*\\s+as\\s+${escaped}\\b`, "mu").test(source)
   )
-    return true;
+    return "present";
   for (const match of source.matchAll(/^\s*export\s*\{([^}]*)\}/gmu)) {
     const exported = match[1].split(",").map((entry) =>
       entry
@@ -1044,9 +1056,9 @@ function hasExport(file: string, name: string): boolean {
         .at(-1)
         ?.trim(),
     );
-    if (exported.includes(name)) return true;
+    if (exported.includes(name)) return "present";
   }
-  return false;
+  return "absent";
 }
 
 export function validateRepositoryConformance(
@@ -1138,10 +1150,21 @@ export function validateRepositoryConformance(
             errors.push(
               `${String(item.id)}のfile-entrypointはsymlinkでない通常fileでなければなりません: ${point.path}`,
             );
-        } else if (!text(point.export) || !hasExport(file, point.export))
+        } else if (!text(point.export))
           errors.push(
             `${String(item.id)}のenforcement exportが実在しません: ${point.path}#${String(point.export)}`,
           );
+        else {
+          const found = findExport(file, point.export);
+          if (found === "unparsable")
+            errors.push(
+              `${String(item.id)}のenforcement sourceを解析できないためexportの実在を判定できません: ${point.path}#${point.export}。未終端のstring literalやtemplate literal、判定できない\`/\`が無いか確かめてください。exportは実在するかもしれません`,
+            );
+          else if (found === "absent")
+            errors.push(
+              `${String(item.id)}のenforcement exportが実在しません: ${point.path}#${point.export}`,
+            );
+        }
       } catch {
         errors.push(
           `${String(item.id)}のenforcement pathが実在しません: ${point.path}`,
