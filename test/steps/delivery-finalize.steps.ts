@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
@@ -39,6 +40,12 @@ interface DeliveryFinalizeWorld extends WorkflowWorld {
   finalizeState: Parameters<typeof buildFinalizeReport>[0];
   ghLog: string;
   issueSyncResult: { url: string };
+  issueReadResult: {
+    repository: string;
+    issue: number;
+    body: string;
+    bodySha256: string;
+  };
   mergeInput: MergeInput;
   mergeResult: ReturnType<typeof authorizeMerge>;
   mergeOperationResult: { state: string };
@@ -475,6 +482,56 @@ When("Issue sync adapterを実行する", function () {
     process.env.PATH = original;
   }
 });
+When("Issue read adapterを実行する", function () {
+  const original = process.env.PATH;
+  process.env.PATH = this.stubPath;
+  try {
+    this.issueReadResult = github(
+      "issue.read",
+      { repository: "o/r", issue: 824 },
+      process.cwd(),
+    );
+  } catch (error) {
+    this.error = error;
+  } finally {
+    process.env.PATH = original;
+  }
+});
+
+Then("Issue readは本文とsha256を返す", function () {
+  assert.equal(this.issueReadResult.repository, "o/r");
+  assert.equal(this.issueReadResult.issue, 824);
+  assert.equal(this.issueReadResult.body, "# 同期本文\n");
+  assert.equal(
+    this.issueReadResult.bodySha256,
+    crypto
+      .createHash("sha256")
+      .update(this.issueReadResult.body, "utf8")
+      .digest("hex"),
+  );
+});
+
+Then(
+  "gh操作順にauth、repo確認、read-onlyのissue viewだけが含まれる",
+  function () {
+    const lines = fs.readFileSync(this.ghLog, "utf8").trim().split("\n");
+    assert.deepEqual(
+      lines.map((line) => line.split(" ").slice(0, 2).join(" ")),
+      ["auth status", "repo view", "issue view"],
+    );
+    assert.equal(
+      lines.some((line) => line.startsWith("issue edit")),
+      false,
+      `Issue readが書き込みを行っています: ${lines.join(" | ")}`,
+    );
+  },
+);
+
+Then("Issue readは成功する", function () {
+  assert.equal(this.error, undefined);
+  assert.equal(this.issueReadResult.body, "# 同期本文\n");
+});
+
 Then("Issue syncは成功する", function () {
   assert.equal(this.issueSyncResult.url, "https://github.com/o/r/issues/824");
 });

@@ -4575,6 +4575,32 @@ export async function main(
     print(result);
     return result.valid ? 0 : 1;
   }
+  if (command === "issue" && subcommand === "read") {
+    /**
+     * **更新前のIssue本文を読む。**
+     *
+     * `issue sync`は本文を全面置換するため、既存のチェックリストや進捗記録を
+     * 保全するには更新前の本文が要る。skillは`gh`の直接呼び出しを禁じており、
+     * この経路が無いと保全と禁止が両立しない（Issue #1104）。
+     *
+     * **読み取り専用であり`--apply`も`--authorize`も要求しない。** 外部状態を
+     * 1つも変えない。
+     */
+    const { flags } = parse(rest);
+    const issueRaw = required(flags, "issue");
+    if (!/^[1-9]\d*$/u.test(issueRaw))
+      throw new Error("--issueは正のIssue番号で指定してください");
+    const observed = github(
+      "issue.read",
+      {
+        repository: required(flags, "repo"),
+        issue: Number(issueRaw),
+      },
+      path.resolve(typeof flags.root === "string" ? flags.root : "."),
+    );
+    print(observed);
+    return 0;
+  }
   if (command === "issue" && subcommand === "sync") {
     const { flags } = parse(rest);
     const apply = applyMode(flags);

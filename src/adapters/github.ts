@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -534,6 +535,16 @@ function verifyRepository(
  * The only GitHub CLI process boundary. Domain code and skills never invoke gh.
  */
 export function github(
+  operation: "issue.read",
+  input: Pick<GitHubInput, "repository" | "issue">,
+  cwd: string,
+): {
+  repository: string;
+  issue: number;
+  body: string;
+  bodySha256: string;
+};
+export function github(
   operation: "issue.sync",
   input: Pick<GitHubInput, "repository" | "issue" | "bodyFile">,
   cwd: string,
@@ -642,6 +653,43 @@ export function github(
   cwd: string,
 ): unknown {
   const input = supplied as GitHubInput;
+  if (operation === "issue.read") {
+    /**
+     * **更新前のIssue本文を読む唯一の経路である。**
+     *
+     * `issue.sync`は本文を全面置換する。既存のチェックリストや進捗記録を保全
+     * するには更新前の本文が要るが、skillは`gh`の直接呼び出しを禁じている
+     * （`step-04-issue-sync/SKILL.md`）。読み取り経路が無いと、この2つを
+     * 同時に満たせない。
+     *
+     * 書き込みを行わないため`repository read`で足りる。
+     */
+    verifyRepository(input.repository, cwd, "read");
+    const body = run(
+      "gh",
+      [
+        "issue",
+        "view",
+        String(input.issue),
+        "--repo",
+        input.repository,
+        "--json",
+        "body",
+        "--jq",
+        ".body",
+      ],
+      cwd,
+    ).stdout.replace(/\r\n/g, "\n");
+    return {
+      repository: input.repository,
+      issue: input.issue,
+      body,
+      bodySha256: crypto
+        .createHash("sha256")
+        .update(body, "utf8")
+        .digest("hex"),
+    };
+  }
   if (operation === "issue.sync") {
     verifyRepository(input.repository, cwd, "write");
     const args = [
