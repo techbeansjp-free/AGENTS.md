@@ -311,6 +311,7 @@ interface UnitWorld extends WorkflowWorld {
   traceEvidence: string;
   traceRoot: string;
   traceTemplate: string;
+  planTemplate: string;
   unknownDirectoryGuideRoot: string;
   unknownDirectoryGuides: {
     valid: boolean;
@@ -2058,6 +2059,10 @@ When("project選択層とfalse block対応の文書契約を検査する", funct
     ".agent-skill-chain/templates/specs/15_要件追跡/00_追跡表.md",
     "utf8",
   );
+  this.planTemplate = fs.readFileSync(
+    ".agent-skill-chain/templates/issue/03_実装計画.md",
+    "utf8",
+  );
   this.operationsSpec = fs.readFileSync(
     "docs/specs/12_運用保守/00_運用設計.md",
     "utf8",
@@ -2066,13 +2071,37 @@ When("project選択層とfalse block対応の文書契約を検査する", funct
 Then(
   "全test layerは層ごとに追跡されnon-override denyは弱化されない",
   function () {
+    /**
+     * **担保する層だけを行にする。** 全層とSCNの直積にすると追跡表の大半が
+     * 非適用行で埋まり、本来検出したい担保漏れが埋没する（Issue #995）。
+     * **直積を要求する文言へ戻す変更をここで殺す。**
+     */
     for (const fragment of [
       "projectChoices.testLayers",
-      "全層",
-      "1層1行",
+      "担保する層だけ",
+      "直積にしない",
+      "代替の検証手段",
       "固定の層名",
     ])
       assert.ok(this.traceTemplate.includes(fragment), fragment);
+    assert.ok(
+      !this.traceTemplate.includes("選択した全層を、同じ要件"),
+      "直積要求の旧文言が残っています",
+    );
+    /**
+     * **実装計画templateも同じ契約を持つ。** 片方だけを直すと、もう片方が
+     * 直積を要求したまま残る。
+     */
+    for (const fragment of [
+      "担保する層だけを1層1行で対応付ける",
+      "直積にしない",
+      "SCN単位で1回だけ書く",
+    ])
+      assert.ok(this.planTemplate.includes(fragment), fragment);
+    assert.ok(
+      !this.planTemplate.includes("全選択層を同じSCN IDへ1層1行"),
+      "直積要求の旧文言が実装計画templateに残っています",
+    );
     for (const fragment of [
       "non-override deny",
       "弱めず",
