@@ -75,6 +75,7 @@ interface UnitWorld extends WorkflowWorld {
   candidate: string;
   changedFiles: string[];
   choiceSchema: ChoiceSchemaFixture;
+  distributedChoiceSchemas: ChoiceSchemaFixture[];
   considerationDocument: string;
   considerationResult: {
     valid: boolean;
@@ -391,12 +392,37 @@ interface PolicySchemaFixture {
 
 interface ChoiceSchemaFixture {
   properties: {
-    testLayers: { minItems: number };
+    testLayers: { minItems: number; description?: string };
     forbiddenTestFileSuffixes: {
       minItems?: number;
       description?: string;
     };
   };
+}
+
+/**
+ * **配布schemaは2件ある。** `project-choice.schema.json`だけをassertすると、
+ * `project-policy.schema.json`側のdescriptionを消す変異が生存する
+ * （PR #1209 の外部指摘）。両方を同じ条件で検査する。
+ */
+interface PolicySchemaFixture {
+  $defs: { projectChoices: ChoiceSchemaFixture };
+}
+
+function readDistributedChoiceSchemas(): ChoiceSchemaFixture[] {
+  const choice = JSON.parse(
+    fs.readFileSync(
+      ".agent-skill-chain/schemas/project-choice.schema.json",
+      "utf8",
+    ),
+  ) as unknown as ChoiceSchemaFixture;
+  const policy = JSON.parse(
+    fs.readFileSync(
+      ".agent-skill-chain/schemas/project-policy.schema.json",
+      "utf8",
+    ),
+  ) as unknown as PolicySchemaFixture;
+  return [choice, policy.$defs.projectChoices];
 }
 
 interface ReviewFixture {
@@ -2872,12 +2898,8 @@ Given("空のtestLayersを持つcurrent project policyがある", function () {
     ) as unknown as Record<string, unknown>),
     testLayers: [],
   };
-  this.choiceSchema = JSON.parse(
-    fs.readFileSync(
-      ".agent-skill-chain/schemas/project-choice.schema.json",
-      "utf8",
-    ),
-  ) as unknown as ChoiceSchemaFixture;
+  this.distributedChoiceSchemas = readDistributedChoiceSchemas();
+  this.choiceSchema = this.distributedChoiceSchemas[0]!;
 });
 When("current project policyを検証する", function () {
   this.policyValidation = validatePolicy(this.emptyLayersPolicy);
@@ -2886,7 +2908,25 @@ When("current project policyを検証する", function () {
 Then("runtimeとschemaは空のtestLayersを拒否する", function () {
   assert.equal(this.policyValidation.valid, false);
   assert.match(this.policyValidation.errors.join(" "), /testLayers.*1件以上/u);
-  assert.equal(this.choiceSchema.properties.testLayers.minItems, 1);
+  /**
+   * **語彙を定義しないことと、縮小経路があることをschemaへ書く。** 利用側は
+   * 自由文字列の配列へ軸の異なる値を混ぜられるが、単調性契約があるため
+   * 「二度と直せない」と読まれていた（Issue #998）。**説明を消す変更をここで殺す。**
+   *
+   * **配布schema 2件の両方をassertする。** 片方だけだと、もう片方の
+   * descriptionを消す変異が生存する（PR #1209 の外部指摘）。
+   */
+  for (const schema of this.distributedChoiceSchemas) {
+    assert.equal(schema.properties.testLayers.minItems, 1);
+    assert.match(
+      schema.properties.testLayers.description ?? "",
+      /package側は語彙を定義しない/u,
+    );
+    assert.match(
+      schema.properties.testLayers.description ?? "",
+      /projectChoiceShrinkProposals/u,
+    );
+  }
 });
 Given(
   "空のforbiddenTestFileSuffixesを持つcurrent project policyがある",
@@ -2908,12 +2948,8 @@ Given(
       ) as unknown as Record<string, unknown>),
       forbiddenTestFileSuffixes: [],
     };
-    this.choiceSchema = JSON.parse(
-      fs.readFileSync(
-        ".agent-skill-chain/schemas/project-choice.schema.json",
-        "utf8",
-      ),
-    ) as unknown as ChoiceSchemaFixture;
+    this.distributedChoiceSchemas = readDistributedChoiceSchemas();
+    this.choiceSchema = this.distributedChoiceSchemas[0]!;
   },
 );
 When("空の禁止接尾辞を持つcurrent project policyを検証する", function () {
@@ -2929,23 +2965,27 @@ Then("runtimeとschemaは空のforbiddenTestFileSuffixesを受理する", functi
   /**
    * **`minItems`が無いことを明示的に固定する。** `testLayers`と揃えて`minItems: 1`を
    * 足す変更は、この行が落ちて初めて検出できる。
+   *
+   * **説明そのものも固定する。** 空配列の意味がschemaに書かれていないことが
+   * Issue #982 の残りの実害だった。
+   *
+   * **配布schema 2件の両方をassertする**（PR #1209 の外部指摘）。片方だけだと、
+   * もう片方のdescriptionを消す変異が生存する。
    */
-  assert.equal(
-    this.choiceSchema.properties.forbiddenTestFileSuffixes.minItems,
-    undefined,
-  );
-  /**
-   * **説明そのものを固定する。** 空配列の意味がschemaに書かれていないことが
-   * Issue #982 の残りの実害だった。descriptionを消す変更をここで殺す。
-   */
-  assert.match(
-    this.choiceSchema.properties.forbiddenTestFileSuffixes.description ?? "",
-    /空配列は「この方針を持たない」の正規表現である/u,
-  );
-  assert.match(
-    this.choiceSchema.properties.forbiddenTestFileSuffixes.description ?? "",
-    /projectChoiceShrinkProposals/u,
-  );
+  for (const schema of this.distributedChoiceSchemas) {
+    assert.equal(
+      schema.properties.forbiddenTestFileSuffixes.minItems,
+      undefined,
+    );
+    assert.match(
+      schema.properties.forbiddenTestFileSuffixes.description ?? "",
+      /空配列は「この方針を持たない」の正規表現である/u,
+    );
+    assert.match(
+      schema.properties.forbiddenTestFileSuffixes.description ?? "",
+      /projectChoiceShrinkProposals/u,
+    );
+  }
 });
 Given("同じSCN IDを持つ2つのGherkin scenarioがある", function () {
   const root = this.temp();
