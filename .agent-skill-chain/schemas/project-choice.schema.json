@@ -29,6 +29,7 @@
       "items": { "type": "string", "minLength": 1 }
     },
     "forbiddenTestFileSuffixes": {
+      "description": "テストファイル名として禁止する接尾辞。**空配列は「この方針を持たない」の正規表現である。**`testLayers`と違い`minItems`を持たないのは、「テスト層が1つもないprojectはない」は成り立つが「禁止接尾辞を持たないprojectはある」ためである。検査系は空配列を禁止対象0件として扱う。既に宣言した値を取り除くときは、単調性契約により`projectChoiceShrinkProposals`の二段階手順を使う（`schemas/00_利用案内.md`）。",
       "type": "array",
       "uniqueItems": true,
       "items": { "type": "string", "pattern": "^\\.[A-Za-z0-9._-]+$" }
