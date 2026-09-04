@@ -516,7 +516,15 @@ export function compareTrustedPolicy(
           trustedRule.scope,
           ["trusted default policyとcandidate policyを比較した"],
           [],
-          "trusted条件を維持し、独立reviewと既定ブランチへの正規migrationを行ってください",
+          /**
+           * **候補側からtrusted ruleを削除・弱化する経路は製品CLIに無い。**
+           * `policy migrate`も概念migration・file migrationの両経路で
+           * `compareTrustedPolicy`を互換性判定に使うため同じ理由で拒否する。
+           * 「既定ブランチへの正規migrationを行え」とだけ返すと、その手段が
+           * 製品内に無いため利用者を循環させる。**owner authorityの操作であり
+           * 候補側の経路が無いことまで返す**（Issue #967）。
+           */
+          "trusted条件を維持するか、既定branchのproject policyを先に更新して独立reviewを受けてください。trusted ruleの削除・弱化は既定branchのproject policy ownerのauthority操作であり、候補側から適用する経路は製品CLIにありません。ruleを廃止する場合も、候補側でmanifestから外すだけでは受理されません",
           "default branch policy owner",
           "candidateの緩和差分を取り消す",
         ),
@@ -952,7 +960,7 @@ export function resolveEffectivePolicy(
         ["project-policy"],
         ["package defaultとproject extensionを比較した"],
         [],
-        "project固有ruleを新しいIDのstaged ruleとして追加してください",
+        "project固有ruleを新しいIDのstaged ruleとして追加してください。package安全floorのruleは`active`から`disabled`へ戻せません。廃止したい場合も候補側でmanifestから外す経路はなく、既定branchのproject policy ownerのauthority操作になります",
         "project policy owner",
         "package default floorだけへ戻す",
       ),
