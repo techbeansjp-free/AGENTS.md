@@ -391,7 +391,7 @@ interface PolicySchemaFixture {
 
 interface ChoiceSchemaFixture {
   properties: {
-    testLayers: { minItems: number };
+    testLayers: { minItems: number; description?: string };
     forbiddenTestFileSuffixes: {
       minItems?: number;
       description?: string;
@@ -2887,6 +2887,19 @@ Then("runtimeとschemaは空のtestLayersを拒否する", function () {
   assert.equal(this.policyValidation.valid, false);
   assert.match(this.policyValidation.errors.join(" "), /testLayers.*1件以上/u);
   assert.equal(this.choiceSchema.properties.testLayers.minItems, 1);
+  /**
+   * **語彙を定義しないことと、縮小経路があることをschemaへ書く。** 利用側は
+   * 自由文字列の配列へ軸の異なる値を混ぜられるが、単調性契約があるため
+   * 「二度と直せない」と読まれていた（Issue #998）。**説明を消す変更をここで殺す。**
+   */
+  assert.match(
+    this.choiceSchema.properties.testLayers.description ?? "",
+    /package側は語彙を定義しない/u,
+  );
+  assert.match(
+    this.choiceSchema.properties.testLayers.description ?? "",
+    /projectChoiceShrinkProposals/u,
+  );
 });
 Given(
   "空のforbiddenTestFileSuffixesを持つcurrent project policyがある",

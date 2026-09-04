@@ -213,6 +213,7 @@
         "testRunner": { "type": "string", "minLength": 1 },
         "gherkinDialect": { "type": "string", "minLength": 1 },
         "testLayers": {
+          "description": "テスト層の名前。**package側は語彙を定義しない。** 利用側projectが担保の水準を分類する軸として自由に決める。`minItems: 1`を持つのは「テスト層が1つもないprojectはない」ためである。**軸の異なる値を混在させると追跡表の意味が壊れるため、1つの軸で揃える。** 宣言済みの層を取り除くときは、単調性契約により`projectChoiceShrinkProposals`の二段階手順を使う（`schemas/00_利用案内.md`）。**混入した誤りは是正できる。**",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
