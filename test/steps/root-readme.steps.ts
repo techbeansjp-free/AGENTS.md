@@ -13,6 +13,8 @@ interface RootReadmeWorld extends WorkflowWorld {
   contractCheck?: ReturnType<typeof checkCliContract>;
   packageCheck?: boolean;
   readme: string;
+  /** 配布される中央利用案内。公開入口の記述を同じ条件で検査する（Issue #1213）。 */
+  guide: string;
   root: string;
 }
 
@@ -40,6 +42,10 @@ Given("repository rootに利用者向けREADMEがある", function () {
 
 When("READMEの公開案内を検査する", function () {
   this.readme = fs.readFileSync(path.join(this.root, README), "utf8");
+  this.guide = fs.readFileSync(
+    path.join(this.root, ".agent-skill-chain/00_利用案内.md"),
+    "utf8",
+  );
 });
 
 Then(
@@ -53,6 +59,20 @@ Then(
         this.readme,
         new RegExp(`npx\\s+agent-skill-chain\\s+${command}\\b`, "u"),
       );
+    /**
+     * **取得元はnpm registryではなくGit remoteである。** `npx agent-skill-chain`
+     * だけを案内すると registry を引いて404になる（Issue #1213）。README と
+     * 配布される中央利用案内の**両方**が、Git remote指定と版固定の形、および
+     * 短縮表記であることの断りを持つ。
+     */
+    for (const document of [this.readme, this.guide]) {
+      assert.match(document, /npx github:techbeansjp-free\/AGENTS\.md /u);
+      assert.match(document, /npx github:techbeansjp-free\/AGENTS\.md#<tag>/u);
+      assert.match(document, /短縮表記/u);
+      assert.match(document, /registry/u);
+    }
+    /** registry前提の版固定形を案内し続けない。 */
+    assert.doesNotMatch(this.guide, /`agent-skill-chain@<version>`とする/u);
   },
 );
 

@@ -15,6 +15,15 @@ Semantic Graphの`graph` subcommandだけは、組み込み`node:sqlite`でGraph
 
 ## 導入と利用
 
+**本packageはnpm registryへ公開していません。** 入口はGit remoteの指定です。`npx`はregistryを参照せず、GitHubから直接取得して実行します。
+
+| 用途 | command |
+| ---- | ------- |
+| 最新を使う | `npx github:techbeansjp-free/AGENTS.md doctor --root=.` |
+| 版を固定する | `npx github:techbeansjp-free/AGENTS.md#<tag> doctor --root=.` |
+
+`<tag>`にはreleaseのtag（`v0.3.1-beta.83`のような形）を指定します。**以降の例に現れる`npx agent-skill-chain <command>`は、この`npx github:techbeansjp-free/AGENTS.md <command>`の短縮表記です。**
+
 対象directoryを省略した場合は現在directoryを使います。対象を明示するときは`--root=.`を指定します。
 
 `install`、`update`、`delete`は何も書き換えないpreviewが既定です。表示された変更を確認し、同じcommandへ`--apply`を付けた場合だけ変更します。`doctor`は読み取り専用で、GitとGitHub CLIのversionも診断します。
