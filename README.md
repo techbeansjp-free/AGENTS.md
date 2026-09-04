@@ -15,7 +15,9 @@ Semantic Graphの`graph` subcommandだけは、組み込み`node:sqlite`でGraph
 
 ## 導入と利用
 
-**本packageはnpm registryへ公開していません。** 入口はGit remoteの指定です。`npx`はregistryを参照せず、GitHubから直接取得して実行します。
+**本packageはnpm registryへ公開していません。** 入口はGit remoteの指定です。`npx`は**本package自体をregistryから解決せず**、GitHubから直接取得して実行します。
+
+**ただしregistryを完全に使わないわけではありません。** Git取得時は`prepare`が`npm run build`を実行するため、その過程でdevDependenciesをregistryから取得します。
 
 | 用途 | command |
 | ---- | ------- |

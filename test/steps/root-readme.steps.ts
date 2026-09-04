@@ -71,8 +71,20 @@ Then(
       assert.match(document, /短縮表記/u);
       assert.match(document, /registry/u);
     }
-    /** registry前提の版固定形を案内し続けない。 */
-    assert.doesNotMatch(this.guide, /`agent-skill-chain@<version>`とする/u);
+    /**
+     * **registry前提の版固定形を案内し続けない。** READMEと中央利用案内の
+     * **両方**を検査する。片方だけだと、もう片方へ旧形式が復活しても通る
+     * （PR #1214 の外部指摘）。
+     */
+    for (const document of [this.readme, this.guide])
+      assert.doesNotMatch(document, /`agent-skill-chain@<version>`とする/u);
+    /**
+     * **registryを完全に使わないわけではない。** Git取得時は`prepare`が
+     * buildを実行し、その過程でdevDependenciesをregistryから取得する。
+     * 「registryは一切介在しない」と書くと事実に反する（PR #1214 の外部指摘）。
+     */
+    for (const document of [this.readme, this.guide])
+      assert.match(document, /devDependencies/u);
   },
 );
 
