@@ -18,6 +18,7 @@ import {
   checkPackageDistributionBoundary,
   checkPackageManagerBoundary,
   checkQualityCiTriggers,
+  checkRegistryPublishProhibition,
   checkRepositoryRuleLedger,
   type RepositoryRuleLedgerResult,
 } from "../../scripts/check_conformance.js";
@@ -48,6 +49,7 @@ const LEDGER_COMPOSED_CHECKS: readonly string[] = [
   "checkQualityCiPermissions",
   "checkQualityCiTriggers",
   "checkQualityCommands",
+  "checkRegistryPublishProhibition",
   "checkReleaseJobDocumentation",
   "checkRequirementIdScheme",
   "checkTrustedPolicyBoundary",
@@ -116,6 +118,9 @@ class ProjectRuleLedgerWorld extends WorkflowWorld {
   /** trusted rule削除の判定結果（Issue #967）。 */
   retirementComparison: ReturnType<typeof compareTrustedPolicy> | undefined =
     undefined;
+  /** npm公開禁止の強制点検査（Issue #1215）。 */
+  registryRoots: string[] = [];
+  registryResults: string[][] = [];
   retirementDiagnostics: ReturnType<typeof compareTrustedPolicy>["rejected"] =
     [];
   /** 適合性検査scriptの本体。 */
@@ -259,6 +264,42 @@ Given(
     ];
   },
 );
+
+Given("privateを持つpackage.jsonと持たないpackage.jsonがある", function () {
+  /**
+   * **npm registryへ公開しない強制点はnpm自身である。** `private: true`があると
+   * npmは`EPRIVATE`でpublishを拒否する（dummy認証つきの実publishで観測した）。
+   * ここが見るのは**その強制点が宣言され続けること**である（Issue #1215）。
+   *
+   * **`--dry-run`はこの拒否を通過する。** 実publishでしか観測できないため、
+   * CIはfileの宣言だけを見る。
+   */
+  const withPrivate = this.temp("asc-registry-private-");
+  fs.writeFileSync(
+    path.join(withPrivate, "package.json"),
+    JSON.stringify({ name: "x", private: true }, null, 2),
+  );
+  const withoutPrivate = this.temp("asc-registry-public-");
+  fs.writeFileSync(
+    path.join(withoutPrivate, "package.json"),
+    JSON.stringify({ name: "x" }, null, 2),
+  );
+  this.registryRoots = [withPrivate, withoutPrivate];
+});
+
+When("npm公開禁止の強制点を検査する", function () {
+  this.registryResults = this.registryRoots.map((root) =>
+    checkRegistryPublishProhibition(root),
+  );
+});
+
+Then("privateを持つ側だけを受理する", function () {
+  assert.deepEqual(this.registryResults[0], []);
+  assert.match(
+    (this.registryResults[1] ?? []).join(" "),
+    /package\.jsonのprivateがtrueではありません/u,
+  );
+});
 
 Given(
   "trusted policyのproject ruleを候補側から取り除いた差分がある",

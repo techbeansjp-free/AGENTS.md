@@ -142,6 +142,35 @@ export function checkReleaseJobDocumentation(root: string): string[] {
   });
 }
 
+/**
+ * npm registryへの公開を拒否する強制点が存在することを検査する。
+ *
+ * **owner決裁（2026-09-04）で、本packageはGit remoteだけで配布する。** 公開入口は
+ * `npx github:<owner>/<repo>` であり、registryは本package自体の解決に使わない
+ * （Issue #1213・#1215）。
+ *
+ * **強制点はnpm自身である。** `package.json`の`private: true`があると、npmは
+ * `EPRIVATE`でpublishを拒否する（dummy認証つきの実publishで観測した）。
+ * ここが見るのは**その強制点が存在し続けること**であり、npmの判定を重複させない。
+ *
+ * `--dry-run`はこの拒否を通過するため、`private`の有無を実publishで確かめる経路は
+ * CIに置かない。**fileの宣言だけを見る。**
+ *
+ * **release workflowの公開経路は本検査の対象外である。** `npm_publish` jobは
+ * consumer acceptance gate（Issue #1024）を同じjob内に持つため、除去には
+ * gateの移設が要る。分離して扱う。
+ */
+export function checkRegistryPublishProhibition(root: string): string[] {
+  const metadataFile = path.join(root, "package.json");
+  if (!fs.existsSync(metadataFile)) return ["package.jsonがありません"];
+  const metadata = JSON.parse(fs.readFileSync(metadataFile, "utf8")) as unknown;
+  if (!isRecord(metadata) || metadata.private !== true)
+    return [
+      "package.jsonのprivateがtrueではありません。npm registryへの公開を拒否する強制点が失われます",
+    ];
+  return [];
+}
+
 const PACKAGE_MODEL_SLUG_PATHS = [
   "AGENTS.md",
   ".agent-skill-chain/00_利用案内.md",
@@ -519,6 +548,7 @@ export function checkRepositoryRuleLedger(
   errors.push(...checkCanonicalScopeAlignment(root));
   errors.push(...checkCanonicalDuplication(root));
   errors.push(...checkReleaseJobDocumentation(root));
+  errors.push(...checkRegistryPublishProhibition(root));
   errors.push(
     ...coverage.orphans.map((orphan) => `${orphan.ruleId}: ${orphan.reason}`),
     ...checkQualityCiTriggers(

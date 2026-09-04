@@ -71,6 +71,7 @@ export const PROJECT_RULE_ENFORCEMENT_POINTS: Readonly<Record<string, string>> =
       ["JAPANESE-DOCS-001", "checkJapaneseDocuments"],
       ["LOCKFILE-001", "checkPackageManagerBoundary"],
       ["NAMING-EXCEPTION-001", "checkFixedMarkdownNames"],
+      ["NO-REGISTRY-PUBLISH-001", "checkRegistryPublishProhibition"],
       ["NUMBERED-MARKDOWN-001", "checkFixedMarkdownNames"],
       ["OWNERSHIP-LOCAL-001", "validateOwnershipBoundary"],
       ["OWNERSHIP-PR-001", "validateOwnershipBoundary"],

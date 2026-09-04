@@ -48,6 +48,7 @@
     "project/rules/japanese-docs.json",
     "project/rules/lockfile.json",
     "project/rules/naming-exception.json",
+    "project/rules/no-registry-publish.json",
     "project/rules/numbered-markdown.json",
     "project/rules/ownership-local.json",
     "project/rules/ownership-pr.json",
