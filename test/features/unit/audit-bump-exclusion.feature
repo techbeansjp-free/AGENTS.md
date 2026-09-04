@@ -36,3 +36,8 @@ Feature: release bump commitの監査対象除外
     Given release bump commitを持たない隔離repository
     When 履歴に存在しないcutoffでfile監査を実行する
     Then file監査はcutoffを解決できないことを理由に停止する
+
+  Scenario: SCN-UNIT-AUDITBUMP-008 版管理下の生成物distを個別監査の対象から外す
+    Given 生成物distを実装commitへ含む隔離repository
+    When 隔離repositoryのfile監査を実行する
+    Then file監査は合格する

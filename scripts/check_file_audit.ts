@@ -81,6 +81,25 @@ function commitParents(root: string, commit: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * 版管理下の生成物。個別監査の対象から外す。
+ *
+ * **`dist/`はsourceから決定的に導出される**（Issue #1187で版管理下へ置いた）。
+ * 承認機構つき環境では`prepare`が実行されずbuildできないため、Git remoteからの
+ * 取得でそのまま実行できるようcommitしている。
+ *
+ * **監査の目的は「変更を人が確認したこと」の記録である。** 生成物を1行ずつ
+ * 書かせても、確認しているのは同じsourceであり、**表が生成file行で埋まって
+ * 本来確認すべき変更が埋没する**（Issue #995 と同じ形）。
+ *
+ * **導出の正しさは別の機構が見る。** CIは`npm run build`の後に
+ * `git status --porcelain`が空であることを要求しており、commit済み`dist`と
+ * 再build結果の乖離はそこで落ちる。
+ */
+function isGeneratedDistributionPath(target: string): boolean {
+  return target === "dist" || target.startsWith("dist/");
+}
+
 function changedPaths(root: string, parent: string, commit: string): string[] {
   return lines(
     git(
@@ -1226,7 +1245,8 @@ export function checkFileAudit(
     .map((line) => {
       const [status, ...parts] = line.split("\t");
       return { status: status?.[0] ?? "", path: parts.at(-1) ?? "" };
-    });
+    })
+    .filter((entry) => !isGeneratedDistributionPath(entry.path));
   const expectedKeys = expected
     .map((entry) => `${entry.status}\u0000${entry.path}`)
     .sort();
