@@ -40,3 +40,8 @@ Feature: project固有rule台帳の単体契約
     Given trusted policyのproject ruleを候補側から取り除いた差分がある
     When trusted rule削除の判定結果を読む
     Then 削除を拒否しauthorityと候補側経路の不在を診断へ返す
+
+  Scenario: SCN-UNIT-LEDGER-009 npm registryへ公開しない強制点の宣言を検査する
+    Given privateを持つpackage.jsonと持たないpackage.jsonがある
+    When npm公開禁止の強制点を検査する
+    Then privateを持つ側だけを受理する

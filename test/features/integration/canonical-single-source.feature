@@ -14,7 +14,7 @@ Feature: 実repositoryで正本複製が解消されている
   Scenario: SCN-INT-CANON-003 既存ruleとorphan件数を維持する
     Given 正本単一化ruleを含む実repositoryのrule台帳がある
     When rule coverageを算出する
-    Then ruleは20件でorphansは0件である
+    Then ruleは21件でorphansは0件である
 
   Scenario: SCN-INT-CANON-004 実repositoryの走査対象が範囲外を含まない
     Given 実repositoryがある

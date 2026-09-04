@@ -397,8 +397,8 @@ Then("orphansに正本単一化ruleは含まれない", function () {
   );
 });
 
-Then("ruleは20件でorphansは0件である", function () {
-  assert.equal(this.coverage.rows.length, 20);
+Then("ruleは21件でorphansは0件である", function () {
+  assert.equal(this.coverage.rows.length, 21);
   assert.deepEqual(this.coverage.orphans, []);
 });
 
