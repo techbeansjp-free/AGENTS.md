@@ -1073,6 +1073,14 @@ export function checkModeQuestionText(root: string): string[] {
     ];
   for (const relative of tracked.stdout.split("\0").filter(Boolean)) {
     if (MODE_QUESTION_SOURCES.includes(relative)) continue;
+    /**
+     * **`dist/`はsourceから決定的に導出される生成物である**（Issue #1187で版管理下へ
+     * 置いた）。質問文が現れるのは`src/domain/mode.ts`をcompileした結果であり、
+     * **独立した正本ではない。** 複製として拒否すると、追跡した瞬間に必ず落ちる。
+     *
+     * 生成物とsourceの一致はCIの`git status --porcelain`が見る。
+     */
+    if (relative === "dist" || relative.startsWith("dist/")) continue;
     let contents: string;
     try {
       contents = fs.readFileSync(path.join(root, relative), "utf8");

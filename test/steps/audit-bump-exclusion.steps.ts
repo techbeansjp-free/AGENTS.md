@@ -128,6 +128,41 @@ function mergePackageChange(
   ]);
 }
 
+Given("生成物distを実装commitへ含む隔離repository", function () {
+  /**
+   * **`dist/`はsourceから決定的に導出される生成物である**（Issue #1187で版管理下へ
+   * 置いた）。個別監査表へ1行ずつ書かせても確認対象は同じsourceであり、**表が
+   * 生成file行で埋まって本来確認すべき変更が埋没する。**
+   *
+   * 導出の正しさはCIの`git status --porcelain`が見る。ここでは**監査表が
+   * `dist/`を要求しないこと**だけを固定する。
+   */
+  const root = this.initRepo();
+  writeJson(root, "package.json", {
+    name: "audit-fixture",
+    version: "0.3.1-beta.1",
+    description: "fixture",
+  });
+  writeJson(root, "package-lock.json", {
+    name: "audit-fixture",
+    version: "0.3.1-beta.1",
+    lockfileVersion: 3,
+    packages: { "": { name: "audit-fixture", version: "0.3.1-beta.1" } },
+  });
+  fs.writeFileSync(path.join(root, "implementation.txt"), "base\n");
+  const base = commitAll(root, "test: 監査fixtureの基点を作る");
+  fs.writeFileSync(path.join(root, "implementation.txt"), "implemented\n");
+  fs.mkdirSync(path.join(root, "dist", "src"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "dist", "src", "generated.js"),
+    "export const generated = true;\n",
+  );
+  const implementation = commitAll(root, "feat: 監査対象と生成物を実装する");
+  writeAuditArtifact(root, base, implementation);
+  commitAll(root, "docs: 課題873実装レビューを記録する");
+  this.auditRoot = root;
+});
+
 Given(
   "監査artifact後に正規のrelease bump commitがある隔離repository",
   function () {

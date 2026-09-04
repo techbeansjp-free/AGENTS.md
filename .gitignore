@@ -7,7 +7,12 @@ node_modules/
 .worktrees/
 
 # compileが毎回削除して再生成する配布用ビルド成果物。配布はpackage.jsonのfilesが行う
-dist/
+# distはGit remoteからの取得で即実行できるよう版管理下に置く（Issue #1187）。
+# 承認機構つき環境では`prepare`が実行されず、buildできないためである。
+# 実行に不要な型定義とsource mapだけを除外し、差分の雑音を抑える。
+dist/**/*.d.ts
+dist/**/*.d.ts.map
+dist/**/*.js.map
 
 # 同期前staging、失効済みlocal issue、他案件を含み得るmemo
 .agent-skill-chain/tmp/

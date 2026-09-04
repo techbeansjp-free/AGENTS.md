@@ -81,6 +81,43 @@ function commitParents(root: string, commit: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * 版管理下の生成物。個別監査の対象から外す。
+ *
+ * **`dist/`はsourceから決定的に導出される**（Issue #1187で版管理下へ置いた）。
+ * 承認機構つき環境では`prepare`が実行されずbuildできないため、Git remoteからの
+ * 取得でそのまま実行できるようcommitしている。
+ *
+ * **監査の目的は「変更を人が確認したこと」の記録である。** 生成物を1行ずつ
+ * 書かせても、確認しているのは同じsourceであり、**表が生成file行で埋まって
+ * 本来確認すべき変更が埋没する**（Issue #995 と同じ形）。
+ *
+ * **導出の正しさは別の機構が見る。** CIは`npm run build`の後に
+ * `git status --porcelain`が空であることを要求しており、commit済み`dist`と
+ * 再build結果の乖離はそこで落ちる。
+ */
+/**
+ * 生成物pathを配布境界の単位（`dist/<top>/`）へまとめる。
+ *
+ * **`dist/`は配布境界の中にある。** 除外すると、生成物を直接書き換えた変更が
+ * 配布物影響の記述を要求されなくなる（PR #1218 の外部指摘）。一方で61 fileを
+ * 1行ずつ書かせると、**src変更のたび表が生成file行で埋まり、本来確認すべき
+ * 配布影響が埋没する。**
+ *
+ * **`dist/src/`・`dist/bin/`のような境界単位へまとめると両方を満たす。**
+ * 触れた事実は残り、記述は境界ごとに1行で済む。`package.json`の`files`に
+ * 無い単位（`dist/vendor/`など）は配布判定側で対象外になる。
+ */
+function generatedDistributionGroup(target: string): string | undefined {
+  if (!isGeneratedDistributionPath(target)) return undefined;
+  const [, top] = target.split("/");
+  return top === undefined || top === "" ? "dist/" : `dist/${top}/`;
+}
+
+function isGeneratedDistributionPath(target: string): boolean {
+  return target === "dist" || target.startsWith("dist/");
+}
+
 function changedPaths(root: string, parent: string, commit: string): string[] {
   return lines(
     git(
@@ -1227,7 +1264,17 @@ export function checkFileAudit(
       const [status, ...parts] = line.split("\t");
       return { status: status?.[0] ?? "", path: parts.at(-1) ?? "" };
     });
-  const expectedKeys = expected
+  /**
+   * **個別監査表の照合だけから生成物を外す。**
+   *
+   * `dist/`は配布境界の中にあるため、**配布物影響の検査には生の差分を渡す**
+   * （PR #1218 の外部指摘）。除外を共有すると、生成物を直接書き換えた変更が
+   * 配布物影響の記述を要求されなくなる。
+   */
+  const auditedExpected = expected.filter(
+    (entry) => !isGeneratedDistributionPath(entry.path),
+  );
+  const expectedKeys = auditedExpected
     .map((entry) => `${entry.status}\u0000${entry.path}`)
     .sort();
   const actualKeys = parsed.entries
@@ -1237,7 +1284,7 @@ export function checkFileAudit(
     errors.push("個別監査に重複pathがあります");
   if (JSON.stringify(expectedKeys) !== JSON.stringify(actualKeys))
     errors.push(
-      `個別監査とGit差分path集合が一致しません: expected=${expected.length} actual=${parsed.entries.length}`,
+      `個別監査とGit差分path集合が一致しません: expected=${auditedExpected.length} actual=${parsed.entries.length}`,
     );
   for (const entry of parsed.entries) {
     if (entry.fields.some((field) => field === "" || field === "-"))
@@ -1283,7 +1330,24 @@ export function checkFileAudit(
       ? { errors: [], distributed: [] }
       : validateDistributionImpact({
           markdown: artifactText,
-          changedPaths: expected.map((entry) => entry.path),
+          /**
+           * **生成物は`dist/`1件へまとめる。**
+           *
+           * `dist/`は配布境界の中にあるため、除外すると生成物を直接書き換えた
+           * 変更が配布物影響の記述を要求されなくなる（PR #1218 の外部指摘）。
+           * 一方で61 fileを1行ずつ書かせると、**src変更のたび配布物影響の表が
+           * 生成file行で埋まり、本来確認すべき配布影響が埋没する。**
+           *
+           * **1件へまとめると両方を満たす。** 生成物へ触れた事実は残り、記述量は
+           * 1行で済む。
+           */
+          changedPaths: [
+            ...new Set(
+              expected.map(
+                (entry) => generatedDistributionGroup(entry.path) ?? entry.path,
+              ),
+            ),
+          ],
           packageFiles,
         });
   errors.push(...impact.errors);
