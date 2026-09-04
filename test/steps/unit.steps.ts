@@ -2080,7 +2080,7 @@ Then(
       "projectChoices.testLayers",
       "担保する層だけ",
       "直積にしない",
-      "代替の検証手段",
+      "代替の検証手段をSCN単位で1回だけ記録する",
       "固定の層名",
     ])
       assert.ok(this.traceTemplate.includes(fragment), fragment);
