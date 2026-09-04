@@ -53,3 +53,8 @@ Feature: Gherkinを全test layerの正本にする
     Given 空のtestLayersを持つcurrent project policyがある
     When current project policyを検証する
     Then runtimeとschemaは空のtestLayersを拒否する
+
+  Scenario: SCN-UNIT-TRACE-010 空のforbiddenTestFileSuffixesを方針不採用として受理する
+    Given 空のforbiddenTestFileSuffixesを持つcurrent project policyがある
+    When 空の禁止接尾辞を持つcurrent project policyを検証する
+    Then runtimeとschemaは空のforbiddenTestFileSuffixesを受理する
