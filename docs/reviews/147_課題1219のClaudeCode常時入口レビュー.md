@@ -8,15 +8,15 @@
 |---|---|
 | 対象 | 実装 |
 | 対象Issue | #1219 |
-| ラウンド | Step 10 ラウンド1 |
+| ラウンド | Step 10 ラウンド1〜2 |
 | 比較基点 | `de9dee38ea854f2021b6fc4e90fcaa9ebe3ddf20` |
-| H_impl | `90b52cd93b0f47bd6758f941e4bf69cef3f70759` |
+| H_impl | `9983b3a2dfb159ad1834a175b0791f4ebf7bf362` |
 | 比較基点の由来 | worktree作成時点の`origin/main`のtip |
 | モード | full（Q-01がtrue。配布物のfile一覧と`install`の展開対象が変わる） |
-| 対象差分 | 7 file、+65 -8。commitは`90b52cd9` 1件 |
+| 対象差分 | 7 file、+65 -8。commitは`90b52cd9`と`9983b3a2`（取り込みでartifact commitが`比較基点..H_impl`へ入る） |
 | 対象外 | hookの展開（#1105）。`.claude/`配下への資産追加。`AGENTS.md`の内容変更。3規範文書の内容変更。`docs/reviews/`のrole authority不整合（#1047） |
-| 残り予算 | **2**（同一範囲で最大3ラウンド。以降は収束後のHEAD移動に対する取り直し1回のみ） |
-| ラウンド数 | 1 |
+| 残り予算 | **1**（同一範囲で最大3ラウンド。以降は収束後のHEAD移動に対する取り直し1回のみ） |
+| ラウンド数 | 2。ラウンド2は`pr create`後の外部指摘の取り込みである（#1194・#1201の経路） |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260905_080836_Claude-Code側に常時の入口が無く規範文書へ到達しない |
 | 仕様の所有箇所 | `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md`のREQ-LC-001（**改訂**） |
 | 成果物行数 | 製品 **+27行**（`CLAUDE.md` +5、`src/domain/lifecycle.ts` +16 -2、`package.json` +2 -1）。仕様 **+2 -1行**。支援層 **+23 -2行**（`test/steps/lifecycle-isolation.steps.ts`）。**支援層/成果物 = 0.85倍** |
@@ -60,6 +60,7 @@
 | `test/steps/lifecycle-isolation.steps.ts` | M | package | test | `ROOT_HOST_ENTRIES`を定義し、install直後の存在とdelete後の非存在を全要素について検査する | test層のみ。製品を参照しない | SCN-E2E-LIFECYCLE-001 / AC-06 | 隔離consumerのみを扱う | pass |
 | `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md` | M | project | spec | REQ-LC-001を改訂する。host入口の複数展開、host skillが代替にならないこと、展開対象一覧の正本化 | 適合 | REQ-LC-001 / AC-LC-001 | 記述のみ | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | project | spec | 変更履歴を1行足す | 適合 | 同上 | 記述のみ | pass |
+| `docs/reviews/147_課題1219のClaudeCode常時入口レビュー.md` | A | project | evidence | 本レビュー証跡。取り込みでラウンド1のartifact commitが`比較基点..H_impl`へ入るため自己行を持つ | 適合 | AC-06 | 記述のみ | pass |
 
 **`dist/src/domain/lifecycle.js` は個別監査の対象外である。** `scripts/check_file_audit.ts` の `isGeneratedDistributionPath` が生成物を個別監査から除外する（#1187）。配布物影響の検査には境界単位（`dist/src/`）で残る。
 
@@ -116,6 +117,8 @@
 | ADV-01 | record-only | **`ASC-CANON-SINGLE-SOURCE-001` の token 検査は repository root を走査しない。** `CLAUDE.md` が将来規約の複製へ育っても機構は止めない | **強制点を足さない。** 走査対象の拡大は既存の検査対象全体へ影響し、運用ポリシーの「手段の追加より既存手段の縮小を先に評価する」に反する。設計12節と仕様へ記述で残す |
 | ADV-02 | record-only | 本変更は入口の**存在**を保証するが、入口が読まれて規範文書へ到達したことは保証しない | 観測不能な条件をACにしない。**効果は次に同種の取り違えが起きるかで測る** |
 
+| ADV-03 | record-only | **`scripts/check_package_contents.ts` の `required` 集合に `CLAUDE.md` が無い。** `package.json` の `files` から消えても `package:check` は成功する。AC-04 は実測で充足しているが、**回帰を検出する常設の門が無い** | **本PRでは取り込まない。** 是正を試みたところ `SCN-INT-CONSUMER-005` が `対象製品fileのSHA-256が一致しません: scripts/check_package_contents.ts` で落ちた。故障注入証跡3件が当該fileの**全体のhash**を固定しており、無関係な1行でも同時に無効になる。束縛の粒度を先に決める必要があるため **#1221** へ分離した |
+
 **blocking 0件。未解決のCritical / High 0件。**
 
 ## 6. 検証結果
@@ -155,6 +158,18 @@
 - **既存SCNを1件も削除していない**
 - 用語台帳の差分なし
 
-## 8. 判定
+## 8. ラウンド2 固有の確認
 
-**承認。** blocking 0件、未解決のCritical / High 0件。record-only 2件（ADV-01・02）、resolved 1件（DISC-01）。
+**外部reviewer（CodeRabbit）の指摘3件を受けた取り込みラウンドである。**
+
+| 指摘 | 判定 | 対処 |
+|---|---|---|
+| `docs/reviews/147_…md:25` 実施日が未来日付 | **false-positive** | 本repositoryの記録はJSTである。commitの実時刻は`2026-09-05T08:19:21+09:00`と`2026-09-05T08:21:39+09:00`であり、UTCでは前日だがJSTでは当日である。artifactは`（JST）`と明記している |
+| `docs/specs/15_要件追跡/01_変更履歴.md:5` 同上 | **false-positive** | 同上 |
+| `package.json:35` `required`集合に`CLAUDE.md`が無い（Major） | **valid。本PRでは取り込まない** | ADV-03。#1221へ分離した |
+
+**ラウンド2で製品コードを1行も変更していない。** 変更はartifact本文のみである。
+
+## 9. 判定
+
+**承認。** blocking 0件、未解決のCritical / High 0件。record-only 3件（ADV-01・02・03）、resolved 1件（DISC-01）、false-positive 2件。
