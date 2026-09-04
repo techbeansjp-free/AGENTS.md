@@ -35,3 +35,8 @@ Feature: project固有rule台帳の単体契約
     Given metadataを省略したruleと有効・空文字列・非文字列のmetadataを持つruleがある
     When runtimeでrule metadataとtrusted policy比較を検証する
     Then metadata省略と有効値だけを許可しmetadata追加を意味変更として拒否しない
+
+  Scenario: SCN-UNIT-LEDGER-008 trusted ruleの削除を拒否しauthorityと経路の不在を返す
+    Given trusted policyのproject ruleを候補側から取り除いた差分がある
+    When trusted rule削除の判定結果を読む
+    Then 削除を拒否しauthorityと候補側経路の不在を診断へ返す

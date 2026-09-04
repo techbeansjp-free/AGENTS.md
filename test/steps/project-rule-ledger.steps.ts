@@ -113,6 +113,11 @@ class ProjectRuleLedgerWorld extends WorkflowWorld {
   runtimeRuleValidations: Array<ReturnType<typeof validateRule>> = [];
   metadataComparison: ReturnType<typeof compareTrustedPolicy> | undefined =
     undefined;
+  /** trusted rule削除の判定結果（Issue #967）。 */
+  retirementComparison: ReturnType<typeof compareTrustedPolicy> | undefined =
+    undefined;
+  retirementDiagnostics: ReturnType<typeof compareTrustedPolicy>["rejected"] =
+    [];
   /** 適合性検査scriptの本体。 */
   ledgerSource = "";
   /** 本体から実際に読み取った合成済み検査名。 */
@@ -254,6 +259,64 @@ Given(
     ];
   },
 );
+
+Given(
+  "trusted policyのproject ruleを候補側から取り除いた差分がある",
+  function () {
+    /**
+     * **trusted ruleの削除は受理されない。** 候補側から適用する経路は製品CLIに無く、
+     * `policy migrate`も`compareTrustedPolicy`を互換性判定に使うため同じ理由で拒否する。
+     * **利用者が「永久に廃止できない」と誤読しないよう、診断が経路の所在まで返す**
+     * （Issue #967）。
+     */
+    const trustedRule = ruleFixture();
+    const policy = (rules: unknown[]) => ({
+      schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
+      delivery: { stopAt: "pull_request" as const },
+      merge: {
+        mode: "disabled" as const,
+        branches: [],
+        methods: [],
+        requiredChecks: [],
+        requiredReviews: 1,
+      },
+      budgets: { localFeedbackMs: 120000, prGateMs: 900000 },
+      rules,
+    });
+    this.retirementComparison = compareTrustedPolicy(
+      policy([trustedRule]) as Parameters<typeof compareTrustedPolicy>[0],
+      policy([]) as Parameters<typeof compareTrustedPolicy>[1],
+    );
+  },
+);
+
+When("trusted rule削除の判定結果を読む", function () {
+  const comparison = this.retirementComparison;
+  assert.ok(comparison);
+  this.retirementDiagnostics = comparison.rejected;
+});
+
+Then("削除を拒否しauthorityと候補側経路の不在を診断へ返す", function () {
+  assert.equal(this.retirementComparison?.allowed, false);
+  const reasons = this.retirementDiagnostics.flatMap(
+    (item: { reasons: string[] }) => item.reasons,
+  );
+  assert.ok(reasons.includes("trusted ruleを削除している"), reasons.join("; "));
+  const next = this.retirementDiagnostics
+    .map((item: { next: string }) => item.next)
+    .join(" ");
+  /**
+   * **「既定ブランチへの正規migrationを行え」だけを返すと利用者を循環させる。**
+   * その手段が製品内に無いためである。authorityと経路の不在を名指しする。
+   */
+  assert.match(next, /既定branchのproject policy owner/u);
+  assert.match(next, /候補側から適用する経路は製品CLIにありません/u);
+  assert.match(next, /manifestから外すだけでは受理されません/u);
+  const authority = this.retirementDiagnostics
+    .map((item: { requiredAuthority: string }) => item.requiredAuthority)
+    .join(" ");
+  assert.match(authority, /default branch policy owner/u);
+});
 
 When("runtimeでrule metadataとtrusted policy比較を検証する", function () {
   this.runtimeRuleValidations = this.rules.map(validateRule);
