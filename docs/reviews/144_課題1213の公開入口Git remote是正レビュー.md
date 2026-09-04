@@ -8,15 +8,15 @@
 |---|---|
 | 対象 | 実装 |
 | 対象Issue | #1213 |
-| ラウンド | Step 10 ラウンド1 |
+| ラウンド | Step 10 ラウンド1〜2 |
 | 比較基点 | `34935668c086db9a819b2feda9553298fff80272` |
-| H_impl | `470309885e3787950370236afd2bd5dc25a282a9` |
+| H_impl | `86153571bef659264fad316a1ebebe2daf789d70` |
 | 比較基点の由来 | worktree作成時点の`origin/main`のtip |
 | モード | full（Q-01がfalse） |
-| 対象差分 | 7 file、+44 -5。commitは`47030988` |
+| 対象差分 | 8 file、+240 -8。commitは`47030988`と`86153571`（取り込みの前進commit）。取り込みroundでは`比較基点..H_impl`へ最初のartifact commitが入る |
 | 対象外 | `prepare`の承認待ち（**#1187**。承認機構つき環境で`dist/`が生成されない）。npm registryへの公開（**#984 で対応しないと決裁済み**）。`cli-usage.ts`の48件のusage例。`docs/reviews/`のrole authority不整合（#1047） |
-| 残り予算 | **2**（同一範囲で最大3ラウンド、収束後にHEADが動いたときの取り直しを1回まで） |
-| ラウンド数 | 1 |
+| 残り予算 | **1**（同一範囲で最大3ラウンド、収束後にHEADが動いたときの取り直しを1回まで） |
+| ラウンド数 | 2。ラウンド2は`pr create`後の外部指摘の取り込みである（#1194・#1201の経路） |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260904_161231_公開入口の取得元をnpm-registryからGit-remoteへ是正する |
 | 仕様の所有箇所 | `docs/specs/02_要件/04_仕様・品質管理要件.md`のREQ-SQ-005（**改訂**） |
 | 成果物行数 | 配布文書 **+21 -2行**（README +8、中央利用案内 +11 -1、機能仕様 +1 -1）。仕様 **+2 -1行**。支援層 **+20 -3行**（既存scenarioの延長のみ）。**支援層/成果物 = 0.95倍** |
@@ -61,7 +61,8 @@
 | `docs/specs/02_要件/04_仕様・品質管理要件.md` | M | project | spec | REQ-SQ-005へ取得元の要求を追記した | 適合 | REQ-SQ-005 | 同上 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | project | spec | 変更履歴を1行足した | 適合 | 同上 | 同上 | pass |
 | `test/features/unit/root-readme.feature` | M | package | package | 既存scenarioの説明文を新しい性質へ直した。**scenario数を増やしていない** | 適合 | AC-05 | fixtureは実fileの読み取りで外部へ到達しない | pass |
-| `test/steps/root-readme.steps.ts` | M | package | package | 既存 `SCN-UNIT-README-001` のWhenへ中央利用案内の読み取りを足し、Thenへ4件の肯定assertと1件の否定assertを置いた。**新規SCNを足していない** | 適合 | AC-02〜AC-05 | fixtureは実fileの読み取りで外部へ到達しない | pass |
+| `test/steps/root-readme.steps.ts` | M | package | package | 既存 `SCN-UNIT-README-001` のWhenへ中央利用案内の読み取りを足し、Thenへ肯定assertと否定assertを置いた。取り込みで否定assertを両文書へ広げ、devDependencies取得のassertを足した。**新規SCNを足していない** | 適合 | AC-02〜AC-05 | fixtureは実fileの読み取りで外部へ到達しない | pass |
+| `docs/reviews/144_課題1213の公開入口Git remote是正レビュー.md` | A | project | project | 本artifact。**取り込みroundでは`比較基点..H_impl`へ最初のartifact commitが入るため、自身を個別監査行に持つ**（#1194の新経路の構造的帰結） | 適合 | REQ-SQ-005 | 記述だけで実行authorityを持たない | pass |
 
 ## 2. 受け入れ条件の確認
 
@@ -113,7 +114,12 @@
 | DISC-1102 | Low | **`check_cli_contract.ts` が字面を要求する。** 48件の書き換え案が成立しない | 実コード読解 | 実測 | 短縮表記の定義を1箇所へ置く形にした | valid / resolved | なし |
 | ADV-01 | **High** | **文書を直しても、承認機構つき環境では入口が成立しない。** `npx github:` 経路は `prepare` を走らせて `dist/` を作るが、pnpm は既定で `onlyBuiltDependencies` の承認を要求する。**利用側は pnpm である** | 敵対評価 | 実測（#1187） | **本Issueでは修正しない。** 配布境界の変更でありowner決裁を要する。**#1187 へ案A〜Dの決裁材料を掲示した。#1025 の唯一のブロッカーである** | valid / record-only | 承認機構つき環境で入口が成立しない |
 
-**未解決のCritical / Highは0件である。** F-01・F-03は解消済み、ADV-01は記録のみで #1187 へ委譲した。
+| F-04 | **Major** | **「registryは一切介在しない」は言い過ぎだった。** Git取得時は`prepare`が`npm run build`を実行するため、その過程でdevDependenciesをregistryから取得する。**registryから解決しないのは本package自体だけである** | PR #1214 の外部review | 外部review | 両文書へdevDependenciesの取得を明記し、`agent-skill-chain@<version>`が成立しない理由も書いた。assertで固定した。変異M3でkill | valid / resolved | なし |
+| F-05 | Minor | **旧版固定形の否定assertが中央利用案内だけだった。** READMEへ復活しても通る | 同上 | 外部review | 両文書へ広げた。変異M4でkill | valid / resolved | なし |
+| F-06 | — | 「短縮表記の定義をREADMEから消し中央利用案内へ集約せよ」 | 同上 | 外部review | **valid でない。** READMEは`.agent-skill-chain/`を開かない読者のための公開入口であり、参照だけにすると入口の意味が失われる。**両方に置くのは意図した重複である**。`SCN-UNIT-README-001`も両文書を検査する | **invalid** | 定義が2箇所にある |
+| F-07 | — | 「独立review完了前にapprovedを記録するな」 | 同上 | 外部review | **valid / out-of-scope。** 0.2節に逸脱として開示済みであり、本repositoryの全ASC PRに共通する構造条件である。指摘された是正（review例外の正本registry登録）は配布契約変更でありowner決裁を要する。canonical Issueは #1036 | valid / out-of-scope | #1036 |
+
+**未解決のCritical / Highは0件である。** F-01・F-03・F-04は解消済み、ADV-01は記録のみで #1187 へ委譲した。
 
 ## 配布物影響
 
@@ -134,9 +140,15 @@
 
 ### ラウンド1
 
-- 対象: 実装差分の7 file。
-- 確認: 個別監査7行、AC-01〜06、INV-01〜03、肯定5観点、敵対6観点、変異2件。
+- 対象: 実装差分の8 file。
+- 確認: 個別監査8行、AC-01〜06、INV-01〜03、肯定5観点、敵対6観点、変異2件。
 - 結果: blocking 0件。record-only 1件（ADV-01）。resolved 4件（F-01・F-02・F-03・DISC-1102）。
+
+### ラウンド2
+
+- 対象: `pr create`後に届いた外部指摘4件（F-04〜F-07）。**#1194・#1201 で入れた取り込み経路の適用である。**
+- 確認: F-04を実コードの経路で確認した（`prepare` → `npm run build` → devDependencies取得）。**自分の記述が過大だった。** F-05・F-06は両文書の役割から判断した。是正は前進commitで行い、amendを使っていない。
+- 結果: blocking 0件。resolved 2件（F-04・F-05）。**F-06は根拠つきでinvalid、F-07は範囲外と判定した。**
 
 ## 7. テスト結果
 
@@ -154,8 +166,10 @@
 |---|---|---|
 | M1 | 中央利用案内の版固定形をregistry前提へ戻す | kill |
 | M2 | READMEから版固定の行を削る | kill |
+| M3 | READMEからdevDependencies取得の記述を削る | kill |
+| M4 | READMEへ旧版固定形を書き足す | kill |
 
-**2件ともkill。** 復元後に `SCN-UNIT-README-00` 系4件の再実行で緑を確認している。
+**4件ともkill。** M3とM4は外部指摘を受けて足した。 復元後に `SCN-UNIT-README-00` 系4件の再実行で緑を確認している。
 
 ## 8. 総合判定と再開地点
 
