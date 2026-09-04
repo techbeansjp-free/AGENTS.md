@@ -19,10 +19,15 @@ interface IsolationWorld extends WorkflowWorld {
   externalFile: string;
   installedAssets: string[];
   invalidRecordRejected: boolean;
+  /** install直後のhost入口の存在（Issue #1219）。 */
+  rootEntriesAfterInstall: boolean[];
   root: string;
   secondDeleteRejected: boolean;
   statusBefore: string;
 }
+
+/** repository直下へ展開されるhostごとの常時入口（Issue #1219）。 */
+const ROOT_HOST_ENTRIES = ["AGENTS.md", "CLAUDE.md"] as const;
 
 const { Given, When, Then } = stepDefinitions<IsolationWorld>();
 
@@ -417,8 +422,17 @@ Given("CLI lifecycle用の隔離consumerがある", function () {
 });
 
 When("CLIのinstallとupdateとdeleteをapplyする", function () {
+  const installed = runCli(this.root, ["install", "--apply"]);
+  /**
+   * **hostごとに常時読まれるfile名が違う。** Codexは`AGENTS.md`、Claude Codeは
+   * `CLAUDE.md`を読む。片方だけを配ると、もう片方のhostでは規範文書へ到達する
+   * 常時の入口が存在しない（Issue #1219）。**installの直後に両方を観測する。**
+   */
+  this.rootEntriesAfterInstall = ROOT_HOST_ENTRIES.map((relative) =>
+    fs.existsSync(path.join(this.root, relative)),
+  );
   this.cliResults = [
-    runCli(this.root, ["install", "--apply"]),
+    installed,
     runCli(this.root, ["update", "--apply"]),
     runCli(this.root, ["delete", "--apply"]),
   ];
@@ -429,7 +443,14 @@ Then("CLI lifecycleは成功してconsumer資産だけが残る", function () {
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assertCapturedFiles(this.root, this.consumerFiles);
   assert.equal(fs.existsSync(recordPath(this.root)), false);
-  assert.equal(fs.existsSync(path.join(this.root, "AGENTS.md")), false);
+  /** installは両hostの入口を作り、deleteは両方を取り除く。 */
+  assert.deepEqual(
+    this.rootEntriesAfterInstall,
+    ROOT_HOST_ENTRIES.map(() => true),
+    `installがhost入口を作っていません: ${ROOT_HOST_ENTRIES.join("、")}`,
+  );
+  for (const relative of ROOT_HOST_ENTRIES)
+    assert.equal(fs.existsSync(path.join(this.root, relative)), false);
 });
 
 Given("CLIで導入済みの隔離consumerと外部一時資産がある", function () {

@@ -13,7 +13,17 @@ import { readStoredStagingRecord } from "./staging.js";
 import { MODE_DECISION_FILE, STEP_JOURNAL_FILE, inspectWorkflowStagingArtifacts, } from "./workflow.js";
 import { surveyWorktrees } from "./worktree-survey.js";
 const packageRoot = findPackageRoot(import.meta.url);
-const ROOT_ASSETS = ["AGENTS.md"];
+/**
+ * repository直下へ展開するhost入口。
+ *
+ * **hostごとに常時読まれるfile名が違う。** Codexは`AGENTS.md`、Claude Codeは
+ * `CLAUDE.md`を読む。片方だけを配ると、もう片方のhostでは規範文書へ到達する
+ * 常時の入口が存在しない（Issue #1219）。
+ *
+ * **skillは代替にならない。** `HOST_SKILL_TARGETS`は呼び出されたときに読まれる
+ * 登録口であり、常時読まれる入口ではない。
+ */
+const ROOT_ASSETS = ["AGENTS.md", "CLAUDE.md"];
 const NAMESPACE_ROOT_ASSETS = ["00_利用案内.md"];
 const NAMESPACE_ASSETS = ["docs", "skills", "templates", "schemas", "policy"];
 const MANAGED_RECORD = ".agent-skill-chain/managed-assets.json";
@@ -25,7 +35,12 @@ const HOST_SKILL_TARGETS = [
 const SHA256 = /^[a-f0-9]{64}$/u;
 function isPackageOwnedPath(relative) {
     const normalized = relative.replaceAll("\\", "/");
-    return (normalized === "AGENTS.md" ||
+    return (
+    /**
+     * **`ROOT_ASSETS`を正本にする。** file名を直接書くと、host入口を足したときに
+     * 展開はされるがrecord検証で拒否される（Issue #1219で`CLAUDE.md`を足して観測した）。
+     */
+    ROOT_ASSETS.includes(normalized) ||
         HOST_SKILL_TARGETS.includes(normalized) ||
         NAMESPACE_ROOT_ASSETS.some((file) => normalized === `.agent-skill-chain/${file}`) ||
         NAMESPACE_ASSETS.some((directory) => normalized.startsWith(`.agent-skill-chain/${directory}/`)));
