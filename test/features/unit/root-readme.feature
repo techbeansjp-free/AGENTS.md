@@ -1,7 +1,7 @@
 @unit
 Feature: root READMEの公開案内契約
 
-  Scenario: SCN-UNIT-README-001 READMEが現行の公開CLI 4 commandを記載する
+  Scenario: SCN-UNIT-README-001 READMEと利用案内が公開CLI 4 commandとGit remote入口を記載する
     Given repository rootに利用者向けREADMEがある
     When READMEの公開案内を検査する
     Then READMEは製品目的と前提条件と現行の公開CLI 4 commandを記載する
