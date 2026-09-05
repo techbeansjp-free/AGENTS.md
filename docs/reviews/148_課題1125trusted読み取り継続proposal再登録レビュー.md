@@ -8,15 +8,15 @@
 |---|---|
 | 対象 | 実装 |
 | 対象Issue | #1125 |
-| ラウンド | Step 10 ラウンド1 |
+| ラウンド | Step 10 ラウンド1〜2 |
 | 比較基点 | `f3a17566e297f85da0c8de1d2543abb0e0cc7f00` |
-| H_impl | `73b4514a38a665ddd638019d54624f94351de47a` |
+| H_impl | `e78475f5a9dcc2af2c786c9542786b5d99a2fe1e` |
 | 比較基点の由来 | worktree作成時点の`origin/main`のtip |
 | モード | quick（Q-01〜Q-08がすべてtrue） |
-| 対象差分 | 1 file、+23 -0。commitは`73b4514a` 1件 |
+| 対象差分 | 1 file、+23 -0。commitは`73b4514a`と`e78475f5`（取り込みでartifact commitが`比較基点..H_impl`へ入る） |
 | 対象外 | 保護fileの内容変更（PR-2）。`TQP-TRUSTED-READ-CONTINUE-001`の削除（**規則上できない**）。`docs/reviews/`のrole authority不整合（#1047） |
-| 残り予算 | **2**（同一範囲で最大3ラウンド。以降は収束後のHEAD移動に対する取り直し1回のみ） |
-| ラウンド数 | 1 |
+| 残り予算 | **1**（同一範囲で最大3ラウンド。以降は収束後のHEAD移動に対する取り直し1回のみ） |
+| ラウンド数 | 2。ラウンド2は`pr create`後の外部指摘の取り込みである（#1194・#1201の経路） |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260905_090953_trusted読み取り継続proposalを本文つきで登録し直す |
 | 仕様の所有箇所 | `docs/specs/02_要件/04_仕様・品質管理要件.md`のREQ-SQ-030 |
 | 成果物行数 | project **+23行**（`.github/trusted-quality-proposals.json`）。製品コード **0行**。支援層 **0行**。**支援層/成果物 = 0倍** |
@@ -58,6 +58,7 @@
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
 | `.github/trusted-quality-proposals.json` | M | project | project | proposal 1件の末尾追記。既存14件へ触れない | registry → 適用PR の一方向。登録は適用を参照しない | REQ-SQ-030 / AC-01〜AC-06 / SCN-UNIT-PROPFIELD-001 | **登録済みproposalは削除できない。** 適用しなければ`staged`のまま無害である | pass |
+| `docs/reviews/148_課題1125trusted読み取り継続proposal再登録レビュー.md` | A | project | evidence | 本レビュー証跡。取り込みでラウンド1のartifact commitが`比較基点..H_impl`へ入るため自己行を持つ | 適合 | AC-06 | 記述のみ | pass |
 
 ## 配布物影響
 
@@ -73,6 +74,8 @@
 **`001` に欠けていたのはこれである。** `afterSha256` = `145c8030dd7b778334fe30a47d15b81af34afbe77ffcfae677672e435d94f01c` は、**`beforeSha256` = `0702604760f7eb6b3083467a34e6c0b1319f5e3d4b4c1f0f560b71d13f9a1305` の内容へ次のdiffを当て、prettierを適用した結果**である（prettierは本文を変更しなかった）。
 
 ```diff
+--- a/scripts/check_project_quality.ts
++++ b/scripts/check_project_quality.ts
 @@ -775,6 +775,14 @@
      root,
      ".github/workflows/trusted-quality.yml",
@@ -136,14 +139,19 @@
 
 **本artifactのdiffだけを入力にして、`afterSha256` をbyte単位で再現できる。**
 
+上のblockは `---` と `+++` の対象pathを含む完全なunified diffである。既定branch（`f3a17566`）の内容へそのまま当てられる。
+
 ```console
-$ # 本artifactのdiffブロックを抽出し、既定branchの内容へ当てる
+$ git show f3a17566:scripts/check_project_quality.ts > scripts/check_project_quality.ts
+$ sha256sum scripts/check_project_quality.ts
+0702604760f7eb6b3083467a34e6c0b1319f5e3d4b4c1f0f560b71d13f9a1305
+$ # 本artifactの```diffブロックの中身をそのままfileへ保存して当てる
 $ patch -p1 < from-artifact.diff
 $ sha256sum scripts/check_project_quality.ts
 145c8030dd7b778334fe30a47d15b81af34afbe77ffcfae677672e435d94f01c
 ```
 
-登録した `afterSha256` と一致する。**`001` にできなかったのはこれである。**
+**前者が登録した `beforeSha256`、後者が `afterSha256` と一致する。** 入力は本artifactと既定branchの内容だけであり、外部のfileを要さない。**`001` にできなかったのはこれである。**
 
 ## 3. 肯定review
 
@@ -176,13 +184,16 @@ $ sha256sum scripts/check_project_quality.ts
 | ADV-01 | record-only | 既定branchが動くと `beforeSha256` が陳腐化しうる | merge直前に再確認する。自動releaseはtag方式で当該fileを触らない |
 | ADV-02 | record-only | `001` は `staged` のまま永久に残る。削除経路が無い | 規則どおりである。#1211（project ruleの廃止経路）と同型の論点だが、proposal registryは対象外 |
 
+| ADV-03 | resolved | **証跡のdiffが`---`/`+++`の対象pathを欠いており、artifact単体では`patch -p1`を実行できなかった。** 2.1節が主張する再現手順が、artifactに無いfileを入力にしていた（外部reviewer指摘、Major） | **本PRで是正した。** 対象pathを含む完全なunified diffへ直し、`beforeSha256`の内容を`git show`で得るところから手順を書き直した。**artifactから逐語で抽出したdiffを当てて2つのhashが両方一致することを実測した** |
+| ADV-04 | resolved | 行頭の `#1002` がMarkdownの見出しとして解釈される（MD018、外部reviewer指摘、Minor） | Issue番号をcode spanで囲んだ |
+
 **blocking 0件。未解決のCritical / High 0件。**
 
 ## 6. 再発防止
 
-**#1002 は「hashがずれると再登録になる」を教訓にしたが、ずれる原因はhashの取り方ではなく本文が残っていないことだった。**
+**Issue `#1002` は「hashがずれると再登録になる」を教訓にしたが、ずれる原因はhashの取り方ではなく本文が残っていないことだった。**
 
-#1002 は変換手順を全手記録し、さらに **PR-1のcommitをtrusted rootとして切り出して事前検証**していた。#1125 の PR-1（`001`）にはそれが無い。artifact `120_…` は「prettier適用後から取った」とだけ書いている。
+Issue `#1002` は変換手順を全手記録し、さらに **PR-1のcommitをtrusted rootとして切り出して事前検証**していた。#1125 の PR-1（`001`）にはそれが無い。artifact `120_…` は「prettier適用後から取った」とだけ書いている。
 
 **`afterSha256` を登録するPRは、次の3つを揃える。**
 
@@ -191,6 +202,19 @@ $ sha256sum scripts/check_project_quality.ts
 3. その実行結果を証跡へ引用する
 
 **本PRは3件とも実施した。**
+
+## 6.1 ラウンド2 固有の確認
+
+**外部reviewer（CodeRabbit）の指摘2件を受けた取り込みラウンドである。**
+
+| 指摘 | 判定 | 対処 |
+|---|---|---|
+| 2節のdiffが`---`/`+++`を欠き、artifact単体で`patch -p1`できない（Major） | **valid** | ADV-03。対象pathを足し、手順を`git show`から書き直した |
+| 行頭の`#1002`がMD018になる（Minor） | **valid** | ADV-04。code spanで囲んだ |
+
+**この指摘は本PRの主張そのものへ当たっていた。** 本PRは「証跡から再現できること」を目的にしながら、**その証跡が単体で再現できない形をしていた。** 是正後、artifactから逐語で抽出したdiffだけで `beforeSha256` と `afterSha256` の両方を再現できることを実測した。
+
+**ラウンド2でregistryを1バイトも変更していない。** 変更はartifact本文のみである。
 
 ## 7. 検証結果
 
@@ -221,4 +245,4 @@ $ sha256sum scripts/check_project_quality.ts
 
 ## 9. 判定
 
-**承認。** blocking 0件、未解決のCritical / High 0件。resolved 2件（DISC-001・002）、record-only 2件（ADV-01・02）。
+**承認。** blocking 0件、未解決のCritical / High 0件。resolved 4件（DISC-001・002、ADV-03・04）、record-only 2件（ADV-01・02）。
