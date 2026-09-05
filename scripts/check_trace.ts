@@ -165,6 +165,20 @@ interface RequirementDefinition {
   line: number;
   acceptanceIds: string[];
   implementationPaths: string[];
+  namedScenarioClaims: NamedScenarioClaim[];
+}
+
+/**
+ * 要件本文が特定のSCNを強制主体または検出主体として断定した文。
+ *
+ * **単なるSCN参照や例示と区別する。** 受理するのは閉じた語彙に限る。
+ * 動詞1語で判定すると通常の仕様記述へ誤って当たり、**偽陽性は全変更の
+ * 既存gateを止める**（Issue #1229）。
+ */
+interface NamedScenarioClaim {
+  line: number;
+  scenarioIds: string[];
+  errors: string[];
 }
 
 interface TraceRow {
@@ -224,6 +238,112 @@ function markdownPaths(text: string): string[] {
     .map((candidate) => candidate.replaceAll("\\", "/"));
 }
 
+/**
+ * 受理する帰属文の形。
+ *
+ * **`のは … である`まで成立した文だけを対象にする。** 新しい言い回しは、
+ * この一覧とfixtureを意図的に拡張してから使う。
+ */
+const NAMED_SCENARIO_CLAIM =
+  /(?:この不変条件を強制するのは|[^。]*?を回帰として検出するのは)((?:\s|、|と|から|`SCN-[A-Z0-9-]+`)+)である/gu;
+
+const SCENARIO_RANGE_LIMIT = 64;
+
+/**
+ * `AからB`の範囲を連番展開する。
+ *
+ * **条件を満たさない範囲を両端だけの列挙へ縮退させない。** 縮退させると中間IDの
+ * 欠落が黙って通る。prefixのbyte一致、桁幅一致、開始が終了以下、件数上限を要求する。
+ */
+function expandScenarioRange(
+  from: string,
+  to: string,
+): { ids: string[]; error: string | undefined } {
+  const start = /^(.*?)(\d+)$/u.exec(from);
+  const end = /^(.*?)(\d+)$/u.exec(to);
+  if (!start?.[1] || !start[2] || !end?.[1] || !end[2])
+    return {
+      ids: [],
+      error: `範囲の両端が末尾数字のSCN IDではありません: ${from}から${to}`,
+    };
+  if (start[1] !== end[1])
+    return {
+      ids: [],
+      error: `範囲の両端のprefixが一致しません: ${from}から${to}`,
+    };
+  if (start[2].length !== end[2].length)
+    return {
+      ids: [],
+      error: `範囲の両端の桁数が一致しません: ${from}から${to}`,
+    };
+  const first = Number(start[2]);
+  const last = Number(end[2]);
+  if (first > last)
+    return {
+      ids: [],
+      error: `範囲の開始が終了より大きいです: ${from}から${to}`,
+    };
+  if (last - first + 1 > SCENARIO_RANGE_LIMIT)
+    return {
+      ids: [],
+      error: `範囲の展開件数が上限${SCENARIO_RANGE_LIMIT}を超えます: ${from}から${to}`,
+    };
+  const ids: string[] = [];
+  for (let value = first; value <= last; value += 1)
+    ids.push(`${start[1]}${String(value).padStart(start[2].length, "0")}`);
+  return { ids, error: undefined };
+}
+
+/**
+ * 要件本文から帰属文を抽出する。
+ *
+ * **code fence内を対象にしない。** 説明のために書いた例で既存gateを止めない。
+ */
+function collectNamedScenarioClaims(
+  bodyLines: string[],
+  bodyStartLine: number,
+): NamedScenarioClaim[] {
+  const claims: NamedScenarioClaim[] = [];
+  let insideFence = false;
+  for (let index = 0; index < bodyLines.length; index += 1) {
+    const line = bodyLines[index] ?? "";
+    if (/^\s*```/u.test(line)) {
+      insideFence = !insideFence;
+      continue;
+    }
+    if (insideFence) continue;
+    NAMED_SCENARIO_CLAIM.lastIndex = 0;
+    for (const match of line.matchAll(NAMED_SCENARIO_CLAIM)) {
+      const raw = match[1] ?? "";
+      const listed = [...raw.matchAll(/`(SCN-[A-Z0-9-]+)`/gu)].map(
+        (hit) => hit[1] ?? "",
+      );
+      if (listed.length === 0) continue;
+      const scenarioIds = new Set<string>();
+      const errors: string[] = [];
+      if (raw.includes("から")) {
+        if (listed.length < 2)
+          errors.push(`範囲表記に両端がありません: ${raw.trim()}`);
+        else {
+          const expanded = expandScenarioRange(
+            listed[0] ?? "",
+            listed[1] ?? "",
+          );
+          if (expanded.error) errors.push(expanded.error);
+          for (const id of expanded.ids) scenarioIds.add(id);
+          for (const id of listed.slice(2)) scenarioIds.add(id);
+        }
+      } else for (const id of listed) scenarioIds.add(id);
+      claims.push({
+        line: bodyStartLine + index,
+        scenarioIds: [...scenarioIds].sort(),
+        errors,
+      });
+    }
+  }
+  return claims;
+}
+
 function collectRequirementDefinitions(
   root: string,
   markdownFiles: string[],
@@ -242,11 +362,13 @@ function collectRequirementDefinitions(
         operationCount += 1;
         end += 1;
       }
-      const body = lines.slice(index + 1, end).join("\n");
+      const bodyLines = lines.slice(index + 1, end);
+      const body = bodyLines.join("\n");
       definitions.push({
         id: heading[1],
         file: source,
         line: index + 1,
+        namedScenarioClaims: collectNamedScenarioClaims(bodyLines, index + 2),
         acceptanceIds: matchingIds(body, ACCEPTANCE_ID),
         implementationPaths: markdownPaths(
           body
@@ -589,6 +711,46 @@ export function checkSpecNormalization(
         );
     }
   }
+
+  /**
+   * 要件本文の帰属文と追跡表の登録を突合する。
+   *
+   * **排他的所属を要求しない。** 追跡は多対多であり、名指しSCNが他の要件へも
+   * 結線されていること自体は欠陥ではない。欠陥は名指し元要件への辺が無いことである。
+   *
+   * **自動修正しない。** 要件ID・SCN ID・本文位置・不足SCNを報告し、追跡表を直すか
+   * 名指し契約を変えるかはownerが選ぶ（Issue #1229）。
+   */
+  const scenariosByRequirement = new Map<string, Set<string>>();
+  for (const row of traceRows)
+    for (const requirementId of row.requirementIds) {
+      const linked = scenariosByRequirement.get(requirementId) ?? new Set();
+      for (const scenarioId of row.scenarioIds) linked.add(scenarioId);
+      scenariosByRequirement.set(requirementId, linked);
+    }
+  for (const definition of collected.definitions)
+    for (const claim of definition.namedScenarioClaims) {
+      operationCount += 1;
+      const location = `${definition.file}:${claim.line}`;
+      for (const failure of claim.errors)
+        errors.push(`帰属文の範囲表記が不正です: ${failure} (${location})`);
+      const linked = scenariosByRequirement.get(definition.id) ?? new Set();
+      const unknown = claim.scenarioIds.filter(
+        (scenarioId) => !scenariosById.has(scenarioId),
+      );
+      if (unknown.length > 0)
+        errors.push(
+          `帰属文が実在しないSCNを名指ししています: ${definition.id} -> ${unknown.join("、")} (${location})`,
+        );
+      const missing = claim.scenarioIds.filter(
+        (scenarioId) =>
+          !linked.has(scenarioId) && !unknown.includes(scenarioId),
+      );
+      if (missing.length > 0)
+        errors.push(
+          `帰属文が名指しするSCNが追跡表の同じ要件へ結線されていません: ${definition.id} -> ${missing.join("、")} (${location})`,
+        );
+    }
 
   return {
     valid: errors.length === 0,
