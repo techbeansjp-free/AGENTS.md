@@ -54,12 +54,14 @@ export function isContentEquivalent(before, after) {
 export function deriveEffectiveHead(input) {
     let effective = input.anchoredHeadSha;
     let validCount = 0;
+    let recordedAt;
     for (const [index, candidate] of input.records.entries()) {
         if (!isEvidenceReanchorRecord(candidate))
             return {
                 effectiveHeadSha: effective,
                 validCount,
                 invalidIndex: index,
+                effectiveRecordedAt: recordedAt,
             };
         if (candidate.oldHeadSha !== effective ||
             candidate.oldHeadSha === candidate.newHeadSha)
@@ -67,11 +69,18 @@ export function deriveEffectiveHead(input) {
                 effectiveHeadSha: effective,
                 validCount,
                 invalidIndex: index,
+                effectiveRecordedAt: recordedAt,
             };
         effective = candidate.newHeadSha;
+        recordedAt = candidate.recordedAt;
         validCount += 1;
     }
-    return { effectiveHeadSha: effective, validCount, invalidIndex: undefined };
+    return {
+        effectiveHeadSha: effective,
+        validCount,
+        invalidIndex: undefined,
+        effectiveRecordedAt: recordedAt,
+    };
 }
 /**
  * 実効HEADが対象PRの現在のheadから到達できるかを三値で返す。

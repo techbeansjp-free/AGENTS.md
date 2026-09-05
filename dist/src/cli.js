@@ -43,6 +43,7 @@ import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
 import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, observeStoredMerge, prepareStoredMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
 import { DELIVERY_STATE_FILE, assertImmutablePullRequestBinding, canonicalDigest, closingContractDigest, pullRequestContentDigest, pullRequestTerminalEvidenceId, } from "./domain/delivery-state.js";
 import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, } from "./domain/workflow.js";
+import { CI_DELIVERY_GRACE_MINUTES, inspectCiDelivery, } from "./domain/ci-delivery.js";
 function workflowArguments(args) {
     const flags = {};
     const artifacts = [];
@@ -630,6 +631,32 @@ function resolveImplementationCommitForMerge(root, finalHeadSha) {
             .digest("hex"),
     };
 }
+/**
+ * CI配送判定の事象時刻を選ぶ。
+ *
+ * **実効HEADが再固定で進んでいるなら、その再固定時刻を使う。** 再固定はHEADを
+ * 差し替える操作であり、新しいHEADに対するCI runはその時刻より後にしか生成
+ * されない。元の`pr.boundAt`から経過を測ると、新しいHEADで未生成の状態を
+ * 古い時刻からの経過で`undelivered`と誤分類する（Issue #969）。
+ *
+ * **再固定が無ければ従来どおり。** `pr.boundAt`はASCがPRをbindした時刻、
+ * `create.preparedAt`はhead SHAを固定した時刻であり、どちらもcommit時刻や
+ * 汎用のPR更新時刻ではない。
+ */
+function ciDeliveryEventAt(staging, state) {
+    const anchored = state.pr?.boundAt ?? state.create.preparedAt;
+    try {
+        const derived = deriveEffectiveHead({
+            records: readEvidenceReanchorChain(staging),
+            anchoredHeadSha: state.create.headSha,
+        });
+        return derived.effectiveRecordedAt ?? anchored;
+    }
+    catch {
+        /** **観測できない場合は固定時刻へ倒す。** 判定を止める門にしない。 */
+        return anchored;
+    }
+}
 function observeMergeReviewEvidence(input) {
     if (typeof input.observed.headRefOid !== "string")
         throw new Error("PR HEAD SHAが不正です");
@@ -641,11 +668,12 @@ function observeMergeReviewEvidence(input) {
     if (implementation.sha !== candidate.implementationCommitSha)
         throw new Error("実装commitのtrusted観測がH_implと一致しません");
     const approvals = github("pr.reviews", { repository: input.repository, pr: input.pr }, input.root);
-    const ci = github("pr.ci-runs", {
+    const ciRuns = github("pr.ci-runs", {
         repository: input.repository,
         pr: input.pr,
         headSha: input.observed.headRefOid,
-    }, input.root)
+    }, input.root);
+    const ci = ciRuns
         .filter((run) => run.repository.toLowerCase() === input.repository.toLowerCase() &&
         /^[1-9]\d*$/u.test(run.runId) &&
         run.event === "pull_request" &&
@@ -654,8 +682,27 @@ function observeMergeReviewEvidence(input) {
         run.pullRequestNumbers.length === 1 &&
         run.pullRequestNumbers[0] === input.pr)
         .sort((left, right) => left.runId.localeCompare(right.runId, "en", { numeric: true }))[0];
-    if (!ci)
-        throw new Error("current H_finalと対象PRへ直接関連するsuccessful pull_request CI runがありません");
+    if (!ci) {
+        /**
+         * **拒否の理由を、待つべきか人を呼ぶべきかまで含めて返す**（Issue #969）。
+         *
+         * 従来はrun未生成・実行中・失敗がすべて同じ1文になっていた。GitHub Actionsの
+         * 遅延を「不達」と誤診し、不要な人間対応を要求した実例がある。**判定はmergeの
+         * 門を増やさない。** 拒否そのものは従来どおりで、診断の内容だけを厚くする。
+         */
+        const delivery = inspectCiDelivery({
+            runs: ciRuns,
+            headSha: input.observed.headRefOid,
+            pullRequest: input.pr,
+            eventAt: input.ciEventAt,
+            observedAt: deliveryEventTime(input.ciEventAt),
+            graceMinutes: CI_DELIVERY_GRACE_MINUTES,
+        });
+        throw new Error(`current H_finalと対象PRへ直接関連するsuccessful pull_request CI runがありません: ` +
+            `配送状態=${delivery.state} 該当run=${delivery.runCount}件 ` +
+            `head=${delivery.headSha} イベント時刻=${delivery.eventAt} 観測時刻=${delivery.observedAt} ` +
+            `経過=${delivery.elapsedMinutes.toFixed(1)}分 猶予=${delivery.graceMinutes}分。${delivery.nextAction}`);
+    }
     const independentReview = currentIndependentApprovals({
         approvals,
         headSha: input.observed.headRefOid,
@@ -734,6 +781,7 @@ function inspectAuthorizedPullRequestMerge(input) {
         pr: input.pr,
         state: input.state,
         observed,
+        ciEventAt: ciDeliveryEventAt(input.staging, input.state),
     });
     return {
         observed,
@@ -909,6 +957,7 @@ function readBackPreparedPullRequestMerge(input) {
                 pr: input.pr,
                 state: input.state,
                 observed,
+                ciEventAt: ciDeliveryEventAt(input.staging, input.state),
             });
             assertFixedMergeReviewEvidence(input.state, reviewed.reviewEvidence);
         }

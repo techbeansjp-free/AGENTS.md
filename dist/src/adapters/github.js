@@ -621,7 +621,13 @@ export function github(operation, supplied, cwd) {
             "api",
             "--paginate",
             "--slurp",
-            `repos/${input.repository}/actions/runs?event=pull_request&head_sha=${headSha}&status=success&per_page=100`,
+            /**
+             * **成否で絞り込まない**（Issue #969）。`status=success`を付けると、
+             * run未生成・実行中・失敗がすべて同じ「該当0件」へ潰れ、
+             * 待つべきか人を呼ぶべきかを判定できない。**絞り込みは呼び出し側の
+             * 純関数が行う。** 成功判定そのものは従来どおり呼び出し側にある。
+             */
+            `repos/${input.repository}/actions/runs?event=pull_request&head_sha=${headSha}&per_page=100`,
         ], cwd).stdout);
         if (!Array.isArray(pages))
             throw new Error("GitHub Actions run観測がpage object配列ではありません");
@@ -651,6 +657,7 @@ export function github(operation, supplied, cwd) {
                 event: String(run.event ?? ""),
                 headSha: String(run.head_sha ?? ""),
                 conclusion: String(run.conclusion ?? "").toLowerCase(),
+                status: String(run.status ?? "").toLowerCase(),
                 pullRequestNumbers: run.pull_requests.map((pullRequest) => Number(pullRequest.number)),
             };
         });
