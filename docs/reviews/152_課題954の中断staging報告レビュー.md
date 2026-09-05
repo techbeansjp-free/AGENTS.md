@@ -8,15 +8,15 @@
 |---|---|
 | 対象 | 実装 |
 | 対象Issue | #954 |
-| ラウンド | Step 10 ラウンド1 |
+| ラウンド | Step 10 ラウンド1〜2 |
 | 比較基点 | `68c5bf1cfba06da6f4299a30f9c7717f8fda7620` |
-| H_impl | `b9b3c27ca7bb1e4c2180e68913ee83d6de936d34` |
+| H_impl | `f0ab19ad35300d3824bba26c3bc06661faff6052` |
 | 比較基点の由来 | worktree作成時点の`origin/main`のtip |
 | モード | full（Q-01がfalse。`doctor`の出力構造が変わる） |
 | 対象差分 | 8 file（うちdist 2件は生成物）、commitは`b9b3c27c` 1件 |
 | 対象外 | `healthy`の判定変更。`workflow list`の新設。中断の自動是正。契約driftの是正（古いstaging 17件）。`docs/reviews/`のrole authority不整合（#1047） |
-| 残り予算 | **2**（同一範囲で最大3ラウンド。以降は収束後のHEAD移動に対する取り直し1回のみ） |
-| ラウンド数 | 1 |
+| 残り予算 | **1**（同一範囲で最大3ラウンド。以降は収束後のHEAD移動に対する取り直し1回のみ） |
+| ラウンド数 | 2。ラウンド2は`pr create`後の外部指摘の取り込みである（#1194・#1201の経路） |
 | Step chain | 経由: /home/tatsuru/Projects/techbeansjp-free/AGENTS.md/.worktrees/20260905_183025-954-interrupted-chain-report/.agent-skill-chain/tmp/issues/20260905_184025_契約を満たしたまま未完のstagingをdoctorが分けて報告する |
 | 仕様の所有箇所 | `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md`のREQ-LC-011（**1段落追記**） |
 | 成果物行数 | 製品 **+30 -2行**（`workflow.ts` +14 -2、`lifecycle.ts` +16）。仕様 **+2行**。支援層 **+58行**（feature +15、steps +43）。**支援層/成果物 = 1.9倍** |
@@ -64,6 +64,7 @@
 | `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md` | M | project | spec | REQ-LC-011へ1段落追記。**既存本文を1文字も変えない** | 適合 | REQ-LC-011 / AC-LC-011 | 記述のみ | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | project | spec | 新規SCN 3件の結線 | 適合 | 同上 | 記述のみ | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | project | spec | 変更履歴1行 | 適合 | 同上 | 記述のみ | pass |
+| `docs/reviews/152_課題954の中断staging報告レビュー.md` | A | project | evidence | 本レビュー証跡。取り込みでラウンド1のartifact commitが`比較基点..H_impl`へ入るため自己行を持つ | 適合 | AC-06 | 記述のみ | pass |
 
 **`dist/` 2件は個別監査の対象外である。** `isGeneratedDistributionPath` が生成物を除外する（#1187）。
 
@@ -119,7 +120,23 @@
 | ADV-01 | record-only | **報告は出るが進行役が読む保証は無い。** 規約であって機構ではない | REQ-LC-011がworktreeへ同じ形を既に採っている。owner決裁「強制は基本使わない」に照らして門を足さない |
 | ADV-02 | record-only | 契約driftの17件は残る | **本Issueの範囲外。** 古いstagingの是正は別論点である |
 
+| ADV-03 | resolved | **新規SCN 3件を誤った要件行へ結線していた。** `REQ-WF-004`・`REQ-WF-012` の証拠として登録しており、仕様本文が名指しする `REQ-LC-011` の受入証拠になっていなかった（外部reviewer指摘、Minor） | **`trace:check` は orphan だけを見るため通っていた。** `REQ-LC-011` の専用行を作り、`REQ-WF-004`側からは戻した |
+| ADV-04 | resolved | **doc commentが実装と食い違っていた。** 「契約を満たしたまま止まったstagingも `valid: false` になる」と書いたが、`validateStepJournal` へ `upToStep: currentStep` を渡すため接頭辞が正しければ `valid: true` のままである（外部reviewer指摘、Minor） | 契約driftと中断を明示的に分けて書き直した。**実装が正しく説明が誤りだった** |
+
 **blocking 0件。未解決のCritical / High 0件。**
+
+## 5.1 ラウンド2 固有の確認
+
+**外部reviewer（CodeRabbit）の指摘2件を受けた取り込みラウンドである。**
+
+| 指摘 | 判定 | 対処 |
+|---|---|---|
+| 新規SCNが `REQ-LC-011` へ結線されていない（Minor） | **valid** | ADV-03。専用行を作った |
+| doc commentが実装と食い違う（Minor） | **valid** | ADV-04。説明を実装へ合わせた |
+
+**1件目は `trace:check` が通るのに誤っていた。** 同検査は orphan の有無だけを見るため、**紐づく先が違っても検出しない。** 識別子の実在と、紐づく先の正しさは別の検査である。
+
+**ラウンド2で判定logicを1行も変更していない。** 変更は追跡表の行とdoc commentである。
 
 ## 6. 検証結果
 
@@ -150,4 +167,4 @@
 
 ## 8. 判定
 
-**承認。** blocking 0件、未解決のCritical / High 0件。resolved 3件（DISC-001〜003）、record-only 2件（ADV-01・02）。
+**承認。** blocking 0件、未解決のCritical / High 0件。resolved 5件（DISC-001〜003、ADV-03・04）、record-only 2件（ADV-01・02）。
