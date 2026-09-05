@@ -10,42 +10,59 @@ import {
 import {
   compareScanBoundary,
   observeScanBoundary,
-  type GateExclusionSource,
+  type ExclusionPredicateSource,
+  type ScanBoundaryIncomplete,
 } from "../src/domain/scan-boundary.js";
 
 /**
- * 観測対象のgateをnpm script keyで明示する。
+ * 観測を期待する除外述語のID。
  *
- * **composite scriptを含めない。** `quality`や`verify:distribution`はleafの合成であり、
- * 走査境界を自分では持たない。含めると同じ境界を二重に数える。
- *
- * `excludes`が`undefined`のgateは、除外集合をmoduleとして公開していないため
- * 観測できない。**成功へ倒さず不完全として非0で終了する。**
+ * **供給元とは独立に列挙する。** 供給元から期待一覧を導出すると、供給元の削除で
+ * 期待も同時に縮み、述語の欠落を検出できない（Issue #960 round 1、F-02）。
  */
-const GATE_EXCLUSION_SOURCES: readonly GateExclusionSource[] = Object.freeze([
-  {
-    gate: "trace:check",
-    reason:
-      "Issue一時ステージングをSCN配置検査の走査範囲から除く（REQ-SQ-017）",
-    excludes: isIssueStagingPath,
-  },
-  {
-    gate: "directories:check",
-    reason: "一時ライフサイクル領域を配下の再帰から除く（REQ-SQ-019）",
-    excludes: isStagingLifecyclePath,
-  },
-  {
-    gate: "package:check",
-    reason: "一時ライフサイクル領域をpackage混入禁止prefixとして扱う",
-    excludes: isStagingLifecyclePath,
-  },
-  {
-    gate: "source:check",
-    reason:
-      "除外directory集合が`scripts/check_source_quality.ts`の非公開定数であり、moduleとして参照できません",
-    excludes: undefined,
-  },
+export const EXPECTED_PREDICATE_IDS: readonly string[] = Object.freeze([
+  "issue-staging",
+  "staging-lifecycle",
+  "source-quality-directories",
 ]);
+
+/**
+ * 除外述語の供給元。
+ *
+ * **`appliesTo`はgate名ではなく適用される検査の範囲である。** 述語はgate全体では
+ * なくgate内の一部へ適用される。gate名だけを書くと「gate全体の除外」と読める。
+ */
+export const EXCLUSION_PREDICATE_SOURCES: readonly ExclusionPredicateSource[] =
+  Object.freeze([
+    {
+      id: "issue-staging",
+      owner: "trace:check",
+      appliesTo:
+        "SCN配置検査の走査範囲のみ。同gateの要件本文検査へは同じMarkdownが届く",
+      reasonCode: "issue-staging",
+      reason:
+        "Issue一時ステージングをSCN配置検査の走査範囲から除く（REQ-SQ-017）",
+      excludes: isIssueStagingPath,
+    },
+    {
+      id: "staging-lifecycle",
+      owner: "directories:check、package:check",
+      appliesTo:
+        "`.agent-skill-chain`配下のdirectory案内検査と、`npm pack`が返した配布file集合の混入禁止prefix判定",
+      reasonCode: "staging-lifecycle",
+      reason: "一時ライフサイクル領域を対象から除く（REQ-SQ-019）",
+      excludes: isStagingLifecyclePath,
+    },
+    {
+      id: "source-quality-directories",
+      owner: "source:check",
+      appliesTo: "実装言語集約検査のdirectory再帰",
+      reasonCode: "predicate-unavailable",
+      reason:
+        "除外directory集合が`scripts/check_source_quality.ts`の非公開定数であり、moduleとして参照できません",
+      excludes: undefined,
+    },
+  ]);
 
 const GIT_ENV: NodeJS.ProcessEnv = {
   PATH: process.env.PATH ?? "/usr/bin:/bin",
@@ -57,25 +74,35 @@ const GIT_ENV: NodeJS.ProcessEnv = {
 };
 
 /**
- * ignored entryをgateが実際に見るfileへ展開する。
+ * NUL区切りのGit出力を分ける。
  *
- * **`git status --ignored`はdirectory単位へ畳む。** `.agent-skill-chain/tmp`のように
- * directoryごと無視される領域は1行で返るが、gateはfilesystemを歩くため配下のfileを見る。
- * 畳んだままの観測は、除外述語が深いprefixを要求する場合に「除外0件」と誤って報告する。
- *
- * 走査量の上限を置き、超えたら不完全として扱う。無制限に歩くと報告が観測ではなく負荷になる。
+ * **行区切りと`trim()`を使わない。** 空白・改行を含む正当なfilenameが変形または
+ * 欠落する（Issue #960 round 1、F-05）。
  */
+function nulSeparated(value: string): string[] {
+  return value.split("\0").filter((entry) => entry !== "");
+}
+
 const EXPANSION_FILE_LIMIT_PER_ENTRY = 2000;
 
+/**
+ * ignored entryを、検査が実際に見るfileへ展開する。
+ *
+ * **`git status --ignored`はdirectory単位へ畳む。** 畳んだままでは、深いprefixを
+ * 要求する述語について「除外0件」と誤って報告する。
+ *
+ * **展開中に消えたentryを黙って落とさない。** 落とすと、覆われていないのではなく
+ * 見ていないだけの状態を「差なし」の根拠にできてしまう（F-05）。
+ */
 function expandIgnoredEntries(
   root: string,
   entries: readonly string[],
 ): {
   readonly paths: string[];
-  readonly truncated: readonly string[];
+  readonly incomplete: ScanBoundaryIncomplete[];
 } {
   const paths: string[] = [];
-  const truncated: string[] = [];
+  const incomplete: ScanBoundaryIncomplete[] = [];
   for (const entry of entries) {
     let taken = 0;
     let overflow = false;
@@ -87,7 +114,24 @@ function expandIgnoredEntries(
       }
       const absolute = path.join(root, relative);
       const stat = fs.lstatSync(absolute, { throwIfNoEntry: false });
-      if (stat === undefined || stat.isSymbolicLink()) return;
+      if (stat === undefined) {
+        incomplete.push({
+          code: "scan-failed",
+          predicate: undefined,
+          path: relative,
+          detail: "Git観測後に消えたため展開できませんでした",
+        });
+        return;
+      }
+      if (stat.isSymbolicLink()) {
+        incomplete.push({
+          code: "scan-failed",
+          predicate: undefined,
+          path: relative,
+          detail: "symlinkは辿らず、指す先を観測できません",
+        });
+        return;
+      }
       if (!stat.isDirectory()) {
         paths.push(relative);
         taken += 1;
@@ -97,44 +141,40 @@ function expandIgnoredEntries(
         walk(`${relative}/${child.name}`);
     };
     walk(entry);
-    if (overflow) truncated.push(entry);
+    if (overflow)
+      incomplete.push({
+        code: "scan-failed",
+        predicate: undefined,
+        path: entry,
+        detail: `1領域あたり${EXPANSION_FILE_LIMIT_PER_ENTRY}件の上限に達したため展開を打ち切りました`,
+      });
   }
-  return { paths, truncated };
-}
-
-function lines(value: string): string[] {
-  return value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line !== "");
+  return { paths, incomplete };
 }
 
 export function reportScanBoundary(root = process.cwd()) {
-  const gates = GATE_EXCLUSION_SOURCES.map((source) => source.gate);
   let tracked: string[];
-  let ignored: string[];
-  let truncatedEntries: readonly string[];
+  let ignoredEntries: string[];
   try {
-    tracked = lines(git(["ls-files"], root, { env: GIT_ENV }).stdout);
-    ignored = lines(
-      git(["status", "--porcelain", "--ignored=matching"], root, {
+    tracked = nulSeparated(
+      git(["ls-files", "-z"], root, { env: GIT_ENV }).stdout,
+    );
+    ignoredEntries = nulSeparated(
+      git(["status", "--porcelain=v1", "-z", "--ignored=matching"], root, {
         env: GIT_ENV,
       }).stdout,
     )
-      .filter((line) => line.startsWith("!! "))
-      .map((line) => line.slice(3).replace(/\/$/u, ""));
-    const expanded = expandIgnoredEntries(root, ignored);
-    truncatedEntries = expanded.truncated;
-    ignored = expanded.paths;
+      .filter((entry) => entry.startsWith("!! "))
+      .map((entry) => entry.slice(3).replace(/\/$/u, ""));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return {
       valid: false,
-      gates,
+      expectedPredicates: EXPECTED_PREDICATE_IDS,
       incomplete: [
         {
-          code: "scan-failed",
-          gate: undefined,
+          code: "scan-failed" as const,
+          predicate: undefined,
           path: undefined,
           detail: `Git観測に失敗しました: ${detail}`,
         },
@@ -144,63 +184,53 @@ export function reportScanBoundary(root = process.cwd()) {
       comparison: undefined,
     };
   }
-  const baseline = observeScanBoundary({
-    gates,
-    paths: tracked,
-    sources: GATE_EXCLUSION_SOURCES,
-  });
-  const contaminated = observeScanBoundary({
-    gates,
-    paths: [...tracked, ...ignored],
-    sources: GATE_EXCLUSION_SOURCES,
-  });
+  const expanded = expandIgnoredEntries(root, ignoredEntries);
+  const observe = (paths: readonly string[]) =>
+    observeScanBoundary({
+      predicates: EXPECTED_PREDICATE_IDS,
+      paths,
+      sources: EXCLUSION_PREDICATE_SOURCES,
+    });
+  const baseline = observe(tracked);
+  const contaminated = observe([...tracked, ...expanded.paths]);
   const comparison = compareScanBoundary(baseline, contaminated);
-  /**
-   * **打ち切った領域は不完全として数える。** 上限に達した領域を黙って落とすと、
-   * 「差は無かった」ではなく「見ていない」を合格として報告することになる。
-   */
-  const incomplete = [
-    ...contaminated.incomplete,
-    ...truncatedEntries.map((entry) => ({
-      code: "scan-failed" as const,
-      gate: undefined,
-      path: entry,
-      detail: `1領域あたり${EXPANSION_FILE_LIMIT_PER_ENTRY}件の上限に達したため展開を打ち切りました`,
+  const incomplete = [...contaminated.incomplete, ...expanded.incomplete];
+  const describe = (observation: ReturnType<typeof observe>) => ({
+    observedPaths: observation.observedPaths.length,
+    uncovered: observation.uncovered,
+    predicates: observation.predicates.map((entry) => ({
+      predicate: entry.predicate,
+      owner: entry.owner,
+      appliesTo: entry.appliesTo,
+      excludedCount: entry.excludedCount,
+      excluded: entry.excluded,
     })),
-  ];
+  });
   return {
     /**
      * **成功を既定にしない。** 観測が不完全なら、差分が0でも合格にしない。
-     * 不完全な観測を「差は無かった」の根拠にすると、見えていないgateを
+     * 不完全な観測を「差は無かった」の根拠にすると、見ていない述語を
      * 見たことにしてしまう。
      */
     valid: incomplete.length === 0 && comparison.comparable,
-    gates,
+    expectedPredicates: EXPECTED_PREDICATE_IDS,
     incomplete,
-    baseline: {
-      paths: tracked.length,
-      gates: baseline.gates.map((gate) => ({
-        gate: gate.gate,
-        included: gate.includedCount,
-        excluded: gate.excludedCount,
-      })),
-    },
+    baseline: describe(baseline),
     contaminated: {
-      paths: tracked.length + ignored.length,
-      ignored: ignored.length,
-      gates: contaminated.gates.map((gate) => ({
-        gate: gate.gate,
-        included: gate.includedCount,
-        excluded: gate.excludedCount,
-        excludedPaths: gate.excluded.map((entry) => entry.path),
-      })),
+      ...describe(contaminated),
+      ignoredEntries: ignoredEntries.length,
+      ignoredFiles: expanded.paths.length,
     },
     comparison,
   };
 }
 
 if (isExecutionEntry(import.meta.url)) {
-  const result = reportScanBoundary();
+  /**
+   * **観測対象のrootを引数で受け取れるようにする。** 受け取れないと、
+   * 別rootに対する終了値の振る舞いをtestから観測できない。
+   */
+  const result = reportScanBoundary(process.argv[2] ?? process.cwd());
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   if (!result.valid) process.exitCode = 1;
 }

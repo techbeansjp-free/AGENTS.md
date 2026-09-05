@@ -1,151 +1,165 @@
 /**
- * 品質検査の走査境界を観測し、2入力の差分を返す。
+ * 登録済みの除外述語が、与えられたpath集合のどれを除外するかを観測する。
  *
- * **この層は除外規則を所有しない。** 各gateの除外述語は引数として受け取り、
- * ここでは適用結果を記録するだけである。`.gitignore`も読まない。
- * 除外条件をここへ書くと、Issue #960が否定した「検査ごとの目的に関係なく
- * 対象を黙って縮小する共通列挙層」になる。
+ * **測るのはgateの判定差分ではない。** 述語はgate全体ではなくgate内の一部の検査へ
+ * 適用される。`isIssueStagingPath`は`check_trace.ts`のSCN配置検査だけに使われ、
+ * 同じMarkdownは同gateの要件本文検査へ届く。`check_directory_guides.ts`は
+ * `.agent-skill-chain`配下だけを再帰し、`check_package_contents.ts`の実対象は
+ * `npm pack`の出力である。**述語の適用範囲をgate全体だと仮定すると、gateの判定を
+ * 再現していないのに再現したことになる**（Issue #960 round 1、F-01）。
  *
- * 差分は2種類へ分ける。除外pathと件数を出せば観測の生出力は必ず変わるため、
- * 「rootでだけ落ちる」の検出に使えるのは判定へ届いたpathの差だけである。
+ * したがってこの層が答えるのは1つだけである。
+ * **「この生成物は、登録済みのどの述語にも掛からないか」。**
+ * 掛からない生成物は、どこかの検査の判定へそのまま届く。#953の
+ * `.agent-skill-chain/tmp/issues`は掛かり、`.claude/`はどの述語にも掛からない。
+ *
+ * **この層は除外規則を所有しない。** 述語は引数として受け取り、`.gitignore`も読まない。
  */
 /**
  * 観測に使えるrepository相対pathか判定する。
  *
- * **これは除外規則ではなく入力検証である。** 絶対path、空、`.`、`..`を含むものは
- * 判定不能とし、除外側へ倒さない。倒すと、走査から外れたのか判定できなかったのかを
- * 区別できなくなる。
+ * **これは除外規則ではなく入力検証である。** 空、`.`、`..`を含むもの、および
+ * drive修飾を持つものは判定不能とし、除外側へ倒さない。倒すと、走査から外れたのか
+ * 判定できなかったのかを区別できない。
+ *
+ * **絶対pathの判定を別に置かない。** 先頭が`/`なら最初のsegmentが空になり、
+ * 下のsegment検査が必ず拒否する。別の分岐を置くと、消しても検出できない
+ * 等価な分岐が残る（変異試験で実測）。
  */
 function isObservableRelativePath(candidate) {
     if (typeof candidate !== "string" || candidate === "")
         return false;
     const normalized = candidate.replaceAll("\\", "/");
-    /**
-     * **絶対pathの判定を別に置かない。** 先頭が`/`なら最初のsegmentが空になり、
-     * 下のsegment検査が必ず拒否する。別の分岐を置くと、消しても検出できない
-     * 等価な分岐が残る（変異試験で実測）。
-     */
+    if (/^[A-Za-z]:/u.test(normalized))
+        return false;
     return !normalized
         .split("/")
         .some((segment) => segment === "" || segment === "." || segment === "..");
 }
 export function observeScanBoundary(input) {
     const incomplete = [];
-    const registry = new Map(input.sources.map((source) => [source.gate, source]));
-    const observable = input.paths.filter((candidate) => {
+    const registry = new Map();
+    for (const source of input.sources) {
+        if (registry.has(source.id))
+            incomplete.push({
+                code: "unknown-predicate",
+                predicate: source.id,
+                path: undefined,
+                detail: "同じ述語IDが二重に登録されています",
+            });
+        registry.set(source.id, source);
+    }
+    /**
+     * **供給元にしか無い述語も不完全に数える。** 期待一覧を供給元から作ると、
+     * 供給元の削除で期待も同時に縮み、欠落を検出できない（F-02）。
+     */
+    for (const id of registry.keys())
+        if (!input.predicates.includes(id))
+            incomplete.push({
+                code: "unknown-predicate",
+                predicate: id,
+                path: undefined,
+                detail: "期待一覧に無い述語が登録されています",
+            });
+    const observed = input.paths.filter((candidate) => {
         if (isObservableRelativePath(candidate))
             return true;
         incomplete.push({
             code: "unresolvable-path",
-            gate: undefined,
+            predicate: undefined,
             path: candidate,
-            detail: "repository相対pathとして解決できません。絶対path、空segment、`.`、`..`は判定不能とします",
+            detail: "repository相対pathとして解決できません。空segment、`.`、`..`、drive修飾は判定不能とします",
         });
         return false;
     });
-    const gates = [];
-    for (const gate of input.gates) {
-        const source = registry.get(gate);
+    const predicates = [];
+    const covered = new Set();
+    for (const id of input.predicates) {
+        const source = registry.get(id);
         if (source === undefined) {
             incomplete.push({
-                code: "unknown-gate",
-                gate,
+                code: "missing-predicate",
+                predicate: id,
                 path: undefined,
-                detail: "除外述語の供給元が登録されていないgateです",
+                detail: "期待した述語が登録されていません",
             });
             continue;
         }
         if (source.excludes === undefined) {
             incomplete.push({
                 code: "predicate-unavailable",
-                gate,
+                predicate: id,
                 path: undefined,
                 detail: source.reason,
             });
             continue;
         }
-        const included = [];
         const excluded = [];
-        for (const relative of observable) {
-            if (source.excludes(relative))
-                excluded.push({ path: relative, reason: source.reason });
-            else
-                included.push(relative);
-        }
-        gates.push({
-            gate,
-            included,
+        for (const relative of observed)
+            if (source.excludes(relative)) {
+                excluded.push({
+                    path: relative,
+                    reasonCode: source.reasonCode,
+                    reason: source.reason,
+                });
+                covered.add(relative);
+            }
+        predicates.push({
+            predicate: id,
+            owner: source.owner,
+            appliesTo: source.appliesTo,
             excluded,
-            includedCount: included.length,
             excludedCount: excluded.length,
         });
     }
     return {
-        gates,
+        predicates,
+        uncovered: observed.filter((relative) => !covered.has(relative)).sort(),
+        observedPaths: [...observed].sort(),
         incomplete,
         complete: incomplete.length === 0,
     };
 }
-function observedPaths(observation) {
-    return new Map(observation.gates.map((gate) => [
-        gate.gate,
-        {
-            all: new Set([
-                ...gate.included,
-                ...gate.excluded.map((entry) => entry.path),
-            ]),
-            included: new Set(gate.included),
-        },
-    ]));
-}
 function symmetricDifference(left, right) {
+    const leftSet = new Set(left);
+    const rightSet = new Set(right);
     return [
-        ...[...left].filter((value) => !right.has(value)),
-        ...[...right].filter((value) => !left.has(value)),
+        ...left.filter((value) => !rightSet.has(value)),
+        ...right.filter((value) => !leftSet.has(value)),
     ];
 }
 /**
- * 2つの観測から走査差分と判定差分を分けて返す。
+ * 2つの観測から走査差分と被覆差分を分けて返す。
  *
- * - `scopeDelta`: 走査対象として観測されたpath集合の差。代表生成物を観測できた証拠
- * - `semanticDelta`: **判定へ届いたpath集合の差。** 正しく除外される生成物なら0になる
+ * - `scopeDelta`: 観測対象として受理されたpath集合の差。代表生成物を観測できた証拠
+ * - `uncoveredDelta`: **どの述語にも掛からないpath集合の差。** 足した生成物が
+ *   いずれかの述語に掛かるなら0になる
  *
- * **対象gate一覧が一致しない2件は比較しない。** 片方にしか無いgateの差を
- * 生成物由来の差と取り違える。
+ * **不完全な観測を比較しない。** 見ていない述語がある状態の「差なし」は、
+ * 差が無かったのではなく見ていないだけである（F-04）。
  */
 export function compareScanBoundary(baseline, contaminated) {
-    const left = observedPaths(baseline);
-    const right = observedPaths(contaminated);
-    const missing = symmetricDifference(new Set(left.keys()), new Set(right.keys()));
+    const refuse = (detail) => ({
+        comparable: false,
+        scopeDelta: 0,
+        uncoveredDelta: 0,
+        contributingPaths: [],
+        detail,
+    });
+    if (!baseline.complete || !contaminated.complete)
+        return refuse("不完全な観測は比較しません。見ていない述語がある状態の差は根拠になりません");
+    const missing = symmetricDifference(baseline.predicates.map((entry) => entry.predicate), contaminated.predicates.map((entry) => entry.predicate));
     if (missing.length > 0)
-        return {
-            comparable: false,
-            scopeDelta: 0,
-            semanticDelta: 0,
-            contributingPaths: [],
-            detail: `対象gate一覧が一致しません: ${[...missing].sort().join("、")}`,
-        };
-    let scopeDelta = 0;
-    let semanticDelta = 0;
-    const contributing = new Set();
-    for (const [gate, before] of left) {
-        const after = right.get(gate);
-        if (after === undefined)
-            continue;
-        scopeDelta += symmetricDifference(before.all, after.all).length;
-        const semantic = symmetricDifference(before.included, after.included);
-        semanticDelta += semantic.length;
-        for (const relative of semantic)
-            contributing.add(relative);
-    }
+        return refuse(`述語一覧が一致しません: ${[...missing].sort().join("、")}`);
+    const uncovered = symmetricDifference(baseline.uncovered, contaminated.uncovered);
     return {
         comparable: true,
-        scopeDelta,
-        semanticDelta,
-        contributingPaths: [...contributing].sort(),
-        detail: semanticDelta === 0
-            ? "判定へ届いたpathに差はありません"
-            : "判定へ届いたpathに差があります。除外が効いていないgateがあります",
+        scopeDelta: symmetricDifference(baseline.observedPaths, contaminated.observedPaths).length,
+        uncoveredDelta: uncovered.length,
+        contributingPaths: [...new Set(uncovered)].sort(),
+        detail: uncovered.length === 0
+            ? "どの述語にも掛からないpathに差はありません"
+            : "どの述語にも掛からないpathが増えています。登録済みの述語が覆っていない生成物があります",
     };
 }
 //# sourceMappingURL=scan-boundary.js.map
