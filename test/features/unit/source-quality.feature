@@ -107,3 +107,8 @@ Feature: project固有の型品質と汎用開発考慮事項
     Given 読み取り可能だがmalformedなcandidateのtsconfigがある
     When project品質bindingを検証する
     Then file読み取り失敗へ変換せず既存の内容不正policyで拒否する
+
+  Scenario: SCN-UNIT-QUALITY-019 trusted-quality読み取り失敗でもmigration検査を続行する
+    Given trusted-quality.ymlを欠損させ品質契約versionだけ動かしたcandidateがある
+    When project品質bindingを検証する
+    Then 読み取り失敗errorとmigration検査のerrorを両方返す

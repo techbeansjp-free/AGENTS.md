@@ -775,6 +775,14 @@ export function checkProjectQualityContract(
     root,
     ".github/workflows/trusted-quality.yml",
   );
+  /**
+   * **読み取れなかった値に依存する検査だけを飛ばす。**
+   *
+   * 早期returnにすると、workflow本文に一切依存しない`validateTrustedQualityMigration`
+   * まで実行されない。読み取り失敗と品質契約の二段階承認違反が同時に存在するとき、
+   * 後者が診断へ現れず、前者を直して再実行するまで気付けない（Issue #1125）。
+   * すぐ上の`ci.yml`の読み取りが既に同じ形をしている。
+   */
   if ("reason" in trustedRead) {
     errors.push(
       protectedReadError(
@@ -783,23 +791,23 @@ export function checkProjectQualityContract(
         trustedRead.reason,
       ),
     );
-    return { valid: errors.length === 0, errors, checks };
+  } else {
+    const trustedWorkflow = trustedRead.text;
+    for (const required of [
+      "pull_request_target:",
+      "ref: ${{ github.event.pull_request.base.sha }}",
+      "ref: ${{ github.event.pull_request.head.sha }}",
+      "working-directory: trusted",
+      'scripts/check_project_quality.ts "--root=$GITHUB_WORKSPACE/candidate"',
+    ])
+      if (!trustedWorkflow.includes(required))
+        errors.push(`trusted base品質gateに必須拘束がありません: ${required}`);
+    if (/working-directory:\s*candidate/u.test(trustedWorkflow))
+      errors.push(
+        "trusted base品質gateはcandidate directoryでcommandを実行できません",
+      );
+    checks.push("base workflowによるcandidate設定のread-only検証");
   }
-  const trustedWorkflow = trustedRead.text;
-  for (const required of [
-    "pull_request_target:",
-    "ref: ${{ github.event.pull_request.base.sha }}",
-    "ref: ${{ github.event.pull_request.head.sha }}",
-    "working-directory: trusted",
-    'scripts/check_project_quality.ts "--root=$GITHUB_WORKSPACE/candidate"',
-  ])
-    if (!trustedWorkflow.includes(required))
-      errors.push(`trusted base品質gateに必須拘束がありません: ${required}`);
-  if (/working-directory:\s*candidate/u.test(trustedWorkflow))
-    errors.push(
-      "trusted base品質gateはcandidate directoryでcommandを実行できません",
-    );
-  checks.push("base workflowによるcandidate設定のread-only検証");
   if (trustedRoot) {
     const trustedMetadata = readObject(path.join(trustedRoot, "package.json"));
     errors.push(

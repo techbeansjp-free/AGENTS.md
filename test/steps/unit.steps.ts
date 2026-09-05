@@ -999,6 +999,84 @@ function prepareSnapshotOuterCandidate(
   fs.rmSync(path.join(world.projectQualityRoot, relative));
 }
 
+/**
+ * **読み取れなかった値に依存しない検査まで飛ばしていないことを測る**（Issue #1125）。
+ *
+ * `.github/workflows/trusted-quality.yml`を欠損させ、同時に
+ * `qualityContractVersion`だけを動かす。前者は読み取りerrorを生み、後者は
+ * `validateTrustedQualityMigration`だけが検出できるerrorを生む。**早期returnに
+ * 戻すと後者が消える。**
+ */
+Given(
+  "trusted-quality.ymlを欠損させ品質契約versionだけ動かしたcandidateがある",
+  function () {
+    this.projectQualityRoot = this.temp("asc-quality-continue-");
+    copyQualityContractFixture(this.projectQualityRoot);
+    fs.rmSync(
+      path.join(
+        this.projectQualityRoot,
+        ".github/workflows/trusted-quality.yml",
+      ),
+    );
+    const metadataPath = path.join(this.projectQualityRoot, "package.json");
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8")) as {
+      agentSkillChain: { qualityContractVersion: number };
+    };
+    /**
+     * **保護fileの内容差分は作らない。** `qualityContractVersion`は
+     * `PROTECTED_PACKAGE_FIELDS`に属するため、これだけを動かすと
+     * 一致するproposalが無い変更として`validateTrustedQualityMigration`が拒否する。
+     */
+    metadata.agentSkillChain.qualityContractVersion += 1;
+    fs.writeFileSync(
+      metadataPath,
+      `${JSON.stringify(metadata, undefined, 2)}\n`,
+    );
+  },
+);
+
+Then("読み取り失敗errorとmigration検査のerrorを両方返す", function () {
+  assert.equal(
+    this.projectQualityThrown,
+    undefined,
+    `未捕捉throwが残っています: ${this.projectQualityThrown?.message ?? ""}`,
+  );
+  const result = this.projectQualityResult;
+  assert.ok(result, "結果がありません");
+  assert.equal(result.valid, false, JSON.stringify(result));
+  /**
+   * **診断文字列を名指しする。** 件数やvalid===falseだけを見る検査は、
+   * migration検査を飛ばす変異を捕まえない。
+   */
+  const readError =
+    "候補の保護対象file .github/workflows/trusted-quality.yml が存在しません";
+  const migrationError =
+    "candidateのtrusted品質契約変更はbaseで事前登録済みのversioned staged proposalと完全一致しません";
+  assert.ok(
+    result.errors.includes(readError),
+    `読み取り失敗errorがありません: ${JSON.stringify(result.errors)}`,
+  );
+  assert.ok(
+    result.errors.includes(migrationError),
+    `migration検査のerrorがありません。読み取れなかった値に依存しない検査まで飛ばしています: ${JSON.stringify(result.errors)}`,
+  );
+  /**
+   * **飛ばす検査を増やしていないことも測る。** workflow本文に依存するcheckだけが
+   * 落ち、migration checkは残る。両方を測らないと、else分岐ごと消す変異と
+   * migration checkを外へ出す変異のどちらかが生存する。
+   */
+  assert.ok(
+    !result.checks.includes("base workflowによるcandidate設定のread-only検証"),
+    `依存する検査が実行されています: ${JSON.stringify(result.checks)}`,
+  );
+  assert.ok(
+    result.checks.includes(
+      "base事前登録済みversioned staged proposalによる品質契約更新",
+    ),
+    `migration検査が実行されていません: ${JSON.stringify(result.checks)}`,
+  );
+});
+
 Given(
   "candidateのsnapshot外保護file {string} を欠損させたprojectがある",
   function (relative: string) {
