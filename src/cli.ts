@@ -258,6 +258,10 @@ import {
   type JournalHumanOverride,
   type StepJournalEntry,
 } from "./domain/workflow.js";
+import {
+  CI_DELIVERY_GRACE_MINUTES,
+  inspectCiDelivery,
+} from "./domain/ci-delivery.js";
 import type { Mode } from "./domain/mode.js";
 
 type Flags = Record<string, string | boolean>;
@@ -1088,7 +1092,7 @@ function observeMergeReviewEvidence(input: {
     { repository: input.repository, pr: input.pr },
     input.root,
   );
-  const ci = github(
+  const ciRuns = github(
     "pr.ci-runs",
     {
       repository: input.repository,
@@ -1096,7 +1100,8 @@ function observeMergeReviewEvidence(input: {
       headSha: input.observed.headRefOid,
     },
     input.root,
-  )
+  );
+  const ci = ciRuns
     .filter(
       (run) =>
         run.repository.toLowerCase() === input.repository.toLowerCase() &&
@@ -1110,10 +1115,37 @@ function observeMergeReviewEvidence(input: {
     .sort((left, right) =>
       left.runId.localeCompare(right.runId, "en", { numeric: true }),
     )[0];
-  if (!ci)
+  if (!ci) {
+    /**
+     * **拒否の理由を、待つべきか人を呼ぶべきかまで含めて返す**（Issue #969）。
+     *
+     * 従来はrun未生成・実行中・失敗がすべて同じ1文になっていた。GitHub Actionsの
+     * 遅延を「不達」と誤診し、不要な人間対応を要求した実例がある。**判定はmergeの
+     * 門を増やさない。** 拒否そのものは従来どおりで、診断の内容だけを厚くする。
+     */
+    const delivery = inspectCiDelivery({
+      runs: ciRuns,
+      headSha: input.observed.headRefOid,
+      pullRequest: input.pr,
+      /**
+       * **イベント時刻はASCが固定した時刻を使う。** commit時刻や汎用の
+       * PR更新時刻で代用しない。前者はpush前に決まり、後者は無関係な更新でも動く。
+       * `pr.boundAt`はASCがそのPRをbindした時刻、`create.preparedAt`はhead SHAを
+       * 固定した時刻であり、どちらもこのhead SHAに対して単調である。
+       */
+      eventAt: input.state.pr?.boundAt ?? input.state.create.preparedAt,
+      observedAt: deliveryEventTime(
+        input.state.pr?.boundAt ?? input.state.create.preparedAt,
+      ),
+      graceMinutes: CI_DELIVERY_GRACE_MINUTES,
+    });
     throw new Error(
-      "current H_finalと対象PRへ直接関連するsuccessful pull_request CI runがありません",
+      `current H_finalと対象PRへ直接関連するsuccessful pull_request CI runがありません: ` +
+        `配送状態=${delivery.state} 該当run=${delivery.runCount}件 ` +
+        `head=${delivery.headSha} イベント時刻=${delivery.eventAt} 観測時刻=${delivery.observedAt} ` +
+        `経過=${delivery.elapsedMinutes.toFixed(1)}分 猶予=${delivery.graceMinutes}分。${delivery.nextAction}`,
     );
+  }
   const independentReview = currentIndependentApprovals({
     approvals,
     headSha: input.observed.headRefOid,
