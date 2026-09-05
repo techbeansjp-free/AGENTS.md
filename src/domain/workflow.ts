@@ -1080,11 +1080,16 @@ export function inspectWorkflowStagingArtifacts(input: {
     /**
      * **契約を満たしたまま未完で止まっているか**（Issue #954）。
      *
-     * `valid`が偽になる理由は2つある。契約を満たさない記録があること（例:
-     * `reviewSession binding`の要求より前に書かれた古いStep 10）と、単に途中で
-     * 止まっていることである。**両方を`valid: false`へ潰すと、手を入れるべき
-     * stagingを選べない。** 実測では未完24件のうち手を入れるべきは2件で、
-     * 残りはmerge済みの古いstagingだった。
+     * **契約を満たす接頭辞で止まっているstagingは`valid: true`のままである。**
+     * `validateStepJournal`へ`upToStep: currentStep`を渡すため、そこまでの
+     * 記録が正しければ検査は通る。したがって未完のstagingには2種類が混ざる。
+     *
+     * - **契約drift**: 記録が現在の契約を満たさない（例: `reviewSession binding`の
+     *   要求より前に書かれた古いStep 10）。`valid: false`になる
+     * - **中断**: 契約は満たすが途中で止まっている。`valid: true`のまま
+     *
+     * **どちらも「未完」として同じ集計へ潰すと、手を入れるべきstagingを選べない。**
+     * 実測では28件中9件が中断、17件が契約driftだった。
      *
      * **`valid`の値は変えない。** 判定を増やさず、区別だけを足す。
      */
