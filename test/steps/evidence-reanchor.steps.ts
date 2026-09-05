@@ -48,6 +48,8 @@ class ReanchorWorld extends WorkflowWorld {
   newBaseSha = "";
   newHeadSha = "";
   chain: EvidenceReanchorRecord[] = [];
+  /** 最後に成立した再固定の記録時刻（Issue #969）。 */
+  effectiveRecordedAt: string | undefined = undefined;
   effectiveHead = "";
   reachability = "";
   override error: unknown = undefined;
@@ -388,10 +390,41 @@ When("再固定を二回適用する", function () {
 });
 
 When("実効HEADを導出する", function () {
-  this.effectiveHead = deriveEffectiveHead({
+  const derived = deriveEffectiveHead({
     records: this.chain,
     anchoredHeadSha: this.oldHeadSha,
-  }).effectiveHeadSha;
+  });
+  this.effectiveHead = derived.effectiveHeadSha;
+  /**
+   * **実効HEADが動いたなら事象時刻も動く**（Issue #969）。CI配送判定は
+   * この時刻からの経過で`pending`と`undelivered`を分ける。元の固定時刻の
+   * ままだと、再固定直後の未生成を`undelivered`と誤分類する。
+   */
+  this.effectiveRecordedAt = derived.effectiveRecordedAt;
+});
+
+Given("成立する再固定chainがある", function () {
+  baseFixture(this);
+  this.chain = [
+    {
+      oldHeadSha: this.oldHeadSha,
+      newHeadSha: "c".repeat(40),
+      oldBaseSha: this.baseSha,
+      newBaseSha: this.baseSha,
+      diffDigest: "d".repeat(64),
+      method: "rebase",
+      reason: "等価なrebase",
+      recordedAt: "2026-09-05T12:00:00.000Z",
+    },
+  ];
+});
+
+Then("実効HEADの再固定時刻を返す", function () {
+  assert.equal(this.effectiveRecordedAt, "2026-09-05T12:00:00.000Z");
+});
+
+Then("再固定時刻を返さない", function () {
+  assert.equal(this.effectiveRecordedAt, undefined);
 });
 
 When("到達性を判定する", function () {

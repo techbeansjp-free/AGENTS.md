@@ -81,6 +81,14 @@ export interface EffectiveHead {
   effectiveHeadSha: string;
   validCount: number;
   invalidIndex: number | undefined;
+  /**
+   * 最後に成立した再固定の記録時刻。再固定が1件も無ければ`undefined`。
+   *
+   * **実効HEADが動いたなら、そのHEADに対する事象時刻も動く**（Issue #969）。
+   * 元の固定時刻のまま経過を測ると、新しいHEADのCI runが未生成の場合に
+   * 古い時刻からの経過で`undelivered`と誤分類する。
+   */
+  effectiveRecordedAt: string | undefined;
 }
 
 /**
@@ -97,12 +105,14 @@ export function deriveEffectiveHead(input: {
 }): EffectiveHead {
   let effective = input.anchoredHeadSha;
   let validCount = 0;
+  let recordedAt: string | undefined;
   for (const [index, candidate] of input.records.entries()) {
     if (!isEvidenceReanchorRecord(candidate))
       return {
         effectiveHeadSha: effective,
         validCount,
         invalidIndex: index,
+        effectiveRecordedAt: recordedAt,
       };
     if (
       candidate.oldHeadSha !== effective ||
@@ -112,11 +122,18 @@ export function deriveEffectiveHead(input: {
         effectiveHeadSha: effective,
         validCount,
         invalidIndex: index,
+        effectiveRecordedAt: recordedAt,
       };
     effective = candidate.newHeadSha;
+    recordedAt = candidate.recordedAt;
     validCount += 1;
   }
-  return { effectiveHeadSha: effective, validCount, invalidIndex: undefined };
+  return {
+    effectiveHeadSha: effective,
+    validCount,
+    invalidIndex: undefined,
+    effectiveRecordedAt: recordedAt,
+  };
 }
 
 /**

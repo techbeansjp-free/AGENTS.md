@@ -85,3 +85,18 @@ Feature: rebase後の証跡再固定を内容等価性で受理する
     Given 実効HEADがPR headの祖先でないstagingがある
     When 到達性を判定する
     Then 到達性はrewrittenになる
+
+  Scenario: SCN-UNIT-REANCHOR-018 成立した再固定の記録時刻を実効HEADとともに返す
+    Given 成立する再固定chainがある
+    When 実効HEADを導出する
+    Then 実効HEADの再固定時刻を返す
+
+  Scenario: SCN-UNIT-REANCHOR-019 再固定が無ければ記録時刻を返さない
+    Given 再固定記録を持たないstagingがある
+    When 実効HEADを導出する
+    Then 再固定時刻を返さない
+
+  Scenario: SCN-UNIT-REANCHOR-020 連鎖しない記録の時刻を採用しない
+    Given 連鎖条件を満たさない再固定chainがある
+    When 実効HEADを導出する
+    Then 再固定時刻を返さない

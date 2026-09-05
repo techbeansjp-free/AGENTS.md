@@ -631,6 +631,32 @@ function resolveImplementationCommitForMerge(root, finalHeadSha) {
             .digest("hex"),
     };
 }
+/**
+ * CI配送判定の事象時刻を選ぶ。
+ *
+ * **実効HEADが再固定で進んでいるなら、その再固定時刻を使う。** 再固定はHEADを
+ * 差し替える操作であり、新しいHEADに対するCI runはその時刻より後にしか生成
+ * されない。元の`pr.boundAt`から経過を測ると、新しいHEADで未生成の状態を
+ * 古い時刻からの経過で`undelivered`と誤分類する（Issue #969）。
+ *
+ * **再固定が無ければ従来どおり。** `pr.boundAt`はASCがPRをbindした時刻、
+ * `create.preparedAt`はhead SHAを固定した時刻であり、どちらもcommit時刻や
+ * 汎用のPR更新時刻ではない。
+ */
+function ciDeliveryEventAt(staging, state) {
+    const anchored = state.pr?.boundAt ?? state.create.preparedAt;
+    try {
+        const derived = deriveEffectiveHead({
+            records: readEvidenceReanchorChain(staging),
+            anchoredHeadSha: state.create.headSha,
+        });
+        return derived.effectiveRecordedAt ?? anchored;
+    }
+    catch {
+        /** **観測できない場合は固定時刻へ倒す。** 判定を止める門にしない。 */
+        return anchored;
+    }
+}
 function observeMergeReviewEvidence(input) {
     if (typeof input.observed.headRefOid !== "string")
         throw new Error("PR HEAD SHAが不正です");
@@ -668,14 +694,8 @@ function observeMergeReviewEvidence(input) {
             runs: ciRuns,
             headSha: input.observed.headRefOid,
             pullRequest: input.pr,
-            /**
-             * **イベント時刻はASCが固定した時刻を使う。** commit時刻や汎用の
-             * PR更新時刻で代用しない。前者はpush前に決まり、後者は無関係な更新でも動く。
-             * `pr.boundAt`はASCがそのPRをbindした時刻、`create.preparedAt`はhead SHAを
-             * 固定した時刻であり、どちらもこのhead SHAに対して単調である。
-             */
-            eventAt: input.state.pr?.boundAt ?? input.state.create.preparedAt,
-            observedAt: deliveryEventTime(input.state.pr?.boundAt ?? input.state.create.preparedAt),
+            eventAt: input.ciEventAt,
+            observedAt: deliveryEventTime(input.ciEventAt),
             graceMinutes: CI_DELIVERY_GRACE_MINUTES,
         });
         throw new Error(`current H_finalと対象PRへ直接関連するsuccessful pull_request CI runがありません: ` +
@@ -761,6 +781,7 @@ function inspectAuthorizedPullRequestMerge(input) {
         pr: input.pr,
         state: input.state,
         observed,
+        ciEventAt: ciDeliveryEventAt(input.staging, input.state),
     });
     return {
         observed,
@@ -936,6 +957,7 @@ function readBackPreparedPullRequestMerge(input) {
                 pr: input.pr,
                 state: input.state,
                 observed,
+                ciEventAt: ciDeliveryEventAt(input.staging, input.state),
             });
             assertFixedMergeReviewEvidence(input.state, reviewed.reviewEvidence);
         }
