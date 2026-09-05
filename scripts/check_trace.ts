@@ -383,8 +383,19 @@ function collectNamedScenarioClaims(
   const masked = bodyLines.map((line) => {
     const marker = /^\s*(`{3,}|~{3,})/u.exec(line)?.[1];
     if (marker !== undefined) {
-      if (fence === undefined) fence = marker[0];
-      else if (marker[0] === fence) fence = undefined;
+      /**
+       * **開始delimiterを全体で保持する。** 先頭1文字だけを保つと、4文字の
+       * fenceの中にある3文字のfenceや`` ```text ``のような情報付きの開始行を
+       * 閉鎖と誤認し、後続の帰属文を本文として抽出する（Issue #1229 round 2）。
+       * 閉鎖は同じ文字、開始以上の長さ、後続が空白だけの行に限る。
+       */
+      if (fence === undefined) fence = marker;
+      else if (
+        marker[0] === fence[0] &&
+        marker.length >= fence.length &&
+        /^\s*(?:`{3,}|~{3,})\s*$/u.test(line)
+      )
+        fence = undefined;
       return "";
     }
     return fence === undefined ? line : "";
