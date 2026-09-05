@@ -473,6 +473,21 @@ export function doctor(target, worktreeObservations) {
         }
     }
     const workflowHealthy = workflowStagings.every((staging) => staging.valid);
+    /**
+     * **契約を満たしたまま止まっているstagingを名指しする**（Issue #954）。
+     *
+     * `healthy`の判定は変えない。**門を増やさず、報告だけを分ける。** 未完の
+     * stagingには「契約を満たさない古い記録」と「単に途中で止まっている」が
+     * 混ざっており、後者だけが手を入れる対象である。
+     */
+    const interruptedStagings = workflowStagings
+        .filter((staging) => "interrupted" in staging && staging.interrupted)
+        .map((staging) => ({
+        staging: staging.staging,
+        mode: staging.mode,
+        currentStep: staging.currentStep,
+        nextStep: staging.nextStep,
+    }));
     const tooling = {
         git: inspectExecutableVersion("git", ["--version"], target, MINIMUM_GIT_VERSION),
         gh: inspectExecutableVersion("gh", ["--version"], target, MINIMUM_GH_VERSION),
@@ -498,6 +513,8 @@ export function doctor(target, worktreeObservations) {
         },
         workflow: {
             healthy: workflowHealthy,
+            /** 契約を満たしたまま未完で止まっているstaging（Issue #954）。 */
+            interrupted: interruptedStagings,
             stagings: workflowStagings,
         },
         worktrees: worktreeSurvey

@@ -46,6 +46,21 @@ Feature: ワークフローStepの定義とjournalを決定的に検証する
     When "SCN-UNIT-WFPATH-002"の単体検査を実行する
     Then ワークフローStep単体検査は期待結果になる
 
+  Scenario: SCN-UNIT-WFPATH-003 契約を満たしたまま未完のstagingをinterruptedにする
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFPATH-003"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFPATH-004 契約を満たさない記録を持つstagingはinterruptedにしない
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFPATH-004"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFPATH-005 完了したstagingはinterruptedにしない
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFPATH-005"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
   Scenario: SCN-UNIT-WFJRNL-001 正しいjournalをvalidとする
     Given ワークフローStep単体検査の準備がある
     When "SCN-UNIT-WFJRNL-001"の単体検査を実行する

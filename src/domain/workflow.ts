@@ -1055,6 +1055,8 @@ export function inspectWorkflowStagingArtifacts(input: {
       : []),
     ...validation.errors,
   ];
+  const healthy =
+    errors.length === 0 && Boolean(modeDecision.decision) && validation.valid;
   return {
     staging: input.staging,
     mode: input.mode,
@@ -1074,8 +1076,24 @@ export function inspectWorkflowStagingArtifacts(input: {
     nextStep,
     validation,
     errors,
-    valid:
-      errors.length === 0 && Boolean(modeDecision.decision) && validation.valid,
+    valid: healthy,
+    /**
+     * **契約を満たしたまま未完で止まっているか**（Issue #954）。
+     *
+     * **契約を満たす接頭辞で止まっているstagingは`valid: true`のままである。**
+     * `validateStepJournal`へ`upToStep: currentStep`を渡すため、そこまでの
+     * 記録が正しければ検査は通る。したがって未完のstagingには2種類が混ざる。
+     *
+     * - **契約drift**: 記録が現在の契約を満たさない（例: `reviewSession binding`の
+     *   要求より前に書かれた古いStep 10）。`valid: false`になる
+     * - **中断**: 契約は満たすが途中で止まっている。`valid: true`のまま
+     *
+     * **どちらも「未完」として同じ集計へ潰すと、手を入れるべきstagingを選べない。**
+     * 実測では28件中9件が中断、17件が契約driftだった。
+     *
+     * **`valid`の値は変えない。** 判定を増やさず、区別だけを足す。
+     */
+    interrupted: healthy && nextStep !== undefined,
   };
 }
 

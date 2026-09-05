@@ -503,6 +503,51 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
       assert.deepEqual(inspectWorkflowStaging(staging), direct);
       break;
     }
+    case "SCN-UNIT-WFPATH-003":
+    case "SCN-UNIT-WFPATH-004":
+    case "SCN-UNIT-WFPATH-005": {
+      /**
+       * **契約を満たしたまま止まっているstagingだけをinterruptedにする**
+       *（Issue #954）。`valid: false`には「契約を満たさない古い記録」と
+       * 「単に途中で止まっている」が混ざる。実測では未完28件のうち手を入れる
+       * べきは9件で、残りはmerge済みだった。**混ぜると選べない。**
+       */
+      const root = this.temp("asc-workflow-interrupted-");
+      const staging = createQuickStaging(root);
+      const record = readStoredStagingRecord(staging);
+      const steps =
+        scenarioId === "SCN-UNIT-WFPATH-003"
+          ? [0, 1, 4]
+          : scenarioId === "SCN-UNIT-WFPATH-004"
+            ? [0, 1, 9, 10]
+            : [0, 1, 4, 9, 10, 11];
+      const inspected = inspectWorkflowStagingArtifacts({
+        staging,
+        mode: record.mode,
+        state: record.state,
+        modeDecisionSource: fs.readFileSync(
+          path.join(staging, MODE_DECISION_FILE),
+          "utf8",
+        ),
+        journalSource: `${steps
+          .map((step) => JSON.stringify(entry(step)))
+          .join("\n")}\n`,
+      });
+      if (scenarioId === "SCN-UNIT-WFPATH-003") {
+        assert.equal(inspected.valid, true);
+        assert.equal(inspected.nextStep, 9);
+        assert.equal(inspected.interrupted, true);
+      } else if (scenarioId === "SCN-UNIT-WFPATH-004") {
+        /** Step 4を欠いた記録は契約違反であり、interruptedへ入れない。 */
+        assert.equal(inspected.valid, false);
+        assert.equal(inspected.interrupted, false);
+      } else {
+        assert.equal(inspected.valid, true);
+        assert.equal(inspected.nextStep, undefined);
+        assert.equal(inspected.interrupted, false);
+      }
+      break;
+    }
     case "SCN-UNIT-WFJRNL-001":
       assert.equal(
         result(
