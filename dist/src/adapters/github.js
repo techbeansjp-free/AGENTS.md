@@ -384,29 +384,32 @@ export function github(operation, supplied, cwd) {
          * **成功時も例外時も一時fileを残さない。** `gh`はfileを同期的に読み切るため、
          * 呼び出し直後に消してよい。残すと`pr create`のたびにtmpへ本文が蓄積する。
          */
-        /**
-         * **claimはprovider要求の直前でだけ消費する**（Issue #1157）。
-         *
-         * 以前はCLIがclaimを消費してからこのadapterを呼び、adapterの第1文の
-         * `verifyRepository`（内部で`gh auth status`）で落ちていた。**変更要求を1度も
-         * 送っていないのに「成否を断定できない」としてstagingが恒久的に停止していた。**
-         *
-         * `01_開発ワークフロー.md`はprovider call直前のclaimを定めている。ここが
-         * 「最終再検証に成功した同じ呼び出しだけが一度実行できる」境界である。
-         * **`onDispatch`を任意にしない。** 任意にすると、claimを取らずに変更要求を
-         * 送れるprimitiveが公開され、並行実行で重複PRを作れる。
-         */
-        /**
-         * **型で必須にしたうえで実行時も確かめる。** overloadは`pr.create`へ
-         * `onDispatch`を必須にしているが、実装signatureは全operation共通のため
-         * 省略が型で止まらない経路が残る。**fail-closedで拒否する。**
-         */
-        if (typeof input.onDispatch !== "function")
-            throw new Error("PR createにはdispatch claimの受け渡しが必要です");
-        if (!input.onDispatch())
-            throw new Error("PR create dispatch claimは既に消費済みのためprovider createを再送しません");
         let created;
         try {
+            /**
+             * **claimはprovider要求の直前でだけ消費する**（Issue #1157）。
+             *
+             * 以前はCLIがclaimを消費してからこのadapterを呼び、adapterの第1文の
+             * `verifyRepository`（内部で`gh auth status`）で落ちていた。**変更要求を1度も
+             * 送っていないのに「成否を断定できない」としてstagingが恒久的に停止していた。**
+             *
+             * `01_開発ワークフロー.md`はprovider call直前のclaimを定めている。ここが
+             * 「最終再検証に成功した同じ呼び出しだけが一度実行できる」境界である。
+             * **`onDispatch`を任意にしない。** 任意にすると、claimを取らずに変更要求を
+             * 送れるprimitiveが公開され、並行実行で重複PRを作れる。
+             *
+             * **型で必須にしたうえで実行時も確かめる。** overloadは`pr.create`へ
+             * `onDispatch`を必須にしているが、実装signatureは全operation共通のため
+             * 省略が型で止まらない経路が残る。**fail-closedで拒否する。**
+             *
+             * **本文を書いた後・`gh`を起動する前に置く。** `try`の外へ出すと、gateが
+             * 拒否したときにPR本文を含む一時領域が残る（外部reviewer指摘）。前へ出すと、
+             * 本文書き込みの失敗がclaim消費後に起きて同じ欠陥を再現する。
+             */
+            if (typeof input.onDispatch !== "function")
+                throw new Error("PR createにはdispatch claimの受け渡しが必要です");
+            if (!input.onDispatch())
+                throw new Error("PR create dispatch claimは既に消費済みのためprovider createを再送しません");
             created = run("gh", [
                 "pr",
                 "create",

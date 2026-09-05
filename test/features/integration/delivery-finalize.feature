@@ -197,6 +197,7 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When dispatch claimを渡さずPR create adapterを実行する
     Then PR create adapterは失敗する
     And PR create操作は呼ばれない
+    And PR本文の一時領域が残っていない
 
   Scenario: SCN-INT-GITHUB-007 read権限しかないrepositoryへIssueを書き込まない
     Given read権限だけを返すgh stubがある

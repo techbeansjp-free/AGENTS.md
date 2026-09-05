@@ -53,6 +53,8 @@ interface DeliveryFinalizeWorld extends WorkflowWorld {
   omitTrustedPolicy: boolean;
   /** provider要求の直前でdispatch claimが消費されたか（Issue #1157）。 */
   dispatchClaimed: boolean;
+  /** PR本文の一時領域を観測するための専用tmp（Issue #1157）。 */
+  temporaryRoot: string;
   prCreationResult: PullRequestCreationResult;
   prInspection: PullRequestInspection;
   prOverrides: Record<string, string>;
@@ -985,6 +987,15 @@ Then("dispatch claimを消費していない", function () {
 When("dispatch claimを渡さずPR create adapterを実行する", function () {
   const original = process.env.PATH;
   process.env.PATH = this.stubPath;
+  /**
+   * **一時領域の残留を観測する**（Issue #1157）。adapterはPR本文を
+   * `os.tmpdir()`直下の`asc-pr-body-*`へ書く。**gateが`try`の外にあると、
+   * 拒否したときに本文入りの一時領域が残る。** `os.tmpdir()`は呼び出しごとに
+   * 環境変数を読むため、専用のtmpへ差し替えて観測できる。
+   */
+  this.temporaryRoot = this.temp("asc-pr-tmp-");
+  const originalTmp = process.env.TMPDIR;
+  process.env.TMPDIR = this.temporaryRoot;
   this.dispatchClaimed = false;
   try {
     /**
@@ -1015,7 +1026,20 @@ When("dispatch claimを渡さずPR create adapterを実行する", function () {
     this.error = error;
   } finally {
     process.env.PATH = original;
+    if (originalTmp === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = originalTmp;
   }
+});
+
+Then("PR本文の一時領域が残っていない", function () {
+  const leftovers = fs
+    .readdirSync(this.temporaryRoot)
+    .filter((entry) => entry.startsWith("asc-pr-body-"));
+  assert.deepEqual(
+    leftovers,
+    [],
+    `PR本文を含む一時領域が残っています: ${leftovers.join("、")}`,
+  );
 });
 
 When("PR create adapterを実行する", function () {
