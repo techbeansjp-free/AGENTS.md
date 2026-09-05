@@ -2501,6 +2501,7 @@ const STATIC_ANALYSIS_MARKERS = [
   "make -n",
   "変数展開後の定数比較",
   "安全な静的展開器ではない",
+  "sandboxは認証情報も分離する",
 ] as const;
 
 Given("Step 10 skillの静的解析markerを欠いたpackageがある", function () {
