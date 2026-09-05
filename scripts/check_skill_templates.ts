@@ -127,6 +127,24 @@ const ROUTING_INPUT_CONTRACT_MARKERS = [
   "独立性証拠欄",
 ] as const;
 
+/**
+ * Step 10が実装言語以外の成果物へ当てる静的解析の観点。
+ *
+ * **実装言語にはlintと型検査が当たるが、shell・Makefile・CI workflowには当たらない。**
+ * これらは検査する側の仕組みであり、壊れると他のすべての検査が黙って素通りする。
+ * 本検査は観点の記述が配布物から失われたことを回帰として検出する。
+ * **信頼境界ではない。** 本scriptは`PROTECTED_FILES`に属さず同一PRで緩和できる（Issue #1083）。
+ */
+const STATIC_ANALYSIS_REVIEW_SKILL = "skills/step-10-review/SKILL.md";
+
+const STATIC_ANALYSIS_REVIEW_MARKERS = [
+  "実装言語以外の成果物",
+  "make -n",
+  "変数展開後の定数比較",
+  "安全な静的展開器ではない",
+  "sandboxは認証情報も分離する",
+] as const;
+
 const HOST_ADAPTER_SKILL = "asc-step";
 
 const EXPECTED_TEMPLATE_LINKS = new Map<string, string[]>([
@@ -457,6 +475,22 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
     for (const marker of ROUTING_INPUT_CONTRACT_MARKERS)
       if (!markdown.includes(marker))
         errors.push(`${relative}: routing入力契約の${marker}がありません`);
+  }
+  const staticAnalysisSkill = path.join(
+    namespaceRoot,
+    STATIC_ANALYSIS_REVIEW_SKILL,
+  );
+  if (!fs.existsSync(staticAnalysisSkill))
+    errors.push(
+      `静的解析観点の検査対象がありません: ${STATIC_ANALYSIS_REVIEW_SKILL}`,
+    );
+  else {
+    const markdown = fs.readFileSync(staticAnalysisSkill, "utf8");
+    for (const marker of STATIC_ANALYSIS_REVIEW_MARKERS)
+      if (!markdown.includes(marker))
+        errors.push(
+          `${STATIC_ANALYSIS_REVIEW_SKILL}: 実装言語以外の成果物への静的解析の観点「${marker}」がありません`,
+        );
   }
   for (const relative of DEVELOPMENT_CONSIDERATION_TEMPLATES) {
     const template = path.join(templatesRoot, relative);

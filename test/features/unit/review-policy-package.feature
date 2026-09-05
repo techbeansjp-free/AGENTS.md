@@ -212,6 +212,11 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     When 正規契約とリンク切れ・対応漏れ・経路欠落契約を検証する
     Then 正規契約だけが合格しリンク切れ・対応漏れ・経路欠落は拒否される
 
+  Scenario: SCN-UNIT-PACKAGE-020 Step 10 skillは実装言語以外の成果物への静的解析の観点へ拘束される
+    Given Step 10 skillの静的解析markerを欠いたpackageがある
+    When Step skillの静的解析markerを検証する
+    Then 欠落した静的解析markerを名指しして拒否される
+
   Scenario: SCN-UNIT-PACKAGE-017 Step skillのdocs向けlinkはlink先fileの不在を失敗にする
     Given Step skillから規範文書へのlinkを壊したpackageがある
     When Step skillの規範文書linkを検証する

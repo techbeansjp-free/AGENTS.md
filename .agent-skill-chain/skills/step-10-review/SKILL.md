@@ -21,6 +21,10 @@ role欄の担当roleが`reviewer`であること、必要能力tier、provider�
 
 **`pr create`より後に届いた外部reviewerの指摘を、同じPRへ取り込まない。** Step 11の記録でworkflow journalが封じられ、Step 10を再記録できない。判定と分離先をreviewスレッドへ返信して解決し、取り込みはfollow-up Issueで行う。**収束後のHEAD移動に対する取り直し1ラウンドが使えるのは`pr create`より前だけである。**
 
+**差分が実装言語以外の成果物を含む場合、その種別に対応する静的解析を当てる。** 実装言語にはprojectのlintと型検査が当たるが、shell script、Makefile、CI workflowのようなrepository運用の足回りは、どの工程でも解析されないまま既定branchへ到達しうる。**これらは検査する側の仕組みであり、壊れると他のすべての検査が黙って素通りする。** 字面の照合は実行可能性を見ないため、種別に対応する解析の代替にならない。当てられるツールが環境に無い場合は、その事実と理由をレビュー成果物へ記録し、当てたものとして扱わない。
+
+**Makefileは`make -n <target>`で展開した実コマンドへ当てる。** レシピ本文をそのまま解析器へ渡すと`$$`と`@`が未展開のままparseが途中で止まり、**本物の欠陥が報告されない。**「当てたが指摘は無かった」という誤結論の原因になる。**ただし`make -n`は安全な静的展開器ではない。** 読み込み時に評価される`$(shell ...)`は`-n`でも実行されるため、候補が制御するMakefileへそのまま実行すると任意のコマンド実行になる。**書き込み不可のfilesystem、network分離、資源制限を持つsandbox内で実行し、対象targetを差分が触れた範囲に限る。** **sandboxは認証情報も分離する。** 環境変数は許可listだけを渡し（`env -i`相当）、credential mountとagent socketを到達不能にする。取得した出力に認証情報が混入していないことを確認し、レビュー成果物とCI logへ残さない。 変数展開後の定数比較に対する指摘は、**その比較が設計上つねに定数になる場合にかぎり**誤検知である。未定義変数や変数名の誤記で意図せず定数化した場合は真の欠陥であり、比較ごとに判断する。
+
 **成果物は版管理下へ置く。** 一時ステージングは版管理外であり、そこに置いたままでは`review evidence`も履歴監査も成立しない。収束後に`docs/reviews/`または`.agent-skill-chain/reviews/`配下へ複写し、実装commitの後にその1 fileだけをcommitして`H_final`にする。
 
 project choicesと対象成果物のDC行を読む。**DC判定が`applicable`の領域と、対象差分が実際に触れた領域だけ**、作業開始前に対応するtemplateの全文を読む。[脅威・対策・監査](../../templates/specs/10_セキュリティ/02_脅威・対策・監査.md)はDC-PRIVACYが`applicable`のとき、[利用性・互換性・保守性](../../templates/specs/11_非機能/02_利用性・互換性・保守性.md)と[監視・障害対応](../../templates/specs/12_運用保守/01_監視・障害対応.md)はDC-OBSERVABILITYが`applicable`のとき、[コーディング標準](../../templates/specs/14_開発・品質/01_コーディング標準.md)と[テスト標準](../../templates/specs/14_開発・品質/02_テスト標準.md)は差分がsourceまたはtestを含むときに読む。**`not-applicable`と判定した領域のtemplateの全文を読む固定費を課さない。** 判定自体の妥当性は§2.2のDC欄でreviewする。UIまたはtoken capabilityが`not-applicable`でない場合は[デザイントークン](../../templates/specs/17_デザイン/00_デザイントークン.md)と[レイアウトトークン](../../templates/specs/18_レイアウト/00_レイアウトトークン.md)も全文読み、判定・理由・実測証拠の欠落をfindingにする。
