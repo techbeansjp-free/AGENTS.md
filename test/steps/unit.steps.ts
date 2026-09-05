@@ -164,6 +164,10 @@ interface UnitWorld extends WorkflowWorld {
   documentLinkContracts: {
     [k: string]: { valid: boolean; errors: string[]; skills: number };
   };
+  staticAnalysisMarkerRoots: { [k: string]: string };
+  staticAnalysisContracts: {
+    [k: string]: { valid: boolean; errors: string[]; skills: number };
+  };
   missingDomainGlossaryContractRoot: string;
   missingDomainGlossaryContracts: {
     valid: boolean;
@@ -2485,6 +2489,105 @@ const DOCUMENT_LINK_BREAKS: {
     },
   },
 ];
+
+/**
+ * Step 10 skillが保持すべき静的解析の観点marker。
+ *
+ * **`scripts/check_skill_templates.ts`の定数を書き写さず、意味の側から独立に列挙する。**
+ * 対象から導出すると、両方が同じ向きにずれたときに変異を検出できない（Issue #1083）。
+ */
+const STATIC_ANALYSIS_MARKERS = [
+  "実装言語以外の成果物",
+  "make -n",
+  "変数展開後の定数比較",
+] as const;
+
+Given("Step 10 skillの静的解析markerを欠いたpackageがある", function () {
+  this.staticAnalysisMarkerRoots = {};
+  const variants: { key: string; drop: readonly string[] }[] = [
+    ...STATIC_ANALYSIS_MARKERS.map((marker, index) => ({
+      key: `missing-${index}`,
+      drop: [marker],
+    })),
+    { key: "missing-all", drop: STATIC_ANALYSIS_MARKERS },
+  ];
+  for (const { key, drop } of variants) {
+    const root = this.temp(`asc-static-analysis-${key}-`);
+    fs.mkdirSync(path.join(root, ".agent-skill-chain"), { recursive: true });
+    for (const area of ["skills", "templates", "docs"])
+      fs.cpSync(
+        `.agent-skill-chain/${area}`,
+        path.join(root, `.agent-skill-chain/${area}`),
+        { recursive: true },
+      );
+    const skillFile = path.join(
+      root,
+      ".agent-skill-chain/skills/step-10-review/SKILL.md",
+    );
+    let markdown = fs.readFileSync(skillFile, "utf8");
+    for (const marker of drop) {
+      assert.ok(
+        markdown.includes(marker),
+        `削る対象のmarkerが見つかりません: ${marker}`,
+      );
+      markdown = markdown.split(marker).join("（削除）");
+    }
+    fs.writeFileSync(skillFile, markdown);
+    this.staticAnalysisMarkerRoots[key] = root;
+  }
+});
+
+When("Step skillの静的解析markerを検証する", function () {
+  this.staticAnalysisContracts = {
+    intact: checkSkillTemplateContracts(process.cwd()),
+  };
+  for (const [key, root] of Object.entries(this.staticAnalysisMarkerRoots))
+    this.staticAnalysisContracts[key] = checkSkillTemplateContracts(root);
+});
+
+Then("欠落した静的解析markerを名指しして拒否される", function () {
+  /**
+   * **正規の配布物は合格し続ける。** 欠落側だけを見ると、常に失敗する検査が
+   * 通ってしまう。
+   */
+  assert.equal(this.staticAnalysisContracts.intact!.valid, true);
+  STATIC_ANALYSIS_MARKERS.forEach((marker, index) => {
+    const observed = this.staticAnalysisContracts[`missing-${index}`]!;
+    assert.equal(observed.valid, false);
+    /**
+     * **error本文が欠落したmarkerを名指しすることまで検査する。**
+     * `valid === false`だけでは、他の理由で落ちた場合と区別できない。
+     */
+    assert.ok(
+      observed.errors.some(
+        (error) =>
+          error.includes("skills/step-10-review/SKILL.md") &&
+          error.includes(`「${marker}」`),
+      ),
+      observed.errors.join(" "),
+    );
+    /**
+     * **他のmarkerを巻き込んでいないことも見る。** 1件だけ削ったのに全件が
+     * 報告されるなら、判定が入力に依存していない。
+     *
+     * **照合は鉤括弧付きの引用形で行う。** error本文の固定部分が
+     * `実装言語以外の成果物`をそのまま含むため、素の部分一致では自分自身に当たる。
+     */
+    for (const other of STATIC_ANALYSIS_MARKERS)
+      if (other !== marker)
+        assert.ok(
+          !observed.errors.some((error) => error.includes(`「${other}」`)),
+          `${marker}だけを削ったのに${other}も報告された: ${observed.errors.join(" ")}`,
+        );
+  });
+  const all = this.staticAnalysisContracts["missing-all"]!;
+  assert.equal(all.valid, false);
+  for (const marker of STATIC_ANALYSIS_MARKERS)
+    assert.ok(
+      all.errors.some((error) => error.includes(`「${marker}」`)),
+      `全件削除で${marker}が報告されない: ${all.errors.join(" ")}`,
+    );
+});
 
 Given("Step skillから規範文書へのlinkを壊したpackageがある", function () {
   this.missingDocumentLinkRoots = {};
