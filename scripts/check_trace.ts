@@ -241,19 +241,29 @@ function markdownPaths(text: string): string[] {
 /**
  * 受理する帰属文の形。
  *
- * **`のは … である`まで成立した文だけを対象にする。** 新しい言い回しは、
- * この一覧とfixtureを意図的に拡張してから使う。
+ * **`である。`で文が終わることまで要求する。** 後続を拘束しないと、
+ * 「であるとは限らない」「であるべきではない」「である、と説明していた」
+ * 「であるかは未決である」がすべて断定として一致する（Issue #1229 round 1、H-02）。
+ *
+ * **改行をまたぐ帰属文も対象にする。** Markdownのsoft line breakで折り返した文は
+ * 通常の記法であり、1行単位の抽出では取りこぼす（M-01）。
  */
 const NAMED_SCENARIO_CLAIM =
-  /(?:この不変条件を強制するのは|[^。]*?を回帰として検出するのは)((?:\s|、|と|から|`SCN-[A-Z0-9-]+`)+)である/gu;
+  /(?:この不変条件を強制するのは|[^。]{0,120}?を回帰として検出するのは)((?:\s|、|と|から|`SCN-[A-Z0-9-]+`)+)である。/gu;
 
 const SCENARIO_RANGE_LIMIT = 64;
+
+/** 数値部の桁数上限。**安全整数を超える入力を正規表現の前段で落とす。** */
+const SCENARIO_SEQUENCE_DIGITS_LIMIT = 12;
 
 /**
  * `AからB`の範囲を連番展開する。
  *
  * **条件を満たさない範囲を両端だけの列挙へ縮退させない。** 縮退させると中間IDの
  * 欠落が黙って通る。prefixのbyte一致、桁幅一致、開始が終了以下、件数上限を要求する。
+ *
+ * **数値部の安全整数性を検査する。** `2^53`を超える値では`value += 1`が値を変えず、
+ * loopが終了しない。展開件数の上限は差分が小さい入力で防御にならない（H-01）。
  */
 function expandScenarioRange(
   from: string,
@@ -276,8 +286,18 @@ function expandScenarioRange(
       ids: [],
       error: `範囲の両端の桁数が一致しません: ${from}から${to}`,
     };
+  if (start[2].length > SCENARIO_SEQUENCE_DIGITS_LIMIT)
+    return {
+      ids: [],
+      error: `範囲の数値部が桁数上限${SCENARIO_SEQUENCE_DIGITS_LIMIT}を超えます: ${from}から${to}`,
+    };
   const first = Number(start[2]);
   const last = Number(end[2]);
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last))
+    return {
+      ids: [],
+      error: `範囲の数値部が安全整数ではありません: ${from}から${to}`,
+    };
   if (first > last)
     return {
       ids: [],
@@ -295,51 +315,92 @@ function expandScenarioRange(
 }
 
 /**
+ * 帰属文のSCN式を解釈する。
+ *
+ * **受理する文法を閉じたうえで、混在形を正しく解釈する。** `から`の実位置を見ずに
+ * 両端を決めると、`A と B から C` が `A..B` と `C` になり中間IDが黙って落ちる
+ * （Issue #1229 round 1、H-03）。**列挙の各項が単独IDか`AからB`のいずれかである、
+ * という形で解釈する。** `AからBからC`のような連続した範囲は明示errorとする。
+ */
+function parseScenarioExpression(raw: string): {
+  ids: string[];
+  errors: string[];
+} {
+  const parts = raw.split(/`(SCN-[A-Z0-9-]+)`/u);
+  const ids: string[] = [];
+  const connectors: string[] = [];
+  for (let index = 0; index < parts.length; index += 1)
+    if (index % 2 === 1) ids.push(parts[index] ?? "");
+    else connectors.push((parts[index] ?? "").trim());
+  if (ids.length === 0) return { ids: [], errors: [] };
+  const outer = [connectors[0] ?? "", connectors[connectors.length - 1] ?? ""];
+  if (outer.some((connector) => connector !== ""))
+    return {
+      ids: [],
+      errors: [`SCN式の前後に解釈できない語があります: ${raw.trim()}`],
+    };
+  const inner = connectors.slice(1, -1);
+  if (inner.some((connector) => !["、", "と", "から"].includes(connector)))
+    return {
+      ids: [],
+      errors: [`SCN式の接続語を解釈できません: ${raw.trim()}`],
+    };
+  const resolved: string[] = [];
+  const errors: string[] = [];
+  let index = 0;
+  while (index < ids.length) {
+    if (inner[index] === "から") {
+      if (inner[index + 1] === "から") {
+        errors.push(`範囲表記が連続しています: ${raw.trim()}`);
+        return { ids: [], errors };
+      }
+      const expanded = expandScenarioRange(
+        ids[index] ?? "",
+        ids[index + 1] ?? "",
+      );
+      if (expanded.error !== undefined) errors.push(expanded.error);
+      resolved.push(...expanded.ids);
+      index += 2;
+      continue;
+    }
+    resolved.push(ids[index] ?? "");
+    index += 1;
+  }
+  return { ids: errors.length > 0 ? [] : resolved, errors };
+}
+
+/**
  * 要件本文から帰属文を抽出する。
  *
  * **code fence内を対象にしない。** 説明のために書いた例で既存gateを止めない。
+ * **fenceはbacktickとtildeの双方、3文字以上を認識する**（H-02）。
  */
 function collectNamedScenarioClaims(
   bodyLines: string[],
   bodyStartLine: number,
 ): NamedScenarioClaim[] {
+  let fence: string | undefined;
+  const masked = bodyLines.map((line) => {
+    const marker = /^\s*(`{3,}|~{3,})/u.exec(line)?.[1];
+    if (marker !== undefined) {
+      if (fence === undefined) fence = marker[0];
+      else if (marker[0] === fence) fence = undefined;
+      return "";
+    }
+    return fence === undefined ? line : "";
+  });
+  const body = masked.join("\n");
   const claims: NamedScenarioClaim[] = [];
-  let insideFence = false;
-  for (let index = 0; index < bodyLines.length; index += 1) {
-    const line = bodyLines[index] ?? "";
-    if (/^\s*```/u.test(line)) {
-      insideFence = !insideFence;
-      continue;
-    }
-    if (insideFence) continue;
-    NAMED_SCENARIO_CLAIM.lastIndex = 0;
-    for (const match of line.matchAll(NAMED_SCENARIO_CLAIM)) {
-      const raw = match[1] ?? "";
-      const listed = [...raw.matchAll(/`(SCN-[A-Z0-9-]+)`/gu)].map(
-        (hit) => hit[1] ?? "",
-      );
-      if (listed.length === 0) continue;
-      const scenarioIds = new Set<string>();
-      const errors: string[] = [];
-      if (raw.includes("から")) {
-        if (listed.length < 2)
-          errors.push(`範囲表記に両端がありません: ${raw.trim()}`);
-        else {
-          const expanded = expandScenarioRange(
-            listed[0] ?? "",
-            listed[1] ?? "",
-          );
-          if (expanded.error) errors.push(expanded.error);
-          for (const id of expanded.ids) scenarioIds.add(id);
-          for (const id of listed.slice(2)) scenarioIds.add(id);
-        }
-      } else for (const id of listed) scenarioIds.add(id);
-      claims.push({
-        line: bodyStartLine + index,
-        scenarioIds: [...scenarioIds].sort(),
-        errors,
-      });
-    }
+  for (const match of body.matchAll(NAMED_SCENARIO_CLAIM)) {
+    const parsed = parseScenarioExpression(match[1] ?? "");
+    if (parsed.ids.length === 0 && parsed.errors.length === 0) continue;
+    const offset = match.index ?? 0;
+    const line = bodyStartLine + body.slice(0, offset).split("\n").length - 1;
+    claims.push({
+      line,
+      scenarioIds: [...new Set(parsed.ids)].sort(),
+      errors: parsed.errors,
+    });
   }
   return claims;
 }

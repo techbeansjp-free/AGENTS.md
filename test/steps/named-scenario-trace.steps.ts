@@ -93,6 +93,16 @@ Given(
           "**この不変条件を強制するのは`SCN-UNIT-XX-001`から`SCN-UNIT-YY-003`である。**",
           "",
           "**この不変条件を強制するのは`SCN-UNIT-XX-001`から`SCN-UNIT-XX-0003`である。**",
+          "",
+          "**この不変条件を強制するのは`SCN-UNIT-XX-005`から`SCN-UNIT-XX-005`である。**",
+          "",
+          "**この不変条件を強制するのは`SCN-UNIT-XX-006`から`SCN-UNIT-XX-069`である。**",
+          "",
+          "**この不変条件を強制するのは`SCN-UNIT-XX-006`から`SCN-UNIT-XX-070`である。**",
+          "",
+          "**この不変条件を強制するのは`SCN-UNIT-XX-001`から`SCN-UNIT-XX`である。**",
+          "",
+          "**この不変条件を強制するのは`SCN-UNIT-XX-9007199254740992`から`SCN-UNIT-XX-9007199254740992`である。**",
         ].join("\n"),
       ),
     );
@@ -104,13 +114,124 @@ Given(
        * 実装や先頭1件へ縮退した実装を検出できない（変異試験で実測）。
        */
       traceTable([
-        traceRow("REQ-XX-001", ["SCN-UNIT-XX-001", "SCN-UNIT-XX-003"]),
+        traceRow("REQ-XX-001", [
+          "SCN-UNIT-XX-001",
+          "SCN-UNIT-XX-003",
+          "SCN-UNIT-XX-005",
+        ]),
       ]),
     );
     write(
       this.root,
       "test/features/unit/例.feature",
-      feature(["SCN-UNIT-XX-001", "SCN-UNIT-XX-002", "SCN-UNIT-XX-003"]),
+      feature([
+        "SCN-UNIT-XX-001",
+        "SCN-UNIT-XX-002",
+        "SCN-UNIT-XX-003",
+        "SCN-UNIT-XX-005",
+      ]),
+    );
+  },
+);
+
+Given(
+  "否定文と未決文とtilde fence内の帰属文がある仕様がある",
+  function (this: NamedScenarioWorld) {
+    this.root = this.temp("asc-namedscn-assertion-");
+    write(
+      this.root,
+      "docs/specs/02_要件/01_例.md",
+      requirementDocument(
+        [
+          "この不変条件を強制するのは`SCN-UNIT-XX-009`であるとは限らない。",
+          "",
+          "この不変条件を強制するのは`SCN-UNIT-XX-009`であるべきではない。",
+          "",
+          "旧仕様では、この不変条件を強制するのは`SCN-UNIT-XX-009`である、と説明していた。",
+          "",
+          "この不変条件を強制するのは`SCN-UNIT-XX-009`であるかは未決である。",
+          "",
+          "~~~markdown",
+          "**この不変条件を強制するのは`SCN-UNIT-XX-009`である。**",
+          "~~~",
+        ].join("\n"),
+      ),
+    );
+    write(
+      this.root,
+      "docs/specs/15_要件追跡/00_追跡表.md",
+      traceTable([traceRow("REQ-XX-001", ["SCN-UNIT-XX-001"])]),
+    );
+    write(
+      this.root,
+      "test/features/unit/例.feature",
+      feature(["SCN-UNIT-XX-001"]),
+    );
+  },
+);
+
+Given(
+  "soft line breakで折り返した帰属文がある仕様がある",
+  function (this: NamedScenarioWorld) {
+    this.root = this.temp("asc-namedscn-softbreak-");
+    write(
+      this.root,
+      "docs/specs/02_要件/01_例.md",
+      requirementDocument(
+        ["**この不変条件を強制するのは", "`SCN-UNIT-XX-002`である。**"].join(
+          "\n",
+        ),
+      ),
+    );
+    write(
+      this.root,
+      "docs/specs/15_要件追跡/00_追跡表.md",
+      traceTable([traceRow("REQ-XX-001", ["SCN-UNIT-XX-001"])]),
+    );
+    write(
+      this.root,
+      "test/features/unit/例.feature",
+      feature(["SCN-UNIT-XX-001", "SCN-UNIT-XX-002"]),
+    );
+  },
+);
+
+Given(
+  "列挙と範囲を混在させた帰属文と連続した範囲がある仕様がある",
+  function (this: NamedScenarioWorld) {
+    this.root = this.temp("asc-namedscn-mixed-");
+    write(
+      this.root,
+      "docs/specs/02_要件/01_例.md",
+      requirementDocument(
+        [
+          "**この不変条件を強制するのは`SCN-UNIT-XX-001`と`SCN-UNIT-XX-002`から`SCN-UNIT-XX-004`である。**",
+          "",
+          "**この不変条件を強制するのは`SCN-UNIT-XX-001`から`SCN-UNIT-XX-002`から`SCN-UNIT-XX-003`である。**",
+        ].join("\n"),
+      ),
+    );
+    /** **中間の`SCN-UNIT-XX-003`だけを結線から外す。** 混在形の解釈が誤ると検出できない。 */
+    write(
+      this.root,
+      "docs/specs/15_要件追跡/00_追跡表.md",
+      traceTable([
+        traceRow("REQ-XX-001", [
+          "SCN-UNIT-XX-001",
+          "SCN-UNIT-XX-002",
+          "SCN-UNIT-XX-004",
+        ]),
+      ]),
+    );
+    write(
+      this.root,
+      "test/features/unit/例.feature",
+      feature([
+        "SCN-UNIT-XX-001",
+        "SCN-UNIT-XX-002",
+        "SCN-UNIT-XX-003",
+        "SCN-UNIT-XX-004",
+      ]),
     );
   },
 );
@@ -224,12 +345,11 @@ Then(
     const missing = this.errors.filter((error) =>
       error.startsWith(MISSING_LINK),
     );
-    assert.equal(missing.length, 1, this.errors.join("\n"));
-    assert.ok(missing[0].includes("SCN-UNIT-XX-002"), missing[0]);
-    assert.ok(!missing[0].includes("SCN-UNIT-XX-001"), missing[0]);
-    assert.ok(!missing[0].includes("SCN-UNIT-XX-003"), missing[0]);
+    const missingText = missing.join("\n");
+    assert.ok(missingText.includes("SCN-UNIT-XX-002"), missingText);
+    assert.ok(!missingText.includes("SCN-UNIT-XX-003"), missingText);
     const ranges = this.errors.filter((error) => error.startsWith(RANGE_ERROR));
-    assert.equal(ranges.length, 3, ranges.join("\n"));
+    assert.equal(ranges.length, 6, ranges.join("\n"));
     assert.ok(
       ranges.some((error) => error.includes("開始が終了より大きい")),
       ranges.join("\n"),
@@ -241,6 +361,79 @@ Then(
     assert.ok(
       ranges.some((error) => error.includes("桁数が一致しません")),
       ranges.join("\n"),
+    );
+    assert.ok(
+      ranges.some((error) => error.includes("上限64を超えます")),
+      ranges.join("\n"),
+    );
+    assert.ok(
+      ranges.some((error) => error.includes("末尾数字のSCN IDではありません")),
+      ranges.join("\n"),
+    );
+    /** **`AからA`は1件として展開される。** 結線済みなので不足に現れない。 */
+    assert.ok(!missingText.includes("SCN-UNIT-XX-005"), missingText);
+    /**
+     * **上限ちょうど64件は展開される。** fixtureに定義の無いIDなので不足ではなく
+     * 実在しないSCNとして報告される。**両端が揃って現れることで、始端も終端も
+     * 落としていないことが分かる。**
+     */
+    const unknown = this.errors
+      .filter((error) => error.startsWith(UNKNOWN_SCN))
+      .join("\n");
+    assert.ok(unknown.includes("SCN-UNIT-XX-006"), unknown);
+    assert.ok(unknown.includes("SCN-UNIT-XX-069"), unknown);
+    assert.ok(unknown.includes("SCN-UNIT-XX-037"), unknown);
+  },
+);
+
+Then(
+  "安全整数を超える数値部は展開されず検査が停止しない",
+  function (this: NamedScenarioWorld) {
+    /**
+     * **`2^53`を超える数値部は`value += 1`が値を変えずloopが終わらない。**
+     * 展開件数の上限は差分が1と評価されるため防御にならない（Issue #1229 H-01）。
+     * ここまで到達していること自体が停止の証拠である。
+     */
+    assert.ok(
+      this.errors.some(
+        (error) =>
+          error.startsWith(RANGE_ERROR) &&
+          error.includes("桁数上限12を超えます"),
+      ),
+      this.errors.join("\n"),
+    );
+  },
+);
+
+Then(
+  "折り返した帰属文の不足SCNが本文位置とともに報告される",
+  function (this: NamedScenarioWorld) {
+    const reported = this.errors.filter((error) =>
+      error.startsWith(MISSING_LINK),
+    );
+    assert.equal(reported.length, 1, this.errors.join("\n"));
+    assert.ok(reported[0].includes("SCN-UNIT-XX-002"), reported[0]);
+    /** **本文位置は帰属文の開始行を指す。** 折り返し後の行を指すと原文へ辿れない。 */
+    assert.ok(reported[0].includes("01_例.md:5"), reported[0]);
+  },
+);
+
+Then(
+  "混在した範囲の中間IDが不足として報告され連続した範囲は明示errorになる",
+  function (this: NamedScenarioWorld) {
+    const reported = this.errors.filter((error) =>
+      error.startsWith(MISSING_LINK),
+    );
+    assert.equal(reported.length, 1, this.errors.join("\n"));
+    /** **`A と B から D` は A と B..D である。** 両端だけを見る実装では C が消える。 */
+    assert.ok(reported[0].includes("SCN-UNIT-XX-003"), reported[0]);
+    assert.ok(!reported[0].includes("SCN-UNIT-XX-001"), reported[0]);
+    assert.ok(
+      this.errors.some(
+        (error) =>
+          error.startsWith(RANGE_ERROR) && error.includes("範囲表記が連続"),
+      ),
+      this.errors.join("\n"),
     );
   },
 );
