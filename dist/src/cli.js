@@ -4771,40 +4771,66 @@ export async function main(argv, dependencies = {}) {
                     repositoryAuthority.defaultBranchTipOid.toLowerCase())
                     throw new Error("provider create再試行には現在の既定branch tipと一致するtrusted policy provenanceが必要です");
                 assertCurrentReviewJournalBinding(staging, headSha);
-                const claimed = claimStoredPullRequestCreationDispatch(staging, deliveryEventTime(effectivePrepared.create.preparedAt));
-                if (!claimed.dispatchAllowed) {
-                    const retained = claimed.state.state === "create-prepared"
-                        ? requireStoredDeliveryReconciliation(staging, {
-                            phase: "create",
-                            reason: "PR create dispatch claimは既に消費済みのためprovider createを再送しません",
-                            enteredAt: deliveryEventTime(claimed.state.create.preparedAt),
-                        })
-                        : claimed.state;
-                    return {
-                        exitCode: 1,
-                        output: {
-                            state: "reconciliation_required",
-                            reason: "PR create dispatch claimは既に消費済みのためprovider createを再送しません",
-                            deliveryState: retained,
-                            next: "固定済みhead/base/Issueに一致するPRをproviderで照合してください",
-                        },
-                    };
-                }
-                effectivePrepared = claimed.state;
+                /**
+                 * **claimはprovider要求の直前でだけ消費する**（Issue #1157）。
+                 *
+                 * 以前はここでclaimを消費してからadapterを呼んでいた。adapterの第1文が
+                 * `verifyRepository`（内部で`gh auth status`）であるため、認証の一時失敗で
+                 * **変更要求を1度も送っていないのにclaimだけが消費され**、stagingが
+                 * `reconciliation-required`から出られなくなっていた。
+                 *
+                 * **claimの消費そのものが送信phaseの証拠になる。** 新しいstate fieldも
+                 * error型も足さず、この変数だけで「送信前の失敗」と「成否不明」を分ける。
+                 */
+                let dispatchClaimed = false;
+                let dispatchAllowed = true;
                 try {
-                    created = createPullRequest({ ...commonInput, baseSha }, (operation, payload) => github(operation, payload, root));
+                    created = createPullRequest({ ...commonInput, baseSha }, (operation, payload) => github(operation, {
+                        ...payload,
+                        onDispatch: () => {
+                            const claimed = claimStoredPullRequestCreationDispatch(staging, deliveryEventTime(effectivePrepared.create.preparedAt));
+                            dispatchClaimed = true;
+                            dispatchAllowed = claimed.dispatchAllowed;
+                            if (claimed.dispatchAllowed)
+                                effectivePrepared = claimed.state;
+                            return claimed.dispatchAllowed;
+                        },
+                    }, root));
                 }
                 catch (error) {
-                    const reconciled = requireStoredDeliveryReconciliation(staging, {
-                        phase: "create",
-                        reason: `provider createの成否を断定できないため同じ要求の自動再送を禁止した: ${error instanceof Error ? error.message : String(error)}`,
-                        enteredAt: deliveryEventTime(prepared.create.preparedAt),
-                    });
+                    const message = error instanceof Error ? error.message : String(error);
+                    if (!dispatchClaimed) {
+                        /**
+                         * **変更要求を1度も送っていない。** 最終再検証より前で落ちており、
+                         * claimも消費していない。`reconciliation-required`へ落とす根拠が無い。
+                         * stateは`create-prepared`のままなので、同じcommandを再実行できる。
+                         */
+                        return {
+                            exitCode: 1,
+                            output: {
+                                state: "dispatch_not_started",
+                                reason: message,
+                                deliveryState: effectivePrepared,
+                                next: "原因を解消して同じpr createを再実行してください。provider createは実行していません",
+                            },
+                        };
+                    }
+                    const reconciled = dispatchAllowed
+                        ? requireStoredDeliveryReconciliation(staging, {
+                            phase: "create",
+                            reason: `provider createの成否を断定できないため同じ要求の自動再送を禁止した: ${message}`,
+                            enteredAt: deliveryEventTime(prepared.create.preparedAt),
+                        })
+                        : requireStoredDeliveryReconciliation(staging, {
+                            phase: "create",
+                            reason: "PR create dispatch claimは既に消費済みのためprovider createを再送しません",
+                            enteredAt: deliveryEventTime(prepared.create.preparedAt),
+                        });
                     return {
                         exitCode: 1,
                         output: {
                             state: "reconciliation_required",
-                            reason: error instanceof Error ? error.message : String(error),
+                            reason: message,
                             deliveryState: reconciled,
                             next: "固定済みhead/base/Issueに一致するPRをproviderで照合してください",
                         },
