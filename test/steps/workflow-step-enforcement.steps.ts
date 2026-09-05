@@ -1845,6 +1845,13 @@ interface PreparedPullRequest {
 }
 
 interface DeliveryProviderControl {
+  /**
+   * `pr.create`内のremote HEAD再検証を失敗させる（Issue #1157）。
+   *
+   * **この照会は`pr.create`の中でだけ起きる。** dispatch gateより前で落ちるため、
+   * claimを消費しないことをCLI経路で観測できる。
+   */
+  failCreateVerification: boolean;
   phase: "ready" | "merge-requested" | "queue-requested" | "merged";
   ghVersion: string;
   closingChanged: boolean;
@@ -2193,6 +2200,7 @@ function prepareDeliveryCli(
     providerDefaultBranch: "main",
     requestedAt: fixtureInstant(),
     existingPr: "none",
+    failCreateVerification: false,
     prAuthorId: "pr-author",
     implementationAuthorId: "implementation-author",
     reviewDisposition: "approved",
@@ -2311,7 +2319,9 @@ if (exact(["--version"])) {
 } else if (
   exact(["api", "repos/o/r/commits/feature%2Fx", "--jq", ".sha"])
 ) {
-  process.stdout.write(sha + "\\n");
+  process.stdout.write(
+    (control.failCreateVerification ? "e".repeat(40) : sha) + "\\n",
+  );
 } else if (exact(["api", "repos/o/r/commits/main", "--jq", ".sha"])) {
   process.stdout.write(
     (control.phase === "merged"
@@ -3619,6 +3629,76 @@ if (exact(["auth", "status"])) {
           ),
         ).entries.filter((entry) => entry.step === 11).length,
         1,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-043": {
+      /**
+       * **dispatch gateより前で落ちた場合はclaimを消費しない**（Issue #1157）。
+       *
+       * `pr.create`内のremote HEAD再検証を失敗させる。この照会はgateより前に
+       * あるため、providerへ変更要求を送っていない。**stateは`create-prepared`の
+       * まま残り、原因を解消すれば同じcommandで前進できる。**
+       */
+      const prepared = prepareDeliveryCli(this);
+      const issueUrl = "https://github.com/o/r/issues/877";
+      prepareStoredPullRequestCreation(prepared.staging, {
+        repository: "o/r",
+        issue: 877,
+        issueUrl,
+        headRef: "feature/x",
+        headSha: prepared.headSha,
+        baseRef: "main",
+        baseSha: prepared.baseSha,
+        pullRequestDigest: preparedPullRequestDigest(prepared),
+        bodyClosingDigest: closingContractDigest({
+          canonicalIssue: 877,
+          canonicalIssueUrl: issueUrl,
+          closingIssueNumbers: [877],
+        }),
+        preparedAt: fixtureInstant({ secondsAgo: 1 }),
+      });
+      writeDeliveryProviderControl(prepared, { failCreateVerification: true });
+      const before = deliveryProviderCalls(prepared);
+      const blocked = executeCli(
+        [...prepared.args, "--apply", "--authorize=approved"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(blocked.status, 0);
+      const blockedDelta = deliveryProviderCalls(prepared).slice(before.length);
+      assert.equal(
+        blockedDelta.filter(isCreateCall).length,
+        0,
+        "再検証で落ちたのにPR createを送っています",
+      );
+      const stopped = parseDeliveryState(
+        fs.readFileSync(
+          path.join(prepared.staging, "journal", "delivery-state.json"),
+          "utf8",
+        ),
+      );
+      assert.equal(
+        stopped.create.dispatchClaimedAt,
+        null,
+        "変更要求を送っていないのにdispatch claimを消費しています",
+      );
+      assert.equal(
+        stopped.state,
+        "create-prepared",
+        "送信前の失敗でreconciliation-requiredへ落としています",
+      );
+      /** **原因を解消すれば同じcommandで前進できる。** */
+      writeDeliveryProviderControl(prepared, { failCreateVerification: false });
+      const recovered = executeCli(
+        [...prepared.args, "--apply", "--authorize=approved"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(
+        recovered.status,
+        0,
+        `${recovered.stdout}\n${recovered.stderr}`,
       );
       break;
     }

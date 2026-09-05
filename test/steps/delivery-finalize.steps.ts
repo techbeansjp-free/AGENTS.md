@@ -51,6 +51,10 @@ interface DeliveryFinalizeWorld extends WorkflowWorld {
   mergeOperationResult: { state: string };
   mergeMethodError: string | undefined;
   omitTrustedPolicy: boolean;
+  /** provider要求の直前でdispatch claimが消費されたか（Issue #1157）。 */
+  dispatchClaimed: boolean;
+  /** PR本文の一時領域を観測するための専用tmp（Issue #1157）。 */
+  temporaryRoot: string;
   prCreationResult: PullRequestCreationResult;
   prInspection: PullRequestInspection;
   prOverrides: Record<string, string>;
@@ -950,9 +954,102 @@ Given("異なるremote HEADを返すgh stubがある", function () {
 Given("作成中にremote base OIDが変更されるgh stubがある", function () {
   prepareGhCreateStub(this, true, false);
 });
+
+/**
+ * **認証観測の失敗を実際に起こす**（Issue #1157）。`gh auth status` は
+ * `pr.create` の第1文で呼ばれる。ここで落ちた時点でproviderへ変更要求を
+ * 送っていないため、dispatch claimを消費してはならない。
+ */
+Given("認証観測に失敗するgh stubがある", function () {
+  const directory = this.temp("asc-gh-authfail-");
+  const stub = path.join(directory, "gh");
+  this.ghLog = path.join(directory, "gh.log");
+  fs.writeFileSync(
+    stub,
+    `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(
+      "GHLOG",
+    )},args.join(' ')+'\\n');if(args[0]==='auth'){process.stderr.write('timeout');process.exit(1);}\n`.replace(
+      JSON.stringify("GHLOG"),
+      JSON.stringify(this.ghLog),
+    ),
+  );
+  fs.chmodSync(stub, 0o755);
+  this.stubPath = `${directory}${path.delimiter}${process.env.PATH ?? ""}`;
+});
+Then("dispatch claimを消費していない", function () {
+  assert.equal(
+    this.dispatchClaimed,
+    false,
+    "provider要求を送っていないのにdispatch claimを消費しています",
+  );
+});
+
+When("dispatch claimを渡さずPR create adapterを実行する", function () {
+  const original = process.env.PATH;
+  process.env.PATH = this.stubPath;
+  /**
+   * **一時領域の残留を観測する**（Issue #1157）。adapterはPR本文を
+   * `os.tmpdir()`直下の`asc-pr-body-*`へ書く。**gateが`try`の外にあると、
+   * 拒否したときに本文入りの一時領域が残る。** `os.tmpdir()`は呼び出しごとに
+   * 環境変数を読むため、専用のtmpへ差し替えて観測できる。
+   */
+  this.temporaryRoot = this.temp("asc-pr-tmp-");
+  const originalTmp = process.env.TMPDIR;
+  process.env.TMPDIR = this.temporaryRoot;
+  this.dispatchClaimed = false;
+  try {
+    /**
+     * **型で必須にしていても実行時の経路が残る。** 呼び出し側がcastで
+     * 省略できるため、実装側のfail-closedを直接測る。
+     */
+    (
+      github as unknown as (
+        operation: string,
+        input: Record<string, unknown>,
+        cwd: string,
+      ) => unknown
+    )(
+      "pr.create",
+      {
+        repository: "o/r",
+        issue: 824,
+        head: "feature/x",
+        headSha: "a".repeat(40),
+        base: "main",
+        baseSha: "c".repeat(40),
+        title: "bugfix: 対象を是正する",
+        body: "Relates to #824",
+      },
+      process.cwd(),
+    );
+  } catch (error) {
+    this.error = error;
+  } finally {
+    process.env.PATH = original;
+    if (originalTmp === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = originalTmp;
+  }
+});
+
+Then("PR本文の一時領域が残っていない", function () {
+  const leftovers = fs
+    .readdirSync(this.temporaryRoot)
+    .filter((entry) => entry.startsWith("asc-pr-body-"));
+  assert.deepEqual(
+    leftovers,
+    [],
+    `PR本文を含む一時領域が残っています: ${leftovers.join("、")}`,
+  );
+});
+
 When("PR create adapterを実行する", function () {
   const original = process.env.PATH;
   process.env.PATH = this.stubPath;
+  /**
+   * **dispatch claimの消費時点を観測する**（Issue #1157）。claimはprovider要求の
+   * 直前でだけ消費されるべきで、認証や再検証で落ちた場合は消費されない。
+   */
+  this.dispatchClaimed = false;
   try {
     this.prCreationResult = github(
       "pr.create",
@@ -965,6 +1062,10 @@ When("PR create adapterを実行する", function () {
         baseSha: "c".repeat(40),
         title: "bugfix: 対象を是正する",
         body: "Relates to #824",
+        onDispatch: () => {
+          this.dispatchClaimed = true;
+          return true;
+        },
       },
       process.cwd(),
     );

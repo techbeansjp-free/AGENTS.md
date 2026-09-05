@@ -179,6 +179,26 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     Then PR create adapterは失敗する
     And PR create操作は呼ばれない
 
+  Scenario: SCN-INT-GITHUB-019 remote HEAD不一致でdispatch claimを消費しない
+    Given 異なるremote HEADを返すgh stubがある
+    When PR create adapterを実行する
+    Then PR create adapterは失敗する
+    And dispatch claimを消費していない
+
+  Scenario: SCN-INT-GITHUB-020 認証観測に失敗したらdispatch claimを消費しない
+    Given 認証観測に失敗するgh stubがある
+    When PR create adapterを実行する
+    Then PR create adapterは失敗する
+    And dispatch claimを消費していない
+    And PR create操作は呼ばれない
+
+  Scenario: SCN-INT-GITHUB-021 dispatch claimの受け渡しがないPR作成を拒否する
+    Given 一致するremote HEADとPR状態を返すgh stubがある
+    When dispatch claimを渡さずPR create adapterを実行する
+    Then PR create adapterは失敗する
+    And PR create操作は呼ばれない
+    And PR本文の一時領域が残っていない
+
   Scenario: SCN-INT-GITHUB-007 read権限しかないrepositoryへIssueを書き込まない
     Given read権限だけを返すgh stubがある
     When Issue sync adapterを実行する

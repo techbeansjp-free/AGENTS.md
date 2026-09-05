@@ -210,3 +210,8 @@ Feature: 公開CLIでワークフローStepを強制する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-042"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-043 dispatch gate前の失敗はclaimを消費せず再実行できる
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-043"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
