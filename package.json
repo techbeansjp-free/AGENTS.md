@@ -51,6 +51,7 @@
     "docs:format": "node --import tsx scripts/check_japanese_docs.ts",
     "test:format": "node --import tsx scripts/check_gherkin_format.ts",
     "package:check": "node --import tsx scripts/check_package_contents.ts",
+    "scan-boundary:report": "node --import tsx scripts/report_scan_boundary.ts",
     "test": "npm run compile --silent && node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs",
     "test:unit": "npm run compile --silent && node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs --tags @unit",
     "test:integration": "npm run compile --silent && node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs --tags @integration",
