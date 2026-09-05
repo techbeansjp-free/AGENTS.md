@@ -820,6 +820,7 @@ export function inspectWorkflowStagingArtifacts(input) {
             : []),
         ...validation.errors,
     ];
+    const healthy = errors.length === 0 && Boolean(modeDecision.decision) && validation.valid;
     return {
         staging: input.staging,
         mode: input.mode,
@@ -839,7 +840,19 @@ export function inspectWorkflowStagingArtifacts(input) {
         nextStep,
         validation,
         errors,
-        valid: errors.length === 0 && Boolean(modeDecision.decision) && validation.valid,
+        valid: healthy,
+        /**
+         * **契約を満たしたまま未完で止まっているか**（Issue #954）。
+         *
+         * `valid`が偽になる理由は2つある。契約を満たさない記録があること（例:
+         * `reviewSession binding`の要求より前に書かれた古いStep 10）と、単に途中で
+         * 止まっていることである。**両方を`valid: false`へ潰すと、手を入れるべき
+         * stagingを選べない。** 実測では未完24件のうち手を入れるべきは2件で、
+         * 残りはmerge済みの古いstagingだった。
+         *
+         * **`valid`の値は変えない。** 判定を増やさず、区別だけを足す。
+         */
+        interrupted: healthy && nextStep !== undefined,
     };
 }
 export function completePullRequestWorkflow(created, staging, record, recovery = {
