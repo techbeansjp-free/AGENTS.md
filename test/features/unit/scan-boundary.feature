@@ -28,3 +28,4 @@ Feature: 除外述語の被覆の観測
     Given ignored生成物を持つ一時repositoryがある
     When 報告scriptを実行する
     Then 述語未公開が報告され終了値が非0になる
+    And 展開中のfilesystem例外は走査失敗として報告される

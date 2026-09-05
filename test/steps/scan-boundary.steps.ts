@@ -10,6 +10,7 @@ import {
   type ScanBoundaryObservation,
 } from "../../src/domain/scan-boundary.js";
 import { isIssueStagingPath } from "../../src/domain/staging.js";
+import { expandIgnoredEntries } from "../../scripts/report_scan_boundary.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 /**
@@ -280,6 +281,7 @@ Then(
     assert.equal(observed.complete, false);
     const codes = observed.incomplete.map((entry) => entry.code);
     assert.ok(codes.includes("missing-predicate"), codes.join(" "));
+    assert.ok(codes.includes("duplicate-predicate"), codes.join(" "));
     assert.ok(codes.includes("predicate-unavailable"), codes.join(" "));
     /**
      * **`unknown-predicate`の中身まで見る。** 重複登録と期待一覧外は同じcodeで
@@ -288,11 +290,18 @@ Then(
     const unknown = observed.incomplete.filter(
       (entry) => entry.code === "unknown-predicate",
     );
+    /**
+     * **二重登録は専用のcodeで返ることを見る。** `detail`の文字列だけでは
+     * 呼び出し側が理由で分岐できない。
+     */
+    const duplicate = observed.incomplete.filter(
+      (entry) => entry.code === "duplicate-predicate",
+    );
+    assert.equal(duplicate.length, 1, JSON.stringify(duplicate));
+    assert.equal(duplicate[0].predicate, "source-quality-directories");
     assert.ok(
-      unknown.some(
-        (entry) =>
-          entry.predicate === "source-quality-directories" &&
-          entry.detail.includes("二重"),
+      !unknown.some(
+        (entry) => entry.predicate === "source-quality-directories",
       ),
       JSON.stringify(unknown),
     );
@@ -330,6 +339,27 @@ Then(
     assert.ok(comparison.detail.includes("不完全"), comparison.detail);
   },
 );
+
+Then("展開中のfilesystem例外は走査失敗として報告される", function () {
+  /**
+   * **例外経路を実行環境の権限に頼らない。** rootで走ると権限不足が起きない。
+   * test doubleで例外を確実に起こす。
+   */
+  const expanded = expandIgnoredEntries("/dummy", ["ignored-area"], {
+    lstat: () => {
+      throw new Error("EACCES: permission denied");
+    },
+    readdir: () => [],
+  });
+  assert.deepEqual(expanded.paths, []);
+  assert.equal(expanded.incomplete.length, 1);
+  assert.equal(expanded.incomplete[0].code, "scan-failed");
+  assert.equal(expanded.incomplete[0].path, "ignored-area");
+  assert.ok(
+    expanded.incomplete[0].detail.includes("EACCES"),
+    expanded.incomplete[0].detail,
+  );
+});
 
 Then(
   "述語未公開が報告され終了値が非0になる",

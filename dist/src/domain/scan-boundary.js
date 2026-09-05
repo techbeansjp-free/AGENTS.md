@@ -42,7 +42,11 @@ export function observeScanBoundary(input) {
     for (const source of input.sources) {
         if (registry.has(source.id))
             incomplete.push({
-                code: "unknown-predicate",
+                /**
+                 * **二重登録を未知の登録と同じcodeで返さない。** 文字列の`detail`だけでは
+                 * 構造化された区別にならず、呼び出し側が理由で分岐できない。
+                 */
+                code: "duplicate-predicate",
                 predicate: source.id,
                 path: undefined,
                 detail: "同じ述語IDが二重に登録されています",

@@ -94,9 +94,26 @@ const EXPANSION_FILE_LIMIT_PER_ENTRY = 2000;
  * **展開中に消えたentryを黙って落とさない。** 落とすと、覆われていないのではなく
  * 見ていないだけの状態を「差なし」の根拠にできてしまう（F-05）。
  */
-function expandIgnoredEntries(
+/**
+ * 展開が使うfilesystem操作。
+ *
+ * **test doubleを注入できる接合部を置く。** 権限不足を実際に作るtestは実行環境の
+ * 権限に依存し、rootで走ると例外が起きない。例外経路を環境に頼らず固定する。
+ */
+export interface ExpansionReader {
+  readonly lstat: (absolute: string) => fs.Stats | undefined;
+  readonly readdir: (absolute: string) => readonly fs.Dirent[];
+}
+
+const DEFAULT_EXPANSION_READER: ExpansionReader = {
+  lstat: (absolute) => fs.lstatSync(absolute, { throwIfNoEntry: false }),
+  readdir: (absolute) => fs.readdirSync(absolute, { withFileTypes: true }),
+};
+
+export function expandIgnoredEntries(
   root: string,
   entries: readonly string[],
+  reader: ExpansionReader = DEFAULT_EXPANSION_READER,
 ): {
   readonly paths: string[];
   readonly incomplete: ScanBoundaryIncomplete[];
@@ -113,7 +130,7 @@ function expandIgnoredEntries(
         return;
       }
       const absolute = path.join(root, relative);
-      const stat = fs.lstatSync(absolute, { throwIfNoEntry: false });
+      const stat = reader.lstat(absolute);
       if (stat === undefined) {
         incomplete.push({
           code: "scan-failed",
@@ -137,10 +154,26 @@ function expandIgnoredEntries(
         taken += 1;
         return;
       }
-      for (const child of fs.readdirSync(absolute, { withFileTypes: true }))
+      for (const child of reader.readdir(absolute))
         walk(`${relative}/${child.name}`);
     };
-    walk(entry);
+    /**
+     * **filesystem例外を報告の外へ出さない。** `lstatSync`と`readdirSync`は権限不足で
+     * throwする。捕まえないと、読めないignored領域が1つあるだけでJSON報告を出さずに
+     * 終了する。**観測できなかったことを報告できないのは、fail-closedではなく無音である。**
+     */
+    try {
+      walk(entry);
+    } catch (error) {
+      incomplete.push({
+        code: "scan-failed",
+        predicate: undefined,
+        path: entry,
+        detail: `展開中にfilesystem例外が発生しました: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
+    }
     if (overflow)
       incomplete.push({
         code: "scan-failed",
