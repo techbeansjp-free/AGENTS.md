@@ -8,15 +8,15 @@
 |---|---|
 | 対象 | 実装 |
 | 対象Issue | #1157 |
-| ラウンド | Step 10 ラウンド1 |
+| ラウンド | Step 10 ラウンド1〜2 |
 | 比較基点 | `a226eaa11b5a0033616f060d75c1814d83edf40f` |
-| H_impl | `b57e3c883830ad05f3641db58595afeb47684103` |
+| H_impl | `c2c1998d41999e6d69a272d078908b4b8038601c` |
 | 比較基点の由来 | worktree作成時点の`origin/main`のtip |
 | モード | full（Q-01・Q-03・Q-06がfalse） |
-| 対象差分 | 11 file（うちdist 2件は生成物）、commitは`b57e3c88` 1件 |
+| 対象差分 | 11 file（うちdist 2件は生成物）、commitは`b57e3c88`・`8a18b699`・取り込み commit（取り込みでartifact commitが`比較基点..H_impl`へ入る） |
 | 対象外 | merge側のdispatch claim。既に`reconciliation-required`へ入っている既存stagingの救済。`pr reconcile`相当の新設。claim消費後の再送禁止の緩和。`docs/reviews/`のrole authority不整合（#1047） |
-| 残り予算 | **2**（同一範囲で最大3ラウンド。以降は収束後のHEAD移動に対する取り直し1回のみ） |
-| ラウンド数 | 1 |
+| 残り予算 | **1**（同一範囲で最大3ラウンド。以降は収束後のHEAD移動に対する取り直し1回のみ） |
+| ラウンド数 | 2。ラウンド2は`pr create`後の外部指摘の取り込みである（#1194・#1201の経路） |
 | Step chain | 経由: /home/tatsuru/Projects/techbeansjp-free/AGENTS.md/.worktrees/20260905_153141-1157-claim-after-preflight/.agent-skill-chain/tmp/issues/20260905_155028_PR-createのdispatch-claimをprovider要求の直前へ移す |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md`のREQ-WF-013（**1段落追記**） |
 | 成果物行数 | 製品 **+61 -27行**（`github.ts` +26 -3、`cli.ts` +35 -24）。仕様 **+3 -1行**。支援層 **+141 -3行**（feature +22、steps +119 -3）。**支援層/成果物 = 2.3倍** |
@@ -66,6 +66,7 @@
 | `docs/specs/02_要件/01_ワークフロー要件.md` | M | project | spec | REQ-WF-013へ1段落追記。**既存本文を1文字も変えない** | 適合 | REQ-WF-013 / AC-WF-013 | 記述のみ | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | project | spec | 新規SCN 4件の結線 | 適合 | 同上 | 記述のみ | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | project | spec | 変更履歴1行 | 適合 | 同上 | 記述のみ | pass |
+| `docs/reviews/150_課題1157のdispatch-claim位置レビュー.md` | A | project | evidence | 本レビュー証跡。取り込みでラウンド1のartifact commitが`比較基点..H_impl`へ入るため自己行を持つ | 適合 | AC-06 | 記述のみ | pass |
 
 **`dist/src/adapters/github.js` と `dist/src/cli.js` は個別監査の対象外である。** `scripts/check_file_audit.ts` の `isGeneratedDistributionPath` が生成物を個別監査から除外する（#1187）。
 
@@ -123,6 +124,9 @@
 | ADV-02 | record-only | 再検証成功からprocess起動までの極小の窓が残る | **成否不明なので止まるのが正しい。** 縮めるにはprovider側のidempotency keyが要る |
 | ADV-03 | record-only | 既に`reconciliation-required`へ入っている既存stagingの救済経路が無い | **本Issueの範囲外。** 外部2者とも「復旧策であって変更経路ではない」で一致した。件数の実測後に判断する |
 
+| ADV-04 | resolved | **dispatch gateが`try/finally`の外にあり、拒否時にPR本文を含む一時領域`asc-pr-body-*`が残っていた**（外部reviewer指摘、Minor） | gateを`try`の中・`gh`起動の直前へ移した。**前へ出す案は採らない。** 本文書き込みの失敗がclaim消費後に起きて同じ欠陥を再現する |
+| ADV-05 | resolved | **ADV-04の是正を固定する変異が最初は生存した。** gateを`try`の外へ戻しても21件すべて合格した | 等価変異ではない（本文入りの一時領域が実際に残る）。`TMPDIR`を差し替えて残留を観測するassertionを`SCN-INT-GITHUB-021`へ足し、変異M3をkillした |
+
 **blocking 0件。未解決のCritical / High 0件。**
 
 ## 6. 検証結果
@@ -143,8 +147,19 @@
 |---|---|---|
 | M1 | dispatch gateを `verifyRepository` の前（旧位置）へ戻す | **kill**（新規3件） |
 | M2 | 実行時のfail-closed（`typeof` 検査）を消す | **kill**（SCN-INT-GITHUB-021） |
+| M3 | dispatch gateを `try` の外（`bodyDirectory` 直後）へ戻す | **kill**（同上。**当初生存**） |
 
-**2件ともkill。** 変異は複写で戻し、復元を確認した。
+**3件ともkill。** M3は当初生存した。**外部指摘を直しただけでは、その是正を固定する検査が無かった。** `TMPDIR`を差し替えてPR本文の一時領域の残留を観測するassertionを足して塞いだ。変異は複写で戻し、復元を確認した。
+
+## 6.1 ラウンド2 固有の確認
+
+**外部reviewer（CodeRabbit）の指摘1件を受けた取り込みラウンドである。**
+
+| 指摘 | 判定 | 対処 |
+|---|---|---|
+| `bodyDirectory` 作成後・`try` の外に gate があり、拒否時に一時領域が残る（Minor） | **valid** | ADV-04。gateを`try`の中・`gh`起動の直前へ移した |
+
+**指摘は私の不変条件にとっても正しかった。** gateを`bodyDirectory`より前へ出すと、本文書き込みの失敗がclaim消費後に起きて**本Issueが直している欠陥をそのまま再現する。** `try`の中で`gh`起動の直前に置くのが、清掃と「変更要求の直前」の両方を満たす唯一の位置である。
 
 ## 7. 仕様更新
 
@@ -154,4 +169,4 @@
 
 ## 8. 判定
 
-**承認。** blocking 0件、未解決のCritical / High 0件。resolved 3件（DISC-001〜003）、record-only 3件（ADV-01〜03）。
+**承認。** blocking 0件、未解決のCritical / High 0件。resolved 5件（DISC-001〜003、ADV-04・05）、record-only 3件（ADV-01〜03）。
