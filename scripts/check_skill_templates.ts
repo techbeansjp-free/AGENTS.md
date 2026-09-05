@@ -141,6 +141,7 @@ const STATIC_ANALYSIS_REVIEW_MARKERS = [
   "実装言語以外の成果物",
   "make -n",
   "変数展開後の定数比較",
+  "安全な静的展開器ではない",
 ] as const;
 
 const HOST_ADAPTER_SKILL = "asc-step";
