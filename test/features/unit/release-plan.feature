@@ -28,10 +28,10 @@ Feature: release計画と結果集約
     When 不完全なgateのrelease計画を作成する
     Then すべてのrelease計画はgateを根拠に拒否される
 
-  Scenario: SCN-UNIT-RELEASE-006 npm公開は明示入力があるときだけ有効になる
-    Given npm公開の無効入力と有効入力を用意する
+  Scenario: SCN-UNIT-RELEASE-006 release計画はnpm公開stageを持たない
+    Given dry-run有無のrelease入力を用意する
     When npm公開条件ごとのrelease計画を作成する
-    Then 明示入力がある計画だけnpm公開stageが有効になる
+    Then どの計画にもnpm公開stageが現れない
 
   Scenario: SCN-UNIT-RELEASE-007 途中失敗を部分成功として報告し復旧手順を返す
     Given tag成功後にGitHub Releaseが失敗した操作結果がある

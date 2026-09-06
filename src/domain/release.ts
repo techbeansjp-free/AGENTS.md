@@ -1,14 +1,12 @@
 import crypto from "node:crypto";
 import { isPackageVersion, packageReleaseVersion } from "../lib/version.js";
 
-export type ReleaseStage =
-  "validate" | "tag" | "github_release" | "npm_publish";
+export type ReleaseStage = "validate" | "tag" | "github_release";
 
 export interface ReleasePlanInput {
   currentVersion: string;
   requestedVersion: string;
   dryRun: boolean;
-  publishNpm: boolean;
   actor: string;
   ref: string;
   refSha: string;
@@ -73,11 +71,17 @@ export interface AutoReleasePlan {
   reasons: string[];
 }
 
+/**
+ * releaseのstage。
+ *
+ * **npm公開stageを持たない。** owner決裁でnpm registryへ公開しないことが確定しており、
+ * `package.json`の`private: true`により`npm publish`は必ず失敗する。stageを残すと、
+ * 方針上あってはならない経路を計画が宣言し続ける（Issue #1216）。
+ */
 const RELEASE_STAGES: readonly ReleaseStage[] = [
   "validate",
   "tag",
   "github_release",
-  "npm_publish",
 ];
 const REQUIRED_GATES = [
   "quality",
@@ -90,7 +94,6 @@ const RELEASE_INPUT_KEYS = new Set([
   "currentVersion",
   "requestedVersion",
   "dryRun",
-  "publishNpm",
   "actor",
   "ref",
   "refSha",
@@ -409,9 +412,8 @@ function validatePlanInput(value: unknown): {
   ] as const)
     if (typeof value[key] !== "string")
       reasons.push(`${key}は文字列でなければなりません`);
-  for (const key of ["dryRun", "publishNpm"] as const)
-    if (typeof value[key] !== "boolean")
-      reasons.push(`${key}はbooleanでなければなりません`);
+  if (typeof value.dryRun !== "boolean")
+    reasons.push("dryRunはbooleanでなければなりません");
   if (
     !Array.isArray(value.existingTags) ||
     value.existingTags.some((tag) => typeof tag !== "string")
@@ -424,7 +426,6 @@ function validatePlanInput(value: unknown): {
     currentVersion: value.currentVersion as string,
     requestedVersion: value.requestedVersion as string,
     dryRun: value.dryRun as boolean,
-    publishNpm: value.publishNpm as boolean,
     actor: value.actor as string,
     ref: value.ref as string,
     refSha: value.refSha as string,
@@ -584,13 +585,6 @@ export function planRelease(value: unknown): ReleasePlan {
         enabled: true,
         reason: "検証済みtagからGitHub Releaseを作成する",
       },
-      {
-        stage: "npm_publish",
-        enabled: input.publishNpm,
-        reason: input.publishNpm
-          ? "publishNpmが明示されたためprovenance付きで公開する"
-          : "publishNpmが明示されていないため公開しない",
-      },
     ],
     reasons: [],
   };
@@ -655,10 +649,6 @@ export function summarizeReleaseOutcome(outcomes: unknown): {
         : "failed"
       : "succeeded";
   const recovery: string[] = [];
-  if (state !== "succeeded" && completed.includes("npm_publish"))
-    recovery.push(
-      "npm公開済みversionは削除せず、npm deprecateで利用非推奨理由と代替versionを案内してください",
-    );
   if (state !== "succeeded" && completed.includes("github_release"))
     recovery.push(
       "GitHub Release作成済みの場合は対象tagとの対応を確認し、Releaseを削除してから再実行してください",
@@ -703,29 +693,6 @@ function inputHasDefault(
   });
 }
 
-function blockHasSafeNpmPublishCondition(block: string[]): boolean {
-  const text = block.join("\n");
-  return (
-    /github\.event_name\s*==\s*['"]workflow_dispatch['"]/u.test(text) &&
-    /inputs\.publish_npm\s*==\s*(?:true|['"]true['"])/u.test(text)
-  );
-}
-
-function jobBlockContaining(lines: string[], lineIndex: number): string[] {
-  for (let index = lineIndex; index >= 0; index -= 1) {
-    if (/^ {2}[A-Za-z0-9_-]+:\s*$/u.test(lines[index] ?? ""))
-      return yamlBlock(lines, index);
-  }
-  return [];
-}
-
-/**
- * 配布前品質検証の入口名。**`prepack`は形によって意味が変わる。**全gateを持つ形では
- * `npm run prepack`が配布前品質検証そのものだが、構築だけへ移した形では入口が
- * `verify:distribution`になる（REQ-SQ-020）。どちらの形かを決めるのは`package.json`であり、
- * workflow本文だけを入力とするこの検査は双方を受理する。**形と入口の対応は
- * `checkDistributionGateReachability`が両方向で突き合わせる。**
- */
 const DISTRIBUTION_VERIFICATION_SCRIPTS = [
   "prepack",
   "verify:distribution",
@@ -1035,23 +1002,30 @@ export function validateReleaseWorkflow(yaml: string): {
   if (!inputHasDefault(lines, "dry_run", "true"))
     errors.push("dry_run入力を宣言しdefaultをtrueにしてください");
   else checks.push("dry_run=trueの安全な既定値を確認した");
-  if (!inputHasDefault(lines, "publish_npm", "false"))
-    errors.push("publish_npm入力を宣言しdefaultをfalseにしてください");
-  else checks.push("publish_npm=falseの安全な既定値を確認した");
-  const npmPublishLines = lines
-    .map((line, index) => ({ line, index }))
-    .filter(({ line }) => /\bnpm\s+publish\b/u.test(line));
-  if (
-    npmPublishLines.some(
-      ({ index }) =>
-        !blockHasSafeNpmPublishCondition(jobBlockContaining(lines, index)),
-    )
-  )
+  /**
+   * **npm公開経路そのものを拒否する。** 条件付きで許すのではなく存在を許さない。
+   * 条件付きにすると、条件を満たす入力を与えるだけで方針違反の経路が開く。
+   */
+  if (lines.some((line) => /\bnpm\s+publish\b/u.test(line)))
     errors.push(
-      "npm公開stepはworkflow_dispatchかつpublish_npmが真の場合だけ実行してください",
+      "npm公開stepを置かないでください。npm registryへは公開しません",
     );
-  else
-    checks.push("npm公開が明示的な手動入力だけに限定されていることを確認した");
+  else checks.push("npm公開stepが存在しないことを確認した");
+  if (lines.some((line) => /^\s*publish_npm\s*:/u.test(line)))
+    errors.push(
+      "publish_npm入力を宣言しないでください。npm公開経路は存在しません",
+    );
+  else checks.push("publish_npm入力が存在しないことを確認した");
+  /**
+   * **consumer acceptanceの`git-dependency`をtag作成より前で実行させる。**
+   * `packed-bin`と`scale-output`は`package:check`から毎回実行されるが、
+   * `git-dependency`だけはどのreleaseでも実行されていなかった（Issue #1216）。
+   */
+  if (!/--mechanisms=[^\s]*git-dependency/u.test(yaml))
+    errors.push(
+      "validate jobでconsumer acceptanceのgit-dependencyを実行してください",
+    );
+  else checks.push("git-dependency acceptanceの実行を確認した");
   if (
     ![...DISTRIBUTION_VERIFICATION_SCRIPTS, "quality"].some((script) =>
       npmRunPattern(script).test(yaml),

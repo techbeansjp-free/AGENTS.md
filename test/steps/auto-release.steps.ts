@@ -8,6 +8,7 @@ import {
   normalizeDistributionContent,
   planAutoRelease,
   releaseJobDocumentationMismatch,
+  releaseWorkflowJobNames,
   validateReleaseWorkflow,
   type AutoReleaseInput,
   type AutoReleasePlan,
@@ -159,214 +160,6 @@ interface WorkflowStep {
  * `npm publish <tgz>`が`prepack`を実行しない以上、注入漏れを公開前に検出する
  * 機会はこのstepだけであり、**ifやcontinue-on-errorで飛ばせないことを固定する。**
  */
-const BUMP_SCRIPT_RUN =
-  "node --import tsx scripts/inject_publish_version.ts\nnpm run build";
-
-/**
- * `bump_version` jobで使ってよいgit sub commandの**allowlist**。
- *
- * **禁止集合の列挙をやめてallowlistにした。** 禁止側を数えると`git restore --source`、
- * `git -c alias.x=checkout x`、`git-switch`、`/usr/bin/git switch`、`'git' switch`の
- * ような表記で素通りする。allowlistなら未知の表記は既定で違反になる。
- */
-const ALLOWED_GIT_SUBCOMMANDS = ["show", "fetch", "rev-parse", "ls-remote"];
-
-/** `git`本体を指すtokenか。quoteとdirectoryを剥がしてbasenameで判定する。 */
-function isGitInvocation(token: string): boolean {
-  const bare = token.replace(/^["']|["']$/gu, "");
-  const base = bare.split("/").pop() ?? bare;
-  return base === "git" || base.startsWith("git-");
-}
-
-/** `run`本文に、allowlist外のgit sub commandが現れるか。**未知の形は違反とする。** */
-function forbiddenGitUsage(run: string): string[] {
-  const found: string[] = [];
-  for (const line of run.split(/\n/u)) {
-    const tokens = line.split(/\s+/u).filter(Boolean);
-    for (let index = 0; index < tokens.length; index += 1) {
-      const token = tokens[index]!;
-      if (!isGitInvocation(token)) continue;
-      const bare = token.replace(/^["']|["']$/gu, "");
-      const base = bare.split("/").pop() ?? bare;
-      if (base.startsWith("git-")) {
-        const subcommand = base.slice(4);
-        if (!ALLOWED_GIT_SUBCOMMANDS.includes(subcommand))
-          found.push(`git ${subcommand}`);
-        continue;
-      }
-      let cursor = index + 1;
-      while (cursor < tokens.length) {
-        const next = tokens[cursor]!;
-        if (next === "-c" || next === "--git-dir" || next === "-C") {
-          cursor += 2;
-          continue;
-        }
-        if (next.startsWith("-")) {
-          cursor += 1;
-          continue;
-        }
-        break;
-      }
-      const subcommand = tokens[cursor];
-      if (
-        subcommand === undefined ||
-        !ALLOWED_GIT_SUBCOMMANDS.includes(subcommand)
-      )
-        found.push(`git ${subcommand ?? "(不明)"}`);
-    }
-  }
-  return found;
-}
-
-function indentWidth(line: string): number {
-  return line.length - line.trimStart().length;
-}
-
-/** `start`行の次から、`start`行より深いindentが続く範囲を返す。 */
-function blockAfter(lines: string[], start: number): string[] {
-  const parent = indentWidth(lines[start] ?? "");
-  const block: string[] = [];
-  for (let index = start + 1; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
-    if (line.trim().length > 0 && indentWidth(line) <= parent) break;
-    block.push(line);
-  }
-  return block;
-}
-
-/**
- * 指定scopeにある**すべての**`defaults:`について、`run.shell`があるかを判定する。
- *
- * **最初の1件だけを見てはならない。** 先行jobにshellなしの`defaults:`があると
- * workflow直下のshellあり`defaults:`を見落とし、逆にscopeを絞らないと
- * job側の`defaults:`をworkflow側の判定に使ってしまう。**indentでscopeを固定し全件走査する。**
- */
-function hasDefaultsRunShell(lines: string[], scopeIndent: number): boolean {
-  return lines.some((line, index) => {
-    if (indentWidth(line) !== scopeIndent || !/^\s*defaults:\s*$/u.test(line))
-      return false;
-    const defaultsBlock = blockAfter(lines, index);
-    return defaultsBlock.some((runLine, runIndex) => {
-      if (!/^\s*run:\s*$/u.test(runLine)) return false;
-      return blockAfter(defaultsBlock, runIndex).some((shellLine) =>
-        /^\s*shell:\s*\S/u.test(shellLine),
-      );
-    });
-  });
-}
-
-/** `- `で始まるstep項目ごとにkeyを読む。`run: |`のblock scalarは全文を連結する。 */
-function parseSteps(stepsBlock: string[]): WorkflowStep[] {
-  /**
-   * **項目の列挙は`- `に続く内容の有無で決めない。**
-   *
-   * `-`だけの行に続けてmappingを書くのはYAMLとして妥当だが、`-\s+\S`を要求すると
-   * その行が項目として列挙されず、配下の`run:`が走査対象から外れる。認識できた
-   * 最初のstepより前に置かれた場合は完全に見えなくなる。
-   * **項目のindentを固定し、そのindentで`-`から始まる行をすべて項目とする。**
-   * 内容が読めない項目は後段の`unparsed`がC-0で違反へ倒す。
-   */
-  const firstDash = stepsBlock.findIndex((line) => /^\s*-/u.test(line));
-  const itemIndent = firstDash >= 0 ? indentWidth(stepsBlock[firstDash]!) : -1;
-  const itemIndexes = stepsBlock
-    .map((line, index) =>
-      indentWidth(line) === itemIndent && /^\s*-(\s|$)/u.test(line)
-        ? index
-        : -1,
-    )
-    .filter((index) => index >= 0);
-  return itemIndexes.map((start, order) => {
-    const end = itemIndexes[order + 1] ?? stepsBlock.length;
-    const item = stepsBlock.slice(start, end);
-    const normalized = item.map((line, index) =>
-      index === 0 ? line.replace(/^(\s*)-\s+/u, "$1  ") : line,
-    );
-    const step: WorkflowStep = {
-      run: undefined,
-      hasIf: false,
-      hasContinueOnError: false,
-      hasShell: false,
-      /**
-       * **解析できる正準形以外はすべて違反にする。**
-       *
-       * `- {name: x, run: ...}`のflow mapping、`-`だけの行に続けてmappingを書く形、
-       * anchor・alias・merge keyは、いずれもYAMLとして妥当でありながらこの行ベース
-       * 解析器が読み落とす。読めない形を無視すると検査が素通りする。
-       * **`- <key>:`で始まるblock mappingだけを解析対象とし、他は違反へ倒す。**
-       */
-      unparsed:
-        !/^\s*-\s+[A-Za-z][A-Za-z0-9_-]*:/u.test(item[0] ?? "") ||
-        normalized.some(
-          (line) =>
-            indentWidth(line) === indentWidth(normalized[0] ?? "") &&
-            /^\s*<<\s*:/u.test(line),
-        ),
-    };
-    const keyIndent = indentWidth(normalized[0] ?? "");
-    for (let index = 0; index < normalized.length; index += 1) {
-      const line = normalized[index] ?? "";
-      if (indentWidth(line) !== keyIndent || line.trim().length === 0) continue;
-      if (/^\s*if:\s*\S/u.test(line)) step.hasIf = true;
-      if (/^\s*continue-on-error:\s*\S/u.test(line))
-        step.hasContinueOnError = true;
-      if (/^\s*shell:\s*\S/u.test(line)) step.hasShell = true;
-      /**
-       * **block scalarの判定をinlineより先に置く。**`run: |`の`|`は非空白なので、
-       * inlineの`\S`が先に一致すると本文を1文字と誤読し、C-5が発火しなくなる。
-       */
-      if (/^\s*run:\s*[|>][-+0-9]*\s*$/u.test(line))
-        step.run = blockAfter(normalized, index)
-          .map((body) => body.trim())
-          .filter(Boolean)
-          .join("\n");
-      else {
-        const inline = /^\s*run:\s*(\S.*)$/u.exec(line);
-        if (inline) step.run = inline[1]!.trim();
-      }
-    }
-    return step;
-  });
-}
-
-/** `02_設計.md` §10.1のC-1〜C-6。満たさない条件を日本語で返す。 */
-function evaluateComposition(world: AutoReleaseWorld): string[] {
-  const errors: string[] = [];
-  const steps = world.bumpJobSteps;
-  if (steps.some((step) => step.unparsed))
-    errors.push(
-      "C-0: block mappingとして読めないstepがあります。flow記法のstepは内容を判定できないため拒否します",
-    );
-  const matched = steps.filter((step) => step.run === BUMP_SCRIPT_RUN);
-  if (matched.length !== 1)
-    errors.push(
-      `C-1: run scalarが${BUMP_SCRIPT_RUN}と完全一致するstepはちょうど1件必要ですが${matched.length}件でした`,
-    );
-  const target = matched[0];
-  if (target?.hasIf) errors.push("C-2: script呼び出しstepがifを持っています");
-  if (target?.hasContinueOnError)
-    errors.push("C-3: script呼び出しstepがcontinue-on-errorを持っています");
-  const targetIndex = target ? steps.indexOf(target) : -1;
-  const npmCiBefore =
-    targetIndex >= 0 &&
-    steps
-      .slice(0, targetIndex)
-      .some((step) => /(^|\n)\s*npm ci(\s|$)/u.test(step.run ?? ""));
-  if (!npmCiBefore)
-    errors.push(
-      "C-4: script呼び出しstepより前にnpm ciを実行するstepがありません",
-    );
-  for (const step of steps)
-    for (const usage of forbiddenGitUsage(step.run ?? ""))
-      errors.push(`C-5: job内にallowlist外のgitコマンド${usage}が残っています`);
-  if (target?.hasShell)
-    errors.push("C-6: script呼び出しstepがshell keyを持っています");
-  if (world.bumpJobDefaultsShell)
-    errors.push("C-6: npm_publish jobがdefaults.run.shellを持っています");
-  if (world.workflowDefaultsShell)
-    errors.push("C-6: workflowがdefaults.run.shellを持っています");
-  return errors;
-}
-
 const { Given, When, Then } = stepDefinitions<AutoReleaseWorld>();
 
 Given("release対象の現在tagが未存在な自動release入力がある", function () {
@@ -966,9 +759,15 @@ Then(
       this.autoWorkflowValidation?.errors.join(" ") ?? "",
       /digest/u,
     );
-    assert.match(
-      this.autoWorkflowValidation?.errors.join(" ") ?? "",
-      /npm.*workflow_dispatch/u,
+    /**
+     * **npm公開は条件付きで許すのではなく存在を許さない。** 条件付きにすると、
+     * 条件を満たす入力を与えるだけで方針違反の経路が開く（Issue #1216）。
+     */
+    assert.ok(
+      this.autoWorkflowValidation?.errors.includes(
+        "npm公開stepを置かないでください。npm registryへは公開しません",
+      ),
+      this.autoWorkflowValidation?.errors.join(" / "),
     );
   },
 );
@@ -1192,44 +991,32 @@ Then(
   },
 );
 
-Given(
-  "release.ymlのnpm_publish jobをYAMLのstep構造として読み込む",
-  function () {
-    const yaml = fs.readFileSync(
-      path.resolve(".github", "workflows", "release.yml"),
-      "utf8",
-    );
-    const lines = yaml.split(/\r?\n/u);
-    /**
-     * **`indentWidth <= 2`で絞ってはならない。**`defaults:`は indent 0、`run:`は 2、
-     * `shell:`は 4 にあるため、絞ると`shell:`が落ちてworkflow直下の上書きを見逃す。
-     */
-    this.workflowDefaultsShell = hasDefaultsRunShell(lines, 0);
-    const jobIndex = lines.findIndex((line) =>
-      /^\s{2}npm_publish:\s*$/u.test(line),
-    );
-    assert.ok(jobIndex >= 0, "npm_publish jobが見つかりません");
-    const jobBlock = blockAfter(lines, jobIndex);
-    this.bumpJobDefaultsShell = hasDefaultsRunShell(jobBlock, 4);
-    const stepsIndex = jobBlock.findIndex((line) =>
-      /^\s*steps:\s*$/u.test(line),
-    );
-    assert.ok(stepsIndex >= 0, "npm_publish jobのstepsが見つかりません");
-    this.bumpJobSteps = parseSteps(blockAfter(jobBlock, stepsIndex));
-    assert.ok(this.bumpJobSteps.length > 0, "stepを1件も読み取れませんでした");
-  },
-);
-
-When("C-1からC-6の条件を判定する", function () {
-  this.compositionErrors = evaluateComposition(this);
+Given("release.ymlをYAMLのjob構造として読み込む", function () {
+  this.autoWorkflowYaml = fs.readFileSync(
+    path.resolve(".github", "workflows", "release.yml"),
+    "utf8",
+  );
 });
 
-Then(
-  "scriptを呼ぶstepはrun scalarが完全一致で1件だけ存在し、ifとcontinue-on-errorとshellを持たず、npm ciが先行し、HEADを動かすコマンドがjob内に無く、jobとworkflowのdefaults.run.shellも無い",
-  function () {
-    assert.deepEqual(this.compositionErrors, []);
-  },
-);
+When("npm公開経路の不在を判定する", function () {
+  this.autoWorkflowValidation = validateReleaseWorkflow(this.autoWorkflowYaml);
+});
+
+Then("npm公開jobもpublish_npm入力もnpm publish stepも存在しない", function () {
+  const yaml = this.autoWorkflowYaml;
+  /**
+   * **job名の集合そのものを検査する。** `includes`だけでは、npm公開jobを
+   * 足し戻す変異を素通しする。
+   */
+  assert.deepEqual(releaseWorkflowJobNames(yaml), [
+    "validate",
+    "tag",
+    "github_release",
+  ]);
+  assert.equal(/\bnpm\s+publish\b/u.test(yaml), false);
+  assert.equal(/^\s*publish_npm\s*:/mu.test(yaml), false);
+  assert.equal(this.autoWorkflowValidation?.valid, true);
+});
 
 /** bump準備の隔離fixture。**実`origin`を持たず`os.tmpdir()`配下だけを対象にする。** */
 interface BumpFixture {
@@ -1899,4 +1686,74 @@ Then("jobを載せていないことを理由に拒否する", function () {
 
 Then("release jobと権限境界表の不一致は0件である", function () {
   assert.deepEqual(this.releaseJobMismatch, []);
+});
+
+Then("git-dependency acceptanceの行を消すと拒否される", function () {
+  assert.equal(this.autoWorkflowValidation?.valid, true);
+  const workflow = this.autoWorkflowYaml;
+  const match = /^.*--mechanisms=git-dependency.*$/mu.exec(workflow);
+  assert.ok(match, "acceptance行が見つかりません");
+  const removed = `${workflow.slice(0, match.index)}${workflow.slice(
+    match.index + match[0].length,
+  )}`;
+  assert.notEqual(removed, workflow);
+  /**
+   * **checks配列の有無ではなくerror本文を名指しする。** checksだけを見ると、
+   * 条件を常に真へ倒す変異が生存する。
+   */
+  assert.ok(
+    validateReleaseWorkflow(removed).errors.includes(
+      "validate jobでconsumer acceptanceのgit-dependencyを実行してください",
+    ),
+    validateReleaseWorkflow(removed).errors.join(" / "),
+  );
+});
+
+Then("acceptance stepはtag jobの定義より前にある", function () {
+  const workflow = this.autoWorkflowYaml;
+  const acceptance = workflow.indexOf("--mechanisms=git-dependency");
+  const tagJob = /^ {2}tag:$/mu.exec(workflow)?.index ?? -1;
+  assert.ok(acceptance >= 0, "acceptance行が見つかりません");
+  assert.ok(tagJob >= 0, "tag jobが見つかりません");
+  /**
+   * **tag自体が`npx github:...#<tag>`の配布アドレスになる。** GitHub Release作成
+   * より前で止めるだけでは遅い。
+   */
+  assert.ok(acceptance < tagJob, `${acceptance} !< ${tagJob}`);
+});
+
+Then("npm公開stepとpublish_npm入力のどちらを足しても拒否される", function () {
+  const workflow = this.autoWorkflowYaml;
+  const withPublish = workflow.replace(
+    "  tag:",
+    "  publish:\n    steps:\n      - name: 公開する\n        run: npm publish\n\n  tag:",
+  );
+  assert.ok(
+    validateReleaseWorkflow(withPublish).errors.includes(
+      "npm公開stepを置かないでください。npm registryへは公開しません",
+    ),
+    validateReleaseWorkflow(withPublish).errors.join(" / "),
+  );
+  const withInput = workflow.replace(
+    "      dry_run:",
+    "      publish_npm:\n        type: boolean\n        default: false\n      dry_run:",
+  );
+  assert.ok(
+    validateReleaseWorkflow(withInput).errors.includes(
+      "publish_npm入力を宣言しないでください。npm公開経路は存在しません",
+    ),
+    validateReleaseWorkflow(withInput).errors.join(" / "),
+  );
+});
+
+Then("job一覧はvalidateとtagとgithub_releaseだけである", function () {
+  /**
+   * **job名の集合そのものを検査する。** `includes`だけでは、npm公開jobを
+   * 足し戻す変異を素通しする。
+   */
+  assert.deepEqual(releaseWorkflowJobNames(this.autoWorkflowYaml), [
+    "validate",
+    "tag",
+    "github_release",
+  ]);
 });
