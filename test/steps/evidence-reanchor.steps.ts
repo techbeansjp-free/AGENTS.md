@@ -332,6 +332,21 @@ function world_newBase(world: ReanchorWorld): string {
   return world.newBaseSha;
 }
 
+Given(
+  "識別情報の見出しが本文中にしかないrebase後のreview証跡がある",
+  function () {
+    artifactFixture(
+      this,
+      (base, implementation) =>
+        `# 04 レビュー\n\n本文で ## 0. レビュー識別情報 と書くだけで見出しは無い。\n\n| 比較基点 | \`${base}\` |\n| H_impl | \`${implementation}\` |\n`,
+    );
+  },
+);
+
+Given("存在しないH_implを宣言したrebase後のreview証跡がある", function () {
+  artifactFixture(this, (base) => reviewArtifact(base, "0".repeat(40)));
+});
+
 Given("SHA行だけを更新したrebase後のreview証跡がある", function () {
   artifactFixture(this);
 });

@@ -140,3 +140,13 @@ Feature: rebase後の証跡再固定を内容等価性で受理する
     Given artifactのpathが変わったrebase後のreview証跡がある
     When 再固定を適用する
     Then 再固定は"artifact-path-changed"を理由に拒否される
+
+  Scenario: SCN-UNIT-REANCHOR-029 識別情報の見出しが本文中にしかない証跡を拒否する
+    Given 識別情報の見出しが本文中にしかないrebase後のreview証跡がある
+    When 再固定を適用する
+    Then 再固定は"identity-unresolvable"を理由に拒否される
+
+  Scenario: SCN-UNIT-REANCHOR-030 存在しないH_implを宣言した証跡を拒否する
+    Given 存在しないH_implを宣言したrebase後のreview証跡がある
+    When 再固定を適用する
+    Then 再固定は"boundary-mismatch"を理由に拒否される

@@ -72,7 +72,20 @@ function verifiedImplementationBoundary(
   artifactPath: string,
   declared: string,
 ): boolean {
-  const observed = observeReviewDiff(root, declared, head);
+  /**
+   * **Git観測の失敗を例外のまま外へ出さない。**
+   *
+   * `parseReviewIdentityAnchor`は40桁hexの書式だけを見るため、**存在しないSHAも
+   * 通す。** その値で`observeReviewDiff`を呼ぶと`git rev-parse`が失敗して例外になり、
+   * 拒否理由へ変換されないまま呼び出し元へ伝播する（Issue #1172、外部review）。
+   * **同定できない入力は理由つきで拒否する。**
+   */
+  let observed;
+  try {
+    observed = observeReviewDiff(root, declared, head);
+  } catch {
+    return false;
+  }
   return (
     observed.changedPaths.length === 1 &&
     observed.changedPaths[0] === artifactPath

@@ -49,11 +49,24 @@ const IDENTITY_IMPL_ROW = /^\| H_impl \| `([a-f0-9]{40})` \|$/gmu;
 /** 正規化後に入る値。40桁hexと同じ形にしない。 */
 export const REVIEW_IDENTITY_PLACEHOLDER = "<正規化済み>";
 function uniqueIdentitySection(markdown) {
-    const parts = markdown.split(REVIEW_IDENTITY_HEADING);
+    /**
+     * **見出しは行単位で同定する。**
+     *
+     * 文字列検索だと本文中の出現も節として扱う。**見出しが1つも無いartifactでも、
+     * 本文が同じ文字列を含み識別欄が一意なら受理してしまう**（Issue #1172、外部review）。
+     * 実測で誤受理を再現した。**H2見出し行だけを節の開始とし、次のH2見出し行までを
+     * 節とする。**
+     */
+    const lines = markdown.split("\n");
+    const starts = lines
+        .map((line, index) => line.trim() === REVIEW_IDENTITY_HEADING ? index : -1)
+        .filter((index) => index >= 0);
     /** **節が0個または2個以上なら同定できない。** 一意でない入力を受理しない。 */
-    if (parts.length !== 2)
+    if (starts.length !== 1)
         return undefined;
-    return parts[1].split("\n## ")[0] ?? "";
+    const start = starts[0];
+    const end = lines.findIndex((line, index) => index > start && /^## /u.test(line));
+    return lines.slice(start + 1, end < 0 ? lines.length : end).join("\n");
 }
 function singleMatch(section, pattern) {
     const found = [...section.matchAll(pattern)];
