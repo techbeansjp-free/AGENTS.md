@@ -100,3 +100,43 @@ Feature: rebase後の証跡再固定を内容等価性で受理する
     Given 連鎖条件を満たさない再固定chainがある
     When 実効HEADを導出する
     Then 再固定時刻を返さない
+
+  Scenario: SCN-UNIT-REANCHOR-021 SHA行だけを更新したrebaseを再固定できる
+    Given SHA行だけを更新したrebase後のreview証跡がある
+    When 再固定を適用する
+    Then 再固定chainは1件伸び実効HEADは新headになる
+
+  Scenario: SCN-UNIT-REANCHOR-022 SHA行以外を書き換えたrebaseを拒否する
+    Given SHA行に加えて判定も書き換えたrebase後のreview証跡がある
+    When 再固定を適用する
+    Then 再固定は"artifact-body-changed"を理由に拒否される
+
+  Scenario: SCN-UNIT-REANCHOR-023 識別情報の欄が重複する証跡を拒否する
+    Given 識別情報の欄を重複させたrebase後のreview証跡がある
+    When 再固定を適用する
+    Then 再固定は"identity-unresolvable"を理由に拒否される
+
+  Scenario: SCN-UNIT-REANCHOR-024 H_implの宣言が構造と一致しない証跡を拒否する
+    Given H_implの宣言が構造と一致しないrebase後のreview証跡がある
+    When 再固定を適用する
+    Then 再固定は"boundary-mismatch"を理由に拒否される
+
+  Scenario: SCN-UNIT-REANCHOR-025 実装の内容まで変わったrebaseを拒否する
+    Given 実装の内容まで変わったrebase後のreview証跡がある
+    When 再固定を適用する
+    Then 再固定は"implementation-diff-changed"を理由に拒否される
+
+  Scenario: SCN-UNIT-REANCHOR-026 識別情報の節が一意でない証跡を拒否する
+    Given 識別情報の節が2つあるrebase後のreview証跡がある
+    When 再固定を適用する
+    Then 再固定は"identity-unresolvable"を理由に拒否される
+
+  Scenario: SCN-UNIT-REANCHOR-027 比較基点の宣言が再固定の基点と違う証跡を拒否する
+    Given 比較基点の宣言が再固定の基点と違うrebase後のreview証跡がある
+    When 再固定を適用する
+    Then 再固定は"base-mismatch"を理由に拒否される
+
+  Scenario: SCN-UNIT-REANCHOR-028 artifactのpathが変わったrebaseを拒否する
+    Given artifactのpathが変わったrebase後のreview証跡がある
+    When 再固定を適用する
+    Then 再固定は"artifact-path-changed"を理由に拒否される

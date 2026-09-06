@@ -43,6 +43,68 @@ export function isContentEquivalent(before, after) {
         stableJson([...before.changedPaths].sort()) ===
             stableJson([...after.changedPaths].sort()));
 }
+const REVIEW_IDENTITY_HEADING = "## 0. レビュー識別情報";
+const IDENTITY_BASE_ROW = /^\| 比較基点 \| `([a-f0-9]{40})` \|$/gmu;
+const IDENTITY_IMPL_ROW = /^\| H_impl \| `([a-f0-9]{40})` \|$/gmu;
+/** 正規化後に入る値。40桁hexと同じ形にしない。 */
+export const REVIEW_IDENTITY_PLACEHOLDER = "<正規化済み>";
+function uniqueIdentitySection(markdown) {
+    const parts = markdown.split(REVIEW_IDENTITY_HEADING);
+    /** **節が0個または2個以上なら同定できない。** 一意でない入力を受理しない。 */
+    if (parts.length !== 2)
+        return undefined;
+    return parts[1].split("\n## ")[0] ?? "";
+}
+function singleMatch(section, pattern) {
+    const found = [...section.matchAll(pattern)];
+    /** **重複欄を受理しない。** 2つ目を書き足して片方だけ正しくする迂回を防ぐ。 */
+    return found.length === 1 ? found[0][1] : undefined;
+}
+/**
+ * review artifactから、機械導出される2つの正規セルを構造として取り出す。
+ *
+ * **全文regexでは足りない。** 節が一意であること、各欄がその節に1つだけ現れることを
+ * 要求する。**同定できない入力はundefinedを返し、呼び出し側が拒否する**（Issue #1172）。
+ */
+export function parseReviewIdentityAnchor(markdown) {
+    const section = uniqueIdentitySection(markdown);
+    if (section === undefined)
+        return undefined;
+    const base = singleMatch(section, new RegExp(IDENTITY_BASE_ROW));
+    const implementation = singleMatch(section, new RegExp(IDENTITY_IMPL_ROW));
+    if (base === undefined || implementation === undefined)
+        return undefined;
+    return { base, implementation };
+}
+/**
+ * 2つの正規セルの値だけをplaceholderへ置き換える。
+ *
+ * **緩めるのはSHA一般ではない。** 別commitのcitation、検証Evidence、例示中のOIDは
+ * そのまま比較対象に残す。**`audit:check`が検証しないSHA改変を洗浄しない**ため、
+ * 独立導出でき独立検証できる2欄だけを対象にする（Issue #1172）。
+ */
+export function normalizeReviewIdentityAnchor(markdown) {
+    const section = uniqueIdentitySection(markdown);
+    if (section === undefined)
+        return undefined;
+    if (parseReviewIdentityAnchor(markdown) === undefined)
+        return undefined;
+    const normalizedSection = section
+        .replace(new RegExp(IDENTITY_BASE_ROW), `| 比較基点 | \`${REVIEW_IDENTITY_PLACEHOLDER}\` |`)
+        .replace(new RegExp(IDENTITY_IMPL_ROW), `| H_impl | \`${REVIEW_IDENTITY_PLACEHOLDER}\` |`);
+    return markdown.replace(section, normalizedSection);
+}
+export function isRebaseEquivalent(input) {
+    if (input.beforeArtifactPath !== input.afterArtifactPath)
+        return "artifact-path-changed";
+    if (!isContentEquivalent(input.beforeImplementation, input.afterImplementation))
+        return "implementation-diff-changed";
+    const before = normalizeReviewIdentityAnchor(input.beforeArtifact);
+    const after = normalizeReviewIdentityAnchor(input.afterArtifact);
+    if (before === undefined || after === undefined)
+        return "identity-unresolvable";
+    return before === after ? "ok" : "artifact-body-changed";
+}
 /**
  * append-only chainから実効HEADを導出する。
  *

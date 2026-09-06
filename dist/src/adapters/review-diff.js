@@ -46,4 +46,16 @@ export function observeReviewDiff(root, baseSha, headSha) {
         changedPaths: Object.freeze(names),
     };
 }
+/**
+ * commit時点のblobをtextとして読む。存在しなければ`undefined`。
+ *
+ * **作業treeを読まない。** 再固定の判定はGit objectだけを根拠にする（Issue #1172）。
+ */
+export function readBlobAtCommit(root, commit, filePath) {
+    const shown = git(["show", `${commit}:${filePath}`], root, {
+        env: GIT_ENV,
+        allowFailure: true,
+    });
+    return shown.status === 0 ? shown.stdout : undefined;
+}
 //# sourceMappingURL=review-diff.js.map
