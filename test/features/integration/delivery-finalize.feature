@@ -319,6 +319,26 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When PRとstagingの同一性を検証する
     Then PRとstagingの同一性検証は失敗する
 
+  Scenario: SCN-INT-MERGE-013 独立review不足の拒否が根拠・次の操作・必要authority・rollbackを返す
+    Given trusted automatic policyがreview 1件を要求しapprovalが0件である
+    When merge authorizationを評価する
+    Then 独立review不足の拒否診断が次の操作と必要authorityを持つ
+
+  Scenario: SCN-INT-MERGE-014 拒否の根拠が要求数と観測数を示しactor IDを出さない
+    Given trusted automatic policyがreview 1件を要求しapprovalが0件である
+    When merge authorizationを評価する
+    Then 独立review不足の拒否診断は件数だけを根拠にする
+
+  Scenario: SCN-INT-MERGE-015 宣言したrequiredReviewsが下限へ引き上げられた事実を根拠へ出す
+    Given requiredReviewsを0と宣言したtrusted automatic policyがある
+    When 宣言0件と宣言1件でmerge authorizationを評価する
+    Then 独立review不足の拒否診断は宣言値と適用値の双方を示す
+
+  Scenario: SCN-INT-MERGE-016 診断の付与が許可判定を変えない
+    Given trusted policyがassistedである
+    When human approvalなしとありでmerge authorizationを評価する
+    Then 診断の有無にかかわらずallowedとoperationsが従来どおりになる
+
   Scenario: SCN-INT-FINALIZE-001 safeなdry-run reportはhashを返して何も削除しない
     Given merged、clean、pushed、recoveryありのworktree stateがある
     When finalize reportを作成する

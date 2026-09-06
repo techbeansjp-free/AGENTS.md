@@ -585,6 +585,44 @@ export function createPullRequest(
   };
 }
 
+export function independentReviewDiagnostic(input: {
+  mode: string;
+  declaredRequiredReviews: number | undefined;
+  appliedRequiredReviews: number;
+  observedIndependentApprovals: number;
+  headSha: string | undefined;
+}): Diagnostic {
+  const reasons = [
+    `要求する独立approvalは${input.appliedRequiredReviews}件ですが、対象HEADに対する独立approvalは${input.observedIndependentApprovals}件です`,
+  ];
+  if (
+    typeof input.declaredRequiredReviews === "number" &&
+    input.declaredRequiredReviews !== input.appliedRequiredReviews
+  )
+    reasons.push(
+      `policyが宣言したrequiredReviewsは${input.declaredRequiredReviews}ですが、独立reviewの下限は1のため適用値は${input.appliedRequiredReviews}です`,
+    );
+  return {
+    ruleId: "ASC-MERGE-REVIEW-001",
+    purpose: "実装者以外の独立した確認を経ないmergeを防ぐ",
+    risk: "authority",
+    reasons,
+    scope: [
+      "pr merge",
+      `mode:${input.mode}`,
+      `head:${input.headSha || "不明"}`,
+    ],
+    checks: [
+      "同一actorのreviewを最新状態へ畳み込み、対象HEAD SHAへのAPPROVEDだけを数えた",
+      "PR authorとimplementation authorのstable IDを独立approvalから除外した",
+    ],
+    autoFixes: [],
+    next: "対象HEAD SHAに対する独立reviewerのapprovalを得てからpr mergeを再実行してください",
+    requiredAuthority: "対象PRへ独立approvalを与えられるreviewer",
+    rollback: "mergeを実行せず、branchと既存commitを変更しない",
+  };
+}
+
 export function authorizeMerge(input: MergeInput) {
   const policy = input.trustedPolicy?.merge;
   const deny = (reason: string, diagnostic?: Diagnostic) => ({
@@ -714,7 +752,16 @@ export function authorizeMerge(input: MergeInput) {
   );
   const requiredIndependentReviews = Math.max(1, policy.requiredReviews ?? 0);
   if (independentApprovals.size < requiredIndependentReviews)
-    return deny("同じHEAD SHAに対する独立reviewが不足しています");
+    return deny(
+      "同じHEAD SHAに対する独立reviewが不足しています",
+      independentReviewDiagnostic({
+        mode: policy.mode,
+        declaredRequiredReviews: policy.requiredReviews,
+        appliedRequiredReviews: requiredIndependentReviews,
+        observedIndependentApprovals: independentApprovals.size,
+        headSha: input.headSha,
+      }),
+    );
   if (policy.mode === "assisted" && independentApprovals.size < 1)
     return deny(
       "assistedモードには同じHEAD SHAに対する独立した人間承認が必要です",

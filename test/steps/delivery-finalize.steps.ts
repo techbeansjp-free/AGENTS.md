@@ -65,6 +65,8 @@ interface DeliveryFinalizeWorld extends WorkflowWorld {
   trustedPolicy: Policy;
   withApproval: ReturnType<typeof authorizeMerge>;
   withoutApproval: ReturnType<typeof authorizeMerge>;
+  declaredZero: ReturnType<typeof authorizeMerge>;
+  declaredOne: ReturnType<typeof authorizeMerge>;
 }
 
 const { Given, When, Then } = stepDefinitions<DeliveryFinalizeWorld>();
@@ -173,6 +175,29 @@ const trustedFinalizePolicy = (): Policy => ({
 
 function policyWithMerge(merge: Policy["merge"]): Policy {
   return { ...trustedDeliveryPolicy(), merge };
+}
+
+function independentReviewMergeInput(requiredReviews: number): MergeInput {
+  return {
+    trustedPolicy: policyWithMerge({
+      mode: "automatic",
+      branches: ["feature/*"],
+      methods: ["merge"],
+      requiredChecks: ["ci"],
+      requiredReviews,
+    }),
+    method: "merge",
+    checks: ["ci"],
+    approvals: [],
+    headSha: "a".repeat(40),
+    prAuthorActorId: "author",
+    implementationAuthorActorId: "implementer",
+    branch: "feature/a",
+    repositoryVerified: true,
+    shaVerified: true,
+    protectionVerified: true,
+    mergeableVerified: true,
+  };
 }
 
 Given("review、test、spec evidenceがすべてpassである", function () {
@@ -1386,6 +1411,93 @@ Then("mergeは許可される", function () {
 Then("許可operationは{string}だけである", function (operation: string) {
   assert.deepEqual(this.mergeResult.operations, [operation]);
 });
+Given(
+  "trusted automatic policyがreview 1件を要求しapprovalが0件である",
+  function () {
+    this.mergeInput = independentReviewMergeInput(1);
+  },
+);
+Given(
+  "requiredReviewsを0と宣言したtrusted automatic policyがある",
+  function () {
+    this.mergeInput = independentReviewMergeInput(0);
+  },
+);
+When("宣言0件と宣言1件でmerge authorizationを評価する", function () {
+  this.declaredZero = authorizeMerge(independentReviewMergeInput(0));
+  this.declaredOne = authorizeMerge(independentReviewMergeInput(1));
+});
+Then("独立review不足の拒否診断が次の操作と必要authorityを持つ", function () {
+  assert.equal(this.mergeResult.allowed, false);
+  const diagnostic = this.mergeResult.diagnostic;
+  assert.ok(diagnostic, "拒否診断がありません");
+  assert.equal(diagnostic.ruleId, "ASC-MERGE-REVIEW-001");
+  assert.equal(
+    diagnostic.purpose,
+    "実装者以外の独立した確認を経ないmergeを防ぐ",
+  );
+  assert.equal(diagnostic.risk, "authority");
+  assert.equal(
+    diagnostic.next,
+    "対象HEAD SHAに対する独立reviewerのapprovalを得てからpr mergeを再実行してください",
+  );
+  assert.equal(
+    diagnostic.requiredAuthority,
+    "対象PRへ独立approvalを与えられるreviewer",
+  );
+  assert.equal(
+    diagnostic.rollback,
+    "mergeを実行せず、branchと既存commitを変更しない",
+  );
+  assert.deepEqual(diagnostic.autoFixes, []);
+  assert.ok(diagnostic.checks.length >= 1);
+  assert.ok(diagnostic.scope.includes("mode:automatic"));
+  assert.ok(diagnostic.scope.includes(`head:${"a".repeat(40)}`));
+});
+Then("独立review不足の拒否診断は件数だけを根拠にする", function () {
+  const diagnostic = this.mergeResult.diagnostic;
+  assert.ok(diagnostic, "拒否診断がありません");
+  assert.ok(
+    diagnostic.reasons.includes(
+      "要求する独立approvalは1件ですが、対象HEADに対する独立approvalは0件です",
+    ),
+    `要求数と観測数の根拠がありません: ${JSON.stringify(diagnostic.reasons)}`,
+  );
+  for (const reason of diagnostic.reasons)
+    for (const actorId of ["author", "implementer", "independent-reviewer"])
+      assert.ok(
+        !reason.includes(actorId),
+        `根拠へactor IDが混入しています: ${reason}`,
+      );
+});
+Then("独立review不足の拒否診断は宣言値と適用値の双方を示す", function () {
+  const raised =
+    "policyが宣言したrequiredReviewsは0ですが、独立reviewの下限は1のため適用値は1です";
+  assert.ok(
+    this.declaredZero.diagnostic?.reasons.includes(raised),
+    `宣言値と適用値の差がありません: ${JSON.stringify(this.declaredZero.diagnostic?.reasons)}`,
+  );
+  assert.ok(
+    !this.declaredOne.diagnostic?.reasons.some((reason: string) =>
+      reason.startsWith("policyが宣言したrequiredReviewsは"),
+    ),
+    "宣言値と適用値が一致する場合に差の根拠を出しています",
+  );
+});
+Then(
+  "診断の有無にかかわらずallowedとoperationsが従来どおりになる",
+  function () {
+    assert.equal(this.withoutApproval.allowed, false);
+    assert.deepEqual(this.withoutApproval.operations, []);
+    assert.equal(
+      this.withoutApproval.diagnostic?.ruleId,
+      "ASC-MERGE-REVIEW-001",
+    );
+    assert.equal(this.withApproval.allowed, true);
+    assert.deepEqual(this.withApproval.operations, ["pr.merge"]);
+    assert.equal(this.withApproval.diagnostic, undefined);
+  },
+);
 Then("approvalなしは拒否され、approvalありだけ許可される", function () {
   assert.equal(this.withoutApproval.allowed, false);
   assert.equal(this.withApproval.allowed, true);
