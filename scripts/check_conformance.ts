@@ -904,6 +904,34 @@ function reliableSegments(command: string): string[] {
     .filter((entry) => entry !== "" && !entry.includes("||"));
 }
 
+/**
+ * step属性のkey照合。**quoteされたkeyも同じ属性である。**
+ *
+ * `"if": ${{ false }}`と`"continue-on-error": true`は妥当なYAMLのmapping keyであり、
+ * 引用しないkeyだけを見ると**新しい失格条件をquote1つで迂回できる**（Issue #980、外部review）。
+ */
+function stepAttribute(name: string, tail: string): RegExp {
+  return new RegExp(`^\\s*(?:-\\s+)?["']?${name}["']?[ \\t]*:${tail}`, "mu");
+}
+
+const STEP_CONDITION = stepAttribute("if", "");
+const STEP_FAULT_TOLERANCE = stepAttribute("continue-on-error", "[ \\t]*(.+)$");
+const STEP_DISABLED = stepAttribute(
+  "if",
+  "\\s*(?:false|\\$\\{\\{\\s*false\\s*\\}\\})\\s*$",
+);
+
+/**
+ * 静的に`false`と決まる値。
+ *
+ * **`${{ false }}`はGitHubが`false`へ評価する定数式である。** `if:`の無効化判定が既に
+ * 同じ形を受理しており、`continue-on-error`だけ失敗許容と扱うと**正当なworkflowを
+ * 拒否する**（Issue #980、外部review）。実行時contextを含む式は引き続き判定できない。
+ */
+function isStaticFalse(value: string): boolean {
+  return /^(?:false|\$\{\{\s*false\s*\}\})$/u.test(value.trim());
+}
+
 interface ReleaseRunStep {
   readonly command: string;
   /** `if: false`リテラルで無効化されていない。 */
@@ -929,8 +957,7 @@ function releaseRunSteps(yaml: string): ReleaseRunStep[] {
   const flush = (): void => {
     if (current.length === 0) return;
     const text = current.join("\n");
-    const disabled =
-      /^\s*(?:-\s+)?if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mu.test(text);
+    const disabled = STEP_DISABLED.test(text);
     const block = /^(\s*)(?:-\s+)?run:[ \t]*[|>][-+]?[ \t]*$/mu.exec(text);
     const inline = /^\s*(?:-\s+)?run:[ \t]+(?![|>][-+]?[ \t]*$)(.+)$/mu.exec(
       text,
@@ -948,11 +975,10 @@ function releaseRunSteps(yaml: string): ReleaseRunStep[] {
       }
       command = body.join("\n");
     } else if (inline) command = inline[1]!.trim();
-    const conditional = /^\s*(?:-\s+)?if:/mu.test(text);
-    const tolerance = /^\s*(?:-\s+)?continue-on-error:[ \t]*(.+)$/mu.exec(text);
+    const conditional = STEP_CONDITION.test(text);
+    const tolerance = STEP_FAULT_TOLERANCE.exec(text);
     /** **静的な`false`だけを安全と認める。** 実行時式は`if:`と同じ理由で判定できない。 */
-    const faultTolerant =
-      tolerance !== null && tolerance[1]!.trim() !== "false";
+    const faultTolerant = tolerance !== null && !isStaticFalse(tolerance[1]!);
     if (command !== "")
       steps.push({ command, enabled: !disabled, conditional, faultTolerant });
     current = [];
@@ -1106,7 +1132,11 @@ export function checkDistributionGateReachability(root: string): string[] {
     errors.push(
       "prepackを構築だけの形にした場合、release.ymlはnpm run prepackを配布前品質検証として実行できません",
     );
-  const verificationIndex = invocationIndex(lightweight ? "verify" : "prepack");
+  /**
+   * **順序判定も無条件stepで測る。** 条件付きstepが公開より前に呼び、無条件stepが公開より
+   * 後に呼ぶworkflowは、存在検査と順序検査を別々のstepで通してしまう（Issue #980、外部review）。
+   */
+  const verificationIndex = unconditionalIndex(requiredKind);
   if (
     publishIndex >= 0 &&
     verificationIndex >= 0 &&
