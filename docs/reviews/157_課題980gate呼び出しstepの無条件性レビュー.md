@@ -5,14 +5,14 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 2 |
-| 対象SHA・文書ダイジェスト | `fb384af6d097149f9ad4da7fd0a745fe59c4a0dc` |
+| ラウンド | 3 |
+| 対象SHA・文書ダイジェスト | `3fc5d425541e1bd080b2023961cb39953459bc0f` |
 | 比較基点 | `33242c62cee62cc131dc45279ffab0c682f3abc2` |
-| H_impl | `fb384af6d097149f9ad4da7fd0a745fe59c4a0dc` |
-| 対象差分 | `33242c62cee62cc131dc45279ffab0c682f3abc2..fb384af6d097149f9ad4da7fd0a745fe59c4a0dc`。8 file。**本artifactは`H_impl`より後のcommitで加わるためこの範囲に含まれない** |
+| H_impl | `3fc5d425541e1bd080b2023961cb39953459bc0f` |
+| 対象差分 | `33242c62cee62cc131dc45279ffab0c682f3abc2..3fc5d425541e1bd080b2023961cb39953459bc0f`。9 file。**ラウンド2の是正を前進commitで行ったため、`H_impl`が最初のartifact commitより後へ移り、本artifact自身がこの範囲に入る** |
 | 対象外 | job-levelの`if:`と`needs:`の解釈、job-levelの`continue-on-error`（Issue #1236へ分離）、`; exit 0`のshell意味論、`npm publish`との実行順契約の再定義、`checkDistributionGateReachability`の保護対象化 |
-| 残り予算 | 3ラウンドのうち2使用。**残り1** |
-| ラウンド数 | 2 |
+| 残り予算 | 3ラウンドのうち3使用。**残り0** |
+| ラウンド数 | 3 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260906_143836_配布gate到達性検査がjob条件-job依存-失敗握り潰しを解釈せず-gateを実行しない入力を受理する |
 | 仕様の所有箇所 | `docs/specs/02_要件/04_仕様・品質管理要件.md`のREQ-SQ-020。引用: 「**判定不能は合格へ倒さない。**」 |
 | 成果物行数 | 製品の変更行数 91挿入17削除の行（`scripts/check_conformance.ts`）。test 199挿入3削除行。仕様 10挿入1削除行。支援層は諮問文1件と変異試験script 1件 |
@@ -30,15 +30,16 @@
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | Issue #980、staging `01_要件定義.md`§6 | AC-01〜AC-05、INV-01〜INV-04 | 一次資料 |
-| 差分 | `33242c62cee62cc131dc45279ffab0c682f3abc2..fb384af6d097149f9ad4da7fd0a745fe59c4a0dc` | 8 file、300挿入、21削除（本artifactを除く） | 既存コード |
+| 差分 | `33242c62cee62cc131dc45279ffab0c682f3abc2..3fc5d425541e1bd080b2023961cb39953459bc0f` | 9 file。実装だけの範囲`33242c62..fb384af6`は8 file、300挿入、21削除 | 既存コード |
 | テスト | `npm run conformance:check`（全suite内包） | 1541 scenarios（1525 passed、16 skipped）、失敗0 | テスト出力 |
 | 変異試験 | 12変異を1件ずつ適用 | **12件すべてkill。** 生存0件 | テスト出力 |
 | 仕様 | `docs/specs/01_システム概要/`、`02_要件/`、`11_非機能/`、`15_要件追跡/` | updated | 既存文書 |
 | commit前candidate | 本artifactを除く8 file | `fb384af6d097149f9ad4da7fd0a745fe59c4a0dc` | Git観測 |
+| ラウンド2の是正 | 本artifact 1 file | `3fc5d425541e1bd080b2023961cb39953459bc0f` | Git観測 |
 | Phase A artifact | `docs/reviews/157_課題980gate呼び出しstepの無条件性レビュー.md` | 本commitで追加する1 fileのみ | Git観測 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **確認した。** 依存は`checkDistributionGateReachability`→`releaseRunSteps`→`node:fs`の単方向1本で、追加importは0件。本artifactへ自身のcommit SHAを書いていない
-- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: `H_impl`は`fb384af6d097149f9ad4da7fd0a745fe59c4a0dc`。本artifactの1 fileだけを加えて`H_final`にする
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: `H_impl`は`3fc5d425541e1bd080b2023961cb39953459bc0f`。本artifactの1 fileだけを加えて`H_final`にする
 - reviewer stable IDがPR author/provider観測済み`H_impl` author stable IDと異なる: reviewerはimplementerと別contextで起動する。差分pathを1件も変更していない
 - 既定branch追随を行った場合: **行っていない。** baseは`33242c62cee62cc131dc45279ffab0c682f3abc2`のままである
 
@@ -54,8 +55,9 @@
 | `docs/specs/01_システム概要/02_用語・略語.md` | M | 本repository | spec | TERM-ASC-089〜091を追加 | pass | 同上 | 同上 | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | 本repository | spec | REQ-SQ-020行へSCN-INT-DISTGATE-021〜027を追加 | pass | 同上 | 同上 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | 本repository | spec | 本変更の履歴行 | pass | 同上 | 同上 | pass |
+| `docs/reviews/157_課題980gate呼び出しstepの無条件性レビュー.md` | A | 本repository | evidence | 本レビュー成果物そのもの。**ラウンド2の是正を前進commitで行った結果、`比較基点..H_impl`へ入った**ため自己行を置く | pass | REQ-SQ-020 / AC-01〜AC-05 / SCN-INT-DISTGATE-021〜027 | 版管理下に置く。revertで復旧 | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: **確認した。** `比較基点..H_impl`の`git diff --name-status`が返す8件と表の8行が一致する。**本artifactは`H_impl`より後のcommitで加わるため、この範囲には現れず表にも置かない。** 生成物である`dist/`配下の差分は0件で、`scripts/`はbuild対象に含まれない
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: **確認した。** `比較基点..H_impl`の`git diff --name-only`が返す9件と表の9行が一致する。生成物である`dist/`配下の差分は0件で、`scripts/`はbuild対象に含まれない
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: **確認した。** 判定は`scripts/`の検査へ、契約は`docs/specs/`へ置き、`src/`へ触れていない
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: **確認した。** 変異試験による是正は`scripts/check_conformance.ts`とtest 2 fileに閉じている
 
@@ -115,6 +117,7 @@
 | F-03 | Medium | FR-04の実行時式の条項に対応するscenarioが無い | 是正済み。SCN-026を追加。DISC-005 |
 | F-04 | Low | 変更履歴の変更file一覧へ`dist/`を書いていたが、`scripts/`はbuild対象でなくdiffは0件 | 是正済み。`dist/`を外した |
 | F-05 | Low | 本artifactのテスト結果へ`1542 scenarios`と書いていたが、`conformance:check`の実測は`1541 scenarios（1525 passed、16 skipped）`である。実行commandの表記も`npm test`から`conformance:check`へ正した | 是正済み。ラウンド2で前進commitとして是正した |
+| F-06 | Medium | ラウンド2の前進commitにより`audit:check`が導出する`H_impl`が`HEAD^`＝最初のartifact commitへ移り、本artifact本文の`H_impl`と一致しなくなった。**`比較基点..H_impl`へ本artifact自身が入るため、個別監査の表も8行では一致しない** | 是正済み。`H_impl`を`3fc5d425`へ更新し、個別監査へ自己行を足して9行にした |
 
 未解決のCritical/Highは0件である。
 
@@ -123,6 +126,10 @@
 ### ラウンド1
 
 固定initial HEADに対する全scope reviewである。`previousBlocking`、`fixedDiff`、`adjacentScope`はいずれも空である。
+
+### ラウンド3
+
+F-06だけを対象にした是正である。`fixedDiff`は本artifact 1 fileで、`previousBlocking`と`adjacentScope`は空である。**`H_impl`は本commitの親である`3fc5d425541e1bd080b2023961cb39953459bc0f`を指す。** 前進commitのたびに`H_impl`が1つ後ろへ移るため、**是正内容の中で自分の親SHAを書くことで循環を止めた。** 予算3ラウンドを使い切ったため、以降の是正は目的阻害・データ喪失・回帰に限る。
 
 ### ラウンド2
 
