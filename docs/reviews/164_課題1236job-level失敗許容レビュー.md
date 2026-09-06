@@ -5,14 +5,14 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 2（外部reviewer指摘の取り込み） |
-| 対象SHA・文書ダイジェスト | `f11eb4b1fc67b677798fb471808e19e3f52a3acf` |
+| ラウンド | 3（外部reviewer指摘の取り込み、2回目） |
+| 対象SHA・文書ダイジェスト | `ed7e87bf2716f33e5f10bd0cfc46f051dfc65b54` |
 | 比較基点 | `4d83166d3e6167f9ebf6802f43fba0bccc7322a9` |
-| H_impl | `f11eb4b1fc67b677798fb471808e19e3f52a3acf` |
-| 対象差分 | `4d83166d3e6167f9ebf6802f43fba0bccc7322a9..f11eb4b1fc67b677798fb471808e19e3f52a3acf`。7 path。`dist/`配下の変更は無い（`scripts/`はbuild対象外）。**ラウンド2の是正を前進commitで行ったため本artifact自身がこの範囲に入り、表は7行になる** |
+| H_impl | `ed7e87bf2716f33e5f10bd0cfc46f051dfc65b54` |
+| 対象差分 | `4d83166d3e6167f9ebf6802f43fba0bccc7322a9..ed7e87bf2716f33e5f10bd0cfc46f051dfc65b54`。7 path。`dist/`配下の変更は無い（`scripts/`はbuild対象外）。**ラウンド2の是正を前進commitで行ったため本artifact自身がこの範囲に入り、表は7行になる** |
 | 対象外 | job-levelの`if:`と`needs:`、実行時式の真偽判定、`release.yml`の内容変更、本repositoryでの実走行によるGitHub挙動の再確認 |
-| 残り予算 | 3ラウンドのうち2使用。**残り1** |
-| ラウンド数 | 2 |
+| 残り予算 | 3ラウンドのうち3使用。**残り0**。以後は収束後のHEAD移動に対する取り直し1回（round 4）だけが開く |
+| ラウンド数 | 3 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260906_224206_bugfix-配布gate到達性検査がjob-levelのcontinue-on-errorを解釈しておらず-失敗の握り潰しが未確認のまま残る |
 | 仕様の所有箇所 | `docs/specs/02_要件/04_仕様・品質管理要件.md`のREQ-SQ-020。引用: 「**job-levelの条件と`needs:`は対象にしない。**」 |
 | 成果物行数 | `scripts/` +71行。test +176行。仕様 +6行 |
@@ -32,15 +32,17 @@
 | 要求・受け入れ条件 | Issue #1236、staging `01_要件定義.md`§9 | AC-01〜AC-04、INV-01〜INV-03 | 一次資料 |
 | GitHubの挙動 | `actions/toolkit` Issue #1739 の再現報告 | job-levelの`continue-on-error: true`で失敗したjobについて、後続jobが読む`needs`のresultが`success`になる | 外部のimmutable証拠 |
 | 起票時の未確認事項 | Issue #1236 本文 | 「どちらであるかを私は実測していない。GitHub Actionsの仕様を根拠なしに断定しない」 | 一次資料 |
-| 差分 | `4d83166d..f11eb4b1` | 7 path | 既存コード |
+| 差分 | `4d83166d..ed7e87bf` | 7 path | 既存コード |
 | テスト | `npm test` | 1581 scenarios（1565 passed、16 skipped）、失敗0 | テスト出力 |
 | conformance | `npm run conformance:check` | 合格（project rule 21件、orphan 0件、I1〜I12、実在source/export、成功SCN証拠、固定model slug 0件）。1581 scenarios（1565 passed、16 skipped）、失敗0 | テスト出力 |
 | 変異試験 | 8変異を1件ずつ適用 | **8件すべてkill。復元後に38 scenario再合格を確認した** | テスト出力 |
 | commit後external | PR #1247 | 必須check 3件が`success`。**外部reviewer（CodeRabbit）がMajor 1件を指摘** | 外部のimmutable証拠 |
-| ラウンド2の是正 | `scripts/`1件、`test/`2件、`docs/specs/`3件 | `f11eb4b1fc67b677798fb471808e19e3f52a3acf` | Git観測 |
+| ラウンド2の是正 | `scripts/`1件、`test/`2件、`docs/specs/`3件 | `ed7e87bf2716f33e5f10bd0cfc46f051dfc65b54` | Git観測 |
+| commit後external（2回目） | PR #1247 | 必須check 3件が`success`。**外部reviewer（CodeRabbit）がMinor 3件を指摘** | 外部のimmutable証拠 |
+| ラウンド3の是正 | `docs/specs/`1件 | `ed7e87bf2716f33e5f10bd0cfc46f051dfc65b54` | Git観測 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **確認した。** `checkDistributionGateReachability` → `releaseRunSteps` → `jobFaultToleranceByLine` の単方向で、新関数はfileへも外部へも触れない。本artifactへ自身のcommit SHAを書いていない
-- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: `H_impl`は`f11eb4b1fc67b677798fb471808e19e3f52a3acf`。本artifactの1 fileだけを加えて`H_final`にする
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: `H_impl`は`ed7e87bf2716f33e5f10bd0cfc46f051dfc65b54`。本artifactの1 fileだけを加えて`H_final`にする
 - reviewer stable IDがPR author/provider観測済み`H_impl` author stable IDと異なる: reviewerはimplementerと別contextで起動する
 - 既定branch追随を行った場合: **行っていない。** baseは`4d83166d3e6167f9ebf6802f43fba0bccc7322a9`のままである
 
@@ -48,11 +50,11 @@
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
-| `scripts/check_conformance.ts` | M | 本repository | project | 行ごとの許容表を返す`jobFaultToleranceByLine`と、失格条件1項、拒否理由1件（SCN-INT-DISTGATE-032〜035） | pass。既存の`STEP_FAULT_TOLERANCE`と`isStaticFalse`を再利用する | REQ-SQ-020 / AC-01〜AC-04 / SCN-INT-DISTGATE-032〜035 | 読み取り専用。revertで戻る | pass |
-| `test/features/integration/distribution-gate-reachability.feature` | M | 本repository | evidence | SCN-INT-DISTGATE-032〜035のscenario定義 | pass | AC-01〜AC-04 | 一時directoryのfixtureのみ | pass |
+| `scripts/check_conformance.ts` | M | 本repository | project | 行ごとの許容表を返す`jobFaultToleranceByLine`と、失格条件1項、拒否理由1件（SCN-INT-DISTGATE-032〜038） | pass。既存の`STEP_FAULT_TOLERANCE`と`isStaticFalse`を再利用する | REQ-SQ-020 / AC-01〜AC-04 / SCN-INT-DISTGATE-032〜038 | 読み取り専用。revertで戻る | pass |
+| `test/features/integration/distribution-gate-reachability.feature` | M | 本repository | evidence | SCN-INT-DISTGATE-032〜038のscenario定義 | pass | AC-01〜AC-04 | 一時directoryのfixtureのみ | pass |
 | `test/steps/distribution-gate-reachability.steps.ts` | M | 本repository | evidence | 上記のworkflow fixture 4件と拒否理由を名指しするThen | pass。既存の`build` helperを再利用 | 同上 | 同上 | pass |
 | `docs/specs/02_要件/04_仕様・品質管理要件.md` | M | 本repository | spec | REQ-SQ-020へjob-levelの条項を追加し強制SCNを名指しする | pass | REQ-SQ-020、AC-SQ-020 | 追加なし | pass |
-| `docs/specs/15_要件追跡/00_追跡表.md` | M | 本repository | spec | REQ-SQ-020行へSCN-INT-DISTGATE-032〜035 | pass | 同上 | 同上 | pass |
+| `docs/specs/15_要件追跡/00_追跡表.md` | M | 本repository | spec | REQ-SQ-020行へSCN-INT-DISTGATE-032〜038 | pass | 同上 | 同上 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | 本repository | spec | 本変更の履歴行 | pass | 同上 | 同上 | pass |
 | `docs/reviews/164_課題1236job-level失敗許容レビュー.md` | A | 本repository | evidence | 本レビュー成果物そのもの。**ラウンド2の是正を前進commitで行った結果`比較基点..H_impl`へ入った**ため自己行を置く | pass | REQ-SQ-020 / AC-01〜AC-04 / SCN-INT-DISTGATE-032〜038 | 版管理下に置く。revertで復旧 | pass |
 
@@ -71,6 +73,7 @@
 | DISC-003 | **変更履歴の更新文書欄へ`dist/`を書いていたが、`scripts/`はbuild対象外で差分が出ない** | `git status`の実測で気付き、記載から外した。**未実行の事実を書かない** |
 | DISC-004 | **`steps:`の部分木をindent深さだけで切っていたため、indentless sequenceの2件目以降のstep-level属性をjob-levelとして拾っていた。** YAMLは`steps:`と同じ字下げの`-`をその値として認める | 外部reviewerが指摘した。**実測で再現してから是正した。** SCN-INT-DISTGATE-036と変異M7で固定した |
 | DISC-005 | **変異試験で追加の欠落が出た。** 部分木判定を常に真へ倒す変異が生存し、`steps:`より後ろへ置いたjob-level属性を固定するscenarioが無いことが分かった | SCN-INT-DISTGATE-038を足して両方killした。**是正の変異試験が、是正とは別のfixture欠落を見つけた** |
+| DISC-007 | **変更履歴の行を8列の「旧26件の移行対応」表の末尾へ挿入していた。** file末尾の定型文をanchorにしたため、9列の変更履歴表ではなく後続の8列表へ入った。**#1245の行は既にmainへ入っている。** 機械検査は列数の不一致を検出しない | 外部reviewerが指摘した。両行を9列表の先頭へ移した。表の内容は変えていない |
 | DISC-006 | **artifactへ書いた`H_impl`のSHA末尾を捏造していた。** 前進commitの実値を確認せずに書いた | `git rev-parse HEAD`で実値へ置換し、artifact内の全40桁hexが実在commitであることを`git cat-file -e`で確認した |
 
 ### 2.1 受け入れ条件とシナリオ
@@ -127,10 +130,17 @@
 | CR-01 | Major | **`steps:`のindentless sequenceを部分木として除外していなかった。** 2件目以降のstep-level `continue-on-error` をjob-levelとして拾い、無関係なstepの設定だけで有効なworkflowを拒否していた | 是正済み。実測で再現してから直した。SCN-INT-DISTGATE-036と変異M7で固定した。DISC-004 |
 | F-07 | Low | **`steps:`より後ろへ置いたjob-level属性を固定するscenarioが無かった** | 是正済み。SCN-INT-DISTGATE-038。DISC-005 |
 | F-08 | Low | **artifactの`H_impl`のSHA末尾を捏造した** | 是正済み。実値へ置換し全40桁hexの実在を確認した。DISC-006 |
+| CR-02 | Low | **変更履歴の変異試験件数がラウンド2の記録と一致しない。** 「6件」のままで追加2件を含んでいなかった | 是正済み。「初回6件、ラウンド2で追加2件、計8件」へ直した |
+| CR-03 | Low | **個別監査表のSCN範囲が032〜035のままで、ラウンド2で追加した036〜038を含んでいなかった** | 是正済み。表は`比較基点..H_impl`の最終監査範囲を示すため032〜038へ統一した |
+| CR-04 | Medium | **変更履歴の行が8列の表へ9セルで挿入されていた。** #1245の行も同じ誤りでmainへ入っている | 是正済み。両行を9列表へ移した。DISC-007 |
 
 未解決のCritical/Highは0件である。
 
 ## 6. ラウンド固有の確認
+
+### ラウンド3（外部reviewer指摘の取り込み、2回目）
+
+CR-02・CR-03・CR-04を対象にした是正である。**3件とも実測で確認してから是正した。** いずれも`docs/`配下の記録の整合であり、製品codeとtestへ触れていない。`fixedDiff`はラウンド2のHEADからの実差分である。**予算3ラウンドを使い切った。** 以後は収束後のHEAD移動に対する取り直し1回だけが開く。
 
 ### ラウンド2（外部reviewer指摘の取り込み）
 
@@ -152,7 +162,7 @@ CR-01を対象にした是正である。**実測で再現してから是正し�
 
 runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は英語keyword・日本語説明である。
 
-対応する成功CI runの参照: ラウンド1の`a2c02a7e`に対する必須check 3件がいずれも`success`（品質検証 9分3秒、base validator 9秒、CodeRabbit）。**ラウンド2のHEADに対するrunはpush後に観測する。**
+対応する成功CI runの参照: ラウンド1の`a2c02a7e`とラウンド2の`d1f2a145`に対する必須check 3件がいずれも`success`。**ラウンド3のHEADに対するrunはpush後に観測する。**
 
 ## 8. 配布物影響
 
@@ -176,7 +186,7 @@ runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は英語keyword�
 |---|---|
 | 独立reviewの外部証拠 | あり。PR #1247で外部reviewer（CodeRabbit）がMajor 1件を指摘した。必須check 3件はいずれも`success` |
 | reviewerがPR author・実装commit authorと異なる | はい |
-| 観測したreview commentとapprovalの件数 | 内部の敵対review finding 8件（Medium 2、Low 6）と外部reviewerのMajor 1件。**外部の一次資料（`actions/toolkit` #1739）で前提を確定してから着手した。** 外部の指摘は実測で再現してから是正した |
+| 観測したreview commentとapprovalの件数 | 内部の敵対review finding 8件（Medium 2、Low 6）と外部reviewerのMajor 1件・Medium 1件・Minor 2件。**外部の一次資料（`actions/toolkit` #1739）で前提を確定してから着手した。** 外部の指摘は実測で再現してから是正した |
 
 ## 10. 仕様整合性
 
@@ -191,7 +201,7 @@ runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は英語keyword�
 ## 11. 総合判定と再開地点
 
 - 未解決Critical/High: **0件**
-- Medium/Lowの記録: F-01〜F-04を対象範囲外として記録し、F-05・F-06・F-07・F-08とCR-01をresolvedとした
+- Medium/Lowの記録: F-01〜F-04を対象範囲外として記録し、F-05〜F-08とCR-01〜CR-04をresolvedとした
 - 判定: approved
 - 新しい権限が必要な事項: **なし。** `PROTECTED_FILES`所属fileを1件も変更していない。**受理集合を広げる差分を含まない**
 - 残存リスク: **本repositoryでの実走行によるGitHub挙動の確認をしていない。** 根拠は外部の再現報告1件である。**`needs`のresultを`if:`条件で参照する形とskipの組み合わせを測っていない。** 同型のfail-openを作りうるが対象外境界に属する。**字面検査であり意味を見ない。** flow styleのmappingとYAML anchorを検出しない。**本検査は信頼境界ではない。** `scripts/check_conformance.ts`は保護対象ではなく同一PRで失格条件ごと削除できる。**実害の観測が無い。** 現行の`release.yml`はこの形を使っておらず、本変更は将来の書き方を禁じたものである
