@@ -100,3 +100,58 @@ Feature: 配布準備工程の形とrelease workflowの呼び出し先を一致�
     Given 配布gate到達性検査の準備がある
     When "SCN-INT-DISTGATE-020"の配布gate到達性検査を実行する
     Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-021 条件付きのgate呼び出しstepを数えない
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-021"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-022 失敗を許容するgate呼び出しstepを数えない
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-022"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-023 次のjobのjob-level条件を最終stepへ混入させない
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-023"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-024 gate呼び出し以外のstepの失敗許容を拒否しない
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-024"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-025 現行のrelease workflowを受理する
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-025"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-026 continue-on-errorの実行時式を静的なfalseと同一視しない
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-026"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-027 step markerと同じindentのjob-level keyでblockを終端する
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-027"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-028 quoteしたif:のkeyを失格条件として検出する
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-028"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-029 quoteしたcontinue-on-errorのkeyを失格条件として検出する
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-029"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-030 静的なfalseと決まる定数式を失敗許容と誤判定しない
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-030"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-031 順序判定にも無条件stepの位置を使う
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-031"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
