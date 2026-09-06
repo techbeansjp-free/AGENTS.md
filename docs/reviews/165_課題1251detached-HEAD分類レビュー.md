@@ -6,10 +6,10 @@
 |---|---|
 | 対象 | 実装 |
 | ラウンド | 1 |
-| 対象SHA・文書ダイジェスト | `31bbbb5475f875885554a8d991fe18f50372d1b1` |
-| 比較基点 | `4d83166d3e6167f9ebf6802f43fba0bccc7322a9` |
-| H_impl | `31bbbb5475f875885554a8d991fe18f50372d1b1` |
-| 対象差分 | `4d83166d3e6167f9ebf6802f43fba0bccc7322a9..31bbbb5475f875885554a8d991fe18f50372d1b1`。12 pathのうち`dist/`配下2件は生成物として個別監査の対象外であり、表は10行 |
+| 対象SHA・文書ダイジェスト | `5ca47b3a651920ba1ec6b15be5bcda9a23ca4728` |
+| 比較基点 | `58ed41c3756e8252cf4b35524e10faa0611789cb` |
+| H_impl | `5ca47b3a651920ba1ec6b15be5bcda9a23ca4728` |
+| 対象差分 | `58ed41c3756e8252cf4b35524e10faa0611789cb..5ca47b3a651920ba1ec6b15be5bcda9a23ca4728`。12 pathのうち`dist/`配下2件は生成物として個別監査の対象外であり、表は10行 |
 | 対象外 | finalizeの対象同一性を`path + headSha + headState`へ拡張してdetachedを後片付け可能にすること（段階2）、`doctor.healthy`と終了codeの変更、無視対象資産allowlist（#1248）、起動契機（#946）、auto-finalizeの述語（#947） |
 | 残り予算 | 3ラウンドのうち1使用。**残り2** |
 | ラウンド数 | 1 |
@@ -38,9 +38,9 @@
 | commit後external | PR未作成 | ラウンド1時点では未観測 | 外部のimmutable証拠 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **確認した。** CLI（観測）→domain（分類）の単方向で、domainはGitへ触れない。本artifactへ自身のcommit SHAを書いていない
-- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: `H_impl`は`31bbbb5475f875885554a8d991fe18f50372d1b1`。本artifactの1 fileだけを加えて`H_final`にする
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: `H_impl`は`5ca47b3a651920ba1ec6b15be5bcda9a23ca4728`。本artifactの1 fileだけを加えて`H_final`にする
 - reviewer stable IDがPR author/provider観測済み`H_impl` author stable IDと異なる: reviewerはimplementerと別contextで起動する
-- 既定branch追随を行った場合: **行っていない。** baseは`4d83166d3e6167f9ebf6802f43fba0bccc7322a9`のままである
+- 既定branch追随を行った場合: **行っていない。** baseは`58ed41c3756e8252cf4b35524e10faa0611789cb`のままである
 
 ## 変更ファイル個別監査
 
