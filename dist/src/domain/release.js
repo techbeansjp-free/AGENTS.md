@@ -628,37 +628,83 @@ export function releaseJobDocumentationMismatch(input) {
     return errors;
 }
 /**
+ * job blockの範囲を返す。**top-level jobのindentは2である。**
+ */
+function jobRange(lines, job) {
+    const start = lines.findIndex((line) => new RegExp(`^ {2}${job}:\\s*$`, "u").test(line));
+    if (start < 0)
+        return undefined;
+    let end = start + 1;
+    while (end < lines.length &&
+        !/^ {2}[A-Za-z_][\w-]*:\s*$/u.test(lines[end] ?? ""))
+        end += 1;
+    return { start, end };
+}
+/**
+ * job-levelの`if:`式だけを返す。
+ *
+ * **`name:`や他のkeyを条件と読み違えない。** job blockの先頭数行を文字列として
+ * 検索すると、`name:`へ必要な文字列を置くだけで検査を通せる
+ * （Issue #1216 round 3、外部reviewer指摘）。
+ */
+function jobCondition(lines, range) {
+    const index = lines.findIndex((line, position) => position > range.start && position < range.end && /^ {4}if:/u.test(line));
+    if (index < 0)
+        return "";
+    const collected = [lines[index] ?? ""];
+    for (let cursor = index + 1; cursor < range.end; cursor += 1) {
+        const line = lines[cursor] ?? "";
+        if (/^ {4}[A-Za-z_][\w-]*:/u.test(line))
+            break;
+        collected.push(line);
+    }
+    return collected.join("\n");
+}
+/**
  * consumer acceptanceのstepが実際に実行され、失敗が握り潰されないことを検査する。
  *
- * **文字列の存在だけでは足りない。** `continue-on-error: true`、`if:`によるskip、
- * `|| true`、実commandを別機構へ差し替えてcommentへmarkerを残す、のいずれでも
- * 素の存在検査は通る（Issue #1216 round 1、F-02）。
+ * **markerは`run:` blockの中にあることを要求する。** workflow全体を文字列検索すると、
+ * `- name: --mechanisms=git-dependency`のような非実行行でも通る。
+ * **step全体を読む。** markerより前だけを読むと、`run:`の後に置いた
+ * `continue-on-error: true`を見落とす（Issue #1216 round 3、外部reviewer指摘）。
  */
 function validateAcceptanceStep(lines) {
     const marker = "--mechanisms=git-dependency";
-    const commandIndex = lines.findIndex((line) => line.includes(marker) && !/^\s*#/u.test(line));
-    if (commandIndex < 0)
-        return [
-            "validate jobでconsumer acceptanceのgit-dependencyを実行してください",
-        ];
-    const errors = [];
-    const commandLine = lines[commandIndex] ?? "";
-    if (/\|\|\s*true|true\s*\|\||;\s*exit\s+0/u.test(commandLine))
-        errors.push("consumer acceptanceの失敗を握り潰さないでください: acceptance command");
-    /** stepの先頭（`- name:`）まで遡り、そのstepの属性を読む。 */
-    let stepStart = commandIndex;
-    while (stepStart > 0 && !/^\s*-\s+name:/u.test(lines[stepStart] ?? ""))
-        stepStart -= 1;
-    const stepBody = lines.slice(stepStart, commandIndex + 1).join("\n");
-    if (/^\s+if:/mu.test(stepBody))
-        errors.push("consumer acceptance stepへifを付けないでください。skipできる経路になります");
-    if (/^\s+continue-on-error:\s*true/mu.test(stepBody))
-        errors.push("consumer acceptance stepへcontinue-on-error: trueを付けないでください");
-    /** **`tag` jobより前にあることを要求する。** 後ろにあるとtag作成を止められない。 */
-    const tagJobIndex = lines.findIndex((line) => /^ {2}tag:\s*$/u.test(line));
-    if (tagJobIndex >= 0 && commandIndex > tagJobIndex)
-        errors.push("consumer acceptanceはtag jobの定義より前に置いてください");
-    return errors;
+    const missing = [
+        "validate jobでconsumer acceptanceのgit-dependencyを実行してください",
+    ];
+    const validate = jobRange(lines, "validate");
+    if (validate === undefined)
+        return missing;
+    /** stepの開始行（`      - name:`）を列挙する。 */
+    const stepStarts = [];
+    for (let cursor = validate.start; cursor < validate.end; cursor += 1)
+        if (/^ {6}- name:/u.test(lines[cursor] ?? ""))
+            stepStarts.push(cursor);
+    for (const [order, stepStart] of stepStarts.entries()) {
+        const stepEnd = stepStarts[order + 1] ?? validate.end;
+        const body = lines.slice(stepStart, stepEnd);
+        /** **`run:`以降だけをcommandとみなす。** `name:`へ置いたmarkerを実行と数えない。 */
+        const runIndex = body.findIndex((line) => /^ {8}run:/u.test(line));
+        if (runIndex < 0)
+            continue;
+        const command = body.slice(runIndex).join("\n");
+        if (!command.includes(marker))
+            continue;
+        const errors = [];
+        if (/\|\|\s*true|true\s*\|\||;\s*exit\s+0/u.test(command))
+            errors.push("consumer acceptanceの失敗を握り潰さないでください: acceptance command");
+        const attributes = body.join("\n");
+        if (/^ {8}if:/mu.test(attributes))
+            errors.push("consumer acceptance stepへifを付けないでください。skipできる経路になります");
+        if (/^ {8}continue-on-error:\s*true/mu.test(attributes))
+            errors.push("consumer acceptance stepへcontinue-on-error: trueを付けないでください");
+        const tagJob = jobRange(lines, "tag");
+        if (tagJob !== undefined && stepStart > tagJob.start)
+            errors.push("consumer acceptanceはtag jobの定義より前に置いてください");
+        return errors;
+    }
+    return missing;
 }
 export function validateReleaseWorkflow(yaml) {
     if (typeof yaml !== "string")
@@ -826,17 +872,14 @@ export function validateReleaseWorkflow(yaml) {
         ["tag", "needs.validate.result == 'success'"],
         ["github_release", "needs.tag.result == 'success'"],
     ]) {
-        const start = lines.findIndex((line) => new RegExp(`^ {2}${job}:\\s*$`, "u").test(line));
-        if (start < 0)
+        const range = jobRange(lines, job);
+        if (range === undefined)
             continue;
-        /** **comment行を除く。** 判断の理由をcommentで説明した行が条件と誤認される。 */
-        const body = lines
-            .slice(start, start + 12)
-            .filter((line) => !/^\s*#/u.test(line))
-            .join("\n");
-        if (!body.includes(required))
+        /** **job-levelの`if:`式だけを読む。** `name:`へ文字列を置く迂回を許さない。 */
+        const condition = jobCondition(lines, range);
+        if (!condition.includes(required))
             errors.push(`${job} jobは${required}を条件へ含めてください`);
-        if (/\balways\(\)/u.test(body))
+        if (/\balways\(\)/u.test(condition))
             errors.push(`${job} jobの条件からalways()を外してください。先行jobの失敗後も起動します`);
     }
     if (errors.length === 0 ||

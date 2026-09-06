@@ -217,3 +217,8 @@ Feature: main mergeの自動release計画と配布digest
     When 自動release workflow契約を検証する
     Then quoted keyと行継続で書いたnpm公開も拒否される
 
+  Scenario: SCN-UNIT-AUTOREL-027 markerの退避と属性の後置と条件の退避を拒否する
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then markerの退避と属性の後置と条件の退避を拒否する
+

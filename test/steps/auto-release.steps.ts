@@ -1859,3 +1859,50 @@ Then("quoted keyと行継続で書いたnpm公開も拒否される", function (
     validateReleaseWorkflow(continued).errors.join(" / "),
   );
 });
+
+Then("markerの退避と属性の後置と条件の退避を拒否する", function () {
+  const workflow = this.autoWorkflowYaml;
+  /**
+   * **markerは`run:` blockの中にあることを要求する。** workflow全体の文字列検索は、
+   * `- name:`へmarkerを置いた非実行行でも通る（Issue #1216 round 3）。
+   */
+  const relocated = workflow
+    .replace(
+      '--tarball="$TARBALL_PATH" --mechanisms=git-dependency',
+      '--tarball="$TARBALL_PATH" --mechanisms=packed-bin',
+    )
+    .replace(
+      "      - name: 実Git依存でのconsumer acceptanceを検証する",
+      "      - name: 実Git依存 --mechanisms=git-dependency",
+    );
+  assert.ok(
+    validateReleaseWorkflow(relocated).errors.includes(
+      "validate jobでconsumer acceptanceのgit-dependencyを実行してください",
+    ),
+    validateReleaseWorkflow(relocated).errors.join(" / "),
+  );
+  /** **step全体を読む。** markerより前だけでは`run:`の後の属性を見落とす。 */
+  const trailing = workflow.replace(
+    '            --tarball="$TARBALL_PATH" --mechanisms=git-dependency',
+    '            --tarball="$TARBALL_PATH" --mechanisms=git-dependency\n        continue-on-error: true',
+  );
+  assert.ok(
+    validateReleaseWorkflow(trailing).errors.includes(
+      "consumer acceptance stepへcontinue-on-error: trueを付けないでください",
+    ),
+    validateReleaseWorkflow(trailing).errors.join(" / "),
+  );
+  /** **job-levelの`if:`式だけを読む。** `name:`へ必要文字列を置く迂回を許さない。 */
+  const disguised = workflow
+    .replace(
+      "    name: 検証済みcommitへGit tagを冪等に作成する",
+      "    name: needs.validate.result == 'success' のtag",
+    )
+    .replace("      ${{ needs.validate.result == 'success' &&", "      ${{ (");
+  assert.ok(
+    validateReleaseWorkflow(disguised).errors.includes(
+      "tag jobはneeds.validate.result == 'success'を条件へ含めてください",
+    ),
+    validateReleaseWorkflow(disguised).errors.join(" / "),
+  );
+});
