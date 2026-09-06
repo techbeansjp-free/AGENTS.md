@@ -42,6 +42,9 @@ const REQUIRED = [
     "16_参照資料/00_官公庁一次資料台帳.md",
 ];
 const GLOSSARY = "01_システム概要/02_用語・略語.md";
+const SPEC_CHANGE_LOG = "15_要件追跡/01_変更履歴.md";
+/** 仕様変更履歴の用語ID列（0起点で3列目）。 */
+const CHANGE_LOG_TERM_COLUMN = 3;
 const GLOSSARY_HEADER = "| 用語ID | 標準語 | 定義 | 種別 | 境界づけられたコンテキスト | 成立例・反例 | 類義語・禁止表現 | 根拠ID・資料 | owner | 状態・適用版・置換先 |";
 const GLOSSARY_TYPES = new Set(["business", "system", "acronym"]);
 function tableCells(line) {
@@ -49,6 +52,31 @@ function tableCells(line) {
         .split("|")
         .slice(1, -1)
         .map((cell) => cell.trim());
+}
+/**
+ * 仕様変更履歴の用語ID列が名指しする用語IDと、範囲記法の有無を取り出す。
+ *
+ * **範囲記法を許さない。** `TERM-ASC-089〜091`は走査で089と091しか拾えず、
+ * **中間の090が検査を素通りする。** 個別列挙へ限定すれば走査結果が名指しの全体と一致する。
+ */
+function changeLogTermCitations(file) {
+    const ids = [];
+    const ranges = [];
+    if (!fs.existsSync(file))
+        return { ids, ranges };
+    for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/u)) {
+        const cells = tableCells(line);
+        const column = cells[CHANGE_LOG_TERM_COLUMN];
+        if (column === undefined)
+            continue;
+        const cited = [...column.matchAll(/TERM-[A-Z0-9][A-Z0-9-]*/gu)].map((match) => match[0]);
+        if (cited.length === 0)
+            continue;
+        ids.push(...cited);
+        if (/TERM-[A-Z0-9][A-Z0-9-]*\s*[〜~]/u.test(column))
+            ranges.push(column);
+    }
+    return { ids, ranges };
 }
 function validateDomainGlossary(file) {
     if (!fs.existsSync(file))
@@ -91,6 +119,23 @@ function validateDomainGlossary(file) {
             !/TERM-[A-Z0-9][A-Z0-9-]*/u.test(lifecycle))
             errors.push(`deprecated用語に置換先がありません: ${id}`);
     }
+    /**
+     * **仕様変更履歴が名指しした用語IDは台帳に存在しなければならない。**
+     *
+     * 片方だけを更新した状態を外部reviewerの指摘を待たずに検出する（Issue #1129）。
+     * **逆方向は要求しない。** 台帳の全用語が変更履歴に載ることは不変条件ではなく、
+     * 実測で台帳59件に対し用語ID列が埋まるのは68行中8行であり、要求すると既存が
+     * 即座に不合格になる。**永久に塞がる門を作らない。**
+     *
+     * **両方を更新し忘れた場合は検出できない。** 版管理下に比較対象が残らないためで、
+     * これがIssue #965の事象である。**本検査はその再発を検出しない。**
+     */
+    const citations = changeLogTermCitations(path.join(path.dirname(path.dirname(file)), SPEC_CHANGE_LOG));
+    for (const range of citations.ranges)
+        errors.push(`仕様変更履歴の用語ID列へ範囲記法を置けません: ${range}`);
+    for (const cited of citations.ids)
+        if (!ids.has(cited))
+            errors.push(`仕様変更履歴が名指しする用語IDが台帳にありません: ${cited}`);
     return errors;
 }
 function listTemplateFiles(root, relative = "") {
