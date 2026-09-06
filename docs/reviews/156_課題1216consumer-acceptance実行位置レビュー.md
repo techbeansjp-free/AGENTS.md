@@ -5,14 +5,14 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 3（round 3は`pr create`後の外部指摘取り込み） |
-| 対象SHA・文書ダイジェスト | `f38885e13569f7741850169cb0f1d30a3cb0df40` |
+| ラウンド | 4（round 3と4は`pr create`後の外部指摘取り込み。round 4は`REVIEW_RECOVERY_ROUND`の別枠） |
+| 対象SHA・文書ダイジェスト | `65f28644824ee7a3c38af907deecd95e683d3396` |
 | 比較基点 | `6a2bdcbb791e6b677995d70dd5c60e150358add0` |
-| H_impl | `f38885e13569f7741850169cb0f1d30a3cb0df40` |
-| 対象差分 | `6a2bdcbb791e6b677995d70dd5c60e150358add0..f38885e13569f7741850169cb0f1d30a3cb0df40`。22 file（review artifact自身を含む） |
+| H_impl | `65f28644824ee7a3c38af907deecd95e683d3396` |
+| 対象差分 | `6a2bdcbb791e6b677995d70dd5c60e150358add0..65f28644824ee7a3c38af907deecd95e683d3396`。22 file（review artifact自身を含む） |
 | 対象外 | `packed-bin`と`scale-output`の実行位置、3機構の検査内容、`02_品質基準.md`の改訂、`docs/reviews/`配下の過去証跡 |
-| 残り予算 | 予算3ラウンドを使用済み。**残り0** |
-| ラウンド数 | 3 |
+| 残り予算 | 予算3ラウンドを使用済み。round 4は`REVIEW_RECOVERY_ROUND`の別枠。**残り0** |
+| ラウンド数 | 4 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260906_073424_consumer-acceptance-gateが実行されないjobの中にあり-releaseで一度も走っていない |
 | 仕様の所有箇所 | `docs/specs/02_要件/04_仕様・品質管理要件.md`のREQ-SQ-027。引用: 「**機構1はrelease workflowの`validate` jobで、tag作成より前に実行する。**」 |
 | 成果物行数 | 製品の変更行数 約210行（workflow 62、release.ts 118、plan_release 2、仕様 28）。削除 約530行（inject script 104、そのstep 116、npm公開job 約310）。支援層 約340行 |
@@ -30,15 +30,15 @@
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | Issue #1216、staging `01_要件定義.md`§9 | AC-01〜AC-04、INV-01〜INV-04 | 一次資料 |
-| 差分 | `6a2bdcbb791e6b677995d70dd5c60e150358add0..f38885e13569f7741850169cb0f1d30a3cb0df40` | 21 file、548挿入、853削除 | 既存コード |
-| テスト | `npm run conformance:check`（全suite内包） | 1533 scenarios（1517 passed、16 skipped）、失敗0 | テスト出力 |
+| 差分 | `6a2bdcbb791e6b677995d70dd5c60e150358add0..65f28644824ee7a3c38af907deecd95e683d3396` | 21 file、548挿入、853削除 | 既存コード |
+| テスト | `npm run conformance:check`（全suite内包） | 1534 scenarios（1518 passed、16 skipped）、失敗0 | テスト出力 |
 | 仕様 | `docs/specs/02_要件/`、`11_非機能/`、`12_運用保守/`、`13_移行・廃止/`、`15_要件追跡/` | updated | 既存文書 |
-| commit前candidate | 本artifactを除く21 file | `f38885e13569f7741850169cb0f1d30a3cb0df40` | Git index |
+| commit前candidate | 本artifactを除く21 file | `65f28644824ee7a3c38af907deecd95e683d3396` | Git index |
 | Phase A artifact | `docs/reviews/156_課題1216consumer-acceptance実行位置レビュー.md` | 本commitで追加する1 fileのみ | Git観測 |
 | commit後external | PR #1235 | 必須check 2件が`success`。外部reviewer（CodeRabbit）がMinor 2件を指摘 | 外部のimmutable証拠 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **確認した。** job依存は`validate`→`tag`→`github_release`の直列1本で、GitHub Actionsが循環を許さない。本artifactへ自身のcommit SHAを書いていない
-- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: `H_impl`は`f38885e13569f7741850169cb0f1d30a3cb0df40`。本artifactの1 fileだけを加えて`H_final`にする
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: `H_impl`は`65f28644824ee7a3c38af907deecd95e683d3396`。本artifactの1 fileだけを加えて`H_final`にする
 - reviewer stable IDがPR author/provider観測済み`H_impl` author stable IDと異なる: reviewerはcodex、implementerとPR authorはClaude/tatsuru。異なる
 - 既定branch追随を行った場合: **行っていない。** baseは`6a2bdcbb`のままである
 
@@ -46,7 +46,7 @@
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
-| `.github/workflows/release.yml` | M | 本repository | project | `validate`へ`npm pack`と`git-dependency` acceptanceを追加し、`npm_publish` jobと`publish_npm`入力を削除。tagとgithub_releaseの条件へjob結果を要求 | pass。job依存は`validate`→`tag`→`github_release`の直列1本 | REQ-SQ-027、REQ-GH-002、REQ-GH-003 / AC-01〜AC-04 / SCN-UNIT-AUTOREL-020〜026 | acceptance失敗でtagが作られない。残る状態は「merge済みだがtagなし」で復旧可能 | pass |
+| `.github/workflows/release.yml` | M | 本repository | project | `validate`へ`npm pack`と`git-dependency` acceptanceを追加し、`npm_publish` jobと`publish_npm`入力を削除。tagとgithub_releaseの条件へjob結果を要求 | pass。job依存は`validate`→`tag`→`github_release`の直列1本 | REQ-SQ-027、REQ-GH-002、REQ-GH-003 / AC-01〜AC-04 / SCN-UNIT-AUTOREL-020〜027 | acceptance失敗でtagが作られない。残る状態は「merge済みだがtagなし」で復旧可能 | pass |
 | `src/domain/release.ts` | M | 本repository | package | release planからnpm stageを削除し、workflow検証へacceptance実行・job結果・npm公開不在の3検査を追加 | pass。追加importは0件 | 同上 | 読み取りのみ。判定不能を合格へ倒さない | pass |
 | `scripts/plan_release.ts` | M | 本repository | project | `publishNpm`入力の受け渡しを削除 | pass | 同上 | 入力fieldが1つ減るだけ | pass |
 | `scripts/inject_publish_version.ts` | D | 本repository | project | **npm公開専用のversion注入。公開経路が無くなったため削除する** | pass。他の呼び出し元は0件 | REQ-GH-003 | revertで復元可能 | pass |
@@ -66,7 +66,7 @@
 | `docs/specs/13_移行・廃止/01_移行方針.md` | M | 本repository | spec | 移行方針からnpm公開の記述を削除 | pass | REQ-GH-003 | 同上 | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | 本repository | spec | REQ-SQ-027へ新規SCN行を追加し、削除したSCNと実装pathを外す | pass | 同上 | 同上 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | 本repository | spec | 本変更の履歴行 | pass | 同上 | 同上 | pass |
-| `docs/reviews/156_課題1216consumer-acceptance実行位置レビュー.md` | A | 本repository | evidence | 本レビュー成果物そのもの。**`pr create`後の外部指摘取り込みにより、`比較基点..H_impl`が最初のartifact commitを含む形になった**ため自己行を置く | pass | REQ-SQ-027 / AC-01〜AC-04 / SCN-UNIT-AUTOREL-020〜026 | 版管理下に置く。revertで復旧 | pass |
+| `docs/reviews/156_課題1216consumer-acceptance実行位置レビュー.md` | A | 本repository | evidence | 本レビュー成果物そのもの。**`pr create`後の外部指摘取り込みにより、`比較基点..H_impl`が最初のartifact commitを含む形になった**ため自己行を置く | pass | REQ-SQ-027 / AC-01〜AC-04 / SCN-UNIT-AUTOREL-020〜027 | 版管理下に置く。revertで復旧 | pass |
 - 基準SHAとの差分path集合と表のpath集合が完全一致する: **確認した。** `git diff --name-status`が返す22件のうち生成物である`dist/src/domain/release.js`は`isGeneratedDistributionPath`により個別監査の対象外であり、残る21件と表の21行が一致する
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: **確認した。** workflow固有の判定は`release.ts`の検証器へ、実行はworkflowのstepへ置いた
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: **確認した。** round 1のF-01〜F-05は`release.yml`・`release.ts`・`test/`3件・`docs/specs/`6件・削除2件に閉じている
@@ -77,7 +77,7 @@
 
 | 発見ID | 事実 | 影響 | 契約変更 | 対処 | Verification Evidence | 仕様反映 | 判定 |
 |---|---|---|---|---|---|---|---|
-| DISC-001 | 独立reviewerが5件を検出。**F-01（Critical）: `tag` jobの条件が`always()`と保存済みstateだけで、`needs.validate.result == 'success'`を要求していなかった。** `plan_outputs`はacceptanceより前でstateを出力するため、acceptanceが落ちてもtagとGitHub Releaseが作られる | **本変更の目的そのものを満たしていなかった。** AC-01・AC-02・AC-04とINV-03の直接違反 | 契約変更なし。ACとINVの本文を変えていない | job結果の要求、`always()`混入の拒否、acceptance stepのskip・握り潰し・位置の検査、npm公開不在検査の正規化、削除の取り残しの掃き出し | commit `f38885e13569f7741850169cb0f1d30a3cb0df40`。変異12件を全件kill | updated | pass |
+| DISC-001 | 独立reviewerが5件を検出。**F-01（Critical）: `tag` jobの条件が`always()`と保存済みstateだけで、`needs.validate.result == 'success'`を要求していなかった。** `plan_outputs`はacceptanceより前でstateを出力するため、acceptanceが落ちてもtagとGitHub Releaseが作られる | **本変更の目的そのものを満たしていなかった。** AC-01・AC-02・AC-04とINV-03の直接違反 | 契約変更なし。ACとINVの本文を変えていない | job結果の要求、`always()`混入の拒否、acceptance stepのskip・握り潰し・位置の検査、npm公開不在検査の正規化、削除の取り残しの掃き出し | commit `65f28644824ee7a3c38af907deecd95e683d3396`。変異12件を全件kill | updated | pass |
 
 **#1229で入れた帰属文の突合検査が、本変更のSCN未結線を実際に検出した。** 追跡表へ結線して解消している。
 
@@ -133,6 +133,8 @@
 | F-05 | Low | 所要時間の比較対象が不足している | reviewerの指摘 | 常設可否の判断 | **主張を訂正した。** acceptance単体42秒に`npm pack`13秒を加えて約55秒であり、20分はacceptance専用ではない。**localのwarm cache 3回ではcold CIの上限を証明できない** | resolved | **CI上の実測は初回のrelease runで取る** |
 | CR-01 | Minor | 運用設計と移行方針が旧release契約のまま。npm公開job・`publish_npm`入力・npm credential、version bump branchと`RELEASE_MAIN_PAT`によるPR merge、`package.json.version`を正本とする記述が残る | 外部reviewer（CodeRabbit）の指摘 | 仕様の正確性 | いずれも現行契約へ書き換えた。**versionの正本は既存のGit tagであり`package.json`はsentinelである**ことを明記した | resolved | なし |
 | CR-02 | Minor | 変更履歴の表内で条件式の`\|`が列区切りとして解釈される | 同上 | 文書の可読性 | 条件式を2つに分けて`\|`を除いた | resolved | なし |
+| CR-03 | Major | acceptance検証器のmarker検索がworkflow全体で、`- name:`へ置いた非実行行が通る。step本文をmarker行より前しか読まないため`run:`の後の`continue-on-error: true`を見落とす | 外部reviewer（CodeRabbit）の指摘。**3件とも実測で再現した** | 検証器の有効性 | job rangeとstep rangeの構造単位へ書き直し、markerは`run:` blockの中にあることを要求し、step全体の属性を読む | resolved | なし |
+| CR-04 | Major | job条件の検査がjob blockの先頭12行の文字列検索で、`name:`へ必要文字列を置き`if:`から外す迂回が通る | 同上 | 同上 | job-levelの`if:`式だけを条件として読む | resolved | なし |
 
 ## 6. ラウンド固有の確認
 
@@ -144,29 +146,29 @@
 
 ### ラウンド2
 
-- 未解決Critical/High: **0件。** F-01〜F-04はcommit `f38885e13569f7741850169cb0f1d30a3cb0df40`で解消した
-- 修正差分: `dafaadbb..f38885e13569f7741850169cb0f1d30a3cb0df40`。`release.yml`、`release.ts`、`test/`2件、`docs/specs/`6件、削除2件
+- 未解決Critical/High: **0件。** F-01〜F-04はcommit `65f28644824ee7a3c38af907deecd95e683d3396`で解消した
+- 修正差分: `dafaadbb..65f28644824ee7a3c38af907deecd95e683d3396`。`release.yml`、`release.ts`、`test/`2件、`docs/specs/`6件、削除2件
 - 修正で触れた隣接範囲: 追跡表のSCN一覧と実装path、品質要件のQLT-DISTGATE-005、用語台帳・移行方針・運用設計のnpm記述
 - 既承認・未変更範囲を再走査していない: **確認した。** `plan_release.ts`と`release-plan.feature`はラウンド1で承認済みで、ラウンド2では再走査していない
 
-### ラウンド3（`pr create`後の外部指摘取り込み）
+### ラウンド3と4（`pr create`後の外部指摘取り込み）
 
-- 全指摘の最終分類: F-01〜F-05とCR-01・CR-02をすべてresolvedとして確定した
+- 全指摘の最終分類: F-01〜F-05とCR-01〜CR-04をすべてresolvedとして確定した
 - 取り込みの可否判定: **目的・scope・受け入れ条件・安全境界・不可逆操作のいずれも変えていない。** CR-01・CR-02はいずれも仕様記述の整合であり、既存ACの範囲内である
 - 任意の危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: 該当なし
 - 同じ範囲の予算を自動更新していない: **確認した。** 予算3ラウンドの範囲内である
-- 再検証: `npm run conformance:check` 1533 scenarios / 失敗0、`trace:check` valid、`audit:check` valid
+- 再検証: `npm run conformance:check` 1534 scenarios / 失敗0、`trace:check` valid、`audit:check` valid。**round 4はCR-03・CR-04の是正で、`REVIEW_RECOVERY_ROUND`の別枠を使用した**
 - AIによる最終裁定: approved
 
 ## 7. テスト結果
 
 実行したcommandの一覧: `npm run lint`、`npm run format:check`、`npm run typecheck`、`npm run source:check`、`npm run docs:format`、`npm run test:format`、`npm run skills:check`、`npm run cli:check`、`npm run package:check`、`npm run architecture:check`、`npm run project:quality`、`npm run trace:check`、`npm run conformance:check`、`npm run build`
 
-全layerの合計: **1533 scenarios（1517 passed、16 skipped）、失敗0件。**
+全layerの合計: **1534 scenarios（1518 passed、16 skipped）、失敗0件。**
 
 失敗またはskipがある層: skipは16 scenarioで、いずれも本変更以前から存在する環境依存scenarioである。失敗は0件のため展開する層は無い。
 
-対応する成功CI runの参照: PR #1235。`b8e9`系のround 2 HEADに対する必須check 2件がいずれも`success`（`日本語文書・Gherkin・型・配布物の品質検証` 9分55秒、`base validatorで品質自己緩和を拒否` 11秒）。**ラウンド3の`f38885e13569f7741850169cb0f1d30a3cb0df40`に対するrunはpush後に観測する。**
+対応する成功CI runの参照: PR #1235。`b8e9`系のround 2 HEADに対する必須check 2件がいずれも`success`（`日本語文書・Gherkin・型・配布物の品質検証` 9分55秒、`base validatorで品質自己緩和を拒否` 11秒）。**ラウンド3の`65f28644824ee7a3c38af907deecd95e683d3396`に対するrunはpush後に観測する。**
 
 runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は英語keyword・日本語説明である。
 
@@ -200,14 +202,14 @@ runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は英語keyword�
 - 更新した仕様: `01_システム概要/02_用語・略語.md`、`02_要件/03_外部連携要件.md`、`02_要件/04_仕様・品質管理要件.md`、`11_非機能/01_品質要件.md`、`12_運用保守/00_運用設計.md`、`13_移行・廃止/01_移行方針.md`、`15_要件追跡/`
 - ドメイン用語台帳の候補・確定・現在有効な定義が一方向に追跡できる: **台帳への追加・変更・廃止は0件である。** TERM-ASC-019・020の定義文からnpm公開の記述を外したが、用語そのものは維持している
 - 未定義語、同一コンテキスト内の重複定義、根拠なしの意味変更、表記揺れ、置換先なしの廃止がない: **確認した。** `conformance:check`が合格している
-- 要件・変更・SCN・テストの追跡: REQ-SQ-027 → AC-SQ-027 → SCN-UNIT-AUTOREL-020〜026。`trace:check`でorphan 0件
+- 要件・変更・SCN・テストの追跡: REQ-SQ-027 → AC-SQ-027 → SCN-UNIT-AUTOREL-020〜027。`trace:check`でorphan 0件
 - `no-spec-impact`の場合の限定的根拠: 該当しない
 - UI・トークンの判断: UI無し
 
 ## 11. 総合判定と再開地点
 
 - 未解決Critical/High: **0件**
-- Medium/Lowの記録: F-05とCR-01・CR-02をresolvedとして記録した
+- Medium/Lowの記録: F-05とCR-01・CR-02をresolvedとして記録した。**CR-03・CR-04はMajorであり、いずれも実測で再現してから是正した**
 - 判定: approved
 - 新しい権限が必要な事項: **なし。** `PROTECTED_FILES`所属fileを1件も変更していない
 - 残存リスク: **CI上の`git-dependency`の所要時間は未実測である。** 手元のwarm cache 3回ではcold CIの上限を証明できない。**本変更のmerge後の自動releaseが、変更後のworkflowで実行される最初のrunである。** job一覧とstep結果を観測する。**`02_品質基準.md`の停止規定との整合はowner確認事項として残す**
