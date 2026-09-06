@@ -904,13 +904,26 @@ function reliableSegments(command: string): string[] {
     .filter((entry) => entry !== "" && !entry.includes("||"));
 }
 
-function releaseRunSteps(
-  yaml: string,
-): { command: string; enabled: boolean }[] {
+interface ReleaseRunStep {
+  readonly command: string;
+  /** `if: false`リテラルで無効化されていない。 */
+  readonly enabled: boolean;
+  /**
+   * `if:`を持つ。**リテラルか実行時式かを問わない。**
+   *
+   * 式の真偽は判定しない。GitHubのcontextをモデル化せずにIssue #980のIを閉じるため、
+   * **存在だけで「gateの実行を保証しない」と扱う。**
+   */
+  readonly conditional: boolean;
+  /** `continue-on-error`が静的な`false`でない。失敗が破棄される。 */
+  readonly faultTolerant: boolean;
+}
+
+function releaseRunSteps(yaml: string): ReleaseRunStep[] {
   const lines = yaml
     .split("\n")
     .map((line) => line.replace(/(^|\s)#.*$/u, "$1"));
-  const steps: { command: string; enabled: boolean }[] = [];
+  const steps: ReleaseRunStep[] = [];
   let current: string[] = [];
   let indent = -1;
   const flush = (): void => {
@@ -935,7 +948,13 @@ function releaseRunSteps(
       }
       command = body.join("\n");
     } else if (inline) command = inline[1]!.trim();
-    if (command !== "") steps.push({ command, enabled: !disabled });
+    const conditional = /^\s*(?:-\s+)?if:/mu.test(text);
+    const tolerance = /^\s*(?:-\s+)?continue-on-error:[ \t]*(.+)$/mu.exec(text);
+    /** **静的な`false`だけを安全と認める。** 実行時式は`if:`と同じ理由で判定できない。 */
+    const faultTolerant =
+      tolerance !== null && tolerance[1]!.trim() !== "false";
+    if (command !== "")
+      steps.push({ command, enabled: !disabled, conditional, faultTolerant });
     current = [];
   };
   for (const line of lines) {
@@ -943,6 +962,21 @@ function releaseRunSteps(
     if (start && (indent < 0 || start[1]!.length <= indent)) {
       flush();
       indent = start[1]!.length;
+    } else if (indent >= 0 && line.trim() !== "") {
+      /**
+       * **step blockはstep markerより深いindentの行だけで続く。** 打ち切らないと、jobの
+       * 最終stepのblockへ次のjobのheaderとjob-levelの`if:`が混入する。実測では現行の
+       * `.github/workflows/release.yml`で混入blockが2件あった（Issue #980）。
+       * 混入したままstep属性を読むと、**最終stepを他jobの条件で失格させる。**
+       *
+       * block scalarの本文は親keyより深く字下げされるためこの条件に掛からない。
+       * 全行commentはcomment除去後に空白だけとなり、上の`line.trim()`で除外される。
+       */
+      const width = line.length - line.trimStart().length;
+      if (width <= indent) {
+        flush();
+        indent = -1;
+      }
     }
     current.push(line);
   }
@@ -1003,19 +1037,35 @@ export function checkDistributionGateReachability(root: string): string[] {
     return errors;
   }
   const steps = releaseRunSteps(fs.readFileSync(workflowFile, "utf8"));
-  const invocationIndex = (kind: "prepack" | "verify"): number => {
-    const pattern =
-      kind === "prepack"
-        ? /^npm\s+run\s+prepack(?![A-Za-z0-9:._-])/u
-        : /^npm\s+run\s+verify:distribution(?![A-Za-z0-9:._-])/u;
-    return steps.findIndex(
-      (step) =>
-        step.enabled &&
-        reliableSegments(step.command).some((entry) => pattern.test(entry)),
-    );
-  };
+  const patternOf = (kind: "prepack" | "verify"): RegExp =>
+    kind === "prepack"
+      ? /^npm\s+run\s+prepack(?![A-Za-z0-9:._-])/u
+      : /^npm\s+run\s+verify:distribution(?![A-Za-z0-9:._-])/u;
+  const commandMatches = (kind: "prepack" | "verify", step: ReleaseRunStep) =>
+    reliableSegments(step.command).some((entry) => patternOf(kind).test(entry));
+  const invocationIndex = (kind: "prepack" | "verify"): number =>
+    steps.findIndex((step) => step.enabled && commandMatches(kind, step));
   const invokes = (kind: "prepack" | "verify"): boolean =>
     invocationIndex(kind) >= 0;
+  /**
+   * **gateの実行を要求する側は、無条件のstepだけを数える。**
+   *
+   * `if:`付きのstepはskipされてもjobは成功し、後続jobの`needs.<job>.result == 'success'`を
+   * 満たす。**gateだけが飛んだまま配布へ到達する。** `continue-on-error`も失敗が破棄される
+   * ため同じ結果になる。どちらも実行時の値を評価せず、属性の存在で判定する（Issue #980）。
+   *
+   * job-levelの条件と`needs:`は数えない。job全体のskipは後続jobの条件へ伝播して配布を
+   * 止めるため、gateだけが飛ぶ状態にならない。支配関係は`src/domain/release.ts`の
+   * `validateReleaseWorkflow`が要求する。
+   */
+  const unconditionalIndex = (kind: "prepack" | "verify"): number =>
+    steps.findIndex(
+      (step) =>
+        step.enabled &&
+        !step.conditional &&
+        !step.faultTolerant &&
+        commandMatches(kind, step),
+    );
   const publishIndex = steps.findIndex(
     (step) =>
       step.enabled &&
@@ -1024,10 +1074,34 @@ export function checkDistributionGateReachability(root: string): string[] {
       ),
   );
   const required = lightweight ? "verify:distribution" : "prepack";
-  if (!invokes(lightweight ? "verify" : "prepack"))
-    errors.push(
-      `prepackが${lightweight ? "構築だけの" : "全gateの"}形であるため、release.ymlは有効なstepでnpm run ${required}を実行しなければなりません`,
+  const requiredKind = lightweight ? "verify" : "prepack";
+  if (unconditionalIndex(requiredKind) < 0) {
+    const disqualified = steps.filter((step) =>
+      commandMatches(requiredKind, step),
     );
+    const causes: string[] = [];
+    if (disqualified.some((step) => step.conditional))
+      causes.push(
+        `npm run ${required}を呼ぶstepにif:があります。stepがskipされてもjobは成功するためgateの実行を保証しません。条件をjob-levelへ移すか、無条件のstepでnpm run ${required}を実行してください`,
+      );
+    if (disqualified.some((step) => step.faultTolerant))
+      causes.push(
+        `npm run ${required}を呼ぶstepがcontinue-on-errorで失敗を許容しています。失敗が破棄されるためgateの実行と認められません。当該stepからcontinue-on-errorを外してください`,
+      );
+    /**
+     * **原因を1件も特定できなければ汎用の拒否へ倒す。**「呼び出しは在るが数えられない」を
+     * 無言で受理しない。現在の失格条件は`conditional`と`faultTolerant`だけなのでこの分岐へ
+     * 到達する入力は無いが、**失格条件を足したときに沈黙が既定にならないようにする**
+     * （Issue #980）。
+     */
+    errors.push(
+      ...(causes.length > 0
+        ? causes
+        : [
+            `prepackが${lightweight ? "構築だけの" : "全gateの"}形であるため、release.ymlは有効なstepでnpm run ${required}を実行しなければなりません`,
+          ]),
+    );
+  }
   if (lightweight && invokes("prepack"))
     errors.push(
       "prepackを構築だけの形にした場合、release.ymlはnpm run prepackを配布前品質検証として実行できません",

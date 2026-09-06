@@ -42,6 +42,72 @@ function build(world: WorkflowWorld, fixture: Fixture): string {
   return root;
 }
 
+const CONDITIONAL_GATE_WORKFLOW = [
+  "jobs:",
+  "  validate:",
+  "    steps:",
+  "      - if: ${{ github.event_name == 'never_ever' }}",
+  "        run: npm run verify:distribution",
+  "",
+].join("\n");
+
+const TOLERANT_GATE_WORKFLOW = [
+  "jobs:",
+  "  validate:",
+  "    steps:",
+  "      - run: npm run verify:distribution",
+  "        continue-on-error: true",
+  "",
+].join("\n");
+
+/** gate呼び出しstepがjobの最終stepであり、直後に条件付きjobが続く形。 */
+const TRAILING_JOB_WORKFLOW = [
+  "jobs:",
+  "  validate:",
+  "    steps:",
+  "      - run: npm run verify:distribution",
+  "  tag:",
+  "    needs: validate",
+  "    if: ${{ needs.validate.result == 'success' }}",
+  "    steps:",
+  "      - run: echo tag",
+  "",
+].join("\n");
+
+/**
+ * sequenceを親keyと同じindentへ置いた形。**step markerのindentとjob-level keyのindentが
+ * 等しくなる。** 終端条件を`width < indent`にすると、job-levelの`if:`がstepへ混入する。
+ */
+const FLUSH_LEFT_SEQUENCE_WORKFLOW = [
+  "jobs:",
+  "  validate:",
+  "    steps:",
+  "    - run: npm run verify:distribution",
+  "    if: ${{ github.event_name == 'never_ever' }}",
+  "",
+].join("\n");
+
+/** `continue-on-error`が実行時式であり、静的な`false`と同一視できない形。 */
+const EXPRESSION_TOLERANT_GATE_WORKFLOW = [
+  "jobs:",
+  "  validate:",
+  "    steps:",
+  "      - run: npm run verify:distribution",
+  "        continue-on-error: ${{ github.event_name == 'push' }}",
+  "",
+].join("\n");
+
+/** gate呼び出しstep以外が失敗を許容する形。 */
+const OTHER_STEP_TOLERANT_WORKFLOW = [
+  "jobs:",
+  "  validate:",
+  "    steps:",
+  "      - run: echo diagnostics",
+  "        continue-on-error: true",
+  "      - run: npm run verify:distribution",
+  "",
+].join("\n");
+
 const CHECKS: Readonly<Record<string, (world: WorkflowWorld) => void>> = {
   "SCN-INT-DISTGATE-001": (world) => {
     const errors = checkDistributionGateReachability(
@@ -152,9 +218,7 @@ const CHECKS: Readonly<Record<string, (world: WorkflowWorld) => void>> = {
       }),
     );
     assert.ok(
-      errors.some((entry) =>
-        entry.includes("verify:distributionを実行しなければなりません"),
-      ),
+      errors.some((entry) => entry.includes("を呼ぶstepにif:があります")),
       `無効化されたstepを実行と誤判定しています: ${errors.join(" | ")}`,
     );
   },
@@ -346,6 +410,103 @@ const CHECKS: Readonly<Record<string, (world: WorkflowWorld) => void>> = {
       }),
     );
     assert.deepEqual(errors, []);
+  },
+  "SCN-INT-DISTGATE-021": (world) => {
+    const errors = checkDistributionGateReachability(
+      build(world, {
+        prepack: PREPARE_COMMAND,
+        workflow: CONDITIONAL_GATE_WORKFLOW,
+      }),
+    );
+    assert.ok(
+      errors.some(
+        (entry) =>
+          entry.includes(
+            "npm run verify:distributionを呼ぶstepにif:があります",
+          ) && entry.includes("条件をjob-levelへ移すか"),
+      ),
+      `条件付きのgate呼び出しstepを数えています: ${errors.join(" | ")}`,
+    );
+  },
+  "SCN-INT-DISTGATE-022": (world) => {
+    const errors = checkDistributionGateReachability(
+      build(world, {
+        prepack: PREPARE_COMMAND,
+        workflow: TOLERANT_GATE_WORKFLOW,
+      }),
+    );
+    assert.ok(
+      errors.some(
+        (entry) =>
+          entry.includes(
+            "npm run verify:distributionを呼ぶstepがcontinue-on-errorで失敗を許容しています",
+          ) && entry.includes("当該stepからcontinue-on-errorを外してください"),
+      ),
+      `失敗を許容するgate呼び出しstepを数えています: ${errors.join(" | ")}`,
+    );
+  },
+  "SCN-INT-DISTGATE-023": (world) => {
+    const errors = checkDistributionGateReachability(
+      build(world, {
+        prepack: PREPARE_COMMAND,
+        workflow: TRAILING_JOB_WORKFLOW,
+      }),
+    );
+    assert.deepEqual(
+      errors,
+      [],
+      `次のjobのjob-level条件を最終stepへ混入させています: ${errors.join(" | ")}`,
+    );
+  },
+  "SCN-INT-DISTGATE-024": (world) => {
+    const errors = checkDistributionGateReachability(
+      build(world, {
+        prepack: PREPARE_COMMAND,
+        workflow: OTHER_STEP_TOLERANT_WORKFLOW,
+      }),
+    );
+    assert.deepEqual(
+      errors,
+      [],
+      `gate呼び出し以外のstepの失敗許容を拒否しています: ${errors.join(" | ")}`,
+    );
+  },
+  "SCN-INT-DISTGATE-026": (world) => {
+    const errors = checkDistributionGateReachability(
+      build(world, {
+        prepack: PREPARE_COMMAND,
+        workflow: EXPRESSION_TOLERANT_GATE_WORKFLOW,
+      }),
+    );
+    assert.ok(
+      errors.some((entry) =>
+        entry.includes(
+          "npm run verify:distributionを呼ぶstepがcontinue-on-errorで失敗を許容しています",
+        ),
+      ),
+      `continue-on-errorの実行時式を静的なfalseと同一視しています: ${errors.join(" | ")}`,
+    );
+  },
+  "SCN-INT-DISTGATE-027": (world) => {
+    const errors = checkDistributionGateReachability(
+      build(world, {
+        prepack: PREPARE_COMMAND,
+        workflow: FLUSH_LEFT_SEQUENCE_WORKFLOW,
+      }),
+    );
+    assert.deepEqual(
+      errors,
+      [],
+      `job-level keyをstepへ混入させています: ${errors.join(" | ")}`,
+    );
+  },
+  "SCN-INT-DISTGATE-025": () => {
+    const errors = checkDistributionGateReachability(path.resolve("."));
+    assert.deepEqual(
+      errors,
+      [],
+      `現行のrelease.ymlを拒否しています: ${errors.join(" | ")}`,
+    );
   },
 };
 
