@@ -42,7 +42,19 @@ export function previewReviewRound(input) {
             throw new Error("review roundのinitial diff digestがGit観測値と一致しません");
     }
     else {
-        const fixed = observeReviewDiff(root, previous.latestCandidateHeadSha, input.round.candidateHeadSha).changedPaths;
+        /**
+         * **前round headは再固定chainから導出した実効HEADである。**
+         *
+         * 生の`latestCandidateHeadSha`を使うと、rebase後に`review reanchor`が成立しても
+         * 次の前進修正で「diff baseがcandidate HEADのancestorではありません」と拒否され、
+         * **正規経路が再び塞がる**（Issue #1172）。chainが空なら
+         * `latestCandidateHeadSha`そのものになり、判定は変更前と同一である。
+         */
+        const previousHeadSha = deriveEffectiveHead({
+            records: readEvidenceReanchorChain(staging),
+            anchoredHeadSha: previous.latestCandidateHeadSha,
+        }).effectiveHeadSha;
+        const fixed = observeReviewDiff(root, previousHeadSha, input.round.candidateHeadSha).changedPaths;
         if (stableJson(fixed) !== stableJson(input.round.focus.fixedDiff))
             throw new Error("review roundのfixedDiffが前roundからの実Git差分と一致しません");
     }

@@ -179,6 +179,201 @@ function snapshot(world: ReanchorWorld): void {
   }
 }
 
+const REVIEW_ARTIFACT = "docs/reviews/99_課題1172再固定レビュー.md";
+
+/** 「レビュー識別情報」節を持つreview artifactを組み立てる。 */
+function reviewArtifact(
+  base: string,
+  implementation: string,
+  extra = "",
+): string {
+  return `# 04 レビュー
+
+## 0. レビュー識別情報
+
+| 項目 | 内容 |
+|---|---|
+| 比較基点 | \`${base}\` |
+| H_impl | \`${implementation}\` |
+| 実施者 | reviewer |
+
+## 1. 判定
+
+approved${extra}
+`;
+}
+
+function commitPath(
+  root: string,
+  relative: string,
+  body: string,
+  message: string,
+): string {
+  const file = path.join(root, relative);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, body);
+  execFileSync("git", ["add", relative], { cwd: root });
+  execFileSync("git", ["commit", "-q", "-m", message], { cwd: root });
+  return git(root, ["rev-parse", "HEAD"]);
+}
+
+/**
+ * ASCの規定するrebase手順を再現する。
+ *
+ * 実装commitとreview artifact commitの2 commit構造を作り、rebase後に
+ * **artifactのSHA行だけを更新する**。`audit:check`はこの更新を要求し、
+ * 従来の完全diff digestはこの更新を必ず拒否する（Issue #1172）。
+ */
+function artifactFixture(
+  world: ReanchorWorld,
+  mutateArtifact?: (base: string, implementation: string) => string,
+): void {
+  world.root = world.initRepo();
+  world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
+  const implementation = commit(
+    world.root,
+    "export const reviewed = 1;\n",
+    "feat: レビュー対象",
+  );
+  world.oldHeadSha = commitPath(
+    world.root,
+    REVIEW_ARTIFACT,
+    reviewArtifact(world.baseSha, implementation),
+    "docs: review artifactを記録する",
+  );
+  world.staging = makeStaging(world);
+  buildDelivery(world);
+  /** 新baseは対象pathへ触れない。 */
+  execFileSync("git", ["checkout", "-q", world.baseSha], { cwd: world.root });
+  const upstream = path.join(world.root, "upstream.ts");
+  fs.writeFileSync(upstream, "export const upstream = 1;\n");
+  execFileSync("git", ["add", "upstream.ts"], { cwd: world.root });
+  execFileSync("git", ["commit", "-q", "-m", "chore: 既定branchが進む"], {
+    cwd: world.root,
+  });
+  const newBase = git(world.root, ["rev-parse", "HEAD"]);
+  const newImplementation = commit(
+    world.root,
+    "export const reviewed = 1;\n",
+    "feat: レビュー対象",
+  );
+  const body = mutateArtifact
+    ? mutateArtifact(newBase, newImplementation)
+    : reviewArtifact(newBase, newImplementation);
+  world.newHeadSha = commitPath(
+    world.root,
+    REVIEW_ARTIFACT,
+    body,
+    "docs: review artifactを記録する",
+  );
+  world.newBaseSha = newBase;
+}
+
+/** artifactの記述は保ったまま実装fileの内容だけを変えるrebase。 */
+function artifactFixtureWithChangedImplementation(world: ReanchorWorld): void {
+  artifactFixture(world);
+  /** 新head側の実装内容を変えて2 commit構造を作り直す。 */
+  execFileSync("git", ["checkout", "-q", world.newBaseSha], {
+    cwd: world.root,
+  });
+  const implementation = commit(
+    world.root,
+    "export const reviewed = 2;\n",
+    "feat: レビュー対象",
+  );
+  world.newHeadSha = commitPath(
+    world.root,
+    REVIEW_ARTIFACT,
+    reviewArtifact(world.newBaseSha, implementation),
+    "docs: review artifactを記録する",
+  );
+}
+
+Given("実装の内容まで変わったrebase後のreview証跡がある", function () {
+  artifactFixtureWithChangedImplementation(this);
+});
+
+Given("識別情報の節が2つあるrebase後のreview証跡がある", function () {
+  artifactFixture(
+    this,
+    (base, implementation) =>
+      `${reviewArtifact(base, implementation)}\n## 0. レビュー識別情報\n\n二重の節\n`,
+  );
+});
+
+Given(
+  "比較基点の宣言が再固定の基点と違うrebase後のreview証跡がある",
+  function () {
+    artifactFixture(this, (_base, implementation) =>
+      reviewArtifact("0".repeat(40), implementation),
+    );
+  },
+);
+
+Given("artifactのpathが変わったrebase後のreview証跡がある", function () {
+  artifactFixture(this);
+  execFileSync("git", ["checkout", "-q", world_newBase(this)], {
+    cwd: this.root,
+  });
+  const implementation = commit(
+    this.root,
+    "export const reviewed = 1;\n",
+    "feat: レビュー対象",
+  );
+  this.newHeadSha = commitPath(
+    this.root,
+    "docs/reviews/98_課題1172別名レビュー.md",
+    reviewArtifact(this.newBaseSha, implementation),
+    "docs: review artifactを記録する",
+  );
+});
+
+function world_newBase(world: ReanchorWorld): string {
+  return world.newBaseSha;
+}
+
+Given(
+  "識別情報の見出しが本文中にしかないrebase後のreview証跡がある",
+  function () {
+    artifactFixture(
+      this,
+      (base, implementation) =>
+        `# 04 レビュー\n\n本文で ## 0. レビュー識別情報 と書くだけで見出しは無い。\n\n| 比較基点 | \`${base}\` |\n| H_impl | \`${implementation}\` |\n`,
+    );
+  },
+);
+
+Given("存在しないH_implを宣言したrebase後のreview証跡がある", function () {
+  artifactFixture(this, (base) => reviewArtifact(base, "0".repeat(40)));
+});
+
+Given("SHA行だけを更新したrebase後のreview証跡がある", function () {
+  artifactFixture(this);
+});
+
+Given("SHA行に加えて判定も書き換えたrebase後のreview証跡がある", function () {
+  artifactFixture(this, (base, implementation) =>
+    reviewArtifact(base, implementation).replace("approved", "rejected"),
+  );
+});
+
+Given("識別情報の欄を重複させたrebase後のreview証跡がある", function () {
+  artifactFixture(this, (base, implementation) =>
+    reviewArtifact(
+      base,
+      implementation,
+      `\n\n| H_impl | \`${"0".repeat(40)}\` |`,
+    ).replace(
+      "| 実施者 | reviewer |",
+      `| 実施者 | reviewer |\n| H_impl | \`${"0".repeat(40)}\` |`,
+    ),
+  );
+});
+
+Given("H_implの宣言が構造と一致しないrebase後のreview証跡がある", function () {
+  artifactFixture(this, (base) => reviewArtifact(base, base));
+});
+
 function baseFixture(world: ReanchorWorld): void {
   world.root = world.initRepo();
   world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
@@ -476,6 +671,19 @@ Then("delivery stateとjournalは1 byteも変わらない", function () {
     const actual = fs.readFileSync(path.join(this.staging, relative), "utf8");
     assert.equal(actual, expected, `${relative}が変化しました`);
   }
+});
+
+Then("再固定は{string}を理由に拒否される", function (reason: string) {
+  assert.equal(this.applied, false, "拒否されていません");
+  const message = String(this.error);
+  /**
+   * **理由まで検査する。** 拒否の有無だけを見ると、別の条件で落ちた場合も通る。
+   * 実際、理由を1種類にしていたときは条件を外す変異が5件生存した（Issue #1172）。
+   */
+  assert.match(
+    message,
+    new RegExp(`再固定前後の内容が等価ではありません（${reason}）`, "u"),
+  );
 });
 
 Then("再固定は拒否され両側のdiff digestが理由に含まれる", function () {
