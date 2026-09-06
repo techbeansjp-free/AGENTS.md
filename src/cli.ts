@@ -221,6 +221,7 @@ import {
 } from "./adapters/review-session.js";
 import {
   appendEvidenceReanchor,
+  evaluateEvidenceReanchor,
   readEvidenceReanchorChain,
 } from "./adapters/evidence-reanchor.js";
 import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
@@ -2498,13 +2499,25 @@ function dispatchEvidenceReanchor(
   const { apply, staging, newHeadSha, newBaseSha, reason, layer } = input;
   const root = path.resolve(input.root ?? process.cwd());
   if (!apply) {
+    const evaluation = evaluateEvidenceReanchor({
+      staging,
+      root,
+      layer,
+      newHeadSha,
+      newBaseSha,
+      reason,
+    });
     print({
       state: "preview",
       layer,
-      chainLength: readEvidenceReanchorChain(staging).length,
+      chainLength: evaluation.chain.length,
+      effectiveHeadSha: evaluation.effectiveHeadSha,
+      willAppend: evaluation.appended,
       newHeadSha,
       newBaseSha,
-      next: "--applyで再固定を記録します",
+      next: evaluation.appended
+        ? "--applyで再固定を記録します"
+        : "同じ再固定は既に記録済みです。--applyでも変更しません",
     });
     return 0;
   }
