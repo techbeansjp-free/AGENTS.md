@@ -998,7 +998,18 @@ function jobFaultToleranceByLine(lines: readonly string[]): boolean[] {
       continue;
     }
     if (start < 0) continue;
-    if (stepsIndent >= 0 && width > stepsIndent) continue;
+    /**
+     * **indentless sequenceも部分木に含める。** YAMLは`steps:`と同じ字下げの`-`を
+     * その値として認める。深さだけで切ると、2件目以降のstep-levelの属性を
+     * job-levelとして拾い、**無関係なstepの設定だけで有効なworkflowを拒否する**
+     * （外部reviewerの指摘、SCN-INT-DISTGATE-036）。
+     */
+    const sequenceMarker = /^\s*-\s/u.test(line);
+    if (
+      stepsIndent >= 0 &&
+      (width > stepsIndent || (width === stepsIndent && sequenceMarker))
+    )
+      continue;
     if (stepsIndent >= 0 && width <= stepsIndent) stepsIndent = -1;
     if (/^\s*["']?steps["']?[ \t]*:/u.test(line)) {
       stepsIndent = width;

@@ -193,7 +193,79 @@ const STEP_TOLERANCE_FALSE_WORKFLOW = [
   "",
 ].join("\n");
 
+/** indentless sequenceで別stepだけが失敗を許容する形。 */
+const INDENTLESS_STEP_TOLERANT_WORKFLOW = [
+  "jobs:",
+  "  validate:",
+  "    steps:",
+  "    - run: npm run verify:distribution",
+  "    - run: echo diagnostics",
+  "      continue-on-error: true",
+  "",
+].join("\n");
+
+/** indentless sequenceでもjob-levelの失敗許容は検出する。 */
+const INDENTLESS_JOB_TOLERANT_WORKFLOW = [
+  "jobs:",
+  "  validate:",
+  "    continue-on-error: true",
+  "    steps:",
+  "    - run: npm run verify:distribution",
+  "",
+].join("\n");
+
+/** job-levelの失敗許容を`steps:`より後ろへ置いた形。 */
+const TRAILING_JOB_TOLERANT_WORKFLOW = [
+  "jobs:",
+  "  validate:",
+  "    steps:",
+  "      - run: npm run verify:distribution",
+  "    continue-on-error: true",
+  "",
+].join("\n");
+
 const CHECKS: Readonly<Record<string, (world: WorkflowWorld) => void>> = {
+  "SCN-INT-DISTGATE-038": (world) => {
+    const errors = checkDistributionGateReachability(
+      build(world, {
+        prepack: PREPARE_COMMAND,
+        workflow: TRAILING_JOB_TOLERANT_WORKFLOW,
+      }),
+    );
+    assert.ok(
+      errors.some((entry) =>
+        entry.includes(
+          "npm run verify:distributionを呼ぶstepが属するjobにcontinue-on-errorがあります",
+        ),
+      ),
+      `期待した拒否がありません: ${errors.join(" | ")}`,
+    );
+  },
+  "SCN-INT-DISTGATE-036": (world) => {
+    const errors = checkDistributionGateReachability(
+      build(world, {
+        prepack: PREPARE_COMMAND,
+        workflow: INDENTLESS_STEP_TOLERANT_WORKFLOW,
+      }),
+    );
+    assert.deepEqual(errors, []);
+  },
+  "SCN-INT-DISTGATE-037": (world) => {
+    const errors = checkDistributionGateReachability(
+      build(world, {
+        prepack: PREPARE_COMMAND,
+        workflow: INDENTLESS_JOB_TOLERANT_WORKFLOW,
+      }),
+    );
+    assert.ok(
+      errors.some((entry) =>
+        entry.includes(
+          "npm run verify:distributionを呼ぶstepが属するjobにcontinue-on-errorがあります",
+        ),
+      ),
+      `期待した拒否がありません: ${errors.join(" | ")}`,
+    );
+  },
   "SCN-INT-DISTGATE-032": (world) => {
     const errors = checkDistributionGateReachability(
       build(world, {

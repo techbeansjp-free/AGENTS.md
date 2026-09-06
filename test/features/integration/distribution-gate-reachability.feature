@@ -175,3 +175,18 @@ Feature: 配布準備工程の形とrelease workflowの呼び出し先を一致�
     Given 配布gate到達性検査の準備がある
     When "SCN-INT-DISTGATE-035"の配布gate到達性検査を実行する
     Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-036 indentless sequenceのstep-level設定をjob-levelと読み違えない
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-036"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-037 indentless sequenceでもjob-levelの失敗許容を検出する
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-037"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-038 steps:より後ろへ置いたjob-levelの失敗許容も検出する
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-038"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
