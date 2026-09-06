@@ -9,6 +9,9 @@ import { bootstrapProject, validateSpecs } from "../../src/domain/spec.js";
 interface IssueSpecWorld extends WorkflowWorld {
   answers: Parameters<typeof createIssueStaging>[1]["answers"];
   invalidGlossaries: Array<ReturnType<typeof validateSpecs>>;
+  changeLogTermValidations?: {
+    [k: string]: ReturnType<typeof validateSpecs>;
+  };
   issue: ReturnType<typeof createIssueStaging>;
   issueValidation: ReturnType<typeof validateIssue>;
   mtime: number;
@@ -365,6 +368,65 @@ When(
     ];
   },
 );
+When("変更履歴の用語ID列と台帳の突合を検証する", function () {
+  const specs = path.join(this.root, "docs", "specs");
+  const glossary = path.join(specs, "01_システム概要", "02_用語・略語.md");
+  const changeLog = path.join(specs, "15_要件追跡", "01_変更履歴.md");
+  const header =
+    "| 用語ID | 標準語 | 定義 | 種別 | 境界づけられたコンテキスト | 成立例・反例 | 類義語・禁止表現 | 根拠ID・資料 | owner | 状態・適用版・置換先 |\n" +
+    "|---|---|---|---|---|---|---|---|---|---|\n";
+  fs.writeFileSync(
+    glossary,
+    `# 用語・略語\n\n${header}| TERM-ORDER-001 | 注文 | 判定可能な定義 | business | 受注 | 成立例・反例 | 禁止表現なし | FR-001 | domain owner | active、v1、なし |\n`,
+  );
+  const logHeader =
+    "# 仕様変更履歴\n\n| 日付 | 変更 | 要件・SCN | 用語ID | 更新文書 | Issue・PR | 互換性 | 判断者 | HEAD SHA |\n" +
+    "|---|---|---|---|---|---|---|---|---|\n";
+  const logRow = (terms: string) =>
+    `| 2026-09-06 | 変更 | FR-001 | ${terms} | 文書 | Issue | 変更なし | owner | tree |\n`;
+  const validate = (terms: string) => {
+    fs.writeFileSync(changeLog, `${logHeader}${logRow(terms)}`);
+    return validateSpecs(this.root);
+  };
+  this.changeLogTermValidations = {
+    /** 台帳に無いIDを名指しした状態。 */
+    unregistered: validate("TERM-ORDER-999を追加"),
+    /** 範囲記法。中間IDが走査で拾えない。 */
+    range: validate("TERM-ORDER-001〜003を追加"),
+    /** 名指ししない行。逆方向を要求しないことの観測でもある。 */
+    silent: validate("追加・変更なし"),
+    /** 台帳に在るIDを個別列挙した状態。 */
+    registered: validate("TERM-ORDER-001を追加"),
+  };
+});
+
+Then("未登録の名指しと範囲記法だけが拒否され逆方向は要求されない", function () {
+  const observed = this.changeLogTermValidations;
+  assert.ok(observed, "突合の観測がありません");
+  assert.equal(observed.unregistered.valid, false);
+  assert.ok(
+    observed.unregistered.errors.some(
+      (error: string) =>
+        error.includes("仕様変更履歴が名指しする用語IDが台帳にありません") &&
+        error.includes("TERM-ORDER-999"),
+    ),
+    observed.unregistered.errors.join(" "),
+  );
+  assert.equal(observed.range.valid, false);
+  assert.ok(
+    observed.range.errors.some((error: string) =>
+      error.includes("仕様変更履歴の用語ID列へ範囲記法を置けません"),
+    ),
+    observed.range.errors.join(" "),
+  );
+  /**
+   * **台帳に在り変更履歴が名指ししない用語を拒否しない。** 網羅は不変条件では
+   * なく、要求すると既存台帳が即座に不合格になる（Issue #1129）。
+   */
+  assert.equal(observed.silent.valid, true);
+  assert.equal(observed.registered.valid, true);
+});
+
 Then("有効な用語行だけが合格し不正な用語台帳はすべて拒否される", function () {
   assert.equal(
     this.validGlossary.valid,
