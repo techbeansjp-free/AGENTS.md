@@ -50,3 +50,28 @@ Feature: packed artifactを隔離環境で利用者と同じ入口から観測�
     Given 保護fileがmerge-baseと異なりHEADと一致する候補treeがある
     When 保護fileの前提判定を実行する
     Then 前提は成立し、未commit変更とHEAD読取失敗では不成立になる
+
+  Scenario: SCN-INT-CONSUMER-011 束縛対象を機構別に宣言する
+    Given 機構別束縛の検査準備がある
+    When 機構別の束縛宣言と縮小の妥当性を検査する
+    Then 全機構の宣言が判定の実体とprocess境界を含む
+
+  Scenario: SCN-INT-CONSUMER-012 接続経路に存在しない機構をbridgeへ束縛しない
+    Given 機構別束縛の検査準備がある
+    When 機構別の束縛宣言と縮小の妥当性を検査する
+    Then 接続経路に存在しない機構はbridgeを宣言しない
+
+  Scenario: SCN-INT-CONSUMER-013 宣言した束縛対象の変更で当該機構を必ず落とす
+    Given 機構別束縛の検査準備がある
+    When 機構別の束縛宣言と縮小の妥当性を検査する
+    Then 宣言した束縛対象の変更は全機構で不合格になる
+
+  Scenario: SCN-INT-CONSUMER-014 診断へ機構名とpathを含める
+    Given 機構別束縛の検査準備がある
+    When 機構別の束縛宣言と縮小の妥当性を検査する
+    Then 診断は機構名とpathの両方を名指しする
+
+  Scenario: SCN-INT-CONSUMER-015 宣言外pathを記録した証跡を拒否する
+    Given 機構別束縛の検査準備がある
+    When 機構別の束縛宣言と縮小の妥当性を検査する
+    Then 宣言外pathを記録した証跡は機構名つきで拒否される
