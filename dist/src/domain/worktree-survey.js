@@ -6,6 +6,8 @@ const OBSERVATION_FIELDS = new Set([
     "path",
     "repositoryRoot",
     "branch",
+    "headState",
+    "headSha",
     "isPrimary",
     "mergedIntoDefault",
     "dirty",
@@ -28,7 +30,12 @@ function emptySurvey(errors = []) {
     };
 }
 function validationErrors(value, index) {
-    const prefix = `entry[${index}]`;
+    const located = isRecord(value) &&
+        typeof value.path === "string" &&
+        value.path.trim() !== ""
+        ? `entry[${index}]（${value.path}）`
+        : `entry[${index}]`;
+    const prefix = located;
     if (!isRecord(value))
         return [`${prefix}はobjectでなければなりません`];
     const errors = [];
@@ -40,8 +47,24 @@ function validationErrors(value, index) {
     if (typeof value.repositoryRoot !== "string" ||
         value.repositoryRoot.trim() === "")
         errors.push(`${prefix}.repositoryRootは空でない文字列でなければなりません`);
-    if (typeof value.branch !== "string" || value.branch.trim() === "")
-        errors.push(`${prefix}.branchは空でない文字列でなければなりません`);
+    /**
+     * **detached HEADは正当な観測である。** `headState`の明示値を根拠にし、attachedなら
+     * 空でないbranch、detachedなら`null`を要求する。矛盾（attachedで空、detachedで
+     * branchあり）と不明（headStateが列挙外）は不正観測として分離し、**pathを添えて**
+     * 名指しする。raw添字だけでは対象を特定できない（Issue #1251）。
+     */
+    const headState = value.headState;
+    if (headState !== "attached" && headState !== "detached")
+        errors.push(`${prefix}.headStateはattachedまたはdetachedでなければなりません`);
+    if (typeof value.headSha !== "string" ||
+        !/^[0-9a-f]{40}$/u.test(value.headSha))
+        errors.push(`${prefix}.headShaは40桁の小文字hexでなければなりません`);
+    if (headState === "attached") {
+        if (typeof value.branch !== "string" || value.branch.trim() === "")
+            errors.push(`${prefix}.branchはattachedのとき空でない文字列でなければなりません`);
+    }
+    else if (headState === "detached" && value.branch !== null)
+        errors.push(`${prefix}.branchはdetachedのときnullでなければなりません`);
     for (const field of [
         "isPrimary",
         "mergedIntoDefault",
@@ -77,6 +100,7 @@ function classify(observation, ignoredPathAllowlist) {
         return {
             path: observation.path,
             branch: observation.branch,
+            headState: observation.headState,
             disposition: "primary",
             reasons: ["repository root自身は後片付け対象ではありません"],
         };
@@ -95,11 +119,24 @@ function classify(observation, ignoredPathAllowlist) {
         reachableFromDefaultBranch: observation.reachableFromDefaultBranch,
         unpushedCommits: observation.unpushedCommits,
     });
-    const reasons = assessment.reasons;
+    /**
+     * detachedは分類を自動でretainへ変える理由ではなく、**現行finalizeが対象branchを
+     * 要求する**事実を理由として加える。REQ-LC-010の「不一致は`reasons`へ報告するが分類を
+     * 変えない」先例と同じ形にし、理由が残る限りcleanup-readyへは進まない（Issue #1251）。
+     */
+    const reasons = [
+        ...assessment.reasons,
+        ...(observation.headState === "detached"
+            ? [
+                "HEADがdetachedです。現行のfinalizeは対象branchを要求するため、この経路では後片付けできません",
+            ]
+            : []),
+    ];
     if (!observation.mergedIntoDefault)
         return {
             path: observation.path,
             branch: observation.branch,
+            headState: observation.headState,
             disposition: "in-progress",
             reasons,
         };
@@ -107,12 +144,14 @@ function classify(observation, ignoredPathAllowlist) {
         ? {
             path: observation.path,
             branch: observation.branch,
+            headState: observation.headState,
             disposition: "retain",
             reasons,
         }
         : {
             path: observation.path,
             branch: observation.branch,
+            headState: observation.headState,
             disposition: "cleanup-ready",
             reasons: [
                 "既定branchへmerge済みで、finalize共通の保持条件がありません",
@@ -120,6 +159,8 @@ function classify(observation, ignoredPathAllowlist) {
         };
 }
 function namingMismatchReasons(observation) {
+    if (observation.branch === null)
+        return [];
     const directory = WORKTREE_DIRECTORY_IDENTITY.exec(observation.path);
     const branch = WORKTREE_BRANCH_IDENTITY.exec(observation.branch);
     if (!directory || !branch)
