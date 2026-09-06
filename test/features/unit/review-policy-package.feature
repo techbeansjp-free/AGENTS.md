@@ -217,6 +217,21 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     When Step skillの静的解析markerを検証する
     Then 欠落した静的解析markerを名指しして拒否される
 
+  Scenario: SCN-UNIT-PACKAGE-021 Step 10 skillはpr create後の取り込み記述へ拘束される
+    Given pr create後の取り込み記述を欠いたpackageがある
+    When Step skillのpr create後の取り込み記述を検証する
+    Then 欠落した取り込み記述を名指しして拒否される
+
+  Scenario: SCN-UNIT-PACKAGE-022 Step 10 skillへ規範文書と反対の記述を混入できない
+    Given pr create後の取り込み記述を欠いたpackageがある
+    When Step skillのpr create後の取り込み記述を検証する
+    Then 規範文書と反対の記述を名指しして拒否される
+
+  Scenario: SCN-UNIT-PACKAGE-023 正規の配布物はpr create後の取り込み記述の検査に合格する
+    Given pr create後の取り込み記述を欠いたpackageがある
+    When Step skillのpr create後の取り込み記述を検証する
+    Then 正規の配布物は取り込み記述の検査に合格する
+
   Scenario: SCN-UNIT-PACKAGE-017 Step skillのdocs向けlinkはlink先fileの不在を失敗にする
     Given Step skillから規範文書へのlinkを壊したpackageがある
     When Step skillの規範文書linkを検証する
