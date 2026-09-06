@@ -181,3 +181,44 @@ Feature: main mergeの自動release計画と配布digest
     Given 行末コメントに見える値を持つkeyだけのrelease workflowと、空の権限境界表がある
     When release jobと権限境界表の一致を検証する
     Then validateだけを載せていないことを理由に拒否する
+
+  Scenario: SCN-UNIT-AUTOREL-020 git-dependency acceptanceの欠落を拒否する
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then git-dependency acceptanceの行を消すと拒否される
+
+  Scenario: SCN-UNIT-AUTOREL-021 acceptanceはtag jobより前に置かれる
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then acceptance stepはtag jobの定義より前にある
+
+  Scenario: SCN-UNIT-AUTOREL-022 npm公開経路の混入を拒否する
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then npm公開stepとpublish_npm入力のどちらを足しても拒否される
+
+  Scenario: SCN-UNIT-AUTOREL-023 release workflowはnpm公開jobを持たない
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then job一覧はvalidateとtagとgithub_releaseだけである
+
+  Scenario: SCN-UNIT-AUTOREL-024 後続jobは先行jobの結果成功を要求する
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then job結果の要求を外すかalwaysを足すと拒否される
+
+  Scenario: SCN-UNIT-AUTOREL-025 acceptanceのskipと握り潰しと位置移動を拒否する
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then acceptanceへifやcontinue-on-errorや失敗握り潰しを足すと拒否される
+
+  Scenario: SCN-UNIT-AUTOREL-026 quoted keyと行継続のnpm公開を拒否する
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then quoted keyと行継続で書いたnpm公開も拒否される
+
+  Scenario: SCN-UNIT-AUTOREL-027 markerの退避と属性の後置と条件の退避を拒否する
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then markerの退避と属性の後置と条件の退避を拒否する
+

@@ -1,10 +1,16 @@
 import crypto from "node:crypto";
 import { isPackageVersion, packageReleaseVersion } from "../lib/version.js";
+/**
+ * releaseのstage。
+ *
+ * **npm公開stageを持たない。** owner決裁でnpm registryへ公開しないことが確定しており、
+ * `package.json`の`private: true`により`npm publish`は必ず失敗する。stageを残すと、
+ * 方針上あってはならない経路を計画が宣言し続ける（Issue #1216）。
+ */
 const RELEASE_STAGES = [
     "validate",
     "tag",
     "github_release",
-    "npm_publish",
 ];
 const REQUIRED_GATES = [
     "quality",
@@ -17,7 +23,6 @@ const RELEASE_INPUT_KEYS = new Set([
     "currentVersion",
     "requestedVersion",
     "dryRun",
-    "publishNpm",
     "actor",
     "ref",
     "refSha",
@@ -283,9 +288,8 @@ function validatePlanInput(value) {
     ])
         if (typeof value[key] !== "string")
             reasons.push(`${key}は文字列でなければなりません`);
-    for (const key of ["dryRun", "publishNpm"])
-        if (typeof value[key] !== "boolean")
-            reasons.push(`${key}はbooleanでなければなりません`);
+    if (typeof value.dryRun !== "boolean")
+        reasons.push("dryRunはbooleanでなければなりません");
     if (!Array.isArray(value.existingTags) ||
         value.existingTags.some((tag) => typeof tag !== "string"))
         reasons.push("existingTagsは文字列配列でなければなりません");
@@ -297,7 +301,6 @@ function validatePlanInput(value) {
         currentVersion: value.currentVersion,
         requestedVersion: value.requestedVersion,
         dryRun: value.dryRun,
-        publishNpm: value.publishNpm,
         actor: value.actor,
         ref: value.ref,
         refSha: value.refSha,
@@ -442,13 +445,6 @@ export function planRelease(value) {
                 enabled: true,
                 reason: "検証済みtagからGitHub Releaseを作成する",
             },
-            {
-                stage: "npm_publish",
-                enabled: input.publishNpm,
-                reason: input.publishNpm
-                    ? "publishNpmが明示されたためprovenance付きで公開する"
-                    : "publishNpmが明示されていないため公開しない",
-            },
         ],
         reasons: [],
     };
@@ -496,8 +492,6 @@ export function summarizeReleaseOutcome(outcomes) {
             : "failed"
         : "succeeded";
     const recovery = [];
-    if (state !== "succeeded" && completed.includes("npm_publish"))
-        recovery.push("npm公開済みversionは削除せず、npm deprecateで利用非推奨理由と代替versionを案内してください");
     if (state !== "succeeded" && completed.includes("github_release"))
         recovery.push("GitHub Release作成済みの場合は対象tagとの対応を確認し、Releaseを削除してから再実行してください");
     if (state !== "succeeded" && completed.includes("tag"))
@@ -530,25 +524,6 @@ function inputHasDefault(lines, inputName, expected) {
         return match?.[1] === expected;
     });
 }
-function blockHasSafeNpmPublishCondition(block) {
-    const text = block.join("\n");
-    return (/github\.event_name\s*==\s*['"]workflow_dispatch['"]/u.test(text) &&
-        /inputs\.publish_npm\s*==\s*(?:true|['"]true['"])/u.test(text));
-}
-function jobBlockContaining(lines, lineIndex) {
-    for (let index = lineIndex; index >= 0; index -= 1) {
-        if (/^ {2}[A-Za-z0-9_-]+:\s*$/u.test(lines[index] ?? ""))
-            return yamlBlock(lines, index);
-    }
-    return [];
-}
-/**
- * 配布前品質検証の入口名。**`prepack`は形によって意味が変わる。**全gateを持つ形では
- * `npm run prepack`が配布前品質検証そのものだが、構築だけへ移した形では入口が
- * `verify:distribution`になる（REQ-SQ-020）。どちらの形かを決めるのは`package.json`であり、
- * workflow本文だけを入力とするこの検査は双方を受理する。**形と入口の対応は
- * `checkDistributionGateReachability`が両方向で突き合わせる。**
- */
 const DISTRIBUTION_VERIFICATION_SCRIPTS = [
     "prepack",
     "verify:distribution",
@@ -651,6 +626,85 @@ export function releaseJobDocumentationMismatch(input) {
     if (missing.length > 0)
         errors.push(`運用設計の権限境界表がrelease workflowのjobを載せていません: ${missing.join("、")}`);
     return errors;
+}
+/**
+ * job blockの範囲を返す。**top-level jobのindentは2である。**
+ */
+function jobRange(lines, job) {
+    const start = lines.findIndex((line) => new RegExp(`^ {2}${job}:\\s*$`, "u").test(line));
+    if (start < 0)
+        return undefined;
+    let end = start + 1;
+    while (end < lines.length &&
+        !/^ {2}[A-Za-z_][\w-]*:\s*$/u.test(lines[end] ?? ""))
+        end += 1;
+    return { start, end };
+}
+/**
+ * job-levelの`if:`式だけを返す。
+ *
+ * **`name:`や他のkeyを条件と読み違えない。** job blockの先頭数行を文字列として
+ * 検索すると、`name:`へ必要な文字列を置くだけで検査を通せる
+ * （Issue #1216 round 3、外部reviewer指摘）。
+ */
+function jobCondition(lines, range) {
+    const index = lines.findIndex((line, position) => position > range.start && position < range.end && /^ {4}if:/u.test(line));
+    if (index < 0)
+        return "";
+    const collected = [lines[index] ?? ""];
+    for (let cursor = index + 1; cursor < range.end; cursor += 1) {
+        const line = lines[cursor] ?? "";
+        if (/^ {4}[A-Za-z_][\w-]*:/u.test(line))
+            break;
+        collected.push(line);
+    }
+    return collected.join("\n");
+}
+/**
+ * consumer acceptanceのstepが実際に実行され、失敗が握り潰されないことを検査する。
+ *
+ * **markerは`run:` blockの中にあることを要求する。** workflow全体を文字列検索すると、
+ * `- name: --mechanisms=git-dependency`のような非実行行でも通る。
+ * **step全体を読む。** markerより前だけを読むと、`run:`の後に置いた
+ * `continue-on-error: true`を見落とす（Issue #1216 round 3、外部reviewer指摘）。
+ */
+function validateAcceptanceStep(lines) {
+    const marker = "--mechanisms=git-dependency";
+    const missing = [
+        "validate jobでconsumer acceptanceのgit-dependencyを実行してください",
+    ];
+    const validate = jobRange(lines, "validate");
+    if (validate === undefined)
+        return missing;
+    /** stepの開始行（`      - name:`）を列挙する。 */
+    const stepStarts = [];
+    for (let cursor = validate.start; cursor < validate.end; cursor += 1)
+        if (/^ {6}- name:/u.test(lines[cursor] ?? ""))
+            stepStarts.push(cursor);
+    for (const [order, stepStart] of stepStarts.entries()) {
+        const stepEnd = stepStarts[order + 1] ?? validate.end;
+        const body = lines.slice(stepStart, stepEnd);
+        /** **`run:`以降だけをcommandとみなす。** `name:`へ置いたmarkerを実行と数えない。 */
+        const runIndex = body.findIndex((line) => /^ {8}run:/u.test(line));
+        if (runIndex < 0)
+            continue;
+        const command = body.slice(runIndex).join("\n");
+        if (!command.includes(marker))
+            continue;
+        const errors = [];
+        if (/\|\|\s*true|true\s*\|\||;\s*exit\s+0/u.test(command))
+            errors.push("consumer acceptanceの失敗を握り潰さないでください: acceptance command");
+        const attributes = body.join("\n");
+        if (/^ {8}if:/mu.test(attributes))
+            errors.push("consumer acceptance stepへifを付けないでください。skipできる経路になります");
+        if (/^ {8}continue-on-error:\s*true/mu.test(attributes))
+            errors.push("consumer acceptance stepへcontinue-on-error: trueを付けないでください");
+        const tagJob = jobRange(lines, "tag");
+        if (tagJob !== undefined && stepStart > tagJob.start)
+            errors.push("consumer acceptanceはtag jobの定義より前に置いてください");
+        return errors;
+    }
+    return missing;
 }
 export function validateReleaseWorkflow(yaml) {
     if (typeof yaml !== "string")
@@ -791,17 +845,46 @@ export function validateReleaseWorkflow(yaml) {
         errors.push("dry_run入力を宣言しdefaultをtrueにしてください");
     else
         checks.push("dry_run=trueの安全な既定値を確認した");
-    if (!inputHasDefault(lines, "publish_npm", "false"))
-        errors.push("publish_npm入力を宣言しdefaultをfalseにしてください");
+    /**
+     * **npm公開経路そのものを拒否する。** 条件付きで許すのではなく存在を許さない。
+     * 条件付きにすると、条件を満たす入力を与えるだけで方針違反の経路が開く。
+     *
+     * **正規化してから探す。** 行継続、shell quote、YAMLのquoted keyはいずれも
+     * 有効な表現であり、素の文字列一致では迂回できる（Issue #1216 round 1、F-04）。
+     */
+    const flattened = yaml
+        .replaceAll(/\\\r?\n\s*/gu, " ")
+        .replaceAll(/["']/gu, "");
+    if (/\bnpm\s+publish\b/u.test(flattened))
+        errors.push("npm公開stepを置かないでください。npm registryへは公開しません");
     else
-        checks.push("publish_npm=falseの安全な既定値を確認した");
-    const npmPublishLines = lines
-        .map((line, index) => ({ line, index }))
-        .filter(({ line }) => /\bnpm\s+publish\b/u.test(line));
-    if (npmPublishLines.some(({ index }) => !blockHasSafeNpmPublishCondition(jobBlockContaining(lines, index))))
-        errors.push("npm公開stepはworkflow_dispatchかつpublish_npmが真の場合だけ実行してください");
+        checks.push("npm公開stepが存在しないことを確認した");
+    if (/^\s*publish_npm\s*:/mu.test(flattened))
+        errors.push("publish_npm入力を宣言しないでください。npm公開経路は存在しません");
     else
-        checks.push("npm公開が明示的な手動入力だけに限定されていることを確認した");
+        checks.push("publish_npm入力が存在しないことを確認した");
+    errors.push(...validateAcceptanceStep(lines));
+    /**
+     * **後続jobは先行jobの結果そのものを要求する。** `always()`と保存済みoutputだけでは、
+     * acceptanceが落ちて`validate`がfailureになってもtagが作られる（Issue #1216 F-01）。
+     */
+    for (const [job, required] of [
+        ["tag", "needs.validate.result == 'success'"],
+        ["github_release", "needs.tag.result == 'success'"],
+    ]) {
+        const range = jobRange(lines, job);
+        if (range === undefined)
+            continue;
+        /** **job-levelの`if:`式だけを読む。** `name:`へ文字列を置く迂回を許さない。 */
+        const condition = jobCondition(lines, range);
+        if (!condition.includes(required))
+            errors.push(`${job} jobは${required}を条件へ含めてください`);
+        if (/\balways\(\)/u.test(condition))
+            errors.push(`${job} jobの条件からalways()を外してください。先行jobの失敗後も起動します`);
+    }
+    if (errors.length === 0 ||
+        !errors.some((error) => error.includes("acceptance")))
+        checks.push("git-dependency acceptanceの実行を確認した");
     if (![...DISTRIBUTION_VERIFICATION_SCRIPTS, "quality"].some((script) => npmRunPattern(script).test(yaml)))
         errors.push("release前の品質gateとしてnpm run prepack、npm run verify:distribution、npm run qualityのいずれかが必要です");
     else

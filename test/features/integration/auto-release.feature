@@ -42,10 +42,10 @@ Feature: 自動release workflowと配布digest CLI
     When bump準備手順を実行する
     Then bump branchとPRのremote状態は変化しない
 
-  Scenario: SCN-INT-AUTORELEASE-011 npm_publish jobがversion注入scriptを実際の経路として実行する
-    Given release.ymlのnpm_publish jobをYAMLのstep構造として読み込む
-    When C-1からC-6の条件を判定する
-    Then scriptを呼ぶstepはrun scalarが完全一致で1件だけ存在し、ifとcontinue-on-errorとshellを持たず、npm ciが先行し、HEADを動かすコマンドがjob内に無く、jobとworkflowのdefaults.run.shellも無い
+  Scenario: SCN-INT-AUTORELEASE-011 release.ymlにnpm公開jobとversion注入経路が存在しない
+    Given release.ymlをYAMLのjob構造として読み込む
+    When npm公開経路の不在を判定する
+    Then npm公開jobもpublish_npm入力もnpm publish stepも存在しない
 
   Scenario: SCN-INT-DIGEST-001 fixture repositoryで配布file一覧からdigestを算出する
     Given distと配布fileを持つfixture packageがある
@@ -76,13 +76,3 @@ Feature: 自動release workflowと配布digest CLI
     Given 追加可能な配布fileを持つfixture packageがある
     When package filesへ配布対象を追加して前後の配布digestを算出する
     Then 追加fileが配布entryへ増えてdigestは異なる
-
-  Scenario: SCN-INT-AUTORELEASE-012 version注入はpackage.jsonとpackage-lock.jsonの3 version fieldだけを変える
-    Given sentinel versionを持つ隔離package treeがある
-    When release tagのversionを注入する
-    Then 変更はpackage.jsonとpackage-lock.jsonの3 version fieldだけである
-
-  Scenario: SCN-INT-AUTORELEASE-013 version以外を変える注入を拒否する
-    Given sentinel versionを持つ隔離package treeがある
-    When version以外も変える注入を実行する
-    Then 注入は正規bump差分でないことを理由に拒否される

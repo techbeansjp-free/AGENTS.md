@@ -1745,44 +1745,42 @@ Given("release workflowの公開artifact経路がある", function () {
 When(
   "pack artifactからconsumer acceptanceとpublishへの参照を検査する",
   function () {
-    const expectedReference =
-      "TARBALL_PATH: ${{ steps.pack_artifact.outputs.tarball_path }}";
-    const referenceCount = this.releaseWorkflow
-      .split("\n")
-      .filter((line) => line.trim() === expectedReference).length;
-    const packCount = this.releaseWorkflow
-      .split("\n")
-      .filter((line) =>
-        line.includes("npm pack --json --pack-destination=./release-artifact"),
-      ).length;
+    const lines = this.releaseWorkflow.split("\n");
+    const packCount = lines.filter((line) =>
+      line.includes('TARBALL_PATH="$(npm pack --pack-destination'),
+    ).length;
+    const referenceCount = lines.filter(
+      (line) =>
+        line.trim() ===
+        "TARBALL_PATH: ${{ steps.pack_release_artifact.outputs.tarball_path }}",
+    ).length;
     this.releaseWorkflowErrors = [];
     if (packCount !== 1)
       this.releaseWorkflowErrors.push(
         `release対象tarballの作成回数が1件ではありません: ${packCount}`,
       );
-    if (referenceCount !== 3)
+    /**
+     * **参照は検査の1件だけである。** 公開経路が無いため、同一性再検証も公開も
+     * tarballを参照しない（Issue #1216）。
+     */
+    if (referenceCount !== 1)
       this.releaseWorkflowErrors.push(
-        `pack_artifactのtarball参照が検査・同一性確認・公開の3件ではありません: ${referenceCount}`,
+        `pack_release_artifactのtarball参照が検査の1件ではありません: ${referenceCount}`,
       );
-    if (
-      !this.releaseWorkflow.includes(
-        'node --import tsx scripts/check_consumer_acceptance.ts --tarball="$TARBALL_PATH" --mechanisms=git-dependency,packed-bin,scale-output',
-      )
-    )
+    if (!this.releaseWorkflow.includes("--mechanisms=git-dependency"))
       this.releaseWorkflowErrors.push(
-        "consumer acceptanceが同じtarballの3機構を指定していません",
+        "consumer acceptanceがgit-dependencyを指定していません",
       );
-    if (
-      !this.releaseWorkflow.includes(
-        'run: npm publish --provenance --access public "$TARBALL_PATH"',
-      )
-    )
+    if (/\bnpm\s+publish\b/u.test(this.releaseWorkflow))
       this.releaseWorkflowErrors.push(
-        "npm publishが検査済みの同じtarballを参照していません",
+        "npm公開stepが存在します。公開経路は削除済みです",
       );
   },
 );
 
-Then("1度だけ作った同じtarballに3機構の検査と公開が結び付く", function () {
-  assert.deepEqual(this.releaseWorkflowErrors, []);
-});
+Then(
+  "validateで作ったtarballにgit-dependencyの検査が結び付き公開経路は存在しない",
+  function () {
+    assert.deepEqual(this.releaseWorkflowErrors, []);
+  },
+);

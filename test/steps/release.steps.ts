@@ -26,7 +26,6 @@ function releaseInput(
     currentVersion: "0.3.1-beta.1",
     requestedVersion: "0.3.1",
     dryRun: false,
-    publishNpm: false,
     actor: "release-operator",
     ref: "main",
     refSha: "0123456789abcdef0123456789abcdef01234567",
@@ -56,7 +55,7 @@ class ReleaseWorld extends WorkflowWorld {
 const { Given, When, Then } = stepDefinitions<ReleaseWorld>();
 
 Given("release可能な入力でdry-runを有効にする", function () {
-  this.planInput = releaseInput({ dryRun: true, publishNpm: true });
+  this.planInput = releaseInput({ dryRun: true });
 });
 
 When("release計画を作成する", function () {
@@ -147,17 +146,17 @@ Then("すべてのrelease計画はgateを根拠に拒否される", function () 
   }
 });
 
-Given("npm公開の無効入力と有効入力を用意する", function () {
+Given("dry-run有無のrelease入力を用意する", function () {
   this.planInputs = [
     releaseInput({
       currentVersion: "0.3.1-alpha.2",
       requestedVersion: "0.3.1-alpha.10",
-      publishNpm: false,
+      dryRun: false,
     }),
     releaseInput({
       currentVersion: "0.3.1-alpha.2",
       requestedVersion: "0.3.1-alpha.10",
-      publishNpm: true,
+      dryRun: true,
     }),
   ];
 });
@@ -166,18 +165,23 @@ When("npm公開条件ごとのrelease計画を作成する", function () {
   this.plans = this.planInputs.map(planRelease);
 });
 
-Then("明示入力がある計画だけnpm公開stageが有効になる", function () {
+Then("どの計画にもnpm公開stageが現れない", function () {
   assert.equal(this.plans.length, 2);
-  assert.equal(this.plans[0]?.state, "ready");
-  assert.equal(this.plans[1]?.state, "ready");
-  assert.equal(
-    this.plans[0]?.stages.find(({ stage }) => stage === "npm_publish")?.enabled,
-    false,
-  );
-  assert.equal(
-    this.plans[1]?.stages.find(({ stage }) => stage === "npm_publish")?.enabled,
-    true,
-  );
+  /**
+   * **stage名の一覧そのものを検査する。** `find`がundefinedであることだけを見ると、
+   * stage名を変えただけの変異を素通しする。
+   */
+  for (const plan of this.plans) {
+    /** **dry-runでもreadyでもstage一覧は同じである。** stateは入力で変わるため固定しない。 */
+    assert.ok(
+      plan?.state === "ready" || plan?.state === "dry-run",
+      String(plan?.state),
+    );
+    assert.deepEqual(
+      plan?.stages.map(({ stage }) => stage),
+      ["validate", "tag", "github_release"],
+    );
+  }
 });
 
 Given("tag成功後にGitHub Releaseが失敗した操作結果がある", function () {
@@ -189,20 +193,19 @@ Given("tag成功後にGitHub Releaseが失敗した操作結果がある", funct
       state: "failed",
       detail: "GitHub API失敗",
     },
-    {
-      stage: "npm_publish",
-      state: "skipped",
-      detail: "先行stage失敗のため未実行",
-    },
   ];
   this.outcomes = outcomes;
+  /**
+   * **GitHub Release作成済みで後続が失敗した形をもう1つ置く。**
+   * npm公開stageは存在しないため、外部更新済みの最上位はGitHub Releaseである。
+   */
   this.publishedOutcomes = [
-    ...outcomes.slice(0, 2),
-    outcomes[2],
+    { stage: "validate", state: "succeeded", detail: "品質gate合格" },
+    { stage: "tag", state: "succeeded", detail: "tag作成済み" },
     {
-      stage: "npm_publish",
+      stage: "github_release",
       state: "succeeded",
-      detail: "公開済みfixture",
+      detail: "Release作成済み",
     },
   ];
 });
@@ -220,10 +223,12 @@ Then("結果は部分成功として完了stageと未完了stageを分離する"
 
 Then("外部更新済み状態ごとの日本語復旧手順を返す", function () {
   assert.match(this.summary?.recovery.join(" ") ?? "", /tag.*削除/u);
-  assert.match(
-    this.publishedSummary?.recovery.join(" ") ?? "",
-    /npm.*deprecate/u,
-  );
+  /**
+   * **全stage成功なら復旧手順を返さない。** npm公開stageが無い以上、
+   * 外部更新済みの最上位はGitHub Releaseであり、成功時に案内すべき復旧は無い。
+   */
+  assert.equal(this.publishedSummary?.state, "succeeded");
+  assert.deepEqual(this.publishedSummary?.recovery, []);
 });
 
 Given("不正なversion形式と不正なSHAの入力を用意する", function () {
@@ -274,9 +279,11 @@ Then(
   function () {
     assert.equal(this.workflowValidation?.valid, false);
     assert.match(this.workflowValidation?.errors.join(" ") ?? "", /push/u);
-    assert.match(
-      this.workflowValidation?.errors.join(" ") ?? "",
-      /npm.*workflow_dispatch/u,
+    assert.ok(
+      this.workflowValidation?.errors.includes(
+        "npm公開stepを置かないでください。npm registryへは公開しません",
+      ),
+      this.workflowValidation?.errors.join(" / "),
     );
     assert.match(this.workflowValidation?.errors.join(" ") ?? "", /秘密/u);
   },

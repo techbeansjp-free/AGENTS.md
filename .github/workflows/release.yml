@@ -14,11 +14,6 @@ name: 自動・手動release
         required: true
         type: boolean
         default: true
-      publish_npm:
-        description: 承認後にnpmへprovenance付きで公開する
-        required: true
-        type: boolean
-        default: false
 
 concurrency:
   group: main-mutator
@@ -41,7 +36,6 @@ jobs:
       version: ${{ steps.plan_outputs.outputs.version }}
       tag: ${{ steps.plan_outputs.outputs.tag }}
       needs_version_bump: ${{ steps.plan_outputs.outputs.needs_version_bump }}
-      npm_enabled: ${{ steps.plan_outputs.outputs.npm_enabled }}
       release_sha: ${{ steps.plan_outputs.outputs.release_sha }}
       distribution_digest: ${{ steps.plan_outputs.outputs.distribution_digest }}
       distribution_entry_count: ${{ steps.plan_outputs.outputs.distribution_entry_count }}
@@ -156,7 +150,6 @@ jobs:
         env:
           RELEASE_REQUESTED_VERSION: ${{ inputs.version }}
           RELEASE_DRY_RUN: ${{ inputs.dry_run }}
-          RELEASE_PUBLISH_NPM: ${{ inputs.publish_npm }}
           RELEASE_ACTOR: ${{ github.actor }}
           RELEASE_REF: ${{ github.ref_name }}
           RELEASE_REF_SHA: ${{ github.sha }}
@@ -176,7 +169,6 @@ jobs:
           const output = process.env.GITHUB_OUTPUT;
           if (!output || !fs.existsSync("release-plan.json")) process.exit(1);
           const plan = JSON.parse(fs.readFileSync("release-plan.json", "utf8"));
-          const npmStage = plan.stages?.find(({ stage }) => stage === "npm_publish");
           const distribution = fs.existsSync("distribution-digest.json")
             ? JSON.parse(fs.readFileSync("distribution-digest.json", "utf8"))
             : { digest: "", entryCount: 0 };
@@ -187,7 +179,6 @@ jobs:
               `version=${plan.version}`,
               `tag=${plan.tag}`,
               `needs_version_bump=${plan.needsVersionBump === true}`,
-              `npm_enabled=${npmStage?.enabled === true}`,
               `release_sha=${process.env.RELEASE_SHA ?? ""}`,
               `distribution_digest=${distribution.digest ?? ""}`,
               `distribution_entry_count=${distribution.entryCount ?? 0}`,
@@ -292,12 +283,33 @@ jobs:
           if (event === "push" && !["release", "skipped"].includes(state ?? "")) process.exit(1);
           if (event === "workflow_dispatch" && !["ready", "dry-run"].includes(state ?? "")) process.exit(1);
           NODE
+      # packed-binとscale-outputはpackage:checkから毎回実行されるが、git-dependencyだけは
+      # どのreleaseでも実行されていなかった。tag自体がnpx github:#<tag>の配布アドレスに
+      # なるため、tag作成より前で止める（Issue #1216）。
+      - name: 検査対象のrelease artifactを作成する
+        id: pack_release_artifact
+        run: |
+          set -euo pipefail
+          TARBALL_PATH="$(npm pack --pack-destination "$RUNNER_TEMP" --silent | tail -n 1)"
+          test -n "$TARBALL_PATH"
+          printf 'tarball_path=%s\n' "$RUNNER_TEMP/$TARBALL_PATH" >> "$GITHUB_OUTPUT"
+      - name: 実Git依存でのconsumer acceptanceを検証する
+        env:
+          TARBALL_PATH: ${{ steps.pack_release_artifact.outputs.tarball_path }}
+        run: |
+          set -euo pipefail
+          test -n "$TARBALL_PATH"
+          node --import tsx scripts/check_consumer_acceptance.ts \
+            --tarball="$TARBALL_PATH" --mechanisms=git-dependency
 
   tag:
     name: 検証済みcommitへGit tagを冪等に作成する
     needs: validate
+    # validateのstate出力はconsumer acceptanceより前に書かれる。always()と保存済みstateだけ
+    # では、acceptanceが落ちてvalidateがfailureになってもtagが作られる（Issue #1216 F-01）。
+    # job結果そのものを要求する。
     if: >-
-      ${{ always() &&
+      ${{ needs.validate.result == 'success' &&
           (needs.validate.outputs.state == 'ready' ||
            needs.validate.outputs.state == 'release') }}
     runs-on: ubuntu-latest
@@ -413,7 +425,10 @@ jobs:
   github_release:
     name: GitHub Releaseを冪等に作成する
     needs: [validate, tag]
-    if: ${{ always() && needs.tag.outputs.state == 'succeeded' }}
+    if: >-
+      ${{ needs.validate.result == 'success' &&
+          needs.tag.result == 'success' &&
+          needs.tag.outputs.state == 'succeeded' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -487,7 +502,6 @@ jobs:
           RELEASE_STATE: ${{ steps.release_status.outputs.state }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
           RELEASE_EVENT: ${{ github.event_name }}
-          NPM_ENABLED: ${{ needs.validate.outputs.npm_enabled }}
         run: |
           node --input-type=module <<'NODE'
           import fs from "node:fs";
@@ -500,13 +514,7 @@ jobs:
             `- tag・Release名: ${process.env.RELEASE_TAG ?? "不明"}`,
             `- 状態: ${succeeded ? "succeeded" : "failed"}`,
             succeeded ? "- 完了: validate、必要なversion bump、Git tag、GitHub Release" : "- 完了: validate、必要なversion bump、Git tag",
-            succeeded && process.env.RELEASE_EVENT === "push"
-              ? "- 未実行: npm公開（自動経路では常に無効）"
-              : succeeded && process.env.NPM_ENABLED === "true"
-                ? "- 未完了: npm公開（environment承認待ち）"
-                : succeeded
-                  ? "- 未実行: npm公開（手動入力なし）"
-                  : "- 未完了: GitHub Release",
+            succeeded ? "- npm公開: 経路そのものが存在しません" : "- 未完了: GitHub Release",
             succeeded ? "- 復旧: 同名Releaseは再作成せず成功として扱う" : "- 復旧: Releaseの有無を確認し、存在しなければ新しいrunで再実行する",
             "",
           ].join("\n"));
@@ -518,182 +526,4 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           if (process.env.RELEASE_STATE !== "succeeded") process.exit(1);
-          NODE
-
-  npm_publish:
-    name: 手動承認後にnpm packageを公開する
-    needs: [validate, tag, github_release]
-    if: >-
-      ${{ github.event_name == 'workflow_dispatch' &&
-          inputs.publish_npm == true &&
-          needs.validate.outputs.state == 'ready' &&
-          needs.validate.outputs.npm_enabled == 'true' &&
-          needs.tag.outputs.state == 'succeeded' &&
-          needs.github_release.outputs.state == 'succeeded' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: npm-production
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: release tagの内容を取得する
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.validate.outputs.tag }}
-          persist-credentials: false
-      - name: npm公開用Node.js実行環境を準備する
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          registry-url: https://registry.npmjs.org
-      - name: PoC隔離実行に必要なbubblewrapを準備する
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            apparmor-profiles \
-            bubblewrap
-          test -r /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
-          sudo apparmor_parser -r \
-            /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
-          /usr/bin/bwrap \
-            --unshare-all \
-            --die-with-parent \
-            --new-session \
-            --ro-bind / / \
-            -- /bin/true
-      - name: 固定ファイルどおりに公開用依存を導入する
-        run: npm ci
-      - name: tag内容で全release gateを再検証する
-        run: npm run verify:distribution
-      # 版管理下のtreeはsentinelを持つ。npmが読むversionはここでだけ与える。
-      # 注入がversion 3 fieldだけを変えたことをcanonicalBumpDiffで検査し、
-      # 注入後のtreeでbuildをやり直してからpackする。
-      - name: release tagのversionを公開treeへ注入する
-        env:
-          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-        run: |
-          node --import tsx scripts/inject_publish_version.ts
-          npm run build
-      - name: 検査対象のnpm artifactを一度だけ作成する
-        id: pack_artifact
-        run: |
-          mkdir -p ./release-artifact
-          npm pack --json --pack-destination=./release-artifact > "$RUNNER_TEMP/pack-result.json"
-          node --input-type=module <<'NODE'
-          import fs from "node:fs";
-          import path from "node:path";
-          const output = process.env.GITHUB_OUTPUT;
-          if (!output) process.exit(1);
-          const packed = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/pack-result.json`, "utf8"));
-          const filename = Array.isArray(packed) && packed.length === 1
-            ? packed[0]?.filename
-            : undefined;
-          if (typeof filename !== "string" || !filename.endsWith(".tgz") || /[\r\n]/u.test(filename) || path.basename(filename) !== filename) process.exit(1);
-          const tarballPath = path.join("release-artifact", filename);
-          if (!fs.statSync(tarballPath).isFile()) process.exit(1);
-          fs.appendFileSync(output, `tarball_path=${tarballPath}\n`);
-          NODE
-      - name: 配布artifactのconsumer acceptanceを検証する
-        id: consumer_acceptance
-        env:
-          TARBALL_PATH: ${{ steps.pack_artifact.outputs.tarball_path }}
-        run: |
-          if [ -z "$TARBALL_PATH" ]; then exit 1; fi
-          node --import tsx scripts/check_consumer_acceptance.ts --tarball="$TARBALL_PATH" --mechanisms=git-dependency,packed-bin,scale-output
-          node --import tsx scripts/compute_distribution_digest.ts > "$RUNNER_TEMP/distribution-digest.json"
-          node --input-type=module <<'NODE'
-          import crypto from "node:crypto";
-          import fs from "node:fs";
-          const output = process.env.GITHUB_OUTPUT;
-          const tarballPath = process.env.TARBALL_PATH;
-          if (!output || !tarballPath) process.exit(1);
-          const artifactSha256 = crypto.createHash("sha256").update(fs.readFileSync(tarballPath)).digest("hex");
-          const distribution = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/distribution-digest.json`, "utf8"));
-          if (!distribution || typeof distribution.digest !== "string" || !/^[a-f0-9]{64}$/u.test(distribution.digest)) process.exit(1);
-          fs.appendFileSync(output, [
-            `artifact_sha256=${artifactSha256}`,
-            `distribution_digest=${distribution.digest}`,
-            "",
-          ].join("\n"));
-          NODE
-      - name: 検査済みartifactの同一性を公開直前に再検証する
-        id: verify_identity
-        env:
-          TARBALL_PATH: ${{ steps.pack_artifact.outputs.tarball_path }}
-          ACCEPTED_ARTIFACT_SHA256: ${{ steps.consumer_acceptance.outputs.artifact_sha256 }}
-        run: |
-          node --input-type=module <<'NODE'
-          import crypto from "node:crypto";
-          import fs from "node:fs";
-          const tarballPath = process.env.TARBALL_PATH;
-          const accepted = process.env.ACCEPTED_ARTIFACT_SHA256;
-          if (!tarballPath || !accepted || !/^[a-f0-9]{64}$/u.test(accepted)) process.exit(1);
-          const publication = crypto.createHash("sha256").update(fs.readFileSync(tarballPath)).digest("hex");
-          if (publication !== accepted) process.exit(1);
-          NODE
-      - name: 明示承認されたpackageをprovenance付きで公開する
-        id: npm_operation
-        continue-on-error: true
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          TARBALL_PATH: ${{ steps.pack_artifact.outputs.tarball_path }}
-        run: npm publish --provenance --access public "$TARBALL_PATH"
-      - name: npm registryの公開versionを読み直す
-        id: npm_observation
-        continue-on-error: true
-        env:
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-        run: npm view "agent-skill-chain@$RELEASE_VERSION" version --json > npm-after.json
-      - name: npm公開状態を確定する
-        id: npm_status
-        if: always()
-        env:
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-          NPM_OPERATION_OUTCOME: ${{ steps.npm_operation.outcome }}
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from "node:fs";
-          const output = process.env.GITHUB_OUTPUT;
-          if (!output) process.exit(1);
-          let state = "failed";
-          try {
-            const observed = JSON.parse(fs.readFileSync("npm-after.json", "utf8"));
-            state = process.env.NPM_OPERATION_OUTCOME === "success" && observed === process.env.RELEASE_VERSION ? "succeeded" : "failed";
-          } catch {
-            state = "failed";
-          }
-          fs.appendFileSync(output, `state=${state}\n`);
-          NODE
-      - name: npm公開結果と復旧方法を記録する
-        if: always()
-        env:
-          NPM_STATE: ${{ steps.npm_status.outputs.state }}
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from "node:fs";
-          const summary = process.env.GITHUB_STEP_SUMMARY;
-          if (!summary) process.exit(1);
-          const succeeded = process.env.NPM_STATE === "succeeded";
-          fs.appendFileSync(summary, [
-            "# npm公開操作結果",
-            "",
-            `- version: ${process.env.RELEASE_VERSION ?? "不明"}`,
-            `- 状態: ${succeeded ? "succeeded" : "failed"}`,
-            succeeded ? "- 完了: Git tag、GitHub Release、npm公開" : "- 完了: Git tag、GitHub Release",
-            succeeded ? "- 未完了: なし" : "- 未完了: npm公開",
-            succeeded ? "- 復旧: 公開済みversionは削除せずnpm deprecateで利用非推奨理由と代替versionを案内する" : "- 復旧: registryでversionの有無を再確認し、未公開なら原因解消後に新しいrunで再計画する",
-            "",
-          ].join("\n"));
-          NODE
-      - name: npm公開未確認時に成功報告を拒否する
-        if: always()
-        env:
-          NPM_STATE: ${{ steps.npm_status.outputs.state }}
-        run: |
-          node --input-type=module <<'NODE'
-          if (process.env.NPM_STATE !== "succeeded") process.exit(1);
           NODE

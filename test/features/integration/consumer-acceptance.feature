@@ -41,10 +41,10 @@ Feature: packed artifactを隔離環境で利用者と同じ入口から観測�
     When ignored出力が1MiBを超えるscratch repositoryで公開入口を観測する
     Then scale-outputの公開入口は終了値0を返す
 
-  Scenario: SCN-INT-CONSUMER-009 release対象の同じtarballで3機構を検査して公開する
+  Scenario: SCN-INT-CONSUMER-009 release対象のtarballをvalidateで作りgit-dependencyを検査する
     Given release workflowの公開artifact経路がある
     When pack artifactからconsumer acceptanceとpublishへの参照を検査する
-    Then 1度だけ作った同じtarballに3機構の検査と公開が結び付く
+    Then validateで作ったtarballにgit-dependencyの検査が結び付き公開経路は存在しない
 
   Scenario: SCN-INT-CONSUMER-010 前提はHEADとの一致だけを要求する
     Given 保護fileがmerge-baseと異なりHEADと一致する候補treeがある
