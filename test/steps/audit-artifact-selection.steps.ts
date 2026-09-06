@@ -10,6 +10,8 @@ type AuditResult = ReturnType<typeof checkFileAudit>;
 class AuditSelectionWorld extends WorkflowWorld {
   auditRoot = "";
   auditResult: AuditResult | undefined = undefined;
+  /** fixtureが期待する`H_impl`。`valid`だけでなく導出結果そのものを照合する。 */
+  expectedImplementation: string | undefined = undefined;
   auditResults: AuditResult[] = [];
   expectedAuditPath = "";
 }
@@ -143,6 +145,142 @@ function writePackage(root: string, version: string): void {
     )}\n`,
   );
 }
+
+/**
+ * artifactだけを変える前進commitを`count`本積む。
+ *
+ * **帳簿合わせの再現である。** 実装は変えず、artifactの記述だけを直す。
+ */
+function appendAuditOnlyCommits(
+  fixture: ReturnType<typeof createImplementation>,
+  auditPath: string,
+  count: number,
+  recordedImplementation: string,
+): void {
+  for (let index = 0; index < count; index += 1) {
+    writeFile(
+      fixture.root,
+      auditPath,
+      `${auditMarkdown(fixture.base, recordedImplementation, fixture.changedPath)}\n<!-- 帳簿合わせ ${index} -->\n`,
+    );
+    commitPaths(fixture.root, `docs: review artifactの記載を直す ${index}`, [
+      auditPath,
+    ]);
+  }
+}
+
+Given(
+  "review artifactだけを直す前進commitを2本積んだ監査選択repository",
+  function () {
+    const fixture = createImplementation(this);
+    const auditPath = "docs/reviews/41_課題1074境界安定化レビュー.md";
+    commitArtifact(this, fixture, auditPath);
+    /** **記載する`H_impl`は実装commitのまま動かさない。** 安定化の観測点である。 */
+    appendAuditOnlyCommits(fixture, auditPath, 2, fixture.implementation);
+    this.expectedImplementation = fixture.implementation;
+  },
+);
+
+Given(
+  "review artifactの直後に実装を変える前進commitを積んだ監査選択repository",
+  function () {
+    const fixture = createImplementation(this);
+    const auditPath = "docs/reviews/42_課題1074境界停止レビュー.md";
+    commitArtifact(this, fixture, auditPath);
+    /**
+     * artifactでないpathを含むcommitは境界になる。**遡りはここで止まる。**
+     * したがって`H_impl`はこのcommit自身であり、記載も同じ値にする。
+     */
+    writeFile(
+      fixture.root,
+      fixture.changedPath,
+      "export const selected = 2;\n",
+    );
+    const second = commitPaths(fixture.root, "fix: 実装を直す", [
+      fixture.changedPath,
+    ]);
+    /**
+     * **`比較基点..H_impl`へartifact自身が入る。** 遡りが`second`で止まるため、
+     * その手前でcommitした本artifactが範囲に含まれる。個別監査へ自己行を置く。
+     */
+    writeFile(
+      fixture.root,
+      auditPath,
+      `${auditMarkdown(fixture.base, second, fixture.changedPath)}| \`${auditPath}\` | A | test owner | fixture | 本レビュー成果物 | 依存なし | AC-892 | commitを戻す | pass |\n`,
+    );
+    commitPaths(fixture.root, "docs: review artifactを追随させる", [auditPath]);
+    this.expectedImplementation = second;
+  },
+);
+
+Given("suffixの途中でartifactを2件同時に変える監査選択repository", function () {
+  const fixture = createImplementation(this);
+  const auditPath = "docs/reviews/43_課題1074境界複数レビュー.md";
+  const otherPath = "docs/reviews/44_課題1074別レビュー.md";
+  commitArtifact(this, fixture, auditPath);
+  /**
+   * **artifactが2件同時に変わるcommitで遡りを止める。** 1 fileだけの帳簿合わせと
+   * 区別できないと、遡りが実装commitまで到達して`H_impl`が過去へ飛ぶ。
+   * このcommitを**suffixの途中**（`HEAD^`）へ置き、その先に帳簿合わせを1本積む。
+   */
+  /** **両方のartifactを同じcommitで変える。** 片方だけだと差分が1件になり遡ってしまう。 */
+  writeFile(
+    fixture.root,
+    auditPath,
+    `${auditMarkdown(fixture.base, fixture.implementation, fixture.changedPath)}<!-- 2件同時 -->\n`,
+  );
+  writeFile(fixture.root, otherPath, "# 別\n");
+  const boundary = commitPaths(
+    fixture.root,
+    "docs: artifactを2件同時に変える",
+    [auditPath, otherPath],
+  );
+  writeFile(
+    fixture.root,
+    auditPath,
+    `${auditMarkdown(fixture.base, boundary, fixture.changedPath)}| \`${auditPath}\` | A | test owner | fixture | 本レビュー成果物 | 依存なし | AC-892 | commitを戻す | pass |\n| \`${otherPath}\` | A | test owner | fixture | 別の成果物 | 依存なし | AC-892 | commitを戻す | pass |\n`,
+  );
+  commitPaths(fixture.root, "docs: review artifactの記載を直す", [auditPath]);
+  this.expectedImplementation = boundary;
+});
+
+Given("suffixの途中にmerge commitがある監査選択repository", function () {
+  const fixture = createImplementation(this);
+  const auditPath = "docs/reviews/45_課題1074境界mergeレビュー.md";
+  commitArtifact(this, fixture, auditPath);
+  /**
+   * **merge commitで遡りを止める。**
+   *
+   * 第1親差分がartifact 1件だけになるmergeを作る。止めないと遡りが実装commitまで
+   * 到達し、`比較基点..H_impl`からartifactが外れて個別監査表の期待が変わる。
+   * **第1親差分に実装が含まれるmergeでは次の判定が止めるため、この形でしか観測できない。**
+   */
+  git(fixture.root, ["checkout", "-q", "-b", "side"]);
+  writeFile(
+    fixture.root,
+    auditPath,
+    `${auditMarkdown(fixture.base, fixture.implementation, fixture.changedPath)}<!-- 別branchの帳簿合わせ -->\n`,
+  );
+  commitPaths(fixture.root, "docs: 別branchでartifactを直す", [auditPath]);
+  git(fixture.root, ["checkout", "-q", "main"]);
+  git(fixture.root, [
+    "merge",
+    "--no-ff",
+    "-q",
+    "-m",
+    "merge: sideを取り込む",
+    "side",
+  ]);
+  const merged = git(fixture.root, ["rev-parse", "HEAD"]);
+  /** 記載する`H_impl`はmerge commit自身。`比較基点..H_impl`は実装1件とartifact 1件。 */
+  writeFile(
+    fixture.root,
+    auditPath,
+    `${auditMarkdown(fixture.base, merged, fixture.changedPath)}| \`${auditPath}\` | A | test owner | fixture | 本レビュー成果物 | 依存なし | AC-892 | commitを戻す | pass |\n`,
+  );
+  commitPaths(fixture.root, "docs: review artifactの記載を直す", [auditPath]);
+  this.expectedImplementation = merged;
+});
 
 Given("差分がreview artifact 1件だけの監査選択repository", function () {
   const fixture = createImplementation(this);
@@ -908,6 +1046,27 @@ Then("file監査は比較基点を検証せず合格する", function () {
     this.auditResult?.errors.join("\n") ?? "",
     /比較基点 [a-f0-9]{40} が実際のcommit構造から導出した/u,
   );
+});
+
+Then("監査選択のfile監査は不合格になる", function () {
+  assert.equal(
+    this.auditResult?.valid,
+    false,
+    JSON.stringify(this.auditResult),
+  );
+});
+
+Then("監査選択のfile監査は合格し導出したH_implが期待どおりである", function () {
+  assert.equal(
+    this.auditResult?.valid,
+    true,
+    `file監査が失敗しました: ${this.auditResult?.errors.join("\n")}`,
+  );
+  /**
+   * **`valid`だけを見ない。** 記載した`H_impl`と導出値の一致は検査が担保するため、
+   * 記載値そのものを照合すれば導出結果を固定できる（外部review指摘）。
+   */
+  assert.equal(this.auditResult?.implementation, this.expectedImplementation);
 });
 
 Then("監査選択のfile監査は合格する", function () {
