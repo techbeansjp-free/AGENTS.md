@@ -5,14 +5,14 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 1 |
+| ラウンド | 2 |
 | 対象SHA・文書ダイジェスト | `fb384af6d097149f9ad4da7fd0a745fe59c4a0dc` |
 | 比較基点 | `33242c62cee62cc131dc45279ffab0c682f3abc2` |
 | H_impl | `fb384af6d097149f9ad4da7fd0a745fe59c4a0dc` |
 | 対象差分 | `33242c62cee62cc131dc45279ffab0c682f3abc2..fb384af6d097149f9ad4da7fd0a745fe59c4a0dc`。8 file。**本artifactは`H_impl`より後のcommitで加わるためこの範囲に含まれない** |
 | 対象外 | job-levelの`if:`と`needs:`の解釈、job-levelの`continue-on-error`（Issue #1236へ分離）、`; exit 0`のshell意味論、`npm publish`との実行順契約の再定義、`checkDistributionGateReachability`の保護対象化 |
-| 残り予算 | 3ラウンドのうち1使用。**残り2** |
-| ラウンド数 | 1 |
+| 残り予算 | 3ラウンドのうち2使用。**残り1** |
+| ラウンド数 | 2 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260906_143836_配布gate到達性検査がjob条件-job依存-失敗握り潰しを解釈せず-gateを実行しない入力を受理する |
 | 仕様の所有箇所 | `docs/specs/02_要件/04_仕様・品質管理要件.md`のREQ-SQ-020。引用: 「**判定不能は合格へ倒さない。**」 |
 | 成果物行数 | 製品の変更行数 91挿入17削除の行（`scripts/check_conformance.ts`）。test 199挿入3削除行。仕様 10挿入1削除行。支援層は諮問文1件と変異試験script 1件 |
@@ -31,7 +31,7 @@
 |---|---|---|---|
 | 要求・受け入れ条件 | Issue #980、staging `01_要件定義.md`§6 | AC-01〜AC-05、INV-01〜INV-04 | 一次資料 |
 | 差分 | `33242c62cee62cc131dc45279ffab0c682f3abc2..fb384af6d097149f9ad4da7fd0a745fe59c4a0dc` | 8 file、300挿入、21削除（本artifactを除く） | 既存コード |
-| テスト | `npm test` | 1542 scenarios（1526 passed、16 skipped）、失敗0 | テスト出力 |
+| テスト | `npm run conformance:check`（全suite内包） | 1541 scenarios（1525 passed、16 skipped）、失敗0 | テスト出力 |
 | 変異試験 | 12変異を1件ずつ適用 | **12件すべてkill。** 生存0件 | テスト出力 |
 | 仕様 | `docs/specs/01_システム概要/`、`02_要件/`、`11_非機能/`、`15_要件追跡/` | updated | 既存文書 |
 | commit前candidate | 本artifactを除く8 file | `fb384af6d097149f9ad4da7fd0a745fe59c4a0dc` | Git観測 |
@@ -114,6 +114,7 @@
 | F-02 | Medium | step block終端の`width <= indent`が変異で生存した。等価変異ではない | 是正済み。SCN-027を追加。DISC-004 |
 | F-03 | Medium | FR-04の実行時式の条項に対応するscenarioが無い | 是正済み。SCN-026を追加。DISC-005 |
 | F-04 | Low | 変更履歴の変更file一覧へ`dist/`を書いていたが、`scripts/`はbuild対象でなくdiffは0件 | 是正済み。`dist/`を外した |
+| F-05 | Low | 本artifactのテスト結果へ`1542 scenarios`と書いていたが、`conformance:check`の実測は`1541 scenarios（1525 passed、16 skipped）`である。実行commandの表記も`npm test`から`conformance:check`へ正した | 是正済み。ラウンド2で前進commitとして是正した |
 
 未解決のCritical/Highは0件である。
 
@@ -123,11 +124,15 @@
 
 固定initial HEADに対する全scope reviewである。`previousBlocking`、`fixedDiff`、`adjacentScope`はいずれも空である。
 
+### ラウンド2
+
+F-05だけを対象にした是正である。`fixedDiff`は本artifact 1 fileで、`previousBlocking`と`adjacentScope`は空である。**是正は前進commitで行った。** ラウンド1のcandidate HEADをamendで消すと、review sessionのdiff baseがcandidate HEADのancestorでなくなり、round 2を適用できない。実際に一度amendして拒否され、`git reset --hard`でラウンド1のHEADへ戻してから前進commitへ切り替えた。
+
 ## 7. テスト結果
 
 実行したcommandの一覧: `npm run lint`、`npm run format:check`、`npm run typecheck`、`npm run trace:check`、`npm run conformance:check`、`npm test`、`npm run build`、変異試験script
 
-全layerの合計: **1542 scenarios（1526 passed、16 skipped）、失敗0**
+全layerの合計: **1541 scenarios（1525 passed、16 skipped）、失敗0**
 
 失敗またはskipがある層: skipは16 scenarioで、いずれも本変更以前から存在する環境依存scenarioである。失敗は0件のため展開する層は無い
 
