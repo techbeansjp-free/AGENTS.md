@@ -5,17 +5,17 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 1 |
-| 対象SHA・文書ダイジェスト | `06bab890959448724e62189b46ad722f2d115e79` |
+| ラウンド | 2（外部reviewer指摘の取り込み） |
+| 対象SHA・文書ダイジェスト | `f11eb4b1fc67b677798fb471808e19e3f52a3acf` |
 | 比較基点 | `4d83166d3e6167f9ebf6802f43fba0bccc7322a9` |
-| H_impl | `06bab890959448724e62189b46ad722f2d115e79` |
-| 対象差分 | `4d83166d3e6167f9ebf6802f43fba0bccc7322a9..06bab890959448724e62189b46ad722f2d115e79`。6 path。`dist/`配下の変更は無い（`scripts/`はbuild対象外） |
+| H_impl | `f11eb4b1fc67b677798fb471808e19e3f52a3acf` |
+| 対象差分 | `4d83166d3e6167f9ebf6802f43fba0bccc7322a9..f11eb4b1fc67b677798fb471808e19e3f52a3acf`。7 path。`dist/`配下の変更は無い（`scripts/`はbuild対象外）。**ラウンド2の是正を前進commitで行ったため本artifact自身がこの範囲に入り、表は7行になる** |
 | 対象外 | job-levelの`if:`と`needs:`、実行時式の真偽判定、`release.yml`の内容変更、本repositoryでの実走行によるGitHub挙動の再確認 |
-| 残り予算 | 3ラウンドのうち1使用。**残り2** |
-| ラウンド数 | 1 |
+| 残り予算 | 3ラウンドのうち2使用。**残り1** |
+| ラウンド数 | 2 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260906_224206_bugfix-配布gate到達性検査がjob-levelのcontinue-on-errorを解釈しておらず-失敗の握り潰しが未確認のまま残る |
 | 仕様の所有箇所 | `docs/specs/02_要件/04_仕様・品質管理要件.md`のREQ-SQ-020。引用: 「**job-levelの条件と`needs:`は対象にしない。**」 |
-| 成果物行数 | `scripts/` +58行。test +115行。仕様 +5行 |
+| 成果物行数 | `scripts/` +71行。test +176行。仕様 +6行 |
 | 縮小の先行評価 | 新しい機構を作っていない。既存の`STEP_FAULT_TOLERANCE`と`isStaticFalse`を再利用し、追加は行ごとの許容表を返す純関数1つ、`ReleaseRunStep`の1 field、失格条件1項、拒否理由1件である。YAML parserの導入案は依存増と二重解釈を理由に採らなかった |
 | 実施者・日時 | reviewer / 2026-09-06 |
 
@@ -32,14 +32,15 @@
 | 要求・受け入れ条件 | Issue #1236、staging `01_要件定義.md`§9 | AC-01〜AC-04、INV-01〜INV-03 | 一次資料 |
 | GitHubの挙動 | `actions/toolkit` Issue #1739 の再現報告 | job-levelの`continue-on-error: true`で失敗したjobについて、後続jobが読む`needs`のresultが`success`になる | 外部のimmutable証拠 |
 | 起票時の未確認事項 | Issue #1236 本文 | 「どちらであるかを私は実測していない。GitHub Actionsの仕様を根拠なしに断定しない」 | 一次資料 |
-| 差分 | `4d83166d..06bab890` | 6 path | 既存コード |
-| テスト | `npm test` | 1578 scenarios（1562 passed、16 skipped）、失敗0 | テスト出力 |
-| conformance | `npm run conformance:check` | 合格（project rule 21件、orphan 0件、I1〜I12、実在source/export、成功SCN証拠、固定model slug 0件）。1578 scenarios（1562 passed、16 skipped）、失敗0 | テスト出力 |
-| 変異試験 | 6変異を1件ずつ適用 | **6件すべてkill。復元後に35 scenario再合格を確認した** | テスト出力 |
-| commit後external | PR未作成 | ラウンド1時点では未観測 | 外部のimmutable証拠 |
+| 差分 | `4d83166d..f11eb4b1` | 7 path | 既存コード |
+| テスト | `npm test` | 1581 scenarios（1565 passed、16 skipped）、失敗0 | テスト出力 |
+| conformance | `npm run conformance:check` | 合格（project rule 21件、orphan 0件、I1〜I12、実在source/export、成功SCN証拠、固定model slug 0件）。1581 scenarios（1565 passed、16 skipped）、失敗0 | テスト出力 |
+| 変異試験 | 8変異を1件ずつ適用 | **8件すべてkill。復元後に38 scenario再合格を確認した** | テスト出力 |
+| commit後external | PR #1247 | 必須check 3件が`success`。**外部reviewer（CodeRabbit）がMajor 1件を指摘** | 外部のimmutable証拠 |
+| ラウンド2の是正 | `scripts/`1件、`test/`2件、`docs/specs/`3件 | `f11eb4b1fc67b677798fb471808e19e3f52a3acf` | Git観測 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **確認した。** `checkDistributionGateReachability` → `releaseRunSteps` → `jobFaultToleranceByLine` の単方向で、新関数はfileへも外部へも触れない。本artifactへ自身のcommit SHAを書いていない
-- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: `H_impl`は`06bab890959448724e62189b46ad722f2d115e79`。本artifactの1 fileだけを加えて`H_final`にする
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: `H_impl`は`f11eb4b1fc67b677798fb471808e19e3f52a3acf`。本artifactの1 fileだけを加えて`H_final`にする
 - reviewer stable IDがPR author/provider観測済み`H_impl` author stable IDと異なる: reviewerはimplementerと別contextで起動する
 - 既定branch追随を行った場合: **行っていない。** baseは`4d83166d3e6167f9ebf6802f43fba0bccc7322a9`のままである
 
@@ -53,10 +54,11 @@
 | `docs/specs/02_要件/04_仕様・品質管理要件.md` | M | 本repository | spec | REQ-SQ-020へjob-levelの条項を追加し強制SCNを名指しする | pass | REQ-SQ-020、AC-SQ-020 | 追加なし | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | 本repository | spec | REQ-SQ-020行へSCN-INT-DISTGATE-032〜035 | pass | 同上 | 同上 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | 本repository | spec | 本変更の履歴行 | pass | 同上 | 同上 | pass |
+| `docs/reviews/164_課題1236job-level失敗許容レビュー.md` | A | 本repository | evidence | 本レビュー成果物そのもの。**ラウンド2の是正を前進commitで行った結果`比較基点..H_impl`へ入った**ため自己行を置く | pass | REQ-SQ-020 / AC-01〜AC-04 / SCN-INT-DISTGATE-032〜038 | 版管理下に置く。revertで復旧 | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: **確認した。** `git diff --name-only`が返す6件と表の6行が一致する。`scripts/`はbuild対象外のため`dist/`に差分が出ない
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: **確認した。** `git diff --name-only`が返す7件と表の7行が一致する。`scripts/`はbuild対象外のため`dist/`に差分が出ない
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: **確認した。** 検査はproject層の`scripts/`に閉じ、契約は`docs/specs/`へ置いた
-- 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: 是正は行っていない
+- 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: **確認した。** ラウンド2の是正は`scripts/check_conformance.ts`の部分木判定1箇所と、それを固定するtest 3 scenario、対応する仕様3 fileに閉じている
 
 ## 2. 受け入れ条件の確認
 
@@ -67,6 +69,9 @@
 | DISC-001 | **診断文に`needs.`に続く山括弧付きの語を書くと、`issue validate`が未解決placeholderとして拒否する。** 製品の診断文とstaging成果物の双方が同じ表記を使うため両方が通らない | 意味を変えずに山括弧を外した。製品の診断文、test assertion、staging 00〜01 を同時に書き換えた |
 | DISC-002 | **`steps:`部分木を除外しないとstep-levelの`continue-on-error`を二重に数え、job全体を不当に失格させる** | 設計段階で除外規則を入れ、SCN-INT-DISTGATE-035と変異M5で固定した |
 | DISC-003 | **変更履歴の更新文書欄へ`dist/`を書いていたが、`scripts/`はbuild対象外で差分が出ない** | `git status`の実測で気付き、記載から外した。**未実行の事実を書かない** |
+| DISC-004 | **`steps:`の部分木をindent深さだけで切っていたため、indentless sequenceの2件目以降のstep-level属性をjob-levelとして拾っていた。** YAMLは`steps:`と同じ字下げの`-`をその値として認める | 外部reviewerが指摘した。**実測で再現してから是正した。** SCN-INT-DISTGATE-036と変異M7で固定した |
+| DISC-005 | **変異試験で追加の欠落が出た。** 部分木判定を常に真へ倒す変異が生存し、`steps:`より後ろへ置いたjob-level属性を固定するscenarioが無いことが分かった | SCN-INT-DISTGATE-038を足して両方killした。**是正の変異試験が、是正とは別のfixture欠落を見つけた** |
+| DISC-006 | **artifactへ書いた`H_impl`のSHA末尾を捏造していた。** 前進commitの実値を確認せずに書いた | `git rev-parse HEAD`で実値へ置換し、artifact内の全40桁hexが実在commitであることを`git cat-file -e`で確認した |
 
 ### 2.1 受け入れ条件とシナリオ
 
@@ -76,6 +81,9 @@
 | AC-02 | job-levelの静的な`false`を受理する | SCN-INT-DISTGATE-033 | pass |
 | AC-03 | gate呼び出しを持たない別jobの`continue-on-error: true`で失格させない | SCN-INT-DISTGATE-034 | pass |
 | AC-04 | step-levelの静的な`false`をjob-levelの許容と読み違えない | SCN-INT-DISTGATE-035 | pass |
+| AC-01（追加検証） | indentless sequenceのstep-level設定をjob-levelと読み違えない | SCN-INT-DISTGATE-036 | pass |
+| AC-01（追加検証） | indentless sequenceでもjob-levelの失敗許容を検出する | SCN-INT-DISTGATE-037 | pass |
+| AC-01（追加検証） | `steps:`より後ろへ置いたjob-levelの失敗許容も検出する | SCN-INT-DISTGATE-038 | pass |
 
 ### 2.2 開発考慮事項の適用判定（必須）
 
@@ -99,6 +107,8 @@
 
 - **本repositoryでの実走行では確認していない。** 根拠は `actions/toolkit` Issue #1739 の再現報告である。**GitHubの挙動が変われば、この失格条件は不要なまま残る。** ただしその場合も受理集合が狭まるだけで、未検証contentが配布される方向へは働かない。
 - **字面検査であり意味を見ない。** YAMLの構造を解析していないため、行の字下げ幅に依存する。anchorやalias、flow styleのmapping（`validate: {continue-on-error: true}`）は検出しない。**現行の`release.yml`はblock styleだが、この限定は残る。**
+- **字下げ幅への依存が実際に欠陥を生んだ。** indentless sequenceの誤検出は外部reviewerが見つけた。**私の敵対的評価は「字面検査の限定」を一般論として書いていたが、その限定が具体的にどの入力で破れるかを1件も挙げていなかった。** flow styleとanchorについても同じ状態が残っている。
+- **是正の変異試験が別の欠落を見つけた。** 部分木判定を常に真へ倒す変異が生存し、`steps:`より後ろへ置いたjob-level属性のscenarioが無いことが分かった。**当初の6変異はこの境界を触っていなかった。**
 - **`jobs:`が`^jobs:$`の完全一致でしか始まらない。** 前後に空白やコメントが付く形は走査を始めない。既存の`releaseRunSteps`も同じ前提だが、本変更で前提が1つ増えた。
 - **本検査は信頼境界ではない。** `scripts/check_conformance.ts`は保護対象ではなく、同一PRで失格条件ごと削除できる。担保するのは偶発的劣化の回帰検出である。
 - **job-levelの`if:`と`needs:`は依然として対象外である。** #980の根拠が有効だと判断したが、`needs`のresultを`if:`条件で参照する形（`if: needs.validate.result != 'failure'`）は、skipとの組み合わせで同じfail-openを作りうる。**この組み合わせは測っていない。**
@@ -114,10 +124,17 @@
 | F-04 | Low | **実害の観測が無い。** `release.yml`は現在この形を使っていない | **本Issueでは扱わない。** 予防的な失格条件であることを敵対的評価へ記録した |
 | F-05 | Low | 診断文の山括弧が`issue validate`のplaceholder検出と衝突した | 是正済み。DISC-001 |
 | F-06 | Low | 変更履歴へ`dist/`を書いていたが差分が無かった | 是正済み。DISC-003 |
+| CR-01 | Major | **`steps:`のindentless sequenceを部分木として除外していなかった。** 2件目以降のstep-level `continue-on-error` をjob-levelとして拾い、無関係なstepの設定だけで有効なworkflowを拒否していた | 是正済み。実測で再現してから直した。SCN-INT-DISTGATE-036と変異M7で固定した。DISC-004 |
+| F-07 | Low | **`steps:`より後ろへ置いたjob-level属性を固定するscenarioが無かった** | 是正済み。SCN-INT-DISTGATE-038。DISC-005 |
+| F-08 | Low | **artifactの`H_impl`のSHA末尾を捏造した** | 是正済み。実値へ置換し全40桁hexの実在を確認した。DISC-006 |
 
 未解決のCritical/Highは0件である。
 
 ## 6. ラウンド固有の確認
+
+### ラウンド2（外部reviewer指摘の取り込み）
+
+CR-01を対象にした是正である。**実測で再現してから是正した。** `fixedDiff`はラウンド1のHEADからの実差分である。取り込みは`01_開発ワークフロー.md`が定める条件を満たす。是正の変異試験が別の欠落（F-07）を見つけたため、同じラウンドで併せて塞いだ。
 
 ### ラウンド1
 
@@ -127,7 +144,7 @@
 
 実行したcommandの一覧: `npm run lint`、`npm run format:check`、`npm run typecheck`、`npm run trace:check`、`npm run docs:format`、`npm run test:format`、`npm run build`、`npm test`、`npm run conformance:check`、変異試験script
 
-全layerの合計: **1578 scenarios（1562 passed、16 skipped）、失敗0**
+全layerの合計: **1581 scenarios（1565 passed、16 skipped）、失敗0**
 
 失敗またはskipがある層: skipは16 scenarioで、いずれも本変更以前から存在する環境依存scenarioである。**本変更が追加した4 scenarioはいずれもpassである。**
 
@@ -135,7 +152,7 @@
 
 runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は英語keyword・日本語説明である。
 
-対応する成功CI runの参照: **ラウンド1時点ではPR未作成のため未観測。** push後に観測する。
+対応する成功CI runの参照: ラウンド1の`a2c02a7e`に対する必須check 3件がいずれも`success`（品質検証 9分3秒、base validator 9秒、CodeRabbit）。**ラウンド2のHEADに対するrunはpush後に観測する。**
 
 ## 8. 配布物影響
 
@@ -147,6 +164,7 @@ runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は英語keyword�
 | `docs/specs/02_要件/04_仕様・品質管理要件.md` | 入らない | なし |
 | `docs/specs/15_要件追跡/00_追跡表.md` | 入らない | なし |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | 入らない | なし |
+| `docs/reviews/164_課題1236job-level失敗許容レビュー.md` | 入らない | なし |
 
 判断: 配布物を更新した
 
@@ -156,9 +174,9 @@ runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は英語keyword�
 
 | 項目 | 内容 |
 |---|---|
-| 独立reviewの外部証拠 | **ラウンド1時点では未観測。** PR作成後に外部reviewerの指摘とCI checkを観測する |
+| 独立reviewの外部証拠 | あり。PR #1247で外部reviewer（CodeRabbit）がMajor 1件を指摘した。必須check 3件はいずれも`success` |
 | reviewerがPR author・実装commit authorと異なる | はい |
-| 観測したreview commentとapprovalの件数 | 内部の敵対review finding 6件（Medium 2、Low 4）。**外部の一次資料（`actions/toolkit` #1739）で前提を確定してから着手した。** 外部reviewとapprovalはPR作成後に観測する |
+| 観測したreview commentとapprovalの件数 | 内部の敵対review finding 8件（Medium 2、Low 6）と外部reviewerのMajor 1件。**外部の一次資料（`actions/toolkit` #1739）で前提を確定してから着手した。** 外部の指摘は実測で再現してから是正した |
 
 ## 10. 仕様整合性
 
@@ -166,14 +184,14 @@ runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は英語keyword�
 - 更新した仕様: `02_要件/04_仕様・品質管理要件.md`、`15_要件追跡/`
 - ドメイン用語台帳の候補・確定・現在有効な定義が一方向に追跡できる: **台帳への追加・変更・廃止は0件である。** 配布gate到達性、失格条件、自動release計画の意味を変えていない
 - 未定義語、同一コンテキスト内の重複定義、根拠なしの意味変更、表記揺れ、置換先なしの廃止がない: **確認した。** `conformance:check`が合格している
-- 要件・変更・SCN・テストの追跡: REQ-SQ-020 → AC-SQ-020 → SCN-INT-DISTGATE-032〜035。`trace:check`でorphan 0件
+- 要件・変更・SCN・テストの追跡: REQ-SQ-020 → AC-SQ-020 → SCN-INT-DISTGATE-032〜038。`trace:check`でorphan 0件
 - `no-spec-impact`の場合の限定的根拠: 該当しない
 - UI・トークンの判断: UI無し
 
 ## 11. 総合判定と再開地点
 
 - 未解決Critical/High: **0件**
-- Medium/Lowの記録: F-01〜F-04を対象範囲外として記録し、F-05とF-06をresolvedとした
+- Medium/Lowの記録: F-01〜F-04を対象範囲外として記録し、F-05・F-06・F-07・F-08とCR-01をresolvedとした
 - 判定: approved
 - 新しい権限が必要な事項: **なし。** `PROTECTED_FILES`所属fileを1件も変更していない。**受理集合を広げる差分を含まない**
 - 残存リスク: **本repositoryでの実走行によるGitHub挙動の確認をしていない。** 根拠は外部の再現報告1件である。**`needs`のresultを`if:`条件で参照する形とskipの組み合わせを測っていない。** 同型のfail-openを作りうるが対象外境界に属する。**字面検査であり意味を見ない。** flow styleのmappingとYAML anchorを検出しない。**本検査は信頼境界ではない。** `scripts/check_conformance.ts`は保護対象ではなく同一PRで失格条件ごと削除できる。**実害の観測が無い。** 現行の`release.yml`はこの形を使っておらず、本変更は将来の書き方を禁じたものである
