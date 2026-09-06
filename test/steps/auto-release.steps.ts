@@ -1757,3 +1757,105 @@ Then("job一覧はvalidateとtagとgithub_releaseだけである", function () {
     "github_release",
   ]);
 });
+
+Then("job結果の要求を外すかalwaysを足すと拒否される", function () {
+  const workflow = this.autoWorkflowYaml;
+  for (const [from, expected] of [
+    [
+      "needs.validate.result == 'success' &&\n          (needs.validate.outputs.state",
+      "tag jobはneeds.validate.result == 'success'を条件へ含めてください",
+    ],
+    [
+      "needs.tag.result == 'success' &&",
+      "github_release jobはneeds.tag.result == 'success'を条件へ含めてください",
+    ],
+  ] as const) {
+    const removed = workflow.replace(
+      from,
+      from.replace(/needs\.[a-z_]+\.result == 'success' &&\n?\s*/u, ""),
+    );
+    assert.notEqual(removed, workflow, expected);
+    assert.ok(
+      validateReleaseWorkflow(removed).errors.includes(expected),
+      validateReleaseWorkflow(removed).errors.join(" / "),
+    );
+  }
+  /**
+   * **`always()`の混入も拒否する。** 条件を満たしていても`always()`があれば
+   * 先行jobの失敗後に起動する。
+   */
+  const withAlways = workflow.replace(
+    "      ${{ needs.validate.result == 'success' &&",
+    "      ${{ always() && needs.validate.result == 'success' &&",
+  );
+  assert.ok(
+    validateReleaseWorkflow(withAlways).errors.some((error) =>
+      error.includes("always()を外してください"),
+    ),
+    validateReleaseWorkflow(withAlways).errors.join(" / "),
+  );
+});
+
+Then(
+  "acceptanceへifやcontinue-on-errorや失敗握り潰しを足すと拒否される",
+  function () {
+    const workflow = this.autoWorkflowYaml;
+    const stepHeader =
+      "      - name: 実Git依存でのconsumer acceptanceを検証する";
+    for (const [injected, expected] of [
+      [
+        `${stepHeader}\n        if: \${{ false }}`,
+        "consumer acceptance stepへifを付けないでください。skipできる経路になります",
+      ],
+      [
+        `${stepHeader}\n        continue-on-error: true`,
+        "consumer acceptance stepへcontinue-on-error: trueを付けないでください",
+      ],
+    ] as const) {
+      const mutated = workflow.replace(stepHeader, injected);
+      assert.notEqual(mutated, workflow, expected);
+      assert.ok(
+        validateReleaseWorkflow(mutated).errors.includes(expected),
+        validateReleaseWorkflow(mutated).errors.join(" / "),
+      );
+    }
+    const swallowed = workflow.replace(
+      '--tarball="$TARBALL_PATH" --mechanisms=git-dependency',
+      '--tarball="$TARBALL_PATH" --mechanisms=git-dependency || true',
+    );
+    assert.ok(
+      validateReleaseWorkflow(swallowed).errors.some((error) =>
+        error.includes("失敗を握り潰さないでください"),
+      ),
+      validateReleaseWorkflow(swallowed).errors.join(" / "),
+    );
+  },
+);
+
+Then("quoted keyと行継続で書いたnpm公開も拒否される", function () {
+  const workflow = this.autoWorkflowYaml;
+  /**
+   * **正規化してから探す。** 素の文字列一致では、YAMLのquoted keyと
+   * shellの行継続がいずれも検査を通る（Issue #1216 F-04）。
+   */
+  const quotedKey = workflow.replace(
+    "      dry_run:",
+    '      "publish_npm":\n        type: boolean\n        default: false\n      dry_run:',
+  );
+  assert.ok(
+    validateReleaseWorkflow(quotedKey).errors.includes(
+      "publish_npm入力を宣言しないでください。npm公開経路は存在しません",
+    ),
+    validateReleaseWorkflow(quotedKey).errors.join(" / "),
+  );
+  const continued = workflow.replace(
+    "  tag:",
+    "  publish:\n    steps:\n      - name: 公開\n        run: |\n          npm \\\n            publish\n\n  tag:",
+  );
+  assert.ok(
+    validateReleaseWorkflow(continued).errors.includes(
+      "npm公開stepを置かないでください。npm registryへは公開しません",
+    ),
+    validateReleaseWorkflow(continued).errors.join(" / "),
+  );
+});

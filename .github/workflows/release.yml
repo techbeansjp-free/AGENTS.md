@@ -305,8 +305,11 @@ jobs:
   tag:
     name: 検証済みcommitへGit tagを冪等に作成する
     needs: validate
+    # validateのstate出力はconsumer acceptanceより前に書かれる。always()と保存済みstateだけ
+    # では、acceptanceが落ちてvalidateがfailureになってもtagが作られる（Issue #1216 F-01）。
+    # job結果そのものを要求する。
     if: >-
-      ${{ always() &&
+      ${{ needs.validate.result == 'success' &&
           (needs.validate.outputs.state == 'ready' ||
            needs.validate.outputs.state == 'release') }}
     runs-on: ubuntu-latest
@@ -422,7 +425,10 @@ jobs:
   github_release:
     name: GitHub Releaseを冪等に作成する
     needs: [validate, tag]
-    if: ${{ always() && needs.tag.outputs.state == 'succeeded' }}
+    if: >-
+      ${{ needs.validate.result == 'success' &&
+          needs.tag.result == 'success' &&
+          needs.tag.outputs.state == 'succeeded' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

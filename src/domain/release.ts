@@ -811,6 +811,48 @@ export function releaseJobDocumentationMismatch(input: {
   return errors;
 }
 
+/**
+ * consumer acceptanceのstepが実際に実行され、失敗が握り潰されないことを検査する。
+ *
+ * **文字列の存在だけでは足りない。** `continue-on-error: true`、`if:`によるskip、
+ * `|| true`、実commandを別機構へ差し替えてcommentへmarkerを残す、のいずれでも
+ * 素の存在検査は通る（Issue #1216 round 1、F-02）。
+ */
+function validateAcceptanceStep(lines: readonly string[]): string[] {
+  const marker = "--mechanisms=git-dependency";
+  const commandIndex = lines.findIndex(
+    (line) => line.includes(marker) && !/^\s*#/u.test(line),
+  );
+  if (commandIndex < 0)
+    return [
+      "validate jobでconsumer acceptanceのgit-dependencyを実行してください",
+    ];
+  const errors: string[] = [];
+  const commandLine = lines[commandIndex] ?? "";
+  if (/\|\|\s*true|true\s*\|\||;\s*exit\s+0/u.test(commandLine))
+    errors.push(
+      "consumer acceptanceの失敗を握り潰さないでください: acceptance command",
+    );
+  /** stepの先頭（`- name:`）まで遡り、そのstepの属性を読む。 */
+  let stepStart = commandIndex;
+  while (stepStart > 0 && !/^\s*-\s+name:/u.test(lines[stepStart] ?? ""))
+    stepStart -= 1;
+  const stepBody = lines.slice(stepStart, commandIndex + 1).join("\n");
+  if (/^\s+if:/mu.test(stepBody))
+    errors.push(
+      "consumer acceptance stepへifを付けないでください。skipできる経路になります",
+    );
+  if (/^\s+continue-on-error:\s*true/mu.test(stepBody))
+    errors.push(
+      "consumer acceptance stepへcontinue-on-error: trueを付けないでください",
+    );
+  /** **`tag` jobより前にあることを要求する。** 後ろにあるとtag作成を止められない。 */
+  const tagJobIndex = lines.findIndex((line) => /^ {2}tag:\s*$/u.test(line));
+  if (tagJobIndex >= 0 && commandIndex > tagJobIndex)
+    errors.push("consumer acceptanceはtag jobの定義より前に置いてください");
+  return errors;
+}
+
 export function validateReleaseWorkflow(yaml: string): {
   valid: boolean;
   errors: string[];
@@ -1005,27 +1047,53 @@ export function validateReleaseWorkflow(yaml: string): {
   /**
    * **npm公開経路そのものを拒否する。** 条件付きで許すのではなく存在を許さない。
    * 条件付きにすると、条件を満たす入力を与えるだけで方針違反の経路が開く。
+   *
+   * **正規化してから探す。** 行継続、shell quote、YAMLのquoted keyはいずれも
+   * 有効な表現であり、素の文字列一致では迂回できる（Issue #1216 round 1、F-04）。
    */
-  if (lines.some((line) => /\bnpm\s+publish\b/u.test(line)))
+  const flattened = yaml
+    .replaceAll(/\\\r?\n\s*/gu, " ")
+    .replaceAll(/["']/gu, "");
+  if (/\bnpm\s+publish\b/u.test(flattened))
     errors.push(
       "npm公開stepを置かないでください。npm registryへは公開しません",
     );
   else checks.push("npm公開stepが存在しないことを確認した");
-  if (lines.some((line) => /^\s*publish_npm\s*:/u.test(line)))
+  if (/^\s*publish_npm\s*:/mu.test(flattened))
     errors.push(
       "publish_npm入力を宣言しないでください。npm公開経路は存在しません",
     );
   else checks.push("publish_npm入力が存在しないことを確認した");
+  errors.push(...validateAcceptanceStep(lines));
   /**
-   * **consumer acceptanceの`git-dependency`をtag作成より前で実行させる。**
-   * `packed-bin`と`scale-output`は`package:check`から毎回実行されるが、
-   * `git-dependency`だけはどのreleaseでも実行されていなかった（Issue #1216）。
+   * **後続jobは先行jobの結果そのものを要求する。** `always()`と保存済みoutputだけでは、
+   * acceptanceが落ちて`validate`がfailureになってもtagが作られる（Issue #1216 F-01）。
    */
-  if (!/--mechanisms=[^\s]*git-dependency/u.test(yaml))
-    errors.push(
-      "validate jobでconsumer acceptanceのgit-dependencyを実行してください",
+  for (const [job, required] of [
+    ["tag", "needs.validate.result == 'success'"],
+    ["github_release", "needs.tag.result == 'success'"],
+  ] as const) {
+    const start = lines.findIndex((line) =>
+      new RegExp(`^ {2}${job}:\\s*$`, "u").test(line),
     );
-  else checks.push("git-dependency acceptanceの実行を確認した");
+    if (start < 0) continue;
+    /** **comment行を除く。** 判断の理由をcommentで説明した行が条件と誤認される。 */
+    const body = lines
+      .slice(start, start + 12)
+      .filter((line) => !/^\s*#/u.test(line))
+      .join("\n");
+    if (!body.includes(required))
+      errors.push(`${job} jobは${required}を条件へ含めてください`);
+    if (/\balways\(\)/u.test(body))
+      errors.push(
+        `${job} jobの条件からalways()を外してください。先行jobの失敗後も起動します`,
+      );
+  }
+  if (
+    errors.length === 0 ||
+    !errors.some((error) => error.includes("acceptance"))
+  )
+    checks.push("git-dependency acceptanceの実行を確認した");
   if (
     ![...DISTRIBUTION_VERIFICATION_SCRIPTS, "quality"].some((script) =>
       npmRunPattern(script).test(yaml),

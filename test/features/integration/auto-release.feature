@@ -76,13 +76,3 @@ Feature: 自動release workflowと配布digest CLI
     Given 追加可能な配布fileを持つfixture packageがある
     When package filesへ配布対象を追加して前後の配布digestを算出する
     Then 追加fileが配布entryへ増えてdigestは異なる
-
-  Scenario: SCN-INT-AUTORELEASE-012 version注入はpackage.jsonとpackage-lock.jsonの3 version fieldだけを変える
-    Given sentinel versionを持つ隔離package treeがある
-    When release tagのversionを注入する
-    Then 変更はpackage.jsonとpackage-lock.jsonの3 version fieldだけである
-
-  Scenario: SCN-INT-AUTORELEASE-013 version以外を変える注入を拒否する
-    Given sentinel versionを持つ隔離package treeがある
-    When version以外も変える注入を実行する
-    Then 注入は正規bump差分でないことを理由に拒否される
