@@ -10,6 +10,8 @@ type AuditResult = ReturnType<typeof checkFileAudit>;
 class AuditSelectionWorld extends WorkflowWorld {
   auditRoot = "";
   auditResult: AuditResult | undefined = undefined;
+  /** fixtureが期待する`H_impl`。`valid`だけでなく導出結果そのものを照合する。 */
+  expectedImplementation: string | undefined = undefined;
   auditResults: AuditResult[] = [];
   expectedAuditPath = "";
 }
@@ -175,6 +177,7 @@ Given(
     commitArtifact(this, fixture, auditPath);
     /** **記載する`H_impl`は実装commitのまま動かさない。** 安定化の観測点である。 */
     appendAuditOnlyCommits(fixture, auditPath, 2, fixture.implementation);
+    this.expectedImplementation = fixture.implementation;
   },
 );
 
@@ -206,6 +209,7 @@ Given(
       `${auditMarkdown(fixture.base, second, fixture.changedPath)}| \`${auditPath}\` | A | test owner | fixture | 本レビュー成果物 | 依存なし | AC-892 | commitを戻す | pass |\n`,
     );
     commitPaths(fixture.root, "docs: review artifactを追随させる", [auditPath]);
+    this.expectedImplementation = second;
   },
 );
 
@@ -237,6 +241,7 @@ Given("suffixの途中でartifactを2件同時に変える監査選択repository
     `${auditMarkdown(fixture.base, boundary, fixture.changedPath)}| \`${auditPath}\` | A | test owner | fixture | 本レビュー成果物 | 依存なし | AC-892 | commitを戻す | pass |\n| \`${otherPath}\` | A | test owner | fixture | 別の成果物 | 依存なし | AC-892 | commitを戻す | pass |\n`,
   );
   commitPaths(fixture.root, "docs: review artifactの記載を直す", [auditPath]);
+  this.expectedImplementation = boundary;
 });
 
 Given("suffixの途中にmerge commitがある監査選択repository", function () {
@@ -274,6 +279,7 @@ Given("suffixの途中にmerge commitがある監査選択repository", function 
     `${auditMarkdown(fixture.base, merged, fixture.changedPath)}| \`${auditPath}\` | A | test owner | fixture | 本レビュー成果物 | 依存なし | AC-892 | commitを戻す | pass |\n`,
   );
   commitPaths(fixture.root, "docs: review artifactの記載を直す", [auditPath]);
+  this.expectedImplementation = merged;
 });
 
 Given("差分がreview artifact 1件だけの監査選択repository", function () {
@@ -1048,6 +1054,19 @@ Then("監査選択のfile監査は不合格になる", function () {
     false,
     JSON.stringify(this.auditResult),
   );
+});
+
+Then("監査選択のfile監査は合格し導出したH_implが期待どおりである", function () {
+  assert.equal(
+    this.auditResult?.valid,
+    true,
+    `file監査が失敗しました: ${this.auditResult?.errors.join("\n")}`,
+  );
+  /**
+   * **`valid`だけを見ない。** 記載した`H_impl`と導出値の一致は検査が担保するため、
+   * 記載値そのものを照合すれば導出結果を固定できる（外部review指摘）。
+   */
+  assert.equal(this.auditResult?.implementation, this.expectedImplementation);
 });
 
 Then("監査選択のfile監査は合格する", function () {

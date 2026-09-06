@@ -76,19 +76,19 @@ Feature: review artifactの差分選択
   Scenario: SCN-UNIT-AUDITSEL-015 artifactだけを直す前進commitでH_implを動かさない
     Given review artifactだけを直す前進commitを2本積んだ監査選択repository
     When 監査選択repositoryのfile監査を実行する
-    Then 監査選択のfile監査は合格する
+    Then 監査選択のfile監査は合格し導出したH_implが期待どおりである
 
   Scenario: SCN-UNIT-AUDITSEL-016 artifact以外を含むcommitで遡りを止める
     Given review artifactの直後に実装を変える前進commitを積んだ監査選択repository
     When 監査選択repositoryのfile監査を実行する
-    Then 監査選択のfile監査は合格する
+    Then 監査選択のfile監査は合格し導出したH_implが期待どおりである
 
   Scenario: SCN-UNIT-AUDITSEL-017 suffixの途中でartifactを2件同時に変えるcommitで遡りを止める
     Given suffixの途中でartifactを2件同時に変える監査選択repository
     When 監査選択repositoryのfile監査を実行する
-    Then 監査選択のfile監査は合格する
+    Then 監査選択のfile監査は合格し導出したH_implが期待どおりである
 
   Scenario: SCN-UNIT-AUDITSEL-018 suffixの途中のmerge commitで遡りを止める
     Given suffixの途中にmerge commitがある監査選択repository
     When 監査選択repositoryのfile監査を実行する
-    Then 監査選択のfile監査は合格する
+    Then 監査選択のfile監査は合格し導出したH_implが期待どおりである
