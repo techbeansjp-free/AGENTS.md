@@ -29,6 +29,7 @@ interface SurveyWorld extends WorkflowWorld {
   survey: WorktreeSurvey;
   root: string;
   worktree: string;
+  detachedWorktree: string;
   process: SpawnSyncReturns<string>;
   before: string;
   after: string;
@@ -43,6 +44,8 @@ function observation(
     repositoryRoot: "/repo",
     path: "/repo/.worktrees/20260825_120000-883-survey",
     branch: "feature/883-survey",
+    headState: "attached",
+    headSha: "a".repeat(40),
     isPrimary: false,
     mergedIntoDefault: true,
     dirty: false,
@@ -239,8 +242,107 @@ Given(
 Given("cleanup-readyでslugだけが異なるworktree観測がある", function () {
   this.input = [observation({ branch: "feature/883-renamed" })];
 });
+Given("detached HEADでmerge済みかつcleanなworktree観測がある", function () {
+  this.input = [observation({ branch: null, headState: "detached" })];
+});
+Given("detached HEADで未mergeのworktree観測がある", function () {
+  this.input = [
+    observation({
+      branch: null,
+      headState: "detached",
+      mergedIntoDefault: false,
+    }),
+  ];
+});
+Given(
+  "attachedなのにbranchが空の観測とdetachedなのにbranchを持つ観測と正常な観測がある",
+  function () {
+    this.input = [
+      observation({
+        path: "/repo/.worktrees/20260825_120000-883-empty",
+        branch: "",
+      }),
+      observation({
+        path: "/repo/.worktrees/20260825_120000-883-contradict",
+        branch: "feature/883-survey",
+        headState: "detached",
+      }),
+      observation(),
+    ];
+  },
+);
+Given("headStateが不明なworktree観測がある", function () {
+  this.input = [
+    {
+      ...observation({ path: "/repo/.worktrees/20260825_120000-883-unknown" }),
+      headState: "unknown",
+    },
+  ];
+});
 When("worktree走査を純粋判定する", function () {
   this.survey = surveyWorktrees(this.input);
+});
+Then("判定はretainでdetached理由を含みbranchはnullである", function () {
+  const entry = this.survey.entries[0];
+  assert.ok(entry, "entriesへ入っていません");
+  assert.equal(entry.disposition, "retain");
+  assert.equal(entry.branch, null);
+  assert.equal(entry.headState, "detached");
+  assert.ok(
+    entry.reasons.includes(
+      "HEADがdetachedです。現行のfinalizeは対象branchを要求するため、この経路では後片付けできません",
+    ),
+    `detached理由がありません: ${entry.reasons.join(" | ")}`,
+  );
+  assert.deepEqual(this.survey.errors, []);
+  assert.deepEqual(this.survey.cleanupReady, []);
+});
+Then("判定はin-progressでdetached理由を含む", function () {
+  const entry = this.survey.entries[0];
+  assert.ok(entry, "entriesへ入っていません");
+  assert.equal(entry.disposition, "in-progress");
+  assert.equal(entry.branch, null);
+  assert.ok(
+    entry.reasons.includes(
+      "HEADがdetachedです。現行のfinalizeは対象branchを要求するため、この経路では後片付けできません",
+    ),
+  );
+});
+Then(
+  "attachment状態の矛盾はpath付きerrorになり正常な観測だけが分類される",
+  function () {
+    assert.equal(this.survey.entries.length, 1);
+    assert.equal(this.survey.entries[0]?.path, observation().path);
+    assert.ok(
+      this.survey.errors.some(
+        (error: string) =>
+          error.includes("/repo/.worktrees/20260825_120000-883-empty") &&
+          error.includes(
+            "branchはattachedのとき空でない文字列でなければなりません",
+          ),
+      ),
+      `attachedで空branchのerrorがありません: ${this.survey.errors.join(" | ")}`,
+    );
+    assert.ok(
+      this.survey.errors.some(
+        (error: string) =>
+          error.includes("/repo/.worktrees/20260825_120000-883-contradict") &&
+          error.includes("branchはdetachedのときnullでなければなりません"),
+      ),
+      `detachedでbranchありのerrorがありません: ${this.survey.errors.join(" | ")}`,
+    );
+  },
+);
+Then("headState不明はpath付きerrorになりentriesへ入らない", function () {
+  assert.equal(this.survey.entries.length, 0);
+  assert.ok(
+    this.survey.errors.some(
+      (error: string) =>
+        error.includes("/repo/.worktrees/20260825_120000-883-unknown") &&
+        error.includes("headStateはattachedまたはdetachedでなければなりません"),
+    ),
+    `headState不明のerrorがありません: ${this.survey.errors.join(" | ")}`,
+  );
 });
 Then("判定はin-progressである", function () {
   assert.equal(this.survey.entries[0]?.disposition, "in-progress");
@@ -371,6 +473,21 @@ Given("remote branchを削除したmerge済みの走査用worktreeがある", fu
   runGit(this.worktree, ["merge", "--ff-only", "main"]);
 });
 
+Given("detached HEADのmerge済み走査用worktreeがある", function () {
+  createSurveyRepository(this, true);
+  this.detachedWorktree = path.join(
+    this.root,
+    ".worktrees",
+    "20260825_120000-884-detached",
+  );
+  runGit(this.root, [
+    "worktree",
+    "add",
+    "--detach",
+    this.detachedWorktree,
+    "origin/main",
+  ]);
+});
 When("worktree surveyをJSON形式で実行する", function () {
   runCli(this, ["worktree", "survey", `--root=${this.root}`]);
 });
@@ -387,6 +504,36 @@ When("worktree surveyをtext形式で実行する", function () {
 });
 When("doctor CLIを実行する", function () {
   runCli(this, ["doctor", `--root=${this.root}`]);
+});
+Then("detached worktreeはretainでbranchがnullとして報告される", function () {
+  const survey = parsed(this);
+  const entries = survey.entries as Array<Record<string, unknown>>;
+  const target = entries.find((entry) => entry.path === this.detachedWorktree);
+  assert.ok(
+    target,
+    `detached worktreeがentriesにありません: ${JSON.stringify(survey.errors)}`,
+  );
+  assert.equal(target.branch, null);
+  assert.equal(target.headState, "detached");
+  assert.equal(target.disposition, "retain");
+  assert.ok(
+    (target.reasons as string[]).some((reason) =>
+      reason.includes("HEADがdetachedです"),
+    ),
+    `detached理由がありません: ${JSON.stringify(target.reasons)}`,
+  );
+  assert.ok(!(survey.cleanupReady as string[]).includes(this.detachedWorktree));
+  assert.deepEqual(survey.errors, []);
+  assert.equal(this.process.status, 0);
+});
+Then("要約表にdetachedの行がある", function () {
+  assert.equal(this.process.status, 0);
+  const line = this.process.stdout
+    .split("\n")
+    .find((row: string) => row.includes(this.detachedWorktree));
+  assert.ok(line, `detached worktreeの行がありません: ${this.process.stdout}`);
+  assert.ok(line.includes("(detached)"), `(detached)表記がありません: ${line}`);
+  assert.ok(line.startsWith("retain\t"), `retainではありません: ${line}`);
 });
 Then("登録済みworktreeがすべて列挙される", function () {
   assert.equal((parsed(this).entries as unknown[]).length, 2);
