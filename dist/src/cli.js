@@ -1804,6 +1804,52 @@ function registeredWorktrees(root) {
         ];
     });
 }
+/**
+ * surveyのための登録worktree観測。`registeredWorktrees`と違い、detached HEADを
+ * 落とさず`branch: null`として返す。**HEADの状態はporcelainの明示marker
+ * （`branch refs/heads/…`と`detached`）だけを根拠にし、両方ある・両方ない形は
+ * pathを添えて分離する**（Issue #1251）。
+ */
+function registeredWorktreeHeads(root) {
+    const output = git(["worktree", "list", "--porcelain"], root).stdout;
+    const heads = [];
+    const errors = [];
+    for (const entry of output
+        .trim()
+        .split(/\r?\n\r?\n/u)
+        .filter(Boolean)) {
+        const lines = entry.split(/\r?\n/u);
+        const worktreeLine = lines.find((line) => line.startsWith("worktree "));
+        if (!worktreeLine)
+            continue;
+        const worktreePath = path.resolve(worktreeLine.slice("worktree ".length));
+        const headLine = lines.find((line) => line.startsWith("HEAD "));
+        const branchLine = lines.find((line) => line.startsWith("branch refs/heads/"));
+        const detached = lines.includes("detached");
+        const headSha = headLine?.slice("HEAD ".length).trim() ?? "";
+        if (!/^[0-9a-f]{40}$/u.test(headSha)) {
+            errors.push(`${worktreePath}: HEAD SHAを観測できません`);
+            continue;
+        }
+        if (branchLine !== undefined && !detached)
+            heads.push({
+                path: worktreePath,
+                branch: branchLine.slice("branch refs/heads/".length),
+                headState: "attached",
+                headSha,
+            });
+        else if (branchLine === undefined && detached)
+            heads.push({
+                path: worktreePath,
+                branch: null,
+                headState: "detached",
+                headSha,
+            });
+        else
+            errors.push(`${worktreePath}: HEADの付着状態を判定できません（branch行とdetached行の両方がある、または両方ない）`);
+    }
+    return { heads, errors };
+}
 function finalizeIgnoredPathAllowlist(root) {
     const manifest = path.join(root, ".agent-skill-chain", "project-policy.json");
     if (!fs.existsSync(manifest))
@@ -1813,12 +1859,12 @@ function finalizeIgnoredPathAllowlist(root) {
 }
 function collectWorktreeSurvey(root) {
     const repositoryRoot = path.resolve(git(["rev-parse", "--show-toplevel"], root).stdout.trim());
-    const registered = registeredWorktrees(repositoryRoot);
+    const { heads: registered, errors: headErrors } = registeredWorktreeHeads(repositoryRoot);
     const primaryRoot = registered[0]?.path;
     const remoteDefaultRef = `origin/${defaultBranch(repositoryRoot)}`;
     const ignoredPathAllowlist = finalizeIgnoredPathAllowlist(repositoryRoot);
     const observations = [];
-    const errors = [];
+    const errors = [...headErrors];
     const withoutUpstream = new Set();
     for (const [index, worktree] of registered.entries()) {
         try {
@@ -1845,7 +1891,7 @@ function collectWorktreeSurvey(root) {
                 const count = git([
                     "rev-list",
                     "--count",
-                    `${upstream.stdout.trim()}..${worktree.branch}`,
+                    `${upstream.stdout.trim()}..${worktree.branch ?? "HEAD"}`,
                 ], worktree.path).stdout.trim();
                 unpushedCommits = Number(count);
             }
@@ -1857,15 +1903,31 @@ function collectWorktreeSurvey(root) {
             const stashes = git(["stash", "list"], worktree.path)
                 .stdout.split(/\r?\n/u)
                 .filter(Boolean);
-            const merged = git(["branch", "--merged", remoteDefaultRef, "--list", worktree.branch], repositoryRoot, { allowFailure: true });
-            if (merged.status !== 0)
-                throw new Error(`既定branchへのmerge状態を確認できません: ${merged.stderr.trim()}`);
+            /**
+             * detachedはbranch名を持たないため、`git branch --merged`ではなくHEAD SHAの
+             * 既定branchへの到達で同じ事実を観測する（Issue #1251）。
+             */
+            let mergedIntoDefault;
+            if (worktree.branch === null) {
+                const ancestor = git(["merge-base", "--is-ancestor", worktree.headSha, remoteDefaultRef], repositoryRoot, { allowFailure: true });
+                if (ancestor.status !== 0 && ancestor.status !== 1)
+                    throw new Error(`既定branchへのmerge状態を確認できません: ${ancestor.stderr.trim()}`);
+                mergedIntoDefault = ancestor.status === 0;
+            }
+            else {
+                const merged = git(["branch", "--merged", remoteDefaultRef, "--list", worktree.branch], repositoryRoot, { allowFailure: true });
+                if (merged.status !== 0)
+                    throw new Error(`既定branchへのmerge状態を確認できません: ${merged.stderr.trim()}`);
+                mergedIntoDefault = merged.stdout.trim() !== "";
+            }
             observations.push({
                 repositoryRoot,
                 path: worktree.path,
                 branch: worktree.branch,
+                headState: worktree.headState,
+                headSha: worktree.headSha,
                 isPrimary,
-                mergedIntoDefault: merged.stdout.trim() !== "",
+                mergedIntoDefault,
                 dirty: status.some((line) => !line.startsWith("?? ")),
                 untracked: status
                     .filter((line) => line.startsWith("?? "))
@@ -1894,7 +1956,7 @@ function printWorktreeSurveyText(survey) {
     const lines = [
         "worktree後片付け走査",
         "判定\tbranch\tpath\t理由",
-        ...survey.entries.map((entry) => `${entry.disposition}\t${entry.branch}\t${entry.path}\t${entry.reasons.join("、")}`),
+        ...survey.entries.map((entry) => `${entry.disposition}\t${entry.branch ?? "(detached)"}\t${entry.path}\t${entry.reasons.join("、")}`),
         `要約: 後片付け可能 ${survey.cleanupReady.length}件 / 保持 ${survey.retained.length}件 / 進行中 ${survey.inProgress.length}件`,
         ...survey.errors.map((error) => `走査error: ${error}`),
     ];

@@ -66,3 +66,12 @@ Feature: CLIで登録済みworktreeを事後走査する
     When worktree surveyをJSON形式で実行する
     Then 対象worktreeはcleanup-readyとして報告される
 
+  Scenario: SCN-INT-WTSURVEY-014 detached HEADのworktreeを分類から落とさずretainとして報告する
+    Given detached HEADのmerge済み走査用worktreeがある
+    When worktree surveyをJSON形式で実行する
+    Then detached worktreeはretainでbranchがnullとして報告される
+
+  Scenario: SCN-INT-WTSURVEY-015 text形式でdetached HEADのworktreeを(detached)として表示する
+    Given detached HEADのmerge済み走査用worktreeがある
+    When worktree surveyをtext形式で実行する
+    Then 要約表にdetachedの行がある
