@@ -145,6 +145,28 @@ const STATIC_ANALYSIS_REVIEW_MARKERS = [
   "sandboxは認証情報も分離する",
 ] as const;
 
+/**
+ * Step 10 skillが保持すべき、`pr create`後の外部指摘の取り込みに関する記述。
+ *
+ * **skillが規範文書と正反対を述べていた（Issue #1240）。** `01_開発ワークフロー.md`と
+ * `02_品質基準.md`が「取り込む」と定めるのに対し、skillは「取り込まない」と述べ、
+ * その根拠に挙げた「Step 10を再記録できない」は`--post-terminal-intake`の存在により
+ * 実測で成立しなかった。**乖離は起票まで無言で残った。**
+ *
+ * **必須と禁止の両方を検査する。** 必須だけでは禁止文を残したまま必須語を書き足せば
+ * 通り、禁止だけでは段落ごと削れば通る。
+ * **信頼境界ではない。** 本scriptは`PROTECTED_FILES`に属さず同一PRで緩和できる。
+ */
+const POST_PR_INTAKE_MARKERS = [
+  "同じPRへ取り込む",
+  "01_開発ワークフロー.md",
+  "--post-terminal-intake",
+  "budget-exhausted",
+] as const;
+
+/** 規範文書と正反対になる表現。混入を拒否する。 */
+const POST_PR_INTAKE_FORBIDDEN = ["同じPRへ取り込まない"] as const;
+
 const HOST_ADAPTER_SKILL = "asc-step";
 
 const EXPECTED_TEMPLATE_LINKS = new Map<string, string[]>([
@@ -490,6 +512,16 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
       if (!markdown.includes(marker))
         errors.push(
           `${STATIC_ANALYSIS_REVIEW_SKILL}: 実装言語以外の成果物への静的解析の観点「${marker}」がありません`,
+        );
+    for (const marker of POST_PR_INTAKE_MARKERS)
+      if (!markdown.includes(marker))
+        errors.push(
+          `${STATIC_ANALYSIS_REVIEW_SKILL}: pr create後の指摘取り込みの記述「${marker}」がありません`,
+        );
+    for (const forbidden of POST_PR_INTAKE_FORBIDDEN)
+      if (markdown.includes(forbidden))
+        errors.push(
+          `${STATIC_ANALYSIS_REVIEW_SKILL}: 規範文書と反対の記述「${forbidden}」があります`,
         );
   }
   for (const relative of DEVELOPMENT_CONSIDERATION_TEMPLATES) {

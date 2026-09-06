@@ -168,6 +168,10 @@ interface UnitWorld extends WorkflowWorld {
   staticAnalysisContracts: {
     [k: string]: { valid: boolean; errors: string[]; skills: number };
   };
+  postPrIntakeRoots: { [k: string]: string };
+  postPrIntakeContracts: {
+    [k: string]: { valid: boolean; errors: string[]; skills: number };
+  };
   missingDomainGlossaryContractRoot: string;
   missingDomainGlossaryContracts: {
     valid: boolean;
@@ -2503,6 +2507,107 @@ const STATIC_ANALYSIS_MARKERS = [
   "安全な静的展開器ではない",
   "sandboxは認証情報も分離する",
 ] as const;
+
+/**
+ * Step 10 skillが保持すべき、`pr create`後の指摘取り込みに関する記述marker。
+ *
+ * **`scripts/check_skill_templates.ts`の定数を書き写さず、意味の側から独立に列挙する。**
+ * 対象から導出すると、両方が同じ向きにずれたときに変異を検出できない（Issue #1240）。
+ */
+const POST_PR_INTAKE_MARKERS = [
+  "同じPRへ取り込む",
+  "01_開発ワークフロー.md",
+  "--post-terminal-intake",
+  "budget-exhausted",
+] as const;
+
+/** 規範文書と正反対になる表現。 */
+const POST_PR_INTAKE_FORBIDDEN_PHRASE = "同じPRへ取り込まない";
+
+function skillPackageCopy(world: WorkflowWorld, key: string): string {
+  const root = world.temp(`asc-post-pr-intake-${key}-`);
+  fs.mkdirSync(path.join(root, ".agent-skill-chain"), { recursive: true });
+  for (const area of ["skills", "templates", "docs"])
+    fs.cpSync(
+      `.agent-skill-chain/${area}`,
+      path.join(root, `.agent-skill-chain/${area}`),
+      { recursive: true },
+    );
+  return root;
+}
+
+const POST_PR_INTAKE_SKILL_RELATIVE =
+  ".agent-skill-chain/skills/step-10-review/SKILL.md";
+
+Given("pr create後の取り込み記述を欠いたpackageがある", function () {
+  this.postPrIntakeRoots = {};
+  for (const [index, marker] of POST_PR_INTAKE_MARKERS.entries()) {
+    const root = skillPackageCopy(this, `missing-${index}`);
+    const skillFile = path.join(root, POST_PR_INTAKE_SKILL_RELATIVE);
+    const markdown = fs.readFileSync(skillFile, "utf8");
+    assert.ok(
+      markdown.includes(marker),
+      `削る対象のmarkerが見つかりません: ${marker}`,
+    );
+    fs.writeFileSync(skillFile, markdown.split(marker).join("（削除）"));
+    this.postPrIntakeRoots[`missing-${index}`] = root;
+  }
+  /** 規範文書と反対の表現を混入させた変種。 */
+  const forbiddenRoot = skillPackageCopy(this, "forbidden");
+  const forbiddenFile = path.join(forbiddenRoot, POST_PR_INTAKE_SKILL_RELATIVE);
+  const original = fs.readFileSync(forbiddenFile, "utf8");
+  assert.ok(
+    !original.includes(POST_PR_INTAKE_FORBIDDEN_PHRASE),
+    "現行skillへ既に禁止表現があります",
+  );
+  fs.writeFileSync(
+    forbiddenFile,
+    `${original}\n\n**${POST_PR_INTAKE_FORBIDDEN_PHRASE}。**\n`,
+  );
+  this.postPrIntakeRoots.forbidden = forbiddenRoot;
+});
+
+When("Step skillのpr create後の取り込み記述を検証する", function () {
+  this.postPrIntakeContracts = {
+    intact: checkSkillTemplateContracts(process.cwd()),
+  };
+  for (const [key, root] of Object.entries(this.postPrIntakeRoots))
+    this.postPrIntakeContracts[key] = checkSkillTemplateContracts(root);
+});
+
+Then("欠落した取り込み記述を名指しして拒否される", function () {
+  assert.equal(this.postPrIntakeContracts.intact!.valid, true);
+  POST_PR_INTAKE_MARKERS.forEach((marker, index) => {
+    const observed = this.postPrIntakeContracts[`missing-${index}`]!;
+    assert.equal(observed.valid, false);
+    assert.ok(
+      observed.errors.some(
+        (error) =>
+          error.includes("skills/step-10-review/SKILL.md") &&
+          error.includes(`「${marker}」`),
+      ),
+      observed.errors.join(" "),
+    );
+  });
+});
+
+Then("規範文書と反対の記述を名指しして拒否される", function () {
+  const observed = this.postPrIntakeContracts.forbidden!;
+  assert.equal(observed.valid, false);
+  assert.ok(
+    observed.errors.some(
+      (error) =>
+        error.includes("skills/step-10-review/SKILL.md") &&
+        error.includes(`「${POST_PR_INTAKE_FORBIDDEN_PHRASE}」`),
+    ),
+    observed.errors.join(" "),
+  );
+});
+
+Then("正規の配布物は取り込み記述の検査に合格する", function () {
+  assert.equal(this.postPrIntakeContracts.intact!.valid, true);
+  assert.deepEqual(this.postPrIntakeContracts.intact!.errors, []);
+});
 
 Given("Step 10 skillの静的解析markerを欠いたpackageがある", function () {
   this.staticAnalysisMarkerRoots = {};
