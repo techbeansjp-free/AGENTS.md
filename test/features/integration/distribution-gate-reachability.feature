@@ -155,3 +155,23 @@ Feature: 配布準備工程の形とrelease workflowの呼び出し先を一致�
     Given 配布gate到達性検査の準備がある
     When "SCN-INT-DISTGATE-031"の配布gate到達性検査を実行する
     Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-032 gate呼び出しstepが属するjobのcontinue-on-errorを失格条件にする
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-032"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-033 job-levelの静的なfalseを失敗許容と誤判定しない
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-033"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-034 gate呼び出しを持たない別jobのcontinue-on-errorで失格させない
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-034"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
+
+  Scenario: SCN-INT-DISTGATE-035 step-levelの静的なfalseをjob-levelの許容と読み違えない
+    Given 配布gate到達性検査の準備がある
+    When "SCN-INT-DISTGATE-035"の配布gate到達性検査を実行する
+    Then 配布gate到達性検査は期待結果になる
