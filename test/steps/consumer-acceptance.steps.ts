@@ -64,7 +64,18 @@ function observation(
   };
 }
 
+interface EvidenceBindingObservation {
+  readonly declarations: ReadonlyArray<{
+    readonly mechanism: string;
+    readonly productFiles: readonly string[];
+  }>;
+  readonly bridgeDeclaredIn: readonly string[];
+  readonly brokenShared: readonly (readonly string[])[];
+  readonly undefinedPath: readonly string[];
+}
+
 class ConsumerAcceptanceWorld extends WorkflowWorld {
+  bindingObservation: EvidenceBindingObservation | undefined = undefined;
   isolationInput: IsolationInput | undefined = undefined;
   isolationAssessment: IsolationAssessment | undefined = undefined;
   observations: ConsumerAcceptanceObservation[] = [];
@@ -177,13 +188,48 @@ const EVIDENCE_DIRECTORY = path.join(
   "evidence",
   "1024-consumer-acceptance",
 );
+/**
+ * 全機構が依存する束縛対象。**判定の実体とprocess境界はどの機構からも外せない。**
+ *
+ * `check_consumer_acceptance.ts`は3機構すべての判定を実装し、`src/lib/process.ts`の
+ * `run`を`git-dependency`のinstallを含む全機構で使う。
+ */
+const SHARED_EVIDENCE_PRODUCT_FILES = [
+  "scripts/check_consumer_acceptance.ts",
+  "src/lib/process.ts",
+] as const;
+
+/**
+ * `package:check`からconsumer acceptanceへ接続するfile。
+ *
+ * **`checkConsumerAcceptance`を`mechanisms: ["packed-bin", "scale-output"]`で呼ぶ。**
+ * したがって`git-dependency`はこの接続経路に存在しない（Issue #1221）。
+ */
+const PACKAGE_CONTENTS_BRIDGE = "scripts/check_package_contents.ts";
+
+/**
+ * 機構ごとの契約。`productFiles`が**その機構の主張が依存する束縛対象**である。
+ *
+ * **束縛は緩めない。** 宣言した対象の内容が変われば当該証跡は落ちる。機構別にする
+ * 理由は、ある機構の主張が依存しない実装の変更で他機構の証跡まで無効になり、
+ * 1行の変更に対して実npm installを含む3機構の再取得を要求していたためである。
+ */
 const EVIDENCE_CONTRACTS = [
   {
     file: "mechanism-1-git-dependency.md",
     mechanism: "git-dependency",
+    productFiles: SHARED_EVIDENCE_PRODUCT_FILES,
   },
-  { file: "mechanism-2-packed-bin.md", mechanism: "packed-bin" },
-  { file: "mechanism-3-scale-output.md", mechanism: "scale-output" },
+  {
+    file: "mechanism-2-packed-bin.md",
+    mechanism: "packed-bin",
+    productFiles: [...SHARED_EVIDENCE_PRODUCT_FILES, PACKAGE_CONTENTS_BRIDGE],
+  },
+  {
+    file: "mechanism-3-scale-output.md",
+    mechanism: "scale-output",
+    productFiles: [...SHARED_EVIDENCE_PRODUCT_FILES, PACKAGE_CONTENTS_BRIDGE],
+  },
 ] as const;
 const EVIDENCE_FIELDS = [
   "対象製品fileのSHA-256",
@@ -196,13 +242,8 @@ const EVIDENCE_FIELDS = [
   "機構別診断",
   "保存先",
 ] as const;
-const EVIDENCE_PRODUCT_FILES = [
-  "scripts/check_consumer_acceptance.ts",
-  "scripts/check_package_contents.ts",
-  "src/lib/process.ts",
-] as const;
 const SHA256_HEX = /^[a-f0-9]{64}$/u;
-// この3件は証跡が主張する判定・接続・process境界の実体である。
+// 束縛対象は証跡が主張する判定・接続・process境界の実体である。
 // package.jsonはmainの自動releaseでversionが変わるため、振る舞いを変えない
 // release差分から証跡の束縛を分離する。
 
@@ -355,20 +396,26 @@ function validateEvidence(
   const recordedDigests = evidenceProductFileDigests(
     sections.get("対象製品fileのSHA-256"),
   );
-  for (const file of EVIDENCE_PRODUCT_FILES) {
+  /** **突合はこの機構の宣言に対してだけ行う。** 他機構の宣言は参照しない。 */
+  const declared: readonly string[] = contract.productFiles;
+  for (const file of declared) {
     const records = recordedDigests.filter((record) => record.path === file);
     if (records.length === 0) {
-      errors.push(`対象製品fileのSHA-256にpathがありません: ${file}`);
+      errors.push(
+        `対象製品fileのSHA-256にpathがありません: ${contract.mechanism}: ${file}`,
+      );
       continue;
     }
     if (records.length > 1) {
-      errors.push(`対象製品fileのSHA-256にpathが重複しています: ${file}`);
+      errors.push(
+        `対象製品fileのSHA-256にpathが重複しています: ${contract.mechanism}: ${file}`,
+      );
       continue;
     }
     const recorded = records[0]!.sha256;
     if (!SHA256_HEX.test(recorded)) {
       errors.push(
-        `対象製品fileのSHA-256は64桁のhexでなければなりません: ${file}`,
+        `対象製品fileのSHA-256は64桁のhexでなければなりません: ${contract.mechanism}: ${file}`,
       );
       continue;
     }
@@ -376,16 +423,20 @@ function validateEvidence(
     try {
       actual = productFileSha256(file);
     } catch {
-      errors.push(`対象製品fileを読み取れません: ${file}`);
+      errors.push(
+        `対象製品fileを読み取れません: ${contract.mechanism}: ${file}`,
+      );
       continue;
     }
     if (recorded !== actual)
-      errors.push(`対象製品fileのSHA-256が一致しません: ${file}`);
+      errors.push(
+        `対象製品fileのSHA-256が一致しません: ${contract.mechanism}: ${file}`,
+      );
   }
   for (const record of recordedDigests)
-    if (!(EVIDENCE_PRODUCT_FILES as readonly string[]).includes(record.path))
+    if (!declared.includes(record.path))
       errors.push(
-        `対象製品fileのSHA-256に未定義pathがあります: ${record.path}`,
+        `対象製品fileのSHA-256に未定義pathがあります: ${contract.mechanism}: ${record.path}`,
       );
 
   const expectedSavePath = path
@@ -1401,15 +1452,15 @@ Then(
     );
     assert.match(
       this.invalidEvidenceErrors[0]?.join(" ") ?? "",
-      /対象製品fileのSHA-256が一致しません: scripts\/check_consumer_acceptance\.ts/u,
+      /対象製品fileのSHA-256が一致しません: git-dependency: scripts\/check_consumer_acceptance\.ts/u,
     );
     assert.match(
       this.invalidEvidenceErrors[1]?.join(" ") ?? "",
-      /64桁のhexでなければなりません: scripts\/check_consumer_acceptance\.ts/u,
+      /64桁のhexでなければなりません: git-dependency: scripts\/check_consumer_acceptance\.ts/u,
     );
     assert.match(
       this.invalidEvidenceErrors[2]?.join(" ") ?? "",
-      /pathがありません: scripts\/check_consumer_acceptance\.ts/u,
+      /pathがありません: git-dependency: scripts\/check_consumer_acceptance\.ts/u,
     );
     assert.match(this.invalidEvidenceErrors[3]?.join(" ") ?? "", /機構識別子/u);
     assert.match(this.invalidEvidenceErrors[4]?.join(" ") ?? "", /保存先/u);
@@ -1417,6 +1468,153 @@ Then(
     assert.match(this.invalidEvidenceErrors[6]?.join(" ") ?? "", /注入後/u);
   },
 );
+
+Given("機構別束縛の検査準備がある", function () {
+  for (const { file } of EVIDENCE_CONTRACTS)
+    assert.equal(
+      fs.statSync(path.join(EVIDENCE_DIRECTORY, file)).isFile(),
+      true,
+      `${file}が通常fileではありません`,
+    );
+});
+
+/** 証跡本文の記録hashを1件だけ壊した複製を返す。 */
+function evidenceWithBrokenDigest(file: string, target: string): string {
+  const markdown = fs.readFileSync(path.join(EVIDENCE_DIRECTORY, file), "utf8");
+  const broken = markdown.replace(
+    new RegExp(
+      `(\\|\\s*\`${target.replaceAll("/", "\\/").replaceAll(".", "\\.")}\`\\s*\\|\\s*\`)[a-f0-9]{64}`,
+      "u",
+    ),
+    `$1${"0".repeat(64)}`,
+  );
+  assert.notEqual(broken, markdown, `記録hashを壊せませんでした: ${target}`);
+  return broken;
+}
+
+When("機構別の束縛宣言と縮小の妥当性を検査する", function () {
+  const declarations = EVIDENCE_CONTRACTS.map((contract) => ({
+    mechanism: contract.mechanism,
+    productFiles: [...contract.productFiles],
+  }));
+  /**
+   * 宣言外fileの内容変更を模した入力。**証跡側にそのpathの行が無い**状態が
+   * 「無関係な変更で落ちない」ことの観測になる。
+   */
+  const bridgeDeclaredIn = declarations
+    .filter((entry) => entry.productFiles.includes(PACKAGE_CONTENTS_BRIDGE))
+    .map((entry) => entry.mechanism);
+  const brokenShared = EVIDENCE_CONTRACTS.map((contract) =>
+    validateEvidence(
+      evidenceWithBrokenDigest(
+        contract.file,
+        "scripts/check_consumer_acceptance.ts",
+      ),
+      contract,
+    ),
+  );
+  /**
+   * **宣言外のpathを記録した証跡**。機構別化で宣言が狭くなるほど、
+   * 「他機構の宣言に在るpath」を書けてしまう余地が増える。拒否を観測する。
+   */
+  const gitDependencyContract = EVIDENCE_CONTRACTS[0];
+  const withUndefinedPath = fs
+    .readFileSync(
+      path.join(EVIDENCE_DIRECTORY, gitDependencyContract.file),
+      "utf8",
+    )
+    .replace(
+      "## artifact_sha256",
+      `| \`${PACKAGE_CONTENTS_BRIDGE}\` | \`${"0".repeat(64)}\` |\n\n## artifact_sha256`,
+    );
+  this.bindingObservation = {
+    declarations,
+    bridgeDeclaredIn,
+    brokenShared,
+    undefinedPath: validateEvidence(withUndefinedPath, gitDependencyContract),
+  };
+});
+
+Then("接続経路に存在しない機構はbridgeを宣言しない", function () {
+  const observed = this.bindingObservation;
+  assert.ok(observed, "束縛観測がありません");
+  assert.deepEqual(observed.bridgeDeclaredIn, ["packed-bin", "scale-output"]);
+  const gitDependency = observed.declarations.find(
+    (entry) => entry.mechanism === "git-dependency",
+  );
+  assert.equal(
+    gitDependency?.productFiles.includes(PACKAGE_CONTENTS_BRIDGE),
+    false,
+    "接続経路に存在しない機構がbridgeを宣言しています",
+  );
+});
+
+Then("全機構の宣言が判定の実体とprocess境界を含む", function () {
+  const observed = this.bindingObservation;
+  assert.ok(observed, "束縛観測がありません");
+  assert.equal(observed.declarations.length, 3);
+  const distinct = new Set(
+    observed.declarations.map((entry) =>
+      [...entry.productFiles].sort().join(","),
+    ),
+  );
+  assert.ok(distinct.size > 1, "3機構の宣言が同一です。機構別になっていません");
+  for (const entry of observed.declarations) {
+    assert.ok(
+      entry.productFiles.includes("scripts/check_consumer_acceptance.ts"),
+      `判定の実体が宣言から欠けています: ${entry.mechanism}`,
+    );
+    assert.ok(
+      entry.productFiles.includes("src/lib/process.ts"),
+      `process境界が宣言から欠けています: ${entry.mechanism}`,
+    );
+  }
+});
+
+Then("宣言した束縛対象の変更は全機構で不合格になる", function () {
+  const observed = this.bindingObservation;
+  assert.ok(observed, "束縛観測がありません");
+  assert.equal(observed.brokenShared.length, 3);
+  for (const [index, errors] of observed.brokenShared.entries())
+    assert.ok(
+      errors.some((entry) =>
+        entry.startsWith(
+          `対象製品fileのSHA-256が一致しません: ${EVIDENCE_CONTRACTS[index]!.mechanism}: scripts/check_consumer_acceptance.ts`,
+        ),
+      ),
+      `宣言した束縛対象の変更を検出していません: ${JSON.stringify(errors)}`,
+    );
+});
+
+Then("診断は機構名とpathの両方を名指しする", function () {
+  const observed = this.bindingObservation;
+  assert.ok(observed, "束縛観測がありません");
+  for (const [index, errors] of observed.brokenShared.entries()) {
+    const mechanism = EVIDENCE_CONTRACTS[index]!.mechanism;
+    const joined = errors.join(" ");
+    assert.ok(
+      joined.includes(`: ${mechanism}: `),
+      `診断が機構名を名指ししていません: ${joined}`,
+    );
+    assert.ok(
+      joined.includes("scripts/check_consumer_acceptance.ts"),
+      `診断がpathを名指ししていません: ${joined}`,
+    );
+  }
+});
+
+Then("宣言外pathを記録した証跡は機構名つきで拒否される", function () {
+  const observed = this.bindingObservation;
+  assert.ok(observed, "束縛観測がありません");
+  assert.ok(
+    observed.undefinedPath.some(
+      (entry) =>
+        entry ===
+        `対象製品fileのSHA-256に未定義pathがあります: git-dependency: ${PACKAGE_CONTENTS_BRIDGE}`,
+    ),
+    `宣言外pathを拒否していません: ${JSON.stringify(observed.undefinedPath)}`,
+  );
+});
 
 Given("公開binを持つ最小fixture tarballがある", function () {
   this.fixtureTarball = createMinimalFixtureTarball(this);
