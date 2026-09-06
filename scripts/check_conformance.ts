@@ -937,6 +937,15 @@ interface ReleaseRunStep {
   /** `if: false`リテラルで無効化されていない。 */
   readonly enabled: boolean;
   /**
+   * 属するjobが`continue-on-error`で失敗を許容する。
+   *
+   * job-levelの`continue-on-error`はskipではなく**失敗の握り潰し**である。gateは実行され、
+   * 失敗し、そのうえで後続jobの`needsのresult`が`success`になる。GitHubの一次事例で
+   * 確認した（`actions/toolkit` #1739）。**gateが落ちても配布が進む**ため、step-levelと
+   * 同じ規則で失格させる（Issue #1236）。
+   */
+  readonly jobFaultTolerant: boolean;
+  /**
    * `if:`を持つ。**リテラルか実行時式かを問わない。**
    *
    * 式の真偽は判定しない。GitHubのcontextをモデル化せずにIssue #980のIを閉じるため、
@@ -947,13 +956,80 @@ interface ReleaseRunStep {
   readonly faultTolerant: boolean;
 }
 
+/**
+ * 各行について、その行が属するjobが`continue-on-error`で失敗を許容するかを返す。
+ *
+ * **`steps:`部分木の内側は見ない。** step-levelの`continue-on-error`は既に
+ * `STEP_FAULT_TOLERANCE`が拾っており、ここで重ねて拾うとjob全体を失格させてしまう。
+ *
+ * job-levelの`if:`と`needs:`は対象にしない。job全体のskipは後続jobの
+ * `needsのresult == 'success'`を満たさず配布を止めるため、gateだけが飛ぶ状態に
+ * ならない（Issue #980）。**握り潰しはskipではないのでこの根拠が及ばない**（Issue #1236）。
+ */
+function jobFaultToleranceByLine(lines: readonly string[]): boolean[] {
+  const tolerance = new Array<boolean>(lines.length).fill(false);
+  const jobsIndex = lines.findIndex((line) => /^jobs:[ \t]*$/u.test(line));
+  if (jobsIndex < 0) return tolerance;
+  const indentOf = (line: string): number =>
+    line.length - line.trimStart().length;
+  let jobIndent = -1;
+  let start = -1;
+  let tolerant = false;
+  let stepsIndent = -1;
+  const commit = (end: number): void => {
+    if (start < 0 || !tolerant) return;
+    for (let index = start; index < end; index += 1) tolerance[index] = true;
+  };
+  for (let index = jobsIndex + 1; index <= lines.length; index += 1) {
+    const line = lines[index];
+    if (line === undefined || (line.trim() !== "" && indentOf(line) === 0)) {
+      commit(index);
+      break;
+    }
+    if (line.trim() === "") continue;
+    const width = indentOf(line);
+    const header = /^\s*(?:["'][^"']+["']|[A-Za-z0-9_.-]+):[ \t]*$/u.test(line);
+    if (header && (jobIndent < 0 || width === jobIndent)) {
+      commit(index);
+      jobIndent = width;
+      start = index;
+      tolerant = false;
+      stepsIndent = -1;
+      continue;
+    }
+    if (start < 0) continue;
+    /**
+     * **indentless sequenceも部分木に含める。** YAMLは`steps:`と同じ字下げの`-`を
+     * その値として認める。深さだけで切ると、2件目以降のstep-levelの属性を
+     * job-levelとして拾い、**無関係なstepの設定だけで有効なworkflowを拒否する**
+     * （外部reviewerの指摘、SCN-INT-DISTGATE-036）。
+     */
+    const sequenceMarker = /^\s*-\s/u.test(line);
+    if (
+      stepsIndent >= 0 &&
+      (width > stepsIndent || (width === stepsIndent && sequenceMarker))
+    )
+      continue;
+    if (stepsIndent >= 0 && width <= stepsIndent) stepsIndent = -1;
+    if (/^\s*["']?steps["']?[ \t]*:/u.test(line)) {
+      stepsIndent = width;
+      continue;
+    }
+    const found = STEP_FAULT_TOLERANCE.exec(line);
+    if (found && !isStaticFalse(found[1]!)) tolerant = true;
+  }
+  return tolerance;
+}
+
 function releaseRunSteps(yaml: string): ReleaseRunStep[] {
   const lines = yaml
     .split("\n")
     .map((line) => line.replace(/(^|\s)#.*$/u, "$1"));
+  const jobTolerance = jobFaultToleranceByLine(lines);
   const steps: ReleaseRunStep[] = [];
   let current: string[] = [];
   let indent = -1;
+  let blockStart = -1;
   const flush = (): void => {
     if (current.length === 0) return;
     const text = current.join("\n");
@@ -980,14 +1056,21 @@ function releaseRunSteps(yaml: string): ReleaseRunStep[] {
     /** **静的な`false`だけを安全と認める。** 実行時式は`if:`と同じ理由で判定できない。 */
     const faultTolerant = tolerance !== null && !isStaticFalse(tolerance[1]!);
     if (command !== "")
-      steps.push({ command, enabled: !disabled, conditional, faultTolerant });
+      steps.push({
+        command,
+        enabled: !disabled,
+        conditional,
+        faultTolerant,
+        jobFaultTolerant: blockStart >= 0 && jobTolerance[blockStart] === true,
+      });
     current = [];
   };
-  for (const line of lines) {
+  for (const [position, line] of lines.entries()) {
     const start = /^(\s*)-\s/u.exec(line);
     if (start && (indent < 0 || start[1]!.length <= indent)) {
       flush();
       indent = start[1]!.length;
+      blockStart = position;
     } else if (indent >= 0 && line.trim() !== "") {
       /**
        * **step blockはstep markerより深いindentの行だけで続く。** 打ち切らないと、jobの
@@ -1076,13 +1159,18 @@ export function checkDistributionGateReachability(root: string): string[] {
   /**
    * **gateの実行を要求する側は、無条件のstepだけを数える。**
    *
-   * `if:`付きのstepはskipされてもjobは成功し、後続jobの`needs.<job>.result == 'success'`を
+   * `if:`付きのstepはskipされてもjobは成功し、後続jobの`needsのresult == 'success'`を
    * 満たす。**gateだけが飛んだまま配布へ到達する。** `continue-on-error`も失敗が破棄される
    * ため同じ結果になる。どちらも実行時の値を評価せず、属性の存在で判定する（Issue #980）。
    *
    * job-levelの条件と`needs:`は数えない。job全体のskipは後続jobの条件へ伝播して配布を
    * 止めるため、gateだけが飛ぶ状態にならない。支配関係は`src/domain/release.ts`の
    * `validateReleaseWorkflow`が要求する。
+   *
+   * **job-levelの`continue-on-error`だけは数える。** これはskipではなく失敗の握り潰しで
+   * あり、上のskipの根拠が及ばない。gateは実行されて失敗し、そのうえで後続jobの
+   * `needsのresult`が`success`になる（`actions/toolkit` #1739の再現）。**gateが落ちた
+   * まま配布へ到達する**ため失格させる（Issue #1236）。
    */
   const unconditionalIndex = (kind: "prepack" | "verify"): number =>
     steps.findIndex(
@@ -1090,6 +1178,7 @@ export function checkDistributionGateReachability(root: string): string[] {
         step.enabled &&
         !step.conditional &&
         !step.faultTolerant &&
+        !step.jobFaultTolerant &&
         commandMatches(kind, step),
     );
   const publishIndex = steps.findIndex(
@@ -1113,6 +1202,10 @@ export function checkDistributionGateReachability(root: string): string[] {
     if (disqualified.some((step) => step.faultTolerant))
       causes.push(
         `npm run ${required}を呼ぶstepがcontinue-on-errorで失敗を許容しています。失敗が破棄されるためgateの実行と認められません。当該stepからcontinue-on-errorを外してください`,
+      );
+    if (disqualified.some((step) => step.jobFaultTolerant))
+      causes.push(
+        `npm run ${required}を呼ぶstepが属するjobにcontinue-on-errorがあります。gateは実行されて失敗しますが、後続jobのneedsのresultがsuccessになるため配布が止まりません。当該jobからcontinue-on-errorを外してください`,
       );
     /**
      * **原因を1件も特定できなければ汎用の拒否へ倒す。**「呼び出しは在るが数えられない」を
