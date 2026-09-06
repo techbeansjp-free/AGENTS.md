@@ -577,6 +577,55 @@ function releaseBumpParent(
   return withinLegacyBumpWindow(root, commit, cutoff) ? parent : undefined;
 }
 
+/**
+ * `H_final`で終わる、review artifactだけを変える第1親suffixを遡って`H_impl`を返す。
+ *
+ * **`H_impl`を`HEAD^`に固定すると、artifactの帳簿合わせのたびに`H_impl`が動く。**
+ * 記載した`H_impl`と個別監査表を追随させる必要が生じ、その追随commitがまた
+ * `H_impl`を動かす。**有限レビュー予算がreviewの実質でなく帳簿合わせで消える**
+ * （Issue #1074）。2026-09-06の#980では予算3のうち2ラウンドがこれに費やされた。
+ *
+ * **suffixの各commitは、artifact 1 fileだけを変えるものに限る。** 他pathを含む
+ * commit、merge commit、rename、複数artifactの同時変更で遡りを止める。
+ * **止められない場合は`HEAD^`と同じ結果へ戻る**ため、判定が緩む方向へは動かない。
+ */
+function withoutTrailingAuditCommits(root: string, head: string): string {
+  /**
+   * **起点は従来どおり`HEAD^`である。** ここを`HEAD`にすると、review headが
+   * artifact以外を含む場合に`H_impl..current`が空になり、
+   * 「artifact以外のfileが含まれています」を検出できなくなる。
+   */
+  const [start = head] = commitParents(root, head);
+  let cursor = start;
+  const visited = new Set<string>();
+  while (!visited.has(cursor)) {
+    visited.add(cursor);
+    const parents = commitParents(root, cursor);
+    /** **merge commitで止める。** 親が1個でなければ第1親suffixとして扱えない。 */
+    if (parents.length !== 1) break;
+    const parent = parents[0]!;
+    const changed = changedPathsWithoutRenames(root, parent, cursor);
+    /**
+     * **artifact 1 fileだけを変えるcommitだけを遡る。** 0件や2件以上、
+     * `docs/reviews/`配下でないpathを含む場合は実装commitであり境界になる。
+     */
+    if (changed.length !== 1 || !isAuditPath(changed[0]!)) break;
+    cursor = parent;
+  }
+  /**
+   * **遡った結果が緩む入力では`HEAD^`へ戻す。**
+   *
+   * 遡りは`H_impl..current`を広げる。広げた結果がreview artifact 1件でなくなるなら、
+   * 遡らなかった場合に検出できた違反を見逃す。実測で、cutoffより後のrelease bump
+   * commitが`finalAuditPaths`のrelease遷移として吸収され、**本来落ちる入力が
+   * 通るようになった**（`SCN-UNIT-AUDITBUMP-005`）。
+   * **判定が緩む方向へは動かさない**（Issue #1074）。
+   */
+  const widened = new Set(changedPathsWithoutRenames(root, cursor, head));
+  if (widened.size !== 1 || !isAuditPath([...widened][0]!)) return start;
+  return cursor;
+}
+
 function withoutFinalReleaseBumps(
   root: string,
   current: string,
@@ -643,7 +692,7 @@ function inferReviewBoundary(
     boundaryParents.length > 1
       ? withoutFinalReleaseBumps(root, boundaryParents.at(-1)!, cutoff)
       : boundary;
-  const [implementation = reviewHead] = commitParents(root, reviewHead);
+  const implementation = withoutTrailingAuditCommits(root, reviewHead);
   /**
    * `H_impl`と同じく、比較基点もcommit構造から独立に導出する（Issue #966）。
    *
