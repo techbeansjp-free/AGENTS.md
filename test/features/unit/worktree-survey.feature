@@ -111,3 +111,22 @@ Feature: 登録済みworktreeを安全側に分類する
     When worktree削除の安全性を判定する
     Then 拒否理由にupstream由来が含まれる
 
+  Scenario: SCN-UNIT-WTSURVEY-023 detached HEADのmerge済みworktreeをentriesへ入れretainとしdetached理由を含める
+    Given detached HEADでmerge済みかつcleanなworktree観測がある
+    When worktree走査を純粋判定する
+    Then 判定はretainでdetached理由を含みbranchはnullである
+
+  Scenario: SCN-UNIT-WTSURVEY-024 detached HEADの未mergeworktreeをin-progressとしdetached理由を含める
+    Given detached HEADで未mergeのworktree観測がある
+    When worktree走査を純粋判定する
+    Then 判定はin-progressでdetached理由を含む
+
+  Scenario: SCN-UNIT-WTSURVEY-025 attachment状態の矛盾をpath付きerrorへ分離し正常な観測の判定を継続する
+    Given attachedなのにbranchが空の観測とdetachedなのにbranchを持つ観測と正常な観測がある
+    When worktree走査を純粋判定する
+    Then attachment状態の矛盾はpath付きerrorになり正常な観測だけが分類される
+
+  Scenario: SCN-UNIT-WTSURVEY-026 headStateが不明な観測をpath付きerrorへ分離する
+    Given headStateが不明なworktree観測がある
+    When worktree走査を純粋判定する
+    Then headState不明はpath付きerrorになりentriesへ入らない

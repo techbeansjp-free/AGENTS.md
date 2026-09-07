@@ -15,6 +15,7 @@ interface IssueSpecWorld extends WorkflowWorld {
   issue: ReturnType<typeof createIssueStaging>;
   issueValidation: ReturnType<typeof validateIssue>;
   mtime: number;
+  projectKind?: "ui" | "api";
   result: ReturnType<typeof bootstrapProject>;
   root: string;
   sentinel: string;
@@ -577,5 +578,174 @@ Then(
         new RegExp(`mermaid[\\s\\S]*${diagram}`),
         file,
       );
+  },
+);
+
+/**
+ * **projectKindを保持する。** 対応契約の検査は画面categoryの有無で分岐するため、
+ * 生成物の実在から種別を推測すると、画面templateの生成が止まった回帰を
+ * 「画面なしのproject」として黙って通してしまう。
+ */
+const PROJECT_KIND_BY_LABEL: ReadonlyMap<string, "ui" | "api"> = new Map([
+  ["UI", "ui"],
+  ["API", "api"],
+]);
+
+When("{string} project bootstrapをapplyする", function (label: string) {
+  const projectKind = PROJECT_KIND_BY_LABEL.get(label);
+  assert.notEqual(projectKind, undefined, `未知のproject種別です: ${label}`);
+  this.projectKind = projectKind;
+  this.result = bootstrapProject(this.root, {
+    apply: true,
+    newProject: true,
+    projectKind: projectKind as "ui" | "api",
+  });
+});
+
+/**
+ * 業務単位の設計契約の記入欄が、bootstrapした生成物へ届いていることを検査する。
+ *
+ * **欄名だけでなく記入内容の字面まで名指しする。** `- 事後条件:`のように接頭辞だけを
+ * 見ると、値を空へ置き換えた変異が生存する。**参照先を含む1行を丸ごと期待値にする。**
+ * ユースケース詳細は9欄すべての実在を要求し、1欄でも落ちたら失敗させる。
+ * **画面の契約は種別で分岐させ、UIでだけ必須にする。** 生成物に無ければ非適用と
+ * 読み替える書き方をしない。
+ */
+const USECASE_DETAIL_FIELDS = [
+  "- UC-001 目的: {この業務で達成する結果}",
+  "- 主体・権限: {主体と必要な権限}",
+  "- 起動: {画面操作 / API / CLI / イベント / 時刻}",
+  "- 前提条件: {成立していなければ開始しない条件}",
+  "- 事後条件: {業務として成立した結果。受付や画面操作の成功と混同しない}",
+  "- 主フロー: {手順}",
+  "- 代替フロー: {条件と手順}",
+  "- 失敗フロー: {条件、保持される状態、利用者の再開手段}",
+  "- 依存ユースケース・完了観測: {同期処理か、非同期で依存するユースケースと完了を観測する方法。該当しない場合は理由}",
+  "- 業務規則・受け入れ例: {BR-...、SCN-...}",
+] as const;
+
+/** 非機能要件一覧templateが持つ品質特性の行数。行が消えたことも検出する。 */
+const NFR_REQUIREMENT_ROWS = 12;
+
+/** 要件ID・品質特性・要求・測定条件・合格基準・検証方法・参照・適用の8列。 */
+const NFR_COLUMNS = 8;
+
+/** 参照列は0起点で6列目。列の位置が動いたことも検出する。 */
+const NFR_REFERENCE_COLUMN = 6;
+
+const NFR_REFERENCE_CELL = "{実現する設計の正本と、劣化時の監視・復旧手順}";
+
+const RELATED_USECASE_FIELD =
+  "- 関連ユースケース: {UC ID。対応の正本は`15_要件追跡/00_追跡表.md`}";
+
+Then(
+  "生成した仕様はユースケースと機能・画面・ジョブの対応契約を保持する",
+  function () {
+    const specs = path.join(this.root, "docs", "specs");
+    const flow = "01_システム概要/01_業務・利用者フロー.md";
+    const trace = "15_要件追跡/00_追跡表.md";
+    const expectations: [string, string][] = [
+      [flow, "## ユースケース詳細"],
+      [
+        flow,
+        "**対応関係の正本は`15_要件追跡/00_追跡表.md`とし、ここへ複製しない。** 今回届ける単位のユースケースだけを詳細化する。",
+      ],
+      ...USECASE_DETAIL_FIELDS.map((field): [string, string] => [flow, field]),
+      [trace, "## ユースケースと機能・画面・ジョブの対応"],
+      [
+        trace,
+        "| UC ID | FN ID | SCR ID | JOB ID | 受け入れ条件・SCN | 詳細参照 |",
+      ],
+      [
+        trace,
+        "| UC-001 | FN-001 | SCR-001 / 対象外: {理由} | JOB-001 / 対象外: {理由} | AC-... / SCN-... | {パス} |",
+      ],
+      [trace, "ユースケースと機能・画面・ジョブの直積にしない"],
+      [trace, "画面やジョブを持たない構成は空欄にせず、`対象外`と理由を書く"],
+      [
+        trace,
+        "**対応の条件と理由をこの表以外へ書かない。** 各詳細が持つのは関連ユースケース欄からこの表への参照であり、対応の複製ではない。",
+      ],
+      ["04_機能/01_個別機能テンプレート.md", RELATED_USECASE_FIELD],
+      ["08_バッチ・ジョブ/01_個別ジョブテンプレート.md", RELATED_USECASE_FIELD],
+      [
+        "03_アーキテクチャ/00_全体構成.md",
+        "業務規則と認可の最終判断はサーバーとドメインが持つ。フロントエンドは表示、操作状態、入力支援に限る。",
+      ],
+      [
+        "03_アーキテクチャ/00_全体構成.md",
+        "- 技術スタック・基盤の選定根拠: {必要な能力、制約、不採用案、版管理方針。製品名だけを結論にしない}",
+      ],
+      [
+        "06_外部インターフェース/01_共通契約.md",
+        "業務の意味、状態遷移、権限はドメインが判定する。",
+      ],
+      [
+        "06_外部インターフェース/01_共通契約.md",
+        "型が通ることを業務資格の充足と読み替えない",
+      ],
+      [
+        "14_開発・品質/01_コーディング標準.md",
+        "事前条件、事後条件、不変条件を宣言し、境界検証済みの型、生成時の制約、副作用前の検証のいずれで保証するかを割り当てる",
+      ],
+      [
+        "11_非機能/00_非機能要件一覧.md",
+        "| 要件ID | 品質特性 | 要求 | 測定条件 | 合格基準 | 検証方法 | 設計・監視復旧の参照 | 適用 |",
+      ],
+    ];
+    if (this.projectKind === "ui")
+      expectations.push(
+        ["05_画面/02_個別画面テンプレート.md", RELATED_USECASE_FIELD],
+        [
+          "05_画面/02_個別画面テンプレート.md",
+          "- 業務完了の判定と表示: {どの層が業務完了を判定するか。画面が何を根拠に完了と表示するか。非同期確定なら未確定中の表示}",
+        ],
+      );
+    for (const [file, contract] of expectations) {
+      const target = path.join(specs, file);
+      assert.equal(fs.existsSync(target), true, `生成物にありません: ${file}`);
+      assert.equal(
+        fs.readFileSync(target, "utf8").includes(contract),
+        true,
+        `${file}に記入契約がありません: ${contract}`,
+      );
+    }
+    /**
+     * **非機能要件は全行が参照欄を持つ。** `includes`だけでは、1行の欄を空へ
+     * 置き換えても他の行が一致して通る。行ごとに要求し、件数ではなく
+     * 「参照欄を欠く行が0件であること」を判定する。
+     *
+     * **行の抽出を字面の接頭辞に依存させず、cell境界で分解する。**
+     * `startsWith("| REQ-")`は、行頭の空白1文字や`|`直後の空白の有無で
+     * 抽出対象から外れる。**外れた行は「欠く行が0件」も件数一致も素通りする。**
+     * cellへ分解して、列数と参照列の位置まで判定する。
+     */
+    const nfr = "11_非機能/00_非機能要件一覧.md";
+    const nfrRows = fs
+      .readFileSync(path.join(specs, nfr), "utf8")
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("|") && line.endsWith("|"))
+      .map((line) =>
+        line
+          .slice(1, -1)
+          .split("|")
+          .map((cell) => cell.trim()),
+      )
+      .filter((cells) => (cells[0] ?? "").startsWith("REQ-{domain}-"));
+    assert.equal(
+      nfrRows.length,
+      NFR_REQUIREMENT_ROWS,
+      `${nfr}の要件行が${NFR_REQUIREMENT_ROWS}行ではありません: ${nfrRows.length}`,
+    );
+    assert.deepEqual(
+      nfrRows.filter(
+        (cells) =>
+          cells.length !== NFR_COLUMNS ||
+          cells[NFR_REFERENCE_COLUMN] !== NFR_REFERENCE_CELL,
+      ),
+      [],
+      `${nfr}に設計・監視復旧の参照欄を欠く行、または列数が${NFR_COLUMNS}でない行があります`,
+    );
   },
 );

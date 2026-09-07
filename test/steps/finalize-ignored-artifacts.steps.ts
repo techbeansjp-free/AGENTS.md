@@ -73,6 +73,8 @@ function safeObservation(): WorktreeObservation {
     repositoryRoot: "/repo",
     path: "/repo/.worktrees/target",
     branch: "bugfix/894-finalize-ignored-artifacts",
+    headState: "attached",
+    headSha: "a".repeat(40),
     isPrimary: false,
     mergedIntoDefault: true,
     dirty: false,

@@ -140,3 +140,13 @@ Feature: Issue stagingとsystem specificationを安全に統合する
     Given 必須specを持つCLI projectがある
     When 変更履歴の用語ID列と台帳の突合を検証する
     Then 未登録の名指しと範囲記法だけが拒否され逆方向は要求されない
+
+  Scenario Outline: SCN-INT-SPEC-016 生成した仕様は業務単位の設計契約の記入欄を保持する
+    Given 空の新規project directoryがある
+    When <種別> project bootstrapをapplyする
+    Then 生成した仕様はユースケースと機能・画面・ジョブの対応契約を保持する
+
+    Examples:
+      | 種別 |
+      | "UI" |
+      | "API" |
