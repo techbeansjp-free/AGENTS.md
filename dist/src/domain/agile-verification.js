@@ -119,6 +119,20 @@ export function selectVerificationSet(input) {
     if (input.impactAnalysis.externalContractChanged) {
         methods.add("contract-test");
         methods.add("integration-test");
+        /**
+         * **外部契約を変える変更へだけmutation-testを課す。**
+         *
+         * 契約の変更は利用者へ届くため、その契約を固定するassertionが契約の回帰で
+         * 実際に失敗することを示す必要がある。**検査が緑であることは正しさの十分
+         * 条件ではない**（`00_運用ポリシー.md`）。2026-09-07の実測では、外部契約を
+         * 変えた3件すべてで、gateが緑のまま独立reviewerがassertionの空虚さを
+         * 検出した。
+         *
+         * **riskがcriticalであることを条件にしない。** `SCN-UNIT-AGILE-005`が
+         * criticalだけでは選ばないことを固定しており、その判断を実装側から
+         * 覆さない。すべての変更へ一律に課すこともしない。
+         */
+        methods.add("mutation-test");
     }
     if (input.impactAnalysis.concurrentBehaviorChanged) {
         methods.add("race-test");

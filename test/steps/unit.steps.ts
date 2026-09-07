@@ -51,6 +51,7 @@ import {
 interface UnitWorld extends WorkflowWorld {
   adrAssets: string[];
   graphSkillLinks?: Record<string, boolean>;
+  mutationGuidance?: Record<string, string>;
   graphUsageSection?: string;
   answers: Parameters<typeof classifyMode>[0];
   auditBase: string;
@@ -3665,4 +3666,49 @@ Then("追跡と言及のedge種別の対応と未導入時の退避先が存在�
       true,
       `Semantic Graphの利用節に判断材料がありません: ${contract}`,
     );
+});
+
+/**
+ * 変異試験の判断材料と充足の記録先。
+ *
+ * **契約の字面を名指しする。** 「変異試験」という語の存在だけを見ると、
+ * 判断のない言及へ置き換えても通る。
+ */
+const MUTATION_GUIDANCE_CONTRACTS: ReadonlyArray<[string, string]> = [
+  [
+    ".agent-skill-chain/docs/02_品質基準.md",
+    "**変異はassertionが名指しした字面からではなく、契約本文の側から作る。**",
+  ],
+  [".agent-skill-chain/docs/02_品質基準.md", "全件killを成果として報告しない"],
+  [
+    ".agent-skill-chain/templates/issue/03_実装計画.md",
+    "| 選ばれた検証 | 充足手段 | 実測結果 | 充足しない場合の理由 |",
+  ],
+  [
+    ".agent-skill-chain/templates/issue/03_実装計画.md",
+    "**選定結果の各件について、どう充足したかを残す。**",
+  ],
+];
+
+Given("配布する品質基準と実装計画templateがある", function () {
+  this.mutationGuidance = {};
+});
+
+When("変異試験の記述を検査する", function () {
+  const observed: Record<string, string> = {};
+  for (const [file] of MUTATION_GUIDANCE_CONTRACTS)
+    observed[file] ??= fs.readFileSync(file, "utf8");
+  this.mutationGuidance = observed;
+});
+
+Then("契約本文から変異を作る指示と充足の記録欄が存在する", function () {
+  const documents = this.mutationGuidance ?? {};
+  const missing = MUTATION_GUIDANCE_CONTRACTS.filter(
+    ([file, contract]) => !(documents[file] ?? "").includes(contract),
+  ).map(([file, contract]) => `${file}: ${contract}`);
+  assert.deepEqual(
+    missing,
+    [],
+    `配布物に変異試験の判断材料または充足の記録欄がありません: ${missing.join(" / ")}`,
+  );
 });
