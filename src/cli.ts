@@ -73,6 +73,7 @@ import {
   conformanceDeclarationFromPolicySet,
   loadEffectiveTrustedPolicySet,
   choicesFragmentSource,
+  ruleFragmentSources,
   loadOperationPolicy,
   loadProjectPolicySet,
   loadProjectPolicySetAtCommit,
@@ -5428,6 +5429,7 @@ export async function main(
       const effective = resolveEffectivePolicy(
         trustedSet.policy,
         candidateSet.policy,
+        { packageFloor: trustedSet.packageFloor },
       );
       if (!effective.valid) {
         print(
@@ -5446,6 +5448,7 @@ export async function main(
         effective.policy,
         {
           trustedConformance: conformanceDeclarationFromPolicySet(trustedSet),
+          trustedRuleSources: ruleFragmentSources(trustedSet),
           candidateConformance:
             conformanceDeclarationFromPolicySet(candidateSet),
           candidateChoicesRaw: candidateChoices?.raw,
@@ -5458,6 +5461,7 @@ export async function main(
           status: "rejected",
           candidateSetHash: candidateSet.setHash,
           trustedSetHash: trustedSet.setHash,
+          acceptedRetirements: comparison.acceptedRetirements,
           errors: comparison.rejected.flatMap((item) => item.reasons),
         };
         print(
@@ -5502,6 +5506,7 @@ export async function main(
         trustedSetHash: trustedSet.setHash,
         trustedProvenance: trustedSet.provenance,
         stagedAdditions: comparison.stagedAdditions,
+        acceptedRetirements: comparison.acceptedRetirements,
         errors: [],
         warnings: mergeMethodPolicyWarnings(candidateSet.policy),
       };
@@ -5535,6 +5540,7 @@ export async function main(
       const effective = resolveEffectivePolicy(
         trustedSet.policy,
         candidateSet.policy,
+        { packageFloor: trustedSet.packageFloor },
       );
       if (!effective.valid) {
         print(
@@ -5553,6 +5559,7 @@ export async function main(
         effective.policy,
         {
           trustedConformance: conformanceDeclarationFromPolicySet(trustedSet),
+          trustedRuleSources: ruleFragmentSources(trustedSet),
           candidateConformance:
             conformanceDeclarationFromPolicySet(candidateSet),
           candidateChoicesRaw: candidateChoices?.raw,
@@ -5566,6 +5573,7 @@ export async function main(
         trustedSetHash: trustedSet.setHash,
         trustedProvenance: trustedSet.provenance,
         stagedAdditions: comparison.stagedAdditions,
+        acceptedRetirements: comparison.acceptedRetirements,
         errors: comparison.rejected.flatMap((item) => item.reasons),
         warnings: comparison.allowed
           ? mergeMethodPolicyWarnings(candidateSet.policy)
@@ -6397,6 +6405,8 @@ export async function main(
       evidence,
       trustedPolicy: trustedSet.policy,
       candidatePolicy: loadConsumerPolicyAtCommit(root, headSha),
+      packageFloor: trustedSet.packageFloor,
+      trustedRuleSources: ruleFragmentSources(trustedSet),
       candidateChoicesRaw: prCandidateChoices?.raw,
       choicesFragmentPath: prCandidateChoices?.path,
     };

@@ -61,7 +61,6 @@
     },
     "rules": {
       "type": "array",
-      "minItems": 1,
       "items": { "$ref": "#/$defs/rule" }
     },
     "worktree": {
@@ -103,6 +102,31 @@
       }
     },
     "projectChoices": { "$ref": "#/$defs/projectChoices" },
+    "projectRuleRetirementProposals": {
+      "type": "array",
+      "description": "trusted側へ先行登録するproject rule廃止提案。rule IDとtrusted fragmentのraw UTF-8 SHA-256が一致する完全削除だけを後続PRで受理する。",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ruleId", "beforeSha256", "reason", "owner"],
+        "properties": {
+          "ruleId": { "type": "string", "pattern": "^ASC-[A-Z0-9-]+$" },
+          "beforeSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "reason": {
+            "type": "string",
+            "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}]+$",
+            "description": "制御文字を含まない非空の廃止理由"
+          },
+          "owner": {
+            "type": "string",
+            "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}]+$",
+            "description": "制御文字を含まない非空のowner。認証の根拠にはしない"
+          }
+        }
+      }
+    },
     "projectChoiceShrinkProposals": {
       "type": "array",
       "description": "利用側project ownerが既定branch側へ事前登録する縮小提案。次のPRでこの宣言とchoices fragment fileのraw byteが一致する縮小だけを受理する。候補側へ登録した提案は受理判断に使わない。",

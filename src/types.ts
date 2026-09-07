@@ -183,6 +183,15 @@ export interface Policy {
   rules: Rule[];
   projectChoices?: ProjectChoices;
   projectChoiceShrinkProposals?: ProjectChoiceShrinkProposal[];
+  projectRuleRetirementProposals?: ProjectRuleRetirementProposal[];
+}
+
+/** trusted branchへ先行登録するproject rule廃止提案。 */
+export interface ProjectRuleRetirementProposal {
+  ruleId: string;
+  beforeSha256: string;
+  reason: string;
+  owner: string;
 }
 
 export interface AutoFix {

@@ -30,3 +30,17 @@ Feature: project固有rule台帳のrepository結合契約
     Given 適合性検査scriptの本体がある
     When 公開入口へ合成されている個別検査を読む
     Then 合成されている個別検査がすべて宣言されている
+  Scenario: SCN-INT-LEDGER-007 file migrationがtrusted sourceを配送し完全削除を受理する
+    Given trusted fragmentとproject rule廃止提案がある
+    When 隔離policy setのrule廃止migrationを計画する
+    Then migrationで承認済みrule廃止を返し提案撤回時は拒否する
+
+  Scenario: SCN-INT-LEDGER-008 fixed commitのtrusted提案だけをvalidateとdeliveryへ配送する
+    Given trusted fragmentとproject rule廃止提案がある
+    When 隔離Gitの固定commitからrule廃止を検証する
+    Then trustedで先行登録した廃止だけが受理されcandidate自己承認は拒否される
+
+  Scenario: SCN-INT-LEDGER-009 配布schemaと案内がproject rule廃止契約を持つ
+    Given project rule廃止の配布契約がある
+    When schemaとruntimeと利用案内を照合する
+    Then 宣言形式と二段階手順と撤回とrollbackが一致する

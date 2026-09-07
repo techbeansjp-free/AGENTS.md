@@ -2116,15 +2116,18 @@ When("schema契約とruntime契約を検証する", function () {
     "utf8",
   );
 });
-Then("両方が安全なmigration diagnostic付きでinvalidになる", function () {
-  for (const result of this.schemaRuntime) {
-    assert.equal(result.valid, false);
-    assert.ok(result.diagnostics[0]);
-    assert.ok(
-      result.migration || result.diagnostics[0].next.includes("migration"),
-    );
-  }
-  assert.ok(this.schemaText.includes('"minItems": 1'));
+Then("未知fieldはmigration診断で拒否し空project rulesは受理する", function () {
+  const result = this.schemaRuntime[0]!;
+  assert.equal(result.valid, false);
+  assert.ok(result.diagnostics[0]);
+  assert.ok(
+    result.migration || result.diagnostics[0].next.includes("migration"),
+  );
+  assert.equal(this.schemaRuntime[1]!.valid, true);
+  const schema = parseJsonFixture<{
+    properties: { rules: { minItems?: number } };
+  }>(this.schemaText);
+  assert.equal(schema.properties.rules.minItems ?? 0, 0);
   assert.ok(this.schemaText.includes('"else"'));
 });
 
