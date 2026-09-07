@@ -110,7 +110,7 @@ import {
   type SemanticEdgeKind,
 } from "./domain/semantic-graph.js";
 import {
-  buildRepositorySemanticGraph,
+  buildRepositorySemanticGraphWithDiagnostics,
   observeRepositoryGraphSource,
 } from "./adapters/repository-graph.js";
 import {
@@ -3659,10 +3659,31 @@ function graphBooleanFlag(
   return true;
 }
 
+/** 診断へ列挙するpathの上限。残数は件数から導ける。 */
+const OVERSIZED_SAMPLE_LIMIT = 5;
+
+/**
+ * 上限超過で取り込まなかったpathを、判断に足る分量へ絞って返す。
+ *
+ * **黙って落とさない。** 仕様は取り込まないことを定めるが、報告しないとは
+ * 定めていない。**全pathを常に列挙もしない。** 件数を必ず出し、pathは先頭の
+ * 一定件数までとする。
+ */
+function oversizedSourceDiagnostic(paths: readonly string[]): {
+  count: number;
+  paths: readonly string[];
+} {
+  return {
+    count: paths.length,
+    paths: Object.freeze(paths.slice(0, OVERSIZED_SAMPLE_LIMIT)),
+  };
+}
+
 async function readFreshSemanticGraph(root: string) {
   const { GRAPHQLITE_VERSION, GraphQlLiteStore, graphQlLiteAsset } =
     await import("./adapters/graphqlite.js");
-  const expectedSnapshot = buildRepositorySemanticGraph(root);
+  const expectedBuild = buildRepositorySemanticGraphWithDiagnostics(root);
+  const expectedSnapshot = expectedBuild.snapshot;
   const expectedGraphContentHash = semanticGraphContentHash(expectedSnapshot);
   const expectedAsset = graphQlLiteAsset();
   const store = new GraphQlLiteStore(root);
@@ -3700,6 +3721,7 @@ async function readFreshSemanticGraph(root: string) {
       observedSource: sourceAfterRead,
       expectedGraphContentHash,
       observedGraphContentHash,
+      oversizedPaths: expectedBuild.oversizedPaths,
     };
   } finally {
     await store.close();
@@ -4490,7 +4512,9 @@ export async function main(
     const { flags } = parse(rest);
     const root = graphRoot(flags);
     const apply = applyMode(flags);
-    const snapshot = buildRepositorySemanticGraph(root);
+    const build = buildRepositorySemanticGraphWithDiagnostics(root);
+    const snapshot = build.snapshot;
+    const oversizedSource = oversizedSourceDiagnostic(build.oversizedPaths);
     const graphContentHash = semanticGraphContentHash(snapshot);
     if (!apply) {
       print({
@@ -4502,6 +4526,7 @@ export async function main(
         graphContentHash,
         nodeCount: snapshot.nodes.length,
         edgeCount: snapshot.edges.length,
+        oversizedSource,
         writes: ["worktree固有のruntime projection", "atomic current pointer"],
       });
       return 0;
@@ -4541,6 +4566,7 @@ export async function main(
           mergeAuthorization: false,
           modeAuthorization: false,
           manifest,
+          oversizedSource,
           readBackGraphContentHash: semanticGraphContentHash(readBack.snapshot),
         });
       } finally {
@@ -4564,6 +4590,7 @@ export async function main(
         modeAuthorization: false,
         exactEvidenceAllowed: result.freshness.exactEvidenceAllowed,
         manifest: result.manifest,
+        oversizedSource: oversizedSourceDiagnostic(result.oversizedPaths),
       });
       return 0;
     } catch (error) {

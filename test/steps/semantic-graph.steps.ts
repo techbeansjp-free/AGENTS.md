@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 
 import {
   DEFAULT_GRAPH_BUDGET,
@@ -29,6 +31,11 @@ import {
   type ShortestPathResult,
   type TopologicalResult,
 } from "../../src/domain/semantic-graph.js";
+import {
+  DEFAULT_SOURCE_OBSERVATION_LIMITS,
+  buildRepositorySemanticGraphWithDiagnostics,
+  type SourceObservationLimits,
+} from "../../src/adapters/repository-graph.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 interface BudgetObservation {
@@ -39,6 +46,10 @@ interface BudgetObservation {
 }
 
 interface SemanticGraphWorld extends WorkflowWorld {
+  buildResult?: ReturnType<typeof buildRepositorySemanticGraphWithDiagnostics>;
+  buildError?: string;
+  observationLimits?: SourceObservationLimits;
+  root?: string;
   cardinalityExactErrors?: string[][];
   cardinalityProbe?: { touched: boolean };
   cardinalityThrowMessages?: string[];
@@ -1729,3 +1740,287 @@ Then(
     assert.deepEqual(this.oracleMismatches, []);
   },
 );
+
+/**
+ * 上限超過の観測に使う小さい上限。**本番の閾値そのものは変えない。**
+ *
+ * 既定の128 MiB集合上限を実際に踏むには同量の入力が要り、支援層の所要時間が
+ * 成果物構築を上回る。判定の分岐は同一なので、単位testは小さい上限で通し、
+ * 本番の4 MiB閾値は`SCN-INT-SEMGRAPH-033`が実repositoryで担保する。
+ */
+const SMALL_LIMITS: SourceObservationLimits = Object.freeze({
+  maxFileBytes: 64,
+  maxSetBytes: 1024 * 1024,
+  maxFiles: 200_000,
+});
+
+/** 追跡表とfeatureは取り込み、実装fileだけが超過する上限。 */
+const TRACE_LIMITS: SourceObservationLimits = Object.freeze({
+  maxFileBytes: 2048,
+  maxSetBytes: 1024 * 1024,
+  maxFiles: 200_000,
+});
+
+const TINY_SET_LIMITS: SourceObservationLimits = Object.freeze({
+  maxFileBytes: 64,
+  maxSetBytes: 32,
+  maxFiles: 200_000,
+});
+
+function writeGraphFixture(root: string, relative: string, body: string): void {
+  const absolute = path.join(root, ...relative.split("/"));
+  fs.mkdirSync(path.dirname(absolute), { recursive: true });
+  fs.writeFileSync(absolute, body);
+}
+
+Given("上限を超えるfileと通常のfileを持つ疑似projectがある", function () {
+  this.root = this.initRepo();
+  writeGraphFixture(this.root, "src/small.ts", "export const small = 1;\n");
+  writeGraphFixture(this.root, "src/huge.ts", `// ${"x".repeat(4096)}\n`);
+  this.observationLimits = SMALL_LIMITS;
+});
+
+Given("上限を超えるfileを複数持つ疑似projectがある", function () {
+  this.root = this.initRepo();
+  writeGraphFixture(this.root, "src/small.ts", "export const small = 1;\n");
+  for (const name of ["zeta", "alpha", "mid"])
+    writeGraphFixture(this.root, `src/${name}.ts`, `// ${"y".repeat(4096)}\n`);
+  this.observationLimits = SMALL_LIMITS;
+});
+
+Given("集合byte上限を超える疑似projectがある", function () {
+  this.root = this.initRepo();
+  for (const name of ["a", "b", "c"])
+    writeGraphFixture(this.root, `src/${name}.ts`, `// ${"z".repeat(40)}\n`);
+  this.observationLimits = TINY_SET_LIMITS;
+});
+
+When("意味Graphを構築する", function () {
+  assert.ok(this.root);
+  assert.ok(this.observationLimits);
+  try {
+    this.buildResult = buildRepositorySemanticGraphWithDiagnostics(
+      this.root,
+      this.observationLimits,
+    );
+  } catch (error) {
+    this.buildError = error instanceof Error ? error.message : String(error);
+  }
+});
+
+Then("上限を超えたfileのnodeは存在せず通常のfileのnodeは存在する", function () {
+  assert.equal(this.buildError, undefined, this.buildError);
+  assert.ok(this.buildResult);
+  const ids = new Set(this.buildResult.snapshot.nodes.map(({ id }) => id));
+  assert.equal(
+    ids.has("file:src/huge.ts"),
+    false,
+    "上限を超えたfileが意味Graphへ取り込まれています",
+  );
+  assert.equal(
+    ids.has("file:src/small.ts"),
+    true,
+    "通常のfileが意味Graphから落ちています",
+  );
+  assert.deepEqual(this.buildResult.oversizedPaths, ["src/huge.ts"]);
+});
+
+Then("除外したpathを決定論的な順序で件数付きで観測できる", function () {
+  assert.equal(this.buildError, undefined, this.buildError);
+  assert.ok(this.buildResult);
+  assert.deepEqual(this.buildResult.oversizedPaths, [
+    "src/alpha.ts",
+    "src/mid.ts",
+    "src/zeta.ts",
+  ]);
+  const ids = new Set(this.buildResult.snapshot.nodes.map(({ id }) => id));
+  assert.equal(ids.has("file:src/small.ts"), true);
+});
+
+Then("構築は拒否される", function () {
+  assert.equal(
+    this.buildError,
+    "graph source集合のbyte上限を超えました",
+    `集合上限の拒否が失われています: ${String(this.buildError)}`,
+  );
+  assert.equal(this.buildResult, undefined);
+});
+
+/**
+ * 実repositoryのrootで構築する回帰。
+ *
+ * **fixtureでは検出できなかった欠陥がある。** 既存の観測scenarioはすべて隔離
+ * 疑似projectを対象にしており、追跡済みの4 MiB超fileで投影全体がfail-closedする
+ * 状態を素通りさせた（Issue #1262）。本番の上限値そのものは、この1件だけが
+ * 実入力で担保する。
+ */
+Given("このrepositoryのrootがある", function () {
+  this.root = process.cwd();
+  this.observationLimits = DEFAULT_SOURCE_OBSERVATION_LIMITS;
+});
+
+Then("構築は完了し上限を超えた追跡fileが除外として報告される", function () {
+  assert.equal(this.buildError, undefined, this.buildError);
+  assert.ok(this.buildResult);
+  assert.ok(
+    this.buildResult.snapshot.nodes.length > 0,
+    "実repositoryの投影が空です",
+  );
+  const oversized = this.buildResult.oversizedPaths;
+  /**
+   * **空の除外集合で合格させない。** このrepositoryは本番既定値を超える追跡file
+   * を実際に持つ。空になるのは、是正が効いていないか走査対象から外れたかの
+   * どちらかであり、いずれも回帰である。
+   */
+  assert.ok(
+    oversized.length > 0,
+    "実repositoryで除外が1件も観測されません。是正または走査対象が変わっています",
+  );
+  const ids = new Set(this.buildResult.snapshot.nodes.map(({ id }) => id));
+  for (const entry of oversized) {
+    assert.equal(
+      entry.startsWith("/"),
+      false,
+      `除外pathはrepository相対でなければなりません: ${entry}`,
+    );
+    assert.equal(
+      ids.has(`file:${entry}`),
+      false,
+      `除外したfileが意味Graphへ取り込まれています: ${entry}`,
+    );
+    /**
+     * **本番既定の閾値そのものを実入力で固定する。** 小さい上限を注入した
+     * 単位testでは分岐しか担保できない。
+     */
+    const size = fs.statSync(path.join(process.cwd(), entry)).size;
+    assert.ok(
+      size > DEFAULT_SOURCE_OBSERVATION_LIMITS.maxFileBytes,
+      `除外pathが既定上限を超えていません: ${entry} (${size} byte)`,
+    );
+  }
+});
+
+Given("追跡表が上限を超えるfileを実装として指す疑似projectがある", function () {
+  this.root = this.initRepo();
+  writeGraphFixture(this.root, "src/small.ts", "export const small = 1;\n");
+  writeGraphFixture(this.root, "src/huge.ts", `// ${"x".repeat(4096)}\n`);
+  writeGraphFixture(
+    this.root,
+    "docs/specs/15_要件追跡/00_追跡表.md",
+    [
+      "# Observation trace",
+      "",
+      "| Requirement | Acceptance | Scenario | Feature | Implementation |",
+      "| --- | --- | --- | --- | --- |",
+      "| REQ-OBS-001 | AC-OBS-001 | SCN-OBS-001 | `test/features/obs.feature` | `src/huge.ts` |",
+      "",
+    ].join("\n"),
+  );
+  writeGraphFixture(
+    this.root,
+    "test/features/obs.feature",
+    [
+      "Feature: observation",
+      "",
+      "  Scenario: SCN-OBS-001 observation",
+      "    Given an isolated project",
+      "    Then the behavior is observable",
+      "",
+    ].join("\n"),
+  );
+  this.observationLimits = TRACE_LIMITS;
+});
+
+Then("構築は完了し除外fileは実在として扱われる", function () {
+  assert.equal(
+    this.buildError,
+    undefined,
+    `追跡表が除外fileを指すだけで構築が失敗しています: ${String(this.buildError)}`,
+  );
+  assert.ok(this.buildResult);
+  assert.deepEqual(this.buildResult.oversizedPaths, ["src/huge.ts"]);
+  const ids = new Set(this.buildResult.snapshot.nodes.map(({ id }) => id));
+  assert.equal(ids.has("file:src/huge.ts"), false);
+  assert.equal(ids.has("file:src/small.ts"), true);
+});
+
+/** file件数上限だけを1へ絞る。byte上限は踏ませない。 */
+const ONE_FILE_LIMITS: SourceObservationLimits = Object.freeze({
+  maxFileBytes: 4096,
+  maxSetBytes: 1024 * 1024,
+  maxFiles: 1,
+});
+
+Given("file件数上限を超える疑似projectがある", function () {
+  this.root = this.initRepo();
+  writeGraphFixture(this.root, "src/a.ts", "export const a = 1;\n");
+  writeGraphFixture(this.root, "src/b.ts", "export const b = 2;\n");
+  this.observationLimits = ONE_FILE_LIMITS;
+});
+
+Given(
+  "追跡表が上限を超えるsymlinkを実装として指す疑似projectがある",
+  function () {
+    this.root = this.initRepo();
+    writeGraphFixture(this.root, "src/s.ts", "export const s = 1;\n");
+    writeGraphFixture(this.root, "t/o.feature", "Feature: o\n");
+    /**
+     * link先の文字列長が単一file上限を超えるsymlink。
+     *
+     * **除外したsymlinkを実在する通常fileとして扱わない。** 追跡表のendpoint
+     * 検査は通常fileの実在を問うており、symlinkは元から対象外である。
+     * **上限は追跡表本体を取り込み、symlinkだけが超える値へ置く。** 追跡表が
+     * 除外されると走査自体が行われず、この検査が空虚に成立する。
+     */
+    const target = `./${"d".repeat(200)}.ts`;
+    writeGraphFixture(
+      this.root,
+      `src/${target.slice(2)}`,
+      "export const d = 1;\n",
+    );
+    fs.symlinkSync(target, path.join(this.root, "src", "linked.ts"));
+    const trace = [
+      "# t",
+      "",
+      "| R | A | S | F | I |",
+      "| --- | --- | --- | --- | --- |",
+      "| REQ-O-001 | AC-O-001 | SCN-O-001 | `t/o.feature` | `src/linked.ts` |",
+      "",
+    ].join("\n");
+    const limit = 160;
+    assert.ok(
+      Buffer.byteLength(trace) < limit,
+      `追跡表が上限を超えると走査されず検査が空虚になります: ${Buffer.byteLength(trace)}`,
+    );
+    assert.ok(
+      Buffer.byteLength(target) > limit,
+      `symlinkが上限を超えていません: ${Buffer.byteLength(target)}`,
+    );
+    writeGraphFixture(this.root, "docs/specs/15_要件追跡/00_追跡表.md", trace);
+    this.observationLimits = Object.freeze({
+      maxFileBytes: limit,
+      maxSetBytes: 1024 * 1024,
+      maxFiles: 200_000,
+    });
+  },
+);
+
+Then("構築は実在しないendpointとして拒否される", function () {
+  assert.ok(
+    this.buildError?.includes("trace-endpoint-missing"),
+    `実在しないendpointとして拒否されていません: ${String(this.buildError)}`,
+  );
+  assert.ok(
+    this.buildError?.includes("src/linked.ts"),
+    `診断が対象pathを名指ししていません: ${String(this.buildError)}`,
+  );
+});
+
+Then("構築はfile件数上限として拒否される", function () {
+  assert.equal(
+    this.buildError,
+    "graph source file件数上限を超えました",
+    `file件数上限の拒否が失われています: ${String(this.buildError)}`,
+  );
+  assert.equal(this.buildResult, undefined);
+});

@@ -8,6 +8,11 @@ import { loadTypeScriptCompiler, } from "../lib/typescript-vendor.js";
 const MAX_SOURCE_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_SOURCE_SET_BYTES = 128 * 1024 * 1024;
 const MAX_SOURCE_FILES = 200_000;
+export const DEFAULT_SOURCE_OBSERVATION_LIMITS = Object.freeze({
+    maxFileBytes: MAX_SOURCE_FILE_BYTES,
+    maxSetBytes: MAX_SOURCE_SET_BYTES,
+    maxFiles: MAX_SOURCE_FILES,
+});
 const MAX_TRACE_IDS_PER_CELL = 1_000;
 const MAX_ECMASCRIPT_IMPORT_SCAN_TOKENS = 250_000;
 const SOURCE_EXTENSIONS = new Set([
@@ -530,7 +535,7 @@ function isTraceEndpointCandidate(candidate) {
     return (SOURCE_BASENAMES.has(candidate) ||
         SOURCE_EXTENSIONS.has(path.posix.extname(candidate).toLowerCase()));
 }
-function sourcePaths(root) {
+function sourcePaths(root, limits = DEFAULT_SOURCE_OBSERVATION_LIMITS) {
     const listed = git(["ls-files", "-co", "--exclude-standard", "-z", "--"], root).stdout.split("\0");
     const result = [...new Set(listed)]
         .filter(Boolean)
@@ -538,11 +543,11 @@ function sourcePaths(root) {
         .filter((entry) => SOURCE_EXTENSIONS.has(path.posix.extname(entry).toLowerCase()) ||
         SOURCE_BASENAMES.has(path.posix.basename(entry)))
         .sort(compareText);
-    if (result.length > MAX_SOURCE_FILES)
+    if (result.length > limits.maxFiles)
         throw new Error("graph source file件数上限を超えました");
     return result;
 }
-function observeSourceFile(root, relative) {
+function observeSourceFile(root, relative, limits = DEFAULT_SOURCE_OBSERVATION_LIMITS) {
     const absolute = path.join(root, ...relative.split("/"));
     if (!fs.existsSync(absolute))
         return {
@@ -563,7 +568,12 @@ function observeSourceFile(root, relative) {
     }
     if (!stat.isFile())
         throw new Error(`graph sourceは通常fileでなければなりません: ${relative}`);
-    if (stat.size > MAX_SOURCE_FILE_BYTES)
+    /**
+     * **上流の`observeSourceFiles`が既に除外しているため通常は到達しない。**
+     * この関数を単独で呼ぶ経路への防御として残す。到達した場合は観測できない
+     * fileを黙って通さない。
+     */
+    if (stat.size > limits.maxFileBytes)
         throw new Error(`graph source file上限を超えました: ${relative}`);
     const contents = fs.readFileSync(absolute);
     return {
@@ -574,10 +584,12 @@ function observeSourceFile(root, relative) {
         ...(contents.includes(0) ? {} : { text: contents.toString("utf8") }),
     };
 }
-function observeSourceFiles(root) {
+function observeSourceFiles(root, limits = DEFAULT_SOURCE_OBSERVATION_LIMITS) {
     const files = [];
+    const oversized = [];
+    const oversizedRegularFiles = [];
     let totalBytes = 0;
-    for (const relative of sourcePaths(root)) {
+    for (const relative of sourcePaths(root, limits)) {
         const absolute = path.join(root, ...relative.split("/"));
         if (fs.existsSync(absolute)) {
             const stat = fs.lstatSync(absolute);
@@ -586,18 +598,30 @@ function observeSourceFiles(root) {
                 : stat.isFile()
                     ? stat.size
                     : 0;
-            if (nextSize > MAX_SOURCE_FILE_BYTES)
-                throw new Error(`graph source file上限を超えました: ${relative}`);
-            if (totalBytes + nextSize > MAX_SOURCE_SET_BYTES)
+            /**
+             * **判定はfileを読む前に行う。** 上限を超えたfileの本文をメモリへ載せない。
+             * 取り込まないだけで走査は続けるため、1件の超過が投影全体を止めない。
+             */
+            if (nextSize > limits.maxFileBytes) {
+                oversized.push(relative);
+                if (!stat.isSymbolicLink() && stat.isFile())
+                    oversizedRegularFiles.push(relative);
+                continue;
+            }
+            if (totalBytes + nextSize > limits.maxSetBytes)
                 throw new Error("graph source集合のbyte上限を超えました");
         }
-        const observed = observeSourceFile(root, relative);
+        const observed = observeSourceFile(root, relative, limits);
         totalBytes += observed.size;
-        if (totalBytes > MAX_SOURCE_SET_BYTES)
+        if (totalBytes > limits.maxSetBytes)
             throw new Error("graph source集合のbyte上限を超えました");
         files.push(observed);
     }
-    return files;
+    return {
+        files,
+        oversized: Object.freeze([...oversized]),
+        oversizedRegularFiles: Object.freeze([...oversizedRegularFiles]),
+    };
 }
 function repositoryIdentifier(remote, top) {
     if (remote === "")
@@ -640,7 +664,7 @@ function repositoryIdentity(root, files) {
 }
 export function observeRepositoryGraphSource(root) {
     const resolvedRoot = fs.realpathSync(root);
-    const files = observeSourceFiles(resolvedRoot);
+    const { files } = observeSourceFiles(resolvedRoot);
     return repositoryIdentity(resolvedRoot, files);
 }
 function nodeId(kind, value) {
@@ -703,11 +727,24 @@ function projectionDiagnostic(code, sourcePath, sourceLine, detail) {
     return new Error(`semantic graph projection診断 ${code}: ${sourcePath}:${sourceLine}: ${detail}`);
 }
 export function buildRepositorySemanticGraph(root) {
+    return buildRepositorySemanticGraphWithDiagnostics(root).snapshot;
+}
+export function buildRepositorySemanticGraphWithDiagnostics(root, limits = DEFAULT_SOURCE_OBSERVATION_LIMITS) {
     const resolvedRoot = fs.realpathSync(root);
-    const files = observeSourceFiles(resolvedRoot);
+    const { files, oversized, oversizedRegularFiles } = observeSourceFiles(resolvedRoot, limits);
     const source = repositoryIdentity(resolvedRoot, files);
+    /**
+     * import解決の到達先はnodeでなければならないため、除外fileを含めない。
+     * 一方で実在判定は取り込みの有無と独立なので、除外した通常fileを含める。
+     */
     const knownFiles = new Set(files.map(({ path: file }) => file));
-    const existingRegularFiles = new Set(files.filter(({ state }) => state === "file").map(({ path: file }) => file));
+    const existingRegularFiles = new Set([
+        ...files
+            .filter(({ state }) => state === "file")
+            .map(({ path: file }) => file),
+        ...oversizedRegularFiles,
+    ]);
+    const excludedFromProjection = new Set(oversized);
     const nodes = new Map();
     const edges = new Map();
     const occurrences = new Map([
@@ -861,8 +898,14 @@ export function buildRepositorySemanticGraph(root) {
             const missingPaths = referencedPaths.filter((candidate) => !existingRegularFiles.has(candidate));
             if (missingPaths.length > 0)
                 throw projectionDiagnostic("trace-endpoint-missing", trace.path, index + 1, `存在しないrepository path=${[...new Set(missingPaths)].sort(compareText).join(",")}`);
-            const featurePaths = referencedPaths.filter((candidate) => candidate.endsWith(".feature"));
-            const implementationPaths = referencedPaths.filter((candidate) => !candidate.endsWith(".feature") &&
+            /**
+             * **取り込まなかったfileへはedgeを張らない。** 実在するがnodeではないため、
+             * endpointとして参照するとedge-endpoint-missingで構築全体が落ちる。
+             * 不在ではないので`trace-endpoint-missing`でも拒否しない。
+             */
+            const projectedPaths = referencedPaths.filter((candidate) => !excludedFromProjection.has(candidate));
+            const featurePaths = projectedPaths.filter((candidate) => candidate.endsWith(".feature"));
+            const implementationPaths = projectedPaths.filter((candidate) => !candidate.endsWith(".feature") &&
                 (candidate.startsWith("src/") ||
                     candidate.startsWith("bin/") ||
                     candidate.startsWith("scripts/")));
@@ -892,10 +935,10 @@ export function buildRepositorySemanticGraph(root) {
     const errors = validateSemanticGraphSnapshot(snapshot);
     if (errors.length > 0)
         throw new Error(`semantic graph projectionを構築できません: ${errors.join("; ")}`);
-    const afterFiles = observeSourceFiles(resolvedRoot);
+    const { files: afterFiles } = observeSourceFiles(resolvedRoot, limits);
     const afterSource = repositoryIdentity(resolvedRoot, afterFiles);
     if (stableJson(afterSource) !== stableJson(source))
         throw new Error("semantic graph構築中にsourceが変化しました。再実行してください");
-    return snapshot;
+    return { snapshot, oversizedPaths: oversized };
 }
 //# sourceMappingURL=repository-graph.js.map
