@@ -169,6 +169,156 @@ function questionText(id: string): string {
   return MODE_QUESTIONS.find((entry) => entry.id === id)?.question ?? "";
 }
 
+/**
+ * **Q-01の3つの判断を個別に固定する。**
+ *
+ * 対象の限定、内部仕様の除外、確認できない場合のfalseは別々の判断であり、
+ * どれか1つを落とす変異を他の2つが吸収しない。
+ */
+const Q01_JUDGEMENTS = [
+  "列挙した文書等は外部へinterfaceとして提供するものを指し",
+  "内部の仕様・追跡記録の更新という事実だけでは該当しないが",
+  "変更fileの所在や配布の有無によらず、生成物を含む当該interfaceまたはその外部観測可能な振る舞いを追加・変更・削除する場合や、公開境界またはそれらへの影響を確認できない場合はfalseとする",
+] as const;
+
+/**
+ * **判定例は行として固定する。** 変更の実態cellと判定cellの対応まで見なければ、
+ * 判定値だけを反転する変異が生存する。
+ */
+const Q01_EXAMPLE_ROWS: ReadonlyArray<readonly [string, string]> = [
+  [
+    "外部へinterfaceとして提供しない内部の仕様・追跡記録だけを更新し、生成物を含む外部interfaceとその外部観測可能な振る舞いに追加・変更・削除がないことを確認できた",
+    "true（他の7問も真かつ根拠付きの場合だけquick）",
+  ],
+  [
+    "内部仕様fileだけを変更したが、それを入力に生成される公開schemaの必須項目が変わる",
+    "false（full）",
+  ],
+  [
+    "公開境界、または生成物を含む外部interfaceとその外部観測可能な振る舞いへの影響を確認できない",
+    "false（full）",
+  ],
+];
+
+When("Q-01の質問文を読む", function () {
+  this.texts = [questionText("Q-01")];
+});
+
+Then(
+  "外部提供への限定と内部仕様の除外と確認できない場合のfalseが含まれる",
+  function () {
+    const text = this.texts[0] ?? "";
+    for (const judgement of Q01_JUDGEMENTS)
+      assert.equal(
+        text.includes(judgement),
+        true,
+        `Q-01の質問文に判断がありません: ${judgement}`,
+      );
+  },
+);
+
+/**
+ * **表示される本文だけを走査対象にする。**
+ *
+ * HTMLコメント、fenced code block（バッククォートとチルダの両方）、indented code
+ * blockへ退避した正しい表を充足証拠にしない。**独立reviewerが、チルダfenceと
+ * 4スペースindentへ正しい行を退避して表本文を反転する回避を実証した。**
+ */
+function visibleLines(markdown: string): string[] {
+  const lines: string[] = [];
+  let fence: string | null = null;
+  let inComment = false;
+  for (const line of markdown.split(/\r?\n/u)) {
+    const opener = /^\s{0,3}(`{3,}|~{3,})/u.exec(line);
+    if (fence !== null) {
+      if (opener && line.trimStart().startsWith(fence)) fence = null;
+      continue;
+    }
+    if (opener) {
+      fence = opener[1]!.slice(0, 3);
+      continue;
+    }
+    if (inComment) {
+      if (line.includes("-->")) inComment = false;
+      continue;
+    }
+    if (line.includes("<!--")) {
+      if (!line.includes("-->")) inComment = true;
+      continue;
+    }
+    /** indented code blockは4スペースまたはtabで始まる。表の行はindentしない。 */
+    if (/^(?: {4}|\t)/u.test(line)) continue;
+    lines.push(line);
+  }
+  return lines;
+}
+
+/** Markdownの表として、header・区切り行・連続する本文行を1つの表に閉じる。 */
+function tableBody(
+  lines: readonly string[],
+  header: readonly string[],
+): string[][] {
+  const cells = (line: string): string[] | null => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return null;
+    return trimmed
+      .split("|")
+      .slice(1, -1)
+      .map((cell) => cell.trim());
+  };
+  for (const [index, line] of lines.entries()) {
+    const head = cells(line);
+    if (!head || head.length !== header.length) continue;
+    if (head.some((cell, column) => cell !== header[column])) continue;
+    const separator = cells(lines[index + 1] ?? "");
+    if (
+      !separator ||
+      separator.length !== header.length ||
+      separator.some((cell) => !/^:?-{3,}:?$/u.test(cell))
+    )
+      continue;
+    const body: string[][] = [];
+    for (const rest of lines.slice(index + 2)) {
+      const row = cells(rest);
+      if (!row || row.length !== header.length) break;
+      body.push(row);
+    }
+    return body;
+  }
+  return [];
+}
+
+When("モード判定質問の判定例を検査する", function () {
+  const document = fs.readFileSync(
+    path.join(repositoryRoot(), DOCUMENT),
+    "utf8",
+  );
+  const [, afterHeading = ""] = document.split("\n## モード判定質問\n");
+  this.texts = visibleLines(afterHeading.split("\n## ")[0] ?? "");
+});
+
+Then(
+  "真の例と公開生成物へ影響する偽の例と確認できない場合の偽が各1行ある",
+  function () {
+    const body = tableBody(this.texts, ["変更の実態", "Q-01"]);
+    assert.notEqual(
+      body.length,
+      0,
+      "判定例の表がheaderと区切り行を伴って見つかりません",
+    );
+    for (const [situation, verdict] of Q01_EXAMPLE_ROWS) {
+      const matched = body.filter(
+        (row) => row[0] === situation && row[1] === verdict,
+      );
+      assert.equal(
+        matched.length,
+        1,
+        `判定例の行が1件ではありません: ${situation} / ${verdict}`,
+      );
+    }
+  },
+);
+
 When("Q-06の質問文を読む", function () {
   this.texts = [questionText("Q-06")];
 });

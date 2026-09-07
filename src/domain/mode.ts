@@ -18,7 +18,7 @@ export const MODE_QUESTIONS: readonly ModeQuestion[] = Object.freeze([
     id: "Q-01",
     disqualifier: "public-api",
     question:
-      "この変更は、外部へ公開するinterface（API、CLI、配布するschema定義file、template、規範文書）とその外部観測可能な振る舞い（終了値、error、既定値、副作用、互換性）を、追加・変更・削除しないか",
+      "この変更は、外部へ公開するinterface（API、CLI、配布するschema定義file、template、規範文書）とその外部観測可能な振る舞い（終了値、error、既定値、副作用、互換性）を、追加・変更・削除しないか。列挙した文書等は外部へinterfaceとして提供するものを指し、内部の仕様・追跡記録の更新という事実だけでは該当しないが、変更fileの所在や配布の有無によらず、生成物を含む当該interfaceまたはその外部観測可能な振る舞いを追加・変更・削除する場合や、公開境界またはそれらへの影響を確認できない場合はfalseとする",
   },
   {
     id: "Q-02",

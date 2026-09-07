@@ -71,3 +71,10 @@ Feature: Mode判定と入力境界をfail-closedにする
     When process境界でcommandを実行する
     Then process errorに元のtokenは残らない
     And process errorには伏字が含まれる
+
+  Scenario: SCN-UNIT-MODE-005 内部仕様pathだけの入力でQ-01の回答だけがモードを決める
+    Given 内部仕様pathだけを変更しすべての質問へ根拠付きtrueを答えた入力がある
+    When そのままモードを判定する
+    Then quickが選ばれ理由は空である
+    When 同じ入力のQ-01だけをfalseにして判定する
+    Then fullが選ばれ理由にQ-01が含まれる

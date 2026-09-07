@@ -53,6 +53,8 @@ interface UnitWorld extends WorkflowWorld {
   graphSkillLinks?: Record<string, boolean>;
   mutationGuidance?: Record<string, string>;
   graphUsageSection?: string;
+  modeQuestionSkillLink?: string;
+  secondModeResult?: ReturnType<typeof classifyMode>;
   answers: Parameters<typeof classifyMode>[0];
   auditBase: string;
   auditFile: string;
@@ -1639,6 +1641,53 @@ Then("不適格理由にQ-04が含まれる", function () {
   assert.ok(
     this.modeResult.reasons.some((reason: string) => reason.includes("Q-04")),
   );
+});
+
+/**
+ * **内部仕様pathだけの変更でQ-01の回答だけがmodeを決めることを固定する。**
+ *
+ * Issue #1268の起票時の前提は「機構がfullを強制している」だった。実測ではそうでは
+ * なく、`classifyMode`のquick経路は変更pathも文書の規範性も見ない。**この回帰は
+ * 是正前でも合格する。** 本件の効果の証拠ではなく、判定logicを変えていないことの
+ * 証拠である。
+ */
+Given(
+  "内部仕様pathだけを変更しすべての質問へ根拠付きtrueを答えた入力がある",
+  function () {
+    this.answers = validAnswers();
+    this.changedFiles = [
+      "docs/specs/17_デザイン/design-tokens.json",
+      "docs/specs/18_レイアウト/00_レイアウトトークン.md",
+      "docs/specs/15_要件追跡/00_追跡表.md",
+      "docs/specs/15_要件追跡/01_変更履歴.md",
+      "src/styles/_layout.scss",
+    ];
+  },
+);
+When("そのままモードを判定する", function () {
+  this.modeResult = classifyMode(this.answers, {
+    requestedMode: "quick",
+    changedFiles: this.changedFiles,
+  });
+});
+Then("quickが選ばれ理由は空である", function () {
+  assert.equal(this.modeResult.mode, "quick");
+  assert.deepEqual(this.modeResult.reasons, []);
+});
+When("同じ入力のQ-01だけをfalseにして判定する", function () {
+  this.secondModeResult = classifyMode(
+    {
+      ...this.answers,
+      "Q-01": { answer: false, evidence: "外部契約を変える" },
+    },
+    { requestedMode: "quick", changedFiles: this.changedFiles },
+  );
+});
+Then("fullが選ばれ理由にQ-01が含まれる", function () {
+  const result = this.secondModeResult;
+  assert.ok(result, "2回目の判定結果がありません");
+  assert.equal(result.mode, "full");
+  assert.deepEqual(result.reasons, ["Q-01: false"]);
 });
 
 Given("quickとして開始した変更fileが{string}である", function (files: string) {
@@ -3594,6 +3643,80 @@ Then("終了値は1でstderrに実行できなかった原因が残る", functio
  * **anchorはlinkの字面から取る。** 見出しが改名されると`skills:check`のdocs link
  * 検査が別途落ちるため、ここでは参照の存在だけを判定する。
  */
+/**
+ * **link先だけでなくMarkdown linkの全体と読取指示までを要求する。**
+ * 括弧の中身だけを検査すると、段落を裸のpath文字列へ置き換えた変異が生存する
+ * （Issue #1261のM-01）。
+ */
+const MODE_QUESTION_SKILL_LINK =
+  "[モード判定質問](../../docs/01_開発ワークフロー.md#モード判定質問)を読み";
+const MODE_QUESTION_HEADING = "## モード判定質問";
+
+/**
+ * **表示される本文だけをlinkの充足証拠にする。**
+ *
+ * 段落全体をHTMLコメントで囲む変異と、code blockへ退避する変異が生存した
+ * （独立reviewerのM-02）。読まれない位置にlinkがあっても実行経路へ届かない。
+ */
+function visibleMarkdown(markdown: string): string {
+  const lines: string[] = [];
+  let fence: string | null = null;
+  let inComment = false;
+  for (const line of markdown.split(/\r?\n/u)) {
+    const opener = /^\s{0,3}(`{3,}|~{3,})/u.exec(line);
+    if (fence !== null) {
+      if (opener && line.trimStart().startsWith(fence)) fence = null;
+      continue;
+    }
+    if (opener) {
+      fence = opener[1]!.slice(0, 3);
+      continue;
+    }
+    if (inComment) {
+      if (line.includes("-->")) inComment = false;
+      continue;
+    }
+    if (line.includes("<!--")) {
+      if (!line.includes("-->")) inComment = true;
+      continue;
+    }
+    if (/^(?: {4}|\t)/u.test(line)) continue;
+    lines.push(line);
+  }
+  return lines.join("\n");
+}
+
+Given("配布するStep 0のskillがある", function () {
+  this.modeQuestionSkillLink = visibleMarkdown(
+    fs.readFileSync(".agent-skill-chain/skills/step-00-stage/SKILL.md", "utf8"),
+  );
+});
+
+When("モード判定質問への参照を検査する", function () {
+  this.graphUsageSection = visibleMarkdown(
+    fs.readFileSync(".agent-skill-chain/docs/01_開発ワークフロー.md", "utf8"),
+  );
+});
+
+/**
+ * **参照先のfileと見出しの実在まで見る。**
+ * link文字列だけを固定すると、参照先の見出しを消す変異と、link先pathを誤らせる
+ * 変異が生存する。
+ */
+Then("節への相対linkが存在し参照先のfileと見出しが実在する", function () {
+  assert.ok(
+    (this.modeQuestionSkillLink ?? "").includes(MODE_QUESTION_SKILL_LINK),
+    "step-00-stageがモード判定質問節を参照していません",
+  );
+  const document = this.graphUsageSection ?? "";
+  assert.ok(
+    document
+      .split(/\r?\n/u)
+      .some((line: string) => line === MODE_QUESTION_HEADING),
+    "参照先の見出しが正本にありません",
+  );
+});
+
 const GRAPH_REFERENCE_SKILLS = [
   "step-05-design",
   "step-09-implement",
