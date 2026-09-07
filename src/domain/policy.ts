@@ -33,6 +33,10 @@ import {
 import { validateProviderCapabilityMapping } from "./provider-capability.js";
 import { validateRoleConfigurationIndependence } from "./routing-independence.js";
 import { MODEL_TIERS, ROLES } from "./role.js";
+import {
+  validRuleRetirementProposals,
+  type RuleFragmentSource,
+} from "./project-rule-retirement.js";
 import { isSafeFinalizeIgnoredPathPrefix } from "./worktree-removal-safety.js";
 
 const PROJECT_CHOICE_FIELDS = [
@@ -770,11 +774,19 @@ export function validatePolicy(policy: unknown) {
       "worktree",
       "projectChoices",
       "projectChoiceShrinkProposals",
+      "projectRuleRetirementProposals",
     ],
     "policy",
     errors,
   );
   rejectUnknownKeys(candidate.delivery, ["stopAt"], "delivery", errors);
+  if (
+    candidate.projectRuleRetirementProposals !== undefined &&
+    !validRuleRetirementProposals(candidate.projectRuleRetirementProposals)
+  )
+    errors.push(
+      "projectRuleRetirementProposalsが不正です（最大16件、一意、ruleId、beforeSha256、制御文字なしのreason・ownerが必要です）",
+    );
   rejectUnknownKeys(
     candidate.merge,
     [
@@ -869,7 +881,9 @@ export function validatePolicy(policy: unknown) {
         budgets[key] < 1
       )
         errors.push(`budgets.${key}は1以上の整数でなければなりません`);
-    const enforcement = validateEnforcementPolicy(policy);
+    const enforcement = validateEnforcementPolicy(policy, {
+      allowEmptyRules: true,
+    });
     errors.push(...enforcement.errors);
     if (candidate.worktree !== undefined)
       validateWorktreePlacementPolicy(candidate.worktree, "worktree", errors);
@@ -1048,10 +1062,16 @@ export function validateProjectPolicyManifest(manifest: unknown) {
       "budgets",
       "worktree",
       "projectChoiceShrinkProposals",
+      "projectRuleRetirementProposals",
     ],
     "manifest.policy",
     errors,
   );
+  if (
+    policy.projectRuleRetirementProposals !== undefined &&
+    !validRuleRetirementProposals(policy.projectRuleRetirementProposals)
+  )
+    errors.push("manifest.policy.projectRuleRetirementProposalsが不正です");
   rejectUnknownKeys(
     policy.delivery,
     ["stopAt"],
@@ -1147,8 +1167,8 @@ export function validateProjectPolicyManifest(manifest: unknown) {
     manifest.choiceFiles.length !== 1
   )
     errors.push("choiceFilesは1件の配列でなければなりません");
-  if (!Array.isArray(manifest?.ruleFiles) || manifest.ruleFiles.length === 0)
-    errors.push("ruleFilesは1件以上の配列でなければなりません");
+  if (!Array.isArray(manifest?.ruleFiles))
+    errors.push("ruleFilesは配列でなければなりません");
   if (!Array.isArray(manifest?.conformanceFiles))
     errors.push("conformanceFilesは配列でなければなりません");
   else if (
@@ -1582,6 +1602,13 @@ function loadEffectiveTrustedPolicySetAtCommit(root: string, ref: string) {
       `trusted defaultをpackage safety floorへ合成できません: ${"diagnostic" in floorResult ? floorResult.diagnostic?.reasons.join("; ") : "不明な構成error"}`,
     );
   const floor = floorResult.policy;
+  if (
+    !validateEnforcementPolicy(packageFloor).valid ||
+    !validateEnforcementPolicy(committedFloor).valid
+  )
+    throw new Error(
+      "package default safety floorは1件以上の有効ruleが必要です",
+    );
   const result = git(
     ["show", `${ref}:.agent-skill-chain/project-policy.json`],
     root,
@@ -1612,6 +1639,7 @@ function loadEffectiveTrustedPolicySetAtCommit(root: string, ref: string) {
       .digest("hex");
     return {
       policy: floor,
+      packageFloor: floor,
       setHash,
       setEntries: baseEntries,
       semanticPolicyHash: crypto
@@ -1651,6 +1679,7 @@ function loadEffectiveTrustedPolicySetAtCommit(root: string, ref: string) {
   return {
     ...projectSet,
     policy: effectivePolicy,
+    packageFloor: floor,
     setHash,
     hash: setHash,
     setEntries,
@@ -1893,12 +1922,52 @@ export function loadConsumerChoicesFragmentAtCommit(
 }
 
 /**
- * policy setからchoices fragmentのpathとraw byte列を取り出す。
- *
- * **legacy monolith policyでは`undefined`を返す。** `manifest.choiceFiles`を持たず
- * fragmentのraw byte列が存在しないためで、この経路では縮小の受理が構造的に起きない。
- * これは提案なしの場合と同じ挙動であり、変更前と一致する（Issue #1044）。
+ * 検証済みtrusted setからrule ID・path・rawを一意に対応付ける。
+ * legacy monolith、欠落、重複、対応不明ではsourceを返さず廃止を受理しない。
  */
+export function ruleFragmentSources(policySet: {
+  policy: Policy;
+  manifest?: PolicyManifest | Policy;
+  rules?: Rule[];
+  rawEntries?: Record<string, string>;
+}): RuleFragmentSource[] {
+  const manifest = policySet.manifest;
+  if (
+    !manifest ||
+    !("ruleFiles" in manifest) ||
+    !policySet.rules ||
+    !policySet.rawEntries ||
+    manifest.ruleFiles.length !== policySet.rules.length
+  )
+    return [];
+  const sources: RuleFragmentSource[] = [];
+  for (const [index, relative] of manifest.ruleFiles.entries()) {
+    const rule = policySet.rules[index];
+    const raw = policySet.rawEntries[relative];
+    if (!rule || typeof raw !== "string") return [];
+    try {
+      const parsed: unknown = parseJsonStrict(raw, relative);
+      if (
+        !isRecord(parsed) ||
+        parsed.ruleId !== rule.ruleId ||
+        stableJson(parsed) !== stableJson(rule)
+      )
+        return [];
+    } catch {
+      return [];
+    }
+    sources.push({ ruleId: rule.ruleId, fragmentPath: relative, raw });
+  }
+  if (
+    new Set(sources.map((source) => source.ruleId)).size !== sources.length ||
+    new Set(sources.map((source) => source.fragmentPath)).size !==
+      sources.length
+  )
+    return [];
+  return sources;
+}
+
+/** legacy monolithではchoices fragmentを持たないためundefinedを返す。 */
 export function choicesFragmentSource(
   policySet: PolicySet,
 ): { path: string; raw: string } | undefined {

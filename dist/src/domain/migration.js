@@ -4,7 +4,7 @@ import path from "node:path";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { resolveContained, stableJson } from "../lib/security.js";
 import { compareTrustedPolicy, diagnostic } from "./enforcement.js";
-import { choicesFragmentSource, loadProjectPolicySet, validatePolicy, } from "./policy.js";
+import { choicesFragmentSource, ruleFragmentSources, loadProjectPolicySet, validatePolicy, } from "./policy.js";
 import { isRecord } from "../types.js";
 const ORDER = [
     "policy",
@@ -269,7 +269,12 @@ export function planFileMigration(root, trusted, candidate, entries) {
             ? digest(candidate.rawEntries)
             : undefined,
         manifestHash: digest(manifest),
-        compatibility: compareTrustedPolicy(trustedPolicy, candidatePolicy, candidateChoicesSource(candidate)),
+        compatibility: compareTrustedPolicy(trustedPolicy, candidatePolicy, {
+            ...candidateChoicesSource(candidate),
+            trustedRuleSources: fragmentedSet(trusted)
+                ? ruleFragmentSources(trusted)
+                : undefined,
+        }),
         manifest,
         artifacts,
         changes: [...new Set(manifest.map((item) => item.kind))],
@@ -353,7 +358,12 @@ function verify(state, trusted, candidate, revision, expectedFileHash, approvedP
         reasons.push("immutable plan fingerprintが一致しません");
     if (!approvedPlanHash || approvedPlanHash !== state.planFingerprint)
         reasons.push("approved plan hashが一致しません");
-    const compatibility = compareTrustedPolicy(trustedPolicy, candidatePolicy, candidateChoicesSource(candidate));
+    const compatibility = compareTrustedPolicy(trustedPolicy, candidatePolicy, {
+        ...candidateChoicesSource(candidate),
+        trustedRuleSources: fragmentedSet(trusted)
+            ? ruleFragmentSources(trusted)
+            : undefined,
+    });
     if (!compatibility.allowed)
         reasons.push(...compatibility.rejected.flatMap((item) => item.reasons));
     for (const artifact of state.artifacts ?? []) {

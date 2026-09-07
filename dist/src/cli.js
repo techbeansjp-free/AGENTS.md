@@ -14,7 +14,7 @@ import { applyWorkspaceHygiene, previewWorkspaceHygiene, } from "./domain/hygien
 import { applyStagingCleanup, calculateStagingDigest, listStagingArtifacts, migrateLegacyStagingTrackerLocked, planStagingCleanup, readStoredStagingRecord, withStagingMutationLock, } from "./domain/staging.js";
 import { buildFinalizeReport, applyFinalize, planCompletion, planRootUpdate, planWorktreeCleanup, summarizeCompletion, } from "./domain/finalize.js";
 import { init, upgrade, uninstall, doctor } from "./domain/lifecycle.js";
-import { loadConsumerChoicesFragmentAtCommit, loadConsumerPolicyAtCommit, conformanceDeclarationFromPolicySet, loadEffectiveTrustedPolicySet, choicesFragmentSource, loadOperationPolicy, loadProjectPolicySet, loadProjectPolicySetAtCommit, mergeMethodPolicyWarnings, validatePolicy, } from "./domain/policy.js";
+import { loadConsumerChoicesFragmentAtCommit, loadConsumerPolicyAtCommit, conformanceDeclarationFromPolicySet, loadEffectiveTrustedPolicySet, choicesFragmentSource, ruleFragmentSources, loadOperationPolicy, loadProjectPolicySet, loadProjectPolicySetAtCommit, mergeMethodPolicyWarnings, validatePolicy, } from "./domain/policy.js";
 import { applyMigration, compareTrustedPolicy, enforceOperation, planMigration, resolveEffectivePolicy, retryMigration, rollbackMigration, sanitizeOutput, serializeDiagnostic, } from "./domain/enforcement.js";
 import { applyFileMigration, planFileMigration, recoverFileMigration, retryFileMigration, rollbackFileMigration, } from "./domain/migration.js";
 import { validateScenarioTrace } from "./domain/trace.js";
@@ -3971,7 +3971,7 @@ export async function main(argv, dependencies = {}) {
                 print(policyAuthorityFailure("rejected", error instanceof Error ? error.message : String(error)));
                 return 1;
             }
-            const effective = resolveEffectivePolicy(trustedSet.policy, candidateSet.policy);
+            const effective = resolveEffectivePolicy(trustedSet.policy, candidateSet.policy, { packageFloor: trustedSet.packageFloor });
             if (!effective.valid) {
                 print(serializeDiagnostic({
                     allowed: false,
@@ -3984,6 +3984,7 @@ export async function main(argv, dependencies = {}) {
             const candidateChoices = choicesFragmentSource(candidateSet);
             const comparison = compareTrustedPolicy(trustedSet.policy, effective.policy, {
                 trustedConformance: conformanceDeclarationFromPolicySet(trustedSet),
+                trustedRuleSources: ruleFragmentSources(trustedSet),
                 candidateConformance: conformanceDeclarationFromPolicySet(candidateSet),
                 candidateChoicesRaw: candidateChoices?.raw,
                 choicesFragmentPath: candidateChoices?.path,
@@ -3994,6 +3995,7 @@ export async function main(argv, dependencies = {}) {
                     status: "rejected",
                     candidateSetHash: candidateSet.setHash,
                     trustedSetHash: trustedSet.setHash,
+                    acceptedRetirements: comparison.acceptedRetirements,
                     errors: comparison.rejected.flatMap((item) => item.reasons),
                 };
                 print(serializeDiagnostic({
@@ -4023,6 +4025,7 @@ export async function main(argv, dependencies = {}) {
                 trustedSetHash: trustedSet.setHash,
                 trustedProvenance: trustedSet.provenance,
                 stagedAdditions: comparison.stagedAdditions,
+                acceptedRetirements: comparison.acceptedRetirements,
                 errors: [],
                 warnings: mergeMethodPolicyWarnings(candidateSet.policy),
             };
@@ -4050,7 +4053,7 @@ export async function main(argv, dependencies = {}) {
                 return 1;
             }
             const trustedSet = loadOperationPolicy(root);
-            const effective = resolveEffectivePolicy(trustedSet.policy, candidateSet.policy);
+            const effective = resolveEffectivePolicy(trustedSet.policy, candidateSet.policy, { packageFloor: trustedSet.packageFloor });
             if (!effective.valid) {
                 print(serializeDiagnostic({
                     allowed: false,
@@ -4063,6 +4066,7 @@ export async function main(argv, dependencies = {}) {
             const candidateChoices = choicesFragmentSource(candidateSet);
             const comparison = compareTrustedPolicy(trustedSet.policy, effective.policy, {
                 trustedConformance: conformanceDeclarationFromPolicySet(trustedSet),
+                trustedRuleSources: ruleFragmentSources(trustedSet),
                 candidateConformance: conformanceDeclarationFromPolicySet(candidateSet),
                 candidateChoicesRaw: candidateChoices?.raw,
                 choicesFragmentPath: candidateChoices?.path,
@@ -4074,6 +4078,7 @@ export async function main(argv, dependencies = {}) {
                 trustedSetHash: trustedSet.setHash,
                 trustedProvenance: trustedSet.provenance,
                 stagedAdditions: comparison.stagedAdditions,
+                acceptedRetirements: comparison.acceptedRetirements,
                 errors: comparison.rejected.flatMap((item) => item.reasons),
                 warnings: comparison.allowed
                     ? mergeMethodPolicyWarnings(candidateSet.policy)
@@ -4766,6 +4771,8 @@ export async function main(argv, dependencies = {}) {
             evidence,
             trustedPolicy: trustedSet.policy,
             candidatePolicy: loadConsumerPolicyAtCommit(root, headSha),
+            packageFloor: trustedSet.packageFloor,
+            trustedRuleSources: ruleFragmentSources(trustedSet),
             candidateChoicesRaw: prCandidateChoices?.raw,
             choicesFragmentPath: prCandidateChoices?.path,
         };

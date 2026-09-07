@@ -3,6 +3,7 @@ import { CURRENT_POLICY_SCHEMA_VERSION } from "../lib/version.js";
 import { redactSecrets, stableJson } from "../lib/security.js";
 import { classifyProjectChoiceDiff } from "./project-choice-diff.js";
 import { acceptApprovedShrinks } from "./project-choice-shrink.js";
+import { acceptApprovedRuleRetirements, } from "./project-rule-retirement.js";
 import { classifyConformanceDeclarationDiff, } from "./conformance.js";
 import { isRecord, } from "../types.js";
 import { resolveFinalizeIgnoredPathAllowlist } from "./worktree-removal-safety.js";
@@ -259,14 +260,14 @@ export function evaluateRule(rule, input) {
         diagnostic: details,
     };
 }
-export function validateEnforcementPolicy(policy) {
+export function validateEnforcementPolicy(policy, options = {}) {
     const errors = [];
     const diagnostics = [];
     const candidate = isRecord(policy) ? policy : {};
     if (!Array.isArray(candidate.rules))
         errors.push("rulesは配列でなければなりません");
     else {
-        if (candidate.rules.length === 0)
+        if (candidate.rules.length === 0 && !options.allowEmptyRules)
             errors.push("rulesは1件以上必要です");
         const ids = new Set();
         for (const rule of candidate.rules) {
@@ -292,6 +293,11 @@ export function compareTrustedPolicy(trusted, candidate, options = {}) {
     const conformanceChanges = [];
     const authorityReasons = [];
     const acceptedShrinks = [];
+    const retirements = acceptApprovedRuleRetirements({
+        deletedRuleIds: [...trustedRules.keys()].filter((ruleId) => !candidateRules.has(ruleId)),
+        trustedProposals: trusted.projectRuleRetirementProposals,
+        trustedRuleSources: options.trustedRuleSources,
+    });
     const mergeStrength = {
         disabled: 3,
         assisted: 2,
@@ -328,8 +334,11 @@ export function compareTrustedPolicy(trusted, candidate, options = {}) {
     for (const [ruleId, trustedRule] of trustedRules) {
         const next = candidateRules.get(ruleId);
         const reasons = [];
-        if (!next)
-            reasons.push("trusted ruleを削除している");
+        if (!next) {
+            const remaining = retirements.remaining.find((item) => item.ruleId === ruleId);
+            if (remaining)
+                reasons.push(remaining.reason);
+        }
         else {
             if ((STRENGTH[next.enforcement] ?? 0) <
                 (STRENGTH[trustedRule.enforcement] ?? 99))
@@ -352,16 +361,7 @@ export function compareTrustedPolicy(trusted, candidate, options = {}) {
                 reasons.push("rule意味fingerprintを変更している");
         }
         if (reasons.length)
-            rejected.push(diagnostic("ASC-TRUST-001", "候補変更による自己承認を防止する", "authority", reasons, trustedRule.scope, ["trusted default policyとcandidate policyを比較した"], [], 
-            /**
-             * **候補側からtrusted ruleを削除・弱化する経路は製品CLIに無い。**
-             * `policy migrate`も概念migration・file migrationの両経路で
-             * `compareTrustedPolicy`を互換性判定に使うため同じ理由で拒否する。
-             * 「既定ブランチへの正規migrationを行え」とだけ返すと、その手段が
-             * 製品内に無いため利用者を循環させる。**owner authorityの操作であり
-             * 候補側の経路が無いことまで返す**（Issue #967）。
-             */
-            "trusted条件を維持するか、既定branchのproject policyを先に更新して独立reviewを受けてください。trusted ruleの削除・弱化は既定branchのproject policy ownerのauthority操作であり、候補側から適用する経路は製品CLIにありません。ruleを廃止する場合も、候補側でmanifestから外すだけでは受理されません", "default branch policy owner", "candidateの緩和差分を取り消す"));
+            rejected.push(diagnostic("ASC-TRUST-001", "候補変更による自己承認を防止する", "authority", reasons, trustedRule.scope, ["trusted default policyとcandidate policyを比較した"], [], "部分弱化は取り消してください。完全削除は既定branchのproject policy ownerがprojectRuleRetirementProposalsへruleIdとtrusted fragmentのraw UTF-8 SHA-256を先に登録し、後続PRでfragmentとmanifest参照を削除して独立reviewを受けてください。候補側だけの提案は無効で、manifestから外すだけでは受理されません。sha256sum・撤回・rollback手順はschemas/00_利用案内.mdを参照してください", "default branch policy owner", "candidateの緩和差分を取り消す"));
     }
     for (const [ruleId, rule] of candidateRules) {
         if (trustedRules.has(ruleId))
@@ -419,6 +419,7 @@ export function compareTrustedPolicy(trusted, candidate, options = {}) {
         projectChoiceChanges,
         conformanceChanges,
         acceptedShrinks,
+        acceptedRetirements: retirements.accepted,
     };
 }
 export function validateOverride(rule, override, expected) {
@@ -617,7 +618,11 @@ export function resolveEffectivePolicy(floor, project, options = {}) {
             policy: structuredClone(floor),
             diagnostic: diagnostic("ASC-EFFECTIVE-001", "package安全floorをproject設定で弱化させない", "authority", rejected, ["project-policy"], ["package defaultとproject extensionを比較した"], [], "project固有ruleを新しいIDのstaged ruleとして追加してください。package安全floorのruleは`active`から`disabled`へ戻せません。廃止したい場合も候補側でmanifestから外す経路はなく、既定branchのproject policy ownerのauthority操作になります", "project policy owner", "package default floorだけへ戻す"),
         };
-    const effectiveRules = floor.rules.map((rule) => replacements.get(rule.ruleId) ?? rule);
+    // trusted project ruleをpackage floorとして補完すると削除差分が消える。
+    const retainedFloorRules = options.packageFloor
+        ? floor.rules.filter((rule) => options.packageFloor.rules.some((item) => item.ruleId === rule.ruleId) || project.rules.some((item) => item.ruleId === rule.ruleId))
+        : floor.rules;
+    const effectiveRules = retainedFloorRules.map((rule) => replacements.get(rule.ruleId) ?? rule);
     return {
         valid: true,
         source: "package-floor+trusted-project-extension",
@@ -639,6 +644,9 @@ export function resolveEffectivePolicy(floor, project, options = {}) {
              */
             projectChoiceShrinkProposals: options.trusted
                 ? project.projectChoiceShrinkProposals
+                : undefined,
+            projectRuleRetirementProposals: options.trusted
+                ? project.projectRuleRetirementProposals
                 : undefined,
             rules: [...effectiveRules, ...additions],
         },

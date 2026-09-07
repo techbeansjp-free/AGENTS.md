@@ -207,11 +207,12 @@ export function createPullRequest(input, external) {
         throw new Error("先頭・基点ブランチ名が安全ではありません");
     validateDeliveryEvidence(input.evidence, input.headSha);
     if (input.trustedPolicy) {
-        const effective = resolveEffectivePolicy(input.trustedPolicy, input.candidatePolicy);
+        const effective = resolveEffectivePolicy(input.trustedPolicy, input.candidatePolicy, { packageFloor: input.packageFloor });
         const comparison = effective.valid
             ? compareTrustedPolicy(input.trustedPolicy, effective.policy, {
                 candidateChoicesRaw: input.candidateChoicesRaw,
                 choicesFragmentPath: input.choicesFragmentPath,
+                trustedRuleSources: input.trustedRuleSources,
             })
             : { allowed: false, rejected: [effective.diagnostic] };
         const ownership = input.evidence?.ownership;

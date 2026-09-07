@@ -6,6 +6,7 @@ import { resolveContained, stableJson } from "../lib/security.js";
 import { compareTrustedPolicy, diagnostic } from "./enforcement.js";
 import {
   choicesFragmentSource,
+  ruleFragmentSources,
   loadProjectPolicySet,
   validatePolicy,
   type PolicySet,
@@ -37,12 +38,7 @@ interface MigrationManifestEntry {
   afterHash: string | null;
 }
 type PolicyInput = Policy | PolicySet;
-interface Compatibility {
-  allowed: boolean;
-  rejected: Diagnostic[];
-  stagedAdditions: string[];
-  projectChoiceChanges: string[];
-}
+type Compatibility = ReturnType<typeof compareTrustedPolicy>;
 export interface MigrationState {
   state: string;
   allowed: boolean;
@@ -429,11 +425,12 @@ export function planFileMigration(
       ? digest(candidate.rawEntries)
       : undefined,
     manifestHash: digest(manifest),
-    compatibility: compareTrustedPolicy(
-      trustedPolicy,
-      candidatePolicy,
-      candidateChoicesSource(candidate),
-    ),
+    compatibility: compareTrustedPolicy(trustedPolicy, candidatePolicy, {
+      ...candidateChoicesSource(candidate),
+      trustedRuleSources: fragmentedSet(trusted)
+        ? ruleFragmentSources(trusted)
+        : undefined,
+    }),
     manifest,
     artifacts,
     changes: [...new Set(manifest.map((item) => item.kind))],
@@ -531,11 +528,12 @@ function verify(
     reasons.push("immutable plan fingerprintが一致しません");
   if (!approvedPlanHash || approvedPlanHash !== state.planFingerprint)
     reasons.push("approved plan hashが一致しません");
-  const compatibility = compareTrustedPolicy(
-    trustedPolicy,
-    candidatePolicy,
-    candidateChoicesSource(candidate),
-  );
+  const compatibility = compareTrustedPolicy(trustedPolicy, candidatePolicy, {
+    ...candidateChoicesSource(candidate),
+    trustedRuleSources: fragmentedSet(trusted)
+      ? ruleFragmentSources(trusted)
+      : undefined,
+  });
   if (!compatibility.allowed)
     reasons.push(...compatibility.rejected.flatMap((item) => item.reasons));
   for (const artifact of state.artifacts ?? []) {
