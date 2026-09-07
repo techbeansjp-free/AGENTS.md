@@ -171,7 +171,7 @@ function questionText(id: string): string {
 }
 
 /**
- * **Q-01の3つの判断を個別に固定する。**
+ * **Q-01の5つの判断を個別に固定する。**
  *
  * 対象の限定、内部仕様の除外、確認できない場合のfalseは別々の判断であり、
  * どれか1つを落とす変異を他の2つが吸収しない。
@@ -238,13 +238,19 @@ function tableBody(
   lines: readonly string[],
   header: readonly string[],
 ): string[][] {
+  /**
+   * **GFMは外側のpipeを省略できる。** 末尾の`|`が無い行を終端として捨てると、
+   * 正しい6行の直後へ足した7行目が「本文6行」の完全一致を素通りする
+   * （Issue #1274、独立reviewerのMedium-1）。**行頭が`|`なら表の行として扱い、
+   * 末尾の`|`の有無で捨てない。**
+   */
   const cells = (line: string): string[] | null => {
     const trimmed = line.trim();
-    if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return null;
-    return trimmed
-      .split("|")
-      .slice(1, -1)
-      .map((cell) => cell.trim());
+    if (!trimmed.startsWith("|")) return null;
+    const inner = trimmed.endsWith("|")
+      ? trimmed.slice(1, -1)
+      : trimmed.slice(1);
+    return inner.split("|").map((cell) => cell.trim());
   };
   for (const [index, line] of lines.entries()) {
     const head = cells(line);
@@ -285,26 +291,23 @@ When("モード判定質問の判定例を検査する", function () {
   this.texts = visibleMarkdownLines(afterHeading.split("\n## ")[0] ?? "");
 });
 
-Then(
-  "真の例と公開生成物へ影響する偽の例と確認できない場合の偽が各1行ある",
-  function () {
-    const body = tableBody(this.texts, ["変更の実態", "Q-01"]);
-    assert.notEqual(
-      body.length,
-      0,
-      "判定例の表がheaderと区切り行を伴って見つかりません",
-    );
-    /**
-     * **過不足ない一致を要求する。** 各組の存在だけを見ると、正しい6行へ
-     * 誤った7行目を足す変異が生存する（Issue #1274、独立reviewerのMedium-1）。
-     */
-    assert.deepEqual(
-      body,
-      Q01_EXAMPLE_ROWS.map(([situation, verdict]) => [situation, verdict]),
-      "判定例の行が確定した組と過不足なく一致しません",
-    );
-  },
-);
+Then("確定した6組の変更の実態と判定値が過不足なく一致する", function () {
+  const body = tableBody(this.texts, ["変更の実態", "Q-01"]);
+  assert.notEqual(
+    body.length,
+    0,
+    "判定例の表がheaderと区切り行を伴って見つかりません",
+  );
+  /**
+   * **過不足ない一致を要求する。** 各組の存在だけを見ると、正しい6行へ
+   * 誤った7行目を足す変異が生存する（Issue #1274、独立reviewerのMedium-1）。
+   */
+  assert.deepEqual(
+    body,
+    Q01_EXAMPLE_ROWS.map(([situation, verdict]) => [situation, verdict]),
+    "判定例の行が確定した組と過不足なく一致しません",
+  );
+});
 
 /**
  * Q-01の根拠欄へ残す確認対象と、条件付きの表記修正文。
