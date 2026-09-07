@@ -50,6 +50,8 @@ import {
 
 interface UnitWorld extends WorkflowWorld {
   adrAssets: string[];
+  graphSkillLinks?: Record<string, boolean>;
+  graphUsageSection?: string;
   answers: Parameters<typeof classifyMode>[0];
   auditBase: string;
   auditFile: string;
@@ -3583,4 +3585,84 @@ Then("失敗理由にENOBUFSが残る", function () {
 Then("終了値は1でstderrに実行できなかった原因が残る", function () {
   assert.equal(this.processResult.status, 1);
   assert.match(this.processResult.stderr, /ENOENT/u);
+});
+
+/**
+ * 影響範囲を扱うStepと、Semantic Graphの利用節へのlink。
+ *
+ * **anchorはlinkの字面から取る。** 見出しが改名されると`skills:check`のdocs link
+ * 検査が別途落ちるため、ここでは参照の存在だけを判定する。
+ */
+const GRAPH_REFERENCE_SKILLS = [
+  "step-05-design",
+  "step-09-implement",
+  "step-10-review",
+] as const;
+
+/**
+ * **link先だけでなくMarkdown linkの全体を要求する。**
+ * 括弧の中身だけを検査すると、段落を裸のpath文字列へ置き換えた変異が生存する。
+ */
+const GRAPH_USAGE_LINK =
+  "[Semantic Graphの利用](../../docs/01_開発ワークフロー.md#semantic-graphの利用)を読み";
+
+Given("配布するStep skill一式がある", function () {
+  this.graphSkillLinks = {};
+});
+
+When("影響範囲を扱うStepのdocs向けlinkを検査する", function () {
+  const observed: Record<string, boolean> = {};
+  for (const skill of GRAPH_REFERENCE_SKILLS)
+    observed[skill] = fs
+      .readFileSync(`.agent-skill-chain/skills/${skill}/SKILL.md`, "utf8")
+      .includes(GRAPH_USAGE_LINK);
+  this.graphSkillLinks = observed;
+});
+
+Then("Step 5とStep 9とStep 10がSemantic Graphの利用節を参照する", function () {
+  assert.deepEqual(
+    Object.entries(this.graphSkillLinks ?? {})
+      .filter(([, referenced]) => !referenced)
+      .map(([skill]) => skill),
+    [],
+    "影響範囲を扱うStep skillがSemantic Graphの利用節を参照していません",
+  );
+  assert.equal(
+    Object.keys(this.graphSkillLinks ?? {}).length,
+    GRAPH_REFERENCE_SKILLS.length,
+    "検査した対象Stepの件数が想定と異なります",
+  );
+});
+
+Given("開発ワークフローの正本がある", function () {
+  this.graphUsageSection = undefined;
+});
+
+When("Semantic Graphの利用節を検査する", function () {
+  const document = fs.readFileSync(
+    ".agent-skill-chain/docs/01_開発ワークフロー.md",
+    "utf8",
+  );
+  const [, body = ""] = document.split("## Semantic Graphの利用");
+  this.graphUsageSection = body.split("\n## ")[0];
+});
+
+Then("追跡と言及のedge種別の対応と未導入時の退避先が存在する", function () {
+  const section = this.graphUsageSection ?? "";
+  assert.notEqual(section, "", "Semantic Graphの利用節が見つかりません");
+  /**
+   * **追跡と言及の両方を名指しさせる。** 片方だけでは選び分けられない。
+   * 実装者自身が`supported-by`だけで問うて誤答した実例に基づく。
+   */
+  for (const contract of [
+    "**追跡関係を辿るのは`satisfied-by`と`verified-by`と`has-acceptance-criteria`である。**",
+    "**`supported-by`は「そのIDがそのfileの本文に出現する」という言及であって追跡関係ではない。**",
+    "**投影が未導入または構築に失敗した場合はgrepなど既存手段へ退避し、Stepを失敗させない。**",
+    "**Graphは選べる手段であって前提ではない。**",
+  ])
+    assert.equal(
+      section.includes(contract),
+      true,
+      `Semantic Graphの利用節に判断材料がありません: ${contract}`,
+    );
 });

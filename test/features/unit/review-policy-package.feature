@@ -261,3 +261,13 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     Given npx lifecycleの公開契約がある
     When 正規契約と旧aliasを公開した契約を検証する
     Then 正規契約だけが合格し旧aliasの公開は拒否される
+
+  Scenario: SCN-UNIT-PACKAGE-024 影響範囲を扱うStep skillはSemantic Graphの利用節を参照する
+    Given 配布するStep skill一式がある
+    When 影響範囲を扱うStepのdocs向けlinkを検査する
+    Then Step 5とStep 9とStep 10がSemantic Graphの利用節を参照する
+
+  Scenario: SCN-UNIT-PACKAGE-025 Semantic Graphの利用節は選び方と退避先を持つ
+    Given 開発ワークフローの正本がある
+    When Semantic Graphの利用節を検査する
+    Then 追跡と言及のedge種別の対応と未導入時の退避先が存在する
