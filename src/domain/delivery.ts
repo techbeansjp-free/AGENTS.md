@@ -10,6 +10,7 @@ import {
   type RuleObservation,
 } from "../types.js";
 import { validatePullRequestBody, withoutMarkdownCode } from "./issue.js";
+import type { RuleFragmentSource } from "./project-rule-retirement.js";
 
 interface DeliveryEvidence {
   headSha?: string;
@@ -42,6 +43,8 @@ interface PullRequestInput {
   title?: string;
   trustedPolicy?: Policy;
   candidatePolicy?: Policy;
+  packageFloor?: Policy;
+  trustedRuleSources?: readonly RuleFragmentSource[];
   /**
    * candidate policy setのchoices fragmentのraw byte列とpath。
    *
@@ -469,11 +472,13 @@ export function createPullRequest(
     const effective = resolveEffectivePolicy(
       input.trustedPolicy,
       input.candidatePolicy,
+      { packageFloor: input.packageFloor },
     );
     const comparison = effective.valid
       ? compareTrustedPolicy(input.trustedPolicy, effective.policy, {
           candidateChoicesRaw: input.candidateChoicesRaw,
           choicesFragmentPath: input.choicesFragmentPath,
+          trustedRuleSources: input.trustedRuleSources,
         })
       : { allowed: false, rejected: [effective.diagnostic] };
     const ownership = input.evidence?.ownership;
