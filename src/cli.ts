@@ -161,8 +161,9 @@ import {
 import { type Policy, isRecord } from "./types.js";
 import { type PolicySet } from "./domain/policy.js";
 import {
+  parseWorktreeHeads,
+  type WorktreeHeadEntry,
   surveyWorktrees,
-  type WorktreeHeadState,
   type WorktreeObservation,
   type WorktreeSurvey,
 } from "./domain/worktree-survey.js";
@@ -2639,60 +2640,17 @@ function registeredWorktrees(root: string): Array<{
  * pathを添えて分離する**（Issue #1251）。
  */
 function registeredWorktreeHeads(root: string): {
-  heads: Array<{
-    path: string;
-    branch: string | null;
-    headState: WorktreeHeadState;
-    headSha: string;
-  }>;
+  heads: WorktreeHeadEntry[];
   errors: string[];
 } {
-  const output = git(["worktree", "list", "--porcelain"], root).stdout;
-  const heads: Array<{
-    path: string;
-    branch: string | null;
-    headState: WorktreeHeadState;
-    headSha: string;
-  }> = [];
-  const errors: string[] = [];
-  for (const entry of output
-    .trim()
-    .split(/\r?\n\r?\n/u)
-    .filter(Boolean)) {
-    const lines = entry.split(/\r?\n/u);
-    const worktreeLine = lines.find((line) => line.startsWith("worktree "));
-    if (!worktreeLine) continue;
-    const worktreePath = path.resolve(worktreeLine.slice("worktree ".length));
-    const headLine = lines.find((line) => line.startsWith("HEAD "));
-    const branchLine = lines.find((line) =>
-      line.startsWith("branch refs/heads/"),
-    );
-    const detached = lines.includes("detached");
-    const headSha = headLine?.slice("HEAD ".length).trim() ?? "";
-    if (!/^[0-9a-f]{40}$/u.test(headSha)) {
-      errors.push(`${worktreePath}: HEAD SHAを観測できません`);
-      continue;
-    }
-    if (branchLine !== undefined && !detached)
-      heads.push({
-        path: worktreePath,
-        branch: branchLine.slice("branch refs/heads/".length),
-        headState: "attached",
-        headSha,
-      });
-    else if (branchLine === undefined && detached)
-      heads.push({
-        path: worktreePath,
-        branch: null,
-        headState: "detached",
-        headSha,
-      });
-    else
-      errors.push(
-        `${worktreePath}: HEADの付着状態を判定できません（branch行とdetached行の両方がある、または両方ない）`,
-      );
-  }
-  return { heads, errors };
+  /**
+   * **解析はdomainの純関数へ委譲する。** CLI層に解析を置くと、porcelainの異常入力を
+   * 与える経路が無く、正規化を挟む変異が全scenario緑のまま生存する（Issue #1255）。
+   * この層の責務はgitの起動と出力の受け渡しだけである。
+   */
+  return parseWorktreeHeads(
+    git(["worktree", "list", "--porcelain"], root).stdout,
+  );
 }
 
 function finalizeIgnoredPathAllowlist(root: string): string[] {

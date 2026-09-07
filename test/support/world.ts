@@ -33,9 +33,23 @@ export class WorkflowWorld extends World<WorkflowParameters> {
     return directory;
   }
 
-  initRepo() {
+  /**
+   * **省略時はSHA-1へ固定する。** `--object-format`を省略した`git init`はgitの既定に従い、
+   * その既定は`GIT_DEFAULT_HASH`と`init.defaultObjectFormat`で変えられる。実測でも
+   * `GIT_DEFAULT_HASH=sha256`のとき省略した`git init`は64桁のOIDを作った。**したがって
+   * 「省略＝SHA-1」は成り立たない。** 固定しないと、開発者の環境設定やgitの将来の既定変更で
+   * 既存fixtureのobject formatが無言で変わる（Issue #1255のラウンド1で独立reviewerが指摘）。
+   *
+   * **fixture生成経路を複製しない。** SHA-1側とSHA-256側で手順が分かれると両側が同じ向きに
+   * ずれても検出できなくなるため、object formatだけを変数にする。
+   */
+  initRepo(objectFormat?: "sha1" | "sha256") {
     const directory = this.temp();
-    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: directory });
+    execFileSync(
+      "git",
+      ["init", "-q", "-b", "main", `--object-format=${objectFormat ?? "sha1"}`],
+      { cwd: directory },
+    );
     execFileSync("git", ["config", "user.email", "test@example.invalid"], {
       cwd: directory,
     });
