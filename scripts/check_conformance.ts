@@ -182,6 +182,7 @@ const PACKAGE_MODEL_SLUG_PATHS = [
   "bin",
   "src",
   "scripts",
+  ".agent-skill-chain/project",
 ] as const;
 
 const TEXT_ASSET_SUFFIXES = new Set([
@@ -583,7 +584,12 @@ export function findPackageModelSlugViolations(
     const source = fs.readFileSync(file, "utf8");
     for (const match of source.matchAll(modelSlug)) {
       const slug = match[0];
-      if (slug)
+      const projectAsset = path
+        .relative(root, file)
+        .split(path.sep)
+        .join("/")
+        .startsWith(".agent-skill-chain/project/");
+      if (slug && !(projectAsset && slug.startsWith("claude-")))
         violations.push({
           path: path.relative(root, file).split(path.sep).join("/"),
           slug,

@@ -27,7 +27,9 @@
         "logicalTier": "project_default",
         "reasoningEffort": "high",
         "speed": "standard",
-        "independence": { "differentFrom": "implementer" }
+        "independence": {
+          "differentFrom": "implementer"
+        }
       }
     },
     "roleContracts": {
@@ -140,8 +142,8 @@
       }
     },
     "tierMapping": {
-      "gpt-5.6-sol": "critical",
-      "claude-opus-5": "critical"
+      "claude-opus-5": "critical",
+      "codex:provider_recommended_default:high:default": "critical"
     },
     "minimumTierByRisk": {
       "secret": "critical",

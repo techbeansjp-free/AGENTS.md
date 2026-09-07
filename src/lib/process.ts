@@ -21,6 +21,7 @@ export interface JsonlSessionOptions extends Omit<
   input: string;
   timeoutMs: number;
   isComplete: (stdout: string) => boolean;
+  nextInput?: (stdout: string) => string | undefined;
 }
 
 const MAX_STREAM_BYTES = 1024 * 1024;
@@ -144,9 +145,16 @@ export function runJsonlSession(
     child.stdout.on("data", (chunk: string) => {
       stdout = appendWithinLimit("stdout", stdout, chunk);
       if (settled) return;
-      if (!completed && options.isComplete(stdout)) {
-        completed = true;
-        child.stdin.end();
+      if (completed) return;
+      try {
+        const nextInput = options.nextInput?.(stdout);
+        if (nextInput !== undefined) child.stdin.write(nextInput);
+        if (options.isComplete(stdout)) {
+          completed = true;
+          child.stdin.end();
+        }
+      } catch {
+        failWithReason("JSONL応答の検証に失敗したため停止しました");
       }
     });
     child.stderr.on("data", (chunk: string) => {
@@ -156,7 +164,9 @@ export function runJsonlSession(
       failWithReason(`子processを起動できません: ${error.message}`),
     );
     child.on("close", (code) => finish(code ?? 1));
-    child.stdin.on("error", () => undefined);
+    child.stdin.on("error", () =>
+      failWithReason("子processのstdinへの書込に失敗しました"),
+    );
     child.stdin.write(options.input);
   });
 }

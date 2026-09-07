@@ -8,6 +8,7 @@ import {
 } from "../../src/adapters/provider.js";
 import { run, runJsonlSession } from "../../src/lib/process.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
+import { withProviderPath } from "../support/provider-fixture.js";
 
 class ProviderAdapterRoutingWorld extends WorkflowWorld {
   providerExecutor: ProviderExecutor | undefined = undefined;
@@ -190,15 +191,17 @@ Then("Codex JSONLの末尾が部分行でも確定応答で観測完了する", 
     [
       "#!/usr/bin/env node",
       "process.stdin.resume();",
-      `process.stdout.write(${JSON.stringify(`${response}\n{"partial":`)});`,
+      "let input = ''; let initialized = false; let catalogSent = false;",
+      "process.stdin.on('data', chunk => { input += chunk;",
+      "if (!initialized && input.includes('initialize')) { initialized = true; process.stdout.write(JSON.stringify({ id: 0, result: { userAgent: 'fixture' } })+'\\n'); }",
+      `if (!catalogSent && input.includes('model/list')) { catalogSent = true; process.stdout.write(${JSON.stringify(`${response}\n{"partial":`)}); }`,
+      "});",
       "process.stdin.on('end', () => process.exit(0));",
       "setTimeout(() => process.exit(2), 500);",
     ].join("\n"),
   );
   fs.chmodSync(executable, 0o755);
-  const originalPath = process.env.PATH;
-  process.env.PATH = `${executableDirectory}${path.delimiter}${originalPath ?? ""}`;
-  try {
+  await withProviderPath(executableDirectory, async () => {
     const observation = await observeProvider(
       "codex",
       undefined,
@@ -206,9 +209,7 @@ Then("Codex JSONLの末尾が部分行でも確定応答で観測完了する", 
     );
     assert.equal(observation.state, "available");
     assert.deepEqual(observation.models, ["model-fixture"]);
-  } finally {
-    process.env.PATH = originalPath;
-  }
+  });
 });
 
 Given("秘密を含む標準エラーを返すprovider実行関数を注入した", function () {
@@ -277,5 +278,103 @@ Then(
     };
     for (const content of Object.values(downstreamChannels))
       assert.equal(content.includes(this.providerStderrSecret), false);
+  },
+);
+
+Then(
+  "Codexはinitialize成功応答まで後続を送らず失敗や不正応答で停止する",
+  async function () {
+    const directory = this.temp("asc-codex-handshake-");
+    const executable = path.join(directory, "codex");
+    const transcript = path.join(directory, "transcript.jsonl");
+    await withProviderPath(directory, async () => {
+      for (const official of [false, true]) {
+        for (const behavior of ["success", "error", "malformed"]) {
+          fs.writeFileSync(transcript, "");
+          const initialize =
+            behavior === "success"
+              ? JSON.stringify({
+                  id: 0,
+                  result: { userAgent: "delayed-fixture" },
+                })
+              : behavior === "error"
+                ? JSON.stringify({
+                    id: 0,
+                    error: { code: -32600, message: "token=initialize-secret" },
+                  })
+                : JSON.stringify({ id: 0, result: { userAgent: null } });
+          fs.writeFileSync(
+            executable,
+            `#!${process.execPath}\n` +
+              `
+const fs = require('node:fs');
+const lines = require('node:readline').createInterface({ input: process.stdin });
+let initialized = false;
+lines.on('line', line => {
+  const request = JSON.parse(line);
+  fs.appendFileSync(${JSON.stringify(transcript)}, JSON.stringify({ method: request.method, afterInitializeResponse: initialized })+'\\n');
+  if(request.method === 'initialize') {
+    setTimeout(() => {
+      const response = ${JSON.stringify(initialize)};
+      process.stdout.write(response.slice(0, 12));
+      setTimeout(() => { process.stdout.write(response.slice(12)+'\\n'); initialized = true; }, 20);
+    }, 20);
+  } else if(!initialized) {
+    process.exitCode = 2;
+    lines.close();
+    process.stdin.destroy();
+  } else if(request.method === 'config/read') {
+    process.stdout.write(JSON.stringify({ id: 2, result: { config: { model_catalog_json: null } } })+'\\n');
+  } else if(request.method === 'model/list') {
+    process.stdout.write(JSON.stringify({ id: 1, result: { data: [{ model: 'current-fixture', isDefault: true, supportedReasoningEfforts: [{ reasoningEffort: 'high' }] }], nextCursor: null } })+'\\n');
+  }
+});
+process.stdin.on('end', () => process.exit(process.exitCode || 0));
+`,
+          );
+          fs.chmodSync(executable, 0o755);
+          const observation = await observeProvider(
+            "codex",
+            undefined,
+            undefined,
+            { official },
+          );
+          const calls = fs
+            .readFileSync(transcript, "utf8")
+            .trim()
+            .split("\n")
+            .map(
+              (line) =>
+                JSON.parse(line) as {
+                  method: string;
+                  afterInitializeResponse: boolean;
+                },
+            );
+          assert.equal(
+            observation.state,
+            behavior === "success" ? "available" : "unknown",
+            JSON.stringify({ official, behavior, observation, calls }),
+          );
+          assert.deepEqual(
+            calls.map((call) => call.method),
+            behavior === "success"
+              ? [
+                  "initialize",
+                  "initialized",
+                  ...(official ? ["config/read"] : []),
+                  "model/list",
+                ]
+              : ["initialize"],
+          );
+          assert.ok(
+            calls.slice(1).every((call) => call.afterInitializeResponse),
+          );
+          assert.equal(
+            JSON.stringify(observation).includes("initialize-secret"),
+            false,
+          );
+        }
+      }
+    });
   },
 );

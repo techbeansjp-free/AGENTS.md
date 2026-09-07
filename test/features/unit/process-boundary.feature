@@ -35,3 +35,9 @@ Feature: 外部command実行の境界で失敗原因を保存する
     Given 実在しないcommandがある
     When session境界で実在しないcommandを起動する
     Then session失敗理由に起動できなかった原因が残る
+
+  Scenario: SCN-UNIT-PROC-008 追加入力の失敗を終了値0で成功に戻さない
+    Given stdin閉鎖を通知して終了値0を返す実Node childがある
+    When 閉鎖通知後にsessionの追加入力を送信する
+    Then allowFailureの両値でstdin書込失敗を安全に返す
+    And 通常のsession送信と終了は成功する
