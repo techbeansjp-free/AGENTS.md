@@ -6,10 +6,10 @@
 |---|---|
 | 対象 | 実装 |
 | ラウンド | 1 |
-| 対象SHA・文書ダイジェスト | `5ca47b3a651920ba1ec6b15be5bcda9a23ca4728` |
-| 比較基点 | `58ed41c3756e8252cf4b35524e10faa0611789cb` |
-| H_impl | `5ca47b3a651920ba1ec6b15be5bcda9a23ca4728` |
-| 対象差分 | `58ed41c3756e8252cf4b35524e10faa0611789cb..5ca47b3a651920ba1ec6b15be5bcda9a23ca4728`。12 pathのうち`dist/`配下2件は生成物として個別監査の対象外であり、表は10行 |
+| 対象SHA・文書ダイジェスト | `9c28b4952118a0c3742a42fbe59de1b9132d73a9` |
+| 比較基点 | `317d65cf041f55786d468cb6e4445de0b3dd7ca9` |
+| H_impl | `9c28b4952118a0c3742a42fbe59de1b9132d73a9` |
+| 対象差分 | `317d65cf041f55786d468cb6e4445de0b3dd7ca9..9c28b4952118a0c3742a42fbe59de1b9132d73a9`。12 pathのうち`dist/`配下2件は生成物として個別監査の対象外であり、表は10行 |
 | 対象外 | finalizeの対象同一性を`path + headSha + headState`へ拡張してdetachedを後片付け可能にすること（段階2）、`doctor.healthy`と終了codeの変更、無視対象資産allowlist（#1248）、起動契機（#946）、auto-finalizeの述語（#947） |
 | 残り予算 | 3ラウンドのうち1使用。**残り2** |
 | ラウンド数 | 1 |
@@ -40,7 +40,7 @@
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **確認した。** CLI（観測）→domain（分類）の単方向で、domainはGitへ触れない。本artifactへ自身のcommit SHAを書いていない
 - `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: `H_impl`は`5ca47b3a651920ba1ec6b15be5bcda9a23ca4728`。本artifactの1 fileだけを加えて`H_final`にする
 - reviewer stable IDがPR author/provider観測済み`H_impl` author stable IDと異なる: reviewerはimplementerと別contextで起動する
-- 既定branch追随を行った場合: **行っていない。** baseは`58ed41c3756e8252cf4b35524e10faa0611789cb`のままである
+- 既定branch追随を行った場合: **行った。** PR #1258 のmergeで既定branchが`317d65cf041f55786d468cb6e4445de0b3dd7ca9`へ動き、`docs/specs/15_要件追跡/01_変更履歴.md`のheader直後の行が双方で衝突したため、`git rebase --onto origin/main 58ed41c3 HEAD`で追随した。**衝突は双方の行を保持して解消し、どちらの行も削っていない。** 取り込みはreview artifact commitより前にあり、artifactが最終commitである。`比較基点`は取り込んだ既定branch tip`317d65cf041f55786d468cb6e4445de0b3dd7ca9`、`H_impl`はartifact直前の最新commit`9c28b4952118a0c3742a42fbe59de1b9132d73a9`を指す。個別監査表は`比較基点..H_impl`から再生成し、path集合が変わっていないことを確認した
 
 ## 変更ファイル個別監査
 
