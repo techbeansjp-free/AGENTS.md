@@ -354,6 +354,18 @@ function readLocked(staging) {
     const source = readDeliverySource(staging);
     return source === undefined ? undefined : parseDeliveryState(source);
 }
+/**
+ * delivery stateと未完了transactionを、復旧やlock作成を行わず観測する。
+ *
+ * transactionがある場合もbefore/afterの整合性を既存inspectorで検証し、現在公開済みの
+ * stateだけを返す。previewがwriter経路へ入らずapplyと同じ安全な読取境界を使うための
+ * 薄いobserverである。
+ */
+export function observeStoredDeliveryState(directory) {
+    const staging = assertWorkflowStaging(directory);
+    inspectPendingDeliveryStateTransactionLocked(staging);
+    return readLocked(staging);
+}
 function persistLocked(staging, state) {
     recoverPendingDeliveryStateTransactionLocked(staging);
     const directory = assertDeliveryDirectory(staging);

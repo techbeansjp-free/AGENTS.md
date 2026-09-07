@@ -38,7 +38,7 @@ import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssig
 import { readDeliveryEvidence, readEnforcementInput, readFinalizeEvidence, isPolicyInput, readJsonInput, readMigrationManifest, readMigrationState, readModeAssessment, readPolicyFileInput, readPolicyJson, readSpecReview, } from "./adapters/json-input.js";
 import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPocDeliveryChangeScope, assertWorkflowStaging, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
 import { assertConvergedReviewSession, previewReviewRound, recordReviewRound, } from "./adapters/review-session.js";
-import { appendEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
+import { appendEvidenceReanchor, evaluateEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
 import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
 import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, observeStoredMerge, prepareStoredMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
 import { DELIVERY_STATE_FILE, assertImmutablePullRequestBinding, canonicalDigest, closingContractDigest, pullRequestContentDigest, pullRequestTerminalEvidenceId, } from "./domain/delivery-state.js";
@@ -1701,13 +1701,25 @@ function dispatchEvidenceReanchor(input, dependencies) {
     const { apply, staging, newHeadSha, newBaseSha, reason, layer } = input;
     const root = path.resolve(input.root ?? process.cwd());
     if (!apply) {
+        const evaluation = evaluateEvidenceReanchor({
+            staging,
+            root,
+            layer,
+            newHeadSha,
+            newBaseSha,
+            reason,
+        });
         print({
             state: "preview",
             layer,
-            chainLength: readEvidenceReanchorChain(staging).length,
+            chainLength: evaluation.chain.length,
+            effectiveHeadSha: evaluation.effectiveHeadSha,
+            willAppend: evaluation.appended,
             newHeadSha,
             newBaseSha,
-            next: "--applyで再固定を記録します",
+            next: evaluation.appended
+                ? "--applyで再固定を記録します"
+                : "同じ再固定は既に記録済みです。--applyでも変更しません",
         });
         return 0;
     }
