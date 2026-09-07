@@ -2,7 +2,7 @@
  * 登録済みの除外述語が、与えられたpath集合のどれを除外するかを観測する。
  *
  * **測るのはgateの判定差分ではない。** 述語はgate全体ではなくgate内の一部の検査へ
- * 適用される。`isIssueStagingPath`は`check_trace.ts`のSCN配置検査だけに使われ、
+ * 適用される。`isStagingLifecycleScanPath`は`check_trace.ts`のSCN配置検査だけに使われ、
  * 同じMarkdownは同gateの要件本文検査へ届く。`check_directory_guides.ts`は
  * `.agent-skill-chain`配下だけを再帰し、`check_package_contents.ts`の実対象は
  * `npm pack`の出力である。**述語の適用範囲をgate全体だと仮定すると、gateの判定を

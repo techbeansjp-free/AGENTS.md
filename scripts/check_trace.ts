@@ -4,7 +4,7 @@ import path from "node:path";
 import { validateScenarioTrace } from "../src/domain/trace.js";
 import { loadProjectPolicySet } from "../src/domain/policy.js";
 import { validateSpecs } from "../src/domain/spec.js";
-import { isIssueStagingPath } from "../src/domain/staging.js";
+import { isStagingLifecycleScanPath } from "../src/domain/staging.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 function walkFiles(
@@ -766,9 +766,16 @@ export function checkSpecNormalization(
   );
   for (const file of scenarioDefinitionFiles) {
     const relative = relativePath(root, file);
-    // Issue一時ステージングのGherkinは受け入れ例の下書きでありtest定義ではない。
-    // 除外はこの検査の内側だけに置き、共有walkerの列挙結果は変更しない。
-    if (isIssueStagingPath(relative)) continue;
+    /**
+     * 一時ライフサイクル領域のGherkinは受け入れ例や引き継ぎの下書きであり
+     * test定義ではない。**除外範囲は`STAGING_LIFECYCLE_AREAS`から導出し、
+     * この検査が独自のprefixを持たない**（Issue #1273）。
+     *
+     * 除外はこの検査の内側だけに置き、共有walkerの列挙結果は変更しない。
+     * **`isStagingLifecyclePath`は使わない。** あちらは追跡混入検査が使い、
+     * 真偽の安全側の向きが逆である。
+     */
+    if (isStagingLifecycleScanPath(relative)) continue;
     if (relative.startsWith("test/features/") && file.endsWith(".feature"))
       continue;
     const lines = fs.readFileSync(file, "utf8").split(/\r?\n/u);
