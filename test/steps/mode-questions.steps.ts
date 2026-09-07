@@ -14,6 +14,7 @@ import {
   validateModeQuestions,
   type ModeQuestion,
 } from "../../src/domain/mode.js";
+import { visibleMarkdownLines } from "../support/markdown.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 const LEDGER_KEYS = ["valid", "errors", "rules", "coverage"];
@@ -217,42 +218,6 @@ Then(
   },
 );
 
-/**
- * **表示される本文だけを走査対象にする。**
- *
- * HTMLコメント、fenced code block（バッククォートとチルダの両方）、indented code
- * blockへ退避した正しい表を充足証拠にしない。**独立reviewerが、チルダfenceと
- * 4スペースindentへ正しい行を退避して表本文を反転する回避を実証した。**
- */
-function visibleLines(markdown: string): string[] {
-  const lines: string[] = [];
-  let fence: string | null = null;
-  let inComment = false;
-  for (const line of markdown.split(/\r?\n/u)) {
-    const opener = /^\s{0,3}(`{3,}|~{3,})/u.exec(line);
-    if (fence !== null) {
-      if (opener && line.trimStart().startsWith(fence)) fence = null;
-      continue;
-    }
-    if (opener) {
-      fence = opener[1]!.slice(0, 3);
-      continue;
-    }
-    if (inComment) {
-      if (line.includes("-->")) inComment = false;
-      continue;
-    }
-    if (line.includes("<!--")) {
-      if (!line.includes("-->")) inComment = true;
-      continue;
-    }
-    /** indented code blockは4スペースまたはtabで始まる。表の行はindentしない。 */
-    if (/^(?: {4}|\t)/u.test(line)) continue;
-    lines.push(line);
-  }
-  return lines;
-}
-
 /** Markdownの表として、header・区切り行・連続する本文行を1つの表に閉じる。 */
 function tableBody(
   lines: readonly string[],
@@ -294,7 +259,7 @@ When("モード判定質問の判定例を検査する", function () {
     "utf8",
   );
   const [, afterHeading = ""] = document.split("\n## モード判定質問\n");
-  this.texts = visibleLines(afterHeading.split("\n## ")[0] ?? "");
+  this.texts = visibleMarkdownLines(afterHeading.split("\n## ")[0] ?? "");
 });
 
 Then(

@@ -37,6 +37,7 @@ import { checkProjectQualityContract } from "../../scripts/check_project_quality
 import { validateDevelopmentConsiderations } from "../../src/domain/conformance.js";
 import { run, runJsonlSession } from "../../src/lib/process.js";
 import { main } from "../../src/cli.js";
+import { visibleMarkdown } from "../support/markdown.js";
 import {
   COMPATIBLE_POLICY_SCHEMA_VERSIONS,
   CURRENT_POLICY_SCHEMA_VERSION,
@@ -1660,7 +1661,6 @@ Given(
       "docs/specs/18_レイアウト/00_レイアウトトークン.md",
       "docs/specs/15_要件追跡/00_追跡表.md",
       "docs/specs/15_要件追跡/01_変更履歴.md",
-      "src/styles/_layout.scss",
     ];
   },
 );
@@ -3651,40 +3651,6 @@ Then("終了値は1でstderrに実行できなかった原因が残る", functio
 const MODE_QUESTION_SKILL_LINK =
   "[モード判定質問](../../docs/01_開発ワークフロー.md#モード判定質問)を読み";
 const MODE_QUESTION_HEADING = "## モード判定質問";
-
-/**
- * **表示される本文だけをlinkの充足証拠にする。**
- *
- * 段落全体をHTMLコメントで囲む変異と、code blockへ退避する変異が生存した
- * （独立reviewerのM-02）。読まれない位置にlinkがあっても実行経路へ届かない。
- */
-function visibleMarkdown(markdown: string): string {
-  const lines: string[] = [];
-  let fence: string | null = null;
-  let inComment = false;
-  for (const line of markdown.split(/\r?\n/u)) {
-    const opener = /^\s{0,3}(`{3,}|~{3,})/u.exec(line);
-    if (fence !== null) {
-      if (opener && line.trimStart().startsWith(fence)) fence = null;
-      continue;
-    }
-    if (opener) {
-      fence = opener[1]!.slice(0, 3);
-      continue;
-    }
-    if (inComment) {
-      if (line.includes("-->")) inComment = false;
-      continue;
-    }
-    if (line.includes("<!--")) {
-      if (!line.includes("-->")) inComment = true;
-      continue;
-    }
-    if (/^(?: {4}|\t)/u.test(line)) continue;
-    lines.push(line);
-  }
-  return lines.join("\n");
-}
 
 Given("配布するStep 0のskillがある", function () {
   this.modeQuestionSkillLink = visibleMarkdown(
