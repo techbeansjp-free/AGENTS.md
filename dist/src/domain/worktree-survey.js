@@ -45,7 +45,7 @@ export function parseWorktreeHeads(output) {
         const branchLine = lines.find((line) => line.startsWith("branch refs/heads/"));
         const detached = lines.includes("detached");
         const headSha = headLine?.slice("HEAD ".length).trim() ?? "";
-        if (!isWorktreeHeadSha(headSha) && false) {
+        if (!isWorktreeHeadSha(headSha)) {
             errors.push(`${worktreePath}: HEAD SHAを観測できません`);
             continue;
         }
