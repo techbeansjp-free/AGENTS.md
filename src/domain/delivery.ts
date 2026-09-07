@@ -2,6 +2,7 @@ import {
   compareTrustedPolicy,
   enforceTrustedBoundary,
   resolveEffectivePolicy,
+  validateEnforcementPolicy,
 } from "./enforcement.js";
 import {
   isRecord,
@@ -10,6 +11,7 @@ import {
   type RuleObservation,
 } from "../types.js";
 import { validatePullRequestBody, withoutMarkdownCode } from "./issue.js";
+import { validatePolicy } from "./policy.js";
 import type { RuleFragmentSource } from "./project-rule-retirement.js";
 
 interface DeliveryEvidence {
@@ -25,7 +27,7 @@ interface DeliveryEvidence {
   };
   ownership?: { classified?: boolean; owner?: string; targetLayer?: string };
 }
-interface PullRequestInput {
+interface PullRequestBaseInput {
   apply: boolean;
   authorization?: string;
   evidence: DeliveryEvidence;
@@ -41,9 +43,7 @@ interface PullRequestInput {
   body: string;
   /** 省略時はPR本文のH1から導出する。 */
   title?: string;
-  trustedPolicy?: Policy;
   candidatePolicy?: Policy;
-  packageFloor?: Policy;
   trustedRuleSources?: readonly RuleFragmentSource[];
   /**
    * candidate policy setのchoices fragmentのraw byte列とpath。
@@ -55,6 +55,12 @@ interface PullRequestInput {
   candidateChoicesRaw?: string;
   choicesFragmentPath?: string;
 }
+/** trusted callerはcandidateから独立したtrusted loaderのfloorを供給する。 */
+type PullRequestInput = PullRequestBaseInput &
+  (
+    | { trustedPolicy: Policy; packageFloor: Policy }
+    | { trustedPolicy?: undefined; packageFloor?: Policy }
+  );
 export interface PullRequestReadBack {
   number?: number;
   url?: string;
@@ -469,6 +475,13 @@ export function createPullRequest(
     throw new Error("先頭・基点ブランチ名が安全ではありません");
   validateDeliveryEvidence(input.evidence, input.headSha);
   if (input.trustedPolicy) {
+    if (
+      !validatePolicy(input.packageFloor).valid ||
+      !validateEnforcementPolicy(input.packageFloor).valid
+    )
+      throw new Error(
+        "trustedPolicyを使うPR作成には有効なpackageFloor（空でないrules）が必要です。trusted loaderのloadEffectiveTrustedPolicySetが返すpackageFloorをcandidateから独立して供給してください",
+      );
     const effective = resolveEffectivePolicy(
       input.trustedPolicy,
       input.candidatePolicy,

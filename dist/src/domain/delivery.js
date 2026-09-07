@@ -1,6 +1,7 @@
-import { compareTrustedPolicy, enforceTrustedBoundary, resolveEffectivePolicy, } from "./enforcement.js";
+import { compareTrustedPolicy, enforceTrustedBoundary, resolveEffectivePolicy, validateEnforcementPolicy, } from "./enforcement.js";
 import { isRecord, } from "../types.js";
 import { validatePullRequestBody, withoutMarkdownCode } from "./issue.js";
+import { validatePolicy } from "./policy.js";
 function branchMatches(pattern, value) {
     const escaped = pattern
         .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
@@ -207,6 +208,9 @@ export function createPullRequest(input, external) {
         throw new Error("先頭・基点ブランチ名が安全ではありません");
     validateDeliveryEvidence(input.evidence, input.headSha);
     if (input.trustedPolicy) {
+        if (!validatePolicy(input.packageFloor).valid ||
+            !validateEnforcementPolicy(input.packageFloor).valid)
+            throw new Error("trustedPolicyを使うPR作成には有効なpackageFloor（空でないrules）が必要です。trusted loaderのloadEffectiveTrustedPolicySetが返すpackageFloorをcandidateから独立して供給してください");
         const effective = resolveEffectivePolicy(input.trustedPolicy, input.candidatePolicy, { packageFloor: input.packageFloor });
         const comparison = effective.valid
             ? compareTrustedPolicy(input.trustedPolicy, effective.policy, {
