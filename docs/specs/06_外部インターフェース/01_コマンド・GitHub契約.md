@@ -128,8 +128,9 @@ squash/rebaseの終端検証は、固定base..headからsource commit数を1〜2
 |---|---|---|
 | `routing observe` | `--provider` | read-onlyのProviderAvailability。availableは0、unavailableまたはunknownは非0 |
 | `routing resolve` | `--root --scope --coordinator --implementer --reviewer --evaluator-ref` | project choice、trusted mapping、provider観測からroleとmodelを解決する。resolvedは0、pendingまたはrejectedは理由、確認済み入口、安全なfallback候補、必要authority、停止点、再開条件を含めて非0 |
+| `routing launch` | `--root --scope --coordinator --implementer --reviewer --implementer-context --reviewer-context --risk --mode --prompt-file --sandbox` | trusted policyのselector採用tierと起動ごとの公式推奨を検証してCodex taskを実行する。rootは現在directory、sandboxはread-onlyが既定。workspace-writeだけを追加選択できる。成功は0、拒否・失敗・結果不明は非0。任意model・provider・shell・追加argv・trusted-ref overrideを受理しない |
 | `routing roles` | `--scope --assignments=<JSON>` | 6 roleの重複、未知role、coordinator欠落、implementerとreviewerのidentity・context兼務を検証する。違反は日本語構造化診断と非0 |
-| `routing tier` | `--risk --mode --scope --model --selected [--justification]` | risk・mode・scopeとproject choice mappingから必要tierを決め、降格・mapping不明・不一致を非0で拒否する |
+| `routing tier` | `--risk --mode --scope --model --selected [--provider=codex] [--justification]` | provider=codexはtrusted selector採用tierと新しい公式観測で具体modelを照合する。未指定は既存台帳の互換検証でありCodex自動起動の認可に使わない。必要tier不足・mapping不明・不一致を非0で拒否する |
 | `routing ceiling` | `--provider --selection --issue --scope [--override=<JSON>]` | provider自律選択上限とIssue・scope拘束の人間overrideを検証し、alias・自動routing・失効・自己発行を非0で拒否する |
 | `routing independence` | `--implementer --reviewer --candidate-paths --trusted-ref --candidate-head --evaluator-ref` | identity分離とcandidate自己評価を検査する。independentは0、violatedまたはpendingは構造化診断付きで非0 |
 | `routing evidence issue` | store設定と`--base-sha --issue --scope --role --route-mode --provider --model --model-selection --routing-reason --mapping-version --reasoning-effort --service-tier --identity --evaluator-ref` | 無指定は発行preview、`--apply`はCodex優先またはClaude fallbackを拘束した書換不能なrouting evidenceを排他的に1件発行する |
@@ -148,3 +149,11 @@ squash/rebaseの終端検証は、固定base..headからsource commit数を1〜2
 `pr merge`はCLI flagをhuman approvalとして扱わない。GitHub review APIをpaginationして全pageのreview ID、submittedAt、commit SHA、actorを取得し、配列順でなく時刻とstable IDからactorごとの最新状態を決める。現在のHEAD SHAに一致してPR authorとprovider観測済みH_impl commit authorの両方から独立したapprovalだけを数える。base branchが`branchMethods`の複数entryに一致するときは全methodsの積集合を使い、空ならfail-closedで拒否する。未一致時はglobalな`merge.methods`を使い、branch単位指定によるglobal許可の拡大はpolicy検証で拒否する。baseRefとheadRefの双方が`merge.branches`へ文字列として列挙された長命branch同士なら、squashとrebaseを`ASC-MERGE-METHOD-001`で拒否し、merge方式での再実行を案内する。観測値・時刻・repository・SHA・branch protectionの欠落や矛盾はfail-closedとし、適用直前にPR、check、review、protectionとmethodを再取得して同じ条件で再認可する。
 
 PR CIで`origin/HEAD`がない場合も、workflowはevent値をquoted environment経由の明示入力とし、read-only tokenを使う唯一のGitHub adapterがexact repository/PRのbase ref/OID、head OID、repository default branchとcurrent tip OIDを再観測する。provider tip OIDが`refs/remotes/origin/<default>` tipと完全一致し、base refがobserved default branchで、observed base OIDが両SHAに一致し、そのSHAがtipのancestorである場合だけauthorityとする。explicit modeのcandidateはfilesystemでなくprovider-observed head commitのGit objectからentrypointと全fragment inventoryを読み、manifestを正本として検証する。そのcommitにないhead、monolith、mixed inventory、orphan/missing fragment、stale local remote refをfail-closedにし、dirty/missing/orphan worktreeが検証対象を差し替えることを許さない。初回bootstrapのproject set不在はtrusted commit側だけに認める。候補側の環境変数やcheckout中のfile、feature-only commitをtrusted SHAの代替にしない。
+
+## 最新Codexモデルの起動契約
+
+`routing launch`はroot内の1MiB以下の非空通常fileを`--prompt-file`で受け取り、task本文をshell評価せずstdinへ渡す。scope、identity、contextは非空・512文字以下・制御文字なしとし、modeはfull/quick/poc、riskはtrusted `minimumTierByRisk`に存在する値を要求する。coordinator/implementer、implementer/reviewerのidentityと、implementer/reviewerのcontextは分離する。root・prompt fileのsymlink脱出、不正path、非NFCのprompt file名を拒否する。
+
+公式観測は`codex app-server`の`config/read`と`model/list`を10秒上限で取得し、別catalogの`model_catalog_json`指定を拒否する。認証・安全設定を保持し、選択に関するOpenAI provider・high・service tier defaultだけを固定する。現在環境のpicker-visibleな一意推奨を具体slugへ解決し、trusted selector採用tierが不足する場合は起動しない。
+
+実行は`codex exec --json --ephemeral --model`へ観測slugを渡し、high・default、指定sandbox/root、stdin入力を固定する。既定timeoutは30分、stdout/stderr合計の上限は8MiB。`turn.completed`が1件、失敗eventなし、完全なJSONL、終了値0をそろえて成功とする。異常終了はfailed、timeout・容量超過・不正/不足eventなど完了を確定できない場合はunknownとし、自動再送しない。結果は選択条件と`modelEvidence=dispatch_arguments`を保持し、promptとraw process出力を返さない。

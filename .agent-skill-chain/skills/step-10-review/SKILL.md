@@ -11,6 +11,8 @@ description: exact-headの実装・テスト・仕様証拠を有限にレビュ
 
 role欄の担当roleが`reviewer`であること、必要能力tier、provider欄の上限、model設定欄、fallback欄、独立性証拠欄、肯定・敵対review、finding分類、対象差分を変更していない証拠を実装時のrouting evidenceと突合する。providerとmodel設定はproject choiceの入力契約として扱い、固有のmodel slugからreview authorityを推測しない。reviewerがimplementerと異なるidentity・contextであることを独立性証拠欄で確認できない場合は停止条件を適用し、承認しない。reviewerはfindingを隠す修正を行わない。
 
+Codex起動差分では`routing launch`の観測時刻・入口・selectedModel/dispatchedModel・high/default・trusted selector採用tier・policy SHA・終了eventを確認する。dispatch引数の証拠をproviderが実効modelをattestした証拠へ読み替えない。古いresolve結果や固定slugが起動経路へ残った場合はfindingにする。
+
 ## テンプレート契約
 
 作業開始前に[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)を全文読み、成果物間の責務越境、上流の暗黙変更、対象版とシステム仕様書の不一致をfindingにする。

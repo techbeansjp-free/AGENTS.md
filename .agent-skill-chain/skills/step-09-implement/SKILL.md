@@ -17,6 +17,8 @@ role欄の担当roleが`implementer`であること、許可path・操作、必�
 
 `continue`は記録して実装を継続する。`rebaseline-affected-contracts`は出力された影響成果物だけを再確定する。`promote-to-full`でquickをfullへ昇格する場合は、まず`workflow promote-full --staging=<同じstaging> --input=<同じ発見JSON>`をflagなしで実行する。既定は副作用のないpreviewであり、対象と診断を確認後、同じstaging・発見JSONへ`--apply`を付けた明示実行だけが00〜03を補完する。`stop-or-promote-full`は判定時点ではfileを変更せず、停止を記録するか、同じpreviewと明示`--apply`でPoCからfullへの昇格を選ぶ。昇格は元のモード判定と00をbackupし、排他lock・永続transaction・digest検証で途中停止から再実行可能にする。既同期stagingは`promotion-active`となり、同じIssueのStep 8再同期までPRへ進めない。昇格後は旧modeのStep 0・1だけを継承し、fullのStep 2〜10を補完する。Issueや変更のない成果物を作り直さない。
 
+Codexを新しく起動するときは必ず`routing launch --help`で入力を確認し、当該taskのfile、root、独立identity/context、risk、modeを渡して実行する。編集taskだけ`--sandbox=workspace-write`を明示する。launch自身が毎回公式config/readとmodel/listを観測し、trusted selector採用tier、具体model、high、標準速度を検証してCodexを起動する。手書きmodel名、以前のresolve結果、旧Evidenceを新しい起動の選択元にしない。launchが起動したimplementer自身は同じtaskを再launchせず、このStepの実装を続ける。取得不能・採用不足は起動前に停止し、旧modelや別providerで暗黙に実行しない。
+
 ## テンプレート契約
 
 作業開始前に[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)を全文読み、システム仕様書には実装後に成立する現在状態だけを反映する。未実装の計画を仕様済みにしない。

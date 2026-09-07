@@ -1,3 +1,4 @@
+import { launchCodex } from "./adapters/codex-launch.js";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -34,7 +35,7 @@ import { observeProvider } from "./adapters/provider.js";
 import { resolveRouting } from "./domain/routing.js";
 import { checkRoutingIndependence } from "./domain/routing-independence.js";
 import { appendCompletionRecord, appendEvidenceStateRecord, applyEvidencePrune, issueRoutingEvidence, previewEvidencePrune, } from "./domain/routing-evidence.js";
-import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssignment, validateTierSelection, } from "./domain/role.js";
+import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssignment, validateTierSelection, validateCodexTier, CODEX_ADOPTION_SELECTOR, } from "./domain/role.js";
 import { readDeliveryEvidence, readEnforcementInput, readFinalizeEvidence, isPolicyInput, readJsonInput, readMigrationManifest, readMigrationState, readModeAssessment, readPolicyFileInput, readPolicyJson, readSpecReview, } from "./adapters/json-input.js";
 import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPocDeliveryChangeScope, assertWorkflowStaging, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
 import { assertConvergedReviewSession, previewReviewRound, recordReviewRound, } from "./adapters/review-session.js";
@@ -2776,6 +2777,10 @@ export async function main(argv, dependencies = {}) {
         const mode = required(flags, "mode");
         const scope = required(flags, "scope");
         const model = required(flags, "model");
+        if (flags.provider !== undefined &&
+            flags.provider !== "codex" &&
+            flags.provider !== "claude")
+            throw new Error("--providerはcodexまたはclaudeが必要です");
         const selected = modelTier(required(flags, "selected"), "selected");
         const choices = loadProjectPolicySet(root).choices[0];
         const configured = choices?.modelMapping && typeof choices.modelMapping !== "string"
@@ -2787,6 +2792,46 @@ export async function main(argv, dependencies = {}) {
             MODEL_TIERS.indexOf(configuredMinimum) > MODEL_TIERS.indexOf(computed)
             ? configuredMinimum
             : computed;
+        if (flags.provider === "codex") {
+            const trustedSet = loadOperationPolicy(root);
+            const trustedMapping = trustedSet.policy.projectChoices?.modelMapping;
+            const tierMapping = trustedMapping && typeof trustedMapping !== "string"
+                ? (trustedMapping.tierMapping ?? {})
+                : {};
+            const trustedMinimum = trustedMapping && typeof trustedMapping !== "string"
+                ? trustedMapping.minimumTierByRisk?.[risk]
+                : undefined;
+            const codexRequired = trustedMinimum &&
+                MODEL_TIERS.indexOf(trustedMinimum) > MODEL_TIERS.indexOf(computed)
+                ? trustedMinimum
+                : computed;
+            const observation = await observeProvider("codex", undefined, undefined, {
+                cwd: root,
+                official: true,
+            });
+            const recommended = observation.modelMetadata.filter((entry) => entry.recommended);
+            const result = validateCodexTier({
+                required: codexRequired,
+                mapping: tierMapping,
+            });
+            if (observation.state !== "available" ||
+                recommended.length !== 1 ||
+                recommended[0]?.model !== model ||
+                !recommended[0]?.supportedReasoningEfforts.includes("high"))
+                result.errors.push("modelが今回の公式推奨high対応Codexと一致しません");
+            if (tierMapping[CODEX_ADOPTION_SELECTOR] !== selected)
+                result.errors.push("選択tierがtrusted selector採用tierと一致しません");
+            result.valid = result.errors.length === 0;
+            print({
+                ...result,
+                required: codexRequired,
+                selected,
+                model,
+                selector: CODEX_ADOPTION_SELECTOR,
+                observedAt: observation.observedAt,
+            });
+            return result.valid ? 0 : 1;
+        }
         const result = validateTierSelection({
             required: requiredMinimum,
             selected,
@@ -2829,6 +2874,33 @@ export async function main(argv, dependencies = {}) {
         const observation = await observeProvider(provider);
         print(observation);
         return observation.state === "available" ? 0 : 1;
+    }
+    if (command === "routing" && subcommand === "launch") {
+        const { flags, positionals } = parse(rest);
+        if (usage === undefined)
+            throw new Error("routing launchのusageが未定義です");
+        const allowed = new Set([...usage.requiredFlags, ...usage.optionalFlags].map((entry) => entry.name));
+        if (positionals.length > 0 ||
+            Object.keys(flags).some((name) => !allowed.has(name)))
+            throw new Error("routing launchは定義済みflagだけを受理します。model/providerや任意Codex引数を指定できません");
+        const sandbox = typeof flags.sandbox === "string" ? flags.sandbox : "read-only";
+        if (sandbox !== "read-only" && sandbox !== "workspace-write")
+            throw new Error("--sandboxはread-onlyまたはworkspace-writeが必要です");
+        const result = await launchCodex({
+            root: typeof flags.root === "string" ? flags.root : process.cwd(),
+            scope: required(flags, "scope"),
+            coordinator: required(flags, "coordinator"),
+            implementer: required(flags, "implementer"),
+            reviewer: required(flags, "reviewer"),
+            implementerContext: required(flags, "implementer-context"),
+            reviewerContext: required(flags, "reviewer-context"),
+            risk: required(flags, "risk"),
+            mode: required(flags, "mode"),
+            promptFile: required(flags, "prompt-file"),
+            sandbox,
+        });
+        print(result);
+        return result.state === "succeeded" ? 0 : 1;
     }
     if (command === "routing" && subcommand === "resolve") {
         const { flags } = parse(rest);
