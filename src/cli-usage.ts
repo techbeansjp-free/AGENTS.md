@@ -182,6 +182,12 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     ],
     conditionalFlags: [],
     optionalFlags: [
+      optional(
+        "provider",
+        "text",
+        "codexは公式selectorとtrusted tierを検証、claudeは旧台帳",
+        "旧台帳互換",
+      ),
       ROOT_FLAG,
       optional("justification", "text", "上位tierを選ぶ根拠", "根拠なし"),
     ],
@@ -214,6 +220,29 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     conditionalFlags: [],
     optionalFlags: [],
     example: "npx agent-skill-chain routing observe --provider=codex",
+  },
+  {
+    command: "routing",
+    subcommand: "launch",
+    summary: "起動ごとに公式推奨Codexとtrusted採用tierを検証してtaskを実行する",
+    requiredFlags: [
+      flag("scope", "text", "実行scope"),
+      flag("coordinator", "text", "coordinator identity"),
+      flag("implementer", "text", "implementer identity"),
+      flag("reviewer", "text", "reviewer identity"),
+      flag("implementer-context", "text", "implementer context"),
+      flag("reviewer-context", "text", "独立reviewer context"),
+      flag("risk", "text", "trusted projectのrisk名"),
+      flag("mode", "text", "full/quick/poc"),
+      flag("prompt-file", "path", "root内のtask本文file"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [
+      ROOT_FLAG,
+      optional("sandbox", "text", "read-only/workspace-write", "read-only"),
+    ],
+    example:
+      "npx agent-skill-chain routing launch --scope=issue-1257 --coordinator=a --implementer=b --reviewer=c --implementer-context=b1 --reviewer-context=c1 --risk=identity --mode=full --prompt-file=task.txt",
   },
   {
     command: "routing",

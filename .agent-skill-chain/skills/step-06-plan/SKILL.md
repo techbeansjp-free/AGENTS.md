@@ -13,6 +13,10 @@ description: 承認対象の設計を、risk比例のVerification Setから最�
 
 実装taskごとに6 roleを記すrole欄、許可path・操作、必要証拠、能力tier、provider欄、model設定欄、fallback欄、独立性証拠欄を計画する。providerとmodel設定はproject choiceから受け取る入力であり、汎用skillは固有のmodel slugを既定しない。要求能力を満たす解決が不能な場合はfallback欄へ安全な停止・再開条件を置き、implementerとreviewerが異なるidentity・contextであることを独立性証拠欄で検証できるようにする。coordinatorへproduct実装taskを割り当てない。
 
+Codex実装taskは起動ごとに`routing launch`へ渡す計画にする。最新Codexモデルは公式model/listの一意な現在推奨かつhigh対応とし、モデル名の順位を推測しない。trusted tierMappingのselector採用tierを必要tierと比較し、task file、独立identity/context、risk、mode、sandboxを用意する。
+
+初回導入ではproject ownerが`.agent-skill-chain/project-policy.json`の`choiceFiles`に列挙したchoice JSONの`modelMapping.tierMapping`へ、`codex:provider_recommended_default:high:default`をkey、採用する能力tierを値として一度だけ設定し、既定branchへ反映する。このkeyは公式推奨・high・標準速度に対するprojectの採用方針であり、具体model名でも公式の性能保証でもない。未設定または必要tier未満ではlaunchを開始せず、candidate自身の設定をtrusted基準へ代用しない。以降の公式推奨model変更でkeyやmodel名を手動更新する必要はない。
+
 ## テンプレート契約
 
 作業開始前に[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)を全文読み、実装計画へ新しい要求・要件・設計判断を暗黙追加しない。実装中の発見は事実と対処を03へ追記し、契約変更時だけ影響する上流成果物を再確定する。

@@ -5,7 +5,7 @@
 | path | SHA-256 |
 |---|---|
 | `scripts/check_consumer_acceptance.ts` | `08cbde239552af94f97485a09e3173fb6e72855e7f4cffbc80629122f5bff5fc` |
-| `src/lib/process.ts` | `888c3467dec10e0f5b62c746fe7929e0391bf071039ea6d9fdd2b03b37f2742d` |
+| `src/lib/process.ts` | `06013f66a9aaf57b2cb9efc261b812730beccfd65366431b4b71faf0d35caf85` |
 
 この2件を記録するのは、consumer acceptanceの判定とprocess出力上限という、この証跡が主張する振る舞いの実体だからである。**`scripts/check_package_contents.ts`は含めない。** 同fileは`checkConsumerAcceptance`を`mechanisms: ["packed-bin", "scale-output"]`で呼んでおり、**この機構は接続経路に存在しない**（Issue #1221）。`package.json`はmainの自動releaseでversionが変わり、主張する振る舞いが同じでもhashが変わるため対象に含めない。
 
@@ -84,3 +84,11 @@ npmとallowBuildsありのpnpmがともに不合格であり、allowBuildsなし
 ## 復元確認
 
 変異前copyを `cp` で一時repositoryの `package.json` へ戻し、主worktreeの `package.json` も退避copyから `cp` で復元した。`cmp -s` は双方とも終了値0で、変異前copy、一時repository、主worktreeのSHA-256はすべて `1d1773b314faf375b14494aa286d56f4f1bf0540f898011de1427aaaabceebe9` と一致した。`git checkout` は使用していない。
+
+## 2026-09-07の現行sourceへの再拘束
+
+PR #1263の補正で`JsonlSessionOptions`と`runJsonlSession`だけを変更したため、対象製品fileの全体SHA-256を更新した。旧束縛`888c3467dec10e0f5b62c746fe7929e0391bf071039ea6d9fdd2b03b37f2742d`に一致するcommit `6ae197172c3f49dfe1524bf320f6d990302bd052`の`src/lib/process.ts`と現在fileを実読した。TypeScript ASTでこの2宣言だけを`getFullStart()`から`getEnd()`まで除き、残る宣言の元byte列と末尾を連結して比較した結果は完全一致であり、そのSHA-256は`fa1b2ec07ff06c7ab0f89d854c9231d2dfbdf4c178e540a89717f9ac1582748d`だった。同期`run`・`git`、出力上限、import、module初期化はこの一致範囲に含まれる。
+
+`check_consumer_acceptance.ts`のprocess実装importは同期`run`と型`ProcessOptions`・`ProcessResult`だけであり、`runJsonlSession`への接続はない。同fileの全体SHA-256も上表から変化していない。現在sourceで`node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs --name 'SCN-INT-CONSUMER-00[1678]'`を実行し、packed-bin故障検出、fixture公開入口、git準備の制御seam故障、候補tarballの3MiB出力を4 scenario・20 stepすべて合格で観測した。
+
+これは変更されていない同期consumer経路への再拘束と現行回帰の観測であり、既存の#1024時点の実npm・pnpm故障注入を今回再実行したという主張ではない。`artifact_sha256`、`distribution_digest`、旧注入差分・前後終了値・復元確認は保持した。束縛対象と検証器も保持し、検査をAST部分hashへ変更せず、上表のfile全体hashを引き続き照合する。過去の同種再拘束はcommit `ddf8e99a0bb0282b26edb408e046b5d9062c12af`（Issue #1027）にある。

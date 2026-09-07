@@ -16,7 +16,7 @@ function parseJsonLines(stdout) {
 function parseTerminatedJsonLines(stdout) {
     return parseJsonLines(stdout.slice(0, stdout.lastIndexOf("\n") + 1));
 }
-function hasCodexResponse(stdout) {
+function hasCodexResponse(stdout, id = CODEX_RESPONSE_ID) {
     for (const line of stdout
         .slice(0, stdout.lastIndexOf("\n") + 1)
         .split("\n")) {
@@ -25,7 +25,7 @@ function hasCodexResponse(stdout) {
             continue;
         try {
             const message = parseJsonStrict(source, "provider JSONL response");
-            if (isRecord(message) && message.id === CODEX_RESPONSE_ID)
+            if (isRecord(message) && message.id === id)
                 return true;
         }
         catch {
@@ -34,20 +34,25 @@ function hasCodexResponse(stdout) {
     }
     return false;
 }
-function codexInput() {
-    return [
-        {
-            method: "initialize",
-            id: 0,
-            params: {
-                clientInfo: {
-                    name: "agent-skill-chain",
-                    title: "agent-skill-chain",
-                    version: PACKAGE_VERSION,
-                },
+function codexInitializeInput() {
+    return (JSON.stringify({
+        method: "initialize",
+        id: 0,
+        params: {
+            clientInfo: {
+                name: "agent-skill-chain",
+                title: "agent-skill-chain",
+                version: PACKAGE_VERSION,
             },
         },
+    }) + "\n");
+}
+function codexRequests(official) {
+    return ([
         { method: "initialized", params: {} },
+        ...(official
+            ? [{ method: "config/read", id: 2, params: { includeLayers: false } }]
+            : []),
         {
             method: "model/list",
             id: CODEX_RESPONSE_ID,
@@ -55,12 +60,41 @@ function codexInput() {
         },
     ]
         .map((message) => JSON.stringify(message))
-        .join("\n")
-        .concat("\n");
+        .join("\n") + "\n");
+}
+function runCodexSession(file, args, cwd, options, official) {
+    let initialized = false;
+    return runJsonlSession(file, args, cwd, {
+        ...options,
+        input: codexInitializeInput(),
+        timeoutMs: options.timeoutMs ?? PROVIDER_TIMEOUT_MS,
+        nextInput: (stdout) => {
+            if (initialized)
+                return undefined;
+            const responses = parseTerminatedJsonLines(stdout).filter((message) => isRecord(message) && message.id === 0);
+            if (responses.length === 0)
+                return undefined;
+            const response = responses[0];
+            if (responses.length !== 1 ||
+                !isRecord(response) ||
+                Object.hasOwn(response, "error") ||
+                !isRecord(response.result) ||
+                typeof response.result.userAgent !== "string" ||
+                response.result.userAgent.trim() === "")
+                throw new Error("Codex initializeの成功応答を確認できません");
+            initialized = true;
+            return codexRequests(official);
+        },
+        isComplete: (stdout) => initialized &&
+            hasCodexResponse(stdout) &&
+            (!official || hasCodexResponse(stdout, 2)),
+    });
 }
 function codexCatalog(stdout) {
     const response = parseTerminatedJsonLines(stdout).find((message) => isRecord(message) && message.id === CODEX_RESPONSE_ID);
-    if (!isRecord(response) || !isRecord(response.result))
+    if (!isRecord(response) ||
+        Object.hasOwn(response, "error") ||
+        !isRecord(response.result))
         return undefined;
     const result = response.result;
     if (!Array.isArray(result.data) ||
@@ -72,6 +106,7 @@ function codexCatalog(stdout) {
             typeof entry.model !== "string" ||
             !MODEL_SLUG.test(entry.model) ||
             (entry.isDefault !== undefined && typeof entry.isDefault !== "boolean") ||
+            (entry.hidden !== undefined && typeof entry.hidden !== "boolean") ||
             entry.hidden === true)
             return undefined;
         const efforts = entry.supportedReasoningEfforts;
@@ -101,12 +136,7 @@ function codexCatalog(stdout) {
 async function defaultExecutor(file, args, cwd, options) {
     if (file !== "codex")
         return run(file, args, cwd, options);
-    return runJsonlSession(file, args, cwd, {
-        ...options,
-        input: codexInput(),
-        timeoutMs: options.timeoutMs ?? PROVIDER_TIMEOUT_MS,
-        isComplete: hasCodexResponse,
-    });
+    return runCodexSession(file, args, cwd, options, false);
 }
 function isLegacyProviderCatalog(value) {
     if (!isRecord(value))
@@ -134,15 +164,22 @@ function unknownObservation(provider, observedAt, reason) {
         reason,
     };
 }
-export async function observeProvider(provider, execute = defaultExecutor, now = () => new Date()) {
+export async function observeProvider(provider, execute = defaultExecutor, now = () => new Date(), options = {}) {
     const observedAt = now().toISOString();
     if (!PROVIDER_NAME.test(provider))
         return unknownObservation(provider, observedAt, "provider実行入口の名前が不正です");
     let result;
     try {
-        result = await execute(provider, provider === "codex"
-            ? ["app-server", "--stdio"]
-            : ["models", "list", "--json"], process.cwd(), { allowFailure: true, timeoutMs: PROVIDER_TIMEOUT_MS });
+        const observer = options.official && execute === defaultExecutor
+            ? (file, args, cwd, processOptions) => runCodexSession(file, args, cwd, processOptions, true)
+            : execute;
+        result = await observer(provider, provider === "codex"
+            ? [
+                "app-server",
+                "--stdio",
+                ...(options.official ? CODEX_SELECTION_CONFIG : []),
+            ]
+            : ["models", "list", "--json"], options.cwd ?? process.cwd(), { allowFailure: true, timeoutMs: PROVIDER_TIMEOUT_MS });
     }
     catch {
         return unknownObservation(provider, observedAt, "provider実行入口を起動できません");
@@ -151,8 +188,29 @@ export async function observeProvider(provider, execute = defaultExecutor, now =
         return unknownObservation(provider, observedAt, "provider実行入口のread-only観測が失敗しました");
     let catalog;
     try {
-        if (provider === "codex")
+        if (provider === "codex") {
+            if (options.official) {
+                const responses = parseTerminatedJsonLines(result.stdout);
+                const configurations = responses.filter((entry) => isRecord(entry) && entry.id === 2);
+                const configuration = configurations[0];
+                if (configurations.length !== 1 ||
+                    !isRecord(configuration) ||
+                    Object.hasOwn(configuration, "error") ||
+                    !isRecord(configuration.result) ||
+                    !isRecord(configuration.result.config))
+                    return unknownObservation(provider, observedAt, "公式catalogのconfig/read応答を確認できません");
+                const config = configuration.result.config;
+                if ((config.model_catalog_json !== null &&
+                    config.model_catalog_json !== undefined) ||
+                    (config.model_provider !== null &&
+                        config.model_provider !== undefined &&
+                        config.model_provider !== "openai"))
+                    return unknownObservation(provider, observedAt, "公式catalogを確認できません。model_catalog_json指定を解除しOpenAI providerで再実行してください");
+                if (responses.filter((entry) => isRecord(entry) && entry.id === CODEX_RESPONSE_ID).length !== 1)
+                    return unknownObservation(provider, observedAt, "model/list応答が一意ではありません");
+            }
             catalog = codexCatalog(result.stdout);
+        }
         else {
             const value = parseJsonStrict(result.stdout, "provider model catalog");
             if (isLegacyProviderCatalog(value))
@@ -184,4 +242,13 @@ export async function observeProvider(provider, execute = defaultExecutor, now =
         entrypoint: provider === "codex" ? "codex app-server model/list" : provider,
     };
 }
+/** Keep authentication and safety configuration; override only model selection. */
+export const CODEX_SELECTION_CONFIG = [
+    "-c",
+    'model_provider="openai"',
+    "-c",
+    'model_reasoning_effort="high"',
+    "-c",
+    'service_tier="default"',
+];
 //# sourceMappingURL=provider.js.map
