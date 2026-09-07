@@ -5,14 +5,14 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 1 |
+| ラウンド | 2 |
 | H_impl | `f9dcba9f0e80cccac547eca3fbcd2682769f8e85` |
 | 比較基点 | `b5346195b4554d9d05ba1856ee588ec3d166a8c5` |
 | 対象SHA・文書ダイジェスト | `f9dcba9f0e80cccac547eca3fbcd2682769f8e85` |
 | 対象差分 | `b5346195b4554d9d05ba1856ee588ec3d166a8c5..f9dcba9f0e80cccac547eca3fbcd2682769f8e85`、11 path。うち`dist/`配下1件は生成物として個別監査の対象外とし、配布影響は§8へ残す |
 | 対象外 | 変異試験の実施そのもののgate化、`mutation-test`を選ぶ条件の`externalContractChanged`以外への拡張、既存増補規則5件の変更、`BASE_VERIFICATION`の変更、Issue #1261が所有するSemantic Graphのskill参照 |
-| 残り予算 | 同一範囲で最大3ラウンドのうち1ラウンドを使用。**残り2。** 収束後のHEAD移動に対する取り直し1ラウンドは未使用 |
-| ラウンド数 | 1 |
+| 残り予算 | 同一範囲で最大3ラウンドのうち1ラウンドを使用。**残り2。** 収束後の回復ラウンド1枠をラウンド2で使用した |
+| ラウンド数 | 2。ラウンド2はStep 11後の外部指摘を取り込む回復ラウンドである |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260907_143916_mutation-testに選択経路を与え新しいSCNの検出力を要求する |
 | 仕様の所有箇所 | `docs/specs/02_要件/04_仕様・品質管理要件.md`のREQ-SQ-029。引用: 「critical logicは必要に応じてnegative、property-based、differential、mutation等を追加する」 |
 | 成果物行数 | 実装 +14、配布文書 +7、test +219、仕様 +5、生成dist +14 |
@@ -34,12 +34,12 @@
 | 是正後の観測 | 同一入力を是正後のHEADで実行 | 同じ集合へ`mutation-test`が1件加わる | 実行観測 |
 | 差分 | `b5346195..f9dcba9f` | 11 path | 既存コード |
 | テスト | 対象4 SCNを`--name`で絞り込んだcucumber実行 | 4 scenarios、20 steps、すべて成功 | テスト出力 |
-| 変異試験 | 8件 | 8 kill。独立reviewerが構成した回避2件を含む | テスト出力 |
+| 変異試験 | 8件 | 8 kill。母集団は`src/domain/agile-verification.ts`の選定logicへの4件と、配布2 fileの契約文・表headerを落とす4件である。独立reviewerが構成した回避2件を含む | テスト出力 |
 | 全数比較 | reviewerによる10変更種別×4 risk×境界数2種×影響フラグ32組合せ=2,560入力 | 外部契約変更なしの1,280入力で出力全体が基点と`deepEqual`一致。変更ありの1,280入力すべてで`mutation-test`が選ばれ、従来との差は`mutation-test`だけ | 実行観測 |
 | 仕様 | `docs/specs/02_要件/04_仕様・品質管理要件.md`、`15_要件追跡/` | updated | 既存文書 |
 | commit前candidate | `git diff --name-status b5346195 f9dcba9f` | 11 pathすべてM。うち生成dist 1件 | Git index |
 | Phase A artifact | `docs/reviews/171_課題1259mutation-test選択経路レビュー.md` | H_implの後にこの1 fileだけをcommitしてH_finalとする | Git観測 |
-| commit後external | PR、CI run、外部review | **本artifactの作成時点では未観測である。** | 外部のimmutable証拠 |
+| commit後external | PR #1269、CI run 34093090909・34093090903、CodeRabbitのreview thread 3件 | 必須check 2件が合格。外部指摘3件をラウンド2で取り込んだ | 外部のimmutable証拠 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **満たす。**
 - `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: **artifact commit時点で満たす。**
@@ -107,9 +107,9 @@
 
 | 観点 | 確認内容 | 判定 | 根拠 |
 |---|---|---|---|
-| 反例 | 要件を破る入力・状態がないか | pass | 変異8件中8 kill。reviewerが構成した回避2件を含む。2,560入力の全数比較で例外なし |
+| 反例 | 要件を破る入力・状態がないか | pass | 変異8件中8 kill。**この8件はM-03の本文反転変異を含まない。** 8件は選定logicへの4件（追加行の削除、`risk === "high"`への限定、`api`への無条件追加、条件の反転）と、配布2 fileの契約文・表headerを落とす4件である。M-03の変異は別母集団の1件で、生存する。2,560入力の全数比較で例外なし |
 | 失敗経路 | 外部失敗・部分失敗を安全に扱うか | pass | 追加した`methods.add("mutation-test");`は既存の`if (input.impactAnalysis.externalContractChanged) {`分岐内のSet操作だけで、I/Oも例外送出も追加していない。**選定は要求であって強制ではない。** 充足できない場合は理由を実装計画へ残す経路がある。SCN-UNIT-AGILE-030 |
-| 境界値 | 空、最大、最小、重複、Unicode等 | pass | 10変更種別×4 risk×境界数1・2をsweepした。`externalContractChanged`が真かつ他の影響がすべて偽の場合も選ぶ |
+| 境界値 | 空、最大、最小、重複、Unicode等 | pass | **SCN-UNIT-AGILE-030が走査するのは10変更種別×4 riskの40組合せで、`affectedBoundaries`は`["domain"]`に固定し影響分析は2状態だけを比較する。** 空・最大・最小・重複・Unicodeの入力はこのscenarioに含まれない。境界数2と影響フラグ32組合せを含む2,560入力はreviewerの全数比較で観測したものであり、repositoryのtestではない。`externalContractChanged`が真かつ他の影響がすべて偽の場合も選ぶ |
 | 悪用 | 注入、経路脱出、権限外操作等 | not-applicable | 新しい入力経路と権限を追加していない。入力schemaを変更していない |
 | 安全性 | 認証、承認、秘密情報、Zero Trust | pass | gateを追加せず既存gateも弱めていない。**選ばれた手段を充足したかの判定は既存の独立reviewが担う。** 実装側でmerge可否を変えない |
 | データ損失 | 上書き、削除、部分公開、履歴消失 | pass | 既存の増補規則、`BASE_VERIFICATION`、既存scenarioを削除していない |
@@ -125,6 +125,9 @@
 | M-03 | Medium | REQ-SQ-029の「この不変条件を強制する」が検証範囲を超えている。SCN-UNIT-PACKAGE-026は本文を反転して元文をHTMLコメントへ移す変異で生存する | reviewerが該当変異の生存を示した | 仕様の主張 | **assertionをACを超えて広げず仕様の主張を狭めた。** 「保証するのは選定結果と固定文字列の実在であり、変異の作り方に従ったことも変異試験を実施したことも保証しない」と明記した | resolved | 配布文書の意味の反転は検出しない。実施の確認は独立reviewが担う |
 | L-01 | Low | SCN-UNIT-PACKAGE-026の期待値が太字記号まで固定しており、意味を変えない表記修正でも落ちる。厳密には契約全文の固定ではなく選んだ4文字列の部分一致である | reviewerが期待値の原文を引用 | 記録の正確性、将来の表記変更の費用 | 記録のみ。**固定配布文書の回帰検査として4箇所の同時更新は受け入れ可能と判断した。** M-03で仕様の主張を実態へ合わせている | valid | 表記変更時に期待値の更新が要る |
 | L-02 | Low | 「契約の変更は利用者へ届く」は対象に含める根拠にはなるが、対象外をすべて除く根拠にはならない。外部契約を維持する内部refactoringでも回帰は利用者へ届き得る | reviewerの総評 | 選定条件の広さ | **今回の明示的なscopeとして狭さを受け入れる。** 拡張は別Issueが所有する | valid | 外部契約を変えない変更の検出力は選定として要求されない |
+| X-01 | Medium | 変異試験の母集団が一意に読めない。`8件・8 kill`とM-03の本文反転変異の生存が併記され、後者が8件に含まれるなら`8/8 kill`は誤りである | PR #1269のCodeRabbit指摘（Step 11後の外部指摘） | 承認根拠の解釈 | 8件の内訳を明記し、**M-03の変異が8件に含まれない別母集団であることを§1・§4・§7へ書いた** | resolved | なし |
+| X-02 | Medium | 敵対的評価の境界値行が「境界数1・2をsweepした」としているが、SCN-UNIT-AGILE-030は`affectedBoundaries`を`["domain"]`に固定し影響分析も2状態しか比較しない。境界数2と32フラグ組合せはreviewerの全数比較の観測であってrepositoryのtestではない | PR #1269のCodeRabbit指摘（Step 11後の外部指摘） | 検証範囲の記述の正確さ | 実際の走査範囲へ記述を直し、2,560入力の出所をreviewerの観測として区別した。**assertionは広げない。** | resolved | 空・最大・最小・重複・Unicodeの入力はscenarioに含まれない |
+| X-03 | Low | 「ユーザーが2026-09-07に明示承認した」に出典の識別子がない | PR #1269のCodeRabbit指摘（Step 11後の外部指摘） | 操作許可の追跡 | 出典が対話上の指示でありGitHub上の識別子を持たないことを明記した。**この文書を操作許可の正本にしない。** | resolved | 対話外から承認の存在を独立に確認できない |
 
 ## 6. ラウンド固有の確認
 
@@ -133,6 +136,14 @@
 - 全評価基準を確認した: はい。AC-1259-01からAC-1259-03、INV-1259-01からINV-1259-03を原文引用で判定した。
 - 指摘を確定した: M-01、M-02、M-03、L-01、L-02。**Critical/Highは0件。**
 - 次ラウンド対象のCritical/High: なし。M-01、M-02、M-03はこのラウンド内で是正した。
+- verdictはAPPROVE_WITH_FINDINGS。
+
+### ラウンド2（Step 11後の外部指摘の取り込み）
+
+- 契機: PR #1269へCodeRabbitがreview threadを3件残した。**review sessionは`converged`であり、`--post-terminal-intake`で開いた回復ラウンドである。**
+- 受理範囲: 3件はいずれもreview artifactの記述の正確さに関するもので、**製品コードとassertionを変更していない。**
+- 指摘を確定した: X-01、X-02、X-03。**Critical/Highは0件。** 3件ともこのラウンド内で是正した。
+- **是正はartifactの記述だけであり、`H_impl`は`f9dcba9f`のまま動かない。**
 - verdictはAPPROVE_WITH_FINDINGS。
 
 ## 7. テスト結果
@@ -155,7 +166,9 @@ runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は`en`、`projec
 
 失敗またはskipがある層: **対象シナリオの実行では0件である。** 全suiteの結果は`verify:distribution`の実行ログを正本とする。
 
-対応する成功CI runの参照: **本artifactの作成時点では存在しない。** branchを未pushであるため、run IDとURLと対象HEADは提出時に別途記録する。
+変異試験の母集団は8件で、内訳は選定logicへの4件（追加行の削除、`risk === "high"`への限定、`api`への無条件追加、条件の反転）と、配布2 fileの契約文・表headerを落とす4件である。**M-03の本文反転変異はこの8件に含まれない別母集団の1件であり、生存する。**
+
+対応する成功CI runの参照: PR #1269のH_final `b115a6c4`に対し、必須check 2件が合格した。run 34093090909（日本語文書・Gherkin・型・配布物の品質検証、10分32秒）とrun 34093090903（base validatorで品質自己緩和を拒否、12秒）である。**ラウンド2の是正後のHEADに対するCI runは提出後に観測する。**
 
 ## 8. 配布物影響
 
@@ -175,9 +188,9 @@ runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は`en`、`projec
 
 | 項目 | 内容 |
 |---|---|
-| 独立reviewの外部証拠 | 本artifactの作成時点ではなし。提出時にPRとCI runで観測する |
+| 独立reviewの外部証拠 | PR #1269のCodeRabbit review threadを3件観測した。必須check 2件はH_final `b115a6c4`で合格している |
 | reviewerがPR author・実装commit authorと異なる | はい。reviewerはcodex CLIの独立sessionであり、commitのauthorではない |
-| 観測したreview commentとapprovalの件数 | 1ラウンド。Medium 3件・Low 2件を確定。Critical/Highは0件 |
+| 観測したreview commentとapprovalの件数 | 2ラウンド。ラウンド1でMedium 3件・Low 2件、ラウンド2でPR #1269の外部指摘3件を確定。Critical/Highは0件 |
 
 ## 10. 仕様整合性
 
@@ -192,9 +205,9 @@ runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は`en`、`projec
 ## 11. 総合判定と再開地点
 
 - 未解決Critical/High: なし。
-- Medium/Lowの記録: M-01、M-02、M-03はresolved。L-01とL-02はvalidとして記録のみとする。追加loopとgate停止を生じさせない。
+- Medium/Lowの記録: M-01、M-02、M-03、X-01、X-02、X-03はresolved。L-01とL-02はvalidとして記録のみとする。追加loopとgate停止を生じさせない。
 - 判定: approved
-- 新しい権限が必要な事項: なし。push、PR作成、mergeはユーザーが2026-09-07に明示承認している。merge承認は`pr.merge`だけを許可し、branch削除、Issue終了、release、公開、cleanupを連結しない。mergeは`--merge`で行い`--squash`を使わない。
+- 新しい権限が必要な事項: なし。push、PR作成、mergeはユーザーが2026-09-07に対話上で明示承認している。**出典は当該対話の指示であり、GitHub上の識別子や監査logの参照を持たない。この文書を操作許可の正本にしない。** merge承認は`pr.merge`だけを許可し、branch削除、Issue終了、release、公開、cleanupを連結しない。mergeは`--merge`で行い`--squash`を使わない。
 - 残存リスク: M-03により、配布文書の契約文が意味ごと反転してもSCN-UNIT-PACKAGE-026は検出しない。L-01により表記変更時の期待値更新が要る。L-02により外部契約を変えない変更の検出力は選定として要求されない。
 - **主張の範囲。** 本件が担保するのは、`externalContractChanged`が真の入力に対して`mutation-test`が選ばれること、偽の入力の選定結果が従来と同一であること、配布文書に判断材料と記録欄が実在することである。**変異の作り方に従ったことも、変異試験を実施したことも担保しない。** それらの確認は独立reviewが担う。
 - 次に許可される操作: 本artifactをH_implの後に単独commitしてH_finalとし、`audit:check`と`verify:distribution`をH_finalで実行する。その後にbranchをpushしPRを作成する。
