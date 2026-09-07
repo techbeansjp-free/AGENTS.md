@@ -276,3 +276,8 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     Given 配布する品質基準と実装計画templateがある
     When 変異試験の記述を検査する
     Then 契約本文から変異を作る指示と充足の記録欄が存在する
+
+  Scenario: SCN-UNIT-PACKAGE-027 Step 0のskillがモード判定質問節を参照する
+    Given 配布するStep 0のskillがある
+    When モード判定質問への参照を検査する
+    Then 節への相対linkが存在し参照先のfileと見出しが実在する
