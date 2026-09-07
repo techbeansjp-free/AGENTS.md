@@ -2826,6 +2826,8 @@ export async function main(argv, dependencies = {}) {
                 required: codexRequired,
                 mapping: tierMapping,
             });
+            if (observation.state !== "available" && observation.reason)
+                result.errors.push(observation.reason);
             if (observation.state !== "available" ||
                 recommended.length !== 1 ||
                 recommended[0]?.model !== model ||

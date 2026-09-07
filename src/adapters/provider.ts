@@ -66,9 +66,9 @@ function hasCodexResponse(stdout: string, id = CODEX_RESPONSE_ID): boolean {
   return false;
 }
 
-function codexInput(official = false): string {
-  return [
-    {
+function codexInitializeInput(): string {
+  return (
+    JSON.stringify({
       method: "initialize",
       id: 0,
       params: {
@@ -78,20 +78,64 @@ function codexInput(official = false): string {
           version: PACKAGE_VERSION,
         },
       },
+    }) + "\n"
+  );
+}
+
+function codexRequests(official: boolean): string {
+  return (
+    [
+      { method: "initialized", params: {} },
+      ...(official
+        ? [{ method: "config/read", id: 2, params: { includeLayers: false } }]
+        : []),
+      {
+        method: "model/list",
+        id: CODEX_RESPONSE_ID,
+        params: { limit: 1000, includeHidden: false },
+      },
+    ]
+      .map((message) => JSON.stringify(message))
+      .join("\n") + "\n"
+  );
+}
+
+function runCodexSession(
+  file: string,
+  args: string[],
+  cwd: string,
+  options: ProcessOptions,
+  official: boolean,
+): Promise<ProcessResult> {
+  let initialized = false;
+  return runJsonlSession(file, args, cwd, {
+    ...options,
+    input: codexInitializeInput(),
+    timeoutMs: options.timeoutMs ?? PROVIDER_TIMEOUT_MS,
+    nextInput: (stdout) => {
+      if (initialized) return undefined;
+      const responses = parseTerminatedJsonLines(stdout).filter(
+        (message) => isRecord(message) && message.id === 0,
+      );
+      if (responses.length === 0) return undefined;
+      const response = responses[0];
+      if (
+        responses.length !== 1 ||
+        !isRecord(response) ||
+        Object.hasOwn(response, "error") ||
+        !isRecord(response.result) ||
+        typeof response.result.userAgent !== "string" ||
+        response.result.userAgent.trim() === ""
+      )
+        throw new Error("Codex initializeの成功応答を確認できません");
+      initialized = true;
+      return codexRequests(official);
     },
-    { method: "initialized", params: {} },
-    ...(official
-      ? [{ method: "config/read", id: 2, params: { includeLayers: false } }]
-      : []),
-    {
-      method: "model/list",
-      id: CODEX_RESPONSE_ID,
-      params: { limit: 1000, includeHidden: false },
-    },
-  ]
-    .map((message) => JSON.stringify(message))
-    .join("\n")
-    .concat("\n");
+    isComplete: (stdout) =>
+      initialized &&
+      hasCodexResponse(stdout) &&
+      (!official || hasCodexResponse(stdout, 2)),
+  });
 }
 
 function codexCatalog(stdout: string): ProviderCatalog | undefined {
@@ -158,12 +202,7 @@ async function defaultExecutor(
   options: ProcessOptions,
 ): Promise<ProcessResult> {
   if (file !== "codex") return run(file, args, cwd, options);
-  return runJsonlSession(file, args, cwd, {
-    ...options,
-    input: codexInput(),
-    timeoutMs: options.timeoutMs ?? PROVIDER_TIMEOUT_MS,
-    isComplete: hasCodexResponse,
-  });
+  return runCodexSession(file, args, cwd, options, false);
 }
 
 function isLegacyProviderCatalog(
@@ -227,14 +266,7 @@ export async function observeProvider(
             args: string[],
             cwd: string,
             processOptions: ProcessOptions,
-          ) =>
-            runJsonlSession(file, args, cwd, {
-              ...processOptions,
-              input: codexInput(true),
-              timeoutMs: PROVIDER_TIMEOUT_MS,
-              isComplete: (stdout) =>
-                hasCodexResponse(stdout) && hasCodexResponse(stdout, 2),
-            })
+          ) => runCodexSession(file, args, cwd, processOptions, true)
         : execute;
     result = await observer(
       provider,

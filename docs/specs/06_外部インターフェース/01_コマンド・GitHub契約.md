@@ -132,7 +132,7 @@ squash/rebaseの終端検証は、固定base..headからsource commit数を1〜2
 |---|---|---|
 | `routing observe` | `--provider` | read-onlyのProviderAvailability。availableは0、unavailableまたはunknownは非0 |
 | `routing resolve` | `--root --scope --coordinator --implementer --reviewer --evaluator-ref` | project choice、trusted mapping、provider観測からroleとmodelを解決する。resolvedは0、pendingまたはrejectedは理由、確認済み入口、安全なfallback候補、必要authority、停止点、再開条件を含めて非0 |
-| `routing launch` | `--root --scope --coordinator --implementer --reviewer --implementer-context --reviewer-context --risk --mode --prompt-file --sandbox` | trusted policyのselector採用tierと起動ごとの公式推奨を検証してCodex taskを実行する。rootは現在directory、sandboxはread-onlyが既定。workspace-writeだけを追加選択できる。成功は0、拒否・失敗・結果不明は非0。任意model・provider・shell・追加argv・trusted-ref overrideを受理しない |
+| `routing launch` | `--root --scope --coordinator --implementer --reviewer --implementer-context --reviewer-context --risk --mode --prompt-file [--sandbox=read-only\|workspace-write]` | trusted policyのselector採用tierと起動ごとの公式推奨を検証してCodex taskを実行する。rootは現在directory、sandboxはread-onlyが既定。workspace-writeだけを追加選択できる。成功は0、拒否・失敗・結果不明は非0。任意model・provider・shell・追加argv・trusted-ref overrideを受理しない |
 | `routing roles` | `--scope --assignments=<JSON>` | 6 roleの重複、未知role、coordinator欠落、implementerとreviewerのidentity・context兼務を検証する。違反は日本語構造化診断と非0 |
 | `routing tier` | `--risk --mode --scope --model --selected [--provider=codex] [--justification]` | provider=codexはtrusted selector採用tierと新しい公式観測で具体modelを照合する。未指定は既存台帳の互換検証でありCodex自動起動の認可に使わない。必要tier不足・mapping不明・不一致を非0で拒否する |
 | `routing ceiling` | `--provider --selection --issue --scope [--override=<JSON>]` | provider自律選択上限とIssue・scope拘束の人間overrideを検証し、alias・自動routing・失効・自己発行を非0で拒否する |

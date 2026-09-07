@@ -3961,6 +3961,8 @@ export async function main(
         required: codexRequired,
         mapping: tierMapping,
       });
+      if (observation.state !== "available" && observation.reason)
+        result.errors.push(observation.reason);
       if (
         observation.state !== "available" ||
         recommended.length !== 1 ||

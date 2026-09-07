@@ -111,7 +111,16 @@ const directory = ${JSON.stringify(this.binaryRoot)};
 const args = process.argv.slice(2);
 let input = '';
 process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => { input += chunk; if(args[0] === 'app-server' && input.includes('model/list')) { process.stdout.write(fs.readFileSync(path.join(directory, 'catalog.jsonl'), 'utf8')); } });
+let initializationSent = false;
+process.stdin.on('data', chunk => {
+  input += chunk;
+  if(args[0] !== 'app-server') return;
+  if(!initializationSent && input.includes('"method":"initialize"')) {
+    initializationSent = true;
+    process.stdout.write(JSON.stringify({ id: 0, result: { userAgent: 'fixture' } })+'\\n');
+  }
+  if(input.includes('model/list')) process.stdout.write(fs.readFileSync(path.join(directory, 'catalog.jsonl'), 'utf8'));
+});
 process.stdin.on('end', () => {
   if(args[0] === 'exec') {
     fs.appendFileSync(path.join(directory,'calls.jsonl'), JSON.stringify({args,input})+'\\n');
@@ -242,6 +251,39 @@ When("公式推奨をAからBへ変更して公開CLIを2回起動する", funct
 });
 
 Then("固定名なしで各回の具体modelとhighと標準速度を実execへ渡す", function () {
+  fs.writeFileSync(
+    path.join(this.binaryRoot, "catalog.jsonl"),
+    catalog("future-model-b", [], {
+      model_catalog_json: "/private-catalog-location",
+    }),
+  );
+  const diagnostic = spawnSync(
+    process.execPath,
+    [
+      path.resolve("dist/bin/agent-skill-chain.js"),
+      "routing",
+      "tier",
+      `--root=${this.launchRoot}`,
+      "--provider=codex",
+      "--risk=identity",
+      "--mode=full",
+      "--scope=issue-1257",
+      "--model=future-model-b",
+      "--selected=critical",
+    ],
+    {
+      cwd: this.launchRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${this.binaryRoot}${path.delimiter}${process.env.PATH ?? ""}`,
+      },
+    },
+  );
+  assert.equal(diagnostic.status, 1);
+  assert.match(diagnostic.stdout, /model_catalog_json指定を解除/u);
+  assert.equal(diagnostic.stdout.includes("private-catalog-location"), false);
+
   const calls: unknown[] = fs
     .readFileSync(path.join(this.binaryRoot, "calls.jsonl"), "utf8")
     .trim()

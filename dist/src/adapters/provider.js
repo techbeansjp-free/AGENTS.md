@@ -34,19 +34,21 @@ function hasCodexResponse(stdout, id = CODEX_RESPONSE_ID) {
     }
     return false;
 }
-function codexInput(official = false) {
-    return [
-        {
-            method: "initialize",
-            id: 0,
-            params: {
-                clientInfo: {
-                    name: "agent-skill-chain",
-                    title: "agent-skill-chain",
-                    version: PACKAGE_VERSION,
-                },
+function codexInitializeInput() {
+    return (JSON.stringify({
+        method: "initialize",
+        id: 0,
+        params: {
+            clientInfo: {
+                name: "agent-skill-chain",
+                title: "agent-skill-chain",
+                version: PACKAGE_VERSION,
             },
         },
+    }) + "\n");
+}
+function codexRequests(official) {
+    return ([
         { method: "initialized", params: {} },
         ...(official
             ? [{ method: "config/read", id: 2, params: { includeLayers: false } }]
@@ -58,8 +60,35 @@ function codexInput(official = false) {
         },
     ]
         .map((message) => JSON.stringify(message))
-        .join("\n")
-        .concat("\n");
+        .join("\n") + "\n");
+}
+function runCodexSession(file, args, cwd, options, official) {
+    let initialized = false;
+    return runJsonlSession(file, args, cwd, {
+        ...options,
+        input: codexInitializeInput(),
+        timeoutMs: options.timeoutMs ?? PROVIDER_TIMEOUT_MS,
+        nextInput: (stdout) => {
+            if (initialized)
+                return undefined;
+            const responses = parseTerminatedJsonLines(stdout).filter((message) => isRecord(message) && message.id === 0);
+            if (responses.length === 0)
+                return undefined;
+            const response = responses[0];
+            if (responses.length !== 1 ||
+                !isRecord(response) ||
+                Object.hasOwn(response, "error") ||
+                !isRecord(response.result) ||
+                typeof response.result.userAgent !== "string" ||
+                response.result.userAgent.trim() === "")
+                throw new Error("Codex initializeの成功応答を確認できません");
+            initialized = true;
+            return codexRequests(official);
+        },
+        isComplete: (stdout) => initialized &&
+            hasCodexResponse(stdout) &&
+            (!official || hasCodexResponse(stdout, 2)),
+    });
 }
 function codexCatalog(stdout) {
     const response = parseTerminatedJsonLines(stdout).find((message) => isRecord(message) && message.id === CODEX_RESPONSE_ID);
@@ -107,12 +136,7 @@ function codexCatalog(stdout) {
 async function defaultExecutor(file, args, cwd, options) {
     if (file !== "codex")
         return run(file, args, cwd, options);
-    return runJsonlSession(file, args, cwd, {
-        ...options,
-        input: codexInput(),
-        timeoutMs: options.timeoutMs ?? PROVIDER_TIMEOUT_MS,
-        isComplete: hasCodexResponse,
-    });
+    return runCodexSession(file, args, cwd, options, false);
 }
 function isLegacyProviderCatalog(value) {
     if (!isRecord(value))
@@ -147,12 +171,7 @@ export async function observeProvider(provider, execute = defaultExecutor, now =
     let result;
     try {
         const observer = options.official && execute === defaultExecutor
-            ? (file, args, cwd, processOptions) => runJsonlSession(file, args, cwd, {
-                ...processOptions,
-                input: codexInput(true),
-                timeoutMs: PROVIDER_TIMEOUT_MS,
-                isComplete: (stdout) => hasCodexResponse(stdout) && hasCodexResponse(stdout, 2),
-            })
+            ? (file, args, cwd, processOptions) => runCodexSession(file, args, cwd, processOptions, true)
             : execute;
         result = await observer(provider, provider === "codex"
             ? [
