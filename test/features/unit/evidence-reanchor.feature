@@ -150,3 +150,9 @@ Feature: rebase後の証跡再固定を内容等価性で受理する
     Given 存在しないH_implを宣言したrebase後のreview証跡がある
     When 再固定を適用する
     Then 再固定は"boundary-mismatch"を理由に拒否される
+    And 新H_impl比較の診断に4 SHAとH_implが含まれる
+
+  Scenario: SCN-UNIT-REANCHOR-031 適用直前にchainを再読取する
+    Given 共通評価が成功した再固定fixtureがある
+    When 評価後に連鎖不正なchainを保存して再固定を適用する
+    Then 最新chainの不整合を拒否しchainへ追記しない

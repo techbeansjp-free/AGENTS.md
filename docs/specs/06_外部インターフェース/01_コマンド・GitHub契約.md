@@ -75,7 +75,11 @@ finalize時に削除可能なignore対象は、package既定の`node_modules/`�
 | `review evidence` | `--repo --pr --run-id --review-id`と`H_impl/H_final`、artifact path | Gitと唯一のGitHub adapterから観測した二段階証拠。caller actor option、任意JSON、別PR run、不一致・未完了・自己reviewは非承認 |
 | `review validate` | tracked review file | rubricと構造だけを検証する。file内のGitHub metadataをauthorityにせず、承認はtrusted provider観測待ちのpending |
 | `review round` | `--staging --file`、任意の`--apply`。fileはanchor、candidate HEAD、previous round digest、focus、findingの厳密JSON | 無指定はpreview、`--apply`は`review-session.json`へ永続化する。Git実差分、scope/AC/invariant/diff anchor、round digest chain、finding admissionを再導出する。収束後は異なるHEADと空でない実fixed diffのround 2/3だけを追加でき、同じHEAD・reset・anchor変更・blocker脱落・budget終了後・3round超過を非0で拒否する |
+| `review reanchor` | `--staging --new-head --new-base --reason`、任意の`--root`、`--dry-run`または`--apply` | PR作成前の収束済みreview sessionをanchorにする。previewはapplyと同じread-only evaluatorで入力、anchor、chain、冪等性、完全diff、二層の等価性を検証し、成功時は`willAppend`と実効HEADを返す。`--apply`はmutation lock内で最新stateへ再評価し、成功時だけ再固定chainを追記してread-backする |
+| `pr reanchor` | `--staging --new-head --new-base --reason`、任意の`--root`、`--dry-run`または`--apply` | PR作成後の`step11-recorded` delivery stateをanchorにする。previewとapplyの判定、出力、適用境界は`review reanchor`と同じである。previewはmutation lock、transaction復旧、再固定chain、staging digestを含む永続書込みを行わない |
 | `trace validate` | project adapterが作成した`--evidence` JSONとproject choices | runner・file形式・表示言語・Gherkin方言を所有せず、stable ID、canonical step role、選択層、禁止file証拠を検証 |
+
+再固定のGit比較が失敗した場合は、`旧base→旧head`、`新base→新head`、`旧H_impl→旧head`、`新H_impl→新head`、`旧base→旧H_impl`、`新base→新H_impl`のいずれかの役割と、旧・新のbase/head SHAを診断へ含める。`H_impl`を使う比較では該当SHAも示す。入力、anchor、chain、内容不一致の既存診断と`ASC-CLI-VALIDATION-001`の構造は維持する。
 
 ## Workflowサブコマンド
 

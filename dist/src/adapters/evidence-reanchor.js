@@ -4,7 +4,7 @@ import { writeFileAtomic } from "../lib/atomic.js";
 import { parseJsonStrict } from "../lib/security.js";
 import { deriveEffectiveHead, isContentEquivalent, isRebaseEquivalent, parseReviewIdentityAnchor, isEvidenceReanchorRecord, } from "../domain/evidence-reanchor.js";
 import { refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
-import { readStoredDeliveryState } from "./delivery-state.js";
+import { observeStoredDeliveryState, readStoredDeliveryState, } from "./delivery-state.js";
 import { observeReviewDiff, readBlobAtCommit } from "./review-diff.js";
 import { readStoredReviewSession } from "./review-session-store.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
@@ -47,7 +47,7 @@ const REVIEW_ARTIFACT_PREFIX = "docs/reviews/";
  * **caller申告を信用しない。** `H_impl..head`が当該artifact 1件だけであることを
  * Git objectから確かめる。宣言が偽なら不一致になり受理されない（Issue #1172）。
  */
-function verifiedImplementationBoundary(root, head, artifactPath, declared) {
+function verifiedImplementationBoundary(root, head, artifactPath, declared, comparison, role) {
     /**
      * **Git観測の失敗を例外のまま外へ出さない。**
      *
@@ -58,13 +58,18 @@ function verifiedImplementationBoundary(root, head, artifactPath, declared) {
      */
     let observed;
     try {
-        observed = observeReviewDiff(root, declared, head);
+        observed = observeReanchorDiff(root, role, comparison, declared, head, declared);
     }
-    catch {
-        return false;
+    catch (error) {
+        return {
+            valid: false,
+            gitFailure: error instanceof Error ? error.message : String(error),
+        };
     }
-    return (observed.changedPaths.length === 1 &&
-        observed.changedPaths[0] === artifactPath);
+    return {
+        valid: observed.changedPaths.length === 1 &&
+            observed.changedPaths[0] === artifactPath,
+    };
 }
 function terminalArtifactPath(paths) {
     const artifacts = paths.filter((entry) => entry.startsWith(REVIEW_ARTIFACT_PREFIX));
@@ -72,44 +77,71 @@ function terminalArtifactPath(paths) {
     return artifacts.length === 1 ? artifacts[0] : undefined;
 }
 /**
+ * 再固定で行うGit比較へ、その比較の役割と固定中の4 SHAを付ける。
+ *
+ * `observeReviewDiff`は汎用adapterなので変更せず、再固定固有の診断だけをここで
+ * 合成する。artifact本文やstate全体は診断へ出さない。
+ */
+function observeReanchorDiff(root, role, comparison, baseSha, headSha, implementationSha) {
+    try {
+        return observeReviewDiff(root, baseSha, headSha);
+    }
+    catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`再固定のGit比較に失敗しました（役割=${role}, oldBaseSha=${comparison.oldBaseSha}, oldHeadSha=${comparison.oldHeadSha}, newBaseSha=${comparison.newBaseSha}, newHeadSha=${comparison.newHeadSha}${implementationSha === undefined ? "" : `, H_impl=${implementationSha}`}）: ${detail}`, { cause: error });
+    }
+}
+/**
  * rebase後の再固定に限って成立する二層の等価性を観測する。
  *
  * 判定材料はすべてGit objectから再計算する。記録も申告も根拠にしない。
  */
 function observeRebaseEquivalence(root, input) {
-    const beforeAll = observeReviewDiff(root, input.oldBaseSha, input.oldHeadSha);
-    const afterAll = observeReviewDiff(root, input.newBaseSha, input.newHeadSha);
+    const beforeAll = observeReanchorDiff(root, "旧base→旧head", input, input.oldBaseSha, input.oldHeadSha);
+    const afterAll = observeReanchorDiff(root, "新base→新head", input, input.newBaseSha, input.newHeadSha);
     const beforePath = terminalArtifactPath(beforeAll.changedPaths);
     const afterPath = terminalArtifactPath(afterAll.changedPaths);
     if (beforePath === undefined || afterPath === undefined)
-        return "artifact-not-unique";
+        return { reason: "artifact-not-unique" };
     const beforeArtifact = readBlobAtCommit(root, input.oldHeadSha, beforePath);
     const afterArtifact = readBlobAtCommit(root, input.newHeadSha, afterPath);
     if (beforeArtifact === undefined || afterArtifact === undefined)
-        return "artifact-unreadable";
+        return { reason: "artifact-unreadable" };
     const beforeAnchor = parseReviewIdentityAnchor(beforeArtifact);
     const afterAnchor = parseReviewIdentityAnchor(afterArtifact);
     if (beforeAnchor === undefined || afterAnchor === undefined)
-        return "identity-unresolvable";
+        return { reason: "identity-unresolvable" };
     /** **宣言した比較基点が再固定の基点と一致することを要求する。** */
     if (beforeAnchor.base !== input.oldBaseSha ||
         afterAnchor.base !== input.newBaseSha)
-        return "base-mismatch";
-    if (!verifiedImplementationBoundary(root, input.oldHeadSha, beforePath, beforeAnchor.implementation) ||
-        !verifiedImplementationBoundary(root, input.newHeadSha, afterPath, afterAnchor.implementation))
-        return "boundary-mismatch";
-    return isRebaseEquivalent({
-        beforeImplementation: observeReviewDiff(root, input.oldBaseSha, beforeAnchor.implementation),
-        afterImplementation: observeReviewDiff(root, input.newBaseSha, afterAnchor.implementation),
-        beforeArtifact,
-        afterArtifact,
-        beforeArtifactPath: beforePath,
-        afterArtifactPath: afterPath,
-    });
+        return { reason: "base-mismatch" };
+    const beforeBoundary = verifiedImplementationBoundary(root, input.oldHeadSha, beforePath, beforeAnchor.implementation, input, "旧H_impl→旧head");
+    if (!beforeBoundary.valid)
+        return {
+            reason: "boundary-mismatch",
+            gitFailure: beforeBoundary.gitFailure,
+        };
+    const afterBoundary = verifiedImplementationBoundary(root, input.newHeadSha, afterPath, afterAnchor.implementation, input, "新H_impl→新head");
+    if (!afterBoundary.valid)
+        return {
+            reason: "boundary-mismatch",
+            gitFailure: afterBoundary.gitFailure,
+        };
+    return {
+        reason: isRebaseEquivalent({
+            beforeImplementation: observeReanchorDiff(root, "旧base→旧H_impl", input, input.oldBaseSha, beforeAnchor.implementation, beforeAnchor.implementation),
+            afterImplementation: observeReanchorDiff(root, "新base→新H_impl", input, input.newBaseSha, afterAnchor.implementation, afterAnchor.implementation),
+            beforeArtifact,
+            afterArtifact,
+            beforeArtifactPath: beforePath,
+            afterArtifactPath: afterPath,
+        }),
+    };
 }
 function resolveAnchor(staging, layer) {
+    const deliveryState = observeStoredDeliveryState(staging);
     if (layer === "delivery") {
-        const state = readStoredDeliveryState(staging);
+        const state = deliveryState;
         if (!state?.create)
             throw new Error("pr reanchorには pr create で固定したdelivery stateが必要です");
         if (state.state !== "step11-recorded")
@@ -119,7 +151,7 @@ function resolveAnchor(staging, layer) {
             anchoredBaseSha: state.create.baseSha,
         };
     }
-    if (readStoredDeliveryState(staging)?.create)
+    if (deliveryState?.create)
         throw new Error("review reanchorはdelivery state固定後には使えません。pr reanchorを使ってください");
     const session = readStoredReviewSession(staging);
     if (session === null)
@@ -131,14 +163,7 @@ function resolveAnchor(staging, layer) {
         anchoredBaseSha: session.anchor.diffBaseSha,
     };
 }
-/**
- * 内容等価性を実証したうえで再固定記録を1件追記する。
- *
- * 既存の`journal/steps.jsonl`と`journal/delivery-state.json`へは書き込まない。
- * 追記後に`refreshStoredStagingDigest`を呼び、read-backで一致を確認する。
- */
-export function appendEvidenceReanchor(input) {
-    const staging = assertWorkflowStaging(input.staging);
+function validateEvidenceReanchorInput(input) {
     for (const [label, oid] of [
         ["--new-head", input.newHeadSha],
         ["--new-base", input.newBaseSha],
@@ -147,62 +172,88 @@ export function appendEvidenceReanchor(input) {
             throw new Error(`${label}は小文字40桁のGit SHAで指定してください`);
     if (input.reason.trim() === "")
         throw new Error("再固定の理由を指定してください");
+}
+/** 再固定の既存受理条件を、永続書込みなしで評価する。 */
+export function evaluateEvidenceReanchor(input) {
+    const staging = assertWorkflowStaging(input.staging);
+    validateEvidenceReanchorInput(input);
+    const anchor = resolveAnchor(staging, input.layer);
+    const existing = readEvidenceReanchorChain(staging);
+    const derived = deriveEffectiveHead({
+        records: existing,
+        anchoredHeadSha: anchor.anchoredHeadSha,
+    });
+    if (derived.invalidIndex !== undefined)
+        throw new Error(`既存の再固定chainが${derived.invalidIndex}件目で連鎖していません`);
+    const oldHeadSha = derived.effectiveHeadSha;
+    const oldBaseSha = existing.at(-1)?.newBaseSha ?? anchor.anchoredBaseSha;
+    const terminal = existing.at(-1);
+    if (terminal?.newHeadSha === input.newHeadSha &&
+        terminal.newBaseSha === input.newBaseSha)
+        return {
+            chain: existing,
+            effectiveHeadSha: derived.effectiveHeadSha,
+            appended: false,
+            oldHeadSha,
+            oldBaseSha,
+            diffDigest: undefined,
+        };
+    if (oldHeadSha === input.newHeadSha)
+        throw new Error("再固定は移動していないheadに対して行えません");
+    const comparison = {
+        oldBaseSha,
+        oldHeadSha,
+        newBaseSha: input.newBaseSha,
+        newHeadSha: input.newHeadSha,
+    };
+    const before = observeReanchorDiff(input.root, "旧base→旧head", comparison, oldBaseSha, oldHeadSha);
+    const after = observeReanchorDiff(input.root, "新base→新head", comparison, input.newBaseSha, input.newHeadSha);
+    if (!isContentEquivalent(before, after)) {
+        const rebase = observeRebaseEquivalence(input.root, comparison);
+        if (rebase.reason !== "ok")
+            throw new Error(`再固定前後の内容が等価ではありません（${rebase.reason}）: before=${before.digest} after=${after.digest}${rebase.gitFailure === undefined ? "" : `; ${rebase.gitFailure}`}`);
+    }
+    return {
+        chain: existing,
+        effectiveHeadSha: input.newHeadSha,
+        appended: true,
+        oldHeadSha,
+        oldBaseSha,
+        diffDigest: before.digest,
+    };
+}
+/**
+ * 内容等価性を実証したうえで再固定記録を1件追記する。
+ *
+ * 既存の`journal/steps.jsonl`と`journal/delivery-state.json`へは書き込まない。
+ * 追記後に`refreshStoredStagingDigest`を呼び、read-backで一致を確認する。
+ */
+export function appendEvidenceReanchor(input) {
+    const staging = assertWorkflowStaging(input.staging);
+    /** input拒否で既存transaction復旧やlock作成へ進まない旧順序を保つ。 */
+    validateEvidenceReanchorInput(input);
     return withStagingMutationLock(staging, () => {
-        const anchor = resolveAnchor(staging, input.layer);
-        const existing = readEvidenceReanchorChain(staging);
-        const derived = deriveEffectiveHead({
-            records: existing,
-            anchoredHeadSha: anchor.anchoredHeadSha,
-        });
-        if (derived.invalidIndex !== undefined)
-            throw new Error(`既存の再固定chainが${derived.invalidIndex}件目で連鎖していません`);
-        const oldHeadSha = derived.effectiveHeadSha;
-        const oldBaseSha = existing.at(-1)?.newBaseSha ?? anchor.anchoredBaseSha;
-        const terminal = existing.at(-1);
-        if (terminal?.newHeadSha === input.newHeadSha &&
-            terminal.newBaseSha === input.newBaseSha)
+        /** applyだけが既存delivery transactionをlock内で復旧してから最新stateを評価する。 */
+        readStoredDeliveryState(staging);
+        const evaluation = evaluateEvidenceReanchor(input);
+        if (!evaluation.appended)
             return {
-                chain: existing,
-                effectiveHeadSha: derived.effectiveHeadSha,
+                chain: evaluation.chain,
+                effectiveHeadSha: evaluation.effectiveHeadSha,
                 appended: false,
             };
-        if (oldHeadSha === input.newHeadSha)
-            throw new Error("再固定は移動していないheadに対して行えません");
-        const before = observeReviewDiff(input.root, oldBaseSha, oldHeadSha);
-        const after = observeReviewDiff(input.root, input.newBaseSha, input.newHeadSha);
-        if (!isContentEquivalent(before, after)) {
-            /**
-             * **完全一致しない場合だけ、二層の等価性へ落とす。**
-             *
-             * ASCの規定するrebase手順は`audit:check`のためにreview artifactのSHA行の
-             * 更新を要求する。完全diff digestは`base..H_final`全体を見るため、その1行で
-             * 必ず不一致になる。**両者の要求が同時に満たせない**（Issue #1172）。
-             *
-             * **緩めるのは機械導出される2欄だけである。** 実装差分は`base..H_impl`の
-             * 完全diff digestで従来どおり一致を要求し、artifactは2欄を正規化した
-             * byte一致を要求する。**同定できない入力は受理しない。**
-             */
-            const rebase = observeRebaseEquivalence(input.root, {
-                oldBaseSha,
-                oldHeadSha,
-                newBaseSha: input.newBaseSha,
-                newHeadSha: input.newHeadSha,
-            });
-            if (rebase !== "ok")
-                throw new Error(`再固定前後の内容が等価ではありません（${rebase}）: before=${before.digest} after=${after.digest}`);
-        }
         const record = {
-            oldHeadSha,
+            oldHeadSha: evaluation.oldHeadSha,
             newHeadSha: input.newHeadSha,
-            oldBaseSha,
+            oldBaseSha: evaluation.oldBaseSha,
             newBaseSha: input.newBaseSha,
-            diffDigest: before.digest,
+            diffDigest: evaluation.diffDigest,
             method: "rebase",
             reason: input.reason,
             recordedAt: input.recordedAt,
         };
         const file = path.join(staging, EVIDENCE_REANCHOR_FILE);
-        const next = [...existing, record];
+        const next = [...evaluation.chain, record];
         writeFileAtomic(file, `${next.map((entry) => JSON.stringify(entry)).join("\n")}\n`, { temporaryDirectory: path.dirname(staging) });
         refreshStoredStagingDigest(staging);
         const reread = readEvidenceReanchorChain(staging);
