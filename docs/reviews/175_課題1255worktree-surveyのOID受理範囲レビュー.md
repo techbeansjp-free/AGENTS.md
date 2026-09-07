@@ -6,10 +6,10 @@
 |---|---|
 | 対象 | 実装 |
 | ラウンド | 3 |
-| H_impl | `0d9a2953f5fde7274ea672971036ea44ea5eabf7` |
-| 比較基点 | `791c5da9cbdd3d91c3c980208b3ee45d2503889c` |
-| 対象SHA・文書ダイジェスト | `0d9a2953f5fde7274ea672971036ea44ea5eabf7` |
-| 対象差分 | `791c5da9cbdd3d91c3c980208b3ee45d2503889c..0d9a2953f5fde7274ea672971036ea44ea5eabf7`、11 path。うち`dist/`配下2件は生成物として個別監査の対象外とし、配布影響は§8へ残す。**ラウンド3でdistの是正を前進commitしたためH_implが動いた** |
+| H_impl | `86a808c6237e5f3784f34d295ecd42913429d4ec` |
+| 比較基点 | `ea50cfeb103bf2d29d9b33dde558d4ee9bb9f31d` |
+| 対象SHA・文書ダイジェスト | `86a808c6237e5f3784f34d295ecd42913429d4ec` |
+| 対象差分 | `ea50cfeb103bf2d29d9b33dde558d4ee9bb9f31d..86a808c6f5fde7274ea672971036ea44ea5eabf7`、11 path。うち`dist/`配下2件は生成物として個別監査の対象外とし、配布影響は§8へ残す。**ラウンド3でdistの是正を前進commitしたためH_implが動いた** |
 | 対象外 | 他51箇所のOID検証の一括是正、`src/cli.ts`のmerge commit OID検証、`registeredWorktrees`の変更、`worktree finalize`の認可条件、任意長hexの受理、大文字の正規化受理、repositoryの実object formatと桁数の整合確認、conformance検査の重複実行の除去 |
 | 残り予算 | 同一範囲で最大3ラウンドをすべて使用。**残り0。** |
 | ラウンド数 | 3 |
@@ -33,19 +33,19 @@
 | 要求・受け入れ条件 | GitHub Issue #1255、staging 00・01のAC-01からAC-06 | Step 8で`sync-verified`、syncDigestとreadBackDigestが`e548111660acc68938f1b3c426662ba81ba011e02fded6682b090959d25624c9`で一致 | 実行観測 |
 | 是正前の状態（T00） | 是正前`dist/`の`surveyWorktrees` | 40桁と64桁だけが異なる観測で、retain・in-progress・detached保持の3分類すべてが`entries`0件・`errors`1件へ落ちた | 実行観測 |
 | 是正後 | 同上 | 3分類すべてが40桁と同一の`disposition`・`reasons`で返る | 実行観測 |
-| 差分 | `791c5da9..0d9a2953` | 11 path。うち生成dist 2件 | 既存コード |
+| 差分 | `ea50cfeb..86a808c6` | 11 path。うち生成dist 2件 | 既存コード |
 | テスト | `--name WTSURVEY`で絞り込んだcucumber実行 | **49 scenarios、245 stepsが成功** | テスト出力 |
 | 環境依存の反例 | `GIT_DEFAULT_HASH=sha256`を設定した同一実行 | 49 scenarios成功。**固定前は既存fixtureが無言でSHA-256化していた** | 実行観測 |
 | 変異試験 | 16件 | **16 kill、生存0。うち3件はreviewer由来である** | テスト出力 |
 | 仕様 | `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md`、`15_要件追跡/` | updated | 既存文書 |
-| commit前candidate | `git diff --name-only 791c5da9 0d9a2953` | 11 path。うち生成dist 2件 | Git index |
+| commit前candidate | `git diff --name-only ea50cfeb 86a808c6` | 11 path。うち生成dist 2件 | Git index |
 | Phase A artifact | `docs/reviews/175_課題1255worktree-surveyのOID受理範囲レビュー.md` | H_implの後にこの1 fileだけをcommitしてH_finalとする | Git観測 |
 | commit後external | PR、CI run、外部review | **本artifactの作成時点では未観測である。** | 外部のimmutable証拠 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **満たす。** 依存は`src/cli.ts` → `src/domain/worktree-survey.ts`の既存1本のままで、向きも変えていない。
 - `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: **artifact commit時点で満たす。**
 - reviewer stable IDが`H_impl` author stable IDと異なる: **満たす。**
-- 既定branch追随を行った場合: **行った。** PR #1282（Issue #1211）のmerge後に既定branchが動き、PRが`CONFLICTING`になった。**rebaseではなくmergeで追随した。** rebaseはreview sessionのanchorを殺し、reanchorも`implementation-diff-changed`で正しく拒否するためである。衝突は`docs/specs/15_要件追跡/01_変更履歴.md`の1件で、双方がheader区切り直後へ1行を足していた。**両側の行を保存した。** 追随merge commitは`86a808c6237e5f3784f34d295ecd42913429d4ec`であり、比較基点`791c5da9`とH_impl`0d9a2953`は動いていない。
+- 既定branch追随を行った場合: **行った。** PR #1282（Issue #1211）のmerge後に既定branchが動き、PRが`CONFLICTING`になった。**rebaseではなくmergeで追随した。** rebaseはreview sessionのanchorを殺し、reanchorも`implementation-diff-changed`で正しく拒否するためである。衝突は`docs/specs/15_要件追跡/01_変更履歴.md`の1件で、双方がheader区切り直後へ1行を足していた。**両側の行を保存した。** **追随mergeによって比較基点とH_implが動いた。** 比較基点は追随先の既定branch tip`ea50cfeb103bf2d29d9b33dde558d4ee9bb9f31d`へ、H_implは追随merge commit`86a808c6237e5f3784f34d295ecd42913429d4ec`へ移した。実装差分の内容は変わっていない。
 
 ## 変更ファイル個別監査
 
