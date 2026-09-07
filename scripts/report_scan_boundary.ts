@@ -6,6 +6,7 @@ import { git } from "../src/lib/process.js";
 import {
   isIssueStagingPath,
   isStagingLifecyclePath,
+  isStagingLifecycleScanPath,
 } from "../src/domain/staging.js";
 import {
   compareScanBoundary,
@@ -23,6 +24,7 @@ import {
 export const EXPECTED_PREDICATE_IDS: readonly string[] = Object.freeze([
   "issue-staging",
   "staging-lifecycle",
+  "staging-lifecycle-scan",
   "source-quality-directories",
 ]);
 
@@ -36,19 +38,28 @@ export const EXCLUSION_PREDICATE_SOURCES: readonly ExclusionPredicateSource[] =
   Object.freeze([
     {
       id: "issue-staging",
-      owner: "trace:check",
+      owner: "src/domain/staging.ts",
       appliesTo:
-        "SCN配置検査の走査範囲のみ。同gateの要件本文検査へは同じMarkdownが届く",
+        "Issue一時ステージング判定の公開API。**SCN配置検査はこれを使わない**（Issue #1273以降）。利用側はtestとscan boundary観測である",
       reasonCode: "issue-staging",
-      reason:
-        "Issue一時ステージングをSCN配置検査の走査範囲から除く（REQ-SQ-017）",
+      reason: "Issue一時ステージング配下かを判定する（REQ-SQ-017）",
       excludes: isIssueStagingPath,
     },
     {
-      id: "staging-lifecycle",
-      owner: "directories:check、package:check",
+      id: "staging-lifecycle-scan",
+      owner: "trace:check",
       appliesTo:
-        "`.agent-skill-chain`配下のdirectory案内検査と、`npm pack`が返した配布file集合の混入禁止prefix判定",
+        "SCN配置検査の走査範囲のみ。同gateの要件本文検査へは同じMarkdownが届く",
+      reasonCode: "staging-lifecycle",
+      reason:
+        "一時ライフサイクル領域をSCN配置検査の走査範囲から除く（REQ-SQ-017）",
+      excludes: isStagingLifecycleScanPath,
+    },
+    {
+      id: "staging-lifecycle",
+      owner: "directories:check、package:check、conformance:check、hygiene",
+      appliesTo:
+        "`.agent-skill-chain`配下のdirectory案内検査、`npm pack`が返した配布file集合の混入禁止prefix判定、追跡混入検査、workspace hygieneの削除保護。**真が安全側であるためSCN配置検査とは入力契約を共有しない**",
       reasonCode: "staging-lifecycle",
       reason: "一時ライフサイクル領域を対象から除く（REQ-SQ-019）",
       excludes: isStagingLifecyclePath,

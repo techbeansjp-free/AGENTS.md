@@ -4,7 +4,13 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import { checkSpecNormalization } from "../../scripts/check_trace.js";
-import { isIssueStagingPath } from "../../src/domain/staging.js";
+import {
+  isIssueStagingPath,
+  isStagingLifecyclePath,
+  isStagingLifecycleScanPath,
+  STAGING_LIFECYCLE_AREAS,
+} from "../../src/domain/staging.js";
+import { visibleMarkdownLines } from "../support/markdown.js";
 
 const ISSUE_STAGING_PREFIX = ".agent-skill-chain/tmp/issues";
 
@@ -70,7 +76,7 @@ Given("除外判定へ渡す生のpath一覧がある", function () {
 
 Given("除外領域に前方一致するだけの近似pathにSCN定義がある", function () {
   this.root = this.temp();
-  write(this.root, ".agent-skill-chain/tmp/issues-old/例.md", SCN_LINE);
+  write(this.root, ".agent-skill-chain/tmp-old/例.md", SCN_LINE);
 });
 
 Given("role-logとmetricsにSCN定義がある", function () {
@@ -283,3 +289,217 @@ Then(
     assert.deepEqual(missing, []);
   },
 );
+
+/**
+ * **報告される期待集合を固定値で書く。**
+ *
+ * 述語自身から期待を導出すると、判定を`startsWith(area)`へ緩めても両側が
+ * 同じ向きにずれて通過する。独立reviewerが固定oracleと退化oracleの比較で
+ * その差を実測した（Issue #1273）。
+ */
+const PLACEMENT_FIXTURE: ReadonlyArray<readonly [string, boolean]> = [
+  ["test/features/unit/allowed.feature", false],
+  ["test/features/unit/not-allowed.md", true],
+  ["test/features-old/misplaced.feature", true],
+  ["test/steps/misplaced.feature", true],
+  ["docs/outside.md", true],
+  ["src/outside.feature", true],
+  [".agent-skill-chain/docs/outside.md", true],
+  [".agent-skill-chain/tmp-old/near.md", true],
+  [".agent-skill-chain/role-log-old/near.feature", true],
+  [".agent-skill-chain/metrics-old/near.md", true],
+  [".agent-skill-chain/runtime-old/near.feature", true],
+  [".agent-skill-chain/tmp/handoffs/draft.md", false],
+  [".agent-skill-chain/tmp/issues-old/draft.feature", false],
+  [".agent-skill-chain/role-log/draft.feature", false],
+  [".agent-skill-chain/metrics/draft.md", false],
+  [".agent-skill-chain/runtime/draft.feature", false],
+];
+
+Given("一時ライフサイクル領域4件すべてにSCN定義がある", function () {
+  this.root = this.temp();
+  write(this.root, ".agent-skill-chain/tmp/handoffs/例.md", SCN_LINE);
+  write(this.root, ".agent-skill-chain/role-log/例.feature", SCN_LINE);
+  write(this.root, ".agent-skill-chain/metrics/例.md", SCN_LINE);
+  write(this.root, ".agent-skill-chain/runtime/例.feature", SCN_LINE);
+});
+
+Given(
+  "4領域それぞれの近似pathと所定locationと領域外にSCN定義がある",
+  function () {
+    this.root = this.temp();
+    for (const [relative] of PLACEMENT_FIXTURE)
+      write(this.root, relative, SCN_LINE);
+  },
+);
+
+Then("検査は固定の期待集合どおりに配置違反を報告する", function () {
+  const expected = PLACEMENT_FIXTURE.filter(([, reported]) => reported)
+    .map(([relative]) => relative)
+    .sort();
+  const actual = this.errors
+    .map((error) => error.slice(SCN_PLACEMENT.length + 2).split(":")[0] ?? "")
+    .sort();
+  assert.deepEqual(actual, expected);
+});
+
+Given("新しい除外判定へ渡す生のpath一覧がある", function () {
+  // filesystemを経由するとpath.joinが親参照を解決してしまい、悪用入力そのものを
+  // 検証できない。判定関数へ生の文字列を直接入力する。
+  const area = STAGING_LIFECYCLE_AREAS[0]!;
+  this.judged = [
+    `${area}/handoffs/01_要件定義.md`,
+    // **POSIXの \ はfile名文字であり区切りではない。** 領域外として扱う
+    ".agent-skill-chain\\tmp\\handoffs\\01_要件定義.md",
+    `${area}/../../../docs/例.md`,
+    `${area}/./handoffs/01_要件定義.md`,
+    `${area}//handoffs/01_要件定義.md`,
+    ...STAGING_LIFECYCLE_AREAS,
+    `${area}-old/例.md`,
+    "docs/例.md",
+    "",
+  ].map((input) => ({ input, excluded: isStagingLifecycleScanPath(input) }));
+});
+
+When("新しい除外判定を1件ずつ適用する", function () {
+  assert.notEqual(this.judged.length, 0, "判定対象がありません");
+});
+
+Then(
+  "区切りを正規化し親参照と現在参照と空segmentを含むpathは除外しない",
+  function () {
+    assert.deepEqual(
+      this.judged.map(({ excluded }) => excluded),
+      [
+        true,
+        false,
+        false,
+        false,
+        false,
+        ...STAGING_LIFECYCLE_AREAS.map(() => true),
+        false,
+        false,
+        false,
+      ],
+    );
+    /**
+     * **2種類の「領域そのもの」を混同しない。** 一時ライフサイクル領域そのものは
+     * 真だが、Issue一時ステージングのprefixそのものは従来どおり偽である。
+     */
+    assert.equal(isIssueStagingPath(".agent-skill-chain/tmp/issues"), false);
+  },
+);
+
+/**
+ * **`isStagingLifecyclePath`の契約が変わっていないことを固定する。**
+ *
+ * `\\`はPOSIXでは通常文字であり、これらは一時領域配下に実在しうる合法なfile名
+ * である。厳格化すると`checkLifecycleIgnore`の追跡混入拒否がすり抜ける。
+ */
+Given("区切り文字を名前に含む合法な一時領域pathがある", function () {
+  this.judged = [
+    // **領域そのものも契約の一部である。** 配下だけを見ると
+    // `normalized === area` を落とす変異が生存する。
+    ...STAGING_LIFECYCLE_AREAS,
+    ...STAGING_LIFECYCLE_AREAS.flatMap((area) =>
+      ["..\\draft.md", ".\\draft.md", "\\draft.md", "draft.md"].map(
+        (name) => `${area}/${name}`,
+      ),
+    ),
+  ].map((input) => ({ input, excluded: isStagingLifecyclePath(input) }));
+});
+
+When("追跡混入検査が使う領域判定を適用する", function () {
+  assert.equal(this.judged.length, STAGING_LIFECYCLE_AREAS.length * 5);
+});
+
+Then("すべて領域内と判定される", function () {
+  assert.deepEqual(
+    this.judged.filter(({ excluded }) => !excluded).map(({ input }) => input),
+    [],
+  );
+});
+
+const REQ_SQ_017_STALE = [
+  "**`.agent-skill-chain/role-log/`と`.agent-skill-chain/metrics/`は除外しない。**",
+  "この2領域は`.gitignore`に無く追跡され得るため",
+];
+const REQ_SQ_017_STALE_SCOPE = [
+  "走査範囲からIssue一時ステージング`.agent-skill-chain/tmp/issues/`だけを除く",
+];
+
+/**
+ * **標識文だけでなく、各段落の実体も固定する。**
+ *
+ * 見出しの1文だけを検査すると、段落の後続本文を空にする変異が生存する
+ * （Issue #1273、独立reviewerのM-02）。品質基準が要求する
+ * 「欄名や見出しを残して値だけを空にする変異」を殺すため、各段落から
+ * **判断の実体を1文ずつ**名指しする。
+ */
+const REQ_SQ_017_CURRENT = [
+  "**除外は一時ライフサイクル領域`STAGING_LIFECYCLE_AREAS`の4件とする。**",
+  "除外範囲をこの検査が独自に持たず、分類の唯一の正本から導出する",
+  "**`role-log/`と`metrics/`を除外しなかった旧来の理由は成立しない。**",
+  "REQ-SQ-019がその非対称を解消し",
+  "**受け入れる検出損失を明示する。**",
+  "**未追跡の誤配置featureまで代替検出する保証ではない。代替検出があるとは主張しない。**",
+  "**SCN配置検査が使う判定は`isStagingLifecyclePath`ではない。**",
+  "**「安全側」の向きは呼び出し元ごとに逆である。**",
+];
+
+Given("仕様・品質管理要件の正本がある", function () {
+  this.exported = [];
+});
+
+When("REQ-SQ-017の除外範囲の記述を表示本文で検査する", function () {
+  const document = fs.readFileSync(
+    path.resolve("docs/specs/02_要件/04_仕様・品質管理要件.md"),
+    "utf8",
+  );
+  const [, after = ""] = document.split(
+    "### REQ-SQ-017 SCN配置検査の走査範囲から一時ライフサイクル領域を除く",
+  );
+  this.exported = visibleMarkdownLines(after.split("\n### ")[0] ?? "");
+});
+
+Then("陳腐化した記述が存在せず新しい除外範囲と理由が存在する", function () {
+  const section = this.exported.join("\n");
+  assert.notEqual(section, "", "REQ-SQ-017の節が見つかりません");
+  for (const stale of [...REQ_SQ_017_STALE, ...REQ_SQ_017_STALE_SCOPE])
+    assert.equal(
+      section.includes(stale),
+      false,
+      `陳腐化した記述が残っています: ${stale}`,
+    );
+  for (const current of REQ_SQ_017_CURRENT)
+    assert.equal(
+      section.includes(current),
+      true,
+      `新しい記述がありません: ${current}`,
+    );
+});
+
+/**
+ * **領域名の直後に区切り文字を持つfileは領域外である。**
+ *
+ * POSIXでは`\\`は通常のfile名文字であり、
+ * `.agent-skill-chain/role-log\\evil.feature`の親directoryは
+ * `.agent-skill-chain`である。除外判定が`\\`を区切りへ倒すと、
+ * **除外が領域の外へ及ぶ**（Issue #1273、独立reviewerのH-01）。
+ */
+Given("領域名の直後に区切り文字を含む領域外pathにSCN定義がある", function () {
+  this.root = this.temp();
+  const container = path.join(this.root, ".agent-skill-chain");
+  fs.mkdirSync(container, { recursive: true });
+  for (const name of [
+    "role-log\\evil.feature",
+    "metrics\\evil.feature",
+    "runtime\\evil.feature",
+    "tmp\\handoffs\\evil.feature",
+  ])
+    fs.writeFileSync(path.join(container, name), SCN_LINE);
+});
+
+Then("検査はSCN配置違反を4件報告する", function () {
+  assert.equal(this.errors.length, 4);
+});

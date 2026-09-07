@@ -933,15 +933,38 @@ export function applyStagingCleanup(input, remove) {
     };
 }
 /**
+ * 除外述語が共有するsegment検証。
+ *
+ * `/`区切りへ**正規化済みの**pathを受け取り、空・`.`・`..`のsegmentを含む場合は
+ * **判定不能**として`undefined`を返す。**この関数は区切りの正規化規則を持たない。**
+ *
+ * 正規化規則を共有しないのは、**呼び出し元ごとに`' + BS + '`の意味が違う**ためである。
+ * `isIssueStagingPath`は生のpath入力APIとしてWindows区切りを受け付ける契約を持つ。
+ * 一方、走査由来のpathではPOSIXの`' + BS + '`は通常のfile名文字であり、
+ * `.agent-skill-chain/role-log' + BS + 'evil.feature`は`role-log/`配下ではなく
+ * `.agent-skill-chain`直下のfileである。ここで一律に`' + BS + '`を区切りへ倒すと、
+ * **領域外のfileを除外してしまう**（Issue #1273で実測）。
+ *
+ * **分類も知らない。** 分類は呼び出す述語が与える。
+ */
+function validatedSegments(normalized) {
+    if (typeof normalized !== "string" || normalized === "")
+        return undefined;
+    const segments = normalized.split("/");
+    if (segments.some((segment) => segment === "" || segment === "." || segment === ".."))
+        return undefined;
+    return segments;
+}
+/**
  * Issue一時ステージング配下のrepository相対pathかを判定する。
  * 区切りを正規化したうえで、空・`.`・`..`のsegmentを含むpathは判定不能として
  * 偽を返す。除外側へ倒さないことでfail-closedにする。
  */
 export function isIssueStagingPath(relative) {
-    if (typeof relative !== "string" || relative === "")
+    if (typeof relative !== "string")
         return false;
-    const segments = relative.replaceAll("\\", "/").split("/");
-    if (segments.some((segment) => segment === "" || segment === "." || segment === ".."))
+    const segments = validatedSegments(relative.replaceAll("\\", "/"));
+    if (!segments)
         return false;
     const prefix = ISSUE_STAGING_PREFIX.split("/");
     if (segments.length <= prefix.length)
@@ -961,8 +984,44 @@ export const STAGING_LIFECYCLE_AREAS = Object.freeze([
     ".agent-skill-chain/metrics",
     ".agent-skill-chain/runtime",
 ]);
+/**
+ * 一時ライフサイクル領域配下かを判定する。
+ *
+ * **入力契約を`isIssueStagingPath`と揃えない。** この述語は追跡混入検査
+ * （`checkLifecycleIgnore`）とworkspace hygieneが使い、**真が「領域内なので
+ * 拒否・保護する」という安全側**を意味する。`\\`はPOSIXでは通常文字であり、
+ * `.agent-skill-chain/tmp/..\\draft.md`は`tmp`配下に実在しうる合法なfile名である。
+ * 正規化して判定不能へ倒すと、**その追跡混入を12件中12件見逃す**（Issue #1273で実測）。
+ *
+ * **「安全側」の向きは呼び出し元ごとに逆である。** 除外述語としては「除外しない」が
+ * 安全側だが、ここでは「領域内と判定する」が安全側である。
+ */
 export function isStagingLifecyclePath(relative) {
     const normalized = slash(relative);
+    return STAGING_LIFECYCLE_AREAS.some((area) => normalized === area || normalized.startsWith(`${area}/`));
+}
+/**
+ * SCN配置検査の除外に使う、一時ライフサイクル領域の**厳格な**判定。
+ *
+ * 分類は`STAGING_LIFECYCLE_AREAS`から導出し、複製しない。入力契約は
+ * `isIssueStagingPath`と共有し、**判定不能なpathを除外しない**。
+ * 除外述語としてはそれが安全側である。
+ *
+ * `isStagingLifecyclePath`と別に置くのは、あちらが追跡混入検査で使われ、
+ * **真偽の安全側の向きが逆**だからである。**1つの述語へまとめない。**
+ */
+export function isStagingLifecycleScanPath(relative) {
+    if (typeof relative !== "string")
+        return false;
+    /**
+     * **区切りの正規化はOS本来のものに限る。** `slash`は`path.sep`だけを`/`へ倒す。
+     * POSIXの`\`はfile名の一部であり、区切りとして扱うと領域外のfileを
+     * 除外する（Issue #1273）。
+     */
+    const segments = validatedSegments(slash(relative));
+    if (!segments)
+        return false;
+    const normalized = segments.join("/");
     return STAGING_LIFECYCLE_AREAS.some((area) => normalized === area || normalized.startsWith(`${area}/`));
 }
 //# sourceMappingURL=staging.js.map
