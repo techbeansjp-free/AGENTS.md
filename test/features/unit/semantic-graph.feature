@@ -170,3 +170,33 @@ Feature: 意味グラフを決定論的かつ有界に探索し投影の鮮度�
     Given 固定seedから生成した小規模な有向Graph集合がある
     When production探索と独立oracleを各Graphで実行する
     Then BFSとSCCとtopological orderとweighted distanceがoracleに一致する
+
+  Scenario: SCN-UNIT-SEMGRAPH-034 上限を超える単一fileを取り込まず構築を続ける
+    Given 上限を超えるfileと通常のfileを持つ疑似projectがある
+    When 意味Graphを構築する
+    Then 上限を超えたfileのnodeは存在せず通常のfileのnodeは存在する
+
+  Scenario: SCN-UNIT-SEMGRAPH-035 取り込まなかったfileを診断として報告する
+    Given 上限を超えるfileを複数持つ疑似projectがある
+    When 意味Graphを構築する
+    Then 除外したpathを決定論的な順序で件数付きで観測できる
+
+  Scenario: SCN-UNIT-SEMGRAPH-036 集合上限の拒否を維持する
+    Given 集合byte上限を超える疑似projectがある
+    When 意味Graphを構築する
+    Then 構築は拒否される
+
+  Scenario: SCN-UNIT-SEMGRAPH-037 追跡表が除外fileを指しても構築を続ける
+    Given 追跡表が上限を超えるfileを実装として指す疑似projectがある
+    When 意味Graphを構築する
+    Then 構築は完了し除外fileは実在として扱われる
+
+  Scenario: SCN-UNIT-SEMGRAPH-038 file件数上限の拒否を維持する
+    Given file件数上限を超える疑似projectがある
+    When 意味Graphを構築する
+    Then 構築はfile件数上限として拒否される
+
+  Scenario: SCN-UNIT-SEMGRAPH-039 上限を超えるsymlinkを実在する通常fileとして扱わない
+    Given 追跡表が上限を超えるsymlinkを実装として指す疑似projectがある
+    When 意味Graphを構築する
+    Then 構築は実在しないendpointとして拒否される

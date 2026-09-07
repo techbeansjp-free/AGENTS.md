@@ -18,7 +18,7 @@ import { applyMigration, compareTrustedPolicy, enforceOperation, planMigration, 
 import { applyFileMigration, planFileMigration, recoverFileMigration, retryFileMigration, rollbackFileMigration, } from "./domain/migration.js";
 import { validateScenarioTrace } from "./domain/trace.js";
 import { DEFAULT_GRAPH_BUDGET, GraphFreshnessError, SEMANTIC_EDGE_KINDS, assessGraphFreshness, semanticGraphContentHash, shortestSemanticPath, topologicalSemanticOrder, traverseSemanticGraph, } from "./domain/semantic-graph.js";
-import { buildRepositorySemanticGraph, observeRepositoryGraphSource, } from "./adapters/repository-graph.js";
+import { buildRepositorySemanticGraphWithDiagnostics, observeRepositoryGraphSource, } from "./adapters/repository-graph.js";
 import { canonicalProviderInstant, github, GitHubProviderUnavailableError, samePolicyAuthorityObservation, } from "./adapters/github.js";
 import { assertMinimumExecutableVersion, MINIMUM_GH_VERSION, MINIMUM_GIT_VERSION, } from "./lib/executable-version.js";
 import { git } from "./lib/process.js";
@@ -2596,9 +2596,25 @@ function graphBooleanFlag(value, name) {
         throw new Error(`--${name}は値を取らないflagとして指定してください`);
     return true;
 }
+/** 診断へ列挙するpathの上限。残数は件数から導ける。 */
+const OVERSIZED_SAMPLE_LIMIT = 5;
+/**
+ * 上限超過で取り込まなかったpathを、判断に足る分量へ絞って返す。
+ *
+ * **黙って落とさない。** 仕様は取り込まないことを定めるが、報告しないとは
+ * 定めていない。**全pathを常に列挙もしない。** 件数を必ず出し、pathは先頭の
+ * 一定件数までとする。
+ */
+function oversizedSourceDiagnostic(paths) {
+    return {
+        count: paths.length,
+        paths: Object.freeze(paths.slice(0, OVERSIZED_SAMPLE_LIMIT)),
+    };
+}
 async function readFreshSemanticGraph(root) {
     const { GRAPHQLITE_VERSION, GraphQlLiteStore, graphQlLiteAsset } = await import("./adapters/graphqlite.js");
-    const expectedSnapshot = buildRepositorySemanticGraph(root);
+    const expectedBuild = buildRepositorySemanticGraphWithDiagnostics(root);
+    const expectedSnapshot = expectedBuild.snapshot;
     const expectedGraphContentHash = semanticGraphContentHash(expectedSnapshot);
     const expectedAsset = graphQlLiteAsset();
     const store = new GraphQlLiteStore(root);
@@ -2627,6 +2643,7 @@ async function readFreshSemanticGraph(root) {
             observedSource: sourceAfterRead,
             expectedGraphContentHash,
             observedGraphContentHash,
+            oversizedPaths: expectedBuild.oversizedPaths,
         };
     }
     finally {
@@ -3227,7 +3244,9 @@ export async function main(argv, dependencies = {}) {
         const { flags } = parse(rest);
         const root = graphRoot(flags);
         const apply = applyMode(flags);
-        const snapshot = buildRepositorySemanticGraph(root);
+        const build = buildRepositorySemanticGraphWithDiagnostics(root);
+        const snapshot = build.snapshot;
+        const oversizedSource = oversizedSourceDiagnostic(build.oversizedPaths);
         const graphContentHash = semanticGraphContentHash(snapshot);
         if (!apply) {
             print({
@@ -3239,6 +3258,7 @@ export async function main(argv, dependencies = {}) {
                 graphContentHash,
                 nodeCount: snapshot.nodes.length,
                 edgeCount: snapshot.edges.length,
+                oversizedSource,
                 writes: ["worktree固有のruntime projection", "atomic current pointer"],
             });
             return 0;
@@ -3271,6 +3291,7 @@ export async function main(argv, dependencies = {}) {
                     mergeAuthorization: false,
                     modeAuthorization: false,
                     manifest,
+                    oversizedSource,
                     readBackGraphContentHash: semanticGraphContentHash(readBack.snapshot),
                 });
             }
@@ -3297,6 +3318,7 @@ export async function main(argv, dependencies = {}) {
                 modeAuthorization: false,
                 exactEvidenceAllowed: result.freshness.exactEvidenceAllowed,
                 manifest: result.manifest,
+                oversizedSource: oversizedSourceDiagnostic(result.oversizedPaths),
             });
             return 0;
         }

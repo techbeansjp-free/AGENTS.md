@@ -163,3 +163,8 @@ Feature: 隔離疑似projectでsemantic graphを即時観測する
     Given 実在しないpathをFeature列・実装列へ持つtrace rowがある
     When trace endpoint観測用のsemantic graphを構築する
     Then 実在しないpathは既存の診断文言でfail closedになる
+
+  Scenario: SCN-INT-SEMGRAPH-033 実repositoryのrootで投影を構築できる
+    Given このrepositoryのrootがある
+    When 意味Graphを構築する
+    Then 構築は完了し上限を超えた追跡fileが除外として報告される
