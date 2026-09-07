@@ -57,6 +57,7 @@
 | `test/features/unit/worktree-survey.feature` | M | package owner | evidence | SCN-UNIT-WTSURVEY-027〜032の追加 | pass | AC-01〜AC-04 | 追加のみ。既存scenarioを削除していない | pass |
 | `test/features/integration/worktree-survey.feature` | M | package owner | evidence | SCN-INT-WTSURVEY-016〜017の追加 | pass | AC-05・AC-06 | 同上 | pass |
 | `test/steps/worktree-survey.steps.ts` | M | package owner | evidence | 新8 SCNのstepと、実Git fixtureのobject format透過。remoteのbare repositoryも形式を揃える | pass。既存step定義を書き換えていない | AC-01〜AC-06 | 追加のみ | pass |
+| `docs/reviews/175_課題1255worktree-surveyのOID受理範囲レビュー.md` | A | package owner | evidence | 本artifact。**ラウンド2と3の是正を前進commitしたため、H_implの範囲へ入った** | pass。artifact自身のSHAを本文へ書かない | 全AC | ラウンド2と3の記録を追記した。既存の記述を削除していない | pass |
 | `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md` | M | package owner | spec | REQ-LC-008へobject format非依存、単一所有、信頼前提、照合を採らない理由の4段落を追記 | pass。名指ししたSCN 8件は同じ要件の追跡行に登録済み | REQ-LC-008 / AC-LC-008 | 既存段落を削除していない | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | package owner | spec | 新8 SCNの追跡登録 | pass。`trace:check`のorphanが要件・SCN・実装とも0件 | REQ-LC-008 | 既存行は不変 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | package owner | spec | 変更理由と判断の記録1行 | pass。9列のheader区切り直後へ挿入 | REQ-LC-008 | 既存行は不変 | pass |
