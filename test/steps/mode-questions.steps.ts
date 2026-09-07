@@ -171,7 +171,7 @@ function questionText(id: string): string {
 }
 
 /**
- * **Q-01の3つの判断を個別に固定する。**
+ * **Q-01の5つの判断を個別に固定する。**
  *
  * 対象の限定、内部仕様の除外、確認できない場合のfalseは別々の判断であり、
  * どれか1つを落とす変異を他の2つが吸収しない。
@@ -180,6 +180,9 @@ const Q01_JUDGEMENTS = [
   "列挙した文書等は外部へinterfaceとして提供するものを指し",
   "内部の仕様・追跡記録の更新という事実だけでは該当しないが",
   "変更fileの所在や配布の有無によらず、生成物を含む当該interfaceまたはその外部観測可能な振る舞いを追加・変更・削除する場合や、公開境界またはそれらへの影響を確認できない場合はfalseとする",
+  // Issue #1274で追加した2判断。**既存3判断を置き換えない。**
+  "公開Web画面も人や支援技術への外部interfaceを含むが",
+  "外部契約の対象でない視覚的調整は、画面の意味・操作・入出力の仕様・アクセシビリティと、生成物を含む他の外部提供物への影響がないと確認できた場合に限り対象外とする",
 ] as const;
 
 /**
@@ -196,7 +199,19 @@ const Q01_EXAMPLE_ROWS: ReadonlyArray<readonly [string, string]> = [
     "false（full）",
   ],
   [
-    "公開境界、または生成物を含む外部interfaceとその外部観測可能な振る舞いへの影響を確認できない",
+    "公開境界、または生成物を含む外部interfaceとその外部観測可能な振る舞いへの影響を確認できない（外部向けの保証範囲・操作とa11yへの影響・tokenの提供先を確認できない場合を含む）",
+    "false（full）",
+  ],
+  [
+    "外部契約の対象でない色・間隔・配置だけを調整し、画面の意味・操作・入出力の仕様・a11y上の意味と利用可能性、および生成物を含む他の外部提供物への影響がないことを確認できた",
+    "true（他の7問も真かつ根拠付きの場合だけquick）",
+  ],
+  [
+    "公開画面が伝える意味・操作・入力条件・出力の仕様・a11y上の意味と利用可能性のいずれかを変える、または表示に関する外部向け保証を追加・変更・削除する",
+    "false（full）",
+  ],
+  [
+    "内部tokenの変更により、生成・同期経路を通じて外部consumerへ提供する値・意味・生成物のいずれかが変わる",
     "false（full）",
   ],
 ];
@@ -223,13 +238,19 @@ function tableBody(
   lines: readonly string[],
   header: readonly string[],
 ): string[][] {
+  /**
+   * **GFMは外側のpipeを省略できる。** 末尾の`|`が無い行を終端として捨てると、
+   * 正しい6行の直後へ足した7行目が「本文6行」の完全一致を素通りする
+   * （Issue #1274、独立reviewerのMedium-1）。**行頭が`|`なら表の行として扱い、
+   * 末尾の`|`の有無で捨てない。**
+   */
   const cells = (line: string): string[] | null => {
     const trimmed = line.trim();
-    if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return null;
-    return trimmed
-      .split("|")
-      .slice(1, -1)
-      .map((cell) => cell.trim());
+    if (!trimmed.startsWith("|")) return null;
+    const inner = trimmed.endsWith("|")
+      ? trimmed.slice(1, -1)
+      : trimmed.slice(1);
+    return inner.split("|").map((cell) => cell.trim());
   };
   for (const [index, line] of lines.entries()) {
     const head = cells(line);
@@ -242,10 +263,18 @@ function tableBody(
       separator.some((cell) => !/^:?-{3,}:?$/u.test(cell))
     )
       continue;
+    /**
+     * **同じ表の中の列数違反を終端として捨てない。**
+     *
+     * `break`で抜けると、正しい6行の直後へ3 cellの誤った行を足す変異が
+     * 「本文6行」の完全一致を素通りする（Issue #1274、独立reviewerのMedium-1）。
+     * 表として続いている行は列数が違っても本文へ入れ、呼び出し側の比較で
+     * 落とす。**表でない行（`|`で始まらない行）が来たときだけ終端とする。**
+     */
     const body: string[][] = [];
     for (const rest of lines.slice(index + 2)) {
       const row = cells(rest);
-      if (!row || row.length !== header.length) break;
+      if (!row) break;
       body.push(row);
     }
     return body;
@@ -262,25 +291,62 @@ When("モード判定質問の判定例を検査する", function () {
   this.texts = visibleMarkdownLines(afterHeading.split("\n## ")[0] ?? "");
 });
 
+Then("確定した6組の変更の実態と判定値が過不足なく一致する", function () {
+  const body = tableBody(this.texts, ["変更の実態", "Q-01"]);
+  assert.notEqual(
+    body.length,
+    0,
+    "判定例の表がheaderと区切り行を伴って見つかりません",
+  );
+  /**
+   * **過不足ない一致を要求する。** 各組の存在だけを見ると、正しい6行へ
+   * 誤った7行目を足す変異が生存する（Issue #1274、独立reviewerのMedium-1）。
+   */
+  assert.deepEqual(
+    body,
+    Q01_EXAMPLE_ROWS.map(([situation, verdict]) => [situation, verdict]),
+    "判定例の行が確定した組と過不足なく一致しません",
+  );
+});
+
+/**
+ * Q-01の根拠欄へ残す確認対象と、条件付きの表記修正文。
+ *
+ * **見出し語だけを検査しない。** 各項目の実体と、表記修正文の**条件節**まで
+ * 名指しする。条件節だけを削除すると、外部契約変更をtrueへ通す弱い例外へ
+ * 戻る（Issue #1274、要件レビューのHigh-1）。
+ */
+const Q01_CHECKLIST = [
+  "**Q-01の根拠欄には、次の4点について確認結果と根拠を残す。該当しない項目は理由を記す。**",
+  "**公開境界と提供先:** 変更対象が誰に何を提供しているか。",
+  "**外部契約と保証範囲:** 変更前後の提供内容と外部向け保証。宣言がないことを契約不存在の証拠にせず、保証の削除も変更に含める。",
+  "**画面への影響:** 意味・操作・入出力の仕様・a11y上の意味と利用可能性への影響。",
+  "**生成・同期先への影響:** tokenを含む変更が、外部consumerへ提供する値・意味・生成物へ及ぼす影響。",
+  "**表記修正も、意味・操作識別・支援技術への伝達を変えず、外部契約および生成物を含む他の外部提供物への影響がないと確認できた場合に限りQ-01をtrueとする。**",
+  // #1268で入れた注意文。**本件で削除しない。**
+  "**「画面で見える」「registryへ公開していない」「docs/specs/にある」は、いずれも単独ではQ-01の判定根拠にならない。**",
+] as const;
+
+When("Q-01の確認対象の記述を表示本文で検査する", function () {
+  const document = fs.readFileSync(
+    path.join(repositoryRoot(), DOCUMENT),
+    "utf8",
+  );
+  const [, afterHeading = ""] = document.split("\n## モード判定質問\n");
+  this.texts = visibleMarkdownLines(afterHeading.split("\n## ")[0] ?? "");
+});
+
 Then(
-  "真の例と公開生成物へ影響する偽の例と確認できない場合の偽が各1行ある",
+  "確認対象4項目と条件付きの表記修正文と既存の注意文が存在する",
   function () {
-    const body = tableBody(this.texts, ["変更の実態", "Q-01"]);
-    assert.notEqual(
-      body.length,
-      0,
-      "判定例の表がheaderと区切り行を伴って見つかりません",
-    );
-    for (const [situation, verdict] of Q01_EXAMPLE_ROWS) {
-      const matched = body.filter(
-        (row) => row[0] === situation && row[1] === verdict,
-      );
+    const section = this.texts.join("\n");
+    assert.notEqual(section, "", "モード判定質問の節が見つかりません");
+    for (const entry of Q01_CHECKLIST)
       assert.equal(
-        matched.length,
-        1,
-        `判定例の行が1件ではありません: ${situation} / ${verdict}`,
+        section.includes(entry),
+        true,
+        `確認対象の記述がありません: ${entry}`,
       );
-    }
   },
 );
 
