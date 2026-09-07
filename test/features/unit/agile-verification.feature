@@ -135,3 +135,18 @@ Feature: 実装中の発見を前向きに処理しrisk比例で検証する
     Given 不正なdiscoveryIdを含む実装中発見入力JSONがrepository内にある
     When workflow assess-discovery CLIで評価する
     Then 不正なdiscoveryIdをfail-closedで拒否する
+
+  Scenario: SCN-UNIT-AGILE-028 外部契約を変える変更はmutation-testを選ぶ
+    Given 外部契約を変える影響分析がある
+    When new-featureのhigh risk検証集合を選ぶ
+    Then mutation-testが選ばれる
+
+  Scenario: SCN-UNIT-AGILE-029 外部契約を変えない変更はmutation-testを選ばない
+    Given 変更が単一domain境界に限定される
+    When bug-fixのmedium risk検証集合を選ぶ
+    Then mutation-testは選ばれず既存の選定結果を変えない
+
+  Scenario: SCN-UNIT-AGILE-030 mutation-testの有無は外部契約の変更だけで決まる
+    Given 全変更種別と全riskの組み合わせがある
+    When 外部契約の有無だけを変えて検証集合を選ぶ
+    Then mutation-testの有無は外部契約の変更と完全に一致する

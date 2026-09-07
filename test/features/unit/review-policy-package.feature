@@ -271,3 +271,8 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     Given 開発ワークフローの正本がある
     When Semantic Graphの利用節を検査する
     Then 追跡と言及のedge種別の対応と未導入時の退避先が存在する
+
+  Scenario: SCN-UNIT-PACKAGE-026 変異の作り方と充足の記録先が配布物にある
+    Given 配布する品質基準と実装計画templateがある
+    When 変異試験の記述を検査する
+    Then 契約本文から変異を作る指示と充足の記録欄が存在する

@@ -22,6 +22,13 @@ let discovery: ImplementationDiscovery;
 let assessment: DiscoveryAssessment;
 let selection: VerificationSelection;
 let affectedBoundaries: string[];
+let contractChange = false;
+let contractSweep: Array<{
+  changeType: string;
+  risk: string;
+  withoutFlag: readonly string[];
+  withFlag: readonly string[];
+}> = [];
 let deliveryInput: Parameters<typeof decideDeliveryContinuation>[0];
 let deliveryContinuation: DeliveryContinuation;
 let cliRoot: string;
@@ -345,6 +352,31 @@ Then("PoC停止の更新対象とfull昇格の補完成果物を分離する", f
     "02_設計.md",
     "03_実装計画.md",
   ]);
+});
+
+/**
+ * 外部契約だけを変える影響分析。
+ *
+ * **他の影響をすべて偽にする。** riskや境界数による増補と混ざると、
+ * `mutation-test`が外部契約の条件で選ばれたのか他の条件で選ばれたのかを
+ * 区別できない。
+ */
+const contractChangeImpact = (): VerificationImpactAnalysis => ({
+  securityRelevant: false,
+  dataLossPossible: false,
+  irreversibleOperation: false,
+  externalContractChanged: true,
+  concurrentBehaviorChanged: false,
+});
+
+Given("外部契約を変える影響分析がある", function () {
+  /**
+   * **先行scenarioの状態へ依存しない。** 境界も同じGivenで設定する。
+   * 設定しないと`affectedBoundaries`が未初期化のまま渡り、単独実行が
+   * TypeErrorで落ちる。
+   */
+  affectedBoundaries = ["domain"];
+  contractChange = true;
 });
 
 When("bug-fixのmedium risk検証集合を選ぶ", function () {
@@ -688,4 +720,125 @@ Then("不正なdiscoveryIdをfail-closedで拒否する", function () {
   assert.ok(this.error instanceof Error);
   assert.match(this.error.message, /discoveryId.*DISC-/u);
   assert.equal(this.value, undefined);
+});
+
+When("new-featureのhigh risk検証集合を選ぶ", function () {
+  selection = selectVerificationSet({
+    ...verificationInput("new-feature", "high"),
+    impactAnalysis: contractChange
+      ? contractChangeImpact()
+      : noAdditionalImpact(),
+  });
+});
+
+Then("mutation-testが選ばれる", function () {
+  assert.equal(
+    selection.methods.includes("mutation-test"),
+    true,
+    `外部契約を変える変更でmutation-testが選ばれていません: ${selection.methods.join(", ")}`,
+  );
+});
+
+Then("mutation-testは選ばれず既存の選定結果を変えない", function () {
+  assert.equal(
+    selection.methods.includes("mutation-test"),
+    false,
+    "外部契約を変えない変更でmutation-testが選ばれています",
+  );
+  /**
+   * **既存の選定結果そのものを固定する。** 「含まれない」だけでは、
+   * 他の手段が増減した回帰を見逃す。
+   */
+  assert.deepEqual(selection.methods, [
+    "bug-reproduction",
+    "regression-test",
+    "integration-test",
+  ]);
+});
+
+/**
+ * 変更種別とriskの全列挙。
+ *
+ * **production定数から導出しない。** 導出すると、選定規則と列挙が同じ向きに
+ * ずれたときに検査が空振りする。独立に書き、増えたときは意図して更新する。
+ */
+const SWEEP_CHANGE_TYPES = [
+  "bug-fix",
+  "new-feature",
+  "refactoring",
+  "documentation",
+  "configuration",
+  "migration",
+  "security-sensitive",
+  "algorithm",
+  "api",
+  "concurrency",
+] as const;
+
+const SWEEP_RISKS = ["low", "medium", "high", "critical"] as const;
+
+Given("全変更種別と全riskの組み合わせがある", function () {
+  contractSweep = [];
+});
+
+When("外部契約の有無だけを変えて検証集合を選ぶ", function () {
+  const observed: typeof contractSweep = [];
+  for (const changeType of SWEEP_CHANGE_TYPES)
+    for (const risk of SWEEP_RISKS) {
+      const base = {
+        changeType,
+        risk,
+        affectedBoundaries: ["domain"],
+        requirementIds: ["REQ-001"],
+        acceptanceCriteriaIds: ["AC-001"],
+      } as const;
+      observed.push({
+        changeType,
+        risk,
+        withoutFlag: selectVerificationSet({
+          ...base,
+          impactAnalysis: noAdditionalImpact(),
+        }).methods,
+        withFlag: selectVerificationSet({
+          ...base,
+          impactAnalysis: contractChangeImpact(),
+        }).methods,
+      });
+    }
+  contractSweep = observed;
+});
+
+Then("mutation-testの有無は外部契約の変更と完全に一致する", function () {
+  assert.equal(
+    contractSweep.length,
+    SWEEP_CHANGE_TYPES.length * SWEEP_RISKS.length,
+    "走査した組み合わせ件数が想定と異なります",
+  );
+  const wrong = contractSweep.filter(
+    ({ withoutFlag, withFlag }) =>
+      withoutFlag.includes("mutation-test") ||
+      !withFlag.includes("mutation-test"),
+  );
+  assert.deepEqual(
+    wrong.map(({ changeType, risk }) => `${changeType}/${risk}`),
+    [],
+    "mutation-testの有無が外部契約の変更と一致しない組み合わせがあります",
+  );
+  /**
+   * **外部契約の変更が足す手段を固定する。** mutation-test以外の増減が
+   * 混ざると、この条件が別の理由で成立しているかを区別できない。
+   */
+  const unexpected = contractSweep.flatMap(
+    ({ changeType, risk, withoutFlag, withFlag }) =>
+      withFlag
+        .filter((method) => !withoutFlag.includes(method))
+        .filter(
+          (method) =>
+            !["contract-test", "integration-test", "mutation-test"].includes(
+              method,
+            ),
+        )
+        .map((method) => `${changeType}/${risk}:${method}`),
+  );
+  assert.deepEqual(unexpected, []);
 });
