@@ -117,7 +117,7 @@ export function runJsonlSession(file, args, cwd, options) {
         });
         child.on("error", (error) => failWithReason(`子processを起動できません: ${error.message}`));
         child.on("close", (code) => finish(code ?? 1));
-        child.stdin.on("error", () => undefined);
+        child.stdin.on("error", () => failWithReason("子processのstdinへの書込に失敗しました"));
         child.stdin.write(options.input);
     });
 }

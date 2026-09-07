@@ -15,12 +15,15 @@ import { git } from "../../src/lib/process.js";
 import { isRecord } from "../../src/types.js";
 import { findPackageModelSlugViolations } from "../../scripts/check_conformance.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
+import {
+  codexFixtureScript,
+  withProviderPath,
+} from "../support/provider-fixture.js";
 
 class CodexLaunchWorld extends WorkflowWorld {
   launchRoot = "";
   binaryRoot = "";
   launchInput: CodexLaunchInput | undefined;
-  originalPath: string | undefined;
   expectedStates: string[] = [];
   observedStates: string[] = [];
 }
@@ -101,53 +104,9 @@ Given("最新Codex起動用のtrusted projectと隔離実行入口がある", fu
   this.binaryRoot = this.temp("codex-launch-bin-");
   fs.writeFileSync(path.join(this.binaryRoot, "catalog.jsonl"), catalog());
   const executable = path.join(this.binaryRoot, "codex");
-  fs.writeFileSync(
-    executable,
-    `#!${process.execPath}\n` +
-      `
-const fs = require('node:fs');
-const path = require('node:path');
-const directory = ${JSON.stringify(this.binaryRoot)};
-const args = process.argv.slice(2);
-let input = '';
-process.stdin.setEncoding('utf8');
-let initializationSent = false;
-process.stdin.on('data', chunk => {
-  input += chunk;
-  if(args[0] !== 'app-server') return;
-  if(!initializationSent && input.includes('"method":"initialize"')) {
-    initializationSent = true;
-    process.stdout.write(JSON.stringify({ id: 0, result: { userAgent: 'fixture' } })+'\\n');
-  }
-  if(input.includes('model/list')) process.stdout.write(fs.readFileSync(path.join(directory, 'catalog.jsonl'), 'utf8'));
-});
-process.stdin.on('end', () => {
-  if(args[0] === 'exec') {
-    fs.appendFileSync(path.join(directory,'calls.jsonl'), JSON.stringify({args,input})+'\\n');
-    const behaviorFile = path.join(directory,'behavior');
-    const behavior = fs.existsSync(behaviorFile) ? fs.readFileSync(behaviorFile,'utf8') : 'complete';
-    if(behavior === 'timeout') { setInterval(() => {}, 1000); return; }
-    if(behavior === 'overflow') { process.stdout.write('x'.repeat(100000)); return; }
-    process.stderr.write('token=private-test-value');
-    process.stdout.write(JSON.stringify({ type: behavior === 'complete' ? 'turn.completed' : behavior === 'failed' ? 'turn.failed' : 'item.completed', text: 'token=private-test-value' })+'\\n');
-    process.exitCode = behavior === 'failed' ? 1 : 0;
-  }
-});
-`,
-  );
+  fs.writeFileSync(executable, codexFixtureScript(this.binaryRoot));
   fs.chmodSync(executable, 0o755);
 });
-
-function withPath<T>(
-  world: CodexLaunchWorld,
-  operation: () => Promise<T>,
-): Promise<T> {
-  const previous = process.env.PATH;
-  process.env.PATH = `${world.binaryRoot}${path.delimiter}${previous ?? ""}`;
-  return operation().finally(() => {
-    process.env.PATH = previous;
-  });
-}
 
 When("公式推奨をAからBへ変更して公開CLIを2回起動する", function () {
   assert.ok(this.launchInput);
@@ -470,7 +429,7 @@ When("candidate追加と旧slug台帳でtrusted採用不足を補えない", asy
 When(
   "完了と失敗と不明と時間容量上限を区別し秘密を出力しない",
   async function () {
-    await withPath(this, async () => {
+    await withProviderPath(this.binaryRoot, async () => {
       for (const [behavior, expected] of [
         ["complete", "succeeded"],
         ["failed", "failed"],
@@ -508,7 +467,7 @@ When(
   async function () {
     assert.ok(this.launchInput);
     const input = this.launchInput;
-    await withPath(this, async () => {
+    await withProviderPath(this.binaryRoot, async () => {
       const good = await launchCodex({ ...input, sandbox: "workspace-write" });
       this.observedStates.push(good.state);
       this.expectedStates.push("succeeded");

@@ -8,6 +8,7 @@ import {
 } from "../../src/adapters/provider.js";
 import { run, runJsonlSession } from "../../src/lib/process.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
+import { withProviderPath } from "../support/provider-fixture.js";
 
 class ProviderAdapterRoutingWorld extends WorkflowWorld {
   providerExecutor: ProviderExecutor | undefined = undefined;
@@ -190,19 +191,17 @@ Then("Codex JSONLの末尾が部分行でも確定応答で観測完了する", 
     [
       "#!/usr/bin/env node",
       "process.stdin.resume();",
-      "let input = ''; let initialized = false;",
+      "let input = ''; let initialized = false; let catalogSent = false;",
       "process.stdin.on('data', chunk => { input += chunk;",
       "if (!initialized && input.includes('initialize')) { initialized = true; process.stdout.write(JSON.stringify({ id: 0, result: { userAgent: 'fixture' } })+'\\n'); }",
-      `if (input.includes('model/list')) process.stdout.write(${JSON.stringify(`${response}\n{"partial":`)});`,
+      `if (!catalogSent && input.includes('model/list')) { catalogSent = true; process.stdout.write(${JSON.stringify(`${response}\n{"partial":`)}); }`,
       "});",
       "process.stdin.on('end', () => process.exit(0));",
       "setTimeout(() => process.exit(2), 500);",
     ].join("\n"),
   );
   fs.chmodSync(executable, 0o755);
-  const originalPath = process.env.PATH;
-  process.env.PATH = `${executableDirectory}${path.delimiter}${originalPath ?? ""}`;
-  try {
+  await withProviderPath(executableDirectory, async () => {
     const observation = await observeProvider(
       "codex",
       undefined,
@@ -210,9 +209,7 @@ Then("Codex JSONLの末尾が部分行でも確定応答で観測完了する", 
     );
     assert.equal(observation.state, "available");
     assert.deepEqual(observation.models, ["model-fixture"]);
-  } finally {
-    process.env.PATH = originalPath;
-  }
+  });
 });
 
 Given("秘密を含む標準エラーを返すprovider実行関数を注入した", function () {
@@ -290,9 +287,7 @@ Then(
     const directory = this.temp("asc-codex-handshake-");
     const executable = path.join(directory, "codex");
     const transcript = path.join(directory, "transcript.jsonl");
-    const originalPath = process.env.PATH;
-    process.env.PATH = `${directory}${path.delimiter}${originalPath ?? ""}`;
-    try {
+    await withProviderPath(directory, async () => {
       for (const official of [false, true]) {
         for (const behavior of ["success", "error", "malformed"]) {
           fs.writeFileSync(transcript, "");
@@ -380,8 +375,6 @@ process.stdin.on('end', () => process.exit(process.exitCode || 0));
           );
         }
       }
-    } finally {
-      process.env.PATH = originalPath;
-    }
+    });
   },
 );

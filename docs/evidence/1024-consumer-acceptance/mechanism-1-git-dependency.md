@@ -5,7 +5,7 @@
 | path | SHA-256 |
 |---|---|
 | `scripts/check_consumer_acceptance.ts` | `08cbde239552af94f97485a09e3173fb6e72855e7f4cffbc80629122f5bff5fc` |
-| `src/lib/process.ts` | `06013f66a9aaf57b2cb9efc261b812730beccfd65366431b4b71faf0d35caf85` |
+| `src/lib/process.ts` | `1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2` |
 
 この2件を記録するのは、consumer acceptanceの判定とprocess出力上限という、この証跡が主張する振る舞いの実体だからである。**`scripts/check_package_contents.ts`は含めない。** 同fileは`checkConsumerAcceptance`を`mechanisms: ["packed-bin", "scale-output"]`で呼んでおり、**この機構は接続経路に存在しない**（Issue #1221）。`package.json`はmainの自動releaseでversionが変わり、主張する振る舞いが同じでもhashが変わるため対象に含めない。
 
@@ -92,3 +92,9 @@ PR #1263の補正で`JsonlSessionOptions`と`runJsonlSession`だけを変更し�
 `check_consumer_acceptance.ts`のprocess実装importは同期`run`と型`ProcessOptions`・`ProcessResult`だけであり、`runJsonlSession`への接続はない。同fileの全体SHA-256も上表から変化していない。現在sourceで`node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs --name 'SCN-INT-CONSUMER-00[1678]'`を実行し、packed-bin故障検出、fixture公開入口、git準備の制御seam故障、候補tarballの3MiB出力を4 scenario・20 stepすべて合格で観測した。
 
 これは変更されていない同期consumer経路への再拘束と現行回帰の観測であり、既存の#1024時点の実npm・pnpm故障注入を今回再実行したという主張ではない。`artifact_sha256`、`distribution_digest`、旧注入差分・前後終了値・復元確認は保持した。束縛対象と検証器も保持し、検査をAST部分hashへ変更せず、上表のfile全体hashを引き続き照合する。過去の同種再拘束はcommit `ddf8e99a0bb0282b26edb408e046b5d9062c12af`（Issue #1027）にある。
+
+## Issue #1265のstdin失敗処理変更への再拘束
+
+2026-09-07、旧束縛`06013f66a9aaf57b2cb9efc261b812730beccfd65366431b4b71faf0d35caf85`に一致するcommit `2931acc5acf4164b25c5e59f2ef431ec081eff9f`の`src/lib/process.ts`と修正後sourceを実読した。変更は`runJsonlSession`のstdin errorを既存の失敗処理へ接続する部分だけである。前節と同じTypeScript ASTの2宣言除外手順で残余の元byte列を比較し、完全一致とSHA-256 `fa1b2ec07ff06c7ab0f89d854c9231d2dfbdf4c178e540a89717f9ac1582748d`を再計測した。同期`run`・`git`、定数、import、module初期化は未変更であり、consumerの接続先は同期`run`と型だけである。`check_consumer_acceptance.ts`の全体SHA-256 `08cbde239552af94f97485a09e3173fb6e72855e7f4cffbc80629122f5bff5fc`も未変更だった。
+
+上表は修正後file全体のSHA-256 `1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2`へ再拘束する。これは非同期session変更から独立した同期consumer経路のbyte同一性による再拘束であり、既存の#1024時点の実npm・pnpm故障注入を再実行したという主張ではない。旧注入結果、artifact、distribution digest、束縛集合、検証器、SHA節からartifact節への解析境界を保持する。統合後sourceのconsumer全31 scenarioは別途coordinatorが検証し、その結果をIssue #1265のレビュー証拠へ記録する。
