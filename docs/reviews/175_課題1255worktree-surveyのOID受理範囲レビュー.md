@@ -45,7 +45,7 @@
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **満たす。** 依存は`src/cli.ts` → `src/domain/worktree-survey.ts`の既存1本のままで、向きも変えていない。
 - `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: **artifact commit時点で満たす。**
 - reviewer stable IDが`H_impl` author stable IDと異なる: **満たす。**
-- 既定branch追随を行った場合: **該当なし。** 比較基点は`791c5da9`のままである。
+- 既定branch追随を行った場合: **行った。** PR #1282（Issue #1211）のmerge後に既定branchが動き、PRが`CONFLICTING`になった。**rebaseではなくmergeで追随した。** rebaseはreview sessionのanchorを殺し、reanchorも`implementation-diff-changed`で正しく拒否するためである。衝突は`docs/specs/15_要件追跡/01_変更履歴.md`の1件で、双方がheader区切り直後へ1行を足していた。**両側の行を保存した。** 追随merge commitは`86a808c6237e5f3784f34d295ecd42913429d4ec`であり、比較基点`791c5da9`とH_impl`0d9a2953`は動いていない。
 
 ## 変更ファイル個別監査
 
