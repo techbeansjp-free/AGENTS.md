@@ -67,6 +67,14 @@ export function visibleMarkdownLines(markdown: string): string[] {
       continue;
     }
     /**
+     * **indented code blockの除外をコメント処理より前へ置く。**
+     *
+     * 後ろへ置くと、`    行 <!-- 補足 -->`のようにindentした行でもコメント分岐が
+     * 先に可視行として積み、**code block内の文字列が契約の充足証拠になる**
+     * （Issue #1274、PR #1277の外部指摘）。fenceの内側は上で既に落としている。
+     */
+    if (!inComment && /^(?: {4}|\t)/u.test(line)) continue;
+    /**
      * **コメントの外にある可視内容を落とさない。**
      *
      * 以前は`<!--`を含む行を丸ごと捨てていたため、`| 行 | 値 | <!-- 補足 -->`の
@@ -100,8 +108,6 @@ export function visibleMarkdownLines(markdown: string): string[] {
       if (visible.trim() !== "") lines.push(visible);
       continue;
     }
-    /** indented code blockは4スペースまたはtabで始まる。表の行はindentしない。 */
-    if (/^(?: {4}|\t)/u.test(line)) continue;
     lines.push(line);
   }
   return lines;
