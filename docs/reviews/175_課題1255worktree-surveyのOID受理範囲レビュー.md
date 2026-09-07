@@ -200,12 +200,16 @@
 
 ## 8. 配布物影響
 
-| path | 影響 |
-|---|---|
-| `dist/src/domain/worktree-survey.js` | `isWorktreeHeadSha`と`parseWorktreeHeads`が追加され、`headSha`検証が40桁または64桁になる |
-| `dist/src/cli.js` | `registeredWorktreeHeads`がdomainへの委譲に変わる |
+| 変更path | 配布境界に入るか | 影響 |
+|---|---|---|
+| `src/domain/worktree-survey.ts`、`dist/src/domain/worktree-survey.js` | 入る | `isWorktreeHeadSha`と`parseWorktreeHeads`が追加され、`headSha`の受理が40桁または64桁の小文字hexになる |
+| `src/cli.ts`、`dist/src/cli.js` | 入る | `registeredWorktreeHeads`がdomainへの委譲へ変わり、58行減る。呼び出し元へ返す契約は不変である |
+| `docs/specs/`の3 file | 入らない | ASC自身の仕様と追跡であり配布物に含まれない |
+| `test/`の4 file | 入らない | 配布境界外の検証資産である |
 
-**利用者から見た変化は、SHA-256 object formatのrepositoryで`worktree survey`が分類を返すようになることだけである。** 出力書式、分類名、理由文、終了値の規則は変えていない。受理範囲は広がる方向のみで、従来分類されていたworktreeが落ちることはない。
+判断: 配布物を更新した
+
+根拠: `src/`は配布されるpackage所有資産であり、`worktree survey`が受理する観測の範囲という外部観測可能な振る舞いが変わる。**利用者から見た変化は、SHA-256 object formatのrepositoryで分類が返るようになることだけである。** 出力書式、分類名、理由文、終了値の規則、`worktree finalize`の認可条件はいずれも不変であり、受理範囲は広がる方向のみなので従来分類されていたworktreeが落ちることはない。
 
 ## 9. 独立reviewの成立
 
