@@ -13,7 +13,7 @@
 | 対象外 | 個別project ruleの実廃止、proposal自動消費、PR・merge等の提出操作 |
 | 残り予算 | 通常2回。追加roundを本reviewから要求しない |
 | ラウンド数 | 1 |
-| Step chain | 経由: `.agent-skill-chain/tmp/issues/20260908_054817_project-ruleの正式な廃止経路を確立する` |
+| Step chain | 経由: .agent-skill-chain/tmp/issues/20260908_054817_project-ruleの正式な廃止経路を確立する |
 | 仕様の所有箇所 | `docs/specs/02_要件/04_仕様・品質管理要件.md` REQ-SQ-004「trusted側へ先行登録したproject rule廃止提案とrule ID・trusted fragmentのraw UTF-8 SHA-256が完全一致する完全削除だけを受理する」 |
 | 成果物行数 | 製品source +270/-39、schema・配布案内 +67/-13、仕様 +21/-6、test +874/-26、生成dist +172/-30（合計 +1404/-114） |
 | 縮小の先行評価 | 既存policy比較・loader・migrationへmatcherを合成。新CLI、service、DB、依存追加なし |
@@ -171,8 +171,17 @@ GitHub成功CI run ID/URLとH_finalは本review時点で未観測。local verifi
 
 | 変更path | 配布境界に入るか | 影響 |
 |---|---|---|
-| `.agent-skill-chain/schemas/`の3変更file | 入る | 新optional提案、空inventory、二段階手順 |
-| `src/`の7変更fileおよび対応`dist/`6file | 入る | trusted proposalによる完全削除判定と入口配送 |
+| `.agent-skill-chain/schemas/00_利用案内.md` | 入る | 二段階手順 |
+| `.agent-skill-chain/schemas/project-policy-manifest.schema.json` | 入る | optional提案と空inventory |
+| `.agent-skill-chain/schemas/project-policy.schema.json` | 入る | optional提案と空inventory |
+| `src/cli.ts` | 入る | validateとdelivery接続 |
+| `src/domain/delivery.ts` | 入る | trusted source配送 |
+| `src/domain/enforcement.ts` | 入る | 完全削除判定とfloor保持 |
+| `src/domain/migration.ts` | 入る | plan/verify接続 |
+| `src/domain/policy.ts` | 入る | source復元と入力検証 |
+| `src/domain/project-rule-retirement.ts` | 入る | trusted proposal照合 |
+| `src/types.ts` | 入る | optional提案型 |
+| `dist/src/` | 入る | 上記sourceから生成した配布JS 6件 |
 | `docs/specs/`5file、`test/`5file | 入らない | 開発上の追跡・検証 |
 
 判断: 配布物を更新した
@@ -208,4 +217,3 @@ GitHub成功CI run ID/URLとH_finalは本review時点で未観測。local verifi
 内部reviewのapproved判定・findingは上記のとおり保持する。coordinator/analyst/verifier/finalizerはroot、implementerは別CLI context、reviewerは別内部contextであり、verifierは独立して12 commandを完走した。既定Claude mappingに対する外部送信は自動審査に拒否され、内部reviewへ代替した。これは既定providerの実行・実効tier attestationを満たしたという主張ではない。今回の明示された自走・merge authorityの下、この相違を記録して可逆なPR/mergeへ進める。project choiceや安全gateは変更せず、release・registry公開は実行しない。
 
 外部review不成立の既存例外は`.agent-skill-chain/review-exceptions.json`の`RVX-REPORTED-SUCCESS-WITHOUT-REVIEW-001`を参照する。ただし本書作成時点では適用していない。PR作成後にreview comment・approvalの実体を観測し、その条件を満たす場合にのみ外部記録へ適用値を残す。内部reviewをGitHubのimmutable approvalへ読み替えない。
-
