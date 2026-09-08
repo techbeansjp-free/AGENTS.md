@@ -1094,6 +1094,37 @@ function ciDeliveryEventAt(staging: string, state: DeliveryState): string {
   }
 }
 
+/**
+ * 固定run IDでCI runを直読みし、9項目を照合してrun IDを返す（Issue #1280）。
+ *
+ * **merge後の経路だけがこれを使う。** merge前の一覧選別へは1文字も影響しない。
+ */
+function reconcileFixedMergeCiRun(
+  input: { root: string; repository: string; pr: number; state: DeliveryState },
+  fixedCiRunId: string,
+): string {
+  const fixedRun = github(
+    "pr.ci-run",
+    { repository: input.repository, runId: fixedCiRunId },
+    input.root,
+  );
+  const reconciled = reconcileFixedMergeRun(
+    {
+      runId: fixedCiRunId,
+      repository: input.repository,
+      headSha: input.state.merge?.authorizedHeadSha ?? "",
+      headBranch: input.state.create.headRef,
+      pullRequest: input.pr,
+    },
+    fixedRun,
+  );
+  if (!reconciled.reconciled)
+    throw new Error(
+      `固定済みmerge CI runがcurrent providerの観測と一致しません: ${reconciled.mismatches.join(", ")}`,
+    );
+  return fixedRun.runId;
+}
+
 function observeMergeReviewEvidence(input: {
   root: string;
   repository: string;
@@ -1108,6 +1139,19 @@ function observeMergeReviewEvidence(input: {
    * 経過で`undelivered`と誤分類する（外部reviewer指摘）。
    */
   ciEventAt: string;
+  /**
+   * merge成功後にだけ渡す固定run ID（Issue #1280）。
+   *
+   * `pull_requests`は「現在openで同一headを持つsame-repo PR」の一覧であり、
+   * **PRが閉じた瞬間に空になる。** head_shaでの一覧再検索はmerge成功後に必ず
+   * 失敗するため、**このときだけ固定identityの直読みへ切り替える。**
+   *
+   * **merge前は渡さない。** 渡さない経路の選別は1文字も変えておらず、
+   * 空`pull_requests`の許容はmerge前から到達できない。
+   * **切り替えるのはCI runの取得だけであり、実装commitの再観測、独立approvalの
+   * 再確認、review Evidence identityの照合はどちらの経路でも同じに走る。**
+   */
+  fixedCiRunId?: string;
 }): {
   reviewEvidence: MergeReviewEvidence;
   approvals: ApprovalObservation[];
@@ -1134,30 +1178,39 @@ function observeMergeReviewEvidence(input: {
     { repository: input.repository, pr: input.pr },
     input.root,
   );
-  const ciRuns = github(
-    "pr.ci-runs",
-    {
-      repository: input.repository,
-      pr: input.pr,
-      headSha: input.observed.headRefOid,
-    },
-    input.root,
-  );
-  const ci = ciRuns
-    .filter(
-      (run) =>
-        run.repository.toLowerCase() === input.repository.toLowerCase() &&
-        /^[1-9]\d*$/u.test(run.runId) &&
-        run.event === "pull_request" &&
-        run.headSha === input.observed.headRefOid &&
-        run.conclusion === "success" &&
-        run.pullRequestNumbers.length === 1 &&
-        run.pullRequestNumbers[0] === input.pr,
-    )
-    .sort((left, right) =>
-      left.runId.localeCompare(right.runId, "en", { numeric: true }),
-    )[0];
-  if (!ci) {
+  const ci =
+    input.fixedCiRunId === undefined
+      ? undefined
+      : { runId: reconcileFixedMergeCiRun(input, input.fixedCiRunId) };
+  const ciRuns =
+    ci === undefined
+      ? github(
+          "pr.ci-runs",
+          {
+            repository: input.repository,
+            pr: input.pr,
+            headSha: input.observed.headRefOid,
+          },
+          input.root,
+        )
+      : [];
+  const selected =
+    ci ??
+    ciRuns
+      .filter(
+        (run) =>
+          run.repository.toLowerCase() === input.repository.toLowerCase() &&
+          /^[1-9]\d*$/u.test(run.runId) &&
+          run.event === "pull_request" &&
+          run.headSha === input.observed.headRefOid &&
+          run.conclusion === "success" &&
+          run.pullRequestNumbers.length === 1 &&
+          run.pullRequestNumbers[0] === input.pr,
+      )
+      .sort((left, right) =>
+        left.runId.localeCompare(right.runId, "en", { numeric: true }),
+      )[0];
+  if (!selected) {
     /**
      * **拒否の理由を、待つべきか人を呼ぶべきかまで含めて返す**（Issue #969）。
      *
@@ -1198,13 +1251,13 @@ function observeMergeReviewEvidence(input: {
     implementationCommitSha: candidate.implementationCommitSha,
     reviewArtifactPath: candidate.reviewArtifactPath,
     reviewArtifactDigest: candidate.reviewArtifactDigest,
-    ciRunId: ci.runId,
+    ciRunId: selected.runId,
     reviewId: independentReview.reviewId,
   };
   return {
     reviewEvidence: {
       ...candidate,
-      ciRunId: ci.runId,
+      ciRunId: selected.runId,
       reviewId: independentReview.reviewId,
       reviewEvidenceId: canonicalDigest(identity),
     },
@@ -1559,37 +1612,26 @@ function readBackPreparedPullRequestMerge(input: {
         tracker: input.tracker,
       });
       /**
-       * **merge後は再検索せず、固定identityを直読みで照合する。**
+       * **merge後は一覧を再検索せず、固定`ciRunId`の直読みで照合する。**
        *
        * `pull_requests`は「現在openで同一headを持つsame-repo PR」の一覧であり、
        * **PRが閉じた瞬間に空になる**（Issue #1280で実測）。head_shaでの再検索は
        * merge成功後に必ず失敗し、`outcome=merged`のStep 11を構造的に記録できなくする。
        *
-       * 規範は「副作用の成否が曖昧な場合は同じ要求を再送せず、**固定identityを使った
-       * provider read-backだけで照合する**」と定める。再検索はそこから外れていた。
-       *
-       * **merge前の選別は1文字も変えない。** 空`pull_requests`の許容は
-       * `reconcileFixedMergeRun`だけが持ち、merge前の経路から到達できない。
+       * **切り替えるのはCI runの取得だけである。** 実装commitのtrusted再観測、
+       * PR author・H_impl authorと独立したreviewの再確認、固定review Evidence
+       * identityの照合は従来どおり同じ経路で走る。
        */
-      const fixedRun = github(
-        "pr.ci-run",
-        { repository: input.repository, runId: input.state.merge.ciRunId },
-        input.root,
-      );
-      const reconciled = reconcileFixedMergeRun(
-        {
-          runId: input.state.merge.ciRunId,
-          repository: input.repository,
-          headSha: input.state.merge.authorizedHeadSha,
-          headBranch: input.state.create.headRef,
-          pullRequest: input.pr,
-        },
-        fixedRun,
-      );
-      if (!reconciled.reconciled)
-        throw new Error(
-          `固定済みmerge CI runがcurrent providerの観測と一致しません: ${reconciled.mismatches.join(", ")}`,
-        );
+      const reviewed = observeMergeReviewEvidence({
+        root: input.root,
+        repository: input.repository,
+        pr: input.pr,
+        state: input.state,
+        observed,
+        ciEventAt: ciDeliveryEventAt(input.staging, input.state),
+        fixedCiRunId: input.state.merge.ciRunId,
+      });
+      assertFixedMergeReviewEvidence(input.state, reviewed.reviewEvidence);
     } else {
       const base = defaultBranch(input.root);
       const trustedSet = loadEffectiveTrustedPolicySet(input.root, base);
