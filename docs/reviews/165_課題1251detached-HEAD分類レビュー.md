@@ -145,7 +145,7 @@ runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は英語keyword�
 
 ## 8. 配布物影響
 
-**梱包対象かどうかと配布影響があるかどうかを分ける**（Issue #1254で訂正）。`package.json`の`files`は`dist/bin/`・`dist/src/`・`dist/vendor/`・`.agent-skill-chain/`の6項目・`README.md`・`AGENTS.md`・`CLAUDE.md`であり、`npm pack --dry-run`の実測でも`src/`・`test/`・`docs/`は1件も梱包されない。
+**梱包対象かどうかと配布影響があるかどうかを分ける**（Issue #1254で訂正）。`package.json`の`files`は**全12項目**であり、内訳は`dist/bin/`・`dist/src/`・`dist/vendor/`の3件、`.agent-skill-chain/`配下の6件（`00_利用案内.md`・`skills/`・`templates/`・`schemas/`・`policy/`・`docs/`）、root直下の`README.md`・`AGENTS.md`・`CLAUDE.md`の3件である。`npm pack --dry-run`の実測でも`src/`・`test/`・`docs/`は1件も梱包されない、`npm pack --dry-run`の実測でも`src/`・`test/`・`docs/`は1件も梱包されない。
 
 | 変更path | npm梱包対象か | 配布影響 |
 |---|---|---|
