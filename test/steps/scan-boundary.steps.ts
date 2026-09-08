@@ -65,6 +65,9 @@ class ScanBoundaryWorld extends WorkflowWorld {
   fixtureRoot = "";
   reportStatus = 0;
   reportOutput = "";
+  /** 述語が受け取った引数。**入力そのものが渡ることを観測する**（Issue #1276）。 */
+  predicateArguments: string[] = [];
+  observableTarget = "";
 }
 
 const { Given, When, Then } = stepDefinitions<ScanBoundaryWorld>();
@@ -381,6 +384,179 @@ Then(
           entry.predicate === "source-quality-directories",
       ),
       JSON.stringify(parsed.incomplete),
+    );
+  },
+);
+
+/**
+ * **実行OSの区切りを隠さない**（Issue #1276）。
+ *
+ * `isObservableRelativePath`は`path.sep`だけを正規化する。判定はOSに依存するため、
+ * **どのOSで測ったかをscenarioの側で先に固定する。** CIは`ubuntu-latest`であり
+ * `path.sep`は`/`である。Windowsでは`..\x`が本物の親参照になり結果が変わる。
+ */
+Given("実行OSの区切りが {string} である", function (separator: string) {
+  assert.equal(
+    path.sep,
+    separator,
+    `本scenarioは path.sep が ${separator} の環境を前提とする。実測値は ${path.sep}`,
+  );
+});
+
+/**
+ * **POSIXで実在しうる合法なfile名を与える**（Issue #1276）。
+ *
+ * `..\draft.md`はPOSIXでは1つの正常なsegmentであり、`tmp/issues/`配下のfileである。
+ * backslashを無条件に区切りとして解釈すると、このpathはどの述語へも届かない。
+ */
+Given(
+  "backslashを含む合法なfile名の観測入力がある",
+  function (this: ScanBoundaryWorld) {
+    this.observableTarget =
+      ".agent-skill-chain/tmp/issues/20260101_000000_例/..\\draft.md";
+    this.predicates = ["issue-staging"];
+    this.sources = [STAGING_PREDICATE];
+    this.paths = [this.observableTarget];
+  },
+);
+
+Given(
+  "親参照と現在参照と絶対pathとdrive修飾と空文字の観測入力がある",
+  function (this: ScanBoundaryWorld) {
+    this.predicates = ["issue-staging"];
+    this.sources = [STAGING_PREDICATE];
+    /** **実行OSの区切りで解釈したときに不正segmentを生じる入力だけを並べる。** */
+    this.paths = [
+      "a/../b",
+      "a/./b",
+      "/absolute.md",
+      "C:/outside.md",
+      "C:\\outside.md",
+      "",
+    ];
+  },
+);
+
+Given(
+  "引数を記録する述語とbackslashを含むpathがある",
+  function (this: ScanBoundaryWorld) {
+    this.observableTarget =
+      ".agent-skill-chain/tmp/issues/20260101_000000_例/..\\draft.md";
+    this.predicateArguments = [];
+    const recorded = this.predicateArguments;
+    this.predicates = ["recording"];
+    this.sources = [
+      {
+        id: "recording",
+        owner: "trace:check",
+        appliesTo: "SCN配置検査の走査範囲のみ",
+        reasonCode: "recording",
+        reason: "述語が受け取った引数を記録する",
+        excludes: (candidate: string) => {
+          recorded.push(candidate);
+          return true;
+        },
+      },
+    ];
+    this.paths = [this.observableTarget];
+  },
+);
+
+Then(
+  "そのpathは観測対象に入り述語の判定結果へ現れる",
+  function (this: ScanBoundaryWorld) {
+    const observation = this.observation!;
+    assert.deepEqual(
+      [...observation.observedPaths],
+      [this.observableTarget],
+      "合法なfile名が観測対象へ入っていません",
+    );
+    /**
+     * **`isIssueStagingPath`はこのpathを除外しない**（Issue #1276で実測）。
+     *
+     * POSIXでは`..\\draft.md`が1つの正常なsegmentになり、同述語のsegment検査を
+     * 通らない。**その差こそが観測すべき対象である。** 除外されないことは、
+     * どの述語にも掛からなかった生成物として`uncovered`へ現れることで示される。
+     * **是正前はこの判定自体が行われず、`incomplete`へ落ちていた。**
+     */
+    const excluded = observation.predicates.flatMap((entry) =>
+      entry.excluded.map((item) => item.path),
+    );
+    assert.deepEqual(
+      excluded,
+      [],
+      "この入力はissue-staging述語に掛からないはずである",
+    );
+    assert.deepEqual(
+      [...observation.uncovered],
+      [this.observableTarget],
+      `述語の判定結果へ現れていません: ${JSON.stringify(observation.uncovered)}`,
+    );
+  },
+);
+
+Then("判定不能なpathは1件も報告されない", function (this: ScanBoundaryWorld) {
+  const unresolvable = this.observation!.incomplete.filter(
+    (item) => item.code === "unresolvable-path",
+  );
+  assert.deepEqual(
+    unresolvable.map((item) => item.path),
+    [],
+    "判定不能として落ちたpathがあります",
+  );
+});
+
+Then(
+  "すべて判定不能として報告され観測対象に入らない",
+  function (this: ScanBoundaryWorld) {
+    const observation = this.observation!;
+    assert.deepEqual(
+      [...observation.observedPaths],
+      [],
+      "拒否すべきpathが観測対象へ入っています",
+    );
+    /** **件数だけでなく、どのpathが落ちたかを名指しで突合する。** */
+    assert.deepEqual(
+      observation.incomplete
+        .filter((item) => item.code === "unresolvable-path")
+        .map((item) => item.path),
+      [...this.paths],
+      "拒否したpath集合が入力と一致しません",
+    );
+  },
+);
+
+Then(
+  "報告されうる理由codeは登録済みの6件だけである",
+  function (this: ScanBoundaryWorld) {
+    /**
+     * **列挙を対象codeから導出しない**（Issue #1276）。
+     * ここへ書き写した6件が正本と食い違えば、この検査が落ちる。
+     */
+    const registered = [
+      "unknown-predicate",
+      "duplicate-predicate",
+      "missing-predicate",
+      "unresolvable-path",
+      "predicate-unavailable",
+      "scan-failed",
+    ];
+    assert.equal(registered.length, 6);
+    for (const item of this.observation!.incomplete)
+      assert.ok(
+        registered.includes(item.code),
+        `登録外の理由codeが報告されました: ${item.code}`,
+      );
+  },
+);
+
+Then(
+  "述語が受け取った文字列は入力と1文字も違わない",
+  function (this: ScanBoundaryWorld) {
+    assert.deepEqual(
+      this.predicateArguments,
+      [this.observableTarget],
+      "観測層が述語へ渡す文字列を書き換えています",
     );
   },
 );
