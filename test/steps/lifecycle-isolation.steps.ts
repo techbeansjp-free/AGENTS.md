@@ -670,3 +670,36 @@ Then("2つのhealthyは等しく登録状態だけが違う", function (this: Is
   assert.equal(unregistered.hooks.diagnostics.length > 0, true);
   assert.equal(registered.hooks.diagnostics.length, 0);
 });
+
+/**
+ * **境界外への解決失敗で`doctor`が止まらないことを測る**（Issue #1105）。
+ *
+ * `.claude`がroot外を指すsymlinkだと`resolveContained`が例外を投げる。
+ * **登録状態の観測は任意であり、失敗しても他の診断を返す価値がある。**
+ */
+/**
+ * **installの後にsymlinkへ差し替える。** 先に差し替えると`mappings()`の
+ * `resolveContained`が`install`自体を止め、`doctor`の観測に到達しない。
+ */
+When(
+  "setupを適用してからhost設定pathを境界外のsymlinkへ差し替えてdoctorを実行する",
+  function (this: IsolationWorld) {
+    init(this.root, { apply: true });
+    const hostDirectory = path.join(this.root, ".claude");
+    fs.rmSync(hostDirectory, { recursive: true, force: true });
+    fs.symlinkSync(this.temp("asc-lifecycle-outside-"), hostDirectory);
+    this.hookDoctorStates = [doctor(this.root)];
+  },
+);
+
+Then("doctorは中断せず未登録として報告する", function (this: IsolationWorld) {
+  const [state] = this.hookDoctorStates ?? [];
+  assert.ok(state !== undefined, "doctorが結果を返していません");
+  assert.equal(state.hooks.registered, false);
+  assert.equal(state.hooks.diagnostics.length > 0, true);
+  assert.equal(
+    Array.isArray(state.adapters.diagnostics),
+    true,
+    "他の診断欄が返っていません",
+  );
+});

@@ -585,15 +585,30 @@ export function doctor(target, worktreeObservations) {
      * **登録は利用者による有効化状態であり、packageのinstall健全性ではない。**
      * `healthy` keyをこの欄へ置かない。置くと門と誤読される。
      */
-    const hookSettingsFile = resolveContained(target, HOST_HOOK_SETTINGS, {
-        allowMissingLeaf: true,
-    });
+    /**
+     * **境界外への解決失敗で`doctor`全体を止めない**（Issue #1105、外部reviewの指摘）。
+     *
+     * `.claude`がroot外を指すsymlinkだと`resolveContained`は例外を投げる。
+     * **登録状態の観測は任意であり、失敗しても他の診断を返す価値がある。**
+     * `resolveContained`自体は残すため、境界外のfileは読まない。
+     */
+    let hookSettingsFile;
+    try {
+        hookSettingsFile = resolveContained(target, HOST_HOOK_SETTINGS, {
+            allowMissingLeaf: true,
+        });
+    }
+    catch {
+        hookSettingsFile = undefined;
+    }
     /**
      * **設定fileが無い場合を例外にしない。** `isRegularFile`は`lstatSync`を使い
      * ENOENTを投げる。**未登録は正常な状態であり、診断の対象であって失敗ではない。**
      */
     const hookRegistration = inspectHookRegistration({
-        settings: fs.existsSync(hookSettingsFile) && isRegularFile(hookSettingsFile)
+        settings: hookSettingsFile !== undefined &&
+            fs.existsSync(hookSettingsFile) &&
+            isRegularFile(hookSettingsFile)
             ? fs.readFileSync(hookSettingsFile, "utf8")
             : undefined,
         expectedCommandFragment: HOST_HOOK_TARGETS[0],

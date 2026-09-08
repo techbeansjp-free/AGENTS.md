@@ -75,3 +75,8 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     Given lifecycle検証用の隔離directoryがある
     When setupを適用してhook未登録と登録済みの両方でdoctorを実行する
     Then 2つのhealthyは等しく登録状態だけが違う
+
+  Scenario: SCN-INT-LIFECYCLE-016 hook設定の解決に失敗してもdoctorは他の診断を返す
+    Given lifecycle検証用の隔離directoryがある
+    When setupを適用してからhost設定pathを境界外のsymlinkへ差し替えてdoctorを実行する
+    Then doctorは中断せず未登録として報告する
