@@ -55,7 +55,6 @@ interface DeliveryFinalizeWorld extends WorkflowWorld {
   omitTrustedPolicy: boolean;
   /** provider要求の直前でdispatch claimが消費されたか（Issue #1157）。 */
   dispatchClaimed: boolean;
-  settleStartedAt: number;
   settleElapsedMs: number;
   /** PR本文の一時領域を観測するための専用tmp（Issue #1157）。 */
   temporaryRoot: string;
@@ -1056,6 +1055,10 @@ Given("読み戻しがclosing索引を欠く観測を返すstubがある", funct
 Given("読み戻しが対象外Issueをcloseする観測を返すstubがある", function () {
   prepareGhCreateStub(this, true, true, "wrong-issue");
 });
+Given("索引が未確定な観測列を2回流す準備がある", function () {
+  /** stubはWhenの中で毎回作り直す。**counterを共有すると2回目が待たない。** */
+  prepareGhCreateStub(this, true, true, "empty-then-canonical");
+});
 Given("読み戻し自体が失敗するstubがある", function () {
   prepareGhCreateStub(this, true, true, "view-fails");
 });
@@ -1225,25 +1228,21 @@ function ghOperationCounts(log: string): Map<string, number> {
 }
 
 /**
- * **待機を注入した上限で実行し、経過時間を測る**（Issue #1271）。
+ * **待機の実在は差分でしか測れない**（Issue #1271）。
  *
- * 待機そのものは戻り値へ現れない。**待たない変異は、待機0の上限を注入した
- * scenarioだけでは恒等変換になり生存する。** 下限だけを測って非決定性を避ける。
+ * 読み戻しは`gh`のsubprocessを起動するため、待機を全く行わなくても経過は
+ * 数十から数百msになる。**下限を1回測るだけでは、待機を落とす変異が
+ * subprocess起動コストに隠れて生存する**（変異試験で実測）。同じ観測列を
+ * 待機0と待機Nで2回流し、**差が待機に由来することを測る。**
  */
 When(
-  "待機 {int} ミリ秒のsettle上限でPR create adapterを実行する",
+  "待機0と待機 {int} ミリ秒のsettleを続けて実行する",
   function (delay: number) {
     const original = process.env.PATH;
-    process.env.PATH = this.stubPath;
-    this.dispatchClaimed = false;
-    /**
-     * **単調時計で経過だけを測る**（Issue #1271）。
-     *
-     * `Date.now()`はfixtureへ実時刻が漏れるため禁じられている。ここで必要なのは
-     * 時刻ではなく経過の下限であり、`process.hrtime.bigint()`は壁時計を返さない。
-     */
-    this.settleStartedAt = Number(process.hrtime.bigint() / 1000000n);
-    try {
+    const measure = (delayMs: number): number => {
+      prepareGhCreateStub(this, true, true, "empty-then-canonical");
+      process.env.PATH = this.stubPath;
+      const startedAt = process.hrtime.bigint();
       this.prCreationResult = github(
         "pr.create",
         {
@@ -1255,32 +1254,35 @@ When(
           baseSha: "c".repeat(40),
           title: "bugfix: 対象を是正する",
           body: "Relates to #824",
-          /**
-           * **経過時間の上限は十分大きく取る。** ここで測るのは待機の実在で
-           * あって上限ではない。subprocess起動の実費が上限を越えると、
-           * 待機の有無と無関係にloopが止まり測定にならない。
-           */
           readBackSettle: {
             maxAttempts: 100,
-            delaysMs: [delay],
+            delaysMs: [delayMs],
             maxElapsedMs: 60000,
           },
-          onDispatch: () => {
-            this.dispatchClaimed = true;
-            return true;
-          },
+          onDispatch: () => true,
         },
         process.cwd(),
       );
+      return Number((process.hrtime.bigint() - startedAt) / 1000000n);
+    };
+    try {
+      const withoutDelay = measure(0);
+      const withDelay = measure(delay);
+      this.settleElapsedMs = withDelay - withoutDelay;
     } catch (error) {
       this.error = error;
     } finally {
-      this.settleElapsedMs =
-        Number(process.hrtime.bigint() / 1000000n) - this.settleStartedAt;
       process.env.PATH = original;
     }
   },
 );
+
+Then("待機由来の経過差は {int} ミリ秒以上である", function (least: number) {
+  assert.ok(
+    this.settleElapsedMs >= least,
+    `待機していないか短縮されています: 差分 ${this.settleElapsedMs}ms < ${least}ms`,
+  );
+});
 
 /**
  * **経過時間の上限だけで止まることを測る**（Issue #1271）。
@@ -1325,13 +1327,6 @@ When(
     }
   },
 );
-
-Then("経過時間は {int} ミリ秒以上である", function (least: number) {
-  assert.ok(
-    this.settleElapsedMs >= least,
-    `待機していません: ${this.settleElapsedMs}ms < ${least}ms`,
-  );
-});
 
 Then(
   "読み戻し回数は回数上限より少ない {int} 回以下である",

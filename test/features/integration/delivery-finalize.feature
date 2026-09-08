@@ -202,10 +202,10 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     Then 読み戻し回数は 1 回で対象外Issueの観測がそのまま返る
 
   Scenario: SCN-INT-GITHUB-031 索引が未確定なら実際に待ってから読み直す
-    Given PR作成後の読み戻しが1回目に空のclosing索引を返すstubがある
-    When 待機 50 ミリ秒のsettle上限でPR create adapterを実行する
+    Given 索引が未確定な観測列を2回流す準備がある
+    When 待機0と待機 400 ミリ秒のsettleを続けて実行する
     Then 読み戻し回数は 2 回でcanonical Issueをcloseする観測が返る
-    And 経過時間は 50 ミリ秒以上である
+    And 待機由来の経過差は 300 ミリ秒以上である
 
   Scenario: SCN-INT-GITHUB-032 読み戻し自体の失敗は待たずにrollback要求へ倒す
     Given 読み戻し自体が失敗するstubがある
