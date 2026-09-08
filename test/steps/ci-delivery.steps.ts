@@ -219,6 +219,26 @@ When("merge後の固定run照合を評価する", function () {
     { label: "conclusion空", observed: { ...base, conclusion: "" } },
     { label: "headSha空", observed: { ...base, headSha: "" } },
     { label: "status空", observed: { ...base, status: "" } },
+    /**
+     * **repository名の表記差は受理する**（外部reviewerの指摘、Issue #1280）。
+     *
+     * GitHubのrepository名は大文字小文字を区別せず、providerは正規化した表記を返す。
+     * 完全一致にすると表記差だけでmerge後の照合が停止し、**本Issueが直した
+     * 「Step 11へ到達できない」欠陥を作り直す。**
+     */
+    {
+      label: "repository表記差",
+      observed: { ...base, repository: "O/R", headRepository: "o/r" },
+    },
+    {
+      label: "headRepository表記差",
+      observed: { ...base, headRepository: "O/R" },
+    },
+    /** **表記を畳んでもforkは拒否し続ける。** owner/nameが異なれば一致しない。 */
+    {
+      label: "表記差のfork",
+      observed: { ...base, headRepository: "FORK/X" },
+    },
   ];
   /**
    * **固定した側が空の場合を別枠で測る**（Issue #1280）。
@@ -304,6 +324,11 @@ Then(
     ]);
     assert.deepEqual(by("固定headShaが空"), ["headSha"]);
     assert.deepEqual(by("固定headBranchが空"), ["headBranch"]);
+    /** **表記差は一致とみなす。** merge後の照合を表記だけで止めない。 */
+    assert.deepEqual(by("repository表記差"), []);
+    assert.deepEqual(by("headRepository表記差"), []);
+    /** **表記を畳んでもforkは拒否する。** */
+    assert.deepEqual(by("表記差のfork"), ["headRepository"]);
   },
 );
 Given("関連PRが空のrunと対象PRのrunがある", function () {

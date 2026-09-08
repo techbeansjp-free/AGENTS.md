@@ -98,10 +98,24 @@ export function reconcileFixedMergeRun(fixed, observed) {
         if (expected === "" || actual !== expected)
             mismatches.push(field);
     };
+    /**
+     * **repository名は大文字小文字を無視して突合する**（外部reviewerの指摘）。
+     *
+     * GitHubのrepository名は大文字小文字を区別せず、providerは正規化した表記を返す。
+     * **完全一致にすると、`--repo`の表記が違うだけでmerge後の照合が停止し、
+     * `outcome=merged`のStep 11へ到達できない。** それは本Issueが直した欠陥そのものである。
+     * **merge前の選別も既に`toLowerCase()`で比較しており、こちらだけ厳しくする理由がない。**
+     *
+     * **緩めるのは表記だけである。** owner/nameが異なるforkは畳んでも一致しない。
+     * 空文字は`require`の歯止めがそのまま効く。
+     */
+    const requireRepository = (field, expected, actual) => {
+        require(field, expected.toLowerCase(), actual.toLowerCase());
+    };
     require("runId", fixed.runId, observed.runId);
-    require("repository", fixed.repository, observed.repository);
+    requireRepository("repository", fixed.repository, observed.repository);
     /** **head側repositoryも対象と一致させる。** forkの同一commitを受理しない。 */
-    require("headRepository", fixed.repository, observed.headRepository);
+    requireRepository("headRepository", fixed.repository, observed.headRepository);
     require("event", "pull_request", observed.event);
     require("headSha", fixed.headSha, observed.headSha);
     require("headBranch", fixed.headBranch, observed.headBranch);
