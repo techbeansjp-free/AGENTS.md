@@ -33,7 +33,7 @@
 | 要求・受け入れ条件 | GitHub Issue #1281、staging 00・01のAC-01からAC-05 | Step 8で`sync-verified`、syncDigestとreadBackDigestが`3206f6eef1df09c5f924b306ed62007030bb3f05ed4f2545aa7c19a2f1b33c51`で一致 | 実行観測 |
 | 変更前の所要 | `conformance:check` | **1650 scenarios、9分34秒** | 実行観測 |
 | 変更後の所要 | 同上 | **87 scenarios、26秒**。49名のうちScenario Outline 3件のExamples展開で87件になる | 実行観測 |
-| 全Gherkinの独立確認 | `npm test` | **1658 scenarios合格**（1642 passed、16 skipped）、9分15秒 | 実行観測 |
+| 全Gherkinの独立確認 | `npm test` | **1642 passed、16 skipped、失敗0**（全1658 scenarios）、9分15秒。**skipを合格として数えない** | 実行観測 |
 | 対象SCN | `--name`で絞り込んだcucumber実行 | 3 scenarios、15 steps成功 | テスト出力 |
 | 前方一致の危険 | `git grep`の全SCN ID集計 | repository内1525 IDに対しbinding IDが前方一致になる組は0件。**それを根拠に境界指定を省いていない** | 実行観測 |
 | 変異試験 | 8件 | **8 kill、生存0。うち3件はreviewer由来である** | テスト出力 |
@@ -90,7 +90,7 @@
 
 - **所要が9分34秒から26秒になった。** `verify:distribution`全体で約9分30秒の短縮であり、1 Issueで検証を2〜3回回すと20〜30分になる。
 - **新しい機構を1つも足していない。** それどころかseamのwrapperを削除し、argvを組む式をrepository全体で1箇所にした。
-- **検出力を落としていないことを、主張ではなく反例で示した。** 全Gherkinの合格を別途1658 scenariosで確認し、限定の正しさを8件の変異で拘束した。
+- **限定対象が過不足ないことを、主張ではなく反例で示した。** 名指しした全IDが一致し、repository中の名指ししていない全IDが一致しないことを突き合わせ、限定の正しさを8件の変異で拘束した。全Gherkinは別途1642 passed・16 skipped・失敗0を確認した。**「検出力を落としていない」とは書かない。** §10と`REQ-SQ-005`が受け入れる検出損失を4件明示しており、そのうち3件と4件は機械的に閉じていない。
 - **受け入れる検出損失を4件、隠さず書いた。** うち3件はreviewerの指摘で追加したものである。
 
 ## 4. 敵対的評価
@@ -140,6 +140,17 @@
 - 指摘7件のうちHigh 3件・Medium 3件を是正し、Low 1件も是正した。**reviewerが構成した3変異がすべてkillへ変わることを実測した。**
 - 是正は`src/domain/conformance.ts`、`scripts/check_conformance.ts`、`test/`3 file、仕様1 fileに閉じ、隣接依存だけを再監査した。
 
+### ラウンド2（外部reviewerの取り込み）
+
+CodeRabbitがinlineで4件を指摘し、うち3件を是正した。
+
+| 指摘 | 重大度 | 対処 |
+|---|---|---|
+| `1658 scenarios合格`は未実行の16件を合格として記録している | Major | 是正。`1642 passed、16 skipped、失敗0`へ直した。**skipを合格として数えない。** §1と§7の2箇所 |
+| 「検出力を落としていない」が同artifactの受け入れ検出損失4件と矛盾する | Minor | 是正。§3を「限定対象が過不足ないことを示した」へ改め、検出損失を否定しない表現にした |
+| `audit:check`の欄が未実行のままで、総合判定「合格」が暫定である | Major | 是正。H_final確定後に実行した実測結果へ更新した |
+| `npm test`を補償統制として単独で扱わないこと | Major | **既に対処済み。** `REQ-SQ-005`の受け入れる検出損失の第三項が、`test/support/`の`Before` hookによるskipを名指しで明記している。追加の強制点は本Issueのscope外として別扱いにした |
+
 ## 7. テスト結果
 
 | 検証 | コマンド | 結果 |
@@ -155,9 +166,9 @@
 | 依存方向 | `npm run architecture:check` | 違反0件 |
 | 配布物 | `npm run package:check` | 合格 |
 | 対象SCN | `npm test -- --name 'SCN-INT-CANON-007\|SCN-UNIT-CONFORMANCE-00[67]'` | 3 scenarios、15 steps成功 |
-| **全Gherkin（独立確認）** | `npm test` | **1658 scenarios合格**（1642 passed、16 skipped）、9分15秒 |
+| **全Gherkin（独立確認）** | `npm test` | **1642 passed、16 skipped、失敗0**（全1658 scenarios）、9分15秒 |
 | **conformance（限定後）** | `npm run conformance:check` | **87 scenarios合格、26秒** |
-| 監査 | `npm run audit:check` | 本artifact確定後に実行する |
+| 監査 | `npm run audit:check` | **valid、監査対象9 file。** 本artifactをcommitしてH_finalを確定させた後に実行した |
 
 **本Issueに限り`npm test`を`conformance:check`と別に1回実行した。** 限定により`conformance:check`が全Gherkinを内包しなくなるため、変更後の全Gherkin合格を独立に確認する必要がある。
 
@@ -217,7 +228,7 @@
 
 ## 11. 総合判定と再開地点
 
-**判定: 合格。** ラウンド1でHigh 3件・Medium 3件・Low 1件を是正し、reviewerが構成した3変異がkillへ変わることを実測した。変異8件すべてkillであり、生存0である。
+**判定: 合格。** ラウンド1でHigh 3件・Medium 3件・Low 1件を、ラウンド2で外部reviewerのMajor 2件・Minor 1件を是正した。reviewerが構成した3変異がkillへ変わることを実測した。変異8件すべてkillであり、生存0である。**`audit:check`はH_final確定後に実行し`valid`を確認済みである。**
 
 **残る前提を隠さない。** 全Gherkinの合格は`quality`段に依存し、`test/support/`は候補側が同一PRで変更できる。これは本変更が作った穴ではなく既存の性質だが、本変更が`quality`を補償統制として必要条件にするため、REQ-SQ-005へ検出損失として明記した。機械的に閉じることは別Issueの範囲である。
 
