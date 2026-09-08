@@ -5108,7 +5108,7 @@ export async function main(argv, dependencies = {}) {
                                 state: "binding_recovery_required",
                                 reason: error instanceof Error ? error.message : String(error),
                                 deliveryState: retained,
-                                next: `作成済みPR ${created.url ?? "（URL不明）"} を確認し、pr createを再実行せず同じstagingでidentity照合を復旧してください`,
+                                next: `作成済みPR ${created.url ?? "（URL不明）"} を確認したうえで、**同じstagingで同じpr createを再実行してください。** 再実行はproviderへcreateを再送せず、固定済みidentityで既存PRをread-onlyに照合してbindingを復旧します。**headを動かす前に再実行してください。** headが動くとStep 10 bindingとPR作成identityの双方が旧headを指したままになり、復旧経路が塞がります（Issue #1271）`,
                             },
                         };
                     }

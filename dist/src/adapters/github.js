@@ -25,6 +25,27 @@ function mergeMethodFlag(method) {
         return "--squash";
     throw new Error(`merge方式を解決できません: ${method}。merge、rebase、squashのいずれかを指定してください`);
 }
+/**
+ * **既定値をadapter内に1箇所だけ持つ**（Issue #1271）。
+ *
+ * CLI flag、project choice、環境変数へ出さない。**利用側が上限を伸ばせると、
+ * 未確定の索引を待ち続ける経路が製品の外から作れる。**
+ */
+export const DEFAULT_READ_BACK_SETTLE = Object.freeze({
+    maxAttempts: 6,
+    delaysMs: Object.freeze([1000, 2000, 4000, 8000, 16000]),
+    maxElapsedMs: 40000,
+});
+/**
+ * event loopを進めずに待つ。**`sleep`等のexecutableへ依存しない**（Issue #1271）。
+ *
+ * CLIは同期実行であり、`await`できる呼び出し元が存在しない。
+ */
+function waitSync(milliseconds) {
+    if (milliseconds <= 0)
+        return;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
 function requireFullOid(value, label) {
     if (typeof value !== "string" || !/^[a-f0-9]{40}$/iu.test(value))
         throw new Error(`${label}は40桁の完全OIDでなければなりません`);
@@ -433,44 +454,94 @@ export function github(operation, supplied, cwd) {
         const urlMatch = new RegExp(`^https://github\\.com/${input.repository.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/pull/([1-9]\\d*)$`, "iu").exec(url);
         if (!urlMatch)
             throw new Error("PR作成結果のURLが対象リポジトリと一致しません");
-        let observed;
-        try {
-            observed = parseObject(run("gh", [
-                "pr",
-                "view",
-                url,
-                "--repo",
-                input.repository,
-                "--json",
-                "number,url,title,body,headRefName,baseRefName,headRefOid,baseRefOid,headRepository,isCrossRepository,closingIssuesReferences",
-            ], cwd).stdout, "PR観測");
-        }
-        catch (error) {
-            return {
-                state: "rollback_required",
-                url,
-                reason: `PR作成後の読み取り検証に失敗しました。作成済みPRを確認してcloseまたは修正してください: ${error instanceof Error ? error.message : String(error)}`,
-            };
-        }
         const expectedBody = input.body.replace(/\r\n/g, "\n").trimEnd();
-        const observedBody = observed.body?.replace(/\r\n/g, "\n").trimEnd();
-        if (observed.number !== Number(urlMatch[1]) ||
-            observed.url !== url ||
-            observed.title !== input.title ||
-            observedBody !== expectedBody ||
-            observed.headRefName !== input.head ||
-            observed.baseRefName !== input.base ||
-            observed.headRefOid !== input.headSha ||
-            observed.baseRefOid !== remoteBase ||
-            observed.headRepository?.nameWithOwner?.toLowerCase() !==
-                input.repository.toLowerCase() ||
-            observed.isCrossRepository !== false) {
-            return {
-                state: "rollback_required",
-                url,
-                reason: "PR作成後の読み取り検証に失敗しました。作成済みPRを確認してcloseまたは修正してください",
-                observation: observed,
-            };
+        /**
+         * **closing以外のidentityは各観測で照合する**（Issue #1271）。
+         *
+         * loopの後で1回だけ照合すると、**1回目の不一致が2回目の正常な観測で
+         * 洗い流される。** 待機中は認可済みの別writerがtitleやbodyを変更しうる。
+         * REQ-GH-001はこの競合を予防できず事後検出すると定めており、検出の位置は
+         * 各観測でなければならない。
+         */
+        const coreIdentityMatches = (observation) => observation.number === Number(urlMatch[1]) &&
+            observation.url === url &&
+            observation.title === input.title &&
+            observation.body?.replace(/\r\n/g, "\n").trimEnd() === expectedBody &&
+            observation.headRefName === input.head &&
+            observation.baseRefName === input.base &&
+            observation.headRefOid === input.headSha &&
+            observation.baseRefOid === remoteBase &&
+            observation.headRepository?.nameWithOwner?.toLowerCase() ===
+                input.repository.toLowerCase() &&
+            observation.isCrossRepository === false;
+        /**
+         * **closing Issue索引の反映を有界で待つ**（Issue #1271）。
+         *
+         * `gh pr create`の直後は、GitHubがPR本文を解釈して作る
+         * `closingIssuesReferences`がまだ空で返る。**これは「1件もcloseしない」
+         * という確定した判定ではなく未確定である。** 1回だけ読んで空を返すと、
+         * 後段の`assertPullRequestTrackerBinding`が必ず拒否し、`pr create`の
+         * 1回目が確定的に失敗していた。
+         *
+         * **待つのは厳密に空配列のときだけである。** 非空、配列でない、identity
+         * 不一致はいずれも確定した観測として即座に停止する。**空を成功へ倒す経路は
+         * 作らない。** 上限に達したら最後の観測をそのまま返し、受理述語が今日と
+         * 同じように拒否する。
+         *
+         * **繰り返すのは`gh pr view`だけである。** `gh pr create`は再送しない
+         * （`01_開発ワークフロー.md`のclaim消費規則）。
+         */
+        const settle = input.readBackSettle ?? DEFAULT_READ_BACK_SETTLE;
+        /**
+         * **単調時計を使う**（Issue #1271）。`Date.now()`はNTP補正で後退しうる。
+         * 後退すると経過の上限が発火せず、回数上限だけが停止条件になる。
+         * **上限を2つ置く意味が半分失われる。**
+         */
+        const startedAt = process.hrtime.bigint();
+        let observed;
+        let attempt = 0;
+        for (;;) {
+            attempt += 1;
+            try {
+                observed = parseObject(run("gh", [
+                    "pr",
+                    "view",
+                    url,
+                    "--repo",
+                    input.repository,
+                    "--json",
+                    "number,url,title,body,headRefName,baseRefName,headRefOid,baseRefOid,headRepository,isCrossRepository,closingIssuesReferences",
+                ], cwd).stdout, "PR観測");
+            }
+            catch (error) {
+                /** **読み取りの失敗はsettleの対象にしない。** 未確定ではなく異常である。 */
+                return {
+                    state: "rollback_required",
+                    url,
+                    reason: `PR作成後の読み取り検証に失敗しました。作成済みPRを確認してcloseまたは修正してください: ${error instanceof Error ? error.message : String(error)}`,
+                };
+            }
+            if (!coreIdentityMatches(observed))
+                return {
+                    state: "rollback_required",
+                    url,
+                    reason: "PR作成後の読み取り検証に失敗しました。作成済みPRを確認してcloseまたは修正してください",
+                    observation: observed,
+                };
+            const closing = observed.closingIssuesReferences;
+            /**
+             * **配列でない観測をsettleの対象にしない。** field欠落や`null`は
+             * 索引の未反映ではなく、trusted providerから観測できていない状態である。
+             */
+            if (!Array.isArray(closing) || closing.length > 0)
+                break;
+            if (attempt >= settle.maxAttempts)
+                break;
+            const delay = settle.delaysMs[Math.min(attempt - 1, settle.delaysMs.length - 1)] ?? 0;
+            const elapsedMs = Number((process.hrtime.bigint() - startedAt) / 1000000n);
+            if (elapsedMs + delay > settle.maxElapsedMs)
+                break;
+            waitSync(delay);
         }
         return { state: "created", url, observation: observed };
     }

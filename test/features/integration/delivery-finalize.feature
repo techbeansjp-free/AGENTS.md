@@ -173,6 +173,50 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     Then PR create adapterは成功する
     And PR作成順にauth、repository、remote HEAD、create、read-backが含まれる
 
+  Scenario: SCN-INT-GITHUB-026 索引が未確定な読み戻しを有界で待ち確定した観測を返す
+    Given PR作成後の読み戻しが1回目に空のclosing索引を返すstubがある
+    When settle上限を絞ってPR create adapterを実行する
+    Then 読み戻し回数は 2 回でcanonical Issueをcloseする観測が返る
+    And PR create操作は1回だけ呼ばれる
+
+  Scenario: SCN-INT-GITHUB-027 上限まで確定しない索引を成功へ倒さない
+    Given PR作成後の読み戻しが常に空のclosing索引を返すstubがある
+    When settle上限を絞ってPR create adapterを実行する
+    Then 読み戻し回数は 3 回で空のclosing索引がそのまま返る
+    And PR create操作は1回だけ呼ばれる
+
+  Scenario: SCN-INT-GITHUB-028 待機中にidentity不一致を洗い流さない
+    Given 読み戻しの1回目がidentity不一致で2回目が正常なstubがある
+    When settle上限を絞ってPR create adapterを実行する
+    Then 読み戻し回数は 1 回でrollback要求が返る
+    And 作成済みPRのURLを失わない
+
+  Scenario: SCN-INT-GITHUB-029 closing索引が配列でない観測を待たない
+    Given 読み戻しがclosing索引を欠く観測を返すstubがある
+    When settle上限を絞ってPR create adapterを実行する
+    Then 読み戻し回数は 1 回でclosing索引を欠く観測がそのまま返る
+
+  Scenario: SCN-INT-GITHUB-030 非空だが不一致な索引を待たずに返す
+    Given 読み戻しが対象外Issueをcloseする観測を返すstubがある
+    When settle上限を絞ってPR create adapterを実行する
+    Then 読み戻し回数は 1 回で対象外Issueの観測がそのまま返る
+
+  Scenario: SCN-INT-GITHUB-031 索引が未確定なら実際に待ってから読み直す
+    Given 索引が未確定な観測列を2回流す準備がある
+    When 待機0と待機 1000 ミリ秒のsettleを続けて実行する
+    Then 読み戻し回数は 2 回でcanonical Issueをcloseする観測が返る
+    And 待機由来の経過差は 600 ミリ秒以上である
+
+  Scenario: SCN-INT-GITHUB-032 読み戻し自体の失敗は待たずにrollback要求へ倒す
+    Given 読み戻し自体が失敗するstubがある
+    When settle上限を絞ってPR create adapterを実行する
+    Then 読み戻し回数は 1 回でrollback要求が返る
+
+  Scenario: SCN-INT-GITHUB-033 経過時間の上限だけでも反復を止める
+    Given PR作成後の読み戻しが常に空のclosing索引を返すstubがある
+    When 経過時間の上限だけで止まるsettleでPR create adapterを実行する
+    Then 読み戻し回数は回数上限より少ない 60 回以下である
+
   Scenario: SCN-INT-GITHUB-006 remote HEADが証拠SHAと違えばPRを作成しない
     Given 異なるremote HEADを返すgh stubがある
     When PR create adapterを実行する

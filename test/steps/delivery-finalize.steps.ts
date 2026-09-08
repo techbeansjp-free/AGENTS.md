@@ -55,6 +55,7 @@ interface DeliveryFinalizeWorld extends WorkflowWorld {
   omitTrustedPolicy: boolean;
   /** provider要求の直前でdispatch claimが消費されたか（Issue #1157）。 */
   dispatchClaimed: boolean;
+  settleElapsedMs: number;
   /** PR本文の一時領域を観測するための専用tmp（Issue #1157）。 */
   temporaryRoot: string;
   prCreationResult: PullRequestCreationResult;
@@ -945,10 +946,31 @@ Then("protection読取前にauthとrepository確認が行われる", function ()
 });
 
 /** `matchingBase` reproduces a base-branch OID change between preflight and PR read-back. */
+/**
+ * `pr view`が返すclosing索引の観測列（Issue #1271）。
+ *
+ * **実PRの本文は作成前に「canonical Issueを1件だけcloseする」ことが
+ * 検証されている。** したがって空配列は索引の未反映であり、「1件もcloseしない」
+ * という確定判定ではない。列を与えて停止条件を1つずつ検査する。
+ */
+type CreateStubClosing =
+  | "canonical"
+  | "empty-then-canonical"
+  | "always-empty"
+  | "missing"
+  | "wrong-issue"
+  | "mismatch-then-canonical"
+  | "view-fails";
+
+const CANONICAL_CLOSING = [
+  { number: 824, url: "https://github.com/o/r/issues/824" },
+];
+
 function prepareGhCreateStub(
   world: GhReadStubWorld,
   matchingHead: boolean,
   matchingBase = true,
+  closing: CreateStubClosing = "canonical",
 ) {
   const directory = world.temp("asc-gh-create-");
   world.ghLog = path.join(directory, "operations.log");
@@ -957,19 +979,50 @@ function prepareGhCreateStub(
   const observed = matchingHead ? expected : "b".repeat(40);
   const base = "c".repeat(40);
   const observedBase = matchingBase ? base : "d".repeat(40);
-  const pr = JSON.stringify({
+  const view = (
+    override: Record<string, unknown> = {},
+  ): Record<string, unknown> => ({
     number: 9,
     url: "https://github.com/o/r/pull/9",
+    title: "bugfix: 対象を是正する",
     body: "Relates to #824",
     headRefName: "feature/x",
     baseRefName: "main",
     headRefOid: expected,
     baseRefOid: observedBase,
-    closingIssuesReferences: [],
+    headRepository: { nameWithOwner: "o/r" },
+    isCrossRepository: false,
+    closingIssuesReferences: CANONICAL_CLOSING,
+    ...override,
   });
+  /**
+   * **観測列は呼び出し回数で切り替える。** stubは呼び出しごとに別processで
+   * 起動するため、回数はfileへ数える。
+   */
+  const sequence: Record<CreateStubClosing, Record<string, unknown>[]> = {
+    canonical: [view()],
+    "empty-then-canonical": [view({ closingIssuesReferences: [] }), view()],
+    "always-empty": [view({ closingIssuesReferences: [] })],
+    missing: [view({ closingIssuesReferences: undefined })],
+    "wrong-issue": [
+      view({
+        closingIssuesReferences: [
+          { number: 999, url: "https://github.com/o/r/issues/999" },
+        ],
+      }),
+    ],
+    "mismatch-then-canonical": [view({ title: "別のtitle" }), view()],
+    /** 読み戻し自体が失敗する。**未確定ではなく異常であり待たない。** */
+    "view-fails": [],
+  };
+  const payloads = JSON.stringify(
+    sequence[closing].map((value) => JSON.stringify(value)),
+  );
+  const viewFails = closing === "view-fails";
+  const counter = path.join(directory, "view-count");
   fs.writeFileSync(
     stub,
-    `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(world.ghLog)},args.join(' ')+'\\n');if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:'o/r',viewerPermission:'WRITE'}));if(args[0]==='api')process.stdout.write((args[1].includes('feature%2Fx')?${JSON.stringify(observed)}:${JSON.stringify(base)})+'\\n');if(args[0]==='pr'&&args[1]==='create')process.stdout.write('https://github.com/o/r/pull/9\\n');if(args[0]==='pr'&&args[1]==='view')process.stdout.write(${JSON.stringify(pr)});\n`,
+    `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(world.ghLog)},args.join(' ')+'\\n');if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:'o/r',viewerPermission:'WRITE'}));if(args[0]==='api')process.stdout.write((args[1].includes('feature%2Fx')?${JSON.stringify(observed)}:${JSON.stringify(base)})+'\\n');if(args[0]==='pr'&&args[1]==='create')process.stdout.write('https://github.com/o/r/pull/9\\n');if(args[0]==='pr'&&args[1]==='view'){${viewFails ? "process.stderr.write('gh: could not read PR\\n');process.exit(1);" : `const p=${payloads};let n=0;try{n=Number(fs.readFileSync(${JSON.stringify(counter)},'utf8'))}catch{}fs.writeFileSync(${JSON.stringify(counter)},String(n+1));process.stdout.write(p[Math.min(n,p.length-1)]);`}}\n`,
   );
   fs.chmodSync(stub, 0o755);
   world.stubPath = `${directory}${path.delimiter}${process.env.PATH ?? ""}`;
@@ -983,6 +1036,31 @@ Given("異なるremote HEADを返すgh stubがある", function () {
 });
 Given("作成中にremote base OIDが変更されるgh stubがある", function () {
   prepareGhCreateStub(this, true, false);
+});
+Given(
+  "PR作成後の読み戻しが1回目に空のclosing索引を返すstubがある",
+  function () {
+    prepareGhCreateStub(this, true, true, "empty-then-canonical");
+  },
+);
+Given("PR作成後の読み戻しが常に空のclosing索引を返すstubがある", function () {
+  prepareGhCreateStub(this, true, true, "always-empty");
+});
+Given("読み戻しの1回目がidentity不一致で2回目が正常なstubがある", function () {
+  prepareGhCreateStub(this, true, true, "mismatch-then-canonical");
+});
+Given("読み戻しがclosing索引を欠く観測を返すstubがある", function () {
+  prepareGhCreateStub(this, true, true, "missing");
+});
+Given("読み戻しが対象外Issueをcloseする観測を返すstubがある", function () {
+  prepareGhCreateStub(this, true, true, "wrong-issue");
+});
+Given("索引が未確定な観測列を2回流す準備がある", function () {
+  /** stubはWhenの中で毎回作り直す。**counterを共有すると2回目が待たない。** */
+  prepareGhCreateStub(this, true, true, "empty-then-canonical");
+});
+Given("読み戻し自体が失敗するstubがある", function () {
+  prepareGhCreateStub(this, true, true, "view-fails");
 });
 
 /**
@@ -1105,6 +1183,243 @@ When("PR create adapterを実行する", function () {
     process.env.PATH = original;
   }
 });
+/**
+ * **上限を引数で注入する**（Issue #1271）。testが実時間を待たないためであり、
+ * 既定値を弱めるためではない。既定値は`DEFAULT_READ_BACK_SETTLE`が持つ。
+ */
+When("settle上限を絞ってPR create adapterを実行する", function () {
+  const original = process.env.PATH;
+  process.env.PATH = this.stubPath;
+  this.dispatchClaimed = false;
+  try {
+    this.prCreationResult = github(
+      "pr.create",
+      {
+        repository: "o/r",
+        issue: 824,
+        head: "feature/x",
+        headSha: "a".repeat(40),
+        base: "main",
+        baseSha: "c".repeat(40),
+        title: "bugfix: 対象を是正する",
+        body: "Relates to #824",
+        readBackSettle: { maxAttempts: 3, delaysMs: [0], maxElapsedMs: 1000 },
+        onDispatch: () => {
+          this.dispatchClaimed = true;
+          return true;
+        },
+      },
+      process.cwd(),
+    );
+  } catch (error) {
+    this.error = error;
+  } finally {
+    process.env.PATH = original;
+  }
+});
+
+function ghOperationCounts(log: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const line of fs.readFileSync(log, "utf8").trim().split("\n")) {
+    const key = line.split(" ").slice(0, 2).join(" ");
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * **待機の実在は差分でしか測れない**（Issue #1271）。
+ *
+ * 読み戻しは`gh`のsubprocessを起動するため、待機を全く行わなくても経過は
+ * 数十から数百msになる。**下限を1回測るだけでは、待機を落とす変異が
+ * subprocess起動コストに隠れて生存する**（変異試験で実測）。同じ観測列を
+ * 待機0と待機Nで2回流し、**差が待機に由来することを測る。**
+ *
+ * **判定の余裕は雑音より大きく取る。** 差分300msでは、他scenarioの負荷で
+ * 待機なしの2回目が偶然遅くなったときに変異が生き延びた（実測）。
+ * 注入する待機を1000msとし、その6割を下限にする。
+ */
+When(
+  "待機0と待機 {int} ミリ秒のsettleを続けて実行する",
+  function (delay: number) {
+    const original = process.env.PATH;
+    const measure = (delayMs: number): number => {
+      prepareGhCreateStub(this, true, true, "empty-then-canonical");
+      process.env.PATH = this.stubPath;
+      const startedAt = process.hrtime.bigint();
+      this.prCreationResult = github(
+        "pr.create",
+        {
+          repository: "o/r",
+          issue: 824,
+          head: "feature/x",
+          headSha: "a".repeat(40),
+          base: "main",
+          baseSha: "c".repeat(40),
+          title: "bugfix: 対象を是正する",
+          body: "Relates to #824",
+          readBackSettle: {
+            maxAttempts: 100,
+            delaysMs: [delayMs],
+            maxElapsedMs: 60000,
+          },
+          onDispatch: () => true,
+        },
+        process.cwd(),
+      );
+      return Number((process.hrtime.bigint() - startedAt) / 1000000n);
+    };
+    try {
+      /**
+       * **cold startを測定へ入れない。** 1回目はmodule読込とprocess起動の
+       * 初期費用を含み、待機なしでも数百msかかる。**warm-upを捨ててから
+       * 2回を比べる。** これを省くと、待機を落とす変異が偶然生き延びる。
+       */
+      measure(0);
+      const withoutDelay = measure(0);
+      const withDelay = measure(delay);
+      this.settleElapsedMs = withDelay - withoutDelay;
+    } catch (error) {
+      this.error = error;
+    } finally {
+      process.env.PATH = original;
+    }
+  },
+);
+
+Then("待機由来の経過差は {int} ミリ秒以上である", function (least: number) {
+  assert.ok(
+    this.settleElapsedMs >= least,
+    `待機していないか短縮されています: 差分 ${this.settleElapsedMs}ms < ${least}ms`,
+  );
+});
+
+/**
+ * **経過時間の上限だけで止まることを測る**（Issue #1271）。
+ *
+ * 回数上限を事実上無効な大きさにし、経過時間の上限だけが停止条件になる形を作る。
+ * **片方の上限を落とす変異は、両方が効いている条件では検出できない。**
+ */
+When(
+  "経過時間の上限だけで止まるsettleでPR create adapterを実行する",
+  function () {
+    const original = process.env.PATH;
+    process.env.PATH = this.stubPath;
+    this.dispatchClaimed = false;
+    try {
+      this.prCreationResult = github(
+        "pr.create",
+        {
+          repository: "o/r",
+          issue: 824,
+          head: "feature/x",
+          headSha: "a".repeat(40),
+          base: "main",
+          baseSha: "c".repeat(40),
+          title: "bugfix: 対象を是正する",
+          body: "Relates to #824",
+          readBackSettle: {
+            maxAttempts: 100,
+            delaysMs: [10],
+            maxElapsedMs: 1000,
+          },
+          onDispatch: () => {
+            this.dispatchClaimed = true;
+            return true;
+          },
+        },
+        process.cwd(),
+      );
+    } catch (error) {
+      this.error = error;
+    } finally {
+      process.env.PATH = original;
+    }
+  },
+);
+
+Then(
+  "読み戻し回数は回数上限より少ない {int} 回以下である",
+  function (most: number) {
+    const views = ghOperationCounts(this.ghLog).get("pr view") ?? 0;
+    assert.ok(views <= most, `経過時間の上限で停止していません: ${views}回`);
+    assert.ok(views >= 2, `反復していません: ${views}回`);
+  },
+);
+
+Then(
+  "読み戻し回数は {int} 回でcanonical Issueをcloseする観測が返る",
+  function (times: number) {
+    assert.equal(this.prCreationResult.state, "created");
+    assert.deepEqual(
+      this.prCreationResult.observation?.closingIssuesReferences,
+      [{ number: 824, url: "https://github.com/o/r/issues/824" }],
+      "確定した観測が返っていません",
+    );
+    assert.equal(
+      ghOperationCounts(this.ghLog).get("pr view") ?? 0,
+      times,
+      "読み戻し回数が想定と違います",
+    );
+  },
+);
+
+Then(
+  "読み戻し回数は {int} 回で空のclosing索引がそのまま返る",
+  function (times: number) {
+    assert.equal(this.prCreationResult.state, "created");
+    assert.deepEqual(
+      this.prCreationResult.observation?.closingIssuesReferences,
+      [],
+      "空を成功側の値へ書き換えています",
+    );
+    assert.equal(ghOperationCounts(this.ghLog).get("pr view") ?? 0, times);
+  },
+);
+
+Then("PR create操作は1回だけ呼ばれる", function () {
+  assert.equal(
+    ghOperationCounts(this.ghLog).get("pr create") ?? 0,
+    1,
+    "読み戻しの反復がprovider createを再送しています",
+  );
+});
+
+Then("読み戻し回数は {int} 回でrollback要求が返る", function (times: number) {
+  assert.equal(this.prCreationResult.state, "rollback_required");
+  assert.equal(
+    ghOperationCounts(this.ghLog).get("pr view") ?? 0,
+    times,
+    "identity不一致を待ってしまっています",
+  );
+});
+
+Then(
+  "読み戻し回数は {int} 回でclosing索引を欠く観測がそのまま返る",
+  function (times: number) {
+    assert.equal(this.prCreationResult.state, "created");
+    assert.equal(
+      this.prCreationResult.observation?.closingIssuesReferences,
+      undefined,
+      "配列でない観測を書き換えています",
+    );
+    assert.equal(ghOperationCounts(this.ghLog).get("pr view") ?? 0, times);
+  },
+);
+
+Then(
+  "読み戻し回数は {int} 回で対象外Issueの観測がそのまま返る",
+  function (times: number) {
+    assert.equal(this.prCreationResult.state, "created");
+    assert.deepEqual(
+      this.prCreationResult.observation?.closingIssuesReferences,
+      [{ number: 999, url: "https://github.com/o/r/issues/999" }],
+      "非空だが不一致な観測を待つか書き換えています",
+    );
+    assert.equal(ghOperationCounts(this.ghLog).get("pr view") ?? 0, times);
+  },
+);
+
 Then("PR create adapterは成功する", function () {
   assert.equal(this.prCreationResult.url, "https://github.com/o/r/pull/9");
 });
