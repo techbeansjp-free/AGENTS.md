@@ -32,6 +32,8 @@ import { type Policy } from "../../src/types.js";
 interface DeliveryFinalizeWorld extends WorkflowWorld {
   authorization: "approved";
   bodyFile: string;
+  ciRunObservation: unknown;
+  ciRunError?: Error;
   commitResults: Array<{ sha?: string; authorActorId?: string } | Error>;
   deliveryResult: ReturnType<typeof createPullRequest>;
   evidence: ReturnType<typeof safeDeliveryEvidence>;
@@ -1715,4 +1717,221 @@ Then("lifecycle stateはfinalizedである", function () {
 });
 Then("destructive operationは{string}だけである", function (operation: string) {
   assert.deepEqual(this.calls, [operation]);
+});
+
+/**
+ * 固定run IDの直読みを実gh境界で測る（Issue #1280）。
+ * merge後の照合はこのadapterの返り値だけを入力にするため、
+ * 欠落や型違いを合格へ倒すと偽のmerged終端を受理する。
+ */
+const fixedCiRunPayload = (): Record<string, unknown> => ({
+  id: 42,
+  repository: { full_name: "o/r" },
+  head_repository: { full_name: "o/r" },
+  event: "pull_request",
+  head_sha: "a".repeat(40),
+  head_branch: "feature/x",
+  status: "completed",
+  conclusion: "success",
+  pull_requests: [{ number: 9 }],
+});
+
+function prepareCiRunStub(
+  world: GhReadStubWorld,
+  body: string,
+  apiExitCode = 0,
+) {
+  const directory = world.temp("asc-gh-cirun-");
+  world.ghLog = path.join(directory, "operations.log");
+  const stub = path.join(directory, "gh");
+  fs.writeFileSync(
+    stub,
+    `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(world.ghLog)},args.join(' ')+'\\n');if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:'o/r',viewerPermission:'READ'}));if(args[0]==='api'){if(${apiExitCode}!==0){process.stderr.write('HTTP 404: Not Found');process.exit(${apiExitCode});}process.stdout.write(${JSON.stringify(body)});}\n`,
+  );
+  fs.chmodSync(stub, 0o755);
+  world.stubPath = `${directory}${path.delimiter}${process.env.PATH ?? ""}`;
+}
+
+/** 変種名から壊し方を導く。fixtureを実装から書き写さず、健全な観測へ1箇所だけ操作を当てる。 */
+const ciRunVariants: Record<string, () => { body: string; exit?: number }> = {
+  head_repository欠落: () => {
+    const payload = fixedCiRunPayload();
+    delete payload.head_repository;
+    return { body: JSON.stringify(payload) };
+  },
+  head_repositoryのfull_nameが非文字列: () => ({
+    body: JSON.stringify({
+      ...fixedCiRunPayload(),
+      head_repository: { full_name: 1 },
+    }),
+  }),
+  repository欠落: () => {
+    const payload = fixedCiRunPayload();
+    delete payload.repository;
+    return { body: JSON.stringify(payload) };
+  },
+  event欠落: () => {
+    const payload = fixedCiRunPayload();
+    delete payload.event;
+    return { body: JSON.stringify(payload) };
+  },
+  head_sha欠落: () => {
+    const payload = fixedCiRunPayload();
+    delete payload.head_sha;
+    return { body: JSON.stringify(payload) };
+  },
+  head_branch欠落: () => {
+    const payload = fixedCiRunPayload();
+    delete payload.head_branch;
+    return { body: JSON.stringify(payload) };
+  },
+  status欠落: () => {
+    const payload = fixedCiRunPayload();
+    delete payload.status;
+    return { body: JSON.stringify(payload) };
+  },
+  conclusionがnull: () => ({
+    body: JSON.stringify({ ...fixedCiRunPayload(), conclusion: null }),
+  }),
+  idが非整数: () => ({
+    body: JSON.stringify({ ...fixedCiRunPayload(), id: "42" }),
+  }),
+  pull_requestsが配列でない: () => ({
+    body: JSON.stringify({ ...fixedCiRunPayload(), pull_requests: {} }),
+  }),
+  pull_requests要素のnumberが欠落: () => ({
+    body: JSON.stringify({ ...fixedCiRunPayload(), pull_requests: [{}] }),
+  }),
+  応答がobjectでない: () => ({ body: '"o/r"' }),
+  応答が404: () => ({ body: "", exit: 1 }),
+};
+
+Given("固定run IDのrun観測を返すgh stubがある", function () {
+  prepareCiRunStub(this, JSON.stringify(fixedCiRunPayload()));
+});
+/**
+ * **head側とbase側を同値にしたfixtureはforkを区別できない**（Issue #1280）。
+ * `head_repository.full_name`の代わりに`repository.full_name`を流用する変異は、
+ * 両者が同値のfixtureでは観測不能である。**異なる値を1件置く。**
+ */
+Given("head repositoryがforkのrun観測を返すgh stubがある", function () {
+  prepareCiRunStub(
+    this,
+    JSON.stringify({
+      ...fixedCiRunPayload(),
+      head_repository: { full_name: "fork/x" },
+    }),
+  );
+});
+Then(
+  "CI run観測のhead repositoryは {string} である",
+  function (expected: string) {
+    assert.equal(
+      (this.ciRunObservation as { headRepository: string }).headRepository,
+      expected,
+    );
+  },
+);
+Then("CI run観測のrepositoryは {string} である", function (expected: string) {
+  assert.equal(
+    (this.ciRunObservation as { repository: string }).repository,
+    expected,
+  );
+});
+Given("{word}のrun観測を返すgh stubがある", function (variant: string) {
+  const build = ciRunVariants[variant];
+  assert.ok(build, `未知のrun観測変種です: ${variant}`);
+  const { body, exit } = build();
+  prepareCiRunStub(this, body, exit ?? 0);
+});
+
+function readFixedCiRun(world: { stubPath: string }): unknown {
+  const original = process.env.PATH;
+  process.env.PATH = world.stubPath;
+  try {
+    return github(
+      "pr.ci-run",
+      { repository: "o/r", runId: "42" },
+      process.cwd(),
+    );
+  } finally {
+    process.env.PATH = original;
+  }
+}
+
+When(
+  "run ID {string} でCI run adapterを実行して失敗を確認する",
+  function (runId: string) {
+    /**
+     * **`runId`はAPI pathへそのまま連結される**（Issue #1280）。
+     * 字句検査を落とすと`repos/o/r/actions/runs/<任意文字列>`を組み立てて
+     * provider要求を送ってしまう。**拒否するだけでなく、送っていないことを測る。**
+     */
+    const original = process.env.PATH;
+    process.env.PATH = this.stubPath;
+    try {
+      this.ciRunObservation = github(
+        "pr.ci-run",
+        { repository: "o/r", runId },
+        process.cwd(),
+      );
+      this.ciRunError = undefined;
+    } catch (error) {
+      this.ciRunError = error as Error;
+    } finally {
+      process.env.PATH = original;
+    }
+  },
+);
+Then("run読取のapi操作は呼ばれない", function () {
+  const log = fs.existsSync(this.ghLog)
+    ? fs.readFileSync(this.ghLog, "utf8")
+    : "";
+  assert.doesNotMatch(
+    log,
+    /^api /mu,
+    `不正なrun IDでprovider要求を送っています: ${log}`,
+  );
+});
+When("固定run IDでCI run adapterを実行する", function () {
+  this.ciRunObservation = readFixedCiRun(this);
+});
+When("固定run IDでCI run adapterを実行して失敗を確認する", function () {
+  try {
+    this.ciRunObservation = readFixedCiRun(this);
+    this.ciRunError = undefined;
+  } catch (error) {
+    this.ciRunError = error as Error;
+  }
+});
+Then("CI run adapterは失敗する", function () {
+  assert.ok(
+    this.ciRunError instanceof Error,
+    `不正なrun観測を受理しました: ${JSON.stringify(this.ciRunObservation)}`,
+  );
+});
+Then("CI run観測は9項目のidentityを返す", function () {
+  assert.deepEqual(this.ciRunObservation, {
+    runId: "42",
+    repository: "o/r",
+    headRepository: "o/r",
+    event: "pull_request",
+    headSha: "a".repeat(40),
+    headBranch: "feature/x",
+    status: "completed",
+    conclusion: "success",
+    pullRequestNumbers: [9],
+  });
+});
+Then("run読取前にauthとrepository確認が行われる", function () {
+  const operations = fs
+    .readFileSync(this.ghLog, "utf8")
+    .trim()
+    .split("\n")
+    .map((line: string) => line.split(" ").slice(0, 2).join(" "));
+  assert.deepEqual(operations, [
+    "auth status",
+    "repo view",
+    "api repos/o/r/actions/runs/42",
+  ]);
 });

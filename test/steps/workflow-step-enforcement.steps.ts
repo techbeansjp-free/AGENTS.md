@@ -1929,6 +1929,27 @@ interface DeliveryProviderControl {
   isCrossRepository: boolean;
   contentChanged: boolean;
   titleChanged: boolean;
+  /**
+   * merge後に固定run IDで直読みしたrunの`conclusion`（Issue #1280）。
+   * **不一致側を作るための唯一の入口である。** 既定は`"success"`で挙動を変えない。
+   */
+  fixedRunConclusion: string;
+  /**
+   * **merge前の一覧観測が返す`pull_requests`**（Issue #1280）。
+   *
+   * merge前の選別はこの一覧を読む。**空を許すとdispatch可能集合が増える。**
+   * 既定の`"target"`は対象PR 1件で、既存scenarioの挙動を変えない。
+   */
+  preMergeRunPullRequests: "target" | "empty" | "other";
+  /**
+   * **merge成功後にprovider側のreview状態が動いた場合を作る**（Issue #1280）。
+   *
+   * merge後のread-backは固定review Evidenceをread-onlyで再観測する。
+   * `"replaced"`はより小さいreview IDの別の独立reviewerが現れた場合、
+   * `"revoked"`は独立reviewerが承認を取り下げた場合である。
+   * 既定の`"none"`は既存scenarioの挙動を変えない。
+   */
+  postMergeReviewShift: "none" | "replaced" | "revoked";
 }
 
 interface PreparedDeliveryCli extends PreparedPullRequest {
@@ -2259,6 +2280,9 @@ function prepareDeliveryCli(
     isCrossRepository: false,
     contentChanged: false,
     titleChanged: false,
+    fixedRunConclusion: "success",
+    preMergeRunPullRequests: "target",
+    postMergeReviewShift: "none",
     ...initial,
   };
   const canonicalDocument = splitPullRequestDocument(
@@ -2517,6 +2541,25 @@ if (exact(["--version"])) {
         user: { node_id: "independent-reviewer" },
         submitted_at: control.requestedAt,
       },
+      // merge後にprovider側のreview状態が動いた場合（Issue #1280）。
+      ...(control.phase === "merged" && control.postMergeReviewShift === "replaced"
+        ? [{
+            id: 5,
+            state: "APPROVED",
+            commit_id: sha,
+            user: { node_id: "independent-reviewer-2" },
+            submitted_at: control.requestedAt,
+          }]
+        : []),
+      ...(control.phase === "merged" && control.postMergeReviewShift === "revoked"
+        ? [{
+            id: 9,
+            state: "CHANGES_REQUESTED",
+            commit_id: sha,
+            user: { node_id: "independent-reviewer" },
+            submitted_at: new Date(Date.parse(control.requestedAt) + 2000).toISOString(),
+          }]
+        : []),
       ...(control.reviewDisposition !== "approved"
         ? [{
             id: 8,
@@ -2529,6 +2572,21 @@ if (exact(["--version"])) {
           }]
         : []),
     ]]),
+  );
+} else if (exact(["api", "repos/o/r/actions/runs/42"])) {
+  // merge後の固定run ID直読み。pull_requests はPRが閉じると空になる実仕様を保つ。
+  process.stdout.write(
+    JSON.stringify({
+      id: 42,
+      repository: { full_name: "o/r" },
+      head_repository: { full_name: "o/r" },
+      event: "pull_request",
+      head_sha: sha,
+      head_branch: "feature/x",
+      status: "completed",
+      conclusion: control.fixedRunConclusion,
+      pull_requests: control.phase === "merged" ? [] : [{ number: 1 }],
+    }),
   );
 } else if (
   args[0] === "api" &&
@@ -2544,7 +2602,18 @@ if (exact(["--version"])) {
         event: "pull_request",
         head_sha: sha,
         conclusion: "success",
-        pull_requests: [{ number: 1 }],
+        // 実GitHubの仕様を再現する。pull_requests は「現在openで同一headを持つ
+        // same-repo PR」の一覧であり、PRが閉じた瞬間に空になる（Issue #1280で実測）。
+        // mergedでも埋まったままにすると、merge後のread-backが実環境で必ず失敗する
+        // 欠陥を検査が見逃す。
+        // merge前は control で操作する。空や別PRを許すとdispatch可能集合が増える。
+        pull_requests: control.phase === "merged"
+          ? []
+          : control.preMergeRunPullRequests === "empty"
+            ? []
+            : control.preMergeRunPullRequests === "other"
+              ? [{ number: 2 }]
+              : [{ number: 1 }],
       }],
     }]),
   );
@@ -3675,6 +3744,157 @@ if (exact(["auth", "status"])) {
         ).entries.filter((entry) => entry.step === 11).length,
         1,
       );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-044": {
+      /**
+       * **merge成功後は関連PRが必ず空になる**（Issue #1280で実測）。
+       *
+       * GitHubの`pull_requests`は「現在openで同一headを持つsame-repo PR」の一覧であり、
+       * PRが閉じた瞬間に空になる。head_shaによる一覧再検索はmerge成功後に必ず失敗し、
+       * `outcome=merged`のStep 11を構造的に記録できなくする。
+       *
+       * **固定`ciRunId`の直読みで照合すれば到達できる。** mockは`phase === "merged"`で
+       * 関連PRを空にしており、実GitHubの仕様を再現している。
+       */
+      const prepared = prepareDeliveryCli(this);
+      const completed = completeDeliveryMerge(prepared);
+      const completedOutput = JSON.parse(completed.stdout) as {
+        state?: string;
+      };
+      assert.equal(completedOutput.state, "merged");
+      const state = parseDeliveryState(
+        fs.readFileSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+          "utf8",
+        ),
+      );
+      assert.equal(state.state, "step11-recorded");
+      assert.equal(state.merge?.observation?.providerState, "merged");
+      /** **固定run IDが照合に使われた。** 一覧の再検索では到達できない。 */
+      assert.equal(state.merge?.ciRunId, "42");
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(prepared.staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.ok(
+        journal.entries.some((item) => item.step === 11),
+        "Step 11が記録されていません",
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-045": {
+      /**
+       * **照合結果を捨てる変異を捕まえる**（Issue #1280）。
+       *
+       * `reconcileFixedMergeRun`が不一致を名指ししても、**cliがその結果を無視すれば
+       * 誰も気付かない。** 判定関数の単体SCNだけでは合成経路を検査できないため、
+       * 固定run観測を不一致側にしてCLI経路で拒否を観測する。
+       *
+       * **Step 11を記録していないことまで測る。** 例外を投げるだけで終端記録が
+       * 残るなら、偽のmerged終端を作ってしまう。
+       */
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      const requested = executeDeliveryMerge(prepared);
+      assert.equal(requested.status, 0, requested.stdout + requested.stderr);
+      writeDeliveryProviderControl(prepared, {
+        phase: "merged",
+        mergedAt: fixtureInstant({ minutesAhead: 5 }),
+        fixedRunConclusion: "failure",
+      });
+      const rejected = executeDeliveryMerge(prepared);
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /固定済みmerge CI runがcurrent providerの観測と一致しません: conclusion/u,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(prepared.staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.ok(
+        !journal.entries.some((item) => item.step === 11),
+        "照合が不一致なのにStep 11が記録されています",
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-046": {
+      /**
+       * **merge前の実selectorが空`pull_requests`を拒否する**（Issue #1280）。
+       *
+       * 純関数`inspectCiDelivery`は診断文の生成にしか使われておらず、
+       * **merge可否を決めているのは`observeMergeReviewEvidence`内のinline
+       * selectorである。** 独立reviewerがこの差を指摘した。単体SCNは
+       * 「dispatch可能集合が増えない」を強制していなかった。
+       *
+       * **`pr.merge`が0回であることまで測る。** 拒否の文言だけでは、
+       * 要求を送った後で落ちる実装を区別できない。
+       */
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      for (const variant of ["empty", "other"] as const) {
+        writeDeliveryProviderControl(prepared, {
+          preMergeRunPullRequests: variant,
+        });
+        const before =
+          deliveryProviderCalls(prepared).filter(isMergeCall).length;
+        const rejected = executeDeliveryMerge(prepared);
+        assert.notEqual(rejected.status, 0, `${variant}を受理しました`);
+        assert.match(
+          rejected.stdout + rejected.stderr,
+          /successful pull_request CI runがありません/u,
+        );
+        const after =
+          deliveryProviderCalls(prepared).filter(isMergeCall).length;
+        assert.equal(
+          after,
+          before,
+          `${variant}でproviderへmergeを要求しています`,
+        );
+      }
+      break;
+    }
+    case "SCN-E2E-WFSTEP-047": {
+      /**
+       * **merge後もreview Evidenceをread-onlyで再観測する**（Issue #1280）。
+       *
+       * 独立reviewerが指摘した。merge後のCI照合を固定run直読みへ移すとき、
+       * **私は`observeMergeReviewEvidence`と`assertFixedMergeReviewEvidence`を
+       * 丸ごと迂回していた。** 実装commitの再観測、独立approvalの再確認、
+       * review Evidence identityの照合が同時に失われていた。
+       *
+       * **どちらの失敗も、変更前からどのSCNでも検査されていなかった。**
+       * `replaced`はidentity照合を、`revoked`は独立approvalの再確認を殺す変異を
+       * 捕まえる。**Step 11を記録しないことまで測る。**
+       */
+      const prepared = prepareDeliveryCli(this);
+      for (const [shift, pattern] of [
+        ["replaced", /固定済みmerge review identityと一致しません/u],
+        ["revoked", /独立したreviewがありません/u],
+      ] as const) {
+        const scenario = prepareDeliveryCli(this);
+        createDeliveryPullRequest(scenario);
+        const requested = executeDeliveryMerge(scenario);
+        assert.equal(requested.status, 0, requested.stdout + requested.stderr);
+        writeDeliveryProviderControl(scenario, {
+          phase: "merged",
+          mergedAt: fixtureInstant({ minutesAhead: 5 }),
+          postMergeReviewShift: shift,
+        });
+        const rejected = executeDeliveryMerge(scenario);
+        assert.notEqual(rejected.status, 0, `${shift}を受理しました`);
+        assert.match(rejected.stdout + rejected.stderr, pattern);
+        const journal = parseStepJournal(
+          fs.readFileSync(
+            path.join(scenario.staging, STEP_JOURNAL_FILE),
+            "utf8",
+          ),
+        );
+        assert.ok(
+          !journal.entries.some((item) => item.step === 11),
+          `${shift}でStep 11が記録されています`,
+        );
+      }
+      void prepared;
       break;
     }
     case "SCN-E2E-WFSTEP-043": {

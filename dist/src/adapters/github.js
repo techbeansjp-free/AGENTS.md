@@ -662,6 +662,55 @@ export function github(operation, supplied, cwd) {
             };
         });
     }
+    if (operation === "pr.ci-run") {
+        /**
+         * **固定run IDで1件だけ読む。** merge後の照合は再検索ではなく固定identityの
+         * 直読みで行う。`pull_requests`はPRが閉じると空になるため、head_shaでの再検索は
+         * merge成功後に必ず失敗する（Issue #1280）。
+         *
+         * **欠落を合格へ倒さない。** 404も不正応答も例外にする。
+         */
+        verifyRepository(input.repository, cwd, "read");
+        const runId = String(input.runId ?? "");
+        if (!/^[0-9]+$/u.test(runId))
+            throw new Error("pr.ci-runのrun IDが不正です");
+        const observed = JSON.parse(run("gh", ["api", `repos/${input.repository}/actions/runs/${runId}`], cwd)
+            .stdout);
+        if (!isRecord(observed))
+            throw new Error("GitHub Actions run観測がobjectではありません");
+        const repository = observed.repository;
+        const headRepository = observed.head_repository;
+        if (!isRecord(repository) ||
+            typeof repository.full_name !== "string" ||
+            !isRecord(headRepository) ||
+            typeof headRepository.full_name !== "string" ||
+            typeof observed.event !== "string" ||
+            typeof observed.head_sha !== "string" ||
+            typeof observed.head_branch !== "string" ||
+            typeof observed.status !== "string" ||
+            typeof observed.conclusion !== "string" ||
+            !Number.isSafeInteger(observed.id) ||
+            !Array.isArray(observed.pull_requests))
+            throw new Error("GitHub Actions run観測のidentityが不正です");
+        const pullRequestNumbers = observed.pull_requests.map((pullRequest) => {
+            if (!isRecord(pullRequest) ||
+                !Number.isSafeInteger(pullRequest.number) ||
+                Number(pullRequest.number) < 1)
+                throw new Error("GitHub Actions run観測の関連PRが不正です");
+            return Number(pullRequest.number);
+        });
+        return {
+            runId: String(observed.id),
+            repository: repository.full_name,
+            headRepository: headRepository.full_name,
+            event: observed.event,
+            headSha: observed.head_sha,
+            headBranch: observed.head_branch,
+            status: observed.status,
+            conclusion: observed.conclusion,
+            pullRequestNumbers,
+        };
+    }
     if (operation === "commit.inspect") {
         verifyRepository(input.repository, cwd, "read");
         const requestedSha = requireFullOid(input.sha, "commit.inspectのSHA");
