@@ -5,14 +5,14 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 1 |
-| H_impl | `6d1ad607818082d02f54d922e42c01b23dd79aab` |
+| ラウンド | 3 |
+| H_impl | `fbbf853bbdae49049725d3ebdf493155f1403fee` |
 | 比較基点 | `2bb00af07f09935b4091cdb476c89ffd66c1a0dc` |
-| 対象SHA・文書ダイジェスト | `6d1ad607818082d02f54d922e42c01b23dd79aab` |
-| 対象差分 | `2bb00af07f09935b4091cdb476c89ffd66c1a0dc..6d1ad607818082d02f54d922e42c01b23dd79aab`、10 path。うち`dist/`配下1件は生成物として個別監査の対象外とし、配布影響は§8へ残す |
+| 対象SHA・文書ダイジェスト | `fbbf853bbdae49049725d3ebdf493155f1403fee` |
+| 対象差分 | `2bb00af07f09935b4091cdb476c89ffd66c1a0dc..fbbf853bbdae49049725d3ebdf493155f1403fee`、10 path。うち`dist/`配下1件は生成物として個別監査の対象外とし、配布影響は§8へ残す。**ラウンド3で仕様の是正を前進commitしたためH_implが動き、本artifact自身がこの範囲へ入る** |
 | 対象外 | 結果の再利用・cache・digest条件付きskip、`cucumber.mjs`、`check_project_quality.ts`、`ci.yml`、`quality` script、`DISTRIBUTION_GATES`、予算や閾値の変更 |
-| 残り予算 | 同一範囲で最大3ラウンドのうち1ラウンドを使用。**残り2。** |
-| ラウンド数 | 1 |
+| 残り予算 | 同一範囲で最大3ラウンドのうち3ラウンドを使用。**残り0。** 収束後の回復ラウンドは未使用 |
+| ラウンド数 | 3 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260908_101725_conformance-checkのcucumber実行をbindingの反例SCNへ限定する |
 | 仕様の所有箇所 | `docs/specs/02_要件/04_仕様・品質管理要件.md`のREQ-SQ-005。引用: 「**`conformance:check`が起動するcucumberは、conformance bindingが名指しした反例SCNだけへ完全ID一致で限定する。**」 |
 | 成果物行数 | 実装 +51、test +129、仕様 +9、生成dist +30 |
@@ -38,7 +38,7 @@
 | 前方一致の危険 | `git grep`の全SCN ID集計 | repository内1525 IDに対しbinding IDが前方一致になる組は0件。**それを根拠に境界指定を省いていない** | 実行観測 |
 | 変異試験 | 8件 | **8 kill、生存0。うち3件はreviewer由来である** | テスト出力 |
 | 仕様 | `docs/specs/02_要件/04_仕様・品質管理要件.md`、`15_要件追跡/` | updated | 既存文書 |
-| commit前candidate | `git diff --name-only 2bb00af0 6d1ad607` | 10 path。うち生成dist 1件 | Git index |
+| commit前candidate | `git diff --name-only 2bb00af0 fbbf853b` | 10 path。うち生成dist 1件 | Git index |
 | Phase A artifact | `docs/reviews/177_課題1281conformance検査の実行範囲限定レビュー.md` | H_implの後にこの1 fileだけをcommitしてH_finalとする | Git観測 |
 | commit後external | PR、CI run、外部review | **本artifactの作成時点では未観測である。** | 外部のimmutable証拠 |
 
@@ -57,11 +57,12 @@
 | `test/features/integration/canonical-single-source.feature` | M | package owner | evidence | SCN-INT-CANON-007の追加 | pass | AC-03・AC-04 | 追加のみ | pass |
 | `test/steps/risk-policy.steps.ts` | M | package owner | evidence | 完全一致、ハイフン延長、メタ文字、重複、空bindingのargvを検査する | pass。既存step定義を書き換えていない | AC-01・AC-02 | 追加のみ | pass |
 | `test/steps/canonical-single-source.steps.ts` | M | package owner | evidence | 注入したspawnが受け取るargvを観測する。**expectedを同じhelperから導出しない** | pass | AC-03・AC-04 | 追加のみ | pass |
+| `docs/reviews/177_課題1281conformance検査の実行範囲限定レビュー.md` | A | package owner | evidence | 本artifact。**ラウンド3の是正を前進commitしたためH_implの範囲へ入った** | pass。artifact自身のSHAを本文へ書かない | 全AC | ラウンド2と3の記録を追記した | pass |
 | `docs/specs/02_要件/04_仕様・品質管理要件.md` | M | package owner | spec | REQ-SQ-005へ限定条件と受け入れる検出損失4件を追記 | pass。名指ししたSCN 3件は同じ要件の追跡行に登録済み | REQ-SQ-005 / AC-SQ-005 | 既存段落を削除していない | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | package owner | spec | 新3 SCNの追跡登録 | pass。`trace:check`のorphanが0件 | REQ-SQ-005 | 既存行は不変 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | package owner | spec | 変更理由と判断の記録1行 | pass。9列のheader区切り直後へ挿入 | REQ-SQ-005 | 既存行は不変 | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: **満たす。** `git diff --name-only`の10 pathのうち、生成物である`dist/`配下1件を除いた9 pathと表の9行が一致する。
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: **満たす。** `git diff --name-only`の10 pathのうち、生成物である`dist/`配下1件を除いた9 pathに本artifactを加えた10 pathと、表の10行が一致する。
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: **満たす。**
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: **満たす。** ラウンド1の是正は`src/domain/conformance.ts`、`scripts/check_conformance.ts`、`test/`3 file、仕様1 fileに閉じている。
 
@@ -150,6 +151,7 @@ CodeRabbitがinlineで4件を指摘し、うち3件を是正した。
 | 「検出力を落としていない」が同artifactの受け入れ検出損失4件と矛盾する | Minor | 是正。§3を「限定対象が過不足ないことを示した」へ改め、検出損失を否定しない表現にした |
 | `audit:check`の欄が未実行のままで、総合判定「合格」が暫定である | Major | 是正。H_final確定後に実行した実測結果へ更新した |
 | `npm test`を補償統制として単独で扱わないこと | Major | **既に対処済み。** `REQ-SQ-005`の受け入れる検出損失の第三項が、`test/support/`の`Before` hookによるskipを名指しで明記している。追加の強制点は本Issueのscope外として別扱いにした |
+| 3 SCNが配布gateと保護CIまで強制するかのように書かれている | Minor | 是正。**強制主体を条項ごとに分けた。** 限定の範囲と完全ID一致と拒否は3 SCNが、配布前の`quality`実行は`SCN-INT-DISTGATE-001`から`008`と`check_project_quality.ts`が担う。受け入れる検出損失の第二項から第四項には強制主体が無いことも明記した |
 
 ## 7. テスト結果
 
