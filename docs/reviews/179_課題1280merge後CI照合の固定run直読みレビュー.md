@@ -5,14 +5,14 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 2 |
-| H_impl | `6e45f52c223580f0c7cd1d9dac815994708c0236` |
+| ラウンド | 3 |
+| H_impl | `993bd0f8ab60cf9376b9a1e9820e35a243b81197` |
 | 比較基点 | `98a4bc2b1c3d2d84af7b9563f821d150090e3436` |
-| 対象SHA・文書ダイジェスト | `6e45f52c223580f0c7cd1d9dac815994708c0236` |
-| 対象差分 | `98a4bc2b1c3d2d84af7b9563f821d150090e3436..6e45f52c223580f0c7cd1d9dac815994708c0236`、16 path。うち`dist/`配下3件は生成物として個別監査の対象外とし、配布影響は§8へ残す。commitは`b16c9bcf`・`d07d971b`・`086087bd`・`6e45f52c` |
+| 対象SHA・文書ダイジェスト | `993bd0f8ab60cf9376b9a1e9820e35a243b81197` |
+| 対象差分 | `98a4bc2b1c3d2d84af7b9563f821d150090e3436..993bd0f8ab60cf9376b9a1e9820e35a243b81197`、17 path。うち`dist/`配下3件は生成物として個別監査の対象外とし、配布影響は§8へ残す。commitは`b16c9bcf`・`d07d971b`・`086087bd`・`6e45f52c`・`fd5e8588`・`4f4402d1`・`993bd0f8` |
 | 対象外 | merge前の選別の判定変更、`pr.merge`の再送、照合結果の固定merge intentへの書き戻し、`inspectCiDelivery`の状態3値の変更、CI待ちのpolling |
-| 残り予算 | 同一範囲で最大3ラウンドのうち2ラウンドを使用。**残り1。** |
-| ラウンド数 | 2。ラウンド1は実装差分、**ラウンド2は独立reviewerの指摘2件の是正**が対象である |
+| 残り予算 | 同一範囲で最大3ラウンドをすべて使用。**残り0。** ラウンド3は目的阻害の是正であり、予算内で処理した |
+| ラウンド数 | 3。ラウンド1は実装差分、ラウンド2は独立reviewer（codex）の指摘2件の是正、**ラウンド3は外部reviewer（CodeRabbit）の指摘1件の是正**が対象である |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260908_134956_merge後のCI照合を固定run-IDの直読みへ戻す |
 | 仕様の所有箇所 | `docs/specs/02_要件/03_外部連携要件.md`のREQ-GH-001。引用: 「**merge後の照合は一覧を再検索せず、merge前に固定した`ciRunId`で単一runを直読みする。**」 |
 | 成果物行数 | 製品 **+219 / −13行**、支援層(test) **+585 / −1行**、仕様 **+7 / −3行**、生成dist **+118 / −13行** |
@@ -156,6 +156,7 @@
 | R-01 | High | merged分岐で`observeMergeReviewEvidence`と`assertFixedMergeReviewEvidence`を迂回しており、実装commitの再観測、独立approvalの再確認、review Evidence identityの照合が同時に失われていた | **正しい。** `git show 98a4bc2b:src/cli.ts`と突合し、旧経路が3つの再検証を行っていたことを確認した。**これは既存の安全条件を弱める変更である** | CI runの取得を`fixedCiRunId`で切り替える形へ直し、他の再検証は両経路で同じに走らせる。`SCN-E2E-WFSTEP-047`を追加 |
 | R-02 | High | merge可否を決めているのは`inspectCiDelivery`ではなく`observeMergeReviewEvidence`内のinline selectorである。`SCN-UNIT-CIDEL-009`は「dispatch可能集合が増えない」を強制していない | **正しい。** `src/cli.ts`のfilterが実際の門であり、`inspectCiDelivery`は診断文の生成に使われる。**私は述語の適用範囲をgateの範囲と取り違えていた** | 実selectorへ空と他PRを与え`pr.merge`が0回であることを測る`SCN-E2E-WFSTEP-046`を追加。仕様の強制主体の記述を是正 |
 | R-03 | Medium | 対象commit`b16c9bcf`の時点では追跡表登録とformatが未完結で、後続commitで補われている | **正しい。** commit範囲の切り方に起因する | 3 commitを1つのPRとして出す構造は変えず、本節へ記録する |
+| R-04 | Major | 外部reviewer（CodeRabbit）。`reconcileFixedMergeRun`が`repository`と`headRepository`を完全一致で突合しており、`--repo`の表記差だけでmerge後の照合が停止する | **正しく、かつ本Issueの目的を打ち消す。** merge前の実selectorは既に`toLowerCase()`で比較しており、私だけが不整合に厳しくしていた。`pr create`の戻り値URLが`techbeansjp-free/agents.md`と小文字で返る経路も実在する | `requireRepository`で表記を畳んで突合する。**緩めるのは表記だけで、owner/nameが異なるforkは畳んでも一致しない。** 完全一致へ戻す変異と、畳んだ上でforkを受理する変異の両方がkillすることを実測した |
 
 **指摘そのものを変異として測り、是正の有効性を実測した。**
 
@@ -166,6 +167,8 @@
 | E3 merge後も一覧再検索へ戻す | kill | kill |
 | E4 固定run照合の結果を捨てる | kill | kill |
 | E5 独立reviewの再確認を落とす | **生存** | kill |
+| F1 repository照合を完全一致へ戻す | — | kill |
+| F2 表記を畳んだ上でforkを受理する | — | kill |
 
 **E1とE5は私の変更前からどのSCNでも検査されていなかった。** 私がこの経路を書き換えたため、塞いでから出す。
 
@@ -176,6 +179,12 @@
 ### ラウンド1
 
 実装差分、支援層、仕様、追跡表を対象とした。**この時点で私はpassと判定していた。** 全gate緑、変異試験25件で生存0だった。
+
+### ラウンド3
+
+**外部reviewer（CodeRabbit）のMajor 1件を是正した。** 完全一致の照合は、`--repo`の表記差だけで
+merge後のread-backを停止させ、**本Issueが直した「Step 11へ到達できない」欠陥を別経路で作り直していた。**
+**ラウンド予算の残り1を使った。** 目的阻害に該当するため、予算内で処理する判断とした。
 
 ### ラウンド2
 
@@ -271,7 +280,7 @@
 
 ## 11. 総合判定と再開地点
 
-**判定: pass（ラウンド2）。** 独立reviewerのHigh 2件を是正し、変異試験で是正の有効性を実測した。未解決の指摘は無い。
+**判定: pass（ラウンド3）。** 独立reviewerのHigh 2件と外部reviewerのMajor 1件を是正し、変異試験で是正の有効性を実測した。未解決の指摘は無い。**ラウンド予算は使い切った。**
 
 再開地点は`workflow record --step=10`、`review round`、`pr create`である。
 
