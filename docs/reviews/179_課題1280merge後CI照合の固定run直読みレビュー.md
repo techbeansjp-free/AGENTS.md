@@ -5,14 +5,14 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 1 |
-| H_impl | `086087bd62575996dbdf71baee811a51901210c5` |
+| ラウンド | 2 |
+| H_impl | `6e45f52c223580f0c7cd1d9dac815994708c0236` |
 | 比較基点 | `98a4bc2b1c3d2d84af7b9563f821d150090e3436` |
-| 対象SHA・文書ダイジェスト | `086087bd62575996dbdf71baee811a51901210c5` |
-| 対象差分 | `98a4bc2b1c3d2d84af7b9563f821d150090e3436..086087bd62575996dbdf71baee811a51901210c5`、16 path。うち`dist/`配下3件は生成物として個別監査の対象外とし、配布影響は§8へ残す。commitは`b16c9bcf`・`d07d971b`・`086087bd` |
+| 対象SHA・文書ダイジェスト | `6e45f52c223580f0c7cd1d9dac815994708c0236` |
+| 対象差分 | `98a4bc2b1c3d2d84af7b9563f821d150090e3436..6e45f52c223580f0c7cd1d9dac815994708c0236`、16 path。うち`dist/`配下3件は生成物として個別監査の対象外とし、配布影響は§8へ残す。commitは`b16c9bcf`・`d07d971b`・`086087bd`・`6e45f52c` |
 | 対象外 | merge前の選別の判定変更、`pr.merge`の再送、照合結果の固定merge intentへの書き戻し、`inspectCiDelivery`の状態3値の変更、CI待ちのpolling |
-| 残り予算 | 同一範囲で最大3ラウンドのうち1ラウンドを使用。**残り2。** |
-| ラウンド数 | 1 |
+| 残り予算 | 同一範囲で最大3ラウンドのうち2ラウンドを使用。**残り1。** |
+| ラウンド数 | 2。ラウンド1は実装差分、**ラウンド2は独立reviewerの指摘2件の是正**が対象である |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260908_134956_merge後のCI照合を固定run-IDの直読みへ戻す |
 | 仕様の所有箇所 | `docs/specs/02_要件/03_外部連携要件.md`のREQ-GH-001。引用: 「**merge後の照合は一覧を再検索せず、merge前に固定した`ciRunId`で単一runを直読みする。**」 |
 | 成果物行数 | 製品 **+219 / −13行**、支援層(test) **+585 / −1行**、仕様 **+7 / −3行**、生成dist **+118 / −13行** |
@@ -26,6 +26,22 @@
 | implementer | `src/`、`test/`、`docs/specs/`、`dist/`の読み書き | SCN実行結果、差分試験、変異試験 | advanced。riskはhigh、security-sensitive | project choiceのprovider上限に従う | project choiceのtier mapping | 検査失敗時はcommitせず停止する | 実装は本session、reviewerはcodex CLIの新規session |
 | reviewer | 読み取りのみ。`--sandbox read-only` | 肯定・敵対review、finding分類、原文引用 | standard | codex CLI | **`--model`で固定せず設定既定に従う** | 独立性が不明ならPRとmergeを停止する | §9に観測結果を残す |
 
+## 規範の引用
+
+本artifactは範囲を狭める記述を含む。判断の根拠となる要件の原文を引用する。
+
+**REQ-GH-001**（`docs/specs/02_要件/03_外部連携要件.md`）
+
+> Issue同期、PR作成、review証拠、policy authority、mergeは完全repository同一性・base/head SHA・認証・権限を事前検証し、適用直前に再検証し、適用後に再読取する。candidate policy、自己申告metadata、stale/failed証拠をauthorityにしない。
+
+> **GitHub Actions runの`pull_requests`は「現在openで同一headを持つsame-repo PR」の一覧であり、PRが閉じた瞬間に空になる。** したがって`event=pull_request&head_sha=`による一覧検索は、merge成功後には必ず対象PRを関連付けられない。**merge前の選別はこの一覧を使い、`pull_requests`が対象PR1件であることを要求し続ける。**
+
+> **merge後の照合は一覧を再検索せず、merge前に固定した`ciRunId`で単一runを直読みする。**
+
+> **merge dispatchが許される入力集合は本条項で1件も増えない**（Issue #1280）。
+
+**AC-GH-001**は本要件の受け入れ条件であり、追跡表`docs/specs/15_要件追跡/00_追跡表.md`のREQ-GH-001行が担保SCNを列挙する。
+
 ## 1. 入力証拠
 
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
@@ -34,8 +50,8 @@
 | 欠陥の再現 | e2e mockを実GitHub仕様（merged時に`pull_requests: []`）へ合わせる | **43 scenario中9件が失敗した。** 固定ID直読みへ差し替えた後は全緑 | 実行観測 |
 | `pull_requests`の意味論 | GitHub Actions APIの実観測 | 「現在openで同一headを持つsame-repo PR」の一覧であり、PRが閉じた瞬間に空になる | 一次資料 |
 | 差分試験 | 生成入力48件 | **merge前の選別の判定が旧実装と全件一致。不一致0件** | テスト出力 |
-| 対象SCN | `--name`で絞り込んだcucumber実行 | **40 scenarios、220 steps成功** | テスト出力 |
-| 変異試験 | 累計25件 | **21 kill、最終生存0件。一度生存した4件はすべて反例SCNを足してkillした** | テスト出力 |
+| 対象SCN | `--name`で絞り込んだcucumber実行 | **ラウンド2で62 scenarios成功**（ラウンド1は40 scenarios） | テスト出力 |
+| 変異試験 | **累計32件** | **最終生存0件。一度生存した7件はすべて反例SCNを足してkillした。うち3件は独立reviewerの指摘由来である** | テスト出力 |
 | 静的検査 | `lint`、`format:check`、`typecheck`、`source:check` | 全合格。`source:check`は180 file、error 0件 | テスト出力 |
 | 追跡・構造・配布 | `trace:check`、`architecture:check`、`package:check` | 全合格。orphan 0件、配布363件 | テスト出力 |
 | conformance | `conformance:check` | **合格。87 scenarios、14.4秒**（#1281の反例SCN限定が効いている） | テスト出力 |
@@ -132,13 +148,37 @@
 
 ## 5. 指摘
 
-なし。§2.0の4件は実装中に自ら発見して是正済みであり、未解決の指摘は残っていない。
+**独立reviewer（codex）がHigh 2件で要修正と判定した。どちらも正しく、両方を是正した。**
+
+| ID | 重大度 | 指摘 | 自分の検証 | 是正 |
+|---|---|---|---|---|
+| R-01 | High | merged分岐で`observeMergeReviewEvidence`と`assertFixedMergeReviewEvidence`を迂回しており、実装commitの再観測、独立approvalの再確認、review Evidence identityの照合が同時に失われていた | **正しい。** `git show 98a4bc2b:src/cli.ts`と突合し、旧経路が3つの再検証を行っていたことを確認した。**これは既存の安全条件を弱める変更である** | CI runの取得を`fixedCiRunId`で切り替える形へ直し、他の再検証は両経路で同じに走らせる。`SCN-E2E-WFSTEP-047`を追加 |
+| R-02 | High | merge可否を決めているのは`inspectCiDelivery`ではなく`observeMergeReviewEvidence`内のinline selectorである。`SCN-UNIT-CIDEL-009`は「dispatch可能集合が増えない」を強制していない | **正しい。** `src/cli.ts`のfilterが実際の門であり、`inspectCiDelivery`は診断文の生成に使われる。**私は述語の適用範囲をgateの範囲と取り違えていた** | 実selectorへ空と他PRを与え`pr.merge`が0回であることを測る`SCN-E2E-WFSTEP-046`を追加。仕様の強制主体の記述を是正 |
+| R-03 | Medium | 対象commit`b16c9bcf`の時点では追跡表登録とformatが未完結で、後続commitで補われている | **正しい。** commit範囲の切り方に起因する | 3 commitを1つのPRとして出す構造は変えず、本節へ記録する |
+
+**指摘そのものを変異として測り、是正の有効性を実測した。**
+
+| 変異 | 是正前 | 是正後 |
+|---|---|---|
+| E1 merge後のReview Evidence照合を落とす | **生存** | kill |
+| E2 merge前の実selectorへ空許容を漏らす | **生存** | kill |
+| E3 merge後も一覧再検索へ戻す | kill | kill |
+| E4 固定run照合の結果を捨てる | kill | kill |
+| E5 独立reviewの再確認を落とす | **生存** | kill |
+
+**E1とE5は私の変更前からどのSCNでも検査されていなかった。** 私がこの経路を書き換えたため、塞いでから出す。
+
+**reviewerの観測にも誤りが1件あった。** `prettier_equal=false`はreviewer自身のshellのquoting破損による観測であり、`npm run format:check`と`npx prettier --check`はいずれも合格する。この1件は採らない。
 
 ## 6. ラウンド固有の確認
 
 ### ラウンド1
 
-実装差分、支援層、仕様、追跡表を対象とした。外部reviewerの指摘は本artifact作成時点で未受領である。
+実装差分、支援層、仕様、追跡表を対象とした。**この時点で私はpassと判定していた。** 全gate緑、変異試験25件で生存0だった。
+
+### ラウンド2
+
+**独立reviewerのHigh 2件を是正した。** 検査が緑であることは正しさの十分条件ではない、という命題がそのまま出た。**特にR-01は、私が既存の安全条件を削除したことに、25件の変異試験でも気付かなかった事例である。** 私の変異集合が「新しく足した照合」に閉じており、「消してしまった既存の照合」を含んでいなかったためである。**変異は自分が足したものだけでなく、自分が消したものにも当てる。**
 
 ## 7. テスト結果
 
@@ -154,7 +194,7 @@
 | 依存方向 | `npm run architecture:check` | 違反0件 |
 | 配布物 | `npm run package:check` | 合格、363件 |
 | conformance | `npm run conformance:check` | **合格。87 scenarios、14.4秒** |
-| 全Gherkin | `npm test` | **1688 scenarios（1672 passed、16 skipped）、8877 steps（8827 passed、50 skipped）、失敗0。9分54秒** |
+| 全Gherkin | `npm test` | **1690 scenarios（1674 passed、16 skipped）、8887 steps（8837 passed、50 skipped）、失敗0。10分14秒**（ラウンド2のH_impl `6e45f52c`で実行） |
 
 ### 差分試験
 
@@ -203,7 +243,13 @@
 1. **reviewerは進行役（coordinator）と同一sessionである。** implementerとreviewerのprovider分離は成立しているが、coordinatorとreviewerが同一sessionであることは`roleContracts.coordinator.forbiddenOperations`の`self_approve`に接する。隠さず記録する。
 2. **PR authorと`H_impl` commit authorが同一（`adachi-tatsuru`）である。** 本repositoryの構成上、reviewer stable IDの分離は成立しない。
 
-**最初の諮問は観測が汚染されていたため破棄した**（§2.0の(4)）。commit後に`--sandbox read-only`で再諮問した結果を§9.1へ記録する。
+**最初の諮問は観測が汚染されていたため破棄した**（§2.0の(4)）。
+
+### 9.1 commit後の再諮問
+
+`98a4bc2b..b16c9bcf`を対象に`codex exec --sandbox read-only`で再諮問した。**`--model`を指定せず設定既定に従った**（観測されたmodelは`gpt-5.6-sol`、reasoning effort high）。reviewerは「ファイル編集・commit・pushは行っていません」と報告し、判定範囲を指定commit範囲へ固定した。**判定は要修正（reject）で、High 2件、Medium 1件。** §5に全件を記録した。
+
+**reviewerは統合/E2Eをread-only sandboxで完走していない**（`/tmp`がEROFS）。単体SCN、TypeScript、ESLint、diff-checkは自身で実行して合格を確認している。
 
 ## 10. 仕様整合性
 
@@ -211,6 +257,11 @@
 
 ## 11. 総合判定と再開地点
 
-**判定: pass。** 未解決の指摘は無い。
+**判定: pass（ラウンド2）。** 独立reviewerのHigh 2件を是正し、変異試験で是正の有効性を実測した。未解決の指摘は無い。
 
-再開地点は`workflow record --step=10`、`review round`、`pr create`である。**§4.5の支援層比2.67倍は解消していない。** 削れる行が無いという判断を記録した上で、次のreviewの対象として残す。
+再開地点は`workflow record --step=10`、`review round`、`pr create`である。
+
+**残る観測を2件記録する。**
+
+1. **支援層比は2.67倍から更に増えた。** ラウンド2で`SCN-E2E-WFSTEP-046`・`047`とmock controlを追加した。削れる行が無いという判断は変えないが、比率は次のreviewの対象として残す。
+2. **私の変異集合の作り方に系統的な穴があった。** 「新しく足した判定」には変異を当てたが、「既存の判定を消してしまったこと」には当てていなかった。**差分がコードを削除している場合、削除そのものを検出するSCNが要る。**
