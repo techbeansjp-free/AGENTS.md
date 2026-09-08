@@ -1759,7 +1759,7 @@ const ciRunVariants: Record<string, () => { body: string; exit?: number }> = {
     delete payload.head_repository;
     return { body: JSON.stringify(payload) };
   },
-  "head_repositoryのfull_nameが非文字列": () => ({
+  head_repositoryのfull_nameが非文字列: () => ({
     body: JSON.stringify({
       ...fixedCiRunPayload(),
       head_repository: { full_name: 1 },
@@ -1799,7 +1799,7 @@ const ciRunVariants: Record<string, () => { body: string; exit?: number }> = {
   pull_requestsが配列でない: () => ({
     body: JSON.stringify({ ...fixedCiRunPayload(), pull_requests: {} }),
   }),
-  "pull_requests要素のnumberが欠落": () => ({
+  pull_requests要素のnumberが欠落: () => ({
     body: JSON.stringify({ ...fixedCiRunPayload(), pull_requests: [{}] }),
   }),
   応答がobjectでない: () => ({ body: '"o/r"' }),
@@ -1823,12 +1823,15 @@ Given("head repositoryがforkのrun観測を返すgh stubがある", function ()
     }),
   );
 });
-Then("CI run観測のhead repositoryは {string} である", function (expected: string) {
-  assert.equal(
-    (this.ciRunObservation as { headRepository: string }).headRepository,
-    expected,
-  );
-});
+Then(
+  "CI run観測のhead repositoryは {string} である",
+  function (expected: string) {
+    assert.equal(
+      (this.ciRunObservation as { headRepository: string }).headRepository,
+      expected,
+    );
+  },
+);
 Then("CI run観測のrepositoryは {string} である", function (expected: string) {
   assert.equal(
     (this.ciRunObservation as { repository: string }).repository,
