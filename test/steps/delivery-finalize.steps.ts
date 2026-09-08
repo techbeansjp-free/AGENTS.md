@@ -1234,6 +1234,10 @@ function ghOperationCounts(log: string): Map<string, number> {
  * 数十から数百msになる。**下限を1回測るだけでは、待機を落とす変異が
  * subprocess起動コストに隠れて生存する**（変異試験で実測）。同じ観測列を
  * 待機0と待機Nで2回流し、**差が待機に由来することを測る。**
+ *
+ * **判定の余裕は雑音より大きく取る。** 差分300msでは、他scenarioの負荷で
+ * 待機なしの2回目が偶然遅くなったときに変異が生き延びた（実測）。
+ * 注入する待機を1000msとし、その6割を下限にする。
  */
 When(
   "待機0と待機 {int} ミリ秒のsettleを続けて実行する",
@@ -1266,6 +1270,12 @@ When(
       return Number((process.hrtime.bigint() - startedAt) / 1000000n);
     };
     try {
+      /**
+       * **cold startを測定へ入れない。** 1回目はmodule読込とprocess起動の
+       * 初期費用を含み、待機なしでも数百msかかる。**warm-upを捨ててから
+       * 2回を比べる。** これを省くと、待機を落とす変異が偶然生き延びる。
+       */
+      measure(0);
       const withoutDelay = measure(0);
       const withDelay = measure(delay);
       this.settleElapsedMs = withDelay - withoutDelay;
