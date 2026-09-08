@@ -1,0 +1,1504 @@
+[
+ {
+  "staging": "20260907_124810_Semantic-GraphをStep-skil",
+  "target": "（なし）",
+  "variant": "baseline",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_124810_Semantic-GraphをStep-skil",
+  "target": "00_要求定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "00_要求定義.mdがありません"
+  ]
+ },
+ {
+  "staging": "20260907_124810_Semantic-GraphをStep-skil",
+  "target": "00_要求定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "P-02の証拠がありません",
+   "P-03の証拠がありません",
+   "P-04の証拠がありません",
+   "P-05の証拠がありません",
+   "P-06の証拠がありません",
+   "00_要求定義.md: DC-PRIVACYは重複なく1件必要です",
+   "00_要求定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "00_要求定義.md: DC-UXは重複なく1件必要です",
+   "00_要求定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_124810_Semantic-GraphをStep-skil",
+  "target": "00_要求定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_124810_Semantic-GraphをStep-skil",
+  "target": "01_要件定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには01_要件定義.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_124810_Semantic-GraphをStep-skil",
+  "target": "01_要件定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "01_要件定義.md: DC-PRIVACYは重複なく1件必要です",
+   "01_要件定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "01_要件定義.md: DC-UXは重複なく1件必要です",
+   "01_要件定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_124810_Semantic-GraphをStep-skil",
+  "target": "01_要件定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_124810_Semantic-GraphをStep-skil",
+  "target": "02_設計.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには02_設計.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_124810_Semantic-GraphをStep-skil",
+  "target": "02_設計.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "02_設計.md: DC-PRIVACYは重複なく1件必要です",
+   "02_設計.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "02_設計.md: DC-UXは重複なく1件必要です",
+   "02_設計.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_124810_Semantic-GraphをStep-skil",
+  "target": "02_設計.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_124810_Semantic-GraphをStep-skil",
+  "target": "03_実装計画.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには03_実装計画.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_124810_Semantic-GraphをStep-skil",
+  "target": "03_実装計画.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "03_実装計画.md: DC-PRIVACYは重複なく1件必要です",
+   "03_実装計画.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "03_実装計画.md: DC-UXは重複なく1件必要です",
+   "03_実装計画.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_124810_Semantic-GraphをStep-skil",
+  "target": "03_実装計画.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_104854_graph-rebuildが4MiB超の追跡fi",
+  "target": "（なし）",
+  "variant": "baseline",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_104854_graph-rebuildが4MiB超の追跡fi",
+  "target": "00_要求定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "00_要求定義.mdがありません"
+  ]
+ },
+ {
+  "staging": "20260907_104854_graph-rebuildが4MiB超の追跡fi",
+  "target": "00_要求定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "P-02の証拠がありません",
+   "P-03の証拠がありません",
+   "P-04の証拠がありません",
+   "P-05の証拠がありません",
+   "P-06の証拠がありません",
+   "00_要求定義.md: DC-PRIVACYは重複なく1件必要です",
+   "00_要求定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "00_要求定義.md: DC-UXは重複なく1件必要です",
+   "00_要求定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_104854_graph-rebuildが4MiB超の追跡fi",
+  "target": "00_要求定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_104854_graph-rebuildが4MiB超の追跡fi",
+  "target": "01_要件定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには01_要件定義.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_104854_graph-rebuildが4MiB超の追跡fi",
+  "target": "01_要件定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "01_要件定義.md: DC-PRIVACYは重複なく1件必要です",
+   "01_要件定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "01_要件定義.md: DC-UXは重複なく1件必要です",
+   "01_要件定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_104854_graph-rebuildが4MiB超の追跡fi",
+  "target": "01_要件定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_104854_graph-rebuildが4MiB超の追跡fi",
+  "target": "02_設計.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには02_設計.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_104854_graph-rebuildが4MiB超の追跡fi",
+  "target": "02_設計.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "02_設計.md: DC-PRIVACYは重複なく1件必要です",
+   "02_設計.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "02_設計.md: DC-UXは重複なく1件必要です",
+   "02_設計.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_104854_graph-rebuildが4MiB超の追跡fi",
+  "target": "02_設計.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_104854_graph-rebuildが4MiB超の追跡fi",
+  "target": "03_実装計画.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには03_実装計画.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_104854_graph-rebuildが4MiB超の追跡fi",
+  "target": "03_実装計画.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "03_実装計画.md: DC-PRIVACYは重複なく1件必要です",
+   "03_実装計画.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "03_実装計画.md: DC-UXは重複なく1件必要です",
+   "03_実装計画.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_104854_graph-rebuildが4MiB超の追跡fi",
+  "target": "03_実装計画.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_125050_1265_Codex観測の失敗処理と統合",
+  "target": "（なし）",
+  "variant": "baseline",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_125050_1265_Codex観測の失敗処理と統合",
+  "target": "00_要求定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "00_要求定義.mdがありません"
+  ]
+ },
+ {
+  "staging": "20260907_125050_1265_Codex観測の失敗処理と統合",
+  "target": "00_要求定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "P-02の証拠がありません",
+   "P-03の証拠がありません",
+   "P-04の証拠がありません",
+   "P-05の証拠がありません",
+   "P-06の証拠がありません",
+   "00_要求定義.md: DC-PRIVACYは重複なく1件必要です",
+   "00_要求定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "00_要求定義.md: DC-UXは重複なく1件必要です",
+   "00_要求定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_125050_1265_Codex観測の失敗処理と統合",
+  "target": "00_要求定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_125050_1265_Codex観測の失敗処理と統合",
+  "target": "01_要件定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "fullモードには01_要件定義.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_125050_1265_Codex観測の失敗処理と統合",
+  "target": "01_要件定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "01_要件定義.md: DC-PRIVACYは重複なく1件必要です",
+   "01_要件定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "01_要件定義.md: DC-UXは重複なく1件必要です",
+   "01_要件定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_125050_1265_Codex観測の失敗処理と統合",
+  "target": "01_要件定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_125050_1265_Codex観測の失敗処理と統合",
+  "target": "02_設計.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには02_設計.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_125050_1265_Codex観測の失敗処理と統合",
+  "target": "02_設計.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "02_設計.md: DC-PRIVACYは重複なく1件必要です",
+   "02_設計.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "02_設計.md: DC-UXは重複なく1件必要です",
+   "02_設計.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_125050_1265_Codex観測の失敗処理と統合",
+  "target": "02_設計.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_125050_1265_Codex観測の失敗処理と統合",
+  "target": "03_実装計画.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには03_実装計画.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_125050_1265_Codex観測の失敗処理と統合",
+  "target": "03_実装計画.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "03_実装計画.md: DC-PRIVACYは重複なく1件必要です",
+   "03_実装計画.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "03_実装計画.md: DC-UXは重複なく1件必要です",
+   "03_実装計画.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_125050_1265_Codex観測の失敗処理と統合",
+  "target": "03_実装計画.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_164752_モード判定Q-01の対象を外部公開interfa",
+  "target": "（なし）",
+  "variant": "baseline",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_164752_モード判定Q-01の対象を外部公開interfa",
+  "target": "00_要求定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "00_要求定義.mdがありません"
+  ]
+ },
+ {
+  "staging": "20260907_164752_モード判定Q-01の対象を外部公開interfa",
+  "target": "00_要求定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "P-02の証拠がありません",
+   "P-03の証拠がありません",
+   "P-04の証拠がありません",
+   "P-05の証拠がありません",
+   "P-06の証拠がありません",
+   "00_要求定義.md: DC-PRIVACYは重複なく1件必要です",
+   "00_要求定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "00_要求定義.md: DC-UXは重複なく1件必要です",
+   "00_要求定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_164752_モード判定Q-01の対象を外部公開interfa",
+  "target": "00_要求定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_164752_モード判定Q-01の対象を外部公開interfa",
+  "target": "01_要件定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "fullモードには01_要件定義.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_164752_モード判定Q-01の対象を外部公開interfa",
+  "target": "01_要件定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "01_要件定義.md: DC-PRIVACYは重複なく1件必要です",
+   "01_要件定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "01_要件定義.md: DC-UXは重複なく1件必要です",
+   "01_要件定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_164752_モード判定Q-01の対象を外部公開interfa",
+  "target": "01_要件定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_164752_モード判定Q-01の対象を外部公開interfa",
+  "target": "02_設計.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには02_設計.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_164752_モード判定Q-01の対象を外部公開interfa",
+  "target": "02_設計.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "02_設計.md: DC-PRIVACYは重複なく1件必要です",
+   "02_設計.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "02_設計.md: DC-UXは重複なく1件必要です",
+   "02_設計.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_164752_モード判定Q-01の対象を外部公開interfa",
+  "target": "02_設計.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_164752_モード判定Q-01の対象を外部公開interfa",
+  "target": "03_実装計画.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには03_実装計画.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_164752_モード判定Q-01の対象を外部公開interfa",
+  "target": "03_実装計画.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "03_実装計画.md: DC-PRIVACYは重複なく1件必要です",
+   "03_実装計画.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "03_実装計画.md: DC-UXは重複なく1件必要です",
+   "03_実装計画.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_164752_モード判定Q-01の対象を外部公開interfa",
+  "target": "03_実装計画.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_193016_bugfix-pr-createの読み戻しがcl",
+  "target": "（なし）",
+  "variant": "baseline",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_193016_bugfix-pr-createの読み戻しがcl",
+  "target": "00_要求定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "00_要求定義.mdがありません"
+  ]
+ },
+ {
+  "staging": "20260908_193016_bugfix-pr-createの読み戻しがcl",
+  "target": "00_要求定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "P-02の証拠がありません",
+   "P-03の証拠がありません",
+   "P-04の証拠がありません",
+   "P-05の証拠がありません",
+   "P-06の証拠がありません",
+   "00_要求定義.md: DC-PRIVACYは重複なく1件必要です",
+   "00_要求定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "00_要求定義.md: DC-UXは重複なく1件必要です",
+   "00_要求定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_193016_bugfix-pr-createの読み戻しがcl",
+  "target": "00_要求定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_193016_bugfix-pr-createの読み戻しがcl",
+  "target": "01_要件定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "fullモードには01_要件定義.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_193016_bugfix-pr-createの読み戻しがcl",
+  "target": "01_要件定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "01_要件定義.md: DC-PRIVACYは重複なく1件必要です",
+   "01_要件定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "01_要件定義.md: DC-UXは重複なく1件必要です",
+   "01_要件定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_193016_bugfix-pr-createの読み戻しがcl",
+  "target": "01_要件定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_193016_bugfix-pr-createの読み戻しがcl",
+  "target": "02_設計.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには02_設計.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_193016_bugfix-pr-createの読み戻しがcl",
+  "target": "02_設計.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "02_設計.md: DC-PRIVACYは重複なく1件必要です",
+   "02_設計.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "02_設計.md: DC-UXは重複なく1件必要です",
+   "02_設計.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_193016_bugfix-pr-createの読み戻しがcl",
+  "target": "02_設計.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_193016_bugfix-pr-createの読み戻しがcl",
+  "target": "03_実装計画.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには03_実装計画.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_193016_bugfix-pr-createの読み戻しがcl",
+  "target": "03_実装計画.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "03_実装計画.md: DC-PRIVACYは重複なく1件必要です",
+   "03_実装計画.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "03_実装計画.md: DC-UXは重複なく1件必要です",
+   "03_実装計画.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_193016_bugfix-pr-createの読み戻しがcl",
+  "target": "03_実装計画.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_204534_SCN配置検査の除外を一時ライフサイクル領域の正",
+  "target": "（なし）",
+  "variant": "baseline",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_204534_SCN配置検査の除外を一時ライフサイクル領域の正",
+  "target": "00_要求定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "00_要求定義.mdがありません"
+  ]
+ },
+ {
+  "staging": "20260907_204534_SCN配置検査の除外を一時ライフサイクル領域の正",
+  "target": "00_要求定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "P-02の証拠がありません",
+   "P-03の証拠がありません",
+   "P-04の証拠がありません",
+   "P-05の証拠がありません",
+   "P-06の証拠がありません",
+   "00_要求定義.md: DC-PRIVACYは重複なく1件必要です",
+   "00_要求定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "00_要求定義.md: DC-UXは重複なく1件必要です",
+   "00_要求定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_204534_SCN配置検査の除外を一時ライフサイクル領域の正",
+  "target": "00_要求定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_204534_SCN配置検査の除外を一時ライフサイクル領域の正",
+  "target": "01_要件定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "fullモードには01_要件定義.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_204534_SCN配置検査の除外を一時ライフサイクル領域の正",
+  "target": "01_要件定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "01_要件定義.md: DC-PRIVACYは重複なく1件必要です",
+   "01_要件定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "01_要件定義.md: DC-UXは重複なく1件必要です",
+   "01_要件定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_204534_SCN配置検査の除外を一時ライフサイクル領域の正",
+  "target": "01_要件定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_204534_SCN配置検査の除外を一時ライフサイクル領域の正",
+  "target": "02_設計.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには02_設計.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_204534_SCN配置検査の除外を一時ライフサイクル領域の正",
+  "target": "02_設計.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "02_設計.md: DC-PRIVACYは重複なく1件必要です",
+   "02_設計.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "02_設計.md: DC-UXは重複なく1件必要です",
+   "02_設計.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_204534_SCN配置検査の除外を一時ライフサイクル領域の正",
+  "target": "02_設計.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260907_204534_SCN配置検査の除外を一時ライフサイクル領域の正",
+  "target": "03_実装計画.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには03_実装計画.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260907_204534_SCN配置検査の除外を一時ライフサイクル領域の正",
+  "target": "03_実装計画.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "03_実装計画.md: DC-PRIVACYは重複なく1件必要です",
+   "03_実装計画.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "03_実装計画.md: DC-UXは重複なく1件必要です",
+   "03_実装計画.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260907_204534_SCN配置検査の除外を一時ライフサイクル領域の正",
+  "target": "03_実装計画.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_033043_Q-01の対象へ公開Web画面を位置づけ表示調整",
+  "target": "（なし）",
+  "variant": "baseline",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_033043_Q-01の対象へ公開Web画面を位置づけ表示調整",
+  "target": "00_要求定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "00_要求定義.mdがありません"
+  ]
+ },
+ {
+  "staging": "20260908_033043_Q-01の対象へ公開Web画面を位置づけ表示調整",
+  "target": "00_要求定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "P-02の証拠がありません",
+   "P-03の証拠がありません",
+   "P-04の証拠がありません",
+   "P-05の証拠がありません",
+   "P-06の証拠がありません",
+   "00_要求定義.md: DC-PRIVACYは重複なく1件必要です",
+   "00_要求定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "00_要求定義.md: DC-UXは重複なく1件必要です",
+   "00_要求定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_033043_Q-01の対象へ公開Web画面を位置づけ表示調整",
+  "target": "00_要求定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_033043_Q-01の対象へ公開Web画面を位置づけ表示調整",
+  "target": "01_要件定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "fullモードには01_要件定義.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_033043_Q-01の対象へ公開Web画面を位置づけ表示調整",
+  "target": "01_要件定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "01_要件定義.md: DC-PRIVACYは重複なく1件必要です",
+   "01_要件定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "01_要件定義.md: DC-UXは重複なく1件必要です",
+   "01_要件定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_033043_Q-01の対象へ公開Web画面を位置づけ表示調整",
+  "target": "01_要件定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_033043_Q-01の対象へ公開Web画面を位置づけ表示調整",
+  "target": "02_設計.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには02_設計.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_033043_Q-01の対象へ公開Web画面を位置づけ表示調整",
+  "target": "02_設計.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "02_設計.md: DC-PRIVACYは重複なく1件必要です",
+   "02_設計.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "02_設計.md: DC-UXは重複なく1件必要です",
+   "02_設計.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_033043_Q-01の対象へ公開Web画面を位置づけ表示調整",
+  "target": "02_設計.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_033043_Q-01の対象へ公開Web画面を位置づけ表示調整",
+  "target": "03_実装計画.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには03_実装計画.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_033043_Q-01の対象へ公開Web画面を位置づけ表示調整",
+  "target": "03_実装計画.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "03_実装計画.md: DC-PRIVACYは重複なく1件必要です",
+   "03_実装計画.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "03_実装計画.md: DC-UXは重複なく1件必要です",
+   "03_実装計画.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_033043_Q-01の対象へ公開Web画面を位置づけ表示調整",
+  "target": "03_実装計画.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_172130_bugfix-scan-boundary観測層が",
+  "target": "（なし）",
+  "variant": "baseline",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_172130_bugfix-scan-boundary観測層が",
+  "target": "00_要求定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "00_要求定義.mdがありません"
+  ]
+ },
+ {
+  "staging": "20260908_172130_bugfix-scan-boundary観測層が",
+  "target": "00_要求定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "P-02の証拠がありません",
+   "P-03の証拠がありません",
+   "P-04の証拠がありません",
+   "P-05の証拠がありません",
+   "P-06の証拠がありません",
+   "00_要求定義.md: DC-PRIVACYは重複なく1件必要です",
+   "00_要求定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "00_要求定義.md: DC-UXは重複なく1件必要です",
+   "00_要求定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_172130_bugfix-scan-boundary観測層が",
+  "target": "00_要求定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_172130_bugfix-scan-boundary観測層が",
+  "target": "01_要件定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "fullモードには01_要件定義.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_172130_bugfix-scan-boundary観測層が",
+  "target": "01_要件定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "01_要件定義.md: DC-PRIVACYは重複なく1件必要です",
+   "01_要件定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "01_要件定義.md: DC-UXは重複なく1件必要です",
+   "01_要件定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_172130_bugfix-scan-boundary観測層が",
+  "target": "01_要件定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_172130_bugfix-scan-boundary観測層が",
+  "target": "02_設計.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには02_設計.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_172130_bugfix-scan-boundary観測層が",
+  "target": "02_設計.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "02_設計.md: DC-PRIVACYは重複なく1件必要です",
+   "02_設計.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "02_設計.md: DC-UXは重複なく1件必要です",
+   "02_設計.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_172130_bugfix-scan-boundary観測層が",
+  "target": "02_設計.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_172130_bugfix-scan-boundary観測層が",
+  "target": "03_実装計画.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには03_実装計画.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_172130_bugfix-scan-boundary観測層が",
+  "target": "03_実装計画.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "03_実装計画.md: DC-PRIVACYは重複なく1件必要です",
+   "03_実装計画.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "03_実装計画.md: DC-UXは重複なく1件必要です",
+   "03_実装計画.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_172130_bugfix-scan-boundary観測層が",
+  "target": "03_実装計画.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_134956_merge後のCI照合を固定run-IDの直読み",
+  "target": "（なし）",
+  "variant": "baseline",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_134956_merge後のCI照合を固定run-IDの直読み",
+  "target": "00_要求定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "00_要求定義.mdがありません"
+  ]
+ },
+ {
+  "staging": "20260908_134956_merge後のCI照合を固定run-IDの直読み",
+  "target": "00_要求定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "P-02の証拠がありません",
+   "P-03の証拠がありません",
+   "P-04の証拠がありません",
+   "P-05の証拠がありません",
+   "P-06の証拠がありません",
+   "00_要求定義.md: DC-PRIVACYは重複なく1件必要です",
+   "00_要求定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "00_要求定義.md: DC-UXは重複なく1件必要です",
+   "00_要求定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_134956_merge後のCI照合を固定run-IDの直読み",
+  "target": "00_要求定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_134956_merge後のCI照合を固定run-IDの直読み",
+  "target": "01_要件定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには01_要件定義.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_134956_merge後のCI照合を固定run-IDの直読み",
+  "target": "01_要件定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "01_要件定義.md: DC-PRIVACYは重複なく1件必要です",
+   "01_要件定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "01_要件定義.md: DC-UXは重複なく1件必要です",
+   "01_要件定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_134956_merge後のCI照合を固定run-IDの直読み",
+  "target": "01_要件定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_134956_merge後のCI照合を固定run-IDの直読み",
+  "target": "02_設計.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには02_設計.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_134956_merge後のCI照合を固定run-IDの直読み",
+  "target": "02_設計.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "02_設計.md: DC-PRIVACYは重複なく1件必要です",
+   "02_設計.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "02_設計.md: DC-UXは重複なく1件必要です",
+   "02_設計.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_134956_merge後のCI照合を固定run-IDの直読み",
+  "target": "02_設計.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_134956_merge後のCI照合を固定run-IDの直読み",
+  "target": "03_実装計画.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには03_実装計画.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_134956_merge後のCI照合を固定run-IDの直読み",
+  "target": "03_実装計画.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "03_実装計画.md: DC-PRIVACYは重複なく1件必要です",
+   "03_実装計画.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "03_実装計画.md: DC-UXは重複なく1件必要です",
+   "03_実装計画.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_134956_merge後のCI照合を固定run-IDの直読み",
+  "target": "03_実装計画.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_101725_conformance-checkのcucumb",
+  "target": "（なし）",
+  "variant": "baseline",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_101725_conformance-checkのcucumb",
+  "target": "00_要求定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "00_要求定義.mdがありません"
+  ]
+ },
+ {
+  "staging": "20260908_101725_conformance-checkのcucumb",
+  "target": "00_要求定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "P-02の証拠がありません",
+   "P-03の証拠がありません",
+   "P-04の証拠がありません",
+   "P-05の証拠がありません",
+   "P-06の証拠がありません",
+   "00_要求定義.md: DC-PRIVACYは重複なく1件必要です",
+   "00_要求定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "00_要求定義.md: DC-UXは重複なく1件必要です",
+   "00_要求定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_101725_conformance-checkのcucumb",
+  "target": "00_要求定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_101725_conformance-checkのcucumb",
+  "target": "01_要件定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには01_要件定義.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_101725_conformance-checkのcucumb",
+  "target": "01_要件定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "01_要件定義.md: DC-PRIVACYは重複なく1件必要です",
+   "01_要件定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "01_要件定義.md: DC-UXは重複なく1件必要です",
+   "01_要件定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_101725_conformance-checkのcucumb",
+  "target": "01_要件定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_101725_conformance-checkのcucumb",
+  "target": "02_設計.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには02_設計.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_101725_conformance-checkのcucumb",
+  "target": "02_設計.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "02_設計.md: DC-PRIVACYは重複なく1件必要です",
+   "02_設計.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "02_設計.md: DC-UXは重複なく1件必要です",
+   "02_設計.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_101725_conformance-checkのcucumb",
+  "target": "02_設計.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_101725_conformance-checkのcucumb",
+  "target": "03_実装計画.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには03_実装計画.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_101725_conformance-checkのcucumb",
+  "target": "03_実装計画.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "03_実装計画.md: DC-PRIVACYは重複なく1件必要です",
+   "03_実装計画.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "03_実装計画.md: DC-UXは重複なく1件必要です",
+   "03_実装計画.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_101725_conformance-checkのcucumb",
+  "target": "03_実装計画.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_081724_deliveryのpackageFloor省略を",
+  "target": "（なし）",
+  "variant": "baseline",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_081724_deliveryのpackageFloor省略を",
+  "target": "00_要求定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "00_要求定義.mdがありません"
+  ]
+ },
+ {
+  "staging": "20260908_081724_deliveryのpackageFloor省略を",
+  "target": "00_要求定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "P-02の証拠がありません",
+   "P-03の証拠がありません",
+   "P-04の証拠がありません",
+   "P-05の証拠がありません",
+   "P-06の証拠がありません",
+   "00_要求定義.md: DC-PRIVACYは重複なく1件必要です",
+   "00_要求定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "00_要求定義.md: DC-UXは重複なく1件必要です",
+   "00_要求定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_081724_deliveryのpackageFloor省略を",
+  "target": "00_要求定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_081724_deliveryのpackageFloor省略を",
+  "target": "01_要件定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "fullモードには01_要件定義.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_081724_deliveryのpackageFloor省略を",
+  "target": "01_要件定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "GherkinシナリオIDがありません",
+   "01_要件定義.md: DC-PRIVACYは重複なく1件必要です",
+   "01_要件定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "01_要件定義.md: DC-UXは重複なく1件必要です",
+   "01_要件定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_081724_deliveryのpackageFloor省略を",
+  "target": "01_要件定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_081724_deliveryのpackageFloor省略を",
+  "target": "02_設計.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには02_設計.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_081724_deliveryのpackageFloor省略を",
+  "target": "02_設計.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "02_設計.md: DC-PRIVACYは重複なく1件必要です",
+   "02_設計.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "02_設計.md: DC-UXは重複なく1件必要です",
+   "02_設計.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_081724_deliveryのpackageFloor省略を",
+  "target": "02_設計.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_081724_deliveryのpackageFloor省略を",
+  "target": "03_実装計画.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには03_実装計画.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_081724_deliveryのpackageFloor省略を",
+  "target": "03_実装計画.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "03_実装計画.md: DC-PRIVACYは重複なく1件必要です",
+   "03_実装計画.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "03_実装計画.md: DC-UXは重複なく1件必要です",
+   "03_実装計画.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_081724_deliveryのpackageFloor省略を",
+  "target": "03_実装計画.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_121321_finalize拒否理由へ次に採る行動を示す",
+  "target": "（なし）",
+  "variant": "baseline",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_121321_finalize拒否理由へ次に採る行動を示す",
+  "target": "00_要求定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "00_要求定義.mdがありません"
+  ]
+ },
+ {
+  "staging": "20260908_121321_finalize拒否理由へ次に採る行動を示す",
+  "target": "00_要求定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "P-02の証拠がありません",
+   "P-03の証拠がありません",
+   "P-04の証拠がありません",
+   "P-05の証拠がありません",
+   "P-06の証拠がありません",
+   "00_要求定義.md: DC-PRIVACYは重複なく1件必要です",
+   "00_要求定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "00_要求定義.md: DC-UXは重複なく1件必要です",
+   "00_要求定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_121321_finalize拒否理由へ次に採る行動を示す",
+  "target": "00_要求定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_121321_finalize拒否理由へ次に採る行動を示す",
+  "target": "01_要件定義.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには01_要件定義.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_121321_finalize拒否理由へ次に採る行動を示す",
+  "target": "01_要件定義.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "01_要件定義.md: DC-PRIVACYは重複なく1件必要です",
+   "01_要件定義.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "01_要件定義.md: DC-UXは重複なく1件必要です",
+   "01_要件定義.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_121321_finalize拒否理由へ次に採る行動を示す",
+  "target": "01_要件定義.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_121321_finalize拒否理由へ次に採る行動を示す",
+  "target": "02_設計.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには02_設計.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_121321_finalize拒否理由へ次に採る行動を示す",
+  "target": "02_設計.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "02_設計.md: DC-PRIVACYは重複なく1件必要です",
+   "02_設計.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "02_設計.md: DC-UXは重複なく1件必要です",
+   "02_設計.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_121321_finalize拒否理由へ次に採る行動を示す",
+  "target": "02_設計.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ },
+ {
+  "staging": "20260908_121321_finalize拒否理由へ次に採る行動を示す",
+  "target": "03_実装計画.md",
+  "variant": "delete",
+  "valid": false,
+  "errors": [
+   "fullモードには03_実装計画.mdが必要です"
+  ]
+ },
+ {
+  "staging": "20260908_121321_finalize拒否理由へ次に採る行動を示す",
+  "target": "03_実装計画.md",
+  "variant": "gut",
+  "valid": false,
+  "errors": [
+   "03_実装計画.md: DC-PRIVACYは重複なく1件必要です",
+   "03_実装計画.md: DC-OBSERVABILITYは重複なく1件必要です",
+   "03_実装計画.md: DC-UXは重複なく1件必要です",
+   "03_実装計画.md: DC-TOKENSは重複なく1件必要です"
+  ]
+ },
+ {
+  "staging": "20260908_121321_finalize拒否理由へ次に採る行動を示す",
+  "target": "03_実装計画.md",
+  "variant": "swap",
+  "valid": true,
+  "errors": []
+ }
+]
