@@ -24,6 +24,8 @@ interface IsolationWorld extends WorkflowWorld {
   root: string;
   secondDeleteRejected: boolean;
   statusBefore: string;
+  /** hookの登録の有無で`healthy`が変わらないことの観測（Issue #1105）。 */
+  hookDoctorStates?: Array<ReturnType<typeof doctor>>;
 }
 
 /** repository直下へ展開されるhostごとの常時入口（Issue #1219）。 */
@@ -618,4 +620,53 @@ Then("deleteはpreviewだけを返して隔離先と外部資産を変更しな�
     fs.lstatSync(path.join(this.root, "external-link")).isSymbolicLink(),
     true,
   );
+});
+
+/**
+ * **合成経路で`healthy`の不変を測る**（Issue #1105）。
+ *
+ * 純関数`inspectHookRegistration`の単体だけでは、**その結果を`doctor`が
+ * root `healthy`へ混ぜる変異を1件も捕まえない**（変異試験で実測）。同じ
+ * projectを未登録と登録済みの2状態にして`healthy`を突き合わせる。
+ */
+When(
+  "setupを適用してhook未登録と登録済みの両方でdoctorを実行する",
+  function (this: IsolationWorld) {
+    init(this.root, { apply: true });
+    const unregistered = doctor(this.root);
+    write(
+      this.root,
+      HOST_HOOK_SETTINGS,
+      `${JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash",
+              hooks: [
+                {
+                  type: "command",
+                  command: `"$CLAUDE_PROJECT_DIR/${HOOK_HOST_COPIES[0]}"`,
+                },
+              ],
+            },
+          ],
+        },
+      })}\n`,
+    );
+    this.hookDoctorStates = [unregistered, doctor(this.root)];
+  },
+);
+
+Then("2つのhealthyは等しく登録状態だけが違う", function (this: IsolationWorld) {
+  const [unregistered, registered] = this.hookDoctorStates ?? [];
+  assert.ok(unregistered !== undefined && registered !== undefined);
+  assert.equal(
+    unregistered.healthy,
+    registered.healthy,
+    "hookの登録の有無がdoctorのhealthyを変えています",
+  );
+  assert.equal(unregistered.hooks.registered, false);
+  assert.equal(registered.hooks.registered, true);
+  assert.equal(unregistered.hooks.diagnostics.length > 0, true);
+  assert.equal(registered.hooks.diagnostics.length, 0);
 });

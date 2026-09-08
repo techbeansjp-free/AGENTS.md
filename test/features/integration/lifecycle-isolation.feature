@@ -70,3 +70,8 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     Given hook登録済みのhost設定を持つ隔離directoryがある
     When setupを適用する
     Then host設定fileは1 byteも変わらない
+
+  Scenario: SCN-INT-LIFECYCLE-015 hookの登録の有無はdoctorのhealthyを変えない
+    Given lifecycle検証用の隔離directoryがある
+    When setupを適用してhook未登録と登録済みの両方でdoctorを実行する
+    Then 2つのhealthyは等しく登録状態だけが違う

@@ -703,10 +703,15 @@ export function doctor(target: string, worktreeObservations?: unknown) {
   const hookSettingsFile = resolveContained(target, HOST_HOOK_SETTINGS, {
     allowMissingLeaf: true,
   });
+  /**
+   * **設定fileが無い場合を例外にしない。** `isRegularFile`は`lstatSync`を使い
+   * ENOENTを投げる。**未登録は正常な状態であり、診断の対象であって失敗ではない。**
+   */
   const hookRegistration = inspectHookRegistration({
-    settings: isRegularFile(hookSettingsFile)
-      ? fs.readFileSync(hookSettingsFile, "utf8")
-      : undefined,
+    settings:
+      fs.existsSync(hookSettingsFile) && isRegularFile(hookSettingsFile)
+        ? fs.readFileSync(hookSettingsFile, "utf8")
+        : undefined,
     expectedCommandFragment: HOST_HOOK_TARGETS[0],
   });
   return {
