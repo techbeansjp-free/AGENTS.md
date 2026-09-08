@@ -32,13 +32,13 @@
 | 要求・受け入れ条件 | Issue #1251、staging `01_要件定義.md`§9 | AC-01〜AC-06、INV-01〜INV-04 | 一次資料 |
 | 諮問 | Issue #1251のcodex諮問結果コメント | 案2を判別値へ精緻化する。detachedを一律cleanup-ready不可とするのは過剰。surveyだけを変えると現行finalizeが必ず拒否する | 一次資料 |
 | 発生の実測 | 2026-09-06の`worktree survey` | 35件中2件が脱落し、`entry[4]`・`entry[34]`という添字だけのerrorになった | 実測 |
-| 差分 | `4d83166d..31bbbb54` | 12 path（うち`dist/`2件は生成物） | 既存コード |
+| 差分 | **追随前** `4d83166d..31bbbb54`、**追随後（本artifactの対象）** `317d65cf..9c28b495` | どちらも12 path（うち`dist/`2件は生成物）。**path集合は追随の前後で変わっていない** | 既存コード |
 | テスト | `npm run conformance:check`（全suite内包） | 1580 scenarios（1564 passed、16 skipped）、失敗0 | テスト出力 |
 | 変異試験 | 7変異を1件ずつ適用 | **7件すべてkill。復元後に41 scenario再合格を確認した** | テスト出力 |
 | commit後external | PR未作成 | ラウンド1時点では未観測 | 外部のimmutable証拠 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **確認した。** CLI（観測）→domain（分類）の単方向で、domainはGitへ触れない。本artifactへ自身のcommit SHAを書いていない
-- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: `H_impl`は`5ca47b3a651920ba1ec6b15be5bcda9a23ca4728`。本artifactの1 fileだけを加えて`H_final`にする
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: **`H_impl`は`9c28b4952118a0c3742a42fbe59de1b9132d73a9`である。** 本artifactの1 fileだけを加えて`H_final`にする。**追随前の`H_impl`は`5ca47b3a651920ba1ec6b15be5bcda9a23ca4728`だったが、既定branch追随のrebaseで到達不能になった。** §0の固定値が追随後の正しい値であり、本行はその履歴を残すためだけに追随前の値を併記する（Issue #1254で訂正）
 - reviewer stable IDがPR author/provider観測済み`H_impl` author stable IDと異なる: reviewerはimplementerと別contextで起動する
 - 既定branch追随を行った場合: **行った。** PR #1258 のmergeで既定branchが`317d65cf041f55786d468cb6e4445de0b3dd7ca9`へ動き、`docs/specs/15_要件追跡/01_変更履歴.md`のheader直後の行が双方で衝突したため、`git rebase --onto origin/main 58ed41c3 HEAD`で追随した。**衝突は双方の行を保持して解消し、どちらの行も削っていない。** 取り込みはreview artifact commitより前にあり、artifactが最終commitである。`比較基点`は取り込んだ既定branch tip`317d65cf041f55786d468cb6e4445de0b3dd7ca9`、`H_impl`はartifact直前の最新commit`9c28b4952118a0c3742a42fbe59de1b9132d73a9`を指す。個別監査表は`比較基点..H_impl`から再生成し、path集合が変わっていないことを確認した
 
@@ -71,7 +71,7 @@
 | DISC-002 | **起票時の「detachedは一律cleanup-readyにしない」は過剰だった。** REQ-LC-009は既定branchからの到達を独立の免除根拠として認める | 諮問で指摘された。**ただしsurveyだけを変えると現行finalizeが必ず拒否する状態を作る**ため、本変更は可視化に限定し、理由駆動でretainへ倒す形にした。段階2は対象外として記録した |
 | DISC-003 | **`registeredWorktrees`は6呼び出し元を持ち、返り値型を変えるとfinalizeの認可条件へ波及する** | survey専用の`registeredWorktreeHeads`を足し、既存関数へ触れなかった |
 | DISC-004 | **既存の観測fixtureが`finalize-ignored-artifacts.steps.ts`にも1件あり、型検査で見つかった** | 既定値に`headState`・`headSha`を足した |
-| DISC-005 | **変更履歴の行を8列表へ入れる#1236の誤りを、本Issueでは9列表の見出し直後へ挿入する形で回避した** | 挿入位置を`|---|`行の直後に固定し、列数を検証してから書き込んだ |
+| DISC-005 | **変更履歴の行を8列表へ入れる#1236の誤りを、本Issueでは9列表の見出し直後へ挿入する形で回避した** | 挿入位置をheader区切り行の直後に固定し、列数を検証してから書き込んだ |
 
 ### 2.1 受け入れ条件とシナリオ
 
@@ -145,24 +145,26 @@ runnerは`@cucumber/cucumber`、`projectChoices.gherkinDialect`は英語keyword�
 
 ## 8. 配布物影響
 
-| 変更path | 配布境界に入るか | 影響 |
+**梱包対象かどうかと配布影響があるかどうかを分ける**（Issue #1254で訂正）。`package.json`の`files`は**全12項目**であり、内訳は`dist/bin/`・`dist/src/`・`dist/vendor/`の3件、`.agent-skill-chain/`配下の6件（`00_利用案内.md`・`skills/`・`templates/`・`schemas/`・`policy/`・`docs/`）、root直下の`README.md`・`AGENTS.md`・`CLAUDE.md`の3件である。`npm pack --dry-run`の実測でも`src/`・`test/`・`docs/`は1件も梱包されない、`npm pack --dry-run`の実測でも`src/`・`test/`・`docs/`は1件も梱包されない。
+
+| 変更path | npm梱包対象か | 配布影響 |
 |---|---|---|
-| `src/domain/worktree-survey.ts` | 入る | 観測型に`headState`・`headSha`が加わり、entryに`headState`が加わる。`branch`が`null`を取りうる |
-| `src/cli.ts` | 入る | detachedがentriesへ現れる。text形式に`(detached)`。errorsにpath |
-| `dist/src/domain/worktree-survey.js` | 入る | 上記のbuild生成物 |
-| `dist/src/cli.js` | 入る | 同上 |
-| `test/features/unit/worktree-survey.feature` | 入る | なし |
-| `test/features/integration/worktree-survey.feature` | 入る | なし |
-| `test/steps/worktree-survey.steps.ts` | 入る | なし |
-| `test/steps/finalize-ignored-artifacts.steps.ts` | 入る | なし |
-| `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md` | 入らない | なし |
-| `docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md` | 入らない | なし |
-| `docs/specs/15_要件追跡/00_追跡表.md` | 入らない | なし |
-| `docs/specs/15_要件追跡/01_変更履歴.md` | 入らない | なし |
+| `src/domain/worktree-survey.ts` | **入らない**（compile元） | **ある。** 観測型に`headState`・`headSha`が加わり、entryに`headState`が加わる。`branch`が`null`を取りうる。実体は`dist/`として届く |
+| `src/cli.ts` | **入らない**（compile元） | **ある。** detachedがentriesへ現れる。text形式に`(detached)`。errorsにpath。実体は`dist/`として届く |
+| `dist/src/domain/worktree-survey.js` | **入る** | 上記のbuild生成物 |
+| `dist/src/cli.js` | **入る** | 同上 |
+| `test/features/unit/worktree-survey.feature` | **入らない** | なし |
+| `test/features/integration/worktree-survey.feature` | **入らない** | なし |
+| `test/steps/worktree-survey.steps.ts` | **入らない** | なし |
+| `test/steps/finalize-ignored-artifacts.steps.ts` | **入らない** | なし |
+| `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md` | **入らない** | なし |
+| `docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md` | **入らない** | なし |
+| `docs/specs/15_要件追跡/00_追跡表.md` | **入らない** | なし |
+| `docs/specs/15_要件追跡/01_変更履歴.md` | **入らない** | なし |
 
 判断: 配布物を更新した
 
-根拠: `src/`と`dist/`は`npm pack`の対象であり利用者が実行する。**entriesが増える方向の変更で、attachedの分類は変わらない。** `branch: null`を想定しない利用側の読み手は`headState`で判別できる。cleanupReadyの集合は狭まる方向にしか動かない。
+根拠: **`npm pack`が梱包するのは`dist/`であり、`src/`はそのcompile元である。** 利用者が実行するのは`dist/`である。**entriesが増える方向の変更で、attachedの分類は変わらない。** `branch: null`を想定しない利用側の読み手は`headState`で判別できる。cleanupReadyの集合は狭まる方向にしか動かない。
 
 ## 9. 独立reviewの成立
 
