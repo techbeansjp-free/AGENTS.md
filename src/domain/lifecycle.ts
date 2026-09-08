@@ -37,13 +37,90 @@ const packageRoot = findPackageRoot(import.meta.url);
  */
 const ROOT_ASSETS = ["AGENTS.md", "CLAUDE.md"];
 const NAMESPACE_ROOT_ASSETS = ["00_利用案内.md"];
-const NAMESPACE_ASSETS = ["docs", "skills", "templates", "schemas", "policy"];
+const NAMESPACE_ASSETS = [
+  "docs",
+  "skills",
+  "templates",
+  "schemas",
+  "policy",
+  "hooks",
+];
 const MANAGED_RECORD = ".agent-skill-chain/managed-assets.json";
 const HOST_SKILL_SOURCE = ".agent-skill-chain/skills/asc-step/SKILL.md";
 const HOST_SKILL_TARGETS = [
   ".claude/skills/asc-step/SKILL.md",
   ".agents/skills/asc-step/SKILL.md",
 ] as const;
+/**
+ * 強制点hookの正本と、hostごとの展開先（Issue #1105）。
+ *
+ * **skillとhookは責務が違う。** skillは呼び出されたときに読まれる登録口であり、
+ * hookはhostのtool呼び出し前に**利用者の操作なしに毎回走る**。同じ配布機構を
+ * 使うが、`HOST_SKILL_TARGETS`とは別の定数に分ける。
+ *
+ * **共通のloopへまとめない。** まとめると、展開先の一覧を消す変異がskillと
+ * hookの両方を同時に消し、片方だけを壊す変異を検出できなくなる。
+ *
+ * **配るのは本体だけである。** hostの設定fileへ登録を書き込まない。登録は
+ * 利用者・hostが所有する共有設定への書き込みであり、`install`の権限を
+ * 「packageの資産を置く」から「以後のtool callごとに自動実行されるcodeを
+ * 登録する」へ広げる。登録状態は`doctor`が報告するだけにとどめる。
+ */
+const HOST_HOOK_SOURCE = ".agent-skill-chain/hooks/asc-contract-citation.mjs";
+const HOST_HOOK_TARGETS = [
+  ".claude/hooks/asc-contract-citation.mjs",
+  ".codex/hooks/asc-contract-citation.mjs",
+] as const;
+/**
+ * hookの登録を観測するproject-localの設定file（Issue #1105）。
+ *
+ * **読むだけで書かない。** ここへ`install`が書き込むと、`install`の権限が
+ * 「以後のtool callごとに自動実行されるcodeを登録する」まで広がる。
+ */
+const HOST_HOOK_SETTINGS = ".claude/settings.local.json";
+
+/**
+ * project-localの設定にhookのentryがあるかを返す純関数（Issue #1105）。
+ *
+ * **filesystemを読まない。** 設定の内容を引数で受ける。読み取りは呼び出し側が行う。
+ *
+ * **`healthy`を変えない。** 返すのは観測であって判定ではない。project-localの
+ * 設定だけを見ており、global・managed・plugin経由の有効化状態は見えない。
+ * **「hookが無効です」と断定しない。**
+ */
+export function inspectHookRegistration(input: {
+  readonly settings: string | undefined;
+  readonly expectedCommandFragment: string;
+}): { registered: boolean; reason: string } {
+  if (input.settings === undefined)
+    return {
+      registered: false,
+      reason: `${HOST_HOOK_SETTINGS}がありません。project-localの登録は確認できません`,
+    };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input.settings);
+  } catch {
+    return {
+      registered: false,
+      reason: `${HOST_HOOK_SETTINGS}をJSONとして解釈できません。project-localの登録は確認できません`,
+    };
+  }
+  /**
+   * **entryの形ではなくcommandの字面を見る。** 別のcommandのentryが1件あるだけで
+   * 登録済みと数えると、未登録を見逃す。
+   */
+  const found = JSON.stringify(parsed).includes(input.expectedCommandFragment);
+  return found
+    ? {
+        registered: true,
+        reason: `${HOST_HOOK_SETTINGS}に期待entryがあります`,
+      }
+    : {
+        registered: false,
+        reason: `${HOST_HOOK_SETTINGS}に期待entryがありません。global・managed・plugin経由の有効化状態は未確認です`,
+      };
+}
 const SHA256 = /^[a-f0-9]{64}$/u;
 
 interface ManagedAssetRecord {
@@ -77,6 +154,14 @@ function isPackageOwnedPath(relative: string): boolean {
     ROOT_ASSETS.includes(normalized) ||
     HOST_SKILL_TARGETS.includes(
       normalized as (typeof HOST_SKILL_TARGETS)[number],
+    ) ||
+    /**
+     * **hookの展開先も同じ扱いにする**（Issue #1105）。ここへ足さないと、
+     * 展開はされるがrecord検証で拒否され、`update`と`delete`が使えなくなる。
+     * 上の`ROOT_ASSETS`のコメントが警告しているのと同じ罠である。
+     */
+    HOST_HOOK_TARGETS.includes(
+      normalized as (typeof HOST_HOOK_TARGETS)[number],
     ) ||
     NAMESPACE_ROOT_ASSETS.some(
       (file) => normalized === `.agent-skill-chain/${file}`,
@@ -196,6 +281,11 @@ function mappings(target: string): Array<{ src: string; dest: string }> {
   for (const relative of HOST_SKILL_TARGETS)
     result.push({
       src: path.join(packageRoot, HOST_SKILL_SOURCE),
+      dest: destination(relative),
+    });
+  for (const relative of HOST_HOOK_TARGETS)
+    result.push({
+      src: path.join(packageRoot, HOST_HOOK_SOURCE),
       dest: destination(relative),
     });
   return result;
@@ -603,9 +693,31 @@ export function doctor(target: string, worktreeObservations?: unknown) {
   const toolingDiagnostics = [tooling.git, tooling.gh].flatMap((tool) =>
     tool.diagnostic ? [tool.diagnostic] : [],
   );
+  /**
+   * **登録状態は報告するが`healthy`を変えない**（Issue #1105）。
+   *
+   * hook本体の欠落・改変はmanaged assetの診断として`healthy`へ入る。
+   * **登録は利用者による有効化状態であり、packageのinstall健全性ではない。**
+   * `healthy` keyをこの欄へ置かない。置くと門と誤読される。
+   */
+  const hookSettingsFile = resolveContained(target, HOST_HOOK_SETTINGS, {
+    allowMissingLeaf: true,
+  });
+  const hookRegistration = inspectHookRegistration({
+    settings: isRegularFile(hookSettingsFile)
+      ? fs.readFileSync(hookSettingsFile, "utf8")
+      : undefined,
+    expectedCommandFragment: HOST_HOOK_TARGETS[0],
+  });
   return {
     healthy: installed && diagnostics.length === 0,
     installed,
+    hooks: {
+      canonical: HOST_HOOK_SOURCE,
+      expected: [...HOST_HOOK_TARGETS],
+      registered: hookRegistration.registered,
+      diagnostics: hookRegistration.registered ? [] : [hookRegistration.reason],
+    },
     adapters: {
       expected: [...HOST_SKILL_TARGETS],
       healthy: diagnostics.length === 0,

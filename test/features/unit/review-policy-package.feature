@@ -281,3 +281,28 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     Given 配布するStep 0のskillがある
     When モード判定質問への参照を検査する
     Then 節への相対linkが存在し参照先のfileと見出しが実在する
+
+  Scenario: SCN-UNIT-PACKAGE-028 強制点hookの正本と案内が配布物の必須assetである
+    Given 配布物の必須asset一覧がある
+    When 強制点hookの必須assetを検査する
+    Then hook正本と案内の両方が必須assetに含まれる
+
+  Scenario: SCN-UNIT-PACKAGE-029 hookの案内はCodex側の登録が未確認である旨を述べる
+    Given 配布する強制点hookの案内がある
+    When Codex側の記述を検査する
+    Then 未確認である旨と実測した否定的観測が含まれる
+
+  Scenario: SCN-UNIT-DOCTORHOOK-001 登録済みの設定を登録済みとして報告する
+    Given hookのentryを持つproject-local設定がある
+    When hook登録状態を検査する
+    Then 登録済みとして報告され診断は出ない
+
+  Scenario: SCN-UNIT-DOCTORHOOK-002 設定が無い場合を未登録として報告する
+    Given project-local設定が存在しない
+    When hook登録状態を検査する
+    Then 未登録として報告され断定しない診断が出る
+
+  Scenario: SCN-UNIT-DOCTORHOOK-003 別のcommandだけの設定を未登録として報告する
+    Given 別のcommandのentryだけを持つproject-local設定がある
+    When hook登録状態を検査する
+    Then 未登録として報告され断定しない診断が出る

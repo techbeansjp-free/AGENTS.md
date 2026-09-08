@@ -207,6 +207,12 @@ export function checkPackageContents(): {
       ".agent-skill-chain/docs/01_開発ワークフロー.md",
       ".agent-skill-chain/docs/02_品質基準.md",
       ".agent-skill-chain/policy/00_利用案内.md",
+      /**
+       * **強制点hookの正本と案内を必須にする**（Issue #1105）。
+       * `files`から外すと利用者側に強制点が届かない。
+       */
+      ".agent-skill-chain/hooks/00_利用案内.md",
+      ".agent-skill-chain/hooks/asc-contract-citation.mjs",
       ".agent-skill-chain/schemas/00_利用案内.md",
       ".agent-skill-chain/skills/00_利用案内.md",
       ".agent-skill-chain/skills/asc-step/SKILL.md",
