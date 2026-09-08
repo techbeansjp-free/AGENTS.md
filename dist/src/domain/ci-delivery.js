@@ -38,6 +38,12 @@ export function inspectCiDelivery(input) {
         run.event === "pull_request" &&
         run.pullRequestNumbers.length === 1 &&
         run.pullRequestNumbers[0] === input.pullRequest);
+    /**
+     * **「run未生成」と「run有りだが未関連付け」を区別する**（Issue #1280、AC-07）。
+     * `pull_requests`はPRが閉じた瞬間に空になるため、両者は同じ「該当0件」へ潰れていた。
+     * **判定は1つも変えず、報告だけを分ける。**
+     */
+    const headShaRunCount = input.runs.filter((run) => run.headSha === input.headSha && run.event === "pull_request").length;
     const elapsedMinutes = (observedAt - eventAt) / 60000;
     const state = matched.length > 0
         ? "delivered"
@@ -47,13 +53,14 @@ export function inspectCiDelivery(input) {
     return {
         state,
         runCount: matched.length,
+        headShaRunCount,
         elapsedMinutes,
         graceMinutes: input.graceMinutes,
         headSha: input.headSha,
         pullRequest: input.pullRequest,
         eventAt: input.eventAt,
         observedAt: input.observedAt,
-        nextAction: nextActionFor(state, input.graceMinutes),
+        nextAction: nextActionFor(state, input.graceMinutes, headShaRunCount),
     };
 }
 /**
@@ -63,11 +70,46 @@ export function inspectCiDelivery(input) {
  * 「待つのか人を呼ぶのか」の基準が無かったことによる。**`undelivered`を人間へ
  * 上げる唯一の条件として文言で固定する。**
  */
-function nextActionFor(state, graceMinutes) {
+function nextActionFor(state, graceMinutes, headShaRunCount) {
     if (state === "delivered")
         return "CI runは生成済みです。結論を確認してください。人間を呼ばないでください";
+    /**
+     * **「未生成」と「run有りだが未関連付け」を同じ文言へ潰さない**（Issue #1280、AC-07）。
+     * 後者はPRが閉じた、fork由来、`types: [closed]`由来のいずれかであり、**採る行動が違う。**
+     * **状態は変えない。** ここで分岐を増やしても`state`は上流で確定済みである。
+     */
+    const cause = headShaRunCount > 0
+        ? `CI runは${headShaRunCount}件生成済みですが対象PRへ関連付いていません`
+        : "CI runが未生成です";
     if (state === "pending")
-        return `CI runは未生成ですが猶予${graceMinutes}分の内側です。再観測してください。人間を呼ばないでください`;
-    return `CI runが猶予${graceMinutes}分を超えて未生成です。人間へ上げてください`;
+        return `${cause}。猶予${graceMinutes}分の内側です。再観測してください。人間を呼ばないでください`;
+    return `${cause}。猶予${graceMinutes}分を超えました。人間へ上げてください`;
+}
+/**
+ * 固定identityと固定run観測を突合する。
+ *
+ * **不明を免除へ倒さない。** 空文字、未知のstatus、未知のconclusionはすべて不一致にする。
+ * **`pullRequestNumbers`は空または対象PRだけを許す。** 他PRを含めば、merge後に別PRが
+ * 同一headをopenで持つ状況で取り違える。
+ */
+export function reconcileFixedMergeRun(fixed, observed) {
+    const mismatches = [];
+    const require = (field, expected, actual) => {
+        if (expected === "" || actual !== expected)
+            mismatches.push(field);
+    };
+    require("runId", fixed.runId, observed.runId);
+    require("repository", fixed.repository, observed.repository);
+    /** **head側repositoryも対象と一致させる。** forkの同一commitを受理しない。 */
+    require("headRepository", fixed.repository, observed.headRepository);
+    require("event", "pull_request", observed.event);
+    require("headSha", fixed.headSha, observed.headSha);
+    require("headBranch", fixed.headBranch, observed.headBranch);
+    require("status", "completed", observed.status);
+    require("conclusion", "success", observed.conclusion);
+    if (!Array.isArray(observed.pullRequestNumbers) ||
+        observed.pullRequestNumbers.some((number) => number !== fixed.pullRequest))
+        mismatches.push("pullRequestNumbers");
+    return { reconciled: mismatches.length === 0, mismatches };
 }
 //# sourceMappingURL=ci-delivery.js.map

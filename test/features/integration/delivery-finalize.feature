@@ -401,3 +401,52 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When finalize reportを作成する
     Then finalize reportはsafeでない
 
+
+  Scenario: SCN-INT-GITHUB-022 固定run IDの直読みは9項目のidentityを観測する
+    Given 固定run IDのrun観測を返すgh stubがある
+    When 固定run IDでCI run adapterを実行する
+    Then CI run観測は9項目のidentityを返す
+    And run読取前にauthとrepository確認が行われる
+
+  Scenario: SCN-INT-GITHUB-025 fork由来runのhead repositoryをrepositoryへ潰さない
+    Given head repositoryがforkのrun観測を返すgh stubがある
+    When 固定run IDでCI run adapterを実行する
+    Then CI run観測のhead repositoryは "fork/x" である
+    And CI run観測のrepositoryは "o/r" である
+
+  Scenario Outline: SCN-INT-GITHUB-023 identityの欠けたrun観測を拒否する
+    Given <変種>のrun観測を返すgh stubがある
+    When 固定run IDでCI run adapterを実行して失敗を確認する
+    Then CI run adapterは失敗する
+
+    Examples:
+      | 変種 |
+      | head_repository欠落 |
+      | head_repositoryのfull_nameが非文字列 |
+      | repository欠落 |
+      | event欠落 |
+      | head_sha欠落 |
+      | head_branch欠落 |
+      | status欠落 |
+      | conclusionがnull |
+      | idが非整数 |
+      | pull_requestsが配列でない |
+      | pull_requests要素のnumberが欠落 |
+      | 応答がobjectでない |
+      | 応答が404 |
+
+  Scenario Outline: SCN-INT-GITHUB-024 数字でないrun IDでprovider要求を送らない
+    Given 固定run IDのrun観測を返すgh stubがある
+    When run ID <値> でCI run adapterを実行して失敗を確認する
+    Then CI run adapterは失敗する
+    And run読取のapi操作は呼ばれない
+
+    Examples:
+      | 値 |
+      | "" |
+      | "abc" |
+      | "42/../../secrets" |
+      | "42 --jq" |
+      | "-1" |
+      | "1e3" |
+      | "042%2F" |

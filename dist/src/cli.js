@@ -44,7 +44,7 @@ import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
 import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, observeStoredMerge, prepareStoredMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
 import { DELIVERY_STATE_FILE, assertImmutablePullRequestBinding, canonicalDigest, closingContractDigest, pullRequestContentDigest, pullRequestTerminalEvidenceId, } from "./domain/delivery-state.js";
 import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, } from "./domain/workflow.js";
-import { CI_DELIVERY_GRACE_MINUTES, inspectCiDelivery, } from "./domain/ci-delivery.js";
+import { reconcileFixedMergeRun, CI_DELIVERY_GRACE_MINUTES, inspectCiDelivery, } from "./domain/ci-delivery.js";
 function workflowArguments(args) {
     const flags = {};
     const artifacts = [];
@@ -952,15 +952,29 @@ function readBackPreparedPullRequestMerge(input) {
                 observed,
                 tracker: input.tracker,
             });
-            const reviewed = observeMergeReviewEvidence({
-                root: input.root,
+            /**
+             * **merge後は再検索せず、固定identityを直読みで照合する。**
+             *
+             * `pull_requests`は「現在openで同一headを持つsame-repo PR」の一覧であり、
+             * **PRが閉じた瞬間に空になる**（Issue #1280で実測）。head_shaでの再検索は
+             * merge成功後に必ず失敗し、`outcome=merged`のStep 11を構造的に記録できなくする。
+             *
+             * 規範は「副作用の成否が曖昧な場合は同じ要求を再送せず、**固定identityを使った
+             * provider read-backだけで照合する**」と定める。再検索はそこから外れていた。
+             *
+             * **merge前の選別は1文字も変えない。** 空`pull_requests`の許容は
+             * `reconcileFixedMergeRun`だけが持ち、merge前の経路から到達できない。
+             */
+            const fixedRun = github("pr.ci-run", { repository: input.repository, runId: input.state.merge.ciRunId }, input.root);
+            const reconciled = reconcileFixedMergeRun({
+                runId: input.state.merge.ciRunId,
                 repository: input.repository,
-                pr: input.pr,
-                state: input.state,
-                observed,
-                ciEventAt: ciDeliveryEventAt(input.staging, input.state),
-            });
-            assertFixedMergeReviewEvidence(input.state, reviewed.reviewEvidence);
+                headSha: input.state.merge.authorizedHeadSha,
+                headBranch: input.state.create.headRef,
+                pullRequest: input.pr,
+            }, fixedRun);
+            if (!reconciled.reconciled)
+                throw new Error(`固定済みmerge CI runがcurrent providerの観測と一致しません: ${reconciled.mismatches.join(", ")}`);
         }
         else {
             const base = defaultBranch(input.root);
