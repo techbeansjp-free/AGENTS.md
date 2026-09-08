@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import {
+  conformanceTestArgv,
   buildRuleCoverage,
   CANONICAL_SCAN_LOCATIONS,
   collectCanonicalScanTargets,
@@ -630,7 +631,29 @@ function passedScenarioIds(value: unknown): string[] {
   return passed;
 }
 
-export function checkConformance(root: string): number {
+/**
+ * cucumberの起動を差し替えられるseam。**注入するのはspawnそのものであり、間に別の
+ * 変換層を置かない。** 中間のrunnerを挟むと、注入版と既定版でargvが分岐しうる。実際
+ * `argv.slice(0, 4)`を既定runnerだけに入れる変異は、注入runnerを観測するSCNを素通りし、
+ * productionでだけ`--name`が消えた（Issue #1281のラウンド1で独立reviewerが構成した）。
+ *
+ * **argvを組む式はcheckConformance内の1箇所だけである。** 注入したspawnが受け取る
+ * argvは、既定のspawnSyncが受け取るものと同一である。
+ */
+export type ConformanceTestSpawn = (
+  command: string,
+  argv: string[],
+  options: {
+    cwd: string;
+    encoding: "utf8";
+    stdio: ["ignore", "inherit", "inherit"];
+  },
+) => { status: number | null };
+
+export function checkConformance(
+  root: string,
+  spawn: ConformanceTestSpawn = spawnSync,
+): number {
   const ledger = checkRepositoryRuleLedger(root);
   if (!ledger.valid) {
     process.stderr.write(
@@ -638,25 +661,43 @@ export function checkConformance(root: string): number {
     );
     return 1;
   }
+  const binding: unknown = JSON.parse(
+    fs.readFileSync(
+      path.join(root, ".agent-skill-chain/project/conformance/bindings.json"),
+      "utf8",
+    ),
+  );
+  /**
+   * **bindingが名指しした反例SCNだけを実行する。** `quality`段の`npm test`が同じsuiteを
+   * 既に実行しており、全件の再実行は純粋な重複である（Issue #1281）。
+   *
+   * **全Gherkinの合格はこの検査の宣言ではない。** `TERM-ASC-006`のconformance bindingは
+   * 「I1からI12を実在exportと成功SCNへ結ぶ」であり、名指ししていないscenarioの合否は
+   * `quality`と保護されたCI workflowが担う。受け入れる検出損失はREQ-SQ-005が持つ。
+   *
+   * **限定できないなら実行しない。** bindingが空なら`undefined`が返るので、
+   * 限定なしで全件を走らせるのではなく拒否する。空bindingで検査を素通しさせない。
+   */
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "asc-conformance-"));
   const report = path.join(temporary, "cucumber.json");
   try {
-    const run = spawnSync("npm", ["test", "--", "--format", `json:${report}`], {
+    const argv = conformanceTestArgv(report, binding);
+    if (argv === undefined) {
+      process.stderr.write(
+        "conformance検査: 失敗\n- bindingが反例SCNを1件も名指ししていません\n",
+      );
+      return 1;
+    }
+    const testRun = spawn("npm", argv, {
       cwd: root,
       encoding: "utf8",
       stdio: ["ignore", "inherit", "inherit"],
     });
-    if (run.status !== 0) return run.status ?? 1;
+    if (testRun.status !== 0) return testRun.status ?? 1;
     const reportInput: unknown = JSON.parse(fs.readFileSync(report, "utf8"));
     const contract: unknown = JSON.parse(
       fs.readFileSync(
         path.join(root, ".agent-skill-chain/policy/conformance.json"),
-        "utf8",
-      ),
-    );
-    const binding: unknown = JSON.parse(
-      fs.readFileSync(
-        path.join(root, ".agent-skill-chain/project/conformance/bindings.json"),
         "utf8",
       ),
     );

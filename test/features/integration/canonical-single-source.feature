@@ -30,3 +30,8 @@ Feature: 実repositoryで正本複製が解消されている
     Given 正本単一化ruleの定義がある
     When rule scopeと走査locationを突合する
     Then 突合は差異0件で一致する
+
+  Scenario: SCN-INT-CANON-007 conformance検査はbindingが名指しした反例SCNだけをcucumberへ渡す
+    Given 実repositoryのconformance検査を注入したrunnerで起動する
+    When conformance検査を実行する
+    Then cucumberへ渡す引数はbindingの反例SCNだけを完全ID一致で限定する

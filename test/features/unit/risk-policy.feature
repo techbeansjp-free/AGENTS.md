@@ -187,6 +187,16 @@ Feature: riskに比例したrule判定で安全性と開発速度を両立する
     When project conformance bindingを検証する
     Then runtimeとschemaは末尾slashを拒否する
 
+  Scenario: SCN-UNIT-CONFORMANCE-006 反例SCN名の正規表現を完全ID一致で組み前方一致と空配列を拒否する
+    Given 前方一致になるIDと正規表現メタ文字を含む反例SCN候補がある
+    When 反例SCN名の正規表現を組む
+    Then 完全ID一致だけが真になり空bindingはundefinedになる
+
+  Scenario: SCN-UNIT-CONFORMANCE-007 名指しした反例SCNの成功証拠が1件もないreportを拒否する
+    Given 反例SCNを名指しするbindingと成功証拠が空のreportがある
+    When project conformanceを検証する
+    Then 成功証拠の不在を名指しして拒否する
+
   Scenario: SCN-UNIT-RISK-027 trusted ruleがないoperation境界を暗黙許可しない
     Given trusted boundaryに適用ruleがないpolicyがある
     When trusted boundaryを評価する

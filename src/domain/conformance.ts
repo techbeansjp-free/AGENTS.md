@@ -1269,6 +1269,77 @@ function normalizeRelative(value: string): string {
   return value.replaceAll("\\", "/").replace(/^\.\//u, "");
 }
 
+/**
+ * conformance bindingが名指しした反例SCNだけをcucumberへ実行させる`--name`正規表現を組む。
+ *
+ * **完全ID一致にする。** 単純な連結では`SCN-UNIT-RISK-003`が`SCN-UNIT-RISK-0031`を巻き込む。
+ * 現時点のrepositoryに前方一致の組は0件だが、**「今0件」は「起こり得ない」ではない。**
+ *
+ * **語境界`\b`では閉じられない。** SCN IDは`-`を含み、`-`は非単語文字なので
+ * `\b(SCN-UNIT-RISK-003)\b`は`SCN-UNIT-RISK-003-EXTRA`にも一致する。実測で確認した
+ * （Issue #1281のラウンド1で独立reviewerが構成した）。**IDの許可文字集合そのもので閉じる。**
+ * schemaが要求する`^SCN-[A-Z0-9-]+$`に合わせ、前後に`[A-Z0-9-]`が来ないことを要求する。
+ *
+ * **空集合はundefinedを返す。** 呼び出し側が限定なしへ倒すと、bindingを空にするだけで
+ * conformanceが全scenarioを緑と見なす経路ができる。**限定できないなら実行しないのではなく、
+ * 呼び出し側が拒否する。** 判断をここへ埋め込まず、fail-closedの選択を呼び出し側へ残す。
+ *
+ * **正規表現メタ文字をescapeする。** schemaは`^SCN-[A-Z0-9-]+$`を要求するが、
+ * この関数はschema検証前の値も受け取りうるため字面として扱う。
+ */
+export function counterexampleScenarioNamePattern(
+  binding: unknown,
+): string | undefined {
+  if (!isRecord(binding)) return undefined;
+  const documents = Array.isArray(binding.bindings) ? binding.bindings : [];
+  const ids = new Set<string>();
+  for (const document of documents) {
+    if (!isRecord(document)) continue;
+    const scenarios = document.counterexampleScenarios;
+    if (!Array.isArray(scenarios)) continue;
+    for (const id of scenarios)
+      if (typeof id === "string" && id !== "") ids.add(id);
+  }
+  if (ids.size === 0) return undefined;
+  const escaped = [...ids]
+    .sort()
+    .map((id) => id.replaceAll(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`));
+  return (
+    String.raw`(?<![A-Z0-9-])(?:` +
+    escaped.join("|") +
+    String.raw`)(?![A-Z0-9-])`
+  );
+}
+
+/**
+ * conformance検査がcucumberへ渡すargvを組む。**限定できない場合は`undefined`を返す。**
+ *
+ * 正規表現の生成と「限定できないなら実行しない」判断を1つの純関数へ閉じる。
+ * **判断を呼び出し側の分岐だけに置くと単体で反例を当てられない。** 実際、空bindingの
+ * 拒否を`?? ""`で型を満たしたまま消す変異は、呼び出し側にguardがある形では
+ * 全scenario緑のまま生存した（Issue #1281）。
+ *
+ * **これは検査の素通しを防ぐ唯一の壁ではない。** 空patternで全scenarioを走らせても、
+ * `validateRepositoryConformance`が`bindings`をexact 12件と要求するため後段で拒否される。
+ * 本guardの役割はfail-fastと、全suiteを走らせてから落ちる無駄の回避と、
+ * 原因を名指しする診断である。**「これが無いと素通しになる」とは書かない。**
+ */
+export function conformanceTestArgv(
+  reportPath: string,
+  binding: unknown,
+): string[] | undefined {
+  const namePattern = counterexampleScenarioNamePattern(binding);
+  if (namePattern === undefined) return undefined;
+  return [
+    "test",
+    "--",
+    "--format",
+    `json:${reportPath}`,
+    "--name",
+    namePattern,
+  ];
+}
+
 export function distributedPaths(input: {
   changedPaths: readonly string[];
   packageFiles: readonly string[];
