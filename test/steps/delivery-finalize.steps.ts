@@ -407,9 +407,12 @@ When("PR createをapplyする", function () {
           title: "bugfix: 824を是正する",
           canonicalIssue: 824,
         }),
-        trustedPolicy: this.omitTrustedPolicy
-          ? undefined
-          : trustedDeliveryPolicy(),
+        ...(this.omitTrustedPolicy
+          ? { trustedPolicy: undefined }
+          : {
+              trustedPolicy: trustedDeliveryPolicy(),
+              packageFloor: trustedDeliveryPolicy(),
+            }),
       },
       (operation) => {
         this.calls.push(operation);

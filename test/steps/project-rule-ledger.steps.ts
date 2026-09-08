@@ -124,6 +124,7 @@ class ProjectRuleLedgerWorld extends WorkflowWorld {
   retirementTrusted: Policy | undefined = undefined;
   retirementCandidate: Policy | undefined = undefined;
   retirementRaw = "";
+  deliveryObservations: ReturnType<typeof observeDelivery>[] = [];
   retirementCases: Array<ReturnType<typeof compareTrustedPolicy>> = [];
   retirementSet: PolicySet | undefined = undefined;
   retirementFloor: Policy | undefined = undefined;
@@ -658,18 +659,13 @@ Then("migrationで承認済みrule廃止を返し提案撤回時は拒否する"
   );
 });
 
-function assertDeliveryRetirement(
+function deliveryRetirementInput(
   trusted: { policy: Policy; packageFloor: Policy },
   candidate: { policy: Policy },
   sources: ReturnType<typeof ruleFragmentSources>,
   headSha: string,
 ) {
-  const revoked = structuredClone(trusted.policy);
-  delete revoked.projectRuleRetirementProposals;
-  const selfApproved = structuredClone(candidate.policy);
-  selfApproved.projectRuleRetirementProposals =
-    trusted.policy.projectRuleRetirementProposals;
-  const input = {
+  return {
     apply: false,
     issue: 1211,
     head: "feature/retire",
@@ -701,6 +697,20 @@ function assertDeliveryRetirement(
     packageFloor: trusted.packageFloor,
     trustedRuleSources: sources,
   };
+}
+
+function assertDeliveryRetirement(
+  trusted: { policy: Policy; packageFloor: Policy },
+  candidate: { policy: Policy },
+  sources: ReturnType<typeof ruleFragmentSources>,
+  headSha: string,
+) {
+  const input = deliveryRetirementInput(trusted, candidate, sources, headSha);
+  const revoked = structuredClone(trusted.policy);
+  delete revoked.projectRuleRetirementProposals;
+  const selfApproved = structuredClone(candidate.policy);
+  selfApproved.projectRuleRetirementProposals =
+    trusted.policy.projectRuleRetirementProposals;
   const noRemote = () => {
     throw new Error("実remoteを呼んではならない");
   };
@@ -1331,4 +1341,186 @@ Then("合成されている個別検査がすべて宣言されている", funct
     [],
     `LEDGER_COMPOSED_CHECKSへ未登録の個別検査があります: ${unregistered.join(", ")}`,
   );
+});
+
+function deliveryFloorFixture() {
+  const packageFloor = JSON.parse(
+    fs.readFileSync(".agent-skill-chain/policy/default.json", "utf8"),
+  ) as Policy;
+  const rule = ruleFixture() as Rule;
+  const raw = `${JSON.stringify(rule, null, 2)}\n`;
+  const trusted = resolveEffectivePolicy(
+    packageFloor,
+    retirementPolicy([rule]),
+    { trusted: true },
+  );
+  assert.equal(trusted.valid, true);
+  const input = deliveryRetirementInput(
+    { policy: trusted.policy, packageFloor },
+    { policy: retirementPolicy([]) },
+    [{ ruleId: rule.ruleId, fragmentPath: "project/rules/fixture.json", raw }],
+    "a".repeat(40),
+  );
+  return { ...input, authorization: "approved", baseSha: "b".repeat(40) };
+}
+
+const missingFloorError =
+  "trustedPolicyを使うPR作成には有効なpackageFloor（空でないrules）が必要です。trusted loaderのloadEffectiveTrustedPolicySetが返すpackageFloorをcandidateから独立して供給してください";
+
+function observeDelivery(input: unknown) {
+  let calls = 0;
+  let error: unknown;
+  let result: ReturnType<typeof createPullRequest> | undefined;
+  try {
+    // JavaScript callerの型検査を経ない入力をruntimeへ渡す。
+    result = createPullRequest(
+      input as Parameters<typeof createPullRequest>[0],
+      () => {
+        calls += 1;
+        return { url: "https://example.invalid/pr/1284" };
+      },
+    );
+  } catch (caught) {
+    error = caught;
+  }
+  return { calls, error, result };
+}
+
+Given("deliveryの正規floorと未承認削除candidateがある", function () {
+  this.retirementFloor = deliveryFloorFixture().packageFloor;
+});
+
+When("floor省略をpreviewとapplyおよびcandidate有無で実行する", function () {
+  this.boundaryErrors = [];
+  for (const apply of [false, true]) {
+    for (const withCandidate of [false, true]) {
+      const input: Record<string, unknown> = {
+        ...deliveryFloorFixture(),
+        apply,
+      };
+      delete input.packageFloor;
+      if (!withCandidate) delete input.candidatePolicy;
+      const observed = observeDelivery(input);
+      assert.equal(
+        observed.calls,
+        0,
+        `apply=${apply}, candidate=${withCandidate}`,
+      );
+      assert.ok(
+        observed.error instanceof Error,
+        `apply=${apply}, candidate=${withCandidate}`,
+      );
+      this.boundaryErrors.push(observed.error.message);
+    }
+  }
+});
+
+When("不正floorをpreviewとapplyおよびcandidate有無で実行する", function () {
+  const floor = deliveryFloorFixture().packageFloor;
+  const invalidFloors: unknown[] = [
+    undefined,
+    null,
+    {},
+    [],
+    "raw-secret-1284",
+    0,
+    false,
+    { ...floor, rules: [] },
+    { ...floor, rules: null },
+    { ...floor, rules: [{ ...floor.rules[0], owner: "" }] },
+    { ...floor, rules: [{ ...floor.rules[0], ruleId: "raw-secret-1284" }] },
+    { ...floor, merge: null },
+    { ...floor, delivery: {} },
+    { ...floor, schemaVersion: "raw-secret-1284" },
+    { ...floor, budgets: null },
+  ];
+  this.boundaryErrors = [];
+  for (const packageFloor of invalidFloors) {
+    for (const apply of [false, true]) {
+      for (const withCandidate of [false, true]) {
+        const input: Record<string, unknown> = {
+          ...deliveryFloorFixture(),
+          apply,
+          packageFloor,
+        };
+        if (!withCandidate) delete input.candidatePolicy;
+        const observed = observeDelivery(input);
+        assert.equal(observed.calls, 0);
+        assert.ok(observed.error instanceof Error);
+        this.boundaryErrors.push(observed.error.message);
+      }
+    }
+  }
+});
+
+Then("全呼出しがraw入力を含まない固定floor復旧errorを返す", function () {
+  assert.ok(this.boundaryErrors.length >= 4);
+  for (const message of this.boundaryErrors) {
+    assert.equal(message, missingFloorError);
+    assert.doesNotMatch(message, /raw-secret-1284/u);
+  }
+});
+
+When("正規floorでも提案なしとsourceなしの削除を実行する", function () {
+  this.deliveryObservations = [];
+  for (const apply of [false, true]) {
+    const input = { ...deliveryFloorFixture(), apply };
+    const withProposal = structuredClone(input.trustedPolicy);
+    withProposal.projectRuleRetirementProposals = [
+      retirementProposal(input.trustedRuleSources[0]!.raw),
+    ];
+    for (const attempt of [
+      input,
+      { ...input, trustedPolicy: withProposal, trustedRuleSources: undefined },
+    ]) {
+      this.deliveryObservations.push(observeDelivery(attempt));
+    }
+  }
+});
+
+Then("正規floorの無承認削除はprovider呼出し前に拒否される", function () {
+  assert.equal(this.deliveryObservations.length, 4);
+  for (const observed of this.deliveryObservations) {
+    assert.equal(observed.calls, 0);
+    assert.ok(observed.error instanceof Error);
+    assert.match(observed.error.message, /trusted rule|ASC-TRUST/u);
+  }
+});
+
+When(
+  "非trusted previewとtrusted正常入力とpackage rule弱化を実行する",
+  function () {
+    const input = deliveryFloorFixture();
+    const legacy = {
+      ...input,
+      trustedPolicy: undefined,
+      packageFloor: undefined,
+    };
+    const trustedOnly = { ...input, candidatePolicy: undefined };
+    const candidatePolicy = structuredClone(input.trustedPolicy);
+    candidatePolicy.rules.find(
+      (rule) => rule.ruleId === "ASC-TRUST-001",
+    )!.enforcement = "record";
+    this.deliveryObservations = [
+      observeDelivery(legacy),
+      observeDelivery(trustedOnly),
+      observeDelivery({ ...trustedOnly, apply: true }),
+      observeDelivery({ ...input, candidatePolicy }),
+    ];
+  },
+);
+
+Then("互換previewと正規applyを保ちpackage保護を維持する", function () {
+  const [legacy, trustedOnly, applied, rejected] = this.deliveryObservations;
+  for (const preview of [legacy!, trustedOnly!]) {
+    assert.equal(preview.error, undefined);
+    assert.equal(preview.result?.state, "preview");
+    assert.equal(preview.calls, 0);
+  }
+  assert.equal(applied!.error, undefined);
+  assert.equal(applied!.calls, 1);
+  assert.equal(applied!.result?.state, "waiting_for_human_review");
+  assert.equal(rejected!.calls, 0);
+  assert.ok(rejected!.error instanceof Error);
+  assert.match(rejected!.error.message, /ASC-TRUST|floor/u);
 });

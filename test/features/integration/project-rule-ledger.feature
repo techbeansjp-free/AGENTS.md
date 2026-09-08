@@ -44,3 +44,28 @@ Feature: project固有rule台帳のrepository結合契約
     Given project rule廃止の配布契約がある
     When schemaとruntimeと利用案内を照合する
     Then 宣言形式と二段階手順と撤回とrollbackが一致する
+
+  Scenario: SCN-INT-LEDGER-010 trusted deliveryのfloor省略を全経路で拒否する
+    Given deliveryの正規floorと未承認削除candidateがある
+    When floor省略をpreviewとapplyおよびcandidate有無で実行する
+    Then 全呼出しがraw入力を含まない固定floor復旧errorを返す
+
+  Scenario: SCN-INT-LEDGER-011 trusted deliveryの不正floorを全経路で拒否する
+    Given deliveryの正規floorと未承認削除candidateがある
+    When 不正floorをpreviewとapplyおよびcandidate有無で実行する
+    Then 全呼出しがraw入力を含まない固定floor復旧errorを返す
+
+  Scenario: SCN-INT-LEDGER-012 正規floorでも無提案と無sourceの削除を拒否する
+    Given deliveryの正規floorと未承認削除candidateがある
+    When 正規floorでも提案なしとsourceなしの削除を実行する
+    Then 正規floorの無承認削除はprovider呼出し前に拒否される
+
+  Scenario: SCN-INT-LEDGER-013 正規loaderのfloorと先行提案で二段階廃止を受理する
+    Given trusted fragmentとproject rule廃止提案がある
+    When 隔離Gitの固定commitからrule廃止を検証する
+    Then trustedで先行登録した廃止だけが受理されcandidate自己承認は拒否される
+
+  Scenario: SCN-INT-LEDGER-014 非trusted previewとtrusted正常入力とpackage保護を維持する
+    Given deliveryの正規floorと未承認削除candidateがある
+    When 非trusted previewとtrusted正常入力とpackage rule弱化を実行する
+    Then 互換previewと正規applyを保ちpackage保護を維持する
