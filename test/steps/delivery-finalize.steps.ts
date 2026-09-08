@@ -55,6 +55,8 @@ interface DeliveryFinalizeWorld extends WorkflowWorld {
   omitTrustedPolicy: boolean;
   /** provider要求の直前でdispatch claimが消費されたか（Issue #1157）。 */
   dispatchClaimed: boolean;
+  settleStartedAt: number;
+  settleElapsedMs: number;
   /** PR本文の一時領域を観測するための専用tmp（Issue #1157）。 */
   temporaryRoot: string;
   prCreationResult: PullRequestCreationResult;
@@ -958,7 +960,8 @@ type CreateStubClosing =
   | "always-empty"
   | "missing"
   | "wrong-issue"
-  | "mismatch-then-canonical";
+  | "mismatch-then-canonical"
+  | "view-fails";
 
 const CANONICAL_CLOSING = [
   { number: 824, url: "https://github.com/o/r/issues/824" },
@@ -1010,14 +1013,17 @@ function prepareGhCreateStub(
       }),
     ],
     "mismatch-then-canonical": [view({ title: "別のtitle" }), view()],
+    /** 読み戻し自体が失敗する。**未確定ではなく異常であり待たない。** */
+    "view-fails": [],
   };
   const payloads = JSON.stringify(
     sequence[closing].map((value) => JSON.stringify(value)),
   );
+  const viewFails = closing === "view-fails";
   const counter = path.join(directory, "view-count");
   fs.writeFileSync(
     stub,
-    `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(world.ghLog)},args.join(' ')+'\\n');if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:'o/r',viewerPermission:'WRITE'}));if(args[0]==='api')process.stdout.write((args[1].includes('feature%2Fx')?${JSON.stringify(observed)}:${JSON.stringify(base)})+'\\n');if(args[0]==='pr'&&args[1]==='create')process.stdout.write('https://github.com/o/r/pull/9\\n');if(args[0]==='pr'&&args[1]==='view'){const p=${payloads};let n=0;try{n=Number(fs.readFileSync(${JSON.stringify(counter)},'utf8'))}catch{}fs.writeFileSync(${JSON.stringify(counter)},String(n+1));process.stdout.write(p[Math.min(n,p.length-1)]);}\n`,
+    `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(world.ghLog)},args.join(' ')+'\\n');if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:'o/r',viewerPermission:'WRITE'}));if(args[0]==='api')process.stdout.write((args[1].includes('feature%2Fx')?${JSON.stringify(observed)}:${JSON.stringify(base)})+'\\n');if(args[0]==='pr'&&args[1]==='create')process.stdout.write('https://github.com/o/r/pull/9\\n');if(args[0]==='pr'&&args[1]==='view'){${viewFails ? "process.stderr.write('gh: could not read PR\\n');process.exit(1);" : `const p=${payloads};let n=0;try{n=Number(fs.readFileSync(${JSON.stringify(counter)},'utf8'))}catch{}fs.writeFileSync(${JSON.stringify(counter)},String(n+1));process.stdout.write(p[Math.min(n,p.length-1)]);`}}\n`,
   );
   fs.chmodSync(stub, 0o755);
   world.stubPath = `${directory}${path.delimiter}${process.env.PATH ?? ""}`;
@@ -1049,6 +1055,9 @@ Given("読み戻しがclosing索引を欠く観測を返すstubがある", funct
 });
 Given("読み戻しが対象外Issueをcloseする観測を返すstubがある", function () {
   prepareGhCreateStub(this, true, true, "wrong-issue");
+});
+Given("読み戻し自体が失敗するstubがある", function () {
+  prepareGhCreateStub(this, true, true, "view-fails");
 });
 
 /**
@@ -1214,6 +1223,124 @@ function ghOperationCounts(log: string): Map<string, number> {
   }
   return counts;
 }
+
+/**
+ * **待機を注入した上限で実行し、経過時間を測る**（Issue #1271）。
+ *
+ * 待機そのものは戻り値へ現れない。**待たない変異は、待機0の上限を注入した
+ * scenarioだけでは恒等変換になり生存する。** 下限だけを測って非決定性を避ける。
+ */
+When(
+  "待機 {int} ミリ秒のsettle上限でPR create adapterを実行する",
+  function (delay: number) {
+    const original = process.env.PATH;
+    process.env.PATH = this.stubPath;
+    this.dispatchClaimed = false;
+    /**
+     * **単調時計で経過だけを測る**（Issue #1271）。
+     *
+     * `Date.now()`はfixtureへ実時刻が漏れるため禁じられている。ここで必要なのは
+     * 時刻ではなく経過の下限であり、`process.hrtime.bigint()`は壁時計を返さない。
+     */
+    this.settleStartedAt = Number(process.hrtime.bigint() / 1000000n);
+    try {
+      this.prCreationResult = github(
+        "pr.create",
+        {
+          repository: "o/r",
+          issue: 824,
+          head: "feature/x",
+          headSha: "a".repeat(40),
+          base: "main",
+          baseSha: "c".repeat(40),
+          title: "bugfix: 対象を是正する",
+          body: "Relates to #824",
+          /**
+           * **経過時間の上限は十分大きく取る。** ここで測るのは待機の実在で
+           * あって上限ではない。subprocess起動の実費が上限を越えると、
+           * 待機の有無と無関係にloopが止まり測定にならない。
+           */
+          readBackSettle: {
+            maxAttempts: 100,
+            delaysMs: [delay],
+            maxElapsedMs: 60000,
+          },
+          onDispatch: () => {
+            this.dispatchClaimed = true;
+            return true;
+          },
+        },
+        process.cwd(),
+      );
+    } catch (error) {
+      this.error = error;
+    } finally {
+      this.settleElapsedMs =
+        Number(process.hrtime.bigint() / 1000000n) - this.settleStartedAt;
+      process.env.PATH = original;
+    }
+  },
+);
+
+/**
+ * **経過時間の上限だけで止まることを測る**（Issue #1271）。
+ *
+ * 回数上限を事実上無効な大きさにし、経過時間の上限だけが停止条件になる形を作る。
+ * **片方の上限を落とす変異は、両方が効いている条件では検出できない。**
+ */
+When(
+  "経過時間の上限だけで止まるsettleでPR create adapterを実行する",
+  function () {
+    const original = process.env.PATH;
+    process.env.PATH = this.stubPath;
+    this.dispatchClaimed = false;
+    try {
+      this.prCreationResult = github(
+        "pr.create",
+        {
+          repository: "o/r",
+          issue: 824,
+          head: "feature/x",
+          headSha: "a".repeat(40),
+          base: "main",
+          baseSha: "c".repeat(40),
+          title: "bugfix: 対象を是正する",
+          body: "Relates to #824",
+          readBackSettle: {
+            maxAttempts: 100,
+            delaysMs: [10],
+            maxElapsedMs: 1000,
+          },
+          onDispatch: () => {
+            this.dispatchClaimed = true;
+            return true;
+          },
+        },
+        process.cwd(),
+      );
+    } catch (error) {
+      this.error = error;
+    } finally {
+      process.env.PATH = original;
+    }
+  },
+);
+
+Then("経過時間は {int} ミリ秒以上である", function (least: number) {
+  assert.ok(
+    this.settleElapsedMs >= least,
+    `待機していません: ${this.settleElapsedMs}ms < ${least}ms`,
+  );
+});
+
+Then(
+  "読み戻し回数は回数上限より少ない {int} 回以下である",
+  function (most: number) {
+    const views = ghOperationCounts(this.ghLog).get("pr view") ?? 0;
+    assert.ok(views <= most, `経過時間の上限で停止していません: ${views}回`);
+    assert.ok(views >= 2, `反復していません: ${views}回`);
+  },
+);
 
 Then(
   "読み戻し回数は {int} 回でcanonical Issueをcloseする観測が返る",

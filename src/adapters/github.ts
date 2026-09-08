@@ -966,7 +966,12 @@ export function github(
      * （`01_開発ワークフロー.md`のclaim消費規則）。
      */
     const settle = input.readBackSettle ?? DEFAULT_READ_BACK_SETTLE;
-    const startedAt = Date.now();
+    /**
+     * **単調時計を使う**（Issue #1271）。`Date.now()`はNTP補正で後退しうる。
+     * 後退すると経過の上限が発火せず、回数上限だけが停止条件になる。
+     * **上限を2つ置く意味が半分失われる。**
+     */
+    const startedAt = process.hrtime.bigint();
     let observed: PullRequestInspection;
     let attempt = 0;
     for (;;) {
@@ -1013,7 +1018,10 @@ export function github(
       if (attempt >= settle.maxAttempts) break;
       const delay =
         settle.delaysMs[Math.min(attempt - 1, settle.delaysMs.length - 1)] ?? 0;
-      if (Date.now() - startedAt + delay > settle.maxElapsedMs) break;
+      const elapsedMs = Number(
+        (process.hrtime.bigint() - startedAt) / 1000000n,
+      );
+      if (elapsedMs + delay > settle.maxElapsedMs) break;
       waitSync(delay);
     }
     return { state: "created", url, observation: observed };
