@@ -69,7 +69,7 @@
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
-| `src/domain/ci-delivery.ts` | M | package owner | domain | `reconcileFixedMergeRun`と3つの型を追加し、`headShaRunCount`で診断を分ける。**`inspectCiDelivery`のfilter式はbyte単位で不変** | pass。純関数であり新しい依存を追加しない | REQ-GH-001 / AC-01〜AC-07 / SCN-UNIT-CIDEL-008〜010 | merge前の判定は不変。前進revertで復旧 | pass |
+| `src/domain/ci-delivery.ts` | M | package owner | domain | `reconcileFixedMergeRun`と3つの型を追加し、`headShaRunCount`で診断を分ける。**`inspectCiDelivery`のfilter式はbyte単位で不変** | pass。`import`行を1件も追加しておらず、`architecture:check`が違反0件。SCN-UNIT-CIDEL-008・010が引数だけから戻り値を決めることを検査する | REQ-GH-001 / AC-01〜AC-07 / SCN-UNIT-CIDEL-008〜010 | merge前の判定は不変。前進revertで復旧 | pass |
 | `src/adapters/github.ts` | M | package owner | adapter | `pr.ci-run`を追加。固定run IDで1件だけ読み、identityを検証する。**`pr.ci-runs`の一覧観測とは別の型である** | pass。`verifyRepository`を先に呼び、既存の観測経路を変更しない | REQ-GH-001 / AC-02・AC-06 / SCN-INT-GITHUB-022〜025 | 404も不正応答も例外へ倒す。`runId`は数字だけを受理する | pass |
 | `src/cli.ts` | M | package owner | cli | merged分岐を一覧再検索から固定ID直読みへ差し替える | pass。domainとadapterへの依存方向は不変 | REQ-GH-001 / AC-01 / SCN-E2E-WFSTEP-044・045 | 不一致は例外にしてStep 11を記録しない | pass |
 | `test/features/unit/ci-delivery.feature` | M | package owner | evidence | SCN-UNIT-CIDEL-008〜010の追加 | pass | AC-03〜AC-05・AC-07 | 追加のみ。既存scenarioを削除していない | pass |
@@ -82,8 +82,9 @@
 | `docs/specs/10_セキュリティ/01_信頼境界.md` | M | package owner | spec | 「偽のmerged終端」行へ固定ID再読を追記 | pass | REQ-GH-001 | 既存行の意味を変えていない | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | package owner | spec | 新7 SCNの追跡登録 | pass。`trace:check`のorphanが0件 | REQ-GH-001 | 既存行は不変 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | package owner | spec | 変更理由と判断の記録1行 | pass。9列のheader区切り直後へ挿入 | REQ-GH-001 | 既存行は不変 | pass |
+| `docs/reviews/179_課題1280merge後CI照合の固定run直読みレビュー.md` | A | package owner | evidence | 本artifact。H_implの後にこの1 fileだけをcommitしてH_finalとする | pass。自身のcommit SHAを書いていない | REQ-GH-001 / AC-GH-001 | 追加のみ。実装へ影響しない | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: **満たす。** `git diff --name-only`の16 pathのうち、生成物である`dist/`配下3件を除いた13 pathと表の13行が一致する。
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: **満たす。** `git diff --name-only 98a4bc2b fd5e8588`の17 pathのうち、生成物である`dist/`配下3件を除いた14 pathと表の14行が一致する。
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: **満たす。**
 
 ## 2. 受け入れ条件の確認
@@ -234,7 +235,20 @@
 
 ## 8. 配布物影響
 
-`dist/src/domain/ci-delivery.js`、`dist/src/adapters/github.js`、`dist/src/cli.js`の3 pathが変わる。`package:check`は合格し、配布363件に開発専用資産は含まれない。**利用projectから見た変化は、merge後のCI照合が固定run IDの直読みになることと、CI配送診断が「run未生成」と「未関連付け」を区別することの2点である。** merge前の判定は変わらない。
+判断: 配布物を更新した
+
+根拠: 配布境界へ入る`src/domain/ci-delivery.ts`、`src/adapters/github.ts`、`src/cli.ts`の3 pathを変更したため、対応する`dist/src/domain/ci-delivery.js`、`dist/src/adapters/github.js`、`dist/src/cli.js`を同じcommitで再生成した。
+
+| 配布path | 変更内容 |
+|---|---|
+| `src/domain/ci-delivery.ts` | `reconcileFixedMergeRun`と3つの型を追加。`CiDeliveryInspection`へ`headShaRunCount`を追加 |
+| `src/adapters/github.ts` | `pr.ci-run`操作と`FixedCiRunObservation`型を追加 |
+| `src/cli.ts` | `reconcileFixedMergeCiRun`を追加。`observeMergeReviewEvidence`へ`fixedCiRunId`を追加 |
+| `dist/src/domain/ci-delivery.js` | 上記のbuild結果 |
+| `dist/src/adapters/github.js` | 上記のbuild結果 |
+| `dist/src/cli.js` | 上記のbuild結果 |
+
+`package:check`は合格し、配布363件に開発専用資産は含まれない。**利用projectから見た変化は、merge後のCI照合が固定run IDの直読みになることと、CI配送診断が「run未生成」と「run有りだが未関連付け」を区別することの2点である。** merge前の判定は変わらない。
 
 ## 9. 独立reviewの成立
 
