@@ -5,6 +5,41 @@ export const DEFAULT_FINALIZE_IGNORED_PATH_ALLOWLIST = [
 ];
 const CONTROL = /\p{C}/u;
 const PATTERN_META = /[\\*?[\]{}()|^$+]/u;
+/**
+ * blocking資産のpathから、その領域を所有するcommandの案内を返す。
+ *
+ * **入力は`validArtifactPath`を通過したpathだけである。** 空segment、`.`、`..`、絶対path、
+ * `\\`、制御文字、非NFCは呼び出し前に不正観測として分離済みなので、`.agent-skill-chain/tmp/issues/`
+ * のような末尾slash形や`tmp/issues/../runtime/x`はここへ届かない。**この関数は正規化しない。**
+ *
+ * **大小文字を畳み込まない。** Gitのpathはcase-sensitiveであり、畳み込むと
+ * `.AGENT-SKILL-CHAIN/TMP/ISSUES/x`のような別pathを所有領域と誤認する。
+ *
+ * **報告だけを変え、判定を1つも変えない。** 案内はallowlist判定の**後**に生成し、
+ * `allowedIgnoredArtifacts`へ触れない。REQ-LC-011の「報告するがhealthyを変えない」と
+ * 同じ形である。
+ *
+ * **`STAGING_LIFECYCLE_AREAS`を流用しない。** 同配列は「真なら保護する」ライフサイクル
+ * 分類の正本であり`.agent-skill-chain/tmp`全体を含む。案内が必要なのは`issue staging`が
+ * 所有する`tmp/issues/`配下だけであり、分類の正本を案内へ流用すると、将来その配列へ
+ * 領域を追加したとき誤った案内が出る。**分類と案内を分離する**（Issue #1290）。
+ *
+ * **exportしない。** 他所から流用され、分類の正本が削除許可の正本へ誤用される事故は
+ * Issue #1248で検討され棄却された。同型の誤用の余地を作らない。
+ *
+ * 接頭辞は末尾`/`を含む。`.agent-skill-chain/tmp/issues`そのものと
+ * `.agent-skill-chain/tmp/issues-other/x`は所有領域の**配下ではない**ので案内を出さない。
+ */
+const OWNING_COMMAND_HINTS = Object.freeze([
+    Object.freeze({
+        prefix: ".agent-skill-chain/tmp/issues/",
+        hint: "この領域はissue stagingが所有します。まず issue staging --root=<worktree> を実行し、表示されたstate=deletion-readyとhashを確認してから issue staging --root=<worktree> --apply --approved-hash=<hash> を実行してください。その後にこのcommandを再実行します",
+    }),
+]);
+function owningCommandHint(artifact) {
+    return OWNING_COMMAND_HINTS.find((entry) => artifact.startsWith(entry.prefix))
+        ?.hint;
+}
 export function isSafeFinalizeIgnoredPathPrefix(value) {
     if (typeof value !== "string" ||
         value === "" ||
@@ -92,7 +127,14 @@ export function assessWorktreeRemovalSafety(observation) {
                 allowedIgnoredArtifacts.push(artifact);
             else {
                 blockingIgnoredArtifacts.push(artifact);
-                reasons.push(`allowlist外の無視対象資産です: ${artifact}`);
+                /**
+                 * **既存の理由は先頭から変えない。** 案内は末尾へ足すだけである。
+                 * 案内の有無は`blockingIgnoredArtifacts`にも`safe`にも影響しない。
+                 */
+                const hint = owningCommandHint(artifact);
+                reasons.push(hint === undefined
+                    ? `allowlist外の無視対象資産です: ${artifact}`
+                    : `allowlist外の無視対象資産です: ${artifact}。${hint}`);
             }
         }
     }

@@ -7,6 +7,7 @@ import {
 } from "../../src/domain/finalize.js";
 import {
   DEFAULT_FINALIZE_IGNORED_PATH_ALLOWLIST,
+  assessWorktreeRemovalSafety,
   isSafeFinalizeIgnoredPathPrefix,
   resolveFinalizeIgnoredPathAllowlist,
 } from "../../src/domain/worktree-removal-safety.js";
@@ -28,6 +29,8 @@ interface FinalizeIgnoredUnitWorld extends WorkflowWorld {
   schemaAllowsPattern: boolean;
   schemaPatterns: string[];
   finalizeIgnoredPathInput: string;
+  hintAssessment: ReturnType<typeof assessWorktreeRemovalSafety>;
+  hintAssessments: ReturnType<typeof assessWorktreeRemovalSafety>[];
   schemaResults: boolean[];
   runtimeResult: boolean;
   cleanupPlan: ReturnType<typeof planWorktreeCleanup>;
@@ -634,5 +637,137 @@ Then("拒否理由は一時資産があるか状態不明であることを示�
     this.cleanupPlan.reasons.some((reason) =>
       reason.includes("一時資産があるか状態が不明"),
     ),
+  );
+});
+
+/**
+ * **接頭辞の延長とdirectory自身を同じ入力へ並べる。** #1281で語境界による延長の
+ * 巻き込みを踏んでいる。案内でも同じclassの反例を先に置く。
+ */
+const HINT_OBSERVATION_BASE = {
+  repositoryRoot: "/repo",
+  worktreePath: "/repo/.worktrees/20260825_120000-883-hint",
+  worktreeRoot: "/repo/.worktrees",
+  trackedChanges: false,
+  untracked: [],
+  ignoredPathAllowlist: ["node_modules/", "dist/"],
+  stashes: [],
+  pushed: true,
+  remoteBranch: true,
+  merged: true,
+  recoveryReachable: true,
+  reachableFromDefaultBranch: true,
+  unpushedCommits: 0,
+};
+const HINT_STAGED_ARTIFACT =
+  ".agent-skill-chain/tmp/issues/20260908_x/00_要求定義.md";
+const HINT_NON_OWNED_ARTIFACTS = [
+  ".agent-skill-chain/tmp/issues",
+  ".agent-skill-chain/tmp/issues-other/x",
+  ".agent-skill-chain/tmp/1290/scratch.md",
+  /**
+   * **大小文字を畳み込まない。** Gitのpathはcase-sensitiveである。
+   * `toLowerCase()`を挟む変異は、この反例が無いと3 SCN全緑のまま生存する
+   * （Issue #1290のラウンド1で独立reviewerが構成した）。
+   */
+  ".AGENT-SKILL-CHAIN/TMP/ISSUES/x",
+];
+/**
+ * **`validArtifactPath`が案内より前で弾く入力。** 案内側で改めて正規化しないことを、
+ * 合成経路で確かめる。ここが素通しになると`tmp/issues/../runtime/x`へ誤案内が出る。
+ */
+const HINT_REJECTED_ARTIFACTS = [
+  ".agent-skill-chain/tmp/issues/",
+  ".agent-skill-chain/tmp/issues/../runtime/x",
+  ".agent-skill-chain/tmp/issues//x",
+  "./.agent-skill-chain/tmp/issues/x",
+];
+Given(
+  "一時staging領域と所有commandのない領域のblocking資産がある",
+  function () {
+    this.hintAssessment = assessWorktreeRemovalSafety({
+      ...HINT_OBSERVATION_BASE,
+      ignoredArtifacts: [HINT_STAGED_ARTIFACT, ...HINT_NON_OWNED_ARTIFACTS],
+    });
+  },
+);
+When("案内対象を含む観測の削除安全性を判定する", function () {
+  assert.ok(this.hintAssessment, "判定結果がありません");
+});
+Then("一時staging領域の理由にだけissue stagingの案内が含まれる", function () {
+  const hinted = this.hintAssessment.reasons.filter((reason: string) =>
+    reason.includes("issue staging"),
+  );
+  assert.equal(hinted.length, 1, `案内が1件ではありません: ${hinted.length}`);
+  assert.ok(
+    hinted[0]?.includes(HINT_STAGED_ARTIFACT),
+    `案内が別のpathへ付いています: ${hinted[0] ?? ""}`,
+  );
+  /** **既存の理由は先頭から変わらない。** 案内は末尾へ足すだけである。 */
+  assert.ok(
+    hinted[0]?.startsWith(
+      `allowlist外の無視対象資産です: ${HINT_STAGED_ARTIFACT}。`,
+    ),
+    `既存の理由文字列が先頭から変わっています: ${hinted[0] ?? ""}`,
+  );
+});
+Then(
+  "接頭辞の延長とdirectory自身の理由は案内なしの既存文字列と一致する",
+  function () {
+    for (const artifact of HINT_NON_OWNED_ARTIFACTS)
+      assert.ok(
+        this.hintAssessment.reasons.includes(
+          `allowlist外の無視対象資産です: ${artifact}`,
+        ),
+        `案内なしの既存文字列と一致しません: ${artifact}`,
+      );
+    /**
+     * **正規化を要する入力は案内へ届かない。** `validArtifactPath`が先に不正観測へ
+     * 分離する。案内側で正規化を足すとこの前提が崩れる。
+     */
+    const rejected = assessWorktreeRemovalSafety({
+      ...HINT_OBSERVATION_BASE,
+      ignoredArtifacts: HINT_REJECTED_ARTIFACTS,
+    });
+    assert.deepEqual(rejected.blockingIgnoredArtifacts, []);
+    for (const reason of rejected.reasons)
+      assert.equal(
+        reason.includes("issue staging"),
+        false,
+        `正規化を要する入力へ案内が出ました: ${reason}`,
+      );
+  },
+);
+Given("案内対象を含む観測と含まない観測が他の条件で同一である", function () {
+  this.hintAssessments = [
+    [HINT_STAGED_ARTIFACT, ...HINT_NON_OWNED_ARTIFACTS],
+    HINT_NON_OWNED_ARTIFACTS,
+  ].map((ignoredArtifacts) =>
+    assessWorktreeRemovalSafety({
+      ...HINT_OBSERVATION_BASE,
+      ignoredArtifacts,
+    }),
+  );
+});
+When("双方のworktree削除の安全性を判定する", function () {
+  assert.equal(this.hintAssessments.length, 2);
+});
+Then("safeと無視対象資産の分類は双方で一致する", function () {
+  const [withHint, withoutHint] = this.hintAssessments;
+  assert.ok(withHint && withoutHint, "判定結果が2件ありません");
+  /**
+   * **案内はallowlistへの追加として働かない。** 案内対象は必ずblocking側にあり、
+   * allowed側へは決して入らない。これが破れると削除可能範囲が無言で広がる。
+   */
+  assert.equal(withHint.safe, withoutHint.safe);
+  assert.deepEqual(withHint.allowedIgnoredArtifacts, []);
+  assert.deepEqual(withoutHint.allowedIgnoredArtifacts, []);
+  assert.deepEqual(withHint.blockingIgnoredArtifacts, [
+    HINT_STAGED_ARTIFACT,
+    ...HINT_NON_OWNED_ARTIFACTS,
+  ]);
+  assert.deepEqual(
+    withoutHint.blockingIgnoredArtifacts,
+    HINT_NON_OWNED_ARTIFACTS,
   );
 });

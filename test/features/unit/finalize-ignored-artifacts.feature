@@ -170,3 +170,18 @@ Feature: worktree finalizeのignore対象を安全に判定する
     Given untrackedが空でconsumerAssetsにmemoがあるcleanup入力がある
     When worktree cleanupを計画する
     Then worktree cleanupは拒否される
+
+  Scenario: SCN-UNIT-FINALIGN-035 一時staging領域のblocking資産へ所有commandの案内を添える
+    Given 一時staging領域と所有commandのない領域のblocking資産がある
+    When 案内対象を含む観測の削除安全性を判定する
+    Then 一時staging領域の理由にだけissue stagingの案内が含まれる
+
+  Scenario: SCN-UNIT-FINALIGN-036 所有領域の接頭辞の延長とdirectory自身へ案内を出さない
+    Given 一時staging領域と所有commandのない領域のblocking資産がある
+    When 案内対象を含む観測の削除安全性を判定する
+    Then 接頭辞の延長とdirectory自身の理由は案内なしの既存文字列と一致する
+
+  Scenario: SCN-UNIT-FINALIGN-037 案内の有無が安全判定と資産分類を変えない
+    Given 案内対象を含む観測と含まない観測が他の条件で同一である
+    When 双方のworktree削除の安全性を判定する
+    Then safeと無視対象資産の分類は双方で一致する
