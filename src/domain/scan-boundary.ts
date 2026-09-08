@@ -16,6 +16,8 @@
  * **この層は除外規則を所有しない。** 述語は引数として受け取り、`.gitignore`も読まない。
  */
 
+import path from "node:path";
+
 /** 観測が不完全になった理由。有限列挙とし、設定fileへ出さない。 */
 export type ScanBoundaryIncompleteCode =
   | "unknown-predicate"
@@ -89,10 +91,21 @@ export interface ScanBoundaryComparison {
  * **絶対pathの判定を別に置かない。** 先頭が`/`なら最初のsegmentが空になり、
  * 下のsegment検査が必ず拒否する。別の分岐を置くと、消しても検出できない
  * 等価な分岐が残る（変異試験で実測）。
+ *
+ * **正規化するのは実行OS本来の区切りだけである**（Issue #1276）。
+ *
+ * backslashを無条件に区切りとして解釈すると、POSIXで合法なfile名を判定不能へ落とす。
+ * `.agent-skill-chain/tmp/issues/..\draft.md`はPOSIXで`tmp/issues/`配下に実在しうる
+ * 1 fileであり、**述語ごとの判定差こそが観測すべき対象**だが、どの述語も実行されない。
+ * **観測層が独自の入力契約を持つと、述語ごとの契約の差を観測できなくなる**（Issue #1273）。
+ *
+ * **単純に正規化を外さない。** `path.sep`が`\`となるWindowsでは、`..\x`が
+ * 本物の親参照である。実行OSの区切りへ限定すれば、POSIXでは解釈せず、
+ * Windowsでは従来どおり拒否する。
  */
 function isObservableRelativePath(candidate: string): boolean {
   if (typeof candidate !== "string" || candidate === "") return false;
-  const normalized = candidate.replaceAll("\\", "/");
+  const normalized = candidate.replaceAll(path.sep, "/");
   if (/^[A-Za-z]:/u.test(normalized)) return false;
   return !normalized
     .split("/")

@@ -7,9 +7,14 @@ import {
   observeScanBoundary,
   type ExclusionPredicateSource,
   type ScanBoundaryComparison,
+  type ScanBoundaryIncompleteCode,
   type ScanBoundaryObservation,
 } from "../../src/domain/scan-boundary.js";
-import { isIssueStagingPath } from "../../src/domain/staging.js";
+import {
+  isIssueStagingPath,
+  isStagingLifecyclePath,
+  isStagingLifecycleScanPath,
+} from "../../src/domain/staging.js";
 import { expandIgnoredEntries } from "../../scripts/report_scan_boundary.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
@@ -45,6 +50,48 @@ const STAGING_PREDICATE: ExclusionPredicateSource = {
   excludes: isIssueStagingPath,
 };
 
+/**
+ * **同じ入力に対する判定差を観測するための2述語**（Issue #1276）。
+ *
+ * `isIssueStagingPath`と合わせて3述語を並べると、`..\\draft.md`について
+ * `false / true / true`という差が観測される。**是正前はこの差が1つも測れなかった。**
+ */
+const LIFECYCLE_PREDICATE: ExclusionPredicateSource = {
+  id: "staging-lifecycle",
+  owner: "check_trace.ts",
+  appliesTo: "追跡混入検査の走査範囲のみ",
+  reasonCode: "staging-lifecycle",
+  reason: "一時ステージング領域を追跡混入検査の走査範囲から除く",
+  excludes: isStagingLifecyclePath,
+};
+
+const LIFECYCLE_SCAN_PREDICATE: ExclusionPredicateSource = {
+  id: "staging-lifecycle-scan",
+  owner: "check_trace.ts",
+  appliesTo: "SCN配置検査の走査範囲のみ",
+  reasonCode: "staging-lifecycle-scan",
+  reason: "一時ステージング領域をSCN配置検査の走査範囲から除く",
+  excludes: isStagingLifecycleScanPath,
+};
+
+/**
+ * **理由codeの列挙を製品の型と結ぶ**（Issue #1276）。
+ *
+ * `Record<ScanBoundaryIncompleteCode, true>`は、unionへcodeを足すと欄が欠けて
+ * `npm run typecheck`が落ち、削ると余分な欄として落ちる。**testの中へ書き写した
+ * 配列だけでは、unionを増やす変更を1件も検出できない。**
+ */
+const REGISTERED_INCOMPLETE_CODES: Readonly<
+  Record<ScanBoundaryIncompleteCode, true>
+> = Object.freeze({
+  "unknown-predicate": true,
+  "duplicate-predicate": true,
+  "missing-predicate": true,
+  "unresolvable-path": true,
+  "predicate-unavailable": true,
+  "scan-failed": true,
+});
+
 const UNAVAILABLE_PREDICATE: ExclusionPredicateSource = {
   id: "source-quality-directories",
   owner: "source:check",
@@ -65,6 +112,9 @@ class ScanBoundaryWorld extends WorkflowWorld {
   fixtureRoot = "";
   reportStatus = 0;
   reportOutput = "";
+  /** 述語が受け取った引数。**入力そのものが渡ることを観測する**（Issue #1276）。 */
+  predicateArguments: string[] = [];
+  observableTarget = "";
 }
 
 const { Given, When, Then } = stepDefinitions<ScanBoundaryWorld>();
@@ -381,6 +431,248 @@ Then(
           entry.predicate === "source-quality-directories",
       ),
       JSON.stringify(parsed.incomplete),
+    );
+  },
+);
+
+/**
+ * **実行OSの区切りを隠さない**（Issue #1276）。
+ *
+ * `isObservableRelativePath`は`path.sep`だけを正規化する。判定はOSに依存するため、
+ * **どのOSで測ったかをscenarioの側で先に固定する。** CIは`ubuntu-latest`であり
+ * `path.sep`は`/`である。Windowsでは`..\x`が本物の親参照になり結果が変わる。
+ */
+Given("実行OSの区切りが {string} である", function (separator: string) {
+  assert.equal(
+    path.sep,
+    separator,
+    `本scenarioは path.sep が ${separator} の環境を前提とする。実測値は ${path.sep}`,
+  );
+});
+
+/**
+ * **POSIXで実在しうる合法なfile名を与える**（Issue #1276）。
+ *
+ * `..\draft.md`はPOSIXでは1つの正常なsegmentであり、`tmp/issues/`配下のfileである。
+ * backslashを無条件に区切りとして解釈すると、このpathはどの述語へも届かない。
+ */
+Given(
+  "backslashを含む合法なfile名の観測入力がある",
+  function (this: ScanBoundaryWorld) {
+    this.observableTarget =
+      ".agent-skill-chain/tmp/issues/20260101_000000_例/..\\draft.md";
+    /** **1述語では判定差を観測できない**（Issue #1276）。3述語を並べる。 */
+    this.predicates = [
+      "issue-staging",
+      "staging-lifecycle",
+      "staging-lifecycle-scan",
+    ];
+    this.sources = [
+      STAGING_PREDICATE,
+      LIFECYCLE_PREDICATE,
+      LIFECYCLE_SCAN_PREDICATE,
+    ];
+    this.paths = [this.observableTarget];
+  },
+);
+
+Given(
+  "親参照と現在参照と絶対pathとdrive修飾と空文字の観測入力がある",
+  function (this: ScanBoundaryWorld) {
+    this.predicates = ["issue-staging"];
+    this.sources = [STAGING_PREDICATE];
+    /**
+     * **実行OSの区切りで解釈したときに不正segmentを生じる入力だけを並べる。**
+     *
+     * **1分類につき1件では、位置や大小文字で条件を狭める変異が生存する**
+     * （Issue #1276の独立reviewで実測）。親参照・現在参照・空segmentは
+     * 先頭・中間・末尾を、drive修飾は大文字と小文字を並べる。
+     */
+    this.paths = [
+      "../x",
+      "a/../b",
+      "a/..",
+      "..",
+      "./x",
+      "a/./b",
+      "a/.",
+      ".",
+      "/absolute.md",
+      "a//b",
+      "a/",
+      "C:/outside.md",
+      "C:\\outside.md",
+      "c:/outside.md",
+      "",
+    ];
+  },
+);
+
+Given(
+  "複数の理由codeが同時に生じる観測入力がある",
+  function (this: ScanBoundaryWorld) {
+    /**
+     * **合法な入力だけでは`incomplete`が空になり、走査が0回で終わる**
+     * （Issue #1276の独立reviewで実測）。**空振りするassertionにしない。**
+     */
+    this.predicates = [
+      "issue-staging",
+      "source-quality-directories",
+      "登録されていない述語",
+    ];
+    this.sources = [
+      STAGING_PREDICATE,
+      STAGING_PREDICATE,
+      UNAVAILABLE_PREDICATE,
+      { ...STAGING_PREDICATE, id: "期待一覧に無い述語" },
+    ];
+    this.paths = [
+      "a/../b",
+      ".agent-skill-chain/tmp/issues/20260101_000000_例/00_要求定義.md",
+    ];
+  },
+);
+
+Given(
+  "引数を記録する述語とbackslashを含むpathがある",
+  function (this: ScanBoundaryWorld) {
+    this.predicateArguments = [];
+    const recorded = this.predicateArguments;
+    this.predicates = ["recording"];
+    this.sources = [
+      {
+        id: "recording",
+        owner: "trace:check",
+        appliesTo: "SCN配置検査の走査範囲のみ",
+        reasonCode: "recording",
+        reason: "述語が受け取った引数を記録する",
+        excludes: (candidate: string) => {
+          recorded.push(candidate);
+          return true;
+        },
+      },
+    ];
+    /**
+     * **1入力では「入力そのものを渡す」を強制できない**
+     * （Issue #1276の独立reviewで実測）。**代表的な書き換えで実際に
+     * 変化する入力を並べる。** 小文字化、trim、Unicode正規化のいずれも
+     * この配列のどれかを変える。
+     */
+    this.paths = [
+      ".agent-skill-chain/tmp/issues/20260101_000000_例/..\\draft.md",
+      "src/Domain/Staging.TS",
+      " 前後に空白のあるfile名.md ",
+      "docs/e\u0301tude.md",
+    ];
+  },
+);
+
+Then(
+  "そのpathは観測対象に入り述語の判定結果へ現れる",
+  function (this: ScanBoundaryWorld) {
+    const observation = this.observation!;
+    assert.deepEqual(
+      [...observation.observedPaths],
+      [this.observableTarget],
+      "合法なfile名が観測対象へ入っていません",
+    );
+    /**
+     * **述語ごとの判定差こそが観測すべき対象である**（Issue #1276）。
+     *
+     * POSIXでは`..\\draft.md`が1つの正常なsegmentになるため、`.agent-skill-chain/
+     * tmp/issues/<slug>/`直下の成果物名を要求する`isIssueStagingPath`だけが偽を返し、
+     * 領域接頭辞だけを見る他の2述語は真を返す。**是正前はこの差が1件も測れず、
+     * 3述語のいずれも実行されないまま`incomplete`へ落ちていた。**
+     */
+    assert.deepEqual(
+      observation.predicates.map((entry) => [
+        entry.predicate,
+        entry.excluded.map((item) => item.path),
+      ]),
+      [
+        ["issue-staging", []],
+        ["staging-lifecycle", [this.observableTarget]],
+        ["staging-lifecycle-scan", [this.observableTarget]],
+      ],
+      "述語ごとの判定結果が実測と違います",
+    );
+    assert.deepEqual(
+      [...observation.uncovered],
+      [],
+      "いずれかの述語に掛かった生成物がuncoveredへ残っています",
+    );
+  },
+);
+
+Then("判定不能なpathは1件も報告されない", function (this: ScanBoundaryWorld) {
+  const unresolvable = this.observation!.incomplete.filter(
+    (item) => item.code === "unresolvable-path",
+  );
+  assert.deepEqual(
+    unresolvable.map((item) => item.path),
+    [],
+    "判定不能として落ちたpathがあります",
+  );
+});
+
+Then(
+  "すべて判定不能として報告され観測対象に入らない",
+  function (this: ScanBoundaryWorld) {
+    const observation = this.observation!;
+    assert.deepEqual(
+      [...observation.observedPaths],
+      [],
+      "拒否すべきpathが観測対象へ入っています",
+    );
+    /** **件数だけでなく、どのpathが落ちたかを名指しで突合する。** */
+    assert.deepEqual(
+      observation.incomplete
+        .filter((item) => item.code === "unresolvable-path")
+        .map((item) => item.path),
+      [...this.paths],
+      "拒否したpath集合が入力と一致しません",
+    );
+  },
+);
+
+Then(
+  "報告されうる理由codeは登録済みの6件だけである",
+  function (this: ScanBoundaryWorld) {
+    const observed = this.observation!.incomplete.map((item) => item.code);
+    /** **走査が0回で終わっていないことを先に固定する。** */
+    assert.ok(observed.length > 0, "理由codeが1件も観測されていません");
+    assert.deepEqual(
+      [...new Set(observed)].sort(),
+      [
+        "duplicate-predicate",
+        "missing-predicate",
+        "predicate-unavailable",
+        "unknown-predicate",
+        "unresolvable-path",
+      ],
+      "観測された理由codeの集合が想定と違います",
+    );
+    /**
+     * **列挙の不変は型が強制する**（Issue #1276）。
+     * `REGISTERED_INCOMPLETE_CODES`は製品のunionを網羅する`Record`であり、
+     * unionへcodeを足すと`npm run typecheck`が落ちる。
+     */
+    assert.equal(Object.keys(REGISTERED_INCOMPLETE_CODES).length, 6);
+    for (const code of observed)
+      assert.ok(
+        code in REGISTERED_INCOMPLETE_CODES,
+        `登録外の理由codeが報告されました: ${code}`,
+      );
+  },
+);
+
+Then(
+  "述語が受け取った文字列は入力と1文字も違わない",
+  function (this: ScanBoundaryWorld) {
+    assert.deepEqual(
+      this.predicateArguments,
+      [...this.paths],
+      "観測層が述語へ渡す文字列を書き換えています",
     );
   },
 );
