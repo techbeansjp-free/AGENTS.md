@@ -235,3 +235,13 @@ Feature: 公開CLIでワークフローStepを強制する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-047"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-048 索引の反映待ちを経て1回のpr createでbindする
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-048"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-049 binding失敗時の案内が実際に踏める手順を述べる
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-049"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる

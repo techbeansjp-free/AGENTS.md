@@ -1900,6 +1900,18 @@ interface DeliveryProviderControl {
   phase: "ready" | "merge-requested" | "queue-requested" | "merged";
   ghVersion: string;
   closingChanged: boolean;
+  /**
+   * PR作成後の読み戻しのうち、先頭何回をclosing索引が空の観測にするか
+   * （Issue #1271）。GitHubの索引反映遅延を再現する。
+   */
+  emptyClosingViews: number;
+  /**
+   * PR本文を変えずにclosing索引だけへ対象外Issueを混ぜる（Issue #1271）。
+   *
+   * `closingChanged`は本文も変えるため、core identityの照合で先に落ちて
+   * binding失敗の経路へ届かない。**索引だけが契約と食い違う場合を作る。**
+   */
+  extraClosingIndexOnly: boolean;
   failMerge: boolean;
   mergedAt: string;
   remoteBaseSha: string;
@@ -2259,6 +2271,8 @@ function prepareDeliveryCli(
     phase: "ready",
     ghVersion: "2.97.0",
     closingChanged: false,
+    emptyClosingViews: 0,
+    extraClosingIndexOnly: false,
     failMerge: false,
     mergedAt: fixtureInstant({ secondsAhead: 1 }),
     remoteBaseSha: prepared.baseSha,
@@ -2358,12 +2372,13 @@ const observation = () => ({
   mergeStateStatus: "CLEAN",
   reviewDecision: "APPROVED",
   statusCheckRollup: [],
-  closingIssuesReferences: control.closingChanged
-    ? [
-        { number: 877, url: issueUrl },
-        { number: 878, url: "https://github.com/o/r/issues/878" },
-      ]
-    : [{ number: 877, url: issueUrl }],
+  closingIssuesReferences:
+    control.closingChanged || control.extraClosingIndexOnly
+      ? [
+          { number: 877, url: issueUrl },
+          { number: 878, url: "https://github.com/o/r/issues/878" },
+        ]
+      : [{ number: 877, url: issueUrl }],
 });
 
 if (exact(["--version"])) {
@@ -2416,7 +2431,17 @@ if (exact(["--version"])) {
   args[1] === "view" &&
   (args[2] === prUrl || args[2] === "1")
 ) {
-  process.stdout.write(JSON.stringify(observation()));
+  const views = fs
+    .readFileSync(logFile, "utf8")
+    .trim()
+    .split("\\n")
+    .filter((line) => {
+      const logged = JSON.parse(line);
+      return logged[0] === "pr" && logged[1] === "view";
+    }).length;
+  const value = observation();
+  if (views <= control.emptyClosingViews) value.closingIssuesReferences = [];
+  process.stdout.write(JSON.stringify(value));
 } else if (args[0] === "api" && args[1] === "graphql") {
   if (args.some((argument) => argument.includes("query ExactPullRequests"))) {
     const graphNode = (value) => ({
@@ -3204,6 +3229,80 @@ if (exact(["auth", "status"])) {
       assert.equal(
         deliveryProviderCalls(prepared).filter(isMergeCall).length,
         1,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-048": {
+      /**
+       * **索引の反映待ちを合成経路で通す**（Issue #1271）。
+       *
+       * adapterの単体だけでは、CLIが待った結果を使わずに捨てる変異を
+       * 1件も捕まえない。1回のpr createでpr-boundへ到達することを測る。
+       */
+      const prepared = prepareDeliveryCli(this, { emptyClosingViews: 1 });
+      const created = executeCli(
+        [...prepared.args, "--apply", "--authorize=approved"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(created.status, 0, created.stdout + created.stderr);
+      const views = deliveryProviderCalls(prepared).filter(
+        (call) => call[0] === "pr" && call[1] === "view",
+      );
+      assert.equal(
+        views.length >= 2,
+        true,
+        `読み戻しが反復していません: ${JSON.stringify(views)}`,
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(
+          (call) => call[0] === "pr" && call[1] === "create",
+        ).length,
+        1,
+        "読み戻しの反復がprovider createを再送しています",
+      );
+      const state = parseDeliveryState(
+        fs.readFileSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+          "utf8",
+        ),
+      );
+      assert.equal(state.state, "pr-bound");
+      break;
+    }
+    case "SCN-E2E-WFSTEP-049": {
+      /**
+       * **binding失敗時の案内が実際に踏める手順であることを測る**
+       * （Issue #1271）。**「案内が出る」ではなく「何を述べているか」を検査する。**
+       *
+       * 是正前の文言は「pr createを再実行せず」であり、実際の回復経路
+       * （同一commandの再実行によるread-only照合）と逆を向いていた。
+       */
+      const prepared = prepareDeliveryCli(this, {
+        extraClosingIndexOnly: true,
+      });
+      const rejected = executeCli(
+        [...prepared.args, "--apply", "--authorize=approved"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      const output = rejected.stdout + rejected.stderr;
+      assert.match(output, /binding_recovery_required/u);
+      assert.match(
+        output,
+        /同じstagingで同じpr createを再実行してください/u,
+        "案内が同一commandの再実行を述べていません",
+      );
+      assert.match(
+        output,
+        /headを動かす前に再実行してください/u,
+        "案内がheadを動かす前に行うことを述べていません",
+      );
+      assert.equal(
+        /pr createを再実行せず/u.test(output),
+        false,
+        "是正前の誤った案内が残っています",
       );
       break;
     }
