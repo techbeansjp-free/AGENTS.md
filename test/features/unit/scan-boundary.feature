@@ -44,7 +44,7 @@ Feature: 除外述語の被覆の観測
     Then すべて判定不能として報告され観測対象に入らない
 
   Scenario: SCN-UNIT-SCANBND-008 観測が不完全になった理由codeの列挙を増やさない
-    Given backslashを含む合法なfile名の観測入力がある
+    Given 複数の理由codeが同時に生じる観測入力がある
     When 除外述語の被覆を観測する
     Then 報告されうる理由codeは登録済みの6件だけである
 
