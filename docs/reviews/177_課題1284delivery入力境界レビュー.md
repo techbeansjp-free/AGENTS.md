@@ -5,19 +5,19 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | Issue #1284 の内部独立実装review |
-| ラウンド | 1、提出前の同一review内で追跡6cellを前向き補完 |
-| H_impl | `13715fed40578b51837d9095c68f04f84e16fdd4` |
-| 対象SHA・文書ダイジェスト | H_implをGit観測。製品 `759fbc413fa1303334cf9eb42dc58448b3ead6a8`、追跡補完 `a2bf8d276c254c1236e3e4ad556a1a98d71bfab3` の後に既定branchを取り込んだ |
-| 比較基点 | `f54d3f739483e847c75bff673da120705ed5fc5d` |
-| 対象差分 | 製品・test・配布案内・仕様10path。生成dist以外9pathを個別表へ記録 |
+| ラウンド | 2。round1収束後のHEAD移動に対する取り直し1回。差分と隣接影響だけを確認 |
+| H_impl | `98e0ee399ea0fc06c10157ed03831ce1a9894c71` |
+| 対象SHA・文書ダイジェスト | 新H_implをGit観測。旧H_impl `13715fed40578b51837d9095c68f04f84e16fdd4`、旧H_final `8c9e362a45211fedc4e02297891d0c29e59bd8f7` はancestor。製品実装759fbcと追跡補完a2bf8dを保持 |
+| 比較基点 | `358c93256d90d335979fc11f681024f47bd974d3` |
+| 対象差分 | 比較基点..H_implは製品10pathと前round review177の計11path。生成distを除く10pathを個別表へ記録 |
 | 対象外 | 共通extension合成の変更、真正floorを偽るcallerの新provenance機構、個別rule廃止、proposal自動消費、提出操作 |
-| 残り予算 | 通常2回、収束後のHEAD移動の取り直し1回。新たなroundは要求しない |
-| ラウンド数 | 1 |
+| 残り予算 | 収束後の取り直し1回を本roundで使用。scope/anchor/予算をresetしない |
+| ラウンド数 | 2 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260908_081724_deliveryのpackageFloor省略を安全側に拒否する |
 | 仕様の所有箇所 | `docs/specs/02_要件/04_仕様・品質管理要件.md` REQ-SQ-004「trusted側へ先行登録したproject rule廃止提案とrule ID・trusted fragmentのraw UTF-8 SHA-256が完全一致する完全削除だけを受理する」 |
 | 成果物行数 | source +16/-3、配布案内 +2、仕様 +14、test +230/-10、生成dist +5/-1。支援層は確認時00〜03の480行と本書、機械記録を再利用 |
 | 縮小の先行評価 | 既存validator2個をdelivery入口へ合成し、共通resolver・保存状態・依存・policy設定を変更しない |
-| 実施者・日時 | reviewer `/root/review_1284`、2026-09-07T23:40:00Z以降の同一review turn |
+| 実施者・日時 | reviewer `/root/review_1284`。round1は2026-09-07T23:40:00Z以降、round2は2026-09-08の既定branch追随後 |
 
 ### 0.1 routing入力契約
 
@@ -38,12 +38,12 @@
 | 実装引継ぎ | `.agent-skill-chain/tmp/1284-implementation-handoff.json` | 10pathのhashと成果物。環境EPERMを成功へ読み替えていない | 実装者記録 |
 | 独立対象回帰 | `.agent-skill-chain/tmp/1284-root-targeted.md` | 42scenario/230step成功、失敗・skip0 | verifier出力 |
 | 独立静的検証 | `.agent-skill-chain/tmp/1284-independent-static-results.json` と各log | 10command exit0。実tool session出力の集約 | verifier出力 |
-| 最終直列検証 | `.agent-skill-chain/tmp/issue-1284-verification-final/latest-results.json` と `conformance-check.log` | H_implで6command exit0、1631scenario成功・16skip・失敗0 | verifier出力 |
+| round1直列検証 | `.agent-skill-chain/tmp/issue-1284-verification-final/latest-results.json` と `conformance-check.log` | 旧H_impl 13715fedで6command exit0、1631scenario成功・16skip・失敗0。新HEADのfull証拠とは称さない | verifier出力 |
 | 追加反例 | `.agent-skill-chain/tmp/1284-independent-review-probes.md` | dist直接呼出し24/24成功、provider0 | reviewer実行観測 |
 | 仕様 | REQ-SQ-004、信頼境界、追跡、変更履歴 | updated、既存用語を参照し新定義なし | 既存文書 |
 | commit前candidate | implementer handoff path/hash | rootが製品commitへ固定。reviewerは非追跡8pathのhash一致を別途確認 | Git・hash観測 |
 | Phase A artifact | `docs/reviews/177_課題1284delivery入力境界レビュー.md` | 本書の確定後、rootが内容を変えずコピーしてartifactだけをcommitする | 後続操作 |
-| commit後external | 対象PRのCI・review | 本review時点で未観測。既存別PRの成功を流用しない | 未観測 |
+| commit後external | PR #1288のCodeRabbit実体 | rootがreview comment0・approval0、制限通知5577084377を観測。新H_finalの成功full CIは後続確認 | verifierの外部観測報告 |
 
 依存はtrusted loader→floor validation→effective/comparison→provider。一方向でありcandidateはauthorityを作らない。tracked文書のSHAは先行実装commitだけを指す。H_final・artifact digest/blob・provider actor/CI/approvalの一致は後続提出時の観測であり、本書だけでは成立しない。
 
@@ -60,8 +60,11 @@
 | `test/features/integration/project-rule-ledger.feature` | M | project | project | 5件の実行可能な受入例 | pass、stepへ一意対応 | SCN-INT-LEDGER-010〜014 | preview/apply、candidate有無を列挙 | pass |
 | `test/steps/delivery-finalize.steps.ts` | M | project | project | trusted正常fixtureへfloor供給 | pass、test→domain | AC-1284-05、既存delivery | package層だけのfixture、非trusted分岐を保持 | pass |
 | `test/steps/project-rule-ledger.steps.ts` | M | project | project | 入力変種・callback回数・復旧errorの観測 | pass、既存廃止fixture再利用 | 全AC、5新SCN | 実remoteなし、隔離Git、既存assertion保持 | pass |
+| `docs/reviews/177_課題1284delivery入力境界レビュー.md` | A | project | evidence | 旧H_finalに存在するround1の独立review履歴 | pass、過去の観測記録であって新HEADのauthorityではない | AC-1284-01〜05、旧H_impl13715fed | 旧8c9 commitに履歴保持。今回のartifact自己SHAを記入しない | pass |
 
-生成dist1pathもsourceと比較した。最終の比較基点..H_implから観測したnet deltaは10path、dist以外9pathと個別表が一致する。H_implの第2親とmerge-baseは比較基点に一致し、取り込みはartifact作成前である。759fbc以後の差分は追跡2文書とmainからの既存review176だけで、source/test/distは不変。mainの#1285による既存3cellを保持し、比較基点からの追跡差分は#1284の5行と履歴1行の追加だけ。packageへproject固有値、spec/evidenceへ実行authorityを混入していない。最終確認でHEAD一致・tracked変更なしを観測した。
+新比較基点..H_implのGit net deltaは11path、dist以外10pathと個別表が一致する。製品10pathの変更内容は前roundと同一で、追加された11件目は旧review177である。新H_implの第2親とmerge-baseは比較基点に一致し、今回のartifact更新より前に通常mergeしている。旧H_finalもancestorとして保持した。mainの#1255差分は既存独立review済みの取り込み内容であり、当案件へ混入した新実装とは扱わない。
+
+隣接影響は `src/cli.ts` のworktree parser委譲と `test/support/world.ts` のinitRepo既定SHA-1明示に限って確認した。createPullRequestの3callへtrustedSet.packageFloorを供給する配線は不変。新BDDが使うinitRepoの省略呼出しは従来SHA-1 fixtureの意味を保つ。#1284の追跡6行、#1285の確定3cellを保持し、当案件source/test/distは旧13715fedからbyte不変。未変更製品の全範囲を再レビューしていない。
 
 ## 2. 受け入れ条件の確認
 
@@ -69,7 +72,7 @@
 
 | 発見ID | 事実 | 影響 | 契約変更 | 対処 | Verification Evidence | 仕様反映 | 判定 |
 |---|---|---|---|---|---|---|---|
-| DISC-1284-001 | 実装者sandboxでgit等がEPERM、初回独立fullでもCLI入口不在等の失敗 | 正常廃止・package/fullの証拠取得 | なし | rootが許可環境で全process終了後に直列検証、旧失敗logを保持し検査弱化なし | root targeted42件と最終full1631件成功、16skip、失敗0 | updated | pass |
+| DISC-1284-001 | 実装者sandboxでgit等がEPERM、初回独立fullでもCLI入口不在等の失敗 | 正常廃止・package/fullの証拠取得 | なし | rootが許可環境で全process終了後に直列検証、旧失敗logを保持し検査弱化なし | round1の旧H_implでroot targeted42件とfull1631件成功、16skip、失敗0 | updated | pass |
 
 一時Python helperがsource検査へ抵触した事実と内容保持の移動は `1284-root-verification-notice.md` に残る。reviewerはhelperを実行・編集せず、製品diff外の環境是正として記録した。
 
@@ -131,7 +134,7 @@ Critical/Highの再現可能な製品欠陥はなし。Lowを根拠にscope拡�
 
 ### ラウンド2
 
-未実施・不要。追跡以外の既確認製品を再走査しない。
+round1収束後にmainの#1255が進み、strict更新要求へ通常mergeで追随した。新H_impl/base、net delta、隣接CLI/world fixture、追跡保持を再確認。新findingなし、既存Lowはresolvedを保持する。検証は影響範囲へ比例させ、旧fullのHEADを読み替えず、最終PR CIでcurrent H_final全体を検証する。同sessionの取り直し1回を使用し、旧Step11とstaging digestを保持する。
 
 ### ラウンド3
 
@@ -147,7 +150,7 @@ command: `project:quality`、`lint`、`format:check`、`typecheck`、`source:che
 
 独立full初回は1647scenario中1622成功・16skip・9失敗、8657step中8584成功・64skip・9失敗。E2Eのdist/bin入口不在等を実logで確認した。同時buildの競合は原因候補であり、9件すべての確定原因とは主張しない。旧失敗logを保持し、初回を成功へ読み替えない。
 
-最終H_implでrootが `build → source:check → docs:format → trace:check → package:check → conformance:check` を直列実行し、6commandすべてexit0。全layer合計1647scenario中1631成功・0失敗・16skip、8657step中8607成功・0失敗・50skip、9m20.9s。conformanceはproject rule21件、orphan0、I1〜I12、実在source/export、成功SCN、固定model slug0の合格を実logで確認した。
+round1の旧H_impl `13715fed40578b51837d9095c68f04f84e16fdd4` でrootが `build → source:check → docs:format → trace:check → package:check → conformance:check` を直列実行し、6commandすべてexit0。全layer合計1647scenario中1631成功・0失敗・16skip、8657step中8607成功・0失敗・50skip、9m20.9s。conformanceはproject rule21件、orphan0、I1〜I12、実在source/export、成功SCN、固定model slug0の合格を実logで確認した。
 
 | project layer | 失敗 | skip | 理由・証拠 |
 |---|---:|---:|---|
@@ -157,6 +160,9 @@ command: `project:quality`、`lint`、`format:check`、`typecheck`、`source:che
 
 成功CI run ID/URLとH_finalは本review時点で未観測。local出力を外部immutable CI証拠へ読み替えない。提出時にはcurrent H_finalへ一致する対象PRの成功CIを別途固定する。
 
+
+round2の新H_impl `98e0ee399ea0fc06c10157ed03831ce1a9894c71` ではrootがbuildを完了後、`SCN-(UNIT|INT)-(LEDGER|WTSURVEY)|SCN-INT-DELIVERY` を実行し91scenario/475step全成功、失敗・skip0、exit0を観測した。`1284-postmerge-targeted.json` と同名logはhead/baseへ固定されている。`issue-1284-verification-postmerge/latest-results.json` と各logのtypecheck/source/docs/trace/architecture/package 6commandも全exit0。旧fullの1631成功・16skipは13715fedに固定したまま、新H_implのfullとは称さない。製品delta不変と取り込み隣接影響の確認から局所再検証で十分と判定し、current H_final全体のfull検証はPR CIへ委ねる。最終CI成功確認前にmerge完了とは扱わない。
+
 ## 8. 配布物影響
 
 | 変更path | 配布境界に入るか | 影響 |
@@ -164,7 +170,7 @@ command: `project:quality`、`lint`、`format:check`、`typecheck`、`source:che
 | `.agent-skill-chain/schemas/00_利用案内.md` | 入る | 旧trusted callerのfloor供給と復旧 |
 | `src/domain/delivery.ts` | 入る | 配布JSになる入力guardと型契約 |
 | `dist/src/domain/delivery.js` | 入る | sourceと対応するruntime拒否 |
-| `docs/specs/`4file、`test/`3file | 入らない | 内部仕様・追跡・検証 |
+| `docs/specs/`4file、`test/`3file、`docs/reviews/177_課題1284delivery入力境界レビュー.md` | 入らない | 内部仕様・追跡・検証、旧roundの証拠履歴 |
 
 判断: 配布物を更新した
 
@@ -174,11 +180,13 @@ command: `project:quality`、`lint`、`format:check`、`typecheck`、`source:che
 
 | 項目 | 内容 |
 |---|---|
-| 独立reviewの外部証拠 | 本reviewerは未観測。内部独立code reviewである |
-| reviewerがPR author・実装commit authorと異なる | 内部identity/contextは両implementerと異なる。provider stable actor比較は未観測 |
-| 観測したreview commentとapprovalの件数 | 未観測。0件と断定しない |
-| 適用する例外の識別子 | 本reviewerは発行・適用していない。rootが正本とprovider実体を確認する |
-| 観測値 | Claude外部送信拒否後の明示された内部代替。Claude実行・GitHub APPROVEDとは扱わない |
+| 独立reviewの外部証拠 | PR #1288の外部review未実行をrootが実体観測。本文は内部独立code review |
+| reviewerがPR author・実装commit authorと異なる | 内部identity/contextは各implementerと異なる。GitHubの独立APPROVEDは存在しない |
+| 観測したreview commentとapprovalの件数 | root観測: pulls/1288/reviews=[]、pulls/1288/comments=0、review comment0・approval0。CodeRabbit checkはSUCCESSだが、issue comment5577084377はReview limit reachedの通知だけ |
+| 適用する例外の識別子 | `RVX-REPORTED-SUCCESS-WITHOUT-REVIEW-001`、PR #1288へ適用。正本は `.agent-skill-chain/review-exceptions.json` |
+| 観測値 | checkの緑ではなく、実review不在と制限通知を根拠に未実行と判定。新H_final push後にrootが条件を再観測する |
+
+正本の既存例外を読み、観測条件と可逆なPR/mergeの対象範囲を確認した。承認元・承認者・日時は正本を参照し複製しない。例外は内部reviewを外部のimmutable approvalに変換せず、外部不可逆配布へ拡張しない。Claude外部送信拒否後の内部代替と、CodeRabbitの未実行は別の観測であり、どちらも実行済みreviewとして扱わない。
 
 ## 10. 仕様整合性
 
@@ -188,8 +196,8 @@ command: `project:quality`、`lint`、`format:check`、`typecheck`、`source:che
 
 - 未解決Critical/High: 製品0。
 - Medium/Low: Low1件resolved。
-- 判定: approved（H_impl `13715fed40578b51837d9095c68f04f84e16fdd4` の内部独立code review）。
+- 判定: approved（round2、新H_impl `98e0ee399ea0fc06c10157ed03831ce1a9894c71` の内部独立review）。旧round1承認は歴史として保持。
 - 新しい権限が必要な事項: 本reviewは外部操作をしない。提出authorityは本書から生成しない。
 - 残存リスク: 構造がvalidな偽floorの真正性はtrusted caller責務。新provenance機構を実装したとは主張しない。
 - 次に許可される操作: rootが本書を内容不変でtracked review177へコピーし、artifactだけをcommitする。提出は別途既存authority・外部CI/review確認に従う。
-- 次回の再開地点: H_implを保持しH_finalの外部証拠を別途観測する。product/test/specはreviewer非変更、GitHub APPROVEDやmerge完了を本書から生成しない。
+- 次回の再開地点: 同session round2とpost-terminal Step10を記録し、current H_finalの外部証拠を別途観測する。旧staging00〜04/Step11は書き換えない。product/test/specはreviewer非変更、GitHub APPROVEDやmerge完了を本書から生成しない。
