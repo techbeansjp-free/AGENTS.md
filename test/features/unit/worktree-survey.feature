@@ -130,3 +130,33 @@ Feature: 登録済みworktreeを安全側に分類する
     Given headStateが不明なworktree観測がある
     When worktree走査を純粋判定する
     Then headState不明はpath付きerrorになりentriesへ入らない
+
+  Scenario: SCN-UNIT-WTSURVEY-027 headShaが40桁でも64桁でもattachedの判定と理由を一致させる
+    Given headShaだけが40桁と64桁で異なるattachedのworktree観測がある
+    When worktree走査を純粋判定する
+    Then 双方がentriesへ入り判定とreasonsが一致する
+
+  Scenario: SCN-UNIT-WTSURVEY-028 headShaが64桁のdetached HEADを分類から落とさずdetached理由を含める
+    Given headShaが64桁のdetached HEADでmerge済みかつcleanなworktree観測がある
+    When worktree走査を純粋判定する
+    Then 判定はretainでdetached理由を含みbranchはnullである
+
+  Scenario: SCN-UNIT-WTSURVEY-029 誤長と大文字と非hexのheadShaをpath付きerrorへ分離し正常な観測の判定を継続する
+    Given headShaが誤長と大文字と非hexの観測と正常な観測がある
+    When worktree走査を純粋判定する
+    Then 不正なheadShaはpath付きerrorになり正常な観測だけが分類される
+
+  Scenario: SCN-UNIT-WTSURVEY-030 HEAD SHAの受理を40桁と64桁の小文字hexだけに閉じる
+    Given HEAD SHAの受理判定の上下界となる候補がある
+    When HEAD SHAの受理判定を評価する
+    Then 40桁と64桁の小文字hexだけが受理される
+
+  Scenario: SCN-UNIT-WTSURVEY-031 porcelainのHEAD行が大文字や誤長や非hexならHEAD観測をpath付きerrorへ分離する
+    Given HEAD行が大文字と誤長と非hexと欠落を含むporcelain出力がある
+    When porcelain出力をHEAD観測へ解析する
+    Then 不正なHEAD行はpath付きerrorになり正常なworktreeだけが観測される
+
+  Scenario: SCN-UNIT-WTSURVEY-032 全dispositionについてheadShaを40桁から64桁へ置換しても判定と理由が変わらない
+    Given primaryとcleanup-readyとin-progressとretainとdetachedを網羅する観測群がある
+    When headShaだけを40桁と64桁へ置き換えて双方を純粋判定する
+    Then すべてのdispositionとreasonsが両者で一致する

@@ -1,7 +1,73 @@
+import path from "node:path";
 import { isRecord } from "../types.js";
 import { assessWorktreeRemovalSafety, resolveFinalizeIgnoredPathAllowlist, } from "./worktree-removal-safety.js";
 const WORKTREE_DIRECTORY_IDENTITY = /(?:^|[\\/])\d{8}_\d{6}-(\d+)-([a-z0-9][a-z0-9-]*)$/u;
 const WORKTREE_BRANCH_IDENTITY = /^[a-z][a-z0-9-]{0,31}\/(\d+)-([a-z0-9][a-z0-9-]*)$/u;
+/**
+ * **HEAD SHAとして受理するのは、Gitのobject formatが定める桁数だけである。**
+ * SHA-1は40桁、SHA-256は64桁であり、その2値に閉じる。任意長のhexを受理すると
+ * 誤長の文字列が分類へ混入し、`[0-9a-f]{40}`だけに閉じるとSHA-256 repositoryの
+ * worktreeがすべて分類から落ちる（Issue #1255）。
+ *
+ * **大文字を小文字へ畳み込まない。** `git worktree list --porcelain`の出力は小文字であり、
+ * 大文字の到来は観測経路の異常を意味する。正規化はその異常を隠す。
+ *
+ * **名前にworktree headの役割を含める。** repository内には信頼源の異なるOID検証が
+ * 他にも多数あり、GitHub provider経路やtrusted-root経路が汎用名の述語を無検証で
+ * 採用すると、それぞれの受理範囲が意図せず広がる。
+ */
+export function isWorktreeHeadSha(value) {
+    return (typeof value === "string" && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(value));
+}
+/**
+ * `git worktree list --porcelain`の出力をHEAD観測へ解析する。**純関数として切り出す。**
+ * CLI層に置いたままだと、porcelainの異常入力を与える経路が無く、
+ * `headSha.toLowerCase()`のような正規化を挟む変異が全scenario緑のまま生存する
+ * （Issue #1255のラウンド1で独立reviewerが構成した）。
+ *
+ * **受理した値をそのまま返す。** 大文字化・小文字化・trim以上の整形を行わない。
+ * gitは小文字のOIDを出力するため、大文字の到来は観測経路の異常であり、
+ * 正規化はその異常を隠す。
+ */
+export function parseWorktreeHeads(output) {
+    const heads = [];
+    const errors = [];
+    for (const entry of output
+        .trim()
+        .split(/\r?\n\r?\n/u)
+        .filter(Boolean)) {
+        const lines = entry.split(/\r?\n/u);
+        const worktreeLine = lines.find((line) => line.startsWith("worktree "));
+        if (!worktreeLine)
+            continue;
+        const worktreePath = path.resolve(worktreeLine.slice("worktree ".length));
+        const headLine = lines.find((line) => line.startsWith("HEAD "));
+        const branchLine = lines.find((line) => line.startsWith("branch refs/heads/"));
+        const detached = lines.includes("detached");
+        const headSha = headLine?.slice("HEAD ".length).trim() ?? "";
+        if (!isWorktreeHeadSha(headSha)) {
+            errors.push(`${worktreePath}: HEAD SHAを観測できません`);
+            continue;
+        }
+        if (branchLine !== undefined && !detached)
+            heads.push({
+                path: worktreePath,
+                branch: branchLine.slice("branch refs/heads/".length),
+                headState: "attached",
+                headSha,
+            });
+        else if (branchLine === undefined && detached)
+            heads.push({
+                path: worktreePath,
+                branch: null,
+                headState: "detached",
+                headSha,
+            });
+        else
+            errors.push(`${worktreePath}: HEADの付着状態を判定できません（branch行とdetached行の両方がある、または両方ない）`);
+    }
+    return { heads, errors };
+}
 const OBSERVATION_FIELDS = new Set([
     "path",
     "repositoryRoot",
@@ -56,9 +122,8 @@ function validationErrors(value, index) {
     const headState = value.headState;
     if (headState !== "attached" && headState !== "detached")
         errors.push(`${prefix}.headStateはattachedまたはdetachedでなければなりません`);
-    if (typeof value.headSha !== "string" ||
-        !/^[0-9a-f]{40}$/u.test(value.headSha))
-        errors.push(`${prefix}.headShaは40桁の小文字hexでなければなりません`);
+    if (!isWorktreeHeadSha(value.headSha))
+        errors.push(`${prefix}.headShaは40桁または64桁の小文字hexでなければなりません`);
     if (headState === "attached") {
         if (typeof value.branch !== "string" || value.branch.trim() === "")
             errors.push(`${prefix}.branchはattachedのとき空でない文字列でなければなりません`);
