@@ -8,6 +8,8 @@ import {
 } from "node:child_process";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import {
+  isWorktreeHeadSha,
+  parseWorktreeHeads,
   surveyWorktrees,
   type WorktreeObservation,
   type WorktreeSurvey,
@@ -33,6 +35,11 @@ interface SurveyWorld extends WorkflowWorld {
   process: SpawnSyncReturns<string>;
   before: string;
   after: string;
+  headShaCandidates: { value: unknown; accepted: boolean }[];
+  porcelain: string;
+  parsedHeads: ReturnType<typeof parseWorktreeHeads>;
+  matrix: WorktreeObservation[];
+  surveys: WorktreeSurvey[];
 }
 
 const { Given, When, Then } = stepDefinitions<SurveyWorld>();
@@ -68,8 +75,9 @@ function createSurveyRepository(
   world: SurveyWorld,
   merged: boolean,
   ignoreRules?: string,
+  objectFormat?: "sha1" | "sha256",
 ): void {
-  world.root = world.initRepo();
+  world.root = world.initRepo(objectFormat);
   if (ignoreRules !== undefined) {
     fs.writeFileSync(path.join(world.root, ".gitignore"), ignoreRules);
     runGit(world.root, ["add", ".gitignore"]);
@@ -77,7 +85,16 @@ function createSurveyRepository(
   }
   const remote = world.temp("asc-survey-remote-");
   world.remote = remote;
-  runGit(remote, ["init", "--bare"]);
+  /**
+   * **remoteのhash algorithmをrepositoryへ揃える。** 揃えないと
+   * `the receiving end does not support this repository's hash algorithm`でpushが落ち、
+   * 走査以前にfixtureが成立しない。
+   */
+  runGit(remote, [
+    "init",
+    "--bare",
+    `--object-format=${objectFormat ?? "sha1"}`,
+  ]);
   runGit(world.root, ["remote", "add", "origin", remote]);
   runGit(world.root, ["push", "-u", "origin", "main"]);
   runGit(world.root, [
@@ -278,6 +295,260 @@ Given("headStateが不明なworktree観測がある", function () {
       headState: "unknown",
     },
   ];
+});
+/**
+ * **object formatを唯一の変数にする。** 40桁と64桁の観測はpathだけが異なり、
+ * どちらもIssue番号883とslug`survey`を持つため、directory名由来の理由差が出ない。
+ * 差が出るのは`headSha`の桁数だけであり、判定とreasonsの一致がINV-01を検査する。
+ */
+Given(
+  "headShaだけが40桁と64桁で異なるattachedのworktree観測がある",
+  function () {
+    this.input = [
+      observation({
+        path: "/repo/.worktrees/20260825_120000-883-survey",
+        headSha: "a".repeat(40),
+      }),
+      observation({
+        path: "/repo/.worktrees/20260825_130000-883-survey",
+        headSha: "a".repeat(64),
+      }),
+    ];
+  },
+);
+Given(
+  "headShaが64桁のdetached HEADでmerge済みかつcleanなworktree観測がある",
+  function () {
+    this.input = [
+      observation({
+        branch: null,
+        headState: "detached",
+        headSha: "b".repeat(64),
+      }),
+    ];
+  },
+);
+Given("headShaが誤長と大文字と非hexの観測と正常な観測がある", function () {
+  this.input = [
+    observation({
+      path: "/repo/.worktrees/20260825_120000-883-short",
+      headSha: "a".repeat(39),
+    }),
+    observation({
+      path: "/repo/.worktrees/20260825_120000-883-long",
+      headSha: "a".repeat(65),
+    }),
+    observation({
+      path: "/repo/.worktrees/20260825_120000-883-between",
+      headSha: "a".repeat(63),
+    }),
+    observation({
+      path: "/repo/.worktrees/20260825_120000-883-upper",
+      headSha: "A".repeat(40),
+    }),
+    observation({
+      path: "/repo/.worktrees/20260825_120000-883-nonhex",
+      headSha: `${"a".repeat(39)}g`,
+    }),
+    observation(),
+  ];
+});
+/**
+ * **受理の上下界を両側から挟む。** 40と64の直下・直上、大文字、非hex、空、非文字列を
+ * 1つの表で持ち、受理される値と拒否される値の境界そのものをscenarioにする。
+ */
+Given("HEAD SHAの受理判定の上下界となる候補がある", function () {
+  this.headShaCandidates = [
+    { value: "a".repeat(40), accepted: true },
+    { value: "a".repeat(64), accepted: true },
+    { value: "0123456789abcdef".repeat(4), accepted: true },
+    { value: "a".repeat(39), accepted: false },
+    { value: "a".repeat(41), accepted: false },
+    { value: "a".repeat(63), accepted: false },
+    { value: "a".repeat(65), accepted: false },
+    { value: "A".repeat(40), accepted: false },
+    { value: "A".repeat(64), accepted: false },
+    { value: `${"a".repeat(39)}g`, accepted: false },
+    { value: "", accepted: false },
+    { value: undefined, accepted: false },
+    { value: 40, accepted: false },
+  ];
+});
+When("HEAD SHAの受理判定を評価する", function () {
+  this.headShaCandidates = this.headShaCandidates.map((candidate) => ({
+    ...candidate,
+    actual: isWorktreeHeadSha(candidate.value),
+  })) as typeof this.headShaCandidates;
+});
+Then("40桁と64桁の小文字hexだけが受理される", function () {
+  for (const candidate of this.headShaCandidates as ({
+    value: unknown;
+    accepted: boolean;
+  } & { actual: boolean })[])
+    assert.equal(
+      candidate.actual,
+      candidate.accepted,
+      `受理判定が期待と異なります: ${String(candidate.value)}`,
+    );
+});
+Then("双方がentriesへ入り判定とreasonsが一致する", function () {
+  assert.deepEqual(this.survey.errors, []);
+  assert.equal(this.survey.entries.length, 2);
+  const [first, second] = this.survey.entries;
+  assert.ok(first && second, "entriesが2件ありません");
+  assert.equal(first.disposition, second.disposition);
+  assert.deepEqual(first.reasons, second.reasons);
+  assert.equal(first.headState, second.headState);
+  assert.equal(first.branch, second.branch);
+});
+Then(
+  "不正なheadShaはpath付きerrorになり正常な観測だけが分類される",
+  function () {
+    assert.equal(this.survey.entries.length, 1);
+    assert.equal(this.survey.entries[0]?.path, observation().path);
+    for (const slug of ["short", "long", "between", "upper", "nonhex"])
+      assert.ok(
+        this.survey.errors.some(
+          (error: string) =>
+            error.includes(`/repo/.worktrees/20260825_120000-883-${slug}`) &&
+            error.includes("headSha"),
+        ),
+        `${slug}のpath付きerrorがありません: ${this.survey.errors.join(" | ")}`,
+      );
+  },
+);
+/**
+ * **porcelainの異常はCLI層では作れない。** 実gitは小文字の正しい桁数しか出さないため、
+ * 解析を純関数へ切り出さない限り、大文字正規化を挟む変異が全scenario緑のまま生存する。
+ */
+Given(
+  "HEAD行が大文字と誤長と非hexと欠落を含むporcelain出力がある",
+  function () {
+    const lower = "a".repeat(40);
+    this.porcelain = [
+      `worktree /repo${chr10()}HEAD ${lower}${chr10()}branch refs/heads/main`,
+      `worktree /repo/.worktrees/upper${chr10()}HEAD ${"A".repeat(40)}${chr10()}branch refs/heads/feature/upper`,
+      `worktree /repo/.worktrees/upper64${chr10()}HEAD ${"A".repeat(64)}${chr10()}branch refs/heads/feature/upper64`,
+      `worktree /repo/.worktrees/short${chr10()}HEAD ${"a".repeat(39)}${chr10()}branch refs/heads/feature/short`,
+      `worktree /repo/.worktrees/between${chr10()}HEAD ${"a".repeat(63)}${chr10()}branch refs/heads/feature/between`,
+      `worktree /repo/.worktrees/nonhex${chr10()}HEAD ${"a".repeat(39)}g${chr10()}branch refs/heads/feature/nonhex`,
+      `worktree /repo/.worktrees/missing${chr10()}branch refs/heads/feature/missing`,
+      `worktree /repo/.worktrees/ok64${chr10()}HEAD ${"b".repeat(64)}${chr10()}detached`,
+    ].join(`${chr10()}${chr10()}`);
+  },
+);
+function chr10(): string {
+  return String.fromCharCode(10);
+}
+When("porcelain出力をHEAD観測へ解析する", function () {
+  this.parsedHeads = parseWorktreeHeads(this.porcelain);
+});
+Then(
+  "不正なHEAD行はpath付きerrorになり正常なworktreeだけが観測される",
+  function () {
+    const observedPaths = this.parsedHeads.heads.map((head) => head.path);
+    assert.deepEqual(observedPaths.sort(), ["/repo", "/repo/.worktrees/ok64"]);
+    for (const slug of [
+      "upper",
+      "upper64",
+      "short",
+      "between",
+      "nonhex",
+      "missing",
+    ])
+      assert.ok(
+        this.parsedHeads.errors.some(
+          (error: string) =>
+            error.includes(`/repo/.worktrees/${slug}`) &&
+            error.includes("HEAD SHAを観測できません"),
+        ),
+        `${slug}のpath付きerrorがありません: ${this.parsedHeads.errors.join(" | ")}`,
+      );
+    /** **受理した値を整形していないこと。** 大文字を畳み込むと`upper`が観測へ入る。 */
+    assert.equal(
+      this.parsedHeads.heads.find((head) => head.path === "/repo")?.headSha,
+      "a".repeat(40),
+    );
+  },
+);
+/**
+ * **全dispositionを1つの表で回す。** 64桁を1状態だけ検査すると、桁数と他条件を
+ * 組み合わせた分岐（例: 64桁かつ未pushだけを落とす）が生存する。
+ */
+Given(
+  "primaryとcleanup-readyとin-progressとretainとdetachedを網羅する観測群がある",
+  function () {
+    this.matrix = [
+      observation({
+        path: "/repo",
+        repositoryRoot: "/repo",
+        isPrimary: true,
+        branch: "main",
+      }),
+      observation({ path: "/repo/.worktrees/20260825_120000-883-survey" }),
+      observation({
+        path: "/repo/.worktrees/20260825_120000-884-survey",
+        mergedIntoDefault: false,
+        pushed: false,
+        unpushedCommits: 2,
+      }),
+      observation({
+        path: "/repo/.worktrees/20260825_120000-885-survey",
+        dirty: true,
+        untracked: ["draft.md"],
+        stashes: ["stash@{0}"],
+      }),
+      observation({
+        path: "/repo/.worktrees/20260825_120000-886-survey",
+        branch: null,
+        headState: "detached",
+      }),
+      observation({
+        path: "/repo/.worktrees/20260825_120000-887-survey",
+        recoveryReachable: false,
+        remoteBranch: false,
+      }),
+    ];
+  },
+);
+When("headShaだけを40桁と64桁へ置き換えて双方を純粋判定する", function () {
+  this.surveys = ["c".repeat(40), "c".repeat(64)].map((headSha) =>
+    surveyWorktrees(
+      this.matrix.map((entry) => ({ ...entry, headSha })),
+      [],
+    ),
+  );
+});
+Then("すべてのdispositionとreasonsが両者で一致する", function () {
+  const [first, second] = this.surveys;
+  assert.ok(first && second, "2件の走査結果がありません");
+  assert.deepEqual(first.errors, []);
+  assert.deepEqual(second.errors, []);
+  assert.equal(first.entries.length, this.matrix.length);
+  assert.deepEqual(
+    second.entries.map((entry) => [
+      entry.path,
+      entry.disposition,
+      entry.reasons,
+    ]),
+    first.entries.map((entry) => [
+      entry.path,
+      entry.disposition,
+      entry.reasons,
+    ]),
+  );
+  /** **全dispositionを実際に踏んでいること。** 網羅の主張を空虚にしない。 */
+  const dispositions = new Set(first.entries.map((entry) => entry.disposition));
+  for (const expected of [
+    "primary",
+    "cleanup-ready",
+    "in-progress",
+    "retain",
+  ] as const)
+    assert.ok(
+      dispositions.has(expected),
+      `dispositionが網羅されていません: ${[...dispositions].join(",")}`,
+    );
 });
 When("worktree走査を純粋判定する", function () {
   this.survey = surveyWorktrees(this.input);
@@ -487,6 +758,81 @@ Given("detached HEADのmerge済み走査用worktreeがある", function () {
     this.detachedWorktree,
     "origin/main",
   ]);
+});
+/**
+ * **実repositoryで観測する。** fixtureだけのtestは`registeredWorktreeHeads`が
+ * porcelain出力を解析する段を通らず、CLI側の桁数限定を見逃す（Issue #1255）。
+ * attachedとdetachedを両方置き、object formatだけを変数にする。
+ */
+function createDualHeadSurveyRepository(
+  world: SurveyWorld,
+  objectFormat: "sha1" | "sha256",
+): void {
+  createSurveyRepository(world, true, undefined, objectFormat);
+  world.detachedWorktree = path.join(
+    world.root,
+    ".worktrees",
+    "20260825_120000-884-detached",
+  );
+  runGit(world.root, [
+    "worktree",
+    "add",
+    "--detach",
+    world.detachedWorktree,
+    "origin/main",
+  ]);
+}
+Given(
+  "object formatがsha256のmerge済み走査用worktreeとdetached worktreeがある",
+  function () {
+    createDualHeadSurveyRepository(this, "sha256");
+  },
+);
+Given(
+  "object formatがsha1のmerge済み走査用worktreeとdetached worktreeがある",
+  function () {
+    createDualHeadSurveyRepository(this, "sha1");
+  },
+);
+function assertSurveyedWithHeadDigits(
+  world: SurveyWorld,
+  digits: number,
+): void {
+  const survey = parsed(world);
+  assert.deepEqual(
+    survey.errors,
+    [],
+    `走査errorが出ています: ${JSON.stringify(survey.errors)}`,
+  );
+  const observed = runGit(world.root, ["rev-parse", "HEAD"]);
+  assert.equal(
+    observed.length,
+    digits,
+    `fixtureのHEADが${String(digits)}桁ではありません: ${observed}`,
+  );
+  const entries = survey.entries as Array<Record<string, unknown>>;
+  for (const target of [world.root, world.worktree, world.detachedWorktree])
+    assert.ok(
+      entries.some((entry) => entry.path === target),
+      `entriesにありません: ${target}`,
+    );
+  const detached = entries.find(
+    (entry) => entry.path === world.detachedWorktree,
+  );
+  assert.equal(detached?.headState, "detached");
+  assert.equal(detached?.branch, null);
+  assert.ok(
+    (detached?.reasons as string[]).some((reason) =>
+      reason.includes("HEADがdetachedです"),
+    ),
+    `detached理由がありません: ${JSON.stringify(detached?.reasons)}`,
+  );
+}
+Then("全worktreeがHEAD SHAの桁数で落ちず64桁のHEADで分類される", function () {
+  assertSurveyedWithHeadDigits(this, 64);
+});
+Then("全worktreeがHEAD SHAの桁数で落ちず40桁のHEADで分類される", function () {
+  assertSurveyedWithHeadDigits(this, 40);
 });
 When("worktree surveyをJSON形式で実行する", function () {
   runCli(this, ["worktree", "survey", `--root=${this.root}`]);

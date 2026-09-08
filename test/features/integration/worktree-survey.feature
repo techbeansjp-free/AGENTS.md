@@ -75,3 +75,13 @@ Feature: CLIで登録済みworktreeを事後走査する
     Given detached HEADのmerge済み走査用worktreeがある
     When worktree surveyをtext形式で実行する
     Then 要約表にdetachedの行がある
+
+  Scenario: SCN-INT-WTSURVEY-016 SHA-256 repositoryのattachedとdetachedの走査用worktreeを分類する
+    Given object formatがsha256のmerge済み走査用worktreeとdetached worktreeがある
+    When worktree surveyをJSON形式で実行する
+    Then 全worktreeがHEAD SHAの桁数で落ちず64桁のHEADで分類される
+
+  Scenario: SCN-INT-WTSURVEY-017 SHA-1 repositoryでも同じ規則でattachedとdetachedを分類する
+    Given object formatがsha1のmerge済み走査用worktreeとdetached worktreeがある
+    When worktree surveyをJSON形式で実行する
+    Then 全worktreeがHEAD SHAの桁数で落ちず40桁のHEADで分類される
