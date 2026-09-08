@@ -45,3 +45,38 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     Given Unicode pathと読み取り専用資産が共存する隔離先がある
     When setupとupdateとdeleteを適用する
     Then Unicode pathと読み取り専用資産は同一内容で残る
+
+  Scenario: SCN-INT-LIFECYCLE-010 installはhook正本と2つのhost展開先を配置する
+    Given lifecycle検証用の隔離directoryがある
+    When setupを適用する
+    Then hook正本と2つのhost展開先が同じ内容で存在する
+
+  Scenario: SCN-INT-LIFECYCLE-011 展開したhookは実行できる
+    Given lifecycle検証用の隔離directoryがある
+    When setupを適用する
+    Then 展開したhookに実行bitが立っている
+
+  Scenario: SCN-INT-LIFECYCLE-012 updateは消えたhook展開先を正本から復元する
+    Given lifecycle検証用の隔離directoryがある
+    When setupを適用してからhook展開先を消してupdateを適用する
+    Then 展開先のhookは正本と同じ内容へ戻る
+
+  Scenario: SCN-INT-LIFECYCLE-013 deleteは利用者が変更したhookを残す
+    Given lifecycle検証用の隔離directoryがある
+    When setupを適用してからhook展開先を書き換えてdeleteを適用する
+    Then 書き換えたhookは残る
+
+  Scenario: SCN-INT-LIFECYCLE-014 installは利用者とhostの設定fileへ書き込まない
+    Given hook登録済みのhost設定を持つ隔離directoryがある
+    When setupを適用する
+    Then host設定fileは1 byteも変わらない
+
+  Scenario: SCN-INT-LIFECYCLE-015 hookの登録の有無はdoctorのhealthyを変えない
+    Given lifecycle検証用の隔離directoryがある
+    When setupを適用してhook未登録と登録済みの両方でdoctorを実行する
+    Then 2つのhealthyは等しく登録状態だけが違う
+
+  Scenario: SCN-INT-LIFECYCLE-016 hook設定の解決に失敗してもdoctorは他の診断を返す
+    Given lifecycle検証用の隔離directoryがある
+    When setupを適用してからhost設定pathを境界外のsymlinkへ差し替えてdoctorを実行する
+    Then doctorは中断せず未登録として報告する

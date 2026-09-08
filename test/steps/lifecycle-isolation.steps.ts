@@ -24,10 +24,27 @@ interface IsolationWorld extends WorkflowWorld {
   root: string;
   secondDeleteRejected: boolean;
   statusBefore: string;
+  /** hookの登録の有無で`healthy`が変わらないことの観測（Issue #1105）。 */
+  hookDoctorStates?: Array<ReturnType<typeof doctor>>;
 }
 
 /** repository直下へ展開されるhostごとの常時入口（Issue #1219）。 */
 const ROOT_HOST_ENTRIES = ["AGENTS.md", "CLAUDE.md"] as const;
+
+/**
+ * 強制点hookの正本と展開先（Issue #1105）。
+ *
+ * **期待pathを製品の定数から導出しない。** 導出すると、配布対象を消す変異で
+ * 期待値も同時に縮み、変異が検出できなくなる。ここへ書き写した値が正本と
+ * 食い違えば、この検査が落ちる。
+ */
+const HOOK_CANONICAL = ".agent-skill-chain/hooks/asc-contract-citation.mjs";
+const HOOK_HOST_COPIES = [
+  ".claude/hooks/asc-contract-citation.mjs",
+  ".codex/hooks/asc-contract-citation.mjs",
+] as const;
+/** hookを登録済みのhost設定。**installはこれを1 byteも変えてはならない。** */
+const HOST_HOOK_SETTINGS = ".claude/settings.local.json";
 
 const { Given, When, Then } = stepDefinitions<IsolationWorld>();
 
@@ -124,6 +141,120 @@ Then("package管理資産だけが追加更新削除される", function () {
   assert.equal(fs.existsSync(recordPath(this.root)), false);
   for (const relative of this.installedAssets)
     assert.equal(fs.existsSync(path.join(this.root, relative)), false);
+  assertCapturedFiles(this.root, this.consumerFiles);
+});
+
+Given(
+  "hook登録済みのhost設定を持つ隔離directoryがある",
+  function (this: IsolationWorld) {
+    this.root = this.temp("asc-lifecycle-hooksettings-");
+    write(this.root, "README.md", "# fixture\n");
+    const settings = `${JSON.stringify(
+      {
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash",
+              hooks: [
+                {
+                  type: "command",
+                  command: `"$CLAUDE_PROJECT_DIR/${HOOK_HOST_COPIES[0]}"`,
+                  timeout: 15,
+                },
+              ],
+            },
+          ],
+        },
+      },
+      null,
+      2,
+    )}\n`;
+    write(this.root, HOST_HOOK_SETTINGS, settings);
+    this.consumerFiles = { [HOST_HOOK_SETTINGS]: settings };
+  },
+);
+
+When("setupを適用する", function (this: IsolationWorld) {
+  init(this.root, { apply: true });
+});
+
+/**
+ * **消えた展開先の復元を測る**（Issue #1105）。
+ *
+ * 展開先を**書き換えて**updateを流すのは別の契約の検査になる。書き換えは
+ * 利用者の変更であり、`update`はそれを保持するのが正しい。**2つを同じ
+ * scenarioで測ると、どちらの契約も検査できない。** 保持の側は
+ * `SCN-INT-LIFECYCLE-013`が`delete`で測る。
+ */
+When(
+  "setupを適用してからhook展開先を消してupdateを適用する",
+  function (this: IsolationWorld) {
+    init(this.root, { apply: true });
+    fs.rmSync(path.join(this.root, HOOK_HOST_COPIES[0]));
+    this.applyResult = upgrade(this.root, { apply: true }) as never;
+  },
+);
+
+When(
+  "setupを適用してからhook展開先を書き換えてdeleteを適用する",
+  function (this: IsolationWorld) {
+    init(this.root, { apply: true });
+    write(
+      this.root,
+      HOOK_HOST_COPIES[0],
+      "#!/usr/bin/env bash\n# 利用者の変更\n",
+    );
+    this.applyResult = uninstall(this.root, { apply: true });
+  },
+);
+
+Then(
+  "hook正本と2つのhost展開先が同じ内容で存在する",
+  function (this: IsolationWorld) {
+    const canonical = path.join(this.root, HOOK_CANONICAL);
+    assert.equal(
+      fs.existsSync(canonical),
+      true,
+      `${HOOK_CANONICAL}がありません`,
+    );
+    const expected = sha256(fs.readFileSync(canonical));
+    for (const relative of HOOK_HOST_COPIES) {
+      const file = path.join(this.root, relative);
+      assert.equal(fs.existsSync(file), true, `${relative}がありません`);
+      assert.equal(
+        sha256(fs.readFileSync(file)),
+        expected,
+        `${relative}が正本と一致しません`,
+      );
+    }
+  },
+);
+
+Then("展開したhookに実行bitが立っている", function (this: IsolationWorld) {
+  for (const relative of [HOOK_CANONICAL, ...HOOK_HOST_COPIES]) {
+    const mode = fs.statSync(path.join(this.root, relative)).mode & 0o111;
+    assert.notEqual(mode, 0, `${relative}に実行bitがありません`);
+  }
+});
+
+Then("展開先のhookは正本と同じ内容へ戻る", function (this: IsolationWorld) {
+  const canonical = sha256(
+    fs.readFileSync(path.join(this.root, HOOK_CANONICAL)),
+  );
+  assert.equal(
+    sha256(fs.readFileSync(path.join(this.root, HOOK_HOST_COPIES[0]))),
+    canonical,
+    "updateが正本の内容を展開先へ反映していません",
+  );
+});
+
+Then("書き換えたhookは残る", function (this: IsolationWorld) {
+  const file = path.join(this.root, HOOK_HOST_COPIES[0]);
+  assert.equal(fs.existsSync(file), true, "利用者が変更したhookを消しています");
+  assert.match(fs.readFileSync(file, "utf8"), /利用者の変更/u);
+});
+
+Then("host設定fileは1 byteも変わらない", function (this: IsolationWorld) {
   assertCapturedFiles(this.root, this.consumerFiles);
 });
 
@@ -488,5 +619,87 @@ Then("deleteはpreviewだけを返して隔離先と外部資産を変更しな�
   assert.equal(
     fs.lstatSync(path.join(this.root, "external-link")).isSymbolicLink(),
     true,
+  );
+});
+
+/**
+ * **合成経路で`healthy`の不変を測る**（Issue #1105）。
+ *
+ * 純関数`inspectHookRegistration`の単体だけでは、**その結果を`doctor`が
+ * root `healthy`へ混ぜる変異を1件も捕まえない**（変異試験で実測）。同じ
+ * projectを未登録と登録済みの2状態にして`healthy`を突き合わせる。
+ */
+When(
+  "setupを適用してhook未登録と登録済みの両方でdoctorを実行する",
+  function (this: IsolationWorld) {
+    init(this.root, { apply: true });
+    const unregistered = doctor(this.root);
+    write(
+      this.root,
+      HOST_HOOK_SETTINGS,
+      `${JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash",
+              hooks: [
+                {
+                  type: "command",
+                  command: `"$CLAUDE_PROJECT_DIR/${HOOK_HOST_COPIES[0]}"`,
+                },
+              ],
+            },
+          ],
+        },
+      })}\n`,
+    );
+    this.hookDoctorStates = [unregistered, doctor(this.root)];
+  },
+);
+
+Then("2つのhealthyは等しく登録状態だけが違う", function (this: IsolationWorld) {
+  const [unregistered, registered] = this.hookDoctorStates ?? [];
+  assert.ok(unregistered !== undefined && registered !== undefined);
+  assert.equal(
+    unregistered.healthy,
+    registered.healthy,
+    "hookの登録の有無がdoctorのhealthyを変えています",
+  );
+  assert.equal(unregistered.hooks.registered, false);
+  assert.equal(registered.hooks.registered, true);
+  assert.equal(unregistered.hooks.diagnostics.length > 0, true);
+  assert.equal(registered.hooks.diagnostics.length, 0);
+});
+
+/**
+ * **境界外への解決失敗で`doctor`が止まらないことを測る**（Issue #1105）。
+ *
+ * `.claude`がroot外を指すsymlinkだと`resolveContained`が例外を投げる。
+ * **登録状態の観測は任意であり、失敗しても他の診断を返す価値がある。**
+ */
+/**
+ * **installの後にsymlinkへ差し替える。** 先に差し替えると`mappings()`の
+ * `resolveContained`が`install`自体を止め、`doctor`の観測に到達しない。
+ */
+When(
+  "setupを適用してからhost設定pathを境界外のsymlinkへ差し替えてdoctorを実行する",
+  function (this: IsolationWorld) {
+    init(this.root, { apply: true });
+    const hostDirectory = path.join(this.root, ".claude");
+    fs.rmSync(hostDirectory, { recursive: true, force: true });
+    fs.symlinkSync(this.temp("asc-lifecycle-outside-"), hostDirectory);
+    this.hookDoctorStates = [doctor(this.root)];
+  },
+);
+
+Then("doctorは中断せず未登録として報告する", function (this: IsolationWorld) {
+  const [state] = this.hookDoctorStates ?? [];
+  assert.ok(state !== undefined, "doctorが結果を返していません");
+  assert.equal(state.hooks.registered, false);
+  assert.equal(state.hooks.diagnostics.length > 0, true);
+  assert.equal(
+    Array.isArray(state.adapters.diagnostics),
+    true,
+    "他の診断欄が返っていません",
   );
 });

@@ -14,6 +14,7 @@ import {
   redactSecrets,
 } from "../../src/lib/security.js";
 import { evaluateReview } from "../../src/domain/review.js";
+import { inspectHookRegistration } from "../../src/domain/lifecycle.js";
 import {
   loadOperationPolicy,
   validatePolicy,
@@ -55,6 +56,13 @@ interface UnitWorld extends WorkflowWorld {
   mutationGuidance?: Record<string, string>;
   graphUsageSection?: string;
   modeQuestionSkillLink?: string;
+  /** 強制点hookの配布検査（Issue #1105）。 */
+  hookRequiredSource?: string;
+  hookRequiredExpected?: string[];
+  hookGuide?: string;
+  hookGuideCodexSection?: string;
+  hookSettings?: string;
+  hookRegistration?: ReturnType<typeof inspectHookRegistration>;
   secondModeResult?: ReturnType<typeof classifyMode>;
   answers: Parameters<typeof classifyMode>[0];
   auditBase: string;
@@ -3651,6 +3659,149 @@ Then("終了値は1でstderrに実行できなかった原因が残る", functio
 const MODE_QUESTION_SKILL_LINK =
   "[モード判定質問](../../docs/01_開発ワークフロー.md#モード判定質問)を読み";
 const MODE_QUESTION_HEADING = "## モード判定質問";
+
+/**
+ * **必須asset一覧をsourceから取り出す**（Issue #1105）。
+ *
+ * `check_package_contents.ts`をimportして`required`を得る形にはできない。
+ * 同fileはtarballを展開して検査する巨大関数の中に集合を持つ。**字面で取る。**
+ */
+/**
+ * **登録状態の判定は純関数で測る**（Issue #1105）。
+ *
+ * 期待するcommandの断片をここへ書き写す。**製品の定数から導出しない。**
+ */
+const HOOK_EXPECTED_FRAGMENT = ".claude/hooks/asc-contract-citation.mjs";
+
+Given("hookのentryを持つproject-local設定がある", function () {
+  this.hookSettings = JSON.stringify({
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            {
+              type: "command",
+              command: `"$CLAUDE_PROJECT_DIR/${HOOK_EXPECTED_FRAGMENT}"`,
+            },
+          ],
+        },
+      ],
+    },
+  });
+});
+
+Given("project-local設定が存在しない", function () {
+  this.hookSettings = undefined;
+});
+
+Given("別のcommandのentryだけを持つproject-local設定がある", function () {
+  this.hookSettings = JSON.stringify({
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [{ type: "command", command: "./other-hook.sh" }],
+        },
+      ],
+    },
+  });
+});
+
+When("hook登録状態を検査する", function () {
+  this.hookRegistration = inspectHookRegistration({
+    settings: this.hookSettings,
+    expectedCommandFragment: HOOK_EXPECTED_FRAGMENT,
+  });
+});
+
+Then("登録済みとして報告され診断は出ない", function () {
+  assert.equal(this.hookRegistration?.registered, true);
+});
+
+/**
+ * **「無効です」と断定しない文言であることまで測る。** project-localの設定
+ * だけを見ており、global・managed・plugin経由の有効化状態は見えない。
+ */
+Then("未登録として報告され断定しない診断が出る", function () {
+  assert.equal(this.hookRegistration?.registered, false);
+  const reason = this.hookRegistration?.reason ?? "";
+  assert.ok(reason.length > 0, "診断文がありません");
+  assert.equal(
+    /無効|hookが動いていません/u.test(reason),
+    false,
+    `断定的な文言が含まれています: ${reason}`,
+  );
+  assert.ok(
+    reason.includes("確認できません") || reason.includes("未確認"),
+    `限定を述べていません: ${reason}`,
+  );
+});
+
+Given("配布物の必須asset一覧がある", function () {
+  this.hookRequiredSource = fs.readFileSync(
+    "scripts/check_package_contents.ts",
+    "utf8",
+  );
+});
+
+/**
+ * **期待pathを製品の定数から導出しない。** 導出すると、必須assetを消す変異で
+ * 期待値も同時に縮み、変異を検出できない。ここへ書き写した値が正本と食い違えば
+ * この検査が落ちる。
+ */
+When("強制点hookの必須assetを検査する", function () {
+  this.hookRequiredExpected = [
+    ".agent-skill-chain/hooks/00_利用案内.md",
+    ".agent-skill-chain/hooks/asc-contract-citation.mjs",
+  ];
+});
+
+Then("hook正本と案内の両方が必須assetに含まれる", function () {
+  const source = this.hookRequiredSource ?? "";
+  for (const relative of this.hookRequiredExpected ?? [])
+    assert.ok(
+      source.includes(`"${relative}"`),
+      `配布物の必須assetに含まれていません: ${relative}`,
+    );
+  const packageFiles = JSON.parse(fs.readFileSync("package.json", "utf8")) as {
+    files?: string[];
+  };
+  assert.ok(
+    (packageFiles.files ?? []).includes(".agent-skill-chain/hooks/"),
+    "package.jsonのfilesにhooksが含まれていません",
+  );
+});
+
+Given("配布する強制点hookの案内がある", function () {
+  this.hookGuide = fs.readFileSync(
+    ".agent-skill-chain/hooks/00_利用案内.md",
+    "utf8",
+  );
+});
+
+When("Codex側の記述を検査する", function () {
+  this.hookGuideCodexSection = (this.hookGuide ?? "").slice(
+    (this.hookGuide ?? "").indexOf("## Codexへの登録"),
+  );
+});
+
+/**
+ * **「未確認」の語だけでは足りない。** 実測した否定的観測まで書かれていること
+ * を求める。書かれていなければ、根拠のない断り書きになる。
+ */
+Then("未確認である旨と実測した否定的観測が含まれる", function () {
+  const section = this.hookGuideCodexSection ?? "";
+  assert.ok(section.includes("未確認"), "未確認である旨がありません");
+  assert.ok(
+    section.includes("発火しなかった"),
+    "実測した否定的観測がありません",
+  );
+  assert.ok(
+    section.includes("設定fileを配らない"),
+    "設定fileを配らない方針がありません",
+  );
+});
 
 Given("配布するStep 0のskillがある", function () {
   this.modeQuestionSkillLink = visibleMarkdown(

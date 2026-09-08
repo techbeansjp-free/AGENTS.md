@@ -29,6 +29,7 @@
     ".agent-skill-chain/templates/",
     ".agent-skill-chain/schemas/",
     ".agent-skill-chain/policy/",
+    ".agent-skill-chain/hooks/",
     ".agent-skill-chain/docs/",
     "README.md",
     "AGENTS.md",
