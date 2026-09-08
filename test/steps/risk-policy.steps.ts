@@ -49,6 +49,8 @@ import {
   validateConformanceContract,
   validateProjectConformanceBinding,
   validateRepositoryConformance,
+  conformanceTestArgv,
+  counterexampleScenarioNamePattern,
 } from "../../src/domain/conformance.js";
 import { evaluateReview } from "../../src/domain/review.js";
 import {
@@ -169,6 +171,8 @@ interface RiskPolicyWorld extends WorkflowWorld {
   beforeFiles: string[];
   binResults: SpawnSyncReturns<string>[];
   binding: BindingFixture;
+  namePatternInput: unknown;
+  namePattern: string | undefined;
   bindingFile: string;
   bindingResult: { valid: boolean; errors: string[] };
   bindingSchema: BindingSchemaFixture;
@@ -4007,6 +4011,125 @@ Given("enforcementが配列でないproject conformance bindingがある", funct
     })),
   };
   requireFirst(this.binding.bindings, "binding").enforcement = {};
+});
+/**
+ * **前方一致の巻き込みを、実在しうる採番で試す。** `SCN-UNIT-RISK-003`と
+ * `SCN-UNIT-RISK-0031`は現時点のrepositoryに同居しないが、連番の桁が増えれば成立する。
+ * 正規表現メタ文字はschemaが弾くが、schema検証前の値も受け取りうるため字面として扱う。
+ */
+Given("前方一致になるIDと正規表現メタ文字を含む反例SCN候補がある", function () {
+  this.namePatternInput = {
+    schemaVersion: "agent-skill-chain/project-conformance/v1",
+    bindings: [
+      { counterexampleScenarios: ["SCN-UNIT-RISK-003", "SCN-A.B"] },
+      { counterexampleScenarios: ["SCN-UNIT-RISK-003"] },
+    ],
+  };
+});
+When("反例SCN名の正規表現を組む", function () {
+  this.namePattern = counterexampleScenarioNamePattern(this.namePatternInput);
+});
+Then("完全ID一致だけが真になり空bindingはundefinedになる", function () {
+  assert.ok(this.namePattern !== undefined, "正規表現が組まれていません");
+  const pattern = new RegExp(this.namePattern, "u");
+  assert.ok(
+    pattern.test("SCN-UNIT-RISK-003 何かの説明"),
+    "名指しIDに一致しません",
+  );
+  /** **前方一致を巻き込まない。** これが破れると限定の主張が偽になる。 */
+  assert.equal(
+    pattern.test("SCN-UNIT-RISK-0031 何かの説明"),
+    false,
+    "前方一致のIDを巻き込みました",
+  );
+  assert.equal(
+    pattern.test("XSCN-UNIT-RISK-003"),
+    false,
+    "後方一致のIDを巻き込みました",
+  );
+  /**
+   * **語境界では閉じられない。** `-`は非単語文字なので`\b`は`-EXTRA`を通す。
+   * IDの許可文字集合そのもので閉じているかを検査する。
+   */
+  assert.equal(
+    pattern.test("SCN-UNIT-RISK-003-EXTRA 説明"),
+    false,
+    "ハイフンで延長したIDを巻き込みました",
+  );
+  assert.equal(
+    pattern.test("SCN-UNIT-RISK-003-1 説明"),
+    false,
+    "ハイフンと数字で延長したIDを巻き込みました",
+  );
+  /** **メタ文字を字面として扱う。** escapeが外れると`SCN-AxB`にも一致する。 */
+  assert.ok(pattern.test("SCN-A.B 説明"), "escapeしたIDに一致しません");
+  assert.equal(
+    pattern.test("SCN-AxB 説明"),
+    false,
+    "メタ文字がescapeされていません",
+  );
+  /** **重複を1つに畳む。** 同じIDが複数のbindingに現れる。 */
+  assert.equal(
+    (this.namePattern.match(/SCN-UNIT-RISK-003/gu) ?? []).length,
+    1,
+    "重複が畳まれていません",
+  );
+  /** **空bindingはundefinedである。** 呼び出し側が限定なしへ倒せないようにする。 */
+  assert.equal(counterexampleScenarioNamePattern({ bindings: [] }), undefined);
+  assert.equal(counterexampleScenarioNamePattern({}), undefined);
+  assert.equal(counterexampleScenarioNamePattern(undefined), undefined);
+  /**
+   * **argvも空bindingでundefinedになる。** ここを空文字へ倒すと全scenarioに一致し、
+   * bindingを空にするだけでconformanceが素通しになる。型を満たしたまま
+   * `?? ""`で消せる変異なので、判断そのものを純関数へ閉じて反例を当てる。
+   */
+  for (const empty of [{ bindings: [] }, {}, undefined])
+    assert.equal(
+      conformanceTestArgv("/tmp/report.json", empty),
+      undefined,
+      "空bindingでargvを組んでしまいました",
+    );
+  const argv = conformanceTestArgv("/tmp/report.json", this.namePatternInput);
+  assert.ok(argv !== undefined, "非空bindingでargvが組まれていません");
+  assert.deepEqual(argv.slice(0, 4), [
+    "test",
+    "--",
+    "--format",
+    "json:/tmp/report.json",
+  ]);
+  assert.equal(argv[4], "--name");
+  assert.equal(argv[5], this.namePattern);
+});
+Given("反例SCNを名指しするbindingと成功証拠が空のreportがある", function () {
+  this.binding = JSON.parse(
+    fs.readFileSync(
+      ".agent-skill-chain/project/conformance/bindings.json",
+      "utf8",
+    ),
+  ) as unknown as BindingFixture;
+  this.contract = JSON.parse(
+    fs.readFileSync(".agent-skill-chain/policy/conformance.json", "utf8"),
+  ) as Record<string, unknown>;
+  this.conformanceEvidence = { tool: "cucumber-js", passedScenarioIds: [] };
+});
+When("project conformanceを検証する", function () {
+  this.repositoryConformance = validateRepositoryConformance(
+    process.cwd(),
+    this.contract,
+    this.binding,
+    this.conformanceEvidence as Parameters<
+      typeof validateRepositoryConformance
+    >[3],
+  );
+});
+Then("成功証拠の不在を名指しして拒否する", function () {
+  assert.equal(this.repositoryConformance.valid, false);
+  assert.ok(
+    this.repositoryConformance.errors.some((error: string) =>
+      error.includes("counterexampleに成功証拠がありません"),
+    ),
+    `成功証拠の不在を名指ししていません: ${this.repositoryConformance.errors.join(" | ")}`,
+  );
 });
 Given("末尾slashを持つenforcement pathがある", function () {
   this.binding = {

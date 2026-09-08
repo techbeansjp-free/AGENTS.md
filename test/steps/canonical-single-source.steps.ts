@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
-import { checkCanonicalDuplication } from "../../scripts/check_conformance.js";
+import {
+  checkCanonicalDuplication,
+  checkConformance,
+  type ConformanceTestSpawn,
+} from "../../scripts/check_conformance.js";
+
 import {
   CANONICAL_SCAN_LOCATIONS,
   CANONICAL_SINGLE_SOURCE_RULE_ID,
@@ -33,6 +38,9 @@ interface CanonicalWorld extends WorkflowWorld {
   coverage: ReturnType<typeof buildRuleCoverage>;
   diagnostics: string[];
   locations: readonly string[];
+  conformanceArgv: readonly string[] | undefined;
+  conformanceCommand: string | undefined;
+  conformanceStatus: number;
   ruleScope: string[];
   mismatches: string[];
 }
@@ -495,3 +503,91 @@ Then("検査はregistry不在を診断として報告する", function () {
 Then("突合は差異0件で一致する", function () {
   assert.deepEqual(this.mismatches, []);
 });
+
+/**
+ * **合成経路を検査する。** 純関数を直接呼ぶscenarioだけでは、`checkConformance`が
+ * `--name`を渡す行を消す変異も、空bindingを拒否する分岐を消す変異も生存する。
+ * 既定値つき引数のseamへrunnerを注入し、cucumberへ実際に渡る引数を観測する。
+ */
+Given("実repositoryのconformance検査を注入したrunnerで起動する", function () {
+  this.root = process.cwd();
+  this.conformanceArgv = undefined;
+});
+When("conformance検査を実行する", function () {
+  const spawn: ConformanceTestSpawn = (command, argv) => {
+    this.conformanceCommand = command;
+    this.conformanceArgv = argv;
+    /** 実行はせず、非0を返して以降の検証経路を止める。観測対象は引数だけである。 */
+    return { status: 1 };
+  };
+  this.conformanceStatus = checkConformance(this.root, spawn);
+});
+Then(
+  "cucumberへ渡す引数はbindingの反例SCNだけを完全ID一致で限定する",
+  function () {
+    const argv = this.conformanceArgv;
+    assert.ok(argv !== undefined, "spawnが呼ばれていません");
+    assert.equal(this.conformanceCommand, "npm");
+    const index = argv.indexOf("--name");
+    assert.ok(index >= 0, `--nameが渡されていません: ${argv.join(" ")}`);
+    const pattern = new RegExp(argv[index + 1] ?? "", "u");
+    /**
+     * **expectedを同じhelperから導出しない。** 導出すると、bindingに無いIDを
+     * patternへ足す変異が両側で同じ向きにずれて素通りする。bindingのJSONを
+     * 独立に読み、repository中の全SCN IDと突き合わせる。
+     */
+    const binding: unknown = JSON.parse(
+      fs.readFileSync(
+        path.join(
+          this.root,
+          ".agent-skill-chain/project/conformance/bindings.json",
+        ),
+        "utf8",
+      ),
+    );
+    const bound = new Set<string>();
+    for (const document of (binding as { bindings?: unknown[] }).bindings ?? [])
+      for (const id of (document as { counterexampleScenarios?: unknown[] })
+        .counterexampleScenarios ?? [])
+        if (typeof id === "string") bound.add(id);
+    assert.ok(bound.size > 0, "bindingが反例SCNを名指ししていません");
+    const everyId = new Set<string>();
+    const walk = (directory: string): void => {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        const child = path.join(directory, entry.name);
+        if (entry.isDirectory()) walk(child);
+        else if (entry.name.endsWith(".feature"))
+          for (const match of fs
+            .readFileSync(child, "utf8")
+            .matchAll(/SCN-[A-Z0-9-]+/gu))
+            everyId.add(match[0]);
+      }
+    };
+    walk(path.join(this.root, "test/features"));
+    /** **名指しした全IDが一致する。** 落とすと限定が狭すぎる。 */
+    for (const id of bound)
+      assert.ok(pattern.test(`${id} 説明`), `名指しIDに一致しません: ${id}`);
+    /** **名指ししていない全IDが一致しない。** 足すと限定が広すぎる。 */
+    for (const id of everyId)
+      if (!bound.has(id))
+        assert.equal(
+          pattern.test(`${id} 説明`),
+          false,
+          `名指ししていないIDを巻き込みました: ${id}`,
+        );
+    /** **IDの延長を巻き込まない。** 語境界では`-EXTRA`が通る。 */
+    for (const id of bound) {
+      assert.equal(
+        pattern.test(`${id}-EXTRA 説明`),
+        false,
+        `IDの延長を巻き込みました: ${id}-EXTRA`,
+      );
+      assert.equal(
+        pattern.test(`${id}9 説明`),
+        false,
+        `IDの延長を巻き込みました: ${id}9`,
+      );
+    }
+    assert.equal(this.conformanceStatus, 1);
+  },
+);
