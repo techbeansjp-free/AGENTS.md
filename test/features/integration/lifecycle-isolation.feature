@@ -197,3 +197,13 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     Given ASCを一度も導入していない隔離directoryがある
     When 未導入の隔離先へdeleteを試みる
     Then 拒否理由は復旧指定を名指しせずinstallを案内する
+
+  Scenario: SCN-INT-LIFECYCLE-040 資産1件の未導入directoryでも案内は状態を断定しない
+    Given 未導入directoryに利用者所有のAGENTS.mdだけがある隔離先がある
+    When 未導入の隔離先へdeleteを試みる
+    Then 拒否理由は復旧指定を名指しせずinstallを案内する
+
+  Scenario: SCN-INT-LIFECYCLE-041 明示指定なしのupdateの拒否もpreviewで裏付ける
+    Given 導入後にrecordを失い展開済み資産が境界外symlinkの隔離先がある
+    When 明示指定なしでrecord不在の隔離先へupdateを試みる
+    Then 拒否理由は明示指定を成功する手段として案内せず原因を名指しする

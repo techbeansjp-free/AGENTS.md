@@ -255,60 +255,52 @@ function mappings(target) {
  * previewが拒否した場合は、その原因をそのまま返す。**原因を解消すべき対象として
  * 名指しし、成功しない手段は名指ししない。**
  */
+/**
+ * 復旧の案内を作る（Issue #1305）。
+ *
+ * **状態をfilesystemから判定しない。** 「導入済みか未導入か」はrecordを失った
+ * 時点で判定できない。`adopted`と`retained`の件数で分けた前版は、利用者所有の
+ * `AGENTS.md`が1件あるだけで「導入済み」へ反転し、誤った`--root`への`delete`が
+ * 全展開を指示した。**推測を案内経路へ持ち込み直していた。**
+ *
+ * したがって案内は次の形にする。
+ *
+ * - previewが拒否されるなら、原因だけを述べcommandを名指ししない
+ * - 拒否されないなら、**previewの内訳をdataとして開示し、両方の分岐を条件付きで
+ *   示す。** どちらであるかの判定は利用者へ返す
+ *
+ * **previewが保証するのは製品判定による拒否が無いことだけである。** 書き込み権限・
+ * 容量・公開時の競合は副作用の無いoracleでは予測できない。
+ */
 function recoveryGuidance(target) {
     let preview;
     try {
         const observed = upgrade(target, { apply: false, recoverRecord: true });
         preview = {
+            planned: observed.planned ?? [],
             adopted: observed.adopted ?? [],
             retained: observed.retained ?? [],
         };
     }
     catch (error) {
         const cause = error instanceof Error ? error.message : String(error);
-        /**
-         * **原因は載せるが、commandを名指ししない。** 失敗した手段を再び名指しすると
-         * 閉路へ戻る。呼び出し側の拒否理由へ連結されるため、ここでcommandを勧めない。
-         */
         return {
-            kind: "blocked",
+            blocked: true,
             text: `この状態では復旧も次の理由で拒否されます: ${cause}。先にこの原因を解消してください`,
         };
     }
     /**
-     * **展開済み資産が1件も無いなら復旧を勧めない**（Issue #1305、fable F-02）。
-     *
-     * 未導入のdirectoryでは全資産が`place`と分類されてpreviewは通る。そこで
-     * `--recover-record`を勧めると、**誤った`--root`へ`delete`を打った利用者が
-     * 案内に従うだけで全展開へ到達する。** #1307の門は利用者の明示宣言を防護に
-     * したのだから、製品がその宣言を無条件に指示してはならない。
-     */
-    if (preview.adopted.length === 0 && preview.retained.length === 0)
-        return {
-            kind: "install",
-            text: "展開済み資産が1件もありません。このdirectoryは未導入です。" +
-                "導入する場合はinstallを使ってください",
-        };
-    /**
-     * **shellへ貼れるcommand文字列を作らない**（Issue #1305、codex High 3）。
-     *
-     * `--root=${JSON.stringify(target)}`はshell quotingではない。pathに`$()`や
-     * バッククォートが含まれると、二重引用の内側でもcommand substitutionが起きる。
-     * **対象はdataとして示し、commandはflag名だけを示す。**
-     *
-     * **`--dry-run`と`--apply`は排他である**（codex High 2）。「同じ引数へ--applyを
-     * 付ける」と書くと`--dry-run --apply`になり、`lifecycleApplyMode`が必ず拒否する。
-     * それは環境要因ではなく既知の論理的拒否であり、案内自身がINV-02に反する。
-     *
-     * **previewが示すのは製品判定による拒否が無いことだけである。** 書き込み権限・
-     * 容量・公開時の競合は副作用の無いoracleでは予測できない。
+     * **shellへ貼れるcommand文字列を作らない。** 対象はdataとして示す。
+     * **`--dry-run`と`--apply`は排他であり併記しない。**
      */
     return {
-        kind: "recover",
-        text: `対象 ${target} に対して update を --recover-record 付きで実行してください。` +
+        blocked: false,
+        text: `対象 ${target} のpreview内訳は 配置予定 ${String(preview.planned.length)}件、` +
+            `採用 ${String(preview.adopted.length)}件、保持 ${String(preview.retained.length)}件です。` +
+            "**このdirectoryを以前に導入していた場合**は update を --recover-record 付きで実行してください。" +
             "まず --dry-run で内容を確認し、確認後は --dry-run を --apply へ置き換えます。" +
-            "recordに無く正本と一致する展開済み資産を採用し、" +
-            "recordに無く正本と異なる資産は上書きせずretainedとして報告します。" +
+            "**一度も導入していない場合は update ではなく install を使ってください。** " +
+            "製品はどちらであるかをfilesystemから判定しません。" +
             "previewは製品判定による拒否が無いことだけを示し、書き込み権限や容量の不足は予測しません",
     };
 }
@@ -469,7 +461,12 @@ export function upgrade(target, options) {
      */
     if (!recordPresent && options.recoverRecord !== true)
         throw new Error("managed asset recordがありません。復旧は明示の指定を要求します。" +
-            "導入済みdirectoryのrecordを再固定する場合は --recover-record を付けて再実行してください");
+            /**
+             * **門の手前でもpreviewで裏付ける**（Issue #1305、codex High 1）。
+             * 無条件に`--recover-record`を勧めると、境界外symlinkのようにpreviewが
+             * 拒否される状態でも成功しない手段を名指しすることになり、正準INV-02に反する。
+             */
+            recoveryGuidance(target).text);
     const old = readManagedAssetRecordAt(target, recordPresent);
     const current = mappings(target);
     /**
@@ -543,9 +540,9 @@ export function uninstall(target, options) {
              * （Issue #1305、fable F-02）。未導入directoryでは再固定する対象が無く、
              * 文が成立しない。
              */
-            return guidance.kind === "recover"
-                ? `managed asset recordがありません。撤去対象を確定できません。${guidance.text}。recordを再固定したのちdeleteを実行してください`
-                : `managed asset recordがありません。撤去対象を確定できません。${guidance.text}`;
+            return guidance.blocked
+                ? `managed asset recordがありません。撤去対象を確定できません。${guidance.text}`
+                : `managed asset recordがありません。撤去対象を確定できません。${guidance.text}。導入済みであった場合はrecordを再固定したのちdeleteを実行してください`;
         })());
     const managed = readManagedAssetRecord(target);
     const removable = [];

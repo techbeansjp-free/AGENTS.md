@@ -989,6 +989,16 @@ Then("拒否理由はupdateを名指しし名指しされたupdateは成功す�
       /--dry-run --apply/u,
       `${index}件目が排他なflagを併記しています: ${message}`,
     );
+    /**
+     * **順序を固定する**（Issue #1305、fable 変異4）。「まず --apply で確認し、
+     * 確認後は --apply を --dry-run へ置き換える」へ反転させる変異は、
+     * `/--dry-run/`と`/--apply/`の存在検査だけでは生存する。
+     */
+    assert.match(
+      message,
+      /まず --dry-run で内容を確認し、確認後は --dry-run を --apply へ置き換えます/u,
+      `${index}件目がpreview→applyの順序を示していません: ${message}`,
+    );
     /** **拒否される手段を案内しない。** installを名指しすると閉路になる。 */
     assert.doesNotMatch(
       message,
@@ -1430,7 +1440,7 @@ Then(
      */
     assert.match(
       String(rejections[0]),
-      /--recover-record を付けて再実行してください/u,
+      /復旧は明示の指定を要求します/u,
       `明示指定を要求していません: ${String(rejections[0])}`,
     );
     assert.doesNotMatch(
@@ -1632,7 +1642,7 @@ Then(
     assert.notEqual(rejections[0], "", "未導入directoryが拒否されていません");
     assert.match(
       String(rejections[0]),
-      /--recover-record を付けて再実行してください/u,
+      /復旧は明示の指定を要求します/u,
       `明示指定を要求していません: ${String(rejections[0])}`,
     );
     const entries = fs
@@ -1654,7 +1664,7 @@ Then("updateは1 fileも書かず明示指定を要求して拒否する", funct
   assert.notEqual(rejections[0], "", "未導入directoryが拒否されていません");
   assert.match(
     String(rejections[0]),
-    /--recover-record を付けて再実行してください/u,
+    /復旧は明示の指定を要求します/u,
     `明示指定を要求していません: ${String(rejections[0])}`,
   );
   const entries = fs
@@ -1763,7 +1773,7 @@ Then("明示指定の要求だけを返しrecordを再生成しない", function
   );
   assert.match(
     String(rejections[0]),
-    /--recover-record を付けて再実行してください/u,
+    /復旧は明示の指定を要求します/u,
     `明示指定を要求していません: ${String(rejections[0])}`,
   );
   /** **recordを再生成しない。** 拒否は状態を変えない。 */
@@ -2034,27 +2044,38 @@ When("分類の前に有効なrecordが現れる状況でupdateを適用する",
     version: "0.0.0",
     files: { [DIVERGENT_ASSET]: sha256(fs.readFileSync(target)) },
   };
-  const original = fs.readFileSync;
-  let injected = false;
+  const record = recordPath(this.root);
+  const original = fs.lstatSync;
+  let observations = 0;
   this.recoveryRejections = [];
   try {
     /**
-     * opt-in門の通過後、record読み取りへ入る直前を狙う。**製品APIへ注入口を
-     * 足さない。** `fs.readFileSync`の初回呼び出しで有効なrecordを配置する。
+     * **record pathへのlstat回数を数え、1回目の直後に有効なrecordを置く**
+     * （Issue #1305、codex High 1 / fable H-02）。
+     *
+     * 是正前は`upgrade`と`readManagedAssetRecordOrEmpty`が**2回**観測しており、
+     * 2回目が新しいrecordを見てそのdigestを`expected`として採用し、利用者fileを
+     * 正本へ上書きした。是正後は観測が1回なので、後から現れたrecordは分類へ
+     * 影響しない。**`fs.readFileSync`への注入では、record不在時に読み取りが
+     * 発生しないため区別できない。**
      */
-    (fs as { readFileSync: typeof fs.readFileSync }).readFileSync = ((
-      file: Parameters<typeof fs.readFileSync>[0],
-      options?: Parameters<typeof fs.readFileSync>[1],
+    (fs as { lstatSync: typeof fs.lstatSync }).lstatSync = ((
+      file: Parameters<typeof fs.lstatSync>[0],
+      options?: Parameters<typeof fs.lstatSync>[1],
     ) => {
-      if (!injected) {
-        injected = true;
-        fs.writeFileSync(
-          recordPath(this.root),
-          `${JSON.stringify(forged, null, 2)}\n`,
-        );
+      /**
+       * **数えるのはoriginalの前である。** record不在のlstatはENOENTでthrowする
+       * ため、後に置くと1回も数えられない。
+       */
+      const isRecordPath = String(file) === record;
+      if (isRecordPath) observations += 1;
+      try {
+        return original(file, options as never);
+      } finally {
+        if (isRecordPath && observations === 1)
+          fs.writeFileSync(record, `${JSON.stringify(forged, null, 2)}\n`);
       }
-      return original(file, options as never);
-    }) as typeof fs.readFileSync;
+    }) as typeof fs.lstatSync;
     this.recoveryResult = upgrade(this.root, {
       apply: true,
       recoverRecord: true,
@@ -2065,9 +2086,15 @@ When("分類の前に有効なrecordが現れる状況でupdateを適用する",
       error instanceof Error ? error.message : String(error),
     );
   } finally {
-    (fs as { readFileSync: typeof fs.readFileSync }).readFileSync = original;
+    (fs as { lstatSync: typeof fs.lstatSync }).lstatSync = original;
   }
-  assert.equal(injected, true, "record出現を注入できていません");
+  assert.ok(observations >= 1, "record pathへのlstatを観測できていません");
+  /** **観測回数そのものを固定する。** 2回観測へ戻す変異をここで捕まえる。 */
+  assert.equal(
+    observations,
+    1,
+    `record pathの観測が${String(observations)}回あります。1回でなければ後から現れたrecordが分類へ影響します`,
+  );
 });
 
 Then("相違資産は上書きされずrecordの観測は1回に保たれる", function () {
@@ -2143,23 +2170,68 @@ Then("拒否理由は復旧指定を名指しせずinstallを案内する", func
   const message = String(rejections[0]);
   assert.notEqual(message, "", "未導入directoryのdeleteが拒否されていません");
   /**
-   * **門が守る宣言を製品自身が指示しない**（Issue #1305、fable F-02）。
-   * 誤った`--root`へ`delete`を打った利用者が案内に従うだけで全展開へ到達しては
-   * ならない。
+   * **状態を断定しないことを固定する**（Issue #1305、codex High 2 / fable H-01）。
+   *
+   * 前版は`adopted`と`retained`が両方0のときだけ「未導入」と断定した。利用者所有の
+   * `AGENTS.md`が1件あるだけで反転し、**撤去したはずのfilesystem推測を案内経路へ
+   * 持ち込み直していた。** 製品は判定せず、内訳をdataとして開示して判断を返す。
    */
-  assert.doesNotMatch(
+  assert.match(
     message,
-    /--recover-record/u,
-    `未導入directoryへ復旧指定を案内しています: ${message}`,
+    /preview内訳は 配置予定 \d+件、採用 \d+件、保持 \d+件です/u,
+    `previewの内訳を開示していません: ${message}`,
   );
   assert.match(
     message,
-    /installを使ってください/u,
-    `installを案内していません: ${message}`,
+    /製品はどちらであるかをfilesystemから判定しません/u,
+    `判定しないことを述べていません: ${message}`,
+  );
+  /** 両方の分岐を条件付きで示す。どちらかを断定しない。 */
+  assert.match(
+    message,
+    /以前に導入していた場合/u,
+    `導入済みの場合の分岐がありません: ${message}`,
+  );
+  assert.match(
+    message,
+    /一度も導入していない場合は update ではなく install を使ってください/u,
+    `未導入の場合の分岐がありません: ${message}`,
   );
   assert.doesNotMatch(
     message,
-    /recordを再固定したのち/u,
-    `再固定する対象が無いのに再固定を求めています: ${message}`,
+    /このdirectoryは未導入です/u,
+    `状態を断定しています: ${message}`,
   );
 });
+
+/**
+ * 門の手前の案内もpreviewで裏付ける（Issue #1305、codex High 1）。
+ *
+ * `update`のopt-in門は展開先の検証より前に発火する。無条件に`--recover-record`を
+ * 勧めると、境界外symlinkのようにpreviewが拒否される状態でも**成功しない手段を
+ * 名指しする**ことになり、正準INV-02に反する。
+ */
+Then(
+  "拒否理由は明示指定を成功する手段として案内せず原因を名指しする",
+  function () {
+    const rejections = this.recoveryRejections;
+    assert.ok(rejections, "拒否理由がありません");
+    const message = String(rejections[0]);
+    assert.notEqual(message, "", "updateが拒否されていません");
+    assert.match(
+      message,
+      /シンボリックリンクによる境界外移動を拒否しました/u,
+      `解消すべき原因を名指ししていません: ${message}`,
+    );
+    assert.doesNotMatch(
+      message,
+      /--recover-record 付きで実行してください/u,
+      `previewが拒否される状態で明示指定を成功する手段として案内しています: ${message}`,
+    );
+    assert.match(
+      message,
+      /先にこの原因を解消してください/u,
+      `原因の解消を求めていません: ${message}`,
+    );
+  },
+);
