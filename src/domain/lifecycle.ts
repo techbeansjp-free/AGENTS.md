@@ -335,8 +335,25 @@ function mappings(target: string): Array<{ src: string; dest: string }> {
  *
  * したがってここが返すのは次の2つだけである。
  *
- * - 同じ状態で`--recover-record`が製品判定により拒否されるなら、その原因
- * - そうでないなら、明示指定が必要であるという事実
+ * - 同じ状態で`--recover-record`が製品判定により拒否されるなら、その原因。**commandを
+ *   名指ししない。** previewが拒否された手段は、INV-02が名指しを禁じる
+ * - そうでないなら、明示指定が必要であるという事実。**このときだけ所属commandを
+ *   名指しする**
+ *
+ * **所属commandの名指しはこの1経路に限る**（Issue #1305、fable H-01）。縮小の初版は
+ * どちらの分岐でも`--recover-record`というflag名だけを返していた。`--recover-record`は
+ * `update`のflagであって`delete`のflagではないが、**CLIは宣言外のflagを黙って捨てる**
+ * （`delete --apply --totally-bogus-flag`が同じ拒否を返すことで実測した）。そのため
+ * `delete`の拒否を読んだ利用者が`delete --recover-record --apply`を実行すると**byte
+ * 一致の拒否が返り**、誤ったcommandを使ったという信号がどこにも出ない。**これは本Issueが
+ * 断とうとしている閉路と同型であり、縮小が作った回帰である。**
+ *
+ * 名指しがINV-02に適合する理由は、直前の`upgrade(target, { apply: false,
+ * recoverRecord: true })`が**まさにその手段のpreviewである**ことによる。previewが
+ * 例外を投げなかった経路にだけ到達するので、「同じ状態で製品の判定により拒否されない
+ * ことをpreviewで確認した手段」という正準条件を満たす。previewが投げた経路では
+ * 名指しせず原因だけを述べる。**`init`の競合拒否はpreviewを走らせないので、
+ * この関数へ連結しない。**
  *
  * **豊かな案内（内訳の開示、preview→applyの手順、分岐の助言）は #1310 が所有する。**
  */
@@ -347,7 +364,7 @@ function recoveryDiagnostic(target: string): string {
     const cause = error instanceof Error ? error.message : String(error);
     return `この状態では --recover-record を付けても次の理由で拒否されます: ${cause}。先にこの原因を解消してください`;
   }
-  return "復旧するには --recover-record が必要です。手順は配布される利用案内を参照してください";
+  return "復旧するには update に --recover-record が必要です。手順は配布される利用案内を参照してください";
 }
 
 export function init(target: string, options: { apply: boolean }) {
@@ -451,6 +468,11 @@ function readManagedAssetRecordAt(
    * そのうえ公開は古い観測に従って`wx`で行われ`EEXIST`で失敗するため、
    * **「commandは失敗したのに利用者fileだけ上書き済み」**という状態が残る。
    * 観測は1回だけ行い、その結果を引数で受ける。
+   *
+   * **この不変条件は状態を変える経路についてのものである**（codex Medium 2）。拒否経路は
+   * 最小診断のために`recoverRecord`つきのpreviewを走らせ、そこでrecord pathを再度観測する。
+   * **previewは1 byteも書かないので上書き権限を与えず、この不変条件が防いでいる事故は
+   * 起こらない。** 無限定に「1回」と述べると拒否経路で偽になる。
    */
   if (!recordPresent) return { version: PACKAGE_VERSION, files: {} };
   return readManagedAssetRecord(target).record;

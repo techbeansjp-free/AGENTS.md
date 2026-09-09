@@ -196,12 +196,12 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
   Scenario: SCN-INT-LIFECYCLE-039 未導入directoryのdeleteも最小診断だけを返す
     Given ASCを一度も導入していない隔離directoryがある
     When 未導入の隔離先へdeleteを試みる
-    Then 拒否理由は最小診断だけを返しinstallを名指ししない
+    Then 拒否理由は最小診断だけを返しupdateを名指しする
 
   Scenario: SCN-INT-LIFECYCLE-040 資産1件の未導入directoryでも診断は同じ形である
     Given 未導入directoryに利用者所有のAGENTS.mdだけがある隔離先がある
     When 未導入の隔離先へdeleteを試みる
-    Then 拒否理由は最小診断だけを返しinstallを名指ししない
+    Then 拒否理由は最小診断だけを返しupdateを名指しする
 
   Scenario: SCN-INT-LIFECYCLE-041 明示指定なしのupdateの拒否もpreviewで裏付ける
     Given 導入後にrecordを失い展開済み資産が境界外symlinkの隔離先がある
