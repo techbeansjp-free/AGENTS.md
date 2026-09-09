@@ -256,53 +256,34 @@ function mappings(target) {
  * 名指しし、成功しない手段は名指ししない。**
  */
 /**
- * 復旧の案内を作る（Issue #1305）。
+ * record不在の最小診断を作る（Issue #1305）。
  *
- * **状態をfilesystemから判定しない。** 「導入済みか未導入か」はrecordを失った
- * 時点で判定できない。`adopted`と`retained`の件数で分けた前版は、利用者所有の
- * `AGENTS.md`が1件あるだけで「導入済み」へ反転し、誤った`--root`への`delete`が
- * 全展開を指示した。**推測を案内経路へ持ち込み直していた。**
+ * **手順・内訳・分岐の助言をここで作らない。** 4ラウンド連続で、この案内文だけから
+ * 新しいHighが出た。原因は構造にある。1本のcaller非依存な文字列を`init`・`upgrade`門・
+ * `uninstall`の3 callerへ連結すると、**callerごとに真偽が変わる文**になる。
+ * `install`の名指しは`init`では拒否の閉路、`delete`では誤誘導、`update`でだけ正しい。
  *
- * したがって案内は次の形にする。
+ * **手順の正本は配布される利用案内である。** `.agent-skill-chain/00_利用案内.md`が
+ * 復旧手順・`--dry-run`・retainの意味・未導入directoryでの帰結を既に所有しており、
+ * error文字列はそれを複製していた。運用ポリシーの「手段の追加より既存手段の縮小を
+ * 先に評価する」に従い、複製を消す。
  *
- * - previewが拒否されるなら、原因だけを述べcommandを名指ししない
- * - 拒否されないなら、**previewの内訳をdataとして開示し、両方の分岐を条件付きで
- *   示す。** どちらであるかの判定は利用者へ返す
+ * したがってここが返すのは次の2つだけである。
  *
- * **previewが保証するのは製品判定による拒否が無いことだけである。** 書き込み権限・
- * 容量・公開時の競合は副作用の無いoracleでは予測できない。
+ * - 同じ状態で`--recover-record`が製品判定により拒否されるなら、その原因
+ * - そうでないなら、明示指定が必要であるという事実
+ *
+ * **豊かな案内（内訳の開示、preview→applyの手順、分岐の助言）は #1310 が所有する。**
  */
-function recoveryGuidance(target) {
-    let preview;
+function recoveryDiagnostic(target) {
     try {
-        const observed = upgrade(target, { apply: false, recoverRecord: true });
-        preview = {
-            planned: observed.planned ?? [],
-            adopted: observed.adopted ?? [],
-            retained: observed.retained ?? [],
-        };
+        upgrade(target, { apply: false, recoverRecord: true });
     }
     catch (error) {
         const cause = error instanceof Error ? error.message : String(error);
-        return {
-            blocked: true,
-            text: `この状態では復旧も次の理由で拒否されます: ${cause}。先にこの原因を解消してください`,
-        };
+        return `この状態では --recover-record を付けても次の理由で拒否されます: ${cause}。先にこの原因を解消してください`;
     }
-    /**
-     * **shellへ貼れるcommand文字列を作らない。** 対象はdataとして示す。
-     * **`--dry-run`と`--apply`は排他であり併記しない。**
-     */
-    return {
-        blocked: false,
-        text: `対象 ${target} のpreview内訳は 配置予定 ${String(preview.planned.length)}件、` +
-            `採用 ${String(preview.adopted.length)}件、保持 ${String(preview.retained.length)}件です。` +
-            "**このdirectoryを以前に導入していた場合**は update を --recover-record 付きで実行してください。" +
-            "まず --dry-run で内容を確認し、確認後は --dry-run を --apply へ置き換えます。" +
-            "**一度も導入していない場合は update ではなく install を使ってください。** " +
-            "製品はどちらであるかをfilesystemから判定しません。" +
-            "previewは製品判定による拒否が無いことだけを示し、書き込み権限や容量の不足は予測しません",
-    };
+    return "復旧するには --recover-record が必要です。手順は配布される利用案内を参照してください";
 }
 export function init(target, options) {
     const assets = mappings(target);
@@ -311,8 +292,12 @@ export function init(target, options) {
         (!isRegularFile(dest) || digest(src) !== digest(dest)))
         .map(({ dest }) => dest);
     if (conflicts.length > 0)
-        throw new Error(`初期導入先が競合しています。ファイルは書き込んでいません: ${conflicts.join(", ")}。` +
-            recoveryGuidance(target).text);
+        throw new Error(
+        /**
+         * **競合pathだけを述べる**（Issue #1305）。復旧手段の案内をここへ連結すると、
+         * いま拒否した`install`を再び名指しする閉路になる。
+         */
+        `初期導入先が競合しています。ファイルは書き込んでいません: ${conflicts.join(", ")}`);
     if (!options.apply)
         return { applied: false, assets: assets.map(({ dest }) => dest) };
     const record = {
@@ -460,13 +445,7 @@ export function upgrade(target, options) {
      * 受理範囲は推測より狭い。
      */
     if (!recordPresent && options.recoverRecord !== true)
-        throw new Error("managed asset recordがありません。復旧は明示の指定を要求します。" +
-            /**
-             * **門の手前でもpreviewで裏付ける**（Issue #1305、codex High 1）。
-             * 無条件に`--recover-record`を勧めると、境界外symlinkのようにpreviewが
-             * 拒否される状態でも成功しない手段を名指しすることになり、正準INV-02に反する。
-             */
-            recoveryGuidance(target).text);
+        throw new Error(`managed asset recordがありません。${recoveryDiagnostic(target)}`);
     const old = readManagedAssetRecordAt(target, recordPresent);
     const current = mappings(target);
     /**
@@ -533,17 +512,7 @@ export function upgrade(target, options) {
 export function uninstall(target, options) {
     const recordPath = path.join(target, MANAGED_RECORD);
     if (!pathEntryExists(recordPath))
-        throw new Error((() => {
-            const guidance = recoveryGuidance(target);
-            /**
-             * **復旧が手段でない場合に「recordを再固定したのち」と続けない**
-             * （Issue #1305、fable F-02）。未導入directoryでは再固定する対象が無く、
-             * 文が成立しない。
-             */
-            return guidance.blocked
-                ? `managed asset recordがありません。撤去対象を確定できません。${guidance.text}`
-                : `managed asset recordがありません。撤去対象を確定できません。${guidance.text}。導入済みであった場合はrecordを再固定したのちdeleteを実行してください`;
-        })());
+        throw new Error(`managed asset recordがありません。撤去対象を確定できません。${recoveryDiagnostic(target)}`);
     const managed = readManagedAssetRecord(target);
     const removable = [];
     const retained = [];

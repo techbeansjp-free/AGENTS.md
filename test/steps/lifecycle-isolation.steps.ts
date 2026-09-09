@@ -944,75 +944,61 @@ Then("相違資産はretainedとして報告され内容は1 byteも変わらな
   );
 });
 
-Then("拒否理由はupdateを名指しし名指しされたupdateは成功する", function () {
+Then("拒否理由は最小診断だけを返す", function () {
   const rejections = this.recoveryRejections;
   assert.ok(rejections, "拒否理由がありません");
   assert.equal(rejections.length, 2);
-  for (const [index, message] of rejections.entries()) {
-    assert.notEqual(message, "", `${index}件目が拒否されていません`);
-    assert.match(
-      message,
-      /update を --recover-record 付きで実行してください/u,
-      `${index}件目の拒否理由が案内すべき手段を名指ししていません: ${message}`,
-    );
-    /**
-     * **規範句を1つずつ名指しで固定する**（Issue #1305、fable F-06）。
-     * 要件本文は「案内はpreviewとapplyの二段階を示し、対象を明示する」を要求する。
-     * 字面を落とす変異を捕まえる。
-     */
-    assert.match(
-      message,
-      /--dry-run/u,
-      `${index}件目がpreviewの段を示していません: ${message}`,
-    );
-    assert.match(
-      message,
-      /--apply/u,
-      `${index}件目がapplyの段を示していません: ${message}`,
-    );
-    assert.match(
-      message,
-      new RegExp(
-        `対象 ${this.root.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}`,
-        "u",
-      ),
-      `${index}件目が対象を明示していません: ${message}`,
-    );
-    /** **shellへ貼れるcommand文字列を作らない**（codex High 3）。 */
-    assert.doesNotMatch(
-      message,
-      /--root=/u,
-      `${index}件目がshellへ貼れる--root=を含みます: ${message}`,
-    );
-    assert.doesNotMatch(
-      message,
-      /--dry-run --apply/u,
-      `${index}件目が排他なflagを併記しています: ${message}`,
-    );
-    /**
-     * **順序を固定する**（Issue #1305、fable 変異4）。「まず --apply で確認し、
-     * 確認後は --apply を --dry-run へ置き換える」へ反転させる変異は、
-     * `/--dry-run/`と`/--apply/`の存在検査だけでは生存する。
-     */
-    assert.match(
-      message,
-      /まず --dry-run で内容を確認し、確認後は --dry-run を --apply へ置き換えます/u,
-      `${index}件目がpreview→applyの順序を示していません: ${message}`,
-    );
-    /** **拒否される手段を案内しない。** installを名指しすると閉路になる。 */
-    assert.doesNotMatch(
-      message,
-      /先にinstallを実行してください/u,
-      `${index}件目が拒否されるinstallを案内しています: ${message}`,
-    );
-  }
-  const result = this.recoveryResult;
-  assert.ok(result, "名指しされたupdateの結果がありません");
-  assert.equal(
-    result.applied,
-    true,
-    "拒否理由が名指しした手段が成功していません",
+  const [conflict, absent] = rejections;
+  /**
+   * **callerごとに主張が違う**（Issue #1305、#1310へ分離）。
+   *
+   * 1本のcaller非依存な文字列を3 callerへ連結する構造が、4ラウンド連続でHighを
+   * 生んだ。`init`の競合は競合pathだけを述べ、復旧手段を案内しない。案内すると
+   * いま拒否した`install`を再び名指しする閉路になる。
+   */
+  assert.notEqual(conflict, "", "installが拒否されていません");
+  assert.match(
+    String(conflict),
+    /初期導入先が競合しています。ファイルは書き込んでいません:/u,
+    `競合pathを述べていません: ${String(conflict)}`,
   );
+  assert.doesNotMatch(
+    String(conflict),
+    /--recover-record|--dry-run|--apply|配置予定/u,
+    `競合拒否へ復旧手段を連結しています: ${String(conflict)}`,
+  );
+  /**
+   * **`install`という語の不在も固定する。** 競合拒否へ「一度も導入していない場合は
+   * install を使ってください」を連結する変異は、flag名や手順語の禁止では捕まらない。
+   * いま拒否した`install`を再び名指しすれば閉路である。
+   */
+  assert.doesNotMatch(
+    String(conflict),
+    /install/u,
+    `競合拒否がinstallを名指ししています: ${String(conflict)}`,
+  );
+  /** `delete`のrecord不在は最小診断だけを返す。 */
+  assert.notEqual(absent, "", "deleteが拒否されていません");
+  assert.match(
+    String(absent),
+    /復旧するには --recover-record が必要です/u,
+    `最小診断を返していません: ${String(absent)}`,
+  );
+  /** **語そのものの不在で固定する。** 字面での禁止は文言変更で空虚化した。 */
+  assert.doesNotMatch(
+    String(absent),
+    /install/u,
+    `installを名指ししています: ${String(absent)}`,
+  );
+  assert.doesNotMatch(
+    String(absent),
+    /--dry-run|--apply|配置予定/u,
+    `手順または内訳を含みます: ${String(absent)}`,
+  );
+  /** 明示指定つきの復旧が同じ状態で成功すること。 */
+  const result = this.recoveryResult;
+  assert.ok(result, "復旧結果がありません");
+  assert.equal(result.applied, true, "明示指定つきの復旧が成功していません");
 });
 
 Then("directoryの展開先はretainedとして残る", function () {
@@ -1440,7 +1426,7 @@ Then(
      */
     assert.match(
       String(rejections[0]),
-      /復旧は明示の指定を要求します/u,
+      /復旧するには --recover-record が必要です/u,
       `明示指定を要求していません: ${String(rejections[0])}`,
     );
     assert.doesNotMatch(
@@ -1642,7 +1628,7 @@ Then(
     assert.notEqual(rejections[0], "", "未導入directoryが拒否されていません");
     assert.match(
       String(rejections[0]),
-      /復旧は明示の指定を要求します/u,
+      /復旧するには --recover-record が必要です/u,
       `明示指定を要求していません: ${String(rejections[0])}`,
     );
     const entries = fs
@@ -1664,7 +1650,7 @@ Then("updateは1 fileも書かず明示指定を要求して拒否する", funct
   assert.notEqual(rejections[0], "", "未導入directoryが拒否されていません");
   assert.match(
     String(rejections[0]),
-    /復旧は明示の指定を要求します/u,
+    /復旧するには --recover-record が必要です/u,
     `明示指定を要求していません: ${String(rejections[0])}`,
   );
   const entries = fs
@@ -1773,7 +1759,7 @@ Then("明示指定の要求だけを返しrecordを再生成しない", function
   );
   assert.match(
     String(rejections[0]),
-    /復旧は明示の指定を要求します/u,
+    /復旧するには --recover-record が必要です/u,
     `明示指定を要求していません: ${String(rejections[0])}`,
   );
   /** **recordを再生成しない。** 拒否は状態を変えない。 */
@@ -2164,43 +2150,43 @@ When("未導入の隔離先へdeleteを試みる", function () {
   }
 });
 
-Then("拒否理由は復旧指定を名指しせずinstallを案内する", function () {
+Then("拒否理由は最小診断だけを返しinstallを名指ししない", function () {
   const rejections = this.recoveryRejections;
   assert.ok(rejections, "拒否理由がありません");
   const message = String(rejections[0]);
   assert.notEqual(message, "", "未導入directoryのdeleteが拒否されていません");
   /**
-   * **状態を断定しないことを固定する**（Issue #1305、codex High 2 / fable H-01）。
+   * **最小診断だけを返す**（Issue #1305、#1310へ分離）。
    *
-   * 前版は`adopted`と`retained`が両方0のときだけ「未導入」と断定した。利用者所有の
-   * `AGENTS.md`が1件あるだけで反転し、**撤去したはずのfilesystem推測を案内経路へ
-   * 持ち込み直していた。** 製品は判定せず、内訳をdataとして開示して判断を返す。
+   * 手順・内訳・分岐の助言は4ラウンド連続でHighの発生源だった。`install`の名指しは
+   * `init`では閉路、`delete`では誤誘導になる。**caller非依存な1本の文字列で
+   * 助言を作らない。**
    */
   assert.match(
     message,
-    /preview内訳は 配置予定 \d+件、採用 \d+件、保持 \d+件です/u,
-    `previewの内訳を開示していません: ${message}`,
+    /復旧するには --recover-record が必要です/u,
+    `最小診断を返していません: ${message}`,
   );
-  assert.match(
+  /**
+   * **語そのものの不在で固定する**（Issue #1305、fable H-01）。
+   * 以前は`/先にinstallを実行してください/`のような字面で禁止していたため、
+   * 文言を「install を使ってください」へ変えた時点で**assertionが空虚化した。**
+   * 字面ではなく語で禁止する。
+   */
+  assert.doesNotMatch(
     message,
-    /製品はどちらであるかをfilesystemから判定しません/u,
-    `判定しないことを述べていません: ${message}`,
-  );
-  /** 両方の分岐を条件付きで示す。どちらかを断定しない。 */
-  assert.match(
-    message,
-    /以前に導入していた場合/u,
-    `導入済みの場合の分岐がありません: ${message}`,
-  );
-  assert.match(
-    message,
-    /一度も導入していない場合は update ではなく install を使ってください/u,
-    `未導入の場合の分岐がありません: ${message}`,
+    /install/u,
+    `拒否理由がinstallを名指ししています: ${message}`,
   );
   assert.doesNotMatch(
     message,
-    /このdirectoryは未導入です/u,
-    `状態を断定しています: ${message}`,
+    /配置予定|採用 \d+件|保持 \d+件/u,
+    `内訳を開示しています: ${message}`,
+  );
+  assert.doesNotMatch(
+    message,
+    /--dry-run|--apply/u,
+    `手順を案内しています: ${message}`,
   );
 });
 

@@ -91,10 +91,10 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     When record不在の隔離先へupdateを適用する
     Then 相違資産はretainedとして報告され内容は1 byteも変わらない
 
-  Scenario: SCN-INT-LIFECYCLE-019 record不在の拒否理由が同じ状態で成功する手段を名指しする
+  Scenario: SCN-INT-LIFECYCLE-019 record不在の拒否理由は最小診断だけを返す
     Given 導入後にrecordを失い展開済み資産が正本と異なる隔離先がある
     When record不在の隔離先へinstallとdeleteを試みる
-    Then 拒否理由はupdateを名指しし名指しされたupdateは成功する
+    Then 拒否理由は最小診断だけを返す
 
   Scenario: SCN-INT-LIFECYCLE-020 record喪失後の復旧でhost設定fileが変わらない
     Given 導入後にrecordを失いhook登録済みhost設定を持つ隔離先がある
@@ -193,15 +193,15 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     When 配布CLIで明示指定つきのdry-runと既定previewを試みる
     Then いずれも0で終了し書き込まずretainedを報告する
 
-  Scenario: SCN-INT-LIFECYCLE-039 未導入directoryのdeleteは復旧指定を案内しない
+  Scenario: SCN-INT-LIFECYCLE-039 未導入directoryのdeleteも最小診断だけを返す
     Given ASCを一度も導入していない隔離directoryがある
     When 未導入の隔離先へdeleteを試みる
-    Then 拒否理由は復旧指定を名指しせずinstallを案内する
+    Then 拒否理由は最小診断だけを返しinstallを名指ししない
 
-  Scenario: SCN-INT-LIFECYCLE-040 資産1件の未導入directoryでも案内は状態を断定しない
+  Scenario: SCN-INT-LIFECYCLE-040 資産1件の未導入directoryでも診断は同じ形である
     Given 未導入directoryに利用者所有のAGENTS.mdだけがある隔離先がある
     When 未導入の隔離先へdeleteを試みる
-    Then 拒否理由は復旧指定を名指しせずinstallを案内する
+    Then 拒否理由は最小診断だけを返しinstallを名指ししない
 
   Scenario: SCN-INT-LIFECYCLE-041 明示指定なしのupdateの拒否もpreviewで裏付ける
     Given 導入後にrecordを失い展開済み資産が境界外symlinkの隔離先がある
