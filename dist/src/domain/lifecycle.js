@@ -33,6 +33,8 @@ const NAMESPACE_ASSETS = [
     "policy",
     "hooks",
 ];
+/** package名前空間。**record不在時の導入証拠をこの配下へ限る**（Issue #1305）。 */
+const PACKAGE_NAMESPACE = ".agent-skill-chain";
 const MANAGED_RECORD = ".agent-skill-chain/managed-assets.json";
 const HOST_SKILL_SOURCE = ".agent-skill-chain/skills/asc-step/SKILL.md";
 const HOST_SKILL_TARGETS = [
@@ -230,6 +232,32 @@ function mappings(target) {
         });
     return result;
 }
+/**
+ * 案内する復旧手段を、実際に成功する手段だけに限る（Issue #1305、R2-H03）。
+ *
+ * **成功しない手段を名指ししない。** 以前は`update`を無条件に名指ししていたが、
+ * 境界外symlinkや壊れたrecordが残る状態では`update`自身が拒否する。名指しした
+ * 手段が失敗する案内は、利用者を1周させるだけで進行しない。
+ *
+ * **判定にはpreviewを使う。** `upgrade`の`apply: false`は書き込みを行わずに
+ * 分類まで到達するため、「同じ状態で`update`が成功するか」の副作用の無い
+ * oracleになる。照会とコマンドを分離した既存設計をそのまま使い、新しい検査を
+ * 足さない。
+ *
+ * previewが拒否した場合は、その原因をそのまま返す。**原因を解消すべき対象として
+ * 名指しし、成功しない手段は名指ししない。**
+ */
+function recoveryGuidance(target) {
+    try {
+        upgrade(target, { apply: false });
+    }
+    catch (error) {
+        const cause = error instanceof Error ? error.message : String(error);
+        return `この状態ではupdateも次の理由で拒否されます: ${cause}。先にこの原因を解消してください`;
+    }
+    return ("次にupdateを実行してください。updateはrecordに無く正本と一致する展開済み資産を採用し、" +
+        "recordに無く正本と異なる資産は上書きせずretainedとして報告します");
+}
 export function init(target, options) {
     const assets = mappings(target);
     const conflicts = assets
@@ -238,9 +266,7 @@ export function init(target, options) {
         .map(({ dest }) => dest);
     if (conflicts.length > 0)
         throw new Error(`初期導入先が競合しています。ファイルは書き込んでいません: ${conflicts.join(", ")}。` +
-            "次にupdateを実行してください。updateはrecordに無く正本と一致する展開済み資産を採用し、" +
-            "recordに無く正本と異なる資産は上書きせずretainedとして報告します。" +
-            "updateが境界外symlinkなど別の原因で拒否する場合は、その理由が示すpathを解消してから再実行してください");
+            recoveryGuidance(target));
     if (!options.apply)
         return { applied: false, assets: assets.map(({ dest }) => dest) };
     const record = {
@@ -253,6 +279,7 @@ export function init(target, options) {
             fs.copyFileSync(src, dest, fs.constants.COPYFILE_EXCL);
         record.files[relativeKey(target, dest)] = digest(dest);
     }
+    assertRecordPublishTarget(path.join(target, MANAGED_RECORD));
     writeFileAtomic(path.join(target, MANAGED_RECORD), `${JSON.stringify(record, null, 2)}\n`);
     return { applied: true, assets: Object.keys(record.files) };
 }
@@ -292,6 +319,23 @@ function readManagedAssetRecordOrEmpty(target) {
     return readManagedAssetRecord(target).record;
 }
 /**
+ * record不在時に「導入済み」を判定する証拠（Issue #1305）。
+ *
+ * **同名entryが1件あることを導入の証拠にしない。** 展開対象には`AGENTS.md`と
+ * `CLAUDE.md`のようにrepository直下の一般的なfile名が含まれる。利用者が自分で
+ * 書いた`AGENTS.md`が1件あるだけの未導入projectがこれを通過すると、残りの
+ * 管理資産をすべて`place`として書き込む。**実測で113 fileが書き込まれた。**
+ *
+ * **package名前空間`.agent-skill-chain/`配下の展開対象に限って証拠として数える。**
+ * 同directoryの配下でpackageが所有するのはdocs・skills・schemas・policy・hooksと
+ * 利用案内であり、利用側所有の`tmp/issues/`・`project-policy.json`・`project/`は
+ * 展開対象に含まれない。したがってこの証拠は由来を判別できる。
+ */
+function hasPackageNamespaceEvidence(target, assets) {
+    return assets.some((item) => relativeKey(target, item.dest).startsWith(`${PACKAGE_NAMESPACE}/`) &&
+        pathEntryExists(item.dest));
+}
+/**
  * 分類の入力をfilesystemから観測する（Issue #1305）。
  *
  * **通常fileでないときにdigestを読まない。** 読むとdirectoryで例外になる。
@@ -308,6 +352,25 @@ function observeManagedAsset(item, expected) {
         destDigest: regularFile ? digest(item.dest) : "",
         sourceDigest: regularFile ? digest(item.src) : "",
     };
+}
+/**
+ * record公開の直前に、公開先のentryを再検証する（Issue #1305、R2-H02）。
+ *
+ * **観測から公開までの間にentryが差し替わりうる。** `writeFileAtomic`は
+ * `rename`で公開するため、その時点でrecord pathがsymlinkやdirectoryであれば
+ * **entryを置換する。** REQ-LC-001は「hash・containment・TOCTOUを各write前に
+ * 検証する」を要求しており、この再検証はその履行である。
+ *
+ * **残存する競合は閉じていない。** 検査と`rename`の間には依然として窓がある。
+ * 窓を完全に閉じるにはno-replaceな公開方式が要り、それは`init`にも同じ形で
+ * 存在する既存の性質であるため、別Issueで扱う。
+ */
+function assertRecordPublishTarget(recordPath) {
+    if (!pathEntryExists(recordPath))
+        return;
+    if (!isRegularFile(recordPath))
+        throw new Error("managed asset recordの公開先が通常fileではありません。書き込みを中止しました。" +
+            "当該pathのsymlinkまたはdirectoryを解消してください");
 }
 export function upgrade(target, options) {
     const recordPath = path.join(target, MANAGED_RECORD);
@@ -327,8 +390,8 @@ export function upgrade(target, options) {
      * `install`を名指しして拒否する。** その状態の`install`は競合を持たないため
      * 必ず成功し、拒否理由が名指しする手段が成功するという性質を保つ。
      */
-    if (!recordPresent && !current.some((item) => pathEntryExists(item.dest)))
-        throw new Error("managed asset recordも展開済み資産も存在しません。未導入のdirectoryです。" +
+    if (!recordPresent && !hasPackageNamespaceEvidence(target, current))
+        throw new Error("managed asset recordがなく、package名前空間の展開済み資産も存在しません。未導入のdirectoryです。" +
             "installを実行してください。updateはrecordを失った導入済みdirectoryの復旧に使います");
     const retained = [];
     const adoptable = [];
@@ -376,6 +439,7 @@ export function upgrade(target, options) {
             adopted.push(item.key);
         next.files[item.key] = digest(item.dest);
     }
+    assertRecordPublishTarget(recordPath);
     writeFileAtomic(recordPath, `${JSON.stringify(next, null, 2)}\n`);
     return { applied: true, adopted, retained };
 }
@@ -383,8 +447,7 @@ export function uninstall(target, options) {
     const recordPath = path.join(target, MANAGED_RECORD);
     if (!fs.existsSync(recordPath))
         throw new Error("managed asset recordがありません。撤去対象を確定できません。" +
-            "次にupdateを実行してrecordを再固定してから、deleteを実行してください。" +
-            "updateが境界外symlinkなど別の原因で拒否する場合は、その理由が示すpathを解消してから再実行してください");
+            `${recoveryGuidance(target)}。recordを再固定したのちdeleteを実行してください`);
     const managed = readManagedAssetRecord(target);
     const removable = [];
     const retained = [];

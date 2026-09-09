@@ -128,12 +128,32 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     When copy直後に配置先へ追記してupdateを適用する
     Then recordの登録digestは追記後の展開先の実測値と一致する
 
-  Scenario: SCN-INT-LIFECYCLE-026 拒否の連鎖が閉路にならず別の原因を名指しして終わる
+  Scenario: SCN-INT-LIFECYCLE-026 成功しない手段を復旧手段として案内しない
     Given 導入後にrecordを失い展開済み資産が境界外symlinkの隔離先がある
-    When deleteが名指しした手段を順に実行する
-    Then 2つ目の拒否は1つ目と別の原因を名指しし同じ拒否へ戻らない
+    When deleteを試みてから同じ状態でupdateも試みる
+    Then deleteの拒否理由はupdateを手段として案内せず解消すべき原因を名指しする
 
   Scenario: SCN-INT-LIFECYCLE-027 未導入directoryのupdateをinstallと同じ書き込みへ倒さない
     Given ASCを一度も導入していない隔離directoryがある
     When record不在の隔離先へupdateを試みる
     Then updateは1 fileも書かずinstallを名指しして拒否し名指しされたinstallは成功する
+
+  Scenario: SCN-INT-LIFECYCLE-028 record不正の各分類を空recordへ降格させない
+    Given 導入後にrecordを不正な各分類へ壊した隔離先の一覧がある
+    When 各不正recordの隔離先へupdateを試みる
+    Then いずれも書き込まず拒否しrecordと管理資産は不変である
+
+  Scenario: SCN-INT-LIFECYCLE-029 利用者所有の同名fileを導入済みの証拠にしない
+    Given 未導入directoryに利用者所有のAGENTS.mdだけがある隔離先がある
+    When record不在の隔離先へupdateを試みる
+    Then updateは1 fileも書かずinstallを名指しして拒否し利用者のfileは不変である
+
+  Scenario: SCN-INT-LIFECYCLE-030 正本とbyte一致する同名fileも導入済みの証拠にしない
+    Given 未導入directoryに正本とbyte一致するAGENTS.mdだけがある隔離先がある
+    When record不在の隔離先へupdateを試みる
+    Then updateは1 fileも書かずinstallを名指しして拒否する
+
+  Scenario: SCN-INT-LIFECYCLE-031 公開直前に現れたsymlinkのrecord公開先を置換しない
+    Given 導入後にrecordと展開済み資産1件を失った隔離先がある
+    When 資産のcopy直後にrecord公開先へsymlinkを挿入してupdateを試みる
+    Then updateは公開を中止しrecord公開先のsymlinkは保持される

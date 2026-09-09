@@ -36,6 +36,14 @@ interface IsolationWorld extends WorkflowWorld {
   digestsBeforeRecovery?: Record<string, string>;
   /** 境界外symlinkの参照先とその内容（Issue #1305）。 */
   outsideTarget?: { file: string; contents: string };
+  /** record不正の各分類の観測（Issue #1305、R2-M01）。 */
+  invalidRecordCases?: Array<{
+    label: string;
+    root: string;
+    recordDigest: string | undefined;
+    assetDigest: string;
+  }>;
+  invalidRecordRejections?: string[];
 }
 
 /** repository直下へ展開されるhostごとの常時入口（Issue #1219）。 */
@@ -1099,6 +1107,21 @@ Then("updateは書き込まず拒否しrecordのsymlinkは保持される", func
     "",
     "dangling symlinkのrecordが拒否されていません",
   );
+  /**
+   * **診断を名指しする**（Issue #1305、M-A8）。不在判定を`existsSync`へ戻すと
+   * dangling symlinkが不在に見え、**公開直前の再検証まで検出が遅れる。**
+   * どちらでも拒否はされるが、捕まえる層が違う。読み取り時に捕まえることを固定する。
+   */
+  assert.match(
+    String(rejections[0]),
+    /パスが存在しません/u,
+    `読み取り時の診断ではありません: ${String(rejections[0])}`,
+  );
+  assert.doesNotMatch(
+    String(rejections[0]),
+    /公開先が通常fileではありません/u,
+    `不在判定をすり抜けて公開直前の検証で捕まえています: ${String(rejections[0])}`,
+  );
   assert.equal(
     fs.lstatSync(recordPath(this.root)).isSymbolicLink(),
     true,
@@ -1259,7 +1282,7 @@ Given(
   },
 );
 
-When("deleteが名指しした手段を順に実行する", function () {
+When("deleteを試みてから同じ状態でupdateも試みる", function () {
   const rejections: string[] = [];
   for (const attempt of [
     () => uninstall(this.root, { apply: true }),
@@ -1275,42 +1298,55 @@ When("deleteが名指しした手段を順に実行する", function () {
   this.recoveryRejections = rejections;
 });
 
-Then("2つ目の拒否は1つ目と別の原因を名指しし同じ拒否へ戻らない", function () {
-  const rejections = this.recoveryRejections;
-  assert.ok(rejections, "拒否理由がありません");
-  assert.equal(rejections.length, 2);
-  const [first, second] = rejections;
-  assert.notEqual(first, "", "deleteが拒否されていません");
-  assert.match(
-    String(first),
-    /update/u,
-    `1つ目が次の手段を名指ししていません: ${String(first)}`,
-  );
-  assert.notEqual(second, "", "updateが拒否されていません");
-  /** **同じ拒否へ戻らないこと。** 閉路の不在をここで固定する。 */
-  assert.notEqual(
-    second,
-    first,
-    "2つ目の拒否が1つ目と同一であり閉路になっています",
-  );
-  assert.doesNotMatch(
-    String(second),
-    /先にinstallを実行してください/u,
-    `2つ目が拒否されるinstallへ戻しています: ${String(second)}`,
-  );
-  assert.match(
-    String(second),
-    /シンボリックリンクによる境界外移動を拒否しました/u,
-    `2つ目が別の原因を名指ししていません: ${String(second)}`,
-  );
-  const outside = this.outsideTarget;
-  assert.ok(outside, "境界外の参照先がありません");
-  assert.equal(
-    fs.readFileSync(outside.file, "utf8"),
-    outside.contents,
-    "境界外のfileへ書き込みました",
-  );
-});
+Then(
+  "deleteの拒否理由はupdateを手段として案内せず解消すべき原因を名指しする",
+  function () {
+    const rejections = this.recoveryRejections;
+    assert.ok(rejections, "拒否理由がありません");
+    assert.equal(rejections.length, 2);
+    const [first, second] = rejections;
+    assert.notEqual(first, "", "deleteが拒否されていません");
+    /**
+     * **成功しない手段を名指ししない。** この状態では`update`も拒否されるため、
+     * 「updateを実行してください」という案内を出してはならない。
+     */
+    assert.doesNotMatch(
+      String(first),
+      /次にupdateを実行してください/u,
+      `成功しないupdateを手段として案内しています: ${String(first)}`,
+    );
+    assert.doesNotMatch(
+      String(first),
+      /先にinstallを実行してください/u,
+      `拒否されるinstallへ戻しています: ${String(first)}`,
+    );
+    /** 解消すべき原因を名指ししていること。 */
+    assert.match(
+      String(first),
+      /シンボリックリンクによる境界外移動を拒否しました/u,
+      `解消すべき原因を名指ししていません: ${String(first)}`,
+    );
+    assert.match(
+      String(first),
+      /先にこの原因を解消してください/u,
+      `原因の解消を求めていません: ${String(first)}`,
+    );
+    /** 案内が正しいこと。実際に同じ状態のupdateは拒否される。 */
+    assert.notEqual(second, "", "updateが拒否されていません");
+    assert.match(
+      String(second),
+      /シンボリックリンクによる境界外移動を拒否しました/u,
+      `updateの拒否理由が原因を示していません: ${String(second)}`,
+    );
+    const outside = this.outsideTarget;
+    assert.ok(outside, "境界外の参照先がありません");
+    assert.equal(
+      fs.readFileSync(outside.file, "utf8"),
+      outside.contents,
+      "境界外のfileへ書き込みました",
+    );
+  },
+);
 
 /**
  * record不在の受理範囲の境界（Issue #1305、F-01）。
@@ -1362,3 +1398,279 @@ Then(
     assert.equal(fs.existsSync(recordPath(this.root)), true);
   },
 );
+
+/**
+ * record不正の分類を網羅する（Issue #1305、R2-M01）。
+ *
+ * **JSON構文不正だけでは足りない。** `readManagedAssetRecord`はdigest不正、
+ * 正規化後のpath重複、非通常fileも拒否する。**errorの種別だけをcatchして
+ * 一部を空recordへ降格させる変異**は、構文不正の1件では捕まらない。
+ */
+const INVALID_RECORDS: readonly {
+  label: string;
+  write: (file: string) => void;
+}[] = [
+  {
+    label: "JSON構文不正",
+    write: (file) => fs.writeFileSync(file, "{ これはJSONではない "),
+  },
+  {
+    label: "digestがSHA-256でない",
+    write: (file) =>
+      fs.writeFileSync(
+        file,
+        `${JSON.stringify({ version: "x", files: { "AGENTS.md": "短すぎる" } }, null, 2)}\n`,
+      ),
+  },
+  {
+    label: "正規化後のpathが重複する",
+    write: (file) =>
+      fs.writeFileSync(
+        file,
+        `${JSON.stringify(
+          {
+            version: "x",
+            files: {
+              "AGENTS.md": "a".repeat(64),
+              "AGENTS.md\\": "b".repeat(64),
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      ),
+  },
+  {
+    label: "filesがobjectでない",
+    write: (file) =>
+      fs.writeFileSync(
+        file,
+        `${JSON.stringify({ version: "x", files: [] }, null, 2)}\n`,
+      ),
+  },
+  {
+    label: "recordが通常fileでない",
+    write: (file) => {
+      fs.mkdirSync(file, { recursive: true });
+    },
+  },
+];
+
+interface InvalidRecordCase {
+  label: string;
+  root: string;
+  recordDigest: string | undefined;
+  assetDigest: string;
+}
+
+Given("導入後にrecordを不正な各分類へ壊した隔離先の一覧がある", function () {
+  const cases: InvalidRecordCase[] = [];
+  for (const invalid of INVALID_RECORDS) {
+    const root = this.temp("asc-lifecycle-invalid-record-");
+    write(root, "README.md", "# fixture\n");
+    init(root, { apply: true });
+    fs.rmSync(recordPath(root));
+    invalid.write(recordPath(root));
+    cases.push({
+      label: invalid.label,
+      root,
+      recordDigest: fs.lstatSync(recordPath(root)).isFile()
+        ? sha256(fs.readFileSync(recordPath(root)))
+        : undefined,
+      assetDigest: sha256(fs.readFileSync(path.join(root, DIVERGENT_ASSET))),
+    });
+  }
+  assert.equal(cases.length, INVALID_RECORDS.length);
+  this.invalidRecordCases = cases;
+});
+
+When("各不正recordの隔離先へupdateを試みる", function () {
+  const cases = this.invalidRecordCases;
+  assert.ok(cases, "不正recordの一覧がありません");
+  this.invalidRecordRejections = cases.map((entry) => {
+    try {
+      upgrade(entry.root, { apply: true });
+      return "";
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  });
+});
+
+Then("いずれも書き込まず拒否しrecordと管理資産は不変である", function () {
+  const cases = this.invalidRecordCases;
+  const rejections = this.invalidRecordRejections;
+  assert.ok(cases && rejections, "観測がありません");
+  assert.equal(rejections.length, cases.length);
+  for (const [index, entry] of cases.entries()) {
+    assert.notEqual(
+      rejections[index],
+      "",
+      `${entry.label}: 不正recordが拒否されていません`,
+    );
+    if (entry.recordDigest !== undefined)
+      assert.equal(
+        sha256(fs.readFileSync(recordPath(entry.root))),
+        entry.recordDigest,
+        `${entry.label}: recordが書き換えられました`,
+      );
+    else
+      assert.equal(
+        fs.lstatSync(recordPath(entry.root)).isDirectory(),
+        true,
+        `${entry.label}: 非通常fileのrecordが置換されました`,
+      );
+    assert.equal(
+      sha256(fs.readFileSync(path.join(entry.root, DIVERGENT_ASSET))),
+      entry.assetDigest,
+      `${entry.label}: 管理資産が書き換えられました`,
+    );
+  }
+});
+
+/**
+ * 導入証拠の由来を判別する（Issue #1305、R2-H01）。
+ *
+ * `AGENTS.md`と`CLAUDE.md`はrepository直下の一般的なfile名であり、
+ * **利用者が自分で所有しうる。** 同名entryが1件あることを導入の証拠にすると、
+ * 未導入projectがfull installへ倒れる。
+ */
+Given(
+  "未導入directoryに利用者所有のAGENTS.mdだけがある隔離先がある",
+  function () {
+    this.root = this.temp("asc-lifecycle-user-agents-");
+    const contents = "# 利用者が自分で書いたAGENTS.md\n";
+    write(this.root, "AGENTS.md", contents);
+    this.consumerFiles = { "AGENTS.md": contents };
+    this.installedAssets = [];
+  },
+);
+
+Given(
+  "未導入directoryに正本とbyte一致するAGENTS.mdだけがある隔離先がある",
+  function () {
+    this.root = this.temp("asc-lifecycle-identical-agents-");
+    /**
+     * **正本と偶然byte一致する同名fileも証拠にしない。** 一致していても
+     * 導入した事実を示さない。
+     */
+    const canonical = fs.readFileSync(
+      path.join(process.cwd(), "AGENTS.md"),
+      "utf8",
+    );
+    write(this.root, "AGENTS.md", canonical);
+    this.consumerFiles = { "AGENTS.md": canonical };
+    this.installedAssets = [];
+  },
+);
+
+Then(
+  "updateは1 fileも書かずinstallを名指しして拒否し利用者のfileは不変である",
+  function () {
+    const rejections = this.recoveryRejections;
+    assert.ok(rejections, "拒否理由がありません");
+    assert.notEqual(rejections[0], "", "未導入directoryが拒否されていません");
+    assert.match(
+      String(rejections[0]),
+      /installを実行してください/u,
+      `installを名指ししていません: ${String(rejections[0])}`,
+    );
+    const entries = fs
+      .readdirSync(this.root)
+      .filter((entry) => entry !== ".git")
+      .sort();
+    assert.deepEqual(
+      entries,
+      ["AGENTS.md"],
+      `updateが未導入directoryへ書き込みました: ${entries.join(", ")}`,
+    );
+    assertCapturedFiles(this.root, this.consumerFiles);
+  },
+);
+
+Then("updateは1 fileも書かずinstallを名指しして拒否する", function () {
+  const rejections = this.recoveryRejections;
+  assert.ok(rejections, "拒否理由がありません");
+  assert.notEqual(rejections[0], "", "未導入directoryが拒否されていません");
+  assert.match(
+    String(rejections[0]),
+    /installを実行してください/u,
+    `installを名指ししていません: ${String(rejections[0])}`,
+  );
+  const entries = fs
+    .readdirSync(this.root)
+    .filter((entry) => entry !== ".git")
+    .sort();
+  assert.deepEqual(
+    entries,
+    ["AGENTS.md"],
+    `updateが未導入directoryへ書き込みました: ${entries.join(", ")}`,
+  );
+});
+
+/**
+ * record公開直前のentry差し替えを検出する（Issue #1305、R2-H02）。
+ *
+ * 静止状態のsymlinkはSCN-022が測る。**こちらは実行開始後に現れる場合である。**
+ * `copyFileSync`のseamで、分類の後・record公開の前にsymlinkを挿入する。
+ */
+When(
+  "資産のcopy直後にrecord公開先へsymlinkを挿入してupdateを試みる",
+  function () {
+    const outsideDirectory = this.temp("asc-lifecycle-publish-target-");
+    const missing = path.join(outsideDirectory, "存在しない.json");
+    this.outsideTarget = { file: missing, contents: "" };
+    const original = fs.copyFileSync;
+    let injected = false;
+    this.recoveryRejections = [];
+    try {
+      (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = ((
+        source: Parameters<typeof fs.copyFileSync>[0],
+        destination: Parameters<typeof fs.copyFileSync>[1],
+        mode?: Parameters<typeof fs.copyFileSync>[2],
+      ) => {
+        original(source, destination, mode);
+        if (!injected) {
+          injected = true;
+          fs.symlinkSync(missing, recordPath(this.root));
+        }
+      }) as typeof fs.copyFileSync;
+      upgrade(this.root, { apply: true });
+      this.recoveryRejections.push("");
+    } catch (error) {
+      this.recoveryRejections.push(
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = original;
+    }
+    assert.equal(injected, true, "公開直前のsymlinkを注入できていません");
+  },
+);
+
+Then("updateは公開を中止しrecord公開先のsymlinkは保持される", function () {
+  const rejections = this.recoveryRejections;
+  assert.ok(rejections, "拒否理由がありません");
+  assert.notEqual(
+    rejections[0],
+    "",
+    "公開直前に現れたsymlinkが検出されていません",
+  );
+  assert.match(
+    String(rejections[0]),
+    /公開先が通常fileではありません/u,
+    `公開先の検証による拒否ではありません: ${String(rejections[0])}`,
+  );
+  assert.equal(
+    fs.lstatSync(recordPath(this.root)).isSymbolicLink(),
+    true,
+    "record公開先のsymlinkが置換されました",
+  );
+  const outside = this.outsideTarget;
+  assert.ok(outside, "symlinkの参照先がありません");
+  assert.equal(
+    fs.existsSync(outside.file),
+    false,
+    "symlinkの参照先へ書き込みました",
+  );
+});
