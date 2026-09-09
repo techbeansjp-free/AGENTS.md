@@ -182,3 +182,18 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     Given 導入後にrecordを失い展開済み資産が正本と異なる隔離先がある
     When 配布CLIで明示指定つきのupdateを適用する
     Then CLIは0で終了しrecordを再固定し相違資産をretainedとして報告する
+
+  Scenario: SCN-INT-LIFECYCLE-037 復旧中に現れたrecordで利用者資産を上書きしない
+    Given 導入後にrecordを失い展開済み資産が正本と異なる隔離先がある
+    When 分類の前に有効なrecordが現れる状況でupdateを適用する
+    Then 相違資産は上書きされずrecordの観測は1回に保たれる
+
+  Scenario: SCN-INT-LIFECYCLE-038 配布CLIで明示指定つきのpreviewが到達できる
+    Given 導入後にrecordを失い展開済み資産が正本と異なる隔離先がある
+    When 配布CLIで明示指定つきのdry-runと既定previewを試みる
+    Then いずれも0で終了し書き込まずretainedを報告する
+
+  Scenario: SCN-INT-LIFECYCLE-039 未導入directoryのdeleteは復旧指定を案内しない
+    Given ASCを一度も導入していない隔離directoryがある
+    When 未導入の隔離先へdeleteを試みる
+    Then 拒否理由は復旧指定を名指しせずinstallを案内する

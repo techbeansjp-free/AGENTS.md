@@ -952,8 +952,42 @@ Then("拒否理由はupdateを名指しし名指しされたupdateは成功す�
     assert.notEqual(message, "", `${index}件目が拒否されていません`);
     assert.match(
       message,
-      /update --recover-record/u,
+      /update を --recover-record 付きで実行してください/u,
       `${index}件目の拒否理由が案内すべき手段を名指ししていません: ${message}`,
+    );
+    /**
+     * **規範句を1つずつ名指しで固定する**（Issue #1305、fable F-06）。
+     * 要件本文は「案内はpreviewとapplyの二段階を示し、対象を明示する」を要求する。
+     * 字面を落とす変異を捕まえる。
+     */
+    assert.match(
+      message,
+      /--dry-run/u,
+      `${index}件目がpreviewの段を示していません: ${message}`,
+    );
+    assert.match(
+      message,
+      /--apply/u,
+      `${index}件目がapplyの段を示していません: ${message}`,
+    );
+    assert.match(
+      message,
+      new RegExp(
+        `対象 ${this.root.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}`,
+        "u",
+      ),
+      `${index}件目が対象を明示していません: ${message}`,
+    );
+    /** **shellへ貼れるcommand文字列を作らない**（codex High 3）。 */
+    assert.doesNotMatch(
+      message,
+      /--root=/u,
+      `${index}件目がshellへ貼れる--root=を含みます: ${message}`,
+    );
+    assert.doesNotMatch(
+      message,
+      /--dry-run --apply/u,
+      `${index}件目が排他なflagを併記しています: ${message}`,
     );
     /** **拒否される手段を案内しない。** installを名指しすると閉路になる。 */
     assert.doesNotMatch(
@@ -1388,10 +1422,21 @@ Then(
       "",
       "未導入directoryのupdateが拒否されていません",
     );
+    /**
+     * **`update`の拒否文は`install`を名指ししない**（Issue #1305、fable F-03）。
+     * 導入済み＋record喪失＋相違資産の状態では`install`は競合で拒否されるため、
+     * 無条件に名指しすると「成功しない手段の名指し」になる。要求するのは
+     * 明示指定の名指しだけである。
+     */
     assert.match(
       String(rejections[0]),
-      /install/u,
-      `拒否理由がinstallを名指ししていません: ${String(rejections[0])}`,
+      /--recover-record を付けて再実行してください/u,
+      `明示指定を要求していません: ${String(rejections[0])}`,
+    );
+    assert.doesNotMatch(
+      String(rejections[0]),
+      /installを実行してください|installを使います/u,
+      `成功が確認されていないinstallを名指ししています: ${String(rejections[0])}`,
     );
     /** **1 fileも書かない。** README.md以外が現れていないことで観測する。 */
     const entries = fs
@@ -1811,9 +1856,16 @@ When("配布CLIで明示指定なしのupdateとapplyを順に試みる", functi
     .readdirSync(this.root)
     .filter((entry) => entry !== ".git")
     .sort();
+  /**
+   * **値付きの指定をopt-inとして受理しない**（Issue #1305、M-E5）。
+   * `--apply`と同じ既存規約である。配線を`!== undefined`へ緩める変異は、
+   * `--recover-record=false`でopt-inが成立してしまう。
+   */
   this.cliResults = [
     runCli(this.root, ["update", "--dry-run"]),
     runCli(this.root, ["update", "--apply"]),
+    runCli(this.root, ["update", "--recover-record=false", "--apply"]),
+    runCli(this.root, ["update", "--recover-record=true", "--apply"]),
   ];
   this.consumerFiles = Object.fromEntries(
     before.map((entry) => [entry, entry]),
@@ -1824,7 +1876,7 @@ When("配布CLIで明示指定なしのupdateとapplyを順に試みる", functi
 Then("CLIは非0で終了し明示指定を名指しし1 fileも書かない", function () {
   const results = this.cliResults;
   assert.ok(results, "CLI結果がありません");
-  assert.equal(results.length, 2);
+  assert.equal(results.length, 4);
   for (const [index, result] of results.entries()) {
     assert.notEqual(
       result.status,
@@ -1967,3 +2019,147 @@ Then(
     );
   },
 );
+
+/**
+ * record存在の観測が1回であることを固定する（Issue #1305、codex High 1）。
+ *
+ * 以前は opt-in 門と record 読み取りで**別々に**観測していた。その間に別processが
+ * 有効なrecordを配置すると、新しいrecordのdigestが`expected`として上書き権限を
+ * 与え、利用者fileが正本へ上書きされたうえで公開が`EEXIST`で失敗した。
+ * **「commandは失敗したのに利用者fileだけ上書き済み」**という状態を作らない。
+ */
+When("分類の前に有効なrecordが現れる状況でupdateを適用する", function () {
+  const target = path.join(this.root, DIVERGENT_ASSET);
+  const forged = {
+    version: "0.0.0",
+    files: { [DIVERGENT_ASSET]: sha256(fs.readFileSync(target)) },
+  };
+  const original = fs.readFileSync;
+  let injected = false;
+  this.recoveryRejections = [];
+  try {
+    /**
+     * opt-in門の通過後、record読み取りへ入る直前を狙う。**製品APIへ注入口を
+     * 足さない。** `fs.readFileSync`の初回呼び出しで有効なrecordを配置する。
+     */
+    (fs as { readFileSync: typeof fs.readFileSync }).readFileSync = ((
+      file: Parameters<typeof fs.readFileSync>[0],
+      options?: Parameters<typeof fs.readFileSync>[1],
+    ) => {
+      if (!injected) {
+        injected = true;
+        fs.writeFileSync(
+          recordPath(this.root),
+          `${JSON.stringify(forged, null, 2)}\n`,
+        );
+      }
+      return original(file, options as never);
+    }) as typeof fs.readFileSync;
+    this.recoveryResult = upgrade(this.root, {
+      apply: true,
+      recoverRecord: true,
+    });
+    this.recoveryRejections.push("");
+  } catch (error) {
+    this.recoveryRejections.push(
+      error instanceof Error ? error.message : String(error),
+    );
+  } finally {
+    (fs as { readFileSync: typeof fs.readFileSync }).readFileSync = original;
+  }
+  assert.equal(injected, true, "record出現を注入できていません");
+});
+
+Then("相違資産は上書きされずrecordの観測は1回に保たれる", function () {
+  const before = this.digestsBeforeRecovery?.[DIVERGENT_ASSET];
+  assert.ok(before, "復旧前のdigestがありません");
+  /**
+   * **これが本scenarioの本体である。** 途中で現れたrecordのdigestを根拠に
+   * 上書きしてはならない。
+   */
+  assert.equal(
+    sha256(fs.readFileSync(path.join(this.root, DIVERGENT_ASSET))),
+    before,
+    `${DIVERGENT_ASSET}が途中で現れたrecordを根拠に上書きされました`,
+  );
+});
+
+/**
+ * opt-inつきの**正方向preview**が配布CLIから到達できることを固定する
+ * （Issue #1305、codex High 5）。
+ *
+ * 拒否とapply成功だけを測ると、配線を`apply && flag`へ狭める変異が生存し、
+ * **案内した`--dry-run`だけが閉じる。**
+ */
+When("配布CLIで明示指定つきのdry-runと既定previewを試みる", function () {
+  this.cliResults = [
+    runCli(this.root, ["update", "--recover-record", "--dry-run"]),
+    runCli(this.root, ["update", "--recover-record"]),
+  ];
+});
+
+Then("いずれも0で終了し書き込まずretainedを報告する", function () {
+  const results = this.cliResults;
+  assert.ok(results, "CLI結果がありません");
+  assert.equal(results.length, 2);
+  for (const [index, result] of results.entries()) {
+    assert.equal(
+      result.status,
+      0,
+      `${index}件目のCLIが0で終了していません: ${result.stdout}${result.stderr}`,
+    );
+    const parsed: unknown = JSON.parse(result.stdout);
+    const payload = parsed as Record<string, unknown>;
+    assert.equal(payload.applied, false, `${index}件目がpreviewではありません`);
+    assert.ok(
+      Array.isArray(payload.retained) &&
+        payload.retained.includes(DIVERGENT_ASSET),
+      `${index}件目がretainedを報告していません: ${result.stdout}`,
+    );
+  }
+  /** previewは書き込まない。 */
+  assert.equal(
+    fs.existsSync(recordPath(this.root)),
+    false,
+    "previewがrecordを書き込みました",
+  );
+});
+
+When("未導入の隔離先へdeleteを試みる", function () {
+  this.recoveryRejections = [];
+  try {
+    uninstall(this.root, { apply: true });
+    this.recoveryRejections.push("");
+  } catch (error) {
+    this.recoveryRejections.push(
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+});
+
+Then("拒否理由は復旧指定を名指しせずinstallを案内する", function () {
+  const rejections = this.recoveryRejections;
+  assert.ok(rejections, "拒否理由がありません");
+  const message = String(rejections[0]);
+  assert.notEqual(message, "", "未導入directoryのdeleteが拒否されていません");
+  /**
+   * **門が守る宣言を製品自身が指示しない**（Issue #1305、fable F-02）。
+   * 誤った`--root`へ`delete`を打った利用者が案内に従うだけで全展開へ到達しては
+   * ならない。
+   */
+  assert.doesNotMatch(
+    message,
+    /--recover-record/u,
+    `未導入directoryへ復旧指定を案内しています: ${message}`,
+  );
+  assert.match(
+    message,
+    /installを使ってください/u,
+    `installを案内していません: ${message}`,
+  );
+  assert.doesNotMatch(
+    message,
+    /recordを再固定したのち/u,
+    `再固定する対象が無いのに再固定を求めています: ${message}`,
+  );
+});
