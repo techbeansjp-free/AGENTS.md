@@ -158,7 +158,14 @@ function resolveManagedAsset(target, relative) {
         segments.some((segment) => segment === "" || segment === "." || segment === "..") ||
         !isPackageOwnedPath(portable))
         throw new Error(`managed asset recordが不正です: ${relative}`);
-    return resolveContained(target, portable, { allowMissingLeaf: true });
+    /** **対象を名指しして投げ直す**（Issue #1305、fable H-2）。`mappings`と同じ理由である。 */
+    try {
+        return resolveContained(target, portable, { allowMissingLeaf: true });
+    }
+    catch (error) {
+        const cause = error instanceof Error ? error.message : String(error);
+        throw new Error(`${cause}: ${portable}`, { cause: error });
+    }
 }
 function readManagedAssetRecord(target) {
     /**
@@ -206,7 +213,31 @@ function walkFiles(directory) {
     });
 }
 function mappings(target) {
-    const destination = (relative) => resolveContained(target, relative, { allowMissingLeaf: true });
+    /**
+     * **境界外拒否は対象を名指しする**（Issue #1305、fable H-2）。
+     *
+     * INV-02の正準文は「どのcommandもこれを満たさない場合はcommandを名指しせず、
+     * **解消すべき原因と対象を名指しする**」である。`resolveContained`が投げる
+     * `シンボリックリンクによる境界外移動を拒否しました`は**対象pathを含まない。**
+     * そのため112資産のうちどれが境界外を指しているのか利用者に分からず、
+     * `install`・`update`・`delete`の3 commandがどれも同じ文だけを返していた。
+     * **閉路ではないが、製品の外へ出ないと解消できない行き止まりである。**
+     *
+     * `src/lib/security.ts`は信頼品質契約の保護対象なので投げ元は変えない。
+     * **呼び出し側で対象を付けて投げ直す。** `readManagedAssetRecord`は同じ理由で
+     * 既にrecord pathを名指ししており、ここはその同型の欠陥が残っていた1箇所である。
+     */
+    const destination = (relative) => {
+        try {
+            return resolveContained(target, relative, { allowMissingLeaf: true });
+        }
+        catch (error) {
+            const cause = error instanceof Error ? error.message : String(error);
+            throw new Error(`${cause}: ${relative.replaceAll("\\", "/")}`, {
+                cause: error,
+            });
+        }
+    };
     const result = ROOT_ASSETS.map((name) => ({
         src: path.join(packageRoot, name),
         dest: destination(name),
@@ -372,10 +403,13 @@ function readManagedAssetRecordAt(target, recordPresent) {
      * **「commandは失敗したのに利用者fileだけ上書き済み」**という状態が残る。
      * 観測は1回だけ行い、その結果を引数で受ける。
      *
-     * **この不変条件は状態を変える経路についてのものである**（codex Medium 2）。拒否経路は
-     * 最小診断のために`recoverRecord`つきのpreviewを走らせ、そこでrecord pathを再度観測する。
-     * **previewは1 byteも書かないので上書き権限を与えず、この不変条件が防いでいる事故は
-     * 起こらない。** 無限定に「1回」と述べると拒否経路で偽になる。
+     * **守るべき性質は観測回数ではない**（codex Medium 2）。「観測は1回」と無限定に述べると
+     * 偽になる。record存在時はこの関数が最初の存在判定のあとで同じentryを読み、拒否経路は
+     * 最小診断のために`recoverRecord`つきのpreviewを走らせてそこでも観測する。**どちらも
+     * 上書き権限を与えないので、この不変条件が防いでいる事故は起こらない。**
+     *
+     * 正確には**「不在と観測してから資産を分類するまでの間に現れたrecordのdigestを
+     * `expected`として使わない」**ことが性質であり、回数はその代理でしかない。
      */
     if (!recordPresent)
         return { version: PACKAGE_VERSION, files: {} };

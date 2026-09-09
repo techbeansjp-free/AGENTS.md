@@ -108,77 +108,57 @@ function gitStatus(root: string): string {
 }
 
 /**
- * **path tokenを除いた本文へ語の検査を当てる**（Issue #1305、fable H-01 / codex Medium 3）。
+ * **許容する診断文そのものを1つに固定する**（Issue #1305、codex Medium 3）。
  *
- * 拒否理由は競合pathを絶対pathで列挙する。`/install/`や`/update/`をmessage全体へ
- * 当てると**TMPDIRやrepository名にその語が含まれる環境で偽陽性になり、逆に本文の語を
- * pathの語が満たす偽陰性も作る。** 空白区切りで`/`を含むtokenを落としてから語を検査する。
- * 管理対象の相対pathに`install`・`update`を含むものは0件であることを確認済みである。
+ * 前版は`/install/`・`/update/`のような**禁止語の列挙**で守っていた。これは必ず漏れる。
+ * codexとfableが独立に反例を出した。`src/cli-contract.ts`の`LEGACY_LIFECYCLE_ALIASES`
+ * （`init`・`upgrade`・`uninstall`）はCLIが現に受理するので「`upgrade`に
+ * `--recover-record`を付けてください」は生存し、`delete`・`doctor`も生存し、
+ * 大小文字を変えた`Update`も生存し、「ASCが入っていません」「初期導入が済んで
+ * いません」のような状態断定の言い換えも生存した。
+ *
+ * **禁止語を数え上げるのをやめ、許容文面との完全一致で固定する。** 何を足しても、
+ * どう言い換えても、文面が変われば落ちる。動的部分は原因と対象pathだけであり、
+ * それらもtest側で**literalに書き下す**（実装から導出しない）。
  */
-function withoutPaths(message: string): string {
-  return message
-    .split(/\s+/u)
-    .filter((token) => !token.includes("/"))
-    .join(" ");
+const ABSENT_PREFIX = "managed asset recordがありません。";
+const DELETE_ABSENT_PREFIX =
+  "managed asset recordがありません。撤去対象を確定できません。";
+const MINIMAL_TAIL =
+  "復旧するには update に --recover-record が必要です。手順は配布される利用案内を参照してください";
+const CONFLICT_PREFIX =
+  "初期導入先が競合しています。ファイルは書き込んでいません: ";
+
+/**
+ * 境界外symlinkの原因文。**対象pathを含む**（Issue #1305、fable H-2）。
+ *
+ * `NON_REGULAR_TARGETS`はこの下で宣言されるため、**定数ではなく関数にする。**
+ * top-levelの`const`にすると読み込み順でtemporal dead zoneに入る。
+ */
+function outsideCause(): string {
+  return `シンボリックリンクによる境界外移動を拒否しました: ${NON_REGULAR_TARGETS[1]}`;
+}
+
+function blockedTail(cause: string): string {
+  return `この状態では --recover-record を付けても次の理由で拒否されます: ${cause}。先にこの原因を解消してください`;
 }
 
 /**
- * **拒否理由がcommandを手段として名指ししていないことを固定する**（Issue #1305）。
+ * 診断文が許容形と**完全一致**することを固定する。
  *
- * INV-02は「previewで拒否されないことを確認した手段」だけの名指しを許す。preview
- * を走らせていない経路（`init`の競合）とpreviewが拒否した経路（blocked分岐）では
- * **どのcommandも名指ししてはならない。** 字面ではなく語で禁止するので、
- * 「update を使ってください」のような言い換えでも失敗する。
+ * `assert.equal`なので、末尾へ助言を1語足しただけでも落ちる。`doesNotMatch`の
+ * 列挙と違い、**列挙漏れという失敗様式そのものが無い。**
  */
-function assertNamesNoCommand(message: string, label: string): void {
-  const body = diagnosticBody(message, label);
-  assert.doesNotMatch(
-    body,
-    /install/u,
-    `${label}がinstallを名指ししています: ${message}`,
+function assertDiagnosticIsExactly(
+  message: string,
+  expected: string,
+  label: string,
+): void {
+  assert.equal(
+    message,
+    expected,
+    `${label}の診断文が許容形と完全一致しません。\n実際: ${message}\n許容: ${expected}`,
   );
-  assert.doesNotMatch(
-    body,
-    /update/u,
-    `${label}がupdateを名指ししています: ${message}`,
-  );
-}
-
-/**
- * **製品が状態を断定しないことを固定する**（Issue #1305、codex Medium 3）。
- *
- * 「このdirectoryは未導入です」という断定は、撤去したfilesystem推測を案内経路へ
- * 持ち込み直す。字面を消すだけの変異退役では別文言での再導入を捕まえられないため、
- * **語の類で禁止する。**
- */
-function assertAssertsNoState(message: string, label: string): void {
-  assert.doesNotMatch(
-    diagnosticBody(message, label),
-    /未導入|導入済み|導入していません|導入されています/u,
-    `${label}が導入状態を断定しています: ${message}`,
-  );
-}
-
-/**
- * **path除去そのものを空洞化から守る**（Issue #1305、変異class C）。
- *
- * `withoutPaths`が`""`を返すよう改変されると、**この下の`doesNotMatch`は全件が
- * 空虚に通る。** 禁止側のassertionだけを重ねても、その入力を作る関数を空にする変異は
- * 生存する。除去後の本文が空でないことと、message固有の語が残っていることを先に課す。
- */
-function diagnosticBody(message: string, label: string): string {
-  const body = withoutPaths(message);
-  assert.notEqual(
-    body.trim(),
-    "",
-    `${label}のpath除去後の本文が空です。path除去が本文まで落としています: ${message}`,
-  );
-  assert.match(
-    body,
-    /拒否|競合|ありません|必要です|解消/u,
-    `${label}のpath除去後の本文から診断語が消えています: ${body}`,
-  );
-  return body;
 }
 
 function runCli(root: string, args: string[]) {
@@ -1046,8 +1026,16 @@ Then("拒否理由は最小診断だけを返す", function () {
    * install を使ってください」を連結する変異は、flag名や手順語の禁止では捕まらない。
    * いま拒否した`install`を再び名指しすれば閉路である。
    */
-  assertNamesNoCommand(String(conflict), "競合拒否");
-  assertAssertsNoState(String(conflict), "競合拒否");
+  /**
+   * **競合拒否は競合pathだけを述べる。** 完全一致なので、commandの名指し・手順・
+   * 状態の断定を1語でも足せば落ちる。競合するのは乖離させた1資産だけである
+   * （正本とbyte一致する資産は競合しない）。
+   */
+  assertDiagnosticIsExactly(
+    String(conflict),
+    `${CONFLICT_PREFIX}${path.join(this.root, DIVERGENT_ASSET)}`,
+    "installの競合拒否",
+  );
   /** `delete`のrecord不在は最小診断だけを返す。 */
   assert.notEqual(absent, "", "deleteが拒否されていません");
   /**
@@ -1058,18 +1046,11 @@ Then("拒否理由は最小診断だけを返す", function () {
    * byte一致の拒否を返し、誤ったcommandを使ったという信号が出ない。**それは本Issueが
    * 断とうとしている閉路と同型である。** previewが成功した経路なのでINV-02に適合する。
    */
-  assert.match(
+  assertDiagnosticIsExactly(
     String(absent),
-    /復旧するには update に --recover-record が必要です/u,
-    `所属commandを名指しした最小診断を返していません: ${String(absent)}`,
+    `${DELETE_ABSENT_PREFIX}${MINIMAL_TAIL}`,
+    "deleteのrecord不在拒否",
   );
-  /** **語そのものの不在で固定する。** 字面での禁止は文言変更で空虚化した。 */
-  assert.doesNotMatch(
-    withoutPaths(String(absent)),
-    /install/u,
-    `installを名指ししています: ${String(absent)}`,
-  );
-  assertAssertsNoState(String(absent), "record不在の拒否");
   assert.doesNotMatch(
     String(absent),
     /--dry-run|--apply|配置予定/u,
@@ -1438,8 +1419,11 @@ Then(
      * 旧版は`/次にupdateを実行してください/`という**字面**で禁じていたため、
      * 「update を使ってください」へ言い換えるだけで空虚化した。語で禁じる。
      */
-    assertNamesNoCommand(String(first), "blocked分岐のdelete拒否");
-    assertAssertsNoState(String(first), "blocked分岐のdelete拒否");
+    assertDiagnosticIsExactly(
+      String(first),
+      `${DELETE_ABSENT_PREFIX}${blockedTail(outsideCause())}`,
+      "blocked分岐のdelete拒否",
+    );
     /** 解消すべき原因を名指ししていること。 */
     assert.match(
       String(first),
@@ -1484,7 +1468,7 @@ Given("ASCを一度も導入していない隔離directoryがある", function (
 });
 
 Then(
-  "updateは1 fileも書かず明示指定を要求して拒否し名指しされたinstallは成功する",
+  "updateは1 fileも書かず明示指定を要求して拒否しinstallは名指しされないまま別途成功する",
   function () {
     const rejections = this.recoveryRejections;
     assert.ok(rejections, "拒否理由がありません");
@@ -1496,18 +1480,13 @@ Then(
     /**
      * **`update`の拒否文は`install`を名指ししない**（Issue #1305、fable F-03）。
      * 導入済み＋record喪失＋相違資産の状態では`install`は競合で拒否されるため、
-     * 無条件に名指しすると「成功しない手段の名指し」になる。要求するのは
-     * 明示指定の名指しだけである。
+     * 無条件に名指しすると「成功しない手段の名指し」になる。**完全一致なので
+     * `install`に限らずどのcommandを足しても落ちる。**
      */
-    assert.match(
+    assertDiagnosticIsExactly(
       String(rejections[0]),
-      /復旧するには update に --recover-record が必要です/u,
-      `明示指定を要求していません: ${String(rejections[0])}`,
-    );
-    assert.doesNotMatch(
-      withoutPaths(String(rejections[0])),
-      /install/u,
-      `成功が確認されていないinstallを名指ししています: ${String(rejections[0])}`,
+      `${ABSENT_PREFIX}${MINIMAL_TAIL}`,
+      "未導入directoryのupdate拒否",
     );
     /** **1 fileも書かない。** README.md以外が現れていないことで観測する。 */
     const entries = fs
@@ -1701,10 +1680,10 @@ Then(
     const rejections = this.recoveryRejections;
     assert.ok(rejections, "拒否理由がありません");
     assert.notEqual(rejections[0], "", "未導入directoryが拒否されていません");
-    assert.match(
+    assertDiagnosticIsExactly(
       String(rejections[0]),
-      /復旧するには update に --recover-record が必要です/u,
-      `明示指定を要求していません: ${String(rejections[0])}`,
+      `${ABSENT_PREFIX}${MINIMAL_TAIL}`,
+      "明示指定なしのupdate拒否",
     );
     const entries = fs
       .readdirSync(this.root)
@@ -1723,10 +1702,10 @@ Then("updateは1 fileも書かず明示指定を要求して拒否する", funct
   const rejections = this.recoveryRejections;
   assert.ok(rejections, "拒否理由がありません");
   assert.notEqual(rejections[0], "", "未導入directoryが拒否されていません");
-  assert.match(
+  assertDiagnosticIsExactly(
     String(rejections[0]),
-    /復旧するには update に --recover-record が必要です/u,
-    `明示指定を要求していません: ${String(rejections[0])}`,
+    `${ABSENT_PREFIX}${MINIMAL_TAIL}`,
+    "明示指定なしのupdate拒否",
   );
   const entries = fs
     .readdirSync(this.root)
@@ -1832,10 +1811,10 @@ Then("明示指定の要求だけを返しrecordを再生成しない", function
     "",
     "明示指定なしのupdateが拒否されていません",
   );
-  assert.match(
+  assertDiagnosticIsExactly(
     String(rejections[0]),
-    /復旧するには update に --recover-record が必要です/u,
-    `明示指定を要求していません: ${String(rejections[0])}`,
+    `${ABSENT_PREFIX}${MINIMAL_TAIL}`,
+    "明示指定なしのupdate拒否",
   );
   /** **recordを再生成しない。** 拒否は状態を変えない。 */
   assert.equal(
@@ -2237,23 +2216,11 @@ Then("拒否理由は最小診断だけを返しupdateを名指しする", funct
    * `init`では閉路、`delete`では誤誘導になる。**caller非依存な1本の文字列で
    * 助言を作らない。**
    */
-  assert.match(
+  assertDiagnosticIsExactly(
     message,
-    /復旧するには update に --recover-record が必要です/u,
-    `所属commandを名指しした最小診断を返していません: ${message}`,
+    `${DELETE_ABSENT_PREFIX}${MINIMAL_TAIL}`,
+    "未導入directoryのdelete拒否",
   );
-  /**
-   * **語そのものの不在で固定する**（Issue #1305、fable H-01）。
-   * 以前は`/先にinstallを実行してください/`のような字面で禁止していたため、
-   * 文言を「install を使ってください」へ変えた時点で**assertionが空虚化した。**
-   * 字面ではなく語で禁止する。`install`はpreviewしていないので名指しできない。
-   */
-  assert.doesNotMatch(
-    withoutPaths(message),
-    /install/u,
-    `拒否理由がinstallを名指ししています: ${message}`,
-  );
-  assertAssertsNoState(message, "未導入directoryのdelete拒否");
   assert.doesNotMatch(
     message,
     /配置予定|採用 \d+件|保持 \d+件/u,
@@ -2290,8 +2257,11 @@ Then(
      * `/--recover-record 付きで実行してください/`という字面の禁止は言い換えで
      * 空虚化する。previewが拒否した経路ではどのcommandも名指しできない。
      */
-    assertNamesNoCommand(message, "blocked分岐のupdate拒否");
-    assertAssertsNoState(message, "blocked分岐のupdate拒否");
+    assertDiagnosticIsExactly(
+      message,
+      `${ABSENT_PREFIX}${blockedTail(outsideCause())}`,
+      "blocked分岐のupdate拒否",
+    );
     assert.match(
       message,
       /先にこの原因を解消してください/u,

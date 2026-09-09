@@ -136,7 +136,7 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
   Scenario: SCN-INT-LIFECYCLE-027 未導入directoryのupdateをinstallと同じ書き込みへ倒さない
     Given ASCを一度も導入していない隔離directoryがある
     When record不在の隔離先へupdateを試みる
-    Then updateは1 fileも書かず明示指定を要求して拒否し名指しされたinstallは成功する
+    Then updateは1 fileも書かず明示指定を要求して拒否しinstallは名指しされないまま別途成功する
 
   Scenario: SCN-INT-LIFECYCLE-028 record不正の各分類を空recordへ降格させない
     Given 導入後にrecordを不正な各分類へ壊した隔離先の一覧がある
