@@ -136,24 +136,34 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
   Scenario: SCN-INT-LIFECYCLE-027 未導入directoryのupdateをinstallと同じ書き込みへ倒さない
     Given ASCを一度も導入していない隔離directoryがある
     When record不在の隔離先へupdateを試みる
-    Then updateは1 fileも書かずinstallを名指しして拒否し名指しされたinstallは成功する
+    Then updateは1 fileも書かず明示指定を要求して拒否し名指しされたinstallは成功する
 
   Scenario: SCN-INT-LIFECYCLE-028 record不正の各分類を空recordへ降格させない
     Given 導入後にrecordを不正な各分類へ壊した隔離先の一覧がある
     When 各不正recordの隔離先へupdateを試みる
     Then いずれも書き込まず拒否しrecordと管理資産は不変である
 
-  Scenario: SCN-INT-LIFECYCLE-029 利用者所有の同名fileを導入済みの証拠にしない
+  Scenario: SCN-INT-LIFECYCLE-029 明示指定なしでは利用者所有の同名fileへ書き込まない
     Given 未導入directoryに利用者所有のAGENTS.mdだけがある隔離先がある
     When record不在の隔離先へupdateを試みる
-    Then updateは1 fileも書かずinstallを名指しして拒否し利用者のfileは不変である
+    Then updateは1 fileも書かず明示指定を要求して拒否し利用者のfileは不変である
 
-  Scenario: SCN-INT-LIFECYCLE-030 正本とbyte一致する同名fileも導入済みの証拠にしない
+  Scenario: SCN-INT-LIFECYCLE-030 正本とbyte一致する同名fileがあっても明示指定を要求する
     Given 未導入directoryに正本とbyte一致するAGENTS.mdだけがある隔離先がある
     When record不在の隔離先へupdateを試みる
-    Then updateは1 fileも書かずinstallを名指しして拒否する
+    Then updateは1 fileも書かず明示指定を要求して拒否する
 
   Scenario: SCN-INT-LIFECYCLE-031 公開直前に現れたsymlinkのrecord公開先を置換しない
     Given 導入後にrecordと展開済み資産1件を失った隔離先がある
     When 資産のcopy直後にrecord公開先へsymlinkを挿入してupdateを試みる
     Then updateは公開を中止しrecord公開先のsymlinkは保持される
+
+  Scenario: SCN-INT-LIFECYCLE-032 導入済みでもrecord復旧には明示指定を要求する
+    Given 導入後にmanaged asset recordだけを失った隔離先がある
+    When 明示指定なしでrecord不在の隔離先へupdateを試みる
+    Then 明示指定の要求だけを返しrecordを再生成しない
+
+  Scenario: SCN-INT-LIFECYCLE-033 record既存の再固定でも公開直前に現れたsymlinkを置換しない
+    Given 導入済みで展開済み資産1件を失った隔離先がある
+    When 資産のcopy直後に既存recordをsymlinkへ差し替えてupdateを試みる
+    Then updateは公開を中止し既存recordのsymlinkは保持される

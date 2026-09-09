@@ -5185,7 +5185,10 @@ export async function main(argv, dependencies = {}) {
         print(lifecycleCommand === "install"
             ? init(root, { apply })
             : lifecycleCommand === "update"
-                ? upgrade(root, { apply })
+                ? upgrade(root, {
+                    apply,
+                    recoverRecord: flags["recover-record"] === true,
+                })
                 : uninstall(root, { apply }));
         return 0;
     }

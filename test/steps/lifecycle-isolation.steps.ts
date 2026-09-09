@@ -826,8 +826,14 @@ When("record不在の隔離先へupdateを適用する", function () {
    * **照会（preview）とコマンド（apply）を別に観測する。** applyだけを見ると、
    * previewが`adopted`を1件も報告しなくなる変異が生存する。
    */
-  this.recoveryPreview = upgrade(this.root, { apply: false });
-  this.recoveryResult = upgrade(this.root, { apply: true });
+  this.recoveryPreview = upgrade(this.root, {
+    apply: false,
+    recoverRecord: true,
+  });
+  this.recoveryResult = upgrade(this.root, {
+    apply: true,
+    recoverRecord: true,
+  });
 });
 
 When("record不在の隔離先へinstallとdeleteを試みる", function () {
@@ -844,7 +850,10 @@ When("record不在の隔離先へinstallとdeleteを試みる", function () {
     }
   }
   this.recoveryRejections = rejections;
-  this.recoveryResult = upgrade(this.root, { apply: true });
+  this.recoveryResult = upgrade(this.root, {
+    apply: true,
+    recoverRecord: true,
+  });
 });
 
 Then(
@@ -1013,7 +1022,7 @@ When("展開先を境界外symlinkへ差し替えてupdateを試みる", functio
   };
   this.recoveryRejections = [];
   try {
-    upgrade(this.root, { apply: true });
+    upgrade(this.root, { apply: true, recoverRecord: true });
     this.recoveryRejections.push("");
   } catch (error) {
     this.recoveryRejections.push(
@@ -1178,7 +1187,10 @@ When("apply中に展開先の内容を変えてupdateを適用する", function 
       }
       return result;
     }) as typeof fs.mkdirSync;
-    this.recoveryResult = upgrade(this.root, { apply: true });
+    this.recoveryResult = upgrade(this.root, {
+      apply: true,
+      recoverRecord: true,
+    });
   } finally {
     (fs as { mkdirSync: typeof fs.mkdirSync }).mkdirSync = original;
   }
@@ -1232,7 +1244,10 @@ When("copy直後に配置先へ追記してupdateを適用する", function () {
         fs.appendFileSync(target, "\ncopy直後の追記\n");
       }
     }) as typeof fs.copyFileSync;
-    this.recoveryResult = upgrade(this.root, { apply: true });
+    this.recoveryResult = upgrade(this.root, {
+      apply: true,
+      recoverRecord: true,
+    });
   } finally {
     (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = original;
   }
@@ -1286,7 +1301,7 @@ When("deleteを試みてから同じ状態でupdateも試みる", function () {
   const rejections: string[] = [];
   for (const attempt of [
     () => uninstall(this.root, { apply: true }),
-    () => upgrade(this.root, { apply: true }),
+    () => upgrade(this.root, { apply: true, recoverRecord: true }),
   ]) {
     try {
       attempt();
@@ -1364,7 +1379,7 @@ Given("ASCを一度も導入していない隔離directoryがある", function (
 });
 
 Then(
-  "updateは1 fileも書かずinstallを名指しして拒否し名指しされたinstallは成功する",
+  "updateは1 fileも書かず明示指定を要求して拒否し名指しされたinstallは成功する",
   function () {
     const rejections = this.recoveryRejections;
     assert.ok(rejections, "拒否理由がありません");
@@ -1565,15 +1580,15 @@ Given(
 );
 
 Then(
-  "updateは1 fileも書かずinstallを名指しして拒否し利用者のfileは不変である",
+  "updateは1 fileも書かず明示指定を要求して拒否し利用者のfileは不変である",
   function () {
     const rejections = this.recoveryRejections;
     assert.ok(rejections, "拒否理由がありません");
     assert.notEqual(rejections[0], "", "未導入directoryが拒否されていません");
     assert.match(
       String(rejections[0]),
-      /installを実行してください/u,
-      `installを名指ししていません: ${String(rejections[0])}`,
+      /--recover-record を付けて再実行してください/u,
+      `明示指定を要求していません: ${String(rejections[0])}`,
     );
     const entries = fs
       .readdirSync(this.root)
@@ -1588,14 +1603,14 @@ Then(
   },
 );
 
-Then("updateは1 fileも書かずinstallを名指しして拒否する", function () {
+Then("updateは1 fileも書かず明示指定を要求して拒否する", function () {
   const rejections = this.recoveryRejections;
   assert.ok(rejections, "拒否理由がありません");
   assert.notEqual(rejections[0], "", "未導入directoryが拒否されていません");
   assert.match(
     String(rejections[0]),
-    /installを実行してください/u,
-    `installを名指ししていません: ${String(rejections[0])}`,
+    /--recover-record を付けて再実行してください/u,
+    `明示指定を要求していません: ${String(rejections[0])}`,
   );
   const entries = fs
     .readdirSync(this.root)
@@ -1635,7 +1650,7 @@ When(
           fs.symlinkSync(missing, recordPath(this.root));
         }
       }) as typeof fs.copyFileSync;
-      upgrade(this.root, { apply: true });
+      upgrade(this.root, { apply: true, recoverRecord: true });
       this.recoveryRejections.push("");
     } catch (error) {
       this.recoveryRejections.push(
@@ -1658,13 +1673,122 @@ Then("updateは公開を中止しrecord公開先のsymlinkは保持される", f
   );
   assert.match(
     String(rejections[0]),
-    /公開先が通常fileではありません/u,
+    /公開先に別のentryが現れました/u,
     `公開先の検証による拒否ではありません: ${String(rejections[0])}`,
   );
   assert.equal(
     fs.lstatSync(recordPath(this.root)).isSymbolicLink(),
     true,
     "record公開先のsymlinkが置換されました",
+  );
+  const outside = this.outsideTarget;
+  assert.ok(outside, "symlinkの参照先がありません");
+  assert.equal(
+    fs.existsSync(outside.file),
+    false,
+    "symlinkの参照先へ書き込みました",
+  );
+});
+
+/**
+ * record復旧の明示指定を要求する（Issue #1305、#1307 案A）。
+ *
+ * **導入済みであっても、opt-inが無ければ1 fileも書かない。** 推測による導入判定を
+ * 撤去したため、意図の宣言だけが復旧の条件である。
+ */
+When("明示指定なしでrecord不在の隔離先へupdateを試みる", function () {
+  this.recoveryRejections = [];
+  try {
+    upgrade(this.root, { apply: true });
+    this.recoveryRejections.push("");
+  } catch (error) {
+    this.recoveryRejections.push(
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+});
+
+Then("明示指定の要求だけを返しrecordを再生成しない", function () {
+  const rejections = this.recoveryRejections;
+  assert.ok(rejections, "拒否理由がありません");
+  assert.notEqual(
+    rejections[0],
+    "",
+    "明示指定なしのupdateが拒否されていません",
+  );
+  assert.match(
+    String(rejections[0]),
+    /--recover-record を付けて再実行してください/u,
+    `明示指定を要求していません: ${String(rejections[0])}`,
+  );
+  /** **recordを再生成しない。** 拒否は状態を変えない。 */
+  assert.equal(
+    fs.existsSync(recordPath(this.root)),
+    false,
+    "拒否したのにrecordが再生成されています",
+  );
+});
+
+/**
+ * record既存時の公開先再検証（Issue #1305、R2-H02・M-A11）。
+ *
+ * **record不在のno-replace公開とは別経路である。** 既存recordの再固定は`rename`で
+ * 公開するため、`assertRecordPublishTarget`が直前のentryを検証する。読み取り時点では
+ * 通常fileだったものが公開直前にsymlinkへ差し替わる場合を測る。
+ */
+Given("導入済みで展開済み資産1件を失った隔離先がある", function () {
+  installedIsolation(this, "asc-lifecycle-publish-existing-");
+  fs.rmSync(path.join(this.root, DIVERGENT_ASSET));
+});
+
+When(
+  "資産のcopy直後に既存recordをsymlinkへ差し替えてupdateを試みる",
+  function () {
+    const outsideDirectory = this.temp("asc-lifecycle-existing-target-");
+    const missing = path.join(outsideDirectory, "存在しない.json");
+    this.outsideTarget = { file: missing, contents: "" };
+    const original = fs.copyFileSync;
+    let injected = false;
+    this.recoveryRejections = [];
+    try {
+      (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = ((
+        source: Parameters<typeof fs.copyFileSync>[0],
+        destination: Parameters<typeof fs.copyFileSync>[1],
+        mode?: Parameters<typeof fs.copyFileSync>[2],
+      ) => {
+        original(source, destination, mode);
+        if (!injected) {
+          injected = true;
+          fs.rmSync(recordPath(this.root));
+          fs.symlinkSync(missing, recordPath(this.root));
+        }
+      }) as typeof fs.copyFileSync;
+      upgrade(this.root, { apply: true });
+      this.recoveryRejections.push("");
+    } catch (error) {
+      this.recoveryRejections.push(
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = original;
+    }
+    assert.equal(injected, true, "公開直前の差し替えを注入できていません");
+  },
+);
+
+Then("updateは公開を中止し既存recordのsymlinkは保持される", function () {
+  const rejections = this.recoveryRejections;
+  assert.ok(rejections, "拒否理由がありません");
+  assert.notEqual(rejections[0], "", "公開先の差し替えが検出されていません");
+  assert.match(
+    String(rejections[0]),
+    /公開先が通常fileではありません/u,
+    `公開先の再検証による拒否ではありません: ${String(rejections[0])}`,
+  );
+  assert.equal(
+    fs.lstatSync(recordPath(this.root)).isSymbolicLink(),
+    true,
+    "既存recordのsymlinkが置換されました",
   );
   const outside = this.outsideTarget;
   assert.ok(outside, "symlinkの参照先がありません");
