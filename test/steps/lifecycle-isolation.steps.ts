@@ -952,8 +952,8 @@ Then("拒否理由はupdateを名指しし名指しされたupdateは成功す�
     assert.notEqual(message, "", `${index}件目が拒否されていません`);
     assert.match(
       message,
-      /update/u,
-      `${index}件目の拒否理由がupdateを名指ししていません: ${message}`,
+      /update --recover-record/u,
+      `${index}件目の拒否理由が案内すべき手段を名指ししていません: ${message}`,
     );
     /** **拒否される手段を案内しない。** installを名指しすると閉路になる。 */
     assert.doesNotMatch(
@@ -1123,8 +1123,8 @@ Then("updateは書き込まず拒否しrecordのsymlinkは保持される", func
    */
   assert.match(
     String(rejections[0]),
-    /パスが存在しません/u,
-    `読み取り時の診断ではありません: ${String(rejections[0])}`,
+    /managed asset recordは通常fileでなければなりません: \.agent-skill-chain\/managed-assets\.json/u,
+    `読み取り時の診断が対象pathを名指ししていません: ${String(rejections[0])}`,
   );
   assert.doesNotMatch(
     String(rejections[0]),
@@ -1798,3 +1798,172 @@ Then("updateは公開を中止し既存recordのsymlinkは保持される", func
     "symlinkの参照先へ書き込みました",
   );
 });
+
+/**
+ * 決裁されたopt-in門を**配布CLIの合成経路で**固定する（Issue #1305、F-01a・M-02）。
+ *
+ * **domain関数の引数testでは足りない。** `cli.ts`の`flags["recover-record"] === true`を
+ * `true`へ置換すると、配布binではopt-inが既定になり#1307の決裁が無効化される。
+ * その変異はdomain層のtestでは1件も落ちない。
+ */
+When("配布CLIで明示指定なしのupdateとapplyを順に試みる", function () {
+  const before = fs
+    .readdirSync(this.root)
+    .filter((entry) => entry !== ".git")
+    .sort();
+  this.cliResults = [
+    runCli(this.root, ["update", "--dry-run"]),
+    runCli(this.root, ["update", "--apply"]),
+  ];
+  this.consumerFiles = Object.fromEntries(
+    before.map((entry) => [entry, entry]),
+  );
+  this.statusBefore = before.join(",");
+});
+
+Then("CLIは非0で終了し明示指定を名指しし1 fileも書かない", function () {
+  const results = this.cliResults;
+  assert.ok(results, "CLI結果がありません");
+  assert.equal(results.length, 2);
+  for (const [index, result] of results.entries()) {
+    assert.notEqual(
+      result.status,
+      0,
+      `${index}件目のCLIが非0で終了していません: ${result.stdout}${result.stderr}`,
+    );
+    const output = `${result.stdout}${result.stderr}`;
+    assert.match(
+      output,
+      /--recover-record/u,
+      `${index}件目のCLI出力が明示指定を名指ししていません: ${output}`,
+    );
+  }
+  /** **1 fileも書かない。** record再生成もdirectory増加も起きない。 */
+  assert.equal(fs.existsSync(recordPath(this.root)), false);
+  const after = fs
+    .readdirSync(this.root)
+    .filter((entry) => entry !== ".git")
+    .sort()
+    .join(",");
+  assert.equal(after, this.statusBefore, "CLIが書き込みました");
+});
+
+/**
+ * `install`側の公開先再検証（Issue #1305、M-A）。
+ *
+ * `assertRecordPublishTarget`は本差分で`init`へも入れた新設の防護である。
+ * `upgrade`側のSCN-033だけでは`init`の呼び出し行を消す変異が生存する。
+ */
+When(
+  "installの資産copy直後にrecord公開先へsymlinkを挿入して適用する",
+  function () {
+    const outsideDirectory = this.temp("asc-lifecycle-init-publish-");
+    const missing = path.join(outsideDirectory, "存在しない.json");
+    this.outsideTarget = { file: missing, contents: "" };
+    const original = fs.copyFileSync;
+    let injected = false;
+    this.recoveryRejections = [];
+    try {
+      (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = ((
+        source: Parameters<typeof fs.copyFileSync>[0],
+        destination: Parameters<typeof fs.copyFileSync>[1],
+        mode?: Parameters<typeof fs.copyFileSync>[2],
+      ) => {
+        original(source, destination, mode);
+        if (!injected) {
+          injected = true;
+          fs.mkdirSync(path.dirname(recordPath(this.root)), {
+            recursive: true,
+          });
+          fs.symlinkSync(missing, recordPath(this.root));
+        }
+      }) as typeof fs.copyFileSync;
+      init(this.root, { apply: true });
+      this.recoveryRejections.push("");
+    } catch (error) {
+      this.recoveryRejections.push(
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = original;
+    }
+    assert.equal(injected, true, "公開直前の挿入を注入できていません");
+  },
+);
+
+Then("installは公開を中止しrecord公開先のsymlinkは保持される", function () {
+  const rejections = this.recoveryRejections;
+  assert.ok(rejections, "拒否理由がありません");
+  assert.notEqual(rejections[0], "", "公開先の差し替えが検出されていません");
+  assert.match(
+    String(rejections[0]),
+    /公開先が通常fileではありません/u,
+    `公開先の再検証による拒否ではありません: ${String(rejections[0])}`,
+  );
+  assert.equal(
+    fs.lstatSync(recordPath(this.root)).isSymbolicLink(),
+    true,
+    "record公開先のsymlinkが置換されました",
+  );
+  const outside = this.outsideTarget;
+  assert.ok(outside, "symlinkの参照先がありません");
+  assert.equal(
+    fs.existsSync(outside.file),
+    false,
+    "symlinkの参照先へ書き込みました",
+  );
+});
+
+/**
+ * opt-inが配布CLIで**実際に効く**ことを固定する（Issue #1305、M-E2）。
+ *
+ * 拒否側だけを検査すると、配線を常に`false`へ倒す変異が生存する。その変異では
+ * #1307で決裁した復旧経路が配布binから到達不能になる。**門が閉じることと、
+ * 鍵が開くことの両方を測る。**
+ */
+When("配布CLIで明示指定つきのupdateを適用する", function () {
+  this.cliResults = [
+    runCli(this.root, ["update", "--recover-record", "--apply"]),
+  ];
+});
+
+Then(
+  "CLIは0で終了しrecordを再固定し相違資産をretainedとして報告する",
+  function () {
+    const results = this.cliResults;
+    assert.ok(results, "CLI結果がありません");
+    assert.equal(results.length, 1);
+    const [result] = results;
+    assert.ok(result);
+    assert.equal(
+      result.status,
+      0,
+      `CLIが0で終了していません: ${result.stdout}${result.stderr}`,
+    );
+    const parsed: unknown = JSON.parse(result.stdout);
+    assert.ok(
+      parsed !== null && typeof parsed === "object" && !Array.isArray(parsed),
+      "CLI出力がJSON objectではありません",
+    );
+    const payload = parsed as Record<string, unknown>;
+    assert.equal(payload.applied, true);
+    assert.ok(
+      Array.isArray(payload.retained) &&
+        payload.retained.includes(DIVERGENT_ASSET),
+      `retainedへ${DIVERGENT_ASSET}が含まれていません: ${result.stdout}`,
+    );
+    assert.equal(
+      fs.existsSync(recordPath(this.root)),
+      true,
+      "recordが再固定されていません",
+    );
+    /** 相違資産は上書きされていない。 */
+    const before = this.digestsBeforeRecovery?.[DIVERGENT_ASSET];
+    assert.ok(before, "復旧前のdigestがありません");
+    assert.equal(
+      sha256(fs.readFileSync(path.join(this.root, DIVERGENT_ASSET))),
+      before,
+      `${DIVERGENT_ASSET}が上書きされました`,
+    );
+  },
+);

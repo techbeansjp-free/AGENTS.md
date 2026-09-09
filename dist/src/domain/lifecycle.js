@@ -161,9 +161,19 @@ function resolveManagedAsset(target, relative) {
     return resolveContained(target, portable, { allowMissingLeaf: true });
 }
 function readManagedAssetRecord(target) {
+    /**
+     * **entryの種別を`resolveContained`より前に見る**（Issue #1305、F-04）。
+     *
+     * `resolveContained`はlink先を解決するため、dangling symlinkのrecordでは
+     * 「パスが存在しません」で止まり、**recordがsymlinkであることも対象pathも
+     * 出ない。** 要件は「解消すべき原因と対象を名指しする」を求めている。
+     */
+    const recordEntry = path.join(target, MANAGED_RECORD);
+    if (pathEntryExists(recordEntry) && !isRegularFile(recordEntry))
+        throw new Error(`managed asset recordは通常fileでなければなりません: ${MANAGED_RECORD}`);
     const recordPath = resolveContained(target, MANAGED_RECORD);
     if (!isRegularFile(recordPath))
-        throw new Error("managed asset recordは通常fileでなければなりません");
+        throw new Error(`managed asset recordは通常fileでなければなりません: ${MANAGED_RECORD}`);
     const parsed = JSON.parse(fs.readFileSync(recordPath, "utf8"));
     if (!isRecord(parsed) || !isRecord(parsed.files))
         throw new Error("managed asset recordが不正です");
@@ -257,9 +267,23 @@ function recoveryGuidance(target) {
          */
         return `この状態では復旧も次の理由で拒否されます: ${cause}。先にこの原因を解消してください`;
     }
-    return ("次に update --recover-record を実行してください。" +
+    /**
+     * **previewが保証するのは「既知の論理的拒否が無いこと」だけである**（Issue #1305、H-02）。
+     *
+     * `apply: false`は分類まで到達してreturnするため、書き込み権限、容量、公開時の
+     * 競合といった環境要因の失敗を予測しない。**副作用の無いoracleでapply成功を
+     * 保証することは原理的にできない。** したがって案内は「論理的な拒否が無い」ことを
+     * 述べ、preview（`--dry-run`）を先に実行させる二段階の形で示す。
+     *
+     * **対象を明示する。** `--root`を省いた文字列をそのまま実行すると別のtargetへ
+     * 向きうる。
+     */
+    const root = JSON.stringify(target);
+    return (`次に update --recover-record --root=${root} --dry-run で内容を確認し、` +
+        "同じ引数へ --apply を付けて実行してください。" +
         "recordに無く正本と一致する展開済み資産を採用し、" +
-        "recordに無く正本と異なる資産は上書きせずretainedとして報告します");
+        "recordに無く正本と異なる資産は上書きせずretainedとして報告します。" +
+        "**previewは論理的な拒否が無いことだけを示し、書き込み権限や容量の不足は予測しません**");
 }
 export function init(target, options) {
     const assets = mappings(target);

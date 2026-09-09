@@ -1029,7 +1029,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       optional(
         "recover-record",
         "",
-        "managed asset recordを失った導入済みdirectoryの復旧を明示的に許可する",
+        "managed asset recordが無い状態での書き込みを明示的に許可する。未導入directoryでは展開対象を配置する",
         "recordが無い場合は拒否する",
       ),
     ],

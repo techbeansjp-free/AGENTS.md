@@ -167,3 +167,18 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     Given 導入済みで展開済み資産1件を失った隔離先がある
     When 資産のcopy直後に既存recordをsymlinkへ差し替えてupdateを試みる
     Then updateは公開を中止し既存recordのsymlinkは保持される
+
+  Scenario: SCN-INT-LIFECYCLE-034 配布CLIでも明示指定なしのrecord復旧を拒否する
+    Given 導入後にmanaged asset recordだけを失った隔離先がある
+    When 配布CLIで明示指定なしのupdateとapplyを順に試みる
+    Then CLIは非0で終了し明示指定を名指しし1 fileも書かない
+
+  Scenario: SCN-INT-LIFECYCLE-035 installの公開直前に現れたsymlinkのrecord公開先を置換しない
+    Given lifecycle検証用の隔離directoryがある
+    When installの資産copy直後にrecord公開先へsymlinkを挿入して適用する
+    Then installは公開を中止しrecord公開先のsymlinkは保持される
+
+  Scenario: SCN-INT-LIFECYCLE-036 配布CLIで明示指定つきのrecord復旧が成功する
+    Given 導入後にrecordを失い展開済み資産が正本と異なる隔離先がある
+    When 配布CLIで明示指定つきのupdateを適用する
+    Then CLIは0で終了しrecordを再固定し相違資産をretainedとして報告する

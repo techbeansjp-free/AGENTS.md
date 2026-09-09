@@ -710,7 +710,7 @@ export const COMMAND_USAGE = Object.freeze([
         optionalFlags: [
             ROOT_FLAG,
             ...APPLY_MODE,
-            optional("recover-record", "", "managed asset recordを失った導入済みdirectoryの復旧を明示的に許可する", "recordが無い場合は拒否する"),
+            optional("recover-record", "", "managed asset recordが無い状態での書き込みを明示的に許可する。未導入directoryでは展開対象を配置する", "recordが無い場合は拒否する"),
         ],
         example: "npx agent-skill-chain update --root=. --apply",
     },
