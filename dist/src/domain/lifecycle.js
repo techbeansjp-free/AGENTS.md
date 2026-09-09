@@ -237,7 +237,9 @@ export function init(target, options) {
         (!isRegularFile(dest) || digest(src) !== digest(dest)))
         .map(({ dest }) => dest);
     if (conflicts.length > 0)
-        throw new Error(`初期導入先が競合しています。ファイルは書き込んでいません: ${conflicts.join(", ")}`);
+        throw new Error(`初期導入先が競合しています。ファイルは書き込んでいません: ${conflicts.join(", ")}。` +
+            "updateを実行してください。updateは正本と一致する展開済み資産を採用し、" +
+            "異なる資産は上書きせずretainedとして報告します");
     if (!options.apply)
         return { applied: false, assets: assets.map(({ dest }) => dest) };
     const record = {
@@ -253,11 +255,50 @@ export function init(target, options) {
     writeFileAtomic(path.join(target, MANAGED_RECORD), `${JSON.stringify(record, null, 2)}\n`);
     return { applied: true, assets: Object.keys(record.files) };
 }
+export function classifyManagedAsset(input) {
+    if (!input.exists)
+        return "place";
+    if (!input.regularFile)
+        return "retain";
+    if (input.expected !== undefined)
+        return input.destDigest === input.expected ? "overwrite" : "retain";
+    return input.destDigest === input.sourceDigest ? "adopt" : "retain";
+}
+/**
+ * managed asset recordを読む。**不在なら空recordを返す**（Issue #1305）。
+ *
+ * 以前はここで`未導入です。先にinstallを実行してください`をthrowしていたが、
+ * その`install`は展開先が正本と異なる場合に`初期導入先が競合しています`で
+ * 拒否するため、**拒否理由が閉路を作り製品内の復旧経路が存在しなかった。**
+ * 空recordを返すと全資産が「記録が無い」として評価され、正本と一致する資産は
+ * 採用、相違する資産は保持になる。**上書きの到達性は1経路も増えない。**
+ */
+function readManagedAssetRecordOrEmpty(target) {
+    if (!fs.existsSync(path.join(target, MANAGED_RECORD)))
+        return { version: PACKAGE_VERSION, files: {} };
+    return readManagedAssetRecord(target).record;
+}
+/**
+ * 分類の入力をfilesystemから観測する（Issue #1305）。
+ *
+ * **通常fileでないときにdigestを読まない。** 読むとdirectoryで例外になる。
+ * 分類関数は`exists`と`regularFile`で早期に返すため、この場合のdigestは
+ * 判定に使われない。
+ */
+function observeManagedAsset(item, expected) {
+    const exists = pathEntryExists(item.dest);
+    const regularFile = exists && isRegularFile(item.dest);
+    return {
+        exists,
+        regularFile,
+        expected,
+        destDigest: regularFile ? digest(item.dest) : "",
+        sourceDigest: regularFile ? digest(item.src) : "",
+    };
+}
 export function upgrade(target, options) {
     const recordPath = path.join(target, MANAGED_RECORD);
-    if (!fs.existsSync(recordPath))
-        throw new Error("未導入です。先にinstallを実行してください");
-    const { record: old } = readManagedAssetRecord(target);
+    const old = readManagedAssetRecordOrEmpty(target);
     const current = mappings(target);
     const retained = [];
     const adoptable = [];
@@ -265,27 +306,14 @@ export function upgrade(target, options) {
     for (const item of current) {
         const key = relativeKey(target, item.dest);
         const expected = old.files[key];
-        if (!pathEntryExists(item.dest)) {
-            planned.push({ ...item, key, expected });
-            continue;
-        }
-        if (!isRegularFile(item.dest)) {
+        const classification = classifyManagedAsset(observeManagedAsset(item, expected));
+        if (classification === "retain") {
             retained.push(key);
             continue;
         }
-        if (expected) {
-            if (digest(item.dest) === expected)
-                planned.push({ ...item, key, expected });
-            else
-                retained.push(key);
-            continue;
-        }
-        if (digest(item.dest) === digest(item.src)) {
-            planned.push({ ...item, key, expected });
+        planned.push({ ...item, key, expected });
+        if (classification === "adopt")
             adoptable.push(key);
-        }
-        else
-            retained.push(key);
     }
     if (!options.apply)
         return {
@@ -301,28 +329,21 @@ export function upgrade(target, options) {
     const adopted = [];
     for (const item of planned) {
         fs.mkdirSync(path.dirname(item.dest), { recursive: true });
-        if (pathEntryExists(item.dest)) {
-            if (!isRegularFile(item.dest)) {
-                retained.push(item.key);
-                continue;
-            }
-            if (item.expected) {
-                if (digest(item.dest) !== item.expected) {
-                    retained.push(item.key);
-                    continue;
-                }
-                fs.copyFileSync(item.src, item.dest);
-            }
-            else {
-                if (digest(item.dest) !== digest(item.src)) {
-                    retained.push(item.key);
-                    continue;
-                }
-                adopted.push(item.key);
-            }
+        /**
+         * **preview後の状態変化をここで取り直す。** TOCTOUの再検証であり、
+         * previewの判定を再利用しない。
+         */
+        const classification = classifyManagedAsset(observeManagedAsset(item, item.expected));
+        if (classification === "retain") {
+            retained.push(item.key);
+            continue;
         }
-        else
+        if (classification === "place")
             fs.copyFileSync(item.src, item.dest, fs.constants.COPYFILE_EXCL);
+        else if (classification === "overwrite")
+            fs.copyFileSync(item.src, item.dest);
+        else
+            adopted.push(item.key);
         next.files[item.key] = digest(item.dest);
     }
     writeFileAtomic(recordPath, `${JSON.stringify(next, null, 2)}\n`);
@@ -331,7 +352,8 @@ export function upgrade(target, options) {
 export function uninstall(target, options) {
     const recordPath = path.join(target, MANAGED_RECORD);
     if (!fs.existsSync(recordPath))
-        throw new Error("未導入です");
+        throw new Error("managed asset recordがありません。撤去対象を確定できません。" +
+            "updateを実行してrecordを再固定してから、deleteを実行してください");
     const managed = readManagedAssetRecord(target);
     const removable = [];
     const retained = [];

@@ -26,6 +26,16 @@ interface IsolationWorld extends WorkflowWorld {
   statusBefore: string;
   /** hookの登録の有無で`healthy`が変わらないことの観測（Issue #1105）。 */
   hookDoctorStates?: Array<ReturnType<typeof doctor>>;
+  /** record喪失からの復旧の観測（Issue #1305）。 */
+  recoveryResult?: ReturnType<typeof upgrade>;
+  /** 適用前のpreview出力（Issue #1305）。照会とコマンドを別に観測する。 */
+  recoveryPreview?: ReturnType<typeof upgrade>;
+  /** record不在時のinstall・deleteの拒否理由（Issue #1305）。 */
+  recoveryRejections?: string[];
+  /** 復旧前に測った資産のdigest（Issue #1305）。 */
+  digestsBeforeRecovery?: Record<string, string>;
+  /** 境界外symlinkの参照先とその内容（Issue #1305）。 */
+  outsideTarget?: { file: string; contents: string };
 }
 
 /** repository直下へ展開されるhostごとの常時入口（Issue #1219）。 */
@@ -701,5 +711,290 @@ Then("doctorは中断せず未登録として報告する", function (this: Isol
     Array.isArray(state.adapters.diagnostics),
     true,
     "他の診断欄が返っていません",
+  );
+});
+
+/**
+ * record喪失からの復旧（Issue #1305）。
+ *
+ * **recordの不在は失敗ではなく「全件未管理」である。** 展開済み資産が
+ * 正本と異なる場合に上書きへ倒すと、利用者の変更が無音で失われる。
+ */
+const DIVERGENT_ASSET = ".claude/skills/asc-step/SKILL.md";
+
+/** 復旧の観測に使う展開先。**製品の定数から導出しない。** */
+const NON_REGULAR_TARGETS = [
+  ".claude/hooks/asc-contract-citation.mjs",
+  ".codex/hooks/asc-contract-citation.mjs",
+] as const;
+
+function installedIsolation(world: IsolationWorld, prefix: string): void {
+  world.root = world.temp(prefix);
+  write(world.root, "README.md", "# fixture\n");
+  world.consumerFiles = { "README.md": "# fixture\n" };
+  const installed = init(world.root, { apply: true });
+  world.installedAssets = installed.assets;
+}
+
+function dropRecord(root: string): void {
+  fs.rmSync(recordPath(root));
+  assert.equal(fs.existsSync(recordPath(root)), false);
+}
+
+Given("導入後にmanaged asset recordだけを失った隔離先がある", function () {
+  installedIsolation(this, "asc-lifecycle-record-lost-");
+  dropRecord(this.root);
+});
+
+Given(
+  "導入後にrecordを失い展開済み資産が正本と異なる隔離先がある",
+  function () {
+    installedIsolation(this, "asc-lifecycle-record-divergent-");
+    const file = path.join(this.root, DIVERGENT_ASSET);
+    fs.appendFileSync(file, "\n利用者による追記\n");
+    this.digestsBeforeRecovery = {
+      [DIVERGENT_ASSET]: sha256(fs.readFileSync(file)),
+    };
+    dropRecord(this.root);
+  },
+);
+
+Given(
+  "導入後にrecordを失いhook登録済みhost設定を持つ隔離先がある",
+  function () {
+    this.root = this.temp("asc-lifecycle-record-settings-");
+    write(this.root, "README.md", "# fixture\n");
+    this.consumerFiles = { "README.md": "# fixture\n" };
+    const settings = JSON.stringify(
+      {
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash",
+              hooks: [
+                {
+                  type: "command",
+                  command: `"$CLAUDE_PROJECT_DIR/${HOOK_HOST_COPIES[0]}"`,
+                },
+              ],
+            },
+          ],
+        },
+      },
+      null,
+      2,
+    );
+    write(this.root, HOST_HOOK_SETTINGS, `${settings}\n`);
+    /**
+     * **保持を確かめるfileを`consumerFiles`へ入れる。** 入れないと
+     * 「1 byteも変わらない」の検査がREADMEだけを見て空虚になる。
+     */
+    this.consumerFiles[HOST_HOOK_SETTINGS] = `${settings}\n`;
+    const installed = init(this.root, { apply: true });
+    this.installedAssets = installed.assets;
+    this.digestsBeforeRecovery = {
+      [HOST_HOOK_SETTINGS]: sha256(
+        fs.readFileSync(path.join(this.root, HOST_HOOK_SETTINGS)),
+      ),
+    };
+    dropRecord(this.root);
+  },
+);
+
+Given("導入後にrecordを失い展開先がdirectoryの隔離先がある", function () {
+  installedIsolation(this, "asc-lifecycle-record-nonregular-");
+  const outside = path.join(this.temp("asc-lifecycle-outside-"), "outside.md");
+  fs.mkdirSync(path.dirname(outside), { recursive: true });
+  fs.writeFileSync(outside, "# 境界外\n");
+  this.outsideTarget = { file: outside, contents: "# 境界外\n" };
+  const asDirectory = path.join(this.root, NON_REGULAR_TARGETS[0]);
+  fs.rmSync(asDirectory);
+  fs.mkdirSync(asDirectory, { recursive: true });
+  dropRecord(this.root);
+});
+
+When("record不在の隔離先へupdateを適用する", function () {
+  /**
+   * **照会（preview）とコマンド（apply）を別に観測する。** applyだけを見ると、
+   * previewが`adopted`を1件も報告しなくなる変異が生存する。
+   */
+  this.recoveryPreview = upgrade(this.root, { apply: false });
+  this.recoveryResult = upgrade(this.root, { apply: true });
+});
+
+When("record不在の隔離先へinstallとdeleteを試みる", function () {
+  const rejections: string[] = [];
+  for (const attempt of [
+    () => init(this.root, { apply: true }),
+    () => uninstall(this.root, { apply: true }),
+  ]) {
+    try {
+      attempt();
+      rejections.push("");
+    } catch (error) {
+      rejections.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  this.recoveryRejections = rejections;
+  this.recoveryResult = upgrade(this.root, { apply: true });
+});
+
+Then(
+  "正本一致資産はadoptedとして採用され実測digestのrecordが再生成される",
+  function () {
+    const result = this.recoveryResult;
+    assert.ok(result, "復旧結果がありません");
+    assert.equal(result.applied, true);
+    assert.ok(
+      result.adopted.length > 0,
+      "正本一致資産が1件もadoptedになっていません",
+    );
+    assert.deepEqual(result.retained, []);
+    const preview = this.recoveryPreview;
+    assert.ok(preview, "preview結果がありません");
+    assert.equal(preview.applied, false);
+    assert.ok(
+      preview.adopted.length > 0,
+      "previewが正本一致資産をadoptedとして報告していません",
+    );
+    assert.deepEqual(
+      [...preview.adopted].sort(),
+      [...result.adopted].sort(),
+      "previewとapplyのadopted集合が一致しません",
+    );
+    assert.deepEqual(preview.retained, []);
+    const files = recordFiles(readObject(recordPath(this.root)));
+    assert.ok(Object.keys(files).length > 0, "recordが再生成されていません");
+    /**
+     * **登録digestが実測値であることを1件ずつ確かめる。** 正本のdigestで
+     * 代替すると、展開先が別内容でも管理済みとして登録されうる。
+     */
+    for (const [relative, recorded] of Object.entries(files))
+      assert.equal(
+        recorded,
+        sha256(fs.readFileSync(path.join(this.root, relative))),
+        `${relative}: recordのdigestが展開先の実測値と一致しません`,
+      );
+  },
+);
+
+Then("相違資産はretainedとして報告され内容は1 byteも変わらない", function () {
+  const result = this.recoveryResult;
+  assert.ok(result, "復旧結果がありません");
+  assert.equal(result.applied, true);
+  assert.ok(
+    result.retained.includes(DIVERGENT_ASSET),
+    `retainedへ${DIVERGENT_ASSET}が含まれていません: ${result.retained.join(", ")}`,
+  );
+  const before = this.digestsBeforeRecovery?.[DIVERGENT_ASSET];
+  assert.ok(before, "復旧前のdigestがありません");
+  assert.equal(
+    sha256(fs.readFileSync(path.join(this.root, DIVERGENT_ASSET))),
+    before,
+    `${DIVERGENT_ASSET}が上書きされました`,
+  );
+  const preview = this.recoveryPreview;
+  assert.ok(preview, "preview結果がありません");
+  assert.ok(
+    preview.retained.includes(DIVERGENT_ASSET),
+    `previewのretainedへ${DIVERGENT_ASSET}が含まれていません: ${preview.retained.join(", ")}`,
+  );
+  /** 保持した資産をrecordへ管理済みとして登録しない。 */
+  const files = recordFiles(readObject(recordPath(this.root)));
+  assert.equal(
+    Object.hasOwn(files, DIVERGENT_ASSET),
+    false,
+    `保持した${DIVERGENT_ASSET}がrecordへ登録されています`,
+  );
+});
+
+Then("拒否理由はupdateを名指しし名指しされたupdateは成功する", function () {
+  const rejections = this.recoveryRejections;
+  assert.ok(rejections, "拒否理由がありません");
+  assert.equal(rejections.length, 2);
+  for (const [index, message] of rejections.entries()) {
+    assert.notEqual(message, "", `${index}件目が拒否されていません`);
+    assert.match(
+      message,
+      /update/u,
+      `${index}件目の拒否理由がupdateを名指ししていません: ${message}`,
+    );
+    /** **拒否される手段を案内しない。** installを名指しすると閉路になる。 */
+    assert.doesNotMatch(
+      message,
+      /先にinstallを実行してください/u,
+      `${index}件目が拒否されるinstallを案内しています: ${message}`,
+    );
+  }
+  const result = this.recoveryResult;
+  assert.ok(result, "名指しされたupdateの結果がありません");
+  assert.equal(
+    result.applied,
+    true,
+    "拒否理由が名指しした手段が成功していません",
+  );
+});
+
+Then("directoryの展開先はretainedとして残る", function () {
+  const result = this.recoveryResult;
+  assert.ok(result, "復旧結果がありません");
+  assert.equal(result.applied, true);
+  assert.ok(
+    result.retained.includes(NON_REGULAR_TARGETS[0]),
+    `retainedへ${NON_REGULAR_TARGETS[0]}が含まれていません: ${result.retained.join(", ")}`,
+  );
+  assert.equal(
+    fs.lstatSync(path.join(this.root, NON_REGULAR_TARGETS[0])).isDirectory(),
+    true,
+    `${NON_REGULAR_TARGETS[0]}がdirectoryのまま残っていません`,
+  );
+  /** 保持した非通常fileをrecordへ管理済みとして登録しない。 */
+  const files = recordFiles(readObject(recordPath(this.root)));
+  assert.equal(
+    Object.hasOwn(files, NON_REGULAR_TARGETS[0]),
+    false,
+    `保持した${NON_REGULAR_TARGETS[0]}がrecordへ登録されています`,
+  );
+});
+
+/**
+ * 境界外へ向くsymlinkは`retain`ではなく**操作全体の拒否**である（Issue #1305、DISC-001）。
+ *
+ * `mappings`が展開先を解決する時点で`resolveContained`が拒否するため、分類へ
+ * 到達しない。**「1 fileも書かない」はこちらのほうが強い。**
+ */
+When("展開先を境界外symlinkへ差し替えてupdateを試みる", function () {
+  const outside = this.outsideTarget;
+  assert.ok(outside, "境界外の参照先がありません");
+  const asSymlink = path.join(this.root, NON_REGULAR_TARGETS[1]);
+  fs.rmSync(asSymlink, { recursive: true, force: true });
+  fs.symlinkSync(outside.file, asSymlink);
+  this.recoveryRejections = [];
+  try {
+    upgrade(this.root, { apply: true });
+    this.recoveryRejections.push("");
+  } catch (error) {
+    this.recoveryRejections.push(
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+});
+
+Then("updateは境界外移動を拒否し境界外のfileへ書き込まない", function () {
+  const rejections = this.recoveryRejections;
+  assert.ok(rejections, "拒否理由がありません");
+  assert.equal(rejections.length, 1);
+  assert.notEqual(rejections[0], "", "境界外symlinkが拒否されていません");
+  assert.match(
+    String(rejections[0]),
+    /シンボリックリンクによる境界外移動を拒否しました/u,
+    `境界外移動の拒否理由ではありません: ${String(rejections[0])}`,
+  );
+  const outside = this.outsideTarget;
+  assert.ok(outside, "境界外の参照先がありません");
+  assert.equal(
+    fs.readFileSync(outside.file, "utf8"),
+    outside.contents,
+    "境界外のfileへ書き込みました",
   );
 });

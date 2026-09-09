@@ -80,3 +80,30 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     Given lifecycle検証用の隔離directoryがある
     When setupを適用してからhost設定pathを境界外のsymlinkへ差し替えてdoctorを実行する
     Then doctorは中断せず未登録として報告する
+
+  Scenario: SCN-INT-LIFECYCLE-017 record喪失後のupdateが正本一致資産を採用してrecordを再固定する
+    Given 導入後にmanaged asset recordだけを失った隔離先がある
+    When record不在の隔離先へupdateを適用する
+    Then 正本一致資産はadoptedとして採用され実測digestのrecordが再生成される
+
+  Scenario: SCN-INT-LIFECYCLE-018 record喪失後のupdateが正本と異なる資産を上書きせず保持する
+    Given 導入後にrecordを失い展開済み資産が正本と異なる隔離先がある
+    When record不在の隔離先へupdateを適用する
+    Then 相違資産はretainedとして報告され内容は1 byteも変わらない
+
+  Scenario: SCN-INT-LIFECYCLE-019 record不在の拒否理由が同じ状態で成功する手段を名指しする
+    Given 導入後にrecordを失い展開済み資産が正本と異なる隔離先がある
+    When record不在の隔離先へinstallとdeleteを試みる
+    Then 拒否理由はupdateを名指しし名指しされたupdateは成功する
+
+  Scenario: SCN-INT-LIFECYCLE-020 record喪失後の復旧でhost設定fileが変わらない
+    Given 導入後にrecordを失いhook登録済みhost設定を持つ隔離先がある
+    When record不在の隔離先へupdateを適用する
+    Then host設定fileは1 byteも変わらない
+
+  Scenario: SCN-INT-LIFECYCLE-021 record不在でも非通常fileと境界外symlinkの展開先へ書き込まない
+    Given 導入後にrecordを失い展開先がdirectoryの隔離先がある
+    When record不在の隔離先へupdateを適用する
+    Then directoryの展開先はretainedとして残る
+    When 展開先を境界外symlinkへ差し替えてupdateを試みる
+    Then updateは境界外移動を拒否し境界外のfileへ書き込まない
