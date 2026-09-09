@@ -2327,6 +2327,15 @@ const logFile = ${JSON.stringify(logFile)};
 const observedBody = ${JSON.stringify(observedBody)};
 const canonicalTitle = ${JSON.stringify(canonicalDocument.title)};
 const canonicalBody = ${JSON.stringify(canonicalDocument.body)};
+/**
+ * **provider clock由来のtimestampはfixture clockから供給する。**
+ *
+ * 実wall clockを使うと、full suiteがこのstubへ到達した時刻と、fixture基準から
+ * 導いたprovider mergedAtとの前後関係がsuiteの所要時間で変わる。
+ * delivery-stateは同一provider clock同士の順序だけを因果証拠として検査するため、
+ * 一方を実時刻にすると検査が時間依存で落ちる（Issue #1300）。
+ */
+const mergeRequestedAt = ${JSON.stringify(fixtureInstant())};
 fs.appendFileSync(logFile, JSON.stringify(args) + "\\n");
 const control = JSON.parse(fs.readFileSync(controlFile, "utf8"));
 const baseSha = control.remoteBaseSha;
@@ -2694,7 +2703,7 @@ if (exact(["--version"])) {
     }),
   );
 } else if (args[0] === "pr" && args[1] === "merge" && args[2] === "1") {
-  const requestedAt = new Date().toISOString();
+  const requestedAt = mergeRequestedAt;
   fs.writeFileSync(
     controlFile,
     JSON.stringify({
@@ -3303,6 +3312,44 @@ if (exact(["auth", "status"])) {
         /pr createを再実行せず/u.test(output),
         false,
         "是正前の誤った案内が残っています",
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-050": {
+      /**
+       * **provider mergedAtより後のmerge要求時刻を因果証拠にしない**
+       * （Issue #1300）。
+       *
+       * この拒否はこれまで**どのscenarioも意図的に到達していなかった。**
+       * 到達していたのはgh stubがrequestedAtを実wall clockで書いていたためで、
+       * full suiteの所要時間が5分を超えたときだけ偶発的に発火していた。
+       * stubをfixture clockへ揃えて決定的にした結果、偶発的な到達も消える。
+       *
+       * **消えた到達を意図的な反例で置き換える。** requestedAtをmergedAtより
+       * 後へ明示的に置き、拒否とStep 11未記録の両方を測る。
+       */
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      const requested = executeDeliveryMerge(prepared);
+      assert.equal(requested.status, 0, requested.stdout + requested.stderr);
+      writeDeliveryProviderControl(prepared, {
+        phase: "merged",
+        mergedAt: fixtureInstant({ minutesAhead: 1 }),
+        requestedAt: fixtureInstant({ minutesAhead: 5 }),
+        retainAutoMergeRequestWhenMerged: true,
+      });
+      const rejected = executeDeliveryMerge(prepared);
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /merge providerRequestがprovider mergedAtより後になっています/u,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(prepared.staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.ok(
+        !journal.entries.some((item) => item.step === 11),
+        "因果が成立しないのにStep 11が記録されています",
       );
       break;
     }

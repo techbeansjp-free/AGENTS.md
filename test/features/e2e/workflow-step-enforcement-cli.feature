@@ -221,6 +221,11 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-044"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  Scenario: SCN-E2E-WFSTEP-050 provider mergedAtより後のmerge要求時刻を因果証拠にしない
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-050"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-045 固定run照合が不一致ならStep 11を記録せず拒否する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-045"のE2E検査を実行する
