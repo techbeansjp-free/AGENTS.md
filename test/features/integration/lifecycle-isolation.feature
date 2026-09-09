@@ -107,3 +107,33 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     Then directoryの展開先はretainedとして残る
     When 展開先を境界外symlinkへ差し替えてupdateを試みる
     Then updateは境界外移動を拒否し境界外のfileへ書き込まない
+
+  Scenario: SCN-INT-LIFECYCLE-022 dangling symlinkのrecordを不在と誤認せず保持する
+    Given 導入後にrecordを境界外を指すdangling symlinkへ置き換えた隔離先がある
+    When record不在の隔離先へupdateを試みる
+    Then updateは書き込まず拒否しrecordのsymlinkは保持される
+
+  Scenario: SCN-INT-LIFECYCLE-023 壊れたrecordを空recordへ降格させない
+    Given 導入後にrecordをJSONとして壊した隔離先がある
+    When record不在の隔離先へupdateを試みる
+    Then updateは書き込まず拒否しrecordの内容は変わらない
+
+  Scenario: SCN-INT-LIFECYCLE-024 preview後に内容が変わった資産を上書きせず保持する
+    Given 導入後にrecordを失い正本一致資産だけを持つ隔離先がある
+    When apply中に展開先の内容を変えてupdateを適用する
+    Then 変更された展開先はretainedとして残りrecordへ登録されない
+
+  Scenario: SCN-INT-LIFECYCLE-025 copy直後に変わった展開先の実測digestをrecordへ登録する
+    Given 導入後にrecordと展開済み資産1件を失った隔離先がある
+    When copy直後に配置先へ追記してupdateを適用する
+    Then recordの登録digestは追記後の展開先の実測値と一致する
+
+  Scenario: SCN-INT-LIFECYCLE-026 拒否の連鎖が閉路にならず別の原因を名指しして終わる
+    Given 導入後にrecordを失い展開済み資産が境界外symlinkの隔離先がある
+    When deleteが名指しした手段を順に実行する
+    Then 2つ目の拒否は1つ目と別の原因を名指しし同じ拒否へ戻らない
+
+  Scenario: SCN-INT-LIFECYCLE-027 未導入directoryのupdateをinstallと同じ書き込みへ倒さない
+    Given ASCを一度も導入していない隔離directoryがある
+    When record不在の隔離先へupdateを試みる
+    Then updateは1 fileも書かずinstallを名指しして拒否し名指しされたinstallは成功する

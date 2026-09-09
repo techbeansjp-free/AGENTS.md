@@ -845,9 +845,15 @@ Then(
     const result = this.recoveryResult;
     assert.ok(result, "復旧結果がありません");
     assert.equal(result.applied, true);
-    assert.ok(
-      result.adopted.length > 0,
-      "正本一致資産が1件もadoptedになっていません",
+    /**
+     * **件数ではなく集合で突合する**（Issue #1305、F-04）。
+     * `length > 0`だと、record不在時に先頭1件だけadoptして残りを無言で落とす
+     * 変異が生存する。
+     */
+    assert.deepEqual(
+      [...result.adopted].sort(),
+      [...this.installedAssets].sort(),
+      "adoptedが導入済み資産の集合と一致しません",
     );
     assert.deepEqual(result.retained, []);
     const preview = this.recoveryPreview;
@@ -864,7 +870,11 @@ Then(
     );
     assert.deepEqual(preview.retained, []);
     const files = recordFiles(readObject(recordPath(this.root)));
-    assert.ok(Object.keys(files).length > 0, "recordが再生成されていません");
+    assert.deepEqual(
+      Object.keys(files).sort(),
+      [...this.installedAssets].sort(),
+      "recordのkey集合が導入済み資産の集合と一致しません",
+    );
     /**
      * **登録digestが実測値であることを1件ずつ確かめる。** 正本のdigestで
      * 代替すると、展開先が別内容でも管理済みとして登録されうる。
@@ -898,6 +908,15 @@ Then("相違資産はretainedとして報告され内容は1 byteも変わらな
   assert.ok(
     preview.retained.includes(DIVERGENT_ASSET),
     `previewのretainedへ${DIVERGENT_ASSET}が含まれていません: ${preview.retained.join(", ")}`,
+  );
+  /**
+   * **混在状態の採用側も固定する**（Issue #1305、F-05）。
+   * 相違が1件でもあればadoptを全部止める変異は、保持側だけの検査では生存する。
+   */
+  assert.deepEqual(
+    [...result.adopted].sort(),
+    this.installedAssets.filter((asset) => asset !== DIVERGENT_ASSET).sort(),
+    "相違資産を除いた全資産がadoptedになっていません",
   );
   /** 保持した資産をrecordへ管理済みとして登録しない。 */
   const files = recordFiles(readObject(recordPath(this.root)));
@@ -969,6 +988,21 @@ When("展開先を境界外symlinkへ差し替えてupdateを試みる", functio
   const asSymlink = path.join(this.root, NON_REGULAR_TARGETS[1]);
   fs.rmSync(asSymlink, { recursive: true, force: true });
   fs.symlinkSync(outside.file, asSymlink);
+  /**
+   * **1つ目のupdateがrecordを再固定しているのでrecord不在へ戻す**
+   * （Issue #1305、F-07）。scenario名が言う状態と測る状態を一致させる。
+   */
+  dropRecord(this.root);
+  /**
+   * **拒否前の管理資産のdigestを取る**（Issue #1305、R1305-09）。
+   * 「1 fileも書かない」を境界外fileの内容だけで観測すると、内部資産を
+   * 先に書いてから境界外errorを返す実装でも通ってしまう。
+   */
+  this.digestsBeforeRecovery = {
+    [DIVERGENT_ASSET]: sha256(
+      fs.readFileSync(path.join(this.root, DIVERGENT_ASSET)),
+    ),
+  };
   this.recoveryRejections = [];
   try {
     upgrade(this.root, { apply: true });
@@ -997,4 +1031,334 @@ Then("updateは境界外移動を拒否し境界外のfileへ書き込まない"
     outside.contents,
     "境界外のfileへ書き込みました",
   );
+  /** symlink自体の保持と、recordを書いていないこと、管理資産の不変。 */
+  assert.equal(
+    fs.lstatSync(path.join(this.root, NON_REGULAR_TARGETS[1])).isSymbolicLink(),
+    true,
+    `${NON_REGULAR_TARGETS[1]}のsymlinkが置換されました`,
+  );
+  assert.equal(
+    fs.existsSync(recordPath(this.root)),
+    false,
+    "境界外拒否の前にrecordを書き込みました",
+  );
+  const before = this.digestsBeforeRecovery;
+  assert.ok(before, "拒否前のdigestがありません");
+  assert.equal(
+    sha256(fs.readFileSync(path.join(this.root, DIVERGENT_ASSET))),
+    before[DIVERGENT_ASSET],
+    "境界外拒否の前に管理資産へ書き込みました",
+  );
 });
+
+/**
+ * review findingへの回帰（Issue #1305、R1305-01〜06）。
+ *
+ * **recordの「不在」はdirectory entryの不在である。** link先を解決する判定を
+ * 使うと、dangling symlinkが不在に見えてsymlinkごと置換される。
+ */
+Given(
+  "導入後にrecordを境界外を指すdangling symlinkへ置き換えた隔離先がある",
+  function () {
+    installedIsolation(this, "asc-lifecycle-record-dangling-");
+    const outsideDirectory = this.temp("asc-lifecycle-dangling-target-");
+    const missing = path.join(outsideDirectory, "存在しない.json");
+    fs.rmSync(recordPath(this.root));
+    fs.symlinkSync(missing, recordPath(this.root));
+    this.outsideTarget = { file: missing, contents: "" };
+  },
+);
+
+Given("導入後にrecordをJSONとして壊した隔離先がある", function () {
+  installedIsolation(this, "asc-lifecycle-record-corrupt-");
+  fs.writeFileSync(recordPath(this.root), "{ これはJSONではない ");
+  this.digestsBeforeRecovery = {
+    [".agent-skill-chain/managed-assets.json"]: sha256(
+      fs.readFileSync(recordPath(this.root)),
+    ),
+  };
+});
+
+When("record不在の隔離先へupdateを試みる", function () {
+  this.recoveryRejections = [];
+  try {
+    upgrade(this.root, { apply: true });
+    this.recoveryRejections.push("");
+  } catch (error) {
+    this.recoveryRejections.push(
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+});
+
+Then("updateは書き込まず拒否しrecordのsymlinkは保持される", function () {
+  const rejections = this.recoveryRejections;
+  assert.ok(rejections, "拒否理由がありません");
+  assert.notEqual(
+    rejections[0],
+    "",
+    "dangling symlinkのrecordが拒否されていません",
+  );
+  assert.equal(
+    fs.lstatSync(recordPath(this.root)).isSymbolicLink(),
+    true,
+    "recordのsymlinkが通常fileへ置換されました",
+  );
+  const outside = this.outsideTarget;
+  assert.ok(outside, "symlinkの参照先がありません");
+  assert.equal(
+    fs.existsSync(outside.file),
+    false,
+    "symlinkの参照先へ書き込みました",
+  );
+});
+
+Then("updateは書き込まず拒否しrecordの内容は変わらない", function () {
+  const rejections = this.recoveryRejections;
+  assert.ok(rejections, "拒否理由がありません");
+  assert.notEqual(rejections[0], "", "壊れたrecordが拒否されていません");
+  const before =
+    this.digestsBeforeRecovery?.[".agent-skill-chain/managed-assets.json"];
+  assert.ok(before, "復旧前のdigestがありません");
+  assert.equal(
+    sha256(fs.readFileSync(recordPath(this.root))),
+    before,
+    "壊れたrecordが書き換えられました",
+  );
+});
+
+Given("導入後にrecordを失い正本一致資産だけを持つ隔離先がある", function () {
+  installedIsolation(this, "asc-lifecycle-toctou-");
+  dropRecord(this.root);
+});
+
+/**
+ * applyのTOCTOU再観測を強制する（R1305-03）。
+ *
+ * **製品APIへ注入口を足さない。** `node:fs`のmethodをtest内で一時的に差し替え、
+ * `finally`で必ず戻す。`upgrade`は`fs.mkdirSync`を各itemの直前に呼ぶため、
+ * ここでpreview後の状態変化を作れる。
+ */
+When("apply中に展開先の内容を変えてupdateを適用する", function () {
+  const target = path.join(this.root, DIVERGENT_ASSET);
+  const original = fs.mkdirSync;
+  let mutated = false;
+  try {
+    (fs as { mkdirSync: typeof fs.mkdirSync }).mkdirSync = ((
+      directory: Parameters<typeof fs.mkdirSync>[0],
+      options?: Parameters<typeof fs.mkdirSync>[1],
+    ) => {
+      const result = original(directory, options);
+      if (!mutated && fs.existsSync(target)) {
+        mutated = true;
+        fs.appendFileSync(target, "\napply中の変更\n");
+      }
+      return result;
+    }) as typeof fs.mkdirSync;
+    this.recoveryResult = upgrade(this.root, { apply: true });
+  } finally {
+    (fs as { mkdirSync: typeof fs.mkdirSync }).mkdirSync = original;
+  }
+  assert.equal(mutated, true, "apply中の変更を注入できていません");
+  this.digestsBeforeRecovery = {
+    [DIVERGENT_ASSET]: sha256(fs.readFileSync(target)),
+  };
+});
+
+Then("変更された展開先はretainedとして残りrecordへ登録されない", function () {
+  const result = this.recoveryResult;
+  assert.ok(result, "復旧結果がありません");
+  assert.equal(result.applied, true);
+  assert.ok(
+    result.retained.includes(DIVERGENT_ASSET),
+    `retainedへ${DIVERGENT_ASSET}が含まれていません: ${result.retained.join(", ")}`,
+  );
+  const files = recordFiles(readObject(recordPath(this.root)));
+  assert.equal(
+    Object.hasOwn(files, DIVERGENT_ASSET),
+    false,
+    `apply中に変わった${DIVERGENT_ASSET}がrecordへ登録されています`,
+  );
+});
+
+Given("導入後にrecordと展開済み資産1件を失った隔離先がある", function () {
+  installedIsolation(this, "asc-lifecycle-place-digest-");
+  fs.rmSync(path.join(this.root, DIVERGENT_ASSET));
+  dropRecord(this.root);
+});
+
+/**
+ * 実測digest登録を強制する（R1305-04）。
+ *
+ * `copyFileSync`直後にdestへ追記すると、`digest(item.src)`を登録する実装では
+ * record値がdestの実測値と食い違う。**INV-04をここで名指しで固定する。**
+ */
+When("copy直後に配置先へ追記してupdateを適用する", function () {
+  const target = path.join(this.root, DIVERGENT_ASSET);
+  const original = fs.copyFileSync;
+  let appended = false;
+  try {
+    (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = ((
+      source: Parameters<typeof fs.copyFileSync>[0],
+      destination: Parameters<typeof fs.copyFileSync>[1],
+      mode?: Parameters<typeof fs.copyFileSync>[2],
+    ) => {
+      original(source, destination, mode);
+      if (!appended && String(destination) === target) {
+        appended = true;
+        fs.appendFileSync(target, "\ncopy直後の追記\n");
+      }
+    }) as typeof fs.copyFileSync;
+    this.recoveryResult = upgrade(this.root, { apply: true });
+  } finally {
+    (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = original;
+  }
+  assert.equal(appended, true, "copy直後の追記を注入できていません");
+});
+
+Then("recordの登録digestは追記後の展開先の実測値と一致する", function () {
+  const result = this.recoveryResult;
+  assert.ok(result, "復旧結果がありません");
+  assert.equal(result.applied, true);
+  const files = recordFiles(readObject(recordPath(this.root)));
+  const recorded = files[DIVERGENT_ASSET];
+  assert.ok(
+    typeof recorded === "string",
+    `${DIVERGENT_ASSET}がrecordへ登録されていません`,
+  );
+  const measured = sha256(
+    fs.readFileSync(path.join(this.root, DIVERGENT_ASSET)),
+  );
+  assert.equal(
+    recorded,
+    measured,
+    `recordのdigestが展開先の実測値と一致しません。正本のdigestで代替していないかを確認してください`,
+  );
+});
+
+/**
+ * 拒否の連鎖が閉路にならないことを固定する（Issue #1305、R1305-02）。
+ *
+ * **是正した欠陥は「閉路」である。** `update`が`install`を名指しし、その
+ * `install`が`update`不要の同じ状態で拒否して元へ戻る形だった。境界外symlinkが
+ * ある状態では`update`も拒否するが、**その理由は別の原因を名指しし、同じ拒否へ
+ * 戻らない。** ここで固定するのは「成功」ではなく「進行」である。
+ */
+Given(
+  "導入後にrecordを失い展開済み資産が境界外symlinkの隔離先がある",
+  function () {
+    installedIsolation(this, "asc-lifecycle-chain-");
+    const outsideDirectory = this.temp("asc-lifecycle-chain-target-");
+    const outside = path.join(outsideDirectory, "境界外.md");
+    fs.writeFileSync(outside, "# 境界外\n");
+    this.outsideTarget = { file: outside, contents: "# 境界外\n" };
+    const asSymlink = path.join(this.root, NON_REGULAR_TARGETS[1]);
+    fs.rmSync(asSymlink);
+    fs.symlinkSync(outside, asSymlink);
+    dropRecord(this.root);
+  },
+);
+
+When("deleteが名指しした手段を順に実行する", function () {
+  const rejections: string[] = [];
+  for (const attempt of [
+    () => uninstall(this.root, { apply: true }),
+    () => upgrade(this.root, { apply: true }),
+  ]) {
+    try {
+      attempt();
+      rejections.push("");
+    } catch (error) {
+      rejections.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  this.recoveryRejections = rejections;
+});
+
+Then("2つ目の拒否は1つ目と別の原因を名指しし同じ拒否へ戻らない", function () {
+  const rejections = this.recoveryRejections;
+  assert.ok(rejections, "拒否理由がありません");
+  assert.equal(rejections.length, 2);
+  const [first, second] = rejections;
+  assert.notEqual(first, "", "deleteが拒否されていません");
+  assert.match(
+    String(first),
+    /update/u,
+    `1つ目が次の手段を名指ししていません: ${String(first)}`,
+  );
+  assert.notEqual(second, "", "updateが拒否されていません");
+  /** **同じ拒否へ戻らないこと。** 閉路の不在をここで固定する。 */
+  assert.notEqual(
+    second,
+    first,
+    "2つ目の拒否が1つ目と同一であり閉路になっています",
+  );
+  assert.doesNotMatch(
+    String(second),
+    /先にinstallを実行してください/u,
+    `2つ目が拒否されるinstallへ戻しています: ${String(second)}`,
+  );
+  assert.match(
+    String(second),
+    /シンボリックリンクによる境界外移動を拒否しました/u,
+    `2つ目が別の原因を名指ししていません: ${String(second)}`,
+  );
+  const outside = this.outsideTarget;
+  assert.ok(outside, "境界外の参照先がありません");
+  assert.equal(
+    fs.readFileSync(outside.file, "utf8"),
+    outside.contents,
+    "境界外のfileへ書き込みました",
+  );
+});
+
+/**
+ * record不在の受理範囲の境界（Issue #1305、F-01）。
+ *
+ * **record不在は「導入済み」の代わりにならない。** 展開済み資産が0件の
+ * directoryも同じ状態に含めると、`update --apply`が`install`と同じ書き込みを
+ * 行う。是正前の`upgrade`はrecord不在で拒否していたため、これは本変更が
+ * 到達可能にしうる書き込みである。
+ */
+Given("ASCを一度も導入していない隔離directoryがある", function () {
+  this.root = this.temp("asc-lifecycle-never-installed-");
+  write(this.root, "README.md", "# fixture\n");
+  this.consumerFiles = { "README.md": "# fixture\n" };
+  this.installedAssets = [];
+});
+
+Then(
+  "updateは1 fileも書かずinstallを名指しして拒否し名指しされたinstallは成功する",
+  function () {
+    const rejections = this.recoveryRejections;
+    assert.ok(rejections, "拒否理由がありません");
+    assert.notEqual(
+      rejections[0],
+      "",
+      "未導入directoryのupdateが拒否されていません",
+    );
+    assert.match(
+      String(rejections[0]),
+      /install/u,
+      `拒否理由がinstallを名指ししていません: ${String(rejections[0])}`,
+    );
+    /** **1 fileも書かない。** README.md以外が現れていないことで観測する。 */
+    const entries = fs
+      .readdirSync(this.root)
+      .filter((entry) => entry !== ".git")
+      .sort();
+    assert.deepEqual(
+      entries,
+      ["README.md"],
+      `updateが未導入directoryへ書き込みました: ${entries.join(", ")}`,
+    );
+    assert.equal(fs.existsSync(recordPath(this.root)), false);
+    /** 名指しした手段が同じ状態で成功すること。 */
+    const installed = init(this.root, { apply: true });
+    assert.ok(
+      installed.assets.length > 0,
+      "名指しされたinstallが資産を配置していません",
+    );
+    assert.equal(fs.existsSync(recordPath(this.root)), true);
+  },
+);

@@ -303,8 +303,9 @@ export function init(target: string, options: { apply: boolean }) {
   if (conflicts.length > 0)
     throw new Error(
       `初期導入先が競合しています。ファイルは書き込んでいません: ${conflicts.join(", ")}。` +
-        "updateを実行してください。updateは正本と一致する展開済み資産を採用し、" +
-        "異なる資産は上書きせずretainedとして報告します",
+        "次にupdateを実行してください。updateはrecordに無く正本と一致する展開済み資産を採用し、" +
+        "recordに無く正本と異なる資産は上書きせずretainedとして報告します。" +
+        "updateが境界外symlinkなど別の原因で拒否する場合は、その理由が示すpathを解消してから再実行してください",
     );
   if (!options.apply)
     return { applied: false, assets: assets.map(({ dest }) => dest) };
@@ -365,7 +366,19 @@ export function classifyManagedAsset(input: {
  * 採用、相違する資産は保持になる。**上書きの到達性は1経路も増えない。**
  */
 function readManagedAssetRecordOrEmpty(target: string): ManagedAssetRecord {
-  if (!fs.existsSync(path.join(target, MANAGED_RECORD)))
+  /**
+   * **`fs.existsSync`ではなく`pathEntryExists`で判定する。** `existsSync`は
+   * link先を解決するため、**dangling symlinkに対して`false`を返す。** それを
+   * 「record不在」と読むと、後続の`writeFileAtomic`がrename でsymlinkの
+   * directory entryを通常fileへ置換し、**REQ-LC-001が保持を求めるsymlinkを
+   * 破壊する。** 是正前の`upgrade`はrecord不在でthrowして何も書かなかったため、
+   * この破壊は本変更が到達可能にしたものである。
+   *
+   * **entryがあるなら必ず`readManagedAssetRecord`へ通す。** 同関数が
+   * 非通常fileを拒否し、JSON不正・digest不正・path重複も拒否する。
+   * **不在だけを空recordへ倒し、壊れたrecordを空recordへ洗浄しない。**
+   */
+  if (!pathEntryExists(path.join(target, MANAGED_RECORD)))
     return { version: PACKAGE_VERSION, files: {} };
   return readManagedAssetRecord(target).record;
 }
@@ -400,8 +413,27 @@ function observeManagedAsset(
 
 export function upgrade(target: string, options: { apply: boolean }) {
   const recordPath = path.join(target, MANAGED_RECORD);
+  const recordPresent = pathEntryExists(recordPath);
   const old = readManagedAssetRecordOrEmpty(target);
   const current = mappings(target);
+  /**
+   * **record不在は「導入済み」の代わりにならない**（Issue #1305）。
+   *
+   * recordの不在を全資産未記録として扱うと、**一度も導入していない
+   * directoryも同じ状態に含まれる。** その場合`update --apply`は展開先を
+   * すべて`place`と分類し、`install`と同じ書き込みを行う。`--root`や作業
+   * directoryを誤った1回の実行が無言でfull installになる。是正前の`upgrade`は
+   * record不在で拒否していたため、**これは本変更が到達可能にした書き込みである。**
+   *
+   * **record不在時は展開先が1件も存在しないことを導入前の証拠として扱い、
+   * `install`を名指しして拒否する。** その状態の`install`は競合を持たないため
+   * 必ず成功し、拒否理由が名指しする手段が成功するという性質を保つ。
+   */
+  if (!recordPresent && !current.some((item) => pathEntryExists(item.dest)))
+    throw new Error(
+      "managed asset recordも展開済み資産も存在しません。未導入のdirectoryです。" +
+        "installを実行してください。updateはrecordを失った導入済みdirectoryの復旧に使います",
+    );
   const retained: string[] = [];
   const adoptable: string[] = [];
   const planned: Array<{
@@ -467,7 +499,8 @@ export function uninstall(
   if (!fs.existsSync(recordPath))
     throw new Error(
       "managed asset recordがありません。撤去対象を確定できません。" +
-        "updateを実行してrecordを再固定してから、deleteを実行してください",
+        "次にupdateを実行してrecordを再固定してから、deleteを実行してください。" +
+        "updateが境界外symlinkなど別の原因で拒否する場合は、その理由が示すpathを解消してから再実行してください",
     );
   const managed = readManagedAssetRecord(target);
   const removable: string[] = [];
