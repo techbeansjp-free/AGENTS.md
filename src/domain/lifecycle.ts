@@ -211,7 +211,13 @@ function resolveManagedAsset(target: string, relative: string): string {
     !isPackageOwnedPath(portable)
   )
     throw new Error(`managed asset recordが不正です: ${relative}`);
-  return resolveContained(target, portable, { allowMissingLeaf: true });
+  /** **対象を名指しして投げ直す**（Issue #1305、fable H-2）。`mappings`と同じ理由である。 */
+  try {
+    return resolveContained(target, portable, { allowMissingLeaf: true });
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    throw new Error(`${cause}: ${portable}`, { cause: error });
+  }
 }
 
 function readManagedAssetRecord(target: string): {
@@ -219,9 +225,23 @@ function readManagedAssetRecord(target: string): {
   record: ManagedAssetRecord;
   assets: ManagedAsset[];
 } {
+  /**
+   * **entryの種別を`resolveContained`より前に見る**（Issue #1305、F-04）。
+   *
+   * `resolveContained`はlink先を解決するため、dangling symlinkのrecordでは
+   * 「パスが存在しません」で止まり、**recordがsymlinkであることも対象pathも
+   * 出ない。** 要件は「解消すべき原因と対象を名指しする」を求めている。
+   */
+  const recordEntry = path.join(target, MANAGED_RECORD);
+  if (pathEntryExists(recordEntry) && !isRegularFile(recordEntry))
+    throw new Error(
+      `managed asset recordは通常fileでなければなりません: ${MANAGED_RECORD}`,
+    );
   const recordPath = resolveContained(target, MANAGED_RECORD);
   if (!isRegularFile(recordPath))
-    throw new Error("managed asset recordは通常fileでなければなりません");
+    throw new Error(
+      `managed asset recordは通常fileでなければなりません: ${MANAGED_RECORD}`,
+    );
   const parsed: unknown = JSON.parse(fs.readFileSync(recordPath, "utf8"));
   if (!isRecord(parsed) || !isRecord(parsed.files))
     throw new Error("managed asset recordが不正です");
@@ -256,8 +276,30 @@ function walkFiles(directory: string): string[] {
 }
 
 function mappings(target: string): Array<{ src: string; dest: string }> {
-  const destination = (relative: string): string =>
-    resolveContained(target, relative, { allowMissingLeaf: true });
+  /**
+   * **境界外拒否は対象を名指しする**（Issue #1305、fable H-2）。
+   *
+   * INV-02の正準文は「どのcommandもこれを満たさない場合はcommandを名指しせず、
+   * **解消すべき原因と対象を名指しする**」である。`resolveContained`が投げる
+   * `シンボリックリンクによる境界外移動を拒否しました`は**対象pathを含まない。**
+   * そのため112資産のうちどれが境界外を指しているのか利用者に分からず、
+   * `install`・`update`・`delete`の3 commandがどれも同じ文だけを返していた。
+   * **閉路ではないが、製品の外へ出ないと解消できない行き止まりである。**
+   *
+   * `src/lib/security.ts`は信頼品質契約の保護対象なので投げ元は変えない。
+   * **呼び出し側で対象を付けて投げ直す。** `readManagedAssetRecord`は同じ理由で
+   * 既にrecord pathを名指ししており、ここはその同型の欠陥が残っていた1箇所である。
+   */
+  const destination = (relative: string): string => {
+    try {
+      return resolveContained(target, relative, { allowMissingLeaf: true });
+    } catch (error) {
+      const cause = error instanceof Error ? error.message : String(error);
+      throw new Error(`${cause}: ${relative.replaceAll("\\", "/")}`, {
+        cause: error,
+      });
+    }
+  };
   const result = ROOT_ASSETS.map((name) => ({
     src: path.join(packageRoot, name),
     dest: destination(name),
@@ -291,6 +333,68 @@ function mappings(target: string): Array<{ src: string; dest: string }> {
   return result;
 }
 
+/**
+ * 案内する復旧手段を、実際に成功する手段だけに限る（Issue #1305、R2-H03）。
+ *
+ * **成功しない手段を名指ししない。** 以前は`update`を無条件に名指ししていたが、
+ * 境界外symlinkや壊れたrecordが残る状態では`update`自身が拒否する。名指しした
+ * 手段が失敗する案内は、利用者を1周させるだけで進行しない。
+ *
+ * **判定にはpreviewを使う。** `upgrade`の`apply: false`は書き込みを行わずに
+ * 分類まで到達するため、「同じ状態で`update`が成功するか」の副作用の無い
+ * oracleになる。照会とコマンドを分離した既存設計をそのまま使い、新しい検査を
+ * 足さない。
+ *
+ * previewが拒否した場合は、その原因をそのまま返す。**原因を解消すべき対象として
+ * 名指しし、成功しない手段は名指ししない。**
+ */
+/**
+ * record不在の最小診断を作る（Issue #1305）。
+ *
+ * **手順・内訳・分岐の助言をここで作らない。** 4ラウンド連続で、この案内文だけから
+ * 新しいHighが出た。原因は構造にある。1本のcaller非依存な文字列を`init`・`upgrade`門・
+ * `uninstall`の3 callerへ連結すると、**callerごとに真偽が変わる文**になる。
+ * `install`の名指しは`init`では拒否の閉路、`delete`では誤誘導、`update`でだけ正しい。
+ *
+ * **手順の正本は配布される利用案内である。** `.agent-skill-chain/00_利用案内.md`が
+ * 復旧手順・`--dry-run`・retainの意味・未導入directoryでの帰結を既に所有しており、
+ * error文字列はそれを複製していた。運用ポリシーの「手段の追加より既存手段の縮小を
+ * 先に評価する」に従い、複製を消す。
+ *
+ * したがってここが返すのは次の2つだけである。
+ *
+ * - 同じ状態で`--recover-record`が製品判定により拒否されるなら、その原因。**commandを
+ *   名指ししない。** previewが拒否された手段は、INV-02が名指しを禁じる
+ * - そうでないなら、明示指定が必要であるという事実。**このときだけ所属commandを
+ *   名指しする**
+ *
+ * **所属commandの名指しはこの1経路に限る**（Issue #1305、fable H-01）。縮小の初版は
+ * どちらの分岐でも`--recover-record`というflag名だけを返していた。`--recover-record`は
+ * `update`のflagであって`delete`のflagではないが、**CLIは宣言外のflagを黙って捨てる**
+ * （`delete --apply --totally-bogus-flag`が同じ拒否を返すことで実測した）。そのため
+ * `delete`の拒否を読んだ利用者が`delete --recover-record --apply`を実行すると**byte
+ * 一致の拒否が返り**、誤ったcommandを使ったという信号がどこにも出ない。**これは本Issueが
+ * 断とうとしている閉路と同型であり、縮小が作った回帰である。**
+ *
+ * 名指しがINV-02に適合する理由は、直前の`upgrade(target, { apply: false,
+ * recoverRecord: true })`が**まさにその手段のpreviewである**ことによる。previewが
+ * 例外を投げなかった経路にだけ到達するので、「同じ状態で製品の判定により拒否されない
+ * ことをpreviewで確認した手段」という正準条件を満たす。previewが投げた経路では
+ * 名指しせず原因だけを述べる。**`init`の競合拒否はpreviewを走らせないので、
+ * この関数へ連結しない。**
+ *
+ * **豊かな案内（内訳の開示、preview→applyの手順、分岐の助言）は #1310 が所有する。**
+ */
+function recoveryDiagnostic(target: string): string {
+  try {
+    upgrade(target, { apply: false, recoverRecord: true });
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    return `この状態では --recover-record を付けても次の理由で拒否されます: ${cause}。先にこの原因を解消してください`;
+  }
+  return "復旧するには update に --recover-record が必要です。手順は配布される利用案内を参照してください";
+}
+
 export function init(target: string, options: { apply: boolean }) {
   const assets = mappings(target);
   const conflicts = assets
@@ -302,6 +406,10 @@ export function init(target: string, options: { apply: boolean }) {
     .map(({ dest }) => dest);
   if (conflicts.length > 0)
     throw new Error(
+      /**
+       * **競合pathだけを述べる**（Issue #1305）。復旧手段の案内をここへ連結すると、
+       * いま拒否した`install`を再び名指しする閉路になる。
+       */
       `初期導入先が競合しています。ファイルは書き込んでいません: ${conflicts.join(", ")}`,
     );
   if (!options.apply)
@@ -316,6 +424,7 @@ export function init(target: string, options: { apply: boolean }) {
       fs.copyFileSync(src, dest, fs.constants.COPYFILE_EXCL);
     record.files[relativeKey(target, dest)] = digest(dest);
   }
+  assertRecordPublishTarget(path.join(target, MANAGED_RECORD));
   writeFileAtomic(
     path.join(target, MANAGED_RECORD),
     `${JSON.stringify(record, null, 2)}\n`,
@@ -323,12 +432,208 @@ export function init(target: string, options: { apply: boolean }) {
   return { applied: true, assets: Object.keys(record.files) };
 }
 
-export function upgrade(target: string, options: { apply: boolean }) {
+/**
+ * 1資産について配置・上書き・採用・保持のどれになるかを決める純関数（Issue #1305）。
+ *
+ * **filesystemを読まない。** 存在・通常file性・digestは呼び出し側が値として渡す。
+ * `upgrade`のpreview経路とapply経路が同じ判定を使うことで、片方だけを緩める
+ * 変異を作れなくする。
+ *
+ * **`expected`が`undefined`であることは「recordに記録が無い」を意味する。**
+ * managed asset recordそのものが存在しない状態は、全資産の`expected`が
+ * `undefined`である状態と同一であり、この関数へ新しい分岐を要しない。
+ * **記録が無く正本と相違する資産は`retain`である。** ここを`overwrite`へ
+ * 倒すと、利用者が変更した資産が無音で失われる。
+ */
+export type ManagedAssetClassification =
+  "place" | "overwrite" | "adopt" | "retain";
+
+export function classifyManagedAsset(input: {
+  readonly exists: boolean;
+  readonly regularFile: boolean;
+  readonly expected: string | undefined;
+  readonly destDigest: string;
+  readonly sourceDigest: string;
+}): ManagedAssetClassification {
+  if (!input.exists) return "place";
+  if (!input.regularFile) return "retain";
+  if (input.expected !== undefined)
+    return input.destDigest === input.expected ? "overwrite" : "retain";
+  return input.destDigest === input.sourceDigest ? "adopt" : "retain";
+}
+
+/**
+ * managed asset recordを読む。**不在なら空recordを返す**（Issue #1305）。
+ *
+ * 以前はここで`未導入です。先にinstallを実行してください`をthrowしていたが、
+ * その`install`は展開先が正本と異なる場合に`初期導入先が競合しています`で
+ * 拒否するため、**拒否理由が閉路を作り製品内の復旧経路が存在しなかった。**
+ * 空recordを返すと全資産が「記録が無い」として評価され、正本と一致する資産は
+ * 採用、相違する資産は保持になる。**上書きの到達性は1経路も増えない。**
+ */
+function readManagedAssetRecordAt(
+  target: string,
+  recordPresent: boolean,
+): ManagedAssetRecord {
+  /**
+   * **`fs.existsSync`ではなく`pathEntryExists`で判定する。** `existsSync`は
+   * link先を解決するため、**dangling symlinkに対して`false`を返す。** それを
+   * 「record不在」と読むと、後続の`writeFileAtomic`がrename でsymlinkの
+   * directory entryを通常fileへ置換し、**REQ-LC-001が保持を求めるsymlinkを
+   * 破壊する。** 是正前の`upgrade`はrecord不在でthrowして何も書かなかったため、
+   * この破壊は本変更が到達可能にしたものである。
+   *
+   * **entryがあるなら必ず`readManagedAssetRecord`へ通す。** 同関数が
+   * 非通常fileを拒否し、JSON不正・digest不正・path重複も拒否する。
+   * **不在だけを空recordへ倒し、壊れたrecordを空recordへ洗浄しない。**
+   */
+  /**
+   * **存在を再観測しない**（Issue #1305、codex High 1）。
+   *
+   * 以前はここで`pathEntryExists`を独立に呼んでいた。呼び出し側の観測と
+   * この観測の間に別processが有効なrecordを配置すると、**新しく現れたrecordの
+   * digestが`expected`として上書き権限を与え**、利用者fileが正本へ上書きされる。
+   * そのうえ公開は古い観測に従って`wx`で行われ`EEXIST`で失敗するため、
+   * **「commandは失敗したのに利用者fileだけ上書き済み」**という状態が残る。
+   * 観測は1回だけ行い、その結果を引数で受ける。
+   *
+   * **守るべき性質は観測回数ではない**（codex Medium 2）。「観測は1回」と無限定に述べると
+   * 偽になる。record存在時はこの関数が最初の存在判定のあとで同じentryを読み、拒否経路は
+   * 最小診断のために`recoverRecord`つきのpreviewを走らせてそこでも観測する。**どちらも
+   * 上書き権限を与えないので、この不変条件が防いでいる事故は起こらない。**
+   *
+   * 正確には**「不在と観測してから資産を分類するまでの間に現れたrecordのdigestを
+   * `expected`として使わない」**ことが性質であり、回数はその代理でしかない。
+   */
+  if (!recordPresent) return { version: PACKAGE_VERSION, files: {} };
+  return readManagedAssetRecord(target).record;
+}
+
+/**
+ * 分類の入力をfilesystemから観測する（Issue #1305）。
+ *
+ * **通常fileでないときにdigestを読まない。** 読むとdirectoryで例外になる。
+ * 分類関数は`exists`と`regularFile`で早期に返すため、この場合のdigestは
+ * 判定に使われない。
+ */
+function observeManagedAsset(
+  item: { src: string; dest: string },
+  expected: string | undefined,
+): {
+  exists: boolean;
+  regularFile: boolean;
+  expected: string | undefined;
+  destDigest: string;
+  sourceDigest: string;
+} {
+  const exists = pathEntryExists(item.dest);
+  const regularFile = exists && isRegularFile(item.dest);
+  return {
+    exists,
+    regularFile,
+    expected,
+    destDigest: regularFile ? digest(item.dest) : "",
+    sourceDigest: regularFile ? digest(item.src) : "",
+  };
+}
+
+/**
+ * record公開の直前に、公開先のentryを再検証する（Issue #1305、R2-H02）。
+ *
+ * **観測から公開までの間にentryが差し替わりうる。** `writeFileAtomic`は
+ * `rename`で公開するため、その時点でrecord pathがsymlinkやdirectoryであれば
+ * **entryを置換する。** REQ-LC-001は「hash・containment・TOCTOUを各write前に
+ * 検証する」を要求しており、この再検証はその履行である。
+ *
+ * **残存する競合は閉じていない。** 検査と`rename`の間には依然として窓がある。
+ * 窓を完全に閉じるにはno-replaceな公開方式が要り、それは`init`にも同じ形で
+ * 存在する既存の性質であるため、別Issueで扱う。
+ */
+function assertRecordPublishTarget(recordPath: string): void {
+  if (!pathEntryExists(recordPath)) return;
+  if (!isRegularFile(recordPath))
+    throw new Error(
+      "managed asset recordの公開先が通常fileではありません。書き込みを中止しました。" +
+        "当該pathのsymlinkまたはdirectoryを解消してください",
+    );
+}
+
+/**
+ * recordを公開する（Issue #1305、R2-H02）。
+ *
+ * **record不在からの復旧はno-replaceで公開する。** `writeFileAtomic`は`rename`で
+ * 公開するため、検査から`rename`までの間に現れたentryを置換する。是正前の`upgrade`は
+ * record不在で公開処理へ到達しなかったため、**この窓は本変更が到達可能にしたもので
+ * ある。** `wx`（`O_CREAT | O_EXCL`）で作成すると、entryが存在する場合は`EEXIST`で
+ * 失敗し、**symlinkのentryを置換しない。**
+ *
+ * recordが既に存在する場合の再固定は置換が意図された動作であるため、従来どおり
+ * `writeFileAtomic`を使う。**その一般化はIssue #1306が所有する。**
+ */
+function publishManagedAssetRecord(
+  recordPath: string,
+  record: ManagedAssetRecord,
+  recordPresent: boolean,
+): void {
+  const contents = `${JSON.stringify(record, null, 2)}\n`;
+  if (!recordPresent) {
+    fs.mkdirSync(path.dirname(recordPath), { recursive: true });
+    try {
+      fs.writeFileSync(recordPath, contents, { flag: "wx" });
+    } catch (error) {
+      if (isRecord(error) && error.code === "EEXIST")
+        throw new Error(
+          "managed asset recordの公開先に別のentryが現れました。書き込みを中止しました。" +
+            "当該pathを確認してから再実行してください",
+          { cause: error },
+        );
+      throw error;
+    }
+    return;
+  }
+  assertRecordPublishTarget(recordPath);
+  writeFileAtomic(recordPath, contents);
+}
+
+export function upgrade(
+  target: string,
+  options: { apply: boolean; recoverRecord?: boolean },
+) {
   const recordPath = path.join(target, MANAGED_RECORD);
-  if (!fs.existsSync(recordPath))
-    throw new Error("未導入です。先にinstallを実行してください");
-  const { record: old } = readManagedAssetRecord(target);
+  const recordPresent = pathEntryExists(recordPath);
+  /**
+   * **record不在からの復旧は明示の意図を要求する**（Issue #1305、#1307）。
+   *
+   * recordを失った状態で「かつて導入した」ことを**filesystemだけでは判定できない。**
+   * mapped pathにentryがあることは、そのentryをpackageが置いたことを意味しない。
+   * 利用者が同名で作ったfile、別toolが置いたfile、正本と偶然byte一致するfile、
+   * directoryのいずれとも区別できない。digestの一致も「同じ内容である」ことしか
+   * 示さない。**導入した事実の耐久的な証拠はrecord自身であり、それを失った状態での
+   * 再構成は循環する。**
+   *
+   * 推測を3度試みて独立reviewerが3度とも反例を構成した（`README.md`のみの
+   * directoryで114 file、利用者所有の`AGENTS.md`で113 file、名前空間内の他tool
+   * 所有fileで113 file）。**したがって推測をやめ、利用者に意図を宣言させる。**
+   * 受理範囲は推測より狭い。
+   */
+  if (!recordPresent && options.recoverRecord !== true)
+    throw new Error(
+      `managed asset recordがありません。${recoveryDiagnostic(target)}`,
+    );
+  const old = readManagedAssetRecordAt(target, recordPresent);
   const current = mappings(target);
+  /**
+   * **record不在は「導入済み」の代わりにならない**（Issue #1305）。
+   *
+   * recordの不在を全資産未記録として扱うと、**一度も導入していない
+   * directoryも同じ状態に含まれる。** その場合`update --apply`は展開先を
+   * すべて`place`と分類し、`install`と同じ書き込みを行う。`--root`や作業
+   * directoryを誤った1回の実行が無言でfull installになる。是正前の`upgrade`は
+   * record不在で拒否していたため、**これは本変更が到達可能にした書き込みである。**
+   *
+   * **推測は撤去した**（Issue #1307、owner決裁の案A）。展開先の有無を導入の証拠に
+   * しない。条件は利用者の明示指定だけである。
+   */
   const retained: string[] = [];
   const adoptable: string[] = [];
   const planned: Array<{
@@ -340,24 +645,15 @@ export function upgrade(target: string, options: { apply: boolean }) {
   for (const item of current) {
     const key = relativeKey(target, item.dest);
     const expected = old.files[key];
-    if (!pathEntryExists(item.dest)) {
-      planned.push({ ...item, key, expected });
-      continue;
-    }
-    if (!isRegularFile(item.dest)) {
+    const classification = classifyManagedAsset(
+      observeManagedAsset(item, expected),
+    );
+    if (classification === "retain") {
       retained.push(key);
       continue;
     }
-    if (expected) {
-      if (digest(item.dest) === expected)
-        planned.push({ ...item, key, expected });
-      else retained.push(key);
-      continue;
-    }
-    if (digest(item.dest) === digest(item.src)) {
-      planned.push({ ...item, key, expected });
-      adoptable.push(key);
-    } else retained.push(key);
+    planned.push({ ...item, key, expected });
+    if (classification === "adopt") adoptable.push(key);
   }
   if (!options.apply)
     return {
@@ -373,28 +669,25 @@ export function upgrade(target: string, options: { apply: boolean }) {
   const adopted: string[] = [];
   for (const item of planned) {
     fs.mkdirSync(path.dirname(item.dest), { recursive: true });
-    if (pathEntryExists(item.dest)) {
-      if (!isRegularFile(item.dest)) {
-        retained.push(item.key);
-        continue;
-      }
-      if (item.expected) {
-        if (digest(item.dest) !== item.expected) {
-          retained.push(item.key);
-          continue;
-        }
-        fs.copyFileSync(item.src, item.dest);
-      } else {
-        if (digest(item.dest) !== digest(item.src)) {
-          retained.push(item.key);
-          continue;
-        }
-        adopted.push(item.key);
-      }
-    } else fs.copyFileSync(item.src, item.dest, fs.constants.COPYFILE_EXCL);
+    /**
+     * **preview後の状態変化をここで取り直す。** TOCTOUの再検証であり、
+     * previewの判定を再利用しない。
+     */
+    const classification = classifyManagedAsset(
+      observeManagedAsset(item, item.expected),
+    );
+    if (classification === "retain") {
+      retained.push(item.key);
+      continue;
+    }
+    if (classification === "place")
+      fs.copyFileSync(item.src, item.dest, fs.constants.COPYFILE_EXCL);
+    else if (classification === "overwrite")
+      fs.copyFileSync(item.src, item.dest);
+    else adopted.push(item.key);
     next.files[item.key] = digest(item.dest);
   }
-  writeFileAtomic(recordPath, `${JSON.stringify(next, null, 2)}\n`);
+  publishManagedAssetRecord(recordPath, next, recordPresent);
   return { applied: true, adopted, retained };
 }
 
@@ -403,7 +696,10 @@ export function uninstall(
   options: { apply: boolean },
 ): UninstallResult {
   const recordPath = path.join(target, MANAGED_RECORD);
-  if (!fs.existsSync(recordPath)) throw new Error("未導入です");
+  if (!pathEntryExists(recordPath))
+    throw new Error(
+      `managed asset recordがありません。撤去対象を確定できません。${recoveryDiagnostic(target)}`,
+    );
   const managed = readManagedAssetRecord(target);
   const removable: string[] = [];
   const retained: string[] = [];

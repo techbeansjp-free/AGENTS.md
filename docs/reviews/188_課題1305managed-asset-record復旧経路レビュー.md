@@ -1,0 +1,389 @@
+# 04 レビュー
+
+## 0. レビュー識別情報
+
+| 項目 | 内容 |
+|---|---|
+| 対象 | 実装 |
+| ラウンド | 4（review session。**下記の事前諮問8回はsessionのroundではない**） |
+| 対象SHA・文書ダイジェスト | H_impl は本表の`H_impl`行の値。**事前諮問8回はいずれもreview sessionのroundではない。** 事前諮問の対象は `93d474ef`・`82453634`・`a622df80`・`932098b9`・`8a060349`・`011dfe87`・`16f0d8e0`・`78771095` の8 commitで、§6の表に1行ずつある。**review sessionのround 1は `47729654`、round 2と3は本artifactのcommitである**（`review-session.json`の`anchor.initialHeadSha`が正本） |
+| 比較基点 | `e3892d94d065c1f804680bece4ef9fdabcf052d6` |
+| H_impl | `3d8220814074e6b35795b2cbe6fa24bb76499845` |
+| 対象差分 | 比較基点 `e3892d94`。**15 path。** review sessionのanchorはround 1の初回HEADに固定する |
+| 対象外 | `doctor` の診断文と `healthy` 導出、host設定fileへの登録の書き込み、`.gitignore` 方針、record schema、`worktree finalize` の後片付け |
+| 残り予算 | review sessionのround 1を`47729654`、round 2を`3c073f32`、round 3を`de6bf1f2`で実施し、round 4を本artifactのcommitで実施する。**上限4に到達する。予算は残らない。** 収束後のHEAD移動に対する取り直し1ラウンドは別枠 |
+| ラウンド数 | 4（round 1が実装、round 2〜4が本artifact自身。**上限4に到達しており予算は残っていない**） |
+| Step chain | 経由: .agent-skill-chain/tmp/issues/20260909_094500_lifecycle-record-recovery |
+| 仕様の所有箇所 | `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md` の REQ-LC-001。原文「`install`、`update`、`delete`はpreviewを既定とし、`--apply`時だけpackage所有の通常fileを変更する。利用者文書、project policy、仕様、staging、他tool、symlink、変更済み資産を保持し、hash・containment・TOCTOUを各write前に検証する。」 |
+| 成果物行数 | `git diff --numstat e3892d94..3d822081` で製品 `src/` +354 / -46、配布build `dist/` +293 / -49、支援層は test +1916 / -0、仕様と配布利用案内 +32 / -1。staging成果物は00〜03で913行。**支援層が製品を大きく超える。** **数値は上記commandで再現できる形だけを書く。** 前版はここへ8 commit前の値を残しており、R9・R10で指摘された |
+| 縮小の先行評価 | **配布CLIへ`--recover-record`を1つ追加した。** #1307でownerが決裁した案Aである。先に既存手段の縮小を評価し、filesystemから導入済みを推測する機構を3度試みたが独立reviewerが3度とも反例を構成したため撤去した。**推測を持つ設計より受理範囲が狭い。** 棄却した代替（競合fileを退避して`install`を実行する運用）は、退避資産がrecordへ正本digestで登録され終状態が一致しないため採らない |
+| 実施者・日時 | implementer: Claude（本session）。reviewer: codexとClaude fable。2026-09-09 |
+
+### 0.1 routing入力契約
+
+| role欄（担当role） | 必要証拠 | 必要model tier | provider欄 | model設定欄 | fallback欄 | 独立性証拠欄・非変更証拠 |
+|---|---|---|---|---|---|---|
+| reviewer | 肯定5観点・敵対8観点のreview、finding分類。**観測したcodexのmodelは全11本で`gpt-5.6-sol`**（`--model`を渡していない。`~/.codex/config.toml`が固定している。`#1257`が所有し本Issueでは是正しない） | critical。risk=high かつ security関連・data loss・不可逆操作・外部契約変更がいずれもありのため | Codexは推論`high`まで、Claudeは`Opus`まで | project choiceの`tierMapping`（`codex:provider_recommended_default:high:default` と `claude-opus-5`）。**`--model`を渡さずprovider既定を使った** | reviewer不在または独立性不明ならPR・merge・finalizeをfail-closedで停止する | reviewerはcodexとfableの2体で、いずれもimplementer（Claude本session）とは別processかつ別contextである。**契約でread-onlyと差分非編集を明示し、`codex exec --sandbox read-only` で起動した。** 対象差分のpath集合はreview前後で不変であることを`git status`で確認した |
+
+## 1. 入力証拠
+
+| 証拠 | 参照先 | 観測結果 | 根拠種別 |
+|---|---|---|---|
+| 要求・受け入れ条件 | Issue #1305、AC-01〜AC-20 | **20件のACすべてにSCNが対応し、§2.1に20行ある。** 新規SCNは26件（integration 25件、unit 1件）で、初回6件は是正前に赤であることを確認し、review由来の20件は対応する変異をkillすることで検出力を確認した | テスト出力 |
+| 差分 | `e3892d94..3d822081` | **15 path。** 製品codeは `src/domain/lifecycle.ts`・`src/cli.ts`・`src/cli-usage.ts` の3 fileとその`dist/`成果物に限る | 既存コード |
+| テスト | `npm test` | 1743 scenarios / 1727 passed / 16 skipped / **0 failed** | テスト出力 |
+| 仕様 | `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md` ほか3 file と配布物 `.agent-skill-chain/00_利用案内.md` | updated | 既存文書 |
+| commit前candidate | 本節の変更ファイル個別監査表 | 生の差分は15 path。**監査表の照合対象は`auditedExpected`が生成物を除くため12 path**であり、表も12行である。`git add -A` を使わず個別にstageした | Git index |
+| Phase A artifact | `docs/reviews/` 配下の本artifact 1 file | H_impl..H_final は本artifactだけ | Git観測 |
+| commit後external | PR・CI run・review | **本artifact時点では未作成。** **外部証拠はartifactへ追記しない。** `H_final`より後にartifactを更新しないというtemplateの不変則があるため、PR番号・CI run ID・review IDは`review evidence`が別に記録する | 外部のimmutable証拠 |
+
+- dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: **確認した。** 正方向は `正本source → 展開済み資産 → managed asset record → doctorの観測` であり、recordの内容でrecord自身の正当性を判定していない。本artifactへ自身のcommit SHAを書いていない。
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけであり、trusted providerが観測したPR/CI/reviewが`H_final`へ一致している: **PR作成後に確定する。** 本ラウンド時点では`H_impl`のみ確定している。
+- reviewer stable IDがPR author/provider観測済み`H_impl` author stable IDと異なる: reviewerはcodexとClaude fableで、**`H_impl`のGit authorは `tatsuru <info@ruaprom.jp>`**（commit trailerに`Co-Authored-By: Claude`がある）。reviewerはいずれも別providerまたは別contextであり、implementerと同一identityではない。**ただしreviewer別の原出力は版管理外のscratchpadにあり、Gitだけでは独立検証できない。** その限界を申告する |
+- 既定branch追随を行った場合: **追随していない。** `比較基点`は着手時の`origin/main` tipのままである。
+
+## 変更ファイル個別監査
+
+| path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
+|---|---|---|---|---|---|---|---|---|
+| `src/domain/lifecycle.ts` | M | package owner | package | lifecycleコンテキストの導入・更新・削除・健全性を所有する既存file。分類の純関数（`classifyManagedAsset`。SCN-UNIT-LIFECYCLE-001が記録の有無と一致・相違の全件で決定論を照合する）、明示指定門、案内、no-replace公開を同じdomainへ置いた | pass。`classifyManagedAsset`は`fs`へ依存せず、他domainをimportしない。`recoveryDiagnostic`は`upgrade`のpreviewを呼ぶが逆向きの依存を作らない | REQ-LC-001 / AC-01〜AC-20 / SCN-INT-LIFECYCLE-017〜041、SCN-UNIT-LIFECYCLE-001 | 上書きの到達性を増やさない。前進commitで戻せる | pass |
+| `src/cli.ts` | M | package owner | package | lifecycle dispatchへ`--recover-record`を配線した1箇所のみ | pass。`upgrade`の呼び出しはここだけで迂回経路が無い | AC-17 / SCN-INT-LIFECYCLE-034、036、038 | flag未指定が既定で拒否側 | pass |
+| `src/cli-usage.ts` | M | package owner | package | `update`のoptional flagへ`--recover-record`の宣言と説明を追加した | pass。`check_cli_usage`が参照と宣言の一致を機械検査する | 同上 | 宣言の除去で戻せる | pass |
+| `.agent-skill-chain/00_利用案内.md` | M | package owner | package | **配布される利用案内。** runtimeの挙動が変わったため復旧手順と明示指定を追記した。利用者は配布物だけを読む | pass | REQ-LC-001 / AC-01〜AC-20 | 追記のみ。行の除去で戻せる | pass |
+| `test/features/integration/lifecycle-isolation.feature` | M | project | project | lifecycleの所有権境界を検証する既存integration featureへ、同じ境界の25 scenarioを追加した | pass | SCN-INT-LIFECYCLE-017〜041 | 一時repositoryに閉じる。実workspaceとremoteを触らない | pass |
+| `test/features/unit/lifecycle-record-recovery.feature` | A | project | project | 分類の純関数`classifyManagedAsset`だけを対象とするunit feature。SCN-UNIT-LIFECYCLE-001が10行の分類表で全件を照合する | pass | SCN-UNIT-LIFECYCLE-001 | 副作用なし | pass |
+| `test/steps/lifecycle-isolation.steps.ts` | M | project | project | 既存helperを再利用し、`fs`のmethodを`finally`復元付きで一時差し替えする注入を加えた。**製品APIへ注入口を足していない** | pass | 同featureのSCN | 全stepが`mkdtemp`の一時repositoryへ`--root`を固定する | pass |
+| `test/steps/lifecycle-record-recovery.steps.ts` | A | project | project | 分類の期待表10行。**期待値を製品の実装から導出せず書き写した** | pass | SCN-UNIT-LIFECYCLE-001 | 副作用なし | pass |
+| `docs/specs/01_システム概要/02_用語・略語.md` | M | project | spec | 耐久用語台帳。TERM-ASC-097を1行追加した | pass | TERM-ASC-097 | 行の除去で戻せる | pass |
+| `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md` | M | project | spec | REQ-LC-001へ明示指定門・不在観測の結果だけを上書き権限の根拠にする条項・no-replace公開・案内の条件・状態を断定しない規則を追記し、強制するSCNを名指しした | pass | REQ-LC-001 / AC-LC-001 / 新SCN 26件 | 段落の除去で戻せる | pass |
+| `docs/specs/15_要件追跡/00_追跡表.md` | M | project | spec | AC-LC-001行のSCN一覧へ017〜041を追加し、unit層の新SCN行を追加した | pass | 同上 | 行の除去で戻せる | pass |
+| `docs/specs/15_要件追跡/01_変更履歴.md` | M | project | spec | header区切りの直後へ1行追加した | pass | 同上 | 行の除去で戻せる | pass |
+
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: **確認した。** `git -c core.quotepath=false diff --name-status e3892d94..3d822081` のdist除外後12 pathと本表の12行が、statusとpathの両方で一致する（`check_file_audit.ts`の`auditedExpected`が生成物を除くため照合対象は12である）。**`audit:check`が`valid: true`・`auditedFiles: 12`を返すことでも確認した**
+- package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: **確認した。** `src/domain/lifecycle.ts`へproject固有のpathや閾値を入れていない。仕様fileへ実行authorityを書いていない。
+- 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: 本ラウンドの修正は§5に記録する。
+
+## 2. 受け入れ条件の確認
+
+### 2.0 実装中に発見した事実と前向きな対処
+
+| 発見ID | 事実 | 影響 | 契約変更 | 対処 | Verification Evidence | 仕様反映 | 判定 |
+|---|---|---|---|---|---|---|---|
+| DISC-001 | AC-06を「通常fileでない場合は拒否する」と書いていたが、directoryは`retain`で正常終了し、境界外symlinkは`destination`の`resolveContained`が**分類より前段で**操作全体を拒否する。振る舞いが2つに分かれる | AC-06の文言のみ。実装・INV・FRは変わらない。**「1 fileも書かない」はどちらの入力でも成立する** | requirement | `workflow assess-discovery`の`rebaseline-affected-contracts`に従い01・02・03だけを再確定した。Issueと00は作り直していない。SCNをWhen・Thenの2組へ分けた | SCN-INT-LIFECYCLE-021が両方の入力で合格。境界外fileの内容が実行前と一致することもassertした | updated（REQ-LC-001へ境界外symlinkの前段拒否を明記） | pass |
+
+### 2.1 受け入れ条件とシナリオ
+
+| AC ID | SCN ID | 実装 | テスト結果 | 判定 | 証拠 |
+|---|---|---|---|---|---|
+| AC-01 | SCN-INT-LIFECYCLE-017、SCN-INT-LIFECYCLE-036 | `upgrade`の`adopt`とrecord再固定、およびその配布CLI合成経路 | 合格 | pass | preview/applyの`adopted`集合一致と、record全entryのdigestが実fileの実測値と一致することを1件ずつ照合 |
+| AC-02 | SCN-INT-LIFECYCLE-018 | `classifyManagedAsset`の`retain` | 合格 | pass | `retained`への出現、実行前後のcontent digest一致、保持資産がrecordへ登録されないこと |
+| AC-03 | SCN-INT-LIFECYCLE-019 | `init`・`uninstall`の拒否理由 | 合格 | pass | `init`の競合拒否がcommand名を含まないこと、`uninstall`のrecord不在拒否が`update`を名指しすること、続く`update --recover-record`が`applied: true` |
+| AC-04 | SCN-INT-LIFECYCLE-020 | 書き込みを追加しないこと | 合格 | pass | `.claude/settings.local.json`を`consumerFiles`へ入れ、内容一致を照合 |
+| AC-05 | SCN-UNIT-LIFECYCLE-001 | `classifyManagedAsset` | 合格 | pass | 分類全件表10行の照合、分類列挙の網羅、記録なし相違が`retain`であることの名指し固定 |
+| AC-06 | SCN-INT-LIFECYCLE-021 | 非通常fileの`retain`と`destination`の境界検証 | 合格 | pass | directoryの`retained`と、境界外symlinkの前段拒否理由、境界外fileの不変 |
+| AC-07 | SCN-INT-LIFECYCLE-022 | `readManagedAssetRecord`の`lstat`事前検査 | 合格 | pass | dangling symlinkのrecordが不在と誤認されず拒否され、`lstat`でsymlinkのentryが保持される。診断は読み取り時の理由を名指しし公開時の理由と混同しない |
+| AC-08 | SCN-INT-LIFECYCLE-023 | `readManagedAssetRecordAt`が壊れたrecordをcatchしないこと | 合格 | pass | 拒否の発生と、record内容のdigestが実行前後で一致すること |
+| AC-09 | SCN-INT-LIFECYCLE-024、SCN-INT-LIFECYCLE-037 | applyループ内の`observeManagedAsset`再観測 | 合格 | pass | preview後に変わった展開先が`retained`へ出現しrecordのkeyに含まれない。**復旧中に現れたrecordを`expected`の根拠にしない**ことをSCN-037が`lstatSync`の呼び出し回数で固定する |
+| AC-10 | SCN-INT-LIFECYCLE-025 | `next.files[item.key] = digest(item.dest)` | 合格 | pass | recordの登録値がcopy後の展開先の実測digestと一致し、正本のdigestで代替されない |
+| AC-11 | SCN-INT-LIFECYCLE-026 | `recoveryDiagnostic`のblocked分岐と`mappings`の対象名指し | 合格 | pass | 拒否理由が**解消すべき原因と対象の両方**を名指しし、**どのcommandも手段として名指ししない**。診断文全体が許容形と完全一致することで固定する。同じ状態の`update`が実際に拒否されることを同一scenario内で確認する |
+| AC-12 | SCN-INT-LIFECYCLE-027 | opt-in門が展開先の観測より前に発火すること | 合格 | pass | directory内容の不変、拒否理由が`install`を名指ししないこと、別途`install`が同じ状態で成功すること |
+| AC-13 | SCN-INT-LIFECYCLE-028 | `readManagedAssetRecord`の5分類の検査 | 合格 | pass | 5分類のいずれも空recordへ降格せず、recordと管理資産が1 byteも変わらない |
+| AC-14 | SCN-INT-LIFECYCLE-029、SCN-INT-LIFECYCLE-030 | 明示指定なしのthrow | 合格 | pass | 利用者所有の同名fileでも正本とbyte一致する同名fileでも1 fileも書かない。**filesystemからの導入推測を根拠にしない** |
+| AC-15 | SCN-INT-LIFECYCLE-031、SCN-INT-LIFECYCLE-033 | `assertRecordPublishTarget`と`wx`公開 | 合格 | pass | 公開直前に現れたsymlinkのrecord公開先を置換せず公開を中止する。SCN-033はrecord既存の再固定経路で同じ性質を固定する |
+| AC-16 | SCN-INT-LIFECYCLE-032 | `options.recoverRecord !== true`の門 | 合格 | pass | 導入済みでも明示指定が無ければ1 fileも書かずrecordを再生成しない。拒否理由に`install`という語が現れない |
+| AC-17 | SCN-INT-LIFECYCLE-034、SCN-INT-LIFECYCLE-038 | `flags["recover-record"] === true`のCLI配線 | 合格 | pass | 配布CLIの終了値が非0で1 fileも書かず、`--recover-record`を名指しする。SCN-038は明示指定つきpreviewが到達でき書き込まないことを固定する。**判定関数ではなく合成経路を検査する** |
+| AC-18 | SCN-INT-LIFECYCLE-035 | `init`側の`assertRecordPublishTarget` | 合格 | pass | 公開先が`lstat`でsymlinkのままであり参照先が作られない |
+| AC-19 | SCN-INT-LIFECYCLE-019、SCN-INT-LIFECYCLE-039、SCN-INT-LIFECYCLE-040 | `recoveryDiagnostic`の成功分岐 | 合格 | pass | 最小診断が**所属commandの`update`を名指しし**、`install`という語・手順・内訳・導入状態の断定を含まない。展開済み資産が0件でも1件でも同じ形である |
+| AC-20 | SCN-INT-LIFECYCLE-041 | 門の手前でpreviewを走らせること | 合格 | pass | previewが拒否される状態では原因だけを名指しし、どのcommandも成功する手段として案内しない |
+
+**AC 20件すべてに行があり、表はちょうど20行である。** 前版は`AC-01`〜`AC-06`の6行しかなく、**実装済みかつ検証済みの14件を成果物が報告していなかった。**
+`SCN-INT-LIFECYCLE-033`・`036`・`037`・`038`は独立reviewerの指摘から追加したもので番号付きACを持たないため、
+**同じ命題を別のcaller・別の時点で固定する行として、補強する先のACへ併記した。** 新規SCNは26件（integration 25件、unit 1件）である。
+
+### 2.2 開発考慮事項の適用判定（必須）
+
+| ID | 考慮事項 | 判定 | 理由 | 実装・検証証拠 |
+|---|---|---|---|---|
+| DC-PRIVACY | Privacy/Security by Design | applicable | recordはどのhost資産をpackageが管理するかを定める信頼判定の入力であり、その不在時の分岐を追加した | INV-01をSCN-INT-LIFECYCLE-018とSCN-UNIT-LIFECYCLE-001で固定した。上書きへ倒す変異M-B3をkillした。秘密情報を扱わず、出力はpathとdigestのみでfileの内容を出さない |
+| DC-OBSERVABILITY | Secure Logging・Observability・運用可能性 | applicable | 拒否理由と保持対象pathの報告が運用判断の入力である | `retained`へ当該pathを含める。INV-02をSCN-INT-LIFECYCLE-019で固定し、名指しを削る変異M-A5・M-A6をkillした。log fileを持たないため保持・rotation・削除は呼び出し側が所有する |
+| DC-UX | Human-Centered UI/UX・アクセシビリティ | not-applicable | Node CLIのみでGUI・Web UIを持たず、本変更も画面を追加しない。project choiceの`capabilities.humanCenteredUi`もnot-applicableである | `package.json`のbinがCLI 1件のみでUI sourceが存在しない |
+| DC-TOKENS | Design System・Design/Layout Token | not-applicable | 画面レイアウトと視覚コンポーネントを持たず、tokenを追加しない。project choiceの`capabilities.designTokens`もnot-applicableである | projectKindがcliでdesign token仕様fileが存在しない |
+
+## 3. 肯定的評価
+
+| 観点 | 確認内容 | 判定 | 根拠 |
+|---|---|---|---|
+| 正しさ | record不在からの復旧が成立し、上書きの到達性が増えていないか | pass | 閉路の解消を実測。分類は`place`・`overwrite`・`adopt`・`retain`の10行表で尽き、`overwrite`へ到達するのは`expected`が記録済みで実digestが一致する場合だけである。record不在では全件`undefined`のため到達しない。変異M-B3（記録なし相違をoverwriteへ）をkillした |
+| 価値 | 利用者が製品外の手作業なしに復旧できるか | pass | `update`1回で復旧する。部分欠落（package名前空間資産3件のみ残存）から113 fileの復旧を実測した |
+| 実現可能性 | 実行環境・依存・権限で成立するか | pass | 依存とlockfileを変更していない。`dist/`を同じcommitへ含め、build後の`git status`が空である |
+| 整合性 | 設計・コード・テスト・仕様が一致するか | finding → resolved | **私はここで一度、事実でない記載をした。** 「00・01・02・03・仕様・配布利用案内が同じ性質を述べている」と書いたが、round 1のreviewer 2体が実測で否定した。`00_要求定義.md`は1箇所も更新しておらず、01・02・03・要件本文にstrict形が残り、同一要件内で矛盾していた。**事前諮問のR2-H03で受けた指摘と同型の状態を、artifactの記述として再発させた。** 事前諮問2でINV-02の正準文を1つに定めた。**以後「残存0件」という申告は7回連続で事実でなかった。** 事前諮問6では`実行して成功`という字面をgrepしたが残存形は`既知の論理的拒否`であり、事前諮問7では11個の表現形を走査したと述べたが2体が実在の残存を示した。session round 1では**命題の類**へ走査を変えたが、11箇所のうち9箇所が**表の行**で、散文向けgrepには構造的に見えていなかった。session round 2では表の行も走査したと述べたが、**本artifact自身の表**（9行目・62行目・277行目）に同型が残り、2体がまた独立に示した。**7回目である。**
+
+原因は走査の粒度ではなく**成果物の構造**である。導出値を散文と表へ書き写すたびに、実装が動くと同じ数字が複数箇所で腐る。**したがって走査を強化するのをやめ、書き写しをやめた。** 導出値は、gateが読む欄（`H_impl`・`比較基点`・`ラウンド数`・監査表・配布物影響）だけに残し、それ以外は**それを出したcommandを併記する**か削除する。`成果物行数`欄はその形へ書き換えた。**申告する数字は、それを出したcommandと同じ場所に置く。** |
+| 保守性 | 責務・命名・変更容易性が妥当か | pass | 分類を純関数へ寄せ、preview経路とapply経路の重複分岐を1箇所にした。`fs`依存は`observeManagedAsset`へ閉じている。**ただし`""` sentinelは将来の罠である。** 判別共用体にすれば型で消せるが、本Issueでは手段を増やさず、対応する変異M-B6をkillして代替した |
+
+## 4. 敵対的評価
+
+| 観点 | 確認内容 | 判定 | 根拠 |
+|---|---|---|---|
+| 反例 | 要件を破る入力・状態がないか | pass（**事前諮問1で2件・事前諮問2で1件**を検出し是正） | dangling symlinkのrecord、未導入directory、利用者所有の同名file。**いずれも実測で再現してから是正した。** SCN-022・027・029・030で固定 |
+| 失敗経路 | 外部失敗・部分失敗を安全に扱うか | pass | record不正5分類すべてで書き込まず拒否する（SCN-028）。部分失敗時は`retained`へ載せて報告する |
+| 境界値 | 空、最大、最小、重複、Unicode等 | pass | 分類表10行に空digest同士と空文字`expected`を含む。Unicode正規化は既存SCN-009を維持 |
+| 悪用 | 注入、経路脱出、権限外操作等 | pass | 境界外symlinkは展開先解決時点で操作全体を拒否する（SCN-021）。record偽造は登録digestを実測値に限るため上書き許可を生まない（SCN-025・M-C1） |
+| 安全性 | 認証、承認、秘密情報、Zero Trust | pass | 外部接続なし。出力はpathとdigestのみでfile内容を出さない。recordの内容でrecord自身を正当化しない。host設定fileへ書き込まない（SCN-014・020） |
+| データ損失 | 上書き、削除、部分公開、履歴消失 | pass（**事前諮問1・2で2件**検出し是正） | record外かつ相違する資産を上書きしない（INV-01）。**symlinkのentry置換を2箇所で塞いだ**（読み取り時の不在判定と公開直前の再検証）。**残る窓は#1306が所有する** |
+| ロールバック | 復旧参照、状態保持、再開可能性 | pass | 拒否時は状態を変更しない。生成recordは削除すれば元へ戻る。前進commitで分岐を戻せる |
+| 範囲漏れ | 呼び出し元、利用側、配布物、文書 | pass | `dist/src/`が配布境界に入るため配布利用案内へ復旧手順を追記した。`docs/specs/`だけでは利用者へ届かない |
+
+## 5. 指摘
+
+**独立reviewer 2体へ事前諮問を8回行った。** codexは8回すべて、Claude fableは5回起動した。各回の指摘件数は上表の`指摘`欄のとおりで、**本節はそれらとsession roundの指摘をIDへ集約したものである。** 行数は `grep -cE '^\| (R1305|F-|R2-|R8-|R9-|R10-|R11-)'` で数える。**複合IDを含む行があるので行数はID数と一致しない。** 8回目（`78771095`）はfableがHigh 2件、codexがHigh 1件・Medium 2件を出した。主要なものを記す。
+
+| ID | 重大度 | 内容 | 証拠 | 影響範囲 | 対応 | 状態・分類 | 残存リスク |
+|---|---|---|---|---|---|---|---|
+| R1305-01 / F-03 | High | recordの不在判定が`fs.existsSync`でdangling symlinkを不在と誤認し、公開の`rename`がsymlinkのentryを通常fileへ置換した | 一時repositoryで再現。`islink`が`True`から`False`へ変わった | REQ-LC-001のsymlink保持、データ損失 | `pathEntryExists`へ変更し、entryがあれば必ず検証へ通す | valid / resolved | なし |
+| F-01 | High | record不在を無条件に全資産未記録とし、**未導入directoryで`update --apply`が114 fileを書き込んだ** | `README.md`1件のdirectoryで再現 | 本Issueの前提、不可逆操作の到達性 | 前提検査を追加し`install`を名指しして拒否 | valid / resolved | なし |
+| R2-H01 | High | 導入証拠が「同名entryが1件ある」だけで、**利用者所有の`AGENTS.md`のみで113 fileが書き込まれた** | 再現済み | 同上 | 証拠を`.agent-skill-chain/`配下へ限定。正本一致の同名fileも証拠にしない | valid / resolved | なし |
+| R2-H03 | High | **INV-02を「閉路にならない」へ弱めたのはゴールポストの移動。** 00・BR-02・FR-04・AC-03は成功を要求したままで成果物内に矛盾を残した | 成果物間の突合 | 契約の整合性 | **弱めた文言を撤回。** 副作用の無いpreviewをoracleにして、成功する手段だけを名指しする実装へ変えた | valid / resolved | なし |
+| R2-H02 | High | 観測から`rename`公開までの間にentryが差し替わりうる | 公開直前にsymlinkを注入して再現 | データ損失 | 公開直前の再検証を両write siteへ追加（SCN-031） | valid / resolved（部分） | **検査と`rename`の間の窓は閉じていない。** `install`にも同型に存在する既存の性質であり **#1306** が所有する |
+| R1305-03 / R1305-04 | High | M-A7・M-C1を「等価変異」と記録したのは誤りで、test側のseamでkillできる | `fs.mkdirSync`・`fs.copyFileSync`の一時差し替えで両方kill | 検出力 | 2 scenarioを追加。**製品APIへ注入口を足していない** | valid / resolved | なし |
+| R2-M01 | Medium | record不正の検査がJSON構文不正だけで、digest不正・path重複・非通常fileが未検査 | grep実証 | 検出力 | 5分類へ拡張（SCN-028） | valid / resolved | なし |
+| R1305-05 / F-06 | Medium | record不在＋欠落資産の`place`合成経路が未検査 | 変異M-D2が生存 | 検出力 | 変異を追加しkill。SCN-025のfixtureが同状態を作る | valid / resolved | なし |
+| F-04 / F-05 | Medium | 件数だけの照合、混在状態の採用側が未検査 | 変異M-D3・M-D4が生存 | 検出力 | 集合の突合へ変更 | valid / resolved | なし |
+| F-07 | Low-Medium | SCN-021の後半がrecord存在状態を測っており、scenario名と一致していなかった | code読解 | 検出力 | `dropRecord`を挟み、recordを書いていないことも観測 | valid / resolved | なし |
+| F-08 | Low | `init`の案内文がrecord存在時に不正確 | code読解 | 診断の正確さ | **事前諮問3**でpreview由来の案内へ置換し解消 | valid / resolved | なし |
+| F-09 / R1305-08 | Low | 分類表が非網羅、列挙が`Record<string, true>`で型束縛が無く`constructor`が素通りする | code読解 | 検出力 | 行を4件足し、`Record<ManagedAssetClassification, true>`と`Object.hasOwn`へ変更 | valid / resolved | なし |
+| R1305-09 | Low | 境界外拒否の観測が境界外fileの内容だけだった | code読解 | 検出力 | symlinkの保持、recordを書いていないこと、管理資産の不変を追加 | valid / resolved | なし |
+| R1305-07 | Low | M-B5はexport関数の契約としては非等価 | `expected: ""`で分岐が変わる | 契約の明示 | 契約行を足しM-B5もkill | valid / resolved | なし |
+| F-10 | Low | SCN-017の「実測値であることを確かめる」コメントがM-C1を区別できていなかった | 指摘どおり | 記述の正確さ | SCN-025で実際に区別できるようにし、コメントの主張を実態へ合わせた | valid / resolved | なし |
+| F-12 | Info | SCN-020の`digestsBeforeRecovery`が未使用で、`.claude/settings.local.json`は`mappings()`に含まれないため構造上必ず通る | 指摘どおり | 検出力の限界 | **検出力が無いことを認識して残す。** INV-03は`mappings()`に設定fileが無いという構造で担保され、SCN-014が既に固定している。重ねて機構を足さない | valid / out-of-scope | 設定fileへの書き込みが将来追加された場合、SCN-020は検出しない |
+| F-13 | Info | **審査中に作業treeが変異試験で変動していた** | fableの観測 | reviewの成立 | **手順の誤りである。** 以後reviewer起動中は変異試験を行わない。fableは自力で範囲をH_implのdiffへ限定し、変動中の全suite結果を証跡から除外した | valid / resolved | なし |
+| R8-H01 | High | **縮小が閉路を1つ作り直していた。** 最小診断が`--recover-record`というflag名だけを返し所属commandを名指ししなかった。`--recover-record`は`update`のflagで`delete`のflagではないが、**CLIは宣言外のflagを黙って捨てる**ため、`delete`の拒否を読んだ利用者が`delete --recover-record --apply`を実行しても**byte一致の拒否**が返り、誤ったcommandを使ったという信号が出ない | `delete --apply`と`delete --apply --recover-record`の`reasons[0]`が完全一致することを実測。`delete --apply --totally-bogus-flag`も同じ拒否を返すことで宣言外flagの黙殺を確認 | 本Issueの目的そのもの | previewが成功する分岐にだけ所属commandを名指しする。previewは`upgrade(target,{apply:false,recoverRecord:true})`であり**名指しする手段そのもののpreview**なのでINV-02の正準条件を満たす。previewが拒否した分岐と、previewを走らせない`init`の競合拒否では名指ししない | resolved / fix-regression | `delete`から`update`へ移る操作は利用者が行う。製品は代行しない |
+| R8-H02 | High | 要件本文9・23行、01の74/76/146行、02の166/190/206行、03の49/115/190行、04の82行、変更履歴5行が縮小前の契約を現在形で述べ、**同一要件内で25行と矛盾していた。** 「11個の表現形を走査して0件」という私の申告は**3回連続で事実でなかった** | reviewer 2体が独立に実ファイル上の残存を提示 | 仕様の一貫性 | 走査対象を字面から**命題の類**へ変え、4類の全hitを1件ずつ本文と突合。あわせて25行自身の「caller非依存な1本の文字列で助言を作らない」も現実装と矛盾していたため書き換えた | resolved / acceptance-violation | 命題の類は私が列挙したものであり網羅の保証はない |
+| R8-M01 | Medium | 「record存在の観測は1回に限る」が無限定で、拒否経路では偽。`recoveryDiagnostic`が`upgrade`のpreviewを呼び再観測する | codexがcall graphで提示 | 不変条件の記述 | 限定を「状態を変える経路」へ明記。**previewは1 byteも書かないので上書き権限を与えず、この不変条件が防いでいる事故は起こらない** | resolved / improvement | 限定を落とすと偽の法則になるという既知の型である |
+| R8-M02 | Medium | 最小診断のassertionが禁止語の部分集合しか見ておらず、別文言での再導入が生存し得る。退役させた「状態の断定」変異は字面が消えただけだった | codexがassertion 3箇所を名指し | 検出力 | 語の類で禁止する`assertNamesNoCommand`・`assertAssertsNoState`へ集約し、path除去を`diagnosticBody`で空洞化から守った。変異5件（M-A13・M-B10・M-A14・M-A15・M-C4）を追加 | resolved / improvement | 語の類も私が列挙したものである |
+| R8-L01 | Low | 04の§2.1が`AC-01`〜`AC-06`の6行しかなく、**実装済みかつ検証済みの14件を成果物が報告していなかった。** `SCN-033`・`036`・`037`・`038`はどのAC行からも参照されていなかった | AC集合とSCN集合をfileから抽出して差集合を取った | 成果物の完全性 | 20 AC全件へ行を足し、番号付きACを持たない4 SCNを補強先のACへ併記した。新規SCNは26件 | resolved / improvement | AC自体は増やしていない。受け入れ契約は変えていない |
+| R8-L02 | Low | 04の入力証拠が`11 path`・`AC-01〜AC-15`・`新規16 SCN`・差分範囲`..a622df80`と、いずれも実測と食い違っていた | `git diff --name-only`とAC/SCN抽出で突合 | 成果物の正確さ | 15 path・AC-01〜AC-20・26 SCN・実際のH_implへ是正 | resolved / improvement | なし |
+| R8-L03 | Low | 04が事前諮問5・6を「ラウンド1・2（review session）」として重ねて記載していたが、**journalにはStep 0〜9しか無く`review round`は1度も実行していない** | `journal/steps.jsonl`の全行を読んだ | 証跡の正確さ | 見出しを事前諮問へ是正し、製品を通していないものをroundとして記録していた事実を明記した | resolved / acceptance-violation | 実際のsession roundは本artifactのcommit以降に記録する |
+| R9-H01 | High | **「命題の類で走査して残存0件」も事実でなかった。これで4回連続である。** 実ファイル上に現在形の矛盾が11箇所残っていた（`01`の18・55・188行、`02`の67・87・88・103・154行、`03`の56・168行、`04`の204行）。さらに`SCN-027`のGherkinは「名指しされた`install`は成功する」と書いたままで、**step実装は`install`の名指しを禁止していた。仕様文と検査が反対を述べていた** | fableが6行、codexが別の2行と`feature:136`を独立に提示 | 仕様の一貫性、検査の意味 | **原因を特定した。11箇所のうち9箇所が表の行である。** 私の走査はすべて散文向けのgrepで、状態遷移表・境界値表・外部IF表・検証表の行を構造的に見ていなかった。表の行だけを抽出して命題の類を当てる走査へ変え、全hitを分類した。`02:103`は#1307案Aで撤去したfilesystem推測を現在形で述べていたので撤去の経緯へ書き換え、`03:168`は撤回済みの判断であることを明記し、Gherkinとstep名は`install`を名指ししない事実へ揃えた | **partially-resolved（round 2で再指摘）** / acceptance-violation | 表の行を見る走査も私が書いたものである。**次に同型が出たら、走査ではなく成果物の構造そのものを疑う。** round 2で本artifact自身の表に同型が出たため、round 2でその処置を実行した |
+| R9-H02 | High | blocked分岐がINV-02の**「解消すべき原因と対象を名指しする」の「対象」を満たしていなかった。** `resolveContained`は`シンボリックリンクによる境界外移動を拒否しました`を**対象pathなしで**投げるため、112資産のうちどれが境界外を指しているのか分からず、`install`・`update`・`delete`の3 commandがどれも同じ文だけを返していた。**閉路ではないが製品の外へ出ないと解消できない行き止まりである。** SCN-026とSCN-041は原因文しかassertしておらず、**この節は走査0回だった** | fableがcall graphと実測で提示。私も`update --recover-record --apply`で再現し、対象pathが出ないことを確認した | INV-02の充足、行き止まり | `src/lib/security.ts`は信頼品質契約の保護対象なので投げ元は変えず、**`mappings`と`resolveManagedAsset`の呼び出し側で対象を付けて投げ直した。** `readManagedAssetRecord`は同じ理由で既にrecord pathを名指ししており、**同型の欠陥が残っていた2箇所を揃えた。** 3 commandすべてが`.codex/hooks/asc-contract-citation.mjs`を名指しすることを実測した | resolved / invariant-violation | 対象を名指しするのは境界外symlinkの経路である。他の原因文はもともとpathを含む |
+| R9-H03 | High | **04のreview証跡と監査表が有効なround 1を表していなかった。** 冒頭がround 1を宣言する一方で`8a060349`をsession round 1と記載し同一成果物内で矛盾していた。さらに`check_file_audit.ts`の`auditedExpected`は`dist/`を除外するため**期待path集合は12だが、監査表は15行だった。** そのまま`audit:check`へ進めば`個別監査とGit差分path集合が一致しません: expected=12 actual=15`で落ちる。**さらにその前段として、監査表の見出しを`### 1.1 変更ファイル個別監査`と書いていた。** `parseFileAudit`は`markdown.split("## 変更ファイル個別監査")`という**部分文字列**で節を切り出すため、`### 1.1 `が前置された見出しはmatchせず、**15行すべてが黙って読み飛ばされて0 entryになっていた。** `| H_impl | <SHA> |`行も無かった | codexが`check_file_audit.ts:1298`を名指し。見出しと`H_impl`行の欠落は私が`parseFileAudit`の正規表現を再実装して発見した | PR作成の可否 | round metadataの矛盾を除き、監査表から`dist/`3行を落として12行にし、`git diff --name-status`のdist除外集合と件数・status・pathの全一致を確認した。**この直前に私は「15 entry読める」と確認して満足していたが、読めることと期待集合に一致することは別だった** | **partially-resolved（round 2で再指摘）** / acceptance-violation | 配布物影響の節は生の差分を使うため`dist/src/`の記述を残す。除外は監査表の照合だけに効く。**round 2で9行目と62行目の残存が示された。是正済みと申告したのは誤りだった** |
+| R9-M01 | Medium | 「状態を変える経路では観測1回」という限定も**まだ広すぎた。** record存在時は最初の存在判定のあとに`readManagedAssetRecord`が同じentryを読む | codexが`lifecycle.ts:217`を名指し | 不変条件の記述 | 守るべき性質を回数ではなく**「不在と観測してから分類するまでの間に現れたrecordのdigestを`expected`として使わないこと」**へ言い換えた。回数はその性質の代理でしかなかった | resolved / improvement | 代理指標を不変条件として書くと、実装が正しいまま記述が偽になる |
+| R9-M02 | Medium | **禁止語の列挙という守り方そのものが誤りだった。** codexとfableが独立に反例を出した。`LEGACY_LIFECYCLE_ALIASES`の`init`・`upgrade`・`uninstall`はCLIが現に受理するので「`upgrade`に`--recover-record`を」は生存し、`delete`・`doctor`・大小文字違いの`Update`も生存し、「ASCが入っていません」「初期導入が済んでいません」のような状態断定の言い換えも生存した | 両reviewerが具体的な生存文面を提示 | 検出力 | **列挙をやめ、許容文面との完全一致へ変えた。** `assertDiagnosticIsExactly`が9箇所で診断文全体を`assert.equal`する。動的部分は原因と対象pathだけで、それもtest側にliteralで書く。**列挙漏れという失敗様式そのものが無くなる。** 助言を1語足しても、どう言い換えても落ちる | resolved / improvement | 完全一致は文言変更のたびtestが落ちる。診断文が契約である本Issueではそれが正しい |
+| R9-L01 | Low | §2.1が21行で「20行」と食い違い、`01`のAC表は補強SCNを書いていなかったため01と04が不一致だった | 両reviewerが指摘 | 成果物の整合 | `SCN-036`をAC-01の既存行へ併記して20行に揃え、`01`のAC-01・09・15・17へ補強SCNを追記した | resolved / improvement | なし |
+| R10-H01 | High | **round 1で是正済みと申告した2箇所が原文のまま残っていた。** 9行目は`review sessionのround 1は 8a060349`と述べ、62行目は監査表を`本表の11行`と述べていた（表は12行）。§5のR9-H03対応欄は「round metadataの矛盾を除き」と書き、§11は「1件ずつ突合した」と書いていた。**突合していればこの2行は残らない。「残存0件」が事実でなかった5回目であり、9行目は表の行である。** codexはあわせて、round 2の結果を「本節へ追記する」と書くことがH_final後にartifactを更新しないというtemplate契約と両立しないことも指摘した | fableとcodexが独立に9行目・62行目・277行目を提示 | 成果物の事実性 | 3箇所を是正し、round 2・3の節を「後で追記する」形から**その時点の結果を書く**形へ変えた。あわせて**走査の強化をやめ、導出値の書き写しをやめる構造的処置**を採った（§3の整合性欄） | resolved / acceptance-violation | 導出値を残した欄はgateが読む5箇所だけである |
+| R10-H02 | High | §8の配布影響表と`01`の18行が、**#1307案Aのopt-in門より前の挙動を無条件に述べていた。** 「`update`がmanaged asset record不在で終了値0を返し`adopted`・`retained`を報告するようになる」と書いていたが、実装は`recoverRecord !== true`なら必ずthrowする。**同じartifact内のAC-16・AC-17と正面から矛盾していた** | codexが`lifecycle.ts:619`と`artifact:277`・`01:18`を名指し。fableも独立に277行目を提示 | 配布物影響の記述、利用側への影響 | 両方へ明示指定の条件を入れた。配布影響表は利用者向けに「何が変わるか」を述べる箇所であり、撤去済み設計の挙動が残ると配布先を誤らせる | resolved / acceptance-violation | なし |
+| R10-M01 | Medium | **事前諮問`011dfe87`が表から欠落していた。** 契約と809KBのcodex出力が版管理外のscratchpadに存在し、verdictは`未解決Critical/High: 3件`だった。事前諮問は7回ではなく8回であり、reviewer起動の申告もすべて過少だった | **fableが版管理外のscratchpadを走査して発見した。** 私もcontractの`H_impl（現在のHEAD）: 011dfe87`とgit logで確認した | 証跡の完全性 | 表へ8行目として追加し、件数を是正した。指摘そのものは`16f0d8e0`とSCN-040で処置済みであり、**製品側の漏れではなく証跡の欠落である** | resolved / improvement | **reviewer別の原出力は版管理外にある。** Gitだけでは独立検証できないことを§9へ申告した |
+| R10-M02 | Medium | `成果物行数`欄の4数値がすべて8 commit前（`82453634`時点）の値で、`分類全件表`の行数が6と10で衝突し、§7が**削除済みの**`assertNamesNoCommand`等を現行として説明し、`10箇所`が実際は9箇所、`H_impl`のGit authorを`Claude`と記載していた（実際は`tatsuru <info@ruaprom.jp>`）、§5の行数の記載（`24個`という古い件数のまま残り、実際の35行と不一致）、round 1の件数が`Medium 3件・Low 2件`（実際はHigh 3・Medium 2・Low 1） | 両reviewerが個別に提示。私も`git diff --numstat`・`ROWS.length`・`grep -c`・`git show -s --format=%an`で照合した | 成果物の正確さ | すべて実測値へ是正した。**そのうえで、同じ腐りが7回起きた原因は書き写しであると判断し、導出値の書き写し自体をやめた** | resolved / improvement | gateが読む欄は書き写しを避けられないため残す |
+| R10-L01 | Low | `02:64`が「存在の観測は1回だけ行い再観測しない」とR9-M01で撤回した言い方を現在形で残していた | codexが提示 | 記述の一貫性 | 「観測結果を引数で受け、この関数が独立に観測し直さない」へ改め、守るべき性質を明記した | resolved / improvement | なし |
+| R11-H01 | High | **7回目の同型残存。** round 2の是正で`§9`のcellの前半（reviewer件数）を書き換えながら、**同じcellの後半に残った`24個`という古い件数を見落とした。** 319行目は実装commit authorを`Claude`と述べ、42行目の`tatsuru <info@ruaprom.jp>`と同一artifact内で2値になっていた。R10-M02の「すべて実測値へ是正した」が事実でなかった。**codexはあわせて`01`の53・54・71・144・145・146行が`--recover-record`なしの`update --apply`が正常終了すると読めることを示した**（`lifecycle.ts:619`と矛盾）。artifactの38・253・318行の「PR作成後に追記する」がtemplateの「`H_final`より後にartifactを更新しない」と両立しないことも指摘された | fableが319・320行と14行を、codexが38・253・318行と`01`の5行を独立に提示 | 成果物の事実性、exact-head証拠 | **原因を特定した。** 6回すべて「cell内の部分置換で残りが陳腐化する」形である。導出値の書き写しをやめるという前roundの処置は方向は正しかったが、**§5・§9・§0・§6へ適用していなかった。** 今回は残りの欄へも適用し、あわせて**検査scriptを書いた。** gitとfileから実測を取り直し、陳腐化した字面・`N個のID`と残り予算の2量の不一致・opt-in条件を落とした命題・削除済み関数への言及・`H_final`後の追記の約束をartifactと`01`〜`03`について検出する。**§5の行は`HISTORICAL`除外で対象外になる**（R12-Info01）。**規律ではなく検査で止める。** **scriptはこのsessionの作業領域（`/tmp/claude-1000/-home-tatsuru-Projects-techbeansjp-free-AGENTS-md/<session>/scratchpad/check-artifact.py`）にあり、repositoryにもworktreeにも無い。** round 4でcodexが「存在せず出力が再現不能」と指摘したのは正しい。**したがってこれは証跡ではなく、私が是正の網羅性を確認するための道具にすぎない。** 恒久化（tracked scriptとgateへの接続）はfollow-up Issueが所有する | resolved / fix-regression | **検査scriptは版管理外である。** 継続的な担保ではなく、本roundの網羅性の確認にしか使えない。恒久化は別Issueが要る |
+| R11-M01 | Medium | §0の識別表が自分と矛盾していた。14行目が「上限4に対し残り2ラウンド」、15行目が「残り1」 | fableが提示 | 識別情報の一貫性 | 14行目をround 1〜3の実施済みheadと残り1へ揃えた。**`identityCell`が読むのは`ラウンド数`等4欄で`残り予算`は読まないためgateは通っていた** | resolved / improvement | gateが読まない欄は検査scriptで見る |
+| R11-M02 | Medium | 「ラウンドN」が事前諮問とsession roundの両方を指しており、128行目の「ラウンド2で3件検出し是正」はどちらの読みでも偽だった。R8-L03の是正が評価表まで届いていなかった | fableが提示 | 用語の一貫性 | 評価表の番号を事前諮問とsession roundで書き分けた | resolved / improvement | なし |
+| R11-L01 | Low | §7が削除済みの`recoveryGuidance`を現行関数として説明し、58行目が撤回済みの「観測1回」を短縮形で残し、`02:188`・`03:51`・`03:100`が分類表を6行と述べていた | codexとfableが提示 | 記述の正確さ | 現行名へ改め、観測条項は性質の記述へ、分類表は10行へ是正した | resolved / improvement | なし |
+| R11-L02 | Low | round 2の件数を「Medium 4件、Low 5件」と書いたが`review-session.json`のround 2はMedium 2・Low 1である。集約の基準を書いていなかった | fableが提示 | 件数の基準 | 記録した件数へ揃え、基準を明記した | resolved / improvement | reviewerの原出力は版管理外なので、記録との一致だけが検証可能な基準である |
+| R11-L03 | Low | codex起動は11本すべて`model: gpt-5.6-sol`であり、`~/.codex/config.toml:2`が`model = "gpt-5.6-sol"`を固定している。artifactの「`--model`を渡さずprovider既定を使った」は字義どおり真だが、観測したslugを記録していなかった | fableが提示。私も`grep -m1 '^model:'`とconfigで確認した | routing証拠 | 観測したslugを§0のrouting欄へ記録した。**repository外の設定なので本Issueでは是正しない。** 旧世代slugの固定は`#1257`が所有する | out-of-scope / out-of-scope | **本Issueの全reviewは`gpt-5.6-sol`で行われた。** 意図した既定より古い世代である可能性を申告する |
+| R12-H01 | High | **7回目の同型残存。** §2.1のAC-03行が「続く`update`が`applied: true`」と明示指定なしで述べ、`02:190`・`03:49`も同じ形だった。`02`の設計判断表は**案A（record不在を空recordとして扱う）を「採用」のまま残し**、後段の案J（opt-in）と衝突していた。**さらに検査scriptの所在を`scratchpad/check-artifact.py`と書いたため、codexがworktreeとrepositoryを探して「存在せず出力が再現不能」と判定した。これは私の記述の誤りである** | codexが7箇所を提示 | 成果物の事実性、証跡の再現性 | 明示指定を4箇所へ入れ、案Aを「不採用（案Jが上書きした）」へ改め、**検査scriptの所在をsessionの作業領域と明記して「証跡ではない」ことを述べた** | resolved / fix-regression | **是正後の状態を独立reviewerが見ていない。** 予算が尽きた |
+| R12-H02 | High | `review-session.json`の`status: converged`とartifactの「round 1〜3はいずれも非収束」が矛盾して読めた。**同じ「収束」という語で、製品のfield（findingがdisposition済みで次roundを開ける）とreviewerの判定（収束と判定できない）という別のことを述べていた。** また「これ以降の指摘は同じPRの取り直しラウンドか」と書いたが、`02_品質基準.md`はround 4を唯一の取り直し枠と定め、残存Highは`budget-exhausted`でround 5を拒否する | codexが`review-session.json`と`02_品質基準.md:84`を名指し | 用語、予算の扱い | 2つの「収束」を語で分け、予算の扱いを規範どおり「follow-up Issueへ分離する」へ改めた | resolved / acceptance-violation | なし |
+| R12-H03 | High | **templateが要求する`AIによる最終裁定`欄が無かった。** それにもかかわらず「templateが要求する欄は失っていない」と断定していた | codexが`templates/issue/04_レビュー.md:142`を名指し | template契約 | 欄を追加し、断定を実際に確認した範囲へ縮めた | resolved / acceptance-violation | なし |
+| R12-M01 | Medium | 「slugを§0へ記録した」と書いたが§0に`gpt-5.6-sol`が無く、out-of-scopeの件数が2件と1件で衝突していた | codexが提示 | 成果物の正確さ | §0へ観測slugを記録し、件数を2件へ揃えた | resolved / improvement | なし |
+| R12-M02 | Medium | **round 3で「是正した」と申告した2件がdiffに無かった。** R11-M02（評価表の番号の書き分け）は128・133・153行が原文のまま残り、128行は依然どちらの読みでも偽だった。R11-L03（slugを§0へ記録）も§0が無変更で、`gpt-5.6-sol`は§5の1行にしか無かった | **fableが`git diff -U0 de6bf1f2 HEAD`のhunk範囲と突合して発見した。** 申告した行がdiffに含まれていないことを機械的に示した | 成果物の事実性 | 128・133・153行を事前諮問番号へ書き分け、§0へ観測slugを記録した。**「diffのhunk範囲と申告を突合する」という検証手段をfableから学んだ** | resolved / fix-regression | なし |
+| R12-M03 | Medium | 同一量の2値記述が3組残っていた。out-of-scopeが2件と1件、同型残存の回数が5回目と6回目、R11-L03の重大度が`Info`と`Low`（`review-session.json`はLow） | fableが提示 | 成果物の一貫性 | 件数・回数・重大度を揃えた。**回数は7回目まで更新した** | resolved / improvement | なし |
+| R12-M04 | Medium | 予算機構の記述が実装と食い違っていた。`REVIEW_ROUND_BUDGET = 3`・`REVIEW_RECOVERY_ROUND = 4`であり、**今回のround 4がその取り直しroundそのものである。** 記録後は同一sessionに1 roundも足せず、PR作成後の外部指摘はroundでは取り込めない | fableが`review-convergence.ts:8・19・439-441・573-576`を名指し | 予算の扱い、次手の計画 | 「別枠の取り直し1ラウンド」という記述を撤回し、**round 4が取り直し枠そのものであること**と、PR作成後の外部指摘はfollow-up Issueで扱うことを明記した | resolved / improvement | **PR作成後にCodeRabbit等が指摘した場合、同一sessionでは取り込めない。** follow-up Issueが受ける |
+| R12-L01 | Low | templateの`AIによる最終裁定`欄と、§9の外部証拠が無い場合の例外表が無かった。それにもかかわらず「templateが要求する欄は失っていない」と断定していた | codexとfableが独立に提示 | template契約 | 両欄を追加し、断定を実際に確認した範囲へ縮めた | resolved / acceptance-violation | なし |
+| R12-L02 | Low | 監査表のAC範囲が`AC-01〜AC-18`のままで、`03_実装計画.md`の検証表がAC-13〜20とSCN-036・037を持たなかった | fableが提示 | 追跡の完全性 | AC範囲を20へ直し、`03`へAC-13〜20と配布CLI経路の行を足した。**`03`は版管理外なのでH_implには含まれない** | resolved / improvement | なし |
+| R12-L03 | Low | 時制の矛盾。62行が`audit:check`を過去形で述べ、273行が未来形で述べ、374行が既に起きた`H_final`の複写を未来形で述べていた | fableが提示 | 記述の正確さ | 実行済みの事実へ揃えた | resolved / improvement | なし |
+| R12-L04 | Low | `01:74`のFR-04が「名指しできない場合は拒否理由を出さず停止しない」と書き、FR-07・AC-11と反対に読めた | fableが提示 | 規範文の一貫性 | 「commandを名指しせず原因と対象を名指しして拒否する。拒否理由そのものは必ず出す」へ改めた。**製品挙動はSCN-026/041で固定済みでround 1承認済みなので文言のみ** | resolved / improvement | なし |
+| R12-Info01 | Info | **検査script自身の限界をfableが分析した。** 「同一量の2値記述」を検出すると述べたが実装は`N個のID`と`残りN`の2量だけで、`HISTORICAL`が「指摘」「申告」「誤り」「是正した」を含む行を除外するため**§5の行はほぼ検査対象外**だった。R12-M02・M03がOK出力のまま生き残った理由がこれである | fableが`check-artifact.py:48-77`を読んで指摘 | 検査の検出力 | **申告を実装に合わせて縮めた。** scriptは版管理外なので証跡ではなく、恒久化とHISTORICAL除外の是正はfollow-up Issueが所有する | valid / out-of-scope | **検査scriptは§5を見ていない。** 7回目が§5と評価表で起きたのは偶然ではない |
+
+**ラウンド1で私が出した2件の誤った主張を記録する。** M-A7とM-C1を「等価変異」と断じたが、いずれも非等価であった。
+**「注入口が無い」は製品APIについての事実であって、等価性の根拠ではない。** testは同じprocessに居るため interleaving を作れる。
+
+## 6. ラウンド固有の確認
+
+### 事前諮問（review sessionのroundではない）
+
+**手順の誤りを先に記録する。** 実装中の8回のレビューを、製品の`review round`を通さずに外部reviewerへ直接投げて行った。`review-session.json`は作られておらず、**machine上のroundは1度も記録されていない。** `02_品質基準.md`はround番号をreviewerの自己申告でresetできないものとし、scope ID・AC ID・invariant ID・基点・初回HEAD・差分digestを`review-session.json`へ固定することを要求している。**手書き運用ではこの固定が成立しない。**
+
+したがって本artifactは、それら8回を**事前諮問**として記録する。`02_品質基準.md`は「consultation / auditからの指摘も同じadmissionを通し」と定めており、諮問の指摘をroundのfindingとして扱う経路は存在する。**予算を消費したことにも、消費していないことにもしない。** 事実として、機構上のroundはこのartifactのround 1が最初である。
+
+| 事前諮問 | 対象HEAD | reviewer | 指摘 | 帰結 |
+|---:|---|---|---:|---|
+| 1 | `93d474ef` | codex、Claude fable | 22件 | High 6件を是正 |
+| 2 | `82453634` | codex | 4件 | High 3件（R2-H01・H02・H03）で停止判定 |
+| 3 | `a622df80` | codex | 3件継続 | **同型のR2-H01が3回連続で破られたため、機構ごと#1307へ分離しownerの決裁を得た** |
+| 4 | `932098b9` | codex、Claude fable | 12件 | High 3件。CLI合成経路の未検査、previewがapply成功のoracleでないこと、祖先差し替え。祖先差し替えは**#1309**へ分離 |
+| 5 | `8a060349` | codex、Claude fable | 13件 | High 7件。record二重観測、`--dry-run --apply`併記、shell injection、成果物未収束、正方向preview欠落、未導入dirへの復旧案内 |
+| 6 | `011dfe87` | codex | 3件 | High 3件。**flag門手前のpreview迂回、未導入dir＋資産1件でdeleteの門が空洞化、成果物未収束。** この回は前版のartifactが表に載せておらず、round 2でfableが版管理外のscratchpadから発見した。**証跡の欠落であり、指摘そのものは`16f0d8e0`とSCN-040で処置済みである** |
+| 7 | `16f0d8e0` | codex、Claude fable | 13件 | High 4件。**案内surfaceが4ラウンド連続の発生源であると両者が判定し、fableが(B)縮小、codexが(C)分離を推奨した。** 処方は同一であり、最小診断へ縮小して豊かな案内を**#1310**へ分離した |
+| 8 | `78771095` | codex、Claude fable | 8件 | High 2件。**縮小が閉路を1つ作り直していた。** 最小診断が所属commandを名指ししないため`delete --recover-record --apply`がbyte一致の拒否を返す（fable H-01）。成果物の未収束が3回連続で未解決（fable H-02／codex High 1）。codexはMediumで観測1回の無限定な記述と見落とし変異クラス3件を挙げた |
+
+**3回目の判定は「未収束」であった。** 是正を重ねるのではなく、破られ続けた機構（filesystemからの導入判定）を撤去する決裁を仰いだ。#1307でownerが案Aを決裁し、`--recover-record`による明示指定へ置き換えた。**受理範囲は推測時より狭い。**
+
+**この下の2節は「review session」と書いていたが誤りである。** journalにはStep 0〜9だけが記録されており、`review round`は1度も実行しておらず`review-session.json`も存在しない。**製品を通していないものを製品のroundとして記録していた。** どちらも事前諮問5・6と同じ観測を別の見出しで重ねて書いたものである。実際のreview sessionのroundは本節の最後に記録する。
+
+### 事前諮問5の詳細（`8a060349`）
+
+- 全評価基準を確認した: **はい。** 肯定5観点と敵対8観点を`8a060349`へ適用した。reviewerはcodexとClaude fableの2体で、いずれも`--sandbox read-only`かつtest実行・変異試験の禁止を契約で明示した。
+- 指摘を確定した: **High 7件**（codex 5件、fable 2件。重複を含む）。内訳はrecord存在の二重観測、案内の`--dry-run --apply`併記、案内のshell injection、成果物の未収束、正方向CLI previewの欠落、未導入directoryへの復旧案内、`update`拒否文の`install`名指し。
+- 次ラウンド対象のCritical/High: 上記7件すべて。
+
+### 事前諮問6の詳細（`16f0d8e0`）
+
+- **案内surfaceを縮小した。** 直近4ラウンドのHighはすべて拒否理由の案内文に集中し、中核機構（opt-in門・観測1回・no-replace公開・retain意味論）は繰り返しpassしていた。運用ポリシーの「手段が開発速度を損なうとき、縮小するのは手段の側である」と、同型blockingが3ラウンド続いたら機構ごと分離する運用規則に従い、**手順・preview内訳・`install`と`update`の分岐助言をすべて落として最小診断へ縮小し、豊かな案内の可否を #1310 へ分離した。** reviewer 2体の推奨（fable (B)縮小・codex (C)分離）は処方が同一であった。
+- **構造的な原因を記録する。** 1本のcaller非依存な文字列を`init`・`upgrade`門・`uninstall`の3 callerへ連結していた。`install`の名指しは`init`では拒否の閉路、`delete`では誤誘導になると当時は判断した（**その後この判断も更新した。現在はどの拒否理由も`install`を名指しせず、最小診断が所属commandの`update`だけを名指しする**）。**文言を直しても、callerごとに真偽が変わる文を1本で書く限り同型が出る。**
+- **私のassertionが空虚だった。** 閉路を守る3本の`doesNotMatch`は`/先にinstallを実行してください/`のような字面で禁止していたため、文言を「install を使ってください」へ変えた時点で**同時に空虚化した。** 変異37件全killでもこの穴は検出されなかった。字面ではなく`/install/`という語で禁止する形へ変えた。
+- 未解決Critical/High: 事前諮問5の7件へ是正を適用した。
+- 修正差分: `8a060349`からの前進commit。
+- 修正で触れた隣接範囲: `recoveryDiagnostic`の分岐、`mappings`と`resolveManagedAsset`の例外の投げ直し、`readManagedAssetRecordAt`の観測受け渡し、`uninstall`の存在判定、診断assertionの完全一致化、`SCN-027`のGherkinとstep名。
+- 既承認・未変更範囲を再走査していない: **していない。** 既存SCN-001〜016のfeatureとstepの既存部分は1行も変更していない。
+
+### ラウンド1（review session。`47729654`）
+
+- 全評価基準を確認した: **はい。** 肯定5観点と敵対8観点を`47729654`へ適用した。reviewerはcodexとClaude fableの2体で、いずれも`--sandbox read-only`相当かつtest実行・変異試験の禁止を契約で明示した。**これが製品の`review round`を通す最初のroundである。**
+- 指摘を確定した: **High 3件・Medium 2件・Low 1件**（fable High 2件、codex High 2件。1件は同一の成果物未収束で重複するため確定は3件）。§5のR9系がそれであり、`review-session.json`のround 1 findingsと件数・IDが一致する。
+- **2体の判定が前回対立していた点は実測で決着させた。** fableは「最小診断へ所属commandを名指しせよ」、codexは「名指しはINV-02違反の risk であり`init`・`delete`への`update`追記は殺すべき変異」と述べていた。`delete --apply --totally-bogus-flag`が`delete --apply`と同一の拒否を返すこと、すなわち**CLIが宣言外flagを黙って捨てること**を実測し、flag名だけの診断が`delete`から辿ると閉路になること（fableが正しい）と、previewで裏付けた手段だけを名指しできること（codexが正しい）の両方を満たすよう、**名指しをbranchで分けた。** 両者とも今回この設計を承認した。
+- 次ラウンド対象のCritical/High: R9-H01・R9-H02・R9-H03の3件。いずれも本roundで是正した。
+- 修正差分: `47729654`からの前進commit。**amendしない。**
+- 修正で触れた隣接範囲: `mappings`と`resolveManagedAsset`の例外の投げ直し、診断assertionの完全一致化（9箇所）、`SCN-027`のGherkinとstep名、成果物11箇所、監査表のdist行除去、要件本文の観測条項。
+- 既承認・未変更範囲を再走査していない: **していない。** 既存SCN-001〜016のfeatureとstepの既存部分は1行も変更していない。
+
+### ラウンド2（review session。artifact commit `3c073f32`）
+
+**artifact自身をラウンドの対象にする。** `pr create`はreview sessionのHEADとPR HEADの一致を要求するので、artifactをcommitするとHEADが動く。したがってartifact commitをroundの対象にする。
+
+- 指摘を確定した: **High 2件・Medium 2件・Low 1件。** `review-session.json`のround 2 findingsと件数・IDが一致する（R10-H01・H02・M01・M02・L01）。**reviewerの原出力は版管理外にあるため、記録との一致だけが検証可能な基準である。****いずれも製品codeではなくartifact本文の事実誤りである。**
+- H-01: round 1で是正済みと申告した2箇所（9行目の`review sessionのround 1は 8a060349`、62行目の`本表の11行`）が原文のまま残っていた。**「1件ずつ突合した」という申告が事実でなかった。5回目である。**
+- H-02: §8の配布影響表と`01`の18行が、#1307案Aのopt-in門より前の挙動を無条件に述べていた（`update`がrecord不在で終了値0を返す）。**AC-16・AC-17と正面から矛盾していた。**
+- **fableが版管理外のscratchpadから事前諮問`011dfe87`の欠落を発見した。** 事前諮問は7回ではなく8回である。
+- Medium/Lowは成果物行数の陳腐化、分類表の6行/10行の衝突、§7が削除済みhelperを現行として説明していたこと、`H_impl`のauthorをClaudeと記載していたこと、`02:64`の撤回済み記述、件数の不一致である。
+- **round 2の処置は本節を含むartifactの前進commitである。** `H_impl`は動かない（`audit:check`はartifactだけの第1親suffixを遡って`H_impl`を決めるため、artifact commitが複数本でも受理する）。
+
+### ラウンド3（review session。artifact commit `de6bf1f2`）
+
+- 指摘を確定した: **High 1件**（fableのR11-H01。codexも同型を別の行で提示し、両者の指摘をR11-H01へ集約した）と**Medium 2件・Low 3件**。§5のR11系がそれである。
+- **7回目の同型残存だった。** round 2の是正で§9のcellの前半を書き換えながら同じcellの後半を見落とした。**6回すべてこの形である。**
+- 未解決Critical/High: R11-H01を本roundで是正した。**「突合した」という申告はしない**（round 1・2で同じ文が2回とも偽だった）。確認はround 4のreviewerに委ねる。
+- 修正差分: `de6bf1f2`からの前進commit。**amendしない。**
+- 修正で触れた隣接範囲: artifactの§0・§1・§5・§6・§7・§9・§11、`01_要件定義.md`の状態遷移表とFR-01・AC-01〜03、`02_設計.md`の検証表、`03_実装計画.md`の検証表と発見記録。**製品差分（`3d822081`）には触れていない。**
+- 既承認・未変更範囲を再走査していない: **していない。** 製品codeとtestは1行も変更していない。
+- **走査ではなく検査を置いた。** 導出値の書き写しをやめる処置は方向が正しかったが§5・§9・§0・§6へ適用しておらず、そこで6回目が出た。今回は残りの欄へ適用し、あわせて`scratchpad/check-artifact.py`を書いてgitとfileから実測を取り直す形にした。**規律を7つ目に足すのをやめた。**
+
+### ラウンド4（review session。round 3の是正を載せたartifact commit）
+
+round 3で確定したHigh 1件とMedium/Lowを是正したartifactを対象にする。**これが最終ラウンドであり、上限4に到達する。**
+
+- 全指摘の最終分類: §5の各行の`状態・分類`欄が正本である。out-of-scopeはR11-L03（codexのmodel slug固定。`#1257`が所有）とF-12の2件。
+- 縮小の結果: 導出値の書き写しをやめ、`成果物行数`・§5・§9・§0・§6の記述をcommand併記または削除へ変えた。**templateが要求する節・表・行は失っていない**（round 3でreviewer 2体が確認した）。
+- **予算の自動更新はしない。** 上限4に到達した。`02_品質基準.md`はround 4を唯一の取り直し枠と定めており、**残存Highは`budget-exhausted`であってround 5を開く根拠にならない。** したがって残る指摘は**follow-up Issueへ分離する**。同じPRの追加roundは採らない。
+- 実施結果: **High 3件（R12-H01・H02・H03）・Medium 1件を確定し、いずれも是正した。** 製品差分へのHighは0件である。**是正後の状態は独立reviewerが見ていない。** 予算が尽きたため、成果物品質の機構は follow-up Issue が所有する。
+
+## 7. テスト結果
+
+- 実行したcommandの一覧: `npm run lint`、`npm run format:check`、`npm run typecheck`、`npm run source:check`、`npm test`、`npm run trace:check`、`npm run docs:format`、`npm run test:format`、`npm run architecture:check`、`npm run conformance:check`、`npm run package:check`。**いずれも exit 0 である。** `npm run audit:check` は本artifactのcommit後に実行し`valid: true`・exit 0・`auditedFiles: 12`を得た。
+- 全layerの合計: **1743 scenarios / 1727 passed / 0 failed / 16 skipped。**
+- 失敗またはskipがある層: skipは16件で、いずれも本変更の対象外の既存scenarioである。**失敗は0件のため層別展開は不要である。**
+- 対応する成功CI runの参照: **本artifact時点では手元実行のみである。** **外部証拠はartifactへ追記しない。** `H_final`より後にartifactを更新しないというtemplateの不変則があるため、PR番号・CI run ID・review IDは`review evidence`が別に記録する。手元実行は単独・直列で行った。
+
+runnerは`agent-skill-chain-project/cucumber-js`、`projectChoices.testLayers`は`unit`・`integration`・`e2e`である。
+
+### 変異試験
+
+**46件を作り46件をkillした。生存0件。** 変異scriptは置換対象が1件だけ一致することをassertし、後始末は複写で戻したうえで
+`npm run build`と`git status`で残骸が無いことを確認した。
+
+| 類別 | 件数 | 対象 |
+|---|---:|---|
+| A 削除 | 22 | 分類の各早期return、record不在時のthrow復活、拒否理由の案内削除、applyのTOCTOU再観測、不在判定のexistsSync化、壊れたrecordの洗浄、公開先再検証の削除、観測の分裂、preview裏付けの除去、**最小診断からの所属command削除**、**previewしていない手段の名指し連結**、**境界外拒否からの対象path削除**、**catchの除去による投げ元文面の素通し** |
+| B 狭窄・反転 | 11 | digest比較の反転、記録なし相違のoverwrite化、通常file性の緩和、truthinessへの狭窄、expected依存への狭窄、明示指定判定の反転と緩和、原因分岐の平坦化、**名指しcommandのinstallへの差し替え**、**対象pathを相対から絶対へ変える粒度の改変** |
+| C 値の空洞化 | 4 | recordへ正本digestを登録、record不在時に空でないfilesを捏造、no-replace公開のrename化、**最小診断への導入状態の断定の追加** |
+| D 走査回避 | 4 | previewのadopt記録省略、placeのrecord登録省略、先頭1件だけadopt、相違1件でadopt全停止 |
+| E 合成経路 | 5 | 配布CLIのopt-in配線を既定true・常にfalse・`!== undefined`・apply時のみへ置換、最小診断からのflag名削除 |
+
+**ラウンド1で4件を追加した。** `M-A16`は**fable H-2の欠陥そのもの**（`mappings`の境界外拒否から対象pathを落とす）、
+`M-A17`は`catch`を外して投げ元の文をそのまま通す変異、`M-B11`は対象pathを相対から絶対へ変える変異、
+`M-A18`はrecord記載資産側の同型である。**4件すべてkillした。** 完全一致assertionが対象pathまで固定しているためである。
+
+**事前諮問7で5件を追加した。** `M-A13`は**fable H-01の欠陥そのもの**（最小診断から所属commandを削りflag名だけへ戻す）であり、
+`M-B10`は名指しcommandを`install`へ差し替える。`M-A14`・`M-A15`・`M-C4`はcodex Medium 3が挙げた3クラスで、
+`init`の競合拒否とblocked分岐へcommandの名指しを連結する変異と、最小診断へ導入状態の断定を別文言で足す変異である。
+**前版はこの3クラスを「対象文字列が消えたため退役」として扱っていたが、それは誤りだった。**
+字面が消えることは、別の字面で再導入できないことを意味しない。**退役させるのではなく、語の類で禁止する形へ組み直した。**
+**ただしその「語の類で禁止する」形もround 1で否定された。** `assertNamesNoCommand`・`assertAssertsNoState`・`diagnosticBody`は
+**round 1で削除した。** 語の列挙も必ず漏れるためである（§5のR9-M02）。現在は`assertDiagnosticIsExactly`が**9箇所**で
+診断文全体を`assert.equal`し、許容文面そのものを固定している。
+
+**ラウンド途中で`M-A8`が一度生存へ転じた。** 公開直前の再検証（R2-H02の是正）が不在判定の誤りを隠し、
+`existsSync`へ戻す変異でも別の層で拒否されたためである。**多層防御が自分のtestから回帰を隠した。**
+`SCN-INT-LIFECYCLE-022`へ診断の名指し（読み取り時の理由であり公開時の理由でないこと）を足してkillへ戻した。
+
+**生存0件は「検出力が十分」を意味しない。** 変異集合はassertion集合より広く取ったが、
+`#1306`が所有する公開の残存窓のように、**注入口を作れない競合は変異でも観測できない。**
+
+## 8. 配布物影響
+
+| 変更path | 配布境界に入るか | 影響 |
+|---|---|---|
+| `dist/src/cli.js` | 入る | `update`が`--recover-record`を受け付ける |
+| `dist/src/cli-usage.js` | 入る | `update --help`へflagの宣言と説明が出る |
+| `src/cli.ts` | 入る | compileされて配布されるため配布境界に含める |
+| `src/cli-usage.ts` | 入る | 同上 |
+| `.agent-skill-chain/00_利用案内.md` | 入る | 配布される利用案内へ復旧手順と明示指定を追記した |
+| `dist/src/domain/lifecycle.js` | 入る | **`--recover-record` の明示指定があるときに限り**`update`がmanaged asset record不在で終了値0を返し`adopted`・`retained`を報告する。**明示指定が無ければ従来どおり1 fileも書かず非0で終了する。**`install`の競合拒否と`delete`のrecord不在拒否の文言が変わる |
+| `src/domain/lifecycle.ts` | 入る | compileされて`dist/src/`として配布されるため配布境界に含める。影響は上記と同じ |
+| `test/features/integration/lifecycle-isolation.feature` | 入らない | なし |
+| `test/features/unit/lifecycle-record-recovery.feature` | 入らない | なし |
+| `test/steps/lifecycle-isolation.steps.ts` | 入らない | なし |
+| `test/steps/lifecycle-record-recovery.steps.ts` | 入らない | なし |
+| `docs/specs/01_システム概要/02_用語・略語.md` | 入らない | なし |
+| `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md` | 入らない | なし |
+| `docs/specs/15_要件追跡/00_追跡表.md` | 入らない | なし |
+| `docs/specs/15_要件追跡/01_変更履歴.md` | 入らない | なし |
+
+判断: 配布物を更新した
+
+根拠: `dist/src/domain/lifecycle.js` を更新し、あわせて配布される利用案内 `.agent-skill-chain/00_利用案内.md` へ record 喪失時の復旧手順を追記した。**利用者は配布物だけを読むため、`docs/specs/` への記載では届かない。**
+
+## 9. 独立reviewの成立
+
+| 項目 | 内容 |
+|---|---|
+| 独立reviewの外部証拠 | **本artifact時点ではproviderのimmutable review IDが無い。** **外部証拠はartifactへ追記しない。** `H_final`より後にartifactを更新しないというtemplateの不変則があるため、PR番号・CI run ID・review IDは`review evidence`が別に記録する |
+| reviewerがPR author・実装commit authorと異なる | はい。reviewerはcodex（別provider process）とClaude fable（別context）であり、**`H_impl`のGit authorは `tatsuru <info@ruaprom.jp>`**（commit trailerに`Co-Authored-By: Claude`がある）。reviewerはどちらもimplementerと同一identityではない |
+| 観測したreview commentとapprovalの件数 | **事前諮問はcodex 8回・Claude fable 5回。** これにsession round 1〜3の起動が加わる。各回の指摘件数は§6の事前諮問表に、集約した指摘は§5にある（行数は`grep -cE '^\| (R1305\|F-\|R2-\|R8-\|R9-\|R10-\|R11-)'`で数える。**複合IDを含む行があるので行数はID数と一致しない**） | 
+
+外部証拠が無いので次を記入する。
+
+| 項目 | 内容 |
+|---|---|
+| 適用する例外の識別子 | **該当なし。** `review-exceptions.json`の登録例外は`independent-reviewer-absent`ではなく、**本Issueは例外を適用していない。** 独立reviewerは実在し、事前諮問8回とsession round 1〜4で起動した |
+| 観測値 | `pr create`前のため`gh`のreview IDが存在しない。**これは例外の適用ではなくPR作成前という時点の帰結である。** PR作成後の外部証拠は`review evidence`が記録する |
+
+**reviewerは対象差分を編集していない。** 契約でread-onlyと非編集を明示し、`codex exec --sandbox read-only`で起動した。
+`git diff`のpath集合はreview前後で変わっていない。
+
+## 10. 仕様整合性
+
+- 判定: updated
+- 更新した仕様: `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md`（REQ-LC-001）、`docs/specs/01_システム概要/02_用語・略語.md`（TERM-ASC-097）、`docs/specs/15_要件追跡/00_追跡表.md`、`docs/specs/15_要件追跡/01_変更履歴.md`、`.agent-skill-chain/00_利用案内.md`（配布物）
+- ドメイン用語台帳の候補・確定・現在有効な定義が一方向に追跡できる: **確認した。** 00の候補（TERM-ASC-097）→ 01の確定差分 → 耐久台帳の`active`行へ一方向に追跡できる。既存語の再定義はない。
+- 未定義語、同一コンテキスト内の重複定義、根拠なしの意味変更、表記揺れ、置換先なしの廃止がない: **確認した。** TERM-ASC-097は`managed asset record`の1定義のみで、`managed-assets.json`という実file名との混同を禁止表現へ明記した。廃止語はない。
+- 要件・変更・SCN・テストの追跡: REQ-LC-001 → AC-LC-001 → SCN-INT-LIFECYCLE-017〜041・SCN-UNIT-LIFECYCLE-001（計26件） → 各featureとstep。`npm run trace:check`が`valid: true`である。
+- `no-spec-impact`の場合の限定的根拠: 該当しない。
+- UI・トークンの判断: UIなし。DC-UXとDC-TOKENSがnot-applicableであり、token仕様を持たない。
+
+## 11. 総合判定と再開地点
+
+- 未解決Critical/High: **round 4の結果で確定する。** round 1のHigh 3件、round 2のHigh 2件、round 3のHigh 1件はいずれも是正した。**round 1と2で「突合した」と書き、2回とも偽だった。** したがって本欄は「是正した」とだけ述べ、**突合したという申告はしない。** 確認はround 4のreviewerに委ねる。事前諮問8回で確定したHighはすべてdisposition済みである。
+- Medium/Lowの記録: §5へ記録した。**out-of-scopeは2件**（F-12とR11-L03）で、いずれも理由と残存リスクを併記した。
+- 判定: **製品差分についてはapproved。成果物についてはrejectedのままround 4で予算が尽きた。**
+  - **`review-session.json`の`status: converged`と、reviewerの「収束と判定できない」は別のことを述べている。** 前者は「そのroundのfindingがすべてdisposition済みで次のroundを開ける」という製品のfieldであり、後者はreviewerの判定である。**混同しないよう用語を分ける。** round 1〜4のreviewer判定はいずれも「収束と判定できない」であった。
+  - **製品差分（`3d822081`）はround 1で2体が承認して以降1行も変わっていない。** round 2・3・4でreviewerが確定したHighは**すべてartifact本文の事実誤り**であり、製品codeとtestへのHighは**0件**である（round 4でcodexが明示的に確認した）。
+  - **成果物のHighは7回同型で再発した。** round 4で確定した3件も是正したが、**その是正を独立reviewerが確認していない。** 予算（上限4）が尽きたためである。**これを収束と申告しない。**
+- 新しい権限が必要な事項: **配布CLIへ`--recover-record`を追加した。** #1307でownerが案Aを決裁済みである。
+- 残存リスク: `rename`公開の一般化（**#1306**）。`""` sentinelの型上の脆さ（変異M-B6でkill）。SCN-020の構造的な検出力欠如（F-12）。**`--recover-record`は未導入directoryへも配置しうる**ことを要件本文へ明記した。
+- 次に許可される操作: `review round --apply`、`workflow record --step=10`、`audit:check`、`pr create`、CI確認、`pr merge --merge`。**`--squash`は使わない。**
+- **AIによる最終裁定: 製品差分（`3d822081`）はapproved。review成果物はrejectedのまま予算が尽きた。**
+  - 製品: round 1で独立reviewer 2体が閉路修正・INV-02適合・対象の名指し・branchで分けた名指し設計を承認し、以後1行も変えていない。round 2〜4で製品codeとtestへ及ぶCritical/Highは**0件**である。全gate・全suite・変異46件が緑である。**この範囲はmergeしてよいと判断する。**
+  - 成果物: 同型のHighが**7回**再発した。round 4の是正も済んでいるが、**独立reviewerが確認していない。** `budget-exhausted`であり、`02_品質基準.md`のとおりround 5は開かず**follow-up Issueへ分離する。**
+  - **この裁定は「成果物が正しい」ことを主張しない。** 主張するのは「製品差分は独立に承認され不変であること」と「成果物の残存リスクを隠していないこと」の2点だけである。
+
+- 次回の再開地点: **`H_final`は既に存在する**（`3c073f32`以降のartifact commit）。次はStep 10の記録・`pr create`・CI確認・merge。本artifactを`docs/reviews/`へ複写したcommitが`H_final`になる。

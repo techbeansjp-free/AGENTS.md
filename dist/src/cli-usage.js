@@ -707,7 +707,11 @@ export const COMMAND_USAGE = Object.freeze([
         positional: "[root] 対象repositoryのroot。--rootの代わりに使える",
         requiredFlags: [],
         conditionalFlags: [],
-        optionalFlags: [ROOT_FLAG, ...APPLY_MODE],
+        optionalFlags: [
+            ROOT_FLAG,
+            ...APPLY_MODE,
+            optional("recover-record", "", "managed asset recordが無い状態での書き込みを明示的に許可する。未導入directoryでは展開対象を配置する", "recordが無い場合は拒否する"),
+        ],
         example: "npx agent-skill-chain update --root=. --apply",
     },
     {
