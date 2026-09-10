@@ -86,6 +86,31 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-017"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  Scenario: SCN-E2E-WFSTEP-053 merge disabledのPR停止終端はpr mergeを拒否しproviderへ送らない
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-053"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-054 assistedのauthority未成立はStep 11を記録せず再開可能な待機になる
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-054"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-055 assistedは独立approvalがあればmerge終端へ到達し無ければ到達しない
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-055"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-052 fullのStep 0から11までを実CLI経路で通す
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-052"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-056 pocはautomatic宣言下でもPR停止終端になりpr mergeを拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-056"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-018 PR終端journal保存後の停止からprovider再送なしでstateを復旧する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-018"のE2E検査を実行する

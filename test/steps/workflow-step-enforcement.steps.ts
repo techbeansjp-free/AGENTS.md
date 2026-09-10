@@ -1937,6 +1937,14 @@ interface DeliveryProviderControl {
    * 単独運用（implementer = PR author = reviewer）をprovider観測として再現できる。**
    */
   reviewerId: string;
+  /**
+   * **APPROVED reviewが指すcommit**（Issue #1320）。
+   *
+   * 既定の`"head"`は現在のH_finalであり、既存scenarioの挙動を変えない。
+   * `"stale"`は別commitを指す承認を作る。**merge実経路のexact-HEAD拘束は
+   * これまでE2Eで検査されておらず、拘束を外す変異が既存scenarioでも生存した。**
+   */
+  reviewCommitSha: "head" | "stale";
   reviewDisposition:
     "approved" | "changes-requested" | "commented-after-approval";
   mergeTreeTampered: boolean;
@@ -2044,16 +2052,35 @@ function convergedReviewBinding(
   };
 }
 
+/**
+ * trusted policyが宣言できるmerge mode（Issue #1320）。
+ *
+ * **3値すべてを受け取る。** 旧実装は`"disabled" | "automatic"`の2値で、
+ * `assisted`をE2Eへ渡す手段が無かった。**その結果`assisted`は実CLI経路で
+ * 一度も踏まれておらず、`decideDeliveryContinuation`の`wait-authority`分岐が
+ * 回帰検出の対象外だった。**
+ */
+type FixtureMergeMode = "disabled" | "assisted" | "automatic";
+
 function preparePullRequest(
   world: WorkflowStepWorld,
   missingStep4: boolean,
-  mergeMode: "disabled" | "automatic" = "disabled",
+  mergeMode: FixtureMergeMode = "disabled",
   mergeMethod: "merge" | "squash" | "rebase" = "merge",
   /**
    * trusted policyが宣言する`merge.reviewIndependence`（Issue #1317）。
    * **未指定は宣言なし**であり、既定の`context-isolated`が適用される。
    */
   reviewIndependence?: "context-isolated" | "actor-independent",
+  /**
+   * 生成するstagingのworkflow mode（Issue #1320）。
+   *
+   * **既定は`"quick"`で、既存scenarioの観測値を変えない。** `"poc"`では
+   * review artifactの代わりにPoC隔離fixtureをHEAD commitにする。PoCの
+   * `pr create`は**baselineからHEADまでの差分がfixture root内だけである**ことを
+   * 再計測するため、review artifactを載せると成立しない。
+   */
+  workflowMode: "quick" | "poc" = "quick",
 ): PreparedPullRequest {
   const fixturePast = fixtureInstant({ hoursAgo: 1 });
   const fixtureNow = fixtureInstant();
@@ -2066,7 +2093,12 @@ function preparePullRequest(
     path.resolve(".agent-skill-chain/policy/default.json"),
     path.join(root, ".agent-skill-chain", "policy", "default.json"),
   );
-  if (mergeMode === "automatic") {
+  /**
+   * **`disabled`はpackage同梱の既定policyをそのまま使う**（Issue #1320）。
+   * 上書きするのは`assisted`と`automatic`だけであり、`automatic`の生成内容は
+   * 従来と1文字も変えていない。既存scenarioの観測値を動かさないためである。
+   */
+  if (mergeMode !== "disabled") {
     const policyFile = path.join(
       root,
       ".agent-skill-chain",
@@ -2078,7 +2110,7 @@ function preparePullRequest(
       unknown
     >;
     policy.merge = {
-      mode: "automatic",
+      mode: mergeMode,
       branches: ["feature/x"],
       methods: [mergeMethod],
       requiredChecks: [],
@@ -2106,25 +2138,94 @@ function preparePullRequest(
     ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
     { cwd: root },
   );
-  fs.mkdirSync(path.join(root, "docs", "reviews"), { recursive: true });
-  fs.writeFileSync(
-    path.join(root, "docs", "reviews", "90_test_review.md"),
-    "# test review artifact\n",
-  );
-  spawnSync("git", ["add", "docs/reviews/90_test_review.md"], { cwd: root });
-  spawnSync("git", ["commit", "-q", "-m", "review evidence"], {
-    cwd: root,
-  });
+  const pocDeclaration = workflowMode === "poc" ? validPoc() : undefined;
+  /**
+   * **PoC baselineはstaging生成時のHEADで固定される**（`src/domain/issue.ts`）。
+   * fixtureをcommitしてからstagingを作るとbaselineとHEADが同じcommitになり、
+   * `pr create`が「baselineからcurrent HEADへのfixture変更がありません」で
+   * 止まる。**stagingを先に作る。**
+   */
+  const pocStaging = pocDeclaration
+    ? createIssueStaging(root, {
+        title: "workflow-test",
+        answers: answers(),
+        now: new Date(fixtureInstantMs()),
+        requestedMode: "poc",
+        poc: pocDeclaration,
+      }).path
+    : undefined;
+  if (pocDeclaration) {
+    materializeValidPocFixture(root, pocDeclaration);
+    spawnSync("git", ["add", pocDeclaration.fixture.root], { cwd: root });
+    spawnSync("git", ["commit", "-q", "-m", "poc fixture"], { cwd: root });
+  } else {
+    fs.mkdirSync(path.join(root, "docs", "reviews"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "docs", "reviews", "90_test_review.md"),
+      "# test review artifact\n",
+    );
+    spawnSync("git", ["add", "docs/reviews/90_test_review.md"], { cwd: root });
+    spawnSync("git", ["commit", "-q", "-m", "review evidence"], {
+      cwd: root,
+    });
+  }
   const headSha = spawnSync("git", ["rev-parse", "HEAD"], {
     cwd: root,
     encoding: "utf8",
   }).stdout.trim();
-  const staging = createIssueStaging(root, {
-    title: "workflow-test",
-    answers: answers(),
-    now: new Date(fixtureInstantMs()),
-    requestedMode: "quick",
-  }).path;
+  const staging =
+    pocStaging ??
+    createIssueStaging(root, {
+      title: "workflow-test",
+      answers: answers(),
+      now: new Date(fixtureInstantMs()),
+      requestedMode: "quick",
+    }).path;
+  if (pocDeclaration) {
+    for (const step of [1, 4])
+      appendWorkflowJournalEntry({
+        staging,
+        entry: entry(step, "poc", fixturePast),
+      });
+    executePocObservation({
+      staging,
+      headSha,
+      observedAt: new Date(fixtureInstantMs()).toISOString(),
+    });
+    const pocReviewSession = convergedReviewBinding(
+      root,
+      staging,
+      baseSha,
+      headSha,
+    );
+    for (const step of [9, 10])
+      appendWorkflowJournalEntry({
+        staging,
+        entry: {
+          ...entry(step, "poc", fixturePast),
+          ...(step === 10 ? { reviewSession: pocReviewSession } : {}),
+        },
+        headSha,
+      });
+    recordStagingSync(staging, {
+      tracker: "https://github.com/o/r/issues/877",
+      checkpoint: 4,
+      syncedAt: fixtureNow,
+      bodyDigest: "a".repeat(64),
+      readBackDigest: "a".repeat(64),
+    });
+    return finalizePreparedPullRequest({
+      world,
+      root,
+      staging,
+      headSha,
+      baseSha,
+      implementationCommitSha,
+      fixtureNow,
+      fixturePast,
+      fixtureFuture,
+    });
+  }
   const reviewSession = convergedReviewBinding(root, staging, baseSha, headSha);
   const journalFile = path.join(staging, STEP_JOURNAL_FILE);
   if (missingStep4) {
@@ -2154,6 +2255,38 @@ function preparePullRequest(
     bodyDigest: "a".repeat(64),
     readBackDigest: "a".repeat(64),
   });
+  return finalizePreparedPullRequest({
+    world,
+    root,
+    staging,
+    headSha,
+    baseSha,
+    implementationCommitSha,
+    fixtureNow,
+    fixturePast,
+    fixtureFuture,
+  });
+}
+
+/**
+ * `pr create`の引数とevidenceを組み立てる共通の末尾（Issue #1320）。
+ *
+ * **quickとpocで同一にする。** 経路ごとに別の引数を組み立てると、観測差が
+ * modeの差なのか引数の差なのか判別できなくなる。
+ */
+function finalizePreparedPullRequest(input: {
+  world: WorkflowStepWorld;
+  root: string;
+  staging: string;
+  headSha: string;
+  baseSha: string;
+  implementationCommitSha: string;
+  fixtureNow: string;
+  fixturePast: string;
+  fixtureFuture: string;
+}): PreparedPullRequest {
+  const { world, root, staging, headSha, baseSha, implementationCommitSha } =
+    input;
   const evidence = path.join(world.temp("asc-workflow-evidence-"), "pr.json");
   fs.writeFileSync(
     evidence,
@@ -2198,8 +2331,8 @@ function preparePullRequest(
     implementationCommitSha,
     bodyFile,
     overrideTimes: {
-      instructedAt: fixturePast,
-      expiresAt: fixtureFuture,
+      instructedAt: input.fixturePast,
+      expiresAt: input.fixtureFuture,
     },
     args: [
       "pr",
@@ -2269,12 +2402,131 @@ function assertReadBackWithoutMergeResend(
   );
 }
 
+/**
+ * `full` stagingが`issue validate`を通る最小の00〜03を書く（Issue #1320）。
+ *
+ * **内容の妥当性はここで検査しない。** 目的はStep 0〜11の連続遷移を実CLI経路で
+ * 通すことであり、成果物の中身は既存のunit・integration層が所有する。
+ *
+ * **括弧付きのtemplate語を書かない。** `unresolvedPlaceholders`が
+ * 「記載」「内容」「根拠」などを含む丸括弧を未解決placeholderとして拒否する。
+ */
+function writeFullStagingArtifacts(staging: string): void {
+  const dc = [
+    "| ID | 考慮事項 | 判定 | 理由 | 証拠 |",
+    "|---|---|---|---|---|",
+    "| DC-PRIVACY | Privacy/Security by Design | not-applicable | E2E fixtureは隔離repository内で完結し個人情報も秘密情報も扱わない | fixtureはworld.temp配下に作られ実credentialを持たない |",
+    "| DC-OBSERVABILITY | Secure Logging・Observability・運用可能性 | not-applicable | 観測対象はCLIの終了値とjournalだけであり運用logを持たない | journalとdelivery stateを直接読んで判定する |",
+    "| DC-UX | Human-Centered UI/UX・アクセシビリティ | not-applicable | CLIでありWeb画面もUI componentも持たない | 変更対象にstyle定義を含まない |",
+    "| DC-TOKENS | Design System・Design/Layout Token | not-applicable | design tokenとlayout tokenを持つUI層が存在しない | 変更対象にtheme定義を含まない |",
+  ].join("\n");
+  const principles = [
+    "| P-01 worktree | 専用worktreeで作業する |",
+    "| P-02 Markdown | 判断をMarkdownへ残す |",
+    "| P-03 UNIX | 単一責務に保つ |",
+    "| P-04 DDD | コンテキストと不変条件を守る |",
+    "| P-05 BDD | Gherkin scenarioで固定する |",
+    "| P-06 Evidence-driven Verification | 再現可能な証拠を残す |",
+    "| P-07 Zero Trust | 入力と同一性を検証する |",
+  ].join("\n");
+  const scenario = [
+    "```gherkin",
+    "Scenario: SCN-E2E-WFSTEP-052 fullのStep 0から11までを実CLI経路で通す",
+    "  Given full stagingがある",
+    "  When Step 0から11までを実CLIで進める",
+    "  Then journalは0から11までを持つ",
+    "```",
+  ].join("\n");
+  fs.writeFileSync(
+    path.join(staging, "00_要求定義.md"),
+    [
+      "# 00 要求定義",
+      "",
+      "| 項目 | 内容 |",
+      "|---|---|",
+      "| モード | `full` |",
+      "",
+      "## 1. 目的と背景",
+      "",
+      "full modeの全Stepを実CLI経路で通せることを確かめる。",
+      "",
+      "## 2. 対象範囲",
+      "",
+      "対象内はStep 0から11までの遷移である。対象外は成果物の内容検査である。",
+      "",
+      "## 3. 利害関係者と利用場面",
+      "",
+      "ASCの開発者が回帰として使う。",
+      "",
+      "## 4. ドメイン影響",
+      "",
+      "Workflowコンテキストのstep列だけに触れる。INV-01としてStep列を維持する。",
+      "",
+      "## 5. 要求の概要",
+      "",
+      "RQ-01としてfullの全Stepが実CLIで通ることを求める。",
+      "",
+      "## 6. 制約、前提、依存関係",
+      "",
+      dc,
+      "",
+      "## 7. 受け入れ条件と成功基準",
+      "",
+      "OUTCOME-01としてjournalが0から11までを持つ。",
+      "",
+      "## 8. リスクと安全側への縮小",
+      "",
+      "隔離repository外へ書き込まないことで実workspaceを守る。",
+      "",
+      "## 9. モード判定Q-01〜Q-08",
+      "",
+      "Q-07とQ-08が偽であるためfullとする。",
+      "",
+      "## 10. P-01〜P-07の適用計画",
+      "",
+      "| 原則 | 適用 |",
+      "|---|---|",
+      principles,
+      "",
+      "## 11. 図表と識別子の判断",
+      "",
+      "Mermaidは不要である。識別子はSCN IDだけで足りる。",
+      "",
+      "## 12. 参考資料、未決事項、再開地点",
+      "",
+      "未決事項は無い。次に実行するのはStep 2である。",
+      "",
+      scenario,
+      "",
+    ].join("\n"),
+  );
+  for (const [name, title] of [
+    ["01_要件定義.md", "01 要件定義"],
+    ["02_設計.md", "02 設計"],
+    ["03_実装計画.md", "03 実装計画"],
+  ])
+    fs.writeFileSync(
+      path.join(staging, name),
+      [
+        `# ${title}`,
+        "",
+        "## 1. 概要",
+        "",
+        "full経路の最小成果物である。",
+        "",
+        dc,
+        "",
+      ].join("\n"),
+    );
+}
+
 function prepareDeliveryCli(
   world: WorkflowStepWorld,
   initial: Partial<DeliveryProviderControl> = {},
-  mergeMode: "disabled" | "automatic" = "automatic",
+  mergeMode: FixtureMergeMode = "automatic",
   mergeMethod: "merge" | "squash" | "rebase" = "merge",
   reviewIndependence?: "context-isolated" | "actor-independent",
+  workflowMode: "quick" | "poc" = "quick",
 ): PreparedDeliveryCli {
   const prepared = preparePullRequest(
     world,
@@ -2282,6 +2534,7 @@ function prepareDeliveryCli(
     mergeMode,
     mergeMethod,
     reviewIndependence,
+    workflowMode,
   );
   const stubDirectory = world.temp("asc-delivery-cli-gh-");
   const stub = path.join(stubDirectory, "gh");
@@ -2305,6 +2558,7 @@ function prepareDeliveryCli(
     prAuthorId: "pr-author",
     implementationAuthorId: "implementation-author",
     reviewerId: "independent-reviewer",
+    reviewCommitSha: "head",
     reviewDisposition: "approved",
     mergeTreeTampered: false,
     terminalParentTampered: false,
@@ -2358,6 +2612,7 @@ const canonicalBody = ${JSON.stringify(canonicalDocument.body)};
  * 一方を実時刻にすると検査が時間依存で落ちる（Issue #1300）。
  */
 const mergeRequestedAt = ${JSON.stringify(fixtureInstant())};
+const issueBodyFile = ${JSON.stringify(path.join(stubDirectory, "issue-body.md"))};
 fs.appendFileSync(logFile, JSON.stringify(args) + "\\n");
 const control = JSON.parse(fs.readFileSync(controlFile, "utf8"));
 const baseSha = control.remoteBaseSha;
@@ -2593,7 +2848,8 @@ if (exact(["--version"])) {
       {
         id: 7,
         state: "APPROVED",
-        commit_id: sha,
+        commit_id:
+          control.reviewCommitSha === "stale" ? "0".repeat(40) : sha,
         user: { node_id: control.reviewerId },
         submitted_at: control.requestedAt,
       },
@@ -2628,6 +2884,15 @@ if (exact(["--version"])) {
           }]
         : []),
     ]]),
+  );
+} else if (args[0] === "issue" && args[1] === "edit") {
+  // Issue同期の実CLI経路（Issue #1320）。本文を保存して読み返すだけにし、
+  // GitHub固有の正規化は模さない。
+  const index = args.indexOf("--body-file");
+  fs.writeFileSync(issueBodyFile, fs.readFileSync(args[index + 1], "utf8"));
+} else if (args[0] === "issue" && args[1] === "view") {
+  process.stdout.write(
+    fs.existsSync(issueBodyFile) ? fs.readFileSync(issueBodyFile, "utf8") : "",
   );
 } else if (exact(["api", "repos/o/r/actions/runs/42"])) {
   // merge後の固定run ID直読み。pull_requests はPRが閉じると空になる実仕様を保つ。
@@ -3850,6 +4115,429 @@ if (exact(["auth", "status"])) {
           ),
         ).entries.filter((entry) => entry.step === 11).length,
         1,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-053": {
+      /**
+       * **PR停止終端へ`pr merge`を発行したときの帰結を実CLI経路で観測する**
+       * （Issue #1320）。
+       *
+       * `merge.mode=disabled`は`outcome=pull-request`のStep 11終端である
+       * （`01_開発ワークフロー.md`）。**その終端へ`pr merge`を発行する経路は、
+       * これまでE2Eで一度も踏まれていなかった。** `disabled`のE2Eは`pr create`
+       * だけを観測しており、終端後の`pr merge`が何を返すかは未検査だった。
+       *
+       * **終了値まで測る。** 文言だけでは、拒否を報告しつつ0で返す実装を
+       * 区別できない。**`pr merge`の呼出回数も測る。** 送ってから落ちる実装と
+       * 送らずに拒否する実装は、利用者にとって別物である。
+       */
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const created = createDeliveryPullRequest(prepared);
+      assert.match(created.stdout, /pull_request_complete/u);
+      const before = deliveryProviderCalls(prepared).filter(isMergeCall).length;
+      const rejected = executeDeliveryMerge(prepared);
+      assert.equal(
+        rejected.status,
+        1,
+        `PR停止終端のpr mergeが終了値1で拒否されていません: ${rejected.stdout}${rejected.stderr}`,
+      );
+      const output = rejected.stdout + rejected.stderr;
+      assert.match(output, /"state": "pull_request_complete"/u, output);
+      assert.match(
+        output,
+        /このworkflowはPR停止点で完了済みです。mergeする場合はownerが別のdelivery判断を開始してください/u,
+        output,
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        before,
+        "拒否したのにproviderへmergeを要求しています",
+      );
+      /** **終端を1件のまま保つ。** 拒否がStep 11を増やしてはならない。 */
+      assert.equal(
+        parseStepJournal(
+          fs.readFileSync(
+            path.join(prepared.staging, STEP_JOURNAL_FILE),
+            "utf8",
+          ),
+        ).entries.filter((entry) => entry.step === 11).length,
+        1,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-054": {
+      /**
+       * **`assisted`のauthority未成立を実CLI経路で観測する**（Issue #1320）。
+       *
+       * `01_開発ワークフロー.md`は「`assisted`のauthority未成立は終端ではなく
+       * `pr-bound`の再開可能な待機であり、Step 11を記録しない」と定める。
+       * **この分岐は実CLI経路で一度も踏まれていなかった。** harnessの
+       * `mergeMode`が2値で、`assisted`を渡す手段が無かったためである。
+       *
+       * **Step 11を記録しないことまで測る。** `merge_pending`と報告しながら
+       * 終端を記録する実装は、再開可能な待機ではなく偽の終端になる。
+       */
+      const prepared = prepareDeliveryCli(this, {}, "assisted");
+      const created = createDeliveryPullRequest(prepared);
+      assert.match(created.stdout, /"state": "merge_pending"/u, created.stdout);
+      /**
+       * **`merge_pending`だけでは`automatic`と区別できない。**
+       *
+       * `pr create`は`mergeReadyVerified`を偽で渡すため、`automatic`も
+       * `wait-merge-ready`で`merge_pending`になる。**この2つを分けているのは
+       * `continuation`と、それに応じた`next`の文面だけである。** 変異試験で
+       * 実測した。`assisted`分岐を削除しても`merge_pending`は出続けるため、
+       * そこまでしか見ない検査は`assisted`を覆ったことにならない。
+       */
+      assert.match(
+        created.stdout,
+        /"continuation": "wait-authority"/u,
+        created.stdout,
+      );
+      assert.match(
+        created.stdout,
+        /owner authorityを待ち、Step 11を記録せずpr-boundから再開してください/u,
+        created.stdout,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(prepared.staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(
+        journal.entries.filter((entry) => entry.step === 11).length,
+        0,
+        "authority未成立なのにStep 11を記録しています",
+      );
+      const stateFile = path.join(
+        prepared.staging,
+        ...DELIVERY_STATE_FILE.split("/"),
+      );
+      const bound = parseDeliveryState(fs.readFileSync(stateFile, "utf8"));
+      assert.equal(
+        bound.state,
+        "pr-bound",
+        `再開可能な待機ではない状態になっています: ${bound.state}`,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-055": {
+      /**
+       * **`assisted`が実CLI経路でmerge終端まで到達できることを測る**
+       * （Issue #1320）。
+       *
+       * `assisted`はこれまで実CLI経路で一度も踏まれていなかった。**経路が
+       * 到達可能であること自体が未観測だった。**
+       *
+       * **このscenarioが示す範囲を広げて読まない。** `authorizeMerge`の
+       * `assisted`固有分岐（`src/domain/delivery.ts`）は到達不能である。
+       * 直前の`Math.max(1, requiredReviews)`が常に1以上のため、独立approvalが
+       * 0件なら手前の検査で必ず拒否されるからである。したがってここで観測して
+       * いるのは**「`assisted`を宣言してもmerge終端へ到達できる」ことと
+       * 「独立approvalが無ければ到達しない」ことであって、`assisted`固有の門では
+       * ない。** 実装の是正はIssue #1036が所有する。
+       */
+      const approved = prepareDeliveryCli(this, {}, "assisted");
+      const created = createDeliveryPullRequest(approved);
+      assert.match(created.stdout, /"state": "merge_pending"/u, created.stdout);
+      const requested = executeDeliveryMerge(approved);
+      assert.equal(
+        requested.status,
+        0,
+        `assistedでmerge要求が通りません: ${requested.stdout}${requested.stderr}`,
+      );
+      writeDeliveryProviderControl(approved, {
+        phase: "merged",
+        mergedAt: fixtureInstant({ minutesAhead: 5 }),
+      });
+      const completed = executeDeliveryMerge(approved);
+      assert.equal(
+        completed.status,
+        0,
+        `assistedでmerged終端へ到達できません: ${completed.stdout}${completed.stderr}`,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(approved.staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      const terminal = journal.entries.filter((entry) => entry.step === 11);
+      assert.equal(terminal.length, 1, "Step 11終端が1件ではありません");
+      const state = parseDeliveryState(
+        fs.readFileSync(
+          path.join(approved.staging, ...DELIVERY_STATE_FILE.split("/")),
+          "utf8",
+        ),
+      );
+      assert.equal(state.state, "step11-recorded");
+      assert.equal(state.step11?.outcome, "merged");
+
+      /**
+       * **反対向きも同じ経路で測る。** 独立approvalが無ければ到達しないことを
+       * 示さないと、「assistedはいつでも通る」だけを固定してしまう。
+       */
+      const denied = prepareDeliveryCli(
+        this,
+        { reviewDisposition: "changes-requested" },
+        "assisted",
+      );
+      createDeliveryPullRequest(denied);
+      const before = deliveryProviderCalls(denied).filter(isMergeCall).length;
+      const rejected = executeDeliveryMerge(denied);
+      assert.notEqual(
+        rejected.status,
+        0,
+        "承認が無いのにassistedのmergeを受理しました",
+      );
+      /**
+       * **拒否は`authorizeMerge`より前段で起きる。** `pr merge`は
+       * `observeMergeReviewEvidence`内のselectorを先に通り、対象HEADへの
+       * APPROVEDが無い時点で止まる。**`authorizeMerge`の診断文を期待すると、
+       * 実経路が到達しない文言を固定してしまう。** 実測して確かめた。
+       */
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /current H_finalそのものを対象とするAPPROVED reviewがありません/u,
+        rejected.stdout + rejected.stderr,
+      );
+      assert.equal(
+        deliveryProviderCalls(denied).filter(isMergeCall).length,
+        before,
+        "拒否したのにproviderへmergeを要求しています",
+      );
+
+      /**
+       * **古いHEADへのAPPROVEDを数えないことも同じ経路で測る**（Issue #1320）。
+       *
+       * `pr merge`の前段selectorはexact-HEAD一致を要求するが、**その拘束を
+       * 外す変異は既存のE2Eでも生存した。** 承認そのものが存在する状態で
+       * headだけを外す入力は、どのscenarioも作っていなかった。
+       */
+      const stale = prepareDeliveryCli(
+        this,
+        { reviewCommitSha: "stale" },
+        "assisted",
+      );
+      createDeliveryPullRequest(stale);
+      const staleBefore =
+        deliveryProviderCalls(stale).filter(isMergeCall).length;
+      const staleRejected = executeDeliveryMerge(stale);
+      assert.notEqual(
+        staleRejected.status,
+        0,
+        "旧HEADへのAPPROVEDでmergeを受理しました",
+      );
+      assert.match(
+        staleRejected.stdout + staleRejected.stderr,
+        /current H_finalそのものを対象とするAPPROVED reviewがありません/u,
+        staleRejected.stdout + staleRejected.stderr,
+      );
+      assert.equal(
+        deliveryProviderCalls(stale).filter(isMergeCall).length,
+        staleBefore,
+        "拒否したのにproviderへmergeを要求しています",
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-052": {
+      /**
+       * **`full`のStep 0から11までを実CLI経路で通す**（Issue #1320）。
+       *
+       * `full`は既定modeだが、**E2Eにfull stagingを作る経路すら存在しなかった。**
+       * 既存のE2Eはすべて`quick`固定で、`full`固有のStep 2/3/5/6/7/8は
+       * どのE2Eも通っていない。
+       *
+       * **Step 0とStep 1〜10とStep 11をすべて別processのCLIで起動する。**
+       * journalへ直接追記するとStepの記録契約そのものを迂回してしまい、
+       * 「Step 0〜11が通る」ことの証拠にならない。
+       */
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const assessment = path.join(prepared.root, "assessment.json");
+      const answered = (answer: boolean, evidence: string) => ({
+        answer,
+        evidence,
+      });
+      fs.writeFileSync(
+        assessment,
+        JSON.stringify({
+          "Q-01": answered(true, "配布境界のfileを変更しない"),
+          "Q-02": answered(true, "保存済みdataの形式に触れない"),
+          "Q-03": answered(true, "信頼境界の判定を変更しない"),
+          "Q-04": answered(true, "依存packageを変更しない"),
+          "Q-05": answered(true, "CI設定を変更しない"),
+          "Q-06": answered(true, "不可逆操作を変更しない"),
+          "Q-07": answered(false, "受け入れ条件の観測方法が未確定である"),
+          "Q-08": answered(false, "複数のコンテキストに触れる"),
+        }),
+      );
+      const staged = executeCli(
+        [
+          "issue",
+          "create",
+          "--title=full-path-test",
+          "--mode=full",
+          `--assessment=${assessment}`,
+          `--root=${prepared.root}`,
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(staged.status, 0, staged.stdout + staged.stderr);
+      const created = JSON.parse(staged.stdout) as {
+        path: string;
+        mode: string;
+      };
+      assert.equal(created.mode, "full", staged.stdout);
+      const fullStaging = created.path;
+      writeFullStagingArtifacts(fullStaging);
+
+      const record = (step: number, extra: string[] = []) => {
+        const result = executeCli(
+          [
+            "workflow",
+            "record",
+            `--staging=${fullStaging}`,
+            `--step=${step}`,
+            "--artifact=00_要求定義.md",
+            `--evidence=Step ${step}を実CLI経路で記録した`,
+            ...extra,
+          ],
+          prepared.root,
+          prepared.env,
+        );
+        assert.equal(
+          result.status,
+          0,
+          `Step ${step}: ${result.stdout}${result.stderr}`,
+        );
+      };
+      const syncIssue = (extra: string[]) => {
+        const result = executeCli(
+          [
+            "issue",
+            "sync",
+            "--issue=877",
+            "--repo=o/r",
+            `--body-file=${path.join(fullStaging, "00_要求定義.md")}`,
+            "--authorize=approved",
+            `--synced-at=${new Date(fixtureInstantMs()).toISOString()}`,
+            ...extra,
+            "--apply",
+          ],
+          prepared.root,
+          prepared.env,
+        );
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+      };
+
+      for (const step of [1, 2, 3]) record(step);
+      syncIssue([]);
+      record(4, ["--artifact=https://github.com/o/r/issues/877"]);
+      for (const step of [5, 6, 7]) record(step);
+      syncIssue([`--staging-path=${fullStaging}`, "--checkpoint=8"]);
+      record(8, ["--artifact=https://github.com/o/r/issues/877"]);
+      record(9);
+      const reviewSession = convergedReviewBinding(
+        prepared.root,
+        fullStaging,
+        prepared.baseSha,
+        prepared.headSha,
+      );
+      record(10, [`--review-session-digest=${reviewSession.roundDigest}`]);
+
+      const delivered = executeCli(
+        [
+          "pr",
+          "create",
+          "--repo=o/r",
+          "--issue=877",
+          "--head=feature/x",
+          "--base=main",
+          `--head-sha=${prepared.headSha}`,
+          `--evidence=${prepared.args[prepared.args.findIndex((item) => item.startsWith("--evidence="))]?.slice("--evidence=".length) ?? ""}`,
+          `--root=${prepared.root}`,
+          `--staging=${fullStaging}`,
+          `--body-file=${prepared.bodyFile}`,
+          "--apply",
+          "--authorize=approved",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(
+        delivered.status,
+        0,
+        `Step 11: ${delivered.stdout}${delivered.stderr}`,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(fullStaging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.deepEqual(
+        journal.entries.map((entry) => entry.step),
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        `fullのStep列が0〜11になっていません: ${JSON.stringify(journal.entries.map((entry) => entry.step))}`,
+      );
+      assert.ok(
+        journal.entries.every((entry) => entry.mode === "full"),
+        "journalのmodeがfullではありません",
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-056": {
+      /**
+       * **`poc`のStep 10からStep 11までを実CLI経路で通す**（Issue #1320）。
+       *
+       * 既存のPoC E2Eは`main()`を同一processで呼び、しかもStep 10で止まって
+       * いた。**`outcome=pull-request`のPoC終端へ実CLIで到達する経路は
+       * 一度も検査されていなかった。**
+       *
+       * **`pr merge`がPoCを拒否することも同じ経路で測る。** 終端に到達できる
+       * ことだけを示すと、PoCがmergeへ進めない停止点であることを覆えない。
+       */
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        undefined,
+        "poc",
+      );
+      const created = createDeliveryPullRequest(prepared);
+      assert.match(created.stdout, /pull_request_complete/u, created.stdout);
+      const state = parseDeliveryState(
+        fs.readFileSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+          "utf8",
+        ),
+      );
+      assert.equal(state.state, "step11-recorded");
+      assert.equal(
+        state.step11?.outcome,
+        "pull-request",
+        "PoCがPR停止終端になっていません",
+      );
+      /**
+       * **`automatic`を宣言していてもPoCはPR停止終端になる。**
+       * `01_開発ワークフロー.md`が「PoCと`merge.mode=disabled`は
+       * `outcome=pull-request`のStep 11終端とする」と定める。**merge policyでは
+       * なくworkflow modeが終端を決めることを、この組み合わせで固定する。**
+       */
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(prepared.staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.ok(
+        journal.entries.every((entry) => entry.mode === "poc"),
+        "journalのmodeがpocではありません",
+      );
+      const before = deliveryProviderCalls(prepared).filter(isMergeCall).length;
+      const rejected = executeDeliveryMerge(prepared);
+      assert.notEqual(rejected.status, 0, "PoCのpr mergeを受理しました");
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /PoCはPRが停止点でありpr mergeを実行できません/u,
+        rejected.stdout + rejected.stderr,
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        before,
+        "拒否したのにproviderへmergeを要求しています",
       );
       break;
     }
