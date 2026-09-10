@@ -1975,12 +1975,18 @@ When("review gateを評価する", function () {
  * 居ないprojectの構成である。
  */
 Given(
-  "reviewerがPR authorおよびimplementation commit authorと同一actorである",
+  "reviewerがimplementation commit authorと同一actorでPRはautomation identityが作成した",
   function () {
+    /**
+     * **GitHubはPR author自身の`APPROVE`を許可しない**（外部reviewの指摘）。
+     * PR authorとreviewerを同一actorにした観測はproviderが返し得ないため、
+     * **実在する単独運用の形**にする。PRはautomation identityが作り、実装commitを
+     * 書いた本人が承認する。
+     */
     const actor = String(
       this.review.externalEvidence.implementation.authorActorId,
     );
-    this.review.externalEvidence.pr.authorActorId = actor;
+    this.review.externalEvidence.pr.authorActorId = "actor-automation";
     this.review.externalEvidence.review.actorId = actor;
   },
 );

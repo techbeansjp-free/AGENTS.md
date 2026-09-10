@@ -3280,8 +3280,19 @@ if (exact(["auth", "status"])) {
        * **`pr.merge`の呼出回数まで測る。** 文言だけでは、要求を送ってから
        * 落ちる実装と、送らずに拒否する実装を区別できない。
        */
+      /**
+       * **GitHubで実際に生成できる観測だけを使う**（外部reviewの指摘）。
+       *
+       * GitHubはPR author自身の`APPROVE`を許可しない。PR authorとreviewerを
+       * 同一actorにしたfixtureは**providerが返し得ない状態**であり、実merge経路を
+       * 検証したことにならない。
+       *
+       * **実在する単独運用の形はこれである。** PRはautomation identityが作り、
+       * 実装commitを書いた本人が承認する。旧契約はreviewerがimplementation commit
+       * authorと同一であることを理由に、この構成を恒常的に拒否していた。
+       */
       const soleOperator = {
-        prAuthorId: "sole-operator",
+        prAuthorId: "automation-actor",
         implementationAuthorId: "sole-operator",
         reviewerId: "sole-operator",
       } as const;

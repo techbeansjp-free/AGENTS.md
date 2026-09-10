@@ -1600,9 +1600,11 @@ When("check state unknownでmerge authorizationを評価する", function () {
 /**
  * **単独運用が既定で成立することを固定する**（Issue #1317）。
  *
- * implementer・PR author・reviewerがすべて同一actorという、別のGitHub利用者が
- * 居ないprojectの形である。旧契約ではこの構成が変更のリスクに関係なく恒常的に
- * 停止していた。**exact HEAD一致とAPPROVEDは引き続き必須である。**
+ * 実装commitを書いた本人がreviewerでもあるという、別のGitHub利用者が居ない
+ * projectの形である。PRはautomation identityが作る。**GitHubはPR author自身の
+ * `APPROVE`を許可しないため、これがproviderで実際に生成できる唯一の形である。**
+ * 旧契約ではこの構成が変更のリスクに関係なく恒常的に停止していた。
+ * **exact HEAD一致とAPPROVEDは引き続き必須である。**
  */
 const soleOperatorMergeInput = (
   reviewIndependence?: "context-isolated" | "actor-independent",
@@ -1630,7 +1632,14 @@ const soleOperatorMergeInput = (
     ],
     branch: "feature/solo",
     headSha,
-    prAuthorActorId: "actor-solo",
+    /**
+     * **GitHubはPR author自身の`APPROVE`を許可しない**（外部reviewの指摘）。
+     * PR authorとreviewerを同一actorにするとproviderが返し得ない観測になるため、
+     * **実在する単独運用の形**にする。PRはautomation identityが作り、実装commitを
+     * 書いた本人が承認する。旧契約はreviewerがimplementation commit authorと
+     * 同一であることを理由にこの構成を拒否していた。
+     */
+    prAuthorActorId: "actor-automation",
     implementationAuthorActorId: "actor-solo",
     repositoryVerified: true,
     shaVerified: true,

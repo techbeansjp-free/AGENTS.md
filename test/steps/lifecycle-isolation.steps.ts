@@ -35,6 +35,8 @@ interface IsolationWorld extends WorkflowWorld {
   recoveryRejections?: string[];
   /** 復旧前に測った資産のdigest（Issue #1305）。 */
   digestsBeforeRecovery?: Record<string, string>;
+  /** managed record破損前の`healthy`（Issue #1314）。報告欄が門にならないことを測る。 */
+  healthyBeforeCorruption?: boolean;
   /** 境界外symlinkの参照先とその内容（Issue #1305）。 */
   outsideTarget?: { file: string; contents: string };
   /** record不正の各分類の観測（Issue #1305、R2-M01）。 */
@@ -1069,6 +1071,8 @@ Then(
  */
 Given("導入後にrecordが読めなくなった隔離先がある", function () {
   installedIsolation(this, "asc-lifecycle-record-unreadable-");
+  /** **破損前の`healthy`を控える。** 報告欄の変更が門にならないことを測る。 */
+  this.healthyBeforeCorruption = doctor(this.root).healthy;
   fs.writeFileSync(recordPath(this.root), "{\n");
 });
 
@@ -1096,6 +1100,29 @@ Then(
       String(unmanaged.note),
       /--recover-record/u,
       `次に採る行動を出していません: ${String(unmanaged.note)}`,
+    );
+    /**
+     * **`healthy`の低下はrecord検証の失敗そのものが決める。**
+     * 報告欄が判定不能を返すこと自体は門にならない。record破損で
+     * `healthy`が`false`になるのは`diagnostics`の側の帰結である。
+     */
+    assert.equal(
+      this.healthyBeforeCorruption,
+      true,
+      "破損前からhealthyがfalseでは、この回帰を測れません",
+    );
+    const observed = this.doctorResult;
+    assert.ok(observed, "doctor結果がありません");
+    assert.equal(
+      observed.healthy,
+      false,
+      "record検証の失敗がdiagnosticsへ入っていません",
+    );
+    assert.ok(
+      observed.adapters.diagnostics.some((diagnostic: string) =>
+        /managed-assets\.json/u.test(String(diagnostic)),
+      ),
+      `record検証の失敗を名指ししていません: ${observed.adapters.diagnostics.join("; ")}`,
     );
   },
 );
