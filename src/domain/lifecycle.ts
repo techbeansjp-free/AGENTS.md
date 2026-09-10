@@ -840,6 +840,13 @@ export function doctor(target: string, worktreeObservations?: unknown) {
   const diagnostics: string[] = [];
   let files: Record<string, string> = {};
   let managedAssets: ManagedAsset[] = [];
+  /**
+   * **recordを読めたかを`installed`と別に持つ**（Issue #1314、外部reviewの指摘）。
+   *
+   * recordの検証に失敗すると`files`は空のままである。`installed`だけを条件に
+   * 未管理資産を数えると、**展開済みの全fileを「recordに無い」と報告する。**
+   */
+  let recordRead = false;
   if (!installed)
     diagnostics.push(`${MANAGED_RECORD}: managed recordがありません`);
   else {
@@ -847,6 +854,7 @@ export function doctor(target: string, worktreeObservations?: unknown) {
       const managed = readManagedAssetRecord(target);
       files = managed.record.files;
       managedAssets = managed.assets;
+      recordRead = true;
     } catch (error) {
       diagnostics.push(
         `${MANAGED_RECORD}: ${error instanceof Error ? error.message : "検証できません"}`,
@@ -1037,37 +1045,63 @@ export function doctor(target: string, worktreeObservations?: unknown) {
    * 手段が無かった。** ここで報告する。**門は足さない。** `REQ-LC-011`の
    * 「報告するが`healthy`を変えない」前例に従う。
    */
-  const unmanagedAssets = ((): string[] => {
-    if (!installed) return [];
+  const unmanagedAssets = ((): {
+    observed: boolean;
+    paths: string[];
+    unobservedReason?: string;
+  } => {
+    if (!installed)
+      return {
+        observed: false,
+        paths: [],
+        unobservedReason: `${MANAGED_RECORD}が無いため、未管理資産を判定できません`,
+      };
+    if (!recordRead)
+      return {
+        observed: false,
+        paths: [],
+        unobservedReason: `${MANAGED_RECORD}を検証できないため、未管理資産を判定できません`,
+      };
     /**
-     * **この報告の失敗で`doctor`全体を落とさない。**
+     * **この報告の失敗で`doctor`全体を落とさない。ただし「なし」とも断定しない**
+     * （Issue #1314、外部reviewの指摘）。
      *
      * `mappings`は展開先の解決で例外を投げうる（境界外symlink等）。それは
      * 他の診断が既に扱う事象であり、**報告欄の計算がそれを理由に`doctor`を
-     * 停止させると、他の診断まで返せなくなる。** 報告できないときは空にする。
+     * 停止させると、他の診断まで返せなくなる。** かといって空配列を返すと
+     * 「0件だった」と読めてしまうので、**観測できなかったことを明示する。**
      */
     try {
-      return mappings(target)
-        .map(({ dest }) => relativeKey(target, dest))
-        .filter(
-          (key) =>
-            !Object.hasOwn(files, key) &&
-            pathEntryExists(path.join(target, key)),
-        )
-        .sort();
-    } catch {
-      return [];
+      return {
+        observed: true,
+        paths: mappings(target)
+          .map(({ dest }) => relativeKey(target, dest))
+          .filter(
+            (key) =>
+              !Object.hasOwn(files, key) &&
+              pathEntryExists(path.join(target, key)),
+          )
+          .sort(),
+      };
+    } catch (error) {
+      return {
+        observed: false,
+        paths: [],
+        unobservedReason: `展開先を解決できないため、未管理資産を判定できません: ${error instanceof Error ? error.message : "不明な失敗"}`,
+      };
     }
   })();
   return {
     healthy: installed && diagnostics.length === 0,
     installed,
     unmanagedAssets: {
-      paths: unmanagedAssets,
-      note:
-        unmanagedAssets.length === 0
+      observed: unmanagedAssets.observed,
+      paths: unmanagedAssets.paths,
+      note: !unmanagedAssets.observed
+        ? `判定不能: ${unmanagedAssets.unobservedReason}。先に install または update --recover-record --apply で managed record を回復してから再実行する`
+        : unmanagedAssets.paths.length === 0
           ? "なし"
-          : `展開先に存在するがmanaged recordに無い管理対象が${unmanagedAssets.length}件ある。これらは update の対象にならず現在の版で固定される。正本へ戻すか、update --recover-record --apply で再評価する`,
+          : `展開先に存在するがmanaged recordに無い管理対象が${unmanagedAssets.paths.length}件ある。これらは update の対象にならず現在の版で固定される。正本へ戻すか、update --recover-record --apply で再評価する`,
     },
     hooks: {
       canonical: HOST_HOOK_SOURCE,

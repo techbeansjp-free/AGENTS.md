@@ -144,6 +144,18 @@ Feature: policy拡張を段階移行して失敗から再実行する
       | null-implementation-author |
       | commented |
 
+  Scenario Outline: SCN-INT-RISK-027 review evidence CLIは読めないproject policyを既定の要求水準へ倒さない
+    Given H_impl後にPhase A review artifactだけをcommitした隔離repositoryがある
+    And GitHub review providerのvalid観測がある
+    And <破損>
+    When review evidence CLIでGitとGitHub providerを結合する
+    Then review evidence CLIは要求水準不明として停止する
+
+    Examples:
+      | 破損 |
+      | project policyが壊れていて読めない |
+      | project policyがreviewIndependenceへ未知の値を宣言する |
+
   Scenario: SCN-INT-RISK-025 read-after-write不一致でも現在artifactをbeforeへ復元する
     Given read-after-write不一致を注入できる単一file migrationがある
     When 不正writeを注入してmigration applyを実行する

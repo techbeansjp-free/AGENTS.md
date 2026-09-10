@@ -1929,6 +1929,14 @@ interface DeliveryProviderControl {
     | "malformed-node";
   prAuthorId: string | null;
   implementationAuthorId: string | null;
+  /**
+   * **APPROVEDを提出したreviewerのstable actor ID**（Issue #1317）。
+   *
+   * 既定は実装者と別actorであり、既存scenarioの挙動を変えない。
+   * `prAuthorId`・`implementationAuthorId`と同じ値にすると、**実利用者が報告した
+   * 単独運用（implementer = PR author = reviewer）をprovider観測として再現できる。**
+   */
+  reviewerId: string;
   reviewDisposition:
     "approved" | "changes-requested" | "commented-after-approval";
   mergeTreeTampered: boolean;
@@ -2041,6 +2049,11 @@ function preparePullRequest(
   missingStep4: boolean,
   mergeMode: "disabled" | "automatic" = "disabled",
   mergeMethod: "merge" | "squash" | "rebase" = "merge",
+  /**
+   * trusted policyが宣言する`merge.reviewIndependence`（Issue #1317）。
+   * **未指定は宣言なし**であり、既定の`context-isolated`が適用される。
+   */
+  reviewIndependence?: "context-isolated" | "actor-independent",
 ): PreparedPullRequest {
   const fixturePast = fixtureInstant({ hoursAgo: 1 });
   const fixtureNow = fixtureInstant();
@@ -2070,6 +2083,7 @@ function preparePullRequest(
       methods: [mergeMethod],
       requiredChecks: [],
       requiredReviews: 0,
+      ...(reviewIndependence ? { reviewIndependence } : {}),
     };
     fs.writeFileSync(policyFile, `${JSON.stringify(policy, null, 2)}\n`);
   }
@@ -2260,8 +2274,15 @@ function prepareDeliveryCli(
   initial: Partial<DeliveryProviderControl> = {},
   mergeMode: "disabled" | "automatic" = "automatic",
   mergeMethod: "merge" | "squash" | "rebase" = "merge",
+  reviewIndependence?: "context-isolated" | "actor-independent",
 ): PreparedDeliveryCli {
-  const prepared = preparePullRequest(world, false, mergeMode, mergeMethod);
+  const prepared = preparePullRequest(
+    world,
+    false,
+    mergeMode,
+    mergeMethod,
+    reviewIndependence,
+  );
   const stubDirectory = world.temp("asc-delivery-cli-gh-");
   const stub = path.join(stubDirectory, "gh");
   const controlFile = path.join(stubDirectory, "control.json");
@@ -2283,6 +2304,7 @@ function prepareDeliveryCli(
     failCreateVerification: false,
     prAuthorId: "pr-author",
     implementationAuthorId: "implementation-author",
+    reviewerId: "independent-reviewer",
     reviewDisposition: "approved",
     mergeTreeTampered: false,
     terminalParentTampered: false,
@@ -2572,7 +2594,7 @@ if (exact(["--version"])) {
         id: 7,
         state: "APPROVED",
         commit_id: sha,
-        user: { node_id: "independent-reviewer" },
+        user: { node_id: control.reviewerId },
         submitted_at: control.requestedAt,
       },
       // merge後にprovider側のreview状態が動いた場合（Issue #1280）。
@@ -2590,7 +2612,7 @@ if (exact(["--version"])) {
             id: 9,
             state: "CHANGES_REQUESTED",
             commit_id: sha,
-            user: { node_id: "independent-reviewer" },
+            user: { node_id: control.reviewerId },
             submitted_at: new Date(Date.parse(control.requestedAt) + 2000).toISOString(),
           }]
         : []),
@@ -2601,7 +2623,7 @@ if (exact(["--version"])) {
               ? "CHANGES_REQUESTED"
               : "COMMENTED",
             commit_id: sha,
-            user: { node_id: "independent-reviewer" },
+            user: { node_id: control.reviewerId },
             submitted_at: new Date(Date.parse(control.requestedAt) + 1000).toISOString(),
           }]
         : []),
@@ -3238,6 +3260,67 @@ if (exact(["auth", "status"])) {
       assert.equal(
         deliveryProviderCalls(prepared).filter(isMergeCall).length,
         1,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-051": {
+      /**
+       * **実経路の`pr merge`で単独運用が通ることと、宣言で止まることを測る**
+       * （Issue #1317）。
+       *
+       * `authorizeMerge`は純関数であり、**`pr merge`はその手前で
+       * `observeMergeReviewEvidence`内のselectorを通る。** 判定関数だけを直接
+       * 呼ぶSCNはこの前段を通らないため、`authorizeMerge`側だけを2モード化しても
+       * 既定modeが実経路では到達不能なまま残る欠陥を検出できなかった
+       * （独立reviewerの指摘）。
+       *
+       * implementer・PR author・reviewerをすべて同一actorにして、報告された
+       * 単独運用の構成をprovider観測として再現する。
+       *
+       * **`pr.merge`の呼出回数まで測る。** 文言だけでは、要求を送ってから
+       * 落ちる実装と、送らずに拒否する実装を区別できない。
+       */
+      const soleOperator = {
+        prAuthorId: "sole-operator",
+        implementationAuthorId: "sole-operator",
+        reviewerId: "sole-operator",
+      } as const;
+      const permitted = prepareDeliveryCli(this, soleOperator);
+      createDeliveryPullRequest(permitted);
+      const requested = executeDeliveryMerge(permitted);
+      assert.equal(
+        requested.status,
+        0,
+        `既定のcontext-isolatedで単独運用のmergeが止まりました: ${requested.stdout}${requested.stderr}`,
+      );
+      assert.ok(
+        deliveryProviderCalls(permitted).filter(isMergeCall).length >= 1,
+        "許可したのにproviderへmergeを要求していません",
+      );
+
+      const denied = prepareDeliveryCli(
+        this,
+        soleOperator,
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
+      createDeliveryPullRequest(denied);
+      const before = deliveryProviderCalls(denied).filter(isMergeCall).length;
+      const rejected = executeDeliveryMerge(denied);
+      assert.notEqual(
+        rejected.status,
+        0,
+        "actor-independentを宣言しても単独運用のmergeを受理しました",
+      );
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /PR author・H_impl authorと独立したreviewがありません/u,
+      );
+      assert.equal(
+        deliveryProviderCalls(denied).filter(isMergeCall).length,
+        before,
+        "拒否したのにproviderへmergeを要求しています",
       );
       break;
     }
@@ -4015,7 +4098,15 @@ if (exact(["auth", "status"])) {
       const prepared = prepareDeliveryCli(this);
       for (const [shift, pattern] of [
         ["replaced", /固定済みmerge review identityと一致しません/u],
-        ["revoked", /独立したreviewがありません/u],
+        /**
+         * **既定の`context-isolated`が返す診断を名指しする**（Issue #1317）。
+         * reviewerは実装者と別actorなので、ここで検査しているのは
+         * 「承認取り下げ後に対象HEADへのAPPROVEDが無い」ことである。
+         */
+        [
+          "revoked",
+          /current H_finalそのものを対象とするAPPROVED reviewがありません/u,
+        ],
       ] as const) {
         const scenario = prepareDeliveryCli(this);
         createDeliveryPullRequest(scenario);

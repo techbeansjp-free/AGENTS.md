@@ -1005,6 +1005,10 @@ Then("相違資産はretainedとして報告され内容は1 byteも変わらな
  * `retained`はrecordへ登録しないので、当該資産は以後`update`の対象から外れる。
  * 正しい設計だが帰結が見えないため、`doctor`が報告する。**門は足さない。**
  */
+When("隔離先でdoctorを実行する", function () {
+  this.doctorResult = doctor(this.root);
+});
+
 When("明示指定つきで復旧してからdoctorを実行する", function () {
   upgrade(this.root, { apply: true, recoverRecord: true });
   this.doctorResult = doctor(this.root);
@@ -1024,6 +1028,11 @@ Then(
     assert.ok(
       unmanaged.paths.includes(DIVERGENT_ASSET),
       `保持した${DIVERGENT_ASSET}を報告していません: ${unmanaged.paths.join(", ")}`,
+    );
+    assert.equal(
+      unmanaged.observed,
+      true,
+      "recordを読めているのに判定不能として報告しています",
     );
     /** **次に採る行動まで出す。** 件数だけでは利用者が動けない。 */
     assert.match(
@@ -1047,6 +1056,47 @@ Then(
         /managed recordに無い|管理対象外/u,
         `管理対象外の報告をhealthyの要因にしています: ${String(diagnostic)}`,
       );
+  },
+);
+
+/**
+ * **観測できなかったことを「なし」と断定しない**（Issue #1314、外部reviewの指摘）。
+ *
+ * recordを検証できないとき`files`は空のままである。`installed`だけを条件に
+ * 未管理資産を数えると、**展開済みの全fileを「recordに無い」と報告する。**
+ * 逆に例外を握って空配列を返すと「0件だった」と読める。**どちらでもなく、
+ * 判定不能であることと次に採る行動を返す。**
+ */
+Given("導入後にrecordが読めなくなった隔離先がある", function () {
+  installedIsolation(this, "asc-lifecycle-record-unreadable-");
+  fs.writeFileSync(recordPath(this.root), "{\n");
+});
+
+Then(
+  "doctorは管理対象外の資産を判定不能として次の操作つきで報告する",
+  function () {
+    const unmanaged = this.doctorResult?.unmanagedAssets;
+    assert.ok(unmanaged, "unmanagedAssetsがありません");
+    assert.equal(
+      unmanaged.observed,
+      false,
+      "recordを検証できないのに観測済みとして報告しています",
+    );
+    assert.deepEqual(
+      unmanaged.paths,
+      [],
+      `判定不能なのにpathを列挙しています: ${unmanaged.paths.join(", ")}`,
+    );
+    assert.match(
+      String(unmanaged.note),
+      /判定不能/u,
+      `「なし」と断定しています: ${String(unmanaged.note)}`,
+    );
+    assert.match(
+      String(unmanaged.note),
+      /--recover-record/u,
+      `次に採る行動を出していません: ${String(unmanaged.note)}`,
+    );
   },
 );
 

@@ -609,9 +609,14 @@ export function independentReviewDiagnostic(input: {
   appliedRequiredReviews: number;
   observedIndependentApprovals: number;
   headSha: string | undefined;
+  /** 適用したreview独立性の要求水準（Issue #1317）。未指定は`context-isolated`。 */
+  reviewIndependence?: "context-isolated" | "actor-independent";
 }): Diagnostic {
+  const actorIndependenceRequired =
+    input.reviewIndependence === "actor-independent";
   const reasons = [
     `要求する独立approvalは${input.appliedRequiredReviews}件ですが、対象HEADに対する独立approvalは${input.observedIndependentApprovals}件です`,
+    `適用したreview独立性の要求水準は${input.reviewIndependence ?? "context-isolated"}です`,
   ];
   if (
     typeof input.declaredRequiredReviews === "number" &&
@@ -632,11 +637,25 @@ export function independentReviewDiagnostic(input: {
     ],
     checks: [
       "同一actorのreviewを最新状態へ畳み込み、対象HEAD SHAへのAPPROVEDだけを数えた",
-      "PR authorとimplementation authorのstable IDを独立approvalから除外した",
+      /**
+       * **実際に適用した条件だけを並べる**（Issue #1317）。
+       * `context-isolated`ではactor除外を行っていないのに「除外した」と書くと、
+       * 別actorを用意する対処へ誘導して**本当の不足（対象HEADへのAPPROVED不在）を
+       * 隠す。**
+       */
+      ...(actorIndependenceRequired
+        ? [
+            "PR authorとimplementation authorのstable IDを独立approvalから除外した",
+          ]
+        : []),
     ],
     autoFixes: [],
-    next: "対象HEAD SHAに対する独立reviewerのapprovalを得てからpr mergeを再実行してください",
-    requiredAuthority: "対象PRへ独立approvalを与えられるreviewer",
+    next: actorIndependenceRequired
+      ? "対象HEAD SHAに対する独立reviewerのapprovalを得てからpr mergeを再実行してください"
+      : "対象HEAD SHAそのものに対するAPPROVED reviewを得てからpr mergeを再実行してください",
+    requiredAuthority: actorIndependenceRequired
+      ? "対象PRへ独立approvalを与えられるreviewer"
+      : "対象PRへapprovalを与えられるreviewer",
     rollback: "mergeを実行せず、branchと既存commitを変更しない",
   };
 }
@@ -797,6 +816,9 @@ export function authorizeMerge(input: MergeInput) {
         appliedRequiredReviews: requiredIndependentReviews,
         observedIndependentApprovals: independentApprovals.size,
         headSha: input.headSha,
+        reviewIndependence: actorIndependenceRequired
+          ? "actor-independent"
+          : "context-isolated",
       }),
     );
   if (policy.mode === "assisted" && independentApprovals.size < 1)

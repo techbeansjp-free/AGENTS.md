@@ -66,6 +66,11 @@ Feature: riskに比例したrule判定で安全性と開発速度を両立する
     When trusted policyとcandidate policyを比較する
     Then すべてのauthority弱化理由を返す
 
+  Scenario: SCN-UNIT-RISK-029 review独立性の引き上げはauthority弱化にならない
+    Given trusted policyがreviewIndependenceを宣言せずcandidateがactor-independentへ引き上げる
+    When trusted policyとcandidate policyを比較する
+    Then review独立性の引き上げをauthority弱化にしない
+
   Scenario: SCN-UNIT-RISK-011 diagnostic serializerは秘密を伏字化してmachine正本と表示fallbackを分離する
     Given tokenとpasswordを含むblock diagnosticがある
     When diagnosticを安全にserializeする

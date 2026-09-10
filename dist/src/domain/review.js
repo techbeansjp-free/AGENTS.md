@@ -318,18 +318,30 @@ export function buildReviewEvidence(observation) {
         },
         externalEvidence: observation?.externalEvidence,
     };
-    const errors = validateImmutableCandidateEvidence({
-        headSha: observation?.finalCommitSha,
-        ...evidence,
-        /**
-         * **未指定は`context-isolated`として扱う**（Issue #1317）。
-         * actor単位の独立性を要求するのは、project policyが`actor-independent`を
-         * 明示的に宣言した場合だけである。
-         */
-        independenceMode: observation?.independenceMode === "actor-independent"
-            ? "actor-independent"
-            : "context-isolated",
-    });
+    /**
+     * **未指定は`context-isolated`、未知値は拒否する**（Issue #1317）。
+     *
+     * 未指定と未知値を同じ既定へ正規化すると、**綴り違いや旧い値がactor単位の
+     * 独立性を静かに外す経路になる。** 未知値は要求水準が不明であって要求なしでは
+     * ないので、errorとして記録したうえで最も強い`actor-independent`で検証する。
+     */
+    const declared = observation?.independenceMode;
+    const declarationError = declared !== undefined &&
+        declared !== "context-isolated" &&
+        declared !== "actor-independent"
+        ? "review独立性モードの宣言が不正です"
+        : undefined;
+    const independenceMode = declared === "actor-independent" || declarationError !== undefined
+        ? "actor-independent"
+        : "context-isolated";
+    const errors = [
+        ...(declarationError ? [declarationError] : []),
+        ...validateImmutableCandidateEvidence({
+            headSha: observation?.finalCommitSha,
+            ...evidence,
+            independenceMode,
+        }),
+    ];
     const pending = errors.some((error) => /CI conclusion|approved verdict|submittedAt/u.test(error));
     return {
         valid: errors.length === 0,
@@ -340,9 +352,7 @@ export function buildReviewEvidence(observation) {
          * 下流がevidenceから判定を再構成するとき、モードが欠けると
          * `actor-independent`で拒否したものが既定で承認され得る。
          */
-        independenceMode: observation?.independenceMode === "actor-independent"
-            ? "actor-independent"
-            : "context-isolated",
+        independenceMode,
         ...evidence,
     };
 }

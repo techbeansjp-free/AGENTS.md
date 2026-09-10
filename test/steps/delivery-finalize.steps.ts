@@ -180,7 +180,16 @@ function policyWithMerge(merge: Policy["merge"]): Policy {
   return { ...trustedDeliveryPolicy(), merge };
 }
 
-function independentReviewMergeInput(requiredReviews: number): MergeInput {
+function independentReviewMergeInput(
+  requiredReviews: number,
+  /**
+   * **既存scenarioはactor単位の独立性の診断を固定している**（Issue #1317）。
+   * その性質は`actor-independent`の強制点なので、fixtureが明示的に宣言する。
+   * 既定の`context-isolated`が返す診断は別scenarioで固定する。
+   */
+  reviewIndependence:
+    "context-isolated" | "actor-independent" = "actor-independent",
+): MergeInput {
   return {
     trustedPolicy: policyWithMerge({
       mode: "automatic",
@@ -188,6 +197,7 @@ function independentReviewMergeInput(requiredReviews: number): MergeInput {
       methods: ["merge"],
       requiredChecks: ["ci"],
       requiredReviews,
+      reviewIndependence,
     }),
     method: "merge",
     checks: ["ci"],
@@ -1805,6 +1815,43 @@ Given(
   "requiredReviewsを0と宣言したtrusted automatic policyがある",
   function () {
     this.mergeInput = independentReviewMergeInput(0);
+  },
+);
+Given(
+  "reviewIndependenceを宣言しないtrusted automatic policyがreview 1件を要求しapprovalが0件である",
+  function () {
+    this.mergeInput = independentReviewMergeInput(1, "context-isolated");
+  },
+);
+Then(
+  "独立review不足の拒否診断はactor除外を主張せず適用モードを述べる",
+  function () {
+    assert.equal(this.mergeResult.allowed, false);
+    const diagnostic = this.mergeResult.diagnostic;
+    assert.ok(diagnostic, "拒否診断がありません");
+    assert.equal(diagnostic.ruleId, "ASC-MERGE-REVIEW-001");
+    /**
+     * **実際に適用していない条件をchecksへ書かない。** actor除外を行っていない
+     * のに「除外した」と書くと、別actorを用意する対処へ誘導し、**本当の不足
+     * （対象HEADへのAPPROVED不在）を隠す。**
+     */
+    assert.equal(
+      diagnostic.checks.some((check: string) =>
+        check.includes("独立approvalから除外した"),
+      ),
+      false,
+      diagnostic.checks.join("; "),
+    );
+    assert.ok(
+      diagnostic.reasons.some((reason: string) =>
+        reason.includes("要求水準はcontext-isolatedです"),
+      ),
+      diagnostic.reasons.join("; "),
+    );
+    assert.equal(
+      diagnostic.next,
+      "対象HEAD SHAそのものに対するAPPROVED reviewを得てからpr mergeを再実行してください",
+    );
   },
 );
 When("宣言0件と宣言1件でmerge authorizationを評価する", function () {

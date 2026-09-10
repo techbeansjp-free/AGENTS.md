@@ -266,7 +266,16 @@ Then("role設定をrole独立性違反として拒否する", function () {
  * 必ず停止していた。**
  */
 Then("role設定を独立性違反として拒否しない", function () {
-  const errors = this.roleConfigurationValidation?.errors ?? [];
+  /**
+   * **未実行を空errorへ丸めない。** `?? []`で既定を与えると、検証を一度も
+   * 走らせていなくてもこのassertionが通り、**走査0回のまま合格する。**
+   */
+  assert.ok(this.roleConfigurationValidation, "role設定の検証結果がありません");
+  const errors = this.roleConfigurationValidation.errors;
+  assert.ok(
+    Array.isArray(errors),
+    "role設定の検証結果にerrors配列がありません",
+  );
   const independence = errors.filter((error: string) =>
     error.includes("BR-836-12"),
   );
