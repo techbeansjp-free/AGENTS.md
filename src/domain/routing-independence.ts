@@ -162,14 +162,16 @@ export function validateRoleConfigurationIndependence(
       ruleId: "BR-836-12",
       reason: "implementerとreviewerのrole解決結果を比較できません",
     };
-  if (
-    implementer.provider === reviewer.provider &&
-    implementer.logicalTier === reviewer.logicalTier
-  )
-    return {
-      verdict: "violated",
-      ruleId: "BR-836-12",
-      reason: "implementerとreviewerが同一providerかつ同一論理tierへ解決します",
-    };
+  /**
+   * **同一provider・同一tierだけを理由に違反としない**（Issue #1317）。
+   *
+   * providerとtierは「誰が判断したか」ではなく「どのmodelへ解決したか」である。
+   * 同一providerの別sessionでも判断コンテキストは分離できるし、逆に別providerでも
+   * 同一contextなら分離していない。**独立性はactor・session/context・対象差分を
+   * 変更していないこと・review evidenceで判定する。**
+   *
+   * 旧実装はここでBR-836-12の違反を返していたため、単独運用や単一provider構成では
+   * 別contextでレビューしても一律拒否され、通常フローが必ず停止した。
+   */
   return { verdict: "independent" };
 }

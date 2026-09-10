@@ -5293,7 +5293,33 @@ export async function main(
       },
       root,
     );
+    /**
+     * **独立性の要求水準はproject policyから読む。**
+     *
+     * caller申告ではなく`merge.reviewIndependence`を正本にする。宣言が無い場合は
+     * `context-isolated`として扱い、actor単位の独立性は要求しない。
+     * `actor-independent`を宣言したprojectでは従来どおり自己reviewを拒否する。
+     */
+    const independenceMode = ((): "context-isolated" | "actor-independent" => {
+      /**
+       * **policyが読めない場合は既定へ倒す。**
+       *
+       * project policyが未配置のrepositoryでも`review evidence`は動く。
+       * 読めないことを理由に停止すると、**独立性とは無関係な失敗で
+       * review evidenceが使えなくなる。** 既定は`context-isolated`であり、
+       * `actor-independent`は明示宣言があるときだけ適用する。
+       */
+      try {
+        return loadProjectPolicySet(root).policy.merge?.reviewIndependence ===
+          "actor-independent"
+          ? "actor-independent"
+          : "context-isolated";
+      } catch {
+        return "context-isolated";
+      }
+    })();
     const result = buildReviewEvidence({
+      independenceMode,
       implementationCommitSha,
       finalCommitSha,
       implementationTreeSha,

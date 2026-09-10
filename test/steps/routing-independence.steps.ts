@@ -256,6 +256,27 @@ Then("role設定をrole独立性違反として拒否する", function () {
   assert.equal(this.roleConfigurationValidation?.valid, false);
 });
 
+/**
+ * **同一provider・同一tierだけでは独立性違反にしない。**
+ *
+ * providerとtierは「どのmodelへ解決したか」であって「誰が判断したか」ではない。
+ * 同一providerの別sessionでも判断コンテキストは分離でき、逆に別providerでも
+ * 同一contextなら分離していない。旧契約はこれを違反としていたため、単独運用や
+ * 単一provider構成では別contextでレビューしても一律拒否され、**通常フローが
+ * 必ず停止していた。**
+ */
+Then("role設定を独立性違反として拒否しない", function () {
+  const errors = this.roleConfigurationValidation?.errors ?? [];
+  const independence = errors.filter((error: string) =>
+    error.includes("BR-836-12"),
+  );
+  assert.deepEqual(
+    independence,
+    [],
+    `同一provider・同一tierだけで独立性違反にしています: ${independence.join(", ")}`,
+  );
+});
+
 Then("role設定の拒否結果はrule IDを持つ", function () {
   assert.ok(
     this.roleConfigurationValidation?.errors.some((error) =>

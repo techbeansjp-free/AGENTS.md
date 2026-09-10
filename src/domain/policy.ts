@@ -796,6 +796,7 @@ export function validatePolicy(policy: unknown) {
       "branchMethods",
       "requiredChecks",
       "requiredReviews",
+      "reviewIndependence",
     ],
     "merge",
     errors,
@@ -857,6 +858,21 @@ export function validatePolicy(policy: unknown) {
     merge.requiredReviews > 20
   )
     errors.push("merge.requiredReviewsが不正です");
+  /**
+   * **reviewの独立性は2段階で宣言する**（Issue #1317）。
+   *
+   * `context-isolated`はimplementerと別session/contextであることを要求し、同一
+   * GitHub actorでも成立する。`actor-independent`はPR authorおよびimplementation
+   * commit authorと別のstable actor IDを要求する。**未宣言の既定は
+   * `context-isolated`である。** 高リスク変更・不可逆操作・releaseは
+   * project policyが`actor-independent`を宣言して引き上げる。
+   */
+  if (
+    merge.reviewIndependence !== undefined &&
+    merge.reviewIndependence !== "context-isolated" &&
+    merge.reviewIndependence !== "actor-independent"
+  )
+    errors.push("merge.reviewIndependenceが不正です");
   const forbidden = [
     "deleteBranch",
     "closeIssue",

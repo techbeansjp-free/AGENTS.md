@@ -850,9 +850,49 @@ export function doctor(target, worktreeObservations) {
             : undefined,
         expectedCommandFragment: HOST_HOOK_TARGETS[0],
     });
+    /**
+     * **展開先に在るがrecordに無い管理対象を報告する。`healthy`は変えない**（Issue #1314）。
+     *
+     * `--recover-record`での復旧は、正本と相違する資産を`retained`として保持し
+     * **recordへ登録しない**（INV-01。置いていないfileを管理していると主張しない）。
+     * 正しい設計だが、**帰結として当該資産は以後`update`の対象から外れ、古い版で
+     * 固定される。** 実利用者repositoryで復旧を実測したところ、version skewにより
+     * 107件中22件がこの状態になり、それでも`doctor`は`healthy`を返していた。
+     *
+     * 復旧commandの出力には`retained`が出るのでその場では見えるが、**後から見る
+     * 手段が無かった。** ここで報告する。**門は足さない。** `REQ-LC-011`の
+     * 「報告するが`healthy`を変えない」前例に従う。
+     */
+    const unmanagedAssets = (() => {
+        if (!installed)
+            return [];
+        /**
+         * **この報告の失敗で`doctor`全体を落とさない。**
+         *
+         * `mappings`は展開先の解決で例外を投げうる（境界外symlink等）。それは
+         * 他の診断が既に扱う事象であり、**報告欄の計算がそれを理由に`doctor`を
+         * 停止させると、他の診断まで返せなくなる。** 報告できないときは空にする。
+         */
+        try {
+            return mappings(target)
+                .map(({ dest }) => relativeKey(target, dest))
+                .filter((key) => !Object.hasOwn(files, key) &&
+                pathEntryExists(path.join(target, key)))
+                .sort();
+        }
+        catch {
+            return [];
+        }
+    })();
     return {
         healthy: installed && diagnostics.length === 0,
         installed,
+        unmanagedAssets: {
+            paths: unmanagedAssets,
+            note: unmanagedAssets.length === 0
+                ? "なし"
+                : `展開先に存在するがmanaged recordに無い管理対象が${unmanagedAssets.length}件ある。これらは update の対象にならず現在の版で固定される。正本へ戻すか、update --recover-record --apply で再評価する`,
+        },
         hooks: {
             canonical: HOST_HOOK_SOURCE,
             expected: [...HOST_HOOK_TARGETS],

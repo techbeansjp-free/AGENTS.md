@@ -1587,6 +1587,62 @@ When("human approvalなしとありでmerge authorizationを評価する", funct
 When("check state unknownでmerge authorizationを評価する", function () {
   this.mergeResult = authorizeMerge(this.mergeInput);
 });
+/**
+ * **単独運用が既定で成立することを固定する**（Issue #1317）。
+ *
+ * implementer・PR author・reviewerがすべて同一actorという、別のGitHub利用者が
+ * 居ないprojectの形である。旧契約ではこの構成が変更のリスクに関係なく恒常的に
+ * 停止していた。**exact HEAD一致とAPPROVEDは引き続き必須である。**
+ */
+const soleOperatorMergeInput = (
+  reviewIndependence?: "context-isolated" | "actor-independent",
+) => {
+  const headSha = "a".repeat(40);
+  return {
+    trustedPolicy: policyWithMerge({
+      mode: "automatic",
+      branches: ["feature/*"],
+      methods: ["squash"],
+      requiredChecks: [],
+      requiredReviews: 1,
+      ...(reviewIndependence === undefined ? {} : { reviewIndependence }),
+    }),
+    method: "squash" as const,
+    checks: [],
+    approvals: [
+      {
+        state: "APPROVED",
+        commitSha: headSha,
+        actorId: "actor-solo",
+        submittedAt: "2026-09-10T12:00:00Z",
+        reviewId: "1",
+      },
+    ],
+    branch: "feature/solo",
+    headSha,
+    prAuthorActorId: "actor-solo",
+    implementationAuthorActorId: "actor-solo",
+    repositoryVerified: true,
+    shaVerified: true,
+    protectionVerified: true,
+    mergeableVerified: true,
+  };
+};
+
+Given(
+  "trusted policyがreviewIndependenceを宣言せず実装者自身の承認だけがある",
+  function () {
+    this.mergeInput = soleOperatorMergeInput();
+  },
+);
+
+Given(
+  "trusted policyがactor-independentを宣言し実装者自身の承認だけがある",
+  function () {
+    this.mergeInput = soleOperatorMergeInput("actor-independent");
+  },
+);
+
 Given("reviewが旧HEADまたは実装者自身による承認である", function () {
   const headSha = "a".repeat(40);
   this.mergeInput = {
@@ -1596,6 +1652,14 @@ Given("reviewが旧HEADまたは実装者自身による承認である", functi
       methods: ["squash"],
       requiredChecks: [],
       requiredReviews: 1,
+      /**
+       * **実装者自身の承認を数えない性質は`actor-independent`の強制点である。**
+       *
+       * 旧HEADの承認を数えないことは両モード共通だが、実装者自身を除外するのは
+       * actor単位の独立性を要求する場合だけである。本scenarioはその強制点を
+       * 固定するので、policyが明示的に宣言する。
+       */
+      reviewIndependence: "actor-independent",
     }),
     method: "squash",
     checks: [],

@@ -21,7 +21,7 @@ PR停止またはmerged終端ではjournalを先にfsyncし、そのdigestと`ou
 
 ## role・tier入力契約
 
-PR作成前にcoordinator、analyst、implementer、reviewer、verifier、finalizerの担当記録、implementerとreviewerの異なるidentity・context、reviewerの非変更証拠、verifierの独立検証、必要model tierとmappingを確認する。不明なrole・tier・独立性証拠をmodel能力やPR作成authorityで補わず、fail-closedで停止する。担当finalizerは要件とproductを変更せず、承認済みreview結果を改変しない。
+PR作成前にcoordinator、analyst、implementer、reviewer、verifier、finalizerの担当記録、implementerとreviewerがproject policyの`merge.reviewIndependence`の要求水準を満たすこと（未宣言の既定は`context-isolated`であり、別session/contextなら同一GitHub actorでも成立する）、reviewerの非変更証拠、verifierの独立検証、必要model tierとmappingを確認する。不明なrole・tier・独立性証拠をmodel能力やPR作成authorityで補わず、fail-closedで停止する。担当finalizerは要件とproductを変更せず、承認済みreview結果を改変しない。
 
 ## テンプレート契約
 

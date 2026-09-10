@@ -47,7 +47,11 @@
           "items": { "type": "string", "minLength": 1 },
           "uniqueItems": true
         },
-        "requiredReviews": { "type": "integer", "minimum": 0, "maximum": 20 }
+        "requiredReviews": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "reviewIndependence": {
+          "description": "reviewの独立性の要求水準。context-isolatedはimplementerと別session/contextを要求し同一actorでも成立する。actor-independentはPR authorおよびimplementation commit authorと別のstable actor IDを要求する。未宣言の既定はcontext-isolatedである",
+          "enum": ["context-isolated", "actor-independent"]
+        }
       }
     },
     "budgets": {

@@ -12,6 +12,7 @@ import {
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
 interface IsolationWorld extends WorkflowWorld {
+  doctorResult?: ReturnType<typeof doctor>;
   applyResult: ReturnType<typeof uninstall>;
   cliResults: Array<ReturnType<typeof runCli>>;
   consumerFiles: Record<string, string>;
@@ -997,6 +998,57 @@ Then("相違資産はretainedとして報告され内容は1 byteも変わらな
     `保持した${DIVERGENT_ASSET}がrecordへ登録されています`,
   );
 });
+
+/**
+ * **復旧の帰結を後から見えるようにする**（Issue #1314）。
+ *
+ * `retained`はrecordへ登録しないので、当該資産は以後`update`の対象から外れる。
+ * 正しい設計だが帰結が見えないため、`doctor`が報告する。**門は足さない。**
+ */
+When("明示指定つきで復旧してからdoctorを実行する", function () {
+  upgrade(this.root, { apply: true, recoverRecord: true });
+  this.doctorResult = doctor(this.root);
+});
+
+Then(
+  "doctorはhealthyを変えず管理対象外の資産を件数と対処つきで報告する",
+  function () {
+    const result = this.doctorResult;
+    assert.ok(result, "doctor結果がありません");
+    const unmanaged = result.unmanagedAssets;
+    assert.ok(unmanaged, "unmanagedAssetsがありません");
+    assert.ok(
+      unmanaged.paths.length > 0,
+      "相違資産があるのに管理対象外として報告していません",
+    );
+    assert.ok(
+      unmanaged.paths.includes(DIVERGENT_ASSET),
+      `保持した${DIVERGENT_ASSET}を報告していません: ${unmanaged.paths.join(", ")}`,
+    );
+    /** **次に採る行動まで出す。** 件数だけでは利用者が動けない。 */
+    assert.match(
+      String(unmanaged.note),
+      /update の対象にならず/u,
+      `帰結を述べていません: ${String(unmanaged.note)}`,
+    );
+    assert.match(
+      String(unmanaged.note),
+      /--recover-record/u,
+      `次に採る行動を出していません: ${String(unmanaged.note)}`,
+    );
+    /**
+     * **報告するが`healthy`を変えない。**
+     * 管理対象外という事実そのものは`healthy`を落とす診断へ入れない。
+     * 入れると門になり、復旧直後の正常な状態を異常として扱ってしまう。
+     */
+    for (const diagnostic of result.adapters.diagnostics)
+      assert.doesNotMatch(
+        String(diagnostic),
+        /managed recordに無い|管理対象外/u,
+        `管理対象外の報告をhealthyの要因にしています: ${String(diagnostic)}`,
+      );
+  },
+);
 
 Then("拒否理由は最小診断だけを返す", function () {
   const rejections = this.recoveryRejections;

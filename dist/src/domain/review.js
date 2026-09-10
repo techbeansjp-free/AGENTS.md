@@ -43,6 +43,7 @@ function reviewInput(value) {
         "headSha",
         "candidateEvidence",
         "externalEvidence",
+        "independenceMode",
         "valid",
         "status",
         "errors",
@@ -54,6 +55,10 @@ function reviewInput(value) {
     if (record.valid !== undefined && typeof record.valid !== "boolean")
         return false;
     if (record.status !== undefined && typeof record.status !== "string")
+        return false;
+    if (record.independenceMode !== undefined &&
+        record.independenceMode !== "context-isolated" &&
+        record.independenceMode !== "actor-independent")
         return false;
     if (record.errors !== undefined &&
         (!Array.isArray(record.errors) ||
@@ -274,10 +279,24 @@ function validateImmutableCandidateEvidence(review) {
         errors.push("PR author stable actor IDが不正です");
     if (!stableActorId(external?.review?.actorId))
         errors.push("review stable actor IDが不正です");
-    if (external?.review?.actorId === external?.pr?.authorActorId)
-        errors.push("reviewerはPR authorと独立していなければなりません");
-    if (external?.review?.actorId === external?.implementation?.authorActorId)
-        errors.push("reviewerはobserved implementation commit authorと独立していなければなりません");
+    /**
+     * **actor単位の独立性は`actor-independent`のときだけ要求する**（Issue #1317）。
+     *
+     * GitHubは自分のPRを自分で承認できない。**別のGitHub利用者が居ないprojectでは、
+     * 変更のリスクに関係なくStep 10が完了不能になっていた。** 分離すべきは
+     * アカウントではなくレビュー判断のコンテキストである。
+     *
+     * `context-isolated`（未宣言時の既定）では同一actorを許すが、**exact HEAD一致、
+     * APPROVED verdict、reviewerが対象差分を変更していないことは引き続き必須である。**
+     * `actor-independent`は高リスク変更・不可逆操作・releaseでproject policyが
+     * 宣言して引き上げる。
+     */
+    if (review.independenceMode === "actor-independent") {
+        if (external?.review?.actorId === external?.pr?.authorActorId)
+            errors.push("reviewerはPR authorと独立していなければなりません");
+        if (external?.review?.actorId === external?.implementation?.authorActorId)
+            errors.push("reviewerはobserved implementation commit authorと独立していなければなりません");
+    }
     if (typeof external?.review?.submittedAt !== "string" ||
         !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(external.review.submittedAt) ||
         !Number.isFinite(Date.parse(external.review.submittedAt)))
@@ -302,12 +321,28 @@ export function buildReviewEvidence(observation) {
     const errors = validateImmutableCandidateEvidence({
         headSha: observation?.finalCommitSha,
         ...evidence,
+        /**
+         * **未指定は`context-isolated`として扱う**（Issue #1317）。
+         * actor単位の独立性を要求するのは、project policyが`actor-independent`を
+         * 明示的に宣言した場合だけである。
+         */
+        independenceMode: observation?.independenceMode === "actor-independent"
+            ? "actor-independent"
+            : "context-isolated",
     });
     const pending = errors.some((error) => /CI conclusion|approved verdict|submittedAt/u.test(error));
     return {
         valid: errors.length === 0,
         status: errors.length === 0 ? "verified" : pending ? "pending" : "rejected",
         errors,
+        /**
+         * **適用した独立性モードを結果へ残す。**
+         * 下流がevidenceから判定を再構成するとき、モードが欠けると
+         * `actor-independent`で拒否したものが既定で承認され得る。
+         */
+        independenceMode: observation?.independenceMode === "actor-independent"
+            ? "actor-independent"
+            : "context-isolated",
         ...evidence,
     };
 }

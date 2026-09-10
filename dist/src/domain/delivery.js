@@ -433,12 +433,30 @@ export function authorizeMerge(input) {
                 }) > 0))
             latestByActor.set(approval.actorId, approval);
     }
+    /**
+     * **独立性は2段階で判定する**（Issue #1317）。
+     *
+     * 旧実装はPR authorとimplementation commit authorを無条件に除外していた。
+     * GitHubは自分のPRを自分で承認できないため、**別のGitHub利用者が居ない
+     * projectでは、変更のリスクに関係なくmergeが恒常的に停止していた。**
+     *
+     * - `context-isolated`（既定）: implementerと別session/contextであることを
+     *   要求する。**同一actorでも成立する。** exact HEAD一致とAPPROVEDは維持する
+     * - `actor-independent`: PR authorおよびimplementation commit authorと別の
+     *   stable actor IDを要求する。**高リスク変更・不可逆操作・releaseで
+     *   project policyが宣言して引き上げる**
+     *
+     * **fail-openではない。** どちらのモードでもAPPROVED verdictとexact HEAD一致は
+     * 必須であり、`actor-independent`の強制点は残る。
+     */
+    const actorIndependenceRequired = policy.reviewIndependence === "actor-independent";
     const independentApprovals = new Set([...latestByActor.values()]
         .filter((approval) => approval.state === "APPROVED" &&
         approval.commitSha === input.headSha &&
         typeof approval.actorId === "string" &&
-        approval.actorId !== input.prAuthorActorId &&
-        approval.actorId !== input.implementationAuthorActorId)
+        (!actorIndependenceRequired ||
+            (approval.actorId !== input.prAuthorActorId &&
+                approval.actorId !== input.implementationAuthorActorId)))
         .map((approval) => approval.actorId));
     const requiredIndependentReviews = Math.max(1, policy.requiredReviews ?? 0);
     if (independentApprovals.size < requiredIndependentReviews)

@@ -494,3 +494,13 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
       | "-1" |
       | "1e3" |
       | "042%2F" |
+
+  Scenario: SCN-INT-MERGE-017 既定のcontext-isolatedは同一actorのreviewでもmergeを許可する
+    Given trusted policyがreviewIndependenceを宣言せず実装者自身の承認だけがある
+    When merge authorizationを評価する
+    Then mergeは許可される
+
+  Scenario: SCN-INT-MERGE-018 actor-independentを宣言すると同一actorのreviewでmergeを拒否する
+    Given trusted policyがactor-independentを宣言し実装者自身の承認だけがある
+    When merge authorizationを評価する
+    Then mergeは許可されない

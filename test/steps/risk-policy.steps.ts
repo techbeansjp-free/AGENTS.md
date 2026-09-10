@@ -605,6 +605,15 @@ const basePolicy = (rules: Rule[] = [baseRule()]): Policy => ({
     methods: [],
     requiredChecks: [],
     requiredReviews: 1,
+    /**
+     * **このfixtureはactor単位の独立性を検査する。**
+     *
+     * `self-review`・`bot-pr-implementation-self-review` variantは
+     * 「reviewerがimplementerと同一actorなら拒否する」性質を固定している。
+     * その性質は`actor-independent`のときの強制点なので、fixtureが明示的に宣言する。
+     * 既定の`context-isolated`で同一actorが成立することは別scenarioで固定する。
+     */
+    reviewIndependence: "actor-independent",
   },
   budgets: { localFeedbackMs: 100, prGateMs: 1000 },
   rules,
@@ -4262,6 +4271,22 @@ Given(
   "H_impl後にPhase A review artifactだけをcommitした隔離repositoryがある",
   function () {
     this.root = this.initRepo();
+    /**
+     * **actor単位の独立性を要求するprojectとして構成する。**
+     *
+     * `self-review`・`bot-pr-implementation-self-review` variantは
+     * 「reviewerがimplementerと同一actorなら承認しない」性質を固定する。
+     * それは`actor-independent`のときの強制点なので、fixtureのproject policyが
+     * 明示的に宣言する。**宣言しないと既定の`context-isolated`になり、
+     * 同一actorでも承認される（それが単独運用の正しい挙動である）。**
+     */
+    fs.mkdirSync(path.join(this.root, ".agent-skill-chain"), {
+      recursive: true,
+    });
+    writeJson(
+      path.join(this.root, ".agent-skill-chain", "project-policy.json"),
+      basePolicy(),
+    );
     fs.writeFileSync(
       path.join(this.root, "product.js"),
       "export const value = 1;\n",
