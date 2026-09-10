@@ -93,6 +93,13 @@ interface ImmutableReviewEvidence {
   headSha?: unknown;
   candidateEvidence?: CandidateEvidence;
   externalEvidence?: ExternalEvidence;
+  /**
+   * reviewの独立性の要求水準（Issue #1317）。
+   *
+   * project policyの`merge.reviewIndependence`から渡す。**未指定は
+   * `context-isolated`として扱い、actor単位の独立性を要求しない。**
+   */
+  independenceMode?: "context-isolated" | "actor-independent";
 }
 interface ReviewObservation {
   implementationCommitSha?: unknown;
@@ -102,6 +109,11 @@ interface ReviewObservation {
   changedPaths?: unknown[];
   artifact?: ArtifactEvidence;
   externalEvidence?: ExternalEvidence;
+  /**
+   * project policyの`merge.reviewIndependence`（Issue #1317）。
+   * **未指定は`context-isolated`として扱う。**
+   */
+  independenceMode?: "context-isolated" | "actor-independent";
 }
 interface Finding {
   id?: string;
@@ -148,6 +160,7 @@ function reviewInput(value: unknown): value is ReviewInput {
     "headSha",
     "candidateEvidence",
     "externalEvidence",
+    "independenceMode",
     "valid",
     "status",
     "errors",
@@ -157,6 +170,12 @@ function reviewInput(value: unknown): value is ReviewInput {
   if (record.valid !== undefined && typeof record.valid !== "boolean")
     return false;
   if (record.status !== undefined && typeof record.status !== "string")
+    return false;
+  if (
+    record.independenceMode !== undefined &&
+    record.independenceMode !== "context-isolated" &&
+    record.independenceMode !== "actor-independent"
+  )
     return false;
   if (
     record.errors !== undefined &&
@@ -487,12 +506,26 @@ function validateImmutableCandidateEvidence(
     errors.push("PR author stable actor IDが不正です");
   if (!stableActorId(external?.review?.actorId))
     errors.push("review stable actor IDが不正です");
-  if (external?.review?.actorId === external?.pr?.authorActorId)
-    errors.push("reviewerはPR authorと独立していなければなりません");
-  if (external?.review?.actorId === external?.implementation?.authorActorId)
-    errors.push(
-      "reviewerはobserved implementation commit authorと独立していなければなりません",
-    );
+  /**
+   * **actor単位の独立性は`actor-independent`のときだけ要求する**（Issue #1317）。
+   *
+   * GitHubは自分のPRを自分で承認できない。**別のGitHub利用者が居ないprojectでは、
+   * 変更のリスクに関係なくStep 10が完了不能になっていた。** 分離すべきは
+   * アカウントではなくレビュー判断のコンテキストである。
+   *
+   * `context-isolated`（未宣言時の既定）では同一actorを許すが、**exact HEAD一致、
+   * APPROVED verdict、reviewerが対象差分を変更していないことは引き続き必須である。**
+   * `actor-independent`は高リスク変更・不可逆操作・releaseでproject policyが
+   * 宣言して引き上げる。
+   */
+  if (review.independenceMode === "actor-independent") {
+    if (external?.review?.actorId === external?.pr?.authorActorId)
+      errors.push("reviewerはPR authorと独立していなければなりません");
+    if (external?.review?.actorId === external?.implementation?.authorActorId)
+      errors.push(
+        "reviewerはobserved implementation commit authorと独立していなければなりません",
+      );
+  }
   if (
     typeof external?.review?.submittedAt !== "string" ||
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(
@@ -519,10 +552,32 @@ export function buildReviewEvidence(observation: ReviewObservation) {
     },
     externalEvidence: observation?.externalEvidence,
   };
-  const errors = validateImmutableCandidateEvidence({
-    headSha: observation?.finalCommitSha,
-    ...evidence,
-  });
+  /**
+   * **未指定は`context-isolated`、未知値は拒否する**（Issue #1317）。
+   *
+   * 未指定と未知値を同じ既定へ正規化すると、**綴り違いや旧い値がactor単位の
+   * 独立性を静かに外す経路になる。** 未知値は要求水準が不明であって要求なしでは
+   * ないので、errorとして記録したうえで最も強い`actor-independent`で検証する。
+   */
+  const declared = observation?.independenceMode;
+  const declarationError =
+    declared !== undefined &&
+    declared !== "context-isolated" &&
+    declared !== "actor-independent"
+      ? "review独立性モードの宣言が不正です"
+      : undefined;
+  const independenceMode: "context-isolated" | "actor-independent" =
+    declared === "actor-independent" || declarationError !== undefined
+      ? "actor-independent"
+      : "context-isolated";
+  const errors = [
+    ...(declarationError ? [declarationError] : []),
+    ...validateImmutableCandidateEvidence({
+      headSha: observation?.finalCommitSha,
+      ...evidence,
+      independenceMode,
+    }),
+  ];
   const pending = errors.some((error) =>
     /CI conclusion|approved verdict|submittedAt/u.test(error),
   );
@@ -530,6 +585,12 @@ export function buildReviewEvidence(observation: ReviewObservation) {
     valid: errors.length === 0,
     status: errors.length === 0 ? "verified" : pending ? "pending" : "rejected",
     errors,
+    /**
+     * **適用した独立性モードを結果へ残す。**
+     * 下流がevidenceから判定を再構成するとき、モードが欠けると
+     * `actor-independent`で拒否したものが既定で承認され得る。
+     */
+    independenceMode,
     ...evidence,
   };
 }

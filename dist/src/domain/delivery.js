@@ -313,8 +313,10 @@ export function createPullRequest(input, external) {
     };
 }
 export function independentReviewDiagnostic(input) {
+    const actorIndependenceRequired = input.reviewIndependence === "actor-independent";
     const reasons = [
         `要求する独立approvalは${input.appliedRequiredReviews}件ですが、対象HEADに対する独立approvalは${input.observedIndependentApprovals}件です`,
+        `適用したreview独立性の要求水準は${input.reviewIndependence ?? "context-isolated"}です`,
     ];
     if (typeof input.declaredRequiredReviews === "number" &&
         input.declaredRequiredReviews !== input.appliedRequiredReviews)
@@ -331,11 +333,25 @@ export function independentReviewDiagnostic(input) {
         ],
         checks: [
             "同一actorのreviewを最新状態へ畳み込み、対象HEAD SHAへのAPPROVEDだけを数えた",
-            "PR authorとimplementation authorのstable IDを独立approvalから除外した",
+            /**
+             * **実際に適用した条件だけを並べる**（Issue #1317）。
+             * `context-isolated`ではactor除外を行っていないのに「除外した」と書くと、
+             * 別actorを用意する対処へ誘導して**本当の不足（対象HEADへのAPPROVED不在）を
+             * 隠す。**
+             */
+            ...(actorIndependenceRequired
+                ? [
+                    "PR authorとimplementation authorのstable IDを独立approvalから除外した",
+                ]
+                : []),
         ],
         autoFixes: [],
-        next: "対象HEAD SHAに対する独立reviewerのapprovalを得てからpr mergeを再実行してください",
-        requiredAuthority: "対象PRへ独立approvalを与えられるreviewer",
+        next: actorIndependenceRequired
+            ? "対象HEAD SHAに対する独立reviewerのapprovalを得てからpr mergeを再実行してください"
+            : "対象HEAD SHAそのものに対するAPPROVED reviewを得てからpr mergeを再実行してください",
+        requiredAuthority: actorIndependenceRequired
+            ? "対象PRへ独立approvalを与えられるreviewer"
+            : "対象PRへapprovalを与えられるreviewer",
         rollback: "mergeを実行せず、branchと既存commitを変更しない",
     };
 }
@@ -433,12 +449,30 @@ export function authorizeMerge(input) {
                 }) > 0))
             latestByActor.set(approval.actorId, approval);
     }
+    /**
+     * **独立性は2段階で判定する**（Issue #1317）。
+     *
+     * 旧実装はPR authorとimplementation commit authorを無条件に除外していた。
+     * GitHubは自分のPRを自分で承認できないため、**別のGitHub利用者が居ない
+     * projectでは、変更のリスクに関係なくmergeが恒常的に停止していた。**
+     *
+     * - `context-isolated`（既定）: implementerと別session/contextであることを
+     *   要求する。**同一actorでも成立する。** exact HEAD一致とAPPROVEDは維持する
+     * - `actor-independent`: PR authorおよびimplementation commit authorと別の
+     *   stable actor IDを要求する。**高リスク変更・不可逆操作・releaseで
+     *   project policyが宣言して引き上げる**
+     *
+     * **fail-openではない。** どちらのモードでもAPPROVED verdictとexact HEAD一致は
+     * 必須であり、`actor-independent`の強制点は残る。
+     */
+    const actorIndependenceRequired = policy.reviewIndependence === "actor-independent";
     const independentApprovals = new Set([...latestByActor.values()]
         .filter((approval) => approval.state === "APPROVED" &&
         approval.commitSha === input.headSha &&
         typeof approval.actorId === "string" &&
-        approval.actorId !== input.prAuthorActorId &&
-        approval.actorId !== input.implementationAuthorActorId)
+        (!actorIndependenceRequired ||
+            (approval.actorId !== input.prAuthorActorId &&
+                approval.actorId !== input.implementationAuthorActorId)))
         .map((approval) => approval.actorId));
     const requiredIndependentReviews = Math.max(1, policy.requiredReviews ?? 0);
     if (independentApprovals.size < requiredIndependentReviews)
@@ -448,6 +482,9 @@ export function authorizeMerge(input) {
             appliedRequiredReviews: requiredIndependentReviews,
             observedIndependentApprovals: independentApprovals.size,
             headSha: input.headSha,
+            reviewIndependence: actorIndependenceRequired
+                ? "actor-independent"
+                : "context-isolated",
         }));
     if (policy.mode === "assisted" && independentApprovals.size < 1)
         return deny("assistedモードには同じHEAD SHAに対する独立した人間承認が必要です");

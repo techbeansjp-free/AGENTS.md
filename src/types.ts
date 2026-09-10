@@ -169,6 +169,14 @@ export interface Policy {
     }>;
     requiredChecks: string[];
     requiredReviews: number;
+    /**
+     * reviewの独立性の要求水準（Issue #1317）。
+     *
+     * `context-isolated`はimplementerと別session/contextを要求し同一actorでも成立する。
+     * `actor-independent`はPR authorおよびimplementation commit authorと別のstable
+     * actor IDを要求する。**未宣言の既定は`context-isolated`である。**
+     */
+    reviewIndependence?: "context-isolated" | "actor-independent";
   };
   budgets?: { localFeedbackMs?: number; prGateMs?: number };
   worktree?: {

@@ -306,3 +306,16 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     Given 別のcommandのentryだけを持つproject-local設定がある
     When hook登録状態を検査する
     Then 未登録として報告され断定しない診断が出る
+
+  Scenario: SCN-UNIT-REVIEW-030 既定のcontext-isolatedは実装者自身のreviewを承認可能にする
+    Given H_implの後にreview artifactだけを追加したH_finalの完全なreviewがある
+    And reviewerがimplementation commit authorと同一actorでPRはautomation identityが作成した
+    When review gateを評価する
+    Then reviewはapprovedである
+
+  Scenario: SCN-UNIT-REVIEW-031 actor-independentは実装者自身のreviewを拒否する
+    Given H_implの後にreview artifactだけを追加したH_finalの完全なreviewがある
+    And reviewerがimplementation commit authorと同一actorでPRはautomation identityが作成した
+    And 独立性モードにactor-independentを宣言する
+    When review gateを評価する
+    Then reviewはrejectedでありobserved implementation commit authorと独立を返す

@@ -241,6 +241,11 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-047"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  Scenario: SCN-E2E-WFSTEP-051 pr merge実経路で単独運用は既定で通りactor-independent宣言で止まる
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-051"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-048 索引の反映待ちを経て1回のpr createでbindする
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-048"のE2E検査を実行する

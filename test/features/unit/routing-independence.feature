@@ -15,8 +15,7 @@ Feature: routingの独立性とcandidate自己評価
     And dot segmentを含むcandidate pathも安全側に停止する
     And evaluatorRefは評価結果に記録する
 
-  Scenario: SCN-UNIT-ROUTING-013 implementerとreviewerが同一providerかつ同一論理tierへ解決するrole設定を拒否する
+  Scenario: SCN-UNIT-ROUTING-013 同一providerかつ同一論理tierだけを理由に独立性違反としない
     Given implementerとreviewerが同一providerかつ同一論理tierへ解決するrole設定を与える
     When role設定を検証する
-    Then role設定をrole独立性違反として拒否する
-    And role設定の拒否結果はrule IDを持つ
+    Then role設定を独立性違反として拒否しない

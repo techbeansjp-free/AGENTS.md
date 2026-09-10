@@ -14,7 +14,7 @@ import { applyWorkspaceHygiene, previewWorkspaceHygiene, } from "./domain/hygien
 import { applyStagingCleanup, calculateStagingDigest, listStagingArtifacts, migrateLegacyStagingTrackerLocked, planStagingCleanup, readStoredStagingRecord, withStagingMutationLock, } from "./domain/staging.js";
 import { buildFinalizeReport, applyFinalize, planCompletion, planRootUpdate, planWorktreeCleanup, summarizeCompletion, } from "./domain/finalize.js";
 import { init, upgrade, uninstall, doctor } from "./domain/lifecycle.js";
-import { loadConsumerChoicesFragmentAtCommit, loadConsumerPolicyAtCommit, conformanceDeclarationFromPolicySet, loadEffectiveTrustedPolicySet, choicesFragmentSource, ruleFragmentSources, loadOperationPolicy, loadProjectPolicySet, loadProjectPolicySetAtCommit, mergeMethodPolicyWarnings, validatePolicy, } from "./domain/policy.js";
+import { loadConsumerChoicesFragmentAtCommit, loadConsumerPolicyAtCommit, conformanceDeclarationFromPolicySet, loadEffectiveTrustedPolicySet, choicesFragmentSource, ruleFragmentSources, loadOperationPolicy, loadProjectPolicySet, loadProjectPolicySetAtCommit, mergeMethodPolicyWarnings, resolveReviewIndependence, validatePolicy, } from "./domain/policy.js";
 import { applyMigration, compareTrustedPolicy, enforceOperation, planMigration, resolveEffectivePolicy, retryMigration, rollbackMigration, sanitizeOutput, serializeDiagnostic, } from "./domain/enforcement.js";
 import { applyFileMigration, planFileMigration, recoverFileMigration, retryFileMigration, rollbackFileMigration, } from "./domain/migration.js";
 import { validateScenarioTrace } from "./domain/trace.js";
@@ -588,11 +588,23 @@ function currentIndependentApprovals(input) {
                 }) > 0))
             latestByActor.set(approval.actorId, approval);
     }
+    /**
+     * **actor単位の除外は`actor-independent`のときだけ行う。**
+     *
+     * ここは`pr merge`の実経路であり、`authorizeMerge`より前段にある。
+     * モードを受け取らずに常に除外していたため、**`authorizeMerge`側だけを
+     * 2モード化しても既定modeが実経路では到達不能だった。** 純粋関数の単体
+     * testはこの前段を通らないので、その齟齬をtestが捕まえられなかった。
+     *
+     * どちらのモードでもAPPROVED verdictとexact HEAD一致は必須である。
+     */
+    const actorIndependenceRequired = input.independenceMode === "actor-independent";
     return [...latestByActor.values()]
         .filter((approval) => approval.state === "APPROVED" &&
         approval.commitSha === input.headSha &&
-        approval.actorId !== input.prAuthorActorId &&
-        approval.actorId !== input.implementationAuthorActorId)
+        (!actorIndependenceRequired ||
+            (approval.actorId !== input.prAuthorActorId &&
+                approval.actorId !== input.implementationAuthorActorId)))
         .sort((left, right) => left.reviewId.localeCompare(right.reviewId, "en", { numeric: true }));
 }
 function resolveImplementationCommitForMerge(root, finalHeadSha) {
@@ -733,9 +745,12 @@ function observeMergeReviewEvidence(input) {
         headSha: input.observed.headRefOid,
         prAuthorActorId: input.observed.author?.id,
         implementationAuthorActorId: implementation.authorActorId,
+        independenceMode: input.independenceMode,
     })[0];
     if (!independentReview?.reviewId)
-        throw new Error("current H_finalに対するPR author・H_impl authorと独立したreviewがありません");
+        throw new Error(input.independenceMode === "actor-independent"
+            ? "current H_finalに対するPR author・H_impl authorと独立したreviewがありません"
+            : "current H_finalそのものを対象とするAPPROVED reviewがありません");
     const identity = {
         domain: "agent-skill-chain/merge-review-evidence/v1",
         repository: input.state.create.repository,
@@ -807,6 +822,7 @@ function inspectAuthorizedPullRequestMerge(input) {
         state: input.state,
         observed,
         ciEventAt: ciDeliveryEventAt(input.staging, input.state),
+        independenceMode: resolveReviewIndependence(input.trustedSet.policy),
     });
     return {
         observed,
@@ -968,6 +984,14 @@ function readBackPreparedPullRequestMerge(input) {
         if (!input.state.merge)
             throw new Error("provider read-backより前のmerge intentがありません");
         let observed = github("pr.inspect", { repository: input.repository, pr: input.pr }, input.root);
+        /**
+         * **merge前後どちらの経路でも、review独立性の要求水準は既定branchのtrusted
+         * policyから解決する**（Issue #1317）。merge後だけcandidate側の値や既定へ
+         * 倒すと、`assertFixedMergeReviewEvidence`が照合する対象を候補が動かせる。
+         */
+        const base = defaultBranch(input.root);
+        const trustedSet = loadEffectiveTrustedPolicySet(input.root, base);
+        const independenceMode = resolveReviewIndependence(trustedSet.policy);
         const merged = String(observed.state ?? "").toUpperCase() === "MERGED";
         if (merged) {
             assertBoundPullRequestObservation({
@@ -995,12 +1019,11 @@ function readBackPreparedPullRequestMerge(input) {
                 observed,
                 ciEventAt: ciDeliveryEventAt(input.staging, input.state),
                 fixedCiRunId: input.state.merge.ciRunId,
+                independenceMode,
             });
             assertFixedMergeReviewEvidence(input.state, reviewed.reviewEvidence);
         }
         else {
-            const base = defaultBranch(input.root);
-            const trustedSet = loadEffectiveTrustedPolicySet(input.root, base);
             const inspected = inspectAuthorizedPullRequestMerge({
                 root: input.root,
                 staging: input.staging,
@@ -1795,6 +1818,34 @@ function defaultBranch(root) {
     if (symbolic.status === 0)
         return symbolic.stdout.trim().replace(/^origin\//, "");
     throw new Error("既定ブランチが不明です。origin/HEADを設定してください");
+}
+/**
+ * review独立性の要求水準を解決する（Issue #1317）。
+ *
+ * **正本は既定branchのtrusted policyである。** 候補側filesystemを正本にすると、
+ * 候補が同一PRのなかで自分に課される要求水準を下げられる。
+ *
+ * **既定`context-isolated`へ倒すのは、policyが本当に未配置のときだけである。**
+ * 壊れたJSON・未知の構造・境界外symlink・権限やIOの失敗は「要求なし」ではなく
+ * 「要求水準が不明」であり、区別せずcatchすると独立性の強制点を静かに落とす経路が
+ * 増える。それらはここでthrowさせて停止させる。
+ */
+function resolveTrustedReviewIndependence(root) {
+    const symbolic = git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], root, { allowFailure: true });
+    if (symbolic.status === 0) {
+        const base = symbolic.stdout.trim().replace(/^origin\//u, "");
+        const trustedRef = git(["rev-parse", "--verify", `origin/${base}^{commit}`], root, { allowFailure: true });
+        if (trustedRef.status === 0)
+            return resolveReviewIndependence(loadEffectiveTrustedPolicySet(root, base).policy);
+    }
+    /**
+     * remote-tracking refを持たないlocal専用repositoryでは候補側のmanifestを読む。
+     * **未配置のときだけ既定とし、配置されているなら不正でも黙って既定へ倒さない。**
+     */
+    const manifestPath = path.join(root, ".agent-skill-chain", "project-policy.json");
+    if (!fs.existsSync(manifestPath))
+        return "context-isolated";
+    return resolveReviewIndependence(loadProjectPolicySet(root).policy);
 }
 function cliRegisteredWorktrees(root) {
     const entries = [];
@@ -3883,7 +3934,15 @@ export async function main(argv, dependencies = {}) {
             reviewId,
             implementationCommitSha,
         }, root);
+        /**
+         * **独立性の要求水準はcaller申告ではなくpolicyを正本にする。**
+         *
+         * 宣言が無い場合は`context-isolated`として扱いactor単位の独立性は要求しない。
+         * `actor-independent`を宣言したprojectでは従来どおり自己reviewを拒否する。
+         */
+        const independenceMode = resolveTrustedReviewIndependence(root);
         const result = buildReviewEvidence({
+            independenceMode,
             implementationCommitSha,
             finalCommitSha,
             implementationTreeSha,

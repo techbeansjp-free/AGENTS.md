@@ -207,3 +207,13 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     Given 導入後にrecordを失い展開済み資産が境界外symlinkの隔離先がある
     When 明示指定なしでrecord不在の隔離先へupdateを試みる
     Then 拒否理由は明示指定を成功する手段として案内せず原因を名指しする
+
+  Scenario: SCN-INT-LIFECYCLE-043 recordを検証できないdoctorは管理対象外を「なし」と断定しない
+    Given 導入後にrecordが読めなくなった隔離先がある
+    When 隔離先でdoctorを実行する
+    Then doctorは管理対象外の資産を判定不能として次の操作つきで報告する
+
+  Scenario: SCN-INT-LIFECYCLE-042 復旧で管理対象から外れた資産をdoctorが報告しhealthyを変えない
+    Given 導入後にrecordを失い展開済み資産が正本と異なる隔離先がある
+    When 明示指定つきで復旧してからdoctorを実行する
+    Then doctorはhealthyを変えず管理対象外の資産を件数と対処つきで報告する

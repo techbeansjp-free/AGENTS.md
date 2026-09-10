@@ -605,6 +605,15 @@ const basePolicy = (rules: Rule[] = [baseRule()]): Policy => ({
     methods: [],
     requiredChecks: [],
     requiredReviews: 1,
+    /**
+     * **このfixtureはactor単位の独立性を検査する。**
+     *
+     * `self-review`・`bot-pr-implementation-self-review` variantは
+     * 「reviewerがimplementerと同一actorなら拒否する」性質を固定している。
+     * その性質は`actor-independent`のときの強制点なので、fixtureが明示的に宣言する。
+     * 既定の`context-isolated`で同一actorが成立することは別scenarioで固定する。
+     */
+    reviewIndependence: "actor-independent",
   },
   budgets: { localFeedbackMs: 100, prGateMs: 1000 },
   rules,
@@ -1448,6 +1457,12 @@ Given(
       methods: ["squash"],
       requiredChecks: ["ci"],
       requiredReviews: 2,
+      /**
+       * **review独立性の要求水準も弱化対象である**（Issue #1317）。
+       * `merge`は丸ごと差し替わるため、**candidate側でfieldを落とすだけで
+       * 既定`context-isolated`へ下がる。** その経路を弱化として固定する。
+       */
+      reviewIndependence: "actor-independent",
     };
     this.candidate = structuredClone(this.trusted);
     this.candidate.merge = {
@@ -1474,10 +1489,52 @@ Then("すべてのauthority弱化理由を返す", function () {
     "method",
     "required check",
     "required review",
+    "merge.reviewIndependenceをactor-independentからcontext-isolatedへ弱化している",
     "scope",
     "意味fingerprint",
   ])
-    assert.ok(reasons.includes(fragment), fragment);
+    assert.ok(reasons.includes(fragment), `${fragment}: ${reasons}`);
+});
+
+/**
+ * **単調性は両方向で押さえる**（Issue #1317）。
+ *
+ * 弱化だけを検査すると、**すべてを弱化として拒否する実装**が通ってしまう。
+ * 引き上げ（未宣言または`context-isolated`から`actor-independent`）は強化なので
+ * 受理しなければならない。
+ */
+Given(
+  "trusted policyがreviewIndependenceを宣言せずcandidateがactor-independentへ引き上げる",
+  function () {
+    this.trusted = basePolicy();
+    this.trusted.merge = {
+      mode: "assisted",
+      branches: ["feature/*"],
+      methods: ["squash"],
+      requiredChecks: ["ci"],
+      requiredReviews: 2,
+    };
+    this.candidate = structuredClone(this.trusted);
+    this.candidate.merge = {
+      ...this.candidate.merge,
+      reviewIndependence: "actor-independent",
+    };
+  },
+);
+Then("review独立性の引き上げをauthority弱化にしない", function () {
+  const reasons = this.comparison.rejected
+    .flatMap((item: Diagnostic) => item.reasons)
+    .filter((reason: string) => reason.includes("reviewIndependence"));
+  assert.deepEqual(
+    reasons,
+    [],
+    `引き上げを弱化として拒否しています: ${reasons.join("; ")}`,
+  );
+  assert.equal(
+    this.comparison.allowed,
+    true,
+    JSON.stringify(this.comparison.rejected),
+  );
 });
 
 Given("tokenとpasswordを含むblock diagnosticがある", function () {
@@ -4262,6 +4319,22 @@ Given(
   "H_impl後にPhase A review artifactだけをcommitした隔離repositoryがある",
   function () {
     this.root = this.initRepo();
+    /**
+     * **actor単位の独立性を要求するprojectとして構成する。**
+     *
+     * `self-review`・`bot-pr-implementation-self-review` variantは
+     * 「reviewerがimplementerと同一actorなら承認しない」性質を固定する。
+     * それは`actor-independent`のときの強制点なので、fixtureのproject policyが
+     * 明示的に宣言する。**宣言しないと既定の`context-isolated`になり、
+     * 同一actorでも承認される（それが単独運用の正しい挙動である）。**
+     */
+    fs.mkdirSync(path.join(this.root, ".agent-skill-chain"), {
+      recursive: true,
+    });
+    writeJson(
+      path.join(this.root, ".agent-skill-chain", "project-policy.json"),
+      basePolicy(),
+    );
     fs.writeFileSync(
       path.join(this.root, "product.js"),
       "export const value = 1;\n",
@@ -4315,6 +4388,41 @@ Given(
 Given(/^GitHub review providerの(.+)観測がある$/u, function (variant: string) {
   prepareReviewGhStub(this as unknown as ReviewStubWorld, variant);
 });
+/**
+ * **要求水準が読めないことを「要求なし」へ倒さない**（Issue #1317）。
+ *
+ * 独立性モードの解決を素朴に`try/catch`で包むと、policy未配置だけでなく
+ * **壊れたJSON・未知の構造・権限やIOの失敗まで既定の`context-isolated`へ倒れる。**
+ * それはactor単位の独立性を無言で外す経路になる。**真の未配置だけが既定であり、
+ * 読めるが不正なら停止する。**
+ */
+Given("project policyが壊れていて読めない", function () {
+  fs.writeFileSync(
+    path.join(this.root, ".agent-skill-chain", "project-policy.json"),
+    '{"schemaVersion": "agent-skill-chain/project-policy/v0.3.1", "merge":\n',
+  );
+});
+Given("project policyがreviewIndependenceへ未知の値を宣言する", function () {
+  writeJson(path.join(this.root, ".agent-skill-chain", "project-policy.json"), {
+    ...basePolicy(),
+    merge: {
+      ...basePolicy().merge,
+      reviewIndependence: "context-independent",
+    },
+  });
+});
+Then("review evidence CLIは要求水準不明として停止する", function () {
+  assert.notEqual(
+    this.reviewEvidenceCli.status,
+    0,
+    "policyを読めないまま既定へ倒して承認しています",
+  );
+  assert.match(
+    this.reviewEvidenceCli.stdout + this.reviewEvidenceCli.stderr,
+    /project policy|reviewIndependence/u,
+  );
+});
+
 When("review evidence CLIでGitとGitHub providerを結合する", function () {
   const common = [
     "review",

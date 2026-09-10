@@ -701,6 +701,13 @@ export function doctor(target, worktreeObservations) {
     const diagnostics = [];
     let files = {};
     let managedAssets = [];
+    /**
+     * **recordを読めたかを`installed`と別に持つ**（Issue #1314、外部reviewの指摘）。
+     *
+     * recordの検証に失敗すると`files`は空のままである。`installed`だけを条件に
+     * 未管理資産を数えると、**展開済みの全fileを「recordに無い」と報告する。**
+     */
+    let recordRead = false;
     if (!installed)
         diagnostics.push(`${MANAGED_RECORD}: managed recordがありません`);
     else {
@@ -708,6 +715,7 @@ export function doctor(target, worktreeObservations) {
             const managed = readManagedAssetRecord(target);
             files = managed.record.files;
             managedAssets = managed.assets;
+            recordRead = true;
         }
         catch (error) {
             diagnostics.push(`${MANAGED_RECORD}: ${error instanceof Error ? error.message : "検証できません"}`);
@@ -850,9 +858,71 @@ export function doctor(target, worktreeObservations) {
             : undefined,
         expectedCommandFragment: HOST_HOOK_TARGETS[0],
     });
+    /**
+     * **展開先に在るがrecordに無い管理対象を報告する。`healthy`は変えない**（Issue #1314）。
+     *
+     * `--recover-record`での復旧は、正本と相違する資産を`retained`として保持し
+     * **recordへ登録しない**（INV-01。置いていないfileを管理していると主張しない）。
+     * 正しい設計だが、**帰結として当該資産は以後`update`の対象から外れ、古い版で
+     * 固定される。** 実利用者repositoryで復旧を実測したところ、version skewにより
+     * 107件中22件がこの状態になり、それでも`doctor`は`healthy`を返していた。
+     *
+     * 復旧commandの出力には`retained`が出るのでその場では見えるが、**後から見る
+     * 手段が無かった。** ここで報告する。**門は足さない。** `REQ-LC-011`の
+     * 「報告するが`healthy`を変えない」前例に従う。
+     */
+    const unmanagedAssets = (() => {
+        if (!installed)
+            return {
+                observed: false,
+                paths: [],
+                unobservedReason: `${MANAGED_RECORD}が無いため、未管理資産を判定できません`,
+            };
+        if (!recordRead)
+            return {
+                observed: false,
+                paths: [],
+                unobservedReason: `${MANAGED_RECORD}を検証できないため、未管理資産を判定できません`,
+            };
+        /**
+         * **この報告の失敗で`doctor`全体を落とさない。ただし「なし」とも断定しない**
+         * （Issue #1314、外部reviewの指摘）。
+         *
+         * `mappings`は展開先の解決で例外を投げうる（境界外symlink等）。それは
+         * 他の診断が既に扱う事象であり、**報告欄の計算がそれを理由に`doctor`を
+         * 停止させると、他の診断まで返せなくなる。** かといって空配列を返すと
+         * 「0件だった」と読めてしまうので、**観測できなかったことを明示する。**
+         */
+        try {
+            return {
+                observed: true,
+                paths: mappings(target)
+                    .map(({ dest }) => relativeKey(target, dest))
+                    .filter((key) => !Object.hasOwn(files, key) &&
+                    pathEntryExists(path.join(target, key)))
+                    .sort(),
+            };
+        }
+        catch (error) {
+            return {
+                observed: false,
+                paths: [],
+                unobservedReason: `展開先を解決できないため、未管理資産を判定できません: ${error instanceof Error ? error.message : "不明な失敗"}`,
+            };
+        }
+    })();
     return {
         healthy: installed && diagnostics.length === 0,
         installed,
+        unmanagedAssets: {
+            observed: unmanagedAssets.observed,
+            paths: unmanagedAssets.paths,
+            note: !unmanagedAssets.observed
+                ? `判定不能: ${unmanagedAssets.unobservedReason}。先に install または update --recover-record --apply で managed record を回復してから再実行する`
+                : unmanagedAssets.paths.length === 0
+                    ? "なし"
+                    : `展開先に存在するがmanaged recordに無い管理対象が${unmanagedAssets.paths.length}件ある。これらは update の対象にならず現在の版で固定される。正本へ戻すか、update --recover-record --apply で再評価する`,
+        },
         hooks: {
             canonical: HOST_HOOK_SOURCE,
             expected: [...HOST_HOOK_TARGETS],

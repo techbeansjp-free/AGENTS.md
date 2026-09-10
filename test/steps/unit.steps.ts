@@ -453,6 +453,8 @@ interface ReviewFixture {
   developmentConsiderations:
     | Array<{ id: string; status: string; reason: string; evidence: string }>
     | undefined;
+  /** reviewの独立性の要求水準。未指定は`context-isolated`として扱う。 */
+  independenceMode?: "context-isolated" | "actor-independent";
   headSha: string;
   candidateEvidence: {
     implementationCommitSha: string;
@@ -1936,12 +1938,22 @@ Given(
       this.review.externalEvidence.review.commitSha = other;
     if (attribute === "reviewer-actor")
       this.review.externalEvidence.review.actorId = "unstable actor name";
-    if (attribute === "pr-author-review")
+    /**
+     * **actor単位の独立性は`actor-independent`のときだけ要求される。**
+     *
+     * 同一actorを拒否する性質は高リスク用の強制点として残す。既定の
+     * `context-isolated`では同一actorでも成立することを別scenarioで固定する。
+     */
+    if (attribute === "pr-author-review") {
+      this.review.independenceMode = "actor-independent";
       this.review.externalEvidence.review.actorId =
         this.review.externalEvidence.pr.authorActorId;
-    if (attribute === "implementer-review")
+    }
+    if (attribute === "implementer-review") {
+      this.review.independenceMode = "actor-independent";
       this.review.externalEvidence.review.actorId =
         this.review.externalEvidence.implementation.authorActorId;
+    }
     if (attribute === "submitted-at")
       this.review.externalEvidence.review.submittedAt = "sometime";
     if (attribute === "verdict")
@@ -1957,6 +1969,32 @@ When("review gateを評価する", function () {
     this.error = error;
   }
 });
+/**
+ * **単独運用の形を作る**（Issue #1317）。
+ * implementer・PR author・reviewerがすべて同一actorという、別のGitHub利用者が
+ * 居ないprojectの構成である。
+ */
+Given(
+  "reviewerがimplementation commit authorと同一actorでPRはautomation identityが作成した",
+  function () {
+    /**
+     * **GitHubはPR author自身の`APPROVE`を許可しない**（外部reviewの指摘）。
+     * PR authorとreviewerを同一actorにした観測はproviderが返し得ないため、
+     * **実在する単独運用の形**にする。PRはautomation identityが作り、実装commitを
+     * 書いた本人が承認する。
+     */
+    const actor = String(
+      this.review.externalEvidence.implementation.authorActorId,
+    );
+    this.review.externalEvidence.pr.authorActorId = "actor-automation";
+    this.review.externalEvidence.review.actorId = actor;
+  },
+);
+
+Given("独立性モードにactor-independentを宣言する", function () {
+  this.review.independenceMode = "actor-independent";
+});
+
 Then("reviewはapprovedである", function () {
   assert.equal(this.reviewResult.approved, true);
 });

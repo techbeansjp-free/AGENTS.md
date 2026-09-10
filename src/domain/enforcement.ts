@@ -452,6 +452,23 @@ export function compareTrustedPolicy(
     (trusted?.merge?.requiredReviews ?? 0)
   )
     authorityReasons.push("required review数を減らしている");
+  /**
+   * **review独立性の要求水準は候補側から下げられない**（Issue #1317）。
+   *
+   * `merge`は`resolveEffectivePolicy`が丸ごと差し替えるため、`actor-independent`から
+   * `context-isolated`への書き換えだけでなく、**fieldの削除も既定値`context-isolated`
+   * への弱化になる。** どちらも`ASC-TRUST-001`で拒否する。引き上げ（未宣言または
+   * `context-isolated`から`actor-independent`）は強化なので通す。
+   */
+  const independenceStrength = (value: unknown): number =>
+    value === "actor-independent" ? 2 : 1;
+  if (
+    independenceStrength(candidate?.merge?.reviewIndependence) <
+    independenceStrength(trusted?.merge?.reviewIndependence)
+  )
+    authorityReasons.push(
+      `merge.reviewIndependenceを${trusted?.merge?.reviewIndependence ?? "context-isolated"}から${candidate?.merge?.reviewIndependence ?? "context-isolated"}へ弱化している`,
+    );
   const trustedIgnoredPathAllowlist = resolveFinalizeIgnoredPathAllowlist(
     trusted.worktree?.finalizeIgnoredPathAllowlist,
   );

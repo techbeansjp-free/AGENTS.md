@@ -530,6 +530,7 @@ export function validatePolicy(policy) {
         "branchMethods",
         "requiredChecks",
         "requiredReviews",
+        "reviewIndependence",
     ], "merge", errors);
     const schemaVersion = candidate.schemaVersion;
     const deprecatedAliasTarget = typeof schemaVersion === "string" &&
@@ -566,6 +567,19 @@ export function validatePolicy(policy) {
         merge.requiredReviews < 0 ||
         merge.requiredReviews > 20)
         errors.push("merge.requiredReviewsが不正です");
+    /**
+     * **reviewの独立性は2段階で宣言する**（Issue #1317）。
+     *
+     * `context-isolated`はimplementerと別session/contextであることを要求し、同一
+     * GitHub actorでも成立する。`actor-independent`はPR authorおよびimplementation
+     * commit authorと別のstable actor IDを要求する。**未宣言の既定は
+     * `context-isolated`である。** 高リスク変更・不可逆操作・releaseは
+     * project policyが`actor-independent`を宣言して引き上げる。
+     */
+    if (merge.reviewIndependence !== undefined &&
+        merge.reviewIndependence !== "context-isolated" &&
+        merge.reviewIndependence !== "actor-independent")
+        errors.push("merge.reviewIndependenceが不正です");
     const forbidden = [
         "deleteBranch",
         "closeIssue",
@@ -713,6 +727,7 @@ export function validateProjectPolicyManifest(manifest) {
         "branchMethods",
         "requiredChecks",
         "requiredReviews",
+        "reviewIndependence",
     ], "manifest.policy.merge", errors);
     rejectUnknownKeys(policy.budgets, ["localFeedbackMs", "prGateMs"], "manifest.policy.budgets", errors);
     if (policy.schemaVersion !== CURRENT_POLICY_SCHEMA_VERSION)
@@ -733,6 +748,10 @@ export function validateProjectPolicyManifest(manifest) {
         requiredReviews < 0 ||
         requiredReviews > 20)
         errors.push("manifest.policy.merge.requiredReviewsが不正です");
+    if (merge.reviewIndependence !== undefined &&
+        merge.reviewIndependence !== "context-isolated" &&
+        merge.reviewIndependence !== "actor-independent")
+        errors.push("manifest.policy.merge.reviewIndependenceが不正です");
     for (const key of ["localFeedbackMs", "prGateMs"]) {
         const value = budgets[key];
         if (typeof value !== "number" || !Number.isInteger(value) || value < 1)
@@ -1029,6 +1048,21 @@ export function loadTrustedPolicy(root, defaultBranch) {
 }
 export function loadEffectiveTrustedPolicy(root, defaultBranch) {
     return loadEffectiveTrustedPolicySet(root, defaultBranch).policy;
+}
+/**
+ * review独立性の要求水準を解決する（Issue #1317）。
+ *
+ * **未宣言は`context-isolated`である。** 単独運用でも成立する既定を明示し、
+ * `actor-independent`は既定branchのproject policyが宣言して引き上げる。
+ *
+ * **入力はtrusted policyでなければならない。** candidate側のfilesystemから読むと
+ * 候補が自分で要求水準を下げられる。`compareTrustedPolicy`が弱化を拒否するのは
+ * trusted比較の側であって、読み出し元の選択はここの呼び出し側の責任である。
+ */
+export function resolveReviewIndependence(policy) {
+    return policy?.merge?.reviewIndependence === "actor-independent"
+        ? "actor-independent"
+        : "context-isolated";
 }
 export function loadEffectiveTrustedPolicySet(root, defaultBranch) {
     const branchRef = `origin/${defaultBranch}`;

@@ -180,7 +180,16 @@ function policyWithMerge(merge: Policy["merge"]): Policy {
   return { ...trustedDeliveryPolicy(), merge };
 }
 
-function independentReviewMergeInput(requiredReviews: number): MergeInput {
+function independentReviewMergeInput(
+  requiredReviews: number,
+  /**
+   * **既存scenarioはactor単位の独立性の診断を固定している**（Issue #1317）。
+   * その性質は`actor-independent`の強制点なので、fixtureが明示的に宣言する。
+   * 既定の`context-isolated`が返す診断は別scenarioで固定する。
+   */
+  reviewIndependence:
+    "context-isolated" | "actor-independent" = "actor-independent",
+): MergeInput {
   return {
     trustedPolicy: policyWithMerge({
       mode: "automatic",
@@ -188,6 +197,7 @@ function independentReviewMergeInput(requiredReviews: number): MergeInput {
       methods: ["merge"],
       requiredChecks: ["ci"],
       requiredReviews,
+      reviewIndependence,
     }),
     method: "merge",
     checks: ["ci"],
@@ -1587,6 +1597,71 @@ When("human approvalなしとありでmerge authorizationを評価する", funct
 When("check state unknownでmerge authorizationを評価する", function () {
   this.mergeResult = authorizeMerge(this.mergeInput);
 });
+/**
+ * **単独運用が既定で成立することを固定する**（Issue #1317）。
+ *
+ * 実装commitを書いた本人がreviewerでもあるという、別のGitHub利用者が居ない
+ * projectの形である。PRはautomation identityが作る。**GitHubはPR author自身の
+ * `APPROVE`を許可しないため、これがproviderで実際に生成できる唯一の形である。**
+ * 旧契約ではこの構成が変更のリスクに関係なく恒常的に停止していた。
+ * **exact HEAD一致とAPPROVEDは引き続き必須である。**
+ */
+const soleOperatorMergeInput = (
+  reviewIndependence?: "context-isolated" | "actor-independent",
+) => {
+  const headSha = "a".repeat(40);
+  return {
+    trustedPolicy: policyWithMerge({
+      mode: "automatic",
+      branches: ["feature/*"],
+      methods: ["squash"],
+      requiredChecks: [],
+      requiredReviews: 1,
+      ...(reviewIndependence === undefined ? {} : { reviewIndependence }),
+    }),
+    method: "squash" as const,
+    checks: [],
+    approvals: [
+      {
+        state: "APPROVED",
+        commitSha: headSha,
+        actorId: "actor-solo",
+        submittedAt: "2026-09-10T12:00:00Z",
+        reviewId: "1",
+      },
+    ],
+    branch: "feature/solo",
+    headSha,
+    /**
+     * **GitHubはPR author自身の`APPROVE`を許可しない**（外部reviewの指摘）。
+     * PR authorとreviewerを同一actorにするとproviderが返し得ない観測になるため、
+     * **実在する単独運用の形**にする。PRはautomation identityが作り、実装commitを
+     * 書いた本人が承認する。旧契約はreviewerがimplementation commit authorと
+     * 同一であることを理由にこの構成を拒否していた。
+     */
+    prAuthorActorId: "actor-automation",
+    implementationAuthorActorId: "actor-solo",
+    repositoryVerified: true,
+    shaVerified: true,
+    protectionVerified: true,
+    mergeableVerified: true,
+  };
+};
+
+Given(
+  "trusted policyがreviewIndependenceを宣言せず実装者自身の承認だけがある",
+  function () {
+    this.mergeInput = soleOperatorMergeInput();
+  },
+);
+
+Given(
+  "trusted policyがactor-independentを宣言し実装者自身の承認だけがある",
+  function () {
+    this.mergeInput = soleOperatorMergeInput("actor-independent");
+  },
+);
+
 Given("reviewが旧HEADまたは実装者自身による承認である", function () {
   const headSha = "a".repeat(40);
   this.mergeInput = {
@@ -1596,6 +1671,14 @@ Given("reviewが旧HEADまたは実装者自身による承認である", functi
       methods: ["squash"],
       requiredChecks: [],
       requiredReviews: 1,
+      /**
+       * **実装者自身の承認を数えない性質は`actor-independent`の強制点である。**
+       *
+       * 旧HEADの承認を数えないことは両モード共通だが、実装者自身を除外するのは
+       * actor単位の独立性を要求する場合だけである。本scenarioはその強制点を
+       * 固定するので、policyが明示的に宣言する。
+       */
+      reviewIndependence: "actor-independent",
     }),
     method: "squash",
     checks: [],
@@ -1741,6 +1824,43 @@ Given(
   "requiredReviewsを0と宣言したtrusted automatic policyがある",
   function () {
     this.mergeInput = independentReviewMergeInput(0);
+  },
+);
+Given(
+  "reviewIndependenceを宣言しないtrusted automatic policyがreview 1件を要求しapprovalが0件である",
+  function () {
+    this.mergeInput = independentReviewMergeInput(1, "context-isolated");
+  },
+);
+Then(
+  "独立review不足の拒否診断はactor除外を主張せず適用モードを述べる",
+  function () {
+    assert.equal(this.mergeResult.allowed, false);
+    const diagnostic = this.mergeResult.diagnostic;
+    assert.ok(diagnostic, "拒否診断がありません");
+    assert.equal(diagnostic.ruleId, "ASC-MERGE-REVIEW-001");
+    /**
+     * **実際に適用していない条件をchecksへ書かない。** actor除外を行っていない
+     * のに「除外した」と書くと、別actorを用意する対処へ誘導し、**本当の不足
+     * （対象HEADへのAPPROVED不在）を隠す。**
+     */
+    assert.equal(
+      diagnostic.checks.some((check: string) =>
+        check.includes("独立approvalから除外した"),
+      ),
+      false,
+      diagnostic.checks.join("; "),
+    );
+    assert.ok(
+      diagnostic.reasons.some((reason: string) =>
+        reason.includes("要求水準はcontext-isolatedです"),
+      ),
+      diagnostic.reasons.join("; "),
+    );
+    assert.equal(
+      diagnostic.next,
+      "対象HEAD SHAそのものに対するAPPROVED reviewを得てからpr mergeを再実行してください",
+    );
   },
 );
 When("宣言0件と宣言1件でmerge authorizationを評価する", function () {

@@ -12,6 +12,7 @@ import {
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
 interface IsolationWorld extends WorkflowWorld {
+  doctorResult?: ReturnType<typeof doctor>;
   applyResult: ReturnType<typeof uninstall>;
   cliResults: Array<ReturnType<typeof runCli>>;
   consumerFiles: Record<string, string>;
@@ -34,6 +35,8 @@ interface IsolationWorld extends WorkflowWorld {
   recoveryRejections?: string[];
   /** 復旧前に測った資産のdigest（Issue #1305）。 */
   digestsBeforeRecovery?: Record<string, string>;
+  /** managed record破損前の`healthy`（Issue #1314）。報告欄が門にならないことを測る。 */
+  healthyBeforeCorruption?: boolean;
   /** 境界外symlinkの参照先とその内容（Issue #1305）。 */
   outsideTarget?: { file: string; contents: string };
   /** record不正の各分類の観測（Issue #1305、R2-M01）。 */
@@ -997,6 +1000,132 @@ Then("相違資産はretainedとして報告され内容は1 byteも変わらな
     `保持した${DIVERGENT_ASSET}がrecordへ登録されています`,
   );
 });
+
+/**
+ * **復旧の帰結を後から見えるようにする**（Issue #1314）。
+ *
+ * `retained`はrecordへ登録しないので、当該資産は以後`update`の対象から外れる。
+ * 正しい設計だが帰結が見えないため、`doctor`が報告する。**門は足さない。**
+ */
+When("隔離先でdoctorを実行する", function () {
+  this.doctorResult = doctor(this.root);
+});
+
+When("明示指定つきで復旧してからdoctorを実行する", function () {
+  upgrade(this.root, { apply: true, recoverRecord: true });
+  this.doctorResult = doctor(this.root);
+});
+
+Then(
+  "doctorはhealthyを変えず管理対象外の資産を件数と対処つきで報告する",
+  function () {
+    const result = this.doctorResult;
+    assert.ok(result, "doctor結果がありません");
+    const unmanaged = result.unmanagedAssets;
+    assert.ok(unmanaged, "unmanagedAssetsがありません");
+    assert.ok(
+      unmanaged.paths.length > 0,
+      "相違資産があるのに管理対象外として報告していません",
+    );
+    assert.ok(
+      unmanaged.paths.includes(DIVERGENT_ASSET),
+      `保持した${DIVERGENT_ASSET}を報告していません: ${unmanaged.paths.join(", ")}`,
+    );
+    assert.equal(
+      unmanaged.observed,
+      true,
+      "recordを読めているのに判定不能として報告しています",
+    );
+    /** **次に採る行動まで出す。** 件数だけでは利用者が動けない。 */
+    assert.match(
+      String(unmanaged.note),
+      /update の対象にならず/u,
+      `帰結を述べていません: ${String(unmanaged.note)}`,
+    );
+    assert.match(
+      String(unmanaged.note),
+      /--recover-record/u,
+      `次に採る行動を出していません: ${String(unmanaged.note)}`,
+    );
+    /**
+     * **報告するが`healthy`を変えない。**
+     * 管理対象外という事実そのものは`healthy`を落とす診断へ入れない。
+     * 入れると門になり、復旧直後の正常な状態を異常として扱ってしまう。
+     */
+    for (const diagnostic of result.adapters.diagnostics)
+      assert.doesNotMatch(
+        String(diagnostic),
+        /managed recordに無い|管理対象外/u,
+        `管理対象外の報告をhealthyの要因にしています: ${String(diagnostic)}`,
+      );
+  },
+);
+
+/**
+ * **観測できなかったことを「なし」と断定しない**（Issue #1314、外部reviewの指摘）。
+ *
+ * recordを検証できないとき`files`は空のままである。`installed`だけを条件に
+ * 未管理資産を数えると、**展開済みの全fileを「recordに無い」と報告する。**
+ * 逆に例外を握って空配列を返すと「0件だった」と読める。**どちらでもなく、
+ * 判定不能であることと次に採る行動を返す。**
+ */
+Given("導入後にrecordが読めなくなった隔離先がある", function () {
+  installedIsolation(this, "asc-lifecycle-record-unreadable-");
+  /** **破損前の`healthy`を控える。** 報告欄の変更が門にならないことを測る。 */
+  this.healthyBeforeCorruption = doctor(this.root).healthy;
+  fs.writeFileSync(recordPath(this.root), "{\n");
+});
+
+Then(
+  "doctorは管理対象外の資産を判定不能として次の操作つきで報告する",
+  function () {
+    const unmanaged = this.doctorResult?.unmanagedAssets;
+    assert.ok(unmanaged, "unmanagedAssetsがありません");
+    assert.equal(
+      unmanaged.observed,
+      false,
+      "recordを検証できないのに観測済みとして報告しています",
+    );
+    assert.deepEqual(
+      unmanaged.paths,
+      [],
+      `判定不能なのにpathを列挙しています: ${unmanaged.paths.join(", ")}`,
+    );
+    assert.match(
+      String(unmanaged.note),
+      /判定不能/u,
+      `「なし」と断定しています: ${String(unmanaged.note)}`,
+    );
+    assert.match(
+      String(unmanaged.note),
+      /--recover-record/u,
+      `次に採る行動を出していません: ${String(unmanaged.note)}`,
+    );
+    /**
+     * **`healthy`の低下はrecord検証の失敗そのものが決める。**
+     * 報告欄が判定不能を返すこと自体は門にならない。record破損で
+     * `healthy`が`false`になるのは`diagnostics`の側の帰結である。
+     */
+    assert.equal(
+      this.healthyBeforeCorruption,
+      true,
+      "破損前からhealthyがfalseでは、この回帰を測れません",
+    );
+    const observed = this.doctorResult;
+    assert.ok(observed, "doctor結果がありません");
+    assert.equal(
+      observed.healthy,
+      false,
+      "record検証の失敗がdiagnosticsへ入っていません",
+    );
+    assert.ok(
+      observed.adapters.diagnostics.some((diagnostic: string) =>
+        /managed-assets\.json/u.test(String(diagnostic)),
+      ),
+      `record検証の失敗を名指ししていません: ${observed.adapters.diagnostics.join("; ")}`,
+    );
+  },
+);
 
 Then("拒否理由は最小診断だけを返す", function () {
   const rejections = this.recoveryRejections;
