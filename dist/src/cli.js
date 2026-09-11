@@ -1317,12 +1317,11 @@ function issueStagingGherkinDialect(issuePath) {
 /**
  * **雛形は検査した実体の親directoryにだけ書く**（Issue #1329、CWE-367）。
  *
- * 親のrealpathを検査した後に親をstagingへのsymlinkへ差し替えられると、
- * 利用者指定pathへの`wx`作成はstaging内へ書く。realpath済みの親へbasenameを
- * 結合した絶対pathで作成し、作成後に実体の親を再検証する。不一致なら自分が
- * 作ったfileだけを消してerrorにする。Node標準APIにdescriptor相対の作成は無い。
- * `hooks.beforeWrite`はtestが検査と作成の間の差し替えを注入するための接合部で、
- * CLIは渡さない。
+ * 親directoryをdescriptorで固定し、descriptor相対pathへ排他的に作成する。
+ * 作成後の失敗時も同じdescriptorと作成inodeを確認して自分が作ったfileだけを
+ * 消す。descriptor相対pathを安全に利用できない環境では書き込み前にfail closed
+ * とする。各hookはtestが作成前・作成後・検証前・cleanup前の競合や失敗を
+ * 注入するための接合部で、CLIは渡さない。
  */
 export function writeReviewRoundDraft(realParent, basename, content, hooks = {}) {
     try {
