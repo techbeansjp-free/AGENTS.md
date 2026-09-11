@@ -31,6 +31,26 @@ Feature: artifact-onlyのHEAD移動の受理
     When H_finalでconverged session検査を行う
     Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
 
+  Scenario: SCN-UNIT-EVIDHEAD-008 製品fileをartifact pathへrenameした差分は拒否する
+    Given 収束したsessionの後に製品fileをartifact pathへgit mvしたstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
+  Scenario: SCN-UNIT-EVIDHEAD-009 artifact-only commitを2本積んだHEADは拒否する
+    Given 収束したsessionの後にartifact commitを2本積んだstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
+  Scenario: SCN-UNIT-EVIDHEAD-010 実行権限付きのartifactは拒否する
+    Given 収束したsessionの後に実行権限付きでartifactをcommitしたstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
+  Scenario: SCN-UNIT-EVIDHEAD-011 merge commitでartifactを加えたHEADは拒否する
+    Given 収束したsessionの後にmerge commitでartifactを加えたstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
   Scenario: SCN-UNIT-EVIDHEAD-007 規範文書とskillが取り直し不要を述べる
     Given 規範文書01とstep-10 skillがある
     When 規範文書01とstep-10 skillを読む

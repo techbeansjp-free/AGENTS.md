@@ -136,19 +136,49 @@ export function evidenceOnlySuffix(
   toSha: string,
 ): string | undefined {
   if (fromSha === toSha) return undefined;
-  const ancestor = git(["merge-base", "--is-ancestor", fromSha, toSha], root, {
+  /**
+   * **1 commitだけを受理する**（round 1 R1-H-02）。`toSha`の第1親が`fromSha`で
+   * なければ、途中commitのauthorをmerge認可が実装者と誤認しうるため拒否する。
+   * ancestor関係はこの条件に含まれる。
+   */
+  const parent = git(["rev-parse", "--verify", `${toSha}^1^{commit}`], root, {
     env: GIT_ENV,
     allowFailure: true,
   });
-  if (ancestor.status !== 0) return undefined;
-  const diff = git(["diff", "--name-only", "-z", fromSha, toSha], root, {
+  if (parent.status !== 0 || parent.stdout.trim() !== fromSha) return undefined;
+  const parents = git(["rev-list", "--parents", "-n", "1", toSha], root, {
     env: GIT_ENV,
     allowFailure: true,
   });
-  if (diff.status !== 0) return undefined;
-  const paths = diff.stdout.split("\0").filter((item) => item.length > 0);
-  if (paths.length !== 1) return undefined;
-  const [only] = paths;
+  if (parents.status !== 0 || parents.stdout.trim().split(/\s+/u).length !== 2)
+    return undefined;
+  /**
+   * **rename検出を切り、change typeとmodeまで見る**（round 1 R1-H-01）。
+   * `--name-only`はrename先だけを1 pathとして出すため、製品fileをartifact pathへ
+   * `git mv`した差分が「artifact 1件の追加」に見える。`--raw`で追加(A)または
+   * 変更(M)の通常file（mode 100644）1件だけを受理し、削除・rename・copy・
+   * type変更・symlink・gitlink・実行権限付与を拒否する。
+   */
+  const raw = git(
+    ["diff", "--raw", "--no-renames", "--no-abbrev", "-z", fromSha, toSha],
+    root,
+    { env: GIT_ENV, allowFailure: true },
+  );
+  if (raw.status !== 0) return undefined;
+  const fields = raw.stdout.split("\0").filter((item) => item.length > 0);
+  if (fields.length !== 2) return undefined;
+  const [meta, only] = fields;
+  const matched =
+    /^:[0-7]{6} (?<dstMode>[0-7]{6}) [0-9a-f]+ [0-9a-f]+ [A-Z]$/u.exec(
+      meta ?? "",
+    );
+  if (!matched?.groups) return undefined;
+  /**
+   * 到達後のmodeが通常file（100644）であることだけを見る。削除（dst 000000）、
+   * symlink・gitlink（120000・160000）、実行権限（100755）はここで落ちる。
+   * `--no-renames`によりrename・copyは2 pathとして上の件数検査で落ちる。
+   */
+  if (matched.groups.dstMode !== "100644") return undefined;
   return isEvidenceOnlyPath(only) ? only : undefined;
 }
 

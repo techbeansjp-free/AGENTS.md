@@ -273,6 +273,79 @@ Given(
   },
 );
 
+Given(
+  "収束したsessionの後に製品fileをartifact pathへgit mvしたstagingがある",
+  function () {
+    convergedFixture(this);
+    fs.mkdirSync(path.join(this.root, path.dirname(artifactPath)), {
+      recursive: true,
+    });
+    git(this.root, ["mv", reviewedPath, artifactPath]);
+    git(this.root, [
+      "commit",
+      "-q",
+      "-m",
+      "chore: move product file into reviews",
+    ]);
+    this.finalHead = git(this.root, ["rev-parse", "HEAD"]);
+  },
+);
+
+Given(
+  "収束したsessionの後にartifact commitを2本積んだstagingがある",
+  function () {
+    convergedFixture(this);
+    commitFiles(
+      this.root,
+      { [artifactPath]: "# 04 レビュー\n" },
+      "docs: artifact 1",
+    );
+    this.finalHead = commitFiles(
+      this.root,
+      { [artifactPath]: "# 04 レビュー\n\n追記\n" },
+      "docs: artifact 2",
+    );
+  },
+);
+
+Given(
+  "収束したsessionの後に実行権限付きでartifactをcommitしたstagingがある",
+  function () {
+    convergedFixture(this);
+    const file = path.join(this.root, artifactPath);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "# 04 レビュー\n");
+    git(this.root, ["add", artifactPath]);
+    git(this.root, ["update-index", "--chmod=+x", artifactPath]);
+    git(this.root, ["commit", "-q", "-m", "docs: executable artifact"]);
+    this.finalHead = git(this.root, ["rev-parse", "HEAD"]);
+  },
+);
+
+Given(
+  "収束したsessionの後にmerge commitでartifactを加えたstagingがある",
+  function () {
+    convergedFixture(this);
+    git(this.root, ["checkout", "-q", "-b", "artifact-branch"]);
+    commitFiles(
+      this.root,
+      { [artifactPath]: "# 04 レビュー\n" },
+      "docs: artifact",
+    );
+    git(this.root, ["checkout", "-q", "main"]);
+    git(this.root, [
+      "merge",
+      "-q",
+      "--no-ff",
+      "-m",
+      "merge artifact",
+      "artifact-branch",
+    ]);
+    this.finalHead = git(this.root, ["rev-parse", "HEAD"]);
+    assert.notEqual(this.finalHead, this.implementationHead);
+  },
+);
+
 When("H_finalでconverged session検査を行う", function () {
   assertSession(this);
 });
@@ -310,5 +383,9 @@ Then("artifact 1 fileのcommitに取り直しroundは要らない旨がある", 
   assert.match(
     read(".agent-skill-chain/skills/step-10-review/SKILL.md"),
     /このartifact commitに対する取り直しroundは要らない/u,
+  );
+  assert.match(
+    read(".agent-skill-chain/docs/02_品質基準.md"),
+    /sessionのcandidate HEADをjournalへbinding.*evidence-only suffix/u,
   );
 });
