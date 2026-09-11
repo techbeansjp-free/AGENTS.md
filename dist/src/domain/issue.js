@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { safeSlug } from "../lib/security.js";
 import { publishDirectoryAtomic, writeFileAtomic } from "../lib/atomic.js";
 import { findPackageRoot } from "../lib/package-root.js";
@@ -15,6 +16,14 @@ const FULL_FILES = {
     "02_設計.md": "02_設計.md",
     "03_実装計画.md": "03_実装計画.md",
 };
+/** mode/checkpointごとの同期対象を、CLIとtestが共有できる形で返す。 */
+export function issueSyncArtifactNames(mode, checkpoint) {
+    if (mode === "full")
+        return checkpoint === 8
+            ? ["00_要求定義.md", "01_要件定義.md", "02_設計.md", "03_実装計画.md"]
+            : ["00_要求定義.md", "01_要件定義.md"];
+    return ["00_要求定義.md"];
+}
 /**
  * fenced blockとinline codeを取り除く。**行構造は保つ。**見出しの行全体一致に使うため、
  * 行番号と行の境界がずれてはならない。
@@ -297,7 +306,7 @@ function jstTimestamp(date) {
     const pad = (value, width = 2) => String(value).padStart(width, "0");
     return `${pad(japan.getUTCFullYear(), 4)}${pad(japan.getUTCMonth() + 1)}${pad(japan.getUTCDate())}_${pad(japan.getUTCHours())}${pad(japan.getUTCMinutes())}${pad(japan.getUTCSeconds())}`;
 }
-function requirementDocument(mode, title, answers, poc) {
+function requirementDocument(mode, title, answers, poc, now, projectChoices) {
     const name = mode === "poc"
         ? "00_要求定義_poc.md"
         : mode === "quick"
@@ -305,6 +314,10 @@ function requirementDocument(mode, title, answers, poc) {
             : "00_要求定義_full.md";
     let content = fs.readFileSync(path.join(templateRoot, name), "utf8");
     content = replaceTwoColumnRow(content, "件名", escapeCell(title));
+    content = replaceTwoColumnRow(content, "正本", "未同期");
+    if (now)
+        content = replaceTwoColumnRow(content, "作成・更新日", now.toISOString());
+    content = replaceTwoColumnRow(content, "作成・確認者", "AIエージェント");
     for (const id of QUESTIONS) {
         const item = answers?.[id];
         const answer = item?.answer === true
@@ -344,6 +357,7 @@ function requirementDocument(mode, title, answers, poc) {
             content = content.replace(new RegExp(`^\\|[ \\t]*${escapeRegExp(risk.id)}[ \\t]*\\|[^\\n|]+\\|[^\\n|]+\\|[ \\t]*$`, "m"), () => `| ${risk.id} | ${risk.present ? "あり" : "なし"} | ${escapeCell(risk.evidence)} |`);
         }
     }
+    content = prefillDevelopmentConsiderations(content, projectChoices);
     return content;
 }
 function escapeRegExp(value) {
@@ -358,6 +372,78 @@ function escapeCell(value) {
         .replace(/[\r\n]+/g, " ")
         .trim();
 }
+function replaceFiveColumnRow(content, id, values) {
+    return content.replace(new RegExp(`^\\|[ \\t]*${escapeRegExp(id)}[ \\t]*\\|[^\\n]*$`, "mu"), `| ${id} | ${values.map(escapeCell).join(" | ")} |`);
+}
+function prefillRoutingRows(content, choices, kind) {
+    if (typeof choices?.modelMapping !== "object")
+        return content;
+    const roles = choices.modelMapping.roles;
+    const fallback = `${choices.modelMapping.fallback.when}: ${choices.modelMapping.fallback.role}/${choices.modelMapping.fallback.modelSelection}`;
+    const row = (role, task) => {
+        const selected = roles[role];
+        return kind === "design"
+            ? `| ${role} | project choiceのrole contract | ${role === "reviewer" ? "肯定・敵対review、finding分類" : "failing test、test result"} | critical | ${escapeCell(selected.provider)} | ${escapeCell(`${selected.logicalTier}/${selected.reasoningEffort}/${selected.speed}`)} | ${escapeCell(fallback)} | implementerとreviewerのprovider・context差を記録 |`
+            : `| ${task} | ${role} | project choiceのrole contract | ${role === "reviewer" ? "肯定・敵対review、finding分類" : "failing test、test result"} | critical | ${escapeCell(selected.provider)} | ${escapeCell(`${selected.logicalTier}/${selected.reasoningEffort}/${selected.speed}`)} | ${escapeCell(fallback)} | implementerとreviewerのprovider・context差を記録 |`;
+    };
+    const replacement = [
+        row("implementer", "実装・検証"),
+        row("reviewer", "独立review"),
+    ].join("\n");
+    return content
+        .replace(/^\| （6 roleのいずれか） \|[^\n]*$/mu, replacement)
+        .replace(/^\| T01 \| （6 roleのいずれか） \|[^\n]*$/mu, replacement);
+}
+function prefillDevelopmentConsiderations(content, choices) {
+    if (!choices)
+        return content;
+    const decisions = [
+        ["DC-PRIVACY", choices.capabilities.privacySecurity],
+        ["DC-OBSERVABILITY", choices.capabilities.observability],
+        ["DC-UX", choices.capabilities.humanCenteredUi],
+        ["DC-TOKENS", choices.capabilities.designTokens],
+    ];
+    for (const [id, decision] of decisions) {
+        const current = new RegExp(`^\\|[ \\t]*${id}[ \\t]*\\|[^\\n]*$`, "mu").exec(content)?.[0];
+        if (!current)
+            continue;
+        const cells = current.split("|").map((cell) => cell.trim());
+        const evidence = decision.status === "not-applicable"
+            ? decision.evidence
+            : (cells[5] ?? "タスク固有証拠を記入する");
+        content = replaceFiveColumnRow(content, id, [
+            cells[2] ?? id,
+            decision.status,
+            decision.reason,
+            evidence,
+        ]);
+    }
+    return content;
+}
+function prefillFullArtifacts(directory, input) {
+    const tracker = "未同期";
+    const createdAt = input.now.toISOString();
+    const common = {
+        件名: escapeCell(input.title),
+        正本: tracker,
+        "作成・更新日": createdAt,
+    };
+    for (const name of Object.keys(FULL_FILES)) {
+        const file = path.join(directory, name);
+        let content = fs.readFileSync(file, "utf8");
+        for (const [label, value] of Object.entries(common))
+            content = replaceTwoColumnRow(content, label, value);
+        content = replaceTwoColumnRow(content, "件名・正本", `${escapeCell(input.title)} / ${tracker}`);
+        if (name === "02_設計.md")
+            content = prefillRoutingRows(content, input.projectChoices, "design");
+        if (name === "03_実装計画.md") {
+            content = replaceTwoColumnRow(content, "専用ブランチ・worktree", path.resolve(input.root));
+            content = prefillRoutingRows(content, input.projectChoices, "plan");
+        }
+        content = prefillDevelopmentConsiderations(content, input.projectChoices);
+        fs.writeFileSync(file, content, { flag: "w" });
+    }
+}
 export function createIssueStaging(root, options) {
     const slug = safeSlug(options.title);
     const decision = classifyMode(options.answers, {
@@ -368,7 +454,7 @@ export function createIssueStaging(root, options) {
     const finalPath = path.join(root, ".agent-skill-chain", "tmp", "issues", `${jstTimestamp(options.now)}_${slug}`);
     publishDirectoryAtomic(finalPath, (temporary) => {
         const decidedAt = options.now.toISOString();
-        fs.writeFileSync(path.join(temporary, "00_要求定義.md"), requirementDocument(decision.mode, options.title, options.answers, options.poc), { flag: "wx" });
+        fs.writeFileSync(path.join(temporary, "00_要求定義.md"), requirementDocument(decision.mode, options.title, options.answers, options.poc, options.now, options.projectChoices), { flag: "wx" });
         const requestedMode = options.requestedMode === "quick" ||
             options.requestedMode === "full" ||
             options.requestedMode === "poc"
@@ -404,6 +490,12 @@ export function createIssueStaging(root, options) {
         if (decision.mode === "full") {
             for (const [name, template] of Object.entries(FULL_FILES))
                 fs.copyFileSync(path.join(templateRoot, template), path.join(temporary, name), fs.constants.COPYFILE_EXCL);
+            prefillFullArtifacts(temporary, {
+                title: options.title,
+                now: options.now,
+                root,
+                projectChoices: options.projectChoices,
+            });
         }
         const artifacts = listStagingArtifacts(temporary);
         const record = {
@@ -429,6 +521,41 @@ export function createIssueStaging(root, options) {
         durable: false,
         synced: false,
     };
+}
+/** 検証済みstaging成果物をmode/checkpointの規定順で連結する。外部副作用は持たない。 */
+export function buildIssueSyncBody(stagingInput, checkpoint, gherkinDialect) {
+    const staging = path.resolve(stagingInput);
+    const record = readStoredStagingRecord(staging);
+    const observedArtifacts = listStagingArtifacts(staging);
+    if (JSON.stringify(record.artifacts) !== JSON.stringify(observedArtifacts) ||
+        record.digest !== calculateStagingDigest(staging, observedArtifacts))
+        throw new Error("同期本文生成前のstaging成果物一覧またはdigestが一致しません。最新Stepをworkflow recordで再記録してください");
+    if (record.mode === "full" ? ![4, 8].includes(checkpoint) : checkpoint !== 4)
+        throw new Error(`同期本文のcheckpointがmode=${record.mode}と一致しません: ${checkpoint}`);
+    const validation = validateIssue(staging, {
+        stage: record.mode === "full"
+            ? checkpoint === 8
+                ? "design"
+                : "requirements"
+            : undefined,
+        gherkinDialect,
+    });
+    if (!validation.valid)
+        throw new Error(`同期本文の成果物が未検証です: ${validation.errors.join("; ")}`);
+    const artifacts = issueSyncArtifactNames(record.mode, checkpoint);
+    const body = `${artifacts
+        .map((name) => fs.readFileSync(path.join(staging, name), "utf8").trimEnd())
+        .join("\n\n---\n\n")}\n`;
+    return Object.freeze({
+        body,
+        bodySha256: crypto
+            .createHash("sha256")
+            .update(body.trimEnd())
+            .digest("hex"),
+        artifacts: Object.freeze(artifacts),
+        mode: record.mode,
+        checkpoint,
+    });
 }
 /**
  * 同期記録の書き込み可否を、**同期の副作用より前に**判定できる部分だけで確かめる。

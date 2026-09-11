@@ -1,9 +1,11 @@
 import { launchCodex } from "./adapters/codex-launch.js";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import {
   createIssueStaging,
+  buildIssueSyncBody,
   assertStagingSyncTarget,
   recordStagingSync,
   validateIssue,
@@ -18,6 +20,7 @@ import {
 } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
+import { renderReviewArtifactDraft } from "./domain/review-artifact.js";
 import {
   assertPullRequestTrackerBinding,
   createPullRequest,
@@ -5028,6 +5031,14 @@ export async function main(
         : { errors: [] as string[] };
     if (parsedPoc.errors.length > 0)
       throw new Error(`PoC宣言が不正です: ${parsedPoc.errors.join("; ")}`);
+    const policyManifest = path.join(
+      root,
+      ".agent-skill-chain",
+      "project-policy.json",
+    );
+    const projectChoices = fs.existsSync(policyManifest)
+      ? loadProjectPolicySet(root).policy.projectChoices
+      : undefined;
     print(
       createIssueStaging(root, {
         title: required(flags, "title"),
@@ -5039,6 +5050,7 @@ export async function main(
             ? flags.changed.split(",").filter(Boolean)
             : [],
         now: new Date(),
+        ...(projectChoices ? { projectChoices } : {}),
       }),
     );
     return 0;
@@ -5090,27 +5102,22 @@ export async function main(
   if (command === "issue" && subcommand === "sync") {
     const { flags } = parse(rest);
     const apply = applyMode(flags);
-    const input = {
-      operation: "issue.sync",
-      repository: required(flags, "repo"),
-      issue: Number(required(flags, "issue")),
-      bodyFile: path.resolve(required(flags, "body-file")),
-    };
-    if (!apply) {
-      print({ state: "preview", ...input });
-      return 0;
-    }
-    if (flags.authorize !== "approved")
-      throw new Error("Issue同期には--authorize=approvedが必要です");
-    const bodyBefore = fs
-      .readFileSync(input.bodyFile, "utf8")
-      .replace(/\r\n/g, "\n")
-      .trimEnd();
     const stagingPath =
       typeof flags["staging-path"] === "string"
         ? path.resolve(flags["staging-path"])
         : undefined;
     const checkpointRaw = flags.checkpoint;
+    if (flags["generate-body"] !== undefined && flags["generate-body"] !== true)
+      throw new Error("--generate-bodyに値は指定できません");
+    const generateBody = flags["generate-body"] === true;
+    const providedBodyFile =
+      typeof flags["body-file"] === "string"
+        ? path.resolve(flags["body-file"])
+        : undefined;
+    if (generateBody === (providedBodyFile !== undefined))
+      throw new Error(
+        "issue syncは--body-fileまたは--generate-bodyのどちらか一方を指定してください",
+      );
     /**
      * **入力の不整合は同期の前に拒否する。** 後で拒否すると、Issueは同期済みなのに
      * commandが失敗した状態になり、利用者は何が起きたか判別できない（Issue #994）。
@@ -5129,6 +5136,67 @@ export async function main(
       (typeof checkpointRaw !== "string" || !/^(?:4|8)$/u.test(checkpointRaw))
     )
       throw new Error("--checkpointは4または8で指定してください");
+    if (
+      generateBody &&
+      (stagingPath === undefined || checkpointRaw === undefined)
+    )
+      throw new Error(
+        "--generate-bodyには--staging-pathと--checkpointが必要です",
+      );
+    const generated = generateBody
+      ? buildIssueSyncBody(
+          stagingPath!,
+          Number(checkpointRaw) as 4 | 8,
+          issueStagingGherkinDialect(stagingPath!),
+        )
+      : undefined;
+    const fullStep4Draft =
+      generated?.mode === "full" && generated.checkpoint === 4;
+    const bodyBefore = (
+      generated?.body ?? fs.readFileSync(providedBodyFile!, "utf8")
+    )
+      .replace(/\r\n/g, "\n")
+      .trimEnd();
+    const preview = {
+      state: "preview",
+      operation: "issue.sync",
+      repository: required(flags, "repo"),
+      issue: Number(required(flags, "issue")),
+      bodySource: generated ? "generated" : "body-file",
+      bodyFile: providedBodyFile,
+      bodySha256: crypto.createHash("sha256").update(bodyBefore).digest("hex"),
+      ...(generated
+        ? {
+            artifacts: generated.artifacts,
+            mode: generated.mode,
+            checkpoint: generated.checkpoint,
+          }
+        : {}),
+    };
+    if (!apply) {
+      print(preview);
+      return 0;
+    }
+    if (flags.authorize !== "approved")
+      throw new Error("Issue同期には--authorize=approvedが必要です");
+    let temporaryDirectory: string | undefined;
+    let dispatchBodyFile = providedBodyFile;
+    if (generated) {
+      temporaryDirectory = fs.mkdtempSync(
+        path.join(os.tmpdir(), "asc-issue-sync-"),
+      );
+      dispatchBodyFile = path.join(temporaryDirectory, "body.md");
+      fs.writeFileSync(dispatchBodyFile, generated.body, {
+        flag: "wx",
+        mode: 0o600,
+      });
+    }
+    const input = {
+      operation: "issue.sync",
+      repository: preview.repository,
+      issue: preview.issue,
+      bodyFile: dispatchBodyFile!,
+    };
     const syncAndRecord = () => {
       if (stagingPath !== undefined)
         recoverPendingJournalTransaction(stagingPath);
@@ -5136,20 +5204,39 @@ export async function main(
        * **staging記録の書き込み可否も同期の前に確かめる。**
        * writer lockを副作用と記録の両方へ保持し、途中で昇格やjournal追記を割り込ませない。
        */
+      if (generated) {
+        const current = buildIssueSyncBody(
+          stagingPath!,
+          generated.checkpoint,
+          issueStagingGherkinDialect(stagingPath!),
+        );
+        if (current.bodySha256 !== generated.bodySha256)
+          throw new Error(
+            "同期本文生成後にstagingが変更されました。新しいpreviewから再実行してください",
+          );
+      }
       const stagingBefore =
         stagingPath === undefined
           ? undefined
-          : assertStagingSyncTarget(
-              stagingPath,
-              Number(checkpointRaw),
-              {
-                repository: input.repository,
-                issue: input.issue,
-              },
-              { allowPromotionStep4: true },
-            );
+          : fullStep4Draft
+            ? readStoredStagingRecord(stagingPath)
+            : assertStagingSyncTarget(
+                stagingPath,
+                Number(checkpointRaw),
+                {
+                  repository: input.repository,
+                  issue: input.issue,
+                },
+                { allowPromotionStep4: true },
+              );
       const result = github("issue.sync", input, process.cwd());
       if (stagingPath === undefined) return result;
+      if (fullStep4Draft)
+        return {
+          ...result,
+          staging: stagingBefore,
+          stagingRecordUpdated: false,
+        };
       if (
         Number(checkpointRaw) === 4 &&
         stagingBefore?.state === "promotion-active"
@@ -5160,7 +5247,7 @@ export async function main(
           stagingRecordUpdated: false,
         };
       const bodyAfter = fs
-        .readFileSync(input.bodyFile, "utf8")
+        .readFileSync(dispatchBodyFile!, "utf8")
         .replace(/\r\n/g, "\n")
         .trimEnd();
       const bodyDigest = crypto
@@ -5183,12 +5270,19 @@ export async function main(
       });
       return { ...result, staging: record };
     };
-    const result =
-      stagingPath === undefined
-        ? syncAndRecord()
-        : withStagingMutationLock(stagingPath, syncAndRecord);
-    print(result);
-    return 0;
+    try {
+      const result =
+        stagingPath === undefined
+          ? syncAndRecord()
+          : withStagingMutationLock(stagingPath, syncAndRecord);
+      print(result);
+      return 0;
+    } finally {
+      if (temporaryDirectory && dispatchBodyFile) {
+        fs.unlinkSync(dispatchBodyFile);
+        fs.rmdirSync(temporaryDirectory);
+      }
+    }
   }
   if (command === "issue" && subcommand === "staging") {
     const { flags } = parse(rest);
@@ -5337,6 +5431,123 @@ export async function main(
     }
     print(result);
     return 1;
+  }
+  if (command === "review" && subcommand === "artifact") {
+    const { flags, positionals } = parse(rest);
+    if (positionals.length > 0)
+      throw new Error("review artifactに位置引数は使用できません");
+    if (flags.init !== true)
+      throw new Error("review artifactには値なしの--initが必要です");
+    const unknown = Object.keys(flags).filter(
+      (flag) => !["init", "staging", "base", "head", "out"].includes(flag),
+    );
+    if (unknown.length > 0)
+      throw new Error(
+        `review artifactの未知optionです: --${unknown.join(", --")}`,
+      );
+    const staging = path.resolve(required(flags, "staging"));
+    const root = path.resolve(staging, "../../../..");
+    const record = readStoredStagingRecord(staging);
+    const artifacts = listStagingArtifacts(staging);
+    if (
+      JSON.stringify(record.artifacts) !== JSON.stringify(artifacts) ||
+      record.digest !== calculateStagingDigest(staging, artifacts)
+    )
+      throw new Error(
+        "review artifact生成前のstaging成果物一覧またはdigestが一致しません。最新Stepをworkflow recordで再記録してください",
+      );
+    const resolveCommit = (label: string, value: string): string => {
+      const observed = git(
+        ["rev-parse", "--verify", `${value}^{commit}`],
+        root,
+        { allowFailure: true },
+      );
+      if (observed.status !== 0)
+        throw new Error(
+          `review artifactの${label}をexact commitへ解決できません: ${value}`,
+        );
+      return observed.stdout.trim();
+    };
+    const baseSha = resolveCommit("--base", required(flags, "base"));
+    const headSha = resolveCommit("--head", required(flags, "head"));
+    const currentHead = resolveCommit("current HEAD", "HEAD");
+    if (headSha !== currentHead)
+      throw new Error(
+        `review artifactの--headはcurrent HEADと一致する必要があります: head=${headSha} current=${currentHead}`,
+      );
+    const diff = git(
+      ["diff", "--name-status", "--no-renames", "-z", baseSha, headSha],
+      root,
+    )
+      .stdout.split("\0")
+      .filter(Boolean);
+    const changedPaths: Array<{ path: string; changeType: "A" | "M" | "D" }> =
+      [];
+    for (let index = 0; index < diff.length; index += 2) {
+      const status = diff[index];
+      const changedPath = diff[index + 1];
+      if (!changedPath || (status !== "A" && status !== "M" && status !== "D"))
+        throw new Error("review artifactのGit差分形式が不正です");
+      changedPaths.push({ path: changedPath, changeType: status });
+    }
+    if (changedPaths.length === 0)
+      throw new Error(
+        "review artifactは比較基点からの変更pathが1件以上必要です",
+      );
+    const issueNumber = /\/issues\/(?<issue>[1-9]\d*)$/u.exec(
+      record.tracker ?? "",
+    )?.groups?.issue;
+    const out = path.resolve(
+      typeof flags.out === "string"
+        ? flags.out
+        : path.join(
+            root,
+            "docs",
+            "reviews",
+            `${issueNumber ?? "review"}_レビュー.md`,
+          ),
+    );
+    const relativeOut = path.relative(root, out);
+    if (relativeOut.startsWith("..") || path.isAbsolute(relativeOut))
+      throw new Error("review artifactの--outはrepository内が必要です");
+    const outParent = fs.realpathSync(path.dirname(out));
+    const realStaging = fs.realpathSync(staging);
+    if (
+      outParent === realStaging ||
+      outParent.startsWith(`${realStaging}${path.sep}`)
+    )
+      throw new Error("review artifactの--outはstaging外が必要です");
+    if (fs.lstatSync(out, { throwIfNoEntry: false }))
+      throw new Error(`review artifactの--outが既に存在します: ${out}`);
+    const template = fs.readFileSync(
+      path.join(
+        root,
+        ".agent-skill-chain",
+        "templates",
+        "issue",
+        "04_レビュー.md",
+      ),
+      "utf8",
+    );
+    const content = renderReviewArtifactDraft({
+      template,
+      staging: path.relative(root, staging),
+      stagingDigest: record.digest,
+      baseSha,
+      headSha,
+      paths: changedPaths,
+    });
+    writeFileExclusivePinned(outParent, path.basename(out), content);
+    print({
+      written: out,
+      baseSha,
+      headSha,
+      changedPaths,
+      sha256: crypto.createHash("sha256").update(content).digest("hex"),
+      reviewVerdict: "unresolved",
+      testResult: "not-run",
+    });
+    return 0;
   }
   if (command === "review" && subcommand === "round") {
     const { flags, positionals } = parse(rest);
