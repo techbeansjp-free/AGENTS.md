@@ -164,7 +164,7 @@ function validateDeliveryEvidence(evidence, headSha) {
     else if (evidence.spec.impact === "no-spec-impact") {
         if (typeof evidence.spec.rationale !== "string" ||
             evidence.spec.rationale.trim().length < 12)
-            throw new Error("no-spec-impactには対象範囲を限定した根拠が必要です");
+            throw new Error("no-spec-impactにはspec.rationaleとして対象範囲を限定した12文字以上の根拠が必要です");
     }
     else {
         throw new Error("仕様影響はupdatedまたはno-spec-impactで指定してください");

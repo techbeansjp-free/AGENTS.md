@@ -472,7 +472,11 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     requiredFlags: [
       flag("staging", "path", "staging directory"),
       flag("step", "1..10", "記録するStep番号"),
-      flag("evidence", "text", "Stepの証跡"),
+      flag(
+        "evidence",
+        "text",
+        "Stepの証跡。Step 4・8の同期証拠は64桁のhex digestとsync語を含める",
+      ),
       flag("artifact", "path", "成果物。1件以上を繰り返し指定する"),
     ],
     conditionalFlags: [
@@ -760,7 +764,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       "npx agent-skill-chain review round --staging=.agent-skill-chain/tmp/issues/20260830_120000-change --file=./review-round.json --apply",
     inputContract: {
       description:
-        "--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。IDは大文字英数と._-で、anchorの各ID列は重複なし昇順。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた雛形を書く",
+        "--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。blocking findingのcontractIdはanchorのACまたはINVに一致させる。IDは大文字英数と._-で、anchorの各ID列は重複なし昇順。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた雛形を書く",
       example: {
         round: 1,
         previousRoundDigest: null,
@@ -1085,7 +1089,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       ...APPLY_MODE,
     ],
     example:
-      "npx agent-skill-chain worktree finalize --root=. --path=.worktrees/20260826_111243-886-cli-usage --evidence=./evidence.json --dry-run",
+      "npx agent-skill-chain worktree finalize --root=. --path=.worktrees/20260826_111243-886-cli-usage --evidence=./evidence.json --report-hash=<preview digest> --approved-digest=<preview digest> --merge-sha=<merge SHA> --cleanup-authority --complete --authorize=approved --apply",
   },
   {
     command: "pr",
@@ -1120,7 +1124,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       "npx agent-skill-chain pr create --issue=886 --repo=owner/name --base=main --head=feature/886-cli-usage --head-sha=$(git rev-parse HEAD) --evidence=./evidence.json --body-file=./PR.md --dry-run",
     inputContract: {
       description:
-        "--evidenceのJSON。headShaは--head-shaと同じexact HEAD。tests.scenarioIdsとspec.trace.scenariosは同じSCN集合。spec.impactはupdated|no-spec-impact。ownershipは変更pathの所有者と層",
+        "--evidenceのJSON。headShaは--head-shaと同じexact HEAD。tests.scenarioIdsとspec.trace.scenariosは同じSCN集合。spec.impactはupdated|no-spec-impactで、no-spec-impactではspec.rationaleに対象範囲を限定した12文字以上の根拠が必要。ownershipは変更pathの所有者と層",
       example: {
         headSha: "<40hex>",
         review: { approved: true, headSha: "<40hex>" },

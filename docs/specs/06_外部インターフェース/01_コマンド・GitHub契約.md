@@ -83,6 +83,8 @@ finalize時に削除可能なignore対象は、package既定の`node_modules/`�
 
 ## Workflowサブコマンド
 
+Step 4・8の`workflow record --evidence`は64桁のhex digestと`sync`語、`pr create --evidence`の`no-spec-impact`は12文字以上の`spec.rationale`を必要とする。`review round`入力fileはstaging外に置き、blocking findingの`contractId`はanchorのACまたはINVに一致させる。finalize applyはpreview digestを`--report-hash`と`--approved-digest`の両方へ渡す。usage、拒否診断、Step skillはこれらのfield・flag名と境界値を実行前に示す。
+
 | コマンド | 入力 | 出力・終了code |
 |---|---|---|
 | `workflow steps` | 任意の`--mode=<quick｜full｜poc>` | Step定義、mode別列、省略対象、全mode共通の省略不能Stepを機械可読JSONで返す。不明modeは非0 |

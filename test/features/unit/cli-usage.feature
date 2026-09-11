@@ -76,3 +76,22 @@ Feature: CLIの必須flagとusageを1回の実行で提示する
     When "worktree finalize"のusage宣言を検査する
     Then usageは"--merge-sha"と"--approved-digest"と"--cleanup-authority"を宣言する
 
+  Scenario: SCN-UNIT-CLICONTRACT-001 journal evidence契約を実行前に案内する
+    Given CLI usage単体検査の準備がある
+    When "SCN-UNIT-CLICONTRACT-001"のCLI usage単体検査を実行する
+    Then CLI usage単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-CLICONTRACT-002 no-spec-impactのrationale契約を実行前に案内する
+    Given CLI usage単体検査の準備がある
+    When "SCN-UNIT-CLICONTRACT-002"のCLI usage単体検査を実行する
+    Then CLI usage単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-CLICONTRACT-003 review round入力fileの配置とcontractIdを案内する
+    Given CLI usage単体検査の準備がある
+    When "SCN-UNIT-CLICONTRACT-003"のCLI usage単体検査を実行する
+    Then CLI usage単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-CLICONTRACT-004 finalizeの2つのdigest引数を例示する
+    Given CLI usage単体検査の準備がある
+    When "SCN-UNIT-CLICONTRACT-004"のCLI usage単体検査を実行する
+    Then CLI usage単体検査は期待結果になる
