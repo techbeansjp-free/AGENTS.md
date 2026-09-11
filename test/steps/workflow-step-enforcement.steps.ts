@@ -6125,6 +6125,44 @@ if (exact(["auth", "status"])) {
         },
       });
       executePocObservation({ staging, headSha, observedAt: instant });
+      const untrackedArtifact = "untracked-observation.txt";
+      fs.writeFileSync(path.join(root, untrackedArtifact), "untracked\n");
+      await assert.rejects(
+        () =>
+          executeMain([
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            `--artifact=${untrackedArtifact}`,
+            "--evidence=未追跡成果物を拒否する",
+            `--recorded-at=${instant}`,
+            "--apply",
+          ]),
+        /現在HEADで追跡済み/u,
+      );
+      fs.unlinkSync(path.join(root, untrackedArtifact));
+      const trackedFixturePath = path.join(
+        declaration.fixture.root,
+        declaration.fixture.runner.path,
+      );
+      const trackedFixture = path.join(root, trackedFixturePath);
+      fs.appendFileSync(trackedFixture, "\n// uncommitted\n");
+      await assert.rejects(
+        () =>
+          executeMain([
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            `--artifact=${declaration.fixture.root}`,
+            "--evidence=変更済み成果物を拒否する",
+            `--recorded-at=${instant}`,
+            "--apply",
+          ]),
+        /現在HEADと完全一致/u,
+      );
+      spawnSync("git", ["restore", trackedFixturePath], {
+        cwd: root,
+      });
       const checked = await executeMain([
         "workflow",
         "advance",
