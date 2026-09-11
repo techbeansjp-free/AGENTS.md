@@ -205,6 +205,13 @@ When("公式推奨をAからBへ変更して公開CLIを2回起動する", funct
         expectedStatus,
         tierResult.stdout + tierResult.stderr,
       );
+      // codex経路はtrusted refを読む。判定の信頼源と用途を出力から観測する（Issue #1350）
+      const tierOutput: unknown = JSON.parse(tierResult.stdout);
+      assert.ok(isRecord(tierOutput), tierResult.stdout);
+      assert.equal(tierOutput.usage, "codex-adoption");
+      assert.ok(isRecord(tierOutput.provenance), tierResult.stdout);
+      assert.equal(tierOutput.provenance.source, "git");
+      assert.match(String(tierOutput.provenance.ref), /^[0-9a-f]{40}$/u);
     }
   }
 });

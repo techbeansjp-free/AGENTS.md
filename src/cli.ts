@@ -3711,6 +3711,24 @@ function routingFailure(
   });
 }
 
+/**
+ * policy loaderが観測した信頼源を出力用へ写す。**handlerで信頼源を推測しない。**
+ * `source`はloaderの語彙（`filesystem` / `filesystem-legacy` / `git`）をそのまま使い、
+ * `ref`は読んだcommit SHA（trusted）またはproject policy manifestのpathとする。
+ */
+function tierProvenance(provenance: Record<string, unknown>): {
+  source: string;
+  ref: string;
+} {
+  const source = typeof provenance.source === "string" ? provenance.source : "";
+  const commitSha =
+    typeof provenance.commitSha === "string" ? provenance.commitSha : undefined;
+  return {
+    source,
+    ref: commitSha ?? ".agent-skill-chain/project-policy.json",
+  };
+}
+
 function roleTierFailure(
   ruleId: string,
   purpose: string,
@@ -4131,14 +4149,18 @@ export async function main(
     const mode = required(flags, "mode");
     const scope = required(flags, "scope");
     const model = required(flags, "model");
-    if (
-      flags.provider !== undefined &&
-      flags.provider !== "codex" &&
-      flags.provider !== "claude"
-    )
-      throw new Error("--providerはcodexまたはclaudeが必要です");
+    /**
+     * **受理値は仕様の`codex`と未指定だけである**（Issue #1350）。`claude`は仕様外の
+     * 互換aliasとして加わっていたが、未指定と同じworking tree判定を行いながら
+     * 診断がtrustedを主張するため、trusted検査を受けたと誤読させていた。
+     */
+    if (flags.provider !== undefined && flags.provider !== "codex")
+      throw new Error(
+        "--providerはcodexだけを受理します。未指定は既存台帳の互換検証であり、Codex自動起動の認可には使いません",
+      );
     const selected = modelTier(required(flags, "selected"), "selected");
-    const choices = loadProjectPolicySet(root).choices[0];
+    const projectSet = loadProjectPolicySet(root);
+    const choices = projectSet.choices[0];
     const configured =
       choices?.modelMapping && typeof choices.modelMapping !== "string"
         ? choices.modelMapping
@@ -4196,6 +4218,8 @@ export async function main(
         model,
         selector: CODEX_ADOPTION_SELECTOR,
         observedAt: observation.observedAt,
+        provenance: tierProvenance(trustedSet.provenance),
+        usage: "codex-adoption",
       });
       return result.valid ? 0 : 1;
     }
@@ -4209,19 +4233,37 @@ export async function main(
           ? flags.justification
           : undefined,
     });
-    const output = { ...result, required: requiredMinimum, selected, model };
+    /**
+     * **未指定経路は候補側のworking treeを読む互換検証である。** 仕様どおり
+     * Codex自動起動の認可に使わないため、判定の信頼源と用途を出力へ明示し、
+     * 診断からtrustedの主張を外す（Issue #1350）。
+     */
+    const compatibility = {
+      provenance: tierProvenance(projectSet.provenance),
+      usage: "compatibility-only" as const,
+    };
+    const output = {
+      ...result,
+      required: requiredMinimum,
+      selected,
+      model,
+      ...compatibility,
+    };
     print(
       result.valid
         ? output
-        : roleTierFailure(
-            "ASC-MODEL-TIER-001",
-            "risk・mode・scopeに必要な能力tierを単調に保証する",
-            risk,
-            result.errors,
-            scope,
-            "trusted project choiceへmodel mappingを定義するか、必要tier以上を選択してください",
-            "model mapping owner",
-          ),
+        : {
+            ...(roleTierFailure(
+              "ASC-MODEL-TIER-001",
+              "risk・mode・scopeに必要な能力tierを単調に保証する",
+              risk,
+              result.errors,
+              scope,
+              "working treeのmodelMapping.tierMappingへmodelを定義するか、必要tier以上を選択してください。本判定は互換検証であり認可には使いません",
+              "不要",
+            ) as Record<string, unknown>),
+            ...compatibility,
+          },
     );
     return result.valid ? 0 : 1;
   }
