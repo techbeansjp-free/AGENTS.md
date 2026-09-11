@@ -16,6 +16,10 @@ import {
 } from "./mode.js";
 import { validateDevelopmentConsiderations } from "./conformance.js";
 import {
+  parseVerificationSelectionInput,
+  type ChangeRisk,
+} from "./agile-verification.js";
+import {
   calculateStagingDigest,
   listStagingArtifacts,
   readStoredStagingRecord,
@@ -48,6 +52,128 @@ const FULL_FILES = {
 };
 
 export type IssueValidationStage = "requirements" | "design";
+
+const LOW_RISK_SHORT_FORM_FILE = "verification-input.json";
+const LOW_RISK_SHORT_FORM = /^対象外:\s*(.*)$/u;
+const LOW_RISK_SHORT_FORM_LIKE = /^\s*(?:(?:[-*+>])\s*)*対象外\s*:/u;
+const MAX_VERIFICATION_INPUT_BYTES = 1024 * 1024;
+const LOW_RISK_SHORT_FORM_TARGETS = Object.freeze([
+  Object.freeze({
+    file: "02_設計.md",
+    heading: "4.2 識別子・UUID（必要な場合だけ）",
+  }),
+  Object.freeze({ file: "02_設計.md", heading: "8. UIと表示契約（該当時）" }),
+  Object.freeze({ file: "02_設計.md", heading: "9. 観測可能性" }),
+  Object.freeze({ file: "03_実装計画.md", heading: "5.2 安全性の必須観点" }),
+]);
+
+/** exact Markdown heading配下を、同じか上位levelの次headingまでに閉じる。 */
+function markdownSectionBodies(
+  text: string,
+  heading: string,
+): readonly string[] {
+  const visible = withoutMarkdownCode(text);
+  const lines = visible.split("\n");
+  const bodies: string[] = [];
+  for (let start = 0; start < lines.length; start += 1) {
+    const match = /^(#{2,6})\s+(.+?)\s*$/u.exec(lines[start]!);
+    if (match?.[2] !== heading) continue;
+    const level = match[1]!.length;
+    let end = lines.length;
+    for (let index = start + 1; index < lines.length; index += 1) {
+      const nextLevel = /^(#{2,6})\s/u.exec(lines[index]!)?.[1]?.length;
+      if (nextLevel !== undefined && nextLevel <= level) {
+        end = index;
+        break;
+      }
+    }
+    bodies.push(lines.slice(start + 1, end).join("\n"));
+  }
+  return Object.freeze(bodies);
+}
+
+function verificationRisk(issuePath: string): ChangeRisk {
+  const inputPath = path.join(issuePath, LOW_RISK_SHORT_FORM_FILE);
+  let descriptor: number | undefined;
+  let input: unknown;
+  try {
+    const named = fs.lstatSync(inputPath);
+    if (!named.isFile() || named.isSymbolicLink())
+      throw new Error(
+        `${LOW_RISK_SHORT_FORM_FILE}は通常fileでなければなりません`,
+      );
+    descriptor = fs.openSync(
+      inputPath,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+    );
+    const opened = fs.fstatSync(descriptor);
+    if (
+      !opened.isFile() ||
+      opened.dev !== named.dev ||
+      opened.ino !== named.ino
+    )
+      throw new Error(`${LOW_RISK_SHORT_FORM_FILE}が読取中に変更されました`);
+    if (opened.size > MAX_VERIFICATION_INPUT_BYTES)
+      throw new Error(
+        `${LOW_RISK_SHORT_FORM_FILE}は${MAX_VERIFICATION_INPUT_BYTES} bytes以下でなければなりません`,
+      );
+    input = JSON.parse(fs.readFileSync(descriptor, "utf8")) as unknown;
+  } catch (error) {
+    throw new Error(
+      `${LOW_RISK_SHORT_FORM_FILE}を安全に読めません: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+  return parseVerificationSelectionInput(input).risk;
+}
+
+/** 指定4節にshort formが現れた場合だけ、low限定・理由付き1行を強制する。 */
+export function validateLowRiskShortForms(
+  issuePath: string,
+): readonly string[] {
+  const candidates = LOW_RISK_SHORT_FORM_TARGETS.flatMap((target) => {
+    const artifact = path.join(issuePath, target.file);
+    if (!fs.existsSync(artifact)) return [];
+    const bodies = markdownSectionBodies(
+      fs.readFileSync(artifact, "utf8"),
+      target.heading,
+    );
+    return bodies.flatMap((body) => {
+      const lines = body.split("\n").filter((line) => line.trim() !== "");
+      return lines.some((line) => LOW_RISK_SHORT_FORM_LIKE.test(line))
+        ? [{ ...target, lines }]
+        : [];
+    });
+  });
+  if (candidates.length === 0) return Object.freeze([]);
+
+  let risk: ChangeRisk;
+  try {
+    risk = verificationRisk(issuePath);
+  } catch (error) {
+    return Object.freeze([
+      `\`対象外: <理由>\`はrisk=lowだけで使用できます。riskを確認できません: ${error instanceof Error ? error.message : String(error)}`,
+    ]);
+  }
+  const errors: string[] = [];
+  for (const candidate of candidates) {
+    const match =
+      candidate.lines.length === 1
+        ? LOW_RISK_SHORT_FORM.exec(candidate.lines[0]!.trim())
+        : null;
+    if (!match || match[1]!.trim() === "")
+      errors.push(
+        `${candidate.file} §${candidate.heading}の短縮形式は\`対象外: <理由>\`の理由付き1行にしてください`,
+      );
+    if (risk !== "low")
+      errors.push(
+        `${candidate.file} §${candidate.heading}の\`対象外: <理由>\`はrisk=lowだけで使用できます（現在: ${risk}）`,
+      );
+  }
+  return Object.freeze(errors);
+}
 
 export interface IssueSyncBodyDraft {
   readonly body: string;
@@ -1150,6 +1276,8 @@ export function validateIssue(
       ).errors,
     );
   }
+  if (mode === "full" && options.stage !== "requirements")
+    errors.push(...validateLowRiskShortForms(issuePath));
   return { valid: errors.length === 0, mode, errors, blockedOperations };
 }
 
