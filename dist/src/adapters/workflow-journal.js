@@ -7,6 +7,7 @@ import { assessImplementationDiscovery, parseImplementationDiscoveryInput, } fro
 import { MODE_QUESTIONS, } from "../domain/mode.js";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { findPackageRoot } from "../lib/package-root.js";
+import { git } from "../lib/process.js";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import { DELIVERY_STATE_FILE, parseDeliveryState, } from "../domain/delivery-state.js";
@@ -268,13 +269,19 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha) {
     }
     if (entry.mode !== current.mode)
         throw new Error(`entry mode ${entry.mode}がstaging mode ${current.mode}と一致しません`);
+    const repositoryRoot = path.resolve(staging, "../../../..");
+    if (entry.step === 9 && headSha !== undefined) {
+        const currentHeadSha = git(["rev-parse", "--verify", "HEAD^{commit}"], repositoryRoot).stdout.trim();
+        if (currentHeadSha !== headSha)
+            throw new Error("Step 9の検証対象HEADがjournal追記前に変更されました");
+    }
     let entryToWrite = entry;
     if (current.mode === "poc" && entry.step >= 9) {
         if (!headSha)
             throw new Error("PoCのStep 9以降には検証対象HEAD SHAとpoc-observation Evidenceが必要です");
         const context = pocContextAtStaging(staging);
         assertPocHeadChangeScope({
-            repositoryRoot: path.resolve(staging, "../../../.."),
+            repositoryRoot,
             baselineHeadSha: context.baselineHeadSha,
             headSha,
             fixtureRoot: context.declaration.fixture.root,
@@ -336,6 +343,10 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha) {
         fs.fsyncSync(temporaryDescriptor);
         fs.closeSync(temporaryDescriptor);
         temporaryDescriptor = undefined;
+        if (entry.step === 9 &&
+            headSha !== undefined &&
+            git(["rev-parse", "--verify", "HEAD^{commit}"], repositoryRoot).stdout.trim() !== headSha)
+            throw new Error("Step 9の検証対象HEADがjournal確定前に変更されました");
         const currentPath = assertRegularJournalPath(journal);
         if (currentPath.dev !== before.dev ||
             currentPath.ino !== before.ino ||

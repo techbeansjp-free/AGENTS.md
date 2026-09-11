@@ -382,7 +382,7 @@ function assertWorkflowAdvanceArtifacts(
   staging: string,
   targetStep: number,
   artifacts: readonly string[],
-): void {
+): string | undefined {
   if (new Set(artifacts).size !== artifacts.length)
     throw new Error(`Step ${targetStep}のartifact重複を拒否しました`);
   const exactByStep = new Map<number, readonly string[]>([
@@ -405,8 +405,28 @@ function assertWorkflowAdvanceArtifacts(
     throw new Error(
       `Step ${targetStep}のartifactは${[...allowed].join("、")}だけを指定できます`,
     );
-  if (targetStep !== 9) return;
+  if (targetStep !== 9) return undefined;
   const repositoryRoot = path.resolve(staging, "../../../..");
+  const candidateHeadSha = git(
+    ["rev-parse", "--verify", "HEAD^{commit}"],
+    repositoryRoot,
+  ).stdout.trim();
+  const worktreeStatus = git(
+    [
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--untracked-files=all",
+      "--",
+      ".",
+      ":(exclude).agent-skill-chain/tmp/issues",
+    ],
+    repositoryRoot,
+  ).stdout;
+  if (worktreeStatus !== "")
+    throw new Error(
+      "Step 9を記録する候補worktree全体は現在HEADと完全一致する必要があります",
+    );
   for (const artifact of artifacts) {
     if (path.isAbsolute(artifact) || artifact.split(/[\\/]/u).includes(".."))
       throw new Error("Step 9のartifactはrepository内の相対pathが必要です");
@@ -461,6 +481,7 @@ function assertWorkflowAdvanceArtifacts(
         `Step 9のartifactは現在HEADと完全一致する必要があります: ${artifact}`,
       );
   }
+  return candidateHeadSha;
 }
 
 function workflowMode(value: string): Mode {
@@ -4886,7 +4907,11 @@ export async function main(
           throw new Error(
             "workflow advanceの記録には--artifactが1件以上必要です",
           );
-        assertWorkflowAdvanceArtifacts(staging, targetStep, artifacts);
+        const candidateHeadSha = assertWorkflowAdvanceArtifacts(
+          staging,
+          targetStep,
+          artifacts,
+        );
         const evidence = required(flags, "evidence");
         const entry: StepJournalEntry = {
           step: targetStep,
@@ -4894,16 +4919,26 @@ export async function main(
           mode: current.mode,
           recordedAt: flags["recorded-at"] ?? new Date().toISOString(),
           artifacts,
-          evidence,
+          evidence:
+            candidateHeadSha === undefined
+              ? evidence
+              : `${evidence}; candidate HEAD ${candidateHeadSha}`,
         };
-        const headSha =
-          current.mode === "poc" && targetStep >= 9
-            ? git(
-                ["rev-parse", "--verify", "HEAD^{commit}"],
-                path.resolve(staging, "../../../.."),
-              ).stdout.trim()
-            : undefined;
-        const result = appendWorkflowJournalEntry({ staging, entry, headSha });
+        if (
+          candidateHeadSha !== undefined &&
+          git(
+            ["rev-parse", "--verify", "HEAD^{commit}"],
+            path.resolve(staging, "../../../.."),
+          ).stdout.trim() !== candidateHeadSha
+        )
+          throw new Error(
+            "Step 9の成果物検証中に候補HEADが変更されました。新しいHEADから再実行してください",
+          );
+        const result = appendWorkflowJournalEntry({
+          staging,
+          entry,
+          headSha: candidateHeadSha,
+        });
         print({ ...plan, state: "applied", result });
         return 0;
       }
@@ -5080,7 +5115,9 @@ export async function main(
     };
     const repositoryRoot = path.resolve(staging, "../../../..");
     const needsHeadSha =
-      step.step === 10 || (journal.mode === "poc" && step.step >= 9);
+      step.step === 9 ||
+      step.step === 10 ||
+      (journal.mode === "poc" && step.step >= 9);
     const headSha = needsHeadSha
       ? git(
           ["rev-parse", "--verify", "HEAD^{commit}"],
