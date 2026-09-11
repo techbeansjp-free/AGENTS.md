@@ -1292,6 +1292,22 @@ function retryPreparedMergeAfterConfirmedAbsence(input) {
         };
     }
 }
+/**
+ * **`issue validate`が使うGherkin方言をproject choiceから解決する。**
+ *
+ * stagingは`<root>/.agent-skill-chain/tmp/issues/<staging>`に置かれるため、
+ * `--path`の4階層上をrootとみなし、そこにproject policy manifestがあれば
+ * `projectChoices.gherkinDialect`を返す。manifestが無い場合（一時directoryの
+ * fixture等）は未指定とし、`validateIssue`の既定`en`に委ねる。
+ * **宣言できても参照されない値を残さない**（Issue #1324）。
+ */
+function issueStagingGherkinDialect(issuePath) {
+    const root = path.resolve(issuePath, "../../../..");
+    const manifest = path.join(root, ".agent-skill-chain", "project-policy.json");
+    if (!fs.existsSync(manifest))
+        return undefined;
+    return loadProjectPolicySet(root).policy.projectChoices?.gherkinDialect;
+}
 function handlePullRequestMerge(flags) {
     const apply = applyMode(flags);
     const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
@@ -3616,11 +3632,13 @@ export async function main(argv, dependencies = {}) {
         const stage = flags.stage;
         if (stage !== undefined && stage !== "requirements" && stage !== "design")
             throw new Error("--stageはrequirementsまたはdesignで指定してください");
-        const result = validateIssue(path.resolve(target), {
+        const issuePath = path.resolve(target);
+        const result = validateIssue(issuePath, {
             changedFiles: typeof flags.changed === "string"
                 ? flags.changed.split(",").filter(Boolean)
                 : [],
             stage: stage,
+            gherkinDialect: issueStagingGherkinDialect(issuePath),
         });
         print(result);
         return result.valid ? 0 : 1;

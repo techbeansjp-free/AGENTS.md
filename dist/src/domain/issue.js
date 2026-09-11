@@ -165,12 +165,52 @@ function withoutCode(text) {
     }
     return visible.join("\n");
 }
-function withoutGherkin(text) {
+/**
+ * **project choiceの`gherkinDialect`ごとの、scenario ID行を開始するkeyword。**
+ *
+ * 従来は英語`Scenario:`だけを検出し、`gherkinDialect`は宣言できても参照されなかった
+ * （Issue #1324）。方言は固定表で持ち、runtime dependencyを足さない。
+ * **表に無い方言はfail-closedで拒否し、英語keywordへ暗黙にfallbackしない。**
+ * `ja`は英語keywordも受理する上位集合であり、`en`の受理集合は従来の`Scenario:`に
+ * `Scenario Outline:`のID行を加えたものである。
+ */
+export const GHERKIN_SCENARIO_KEYWORDS = Object.freeze({
+    en: Object.freeze(["Scenario", "Scenario Outline"]),
+    ja: Object.freeze([
+        "Scenario",
+        "Scenario Outline",
+        "シナリオ",
+        "シナリオアウトライン",
+        "シナリオテンプレート",
+        "テンプレ",
+    ]),
+});
+export const DEFAULT_GHERKIN_DIALECT = "en";
+export function scenarioKeywords(dialect) {
+    const keywords = Object.hasOwn(GHERKIN_SCENARIO_KEYWORDS, dialect)
+        ? GHERKIN_SCENARIO_KEYWORDS[dialect]
+        : undefined;
+    if (!keywords)
+        throw new Error(`gherkinDialectが未対応です: ${dialect}。対応する方言は${Object.keys(GHERKIN_SCENARIO_KEYWORDS).join("、")}です`);
+    return keywords;
+}
+function scenarioIdPattern(dialect) {
+    const alternatives = scenarioKeywords(dialect)
+        .map((keyword) => escapeRegExp(keyword))
+        .join("|");
+    /** 従来の`/Scenario:\\s+SCN-.../`と同じく行頭に固定しない（受理集合を狭めない） */
+    return new RegExp(`(?:${alternatives}):\\s+SCN-[A-Z0-9-]+`, "u");
+}
+function withoutGherkin(text, dialect = DEFAULT_GHERKIN_DIALECT) {
     let inGherkin = false;
+    const scenarioStart = scenarioKeywords(dialect)
+        .map((keyword) => `${escapeRegExp(keyword)}:`)
+        .join("|");
+    const gherkinStart = new RegExp(`^\\s*(?:@[\\w@-]+|Feature:|Rule:|Background:|${scenarioStart}|Examples:|Given\\b|When\\b|Then\\b|And\\b|But\\b|\\*)`, "u");
     return text
         .split("\n")
         .map((line) => {
-        if (/^\s*(?:@[\w@-]+|Feature:|Rule:|Background:|Scenario(?: Outline)?:|Examples:|Given\b|When\b|Then\b|And\b|But\b|\*)/u.test(line)) {
+        if (gherkinStart.test(line)) {
             inGherkin = true;
             return "";
         }
@@ -182,8 +222,8 @@ function withoutGherkin(text) {
         .join("\n");
 }
 const UNRESOLVED_PLACEHOLDER_SAMPLE_LIMIT = 5;
-function unresolvedPlaceholders(text) {
-    const prose = withoutGherkin(withoutCode(text));
+function unresolvedPlaceholders(text, dialect = DEFAULT_GHERKIN_DIALECT) {
+    const prose = withoutGherkin(withoutCode(text), dialect);
     const found = new Set();
     for (const match of prose.matchAll(/<[^>\n]+>|\{[^}\n]+\}/gu))
         found.add(match[0]);
@@ -430,6 +470,8 @@ function recordStagingSyncLocked(resolved, input) {
 }
 export function validateIssue(issuePath, options = {}) {
     const errors = [];
+    const gherkinDialect = options.gherkinDialect ?? DEFAULT_GHERKIN_DIALECT;
+    const scenarioId = scenarioIdPattern(gherkinDialect);
     const requirementPath = path.join(issuePath, "00_要求定義.md");
     if (!fs.existsSync(requirementPath))
         return {
@@ -458,7 +500,7 @@ export function validateIssue(issuePath, options = {}) {
             .filter((name) => fs.existsSync(path.join(issuePath, name)))
             .map((name) => fs.readFileSync(path.join(issuePath, name), "utf8")),
     ].join("\n");
-    const documentPlaceholders = unresolvedPlaceholders(allText);
+    const documentPlaceholders = unresolvedPlaceholders(allText, gherkinDialect);
     if (documentPlaceholders.length > 0)
         errors.push(unresolvedPlaceholderError("", documentPlaceholders));
     for (let index = 1; index <= 7; index += 1) {
@@ -466,7 +508,7 @@ export function validateIssue(issuePath, options = {}) {
         if (!text.includes(id))
             errors.push(`${id}の証拠がありません`);
     }
-    if (!/Scenario:\s+SCN-[A-Z0-9-]+/.test(allText))
+    if (!scenarioId.test(allText))
         errors.push("GherkinシナリオIDがありません");
     const disqualifiers = detectQuickDisqualifiers(options.changedFiles ?? []);
     if ((declared === "quick" || declared === "poc") &&
@@ -563,8 +605,13 @@ export function validateIssue(issuePath, options = {}) {
         const file = path.join(issuePath, name);
         if (!fs.existsSync(file))
             continue;
-        errors.push(...validateDevelopmentConsiderations(fs.readFileSync(file, "utf8"), name)
-            .errors);
+        errors.push(...validateDevelopmentConsiderations(fs.readFileSync(file, "utf8"), name, {
+            /**
+             * **00は参照行を使えない。** 参照先である00自身が参照行になると判定が
+             * 空虚になる（INV-02）。quickとpocは00だけを検証するので常に4行必須である。
+             */
+            allowReference: name !== "00_要求定義.md",
+        }).errors);
     }
     return { valid: errors.length === 0, mode, errors, blockedOperations };
 }

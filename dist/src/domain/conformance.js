@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { findPackageRoot } from "../lib/package-root.js";
 import { resolveContained } from "../lib/security.js";
 import { isRecord } from "../types.js";
 const IDS = Array.from({ length: 12 }, (_, index) => `I${index + 1}`);
@@ -30,6 +31,49 @@ export const DEVELOPMENT_CONSIDERATION_IDS = [
     "DC-UX",
     "DC-TOKENS",
 ];
+/**
+ * **fullの01〜03で4行の表の代わりに置ける参照行。** 00の判定を正本とし、
+ * この成果物に書いた行だけを差分として個別に検証する（Issue #1326）。
+ * 自由記述（「00と同じ」「同上」）は参照行として扱わない。
+ */
+export const DEVELOPMENT_CONSIDERATION_REFERENCE_LINE = "開発考慮事項の適用判定は00_要求定義.md §6.1と同じ";
+const DEVELOPMENT_CONSIDERATION_TEMPLATE_ROOT = path.join(findPackageRoot(import.meta.url), ".agent-skill-chain", "templates", "issue");
+let developmentConsiderationPlaceholderCache;
+/**
+ * **配布templateの開発考慮事項行から導出した既知placeholderの閉じた集合。**
+ *
+ * 一般のplaceholder判定が使う`TEMPLATE_PLACEHOLDER_TERM`は「範囲を限定した理由」
+ * 「NFR/AC・証拠」のような開発考慮事項欄の字面を含まないため、その集合へ揃えると
+ * template由来のplaceholderを残した理由・証拠が通る。従来はこの欄だけ
+ * 全角括弧を一律に拒否して塞いでいたが、それは自然文の括弧も全て拒否していた
+ * （Issue #1324）。**拒否するのはtemplateに実在する字面だけにし、自然文は受理する。**
+ */
+export function developmentConsiderationPlaceholders() {
+    if (developmentConsiderationPlaceholderCache)
+        return developmentConsiderationPlaceholderCache;
+    const placeholders = new Set();
+    for (const name of fs.readdirSync(DEVELOPMENT_CONSIDERATION_TEMPLATE_ROOT)) {
+        if (!name.endsWith(".md"))
+            continue;
+        const template = fs.readFileSync(path.join(DEVELOPMENT_CONSIDERATION_TEMPLATE_ROOT, name), "utf8");
+        for (const row of parseDevelopmentConsiderationRows(template).rows)
+            for (const cell of [row.reason, row.evidence])
+                for (const match of cell.matchAll(/（[^）\n]+）/gu))
+                    placeholders.add(match[0]);
+    }
+    if (placeholders.size === 0)
+        throw new Error("開発考慮事項templateからplaceholderを導出できません。配布templateを確認してください");
+    developmentConsiderationPlaceholderCache = placeholders;
+    return placeholders;
+}
+function containsKnownPlaceholder(value, placeholders) {
+    if (/[<{][^>}\n]+[>}]/u.test(value))
+        return true;
+    for (const placeholder of placeholders)
+        if (value.includes(placeholder))
+            return true;
+    return false;
+}
 const PROJECT_RULE_PREFIX = ["ASC", "DOGFOOD"].join("-");
 export const PROJECT_RULE_ENFORCEMENT_POINTS = Object.fromEntries([
     ["CI-PERMISSION-001", "checkQualityCiPermissions"],
@@ -329,7 +373,24 @@ export function buildRuleCoverage(input) {
     }
     return { rows, orphans };
 }
-export function validateDevelopmentConsiderationRecords(value, label = "document") {
+function developmentConsiderationRecordErrors(record, id, label, placeholders) {
+    const errors = [];
+    if (record.status !== "applicable" && record.status !== "not-applicable")
+        errors.push(`${label}: ${id}の判定はapplicableまたはnot-applicableでなければなりません`);
+    for (const [field, minimum] of [
+        ["reason", 8],
+        ["evidence", 4],
+    ]) {
+        const fieldValue = record[field];
+        if (typeof fieldValue !== "string" ||
+            fieldValue.trim().length < minimum ||
+            /^(?:-|なし|未定|不明|x+)$/iu.test(fieldValue.trim()) ||
+            containsKnownPlaceholder(fieldValue, placeholders))
+            errors.push(`${label}: ${id}の${field === "reason" ? "理由" : "証拠"}が具体化されていません`);
+    }
+    return errors;
+}
+export function validateDevelopmentConsiderationRecords(value, label = "document", options = {}) {
     const errors = [];
     if (!Array.isArray(value))
         return {
@@ -337,29 +398,19 @@ export function validateDevelopmentConsiderationRecords(value, label = "document
             errors: [`${label}: 開発契約の適用判断は配列でなければなりません`],
             checked: DEVELOPMENT_CONSIDERATION_IDS,
         };
+    const placeholders = options.placeholders ?? developmentConsiderationPlaceholders();
     const records = value.filter(isRecord);
     if (records.length !== value.length)
         errors.push(`${label}: 開発契約の適用判断にobject以外があります`);
     for (const id of DEVELOPMENT_CONSIDERATION_IDS) {
         const matches = records.filter((record) => record.id === id);
+        if (options.partial === true && matches.length === 0)
+            continue;
         if (matches.length !== 1) {
             errors.push(`${label}: ${id}は重複なく1件必要です`);
             continue;
         }
-        const record = matches[0] ?? {};
-        if (record.status !== "applicable" && record.status !== "not-applicable")
-            errors.push(`${label}: ${id}の判定はapplicableまたはnot-applicableでなければなりません`);
-        for (const [field, minimum] of [
-            ["reason", 8],
-            ["evidence", 4],
-        ]) {
-            const fieldValue = record[field];
-            if (typeof fieldValue !== "string" ||
-                fieldValue.trim().length < minimum ||
-                /^(?:-|なし|未定|不明|x+)$/iu.test(fieldValue.trim()) ||
-                /[（{][^）}]+[）}]/u.test(fieldValue))
-                errors.push(`${label}: ${id}の${field === "reason" ? "理由" : "証拠"}が具体化されていません`);
-        }
+        errors.push(...developmentConsiderationRecordErrors(matches[0] ?? {}, id, label, placeholders));
     }
     for (const record of records)
         if (typeof record.id !== "string" ||
@@ -371,9 +422,14 @@ export function validateDevelopmentConsiderationRecords(value, label = "document
         checked: DEVELOPMENT_CONSIDERATION_IDS,
     };
 }
-export function validateDevelopmentConsiderations(markdown, label = "document") {
+function parseDevelopmentConsiderationRows(markdown) {
     const rows = [];
+    let hasReferenceLine = false;
     for (const line of markdown.split(/\r?\n/u)) {
+        if (line.trim() === DEVELOPMENT_CONSIDERATION_REFERENCE_LINE) {
+            hasReferenceLine = true;
+            continue;
+        }
         const cells = line
             .split("|")
             .slice(1, -1)
@@ -389,7 +445,21 @@ export function validateDevelopmentConsiderations(markdown, label = "document") 
             evidence: cells[4] ?? "",
         });
     }
-    return validateDevelopmentConsiderationRecords(rows, label);
+    return { rows, hasReferenceLine };
+}
+export function validateDevelopmentConsiderations(markdown, label = "document", options = {}) {
+    const { rows, hasReferenceLine } = parseDevelopmentConsiderationRows(markdown);
+    if (hasReferenceLine && options.allowReference !== true)
+        return {
+            valid: false,
+            errors: [
+                `${label}は参照行を使用できません。開発考慮事項の4行を判定・理由・証拠つきで書いてください`,
+            ],
+            checked: DEVELOPMENT_CONSIDERATION_IDS,
+        };
+    return validateDevelopmentConsiderationRecords(rows, label, {
+        partial: hasReferenceLine,
+    });
 }
 function text(value) {
     return typeof value === "string" && value.trim().length > 0;
