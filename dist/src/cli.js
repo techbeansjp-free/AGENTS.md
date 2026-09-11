@@ -8,7 +8,7 @@ import { parsePocDeclaration } from "./domain/workflow.js";
 import { bootstrapProject, validateSpecs, } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
-import { isReviewArtifactParentContained, renderReviewArtifactDraft, } from "./domain/review-artifact.js";
+import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, } from "./domain/review-artifact.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
 import { buildWorktreePath, createWorktree, canonicalWorktreePath, DEFAULT_WORKTREE_PLACEMENT, enforceTrustedWorktreeBoundary, inspectFinalizeState, inspectRecoveryState, validateWorktreePlacement, } from "./domain/worktree.js";
@@ -3983,11 +3983,14 @@ export async function main(argv, dependencies = {}) {
             throw new Error("review artifactに位置引数は使用できません");
         if (flags.init !== true)
             throw new Error("review artifactには値なしの--initが必要です");
-        const unknown = Object.keys(flags).filter((flag) => !["init", "staging", "base", "head", "out"].includes(flag));
+        const unknown = Object.keys(flags).filter((flag) => !["init", "staging", "base", "head", "out", "root"].includes(flag));
         if (unknown.length > 0)
             throw new Error(`review artifactの未知optionです: --${unknown.join(", --")}`);
-        const staging = path.resolve(required(flags, "staging"));
-        const root = path.resolve(staging, "../../../..");
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const stagingInput = path.resolve(root, required(flags, "staging"));
+        const staging = resolveContained(root, path.relative(root, stagingInput));
+        if (!isReviewArtifactStagingDirectChild(root, staging))
+            throw new Error("review artifactの--stagingは対象rootの.agent-skill-chain/tmp/issues/直下が必要です");
         const record = readStoredStagingRecord(staging);
         const artifacts = listStagingArtifacts(staging);
         if (JSON.stringify(record.artifacts) !== JSON.stringify(artifacts) ||
@@ -4043,7 +4046,14 @@ export async function main(argv, dependencies = {}) {
             headSha,
             paths: changedPaths,
         });
-        writeFileExclusivePinned(outParent, path.basename(out), content);
+        try {
+            writeFileExclusivePinned(outParent, path.basename(out), content);
+        }
+        catch (error) {
+            if (error instanceof ExclusivePinnedWriteError)
+                throw new Error(`review artifact --initの雛形作成後に失敗しました。無関係fileの誤削除を避けるためpathname削除は行っていません。作成entryが残存している可能性があるため、指定--outの削除対象を確認してください`, { cause: error });
+            throw error;
+        }
         print({
             written: out,
             baseSha,

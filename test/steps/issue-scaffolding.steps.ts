@@ -9,6 +9,7 @@ import {
 import type { Mode } from "../../src/domain/mode.js";
 import {
   isReviewArtifactParentContained,
+  isReviewArtifactStagingDirectChild,
   renderReviewArtifactDraft,
 } from "../../src/domain/review-artifact.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
@@ -23,6 +24,7 @@ interface ScaffoldingWorld extends WorkflowWorld {
   syncMode: Mode;
   syncCheckpoint: 4 | 8;
   reviewParentContained: boolean;
+  reviewStagingContained: boolean;
 }
 
 const { Given, When, Then } = stepDefinitions<ScaffoldingWorld>();
@@ -137,6 +139,29 @@ When("review artifactの出力親包含を判定する", function () {
 
 Then("review artifactの出力親は拒否される", function () {
   assert.equal(this.reviewParentContained, false);
+});
+
+Given("review artifactの対象rootと別rootのstagingがある", function () {
+  this.root = path.join(path.sep, "repository");
+  this.staging = path.join(
+    path.sep,
+    "outside",
+    ".agent-skill-chain",
+    "tmp",
+    "issues",
+    "fixture",
+  );
+});
+
+When("review artifactのstaging配置を判定する", function () {
+  this.reviewStagingContained = isReviewArtifactStagingDirectChild(
+    this.root,
+    this.staging,
+  );
+});
+
+Then("review artifactのstagingは拒否される", function () {
+  assert.equal(this.reviewStagingContained, false);
 });
 
 Given(

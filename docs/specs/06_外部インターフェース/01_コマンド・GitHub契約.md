@@ -146,7 +146,7 @@ squash/rebaseの終端検証は、固定base..headからsource commit数を1〜2
 
 外部authorityを要しないpolicy CLIはofflineで動作する。PR CIのexplicit authority検証などGitHub必須gateは接続障害・不完全な観測時に`pending`としてfail-closed（exit非zero）とし、local安全結果は保持して成功扱いしない。観測済みtupleと入力の不一致は`rejected`、検証中のtuple変更は`pending`として再実行を案内する。
 
-`issue sync`はquick・pocのStep 4またはfullのStep 8という最終同期で`--staging-path --checkpoint`を併記できる。GitHub adapterの本文書き込み後再読取が一致し、同期前後のlocal body digestも一致した場合だけ、tracker URL、同期時刻、checkpoint、期待・再読取digestをstaging記録へ保存して再読取する。`promotion-active`のStep 4と8は、記録済みabsolute GitHub tracker URLが`--repo`と`--issue`から導くURLに完全一致する場合だけ元Issueへの同期を許可する。この拘束はGitHub副作用前に検証し、Step 8の同期記録更新時にも再検証する。`promotion-active`のStep 4では`--staging-path --checkpoint=4`を検証専用入力として要求するが、fullの最終checkpointではないため同期記録を更新しない。通常の`local-active` full Step 4では従来どおり両引数を渡さない。
+`issue sync`はquick・pocのStep 4またはfullのStep 8という最終同期で`--staging-path --checkpoint`を併記できる。GitHub adapterの本文書き込み後再読取が一致し、同期前後のlocal body digestも一致した場合だけ、tracker URL、同期時刻、checkpoint、期待・再読取digestをstaging記録へ保存して再読取する。`promotion-active`のStep 4と8は、記録済みabsolute GitHub tracker URLが`--repo`と`--issue`から導くURLに完全一致する場合だけ元Issueへの同期を許可する。この拘束はGitHub副作用前に検証し、Step 8の同期記録更新時にも再検証する。`promotion-active`のStep 4では`--staging-path --checkpoint=4`を検証専用入力として要求するが、fullの最終checkpointではないため同期記録を更新しない。通常の`local-active` full Step 4も、生成経路では両引数を本文生成専用入力として受け取るが同期記録を更新しない。`--body-file`経路を選ぶ場合は従来どおり両引数を渡さない。
 
 `issue sync`の本文入力は`--body-file`または`--generate-body`のexactly oneとする。生成経路は`--staging-path --checkpoint`を必須とし、quick・pocのStep 4では00、fullのStep 4では00・01、fullのStep 8では00〜03を規定順で連結する。通常の`local-active` full Step 4で生成経路を使った場合も同期記録を更新せず、stagingのwriter lock内で生成digestの不変を再検証する。
 

@@ -677,7 +677,13 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     ],
     conditionalFlags: [],
     optionalFlags: [
-      optional("init", "", "§0・§1・個別監査表・§7を初期化する", "必須"),
+      ROOT_FLAG,
+      optional(
+        "init",
+        "",
+        "§0・§1・個別監査表・§7を初期化する。実行には--initが必要です",
+        "--initなしの実行は拒否する",
+      ),
       optional(
         "out",
         "path",

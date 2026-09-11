@@ -24,6 +24,11 @@ Feature: Issue工程の機械導出欄を安全に生成する
     When review artifactの出力親包含を判定する
     Then review artifactの出力親は拒否される
 
+  Scenario: SCN-UNIT-REVIEWARTIFACT-004 別rootのstagingを拒否する
+    Given review artifactの対象rootと別rootのstagingがある
+    When review artifactのstaging配置を判定する
+    Then review artifactのstagingは拒否される
+
   Scenario Outline: SCN-UNIT-ISSUESYNC-001 modeとcheckpointから同期対象を決定する
     Given <mode> modeのcheckpoint <checkpoint>という同期条件がある
     When 同期対象を導出する

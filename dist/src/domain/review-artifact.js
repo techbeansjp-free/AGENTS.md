@@ -1,4 +1,10 @@
 import path from "node:path";
+/** review artifact用stagingが対象rootの規定issues directory直下にあるか判定する。 */
+export function isReviewArtifactStagingDirectChild(root, staging) {
+    const resolvedRoot = path.resolve(root);
+    const issuesRoot = path.join(resolvedRoot, ".agent-skill-chain", "tmp", "issues");
+    return path.dirname(path.resolve(staging)) === issuesRoot;
+}
 /** lexical rootから期待する親とreal parentが一致し、repository内に留まることを判定する。 */
 export function isReviewArtifactParentContained(lexicalRoot, realRoot, lexicalParent, realParent) {
     const relative = path.relative(path.resolve(lexicalRoot), lexicalParent);

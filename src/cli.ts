@@ -22,6 +22,7 @@ import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
 import {
   isReviewArtifactParentContained,
+  isReviewArtifactStagingDirectChild,
   renderReviewArtifactDraft,
 } from "./domain/review-artifact.js";
 import {
@@ -5442,14 +5443,22 @@ export async function main(
     if (flags.init !== true)
       throw new Error("review artifactには値なしの--initが必要です");
     const unknown = Object.keys(flags).filter(
-      (flag) => !["init", "staging", "base", "head", "out"].includes(flag),
+      (flag) =>
+        !["init", "staging", "base", "head", "out", "root"].includes(flag),
     );
     if (unknown.length > 0)
       throw new Error(
         `review artifactの未知optionです: --${unknown.join(", --")}`,
       );
-    const staging = path.resolve(required(flags, "staging"));
-    const root = path.resolve(staging, "../../../..");
+    const root = path.resolve(
+      typeof flags.root === "string" ? flags.root : process.cwd(),
+    );
+    const stagingInput = path.resolve(root, required(flags, "staging"));
+    const staging = resolveContained(root, path.relative(root, stagingInput));
+    if (!isReviewArtifactStagingDirectChild(root, staging))
+      throw new Error(
+        "review artifactの--stagingは対象rootの.agent-skill-chain/tmp/issues/直下が必要です",
+      );
     const record = readStoredStagingRecord(staging);
     const artifacts = listStagingArtifacts(staging);
     if (
@@ -5552,7 +5561,16 @@ export async function main(
       headSha,
       paths: changedPaths,
     });
-    writeFileExclusivePinned(outParent, path.basename(out), content);
+    try {
+      writeFileExclusivePinned(outParent, path.basename(out), content);
+    } catch (error) {
+      if (error instanceof ExclusivePinnedWriteError)
+        throw new Error(
+          `review artifact --initの雛形作成後に失敗しました。無関係fileの誤削除を避けるためpathname削除は行っていません。作成entryが残存している可能性があるため、指定--outの削除対象を確認してください`,
+          { cause: error },
+        );
+      throw error;
+    }
     print({
       written: out,
       baseSha,
