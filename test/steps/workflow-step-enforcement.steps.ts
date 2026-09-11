@@ -5862,6 +5862,24 @@ if (exact(["auth", "status"])) {
     case "SCN-E2E-ADVANCE-002": {
       const staging = createQuickStaging(this.temp("asc-advance-apply-"));
       completeAdvanceRequirement(staging);
+      const before = fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE));
+      await assert.rejects(
+        () =>
+          executeMain([
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--artifact=関係のない成果物.md",
+            "--evidence=要求成果物を確認した",
+            `--recorded-at=${instant}`,
+            "--apply",
+          ]),
+        /Step 1のartifact/u,
+      );
+      assert.deepEqual(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE)),
+        before,
+      );
       const checked = await executeMain([
         "workflow",
         "advance",

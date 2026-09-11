@@ -113,6 +113,38 @@ function composeWorkflowAdvanceIssueBody(existingBody, generatedBody) {
         .trimStart();
     return `${[before, block, after].filter((part) => part !== "").join("\n\n")}\n`;
 }
+function assertWorkflowAdvanceArtifacts(staging, targetStep, artifacts) {
+    const exactByStep = new Map([
+        [1, ["00_要求定義.md"]],
+        [2, ["01_要件定義.md"]],
+        [5, ["02_設計.md"]],
+        [6, ["03_実装計画.md"]],
+    ]);
+    const allowedByStep = new Map([
+        [3, new Set(["00_要求定義.md", "01_要件定義.md"])],
+        [7, new Set(["02_設計.md", "03_実装計画.md"])],
+    ]);
+    const exact = exactByStep.get(targetStep);
+    if (exact && stableJson(artifacts) !== stableJson(exact))
+        throw new Error(`Step ${targetStep}のartifactは${exact.join("、")}と完全一致する必要があります`);
+    const allowed = allowedByStep.get(targetStep);
+    if (allowed && artifacts.some((artifact) => !allowed.has(artifact)))
+        throw new Error(`Step ${targetStep}のartifactは${[...allowed].join("、")}だけを指定できます`);
+    if (targetStep !== 9)
+        return;
+    const repositoryRoot = path.resolve(staging, "../../../..");
+    for (const artifact of artifacts) {
+        if (path.isAbsolute(artifact) || artifact.split(/[\\/]/u).includes(".."))
+            throw new Error("Step 9のartifactはrepository内の相対pathが必要です");
+        const resolved = path.resolve(repositoryRoot, artifact);
+        const relative = path.relative(repositoryRoot, resolved);
+        if (relative === "" ||
+            relative.startsWith(`..${path.sep}`) ||
+            path.isAbsolute(relative) ||
+            !fs.existsSync(resolved))
+            throw new Error(`Step 9のartifactがrepository内に存在しません: ${artifact}`);
+    }
+}
 function workflowMode(value) {
     if (value !== "quick" && value !== "full" && value !== "poc")
         throw new Error("--modeはquick、full、pocのいずれかが必要です");
@@ -3380,7 +3412,7 @@ export async function main(argv, dependencies = {}) {
                 .createHash("sha256")
                 .update(readWorkflowJournal(staging).source)
                 .digest("hex");
-            if (lockedRecord.digest !== initialRecord.digest ||
+            if (stableJson(lockedRecord) !== stableJson(initialRecord) ||
                 lockedJournalDigest !== initialJournalDigest)
                 throw new Error("workflow advanceのpreview後・writer lock取得前にstagingまたはjournalが変更されました。新しいpreviewから再実行してください");
             const validation = validateIssue(staging, {
@@ -3408,6 +3440,7 @@ export async function main(argv, dependencies = {}) {
             if (plan.operation === "record") {
                 if (artifacts.length === 0)
                     throw new Error("workflow advanceの記録には--artifactが1件以上必要です");
+                assertWorkflowAdvanceArtifacts(staging, targetStep, artifacts);
                 const evidence = required(flags, "evidence");
                 const entry = {
                     step: targetStep,
