@@ -227,7 +227,7 @@ export function appendWorkflowJournalEntry(input) {
     if (input.entry.step === 0 || input.entry.step === 11)
         throw new Error("Step 0はstaging初期化専用、Step 11はdelivery終端専用です。汎用journal追記では記録できません");
     const staging = assertWorkflowStaging(input.staging);
-    return withStagingMutationLock(staging, () => appendWorkflowJournalEntryLocked(staging, input.entry, input.headSha));
+    return withStagingMutationLock(staging, () => appendWorkflowJournalEntryLocked(staging, input.entry, input.headSha, input.expectedStagingDigest));
 }
 export function appendDeliveryTerminalJournalEntry(input) {
     if (input.entry.step !== 11)
@@ -235,9 +235,17 @@ export function appendDeliveryTerminalJournalEntry(input) {
     const staging = assertWorkflowStaging(input.staging);
     return withStagingMutationLock(staging, () => appendWorkflowJournalEntryLocked(staging, input.entry, input.headSha));
 }
-function appendWorkflowJournalEntryLocked(staging, entry, headSha) {
+function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagingDigest) {
     recoverPendingJournalTransactionLocked(staging);
     recoverPocObservationTransactionLocked(staging);
+    const assertExpectedStagingDigest = () => {
+        if (expectedStagingDigest === undefined)
+            return;
+        const artifacts = listStagingArtifacts(staging);
+        if (calculateStagingDigest(staging, artifacts) !== expectedStagingDigest)
+            throw new Error("検証後にstaging成果物が変更されたためworkflow journalを確定できません");
+    };
+    assertExpectedStagingDigest();
     const current = readWorkflowJournal(staging);
     if (current.errors.length > 0)
         throw new Error(`journalの追記前検査に失敗しました: ${current.errors.join("; ")}`);
@@ -370,6 +378,7 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha) {
             throw new Error("Step 9の検証対象HEADがjournal確定前に変更されました");
         if (entry.step === 9 && headSha !== undefined)
             assertCandidateWorktreeClean();
+        assertExpectedStagingDigest();
         const currentPath = assertRegularJournalPath(journal);
         if (currentPath.dev !== before.dev ||
             currentPath.ino !== before.ino ||

@@ -379,6 +379,7 @@ export function appendWorkflowJournalEntry(input: {
   staging: string;
   entry: StepJournalEntry;
   headSha?: string;
+  expectedStagingDigest?: string;
 }): { entry: StepJournalEntry; journalDigest: string; stagingDigest: string } {
   if (input.entry.step === 0 || input.entry.step === 11)
     throw new Error(
@@ -386,7 +387,12 @@ export function appendWorkflowJournalEntry(input: {
     );
   const staging = assertWorkflowStaging(input.staging);
   return withStagingMutationLock(staging, () =>
-    appendWorkflowJournalEntryLocked(staging, input.entry, input.headSha),
+    appendWorkflowJournalEntryLocked(
+      staging,
+      input.entry,
+      input.headSha,
+      input.expectedStagingDigest,
+    ),
   );
 }
 
@@ -407,9 +413,19 @@ function appendWorkflowJournalEntryLocked(
   staging: string,
   entry: StepJournalEntry,
   headSha?: string,
+  expectedStagingDigest?: string,
 ): { entry: StepJournalEntry; journalDigest: string; stagingDigest: string } {
   recoverPendingJournalTransactionLocked(staging);
   recoverPocObservationTransactionLocked(staging);
+  const assertExpectedStagingDigest = (): void => {
+    if (expectedStagingDigest === undefined) return;
+    const artifacts = listStagingArtifacts(staging);
+    if (calculateStagingDigest(staging, artifacts) !== expectedStagingDigest)
+      throw new Error(
+        "検証後にstaging成果物が変更されたためworkflow journalを確定できません",
+      );
+  };
+  assertExpectedStagingDigest();
   const current = readWorkflowJournal(staging);
   if (current.errors.length > 0)
     throw new Error(
@@ -597,6 +613,8 @@ function appendWorkflowJournalEntryLocked(
       throw new Error("Step 9の検証対象HEADがjournal確定前に変更されました");
     if (entry.step === 9 && headSha !== undefined)
       assertCandidateWorktreeClean();
+
+    assertExpectedStagingDigest();
 
     const currentPath = assertRegularJournalPath(journal);
     if (

@@ -4965,6 +4965,7 @@ export async function main(
           staging,
           entry,
           headSha: candidateHeadSha,
+          expectedStagingDigest: lockedRecord.digest,
         });
         print({ ...plan, state: "applied", result });
         return 0;
@@ -5098,7 +5099,11 @@ export async function main(
           artifacts: [synced.url],
           evidence: `sync read-back digest ${dispatchBodySha256} matched tracker ${tracker}`,
         };
-        const journal = appendWorkflowJournalEntry({ staging, entry });
+        const journal = appendWorkflowJournalEntry({
+          staging,
+          entry,
+          expectedStagingDigest: lockedRecord.digest,
+        });
         print({ ...plan, state: "applied", result: { sync: synced, journal } });
         return 0;
       } finally {
