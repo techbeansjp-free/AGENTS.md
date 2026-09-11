@@ -340,3 +340,8 @@ Feature: 公開CLIでワークフローStepを強制する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-ADVANCE-012"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-013 workflow advanceは公開済みIssue同期を重複せずjournalを復旧する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-013"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる

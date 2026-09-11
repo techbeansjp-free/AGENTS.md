@@ -2081,7 +2081,8 @@ interface DeliveryProviderControl {
    * 既定の`"none"`は既存scenarioの挙動を変えない。
    */
   postMergeReviewShift: "none" | "replaced" | "revoked";
-  concurrentIssueEditAtView?: number;
+  concurrentIssueEditAtAdapterCas?: boolean;
+  failIssueReadBackAfterEditOnce?: boolean;
 }
 
 interface PreparedDeliveryCli extends PreparedPullRequest {
@@ -3026,12 +3027,23 @@ if (exact(["--version"])) {
   // GitHub固有の正規化は模さない。
   const index = args.indexOf("--body-file");
   fs.writeFileSync(issueBodyFile, fs.readFileSync(args[index + 1], "utf8"));
+  if (control.failIssueReadBackAfterEditOnce) {
+    control.failIssueReadBackAfterEditOnce = false;
+    control.failNextIssueView = true;
+    fs.writeFileSync(controlFile, JSON.stringify(control) + "\\n");
+  }
 } else if (args[0] === "issue" && args[1] === "view") {
   const issueViewCount = fs.existsSync(issueViewCountFile)
     ? Number(fs.readFileSync(issueViewCountFile, "utf8")) + 1
     : 1;
   fs.writeFileSync(issueViewCountFile, String(issueViewCount));
-  if (control.concurrentIssueEditAtView === issueViewCount)
+  if (control.failNextIssueView) {
+    control.failNextIssueView = false;
+    fs.writeFileSync(controlFile, JSON.stringify(control) + "\\n");
+    process.stderr.write("simulated issue read-back failure\\n");
+    process.exit(1);
+  }
+  if (control.concurrentIssueEditAtAdapterCas && issueViewCount === 4)
     fs.writeFileSync(issueBodyFile, "# concurrent edit\\n");
   process.stdout.write(
     fs.existsSync(issueBodyFile) ? fs.readFileSync(issueBodyFile, "utf8") : "",
@@ -6551,7 +6563,7 @@ if (exact(["auth", "status"])) {
       const control = JSON.parse(
         fs.readFileSync(prepared.controlFile, "utf8"),
       ) as DeliveryProviderControl;
-      control.concurrentIssueEditAtView = 3;
+      control.concurrentIssueEditAtAdapterCas = true;
       fs.writeFileSync(prepared.controlFile, `${JSON.stringify(control)}\n`);
       const rejected = executeCli(
         [
@@ -6572,7 +6584,7 @@ if (exact(["auth", "status"])) {
       assert.notEqual(rejected.status, 0);
       assert.match(
         rejected.stdout + rejected.stderr,
-        /preview後にGitHub Issue本文が変更されました/u,
+        /Issue同期直前に本文が変更されました/u,
       );
       assert.equal(
         deliveryProviderCalls(prepared).some(
@@ -6584,6 +6596,83 @@ if (exact(["auth", "status"])) {
         fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
       );
       assert.equal(journal.entries.at(-1)?.step, 3);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-013": {
+      const prepared = prepareDeliveryCli(
+        this,
+        { failIssueReadBackAfterEditOnce: true },
+        "disabled",
+      );
+      fs.writeFileSync(prepared.issueBodyFile, "# initial issue body\n");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-journal-recovery",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const applyFromNewPreview = () => {
+        const preview = executeCli(
+          [
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--repo=o/r",
+            "--issue=877",
+          ],
+          prepared.root,
+          prepared.env,
+        );
+        assert.equal(preview.status, 0, preview.stdout);
+        const expectedBodySha256 = (
+          JSON.parse(preview.stdout) as { sync: { bodySha256: string } }
+        ).sync.bodySha256;
+        return executeCli(
+          [
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--repo=o/r",
+            "--issue=877",
+            "--authorize=approved",
+            `--expected-body-sha256=${expectedBodySha256}`,
+            `--recorded-at=${instant}`,
+            `--synced-at=${instant}`,
+            "--apply",
+          ],
+          prepared.root,
+          prepared.env,
+        );
+      };
+      const interrupted = applyFromNewPreview();
+      assert.notEqual(interrupted.status, 0);
+      assert.match(
+        interrupted.stdout + interrupted.stderr,
+        /state=published.*journalTransaction=none/u,
+      );
+      const recovered = applyFromNewPreview();
+      assert.equal(recovered.status, 0, recovered.stdout + recovered.stderr);
+      assert.equal(
+        (
+          JSON.parse(recovered.stdout) as {
+            result: { recovery: { state: string } };
+          }
+        ).result.recovery.state,
+        "journal-recovered",
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ).length,
+        1,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 4);
       break;
     }
     default:

@@ -3580,6 +3580,8 @@ export async function main(argv, dependencies = {}) {
                 throw new Error("workflow advanceのpreview後に同期本文が変更されました。新しいpreviewから再実行してください");
             let temporaryDirectory;
             let bodyFile;
+            let primaryError;
+            let resultCode;
             try {
                 temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "asc-workflow-advance-"));
                 bodyFile = path.join(temporaryDirectory, "body.md");
@@ -3596,42 +3598,115 @@ export async function main(argv, dependencies = {}) {
                     }, {
                         allowPromotionStep4: fullStep4,
                     });
-                const synced = github("issue.sync", {
-                    repository,
-                    issue: Number(issueRaw),
-                    bodyFile: bodyFile,
-                    expectedBodySha256: observed.bodySha256,
-                }, process.cwd());
-                if (!fullStep4)
-                    recordStagingSync(staging, {
-                        tracker,
-                        checkpoint,
-                        syncedAt,
-                        bodyDigest: dispatchBodySha256,
-                        readBackDigest: dispatchBodySha256,
+                const observedDispatchBodySha256 = crypto
+                    .createHash("sha256")
+                    .update(observed.body.trimEnd())
+                    .digest("hex");
+                const alreadyPublished = observedDispatchBodySha256 === dispatchBodySha256;
+                try {
+                    const synced = alreadyPublished
+                        ? { url: tracker }
+                        : github("issue.sync", {
+                            repository,
+                            issue: Number(issueRaw),
+                            bodyFile: bodyFile,
+                            expectedBodySha256: observed.bodySha256,
+                        }, process.cwd());
+                    if (!fullStep4)
+                        recordStagingSync(staging, {
+                            tracker,
+                            checkpoint,
+                            syncedAt,
+                            bodyDigest: dispatchBodySha256,
+                            readBackDigest: dispatchBodySha256,
+                        });
+                    const entry = {
+                        step: targetStep,
+                        skillId: definition.skillId,
+                        mode: current.mode,
+                        recordedAt,
+                        artifacts: [synced.url],
+                        evidence: `sync read-back digest ${dispatchBodySha256} matched tracker ${tracker}`,
+                    };
+                    const journal = appendWorkflowJournalEntry({
+                        staging,
+                        entry,
+                        expectedStagingDigest: initialContentDigest,
                     });
-                const entry = {
-                    step: targetStep,
-                    skillId: definition.skillId,
-                    mode: current.mode,
-                    recordedAt,
-                    artifacts: [synced.url],
-                    evidence: `sync read-back digest ${dispatchBodySha256} matched tracker ${tracker}`,
-                };
-                const journal = appendWorkflowJournalEntry({
-                    staging,
-                    entry,
-                    expectedStagingDigest: initialContentDigest,
-                });
-                print({ ...plan, state: "applied", result: { sync: synced, journal } });
-                return 0;
-            }
-            finally {
-                if (temporaryDirectory && bodyFile) {
-                    fs.unlinkSync(bodyFile);
-                    fs.rmdirSync(temporaryDirectory);
+                    print({
+                        ...plan,
+                        state: "applied",
+                        result: {
+                            sync: synced,
+                            journal,
+                            ...(alreadyPublished
+                                ? {
+                                    recovery: {
+                                        state: "journal-recovered",
+                                        tracker,
+                                        bodySha256: dispatchBodySha256,
+                                    },
+                                }
+                                : {}),
+                        },
+                    });
+                    resultCode = 0;
+                }
+                catch (error) {
+                    let publicationState = alreadyPublished ? "published" : "unknown";
+                    try {
+                        const recovered = github("issue.read", { repository, issue: Number(issueRaw) }, process.cwd());
+                        const recoveredDigest = crypto
+                            .createHash("sha256")
+                            .update(recovered.body.trimEnd())
+                            .digest("hex");
+                        publicationState =
+                            recoveredDigest === dispatchBodySha256
+                                ? "published"
+                                : "unpublished";
+                    }
+                    catch {
+                        publicationState = "unknown";
+                    }
+                    let journalTransaction = "none";
+                    try {
+                        journalTransaction =
+                            inspectPendingJournalTransaction(staging)?.state ?? "none";
+                    }
+                    catch (transactionError) {
+                        journalTransaction = `invalid:${transactionError instanceof Error ? transactionError.message : String(transactionError)}`;
+                    }
+                    const retry = publicationState === "published"
+                        ? "同じtrackerの新しいpreviewを確認して再実行すると、外部同期を重複せずjournalを復旧します"
+                        : "公開状態を再確認するため、新しいpreviewを確認してからapplyを再実行してください";
+                    throw new Error(`${error instanceof Error ? error.message : String(error)}。workflow advance recovery: state=${publicationState}, tracker=${tracker}, bodySha256=${dispatchBodySha256}, journalTransaction=${journalTransaction}。${retry}`, { cause: error });
                 }
             }
+            catch (error) {
+                primaryError = error;
+            }
+            let cleanupError;
+            if (bodyFile && fs.existsSync(bodyFile))
+                try {
+                    fs.unlinkSync(bodyFile);
+                }
+                catch (error) {
+                    cleanupError = error;
+                }
+            if (temporaryDirectory && fs.existsSync(temporaryDirectory))
+                try {
+                    fs.rmdirSync(temporaryDirectory);
+                }
+                catch (error) {
+                    cleanupError ??= error;
+                }
+            if (primaryError !== undefined)
+                throw primaryError;
+            if (cleanupError !== undefined)
+                throw cleanupError;
+            if (resultCode === undefined)
+                throw new Error("workflow advanceの同期結果を確定できませんでした");
+            return resultCode;
         });
     }
     if (command === "workflow" && subcommand === "record") {
