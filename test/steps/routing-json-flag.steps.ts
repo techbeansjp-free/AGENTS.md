@@ -80,8 +80,9 @@ Then(
     // 実行例は固定の失効日時を持つため、--nowを伴ってそのまま終了値0で通ること（round 2 REV-04）
     const exampleArgs = String(ceiling?.example)
       .replace(/^npx agent-skill-chain /u, "")
-      .match(/'[^']*'|\S+/gu)!
-      .map((token) => token.replace(/^'|'$/gu, ""));
+      .match(/\S+/gu)!
+      // 掲載例はshell向けにJSONを単引用符で囲む。JSON本文に単引用符は現れない
+      .map((token) => token.replaceAll("'", ""));
     const executed = run(exampleArgs);
     assert.equal(executed.status, 0, executed.stdout);
   },
