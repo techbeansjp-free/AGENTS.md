@@ -15,6 +15,7 @@ import {
   type PocDeclaration,
 } from "./mode.js";
 import { validateDevelopmentConsiderations } from "./conformance.js";
+import { isScenarioId, SCENARIO_ID_BODY } from "./scenario-id.js";
 import {
   calculateStagingDigest,
   listStagingArtifacts,
@@ -329,8 +330,36 @@ function scenarioIdPattern(dialect: string): RegExp {
   /**
    * **行頭keywordとしてだけ受理する**（FR-04、round 1 REV-04）。散文中の
    * 「シナリオ: SCN-…」という言及を実scenarioとして数えない。indentは許す。
+   *
+   * **IDは空白または行末で閉じる。** 前方一致のままだと`SCN-69-001a`が
+   * `SCN-69-001`まで一致した時点で受理され、`pr create`の完全一致検査と
+   * 受理集合が食い違う（Issue #1349）。文法の字面は`scenario-id.ts`が所有する。
    */
-  return new RegExp(`^\\s*(?:${alternatives}):\\s+SCN-[A-Z0-9-]+`, "mu");
+  return new RegExp(
+    `^\\s*(?:${alternatives}):\\s+SCN-${SCENARIO_ID_BODY}(?=\\s|$)`,
+    "mu",
+  );
+}
+
+/**
+ * 行頭keywordに続く`SCN-`で始まる語のうち、文法に適合しないものを列挙する。
+ * 検出regexが一致しない理由を「IDが無い」と「IDが文法外」で区別し、後者は
+ * 当該IDを名指しして拒否する。同じIDが複数行にあっても1件として報告する。
+ */
+function malformedScenarioIds(text: string, dialect: string): string[] {
+  const alternatives = scenarioKeywords(dialect)
+    .map((keyword) => escapeRegExp(keyword))
+    .join("|");
+  const candidate = new RegExp(
+    `^\\s*(?:${alternatives}):\\s+(SCN-\\S*)`,
+    "gmu",
+  );
+  const malformed = new Set<string>();
+  for (const match of text.matchAll(candidate)) {
+    const id = match[1] ?? "";
+    if (!isScenarioId(id)) malformed.add(id);
+  }
+  return [...malformed];
 }
 
 function withoutGherkin(
@@ -1005,6 +1034,10 @@ export function validateIssue(
     const id = `P-${String(index).padStart(2, "0")}`;
     if (!text.includes(id)) errors.push(`${id}の証拠がありません`);
   }
+  for (const id of malformedScenarioIds(allText, gherkinDialect))
+    errors.push(
+      `GherkinシナリオIDの文法が不正です: ${id}（SCN-に大文字英数字とハイフンだけを続ける）`,
+    );
   if (!scenarioId.test(allText)) errors.push("GherkinシナリオIDがありません");
   const disqualifiers = detectQuickDisqualifiers(options.changedFiles ?? []);
   if (

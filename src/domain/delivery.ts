@@ -4,6 +4,7 @@ import {
   resolveEffectivePolicy,
   validateEnforcementPolicy,
 } from "./enforcement.js";
+import { isScenarioId } from "./scenario-id.js";
 import {
   isRecord,
   type Diagnostic,
@@ -354,7 +355,7 @@ function requireStringArray(value: unknown, name: string): string[] {
   return value.filter((item): item is string => typeof item === "string");
 }
 
-function validateDeliveryEvidence(
+export function validateDeliveryEvidence(
   evidence: DeliveryEvidence,
   headSha: string,
 ): void {
@@ -370,7 +371,7 @@ function validateDeliveryEvidence(
     evidence.tests.scenarioIds,
     "テスト証拠のSCN ID",
   );
-  if (scenarioIds.some((id) => !/^SCN-[A-Z0-9-]+$/.test(id)))
+  if (scenarioIds.some((id) => !isScenarioId(id)))
     throw new Error("テスト証拠に不正なSCN IDがあります");
   if (!evidence.spec?.consistent || evidence.spec.headSha !== headSha)
     throw new Error("同じHEAD SHAに対する仕様整合性の合格が必要です");
