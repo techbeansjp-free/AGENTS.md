@@ -56,6 +56,10 @@
       "minLength": 1,
       "pattern": "\\S"
     },
+    "implementationHeadSha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
     "pocObservation": {
       "type": "object",
       "additionalProperties": false,
@@ -86,6 +90,10 @@
     }
   },
   "allOf": [
+    {
+      "if": { "properties": { "step": { "const": 9 } } },
+      "else": { "not": { "required": ["implementationHeadSha"] } }
+    },
     {
       "if": {
         "properties": {

@@ -4928,6 +4928,9 @@ export async function main(
             candidateHeadSha === undefined
               ? evidence
               : `${evidence}; candidate HEAD ${candidateHeadSha}`,
+          ...(candidateHeadSha === undefined
+            ? {}
+            : { implementationHeadSha: candidateHeadSha }),
         };
         if (
           candidateHeadSha !== undefined &&
@@ -5129,6 +5132,7 @@ export async function main(
           repositoryRoot,
         ).stdout.trim()
       : undefined;
+    if (step.step === 9) entry.implementationHeadSha = headSha!;
     const intake = flags["post-terminal-intake"] !== undefined;
     if (intake && step.step !== 10)
       throw new Error(

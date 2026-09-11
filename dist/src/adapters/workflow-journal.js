@@ -270,6 +270,11 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha) {
     if (entry.mode !== current.mode)
         throw new Error(`entry mode ${entry.mode}がstaging mode ${current.mode}と一致しません`);
     const repositoryRoot = path.resolve(staging, "../../../..");
+    if (entry.step === 9 &&
+        headSha !== undefined &&
+        entry.implementationHeadSha !== undefined &&
+        entry.implementationHeadSha !== headSha)
+        throw new Error("Step 9には検証対象HEADと一致するimplementationHeadSha bindingが必要です");
     const assertCandidateWorktreeClean = () => {
         const status = git([
             "status",
@@ -290,6 +295,8 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha) {
             throw new Error("Step 9の検証対象HEADがjournal追記前に変更されました");
     }
     let entryToWrite = entry;
+    if (entry.step === 9 && headSha !== undefined)
+        entryToWrite = { ...entry, implementationHeadSha: headSha };
     if (current.mode === "poc" && entry.step >= 9) {
         if (!headSha)
             throw new Error("PoCのStep 9以降には検証対象HEAD SHAとpoc-observation Evidenceが必要です");

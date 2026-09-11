@@ -3496,6 +3496,9 @@ export async function main(argv, dependencies = {}) {
                     evidence: candidateHeadSha === undefined
                         ? evidence
                         : `${evidence}; candidate HEAD ${candidateHeadSha}`,
+                    ...(candidateHeadSha === undefined
+                        ? {}
+                        : { implementationHeadSha: candidateHeadSha }),
                 };
                 if (candidateHeadSha !== undefined &&
                     git(["rev-parse", "--verify", "HEAD^{commit}"], path.resolve(staging, "../../../..")).stdout.trim() !== candidateHeadSha)
@@ -3644,6 +3647,8 @@ export async function main(argv, dependencies = {}) {
         const headSha = needsHeadSha
             ? git(["rev-parse", "--verify", "HEAD^{commit}"], repositoryRoot).stdout.trim()
             : undefined;
+        if (step.step === 9)
+            entry.implementationHeadSha = headSha;
         const intake = flags["post-terminal-intake"] !== undefined;
         if (intake && step.step !== 10)
             throw new Error("--post-terminal-intakeはworkflow record --step=10だけに指定できます");

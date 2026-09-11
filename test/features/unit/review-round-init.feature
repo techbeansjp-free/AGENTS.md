@@ -47,6 +47,16 @@ Feature: review round雛形と契約の露出
     When --headを基点SHAにしてreview round --initを実行する
     Then current HEADと一致しないerrorで拒否し雛形を書かない
 
+  Scenario: SCN-UNIT-REVINIT-020 Step 9と異なるHEADの初回reviewを拒否する
+    Given Step 9のimplementation HEAD後に別commitを積んだstagingがある
+    When Step 9後のHEADでreview round --initを実行する
+    Then Step 9 HEADとの不一致errorで拒否し雛形を書かない
+
+  Scenario: SCN-UNIT-REVINIT-021 自由文Evidenceだけの旧Step 9で初回reviewを拒否する
+    Given implementation HEAD bindingのない旧Step 9を持つstagingがある
+    When Step 9後のHEADでreview round --initを実行する
+    Then Step 9 binding不足errorで拒否し雛形を書かない
+
   Scenario: SCN-UNIT-REVINIT-010 不足flagは--initの有無に応じて1回で列挙する
     Given 初回candidateを持つstagingがある
     When --stagingだけでreview roundを実行しさらに--initと--stagingだけで実行する

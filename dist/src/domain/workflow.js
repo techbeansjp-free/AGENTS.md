@@ -207,6 +207,7 @@ const JOURNAL_FIELDS = new Set([
     "recordedAt",
     "artifacts",
     "evidence",
+    "implementationHeadSha",
     "pocObservation",
     "reviewSession",
     "humanOverride",
@@ -349,6 +350,15 @@ function parseJournalEntry(value, line) {
         errors.push(`${label}.artifactsは空でない文字列を1件以上含む配列が必要です`);
     if (!nonEmpty(value.evidence))
         errors.push(`${label}.evidenceは空でない文字列が必要です`);
+    let implementationHeadSha;
+    if (value.implementationHeadSha !== undefined) {
+        if (!/^[a-f0-9]{40}$/u.test(String(value.implementationHeadSha)))
+            errors.push(`${label}.implementationHeadShaは40桁のcommit SHAが必要です`);
+        else if (Number(value.step) !== 9)
+            errors.push(`${label}.implementationHeadShaはStep 9にだけ指定できます`);
+        else
+            implementationHeadSha = value.implementationHeadSha;
+    }
     const parsedOverride = value.humanOverride === undefined
         ? { errors: [] }
         : parseHumanOverride(value.humanOverride, `${label}.humanOverride`);
@@ -410,6 +420,7 @@ function parseJournalEntry(value, line) {
             recordedAt: value.recordedAt,
             artifacts: [...value.artifacts],
             evidence: value.evidence,
+            ...(implementationHeadSha ? { implementationHeadSha } : {}),
             ...(pocObservation ? { pocObservation } : {}),
             ...(reviewSession ? { reviewSession } : {}),
             ...(parsedOverride.value ? { humanOverride: parsedOverride.value } : {}),

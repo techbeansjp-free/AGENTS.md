@@ -4484,6 +4484,7 @@ if (exact(["auth", "status"])) {
         path: string;
         mode: string;
       };
+      fs.unlinkSync(assessment);
       assert.equal(created.mode, "full", staged.stdout);
       const fullStaging = created.path;
       writeFullStagingArtifacts(fullStaging);

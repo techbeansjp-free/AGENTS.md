@@ -286,6 +286,8 @@ export interface StepJournalEntry {
   recordedAt: string;
   artifacts: string[];
   evidence: string;
+  /** Step 9で検証したexact implementation HEAD。 */
+  implementationHeadSha?: string;
   pocObservation?: { headSha: string; evidenceDigest: string };
   reviewSession?: {
     sessionId: string;
@@ -323,6 +325,7 @@ const JOURNAL_FIELDS = new Set([
   "recordedAt",
   "artifacts",
   "evidence",
+  "implementationHeadSha",
   "pocObservation",
   "reviewSession",
   "humanOverride",
@@ -486,6 +489,14 @@ function parseJournalEntry(
     );
   if (!nonEmpty(value.evidence))
     errors.push(`${label}.evidenceは空でない文字列が必要です`);
+  let implementationHeadSha: string | undefined;
+  if (value.implementationHeadSha !== undefined) {
+    if (!/^[a-f0-9]{40}$/u.test(String(value.implementationHeadSha)))
+      errors.push(`${label}.implementationHeadShaは40桁のcommit SHAが必要です`);
+    else if (Number(value.step) !== 9)
+      errors.push(`${label}.implementationHeadShaはStep 9にだけ指定できます`);
+    else implementationHeadSha = value.implementationHeadSha as string;
+  }
   const parsedOverride =
     value.humanOverride === undefined
       ? { errors: [] as string[] }
@@ -552,6 +563,7 @@ function parseJournalEntry(
       recordedAt: value.recordedAt as string,
       artifacts: [...(value.artifacts as string[])],
       evidence: value.evidence as string,
+      ...(implementationHeadSha ? { implementationHeadSha } : {}),
       ...(pocObservation ? { pocObservation } : {}),
       ...(reviewSession ? { reviewSession } : {}),
       ...(parsedOverride.value ? { humanOverride: parsedOverride.value } : {}),
