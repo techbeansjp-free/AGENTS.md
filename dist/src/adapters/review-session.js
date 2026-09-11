@@ -220,15 +220,18 @@ export function evidenceOnlySuffix(root, fromSha, toSha) {
     if (fields.length !== 2)
         return undefined;
     const [meta, only] = fields;
-    const matched = /^:[0-7]{6} (?<dstMode>[0-7]{6}) [0-9a-f]+ [0-9a-f]+ [A-Z]$/u.exec(meta ?? "");
+    const matched = /^:(?<srcMode>[0-7]{6}) (?<dstMode>[0-7]{6}) [0-9a-f]+ [0-9a-f]+ (?<status>[AM])$/u.exec(meta ?? "");
     if (!matched?.groups)
         return undefined;
     /**
-     * 到達後のmodeが通常file（100644）であることだけを見る。削除（dst 000000）、
-     * symlink・gitlink（120000・160000）、実行権限（100755）はここで落ちる。
+     * 追加は000000→100644、変更は100644→100644だけを受理する。
+     * 削除・type変更・symlink・gitlink・実行権限の付与と除去を落とす。
      * `--no-renames`によりrename・copyは2 pathとして上の件数検査で落ちる。
      */
-    if (matched.groups.dstMode !== "100644")
+    const { srcMode, dstMode, status } = matched.groups;
+    if (dstMode !== "100644" ||
+        (status === "A" && srcMode !== "000000") ||
+        (status === "M" && srcMode !== "100644"))
         return undefined;
     return isEvidenceOnlyPath(only) ? only : undefined;
 }

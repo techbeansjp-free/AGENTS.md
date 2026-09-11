@@ -90,9 +90,13 @@ async function captureMain(args: string[]): Promise<number> {
 }
 
 /** 収束済みsession（round 1、finding無し）をH_implで作る */
-function convergedFixture(world: EvidenceOnlyHeadWorld): void {
+function convergedFixture(
+  world: EvidenceOnlyHeadWorld,
+  prepareImplementation?: (root: string) => void,
+): void {
   world.root = world.initRepo();
   world.base = git(world.root, ["rev-parse", "HEAD"]);
+  prepareImplementation?.(world.root);
   world.implementationHead = commitFiles(
     world.root,
     { [reviewedPath]: "export const reviewed = 1;\n" },
@@ -346,6 +350,40 @@ Given(
   },
 );
 
+Given(
+  "収束したsessionの後にartifactをsymlinkから通常fileへ変えたstagingがある",
+  function () {
+    convergedFixture(this, (root) => {
+      const artifact = path.join(root, artifactPath);
+      fs.mkdirSync(path.dirname(artifact), { recursive: true });
+      fs.symlinkSync("../../src/domain/review.ts", artifact);
+      git(root, ["add", artifactPath]);
+    });
+    fs.rmSync(path.join(this.root, artifactPath));
+    this.finalHead = commitFiles(
+      this.root,
+      { [artifactPath]: "# 04 レビュー\n" },
+      "docs: replace artifact symlink with a regular file",
+    );
+  },
+);
+
+Given(
+  "収束したsessionの後にartifactの実行権限を外したstagingがある",
+  function () {
+    convergedFixture(this, (root) => {
+      const artifact = path.join(root, artifactPath);
+      fs.mkdirSync(path.dirname(artifact), { recursive: true });
+      fs.writeFileSync(artifact, "# 04 レビュー\n");
+      git(root, ["add", artifactPath]);
+      git(root, ["update-index", "--chmod=+x", artifactPath]);
+    });
+    git(this.root, ["update-index", "--chmod=-x", artifactPath]);
+    git(this.root, ["commit", "-q", "-m", "docs: remove executable mode"]);
+    this.finalHead = git(this.root, ["rev-parse", "HEAD"]);
+  },
+);
+
 When("H_finalでconverged session検査を行う", function () {
   assertSession(this);
 });
@@ -378,7 +416,7 @@ Then("artifact 1 fileのcommitに取り直しroundは要らない旨がある", 
     fs.readFileSync(path.join(repositoryRoot, relative), "utf8");
   assert.match(
     read(".agent-skill-chain/docs/01_開発ワークフロー.md"),
-    /review artifact 1 fileだけを加えるHEAD移動.*には取り直しroundを要求しない/u,
+    /review artifact 1 fileだけのこのHEAD移動.*には取り直しroundを要求しない/u,
   );
   assert.match(
     read(".agent-skill-chain/skills/step-10-review/SKILL.md"),

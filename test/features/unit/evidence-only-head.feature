@@ -51,6 +51,16 @@ Feature: artifact-onlyのHEAD移動の受理
     When H_finalでconverged session検査を行う
     Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
 
+  Scenario: SCN-UNIT-EVIDHEAD-012 symlinkから通常fileへ変えたtype変更は拒否する
+    Given 収束したsessionの後にartifactをsymlinkから通常fileへ変えたstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
+  Scenario: SCN-UNIT-EVIDHEAD-013 実行権限を外したartifactのmode変更は拒否する
+    Given 収束したsessionの後にartifactの実行権限を外したstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
   Scenario: SCN-UNIT-EVIDHEAD-007 規範文書とskillが取り直し不要を述べる
     Given 規範文書01とstep-10 skillがある
     When 規範文書01とstep-10 skillを読む
