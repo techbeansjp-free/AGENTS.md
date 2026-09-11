@@ -38,7 +38,7 @@ import { appendCompletionRecord, appendEvidenceStateRecord, applyEvidencePrune, 
 import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssignment, validateTierSelection, validateCodexTier, CODEX_ADOPTION_SELECTOR, } from "./domain/role.js";
 import { readDeliveryEvidence, readEnforcementInput, readFinalizeEvidence, isPolicyInput, readJsonInput, readMigrationManifest, readMigrationState, readModeAssessment, readPolicyFileInput, readPolicyJson, readSpecReview, } from "./adapters/json-input.js";
 import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPocDeliveryChangeScope, assertWorkflowStaging, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
-import { assertConvergedReviewSession, buildReviewRoundDraft, previewReviewRound, recordReviewRound, STAGING_DIGEST_RERECORD_HINT, } from "./adapters/review-session.js";
+import { assertConvergedReviewSession, buildReviewRoundDraft, evidenceOnlySuffix, previewReviewRound, recordReviewRound, STAGING_DIGEST_RERECORD_HINT, } from "./adapters/review-session.js";
 import { appendEvidenceReanchor, evaluateEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
 import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
 import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, observeStoredMerge, prepareStoredMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
@@ -188,7 +188,13 @@ export function assertCurrentReviewJournalBinding(staging, headSha) {
         records: readEvidenceReanchorChain(staging),
         anchoredHeadSha: binding.headSha,
     }).effectiveHeadSha;
-    if (bindingEffectiveHead !== headSha)
+    /**
+     * **artifact 1 fileだけを加えたHEAD（evidence-only suffix）はbindingと同一視する**
+     * （Issue #1272）。bindingは`H_impl`のまま、PR対象は`H_final`でよい。それ以外の
+     * HEAD移動は従来どおり拒否する。
+     */
+    if (bindingEffectiveHead !== headSha &&
+        evidenceOnlySuffix(path.resolve(staging, "../../../.."), bindingEffectiveHead, headSha) === undefined)
         throw new Error("Step 10のreviewSession binding HEADがPR作成対象HEADと一致しません");
     const session = assertConvergedReviewSession({
         staging,
