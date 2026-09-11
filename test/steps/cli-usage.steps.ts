@@ -365,6 +365,10 @@ const CHECKS: Readonly<
     assert.match(evidence?.description ?? "", /Step 4・8/u);
     assert.match(evidence?.description ?? "", /64桁のhex digest/u);
     assert.match(evidence?.description ?? "", /sync語/u);
+    assert.match(
+      usage.example,
+      /--evidence='[^']*sync[^']*[a-f0-9]{64}[^']*'/u,
+    );
     for (const step of ["04-issue-sync", "08-design-sync"]) {
       const skill = fs.readFileSync(
         path.resolve(`.agent-skill-chain/skills/step-${step}/SKILL.md`),
@@ -409,8 +413,17 @@ const CHECKS: Readonly<
   "SCN-UNIT-CLICONTRACT-004": () => {
     const usage = findCommandUsage("worktree", "finalize");
     assert.ok(usage);
+    assert.match(usage.example, /worktree finalize .* --complete .* --apply/u);
     assert.match(usage.example, /--report-hash=<preview digest>/u);
     assert.match(usage.example, /--approved-digest=<preview digest>/u);
+    const reportHash = usage.conditionalFlags.find(
+      (item) => item.name === "report-hash",
+    );
+    const approvedDigest = usage.conditionalFlags.find(
+      (item) => item.name === "approved-digest",
+    );
+    assert.equal(reportHash?.when, "--applyを指定するとき");
+    assert.equal(approvedDigest?.when, "--completeで実際に後片付けするとき");
   },
 };
 

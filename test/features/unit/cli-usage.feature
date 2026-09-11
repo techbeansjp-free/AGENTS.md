@@ -91,7 +91,7 @@ Feature: CLIの必須flagとusageを1回の実行で提示する
     When "SCN-UNIT-CLICONTRACT-003"のCLI usage単体検査を実行する
     Then CLI usage単体検査は期待結果になる
 
-  Scenario: SCN-UNIT-CLICONTRACT-004 finalizeの2つのdigest引数を例示する
+  Scenario: SCN-UNIT-CLICONTRACT-004 finalizeのcleanup applyで2つのdigest引数を例示する
     Given CLI usage単体検査の準備がある
     When "SCN-UNIT-CLICONTRACT-004"のCLI usage単体検査を実行する
     Then CLI usage単体検査は期待結果になる

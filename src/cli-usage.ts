@@ -497,7 +497,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       ),
     ],
     example:
-      "npx agent-skill-chain workflow record --staging=.asc/886 --step=4 --evidence=実装完了 --artifact=src/cli-usage.ts",
+      "npx agent-skill-chain workflow record --staging=.asc/886 --step=4 --evidence='sync digest 0000000000000000000000000000000000000000000000000000000000000000' --artifact=src/cli-usage.ts",
     acceptsSpaceSeparatedFlags: true,
   },
   {
