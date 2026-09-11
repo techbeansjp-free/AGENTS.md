@@ -7,7 +7,10 @@ import {
   issueSyncArtifactNames,
 } from "../../src/domain/issue.js";
 import type { Mode } from "../../src/domain/mode.js";
-import { renderReviewArtifactDraft } from "../../src/domain/review-artifact.js";
+import {
+  isReviewArtifactParentContained,
+  renderReviewArtifactDraft,
+} from "../../src/domain/review-artifact.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
 interface ScaffoldingWorld extends WorkflowWorld {
@@ -19,6 +22,7 @@ interface ScaffoldingWorld extends WorkflowWorld {
   syncArtifacts: readonly string[];
   syncMode: Mode;
   syncCheckpoint: 4 | 8;
+  reviewParentContained: boolean;
 }
 
 const { Given, When, Then } = stepDefinitions<ScaffoldingWorld>();
@@ -116,6 +120,23 @@ Then("review判定とtest結果は未確定である", function () {
 
 Then("削除pathはDとして個別監査表にある", function () {
   assert.match(this.reviewDraft, /\| `docs\/obsolete\.md` \| D \|/u);
+});
+
+Given("repository内の出力親がrepository外へ解決される", function () {
+  this.root = path.join(path.sep, "repository");
+});
+
+When("review artifactの出力親包含を判定する", function () {
+  this.reviewParentContained = isReviewArtifactParentContained(
+    this.root,
+    this.root,
+    path.join(this.root, "docs", "reviews"),
+    path.join(path.sep, "outside", "reviews"),
+  );
+});
+
+Then("review artifactの出力親は拒否される", function () {
+  assert.equal(this.reviewParentContained, false);
 });
 
 Given(

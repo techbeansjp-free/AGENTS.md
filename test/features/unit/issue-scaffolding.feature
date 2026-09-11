@@ -19,6 +19,11 @@ Feature: Issue工程の機械導出欄を安全に生成する
     When review artifact雛形を描画する
     Then 削除pathはDとして個別監査表にある
 
+  Scenario: SCN-UNIT-REVIEWARTIFACT-003 symlink親によるrepository外書き込みを拒否する
+    Given repository内の出力親がrepository外へ解決される
+    When review artifactの出力親包含を判定する
+    Then review artifactの出力親は拒否される
+
   Scenario Outline: SCN-UNIT-ISSUESYNC-001 modeとcheckpointから同期対象を決定する
     Given <mode> modeのcheckpoint <checkpoint>という同期条件がある
     When 同期対象を導出する

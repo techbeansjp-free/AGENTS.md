@@ -20,7 +20,10 @@ import {
 } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
-import { renderReviewArtifactDraft } from "./domain/review-artifact.js";
+import {
+  isReviewArtifactParentContained,
+  renderReviewArtifactDraft,
+} from "./domain/review-artifact.js";
 import {
   assertPullRequestTrackerBinding,
   createPullRequest,
@@ -5511,6 +5514,18 @@ export async function main(
     if (relativeOut.startsWith("..") || path.isAbsolute(relativeOut))
       throw new Error("review artifactの--outはrepository内が必要です");
     const outParent = fs.realpathSync(path.dirname(out));
+    const realRoot = fs.realpathSync(root);
+    if (
+      !isReviewArtifactParentContained(
+        root,
+        realRoot,
+        path.resolve(path.dirname(out)),
+        outParent,
+      )
+    )
+      throw new Error(
+        "review artifactの--outはrepository内のsymlinkを含まない親directoryが必要です",
+      );
     const realStaging = fs.realpathSync(staging);
     if (
       outParent === realStaging ||

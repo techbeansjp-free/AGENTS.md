@@ -1,3 +1,13 @@
+import path from "node:path";
+/** lexical rootから期待する親とreal parentが一致し、repository内に留まることを判定する。 */
+export function isReviewArtifactParentContained(lexicalRoot, realRoot, lexicalParent, realParent) {
+    const relative = path.relative(path.resolve(lexicalRoot), lexicalParent);
+    if (relative === ".." ||
+        relative.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relative))
+        return false;
+    return path.resolve(realRoot, relative) === realParent;
+}
 function escapeCell(value) {
     return value
         .replaceAll("|", "｜")

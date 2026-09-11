@@ -8,7 +8,7 @@ import { parsePocDeclaration } from "./domain/workflow.js";
 import { bootstrapProject, validateSpecs, } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
-import { renderReviewArtifactDraft } from "./domain/review-artifact.js";
+import { isReviewArtifactParentContained, renderReviewArtifactDraft, } from "./domain/review-artifact.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
 import { buildWorktreePath, createWorktree, canonicalWorktreePath, DEFAULT_WORKTREE_PLACEMENT, enforceTrustedWorktreeBoundary, inspectFinalizeState, inspectRecoveryState, validateWorktreePlacement, } from "./domain/worktree.js";
@@ -4025,6 +4025,9 @@ export async function main(argv, dependencies = {}) {
         if (relativeOut.startsWith("..") || path.isAbsolute(relativeOut))
             throw new Error("review artifactの--outはrepository内が必要です");
         const outParent = fs.realpathSync(path.dirname(out));
+        const realRoot = fs.realpathSync(root);
+        if (!isReviewArtifactParentContained(root, realRoot, path.resolve(path.dirname(out)), outParent))
+            throw new Error("review artifactの--outはrepository内のsymlinkを含まない親directoryが必要です");
         const realStaging = fs.realpathSync(staging);
         if (outParent === realStaging ||
             outParent.startsWith(`${realStaging}${path.sep}`))

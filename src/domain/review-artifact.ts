@@ -1,6 +1,25 @@
+import path from "node:path";
+
 export interface ReviewArtifactPath {
   readonly path: string;
   readonly changeType: "A" | "M" | "D";
+}
+
+/** lexical rootから期待する親とreal parentが一致し、repository内に留まることを判定する。 */
+export function isReviewArtifactParentContained(
+  lexicalRoot: string,
+  realRoot: string,
+  lexicalParent: string,
+  realParent: string,
+): boolean {
+  const relative = path.relative(path.resolve(lexicalRoot), lexicalParent);
+  if (
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  )
+    return false;
+  return path.resolve(realRoot, relative) === realParent;
 }
 
 function escapeCell(value: string): string {
