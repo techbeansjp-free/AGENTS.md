@@ -7,6 +7,7 @@ import { findPackageRoot } from "../lib/package-root.js";
 import { git } from "../lib/process.js";
 import { classifyMode, detectQuickDisqualifiers, POC_HIGH_RISK_IDS, QUESTIONS, } from "./mode.js";
 import { validateDevelopmentConsiderations } from "./conformance.js";
+import { isScenarioId, SCENARIO_ID_BODY } from "./scenario-id.js";
 import { parseVerificationSelectionInput, } from "./agile-verification.js";
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, STAGING_RECORD_FILE, withStagingMutationLock, } from "./staging.js";
 import { MODE_DECISION_FILE, parseModeDecision, STEP_JOURNAL_FILE, WORKFLOW_JOURNAL_DIRECTORY, renderModeDecision, WORKFLOW_STEPS, } from "./workflow.js";
@@ -373,8 +374,34 @@ function scenarioIdPattern(dialect) {
     /**
      * **行頭keywordとしてだけ受理する**（FR-04、round 1 REV-04）。散文中の
      * 「シナリオ: SCN-…」という言及を実scenarioとして数えない。indentは許す。
+     *
+     * **IDは空白または行末で閉じる。** 前方一致のままだと`SCN-69-001a`が
+     * `SCN-69-001`まで一致した時点で受理され、`pr create`の完全一致検査と
+     * 受理集合が食い違う（Issue #1349）。文法の字面は`scenario-id.ts`が所有する。
      */
-    return new RegExp(`^\\s*(?:${alternatives}):\\s+SCN-[A-Z0-9-]+`, "mu");
+    return new RegExp(`^\\s*(?:${alternatives}):\\s+SCN-${SCENARIO_ID_BODY}(?=\\s|$)`, "mu");
+}
+/**
+ * 行頭keywordに続く`SCN-`で始まる語のうち、文法に適合しないものを列挙する。
+ * 検出regexが一致しない理由を「IDが無い」と「IDが文法外」で区別し、後者は
+ * 当該IDを名指しして拒否する。同じIDが複数行にあっても1件として報告する。
+ *
+ * **接頭辞は大文字小文字を区別せずに捕捉する。** 大文字`SCN-`だけを捕捉すると、
+ * `scn-69-001`のような小文字接頭辞のIDが正規ID行と同居したときに捕捉されず、
+ * 正規行が存在検査を満たして入口だけ合格する（round 1 REV-01）。
+ */
+function malformedScenarioIds(text, dialect) {
+    const alternatives = scenarioKeywords(dialect)
+        .map((keyword) => escapeRegExp(keyword))
+        .join("|");
+    const candidate = new RegExp(`^\\s*(?:${alternatives}):\\s+([Ss][Cc][Nn]-\\S*)`, "gmu");
+    const malformed = new Set();
+    for (const match of text.matchAll(candidate)) {
+        const id = match[1] ?? "";
+        if (!isScenarioId(id))
+            malformed.add(id);
+    }
+    return [...malformed];
 }
 function withoutGherkin(text, dialect = DEFAULT_GHERKIN_DIALECT) {
     let inGherkin = false;
@@ -809,6 +836,8 @@ export function validateIssue(issuePath, options = {}) {
         if (!text.includes(id))
             errors.push(`${id}の証拠がありません`);
     }
+    for (const id of malformedScenarioIds(allText, gherkinDialect))
+        errors.push(`GherkinシナリオIDの文法が不正です: ${id}（SCN-に大文字英数字とハイフンだけを続ける）`);
     if (!scenarioId.test(allText))
         errors.push("GherkinシナリオIDがありません");
     const disqualifiers = detectQuickDisqualifiers(options.changedFiles ?? []);
