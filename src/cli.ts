@@ -24,6 +24,7 @@ import {
   isReviewArtifactParentContained,
   isReviewArtifactStagingDirectChild,
   renderReviewArtifactDraft,
+  validateReviewArtifactStructure,
 } from "./domain/review-artifact.js";
 import {
   assertPullRequestTrackerBinding,
@@ -4057,7 +4058,11 @@ function isHelpToken(value: string | undefined): boolean {
 
 export async function main(
   argv: string[],
-  dependencies: { now?: () => Date; nodeVersion?: string } = {},
+  dependencies: {
+    now?: () => Date;
+    nodeVersion?: string;
+    afterReviewArtifactStat?: (file: string) => void;
+  } = {},
 ): Promise<number> {
   const [command, subcommand, ...rest] = argv;
   if (!command || command === "--help" || command === "-h") {
@@ -5418,8 +5423,77 @@ export async function main(
   }
   if (command === "review" && subcommand === "validate") {
     const { flags, positionals } = parse(rest);
-    const file = positionals[0] ?? required(flags, "file");
-    const result = evaluateReview(readJsonInput(file));
+    const unknown = Object.keys(flags).filter(
+      (flag) => !["file", "artifact", "root"].includes(flag),
+    );
+    if (unknown.length > 0)
+      throw new Error(
+        `review validateの未知optionです: --${unknown.join(", --")}`,
+      );
+    if (flags.file !== undefined && typeof flags.file !== "string")
+      throw new Error("review validateの--fileにはpathが必要です");
+    if (flags.artifact !== undefined && typeof flags.artifact !== "string")
+      throw new Error("review validateの--artifactにはpathが必要です");
+    if (flags.root !== undefined && typeof flags.root !== "string")
+      throw new Error("review validateの--rootにはpathが必要です");
+    if (positionals.length > 1)
+      throw new Error("review validateの位置引数は1件までです");
+    const positional = positionals[0];
+    if (flags.file !== undefined && positional !== undefined)
+      throw new Error(
+        "review validateは--fileと位置引数を同時に使用できません",
+      );
+    const file = typeof flags.file === "string" ? flags.file : positional;
+    const artifact =
+      typeof flags.artifact === "string" ? flags.artifact : undefined;
+    if (file !== undefined && artifact !== undefined)
+      throw new Error(
+        "review validateは--file（または位置引数）と--artifactを同時に使用できません",
+      );
+    if (artifact !== undefined) {
+      const root = path.resolve(
+        typeof flags.root === "string" ? flags.root : process.cwd(),
+      );
+      const artifactFile = resolveContained(root, artifact);
+      const stat = fs.lstatSync(artifactFile);
+      if (stat.isSymbolicLink() || !stat.isFile())
+        throw new Error(
+          "review validateの--artifactはrepository内の通常fileが必要です",
+        );
+      dependencies.afterReviewArtifactStat?.(artifactFile);
+      const descriptor = fs.openSync(
+        artifactFile,
+        fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+      );
+      let markdown: string;
+      try {
+        const opened = fs.fstatSync(descriptor);
+        if (
+          !opened.isFile() ||
+          opened.dev !== stat.dev ||
+          opened.ino !== stat.ino
+        )
+          throw new Error(
+            "review validateの--artifactが読取直前に変化しました",
+          );
+        markdown = fs.readFileSync(descriptor, "utf8");
+      } finally {
+        fs.closeSync(descriptor);
+      }
+      const structure = validateReviewArtifactStructure(markdown);
+      const result = {
+        valid: structure.diagnostics.length === 0,
+        kind: "review-artifact",
+        artifact: path.relative(root, artifactFile),
+        errors: structure.diagnostics,
+      };
+      print(result);
+      return result.valid ? 0 : 1;
+    }
+    if (flags.root !== undefined)
+      throw new Error("review validateの--rootは--artifactと併用してください");
+    const jsonFile = file ?? required(flags, "file");
+    const result = evaluateReview(readJsonInput(jsonFile));
     if (result.approved) {
       const pending = {
         ...result,
