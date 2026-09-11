@@ -65,7 +65,7 @@ finalize時に削除可能なignore対象は、package既定の`node_modules/`�
 |---|---|---|
 | `issue validate` | `--path=<directory>`と任意の`--stage=requirements\|design`、変更fileを検査する場合は`--changed` | mode、valid、全error、PoC禁止操作をJSONで返す。validは0、invalidは1 |
 
-`--stage=requirements`はfullの`00_要求定義.md`と`01_要件定義.md`だけを必要成果物とし、Step 4で使用する。`--stage=design`はfullの`00_要求定義.md`から`03_実装計画.md`までを必要成果物とし、Step 8で使用する。未指定は後方互換のため`design`相当の全件検証とする。quickとpocは成果物を00へ集約するためstageで必要成果物を変えない。全mode・全stageでP-01〜P-07、開発考慮事項、未解決placeholder、Gherkin scenario IDを検証し、`--stage=requirements`でもGherkinを省略できない。未知のstageは入力errorとして非0で拒否する。
+`--stage=requirements`はfullの`00_要求定義.md`と`01_要件定義.md`だけを必要成果物とし、Step 4で使用する。`--stage=design`はfullの`00_要求定義.md`から`03_実装計画.md`までを必要成果物とし、Step 8で使用する。未指定は後方互換のため`design`相当の全件検証とする。quickとpocは成果物を00へ集約するためstageで必要成果物を変えない。全mode・全stageでP-01〜P-07、開発考慮事項、未解決placeholder、Gherkin scenario IDを検証し、`--stage=requirements`でもGherkinを省略できない。**Gherkin scenario IDの検出とplaceholder判定のGherkin除外は、project choiceの`gherkinDialect`が決めるkeywordで行う。** `--path`の4階層上にproject policy manifestがあればそこから`projectChoices.gherkinDialect`を読み、無ければ`en`とする。`en`は`Scenario:`と`Scenario Outline:`、`ja`はそれに`シナリオ:`・`シナリオアウトライン:`・`シナリオテンプレート:`・`テンプレ:`を加えたkeywordで、行頭（indent可）にあるID行だけを検出し、散文中の言及を数えない。placeholder判定のGherkin除外は同じscenario keywordに加え、方言の構造keyword（`機能:`・`背景:`・`例:`等）とstep keyword（`前提`・`もし`・`ならば`・`かつ`・`しかし`等）で開始行を判定する。対応表に無い方言は`gherkinDialectが未対応です`で拒否し、英語keywordへ暗黙にfallbackしない。開発考慮事項の判定規則と参照行はREQ-SQ-009が所有する。未知のstageは入力errorとして非0で拒否する。
 
 | Policy CLI | 入力 | 出力・終了code |
 |---|---|---|

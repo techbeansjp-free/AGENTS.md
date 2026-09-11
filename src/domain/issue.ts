@@ -216,16 +216,126 @@ function withoutCode(text: string): string {
   return visible.join("\n");
 }
 
-function withoutGherkin(text: string): string {
+/**
+ * **project choiceの`gherkinDialect`ごとの、scenario ID行を開始するkeyword。**
+ *
+ * 従来は英語`Scenario:`だけを検出し、`gherkinDialect`は宣言できても参照されなかった
+ * （Issue #1324）。方言は固定表で持ち、runtime dependencyを足さない。
+ * **表に無い方言はfail-closedで拒否し、英語keywordへ暗黙にfallbackしない。**
+ * `ja`は英語keywordも受理する上位集合であり、`en`の受理集合は従来の`Scenario:`に
+ * `Scenario Outline:`のID行を加えたものである。
+ */
+export const GHERKIN_SCENARIO_KEYWORDS: Readonly<
+  Record<string, readonly string[]>
+> = Object.freeze({
+  en: Object.freeze(["Scenario", "Scenario Outline"]),
+  ja: Object.freeze([
+    "Scenario",
+    "Scenario Outline",
+    "シナリオ",
+    "シナリオアウトライン",
+    "シナリオテンプレート",
+    "テンプレ",
+  ]),
+});
+
+/**
+ * **placeholder判定でGherkin区間の開始と見なす、scenario以外の行頭keyword。**
+ *
+ * `ja`のstep keyword（前提・もし・ならば・かつ・しかし）はcolonを持たず、
+ * 英語keywordだけを見るとja Outlineの`<param>`を含むstep行が散文として
+ * 未解決placeholderに数えられる（round 1 REV-01）。scenario keywordと同じ
+ * 表で管理し、方言ごとに`GHERKIN_SCENARIO_KEYWORDS`と対にする。
+ */
+const GHERKIN_BLOCK_KEYWORDS: Readonly<
+  Record<
+    string,
+    { readonly colon: readonly string[]; readonly step: readonly string[] }
+  >
+> = Object.freeze({
+  en: Object.freeze({
+    colon: Object.freeze(["Feature", "Rule", "Background", "Examples"]),
+    step: Object.freeze(["Given", "When", "Then", "And", "But"]),
+  }),
+  ja: Object.freeze({
+    colon: Object.freeze([
+      "Feature",
+      "Rule",
+      "Background",
+      "Examples",
+      "機能",
+      "フィーチャ",
+      "ルール",
+      "背景",
+      "例",
+      "サンプル",
+    ]),
+    step: Object.freeze([
+      "Given",
+      "When",
+      "Then",
+      "And",
+      "But",
+      "前提",
+      "もし",
+      "ならば",
+      "かつ",
+      "しかし",
+      "但し",
+      "ただし",
+    ]),
+  }),
+});
+
+export const DEFAULT_GHERKIN_DIALECT = "en";
+
+export function scenarioKeywords(dialect: string): readonly string[] {
+  const keywords = Object.hasOwn(GHERKIN_SCENARIO_KEYWORDS, dialect)
+    ? GHERKIN_SCENARIO_KEYWORDS[dialect]
+    : undefined;
+  if (!keywords)
+    throw new Error(
+      `gherkinDialectが未対応です: ${dialect}。対応する方言は${Object.keys(GHERKIN_SCENARIO_KEYWORDS).join("、")}です`,
+    );
+  return keywords;
+}
+
+function scenarioIdPattern(dialect: string): RegExp {
+  const alternatives = scenarioKeywords(dialect)
+    .map((keyword) => escapeRegExp(keyword))
+    .join("|");
+  /**
+   * **行頭keywordとしてだけ受理する**（FR-04、round 1 REV-04）。散文中の
+   * 「シナリオ: SCN-…」という言及を実scenarioとして数えない。indentは許す。
+   */
+  return new RegExp(`^\\s*(?:${alternatives}):\\s+SCN-[A-Z0-9-]+`, "mu");
+}
+
+function withoutGherkin(
+  text: string,
+  dialect: string = DEFAULT_GHERKIN_DIALECT,
+): string {
   let inGherkin = false;
+  const block = GHERKIN_BLOCK_KEYWORDS[dialect];
+  if (!block) throw new Error(`gherkinDialectが未対応です: ${dialect}`);
+  const colonKeywords = [...scenarioKeywords(dialect), ...block.colon]
+    .map((keyword) => `${escapeRegExp(keyword)}:`)
+    .join("|");
+  const stepKeywords = block.step
+    .map((keyword) =>
+      /^[A-Za-z]+$/u.test(keyword)
+        ? `${keyword}\\b`
+        : `${escapeRegExp(keyword)}(?=\\s|$)`,
+    )
+    .join("|");
+  const gherkinStart = new RegExp(
+    `^\\s*(?:@[\\w@-]+|${colonKeywords}|${stepKeywords}|\\*)`,
+    "u",
+  );
   return text
     .split("\n")
     .map((line) => {
-      if (
-        /^\s*(?:@[\w@-]+|Feature:|Rule:|Background:|Scenario(?: Outline)?:|Examples:|Given\b|When\b|Then\b|And\b|But\b|\*)/u.test(
-          line,
-        )
-      ) {
+      if (gherkinStart.test(line)) {
         inGherkin = true;
         return "";
       }
@@ -238,8 +348,11 @@ function withoutGherkin(text: string): string {
 
 const UNRESOLVED_PLACEHOLDER_SAMPLE_LIMIT = 5;
 
-function unresolvedPlaceholders(text: string): string[] {
-  const prose = withoutGherkin(withoutCode(text));
+function unresolvedPlaceholders(
+  text: string,
+  dialect: string = DEFAULT_GHERKIN_DIALECT,
+): string[] {
+  const prose = withoutGherkin(withoutCode(text), dialect);
   const found = new Set<string>();
   for (const match of prose.matchAll(/<[^>\n]+>|\{[^}\n]+\}/gu))
     found.add(match[0]);
@@ -654,9 +767,13 @@ export function validateIssue(
     operation?: string;
     delivery?: { stopAt?: string };
     stage?: IssueValidationStage;
+    /** project choiceの`gherkinDialect`。未指定は`en` */
+    gherkinDialect?: string;
   } = {},
 ) {
   const errors: string[] = [];
+  const gherkinDialect = options.gherkinDialect ?? DEFAULT_GHERKIN_DIALECT;
+  const scenarioId = scenarioIdPattern(gherkinDialect);
   const requirementPath = path.join(issuePath, "00_要求定義.md");
   if (!fs.existsSync(requirementPath))
     return {
@@ -688,15 +805,14 @@ export function validateIssue(
       .filter((name) => fs.existsSync(path.join(issuePath, name)))
       .map((name) => fs.readFileSync(path.join(issuePath, name), "utf8")),
   ].join("\n");
-  const documentPlaceholders = unresolvedPlaceholders(allText);
+  const documentPlaceholders = unresolvedPlaceholders(allText, gherkinDialect);
   if (documentPlaceholders.length > 0)
     errors.push(unresolvedPlaceholderError("", documentPlaceholders));
   for (let index = 1; index <= 7; index += 1) {
     const id = `P-${String(index).padStart(2, "0")}`;
     if (!text.includes(id)) errors.push(`${id}の証拠がありません`);
   }
-  if (!/Scenario:\s+SCN-[A-Z0-9-]+/.test(allText))
-    errors.push("GherkinシナリオIDがありません");
+  if (!scenarioId.test(allText)) errors.push("GherkinシナリオIDがありません");
   const disqualifiers = detectQuickDisqualifiers(options.changedFiles ?? []);
   if (
     (declared === "quick" || declared === "poc") &&
@@ -828,8 +944,17 @@ export function validateIssue(
     const file = path.join(issuePath, name);
     if (!fs.existsSync(file)) continue;
     errors.push(
-      ...validateDevelopmentConsiderations(fs.readFileSync(file, "utf8"), name)
-        .errors,
+      ...validateDevelopmentConsiderations(
+        fs.readFileSync(file, "utf8"),
+        name,
+        {
+          /**
+           * **00は参照行を使えない。** 参照先である00自身が参照行になると判定が
+           * 空虚になる（INV-02）。quickとpocは00だけを検証するので常に4行必須である。
+           */
+          allowReference: name !== "00_要求定義.md",
+        },
+      ).errors,
     );
   }
   return { valid: errors.length === 0, mode, errors, blockedOperations };
