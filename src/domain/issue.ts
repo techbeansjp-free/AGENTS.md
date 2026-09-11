@@ -52,7 +52,8 @@ const FULL_FILES = {
   "03_実装計画.md": "03_実装計画.md",
 };
 
-export type IssueValidationStage = "requirements" | "design";
+export type IssueValidationStage =
+  "request" | "requirements" | "design-artifact" | "design";
 
 const LOW_RISK_SHORT_FORM_FILE = "verification-input.json";
 const LOW_RISK_SHORT_FORM = /^対象外:\s*(.*)$/u;
@@ -157,8 +158,11 @@ function verificationRisk(issuePath: string): ChangeRisk {
 /** 指定4節にshort formが現れた場合だけ、low限定・理由付き1行を強制する。 */
 export function validateLowRiskShortForms(
   issuePath: string,
+  includedFiles?: ReadonlySet<string>,
 ): readonly string[] {
-  const candidates = LOW_RISK_SHORT_FORM_TARGETS.flatMap((target) => {
+  const candidates = LOW_RISK_SHORT_FORM_TARGETS.filter(
+    (target) => includedFiles === undefined || includedFiles.has(target.file),
+  ).flatMap((target) => {
     const artifact = path.join(issuePath, target.file);
     if (!fs.existsSync(artifact)) return [];
     const bodies = markdownSectionBodies(
@@ -1176,9 +1180,15 @@ export function validateIssue(
       errors.push(`必須項目がありません: ${heading}`);
   }
   const validatedFullFiles =
-    declared === "full" && options.stage === "requirements"
-      ? ["01_要件定義.md"]
-      : Object.keys(FULL_FILES);
+    declared !== "full"
+      ? Object.keys(FULL_FILES)
+      : options.stage === "request"
+        ? []
+        : options.stage === "requirements"
+          ? ["01_要件定義.md"]
+          : options.stage === "design-artifact"
+            ? ["01_要件定義.md", "02_設計.md"]
+            : Object.keys(FULL_FILES);
   const allText = [
     text,
     ...validatedFullFiles
@@ -1307,22 +1317,14 @@ export function validateIssue(
       `PoCでは${requestedOperation}を要求できません。delivery.stopAt=${options.delivery?.stopAt ?? "pull_request"}で停止し、fullへ昇格してください`,
     );
   if (mode === "full") {
-    const requiredFiles =
-      options.stage === "requirements"
-        ? ["01_要件定義.md"]
-        : validatedFullFiles;
+    const requiredFiles = validatedFullFiles;
     for (const name of requiredFiles)
       if (!fs.existsSync(path.join(issuePath, name)))
         errors.push(`fullモードには${name}が必要です`);
   }
   const considerationFiles =
     mode === "full"
-      ? [
-          "00_要求定義.md",
-          ...(options.stage === "requirements"
-            ? ["01_要件定義.md"]
-            : validatedFullFiles),
-        ]
+      ? ["00_要求定義.md", ...validatedFullFiles]
       : ["00_要求定義.md"];
   for (const name of considerationFiles) {
     const file = path.join(issuePath, name);
@@ -1341,8 +1343,19 @@ export function validateIssue(
       ).errors,
     );
   }
-  if (mode === "full" && options.stage !== "requirements")
-    errors.push(...validateLowRiskShortForms(issuePath));
+  if (
+    mode === "full" &&
+    options.stage !== "request" &&
+    options.stage !== "requirements"
+  )
+    errors.push(
+      ...validateLowRiskShortForms(
+        issuePath,
+        options.stage === "design-artifact"
+          ? new Set(validatedFullFiles)
+          : undefined,
+      ),
+    );
   return { valid: errors.length === 0, mode, errors, blockedOperations };
 }
 

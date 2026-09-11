@@ -15,7 +15,10 @@ import {
 import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
 import { stableJson } from "../lib/security.js";
-import { assertWorkflowStaging } from "./workflow-journal.js";
+import {
+  assertWorkflowStaging,
+  readWorkflowJournal,
+} from "./workflow-journal.js";
 import { observeReviewDiff } from "./review-diff.js";
 import {
   REVIEW_SESSION_FILE,
@@ -59,6 +62,17 @@ function assertStoredStagingDigest(staging: string): void {
 
 function sortedUnique(values: readonly string[]): string[] {
   return [...new Set(values)].sort();
+}
+
+function latestImplementationEntry(staging: string) {
+  const journal = readWorkflowJournal(staging);
+  if (journal.errors.length > 0)
+    throw new Error(
+      `review round前のworkflow journalが不正です: ${journal.errors.join("; ")}`,
+    );
+  return [...journal.entries]
+    .reverse()
+    .find((entry) => entry.step === 9 && !entry.postTerminalIntake);
 }
 
 function resolveCommit(root: string, label: string, sha: string): string {
@@ -109,6 +123,15 @@ export function buildReviewRoundDraft(input: {
     );
   let round: unknown;
   if (previous === null) {
+    const implementation = latestImplementationEntry(staging);
+    if (!implementation?.implementationHeadSha)
+      throw new Error(
+        "初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください",
+      );
+    if (implementation.implementationHeadSha !== headSha)
+      throw new Error(
+        `review round --initの--headはStep 9 implementation HEAD ${implementation.implementationHeadSha} と一致する必要があります`,
+      );
     if (typeof input.baseSha !== "string")
       throw new Error(
         "review round --initはsessionが無いとき--base=<sha>が必要です",
@@ -204,6 +227,15 @@ export function previewReviewRound(input: {
       "review round candidate HEADがrepositoryのcurrent HEADと一致しません",
     );
   if (previous === null) {
+    const implementation = latestImplementationEntry(staging);
+    if (!implementation?.implementationHeadSha)
+      throw new Error(
+        "初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください",
+      );
+    if (implementation.implementationHeadSha !== input.round.candidateHeadSha)
+      throw new Error(
+        "review round candidate HEADがStep 9 implementation HEADと一致しません",
+      );
     const observed = observeReviewDiff(
       root,
       input.round.anchor.diffBaseSha,
