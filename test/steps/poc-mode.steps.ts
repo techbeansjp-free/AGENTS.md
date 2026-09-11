@@ -762,6 +762,14 @@ Then(
     const artifacts = listStagingArtifacts(this.issue.path);
     const stored = readStoredStagingRecord(this.issue.path);
     const artifact = pocObservationArtifact(this.headSha);
+    const journal = parseStepJournal(
+      fs.readFileSync(path.join(this.issue.path, STEP_JOURNAL_FILE), "utf8"),
+    );
+    assert.equal(
+      [...journal.entries].reverse().find(({ step }) => step === 9)
+        ?.implementationHeadSha,
+      this.headSha,
+    );
     assert.ok(artifacts.includes(artifact));
     assert.equal(
       stored.digest,

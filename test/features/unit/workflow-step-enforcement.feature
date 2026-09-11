@@ -265,3 +265,8 @@ Feature: ワークフローStepの定義とjournalを決定的に検証する
     Given ワークフローStep単体検査の準備がある
     When "SCN-UNIT-ADVANCE-004"の単体検査を実行する
     Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-ADVANCE-005 HEAD拘束のない旧Step 9をreviewへ委譲しない
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-ADVANCE-005"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる

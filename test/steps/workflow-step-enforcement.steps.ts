@@ -1225,6 +1225,7 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
         currentStep: 9,
         nextStep: 10,
         valid: true,
+        implementationHeadBound: true,
       });
       const delivery = planWorkflowAdvance({
         mode: "full",
@@ -1261,6 +1262,20 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
       assert.equal(plan.state, "blocked");
       assert.equal(plan.operation, "blocked");
       assert.match(plan.reasons.join("\n"), /必須順序/u);
+      break;
+    }
+    case "SCN-UNIT-ADVANCE-005": {
+      const plan = planWorkflowAdvance({
+        mode: "full",
+        currentStep: 9,
+        nextStep: 10,
+        valid: true,
+        implementationHeadBound: false,
+      });
+      assert.equal(plan.state, "blocked");
+      assert.equal(plan.operation, "blocked");
+      assert.match(plan.reasons.join("\n"), /implementationHeadSha/u);
+      assert.match(plan.next, /workflow record --step=9/u);
       break;
     }
     default:
@@ -5946,7 +5961,13 @@ if (exact(["auth", "status"])) {
           evidence: `sync read-back digest ${"a".repeat(64)}`,
         },
       });
-      appendWorkflowJournalEntry({ staging, entry: entry(9) });
+      appendWorkflowJournalEntry({
+        staging,
+        entry: {
+          ...entry(9),
+          implementationHeadSha: "a".repeat(40),
+        },
+      });
       const before = fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE));
       const checked = await executeMain([
         "workflow",

@@ -3396,15 +3396,19 @@ export async function main(argv, dependencies = {}) {
         const staging = path.resolve(required(flags, "staging"));
         const inspected = inspectWorkflowStaging(staging);
         const initialRecord = readStoredStagingRecord(staging);
+        const initialJournal = readWorkflowJournal(staging);
         const initialJournalDigest = crypto
             .createHash("sha256")
-            .update(readWorkflowJournal(staging).source)
+            .update(initialJournal.source)
             .digest("hex");
         const plan = planWorkflowAdvance({
             mode: inspected.mode,
             currentStep: inspected.currentStep,
             nextStep: inspected.nextStep,
             valid: inspected.valid,
+            implementationHeadBound: [...initialJournal.entries]
+                .reverse()
+                .some((entry) => entry.step === 9 && entry.implementationHeadSha !== undefined),
             errors: inspected.errors,
         });
         const remoteFlags = ["repo", "issue", "authorize", "synced-at"].filter((flag) => flags[flag] !== undefined);
@@ -3467,11 +3471,15 @@ export async function main(argv, dependencies = {}) {
             if (!validation.valid)
                 throw new Error(`workflow advanceの成果物検証に失敗しました: ${validation.errors.join("; ")}`);
             const current = inspectWorkflowStaging(staging);
+            const currentJournal = readWorkflowJournal(staging);
             const currentPlan = planWorkflowAdvance({
                 mode: current.mode,
                 currentStep: current.currentStep,
                 nextStep: current.nextStep,
                 valid: current.valid,
+                implementationHeadBound: [...currentJournal.entries]
+                    .reverse()
+                    .some((entry) => entry.step === 9 && entry.implementationHeadSha !== undefined),
                 errors: current.errors,
             });
             if (currentPlan.state !== "preview" ||

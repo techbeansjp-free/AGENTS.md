@@ -134,6 +134,17 @@ export function planWorkflowAdvance(input) {
             next: "必要な後続操作はありません",
             reasons: Object.freeze([]),
         });
+    if (input.nextStep === 10 && input.implementationHeadBound !== true)
+        return Object.freeze({
+            ...base,
+            state: "blocked",
+            operation: "blocked",
+            required: Object.freeze(["Step 9 implementation HEAD binding"]),
+            next: "current HEADでworkflow record --step=9を再実行してから再試行してください",
+            reasons: Object.freeze([
+                "最新のStep 9にimplementationHeadSha bindingがありません",
+            ]),
+        });
     if (input.nextStep === 10 || input.nextStep === 11) {
         const review = input.nextStep === 10;
         return Object.freeze({

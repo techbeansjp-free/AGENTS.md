@@ -319,7 +319,7 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha) {
         if (entry.pocObservation &&
             stableJson(entry.pocObservation) !== stableJson(binding))
             throw new Error("PoC journal entryの観測bindingがcurrent HEADと一致しません");
-        entryToWrite = { ...entry, pocObservation: binding };
+        entryToWrite = { ...entryToWrite, pocObservation: binding };
     }
     const journal = path.join(staging, STEP_JOURNAL_FILE);
     const before = assertRegularJournalPath(journal);
