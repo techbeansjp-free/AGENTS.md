@@ -264,12 +264,16 @@ function scenarioIdPattern(dialect) {
  * 行頭keywordに続く`SCN-`で始まる語のうち、文法に適合しないものを列挙する。
  * 検出regexが一致しない理由を「IDが無い」と「IDが文法外」で区別し、後者は
  * 当該IDを名指しして拒否する。同じIDが複数行にあっても1件として報告する。
+ *
+ * **接頭辞は大文字小文字を区別せずに捕捉する。** 大文字`SCN-`だけを捕捉すると、
+ * `scn-69-001`のような小文字接頭辞のIDが正規ID行と同居したときに捕捉されず、
+ * 正規行が存在検査を満たして入口だけ合格する（round 1 REV-01）。
  */
 function malformedScenarioIds(text, dialect) {
     const alternatives = scenarioKeywords(dialect)
         .map((keyword) => escapeRegExp(keyword))
         .join("|");
-    const candidate = new RegExp(`^\\s*(?:${alternatives}):\\s+(SCN-\\S*)`, "gmu");
+    const candidate = new RegExp(`^\\s*(?:${alternatives}):\\s+([Ss][Cc][Nn]-\\S*)`, "gmu");
     const malformed = new Set();
     for (const match of text.matchAll(candidate)) {
         const id = match[1] ?? "";

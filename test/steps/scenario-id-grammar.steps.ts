@@ -4,6 +4,7 @@ import path from "node:path";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import { validateIssue } from "../../src/domain/issue.js";
 import { validateDeliveryEvidence } from "../../src/domain/delivery.js";
+import { isScenarioId } from "../../src/domain/scenario-id.js";
 
 type Validation = ReturnType<typeof validateIssue>;
 
@@ -152,7 +153,7 @@ Then(
     const matching = this.validation.errors.filter(
       (error) =>
         error.startsWith("GherkinシナリオIDの文法が不正です") &&
-        error.includes(id),
+        error.includes(`文法が不正です: ${id}（`),
     );
     assert.equal(matching.length, 1, this.validation.errors.join("\n"));
     assert.match(matching[0] ?? "", /SCN-に大文字英数字とハイフン/u);
@@ -183,6 +184,26 @@ Then("すべてのIDで両検査の受理・拒否が一致する", function () 
     (judgement) => judgement.issue !== judgement.delivery,
   );
   assert.deepEqual(mismatched, []);
+  // 混在staging（round 1 REV-01）: 正規行と同居しても文法外IDを1件ずつ名指しする
+  const mixed = validateIssue(
+    writeFullStaging(
+      this,
+      `# 01\n\n${considerationTable()}\n\n${this.ids
+        .map((id) => `Scenario: ${id} 受け入れ例`)
+        .join("\n")}\n`,
+    ),
+  );
+  assert.equal(mixed.valid, false);
+  for (const id of this.ids.filter((candidate) => !isScenarioId(candidate)))
+    assert.equal(
+      mixed.errors.filter(
+        (error) =>
+          error.startsWith("GherkinシナリオIDの文法が不正です") &&
+          error.includes(`文法が不正です: ${id}（`),
+      ).length,
+      1,
+      `${id}: ${mixed.errors.join("; ")}`,
+    );
   const accepted = this.judgements
     .filter((judgement) => judgement.issue)
     .map((judgement) => judgement.id);
@@ -259,7 +280,7 @@ Then(
           validation.errors.filter(
             (error) =>
               error.startsWith("GherkinシナリオIDの文法が不正です") &&
-              error.includes(staging.id),
+              error.includes(`文法が不正です: ${staging.id}（`),
           ).length,
           1,
           label,
