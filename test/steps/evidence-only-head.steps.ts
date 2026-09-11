@@ -250,6 +250,21 @@ Given(
      */
     git(this.root, ["checkout", "-q", "-b", "other", this.base]);
     git(this.root, ["cherry-pick", this.implementationHead]);
+    /**
+     * cherry-pickは元commitのauthor dateとmessageを保つため、同一秒内に
+     * 作るとH_implと同じSHAになりancestorに化ける。messageを変えて別commitにする。
+     */
+    git(this.root, [
+      "commit",
+      "-q",
+      "--amend",
+      "-m",
+      "feat: implementation (cherry-picked)",
+    ]);
+    assert.notEqual(
+      git(this.root, ["rev-parse", "HEAD"]),
+      this.implementationHead,
+    );
     this.finalHead = commitFiles(
       this.root,
       { [artifactPath]: "# 04 レビュー\n" },
