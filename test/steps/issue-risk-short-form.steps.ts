@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { main } from "../../src/cli.js";
 import { validateIssue } from "../../src/domain/issue.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
@@ -63,13 +63,20 @@ function requirement(): string {
   ].join("\n");
 }
 
-function artifact(kind: "short" | "empty" | "detailed", plan: boolean): string {
+function artifact(
+  kind: "short" | "empty" | "detailed" | "unicode" | "indented",
+  plan: boolean,
+): string {
   const value =
     kind === "short"
       ? "対象外: この変更では該当する判断がないため"
       : kind === "empty"
         ? "対象外:"
-        : "既存契約を維持し、具体的な判断と検証方法を記録する。";
+        : kind === "unicode"
+          ? "対象外： この変更では該当する判断がないため"
+          : kind === "indented"
+            ? "    対象外: この変更では該当する判断がないため"
+            : "既存契約を維持し、具体的な判断と検証方法を記録する。";
   const sections = plan
     ? [`## 5. 実行可能な受け入れ例とtest計画`, `### 5.2 安全性の必須観点`]
     : [
@@ -95,7 +102,7 @@ function artifact(kind: "short" | "empty" | "detailed", plan: boolean): string {
 function writeStaging(
   world: RiskShortFormWorld,
   risk: string,
-  kind: "short" | "empty" | "detailed",
+  kind: "short" | "empty" | "detailed" | "unicode" | "indented",
 ): void {
   world.issuePath = world.temp("asc-issue-risk-short-");
   fs.writeFileSync(path.join(world.issuePath, "00_要求定義.md"), requirement());
@@ -138,6 +145,20 @@ Given(
 );
 
 Given(
+  /^Verification Set riskが"([^"]+)"で02と03の対象節が全角コロン短縮行である$/u,
+  function (risk: string) {
+    writeStaging(this, risk, "unicode");
+  },
+);
+
+Given(
+  /^Verification Set riskが"([^"]+)"で02と03の対象節が字下げcode短縮行である$/u,
+  function (risk: string) {
+    writeStaging(this, risk, "indented");
+  },
+);
+
+Given(
   /^Verification Set riskが"([^"]+)"で02と03の対象節が理由なし短縮行である$/u,
   function (risk: string) {
     writeStaging(this, risk, "empty");
@@ -167,24 +188,21 @@ Then("risk比例のIssue検証は合格する", function () {
   assert.equal(this.validation.valid, true, this.validation.errors.join("; "));
 });
 
-When("CLIでrisk比例のIssue成果物を検証する", async function () {
-  let output = "";
-  const originalWrite = process.stdout.write;
-  process.stdout.write = ((chunk: string | Uint8Array) => {
-    output += String(chunk);
-    return true;
-  }) as typeof process.stdout.write;
-  try {
-    this.cliStatus = await main([
+When("CLIでrisk比例のIssue成果物を検証する", function () {
+  const result = spawnSync(
+    process.execPath,
+    [
+      path.resolve("dist/bin/agent-skill-chain.js"),
       "issue",
       "validate",
       `--path=${this.issuePath}`,
       "--stage=design",
-    ]);
-    this.cliOutput = output;
-  } finally {
-    process.stdout.write = originalWrite;
-  }
+    ],
+    { cwd: repositoryRoot, encoding: "utf8" },
+  );
+  this.cliStatus = result.status ?? -1;
+  this.cliOutput =
+    result.stdout || result.stderr || result.error?.message || "CLI outputなし";
 });
 
 Then("CLIのrisk比例Issue検証は合格する", function () {

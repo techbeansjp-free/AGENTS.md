@@ -19,7 +19,7 @@ const FULL_FILES = {
 };
 const LOW_RISK_SHORT_FORM_FILE = "verification-input.json";
 const LOW_RISK_SHORT_FORM = /^対象外:\s*(.*)$/u;
-const LOW_RISK_SHORT_FORM_LIKE = /^\s*(?:(?:[-*+>])\s*)*対象外\s*:/u;
+const LOW_RISK_SHORT_FORM_LIKE = /^\s*(?:(?:[-*+>])\s*)*対象外\s*[:：﹕︓꞉]/u;
 const MAX_VERIFICATION_INPUT_BYTES = 1024 * 1024;
 const LOW_RISK_SHORT_FORM_TARGETS = Object.freeze([
     Object.freeze({
@@ -57,18 +57,30 @@ function verificationRisk(issuePath) {
     let descriptor;
     let input;
     try {
-        const named = fs.lstatSync(inputPath);
+        const named = fs.lstatSync(inputPath, { bigint: true });
         if (!named.isFile() || named.isSymbolicLink())
             throw new Error(`${LOW_RISK_SHORT_FORM_FILE}は通常fileでなければなりません`);
         descriptor = fs.openSync(inputPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
-        const opened = fs.fstatSync(descriptor);
+        const opened = fs.fstatSync(descriptor, { bigint: true });
         if (!opened.isFile() ||
             opened.dev !== named.dev ||
             opened.ino !== named.ino)
             throw new Error(`${LOW_RISK_SHORT_FORM_FILE}が読取中に変更されました`);
-        if (opened.size > MAX_VERIFICATION_INPUT_BYTES)
+        if (opened.size > BigInt(MAX_VERIFICATION_INPUT_BYTES))
             throw new Error(`${LOW_RISK_SHORT_FORM_FILE}は${MAX_VERIFICATION_INPUT_BYTES} bytes以下でなければなりません`);
-        input = JSON.parse(fs.readFileSync(descriptor, "utf8"));
+        const buffer = Buffer.alloc(MAX_VERIFICATION_INPUT_BYTES + 1);
+        const bytesRead = fs.readSync(descriptor, buffer, 0, buffer.length, 0);
+        if (bytesRead > MAX_VERIFICATION_INPUT_BYTES)
+            throw new Error(`${LOW_RISK_SHORT_FORM_FILE}は${MAX_VERIFICATION_INPUT_BYTES} bytes以下でなければなりません`);
+        const after = fs.fstatSync(descriptor, { bigint: true });
+        if (after.dev !== opened.dev ||
+            after.ino !== opened.ino ||
+            after.size !== opened.size ||
+            after.size !== BigInt(bytesRead) ||
+            after.mtimeNs !== opened.mtimeNs ||
+            after.ctimeNs !== opened.ctimeNs)
+            throw new Error(`${LOW_RISK_SHORT_FORM_FILE}が読取中に変更されました`);
+        input = JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
     }
     catch (error) {
         throw new Error(`${LOW_RISK_SHORT_FORM_FILE}を安全に読めません: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
@@ -107,7 +119,7 @@ export function validateLowRiskShortForms(issuePath) {
     const errors = [];
     for (const candidate of candidates) {
         const match = candidate.lines.length === 1
-            ? LOW_RISK_SHORT_FORM.exec(candidate.lines[0].trim())
+            ? LOW_RISK_SHORT_FORM.exec(candidate.lines[0])
             : null;
         if (!match || match[1].trim() === "")
             errors.push(`${candidate.file} §${candidate.heading}の短縮形式は\`対象外: <理由>\`の理由付き1行にしてください`);
