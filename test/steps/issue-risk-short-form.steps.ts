@@ -181,6 +181,25 @@ Given(
   },
 );
 
+Given(
+  /^Verification Set riskが"([^"]+)"で02と03の対象節が本文"([^"]+)"である$/u,
+  function (risk: string, content: string) {
+    writeStaging(this, risk, "detailed");
+    for (const name of ["02_設計.md", "03_実装計画.md"]) {
+      const artifactPath = path.join(this.issuePath, name);
+      fs.writeFileSync(
+        artifactPath,
+        fs
+          .readFileSync(artifactPath, "utf8")
+          .replaceAll(
+            "既存契約を維持し、具体的な判断と検証方法を記録する。",
+            content,
+          ),
+      );
+    }
+  },
+);
+
 Given("low-risk短縮行のVerification Set入力がsymlinkである", function () {
   writeStaging(this, "low", "short");
   const input = path.join(this.issuePath, "verification-input.json");

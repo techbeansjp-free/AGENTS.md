@@ -51,3 +51,13 @@ Feature: Verification Set riskに比例した02/03短縮形式
     Given Verification Set riskが"low"で02と03の対象節が字下げcode短縮行である
     When risk比例のIssue成果物を検証する
     Then 理由付きの単一行書式を示して拒否する
+
+  Scenario Outline: SCN-WF-1334-009 対象外から始まる通常の日本語本文を維持する
+    Given Verification Set riskが"high"で02と03の対象節が本文"<content>"である
+    When risk比例のIssue成果物を検証する
+    Then risk比例のIssue検証は合格する
+
+    Examples:
+      | content                                  |
+      | 対象外理由を設計判断として詳しく記録する。 |
+      | 対象外ではないため既存契約を維持する。     |
