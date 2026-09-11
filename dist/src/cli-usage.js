@@ -500,12 +500,17 @@ export const COMMAND_USAGE = Object.freeze([
     {
         command: "review",
         subcommand: "validate",
-        summary: "review成果物が契約を満たすか検証する",
-        positional: "[file] 検証するreview成果物。--fileの代わりに使える",
-        requiredFlags: [flag("file", "path", "検証するreview成果物")],
-        conditionalFlags: [],
-        optionalFlags: [],
-        example: "npx agent-skill-chain review validate --file=./docs/reviews/47.md",
+        summary: "review evidence JSONまたはMarkdown artifactを検証する",
+        positional: "[file] 検証するreview evidence JSON。--fileの代わりに使える",
+        requiredFlags: [],
+        conditionalFlags: [
+            conditional("file", "path", "検証するreview evidence JSON", "--artifactを指定しないとき（位置引数でも指定可能）", (provided) => provided.artifact === undefined),
+        ],
+        optionalFlags: [
+            optional("artifact", "path", "構造を検証するMarkdown review artifact（--file・位置引数と排他）", "JSON review evidenceを検証する"),
+            ROOT_FLAG,
+        ],
+        example: "npx agent-skill-chain review validate --artifact=docs/reviews/47_レビュー.md --root=.",
     },
     {
         command: "review",
@@ -852,9 +857,15 @@ export function missingRequiredFlags(usage, provided, positionals = []) {
         })
             .map((item) => item.name),
         ...usage.conditionalFlags
-            .filter((item) => item.requiredWhen !== undefined &&
-            item.requiredWhen(provided) &&
-            missingValue(item.name))
+            .filter((item, index) => {
+            if (positionalSubstitute &&
+                usage.requiredFlags.length === 0 &&
+                index === 0)
+                return false;
+            return (item.requiredWhen !== undefined &&
+                item.requiredWhen(provided) &&
+                missingValue(item.name));
+        })
             .map((item) => item.name),
     ];
 }

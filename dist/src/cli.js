@@ -8,7 +8,7 @@ import { parsePocDeclaration } from "./domain/workflow.js";
 import { bootstrapProject, validateSpecs, } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
-import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, } from "./domain/review-artifact.js";
+import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, validateReviewArtifactStructure, } from "./domain/review-artifact.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
 import { buildWorktreePath, createWorktree, canonicalWorktreePath, DEFAULT_WORKTREE_PLACEMENT, enforceTrustedWorktreeBoundary, inspectFinalizeState, inspectRecoveryState, validateWorktreePlacement, } from "./domain/worktree.js";
@@ -3959,8 +3959,42 @@ export async function main(argv, dependencies = {}) {
     }
     if (command === "review" && subcommand === "validate") {
         const { flags, positionals } = parse(rest);
-        const file = positionals[0] ?? required(flags, "file");
-        const result = evaluateReview(readJsonInput(file));
+        const unknown = Object.keys(flags).filter((flag) => !["file", "artifact", "root"].includes(flag));
+        if (unknown.length > 0)
+            throw new Error(`review validateの未知optionです: --${unknown.join(", --")}`);
+        if (flags.file !== undefined && typeof flags.file !== "string")
+            throw new Error("review validateの--fileにはpathが必要です");
+        if (flags.artifact !== undefined && typeof flags.artifact !== "string")
+            throw new Error("review validateの--artifactにはpathが必要です");
+        if (flags.root !== undefined && typeof flags.root !== "string")
+            throw new Error("review validateの--rootにはpathが必要です");
+        if (positionals.length > 1)
+            throw new Error("review validateの位置引数は1件までです");
+        const positional = positionals[0];
+        const file = typeof flags.file === "string" ? flags.file : positional;
+        const artifact = typeof flags.artifact === "string" ? flags.artifact : undefined;
+        if (file !== undefined && artifact !== undefined)
+            throw new Error("review validateは--file（または位置引数）と--artifactを同時に使用できません");
+        if (artifact !== undefined) {
+            const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+            const artifactFile = resolveContained(root, artifact);
+            const stat = fs.lstatSync(artifactFile);
+            if (stat.isSymbolicLink() || !stat.isFile())
+                throw new Error("review validateの--artifactはrepository内の通常fileが必要です");
+            const structure = validateReviewArtifactStructure(fs.readFileSync(artifactFile, "utf8"));
+            const result = {
+                valid: structure.diagnostics.length === 0,
+                kind: "review-artifact",
+                artifact: path.relative(root, artifactFile),
+                errors: structure.diagnostics,
+            };
+            print(result);
+            return result.valid ? 0 : 1;
+        }
+        if (flags.root !== undefined)
+            throw new Error("review validateの--rootは--artifactと併用してください");
+        const jsonFile = file ?? required(flags, "file");
+        const result = evaluateReview(readJsonInput(jsonFile));
         if (result.approved) {
             const pending = {
                 ...result,

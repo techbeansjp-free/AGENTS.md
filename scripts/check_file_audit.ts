@@ -5,6 +5,7 @@ import {
   validateDistributionImpact,
 } from "../src/domain/conformance.js";
 import { withoutMarkdownCode } from "../src/domain/issue.js";
+import { parseReviewArtifactAudit } from "../src/domain/review-artifact.js";
 import {
   evaluateMergeIntegrity,
   extractLossTokens,
@@ -873,79 +874,8 @@ function observationErrors(section: string): string[] {
   return errors;
 }
 
-/**
- * `| ラウンド数 | 3（注記） |`から先頭の整数を読む。
- *
- * **注記を許す。** 既存artifactは`4（うち1ラウンドは自動review）`のように書いており、
- * 厳格な整数だけを要求すると既存の書き方を一律に壊す。数える対象はラウンド数であって
- * 記法ではない。
- */
-function parseReviewRounds(section: string): number | undefined {
-  const leading = /^(\d+)/u.exec(
-    identityCell(section, "ラウンド数") ?? "",
-  )?.[1];
-  return leading === undefined ? undefined : Number(leading);
-}
-
-/**
- * `| Step chain | 経由: <staging> |`または`| Step chain | 迂回: <理由> |`を読む。
- *
- * **申告の存在だけを要求し、申告内容を検証しない。** 検証しない理由は2つある。
- *
- * 1. staging（`.agent-skill-chain/tmp/`）は`.gitignore`の対象で、追跡fileが0件である。
- *    既定branch側のcheckoutにjournalは存在しないため、`経由`の検証は**必ず失敗する。**
- *    正直な申告だけが落ち、`迂回`は常に通る誘因の逆転を生む。
- * 2. journalの整合検証は捏造への障壁にならない。`validateStepJournal`は在否・順序・mode
- *    しか見ず、`artifacts`と`evidence`は repository 状態へ束縛されない自由文字列である。
- *
- * Issue #986の要求は「迂回した事実が記録に残ればよい」であり、記録の存在で満たされる。
- * **独立oracleを持たない申告を検証したふりをしない。**
- */
-function parseStepChain(
-  section: string,
-): { kind: "via" | "bypass"; detail: string } | undefined {
-  const cell = identityCell(section, "Step chain");
-  if (cell === undefined) return undefined;
-  const matched = /^(経由|迂回) *[:：] *(.+)$/u.exec(cell);
-  if (!matched) return undefined;
-  return {
-    kind: matched[1] === STEP_CHAIN_VIA ? "via" : "bypass",
-    detail: matched[2]!.trim(),
-  };
-}
-
 export function parseFileAudit(markdown: string) {
-  const base = /\| 比較基点 \| `([a-f0-9]{40})` \|/iu.exec(markdown)?.[1];
-  const implementation = /\| H_impl \| `([a-f0-9]{40})` \|/iu.exec(
-    markdown,
-  )?.[1];
-  const section =
-    markdown.split("## 変更ファイル個別監査")[1]?.split("\n## ")[0] ?? "";
-  const entries: Array<{
-    path: string;
-    status: string;
-    fields: string[];
-    decision: string;
-  }> = [];
-  for (const line of section.split(/\r?\n/u)) {
-    const cells = line
-      .split("|")
-      .slice(1, -1)
-      .map((cell) => cell.trim());
-    if (
-      cells.length !== 9 ||
-      !/^\x60[^\x60]+\x60$/u.test(cells[0]) ||
-      !["A", "M", "D", "R"].includes(cells[1])
-    )
-      continue;
-    entries.push({
-      path: cells[0].slice(1, -1),
-      status: cells[1],
-      fields: cells.slice(2, 8),
-      decision: cells[8],
-    });
-  }
-  return { base, implementation, entries };
+  return parseReviewArtifactAudit(markdown);
 }
 
 /**
@@ -1357,7 +1287,7 @@ export function checkFileAudit(
     errors.push(
       `review artifactに「## ${IDENTITY_HEADING}」の節がありません。申告はこの節の表だけを正本にします`,
     );
-  const rounds = parseReviewRounds(identity ?? "");
+  const rounds = parsed.rounds;
   if (rounds === undefined)
     errors.push(
       "review artifactに「| ラウンド数 | N |」がありません。実施したラウンド数を記録してください",
@@ -1368,7 +1298,7 @@ export function checkFileAudit(
     );
   else if (rounds < 1)
     errors.push(`reviewラウンドは1以上で記録してください: ${rounds}`);
-  if (parseStepChain(identity ?? "") === undefined)
+  if (parsed.stepChain === undefined)
     errors.push(
       `review artifactに「| Step chain | ${STEP_CHAIN_VIA}: <staging path> |」または「| Step chain | ${STEP_CHAIN_BYPASS}: <理由> |」がありません`,
     );
