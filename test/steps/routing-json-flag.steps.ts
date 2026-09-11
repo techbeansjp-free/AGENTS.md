@@ -77,6 +77,13 @@ Then(
     assert.match(override?.description ?? "", /path/u);
     assert.match(override?.description ?? "", /\{"provider"/u);
     assert.match(String(ceiling?.example), /--override='\{"provider"/u);
+    // 実行例は固定の失効日時を持つため、--nowを伴ってそのまま終了値0で通ること（round 2 REV-04）
+    const exampleArgs = String(ceiling?.example)
+      .replace(/^npx agent-skill-chain /u, "")
+      .match(/'[^']*'|\S+/gu)!
+      .map((token) => token.replace(/^'|'$/gu, ""));
+    const executed = run(exampleArgs);
+    assert.equal(executed.status, 0, executed.stdout);
   },
 );
 
