@@ -57,6 +57,11 @@ Feature: review round雛形と契約の露出
     When Step 9後のHEADでreview round --initを実行する
     Then Step 9 binding不足errorで拒否し雛形を書かない
 
+  Scenario: SCN-UNIT-REVINIT-022 Step 9より先に初回reviewを開始できない
+    Given Step 9をまだ記録していないstagingがある
+    When Step 9後のHEADでreview round --initを実行する
+    Then Step 9 binding不足errorで拒否し雛形を書かない
+
   Scenario: SCN-UNIT-REVINIT-010 不足flagは--initの有無に応じて1回で列挙する
     Given 初回candidateを持つstagingがある
     When --stagingだけでreview roundを実行しさらに--initと--stagingだけで実行する

@@ -2282,21 +2282,25 @@ function preparePullRequest(
       headSha,
       observedAt: new Date(fixtureInstantMs()).toISOString(),
     });
+    appendWorkflowJournalEntry({
+      staging,
+      entry: entry(9, "poc", fixturePast),
+      headSha,
+    });
     const pocReviewSession = convergedReviewBinding(
       root,
       staging,
       baseSha,
       headSha,
     );
-    for (const step of [9, 10])
-      appendWorkflowJournalEntry({
-        staging,
-        entry: {
-          ...entry(step, "poc", fixturePast),
-          ...(step === 10 ? { reviewSession: pocReviewSession } : {}),
-        },
-        headSha,
-      });
+    appendWorkflowJournalEntry({
+      staging,
+      entry: {
+        ...entry(10, "poc", fixturePast),
+        reviewSession: pocReviewSession,
+      },
+      headSha,
+    });
     recordStagingSync(staging, {
       tracker: "https://github.com/o/r/issues/877",
       checkpoint: 4,
@@ -2316,27 +2320,51 @@ function preparePullRequest(
       fixtureFuture,
     });
   }
-  const reviewSession = convergedReviewBinding(root, staging, baseSha, headSha);
   const journalFile = path.join(staging, STEP_JOURNAL_FILE);
   if (missingStep4) {
-    const entries = [0, 1, 9, 10].map((step) => ({
+    const preReviewEntries = [0, 1, 9].map((step) => ({
       ...entry(step, "quick", fixturePast),
-      ...(step === 10 ? { reviewSession } : {}),
+      ...(step === 9 ? { implementationHeadSha: headSha } : {}),
     }));
     fs.writeFileSync(
       journalFile,
-      `${entries.map((item) => JSON.stringify(item)).join("\n")}\n`,
+      `${preReviewEntries.map((item) => JSON.stringify(item)).join("\n")}\n`,
+    );
+    refreshStoredStagingDigest(staging);
+    const reviewSession = convergedReviewBinding(
+      root,
+      staging,
+      baseSha,
+      headSha,
+    );
+    fs.appendFileSync(
+      journalFile,
+      `${JSON.stringify({
+        ...entry(10, "quick", fixturePast),
+        reviewSession,
+      })}\n`,
     );
     refreshStoredStagingDigest(staging);
   } else {
-    for (const step of [1, 4, 9, 10])
+    for (const step of [1, 4, 9])
       appendWorkflowJournalEntry({
         staging,
-        entry: {
-          ...entry(step, "quick", fixturePast),
-          ...(step === 10 ? { reviewSession } : {}),
-        },
+        entry: entry(step, "quick", fixturePast),
+        ...(step === 9 ? { headSha } : {}),
       });
+    const reviewSession = convergedReviewBinding(
+      root,
+      staging,
+      baseSha,
+      headSha,
+    );
+    appendWorkflowJournalEntry({
+      staging,
+      entry: {
+        ...entry(10, "quick", fixturePast),
+        reviewSession,
+      },
+    });
   }
   recordStagingSync(staging, {
     tracker: "https://github.com/o/r/issues/877",

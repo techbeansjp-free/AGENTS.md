@@ -112,7 +112,10 @@ async function runCli(
   }
 }
 
-function createFixture(world: ReviewRoundInitWorld): void {
+function createFixture(
+  world: ReviewRoundInitWorld,
+  recordImplementation = true,
+): void {
   world.root = world.initRepo();
   world.base = head(world.root);
   world.head = commitFile(
@@ -128,6 +131,7 @@ function createFixture(world: ReviewRoundInitWorld): void {
     requestedMode: "quick",
   }).path;
   world.outFile = path.join(world.temp("asc-review-init-out-"), "round.json");
+  if (recordImplementation) appendStepNine(world, world.head);
 }
 
 function appendStepNine(
@@ -170,7 +174,6 @@ Given(
   "Step 9のimplementation HEAD後に別commitを積んだstagingがある",
   function () {
     createFixture(this);
-    appendStepNine(this, this.head);
     this.head = commitFile(
       this.root,
       reviewedPath,
@@ -183,10 +186,14 @@ Given(
 Given(
   "implementation HEAD bindingのない旧Step 9を持つstagingがある",
   function () {
-    createFixture(this);
+    createFixture(this, false);
     appendStepNine(this);
   },
 );
+
+Given("Step 9をまだ記録していないstagingがある", function () {
+  createFixture(this, false);
+});
 
 When("Step 9後のHEADでreview round --initを実行する", async function () {
   await runCli(

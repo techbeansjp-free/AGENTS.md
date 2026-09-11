@@ -124,16 +124,14 @@ export function buildReviewRoundDraft(input: {
   let round: unknown;
   if (previous === null) {
     const implementation = latestImplementationEntry(staging);
-    if (implementation) {
-      if (!implementation.implementationHeadSha)
-        throw new Error(
-          "Step 9にimplementationHeadSha bindingがありません。current HEADでworkflow record --step=9を再実行してください",
-        );
-      if (implementation.implementationHeadSha !== headSha)
-        throw new Error(
-          `review round --initの--headはStep 9 implementation HEAD ${implementation.implementationHeadSha} と一致する必要があります`,
-        );
-    }
+    if (!implementation?.implementationHeadSha)
+      throw new Error(
+        "初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください",
+      );
+    if (implementation.implementationHeadSha !== headSha)
+      throw new Error(
+        `review round --initの--headはStep 9 implementation HEAD ${implementation.implementationHeadSha} と一致する必要があります`,
+      );
     if (typeof input.baseSha !== "string")
       throw new Error(
         "review round --initはsessionが無いとき--base=<sha>が必要です",
@@ -230,16 +228,14 @@ export function previewReviewRound(input: {
     );
   if (previous === null) {
     const implementation = latestImplementationEntry(staging);
-    if (implementation) {
-      if (!implementation.implementationHeadSha)
-        throw new Error(
-          "Step 9にimplementationHeadSha bindingがありません。current HEADでworkflow record --step=9を再実行してください",
-        );
-      if (implementation.implementationHeadSha !== input.round.candidateHeadSha)
-        throw new Error(
-          "review round candidate HEADがStep 9 implementation HEADと一致しません",
-        );
-    }
+    if (!implementation?.implementationHeadSha)
+      throw new Error(
+        "初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください",
+      );
+    if (implementation.implementationHeadSha !== input.round.candidateHeadSha)
+      throw new Error(
+        "review round candidate HEADがStep 9 implementation HEADと一致しません",
+      );
     const observed = observeReviewDiff(
       root,
       input.round.anchor.diffBaseSha,
