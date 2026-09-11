@@ -1216,7 +1216,7 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
         nextStep: 5,
         valid: true,
       });
-      assert.equal(design.validationStage, "design");
+      assert.equal(design.validationStage, "design-artifact");
       break;
     }
     case "SCN-UNIT-ADVANCE-002": {
