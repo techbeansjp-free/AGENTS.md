@@ -139,6 +139,11 @@ export function buildReviewRoundDraft(input: {
       "round 1は固定initial HEADの全scope reviewである。findingsへreviewの指摘を書く",
     );
   } else {
+    /** budget枯渇はHEAD差分の有無より先に固有の停止理由を返す。 */
+    if (previous.status === "budget-exhausted")
+      throw new Error(
+        "review round --init: sessionはbudget-exhaustedです。取り直しroundは開けません。follow-up Issueの新しいstagingで工程を通してください",
+      );
     if (
       input.baseSha !== undefined ||
       input.scopeIds ||
@@ -174,14 +179,6 @@ export function buildReviewRoundDraft(input: {
     if (fixed.length === 0)
       throw new Error(
         "review round --init: 前round headからの実Git差分が空です。HEADを進めずに次roundを記録することはできません",
-      );
-    /**
-     * `budget-exhausted`の雛形は`advanceReviewSession`が拒否する。書いてから
-     * 失敗させず、生成時に止める（Issue #1329）。
-     */
-    if (previous.status === "budget-exhausted")
-      throw new Error(
-        "review round --init: sessionはbudget-exhaustedです。取り直しroundは開けません。follow-up Issueの新しいstagingで工程を通してください",
       );
     if (previous.status === "converged")
       notes.push(

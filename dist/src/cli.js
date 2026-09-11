@@ -23,7 +23,7 @@ import { buildRepositorySemanticGraphWithDiagnostics, observeRepositoryGraphSour
 import { canonicalProviderInstant, github, GitHubProviderUnavailableError, samePolicyAuthorityObservation, } from "./adapters/github.js";
 import { assertMinimumExecutableVersion, MINIMUM_GH_VERSION, MINIMUM_GIT_VERSION, } from "./lib/executable-version.js";
 import { git } from "./lib/process.js";
-import { writeFileAtomic } from "./lib/atomic.js";
+import { writeFileAtomic, writeFileExclusivePinned } from "./lib/atomic.js";
 import { validateRepositoryConformance } from "./domain/conformance.js";
 import { parseJsonStrict, resolveContained, stableJson, } from "./lib/security.js";
 import { canonicalLifecycleCommand, CLI_USAGE, PUBLIC_LIFECYCLE_COMMANDS, routingDiagnostic, routingRecovery, } from "./cli-contract.js";
@@ -1325,21 +1325,15 @@ function issueStagingGherkinDialect(issuePath) {
  * CLIは渡さない。
  */
 export function writeReviewRoundDraft(realParent, basename, content, hooks = {}) {
-    const target = path.join(realParent, basename);
-    hooks.beforeWrite?.();
-    fs.writeFileSync(target, content, { flag: "wx" });
-    let observedParent;
     try {
-        observedParent = path.dirname(fs.realpathSync(target));
+        return writeFileExclusivePinned(realParent, basename, content, hooks);
     }
-    catch {
-        observedParent = undefined;
+    catch (error) {
+        if (error instanceof Error &&
+            /atomic write directoryが実行中に変更されました/u.test(error.message))
+            throw new Error(`review round --initの--outの親directoryが検査後に差し替えられました。書き込みを取り消しました: ${realParent}`, { cause: error });
+        throw error;
     }
-    if (observedParent !== realParent) {
-        fs.rmSync(target, { force: true });
-        throw new Error(`review round --initの--outの親directoryが検査後に差し替えられました。書き込みを取り消しました: ${realParent}`);
-    }
-    return target;
 }
 function handlePullRequestMerge(flags) {
     const apply = applyMode(flags);
@@ -3976,9 +3970,9 @@ export async function main(argv, dependencies = {}) {
                 acceptanceCriteriaIds: ids(flags.ac),
                 invariantIds: ids(flags.invariant),
             });
-            const written = writeReviewRoundDraft(outParentReal, path.basename(out), `${JSON.stringify(draft.round, null, 2)}\n`);
+            writeReviewRoundDraft(outParentReal, path.basename(out), `${JSON.stringify(draft.round, null, 2)}\n`);
             print({
-                written,
+                written: out,
                 round: draft.round.round,
                 candidateHeadSha: draft.round.candidateHeadSha,
                 notes: draft.notes,

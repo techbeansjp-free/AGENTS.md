@@ -82,13 +82,29 @@ Feature: review round雛形と契約の露出
     When 親directoryの検査直後にstagingへのsymlinkへ差し替えて雛形を書く
     Then 親差し替えのerrorで拒否しstagingにも差し替え先にもfileを残さない
 
+  Scenario: SCN-UNIT-REVINIT-015 再検証後に親を再差し替えても無関係fileを削除しない
+    Given 初回candidateを持つstagingがある
+    When 作成後とcleanup直前に親directoryを2回差し替える
+    Then 親差し替えを拒否し作成fileを消して無関係fileを保持する
+
+  Scenario: SCN-UNIT-REVINIT-017 作成後の書込み失敗で部分fileを残さない
+    Given 初回candidateを持つstagingがある
+    When 排他的作成後に部分書込み失敗を注入する
+    Then 書込み失敗を返し部分fileを残さない
+
   Scenario: SCN-UNIT-REVINIT-012 差し替えが無ければ検査した実体の親へ雛形を書く
     Given 初回candidateを持つstagingがある
     When --outをstaging外を指すsymlink配下にしてreview round --initでround 1の雛形を書く
-    Then writtenはsymlinkでなく実体の親へ結合したpathである
+    Then writtenは利用者指定pathのまま実体の親へ雛形を書く
 
   Scenario: SCN-UNIT-REVINIT-013 budget-exhaustedのsessionへの--initを拒否する
     Given budget-exhaustedのsessionを持つstagingがある
+    When review round --initで次roundの雛形を書こうとする
+    Then budget-exhaustedのerrorで拒否し雛形を書かない
+
+  Scenario: SCN-UNIT-REVINIT-016 HEADが同じbudget-exhausted sessionも固有errorで拒否する
+    Given budget-exhaustedのsessionを持つstagingがある
+    And HEADをbudget-exhausted sessionのcandidateへ戻す
     When review round --initで次roundの雛形を書こうとする
     Then budget-exhaustedのerrorで拒否し雛形を書かない
 

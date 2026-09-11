@@ -50,6 +50,7 @@ interface ReviewRoundInitWorld extends WorkflowWorld {
   reasonSets: string[][];
   writeError: Error | undefined;
   raceParent: string;
+  unrelatedFile: string;
 }
 
 const { Given, When, Then } = stepDefinitions<ReviewRoundInitWorld>();
@@ -665,6 +666,64 @@ Then(
   },
 );
 
+When("作成後とcleanup直前に親directoryを2回差し替える", function () {
+  const container = this.temp("asc-review-init-double-race-");
+  const parent = path.join(container, "out");
+  const unrelated = path.join(container, "unrelated");
+  fs.mkdirSync(parent);
+  fs.mkdirSync(unrelated);
+  this.raceParent = fs.realpathSync(parent);
+  this.unrelatedFile = path.join(unrelated, "round.json");
+  fs.writeFileSync(this.unrelatedFile, "unrelated\n");
+  this.writeError = undefined;
+  try {
+    writeReviewRoundDraft(this.raceParent, "round.json", "{}\n", {
+      afterWriteBeforeVerify: () => {
+        fs.renameSync(parent, `${parent}.moved`);
+        fs.symlinkSync(this.staging, parent);
+      },
+      beforeCleanup: () => {
+        fs.unlinkSync(parent);
+        fs.symlinkSync(unrelated, parent);
+      },
+    });
+  } catch (error) {
+    this.writeError = error instanceof Error ? error : new Error(String(error));
+  }
+});
+
+Then("親差し替えを拒否し作成fileを消して無関係fileを保持する", function () {
+  assert.ok(this.writeError, "拒否を期待した");
+  assert.match(this.writeError.message, /検査後に差し替えられました/u);
+  assert.equal(fs.existsSync(path.join(this.staging, "round.json")), false);
+  assert.equal(
+    fs.existsSync(path.join(`${this.raceParent}.moved`, "round.json")),
+    false,
+  );
+  assert.equal(fs.readFileSync(this.unrelatedFile, "utf8"), "unrelated\n");
+});
+
+When("排他的作成後に部分書込み失敗を注入する", function () {
+  const parent = this.temp("asc-review-init-partial-");
+  this.outFile = path.join(parent, "round.json");
+  this.writeError = undefined;
+  try {
+    writeReviewRoundDraft(parent, "round.json", "{}\n", {
+      afterCreateBeforeWrite: (descriptor) => {
+        fs.writeSync(descriptor, "{");
+        throw new Error("部分書込み失敗を注入");
+      },
+    });
+  } catch (error) {
+    this.writeError = error instanceof Error ? error : new Error(String(error));
+  }
+});
+
+Then("書込み失敗を返し部分fileを残さない", function () {
+  assert.match(this.writeError?.message ?? "", /部分書込み失敗/u);
+  assert.equal(fs.existsSync(this.outFile), false);
+});
+
 When(
   "--outをstaging外を指すsymlink配下にしてreview round --initでround 1の雛形を書く",
   async function () {
@@ -685,13 +744,10 @@ When(
   },
 );
 
-Then("writtenはsymlinkでなく実体の親へ結合したpathである", function () {
+Then("writtenは利用者指定pathのまま実体の親へ雛形を書く", function () {
   const output: unknown = JSON.parse(this.cliOutput);
   assert.ok(output && typeof output === "object" && "written" in output);
-  assert.equal(
-    (output as { written: string }).written,
-    path.join(this.raceParent, "round.json"),
-  );
+  assert.equal((output as { written: string }).written, this.outFile);
   assert.ok(fs.existsSync(path.join(this.raceParent, "round.json")));
 });
 
@@ -758,6 +814,11 @@ Given("budget-exhaustedのsessionを持つstagingがある", function () {
     "export const reviewed = 9;\n",
     "fix: late",
   );
+});
+
+Given("HEADをbudget-exhausted sessionのcandidateへ戻す", function () {
+  this.head = this.session.latestCandidateHeadSha;
+  execFileSync("git", ["reset", "--hard", this.head], { cwd: this.root });
 });
 
 Then("budget-exhaustedのerrorで拒否し雛形を書かない", function () {
