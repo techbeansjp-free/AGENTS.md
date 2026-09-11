@@ -2071,6 +2071,7 @@ interface DeliveryProviderControl {
 interface PreparedDeliveryCli extends PreparedPullRequest {
   controlFile: string;
   logFile: string;
+  issueBodyFile: string;
   env: NodeJS.ProcessEnv;
 }
 
@@ -2629,6 +2630,7 @@ function prepareDeliveryCli(
   const controlFile = path.join(stubDirectory, "control.json");
   const logFile = path.join(stubDirectory, "calls.jsonl");
   const observedBody = path.join(stubDirectory, "observed-pr-body.md");
+  const issueBodyFile = path.join(stubDirectory, "issue-body.md");
   const control: DeliveryProviderControl = {
     phase: "ready",
     ghVersion: "2.97.0",
@@ -2700,7 +2702,7 @@ const canonicalBody = ${JSON.stringify(canonicalDocument.body)};
  * 一方を実時刻にすると検査が時間依存で落ちる（Issue #1300）。
  */
 const mergeRequestedAt = ${JSON.stringify(fixtureInstant())};
-const issueBodyFile = ${JSON.stringify(path.join(stubDirectory, "issue-body.md"))};
+const issueBodyFile = ${JSON.stringify(issueBodyFile)};
 fs.appendFileSync(logFile, JSON.stringify(args) + "\\n");
 const control = JSON.parse(fs.readFileSync(controlFile, "utf8"));
 const baseSha = control.remoteBaseSha;
@@ -3111,6 +3113,7 @@ if (exact(["--version"])) {
     ...prepared,
     controlFile,
     logFile,
+    issueBodyFile,
     env: {
       ...process.env,
       PATH: `${stubDirectory}${path.delimiter}${process.env.PATH ?? ""}`,
@@ -5912,6 +5915,10 @@ if (exact(["auth", "status"])) {
     }
     case "SCN-E2E-ADVANCE-004": {
       const prepared = prepareDeliveryCli(this, {}, "disabled");
+      fs.writeFileSync(
+        prepared.issueBodyFile,
+        "# 既存トラッカー\n\n- [ ] 利用者の進捗を保持する\n",
+      );
       const staging = createIssueStaging(prepared.root, {
         title: "workflow-advance-sync",
         answers: answers(false),
@@ -5945,7 +5952,12 @@ if (exact(["auth", "status"])) {
       );
       assert.equal(previewOutput.sync.checkpoint, 4);
       assert.match(previewOutput.sync.bodySha256, /^[a-f0-9]{64}$/u);
-      assert.deepEqual(deliveryProviderCalls(prepared), []);
+      assert.equal(
+        deliveryProviderCalls(prepared).some(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ),
+        false,
+      );
       const checked = executeCli(
         [
           "workflow",
@@ -5973,6 +5985,12 @@ if (exact(["auth", "status"])) {
       assert.deepEqual(journal.entries.at(-1)?.artifacts, [
         "https://github.com/o/r/issues/877",
       ]);
+      const synchronizedBody = fs.readFileSync(prepared.issueBodyFile, "utf8");
+      assert.match(synchronizedBody, /利用者の進捗を保持する/u);
+      assert.match(
+        synchronizedBody,
+        /agent-skill-chain:workflow-advance:start/u,
+      );
       break;
     }
     case "SCN-E2E-ADVANCE-005": {
@@ -6159,7 +6177,12 @@ if (exact(["auth", "status"])) {
       );
       assert.notEqual(rejected.status, 0);
       assert.match(rejected.stdout + rejected.stderr, /ISO 8601 UTC/u);
-      assert.deepEqual(deliveryProviderCalls(prepared), []);
+      assert.equal(
+        deliveryProviderCalls(prepared).some(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ),
+        false,
+      );
       const journal = parseStepJournal(
         fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
       );

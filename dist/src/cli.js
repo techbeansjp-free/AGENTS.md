@@ -91,6 +91,28 @@ function workflowLifecycleApplyMode(flags) {
         throw new Error("--applyと--dry-runは同時に指定できません");
     return flags.apply === "__present__";
 }
+const WORKFLOW_ADVANCE_BODY_START = "<!-- agent-skill-chain:workflow-advance:start -->";
+const WORKFLOW_ADVANCE_BODY_END = "<!-- agent-skill-chain:workflow-advance:end -->";
+function composeWorkflowAdvanceIssueBody(existingBody, generatedBody) {
+    const existing = existingBody.replace(/\r\n/g, "\n").trimEnd();
+    const generated = generatedBody.replace(/\r\n/g, "\n").trim();
+    const starts = existing.split(WORKFLOW_ADVANCE_BODY_START).length - 1;
+    const ends = existing.split(WORKFLOW_ADVANCE_BODY_END).length - 1;
+    if (starts > 1 || ends > 1 || starts !== ends)
+        throw new Error("既存Issue本文のworkflow advance生成領域markerが不正です");
+    const block = `${WORKFLOW_ADVANCE_BODY_START}\n${generated}\n${WORKFLOW_ADVANCE_BODY_END}`;
+    if (starts === 0)
+        return existing === "" ? `${block}\n` : `${existing}\n\n${block}\n`;
+    const start = existing.indexOf(WORKFLOW_ADVANCE_BODY_START);
+    const end = existing.indexOf(WORKFLOW_ADVANCE_BODY_END);
+    if (end < start)
+        throw new Error("既存Issue本文のworkflow advance生成領域marker順序が不正です");
+    const before = existing.slice(0, start).trimEnd();
+    const after = existing
+        .slice(end + WORKFLOW_ADVANCE_BODY_END.length)
+        .trimStart();
+    return `${[before, block, after].filter((part) => part !== "").join("\n\n")}\n`;
+}
 function workflowMode(value) {
     if (value !== "quick" && value !== "full" && value !== "poc")
         throw new Error("--modeはquick、full、pocのいずれかが必要です");
@@ -3315,6 +3337,7 @@ export async function main(argv, dependencies = {}) {
             (artifacts.length > 0 || flags.evidence !== undefined))
             throw new Error("Step 4/8のworkflow advanceはartifactと同期evidenceを実観測から生成します");
         let syncPreview;
+        let previewSyncBody;
         if (plan.state === "preview" && plan.operation === "sync") {
             const issueRaw = required(flags, "issue");
             if (!/^[1-9]\d*$/u.test(issueRaw))
@@ -3331,12 +3354,19 @@ export async function main(argv, dependencies = {}) {
                     throw new Error("Step 8はStep 4で同期・記録した同じGitHub Issueだけを更新できます");
             }
             const generated = buildIssueSyncBody(staging, checkpoint, issueStagingGherkinDialect(staging));
+            const observed = github("issue.read", { repository, issue }, process.cwd());
+            previewSyncBody = composeWorkflowAdvanceIssueBody(observed.body, generated.body);
             syncPreview = {
                 repository,
                 issue,
                 tracker,
                 checkpoint,
-                bodySha256: generated.bodySha256,
+                observedBodySha256: observed.bodySha256,
+                generatedBodySha256: generated.bodySha256,
+                bodySha256: crypto
+                    .createHash("sha256")
+                    .update(previewSyncBody.trimEnd())
+                    .digest("hex"),
             };
         }
         if (!apply || plan.state !== "preview") {
@@ -3422,14 +3452,24 @@ export async function main(argv, dependencies = {}) {
             }
             const draft = buildIssueSyncBody(staging, checkpoint, issueStagingGherkinDialect(staging));
             if (syncPreview !== undefined &&
-                draft.bodySha256 !== syncPreview.bodySha256)
+                draft.bodySha256 !== syncPreview.generatedBodySha256)
                 throw new Error("workflow advanceのpreview後・writer lock取得前に同期本文が変更されました。新しいpreviewから再実行してください");
+            const observed = github("issue.read", { repository, issue: Number(issueRaw) }, process.cwd());
+            if (observed.bodySha256 !== syncPreview?.observedBodySha256)
+                throw new Error("workflow advanceのpreview後にGitHub Issue本文が変更されました。新しいpreviewから再実行してください");
+            const dispatchBody = composeWorkflowAdvanceIssueBody(observed.body, draft.body);
+            const dispatchBodySha256 = crypto
+                .createHash("sha256")
+                .update(dispatchBody.trimEnd())
+                .digest("hex");
+            if (dispatchBodySha256 !== syncPreview?.bodySha256)
+                throw new Error("workflow advanceのpreview後に同期本文が変更されました。新しいpreviewから再実行してください");
             let temporaryDirectory;
             let bodyFile;
             try {
                 temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "asc-workflow-advance-"));
                 bodyFile = path.join(temporaryDirectory, "body.md");
-                fs.writeFileSync(bodyFile, draft.body, { flag: "wx", mode: 0o600 });
+                fs.writeFileSync(bodyFile, dispatchBody, { flag: "wx", mode: 0o600 });
                 const latest = buildIssueSyncBody(staging, checkpoint, issueStagingGherkinDialect(staging));
                 if (latest.bodySha256 !== draft.bodySha256)
                     throw new Error("workflow advanceの同期直前にstagingが変更されました。新しいpreviewから再実行してください");
@@ -3452,8 +3492,8 @@ export async function main(argv, dependencies = {}) {
                         tracker,
                         checkpoint,
                         syncedAt,
-                        bodyDigest: draft.bodySha256,
-                        readBackDigest: draft.bodySha256,
+                        bodyDigest: dispatchBodySha256,
+                        readBackDigest: dispatchBodySha256,
                     });
                 const entry = {
                     step: targetStep,
@@ -3461,7 +3501,7 @@ export async function main(argv, dependencies = {}) {
                     mode: current.mode,
                     recordedAt,
                     artifacts: [synced.url],
-                    evidence: `sync read-back digest ${draft.bodySha256} matched tracker ${tracker}`,
+                    evidence: `sync read-back digest ${dispatchBodySha256} matched tracker ${tracker}`,
                 };
                 const journal = appendWorkflowJournalEntry({ staging, entry });
                 print({ ...plan, state: "applied", result: { sync: synced, journal } });
