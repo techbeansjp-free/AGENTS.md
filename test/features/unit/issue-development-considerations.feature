@@ -51,6 +51,11 @@ Feature: 開発考慮事項の理由・証拠の具体性とGherkin方言のscen
     When 方言を指定せずIssueを検証する
     Then DC-PRIVACYが重複なく1件必要なerrorで拒否する
 
+  Scenario: SCN-UNIT-ISSUEDC-011 info string付きの内側fenceは外側fenceを閉じない
+    Given 01がmarkdown fenceの中にtext fenceと参照行を持つfull stagingがある
+    When 方言を指定せずIssueを検証する
+    Then DC-PRIVACYが重複なく1件必要なerrorで拒否する
+
   Scenario: SCN-UNIT-ISSUEGHK-001 ja宣言時にシナリオkeywordでIDを検出する
     Given 受け入れ例を「シナリオ: SCN-X-001」で書いたquick stagingがある
     When 方言jaでIssueを検証する

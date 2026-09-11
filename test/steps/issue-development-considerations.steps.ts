@@ -294,6 +294,21 @@ Then("DC-UNKNOWNは未知の開発契約IDのerrorで拒否する", function () 
   );
 });
 
+Given(
+  "01がmarkdown fenceの中にtext fenceと参照行を持つfull stagingがある",
+  function () {
+    this.issuePath = writeFullStaging(this, {
+      requirements: [
+        "```markdown",
+        "```text",
+        DEVELOPMENT_CONSIDERATION_REFERENCE_LINE,
+        "```",
+        "```",
+      ].join("\n"),
+    });
+  },
+);
+
 Given("01の開発考慮事項欄が空のfull stagingがある", function () {
   this.issuePath = writeFullStaging(this, {
     requirements: "開発考慮事項は00と同じ",

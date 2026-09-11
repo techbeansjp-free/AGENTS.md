@@ -431,16 +431,21 @@ function parseDevelopmentConsiderationRows(markdown) {
          * **code fenceの中は成果物の宣言ではない**（round 1 REV-03）。説明用に
          * 参照行やDC行を引用したfenceを、参照行の宣言や差分行として読まない。
          */
-        const fence = /^\s*(`{3,}|~{3,})/u.exec(line)?.[1];
-        if (fence !== undefined) {
-            if (openFence === undefined)
-                openFence = fence;
-            else if (fence[0] === openFence[0] && fence.length >= openFence.length)
+        if (openFence !== undefined) {
+            /**
+             * 終了fenceはmarkerと空白だけの行に限る（CommonMark）。info string付きの
+             * 行を終了と読むと、外側の```` ```markdown ````の中の```` ```text ````で
+             * 外側を閉じ、以降の参照行を宣言として拾う（PR #1327の外部指摘）。
+             */
+            if (new RegExp(`^\\s*${openFence[0] === "`" ? "`" : "~"}{${openFence.length},}\\s*$`, "u").test(line))
                 openFence = undefined;
             continue;
         }
-        if (openFence !== undefined)
+        const fence = /^\s*(`{3,}|~{3,})/u.exec(line)?.[1];
+        if (fence !== undefined) {
+            openFence = fence;
             continue;
+        }
         if (line.trim() === DEVELOPMENT_CONSIDERATION_REFERENCE_LINE) {
             hasReferenceLine = true;
             continue;
