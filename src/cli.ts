@@ -2096,6 +2096,7 @@ export function writeReviewRoundDraft(
     afterCreateBeforeWrite?: (descriptor: number) => void;
     afterWriteBeforeVerify?: () => void;
     beforeCleanup?: () => void;
+    closePinnedDirectory?: (descriptor: number) => void;
   } = {},
 ): string {
   try {

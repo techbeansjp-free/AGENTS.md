@@ -747,6 +747,28 @@ Then("identity取得失敗を返し作成fileを空にして保持する", funct
   assert.equal(fs.readFileSync(this.outFile, "utf8"), "");
 });
 
+When("雛形の耐久化後にdirectory descriptor close失敗を注入する", function () {
+  const parent = this.temp("asc-review-init-directory-close-");
+  this.outFile = path.join(parent, "round.json");
+  this.writeError = undefined;
+  try {
+    this.raceParent = writeReviewRoundDraft(parent, "round.json", "{}\n", {
+      closePinnedDirectory: (descriptor) => {
+        fs.closeSync(descriptor);
+        throw new Error("directory descriptor close失敗を注入");
+      },
+    });
+  } catch (error) {
+    this.writeError = error instanceof Error ? error : new Error(String(error));
+  }
+});
+
+Then("完成済み雛形のpathを返し内容を保持する", function () {
+  assert.equal(this.writeError, undefined);
+  assert.equal(this.raceParent, this.outFile);
+  assert.equal(fs.readFileSync(this.outFile, "utf8"), "{}\n");
+});
+
 When(
   "--outをstaging外を指すsymlink配下にしてreview round --initでround 1の雛形を書く",
   async function () {

@@ -31,6 +31,8 @@ interface ExclusivePinnedWriteHooks {
   afterWriteBeforeVerify?: () => void;
   /** Test-only fault injection before rollback removes the created entry. */
   beforeCleanup?: () => void;
+  /** Test-only replacement for the final pinned-directory close. */
+  closePinnedDirectory?: (descriptor: number) => void;
 }
 
 export class ExclusivePinnedWriteError extends Error {
@@ -181,8 +183,14 @@ export function writeFileExclusivePinned(
     fsyncDirectory(pinned);
     fs.closeSync(descriptor);
     descriptor = undefined;
-    fs.closeSync(pinned.descriptor);
-    return path.join(pinned.path, leaf);
+    const written = path.join(pinned.path, leaf);
+    try {
+      (hooks.closePinnedDirectory ?? fs.closeSync)(pinned.descriptor);
+    } catch {
+      // File and directory contents are already durable. A descriptor cleanup
+      // failure cannot make the completed draft uncertain or roll it back.
+    }
+    return written;
   } catch (error) {
     failure = error;
   }

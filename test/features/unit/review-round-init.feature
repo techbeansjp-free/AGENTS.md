@@ -97,6 +97,11 @@ Feature: review round雛形と契約の露出
     When 排他的作成直後にidentity取得失敗を注入する
     Then identity取得失敗を返し作成fileを空にして保持する
 
+  Scenario: SCN-UNIT-REVINIT-019 耐久化後のdirectory descriptor close失敗は成功を覆さない
+    Given 初回candidateを持つstagingがある
+    When 雛形の耐久化後にdirectory descriptor close失敗を注入する
+    Then 完成済み雛形のpathを返し内容を保持する
+
   Scenario: SCN-UNIT-REVINIT-012 差し替えが無ければ検査した実体の親へ雛形を書く
     Given 初回candidateを持つstagingがある
     When --outをstaging外を指すsymlink配下にしてreview round --initでround 1の雛形を書く
