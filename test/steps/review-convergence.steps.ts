@@ -138,6 +138,11 @@ function createFixture(
     now: instant,
     requestedMode: "quick",
   }).path;
+  for (const step of [1, 4, 9])
+    appendWorkflowJournalEntry({
+      staging: world.staging,
+      entry: workflowEntry(step, initialHead),
+    });
   world.session = recordReviewRound({
     staging: world.staging,
     round: roundInput({
@@ -507,7 +512,10 @@ Then("review session更新は同じHEADと空fixedDiffで拒否される", funct
   assert.match(this.error.message, /異なるcandidate HEAD.*fixedDiff/u);
 });
 
-function workflowEntry(step: number): StepJournalEntry {
+function workflowEntry(
+  step: number,
+  implementationHeadSha?: string,
+): StepJournalEntry {
   const definition = WORKFLOW_STEPS.find(
     (candidate) => candidate.step === step,
   );
@@ -519,6 +527,7 @@ function workflowEntry(step: number): StepJournalEntry {
     recordedAt: instant.toISOString(),
     artifacts: [`artifact-${step}`],
     evidence: `step ${step}の固定証拠`,
+    ...(step === 9 ? { implementationHeadSha } : {}),
   };
 }
 
@@ -536,11 +545,6 @@ Given(
   "Step 9まで進んだquick stagingと収束済みreview sessionがある",
   function () {
     createFixture(this, false);
-    for (const step of [1, 4, 9])
-      appendWorkflowJournalEntry({
-        staging: this.staging,
-        entry: workflowEntry(step),
-      });
     assert.equal(this.session.status, "converged");
   },
 );
@@ -671,6 +675,11 @@ Given(
       now: instant,
       requestedMode: "quick",
     }).path;
+    for (const step of [1, 4, 9])
+      appendWorkflowJournalEntry({
+        staging: this.staging,
+        entry: workflowEntry(step, initialHead),
+      });
     this.session = recordReviewRound({
       staging: this.staging,
       round: roundInput({
@@ -681,11 +690,6 @@ Given(
         findings: [],
       }),
     });
-    for (const step of [1, 4, 9])
-      appendWorkflowJournalEntry({
-        staging: this.staging,
-        entry: workflowEntry(step),
-      });
     this.cliStatus = await captureMain([
       "workflow",
       "record",
