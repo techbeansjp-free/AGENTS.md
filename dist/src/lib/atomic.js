@@ -190,6 +190,9 @@ export function publishDirectoryAtomic(destination, writer) {
     }
 }
 export function writeFileAtomic(destination, contents, options = {}) {
+    const fileMode = options.fileMode ?? 0o600;
+    if (!Number.isInteger(fileMode) || fileMode < 0 || fileMode > 0o777)
+        throw new Error("atomic writeのfile modeが不正です");
     const resolvedDestination = path.resolve(destination);
     const destinationDirectory = path.dirname(resolvedDestination);
     fs.mkdirSync(destinationDirectory, { recursive: true });
@@ -219,7 +222,8 @@ export function writeFileAtomic(destination, contents, options = {}) {
         temporaryDescriptor = fs.openSync(temporary, fs.constants.O_WRONLY |
             fs.constants.O_CREAT |
             fs.constants.O_EXCL |
-            fs.constants.O_NOFOLLOW, 0o600);
+            fs.constants.O_NOFOLLOW, fileMode);
+        fs.fchmodSync(temporaryDescriptor, fileMode);
         writeFully(temporaryDescriptor, expected);
         fs.fsyncSync(temporaryDescriptor);
         fs.closeSync(temporaryDescriptor);

@@ -8,6 +8,7 @@ import { parsePocDeclaration } from "./domain/workflow.js";
 import { bootstrapProject, validateSpecs, } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
+import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
 import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, validateReviewArtifactStructure, } from "./domain/review-artifact.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
@@ -4679,6 +4680,74 @@ export async function main(argv, dependencies = {}) {
             : previewReviewRound({ staging, round });
         print({ applied: apply, ...state });
         return 0;
+    }
+    if (command === "review" && subcommand === "progress") {
+        const { flags, positionals } = parse(rest);
+        const allowed = [
+            "staging",
+            "operation",
+            "task",
+            "state",
+            "recorded-at",
+            "expected-journal-digest",
+            "expected-target-digest",
+            "apply",
+        ];
+        const unknown = Object.keys(flags).filter((flag) => !allowed.includes(flag));
+        if (unknown.length > 0)
+            throw new Error(`review progressの未知optionです: --${unknown.join(", --")}`);
+        if (positionals.length > 0)
+            throw new Error("review progressに位置引数は使用できません");
+        const staging = required(flags, "staging");
+        const operation = required(flags, "operation");
+        const apply = flags.apply === true;
+        if (flags.apply !== undefined && !apply)
+            throw new Error("review progress --applyに値は指定できません");
+        const expectedJournalDigest = typeof flags["expected-journal-digest"] === "string"
+            ? flags["expected-journal-digest"]
+            : null;
+        if (operation === "append") {
+            const state = required(flags, "state");
+            if (!["planned", "started", "completed", "blocked"].includes(state))
+                throw new Error("review progress --stateが不正です");
+            print(appendReviewProgress({
+                staging,
+                taskId: required(flags, "task"),
+                state: state,
+                recordedAt: typeof flags["recorded-at"] === "string"
+                    ? flags["recorded-at"]
+                    : new Date().toISOString(),
+                expectedDigest: expectedJournalDigest,
+                apply,
+            }));
+            return 0;
+        }
+        if (operation === "seal") {
+            print(sealReviewProgress({
+                staging,
+                sealedAt: typeof flags["recorded-at"] === "string"
+                    ? flags["recorded-at"]
+                    : new Date().toISOString(),
+                expectedDigest: expectedJournalDigest,
+                apply,
+            }));
+            return 0;
+        }
+        if (operation === "project") {
+            print(projectReviewProgress({
+                staging,
+                expectedTargetDigest: required(flags, "expected-target-digest"),
+                apply,
+            }));
+            return 0;
+        }
+        if (operation === "verify") {
+            if (apply)
+                throw new Error("review progress verifyはread-onlyです");
+            print(verifyStoredReviewProgress(staging));
+            return 0;
+        }
+        throw new Error("review progress --operationはappend|seal|project|verifyが必要です");
     }
     if (command === "review" && subcommand === "evidence") {
         const { flags } = parse(rest);

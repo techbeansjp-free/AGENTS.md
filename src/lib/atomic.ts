@@ -3,6 +3,8 @@ import path from "node:path";
 import crypto from "node:crypto";
 
 interface AtomicWriteOptions {
+  /** Exact permission bits for the published regular file. Defaults to 0600. */
+  fileMode?: number;
   /**
    * Keep an interrupted temporary file outside a digest-controlled target
    * directory. The directory must be on the same filesystem as destination.
@@ -277,6 +279,9 @@ export function writeFileAtomic(
   contents: string,
   options: AtomicWriteOptions = {},
 ): void {
+  const fileMode = options.fileMode ?? 0o600;
+  if (!Number.isInteger(fileMode) || fileMode < 0 || fileMode > 0o777)
+    throw new Error("atomic writeのfile modeが不正です");
   const resolvedDestination = path.resolve(destination);
   const destinationDirectory = path.dirname(resolvedDestination);
   fs.mkdirSync(destinationDirectory, { recursive: true });
@@ -312,8 +317,9 @@ export function writeFileAtomic(
         fs.constants.O_CREAT |
         fs.constants.O_EXCL |
         fs.constants.O_NOFOLLOW,
-      0o600,
+      fileMode,
     );
+    fs.fchmodSync(temporaryDescriptor, fileMode);
     writeFully(temporaryDescriptor, expected);
     fs.fsyncSync(temporaryDescriptor);
     fs.closeSync(temporaryDescriptor);
