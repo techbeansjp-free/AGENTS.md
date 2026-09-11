@@ -299,6 +299,7 @@ export const COMMAND_USAGE = Object.freeze([
         optionalFlags: [
             optional("recorded-at", "ISO8601", "記録時刻", "実行時刻"),
             optional("post-terminal-intake", "", "Step 11記録後に外部reviewer指摘を同じPRで取り込んだroundとして記録する", "通常のStep記録"),
+            optional("reconfirm", "", "後続Step記録後に上流Step 1〜9を再確定した事実を、順序判定から外すentryとして記録する。同じStepの通常記録が先行しているときだけ受理する", "通常のStep記録"),
         ],
         example: "npx agent-skill-chain workflow record --staging=.asc/886 --step=4 --evidence='sync digest 0000000000000000000000000000000000000000000000000000000000000000' --artifact=src/cli-usage.ts",
         acceptsSpaceSeparatedFlags: true,

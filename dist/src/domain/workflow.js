@@ -138,6 +138,7 @@ const JOURNAL_FIELDS = new Set([
     "reviewSession",
     "humanOverride",
     "postTerminalIntake",
+    "reconfirmation",
 ]);
 const POC_OBSERVATION_BINDING_FIELDS = new Set(["headSha", "evidenceDigest"]);
 const REVIEW_SESSION_BINDING_FIELDS = new Set([
@@ -327,6 +328,15 @@ function parseJournalEntry(value, line) {
         else
             postTerminalIntake = true;
     }
+    let reconfirmation;
+    if (value.reconfirmation !== undefined) {
+        if (value.reconfirmation !== true)
+            errors.push(`${label}のreconfirmationはtrueだけを受理します`);
+        else if (Number(value.step) < 1 || Number(value.step) > 9)
+            errors.push(`${label}のreconfirmationはStep 1〜9にだけ指定できます`);
+        else
+            reconfirmation = true;
+    }
     if (errors.length > 0)
         return { errors };
     return {
@@ -341,6 +351,7 @@ function parseJournalEntry(value, line) {
             ...(reviewSession ? { reviewSession } : {}),
             ...(parsedOverride.value ? { humanOverride: parsedOverride.value } : {}),
             ...(postTerminalIntake ? { postTerminalIntake } : {}),
+            ...(reconfirmation ? { reconfirmation } : {}),
         },
         errors,
     };
@@ -397,10 +408,26 @@ export function validateStepJournal(input) {
      * 後に現れる。順序判定へ入れるとStep 11がout-of-orderになる。**外すのは順序の
      * 判定だけであり、記録は残る**（Issue #1194）。
      */
+    /**
+     * **上流再確定entryも順序判定から外す**（Issue #1342）。外すのは順序の判定だけで、
+     * 記録は残る。flagだけで過去Stepを後付けする抜け道にしないため、同じStepの
+     * 通常entryが先行していることを別途要求する。
+     */
     input.entries.forEach((entry, index) => {
-        if (entry.postTerminalIntake)
+        if (entry.postTerminalIntake || entry.reconfirmation)
             return;
         lastByStep.set(entry.step, { entry, index });
+    });
+    input.entries.forEach((entry, index) => {
+        if (!entry.reconfirmation)
+            return;
+        const preceded = input.entries
+            .slice(0, index)
+            .some((candidate) => candidate.step === entry.step &&
+            !candidate.reconfirmation &&
+            !candidate.postTerminalIntake);
+        if (!preceded)
+            errors.push(`Step ${entry.step}の上流再確定entryに先行する通常entryがありません`);
     });
     const terminalIndex = input.entries.findIndex((entry) => entry.step === 11);
     input.entries.forEach((entry, index) => {
