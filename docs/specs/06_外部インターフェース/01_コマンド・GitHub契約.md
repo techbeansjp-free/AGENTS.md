@@ -146,7 +146,11 @@ squash/rebaseの終端検証は、固定base..headからsource commit数を1〜2
 
 外部authorityを要しないpolicy CLIはofflineで動作する。PR CIのexplicit authority検証などGitHub必須gateは接続障害・不完全な観測時に`pending`としてfail-closed（exit非zero）とし、local安全結果は保持して成功扱いしない。観測済みtupleと入力の不一致は`rejected`、検証中のtuple変更は`pending`として再実行を案内する。
 
-`issue sync`はquick・pocのStep 4またはfullのStep 8という最終同期で`--staging-path --checkpoint`を併記できる。GitHub adapterの本文書き込み後再読取が一致し、同期前後のlocal body digestも一致した場合だけ、tracker URL、同期時刻、checkpoint、期待・再読取digestをstaging記録へ保存して再読取する。`promotion-active`のStep 4と8は、記録済みabsolute GitHub tracker URLが`--repo`と`--issue`から導くURLに完全一致する場合だけ元Issueへの同期を許可する。この拘束はGitHub副作用前に検証し、Step 8の同期記録更新時にも再検証する。`promotion-active`のStep 4では`--staging-path --checkpoint=4`を検証専用入力として要求するが、fullの最終checkpointではないため同期記録を更新しない。通常の`local-active` full Step 4では従来どおり両引数を渡さない。
+`issue sync`はquick・pocのStep 4またはfullのStep 8という最終同期で`--staging-path --checkpoint`を併記できる。GitHub adapterの本文書き込み後再読取が一致し、同期前後のlocal body digestも一致した場合だけ、tracker URL、同期時刻、checkpoint、期待・再読取digestをstaging記録へ保存して再読取する。`promotion-active`のStep 4と8は、記録済みabsolute GitHub tracker URLが`--repo`と`--issue`から導くURLに完全一致する場合だけ元Issueへの同期を許可する。この拘束はGitHub副作用前に検証し、Step 8の同期記録更新時にも再検証する。`promotion-active`のStep 4では`--staging-path --checkpoint=4`を検証専用入力として要求するが、fullの最終checkpointではないため同期記録を更新しない。通常の`local-active` full Step 4も、生成経路では両引数を本文生成専用入力として受け取るが同期記録を更新しない。`--body-file`経路を選ぶ場合は従来どおり両引数を渡さない。
+
+`issue sync`の本文入力は`--body-file`または`--generate-body`のexactly oneとする。生成経路は`--staging-path --checkpoint`を必須とし、quick・pocのStep 4では00、fullのStep 4では00・01、fullのStep 8では00〜03を規定順で連結する。通常の`local-active` full Step 4で生成経路を使った場合も同期記録を更新せず、stagingのwriter lock内で生成digestの不変を再検証する。
+
+`review artifact --init --staging=<path> --base=<sha> --head=<sha> [--out=<path>]`は、保存済みstaging digestと実Gitの`base..head`変更pathを04へ充填する。`head`はcurrent HEADの完全SHAに一致させ、全pathを個別監査表へ残す。既定出力はcanonical Issue番号から`docs/reviews/<issue>_レビュー.md`とし、repository外、staging内、既存path、symlink祖先を拒否して排他的に作成する。review判定とtest結果はreviewerが記録するまで未確定である。
 
 `pr create --dry-run`はtrusted Git policyとlocal review/test/spec/ownership evidenceの構造を判定するが、GitHub authorityをattestしない`unverified-preview`とし、GitHub/`gh`を呼ばない。`--apply`は明示authorizationを必須とし、唯一のGitHub adapterが作成直前にexact repositoryのwrite authority、remote head/base refのOIDを観測し、作成後のrepository/base/head/head OID/base OIDまで再読取する。local evidence JSONのprovenance自己申告をauthorityとして扱わない。
 

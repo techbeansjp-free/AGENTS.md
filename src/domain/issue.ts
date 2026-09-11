@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { safeSlug } from "../lib/security.js";
 import { publishDirectoryAtomic, writeFileAtomic } from "../lib/atomic.js";
 import { findPackageRoot } from "../lib/package-root.js";
@@ -31,6 +32,7 @@ import {
   WORKFLOW_STEPS,
   type StepJournalEntry,
 } from "./workflow.js";
+import type { ProjectChoices } from "../types.js";
 
 const packageRoot = findPackageRoot(import.meta.url);
 const templateRoot = path.join(
@@ -46,6 +48,26 @@ const FULL_FILES = {
 };
 
 export type IssueValidationStage = "requirements" | "design";
+
+export interface IssueSyncBodyDraft {
+  readonly body: string;
+  readonly bodySha256: string;
+  readonly artifacts: readonly string[];
+  readonly mode: Mode;
+  readonly checkpoint: 4 | 8;
+}
+
+/** mode/checkpointごとの同期対象を、CLIとtestが共有できる形で返す。 */
+export function issueSyncArtifactNames(
+  mode: Mode,
+  checkpoint: 4 | 8,
+): readonly string[] {
+  if (mode === "full")
+    return checkpoint === 8
+      ? ["00_要求定義.md", "01_要件定義.md", "02_設計.md", "03_実装計画.md"]
+      : ["00_要求定義.md", "01_要件定義.md"];
+  return ["00_要求定義.md"];
+}
 
 /**
  * fenced blockとinline codeを取り除く。**行構造は保つ。**見出しの行全体一致に使うため、
@@ -385,6 +407,8 @@ function requirementDocument(
   title: string,
   answers: Record<string, ModeAnswer>,
   poc?: PocDeclaration,
+  now?: Date,
+  projectChoices?: ProjectChoices,
 ): string {
   const name =
     mode === "poc"
@@ -394,6 +418,10 @@ function requirementDocument(
         : "00_要求定義_full.md";
   let content = fs.readFileSync(path.join(templateRoot, name), "utf8");
   content = replaceTwoColumnRow(content, "件名", escapeCell(title));
+  content = replaceTwoColumnRow(content, "正本", "未同期");
+  if (now)
+    content = replaceTwoColumnRow(content, "作成・更新日", now.toISOString());
+  content = replaceTwoColumnRow(content, "作成・確認者", "AIエージェント");
   for (const id of QUESTIONS) {
     const item = answers?.[id];
     const answer =
@@ -462,6 +490,7 @@ function requirementDocument(
       );
     }
   }
+  content = prefillDevelopmentConsiderations(content, projectChoices);
   return content;
 }
 
@@ -490,6 +519,112 @@ function escapeCell(value: unknown): string {
     .trim();
 }
 
+function replaceFiveColumnRow(
+  content: string,
+  id: string,
+  values: readonly [string, string, string, string],
+): string {
+  return content.replace(
+    new RegExp(`^\\|[ \\t]*${escapeRegExp(id)}[ \\t]*\\|[^\\n]*$`, "mu"),
+    `| ${id} | ${values.map(escapeCell).join(" | ")} |`,
+  );
+}
+
+function prefillRoutingRows(
+  content: string,
+  choices: ProjectChoices | undefined,
+  kind: "design" | "plan",
+): string {
+  if (typeof choices?.modelMapping !== "object") return content;
+  const roles = choices.modelMapping.roles;
+  const fallback = `${choices.modelMapping.fallback.when}: ${choices.modelMapping.fallback.role}/${choices.modelMapping.fallback.modelSelection}`;
+  const row = (role: "implementer" | "reviewer", task: string): string => {
+    const selected = roles[role];
+    return kind === "design"
+      ? `| ${role} | project choiceのrole contract | ${role === "reviewer" ? "肯定・敵対review、finding分類" : "failing test、test result"} | critical | ${escapeCell(selected.provider)} | ${escapeCell(`${selected.logicalTier}/${selected.reasoningEffort}/${selected.speed}`)} | ${escapeCell(fallback)} | implementerとreviewerのprovider・context差を記録 |`
+      : `| ${task} | ${role} | project choiceのrole contract | ${role === "reviewer" ? "肯定・敵対review、finding分類" : "failing test、test result"} | critical | ${escapeCell(selected.provider)} | ${escapeCell(`${selected.logicalTier}/${selected.reasoningEffort}/${selected.speed}`)} | ${escapeCell(fallback)} | implementerとreviewerのprovider・context差を記録 |`;
+  };
+  const replacement = [
+    row("implementer", "実装・検証"),
+    row("reviewer", "独立review"),
+  ].join("\n");
+  return content
+    .replace(/^\| （6 roleのいずれか） \|[^\n]*$/mu, replacement)
+    .replace(/^\| T01 \| （6 roleのいずれか） \|[^\n]*$/mu, replacement);
+}
+
+function prefillDevelopmentConsiderations(
+  content: string,
+  choices: ProjectChoices | undefined,
+): string {
+  if (!choices) return content;
+  const decisions = [
+    ["DC-PRIVACY", choices.capabilities.privacySecurity],
+    ["DC-OBSERVABILITY", choices.capabilities.observability],
+    ["DC-UX", choices.capabilities.humanCenteredUi],
+    ["DC-TOKENS", choices.capabilities.designTokens],
+  ] as const;
+  for (const [id, decision] of decisions) {
+    const current = new RegExp(`^\\|[ \\t]*${id}[ \\t]*\\|[^\\n]*$`, "mu").exec(
+      content,
+    )?.[0];
+    if (!current) continue;
+    const cells = current.split("|").map((cell) => cell.trim());
+    const evidence =
+      decision.status === "not-applicable"
+        ? decision.evidence
+        : (cells[5] ?? "タスク固有証拠を記入する");
+    content = replaceFiveColumnRow(content, id, [
+      cells[2] ?? id,
+      decision.status,
+      decision.reason,
+      evidence,
+    ]);
+  }
+  return content;
+}
+
+function prefillFullArtifacts(
+  directory: string,
+  input: {
+    title: string;
+    now: Date;
+    root: string;
+    projectChoices?: ProjectChoices;
+  },
+): void {
+  const tracker = "未同期";
+  const createdAt = input.now.toISOString();
+  const common: Record<string, string> = {
+    件名: escapeCell(input.title),
+    正本: tracker,
+    "作成・更新日": createdAt,
+  };
+  for (const name of Object.keys(FULL_FILES)) {
+    const file = path.join(directory, name);
+    let content = fs.readFileSync(file, "utf8");
+    for (const [label, value] of Object.entries(common))
+      content = replaceTwoColumnRow(content, label, value);
+    content = replaceTwoColumnRow(
+      content,
+      "件名・正本",
+      `${escapeCell(input.title)} / ${tracker}`,
+    );
+    if (name === "02_設計.md")
+      content = prefillRoutingRows(content, input.projectChoices, "design");
+    if (name === "03_実装計画.md") {
+      content = replaceTwoColumnRow(
+        content,
+        "専用ブランチ・worktree",
+        path.resolve(input.root),
+      );
+      content = prefillRoutingRows(content, input.projectChoices, "plan");
+    }
+    content = prefillDevelopmentConsiderations(content, input.projectChoices);
+    fs.writeFileSync(file, content, { flag: "w" });
+  }
+}
+
 export function createIssueStaging(
   root: string,
   options: {
@@ -499,6 +634,7 @@ export function createIssueStaging(
     requestedMode?: string;
     poc?: PocDeclaration;
     changedFiles?: string[];
+    projectChoices?: ProjectChoices;
   },
 ) {
   const slug = safeSlug(options.title);
@@ -523,6 +659,8 @@ export function createIssueStaging(
         options.title,
         options.answers,
         options.poc,
+        options.now,
+        options.projectChoices,
       ),
       { flag: "wx" },
     );
@@ -576,6 +714,12 @@ export function createIssueStaging(
           path.join(temporary, name),
           fs.constants.COPYFILE_EXCL,
         );
+      prefillFullArtifacts(temporary, {
+        title: options.title,
+        now: options.now,
+        root,
+        projectChoices: options.projectChoices,
+      });
     }
     const artifacts = listStagingArtifacts(temporary);
     const record: StoredStagingRecord = {
@@ -605,6 +749,55 @@ export function createIssueStaging(
     durable: false,
     synced: false,
   };
+}
+
+/** 検証済みstaging成果物をmode/checkpointの規定順で連結する。外部副作用は持たない。 */
+export function buildIssueSyncBody(
+  stagingInput: string,
+  checkpoint: 4 | 8,
+  gherkinDialect?: string,
+): IssueSyncBodyDraft {
+  const staging = path.resolve(stagingInput);
+  const record = readStoredStagingRecord(staging);
+  const observedArtifacts = listStagingArtifacts(staging);
+  if (
+    JSON.stringify(record.artifacts) !== JSON.stringify(observedArtifacts) ||
+    record.digest !== calculateStagingDigest(staging, observedArtifacts)
+  )
+    throw new Error(
+      "同期本文生成前のstaging成果物一覧またはdigestが一致しません。最新Stepをworkflow recordで再記録してください",
+    );
+  if (record.mode === "full" ? ![4, 8].includes(checkpoint) : checkpoint !== 4)
+    throw new Error(
+      `同期本文のcheckpointがmode=${record.mode}と一致しません: ${checkpoint}`,
+    );
+  const validation = validateIssue(staging, {
+    stage:
+      record.mode === "full"
+        ? checkpoint === 8
+          ? "design"
+          : "requirements"
+        : undefined,
+    gherkinDialect,
+  });
+  if (!validation.valid)
+    throw new Error(
+      `同期本文の成果物が未検証です: ${validation.errors.join("; ")}`,
+    );
+  const artifacts = issueSyncArtifactNames(record.mode, checkpoint);
+  const body = `${artifacts
+    .map((name) => fs.readFileSync(path.join(staging, name), "utf8").trimEnd())
+    .join("\n\n---\n\n")}\n`;
+  return Object.freeze({
+    body,
+    bodySha256: crypto
+      .createHash("sha256")
+      .update(body.trimEnd())
+      .digest("hex"),
+    artifacts: Object.freeze(artifacts),
+    mode: record.mode,
+    checkpoint,
+  });
 }
 
 /**

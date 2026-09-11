@@ -579,13 +579,38 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     requiredFlags: [
       flag("issue", "整数", "対象Issue番号"),
       flag("repo", "owner/name", "対象repository"),
-      flag("body-file", "path", "反映する本文file"),
     ],
-    conditionalFlags: [],
+    conditionalFlags: [
+      conditional(
+        "body-file",
+        "path",
+        "反映する本文file",
+        "--generate-bodyを指定しないとき",
+        (provided) => provided["generate-body"] === undefined,
+      ),
+      conditional(
+        "staging-path",
+        "path",
+        "同期本文を生成するIssue staging",
+        "--generate-bodyを指定するとき",
+        (provided) => provided["generate-body"] !== undefined,
+      ),
+      conditional(
+        "checkpoint",
+        "4|8",
+        "mode別の同期checkpoint",
+        "--generate-bodyを指定するとき",
+        (provided) => provided["generate-body"] !== undefined,
+      ),
+    ],
     optionalFlags: [
       optional("authorize", "approved", "書き込みの承認", "承認なし"),
-      optional("checkpoint", "path", "checkpoint file", "checkpointなし"),
-      optional("staging-path", "path", "staging directory", "既定path"),
+      optional(
+        "generate-body",
+        "",
+        "staging成果物から本文を生成する",
+        "生成しない",
+      ),
       optional("synced-at", "ISO8601", "同期時刻", "実行時刻"),
       ...APPLY_MODE,
     ],
@@ -640,6 +665,34 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       optional("review", "path", "review成果物", "review指定なし"),
     ],
     example: "npx agent-skill-chain spec validate --root=.",
+  },
+  {
+    command: "review",
+    subcommand: "artifact",
+    summary: "Git差分とstagingから未承認のreview artifact雛形を生成する",
+    requiredFlags: [
+      flag("staging", "path", "対象Issue staging"),
+      flag("base", "sha", "比較基点commit"),
+      flag("head", "sha", "current H_impl commit"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [
+      ROOT_FLAG,
+      optional(
+        "init",
+        "",
+        "§0・§1・個別監査表・§7を初期化する。実行には--initが必要です",
+        "--initなしの実行は拒否する",
+      ),
+      optional(
+        "out",
+        "path",
+        "新規artifact出力先",
+        "tracker番号からdocs/reviewsへ導出",
+      ),
+    ],
+    example:
+      "npx agent-skill-chain review artifact --init --staging=.agent-skill-chain/tmp/issues/20260911_change --base=0123456789012345678901234567890123456789 --head=abcdefabcdefabcdefabcdefabcdefabcdefabcd --out=docs/reviews/1333_レビュー.md",
   },
   {
     command: "review",
