@@ -692,13 +692,16 @@ When("作成後とcleanup直前に親directoryを2回差し替える", function 
   }
 });
 
-Then("親差し替えを拒否し作成fileを消して無関係fileを保持する", function () {
+Then("親差し替えを拒否し作成fileを空にして無関係fileを保持する", function () {
   assert.ok(this.writeError, "拒否を期待した");
-  assert.match(this.writeError.message, /検査後に差し替えられました/u);
+  assert.match(this.writeError.message, /作成descriptorを空にしました/u);
   assert.equal(fs.existsSync(path.join(this.staging, "round.json")), false);
   assert.equal(
-    fs.existsSync(path.join(`${this.raceParent}.moved`, "round.json")),
-    false,
+    fs.readFileSync(
+      path.join(`${this.raceParent}.moved`, "round.json"),
+      "utf8",
+    ),
+    "",
   );
   assert.equal(fs.readFileSync(this.unrelatedFile, "utf8"), "unrelated\n");
 });
@@ -719,9 +722,29 @@ When("排他的作成後に部分書込み失敗を注入する", function () {
   }
 });
 
-Then("書込み失敗を返し部分fileを残さない", function () {
-  assert.match(this.writeError?.message ?? "", /部分書込み失敗/u);
-  assert.equal(fs.existsSync(this.outFile), false);
+Then("書込み失敗を返し作成fileを空にして保持する", function () {
+  assert.match(this.writeError?.message ?? "", /作成descriptorを空にしました/u);
+  assert.equal(fs.readFileSync(this.outFile, "utf8"), "");
+});
+
+When("排他的作成直後にidentity取得失敗を注入する", function () {
+  const parent = this.temp("asc-review-init-identity-failure-");
+  this.outFile = path.join(parent, "round.json");
+  this.writeError = undefined;
+  try {
+    writeReviewRoundDraft(parent, "round.json", "{}\n", {
+      afterCreateBeforeIdentity: () => {
+        throw new Error("identity取得失敗を注入");
+      },
+    });
+  } catch (error) {
+    this.writeError = error instanceof Error ? error : new Error(String(error));
+  }
+});
+
+Then("identity取得失敗を返し作成fileを空にして保持する", function () {
+  assert.match(this.writeError?.message ?? "", /作成descriptorを空にしました/u);
+  assert.equal(fs.readFileSync(this.outFile, "utf8"), "");
 });
 
 When(

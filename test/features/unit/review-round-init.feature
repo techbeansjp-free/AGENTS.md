@@ -85,12 +85,17 @@ Feature: review round雛形と契約の露出
   Scenario: SCN-UNIT-REVINIT-015 再検証後に親を再差し替えても無関係fileを削除しない
     Given 初回candidateを持つstagingがある
     When 作成後とcleanup直前に親directoryを2回差し替える
-    Then 親差し替えを拒否し作成fileを消して無関係fileを保持する
+    Then 親差し替えを拒否し作成fileを空にして無関係fileを保持する
 
-  Scenario: SCN-UNIT-REVINIT-017 作成後の書込み失敗で部分fileを残さない
+  Scenario: SCN-UNIT-REVINIT-017 作成後の書込み失敗で部分内容を残さない
     Given 初回candidateを持つstagingがある
     When 排他的作成後に部分書込み失敗を注入する
-    Then 書込み失敗を返し部分fileを残さない
+    Then 書込み失敗を返し作成fileを空にして保持する
+
+  Scenario: SCN-UNIT-REVINIT-018 作成直後のidentity取得失敗も残存を明示する
+    Given 初回candidateを持つstagingがある
+    When 排他的作成直後にidentity取得失敗を注入する
+    Then identity取得失敗を返し作成fileを空にして保持する
 
   Scenario: SCN-UNIT-REVINIT-012 差し替えが無ければ検査した実体の親へ雛形を書く
     Given 初回candidateを持つstagingがある

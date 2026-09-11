@@ -134,7 +134,11 @@ import {
   MINIMUM_GIT_VERSION,
 } from "./lib/executable-version.js";
 import { git } from "./lib/process.js";
-import { writeFileAtomic, writeFileExclusivePinned } from "./lib/atomic.js";
+import {
+  ExclusivePinnedWriteError,
+  writeFileAtomic,
+  writeFileExclusivePinned,
+} from "./lib/atomic.js";
 import { validateRepositoryConformance } from "./domain/conformance.js";
 import {
   parseJsonStrict,
@@ -2077,10 +2081,10 @@ function issueStagingGherkinDialect(issuePath: string): string | undefined {
  * **雛形は検査した実体の親directoryにだけ書く**（Issue #1329、CWE-367）。
  *
  * 親directoryをdescriptorで固定し、descriptor相対pathへ排他的に作成する。
- * 作成後の失敗時も同じdescriptorと作成inodeを確認して自分が作ったfileだけを
- * 消す。descriptor相対pathを安全に利用できない環境では書き込み前にfail closed
- * とする。各hookはtestが作成前・作成後・検証前・cleanup前の競合や失敗を
- * 注入するための接合部で、CLIは渡さない。
+ * 作成後の失敗時はpathnameで削除せず、まだ開いている作成descriptorを空にして
+ * entryの残存を明示する。これにより検査とunlinkの間に差し替えられた無関係fileを
+ * 削除しない。descriptor相対pathを安全に利用できない環境では書き込み前に
+ * fail closedとする。各hookはtestが競合や失敗を注入するための接合部で、CLIは渡さない。
  */
 export function writeReviewRoundDraft(
   realParent: string,
@@ -2088,6 +2092,7 @@ export function writeReviewRoundDraft(
   content: string,
   hooks: {
     beforeWrite?: () => void;
+    afterCreateBeforeIdentity?: (descriptor: number) => void;
     afterCreateBeforeWrite?: (descriptor: number) => void;
     afterWriteBeforeVerify?: () => void;
     beforeCleanup?: () => void;
@@ -2096,6 +2101,11 @@ export function writeReviewRoundDraft(
   try {
     return writeFileExclusivePinned(realParent, basename, content, hooks);
   } catch (error) {
+    if (error instanceof ExclusivePinnedWriteError)
+      throw new Error(
+        `review round --initの雛形作成後に失敗しました。無関係fileの誤削除を避けるためpathname削除は行わず、作成descriptorを${error.createdEntrySanitized ? "空にしました" : "空にできませんでした"}。作成entryが残存している可能性があります。指定--outは差し替え後の別entryを指す可能性があるため、削除対象を確認してください`,
+        { cause: error },
+      );
     if (
       error instanceof Error &&
       /atomic write directoryが実行中に変更されました/u.test(error.message)

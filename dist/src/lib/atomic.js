@@ -1,6 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+export class ExclusivePinnedWriteError extends Error {
+    createdEntrySanitized;
+    constructor(createdEntrySanitized, options) {
+        super(`exclusive file作成後に失敗しました。無関係entryの誤削除を避けるためpathname削除は行わず、作成descriptorを${createdEntrySanitized ? "空にしました" : "空にできませんでした"}。作成entryが残存している可能性があります`, options);
+        this.createdEntrySanitized = createdEntrySanitized;
+        this.name = "ExclusivePinnedWriteError";
+    }
+}
 function pinDirectory(directory) {
     const resolved = path.resolve(directory);
     const directoryFlags = fs.constants.O_RDONLY |
@@ -71,28 +79,31 @@ function descriptorDirectoryPath(directory) {
 /**
  * Publish a new file without ever resolving the caller-controlled parent again.
  *
- * The directory descriptor pins the object used by create and rollback. If the
+ * The directory descriptor pins the object used by create and sanitization. If the
  * named parent moves, both operations still address the pinned directory. A
  * platform without a descriptor-relative path surface is rejected before the
- * destination entry is created.
+ * destination entry is created. A post-create failure truncates the still-open
+ * descriptor and retains its directory entry: unlink-by-name cannot atomically
+ * bind an inode and could delete an unrelated replacement.
  */
 export function writeFileExclusivePinned(directory, leaf, contents, hooks = {}) {
     if (leaf !== path.basename(leaf) || leaf === "." || leaf === "..")
         throw new Error("exclusive file作成のleafが不正です");
     const pinned = pinDirectory(directory);
     let descriptor;
-    let createdIdentity;
+    let created = false;
     let failure;
-    let pinnedTarget = "";
     try {
-        pinnedTarget = path.join(descriptorDirectoryPath(pinned), leaf);
+        const pinnedTarget = path.join(descriptorDirectoryPath(pinned), leaf);
         hooks.beforeWrite?.();
         assertPinnedDirectory(pinned);
         descriptor = fs.openSync(pinnedTarget, fs.constants.O_WRONLY |
             fs.constants.O_CREAT |
             fs.constants.O_EXCL |
             fs.constants.O_NOFOLLOW, 0o600);
-        createdIdentity = fs.fstatSync(descriptor);
+        created = true;
+        hooks.afterCreateBeforeIdentity?.(descriptor);
+        const createdIdentity = fs.fstatSync(descriptor);
         if (!createdIdentity.isFile())
             throw new Error("exclusive file作成先が通常fileではありません");
         hooks.afterCreateBeforeWrite?.(descriptor);
@@ -100,34 +111,30 @@ export function writeFileExclusivePinned(directory, leaf, contents, hooks = {}) 
         fs.fsyncSync(descriptor);
         hooks.afterWriteBeforeVerify?.();
         assertPinnedDirectory(pinned);
-        const named = fs.lstatSync(pinnedTarget);
-        if (!named.isFile() ||
-            named.dev !== createdIdentity.dev ||
-            named.ino !== createdIdentity.ino)
-            throw new Error("exclusive file作成先が実行中に差し替えられました");
+        fsyncDirectory(pinned);
         fs.closeSync(descriptor);
         descriptor = undefined;
-        fsyncDirectory(pinned);
         fs.closeSync(pinned.descriptor);
         return path.join(pinned.path, leaf);
     }
     catch (error) {
         failure = error;
     }
-    hooks.beforeCleanup?.();
-    if (createdIdentity !== undefined) {
+    try {
+        hooks.beforeCleanup?.();
+    }
+    catch (error) {
+        failure = new AggregateError([failure, error], "cleanup hookが失敗しました");
+    }
+    let sanitized = false;
+    if (created && descriptor !== undefined) {
         try {
-            const named = fs.lstatSync(pinnedTarget);
-            if (named.isFile() &&
-                named.dev === createdIdentity.dev &&
-                named.ino === createdIdentity.ino)
-                fs.unlinkSync(pinnedTarget);
+            fs.ftruncateSync(descriptor, 0);
+            fs.fsyncSync(descriptor);
+            sanitized = true;
         }
         catch (error) {
-            if (!(error instanceof Error &&
-                "code" in error &&
-                error.code === "ENOENT"))
-                failure ??= error;
+            failure = new AggregateError([failure, error], "作成descriptorを空にできませんでした");
         }
     }
     if (descriptor !== undefined) {
@@ -144,6 +151,8 @@ export function writeFileExclusivePinned(directory, leaf, contents, hooks = {}) 
     catch (error) {
         failure ??= error;
     }
+    if (created)
+        throw new ExclusivePinnedWriteError(sanitized, { cause: failure });
     throw failure;
 }
 function writeFully(descriptor, contents) {
