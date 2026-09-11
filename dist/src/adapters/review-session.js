@@ -1,5 +1,5 @@
 import path from "node:path";
-import { advanceReviewSession, } from "../domain/review-convergence.js";
+import { advanceReviewSession, parseReviewRoundInput, } from "../domain/review-convergence.js";
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
@@ -19,12 +19,101 @@ const GIT_ENV = {
     GIT_NO_REPLACE_OBJECTS: "1",
     GIT_OPTIONAL_LOCKS: "0",
 };
+/**
+ * **staging digest不一致の診断に付ける再開手順。** digestを再固定できるのは
+ * `workflow record`だけであり、拒否だけを返すと利用者はsourceを読むまで
+ * 次の1手が分からない（Issue #1323、A-3）。判定は変えず文言だけを足す。
+ */
+export const STAGING_DIGEST_RERECORD_HINT = "。stagingを編集した場合は workflow record --step=<最新のStep> を再実行してdigestを更新してから再試行してください";
 function assertStoredStagingDigest(staging) {
     const stored = readStoredStagingRecord(staging);
     const artifacts = listStagingArtifacts(staging);
     if (stableJson(stored.artifacts) !== stableJson(artifacts) ||
         stored.digest !== calculateStagingDigest(staging, artifacts))
-        throw new Error("review session更新前のstaging成果物一覧またはdigestが一致しません");
+        throw new Error(`review session更新前のstaging成果物一覧またはdigestが一致しません${STAGING_DIGEST_RERECORD_HINT}`);
+}
+function resolveCommit(root, label, sha) {
+    const observed = git(["rev-parse", "--verify", `${sha}^{commit}`], root, {
+        env: GIT_ENV,
+        allowFailure: true,
+    });
+    if (observed.status !== 0)
+        throw new Error(`review round --initの${label}をexact commitへ解決できません: ${sha}`);
+    return observed.stdout.trim();
+}
+/**
+ * **次roundの入力雛形を保存済みsessionと実Gitから組み立てる**（Issue #1323、A-2）。
+ *
+ * findings以外を確定した`ReviewRoundInput`を返す。sessionが無ければround 1で、
+ * `baseSha`・`scopeIds`・`acceptanceCriteriaIds`を要求し`initialDiffDigest`を実測する。
+ * sessionがあれば次roundで、anchorをsessionから写し、`previousBlocking`を前roundの
+ * blocking、`fixedDiff`を再固定chainの実効HEADから`headSha`までの実Git差分にする。
+ * **stagingもsessionも書かない。** 判定は`previewReviewRound`が従来どおり行う。
+ */
+export function buildReviewRoundSkeleton(input) {
+    const staging = assertWorkflowStaging(input.staging);
+    const root = path.resolve(staging, "../../../..");
+    const headSha = resolveCommit(root, "--head", input.headSha);
+    const previous = readStoredReviewSession(staging);
+    const notes = [];
+    const currentHeadSha = git(["rev-parse", "--verify", "HEAD^{commit}"], root, {
+        env: GIT_ENV,
+    }).stdout.trim();
+    if (currentHeadSha !== headSha)
+        notes.push(`--head ${headSha.slice(0, 8)} はrepositoryのcurrent HEAD ${currentHeadSha.slice(0, 8)} と一致しません。review roundはcurrent HEADだけを受理します`);
+    let round;
+    if (previous === null) {
+        if (typeof input.baseSha !== "string")
+            throw new Error("review round --initはsessionが無いとき--base=<sha>が必要です");
+        if (!input.scopeIds?.length || !input.acceptanceCriteriaIds?.length)
+            throw new Error("review round --initはsessionが無いとき--scope=<ID,...>と--ac=<ID,...>が必要です");
+        const baseSha = resolveCommit(root, "--base", input.baseSha);
+        const observed = observeReviewDiff(root, baseSha, headSha);
+        round = {
+            round: 1,
+            previousRoundDigest: null,
+            anchor: {
+                scopeIds: [...input.scopeIds],
+                acceptanceCriteriaIds: [...input.acceptanceCriteriaIds],
+                invariantIds: [...(input.invariantIds ?? [])],
+                diffBaseSha: baseSha,
+                initialHeadSha: headSha,
+                initialDiffDigest: observed.digest,
+            },
+            candidateHeadSha: headSha,
+            focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
+            findings: [],
+        };
+        notes.push("round 1は固定initial HEADの全scope reviewである。findingsへreviewの指摘を書く");
+    }
+    else {
+        if (input.baseSha !== undefined ||
+            input.scopeIds ||
+            input.acceptanceCriteriaIds)
+            notes.push("sessionがあるため--base・--scope・--ac・--invariantは無視し、anchorをsessionから写した");
+        const previousHeadSha = deriveEffectiveHead({
+            records: readEvidenceReanchorChain(staging),
+            anchoredHeadSha: previous.latestCandidateHeadSha,
+        }).effectiveHeadSha;
+        const fixed = observeReviewDiff(root, previousHeadSha, headSha).changedPaths;
+        const last = previous.rounds.at(-1);
+        const previousBlocking = [...(last?.blocking ?? [])];
+        round = {
+            round: previous.rounds.length + 1,
+            previousRoundDigest: previous.latestRoundDigest,
+            anchor: previous.anchor,
+            candidateHeadSha: headSha,
+            focus: { previousBlocking, fixedDiff: fixed, adjacentScope: [] },
+            findings: [],
+        };
+        if (previousBlocking.length > 0)
+            notes.push(`前round blocker ${previousBlocking.join("、")} の再評価結果（resolvedまたはvalid）をfindingsへ同じIDで入れる。脱落は拒否される`);
+        if (fixed.length === 0)
+            notes.push("前round headからの実Git差分が空である。HEADを進めずにroundを記録することはできない");
+        if (previous.status !== "active")
+            notes.push(`sessionは${previous.status}である。取り直しroundは収束後のHEAD移動に対して1回だけ許される`);
+    }
+    return { round: parseReviewRoundInput(round), notes };
 }
 export function previewReviewRound(input) {
     const staging = assertWorkflowStaging(input.staging);

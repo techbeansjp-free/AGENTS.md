@@ -223,8 +223,10 @@ import {
 } from "./adapters/workflow-journal.js";
 import {
   assertConvergedReviewSession,
+  buildReviewRoundSkeleton,
   previewReviewRound,
   recordReviewRound,
+  STAGING_DIGEST_RERECORD_HINT,
 } from "./adapters/review-session.js";
 import {
   appendEvidenceReanchor,
@@ -394,7 +396,7 @@ function workflowDiagnostic(
   };
 }
 
-function assertWorkflowReadyForDelivery(
+export function assertWorkflowReadyForDelivery(
   staging: string,
 ): ReturnType<typeof inspectWorkflowStaging> {
   const stored = readStoredStagingRecord(staging);
@@ -405,7 +407,7 @@ function assertWorkflowReadyForDelivery(
     stored.digest !== currentDigest
   )
     throw new Error(
-      "delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています",
+      `delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${STAGING_DIGEST_RERECORD_HINT}`,
     );
   const inspection = inspectWorkflowStaging(staging, 10);
   if (
@@ -5262,7 +5264,19 @@ export async function main(
   if (command === "review" && subcommand === "round") {
     const { flags, positionals } = parse(rest);
     const unknown = Object.keys(flags).filter(
-      (flag) => !["staging", "file", "apply"].includes(flag),
+      (flag) =>
+        ![
+          "staging",
+          "file",
+          "apply",
+          "init",
+          "out",
+          "base",
+          "head",
+          "scope",
+          "ac",
+          "invariant",
+        ].includes(flag),
     );
     if (unknown.length > 0)
       throw new Error(
@@ -5271,6 +5285,57 @@ export async function main(
     if (positionals.length > 0)
       throw new Error("review roundに位置引数は使用できません");
     const staging = required(flags, "staging");
+    if (flags.init !== undefined) {
+      /**
+       * **`--init`は次roundの入力雛形を書くだけで、判定も永続化もしない**
+       * （Issue #1323、A-2）。雛形はstaging外の新規fileにだけ書く。staging内へ
+       * 置くとstaging digestが変わり`review round`自身が拒否するためである。
+       */
+      if (flags.init !== true)
+        throw new Error("review round --initに値は指定できません");
+      if (flags.file !== undefined || flags.apply !== undefined)
+        throw new Error(
+          "review round --initは--fileおよび--applyと併用できません。雛形を確認してから review round --file=<out> を別に実行してください",
+        );
+      const out = path.resolve(required(flags, "out"));
+      const resolvedStaging = path.resolve(staging);
+      if (
+        out === resolvedStaging ||
+        out.startsWith(`${resolvedStaging}${path.sep}`)
+      )
+        throw new Error(
+          "review round --initの--outはstagingの外を指定してください。staging内へ置くとstaging digestが変わり、review roundが拒否します",
+        );
+      if (fs.existsSync(out))
+        throw new Error(
+          `review round --initの--outが既に存在します。既存fileは上書きしません: ${out}`,
+        );
+      const ids = (value: unknown): readonly string[] | undefined =>
+        typeof value === "string"
+          ? value
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : undefined;
+      const skeleton = buildReviewRoundSkeleton({
+        staging,
+        headSha: required(flags, "head"),
+        baseSha: typeof flags.base === "string" ? flags.base : undefined,
+        scopeIds: ids(flags.scope),
+        acceptanceCriteriaIds: ids(flags.ac),
+        invariantIds: ids(flags.invariant),
+      });
+      fs.writeFileSync(out, `${JSON.stringify(skeleton.round, null, 2)}\n`, {
+        flag: "wx",
+      });
+      print({
+        written: out,
+        round: skeleton.round.round,
+        candidateHeadSha: skeleton.round.candidateHeadSha,
+        notes: skeleton.notes,
+      });
+      return 0;
+    }
     const file = path.resolve(required(flags, "file"));
     const round = parseReviewRoundInput(readJsonInput(file));
     const apply = flags.apply === true;

@@ -429,16 +429,52 @@ export const COMMAND_USAGE = Object.freeze([
     {
         command: "review",
         subcommand: "round",
-        summary: "固定anchorのreview roundをpreviewまたは永続化する",
-        requiredFlags: [
-            flag("staging", "path", "対象Issue staging"),
-            flag("file", "path", "review round入力JSON"),
+        summary: "固定anchorのreview roundをpreviewまたは永続化する。--initで次roundの入力雛形を実Gitから生成する",
+        requiredFlags: [flag("staging", "path", "対象Issue staging")],
+        conditionalFlags: [
+            conditional("file", "path", "review round入力JSON。構造はinputContractを参照", "--initを指定しないとき"),
+            conditional("out", "path", "雛形JSONの出力先。stagingの外で、存在しないpath", "--initを指定するとき"),
+            conditional("head", "sha", "candidate HEAD。repositoryのcurrent HEADと一致させる", "--initを指定するとき"),
+            conditional("base", "sha", "review差分の基点SHA", "--initを指定し、review sessionがまだ無いとき（round 1）"),
+            conditional("scope", "ID,ID", "anchor.scopeIds", "--initを指定し、review sessionがまだ無いとき（round 1）"),
+            conditional("ac", "ID,ID", "anchor.acceptanceCriteriaIds", "--initを指定し、review sessionがまだ無いとき（round 1）"),
         ],
-        conditionalFlags: [],
         optionalFlags: [
             optional("apply", "", "roundをreview sessionへ永続化する", "preview"),
+            optional("init", "", "次roundの入力雛形を--outへ書く。stagingとsessionは書かない。--file・--applyと併用不可", "雛形を生成しない"),
+            optional("invariant", "ID,ID", "anchor.invariantIds（--init round 1）", "空"),
         ],
         example: "npx agent-skill-chain review round --staging=.agent-skill-chain/tmp/issues/20260830_120000-change --file=./review-round.json --apply",
+        inputContract: {
+            description: "--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。IDは大文字英数と._-。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた雛形を書く",
+            example: {
+                round: 1,
+                previousRoundDigest: null,
+                anchor: {
+                    scopeIds: ["ISSUE-1234"],
+                    acceptanceCriteriaIds: ["AC-01"],
+                    invariantIds: ["INV-01"],
+                    diffBaseSha: "<40hex>",
+                    initialHeadSha: "<40hex>",
+                    initialDiffDigest: "<sha256>",
+                },
+                candidateHeadSha: "<40hex>",
+                focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
+                findings: [
+                    {
+                        id: "REV-01",
+                        severity: "High",
+                        status: "valid",
+                        source: "review",
+                        relation: "acceptance-violation",
+                        evidence: "file:line と反例",
+                        path: "src/example.ts",
+                        contractId: "AC-01",
+                        causedByFindingId: null,
+                    },
+                ],
+            },
+        },
     },
     {
         command: "review",
@@ -634,7 +670,7 @@ export const COMMAND_USAGE = Object.freeze([
             flag("base", "text", "base branch"),
             flag("head", "text", "head branch"),
             flag("head-sha", "sha", "headのSHA"),
-            flag("evidence", "path", "PR証跡のJSON file"),
+            flag("evidence", "path", "PR証跡のJSON file。構造はinputContractを参照"),
             flag("body-file", "path", "template構造を満たすPR本文"),
         ],
         conditionalFlags: [],
@@ -649,6 +685,33 @@ export const COMMAND_USAGE = Object.freeze([
             ...APPLY_MODE,
         ],
         example: "npx agent-skill-chain pr create --issue=886 --repo=owner/name --base=main --head=feature/886-cli-usage --head-sha=$(git rev-parse HEAD) --evidence=./evidence.json --body-file=./PR.md --dry-run",
+        inputContract: {
+            description: "--evidenceのJSON。headShaは--head-shaと同じexact HEAD。tests.scenarioIdsとspec.trace.scenariosは同じSCN集合。spec.impactはupdated|no-spec-impact。ownershipは変更pathの所有者と層",
+            example: {
+                headSha: "<40hex>",
+                review: { approved: true, headSha: "<40hex>" },
+                tests: {
+                    passed: true,
+                    headSha: "<40hex>",
+                    scenarioIds: ["SCN-UNIT-EXAMPLE-001"],
+                },
+                spec: {
+                    consistent: true,
+                    headSha: "<40hex>",
+                    impact: "updated",
+                    trace: {
+                        requirements: ["REQ-EX-001"],
+                        scenarios: ["SCN-UNIT-EXAMPLE-001"],
+                        tests: ["test/features/unit/example.feature"],
+                    },
+                },
+                ownership: {
+                    classified: true,
+                    owner: "package",
+                    targetLayer: "package",
+                },
+            },
+        },
     },
     {
         command: "pr",
@@ -785,6 +848,9 @@ export function renderUsage(usage) {
             fallback: item.fallback,
         })),
         example: usage.example,
+        ...(usage.inputContract === undefined
+            ? {}
+            : { inputContract: usage.inputContract }),
         note: "flagは--名前=値の形式で指定します。空白区切りは受理しません",
     };
 }
