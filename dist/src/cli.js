@@ -120,6 +120,16 @@ export function composeWorkflowAdvanceIssueBody(existingBody, generatedBody) {
     const after = existing.slice(end + WORKFLOW_ADVANCE_BODY_END.length);
     return `${before}${block}${after}`;
 }
+function latestStep9HasImplementationHead(entries) {
+    return ([...entries].reverse().find((entry) => entry.step === 9)
+        ?.implementationHeadSha !== undefined);
+}
+function assertUniqueStep4Tracker(entries, tracker) {
+    const step4 = [...entries].reverse().find((entry) => entry.step === 4);
+    const trackers = step4?.artifacts.filter((artifact) => /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/[1-9]\d*$/u.test(artifact)) ?? [];
+    if (trackers.length !== 1 || trackers[0] !== tracker)
+        throw new Error("Step 8はStep 4で一意に同期・記録した同じGitHub Issueだけを更新できます");
+}
 function assertWorkflowAdvanceArtifacts(staging, targetStep, artifacts) {
     if (new Set(artifacts).size !== artifacts.length)
         throw new Error(`Step ${targetStep}のartifact重複を拒否しました`);
@@ -3409,9 +3419,7 @@ export async function main(argv, dependencies = {}) {
             currentStep: inspected.currentStep,
             nextStep: inspected.nextStep,
             valid: inspected.valid,
-            implementationHeadBound: [...initialJournal.entries]
-                .reverse()
-                .some((entry) => entry.step === 9 && entry.implementationHeadSha !== undefined),
+            implementationHeadBound: latestStep9HasImplementationHead(initialJournal.entries),
             errors: inspected.errors,
         });
         const remoteFlags = [
@@ -3436,13 +3444,8 @@ export async function main(argv, dependencies = {}) {
             const issue = Number(issueRaw);
             const checkpoint = plan.targetStep;
             const tracker = `https://github.com/${repository}/issues/${issueRaw}`;
-            if (checkpoint === 8) {
-                const step4 = [...readWorkflowJournal(staging).entries]
-                    .reverse()
-                    .find((entry) => entry.step === 4);
-                if (!step4?.artifacts.includes(tracker))
-                    throw new Error("Step 8はStep 4で同期・記録した同じGitHub Issueだけを更新できます");
-            }
+            if (checkpoint === 8)
+                assertUniqueStep4Tracker(readWorkflowJournal(staging).entries, tracker);
             const generated = buildIssueSyncBody(staging, checkpoint, issueStagingGherkinDialect(staging));
             const observed = github("issue.read", { repository, issue }, process.cwd());
             previewSyncBody = composeWorkflowAdvanceIssueBody(observed.body, generated.body);
@@ -3494,9 +3497,7 @@ export async function main(argv, dependencies = {}) {
                 currentStep: current.currentStep,
                 nextStep: current.nextStep,
                 valid: current.valid,
-                implementationHeadBound: [...currentJournal.entries]
-                    .reverse()
-                    .some((entry) => entry.step === 9 && entry.implementationHeadSha !== undefined),
+                implementationHeadBound: latestStep9HasImplementationHead(currentJournal.entries),
                 errors: current.errors,
             });
             if (currentPlan.state !== "preview" ||
@@ -3561,13 +3562,8 @@ export async function main(argv, dependencies = {}) {
                 throw new Error("--expected-body-sha256が現在の同期previewと一致しません。新しいpreviewを確認してから再実行してください");
             const checkpoint = targetStep;
             const tracker = `https://github.com/${repository}/issues/${issueRaw}`;
-            if (checkpoint === 8) {
-                const step4 = [...readWorkflowJournal(staging).entries]
-                    .reverse()
-                    .find((entry) => entry.step === 4);
-                if (!step4?.artifacts.includes(tracker))
-                    throw new Error("Step 8はStep 4で同期・記録した同じGitHub Issueだけを更新できます");
-            }
+            if (checkpoint === 8)
+                assertUniqueStep4Tracker(readWorkflowJournal(staging).entries, tracker);
             const draft = buildIssueSyncBody(staging, checkpoint, issueStagingGherkinDialect(staging));
             if (syncPreview !== undefined &&
                 draft.bodySha256 !== syncPreview.generatedBodySha256)

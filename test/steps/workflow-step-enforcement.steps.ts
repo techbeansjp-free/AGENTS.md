@@ -5995,6 +5995,23 @@ if (exact(["auth", "status"])) {
         fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE)),
         before,
       );
+      appendWorkflowJournalEntry({ staging, entry: entry(9) });
+      const legacy = await executeMain([
+        "workflow",
+        "advance",
+        `--staging=${staging}`,
+      ]);
+      assert.notEqual(legacy.status, 0, legacy.stdout);
+      const legacyOutput = JSON.parse(legacy.stdout) as {
+        state: string;
+        operation: string;
+        reasons: string[];
+      };
+      assert.deepEqual(
+        [legacyOutput.state, legacyOutput.operation],
+        ["blocked", "blocked"],
+      );
+      assert.match(legacyOutput.reasons.join("\n"), /implementationHeadSha/u);
       break;
     }
     case "SCN-E2E-ADVANCE-004": {
@@ -6154,6 +6171,20 @@ if (exact(["auth", "status"])) {
           staging,
           entry: entry(step, "full"),
         });
+      const journalFile = path.join(staging, STEP_JOURNAL_FILE);
+      const journalLines = fs
+        .readFileSync(journalFile, "utf8")
+        .trimEnd()
+        .split("\n")
+        .map((line) => JSON.parse(line) as StepJournalEntry);
+      const step4 = journalLines.find((item) => item.step === 4);
+      assert.ok(step4);
+      step4.artifacts.push("https://github.com/o/r/issues/878");
+      fs.writeFileSync(
+        journalFile,
+        `${journalLines.map((item) => JSON.stringify(item)).join("\n")}\n`,
+      );
+      refreshStoredStagingDigest(staging);
       const rejected = executeCli(
         [
           "workflow",
@@ -6170,7 +6201,7 @@ if (exact(["auth", "status"])) {
       assert.notEqual(rejected.status, 0);
       assert.match(
         rejected.stdout + rejected.stderr,
-        /Step 4で同期・記録した同じGitHub Issue/u,
+        /Step 4で一意に同期・記録した同じGitHub Issue/u,
       );
       const journal = parseStepJournal(
         fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),

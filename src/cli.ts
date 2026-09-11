@@ -383,6 +383,35 @@ export function composeWorkflowAdvanceIssueBody(
   return `${before}${block}${after}`;
 }
 
+function latestStep9HasImplementationHead(
+  entries: readonly {
+    step: number;
+    implementationHeadSha?: string;
+  }[],
+): boolean {
+  return (
+    [...entries].reverse().find((entry) => entry.step === 9)
+      ?.implementationHeadSha !== undefined
+  );
+}
+
+function assertUniqueStep4Tracker(
+  entries: readonly { step: number; artifacts: readonly string[] }[],
+  tracker: string,
+): void {
+  const step4 = [...entries].reverse().find((entry) => entry.step === 4);
+  const trackers =
+    step4?.artifacts.filter((artifact) =>
+      /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/[1-9]\d*$/u.test(
+        artifact,
+      ),
+    ) ?? [];
+  if (trackers.length !== 1 || trackers[0] !== tracker)
+    throw new Error(
+      "Step 8はStep 4で一意に同期・記録した同じGitHub Issueだけを更新できます",
+    );
+}
+
 function assertWorkflowAdvanceArtifacts(
   staging: string,
   targetStep: number,
@@ -4797,12 +4826,9 @@ export async function main(
       currentStep: inspected.currentStep,
       nextStep: inspected.nextStep,
       valid: inspected.valid,
-      implementationHeadBound: [...initialJournal.entries]
-        .reverse()
-        .some(
-          (entry) =>
-            entry.step === 9 && entry.implementationHeadSha !== undefined,
-        ),
+      implementationHeadBound: latestStep9HasImplementationHead(
+        initialJournal.entries,
+      ),
       errors: inspected.errors,
     });
     const remoteFlags = [
@@ -4843,15 +4869,8 @@ export async function main(
       const issue = Number(issueRaw);
       const checkpoint = plan.targetStep as 4 | 8;
       const tracker = `https://github.com/${repository}/issues/${issueRaw}`;
-      if (checkpoint === 8) {
-        const step4 = [...readWorkflowJournal(staging).entries]
-          .reverse()
-          .find((entry) => entry.step === 4);
-        if (!step4?.artifacts.includes(tracker))
-          throw new Error(
-            "Step 8はStep 4で同期・記録した同じGitHub Issueだけを更新できます",
-          );
-      }
+      if (checkpoint === 8)
+        assertUniqueStep4Tracker(readWorkflowJournal(staging).entries, tracker);
       const generated = buildIssueSyncBody(
         staging,
         checkpoint,
@@ -4930,12 +4949,9 @@ export async function main(
         currentStep: current.currentStep,
         nextStep: current.nextStep,
         valid: current.valid,
-        implementationHeadBound: [...currentJournal.entries]
-          .reverse()
-          .some(
-            (entry) =>
-              entry.step === 9 && entry.implementationHeadSha !== undefined,
-          ),
+        implementationHeadBound: latestStep9HasImplementationHead(
+          currentJournal.entries,
+        ),
         errors: current.errors,
       });
       if (
@@ -5023,15 +5039,8 @@ export async function main(
         );
       const checkpoint = targetStep as 4 | 8;
       const tracker = `https://github.com/${repository}/issues/${issueRaw}`;
-      if (checkpoint === 8) {
-        const step4 = [...readWorkflowJournal(staging).entries]
-          .reverse()
-          .find((entry) => entry.step === 4);
-        if (!step4?.artifacts.includes(tracker))
-          throw new Error(
-            "Step 8はStep 4で同期・記録した同じGitHub Issueだけを更新できます",
-          );
-      }
+      if (checkpoint === 8)
+        assertUniqueStep4Tracker(readWorkflowJournal(staging).entries, tracker);
       const draft = buildIssueSyncBody(
         staging,
         checkpoint,
