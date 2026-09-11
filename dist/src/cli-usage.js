@@ -130,7 +130,7 @@ export const COMMAND_USAGE = Object.freeze([
             optional("now", "ISO8601", "評価基準時刻", "実行時刻"),
             optional("override", "JSON", '人間overrideのinline JSON object（{"provider":…,"selection":…,"issue":…,"scope":…,"instructedBy":…,"instructedAt":…,"expiresAt":…}）。file pathではなくJSON本文を渡す', "overrideなし"),
         ],
-        example: "npx agent-skill-chain routing ceiling --issue=886 --scope=issue-886 --provider=codex --selection=autonomous",
+        example: 'npx agent-skill-chain routing ceiling --issue=886 --scope=issue-886 --provider=claude --selection=fable --override=\'{"provider":"claude","selection":"fable","issue":886,"scope":"issue-886","instructedBy":"owner","instructedAt":"2026-09-01T00:00:00Z","expiresAt":"2026-09-02T00:00:00Z"}\'',
     },
     {
         command: "routing",

@@ -76,6 +76,7 @@ Then(
     assert.match(override?.description ?? "", /inline JSON/u);
     assert.match(override?.description ?? "", /path/u);
     assert.match(override?.description ?? "", /\{"provider"/u);
+    assert.match(String(ceiling?.example), /--override='\{"provider"/u);
   },
 );
 
@@ -104,6 +105,50 @@ Given("file pathをJSON flagへ渡すargvがある", function () {
     },
   ];
 });
+
+Given("nullのJSONと角括弧で始まるpathをJSON flagへ渡すargvがある", function () {
+  this.argvs = [
+    {
+      label: "roles-null",
+      args: ["routing", "roles", "--scope=issue-1340", "--assignments=null"],
+    },
+    {
+      label: "roles-bracket",
+      args: [
+        "routing",
+        "roles",
+        "--scope=issue-1340",
+        "--assignments=[secret-a].json",
+      ],
+    },
+  ];
+});
+
+Then(
+  "scalarは型診断で拒否されpathは解析診断と是正操作を併記して拒否される",
+  function () {
+    const nullCase = this.results.find((item) => item.label === "roles-null");
+    assert.equal(nullCase?.result.status, 1);
+    assert.ok(
+      reasonsOf(nullCase!.result).some((reason) =>
+        reason.includes("--assignmentsはJSON配列でなければなりません"),
+      ),
+      nullCase?.result.stdout,
+    );
+    const bracket = this.results.find((item) => item.label === "roles-bracket");
+    assert.equal(bracket?.result.status, 1);
+    const reasons = reasonsOf(bracket!.result);
+    assert.ok(
+      reasons.some(
+        (reason) =>
+          reason.includes("assignments: 値が不正です") &&
+          reason.includes("--assignmentsにはinline JSONを渡します"),
+      ),
+      reasons.join("; "),
+    );
+    assert.doesNotMatch(bracket?.result.stdout ?? "", /secret-/u);
+  },
+);
 
 Given("先頭空白付きのinline JSONをJSON flagへ渡すargvがある", function () {
   this.argvs = [
@@ -153,7 +198,6 @@ Then(
       );
       assert.equal(matching.length, 1, `${label}: ${reasons.join("; ")}`);
       assert.doesNotMatch(result.stdout, /secret-/u);
-      assert.doesNotMatch(result.stdout, /offset 0/u);
     }
   },
 );

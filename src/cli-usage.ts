@@ -241,7 +241,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       ),
     ],
     example:
-      "npx agent-skill-chain routing ceiling --issue=886 --scope=issue-886 --provider=codex --selection=autonomous",
+      'npx agent-skill-chain routing ceiling --issue=886 --scope=issue-886 --provider=claude --selection=fable --override=\'{"provider":"claude","selection":"fable","issue":886,"scope":"issue-886","instructedBy":"owner","instructedAt":"2026-09-01T00:00:00Z","expiresAt":"2026-09-02T00:00:00Z"}\'',
   },
   {
     command: "routing",

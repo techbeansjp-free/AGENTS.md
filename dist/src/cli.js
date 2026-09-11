@@ -2613,18 +2613,22 @@ function roleTierFailure(ruleId, purpose, risk, reasons, scope, next, requiredAu
     });
 }
 /**
- * usageが`<JSON>`と宣言するflagの値がJSON本文でないとき、`parseJsonStrict`の
- * `offset 0`より前に是正操作を示す。fileは読まず、値本文も診断へ転記しない
- * （Issue #1340: `<path>`宣言を信じてpathを渡した利用者が原因を特定できなかった）。
+ * usageが`<JSON>`と宣言するflagの解析errorへ、是正操作を併記する。`<path>`宣言を信じて
+ * pathを渡した利用者は`offset 0`だけでは原因を特定できなかった（Issue #1340）。
+ * fileは読まず、値本文も診断へ転記しない。正当なJSON本文は従来どおり解析し、
+ * 型の診断（配列・object）は解析後の既存検査が担う（round 1 REV-02・REV-03）。
  */
-function requireInlineJson(source, flag, opener) {
-    if (source.trimStart().startsWith(opener))
-        return;
-    throw new Error(`--${flag}にはinline JSONを渡します（file pathではありません）。${opener === "[" ? "JSON配列" : "JSON object"}の本文を--${flag}='…'の形式で指定してください`);
+function inlineJsonInput(source, flag) {
+    try {
+        return parseJsonStrict(source, flag);
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`${message}。--${flag}にはinline JSONを渡します（file pathではありません）。JSON本文を--${flag}='…'の形式で指定してください`, { cause: error });
+    }
 }
 function assignmentInput(source) {
-    requireInlineJson(source, "assignments", "[");
-    const parsed = parseJsonStrict(source, "assignments");
+    const parsed = inlineJsonInput(source, "assignments");
     if (!Array.isArray(parsed))
         throw new Error("--assignmentsはJSON配列でなければなりません");
     return parsed.map((item, index) => {
@@ -2641,8 +2645,7 @@ function assignmentInput(source) {
     });
 }
 function humanOverrideInput(source) {
-    requireInlineJson(source, "override", "{");
-    const parsed = parseJsonStrict(source, "override");
+    const parsed = inlineJsonInput(source, "override");
     if (!isRecord(parsed))
         throw new Error("--overrideはobjectでなければなりません");
     for (const field of [

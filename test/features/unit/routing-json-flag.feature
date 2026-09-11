@@ -11,6 +11,11 @@ Feature: routing rolesとceilingのJSON flagは宣言・実行例・診断が実
     When routing rolesとrouting ceilingを実行する
     Then 両方とも終了値1でreasonsにinline JSONを渡す案内を含み値本文を含まない
 
+  Scenario: SCN-UNIT-JSONFLAG-004 scalarのJSONと角括弧で始まるpathは既存の型・解析診断に是正操作を併記する
+    Given nullのJSONと角括弧で始まるpathをJSON flagへ渡すargvがある
+    When routing rolesとrouting ceilingを実行する
+    Then scalarは型診断で拒否されpathは解析診断と是正操作を併記して拒否される
+
   Scenario: SCN-UNIT-JSONFLAG-003 inline JSONの受理と判定は変わらない
     Given 先頭空白付きのinline JSONをJSON flagへ渡すargvがある
     When routing rolesとrouting ceilingを実行する
