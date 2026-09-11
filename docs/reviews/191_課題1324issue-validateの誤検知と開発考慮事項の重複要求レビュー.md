@@ -8,16 +8,16 @@
 |---|---|
 | 対象 | 実装 |
 | 対象Issue | #1324（#1326を同じPRで解決） |
-| ラウンド | Step 10 ラウンド1〜3 |
+| ラウンド | Step 10 ラウンド1〜4 |
 | 比較基点 | `69ba5c72a61264c175edcdd734046100c0d25c59` |
-| H_impl | `85d3e5700e38212b18c389258d88e432b3443225` |
+| H_impl | `d4ef5e6d379828d3f59d1dd248a3fdd3ff5dffc4` |
 | 比較基点の由来 | worktree作成時点の`origin/main`のtip。PR #1321のmerge commitである |
 | Step 10のreview session ID | `4a9ae6c6f0f408ecca95d0bd29852b8b20256852a71c54f071c9692ef62d4742` |
 | モード | full |
 | 対象差分 | `src/domain/conformance.ts`、`src/domain/issue.ts`、`src/cli.ts`、`dist/src/`の生成物3件、`test/features/unit/issue-development-considerations.feature`、`test/steps/issue-development-considerations.steps.ts`、配布template 01〜03、`docs/specs/`5件 |
 | 対象外 | routing入力契約（02→03・04）の参照受理（検証機構が無い。#1326の残件として起票済みの範囲）。04の開発考慮事項欄。未知方言の英語fallback。`03_実装計画.md` §5.1の言い換え以外のtemplate散文の見直し |
-| 残り予算 | 0（同一範囲で最大3ラウンド。ラウンド1で独立reviewerのHigh 2件・Medium 2件・Low 1件を受け、ラウンド2で是正差分を再reviewして収束した。ラウンド3は本artifactのcommitによるHEAD移動に対する取り直しで、製品差分を変えない。収束後の取り直し1ラウンドの別枠は未使用） |
-| ラウンド数 | 3（ラウンド3は本artifact 1 fileのcommitに対する取り直し） |
+| 残り予算 | 0（同一範囲で最大3ラウンド。ラウンド1で独立reviewerのHigh 2件・Medium 2件・Low 1件を受け、ラウンド2で是正差分を再reviewして収束した。ラウンド3は本artifactのcommitによるHEAD移動に対する取り直し。ラウンド4はPR #1327作成後に届いた外部reviewer（CodeRabbit）の指摘3件の取り込みで、収束後の取り直し1ラウンドの別枠を使った。通算4ラウンドで上限） |
+| ラウンド数 | 4（ラウンド3は本artifact 1 fileのcommitに対する取り直し、ラウンド4はPR作成後の外部指摘の取り込み） |
 | Step chain | 経由: /home/tatsuru/Projects/techbeansjp-free/AGENTS.md/.worktrees/20260911_084727-1324-issue-validate-false-positives/.agent-skill-chain/tmp/issues/20260911_085201_issue-validateの誤検知と開発考慮事項の重複要求を除く |
 | 仕様の所有箇所 | `docs/specs/02_要件/04_仕様・品質管理要件.md` REQ-SQ-009「範囲を限定した理由と証拠を必須にする」、`docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md` Issue検証コマンド「全mode・全stageでP-01〜P-07、開発考慮事項、未解決placeholder、Gherkin scenario IDを検証し」。着手時点で受理規則の粒度（何を「具体化されていない」とするか）と方言の扱いは規定されておらず、本PRで両節へ追記した |
 | 成果物行数 | 製品 +317 / −44行（`src/`3 file。うち`conformance.ts`のplaceholder集合導出・参照行・fence読み飛ばしが約150行、`issue.ts`の方言表とkeyword生成が約110行、`cli.ts`の注入が約20行）。test +548行（feature 18 scenario、steps）。配布template +8 / −1行。仕様 +9 / −3行。支援層（staging 00〜03と本artifact）は約900行 |
@@ -37,37 +37,38 @@ providerとmodel設定はproject choiceとrouting evidenceの観測値を用い�
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | https://github.com/techbeansjp-free/AGENTS.md/issues/1324 、AC-01〜AC-04、INV-01〜INV-04 | Step 4で00・01を、Step 8で00〜03を同期し`sync-verified` | 耐久トラッカー |
-| 差分 | `69ba5c72..85d3e5700e38212b18c389258d88e432b3443225` | 16 file。製品差分は`src/`3 file、+317 / −44行 | 既存コード |
+| 差分 | `69ba5c72..d4ef5e6d379828d3f59d1dd248a3fdd3ff5dffc4` | 17 file（本artifactを含む）。製品差分は`src/`3 file、+337 / −47行 | 既存コード |
 | テスト | `npm test`、`npm run conformance:check` | 7節 | テスト出力 |
 | 仕様 | `docs/specs/`5 file | updated | 既存文書 |
 | commit前candidate | 16 file（個別監査13行と`dist/`生成物3件） | working tree clean | Git index |
-| Phase A artifact | `docs/reviews/191_課題1324issue-validateの誤検知と開発考慮事項の重複要求レビュー.md` | `H_impl` = `85d3e570`。`H_impl..H_final`の差分pathは本file 1件 | Git観測 |
+| Phase A artifact | `docs/reviews/191_課題1324issue-validateの誤検知と開発考慮事項の重複要求レビュー.md` | `H_impl` = `d4ef5e6d`。`H_impl..H_final`の差分pathは本file 1件 | Git観測 |
 | commit後external | PR、CI run、review | Step 11で観測する。本節はPR作成前に書いており外部証拠はまだ無い | 外部のimmutable証拠 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: 成立する。02 §2.3の4 nodeは`cli-issue-validate → issue-validate → dc-validate → dc-placeholders`と`review-evaluate → dc-validate`の一方向で、`architecture:check`が循環なしを観測した
-- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: `H_impl` = `85d3e570`は`H_final`の直接の親であり、差分pathは本artifact 1件
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: `H_impl` = `d4ef5e6d`は`H_final`の直接の親であり、差分pathは本artifact 1件
 - reviewerの独立性が`merge.reviewIndependence`の要求水準を満たす: 満たす。project policyは`reviewIndependence`未宣言で既定`context-isolated`。reviewerはcodexの別processでimplementer sessionと別contextである。同一GitHub actorでも成立する
-- 既定branch追随を行った場合: 行っていない。基点`69ba5c72`は`origin/main`のtipのままで、`比較基点..H_impl`は実装commitと是正commitの一直線である
+- 既定branch追随を行った場合: 行っていない。基点`69ba5c72`は`origin/main`のtipのままで、`比較基点..H_impl`は実装commit、是正commit、review artifact commit、外部指摘の是正commitの一直線である
 
 ## 変更ファイル個別監査
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
-| `src/domain/conformance.ts` | M | package | package | 開発考慮事項判定の1責務。placeholder集合の導出、行parse、records検証を同じmodule内で分割した | domain内に閉じる。`lib/package-root`への依存を追加。循環なし | REQ-SQ-009、AC-01・AC-03、SCN-UNIT-ISSUEDC-001〜010 | 読み取り専用。関数差し戻しで復旧 | pass |
+| `src/domain/conformance.ts` | M | package | package | 開発考慮事項判定の1責務。placeholder集合の導出、行parse、records検証を同じmodule内で分割した。ラウンド4で終了fenceをmarkerと空白だけの行に限定 | domain内に閉じる。`lib/package-root`への依存を追加。循環なし | REQ-SQ-009、AC-01・AC-03、SCN-UNIT-ISSUEDC-001〜011 | 読み取り専用。関数差し戻しで復旧 | pass |
 | `src/domain/issue.ts` | M | package | package | 方言表・keyword生成・scenario検出・Gherkin除外を同じmodule内に置き、`validateIssue`の`options`で注入する | conformanceへの既存依存のみ。循環なし | AC-02・AC-03、SCN-UNIT-ISSUEGHK-001〜008、ISSUEDC-004〜007・009・010 | 読み取り専用。未知方言はthrow | pass |
 | `src/cli.ts` | M | package | package | `issue validate`へ方言を注入する1 helper。判定logicを持たない | cli → domain。`loadProjectPolicySet`の既存importを使う | AC-04、SCN-UNIT-ISSUEGHK-005 | manifest不在は未指定へ倒す。読み取り専用 | pass |
-| `test/features/unit/issue-development-considerations.feature` | A | package | package | 新規Feature 1 file 18 scenario。既存featureを変更しない | steps 1 fileへ | AC-01〜AC-04 | fixtureは一時directoryのみ | pass |
+| `test/features/unit/issue-development-considerations.feature` | A | package | package | 新規Feature 1 file 19 scenario。既存featureを変更しない | steps 1 fileへ | AC-01〜AC-04 | fixtureは一時directoryのみ | pass |
 | `test/steps/issue-development-considerations.steps.ts` | A | package | package | 上記featureの専用steps。既存stepsと語を分けた（曖昧一致を初回で1件検出し改名） | src/domainとcli mainへ | 同上 | 同上 | pass |
-| `.agent-skill-chain/templates/issue/01_要件定義.md` | M | package | package | §7.1直下へ参照行の注記1文 | なし | FR-09、`skills:check` | 4行表は残す | pass |
-| `.agent-skill-chain/templates/issue/02_設計.md` | M | package | package | §1.0直下へ参照行の注記1文 | なし | 同上 | 同上 | pass |
-| `.agent-skill-chain/templates/issue/03_実装計画.md` | M | package | package | §1.0直下へ参照行の注記1文と、§5.1説明文の丸括弧placeholderの言い換え（DISC-001） | なし | 同上 | 同上 | pass |
+| `.agent-skill-chain/templates/issue/01_要件定義.md` | M | package | package | §7.1直下へ参照行の注記1文。冒頭の検査契約を「4行の表（または参照行と差分行）」へ | なし | FR-09、`skills:check` | 4行表は残す | pass |
+| `.agent-skill-chain/templates/issue/02_設計.md` | M | package | package | §1.0直下へ参照行の注記1文。冒頭の検査契約も同様 | なし | 同上 | 同上 | pass |
+| `.agent-skill-chain/templates/issue/03_実装計画.md` | M | package | package | §1.0直下へ参照行の注記1文と、§5.1説明文の丸括弧placeholderの言い換え（DISC-001）。冒頭の検査契約も同様 | なし | 同上 | 同上 | pass |
 | `docs/specs/01_システム概要/02_用語・略語.md` | M | spec | spec | TERM-ASC-099を表内へ追加（REV-05で位置を是正） | なし | TERM-ASC-099 | なし | pass |
 | `docs/specs/02_要件/04_仕様・品質管理要件.md` | M | spec | spec | REQ-SQ-009へ受理規則と参照行を追記 | なし | REQ-SQ-009 | なし | pass |
 | `docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md` | M | spec | spec | Issue検証コマンドへ方言の契約を追記 | なし | AC-02・AC-04 | なし | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | spec | spec | REQ-SQ-009のunit行を1行追加 | なし | SCN 18件 | なし | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | spec | spec | header直後へ1行 | なし | 同上 | なし | pass |
+| `docs/reviews/191_課題1324issue-validateの誤検知と開発考慮事項の重複要求レビュー.md` | A | package | evidence | 本artifact。ラウンド4の是正commitがラウンド3のartifact commitより後にあるため`比較基点..H_impl`に含まれる。製品・仕様・testを変えない | なし | 本artifact全節 | なし | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: 一致する（`git diff --name-only 69ba5c72 85d3e570`の16件のうち`dist/`の生成物3件を除く13件と上表13行。生成物は8節の配布物影響で`dist/`1件として扱う）
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: 一致する（`git diff --name-only 69ba5c72 d4ef5e6d`の17件のうち`dist/`の生成物3件を除く14件と上表14行。本artifactはラウンド3で先にcommitされているため`比較基点..H_impl`に含まれ、表にも1行置く。生成物は8節の配布物影響で`dist/`1件として扱う）
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: していない。方言表は汎用の固定表で、project固有値はproject choiceから注入する
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: ラウンド2は`conformance.ts`・`issue.ts`・test 2 file・`docs/specs/`3 fileだけを再監査した
 
@@ -127,10 +128,13 @@ providerとmodel設定はproject choiceとrouting evidenceの観測値を用い�
 | ID | 重大度 | 内容 | 証拠 | 影響範囲 | 対応 | 状態・分類 | 残存リスク |
 |---|---|---|---|---|---|---|---|
 | REV-01 | High | `withoutGherkin`が英語step keywordしか認識せず、jaの`前提 <値>`が未解決placeholderになる | reviewerが`シナリオテンプレート: … 前提 <値>を受け取る`で`["<値>"]`を再現 | AC-02 | `GHERKIN_BLOCK_KEYWORDS`を追加し方言の構造・step keywordで除外。SCN-UNIT-ISSUEGHK-007 | resolved / acceptance-violation | 方言表に無いkeyword（`*`以外の別名）は将来の追加対象 |
-| REV-02 | High | 参照行つきで未知IDの行が既知IDのfilterで落ち、未知ID検証へ到達しない | `| DC-UNKNOWN | … |`と参照行で`valid:true`を再現 | AC-03 | `DC-`接頭辞の行を全て拾いrecords検証へ渡す。SCN-UNIT-ISSUEDC-009 | resolved / acceptance-violation | `DC-`で始まらない誤記は行として拾わない（変更前と同じ） |
+| REV-02 | High | 参照行つきで未知IDの行が既知IDのfilterで落ち、未知ID検証へ到達しない | `\| DC-UNKNOWN \| … \|`と参照行で`valid:true`を再現 | AC-03 | `DC-`接頭辞の行を全て拾いrecords検証へ渡す。SCN-UNIT-ISSUEDC-009 | resolved / acceptance-violation | `DC-`で始まらない誤記は行として拾わない（変更前と同じ） |
 | REV-03 | Medium | code fence内の参照行を宣言として読む | `~~~text`内の参照行だけの01で`valid:true`を再現 | AC-03 | fenceを読み飛ばす。SCN-UNIT-ISSUEDC-010 | resolved / acceptance-violation | inline code内の参照行は行全体が一致しないため元から拾わない |
 | REV-04 | Medium | scenario検出が行頭固定でなく散文中の言及を数える | jaで`説明文に シナリオ: SCN-X-999`がtrue | AC-02 | 行頭固定（indent可）へ変更しINV-03を精密化。SCN-UNIT-ISSUEGHK-008 | resolved / acceptance-violation | 散文中に`Scenario: SCN-`を書いていた旧成果物は新たに拒否される |
 | REV-05 | Low | TERM-ASC-099の行が用語表の外に置かれていた | `02_用語・略語.md`末尾 | 用語台帳 | TERM-ASC-098の直後へ移動 | resolved / improvement | なし |
+| EXT-01 | High | 終了fenceをmarkerで始まる行すべてと読むため、外側fenceの中のinfo string付きfenceで外側を閉じ、以降の参照行を宣言として拾う | CodeRabbit（PR #1327）。markdown fenceの中のtext fenceと参照行で`valid:true` | AC-03 | 終了fenceをmarkerと空白だけの行に限定。SCN-UNIT-ISSUEDC-011 | resolved / acceptance-violation | なし |
+| EXT-02 | Low | template 01〜03の冒頭注記が「4行の表」を必須と書き、参照行の受理と食い違う | CodeRabbit（PR #1327） | 配布template | 「4行の表（または参照行と差分行）」へ | resolved / improvement | なし |
+| EXT-03 | Low | 本artifact REV-02行のinline code内のpipeがtable区切りとして解釈され列がずれる | CodeRabbit（PR #1327） | 本artifact | pipeをescape | resolved / improvement | なし |
 
 ## 6. ラウンド固有の確認
 
@@ -151,18 +155,26 @@ providerとmodel設定はproject choiceとrouting evidenceの観測値を用い�
 
 - 全指摘の最終分類: REV-01〜REV-05はすべてresolved。新規指摘なし
 - 任意の危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: 対象差分は本artifact 1 fileのみで製品差分を含まない
-- 同じ範囲の予算を自動更新していない: していない。収束後の取り直し1ラウンドの別枠は未使用のまま残す
+- 同じ範囲の予算を自動更新していない: していない
 - AIによる最終裁定: approved
+
+### ラウンド4（PR作成後の外部指摘の取り込み）
+
+- 対象: PR #1327へCodeRabbitが残した指摘3件（EXT-01〜EXT-03）。条件（予算内、受け入れ条件を満たす、安全境界・authority・不可逆操作へ及ばない）をすべて満たすため同じPRへ取り込んだ
+- 修正差分: `src/domain/conformance.ts`、test 2 file、template 3 file、`docs/specs/`3 file、本artifact
+- 検証: SCN-UNIT-ISSUEDC-011追加。終了fence判定を戻す変異で当該SCNが失敗することを確認。`npm test` 1778 scenario（合格1762、skip 16、失敗0）、`conformance:check` 87/87
+- 記録: `workflow record --step=10 --post-terminal-intake`
+- 予算: 収束後の取り直し1ラウンドの別枠を使い、通算4ラウンドで上限
 
 ## 7. テスト結果
 
 実行runnerは`cucumber-js`（`node --import tsx`経由）、`projectChoices.gherkinDialect`は`en`、test layerはunit・integration・e2eの3層である。
 
 - 実行したcommand: `npm test`、`npm run conformance:check`、`npm run lint`、`npm run typecheck`、`npm run format:check`、`npm run test:format`、`npm run docs:format`、`npm run trace:check`、`npm run skills:check`、`npm run cli:check`、`npm run package:check`
-- 全layer合計: 1777 scenario（合格1761、skip 16、失敗0）、9330 step。失敗0件
+- 全layer合計: 1778 scenario（合格1762、skip 16、失敗0）。失敗0件（ラウンド4後の実測）
 - `conformance:check`: 87 scenario（合格87）
 - 静的gate 9本: すべてexit 0
-- 変異試験: 16件（M1〜M12はラウンド1前、M13〜M16はラウンド2是正の差し戻し）。生存0件。M7・M10・M12は初回生存し、fixture強化とSCN-UNIT-ISSUEDC-008・SCN-UNIT-ISSUEGHK-006の追加後にkill
+- 変異試験: 17件（M1〜M12はラウンド1前、M13〜M16はラウンド2是正の差し戻し、M17はラウンド4の終了fence判定の差し戻し）。生存0件。M7・M10・M12は初回生存し、fixture強化とSCN-UNIT-ISSUEDC-008・SCN-UNIT-ISSUEGHK-006の追加後にkill
 - bug-reproduction: 本stagingの01（全角括弧を含む理由）と参照行だけの02を、基点binary（main `69ba5c72`の`dist/`）と本HEADのbinaryで検証し、旧は5件拒否・新は`valid:true`
 
 ## 8. 配布物影響
@@ -204,7 +216,7 @@ providerとmodel設定はproject choiceとrouting evidenceの観測値を用い�
 ## 11. 総合判定と再開地点
 
 - 未解決Critical/High: 0件
-- Medium/Lowの記録: REV-03・REV-04（Medium）、REV-05（Low）はいずれもresolved
+- Medium/Lowの記録: REV-03・REV-04（Medium）、REV-05・EXT-02・EXT-03（Low）はいずれもresolved。EXT-01（High）もresolved
 - 判定: approved
 - 新しい権限が必要な事項: なし
 - 残存リスク: 散文中に`Scenario: SCN-`を書いていた旧成果物は新たに拒否される（REV-04の帰結。行頭へ移せば通る）
