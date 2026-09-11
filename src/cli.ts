@@ -4631,6 +4631,11 @@ export async function main(
       );
     const staging = path.resolve(required(flags, "staging"));
     const inspected = inspectWorkflowStaging(staging);
+    const initialRecord = readStoredStagingRecord(staging);
+    const initialJournalDigest = crypto
+      .createHash("sha256")
+      .update(readWorkflowJournal(staging).source)
+      .digest("hex");
     const plan = planWorkflowAdvance({
       mode: inspected.mode,
       currentStep: inspected.currentStep,
@@ -4696,6 +4701,19 @@ export async function main(
       return plan.state === "blocked" ? 1 : 0;
     }
     return withStagingMutationLock(staging, () => {
+      assertStoredStagingContentDigest(staging, "workflow advance適用前");
+      const lockedRecord = readStoredStagingRecord(staging);
+      const lockedJournalDigest = crypto
+        .createHash("sha256")
+        .update(readWorkflowJournal(staging).source)
+        .digest("hex");
+      if (
+        lockedRecord.digest !== initialRecord.digest ||
+        lockedJournalDigest !== initialJournalDigest
+      )
+        throw new Error(
+          "workflow advanceのpreview後・writer lock取得前にstagingまたはjournalが変更されました。新しいpreviewから再実行してください",
+        );
       const validation = validateIssue(staging, {
         stage: plan.validationStage,
         gherkinDialect: issueStagingGherkinDialect(staging),
@@ -4783,6 +4801,13 @@ export async function main(
         checkpoint,
         issueStagingGherkinDialect(staging),
       );
+      if (
+        syncPreview !== undefined &&
+        draft.bodySha256 !== syncPreview.bodySha256
+      )
+        throw new Error(
+          "workflow advanceのpreview後・writer lock取得前に同期本文が変更されました。新しいpreviewから再実行してください",
+        );
       let temporaryDirectory: string | undefined;
       let bodyFile: string | undefined;
       try {
@@ -4802,11 +4827,18 @@ export async function main(
           );
         const before = readStoredStagingRecord(staging);
         const fullStep4 = before.mode === "full" && checkpoint === 4;
-        if (!fullStep4)
-          assertStagingSyncTarget(staging, checkpoint, {
-            repository,
-            issue: Number(issueRaw),
-          });
+        if (!fullStep4 || before.state === "promotion-active")
+          assertStagingSyncTarget(
+            staging,
+            checkpoint,
+            {
+              repository,
+              issue: Number(issueRaw),
+            },
+            {
+              allowPromotionStep4: fullStep4,
+            },
+          );
         const synced = github(
           "issue.sync",
           {
