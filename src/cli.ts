@@ -6445,7 +6445,6 @@ export async function main(
       "state",
       "recorded-at",
       "expected-journal-digest",
-      "expected-target-digest",
       "apply",
     ];
     const unknown = Object.keys(flags).filter(
@@ -6503,7 +6502,6 @@ export async function main(
       print(
         projectReviewProgress({
           staging,
-          expectedTargetDigest: required(flags, "expected-target-digest"),
           apply,
         }),
       );

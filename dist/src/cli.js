@@ -4690,7 +4690,6 @@ export async function main(argv, dependencies = {}) {
             "state",
             "recorded-at",
             "expected-journal-digest",
-            "expected-target-digest",
             "apply",
         ];
         const unknown = Object.keys(flags).filter((flag) => !allowed.includes(flag));
@@ -4736,7 +4735,6 @@ export async function main(argv, dependencies = {}) {
         if (operation === "project") {
             print(projectReviewProgress({
                 staging,
-                expectedTargetDigest: required(flags, "expected-target-digest"),
                 apply,
             }));
             return 0;

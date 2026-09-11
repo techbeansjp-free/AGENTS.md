@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { latestReviewProgressDigest, makeReviewProgressEntry, makeReviewProgressSeal, parseReviewProgressRecords, projectReviewProgressTarget, verifyReviewProgressTarget, } from "../domain/review-progress.js";
-import { refreshStoredStagingDigest, REVIEW_PROGRESS_JOURNAL_FILE, withStagingMutationLock, } from "../domain/staging.js";
+import { latestReviewProgressDigest, makeReviewProgressEntry, makeReviewProgressSeal, parseReviewProgressRecords, projectReviewProgressTarget, } from "../domain/review-progress.js";
+import { REVIEW_PROGRESS_JOURNAL_FILE, withStagingMutationLock, } from "../domain/staging.js";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
 import { stableJson } from "../lib/security.js";
@@ -33,6 +33,12 @@ function context(stagingInput) {
         (targetStat.mode & 0o777) !== session.anchor.progressInventory.fileMode ||
         fs.realpathSync(target) !== target)
         throw new Error("parallel progress targetのidentityまたはmodeが不正です");
+    const targetDigest = crypto
+        .createHash("sha256")
+        .update(fs.readFileSync(target))
+        .digest("hex");
+    if (targetDigest !== session.anchor.progressInventory.baselineDigest)
+        throw new Error("parallel progress targetがreview開始時点から変化しました。従来の直列経路を使用してください");
     return {
         staging,
         session,
@@ -116,44 +122,24 @@ export function sealReviewProgress(input) {
     });
 }
 export function projectReviewProgress(input) {
+    if (input.apply)
+        throw new Error("parallel progress projectionはread-onlyです。review入力treeへ書き込めません");
     const observed = context(input.staging);
-    const target = observed.target;
-    const source = fs.readFileSync(target, "utf8");
+    const source = fs.readFileSync(observed.target, "utf8");
     const targetDigest = crypto.createHash("sha256").update(source).digest("hex");
-    if (targetDigest !== input.expectedTargetDigest)
-        throw new Error("progress target digestがpreview時点から変化しました");
     const projected = projectReviewProgressTarget({
         inventory: observed.inventory,
         source,
         records: observed.records,
     });
-    if (!input.apply)
-        return { applied: false, projected, expectedTargetDigest: targetDigest };
-    return withStagingMutationLock(observed.staging, () => {
-        const current = context(observed.staging);
-        const currentSource = fs.readFileSync(current.target, "utf8");
-        if (crypto.createHash("sha256").update(currentSource).digest("hex") !==
-            input.expectedTargetDigest)
-            throw new Error("progress targetがapply直前に変化しました");
-        writeFileAtomic(current.target, projected, {
-            temporaryDirectory: path.dirname(observed.staging),
-            fileMode: current.inventory.fileMode,
-        });
-        refreshStoredStagingDigest(observed.staging);
-        verifyReviewProgressTarget({
-            inventory: current.inventory,
-            source: fs.readFileSync(current.target, "utf8"),
-            records: current.records,
-        });
-        return { applied: true, expectedTargetDigest: targetDigest };
-    });
+    return { applied: false, projected, targetDigest };
 }
 export function verifyStoredReviewProgress(staging) {
     const observed = context(staging);
-    const target = observed.target;
-    verifyReviewProgressTarget({
+    const source = fs.readFileSync(observed.target, "utf8");
+    const projected = projectReviewProgressTarget({
         inventory: observed.inventory,
-        source: fs.readFileSync(target, "utf8"),
+        source,
         records: observed.records,
     });
     return {
@@ -161,10 +147,8 @@ export function verifyStoredReviewProgress(staging) {
         sessionId: observed.session.sessionId,
         implementationHeadSha: observed.head,
         journalDigest: latestReviewProgressDigest(observed.records),
-        targetDigest: crypto
-            .createHash("sha256")
-            .update(fs.readFileSync(target))
-            .digest("hex"),
+        targetDigest: crypto.createHash("sha256").update(source).digest("hex"),
+        projected,
     };
 }
 //# sourceMappingURL=review-progress.js.map

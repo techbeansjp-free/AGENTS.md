@@ -841,7 +841,8 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   {
     command: "review",
     subcommand: "progress",
-    summary: "固定review入力へ影響しない進捗をpreview・追記・投影・検証する",
+    summary:
+      "固定review入力treeへ影響しない進捗をpreview・追記・read-only表示・検証する",
     requiredFlags: [
       flag("staging", "path", "対象Issue staging"),
       flag("operation", "append|seal|project|verify", "進捗操作"),
@@ -854,12 +855,6 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "進捗state",
         "operation=append",
       ),
-      conditional(
-        "expected-target-digest",
-        "sha256",
-        "previewで観測したtarget digest",
-        "operation=project",
-      ),
     ],
     optionalFlags: [
       optional("recorded-at", "ISO8601", "記録時刻", "実行時刻"),
@@ -869,7 +864,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "直前journal digest。初回は省略",
         "null",
       ),
-      optional("apply", "", "append・seal・projectを永続化する", "preview"),
+      optional("apply", "", "append・sealだけを永続化する", "preview"),
     ],
     example:
       "npx agent-skill-chain review progress --staging=.agent-skill-chain/tmp/issues/20260912_change --operation=append --task=T01 --state=completed",

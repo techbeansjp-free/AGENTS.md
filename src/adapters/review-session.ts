@@ -18,13 +18,9 @@ import { git } from "../lib/process.js";
 import { stableJson } from "../lib/security.js";
 import {
   buildReviewProgressInventory,
-  parseReviewProgressRecords,
-  projectReviewProgressTarget,
   PROGRESS_END,
   PROGRESS_START,
-  verifyReviewProgressTarget,
 } from "../domain/review-progress.js";
-import { REVIEW_PROGRESS_JOURNAL_FILE } from "../domain/staging.js";
 import {
   assertWorkflowStaging,
   readWorkflowJournal,
@@ -68,54 +64,6 @@ function assertStoredStagingDigest(staging: string): void {
     throw new Error(
       `review session更新前のstaging成果物一覧またはdigestが一致しません${STAGING_DIGEST_RERECORD_HINT}`,
     );
-  const session = readStoredReviewSession(staging);
-  const inventory = session?.anchor.progressInventory;
-  if (inventory) {
-    const journal = path.join(staging, REVIEW_PROGRESS_JOURNAL_FILE);
-    const target = path.join(staging, inventory.targetPath);
-    const targetStat = fs.lstatSync(target);
-    if (
-      targetStat.isSymbolicLink() ||
-      !targetStat.isFile() ||
-      targetStat.nlink !== 1 ||
-      (targetStat.mode & 0o777) !== inventory.fileMode ||
-      fs.realpathSync(target) !== target
-    )
-      throw new Error("parallel progress targetのidentityまたはmodeが不正です");
-    if (!fs.existsSync(journal)) return;
-    const journalStat = fs.lstatSync(journal);
-    if (
-      journalStat.isSymbolicLink() ||
-      !journalStat.isFile() ||
-      journalStat.nlink !== 1 ||
-      (journalStat.mode & 0o777) !== 0o600 ||
-      fs.realpathSync(journal) !== journal
-    )
-      throw new Error("progress journalのidentityまたはmodeが不正です");
-    const records = parseReviewProgressRecords(
-      fs.readFileSync(journal, "utf8"),
-    );
-    if (
-      records.length === 0 ||
-      !("sealDigest" in records.at(-1)!) ||
-      records.some(
-        (record) =>
-          record.sessionId !== session.sessionId ||
-          record.implementationHeadSha !== session.anchor.initialHeadSha,
-      )
-    )
-      throw new Error(
-        "review session更新前のprogress journalが未sealまたはbinding不正です",
-      );
-    const source = fs.readFileSync(target, "utf8");
-    verifyReviewProgressTarget({
-      inventory,
-      source,
-      records,
-    });
-    if (source !== projectReviewProgressTarget({ inventory, source, records }))
-      throw new Error("review session更新前のprogress projectionが未反映です");
-  }
 }
 
 function sortedUnique(values: readonly string[]): string[] {
@@ -181,11 +129,6 @@ export function buildReviewRoundDraft(input: {
     );
   let round: unknown;
   if (previous === null) {
-    const progressJournal = path.join(staging, REVIEW_PROGRESS_JOURNAL_FILE);
-    if (fs.existsSync(progressJournal))
-      throw new Error(
-        "初回review session固定前のprogress journalを拒否しました",
-      );
     const implementation = latestImplementationEntry(staging);
     if (!implementation?.implementationHeadSha)
       throw new Error(
@@ -334,11 +277,15 @@ export function previewReviewRound(input: {
         fs.realpathSync(target) !== target
       )
         throw new Error("review roundのprogress target identityが不正です");
-      verifyReviewProgressTarget({
-        inventory,
-        source: fs.readFileSync(target, "utf8"),
-        records: [],
-      });
+      const observedInventory = buildReviewProgressInventory(
+        inventory.targetPath,
+        fs.readFileSync(target, "utf8"),
+        targetStat.mode & 0o777,
+      );
+      if (stableJson(observedInventory) !== stableJson(inventory))
+        throw new Error(
+          "review roundのprogress inventoryが実targetと一致しません",
+        );
     }
   } else {
     /**
