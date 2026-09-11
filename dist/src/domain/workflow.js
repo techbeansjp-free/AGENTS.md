@@ -152,12 +152,12 @@ export function planWorkflowAdvance(input) {
         ? "design"
         : input.nextStep >= 2
             ? "requirements"
-            : undefined;
+            : "request";
     return Object.freeze({
         ...base,
         state: "preview",
         operation: sync ? "sync" : "record",
-        ...(validationStage === undefined ? {} : { validationStage }),
+        validationStage,
         required: Object.freeze(sync
             ? ["repository", "issue", "authorize=approved"]
             : ["artifact", "evidence"]),

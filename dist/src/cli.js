@@ -3314,14 +3314,12 @@ export async function main(argv, dependencies = {}) {
             return plan.state === "blocked" ? 1 : 0;
         }
         return withStagingMutationLock(staging, () => {
-            if (plan.validationStage !== undefined) {
-                const validation = validateIssue(staging, {
-                    stage: plan.validationStage,
-                    gherkinDialect: issueStagingGherkinDialect(staging),
-                });
-                if (!validation.valid)
-                    throw new Error(`workflow advanceの成果物検証に失敗しました: ${validation.errors.join("; ")}`);
-            }
+            const validation = validateIssue(staging, {
+                stage: plan.validationStage,
+                gherkinDialect: issueStagingGherkinDialect(staging),
+            });
+            if (!validation.valid)
+                throw new Error(`workflow advanceの成果物検証に失敗しました: ${validation.errors.join("; ")}`);
             const current = inspectWorkflowStaging(staging);
             const currentPlan = planWorkflowAdvance({
                 mode: current.mode,
@@ -3363,6 +3361,17 @@ export async function main(argv, dependencies = {}) {
             if (!/^[1-9]\d*$/u.test(issueRaw))
                 throw new Error("--issueは正のIssue番号で指定してください");
             const repository = required(flags, "repo");
+            const recordedAt = flags["recorded-at"] ?? new Date().toISOString();
+            const syncedAt = flags["synced-at"] ?? new Date().toISOString();
+            for (const [label, value] of [
+                ["recorded-at", recordedAt],
+                ["synced-at", syncedAt],
+            ]) {
+                const parsed = Date.parse(value);
+                if (!Number.isFinite(parsed) ||
+                    new Date(parsed).toISOString() !== value)
+                    throw new Error(`--${label}はISO 8601 UTC日時で指定してください`);
+            }
             const checkpoint = targetStep;
             const tracker = `https://github.com/${repository}/issues/${issueRaw}`;
             if (checkpoint === 8) {
@@ -3398,7 +3407,7 @@ export async function main(argv, dependencies = {}) {
                     recordStagingSync(staging, {
                         tracker,
                         checkpoint,
-                        syncedAt: flags["synced-at"] ?? new Date().toISOString(),
+                        syncedAt,
                         bodyDigest: draft.bodySha256,
                         readBackDigest: draft.bodySha256,
                     });
@@ -3406,7 +3415,7 @@ export async function main(argv, dependencies = {}) {
                     step: targetStep,
                     skillId: definition.skillId,
                     mode: current.mode,
-                    recordedAt: flags["recorded-at"] ?? new Date().toISOString(),
+                    recordedAt,
                     artifacts: [synced.url],
                     evidence: `sync read-back digest ${draft.bodySha256} matched tracker ${tracker}`,
                 };

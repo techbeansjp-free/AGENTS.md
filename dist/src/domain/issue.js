@@ -792,9 +792,13 @@ export function validateIssue(issuePath, options = {}) {
         if (!text.includes(`## ${heading}`))
             errors.push(`必須項目がありません: ${heading}`);
     }
-    const validatedFullFiles = declared === "full" && options.stage === "requirements"
-        ? ["01_要件定義.md"]
-        : Object.keys(FULL_FILES);
+    const validatedFullFiles = declared !== "full"
+        ? Object.keys(FULL_FILES)
+        : options.stage === "request"
+            ? []
+            : options.stage === "requirements"
+                ? ["01_要件定義.md"]
+                : Object.keys(FULL_FILES);
     const allText = [
         text,
         ...validatedFullFiles
@@ -887,20 +891,13 @@ export function validateIssue(issuePath, options = {}) {
         isPocBlockedOperation(requestedOperation))
         errors.push(`PoCでは${requestedOperation}を要求できません。delivery.stopAt=${options.delivery?.stopAt ?? "pull_request"}で停止し、fullへ昇格してください`);
     if (mode === "full") {
-        const requiredFiles = options.stage === "requirements"
-            ? ["01_要件定義.md"]
-            : validatedFullFiles;
+        const requiredFiles = validatedFullFiles;
         for (const name of requiredFiles)
             if (!fs.existsSync(path.join(issuePath, name)))
                 errors.push(`fullモードには${name}が必要です`);
     }
     const considerationFiles = mode === "full"
-        ? [
-            "00_要求定義.md",
-            ...(options.stage === "requirements"
-                ? ["01_要件定義.md"]
-                : validatedFullFiles),
-        ]
+        ? ["00_要求定義.md", ...validatedFullFiles]
         : ["00_要求定義.md"];
     for (const name of considerationFiles) {
         const file = path.join(issuePath, name);
@@ -914,7 +911,9 @@ export function validateIssue(issuePath, options = {}) {
             allowReference: name !== "00_要求定義.md",
         }).errors);
     }
-    if (mode === "full" && options.stage !== "requirements")
+    if (mode === "full" &&
+        options.stage !== "request" &&
+        options.stage !== "requirements")
         errors.push(...validateLowRiskShortForms(issuePath));
     return { valid: errors.length === 0, mode, errors, blockedOperations };
 }

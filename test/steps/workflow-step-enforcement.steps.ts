@@ -1275,6 +1275,26 @@ function createQuickStaging(root: string): string {
   }).path;
 }
 
+function completeAdvanceRequirement(staging: string): void {
+  const requirementFile = path.join(staging, "00_要求定義.md");
+  const completed = fs
+    .readFileSync(requirementFile, "utf8")
+    .split("\n")
+    .map((line) =>
+      line.startsWith("|")
+        ? line
+            .replaceAll("applicable / not-applicable", "not-applicable")
+            .replace(/（[^）\n]*）/gu, "自動検査で非該当を確認した")
+        : line,
+    )
+    .join("\n");
+  fs.writeFileSync(
+    requirementFile,
+    `${completed}\nScenario: SCN-QUICK-ADVANCE-001 次Stepを記録する\n  Given 要求成果物が完成している\n  When 次Stepを適用する\n  Then Step 1が記録される\n`,
+  );
+  refreshStoredStagingDigest(staging);
+}
+
 function executeCli(args: string[], cwd = process.cwd(), env = process.env) {
   return spawnSync(
     process.execPath,
@@ -5831,10 +5851,7 @@ if (exact(["auth", "status"])) {
     }
     case "SCN-E2E-ADVANCE-002": {
       const staging = createQuickStaging(this.temp("asc-advance-apply-"));
-      fs.appendFileSync(
-        path.join(staging, "00_要求定義.md"),
-        "\nadvance追記\n",
-      );
+      completeAdvanceRequirement(staging);
       const checked = await executeMain([
         "workflow",
         "advance",
@@ -6058,6 +6075,66 @@ if (exact(["auth", "status"])) {
       );
       assert.equal(journal.entries.at(-1)?.step, 9);
       assert.equal(journal.entries.at(-1)?.pocObservation?.headSha, headSha);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-007": {
+      const staging = createQuickStaging(this.temp("asc-advance-request-"));
+      fs.writeFileSync(path.join(staging, "00_要求定義.md"), "# 未完成\n");
+      refreshStoredStagingDigest(staging);
+      const before = fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE));
+      await assert.rejects(
+        () =>
+          executeMain([
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--artifact=00_要求定義.md",
+            "--evidence=未完成成果物",
+            "--apply",
+          ]),
+        /成果物検証に失敗/u,
+      );
+      assert.deepEqual(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE)),
+        before,
+      );
+      break;
+    }
+    case "SCN-E2E-ADVANCE-008": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-invalid-time",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: entry(step, "full"),
+        });
+      const rejected = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          "--recorded-at=not-an-instant",
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(rejected.stdout + rejected.stderr, /ISO 8601 UTC/u);
+      assert.deepEqual(deliveryProviderCalls(prepared), []);
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 3);
       break;
     }
     default:
