@@ -139,10 +139,16 @@ export function buildReviewRoundDraft(input: {
       "round 1は固定initial HEADの全scope reviewである。findingsへreviewの指摘を書く",
     );
   } else {
+    /** budget枯渇はHEAD差分の有無より先に固有の停止理由を返す。 */
+    if (previous.status === "budget-exhausted")
+      throw new Error(
+        "review round --init: sessionはbudget-exhaustedです。取り直しroundは開けません。follow-up Issueの新しいstagingで工程を通してください",
+      );
     if (
       input.baseSha !== undefined ||
       input.scopeIds ||
-      input.acceptanceCriteriaIds
+      input.acceptanceCriteriaIds ||
+      input.invariantIds
     )
       notes.push(
         "sessionがあるため--base・--scope・--ac・--invariantは無視し、anchorをsessionから写した",
@@ -174,9 +180,9 @@ export function buildReviewRoundDraft(input: {
       throw new Error(
         "review round --init: 前round headからの実Git差分が空です。HEADを進めずに次roundを記録することはできません",
       );
-    if (previous.status !== "active")
+    if (previous.status === "converged")
       notes.push(
-        `sessionは${previous.status}である。取り直しroundは収束後のHEAD移動に対して1回だけ許される`,
+        "sessionはconvergedである。取り直しroundは収束後のHEAD移動に対して1回だけ許される",
       );
   }
   return { round: parseReviewRoundInput(round), notes };

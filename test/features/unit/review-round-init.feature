@@ -76,3 +76,59 @@ Feature: review round雛形と契約の露出
     Given 配布template・規範文書・step-09 skillがある
     When 配布template・規範文書・step-09 skillを読む
     Then 04にH_impl行、01にQ-08の判定例表、step-09にstaging配置の手順がある
+
+  Scenario: SCN-UNIT-REVINIT-011 検査後の親差し替えでもstaging内へ書かない
+    Given 初回candidateを持つstagingがある
+    When 親directoryの検査直後にstagingへのsymlinkへ差し替えて雛形を書く
+    Then 親差し替えのerrorで拒否しstagingにも差し替え先にもfileを残さない
+
+  Scenario: SCN-UNIT-REVINIT-015 再検証後に親を再差し替えても無関係fileを削除しない
+    Given 初回candidateを持つstagingがある
+    When 作成後とcleanup直前に親directoryを2回差し替える
+    Then 親差し替えを拒否し作成fileを空にして無関係fileを保持する
+
+  Scenario: SCN-UNIT-REVINIT-017 作成後の書込み失敗で部分内容を残さない
+    Given 初回candidateを持つstagingがある
+    When 排他的作成後に部分書込み失敗を注入する
+    Then 書込み失敗を返し作成fileを空にして保持する
+
+  Scenario: SCN-UNIT-REVINIT-018 作成直後のidentity取得失敗も残存を明示する
+    Given 初回candidateを持つstagingがある
+    When 排他的作成直後にidentity取得失敗を注入する
+    Then identity取得失敗を返し作成fileを空にして保持する
+
+  Scenario: SCN-UNIT-REVINIT-019 耐久化後のdirectory descriptor close失敗は成功を覆さない
+    Given 初回candidateを持つstagingがある
+    When 雛形の耐久化後にdirectory descriptor close失敗を注入する
+    Then 完成済み雛形のpathを返し内容を保持する
+
+  Scenario: SCN-UNIT-REVINIT-012 差し替えが無ければ検査した実体の親へ雛形を書く
+    Given 初回candidateを持つstagingがある
+    When --outをstaging外を指すsymlink配下にしてreview round --initでround 1の雛形を書く
+    Then writtenは利用者指定pathのまま実体の親へ雛形を書く
+
+  Scenario: SCN-UNIT-REVINIT-013 budget-exhaustedのsessionへの--initを拒否する
+    Given budget-exhaustedのsessionを持つstagingがある
+    When review round --initで次roundの雛形を書こうとする
+    Then budget-exhaustedのerrorで拒否し雛形を書かない
+
+  Scenario: SCN-UNIT-REVINIT-016 HEADが同じbudget-exhausted sessionも固有errorで拒否する
+    Given budget-exhaustedのsessionを持つstagingがある
+    And HEADをbudget-exhausted sessionのcandidateへ戻す
+    When review round --initで次roundの雛形を書こうとする
+    Then budget-exhaustedのerrorで拒否し雛形を書かない
+
+  Scenario: SCN-UNIT-REVINIT-014 session有りで--invariantだけを渡すと無視を通知する
+    Given round 1をblocker付きで記録し是正commitを積んだstagingがある
+    When --invariantだけを添えてreview round --initで次roundの雛形を書く
+    Then notesにanchorをsessionから写した旨がある
+
+  Scenario: SCN-UNIT-DIAGHINT-004 cleanup-apply拒否の案内は--approved-digestだけである
+    Given 承認済みdigestがpreview digestと一致しないcompletion入力がある
+    When completion状態を評価する
+    Then cleanup-applyの拒否は--approved-digestだけを案内し--report-hashを含まない
+
+  Scenario: SCN-UNIT-DOCROW-002 REQ-WF-009とtemplate 04に注記がある
+    Given 配布template・規範文書・step-09 skillがある
+    When 配布template・規範文書・step-09 skillを読む
+    Then session依存flagの個別報告とDC-UX根拠と発見IDの注記がある

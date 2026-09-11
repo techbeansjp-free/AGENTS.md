@@ -20,6 +20,34 @@ interface AtomicWriteOptions {
   onDurableCommit?: () => void;
 }
 
+interface ExclusivePinnedWriteHooks {
+  /** Test-only fault injection immediately after the directory is pinned. */
+  beforeWrite?: () => void;
+  /** Test-only fault injection after create and before identity observation. */
+  afterCreateBeforeIdentity?: (descriptor: number) => void;
+  /** Test-only fault injection after exclusive create and before full write. */
+  afterCreateBeforeWrite?: (descriptor: number) => void;
+  /** Test-only fault injection after the complete file is durable. */
+  afterWriteBeforeVerify?: () => void;
+  /** Test-only fault injection before rollback removes the created entry. */
+  beforeCleanup?: () => void;
+  /** Test-only replacement for the final pinned-directory close. */
+  closePinnedDirectory?: (descriptor: number) => void;
+}
+
+export class ExclusivePinnedWriteError extends Error {
+  constructor(
+    readonly createdEntrySanitized: boolean,
+    options: { cause: unknown },
+  ) {
+    super(
+      `exclusive file作成後に失敗しました。無関係entryの誤削除を避けるためpathname削除は行わず、作成descriptorを${createdEntrySanitized ? "空にしました" : "空にできませんでした"}。作成entryが残存している可能性があります`,
+      options,
+    );
+    this.name = "ExclusivePinnedWriteError";
+  }
+}
+
 interface PinnedDirectory {
   descriptor: number;
   path: string;
@@ -81,6 +109,127 @@ function descriptorPath(directory: PinnedDirectory, leaf: string): string {
   return process.platform === "linux"
     ? `/proc/self/fd/${directory.descriptor}/${leaf}`
     : path.join(directory.path, leaf);
+}
+
+function descriptorDirectoryPath(directory: PinnedDirectory): string {
+  const candidates =
+    process.platform === "linux"
+      ? [`/proc/self/fd/${directory.descriptor}`]
+      : process.platform === "win32"
+        ? []
+        : [`/dev/fd/${directory.descriptor}`];
+  for (const candidate of candidates) {
+    try {
+      const observed = fs.statSync(candidate);
+      if (
+        observed.isDirectory() &&
+        observed.dev === directory.dev &&
+        observed.ino === directory.ino
+      )
+        return candidate;
+    } catch {
+      // A missing descriptor filesystem is handled by the fail-closed error.
+    }
+  }
+  throw new Error(
+    "exclusive file作成にはdirectory descriptor相対pathが必要です",
+  );
+}
+
+/**
+ * Publish a new file without ever resolving the caller-controlled parent again.
+ *
+ * The directory descriptor pins the object used by create and sanitization. If the
+ * named parent moves, both operations still address the pinned directory. A
+ * platform without a descriptor-relative path surface is rejected before the
+ * destination entry is created. A post-create failure truncates the still-open
+ * descriptor and retains its directory entry: unlink-by-name cannot atomically
+ * bind an inode and could delete an unrelated replacement.
+ */
+export function writeFileExclusivePinned(
+  directory: string,
+  leaf: string,
+  contents: string,
+  hooks: ExclusivePinnedWriteHooks = {},
+): string {
+  if (leaf !== path.basename(leaf) || leaf === "." || leaf === "..")
+    throw new Error("exclusive file作成のleafが不正です");
+  const pinned = pinDirectory(directory);
+  let descriptor: number | undefined;
+  let created = false;
+  let failure: unknown;
+  try {
+    const pinnedTarget = path.join(descriptorDirectoryPath(pinned), leaf);
+    hooks.beforeWrite?.();
+    assertPinnedDirectory(pinned);
+    descriptor = fs.openSync(
+      pinnedTarget,
+      fs.constants.O_WRONLY |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        fs.constants.O_NOFOLLOW,
+      0o600,
+    );
+    created = true;
+    hooks.afterCreateBeforeIdentity?.(descriptor);
+    const createdIdentity = fs.fstatSync(descriptor);
+    if (!createdIdentity.isFile())
+      throw new Error("exclusive file作成先が通常fileではありません");
+    hooks.afterCreateBeforeWrite?.(descriptor);
+    writeFully(descriptor, Buffer.from(contents));
+    fs.fsyncSync(descriptor);
+    hooks.afterWriteBeforeVerify?.();
+    assertPinnedDirectory(pinned);
+    fsyncDirectory(pinned);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    const written = path.join(pinned.path, leaf);
+    try {
+      (hooks.closePinnedDirectory ?? fs.closeSync)(pinned.descriptor);
+    } catch {
+      // File and directory contents are already durable. A descriptor cleanup
+      // failure cannot make the completed draft uncertain or roll it back.
+    }
+    return written;
+  } catch (error) {
+    failure = error;
+  }
+  try {
+    hooks.beforeCleanup?.();
+  } catch (error) {
+    failure = new AggregateError(
+      [failure, error],
+      "cleanup hookが失敗しました",
+    );
+  }
+  let sanitized = false;
+  if (created && descriptor !== undefined) {
+    try {
+      fs.ftruncateSync(descriptor, 0);
+      fs.fsyncSync(descriptor);
+      sanitized = true;
+    } catch (error) {
+      failure = new AggregateError(
+        [failure, error],
+        "作成descriptorを空にできませんでした",
+      );
+    }
+  }
+  if (descriptor !== undefined) {
+    try {
+      fs.closeSync(descriptor);
+    } catch (error) {
+      failure ??= error;
+    }
+  }
+  try {
+    fs.closeSync(pinned.descriptor);
+  } catch (error) {
+    failure ??= error;
+  }
+  if (created)
+    throw new ExclusivePinnedWriteError(sanitized, { cause: failure });
+  throw failure;
 }
 
 function writeFully(descriptor: number, contents: Buffer): void {
