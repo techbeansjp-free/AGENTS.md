@@ -9,6 +9,7 @@ import { observeReviewDiff } from "./review-diff.js";
 import { REVIEW_SESSION_FILE, readStoredReviewSession, } from "./review-session-store.js";
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
+import { isEvidenceOnlyPath } from "../domain/review.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
 const GIT_ENV = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
@@ -76,6 +77,38 @@ export function recordReviewRound(input) {
         return reread;
     });
 }
+/**
+ * **evidence-only suffix**: `fromSha`が`toSha`のancestorで、`fromSha..toSha`の
+ * 差分がevidence-only allowlist配下の1 pathだけならそのpathを返す（Issue #1272）。
+ *
+ * review artifactをcommitするとHEADが`H_impl`から`H_final`へ動く。reviewerが
+ * 確認した内容とPR・mergeされる内容の一致という性質は、artifact 1 fileの追加では
+ * 破れない。従来はこの移動にも「取り直しround」を要求し、製品差分の無いroundで
+ * 収束後の別枠を毎Issue消費していた。**受理するのはこの形だけで、空差分・
+ * 2 path以上・allowlist外・非ancestorはundefinedにし、呼び出し側が従来と同じ
+ * 文言で拒否する。**
+ */
+export function evidenceOnlySuffix(root, fromSha, toSha) {
+    if (fromSha === toSha)
+        return undefined;
+    const ancestor = git(["merge-base", "--is-ancestor", fromSha, toSha], root, {
+        env: GIT_ENV,
+        allowFailure: true,
+    });
+    if (ancestor.status !== 0)
+        return undefined;
+    const diff = git(["diff", "--name-only", "-z", fromSha, toSha], root, {
+        env: GIT_ENV,
+        allowFailure: true,
+    });
+    if (diff.status !== 0)
+        return undefined;
+    const paths = diff.stdout.split("\0").filter((item) => item.length > 0);
+    if (paths.length !== 1)
+        return undefined;
+    const [only] = paths;
+    return isEvidenceOnlyPath(only) ? only : undefined;
+}
 export function assertConvergedReviewSession(input) {
     const staging = assertWorkflowStaging(input.staging);
     assertStoredStagingDigest(staging);
@@ -94,7 +127,8 @@ export function assertConvergedReviewSession(input) {
         records: readEvidenceReanchorChain(staging),
         anchoredHeadSha: session.latestCandidateHeadSha,
     }).effectiveHeadSha;
-    if (effectiveHeadSha !== input.currentHeadSha)
+    if (effectiveHeadSha !== input.currentHeadSha &&
+        evidenceOnlySuffix(path.resolve(staging, "../../../.."), effectiveHeadSha, input.currentHeadSha) === undefined)
         throw new Error("review sessionのcandidate HEADがcurrent HEADと一致しません");
     return session;
 }

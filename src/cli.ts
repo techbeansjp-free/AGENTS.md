@@ -223,6 +223,7 @@ import {
 } from "./adapters/workflow-journal.js";
 import {
   assertConvergedReviewSession,
+  evidenceOnlySuffix,
   previewReviewRound,
   recordReviewRound,
 } from "./adapters/review-session.js";
@@ -455,7 +456,19 @@ export function assertCurrentReviewJournalBinding(
     records: readEvidenceReanchorChain(staging),
     anchoredHeadSha: binding.headSha,
   }).effectiveHeadSha;
-  if (bindingEffectiveHead !== headSha)
+  /**
+   * **artifact 1 fileだけを加えたHEAD（evidence-only suffix）はbindingと同一視する**
+   * （Issue #1272）。bindingは`H_impl`のまま、PR対象は`H_final`でよい。それ以外の
+   * HEAD移動は従来どおり拒否する。
+   */
+  if (
+    bindingEffectiveHead !== headSha &&
+    evidenceOnlySuffix(
+      path.resolve(staging, "../../../.."),
+      bindingEffectiveHead,
+      headSha,
+    ) === undefined
+  )
     throw new Error(
       "Step 10のreviewSession binding HEADがPR作成対象HEADと一致しません",
     );

@@ -151,6 +151,14 @@ function stableActorId(value) {
     return (typeof value === "string" &&
         /^[A-Za-z0-9][A-Za-z0-9_.:=/-]{0,255}$/u.test(value));
 }
+/**
+ * evidence-only allowlist配下の安全なpathか。`review evidence`のartifact path判定と、
+ * review sessionの実効HEADからのartifact-only差分（evidence-only suffix）の判定が
+ * 同じ述語を使う（Issue #1272）。
+ */
+export function isEvidenceOnlyPath(value) {
+    return safeEvidencePath(value);
+}
 function safeEvidencePath(value) {
     return (typeof value === "string" &&
         EVIDENCE_ONLY_PREFIXES.some((prefix) => value.startsWith(prefix)) &&
