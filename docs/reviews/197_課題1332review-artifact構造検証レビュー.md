@@ -5,37 +5,37 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | Issue #1332 の実装・test・仕様 |
-| ラウンド | 1 |
-| 対象SHA・文書ダイジェスト | 0ec88753e8363471bb737498940c8cfbdefb5e4b |
+| ラウンド | 1〜2 |
+| 対象SHA・文書ダイジェスト | 00be45527cfcb0f5368164e27be4b0f94097f22e |
 | 比較基点 | `49872adcfcb020561f55e272f04c50f25f2039f8` |
-| H_impl | `0ec88753e8363471bb737498940c8cfbdefb5e4b` |
-| 対象差分 | 17 path。生成済みdist 4 pathは配布物影響で監査する |
+| H_impl | `00be45527cfcb0f5368164e27be4b0f94097f22e` |
+| 対象差分 | 18 path。生成済みdist 4 pathは配布物影響で監査する |
 | 対象外 | 比較基点に存在し変更されていない範囲 |
-| 残り予算 | 2ラウンド |
-| ラウンド数 | 1 |
+| 残り予算 | 1ラウンド |
+| ラウンド数 | 2 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260911_211757_review-artifactのmarkdown構造を事前検証する |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md` REQ-WF-017、`docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md` |
-| 成果物行数 | 17 path、947追加・246削除。生成物4 pathを含む |
+| 成果物行数 | 18 path、1319追加・247削除。生成物4 pathを含む |
 | 縮小の先行評価 | 既存audit・reanchor parserを共用し、新規依存・書込・approval生成を追加しない範囲へ縮小した |
-| 実施者・日時 | exact-head read-only review context、2026-09-11T22:20:00+09:00 |
+| 実施者・日時 | exact-head read-only review contextとCodeRabbit、2026-09-11T22:55:00+09:00 |
 
 ### 0.1 routing入力契約
 
 | role欄（担当role） | 必要証拠 | 必要model tier | provider欄 | model設定欄 | fallback欄 | 独立性証拠欄・非変更証拠 |
 |---|---|---|---|---|---|---|
-| reviewer | 肯定・敵対review、finding分類 | critical | Codex | provider推奨・high | Critical/High未解決なら停止 | H_impl固定後のread-only review、対象差分の変更なし |
+| reviewer | 肯定・敵対review、finding分類 | critical | Codex、CodeRabbit | provider推奨・high、CodeRabbit Advanced | Critical/High未解決なら停止 | H_impl固定後のread-only review、外部review、対象差分の変更なし |
 
 ## 1. 入力証拠
 
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | Issue #1332、staging `01_要件定義.md` | REQ-WF-017、AC-WF-017、INV-01〜03 | 要件文書 |
-| 差分 | `49872adcfcb020561f55e272f04c50f25f2039f8..0ec88753e8363471bb737498940c8cfbdefb5e4b` | 17 path | Git観測 |
+| 差分 | `49872adcfcb020561f55e272f04c50f25f2039f8..00be45527cfcb0f5368164e27be4b0f94097f22e` | 18 path | Git観測 |
 | テスト | `npm run verify:distribution`ほか | 1818成功、16 skip、0失敗、適合性87/87 | テスト出力 |
 | 仕様 | `docs/specs/` | REQ・AC・SCN・CLI契約・変更履歴を更新 | 既存文書 |
-| commit前candidate | 上記17 path | H_impl `0ec88753e8363471bb737498940c8cfbdefb5e4b` | Git観測 |
+| commit前candidate | 上記18 path | H_impl `00be45527cfcb0f5368164e27be4b0f94097f22e` | Git観測 |
 | Phase A artifact | 本file | artifact-only commit後にGit blobとして観測する | Git観測 |
-| review session | staging `journal/review-session.json` | session `283395ae7f290e319fada4fc860ba9b200458d9e507ac4cbc421f2d544728fcd`、round `048a275bb4eed041df324d99714fd14104b63a162d94aa743fc422da20fb4084` | Git観測 |
+| review session | staging `journal/review-session.json` | session `283395ae7f290e319fada4fc860ba9b200458d9e507ac4cbc421f2d544728fcd`、round 2 `0d344b4ba2f3bc43d04efd67eac031b08a585f616d7cfa1b9d54f8f4cc2b5d58` | Git観測 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: architecture・差分監査でpass
 - `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: 本fileのcommit後にauditで検証する
@@ -46,6 +46,7 @@
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
+| `docs/reviews/197_課題1332review-artifact構造検証レビュー.md` | A | evidence | review | 有限review証跡 | 実行authorityなし | round 1〜2 | artifact commitで更新 | pass |
 | `docs/specs/02_要件/00_要件一覧.md` | M | spec | requirements | 要件索引 | 一方向追跡 | REQ-WF-017 | revert可能 | pass |
 | `docs/specs/02_要件/01_ワークフロー要件.md` | M | spec | requirements | 構造検証要件 | 一方向追跡 | AC-WF-017 | revert可能 | pass |
 | `docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md` | M | spec | interface | 公開CLI契約 | domainを参照 | AC-WF-017 | revert可能 | pass |
@@ -60,7 +61,7 @@
 | `test/features/unit/review-artifact-validation.feature` | A | test | feature | domain受入シナリオ | productionへ非依存 | SCN-UNIT-REVARTVAL-001〜003 | fixtureのみ | pass |
 | `test/steps/review-artifact-validation.steps.ts` | A | test | steps | シナリオ実装 | CLI・domainを観測 | AC-WF-017 | 一時directoryのみ | pass |
 
-- 基準SHAとの差分のうち生成物4 pathを除く13 pathが個別監査表と一致し、生成物4 pathは配布物影響で確認した: pass
+- 基準SHAとの差分のうち生成物4 pathを除く14 pathが個別監査表と一致し、生成物4 pathは配布物影響で確認した: pass
 - package・spec・test間に責務越境がない: pass
 - 個別findingによる修正: なし
 
@@ -72,6 +73,7 @@
 |---|---|---|---|---|---|---|---|
 | DISC-001 | CRLF入力の再固定時に改行形式を変え得た | 既存reanchor互換 | なし | 入力の改行形式を保持 | reanchor回帰31件・integration 38件 | no-spec-impact | pass |
 | DISC-002 | 新規Gherkinの説明が日本語規約に未適合だった | quality gate | なし | feature・stepを日本語化 | `npm run test:format`、対象4件成功 | no-spec-impact | pass |
+| DISC-003 | 外部reviewで監査表診断、descriptor固定、入力排他、終了値testの不足4件を検出 | AC-WF-017・INV-03 | interface詳細 | 同じPRで最小修正 | 対象4件・全1834 scenarios成功 | updated | pass |
 
 ### 2.1 受け入れ条件とシナリオ
 
@@ -116,7 +118,12 @@
 
 ## 5. 指摘
 
-指摘なし。
+| ID | 重大度 | 内容 | 証拠 | 影響範囲 | 対応 | 状態・分類 | 残存リスク |
+|---|---|---|---|---|---|---|---|
+| EXT-1332-001 | High | 監査表の欠落・重複・形式不正がdiagnosticsへ入らない | discussion 3989631097 | domain・仕様 | header・行・重複診断を追加 | resolved | なし |
+| EXT-1332-002 | Medium | `--file`と位置引数の併用が片方を黙殺する | discussion 3989631103 | CLI入力 | 排他拒否を追加 | resolved | なし |
+| EXT-1332-003 | High | lstat後のpath差替えでroot外を読み得る | discussion 3989631111 | filesystem境界 | no-follow descriptorとinode一致を追加 | resolved | 祖先directoryは既存root containment契約に依存 |
+| EXT-1332-004 | Medium | CLI終了値をtestが観測していない | discussion 3989631122 | test検出力 | 正常0・不正1をassert | resolved | なし |
 
 ## 6. ラウンド固有の確認
 
@@ -128,7 +135,10 @@
 
 ### ラウンド2
 
-- 未実施: round 1で収束
+- 外部指摘: EXT-1332-001〜004をresolvedへ分類
+- 修正差分: domain、CLI、test、仕様、生成済みdist
+- 修正で触れた隣接範囲: audit parser、JSON入力互換、filesystem read境界
+- 未解決Critical/High: なし
 
 ### ラウンド3
 
@@ -161,7 +171,7 @@
 |---|---|
 | 適用した独立性モード | context-isolated |
 | その要求を満たすこと | はい |
-| reviewerとimplementerのidentity・context比較 | H_impl確定後に実装操作を終了し、固定diffだけを読むreview phaseへ分離した |
+| reviewerとimplementerのidentity・context比較 | H_impl確定後の固定diffを別review phaseとCodeRabbit review ID 5179219204で検査した |
 | reviewerが対象差分を変更していないこと | はい。review phaseで変更したpathは本review artifactだけ |
 
 ## 10. 仕様整合性
@@ -177,7 +187,7 @@
 ## 11. 総合判定と再開地点
 
 - 未解決Critical/High: なし
-- Medium/Lowの記録: なし
+- Medium/Lowの記録: EXT-1332-002・004 resolved
 - 判定: approved
 - 新しい権限が必要な事項: PR作成・mergeはownerの自走指示で許可済み
 - 残存リスク: Markdown方言の追加時は必須見出し契約の更新が必要
