@@ -5,6 +5,8 @@ description: 検証済みトラッカーとモード別実装計画に従い、�
 
 # ステップ9: 専用worktreeでの実装
 
+**stagingは実装するworktreeの中に置く。** `review round`・`workflow record`はstagingのpathからrepository rootを導出してcurrent HEADと突合し、`pr create`・`pr merge`はstagingが対象rootの`.agent-skill-chain/tmp/issues/`直下にあることを要求する。root（既定branch）側にstagingを残したまま専用worktreeでHEADを進めると、Step 10以降の全commandが「candidate HEADがcurrent HEADと一致しません」で止まる。Issue番号が既知なら`worktree create`を先に実行し、Step 0の`issue create --root=<worktree>`でstagingを最初からworktree内へ作る。Step 4でIssueを起票する場合は、worktree作成の直後にroot側のstaging directoryを同じ相対path（`.agent-skill-chain/tmp/issues/<staging>`）へ`mv`で移し、root側へ複製を残さない。journalはworktree側だけが正本になる。
+
 入力は検証済みトラッカーと明示した基点。成果物は専用ブランチ・worktree、BDD例とACを立証するrisk比例Evidence、最小コード、合格したプロジェクト検証一式、merge前に成立状態を反映した`docs/specs/`。作業元の変更状態を検査して同一に保持し、暗黙のstash・reset・checkout・clean・deleteをしない。テストは一時リポジトリ・模擬処理だけを使い、実リモート・他のworktreeを変更しない。
 
 ## routing入力契約

@@ -17,7 +17,7 @@ GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報�
 
 `src/cli-usage.ts`がsubcommandごとの要約、必須flag、条件付きflag、任意flagと既定値、位置引数、実行例を保持する単一正本である。CLIはcommandとsubcommandを解決した直後にこの定義を引き、次の順で評価する。
 
-1. `--help`または`-h`があればusageをJSONで返し終了code 0とする。必須flag検証より先に評価する。
+1. `--help`または`-h`があればusageをJSONで返し終了code 0とする。必須flag検証より先に評価する。入力fileの契約を持つsubcommandは`inputContract`（`description`と`example`）を含める。
 2. 値をとるflagが`--flag=値`形式でない場合、`--flagは空白区切りでは受理しません。--flag=値の形式で指定してください`を返す。無言で未指定として扱わない。
 3. subcommand固有のtrusted boundary評価を行う。`worktree create`の明示`--path`はここで評価し、必須flag検証より先に拒否する。
 4. 不足している必須flagを1回の実行で全件`reasons`へ列挙する。1件ずつ返さない。`next`は当該subcommandの`--help`を案内する。
@@ -74,7 +74,7 @@ finalize時に削除可能なignore対象は、package既定の`node_modules/`�
 | `policy migrate` | trusted/candidate、`--dry-run`または`--apply`、state変更時はcall-siteの`--approved-plan-hash`と`--expected-revision` | plan、snapshot、history、rollback、retry、recover。state内の自己申告approvalをauthorityにせず、dry-runはfileを書き込まない |
 | `review evidence` | `--repo --pr --run-id --review-id`と`H_impl/H_final`、artifact path | Gitと唯一のGitHub adapterから観測した二段階証拠。caller actor option、任意JSON、別PR run、不一致・未完了・自己reviewは非承認 |
 | `review validate` | tracked review file | rubricと構造だけを検証する。file内のGitHub metadataをauthorityにせず、承認はtrusted provider観測待ちのpending |
-| `review round` | `--staging --file`、任意の`--apply`。fileはanchor、candidate HEAD、previous round digest、focus、findingの厳密JSON | 無指定はpreview、`--apply`は`review-session.json`へ永続化する。Git実差分、scope/AC/invariant/diff anchor、round digest chain、finding admissionを再導出する。収束後は異なるHEADと空でない実fixed diffのround 2/3だけを追加でき、同じHEAD・reset・anchor変更・blocker脱落・budget終了後・3round超過を非0で拒否する |
+| `review round` | `--staging --file`、任意の`--apply`。fileはanchor、candidate HEAD、previous round digest、focus、findingの厳密JSON（構造と例は`--help`の`inputContract`）。`--init --out=<staging外の新規path> --head=<sha>`（round 1は`--base --scope --ac`、任意`--invariant`）で次roundの雛形を`--out`へ書き、stagingとsessionは書かない。`--file`・`--apply`と併用不可 | 無指定はpreview、`--apply`は`review-session.json`へ永続化する。Git実差分、scope/AC/invariant/diff anchor、round digest chain、finding admissionを再導出する。収束後は異なるHEADと空でない実fixed diffのround 2/3だけを追加でき、同じHEAD・reset・anchor変更・blocker脱落・budget終了後・3round超過を非0で拒否する |
 | `review reanchor` | `--staging --new-head --new-base --reason`、任意の`--root`、`--dry-run`または`--apply` | PR作成前の収束済みreview sessionをanchorにする。previewはapplyと同じread-only evaluatorで入力、anchor、chain、冪等性、完全diff、二層の等価性を検証し、成功時は`willAppend`と実効HEADを返す。`--apply`はmutation lock内で最新stateへ再評価し、成功時だけ再固定chainを追記してread-backする |
 | `pr reanchor` | `--staging --new-head --new-base --reason`、任意の`--root`、`--dry-run`または`--apply` | PR作成後の`step11-recorded` delivery stateをanchorにする。previewとapplyの判定、出力、適用境界は`review reanchor`と同じである。previewはmutation lock、transaction復旧、再固定chain、staging digestを含む永続書込みを行わない |
 | `trace validate` | project adapterが作成した`--evidence` JSONとproject choices | runner・file形式・表示言語・Gherkin方言を所有せず、stable ID、canonical step role、選択層、禁止file証拠を検証 |
