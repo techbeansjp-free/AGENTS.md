@@ -62,6 +62,7 @@ import {
   migrateLegacyStagingTrackerLocked,
   planStagingCleanup,
   readStoredStagingRecord,
+  refreshStoredStagingDigest,
   withStagingMutationLock,
 } from "./domain/staging.js";
 import {
@@ -5113,19 +5114,22 @@ export async function main(
           .digest("hex");
         const alreadyPublished =
           observedDispatchBodySha256 === dispatchBodySha256;
+        let syncConfirmed = alreadyPublished;
         try {
-          const synced = alreadyPublished
-            ? { url: tracker }
-            : github(
-                "issue.sync",
-                {
-                  repository,
-                  issue: Number(issueRaw),
-                  bodyFile: bodyFile!,
-                  expectedBodySha256: observed.bodySha256,
-                },
-                process.cwd(),
-              );
+          let synced = { url: tracker };
+          if (!alreadyPublished) {
+            synced = github(
+              "issue.sync",
+              {
+                repository,
+                issue: Number(issueRaw),
+                bodyFile: bodyFile!,
+                expectedBodySha256: observed.bodySha256,
+              },
+              process.cwd(),
+            );
+            syncConfirmed = true;
+          }
           if (!fullStep4)
             recordStagingSync(staging, {
               tracker,
@@ -5167,7 +5171,7 @@ export async function main(
           resultCode = 0;
         } catch (error) {
           let publicationState: "published" | "unpublished" | "unknown" =
-            alreadyPublished ? "published" : "unknown";
+            syncConfirmed ? "published" : "unknown";
           try {
             const recovered = github(
               "issue.read",
@@ -5192,14 +5196,63 @@ export async function main(
           } catch (transactionError) {
             journalTransaction = `invalid:${transactionError instanceof Error ? transactionError.message : String(transactionError)}`;
           }
-          const retry =
-            publicationState === "published"
-              ? "同じtrackerの新しいpreviewを確認して再実行すると、外部同期を重複せずjournalを復旧します"
-              : "公開状態を再確認するため、新しいpreviewを確認してからapplyを再実行してください";
-          throw new Error(
-            `${error instanceof Error ? error.message : String(error)}。workflow advance recovery: state=${publicationState}, tracker=${tracker}, bodySha256=${dispatchBodySha256}, journalTransaction=${journalTransaction}。${retry}`,
-            { cause: error },
-          );
+          const journalBeforeRecovery = readWorkflowJournal(staging);
+          const publishedEntry = journalBeforeRecovery.entries.at(-1);
+          const expectedEvidence = `sync read-back digest ${dispatchBodySha256} matched tracker ${tracker}`;
+          const localJournalPublished =
+            publicationState === "published" &&
+            publishedEntry?.step === targetStep &&
+            publishedEntry.mode === current.mode &&
+            publishedEntry.recordedAt === recordedAt &&
+            stableJson(publishedEntry.artifacts) === stableJson([tracker]) &&
+            publishedEntry.evidence === expectedEvidence;
+          if (
+            localJournalPublished &&
+            (journalTransaction === "published" ||
+              journalTransaction === "none")
+          ) {
+            if (journalTransaction === "published")
+              recoverPendingJournalTransaction(staging);
+            else refreshStoredStagingDigest(staging);
+            const recoveredJournal = readWorkflowJournal(staging);
+            const recoveredEntry = recoveredJournal.entries.at(-1);
+            if (!recoveredEntry || recoveredEntry.step !== targetStep)
+              throw new Error(
+                "公開済みworkflow journal transactionの復旧後検査に失敗しました",
+                { cause: error },
+              );
+            print({
+              ...plan,
+              state: "applied",
+              result: {
+                sync: { url: tracker },
+                journal: {
+                  entry: recoveredEntry,
+                  journalDigest: crypto
+                    .createHash("sha256")
+                    .update(recoveredJournal.source)
+                    .digest("hex"),
+                  stagingDigest: readStoredStagingRecord(staging).digest,
+                },
+                recovery: {
+                  state: "journal-recovered",
+                  tracker,
+                  bodySha256: dispatchBodySha256,
+                  journalTransaction,
+                },
+              },
+            });
+            resultCode = 0;
+          } else {
+            const retry =
+              publicationState === "published"
+                ? "同じtrackerの新しいpreviewを確認して再実行すると、外部同期を重複せずjournalを復旧します"
+                : "公開状態を再確認するため、新しいpreviewを確認してからapplyを再実行してください";
+            throw new Error(
+              `${error instanceof Error ? error.message : String(error)}。workflow advance recovery: state=${publicationState}, tracker=${tracker}, bodySha256=${dispatchBodySha256}, journalTransaction=${journalTransaction}。${retry}`,
+              { cause: error },
+            );
+          }
         }
       } catch (error) {
         primaryError = error;
