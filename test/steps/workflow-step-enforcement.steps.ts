@@ -22,6 +22,7 @@ import {
   completePullRequestWorkflow,
   inspectWorkflowStagingArtifacts,
   parseModeDecision,
+  planWorkflowAdvance,
   parseStepJournal,
   renderModeDecision,
   skippableSteps,
@@ -1193,6 +1194,66 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
       });
       assert.equal(checked.valid, false);
       assert.match(checked.errors.join("\n"), /Issueが対象と一致しません/u);
+      break;
+    }
+    case "SCN-UNIT-ADVANCE-001": {
+      const plan = planWorkflowAdvance({
+        mode: "full",
+        currentStep: 3,
+        nextStep: 4,
+        valid: true,
+      });
+      assert.equal(plan.operation, "sync");
+      assert.equal(plan.validationStage, "requirements");
+      assert.deepEqual(plan.required, [
+        "repository",
+        "issue",
+        "authorize=approved",
+      ]);
+      break;
+    }
+    case "SCN-UNIT-ADVANCE-002": {
+      const review = planWorkflowAdvance({
+        mode: "full",
+        currentStep: 9,
+        nextStep: 10,
+        valid: true,
+      });
+      const delivery = planWorkflowAdvance({
+        mode: "full",
+        currentStep: 10,
+        nextStep: 11,
+        valid: true,
+      });
+      assert.equal(review.state, "delegated");
+      assert.equal(review.operation, "review");
+      assert.equal(delivery.state, "delegated");
+      assert.equal(delivery.operation, "delivery");
+      break;
+    }
+    case "SCN-UNIT-ADVANCE-003": {
+      const plan = planWorkflowAdvance({
+        mode: "quick",
+        currentStep: 1,
+        nextStep: 4,
+        valid: false,
+        errors: ["journal digest mismatch"],
+      });
+      assert.equal(plan.state, "blocked");
+      assert.equal(plan.operation, "blocked");
+      assert.deepEqual(plan.reasons, ["journal digest mismatch"]);
+      break;
+    }
+    case "SCN-UNIT-ADVANCE-004": {
+      const plan = planWorkflowAdvance({
+        mode: "quick",
+        currentStep: 1,
+        nextStep: 9,
+        valid: true,
+      });
+      assert.equal(plan.state, "blocked");
+      assert.equal(plan.operation, "blocked");
+      assert.match(plan.reasons.join("\n"), /必須順序/u);
       break;
     }
     default:
@@ -5745,6 +5806,123 @@ if (exact(["auth", "status"])) {
       assert.match(
         rejected.stdout + rejected.stderr,
         /terminal delivery state後はStep 0〜10を追記できません/u,
+      );
+      break;
+    }
+    case "SCN-E2E-ADVANCE-001": {
+      const staging = createQuickStaging(this.temp("asc-advance-preview-"));
+      const journal = path.join(staging, STEP_JOURNAL_FILE);
+      const before = fs.readFileSync(journal);
+      const checked = await executeMain([
+        "workflow",
+        "advance",
+        `--staging=${staging}`,
+        "--dry-run",
+      ]);
+      assert.equal(checked.status, 0, checked.stdout);
+      const output = JSON.parse(checked.stdout) as {
+        operation: string;
+        targetStep: number;
+      };
+      assert.equal(output.operation, "record");
+      assert.equal(output.targetStep, 1);
+      assert.deepEqual(fs.readFileSync(journal), before);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-002": {
+      const staging = createQuickStaging(this.temp("asc-advance-apply-"));
+      fs.appendFileSync(
+        path.join(staging, "00_要求定義.md"),
+        "\nadvance追記\n",
+      );
+      const checked = await executeMain([
+        "workflow",
+        "advance",
+        `--staging=${staging}`,
+        "--artifact=00_要求定義.md",
+        "--evidence=要求成果物を確認した",
+        `--recorded-at=${instant}`,
+        "--apply",
+      ]);
+      assert.equal(checked.status, 0, checked.stdout);
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 1);
+      assert.equal(journal.entries.filter((item) => item.step === 1).length, 1);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-003": {
+      const staging = createQuickStaging(this.temp("asc-advance-delegate-"));
+      appendWorkflowJournalEntry({ staging, entry: entry(1) });
+      appendWorkflowJournalEntry({
+        staging,
+        entry: {
+          ...entry(4),
+          artifacts: ["https://github.com/o/r/issues/877"],
+          evidence: `sync read-back digest ${"a".repeat(64)}`,
+        },
+      });
+      appendWorkflowJournalEntry({ staging, entry: entry(9) });
+      const before = fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE));
+      const checked = await executeMain([
+        "workflow",
+        "advance",
+        `--staging=${staging}`,
+      ]);
+      assert.equal(checked.status, 0, checked.stdout);
+      const output = JSON.parse(checked.stdout) as {
+        state: string;
+        operation: string;
+        targetStep: number;
+      };
+      assert.deepEqual(
+        [output.state, output.operation, output.targetStep],
+        ["delegated", "review", 10],
+      );
+      assert.deepEqual(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE)),
+        before,
+      );
+      break;
+    }
+    case "SCN-E2E-ADVANCE-004": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-sync",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: entry(step, "full"),
+        });
+      const checked = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 4);
+      assert.match(
+        journal.entries.at(-1)?.evidence ?? "",
+        /sync.*[a-f0-9]{64}/u,
       );
       break;
     }

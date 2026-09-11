@@ -280,3 +280,23 @@ Feature: 公開CLIでワークフローStepを強制する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-049"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-001 workflow advanceのpreviewはjournalを変更しない
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-001"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-002 workflow advanceのapplyは次Stepを1件だけ記録する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-002"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-003 workflow advanceはStep 10をreviewへ委譲して変更しない
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-003"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-004 workflow advanceはStep 4の本文同期とjournal記録を合成する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-004"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる

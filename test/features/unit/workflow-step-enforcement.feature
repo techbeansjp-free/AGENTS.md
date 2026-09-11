@@ -245,3 +245,23 @@ Feature: ワークフローStepの定義とjournalを決定的に検証する
     Given ワークフローStep単体検査の準備がある
     When "SCN-UNIT-WFJRNL-028"の単体検査を実行する
     Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-ADVANCE-001 次Step 4をrequirements検証付きIssue同期として計画する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-ADVANCE-001"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-ADVANCE-002 Step 10と11を専用reviewとdeliveryへ委譲する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-ADVANCE-002"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-ADVANCE-003 不正なjournalを副作用なしのblocked計画にする
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-ADVANCE-003"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-ADVANCE-004 modeの必須順序と矛盾する次Stepをblocked計画にする
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-ADVANCE-004"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる

@@ -121,6 +121,106 @@ export function skippableSteps(mode: Mode): readonly number[] {
   );
 }
 
+export type WorkflowAdvanceOperation =
+  "record" | "sync" | "review" | "delivery" | "complete" | "blocked";
+
+export interface WorkflowAdvancePlan {
+  readonly state: "preview" | "blocked" | "delegated" | "complete";
+  readonly mode: Mode;
+  readonly currentStep?: number;
+  readonly targetStep?: number;
+  readonly operation: WorkflowAdvanceOperation;
+  readonly validationStage?: "requirements" | "design";
+  readonly required: readonly string[];
+  readonly next: string;
+  readonly reasons: readonly string[];
+}
+
+/** 保存済みjournalの観測から、次の1操作だけを副作用なしで導出する。 */
+export function planWorkflowAdvance(input: {
+  mode: Mode;
+  currentStep?: number;
+  nextStep?: number;
+  valid: boolean;
+  errors?: readonly string[];
+}): WorkflowAdvancePlan {
+  const base = {
+    mode: input.mode,
+    ...(input.currentStep === undefined
+      ? {}
+      : { currentStep: input.currentStep }),
+    ...(input.nextStep === undefined ? {} : { targetStep: input.nextStep }),
+  };
+  const sequence = requiredSteps(input.mode);
+  const currentIndex =
+    input.currentStep === undefined ? -1 : sequence.indexOf(input.currentStep);
+  const expectedNext = sequence[currentIndex + 1];
+  const inconsistent =
+    (input.currentStep !== undefined && currentIndex < 0) ||
+    input.nextStep !== expectedNext;
+  if (!input.valid || inconsistent)
+    return Object.freeze({
+      ...base,
+      state: "blocked" as const,
+      operation: "blocked" as const,
+      required: Object.freeze([]),
+      next: "workflow verifyでjournal不整合を解消してから再実行してください",
+      reasons: Object.freeze([
+        ...(input.errors ?? []),
+        ...(inconsistent
+          ? ["currentStepとnextStepがmodeの必須順序に一致しません"]
+          : []),
+        ...(!inconsistent && (input.errors?.length ?? 0) === 0
+          ? ["workflow stateが不正です"]
+          : []),
+      ]),
+    });
+  if (input.nextStep === undefined)
+    return Object.freeze({
+      ...base,
+      state: "complete" as const,
+      operation: "complete" as const,
+      required: Object.freeze([]),
+      next: "必要な後続操作はありません",
+      reasons: Object.freeze([]),
+    });
+  if (input.nextStep === 10 || input.nextStep === 11) {
+    const review = input.nextStep === 10;
+    return Object.freeze({
+      ...base,
+      state: "delegated" as const,
+      operation: review ? ("review" as const) : ("delivery" as const),
+      required: Object.freeze(
+        review ? ["exact candidate HEAD"] : ["converged review session"],
+      ),
+      next: review
+        ? "review round --staging=<staging>で独立reviewを開始してください"
+        : "pr create --staging=<staging>でdelivery gateを実行してください",
+      reasons: Object.freeze([]),
+    });
+  }
+  const sync = input.nextStep === 4 || input.nextStep === 8;
+  const validationStage =
+    input.nextStep >= 6
+      ? ("design" as const)
+      : input.nextStep >= 2
+        ? ("requirements" as const)
+        : undefined;
+  return Object.freeze({
+    ...base,
+    state: "preview" as const,
+    operation: sync ? ("sync" as const) : ("record" as const),
+    ...(validationStage === undefined ? {} : { validationStage }),
+    required: Object.freeze(
+      sync
+        ? ["repository", "issue", "authorize=approved"]
+        : ["artifact", "evidence"],
+    ),
+    next: `Step ${input.nextStep}を検証して1件だけ適用してください`,
+    reasons: Object.freeze([]),
+  });
+}
+
 export interface JournalHumanOverride extends Pick<
   HumanOverride,
   "issue" | "scope" | "instructedBy" | "instructedAt" | "expiresAt"
