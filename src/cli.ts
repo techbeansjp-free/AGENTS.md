@@ -349,7 +349,7 @@ export function composeWorkflowAdvanceIssueBody(
   existingBody: string,
   generatedBody: string,
 ): string {
-  const existing = existingBody.replace(/\r\n/g, "\n").trimEnd();
+  const existing = existingBody.replace(/\r\n/g, "\n");
   const generated = generatedBody.replace(/\r\n/g, "\n").trim();
   if (
     generated.includes(WORKFLOW_ADVANCE_BODY_START) ||
@@ -363,19 +363,24 @@ export function composeWorkflowAdvanceIssueBody(
   if (starts > 1 || ends > 1 || starts !== ends)
     throw new Error("既存Issue本文のworkflow advance生成領域markerが不正です");
   const block = `${WORKFLOW_ADVANCE_BODY_START}\n${generated}\n${WORKFLOW_ADVANCE_BODY_END}`;
-  if (starts === 0)
-    return existing === "" ? `${block}\n` : `${existing}\n\n${block}\n`;
+  if (starts === 0) {
+    const separator =
+      existing === "" || existing.endsWith("\n\n")
+        ? ""
+        : existing.endsWith("\n")
+          ? "\n"
+          : "\n\n";
+    return `${existing}${separator}${block}\n`;
+  }
   const start = existing.indexOf(WORKFLOW_ADVANCE_BODY_START);
   const end = existing.indexOf(WORKFLOW_ADVANCE_BODY_END);
   if (end < start)
     throw new Error(
       "既存Issue本文のworkflow advance生成領域marker順序が不正です",
     );
-  const before = existing.slice(0, start).trimEnd();
-  const after = existing
-    .slice(end + WORKFLOW_ADVANCE_BODY_END.length)
-    .trimStart();
-  return `${[before, block, after].filter((part) => part !== "").join("\n\n")}\n`;
+  const before = existing.slice(0, start);
+  const after = existing.slice(end + WORKFLOW_ADVANCE_BODY_END.length);
+  return `${before}${block}${after}`;
 }
 
 function assertWorkflowAdvanceArtifacts(

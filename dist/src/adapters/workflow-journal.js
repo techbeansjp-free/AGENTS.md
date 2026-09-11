@@ -270,7 +270,21 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha) {
     if (entry.mode !== current.mode)
         throw new Error(`entry mode ${entry.mode}がstaging mode ${current.mode}と一致しません`);
     const repositoryRoot = path.resolve(staging, "../../../..");
+    const assertCandidateWorktreeClean = () => {
+        const status = git([
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--",
+            ".",
+            ":(exclude).agent-skill-chain/tmp/issues",
+        ], repositoryRoot).stdout;
+        if (status !== "")
+            throw new Error("Step 9の候補worktreeがjournal確定前に変更されました");
+    };
     if (entry.step === 9 && headSha !== undefined) {
+        assertCandidateWorktreeClean();
         const currentHeadSha = git(["rev-parse", "--verify", "HEAD^{commit}"], repositoryRoot).stdout.trim();
         if (currentHeadSha !== headSha)
             throw new Error("Step 9の検証対象HEADがjournal追記前に変更されました");
@@ -347,6 +361,8 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha) {
             headSha !== undefined &&
             git(["rev-parse", "--verify", "HEAD^{commit}"], repositoryRoot).stdout.trim() !== headSha)
             throw new Error("Step 9の検証対象HEADがjournal確定前に変更されました");
+        if (entry.step === 9 && headSha !== undefined)
+            assertCandidateWorktreeClean();
         const currentPath = assertRegularJournalPath(journal);
         if (currentPath.dev !== before.dev ||
             currentPath.ino !== before.ino ||

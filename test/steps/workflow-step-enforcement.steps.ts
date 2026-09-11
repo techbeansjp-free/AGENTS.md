@@ -6284,6 +6284,15 @@ if (exact(["auth", "status"])) {
           ),
         /予約marker/u,
       );
+      const preservedPrefix = "利用者のhard break  \n\n";
+      const preservedSuffix = "\n    indented user content\n";
+      assert.equal(
+        composeWorkflowAdvanceIssueBody(
+          `${preservedPrefix}<!-- agent-skill-chain:workflow-advance:start -->\nold\n<!-- agent-skill-chain:workflow-advance:end -->${preservedSuffix}`,
+          "new",
+        ),
+        `${preservedPrefix}<!-- agent-skill-chain:workflow-advance:start -->\nnew\n<!-- agent-skill-chain:workflow-advance:end -->${preservedSuffix}`,
+      );
       const prepared = prepareDeliveryCli(this, {}, "disabled");
       const staging = createIssueStaging(prepared.root, {
         title: "workflow-advance-reserved-marker",
