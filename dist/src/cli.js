@@ -93,9 +93,12 @@ function workflowLifecycleApplyMode(flags) {
 }
 const WORKFLOW_ADVANCE_BODY_START = "<!-- agent-skill-chain:workflow-advance:start -->";
 const WORKFLOW_ADVANCE_BODY_END = "<!-- agent-skill-chain:workflow-advance:end -->";
-function composeWorkflowAdvanceIssueBody(existingBody, generatedBody) {
+export function composeWorkflowAdvanceIssueBody(existingBody, generatedBody) {
     const existing = existingBody.replace(/\r\n/g, "\n").trimEnd();
     const generated = generatedBody.replace(/\r\n/g, "\n").trim();
+    if (generated.includes(WORKFLOW_ADVANCE_BODY_START) ||
+        generated.includes(WORKFLOW_ADVANCE_BODY_END))
+        throw new Error("生成するIssue本文にworkflow advance予約markerを含めることはできません");
     const starts = existing.split(WORKFLOW_ADVANCE_BODY_START).length - 1;
     const ends = existing.split(WORKFLOW_ADVANCE_BODY_END).length - 1;
     if (starts > 1 || ends > 1 || starts !== ends)

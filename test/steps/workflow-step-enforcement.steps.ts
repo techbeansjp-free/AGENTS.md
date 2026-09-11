@@ -78,7 +78,7 @@ import {
 import { doctor } from "../../src/domain/lifecycle.js";
 import { checkWorkflowStepDocument } from "../../scripts/check_conformance.js";
 import { checkWorkflowSteps } from "../../scripts/check_workflow_steps.js";
-import { main } from "../../src/cli.js";
+import { composeWorkflowAdvanceIssueBody, main } from "../../src/cli.js";
 import {
   observeReviewDiff,
   recordReviewRound,
@@ -6195,6 +6195,83 @@ if (exact(["auth", "status"])) {
       );
       assert.notEqual(rejected.status, 0);
       assert.match(rejected.stdout + rejected.stderr, /ISO 8601 UTC/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).some(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ),
+        false,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 3);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-009": {
+      const staging = createQuickStaging(this.temp("asc-advance-flags-"));
+      completeAdvanceRequirement(staging);
+      const journalFile = path.join(staging, STEP_JOURNAL_FILE);
+      const before = fs.readFileSync(journalFile);
+      await assert.rejects(
+        () =>
+          executeMain([
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--artifact=00_要求定義.md",
+            "--evidence=競合する実行modeを拒否する",
+            "--dry-run",
+            "--apply",
+          ]),
+        /--applyと--dry-runは同時に指定できません/u,
+      );
+      assert.deepEqual(fs.readFileSync(journalFile), before);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-010": {
+      assert.throws(
+        () =>
+          composeWorkflowAdvanceIssueBody(
+            "# 既存本文\n",
+            "# 生成本文\n<!-- agent-skill-chain:workflow-advance:start -->\n",
+          ),
+        /予約marker/u,
+      );
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-reserved-marker",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      fs.appendFileSync(
+        path.join(staging, "01_要件定義.md"),
+        "\n<!-- agent-skill-chain:workflow-advance:end -->\n",
+      );
+      refreshStoredStagingDigest(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const rejected = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /予約marker|未解決のplaceholder/u,
+      );
       assert.equal(
         deliveryProviderCalls(prepared).some(
           (args) => args[0] === "issue" && args[1] === "edit",

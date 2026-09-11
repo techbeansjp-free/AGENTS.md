@@ -320,3 +320,13 @@ Feature: 公開CLIでワークフローStepを強制する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-ADVANCE-008"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-009 workflow advanceはdry-runとapplyの競合を拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-009"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-010 workflow advanceは成果物内の予約markerを同期前に拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-010"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
