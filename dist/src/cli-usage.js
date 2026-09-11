@@ -1,8 +1,10 @@
 function flag(name, value, description) {
     return { name, value, description };
 }
-function conditional(name, value, description, when) {
-    return { name, value, description, when };
+function conditional(name, value, description, when, requiredWhen) {
+    return requiredWhen === undefined
+        ? { name, value, description, when }
+        : { name, value, description, when, requiredWhen };
 }
 function optional(name, value, description, fallback) {
     return { name, value, description, fallback };
@@ -432,9 +434,9 @@ export const COMMAND_USAGE = Object.freeze([
         summary: "固定anchorのreview roundをpreviewまたは永続化する。--initで次roundの入力雛形を実Gitから生成する",
         requiredFlags: [flag("staging", "path", "対象Issue staging")],
         conditionalFlags: [
-            conditional("file", "path", "review round入力JSON。構造はinputContractを参照", "--initを指定しないとき"),
-            conditional("out", "path", "雛形JSONの出力先。stagingの外で、存在しないpath", "--initを指定するとき"),
-            conditional("head", "sha", "candidate HEAD。repositoryのcurrent HEADと一致させる", "--initを指定するとき"),
+            conditional("file", "path", "review round入力JSON。構造はinputContractを参照", "--initを指定しないとき", (provided) => provided.init === undefined),
+            conditional("out", "path", "雛形JSONの出力先。stagingの外で、存在しないpath", "--initを指定するとき", (provided) => provided.init !== undefined),
+            conditional("head", "sha", "candidate HEAD。repositoryのcurrent HEADと一致させる", "--initを指定するとき", (provided) => provided.init !== undefined),
             conditional("base", "sha", "review差分の基点SHA", "--initを指定し、review sessionがまだ無いとき（round 1）"),
             conditional("scope", "ID,ID", "anchor.scopeIds", "--initを指定し、review sessionがまだ無いとき（round 1）"),
             conditional("ac", "ID,ID", "anchor.acceptanceCriteriaIds", "--initを指定し、review sessionがまだ無いとき（round 1）"),
@@ -446,7 +448,7 @@ export const COMMAND_USAGE = Object.freeze([
         ],
         example: "npx agent-skill-chain review round --staging=.agent-skill-chain/tmp/issues/20260830_120000-change --file=./review-round.json --apply",
         inputContract: {
-            description: "--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。IDは大文字英数と._-。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた雛形を書く",
+            description: "--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。IDは大文字英数と._-で、anchorの各ID列は重複なし昇順。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた雛形を書く",
             example: {
                 round: 1,
                 previousRoundDigest: null,
@@ -818,14 +820,24 @@ export function valueFlagNames(usage) {
 }
 export function missingRequiredFlags(usage, provided, positionals = []) {
     const positionalSubstitute = usage.positional !== undefined && positionals.length > 0;
-    return usage.requiredFlags
-        .filter((item, index) => {
-        if (positionalSubstitute && index === 0)
-            return false;
-        const value = provided[item.name];
+    const missingValue = (name) => {
+        const value = provided[name];
         return typeof value !== "string" || value === "";
-    })
-        .map((item) => item.name);
+    };
+    return [
+        ...usage.requiredFlags
+            .filter((item, index) => {
+            if (positionalSubstitute && index === 0)
+                return false;
+            return missingValue(item.name);
+        })
+            .map((item) => item.name),
+        ...usage.conditionalFlags
+            .filter((item) => item.requiredWhen !== undefined &&
+            item.requiredWhen(provided) &&
+            missingValue(item.name))
+            .map((item) => item.name),
+    ];
 }
 export function renderUsage(usage) {
     const render = (item) => item.value === "" ? `--${item.name}` : `--${item.name}=<${item.value}>`;

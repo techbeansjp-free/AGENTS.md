@@ -6,6 +6,14 @@ export interface UsageFlag {
 
 export interface ConditionalUsageFlag extends UsageFlag {
   readonly when: string;
+  /**
+   * 与えられたflag集合から機械的に必須と判定できる場合の述語。
+   * 定義があれば`missingRequiredFlags`が必須flagと同じ1回の診断へ列挙する
+   * （round 1 REV-03: conditional化した`--file`が一括診断から落ちていた）。
+   */
+  readonly requiredWhen?: (
+    provided: Readonly<Record<string, string | boolean>>,
+  ) => boolean;
 }
 
 export interface OptionalUsageFlag extends UsageFlag {
@@ -44,8 +52,11 @@ function conditional(
   value: string,
   description: string,
   when: string,
+  requiredWhen?: ConditionalUsageFlag["requiredWhen"],
 ): ConditionalUsageFlag {
-  return { name, value, description, when };
+  return requiredWhen === undefined
+    ? { name, value, description, when }
+    : { name, value, description, when, requiredWhen };
 }
 
 function optional(
@@ -642,18 +653,21 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "path",
         "review round入力JSON。構造はinputContractを参照",
         "--initを指定しないとき",
+        (provided) => provided.init === undefined,
       ),
       conditional(
         "out",
         "path",
         "雛形JSONの出力先。stagingの外で、存在しないpath",
         "--initを指定するとき",
+        (provided) => provided.init !== undefined,
       ),
       conditional(
         "head",
         "sha",
         "candidate HEAD。repositoryのcurrent HEADと一致させる",
         "--initを指定するとき",
+        (provided) => provided.init !== undefined,
       ),
       conditional(
         "base",
@@ -693,7 +707,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       "npx agent-skill-chain review round --staging=.agent-skill-chain/tmp/issues/20260830_120000-change --file=./review-round.json --apply",
     inputContract: {
       description:
-        "--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。IDは大文字英数と._-。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた雛形を書く",
+        "--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。IDは大文字英数と._-で、anchorの各ID列は重複なし昇順。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた雛形を書く",
       example: {
         round: 1,
         previousRoundDigest: null,
@@ -1209,13 +1223,26 @@ export function missingRequiredFlags(
 ): readonly string[] {
   const positionalSubstitute =
     usage.positional !== undefined && positionals.length > 0;
-  return usage.requiredFlags
-    .filter((item, index) => {
-      if (positionalSubstitute && index === 0) return false;
-      const value = provided[item.name];
-      return typeof value !== "string" || value === "";
-    })
-    .map((item) => item.name);
+  const missingValue = (name: string): boolean => {
+    const value = provided[name];
+    return typeof value !== "string" || value === "";
+  };
+  return [
+    ...usage.requiredFlags
+      .filter((item, index) => {
+        if (positionalSubstitute && index === 0) return false;
+        return missingValue(item.name);
+      })
+      .map((item) => item.name),
+    ...usage.conditionalFlags
+      .filter(
+        (item) =>
+          item.requiredWhen !== undefined &&
+          item.requiredWhen(provided) &&
+          missingValue(item.name),
+      )
+      .map((item) => item.name),
+  ];
 }
 
 export function renderUsage(usage: CommandUsage): Record<string, unknown> {

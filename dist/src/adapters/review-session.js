@@ -32,6 +32,9 @@ function assertStoredStagingDigest(staging) {
         stored.digest !== calculateStagingDigest(staging, artifacts))
         throw new Error(`review session更新前のstaging成果物一覧またはdigestが一致しません${STAGING_DIGEST_RERECORD_HINT}`);
 }
+function sortedUnique(values) {
+    return [...new Set(values)].sort();
+}
 function resolveCommit(root, label, sha) {
     const observed = git(["rev-parse", "--verify", `${sha}^{commit}`], root, {
         env: GIT_ENV,
@@ -50,7 +53,7 @@ function resolveCommit(root, label, sha) {
  * blocking、`fixedDiff`を再固定chainの実効HEADから`headSha`までの実Git差分にする。
  * **stagingもsessionも書かない。** 判定は`previewReviewRound`が従来どおり行う。
  */
-export function buildReviewRoundSkeleton(input) {
+export function buildReviewRoundDraft(input) {
     const staging = assertWorkflowStaging(input.staging);
     const root = path.resolve(staging, "../../../..");
     const headSha = resolveCommit(root, "--head", input.headSha);
@@ -59,8 +62,13 @@ export function buildReviewRoundSkeleton(input) {
     const currentHeadSha = git(["rev-parse", "--verify", "HEAD^{commit}"], root, {
         env: GIT_ENV,
     }).stdout.trim();
+    /**
+     * **previewが拒否する雛形を書かない**（round 1 REV-02）。`review round`は
+     * current HEADだけを受理し、収束後は空でない実fixedDiffを要求するため、
+     * その条件を満たさない入力はnotesでなくerrorにする。
+     */
     if (currentHeadSha !== headSha)
-        notes.push(`--head ${headSha.slice(0, 8)} はrepositoryのcurrent HEAD ${currentHeadSha.slice(0, 8)} と一致しません。review roundはcurrent HEADだけを受理します`);
+        throw new Error(`review round --initの--head ${headSha.slice(0, 8)} はrepositoryのcurrent HEAD ${currentHeadSha.slice(0, 8)} と一致しません。review roundはcurrent HEADだけを受理します`);
     let round;
     if (previous === null) {
         if (typeof input.baseSha !== "string")
@@ -73,9 +81,10 @@ export function buildReviewRoundSkeleton(input) {
             round: 1,
             previousRoundDigest: null,
             anchor: {
-                scopeIds: [...input.scopeIds],
-                acceptanceCriteriaIds: [...input.acceptanceCriteriaIds],
-                invariantIds: [...(input.invariantIds ?? [])],
+                /** anchorのID列は重複なし昇順が契約であり、雛形側で正規化する */
+                scopeIds: sortedUnique(input.scopeIds),
+                acceptanceCriteriaIds: sortedUnique(input.acceptanceCriteriaIds),
+                invariantIds: sortedUnique(input.invariantIds ?? []),
                 diffBaseSha: baseSha,
                 initialHeadSha: headSha,
                 initialDiffDigest: observed.digest,
@@ -109,7 +118,7 @@ export function buildReviewRoundSkeleton(input) {
         if (previousBlocking.length > 0)
             notes.push(`前round blocker ${previousBlocking.join("、")} の再評価結果（resolvedまたはvalid）をfindingsへ同じIDで入れる。脱落は拒否される`);
         if (fixed.length === 0)
-            notes.push("前round headからの実Git差分が空である。HEADを進めずにroundを記録することはできない");
+            throw new Error("review round --init: 前round headからの実Git差分が空です。HEADを進めずに次roundを記録することはできません");
         if (previous.status !== "active")
             notes.push(`sessionは${previous.status}である。取り直しroundは収束後のHEAD移動に対して1回だけ許される`);
     }

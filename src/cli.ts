@@ -223,7 +223,7 @@ import {
 } from "./adapters/workflow-journal.js";
 import {
   assertConvergedReviewSession,
-  buildReviewRoundSkeleton,
+  buildReviewRoundDraft,
   previewReviewRound,
   recordReviewRound,
   STAGING_DIGEST_RERECORD_HINT,
@@ -5316,15 +5316,28 @@ export async function main(
           "review round --initは--fileおよび--applyと併用できません。雛形を確認してから review round --file=<out> を別に実行してください",
         );
       const out = path.resolve(required(flags, "out"));
-      const resolvedStaging = path.resolve(staging);
+      /**
+       * **包含判定は親directoryのrealpathで行う**（round 1 REV-01）。字句上の
+       * prefixだけでは、stagingを指すdirectory symlinkの配下を`--out`にすると
+       * staging外と判定したままstaging内へ書ける。親が実在しない場合も拒否する。
+       */
+      let outParentReal: string;
+      try {
+        outParentReal = fs.realpathSync(path.dirname(out));
+      } catch {
+        throw new Error(
+          `review round --initの--outの親directoryが実在しません: ${path.dirname(out)}`,
+        );
+      }
+      const realStaging = fs.realpathSync(path.resolve(staging));
       if (
-        out === resolvedStaging ||
-        out.startsWith(`${resolvedStaging}${path.sep}`)
+        outParentReal === realStaging ||
+        outParentReal.startsWith(`${realStaging}${path.sep}`)
       )
         throw new Error(
           "review round --initの--outはstagingの外を指定してください。staging内へ置くとstaging digestが変わり、review roundが拒否します",
         );
-      if (fs.existsSync(out))
+      if (fs.existsSync(out) || fs.lstatSync(out, { throwIfNoEntry: false }))
         throw new Error(
           `review round --initの--outが既に存在します。既存fileは上書きしません: ${out}`,
         );
@@ -5335,7 +5348,7 @@ export async function main(
               .map((item) => item.trim())
               .filter(Boolean)
           : undefined;
-      const skeleton = buildReviewRoundSkeleton({
+      const draft = buildReviewRoundDraft({
         staging,
         headSha: required(flags, "head"),
         baseSha: typeof flags.base === "string" ? flags.base : undefined,
@@ -5343,14 +5356,14 @@ export async function main(
         acceptanceCriteriaIds: ids(flags.ac),
         invariantIds: ids(flags.invariant),
       });
-      fs.writeFileSync(out, `${JSON.stringify(skeleton.round, null, 2)}\n`, {
+      fs.writeFileSync(out, `${JSON.stringify(draft.round, null, 2)}\n`, {
         flag: "wx",
       });
       print({
         written: out,
-        round: skeleton.round.round,
-        candidateHeadSha: skeleton.round.candidateHeadSha,
-        notes: skeleton.notes,
+        round: draft.round.round,
+        candidateHeadSha: draft.round.candidateHeadSha,
+        notes: draft.notes,
       });
       return 0;
     }

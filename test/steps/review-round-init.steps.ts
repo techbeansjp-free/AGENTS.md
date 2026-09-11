@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import { assertWorkflowReadyForDelivery, main } from "../../src/cli.js";
+import { CliValidationError } from "../../src/cli-usage.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
 import { QUESTIONS, type ModeAnswer } from "../../src/domain/mode.js";
 import {
@@ -37,11 +38,12 @@ interface ReviewRoundInitWorld extends WorkflowWorld {
   cliStatus: number;
   cliOutput: string;
   cliError: Error | undefined;
-  skeleton: ReviewRoundInput;
+  draft: ReviewRoundInput;
   fixedPaths: string[];
   helpOutputs: Record<string, unknown>[];
   diagnostic: string;
   completion: ReturnType<typeof planCompletion>;
+  reasonSets: string[][];
 }
 
 const { Given, When, Then } = stepDefinitions<ReviewRoundInitWorld>();
@@ -141,28 +143,33 @@ When("review round --initでround 1の雛形を書く", async function () {
     this,
     initArguments(this, [
       `--base=${this.base}`,
-      "--scope=SCOPE-001",
-      "--ac=AC-001",
+      "--scope=SCOPE-002,SCOPE-001,SCOPE-002",
+      "--ac=AC-002,AC-001",
       "--invariant=INV-001",
     ]),
   );
   assert.equal(this.cliError, undefined, this.cliError?.message);
   assert.equal(this.cliStatus, 0, this.cliOutput);
-  this.skeleton = parseReviewRoundInput(
+  this.draft = parseReviewRoundInput(
     JSON.parse(fs.readFileSync(this.outFile, "utf8")),
+  );
+  assert.deepEqual([...this.draft.anchor.scopeIds], ["SCOPE-001", "SCOPE-002"]);
+  assert.deepEqual(
+    [...this.draft.anchor.acceptanceCriteriaIds],
+    ["AC-001", "AC-002"],
   );
 });
 
 Then("雛形をfileへ渡したreview round previewが受理される", function () {
   const state = previewReviewRound({
     staging: this.staging,
-    round: this.skeleton,
+    round: this.draft,
   });
   assert.equal(state.rounds.length, 1);
-  assert.equal(this.skeleton.round, 1);
-  assert.equal(this.skeleton.candidateHeadSha, this.head);
+  assert.equal(this.draft.round, 1);
+  assert.equal(this.draft.candidateHeadSha, this.head);
   assert.equal(
-    this.skeleton.anchor.initialDiffDigest,
+    this.draft.anchor.initialDiffDigest,
     observeReviewDiff(this.root, this.base, this.head).digest,
   );
 });
@@ -224,7 +231,7 @@ When("review round --initで次roundの雛形を書く", async function () {
   await runCli(this, initArguments(this));
   assert.equal(this.cliError, undefined, this.cliError?.message);
   assert.equal(this.cliStatus, 0, this.cliOutput);
-  this.skeleton = parseReviewRoundInput(
+  this.draft = parseReviewRoundInput(
     JSON.parse(fs.readFileSync(this.outFile, "utf8")),
   );
 });
@@ -232,14 +239,14 @@ When("review round --initで次roundの雛形を書く", async function () {
 Then(
   "雛形のpreviousBlockingとfixedDiffが実測と一致しpreviewが受理される",
   function () {
-    assert.equal(this.skeleton.round, 2);
+    assert.equal(this.draft.round, 2);
     assert.equal(
-      this.skeleton.previousRoundDigest,
+      this.draft.previousRoundDigest,
       this.session.latestRoundDigest,
     );
-    assert.deepEqual([...this.skeleton.focus.previousBlocking], ["H-001"]);
-    assert.deepEqual([...this.skeleton.focus.fixedDiff], this.fixedPaths);
-    assert.deepEqual(this.skeleton.anchor, this.session.anchor);
+    assert.deepEqual([...this.draft.focus.previousBlocking], ["H-001"]);
+    assert.deepEqual([...this.draft.focus.fixedDiff], this.fixedPaths);
+    assert.deepEqual(this.draft.anchor, this.session.anchor);
     const output: unknown = JSON.parse(this.cliOutput);
     assert.ok(output && typeof output === "object" && "notes" in output);
     assert.match(
@@ -247,7 +254,7 @@ Then(
       /H-001/u,
     );
     const withReevaluation = parseReviewRoundInput({
-      ...this.skeleton,
+      ...this.draft,
       findings: [
         {
           id: "H-001",
@@ -340,6 +347,102 @@ Given("配布template・規範文書・step-09 skillがある", function () {
       ),
     ),
   );
+});
+
+When(
+  "--outをstagingを指すsymlinkの配下にしてreview round --initを実行する",
+  async function () {
+    const link = path.join(this.temp("asc-review-init-link-"), "staging-link");
+    fs.symlinkSync(this.staging, link);
+    this.outFile = path.join(link, "round.json");
+    await runCli(
+      this,
+      initArguments(this, [
+        `--base=${this.base}`,
+        "--scope=SCOPE-001",
+        "--ac=AC-001",
+      ]),
+    );
+  },
+);
+
+Then("stagingにfileは作られていない", function () {
+  assert.equal(fs.existsSync(path.join(this.staging, "round.json")), false);
+});
+
+Given("round 1を記録しHEADを進めていないstagingがある", function () {
+  createFixture(this);
+  const observed = observeReviewDiff(this.root, this.base, this.head);
+  this.session = recordReviewRound({
+    staging: this.staging,
+    round: parseReviewRoundInput({
+      round: 1,
+      previousRoundDigest: null,
+      anchor: {
+        scopeIds: ["SCOPE-001"],
+        acceptanceCriteriaIds: ["AC-001"],
+        invariantIds: [],
+        diffBaseSha: this.base,
+        initialHeadSha: this.head,
+        initialDiffDigest: observed.digest,
+      },
+      candidateHeadSha: this.head,
+      focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
+      findings: [],
+    }),
+  });
+});
+
+When("review round --initで次roundの雛形を書こうとする", async function () {
+  await runCli(this, initArguments(this));
+});
+
+Then("実Git差分が空であるerrorで拒否し雛形を書かない", function () {
+  assert.ok(this.cliError, this.cliOutput);
+  assert.match(this.cliError.message, /実Git差分が空です/u);
+  assert.equal(fs.existsSync(this.outFile), false);
+});
+
+When("--headを基点SHAにしてreview round --initを実行する", async function () {
+  await runCli(this, [
+    "review",
+    "round",
+    "--init",
+    `--staging=${this.staging}`,
+    `--out=${this.outFile}`,
+    `--head=${this.base}`,
+    `--base=${this.base}`,
+    "--scope=SCOPE-001",
+    "--ac=AC-001",
+  ]);
+});
+
+Then("current HEADと一致しないerrorで拒否し雛形を書かない", function () {
+  assert.ok(this.cliError, this.cliOutput);
+  assert.match(this.cliError.message, /current HEAD .* と一致しません/u);
+  assert.equal(fs.existsSync(this.outFile), false);
+});
+
+When(
+  "--stagingだけでreview roundを実行しさらに--initと--stagingだけで実行する",
+  async function () {
+    this.reasonSets = [];
+    for (const arguments_ of [
+      ["review", "round", `--staging=${this.staging}`],
+      ["review", "round", "--init", `--staging=${this.staging}`],
+    ]) {
+      await runCli(this, arguments_);
+      assert.ok(this.cliError instanceof CliValidationError, this.cliOutput);
+      this.reasonSets.push([...this.cliError.reasons]);
+    }
+  },
+);
+
+Then("前者は--fileを後者は--outと--headを1回の診断で列挙する", function () {
+  const [first, second] = this.reasonSets;
+  assert.ok(first && second);
+  assert.deepEqual(first, ["--file=...が必要です"]);
+  assert.deepEqual(second, ["--out=...が必要です", "--head=...が必要です"]);
 });
 
 When("review roundとpr createのhelpを取得する", async function () {

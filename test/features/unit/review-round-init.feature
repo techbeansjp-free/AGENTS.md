@@ -31,6 +31,27 @@ Feature: review round雛形と契約の露出
     When --initと--applyを併用してreview round --initを実行する
     Then 併用できないerrorで拒否する
 
+  Scenario: SCN-UNIT-REVINIT-007 stagingを指すsymlink配下への--outを拒否する
+    Given 初回candidateを持つstagingがある
+    When --outをstagingを指すsymlinkの配下にしてreview round --initを実行する
+    Then staging外を要求するerrorで拒否する
+    And stagingにfileは作られていない
+
+  Scenario: SCN-UNIT-REVINIT-008 HEADを進めていないsessionへの--initを拒否する
+    Given round 1を記録しHEADを進めていないstagingがある
+    When review round --initで次roundの雛形を書こうとする
+    Then 実Git差分が空であるerrorで拒否し雛形を書かない
+
+  Scenario: SCN-UNIT-REVINIT-009 current HEADと異なる--headの--initを拒否する
+    Given 初回candidateを持つstagingがある
+    When --headを基点SHAにしてreview round --initを実行する
+    Then current HEADと一致しないerrorで拒否し雛形を書かない
+
+  Scenario: SCN-UNIT-REVINIT-010 不足flagは--initの有無に応じて1回で列挙する
+    Given 初回candidateを持つstagingがある
+    When --stagingだけでreview roundを実行しさらに--initと--stagingだけで実行する
+    Then 前者は--fileを後者は--outと--headを1回の診断で列挙する
+
   Scenario: SCN-UNIT-CLIHELP-010 review roundとpr createのhelpはinputContractを持つ
     Given 配布CLIのusage正本がある
     When review roundとpr createのhelpを取得する
