@@ -145,9 +145,18 @@ Given(
 );
 
 Given(
-  /^Verification Set riskが"([^"]+)"で02と03の対象節が全角コロン短縮行である$/u,
-  function (risk: string) {
+  /^Verification Set riskが"([^"]+)"で02と03の対象節が区切り"([^"]+)"の短縮行である$/u,
+  function (risk: string, separator: string) {
     writeStaging(this, risk, "unicode");
+    for (const name of ["02_設計.md", "03_実装計画.md"]) {
+      const artifactPath = path.join(this.issuePath, name);
+      fs.writeFileSync(
+        artifactPath,
+        fs
+          .readFileSync(artifactPath, "utf8")
+          .replaceAll("対象外：", `対象外${separator}`),
+      );
+    }
   },
 );
 

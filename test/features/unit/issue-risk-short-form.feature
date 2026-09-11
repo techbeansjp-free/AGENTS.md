@@ -36,10 +36,16 @@ Feature: Verification Set riskに比例した02/03短縮形式
     When risk比例のIssue成果物を検証する
     Then Verification Set入力が通常fileでないと示して拒否する
 
-  Scenario: SCN-WF-1334-007 high-riskのUnicode類似短縮行を拒否する
-    Given Verification Set riskが"high"で02と03の対象節が全角コロン短縮行である
+  Scenario Outline: SCN-WF-1334-007 high-riskのUnicode類似短縮行を拒否する
+    Given Verification Set riskが"high"で02と03の対象節が区切り"<separator>"の短縮行である
     When risk比例のIssue成果物を検証する
     Then 理由付きの単一行書式を示して拒否する
+
+    Examples:
+      | separator |
+      | ：        |
+      | ∶         |
+      | ː         |
 
   Scenario: SCN-WF-1334-008 字下げcodeを短縮形式として受理しない
     Given Verification Set riskが"low"で02と03の対象節が字下げcode短縮行である

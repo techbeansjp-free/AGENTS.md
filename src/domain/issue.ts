@@ -55,7 +55,8 @@ export type IssueValidationStage = "requirements" | "design";
 
 const LOW_RISK_SHORT_FORM_FILE = "verification-input.json";
 const LOW_RISK_SHORT_FORM = /^対象外:\s*(.*)$/u;
-const LOW_RISK_SHORT_FORM_LIKE = /^\s*(?:(?:[-*+>])\s*)*対象外\s*[:：﹕︓꞉]/u;
+const LOW_RISK_SHORT_FORM_LIKE =
+  /^\s*(?:(?:[-*+>])\s*)*対象外(?:$|(?=\s|[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}A-Za-z0-9_]))/u;
 const MAX_VERIFICATION_INPUT_BYTES = 1024 * 1024;
 const LOW_RISK_SHORT_FORM_TARGETS = Object.freeze([
   Object.freeze({
