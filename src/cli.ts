@@ -5007,6 +5007,7 @@ export async function main(
             repository,
             issue: Number(issueRaw),
             bodyFile: bodyFile!,
+            expectedBodySha256: observed.bodySha256,
           },
           process.cwd(),
         );

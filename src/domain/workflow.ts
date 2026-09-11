@@ -130,7 +130,8 @@ export interface WorkflowAdvancePlan {
   readonly currentStep?: number;
   readonly targetStep?: number;
   readonly operation: WorkflowAdvanceOperation;
-  readonly validationStage?: "request" | "requirements" | "design";
+  readonly validationStage?:
+    "request" | "requirements" | "design-artifact" | "design";
   readonly required: readonly string[];
   readonly next: string;
   readonly reasons: readonly string[];
@@ -201,11 +202,13 @@ export function planWorkflowAdvance(input: {
   }
   const sync = input.nextStep === 4 || input.nextStep === 8;
   const validationStage =
-    input.nextStep >= 5
-      ? ("design" as const)
-      : input.nextStep >= 2
-        ? ("requirements" as const)
-        : ("request" as const);
+    input.nextStep === 5
+      ? ("design-artifact" as const)
+      : input.nextStep >= 6
+        ? ("design" as const)
+        : input.nextStep >= 2
+          ? ("requirements" as const)
+          : ("request" as const);
   return Object.freeze({
     ...base,
     state: "preview" as const,

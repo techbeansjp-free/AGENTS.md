@@ -51,7 +51,8 @@ const FULL_FILES = {
   "03_実装計画.md": "03_実装計画.md",
 };
 
-export type IssueValidationStage = "request" | "requirements" | "design";
+export type IssueValidationStage =
+  "request" | "requirements" | "design-artifact" | "design";
 
 const LOW_RISK_SHORT_FORM_FILE = "verification-input.json";
 const LOW_RISK_SHORT_FORM = /^対象外:\s*(.*)$/u;
@@ -156,8 +157,11 @@ function verificationRisk(issuePath: string): ChangeRisk {
 /** 指定4節にshort formが現れた場合だけ、low限定・理由付き1行を強制する。 */
 export function validateLowRiskShortForms(
   issuePath: string,
+  includedFiles?: ReadonlySet<string>,
 ): readonly string[] {
-  const candidates = LOW_RISK_SHORT_FORM_TARGETS.flatMap((target) => {
+  const candidates = LOW_RISK_SHORT_FORM_TARGETS.filter(
+    (target) => includedFiles === undefined || includedFiles.has(target.file),
+  ).flatMap((target) => {
     const artifact = path.join(issuePath, target.file);
     if (!fs.existsSync(artifact)) return [];
     const bodies = markdownSectionBodies(
@@ -1149,7 +1153,9 @@ export function validateIssue(
         ? []
         : options.stage === "requirements"
           ? ["01_要件定義.md"]
-          : Object.keys(FULL_FILES);
+          : options.stage === "design-artifact"
+            ? ["01_要件定義.md", "02_設計.md"]
+            : Object.keys(FULL_FILES);
   const allText = [
     text,
     ...validatedFullFiles
@@ -1305,7 +1311,14 @@ export function validateIssue(
     options.stage !== "request" &&
     options.stage !== "requirements"
   )
-    errors.push(...validateLowRiskShortForms(issuePath));
+    errors.push(
+      ...validateLowRiskShortForms(
+        issuePath,
+        options.stage === "design-artifact"
+          ? new Set(validatedFullFiles)
+          : undefined,
+      ),
+    );
   return { valid: errors.length === 0, mode, errors, blockedOperations };
 }
 

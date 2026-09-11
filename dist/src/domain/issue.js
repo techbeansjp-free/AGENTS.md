@@ -97,8 +97,8 @@ function verificationRisk(issuePath) {
     return parseVerificationSelectionInput(input).risk;
 }
 /** 指定4節にshort formが現れた場合だけ、low限定・理由付き1行を強制する。 */
-export function validateLowRiskShortForms(issuePath) {
-    const candidates = LOW_RISK_SHORT_FORM_TARGETS.flatMap((target) => {
+export function validateLowRiskShortForms(issuePath, includedFiles) {
+    const candidates = LOW_RISK_SHORT_FORM_TARGETS.filter((target) => includedFiles === undefined || includedFiles.has(target.file)).flatMap((target) => {
         const artifact = path.join(issuePath, target.file);
         if (!fs.existsSync(artifact))
             return [];
@@ -798,7 +798,9 @@ export function validateIssue(issuePath, options = {}) {
             ? []
             : options.stage === "requirements"
                 ? ["01_要件定義.md"]
-                : Object.keys(FULL_FILES);
+                : options.stage === "design-artifact"
+                    ? ["01_要件定義.md", "02_設計.md"]
+                    : Object.keys(FULL_FILES);
     const allText = [
         text,
         ...validatedFullFiles
@@ -914,7 +916,9 @@ export function validateIssue(issuePath, options = {}) {
     if (mode === "full" &&
         options.stage !== "request" &&
         options.stage !== "requirements")
-        errors.push(...validateLowRiskShortForms(issuePath));
+        errors.push(...validateLowRiskShortForms(issuePath, options.stage === "design-artifact"
+            ? new Set(validatedFullFiles)
+            : undefined));
     return { valid: errors.length === 0, mode, errors, blockedOperations };
 }
 function readTwoColumnValue(text, label) {

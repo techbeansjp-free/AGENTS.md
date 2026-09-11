@@ -148,11 +148,13 @@ export function planWorkflowAdvance(input) {
         });
     }
     const sync = input.nextStep === 4 || input.nextStep === 8;
-    const validationStage = input.nextStep >= 5
-        ? "design"
-        : input.nextStep >= 2
-            ? "requirements"
-            : "request";
+    const validationStage = input.nextStep === 5
+        ? "design-artifact"
+        : input.nextStep >= 6
+            ? "design"
+            : input.nextStep >= 2
+                ? "requirements"
+                : "request";
     return Object.freeze({
         ...base,
         state: "preview",

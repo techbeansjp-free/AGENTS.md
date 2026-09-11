@@ -156,12 +156,19 @@ function assertWorkflowAdvanceArtifacts(staging, targetStep, artifacts) {
         const canonicalArtifact = relative.split(path.sep).join("/");
         if (canonicalArtifact !== artifact)
             throw new Error(`Step 9のartifactは正規化済みrepository相対pathが必要です: ${artifact}`);
-        const tracked = git(["ls-tree", "-r", "-z", "--name-only", "HEAD", "--", artifact], repositoryRoot).stdout
-            .split("\0")
+        const tracked = git(["ls-tree", "-r", "-z", "--name-only", "HEAD", "--", artifact], repositoryRoot)
+            .stdout.split("\0")
             .filter(Boolean);
         if (tracked.length === 0)
             throw new Error(`Step 9のartifactは現在HEADで追跡済みでなければなりません: ${artifact}`);
-        const dirty = git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", artifact], repositoryRoot).stdout;
+        const dirty = git([
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--",
+            artifact,
+        ], repositoryRoot).stdout;
         if (dirty !== "")
             throw new Error(`Step 9のartifactは現在HEADと完全一致する必要があります: ${artifact}`);
     }
@@ -3540,6 +3547,7 @@ export async function main(argv, dependencies = {}) {
                     repository,
                     issue: Number(issueRaw),
                     bodyFile: bodyFile,
+                    expectedBodySha256: observed.bodySha256,
                 }, process.cwd());
                 if (!fullStep4)
                     recordStagingSync(staging, {

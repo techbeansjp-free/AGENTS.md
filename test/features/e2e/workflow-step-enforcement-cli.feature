@@ -330,3 +330,13 @@ Feature: 公開CLIでワークフローStepを強制する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-ADVANCE-010"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-011 workflow advanceのStep 5は未完成の実装計画を要求しない
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-011"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-012 workflow advanceは同期直前のIssue本文競合を拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-012"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる

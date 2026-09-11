@@ -30,6 +30,7 @@ interface GitHubInput {
   repository: string;
   issue: number;
   bodyFile: string;
+  expectedBodySha256?: string;
   title: string;
   headSha: string;
   head: string;
@@ -606,7 +607,10 @@ export function github(
 };
 export function github(
   operation: "issue.sync",
-  input: Pick<GitHubInput, "repository" | "issue" | "bodyFile">,
+  input: Pick<
+    GitHubInput,
+    "repository" | "issue" | "bodyFile" | "expectedBodySha256"
+  >,
   cwd: string,
 ): { url: string };
 export function github(
@@ -760,6 +764,33 @@ export function github(
   }
   if (operation === "issue.sync") {
     verifyRepository(input.repository, cwd, "write");
+    if (input.expectedBodySha256 !== undefined) {
+      if (!/^[a-f0-9]{64}$/u.test(input.expectedBodySha256))
+        throw new Error("Issue同期前の期待body digestが不正です");
+      const currentBody = run(
+        "gh",
+        [
+          "issue",
+          "view",
+          String(input.issue),
+          "--repo",
+          input.repository,
+          "--json",
+          "body",
+          "--jq",
+          ".body",
+        ],
+        cwd,
+      ).stdout.replace(/\r\n/g, "\n");
+      const currentDigest = crypto
+        .createHash("sha256")
+        .update(currentBody, "utf8")
+        .digest("hex");
+      if (currentDigest !== input.expectedBodySha256)
+        throw new Error(
+          "Issue同期直前に本文が変更されました。最新本文から再実行してください",
+        );
+    }
     const args = [
       "issue",
       "edit",

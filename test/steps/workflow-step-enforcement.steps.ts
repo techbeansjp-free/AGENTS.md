@@ -2066,6 +2066,7 @@ interface DeliveryProviderControl {
    * 既定の`"none"`は既存scenarioの挙動を変えない。
    */
   postMergeReviewShift: "none" | "replaced" | "revoked";
+  concurrentIssueEditAtView?: number;
 }
 
 interface PreparedDeliveryCli extends PreparedPullRequest {
@@ -2631,6 +2632,7 @@ function prepareDeliveryCli(
   const logFile = path.join(stubDirectory, "calls.jsonl");
   const observedBody = path.join(stubDirectory, "observed-pr-body.md");
   const issueBodyFile = path.join(stubDirectory, "issue-body.md");
+  const issueViewCountFile = path.join(stubDirectory, "issue-view-count.txt");
   const control: DeliveryProviderControl = {
     phase: "ready",
     ghVersion: "2.97.0",
@@ -2703,6 +2705,7 @@ const canonicalBody = ${JSON.stringify(canonicalDocument.body)};
  */
 const mergeRequestedAt = ${JSON.stringify(fixtureInstant())};
 const issueBodyFile = ${JSON.stringify(issueBodyFile)};
+const issueViewCountFile = ${JSON.stringify(issueViewCountFile)};
 fs.appendFileSync(logFile, JSON.stringify(args) + "\\n");
 const control = JSON.parse(fs.readFileSync(controlFile, "utf8"));
 const baseSha = control.remoteBaseSha;
@@ -2981,6 +2984,12 @@ if (exact(["--version"])) {
   const index = args.indexOf("--body-file");
   fs.writeFileSync(issueBodyFile, fs.readFileSync(args[index + 1], "utf8"));
 } else if (args[0] === "issue" && args[1] === "view") {
+  const issueViewCount = fs.existsSync(issueViewCountFile)
+    ? Number(fs.readFileSync(issueViewCountFile, "utf8")) + 1
+    : 1;
+  fs.writeFileSync(issueViewCountFile, String(issueViewCount));
+  if (control.concurrentIssueEditAtView === issueViewCount)
+    fs.writeFileSync(issueBodyFile, "# concurrent edit\\n");
   process.stdout.write(
     fs.existsSync(issueBodyFile) ? fs.readFileSync(issueBodyFile, "utf8") : "",
   );
@@ -6309,6 +6318,106 @@ if (exact(["auth", "status"])) {
       assert.match(
         rejected.stdout + rejected.stderr,
         /予約marker|未解決のplaceholder/u,
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).some(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ),
+        false,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 3);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-011": {
+      const root = this.temp("asc-advance-design-stage-");
+      for (const args of [
+        ["init", "-q", "-b", "main"],
+        ["config", "user.name", "advance-test"],
+        ["config", "user.email", "advance-test@example.invalid"],
+      ]) {
+        const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+        assert.equal(result.status, 0, result.stderr);
+      }
+      fs.writeFileSync(path.join(root, "README.md"), "# baseline\n");
+      spawnSync("git", ["add", "README.md"], { cwd: root });
+      spawnSync("git", ["commit", "-q", "-m", "baseline"], { cwd: root });
+      const staging = createIssueStaging(root, {
+        title: "workflow-advance-design-stage",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      fs.writeFileSync(path.join(staging, "03_実装計画.md"), "# 未完成\n");
+      refreshStoredStagingDigest(staging);
+      for (const step of [1, 2, 3, 4])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: {
+            ...entry(step, "full"),
+            ...(step === 4
+              ? {
+                  artifacts: ["https://github.com/o/r/issues/877"],
+                  evidence: `sync read-back digest ${"a".repeat(64)}`,
+                }
+              : {}),
+          },
+        });
+      const checked = await executeMain([
+        "workflow",
+        "advance",
+        `--staging=${staging}`,
+        "--artifact=02_設計.md",
+        "--evidence=設計成果物を確認した",
+        `--recorded-at=${instant}`,
+        "--apply",
+      ]);
+      assert.equal(checked.status, 0, checked.stdout);
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 5);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-012": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      fs.writeFileSync(prepared.issueBodyFile, "# initial issue body\n");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-concurrent-issue-edit",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const control = JSON.parse(
+        fs.readFileSync(prepared.controlFile, "utf8"),
+      ) as DeliveryProviderControl;
+      control.concurrentIssueEditAtView = 3;
+      fs.writeFileSync(prepared.controlFile, `${JSON.stringify(control)}\n`);
+      const rejected = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /Issue同期直前に本文が変更されました/u,
       );
       assert.equal(
         deliveryProviderCalls(prepared).some(
