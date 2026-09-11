@@ -4770,6 +4770,7 @@ export async function main(
           "authorize",
           "recorded-at",
           "synced-at",
+          "expected-body-sha256",
           "apply",
           "dry-run",
         ].includes(flag),
@@ -4799,9 +4800,13 @@ export async function main(
         ),
       errors: inspected.errors,
     });
-    const remoteFlags = ["repo", "issue", "authorize", "synced-at"].filter(
-      (flag) => flags[flag] !== undefined,
-    );
+    const remoteFlags = [
+      "repo",
+      "issue",
+      "authorize",
+      "synced-at",
+      "expected-body-sha256",
+    ].filter((flag) => flags[flag] !== undefined);
     if (plan.operation === "record" && remoteFlags.length > 0)
       throw new Error(
         `ローカルStepではIssue同期optionを使用できません: --${remoteFlags.join(", --")}`,
@@ -4983,6 +4988,15 @@ export async function main(
         )
           throw new Error(`--${label}はISO 8601 UTC日時で指定してください`);
       }
+      const expectedBodySha256 = required(flags, "expected-body-sha256");
+      if (!/^[a-f0-9]{64}$/u.test(expectedBodySha256))
+        throw new Error(
+          "--expected-body-sha256はpreviewが表示した64桁のbodySha256で指定してください",
+        );
+      if (expectedBodySha256 !== syncPreview?.bodySha256)
+        throw new Error(
+          "--expected-body-sha256が現在の同期previewと一致しません。新しいpreviewを確認してから再実行してください",
+        );
       const checkpoint = targetStep as 4 | 8;
       const tracker = `https://github.com/${repository}/issues/${issueRaw}`;
       if (checkpoint === 8) {

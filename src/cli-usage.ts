@@ -492,6 +492,12 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "Issue同期の明示承認",
         "Step 4/8を--applyするとき",
       ),
+      conditional(
+        "expected-body-sha256",
+        "64hex",
+        "直前のpreviewが表示した同期本文digest",
+        "Step 4/8を--applyするとき",
+      ),
     ],
     optionalFlags: [
       optional("recorded-at", "ISO8601", "journal記録時刻", "実行時刻"),

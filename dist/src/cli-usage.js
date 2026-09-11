@@ -294,6 +294,7 @@ export const COMMAND_USAGE = Object.freeze([
             conditional("repo", "owner/name", "同期先repository", "Step 4/8"),
             conditional("issue", "整数", "同期先Issue番号", "Step 4/8"),
             conditional("authorize", "approved", "Issue同期の明示承認", "Step 4/8を--applyするとき"),
+            conditional("expected-body-sha256", "64hex", "直前のpreviewが表示した同期本文digest", "Step 4/8を--applyするとき"),
         ],
         optionalFlags: [
             optional("recorded-at", "ISO8601", "journal記録時刻", "実行時刻"),

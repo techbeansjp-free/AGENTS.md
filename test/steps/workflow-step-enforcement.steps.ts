@@ -6035,6 +6035,29 @@ if (exact(["auth", "status"])) {
         ),
         false,
       );
+      const unbound = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(unbound.status, 0);
+      assert.match(unbound.stdout + unbound.stderr, /expected-body-sha256/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).some(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ),
+        false,
+      );
       const checked = executeCli(
         [
           "workflow",
@@ -6043,6 +6066,7 @@ if (exact(["auth", "status"])) {
           "--repo=o/r",
           "--issue=877",
           "--authorize=approved",
+          `--expected-body-sha256=${previewOutput.sync.bodySha256}`,
           `--recorded-at=${instant}`,
           `--synced-at=${instant}`,
           "--apply",
@@ -6084,6 +6108,23 @@ if (exact(["auth", "status"])) {
           staging,
           entry: entry(step, "full"),
         });
+      const firstPreview = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(firstPreview.status, 0, firstPreview.stdout);
+      const firstBodySha256 = (
+        JSON.parse(firstPreview.stdout) as {
+          sync: { bodySha256: string };
+        }
+      ).sync.bodySha256;
       const first = executeCli(
         [
           "workflow",
@@ -6092,6 +6133,7 @@ if (exact(["auth", "status"])) {
           "--repo=o/r",
           "--issue=877",
           "--authorize=approved",
+          `--expected-body-sha256=${firstBodySha256}`,
           `--recorded-at=${instant}`,
           `--synced-at=${instant}`,
           "--apply",
@@ -6453,6 +6495,21 @@ if (exact(["auth", "status"])) {
       writeFullStagingArtifacts(staging);
       for (const step of [1, 2, 3])
         appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const preview = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(preview.status, 0, preview.stdout);
+      const expectedBodySha256 = (
+        JSON.parse(preview.stdout) as { sync: { bodySha256: string } }
+      ).sync.bodySha256;
       const control = JSON.parse(
         fs.readFileSync(prepared.controlFile, "utf8"),
       ) as DeliveryProviderControl;
@@ -6466,6 +6523,7 @@ if (exact(["auth", "status"])) {
           "--repo=o/r",
           "--issue=877",
           "--authorize=approved",
+          `--expected-body-sha256=${expectedBodySha256}`,
           `--recorded-at=${instant}`,
           `--synced-at=${instant}`,
           "--apply",
@@ -6476,7 +6534,7 @@ if (exact(["auth", "status"])) {
       assert.notEqual(rejected.status, 0);
       assert.match(
         rejected.stdout + rejected.stderr,
-        /Issue同期直前に本文が変更されました/u,
+        /preview後にGitHub Issue本文が変更されました/u,
       );
       assert.equal(
         deliveryProviderCalls(prepared).some(
