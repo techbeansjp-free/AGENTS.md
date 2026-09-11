@@ -5,6 +5,8 @@ description: 承認済みexact-headでPRを作成し、modeとtrusted delivery p
 
 # ステップ11: PR作成とdelivery進行
 
+`pr create --evidence`で`spec.impact="no-spec-impact"`を使う場合は、`spec.rationale`に対象範囲を限定した12文字以上の根拠を記録する。
+
 入力は承認済みステップ10、合格したテスト・仕様ゲート、正確なリポジトリ・基点・先頭、事前表示、操作authority。PR作成前にstaging journalがStep 10まで有効で、特にStep 4と10が存在し、staging recordが`sync-verified`であることを検証する。quickでもStep 4を省略せず、無条件bypassを持たない。成果物はPR URLと`pull-request / merge-requested / merged`の観測証拠であり、本文のIssue参照は[開発ワークフロー](../../docs/01_開発ワークフロー.md)の規約に従う。指定stagingは現在project内の検証済みIssue stagingでなければならず、project外、別Issue、symlink経由をprovider呼出し前に拒否する。
 
 `poc`はPoCであることと期限を本文に保持して必ずPRで停止し、release、自動merge、本番cleanupを要求しない。full/quickの`merge.mode=disabled`もPRで停止する。この2経路だけは固定PR bindingのdigestを`outcome=pull-request`の終端EvidenceとしてStep 11へ一度記録する。`assisted`で対象PR authorityが無い場合は必要authorityと再開条件を返し、`pr-bound`のままStep 11を記録しない。

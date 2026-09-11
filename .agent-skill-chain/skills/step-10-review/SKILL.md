@@ -7,6 +7,8 @@ description: exact-headの実装・テスト・仕様証拠を有限にレビュ
 
 入力は正確な先頭SHA・差分、受け入れ条件・シナリオ・Verification Evidence・実装中発見記録・仕様の証拠。成果物は肯定・敵対の評価、有限な指摘、検証結果、発見ごとの対処、`updated`の仕様追跡または範囲を限定した`no-spec-impact`を含む`04_レビュー.md`。影響不明または未解決Critical/Highは停止する。修正後は修正差分と隣接依存だけを再検証し、目的または受け入れ契約が変わらない限り上流工程を再起動しない。**Step 10はPR作成前に完了する。** 収束したreview sessionを`workflow record --step=10`でレビュー成果物をartifact、exact-head・test・仕様整合をevidenceとしてjournalへ追記する。**PR番号・Actions run ID・GitHub review IDはこの時点で存在しないので要求しない。** それらはPR作成後に`review evidence`とdelivery stateへappend-onlyで記録する。
 
+各`review round`の入力JSON fileはstagingの外に置く。blocking findingの`contractId`はanchorのAcceptance Criteria IDまたはInvariant IDに一致させ、単な記録対象へ読み替えない。
+
 ## routing入力契約
 
 role欄の担当roleが`reviewer`であること、必要能力tier、provider欄の上限、model設定欄、fallback欄、独立性証拠欄、肯定・敵対review、finding分類、対象差分を変更していない証拠を実装時のrouting evidenceと突合する。providerとmodel設定はproject choiceの入力契約として扱い、固有のmodel slugからreview authorityを推測しない。**reviewerの独立性はproject policyの`merge.reviewIndependence`が決める。** `context-isolated`（既定）はimplementerと別session/context、exact HEAD固定、対象差分を変更していないこと、肯定・敵対レビューとfinding記録を要求し、**同一GitHub actorでも成立する。** `actor-independent`はPR author・implementation commit authorと別のstable actor IDを要求し、高リスク変更・不可逆操作・releaseでpolicyが宣言して引き上げる。**要求水準を独立性証拠欄で確認できない場合は停止条件を適用し、承認しない。** **同一provider・同一論理tierだけを理由に独立性違反としない。**reviewerはfindingを隠す修正を行わない。

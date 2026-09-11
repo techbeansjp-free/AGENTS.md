@@ -356,6 +356,75 @@ const CHECKS: Readonly<
     assert.equal(result.valid, true);
     assert.equal(result.commands, COMMAND_USAGE.length);
   },
+  "SCN-UNIT-CLICONTRACT-001": () => {
+    const usage = findCommandUsage("workflow", "record");
+    assert.ok(usage);
+    const evidence = usage.requiredFlags.find(
+      (item) => item.name === "evidence",
+    );
+    assert.match(evidence?.description ?? "", /Step 4・8/u);
+    assert.match(evidence?.description ?? "", /64桁のhex digest/u);
+    assert.match(evidence?.description ?? "", /sync語/u);
+    assert.match(
+      usage.example,
+      /--evidence='[^']*sync[^']*[a-f0-9]{64}[^']*'/u,
+    );
+    for (const step of ["04-issue-sync", "08-design-sync"]) {
+      const skill = fs.readFileSync(
+        path.resolve(`.agent-skill-chain/skills/step-${step}/SKILL.md`),
+        "utf8",
+      );
+      assert.match(skill, /64桁のhex digest/u);
+      assert.match(skill, /`sync`語/u);
+    }
+  },
+  "SCN-UNIT-CLICONTRACT-002": () => {
+    const usage = findCommandUsage("pr", "create");
+    assert.ok(usage?.inputContract);
+    assert.match(usage.inputContract.description, /spec\.rationale/u);
+    assert.match(usage.inputContract.description, /12文字以上/u);
+    const skill = fs.readFileSync(
+      path.resolve(".agent-skill-chain/skills/step-11-pr/SKILL.md"),
+      "utf8",
+    );
+    assert.match(skill, /spec\.rationale/u);
+    assert.match(skill, /12文字以上/u);
+    const diagnostic = fs.readFileSync(
+      path.resolve("src/domain/delivery.ts"),
+      "utf8",
+    );
+    assert.match(diagnostic, /spec\.rationale.*12文字以上/u);
+  },
+  "SCN-UNIT-CLICONTRACT-003": () => {
+    const usage = findCommandUsage("review", "round");
+    assert.ok(usage?.inputContract);
+    assert.match(usage.inputContract.description, /入力fileはstagingの外/u);
+    assert.match(
+      usage.inputContract.description,
+      /blocking findingのcontractId/u,
+    );
+    const skill = fs.readFileSync(
+      path.resolve(".agent-skill-chain/skills/step-10-review/SKILL.md"),
+      "utf8",
+    );
+    assert.match(skill, /入力JSON fileはstagingの外/u);
+    assert.match(skill, /blocking findingの`contractId`/u);
+  },
+  "SCN-UNIT-CLICONTRACT-004": () => {
+    const usage = findCommandUsage("worktree", "finalize");
+    assert.ok(usage);
+    assert.match(usage.example, /worktree finalize .* --complete .* --apply/u);
+    assert.match(usage.example, /--report-hash=<preview digest>/u);
+    assert.match(usage.example, /--approved-digest=<preview digest>/u);
+    const reportHash = usage.conditionalFlags.find(
+      (item) => item.name === "report-hash",
+    );
+    const approvedDigest = usage.conditionalFlags.find(
+      (item) => item.name === "approved-digest",
+    );
+    assert.equal(reportHash?.when, "--applyを指定するとき");
+    assert.equal(approvedDigest?.when, "--completeで実際に後片付けするとき");
+  },
 };
 
 Given("CLI usage単体検査の準備がある", function () {
