@@ -98,7 +98,8 @@ export function buildReviewRoundDraft(input) {
     else {
         if (input.baseSha !== undefined ||
             input.scopeIds ||
-            input.acceptanceCriteriaIds)
+            input.acceptanceCriteriaIds ||
+            input.invariantIds)
             notes.push("sessionがあるため--base・--scope・--ac・--invariantは無視し、anchorをsessionから写した");
         const previousHeadSha = deriveEffectiveHead({
             records: readEvidenceReanchorChain(staging),
@@ -119,8 +120,14 @@ export function buildReviewRoundDraft(input) {
             notes.push(`前round blocker ${previousBlocking.join("、")} の再評価結果（resolvedまたはvalid）をfindingsへ同じIDで入れる。脱落は拒否される`);
         if (fixed.length === 0)
             throw new Error("review round --init: 前round headからの実Git差分が空です。HEADを進めずに次roundを記録することはできません");
-        if (previous.status !== "active")
-            notes.push(`sessionは${previous.status}である。取り直しroundは収束後のHEAD移動に対して1回だけ許される`);
+        /**
+         * `budget-exhausted`の雛形は`advanceReviewSession`が拒否する。書いてから
+         * 失敗させず、生成時に止める（Issue #1329）。
+         */
+        if (previous.status === "budget-exhausted")
+            throw new Error("review round --init: sessionはbudget-exhaustedです。取り直しroundは開けません。follow-up Issueの新しいstagingで工程を通してください");
+        if (previous.status === "converged")
+            notes.push("sessionはconvergedである。取り直しroundは収束後のHEAD移動に対して1回だけ許される");
     }
     return { round: parseReviewRoundInput(round), notes };
 }

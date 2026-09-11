@@ -3,7 +3,11 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
-import { assertWorkflowReadyForDelivery, main } from "../../src/cli.js";
+import {
+  assertWorkflowReadyForDelivery,
+  main,
+  writeReviewRoundDraft,
+} from "../../src/cli.js";
 import { CliValidationError } from "../../src/cli-usage.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
 import { QUESTIONS, type ModeAnswer } from "../../src/domain/mode.js";
@@ -44,6 +48,8 @@ interface ReviewRoundInitWorld extends WorkflowWorld {
   diagnostic: string;
   completion: ReturnType<typeof planCompletion>;
   reasonSets: string[][];
+  writeError: Error | undefined;
+  raceParent: string;
 }
 
 const { Given, When, Then } = stepDefinitions<ReviewRoundInitWorld>();
@@ -623,3 +629,181 @@ Then(
     assert.match(skill, /issue create --root=<worktree>/u);
   },
 );
+
+When(
+  "親directoryの検査直後にstagingへのsymlinkへ差し替えて雛形を書く",
+  function () {
+    const container = this.temp("asc-review-init-race-");
+    const parent = path.join(container, "out");
+    fs.mkdirSync(parent);
+    this.raceParent = fs.realpathSync(parent);
+    this.writeError = undefined;
+    try {
+      writeReviewRoundDraft(this.raceParent, "round.json", "{}\n", {
+        beforeWrite: () => {
+          fs.renameSync(parent, `${parent}.moved`);
+          fs.symlinkSync(this.staging, parent);
+        },
+      });
+    } catch (error) {
+      this.writeError =
+        error instanceof Error ? error : new Error(String(error));
+    }
+  },
+);
+
+Then(
+  "親差し替えのerrorで拒否しstagingにも差し替え先にもfileを残さない",
+  function () {
+    assert.ok(this.writeError, "拒否を期待した");
+    assert.match(this.writeError.message, /検査後に差し替えられました/u);
+    assert.equal(fs.existsSync(path.join(this.staging, "round.json")), false);
+    assert.equal(
+      fs.existsSync(path.join(`${this.raceParent}.moved`, "round.json")),
+      false,
+    );
+  },
+);
+
+When(
+  "--outをstaging外を指すsymlink配下にしてreview round --initでround 1の雛形を書く",
+  async function () {
+    const real = this.temp("asc-review-init-real-");
+    const link = path.join(this.temp("asc-review-init-link2-"), "via-link");
+    fs.symlinkSync(real, link);
+    this.outFile = path.join(link, "round.json");
+    this.raceParent = fs.realpathSync(real);
+    await runCli(
+      this,
+      initArguments(this, [
+        `--base=${this.base}`,
+        "--scope=SCOPE-001",
+        "--ac=AC-001",
+      ]),
+    );
+    assert.equal(this.cliError, undefined, this.cliError?.message);
+  },
+);
+
+Then("writtenはsymlinkでなく実体の親へ結合したpathである", function () {
+  const output: unknown = JSON.parse(this.cliOutput);
+  assert.ok(output && typeof output === "object" && "written" in output);
+  assert.equal(
+    (output as { written: string }).written,
+    path.join(this.raceParent, "round.json"),
+  );
+  assert.ok(fs.existsSync(path.join(this.raceParent, "round.json")));
+});
+
+Given("budget-exhaustedのsessionを持つstagingがある", function () {
+  createFixture(this);
+  const observed = observeReviewDiff(this.root, this.base, this.head);
+  const anchor = {
+    scopeIds: ["SCOPE-001"],
+    acceptanceCriteriaIds: ["AC-001"],
+    invariantIds: [],
+    diffBaseSha: this.base,
+    initialHeadSha: this.head,
+    initialDiffDigest: observed.digest,
+  };
+  const blocker = (status: string) => ({
+    id: "H-001",
+    severity: "High",
+    status,
+    source: "review",
+    relation: "acceptance-violation",
+    evidence: "未解決のまま3 roundを使い切る",
+    path: reviewedPath,
+    contractId: "AC-001",
+    causedByFindingId: null,
+  });
+  this.session = recordReviewRound({
+    staging: this.staging,
+    round: parseReviewRoundInput({
+      round: 1,
+      previousRoundDigest: null,
+      anchor,
+      candidateHeadSha: this.head,
+      focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
+      findings: [blocker("valid")],
+    }),
+  });
+  for (const round of [2, 3]) {
+    this.head = commitFile(
+      this.root,
+      reviewedPath,
+      `export const reviewed = ${round};\n`,
+      `fix: attempt ${round}`,
+    );
+    this.session = recordReviewRound({
+      staging: this.staging,
+      round: parseReviewRoundInput({
+        round,
+        previousRoundDigest: this.session.latestRoundDigest,
+        anchor,
+        candidateHeadSha: this.head,
+        focus: {
+          previousBlocking: ["H-001"],
+          fixedDiff: [reviewedPath],
+          adjacentScope: [],
+        },
+        findings: [blocker("valid")],
+      }),
+    });
+  }
+  assert.equal(this.session.status, "budget-exhausted");
+  this.head = commitFile(
+    this.root,
+    reviewedPath,
+    "export const reviewed = 9;\n",
+    "fix: late",
+  );
+});
+
+Then("budget-exhaustedのerrorで拒否し雛形を書かない", function () {
+  assert.ok(this.cliError, this.cliOutput);
+  assert.match(this.cliError.message, /budget-exhausted/u);
+  assert.equal(fs.existsSync(this.outFile), false);
+});
+
+When(
+  "--invariantだけを添えてreview round --initで次roundの雛形を書く",
+  async function () {
+    await runCli(this, initArguments(this, ["--invariant=INV-009"]));
+    assert.equal(this.cliError, undefined, this.cliError?.message);
+  },
+);
+
+Then("notesにanchorをsessionから写した旨がある", function () {
+  const output: unknown = JSON.parse(this.cliOutput);
+  assert.ok(output && typeof output === "object" && "notes" in output);
+  assert.match(
+    (output as { notes: string[] }).notes.join("\n"),
+    /--invariantは無視し、anchorをsessionから写した/u,
+  );
+});
+
+Then(
+  "cleanup-applyの拒否は--approved-digestだけを案内し--report-hashを含まない",
+  function () {
+    const phase = this.completion.phases.find(
+      (item) => item.phase === "cleanup-apply",
+    );
+    assert.ok(phase);
+    const recovery = phase.recovery.join("\n");
+    assert.match(recovery, /--approved-digest=<preview digest>/u);
+    assert.doesNotMatch(recovery, /--report-hash/u);
+  },
+);
+
+Then("session依存flagの個別報告とDC-UX根拠と発見IDの注記がある", function () {
+  const read = (relative: string): string =>
+    fs.readFileSync(path.join(repositoryRoot, relative), "utf8");
+  assert.match(
+    read("docs/specs/02_要件/01_ワークフロー要件.md"),
+    /handlerが個別に報告する/u,
+  );
+  const template = read(".agent-skill-chain/templates/issue/04_レビュー.md");
+  assert.match(template, /「JSON出力のみ」を非適用の根拠にせず/u);
+  assert.match(template, /`DISC-\*`と同じ字面を使い/u);
+});

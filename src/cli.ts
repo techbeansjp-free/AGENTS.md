@@ -2060,6 +2060,40 @@ function issueStagingGherkinDialect(issuePath: string): string | undefined {
   return loadProjectPolicySet(root).policy.projectChoices?.gherkinDialect;
 }
 
+/**
+ * **雛形は検査した実体の親directoryにだけ書く**（Issue #1329、CWE-367）。
+ *
+ * 親のrealpathを検査した後に親をstagingへのsymlinkへ差し替えられると、
+ * 利用者指定pathへの`wx`作成はstaging内へ書く。realpath済みの親へbasenameを
+ * 結合した絶対pathで作成し、作成後に実体の親を再検証する。不一致なら自分が
+ * 作ったfileだけを消してerrorにする。Node標準APIにdescriptor相対の作成は無い。
+ * `hooks.beforeWrite`はtestが検査と作成の間の差し替えを注入するための接合部で、
+ * CLIは渡さない。
+ */
+export function writeReviewRoundDraft(
+  realParent: string,
+  basename: string,
+  content: string,
+  hooks: { beforeWrite?: () => void } = {},
+): string {
+  const target = path.join(realParent, basename);
+  hooks.beforeWrite?.();
+  fs.writeFileSync(target, content, { flag: "wx" });
+  let observedParent: string | undefined;
+  try {
+    observedParent = path.dirname(fs.realpathSync(target));
+  } catch {
+    observedParent = undefined;
+  }
+  if (observedParent !== realParent) {
+    fs.rmSync(target, { force: true });
+    throw new Error(
+      `review round --initの--outの親directoryが検査後に差し替えられました。書き込みを取り消しました: ${realParent}`,
+    );
+  }
+  return target;
+}
+
 function handlePullRequestMerge(flags: Flags): number {
   const apply = applyMode(flags);
   const root = path.resolve(
@@ -5356,11 +5390,13 @@ export async function main(
         acceptanceCriteriaIds: ids(flags.ac),
         invariantIds: ids(flags.invariant),
       });
-      fs.writeFileSync(out, `${JSON.stringify(draft.round, null, 2)}\n`, {
-        flag: "wx",
-      });
+      const written = writeReviewRoundDraft(
+        outParentReal,
+        path.basename(out),
+        `${JSON.stringify(draft.round, null, 2)}\n`,
+      );
       print({
-        written: out,
+        written,
         round: draft.round.round,
         candidateHeadSha: draft.round.candidateHeadSha,
         notes: draft.notes,
