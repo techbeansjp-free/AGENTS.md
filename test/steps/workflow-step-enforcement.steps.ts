@@ -58,6 +58,7 @@ import {
   listStagingArtifacts,
   readStoredStagingRecord,
   refreshStoredStagingDigest,
+  STAGING_RECORD_FILE,
 } from "../../src/domain/staging.js";
 import type { ImplementationDiscovery } from "../../src/domain/agile-verification.js";
 import {
@@ -1314,7 +1315,6 @@ function completeAdvanceRequirement(staging: string): void {
     requirementFile,
     `${completed}\nScenario: SCN-QUICK-ADVANCE-001 次Stepを記録する\n  Given 要求成果物が完成している\n  When 次Stepを適用する\n  Then Step 1が記録される\n`,
   );
-  refreshStoredStagingDigest(staging);
 }
 
 function executeCli(args: string[], cwd = process.cwd(), env = process.env) {
@@ -5916,6 +5916,9 @@ if (exact(["auth", "status"])) {
       const staging = createQuickStaging(this.temp("asc-advance-apply-"));
       completeAdvanceRequirement(staging);
       const before = fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE));
+      const recordBefore = fs.readFileSync(
+        path.join(staging, STAGING_RECORD_FILE),
+      );
       await assert.rejects(
         () =>
           executeMain([
@@ -5932,6 +5935,10 @@ if (exact(["auth", "status"])) {
       assert.deepEqual(
         fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE)),
         before,
+      );
+      assert.deepEqual(
+        fs.readFileSync(path.join(staging, STAGING_RECORD_FILE)),
+        recordBefore,
       );
       const checked = await executeMain([
         "workflow",

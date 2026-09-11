@@ -3397,6 +3397,8 @@ export async function main(argv, dependencies = {}) {
         const staging = path.resolve(required(flags, "staging"));
         const inspected = inspectWorkflowStaging(staging);
         const initialRecord = readStoredStagingRecord(staging);
+        const initialArtifacts = listStagingArtifacts(staging);
+        const initialContentDigest = calculateStagingDigest(staging, initialArtifacts);
         const initialJournal = readWorkflowJournal(staging);
         const initialJournalDigest = crypto
             .createHash("sha256")
@@ -3462,13 +3464,16 @@ export async function main(argv, dependencies = {}) {
             return plan.state === "blocked" ? 1 : 0;
         }
         return withStagingMutationLock(staging, () => {
-            assertStoredStagingContentDigest(staging, "workflow advance適用前");
-            const lockedRecord = readStoredStagingRecord(staging);
+            const lockedStoredRecord = readStoredStagingRecord(staging);
+            const lockedArtifacts = listStagingArtifacts(staging);
+            const lockedContentDigest = calculateStagingDigest(staging, lockedArtifacts);
             const lockedJournalDigest = crypto
                 .createHash("sha256")
                 .update(readWorkflowJournal(staging).source)
                 .digest("hex");
-            if (stableJson(lockedRecord) !== stableJson(initialRecord) ||
+            if (stableJson(lockedStoredRecord) !== stableJson(initialRecord) ||
+                stableJson(lockedArtifacts) !== stableJson(initialArtifacts) ||
+                lockedContentDigest !== initialContentDigest ||
                 lockedJournalDigest !== initialJournalDigest)
                 throw new Error("workflow advanceのpreview後・writer lock取得前にstagingまたはjournalが変更されました。新しいpreviewから再実行してください");
             const validation = validateIssue(staging, {
@@ -3477,6 +3482,11 @@ export async function main(argv, dependencies = {}) {
             });
             if (!validation.valid)
                 throw new Error(`workflow advanceの成果物検証に失敗しました: ${validation.errors.join("; ")}`);
+            const validatedArtifacts = listStagingArtifacts(staging);
+            const validatedContentDigest = calculateStagingDigest(staging, validatedArtifacts);
+            if (stableJson(validatedArtifacts) !== stableJson(initialArtifacts) ||
+                validatedContentDigest !== initialContentDigest)
+                throw new Error("workflow advanceの成果物検証中にstagingが変更されました。新しいpreviewから再実行してください");
             const current = inspectWorkflowStaging(staging);
             const currentJournal = readWorkflowJournal(staging);
             const currentPlan = planWorkflowAdvance({
@@ -3522,7 +3532,7 @@ export async function main(argv, dependencies = {}) {
                     staging,
                     entry,
                     headSha: candidateHeadSha,
-                    expectedStagingDigest: lockedRecord.digest,
+                    expectedStagingDigest: initialContentDigest,
                 });
                 print({ ...plan, state: "applied", result });
                 return 0;
@@ -3615,7 +3625,7 @@ export async function main(argv, dependencies = {}) {
                 const journal = appendWorkflowJournalEntry({
                     staging,
                     entry,
-                    expectedStagingDigest: lockedRecord.digest,
+                    expectedStagingDigest: initialContentDigest,
                 });
                 print({ ...plan, state: "applied", result: { sync: synced, journal } });
                 return 0;
