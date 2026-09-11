@@ -41,6 +41,16 @@ Feature: 開発考慮事項の理由・証拠の具体性とGherkin方言のscen
     When 方言を指定せずIssueを検証する
     Then DC-PRIVACYが重複なく1件必要なerrorで拒否する
 
+  Scenario: SCN-UNIT-ISSUEDC-009 参照行と未知IDの差分行は未知IDを拒否する
+    Given 01が参照行と未知ID DC-UNKNOWNの1行を持つfull stagingがある
+    When 方言を指定せずIssueを検証する
+    Then DC-UNKNOWNは未知の開発契約IDのerrorで拒否する
+
+  Scenario: SCN-UNIT-ISSUEDC-010 code fence内の参照行は宣言として扱わない
+    Given 01がcode fenceの中にだけ参照行を持つfull stagingがある
+    When 方言を指定せずIssueを検証する
+    Then DC-PRIVACYが重複なく1件必要なerrorで拒否する
+
   Scenario: SCN-UNIT-ISSUEGHK-001 ja宣言時にシナリオkeywordでIDを検出する
     Given 受け入れ例を「シナリオ: SCN-X-001」で書いたquick stagingがある
     When 方言jaでIssueを検証する
@@ -65,6 +75,16 @@ Feature: 開発考慮事項の理由・証拠の具体性とGherkin方言のscen
     Given 「シナリオテンプレート:」と「<値>」を持つquick stagingがある
     When 方言jaでIssueを検証する
     Then ja Outlineのplaceholder errorなしでIssue検証は合格する
+
+  Scenario: SCN-UNIT-ISSUEGHK-007 ja step keywordのparameterはplaceholderとしない
+    Given 「シナリオテンプレート:」と「前提 <値>」を持つquick stagingがある
+    When 方言jaでIssueを検証する
+    Then ja Outlineのplaceholder errorなしでIssue検証は合格する
+
+  Scenario: SCN-UNIT-ISSUEGHK-008 散文中のシナリオkeywordはIDとして検出しない
+    Given 受け入れ例を「説明文に シナリオ: SCN-X-999」で書いたquick stagingがある
+    When 方言jaでIssueを検証する
+    Then GherkinシナリオIDがありませんのerrorを含む
 
   Scenario: SCN-UNIT-ISSUEGHK-005 CLIはproject choiceの方言を注入する
     Given gherkinDialectがjaのproject choiceを4階層上に持つquick stagingがある

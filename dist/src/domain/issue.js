@@ -185,6 +185,48 @@ export const GHERKIN_SCENARIO_KEYWORDS = Object.freeze({
         "テンプレ",
     ]),
 });
+/**
+ * **placeholder判定でGherkin区間の開始と見なす、scenario以外の行頭keyword。**
+ *
+ * `ja`のstep keyword（前提・もし・ならば・かつ・しかし）はcolonを持たず、
+ * 英語keywordだけを見るとja Outlineの`<param>`を含むstep行が散文として
+ * 未解決placeholderに数えられる（round 1 REV-01）。scenario keywordと同じ
+ * 表で管理し、方言ごとに`GHERKIN_SCENARIO_KEYWORDS`と対にする。
+ */
+const GHERKIN_BLOCK_KEYWORDS = Object.freeze({
+    en: Object.freeze({
+        colon: Object.freeze(["Feature", "Rule", "Background", "Examples"]),
+        step: Object.freeze(["Given", "When", "Then", "And", "But"]),
+    }),
+    ja: Object.freeze({
+        colon: Object.freeze([
+            "Feature",
+            "Rule",
+            "Background",
+            "Examples",
+            "機能",
+            "フィーチャ",
+            "ルール",
+            "背景",
+            "例",
+            "サンプル",
+        ]),
+        step: Object.freeze([
+            "Given",
+            "When",
+            "Then",
+            "And",
+            "But",
+            "前提",
+            "もし",
+            "ならば",
+            "かつ",
+            "しかし",
+            "但し",
+            "ただし",
+        ]),
+    }),
+});
 export const DEFAULT_GHERKIN_DIALECT = "en";
 export function scenarioKeywords(dialect) {
     const keywords = Object.hasOwn(GHERKIN_SCENARIO_KEYWORDS, dialect)
@@ -198,15 +240,26 @@ function scenarioIdPattern(dialect) {
     const alternatives = scenarioKeywords(dialect)
         .map((keyword) => escapeRegExp(keyword))
         .join("|");
-    /** 従来の`/Scenario:\\s+SCN-.../`と同じく行頭に固定しない（受理集合を狭めない） */
-    return new RegExp(`(?:${alternatives}):\\s+SCN-[A-Z0-9-]+`, "u");
+    /**
+     * **行頭keywordとしてだけ受理する**（FR-04、round 1 REV-04）。散文中の
+     * 「シナリオ: SCN-…」という言及を実scenarioとして数えない。indentは許す。
+     */
+    return new RegExp(`^\\s*(?:${alternatives}):\\s+SCN-[A-Z0-9-]+`, "mu");
 }
 function withoutGherkin(text, dialect = DEFAULT_GHERKIN_DIALECT) {
     let inGherkin = false;
-    const scenarioStart = scenarioKeywords(dialect)
+    const block = GHERKIN_BLOCK_KEYWORDS[dialect];
+    if (!block)
+        throw new Error(`gherkinDialectが未対応です: ${dialect}`);
+    const colonKeywords = [...scenarioKeywords(dialect), ...block.colon]
         .map((keyword) => `${escapeRegExp(keyword)}:`)
         .join("|");
-    const gherkinStart = new RegExp(`^\\s*(?:@[\\w@-]+|Feature:|Rule:|Background:|${scenarioStart}|Examples:|Given\\b|When\\b|Then\\b|And\\b|But\\b|\\*)`, "u");
+    const stepKeywords = block.step
+        .map((keyword) => /^[A-Za-z]+$/u.test(keyword)
+        ? `${keyword}\\b`
+        : `${escapeRegExp(keyword)}(?=\\s|$)`)
+        .join("|");
+    const gherkinStart = new RegExp(`^\\s*(?:@[\\w@-]+|${colonKeywords}|${stepKeywords}|\\*)`, "u");
     return text
         .split("\n")
         .map((line) => {

@@ -265,6 +265,35 @@ Given("00の開発考慮事項欄が参照行だけのfull stagingがある", fu
   });
 });
 
+Given(
+  "01が参照行と未知ID DC-UNKNOWNの1行を持つfull stagingがある",
+  function () {
+    this.issuePath = writeFullStaging(this, {
+      requirements: [
+        DEVELOPMENT_CONSIDERATION_REFERENCE_LINE,
+        "",
+        considerationRow("DC-UNKNOWN", "十分に具体的な差分理由である"),
+      ].join("\n"),
+    });
+  },
+);
+
+Given("01がcode fenceの中にだけ参照行を持つfull stagingがある", function () {
+  this.issuePath = writeFullStaging(this, {
+    requirements: `~~~text\n${DEVELOPMENT_CONSIDERATION_REFERENCE_LINE}\n~~~`,
+  });
+});
+
+Then("DC-UNKNOWNは未知の開発契約IDのerrorで拒否する", function () {
+  assert.equal(this.validation.valid, false);
+  assert.ok(
+    this.validation.errors.includes(
+      "01_要件定義.md: DC-UNKNOWNは未知の開発契約IDです",
+    ),
+    this.validation.errors.join("; "),
+  );
+});
+
 Given("01の開発考慮事項欄が空のfull stagingがある", function () {
   this.issuePath = writeFullStaging(this, {
     requirements: "開発考慮事項は00と同じ",
@@ -323,6 +352,16 @@ Given(
     this.issuePath = writeQuickStaging(
       this,
       "シナリオテンプレート: SCN-X-002 <値>を検証する\n  Given <値>を受け取る\n  Then 正常に扱う\n\n  Examples:\n    | 値 |\n    | a |\n",
+    );
+  },
+);
+
+Given(
+  "「シナリオテンプレート:」と「前提 <値>」を持つquick stagingがある",
+  function () {
+    this.issuePath = writeQuickStaging(
+      this,
+      "シナリオテンプレート: SCN-X-004 入力を検証する\n  前提 <値>を受け取る\n  ならば 正常に扱う\n\n  例:\n    | 値 |\n    | a |\n",
     );
   },
 );

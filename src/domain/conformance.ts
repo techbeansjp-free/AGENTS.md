@@ -606,7 +606,20 @@ function parseDevelopmentConsiderationRows(markdown: string): {
     evidence: string;
   }> = [];
   let hasReferenceLine = false;
+  let openFence: string | undefined;
   for (const line of markdown.split(/\r?\n/u)) {
+    /**
+     * **code fenceの中は成果物の宣言ではない**（round 1 REV-03）。説明用に
+     * 参照行やDC行を引用したfenceを、参照行の宣言や差分行として読まない。
+     */
+    const fence = /^\s*(`{3,}|~{3,})/u.exec(line)?.[1];
+    if (fence !== undefined) {
+      if (openFence === undefined) openFence = fence;
+      else if (fence[0] === openFence[0] && fence.length >= openFence.length)
+        openFence = undefined;
+      continue;
+    }
+    if (openFence !== undefined) continue;
     if (line.trim() === DEVELOPMENT_CONSIDERATION_REFERENCE_LINE) {
       hasReferenceLine = true;
       continue;
@@ -616,11 +629,12 @@ function parseDevelopmentConsiderationRows(markdown: string): {
       .slice(1, -1)
       .map((cell) => cell.trim());
     const id = cells[0];
-    if (
-      typeof id !== "string" ||
-      !DEVELOPMENT_CONSIDERATION_IDS.some((expected) => expected === id)
-    )
-      continue;
+    /**
+     * **`DC-`で始まるIDは未知でも行として拾い、records検証に未知IDを拒否させる**
+     * （round 1 REV-02）。既知IDだけを拾うと、参照行つきの差分行でIDを誤記した
+     * 行が黙って落ちる。
+     */
+    if (typeof id !== "string" || !id.startsWith("DC-")) continue;
     rows.push({
       id,
       status: cells[2] ?? "",
