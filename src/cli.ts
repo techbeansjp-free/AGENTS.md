@@ -4656,74 +4656,91 @@ export async function main(
       print(plan);
       return plan.state === "blocked" ? 1 : 0;
     }
-    if (plan.validationStage !== undefined) {
-      const validation = validateIssue(staging, {
-        stage: plan.validationStage,
-        gherkinDialect: issueStagingGherkinDialect(staging),
-      });
-      if (!validation.valid)
-        throw new Error(
-          `workflow advanceの成果物検証に失敗しました: ${validation.errors.join("; ")}`,
-        );
-    }
-    const current = inspectWorkflowStaging(staging);
-    const currentPlan = planWorkflowAdvance({
-      mode: current.mode,
-      currentStep: current.currentStep,
-      nextStep: current.nextStep,
-      valid: current.valid,
-      errors: current.errors,
-    });
-    if (
-      currentPlan.state !== "preview" ||
-      currentPlan.targetStep !== plan.targetStep ||
-      currentPlan.operation !== plan.operation
-    )
-      throw new Error(
-        "workflow advanceのpreview後にstaging stateが変更されました。新しいpreviewから再実行してください",
-      );
-    const targetStep = plan.targetStep!;
-    const definition = workflowStep(targetStep);
-    if (!definition) throw new Error("workflow step定義がありません");
-    if (plan.operation === "record") {
-      if (artifacts.length === 0)
-        throw new Error(
-          "workflow advanceの記録には--artifactが1件以上必要です",
-        );
-      const evidence = required(flags, "evidence");
-      const entry: StepJournalEntry = {
-        step: targetStep,
-        skillId: definition.skillId,
+    return withStagingMutationLock(staging, () => {
+      if (plan.validationStage !== undefined) {
+        const validation = validateIssue(staging, {
+          stage: plan.validationStage,
+          gherkinDialect: issueStagingGherkinDialect(staging),
+        });
+        if (!validation.valid)
+          throw new Error(
+            `workflow advanceの成果物検証に失敗しました: ${validation.errors.join("; ")}`,
+          );
+      }
+      const current = inspectWorkflowStaging(staging);
+      const currentPlan = planWorkflowAdvance({
         mode: current.mode,
-        recordedAt: flags["recorded-at"] ?? new Date().toISOString(),
-        artifacts,
-        evidence,
-      };
-      const result = appendWorkflowJournalEntry({ staging, entry });
-      print({ ...plan, state: "applied", result });
-      return 0;
-    }
-    if (flags.authorize !== "approved")
-      throw new Error("Issue同期には--authorize=approvedが必要です");
-    const issueRaw = required(flags, "issue");
-    if (!/^[1-9]\d*$/u.test(issueRaw))
-      throw new Error("--issueは正のIssue番号で指定してください");
-    const repository = required(flags, "repo");
-    const checkpoint = targetStep as 4 | 8;
-    const draft = buildIssueSyncBody(
-      staging,
-      checkpoint,
-      issueStagingGherkinDialect(staging),
-    );
-    let temporaryDirectory: string | undefined;
-    let bodyFile: string | undefined;
-    try {
-      temporaryDirectory = fs.mkdtempSync(
-        path.join(os.tmpdir(), "asc-workflow-advance-"),
+        currentStep: current.currentStep,
+        nextStep: current.nextStep,
+        valid: current.valid,
+        errors: current.errors,
+      });
+      if (
+        currentPlan.state !== "preview" ||
+        currentPlan.targetStep !== plan.targetStep ||
+        currentPlan.operation !== plan.operation
+      )
+        throw new Error(
+          "workflow advanceのpreview後にstaging stateが変更されました。新しいpreviewから再実行してください",
+        );
+      const targetStep = plan.targetStep!;
+      const definition = workflowStep(targetStep);
+      if (!definition) throw new Error("workflow step定義がありません");
+      if (plan.operation === "record") {
+        if (artifacts.length === 0)
+          throw new Error(
+            "workflow advanceの記録には--artifactが1件以上必要です",
+          );
+        const evidence = required(flags, "evidence");
+        const entry: StepJournalEntry = {
+          step: targetStep,
+          skillId: definition.skillId,
+          mode: current.mode,
+          recordedAt: flags["recorded-at"] ?? new Date().toISOString(),
+          artifacts,
+          evidence,
+        };
+        const headSha =
+          current.mode === "poc" && targetStep >= 9
+            ? git(
+                ["rev-parse", "--verify", "HEAD^{commit}"],
+                path.resolve(staging, "../../../.."),
+              ).stdout.trim()
+            : undefined;
+        const result = appendWorkflowJournalEntry({ staging, entry, headSha });
+        print({ ...plan, state: "applied", result });
+        return 0;
+      }
+      if (flags.authorize !== "approved")
+        throw new Error("Issue同期には--authorize=approvedが必要です");
+      const issueRaw = required(flags, "issue");
+      if (!/^[1-9]\d*$/u.test(issueRaw))
+        throw new Error("--issueは正のIssue番号で指定してください");
+      const repository = required(flags, "repo");
+      const checkpoint = targetStep as 4 | 8;
+      const tracker = `https://github.com/${repository}/issues/${issueRaw}`;
+      if (checkpoint === 8) {
+        const step4 = [...readWorkflowJournal(staging).entries]
+          .reverse()
+          .find((entry) => entry.step === 4);
+        if (!step4?.artifacts.includes(tracker))
+          throw new Error(
+            "Step 8はStep 4で同期・記録した同じGitHub Issueだけを更新できます",
+          );
+      }
+      const draft = buildIssueSyncBody(
+        staging,
+        checkpoint,
+        issueStagingGherkinDialect(staging),
       );
-      bodyFile = path.join(temporaryDirectory, "body.md");
-      fs.writeFileSync(bodyFile, draft.body, { flag: "wx", mode: 0o600 });
-      const synced = withStagingMutationLock(staging, () => {
+      let temporaryDirectory: string | undefined;
+      let bodyFile: string | undefined;
+      try {
+        temporaryDirectory = fs.mkdtempSync(
+          path.join(os.tmpdir(), "asc-workflow-advance-"),
+        );
+        bodyFile = path.join(temporaryDirectory, "body.md");
+        fs.writeFileSync(bodyFile, draft.body, { flag: "wx", mode: 0o600 });
         const latest = buildIssueSyncBody(
           staging,
           checkpoint,
@@ -4751,31 +4768,30 @@ export async function main(
         );
         if (!fullStep4)
           recordStagingSync(staging, {
-            tracker: `https://github.com/${repository}/issues/${issueRaw}`,
+            tracker,
             checkpoint,
             syncedAt: flags["synced-at"] ?? new Date().toISOString(),
             bodyDigest: draft.bodySha256,
             readBackDigest: draft.bodySha256,
           });
-        return synced;
-      });
-      const entry: StepJournalEntry = {
-        step: targetStep,
-        skillId: definition.skillId,
-        mode: current.mode,
-        recordedAt: flags["recorded-at"] ?? new Date().toISOString(),
-        artifacts: [...draft.artifacts],
-        evidence: `sync read-back digest ${draft.bodySha256} matched tracker https://github.com/${repository}/issues/${issueRaw}`,
-      };
-      const journal = appendWorkflowJournalEntry({ staging, entry });
-      print({ ...plan, state: "applied", result: { sync: synced, journal } });
-      return 0;
-    } finally {
-      if (temporaryDirectory && bodyFile) {
-        fs.unlinkSync(bodyFile);
-        fs.rmdirSync(temporaryDirectory);
+        const entry: StepJournalEntry = {
+          step: targetStep,
+          skillId: definition.skillId,
+          mode: current.mode,
+          recordedAt: flags["recorded-at"] ?? new Date().toISOString(),
+          artifacts: [synced.url],
+          evidence: `sync read-back digest ${draft.bodySha256} matched tracker ${tracker}`,
+        };
+        const journal = appendWorkflowJournalEntry({ staging, entry });
+        print({ ...plan, state: "applied", result: { sync: synced, journal } });
+        return 0;
+      } finally {
+        if (temporaryDirectory && bodyFile) {
+          fs.unlinkSync(bodyFile);
+          fs.rmdirSync(temporaryDirectory);
+        }
       }
-    }
+    });
   }
   if (command === "workflow" && subcommand === "record") {
     const { flags, artifacts } = workflowArguments(rest);

@@ -300,3 +300,13 @@ Feature: 公開CLIでワークフローStepを強制する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-ADVANCE-004"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-005 workflow advanceはStep 8でStep 4と異なるIssueへの同期を拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-005"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-006 workflow advanceはPoC Step 9を現在HEADの観測証拠へ拘束する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-006"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる

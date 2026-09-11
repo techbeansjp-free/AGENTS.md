@@ -5924,6 +5924,140 @@ if (exact(["auth", "status"])) {
         journal.entries.at(-1)?.evidence ?? "",
         /sync.*[a-f0-9]{64}/u,
       );
+      assert.deepEqual(journal.entries.at(-1)?.artifacts, [
+        "https://github.com/o/r/issues/877",
+      ]);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-005": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-same-tracker",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: entry(step, "full"),
+        });
+      const first = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(first.status, 0, first.stdout + first.stderr);
+      for (const step of [5, 6, 7])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: entry(step, "full"),
+        });
+      const rejected = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=878",
+          "--authorize=approved",
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /Step 4で同期・記録した同じGitHub Issue/u,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 7);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-006": {
+      const root = this.temp("asc-advance-poc-");
+      const declaration = validPoc();
+      for (const args of [
+        ["init", "-q", "-b", "main"],
+        ["config", "user.name", "advance-test"],
+        ["config", "user.email", "advance-test@example.invalid"],
+      ]) {
+        const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+        assert.equal(result.status, 0, result.stderr);
+      }
+      fs.writeFileSync(path.join(root, "README.md"), "# baseline\n");
+      spawnSync("git", ["add", "README.md"], { cwd: root });
+      spawnSync("git", ["commit", "-q", "-m", "baseline"], { cwd: root });
+      const staging = createIssueStaging(root, {
+        title: "workflow-advance-poc",
+        answers: answers(),
+        now: new Date(fixtureInstantMs()),
+        requestedMode: "poc",
+        poc: declaration,
+      }).path;
+      const requirementFile = path.join(staging, "00_要求定義.md");
+      const completedRequirement = fs
+        .readFileSync(requirementFile, "utf8")
+        .split("\n")
+        .map((line) =>
+          line.startsWith("|")
+            ? line
+                .replaceAll("applicable / not-applicable", "not-applicable")
+                .replace(/（[^）\n]*）/gu, "隔離fixture内の自動検査で確認した")
+            : line,
+        )
+        .join("\n");
+      fs.writeFileSync(
+        requirementFile,
+        `${completedRequirement}\nScenario: SCN-POC-ADVANCE-001 PoCの次Stepを記録する\n  Given PoC観測が現在HEADにある\n  When 次Stepを適用する\n  Then Step 9が観測証拠へ拘束される\n`,
+      );
+      refreshStoredStagingDigest(staging);
+      materializeValidPocFixture(root, declaration);
+      spawnSync("git", ["add", declaration.fixture.root], { cwd: root });
+      spawnSync("git", ["commit", "-q", "-m", "poc fixture"], { cwd: root });
+      const headSha = spawnSync("git", ["rev-parse", "HEAD"], {
+        cwd: root,
+        encoding: "utf8",
+      }).stdout.trim();
+      appendWorkflowJournalEntry({ staging, entry: entry(1, "poc") });
+      appendWorkflowJournalEntry({
+        staging,
+        entry: {
+          ...entry(4, "poc"),
+          artifacts: ["https://github.com/o/r/issues/877"],
+          evidence: `sync read-back digest ${"a".repeat(64)}`,
+        },
+      });
+      executePocObservation({ staging, headSha, observedAt: instant });
+      const checked = await executeMain([
+        "workflow",
+        "advance",
+        `--staging=${staging}`,
+        `--artifact=${declaration.fixture.root}`,
+        "--evidence=PoC観測結果を現在HEADへ拘束した",
+        `--recorded-at=${instant}`,
+        "--apply",
+      ]);
+      assert.equal(checked.status, 0, checked.stdout);
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 9);
+      assert.equal(journal.entries.at(-1)?.pocObservation?.headSha, headSha);
       break;
     }
     default:
