@@ -114,6 +114,8 @@ function composeWorkflowAdvanceIssueBody(existingBody, generatedBody) {
     return `${[before, block, after].filter((part) => part !== "").join("\n\n")}\n`;
 }
 function assertWorkflowAdvanceArtifacts(staging, targetStep, artifacts) {
+    if (new Set(artifacts).size !== artifacts.length)
+        throw new Error(`Step ${targetStep}のartifact重複を拒否しました`);
     const exactByStep = new Map([
         [1, ["00_要求定義.md"]],
         [2, ["01_要件定義.md"]],
@@ -143,6 +145,11 @@ function assertWorkflowAdvanceArtifacts(staging, targetStep, artifacts) {
             path.isAbsolute(relative) ||
             !fs.existsSync(resolved))
             throw new Error(`Step 9のartifactがrepository内に存在しません: ${artifact}`);
+        const stat = fs.lstatSync(resolved);
+        if (stat.isSymbolicLink() ||
+            (!stat.isFile() && !stat.isDirectory()) ||
+            fs.realpathSync(resolved) !== resolved)
+            throw new Error(`Step 9のartifactはsymlinkでないrepository内の通常pathが必要です: ${artifact}`);
     }
 }
 function workflowMode(value) {
