@@ -7,38 +7,38 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 1〜2 |
-| 対象SHA・文書ダイジェスト | review session `3c5ace75ed4e665efa724a5a49e3bc18257fb2df3a191d99f39891a2fb78326b`、round 2 digest `0798e9e84af1a8de85d01a57fc897ed602b4bd2737dba49476edbb63047dfdfe` |
+| ラウンド | 1〜3 |
+| 対象SHA・文書ダイジェスト | review session `3c5ace75ed4e665efa724a5a49e3bc18257fb2df3a191d99f39891a2fb78326b`、round 3 digest `fa2f5a7c2ec37a81b1d0f4a1af9ddd3cb7855fd1117b03e8ae288d67001e00b8` |
 | 比較基点 | `56f66f2db75905277019954462080bcfb48403e7` |
-| H_impl | `9a45a7499d61cee1b2e23839568b35c019a367ce` |
+| H_impl | `1471e1d368a7e1020559cefcc2c3a0b54989ead3` |
 | 比較基点の由来 | PR #1338を取り込んだ`origin/main`のtip |
-| 対象差分 | `56f66f2db75905277019954462080bcfb48403e7..9a45a7499d61cee1b2e23839568b35c019a367ce`の14 file |
+| 対象差分 | `56f66f2db75905277019954462080bcfb48403e7..1471e1d368a7e1020559cefcc2c3a0b54989ead3`の15 file |
 | 対象外 | 新規Medium/Low findingの自動修正、merge、Issue終了、release、cleanup |
-| 残り予算 | 1（通常予算3ラウンド中2ラウンド使用） |
-| ラウンド数 | 2 |
+| 残り予算 | 0（通常予算3ラウンドを使用） |
+| ラウンド数 | 3 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260911_125120_review-round-initのTOCTOU窓とbudget-exhausted時の雛形拒否ほかPR1328の外部指摘7件を是正する |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md` REQ-WF-009・REQ-WF-014 |
-| 成果物行数 | 全体差分668追加・21削除。製品source、生成物、test、仕様、templateを含む |
+| 成果物行数 | 全体差分912追加・21削除。製品source、生成物、test、仕様、template、既存review記録を含む |
 | 縮小の先行評価 | 既存のatomic writerは上書き用で排他的作成と親identity固定を満たさないため、専用writer 1関数へ限定した。失敗時unlinkは末尾entry競合を安全に閉じられないため廃止した |
-| 実施者・日時 | implementer: Codex primary、reviewer: 独立Codex context、2026-09-11T07:23:27Z |
+| 実施者・日時 | implementer: Codex primary、reviewer: 独立Codex context、2026-09-11T08:13:28Z |
 
 ### 0.1 routing入力契約
 
 | role欄（担当role） | 必要証拠 | 必要model tier | provider欄 | model設定欄 | fallback欄 | 独立性証拠欄・非変更証拠 |
 |---|---|---|---|---|---|---|
-| reviewer | 肯定・敵対review、finding分類 | risk `path`のstandard以上 | Codex | selected/dispatched `gpt-6-astra`、effort high、adopted tier critical | 未解決Critical/Highなら停止 | implementer context `issue-1329-implementation`とreviewer context `issue-1329-review-round-2`を分離。tracked差分なし |
+| reviewer | 肯定・敵対review、finding分類 | risk `path`のstandard以上 | Codex | selected/dispatched `gpt-6-astra`、effort high、adopted tier critical | 未解決Critical/Highなら停止 | implementer context `issue-1329-post-terminal-implementation`とreviewer context `issue-1329-review-round-3`を分離。tracked差分なし |
 
 ## 1. 入力証拠
 
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | https://github.com/techbeansjp-free/AGENTS.md/issues/1329 、AC-01〜05、INV-01〜03 | Step 8まで同一Issueへ同期済み。DISC-002で変更した契約は01〜03へ前向きに反映 | 耐久トラッカー・既存文書 |
-| 差分 | base..H_impl | 14 file、tree `2088218b5755b3a2b4544858cd428ffdab47b50c` | Git観測 |
+| 差分 | base..H_impl | 15 file、tree `2338c06a3f01009f4ca96f0c564cea9c860cbda5` | Git観測 |
 | テスト | `npm test`、`npm run conformance:check`、対象実行、静的gate | §7の全件が失敗0 | テスト出力 |
 | 仕様 | REQ-WF-009・REQ-WF-014、追跡表、変更履歴 | updated | 既存文書 |
-| commit前candidate | 本文書を除く14 file | H_impl author `tatsuru <info@ruaprom.jp>`、working treeは本文書追加前clean | Git観測 |
-| Phase A artifact | `docs/reviews/194_課題1329review雛形TOCTOU是正レビュー.md` | H_impl直後に本fileだけを加える。H_impl..H_finalのpath照合はcommit後auditが実測する | Git観測 |
-| review session | 同stagingの`review-session.json` | session ID `3c5ace75ed4e665efa724a5a49e3bc18257fb2df3a191d99f39891a2fb78326b`、round 2、converged | 実行観測 |
+| commit前candidate | 本文書を含む15 file | H_impl author `tatsuru <info@ruaprom.jp>`、post-terminal修正はforward commit | Git観測 |
+| Phase A artifact | `docs/reviews/194_課題1329review雛形TOCTOU是正レビュー.md` | H_impl直後に本fileだけを更新する。H_impl..H_finalのpath照合はcommit後auditが実測する | Git観測 |
+| review session | 同stagingの`review-session.json` | session ID `3c5ace75ed4e665efa724a5a49e3bc18257fb2df3a191d99f39891a2fb78326b`、round 3、converged | 実行観測 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: ない。CLIからadapter/domain/libへの既存方向を維持した。
 - `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: 本artifactの単独commitと`audit:check`で確認する。
@@ -51,8 +51,9 @@
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
 | `.agent-skill-chain/templates/issue/04_レビュー.md` | M | package | package | DC-UX根拠とDISC ID注記 | 実行依存なし | AC-05、DOCROW-002 | 差し戻し可能 | pass |
+| `docs/reviews/194_課題1329review雛形TOCTOU是正レビュー.md` | A | evidence | evidence | round 1〜2の既存記録をpost-terminal round 3へ更新 | 実行authorityなし | EXT-1329-H01 | forward artifact commitで復旧 | pass |
 | `docs/specs/02_要件/01_ワークフロー要件.md` | M | spec | spec | REQ-WF-009・014の成立契約 | 実行authorityなし | AC-WF-009・014 | 履歴から復旧 | pass |
-| `docs/specs/15_要件追跡/00_追跡表.md` | M | spec | spec | SCN-UNIT-REVINIT-018を追跡 | 実行authorityなし | REVINIT-001〜018 | 履歴から復旧 | pass |
+| `docs/specs/15_要件追跡/00_追跡表.md` | M | spec | spec | SCN-UNIT-REVINIT-019を追跡 | 実行authorityなし | REVINIT-001〜019 | 履歴から復旧 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | spec | spec | #1329の変更を記録 | 実行authorityなし | REQ-WF-009・014 | append位置を差し戻せる | pass |
 | `src/adapters/review-session.ts` | M | package | package | budget拒否と無視通知 | adapterからdomainへの既存方向 | AC-02・03 | 状態変更前拒否 | pass |
 | `src/cli.ts` | M | package | package | writer委譲と利用者診断 | CLIからlibへの依存 | AC-01・04 | 作成後失敗を成功扱いしない | pass |
@@ -61,7 +62,7 @@
 | `test/features/unit/review-round-init.feature` | M | project | project | 受け入れ例を追加 | stepsへ一方向 | AC-01〜05 | 一時fixtureのみ | pass |
 | `test/steps/review-round-init.steps.ts` | M | project | project | SCN-UNIT-REVINIT-011・015でGit/fs競合順序を注入 | product APIを観測 | 同feature | `/tmp` fixtureを後処理 | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: 一致する。生成物4 pathは§8で監査し、その他10 pathを個別に記録した。
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: 一致する。生成物4 pathは§8で監査し、その他11 pathを個別に記録した。
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: いない。
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: round 2は9 fileの修正差分とwriter成功経路、CLI診断、生成物を確認した。
 
@@ -78,7 +79,7 @@
 
 | AC ID | SCN ID | 実装 | テスト結果 | 判定 | 証拠 |
 |---|---|---|---|---|---|
-| AC-01 | SCN-UNIT-REVINIT-011・012・015・017・018 | `writeFileExclusivePinned`、CLI診断 | 5/5合格 | pass（成功時競合はM03） | 対象実行、独立I/O反例 |
+| AC-01 | SCN-UNIT-REVINIT-011・012・015・017・018・019 | `writeFileExclusivePinned`、CLI診断 | 6/6合格 | pass（成功時競合はM03） | 対象実行、独立I/O反例 |
 | AC-02 | SCN-UNIT-REVINIT-013・016 | budget判定を差分観測より先行 | 2/2合格 | pass | 対象実行 |
 | AC-03 | SCN-UNIT-REVINIT-014 | session anchor採用時のnotes | 1/1合格 | pass | 対象実行 |
 | AC-04 | SCN-UNIT-DIAGHINT-004 | finalize recovery文言 | 1/1合格 | pass | 対象実行 |
@@ -97,7 +98,7 @@
 
 | 観点 | 確認内容 | 判定 | 根拠 |
 |---|---|---|---|
-| 正しさ | 要件と観測結果が一致するか | pass（M03を記録） | round 1 blocker 3件を反例で解消、対象10/10合格 |
+| 正しさ | 要件と観測結果が一致するか | pass（M03を記録） | round 1 blocker 3件と外部Majorを解消、対象11/11合格 |
 | 価値 | 利用者・運用上の目的を満たすか | pass | staging外出力の親差し替え、budget、診断の問題を一括是正 |
 | 実現可能性 | 実行環境・依存・権限で成立するか | pass | 依存追加なし。Linux実測、非対応環境はfail-closed |
 | 整合性 | 設計、コード、テスト、仕様が一致するか | finding: L01 | 耐久仕様・追跡・生成物は一致。説明コメント1件をrecord-only |
@@ -125,6 +126,7 @@
 | R1329-M02 | Medium | identity取得前失敗で空fileを無通知で残す | round 1独立再現 | AC-01 | open直後にcreatedを記録し無害化 | resolved / acceptance-violation | なし |
 | R1329-M03 | Medium | 成功前の末尾entry照合削除により、同名差し替え後も成功を返す | round 2独立再現、`src/lib/atomic.ts:179` | 成功時のwritten観測 | 有限review契約により自動修正せず記録 | valid / fix-regression / record-only | 最終照合時点の`--out` identityを保証しない |
 | R1329-L01 | Low | test hookコメントにrollback削除の旧説明が残る | `src/lib/atomic.ts:32` | 保守説明 | 自動修正せず記録 | valid / improvement / record-only | 保守時の誤誘導 |
+| EXT-1329-H01 | High | 耐久化完了後のdirectory descriptor close失敗を完成済みfileの不確実性として誤報する | CodeRabbit PR #1339、round 3独立再現 | AC-01 | 最終directory closeだけをcleanup failureとして成功維持、SCN-019追加 | resolved / acceptance-violation | なし |
 
 ## 6. ラウンド固有の確認
 
@@ -143,19 +145,21 @@
 
 ### ラウンド3
 
-- 全指摘の最終分類: 未実施。round 2で収束。
+- 全指摘の最終分類: CodeRabbitのEXT-1329-H01をresolved、既存R1329-M03・L01をvalid / record-onlyとして維持した。
+- post-terminal修正差分: `848581bf..1471e1d3`の8 file。file write・両fsync・file close後の最終directory closeだけを成功維持する。
+- 未解決Critical/High: 0件。新規指摘なし。独立reviewerの最終verdictはapproved。
 - 任意の危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: pathname削除を廃止し作成fdだけを無害化した。
 - 同じ範囲の予算を自動更新していない: 更新していない。
-- AIによる最終裁定: round 2でapproved。未解決Critical/Highなし。
+- AIによる最終裁定: round 3でapproved。未解決Critical/Highなし。
 
 ## 7. テスト結果
 
 - runner: cucumber-js、`projectChoices.gherkinDialect=en`、unit・integration・e2e。
 - 実行command: `npm test`、`npm run conformance:check`、対象Cucumber、`npm run build`、`npm run typecheck`、`npm run lint`、`npm run test:format`、`npm run trace:check`、`git diff --check`。
-- 全layer合計: 1816 scenarios（1800 passed、16 skipped、0 failed）、9535 steps（9485 passed、50 skipped）。
+- 全layer合計: 1817 scenarios（1801 passed、16 skipped、0 failed）、9540 steps（9490 passed、50 skipped）。
 - skipがある層: project既定のskip 16 scenarios・50 steps。今回追加の対象はskipなし。
 - conformance: 87 scenarios・468 steps、全合格。
-- 対象: 10 scenarios・51 steps、全合格。
+- 対象: 11 scenarios・56 steps、全合格。
 - reviewer環境ではfixtureの`spawnSync git EPERM`により8件が製品assertion前に停止したため、その結果を回帰失敗とも独立全合格とも扱わない。reviewerは配布JSへの独立I/O反例、trace、source/dist一致を別に確認した。
 
 ## 8. 配布物影響
@@ -177,8 +181,8 @@
 |---|---|
 | 適用した独立性モード | context-isolated |
 | その要求を満たすこと | はい |
-| reviewerとimplementerのidentity・context比較 | implementer `codex-implementer` / `issue-1329-implementation`、reviewer `codex-independent-round-2` / `issue-1329-review-round-2` |
-| reviewerが対象差分を変更していないこと | はい。reviewerのrepository書込みは無視対象の`review-round-2-result.md`だけで、tracked path集合は空 |
+| reviewerとimplementerのidentity・context比較 | implementer `codex-implementer` / `issue-1329-post-terminal-implementation`、reviewer `codex-independent-round-3` / `issue-1329-review-round-3` |
+| reviewerが対象差分を変更していないこと | はい。reviewerのrepository書込みは無視対象の`review-round-3-result.md`だけで、tracked path集合は空 |
 
 ## 10. 仕様整合性
 
@@ -186,7 +190,7 @@
 - 更新した仕様: REQ-WF-009・REQ-WF-014、追跡表、変更履歴、配布review template。
 - ドメイン用語台帳の候補・確定・現在有効な定義が一方向に追跡できる: 既存TERM-ASC-100を参照し、新語は追加していない。
 - 未定義語、重複定義、根拠なしの意味変更、置換先なしの廃止がない: ない。説明残文はR1329-L01へ記録した。
-- 要件・変更・SCN・テストの追跡: REQ-WF-009・014 → AC-WF-009・014 → REVINIT-001〜018ほか → feature/steps。`trace:check`合格。
+- 要件・変更・SCN・テストの追跡: REQ-WF-009・014 → AC-WF-009・014 → REVINIT-001〜019ほか → feature/steps。`trace:check`合格。
 - `no-spec-impact`の場合の限定的根拠: 該当なし。
 - UI・トークンの判断: GUI・画面・token変更なし。
 
@@ -197,5 +201,5 @@
 - 判定: approved
 - 新しい権限が必要な事項: PR作成のprovider write authorityのみ。
 - 残存リスク: 成功直前の同名entry差し替えを成功として返すM03、説明残文L01、後処理不能時のentry残存。いずれも有限review契約上の非blocker。
-- 次に許可される操作: 本artifactだけのcommit、audit、Step 10記録、push、PR作成。
-- 次回の再開地点: Step 11 PR作成。
+- 次に許可される操作: 本artifactだけのforward commit、audit、post-terminal Step 10記録、同一PRへのpush、外部review thread返信・解決。
+- 次回の再開地点: PR #1339のCI確認。
