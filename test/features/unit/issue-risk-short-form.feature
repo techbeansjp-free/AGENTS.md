@@ -61,3 +61,18 @@ Feature: Verification Set riskに比例した02/03短縮形式
       | content                                  |
       | 対象外理由を設計判断として詳しく記録する。 |
       | 対象外ではないため既存契約を維持する。     |
+
+  Scenario: SCN-WF-1334-010 読取中に名前付きrisk入力が置換されたら拒否する
+    Given low-risk短縮行のVerification Set入力が読取直後に別fileへ置換される
+    When risk比例のIssue成果物を検証する
+    Then Verification Set入力が読取中に変更されたと示して拒否する
+
+  Scenario Outline: SCN-WF-1334-011 可視文字のない理由を拒否する
+    Given Verification Set riskが"low"で02と03の対象節が"<kind>"だけの理由である
+    When risk比例のIssue成果物を検証する
+    Then 理由付きの単一行書式を示して拒否する
+
+    Examples:
+      | kind           |
+      | HTML comment   |
+      | Unicode format |

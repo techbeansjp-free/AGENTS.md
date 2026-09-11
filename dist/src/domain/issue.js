@@ -73,12 +73,17 @@ function verificationRisk(issuePath) {
         if (bytesRead > MAX_VERIFICATION_INPUT_BYTES)
             throw new Error(`${LOW_RISK_SHORT_FORM_FILE}は${MAX_VERIFICATION_INPUT_BYTES} bytes以下でなければなりません`);
         const after = fs.fstatSync(descriptor, { bigint: true });
+        const current = fs.lstatSync(inputPath, { bigint: true });
         if (after.dev !== opened.dev ||
             after.ino !== opened.ino ||
             after.size !== opened.size ||
             after.size !== BigInt(bytesRead) ||
             after.mtimeNs !== opened.mtimeNs ||
-            after.ctimeNs !== opened.ctimeNs)
+            after.ctimeNs !== opened.ctimeNs ||
+            !current.isFile() ||
+            current.isSymbolicLink() ||
+            current.dev !== after.dev ||
+            current.ino !== after.ino)
             throw new Error(`${LOW_RISK_SHORT_FORM_FILE}が読取中に変更されました`);
         input = JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
     }
@@ -121,7 +126,11 @@ export function validateLowRiskShortForms(issuePath) {
         const match = candidate.lines.length === 1
             ? LOW_RISK_SHORT_FORM.exec(candidate.lines[0])
             : null;
-        if (!match || match[1].trim() === "")
+        const visibleReason = match?.[1]
+            .replace(/<!--[\s\S]*?-->/gu, "")
+            .replace(/\p{Cf}/gu, "")
+            .trim();
+        if (!match || visibleReason === "")
             errors.push(`${candidate.file} §${candidate.heading}の短縮形式は\`対象外: <理由>\`の理由付き1行にしてください`);
         if (risk !== "low")
             errors.push(`${candidate.file} §${candidate.heading}の\`対象外: <理由>\`はrisk=lowだけで使用できます（現在: ${risk}）`);

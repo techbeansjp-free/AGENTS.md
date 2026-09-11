@@ -13,6 +13,7 @@ interface RiskShortFormWorld extends WorkflowWorld {
   templates: string[];
   cliOutput: string;
   cliStatus: number;
+  replaceVerificationInputAfterRead: boolean;
 }
 
 const { Given, When, Then } = stepDefinitions<RiskShortFormWorld>();
@@ -64,7 +65,14 @@ function requirement(): string {
 }
 
 function artifact(
-  kind: "short" | "empty" | "detailed" | "unicode" | "indented",
+  kind:
+    | "short"
+    | "empty"
+    | "detailed"
+    | "unicode"
+    | "indented"
+    | "comment"
+    | "format",
   plan: boolean,
 ): string {
   const value =
@@ -72,11 +80,15 @@ function artifact(
       ? "対象外: この変更では該当する判断がないため"
       : kind === "empty"
         ? "対象外:"
-        : kind === "unicode"
-          ? "対象外： この変更では該当する判断がないため"
-          : kind === "indented"
-            ? "    対象外: この変更では該当する判断がないため"
-            : "既存契約を維持し、具体的な判断と検証方法を記録する。";
+        : kind === "comment"
+          ? "対象外: <!-- 非表示 -->"
+          : kind === "format"
+            ? "対象外: \u200B"
+            : kind === "unicode"
+              ? "対象外： この変更では該当する判断がないため"
+              : kind === "indented"
+                ? "    対象外: この変更では該当する判断がないため"
+                : "既存契約を維持し、具体的な判断と検証方法を記録する。";
   const sections = plan
     ? [`## 5. 実行可能な受け入れ例とtest計画`, `### 5.2 安全性の必須観点`]
     : [
@@ -102,7 +114,14 @@ function artifact(
 function writeStaging(
   world: RiskShortFormWorld,
   risk: string,
-  kind: "short" | "empty" | "detailed" | "unicode" | "indented",
+  kind:
+    | "short"
+    | "empty"
+    | "detailed"
+    | "unicode"
+    | "indented"
+    | "comment"
+    | "format",
 ): void {
   world.issuePath = world.temp("asc-issue-risk-short-");
   fs.writeFileSync(path.join(world.issuePath, "00_要求定義.md"), requirement());
@@ -208,8 +227,52 @@ Given("low-risk短縮行のVerification Set入力がsymlinkである", function 
   fs.symlinkSync(path.basename(target), input);
 });
 
+Given(
+  "low-risk短縮行のVerification Set入力が読取直後に別fileへ置換される",
+  function () {
+    writeStaging(this, "low", "short");
+    this.replaceVerificationInputAfterRead = true;
+  },
+);
+
+Given(
+  /^Verification Set riskが"([^"]+)"で02と03の対象節が"(HTML comment|Unicode format)"だけの理由である$/u,
+  function (risk: string, kind: "HTML comment" | "Unicode format") {
+    writeStaging(this, risk, kind === "HTML comment" ? "comment" : "format");
+  },
+);
+
 When("risk比例のIssue成果物を検証する", function () {
-  this.validation = validateIssue(this.issuePath, { stage: "design" });
+  const originalReadSync = fs.readSync;
+  let replaced = false;
+  if (this.replaceVerificationInputAfterRead) {
+    Object.defineProperty(fs, "readSync", {
+      configurable: true,
+      writable: true,
+      value: (...args: unknown[]) => {
+        const bytesRead = Reflect.apply(originalReadSync, fs, args) as number;
+        if (!replaced) {
+          replaced = true;
+          const input = path.join(this.issuePath, "verification-input.json");
+          fs.renameSync(
+            input,
+            path.join(this.issuePath, "verification-old.json"),
+          );
+          fs.writeFileSync(input, JSON.stringify({ risk: "high" }));
+        }
+        return bytesRead;
+      },
+    });
+  }
+  try {
+    this.validation = validateIssue(this.issuePath, { stage: "design" });
+  } finally {
+    Object.defineProperty(fs, "readSync", {
+      configurable: true,
+      writable: true,
+      value: originalReadSync,
+    });
+  }
 });
 
 Then("risk比例のIssue検証は合格する", function () {
@@ -258,6 +321,11 @@ Then("理由付きの単一行書式を示して拒否する", function () {
 Then("Verification Set入力が通常fileでないと示して拒否する", function () {
   assert.equal(this.validation.valid, false);
   assert.match(this.validation.errors.join(" "), /通常file/u);
+});
+
+Then("Verification Set入力が読取中に変更されたと示して拒否する", function () {
+  assert.equal(this.validation.valid, false);
+  assert.match(this.validation.errors.join(" "), /読取中に変更/u);
 });
 
 Given("出荷される02と03のIssue templateがある", function () {
