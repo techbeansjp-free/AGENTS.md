@@ -3971,6 +3971,8 @@ export async function main(argv, dependencies = {}) {
         if (positionals.length > 1)
             throw new Error("review validateの位置引数は1件までです");
         const positional = positionals[0];
+        if (flags.file !== undefined && positional !== undefined)
+            throw new Error("review validateは--fileと位置引数を同時に使用できません");
         const file = typeof flags.file === "string" ? flags.file : positional;
         const artifact = typeof flags.artifact === "string" ? flags.artifact : undefined;
         if (file !== undefined && artifact !== undefined)
@@ -3981,7 +3983,21 @@ export async function main(argv, dependencies = {}) {
             const stat = fs.lstatSync(artifactFile);
             if (stat.isSymbolicLink() || !stat.isFile())
                 throw new Error("review validateの--artifactはrepository内の通常fileが必要です");
-            const structure = validateReviewArtifactStructure(fs.readFileSync(artifactFile, "utf8"));
+            dependencies.afterReviewArtifactStat?.(artifactFile);
+            const descriptor = fs.openSync(artifactFile, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+            let markdown;
+            try {
+                const opened = fs.fstatSync(descriptor);
+                if (!opened.isFile() ||
+                    opened.dev !== stat.dev ||
+                    opened.ino !== stat.ino)
+                    throw new Error("review validateの--artifactが読取直前に変化しました");
+                markdown = fs.readFileSync(descriptor, "utf8");
+            }
+            finally {
+                fs.closeSync(descriptor);
+            }
+            const structure = validateReviewArtifactStructure(markdown);
             const result = {
                 valid: structure.diagnostics.length === 0,
                 kind: "review-artifact",

@@ -4058,7 +4058,11 @@ function isHelpToken(value: string | undefined): boolean {
 
 export async function main(
   argv: string[],
-  dependencies: { now?: () => Date; nodeVersion?: string } = {},
+  dependencies: {
+    now?: () => Date;
+    nodeVersion?: string;
+    afterReviewArtifactStat?: (file: string) => void;
+  } = {},
 ): Promise<number> {
   const [command, subcommand, ...rest] = argv;
   if (!command || command === "--help" || command === "-h") {
@@ -5435,6 +5439,10 @@ export async function main(
     if (positionals.length > 1)
       throw new Error("review validateの位置引数は1件までです");
     const positional = positionals[0];
+    if (flags.file !== undefined && positional !== undefined)
+      throw new Error(
+        "review validateは--fileと位置引数を同時に使用できません",
+      );
     const file = typeof flags.file === "string" ? flags.file : positional;
     const artifact =
       typeof flags.artifact === "string" ? flags.artifact : undefined;
@@ -5452,9 +5460,27 @@ export async function main(
         throw new Error(
           "review validateの--artifactはrepository内の通常fileが必要です",
         );
-      const structure = validateReviewArtifactStructure(
-        fs.readFileSync(artifactFile, "utf8"),
+      dependencies.afterReviewArtifactStat?.(artifactFile);
+      const descriptor = fs.openSync(
+        artifactFile,
+        fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
       );
+      let markdown: string;
+      try {
+        const opened = fs.fstatSync(descriptor);
+        if (
+          !opened.isFile() ||
+          opened.dev !== stat.dev ||
+          opened.ino !== stat.ino
+        )
+          throw new Error(
+            "review validateの--artifactが読取直前に変化しました",
+          );
+        markdown = fs.readFileSync(descriptor, "utf8");
+      } finally {
+        fs.closeSync(descriptor);
+      }
+      const structure = validateReviewArtifactStructure(markdown);
       const result = {
         valid: structure.diagnostics.length === 0,
         kind: "review-artifact",

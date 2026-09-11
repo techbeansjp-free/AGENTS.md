@@ -16,6 +16,8 @@ interface ReviewArtifactValidationWorld extends WorkflowWorld {
   jsonResult: Record<string, unknown>;
   artifactResult: Record<string, unknown>;
   invalidArtifactResult: Record<string, unknown>;
+  artifactExitCode: number;
+  invalidArtifactExitCode: number;
   unsafeErrors: Error[];
 }
 
@@ -34,7 +36,7 @@ function validArtifact(): string {
     "| Step chain | 経由: .agent-skill-chain/tmp/issues/1332 |",
     "## 1. 入力証拠",
     "### 1.1 変更ファイル個別監査",
-    "| path | status | a | b | c | d | e | f | decision |",
+    "| path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |",
     "|---|---|---|---|---|---|---|---|---|",
     "| `src/cli.ts` | M | ok | ok | ok | ok | ok | ok | pass |",
     "## 2. 受け入れ条件の確認",
@@ -55,7 +57,12 @@ function validArtifact(): string {
 
 async function captureCli(
   args: string[],
-): Promise<{ output?: Record<string, unknown>; error?: Error }> {
+  dependencies: Parameters<typeof main>[1] = {},
+): Promise<{
+  output?: Record<string, unknown>;
+  error?: Error;
+  exitCode?: number;
+}> {
   const originalWrite = process.stdout.write.bind(process.stdout);
   let stdout = "";
   process.stdout.write = ((chunk: string | Uint8Array) => {
@@ -63,8 +70,11 @@ async function captureCli(
     return true;
   }) as typeof process.stdout.write;
   try {
-    await main(args);
-    return { output: JSON.parse(stdout) as Record<string, unknown> };
+    const exitCode = await main(args, dependencies);
+    return {
+      output: JSON.parse(stdout) as Record<string, unknown>,
+      exitCode,
+    };
   } catch (error) {
     return { error: error instanceof Error ? error : new Error(String(error)) };
   } finally {
@@ -91,6 +101,10 @@ Given("section不足と曖昧な配布物影響を持つreview artifactがある
     .replace(
       "判断: 配布物を更新した\n根拠: CLI sourceとdistを更新したため。",
       "判断: 配布物を更新した\n判断: 配布物を更新しない",
+    )
+    .replace(
+      "| `src/cli.ts` | M | ok | ok | ok | ok | ok | ok | pass |",
+      "| `src/cli.ts` | M | ok | ok | ok | ok | ok | ok | pass |\n| `src/cli.ts` | M | ok | ok | ok | ok | ok | ok | pass |\n| `broken` | X | short |",
     );
 });
 
@@ -122,6 +136,8 @@ Then("sectionと配布物影響の診断をまとめて返す", function () {
   assert.ok(codes.includes("heading"));
   assert.ok(codes.includes("distribution-decision"));
   assert.ok(codes.includes("distribution-reason"));
+  assert.ok(codes.includes("audit-row"));
+  assert.ok(codes.includes("audit-duplicate"));
   assert.ok(this.structure.diagnostics.every((item) => item.line > 0));
 });
 
@@ -160,6 +176,7 @@ When(
     ]);
     assert.equal(artifact.error, undefined);
     this.artifactResult = artifact.output!;
+    this.artifactExitCode = artifact.exitCode!;
     const invalidArtifact = await captureCli([
       "review",
       "validate",
@@ -168,6 +185,13 @@ When(
     ]);
     assert.equal(invalidArtifact.error, undefined);
     this.invalidArtifactResult = invalidArtifact.output!;
+    this.invalidArtifactExitCode = invalidArtifact.exitCode!;
+    const conflictingJson = await captureCli([
+      "review",
+      "validate",
+      "--file=review.json",
+      path.join(this.cliRoot, "review.json"),
+    ]);
     const escape = await captureCli([
       "review",
       "validate",
@@ -180,7 +204,26 @@ When(
       "--artifact=artifact-link.md",
       `--root=${this.cliRoot}`,
     ]);
-    this.unsafeErrors = [escape.error!, symlink.error!];
+    const race = await captureCli(
+      [
+        "review",
+        "validate",
+        "--artifact=artifact.md",
+        `--root=${this.cliRoot}`,
+      ],
+      {
+        afterReviewArtifactStat: (file) => {
+          fs.unlinkSync(file);
+          fs.symlinkSync("/etc/passwd", file);
+        },
+      },
+    );
+    this.unsafeErrors = [
+      escape.error!,
+      symlink.error!,
+      conflictingJson.error!,
+      race.error!,
+    ];
   },
 );
 
@@ -190,7 +233,9 @@ Then("JSONは従来結果を返し安全でないartifact pathを拒否する", 
   assert.equal(this.jsonResult.kind, undefined);
   assert.equal(this.artifactResult.valid, true);
   assert.equal(this.artifactResult.kind, "review-artifact");
+  assert.equal(this.artifactExitCode, 0);
   assert.equal(this.invalidArtifactResult.valid, false);
+  assert.equal(this.invalidArtifactExitCode, 1);
   const diagnostics = this.invalidArtifactResult.errors as Array<
     Record<string, unknown>
   >;
@@ -204,4 +249,6 @@ Then("JSONは従来結果を返し安全でないartifact pathを拒否する", 
   assert.ok(this.unsafeErrors.every((error) => error instanceof Error));
   assert.match(this.unsafeErrors[0]!.message, /パストラバーサル/u);
   assert.match(this.unsafeErrors[1]!.message, /通常file/u);
+  assert.match(this.unsafeErrors[2]!.message, /同時に使用できません/u);
+  assert.match(this.unsafeErrors[3]!.message, /ELOOP|変化しました/u);
 });

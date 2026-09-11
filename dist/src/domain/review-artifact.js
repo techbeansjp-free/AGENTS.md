@@ -2,6 +2,8 @@ import path from "node:path";
 const REVIEW_IDENTITY_HEADING = "## 0. レビュー識別情報";
 const IDENTITY_BASE_EXPECTED = "| 比較基点 | `<40桁の小文字hex>` |";
 const IDENTITY_IMPL_EXPECTED = "| H_impl | `<40桁の小文字hex>` |";
+const AUDIT_HEADER = "| path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |";
+const AUDIT_ROW_EXPECTED = "| `<repository相対path>` | A / M / D / R | <owner> | <target layer> | <責務> | <依存> | <追跡> | <安全性> | pass / finding |";
 const REQUIRED_HEADINGS = Object.freeze([
     REVIEW_IDENTITY_HEADING,
     "## 1. 入力証拠",
@@ -93,6 +95,23 @@ function identityCell(lines, range, label) {
         count: candidates.length,
     };
 }
+function parseAuditRow(line) {
+    const cells = line
+        .split("|")
+        .slice(1, -1)
+        .map((cell) => cell.trim());
+    if (cells.length !== 9 ||
+        !/^`[^`]+`$/u.test(cells[0]) ||
+        !["A", "M", "D", "R"].includes(cells[1]) ||
+        cells.slice(2).some((cell) => cell === ""))
+        return undefined;
+    return {
+        path: cells[0].slice(1, -1),
+        status: cells[1],
+        fields: cells.slice(2, 8),
+        decision: cells[8],
+    };
+}
 export function parseReviewArtifactAudit(markdown) {
     const lines = visibleMarkdownLines(markdown);
     const identity = sectionRange(lines, REVIEW_IDENTITY_HEADING);
@@ -114,19 +133,9 @@ export function parseReviewArtifactAudit(markdown) {
     const entries = [];
     if (audit !== undefined)
         for (const line of lines.slice(audit.start + 1, audit.end)) {
-            const cells = line
-                .split("|")
-                .slice(1, -1)
-                .map((cell) => cell.trim());
-            if (cells.length === 9 &&
-                /^`[^`]+`$/u.test(cells[0]) &&
-                ["A", "M", "D", "R"].includes(cells[1]))
-                entries.push({
-                    path: cells[0].slice(1, -1),
-                    status: cells[1],
-                    fields: cells.slice(2, 8),
-                    decision: cells[8],
-                });
+            const entry = parseAuditRow(line);
+            if (entry !== undefined)
+                entries.push(entry);
         }
     return { base, implementation, rounds, stepChain, entries };
 }
@@ -208,6 +217,33 @@ export function validateReviewArtifactStructure(markdown) {
         add("distribution-decision", (decisions[0]?.index ?? distribution?.start ?? 0) + 1, "判断: 配布物を更新した または 判断: 配布物を更新しない（1件）", "配布物影響の判断を一意に記録してください");
     if (roots.length !== 1 || roots[0].line.slice("根拠:".length).trim() === "")
         add("distribution-reason", (roots[0]?.index ?? distribution?.start ?? 0) + 1, "根拠: <具体的な根拠>（1件）", "配布物影響の根拠を一意に記録してください");
+    const auditRange = sectionRange(lines, "### 1.1 変更ファイル個別監査");
+    if (auditRange !== undefined) {
+        const auditLines = lines
+            .slice(auditRange.start + 1, auditRange.end)
+            .map((line, offset) => ({ line, index: auditRange.start + 1 + offset }));
+        const headers = auditLines.filter((entry) => entry.line === AUDIT_HEADER);
+        if (headers.length !== 1)
+            add("audit-header", (headers[0]?.index ?? auditRange.start) + 1, AUDIT_HEADER, "変更ファイル個別監査のheaderを一意な厳密行で記録してください");
+        const dataRows = auditLines.filter((entry) => /^\| *`/u.test(entry.line));
+        for (const entry of dataRows)
+            if (parseAuditRow(entry.line) === undefined)
+                add("audit-row", entry.index + 1, AUDIT_ROW_EXPECTED, "変更ファイル個別監査の行形式が不正です");
+        const validRows = dataRows
+            .map((entry) => ({
+            entry: parseAuditRow(entry.line),
+            index: entry.index,
+        }))
+            .filter((item) => item.entry !== undefined);
+        if (validRows.length === 0)
+            add("audit-row", auditRange.start + 1, AUDIT_ROW_EXPECTED, "変更ファイル個別監査に1件以上の適合行が必要です");
+        const seen = new Set();
+        for (const item of validRows) {
+            if (seen.has(item.entry.path))
+                add("audit-duplicate", item.index + 1, "監査対象pathは各1件", `変更ファイル個別監査のpathが重複しています: ${item.entry.path}`);
+            seen.add(item.entry.path);
+        }
+    }
     const audit = parseReviewArtifactAudit(markdown);
     return {
         base: base.value,
