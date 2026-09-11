@@ -540,6 +540,7 @@ export function planCompletion(input: unknown): {
           ["承認済みdigestが最新cleanup previewの64桁digestと一致しません"],
           [
             "worktree finalize --completeをpreviewで再実行し、新しいpreview digestを確認する",
+            "確認したpreview digestを--approved-digest=<preview digest>として--report-hashと併せて渡す",
           ],
         ),
         completionPhase("post-verify", "skipped"),

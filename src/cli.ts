@@ -223,8 +223,10 @@ import {
 } from "./adapters/workflow-journal.js";
 import {
   assertConvergedReviewSession,
+  buildReviewRoundDraft,
   previewReviewRound,
   recordReviewRound,
+  STAGING_DIGEST_RERECORD_HINT,
 } from "./adapters/review-session.js";
 import {
   appendEvidenceReanchor,
@@ -394,7 +396,7 @@ function workflowDiagnostic(
   };
 }
 
-function assertWorkflowReadyForDelivery(
+export function assertWorkflowReadyForDelivery(
   staging: string,
 ): ReturnType<typeof inspectWorkflowStaging> {
   const stored = readStoredStagingRecord(staging);
@@ -405,7 +407,7 @@ function assertWorkflowReadyForDelivery(
     stored.digest !== currentDigest
   )
     throw new Error(
-      "delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています",
+      `delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${STAGING_DIGEST_RERECORD_HINT}`,
     );
   const inspection = inspectWorkflowStaging(staging, 10);
   if (
@@ -5280,7 +5282,19 @@ export async function main(
   if (command === "review" && subcommand === "round") {
     const { flags, positionals } = parse(rest);
     const unknown = Object.keys(flags).filter(
-      (flag) => !["staging", "file", "apply"].includes(flag),
+      (flag) =>
+        ![
+          "staging",
+          "file",
+          "apply",
+          "init",
+          "out",
+          "base",
+          "head",
+          "scope",
+          "ac",
+          "invariant",
+        ].includes(flag),
     );
     if (unknown.length > 0)
       throw new Error(
@@ -5289,6 +5303,70 @@ export async function main(
     if (positionals.length > 0)
       throw new Error("review roundに位置引数は使用できません");
     const staging = required(flags, "staging");
+    if (flags.init !== undefined) {
+      /**
+       * **`--init`は次roundの入力雛形を書くだけで、判定も永続化もしない**
+       * （Issue #1323、A-2）。雛形はstaging外の新規fileにだけ書く。staging内へ
+       * 置くとstaging digestが変わり`review round`自身が拒否するためである。
+       */
+      if (flags.init !== true)
+        throw new Error("review round --initに値は指定できません");
+      if (flags.file !== undefined || flags.apply !== undefined)
+        throw new Error(
+          "review round --initは--fileおよび--applyと併用できません。雛形を確認してから review round --file=<out> を別に実行してください",
+        );
+      const out = path.resolve(required(flags, "out"));
+      /**
+       * **包含判定は親directoryのrealpathで行う**（round 1 REV-01）。字句上の
+       * prefixだけでは、stagingを指すdirectory symlinkの配下を`--out`にすると
+       * staging外と判定したままstaging内へ書ける。親が実在しない場合も拒否する。
+       */
+      let outParentReal: string;
+      try {
+        outParentReal = fs.realpathSync(path.dirname(out));
+      } catch {
+        throw new Error(
+          `review round --initの--outの親directoryが実在しません: ${path.dirname(out)}`,
+        );
+      }
+      const realStaging = fs.realpathSync(path.resolve(staging));
+      if (
+        outParentReal === realStaging ||
+        outParentReal.startsWith(`${realStaging}${path.sep}`)
+      )
+        throw new Error(
+          "review round --initの--outはstagingの外を指定してください。staging内へ置くとstaging digestが変わり、review roundが拒否します",
+        );
+      if (fs.existsSync(out) || fs.lstatSync(out, { throwIfNoEntry: false }))
+        throw new Error(
+          `review round --initの--outが既に存在します。既存fileは上書きしません: ${out}`,
+        );
+      const ids = (value: unknown): readonly string[] | undefined =>
+        typeof value === "string"
+          ? value
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : undefined;
+      const draft = buildReviewRoundDraft({
+        staging,
+        headSha: required(flags, "head"),
+        baseSha: typeof flags.base === "string" ? flags.base : undefined,
+        scopeIds: ids(flags.scope),
+        acceptanceCriteriaIds: ids(flags.ac),
+        invariantIds: ids(flags.invariant),
+      });
+      fs.writeFileSync(out, `${JSON.stringify(draft.round, null, 2)}\n`, {
+        flag: "wx",
+      });
+      print({
+        written: out,
+        round: draft.round.round,
+        candidateHeadSha: draft.round.candidateHeadSha,
+        notes: draft.notes,
+      });
+      return 0;
+    }
     const file = path.resolve(required(flags, "file"));
     const round = parseReviewRoundInput(readJsonInput(file));
     const apply = flags.apply === true;
