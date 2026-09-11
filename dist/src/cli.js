@@ -2612,7 +2612,18 @@ function roleTierFailure(ruleId, purpose, risk, reasons, scope, next, requiredAu
         },
     });
 }
+/**
+ * usageが`<JSON>`と宣言するflagの値がJSON本文でないとき、`parseJsonStrict`の
+ * `offset 0`より前に是正操作を示す。fileは読まず、値本文も診断へ転記しない
+ * （Issue #1340: `<path>`宣言を信じてpathを渡した利用者が原因を特定できなかった）。
+ */
+function requireInlineJson(source, flag, opener) {
+    if (source.trimStart().startsWith(opener))
+        return;
+    throw new Error(`--${flag}にはinline JSONを渡します（file pathではありません）。${opener === "[" ? "JSON配列" : "JSON object"}の本文を--${flag}='…'の形式で指定してください`);
+}
 function assignmentInput(source) {
+    requireInlineJson(source, "assignments", "[");
     const parsed = parseJsonStrict(source, "assignments");
     if (!Array.isArray(parsed))
         throw new Error("--assignmentsはJSON配列でなければなりません");
@@ -2630,6 +2641,7 @@ function assignmentInput(source) {
     });
 }
 function humanOverrideInput(source) {
+    requireInlineJson(source, "override", "{");
     const parsed = parseJsonStrict(source, "override");
     if (!isRecord(parsed))
         throw new Error("--overrideはobjectでなければなりません");
