@@ -3309,8 +3309,33 @@ export async function main(argv, dependencies = {}) {
         if (plan.operation === "sync" &&
             (artifacts.length > 0 || flags.evidence !== undefined))
             throw new Error("Step 4/8のworkflow advanceはartifactと同期evidenceを実観測から生成します");
+        let syncPreview;
+        if (plan.state === "preview" && plan.operation === "sync") {
+            const issueRaw = required(flags, "issue");
+            if (!/^[1-9]\d*$/u.test(issueRaw))
+                throw new Error("--issueは正のIssue番号で指定してください");
+            const repository = required(flags, "repo");
+            const issue = Number(issueRaw);
+            const checkpoint = plan.targetStep;
+            const tracker = `https://github.com/${repository}/issues/${issueRaw}`;
+            if (checkpoint === 8) {
+                const step4 = [...readWorkflowJournal(staging).entries]
+                    .reverse()
+                    .find((entry) => entry.step === 4);
+                if (!step4?.artifacts.includes(tracker))
+                    throw new Error("Step 8はStep 4で同期・記録した同じGitHub Issueだけを更新できます");
+            }
+            const generated = buildIssueSyncBody(staging, checkpoint, issueStagingGherkinDialect(staging));
+            syncPreview = {
+                repository,
+                issue,
+                tracker,
+                checkpoint,
+                bodySha256: generated.bodySha256,
+            };
+        }
         if (!apply || plan.state !== "preview") {
-            print(plan);
+            print(syncPreview === undefined ? plan : { ...plan, sync: syncPreview });
             return plan.state === "blocked" ? 1 : 0;
         }
         return withStagingMutationLock(staging, () => {

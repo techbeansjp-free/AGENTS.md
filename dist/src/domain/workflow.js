@@ -148,7 +148,7 @@ export function planWorkflowAdvance(input) {
         });
     }
     const sync = input.nextStep === 4 || input.nextStep === 8;
-    const validationStage = input.nextStep >= 6
+    const validationStage = input.nextStep >= 5
         ? "design"
         : input.nextStep >= 2
             ? "requirements"

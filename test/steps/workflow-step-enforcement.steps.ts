@@ -1210,6 +1210,13 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
         "issue",
         "authorize=approved",
       ]);
+      const design = planWorkflowAdvance({
+        mode: "full",
+        currentStep: 4,
+        nextStep: 5,
+        valid: true,
+      });
+      assert.equal(design.validationStage, "design");
       break;
     }
     case "SCN-UNIT-ADVANCE-002": {
@@ -5917,6 +5924,28 @@ if (exact(["auth", "status"])) {
           staging,
           entry: entry(step, "full"),
         });
+      const preview = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+      const previewOutput = JSON.parse(preview.stdout) as {
+        sync: { tracker: string; checkpoint: number; bodySha256: string };
+      };
+      assert.equal(
+        previewOutput.sync.tracker,
+        "https://github.com/o/r/issues/877",
+      );
+      assert.equal(previewOutput.sync.checkpoint, 4);
+      assert.match(previewOutput.sync.bodySha256, /^[a-f0-9]{64}$/u);
+      assert.deepEqual(deliveryProviderCalls(prepared), []);
       const checked = executeCli(
         [
           "workflow",

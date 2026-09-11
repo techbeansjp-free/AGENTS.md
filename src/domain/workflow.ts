@@ -201,7 +201,7 @@ export function planWorkflowAdvance(input: {
   }
   const sync = input.nextStep === 4 || input.nextStep === 8;
   const validationStage =
-    input.nextStep >= 6
+    input.nextStep >= 5
       ? ("design" as const)
       : input.nextStep >= 2
         ? ("requirements" as const)
