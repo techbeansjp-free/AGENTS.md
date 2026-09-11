@@ -1,4 +1,5 @@
 import { compareTrustedPolicy, enforceTrustedBoundary, resolveEffectivePolicy, validateEnforcementPolicy, } from "./enforcement.js";
+import { isScenarioId } from "./scenario-id.js";
 import { isRecord, } from "../types.js";
 import { validatePullRequestBody, withoutMarkdownCode } from "./issue.js";
 import { validatePolicy } from "./policy.js";
@@ -137,7 +138,7 @@ function requireStringArray(value, name) {
         throw new Error(`${name}に重複があります`);
     return value.filter((item) => typeof item === "string");
 }
-function validateDeliveryEvidence(evidence, headSha) {
+export function validateDeliveryEvidence(evidence, headSha) {
     if (!/^[a-f0-9]{40}$/i.test(headSha))
         throw new Error("PR対象HEAD SHAは40桁のGit SHAで指定してください");
     if (!evidence || evidence.headSha !== headSha)
@@ -147,7 +148,7 @@ function validateDeliveryEvidence(evidence, headSha) {
     if (!evidence.tests?.passed || evidence.tests.headSha !== headSha)
         throw new Error("同じHEAD SHAに対するテスト合格が必要です");
     const scenarioIds = requireStringArray(evidence.tests.scenarioIds, "テスト証拠のSCN ID");
-    if (scenarioIds.some((id) => !/^SCN-[A-Z0-9-]+$/.test(id)))
+    if (scenarioIds.some((id) => !isScenarioId(id)))
         throw new Error("テスト証拠に不正なSCN IDがあります");
     if (!evidence.spec?.consistent || evidence.spec.headSha !== headSha)
         throw new Error("同じHEAD SHAに対する仕様整合性の合格が必要です");
