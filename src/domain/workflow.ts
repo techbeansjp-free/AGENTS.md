@@ -317,6 +317,14 @@ export interface StepJournalEntry {
    * 封印していたのは記録側だけであり、性質そのものではなかった（Issue #1194）。
    */
   postTerminalIntake?: true;
+  /**
+   * 上流再確定entryであることを示す（TERM-ASC-109、Issue #1342）。**Step 1〜9にだけ許す。**
+   *
+   * 後続Stepを記録した後に上流Stepを再実施した事実を、順序判定から外して追記する。
+   * 同じStepの通常entryが先行していることを要し、先行entryの無い後付けは受理しない。
+   * Step 10はreview session binding、Step 11はdelivery終端が所有するため対象外。
+   */
+  reconfirmation?: true;
 }
 
 export interface ModeDecision {
@@ -342,6 +350,7 @@ const JOURNAL_FIELDS = new Set([
   "reviewSession",
   "humanOverride",
   "postTerminalIntake",
+  "reconfirmation",
 ]);
 const POC_OBSERVATION_BINDING_FIELDS = new Set(["headSha", "evidenceDigest"]);
 const REVIEW_SESSION_BINDING_FIELDS = new Set([
@@ -566,6 +575,14 @@ function parseJournalEntry(
       errors.push(`${label}のpostTerminalIntakeはStep 10にだけ指定できます`);
     else postTerminalIntake = true;
   }
+  let reconfirmation: true | undefined;
+  if (value.reconfirmation !== undefined) {
+    if (value.reconfirmation !== true)
+      errors.push(`${label}のreconfirmationはtrueだけを受理します`);
+    else if (Number(value.step) < 1 || Number(value.step) > 9)
+      errors.push(`${label}のreconfirmationはStep 1〜9にだけ指定できます`);
+    else reconfirmation = true;
+  }
   if (errors.length > 0) return { errors };
   return {
     entry: {
@@ -580,6 +597,7 @@ function parseJournalEntry(
       ...(reviewSession ? { reviewSession } : {}),
       ...(parsedOverride.value ? { humanOverride: parsedOverride.value } : {}),
       ...(postTerminalIntake ? { postTerminalIntake } : {}),
+      ...(reconfirmation ? { reconfirmation } : {}),
     },
     errors,
   };
@@ -667,9 +685,38 @@ export function validateStepJournal(input: {
    * 後に現れる。順序判定へ入れるとStep 11がout-of-orderになる。**外すのは順序の
    * 判定だけであり、記録は残る**（Issue #1194）。
    */
+  /**
+   * **上流再確定entryも順序判定から外す**（Issue #1342）。外すのは順序の判定だけで、
+   * 記録は残る。flagだけで過去Stepを後付けする抜け道にしないため、同じStepの
+   * 通常entryが先行していることを別途要求する。
+   */
   input.entries.forEach((entry, index) => {
-    if (entry.postTerminalIntake) return;
+    if (entry.postTerminalIntake || entry.reconfirmation) return;
     lastByStep.set(entry.step, { entry, index });
+  });
+  input.entries.forEach((entry, index) => {
+    if (!entry.reconfirmation) return;
+    /**
+     * **先行entryはそのStepを実際に実施した記録でなければならない。**
+     *
+     * `humanOverride`は欠落を人間が明示承認した記録であって、Stepの実施ではない
+     * （順序判定でも`continue`で除外している）。これを先行entryに数えると、
+     * **一度も実施していないStepを「再確定」できてしまう**（Issue #1342のREV-05）。
+     * `reconfirmation`と`postTerminalIntake`を除くのも同じ理由による。
+     */
+    const preceded = input.entries
+      .slice(0, index)
+      .some(
+        (candidate) =>
+          candidate.step === entry.step &&
+          !candidate.reconfirmation &&
+          !candidate.postTerminalIntake &&
+          !candidate.humanOverride,
+      );
+    if (!preceded)
+      errors.push(
+        `Step ${entry.step}の上流再確定entryに先行する通常entryがありません`,
+      );
   });
   const terminalIndex = input.entries.findIndex((entry) => entry.step === 11);
   input.entries.forEach((entry, index) => {
@@ -677,6 +724,22 @@ export function validateStepJournal(input: {
     if (terminalIndex < 0 || index < terminalIndex)
       errors.push(
         "post-terminal intakeのStep 10記録はStep 11より後に置いてください",
+      );
+  });
+  /**
+   * **上流再確定entryはStep 11より後に置けない**（Issue #1342）。
+   *
+   * 順序判定から外すことと、どこへでも置けることは別である。書込み経路の
+   * `appendStepJournal`はStep 11記録後の追記をpost-terminal intakeのStep 10だけに
+   * 限っているが、保存済みjournalを読む側に同じ条件が無いと、**手編集した
+   * journalがStep 11後の再確定entryを載せたまま`workflow verify`を通る。**
+   * 書込み側と読取り側で受理集合が食い違う状態を残さない。
+   */
+  input.entries.forEach((entry, index) => {
+    if (!entry.reconfirmation) return;
+    if (terminalIndex >= 0 && index > terminalIndex)
+      errors.push(
+        "上流再確定entryはStep 11より後に置けません。Step 11記録後に置けるのはpost-terminal intakeのStep 10だけです",
       );
   });
   const maximum = errors.length === 0 ? input.upToStep : 11;
