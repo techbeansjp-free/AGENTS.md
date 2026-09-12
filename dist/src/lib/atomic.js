@@ -62,6 +62,7 @@ function descriptorDirectoryPath(directory) {
         : process.platform === "win32"
             ? []
             : [`/dev/fd/${directory.descriptor}`];
+    let unsupportedDarwinDescriptorAlias = false;
     for (const candidate of candidates) {
         let observedDescriptor;
         try {
@@ -72,11 +73,13 @@ function descriptorDirectoryPath(directory) {
             const observed = fs.fstatSync(observedDescriptor);
             if (observed.isDirectory() &&
                 observed.dev === directory.dev &&
-                observed.ino === directory.ino)
-                // Darwin exposes the descriptor alias but does not support traversing
-                // `/dev/fd/N/leaf`. Use the repeatedly verified named parent there and
-                // verify it again immediately after the exclusive create, before data.
-                return process.platform === "darwin" ? directory.path : candidate;
+                observed.ino === directory.ino) {
+                if (process.platform === "darwin") {
+                    unsupportedDarwinDescriptorAlias = true;
+                    continue;
+                }
+                return candidate;
+            }
         }
         catch {
             // A missing descriptor filesystem is handled by the fail-closed error.
@@ -86,6 +89,8 @@ function descriptorDirectoryPath(directory) {
                 fs.closeSync(observedDescriptor);
         }
     }
+    if (unsupportedDarwinDescriptorAlias)
+        throw new Error("macOSの/dev/fdは末尾pathを探索できないため、安全なdirectory descriptor相対file作成には利用できません");
     throw new Error("exclusive file作成にはdirectory descriptor相対pathが必要です");
 }
 /**
@@ -118,7 +123,6 @@ export function writeFileExclusivePinned(directory, leaf, contents, hooks = {}) 
         const createdIdentity = fs.fstatSync(descriptor);
         if (!createdIdentity.isFile())
             throw new Error("exclusive file作成先が通常fileではありません");
-        assertPinnedDirectory(pinned);
         hooks.afterCreateBeforeWrite?.(descriptor);
         writeFully(descriptor, Buffer.from(contents));
         fs.fsyncSync(descriptor);

@@ -910,16 +910,30 @@ When(
         "--ac=AC-001",
       ]),
     );
-    assert.equal(this.cliError, undefined, this.cliError?.message);
   },
 );
 
-Then("writtenは利用者指定pathのまま実体の親へ雛形を書く", function () {
-  const output: unknown = JSON.parse(this.cliOutput);
-  assert.ok(output && typeof output === "object" && "written" in output);
-  assert.equal((output as { written: string }).written, this.outFile);
-  assert.ok(fs.existsSync(path.join(this.raceParent, "round.json")));
-});
+Then(
+  "対応環境では実体の親へ書きDarwinでは固有理由でfail-closedにする",
+  function () {
+    if (process.platform === "darwin") {
+      assert.match(
+        this.cliError?.message ?? "",
+        /macOSの\/dev\/fdは末尾pathを探索できない/u,
+      );
+      assert.equal(
+        fs.existsSync(path.join(this.raceParent, "round.json")),
+        false,
+      );
+      return;
+    }
+    assert.equal(this.cliError, undefined, this.cliError?.message);
+    const output: unknown = JSON.parse(this.cliOutput);
+    assert.ok(output && typeof output === "object" && "written" in output);
+    assert.equal((output as { written: string }).written, this.outFile);
+    assert.ok(fs.existsSync(path.join(this.raceParent, "round.json")));
+  },
+);
 
 Given("budget-exhaustedのsessionを持つstagingがある", function () {
   createFixture(this);
