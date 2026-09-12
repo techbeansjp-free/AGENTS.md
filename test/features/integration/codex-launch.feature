@@ -16,3 +16,8 @@ Feature: Codexのtrusted採用と実行境界
     Given 最新Codex起動用のtrusted projectと隔離実行入口がある
     When promptのshell文字列はデータとなりpathとcontext不正はdispatch前に拒否する
     Then 最新Codex起動の受け入れ条件を満たす
+
+  Scenario: SCN-INT-TIERPROV-005 Codex経路は壊れたcandidate policyに依存しない
+    Given 最新Codex起動用のtrusted projectと隔離実行入口がある
+    When working treeのcandidate policyを壊してrouting tierのCodex経路を実行する
+    Then trusted policy由来の信頼源でCodex tier判定に成功する

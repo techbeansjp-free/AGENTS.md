@@ -206,9 +206,9 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     optionalFlags: [
       optional(
         "provider",
-        "text",
-        "codexは公式selectorとtrusted tierを検証、claudeは旧台帳",
-        "旧台帳互換",
+        "codex",
+        "codexだけを受理する。trusted selector採用tierと公式観測で照合し、出力はloader由来のprovenance source（git、git-legacy、git-floor）とusage=codex-adoptionを持つ",
+        "未指定はworking treeの既存台帳による互換検証（loader由来のprovenance sourceはfilesystemまたはfilesystem-legacy、usageはcompatibility-only）。認可には使わない",
       ),
       ROOT_FLAG,
       optional("justification", "text", "上位tierを選ぶ根拠", "根拠なし"),
