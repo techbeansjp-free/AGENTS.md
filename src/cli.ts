@@ -3899,7 +3899,14 @@ function routingFailure(
 
 /**
  * policy loaderが観測した信頼源を出力用へ写す。**handlerで信頼源を推測しない。**
- * `source`はloaderの語彙（`filesystem` / `filesystem-legacy` / `git`）をそのまま使い、
+ *
+ * `source`はloaderの語彙をそのまま使い、**正規化も読み替えもしない。** 現在の語彙は
+ * `filesystem`、`filesystem-legacy`、`git`、`git-legacy`、`git-floor`の5値である
+ * （`src/domain/policy.ts`が唯一の発生源）。**`-legacy`や`-floor`を`git`へ潰さない。**
+ * 潰すと「どの形式のpolicyを読んだか」が出力から消え、信頼源を正しく示すという
+ * 本経路の目的そのものを失う（Issue #1350のREV-01）。語彙が増えたときに
+ * handler側の対応が要らないことも、この写しを恒等にしておく理由である。
+ *
  * `ref`は読んだcommit SHA（trusted）またはproject policy manifestのpathとする。
  */
 function tierProvenance(provenance: Record<string, unknown>): {
