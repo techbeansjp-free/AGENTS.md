@@ -43,6 +43,7 @@
 | `docs/specs/10_セキュリティ/01_信頼境界.md` | M | package | security | compatibility-only境界 | CLIへ一方向 | AC-02〜03 | 文書revert可能 | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | package | trace | AC・SCN・実装追跡 | 一方向 | SCN-UNIT-TIERPROV-001〜004 | 文書revert可能 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | package | history | 実装済み変更の記録 | 依存なし | REQ-WF-007 | append記録 | pass |
+| `docs/reviews/204_課題1350routing-tier信頼源表示レビュー.md` | A | reviewer | review evidence | exact-head判定とpost-terminal intakeを保持 | 実装差分を参照 | AC-01〜05 | artifact-only前進 | pass |
 | `src/cli-usage.ts` | M | package | CLI help | provider・出力説明 | CLIへ一方向 | AC-01〜05 | source revert可能 | pass |
 | `src/cli.ts` | M | package | CLI | 入力検証と出力組立 | policy loaderを利用 | AC-01〜05 | 判定関数不変 | pass |
 | `test/features/integration/codex-launch.feature` | M | package | integration test | candidate破損時のtrusted境界 | stepsから製品へ | SCN-INT-TIERPROV-005 | tmp fixtureのみ | pass |
