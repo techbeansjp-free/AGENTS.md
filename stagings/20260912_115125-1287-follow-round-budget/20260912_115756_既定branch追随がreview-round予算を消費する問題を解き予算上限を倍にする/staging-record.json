@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "agent-skill-chain/staging-record/v1",
+  "mode": "full",
+  "artifacts": [
+    "00_モード判定.json",
+    "00_要求定義.md",
+    "01_要件定義.md",
+    "02_設計.md",
+    "03_実装計画.md",
+    "journal/steps.jsonl"
+  ],
+  "digest": "595fc5407f6fc897289eed1cd3444580c210534907e7afb55880d749d42cd720",
+  "owner": "runtime・project owner",
+  "createdAt": "2026-09-12T02:57:56.122Z",
+  "state": "local-active",
+  "tracker": null,
+  "checkpoint": null,
+  "syncedAt": null,
+  "syncDigest": null,
+  "readBackDigest": null
+}

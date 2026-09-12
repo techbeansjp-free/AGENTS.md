@@ -1,0 +1,10 @@
+{
+  "Q-01": {"answer": false, "evidence": "配布する規範文書（02_品質基準.md、01_開発ワークフロー.md）とtemplate（04_レビュー.md）が述べるreviewラウンド予算の値を変え、公開CLI `review round` の受理round数という外部観測可能な振る舞いを変える"},
+  "Q-02": {"answer": false, "evidence": "保存済み`review-session.json`のround記録へ、予算へ数えるかの判定に使う観測値を追加する。既存sessionの読み取り規則が変わる"},
+  "Q-03": {"answer": true, "evidence": "認証・認可・信頼境界の判定と秘密情報の扱いを変えない。予算判定はreview進行の制御であり操作authorityを与えない"},
+  "Q-04": {"answer": true, "evidence": "依存package・lockfile・実行時外部存在を変えない。`git merge-tree`は既に利用しているgitの機能で、必要versionは2.38以上（開発環境は2.43.0）"},
+  "Q-05": {"answer": true, "evidence": "実行環境・CI・基盤設定・配布経路を変えない"},
+  "Q-06": {"answer": true, "evidence": "削除・公開・送信など不可逆操作の認可・対象・手順に触れない。review sessionは追記のみ"},
+  "Q-07": {"answer": false, "evidence": "Issue #1287本文が候補にした「実装差分digestの一致」は実測で成立しないことが判明しており（追随で比較基点が動くためdigestが変わる）、判定条件を本Issue内で確定する必要がある。また上限値の引き上げはowner決裁として後から加わった"},
+  "Q-08": {"answer": true, "evidence": "触れるのはreview convergence（予算判定）と、その入力を観測するreview session adapterだけ。delivery・staging・workflow journalのモデルと操作に触れない"}
+}

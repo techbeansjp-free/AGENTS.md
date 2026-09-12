@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "agent-skill-chain/staging-record/v1",
+  "mode": "full",
+  "artifacts": [
+    "00_モード判定.json",
+    "00_要求定義.md",
+    "01_要件定義.md",
+    "02_設計.md",
+    "03_実装計画.md",
+    "journal/steps.jsonl",
+    "verification-input.json"
+  ],
+  "digest": "f74c763ad8d31be4bf1250f8c77cbc056b29a95a882665683abe8a28da18e289",
+  "owner": "runtime・project owner",
+  "createdAt": "2026-09-12T00:12:22.888Z",
+  "state": "sync-verified",
+  "tracker": "https://github.com/techbeansjp-free/AGENTS.md/issues/1341",
+  "checkpoint": 8,
+  "syncedAt": "2026-09-12T00:24:59.598Z",
+  "syncDigest": "68d02ecadd0001de029995eac0f0a03188f2115ecfdf6f54a83ce6ad0d59e94e",
+  "readBackDigest": "68d02ecadd0001de029995eac0f0a03188f2115ecfdf6f54a83ce6ad0d59e94e"
+}
