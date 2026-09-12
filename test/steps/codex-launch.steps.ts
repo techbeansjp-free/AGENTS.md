@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import {
   launchCodex,
   type CodexLaunchInput,
@@ -26,6 +26,7 @@ class CodexLaunchWorld extends WorkflowWorld {
   launchInput: CodexLaunchInput | undefined;
   expectedStates: string[] = [];
   observedStates: string[] = [];
+  tierResult: SpawnSyncReturns<string> | undefined;
 }
 const { Given, When, Then } = stepDefinitions<CodexLaunchWorld>();
 
@@ -106,6 +107,56 @@ Given("最新Codex起動用のtrusted projectと隔離実行入口がある", fu
   const executable = path.join(this.binaryRoot, "codex");
   fs.writeFileSync(executable, codexFixtureScript(this.binaryRoot));
   fs.chmodSync(executable, 0o755);
+});
+
+When(
+  "working treeのcandidate policyを壊してrouting tierのCodex経路を実行する",
+  function () {
+    const candidate = path.join(
+      this.launchRoot,
+      ".agent-skill-chain/project/choices/development.json",
+    );
+    fs.writeFileSync(candidate, "{ invalid candidate policy\n");
+    this.tierResult = spawnSync(
+      process.execPath,
+      [
+        path.resolve("dist/bin/agent-skill-chain.js"),
+        "routing",
+        "tier",
+        `--root=${this.launchRoot}`,
+        "--provider=codex",
+        "--risk=identity",
+        "--mode=full",
+        "--scope=issue-1350",
+        "--model=future-model-a",
+        "--selected=critical",
+      ],
+      {
+        cwd: this.launchRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${this.binaryRoot}${path.delimiter}${process.env.PATH ?? ""}`,
+        },
+      },
+    );
+  },
+);
+
+Then("trusted policy由来の信頼源でCodex tier判定に成功する", function () {
+  assert.ok(this.tierResult);
+  assert.equal(
+    this.tierResult.status,
+    0,
+    this.tierResult.stdout + this.tierResult.stderr,
+  );
+  const parsed: unknown = JSON.parse(this.tierResult.stdout);
+  assert.ok(isRecord(parsed), this.tierResult.stdout);
+  assert.equal(parsed.valid, true);
+  assert.equal(parsed.usage, "codex-adoption");
+  assert.ok(isRecord(parsed.provenance), this.tierResult.stdout);
+  assert.equal(parsed.provenance.source, "git");
+  assert.match(String(parsed.provenance.ref), /^[0-9a-f]{40}$/u);
 });
 
 When("公式推奨をAからBへ変更して公開CLIを2回起動する", function () {

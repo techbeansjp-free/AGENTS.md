@@ -4371,19 +4371,7 @@ export async function main(
         "--providerはcodexだけを受理します。未指定は既存台帳の互換検証であり、Codex自動起動の認可には使いません",
       );
     const selected = modelTier(required(flags, "selected"), "selected");
-    const projectSet = loadProjectPolicySet(root);
-    const choices = projectSet.choices[0];
-    const configured =
-      choices?.modelMapping && typeof choices.modelMapping !== "string"
-        ? choices.modelMapping
-        : undefined;
     const computed = requiredTier({ risk, mode, scope });
-    const configuredMinimum = configured?.minimumTierByRisk?.[risk];
-    const requiredMinimum =
-      configuredMinimum &&
-      MODEL_TIERS.indexOf(configuredMinimum) > MODEL_TIERS.indexOf(computed)
-        ? configuredMinimum
-        : computed;
     if (flags.provider === "codex") {
       const trustedSet = loadOperationPolicy(root);
       const trustedMapping = trustedSet.policy.projectChoices?.modelMapping;
@@ -4435,6 +4423,19 @@ export async function main(
       });
       return result.valid ? 0 : 1;
     }
+    // 互換経路だけがcandidate working treeを読む。Codex認可はtrusted refだけに依存する。
+    const projectSet = loadProjectPolicySet(root);
+    const choices = projectSet.choices[0];
+    const configured =
+      choices?.modelMapping && typeof choices.modelMapping !== "string"
+        ? choices.modelMapping
+        : undefined;
+    const configuredMinimum = configured?.minimumTierByRisk?.[risk];
+    const requiredMinimum =
+      configuredMinimum &&
+      MODEL_TIERS.indexOf(configuredMinimum) > MODEL_TIERS.indexOf(computed)
+        ? configuredMinimum
+        : computed;
     const result = validateTierSelection({
       required: requiredMinimum,
       selected,

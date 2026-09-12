@@ -207,8 +207,8 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       optional(
         "provider",
         "codex",
-        "codexだけを受理する。trusted selector採用tierと公式観測で照合し、出力はprovenance sourceがgitでusageがcodex-adoptionになる",
-        "未指定はworking treeの既存台帳による互換検証（provenance sourceはfilesystem、usageはcompatibility-only）。認可には使わない",
+        "codexだけを受理する。trusted selector採用tierと公式観測で照合し、出力はloader由来のprovenance source（git、git-legacy、git-floor）とusage=codex-adoptionを持つ",
+        "未指定はworking treeの既存台帳による互換検証（loader由来のprovenance sourceはfilesystemまたはfilesystem-legacy、usageはcompatibility-only）。認可には使わない",
       ),
       ROOT_FLAG,
       optional("justification", "text", "上位tierを選ぶ根拠", "根拠なし"),
