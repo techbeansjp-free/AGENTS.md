@@ -66,6 +66,8 @@ function validateQualityContract(document: string): string[] {
     ])
   )
     errors.push("Git非依存検査の実行境界");
+  if (!includesAll(gitIndependent?.[2], ["出力", "終了状態"]))
+    errors.push("Git非依存検査の合格observable");
   if (
     !includesAll(trusted?.[1], [
       "candidateの外部",
@@ -74,6 +76,16 @@ function validateQualityContract(document: string): string[] {
     ])
   )
     errors.push("trusted repository依存検査の実行境界");
+  if (
+    !includesAll(trusted?.[2], [
+      "固定済みrepository",
+      "ref",
+      "commit",
+      "検査結果",
+      "一致",
+    ])
+  )
+    errors.push("trusted repository依存検査の合格observable");
   if (!includesAll(noIndex?.[2], ["git diff --check --no-index", "stdoutが空"]))
     errors.push("no-index差分検査の合格observable");
   for (const [label, pattern] of [
@@ -221,6 +233,15 @@ Then("配布規範とtemplateの契約削除変異をすべて検出する", fun
     validateQualityContract(emptyValue),
     "品質基準の値だけを空にする",
   );
+  for (const row of ["Git非依存検査", "trusted repository依存検査"])
+    assertRejected(
+      validateQualityContract(
+        replaceSection(quality, QUALITY_HEADING, (section) =>
+          emptyTableCell(section, row, 2),
+        ),
+      ),
+      `品質基準の合格observable欠落: ${row}`,
+    );
   assertRejected(
     validateQualityContract(
       moveParagraphOutside(quality, QUALITY_HEADING, "candidateが作った`.git`"),
