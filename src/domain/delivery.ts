@@ -170,7 +170,7 @@ export function diagnoseBranchFollowCost(
     manualFollowRequired,
     reasons: [
       manualFollowRequired
-        ? "strict required status checksが有効でmerge queueが無いため、base前進時に人手追随が必要です"
+        ? "strict required status checksが有効でmerge queueが無いため、base前進時に人手追随が必要です。安全性を維持して自動化する場合はmerge queueの構成を検討してください"
         : "strict required status checksが無効かmerge queueが構成済みのため、この構成だけから人手追随必須とは判定しません",
     ],
   };
