@@ -6,9 +6,9 @@
 |---|---|
 | 対象 | routing tierの未指定経路をtrustedと表示せずprovenanceを出力し仕様外のprovider値を拒否する |
 | ラウンド数 | 4（引継ぎ済み2ラウンド + 既定branch追随後review + PR後指摘の取り直しreview） |
-| 対象SHA・文書ダイジェスト | `5b92bfe8ffd2adc4bb1d28bed65b03e2b46b392d` |
-| 比較基点 | `e0966d99bc23028dd6936ba28f33e399afb4d32d` |
-| H_impl | `5b92bfe8ffd2adc4bb1d28bed65b03e2b46b392d` |
+| 対象SHA・文書ダイジェスト | `bfd6e1905287e567821197bd6bca34b704f2fd46` |
+| 比較基点 | `70b857dafb099cc01153c9a6621faa03448a9c44` |
+| H_impl | `bfd6e1905287e567821197bd6bca34b704f2fd46` |
 | 対象差分 | routing tierのprovider検証、provenance・usage出力、仕様・追跡・テスト・生成dist |
 | 対象外 | policy loader本体・tier判定関数の変更、merge後処理 |
 | Step chain | 迂回: Issue #1350のsealed stagingは引継ぎ元からdigest不一致のため、Git・GitHub・実差分・独立reviewで再構成 |
@@ -28,9 +28,9 @@
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・要件 | Issue #1350、staging `00_要求定義.md`・`01_要件定義.md` | 仕様外provider拒否、未指定とcodex経路の信頼源・用途を機械可読化 | GitHub・staging |
-| 差分 | `e0966d99`..`5b92bfe8` | source・dist・仕様・test・review artifactの15 path | Git |
-| 追随merge完全性 | merge commit `73da9d54`の両親とtree | 変更履歴の候補側・main側の行をともに保持し、安定ID欠落なし | Git・独立review |
-| 独立再レビュー | exact HEAD `5b92bfe8` | approved、Critical 0 / High 0 / Medium 0 / Low 0 | 別agent context |
+| 差分 | `70b857da`..`bfd6e190` | source・dist・仕様・test・review artifactの15 path | Git |
+| 追随merge完全性 | merge commit `a42e9b79`の両親とtree | 候補側のrouting変更とmain側のIssue #1344変更をともに保持し、安定ID欠落なし | Git・独立review |
+| 独立再レビュー | exact HEAD `bfd6e190` | approved、Critical 0 / High 0 / Medium 0 / Low 0 | 別agent context |
 | 対象test | routing-tier-provenance + codex-launch | 5 scenarios / 25 steps合格 | Cucumber |
 
 ### 1.1 変更ファイル個別監査
@@ -84,6 +84,7 @@
 | REV-L-1358-02 | Low | 追跡表が4 scenarioを列挙しつつ「3 scenarios」と記載し、feature末尾に余分な空行がある | `1931a060`で件数訂正と空行削除、再レビュー合格 | resolved |
 | CR-1358-01 | Low | CLI usageがprovenance sourceを`git`・`filesystem`だけと断定し、loaderの5語彙より狭い | loader由来であることと5語彙を経路別に明記 | resolved |
 | CR-1358-02 | High | Codex経路がtrusted policyより先にcandidate policyを読み、candidate欠落・破損で認可判定へ到達できない | candidate読込みを未指定互換経路へ移動し、破損candidateで成功するSCN-INT-TIERPROV-005を追加 | resolved |
+| REV-M-1358-03 | Medium | 変更履歴がSCN-INT-TIERPROV-005とcandidate破損時の挙動変更を反映していない | `bfd6e190`で要件・追跡と一致する記録へ更新し、exact-head再確認 | resolved |
 
 ## 6. ラウンド固有の確認
 
@@ -92,12 +93,13 @@
 - 追随後review: `73da9d54`をreviewし、機能要件とmerge完全性をapproved。追跡表件数とEOFを是正した。
 - 是正後再review: `1931a060`をexact-headでreviewし、Critical 0 / High 0 / Medium 0 / Low 0でapproved。
 - PR後指摘の取り直しreview: CodeRabbitの2件を有効と判定して前進commit `5b92bfe8`で是正。別agent contextがexact-headで再reviewし、Critical 0 / High 0 / Medium 0 / Low 0でapproved。
+- PR #1368追随後review: `286adf68`で機能・両親保持・SCN到達を確認し、変更履歴の旧記述1件をMediumとして検出。`bfd6e190`で是正し、exact-head再確認で全finding解消・approved。
 
 ## 7. テスト結果
 
 - routing tier対象回帰: 5 scenarios / 25 steps、失敗0。SCN-INT-TIERPROV-005は旧実装なら破損candidateの先読みにより失敗することをコード経路でも確認した。
 - 変異試験: A〜Fをkill。provider受理、usage、source恒等写し、診断、codex provenanceの退行を検出。
-- macOS full test: canonical TMPDIRで1,926 scenarios中1,894合格・16 skip・16失敗。失敗はLinux固定実行ファイル`/usr/bin/bwrap`・`/usr/bin/prlimit`の不在、sandbox内tsx IPC・npm log権限、macOSで作れない危険file名に限定され、対象5 scenariosは合格。非正規化`/var/...`での初回実行は既存のsymlink祖先拒否契約により失敗したため証拠に採用しない。
+- macOS full test: canonical TMPDIRで1,927 scenarios中1,895合格・16 skip・16失敗。15件はLinux固定実行ファイル`/usr/bin/bwrap`・`/usr/bin/prlimit`の不在、sandbox内tsx IPC・npm log権限、macOSで作れない危険file名による環境差。残る1件は追加SCNの追跡漏れで、REQ-WF-007への到達を追加後にSCN-INT-SPECNORM-001を含む対象6 scenarios / 30 steps、trace、conformanceを再実行して解消した。非正規化`/var/...`での初回実行は既存のsymlink祖先拒否契約により失敗したため証拠に採用しない。
 - build: 合格。
 - conformance: canonical TMPDIRと隔離npm cacheで87 scenarios / 468 steps、失敗0。conformance検査合格。
 
@@ -120,7 +122,7 @@
 | 適用した独立性モード | context-isolated |
 | reviewerとimplementerのcontext | 別agent context |
 | reviewerによる対象差分変更 | なし |
-| exact HEAD | `5b92bfe8ffd2adc4bb1d28bed65b03e2b46b392d` |
+| exact HEAD | `bfd6e1905287e567821197bd6bca34b704f2fd46` |
 | 判定 | approved、Critical 0 / High 0 / Medium 0 / Low 0 |
 
 ### 9.1 staging引継ぎ不整合の扱い
