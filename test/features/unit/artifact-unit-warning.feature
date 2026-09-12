@@ -45,18 +45,3 @@ Feature: 成果物1単位の構造warning
     Given 対象内にinline code説明を持つ成果物markerが2件ある
     When 成果物単位warningを検出する
     Then codeとcount 2とkindを持つwarningを1件返す
-
-  Scenario: SCN-UNIT-ARTUNIT-012 quickの対象内markerを警告する
-    Given quickの対象内に成果物markerが2件ある
-    When 成果物単位warningを検出する
-    Then codeとcount 2とkindを持つwarningを1件返す
-
-  Scenario: SCN-UNIT-ARTUNIT-013 pocの対象内markerを警告する
-    Given pocの対象内に成果物markerが2件ある
-    When 成果物単位warningを検出する
-    Then count 2とfeatureとdocumentationを持つwarningを1件返す
-
-  Scenario: SCN-UNIT-ARTUNIT-014 quickの不正な深さを数えない
-    Given quickの対象内に不正な深さの成果物markerだけがある
-    When 成果物単位warningを検出する
-    Then 成果物単位warningは空である

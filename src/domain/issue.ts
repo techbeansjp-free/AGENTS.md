@@ -163,7 +163,7 @@ function artifactUnitSectionBodies(
 }
 
 /**
- * full 00 §2.1またはquick/poc 00 §2の対象内直下にある明示markerだけを数える。
+ * full 00 §2.1直下にある明示markerだけを数える。
  *
  * 自由文や入れ子bulletを推測しない。markerを任意にすることで既存Issueとの
  * 後方互換性を保ち、2件以上でもvalidation authorityへ影響しない診断だけを返す。
@@ -172,30 +172,16 @@ export function detectArtifactUnitWarnings(
   text: string,
 ): readonly IssueScopeWarning[] {
   const markers: ArtifactUnitKind[] = [];
-  const appendMarker = (line: string, indentation: string): void => {
-    const match = new RegExp(
-      `^${indentation}- \\[成果物:(adr|contract|feature|documentation|migration)\\]\\s+\\S.*$`,
-      "u",
-    ).exec(line);
+  const appendMarker = (line: string): void => {
+    const match =
+      /^- \[成果物:(adr|contract|feature|documentation|migration)\]\s+\S.*$/u.exec(
+        line,
+      );
     if (match) markers.push(match[1] as ArtifactUnitKind);
   };
   for (const body of artifactUnitSectionBodies(text, "2.1 対象内（必須）")) {
     for (const line of body.split("\n")) {
-      appendMarker(line, "");
-    }
-  }
-  for (const body of artifactUnitSectionBodies(
-    text,
-    "2. 対象範囲と権限（必須）",
-  )) {
-    let inScope = false;
-    for (const line of body.split("\n")) {
-      if (/^- 対象内:\s*(?:\S.*)?$/u.test(line)) {
-        inScope = true;
-        continue;
-      }
-      if (inScope && /^-\s/u.test(line)) inScope = false;
-      if (inScope) appendMarker(line, "  ");
+      appendMarker(line);
     }
   }
   if (markers.length < 2) return Object.freeze([]);

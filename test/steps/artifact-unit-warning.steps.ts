@@ -43,17 +43,6 @@ ${outside}
 `;
 }
 
-function aggregateDocument(mode: "quick" | "poc", inScope: string): string {
-  return `# 00 要求定義（${mode}集約版）
-
-## 2. 対象範囲と権限（必須）
-
-- 対象内: 実装対象
-${inScope}
-- 対象外: 今回扱わない範囲
-`;
-}
-
 async function captureCli(issuePath: string): Promise<{
   status: number;
   result: ArtifactUnitWorld["cliResult"];
@@ -173,27 +162,6 @@ Given("対象内にinline code説明を持つ成果物markerが2件ある", func
   );
 });
 
-Given("quickの対象内に成果物markerが2件ある", function () {
-  this.markdown = aggregateDocument(
-    "quick",
-    "  - [成果物:feature] CLI warning\n  - [成果物:contract] JSON contract",
-  );
-});
-
-Given("pocの対象内に成果物markerが2件ある", function () {
-  this.markdown = aggregateDocument(
-    "poc",
-    "  - [成果物:feature] experiment\n  - [成果物:documentation] evidence",
-  );
-});
-
-Given("quickの対象内に不正な深さの成果物markerだけがある", function () {
-  this.markdown = aggregateDocument(
-    "quick",
-    "- [成果物:feature] top-level\n    - [成果物:contract] too-deep",
-  );
-});
-
 When("成果物単位warningを検出する", function () {
   this.warnings = detectArtifactUnitWarnings(this.markdown);
 });
@@ -213,12 +181,6 @@ Then("count 2とadrだけを持つwarningを1件返す", function () {
   assert.equal(this.warnings.length, 1);
   assert.equal(this.warnings[0]?.count, 2);
   assert.deepEqual(this.warnings[0]?.kinds, ["adr"]);
-});
-
-Then("count 2とfeatureとdocumentationを持つwarningを1件返す", function () {
-  assert.equal(this.warnings.length, 1);
-  assert.equal(this.warnings[0]?.count, 2);
-  assert.deepEqual(this.warnings[0]?.kinds, ["feature", "documentation"]);
 });
 
 Then("成果物単位warningは空である", function () {
@@ -243,11 +205,33 @@ Then("全文書が成果物1単位と45分とmarkerの非停止性を案内す�
   for (const text of this.contractDocuments) {
     assert.match(text, /成果物1単位/u);
     assert.match(text, /45分/u);
-    assert.match(text, /成果物:(?:adr\|contract\|feature|<kind>)/u);
   }
-  assert.match(this.contractDocuments[0]!, /非停止warning/u);
-  assert.match(this.contractDocuments[1]!, /validation成否は変えない/u);
-  assert.match(this.contractDocuments[4]!, /終了値を変更しません/u);
+  const [workflow, full, quick, poc, help] = this.contractDocuments;
+  assert.match(
+    workflow!,
+    /fullの00 §2\.1にあるtop-level bullet.*非停止warning.*quick\/pocの集約形式はmarker warningの判定対象外/u,
+  );
+  assert.match(full!, /^- \[成果物:feature\] .+$/mu);
+  assert.match(full!, /adr\|contract\|feature\|documentation\|migration/u);
+  assert.match(full!, /top-level markerが2件以上/u);
+  assert.match(full!, /validation成否は変えない/u);
+  for (const aggregate of [quick, poc]) {
+    assert.match(
+      aggregate!,
+      /^- 対象内:.*複数成果物markerの非停止warningはfullだけに適用し、quick\/poc集約形式では適用しない.*$/mu,
+    );
+    assert.doesNotMatch(aggregate!, /^\s+- \[成果物:/mu);
+  }
+  assert.match(help!, /fullの00 §2\.1直下/u);
+  assert.match(
+    help!,
+    /成果物:adr\|contract\|feature\|documentation\|migration/u,
+  );
+  assert.match(help!, /quick\/poc集約形式はmarker warningの判定対象外/u);
+  assert.match(
+    help!,
+    /valid、errors、mode、blockedOperations、終了値を変更しません/u,
+  );
 });
 
 Given("成果物markerを2件持つvalidなfull Issue fixtureがある", function () {
