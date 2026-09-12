@@ -38,3 +38,8 @@ Feature: 上流再確定entryは順序判定から外れ通常entryと区別で�
     Then どちらもそのStep番号を名指しして先行する通常entryが無いと拒否される
     And 同じStepの通常entryを先に置いた場合はどちらも受理される
 
+  Scenario: SCN-UNIT-RECONFIRM-008 値を付けた--reconfirmを拒否する
+    Given Step 0から8まで記録したfull stagingがある
+    When Step 3を--reconfirm=falseで記録する
+    Then 値を付けずに指定する旨を名指しして拒否されjournalは変わらない
+

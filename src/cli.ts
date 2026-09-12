@@ -343,6 +343,19 @@ function workflowArguments(args: string[]): {
   return { flags, artifacts };
 }
 
+/**
+ * 値を取らないflagの受理。**値付き形式を無言で真として扱わない。**
+ *
+ * parserは`--name`だけを`__present__`にし、`--name=値`は値をそのまま保存する。
+ * 存在判定を`!== undefined`で書くと、`--reconfirm=false`が有効として通る。
+ */
+function presentFlag(flags: Record<string, string>, key: string): boolean {
+  if (flags[key] === undefined) return false;
+  if (flags[key] !== "__present__")
+    throw new Error(`--${key}は値を付けずに指定してください`);
+  return true;
+}
+
 function workflowLifecycleApplyMode(flags: Record<string, string>): boolean {
   for (const key of ["apply", "dry-run"])
     if (flags[key] !== undefined && flags[key] !== "__present__")
@@ -5333,7 +5346,13 @@ export async function main(
      * 上流再確定entry（Issue #1342）。Step 10はreview binding、Step 11はdelivery終端が
      * 所有するため対象外。先行する通常entryの存在はjournal本体の順序判定が検証する。
      */
-    const reconfirm = flags.reconfirm !== undefined;
+    /**
+     * **値なしflagは`__present__`だけを受理する。** `--reconfirm=false`のような
+     * 値付き形式は文字列としてflagsへ入るため、`!== undefined`で判定すると
+     * **利用者が「無効にした」つもりの入力が有効として通る**（CodeRabbit指摘）。
+     * 同じ形の`--post-terminal-intake`も同様に扱う。
+     */
+    const reconfirm = presentFlag(flags, "reconfirm");
     if (reconfirm && (step.step < 1 || step.step > 9))
       throw new Error("--reconfirmはStep 1〜9にだけ指定できます");
     if (reconfirm) entry = { ...entry, reconfirmation: true };
@@ -5349,7 +5368,7 @@ export async function main(
         ).stdout.trim()
       : undefined;
     if (step.step === 9) entry.implementationHeadSha = headSha!;
-    const intake = flags["post-terminal-intake"] !== undefined;
+    const intake = presentFlag(flags, "post-terminal-intake");
     if (intake && step.step !== 10)
       throw new Error(
         "--post-terminal-intakeはworkflow record --step=10だけに指定できます",

@@ -397,3 +397,27 @@ Then("同じStepの通常entryを先に置いた場合はどちらも受理さ�
     );
   }
 });
+
+/**
+ * **値付きの値なしflagを無言で真にしない。** `--reconfirm=false`は利用者が
+ * 「無効にした」つもりの入力であり、それが有効として通ると
+ * **意図と逆の記録がjournalへ残る**（CodeRabbit指摘）。
+ */
+When("Step 3を--reconfirm=falseで記録する", async function () {
+  this.journalBefore = journalOf(this.staging);
+  const result = await record(this.staging, 3, ["--reconfirm=false"]);
+  this.results = [{ label: "valued", ...result }];
+});
+
+Then(
+  "値を付けずに指定する旨を名指しして拒否されjournalは変わらない",
+  function () {
+    const [recorded] = this.results;
+    assert.equal(recorded?.status, 1);
+    assert.match(
+      recorded?.stdout ?? "",
+      /--reconfirmは値を付けずに指定してください/u,
+    );
+    assert.equal(journalOf(this.staging), this.journalBefore);
+  },
+);
