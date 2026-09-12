@@ -376,7 +376,7 @@ export const COMMAND_USAGE = Object.freeze([
             optional("changed", "path,path", "変更path", "観測なし"),
         ],
         example: "npx agent-skill-chain issue validate --path=./ISSUE.md",
-        note: "1 Issueの境界は所要時間ではなく、独立に完成・review・merge・rollbackできるかという成果物の結合度で決めます。独立した切り戻し、異なるreview担当・観点、先行merge、失敗影響の分離が必要なら分割候補です。45分は再確認の補助指標であり、長いだけでは分割しません。分割はmodeごとのStep 0〜11、PR review、既定branch追随と有限review予算の固定費を分割数だけ要するため、一体として扱うべきなら分割しない判断も正当です。fullの00 §2.1直下に置く[成果物:adr|contract|feature|documentation|migration] markerが2件以上ならwarningsへ分割候補を返します。quick/poc集約形式はmarker warningの判定対象外です。warningはvalid、errors、mode、blockedOperations、終了値を変更しません",
+        note: "1 Issueの境界は所要時間ではなく、独立に完成・review・merge・rollbackできるかという成果物の結合度で決めます。独立した切り戻し、異なるreview担当・観点、先行merge、失敗影響の分離が必要なら分割候補です。45分は再確認の補助指標であり、長いだけでは分割しません。00〜03を個別管理するfullは集約00のquick/pocより固定費が大きく、分割はmodeごとのStep 0〜11、PR review、既定branch追随時のStep 9再記録とreview round、有限review予算の固定費を分割数だけ要するため、一体として扱うべきなら分割しない判断も正当です。fullの00 §2.1直下に置く[成果物:adr|contract|feature|documentation|migration] markerが2件以上ならwarningsへ分割候補を返します。quick/poc集約形式はmarker warningの判定対象外です。warningはvalid、errors、mode、blockedOperations、終了値を変更しません",
     },
     {
         command: "issue",

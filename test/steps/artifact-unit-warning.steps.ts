@@ -210,6 +210,15 @@ Then(
       assert.match(text, /補助指標/u);
       assert.match(text, /固定費/u);
       assert.match(text, /長いだけでは分割し(?:ない|ません)/u);
+      assert.match(text, /切り戻/u);
+      assert.match(text, /review担当|reviewの担当者/u);
+      assert.match(text, /先(?:行|に)merge/u);
+      assert.match(text, /失敗.*(?:影響|巻き戻)/u);
+      assert.match(text, /Step 0〜11/u);
+      assert.match(text, /PR.*review/u);
+      assert.match(text, /既定branch追随.*Step 9/u);
+      assert.match(text, /有限review予算/u);
+      assert.doesNotMatch(text, /45分(?:を)?超(?:える)?見込みなら.*分割/u);
     }
     const [workflow, full, quick, poc, help] = this.contractDocuments;
     assert.match(
@@ -220,12 +229,14 @@ Then(
     assert.match(full!, /adr\|contract\|feature\|documentation\|migration/u);
     assert.match(full!, /top-level markerが2件以上/u);
     assert.match(full!, /validation成否は変えない/u);
+    assert.match(full!, /full.*quick\/pocより固定費が大き/u);
     for (const aggregate of [quick, poc]) {
       assert.match(
         aggregate!,
         /^- 対象内:.*複数成果物markerの非停止warningはfullだけに適用し、quick\/poc集約形式では適用しない.*$/mu,
       );
       assert.doesNotMatch(aggregate!, /^\s+- \[成果物:/mu);
+      assert.match(aggregate!, /集約00でfullより固定費が小さい/u);
     }
     assert.match(help!, /fullの00 §2\.1直下/u);
     assert.match(
@@ -233,6 +244,7 @@ Then(
       /成果物:adr\|contract\|feature\|documentation\|migration/u,
     );
     assert.match(help!, /quick\/poc集約形式はmarker warningの判定対象外/u);
+    assert.match(help!, /full.*quick\/pocより固定費が大き/u);
     assert.match(
       help!,
       /valid、errors、mode、blockedOperations、終了値を変更しません/u,

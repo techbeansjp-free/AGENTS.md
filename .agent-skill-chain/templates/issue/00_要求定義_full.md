@@ -42,7 +42,7 @@
 
 ### 2.1 対象内（必須）
 
-1 Issueの境界は所要時間ではなく、独立に完成・review・merge・rollbackできるかという成果物の結合度で決める。独立した切り戻し、異なるreview担当・観点、先行merge、失敗影響の分離が必要なら分割候補とする。45分は結合度を再確認する補助指標であり、長いだけでは分割しない。分割はfullのStep 0〜11、PR review、既定branch追随時のStep 9再記録とreview round、有限review予算という固定費を分割数だけ要するため、一体として扱うべきなら分割しない。任意の`[成果物:<kind>]` markerを付ける場合、`kind`は`adr|contract|feature|documentation|migration`から選ぶ。top-level markerが2件以上なら`issue validate`は分割候補のwarningを返すが、validation成否は変えない。
+1 Issueの境界は所要時間ではなく、独立に完成・review・merge・rollbackできるかという成果物の結合度で決める。独立した切り戻し、異なるreview担当・観点、先行merge、失敗影響の分離が必要なら分割候補とする。45分は結合度を再確認する補助指標であり、長いだけでは分割しない。fullは00〜03を個別管理して集約00のquick/pocより固定費が大きく、分割はStep 0〜11、PR review、既定branch追随時のStep 9再記録とreview round、有限review予算という固定費を分割数だけ要するため、一体として扱うべきなら分割しない。任意の`[成果物:<kind>]` markerを付ける場合、`kind`は`adr|contract|feature|documentation|migration`から選ぶ。top-level markerが2件以上なら`issue validate`は分割候補のwarningを返すが、validation成否は変えない。
 
 - [成果物:feature] （実現する1成果物を記載する）
 
