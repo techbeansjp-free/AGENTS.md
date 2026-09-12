@@ -13,10 +13,12 @@ import { createIssueStaging } from "../../src/domain/issue.js";
 import { QUESTIONS, type ModeAnswer } from "../../src/domain/mode.js";
 import {
   parseReviewRoundInput,
+  unconvergedReviewSessionDiagnostic,
   type ReviewRoundInput,
   type ReviewSessionState,
 } from "../../src/domain/review-convergence.js";
 import {
+  buildReviewRoundDraft,
   observeReviewDiff,
   previewReviewRound,
   recordReviewRound,
@@ -229,6 +231,18 @@ When("review round --initでround 1の雛形を書く", async function () {
   );
 });
 
+When("round 1の雛形を直接構築する", function () {
+  const draft = buildReviewRoundDraft({
+    staging: this.staging,
+    headSha: this.head,
+    baseSha: this.base,
+    scopeIds: ["SCOPE-001"],
+    acceptanceCriteriaIds: ["AC-001"],
+  });
+  this.draft = draft.round;
+  this.cliOutput = JSON.stringify({ notes: draft.notes });
+});
+
 Then("雛形をfileへ渡したreview round previewが受理される", function () {
   const state = previewReviewRound({
     staging: this.staging,
@@ -240,6 +254,18 @@ Then("雛形をfileへ渡したreview round previewが受理される", function
   assert.equal(
     this.draft.anchor.initialDiffDigest,
     observeReviewDiff(this.root, this.base, this.head).digest,
+  );
+});
+
+Then("notesは検分対象HEADと記録順を示す", function () {
+  const notes = (JSON.parse(this.cliOutput) as { notes: string[] }).notes.join(
+    "\n",
+  );
+  assert.match(notes, new RegExp(this.head.slice(0, 8), "u"));
+  assert.match(notes, /feat: initial candidate/u);
+  assert.match(
+    notes,
+    /レビュー結果を反映したcommitを、このroundの記録より先に作らない/u,
   );
 });
 
@@ -480,6 +506,33 @@ Then("実Git差分が空であるerrorで拒否し雛形を書かない", functi
   assert.ok(this.cliError, this.cliOutput);
   assert.match(this.cliError.message, /実Git差分が空です/u);
   assert.equal(fs.existsSync(this.outFile), false);
+});
+
+Then("空差分の診断はsession確認を案内する", function () {
+  const message = this.cliError?.message ?? "";
+  assert.match(message, /HEADを進めても取り違えが重なる/u);
+  assert.match(message, /review-session\.json/u);
+  assert.match(message, /candidateHeadSha/u);
+});
+
+Given("非収束statusごとの診断がある", function () {
+  this.reasonSets = [
+    [unconvergedReviewSessionDiagnostic("active")],
+    [unconvergedReviewSessionDiagnostic("budget-exhausted")],
+  ];
+});
+
+When("status別の診断を比較する", function () {
+  assert.equal(this.reasonSets.length, 2);
+});
+
+Then("activeとbudget-exhaustedでownerの確認対象が異なる", function () {
+  const active = this.reasonSets[0]?.[0] ?? "";
+  const exhausted = this.reasonSets[1]?.[0] ?? "";
+  assert.match(active, /candidateHeadSha/u);
+  assert.match(active, /risk受容へ進まず/u);
+  assert.match(exhausted, /既知の未解決finding/u);
+  assert.notEqual(active, exhausted);
 });
 
 When("--headを基点SHAにしてreview round --initを実行する", async function () {
