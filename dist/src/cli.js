@@ -10,7 +10,7 @@ import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
 import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, validateReviewArtifactStructure, } from "./domain/review-artifact.js";
-import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, extractIssueClosingNumbers, } from "./domain/delivery.js";
+import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
 import { buildWorktreePath, createWorktree, canonicalWorktreePath, DEFAULT_WORKTREE_PLACEMENT, enforceTrustedWorktreeBoundary, inspectFinalizeState, inspectRecoveryState, validateWorktreePlacement, } from "./domain/worktree.js";
 import { applyWorkspaceHygiene, previewWorkspaceHygiene, } from "./domain/hygiene.js";
@@ -947,6 +947,7 @@ function inspectAuthorizedPullRequestMerge(input) {
         authority.defaultBranchTipOid !== trustedCommitSha)
         throw new Error("provider authorityのrepository・既定branch・base・headがtrusted policy setと一致しません");
     const protection = github("branch.protection", { repository: input.repository, branch: input.base }, input.root);
+    const deliveryPolicy = github("branch.delivery-policy", { repository: input.repository, branch: input.base }, input.root);
     const checks = (observed.statusCheckRollup ?? [])
         .filter((item) => (item.conclusion ?? item.state ?? item.status) === "SUCCESS")
         .map((item) => item.name ?? item.context)
@@ -965,6 +966,8 @@ function inspectAuthorizedPullRequestMerge(input) {
         authority,
         implementationCommitSha: reviewed.reviewEvidence.implementationCommitSha,
         reviewEvidence: reviewed.reviewEvidence,
+        deliveryPolicy,
+        followCost: diagnoseBranchFollowCost(deliveryPolicy),
         authorization: authorizeMerge({
             trustedPolicy: input.trustedSet.policy,
             method: input.method,
@@ -1669,6 +1672,8 @@ function handlePullRequestMerge(flags) {
                 output: {
                     state: "preview",
                     authorization: inspected.authorization,
+                    deliveryPolicy: inspected.deliveryPolicy,
+                    followCost: inspected.followCost,
                     pr: inspected.observed.url,
                     headSha: inspected.observed.headRefOid,
                     baseSha: inspected.observed.baseRefOid,
