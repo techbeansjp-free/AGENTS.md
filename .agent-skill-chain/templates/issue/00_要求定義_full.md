@@ -42,7 +42,9 @@
 
 ### 2.1 対象内（必須）
 
-- （実現対象を列挙する）
+1 Issueは独立に完成・review・rollbackできる成果物1単位を目安にし、45分を超える見込みなら起票時に分割する。任意の`[成果物:<kind>]` markerを付ける場合、`kind`は`adr|contract|feature|documentation|migration`から選ぶ。top-level markerが2件以上なら`issue validate`は分割候補のwarningを返すが、validation成否は変えない。
+
+- [成果物:feature] （実現する1成果物を記載する）
 
 ### 2.2 対象外（必須）
 
