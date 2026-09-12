@@ -5,13 +5,13 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | macOSでreview雛形を安全に実作成する |
-| ラウンド | 独立レビュー2ラウンド |
-| 対象SHA・文書ダイジェスト | `31285f74b86e09f0864bb253b96e34b61cd46092` |
-| 比較基点 | `d5c2d861d5fc6e0df52b9d0d925487da4c4aea6a` |
-| H_impl | `31285f74b86e09f0864bb253b96e34b61cd46092` |
+| ラウンド | 独立レビュー3ラウンド |
+| 対象SHA・文書ダイジェスト | `5709200f851a54b5dee92bf5f0379485d6a8072a` |
+| 比較基点 | `632c7f1d513e2c7a45b4826d5a08cd6b95e9a9a4` |
+| H_impl | `5709200f851a54b5dee92bf5f0379485d6a8072a` |
 | 対象差分 | Darwin openat helper、仕様・追跡・テスト・生成dist |
 | 対象外 | merge、release、名前付き親pathへのfallback |
-| ラウンド数 | 2（round 2で収束） |
+| ラウンド数 | 3（round 3で既定branch追随後のexact HEADを再確認して収束） |
 | Step chain | 迂回: 利用側ownerからの上流ASC直接修正依頼。隔離cloneで実装・検証・独立reviewを実施 |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md`、`docs/specs/15_要件追跡/` |
 | 成果物行数 | 製品source・仕様 +162/-5、test支援層 +90/-25、生成dist +114/-1 |
@@ -29,7 +29,8 @@
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 利用側要求 | macOSでfail-closedせず雛形作成を成功させる | 指定pathへの安全な実作成を要求 | 要求 |
-| 差分 | `d5c2d861`..`31285f74` | source・dist・仕様・testの9 path | Git |
+| 差分 | `632c7f1d`..`5709200f` | source・dist・仕様・test・既存review artifactの10 path | Git |
+| 追随merge完全性 | `5709200f`の両親とtree | macOS側の主要blobは第1親と同一、main側の安定ID欠落0、共有`src/cli.ts`と変更履歴は両親の内容を保持 | Git・独立review |
 | macOS対象test | REVINIT全scenario | 25 scenario、128 step成功 | Cucumber |
 | 静的検査 | build、lint、typecheck、format、source、docs、Gherkin、trace、architecture、package | 合格 | project scripts |
 
@@ -40,6 +41,7 @@
 | `docs/specs/02_要件/01_ワークフロー要件.md` | M | package | requirement | Darwin openat契約 | 実装へ一方向 | REQ-WF-014 | 文書revert可能 | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | package | trace | 要件からSCNへの追跡 | 一方向 | SCN-UNIT-REVINIT-024〜025 | 文書revert可能 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | package | history | 実装済み変更の記録 | 依存なし | REQ-WF-014 | append記録 | pass |
+| `docs/reviews/203_課題1364macOS-review雛形openat実装レビュー.md` | A | package | review evidence | exact-headレビュー証拠 | 実装差分を参照 | REQ-WF-014 | artifact commitをrevert可能 | pass |
 | `src/cli.ts` | M | package | CLI | helper原因を利用者へ伝える | libへ一方向 | AC-WF-014 | path削除なし | pass |
 | `src/lib/atomic.ts` | M | package | library | FD固定openat書込み | fs・child processだけに依存 | REQ-WF-014 | CWE-367境界維持 | pass |
 | `test/features/unit/review-round-init.feature` | M | package | unit test | macOS正常・異常回帰 | stepsから製品へ | SCN-UNIT-REVINIT-012・024〜025 | fixtureのみ | pass |
@@ -80,6 +82,7 @@
 
 - ラウンド1: `ed025e65`をreviewし、High 1件・Medium 1件を検出してreject。
 - ラウンド2: `31285f74`をreviewし、両findingの解消を確認。新規findingなしでapproved。
+- ラウンド3: `5709200f`をreviewし、`632c7f1d`追随後もmacOS実装・仕様・testが保持され、main側変更との意味的干渉と安定ID欠落がないことを確認。新規findingなしでapproved。
 
 ## 7. テスト結果
 
@@ -108,7 +111,7 @@
 | 適用した独立性モード | context-isolated |
 | reviewerとimplementerのcontext | 別agent context |
 | reviewerによる対象差分変更 | なし |
-| exact HEAD | `31285f74b86e09f0864bb253b96e34b61cd46092` |
+| exact HEAD | `5709200f851a54b5dee92bf5f0379485d6a8072a` |
 
 ## 10. 仕様整合性
 
@@ -120,4 +123,4 @@
 - 未解決Critical/High: 0件。
 - Medium: 0件。Low: record-only 1件。
 - 判定: approved、PR作成可。
-- 次に許可される操作: 本review artifactだけをcommitし、監査とPR CIを実行する。
+- 次に許可される操作: 更新した本review artifactだけをcommitし、監査とPR CIを実行する。
