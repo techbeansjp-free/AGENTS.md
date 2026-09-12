@@ -5,7 +5,7 @@
 | path | SHA-256 |
 |---|---|
 | `scripts/check_consumer_acceptance.ts` | `08cbde239552af94f97485a09e3173fb6e72855e7f4cffbc80629122f5bff5fc` |
-| `src/lib/process.ts` | `1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2` |
+| `src/lib/process.ts` | `99ee2f31dacc759fd67b16c5737f03a023f6591fc3929ed4214c31fdbffa9614` |
 
 この2件を記録するのは、consumer acceptanceの判定とprocess出力上限という、この証跡が主張する振る舞いの実体だからである。**`scripts/check_package_contents.ts`は含めない。** 同fileは`checkConsumerAcceptance`を`mechanisms: ["packed-bin", "scale-output"]`で呼んでおり、**この機構は接続経路に存在しない**（Issue #1221）。`package.json`はmainの自動releaseでversionが変わり、主張する振る舞いが同じでもhashが変わるため対象に含めない。
 
@@ -98,3 +98,14 @@ PR #1263の補正で`JsonlSessionOptions`と`runJsonlSession`だけを変更し�
 2026-09-07、旧束縛`06013f66a9aaf57b2cb9efc261b812730beccfd65366431b4b71faf0d35caf85`に一致するcommit `2931acc5acf4164b25c5e59f2ef431ec081eff9f`の`src/lib/process.ts`と修正後sourceを実読した。変更は`runJsonlSession`のstdin errorを既存の失敗処理へ接続する部分だけである。前節と同じTypeScript ASTの2宣言除外手順で残余の元byte列を比較し、完全一致とSHA-256 `fa1b2ec07ff06c7ab0f89d854c9231d2dfbdf4c178e540a89717f9ac1582748d`を再計測した。同期`run`・`git`、定数、import、module初期化は未変更であり、consumerの接続先は同期`run`と型だけである。`check_consumer_acceptance.ts`の全体SHA-256 `08cbde239552af94f97485a09e3173fb6e72855e7f4cffbc80629122f5bff5fc`も未変更だった。
 
 上表は修正後file全体のSHA-256 `1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2`へ再拘束する。これは非同期session変更から独立した同期consumer経路のbyte同一性による再拘束であり、既存の#1024時点の実npm・pnpm故障注入を再実行したという主張ではない。旧注入結果、artifact、distribution digest、束縛集合、検証器、SHA節からartifact節への解析境界を保持する。統合後sourceのconsumer全31 scenarioは別途coordinatorが検証し、その結果をIssue #1265のレビュー証拠へ記録する。
+
+## 2026-09-12 `src/lib/process.ts`の束縛更新（Issue #1341）
+
+Issue #1341が`ProcessResult`へoptionalな`launchFailure`を追加し、`run`が`result.error`を観測したときだけ立てるようにしたため、対象製品fileの全体SHA-256を`1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2`から`99ee2f31dacc759fd67b16c5737f03a023f6591fc3929ed4214c31fdbffa9614`へ更新した。
+
+**主張する振る舞いは変わっていない。** 追加は次の2箇所だけである。
+
+1. `ProcessResult`interfaceへ`launchFailure?: true`とそのTSDoc
+2. `run`の戻り値objectへ`...(failure === undefined ? {} : { launchFailure: true as const }),`の1行
+
+現在fileからこの2箇所を除いた残余byte列は、旧束縛`1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2`に一致するcommit（`origin/main` = `8e7405b9`）の`src/lib/process.ts`と**完全一致**し、その残余のSHA-256は`1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2`だった。`maxBuffer`既定、`MAX_PROCESS_OUTPUT_BYTES`、`failure`の算出、`status`・`stdout`・`stderr`の写像、`allowFailure`のthrow条件、import、module初期化はこの一致範囲に含まれる。**この証跡が主張するprocess出力上限の振る舞いは1 byteも変わっていない。** 追加fieldは既に算出済みの`failure`から導く旗であり、既存の呼び出しはこのoptional fieldを読まない。
