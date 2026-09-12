@@ -304,7 +304,12 @@ function workflowArguments(args: string[]): {
 } {
   const flags: Record<string, string> = {};
   const artifacts: string[] = [];
-  const booleanFlags = new Set(["apply", "dry-run", "post-terminal-intake"]);
+  const booleanFlags = new Set([
+    "apply",
+    "dry-run",
+    "post-terminal-intake",
+    "reconfirm",
+  ]);
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index] ?? "";
     if (!argument.startsWith("--"))
@@ -5294,6 +5299,7 @@ export async function main(
           "recorded-at",
           "review-session-digest",
           "post-terminal-intake",
+          "reconfirm",
         ].includes(flag),
     );
     if (unknown.length > 0)
@@ -5323,6 +5329,14 @@ export async function main(
       artifacts,
       evidence,
     };
+    /**
+     * 上流再確定entry（Issue #1342）。Step 10はreview binding、Step 11はdelivery終端が
+     * 所有するため対象外。先行する通常entryの存在はjournal本体の順序判定が検証する。
+     */
+    const reconfirm = flags.reconfirm !== undefined;
+    if (reconfirm && (step.step < 1 || step.step > 9))
+      throw new Error("--reconfirmはStep 1〜9にだけ指定できます");
+    if (reconfirm) entry = { ...entry, reconfirmation: true };
     const repositoryRoot = path.resolve(staging, "../../../..");
     const needsHeadSha =
       step.step === 9 ||
