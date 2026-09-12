@@ -132,6 +132,15 @@ export interface ReviewSessionState {
   status: "active" | "converged" | "budget-exhausted";
 }
 
+/** 非収束の原因と、ownerが受容する対象を混同させない診断を返す。 */
+export function unconvergedReviewSessionDiagnostic(
+  status: ReviewSessionState["status"],
+): string {
+  if (status === "budget-exhausted")
+    return "review sessionが収束していません: status=budget-exhausted。有限review予算内で未解決blockerが残っています。ownerが受容する対象は既知の未解決findingです";
+  return "review sessionが収束していません: status=active。reviewが未完了か、実際に検分したHEADとcandidateHeadShaの対応が誤っている可能性があります。ownerのrisk受容へ進まず、review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください";
+}
+
 function exactObject(
   value: unknown,
   label: string,

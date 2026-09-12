@@ -51,7 +51,12 @@ import { reconcileFixedMergeRun, CI_DELIVERY_GRACE_MINUTES, inspectCiDelivery, }
 function workflowArguments(args) {
     const flags = {};
     const artifacts = [];
-    const booleanFlags = new Set(["apply", "dry-run", "post-terminal-intake"]);
+    const booleanFlags = new Set([
+        "apply",
+        "dry-run",
+        "post-terminal-intake",
+        "reconfirm",
+    ]);
     for (let index = 0; index < args.length; index += 1) {
         const argument = args[index] ?? "";
         if (!argument.startsWith("--"))
@@ -83,6 +88,19 @@ function workflowArguments(args) {
         }
     }
     return { flags, artifacts };
+}
+/**
+ * 値を取らないflagの受理。**値付き形式を無言で真として扱わない。**
+ *
+ * parserは`--name`だけを`__present__`にし、`--name=値`は値をそのまま保存する。
+ * 存在判定を`!== undefined`で書くと、`--reconfirm=false`が有効として通る。
+ */
+function presentFlag(flags, key) {
+    if (flags[key] === undefined)
+        return false;
+    if (flags[key] !== "__present__")
+        throw new Error(`--${key}は値を付けずに指定してください`);
+    return true;
 }
 function workflowLifecycleApplyMode(flags) {
     for (const key of ["apply", "dry-run"])
@@ -1441,7 +1459,7 @@ export function writeReviewRoundDraft(realParent, basename, content, hooks = {})
     }
     catch (error) {
         if (error instanceof ExclusivePinnedWriteError)
-            throw new Error(`review round --initの雛形作成後に失敗しました。無関係fileの誤削除を避けるためpathname削除は行わず、作成descriptorを${error.createdEntrySanitized ? "空にしました" : "空にできませんでした"}。作成entryが残存している可能性があります。指定--outは差し替え後の別entryを指す可能性があるため、削除対象を確認してください`, { cause: error });
+            throw new Error(`review round --initの雛形作成後に失敗しました。無関係fileの誤削除を避けるためpathname削除は行わず、作成descriptorを${error.createdEntrySanitized ? "空にしました" : "空にできませんでした"}。作成entryが残存している可能性があります。指定--outは差し替え後の別entryを指す可能性があるため、削除対象を確認してください。原因: ${error.cause instanceof Error ? error.cause.message : String(error.cause)}`, { cause: error });
         if (error instanceof Error &&
             /atomic write directoryが実行中に変更されました/u.test(error.message))
             throw new Error(`review round --initの--outの親directoryが検査後に差し替えられました。書き込みを取り消しました: ${realParent}`, { cause: error });
@@ -2701,6 +2719,26 @@ function routingFailure(state, ruleId, reason, entrypoint) {
         }),
     });
 }
+/**
+ * policy loaderが観測した信頼源を出力用へ写す。**handlerで信頼源を推測しない。**
+ *
+ * `source`はloaderの語彙をそのまま使い、**正規化も読み替えもしない。** 現在の語彙は
+ * `filesystem`、`filesystem-legacy`、`git`、`git-legacy`、`git-floor`の5値である
+ * （`src/domain/policy.ts`が唯一の発生源）。**`-legacy`や`-floor`を`git`へ潰さない。**
+ * 潰すと「どの形式のpolicyを読んだか」が出力から消え、信頼源を正しく示すという
+ * 本経路の目的そのものを失う（Issue #1350のREV-01）。語彙が増えたときに
+ * handler側の対応が要らないことも、この写しを恒等にしておく理由である。
+ *
+ * `ref`は読んだcommit SHA（trusted）またはproject policy manifestのpathとする。
+ */
+export function tierProvenance(provenance) {
+    const source = typeof provenance.source === "string" ? provenance.source : "";
+    const commitSha = typeof provenance.commitSha === "string" ? provenance.commitSha : undefined;
+    return {
+        source,
+        ref: commitSha ?? ".agent-skill-chain/project-policy.json",
+    };
+}
 function roleTierFailure(ruleId, purpose, risk, reasons, scope, next, requiredAuthority) {
     return serializeDiagnostic({
         allowed: false,
@@ -3017,21 +3055,15 @@ export async function main(argv, dependencies = {}) {
         const mode = required(flags, "mode");
         const scope = required(flags, "scope");
         const model = required(flags, "model");
-        if (flags.provider !== undefined &&
-            flags.provider !== "codex" &&
-            flags.provider !== "claude")
-            throw new Error("--providerはcodexまたはclaudeが必要です");
+        /**
+         * **受理値は仕様の`codex`と未指定だけである**（Issue #1350）。`claude`は仕様外の
+         * 互換aliasとして加わっていたが、未指定と同じworking tree判定を行いながら
+         * 診断がtrustedを主張するため、trusted検査を受けたと誤読させていた。
+         */
+        if (flags.provider !== undefined && flags.provider !== "codex")
+            throw new Error("--providerはcodexだけを受理します。未指定は既存台帳の互換検証であり、Codex自動起動の認可には使いません");
         const selected = modelTier(required(flags, "selected"), "selected");
-        const choices = loadProjectPolicySet(root).choices[0];
-        const configured = choices?.modelMapping && typeof choices.modelMapping !== "string"
-            ? choices.modelMapping
-            : undefined;
         const computed = requiredTier({ risk, mode, scope });
-        const configuredMinimum = configured?.minimumTierByRisk?.[risk];
-        const requiredMinimum = configuredMinimum &&
-            MODEL_TIERS.indexOf(configuredMinimum) > MODEL_TIERS.indexOf(computed)
-            ? configuredMinimum
-            : computed;
         if (flags.provider === "codex") {
             const trustedSet = loadOperationPolicy(root);
             const trustedMapping = trustedSet.policy.projectChoices?.modelMapping;
@@ -3071,9 +3103,22 @@ export async function main(argv, dependencies = {}) {
                 model,
                 selector: CODEX_ADOPTION_SELECTOR,
                 observedAt: observation.observedAt,
+                provenance: tierProvenance(trustedSet.provenance),
+                usage: "codex-adoption",
             });
             return result.valid ? 0 : 1;
         }
+        // 互換経路だけがcandidate working treeを読む。Codex認可はtrusted refだけに依存する。
+        const projectSet = loadProjectPolicySet(root);
+        const choices = projectSet.choices[0];
+        const configured = choices?.modelMapping && typeof choices.modelMapping !== "string"
+            ? choices.modelMapping
+            : undefined;
+        const configuredMinimum = configured?.minimumTierByRisk?.[risk];
+        const requiredMinimum = configuredMinimum &&
+            MODEL_TIERS.indexOf(configuredMinimum) > MODEL_TIERS.indexOf(computed)
+            ? configuredMinimum
+            : computed;
         const result = validateTierSelection({
             required: requiredMinimum,
             selected,
@@ -3083,10 +3128,28 @@ export async function main(argv, dependencies = {}) {
                 ? flags.justification
                 : undefined,
         });
-        const output = { ...result, required: requiredMinimum, selected, model };
+        /**
+         * **未指定経路は候補側のworking treeを読む互換検証である。** 仕様どおり
+         * Codex自動起動の認可に使わないため、判定の信頼源と用途を出力へ明示し、
+         * 診断からtrustedの主張を外す（Issue #1350）。
+         */
+        const compatibility = {
+            provenance: tierProvenance(projectSet.provenance),
+            usage: "compatibility-only",
+        };
+        const output = {
+            ...result,
+            required: requiredMinimum,
+            selected,
+            model,
+            ...compatibility,
+        };
         print(result.valid
             ? output
-            : roleTierFailure("ASC-MODEL-TIER-001", "risk・mode・scopeに必要な能力tierを単調に保証する", risk, result.errors, scope, "trusted project choiceへmodel mappingを定義するか、必要tier以上を選択してください", "model mapping owner"));
+            : {
+                ...roleTierFailure("ASC-MODEL-TIER-001", "risk・mode・scopeに必要な能力tierを単調に保証する", risk, result.errors, scope, "working treeのmodelMapping.tierMappingへmodelを定義するか、必要tier以上を選択してください。本判定は互換検証であり認可には使いません", "不要"),
+                ...compatibility,
+            });
         return result.valid ? 0 : 1;
     }
     if (command === "routing" && subcommand === "ceiling") {
@@ -3767,6 +3830,7 @@ export async function main(argv, dependencies = {}) {
             "recorded-at",
             "review-session-digest",
             "post-terminal-intake",
+            "reconfirm",
         ].includes(flag));
         if (unknown.length > 0)
             throw new Error(`workflow recordの未知optionです: --${unknown.join(", --")}`);
@@ -3795,6 +3859,21 @@ export async function main(argv, dependencies = {}) {
             artifacts,
             evidence,
         };
+        /**
+         * 上流再確定entry（Issue #1342）。Step 10はreview binding、Step 11はdelivery終端が
+         * 所有するため対象外。先行する通常entryの存在はjournal本体の順序判定が検証する。
+         */
+        /**
+         * **値なしflagは`__present__`だけを受理する。** `--reconfirm=false`のような
+         * 値付き形式は文字列としてflagsへ入るため、`!== undefined`で判定すると
+         * **利用者が「無効にした」つもりの入力が有効として通る**（CodeRabbit指摘）。
+         * 同じ形の`--post-terminal-intake`も同様に扱う。
+         */
+        const reconfirm = presentFlag(flags, "reconfirm");
+        if (reconfirm && (step.step < 1 || step.step > 9))
+            throw new Error("--reconfirmはStep 1〜9にだけ指定できます");
+        if (reconfirm)
+            entry = { ...entry, reconfirmation: true };
         const repositoryRoot = path.resolve(staging, "../../../..");
         const needsHeadSha = step.step === 9 ||
             step.step === 10 ||
@@ -3804,7 +3883,7 @@ export async function main(argv, dependencies = {}) {
             : undefined;
         if (step.step === 9)
             entry.implementationHeadSha = headSha;
-        const intake = flags["post-terminal-intake"] !== undefined;
+        const intake = presentFlag(flags, "post-terminal-intake");
         if (intake && step.step !== 10)
             throw new Error("--post-terminal-intakeはworkflow record --step=10だけに指定できます");
         if (step.step === 10) {

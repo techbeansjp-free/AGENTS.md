@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   advanceReviewSession,
   parseReviewRoundInput,
+  unconvergedReviewSessionDiagnostic,
   type ReviewRoundInput,
   type ReviewSessionState,
 } from "../domain/review-convergence.js";
@@ -91,6 +92,12 @@ function resolveCommit(root: string, label: string, sha: string): string {
       `review round --initの${label}をexact commitへ解決できません: ${sha}`,
     );
   return observed.stdout.trim();
+}
+
+function commitSubject(root: string, sha: string): string {
+  return git(["show", "-s", "--format=%s", sha], root, {
+    env: GIT_ENV,
+  }).stdout.trim();
 }
 
 /**
@@ -221,13 +228,16 @@ export function buildReviewRoundDraft(input: {
       );
     if (fixed.length === 0)
       throw new Error(
-        "review round --init: 前round headからの実Git差分が空です。HEADを進めずに次roundを記録することはできません",
+        "review round --init: 前round headからの実Git差分が空です。前roundのcandidate HEADが現在のHEADと同じです。多くの場合、前roundの--headに「そのroundを検分したHEAD」ではなく「そのroundの指摘を是正した後のHEAD」を渡しています。その場合、HEADを進めても取り違えが重なるだけです。review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください",
       );
     if (previous.status === "converged")
       notes.push(
         "sessionはconvergedである。取り直しroundは収束後のHEAD移動に対して1回だけ許される",
       );
   }
+  notes.push(
+    `このroundは ${headSha.slice(0, 8)} (${commitSubject(root, headSha)}) を検分したものとして記録します。レビュー結果を反映したcommitを、このroundの記録より先に作らないでください`,
+  );
   return { round: parseReviewRoundInput(round), notes };
 }
 
@@ -494,9 +504,7 @@ export function assertConvergedReviewSession(input: {
   if (session === null)
     throw new Error("Step 10には永続review sessionが必要です");
   if (session.status !== "converged")
-    throw new Error(
-      `review sessionが収束していません: status=${session.status}`,
-    );
+    throw new Error(unconvergedReviewSessionDiagnostic(session.status));
   if (session.latestRoundDigest !== input.expectedDigest)
     throw new Error(
       "Step 10のreview session digestが保存済みlatest roundと一致しません",

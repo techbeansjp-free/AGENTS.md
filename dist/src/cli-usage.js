@@ -109,7 +109,7 @@ export const COMMAND_USAGE = Object.freeze([
         ],
         conditionalFlags: [],
         optionalFlags: [
-            optional("provider", "text", "codexは公式selectorとtrusted tierを検証、claudeは旧台帳", "旧台帳互換"),
+            optional("provider", "codex", "codexだけを受理する。trusted selector採用tierと公式観測で照合し、出力はloader由来のprovenance source（git、git-legacy、git-floor）とusage=codex-adoptionを持つ", "未指定はworking treeの既存台帳による互換検証（loader由来のprovenance sourceはfilesystemまたはfilesystem-legacy、usageはcompatibility-only）。認可には使わない"),
             ROOT_FLAG,
             optional("justification", "text", "上位tierを選ぶ根拠", "根拠なし"),
         ],
@@ -321,6 +321,7 @@ export const COMMAND_USAGE = Object.freeze([
         optionalFlags: [
             optional("recorded-at", "ISO8601", "記録時刻", "実行時刻"),
             optional("post-terminal-intake", "", "Step 11記録後に外部reviewer指摘を同じPRで取り込んだroundとして記録する", "通常のStep記録"),
+            optional("reconfirm", "", "後続Step記録後に上流Step 1〜9を再確定した事実を、順序判定から外すentryとして記録する。同じStepの通常記録が先行しているときだけ受理する", "通常のStep記録"),
         ],
         example: "npx agent-skill-chain workflow record --staging=.asc/886 --step=4 --evidence='sync digest 0000000000000000000000000000000000000000000000000000000000000000' --artifact=src/cli-usage.ts",
         acceptsSpaceSeparatedFlags: true,
@@ -375,6 +376,7 @@ export const COMMAND_USAGE = Object.freeze([
             optional("changed", "path,path", "変更path", "観測なし"),
         ],
         example: "npx agent-skill-chain issue validate --path=./ISSUE.md",
+        note: "1 Issue＝成果物1単位を目安にし、45分超見込みなら起票時に分割します。fullの00 §2.1直下に置く[成果物:adr|contract|feature|documentation|migration] markerが2件以上ならwarningsへ分割候補を返します。quick/poc集約形式はmarker warningの判定対象外です。warningはvalid、errors、mode、blockedOperations、終了値を変更しません",
     },
     {
         command: "issue",
