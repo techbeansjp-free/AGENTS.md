@@ -318,7 +318,7 @@ export interface StepJournalEntry {
    */
   postTerminalIntake?: true;
   /**
-   * 上流再確定entryであることを示す（TERM-ASC-108、Issue #1342）。**Step 1〜9にだけ許す。**
+   * 上流再確定entryであることを示す（TERM-ASC-109、Issue #1342）。**Step 1〜9にだけ許す。**
    *
    * 後続Stepを記録した後に上流Stepを再実施した事実を、順序判定から外して追記する。
    * 同じStepの通常entryが先行していることを要し、先行entryの無い後付けは受理しない。
