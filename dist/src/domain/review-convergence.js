@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
+import { parseReviewProgressInventory, } from "./review-progress.js";
 /**
  * 通常のreviewラウンド予算。round 1で全scopeを見て、2と3で未解決blockerを追う。
  */
@@ -79,14 +80,25 @@ function oneOf(value, values, label) {
     return value;
 }
 function parseAnchor(value) {
-    const anchor = exactObject(value, "review anchor", [
+    if (!isRecord(value))
+        throw new Error("review anchorはobjectが必要です");
+    const fields = [
         "scopeIds",
         "acceptanceCriteriaIds",
         "invariantIds",
         "diffBaseSha",
         "initialHeadSha",
         "initialDiffDigest",
-    ]);
+        "progressInventory",
+    ];
+    const required = fields.filter((field) => field !== "progressInventory");
+    const unknown = Object.keys(value).filter((field) => !fields.includes(field));
+    const missing = required.filter((field) => !(field in value));
+    if (unknown.length > 0)
+        throw new Error(`review anchorの未知fieldを拒否しました: ${unknown.join(", ")}`);
+    if (missing.length > 0)
+        throw new Error(`review anchorの必須fieldがありません: ${missing.join(", ")}`);
+    const anchor = value;
     const scopeIds = stableStrings(anchor.scopeIds, "review anchor.scopeIds");
     const acceptanceCriteriaIds = stableStrings(anchor.acceptanceCriteriaIds, "review anchor.acceptanceCriteriaIds");
     const invariantIds = stableStrings(anchor.invariantIds, "review anchor.invariantIds");
@@ -105,6 +117,11 @@ function parseAnchor(value) {
         diffBaseSha: String(anchor.diffBaseSha),
         initialHeadSha: String(anchor.initialHeadSha),
         initialDiffDigest: String(anchor.initialDiffDigest),
+        ...(anchor.progressInventory === undefined
+            ? {}
+            : {
+                progressInventory: parseReviewProgressInventory(anchor.progressInventory),
+            }),
     });
 }
 function parseFocus(value) {

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import {
   advanceReviewSession,
@@ -15,6 +16,11 @@ import {
 import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
 import { stableJson } from "../lib/security.js";
+import {
+  buildReviewProgressInventory,
+  PROGRESS_END,
+  PROGRESS_START,
+} from "../domain/review-progress.js";
 import {
   assertWorkflowStaging,
   readWorkflowJournal,
@@ -142,6 +148,19 @@ export function buildReviewRoundDraft(input: {
       );
     const baseSha = resolveCommit(root, "--base", input.baseSha);
     const observed = observeReviewDiff(root, baseSha, headSha);
+    const progressTarget = path.join(staging, "03_実装計画.md");
+    const progressSource = fs.existsSync(progressTarget)
+      ? fs.readFileSync(progressTarget, "utf8")
+      : undefined;
+    const progressInventory =
+      progressSource?.includes(PROGRESS_START) &&
+      progressSource.includes(PROGRESS_END)
+        ? buildReviewProgressInventory(
+            "03_実装計画.md",
+            progressSource,
+            fs.lstatSync(progressTarget).mode & 0o777,
+          )
+        : undefined;
     round = {
       round: 1,
       previousRoundDigest: null,
@@ -153,6 +172,7 @@ export function buildReviewRoundDraft(input: {
         diffBaseSha: baseSha,
         initialHeadSha: headSha,
         initialDiffDigest: observed.digest,
+        ...(progressInventory ? { progressInventory } : {}),
       },
       candidateHeadSha: headSha,
       focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
@@ -245,6 +265,28 @@ export function previewReviewRound(input: {
       throw new Error(
         "review roundのinitial diff digestがGit観測値と一致しません",
       );
+    const inventory = input.round.anchor.progressInventory;
+    if (inventory) {
+      const target = path.join(staging, inventory.targetPath);
+      const targetStat = fs.lstatSync(target);
+      if (
+        targetStat.isSymbolicLink() ||
+        !targetStat.isFile() ||
+        targetStat.nlink !== 1 ||
+        (targetStat.mode & 0o777) !== inventory.fileMode ||
+        fs.realpathSync(target) !== target
+      )
+        throw new Error("review roundのprogress target identityが不正です");
+      const observedInventory = buildReviewProgressInventory(
+        inventory.targetPath,
+        fs.readFileSync(target, "utf8"),
+        targetStat.mode & 0o777,
+      );
+      if (stableJson(observedInventory) !== stableJson(inventory))
+        throw new Error(
+          "review roundのprogress inventoryが実targetと一致しません",
+        );
+    }
   } else {
     /**
      * **前round headは再固定chainから導出した実効HEADである。**

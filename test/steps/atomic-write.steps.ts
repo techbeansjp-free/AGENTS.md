@@ -37,6 +37,13 @@ When("sibling directoryを一時領域としてrecordをatomic更新する", fun
   });
 });
 
+When("mode 0644を指定してrecordをatomic更新する", function () {
+  writeFileAtomic(this.record, newRecord, {
+    temporaryDirectory: this.sibling,
+    fileMode: 0o644,
+  });
+});
+
 When(
   "利用可能なら異なるfilesystemを一時領域としてrecordをatomic更新する",
   function () {
@@ -57,6 +64,11 @@ When(
 
 Then("recordは完全な新版だけを保持する", function () {
   assert.equal(fs.readFileSync(this.record, "utf8"), newRecord);
+});
+
+Then("recordは完全な新版とmode 0644を保持する", function () {
+  assert.equal(fs.readFileSync(this.record, "utf8"), newRecord);
+  assert.equal(fs.statSync(this.record).mode & 0o777, 0o644);
 });
 
 Then("digest管理directoryとsibling directoryに一時fileを残さない", function () {

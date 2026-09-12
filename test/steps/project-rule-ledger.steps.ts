@@ -65,6 +65,7 @@ const LEDGER_COMPOSED_CHECKS: readonly string[] = [
   "checkLifecycleIgnore",
   "checkModeQuestionText",
   "checkNodeRuntimeAlignment",
+  "checkParallelProgressIsolation",
   "checkPackageDistributionBoundary",
   "checkPackageManagerBoundary",
   "checkQualityCiPermissions",

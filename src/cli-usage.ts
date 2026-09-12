@@ -840,6 +840,37 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "review",
+    subcommand: "progress",
+    summary:
+      "固定review入力treeへ影響しない進捗をpreview・追記・read-only表示・検証する",
+    requiredFlags: [
+      flag("staging", "path", "対象Issue staging"),
+      flag("operation", "append|seal|project|verify", "進捗操作"),
+    ],
+    conditionalFlags: [
+      conditional("task", "ID", "宣言済みtask ID", "operation=append"),
+      conditional(
+        "state",
+        "planned|started|completed|blocked",
+        "進捗state",
+        "operation=append",
+      ),
+    ],
+    optionalFlags: [
+      optional("recorded-at", "ISO8601", "記録時刻", "実行時刻"),
+      optional(
+        "expected-journal-digest",
+        "sha256",
+        "直前journal digest。初回は省略",
+        "null",
+      ),
+      optional("apply", "", "append・sealだけを永続化する", "preview"),
+    ],
+    example:
+      "npx agent-skill-chain review progress --staging=.agent-skill-chain/tmp/issues/20260912_change --operation=append --task=T01 --state=completed",
+  },
+  {
+    command: "review",
     subcommand: "validate",
     summary: "review evidence JSONまたはMarkdown artifactを検証する",
     positional: "[file] 検証するreview evidence JSON。--fileの代わりに使える",

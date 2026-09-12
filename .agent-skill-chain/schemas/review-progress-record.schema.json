@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/agent-skill-chain/review-progress-record.schema.json",
+  "title": "Parallel progress evidence record",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "sequence",
+        "entryId",
+        "sessionId",
+        "implementationHeadSha",
+        "taskId",
+        "state",
+        "recordedAt",
+        "previousDigest",
+        "entryDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "agent-skill-chain/review-progress-entry/v1"
+        },
+        "sequence": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "entryId": { "$ref": "#/$defs/sha256" },
+        "sessionId": { "$ref": "#/$defs/sha256" },
+        "implementationHeadSha": { "$ref": "#/$defs/gitOid" },
+        "taskId": { "type": "string", "pattern": "^[A-Z][A-Z0-9._-]{1,63}$" },
+        "state": {
+          "enum": ["planned", "started", "completed", "blocked"]
+        },
+        "recordedAt": { "type": "string", "format": "date-time" },
+        "previousDigest": {
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        },
+        "entryDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "sessionId",
+        "implementationHeadSha",
+        "previousDigest",
+        "sealedAt",
+        "sealDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "agent-skill-chain/review-progress-seal/v1"
+        },
+        "sessionId": { "$ref": "#/$defs/sha256" },
+        "implementationHeadSha": { "$ref": "#/$defs/gitOid" },
+        "previousDigest": {
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        },
+        "sealedAt": { "type": "string", "format": "date-time" },
+        "sealDigest": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "gitOid": {
+      "type": "string",
+      "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+    }
+  }
+}
