@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { run } from "../lib/process.js";
 import { isRecord } from "../types.js";
+import type { BranchDeliveryPolicyObservation } from "../domain/delivery.js";
 
 /**
  * merge方式をgh CLIのflagへ写す。
@@ -686,6 +687,11 @@ export function github(
   input: Pick<GitHubInput, "repository" | "branch">,
   cwd: string,
 ): BranchProtectionObservation;
+export function github(
+  operation: "branch.delivery-policy",
+  input: Pick<GitHubInput, "repository" | "branch">,
+  cwd: string,
+): BranchDeliveryPolicyObservation;
 export function github(
   operation: "repository.assert-write",
   input: Pick<GitHubInput, "repository">,
@@ -1649,6 +1655,95 @@ export function github(
       }
     }
     return { known: false, protected: false, error: result.stderr };
+  }
+  if (operation === "branch.delivery-policy") {
+    verifyRepository(input.repository, cwd, "read");
+    const classic = run(
+      "gh",
+      [
+        "api",
+        `repos/${input.repository}/branches/${encodeURIComponent(input.branch)}/protection`,
+      ],
+      cwd,
+      { allowFailure: true },
+    );
+    const rulesResult = run(
+      "gh",
+      [
+        "api",
+        "--paginate",
+        "--slurp",
+        `repos/${input.repository}/rules/branches/${encodeURIComponent(input.branch)}?per_page=100`,
+      ],
+      cwd,
+      { allowFailure: true },
+    );
+    const classicMissing =
+      classic.status === 1 && /404|Branch not protected/i.test(classic.stderr);
+    if ((classic.status !== 0 && !classicMissing) || rulesResult.status !== 0)
+      return {
+        known: false,
+        strictRequiredStatusChecks: null,
+        mergeQueueConfigured: null,
+        sources: [],
+        reasons: [
+          classic.status !== 0 && !classicMissing
+            ? "classic branch protectionを観測できません"
+            : "applicable branch rulesを観測できません",
+        ],
+      };
+    try {
+      let classicStrict = false;
+      if (classic.status === 0) {
+        const value: unknown = JSON.parse(classic.stdout);
+        if (!isRecord(value))
+          throw new Error("classic protection応答がobjectではありません");
+        const required = value.required_status_checks;
+        if (required !== null && required !== undefined) {
+          if (!isRecord(required) || typeof required.strict !== "boolean")
+            throw new Error(
+              "classic protectionのstrictがbooleanではありません",
+            );
+          classicStrict = required.strict;
+        }
+      }
+      const pages: unknown = JSON.parse(rulesResult.stdout);
+      if (!Array.isArray(pages) || pages.some((page) => !Array.isArray(page)))
+        throw new Error("ruleset応答がpage配列ではありません");
+      const rules: unknown[] = pages.flat();
+      if (rules.some((rule) => !isRecord(rule)))
+        throw new Error("ruleset応答にobject以外が含まれます");
+      let rulesetStrict = false;
+      for (const rule of rules) {
+        if (!isRecord(rule) || rule.type !== "required_status_checks") continue;
+        if (
+          !isRecord(rule.parameters) ||
+          typeof rule.parameters.strict_required_status_checks_policy !==
+            "boolean"
+        )
+          throw new Error(
+            "ruleset required status checksのstrictがbooleanではありません",
+          );
+        rulesetStrict ||= rule.parameters.strict_required_status_checks_policy;
+      }
+      return {
+        known: true,
+        strictRequiredStatusChecks: classicStrict || rulesetStrict,
+        mergeQueueConfigured: rules.some(
+          (rule) => isRecord(rule) && rule.type === "merge_queue",
+        ),
+        sources: classic.status === 0 ? ["classic", "ruleset"] : ["ruleset"],
+        reasons: [],
+      };
+    } catch (error) {
+      return {
+        known: false,
+        strictRequiredStatusChecks: null,
+        mergeQueueConfigured: null,
+        sources: [],
+        reasons: [error instanceof Error ? error.message : String(error)],
+      };
+    }
   }
   if (operation === "pr.merge") {
     verifyRepository(input.repository, cwd, "write");

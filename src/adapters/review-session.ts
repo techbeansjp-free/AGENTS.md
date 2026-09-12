@@ -241,7 +241,6 @@ export function buildReviewRoundDraft(input: {
   return { round: parseReviewRoundInput(round), notes };
 }
 
-
 /**
  * **既定branch追随だけのmergeかをGitから判定する**（Issue #1287）。
  *

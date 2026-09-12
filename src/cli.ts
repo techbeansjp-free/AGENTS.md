@@ -36,7 +36,9 @@ import {
   assertPullRequestTrackerBinding,
   createPullRequest,
   authorizeMerge,
+  diagnoseBranchFollowCost,
   extractIssueClosingNumbers,
+  type BranchDeliveryPolicyObservation,
 } from "./domain/delivery.js";
 import {
   assessImplementationDiscovery,
@@ -1561,6 +1563,8 @@ function inspectAuthorizedPullRequestMerge(input: {
   authority: PolicyAuthorityObservation;
   implementationCommitSha: string;
   reviewEvidence: MergeReviewEvidence;
+  deliveryPolicy: BranchDeliveryPolicyObservation;
+  followCost: ReturnType<typeof diagnoseBranchFollowCost>;
   authorization: ReturnType<typeof authorizeMerge>;
 } {
   const observed = github(
@@ -1604,6 +1608,11 @@ function inspectAuthorizedPullRequestMerge(input: {
     { repository: input.repository, branch: input.base },
     input.root,
   );
+  const deliveryPolicy = github(
+    "branch.delivery-policy",
+    { repository: input.repository, branch: input.base },
+    input.root,
+  );
   const checks = (observed.statusCheckRollup ?? [])
     .filter(
       (item) => (item.conclusion ?? item.state ?? item.status) === "SUCCESS",
@@ -1624,6 +1633,8 @@ function inspectAuthorizedPullRequestMerge(input: {
     authority,
     implementationCommitSha: reviewed.reviewEvidence.implementationCommitSha,
     reviewEvidence: reviewed.reviewEvidence,
+    deliveryPolicy,
+    followCost: diagnoseBranchFollowCost(deliveryPolicy),
     authorization: authorizeMerge({
       trustedPolicy: input.trustedSet.policy,
       method: input.method,
@@ -2577,6 +2588,8 @@ function handlePullRequestMerge(flags: Flags): number {
         output: {
           state: "preview",
           authorization: inspected.authorization,
+          deliveryPolicy: inspected.deliveryPolicy,
+          followCost: inspected.followCost,
           pr: inspected.observed.url,
           headSha: inspected.observed.headRefOid,
           baseSha: inspected.observed.baseRefOid,

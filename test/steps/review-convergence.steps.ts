@@ -823,58 +823,6 @@ Then("PR previewは成功する", function () {
 });
 
 /**
- * **既定branch追随のfixture。** `origin/HEAD`を持つ隔離repositoryで、既定branch側に
- * 別fileのcommitを作り、それを取り込むmergeをcandidateにする。
- * `conflicting`が真なら同じfileの同じ行を双方で変え、衝突解決を伴うmergeにする。
- */
-function followMerge(root: string, conflicting: boolean): string {
-  const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-    cwd: root,
-    encoding: "utf8",
-  }).trim();
-  const target = conflicting ? reviewedPath : "docs/upstream.md";
-  execFileSync("git", ["checkout", "-q", "-b", "upstream-main"], { cwd: root });
-  const file = path.join(root, target);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, "export const upstream = 1;\n");
-  execFileSync("git", ["add", target], { cwd: root });
-  execFileSync("git", ["commit", "-q", "-m", "feat: upstream"], { cwd: root });
-  const upstream = head(root);
-  execFileSync("git", ["update-ref", "refs/remotes/origin/main", upstream], {
-    cwd: root,
-  });
-  execFileSync(
-    "git",
-    ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
-    { cwd: root },
-  );
-  execFileSync("git", ["checkout", "-q", branch], { cwd: root });
-  if (!conflicting) {
-    execFileSync("git", ["merge", "--no-ff", "--no-edit", upstream], {
-      cwd: root,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return head(root);
-  }
-  /**
-   * **衝突解決を伴うmergeを決定論的に作る。** 自動mergeの結果とは異なる第3の内容を
-   * 書いてからcommitすることで、`merge-tree`の結果とtreeが一致しない状態にする。
-   * 衝突が起きるかどうかをgitの3-way mergeの挙動へ依存させない。
-   */
-  execFileSync("git", ["merge", "--no-ff", "--no-commit", upstream], {
-    cwd: root,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  fs.writeFileSync(
-    path.join(root, target),
-    "export const resolvedByHand = true;\n",
-  );
-  execFileSync("git", ["add", target], { cwd: root });
-  execFileSync("git", ["commit", "-q", "--no-edit"], { cwd: root });
-  return head(root);
-}
-
-/**
  * **既定branchへ1 commit積み、それを取り込むmergeをcandidateにする。**
  * `mode`で3種の受理しない形を作り分ける。
  */

@@ -55,9 +55,8 @@ Feature: Review sessionを固定契約へ収束させる
 
   Scenario: SCN-UNIT-REVIEWCONV-009 追随として受理しない形を名指しして拒否する
     Given findingなしでround 1が収束したreview sessionがある
-    Then 衝突を解決したmergeは自動merge結果と一致しないとして拒否される
-    And 既定branchのancestorでない第2親を持つmergeは拒否される
+    When 衝突を解決したmergeは自動merge結果と一致しないとして拒否される
+    Then 既定branchのancestorでない第2親を持つmergeは拒否される
     And 第1親が前roundのcandidateでないmergeは拒否される
     And 追随roundへfindingを載せると予算へ数える旨を名指しして拒否される
     And 実装commitを挟んでからのmergeは拒否される
-
