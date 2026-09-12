@@ -28,6 +28,7 @@ import {
 } from "./workflow-journal.js";
 import { observeReviewDiff } from "./review-diff.js";
 import {
+  isDefaultBranchFollowMerge,
   REVIEW_SESSION_FILE,
   readStoredReviewSession,
 } from "./review-session-store.js";
@@ -260,50 +261,6 @@ export function buildReviewRoundDraft(input: {
  * **観測できない場合はfail-closedで偽を返す。** remoteを読めない、`merge-tree`が
  * 使えない（git 2.38未満）などは「追随だと確認できなかった」であり、予算へ数える。
  */
-export function isDefaultBranchFollowMerge(
-  root: string,
-  previousHeadSha: string,
-  candidateHeadSha: string,
-): boolean {
-  const parents = git(
-    ["rev-list", "--parents", "-n", "1", `${candidateHeadSha}^{commit}`],
-    root,
-    { env: GIT_ENV, allowFailure: true },
-  );
-  if (parents.status !== 0) return false;
-  const [self, first, second, ...rest] = parents.stdout.trim().split(/\s+/u);
-  if (self !== candidateHeadSha || rest.length > 0) return false;
-  if (first === undefined || second === undefined) return false;
-  if (first !== previousHeadSha) return false;
-  const defaultTip = git(
-    ["rev-parse", "--verify", "refs/remotes/origin/HEAD^{commit}"],
-    root,
-    { env: GIT_ENV, allowFailure: true },
-  );
-  if (defaultTip.status !== 0) return false;
-  const withinDefault = git(
-    ["merge-base", "--is-ancestor", second, defaultTip.stdout.trim()],
-    root,
-    { env: GIT_ENV, allowFailure: true },
-  );
-  if (withinDefault.status !== 0) return false;
-  const automatic = git(["merge-tree", "--write-tree", first, second], root, {
-    env: GIT_ENV,
-    allowFailure: true,
-  });
-  if (automatic.status !== 0) return false;
-  const mergedTree = git(
-    ["rev-parse", "--verify", `${candidateHeadSha}^{tree}`],
-    root,
-    { env: GIT_ENV, allowFailure: true },
-  );
-  if (mergedTree.status !== 0) return false;
-  return (
-    automatic.stdout.trim().split("\n")[0] === mergedTree.stdout.trim() &&
-    mergedTree.stdout.trim() !== ""
-  );
-}
-
 export function previewReviewRound(input: {
   staging: string;
   round: ReviewRoundInput;

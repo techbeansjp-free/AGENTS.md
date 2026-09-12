@@ -383,17 +383,24 @@ export function advanceReviewSession(previous, round) {
             priorBlocking,
         }),
     }));
-    if (round.round >= 2) {
+    if (round.round >= 2 && !round.followOnly) {
         const reportedPrior = new Set(admittedFindings
             .filter(({ id }) => priorBlocking.has(id))
             .map(({ id }) => id));
         if ([...priorBlocking].some((id) => !reportedPrior.has(id)))
             throw new Error("前round blockerの再評価結果をfindingから脱落できません");
     }
-    const blocking = admittedFindings
-        .filter(({ admission }) => admission === "block-current")
-        .map(({ id }) => id)
-        .sort();
+    /**
+     * follow-only roundはreviewを行わないため、直前の未解決blockerを解消したことにも
+     * できない。findingを要求すると「追随だけなのでfinding禁止」という契約と矛盾
+     * するため、保存済みblockerをそのまま次recordへ運ぶ。
+     */
+    const blocking = round.followOnly
+        ? [...priorBlocking].sort()
+        : admittedFindings
+            .filter(({ admission }) => admission === "block-current")
+            .map(({ id }) => id)
+            .sort();
     const recordOnly = admittedFindings
         .filter(({ admission }) => admission === "record-only")
         .map(({ id }) => id)

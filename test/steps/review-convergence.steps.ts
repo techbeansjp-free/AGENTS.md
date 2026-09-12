@@ -15,6 +15,7 @@ import { QUESTIONS, type ModeAnswer } from "../../src/domain/mode.js";
 import {
   REVIEW_RECOVERY_ROUND,
   REVIEW_ROUND_BUDGET,
+  advanceReviewSession,
   countedRounds,
   parseReviewRoundInput,
   type ReviewRoundInput,
@@ -25,6 +26,10 @@ import {
   observeReviewDiff,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
+import {
+  REVIEW_SESSION_FILE,
+  readStoredReviewSession,
+} from "../../src/adapters/review-session-store.js";
 import {
   appendWorkflowJournalEntry,
   readWorkflowJournal,
@@ -901,6 +906,68 @@ Then("どのroundも記録されるが予算へは数えない", function () {
     assert.equal(record.followOnly, true);
   assert.equal(countedRounds(this.session), 1);
   assert.equal(this.session.status, "converged");
+});
+
+When(
+  "未解決blockerを持ったまま既定branchの自動mergeだけを記録する",
+  function () {
+    initDefaultRef(this.root);
+    const upstream = upstreamCommit(
+      this.root,
+      "docs/active-follow.md",
+      "active follow\n",
+    );
+    const candidate = mergeUpstream(this.root, upstream);
+    this.session = recordReviewRound({
+      staging: this.staging,
+      round: roundInput({
+        world: this,
+        round: 2,
+        candidateHeadSha: candidate,
+        previousRoundDigest: this.session.latestRoundDigest,
+        fixedDiff: ["docs/active-follow.md"],
+        findings: [],
+        followOnly: true,
+      }),
+    });
+  },
+);
+
+Then("追随roundはblockerと予算を維持したactive状態になる", function () {
+  assert.equal(this.session.status, "active");
+  assert.deepEqual(this.session.rounds.at(-1)?.blocking, ["H-001"]);
+  assert.equal(countedRounds(this.session), 1);
+});
+
+When("Git条件を満たさないfollow-only sessionを保存して読み直す", function () {
+  const candidate = commitFile(
+    this.root,
+    "export const reviewed = 99;\n",
+    "fix: not a follow merge",
+  );
+  const fake = advanceReviewSession(
+    this.session,
+    roundInput({
+      world: this,
+      round: this.session.rounds.length + 1,
+      candidateHeadSha: candidate,
+      previousRoundDigest: this.session.latestRoundDigest,
+      fixedDiff: [reviewedPath],
+      findings: [],
+      followOnly: true,
+    }),
+  );
+  fs.writeFileSync(
+    path.join(this.staging, REVIEW_SESSION_FILE),
+    `${JSON.stringify(fake)}\n`,
+  );
+});
+
+Then("保存済みfollow-only roundはGit再検証で拒否される", function () {
+  assert.throws(
+    () => readStoredReviewSession(this.staging),
+    /保存済みreview sessionのfollow-only round 3を実Gitで再検証できません/u,
+  );
 });
 
 Then(

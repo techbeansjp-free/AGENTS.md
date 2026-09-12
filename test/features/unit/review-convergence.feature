@@ -60,3 +60,10 @@ Feature: Review sessionを固定契約へ収束させる
     And 第1親が前roundのcandidateでないmergeは拒否される
     And 追随roundへfindingを載せると予算へ数える旨を名指しして拒否される
     And 実装commitを挟んでからのmergeは拒否される
+
+  Scenario: SCN-UNIT-REVIEWCONV-010 未解決blockerを持つ追随roundを記録し保存時もGit証拠を再検証する
+    Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
+    When 未解決blockerを持ったまま既定branchの自動mergeだけを記録する
+    Then 追随roundはblockerと予算を維持したactive状態になる
+    When Git条件を満たさないfollow-only sessionを保存して読み直す
+    Then 保存済みfollow-only roundはGit再検証で拒否される
