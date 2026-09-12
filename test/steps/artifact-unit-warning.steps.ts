@@ -1,0 +1,222 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { main } from "../../src/cli.js";
+import {
+  detectArtifactUnitWarnings,
+  type IssueScopeWarning,
+} from "../../src/domain/issue.js";
+import { WorkflowWorld, stepDefinitions } from "../support/world.js";
+
+interface ArtifactUnitWorld extends WorkflowWorld {
+  markdown: string;
+  warnings: readonly IssueScopeWarning[];
+  issuePath: string;
+  cliStatus: number;
+  cliResult: {
+    valid: boolean;
+    errors: string[];
+    warnings: IssueScopeWarning[];
+  };
+  contractDocuments: string[];
+}
+
+const { Given, When, Then } = stepDefinitions<ArtifactUnitWorld>();
+const repositoryRoot = process.cwd();
+
+function document(inScope: string, outside = ""): string {
+  return `# 00 要求定義
+
+## 2. 対象範囲
+
+### 2.1 対象内（必須）
+
+${inScope}
+
+### 2.2 対象外（必須）
+
+${outside}
+`;
+}
+
+function materializeFullTemplate(): string {
+  return fs
+    .readFileSync(
+      path.join(
+        repositoryRoot,
+        ".agent-skill-chain/templates/issue/00_要求定義_full.md",
+      ),
+      "utf8",
+    )
+    .split("\n")
+    .map((line) =>
+      line.startsWith("#")
+        ? line
+        : line
+            .replaceAll("applicable / not-applicable", "not-applicable")
+            .replace(/（[^）\n]+）/gu, "具体的な記入済み内容")
+            .replace(/<[^>\n]+>/gu, "記入済み")
+            .replace(/\{[^}\n]+\}/gu, "記入済み"),
+    )
+    .join("\n");
+}
+
+function considerationDocument(): string {
+  const rows = ["DC-PRIVACY", "DC-OBSERVABILITY", "DC-UX", "DC-TOKENS"]
+    .map(
+      (id) =>
+        `| ${id} | 対象 | not-applicable | CLIだけのため対象外 | SCN-INT-ARTUNIT-008で確認 |`,
+    )
+    .join("\n");
+  return `# 検証済み成果物\n\n${rows}\n`;
+}
+
+function createFullIssue(world: ArtifactUnitWorld, valid: boolean): string {
+  const issuePath = world.temp("asc-artifact-unit-");
+  const requirement = `${materializeFullTemplate().replace(
+    /^- \[成果物:feature\].*$/mu,
+    "- [成果物:feature] CLI warning\n- [成果物:contract] JSON contract",
+  )}
+
+Scenario: SCN-INT-ARTUNIT-008 成果物単位を検証する
+Given 記入済みである
+When 検証する
+Then 成否を維持する
+`;
+  fs.writeFileSync(
+    path.join(issuePath, "00_要求定義.md"),
+    valid ? requirement : requirement.replace("## 3. 利害関係者", "## 3. 欠落"),
+  );
+  for (const name of ["01_要件定義.md", "02_設計.md", "03_実装計画.md"])
+    fs.writeFileSync(path.join(issuePath, name), considerationDocument());
+  return issuePath;
+}
+
+Given("対象内にfeatureとcontractの成果物markerがある", function () {
+  this.markdown = document(
+    "- [成果物:feature] CLI warning\n- [成果物:contract] JSON contract",
+  );
+});
+
+Given("対象内にadrの成果物markerが2件ある", function () {
+  this.markdown = document(
+    "- [成果物:adr] decision one\n- [成果物:adr] decision two",
+  );
+});
+
+Given("対象内に通常の箇条書きだけがある", function () {
+  this.markdown = document("- CLI warning\n- JSON contract");
+});
+
+Given("対象内にfeatureの成果物markerが1件ある", function () {
+  this.markdown = document("- [成果物:feature] CLI warning");
+});
+
+Given("対象内にmalformedと入れ子の成果物markerだけがある", function () {
+  this.markdown = document(
+    "- [成果物:unknown] unknown\n- [成果物:feature]\n  - [成果物:contract] nested\n - [成果物:adr] indented",
+  );
+});
+
+Given("対象外sectionに成果物markerが2件ある", function () {
+  this.markdown = document(
+    "- one unit",
+    "- [成果物:feature] outside\n- [成果物:contract] outside",
+  );
+});
+
+Given("対象内のcode fenceに成果物markerが2件ある", function () {
+  this.markdown = document(
+    "```markdown\n- [成果物:feature] example\n- [成果物:contract] example\n```",
+  );
+});
+
+When("成果物単位warningを検出する", function () {
+  this.warnings = detectArtifactUnitWarnings(this.markdown);
+});
+
+Then("codeとcount 2とkindを持つwarningを1件返す", function () {
+  assert.equal(this.warnings.length, 1);
+  assert.deepEqual(this.warnings[0], {
+    code: "ASC-ISSUE-ARTIFACT-UNIT-001",
+    count: 2,
+    kinds: ["contract", "feature"],
+    message:
+      "対象内に独立した成果物単位が複数あります。1 Issue＝成果物1単位を目安に分割を検討してください。",
+  });
+});
+
+Then("count 2とadrだけを持つwarningを1件返す", function () {
+  assert.equal(this.warnings.length, 1);
+  assert.equal(this.warnings[0]?.count, 2);
+  assert.deepEqual(this.warnings[0]?.kinds, ["adr"]);
+});
+
+Then("成果物単位warningは空である", function () {
+  assert.deepEqual(this.warnings, []);
+});
+
+Given("配布する成果物単位marker契約がある", function () {
+  this.contractDocuments = [];
+});
+
+When("workflowと3 templateとCLI helpを読む", function () {
+  this.contractDocuments = [
+    ".agent-skill-chain/docs/01_開発ワークフロー.md",
+    ".agent-skill-chain/templates/issue/00_要求定義_full.md",
+    ".agent-skill-chain/templates/issue/00_要求定義_quick.md",
+    ".agent-skill-chain/templates/issue/00_要求定義_poc.md",
+    "src/cli-usage.ts",
+  ].map((file) => fs.readFileSync(path.join(repositoryRoot, file), "utf8"));
+});
+
+Then("全文書が成果物1単位と45分とmarkerの非停止性を案内する", function () {
+  for (const text of this.contractDocuments) {
+    assert.match(text, /成果物1単位/u);
+    assert.match(text, /45分/u);
+    assert.match(text, /成果物:(?:adr\|contract\|feature|<kind>)/u);
+  }
+  assert.match(this.contractDocuments[0]!, /非停止warning/u);
+  assert.match(this.contractDocuments[1]!, /validation成否は変えない/u);
+  assert.match(this.contractDocuments[4]!, /終了値を変更しません/u);
+});
+
+Given("成果物markerを2件持つvalidなfull Issue fixtureがある", function () {
+  this.issuePath = createFullIssue(this, true);
+});
+
+Given("成果物markerを2件持つinvalidなfull Issue fixtureがある", function () {
+  this.issuePath = createFullIssue(this, false);
+});
+
+When("実CLIで成果物単位を検証する", async function () {
+  let output = "";
+  const originalWrite = process.stdout.write;
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    output += String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    this.cliStatus = await main([
+      "issue",
+      "validate",
+      `--path=${this.issuePath}`,
+    ]);
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+  this.cliResult = JSON.parse(output) as ArtifactUnitWorld["cliResult"];
+});
+
+Then("終了値0のまま成果物単位warningを返す", function () {
+  assert.equal(this.cliStatus, 0);
+  assert.equal(this.cliResult.valid, true, this.cliResult.errors.join("\n"));
+  assert.equal(this.cliResult.warnings[0]?.code, "ASC-ISSUE-ARTIFACT-UNIT-001");
+});
+
+Then("終了値1のままerrorと成果物単位warningを返す", function () {
+  assert.equal(this.cliStatus, 1);
+  assert.equal(this.cliResult.valid, false);
+  assert.ok(this.cliResult.errors.length > 0);
+  assert.equal(this.cliResult.warnings[0]?.code, "ASC-ISSUE-ARTIFACT-UNIT-001");
+});

@@ -18,6 +18,13 @@ const FULL_FILES = {
     "02_設計.md": "02_設計.md",
     "03_実装計画.md": "03_実装計画.md",
 };
+export const ARTIFACT_UNIT_KINDS = Object.freeze([
+    "adr",
+    "contract",
+    "feature",
+    "documentation",
+    "migration",
+]);
 const LOW_RISK_SHORT_FORM_FILE = "verification-input.json";
 const LOW_RISK_SHORT_FORM = /^対象外:\s*(.*)$/u;
 const LOW_RISK_SHORT_FORM_LIKE = /^\s*(?:(?:[-*+>])\s*)*対象外(?:$|(?=\s|[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}A-Za-z0-9_]))/u;
@@ -52,6 +59,33 @@ function markdownSectionBodies(text, heading) {
         bodies.push(lines.slice(start + 1, end).join("\n"));
     }
     return Object.freeze(bodies);
+}
+/**
+ * 00 §2.1直下の明示markerだけからartifact unitを数える。
+ *
+ * 自由文や入れ子bulletを推測しない。markerを任意にすることで既存Issueとの
+ * 後方互換性を保ち、2件以上でもvalidation authorityへ影響しない診断だけを返す。
+ */
+export function detectArtifactUnitWarnings(text) {
+    const markers = [];
+    for (const body of markdownSectionBodies(text, "2.1 対象内（必須）")) {
+        for (const line of body.split("\n")) {
+            const match = /^- \[成果物:(adr|contract|feature|documentation|migration)\]\s+\S.*$/u.exec(line);
+            if (match)
+                markers.push(match[1]);
+        }
+    }
+    if (markers.length < 2)
+        return Object.freeze([]);
+    const kinds = Object.freeze(ARTIFACT_UNIT_KINDS.filter((kind) => markers.includes(kind)));
+    return Object.freeze([
+        Object.freeze({
+            code: "ASC-ISSUE-ARTIFACT-UNIT-001",
+            count: markers.length,
+            kinds,
+            message: "対象内に独立した成果物単位が複数あります。1 Issue＝成果物1単位を目安に分割を検討してください。",
+        }),
+    ]);
 }
 function verificationRisk(issuePath) {
     const inputPath = path.join(issuePath, LOW_RISK_SHORT_FORM_FILE);
@@ -806,9 +840,11 @@ export function validateIssue(issuePath, options = {}) {
             valid: false,
             mode: "full",
             errors: ["00_要求定義.mdがありません"],
+            warnings: Object.freeze([]),
             blockedOperations: [],
         };
     const text = fs.readFileSync(requirementPath, "utf8");
+    const warnings = detectArtifactUnitWarnings(text);
     const declaredValue = /^\|\s*モード\s*\|\s*`?(quick|full|poc)`?\s*\|\s*$/m.exec(text)?.[1];
     const declared = declaredValue === "quick" || declaredValue === "poc"
         ? declaredValue
@@ -948,7 +984,13 @@ export function validateIssue(issuePath, options = {}) {
         errors.push(...validateLowRiskShortForms(issuePath, options.stage === "design-artifact"
             ? new Set(validatedFullFiles)
             : undefined));
-    return { valid: errors.length === 0, mode, errors, blockedOperations };
+    return {
+        valid: errors.length === 0,
+        mode,
+        errors,
+        warnings,
+        blockedOperations,
+    };
 }
 function readTwoColumnValue(text, label) {
     return new RegExp(`^\\|\\s*${escapeRegExp(label)}\\s*\\|\\s*([^|]+?)\\s*\\|\\s*$`, "m")

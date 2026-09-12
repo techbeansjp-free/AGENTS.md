@@ -375,6 +375,7 @@ export const COMMAND_USAGE = Object.freeze([
             optional("changed", "path,path", "変更path", "観測なし"),
         ],
         example: "npx agent-skill-chain issue validate --path=./ISSUE.md",
+        note: "1 Issue＝成果物1単位を目安にし、45分超見込みなら起票時に分割します。00 §2.1直下の[成果物:adr|contract|feature|documentation|migration] markerが2件以上ならwarningsへ分割候補を返します。warningはvalid、errors、終了値を変更しません",
     },
     {
         command: "issue",

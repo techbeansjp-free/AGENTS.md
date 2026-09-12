@@ -55,6 +55,23 @@ const FULL_FILES = {
 export type IssueValidationStage =
   "request" | "requirements" | "design-artifact" | "design";
 
+export const ARTIFACT_UNIT_KINDS = Object.freeze([
+  "adr",
+  "contract",
+  "feature",
+  "documentation",
+  "migration",
+] as const);
+
+export type ArtifactUnitKind = (typeof ARTIFACT_UNIT_KINDS)[number];
+
+export interface IssueScopeWarning {
+  code: "ASC-ISSUE-ARTIFACT-UNIT-001";
+  count: number;
+  kinds: readonly ArtifactUnitKind[];
+  message: string;
+}
+
 const LOW_RISK_SHORT_FORM_FILE = "verification-input.json";
 const LOW_RISK_SHORT_FORM = /^対象外:\s*(.*)$/u;
 const LOW_RISK_SHORT_FORM_LIKE =
@@ -93,6 +110,40 @@ function markdownSectionBodies(
     bodies.push(lines.slice(start + 1, end).join("\n"));
   }
   return Object.freeze(bodies);
+}
+
+/**
+ * 00 §2.1直下の明示markerだけからartifact unitを数える。
+ *
+ * 自由文や入れ子bulletを推測しない。markerを任意にすることで既存Issueとの
+ * 後方互換性を保ち、2件以上でもvalidation authorityへ影響しない診断だけを返す。
+ */
+export function detectArtifactUnitWarnings(
+  text: string,
+): readonly IssueScopeWarning[] {
+  const markers: ArtifactUnitKind[] = [];
+  for (const body of markdownSectionBodies(text, "2.1 対象内（必須）")) {
+    for (const line of body.split("\n")) {
+      const match =
+        /^- \[成果物:(adr|contract|feature|documentation|migration)\]\s+\S.*$/u.exec(
+          line,
+        );
+      if (match) markers.push(match[1] as ArtifactUnitKind);
+    }
+  }
+  if (markers.length < 2) return Object.freeze([]);
+  const kinds = Object.freeze(
+    ARTIFACT_UNIT_KINDS.filter((kind) => markers.includes(kind)),
+  );
+  return Object.freeze([
+    Object.freeze({
+      code: "ASC-ISSUE-ARTIFACT-UNIT-001" as const,
+      count: markers.length,
+      kinds,
+      message:
+        "対象内に独立した成果物単位が複数あります。1 Issue＝成果物1単位を目安に分割を検討してください。",
+    }),
+  ]);
 }
 
 function verificationRisk(issuePath: string): ChangeRisk {
@@ -1164,9 +1215,11 @@ export function validateIssue(
       valid: false,
       mode: "full",
       errors: ["00_要求定義.mdがありません"],
+      warnings: Object.freeze([]) as readonly IssueScopeWarning[],
       blockedOperations: [],
     };
   const text = fs.readFileSync(requirementPath, "utf8");
+  const warnings = detectArtifactUnitWarnings(text);
   const declaredValue =
     /^\|\s*モード\s*\|\s*`?(quick|full|poc)`?\s*\|\s*$/m.exec(text)?.[1];
   const declared: Mode =
@@ -1356,7 +1409,13 @@ export function validateIssue(
           : undefined,
       ),
     );
-  return { valid: errors.length === 0, mode, errors, blockedOperations };
+  return {
+    valid: errors.length === 0,
+    mode,
+    errors,
+    warnings,
+    blockedOperations,
+  };
 }
 
 function readTwoColumnValue(text: string, label: string): string | undefined {
