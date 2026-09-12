@@ -12,6 +12,15 @@ export interface ProcessResult {
   status: number;
   stdout: string;
   stderr: string;
+  /**
+   * **processを起動できなかったことを示す**（ENOENT、timeout、ENOBUFS等。Issue #1341）。
+   *
+   * `allowFailure=true`の呼び出しでは起動失敗も終了値1へ写されるため、`status`だけでは
+   * 「起動できなかった」と「起動して1で終わった」を区別できない。診断が次に採る行動
+   * （pathを直す／引数を直す）を示すにはこの区別が要る。**内容はstderrにあり、
+   * この旗は区別のためだけに持つ。**
+   */
+  launchFailure?: true;
 }
 
 export interface JsonlSessionOptions extends Omit<
@@ -61,6 +70,7 @@ export function run(
     status: failure === undefined ? (result.status ?? 1) : 1,
     stdout: failure === undefined ? (result.stdout ?? "") : "",
     stderr: failure ?? redactSecrets(result.stderr ?? ""),
+    ...(failure === undefined ? {} : { launchFailure: true as const }),
   };
   if (!options.allowFailure && output.status !== 0) {
     throw new Error(

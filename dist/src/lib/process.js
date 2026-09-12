@@ -30,6 +30,7 @@ export function run(file, args, cwd, options = {}) {
         status: failure === undefined ? (result.status ?? 1) : 1,
         stdout: failure === undefined ? (result.stdout ?? "") : "",
         stderr: failure ?? redactSecrets(result.stderr ?? ""),
+        ...(failure === undefined ? {} : { launchFailure: true }),
     };
     if (!options.allowFailure && output.status !== 0) {
         throw new Error(failure ??

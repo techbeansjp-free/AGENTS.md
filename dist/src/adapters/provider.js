@@ -153,39 +153,67 @@ function isLegacyProviderCatalog(value) {
         return false;
     return value.available ? models.length > 0 : models.length === 0;
 }
-function unknownObservation(provider, observedAt, reason) {
+/**
+ * 観測に到達できなかったときの結果を組み立てる。**実行した入口と終了値を残す**（Issue #1341）。
+ *
+ * 旧版は`entrypoint`がprovider名だけ、`reason`が理由だけだったため、利用者は
+ * 「何を実行して何が返ったか」を配布物の`dist`を読むまで特定できなかった。
+ * `stderr`本文と入力本文は載せない（仕様06）。載せるのは製品が組み立てたargvと
+ * 整数の終了値だけである。
+ */
+function unknownObservation(provider, observedAt, reason, attempt = { args: [] }) {
+    const entrypoint = [provider, ...attempt.args].join(" ");
     return {
         provider,
         state: "unknown",
         models: [],
         modelMetadata: [],
         observedAt,
-        entrypoint: provider === "codex" ? "codex app-server model/list" : provider,
-        reason,
+        entrypoint,
+        reason: attempt.exitCode === undefined
+            ? reason
+            : `${reason}（終了値${attempt.exitCode}）`,
     };
 }
 export async function observeProvider(provider, execute = defaultExecutor, now = () => new Date(), options = {}) {
     const observedAt = now().toISOString();
     if (!PROVIDER_NAME.test(provider))
         return unknownObservation(provider, observedAt, "provider実行入口の名前が不正です");
+    const args = provider === "codex"
+        ? [
+            "app-server",
+            "--stdio",
+            ...(options.official ? CODEX_SELECTION_CONFIG : []),
+        ]
+        : ["models", "list", "--json"];
     let result;
     try {
         const observer = options.official && execute === defaultExecutor
-            ? (file, args, cwd, processOptions) => runCodexSession(file, args, cwd, processOptions, true)
+            ? (file, args_, cwd, processOptions) => runCodexSession(file, args_, cwd, processOptions, true)
             : execute;
-        result = await observer(provider, provider === "codex"
-            ? [
-                "app-server",
-                "--stdio",
-                ...(options.official ? CODEX_SELECTION_CONFIG : []),
-            ]
-            : ["models", "list", "--json"], options.cwd ?? process.cwd(), { allowFailure: true, timeoutMs: PROVIDER_TIMEOUT_MS });
+        /**
+         * **argsは複写して渡す。** 同じ配列参照を診断へ再利用すると、executorが
+         * 配列を書き換えた場合に「製品が実際に実行したargv」ではない値を報告する
+         * （Issue #1341のREV-02）。
+         */
+        result = await observer(provider, [...args], options.cwd ?? process.cwd(), {
+            allowFailure: true,
+            timeoutMs: PROVIDER_TIMEOUT_MS,
+        });
     }
     catch {
-        return unknownObservation(provider, observedAt, "provider実行入口を起動できません");
+        return unknownObservation(provider, observedAt, "provider実行入口を起動できません", { args });
     }
+    /**
+     * **起動できなかった場合は終了値を載せない。** `run`は`allowFailure=true`のとき
+     * 起動失敗も終了値1へ写すため、`status`だけでは区別できない（Issue #1341のREV-01）。
+     * 「終了値1で終わった」と報告すると、利用者は引数を疑って実際の原因（pathが無い）へ
+     * 到達できない。
+     */
+    if (result.launchFailure)
+        return unknownObservation(provider, observedAt, "provider実行入口を起動できません", { args });
     if (result.status !== 0)
-        return unknownObservation(provider, observedAt, "provider実行入口のread-only観測が失敗しました");
+        return unknownObservation(provider, observedAt, "provider実行入口のread-only観測が失敗しました", { args, exitCode: result.status });
     let catalog;
     try {
         if (provider === "codex") {
@@ -198,16 +226,16 @@ export async function observeProvider(provider, execute = defaultExecutor, now =
                     Object.hasOwn(configuration, "error") ||
                     !isRecord(configuration.result) ||
                     !isRecord(configuration.result.config))
-                    return unknownObservation(provider, observedAt, "公式catalogのconfig/read応答を確認できません");
+                    return unknownObservation(provider, observedAt, "公式catalogのconfig/read応答を確認できません", { args, exitCode: result.status });
                 const config = configuration.result.config;
                 if ((config.model_catalog_json !== null &&
                     config.model_catalog_json !== undefined) ||
                     (config.model_provider !== null &&
                         config.model_provider !== undefined &&
                         config.model_provider !== "openai"))
-                    return unknownObservation(provider, observedAt, "公式catalogを確認できません。model_catalog_json指定を解除しOpenAI providerで再実行してください");
+                    return unknownObservation(provider, observedAt, "公式catalogを確認できません。model_catalog_json指定を解除しOpenAI providerで再実行してください", { args, exitCode: result.status });
                 if (responses.filter((entry) => isRecord(entry) && entry.id === CODEX_RESPONSE_ID).length !== 1)
-                    return unknownObservation(provider, observedAt, "model/list応答が一意ではありません");
+                    return unknownObservation(provider, observedAt, "model/list応答が一意ではありません", { args, exitCode: result.status });
             }
             catalog = codexCatalog(result.stdout);
         }
@@ -226,10 +254,10 @@ export async function observeProvider(provider, execute = defaultExecutor, now =
         }
     }
     catch {
-        return unknownObservation(provider, observedAt, "provider model catalogを解釈できません");
+        return unknownObservation(provider, observedAt, "provider model catalogを解釈できません", { args, exitCode: result.status });
     }
     if (!catalog)
-        return unknownObservation(provider, observedAt, "provider model catalogの構造が不正です");
+        return unknownObservation(provider, observedAt, "provider model catalogの構造が不正です", { args, exitCode: result.status });
     return {
         provider,
         state: catalog.available ? "available" : "unavailable",
