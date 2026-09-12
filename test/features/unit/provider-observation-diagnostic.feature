@@ -32,3 +32,14 @@ Feature: provider観測の失敗診断は実行入口と終了値を示す
     Given 受け取ったargsを書き換えてから終了値3で終了する実行入口を持つproviderがある
     When 失敗診断のためにproviderを観測する
     Then entrypointは"provider-fixture models list --json"である
+
+  Scenario: SCN-UNIT-OBSDIAG-006 同期実行は起動したprocessの打ち切りを起動失敗としない
+    Given 実在しない実行fileと、起動してから打ち切られる実行fileがある
+    When 同期実行でそれぞれを実行する
+    Then 実在しない方だけが起動失敗として報告される
+
+  Scenario: SCN-UNIT-OBSDIAG-007 JSONLセッションも起動失敗と打ち切りを区別する
+    Given 実在しない実行fileと、起動してから打ち切られる実行fileがある
+    When JSONLセッションでそれぞれを実行する
+    Then 実在しない方だけが起動失敗として報告される
+

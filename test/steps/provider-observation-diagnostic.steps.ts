@@ -4,6 +4,7 @@ import {
   type ProviderAvailabilityObservation,
   type ProviderExecutor,
 } from "../../src/adapters/provider.js";
+import { run, runJsonlSession } from "../../src/lib/process.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 /**
@@ -19,6 +20,7 @@ class ProviderObservationDiagnosticWorld extends WorkflowWorld {
     undefined;
   diagnosticStderrSecret: string | undefined = undefined;
   diagnosticMissingProvider: string | undefined = undefined;
+  launchFailureFlags: Array<boolean | undefined> = [];
 }
 
 const { Given, When, Then } =
@@ -115,3 +117,52 @@ Given(
     };
   },
 );
+
+/**
+ * **`launchFailure`は「子processが1つも起動しなかった」だけを意味する。**
+ *
+ * timeoutと出力上限超過では子processは起動しており、`error.code`だけを見て
+ * 旗を立てると「起動できません」という誤った診断になる（Issue #1341のREV-03）。
+ */
+const MISSING_FILE = "provider-binary-that-does-not-exist-1341";
+const SLOW_ARGS = ["-e", "setTimeout(() => {}, 5000)"];
+
+Given(
+  "実在しない実行fileと、起動してから打ち切られる実行fileがある",
+  function () {
+    this.launchFailureFlags = [];
+  },
+);
+
+When("同期実行でそれぞれを実行する", function () {
+  const missing = run(MISSING_FILE, [], process.cwd(), {
+    allowFailure: true,
+    timeoutMs: 5000,
+  });
+  const timedOut = run("node", SLOW_ARGS, process.cwd(), {
+    allowFailure: true,
+    timeoutMs: 50,
+  });
+  assert.equal(missing.status, 1);
+  assert.equal(timedOut.status, 1);
+  this.launchFailureFlags = [missing.launchFailure, timedOut.launchFailure];
+});
+
+When("JSONLセッションでそれぞれを実行する", async function () {
+  const session = (file: string, args: string[], timeoutMs: number) =>
+    runJsonlSession(file, args, process.cwd(), {
+      allowFailure: true,
+      input: "",
+      timeoutMs,
+      isComplete: () => false,
+    });
+  const missing = await session(MISSING_FILE, [], 5000);
+  const timedOut = await session("node", SLOW_ARGS, 50);
+  assert.equal(missing.status, 1);
+  assert.equal(timedOut.status, 1);
+  this.launchFailureFlags = [missing.launchFailure, timedOut.launchFailure];
+});
+
+Then("実在しない方だけが起動失敗として報告される", function () {
+  assert.deepEqual(this.launchFailureFlags, [true, undefined]);
+});

@@ -30,7 +30,7 @@ export function run(file, args, cwd, options = {}) {
         status: failure === undefined ? (result.status ?? 1) : 1,
         stdout: failure === undefined ? (result.stdout ?? "") : "",
         stderr: failure ?? redactSecrets(result.stderr ?? ""),
-        ...(failure === undefined ? {} : { launchFailure: true }),
+        ...(result.pid ? {} : { launchFailure: true }),
     };
     if (!options.allowFailure && output.status !== 0) {
         throw new Error(failure ??
@@ -57,12 +57,12 @@ export function runJsonlSession(file, args, cwd, options) {
          * （Issue #1027）。`finish`は`stderr`をそのまま結果へ載せるため、
          * `finish`より前に追記する。
          */
-        const failWithReason = (reason) => {
+        const failWithReason = (reason, launchFailure = false) => {
             if (settled)
                 return;
             stderr = `${stderr}${stderr.endsWith("\n") || stderr === "" ? "" : "\n"}${reason}\n`;
             child.kill("SIGKILL");
-            finish(1);
+            finish(1, launchFailure);
         };
         const appendWithinLimit = (stream, current, chunk) => {
             const combined = current + chunk;
@@ -72,7 +72,7 @@ export function runJsonlSession(file, args, cwd, options) {
             }
             return combined;
         };
-        const finish = (status) => {
+        const finish = (status, launchFailure = false) => {
             if (settled)
                 return;
             settled = true;
@@ -81,6 +81,7 @@ export function runJsonlSession(file, args, cwd, options) {
                 status,
                 stdout,
                 stderr: redactSecrets(stderr),
+                ...(launchFailure ? { launchFailure: true } : {}),
             };
             if (!options.allowFailure && output.status !== 0) {
                 const command = redactSecrets(`${file} ${args.join(" ")}`);
@@ -116,7 +117,11 @@ export function runJsonlSession(file, args, cwd, options) {
         child.stderr.on("data", (chunk) => {
             stderr = appendWithinLimit("stderr", stderr, chunk);
         });
-        child.on("error", (error) => failWithReason(`子processを起動できません: ${error.message}`));
+        /**
+         * **`error` eventはspawn失敗以外でも起き得る**（killの失敗など）。pidが
+         * 割り当てられていない場合だけ起動失敗として報告する（Issue #1341）。
+         */
+        child.on("error", (error) => failWithReason(`子processを起動できません: ${error.message}`, child.pid === undefined));
         child.on("close", (code) => finish(code ?? 1));
         child.stdin.on("error", () => failWithReason("子processのstdinへの書込に失敗しました"));
         child.stdin.write(options.input);

@@ -6,7 +6,7 @@
 |---|---|
 | `scripts/check_consumer_acceptance.ts` | `08cbde239552af94f97485a09e3173fb6e72855e7f4cffbc80629122f5bff5fc` |
 | `scripts/check_package_contents.ts` | `798027a8cfb21f8fe22540919fae0e35d1226634d42bb10b625f115785d553d6` |
-| `src/lib/process.ts` | `99ee2f31dacc759fd67b16c5737f03a023f6591fc3929ed4214c31fdbffa9614` |
+| `src/lib/process.ts` | `2d0c9dcb6a84a4eae4007d1bbc9327740b8e81f2faec1b82ec07cf197023f4e9` |
 
 この3件を記録するのは、consumer acceptanceの判定、package検査への接続、process出力上限という、この証跡が主張する振る舞いの実体だからである。**束縛対象は機構別に宣言する。** 本機構は`scripts/check_package_contents.ts`が`checkConsumerAcceptance`へ渡す`mechanisms`に含まれるため接続経路上にあり、同fileを含める（Issue #1221）。`package.json`はmainの自動releaseでversionが変わり、主張する振る舞いが同じでもhashが変わるため対象に含めない。
 
@@ -86,3 +86,9 @@ Issue #1341が`ProcessResult`へoptionalな`launchFailure`を追加し、`run`�
 2. `run`の戻り値objectへ`...(failure === undefined ? {} : { launchFailure: true as const }),`の1行
 
 現在fileからこの2箇所を除いた残余byte列は、旧束縛`1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2`に一致するcommit（`origin/main` = `8e7405b9`）の`src/lib/process.ts`と**完全一致**し、その残余のSHA-256は`1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2`だった。`maxBuffer`既定、`MAX_PROCESS_OUTPUT_BYTES`、`failure`の算出、`status`・`stdout`・`stderr`の写像、`allowFailure`のthrow条件、import、module初期化はこの一致範囲に含まれる。**この証跡が主張するprocess出力上限の振る舞いは1 byteも変わっていない。** 追加fieldは既に算出済みの`failure`から導く旗であり、既存の呼び出しはこのoptional fieldを読まない。
+
+### 2026-09-12 追補（独立review round 1のREV-01・REV-03是正）
+
+`launchFailure`の判定を「`result.error`が存在する」から「子processにpidが割り当てられなかった」へ狭め、`runJsonlSession`にも同じ旗を通したため、束縛SHA-256を`99ee2f31dacc759fd67b16c5737f03a023f6591fc3929ed4214c31fdbffa9614`から`2d0c9dcb6a84a4eae4007d1bbc9327740b8e81f2faec1b82ec07cf197023f4e9`へ再度更新した。
+
+**主張する振る舞いは依然として変わっていない。** 現在fileから今回の追加・変更（`launchFailure`のinterface宣言とTSDoc、`run`戻り値の1行、`runJsonlSession`の`failWithReason`・`finish`の引数追加と`error` handlerのpid判定）をすべて除いた残余byte列は、`origin/main` = `3b6dcb88`時点の`src/lib/process.ts`と**完全一致**し、その残余のSHA-256は旧束縛`1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2`だった。`maxBuffer`既定、`MAX_PROCESS_OUTPUT_BYTES`、`failure`の算出、`status`・`stdout`・`stderr`の写像、`allowFailure`のthrow条件、出力上限超過時の打ち切りとその理由文言はこの一致範囲に含まれる。

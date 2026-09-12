@@ -13,12 +13,17 @@ export interface ProcessResult {
   stdout: string;
   stderr: string;
   /**
-   * **processを起動できなかったことを示す**（ENOENT、timeout、ENOBUFS等。Issue #1341）。
+   * **子processが1つも起動しなかったことを示す**（Issue #1341）。
    *
    * `allowFailure=true`の呼び出しでは起動失敗も終了値1へ写されるため、`status`だけでは
    * 「起動できなかった」と「起動して1で終わった」を区別できない。診断が次に採る行動
-   * （pathを直す／引数を直す）を示すにはこの区別が要る。**内容はstderrにあり、
-   * この旗は区別のためだけに持つ。**
+   * （pathを直す／引数を直す）を示すにはこの区別が要る。
+   *
+   * **timeoutと出力上限超過はここに含めない。** どちらも子processは起動しており、
+   * `ETIMEDOUT`・`ENOBUFS`を「起動できません」と報告すると、利用者は実在するpathを
+   * 疑って実際の原因へ到達できない。判定には`error.code`の列挙ではなくpidの有無を使う。
+   * **起動したかどうかは、pidが割り当てられたかどうかそのものである。**
+   * **内容はstderrにあり、この旗は区別のためだけに持つ。**
    */
   launchFailure?: true;
 }
@@ -70,7 +75,7 @@ export function run(
     status: failure === undefined ? (result.status ?? 1) : 1,
     stdout: failure === undefined ? (result.stdout ?? "") : "",
     stderr: failure ?? redactSecrets(result.stderr ?? ""),
-    ...(failure === undefined ? {} : { launchFailure: true as const }),
+    ...(result.pid ? {} : { launchFailure: true as const }),
   };
   if (!options.allowFailure && output.status !== 0) {
     throw new Error(
@@ -105,11 +110,11 @@ export function runJsonlSession(
      * （Issue #1027）。`finish`は`stderr`をそのまま結果へ載せるため、
      * `finish`より前に追記する。
      */
-    const failWithReason = (reason: string): void => {
+    const failWithReason = (reason: string, launchFailure = false): void => {
       if (settled) return;
       stderr = `${stderr}${stderr.endsWith("\n") || stderr === "" ? "" : "\n"}${reason}\n`;
       child.kill("SIGKILL");
-      finish(1);
+      finish(1, launchFailure);
     };
     const appendWithinLimit = (
       stream: "stdout" | "stderr",
@@ -125,7 +130,7 @@ export function runJsonlSession(
       }
       return combined;
     };
-    const finish = (status: number): void => {
+    const finish = (status: number, launchFailure = false): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -133,6 +138,7 @@ export function runJsonlSession(
         status,
         stdout,
         stderr: redactSecrets(stderr),
+        ...(launchFailure ? { launchFailure: true as const } : {}),
       };
       if (!options.allowFailure && output.status !== 0) {
         const command = redactSecrets(`${file} ${args.join(" ")}`);
@@ -170,8 +176,15 @@ export function runJsonlSession(
     child.stderr.on("data", (chunk: string) => {
       stderr = appendWithinLimit("stderr", stderr, chunk);
     });
+    /**
+     * **`error` eventはspawn失敗以外でも起き得る**（killの失敗など）。pidが
+     * 割り当てられていない場合だけ起動失敗として報告する（Issue #1341）。
+     */
     child.on("error", (error: Error) =>
-      failWithReason(`子processを起動できません: ${error.message}`),
+      failWithReason(
+        `子processを起動できません: ${error.message}`,
+        child.pid === undefined,
+      ),
     );
     child.on("close", (code) => finish(code ?? 1));
     child.stdin.on("error", () =>
