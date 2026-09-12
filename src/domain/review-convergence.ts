@@ -141,11 +141,11 @@ export function unconvergedReviewSessionDiagnostic(
   return "review sessionが収束していません: status=active。reviewが未完了か、実際に検分したHEADとcandidateHeadShaの対応が誤っている可能性があります。ownerのrisk受容へ進まず、review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください";
 }
 
+/** `optionalFields`は必須にはせず、未知fieldとしても拒否しない。 */
 function exactObject(
   value: unknown,
   label: string,
   fields: readonly string[],
-  /** 省略可能なfield。**必須にはせず、未知fieldとしても拒否しない。** */
   optionalFields: readonly string[] = [],
 ): Record<string, unknown> {
   if (!isRecord(value)) throw new Error(`${label}はobjectが必要です`);

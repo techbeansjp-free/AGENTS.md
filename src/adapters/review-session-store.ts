@@ -3,6 +3,11 @@ import path from "node:path";
 
 import { parseJsonStrict } from "../lib/security.js";
 import {
+  deriveEffectiveHead,
+  isEvidenceReanchorRecord,
+  type EvidenceReanchorRecord,
+} from "../domain/evidence-reanchor.js";
+import {
   parseReviewSessionState,
   type ReviewSessionState,
 } from "../domain/review-convergence.js";
@@ -10,6 +15,7 @@ import { git } from "../lib/process.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
 
 export const REVIEW_SESSION_FILE = "review-session.json";
+const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
 
 const GIT_ENV: NodeJS.ProcessEnv = {
   PATH: process.env.PATH ?? "/usr/bin:/bin",
@@ -86,6 +92,20 @@ function assertRegularSessionFile(file: string): void {
     );
 }
 
+function readReanchorChain(staging: string): EvidenceReanchorRecord[] {
+  const file = path.join(staging, EVIDENCE_REANCHOR_FILE);
+  if (!fs.existsSync(file)) return [];
+  const records: EvidenceReanchorRecord[] = [];
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    if (line.trim() === "") continue;
+    const value = parseJsonStrict(line, "再固定記録");
+    if (!isEvidenceReanchorRecord(value))
+      throw new Error("再固定記録の形式が不正です");
+    records.push(value);
+  }
+  return records;
+}
+
 export function readStoredReviewSession(
   stagingInput: string,
 ): ReviewSessionState | null {
@@ -97,6 +117,7 @@ export function readStoredReviewSession(
     parseJsonStrict(fs.readFileSync(file, "utf8"), "review session"),
   );
   const root = path.resolve(staging, "../../../..");
+  const reanchorRecords = readReanchorChain(staging);
   for (const [index, record] of session.rounds.entries()) {
     if (!record.followOnly) continue;
     const previous = session.rounds[index - 1];
@@ -104,7 +125,10 @@ export function readStoredReviewSession(
       previous === undefined ||
       !isDefaultBranchFollowMerge(
         root,
-        previous.candidateHeadSha,
+        deriveEffectiveHead({
+          records: reanchorRecords,
+          anchoredHeadSha: previous.candidateHeadSha,
+        }).effectiveHeadSha,
         record.candidateHeadSha,
       )
     )

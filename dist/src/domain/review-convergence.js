@@ -43,9 +43,8 @@ export function unconvergedReviewSessionDiagnostic(status) {
         return "review sessionが収束していません: status=budget-exhausted。有限review予算内で未解決blockerが残っています。ownerが受容する対象は既知の未解決findingです";
     return "review sessionが収束していません: status=active。reviewが未完了か、実際に検分したHEADとcandidateHeadShaの対応が誤っている可能性があります。ownerのrisk受容へ進まず、review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください";
 }
-function exactObject(value, label, fields, 
-/** 省略可能なfield。**必須にはせず、未知fieldとしても拒否しない。** */
-optionalFields = []) {
+/** `optionalFields`は必須にはせず、未知fieldとしても拒否しない。 */
+function exactObject(value, label, fields, optionalFields = []) {
     if (!isRecord(value))
         throw new Error(`${label}はobjectが必要です`);
     const unknown = Object.keys(value).filter((field) => !fields.includes(field) && !optionalFields.includes(field));

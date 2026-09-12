@@ -11,6 +11,7 @@ import {
   createIssueStaging,
   recordStagingSync,
 } from "../../src/domain/issue.js";
+import { refreshStoredStagingDigest } from "../../src/domain/staging.js";
 import { QUESTIONS, type ModeAnswer } from "../../src/domain/mode.js";
 import {
   REVIEW_RECOVERY_ROUND,
@@ -968,6 +969,59 @@ Then("保存済みfollow-only roundはGit再検証で拒否される", function 
     () => readStoredReviewSession(this.staging),
     /保存済みreview sessionのfollow-only round 3を実Gitで再検証できません/u,
   );
+});
+
+When(
+  "reanchor後の実効HEADから既定branchの自動mergeだけを記録する",
+  function () {
+    const oldHead = this.session.latestCandidateHeadSha;
+    execFileSync(
+      "git",
+      ["commit", "-q", "--allow-empty", "-m", "test: equivalent reanchored candidate"],
+      { cwd: this.root },
+    );
+    const effectiveHead = head(this.root);
+    fs.mkdirSync(path.join(this.staging, "journal"), { recursive: true });
+    fs.writeFileSync(
+      path.join(this.staging, "journal/reanchor.jsonl"),
+      `${JSON.stringify({
+        oldHeadSha: oldHead,
+        newHeadSha: effectiveHead,
+        oldBaseSha: this.anchor.diffBaseSha,
+        newBaseSha: oldHead,
+        diffDigest: "0".repeat(64),
+        method: "rebase",
+        reason: "SCN-UNIT-REVIEWCONV-011 fixture",
+        recordedAt: instant.toISOString(),
+      })}\n`,
+    );
+    refreshStoredStagingDigest(this.staging);
+    initDefaultRef(this.root);
+    const upstream = upstreamCommit(
+      this.root,
+      "docs/reanchored-follow.md",
+      "reanchored follow\n",
+    );
+    const candidate = mergeUpstream(this.root, upstream);
+    this.session = recordReviewRound({
+      staging: this.staging,
+      round: roundInput({
+        world: this,
+        round: 2,
+        candidateHeadSha: candidate,
+        previousRoundDigest: this.session.latestRoundDigest,
+        fixedDiff: ["docs/reanchored-follow.md"],
+        findings: [],
+        followOnly: true,
+      }),
+    });
+  },
+);
+
+Then("追随roundは保存後read-backでも受理される", function () {
+  const reread = readStoredReviewSession(this.staging);
+  assert.equal(reread?.latestRoundDigest, this.session.latestRoundDigest);
+  assert.equal(reread?.rounds.at(-1)?.followOnly, true);
 });
 
 Then(

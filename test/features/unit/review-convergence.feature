@@ -67,3 +67,8 @@ Feature: Review sessionを固定契約へ収束させる
     Then 追随roundはblockerと予算を維持したactive状態になる
     When Git条件を満たさないfollow-only sessionを保存して読み直す
     Then 保存済みfollow-only roundはGit再検証で拒否される
+
+  Scenario: SCN-UNIT-REVIEWCONV-011 reanchor後の実効HEADからの追随を保存後も受理する
+    Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
+    When reanchor後の実効HEADから既定branchの自動mergeだけを記録する
+    Then 追随roundは保存後read-backでも受理される
