@@ -696,13 +696,22 @@ export function validateStepJournal(input: {
   });
   input.entries.forEach((entry, index) => {
     if (!entry.reconfirmation) return;
+    /**
+     * **先行entryはそのStepを実際に実施した記録でなければならない。**
+     *
+     * `humanOverride`は欠落を人間が明示承認した記録であって、Stepの実施ではない
+     * （順序判定でも`continue`で除外している）。これを先行entryに数えると、
+     * **一度も実施していないStepを「再確定」できてしまう**（Issue #1342のREV-05）。
+     * `reconfirmation`と`postTerminalIntake`を除くのも同じ理由による。
+     */
     const preceded = input.entries
       .slice(0, index)
       .some(
         (candidate) =>
           candidate.step === entry.step &&
           !candidate.reconfirmation &&
-          !candidate.postTerminalIntake,
+          !candidate.postTerminalIntake &&
+          !candidate.humanOverride,
       );
     if (!preceded)
       errors.push(

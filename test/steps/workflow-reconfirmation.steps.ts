@@ -18,6 +18,11 @@ interface ReconfirmationWorld extends WorkflowWorld {
   journalLines: string[];
   terminalEntries: StepJournalEntry[];
   terminalResult: ReturnType<typeof validateStepJournal>;
+  overrideJournals: Array<{ target: number; entries: StepJournalEntry[] }>;
+  overrideResults: Array<{
+    target: number;
+    result: ReturnType<typeof validateStepJournal>;
+  }>;
   parseErrors: string[];
   journalBefore: string;
   results: Array<{ label: string; status: number; stdout: string }>;
@@ -315,4 +320,80 @@ Then("同じ再確定entryをStep 11の前へ置いた場合は受理される",
   ];
   const result = validateStepJournal({ mode: "full", entries, upToStep: 11 });
   assert.equal(result.valid, true, result.errors.join("; "));
+});
+
+/**
+ * **`humanOverride`はStepの実施ではなく、欠落を人間が明示承認した記録である。**
+ * 先行entryに数えると、一度も実施していないStepを再確定できてしまう（REV-05）。
+ */
+const OVERRIDE: NonNullable<StepJournalEntry["humanOverride"]> = {
+  issue: 1342,
+  scope: "workflow.pr.create",
+  instructedBy: "repository owner",
+  instructedAt: "2026-09-12T00:00:00.000Z",
+  expiresAt: "2026-09-13T00:00:00.000Z",
+  reason: "欠落を明示承認した記録であってStepの実施ではない",
+};
+
+/**
+ * **2つのStepで検査する。** 1 Stepだけを見ると、除外条件を特定のStep番号へ
+ * 狭める変異が生き残る（Issue #1342の変異R）。
+ */
+const OVERRIDE_STEPS = [3, 7] as const;
+
+Given(
+  "humanOverrideだけで記録したStepへ再確定entryを置いたjournalをStep 3とStep 7の2通り用意する",
+  function () {
+    this.overrideJournals = OVERRIDE_STEPS.map((target) => ({
+      target,
+      entries: [
+        ...Array.from({ length: target }, (_unused, step) => entryOf(step)),
+        entryOf(target, { humanOverride: OVERRIDE }),
+        entryOf(target, { reconfirmation: true }),
+      ],
+    }));
+  },
+);
+
+When("それぞれのjournalの順序を検査する", function () {
+  this.overrideResults = this.overrideJournals.map(({ target, entries }) => ({
+    target,
+    result: validateStepJournal({ mode: "full", entries, upToStep: target }),
+  }));
+});
+
+Then(
+  "どちらもそのStep番号を名指しして先行する通常entryが無いと拒否される",
+  function () {
+    assert.equal(this.overrideResults.length, OVERRIDE_STEPS.length);
+    for (const { target, result } of this.overrideResults) {
+      assert.equal(result.valid, false, `Step ${target}が拒否されていない`);
+      assert.ok(
+        result.errors.includes(
+          `Step ${target}の上流再確定entryに先行する通常entryがありません`,
+        ),
+        `Step ${target}: ${result.errors.join("; ")}`,
+      );
+    }
+  },
+);
+
+Then("同じStepの通常entryを先に置いた場合はどちらも受理される", function () {
+  for (const target of OVERRIDE_STEPS) {
+    const entries = [
+      ...Array.from({ length: target + 1 }, (_unused, step) => entryOf(step)),
+      entryOf(target, { humanOverride: OVERRIDE }),
+      entryOf(target, { reconfirmation: true }),
+    ];
+    const result = validateStepJournal({
+      mode: "full",
+      entries,
+      upToStep: target,
+    });
+    assert.equal(
+      result.valid,
+      true,
+      `Step ${target}: ${result.errors.join("; ")}`,
+    );
+  }
 });

@@ -32,3 +32,9 @@ Feature: 上流再確定entryは順序判定から外れ通常entryと区別で�
     Then Step 11より後に置けないことを名指しして拒否される
     And 同じ再確定entryをStep 11の前へ置いた場合は受理される
 
+  Scenario: SCN-UNIT-RECONFIRM-007 humanOverride entryは先行する通常entryに数えない
+    Given humanOverrideだけで記録したStepへ再確定entryを置いたjournalをStep 3とStep 7の2通り用意する
+    When それぞれのjournalの順序を検査する
+    Then どちらもそのStep番号を名指しして先行する通常entryが無いと拒否される
+    And 同じStepの通常entryを先に置いた場合はどちらも受理される
+
