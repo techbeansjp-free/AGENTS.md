@@ -1000,7 +1000,7 @@ Given("budget-exhaustedのsessionを持つstagingがある", function () {
     status,
     source: "review",
     relation: "acceptance-violation",
-    evidence: "未解決のまま3 roundを使い切る",
+    evidence: "未解決のまま6 roundを使い切る",
     path: reviewedPath,
     contractId: "AC-001",
     causedByFindingId: null,
@@ -1016,7 +1016,7 @@ Given("budget-exhaustedのsessionを持つstagingがある", function () {
       findings: [blocker("valid")],
     }),
   });
-  for (const round of [2, 3]) {
+  for (const round of [2, 3, 4, 5, 6]) {
     this.head = commitFile(
       this.root,
       reviewedPath,
