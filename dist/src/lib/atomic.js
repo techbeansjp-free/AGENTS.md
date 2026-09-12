@@ -62,18 +62,35 @@ function descriptorDirectoryPath(directory) {
         : process.platform === "win32"
             ? []
             : [`/dev/fd/${directory.descriptor}`];
+    let unsupportedDarwinDescriptorAlias = false;
     for (const candidate of candidates) {
+        let observedDescriptor;
         try {
-            const observed = fs.statSync(candidate);
+            // Darwin's fdescfs can report a synthetic st_dev for /dev/fd/N when the
+            // path itself is statted. Reopening the exact descriptor alias and using
+            // fstat observes the underlying directory identity on every supported OS.
+            observedDescriptor = fs.openSync(candidate, fs.constants.O_RDONLY);
+            const observed = fs.fstatSync(observedDescriptor);
             if (observed.isDirectory() &&
                 observed.dev === directory.dev &&
-                observed.ino === directory.ino)
+                observed.ino === directory.ino) {
+                if (process.platform === "darwin") {
+                    unsupportedDarwinDescriptorAlias = true;
+                    continue;
+                }
                 return candidate;
+            }
         }
         catch {
             // A missing descriptor filesystem is handled by the fail-closed error.
         }
+        finally {
+            if (observedDescriptor !== undefined)
+                fs.closeSync(observedDescriptor);
+        }
     }
+    if (unsupportedDarwinDescriptorAlias)
+        throw new Error("macOSの/dev/fdは末尾pathを探索できないため、安全なdirectory descriptor相対file作成には利用できません");
     throw new Error("exclusive file作成にはdirectory descriptor相対pathが必要です");
 }
 /**
@@ -107,6 +124,7 @@ export function writeFileExclusivePinned(directory, leaf, contents, hooks = {}) 
         if (!createdIdentity.isFile())
             throw new Error("exclusive file作成先が通常fileではありません");
         hooks.afterCreateBeforeWrite?.(descriptor);
+        assertPinnedDirectory(pinned);
         writeFully(descriptor, Buffer.from(contents));
         fs.fsyncSync(descriptor);
         hooks.afterWriteBeforeVerify?.();
