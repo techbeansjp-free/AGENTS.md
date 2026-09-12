@@ -4,7 +4,7 @@ import { PACKAGE_VERSION } from "../lib/version.js";
 import { isRecord } from "../types.js";
 const PROVIDER_NAME = /^[a-z0-9][a-z0-9.-]{0,127}$/u;
 const MODEL_SLUG = /^[a-z0-9][a-z0-9.-]{0,127}$/u;
-const CLAUDE_MODEL_ID = /^[^\u0000-\u0020\u007f]{1,512}$/u;
+const CLAUDE_MODEL_ID = /^[^\p{C}\p{Z}]{1,512}$/u;
 const CODEX_RESPONSE_ID = 1;
 const CLAUDE_RESPONSE_ID = "asc-provider-observe";
 const PROVIDER_TIMEOUT_MS = 10_000;

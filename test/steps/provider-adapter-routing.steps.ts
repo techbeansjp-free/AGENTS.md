@@ -336,6 +336,21 @@ Then(
         response: {
           ...response.response,
           response: {
+            models: [
+              {
+                value: "default",
+                resolvedModel: "claude-opus-5\u202e[1m]",
+                supportedEffortLevels: ["high"],
+              },
+            ],
+          },
+        },
+      },
+      {
+        ...response,
+        response: {
+          ...response.response,
+          response: {
             models: [{ value: "default", supportedEffortLevels: ["high"] }],
           },
         },
