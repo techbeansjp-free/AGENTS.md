@@ -20,4 +20,3 @@ Feature: routing tierは判定の信頼源と用途を出力し仕様外のprovi
     Given policy loaderが返しうる信頼源の語彙を5件すべて用意する
     When それぞれを出力用の信頼源へ写す
     Then どの語彙も読み替えられずそのまま現れる
-
