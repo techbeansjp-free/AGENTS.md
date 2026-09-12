@@ -195,6 +195,7 @@ export function writeFileExclusivePinned(
     if (!createdIdentity.isFile())
       throw new Error("exclusive file作成先が通常fileではありません");
     hooks.afterCreateBeforeWrite?.(descriptor);
+    assertPinnedDirectory(pinned);
     writeFully(descriptor, Buffer.from(contents));
     fs.fsyncSync(descriptor);
     hooks.afterWriteBeforeVerify?.();
