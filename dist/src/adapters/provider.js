@@ -4,7 +4,9 @@ import { PACKAGE_VERSION } from "../lib/version.js";
 import { isRecord } from "../types.js";
 const PROVIDER_NAME = /^[a-z0-9][a-z0-9.-]{0,127}$/u;
 const MODEL_SLUG = /^[a-z0-9][a-z0-9.-]{0,127}$/u;
+const CLAUDE_MODEL_ID = /^[^\u0000-\u0020\u007f]{1,512}$/u;
 const CODEX_RESPONSE_ID = 1;
+const CLAUDE_RESPONSE_ID = "asc-provider-observe";
 const PROVIDER_TIMEOUT_MS = 10_000;
 function parseJsonLines(stdout) {
     return stdout
@@ -34,6 +36,12 @@ function hasCodexResponse(stdout, id = CODEX_RESPONSE_ID) {
     }
     return false;
 }
+function hasClaudeResponse(stdout) {
+    return parseTerminatedJsonLines(stdout).some((message) => isRecord(message) &&
+        message.type === "control_response" &&
+        isRecord(message.response) &&
+        message.response.request_id === CLAUDE_RESPONSE_ID);
+}
 function codexInitializeInput() {
     return (JSON.stringify({
         method: "initialize",
@@ -62,6 +70,13 @@ function codexRequests(official) {
         .map((message) => JSON.stringify(message))
         .join("\n") + "\n");
 }
+function claudeInitializeInput() {
+    return (JSON.stringify({
+        type: "control_request",
+        request_id: CLAUDE_RESPONSE_ID,
+        request: { subtype: "initialize", hooks: {} },
+    }) + "\n");
+}
 function runCodexSession(file, args, cwd, options, official) {
     let initialized = false;
     return runJsonlSession(file, args, cwd, {
@@ -88,6 +103,14 @@ function runCodexSession(file, args, cwd, options, official) {
         isComplete: (stdout) => initialized &&
             hasCodexResponse(stdout) &&
             (!official || hasCodexResponse(stdout, 2)),
+    });
+}
+function runClaudeSession(file, args, cwd, options) {
+    return runJsonlSession(file, args, cwd, {
+        ...options,
+        input: claudeInitializeInput(),
+        timeoutMs: options.timeoutMs ?? PROVIDER_TIMEOUT_MS,
+        isComplete: hasClaudeResponse,
     });
 }
 function codexCatalog(stdout) {
@@ -133,6 +156,51 @@ function codexCatalog(stdout) {
         modelMetadata,
     };
 }
+function claudeCatalog(stdout) {
+    const responses = parseTerminatedJsonLines(stdout).filter((message) => isRecord(message) &&
+        message.type === "control_response" &&
+        isRecord(message.response) &&
+        message.response.request_id === CLAUDE_RESPONSE_ID);
+    const envelope = responses[0];
+    if (responses.length !== 1 ||
+        !isRecord(envelope) ||
+        !isRecord(envelope.response) ||
+        envelope.response.subtype !== "success" ||
+        !isRecord(envelope.response.response) ||
+        !Array.isArray(envelope.response.response.models))
+        return undefined;
+    const modelMetadata = [];
+    const values = [];
+    for (const entry of envelope.response.response.models) {
+        if (!isRecord(entry) ||
+            typeof entry.value !== "string" ||
+            !CLAUDE_MODEL_ID.test(entry.value) ||
+            typeof entry.resolvedModel !== "string" ||
+            !CLAUDE_MODEL_ID.test(entry.resolvedModel) ||
+            (entry.supportsEffort !== undefined &&
+                typeof entry.supportsEffort !== "boolean"))
+            return undefined;
+        const efforts = entry.supportedEffortLevels;
+        if (efforts !== undefined && !Array.isArray(efforts))
+            return undefined;
+        const supportedReasoningEfforts = efforts ?? [];
+        if (supportedReasoningEfforts.some((effort) => typeof effort !== "string" ||
+            !/^[a-z][a-z0-9_-]{0,31}$/u.test(effort)) ||
+            new Set(supportedReasoningEfforts).size !==
+                supportedReasoningEfforts.length)
+            return undefined;
+        values.push(entry.value);
+        modelMetadata.push({
+            model: entry.resolvedModel,
+            recommended: entry.value === "default",
+            supportedReasoningEfforts: supportedReasoningEfforts,
+        });
+    }
+    if (new Set(values).size !== values.length)
+        return undefined;
+    const models = [...new Set(modelMetadata.map((entry) => entry.model))];
+    return { available: models.length > 0, models, modelMetadata };
+}
 async function defaultExecutor(file, args, cwd, options) {
     if (file !== "codex")
         return run(file, args, cwd, options);
@@ -160,7 +228,11 @@ function unknownObservation(provider, observedAt, reason) {
         models: [],
         modelMetadata: [],
         observedAt,
-        entrypoint: provider === "codex" ? "codex app-server model/list" : provider,
+        entrypoint: provider === "codex"
+            ? "codex app-server model/list"
+            : provider === "claude"
+                ? "claude stream-json initialize models"
+                : provider,
         reason,
     };
 }
@@ -170,16 +242,27 @@ export async function observeProvider(provider, execute = defaultExecutor, now =
         return unknownObservation(provider, observedAt, "provider実行入口の名前が不正です");
     let result;
     try {
-        const observer = options.official && execute === defaultExecutor
-            ? (file, args, cwd, processOptions) => runCodexSession(file, args, cwd, processOptions, true)
-            : execute;
+        const observer = execute === defaultExecutor && provider === "codex"
+            ? (file, args, cwd, processOptions) => runCodexSession(file, args, cwd, processOptions, options.official === true)
+            : execute === defaultExecutor && provider === "claude"
+                ? runClaudeSession
+                : execute;
         result = await observer(provider, provider === "codex"
             ? [
                 "app-server",
                 "--stdio",
                 ...(options.official ? CODEX_SELECTION_CONFIG : []),
             ]
-            : ["models", "list", "--json"], options.cwd ?? process.cwd(), { allowFailure: true, timeoutMs: PROVIDER_TIMEOUT_MS });
+            : provider === "claude"
+                ? [
+                    "--output-format",
+                    "stream-json",
+                    "--verbose",
+                    "--input-format",
+                    "stream-json",
+                    "--setting-sources=",
+                ]
+                : ["models", "list", "--json"], options.cwd ?? process.cwd(), { allowFailure: true, timeoutMs: PROVIDER_TIMEOUT_MS });
     }
     catch {
         return unknownObservation(provider, observedAt, "provider実行入口を起動できません");
@@ -211,6 +294,9 @@ export async function observeProvider(provider, execute = defaultExecutor, now =
             }
             catalog = codexCatalog(result.stdout);
         }
+        else if (provider === "claude") {
+            catalog = claudeCatalog(result.stdout);
+        }
         else {
             const value = parseJsonStrict(result.stdout, "provider model catalog");
             if (isLegacyProviderCatalog(value))
@@ -239,7 +325,11 @@ export async function observeProvider(provider, execute = defaultExecutor, now =
             supportedReasoningEfforts: [...entry.supportedReasoningEfforts],
         })),
         observedAt,
-        entrypoint: provider === "codex" ? "codex app-server model/list" : provider,
+        entrypoint: provider === "codex"
+            ? "codex app-server model/list"
+            : provider === "claude"
+                ? "claude stream-json initialize models"
+                : provider,
     };
 }
 /** Keep authentication and safety configuration; override only model selection. */

@@ -1,10 +1,15 @@
 @unit
-Feature: routing tierは判定の信頼源と用途を出力し仕様外のprovider値を拒否する
+Feature: routing tierは公式provider観測の信頼源と用途を出力する
 
-  Scenario: SCN-UNIT-TIERPROV-001 codex以外のprovider値を拒否する
+  Scenario: SCN-UNIT-TIERPROV-001 codexとclaude以外のprovider値を拒否する
     Given trusted policyを持つ隔離repositoryがある
-    When routing tierをcodex以外のprovider値で実行する
-    Then すべてcodexだけを受理する案内つきで拒否される
+    When routing tierを仕様外のprovider値で実行する
+    Then すべてcodexまたはclaudeだけを受理する案内つきで拒否される
+
+  Scenario: SCN-UNIT-TIERPROV-005 Claude公式defaultをselector採用tierへ照合する
+    Given trusted policyを持つ隔離repositoryがある
+    When routing tierをClaude公式defaultの解決modelで実行する
+    Then 成功出力はClaude selectorと観測modelを分離して含む
 
   Scenario: SCN-UNIT-TIERPROV-002 未指定経路の成功出力はfilesystemの信頼源と互換検証の用途を持つ
     Given trusted policyを持つ隔離repositoryのworking treeへtierMappingのkeyを未commitで足す

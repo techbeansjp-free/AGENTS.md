@@ -7,6 +7,10 @@ import {
   type ProviderExecutor,
 } from "../../src/adapters/provider.js";
 import { run, runJsonlSession } from "../../src/lib/process.js";
+import {
+  CLAUDE_ADOPTION_SELECTOR,
+  validateClaudeTier,
+} from "../../src/domain/role.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 import { withProviderPath } from "../support/provider-fixture.js";
 
@@ -211,6 +215,147 @@ Then("Codex JSONLの末尾が部分行でも確定応答で観測完了する", 
     assert.deepEqual(observation.models, ["model-fixture"]);
   });
 });
+
+Then(
+  "Claudeは公式initialize応答のdefaultと解決modelとeffortを厳密に観測する",
+  async function () {
+    const calls: Array<{ file: string; args: string[] }> = [];
+    const response = {
+      type: "control_response",
+      response: {
+        subtype: "success",
+        request_id: "asc-provider-observe",
+        response: {
+          models: [
+            {
+              value: "default",
+              resolvedModel: "claude-opus-5[1m]",
+              displayName: "Default (recommended)",
+              description: "fixture",
+              supportsEffort: true,
+              supportedEffortLevels: ["low", "high"],
+            },
+            {
+              value: "sonnet",
+              resolvedModel: "claude-sonnet-5",
+              displayName: "Sonnet",
+              description: "fixture",
+              supportsEffort: true,
+              supportedEffortLevels: ["high"],
+            },
+          ],
+        },
+      },
+    };
+    const observation = await observeProvider(
+      "claude",
+      (file, args) => {
+        calls.push({ file, args });
+        return {
+          status: 0,
+          stdout: `${JSON.stringify(response)}\n`,
+          stderr: "",
+        };
+      },
+      () => new Date("2026-09-12T00:00:00.000Z"),
+      { official: true },
+    );
+    assert.deepEqual(calls, [
+      {
+        file: "claude",
+        args: [
+          "--output-format",
+          "stream-json",
+          "--verbose",
+          "--input-format",
+          "stream-json",
+          "--setting-sources=",
+        ],
+      },
+    ]);
+    assert.equal(observation.state, "available");
+    assert.equal(
+      observation.entrypoint,
+      "claude stream-json initialize models",
+    );
+    assert.deepEqual(
+      observation.modelMetadata.filter((model) => model.recommended),
+      [
+        {
+          model: "claude-opus-5[1m]",
+          recommended: true,
+          supportedReasoningEfforts: ["low", "high"],
+        },
+      ],
+    );
+    assert.equal(
+      validateClaudeTier({
+        required: "critical",
+        mapping: { [CLAUDE_ADOPTION_SELECTOR]: "critical" },
+      }).valid,
+      true,
+    );
+    assert.equal(
+      validateClaudeTier({
+        required: "critical",
+        mapping: { "claude-opus-5[1m]": "critical" },
+      }).valid,
+      false,
+    );
+
+    const directory = this.temp("asc-claude-initialize-");
+    const executable = path.join(directory, "claude");
+    const transcript = path.join(directory, "request.json");
+    fs.writeFileSync(
+      executable,
+      `#!${process.execPath}\n` +
+        `const fs=require('node:fs'); const rl=require('node:readline').createInterface({input:process.stdin}); rl.once('line', line => { fs.writeFileSync(${JSON.stringify(transcript)}, line); process.stdout.write(${JSON.stringify(`${JSON.stringify(response)}\n`)}); });`,
+    );
+    fs.chmodSync(executable, 0o755);
+    await withProviderPath(directory, async () => {
+      const actual = await observeProvider("claude", undefined, undefined, {
+        official: true,
+      });
+      assert.equal(actual.state, "available", JSON.stringify(actual));
+      const request = JSON.parse(fs.readFileSync(transcript, "utf8")) as {
+        type: string;
+        request_id: string;
+        request: { subtype: string };
+      };
+      assert.deepEqual(request, {
+        type: "control_request",
+        request_id: "asc-provider-observe",
+        request: { subtype: "initialize", hooks: {} },
+      });
+    });
+
+    for (const invalid of [
+      { ...response, response: { ...response.response, request_id: "other" } },
+      {
+        ...response,
+        response: {
+          ...response.response,
+          response: {
+            models: [{ value: "default", supportedEffortLevels: ["high"] }],
+          },
+        },
+      },
+    ]) {
+      const rejected = await observeProvider(
+        "claude",
+        () => ({
+          status: 0,
+          stdout: `${JSON.stringify(invalid)}\n`,
+          stderr: "token=must-not-appear",
+        }),
+        () => new Date("2026-09-12T00:00:00.000Z"),
+        { official: true },
+      );
+      assert.equal(rejected.state, "unknown");
+      assert.equal(JSON.stringify(rejected).includes("must-not-appear"), false);
+    }
+  },
+);
 
 Given("秘密を含む標準エラーを返すprovider実行関数を注入した", function () {
   this.providerStderrSecret = "token=stderr-secret-fixture-value";
