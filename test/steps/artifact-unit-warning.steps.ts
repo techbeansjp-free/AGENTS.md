@@ -17,7 +17,11 @@ interface ArtifactUnitWorld extends WorkflowWorld {
     valid: boolean;
     errors: string[];
     warnings: IssueScopeWarning[];
+    mode: string;
+    blockedOperations: string[];
   };
+  baselineCliStatus: number;
+  baselineCliResult: ArtifactUnitWorld["cliResult"];
   contractDocuments: string[];
 }
 
@@ -37,6 +41,38 @@ ${inScope}
 
 ${outside}
 `;
+}
+
+function aggregateDocument(mode: "quick" | "poc", inScope: string): string {
+  return `# 00 要求定義（${mode}集約版）
+
+## 2. 対象範囲と権限（必須）
+
+- 対象内: 実装対象
+${inScope}
+- 対象外: 今回扱わない範囲
+`;
+}
+
+async function captureCli(issuePath: string): Promise<{
+  status: number;
+  result: ArtifactUnitWorld["cliResult"];
+}> {
+  let output = "";
+  const originalWrite = process.stdout.write;
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    output += String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    const status = await main(["issue", "validate", `--path=${issuePath}`]);
+    return {
+      status,
+      result: JSON.parse(output) as ArtifactUnitWorld["cliResult"],
+    };
+  } finally {
+    process.stdout.write = originalWrite;
+  }
 }
 
 function materializeFullTemplate(): string {
@@ -131,6 +167,33 @@ Given("対象内のcode fenceに成果物markerが2件ある", function () {
   );
 });
 
+Given("対象内にinline code説明を持つ成果物markerが2件ある", function () {
+  this.markdown = document(
+    "- [成果物:feature] `issue validate` warning\n- [成果物:contract] `warnings` JSON contract",
+  );
+});
+
+Given("quickの対象内に成果物markerが2件ある", function () {
+  this.markdown = aggregateDocument(
+    "quick",
+    "  - [成果物:feature] CLI warning\n  - [成果物:contract] JSON contract",
+  );
+});
+
+Given("pocの対象内に成果物markerが2件ある", function () {
+  this.markdown = aggregateDocument(
+    "poc",
+    "  - [成果物:feature] experiment\n  - [成果物:documentation] evidence",
+  );
+});
+
+Given("quickの対象内に不正な深さの成果物markerだけがある", function () {
+  this.markdown = aggregateDocument(
+    "quick",
+    "- [成果物:feature] top-level\n    - [成果物:contract] too-deep",
+  );
+});
+
 When("成果物単位warningを検出する", function () {
   this.warnings = detectArtifactUnitWarnings(this.markdown);
 });
@@ -150,6 +213,12 @@ Then("count 2とadrだけを持つwarningを1件返す", function () {
   assert.equal(this.warnings.length, 1);
   assert.equal(this.warnings[0]?.count, 2);
   assert.deepEqual(this.warnings[0]?.kinds, ["adr"]);
+});
+
+Then("count 2とfeatureとdocumentationを持つwarningを1件返す", function () {
+  assert.equal(this.warnings.length, 1);
+  assert.equal(this.warnings[0]?.count, 2);
+  assert.deepEqual(this.warnings[0]?.kinds, ["feature", "documentation"]);
 });
 
 Then("成果物単位warningは空である", function () {
@@ -190,31 +259,51 @@ Given("成果物markerを2件持つinvalidなfull Issue fixtureがある", funct
 });
 
 When("実CLIで成果物単位を検証する", async function () {
-  let output = "";
-  const originalWrite = process.stdout.write;
-  process.stdout.write = ((chunk: string | Uint8Array) => {
-    output += String(chunk);
-    return true;
-  }) as typeof process.stdout.write;
-  try {
-    this.cliStatus = await main([
-      "issue",
-      "validate",
-      `--path=${this.issuePath}`,
-    ]);
-  } finally {
-    process.stdout.write = originalWrite;
-  }
-  this.cliResult = JSON.parse(output) as ArtifactUnitWorld["cliResult"];
+  const marked = await captureCli(this.issuePath);
+  this.cliStatus = marked.status;
+  this.cliResult = marked.result;
+
+  const requirementPath = path.join(this.issuePath, "00_要求定義.md");
+  fs.writeFileSync(
+    requirementPath,
+    fs
+      .readFileSync(requirementPath, "utf8")
+      .replace(
+        /^- \[成果物:(?:adr|contract|feature|documentation|migration)\] (.+)$/gmu,
+        "- $1",
+      ),
+  );
+  const baseline = await captureCli(this.issuePath);
+  this.baselineCliStatus = baseline.status;
+  this.baselineCliResult = baseline.result;
 });
 
+function assertOnlyWarningChanged(world: ArtifactUnitWorld): void {
+  assert.equal(world.cliStatus, world.baselineCliStatus);
+  assert.equal(world.cliResult.valid, world.baselineCliResult.valid);
+  assert.deepEqual(world.cliResult.errors, world.baselineCliResult.errors);
+  assert.equal(world.cliResult.mode, world.baselineCliResult.mode);
+  assert.deepEqual(
+    world.cliResult.blockedOperations,
+    world.baselineCliResult.blockedOperations,
+  );
+  assert.equal(
+    world.baselineCliResult.warnings.some(
+      (warning) => warning.code === "ASC-ISSUE-ARTIFACT-UNIT-001",
+    ),
+    false,
+  );
+}
+
 Then("終了値0のまま成果物単位warningを返す", function () {
+  assertOnlyWarningChanged(this);
   assert.equal(this.cliStatus, 0);
   assert.equal(this.cliResult.valid, true, this.cliResult.errors.join("\n"));
   assert.equal(this.cliResult.warnings[0]?.code, "ASC-ISSUE-ARTIFACT-UNIT-001");
 });
 
 Then("終了値1のままerrorと成果物単位warningを返す", function () {
+  assertOnlyWarningChanged(this);
   assert.equal(this.cliStatus, 1);
   assert.equal(this.cliResult.valid, false);
   assert.ok(this.cliResult.errors.length > 0);

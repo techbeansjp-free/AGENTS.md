@@ -60,19 +60,77 @@ function markdownSectionBodies(text, heading) {
     }
     return Object.freeze(bodies);
 }
+/** code fenceだけを不可視化し、marker説明内のinline codeは保持する。 */
+function markdownLinesOutsideFences(text) {
+    const lines = text.split("\n");
+    let fence;
+    return Object.freeze(lines.map((line) => {
+        const boundary = /^ {0,3}(`{3,}|~{3,})/u.exec(line)?.[1];
+        if (fence) {
+            const closing = new RegExp(`^ {0,3}${fence.character}{${fence.length},}\\s*$`, "u");
+            if (closing.test(line))
+                fence = undefined;
+            return "";
+        }
+        if (boundary) {
+            fence = {
+                character: boundary[0],
+                length: boundary.length,
+            };
+            return "";
+        }
+        return line;
+    }));
+}
+function artifactUnitSectionBodies(text, heading) {
+    const lines = markdownLinesOutsideFences(text);
+    const bodies = [];
+    for (let start = 0; start < lines.length; start += 1) {
+        const match = /^(#{2,6})\s+(.+?)\s*$/u.exec(lines[start]);
+        if (match?.[2] !== heading)
+            continue;
+        const level = match[1].length;
+        let end = lines.length;
+        for (let index = start + 1; index < lines.length; index += 1) {
+            const nextLevel = /^(#{2,6})\s/u.exec(lines[index])?.[1]?.length;
+            if (nextLevel !== undefined && nextLevel <= level) {
+                end = index;
+                break;
+            }
+        }
+        bodies.push(lines.slice(start + 1, end).join("\n"));
+    }
+    return Object.freeze(bodies);
+}
 /**
- * 00 §2.1直下の明示markerだけからartifact unitを数える。
+ * full 00 §2.1またはquick/poc 00 §2の対象内直下にある明示markerだけを数える。
  *
  * 自由文や入れ子bulletを推測しない。markerを任意にすることで既存Issueとの
  * 後方互換性を保ち、2件以上でもvalidation authorityへ影響しない診断だけを返す。
  */
 export function detectArtifactUnitWarnings(text) {
     const markers = [];
-    for (const body of markdownSectionBodies(text, "2.1 対象内（必須）")) {
+    const appendMarker = (line, indentation) => {
+        const match = new RegExp(`^${indentation}- \\[成果物:(adr|contract|feature|documentation|migration)\\]\\s+\\S.*$`, "u").exec(line);
+        if (match)
+            markers.push(match[1]);
+    };
+    for (const body of artifactUnitSectionBodies(text, "2.1 対象内（必須）")) {
         for (const line of body.split("\n")) {
-            const match = /^- \[成果物:(adr|contract|feature|documentation|migration)\]\s+\S.*$/u.exec(line);
-            if (match)
-                markers.push(match[1]);
+            appendMarker(line, "");
+        }
+    }
+    for (const body of artifactUnitSectionBodies(text, "2. 対象範囲と権限（必須）")) {
+        let inScope = false;
+        for (const line of body.split("\n")) {
+            if (/^- 対象内:\s*(?:\S.*)?$/u.test(line)) {
+                inScope = true;
+                continue;
+            }
+            if (inScope && /^-\s/u.test(line))
+                inScope = false;
+            if (inScope)
+                appendMarker(line, "  ");
         }
     }
     if (markers.length < 2)

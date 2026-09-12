@@ -23,7 +23,8 @@
 
 ## 2. 対象範囲と権限（必須）
 
-- 対象内: （成果物1単位を目安にし、45分超見込みなら起票時に分割する。任意markerは`[成果物:adr|contract|feature|documentation|migration]`）
+- 対象内: （成果物1単位を目安にし、45分超見込みなら起票時に分割する）
+  - [成果物:<kind>] （任意markerを使う場合は`adr|contract|feature|documentation|migration`から選ぶ。2件以上は非停止warning）
 - 対象外:
 - 維持する既存動作:
 - 許可済みの書き込み:

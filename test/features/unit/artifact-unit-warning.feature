@@ -40,3 +40,23 @@ Feature: 成果物1単位の構造warning
     Given 配布する成果物単位marker契約がある
     When workflowと3 templateとCLI helpを読む
     Then 全文書が成果物1単位と45分とmarkerの非停止性を案内する
+
+  Scenario: SCN-UNIT-ARTUNIT-011 inline codeを説明に含むmarkerを警告する
+    Given 対象内にinline code説明を持つ成果物markerが2件ある
+    When 成果物単位warningを検出する
+    Then codeとcount 2とkindを持つwarningを1件返す
+
+  Scenario: SCN-UNIT-ARTUNIT-012 quickの対象内markerを警告する
+    Given quickの対象内に成果物markerが2件ある
+    When 成果物単位warningを検出する
+    Then codeとcount 2とkindを持つwarningを1件返す
+
+  Scenario: SCN-UNIT-ARTUNIT-013 pocの対象内markerを警告する
+    Given pocの対象内に成果物markerが2件ある
+    When 成果物単位warningを検出する
+    Then count 2とfeatureとdocumentationを持つwarningを1件返す
+
+  Scenario: SCN-UNIT-ARTUNIT-014 quickの不正な深さを数えない
+    Given quickの対象内に不正な深さの成果物markerだけがある
+    When 成果物単位warningを検出する
+    Then 成果物単位warningは空である
