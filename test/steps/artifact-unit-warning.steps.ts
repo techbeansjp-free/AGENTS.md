@@ -201,38 +201,44 @@ When("workflowと3 templateとCLI helpを読む", function () {
   ].map((file) => fs.readFileSync(path.join(repositoryRoot, file), "utf8"));
 });
 
-Then("全文書が成果物1単位と45分とmarkerの非停止性を案内する", function () {
-  for (const text of this.contractDocuments) {
-    assert.match(text, /成果物1単位/u);
-    assert.match(text, /45分/u);
-  }
-  const [workflow, full, quick, poc, help] = this.contractDocuments;
-  assert.match(
-    workflow!,
-    /fullの00 §2\.1にあるtop-level bullet.*非停止warning.*quick\/pocの集約形式はmarker warningの判定対象外/u,
-  );
-  assert.match(full!, /^- \[成果物:feature\] .+$/mu);
-  assert.match(full!, /adr\|contract\|feature\|documentation\|migration/u);
-  assert.match(full!, /top-level markerが2件以上/u);
-  assert.match(full!, /validation成否は変えない/u);
-  for (const aggregate of [quick, poc]) {
+Then(
+  "全文書が結合度と補助指標とmode別固定費とmarkerの非停止性を案内する",
+  function () {
+    for (const text of this.contractDocuments) {
+      assert.match(text, /結合度/u);
+      assert.match(text, /45分/u);
+      assert.match(text, /補助指標/u);
+      assert.match(text, /固定費/u);
+      assert.match(text, /長いだけでは分割し(?:ない|ません)/u);
+    }
+    const [workflow, full, quick, poc, help] = this.contractDocuments;
     assert.match(
-      aggregate!,
-      /^- 対象内:.*複数成果物markerの非停止warningはfullだけに適用し、quick\/poc集約形式では適用しない.*$/mu,
+      workflow!,
+      /fullの00 §2\.1にあるtop-level bullet.*非停止warning.*quick\/pocの集約形式はmarker warningの判定対象外/u,
     );
-    assert.doesNotMatch(aggregate!, /^\s+- \[成果物:/mu);
-  }
-  assert.match(help!, /fullの00 §2\.1直下/u);
-  assert.match(
-    help!,
-    /成果物:adr\|contract\|feature\|documentation\|migration/u,
-  );
-  assert.match(help!, /quick\/poc集約形式はmarker warningの判定対象外/u);
-  assert.match(
-    help!,
-    /valid、errors、mode、blockedOperations、終了値を変更しません/u,
-  );
-});
+    assert.match(full!, /^- \[成果物:feature\] .+$/mu);
+    assert.match(full!, /adr\|contract\|feature\|documentation\|migration/u);
+    assert.match(full!, /top-level markerが2件以上/u);
+    assert.match(full!, /validation成否は変えない/u);
+    for (const aggregate of [quick, poc]) {
+      assert.match(
+        aggregate!,
+        /^- 対象内:.*複数成果物markerの非停止warningはfullだけに適用し、quick\/poc集約形式では適用しない.*$/mu,
+      );
+      assert.doesNotMatch(aggregate!, /^\s+- \[成果物:/mu);
+    }
+    assert.match(help!, /fullの00 §2\.1直下/u);
+    assert.match(
+      help!,
+      /成果物:adr\|contract\|feature\|documentation\|migration/u,
+    );
+    assert.match(help!, /quick\/poc集約形式はmarker warningの判定対象外/u);
+    assert.match(
+      help!,
+      /valid、errors、mode、blockedOperations、終了値を変更しません/u,
+    );
+  },
+);
 
 Given("成果物markerを2件持つvalidなfull Issue fixtureがある", function () {
   this.issuePath = createFullIssue(this, true);
