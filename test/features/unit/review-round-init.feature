@@ -128,10 +128,20 @@ Feature: review round雛形と契約の露出
     When 雛形の耐久化後にdirectory descriptor close失敗を注入する
     Then 完成済み雛形のpathを返し内容を保持する
 
-  Scenario: SCN-UNIT-REVINIT-012 descriptor相対作成の対応可否を安全に判定する
+  Scenario: SCN-UNIT-REVINIT-012 macOSでも固定した親directoryへ安全に雛形を作成する
     Given 初回candidateを持つstagingがある
     When --outをstaging外を指すsymlink配下にしてreview round --initでround 1の雛形を書く
-    Then 対応環境では実体の親へ書きDarwinでは固有理由でfail-closedにする
+    Then 全対応環境で実体の親へ雛形を書く
+
+  Scenario: SCN-UNIT-REVINIT-024 macOS helperのdirectory fsync失敗は作成内容を空にする
+    Given 初回candidateを持つstagingがある
+    When macOS helperのfile fsync直後に失敗を注入する
+    Then Darwinでは作成descriptorを空にして失敗を返す
+
+  Scenario: SCN-UNIT-REVINIT-025 macOS helperの強制終了を保守的に診断する
+    Given 初回candidateを持つstagingがある
+    When macOS helperを作成直後に強制終了する
+    Then Darwinではsignalと未sanitizeを診断する
 
   Scenario: SCN-UNIT-REVINIT-013 budget-exhaustedのsessionへの--initを拒否する
     Given budget-exhaustedのsessionを持つstagingがある

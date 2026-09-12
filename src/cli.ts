@@ -2291,6 +2291,7 @@ export function writeReviewRoundDraft(
     afterWriteBeforeVerify?: () => void;
     beforeCleanup?: () => void;
     closePinnedDirectory?: (descriptor: number) => void;
+    darwinHelperFault?: "after-file-fsync" | "kill-after-create";
   } = {},
 ): string {
   try {
@@ -2298,7 +2299,7 @@ export function writeReviewRoundDraft(
   } catch (error) {
     if (error instanceof ExclusivePinnedWriteError)
       throw new Error(
-        `review round --initの雛形作成後に失敗しました。無関係fileの誤削除を避けるためpathname削除は行わず、作成descriptorを${error.createdEntrySanitized ? "空にしました" : "空にできませんでした"}。作成entryが残存している可能性があります。指定--outは差し替え後の別entryを指す可能性があるため、削除対象を確認してください`,
+        `review round --initの雛形作成後に失敗しました。無関係fileの誤削除を避けるためpathname削除は行わず、作成descriptorを${error.createdEntrySanitized ? "空にしました" : "空にできませんでした"}。作成entryが残存している可能性があります。指定--outは差し替え後の別entryを指す可能性があるため、削除対象を確認してください。原因: ${error.cause instanceof Error ? error.cause.message : String(error.cause)}`,
         { cause: error },
       );
     if (

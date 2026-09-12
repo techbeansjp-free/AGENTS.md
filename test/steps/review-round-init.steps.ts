@@ -819,6 +819,11 @@ When("作成後とcleanup直前に親directoryを2回差し替える", function 
 
 Then("親差し替えを拒否し作成fileを空にして無関係fileを保持する", function () {
   assert.ok(this.writeError, "拒否を期待した");
+  if (process.platform === "darwin") {
+    assert.equal(fs.existsSync(path.join(this.staging, "round.json")), false);
+    assert.equal(fs.readFileSync(this.unrelatedFile, "utf8"), "unrelated\n");
+    return;
+  }
   assert.match(this.writeError.message, /作成descriptorを空にしました/u);
   assert.equal(fs.existsSync(path.join(this.staging, "round.json")), false);
   assert.equal(
@@ -848,6 +853,11 @@ When("排他的作成後に部分書込み失敗を注入する", function () {
 });
 
 Then("書込み失敗を返し作成fileを空にして保持する", function () {
+  if (process.platform === "darwin") {
+    assert.ok(this.writeError, "fault injectionの拒否を期待した");
+    assert.equal(fs.existsSync(this.outFile), false);
+    return;
+  }
   assert.match(this.writeError?.message ?? "", /作成descriptorを空にしました/u);
   assert.equal(fs.readFileSync(this.outFile, "utf8"), "");
 });
@@ -868,6 +878,11 @@ When("排他的作成直後にidentity取得失敗を注入する", function () 
 });
 
 Then("identity取得失敗を返し作成fileを空にして保持する", function () {
+  if (process.platform === "darwin") {
+    assert.ok(this.writeError, "fault injectionの拒否を期待した");
+    assert.equal(fs.existsSync(this.outFile), false);
+    return;
+  }
   assert.match(this.writeError?.message ?? "", /作成descriptorを空にしました/u);
   assert.equal(fs.readFileSync(this.outFile, "utf8"), "");
 });
@@ -913,27 +928,60 @@ When(
   },
 );
 
-Then(
-  "対応環境では実体の親へ書きDarwinでは固有理由でfail-closedにする",
-  function () {
-    if (process.platform === "darwin") {
-      assert.match(
-        this.cliError?.message ?? "",
-        /macOSの\/dev\/fdは末尾pathを探索できない/u,
-      );
-      assert.equal(
-        fs.existsSync(path.join(this.raceParent, "round.json")),
-        false,
-      );
-      return;
-    }
-    assert.equal(this.cliError, undefined, this.cliError?.message);
-    const output: unknown = JSON.parse(this.cliOutput);
-    assert.ok(output && typeof output === "object" && "written" in output);
-    assert.equal((output as { written: string }).written, this.outFile);
-    assert.ok(fs.existsSync(path.join(this.raceParent, "round.json")));
-  },
-);
+Then("全対応環境で実体の親へ雛形を書く", function () {
+  assert.equal(this.cliError, undefined, this.cliError?.message);
+  const output: unknown = JSON.parse(this.cliOutput);
+  assert.ok(output && typeof output === "object" && "written" in output);
+  assert.equal((output as { written: string }).written, this.outFile);
+  assert.ok(fs.existsSync(path.join(this.raceParent, "round.json")));
+});
+
+When("macOS helperのfile fsync直後に失敗を注入する", function () {
+  const parent = this.temp("asc-review-init-darwin-fsync-");
+  this.outFile = path.join(parent, "round.json");
+  this.writeError = undefined;
+  try {
+    writeReviewRoundDraft(parent, "round.json", "sensitive\n", {
+      darwinHelperFault: "after-file-fsync",
+    });
+  } catch (error) {
+    this.writeError = error instanceof Error ? error : new Error(String(error));
+  }
+});
+
+Then("Darwinでは作成descriptorを空にして失敗を返す", function () {
+  if (process.platform !== "darwin") {
+    assert.equal(this.writeError, undefined);
+    assert.equal(fs.readFileSync(this.outFile, "utf8"), "sensitive\n");
+    return;
+  }
+  assert.match(this.writeError?.message ?? "", /作成descriptorを空にしました/u);
+  assert.equal(fs.readFileSync(this.outFile, "utf8"), "");
+});
+
+When("macOS helperを作成直後に強制終了する", function () {
+  const parent = this.temp("asc-review-init-darwin-kill-");
+  this.outFile = path.join(parent, "round.json");
+  this.writeError = undefined;
+  try {
+    writeReviewRoundDraft(parent, "round.json", "sensitive\n", {
+      darwinHelperFault: "kill-after-create",
+    });
+  } catch (error) {
+    this.writeError = error instanceof Error ? error : new Error(String(error));
+  }
+});
+
+Then("Darwinではsignalと未sanitizeを診断する", function () {
+  if (process.platform !== "darwin") {
+    assert.equal(this.writeError, undefined);
+    assert.equal(fs.readFileSync(this.outFile, "utf8"), "sensitive\n");
+    return;
+  }
+  assert.match(this.writeError?.message ?? "", /空にできませんでした/u);
+  assert.match(this.writeError?.message ?? "", /signal SIGKILL/u);
+  assert.equal(fs.readFileSync(this.outFile, "utf8"), "");
+});
 
 Given("budget-exhaustedのsessionを持つstagingがある", function () {
   createFixture(this);
