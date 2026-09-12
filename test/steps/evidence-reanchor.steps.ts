@@ -496,7 +496,7 @@ function applyReanchor(
 function recordStep10Binding(world: ReanchorWorld): void {
   const session = readStoredReviewSession(world.staging);
   assert.ok(session, "review sessionがありません");
-  for (const step of [1, 4, 9, 10]) {
+  for (const step of [10]) {
     const definition = WORKFLOW_STEPS.find(
       (candidate) => candidate.step === step,
     );
@@ -919,6 +919,24 @@ function buildReviewSession(world: ReanchorWorld, converged: boolean): void {
     world.baseSha,
     world.oldHeadSha,
   );
+  for (const step of [1, 4, 9]) {
+    const definition = WORKFLOW_STEPS.find(
+      (candidate) => candidate.step === step,
+    );
+    assert.ok(definition, `step ${step}がありません`);
+    appendWorkflowJournalEntry({
+      staging: world.staging,
+      entry: {
+        step,
+        skillId: definition.skillId,
+        mode: "quick",
+        recordedAt: INSTANT.toISOString(),
+        artifacts: [`artifact-${step}`],
+        evidence: `step ${step}の固定証拠`,
+        ...(step === 9 ? { implementationHeadSha: world.oldHeadSha } : {}),
+      },
+    });
+  }
   recordReviewRound({
     staging: world.staging,
     round: parseReviewRoundInput({

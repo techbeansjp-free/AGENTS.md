@@ -24,7 +24,9 @@ import {
 import {
   calculateStagingDigest,
   listStagingArtifacts,
+  refreshStoredStagingDigest,
 } from "../../src/domain/staging.js";
+import { STEP_JOURNAL_FILE } from "../../src/domain/workflow.js";
 import {
   planCompletion,
   planRootUpdate,
@@ -110,7 +112,10 @@ async function runCli(
   }
 }
 
-function createFixture(world: ReviewRoundInitWorld): void {
+function createFixture(
+  world: ReviewRoundInitWorld,
+  recordImplementation = true,
+): void {
   world.root = world.initRepo();
   world.base = head(world.root);
   world.head = commitFile(
@@ -126,6 +131,27 @@ function createFixture(world: ReviewRoundInitWorld): void {
     requestedMode: "quick",
   }).path;
   world.outFile = path.join(world.temp("asc-review-init-out-"), "round.json");
+  if (recordImplementation) appendStepNine(world, world.head);
+}
+
+function appendStepNine(
+  world: ReviewRoundInitWorld,
+  implementationHeadSha?: string,
+): void {
+  const journal = path.join(world.staging, STEP_JOURNAL_FILE);
+  fs.appendFileSync(
+    journal,
+    `${JSON.stringify({
+      step: 9,
+      skillId: "step-09-implement",
+      mode: "quick",
+      recordedAt: instant.toISOString(),
+      artifacts: [reviewedPath],
+      evidence: `candidate HEAD ${world.head}`,
+      ...(implementationHeadSha ? { implementationHeadSha } : {}),
+    })}\n`,
+  );
+  refreshStoredStagingDigest(world.staging);
 }
 
 function initArguments(world: ReviewRoundInitWorld, extra: string[] = []) {
@@ -142,6 +168,42 @@ function initArguments(world: ReviewRoundInitWorld, extra: string[] = []) {
 
 Given("初回candidateを持つstagingがある", function () {
   createFixture(this);
+});
+
+Given(
+  "Step 9のimplementation HEAD後に別commitを積んだstagingがある",
+  function () {
+    createFixture(this);
+    this.head = commitFile(
+      this.root,
+      reviewedPath,
+      "export const reviewed = 2;\n",
+      "fix: change after step nine",
+    );
+  },
+);
+
+Given(
+  "implementation HEAD bindingのない旧Step 9を持つstagingがある",
+  function () {
+    createFixture(this, false);
+    appendStepNine(this);
+  },
+);
+
+Given("Step 9をまだ記録していないstagingがある", function () {
+  createFixture(this, false);
+});
+
+When("Step 9後のHEADでreview round --initを実行する", async function () {
+  await runCli(
+    this,
+    initArguments(this, [
+      `--base=${this.base}`,
+      "--scope=SCOPE-001",
+      "--ac=AC-001",
+    ]),
+  );
 });
 
 When("review round --initでround 1の雛形を書く", async function () {
@@ -187,6 +249,16 @@ Then("staging digestは--init前と同じである", function () {
     fs.existsSync(path.join(this.staging, "review-session.json")),
     false,
   );
+});
+
+Then("Step 9 HEADとの不一致errorで拒否し雛形を書かない", function () {
+  assert.match(this.cliError?.message ?? "", /Step 9 implementation HEAD/u);
+  assert.equal(fs.existsSync(this.outFile), false);
+});
+
+Then("Step 9 binding不足errorで拒否し雛形を書かない", function () {
+  assert.match(this.cliError?.message ?? "", /implementationHeadSha binding/u);
+  assert.equal(fs.existsSync(this.outFile), false);
 });
 
 Given(

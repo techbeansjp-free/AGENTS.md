@@ -121,6 +121,121 @@ export function skippableSteps(mode: Mode): readonly number[] {
   );
 }
 
+export type WorkflowAdvanceOperation =
+  "record" | "sync" | "review" | "delivery" | "complete" | "blocked";
+
+export interface WorkflowAdvancePlan {
+  readonly state: "preview" | "blocked" | "delegated" | "complete";
+  readonly mode: Mode;
+  readonly currentStep?: number;
+  readonly targetStep?: number;
+  readonly operation: WorkflowAdvanceOperation;
+  readonly validationStage?:
+    "request" | "requirements" | "design-artifact" | "design";
+  readonly required: readonly string[];
+  readonly next: string;
+  readonly reasons: readonly string[];
+}
+
+/** 保存済みjournalの観測から、次の1操作だけを副作用なしで導出する。 */
+export function planWorkflowAdvance(input: {
+  mode: Mode;
+  currentStep?: number;
+  nextStep?: number;
+  valid: boolean;
+  implementationHeadBound?: boolean;
+  errors?: readonly string[];
+}): WorkflowAdvancePlan {
+  const base = {
+    mode: input.mode,
+    ...(input.currentStep === undefined
+      ? {}
+      : { currentStep: input.currentStep }),
+    ...(input.nextStep === undefined ? {} : { targetStep: input.nextStep }),
+  };
+  const sequence = requiredSteps(input.mode);
+  const currentIndex =
+    input.currentStep === undefined ? -1 : sequence.indexOf(input.currentStep);
+  const expectedNext = sequence[currentIndex + 1];
+  const inconsistent =
+    (input.currentStep !== undefined && currentIndex < 0) ||
+    input.nextStep !== expectedNext;
+  if (!input.valid || inconsistent)
+    return Object.freeze({
+      ...base,
+      state: "blocked" as const,
+      operation: "blocked" as const,
+      required: Object.freeze([]),
+      next: "workflow verifyでjournal不整合を解消してから再実行してください",
+      reasons: Object.freeze([
+        ...(input.errors ?? []),
+        ...(inconsistent
+          ? ["currentStepとnextStepがmodeの必須順序に一致しません"]
+          : []),
+        ...(!inconsistent && (input.errors?.length ?? 0) === 0
+          ? ["workflow stateが不正です"]
+          : []),
+      ]),
+    });
+  if (input.nextStep === undefined)
+    return Object.freeze({
+      ...base,
+      state: "complete" as const,
+      operation: "complete" as const,
+      required: Object.freeze([]),
+      next: "必要な後続操作はありません",
+      reasons: Object.freeze([]),
+    });
+  if (input.nextStep === 10 && input.implementationHeadBound !== true)
+    return Object.freeze({
+      ...base,
+      state: "blocked" as const,
+      operation: "blocked" as const,
+      required: Object.freeze(["Step 9 implementation HEAD binding"]),
+      next: "current HEADでworkflow record --step=9を再実行してから再試行してください",
+      reasons: Object.freeze([
+        "最新のStep 9にimplementationHeadSha bindingがありません",
+      ]),
+    });
+  if (input.nextStep === 10 || input.nextStep === 11) {
+    const review = input.nextStep === 10;
+    return Object.freeze({
+      ...base,
+      state: "delegated" as const,
+      operation: review ? ("review" as const) : ("delivery" as const),
+      required: Object.freeze(
+        review ? ["exact candidate HEAD"] : ["converged review session"],
+      ),
+      next: review
+        ? "review round --staging=<staging>で独立reviewを開始してください"
+        : "pr create --staging=<staging>でdelivery gateを実行してください",
+      reasons: Object.freeze([]),
+    });
+  }
+  const sync = input.nextStep === 4 || input.nextStep === 8;
+  const validationStage =
+    input.nextStep === 5
+      ? ("design-artifact" as const)
+      : input.nextStep >= 6
+        ? ("design" as const)
+        : input.nextStep >= 2
+          ? ("requirements" as const)
+          : ("request" as const);
+  return Object.freeze({
+    ...base,
+    state: "preview" as const,
+    operation: sync ? ("sync" as const) : ("record" as const),
+    validationStage,
+    required: Object.freeze(
+      sync
+        ? ["repository", "issue", "authorize=approved"]
+        : ["artifact", "evidence"],
+    ),
+    next: `Step ${input.nextStep}を検証して1件だけ適用してください`,
+    reasons: Object.freeze([]),
+  });
+}
+
 export interface JournalHumanOverride extends Pick<
   HumanOverride,
   "issue" | "scope" | "instructedBy" | "instructedAt" | "expiresAt"
@@ -183,6 +298,8 @@ export interface StepJournalEntry {
   recordedAt: string;
   artifacts: string[];
   evidence: string;
+  /** Step 9で検証したexact implementation HEAD。 */
+  implementationHeadSha?: string;
   pocObservation?: { headSha: string; evidenceDigest: string };
   reviewSession?: {
     sessionId: string;
@@ -220,6 +337,7 @@ const JOURNAL_FIELDS = new Set([
   "recordedAt",
   "artifacts",
   "evidence",
+  "implementationHeadSha",
   "pocObservation",
   "reviewSession",
   "humanOverride",
@@ -383,6 +501,14 @@ function parseJournalEntry(
     );
   if (!nonEmpty(value.evidence))
     errors.push(`${label}.evidenceは空でない文字列が必要です`);
+  let implementationHeadSha: string | undefined;
+  if (value.implementationHeadSha !== undefined) {
+    if (!/^[a-f0-9]{40}$/u.test(String(value.implementationHeadSha)))
+      errors.push(`${label}.implementationHeadShaは40桁のcommit SHAが必要です`);
+    else if (Number(value.step) !== 9)
+      errors.push(`${label}.implementationHeadShaはStep 9にだけ指定できます`);
+    else implementationHeadSha = value.implementationHeadSha as string;
+  }
   const parsedOverride =
     value.humanOverride === undefined
       ? { errors: [] as string[] }
@@ -449,6 +575,7 @@ function parseJournalEntry(
       recordedAt: value.recordedAt as string,
       artifacts: [...(value.artifacts as string[])],
       evidence: value.evidence as string,
+      ...(implementationHeadSha ? { implementationHeadSha } : {}),
       ...(pocObservation ? { pocObservation } : {}),
       ...(reviewSession ? { reviewSession } : {}),
       ...(parsedOverride.value ? { humanOverride: parsedOverride.value } : {}),

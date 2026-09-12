@@ -467,6 +467,50 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "workflow",
+    subcommand: "advance",
+    summary:
+      "保存済みstateから次の1 Stepを検証・記録し、review/deliveryは専用commandへ委譲する。既定はpreview",
+    requiredFlags: [flag("staging", "path", "Issue staging directory")],
+    conditionalFlags: [
+      conditional(
+        "artifact",
+        "path",
+        "記録する成果物。複数回指定可",
+        "Step 1〜3・5〜9を--applyするとき",
+      ),
+      conditional(
+        "evidence",
+        "text",
+        "人が補足する検証証拠",
+        "Step 1〜3・5〜9を--applyするとき",
+      ),
+      conditional("repo", "owner/name", "同期先repository", "Step 4/8"),
+      conditional("issue", "整数", "同期先Issue番号", "Step 4/8"),
+      conditional(
+        "authorize",
+        "approved",
+        "Issue同期の明示承認",
+        "Step 4/8を--applyするとき",
+      ),
+      conditional(
+        "expected-body-sha256",
+        "64hex",
+        "直前のpreviewが表示した同期本文digest",
+        "Step 4/8を--applyするとき",
+      ),
+    ],
+    optionalFlags: [
+      optional("recorded-at", "ISO8601", "journal記録時刻", "実行時刻"),
+      optional("synced-at", "ISO8601", "Issue同期時刻", "実行時刻"),
+      optional("dry-run", "", "書き込まず計画だけを出力", "省略時もpreview"),
+      optional("apply", "", "次の1 Stepだけを適用", "preview"),
+    ],
+    example:
+      "npx agent-skill-chain workflow advance --staging=.agent-skill-chain/tmp/issues/20260912_change --artifact=01_要件定義.md --evidence='requirements validated' --apply",
+    acceptsSpaceSeparatedFlags: true,
+  },
+  {
+    command: "workflow",
     subcommand: "record",
     summary: "Step実施をstep journalへ追記する",
     requiredFlags: [
@@ -793,6 +837,37 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         ],
       },
     },
+  },
+  {
+    command: "review",
+    subcommand: "progress",
+    summary:
+      "固定review入力treeへ影響しない進捗をpreview・追記・read-only表示・検証する",
+    requiredFlags: [
+      flag("staging", "path", "対象Issue staging"),
+      flag("operation", "append|seal|project|verify", "進捗操作"),
+    ],
+    conditionalFlags: [
+      conditional("task", "ID", "宣言済みtask ID", "operation=append"),
+      conditional(
+        "state",
+        "planned|started|completed|blocked",
+        "進捗state",
+        "operation=append",
+      ),
+    ],
+    optionalFlags: [
+      optional("recorded-at", "ISO8601", "記録時刻", "実行時刻"),
+      optional(
+        "expected-journal-digest",
+        "sha256",
+        "直前journal digest。初回は省略",
+        "null",
+      ),
+      optional("apply", "", "append・sealだけを永続化する", "preview"),
+    ],
+    example:
+      "npx agent-skill-chain review progress --staging=.agent-skill-chain/tmp/issues/20260912_change --operation=append --task=T01 --state=completed",
   },
   {
     command: "review",

@@ -94,6 +94,90 @@ export function skippableSteps(mode) {
     const required = new Set(requiredSteps(mode));
     return WORKFLOW_STEPS.map(({ step }) => step).filter((step) => !required.has(step));
 }
+/** 保存済みjournalの観測から、次の1操作だけを副作用なしで導出する。 */
+export function planWorkflowAdvance(input) {
+    const base = {
+        mode: input.mode,
+        ...(input.currentStep === undefined
+            ? {}
+            : { currentStep: input.currentStep }),
+        ...(input.nextStep === undefined ? {} : { targetStep: input.nextStep }),
+    };
+    const sequence = requiredSteps(input.mode);
+    const currentIndex = input.currentStep === undefined ? -1 : sequence.indexOf(input.currentStep);
+    const expectedNext = sequence[currentIndex + 1];
+    const inconsistent = (input.currentStep !== undefined && currentIndex < 0) ||
+        input.nextStep !== expectedNext;
+    if (!input.valid || inconsistent)
+        return Object.freeze({
+            ...base,
+            state: "blocked",
+            operation: "blocked",
+            required: Object.freeze([]),
+            next: "workflow verifyでjournal不整合を解消してから再実行してください",
+            reasons: Object.freeze([
+                ...(input.errors ?? []),
+                ...(inconsistent
+                    ? ["currentStepとnextStepがmodeの必須順序に一致しません"]
+                    : []),
+                ...(!inconsistent && (input.errors?.length ?? 0) === 0
+                    ? ["workflow stateが不正です"]
+                    : []),
+            ]),
+        });
+    if (input.nextStep === undefined)
+        return Object.freeze({
+            ...base,
+            state: "complete",
+            operation: "complete",
+            required: Object.freeze([]),
+            next: "必要な後続操作はありません",
+            reasons: Object.freeze([]),
+        });
+    if (input.nextStep === 10 && input.implementationHeadBound !== true)
+        return Object.freeze({
+            ...base,
+            state: "blocked",
+            operation: "blocked",
+            required: Object.freeze(["Step 9 implementation HEAD binding"]),
+            next: "current HEADでworkflow record --step=9を再実行してから再試行してください",
+            reasons: Object.freeze([
+                "最新のStep 9にimplementationHeadSha bindingがありません",
+            ]),
+        });
+    if (input.nextStep === 10 || input.nextStep === 11) {
+        const review = input.nextStep === 10;
+        return Object.freeze({
+            ...base,
+            state: "delegated",
+            operation: review ? "review" : "delivery",
+            required: Object.freeze(review ? ["exact candidate HEAD"] : ["converged review session"]),
+            next: review
+                ? "review round --staging=<staging>で独立reviewを開始してください"
+                : "pr create --staging=<staging>でdelivery gateを実行してください",
+            reasons: Object.freeze([]),
+        });
+    }
+    const sync = input.nextStep === 4 || input.nextStep === 8;
+    const validationStage = input.nextStep === 5
+        ? "design-artifact"
+        : input.nextStep >= 6
+            ? "design"
+            : input.nextStep >= 2
+                ? "requirements"
+                : "request";
+    return Object.freeze({
+        ...base,
+        state: "preview",
+        operation: sync ? "sync" : "record",
+        validationStage,
+        required: Object.freeze(sync
+            ? ["repository", "issue", "authorize=approved"]
+            : ["artifact", "evidence"]),
+        next: `Step ${input.nextStep}を検証して1件だけ適用してください`,
+        reasons: Object.freeze([]),
+    });
+}
 const NON_HUMAN_OVERRIDE_ISSUERS = new Set([
     "coordinator",
     "analyst",
@@ -134,6 +218,7 @@ const JOURNAL_FIELDS = new Set([
     "recordedAt",
     "artifacts",
     "evidence",
+    "implementationHeadSha",
     "pocObservation",
     "reviewSession",
     "humanOverride",
@@ -276,6 +361,15 @@ function parseJournalEntry(value, line) {
         errors.push(`${label}.artifactsは空でない文字列を1件以上含む配列が必要です`);
     if (!nonEmpty(value.evidence))
         errors.push(`${label}.evidenceは空でない文字列が必要です`);
+    let implementationHeadSha;
+    if (value.implementationHeadSha !== undefined) {
+        if (!/^[a-f0-9]{40}$/u.test(String(value.implementationHeadSha)))
+            errors.push(`${label}.implementationHeadShaは40桁のcommit SHAが必要です`);
+        else if (Number(value.step) !== 9)
+            errors.push(`${label}.implementationHeadShaはStep 9にだけ指定できます`);
+        else
+            implementationHeadSha = value.implementationHeadSha;
+    }
     const parsedOverride = value.humanOverride === undefined
         ? { errors: [] }
         : parseHumanOverride(value.humanOverride, `${label}.humanOverride`);
@@ -337,6 +431,7 @@ function parseJournalEntry(value, line) {
             recordedAt: value.recordedAt,
             artifacts: [...value.artifacts],
             evidence: value.evidence,
+            ...(implementationHeadSha ? { implementationHeadSha } : {}),
             ...(pocObservation ? { pocObservation } : {}),
             ...(reviewSession ? { reviewSession } : {}),
             ...(parsedOverride.value ? { humanOverride: parsedOverride.value } : {}),

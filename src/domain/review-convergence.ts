@@ -1,6 +1,10 @@
 import crypto from "node:crypto";
 import { stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
+import {
+  parseReviewProgressInventory,
+  type ReviewProgressInventory,
+} from "./review-progress.js";
 
 /**
  * 通常のreviewラウンド予算。round 1で全scopeを見て、2と3で未解決blockerを追う。
@@ -44,6 +48,7 @@ export interface ReviewSessionAnchor {
   diffBaseSha: string;
   initialHeadSha: string;
   initialDiffDigest: string;
+  progressInventory?: ReviewProgressInventory;
 }
 
 export interface ReviewAdjacentScope {
@@ -180,14 +185,28 @@ function oneOf<const Values extends readonly string[]>(
 }
 
 function parseAnchor(value: unknown): ReviewSessionAnchor {
-  const anchor = exactObject(value, "review anchor", [
+  if (!isRecord(value)) throw new Error("review anchorはobjectが必要です");
+  const fields = [
     "scopeIds",
     "acceptanceCriteriaIds",
     "invariantIds",
     "diffBaseSha",
     "initialHeadSha",
     "initialDiffDigest",
-  ]);
+    "progressInventory",
+  ];
+  const required = fields.filter((field) => field !== "progressInventory");
+  const unknown = Object.keys(value).filter((field) => !fields.includes(field));
+  const missing = required.filter((field) => !(field in value));
+  if (unknown.length > 0)
+    throw new Error(
+      `review anchorの未知fieldを拒否しました: ${unknown.join(", ")}`,
+    );
+  if (missing.length > 0)
+    throw new Error(
+      `review anchorの必須fieldがありません: ${missing.join(", ")}`,
+    );
+  const anchor = value;
   const scopeIds = stableStrings(anchor.scopeIds, "review anchor.scopeIds");
   const acceptanceCriteriaIds = stableStrings(
     anchor.acceptanceCriteriaIds,
@@ -212,6 +231,13 @@ function parseAnchor(value: unknown): ReviewSessionAnchor {
     diffBaseSha: String(anchor.diffBaseSha),
     initialHeadSha: String(anchor.initialHeadSha),
     initialDiffDigest: String(anchor.initialDiffDigest),
+    ...(anchor.progressInventory === undefined
+      ? {}
+      : {
+          progressInventory: parseReviewProgressInventory(
+            anchor.progressInventory,
+          ),
+        }),
   });
 }
 
