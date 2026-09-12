@@ -5,43 +5,43 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | Claude Code公式initialize観測、selector採用tier、CLI・仕様・test |
-| ラウンド | 1 |
-| 対象SHA・文書ダイジェスト | `0feb6e9fa4379ebeabeb60f7dc39ef1c012645df` |
-| 比較基点 | `9b5467ce1d8c46b434ea24e5ee10380c9eb26b25` |
-| H_impl | `0feb6e9fa4379ebeabeb60f7dc39ef1c012645df` |
-| 対象差分 | `9b5467ce1d8c46b434ea24e5ee10380c9eb26b25..0feb6e9fa4379ebeabeb60f7dc39ef1c012645df`の22 path |
+| ラウンド | 2 |
+| 対象SHA・文書ダイジェスト | `9e3cc5f32d6243c95589e2e68d711def4aa51386` |
+| 比較基点 | `a74597b38e2c1d8bcbf58effe549aa578f0a35ec` |
+| H_impl | `9e3cc5f32d6243c95589e2e68d711def4aa51386` |
+| 対象差分 | `a74597b38e2c1d8bcbf58effe549aa578f0a35ec..9e3cc5f32d6243c95589e2e68d711def4aa51386`の23 path |
 | 対象外 | Claude task自動起動、Claude APIへのprompt送信、merge・release |
-| 残り予算 | 2ラウンド。PR後のexternal finding取り直し1ラウンドは別枠 |
-| ラウンド数 | 1 |
+| 残り予算 | 1ラウンド。PR後のexternal finding取り直し1ラウンドは別枠 |
+| ラウンド数 | 2 |
 | Step chain | 経由: `.agent-skill-chain/tmp/issues/20260912_172422_課題1343-Claude公式観測selector` |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md`のREQ-WF-007、`docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md`の`routing tier` |
-| 成果物行数 | H_impl差分590追加・86削除。製品source・生成dist・仕様・testを含む |
+| 成果物行数 | H_impl差分784追加・86削除。製品source・生成dist・仕様・test・review artifactを含む |
 | 縮小の先行評価 | `claude-opus-5[1m]`の逐語mapping追加だけでは次のhost default変更で再発するため、既存ProviderObservationとselector tier validatorを再利用した |
-| 実施者・日時 | implementer兼PR前監査: Codex root context、2026-09-12T18:28:00+09:00。外部reviewerはPR後に観測する |
+| 実施者・日時 | implementer兼PR前監査: Codex root context、2026-09-12T18:40:00+09:00。外部reviewerはPR後に観測する |
 
 ### 0.1 routing入力契約
 
 | role欄（担当role） | 必要証拠 | 必要model tier | provider欄 | model設定欄 | fallback欄 | 独立性証拠欄・非変更証拠 |
 |---|---|---|---|---|---|---|
-| reviewer | 肯定・敵対review、finding分類、targeted test | critical | CodexまたはCodeRabbit | provider公式推奨/high | external reviewer不在時はmerge停止 | PR前監査はimplementerと同一context。H_impl後の変更は本artifactだけ |
+| reviewer | 肯定・敵対review、finding分類、targeted test | critical | CodexまたはCodeRabbit | provider公式推奨/high | external reviewer不在時はmerge停止 | PR前監査はimplementerと同一context。最新main統合後のH_impl以降の変更は本artifactだけ |
 
 ## 1. 入力証拠
 
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | Issue #1343、staging 00〜03 | 公式観測model→抽象selector→project採用tier | 人間判断・GitHub・一次資料 |
-| 差分 | `9b5467ce`..`0feb6e9f` | 22 path、590追加・86削除 | Git観測 |
+| 差分 | `a74597b3`..`9e3cc5f3` | 23 path、784追加・86削除 | Git観測 |
 | テスト | targeted、static、conformance | targeted 3 scenarios/21 steps、conformance 87 scenarios/468 steps、失敗0 | テスト出力 |
 | 仕様 | 用語、要件、機能、CLI、security、運用、追跡 | updated | 既存文書 |
-| commit前candidate | 22 path manifest | H_impl `0feb6e9f` | Git index |
-| Phase A artifact | 本file | H_impl後のevidence-only file。SHA-256・blob OIDはcommit後に観測 | Git観測 |
-| review session | staging `review-session.json` | session `ef1f98b6ceb3b79c1e7cf74c2a213fae783f7fc956c8e4457aa5e8cf8623815b`、round digest `c5dd918c6939f3d7d043b7a409b3c1f11c4da3c0c4326b4b02b9854cbb88280b` | Git観測 |
+| commit前candidate | 23 path manifest | H_impl `9e3cc5f3` | Git index |
+| Phase A artifact | 本file | H_impl後のevidence-only再固定。SHA-256・blob OIDはcommit後に観測 | Git観測 |
+| review session | staging `review-session.json` | session `ef1f98b6ceb3b79c1e7cf74c2a213fae783f7fc956c8e4457aa5e8cf8623815b`、round digest `4dde933560b02fa003002f722040b425bcc8e30f4930ab325026002eca957e3a` | Git観測 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: pass。公式応答→observation→selector→trusted mapping→必要tierの一方向。
 - `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: artifact commit後に検証する。
 - reviewerの独立性が要求水準を満たす: 未成立。PR後のCodeRabbitまたはGitHub approvalをPhase Bで観測するまでmergeしない。
 - Phase BのPR/CI/review exact-head一致: PR作成後に`review evidence`で観測する。
-- 既定branch追随: 行っていない。
+- 既定branch追随: `origin/main`の`a74597b3`をmerge commit `9e3cc5f3`で統合し、変更履歴の1競合は両Issueの行を保持して解決した。自動merge treeと一致しないため通常のラウンド2として検分した。
 
 ### 1.1 変更ファイル個別監査
 
@@ -52,6 +52,7 @@
 | `dist/src/cli-usage.js` | M | package | package | CLI usage配布物 | sourceから生成 | AC-1343-01 | buildで再生成 | pass |
 | `dist/src/cli.js` | M | package | package | CLI配布物 | sourceから生成 | AC-1343-01〜04 | buildで再生成 | pass |
 | `dist/src/domain/role.js` | M | package | package | tier validator配布物 | sourceから生成 | AC-1343-02 | buildで再生成 | pass |
+| `docs/reviews/205_課題1343Claude公式default観測レビュー.md` | A | package | review | exact-headレビュー証拠 | H_impl後のartifact commitで再固定 | ISSUE-1343 | evidence-only更新 | pass |
 | `docs/specs/01_システム概要/02_用語・略語.md` | M | package | spec | selectorとClaude観測用語 | 要件へ一方向 | TERM-ASC-094/111 | 文書revert | pass |
 | `docs/specs/02_要件/00_要件一覧.md` | M | package | spec | REQ-WF-007索引 | 要件正本へ一方向 | REQ-WF-007 | 文書revert | pass |
 | `docs/specs/02_要件/01_ワークフロー要件.md` | M | package | spec | 公開振る舞い要件 | 実装へ一方向 | REQ-WF-007 | 文書revert | pass |
@@ -70,7 +71,7 @@
 | `test/steps/provider-adapter-routing.steps.ts` | M | package | test support | process/parser反例 | sourceを実行 | SCN-UNIT-ROUTING-009 | tmp fixture、secret非出力 | pass |
 | `test/steps/routing-tier-provenance.steps.ts` | M | package | test support | trusted repo/CLI fixture | build済みCLIを実行 | SCN-UNIT-TIERPROV-001/005 | tmp Git repoのみ | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: pass（22/22）。
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: pass（23/23）。
 - package/project/specの責務方向に循環はない: pass。
 - 個別finding修正: Unicode Control/Separator拒否をH_impl固定前に追加し、隣接adapter/test/distを再検証した。
 
@@ -137,7 +138,9 @@
 
 ### ラウンド2
 
-- 未実施。PR後の有効なexternal findingがある場合だけ取り直す。
+- 最新`main`統合で動いた差分と競合解決を確認した: はい。
+- 指摘を確定した: exact H_impl `9e3cc5f3`に未解決findingなし。
+- 次ラウンド対象のCritical/High: 0件。
 
 ### ラウンド3
 
@@ -170,7 +173,7 @@
 | 適用した独立性モード | context-isolated（未宣言時の既定） |
 | その要求を満たすこと | いいえ。PR前はimplementerと同じCodex root contextの敵対監査 |
 | reviewerとimplementerのidentity・context比較 | 同一identity・同一context。Claude CLIは未login、外部Codex reviewerはsandbox authority不足で起動せず |
-| reviewerが対象差分を変更していないこと | はい。review roundの対象は固定済みH_impl `0feb6e9f`、以後は本artifactだけ |
+| reviewerが対象差分を変更していないこと | はい。review roundの対象は最新main統合済みH_impl `9e3cc5f3`、以後は本artifactだけ |
 
 独立approvalはPhase BでCodeRabbitまたはGitHub reviewerのexact-head証拠を観測する。自己監査を独立reviewへ読み替えず、成立しなければmergeしない。
 
@@ -190,5 +193,5 @@
 - 判定: approved（PR作成まで）。mergeはexternal exact-head reviewとCIが成立するまで拒否。
 - 新しい権限が必要な事項: PR作成は利用者承認済み。mergeは利用者許可済みでもtrusted policy `merge.mode=disabled`を優先する。
 - 残存リスク: Claude Code initializeの非公開control schemaが将来変わればfail-closedで停止する。最低対応versionは固定していない。
-- 次に許可される操作: artifact-only commit、Step 10記録、PR作成、CI/CodeRabbit観測。
+- 次に許可される操作: artifact-only再固定commit、Step 10記録、PR作成、CI/CodeRabbit観測。
 - 次回の再開地点: PR headのexternal findingsとchecks。
