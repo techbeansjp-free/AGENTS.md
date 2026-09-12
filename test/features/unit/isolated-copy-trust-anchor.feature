@@ -10,6 +10,7 @@ Feature: 隔離copy検査のtrust anchor契約
     Given 隔離copy検査の配布規範と実装計画templateがある
     When trust anchor境界の記述を検査する
     Then candidate由来のrepositoryとoriginとcommitは禁止されている
+    And 配布規範とtemplateの契約削除変異をすべて検出する
 
   Scenario: SCN-1344-003 no-indexの差分と空でない診断を区別する
     Given 隔離copy検査の配布規範と実装計画templateがある
