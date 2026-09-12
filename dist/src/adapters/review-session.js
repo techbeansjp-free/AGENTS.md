@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { advanceReviewSession, parseReviewRoundInput, } from "../domain/review-convergence.js";
+import { advanceReviewSession, parseReviewRoundInput, unconvergedReviewSessionDiagnostic, } from "../domain/review-convergence.js";
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
@@ -54,6 +54,11 @@ function resolveCommit(root, label, sha) {
     if (observed.status !== 0)
         throw new Error(`review round --initの${label}をexact commitへ解決できません: ${sha}`);
     return observed.stdout.trim();
+}
+function commitSubject(root, sha) {
+    return git(["show", "-s", "--format=%s", sha], root, {
+        env: GIT_ENV,
+    }).stdout.trim();
 }
 /**
  * **次roundの入力雛形を保存済みsessionと実Gitから組み立てる**（Issue #1323、A-2）。
@@ -147,10 +152,11 @@ export function buildReviewRoundDraft(input) {
         if (previousBlocking.length > 0)
             notes.push(`前round blocker ${previousBlocking.join("、")} の再評価結果（resolvedまたはvalid）をfindingsへ同じIDで入れる。脱落は拒否される`);
         if (fixed.length === 0)
-            throw new Error("review round --init: 前round headからの実Git差分が空です。HEADを進めずに次roundを記録することはできません");
+            throw new Error("review round --init: 前round headからの実Git差分が空です。前roundのcandidate HEADが現在のHEADと同じです。多くの場合、前roundの--headに「そのroundを検分したHEAD」ではなく「そのroundの指摘を是正した後のHEAD」を渡しています。その場合、HEADを進めても取り違えが重なるだけです。review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください");
         if (previous.status === "converged")
             notes.push("sessionはconvergedである。取り直しroundは収束後のHEAD移動に対して1回だけ許される");
     }
+    notes.push(`このroundは ${headSha.slice(0, 8)} (${commitSubject(root, headSha)}) を検分したものとして記録します。レビュー結果を反映したcommitを、このroundの記録より先に作らないでください`);
     return { round: parseReviewRoundInput(round), notes };
 }
 export function previewReviewRound(input) {
@@ -289,7 +295,7 @@ export function assertConvergedReviewSession(input) {
     if (session === null)
         throw new Error("Step 10には永続review sessionが必要です");
     if (session.status !== "converged")
-        throw new Error(`review sessionが収束していません: status=${session.status}`);
+        throw new Error(unconvergedReviewSessionDiagnostic(session.status));
     if (session.latestRoundDigest !== input.expectedDigest)
         throw new Error("Step 10のreview session digestが保存済みlatest roundと一致しません");
     /**

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { spawnSync } from "node:child_process";
 export class ExclusivePinnedWriteError extends Error {
     createdEntrySanitized;
     constructor(createdEntrySanitized, options) {
@@ -8,6 +9,98 @@ export class ExclusivePinnedWriteError extends Error {
         this.createdEntrySanitized = createdEntrySanitized;
         this.name = "ExclusivePinnedWriteError";
     }
+}
+const DARWIN_OPENAT_HELPER = String.raw `
+import json
+import os
+import stat
+import sys
+
+descriptor = None
+created = False
+sanitized = False
+fault = sys.argv[2]
+try:
+    descriptor = os.open(
+        sys.argv[1],
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        0o600,
+        dir_fd=3,
+    )
+    created = True
+    if fault == "kill-after-create":
+        os.kill(os.getpid(), 9)
+    opened = os.fstat(descriptor)
+    if not stat.S_ISREG(opened.st_mode):
+        raise RuntimeError("exclusive file作成先が通常fileではありません")
+    contents = sys.stdin.buffer.read()
+    offset = 0
+    while offset < len(contents):
+        written = os.write(descriptor, contents[offset:])
+        if written <= 0:
+            raise RuntimeError("exclusive fileへの書込みが進みませんでした")
+        offset += written
+    os.fsync(descriptor)
+    if fault == "after-file-fsync":
+        raise RuntimeError("directory fsync失敗を注入")
+    os.fsync(3)
+    os.close(descriptor)
+    descriptor = None
+except BaseException as error:
+    if descriptor is not None:
+        try:
+            os.ftruncate(descriptor, 0)
+            os.fsync(descriptor)
+            sanitized = True
+        except BaseException:
+            pass
+        try:
+            os.close(descriptor)
+        except BaseException:
+            pass
+    print(json.dumps({
+        "created": created,
+        "sanitized": sanitized,
+        "error": f"{type(error).__name__}: {error}",
+    }))
+    sys.exit(1)
+`;
+function writeFileExclusiveDarwinOpenAt(directory, leaf, contents, fault) {
+    assertPinnedDirectory(directory);
+    const result = spawnSync("/usr/bin/python3", ["-I", "-S", "-c", DARWIN_OPENAT_HELPER, leaf, fault ?? ""], {
+        input: contents,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe", directory.descriptor],
+    });
+    if (result.error)
+        throw new Error(`macOSで安全なdirectory descriptor相対file作成を実行できません: ${result.error.message}`, { cause: result.error });
+    if (result.status !== 0) {
+        let report = {};
+        try {
+            report = JSON.parse(result.stdout.trim());
+        }
+        catch {
+            // A killed or malformed helper may have created the entry. Treat its
+            // state as unknown and require manual inspection instead of unlinking.
+        }
+        const cause = new Error(report.error ||
+            result.stderr.trim() ||
+            (result.signal
+                ? `macOS openat helperがsignal ${result.signal}で終了しました`
+                : `macOS openat helperがstatus ${String(result.status)}で失敗しました`));
+        if (report.created === false)
+            throw cause;
+        throw new ExclusivePinnedWriteError(report.sanitized === true, { cause });
+    }
+    try {
+        assertPinnedDirectory(directory);
+    }
+    catch (error) {
+        // openat has already published and durably written the entry. Its parent
+        // name becoming ambiguous must not be reported as a pre-create refusal.
+        throw new ExclusivePinnedWriteError(false, { cause: error });
+    }
+    return path.join(directory.path, leaf);
 }
 function pinDirectory(directory) {
     const resolved = path.resolve(directory);
@@ -62,18 +155,35 @@ function descriptorDirectoryPath(directory) {
         : process.platform === "win32"
             ? []
             : [`/dev/fd/${directory.descriptor}`];
+    let unsupportedDarwinDescriptorAlias = false;
     for (const candidate of candidates) {
+        let observedDescriptor;
         try {
-            const observed = fs.statSync(candidate);
+            // Darwin's fdescfs can report a synthetic st_dev for /dev/fd/N when the
+            // path itself is statted. Reopening the exact descriptor alias and using
+            // fstat observes the underlying directory identity on every supported OS.
+            observedDescriptor = fs.openSync(candidate, fs.constants.O_RDONLY);
+            const observed = fs.fstatSync(observedDescriptor);
             if (observed.isDirectory() &&
                 observed.dev === directory.dev &&
-                observed.ino === directory.ino)
+                observed.ino === directory.ino) {
+                if (process.platform === "darwin") {
+                    unsupportedDarwinDescriptorAlias = true;
+                    continue;
+                }
                 return candidate;
+            }
         }
         catch {
             // A missing descriptor filesystem is handled by the fail-closed error.
         }
+        finally {
+            if (observedDescriptor !== undefined)
+                fs.closeSync(observedDescriptor);
+        }
     }
+    if (unsupportedDarwinDescriptorAlias)
+        throw new Error("macOSの/dev/fdは末尾pathを探索できないため、安全なdirectory descriptor相対file作成には利用できません");
     throw new Error("exclusive file作成にはdirectory descriptor相対pathが必要です");
 }
 /**
@@ -94,8 +204,25 @@ export function writeFileExclusivePinned(directory, leaf, contents, hooks = {}) 
     let created = false;
     let failure;
     try {
-        const pinnedTarget = path.join(descriptorDirectoryPath(pinned), leaf);
         hooks.beforeWrite?.();
+        const darwinOpenAtHooks = new Set([
+            "beforeWrite",
+            "closePinnedDirectory",
+            "darwinHelperFault",
+        ]);
+        if (process.platform === "darwin" &&
+            Object.keys(hooks).every((hook) => darwinOpenAtHooks.has(hook))) {
+            const written = writeFileExclusiveDarwinOpenAt(pinned, leaf, contents, hooks.darwinHelperFault);
+            try {
+                (hooks.closePinnedDirectory ?? fs.closeSync)(pinned.descriptor);
+            }
+            catch {
+                // File and directory contents are already durable. A descriptor cleanup
+                // failure cannot make the completed draft uncertain or roll it back.
+            }
+            return written;
+        }
+        const pinnedTarget = path.join(descriptorDirectoryPath(pinned), leaf);
         assertPinnedDirectory(pinned);
         descriptor = fs.openSync(pinnedTarget, fs.constants.O_WRONLY |
             fs.constants.O_CREAT |
@@ -107,6 +234,7 @@ export function writeFileExclusivePinned(directory, leaf, contents, hooks = {}) 
         if (!createdIdentity.isFile())
             throw new Error("exclusive file作成先が通常fileではありません");
         hooks.afterCreateBeforeWrite?.(descriptor);
+        assertPinnedDirectory(pinned);
         writeFully(descriptor, Buffer.from(contents));
         fs.fsyncSync(descriptor);
         hooks.afterWriteBeforeVerify?.();
