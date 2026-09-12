@@ -977,7 +977,13 @@ When(
     const oldHead = this.session.latestCandidateHeadSha;
     execFileSync(
       "git",
-      ["commit", "-q", "--allow-empty", "-m", "test: equivalent reanchored candidate"],
+      [
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "test: equivalent reanchored candidate",
+      ],
       { cwd: this.root },
     );
     const effectiveHead = head(this.root);

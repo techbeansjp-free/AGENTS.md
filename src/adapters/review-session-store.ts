@@ -55,10 +55,14 @@ export function isDefaultBranchFollowMerge(
   );
   if (defaultTip.status !== 0) return false;
   if (
-    git(["merge-base", "--is-ancestor", second, defaultTip.stdout.trim()], root, {
-      env: GIT_ENV,
-      allowFailure: true,
-    }).status !== 0
+    git(
+      ["merge-base", "--is-ancestor", second, defaultTip.stdout.trim()],
+      root,
+      {
+        env: GIT_ENV,
+        allowFailure: true,
+      },
+    ).status !== 0
   )
     return false;
   const automatic = git(["merge-tree", "--write-tree", first, second], root, {
