@@ -2713,7 +2713,7 @@ function routingFailure(state, ruleId, reason, entrypoint) {
  *
  * `ref`は読んだcommit SHA（trusted）またはproject policy manifestのpathとする。
  */
-function tierProvenance(provenance) {
+export function tierProvenance(provenance) {
     const source = typeof provenance.source === "string" ? provenance.source : "";
     const commitSha = typeof provenance.commitSha === "string" ? provenance.commitSha : undefined;
     return {

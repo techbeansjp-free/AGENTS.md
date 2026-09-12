@@ -3909,7 +3909,7 @@ function routingFailure(
  *
  * `ref`は読んだcommit SHA（trusted）またはproject policy manifestのpathとする。
  */
-function tierProvenance(provenance: Record<string, unknown>): {
+export function tierProvenance(provenance: Record<string, unknown>): {
   source: string;
   ref: string;
 } {

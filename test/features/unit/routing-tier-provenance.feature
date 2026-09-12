@@ -15,3 +15,9 @@ Feature: routing tierは判定の信頼源と用途を出力し仕様外のprovi
     Given trusted policyを持つ隔離repositoryがある
     When routing tierを未定義のmodelでprovider未指定で実行する
     Then 失敗出力は信頼源を含みtrustedの語が無く必要authorityは不要である
+
+  Scenario: SCN-UNIT-TIERPROV-004 信頼源の語彙を読み替えずそのまま写す
+    Given policy loaderが返しうる信頼源の語彙を5件すべて用意する
+    When それぞれを出力用の信頼源へ写す
+    Then どの語彙も読み替えられずそのまま現れる
+

@@ -1,3 +1,4 @@
+import { tierProvenance } from "../../src/cli.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -9,6 +10,8 @@ import { isRecord } from "../../src/types.js";
 interface TierProvenanceWorld extends WorkflowWorld {
   tierRoot: string;
   results: Array<{ label: string; result: SpawnSyncReturns<string> }>;
+  provenanceSources: string[];
+  provenanceMapped: Array<{ source: string; ref: string }>;
 }
 
 const { Given, When, Then } = stepDefinitions<TierProvenanceWorld>();
@@ -177,3 +180,34 @@ Then(
     assert.doesNotMatch(entry!.result.stdout, /trusted project choice/u);
   },
 );
+
+/**
+ * **loaderの語彙は`src/domain/policy.ts`が唯一の発生源である。** ここへ書くのは
+ * その実測値であり、`tierProvenance`の実装から導出しない（Issue #1350のREV-02）。
+ * 実装から期待値を作ると、特定の値だけを読み替える変異で期待値も同じ向きへずれる。
+ */
+const LOADER_SOURCES = [
+  "filesystem",
+  "filesystem-legacy",
+  "git",
+  "git-legacy",
+  "git-floor",
+] as const;
+
+Given("policy loaderが返しうる信頼源の語彙を5件すべて用意する", function () {
+  this.provenanceSources = [...LOADER_SOURCES];
+});
+
+When("それぞれを出力用の信頼源へ写す", function () {
+  this.provenanceMapped = this.provenanceSources.map((source) =>
+    tierProvenance({ source, commitSha: "a".repeat(40) }),
+  );
+});
+
+Then("どの語彙も読み替えられずそのまま現れる", function () {
+  assert.equal(this.provenanceMapped.length, LOADER_SOURCES.length);
+  assert.deepEqual(
+    this.provenanceMapped.map((entry) => entry.source),
+    [...LOADER_SOURCES],
+  );
+});
