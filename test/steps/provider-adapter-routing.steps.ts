@@ -351,6 +351,38 @@ Then(
         response: {
           ...response.response,
           response: {
+            models: [
+              {
+                value: "sonnet",
+                resolvedModel: "claude-sonnet-5",
+                supportsEffort: true,
+                supportedEffortLevels: ["high"],
+              },
+            ],
+          },
+        },
+      },
+      {
+        ...response,
+        response: {
+          ...response.response,
+          response: {
+            models: [
+              {
+                value: "default",
+                resolvedModel: "claude-opus-5[1m]",
+                supportsEffort: false,
+                supportedEffortLevels: ["high"],
+              },
+            ],
+          },
+        },
+      },
+      {
+        ...response,
+        response: {
+          ...response.response,
+          response: {
             models: [{ value: "default", supportedEffortLevels: ["high"] }],
           },
         },

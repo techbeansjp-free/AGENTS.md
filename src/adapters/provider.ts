@@ -266,6 +266,8 @@ function claudeCatalog(stdout: string): ProviderCatalog | undefined {
     if (efforts !== undefined && !Array.isArray(efforts)) return undefined;
     const supportedReasoningEfforts = efforts ?? [];
     if (
+      (entry.supportsEffort === false &&
+        supportedReasoningEfforts.length > 0) ||
       supportedReasoningEfforts.some(
         (effort) =>
           typeof effort !== "string" ||
@@ -282,7 +284,11 @@ function claudeCatalog(stdout: string): ProviderCatalog | undefined {
       supportedReasoningEfforts: supportedReasoningEfforts as string[],
     });
   }
-  if (new Set(values).size !== values.length) return undefined;
+  if (
+    new Set(values).size !== values.length ||
+    values.filter((value) => value === "default").length !== 1
+  )
+    return undefined;
   const models = [...new Set(modelMetadata.map((entry) => entry.model))];
   return { available: models.length > 0, models, modelMetadata };
 }
