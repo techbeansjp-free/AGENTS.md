@@ -59,6 +59,7 @@ interface DeliveryTransactionWorld extends WorkflowWorld {
 
 interface DiskSnapshot {
   delivery: string | null;
+  marker: string | null;
   record: string;
   requirement: string;
 }
@@ -144,6 +145,7 @@ function setDeliverySource(staging: string, source: string | null): void {
 function snapshot(staging: string): DiskSnapshot {
   return {
     delivery: optionalSource(deliveryFile(staging)),
+    marker: optionalSource(deliveryStateTransactionPath(staging)),
     record: fs.readFileSync(path.join(staging, STAGING_RECORD_FILE), "utf8"),
     requirement: fs.readFileSync(path.join(staging, "00_要求定義.md"), "utf8"),
   };
