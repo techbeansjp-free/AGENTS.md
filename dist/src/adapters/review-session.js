@@ -1,12 +1,14 @@
+import fs from "node:fs";
 import path from "node:path";
-import { advanceReviewSession, parseReviewRoundInput, } from "../domain/review-convergence.js";
+import { advanceReviewSession, parseReviewRoundInput, unconvergedReviewSessionDiagnostic, } from "../domain/review-convergence.js";
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
 import { stableJson } from "../lib/security.js";
-import { assertWorkflowStaging } from "./workflow-journal.js";
+import { buildReviewProgressInventory, PROGRESS_END, PROGRESS_START, } from "../domain/review-progress.js";
+import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
 import { observeReviewDiff } from "./review-diff.js";
-import { REVIEW_SESSION_FILE, readStoredReviewSession, } from "./review-session-store.js";
+import { isDefaultBranchFollowMerge, REVIEW_SESSION_FILE, readStoredReviewSession, } from "./review-session-store.js";
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
 import { isEvidenceOnlyPath } from "../domain/review.js";
@@ -36,6 +38,14 @@ function assertStoredStagingDigest(staging) {
 function sortedUnique(values) {
     return [...new Set(values)].sort();
 }
+function latestImplementationEntry(staging) {
+    const journal = readWorkflowJournal(staging);
+    if (journal.errors.length > 0)
+        throw new Error(`review round前のworkflow journalが不正です: ${journal.errors.join("; ")}`);
+    return [...journal.entries]
+        .reverse()
+        .find((entry) => entry.step === 9 && !entry.postTerminalIntake);
+}
 function resolveCommit(root, label, sha) {
     const observed = git(["rev-parse", "--verify", `${sha}^{commit}`], root, {
         env: GIT_ENV,
@@ -44,6 +54,11 @@ function resolveCommit(root, label, sha) {
     if (observed.status !== 0)
         throw new Error(`review round --initの${label}をexact commitへ解決できません: ${sha}`);
     return observed.stdout.trim();
+}
+function commitSubject(root, sha) {
+    return git(["show", "-s", "--format=%s", sha], root, {
+        env: GIT_ENV,
+    }).stdout.trim();
 }
 /**
  * **次roundの入力雛形を保存済みsessionと実Gitから組み立てる**（Issue #1323、A-2）。
@@ -72,12 +87,25 @@ export function buildReviewRoundDraft(input) {
         throw new Error(`review round --initの--head ${headSha.slice(0, 8)} はrepositoryのcurrent HEAD ${currentHeadSha.slice(0, 8)} と一致しません。review roundはcurrent HEADだけを受理します`);
     let round;
     if (previous === null) {
+        const implementation = latestImplementationEntry(staging);
+        if (!implementation?.implementationHeadSha)
+            throw new Error("初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください");
+        if (implementation.implementationHeadSha !== headSha)
+            throw new Error(`review round --initの--headはStep 9 implementation HEAD ${implementation.implementationHeadSha} と一致する必要があります`);
         if (typeof input.baseSha !== "string")
             throw new Error("review round --initはsessionが無いとき--base=<sha>が必要です");
         if (!input.scopeIds?.length || !input.acceptanceCriteriaIds?.length)
             throw new Error("review round --initはsessionが無いとき--scope=<ID,...>と--ac=<ID,...>が必要です");
         const baseSha = resolveCommit(root, "--base", input.baseSha);
         const observed = observeReviewDiff(root, baseSha, headSha);
+        const progressTarget = path.join(staging, "03_実装計画.md");
+        const progressSource = fs.existsSync(progressTarget)
+            ? fs.readFileSync(progressTarget, "utf8")
+            : undefined;
+        const progressInventory = progressSource?.includes(PROGRESS_START) &&
+            progressSource.includes(PROGRESS_END)
+            ? buildReviewProgressInventory("03_実装計画.md", progressSource, fs.lstatSync(progressTarget).mode & 0o777)
+            : undefined;
         round = {
             round: 1,
             previousRoundDigest: null,
@@ -89,6 +117,7 @@ export function buildReviewRoundDraft(input) {
                 diffBaseSha: baseSha,
                 initialHeadSha: headSha,
                 initialDiffDigest: observed.digest,
+                ...(progressInventory ? { progressInventory } : {}),
             },
             candidateHeadSha: headSha,
             focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
@@ -123,12 +152,32 @@ export function buildReviewRoundDraft(input) {
         if (previousBlocking.length > 0)
             notes.push(`前round blocker ${previousBlocking.join("、")} の再評価結果（resolvedまたはvalid）をfindingsへ同じIDで入れる。脱落は拒否される`);
         if (fixed.length === 0)
-            throw new Error("review round --init: 前round headからの実Git差分が空です。HEADを進めずに次roundを記録することはできません");
+            throw new Error("review round --init: 前round headからの実Git差分が空です。前roundのcandidate HEADが現在のHEADと同じです。多くの場合、前roundの--headに「そのroundを検分したHEAD」ではなく「そのroundの指摘を是正した後のHEAD」を渡しています。その場合、HEADを進めても取り違えが重なるだけです。review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください");
         if (previous.status === "converged")
             notes.push("sessionはconvergedである。取り直しroundは収束後のHEAD移動に対して1回だけ許される");
     }
+    notes.push(`このroundは ${headSha.slice(0, 8)} (${commitSubject(root, headSha)}) を検分したものとして記録します。レビュー結果を反映したcommitを、このroundの記録より先に作らないでください`);
     return { round: parseReviewRoundInput(round), notes };
 }
+/**
+ * **既定branch追随だけのmergeかをGitから判定する**（Issue #1287）。
+ *
+ * 次の3条件をすべて満たすときだけ真とする。**いずれもGitから決定論的に観測でき、
+ * 呼び出し側の申告を入力にしない。**
+ *
+ * 1. `candidate`がmerge commitであり、**第1親が前roundのcandidate**である
+ * 2. **第2親がremote既定branch tipのancestor**である。任意branchの取り込みで
+ *    予算を回避させない
+ * 3. `git merge-tree --write-tree <第1親> <第2親>`が返すtreeが、**merge commitの
+ *    tree自身と一致する**
+ *
+ * 条件3が成り立つとき、merge commitのtreeは両親から完全に決まる。**除外された
+ * roundを通して実装を1 byteも持ち込めない。** 衝突解決はこの条件を満たさないため
+ * 予算へ数える側に落ちる。衝突解決は実装者が書いた内容であり独立reviewの対象である。
+ *
+ * **観測できない場合はfail-closedで偽を返す。** remoteを読めない、`merge-tree`が
+ * 使えない（git 2.38未満）などは「追随だと確認できなかった」であり、予算へ数える。
+ */
 export function previewReviewRound(input) {
     const staging = assertWorkflowStaging(input.staging);
     assertStoredStagingDigest(staging);
@@ -140,9 +189,28 @@ export function previewReviewRound(input) {
     if (currentHeadSha !== input.round.candidateHeadSha)
         throw new Error("review round candidate HEADがrepositoryのcurrent HEADと一致しません");
     if (previous === null) {
+        const implementation = latestImplementationEntry(staging);
+        if (!implementation?.implementationHeadSha)
+            throw new Error("初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください");
+        if (implementation.implementationHeadSha !== input.round.candidateHeadSha)
+            throw new Error("review round candidate HEADがStep 9 implementation HEADと一致しません");
         const observed = observeReviewDiff(root, input.round.anchor.diffBaseSha, input.round.anchor.initialHeadSha);
         if (observed.digest !== input.round.anchor.initialDiffDigest)
             throw new Error("review roundのinitial diff digestがGit観測値と一致しません");
+        const inventory = input.round.anchor.progressInventory;
+        if (inventory) {
+            const target = path.join(staging, inventory.targetPath);
+            const targetStat = fs.lstatSync(target);
+            if (targetStat.isSymbolicLink() ||
+                !targetStat.isFile() ||
+                targetStat.nlink !== 1 ||
+                (targetStat.mode & 0o777) !== inventory.fileMode ||
+                fs.realpathSync(target) !== target)
+                throw new Error("review roundのprogress target identityが不正です");
+            const observedInventory = buildReviewProgressInventory(inventory.targetPath, fs.readFileSync(target, "utf8"), targetStat.mode & 0o777);
+            if (stableJson(observedInventory) !== stableJson(inventory))
+                throw new Error("review roundのprogress inventoryが実targetと一致しません");
+        }
     }
     else {
         /**
@@ -160,6 +228,15 @@ export function previewReviewRound(input) {
         const fixed = observeReviewDiff(root, previousHeadSha, input.round.candidateHeadSha).changedPaths;
         if (stableJson(fixed) !== stableJson(input.round.focus.fixedDiff))
             throw new Error("review roundのfixedDiffが前roundからの実Git差分と一致しません");
+        /**
+         * **`followOnly`は申告ではなくGit観測から導出する**（Issue #1287）。
+         *
+         * 呼び出し側が旗を立てるだけで予算を回避できてはならない。観測が条件を
+         * 満たさない申告は、理由を名指しして拒否する。
+         */
+        if (input.round.followOnly &&
+            !isDefaultBranchFollowMerge(root, previousHeadSha, input.round.candidateHeadSha))
+            throw new Error("既定branch追随として記録できるのは、前roundのcandidateを第1親、既定branch tipのancestorを第2親とし、treeが両親の自動merge結果と一致するmerge commitだけです");
     }
     return advanceReviewSession(previous, input.round);
 }
@@ -246,7 +323,7 @@ export function assertConvergedReviewSession(input) {
     if (session === null)
         throw new Error("Step 10には永続review sessionが必要です");
     if (session.status !== "converged")
-        throw new Error(`review sessionが収束していません: status=${session.status}`);
+        throw new Error(unconvergedReviewSessionDiagnostic(session.status));
     if (session.latestRoundDigest !== input.expectedDigest)
         throw new Error("Step 10のreview session digestが保存済みlatest roundと一致しません");
     /**

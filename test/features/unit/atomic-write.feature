@@ -30,3 +30,9 @@ Feature: 耐久性のある原子的なfile公開
     And sibling一時directoryを外部directoryへのsymlinkへ差し替える
     When 偽装した一時directoryからrecordをatomic更新しようとする
     Then 一時directory境界を拒否して旧recordを維持する
+
+  @SCN-UNIT-ATOMIC-005
+  Scenario: SCN-UNIT-ATOMIC-005 公開前に指定したfile modeを一時fileへ固定する
+    Given digest管理directoryと既存recordがある
+    When mode 0644を指定してrecordをatomic更新する
+    Then recordは完全な新版とmode 0644を保持する

@@ -463,6 +463,61 @@ export interface RepositoryRuleLedgerResult {
   };
 }
 
+export function checkParallelProgressSourceIsolation(
+  sources: Readonly<Record<string, string>>,
+): string[] {
+  const errors: string[] = [];
+  const journalReaders = new Set([
+    "src/domain/staging.ts",
+    "src/adapters/review-progress.ts",
+  ]);
+  for (const [relative, source] of Object.entries(sources)) {
+    if (
+      !journalReaders.has(relative) &&
+      (source.includes("REVIEW_PROGRESS_JOURNAL_FILE") ||
+        source.includes("journal/review-progress.jsonl"))
+    )
+      errors.push(
+        `parallel progress journalを許可外sourceが読んでいます: ${relative}`,
+      );
+    if (
+      /(?:^|\/)delivery[^/]*\.ts$/u.test(relative) &&
+      /from\s+["'][^"']*review-progress\.js["']/u.test(source)
+    )
+      errors.push(`deliveryがparallel progressへ依存しています: ${relative}`);
+  }
+  const reviewSession = sources["src/adapters/review-session.ts"] ?? "";
+  for (const forbidden of [
+    "parseReviewProgressRecords",
+    "projectReviewProgressTarget",
+    "verifyReviewProgressTarget",
+    "REVIEW_PROGRESS_JOURNAL_FILE",
+  ])
+    if (reviewSession.includes(forbidden))
+      errors.push(
+        `review gateがparallel progress evidenceを読みます: ${forbidden}`,
+      );
+  const adapter = sources["src/adapters/review-progress.ts"] ?? "";
+  if (
+    adapter.includes("refreshStoredStagingDigest") ||
+    /writeFileAtomic\(\s*(?:current|observed)\.target/u.test(adapter)
+  )
+    errors.push("parallel progressがreview入力treeへ書き込みます");
+  return errors;
+}
+
+export function checkParallelProgressIsolation(root: string): string[] {
+  const sources = Object.fromEntries(
+    assetFiles(path.join(root, "src"))
+      .filter((file) => file.endsWith(".ts"))
+      .map((file) => [
+        path.relative(root, file).split(path.sep).join("/"),
+        fs.readFileSync(file, "utf8"),
+      ]),
+  );
+  return checkParallelProgressSourceIsolation(sources);
+}
+
 export function checkRepositoryRuleLedger(
   root: string,
 ): RepositoryRuleLedgerResult {
@@ -545,6 +600,7 @@ export function checkRepositoryRuleLedger(
   errors.push(...checkDistributionGateReachability(root));
   errors.push(...checkModeQuestionText(root));
   errors.push(...checkLifecycleIgnore(root));
+  errors.push(...checkParallelProgressIsolation(root));
   errors.push(...checkWorktreeContract(root).errors);
   errors.push(...checkRequirementIdScheme(root).errors);
   errors.push(...checkCanonicalScopeAlignment(root));

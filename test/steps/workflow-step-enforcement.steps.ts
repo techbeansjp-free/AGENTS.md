@@ -22,6 +22,7 @@ import {
   completePullRequestWorkflow,
   inspectWorkflowStagingArtifacts,
   parseModeDecision,
+  planWorkflowAdvance,
   parseStepJournal,
   renderModeDecision,
   skippableSteps,
@@ -57,6 +58,7 @@ import {
   listStagingArtifacts,
   readStoredStagingRecord,
   refreshStoredStagingDigest,
+  STAGING_RECORD_FILE,
 } from "../../src/domain/staging.js";
 import type { ImplementationDiscovery } from "../../src/domain/agile-verification.js";
 import {
@@ -77,7 +79,7 @@ import {
 import { doctor } from "../../src/domain/lifecycle.js";
 import { checkWorkflowStepDocument } from "../../scripts/check_conformance.js";
 import { checkWorkflowSteps } from "../../scripts/check_workflow_steps.js";
-import { main } from "../../src/cli.js";
+import { composeWorkflowAdvanceIssueBody, main } from "../../src/cli.js";
 import {
   observeReviewDiff,
   recordReviewRound,
@@ -1195,6 +1197,88 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
       assert.match(checked.errors.join("\n"), /Issueが対象と一致しません/u);
       break;
     }
+    case "SCN-UNIT-ADVANCE-001": {
+      const plan = planWorkflowAdvance({
+        mode: "full",
+        currentStep: 3,
+        nextStep: 4,
+        valid: true,
+      });
+      assert.equal(plan.operation, "sync");
+      assert.equal(plan.validationStage, "requirements");
+      assert.deepEqual(plan.required, [
+        "repository",
+        "issue",
+        "authorize=approved",
+      ]);
+      const design = planWorkflowAdvance({
+        mode: "full",
+        currentStep: 4,
+        nextStep: 5,
+        valid: true,
+      });
+      assert.equal(design.validationStage, "design-artifact");
+      break;
+    }
+    case "SCN-UNIT-ADVANCE-002": {
+      const review = planWorkflowAdvance({
+        mode: "full",
+        currentStep: 9,
+        nextStep: 10,
+        valid: true,
+        implementationHeadBound: true,
+      });
+      const delivery = planWorkflowAdvance({
+        mode: "full",
+        currentStep: 10,
+        nextStep: 11,
+        valid: true,
+      });
+      assert.equal(review.state, "delegated");
+      assert.equal(review.operation, "review");
+      assert.equal(delivery.state, "delegated");
+      assert.equal(delivery.operation, "delivery");
+      break;
+    }
+    case "SCN-UNIT-ADVANCE-003": {
+      const plan = planWorkflowAdvance({
+        mode: "quick",
+        currentStep: 1,
+        nextStep: 4,
+        valid: false,
+        errors: ["journal digest mismatch"],
+      });
+      assert.equal(plan.state, "blocked");
+      assert.equal(plan.operation, "blocked");
+      assert.deepEqual(plan.reasons, ["journal digest mismatch"]);
+      break;
+    }
+    case "SCN-UNIT-ADVANCE-004": {
+      const plan = planWorkflowAdvance({
+        mode: "quick",
+        currentStep: 1,
+        nextStep: 9,
+        valid: true,
+      });
+      assert.equal(plan.state, "blocked");
+      assert.equal(plan.operation, "blocked");
+      assert.match(plan.reasons.join("\n"), /必須順序/u);
+      break;
+    }
+    case "SCN-UNIT-ADVANCE-005": {
+      const plan = planWorkflowAdvance({
+        mode: "full",
+        currentStep: 9,
+        nextStep: 10,
+        valid: true,
+        implementationHeadBound: false,
+      });
+      assert.equal(plan.state, "blocked");
+      assert.equal(plan.operation, "blocked");
+      assert.match(plan.reasons.join("\n"), /implementationHeadSha/u);
+      assert.match(plan.next, /workflow record --step=9/u);
+      break;
+    }
     default:
       throw new Error(`未対応のunit scenarioです: ${scenarioId}`);
   }
@@ -1212,6 +1296,25 @@ function createQuickStaging(root: string): string {
     now: new Date(instant),
     requestedMode: "quick",
   }).path;
+}
+
+function completeAdvanceRequirement(staging: string): void {
+  const requirementFile = path.join(staging, "00_要求定義.md");
+  const completed = fs
+    .readFileSync(requirementFile, "utf8")
+    .split("\n")
+    .map((line) =>
+      line.startsWith("|")
+        ? line
+            .replaceAll("applicable / not-applicable", "not-applicable")
+            .replace(/（[^）\n]*）/gu, "自動検査で非該当を確認した")
+        : line,
+    )
+    .join("\n");
+  fs.writeFileSync(
+    requirementFile,
+    `${completed}\nScenario: SCN-QUICK-ADVANCE-001 次Stepを記録する\n  Given 要求成果物が完成している\n  When 次Stepを適用する\n  Then Step 1が記録される\n`,
+  );
 }
 
 function executeCli(args: string[], cwd = process.cwd(), env = process.env) {
@@ -1978,11 +2081,14 @@ interface DeliveryProviderControl {
    * 既定の`"none"`は既存scenarioの挙動を変えない。
    */
   postMergeReviewShift: "none" | "replaced" | "revoked";
+  concurrentIssueEditAtAdapterCas?: boolean;
+  failIssueReadBackAfterEditOnce?: boolean;
 }
 
 interface PreparedDeliveryCli extends PreparedPullRequest {
   controlFile: string;
   logFile: string;
+  issueBodyFile: string;
   env: NodeJS.ProcessEnv;
 }
 
@@ -2192,21 +2298,25 @@ function preparePullRequest(
       headSha,
       observedAt: new Date(fixtureInstantMs()).toISOString(),
     });
+    appendWorkflowJournalEntry({
+      staging,
+      entry: entry(9, "poc", fixturePast),
+      headSha,
+    });
     const pocReviewSession = convergedReviewBinding(
       root,
       staging,
       baseSha,
       headSha,
     );
-    for (const step of [9, 10])
-      appendWorkflowJournalEntry({
-        staging,
-        entry: {
-          ...entry(step, "poc", fixturePast),
-          ...(step === 10 ? { reviewSession: pocReviewSession } : {}),
-        },
-        headSha,
-      });
+    appendWorkflowJournalEntry({
+      staging,
+      entry: {
+        ...entry(10, "poc", fixturePast),
+        reviewSession: pocReviewSession,
+      },
+      headSha,
+    });
     recordStagingSync(staging, {
       tracker: "https://github.com/o/r/issues/877",
       checkpoint: 4,
@@ -2226,27 +2336,51 @@ function preparePullRequest(
       fixtureFuture,
     });
   }
-  const reviewSession = convergedReviewBinding(root, staging, baseSha, headSha);
   const journalFile = path.join(staging, STEP_JOURNAL_FILE);
   if (missingStep4) {
-    const entries = [0, 1, 9, 10].map((step) => ({
+    const preReviewEntries = [0, 1, 9].map((step) => ({
       ...entry(step, "quick", fixturePast),
-      ...(step === 10 ? { reviewSession } : {}),
+      ...(step === 9 ? { implementationHeadSha: headSha } : {}),
     }));
     fs.writeFileSync(
       journalFile,
-      `${entries.map((item) => JSON.stringify(item)).join("\n")}\n`,
+      `${preReviewEntries.map((item) => JSON.stringify(item)).join("\n")}\n`,
+    );
+    refreshStoredStagingDigest(staging);
+    const reviewSession = convergedReviewBinding(
+      root,
+      staging,
+      baseSha,
+      headSha,
+    );
+    fs.appendFileSync(
+      journalFile,
+      `${JSON.stringify({
+        ...entry(10, "quick", fixturePast),
+        reviewSession,
+      })}\n`,
     );
     refreshStoredStagingDigest(staging);
   } else {
-    for (const step of [1, 4, 9, 10])
+    for (const step of [1, 4, 9])
       appendWorkflowJournalEntry({
         staging,
-        entry: {
-          ...entry(step, "quick", fixturePast),
-          ...(step === 10 ? { reviewSession } : {}),
-        },
+        entry: entry(step, "quick", fixturePast),
+        ...(step === 9 ? { headSha } : {}),
       });
+    const reviewSession = convergedReviewBinding(
+      root,
+      staging,
+      baseSha,
+      headSha,
+    );
+    appendWorkflowJournalEntry({
+      staging,
+      entry: {
+        ...entry(10, "quick", fixturePast),
+        reviewSession,
+      },
+    });
   }
   recordStagingSync(staging, {
     tracker: "https://github.com/o/r/issues/877",
@@ -2541,6 +2675,8 @@ function prepareDeliveryCli(
   const controlFile = path.join(stubDirectory, "control.json");
   const logFile = path.join(stubDirectory, "calls.jsonl");
   const observedBody = path.join(stubDirectory, "observed-pr-body.md");
+  const issueBodyFile = path.join(stubDirectory, "issue-body.md");
+  const issueViewCountFile = path.join(stubDirectory, "issue-view-count.txt");
   const control: DeliveryProviderControl = {
     phase: "ready",
     ghVersion: "2.97.0",
@@ -2612,7 +2748,8 @@ const canonicalBody = ${JSON.stringify(canonicalDocument.body)};
  * 一方を実時刻にすると検査が時間依存で落ちる（Issue #1300）。
  */
 const mergeRequestedAt = ${JSON.stringify(fixtureInstant())};
-const issueBodyFile = ${JSON.stringify(path.join(stubDirectory, "issue-body.md"))};
+const issueBodyFile = ${JSON.stringify(issueBodyFile)};
+const issueViewCountFile = ${JSON.stringify(issueViewCountFile)};
 fs.appendFileSync(logFile, JSON.stringify(args) + "\\n");
 const control = JSON.parse(fs.readFileSync(controlFile, "utf8"));
 const baseSha = control.remoteBaseSha;
@@ -2890,7 +3027,24 @@ if (exact(["--version"])) {
   // GitHub固有の正規化は模さない。
   const index = args.indexOf("--body-file");
   fs.writeFileSync(issueBodyFile, fs.readFileSync(args[index + 1], "utf8"));
+  if (control.failIssueReadBackAfterEditOnce) {
+    control.failIssueReadBackAfterEditOnce = false;
+    control.failNextIssueView = true;
+    fs.writeFileSync(controlFile, JSON.stringify(control) + "\\n");
+  }
 } else if (args[0] === "issue" && args[1] === "view") {
+  const issueViewCount = fs.existsSync(issueViewCountFile)
+    ? Number(fs.readFileSync(issueViewCountFile, "utf8")) + 1
+    : 1;
+  fs.writeFileSync(issueViewCountFile, String(issueViewCount));
+  if (control.failNextIssueView) {
+    control.failNextIssueView = false;
+    fs.writeFileSync(controlFile, JSON.stringify(control) + "\\n");
+    process.stderr.write("simulated issue read-back failure\\n");
+    process.exit(1);
+  }
+  if (control.concurrentIssueEditAtAdapterCas && issueViewCount === 4)
+    fs.writeFileSync(issueBodyFile, "# concurrent edit\\n");
   process.stdout.write(
     fs.existsSync(issueBodyFile) ? fs.readFileSync(issueBodyFile, "utf8") : "",
   );
@@ -3023,6 +3177,7 @@ if (exact(["--version"])) {
     ...prepared,
     controlFile,
     logFile,
+    issueBodyFile,
     env: {
       ...process.env,
       PATH: `${stubDirectory}${path.delimiter}${process.env.PATH ?? ""}`,
@@ -4384,6 +4539,7 @@ if (exact(["auth", "status"])) {
         path: string;
         mode: string;
       };
+      fs.unlinkSync(assessment);
       assert.equal(created.mode, "full", staged.stdout);
       const fullStaging = created.path;
       writeFullStagingArtifacts(fullStaging);
@@ -5746,6 +5902,777 @@ if (exact(["auth", "status"])) {
         rejected.stdout + rejected.stderr,
         /terminal delivery state後はStep 0〜10を追記できません/u,
       );
+      break;
+    }
+    case "SCN-E2E-ADVANCE-001": {
+      const staging = createQuickStaging(this.temp("asc-advance-preview-"));
+      const journal = path.join(staging, STEP_JOURNAL_FILE);
+      const before = fs.readFileSync(journal);
+      const checked = await executeMain([
+        "workflow",
+        "advance",
+        `--staging=${staging}`,
+        "--dry-run",
+      ]);
+      assert.equal(checked.status, 0, checked.stdout);
+      const output = JSON.parse(checked.stdout) as {
+        operation: string;
+        targetStep: number;
+      };
+      assert.equal(output.operation, "record");
+      assert.equal(output.targetStep, 1);
+      assert.deepEqual(fs.readFileSync(journal), before);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-002": {
+      const staging = createQuickStaging(this.temp("asc-advance-apply-"));
+      completeAdvanceRequirement(staging);
+      const before = fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE));
+      const recordBefore = fs.readFileSync(
+        path.join(staging, STAGING_RECORD_FILE),
+      );
+      await assert.rejects(
+        () =>
+          executeMain([
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--artifact=関係のない成果物.md",
+            "--evidence=要求成果物を確認した",
+            `--recorded-at=${instant}`,
+            "--apply",
+          ]),
+        /Step 1のartifact/u,
+      );
+      assert.deepEqual(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE)),
+        before,
+      );
+      assert.deepEqual(
+        fs.readFileSync(path.join(staging, STAGING_RECORD_FILE)),
+        recordBefore,
+      );
+      const checked = await executeMain([
+        "workflow",
+        "advance",
+        `--staging=${staging}`,
+        "--artifact=00_要求定義.md",
+        "--evidence=要求成果物を確認した",
+        `--recorded-at=${instant}`,
+        "--apply",
+      ]);
+      assert.equal(checked.status, 0, checked.stdout);
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 1);
+      assert.equal(journal.entries.filter((item) => item.step === 1).length, 1);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-003": {
+      const staging = createQuickStaging(this.temp("asc-advance-delegate-"));
+      appendWorkflowJournalEntry({ staging, entry: entry(1) });
+      appendWorkflowJournalEntry({
+        staging,
+        entry: {
+          ...entry(4),
+          artifacts: ["https://github.com/o/r/issues/877"],
+          evidence: `sync read-back digest ${"a".repeat(64)}`,
+        },
+      });
+      appendWorkflowJournalEntry({
+        staging,
+        entry: {
+          ...entry(9),
+          implementationHeadSha: "a".repeat(40),
+        },
+      });
+      const before = fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE));
+      const checked = await executeMain([
+        "workflow",
+        "advance",
+        `--staging=${staging}`,
+      ]);
+      assert.equal(checked.status, 0, checked.stdout);
+      const output = JSON.parse(checked.stdout) as {
+        state: string;
+        operation: string;
+        targetStep: number;
+      };
+      assert.deepEqual(
+        [output.state, output.operation, output.targetStep],
+        ["delegated", "review", 10],
+      );
+      assert.deepEqual(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE)),
+        before,
+      );
+      appendWorkflowJournalEntry({ staging, entry: entry(9) });
+      const legacy = await executeMain([
+        "workflow",
+        "advance",
+        `--staging=${staging}`,
+      ]);
+      assert.notEqual(legacy.status, 0, legacy.stdout);
+      const legacyOutput = JSON.parse(legacy.stdout) as {
+        state: string;
+        operation: string;
+        reasons: string[];
+      };
+      assert.deepEqual(
+        [legacyOutput.state, legacyOutput.operation],
+        ["blocked", "blocked"],
+      );
+      assert.match(legacyOutput.reasons.join("\n"), /implementationHeadSha/u);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-004": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      fs.writeFileSync(
+        prepared.issueBodyFile,
+        "# 既存トラッカー\n\n- [ ] 利用者の進捗を保持する\n",
+      );
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-sync",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: entry(step, "full"),
+        });
+      const preview = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+      const previewOutput = JSON.parse(preview.stdout) as {
+        sync: { tracker: string; checkpoint: number; bodySha256: string };
+      };
+      assert.equal(
+        previewOutput.sync.tracker,
+        "https://github.com/o/r/issues/877",
+      );
+      assert.equal(previewOutput.sync.checkpoint, 4);
+      assert.match(previewOutput.sync.bodySha256, /^[a-f0-9]{64}$/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).some(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ),
+        false,
+      );
+      const unbound = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(unbound.status, 0);
+      assert.match(unbound.stdout + unbound.stderr, /expected-body-sha256/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).some(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ),
+        false,
+      );
+      const checked = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--expected-body-sha256=${previewOutput.sync.bodySha256}`,
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 4);
+      assert.match(
+        journal.entries.at(-1)?.evidence ?? "",
+        /sync.*[a-f0-9]{64}/u,
+      );
+      assert.deepEqual(journal.entries.at(-1)?.artifacts, [
+        "https://github.com/o/r/issues/877",
+      ]);
+      const synchronizedBody = fs.readFileSync(prepared.issueBodyFile, "utf8");
+      assert.match(synchronizedBody, /利用者の進捗を保持する/u);
+      assert.match(
+        synchronizedBody,
+        /agent-skill-chain:workflow-advance:start/u,
+      );
+      break;
+    }
+    case "SCN-E2E-ADVANCE-005": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-same-tracker",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: entry(step, "full"),
+        });
+      const firstPreview = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(firstPreview.status, 0, firstPreview.stdout);
+      const firstBodySha256 = (
+        JSON.parse(firstPreview.stdout) as {
+          sync: { bodySha256: string };
+        }
+      ).sync.bodySha256;
+      const first = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--expected-body-sha256=${firstBodySha256}`,
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(first.status, 0, first.stdout + first.stderr);
+      for (const step of [5, 6, 7])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: entry(step, "full"),
+        });
+      const journalFile = path.join(staging, STEP_JOURNAL_FILE);
+      const journalLines = fs
+        .readFileSync(journalFile, "utf8")
+        .trimEnd()
+        .split("\n")
+        .map((line) => JSON.parse(line) as StepJournalEntry);
+      const step4 = journalLines.find((item) => item.step === 4);
+      assert.ok(step4);
+      step4.artifacts.push("https://github.com/o/r/issues/878");
+      fs.writeFileSync(
+        journalFile,
+        `${journalLines.map((item) => JSON.stringify(item)).join("\n")}\n`,
+      );
+      refreshStoredStagingDigest(staging);
+      const rejected = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=878",
+          "--authorize=approved",
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /Step 4で一意に同期・記録した同じGitHub Issue/u,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 7);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-006": {
+      const root = this.temp("asc-advance-poc-");
+      const declaration = validPoc();
+      for (const args of [
+        ["init", "-q", "-b", "main"],
+        ["config", "user.name", "advance-test"],
+        ["config", "user.email", "advance-test@example.invalid"],
+      ]) {
+        const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+        assert.equal(result.status, 0, result.stderr);
+      }
+      fs.writeFileSync(path.join(root, "README.md"), "# baseline\n");
+      spawnSync("git", ["add", "README.md"], { cwd: root });
+      spawnSync("git", ["commit", "-q", "-m", "baseline"], { cwd: root });
+      const staging = createIssueStaging(root, {
+        title: "workflow-advance-poc",
+        answers: answers(),
+        now: new Date(fixtureInstantMs()),
+        requestedMode: "poc",
+        poc: declaration,
+      }).path;
+      const requirementFile = path.join(staging, "00_要求定義.md");
+      const completedRequirement = fs
+        .readFileSync(requirementFile, "utf8")
+        .split("\n")
+        .map((line) =>
+          line.startsWith("|")
+            ? line
+                .replaceAll("applicable / not-applicable", "not-applicable")
+                .replace(/（[^）\n]*）/gu, "隔離fixture内の自動検査で確認した")
+            : line,
+        )
+        .join("\n");
+      fs.writeFileSync(
+        requirementFile,
+        `${completedRequirement}\nScenario: SCN-POC-ADVANCE-001 PoCの次Stepを記録する\n  Given PoC観測が現在HEADにある\n  When 次Stepを適用する\n  Then Step 9が観測証拠へ拘束される\n`,
+      );
+      refreshStoredStagingDigest(staging);
+      materializeValidPocFixture(root, declaration);
+      spawnSync("git", ["add", declaration.fixture.root], { cwd: root });
+      spawnSync("git", ["commit", "-q", "-m", "poc fixture"], { cwd: root });
+      const headSha = spawnSync("git", ["rev-parse", "HEAD"], {
+        cwd: root,
+        encoding: "utf8",
+      }).stdout.trim();
+      appendWorkflowJournalEntry({ staging, entry: entry(1, "poc") });
+      appendWorkflowJournalEntry({
+        staging,
+        entry: {
+          ...entry(4, "poc"),
+          artifacts: ["https://github.com/o/r/issues/877"],
+          evidence: `sync read-back digest ${"a".repeat(64)}`,
+        },
+      });
+      executePocObservation({ staging, headSha, observedAt: instant });
+      const untrackedArtifact = "omitted-untracked-change.txt";
+      fs.writeFileSync(path.join(root, untrackedArtifact), "untracked\n");
+      await assert.rejects(
+        () =>
+          executeMain([
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            `--artifact=${declaration.fixture.root}`,
+            "--evidence=artifact外の未追跡成果物を拒否する",
+            `--recorded-at=${instant}`,
+            "--apply",
+          ]),
+        /候補worktree全体は現在HEADと完全一致/u,
+      );
+      fs.unlinkSync(path.join(root, untrackedArtifact));
+      const trackedFixturePath = path.join(
+        declaration.fixture.root,
+        declaration.fixture.runner.path,
+      );
+      const trackedFixture = path.join(root, trackedFixturePath);
+      fs.appendFileSync(trackedFixture, "\n// uncommitted\n");
+      await assert.rejects(
+        () =>
+          executeMain([
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            `--artifact=${declaration.fixture.root}`,
+            "--evidence=変更済み成果物を拒否する",
+            `--recorded-at=${instant}`,
+            "--apply",
+          ]),
+        /候補worktree全体は現在HEADと完全一致/u,
+      );
+      spawnSync("git", ["restore", trackedFixturePath], {
+        cwd: root,
+      });
+      const checked = await executeMain([
+        "workflow",
+        "advance",
+        `--staging=${staging}`,
+        `--artifact=${declaration.fixture.root}`,
+        "--evidence=PoC観測結果を現在HEADへ拘束した",
+        `--recorded-at=${instant}`,
+        "--apply",
+      ]);
+      assert.equal(checked.status, 0, checked.stdout);
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 9);
+      assert.equal(journal.entries.at(-1)?.pocObservation?.headSha, headSha);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-007": {
+      const staging = createQuickStaging(this.temp("asc-advance-request-"));
+      fs.writeFileSync(path.join(staging, "00_要求定義.md"), "# 未完成\n");
+      refreshStoredStagingDigest(staging);
+      const before = fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE));
+      await assert.rejects(
+        () =>
+          executeMain([
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--artifact=00_要求定義.md",
+            "--evidence=未完成成果物",
+            "--apply",
+          ]),
+        /成果物検証に失敗/u,
+      );
+      assert.deepEqual(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE)),
+        before,
+      );
+      break;
+    }
+    case "SCN-E2E-ADVANCE-008": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-invalid-time",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: entry(step, "full"),
+        });
+      const rejected = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          "--recorded-at=not-an-instant",
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(rejected.stdout + rejected.stderr, /ISO 8601 UTC/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).some(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ),
+        false,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 3);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-009": {
+      const staging = createQuickStaging(this.temp("asc-advance-flags-"));
+      completeAdvanceRequirement(staging);
+      const journalFile = path.join(staging, STEP_JOURNAL_FILE);
+      const before = fs.readFileSync(journalFile);
+      await assert.rejects(
+        () =>
+          executeMain([
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--artifact=00_要求定義.md",
+            "--evidence=競合する実行modeを拒否する",
+            "--dry-run",
+            "--apply",
+          ]),
+        /--applyと--dry-runは同時に指定できません/u,
+      );
+      assert.deepEqual(fs.readFileSync(journalFile), before);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-010": {
+      assert.throws(
+        () =>
+          composeWorkflowAdvanceIssueBody(
+            "# 既存本文\n",
+            "# 生成本文\n<!-- agent-skill-chain:workflow-advance:start -->\n",
+          ),
+        /予約marker/u,
+      );
+      const preservedPrefix = "利用者のhard break  \n\n";
+      const preservedSuffix = "\n    indented user content\n";
+      assert.equal(
+        composeWorkflowAdvanceIssueBody(
+          `${preservedPrefix}<!-- agent-skill-chain:workflow-advance:start -->\nold\n<!-- agent-skill-chain:workflow-advance:end -->${preservedSuffix}`,
+          "new",
+        ),
+        `${preservedPrefix}<!-- agent-skill-chain:workflow-advance:start -->\nnew\n<!-- agent-skill-chain:workflow-advance:end -->${preservedSuffix}`,
+      );
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-reserved-marker",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      fs.appendFileSync(
+        path.join(staging, "01_要件定義.md"),
+        "\n<!-- agent-skill-chain:workflow-advance:end -->\n",
+      );
+      refreshStoredStagingDigest(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const rejected = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /予約marker|未解決のplaceholder/u,
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).some(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ),
+        false,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 3);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-011": {
+      const root = this.temp("asc-advance-design-stage-");
+      for (const args of [
+        ["init", "-q", "-b", "main"],
+        ["config", "user.name", "advance-test"],
+        ["config", "user.email", "advance-test@example.invalid"],
+      ]) {
+        const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+        assert.equal(result.status, 0, result.stderr);
+      }
+      fs.writeFileSync(path.join(root, "README.md"), "# baseline\n");
+      spawnSync("git", ["add", "README.md"], { cwd: root });
+      spawnSync("git", ["commit", "-q", "-m", "baseline"], { cwd: root });
+      const staging = createIssueStaging(root, {
+        title: "workflow-advance-design-stage",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      fs.writeFileSync(path.join(staging, "03_実装計画.md"), "# 未完成\n");
+      refreshStoredStagingDigest(staging);
+      for (const step of [1, 2, 3, 4])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: {
+            ...entry(step, "full"),
+            ...(step === 4
+              ? {
+                  artifacts: ["https://github.com/o/r/issues/877"],
+                  evidence: `sync read-back digest ${"a".repeat(64)}`,
+                }
+              : {}),
+          },
+        });
+      const checked = await executeMain([
+        "workflow",
+        "advance",
+        `--staging=${staging}`,
+        "--artifact=02_設計.md",
+        "--evidence=設計成果物を確認した",
+        `--recorded-at=${instant}`,
+        "--apply",
+      ]);
+      assert.equal(checked.status, 0, checked.stdout);
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 5);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-012": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      fs.writeFileSync(prepared.issueBodyFile, "# initial issue body\n");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-concurrent-issue-edit",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const preview = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(preview.status, 0, preview.stdout);
+      const expectedBodySha256 = (
+        JSON.parse(preview.stdout) as { sync: { bodySha256: string } }
+      ).sync.bodySha256;
+      const control = JSON.parse(
+        fs.readFileSync(prepared.controlFile, "utf8"),
+      ) as DeliveryProviderControl;
+      control.concurrentIssueEditAtAdapterCas = true;
+      fs.writeFileSync(prepared.controlFile, `${JSON.stringify(control)}\n`);
+      const rejected = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--expected-body-sha256=${expectedBodySha256}`,
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /Issue同期直前に本文が変更されました/u,
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).some(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ),
+        false,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 3);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-013": {
+      const prepared = prepareDeliveryCli(
+        this,
+        { failIssueReadBackAfterEditOnce: true },
+        "disabled",
+      );
+      fs.writeFileSync(prepared.issueBodyFile, "# initial issue body\n");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-journal-recovery",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const applyFromNewPreview = () => {
+        const preview = executeCli(
+          [
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--repo=o/r",
+            "--issue=877",
+          ],
+          prepared.root,
+          prepared.env,
+        );
+        assert.equal(preview.status, 0, preview.stdout);
+        const expectedBodySha256 = (
+          JSON.parse(preview.stdout) as { sync: { bodySha256: string } }
+        ).sync.bodySha256;
+        return executeCli(
+          [
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--repo=o/r",
+            "--issue=877",
+            "--authorize=approved",
+            `--expected-body-sha256=${expectedBodySha256}`,
+            `--recorded-at=${instant}`,
+            `--synced-at=${instant}`,
+            "--apply",
+          ],
+          prepared.root,
+          prepared.env,
+        );
+      };
+      const interrupted = applyFromNewPreview();
+      assert.notEqual(interrupted.status, 0);
+      assert.match(
+        interrupted.stdout + interrupted.stderr,
+        /state=published.*journalTransaction=none/u,
+      );
+      const recovered = applyFromNewPreview();
+      assert.equal(recovered.status, 0, recovered.stdout + recovered.stderr);
+      assert.equal(
+        (
+          JSON.parse(recovered.stdout) as {
+            result: { recovery: { state: string } };
+          }
+        ).result.recovery.state,
+        "journal-recovered",
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ).length,
+        1,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 4);
       break;
     }
     default:

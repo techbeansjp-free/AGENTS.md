@@ -8,6 +8,12 @@ import { writeFileAtomic } from "../lib/atomic.js";
 import { isRecord } from "../types.js";
 export const STAGING_RECORD_FILE = "staging-record.json";
 export const STAGING_PROMOTION_TRANSACTION_FILE = ".full-promotion-transaction.json";
+/**
+ * Review中の進捗は判定用staging成果物ではなく、固定review入力へ結び付く
+ * append-only evidenceである。内容の正当性はreview progress verifierが
+ * review-session anchorから再導出するため、一般成果物digestへ混ぜない。
+ */
+export const REVIEW_PROGRESS_JOURNAL_FILE = "journal/review-progress.jsonl";
 const ISSUE_STAGING_PREFIX = ".agent-skill-chain/tmp/issues";
 const STORED_FIELDS = new Set([
     "schemaVersion",
@@ -301,7 +307,8 @@ function inventory(directory) {
                     mtimeMs: stat.mtimeMs,
                     digest,
                 });
-                if (relative !== STAGING_RECORD_FILE)
+                if (relative !== STAGING_RECORD_FILE &&
+                    relative !== REVIEW_PROGRESS_JOURNAL_FILE)
                     artifacts.push(relative);
             }
             else {

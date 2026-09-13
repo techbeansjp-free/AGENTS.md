@@ -21,6 +21,12 @@ import {
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
 import {
+  appendReviewProgress,
+  projectReviewProgress,
+  sealReviewProgress,
+  verifyStoredReviewProgress,
+} from "./adapters/review-progress.js";
+import {
   isReviewArtifactParentContained,
   isReviewArtifactStagingDirectChild,
   renderReviewArtifactDraft,
@@ -30,7 +36,9 @@ import {
   assertPullRequestTrackerBinding,
   createPullRequest,
   authorizeMerge,
+  diagnoseBranchFollowCost,
   extractIssueClosingNumbers,
+  type BranchDeliveryPolicyObservation,
 } from "./domain/delivery.js";
 import {
   assessImplementationDiscovery,
@@ -62,6 +70,7 @@ import {
   migrateLegacyStagingTrackerLocked,
   planStagingCleanup,
   readStoredStagingRecord,
+  refreshStoredStagingDigest,
   withStagingMutationLock,
 } from "./domain/staging.js";
 import {
@@ -199,7 +208,9 @@ import {
   validateRoleAssignment,
   validateTierSelection,
   validateCodexTier,
+  validateClaudeTier,
   CODEX_ADOPTION_SELECTOR,
+  CLAUDE_ADOPTION_SELECTOR,
   type HumanOverride,
   type ModelTier,
 } from "./domain/role.js";
@@ -274,6 +285,7 @@ import {
   MODE_STEP_SEQUENCES,
   NEVER_SKIPPABLE_STEPS,
   requiredSteps,
+  planWorkflowAdvance,
   skippableSteps,
   validateJournalHumanOverride,
   validateStepJournal,
@@ -296,7 +308,12 @@ function workflowArguments(args: string[]): {
 } {
   const flags: Record<string, string> = {};
   const artifacts: string[] = [];
-  const booleanFlags = new Set(["apply", "dry-run", "post-terminal-intake"]);
+  const booleanFlags = new Set([
+    "apply",
+    "dry-run",
+    "post-terminal-intake",
+    "reconfirm",
+  ]);
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index] ?? "";
     if (!argument.startsWith("--"))
@@ -330,6 +347,19 @@ function workflowArguments(args: string[]): {
   return { flags, artifacts };
 }
 
+/**
+ * 値を取らないflagの受理。**値付き形式を無言で真として扱わない。**
+ *
+ * parserは`--name`だけを`__present__`にし、`--name=値`は値をそのまま保存する。
+ * 存在判定を`!== undefined`で書くと、`--reconfirm=false`が有効として通る。
+ */
+function presentFlag(flags: Record<string, string>, key: string): boolean {
+  if (flags[key] === undefined) return false;
+  if (flags[key] !== "__present__")
+    throw new Error(`--${key}は値を付けずに指定してください`);
+  return true;
+}
+
 function workflowLifecycleApplyMode(flags: Record<string, string>): boolean {
   for (const key of ["apply", "dry-run"])
     if (flags[key] !== undefined && flags[key] !== "__present__")
@@ -337,6 +367,184 @@ function workflowLifecycleApplyMode(flags: Record<string, string>): boolean {
   if (flags.apply === "__present__" && flags["dry-run"] === "__present__")
     throw new Error("--applyと--dry-runは同時に指定できません");
   return flags.apply === "__present__";
+}
+
+const WORKFLOW_ADVANCE_BODY_START =
+  "<!-- agent-skill-chain:workflow-advance:start -->";
+const WORKFLOW_ADVANCE_BODY_END =
+  "<!-- agent-skill-chain:workflow-advance:end -->";
+
+export function composeWorkflowAdvanceIssueBody(
+  existingBody: string,
+  generatedBody: string,
+): string {
+  const existing = existingBody.replace(/\r\n/g, "\n");
+  const generated = generatedBody.replace(/\r\n/g, "\n").trim();
+  if (
+    generated.includes(WORKFLOW_ADVANCE_BODY_START) ||
+    generated.includes(WORKFLOW_ADVANCE_BODY_END)
+  )
+    throw new Error(
+      "生成するIssue本文にworkflow advance予約markerを含めることはできません",
+    );
+  const starts = existing.split(WORKFLOW_ADVANCE_BODY_START).length - 1;
+  const ends = existing.split(WORKFLOW_ADVANCE_BODY_END).length - 1;
+  if (starts > 1 || ends > 1 || starts !== ends)
+    throw new Error("既存Issue本文のworkflow advance生成領域markerが不正です");
+  const block = `${WORKFLOW_ADVANCE_BODY_START}\n${generated}\n${WORKFLOW_ADVANCE_BODY_END}`;
+  if (starts === 0) {
+    const separator =
+      existing === "" || existing.endsWith("\n\n")
+        ? ""
+        : existing.endsWith("\n")
+          ? "\n"
+          : "\n\n";
+    return `${existing}${separator}${block}\n`;
+  }
+  const start = existing.indexOf(WORKFLOW_ADVANCE_BODY_START);
+  const end = existing.indexOf(WORKFLOW_ADVANCE_BODY_END);
+  if (end < start)
+    throw new Error(
+      "既存Issue本文のworkflow advance生成領域marker順序が不正です",
+    );
+  const before = existing.slice(0, start);
+  const after = existing.slice(end + WORKFLOW_ADVANCE_BODY_END.length);
+  return `${before}${block}${after}`;
+}
+
+function latestStep9HasImplementationHead(
+  entries: readonly {
+    step: number;
+    implementationHeadSha?: string;
+  }[],
+): boolean {
+  return (
+    [...entries].reverse().find((entry) => entry.step === 9)
+      ?.implementationHeadSha !== undefined
+  );
+}
+
+function assertUniqueStep4Tracker(
+  entries: readonly { step: number; artifacts: readonly string[] }[],
+  tracker: string,
+): void {
+  const step4 = [...entries].reverse().find((entry) => entry.step === 4);
+  const trackers =
+    step4?.artifacts.filter((artifact) =>
+      /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/[1-9]\d*$/u.test(
+        artifact,
+      ),
+    ) ?? [];
+  if (trackers.length !== 1 || trackers[0] !== tracker)
+    throw new Error(
+      "Step 8はStep 4で一意に同期・記録した同じGitHub Issueだけを更新できます",
+    );
+}
+
+function assertWorkflowAdvanceArtifacts(
+  staging: string,
+  targetStep: number,
+  artifacts: readonly string[],
+): string | undefined {
+  if (new Set(artifacts).size !== artifacts.length)
+    throw new Error(`Step ${targetStep}のartifact重複を拒否しました`);
+  const exactByStep = new Map<number, readonly string[]>([
+    [1, ["00_要求定義.md"]],
+    [2, ["01_要件定義.md"]],
+    [5, ["02_設計.md"]],
+    [6, ["03_実装計画.md"]],
+  ]);
+  const allowedByStep = new Map<number, ReadonlySet<string>>([
+    [3, new Set(["00_要求定義.md", "01_要件定義.md"])],
+    [7, new Set(["02_設計.md", "03_実装計画.md"])],
+  ]);
+  const exact = exactByStep.get(targetStep);
+  if (exact && stableJson(artifacts) !== stableJson(exact))
+    throw new Error(
+      `Step ${targetStep}のartifactは${exact.join("、")}と完全一致する必要があります`,
+    );
+  const allowed = allowedByStep.get(targetStep);
+  if (allowed && artifacts.some((artifact) => !allowed.has(artifact)))
+    throw new Error(
+      `Step ${targetStep}のartifactは${[...allowed].join("、")}だけを指定できます`,
+    );
+  if (targetStep !== 9) return undefined;
+  const repositoryRoot = path.resolve(staging, "../../../..");
+  const candidateHeadSha = git(
+    ["rev-parse", "--verify", "HEAD^{commit}"],
+    repositoryRoot,
+  ).stdout.trim();
+  const worktreeStatus = git(
+    [
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--untracked-files=all",
+      "--",
+      ".",
+      ":(exclude).agent-skill-chain/tmp/issues",
+    ],
+    repositoryRoot,
+  ).stdout;
+  if (worktreeStatus !== "")
+    throw new Error(
+      "Step 9を記録する候補worktree全体は現在HEADと完全一致する必要があります",
+    );
+  for (const artifact of artifacts) {
+    if (path.isAbsolute(artifact) || artifact.split(/[\\/]/u).includes(".."))
+      throw new Error("Step 9のartifactはrepository内の相対pathが必要です");
+    const resolved = path.resolve(repositoryRoot, artifact);
+    const relative = path.relative(repositoryRoot, resolved);
+    if (
+      relative === "" ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative) ||
+      !fs.existsSync(resolved)
+    )
+      throw new Error(
+        `Step 9のartifactがrepository内に存在しません: ${artifact}`,
+      );
+    const stat = fs.lstatSync(resolved);
+    if (
+      stat.isSymbolicLink() ||
+      (!stat.isFile() && !stat.isDirectory()) ||
+      fs.realpathSync(resolved) !== resolved
+    )
+      throw new Error(
+        `Step 9のartifactはsymlinkでないrepository内の通常pathが必要です: ${artifact}`,
+      );
+    const canonicalArtifact = relative.split(path.sep).join("/");
+    if (canonicalArtifact !== artifact)
+      throw new Error(
+        `Step 9のartifactは正規化済みrepository相対pathが必要です: ${artifact}`,
+      );
+    const tracked = git(
+      ["ls-tree", "-r", "-z", "--name-only", "HEAD", "--", artifact],
+      repositoryRoot,
+    )
+      .stdout.split("\0")
+      .filter(Boolean);
+    if (tracked.length === 0)
+      throw new Error(
+        `Step 9のartifactは現在HEADで追跡済みでなければなりません: ${artifact}`,
+      );
+    const dirty = git(
+      [
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--",
+        artifact,
+      ],
+      repositoryRoot,
+    ).stdout;
+    if (dirty !== "")
+      throw new Error(
+        `Step 9のartifactは現在HEADと完全一致する必要があります: ${artifact}`,
+      );
+  }
+  return candidateHeadSha;
 }
 
 function workflowMode(value: string): Mode {
@@ -1357,6 +1565,8 @@ function inspectAuthorizedPullRequestMerge(input: {
   authority: PolicyAuthorityObservation;
   implementationCommitSha: string;
   reviewEvidence: MergeReviewEvidence;
+  deliveryPolicy: BranchDeliveryPolicyObservation;
+  followCost: ReturnType<typeof diagnoseBranchFollowCost>;
   authorization: ReturnType<typeof authorizeMerge>;
 } {
   const observed = github(
@@ -1400,6 +1610,11 @@ function inspectAuthorizedPullRequestMerge(input: {
     { repository: input.repository, branch: input.base },
     input.root,
   );
+  const deliveryPolicy = github(
+    "branch.delivery-policy",
+    { repository: input.repository, branch: input.base },
+    input.root,
+  );
   const checks = (observed.statusCheckRollup ?? [])
     .filter(
       (item) => (item.conclusion ?? item.state ?? item.status) === "SUCCESS",
@@ -1420,6 +1635,8 @@ function inspectAuthorizedPullRequestMerge(input: {
     authority,
     implementationCommitSha: reviewed.reviewEvidence.implementationCommitSha,
     reviewEvidence: reviewed.reviewEvidence,
+    deliveryPolicy,
+    followCost: diagnoseBranchFollowCost(deliveryPolicy),
     authorization: authorizeMerge({
       trustedPolicy: input.trustedSet.policy,
       method: input.method,
@@ -2105,6 +2322,7 @@ export function writeReviewRoundDraft(
     afterWriteBeforeVerify?: () => void;
     beforeCleanup?: () => void;
     closePinnedDirectory?: (descriptor: number) => void;
+    darwinHelperFault?: "after-file-fsync" | "kill-after-create";
   } = {},
 ): string {
   try {
@@ -2112,7 +2330,7 @@ export function writeReviewRoundDraft(
   } catch (error) {
     if (error instanceof ExclusivePinnedWriteError)
       throw new Error(
-        `review round --initの雛形作成後に失敗しました。無関係fileの誤削除を避けるためpathname削除は行わず、作成descriptorを${error.createdEntrySanitized ? "空にしました" : "空にできませんでした"}。作成entryが残存している可能性があります。指定--outは差し替え後の別entryを指す可能性があるため、削除対象を確認してください`,
+        `review round --initの雛形作成後に失敗しました。無関係fileの誤削除を避けるためpathname削除は行わず、作成descriptorを${error.createdEntrySanitized ? "空にしました" : "空にできませんでした"}。作成entryが残存している可能性があります。指定--outは差し替え後の別entryを指す可能性があるため、削除対象を確認してください。原因: ${error.cause instanceof Error ? error.cause.message : String(error.cause)}`,
         { cause: error },
       );
     if (
@@ -2372,6 +2590,8 @@ function handlePullRequestMerge(flags: Flags): number {
         output: {
           state: "preview",
           authorization: inspected.authorization,
+          deliveryPolicy: inspected.deliveryPolicy,
+          followCost: inspected.followCost,
           pr: inspected.observed.url,
           headSha: inspected.observed.headRefOid,
           baseSha: inspected.observed.baseRefOid,
@@ -3711,6 +3931,31 @@ function routingFailure(
   });
 }
 
+/**
+ * policy loaderが観測した信頼源を出力用へ写す。**handlerで信頼源を推測しない。**
+ *
+ * `source`はloaderの語彙をそのまま使い、**正規化も読み替えもしない。** 現在の語彙は
+ * `filesystem`、`filesystem-legacy`、`git`、`git-legacy`、`git-floor`の5値である
+ * （`src/domain/policy.ts`が唯一の発生源）。**`-legacy`や`-floor`を`git`へ潰さない。**
+ * 潰すと「どの形式のpolicyを読んだか」が出力から消え、信頼源を正しく示すという
+ * 本経路の目的そのものを失う（Issue #1350のREV-01）。語彙が増えたときに
+ * handler側の対応が要らないことも、この写しを恒等にしておく理由である。
+ *
+ * `ref`は読んだcommit SHA（trusted）またはproject policy manifestのpathとする。
+ */
+export function tierProvenance(provenance: Record<string, unknown>): {
+  source: string;
+  ref: string;
+} {
+  const source = typeof provenance.source === "string" ? provenance.source : "";
+  const commitSha =
+    typeof provenance.commitSha === "string" ? provenance.commitSha : undefined;
+  return {
+    source,
+    ref: commitSha ?? ".agent-skill-chain/project-policy.json",
+  };
+}
+
 function roleTierFailure(
   ruleId: string,
   purpose: string,
@@ -4157,21 +4402,13 @@ export async function main(
       flags.provider !== "codex" &&
       flags.provider !== "claude"
     )
-      throw new Error("--providerはcodexまたはclaudeが必要です");
+      throw new Error(
+        "--providerはcodexまたはclaudeだけを受理します。未指定は既存台帳の互換検証であり、自動起動の認可には使いません",
+      );
     const selected = modelTier(required(flags, "selected"), "selected");
-    const choices = loadProjectPolicySet(root).choices[0];
-    const configured =
-      choices?.modelMapping && typeof choices.modelMapping !== "string"
-        ? choices.modelMapping
-        : undefined;
     const computed = requiredTier({ risk, mode, scope });
-    const configuredMinimum = configured?.minimumTierByRisk?.[risk];
-    const requiredMinimum =
-      configuredMinimum &&
-      MODEL_TIERS.indexOf(configuredMinimum) > MODEL_TIERS.indexOf(computed)
-        ? configuredMinimum
-        : computed;
-    if (flags.provider === "codex") {
+    if (flags.provider === "codex" || flags.provider === "claude") {
+      const provider = flags.provider;
       const trustedSet = loadOperationPolicy(root);
       const trustedMapping = trustedSet.policy.projectChoices?.modelMapping;
       const tierMapping =
@@ -4182,22 +4419,37 @@ export async function main(
         trustedMapping && typeof trustedMapping !== "string"
           ? trustedMapping.minimumTierByRisk?.[risk]
           : undefined;
-      const codexRequired =
+      const providerRequired =
         trustedMinimum &&
         MODEL_TIERS.indexOf(trustedMinimum) > MODEL_TIERS.indexOf(computed)
           ? trustedMinimum
           : computed;
-      const observation = await observeProvider("codex", undefined, undefined, {
-        cwd: root,
-        official: true,
-      });
+      const observation = await observeProvider(
+        provider,
+        undefined,
+        undefined,
+        {
+          cwd: root,
+          official: true,
+        },
+      );
       const recommended = observation.modelMetadata.filter(
         (entry) => entry.recommended,
       );
-      const result = validateCodexTier({
-        required: codexRequired,
-        mapping: tierMapping,
-      });
+      const selector =
+        provider === "codex"
+          ? CODEX_ADOPTION_SELECTOR
+          : CLAUDE_ADOPTION_SELECTOR;
+      const result =
+        provider === "codex"
+          ? validateCodexTier({
+              required: providerRequired,
+              mapping: tierMapping,
+            })
+          : validateClaudeTier({
+              required: providerRequired,
+              mapping: tierMapping,
+            });
       if (observation.state !== "available" && observation.reason)
         result.errors.push(observation.reason);
       if (
@@ -4206,20 +4458,37 @@ export async function main(
         recommended[0]?.model !== model ||
         !recommended[0]?.supportedReasoningEfforts.includes("high")
       )
-        result.errors.push("modelが今回の公式推奨high対応Codexと一致しません");
-      if (tierMapping[CODEX_ADOPTION_SELECTOR] !== selected)
+        result.errors.push(
+          `modelが今回の公式推奨high対応${provider === "codex" ? "Codex" : "Claude"}と一致しません`,
+        );
+      if (tierMapping[selector] !== selected)
         result.errors.push("選択tierがtrusted selector採用tierと一致しません");
       result.valid = result.errors.length === 0;
       print({
         ...result,
-        required: codexRequired,
+        required: providerRequired,
         selected,
         model,
-        selector: CODEX_ADOPTION_SELECTOR,
+        selector,
         observedAt: observation.observedAt,
+        provenance: tierProvenance(trustedSet.provenance),
+        usage: `${provider}-adoption`,
       });
       return result.valid ? 0 : 1;
     }
+    // 互換経路だけがcandidate working treeを読む。Codex認可はtrusted refだけに依存する。
+    const projectSet = loadProjectPolicySet(root);
+    const choices = projectSet.choices[0];
+    const configured =
+      choices?.modelMapping && typeof choices.modelMapping !== "string"
+        ? choices.modelMapping
+        : undefined;
+    const configuredMinimum = configured?.minimumTierByRisk?.[risk];
+    const requiredMinimum =
+      configuredMinimum &&
+      MODEL_TIERS.indexOf(configuredMinimum) > MODEL_TIERS.indexOf(computed)
+        ? configuredMinimum
+        : computed;
     const result = validateTierSelection({
       required: requiredMinimum,
       selected,
@@ -4230,19 +4499,37 @@ export async function main(
           ? flags.justification
           : undefined,
     });
-    const output = { ...result, required: requiredMinimum, selected, model };
+    /**
+     * **未指定経路は候補側のworking treeを読む互換検証である。** 仕様どおり
+     * Codex自動起動の認可に使わないため、判定の信頼源と用途を出力へ明示し、
+     * 診断からtrustedの主張を外す（Issue #1350）。
+     */
+    const compatibility = {
+      provenance: tierProvenance(projectSet.provenance),
+      usage: "compatibility-only" as const,
+    };
+    const output = {
+      ...result,
+      required: requiredMinimum,
+      selected,
+      model,
+      ...compatibility,
+    };
     print(
       result.valid
         ? output
-        : roleTierFailure(
-            "ASC-MODEL-TIER-001",
-            "risk・mode・scopeに必要な能力tierを単調に保証する",
-            risk,
-            result.errors,
-            scope,
-            "trusted project choiceへmodel mappingを定義するか、必要tier以上を選択してください",
-            "model mapping owner",
-          ),
+        : {
+            ...(roleTierFailure(
+              "ASC-MODEL-TIER-001",
+              "risk・mode・scopeに必要な能力tierを単調に保証する",
+              risk,
+              result.errors,
+              scope,
+              "working treeのmodelMapping.tierMappingへmodelを定義するか、必要tier以上を選択してください。本判定は互換検証であり認可には使いません",
+              "不要",
+            ) as Record<string, unknown>),
+            ...compatibility,
+          },
     );
     return result.valid ? 0 : 1;
   }
@@ -4628,6 +4915,496 @@ export async function main(
     });
     return 0;
   }
+  if (command === "workflow" && subcommand === "advance") {
+    const { flags, artifacts } = workflowArguments(rest);
+    const apply = workflowLifecycleApplyMode(flags);
+    const unknown = Object.keys(flags).filter(
+      (flag) =>
+        ![
+          "staging",
+          "evidence",
+          "repo",
+          "issue",
+          "authorize",
+          "recorded-at",
+          "synced-at",
+          "expected-body-sha256",
+          "apply",
+          "dry-run",
+        ].includes(flag),
+    );
+    if (unknown.length > 0)
+      throw new Error(
+        `workflow advanceの未知optionです: --${unknown.join(", --")}`,
+      );
+    const staging = path.resolve(required(flags, "staging"));
+    const inspected = inspectWorkflowStaging(staging);
+    const initialRecord = readStoredStagingRecord(staging);
+    const initialArtifacts = listStagingArtifacts(staging);
+    const initialContentDigest = calculateStagingDigest(
+      staging,
+      initialArtifacts,
+    );
+    const initialJournal = readWorkflowJournal(staging);
+    const initialJournalDigest = crypto
+      .createHash("sha256")
+      .update(initialJournal.source)
+      .digest("hex");
+    const plan = planWorkflowAdvance({
+      mode: inspected.mode,
+      currentStep: inspected.currentStep,
+      nextStep: inspected.nextStep,
+      valid: inspected.valid,
+      implementationHeadBound: latestStep9HasImplementationHead(
+        initialJournal.entries,
+      ),
+      errors: inspected.errors,
+    });
+    const remoteFlags = [
+      "repo",
+      "issue",
+      "authorize",
+      "synced-at",
+      "expected-body-sha256",
+    ].filter((flag) => flags[flag] !== undefined);
+    if (plan.operation === "record" && remoteFlags.length > 0)
+      throw new Error(
+        `ローカルStepではIssue同期optionを使用できません: --${remoteFlags.join(", --")}`,
+      );
+    if (
+      plan.operation === "sync" &&
+      (artifacts.length > 0 || flags.evidence !== undefined)
+    )
+      throw new Error(
+        "Step 4/8のworkflow advanceはartifactと同期evidenceを実観測から生成します",
+      );
+    let syncPreview:
+      | {
+          repository: string;
+          issue: number;
+          tracker: string;
+          checkpoint: 4 | 8;
+          observedBodySha256: string;
+          generatedBodySha256: string;
+          bodySha256: string;
+        }
+      | undefined;
+    let previewSyncBody: string | undefined;
+    if (plan.state === "preview" && plan.operation === "sync") {
+      const issueRaw = required(flags, "issue");
+      if (!/^[1-9]\d*$/u.test(issueRaw))
+        throw new Error("--issueは正のIssue番号で指定してください");
+      const repository = required(flags, "repo");
+      const issue = Number(issueRaw);
+      const checkpoint = plan.targetStep as 4 | 8;
+      const tracker = `https://github.com/${repository}/issues/${issueRaw}`;
+      if (checkpoint === 8)
+        assertUniqueStep4Tracker(readWorkflowJournal(staging).entries, tracker);
+      const generated = buildIssueSyncBody(
+        staging,
+        checkpoint,
+        issueStagingGherkinDialect(staging),
+      );
+      const observed = github(
+        "issue.read",
+        { repository, issue },
+        process.cwd(),
+      );
+      previewSyncBody = composeWorkflowAdvanceIssueBody(
+        observed.body,
+        generated.body,
+      );
+      syncPreview = {
+        repository,
+        issue,
+        tracker,
+        checkpoint,
+        observedBodySha256: observed.bodySha256,
+        generatedBodySha256: generated.bodySha256,
+        bodySha256: crypto
+          .createHash("sha256")
+          .update(previewSyncBody.trimEnd())
+          .digest("hex"),
+      };
+    }
+    if (!apply || plan.state !== "preview") {
+      print(syncPreview === undefined ? plan : { ...plan, sync: syncPreview });
+      return plan.state === "blocked" ? 1 : 0;
+    }
+    return withStagingMutationLock(staging, () => {
+      const lockedStoredRecord = readStoredStagingRecord(staging);
+      const lockedArtifacts = listStagingArtifacts(staging);
+      const lockedContentDigest = calculateStagingDigest(
+        staging,
+        lockedArtifacts,
+      );
+      const lockedJournalDigest = crypto
+        .createHash("sha256")
+        .update(readWorkflowJournal(staging).source)
+        .digest("hex");
+      if (
+        stableJson(lockedStoredRecord) !== stableJson(initialRecord) ||
+        stableJson(lockedArtifacts) !== stableJson(initialArtifacts) ||
+        lockedContentDigest !== initialContentDigest ||
+        lockedJournalDigest !== initialJournalDigest
+      )
+        throw new Error(
+          "workflow advanceのpreview後・writer lock取得前にstagingまたはjournalが変更されました。新しいpreviewから再実行してください",
+        );
+      const validation = validateIssue(staging, {
+        stage: plan.validationStage,
+        gherkinDialect: issueStagingGherkinDialect(staging),
+      });
+      if (!validation.valid)
+        throw new Error(
+          `workflow advanceの成果物検証に失敗しました: ${validation.errors.join("; ")}`,
+        );
+      const validatedArtifacts = listStagingArtifacts(staging);
+      const validatedContentDigest = calculateStagingDigest(
+        staging,
+        validatedArtifacts,
+      );
+      if (
+        stableJson(validatedArtifacts) !== stableJson(initialArtifacts) ||
+        validatedContentDigest !== initialContentDigest
+      )
+        throw new Error(
+          "workflow advanceの成果物検証中にstagingが変更されました。新しいpreviewから再実行してください",
+        );
+      const current = inspectWorkflowStaging(staging);
+      const currentJournal = readWorkflowJournal(staging);
+      const currentPlan = planWorkflowAdvance({
+        mode: current.mode,
+        currentStep: current.currentStep,
+        nextStep: current.nextStep,
+        valid: current.valid,
+        implementationHeadBound: latestStep9HasImplementationHead(
+          currentJournal.entries,
+        ),
+        errors: current.errors,
+      });
+      if (
+        currentPlan.state !== "preview" ||
+        currentPlan.targetStep !== plan.targetStep ||
+        currentPlan.operation !== plan.operation
+      )
+        throw new Error(
+          "workflow advanceのpreview後にstaging stateが変更されました。新しいpreviewから再実行してください",
+        );
+      const targetStep = plan.targetStep!;
+      const definition = workflowStep(targetStep);
+      if (!definition) throw new Error("workflow step定義がありません");
+      if (plan.operation === "record") {
+        if (artifacts.length === 0)
+          throw new Error(
+            "workflow advanceの記録には--artifactが1件以上必要です",
+          );
+        const candidateHeadSha = assertWorkflowAdvanceArtifacts(
+          staging,
+          targetStep,
+          artifacts,
+        );
+        const evidence = required(flags, "evidence");
+        const entry: StepJournalEntry = {
+          step: targetStep,
+          skillId: definition.skillId,
+          mode: current.mode,
+          recordedAt: flags["recorded-at"] ?? new Date().toISOString(),
+          artifacts,
+          evidence:
+            candidateHeadSha === undefined
+              ? evidence
+              : `${evidence}; candidate HEAD ${candidateHeadSha}`,
+          ...(candidateHeadSha === undefined
+            ? {}
+            : { implementationHeadSha: candidateHeadSha }),
+        };
+        if (
+          candidateHeadSha !== undefined &&
+          git(
+            ["rev-parse", "--verify", "HEAD^{commit}"],
+            path.resolve(staging, "../../../.."),
+          ).stdout.trim() !== candidateHeadSha
+        )
+          throw new Error(
+            "Step 9の成果物検証中に候補HEADが変更されました。新しいHEADから再実行してください",
+          );
+        const result = appendWorkflowJournalEntry({
+          staging,
+          entry,
+          headSha: candidateHeadSha,
+          expectedStagingDigest: initialContentDigest,
+        });
+        print({ ...plan, state: "applied", result });
+        return 0;
+      }
+      if (flags.authorize !== "approved")
+        throw new Error("Issue同期には--authorize=approvedが必要です");
+      const issueRaw = required(flags, "issue");
+      if (!/^[1-9]\d*$/u.test(issueRaw))
+        throw new Error("--issueは正のIssue番号で指定してください");
+      const repository = required(flags, "repo");
+      const recordedAt = flags["recorded-at"] ?? new Date().toISOString();
+      const syncedAt = flags["synced-at"] ?? new Date().toISOString();
+      for (const [label, value] of [
+        ["recorded-at", recordedAt],
+        ["synced-at", syncedAt],
+      ] as const) {
+        const parsed = Date.parse(value);
+        if (
+          !Number.isFinite(parsed) ||
+          new Date(parsed).toISOString() !== value
+        )
+          throw new Error(`--${label}はISO 8601 UTC日時で指定してください`);
+      }
+      const expectedBodySha256 = required(flags, "expected-body-sha256");
+      if (!/^[a-f0-9]{64}$/u.test(expectedBodySha256))
+        throw new Error(
+          "--expected-body-sha256はpreviewが表示した64桁のbodySha256で指定してください",
+        );
+      if (expectedBodySha256 !== syncPreview?.bodySha256)
+        throw new Error(
+          "--expected-body-sha256が現在の同期previewと一致しません。新しいpreviewを確認してから再実行してください",
+        );
+      const checkpoint = targetStep as 4 | 8;
+      const tracker = `https://github.com/${repository}/issues/${issueRaw}`;
+      if (checkpoint === 8)
+        assertUniqueStep4Tracker(readWorkflowJournal(staging).entries, tracker);
+      const draft = buildIssueSyncBody(
+        staging,
+        checkpoint,
+        issueStagingGherkinDialect(staging),
+      );
+      if (
+        syncPreview !== undefined &&
+        draft.bodySha256 !== syncPreview.generatedBodySha256
+      )
+        throw new Error(
+          "workflow advanceのpreview後・writer lock取得前に同期本文が変更されました。新しいpreviewから再実行してください",
+        );
+      const observed = github(
+        "issue.read",
+        { repository, issue: Number(issueRaw) },
+        process.cwd(),
+      );
+      if (observed.bodySha256 !== syncPreview?.observedBodySha256)
+        throw new Error(
+          "workflow advanceのpreview後にGitHub Issue本文が変更されました。新しいpreviewから再実行してください",
+        );
+      const dispatchBody = composeWorkflowAdvanceIssueBody(
+        observed.body,
+        draft.body,
+      );
+      const dispatchBodySha256 = crypto
+        .createHash("sha256")
+        .update(dispatchBody.trimEnd())
+        .digest("hex");
+      if (dispatchBodySha256 !== syncPreview?.bodySha256)
+        throw new Error(
+          "workflow advanceのpreview後に同期本文が変更されました。新しいpreviewから再実行してください",
+        );
+      let temporaryDirectory: string | undefined;
+      let bodyFile: string | undefined;
+      let primaryError: unknown;
+      let resultCode: number | undefined;
+      try {
+        temporaryDirectory = fs.mkdtempSync(
+          path.join(os.tmpdir(), "asc-workflow-advance-"),
+        );
+        bodyFile = path.join(temporaryDirectory, "body.md");
+        fs.writeFileSync(bodyFile, dispatchBody, { flag: "wx", mode: 0o600 });
+        const latest = buildIssueSyncBody(
+          staging,
+          checkpoint,
+          issueStagingGherkinDialect(staging),
+        );
+        if (latest.bodySha256 !== draft.bodySha256)
+          throw new Error(
+            "workflow advanceの同期直前にstagingが変更されました。新しいpreviewから再実行してください",
+          );
+        const before = readStoredStagingRecord(staging);
+        const fullStep4 = before.mode === "full" && checkpoint === 4;
+        if (!fullStep4 || before.state === "promotion-active")
+          assertStagingSyncTarget(
+            staging,
+            checkpoint,
+            {
+              repository,
+              issue: Number(issueRaw),
+            },
+            {
+              allowPromotionStep4: fullStep4,
+            },
+          );
+        const observedDispatchBodySha256 = crypto
+          .createHash("sha256")
+          .update(observed.body.trimEnd())
+          .digest("hex");
+        const alreadyPublished =
+          observedDispatchBodySha256 === dispatchBodySha256;
+        let syncConfirmed = alreadyPublished;
+        try {
+          let synced = { url: tracker };
+          if (!alreadyPublished) {
+            synced = github(
+              "issue.sync",
+              {
+                repository,
+                issue: Number(issueRaw),
+                bodyFile: bodyFile!,
+                expectedBodySha256: observed.bodySha256,
+              },
+              process.cwd(),
+            );
+            syncConfirmed = true;
+          }
+          if (!fullStep4)
+            recordStagingSync(staging, {
+              tracker,
+              checkpoint,
+              syncedAt,
+              bodyDigest: dispatchBodySha256,
+              readBackDigest: dispatchBodySha256,
+            });
+          const entry: StepJournalEntry = {
+            step: targetStep,
+            skillId: definition.skillId,
+            mode: current.mode,
+            recordedAt,
+            artifacts: [synced.url],
+            evidence: `sync read-back digest ${dispatchBodySha256} matched tracker ${tracker}`,
+          };
+          const journal = appendWorkflowJournalEntry({
+            staging,
+            entry,
+            expectedStagingDigest: initialContentDigest,
+          });
+          print({
+            ...plan,
+            state: "applied",
+            result: {
+              sync: synced,
+              journal,
+              ...(alreadyPublished
+                ? {
+                    recovery: {
+                      state: "journal-recovered",
+                      tracker,
+                      bodySha256: dispatchBodySha256,
+                    },
+                  }
+                : {}),
+            },
+          });
+          resultCode = 0;
+        } catch (error) {
+          let publicationState: "published" | "unpublished" | "unknown" =
+            syncConfirmed ? "published" : "unknown";
+          try {
+            const recovered = github(
+              "issue.read",
+              { repository, issue: Number(issueRaw) },
+              process.cwd(),
+            );
+            const recoveredDigest = crypto
+              .createHash("sha256")
+              .update(recovered.body.trimEnd())
+              .digest("hex");
+            publicationState =
+              recoveredDigest === dispatchBodySha256
+                ? "published"
+                : "unpublished";
+          } catch {
+            publicationState = "unknown";
+          }
+          let journalTransaction = "none";
+          try {
+            journalTransaction =
+              inspectPendingJournalTransaction(staging)?.state ?? "none";
+          } catch (transactionError) {
+            journalTransaction = `invalid:${transactionError instanceof Error ? transactionError.message : String(transactionError)}`;
+          }
+          const journalBeforeRecovery = readWorkflowJournal(staging);
+          const publishedEntry = journalBeforeRecovery.entries.at(-1);
+          const expectedEvidence = `sync read-back digest ${dispatchBodySha256} matched tracker ${tracker}`;
+          const localJournalPublished =
+            publicationState === "published" &&
+            publishedEntry?.step === targetStep &&
+            publishedEntry.mode === current.mode &&
+            publishedEntry.recordedAt === recordedAt &&
+            stableJson(publishedEntry.artifacts) === stableJson([tracker]) &&
+            publishedEntry.evidence === expectedEvidence;
+          if (
+            localJournalPublished &&
+            (journalTransaction === "published" ||
+              journalTransaction === "none")
+          ) {
+            if (journalTransaction === "published")
+              recoverPendingJournalTransaction(staging);
+            else refreshStoredStagingDigest(staging);
+            const recoveredJournal = readWorkflowJournal(staging);
+            const recoveredEntry = recoveredJournal.entries.at(-1);
+            if (!recoveredEntry || recoveredEntry.step !== targetStep)
+              throw new Error(
+                "公開済みworkflow journal transactionの復旧後検査に失敗しました",
+                { cause: error },
+              );
+            print({
+              ...plan,
+              state: "applied",
+              result: {
+                sync: { url: tracker },
+                journal: {
+                  entry: recoveredEntry,
+                  journalDigest: crypto
+                    .createHash("sha256")
+                    .update(recoveredJournal.source)
+                    .digest("hex"),
+                  stagingDigest: readStoredStagingRecord(staging).digest,
+                },
+                recovery: {
+                  state: "journal-recovered",
+                  tracker,
+                  bodySha256: dispatchBodySha256,
+                  journalTransaction,
+                },
+              },
+            });
+            resultCode = 0;
+          } else {
+            const retry =
+              publicationState === "published"
+                ? "同じtrackerの新しいpreviewを確認して再実行すると、外部同期を重複せずjournalを復旧します"
+                : "公開状態を再確認するため、新しいpreviewを確認してからapplyを再実行してください";
+            throw new Error(
+              `${error instanceof Error ? error.message : String(error)}。workflow advance recovery: state=${publicationState}, tracker=${tracker}, bodySha256=${dispatchBodySha256}, journalTransaction=${journalTransaction}。${retry}`,
+              { cause: error },
+            );
+          }
+        }
+      } catch (error) {
+        primaryError = error;
+      }
+      let cleanupError: unknown;
+      if (bodyFile && fs.existsSync(bodyFile))
+        try {
+          fs.unlinkSync(bodyFile);
+        } catch (error) {
+          cleanupError = error;
+        }
+      if (temporaryDirectory && fs.existsSync(temporaryDirectory))
+        try {
+          fs.rmdirSync(temporaryDirectory);
+        } catch (error) {
+          cleanupError ??= error;
+        }
+      if (primaryError !== undefined) throw primaryError;
+      if (cleanupError !== undefined) throw cleanupError;
+      if (resultCode === undefined)
+        throw new Error("workflow advanceの同期結果を確定できませんでした");
+      return resultCode;
+    });
+  }
   if (command === "workflow" && subcommand === "record") {
     const { flags, artifacts } = workflowArguments(rest);
     const unknown = Object.keys(flags).filter(
@@ -4639,6 +5416,7 @@ export async function main(
           "recorded-at",
           "review-session-digest",
           "post-terminal-intake",
+          "reconfirm",
         ].includes(flag),
     );
     if (unknown.length > 0)
@@ -4668,16 +5446,33 @@ export async function main(
       artifacts,
       evidence,
     };
+    /**
+     * 上流再確定entry（Issue #1342）。Step 10はreview binding、Step 11はdelivery終端が
+     * 所有するため対象外。先行する通常entryの存在はjournal本体の順序判定が検証する。
+     */
+    /**
+     * **値なしflagは`__present__`だけを受理する。** `--reconfirm=false`のような
+     * 値付き形式は文字列としてflagsへ入るため、`!== undefined`で判定すると
+     * **利用者が「無効にした」つもりの入力が有効として通る**（CodeRabbit指摘）。
+     * 同じ形の`--post-terminal-intake`も同様に扱う。
+     */
+    const reconfirm = presentFlag(flags, "reconfirm");
+    if (reconfirm && (step.step < 1 || step.step > 9))
+      throw new Error("--reconfirmはStep 1〜9にだけ指定できます");
+    if (reconfirm) entry = { ...entry, reconfirmation: true };
     const repositoryRoot = path.resolve(staging, "../../../..");
     const needsHeadSha =
-      step.step === 10 || (journal.mode === "poc" && step.step >= 9);
+      step.step === 9 ||
+      step.step === 10 ||
+      (journal.mode === "poc" && step.step >= 9);
     const headSha = needsHeadSha
       ? git(
           ["rev-parse", "--verify", "HEAD^{commit}"],
           repositoryRoot,
         ).stdout.trim()
       : undefined;
-    const intake = flags["post-terminal-intake"] !== undefined;
+    if (step.step === 9) entry.implementationHeadSha = headSha!;
+    const intake = presentFlag(flags, "post-terminal-intake");
     if (intake && step.step !== 10)
       throw new Error(
         "--post-terminal-intakeはworkflow record --step=10だけに指定できます",
@@ -4798,7 +5593,7 @@ export async function main(
   }
   if (command === "workflow")
     throw new Error(
-      "workflowにはsteps、verification-set、assess-discovery、promote-full、record、verifyのいずれかが必要です",
+      "workflowにはsteps、advance、verification-set、assess-discovery、promote-full、record、verifyのいずれかが必要です",
     );
   if (command === "graph" && subcommand === "install") {
     const { flags } = parse(rest);
@@ -5777,6 +6572,86 @@ export async function main(
       : previewReviewRound({ staging, round });
     print({ applied: apply, ...state });
     return 0;
+  }
+  if (command === "review" && subcommand === "progress") {
+    const { flags, positionals } = parse(rest);
+    const allowed = [
+      "staging",
+      "operation",
+      "task",
+      "state",
+      "recorded-at",
+      "expected-journal-digest",
+      "apply",
+    ];
+    const unknown = Object.keys(flags).filter(
+      (flag) => !allowed.includes(flag),
+    );
+    if (unknown.length > 0)
+      throw new Error(
+        `review progressの未知optionです: --${unknown.join(", --")}`,
+      );
+    if (positionals.length > 0)
+      throw new Error("review progressに位置引数は使用できません");
+    const staging = required(flags, "staging");
+    const operation = required(flags, "operation");
+    const apply = flags.apply === true;
+    if (flags.apply !== undefined && !apply)
+      throw new Error("review progress --applyに値は指定できません");
+    const expectedJournalDigest =
+      typeof flags["expected-journal-digest"] === "string"
+        ? flags["expected-journal-digest"]
+        : null;
+    if (operation === "append") {
+      const state = required(flags, "state");
+      if (!["planned", "started", "completed", "blocked"].includes(state))
+        throw new Error("review progress --stateが不正です");
+      print(
+        appendReviewProgress({
+          staging,
+          taskId: required(flags, "task"),
+          state: state as "planned" | "started" | "completed" | "blocked",
+          recordedAt:
+            typeof flags["recorded-at"] === "string"
+              ? flags["recorded-at"]
+              : new Date().toISOString(),
+          expectedDigest: expectedJournalDigest,
+          apply,
+        }),
+      );
+      return 0;
+    }
+    if (operation === "seal") {
+      print(
+        sealReviewProgress({
+          staging,
+          sealedAt:
+            typeof flags["recorded-at"] === "string"
+              ? flags["recorded-at"]
+              : new Date().toISOString(),
+          expectedDigest: expectedJournalDigest,
+          apply,
+        }),
+      );
+      return 0;
+    }
+    if (operation === "project") {
+      print(
+        projectReviewProgress({
+          staging,
+          apply,
+        }),
+      );
+      return 0;
+    }
+    if (operation === "verify") {
+      if (apply) throw new Error("review progress verifyはread-onlyです");
+      print(verifyStoredReviewProgress(staging));
+      return 0;
+    }
+    throw new Error(
+      "review progress --operationはappend|seal|project|verifyが必要です",
+    );
   }
   if (command === "review" && subcommand === "evidence") {
     const { flags } = parse(rest);

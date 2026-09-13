@@ -6,6 +6,11 @@ Feature: review round雛形と契約の露出
     When review round --initでround 1の雛形を書く
     Then 雛形をfileへ渡したreview round previewが受理される
 
+  Scenario: SCN-UNIT-REVINIT-023 雛形は検分対象HEADと記録順を示す
+    Given 初回candidateを持つstagingがある
+    When round 1の雛形を直接構築する
+    Then notesは検分対象HEADと記録順を示す
+
   Scenario: SCN-UNIT-REVINIT-002 --initはstagingを書き換えない
     Given 初回candidateを持つstagingがある
     When review round --initでround 1の雛形を書く
@@ -41,11 +46,32 @@ Feature: review round雛形と契約の露出
     Given round 1を記録しHEADを進めていないstagingがある
     When review round --initで次roundの雛形を書こうとする
     Then 実Git差分が空であるerrorで拒否し雛形を書かない
+    And 空差分の診断はsession確認を案内する
+
+  Scenario: SCN-UNIT-DIAGHINT-005 非収束理由をstatus別に案内する
+    Given 非収束statusごとの診断がある
+    When status別の診断を比較する
+    Then activeとbudget-exhaustedでownerの確認対象が異なる
 
   Scenario: SCN-UNIT-REVINIT-009 current HEADと異なる--headの--initを拒否する
     Given 初回candidateを持つstagingがある
     When --headを基点SHAにしてreview round --initを実行する
     Then current HEADと一致しないerrorで拒否し雛形を書かない
+
+  Scenario: SCN-UNIT-REVINIT-020 Step 9と異なるHEADの初回reviewを拒否する
+    Given Step 9のimplementation HEAD後に別commitを積んだstagingがある
+    When Step 9後のHEADでreview round --initを実行する
+    Then Step 9 HEADとの不一致errorで拒否し雛形を書かない
+
+  Scenario: SCN-UNIT-REVINIT-021 自由文Evidenceだけの旧Step 9で初回reviewを拒否する
+    Given implementation HEAD bindingのない旧Step 9を持つstagingがある
+    When Step 9後のHEADでreview round --initを実行する
+    Then Step 9 binding不足errorで拒否し雛形を書かない
+
+  Scenario: SCN-UNIT-REVINIT-022 Step 9より先に初回reviewを開始できない
+    Given Step 9をまだ記録していないstagingがある
+    When Step 9後のHEADでreview round --initを実行する
+    Then Step 9 binding不足errorで拒否し雛形を書かない
 
   Scenario: SCN-UNIT-REVINIT-010 不足flagは--initの有無に応じて1回で列挙する
     Given 初回candidateを持つstagingがある
@@ -102,10 +128,20 @@ Feature: review round雛形と契約の露出
     When 雛形の耐久化後にdirectory descriptor close失敗を注入する
     Then 完成済み雛形のpathを返し内容を保持する
 
-  Scenario: SCN-UNIT-REVINIT-012 差し替えが無ければ検査した実体の親へ雛形を書く
+  Scenario: SCN-UNIT-REVINIT-012 macOSでも固定した親directoryへ安全に雛形を作成する
     Given 初回candidateを持つstagingがある
     When --outをstaging外を指すsymlink配下にしてreview round --initでround 1の雛形を書く
-    Then writtenは利用者指定pathのまま実体の親へ雛形を書く
+    Then 全対応環境で実体の親へ雛形を書く
+
+  Scenario: SCN-UNIT-REVINIT-024 macOS helperのdirectory fsync失敗は作成内容を空にする
+    Given 初回candidateを持つstagingがある
+    When macOS helperのfile fsync直後に失敗を注入する
+    Then Darwinでは作成descriptorを空にして失敗を返す
+
+  Scenario: SCN-UNIT-REVINIT-025 macOS helperの強制終了を保守的に診断する
+    Given 初回candidateを持つstagingがある
+    When macOS helperを作成直後に強制終了する
+    Then Darwinではsignalと未sanitizeを診断する
 
   Scenario: SCN-UNIT-REVINIT-013 budget-exhaustedのsessionへの--initを拒否する
     Given budget-exhaustedのsessionを持つstagingがある

@@ -66,7 +66,10 @@ function commitFiles(
   return git(root, ["rev-parse", "HEAD"]);
 }
 
-function workflowEntry(step: number): StepJournalEntry {
+function workflowEntry(
+  step: number,
+  implementationHeadSha?: string,
+): StepJournalEntry {
   const definition = WORKFLOW_STEPS.find((item) => item.step === step);
   if (!definition) throw new Error(`step ${step}がありません`);
   return {
@@ -76,6 +79,7 @@ function workflowEntry(step: number): StepJournalEntry {
     recordedAt: instant.toISOString(),
     artifacts: [`artifact-${step}`],
     evidence: `step ${step}の固定証拠`,
+    ...(step === 9 ? { implementationHeadSha } : {}),
   };
 }
 
@@ -111,7 +115,7 @@ function convergedFixture(
   for (const step of [1, 4, 9])
     appendWorkflowJournalEntry({
       staging: world.staging,
-      entry: workflowEntry(step),
+      entry: workflowEntry(step, world.implementationHead),
     });
   const observed = observeReviewDiff(
     world.root,

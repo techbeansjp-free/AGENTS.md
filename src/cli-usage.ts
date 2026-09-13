@@ -210,9 +210,9 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     optionalFlags: [
       optional(
         "provider",
-        "text",
-        "codexは公式selectorとtrusted tierを検証、claudeは旧台帳",
-        "旧台帳互換",
+        "codex|claude",
+        "codexまたはclaudeを受理する。trusted selector採用tierとprovider公式観測で照合し、出力はloader由来のprovenance source（git、git-legacy、git-floor）とprovider別adoption用途を持つ",
+        "未指定はworking treeの既存台帳による互換検証（loader由来のprovenance sourceはfilesystemまたはfilesystem-legacy、usageはcompatibility-only）。認可には使わない",
       ),
       ROOT_FLAG,
       optional("justification", "text", "上位tierを選ぶ根拠", "根拠なし"),
@@ -476,6 +476,50 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "workflow",
+    subcommand: "advance",
+    summary:
+      "保存済みstateから次の1 Stepを検証・記録し、review/deliveryは専用commandへ委譲する。既定はpreview",
+    requiredFlags: [flag("staging", "path", "Issue staging directory")],
+    conditionalFlags: [
+      conditional(
+        "artifact",
+        "path",
+        "記録する成果物。複数回指定可",
+        "Step 1〜3・5〜9を--applyするとき",
+      ),
+      conditional(
+        "evidence",
+        "text",
+        "人が補足する検証証拠",
+        "Step 1〜3・5〜9を--applyするとき",
+      ),
+      conditional("repo", "owner/name", "同期先repository", "Step 4/8"),
+      conditional("issue", "整数", "同期先Issue番号", "Step 4/8"),
+      conditional(
+        "authorize",
+        "approved",
+        "Issue同期の明示承認",
+        "Step 4/8を--applyするとき",
+      ),
+      conditional(
+        "expected-body-sha256",
+        "64hex",
+        "直前のpreviewが表示した同期本文digest",
+        "Step 4/8を--applyするとき",
+      ),
+    ],
+    optionalFlags: [
+      optional("recorded-at", "ISO8601", "journal記録時刻", "実行時刻"),
+      optional("synced-at", "ISO8601", "Issue同期時刻", "実行時刻"),
+      optional("dry-run", "", "書き込まず計画だけを出力", "省略時もpreview"),
+      optional("apply", "", "次の1 Stepだけを適用", "preview"),
+    ],
+    example:
+      "npx agent-skill-chain workflow advance --staging=.agent-skill-chain/tmp/issues/20260912_change --artifact=01_要件定義.md --evidence='requirements validated' --apply",
+    acceptsSpaceSeparatedFlags: true,
+  },
+  {
+    command: "workflow",
     subcommand: "record",
     summary: "Step実施をstep journalへ追記する",
     requiredFlags: [
@@ -502,6 +546,12 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "post-terminal-intake",
         "",
         "Step 11記録後に外部reviewer指摘を同じPRで取り込んだroundとして記録する",
+        "通常のStep記録",
+      ),
+      optional(
+        "reconfirm",
+        "",
+        "後続Step記録後に上流Step 1〜9を再確定した事実を、順序判定から外すentryとして記録する。同じStepの通常記録が先行しているときだけ受理する",
         "通常のStep記録",
       ),
     ],
@@ -572,6 +622,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       optional("changed", "path,path", "変更path", "観測なし"),
     ],
     example: "npx agent-skill-chain issue validate --path=./ISSUE.md",
+    note: "1 Issueの境界は所要時間ではなく、独立に完成・review・merge・rollbackできるかという成果物の結合度で決めます。独立した切り戻し、異なるreview担当・観点、先行merge、失敗影響の分離が必要なら分割候補です。45分は再確認の補助指標であり、長いだけでは分割しません。00〜03を個別管理するfullは集約00のquick/pocより固定費が大きく、分割はmodeごとのStep 0〜11、PR review、既定branch追随時のStep 9再記録とreview round、有限review予算（同一scope最大6回、収束後の取り直し2回、通算8回）の固定費を分割数だけ要するため、一体として扱うべきなら分割しない判断も正当です。fullの00 §2.1直下に置く[成果物:adr|contract|feature|documentation|migration] markerが2件以上ならwarningsへ分割候補を返します。quick/poc集約形式はmarker warningの判定対象外です。warningはvalid、errors、mode、blockedOperations、終了値を変更しません",
   },
   {
     command: "issue",
@@ -773,7 +824,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       "npx agent-skill-chain review round --staging=.agent-skill-chain/tmp/issues/20260830_120000-change --file=./review-round.json --apply",
     inputContract: {
       description:
-        "--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。blocking findingのcontractIdはanchorのACまたはINVに一致させる。IDは大文字英数と._-で、anchorの各ID列は重複なし昇順。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた雛形を書く",
+        "--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。blocking findingのcontractIdはanchorのACまたはINVに一致させる。IDは大文字英数と._-で、anchorの各ID列は重複なし昇順。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた雛形を書く。**followOnly: trueは既定branch追随だけでHEADが動いたroundを表し、予算へ数えない。** 第1親が前roundのcandidate、第2親が既定branch tipのancestor、treeが両親の自動merge結果と一致するmerge commitの場合だけ受理し、findingsは空でなければならない",
       example: {
         round: 1,
         previousRoundDigest: null,
@@ -802,6 +853,37 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         ],
       },
     },
+  },
+  {
+    command: "review",
+    subcommand: "progress",
+    summary:
+      "固定review入力treeへ影響しない進捗をpreview・追記・read-only表示・検証する",
+    requiredFlags: [
+      flag("staging", "path", "対象Issue staging"),
+      flag("operation", "append|seal|project|verify", "進捗操作"),
+    ],
+    conditionalFlags: [
+      conditional("task", "ID", "宣言済みtask ID", "operation=append"),
+      conditional(
+        "state",
+        "planned|started|completed|blocked",
+        "進捗state",
+        "operation=append",
+      ),
+    ],
+    optionalFlags: [
+      optional("recorded-at", "ISO8601", "記録時刻", "実行時刻"),
+      optional(
+        "expected-journal-digest",
+        "sha256",
+        "直前journal digest。初回は省略",
+        "null",
+      ),
+      optional("apply", "", "append・sealだけを永続化する", "preview"),
+    ],
+    example:
+      "npx agent-skill-chain review progress --staging=.agent-skill-chain/tmp/issues/20260912_change --operation=append --task=T01 --state=completed",
   },
   {
     command: "review",

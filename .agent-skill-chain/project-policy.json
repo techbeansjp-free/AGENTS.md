@@ -6,9 +6,18 @@
       "stopAt": "pull_request"
     },
     "merge": {
-      "mode": "disabled",
-      "branches": [],
-      "methods": [],
+      "mode": "assisted",
+      "branches": [
+        "feature/*",
+        "fix/*",
+        "bugfix/*",
+        "refactor/*",
+        "test/*",
+        "docs/*",
+        "chore/*",
+        "process/*"
+      ],
+      "methods": ["merge"],
       "requiredChecks": [],
       "requiredReviews": 1
     },

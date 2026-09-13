@@ -35,7 +35,9 @@ interface ProviderCatalog {
 
 const PROVIDER_NAME = /^[a-z0-9][a-z0-9.-]{0,127}$/u;
 const MODEL_SLUG = /^[a-z0-9][a-z0-9.-]{0,127}$/u;
+const CLAUDE_MODEL_ID = /^[^\p{C}\p{Z}]{1,512}$/u;
 const CODEX_RESPONSE_ID = 1;
+const CLAUDE_RESPONSE_ID = "asc-provider-observe";
 const PROVIDER_TIMEOUT_MS = 10_000;
 
 function parseJsonLines(stdout: string): unknown[] {
@@ -64,6 +66,16 @@ function hasCodexResponse(stdout: string, id = CODEX_RESPONSE_ID): boolean {
     }
   }
   return false;
+}
+
+function hasClaudeResponse(stdout: string): boolean {
+  return parseTerminatedJsonLines(stdout).some(
+    (message) =>
+      isRecord(message) &&
+      message.type === "control_response" &&
+      isRecord(message.response) &&
+      message.response.request_id === CLAUDE_RESPONSE_ID,
+  );
 }
 
 function codexInitializeInput(): string {
@@ -97,6 +109,16 @@ function codexRequests(official: boolean): string {
     ]
       .map((message) => JSON.stringify(message))
       .join("\n") + "\n"
+  );
+}
+
+function claudeInitializeInput(): string {
+  return (
+    JSON.stringify({
+      type: "control_request",
+      request_id: CLAUDE_RESPONSE_ID,
+      request: { subtype: "initialize", hooks: {} },
+    }) + "\n"
   );
 }
 
@@ -135,6 +157,20 @@ function runCodexSession(
       initialized &&
       hasCodexResponse(stdout) &&
       (!official || hasCodexResponse(stdout, 2)),
+  });
+}
+
+function runClaudeSession(
+  file: string,
+  args: string[],
+  cwd: string,
+  options: ProcessOptions,
+): Promise<ProcessResult> {
+  return runJsonlSession(file, args, cwd, {
+    ...options,
+    input: claudeInitializeInput(),
+    timeoutMs: options.timeoutMs ?? PROVIDER_TIMEOUT_MS,
+    isComplete: hasClaudeResponse,
   });
 }
 
@@ -195,6 +231,68 @@ function codexCatalog(stdout: string): ProviderCatalog | undefined {
   };
 }
 
+function claudeCatalog(stdout: string): ProviderCatalog | undefined {
+  const responses = parseTerminatedJsonLines(stdout).filter(
+    (message) =>
+      isRecord(message) &&
+      message.type === "control_response" &&
+      isRecord(message.response) &&
+      message.response.request_id === CLAUDE_RESPONSE_ID,
+  );
+  const envelope = responses[0];
+  if (
+    responses.length !== 1 ||
+    !isRecord(envelope) ||
+    !isRecord(envelope.response) ||
+    envelope.response.subtype !== "success" ||
+    !isRecord(envelope.response.response) ||
+    !Array.isArray(envelope.response.response.models)
+  )
+    return undefined;
+  const modelMetadata: ProviderModelObservation[] = [];
+  const values: string[] = [];
+  for (const entry of envelope.response.response.models) {
+    if (
+      !isRecord(entry) ||
+      typeof entry.value !== "string" ||
+      !CLAUDE_MODEL_ID.test(entry.value) ||
+      typeof entry.resolvedModel !== "string" ||
+      !CLAUDE_MODEL_ID.test(entry.resolvedModel) ||
+      (entry.supportsEffort !== undefined &&
+        typeof entry.supportsEffort !== "boolean")
+    )
+      return undefined;
+    const efforts = entry.supportedEffortLevels;
+    if (efforts !== undefined && !Array.isArray(efforts)) return undefined;
+    const supportedReasoningEfforts = efforts ?? [];
+    if (
+      (entry.supportsEffort === false &&
+        supportedReasoningEfforts.length > 0) ||
+      supportedReasoningEfforts.some(
+        (effort) =>
+          typeof effort !== "string" ||
+          !/^[a-z][a-z0-9_-]{0,31}$/u.test(effort),
+      ) ||
+      new Set(supportedReasoningEfforts).size !==
+        supportedReasoningEfforts.length
+    )
+      return undefined;
+    values.push(entry.value);
+    modelMetadata.push({
+      model: entry.resolvedModel,
+      recommended: entry.value === "default",
+      supportedReasoningEfforts: supportedReasoningEfforts as string[],
+    });
+  }
+  if (
+    new Set(values).size !== values.length ||
+    values.filter((value) => value === "default").length !== 1
+  )
+    return undefined;
+  const models = [...new Set(modelMetadata.map((entry) => entry.model))];
+  return { available: models.length > 0, models, modelMetadata };
+}
+
 async function defaultExecutor(
   file: string,
   args: string[],
@@ -239,7 +337,12 @@ function unknownObservation(
     models: [],
     modelMetadata: [],
     observedAt,
-    entrypoint: provider === "codex" ? "codex app-server model/list" : provider,
+    entrypoint:
+      provider === "codex"
+        ? "codex app-server model/list"
+        : provider === "claude"
+          ? "claude stream-json initialize models"
+          : provider,
     reason,
   };
 }
@@ -260,14 +363,23 @@ export async function observeProvider(
   let result: ProcessResult;
   try {
     const observer =
-      options.official && execute === defaultExecutor
+      execute === defaultExecutor && provider === "codex"
         ? (
             file: string,
             args: string[],
             cwd: string,
             processOptions: ProcessOptions,
-          ) => runCodexSession(file, args, cwd, processOptions, true)
-        : execute;
+          ) =>
+            runCodexSession(
+              file,
+              args,
+              cwd,
+              processOptions,
+              options.official === true,
+            )
+        : execute === defaultExecutor && provider === "claude"
+          ? runClaudeSession
+          : execute;
     result = await observer(
       provider,
       provider === "codex"
@@ -276,7 +388,16 @@ export async function observeProvider(
             "--stdio",
             ...(options.official ? CODEX_SELECTION_CONFIG : []),
           ]
-        : ["models", "list", "--json"],
+        : provider === "claude"
+          ? [
+              "--output-format",
+              "stream-json",
+              "--verbose",
+              "--input-format",
+              "stream-json",
+              "--setting-sources=",
+            ]
+          : ["models", "list", "--json"],
       options.cwd ?? process.cwd(),
       { allowFailure: true, timeoutMs: PROVIDER_TIMEOUT_MS },
     );
@@ -339,6 +460,8 @@ export async function observeProvider(
           );
       }
       catalog = codexCatalog(result.stdout);
+    } else if (provider === "claude") {
+      catalog = claudeCatalog(result.stdout);
     } else {
       const value: unknown = parseJsonStrict(
         result.stdout,
@@ -377,7 +500,12 @@ export async function observeProvider(
       supportedReasoningEfforts: [...entry.supportedReasoningEfforts],
     })),
     observedAt,
-    entrypoint: provider === "codex" ? "codex app-server model/list" : provider,
+    entrypoint:
+      provider === "codex"
+        ? "codex app-server model/list"
+        : provider === "claude"
+          ? "claude stream-json initialize models"
+          : provider,
   };
 }
 

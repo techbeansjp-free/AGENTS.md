@@ -56,6 +56,10 @@
       "minLength": 1,
       "pattern": "\\S"
     },
+    "implementationHeadSha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
     "pocObservation": {
       "type": "object",
       "additionalProperties": false,
@@ -83,9 +87,33 @@
     },
     "humanOverride": {
       "$ref": "#/$defs/humanOverride"
+    },
+    "postTerminalIntake": {
+      "const": true
+    },
+    "reconfirmation": {
+      "const": true
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": { "step": { "const": 10 } },
+        "required": ["step"]
+      },
+      "else": { "not": { "required": ["postTerminalIntake"] } }
+    },
+    {
+      "if": {
+        "properties": { "step": { "minimum": 1, "maximum": 9 } },
+        "required": ["step"]
+      },
+      "else": { "not": { "required": ["reconfirmation"] } }
+    },
+    {
+      "if": { "properties": { "step": { "const": 9 } } },
+      "else": { "not": { "required": ["implementationHeadSha"] } }
+    },
     {
       "if": {
         "properties": {

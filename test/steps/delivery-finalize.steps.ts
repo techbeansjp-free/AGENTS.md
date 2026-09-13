@@ -12,9 +12,12 @@ import {
   assertPullRequestTrackerBinding,
   createPullRequest,
   authorizeMerge,
+  diagnoseBranchFollowCost,
   extractIssueClosingNumbers,
   validateIssueClosingReferences,
   type MergeInput,
+  type BranchDeliveryPolicyObservation,
+  type BranchFollowCostDiagnostic,
 } from "../../src/domain/delivery.js";
 import {
   buildFinalizeReport,
@@ -63,6 +66,8 @@ interface DeliveryFinalizeWorld extends WorkflowWorld {
   prOverrides: Record<string, string>;
   requiredHeadings: readonly string[];
   protectionObservation: BranchProtectionObservation;
+  branchDeliveryPolicy: BranchDeliveryPolicyObservation;
+  branchFollowCost: BranchFollowCostDiagnostic;
   reviewObservations: ApprovalObservation[];
   stubPath: string;
   trustedPolicy: Policy;
@@ -693,6 +698,32 @@ Given(
     prepareGhProtectionFallbackStub(this, "deletion-only");
   },
 );
+Given(
+  "classic strict {string}とruleset strict {string}とmerge queue {string}を返すgh stubがある",
+  function (classic: string, ruleset: string, queue: string) {
+    const directory = this.temp("asc-gh-delivery-policy-");
+    this.ghLog = path.join(directory, "operations.log");
+    const stub = path.join(directory, "gh");
+    const classicPayload = JSON.stringify({
+      required_status_checks: { strict: classic === "true" },
+    });
+    const rules = [
+      {
+        type: "required_status_checks",
+        parameters: {
+          strict_required_status_checks_policy: ruleset === "true",
+        },
+      },
+      ...(queue === "yes" ? [{ type: "merge_queue", parameters: {} }] : []),
+    ];
+    fs.writeFileSync(
+      stub,
+      `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(this.ghLog)},args.join(' ')+'\\n');const endpoint=args.find((arg)=>arg.startsWith('repos/'));if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:'o/r',viewerPermission:'READ'}));if(endpoint==='repos/o/r/branches/main/protection'){${classic === "unknown" ? "process.stderr.write('gh: forbidden (HTTP 403)\\n');process.exitCode=1;" : `process.stdout.write(${JSON.stringify(classicPayload)});`}}if(endpoint==='repos/o/r/rules/branches/main?per_page=100'){${queue === "error" ? "process.stderr.write('gh: unavailable (HTTP 503)\\n');process.exitCode=1;" : `process.stdout.write(${JSON.stringify(JSON.stringify([rules]))});`}}\n`,
+    );
+    fs.chmodSync(stub, 0o755);
+    this.stubPath = `${directory}${path.delimiter}${process.env.PATH ?? ""}`;
+  },
+);
 Given("複数pageのreviewを返すexact repositoryのgh stubがある", function () {
   prepareGhReadStub(this, "reviews");
 });
@@ -849,6 +880,20 @@ When("branch protection adapterを実行する", function () {
     process.env.PATH = original;
   }
 });
+When("branch delivery policy adapterを実行する", function () {
+  const original = process.env.PATH;
+  process.env.PATH = this.stubPath;
+  try {
+    this.branchDeliveryPolicy = github(
+      "branch.delivery-policy",
+      { repository: "o/r", branch: "main" },
+      process.cwd(),
+    );
+    this.branchFollowCost = diagnoseBranchFollowCost(this.branchDeliveryPolicy);
+  } finally {
+    process.env.PATH = original;
+  }
+});
 When("PR reviews adapterを実行する", function () {
   const original = process.env.PATH;
   process.env.PATH = this.stubPath;
@@ -917,6 +962,25 @@ Then("classic protection後にrulesetを確認する", function () {
   assert.ok(
     ruleset > classic,
     "ruleset観測がclassic protection後ではありません",
+  );
+});
+Then(
+  "delivery診断のknownは{string}で人手追随必要は{string}である",
+  function (known: string, manual: string) {
+    assert.equal(this.branchFollowCost.known, known === "true");
+    assert.equal(
+      this.branchFollowCost.manualFollowRequired,
+      manual === "unknown" ? null : manual === "true",
+    );
+  },
+);
+Then("classic protection成功時もrulesetを確認する", function () {
+  const operations = fs.readFileSync(this.ghLog, "utf8").trim().split("\n");
+  assert.ok(operations.indexOf("api repos/o/r/branches/main/protection") >= 0);
+  assert.ok(
+    operations.indexOf(
+      "api --paginate --slurp repos/o/r/rules/branches/main?per_page=100",
+    ) >= 0,
   );
 });
 Then("全pageのreviewと順序根拠を取得できる", function () {

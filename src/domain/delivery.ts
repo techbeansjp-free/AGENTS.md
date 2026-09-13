@@ -129,6 +129,53 @@ export interface MergeInput {
   mergeableVerified?: boolean;
 }
 
+/** branch policyのread-only観測。merge authorizationの入力にはしない。 */
+export interface BranchDeliveryPolicyObservation {
+  known: boolean;
+  strictRequiredStatusChecks: boolean | null;
+  mergeQueueConfigured: boolean | null;
+  sources: readonly ("classic" | "ruleset")[];
+  reasons: readonly string[];
+}
+
+export interface BranchFollowCostDiagnostic {
+  known: boolean;
+  manualFollowRequired: boolean | null;
+  reasons: readonly string[];
+}
+
+/**
+ * strict required checksとmerge queue構成から追随費用だけを診断する。
+ *
+ * **merge可否を決めない。** 観測不能を「追随不要」と読み替えるとownerの判断を
+ * 誤らせるため、unknownはnullのまま返す。
+ */
+export function diagnoseBranchFollowCost(
+  observation: BranchDeliveryPolicyObservation,
+): BranchFollowCostDiagnostic {
+  if (
+    !observation.known ||
+    observation.strictRequiredStatusChecks === null ||
+    observation.mergeQueueConfigured === null
+  )
+    return {
+      known: false,
+      manualFollowRequired: null,
+      reasons: observation.reasons,
+    };
+  const manualFollowRequired =
+    observation.strictRequiredStatusChecks && !observation.mergeQueueConfigured;
+  return {
+    known: true,
+    manualFollowRequired,
+    reasons: [
+      manualFollowRequired
+        ? "strict required status checksが有効でmerge queueが無いため、base前進時に人手追随が必要です。安全性を維持して自動化する場合はmerge queueの構成を検討してください"
+        : "strict required status checksが無効かmerge queueが構成済みのため、この構成だけから人手追随必須とは判定しません",
+    ],
+  };
+}
+
 export interface MergeMethodDecision {
   allowed: boolean;
   method: string;

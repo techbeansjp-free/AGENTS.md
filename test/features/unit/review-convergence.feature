@@ -20,11 +20,11 @@ Feature: Review sessionを固定契約へ収束させる
     When round 2の修正差分で前round finding起因のHigh回帰を記録する
     Then 修正起因Highはcurrent blockerになる
 
-  Scenario: SCN-UNIT-REVIEWCONV-004 3 round後も未解決なら自動scope拡大せず終了する
+  Scenario: SCN-UNIT-REVIEWCONV-004 予算上限まで未解決なら自動scope拡大せず終了する
     Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
-    When 同じHigh findingをround 3まで未解決にする
+    When 同じHigh findingを予算上限まで未解決にする
     Then review sessionはbudget-exhaustedになる
-    And round 4への自動継続を拒否する
+    And 取り直しroundへの自動継続を拒否する
 
   Scenario: SCN-UNIT-REVIEWCONV-005 収束後の実commitだけを同digest chainで再reviewする
     Given findingなしでround 1が収束したreview sessionがある
@@ -33,16 +33,42 @@ Feature: Review sessionを固定契約へ収束させる
     When 同じHEADをround 3として追記する
     Then review session更新は同じHEADと空fixedDiffで拒否される
 
-  Scenario: SCN-UNIT-REVIEWCONV-006 収束後のHEAD移動へ取り直し1ラウンドを別枠で許す
+  Scenario: SCN-UNIT-REVIEWCONV-006 収束後のHEAD移動へ取り直しを別枠で許す
     Given findingなしでround 1が収束したreview sessionがある
-    When 収束させずにround 3まで進める
-    And 収束後にHEADを進めてround 4で取り直す
-    Then review sessionはround 4で再収束する
-    And round 5への自動継続を拒否する
+    When 収束させずに予算上限まで進める
+    And 収束後にHEADを進めて取り直しroundを使い切る
+    Then review sessionは取り直しroundで再収束する
+    And 取り直し上限を超える自動継続を拒否する
 
   Scenario: SCN-UNIT-REVIEWCONV-007 取り直しラウンドで未解決が残ればbudget-exhaustedにする
     Given findingなしでround 1が収束したreview sessionがある
-    When 収束させずにround 3まで進める
-    And 収束後にHEADを進めてround 4で未解決を残す
-    Then review sessionはround 4でbudget-exhaustedになる
+    When 収束させずに予算上限まで進める
+    And 収束後にHEADを進めて取り直しroundで未解決を残す
+    Then review sessionは取り直しroundでbudget-exhaustedになる
     And budget終了後の追記を拒否する
+
+  Scenario: SCN-UNIT-REVIEWCONV-008 既定branch追随だけのroundは予算へ数えない
+    Given findingなしでround 1が収束したreview sessionがある
+    When 既定branchを取り込む自動mergeだけでHEADを進めroundを3回記録する
+    Then どのroundも記録されるが予算へは数えない
+    And 予算上限までの通常roundを続けて記録でき記録総数は予算上限を超える
+
+  Scenario: SCN-UNIT-REVIEWCONV-009 追随として受理しない形を名指しして拒否する
+    Given findingなしでround 1が収束したreview sessionがある
+    When 衝突を解決したmergeは自動merge結果と一致しないとして拒否される
+    Then 既定branchのancestorでない第2親を持つmergeは拒否される
+    And 第1親が前roundのcandidateでないmergeは拒否される
+    And 追随roundへfindingを載せると予算へ数える旨を名指しして拒否される
+    And 実装commitを挟んでからのmergeは拒否される
+
+  Scenario: SCN-UNIT-REVIEWCONV-010 未解決blockerを持つ追随roundを記録し保存時もGit証拠を再検証する
+    Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
+    When 未解決blockerを持ったまま既定branchの自動mergeだけを記録する
+    Then 追随roundはblockerと予算を維持したactive状態になる
+    When Git条件を満たさないfollow-only sessionを保存して読み直す
+    Then 保存済みfollow-only roundはGit再検証で拒否される
+
+  Scenario: SCN-UNIT-REVIEWCONV-011 reanchor後の実効HEADからの追随を保存後も受理する
+    Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
+    When reanchor後の実効HEADから既定branchの自動mergeだけを記録する
+    Then 追随roundは保存後read-backでも受理される

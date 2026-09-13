@@ -143,6 +143,7 @@
     },
     "tierMapping": {
       "claude-opus-5": "critical",
+      "claude:provider_recommended_default:high:default": "critical",
       "codex:provider_recommended_default:high:default": "critical"
     },
     "minimumTierByRisk": {

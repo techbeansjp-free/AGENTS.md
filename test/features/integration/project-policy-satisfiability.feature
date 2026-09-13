@@ -16,6 +16,7 @@ Feature: 異なる言語構成の利用projectがpolicyを充足する
     Given 現行repositoryのproject policyを変更せず読み込む
     When 現行repositoryのpolicyとconformanceを検証する
     Then scope省略と全applicableとquality実値の同じ強度でvalidである
+    And repositoryのmerge policyは明示承認型である
 
   Scenario: SCN-INT-SAT-004 I1を1件削除、exportを不存在名へ変更、SCN成功証拠を削除した構成は従来どおり失敗する
     Given 現行conformanceを3種類弱化した反例がある

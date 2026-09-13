@@ -3,6 +3,7 @@ import path from "node:path";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { parseJsonStrict } from "../lib/security.js";
 import { deriveEffectiveHead, isContentEquivalent, isRebaseEquivalent, parseReviewIdentityAnchor, isEvidenceReanchorRecord, } from "../domain/evidence-reanchor.js";
+import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
 import { refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { observeStoredDeliveryState, readStoredDeliveryState, } from "./delivery-state.js";
 import { observeReviewDiff, readBlobAtCommit } from "./review-diff.js";
@@ -157,7 +158,7 @@ function resolveAnchor(staging, layer) {
     if (session === null)
         throw new Error("review reanchorには永続review sessionが必要です");
     if (session.status !== "converged")
-        throw new Error(`review sessionが収束していません: status=${session.status}`);
+        throw new Error(unconvergedReviewSessionDiagnostic(session.status));
     return {
         anchoredHeadSha: session.latestCandidateHeadSha,
         anchoredBaseSha: session.anchor.diffBaseSha,

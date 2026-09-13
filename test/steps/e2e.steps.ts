@@ -149,6 +149,22 @@ Given("pass済みreview、tests、specのPR引数がある", function () {
     now: new Date("2026-08-25T12:00:00.000Z"),
   }).path;
   const observedReviewDiff = observeReviewDiff(this.prCwd, headSha, headSha);
+  for (const stepNumber of [1, 4, 9]) {
+    const step = WORKFLOW_STEPS.find((item) => item.step === stepNumber);
+    assert.ok(step);
+    appendWorkflowJournalEntry({
+      staging,
+      entry: {
+        step: stepNumber,
+        skillId: step.skillId,
+        mode: "quick",
+        recordedAt: "2026-08-25T12:00:00.000Z",
+        artifacts: [`artifact-${stepNumber}`],
+        evidence: `step ${stepNumber}証拠`,
+        ...(stepNumber === 9 ? { implementationHeadSha: headSha } : {}),
+      },
+    });
+  }
   const reviewSession = recordReviewRound({
     staging,
     round: parseReviewRoundInput({
@@ -167,7 +183,7 @@ Given("pass済みreview、tests、specのPR引数がある", function () {
       findings: [],
     }),
   });
-  for (const stepNumber of [1, 4, 9, 10]) {
+  for (const stepNumber of [10]) {
     const step = WORKFLOW_STEPS.find((item) => item.step === stepNumber);
     assert.ok(step);
     appendWorkflowJournalEntry({

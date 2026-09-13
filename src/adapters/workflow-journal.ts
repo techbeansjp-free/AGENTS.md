@@ -36,6 +36,7 @@ import {
 } from "../domain/mode.js";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { findPackageRoot } from "../lib/package-root.js";
+import { git } from "../lib/process.js";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import {
@@ -378,6 +379,7 @@ export function appendWorkflowJournalEntry(input: {
   staging: string;
   entry: StepJournalEntry;
   headSha?: string;
+  expectedStagingDigest?: string;
 }): { entry: StepJournalEntry; journalDigest: string; stagingDigest: string } {
   if (input.entry.step === 0 || input.entry.step === 11)
     throw new Error(
@@ -385,7 +387,12 @@ export function appendWorkflowJournalEntry(input: {
     );
   const staging = assertWorkflowStaging(input.staging);
   return withStagingMutationLock(staging, () =>
-    appendWorkflowJournalEntryLocked(staging, input.entry, input.headSha),
+    appendWorkflowJournalEntryLocked(
+      staging,
+      input.entry,
+      input.headSha,
+      input.expectedStagingDigest,
+    ),
   );
 }
 
@@ -406,9 +413,19 @@ function appendWorkflowJournalEntryLocked(
   staging: string,
   entry: StepJournalEntry,
   headSha?: string,
+  expectedStagingDigest?: string,
 ): { entry: StepJournalEntry; journalDigest: string; stagingDigest: string } {
   recoverPendingJournalTransactionLocked(staging);
   recoverPocObservationTransactionLocked(staging);
+  const assertExpectedStagingDigest = (): void => {
+    if (expectedStagingDigest === undefined) return;
+    const artifacts = listStagingArtifacts(staging);
+    if (calculateStagingDigest(staging, artifacts) !== expectedStagingDigest)
+      throw new Error(
+        "検証後にstaging成果物が変更されたためworkflow journalを確定できません",
+      );
+  };
+  assertExpectedStagingDigest();
   const current = readWorkflowJournal(staging);
   if (current.errors.length > 0)
     throw new Error(
@@ -454,7 +471,44 @@ function appendWorkflowJournalEntryLocked(
     throw new Error(
       `entry mode ${entry.mode}がstaging mode ${current.mode}と一致しません`,
     );
+  const repositoryRoot = path.resolve(staging, "../../../..");
+  if (
+    entry.step === 9 &&
+    headSha !== undefined &&
+    entry.implementationHeadSha !== undefined &&
+    entry.implementationHeadSha !== headSha
+  )
+    throw new Error(
+      "Step 9には検証対象HEADと一致するimplementationHeadSha bindingが必要です",
+    );
+  const assertCandidateWorktreeClean = (): void => {
+    const status = git(
+      [
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--",
+        ".",
+        ":(exclude).agent-skill-chain/tmp/issues",
+      ],
+      repositoryRoot,
+    ).stdout;
+    if (status !== "")
+      throw new Error("Step 9の候補worktreeがjournal確定前に変更されました");
+  };
+  if (entry.step === 9 && headSha !== undefined) {
+    assertCandidateWorktreeClean();
+    const currentHeadSha = git(
+      ["rev-parse", "--verify", "HEAD^{commit}"],
+      repositoryRoot,
+    ).stdout.trim();
+    if (currentHeadSha !== headSha)
+      throw new Error("Step 9の検証対象HEADがjournal追記前に変更されました");
+  }
   let entryToWrite = entry;
+  if (entry.step === 9 && headSha !== undefined)
+    entryToWrite = { ...entry, implementationHeadSha: headSha };
   if (current.mode === "poc" && entry.step >= 9) {
     if (!headSha)
       throw new Error(
@@ -462,7 +516,7 @@ function appendWorkflowJournalEntryLocked(
       );
     const context = pocContextAtStaging(staging);
     assertPocHeadChangeScope({
-      repositoryRoot: path.resolve(staging, "../../../.."),
+      repositoryRoot,
       baselineHeadSha: context.baselineHeadSha,
       headSha,
       fixtureRoot: context.declaration.fixture.root,
@@ -485,7 +539,7 @@ function appendWorkflowJournalEntryLocked(
       throw new Error(
         "PoC journal entryの観測bindingがcurrent HEADと一致しません",
       );
-    entryToWrite = { ...entry, pocObservation: binding };
+    entryToWrite = { ...entryToWrite, pocObservation: binding };
   }
   const journal = path.join(staging, STEP_JOURNAL_FILE);
   const before = assertRegularJournalPath(journal);
@@ -547,6 +601,20 @@ function appendWorkflowJournalEntryLocked(
     fs.fsyncSync(temporaryDescriptor);
     fs.closeSync(temporaryDescriptor);
     temporaryDescriptor = undefined;
+
+    if (
+      entry.step === 9 &&
+      headSha !== undefined &&
+      git(
+        ["rev-parse", "--verify", "HEAD^{commit}"],
+        repositoryRoot,
+      ).stdout.trim() !== headSha
+    )
+      throw new Error("Step 9の検証対象HEADがjournal確定前に変更されました");
+    if (entry.step === 9 && headSha !== undefined)
+      assertCandidateWorktreeClean();
+
+    assertExpectedStagingDigest();
 
     const currentPath = assertRegularJournalPath(journal);
     if (
