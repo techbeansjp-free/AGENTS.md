@@ -39,7 +39,7 @@ Feature: 成果物1単位の構造warning
   Scenario: SCN-UNIT-ARTUNIT-010 workflowとtemplateとhelpがmarker契約を案内する
     Given 配布する成果物単位marker契約がある
     When workflowと3 templateとCLI helpを読む
-    Then 全文書が成果物1単位と45分とmarkerの非停止性を案内する
+    Then 全文書が結合度と補助指標とmode別固定費とmarkerの非停止性を案内する
 
   Scenario: SCN-UNIT-ARTUNIT-011 inline codeを説明に含むmarkerを警告する
     Given 対象内にinline code説明を持つ成果物markerが2件ある
