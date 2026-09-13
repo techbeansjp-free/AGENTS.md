@@ -2008,6 +2008,7 @@ interface DeliveryProviderControl {
   rulesetOnly: boolean;
   unresolvedReviewThreads: number;
   unknownBranchRule: boolean;
+  unknownRuleParameter: boolean;
   statusCheckConclusion: "SUCCESS" | "FAILURE";
   ghVersion: string;
   closingChanged: boolean;
@@ -2919,6 +2920,7 @@ function prepareDeliveryCli(
     rulesetOnly: false,
     unresolvedReviewThreads: 0,
     unknownBranchRule: false,
+    unknownRuleParameter: false,
     statusCheckConclusion: "SUCCESS",
     ghVersion: "2.97.0",
     closingChanged: false,
@@ -3237,24 +3239,36 @@ if (exact(["--version"])) {
   ])
 ) {
   process.stdout.write(JSON.stringify([[
-    { type: "deletion" },
-    { type: "non_fast_forward" },
+    { type: "deletion", ruleset_source_type: "Repository", ruleset_source: "o/r", ruleset_id: 1 },
+    { type: "non_fast_forward", ruleset_source_type: "Repository", ruleset_source: "o/r", ruleset_id: 1 },
     {
       type: "pull_request",
       parameters: {
         required_approving_review_count: 0,
+        dismiss_stale_reviews_on_push: true,
         require_code_owner_review: false,
         require_last_push_approval: false,
+        required_review_thread_resolution: true,
+        require_extra_approval_for_unattributed_changes: true,
         required_reviewers: [],
+        dismissal_restriction: { enabled: false, allowed_actors: [] },
         allowed_merge_methods: ["merge", "squash", "rebase"],
+        ...(control.unknownRuleParameter ? { future_review_gate: true } : {}),
       },
+      ruleset_source_type: "Repository",
+      ruleset_source: "o/r",
+      ruleset_id: 1,
     },
     {
       type: control.unknownBranchRule ? "required_signatures" : "required_status_checks",
       parameters: {
         strict_required_status_checks_policy: true,
+        do_not_enforce_on_create: false,
         required_status_checks: [{ context: "quality" }],
       },
+      ruleset_source_type: "Repository",
+      ruleset_source: "o/r",
+      ruleset_id: 1,
     },
   ]]));
 } else if (
@@ -4123,6 +4137,19 @@ if (exact(["auth", "status"])) {
         mergeImmediately: true,
       });
       createDeliveryPullRequest(prepared);
+      const preview = executeCli(
+        deliveryMergeArgs(prepared).map((arg) =>
+          arg === "--apply" ? "--dry-run" : arg,
+        ),
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+      assert.equal(
+        (JSON.parse(preview.stdout) as { dispatchMode?: string }).dispatchMode,
+        "admin",
+        "previewがadmin dispatchを表示していません",
+      );
       const requested = executeDeliveryMerge(prepared);
       assert.equal(
         requested.status,
@@ -4152,11 +4179,25 @@ if (exact(["auth", "status"])) {
         ),
       );
       assert.equal(state.merge?.dispatchMode, "admin");
+      const legacy = JSON.parse(
+        fs.readFileSync(
+          path.join(prepared.staging, "journal", "delivery-state.json"),
+          "utf8",
+        ),
+      ) as { merge?: Record<string, unknown> };
+      assert.ok(legacy.merge);
+      delete legacy.merge.dispatchMode;
+      assert.equal(
+        parseDeliveryState(JSON.stringify(legacy)).merge?.dispatchMode,
+        "normal",
+        "dispatchMode欠落の旧stateをnormalとして読めません",
+      );
       break;
     }
     case "SCN-E2E-WFSTEP-059": {
       const variants: Array<Partial<DeliveryProviderControl>> = [
         { unknownBranchRule: true },
+        { unknownRuleParameter: true },
         { unresolvedReviewThreads: 1 },
         { viewerPermission: "WRITE" },
         { statusCheckConclusion: "FAILURE" },

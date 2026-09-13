@@ -285,6 +285,11 @@ function verifyRepository(repository, cwd, access) {
         throw new Error(`対象GitHubリポジトリの${access === "admin" ? "管理者" : access === "write" ? "書き込み" : "読み取り"}権限が不足しています`);
 }
 const EXACT_REVIEW_THREADS_QUERY = `query ExactReviewThreads($owner:String!,$repo:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$repo){nameWithOwner pullRequest(number:$number){number reviewThreads(first:100,after:$endCursor){nodes{isResolved}pageInfo{hasNextPage endCursor}}}}}`;
+function hasExactFields(value, expected) {
+    const actual = Object.keys(value).sort();
+    return (actual.length === expected.length &&
+        [...expected].sort().every((field, index) => actual[index] === field));
+}
 function observeContextIsolatedAdminMerge(input, cwd) {
     const denied = (reason) => ({
         known: false,
@@ -338,20 +343,55 @@ function observeContextIsolatedAdminMerge(input, cwd) {
         const requiredCheckContexts = [];
         for (const value of rules) {
             if (!isRecord(value) ||
+                !hasExactFields(value, [
+                    "type",
+                    "ruleset_source_type",
+                    "ruleset_source",
+                    "ruleset_id",
+                    ...(value.type === "pull_request" ||
+                        value.type === "required_status_checks"
+                        ? ["parameters"]
+                        : []),
+                ]) ||
                 typeof value.type !== "string" ||
-                !allowedTypes.has(value.type)) {
+                !allowedTypes.has(value.type) ||
+                value.ruleset_source_type !== "Repository" ||
+                value.ruleset_source !== input.repository ||
+                !Number.isSafeInteger(value.ruleset_id) ||
+                value.ruleset_id <= 0) {
                 allowedRulesOnly = false;
                 break;
             }
             if (value.type === "pull_request") {
                 const p = value.parameters;
+                const dismissal = isRecord(p) ? p.dismissal_restriction : undefined;
                 if (!isRecord(p) ||
+                    !hasExactFields(p, [
+                        "required_approving_review_count",
+                        "dismiss_stale_reviews_on_push",
+                        "required_reviewers",
+                        "require_code_owner_review",
+                        "dismissal_restriction",
+                        "require_last_push_approval",
+                        "required_review_thread_resolution",
+                        "require_extra_approval_for_unattributed_changes",
+                        "allowed_merge_methods",
+                    ]) ||
                     p.required_approving_review_count !== 0 ||
+                    typeof p.dismiss_stale_reviews_on_push !== "boolean" ||
                     p.require_code_owner_review !== false ||
                     p.require_last_push_approval !== false ||
+                    p.required_review_thread_resolution !== true ||
+                    p.require_extra_approval_for_unattributed_changes !== true ||
+                    !isRecord(dismissal) ||
+                    !hasExactFields(dismissal, ["enabled", "allowed_actors"]) ||
+                    dismissal.enabled !== false ||
+                    !Array.isArray(dismissal.allowed_actors) ||
+                    dismissal.allowed_actors.length !== 0 ||
                     !Array.isArray(p.required_reviewers) ||
                     p.required_reviewers.length !== 0 ||
                     !Array.isArray(p.allowed_merge_methods) ||
+                    p.allowed_merge_methods.some((method) => method !== "merge" && method !== "squash" && method !== "rebase") ||
                     !p.allowed_merge_methods.includes(input.method)) {
                     allowedRulesOnly = false;
                     break;
@@ -360,9 +400,16 @@ function observeContextIsolatedAdminMerge(input, cwd) {
             if (value.type === "required_status_checks") {
                 const p = value.parameters;
                 if (!isRecord(p) ||
+                    !hasExactFields(p, [
+                        "strict_required_status_checks_policy",
+                        "do_not_enforce_on_create",
+                        "required_status_checks",
+                    ]) ||
                     typeof p.strict_required_status_checks_policy !== "boolean" ||
+                    p.do_not_enforce_on_create !== false ||
                     !Array.isArray(p.required_status_checks) ||
                     p.required_status_checks.some((check) => !isRecord(check) ||
+                        !hasExactFields(check, ["context"]) ||
                         typeof check.context !== "string" ||
                         check.context === "")) {
                     allowedRulesOnly = false;

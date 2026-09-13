@@ -253,9 +253,12 @@ function unknownFields(
   value: Record<string, unknown>,
   allowed: ReadonlySet<string>,
   label: string,
+  optional: ReadonlySet<string> = new Set(),
 ): void {
   const unknown = Object.keys(value).filter((field) => !allowed.has(field));
-  const missing = [...allowed].filter((field) => !(field in value));
+  const missing = [...allowed].filter(
+    (field) => !optional.has(field) && !(field in value),
+  );
   if (unknown.length > 0)
     throw new Error(`${label}の未知fieldを拒否しました: ${unknown.join(", ")}`);
   if (missing.length > 0)
@@ -643,7 +646,7 @@ function parseMerge(
   if (value === null) return null;
   if (!pr) throw new Error("mergeには固定済みpr bindingが必要です");
   if (!isRecord(value)) throw new Error("mergeはobjectまたはnullが必要です");
-  unknownFields(value, MERGE_FIELDS, "merge");
+  unknownFields(value, MERGE_FIELDS, "merge", new Set(["dispatchMode"]));
   if (
     value.method !== "merge" &&
     value.method !== "squash" &&

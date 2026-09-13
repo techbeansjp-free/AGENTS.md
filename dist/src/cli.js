@@ -1830,6 +1830,7 @@ function handlePullRequestMerge(flags) {
                     pr: inspected.observed.url,
                     headSha: inspected.observed.headRefOid,
                     baseSha: inspected.observed.baseRefOid,
+                    dispatchMode: inspected.dispatchMode,
                     deliveryState: current,
                 },
             };
