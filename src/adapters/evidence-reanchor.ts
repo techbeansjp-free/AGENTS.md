@@ -314,10 +314,19 @@ function comparableArtifactContent(markdown: string): string {
       if (
         ignoredSection === undefined &&
         (/^\| Step chain \|/u.test(line) ||
-          /^\| commit前candidate \|/u.test(line) ||
-          /^\| 範囲漏れ \|/u.test(line))
+          /^\| commit前candidate \|/u.test(line))
       ) {
         output.push(`| ${line.split("|")[1]?.trim()} | <derived> |`);
+        continue;
+      }
+      const coverage =
+        /^\| 範囲漏れ \| ([^|]+) \| ([^|]+) \| (\d+ path監査|\d+監査pathと生成物\d+ path) \|$/u.exec(
+          line,
+        );
+      if (ignoredSection === undefined && coverage !== null) {
+        output.push(
+          `| 範囲漏れ | ${coverage[1]} | ${coverage[2]} | <derived-audit-count> |`,
+        );
         continue;
       }
     }

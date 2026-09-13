@@ -306,7 +306,10 @@ function auditableReviewArtifact(base: string, implementation: string): string {
 ## 3. 肯定的評価
 成立。
 ## 4. 敵対的評価
-反例確認済み。
+| 観点 | 確認内容 | 判定 | 根拠 |
+|---|---|---|---|
+| 反例 | 直接反例 | pass | 反例確認済み。 |
+| 範囲漏れ | dist・文書・schema・test | pass | 22監査pathと生成物5 path |
 ## 5. 指摘
 なし。
 ## 6. ラウンド固有の確認
@@ -347,6 +350,10 @@ function legacyAuditableReviewArtifact(
     .replace(
       "判断: 配布物を更新しない\n根拠: fixtureのreview artifact検査だけで配布物を変更しない。",
       "判断: 配布物を更新した\n根拠: sourceとdistを更新した。",
+    )
+    .replace(
+      "| 範囲漏れ | dist・文書・schema・test | pass | 22監査pathと生成物5 path |",
+      "| 範囲漏れ | dist・文書・schema・test | pass | 27 path監査 |",
     );
 }
 
@@ -439,7 +446,12 @@ Given("pr-boundの不正なartifact replacement「{word}」がある", function 
       ? artifact.replace("| pass |", "| fail |")
       : kind === "判定本文改変"
         ? artifact.replace("反例確認済み。", "反例を省略した。")
-        : artifact,
+        : kind === "範囲漏れ判断改変"
+          ? artifact.replace(
+              "| 範囲漏れ | dist・文書・schema・test | pass | 22監査pathと生成物5 path |",
+              "| 範囲漏れ | dist・文書・schema・test | finding | 未監査 |",
+            )
+          : artifact,
     "docs: invalid renamed artifact",
   );
   if (kind === "artifact外差分") {
