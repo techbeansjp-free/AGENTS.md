@@ -1563,6 +1563,7 @@ Given(
         methods: ["squash"],
         requiredChecks: [check],
         requiredReviews: 1,
+        reviewIndependence: "actor-independent",
       }),
       method: "squash",
       checks: [],
@@ -1597,6 +1598,7 @@ Given("trusted policyがassistedである", function () {
     methods: ["merge"],
     requiredChecks: [],
     requiredReviews: 0,
+    reviewIndependence: "actor-independent",
   });
 });
 Given(
@@ -1665,10 +1667,8 @@ When("check state unknownでmerge authorizationを評価する", function () {
  * **単独運用が既定で成立することを固定する**（Issue #1317）。
  *
  * 実装commitを書いた本人がreviewerでもあるという、別のGitHub利用者が居ない
- * projectの形である。PRはautomation identityが作る。**GitHubはPR author自身の
- * `APPROVE`を許可しないため、これがproviderで実際に生成できる唯一の形である。**
- * 旧契約ではこの構成が変更のリスクに関係なく恒常的に停止していた。
- * **exact HEAD一致とAPPROVEDは引き続き必須である。**
+ * projectの形である。GitHubはPR author自身の`APPROVE`を許可しないため、
+ * context-isolatedはprovider eventではなく検証済みformal review approvalを使う。
  */
 const soleOperatorMergeInput = (
   reviewIndependence?: "context-isolated" | "actor-independent",
@@ -1694,16 +1694,11 @@ const soleOperatorMergeInput = (
         reviewId: "1",
       },
     ],
+    formalApprovalIds:
+      reviewIndependence === "actor-independent" ? [] : ["b".repeat(64)],
     branch: "feature/solo",
     headSha,
-    /**
-     * **GitHubはPR author自身の`APPROVE`を許可しない**（外部reviewの指摘）。
-     * PR authorとreviewerを同一actorにするとproviderが返し得ない観測になるため、
-     * **実在する単独運用の形**にする。PRはautomation identityが作り、実装commitを
-     * 書いた本人が承認する。旧契約はreviewerがimplementation commit authorと
-     * 同一であることを理由にこの構成を拒否していた。
-     */
-    prAuthorActorId: "actor-automation",
+    prAuthorActorId: "actor-solo",
     implementationAuthorActorId: "actor-solo",
     repositoryVerified: true,
     shaVerified: true,
@@ -1923,7 +1918,7 @@ Then(
     );
     assert.equal(
       diagnostic.next,
-      "対象HEAD SHAそのものに対するAPPROVED reviewを得てからpr mergeを再実行してください",
+      "対象HEADのformal review artifactとStep 10 bindingを完成させてからpr mergeを再実行してください",
     );
   },
 );
@@ -1938,7 +1933,7 @@ Then("独立review不足の拒否診断が次の操作と必要authorityを持�
   assert.equal(diagnostic.ruleId, "ASC-MERGE-REVIEW-001");
   assert.equal(
     diagnostic.purpose,
-    "実装者以外の独立した確認を経ないmergeを防ぐ",
+    "trusted policyが要求する独立した確認を経ないmergeを防ぐ",
   );
   assert.equal(diagnostic.risk, "authority");
   assert.equal(

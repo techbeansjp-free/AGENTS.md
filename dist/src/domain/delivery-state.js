@@ -381,8 +381,9 @@ function parseMerge(value, create, pr) {
         throw new Error("merge.reviewArtifactPathがevidence-only領域外です");
     const ciRunId = nonEmpty(value.ciRunId, "merge.ciRunId");
     const reviewId = nonEmpty(value.reviewId, "merge.reviewId");
-    if (!/^[1-9]\d*$/u.test(ciRunId) || !/^[1-9]\d*$/u.test(reviewId))
-        throw new Error("mergeのCI run IDとreview IDは正の整数文字列が必要です");
+    if (!/^[1-9]\d*$/u.test(ciRunId) ||
+        (!/^[1-9]\d*$/u.test(reviewId) && !/^[a-f0-9]{64}$/u.test(reviewId)))
+        throw new Error("mergeのCI run IDは正の整数、review IDは正の整数またはformal review round digestが必要です");
     const parsed = {
         method: value.method,
         authorizedHeadSha,

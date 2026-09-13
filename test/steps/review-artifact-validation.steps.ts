@@ -4,7 +4,9 @@ import path from "node:path";
 
 import { main } from "../../src/cli.js";
 import {
+  validateContextIsolatedApprovalRecord,
   validateReviewArtifactStructure,
+  type ContextIsolatedApprovalRecord,
   type ReviewArtifactStructure,
 } from "../../src/domain/review-artifact.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
@@ -19,6 +21,8 @@ interface ReviewArtifactValidationWorld extends WorkflowWorld {
   artifactExitCode: number;
   invalidArtifactExitCode: number;
   unsafeErrors: Error[];
+  approvalMarkdowns: string[];
+  approvalRecords: ContextIsolatedApprovalRecord[];
 }
 
 const { Given, When, Then } = stepDefinitions<ReviewArtifactValidationWorld>();
@@ -139,6 +143,43 @@ Then("sectionと配布物影響の診断をまとめて返す", function () {
   assert.ok(codes.includes("audit-row"));
   assert.ok(codes.includes("audit-duplicate"));
   assert.ok(this.structure.diagnostics.every((item) => item.line > 0));
+});
+
+Given("context-isolated formal approvalの正常例と反例がある", function () {
+  const approved = validArtifact()
+    .replace(
+      "## 9. 独立reviewの成立\n",
+      "## 9. 独立reviewの成立\n| 項目 | 内容 |\n|---|---|\n| 適用した独立性モード | context-isolated |\n| その要求を満たすこと | はい |\n| reviewerとimplementerのidentity・context比較 | reviewer-sessionとimplementer-sessionは別 |\n| reviewerが対象差分を変更していないこと | はい（変更pathなし） |\n",
+    )
+    .replace(
+      "## 11. 総合判定と再開地点\n",
+      "## 11. 総合判定と再開地点\n- 未解決Critical/High: なし\n- 判定: approved\n",
+    );
+  this.approvalMarkdowns = [
+    approved,
+    approved.replace("- 判定: approved", "- 判定: rejected"),
+    approved.replace(
+      "はい（変更pathなし）",
+      "いいえ（reviewerがsrc/cli.tsを変更）",
+    ),
+    approved.replace(
+      "reviewer-sessionとimplementer-sessionは別",
+      "{実体の観測値}",
+    ),
+  ];
+});
+
+When("context-isolated formal approvalを検証する", function () {
+  this.approvalRecords = this.approvalMarkdowns.map((markdown) =>
+    validateContextIsolatedApprovalRecord(markdown),
+  );
+});
+
+Then("正常例だけをformal approvalと判定する", function () {
+  assert.deepEqual(
+    this.approvalRecords.map((record) => record.valid),
+    [true, false, false, false],
+  );
 });
 
 Given(

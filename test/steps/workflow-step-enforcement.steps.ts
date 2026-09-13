@@ -2049,7 +2049,7 @@ interface DeliveryProviderControl {
    */
   reviewCommitSha: "head" | "stale";
   reviewDisposition:
-    "approved" | "changes-requested" | "commented-after-approval";
+    "approved" | "changes-requested" | "commented-after-approval" | "none";
   mergeTreeTampered: boolean;
   terminalParentTampered: boolean;
   mergeOnDefaultBranch: boolean;
@@ -2124,6 +2124,78 @@ function preparedMergeReviewEvidence(prepared: PreparedPullRequest) {
     reviewId: "7",
     reviewEvidenceId: canonicalDigest(identity),
   };
+}
+
+function contextIsolatedReviewArtifact(
+  baseSha: string,
+  implementationSha: string,
+): string {
+  return `# 04 レビュー
+
+## 0. レビュー識別情報
+
+| 項目 | 内容 |
+|---|---|
+| 比較基点 | \`${baseSha}\` |
+| H_impl | \`${implementationSha}\` |
+| ラウンド数 | 1 |
+| Step chain | 経由: fixture staging |
+
+## 1. 入力証拠
+
+### 1.1 変更ファイル個別監査
+
+| path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
+|---|---|---|---|---|---|---|---|---|
+| \`.agent-skill-chain/policy/default.json\` | M | package owner | package | fixture policy | pass | AC-WF-005 | revert可能 | pass |
+
+## 2. 受け入れ条件の確認
+
+pass
+
+## 3. 肯定的評価
+
+pass
+
+## 4. 敵対的評価
+
+pass
+
+## 5. 指摘
+
+指摘なし
+
+## 6. ラウンド固有の確認
+
+round 1完了
+
+## 7. テスト結果
+
+fixture pass
+
+## 8. 配布物影響
+
+判断: 配布物を更新しない
+根拠: fixture内の検査である
+
+## 9. 独立reviewの成立
+
+| 項目 | 内容 |
+|---|---|
+| 適用した独立性モード | context-isolated |
+| その要求を満たすこと | はい |
+| reviewerとimplementerのidentity・context比較 | reviewer-contextとimplementer-contextは別 |
+| reviewerが対象差分を変更していないこと | はい（変更pathなし） |
+
+## 10. 仕様整合性
+
+updated
+
+## 11. 総合判定と再開地点
+
+- 未解決Critical/High: なし
+- 判定: approved
+`;
 }
 
 function convergedReviewBinding(
@@ -2268,7 +2340,7 @@ function preparePullRequest(
     fs.mkdirSync(path.join(root, "docs", "reviews"), { recursive: true });
     fs.writeFileSync(
       path.join(root, "docs", "reviews", "90_test_review.md"),
-      "# test review artifact\n",
+      contextIsolatedReviewArtifact(baseSha, implementationCommitSha),
     );
     spawnSync("git", ["add", "docs/reviews/90_test_review.md"], { cwd: root });
     spawnSync("git", ["commit", "-q", "-m", "review evidence"], {
@@ -2793,7 +2865,8 @@ const observation = () => ({
   headRepository: { nameWithOwner: control.headRepository },
   isCrossRepository: control.isCrossRepository,
   mergeStateStatus: "CLEAN",
-  reviewDecision: "APPROVED",
+  reviewDecision:
+    control.reviewDisposition === "none" ? null : "APPROVED",
   statusCheckRollup: [],
   closingIssuesReferences:
     control.closingChanged || control.extraClosingIndexOnly
@@ -2982,14 +3055,16 @@ if (exact(["--version"])) {
         user: { node_id: "draft-reviewer" },
         submitted_at: null,
       },
-      {
-        id: 7,
-        state: "APPROVED",
-        commit_id:
-          control.reviewCommitSha === "stale" ? "0".repeat(40) : sha,
-        user: { node_id: control.reviewerId },
-        submitted_at: control.requestedAt,
-      },
+      ...(control.reviewDisposition === "none"
+        ? []
+        : [{
+            id: 7,
+            state: "APPROVED",
+            commit_id:
+              control.reviewCommitSha === "stale" ? "0".repeat(40) : sha,
+            user: { node_id: control.reviewerId },
+            submitted_at: control.requestedAt,
+          }]),
       // merge後にprovider側のreview状態が動いた場合（Issue #1280）。
       ...(control.phase === "merged" && control.postMergeReviewShift === "replaced"
         ? [{
@@ -3009,7 +3084,7 @@ if (exact(["--version"])) {
             submitted_at: new Date(Date.parse(control.requestedAt) + 2000).toISOString(),
           }]
         : []),
-      ...(control.reviewDisposition !== "approved"
+      ...(control.reviewDisposition !== "approved" && control.reviewDisposition !== "none"
         ? [{
             id: 8,
             state: control.reviewDisposition === "changes-requested"
@@ -3523,7 +3598,13 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-E2E-WFSTEP-006": {
-      const prepared = prepareDeliveryCli(this);
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       const created = createDeliveryPullRequest(prepared);
       assert.match(created.stdout, /merge_pending/u);
       const delivery = parseDeliveryState(
@@ -3755,6 +3836,39 @@ if (exact(["auth", "status"])) {
       );
       break;
     }
+    case "SCN-E2E-WFSTEP-057": {
+      const sameActor = "sole-operator";
+      const prepared = prepareDeliveryCli(this, {
+        prAuthorId: sameActor,
+        implementationAuthorId: sameActor,
+        reviewerId: sameActor,
+        reviewDisposition: "none",
+      });
+      createDeliveryPullRequest(prepared);
+      const requested = executeDeliveryMerge(prepared);
+      assert.equal(
+        requested.status,
+        0,
+        `context-isolated formal reviewがmerge認可へ接続されていません: ${requested.stdout}${requested.stderr}`,
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        1,
+        "formal reviewで認可したmerge requestは1回だけでなければなりません",
+      );
+      const state = parseDeliveryState(
+        fs.readFileSync(
+          path.join(prepared.staging, "journal", "delivery-state.json"),
+          "utf8",
+        ),
+      );
+      assert.match(
+        state.merge?.reviewId ?? "",
+        /^[a-f0-9]{64}$/u,
+        "formal review round digestがmerge intentのapproval IDに固定されていません",
+      );
+      break;
+    }
     case "SCN-E2E-WFSTEP-048": {
       /**
        * **索引の反映待ちを合成経路で通す**（Issue #1271）。
@@ -3972,7 +4086,13 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-E2E-WFSTEP-012": {
-      const prepared = prepareDeliveryCli(this);
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       createDeliveryPullRequest(prepared);
       const bound = parseDeliveryState(
         fs.readFileSync(
@@ -4004,7 +4124,13 @@ if (exact(["auth", "status"])) {
         "providerがmerge要求なしを確定した同一intentは一度だけ再送する",
       );
 
-      const unsupported = prepareDeliveryCli(this, { ghVersion: "2.12.1" });
+      const unsupported = prepareDeliveryCli(
+        this,
+        { ghVersion: "2.12.1" },
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       createDeliveryPullRequest(unsupported);
       const unsupportedResult = executeDeliveryMerge(unsupported);
       assert.notEqual(unsupportedResult.status, 0);
@@ -4391,7 +4517,13 @@ if (exact(["auth", "status"])) {
        * 「独立approvalが無ければ到達しない」ことであって、`assisted`固有の門では
        * ない。** 実装の是正はIssue #1036が所有する。
        */
-      const approved = prepareDeliveryCli(this, {}, "assisted");
+      const approved = prepareDeliveryCli(
+        this,
+        {},
+        "assisted",
+        "merge",
+        "actor-independent",
+      );
       const created = createDeliveryPullRequest(approved);
       assert.match(created.stdout, /"state": "merge_pending"/u, created.stdout);
       const requested = executeDeliveryMerge(approved);
@@ -4432,6 +4564,8 @@ if (exact(["auth", "status"])) {
         this,
         { reviewDisposition: "changes-requested" },
         "assisted",
+        "merge",
+        "actor-independent",
       );
       createDeliveryPullRequest(denied);
       const before = deliveryProviderCalls(denied).filter(isMergeCall).length;
@@ -4449,7 +4583,7 @@ if (exact(["auth", "status"])) {
        */
       assert.match(
         rejected.stdout + rejected.stderr,
-        /current H_finalそのものを対象とするAPPROVED reviewがありません/u,
+        /current H_final.*独立したreviewがありません/u,
         rejected.stdout + rejected.stderr,
       );
       assert.equal(
@@ -4469,6 +4603,8 @@ if (exact(["auth", "status"])) {
         this,
         { reviewCommitSha: "stale" },
         "assisted",
+        "merge",
+        "actor-independent",
       );
       createDeliveryPullRequest(stale);
       const staleBefore =
@@ -4481,7 +4617,7 @@ if (exact(["auth", "status"])) {
       );
       assert.match(
         staleRejected.stdout + staleRejected.stderr,
-        /current H_finalそのものを対象とするAPPROVED reviewがありません/u,
+        /current H_final.*独立したreviewがありません/u,
         staleRejected.stdout + staleRejected.stderr,
       );
       assert.equal(
@@ -4761,7 +4897,13 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-E2E-WFSTEP-020": {
-      const prepared = prepareDeliveryCli(this);
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       createDeliveryPullRequest(prepared);
       writeDeliveryProviderControl(prepared, {
         providerDefaultBranch: "develop",
@@ -4950,20 +5092,29 @@ if (exact(["auth", "status"])) {
        * `replaced`はidentity照合を、`revoked`は独立approvalの再確認を殺す変異を
        * 捕まえる。**Step 11を記録しないことまで測る。**
        */
-      const prepared = prepareDeliveryCli(this);
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       for (const [shift, pattern] of [
         ["replaced", /固定済みmerge review identityと一致しません/u],
         /**
-         * **既定の`context-isolated`が返す診断を名指しする**（Issue #1317）。
+         * **`actor-independent`が返す診断を名指しする**（Issue #1317）。
          * reviewerは実装者と別actorなので、ここで検査しているのは
          * 「承認取り下げ後に対象HEADへのAPPROVEDが無い」ことである。
          */
-        [
-          "revoked",
-          /current H_finalそのものを対象とするAPPROVED reviewがありません/u,
-        ],
+        ["revoked", /current H_final.*独立したreviewがありません/u],
       ] as const) {
-        const scenario = prepareDeliveryCli(this);
+        const scenario = prepareDeliveryCli(
+          this,
+          {},
+          "automatic",
+          "merge",
+          "actor-independent",
+        );
         createDeliveryPullRequest(scenario);
         const requested = executeDeliveryMerge(scenario);
         assert.equal(requested.status, 0, requested.stdout + requested.stderr);
@@ -5418,7 +5569,13 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-E2E-WFSTEP-032": {
-      const rejectedPrepared = prepareDeliveryCli(this);
+      const rejectedPrepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       createDeliveryPullRequest(rejectedPrepared);
       writeDeliveryProviderControl(rejectedPrepared, {
         reviewDisposition: "changes-requested",
@@ -5434,7 +5591,13 @@ if (exact(["auth", "status"])) {
         0,
       );
 
-      const acceptedPrepared = prepareDeliveryCli(this);
+      const acceptedPrepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       createDeliveryPullRequest(acceptedPrepared);
       writeDeliveryProviderControl(acceptedPrepared, {
         reviewDisposition: "commented-after-approval",

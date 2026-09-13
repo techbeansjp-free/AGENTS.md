@@ -9,7 +9,7 @@ import { bootstrapProject, validateSpecs, } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
-import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, validateReviewArtifactStructure, } from "./domain/review-artifact.js";
+import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, validateContextIsolatedApprovalRecord, validateReviewArtifactStructure, } from "./domain/review-artifact.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
 import { buildWorktreePath, createWorktree, canonicalWorktreePath, DEFAULT_WORKTREE_PLACEMENT, enforceTrustedWorktreeBoundary, inspectFinalizeState, inspectRecoveryState, validateWorktreePlacement, } from "./domain/worktree.js";
@@ -339,6 +339,7 @@ export function assertCurrentReviewJournalBinding(staging, headSha) {
         session.latestRoundDigest !== binding.roundDigest ||
         sessionEffectiveHead !== bindingEffectiveHead)
         throw new Error("Step 10のreviewSession bindingが保存済み収束sessionと一致しません");
+    return { binding, session };
 }
 function assertObservedClosingContract(input) {
     if (input.observed.headRepository?.nameWithOwner?.toLowerCase() !==
@@ -780,6 +781,17 @@ function resolveImplementationCommitForMerge(root, finalHeadSha) {
             .digest("hex"),
     };
 }
+function resolveContextIsolatedFormalApproval(staging, candidate) {
+    const { binding } = assertCurrentReviewJournalBinding(staging, candidate.finalHeadSha);
+    const markdown = git(["show", `${candidate.finalHeadSha}:${candidate.reviewArtifactPath}`], path.resolve(staging, "../../../..")).stdout;
+    const structure = validateReviewArtifactStructure(markdown);
+    if (structure.implementation !== candidate.implementationCommitSha)
+        throw new Error("formal review artifactのH_implがmerge対象と一致しません");
+    const approval = validateContextIsolatedApprovalRecord(markdown);
+    if (!approval.valid)
+        throw new Error(`context-isolated formal review approvalが不正です: ${approval.errors.join("; ")}`);
+    return binding.roundDigest;
+}
 /**
  * CI配送判定の事象時刻を選ぶ。
  *
@@ -834,7 +846,9 @@ function observeMergeReviewEvidence(input) {
     }, input.root);
     if (implementation.sha !== candidate.implementationCommitSha)
         throw new Error("実装commitのtrusted観測がH_implと一致しません");
-    const approvals = github("pr.reviews", { repository: input.repository, pr: input.pr }, input.root);
+    const approvals = input.independenceMode === "actor-independent"
+        ? github("pr.reviews", { repository: input.repository, pr: input.pr }, input.root)
+        : [];
     const ci = input.fixedCiRunId === undefined
         ? undefined
         : { runId: reconcileFixedMergeCiRun(input, input.fixedCiRunId) };
@@ -876,17 +890,22 @@ function observeMergeReviewEvidence(input) {
             `head=${delivery.headSha} イベント時刻=${delivery.eventAt} 観測時刻=${delivery.observedAt} ` +
             `経過=${delivery.elapsedMinutes.toFixed(1)}分 猶予=${delivery.graceMinutes}分。${delivery.nextAction}`);
     }
-    const independentReview = currentIndependentApprovals({
-        approvals,
-        headSha: input.observed.headRefOid,
-        prAuthorActorId: input.observed.author?.id,
-        implementationAuthorActorId: implementation.authorActorId,
-        independenceMode: input.independenceMode,
-    })[0];
-    if (!independentReview?.reviewId)
-        throw new Error(input.independenceMode === "actor-independent"
-            ? "current H_finalに対するPR author・H_impl authorと独立したreviewがありません"
-            : "current H_finalそのものを対象とするAPPROVED reviewがありません");
+    const formalApprovalId = input.independenceMode === "context-isolated"
+        ? resolveContextIsolatedFormalApproval(input.staging, candidate)
+        : undefined;
+    const independentReview = input.independenceMode === "actor-independent"
+        ? currentIndependentApprovals({
+            approvals,
+            headSha: input.observed.headRefOid,
+            prAuthorActorId: input.observed.author?.id,
+            implementationAuthorActorId: implementation.authorActorId,
+            independenceMode: input.independenceMode,
+        })[0]
+        : undefined;
+    if (input.independenceMode === "actor-independent" &&
+        !independentReview?.reviewId)
+        throw new Error("current H_finalに対するPR author・H_impl authorと独立したreviewがありません");
+    const reviewId = formalApprovalId ?? independentReview.reviewId;
     const identity = {
         domain: "agent-skill-chain/merge-review-evidence/v1",
         repository: input.state.create.repository,
@@ -896,16 +915,17 @@ function observeMergeReviewEvidence(input) {
         reviewArtifactPath: candidate.reviewArtifactPath,
         reviewArtifactDigest: candidate.reviewArtifactDigest,
         ciRunId: selected.runId,
-        reviewId: independentReview.reviewId,
+        reviewId,
     };
     return {
         reviewEvidence: {
             ...candidate,
             ciRunId: selected.runId,
-            reviewId: independentReview.reviewId,
+            reviewId,
             reviewEvidenceId: canonicalDigest(identity),
         },
         approvals,
+        formalApprovalIds: formalApprovalId ? [formalApprovalId] : [],
         implementationAuthorActorId: implementation.authorActorId,
     };
 }
@@ -954,6 +974,7 @@ function inspectAuthorizedPullRequestMerge(input) {
         .filter((item) => typeof item === "string");
     const reviewed = observeMergeReviewEvidence({
         root: input.root,
+        staging: input.staging,
         repository: input.repository,
         pr: input.pr,
         state: input.state,
@@ -973,6 +994,7 @@ function inspectAuthorizedPullRequestMerge(input) {
             method: input.method,
             checks,
             approvals: reviewed.approvals,
+            formalApprovalIds: reviewed.formalApprovalIds,
             headSha: observed.headRefOid,
             prAuthorActorId: observed.author?.id,
             implementationAuthorActorId: reviewed.implementationAuthorActorId,
@@ -1152,6 +1174,7 @@ function readBackPreparedPullRequestMerge(input) {
              */
             const reviewed = observeMergeReviewEvidence({
                 root: input.root,
+                staging: input.staging,
                 repository: input.repository,
                 pr: input.pr,
                 state: input.state,
