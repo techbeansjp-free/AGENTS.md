@@ -16,7 +16,7 @@ const SHA256 = /^[a-f0-9]{64}$/u;
  * **閉じた列挙にする。** 内容が変わる supersession を再固定で表現できるようにすると、
  * 未reviewの内容をreview済みとして参照させる洗浄経路になる。
  */
-const METHODS = ["rebase"] as const;
+const METHODS = ["rebase", "artifact-replacement"] as const;
 
 export type EvidenceReanchorMethod = (typeof METHODS)[number];
 
@@ -29,6 +29,12 @@ export interface EvidenceReanchorRecord {
   method: EvidenceReanchorMethod;
   reason: string;
   recordedAt: string;
+  artifactReplacement?: {
+    oldPath: string;
+    newPath: string;
+    oldDigest: string;
+    newDigest: string;
+  };
 }
 
 export interface DiffObservation {
@@ -41,6 +47,18 @@ export type ReachabilityState = "reachable" | "rewritten" | "unverifiable";
 export function isEvidenceReanchorRecord(
   value: unknown,
 ): value is EvidenceReanchorRecord {
+  const replacement = isRecord(value) ? value.artifactReplacement : undefined;
+  const validReplacement =
+    isRecord(replacement) &&
+    typeof replacement.oldPath === "string" &&
+    replacement.oldPath.length > 0 &&
+    typeof replacement.newPath === "string" &&
+    replacement.newPath.length > 0 &&
+    replacement.oldPath !== replacement.newPath &&
+    typeof replacement.oldDigest === "string" &&
+    SHA256.test(replacement.oldDigest) &&
+    typeof replacement.newDigest === "string" &&
+    SHA256.test(replacement.newDigest);
   return (
     isRecord(value) &&
     typeof value.oldHeadSha === "string" &&
@@ -58,7 +76,10 @@ export function isEvidenceReanchorRecord(
     typeof value.reason === "string" &&
     value.reason.trim().length > 0 &&
     typeof value.recordedAt === "string" &&
-    value.recordedAt.trim().length > 0
+    value.recordedAt.trim().length > 0 &&
+    (replacement === undefined ||
+      (value.method === "artifact-replacement" && validReplacement)) &&
+    (value.method !== "artifact-replacement" || replacement !== undefined)
   );
 }
 

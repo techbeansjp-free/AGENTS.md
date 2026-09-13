@@ -280,6 +280,109 @@ approved${extra}
 `;
 }
 
+function auditableReviewArtifact(base: string, implementation: string): string {
+  return `# 04 レビュー
+
+## 0. レビュー識別情報
+
+| 項目 | 内容 |
+|---|---|
+| 比較基点 | \`${base}\` |
+| H_impl | \`${implementation}\` |
+| ラウンド数 | 1 |
+| Step chain | 経由: fixture |
+
+## 1. 入力証拠
+
+### 1.1 変更ファイル個別監査
+
+| path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
+|---|---|---|---|---|---|---|---|---|
+| \`${REVIEWED}\` | A | package owner | domain | fixture実装 | 循環なし | AC-1377-01 / SCN-1377-01 | revert可能 | pass |
+
+## 2. 受け入れ条件の確認
+合格。
+## 3. 肯定的評価
+成立。
+## 4. 敵対的評価
+反例確認済み。
+## 5. 指摘
+なし。
+## 6. ラウンド固有の確認
+収束。
+## 7. テスト結果
+合格。
+## 8. 配布物影響
+判断: 配布物を更新しない
+根拠: fixtureのreview artifact検査だけで配布物を変更しない。
+## 9. 独立reviewの成立
+成立。
+## 10. 仕様整合性
+整合。
+## 11. 総合判定と再開地点
+APPROVED。
+`;
+}
+
+Given(
+  "pr-boundの旧artifactと同一実装を監査した正規名の新artifactがある",
+  function () {
+    this.root = this.initRepo();
+    this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
+    const implementation = commit(
+      this.root,
+      "export const reviewed = 1;\n",
+      "feat: review対象",
+    );
+    this.oldHeadSha = commitPath(
+      this.root,
+      "docs/reviews/1377_レビュー.md",
+      auditableReviewArtifact(this.baseSha, implementation),
+      "docs: old artifact",
+    );
+    this.staging = makeStaging(this);
+    buildDelivery(this, false);
+    snapshot(this);
+    execFileSync("git", ["checkout", "-q", implementation], { cwd: this.root });
+    this.newHeadSha = commitPath(
+      this.root,
+      "docs/reviews/209_課題1377成果物再固定レビュー.md",
+      auditableReviewArtifact(this.baseSha, implementation),
+      "docs: renamed artifact",
+    );
+    this.newBaseSha = this.baseSha;
+  },
+);
+
+Given("pr-boundの新artifactの監査表に不合格がある", function () {
+  this.root = this.initRepo();
+  this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
+  const implementation = commit(
+    this.root,
+    "export const reviewed = 1;\n",
+    "feat: review対象",
+  );
+  this.oldHeadSha = commitPath(
+    this.root,
+    "docs/reviews/1377_レビュー.md",
+    auditableReviewArtifact(this.baseSha, implementation),
+    "docs: old artifact",
+  );
+  this.staging = makeStaging(this);
+  buildDelivery(this, false);
+  execFileSync("git", ["checkout", "-q", implementation], { cwd: this.root });
+  this.newHeadSha = commitPath(
+    this.root,
+    "docs/reviews/209_課題1377成果物再固定レビュー.md",
+    auditableReviewArtifact(this.baseSha, implementation).replace(
+      "| pass |",
+      "| fail |",
+    ),
+    "docs: invalid renamed artifact",
+  );
+  this.newBaseSha = this.baseSha;
+});
+
 function commitPath(
   root: string,
   relative: string,
@@ -1206,6 +1309,34 @@ Then("previewは成功し初回だけ追記して二回目はunchangedになる"
   assert.equal(this.reanchorCliResults[0]?.output.willAppend, true);
   assert.equal(this.reanchorCliResults[1]?.output.state, "reanchored");
   assert.equal(this.reanchorCliResults[2]?.output.state, "unchanged");
+});
+
+Then("再固定recordは旧新artifactのpathとdigestを保持する", function () {
+  const record = readEvidenceReanchorChain(this.staging)[0];
+  assert.equal(record?.method, "artifact-replacement");
+  assert.equal(
+    record?.artifactReplacement?.oldPath,
+    "docs/reviews/1377_レビュー.md",
+  );
+  assert.equal(
+    record?.artifactReplacement?.newPath,
+    "docs/reviews/209_課題1377成果物再固定レビュー.md",
+  );
+  assert.match(record?.artifactReplacement?.oldDigest ?? "", /^[a-f0-9]{64}$/u);
+  assert.match(record?.artifactReplacement?.newDigest ?? "", /^[a-f0-9]{64}$/u);
+  for (const [relative, before] of Object.entries(this.before))
+    assert.equal(
+      fs.readFileSync(path.join(this.staging, relative), "utf8"),
+      before,
+    );
+});
+
+Then("artifact replacementのpreviewとapplyは拒否され追記しない", function () {
+  assert.deepEqual(
+    this.reanchorCliResults.map((result) => result.status),
+    [1, 1],
+  );
+  assert.equal(readEvidenceReanchorChain(this.staging).length, 0);
 });
 
 Then("内容非等価のpreviewとapplyが同じ既存理由で拒否される", function () {

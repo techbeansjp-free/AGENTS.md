@@ -1276,7 +1276,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   {
     command: "pr",
     subcommand: "reanchor",
-    summary: "rebase後のPR証跡を内容等価性つきで新headへ再固定する",
+    summary: "PR証跡を内容等価性または厳密なartifact置換で新headへ再固定する",
     requiredFlags: [
       flag("staging", "path", "対象Issue staging"),
       flag("new-head", "sha", "rebase後のhead SHA"),

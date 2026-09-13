@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 
 import { writeFileAtomic } from "../lib/atomic.js";
 import { parseJsonStrict } from "../lib/security.js";
@@ -12,6 +13,10 @@ import {
   isEvidenceReanchorRecord,
   type EvidenceReanchorRecord,
 } from "../domain/evidence-reanchor.js";
+import {
+  validateReviewArtifactStructure,
+  parseReviewArtifactAudit,
+} from "../domain/review-artifact.js";
 import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
 import {
   refreshStoredStagingDigest,
@@ -261,10 +266,128 @@ function observeRebaseEquivalence(
   };
 }
 
+interface ArtifactReplacementEvidence {
+  oldPath: string;
+  newPath: string;
+  oldDigest: string;
+  newDigest: string;
+}
+
+const REVIEW_ARTIFACT_NAME = /^\d+_課題\d+.*レビュー\.md$/u;
+
+/**
+ * 通常のrebase等価性から外れるartifact改名を、同じreview済み実装境界へ閉じる。
+ * 新artifactの自己申告だけでは受理せず、Git構造・保存済みidentity・監査表を再計測する。
+ */
+function observeArtifactReplacement(
+  root: string,
+  input: ReanchorComparison,
+): ArtifactReplacementEvidence | undefined {
+  const beforeAll = observeReanchorDiff(
+    root,
+    "旧base→旧head",
+    input,
+    input.oldBaseSha,
+    input.oldHeadSha,
+  );
+  const afterAll = observeReanchorDiff(
+    root,
+    "新base→新head",
+    input,
+    input.newBaseSha,
+    input.newHeadSha,
+  );
+  const oldPath = terminalArtifactPath(beforeAll.changedPaths);
+  const newPath = terminalArtifactPath(afterAll.changedPaths);
+  if (
+    oldPath === undefined ||
+    newPath === undefined ||
+    oldPath === newPath ||
+    !REVIEW_ARTIFACT_NAME.test(path.posix.basename(newPath))
+  )
+    return undefined;
+  const oldArtifact = readBlobAtCommit(root, input.oldHeadSha, oldPath);
+  const newArtifact = readBlobAtCommit(root, input.newHeadSha, newPath);
+  if (oldArtifact === undefined || newArtifact === undefined) return undefined;
+  const beforeAnchor = parseReviewIdentityAnchor(oldArtifact);
+  const afterAnchor = parseReviewIdentityAnchor(newArtifact);
+  if (
+    beforeAnchor === undefined ||
+    afterAnchor === undefined ||
+    beforeAnchor.base !== input.oldBaseSha ||
+    afterAnchor.base !== input.newBaseSha
+  )
+    return undefined;
+  if (
+    !verifiedImplementationBoundary(
+      root,
+      input.oldHeadSha,
+      oldPath,
+      beforeAnchor.implementation,
+      input,
+      "旧H_impl→旧head",
+    ).valid ||
+    !verifiedImplementationBoundary(
+      root,
+      input.newHeadSha,
+      newPath,
+      afterAnchor.implementation,
+      input,
+      "新H_impl→新head",
+    ).valid
+  )
+    return undefined;
+  const beforeImplementation = observeReanchorDiff(
+    root,
+    "旧base→旧H_impl",
+    input,
+    input.oldBaseSha,
+    beforeAnchor.implementation,
+    beforeAnchor.implementation,
+  );
+  const afterImplementation = observeReanchorDiff(
+    root,
+    "新base→新H_impl",
+    input,
+    input.newBaseSha,
+    afterAnchor.implementation,
+    afterAnchor.implementation,
+  );
+  if (!isContentEquivalent(beforeImplementation, afterImplementation))
+    return undefined;
+  const structure = validateReviewArtifactStructure(newArtifact);
+  const audit = parseReviewArtifactAudit(newArtifact);
+  const expectedPaths = [...afterImplementation.changedPaths]
+    .filter((entry) => !entry.startsWith("dist/"))
+    .sort();
+  const auditedPaths = audit.entries.map((entry) => entry.path).sort();
+  if (
+    structure.diagnostics.length > 0 ||
+    structure.base !== input.newBaseSha ||
+    structure.implementation !== afterAnchor.implementation ||
+    structure.rounds === undefined ||
+    structure.rounds < 1 ||
+    structure.stepChain?.kind !== "via" ||
+    audit.entries.some((entry) => entry.decision !== "pass") ||
+    JSON.stringify(expectedPaths) !== JSON.stringify(auditedPaths)
+  )
+    return undefined;
+  return {
+    oldPath,
+    newPath,
+    oldDigest: crypto.createHash("sha256").update(oldArtifact).digest("hex"),
+    newDigest: crypto.createHash("sha256").update(newArtifact).digest("hex"),
+  };
+}
+
 function resolveAnchor(
   staging: string,
   layer: EvidenceReanchorLayer,
-): { anchoredHeadSha: string; anchoredBaseSha: string } {
+): {
+  anchoredHeadSha: string;
+  anchoredBaseSha: string;
+  artifactReplacementRequired: boolean;
+} {
   const deliveryState = observeStoredDeliveryState(staging);
   if (layer === "delivery") {
     const state = deliveryState;
@@ -272,13 +395,14 @@ function resolveAnchor(
       throw new Error(
         "pr reanchorには pr create で固定したdelivery stateが必要です",
       );
-    if (state.state !== "step11-recorded")
+    if (state.state !== "step11-recorded" && state.state !== "pr-bound")
       throw new Error(
-        `delivery stateが${state.state}です。step11-recordedでない状態の復旧はpr createの再実行で行ってください`,
+        `delivery stateが${state.state}です。pr-boundまたはstep11-recordedだけがpr reanchorを受理します`,
       );
     return {
       anchoredHeadSha: state.create.headSha,
       anchoredBaseSha: state.create.baseSha,
+      artifactReplacementRequired: state.state === "pr-bound",
     };
   }
   if (deliveryState?.create)
@@ -293,6 +417,7 @@ function resolveAnchor(
   return {
     anchoredHeadSha: session.latestCandidateHeadSha,
     anchoredBaseSha: session.anchor.diffBaseSha,
+    artifactReplacementRequired: false,
   };
 }
 
@@ -306,6 +431,8 @@ export interface EvidenceReanchorEvaluation extends EvidenceReanchorResult {
   oldHeadSha: string;
   oldBaseSha: string;
   diffDigest: string | undefined;
+  method: "rebase" | "artifact-replacement" | undefined;
+  artifactReplacement: ArtifactReplacementEvidence | undefined;
 }
 
 function validateEvidenceReanchorInput(input: {
@@ -358,6 +485,8 @@ export function evaluateEvidenceReanchor(input: {
       oldHeadSha,
       oldBaseSha,
       diffDigest: undefined,
+      method: undefined,
+      artifactReplacement: undefined,
     };
   if (oldHeadSha === input.newHeadSha)
     throw new Error("再固定は移動していないheadに対して行えません");
@@ -381,13 +510,23 @@ export function evaluateEvidenceReanchor(input: {
     input.newBaseSha,
     input.newHeadSha,
   );
+  let method: "rebase" | "artifact-replacement" = "rebase";
+  let artifactReplacement: ArtifactReplacementEvidence | undefined;
   if (!isContentEquivalent(before, after)) {
     const rebase = observeRebaseEquivalence(input.root, comparison);
-    if (rebase.reason !== "ok")
-      throw new Error(
-        `再固定前後の内容が等価ではありません（${rebase.reason}）: before=${before.digest} after=${after.digest}${rebase.gitFailure === undefined ? "" : `; ${rebase.gitFailure}`}`,
-      );
+    if (rebase.reason !== "ok") {
+      artifactReplacement = observeArtifactReplacement(input.root, comparison);
+      if (artifactReplacement === undefined)
+        throw new Error(
+          `再固定前後の内容が等価ではありません（${rebase.reason}）: before=${before.digest} after=${after.digest}${rebase.gitFailure === undefined ? "" : `; ${rebase.gitFailure}`}`,
+        );
+      method = "artifact-replacement";
+    }
   }
+  if (anchor.artifactReplacementRequired && method !== "artifact-replacement")
+    throw new Error(
+      "pr reanchorのpr-bound再固定は同一review済み実装に対する監査合格済みartifact改名だけを受理します",
+    );
   return {
     chain: existing,
     effectiveHeadSha: input.newHeadSha,
@@ -395,6 +534,8 @@ export function evaluateEvidenceReanchor(input: {
     oldHeadSha,
     oldBaseSha,
     diffDigest: before.digest,
+    method,
+    artifactReplacement,
   };
 }
 
@@ -432,9 +573,12 @@ export function appendEvidenceReanchor(input: {
       oldBaseSha: evaluation.oldBaseSha,
       newBaseSha: input.newBaseSha,
       diffDigest: evaluation.diffDigest as string,
-      method: "rebase",
+      method: evaluation.method as "rebase" | "artifact-replacement",
       reason: input.reason,
       recordedAt: input.recordedAt,
+      ...(evaluation.artifactReplacement === undefined
+        ? {}
+        : { artifactReplacement: evaluation.artifactReplacement }),
     };
     const file = path.join(staging, EVIDENCE_REANCHOR_FILE);
     const next = [...evaluation.chain, record];
