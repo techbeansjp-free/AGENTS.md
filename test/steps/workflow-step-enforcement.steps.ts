@@ -4402,7 +4402,7 @@ if (exact(["auth", "status"])) {
       assert.match(output, /"state": "pull_request_complete"/u, output);
       assert.match(
         output,
-        /このworkflowはPR停止点で完了済みです。mergeする場合はownerが別のdelivery判断を開始してください/u,
+        /このworkflowはPR停止点で完了済みです。新しいowner判断で再開する場合だけ--reopen-terminal=approvedを指定してください/u,
         output,
       );
       assert.equal(
