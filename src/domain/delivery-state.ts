@@ -79,6 +79,8 @@ export interface MergeObservation {
 
 export interface MergeIntent {
   method: "merge" | "squash" | "rebase";
+  /** providerへ送る通常mergeまたはcontext-isolated限定admin merge。 */
+  dispatchMode: "normal" | "admin";
   authorizedHeadSha: string;
   authorizedBaseRef: string;
   authorizedBaseSha: string;
@@ -99,8 +101,8 @@ export interface MergeIntent {
 
 export type MergeIntentInput = Omit<
   MergeIntent,
-  "dispatchClaimedAt" | "observation"
->;
+  "dispatchMode" | "dispatchClaimedAt" | "observation"
+> & { dispatchMode?: "normal" | "admin" };
 
 export interface Step11Record {
   outcome: "pull-request" | "merged";
@@ -174,6 +176,7 @@ const CREATE_FIELDS = new Set([
 const PR_FIELDS = new Set(["number", "url", "boundAt"]);
 const MERGE_FIELDS = new Set([
   "method",
+  "dispatchMode",
   "authorizedHeadSha",
   "authorizedBaseRef",
   "authorizedBaseSha",
@@ -691,6 +694,14 @@ function parseMerge(
     );
   const parsed: MergeIntent = {
     method: value.method,
+    dispatchMode:
+      value.dispatchMode === undefined || value.dispatchMode === "normal"
+        ? "normal"
+        : value.dispatchMode === "admin"
+          ? "admin"
+          : (() => {
+              throw new Error("merge.dispatchModeが不正です");
+            })(),
     authorizedHeadSha,
     authorizedBaseRef,
     authorizedBaseSha,
@@ -1201,7 +1212,12 @@ export function prepareMergeIntent(
     ...current,
     revision: current.revision + 1,
     state: "merge-prepared",
-    merge: { ...merge, dispatchClaimedAt: null, observation: null },
+    merge: {
+      ...merge,
+      dispatchMode: merge.dispatchMode ?? "normal",
+      dispatchClaimedAt: null,
+      observation: null,
+    },
   };
   return parseDeliveryState(stableJson(candidate));
 }
@@ -1223,7 +1239,12 @@ export function prepareTerminalRedeliveryMergeIntent(
     ...current,
     revision: current.revision + 1,
     state: "merge-prepared",
-    merge: { ...merge, dispatchClaimedAt: null, observation: null },
+    merge: {
+      ...merge,
+      dispatchMode: merge.dispatchMode ?? "normal",
+      dispatchClaimedAt: null,
+      observation: null,
+    },
     redelivery: {
       decisionId,
       startedAt: merge.preparedAt,

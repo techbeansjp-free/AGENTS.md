@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { run } from "../lib/process.js";
 import { isRecord } from "../types.js";
-import type { BranchDeliveryPolicyObservation } from "../domain/delivery.js";
+import type {
+  BranchDeliveryPolicyObservation,
+  ContextIsolatedAdminMergeObservation,
+} from "../domain/delivery.js";
 
 /**
  * merge方式をgh CLIのflagへ写す。
@@ -46,6 +49,9 @@ interface GitHubInput {
   reviewId: string;
   branch: string;
   method: "merge" | "squash" | "rebase";
+  dispatchMode: "normal" | "admin";
+  allChecksSuccessful: boolean;
+  successfulChecks: readonly string[];
   readBackSettle: ReadBackSettle;
 }
 
@@ -161,6 +167,7 @@ export interface PullRequestInspection extends PullRequestObservation {
   author?: { id?: string };
   isDraft?: boolean;
   mergeStateStatus?: string;
+  mergeable?: string;
   statusCheckRollup?: Array<{
     conclusion?: string;
     status?: string;
@@ -567,7 +574,7 @@ function observePullRequestQueue(
 function verifyRepository(
   repository: string,
   cwd: string,
-  access: "read" | "write",
+  access: "read" | "write" | "admin",
 ): void {
   run("gh", ["auth", "status"], cwd);
   let observed: RepositoryObservation;
@@ -596,11 +603,238 @@ function verifyRepository(
   const levels = ["READ", "TRIAGE", "WRITE", "MAINTAIN", "ADMIN"];
   const observedLevel = levels.indexOf(observed.viewerPermission ?? "");
   const requiredLevel =
-    access === "write" ? levels.indexOf("WRITE") : levels.indexOf("READ");
+    access === "admin"
+      ? levels.indexOf("ADMIN")
+      : access === "write"
+        ? levels.indexOf("WRITE")
+        : levels.indexOf("READ");
   if (observedLevel < requiredLevel)
     throw new Error(
-      `対象GitHubリポジトリの${access === "write" ? "書き込み" : "読み取り"}権限が不足しています`,
+      `対象GitHubリポジトリの${access === "admin" ? "管理者" : access === "write" ? "書き込み" : "読み取り"}権限が不足しています`,
     );
+}
+
+const EXACT_REVIEW_THREADS_QUERY = `query ExactReviewThreads($owner:String!,$repo:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$repo){nameWithOwner pullRequest(number:$number){number reviewThreads(first:100,after:$endCursor){nodes{isResolved}pageInfo{hasNextPage endCursor}}}}}`;
+
+function observeContextIsolatedAdminMerge(
+  input: Pick<
+    GitHubInput,
+    | "repository"
+    | "pr"
+    | "branch"
+    | "method"
+    | "allChecksSuccessful"
+    | "successfulChecks"
+  >,
+  cwd: string,
+): ContextIsolatedAdminMergeObservation {
+  const denied = (reason: string): ContextIsolatedAdminMergeObservation => ({
+    known: false,
+    repositoryAdmin: false,
+    allowedRulesOnly: false,
+    allChecksSuccessful: input.allChecksSuccessful === true,
+    unresolvedReviewThreads: null,
+    reasons: [reason],
+  });
+  try {
+    verifyRepository(input.repository, cwd, "read");
+    const repository = parseObject<RepositoryObservation>(
+      run(
+        "gh",
+        [
+          "repo",
+          "view",
+          input.repository,
+          "--json",
+          "nameWithOwner,viewerPermission",
+        ],
+        cwd,
+      ).stdout,
+      "repository admin authority観測",
+    );
+    if (
+      repository.nameWithOwner !== input.repository ||
+      repository.viewerPermission !== "ADMIN"
+    )
+      return denied("repository admin authorityを観測できません");
+
+    const classic = run(
+      "gh",
+      [
+        "api",
+        `repos/${input.repository}/branches/${encodeURIComponent(input.branch)}/protection`,
+      ],
+      cwd,
+      { allowFailure: true },
+    );
+    if (!(
+      classic.status === 1 && /404|Branch not protected/i.test(classic.stderr)
+    ))
+      return denied(
+        classic.status === 0
+          ? "classic branch protectionはadmin merge許可閉集合の対象外です"
+          : "classic branch protectionを観測できません",
+      );
+
+    const rulesResult = run(
+      "gh",
+      [
+        "api",
+        "--paginate",
+        "--slurp",
+        `repos/${input.repository}/rules/branches/${encodeURIComponent(input.branch)}?per_page=100`,
+      ],
+      cwd,
+      { allowFailure: true },
+    );
+    if (rulesResult.status !== 0)
+      return denied("applicable branch rulesを観測できません");
+    const pages: unknown = JSON.parse(rulesResult.stdout);
+    if (!Array.isArray(pages) || pages.some((page) => !Array.isArray(page)))
+      return denied("applicable branch rulesがpage配列ではありません");
+    const rules: unknown[] = pages.flat();
+    if (rules.length === 0 || rules.some((rule) => !isRecord(rule)))
+      return denied("applicable branch rulesが空または不正です");
+    const allowedTypes = new Set([
+      "deletion",
+      "non_fast_forward",
+      "pull_request",
+      "required_status_checks",
+    ]);
+    let allowedRulesOnly = true;
+    const requiredCheckContexts: string[] = [];
+    for (const value of rules) {
+      if (
+        !isRecord(value) ||
+        typeof value.type !== "string" ||
+        !allowedTypes.has(value.type)
+      ) {
+        allowedRulesOnly = false;
+        break;
+      }
+      if (value.type === "pull_request") {
+        const p = value.parameters;
+        if (
+          !isRecord(p) ||
+          p.required_approving_review_count !== 0 ||
+          p.require_code_owner_review !== false ||
+          p.require_last_push_approval !== false ||
+          !Array.isArray(p.required_reviewers) ||
+          p.required_reviewers.length !== 0 ||
+          !Array.isArray(p.allowed_merge_methods) ||
+          !p.allowed_merge_methods.includes(input.method)
+        ) {
+          allowedRulesOnly = false;
+          break;
+        }
+      }
+      if (value.type === "required_status_checks") {
+        const p = value.parameters;
+        if (
+          !isRecord(p) ||
+          typeof p.strict_required_status_checks_policy !== "boolean" ||
+          !Array.isArray(p.required_status_checks) ||
+          p.required_status_checks.some(
+            (check) =>
+              !isRecord(check) ||
+              typeof check.context !== "string" ||
+              check.context === "",
+          )
+        ) {
+          allowedRulesOnly = false;
+          break;
+        }
+        requiredCheckContexts.push(
+          ...p.required_status_checks.map((check) =>
+            isRecord(check) && typeof check.context === "string"
+              ? check.context
+              : "",
+          ),
+        );
+      }
+    }
+
+    const [owner, repo, ...rest] = input.repository.split("/");
+    if (!owner || !repo || rest.length > 0)
+      return denied("repository identityが不正です");
+    const threadsResult = run(
+      "gh",
+      [
+        "api",
+        "graphql",
+        "--paginate",
+        "--slurp",
+        "-F",
+        `owner=${owner}`,
+        "-F",
+        `repo=${repo}`,
+        "-F",
+        `number=${input.pr}`,
+        "-f",
+        `query=${EXACT_REVIEW_THREADS_QUERY}`,
+      ],
+      cwd,
+      { allowFailure: true },
+    );
+    if (threadsResult.status !== 0)
+      return denied("review threadを観測できません");
+    const threadPages: unknown = JSON.parse(threadsResult.stdout);
+    if (!Array.isArray(threadPages) || threadPages.length === 0)
+      return denied("review thread応答がpage配列ではありません");
+    let unresolvedReviewThreads = 0;
+    for (const page of threadPages) {
+      if (
+        !isRecord(page) ||
+        !isRecord(page.data) ||
+        !isRecord(page.data.repository)
+      )
+        return denied("review thread応答のrepositoryが不正です");
+      const pullRequest = page.data.repository.pullRequest;
+      if (
+        page.data.repository.nameWithOwner !== input.repository ||
+        !isRecord(pullRequest) ||
+        pullRequest.number !== input.pr ||
+        !isRecord(pullRequest.reviewThreads) ||
+        !Array.isArray(pullRequest.reviewThreads.nodes) ||
+        !isRecord(pullRequest.reviewThreads.pageInfo) ||
+        typeof pullRequest.reviewThreads.pageInfo.hasNextPage !== "boolean"
+      )
+        return denied("review thread応答のidentityまたはpaginationが不正です");
+      for (const thread of pullRequest.reviewThreads.nodes) {
+        if (!isRecord(thread) || typeof thread.isResolved !== "boolean")
+          return denied("review threadのisResolvedが不正です");
+        if (!thread.isResolved) unresolvedReviewThreads += 1;
+      }
+    }
+    const last: unknown = (threadPages as unknown[]).at(-1);
+    if (
+      !isRecord(last) ||
+      !isRecord(last.data) ||
+      !isRecord(last.data.repository) ||
+      !isRecord(last.data.repository.pullRequest) ||
+      !isRecord(last.data.repository.pullRequest.reviewThreads) ||
+      !isRecord(last.data.repository.pullRequest.reviewThreads.pageInfo) ||
+      last.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage !==
+        false
+    )
+      return denied("review thread paginationが完了していません");
+    return {
+      known: true,
+      repositoryAdmin: true,
+      allowedRulesOnly,
+      allChecksSuccessful:
+        input.allChecksSuccessful === true &&
+        requiredCheckContexts.every((context) =>
+          input.successfulChecks.includes(context),
+        ),
+      unresolvedReviewThreads,
+      reasons: allowedRulesOnly
+        ? []
+        : ["許可閉集合外または不正なbranch ruleがあります"],
+    };
+  } catch (error) {
+    return denied(error instanceof Error ? error.message : String(error));
+  }
 }
 
 /**
@@ -703,13 +937,28 @@ export function github(
   cwd: string,
 ): BranchDeliveryPolicyObservation;
 export function github(
+  operation: "pr.context-isolated-admin-merge",
+  input: Pick<
+    GitHubInput,
+    | "repository"
+    | "pr"
+    | "branch"
+    | "method"
+    | "allChecksSuccessful"
+    | "successfulChecks"
+  >,
+  cwd: string,
+): ContextIsolatedAdminMergeObservation;
+export function github(
   operation: "repository.assert-write",
   input: Pick<GitHubInput, "repository">,
   cwd: string,
 ): RepositoryWriteAuthorityObservation;
 export function github(
   operation: "pr.merge",
-  input: Pick<GitHubInput, "repository" | "pr" | "method" | "headSha">,
+  input: Pick<GitHubInput, "repository" | "pr" | "method" | "headSha"> & {
+    dispatchMode?: "normal" | "admin";
+  },
   cwd: string,
 ): { state: string };
 export function github(
@@ -1108,7 +1357,7 @@ export function github(
         "--repo",
         input.repository,
         "--json",
-        "number,url,title,body,state,mergedAt,mergeCommit,autoMergeRequest,author,isDraft,headRefName,baseRefName,headRefOid,baseRefOid,headRepository,isCrossRepository,mergeStateStatus,reviewDecision,statusCheckRollup,closingIssuesReferences",
+        "number,url,title,body,state,mergedAt,mergeCommit,autoMergeRequest,author,isDraft,headRefName,baseRefName,headRefOid,baseRefOid,headRepository,isCrossRepository,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,closingIssuesReferences",
       ],
       cwd,
     );
@@ -1779,8 +2028,25 @@ export function github(
       };
     }
   }
+  if (operation === "pr.context-isolated-admin-merge")
+    return observeContextIsolatedAdminMerge(
+      input as Pick<
+        GitHubInput,
+        | "repository"
+        | "pr"
+        | "branch"
+        | "method"
+        | "allChecksSuccessful"
+        | "successfulChecks"
+      >,
+      cwd,
+    );
   if (operation === "pr.merge") {
-    verifyRepository(input.repository, cwd, "write");
+    verifyRepository(
+      input.repository,
+      cwd,
+      input.dispatchMode === "admin" ? "admin" : "write",
+    );
     const expectedHeadSha = requireFullOid(
       input.headSha,
       "merge対象の再認可済みHEAD SHA",
@@ -1793,6 +2059,12 @@ export function github(
      * 黙ってsquashにすると、その破壊が診断なしで起きる。
      */
     const methodFlag = mergeMethodFlag(input.method);
+    if (
+      input.dispatchMode !== undefined &&
+      input.dispatchMode !== "normal" &&
+      input.dispatchMode !== "admin"
+    )
+      throw new Error("merge dispatch modeが不正です");
     run(
       "gh",
       [
@@ -1802,7 +2074,7 @@ export function github(
         "--repo",
         input.repository,
         methodFlag,
-        "--auto",
+        ...(input.dispatchMode === "admin" ? ["--admin"] : ["--auto"]),
         "--match-head-commit",
         expectedHeadSha,
       ],

@@ -12,12 +12,14 @@ import {
   assertPullRequestTrackerBinding,
   createPullRequest,
   authorizeMerge,
+  authorizeContextIsolatedAdminMerge,
   diagnoseBranchFollowCost,
   extractIssueClosingNumbers,
   validateIssueClosingReferences,
   type MergeInput,
   type BranchDeliveryPolicyObservation,
   type BranchFollowCostDiagnostic,
+  type ContextIsolatedAdminMergeObservation,
 } from "../../src/domain/delivery.js";
 import {
   buildFinalizeReport,
@@ -75,9 +77,53 @@ interface DeliveryFinalizeWorld extends WorkflowWorld {
   withoutApproval: ReturnType<typeof authorizeMerge>;
   declaredZero: ReturnType<typeof authorizeMerge>;
   declaredOne: ReturnType<typeof authorizeMerge>;
+  adminMergeObservation: ContextIsolatedAdminMergeObservation;
+  adminMergeDecision: ReturnType<typeof authorizeContextIsolatedAdminMerge>;
 }
 
 const { Given, When, Then } = stepDefinitions<DeliveryFinalizeWorld>();
+
+Given("context-isolated admin mergeの安全条件がすべて成立する", function () {
+  this.adminMergeObservation = {
+    known: true,
+    repositoryAdmin: true,
+    allowedRulesOnly: true,
+    allChecksSuccessful: true,
+    unresolvedReviewThreads: 0,
+    reasons: [],
+  };
+});
+
+Given(
+  "context-isolated admin mergeの安全条件 {string} だけが欠落する",
+  function (condition: string) {
+    this.adminMergeObservation = {
+      known: condition !== "known",
+      repositoryAdmin: condition !== "repositoryAdmin",
+      allowedRulesOnly: condition !== "allowedRulesOnly",
+      allChecksSuccessful: condition !== "allChecksSuccessful",
+      unresolvedReviewThreads:
+        condition === "unresolvedReviewThreads" ? null : 0,
+      reasons: [],
+    };
+  },
+);
+
+When("context-isolated admin merge認可を評価する", function () {
+  this.adminMergeDecision = authorizeContextIsolatedAdminMerge(
+    this.adminMergeObservation,
+  );
+});
+
+Then("admin mergeは許可される", function () {
+  assert.equal(this.adminMergeDecision.allowed, true);
+  assert.deepEqual(this.adminMergeDecision.reasons, []);
+});
+
+Then("admin mergeは欠落理由を示して拒否される", function () {
+  assert.equal(this.adminMergeDecision.allowed, false);
+  assert.ok(this.adminMergeDecision.reasons.length >= 1);
+});
 
 interface GhStubWorld {
   temp(prefix?: string): string;

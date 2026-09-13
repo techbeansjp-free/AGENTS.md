@@ -2002,6 +2002,13 @@ interface DeliveryProviderControl {
    */
   failCreateVerification: boolean;
   phase: "ready" | "merge-requested" | "queue-requested" | "merged";
+  mergeStateStatus: "CLEAN" | "BLOCKED";
+  mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+  viewerPermission: "WRITE" | "ADMIN";
+  rulesetOnly: boolean;
+  unresolvedReviewThreads: number;
+  unknownBranchRule: boolean;
+  statusCheckConclusion: "SUCCESS" | "FAILURE";
   ghVersion: string;
   closingChanged: boolean;
   /**
@@ -2906,6 +2913,13 @@ function prepareDeliveryCli(
   assert.match(mergeTreeSha, /^[a-f0-9]{40}$/u);
   const control: DeliveryProviderControl = {
     phase: "ready",
+    mergeStateStatus: "CLEAN",
+    mergeable: "MERGEABLE",
+    viewerPermission: "WRITE",
+    rulesetOnly: false,
+    unresolvedReviewThreads: 0,
+    unknownBranchRule: false,
+    statusCheckConclusion: "SUCCESS",
     ghVersion: "2.97.0",
     closingChanged: false,
     emptyClosingViews: 0,
@@ -3011,10 +3025,14 @@ const observation = () => ({
   baseRefOid: baseSha,
   headRepository: { nameWithOwner: control.headRepository },
   isCrossRepository: control.isCrossRepository,
-  mergeStateStatus: "CLEAN",
+  mergeable: control.mergeable,
+  mergeStateStatus: control.mergeStateStatus,
   reviewDecision:
     control.reviewDisposition === "none" ? null : "APPROVED",
-  statusCheckRollup: [],
+  statusCheckRollup:
+    control.mergeStateStatus === "BLOCKED"
+      ? [{ conclusion: control.statusCheckConclusion, name: "quality" }]
+      : [],
   closingIssuesReferences:
     control.closingChanged || control.extraClosingIndexOnly
       ? [
@@ -3032,7 +3050,7 @@ if (exact(["--version"])) {
   exact(["repo", "view", "o/r", "--json", "nameWithOwner,viewerPermission"])
 ) {
   process.stdout.write(
-    JSON.stringify({ nameWithOwner: "o/r", viewerPermission: "WRITE" }),
+    JSON.stringify({ nameWithOwner: "o/r", viewerPermission: control.viewerPermission }),
   );
 } else if (exact(["api", "user", "--jq", ".node_id"])) {
   process.stdout.write("repository-owner-node-id\\n");
@@ -3160,6 +3178,24 @@ if (exact(["--version"])) {
         })),
       ),
     );
+  } else if (args.some((argument) => argument.includes("query ExactReviewThreads"))) {
+    process.stdout.write(JSON.stringify([{
+      data: {
+        repository: {
+          nameWithOwner: "o/r",
+          pullRequest: {
+            number: 1,
+            reviewThreads: {
+              nodes: Array.from(
+                { length: control.unresolvedReviewThreads },
+                () => ({ isResolved: false }),
+              ),
+              pageInfo: { hasNextPage: false, endCursor: null },
+            },
+          },
+        },
+      },
+    }]));
   } else {
     const entry =
       control.phase === "queue-requested"
@@ -3186,7 +3222,41 @@ if (exact(["--version"])) {
 } else if (
   exact(["api", "repos/o/r/branches/main/protection"])
 ) {
-  process.stdout.write("{}");
+  if (control.rulesetOnly) {
+    process.stderr.write("HTTP 404: Branch not protected\\n");
+    process.exitCode = 1;
+  } else {
+    process.stdout.write("{}");
+  }
+} else if (
+  exact([
+    "api",
+    "--paginate",
+    "--slurp",
+    "repos/o/r/rules/branches/main?per_page=100",
+  ])
+) {
+  process.stdout.write(JSON.stringify([[
+    { type: "deletion" },
+    { type: "non_fast_forward" },
+    {
+      type: "pull_request",
+      parameters: {
+        required_approving_review_count: 0,
+        require_code_owner_review: false,
+        require_last_push_approval: false,
+        required_reviewers: [],
+        allowed_merge_methods: ["merge", "squash", "rebase"],
+      },
+    },
+    {
+      type: control.unknownBranchRule ? "required_signatures" : "required_status_checks",
+      parameters: {
+        strict_required_status_checks_policy: true,
+        required_status_checks: [{ context: "quality" }],
+      },
+    },
+  ]]));
 } else if (
   exact([
     "api",
@@ -4037,6 +4107,80 @@ if (exact(["auth", "status"])) {
         session.latestRoundDigest,
         "merge intentのreviewIdがactual latestRoundDigestと一致しません",
       );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-058": {
+      const sameActor = "sole-operator";
+      const prepared = prepareDeliveryCli(this, {
+        prAuthorId: sameActor,
+        implementationAuthorId: sameActor,
+        reviewerId: sameActor,
+        reviewDisposition: "none",
+        mergeStateStatus: "BLOCKED",
+        mergeable: "MERGEABLE",
+        viewerPermission: "ADMIN",
+        rulesetOnly: true,
+        mergeImmediately: true,
+      });
+      createDeliveryPullRequest(prepared);
+      const requested = executeDeliveryMerge(prepared);
+      assert.equal(
+        requested.status,
+        0,
+        `GitHub自己承認blockを安全なadmin mergeへ接続できません: ${requested.stdout}${requested.stderr}`,
+      );
+      const calls = deliveryProviderCalls(prepared).filter(isMergeCall);
+      assert.equal(
+        calls.length,
+        1,
+        "admin merge requestは1回だけでなければなりません",
+      );
+      assert.ok(calls[0]?.includes("--admin"), "admin flagがありません");
+      assert.equal(
+        calls[0]?.includes("--auto"),
+        false,
+        "admin mergeへ--autoを混在させています",
+      );
+      assert.ok(
+        calls[0]?.includes("--match-head-commit"),
+        "exact head CASがありません",
+      );
+      const state = parseDeliveryState(
+        fs.readFileSync(
+          path.join(prepared.staging, "journal", "delivery-state.json"),
+          "utf8",
+        ),
+      );
+      assert.equal(state.merge?.dispatchMode, "admin");
+      break;
+    }
+    case "SCN-E2E-WFSTEP-059": {
+      const variants: Array<Partial<DeliveryProviderControl>> = [
+        { unknownBranchRule: true },
+        { unresolvedReviewThreads: 1 },
+        { viewerPermission: "WRITE" },
+        { statusCheckConclusion: "FAILURE" },
+      ];
+      for (const variant of variants) {
+        const prepared = prepareDeliveryCli(this, {
+          reviewDisposition: "none",
+          mergeStateStatus: "BLOCKED",
+          mergeable: "MERGEABLE",
+          viewerPermission: "ADMIN",
+          rulesetOnly: true,
+          ...variant,
+        });
+        createDeliveryPullRequest(prepared);
+        const before =
+          deliveryProviderCalls(prepared).filter(isMergeCall).length;
+        const rejected = executeDeliveryMerge(prepared);
+        assert.notEqual(rejected.status, 0, "不完全なadmin条件を受理しました");
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          before,
+          "拒否したadmin mergeをproviderへ送っています",
+        );
+      }
       break;
     }
     case "SCN-INT-MERGE-019": {

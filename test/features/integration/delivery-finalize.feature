@@ -533,3 +533,21 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     Given trusted policyがactor-independentを宣言し実装者自身の承認だけがある
     When merge authorizationを評価する
     Then mergeは許可されない
+
+  Scenario: SCN-1379-ADMIN-001 正の観測閉集合が成立したときだけadmin mergeを許可する
+    Given context-isolated admin mergeの安全条件がすべて成立する
+    When context-isolated admin merge認可を評価する
+    Then admin mergeは許可される
+
+  Scenario Outline: SCN-1379-ADMIN-002 不明・権限不足・未知rule・失敗check・thread不明をfail-closedで拒否する
+    Given context-isolated admin mergeの安全条件 "<条件>" だけが欠落する
+    When context-isolated admin merge認可を評価する
+    Then admin mergeは欠落理由を示して拒否される
+
+    Examples:
+      | 条件 |
+      | known |
+      | repositoryAdmin |
+      | allowedRulesOnly |
+      | allChecksSuccessful |
+      | unresolvedReviewThreads |

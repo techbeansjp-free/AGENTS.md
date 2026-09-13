@@ -283,6 +283,7 @@
       ],
       "properties": {
         "method": { "enum": ["merge", "squash", "rebase"] },
+        "dispatchMode": { "enum": ["normal", "admin"] },
         "authorizedHeadSha": { "$ref": "#/$defs/oid" },
         "authorizedBaseRef": { "type": "string", "minLength": 1 },
         "authorizedBaseSha": { "$ref": "#/$defs/oid" },

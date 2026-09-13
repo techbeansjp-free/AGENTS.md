@@ -30,6 +30,7 @@ const CREATE_FIELDS = new Set([
 const PR_FIELDS = new Set(["number", "url", "boundAt"]);
 const MERGE_FIELDS = new Set([
     "method",
+    "dispatchMode",
     "authorizedHeadSha",
     "authorizedBaseRef",
     "authorizedBaseSha",
@@ -403,6 +404,13 @@ function parseMerge(value, create, pr) {
         throw new Error("mergeのCI run IDは正の整数、review IDは正の整数またはformal review round digestが必要です");
     const parsed = {
         method: value.method,
+        dispatchMode: value.dispatchMode === undefined || value.dispatchMode === "normal"
+            ? "normal"
+            : value.dispatchMode === "admin"
+                ? "admin"
+                : (() => {
+                    throw new Error("merge.dispatchModeが不正です");
+                })(),
         authorizedHeadSha,
         authorizedBaseRef,
         authorizedBaseSha,
@@ -774,7 +782,12 @@ export function prepareMergeIntent(current, merge) {
         ...current,
         revision: current.revision + 1,
         state: "merge-prepared",
-        merge: { ...merge, dispatchClaimedAt: null, observation: null },
+        merge: {
+            ...merge,
+            dispatchMode: merge.dispatchMode ?? "normal",
+            dispatchClaimedAt: null,
+            observation: null,
+        },
     };
     return parseDeliveryState(stableJson(candidate));
 }
@@ -788,7 +801,12 @@ export function prepareTerminalRedeliveryMergeIntent(current, merge, decisionId,
         ...current,
         revision: current.revision + 1,
         state: "merge-prepared",
-        merge: { ...merge, dispatchClaimedAt: null, observation: null },
+        merge: {
+            ...merge,
+            dispatchMode: merge.dispatchMode ?? "normal",
+            dispatchClaimedAt: null,
+            observation: null,
+        },
         redelivery: {
             decisionId,
             startedAt: merge.preparedAt,
