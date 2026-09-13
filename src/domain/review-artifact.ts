@@ -34,6 +34,11 @@ export interface ReviewArtifactStructure {
   readonly diagnostics: readonly ReviewArtifactDiagnostic[];
 }
 
+export interface ContextIsolatedApprovalRecord {
+  readonly valid: boolean;
+  readonly errors: readonly string[];
+}
+
 const REVIEW_IDENTITY_HEADING = "## 0. レビュー識別情報";
 const IDENTITY_BASE_EXPECTED = "| 比較基点 | `<40桁の小文字hex>` |";
 const IDENTITY_IMPL_EXPECTED = "| H_impl | `<40桁の小文字hex>` |";
@@ -391,6 +396,65 @@ export function validateReviewArtifactStructure(
     auditEntries: audit.entries,
     diagnostics,
   };
+}
+
+/**
+ * Tracked review artifactに記録されたcontext-isolatedの最終判断を読む。
+ * artifact単体はauthorityにせず、callerが保存済みsession bindingとGit blobを
+ * 別途照合した後にだけ、このsemantic recordをapprovalへ使用する。
+ */
+export function validateContextIsolatedApprovalRecord(
+  markdown: string,
+): ContextIsolatedApprovalRecord {
+  const structure = validateReviewArtifactStructure(markdown);
+  const lines = visibleMarkdownLines(markdown);
+  const independence = sectionRange(lines, "## 9. 独立reviewの成立");
+  const summary = sectionRange(lines, "## 11. 総合判定と再開地点");
+  const mode = identityCell(lines, independence, "適用した独立性モード");
+  const satisfies = identityCell(lines, independence, "その要求を満たすこと");
+  const comparison = identityCell(
+    lines,
+    independence,
+    "reviewerとimplementerのidentity・context比較",
+  );
+  const nonModification = identityCell(
+    lines,
+    independence,
+    "reviewerが対象差分を変更していないこと",
+  );
+  const summaryLines =
+    summary === undefined ? [] : lines.slice(summary.start + 1, summary.end);
+  const verdicts = summaryLines.filter((line) => line.startsWith("- 判定:"));
+  const blockers = summaryLines.filter((line) =>
+    line.startsWith("- 未解決Critical/High:"),
+  );
+  const errors = structure.diagnostics.map((item) => item.message);
+  if (mode.count !== 1 || mode.value !== "context-isolated")
+    errors.push("適用した独立性モードはcontext-isolatedが1件必要です");
+  if (satisfies.count !== 1 || !/^はい(?:$|[（(])/u.test(satisfies.value ?? ""))
+    errors.push("context-isolatedの要求を満たす記録が必要です");
+  if (
+    comparison.count !== 1 ||
+    comparison.value === undefined ||
+    comparison.value === "" ||
+    /[{}]|実体の観測値/u.test(comparison.value)
+  )
+    errors.push(
+      "reviewerとimplementerのidentity・context比較の実測値が必要です",
+    );
+  if (
+    nonModification.count !== 1 ||
+    !/^はい(?:$|[（(])/u.test(nonModification.value ?? "")
+  )
+    errors.push("reviewerが対象差分を変更していない記録が必要です");
+  if (verdicts.length !== 1 || verdicts[0] !== "- 判定: approved")
+    errors.push("総合判定approvedが1件必要です");
+  if (
+    blockers.length !== 1 ||
+    !/^- 未解決Critical\/High: *なし$/u.test(blockers[0] ?? "")
+  )
+    errors.push("未解決Critical/Highがない記録が必要です");
+  return { valid: errors.length === 0, errors: Object.freeze(errors) };
 }
 
 /** review artifact用stagingが対象rootの規定issues directory直下にあるか判定する。 */

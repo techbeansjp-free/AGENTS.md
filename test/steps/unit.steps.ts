@@ -2020,10 +2020,13 @@ When("Phase A artifactのimmutable契約を検査する", function () {
   this.phaseAContractInspected = true;
 });
 Then(
-  "H_final後は更新せず外部attestationだけで完了すると明記されている",
+  "H_final後は更新せずmode別approval authorityで完了すると明記されている",
   function () {
     assert.match(this.phaseAReview, /H_final後[^。]*更新しない/u);
-    assert.match(this.phaseAReview, /完了[^。]*外部attestation/u);
+    assert.match(
+      this.phaseAReview,
+      /context-isolated[^]*formal approval[^]*actor-independent[^]*provider `APPROVED`/u,
+    );
   },
 );
 Then("blocking findingは0件である", function () {
