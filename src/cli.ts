@@ -882,6 +882,9 @@ function mergeObservationFromProvider(input: {
   observedAt: string;
 }): Omit<MergeObservation, "observationId"> {
   if (!input.state.pr) throw new Error("固定済みPR bindingがありません");
+  if (!input.state.merge)
+    throw new Error("merge observationには固定済みmerge intentが必要です");
+  const authorizedHeadSha = input.state.merge.authorizedHeadSha;
   const closing = assertBoundPullRequestObservation(input);
   const merged = String(input.observed.state ?? "").toUpperCase() === "MERGED";
   const autoMergeRequest = isRecord(input.observed.autoMergeRequest)
@@ -894,7 +897,7 @@ function mergeObservationFromProvider(input: {
     (input.queue.repository.toLowerCase() !==
       input.state.create.repository.toLowerCase() ||
       input.queue.prNumber !== input.state.pr.number ||
-      input.queue.headRefOid !== input.state.create.headSha)
+      input.queue.headRefOid !== authorizedHeadSha)
   )
     throw new Error("merge queue観測が固定済みPR bindingと一致しません");
   if (!merged && !autoMergeRequested && !queueEntry)
@@ -920,7 +923,7 @@ function mergeObservationFromProvider(input: {
         "auto-merge enabledAt",
       ),
       method: input.state.merge.method,
-      headSha: input.state.create.headSha,
+      headSha: authorizedHeadSha,
       baseSha: input.state.merge.authorizedBaseSha,
     };
   };
@@ -959,7 +962,7 @@ function mergeObservationFromProvider(input: {
     repository: input.state.create.repository,
     prNumber: input.state.pr.number,
     prUrl: input.state.pr.url,
-    headSha: input.state.create.headSha,
+    headSha: authorizedHeadSha,
     issue: closing.issue,
     issueUrl: closing.issueUrl,
     bodyClosingDigest: closing.bodyClosingDigest,
@@ -1040,7 +1043,7 @@ function finishObservedMerge(
     if (!definition) throw new Error("step 11の定義がありません");
     workflow = appendDeliveryTerminalJournalEntry({
       staging,
-      headSha: current.create.headSha,
+      headSha: current.merge.authorizedHeadSha,
       entry: {
         step: 11,
         skillId: definition.skillId,
@@ -1202,6 +1205,48 @@ function assertRecordedStep11Evidence(
     throw new Error(
       "固定済みStep 11 journal digestが現在のjournalと一致しません",
     );
+}
+
+function postPrIntakeDeliveryErrors(staging: string): string[] {
+  const journal = readWorkflowJournal(staging);
+  if (!journal.entries.some((entry) => entry.postPrIntake)) return [];
+  const delivery = readStoredDeliveryState(staging);
+  if (!delivery)
+    return ["post-PR intakeに対応するdelivery stateがありません"];
+  const allowed = new Set<DeliveryState["state"]>([
+    "pr-bound",
+    "merge-prepared",
+    "merge-observed",
+    "step11-recorded",
+  ]);
+  if (
+    delivery.state === "reconciliation-required" &&
+    delivery.reconciliation?.phase === "merge"
+  )
+    allowed.add("reconciliation-required");
+  if (!allowed.has(delivery.state))
+    return [
+      `post-PR intakeに対応しないdelivery stateです: ${delivery.state}`,
+    ];
+  try {
+    if (delivery.state === "step11-recorded")
+      assertRecordedStep11Evidence(staging, delivery);
+    else assertStoredStagingContentDigest(staging, "post-PR intake検証時");
+    return [];
+  } catch (error) {
+    return [error instanceof Error ? error.message : String(error)];
+  }
+}
+
+function exactMergeDispatchHead(input: {
+  observedHeadSha: string;
+  authorizedHeadSha: string;
+}): string {
+  if (input.observedHeadSha !== input.authorizedHeadSha)
+    throw new Error(
+      "merge送信直前のprovider HEADが永続化した認可HEADと一致しません",
+    );
+  return input.observedHeadSha;
 }
 
 type PullRequestMergeMethod = "merge" | "squash" | "rebase";
@@ -2425,7 +2470,10 @@ function retryPreparedMergeAfterConfirmedAbsence(input: {
         repository: input.repository,
         pr: input.pr,
         method: input.method,
-        headSha: rechecked.observed.headRefOid,
+        headSha: exactMergeDispatchHead({
+          observedHeadSha: rechecked.observed.headRefOid,
+          authorizedHeadSha: input.state.merge.authorizedHeadSha,
+        }),
         dispatchMode: input.state.merge.dispatchMode,
       },
       input.root,
@@ -2958,7 +3006,10 @@ function handlePullRequestMerge(flags: Flags): number {
           repository,
           pr,
           method,
-          headSha: rechecked.observed.headRefOid,
+          headSha: exactMergeDispatchHead({
+            observedHeadSha: rechecked.observed.headRefOid,
+            authorizedHeadSha: prepared.state.merge!.authorizedHeadSha,
+          }),
           dispatchMode: prepared.state.merge!.dispatchMode,
         },
         root,
@@ -5791,6 +5842,9 @@ export async function main(
       ? workflowStepNumber(flags["up-to"], "up-to")
       : 11;
     const inspection = inspectWorkflowStaging(flags.staging, upTo);
+    const postPrIntakeErrors = postPrIntakeDeliveryErrors(
+      inspection.staging,
+    );
     if (inspection.mode === "poc" && upTo >= 9) {
       const headSha = git(
         ["rev-parse", "--verify", "HEAD^{commit}"],
@@ -5828,13 +5882,13 @@ export async function main(
         return 1;
       }
     }
-    if (!inspection.valid) {
+    if (!inspection.valid || postPrIntakeErrors.length > 0) {
       print(
         workflowDiagnostic(
           inspection.staging,
           inspection.mode,
           inspection.validation,
-          inspection.errors,
+          [...inspection.errors, ...postPrIntakeErrors],
         ),
       );
       return 1;

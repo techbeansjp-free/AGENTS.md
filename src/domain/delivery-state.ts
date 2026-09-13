@@ -566,6 +566,7 @@ function normalizeObservation(
   value: Record<string, unknown>,
   create: DeliveryCreateIntent,
   pr: PullRequestBinding,
+  authorizedHeadSha: string,
 ): Omit<MergeObservation, "observationId"> {
   const providerState = value.providerState;
   if (providerState !== "merge-requested" && providerState !== "merged")
@@ -615,7 +616,12 @@ function normalizeObservation(
     observedAt: instant(value.observedAt, "merge.observation.observedAt"),
     mergeCommitSha,
   };
-  assertObservationMatchesBinding(create, pr, withoutId);
+  assertObservationMatchesBinding(
+    create,
+    pr,
+    authorizedHeadSha,
+    withoutId,
+  );
   return withoutId;
 }
 
@@ -623,12 +629,18 @@ function parseObservation(
   value: unknown,
   create: DeliveryCreateIntent,
   pr: PullRequestBinding,
+  authorizedHeadSha: string,
 ): MergeObservation | null {
   if (value === null) return null;
   if (!isRecord(value))
     throw new Error("merge.observationはobjectまたはnullが必要です");
   unknownFields(value, OBSERVATION_FIELDS, "merge.observation");
-  const withoutId = normalizeObservation(value, create, pr);
+  const withoutId = normalizeObservation(
+    value,
+    create,
+    pr,
+    authorizedHeadSha,
+  );
   const observationId = digest(
     value.observationId,
     "merge.observation.observationId",
@@ -657,8 +669,6 @@ function parseMerge(
     value.authorizedHeadSha,
     "merge.authorizedHeadSha",
   );
-  if (authorizedHeadSha !== create.headSha)
-    throw new Error("merge.authorizedHeadShaが固定HEADと一致しません");
   const authorizedBaseRef = ref(
     value.authorizedBaseRef,
     "merge.authorizedBaseRef",
@@ -727,13 +737,18 @@ function parseMerge(
       value.dispatchClaimedAt === null
         ? null
         : instant(value.dispatchClaimedAt, "merge.dispatchClaimedAt"),
-    observation: parseObservation(value.observation, create, pr),
+    observation: parseObservation(
+      value.observation,
+      create,
+      pr,
+      authorizedHeadSha,
+    ),
   };
   const expectedReviewEvidenceId = canonicalDigest({
     domain: "agent-skill-chain/merge-review-evidence/v1",
     repository: create.repository,
     prNumber: pr.number,
-    finalHeadSha: create.headSha,
+    finalHeadSha: authorizedHeadSha,
     implementationCommitSha: parsed.implementationCommitSha,
     reviewArtifactPath: parsed.reviewArtifactPath,
     reviewArtifactDigest: parsed.reviewArtifactDigest,
@@ -761,7 +776,7 @@ function parseMerge(
     const request = parsed.observation.providerRequest;
     if (
       request &&
-      (request.headSha !== create.headSha ||
+      (request.headSha !== authorizedHeadSha ||
         request.baseSha !== parsed.authorizedBaseSha)
     )
       throw new Error(
@@ -1306,13 +1321,14 @@ export function claimMergeDispatch(
 function assertObservationMatchesBinding(
   create: DeliveryCreateIntent,
   pr: PullRequestBinding,
+  authorizedHeadSha: string,
   observation: Omit<MergeObservation, "observationId">,
 ): void {
   const expected = {
     repository: create.repository.toLowerCase(),
     prNumber: pr.number,
     prUrl: pr.url.toLowerCase(),
-    headSha: create.headSha,
+    headSha: authorizedHeadSha,
     issue: create.issue,
     issueUrl: create.issueUrl.toLowerCase(),
     bodyClosingDigest: create.bodyClosingDigest,
@@ -1352,6 +1368,7 @@ export function observeMerge(
     observation,
     current.create,
     current.pr,
+    current.merge.authorizedHeadSha,
   );
   const complete: MergeObservation = {
     ...canonical,

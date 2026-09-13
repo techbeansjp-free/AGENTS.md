@@ -448,6 +448,9 @@ export function assertBoundPullRequestObservation(input) {
 function mergeObservationFromProvider(input) {
     if (!input.state.pr)
         throw new Error("固定済みPR bindingがありません");
+    if (!input.state.merge)
+        throw new Error("merge observationには固定済みmerge intentが必要です");
+    const authorizedHeadSha = input.state.merge.authorizedHeadSha;
     const closing = assertBoundPullRequestObservation(input);
     const merged = String(input.observed.state ?? "").toUpperCase() === "MERGED";
     const autoMergeRequest = isRecord(input.observed.autoMergeRequest)
@@ -459,7 +462,7 @@ function mergeObservationFromProvider(input) {
         (input.queue.repository.toLowerCase() !==
             input.state.create.repository.toLowerCase() ||
             input.queue.prNumber !== input.state.pr.number ||
-            input.queue.headRefOid !== input.state.create.headSha))
+            input.queue.headRefOid !== authorizedHeadSha))
         throw new Error("merge queue観測が固定済みPR bindingと一致しません");
     if (!merged && !autoMergeRequested && !queueEntry)
         throw new Error("merge要求またはnative auto-merge登録をproviderのread-backで観測できません");
@@ -478,7 +481,7 @@ function mergeObservationFromProvider(input) {
             kind: "auto-merge",
             requestedAt: canonicalProviderInstant(autoMergeRequest.enabledAt, "auto-merge enabledAt"),
             method: input.state.merge.method,
-            headSha: input.state.create.headSha,
+            headSha: authorizedHeadSha,
             baseSha: input.state.merge.authorizedBaseSha,
         };
     };
@@ -515,7 +518,7 @@ function mergeObservationFromProvider(input) {
         repository: input.state.create.repository,
         prNumber: input.state.pr.number,
         prUrl: input.state.pr.url,
-        headSha: input.state.create.headSha,
+        headSha: authorizedHeadSha,
         issue: closing.issue,
         issueUrl: closing.issueUrl,
         bodyClosingDigest: closing.bodyClosingDigest,
@@ -580,7 +583,7 @@ function finishObservedMerge(staging, current, mode) {
             throw new Error("step 11の定義がありません");
         workflow = appendDeliveryTerminalJournalEntry({
             staging,
-            headSha: current.create.headSha,
+            headSha: current.merge.authorizedHeadSha,
             entry: {
                 step: 11,
                 skillId: definition.skillId,
@@ -708,6 +711,42 @@ function assertRecordedStep11Evidence(staging, current) {
         .digest("hex");
     if (digest !== current.step11.journalDigest)
         throw new Error("固定済みStep 11 journal digestが現在のjournalと一致しません");
+}
+function postPrIntakeDeliveryErrors(staging) {
+    const journal = readWorkflowJournal(staging);
+    if (!journal.entries.some((entry) => entry.postPrIntake))
+        return [];
+    const delivery = readStoredDeliveryState(staging);
+    if (!delivery)
+        return ["post-PR intakeに対応するdelivery stateがありません"];
+    const allowed = new Set([
+        "pr-bound",
+        "merge-prepared",
+        "merge-observed",
+        "step11-recorded",
+    ]);
+    if (delivery.state === "reconciliation-required" &&
+        delivery.reconciliation?.phase === "merge")
+        allowed.add("reconciliation-required");
+    if (!allowed.has(delivery.state))
+        return [
+            `post-PR intakeに対応しないdelivery stateです: ${delivery.state}`,
+        ];
+    try {
+        if (delivery.state === "step11-recorded")
+            assertRecordedStep11Evidence(staging, delivery);
+        else
+            assertStoredStagingContentDigest(staging, "post-PR intake検証時");
+        return [];
+    }
+    catch (error) {
+        return [error instanceof Error ? error.message : String(error)];
+    }
+}
+function exactMergeDispatchHead(input) {
+    if (input.observedHeadSha !== input.authorizedHeadSha)
+        throw new Error("merge送信直前のprovider HEADが永続化した認可HEADと一致しません");
+    return input.observedHeadSha;
 }
 function deliveryEventTime(lowerBound) {
     const now = new Date().toISOString();
@@ -1520,7 +1559,10 @@ function retryPreparedMergeAfterConfirmedAbsence(input) {
             repository: input.repository,
             pr: input.pr,
             method: input.method,
-            headSha: rechecked.observed.headRefOid,
+            headSha: exactMergeDispatchHead({
+                observedHeadSha: rechecked.observed.headRefOid,
+                authorizedHeadSha: input.state.merge.authorizedHeadSha,
+            }),
             dispatchMode: input.state.merge.dispatchMode,
         }, input.root);
         return readBackPreparedPullRequestMerge({ ...input, state: claimed.state });
@@ -1936,7 +1978,10 @@ function handlePullRequestMerge(flags) {
                 repository,
                 pr,
                 method,
-                headSha: rechecked.observed.headRefOid,
+                headSha: exactMergeDispatchHead({
+                    observedHeadSha: rechecked.observed.headRefOid,
+                    authorizedHeadSha: prepared.state.merge.authorizedHeadSha,
+                }),
                 dispatchMode: prepared.state.merge.dispatchMode,
             }, root);
         }
@@ -4137,6 +4182,7 @@ export async function main(argv, dependencies = {}) {
             ? workflowStepNumber(flags["up-to"], "up-to")
             : 11;
         const inspection = inspectWorkflowStaging(flags.staging, upTo);
+        const postPrIntakeErrors = postPrIntakeDeliveryErrors(inspection.staging);
         if (inspection.mode === "poc" && upTo >= 9) {
             const headSha = git(["rev-parse", "--verify", "HEAD^{commit}"], path.resolve(inspection.staging, "../../../..")).stdout.trim();
             const observation = inspectStoredPocObservationEvidence(inspection.staging, headSha);
@@ -4150,8 +4196,8 @@ export async function main(argv, dependencies = {}) {
                 return 1;
             }
         }
-        if (!inspection.valid) {
-            print(workflowDiagnostic(inspection.staging, inspection.mode, inspection.validation, inspection.errors));
+        if (!inspection.valid || postPrIntakeErrors.length > 0) {
+            print(workflowDiagnostic(inspection.staging, inspection.mode, inspection.validation, [...inspection.errors, ...postPrIntakeErrors]));
             return 1;
         }
         print({

@@ -261,6 +261,26 @@ Feature: ワークフローStepの定義とjournalを決定的に検証する
     When "SCN-UNIT-WFJRNL-031"の単体検査を実行する
     Then ワークフローStep単体検査は期待結果になる
 
+  Scenario: SCN-UNIT-WFJRNL-032 workflow verifyはpost-PR intakeとpr-boundを再照合する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-032"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-033 workflow verifyはpost-PR intakeのdelivery state欠落を拒否する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-033"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-034 workflow verifyはpost-PR intake後のstaging改変を拒否する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-034"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-035 workflow verifyはpost-PR intakeに未認可のdelivery stateを拒否する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-035"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
   Scenario: SCN-UNIT-ADVANCE-001 次Step 4をrequirements検証付きIssue同期として計画する
     Given ワークフローStep単体検査の準備がある
     When "SCN-UNIT-ADVANCE-001"の単体検査を実行する
