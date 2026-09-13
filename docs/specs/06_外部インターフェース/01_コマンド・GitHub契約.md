@@ -129,6 +129,8 @@ GitHubのmerge適用が原子的に拘束できるのはHEAD OIDであり、PR�
 
 squash/rebaseの終端検証は、固定base..headからsource commit数を1〜256の線形chainとして導出する。squashは1-parentの結果、rebaseは同数の1-parent chainと最終親baseで立証する。source commitが1件でrequest objectが消失したときは、固定methodを改竄せず、squash/rebaseを結果同値として検証する。
 
+`redelivery.authority`は`source=cli.--reopen-terminal=approved`と、`repository.assert-write`で観測したactor、repository、write Evidence IDを必須とする。固定repositoryとの不一致またはauthority Evidence欠落はprovider dispatch前に拒否する。
+
 ## project導入・診断出力
 
 | コマンド            | 追加出力                                                                            | 契約                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |

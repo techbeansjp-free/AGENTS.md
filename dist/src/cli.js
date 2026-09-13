@@ -696,7 +696,7 @@ function assertRecordedStep11Evidence(staging, current) {
         current.step11.evidenceId !==
             current.merge?.observation?.observationId) ||
         (current.step11.outcome === "pull-request" &&
-            (current.merge !== null ||
+            ((!current.redelivery && current.merge !== null) ||
                 current.step11.evidenceId !==
                     pullRequestTerminalEvidenceId(current.create, current.pr))))
         throw new Error("固定済みStep 11のoutcomeとdelivery stateが一致しません");
@@ -1790,7 +1790,7 @@ function handlePullRequestMerge(flags) {
         const existingQueue = github("pr.queue", { repository, pr }, root);
         if (existingQueue.entry)
             throw new Error("ASC merge intent作成前にprovider上の既存merge queue entryを観測しました");
-        github("repository.assert-write", { repository }, root);
+        const writeAuthority = github("repository.assert-write", { repository }, root);
         assertMinimumExecutableVersion("git", ["--version"], root, MINIMUM_GIT_VERSION);
         assertMinimumExecutableVersion("gh", ["--version"], root, MINIMUM_GH_VERSION);
         fixedMergeSourceCommitCount({
@@ -1815,7 +1815,13 @@ function handlePullRequestMerge(flags) {
             preparedAt: deliveryEventTime(current.pr.boundAt),
         };
         const prepared = terminalRedeliveryStart
-            ? prepareStoredTerminalRedeliveryMergeIntent(staging, mergeInput, crypto.randomBytes(16).toString("hex"))
+            ? prepareStoredTerminalRedeliveryMergeIntent(staging, mergeInput, crypto.randomBytes(16).toString("hex"), {
+                source: "cli.--reopen-terminal=approved",
+                actorId: writeAuthority.actorId,
+                repository: writeAuthority.repository,
+                repositoryWriteSource: writeAuthority.provenance.source,
+                repositoryWriteEvidenceId: writeAuthority.evidenceId,
+            })
             : prepareStoredMergeIntent(staging, mergeInput);
         if (!prepared.requestAllowed)
             return readBackPreparedPullRequestMerge({

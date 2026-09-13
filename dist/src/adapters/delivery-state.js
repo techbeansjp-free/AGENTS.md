@@ -484,7 +484,7 @@ export function prepareStoredMergeIntent(directory, merge) {
         };
     });
 }
-export function prepareStoredTerminalRedeliveryMergeIntent(directory, merge, decisionId) {
+export function prepareStoredTerminalRedeliveryMergeIntent(directory, merge, decisionId, authority) {
     const staging = assertWorkflowStaging(directory);
     return withStagingMutationLock(staging, () => {
         const current = recoverAndReadLocked(staging);
@@ -494,7 +494,7 @@ export function prepareStoredTerminalRedeliveryMergeIntent(directory, merge, dec
             current.step11?.outcome === "pull-request" &&
             !current.redelivery)
             return {
-                state: persistLocked(staging, prepareTerminalRedeliveryMergeIntent(current, merge, decisionId)),
+                state: persistLocked(staging, prepareTerminalRedeliveryMergeIntent(current, merge, decisionId, authority)),
                 requestAllowed: true,
             };
         if (!current.redelivery || !current.merge)

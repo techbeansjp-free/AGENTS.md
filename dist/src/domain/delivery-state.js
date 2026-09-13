@@ -73,6 +73,7 @@ const REDELIVERY_FIELDS = new Set([
     "priorStep11EvidenceId",
     "trustedPolicyCommitSha",
     "authorizedHeadSha",
+    "authority",
     "outcome",
     "completedAt",
     "observationId",
@@ -494,7 +495,7 @@ function parseReconciliation(value) {
         enteredAt: instant(value.enteredAt, "reconciliation.enteredAt"),
     };
 }
-function parseTerminalRedelivery(value, step11, merge) {
+function parseTerminalRedelivery(value, create, step11, merge) {
     if (value === undefined)
         return undefined;
     if (!isRecord(value))
@@ -512,6 +513,33 @@ function parseTerminalRedelivery(value, step11, merge) {
         priorStep11EvidenceId: digest(value.priorStep11EvidenceId, "redelivery.priorStep11EvidenceId"),
         trustedPolicyCommitSha: oid(value.trustedPolicyCommitSha, "redelivery.trustedPolicyCommitSha"),
         authorizedHeadSha: oid(value.authorizedHeadSha, "redelivery.authorizedHeadSha"),
+        authority: (() => {
+            if (!isRecord(value.authority))
+                throw new Error("redelivery.authorityはobjectが必要です");
+            unknownFields(value.authority, new Set([
+                "source",
+                "actorId",
+                "repository",
+                "repositoryWriteSource",
+                "repositoryWriteEvidenceId",
+            ]), "redelivery.authority");
+            if (value.authority.source !== "cli.--reopen-terminal=approved")
+                throw new Error("redelivery.authority.sourceが不正です");
+            if (value.authority.repositoryWriteSource !==
+                "github.repository.assert-write")
+                throw new Error("redelivery.authority.repositoryWriteSourceが不正です");
+            const actorId = nonEmpty(value.authority.actorId, "redelivery.authority.actorId");
+            const authorityRepository = nonEmpty(value.authority.repository, "redelivery.authority.repository").toLowerCase();
+            if (authorityRepository !== create.repository)
+                throw new Error("redelivery.authority.repositoryが固定repositoryと一致しません");
+            return {
+                source: value.authority.source,
+                actorId,
+                repository: authorityRepository,
+                repositoryWriteSource: value.authority.repositoryWriteSource,
+                repositoryWriteEvidenceId: digest(value.authority.repositoryWriteEvidenceId, "redelivery.authority.repositoryWriteEvidenceId"),
+            };
+        })(),
         outcome: value.outcome,
         completedAt: value.completedAt === null
             ? null
@@ -648,7 +676,7 @@ export function parseDeliveryState(source) {
         ...(value.redelivery === undefined
             ? {}
             : {
-                redelivery: parseTerminalRedelivery(value.redelivery, step11, merge),
+                redelivery: parseTerminalRedelivery(value.redelivery, create, step11, merge),
             }),
         reconciliation: parseReconciliation(value.reconciliation),
     };
@@ -749,7 +777,7 @@ export function prepareMergeIntent(current, merge) {
     };
     return parseDeliveryState(stableJson(candidate));
 }
-export function prepareTerminalRedeliveryMergeIntent(current, merge, decisionId) {
+export function prepareTerminalRedeliveryMergeIntent(current, merge, decisionId, authority) {
     if (current.state !== "step11-recorded" ||
         current.step11?.outcome !== "pull-request" ||
         current.merge ||
@@ -766,6 +794,7 @@ export function prepareTerminalRedeliveryMergeIntent(current, merge, decisionId)
             priorStep11EvidenceId: current.step11.evidenceId,
             trustedPolicyCommitSha: merge.trustedPolicyCommitSha,
             authorizedHeadSha: merge.authorizedHeadSha,
+            authority,
             outcome: "pending",
             completedAt: null,
             observationId: null,

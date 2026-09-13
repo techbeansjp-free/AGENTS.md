@@ -2019,6 +2019,7 @@ interface DeliveryProviderControl {
   failMerge: boolean;
   mergedAt: string;
   remoteBaseSha: string;
+  mergeTreeSha: string;
   autoMergeMethod: "MERGE" | "SQUASH" | "REBASE";
   providerDefaultBranch: "main" | "develop";
   requestedAt: string;
@@ -2573,7 +2574,18 @@ function advanceDeliveryTrustedMergeMode(
     { cwd: prepared.root, encoding: "utf8" },
   );
   assert.equal(updateRef.status, 0, updateRef.stderr);
-  writeDeliveryProviderControl(prepared, { remoteBaseSha: advanced });
+  const mergeTree = spawnSync(
+    "git",
+    ["merge-tree", "--write-tree", advanced, prepared.headSha],
+    { cwd: prepared.root, encoding: "utf8" },
+  );
+  assert.equal(mergeTree.status, 0, mergeTree.stderr);
+  const mergeTreeSha = mergeTree.stdout.trim();
+  assert.match(mergeTreeSha, /^[a-f0-9]{40}$/u);
+  writeDeliveryProviderControl(prepared, {
+    remoteBaseSha: advanced,
+    mergeTreeSha,
+  });
   return advanced;
 }
 
@@ -2757,6 +2769,14 @@ function prepareDeliveryCli(
   const observedBody = path.join(stubDirectory, "observed-pr-body.md");
   const issueBodyFile = path.join(stubDirectory, "issue-body.md");
   const issueViewCountFile = path.join(stubDirectory, "issue-view-count.txt");
+  const mergeTree = spawnSync(
+    "git",
+    ["merge-tree", "--write-tree", prepared.baseSha, prepared.headSha],
+    { cwd: prepared.root, encoding: "utf8" },
+  );
+  assert.equal(mergeTree.status, 0, mergeTree.stderr);
+  const mergeTreeSha = mergeTree.stdout.trim();
+  assert.match(mergeTreeSha, /^[a-f0-9]{40}$/u);
   const control: DeliveryProviderControl = {
     phase: "ready",
     ghVersion: "2.97.0",
@@ -2766,6 +2786,7 @@ function prepareDeliveryCli(
     failMerge: false,
     mergedAt: fixtureInstant({ secondsAhead: 1 }),
     remoteBaseSha: prepared.baseSha,
+    mergeTreeSha,
     autoMergeMethod: "MERGE",
     providerDefaultBranch: "main",
     requestedAt: fixtureInstant(),
@@ -2794,14 +2815,6 @@ function prepareDeliveryCli(
   const canonicalDocument = splitPullRequestDocument(
     fs.readFileSync(prepared.bodyFile, "utf8"),
   );
-  const mergeTree = spawnSync(
-    "git",
-    ["merge-tree", "--write-tree", prepared.baseSha, prepared.headSha],
-    { cwd: prepared.root, encoding: "utf8" },
-  );
-  assert.equal(mergeTree.status, 0, mergeTree.stderr);
-  const mergeTreeSha = mergeTree.stdout.trim();
-  assert.match(mergeTreeSha, /^[a-f0-9]{40}$/u);
   fs.writeFileSync(controlFile, `${JSON.stringify(control)}\n`);
   fs.writeFileSync(
     stub,
@@ -2811,7 +2824,6 @@ const args = process.argv.slice(2);
 const sha = ${JSON.stringify(prepared.headSha)};
 const implementationSha = ${JSON.stringify(prepared.implementationCommitSha)};
 const mergeSha = ${JSON.stringify("b".repeat(40))};
-const mergeTreeSha = ${JSON.stringify(mergeTreeSha)};
 const prUrl = "https://github.com/o/r/pull/1";
 const issueUrl = "https://github.com/o/r/issues/877";
 const controlFile = ${JSON.stringify(controlFile)};
@@ -2894,6 +2906,8 @@ if (exact(["--version"])) {
   process.stdout.write(
     JSON.stringify({ nameWithOwner: "o/r", viewerPermission: "WRITE" }),
   );
+} else if (exact(["api", "user", "--jq", ".node_id"])) {
+  process.stdout.write("repository-owner-node-id\\n");
 } else if (
   exact(["repo", "view", "o/r", "--json", "nameWithOwner,defaultBranchRef"])
 ) {
@@ -3190,7 +3204,9 @@ if (exact(["--version"])) {
       sha: mergeSha,
       commit: {
         tree: {
-          sha: control.mergeTreeTampered ? "c".repeat(40) : mergeTreeSha,
+          sha: control.mergeTreeTampered
+            ? "c".repeat(40)
+            : control.mergeTreeSha,
         },
       },
       parents,
@@ -3438,6 +3454,8 @@ if (exact(["auth", "status"])) {
   process.stdout.write(
     JSON.stringify({ nameWithOwner: "o/r", viewerPermission: "WRITE" }),
   );
+} else if (exact(["api", "user", "--jq", ".node_id"])) {
+  process.stdout.write("repository-owner-node-id\\n");
 } else if (
   exact(["repo", "view", "o/r", "--json", "nameWithOwner,defaultBranchRef"])
 ) {
@@ -4438,10 +4456,27 @@ if (exact(["auth", "status"])) {
       assert.equal(redelivery?.priorStep11EvidenceId, originalEvidenceId);
       assert.equal(redelivery?.trustedPolicyCommitSha, trustedPolicyCommitSha);
       assert.equal(redelivery?.authorizedHeadSha, prepared.headSha);
+      writeDeliveryProviderControl(prepared, {
+        phase: "merged",
+        mergedAt: fixtureInstant({ minutesAhead: 5 }),
+      });
+      const completed = executeDeliveryMerge(prepared);
+      assert.equal(completed.status, 0, completed.stdout + completed.stderr);
+      assert.match(completed.stdout, /"state": "merged"/u);
       assert.equal(
         fs.readFileSync(path.join(prepared.staging, STEP_JOURNAL_FILE), "utf8"),
         originalJournal,
         "旧Step 11 journalを変更しています",
+      );
+      const callsAfterCompletion =
+        deliveryProviderCalls(prepared).filter(isMergeCall).length;
+      const replayed = executeDeliveryMerge(prepared);
+      assert.equal(replayed.status, 0, replayed.stdout + replayed.stderr);
+      assert.match(replayed.stdout, /"state": "merged"/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        callsAfterCompletion,
+        "完了済みredeliveryをproviderへ再送しています",
       );
       break;
     }

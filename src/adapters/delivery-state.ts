@@ -25,6 +25,7 @@ import {
   type PullRequestBinding,
   type ReconciliationRecord,
   type Step11Record,
+  type TerminalRedeliveryAuthority,
 } from "../domain/delivery-state.js";
 import {
   calculateStagingDigest,
@@ -741,6 +742,7 @@ export function prepareStoredTerminalRedeliveryMergeIntent(
   directory: string,
   merge: MergeIntentInput,
   decisionId: string,
+  authority: TerminalRedeliveryAuthority,
 ): { state: DeliveryState; requestAllowed: boolean } {
   const staging = assertWorkflowStaging(directory);
   return withStagingMutationLock(staging, () => {
@@ -754,7 +756,12 @@ export function prepareStoredTerminalRedeliveryMergeIntent(
       return {
         state: persistLocked(
           staging,
-          prepareTerminalRedeliveryMergeIntent(current, merge, decisionId),
+          prepareTerminalRedeliveryMergeIntent(
+            current,
+            merge,
+            decisionId,
+            authority,
+          ),
         ),
         requestAllowed: true,
       };

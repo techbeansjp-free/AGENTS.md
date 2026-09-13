@@ -114,9 +114,18 @@ export interface TerminalRedeliveryRecord {
   priorStep11EvidenceId: string;
   trustedPolicyCommitSha: string;
   authorizedHeadSha: string;
+  authority: TerminalRedeliveryAuthority;
   outcome: "pending" | "merged";
   completedAt: string | null;
   observationId: string | null;
+}
+
+export interface TerminalRedeliveryAuthority {
+  source: "cli.--reopen-terminal=approved";
+  actorId: string;
+  repository: string;
+  repositoryWriteSource: "github.repository.assert-write";
+  repositoryWriteEvidenceId: string;
 }
 
 export interface ReconciliationRecord {
@@ -209,6 +218,7 @@ const REDELIVERY_FIELDS = new Set([
   "priorStep11EvidenceId",
   "trustedPolicyCommitSha",
   "authorizedHeadSha",
+  "authority",
   "outcome",
   "completedAt",
   "observationId",
@@ -804,6 +814,7 @@ function parseReconciliation(value: unknown): ReconciliationRecord | null {
 
 function parseTerminalRedelivery(
   value: unknown,
+  create: DeliveryCreateIntent,
   step11: Step11Record | null,
   merge: MergeIntent | null,
 ): TerminalRedeliveryRecord | undefined {
@@ -830,6 +841,50 @@ function parseTerminalRedelivery(
       value.authorizedHeadSha,
       "redelivery.authorizedHeadSha",
     ),
+    authority: (() => {
+      if (!isRecord(value.authority))
+        throw new Error("redelivery.authorityはobjectが必要です");
+      unknownFields(
+        value.authority,
+        new Set([
+          "source",
+          "actorId",
+          "repository",
+          "repositoryWriteSource",
+          "repositoryWriteEvidenceId",
+        ]),
+        "redelivery.authority",
+      );
+      if (value.authority.source !== "cli.--reopen-terminal=approved")
+        throw new Error("redelivery.authority.sourceが不正です");
+      if (
+        value.authority.repositoryWriteSource !==
+        "github.repository.assert-write"
+      )
+        throw new Error("redelivery.authority.repositoryWriteSourceが不正です");
+      const actorId = nonEmpty(
+        value.authority.actorId,
+        "redelivery.authority.actorId",
+      );
+      const authorityRepository = nonEmpty(
+        value.authority.repository,
+        "redelivery.authority.repository",
+      ).toLowerCase();
+      if (authorityRepository !== create.repository)
+        throw new Error(
+          "redelivery.authority.repositoryが固定repositoryと一致しません",
+        );
+      return {
+        source: value.authority.source,
+        actorId,
+        repository: authorityRepository,
+        repositoryWriteSource: value.authority.repositoryWriteSource,
+        repositoryWriteEvidenceId: digest(
+          value.authority.repositoryWriteEvidenceId,
+          "redelivery.authority.repositoryWriteEvidenceId",
+        ),
+      };
+    })(),
     outcome: value.outcome,
     completedAt:
       value.completedAt === null
@@ -996,7 +1051,12 @@ export function parseDeliveryState(source: string): DeliveryState {
     ...(value.redelivery === undefined
       ? {}
       : {
-          redelivery: parseTerminalRedelivery(value.redelivery, step11, merge),
+          redelivery: parseTerminalRedelivery(
+            value.redelivery,
+            create,
+            step11,
+            merge,
+          ),
         }),
     reconciliation: parseReconciliation(value.reconciliation),
   };
@@ -1144,6 +1204,7 @@ export function prepareTerminalRedeliveryMergeIntent(
   current: DeliveryState,
   merge: MergeIntentInput,
   decisionId: string,
+  authority: TerminalRedeliveryAuthority,
 ): DeliveryState {
   if (
     current.state !== "step11-recorded" ||
@@ -1163,6 +1224,7 @@ export function prepareTerminalRedeliveryMergeIntent(
       priorStep11EvidenceId: current.step11.evidenceId,
       trustedPolicyCommitSha: merge.trustedPolicyCommitSha,
       authorizedHeadSha: merge.authorizedHeadSha,
+      authority,
       outcome: "pending",
       completedAt: null,
       observationId: null,

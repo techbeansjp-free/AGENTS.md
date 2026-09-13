@@ -41,6 +41,13 @@ const T2 = "2026-08-30T00:00:02.000Z";
 const T3 = "2026-08-30T00:00:03.000Z";
 const T4 = "2026-08-30T00:00:04.000Z";
 const T5 = "2026-08-30T00:00:05.000Z";
+const REDELIVERY_AUTHORITY = {
+  source: "cli.--reopen-terminal=approved" as const,
+  actorId: "repository-owner-node-id",
+  repository: REPOSITORY,
+  repositoryWriteSource: "github.repository.assert-write" as const,
+  repositoryWriteEvidenceId: "a".repeat(64),
+};
 
 function createIntent(): DeliveryCreateIntentInput {
   const issueUrl = `https://github.com/${REPOSITORY}/issues/${ISSUE}`;
@@ -161,6 +168,7 @@ const CHECKS: Readonly<Record<string, () => void>> = {
       terminal,
       { ...mergeInput, preparedAt: T3 },
       "7".repeat(32),
+      REDELIVERY_AUTHORITY,
     );
     const claimed = claimMergeDispatch(reopened, T4);
     assert.throws(() => claimMergeDispatch(claimed, T5), /既に消費/u);
@@ -187,6 +195,7 @@ const CHECKS: Readonly<Record<string, () => void>> = {
       terminal,
       { ...mergeInput, preparedAt: T3 },
       "9".repeat(32),
+      REDELIVERY_AUTHORITY,
     );
     assert.equal(reopened.state, "merge-prepared");
     assert.equal(reopened.step11?.evidenceId, terminal.step11?.evidenceId);
@@ -211,12 +220,21 @@ const CHECKS: Readonly<Record<string, () => void>> = {
       parseDeliveryState(renderDeliveryState(completed)),
       completed,
     );
+    const missingAuthority = JSON.parse(
+      renderDeliveryState(reopened),
+    ) as Record<string, unknown>;
+    delete (missingAuthority.redelivery as Record<string, unknown>).authority;
+    assert.throws(
+      () => parseDeliveryState(JSON.stringify(missingAuthority)),
+      /redeliveryの必須fieldがありません: authority/u,
+    );
     assert.throws(
       () =>
         prepareTerminalRedeliveryMergeIntent(
           completed,
           { ...mergeInput, preparedAt: T3 },
           "8".repeat(32),
+          REDELIVERY_AUTHORITY,
         ),
       /開始できません/u,
     );
