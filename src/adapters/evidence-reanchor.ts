@@ -31,7 +31,11 @@ import {
   observeStoredDeliveryState,
   readStoredDeliveryState,
 } from "./delivery-state.js";
-import { observeReviewDiff, readBlobAtCommit } from "./review-diff.js";
+import {
+  observeReviewDiff,
+  observeSingleCommitParent,
+  readBlobAtCommit,
+} from "./review-diff.js";
 import { readStoredReviewSession } from "./review-session-store.js";
 import {
   assertWorkflowStaging,
@@ -223,6 +227,7 @@ function observeReanchorDiff(
     | "新base→新head"
     | "旧H_impl→旧head"
     | "新H_impl→新head"
+    | "新H_final親→新H_final"
     | "旧base→旧H_impl"
     | "新base→新H_impl",
   comparison: ReanchorComparison,
@@ -573,14 +578,15 @@ function observeReviewedForward(
   input: ReanchorComparison,
 ): ReviewedForwardEvidence | undefined {
   if (input.oldBaseSha !== input.newBaseSha) return undefined;
-  const afterAll = observeReanchorDiff(
+  const finalParent = observeSingleCommitParent(root, input.newHeadSha);
+  const finalSuffix = observeReanchorDiff(
     root,
-    "新base→新head",
+    "新H_final親→新H_final",
     input,
-    input.newBaseSha,
+    finalParent,
     input.newHeadSha,
   );
-  const artifactPath = terminalArtifactPath(afterAll.changedPaths);
+  const artifactPath = terminalArtifactPath(finalSuffix.changedPaths);
   if (
     artifactPath === undefined ||
     !REVIEW_ARTIFACT_NAME.test(path.posix.basename(artifactPath))

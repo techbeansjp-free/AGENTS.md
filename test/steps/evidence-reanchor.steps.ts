@@ -268,6 +268,7 @@ function snapshot(world: ReanchorWorld): void {
 }
 
 const REVIEW_ARTIFACT = "docs/reviews/99_課題1172再固定レビュー.md";
+const INITIAL_FORWARD_ARTIFACT = "docs/reviews/209_課題1389初回レビュー.md";
 const FORWARD_ARTIFACT = "docs/reviews/210_課題1389再固定レビュー.md";
 
 /** 「レビュー識別情報」節を持つreview artifactを組み立てる。 */
@@ -350,7 +351,7 @@ function auditableReviewArtifact(base: string, implementation: string): string {
 function forwardReviewArtifact(base: string, implementation: string): string {
   return auditableReviewArtifact(base, implementation).replace(
     `| \`${REVIEWED}\` | A | package owner | domain | fixture実装 | 循環なし | AC-1377-01 / SCN-1377-01 | revert可能 | pass |`,
-    `| \`${REVIEWED}\` | A | package owner | domain | fixture実装 | 循環なし | AC-1389-01 / SCN-1389-01 | revert可能 | pass |\n| \`${FORWARD_ARTIFACT}\` | A | package owner | documentation | 前round証跡を更新 | 循環なし | AC-1389-01 / SCN-1389-01 | revert可能 | pass |`,
+    `| \`${REVIEWED}\` | A | package owner | domain | fixture実装 | 循環なし | AC-1389-01 / SCN-1389-01 | revert可能 | pass |\n| \`${INITIAL_FORWARD_ARTIFACT}\` | A | package owner | documentation | 前round証跡を保持 | 循環なし | AC-1389-01 / SCN-1389-01 | revert可能 | pass |`,
   );
 }
 
@@ -370,7 +371,7 @@ function recordForwardRound(
       candidateHeadSha: implementation,
       focus: {
         previousBlocking: [],
-        fixedDiff: [FORWARD_ARTIFACT, REVIEWED],
+        fixedDiff: [INITIAL_FORWARD_ARTIFACT, REVIEWED],
         adjacentScope: [],
       },
       findings: [],
@@ -425,7 +426,7 @@ function forwardFixture(world: ReanchorWorld, recordIntake: boolean): void {
   );
   world.oldHeadSha = commitPath(
     world.root,
-    FORWARD_ARTIFACT,
+    INITIAL_FORWARD_ARTIFACT,
     auditableReviewArtifact(world.baseSha, initialImplementation),
     "docs: initial review artifact",
   );

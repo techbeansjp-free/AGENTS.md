@@ -8,7 +8,7 @@ import { validateReviewArtifactStructure, parseReviewArtifactAudit, validateCont
 import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { observeStoredDeliveryState, readStoredDeliveryState, } from "./delivery-state.js";
-import { observeReviewDiff, readBlobAtCommit } from "./review-diff.js";
+import { observeReviewDiff, observeSingleCommitParent, readBlobAtCommit, } from "./review-diff.js";
 import { readStoredReviewSession } from "./review-session-store.js";
 import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
 export const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
@@ -322,8 +322,9 @@ function observeArtifactReplacement(staging, root, input) {
 function observeReviewedForward(staging, root, input) {
     if (input.oldBaseSha !== input.newBaseSha)
         return undefined;
-    const afterAll = observeReanchorDiff(root, "新base→新head", input, input.newBaseSha, input.newHeadSha);
-    const artifactPath = terminalArtifactPath(afterAll.changedPaths);
+    const finalParent = observeSingleCommitParent(root, input.newHeadSha);
+    const finalSuffix = observeReanchorDiff(root, "新H_final親→新H_final", input, finalParent, input.newHeadSha);
+    const artifactPath = terminalArtifactPath(finalSuffix.changedPaths);
     if (artifactPath === undefined ||
         !REVIEW_ARTIFACT_NAME.test(path.posix.basename(artifactPath)))
         return undefined;
