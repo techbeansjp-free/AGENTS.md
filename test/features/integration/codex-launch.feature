@@ -2,6 +2,12 @@
 Feature: Codexのtrusted採用と実行境界
   採用条件と実行結果を独立に検証する。
 
+  @routing-1383
+  Scenario: SCN-INT-ROUTING-1383-001 linked Git metadata write rootsを配送する
+    Given Git書込commandを使わない隔離linked worktree fixtureがある
+    When 実Git照会からlinked Git metadata write rootsを模擬Codexへ配送する
+    Then linked起動は成功し追加rootを一度ずつ渡す
+
   Scenario: SCN-INT-AM-003 candidateが採用tierを自己認定しない
     Given 最新Codex起動用のtrusted projectと隔離実行入口がある
     When candidate追加と旧slug台帳でtrusted採用不足を補えない

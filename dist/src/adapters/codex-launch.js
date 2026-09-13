@@ -6,6 +6,7 @@ import { resolveRouting } from "../domain/routing.js";
 import { resolveContained } from "../lib/security.js";
 import { observeProvider } from "./provider.js";
 import { executeCodex } from "./codex-execution.js";
+import { GIT_WORKSPACE_REJECTION, resolveGitMetadataWriteRoots, } from "./git-workspace.js";
 function rejection(reason) {
     return {
         state: "rejected",
@@ -87,6 +88,11 @@ export async function launchCodex(input, dependencies = {}) {
     });
     if (!roles.valid)
         return rejection(roles.errors.join(" / "));
+    const workspace = input.sandbox === "workspace-write"
+        ? resolveGitMetadataWriteRoots(path.resolve(input.root))
+        : undefined;
+    if (workspace && !workspace.allowed)
+        return rejection(GIT_WORKSPACE_REJECTION);
     const { root, prompt } = readPrompt(input);
     const trusted = loadOperationPolicy(root);
     const choices = trusted.policy.projectChoices?.modelMapping;
@@ -135,6 +141,14 @@ export async function launchCodex(input, dependencies = {}) {
         return rejection(decision.reason);
     if (decision.routeMode !== "preferred" || decision.provider !== "codex")
         return rejection(`公式推奨Codexの起動条件が不成立です: ${decision.routingReason}`);
+    if (workspace?.allowed && !workspace.revalidate())
+        return rejection(GIT_WORKSPACE_REJECTION);
+    if (workspace?.allowed) {
+        const currentWorkspace = resolveGitMetadataWriteRoots(root);
+        if (!currentWorkspace.allowed ||
+            JSON.stringify(currentWorkspace.roots) !== JSON.stringify(workspace.roots))
+            return rejection(GIT_WORKSPACE_REJECTION);
+    }
     const rechecked = loadOperationPolicy(root);
     if (rechecked.provenance.commitSha !== policySha)
         return rejection("trusted policyが観測中に変化しました。新しい起動要求で再検証してください");
@@ -143,6 +157,7 @@ export async function launchCodex(input, dependencies = {}) {
         model: decision.model,
         prompt,
         sandbox: input.sandbox,
+        ...(workspace?.allowed ? { gitMetadataWriteRoots: workspace.roots } : {}),
     });
     return {
         ...dispatched,
