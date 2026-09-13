@@ -492,6 +492,17 @@ Given("pr-bound後のreviewed-forward反例「{word}」がある", function (kin
       "export const reviewed = 3;\n",
       "fix: unreviewed product change",
     );
+  } else if (kind === "artifact二段") {
+    const artifact = fs.readFileSync(
+      path.join(this.root, FORWARD_ARTIFACT),
+      "utf8",
+    );
+    this.newHeadSha = commitPath(
+      this.root,
+      FORWARD_ARTIFACT,
+      `${artifact}\n`,
+      "docs: mutate terminal artifact twice",
+    );
   } else if (kind === "非ancestor") {
     const current = this.newHeadSha;
     execFileSync("git", ["checkout", "-q", this.baseSha], { cwd: this.root });

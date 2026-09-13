@@ -334,6 +334,8 @@ function observeReviewedForward(staging, root, input) {
     const anchor = parseReviewIdentityAnchor(artifact);
     if (anchor === undefined || anchor.base !== input.newBaseSha)
         return undefined;
+    if (finalParent !== anchor.implementation)
+        return undefined;
     if (input.oldHeadSha === anchor.implementation)
         return undefined;
     try {

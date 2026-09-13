@@ -26,6 +26,7 @@ Feature: 証跡再固定がCLIと診断経路で機能する
       | 未収束 |
       | 古いround |
       | artifact外差分 |
+      | artifact二段 |
 
   @issue-1389
   Scenario: SCN-1389-04 再固定後の新exact HEADをmerge bindingに使う
