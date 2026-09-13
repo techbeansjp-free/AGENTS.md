@@ -616,12 +616,7 @@ function normalizeObservation(
     observedAt: instant(value.observedAt, "merge.observation.observedAt"),
     mergeCommitSha,
   };
-  assertObservationMatchesBinding(
-    create,
-    pr,
-    authorizedHeadSha,
-    withoutId,
-  );
+  assertObservationMatchesBinding(create, pr, authorizedHeadSha, withoutId);
   return withoutId;
 }
 
@@ -635,12 +630,7 @@ function parseObservation(
   if (!isRecord(value))
     throw new Error("merge.observationはobjectまたはnullが必要です");
   unknownFields(value, OBSERVATION_FIELDS, "merge.observation");
-  const withoutId = normalizeObservation(
-    value,
-    create,
-    pr,
-    authorizedHeadSha,
-  );
+  const withoutId = normalizeObservation(value, create, pr, authorizedHeadSha);
   const observationId = digest(
     value.observationId,
     "merge.observation.observationId",

@@ -44,7 +44,7 @@ import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertP
 import { assertConvergedReviewSession, buildReviewRoundDraft, evidenceOnlySuffix, previewReviewRound, recordReviewRound, STAGING_DIGEST_RERECORD_HINT, } from "./adapters/review-session.js";
 import { appendEvidenceReanchor, evaluateEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
 import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
-import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, completeStoredTerminalRedelivery, observeStoredMerge, prepareStoredMergeIntent, prepareStoredTerminalRedeliveryMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
+import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, completeStoredTerminalRedelivery, observeStoredMerge, observeStoredDeliveryState, prepareStoredMergeIntent, prepareStoredTerminalRedeliveryMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
 import { DELIVERY_STATE_FILE, assertImmutablePullRequestBinding, canonicalDigest, closingContractDigest, pullRequestContentDigest, pullRequestTerminalEvidenceId, } from "./domain/delivery-state.js";
 import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, } from "./domain/workflow.js";
 import { reconcileFixedMergeRun, CI_DELIVERY_GRACE_MINUTES, inspectCiDelivery, } from "./domain/ci-delivery.js";
@@ -716,7 +716,7 @@ function postPrIntakeDeliveryErrors(staging) {
     const journal = readWorkflowJournal(staging);
     if (!journal.entries.some((entry) => entry.postPrIntake))
         return [];
-    const delivery = readStoredDeliveryState(staging);
+    const delivery = observeStoredDeliveryState(staging);
     if (!delivery)
         return ["post-PR intakeに対応するdelivery stateがありません"];
     const allowed = new Set([
@@ -729,9 +729,7 @@ function postPrIntakeDeliveryErrors(staging) {
         delivery.reconciliation?.phase === "merge")
         allowed.add("reconciliation-required");
     if (!allowed.has(delivery.state))
-        return [
-            `post-PR intakeに対応しないdelivery stateです: ${delivery.state}`,
-        ];
+        return [`post-PR intakeに対応しないdelivery stateです: ${delivery.state}`];
     try {
         if (delivery.state === "step11-recorded")
             assertRecordedStep11Evidence(staging, delivery);

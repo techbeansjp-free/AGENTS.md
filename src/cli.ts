@@ -266,6 +266,7 @@ import {
   claimStoredPullRequestCreationDispatch,
   completeStoredTerminalRedelivery,
   observeStoredMerge,
+  observeStoredDeliveryState,
   prepareStoredMergeIntent,
   prepareStoredTerminalRedeliveryMergeIntent,
   prepareStoredPullRequestCreation,
@@ -1210,9 +1211,8 @@ function assertRecordedStep11Evidence(
 function postPrIntakeDeliveryErrors(staging: string): string[] {
   const journal = readWorkflowJournal(staging);
   if (!journal.entries.some((entry) => entry.postPrIntake)) return [];
-  const delivery = readStoredDeliveryState(staging);
-  if (!delivery)
-    return ["post-PR intakeに対応するdelivery stateがありません"];
+  const delivery = observeStoredDeliveryState(staging);
+  if (!delivery) return ["post-PR intakeに対応するdelivery stateがありません"];
   const allowed = new Set<DeliveryState["state"]>([
     "pr-bound",
     "merge-prepared",
@@ -1225,9 +1225,7 @@ function postPrIntakeDeliveryErrors(staging: string): string[] {
   )
     allowed.add("reconciliation-required");
   if (!allowed.has(delivery.state))
-    return [
-      `post-PR intakeに対応しないdelivery stateです: ${delivery.state}`,
-    ];
+    return [`post-PR intakeに対応しないdelivery stateです: ${delivery.state}`];
   try {
     if (delivery.state === "step11-recorded")
       assertRecordedStep11Evidence(staging, delivery);
@@ -5842,9 +5840,7 @@ export async function main(
       ? workflowStepNumber(flags["up-to"], "up-to")
       : 11;
     const inspection = inspectWorkflowStaging(flags.staging, upTo);
-    const postPrIntakeErrors = postPrIntakeDeliveryErrors(
-      inspection.staging,
-    );
+    const postPrIntakeErrors = postPrIntakeDeliveryErrors(inspection.staging);
     if (inspection.mode === "poc" && upTo >= 9) {
       const headSha = git(
         ["rev-parse", "--verify", "HEAD^{commit}"],

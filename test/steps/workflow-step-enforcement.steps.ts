@@ -81,10 +81,7 @@ import {
 import { doctor } from "../../src/domain/lifecycle.js";
 import { checkWorkflowStepDocument } from "../../scripts/check_conformance.js";
 import { checkWorkflowSteps } from "../../scripts/check_workflow_steps.js";
-import {
-  composeWorkflowAdvanceIssueBody,
-  main,
-} from "../../src/cli.js";
+import { composeWorkflowAdvanceIssueBody, main } from "../../src/cli.js";
 import {
   observeReviewDiff,
   recordReviewRound,
