@@ -117,6 +117,10 @@ export interface MergeInput {
   method: "merge" | "squash" | "rebase";
   checks?: string[];
   approvals?: Approval[];
+  /** context-isolatedで保存済みformal review sessionから導出したapproval ID。 */
+  formalApprovalIds?: string[];
+  /** assistedで対象PRへの操作を明示承認し、write authorityを観測した証拠。 */
+  assistedAuthorityVerified?: boolean;
   headSha?: string;
   prAuthorActorId?: string;
   implementationAuthorActorId?: string;
@@ -677,7 +681,7 @@ export function independentReviewDiagnostic(input: {
     );
   return {
     ruleId: "ASC-MERGE-REVIEW-001",
-    purpose: "実装者以外の独立した確認を経ないmergeを防ぐ",
+    purpose: "trusted policyが要求する独立した確認を経ないmergeを防ぐ",
     risk: "authority",
     reasons,
     scope: [
@@ -686,7 +690,13 @@ export function independentReviewDiagnostic(input: {
       `head:${input.headSha || "不明"}`,
     ],
     checks: [
-      "同一actorのreviewを最新状態へ畳み込み、対象HEAD SHAへのAPPROVEDだけを数えた",
+      ...(actorIndependenceRequired
+        ? [
+            "同一actorのprovider reviewを最新状態へ畳み込み、対象HEAD SHAへのAPPROVEDだけを数えた",
+          ]
+        : [
+            "保存済みreview session・Step 10 binding・tracked H_final artifactからformal approvalを数えた",
+          ]),
       /**
        * **実際に適用した条件だけを並べる**（Issue #1317）。
        * `context-isolated`ではactor除外を行っていないのに「除外した」と書くと、
@@ -702,10 +712,10 @@ export function independentReviewDiagnostic(input: {
     autoFixes: [],
     next: actorIndependenceRequired
       ? "対象HEAD SHAに対する独立reviewerのapprovalを得てからpr mergeを再実行してください"
-      : "対象HEAD SHAそのものに対するAPPROVED reviewを得てからpr mergeを再実行してください",
+      : "対象HEADのformal review artifactとStep 10 bindingを完成させてからpr mergeを再実行してください",
     requiredAuthority: actorIndependenceRequired
       ? "対象PRへ独立approvalを与えられるreviewer"
-      : "対象PRへapprovalを与えられるreviewer",
+      : "対象HEADのformal reviewを別contextで確定できるreviewer",
     rollback: "mergeを実行せず、branchと既存commitを変更しない",
   };
 }
@@ -843,7 +853,7 @@ export function authorizeMerge(input: MergeInput) {
    */
   const actorIndependenceRequired =
     policy.reviewIndependence === "actor-independent";
-  const independentApprovals = new Set(
+  const providerApprovals = new Set(
     [...latestByActor.values()]
       .filter(
         (approval) =>
@@ -856,24 +866,36 @@ export function authorizeMerge(input: MergeInput) {
       )
       .map((approval) => approval.actorId as string),
   );
+  if (
+    input.formalApprovalIds !== undefined &&
+    (!Array.isArray(input.formalApprovalIds) ||
+      input.formalApprovalIds.some(
+        (approvalId) => !/^[a-f0-9]{64}$/u.test(approvalId),
+      ))
+  )
+    return deny("formal review approval IDが不正です");
+  const formalApprovals = new Set(input.formalApprovalIds ?? []);
+  const observedApprovalCount = actorIndependenceRequired
+    ? providerApprovals.size
+    : formalApprovals.size + providerApprovals.size;
   const requiredIndependentReviews = Math.max(1, policy.requiredReviews ?? 0);
-  if (independentApprovals.size < requiredIndependentReviews)
+  if (observedApprovalCount < requiredIndependentReviews)
     return deny(
       "同じHEAD SHAに対する独立reviewが不足しています",
       independentReviewDiagnostic({
         mode: policy.mode,
         declaredRequiredReviews: policy.requiredReviews,
         appliedRequiredReviews: requiredIndependentReviews,
-        observedIndependentApprovals: independentApprovals.size,
+        observedIndependentApprovals: observedApprovalCount,
         headSha: input.headSha,
         reviewIndependence: actorIndependenceRequired
           ? "actor-independent"
           : "context-isolated",
       }),
     );
-  if (policy.mode === "assisted" && independentApprovals.size < 1)
+  if (policy.mode === "assisted" && input.assistedAuthorityVerified !== true)
     return deny(
-      "assistedモードには同じHEAD SHAに対する独立した人間承認が必要です",
+      "assistedモードには対象PRへの明示承認とrepository write authorityの照合が必要です",
     );
   return {
     allowed: true,
