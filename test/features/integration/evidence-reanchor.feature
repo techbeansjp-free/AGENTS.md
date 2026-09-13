@@ -32,6 +32,7 @@ Feature: 証跡再固定がCLIと診断経路で機能する
     Given pr-bound後に前進した実装と明示済みpost-PR intakeのreview artifactがある
     When reviewed-forward再固定後に新headでpr mergeのbinding検査を通す
     Then pr mergeのbinding検査は通過する
+    And merge providerは新H_finalをexact headとして受け取る
     And post-PR intakeの同一binding再実行はno-opになる
 
   @issue-1377

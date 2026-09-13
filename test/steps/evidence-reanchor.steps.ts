@@ -47,6 +47,7 @@ import {
   main,
 } from "../../src/cli.js";
 import { readStoredDeliveryState } from "../../src/adapters/delivery-state.js";
+import { github } from "../../src/adapters/github.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
 class ReanchorWorld extends WorkflowWorld {
@@ -78,6 +79,7 @@ class ReanchorWorld extends WorkflowWorld {
   observableAfter = "";
   invalidBaselineChainLength = 0;
   intakeIdempotent = false;
+  mergeDispatchHead = "";
 }
 
 const { Given, When, Then } = stepDefinitions<ReanchorWorld>();
@@ -1697,8 +1699,40 @@ When(
     applyReanchor(this, "delivery");
     assert.equal(this.applied, true, String(this.error));
     observeBoundPullRequest(this, this.newHeadSha);
+    const binaryDirectory = path.join(this.root, "fake-bin");
+    const log = path.join(this.root, "merge-provider.log");
+    fs.mkdirSync(binaryDirectory, { recursive: true });
+    const executable = path.join(binaryDirectory, "gh");
+    fs.writeFileSync(
+      executable,
+      `#!/usr/bin/env node\nconst fs=require("node:fs");const args=process.argv.slice(2);if(args[0]==="repo")process.stdout.write(JSON.stringify({nameWithOwner:"example/repository",viewerPermission:"WRITE"}));if(args[0]==="pr"&&args[1]==="merge")fs.writeFileSync(${JSON.stringify(log)},args.join(" ")+"\\n");\n`,
+      { mode: 0o755 },
+    );
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${binaryDirectory}${path.delimiter}${originalPath ?? ""}`;
+    try {
+      github(
+        "pr.merge",
+        {
+          repository: "example/repository",
+          pr: 42,
+          method: "merge",
+          headSha: this.newHeadSha,
+        },
+        this.root,
+      );
+    } finally {
+      process.env.PATH = originalPath;
+    }
+    const arguments_ = fs.readFileSync(log, "utf8").trim().split(" ");
+    const headIndex = arguments_.indexOf("--match-head-commit");
+    this.mergeDispatchHead = arguments_[headIndex + 1] ?? "";
   },
 );
+
+Then("merge providerは新H_finalをexact headとして受け取る", function () {
+  assert.equal(this.mergeDispatchHead, this.newHeadSha);
+});
 
 Then("post-PR intakeの同一binding再実行はno-opになる", function () {
   assert.equal(this.intakeIdempotent, true);
