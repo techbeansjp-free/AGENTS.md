@@ -601,6 +601,26 @@
       },
       "then": {
         "properties": {
+          "merge": {
+            "allOf": [
+              { "$ref": "#/$defs/merge" },
+              {
+                "properties": {
+                  "observation": {
+                    "allOf": [
+                      { "$ref": "#/$defs/observation" },
+                      {
+                        "properties": {
+                          "providerState": { "const": "merged" },
+                          "mergeCommitSha": { "$ref": "#/$defs/oid" }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
           "redelivery": {
             "properties": {
               "completedAt": { "$ref": "#/$defs/instant" },

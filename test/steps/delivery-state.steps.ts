@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import {
   assertImmutablePullRequestBinding,
@@ -227,6 +228,35 @@ const CHECKS: Readonly<Record<string, () => void>> = {
     assert.throws(
       () => parseDeliveryState(JSON.stringify(missingAuthority)),
       /redeliveryの必須fieldがありません: authority/u,
+    );
+    const impossibleMerged = JSON.parse(
+      renderDeliveryState(completed),
+    ) as Record<string, unknown>;
+    impossibleMerged.state = "merge-prepared";
+    (impossibleMerged.merge as Record<string, unknown>).observation = null;
+    assert.throws(
+      () => parseDeliveryState(JSON.stringify(impossibleMerged)),
+      /merged redeliveryがprovider observationと一致しません/u,
+    );
+    const deliverySchema = JSON.parse(
+      fs.readFileSync(
+        ".agent-skill-chain/schemas/delivery-state.schema.json",
+        "utf8",
+      ),
+    ) as { allOf: Array<Record<string, unknown>> };
+    const mergedRedeliveryRule = deliverySchema.allOf.find((rule) =>
+      JSON.stringify(rule).includes(
+        '"redelivery":{"properties":{"outcome":{"const":"merged"}',
+      ),
+    );
+    assert.ok(
+      mergedRedeliveryRule,
+      "merged redelivery schema ruleがありません",
+    );
+    assert.match(
+      JSON.stringify(mergedRedeliveryRule),
+      /"merge".*"observation".*"providerState":\{"const":"merged"\}.*"mergeCommitSha"/u,
+      "schemaがmerged redeliveryへprovider merged observationを要求していません",
     );
     assert.throws(
       () =>
