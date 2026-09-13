@@ -3999,9 +3999,8 @@ function inlineJsonInput(
   try {
     return parseJsonStrict(source, flag);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `${message}。--${flag}にはinline JSONを渡します（file pathではありません）。JSON本文を--${flag}='…'の形式で指定してください`,
+      `${flag}: 値が不正です。--${flag}にはinline JSONを渡します（file pathではありません）。JSON本文を--${flag}='…'の形式で指定してください`,
       { cause: error },
     );
   }

@@ -88,7 +88,7 @@ Then(
   },
 );
 
-Given("file pathをJSON flagへ渡すargvがある", function () {
+Given("file pathと重複keyをJSON flagへ渡すargvがある", function () {
   this.argvs = [
     {
       label: "roles",
@@ -109,6 +109,27 @@ Given("file pathをJSON flagへ渡すargvがある", function () {
         "--issue=1340",
         "--scope=issue-1340",
         "--override=./secret-override.json",
+      ],
+    },
+    {
+      label: "roles-duplicate",
+      args: [
+        "routing",
+        "roles",
+        "--scope=issue-1340",
+        '--assignments=[{"super-secret-key":1,"super-secret-key":2}]',
+      ],
+    },
+    {
+      label: "ceiling-duplicate",
+      args: [
+        "routing",
+        "ceiling",
+        "--provider=claude",
+        "--selection=fable",
+        "--issue=1340",
+        "--scope=issue-1340",
+        '--override={"super-secret-key":1,"super-secret-key":2}',
       ],
     },
   ];
@@ -198,7 +219,7 @@ Then(
     for (const { label, result } of this.results) {
       assert.equal(result.status, 1, `${label}: ${result.stderr}`);
       const reasons = reasonsOf(result);
-      const flag = label === "roles" ? "--assignments" : "--override";
+      const flag = label.startsWith("roles") ? "--assignments" : "--override";
       const matching = reasons.filter(
         (reason) =>
           reason.includes(`${flag}にはinline JSONを渡します`) &&
