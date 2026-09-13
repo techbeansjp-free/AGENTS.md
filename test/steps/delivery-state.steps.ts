@@ -6,12 +6,14 @@ import {
   canonicalDigest,
   claimMergeDispatch,
   claimPullRequestCreationDispatch,
+  completeTerminalRedelivery,
   closingContractDigest,
   deliveryStateDigest,
   observeMerge,
   parseDeliveryState,
   prepareMergeIntent,
   preparePullRequestCreation,
+  prepareTerminalRedeliveryMergeIntent,
   pullRequestContentDigest,
   pullRequestTerminalEvidenceId,
   recordStep11,
@@ -38,6 +40,7 @@ const T1 = "2026-08-30T00:00:01.000Z";
 const T2 = "2026-08-30T00:00:02.000Z";
 const T3 = "2026-08-30T00:00:03.000Z";
 const T4 = "2026-08-30T00:00:04.000Z";
+const T5 = "2026-08-30T00:00:05.000Z";
 
 function createIntent(): DeliveryCreateIntentInput {
   const issueUrl = `https://github.com/${REPOSITORY}/issues/${ISSUE}`;
@@ -139,6 +142,85 @@ function mergeObserved(
 }
 
 const CHECKS: Readonly<Record<string, () => void>> = {
+  "SCN-INT-DELIVERY-REOPEN-001": () => {
+    CHECKS["SCN-UNIT-DELIVERY-REOPEN-001"]!();
+  },
+  "SCN-INT-DELIVERY-REOPEN-002": () => {
+    const terminal = recordStep11(prBound(), {
+      outcome: "pull-request",
+      recordedAt: T2,
+      journalDigest: JOURNAL_DIGEST,
+    });
+    const standardMerge = mergePrepared().merge!;
+    const {
+      dispatchClaimedAt: _claim,
+      observation: _observation,
+      ...mergeInput
+    } = standardMerge;
+    const reopened = prepareTerminalRedeliveryMergeIntent(
+      terminal,
+      { ...mergeInput, preparedAt: T3 },
+      "7".repeat(32),
+    );
+    const claimed = claimMergeDispatch(reopened, T4);
+    assert.throws(() => claimMergeDispatch(claimed, T5), /既に消費/u);
+    const requested = observeMerge(claimed, {
+      ...observation("merge-requested"),
+      observedAt: T5,
+    });
+    assert.equal(requested.redelivery?.outcome, "pending");
+    assert.equal(requested.merge?.dispatchClaimedAt, T4);
+  },
+  "SCN-UNIT-DELIVERY-REOPEN-001": () => {
+    const terminal = recordStep11(prBound(), {
+      outcome: "pull-request",
+      recordedAt: T2,
+      journalDigest: JOURNAL_DIGEST,
+    });
+    const standardMerge = mergePrepared().merge!;
+    const {
+      dispatchClaimedAt: _claim,
+      observation: _observation,
+      ...mergeInput
+    } = standardMerge;
+    const reopened = prepareTerminalRedeliveryMergeIntent(
+      terminal,
+      { ...mergeInput, preparedAt: T3 },
+      "9".repeat(32),
+    );
+    assert.equal(reopened.state, "merge-prepared");
+    assert.equal(reopened.step11?.evidenceId, terminal.step11?.evidenceId);
+    assert.equal(
+      reopened.redelivery?.priorStep11EvidenceId,
+      terminal.step11?.evidenceId,
+    );
+    const observed = observeMerge(reopened, {
+      ...observation("merged"),
+      observedAt: T4,
+      providerMergedAt: T4,
+    });
+    const completed = completeTerminalRedelivery(observed, T5);
+    assert.equal(completed.state, "step11-recorded");
+    assert.equal(completed.step11?.outcome, "pull-request");
+    assert.equal(completed.redelivery?.outcome, "merged");
+    assert.equal(
+      completed.redelivery?.observationId,
+      completed.merge?.observation?.observationId,
+    );
+    assert.deepEqual(
+      parseDeliveryState(renderDeliveryState(completed)),
+      completed,
+    );
+    assert.throws(
+      () =>
+        prepareTerminalRedeliveryMergeIntent(
+          completed,
+          { ...mergeInput, preparedAt: T3 },
+          "8".repeat(32),
+        ),
+      /開始できません/u,
+    );
+  },
   "SCN-UNIT-DELSTATE-001": () => {
     const prepared = createPrepared();
     const bound = prBound();

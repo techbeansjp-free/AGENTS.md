@@ -43,6 +43,7 @@
     "step11": {
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/step11" }]
     },
+    "redelivery": { "$ref": "#/$defs/redelivery" },
     "reconciliation": {
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/reconciliation" }]
     }
@@ -319,6 +320,34 @@
         "evidenceId": { "$ref": "#/$defs/digest" }
       }
     },
+    "redelivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decisionId",
+        "startedAt",
+        "priorStep11EvidenceId",
+        "trustedPolicyCommitSha",
+        "authorizedHeadSha",
+        "outcome",
+        "completedAt",
+        "observationId"
+      ],
+      "properties": {
+        "decisionId": { "type": "string", "pattern": "^[a-f0-9]{32,64}$" },
+        "startedAt": { "$ref": "#/$defs/instant" },
+        "priorStep11EvidenceId": { "$ref": "#/$defs/digest" },
+        "trustedPolicyCommitSha": { "$ref": "#/$defs/oid" },
+        "authorizedHeadSha": { "$ref": "#/$defs/oid" },
+        "outcome": { "enum": ["pending", "merged"] },
+        "completedAt": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/instant" }]
+        },
+        "observationId": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/digest" }]
+        }
+      }
+    },
     "reconciliation": {
       "type": "object",
       "additionalProperties": false,
@@ -375,7 +404,6 @@
               }
             ]
           },
-          "step11": { "type": "null" },
           "reconciliation": { "type": "null" }
         }
       }
@@ -398,7 +426,6 @@
               }
             ]
           },
-          "step11": { "type": "null" },
           "reconciliation": { "type": "null" }
         }
       }
@@ -455,6 +482,43 @@
                 ]
               }
             }
+          },
+          {
+            "required": ["redelivery"],
+            "properties": {
+              "merge": {
+                "allOf": [
+                  { "$ref": "#/$defs/merge" },
+                  {
+                    "properties": {
+                      "observation": {
+                        "allOf": [
+                          { "$ref": "#/$defs/observation" },
+                          {
+                            "properties": {
+                              "providerState": { "const": "merged" },
+                              "mergeCommitSha": { "$ref": "#/$defs/oid" }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "step11": {
+                "allOf": [
+                  { "$ref": "#/$defs/step11" },
+                  { "properties": { "outcome": { "const": "pull-request" } } }
+                ]
+              },
+              "redelivery": {
+                "allOf": [
+                  { "$ref": "#/$defs/redelivery" },
+                  { "properties": { "outcome": { "const": "merged" } } }
+                ]
+              }
+            }
           }
         ]
       }
@@ -468,7 +532,6 @@
       },
       "then": {
         "properties": {
-          "step11": { "type": "null" },
           "reconciliation": { "$ref": "#/$defs/reconciliation" }
         }
       }

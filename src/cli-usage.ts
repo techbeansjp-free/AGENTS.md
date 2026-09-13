@@ -1259,7 +1259,14 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       flag("method", "merge|squash|rebase", "merge方式"),
       flag("staging", "path", "Step 10までを検証するstaging directory"),
     ],
-    conditionalFlags: [],
+    conditionalFlags: [
+      conditional(
+        "reopen-terminal",
+        "approved",
+        "旧outcome=pull-request終端から新しいowner delivery判断を開始する",
+        "旧pull-request終端を現行trusted policyで再評価するとき",
+      ),
+    ],
     optionalFlags: [ROOT_FLAG, ...APPLY_MODE],
     example:
       "npx agent-skill-chain pr merge --repo=owner/name --pr=909 --method=merge --staging=.agent-skill-chain/tmp/issues/20260830_120000_909-example --dry-run",

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import {
@@ -2497,6 +2498,85 @@ function writeDeliveryProviderControl(
   );
 }
 
+function advanceDeliveryTrustedMergeMode(
+  prepared: PreparedDeliveryCli,
+  mode: FixtureMergeMode,
+): string {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "asc-policy-index-"));
+  const indexFile = path.join(scratch, "index");
+  const policyPath = ".agent-skill-chain/policy/default.json";
+  const shown = spawnSync(
+    "git",
+    ["show", `${prepared.baseSha}:${policyPath}`],
+    {
+      cwd: prepared.root,
+      encoding: "utf8",
+    },
+  );
+  assert.equal(shown.status, 0, shown.stderr);
+  const policy = JSON.parse(shown.stdout) as Record<string, unknown>;
+  policy.merge = {
+    mode,
+    branches: ["feature/x"],
+    methods: ["merge"],
+    requiredChecks: [],
+    requiredReviews: 0,
+  };
+  const materialized = path.join(scratch, "policy.json");
+  fs.writeFileSync(materialized, `${JSON.stringify(policy, null, 2)}\n`);
+  const environment = { ...process.env, GIT_INDEX_FILE: indexFile };
+  const readTree = spawnSync("git", ["read-tree", prepared.baseSha], {
+    cwd: prepared.root,
+    env: environment,
+    encoding: "utf8",
+  });
+  assert.equal(readTree.status, 0, readTree.stderr);
+  const blob = spawnSync("git", ["hash-object", "-w", materialized], {
+    cwd: prepared.root,
+    encoding: "utf8",
+  });
+  assert.equal(blob.status, 0, blob.stderr);
+  const updateIndex = spawnSync(
+    "git",
+    [
+      "update-index",
+      "--add",
+      "--cacheinfo",
+      `100644,${blob.stdout.trim()},${policyPath}`,
+    ],
+    { cwd: prepared.root, env: environment, encoding: "utf8" },
+  );
+  assert.equal(updateIndex.status, 0, updateIndex.stderr);
+  const tree = spawnSync("git", ["write-tree"], {
+    cwd: prepared.root,
+    env: environment,
+    encoding: "utf8",
+  });
+  assert.equal(tree.status, 0, tree.stderr);
+  const commit = spawnSync(
+    "git",
+    [
+      "commit-tree",
+      tree.stdout.trim(),
+      "-p",
+      prepared.baseSha,
+      "-m",
+      `merge mode ${mode}`,
+    ],
+    { cwd: prepared.root, encoding: "utf8" },
+  );
+  assert.equal(commit.status, 0, commit.stderr);
+  const advanced = commit.stdout.trim();
+  const updateRef = spawnSync(
+    "git",
+    ["update-ref", "refs/remotes/origin/main", advanced],
+    { cwd: prepared.root, encoding: "utf8" },
+  );
+  assert.equal(updateRef.status, 0, updateRef.stderr);
+  writeDeliveryProviderControl(prepared, { remoteBaseSha: advanced });
+  return advanced;
+}
+
 function deliveryProviderCalls(prepared: PreparedDeliveryCli): string[][] {
   if (!fs.existsSync(prepared.logFile)) return [];
   const source = fs.readFileSync(prepared.logFile, "utf8").trim();
@@ -3202,6 +3282,7 @@ function deliveryMergeArgs(
     root?: string;
     staging?: string;
     method?: "merge" | "squash" | "rebase";
+    reopenTerminal?: boolean;
   } = {},
 ): string[] {
   const root = overrides.root ?? prepared.root;
@@ -3218,6 +3299,7 @@ function deliveryMergeArgs(
     `--root=${root}`,
     `--staging=${stagingArgument}`,
     "--apply",
+    ...(overrides.reopenTerminal ? ["--reopen-terminal=approved"] : []),
   ];
 }
 
@@ -3228,6 +3310,7 @@ function executeDeliveryMerge(
     root?: string;
     staging?: string;
     method?: "merge" | "squash" | "rebase";
+    reopenTerminal?: boolean;
   } = {},
 ) {
   return executeCli(
@@ -4318,6 +4401,80 @@ if (exact(["auth", "status"])) {
           ),
         ).entries.filter((entry) => entry.step === 11).length,
         1,
+      );
+      break;
+    }
+    case "SCN-E2E-DELIVERY-REOPEN-001": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const created = createDeliveryPullRequest(prepared);
+      assert.match(created.stdout, /pull_request_complete/u);
+      const stateFile = path.join(
+        prepared.staging,
+        ...DELIVERY_STATE_FILE.split("/"),
+      );
+      const terminal = parseDeliveryState(fs.readFileSync(stateFile, "utf8"));
+      const originalEvidenceId = terminal.step11?.evidenceId;
+      assert.equal(terminal.step11?.outcome, "pull-request");
+      const originalJournal = fs.readFileSync(
+        path.join(prepared.staging, STEP_JOURNAL_FILE),
+        "utf8",
+      );
+      const trustedPolicyCommitSha = advanceDeliveryTrustedMergeMode(
+        prepared,
+        "assisted",
+      );
+      const before = deliveryProviderCalls(prepared).filter(isMergeCall).length;
+      const resumed = executeDeliveryMerge(prepared, { reopenTerminal: true });
+      assert.equal(resumed.status, 0, resumed.stdout + resumed.stderr);
+      assert.doesNotMatch(resumed.stdout, /pull_request_complete/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        before + 1,
+      );
+      const current = parseDeliveryState(fs.readFileSync(stateFile, "utf8"));
+      const redelivery = (
+        current as unknown as { redelivery?: Record<string, unknown> }
+      ).redelivery;
+      assert.equal(redelivery?.priorStep11EvidenceId, originalEvidenceId);
+      assert.equal(redelivery?.trustedPolicyCommitSha, trustedPolicyCommitSha);
+      assert.equal(redelivery?.authorizedHeadSha, prepared.headSha);
+      assert.equal(
+        fs.readFileSync(path.join(prepared.staging, STEP_JOURNAL_FILE), "utf8"),
+        originalJournal,
+        "旧Step 11 journalを変更しています",
+      );
+      break;
+    }
+    case "SCN-E2E-DELIVERY-REOPEN-002": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const created = createDeliveryPullRequest(prepared);
+      assert.match(created.stdout, /pull_request_complete/u);
+      advanceDeliveryTrustedMergeMode(prepared, "assisted");
+      const before = deliveryProviderCalls(prepared).filter(isMergeCall).length;
+      const rejected = executeDeliveryMerge(prepared);
+      assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+      assert.match(rejected.stdout, /pull_request_complete/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        before,
+      );
+
+      const stillDisabled = prepareDeliveryCli(this, {}, "disabled");
+      createDeliveryPullRequest(stillDisabled);
+      const disabledBefore =
+        deliveryProviderCalls(stillDisabled).filter(isMergeCall).length;
+      const disabledRejected = executeDeliveryMerge(stillDisabled, {
+        reopenTerminal: true,
+      });
+      assert.equal(
+        disabledRejected.status,
+        1,
+        disabledRejected.stdout + disabledRejected.stderr,
+      );
+      assert.equal(
+        deliveryProviderCalls(stillDisabled).filter(isMergeCall).length,
+        disabledBefore,
+        "現在もdisabledなのにproviderへmergeを要求しています",
       );
       break;
     }

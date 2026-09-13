@@ -11,6 +11,7 @@ const ROOT_FIELDS = new Set([
     "pr",
     "merge",
     "step11",
+    "redelivery",
     "reconciliation",
 ]);
 const CREATE_FIELDS = new Set([
@@ -66,6 +67,16 @@ const STEP11_FIELDS = new Set([
     "journalDigest",
     "evidenceId",
 ]);
+const REDELIVERY_FIELDS = new Set([
+    "decisionId",
+    "startedAt",
+    "priorStep11EvidenceId",
+    "trustedPolicyCommitSha",
+    "authorizedHeadSha",
+    "outcome",
+    "completedAt",
+    "observationId",
+]);
 const PROVIDER_REQUEST_FIELDS = new Set([
     "kind",
     "requestedAt",
@@ -120,6 +131,11 @@ function digest(value, label) {
 function oid(value, label) {
     if (typeof value !== "string" || !OID.test(value))
         throw new Error(`${label}は小文字40桁Git OIDが必要です`);
+    return value;
+}
+function redeliveryDecisionId(value) {
+    if (typeof value !== "string" || !INTENT_ID.test(value))
+        throw new Error("redelivery.decisionIdは32〜64桁の小文字hexが必要です");
     return value;
 }
 function repository(value) {
@@ -478,17 +494,70 @@ function parseReconciliation(value) {
         enteredAt: instant(value.enteredAt, "reconciliation.enteredAt"),
     };
 }
+function parseTerminalRedelivery(value, step11, merge) {
+    if (value === undefined)
+        return undefined;
+    if (!isRecord(value))
+        throw new Error("redeliveryはobjectが必要です");
+    unknownFields(value, REDELIVERY_FIELDS, "redelivery");
+    if (!step11 || step11.outcome !== "pull-request")
+        throw new Error("redeliveryには旧pull-request Step 11記録が必要です");
+    if (!merge)
+        throw new Error("redeliveryには固定済みmerge intentが必要です");
+    if (value.outcome !== "pending" && value.outcome !== "merged")
+        throw new Error("redelivery.outcomeが不正です");
+    const parsed = {
+        decisionId: redeliveryDecisionId(value.decisionId),
+        startedAt: instant(value.startedAt, "redelivery.startedAt"),
+        priorStep11EvidenceId: digest(value.priorStep11EvidenceId, "redelivery.priorStep11EvidenceId"),
+        trustedPolicyCommitSha: oid(value.trustedPolicyCommitSha, "redelivery.trustedPolicyCommitSha"),
+        authorizedHeadSha: oid(value.authorizedHeadSha, "redelivery.authorizedHeadSha"),
+        outcome: value.outcome,
+        completedAt: value.completedAt === null
+            ? null
+            : instant(value.completedAt, "redelivery.completedAt"),
+        observationId: value.observationId === null
+            ? null
+            : digest(value.observationId, "redelivery.observationId"),
+    };
+    if (parsed.priorStep11EvidenceId !== step11.evidenceId ||
+        parsed.trustedPolicyCommitSha !== merge.trustedPolicyCommitSha ||
+        parsed.authorizedHeadSha !== merge.authorizedHeadSha)
+        throw new Error("redeliveryが旧Step 11またはmerge認可tupleと一致しません");
+    notBefore(parsed.startedAt, step11.recordedAt, "redelivery.startedAt");
+    if (parsed.outcome === "pending") {
+        if (parsed.completedAt !== null || parsed.observationId !== null)
+            throw new Error("pending redeliveryは完了Evidenceを持てません");
+    }
+    else {
+        if (!parsed.completedAt || !parsed.observationId)
+            throw new Error("merged redeliveryには完了Evidenceが必要です");
+        if (merge.observation?.providerState !== "merged" ||
+            parsed.observationId !== merge.observation.observationId)
+            throw new Error("merged redeliveryがprovider observationと一致しません");
+        notBefore(parsed.completedAt, parsed.startedAt, "redelivery.completedAt");
+    }
+    return parsed;
+}
 function validateShape(state) {
     const fail = (message) => {
         throw new Error(`delivery state ${state.state}が不正です: ${message}`);
     };
     if (state.state === "create-prepared") {
-        if (state.pr || state.merge || state.step11 || state.reconciliation)
+        if (state.pr ||
+            state.merge ||
+            state.step11 ||
+            state.redelivery ||
+            state.reconciliation)
             fail("create以外のfieldはnullが必要です");
         return;
     }
     if (state.state === "pr-bound") {
-        if (!state.pr || state.merge || state.step11 || state.reconciliation)
+        if (!state.pr ||
+            state.merge ||
+            state.step11 ||
+            state.redelivery ||
+            state.reconciliation)
             fail("prだけが固定済みでなければなりません");
         return;
     }
@@ -496,7 +565,7 @@ function validateShape(state) {
         if (!state.pr ||
             !state.merge ||
             state.merge.observation ||
-            state.step11 ||
+            (state.step11 && !state.redelivery) ||
             state.reconciliation)
             fail("観測前のmerge intentだけが必要です");
         return;
@@ -504,7 +573,7 @@ function validateShape(state) {
     if (state.state === "merge-observed") {
         if (!state.pr ||
             !state.merge?.observation ||
-            state.step11 ||
+            (state.step11 && !state.redelivery) ||
             state.reconciliation)
             fail("merge observationが必要です");
         return;
@@ -516,8 +585,12 @@ function validateShape(state) {
         if (!step11)
             throw new Error("delivery state step11-recordedが不正です: Step 11記録が必要です");
         if (step11.outcome === "pull-request") {
-            if (state.merge)
+            if (!state.redelivery && state.merge)
                 fail("PR停止終端ではmergeがnullでなければなりません");
+            if (state.redelivery &&
+                (state.redelivery.outcome !== "merged" ||
+                    state.merge?.observation?.providerState !== "merged"))
+                fail("再配送完了にはproviderのmerged observationが必要です");
         }
         else if (!state.merge?.observation ||
             state.merge.observation.providerState !== "merged") {
@@ -528,7 +601,7 @@ function validateShape(state) {
     const reconciliation = state.reconciliation;
     if (reconciliation === null)
         throw new Error(`delivery state ${state.state}が不正です: reconciliation記録が必要です`);
-    if (state.step11)
+    if (state.step11 && !state.redelivery)
         fail("reconciliation中はstep11がnullでなければなりません");
     if (reconciliation.phase === "create") {
         if (state.pr || state.merge)
@@ -543,9 +616,12 @@ function validateShape(state) {
     }
 }
 export function parseDeliveryState(source) {
-    const value = parseJsonStrict(source, DELIVERY_STATE_FILE);
-    if (!isRecord(value))
+    const raw = parseJsonStrict(source, DELIVERY_STATE_FILE);
+    if (!isRecord(raw))
         throw new Error("delivery stateはobjectが必要です");
+    const value = { ...raw };
+    if (!("redelivery" in value))
+        value.redelivery = undefined;
     unknownFields(value, ROOT_FIELDS, "delivery state");
     if (value.schemaVersion !== DELIVERY_STATE_SCHEMA_VERSION)
         throw new Error("delivery state schemaVersionが不正です");
@@ -560,6 +636,7 @@ export function parseDeliveryState(source) {
     const create = parseCreate(value.create);
     const pr = parsePullRequest(value.pr, create);
     const merge = parseMerge(value.merge, create, pr);
+    const step11 = parseStep11(value.step11, create, pr, merge);
     const state = {
         schemaVersion: DELIVERY_STATE_SCHEMA_VERSION,
         revision,
@@ -567,7 +644,12 @@ export function parseDeliveryState(source) {
         create,
         pr,
         merge,
-        step11: parseStep11(value.step11, create, pr, merge),
+        step11,
+        ...(value.redelivery === undefined
+            ? {}
+            : {
+                redelivery: parseTerminalRedelivery(value.redelivery, step11, merge),
+            }),
         reconciliation: parseReconciliation(value.reconciliation),
     };
     validateShape(state);
@@ -664,6 +746,48 @@ export function prepareMergeIntent(current, merge) {
         revision: current.revision + 1,
         state: "merge-prepared",
         merge: { ...merge, dispatchClaimedAt: null, observation: null },
+    };
+    return parseDeliveryState(stableJson(candidate));
+}
+export function prepareTerminalRedeliveryMergeIntent(current, merge, decisionId) {
+    if (current.state !== "step11-recorded" ||
+        current.step11?.outcome !== "pull-request" ||
+        current.merge ||
+        current.redelivery)
+        throw new Error(`${current.state}からterminal redeliveryを開始できません`);
+    const candidate = {
+        ...current,
+        revision: current.revision + 1,
+        state: "merge-prepared",
+        merge: { ...merge, dispatchClaimedAt: null, observation: null },
+        redelivery: {
+            decisionId,
+            startedAt: merge.preparedAt,
+            priorStep11EvidenceId: current.step11.evidenceId,
+            trustedPolicyCommitSha: merge.trustedPolicyCommitSha,
+            authorizedHeadSha: merge.authorizedHeadSha,
+            outcome: "pending",
+            completedAt: null,
+            observationId: null,
+        },
+    };
+    return parseDeliveryState(stableJson(candidate));
+}
+export function completeTerminalRedelivery(current, completedAt) {
+    if (current.state !== "merge-observed" ||
+        current.redelivery?.outcome !== "pending" ||
+        current.merge?.observation?.providerState !== "merged")
+        throw new Error(`${current.state}からterminal redeliveryを完了できません`);
+    const candidate = {
+        ...current,
+        revision: current.revision + 1,
+        state: "step11-recorded",
+        redelivery: {
+            ...current.redelivery,
+            outcome: "merged",
+            completedAt,
+            observationId: current.merge.observation.observationId,
+        },
     };
     return parseDeliveryState(stableJson(candidate));
 }

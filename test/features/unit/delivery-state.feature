@@ -1,6 +1,11 @@
 @unit
 Feature: PR作成からStep 11までのdelivery identityを永続状態で固定する
 
+  Scenario: SCN-UNIT-DELIVERY-REOPEN-001 旧Step 11を保持してterminal redeliveryを単調遷移する
+    Given delivery state単体検査の準備がある
+    When "SCN-UNIT-DELIVERY-REOPEN-001"のdelivery state単体検査を実行する
+    Then delivery state単体検査は期待結果になる
+
   Scenario: SCN-UNIT-DELSTATE-001 正規遷移を決定的に記録する
     Given delivery state単体検査の準備がある
     When "SCN-UNIT-DELSTATE-001"のdelivery state単体検査を実行する

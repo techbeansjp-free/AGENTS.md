@@ -21,6 +21,8 @@ PR停止またはmerged終端ではjournalを先にfsyncし、そのdigestと`ou
 
 `pr merge`適用後にauto-mergeまたはqueue entryだけが観測できる場合は`merge-observed`と再開条件を返し、Step 11へ進めない。再実行はprovider read-backだけを行い、merged終端Evidenceへ単調更新する。GitHubがHEAD以外のPR metadata CASを提供しない最終窓は、二重read、HEAD CAS、保護規則、事後read-backで検出する残余競合として明示し、完全予防と報告しない。
 
+`merge.mode=disabled`で既に`outcome=pull-request`へ終端化したfull/quickのopen PRは、後からtrusted policyが変わっても通常の`pr merge`では再開しない。repository ownerが同じPRへの新しいdelivery判断を行う場合だけ`--reopen-terminal=approved`を明示し、旧Step 11 evidence、現在のtrusted policy commit、同一PR identity、exact HEADを固定した`redelivery`として通常のmerge認可とone-shot dispatchを通す。旧Step 11 journalは変更・重複追記せず、merged再観測後は`redelivery`だけを完了へ進める。PoC、現在もdisabled、closed/merged PR、identity不一致、flag欠落・未知値を迂回しない。
+
 ## role・tier入力契約
 
 PR作成前にcoordinator、analyst、implementer、reviewer、verifier、finalizerの担当記録、implementerとreviewerがproject policyの`merge.reviewIndependence`の要求水準を満たすこと（未宣言の既定は`context-isolated`であり、別session/contextなら同一GitHub actorでも成立する）、reviewerの非変更証拠、verifierの独立検証、必要model tierとmappingを確認する。不明なrole・tier・独立性証拠をmodel能力やPR作成authorityで補わず、fail-closedで停止する。担当finalizerは要件とproductを変更せず、承認済みreview結果を改変しない。
