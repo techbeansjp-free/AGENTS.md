@@ -25,7 +25,10 @@ import {
   pullRequestContentDigest,
 } from "../../src/domain/delivery-state.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
-import { refreshStoredStagingDigest } from "../../src/domain/staging.js";
+import {
+  calculateStagingDigest,
+  refreshStoredStagingDigest,
+} from "../../src/domain/staging.js";
 import { parseReviewRoundInput } from "../../src/domain/review-convergence.js";
 import {
   observeReviewDiff,
@@ -1088,6 +1091,18 @@ When("再固定を二回適用する", function () {
   applyReanchor(this, "delivery");
 });
 
+When(
+  "reanchor公開後かつstaging digest更新前の停止から同じ入力を再実行する",
+  function () {
+    const recordFile = path.join(this.staging, "staging-record.json");
+    const beforeRecord = fs.readFileSync(recordFile, "utf8");
+    applyReanchor(this, "delivery");
+    assert.equal(this.applied, true, String(this.error));
+    fs.writeFileSync(recordFile, beforeRecord);
+    applyReanchor(this, "delivery");
+  },
+);
+
 When("評価後に連鎖不正なchainを保存して再固定を適用する", function () {
   const invalid: EvidenceReanchorRecord = {
     oldHeadSha: "a".repeat(40),
@@ -1184,6 +1199,18 @@ Then("再固定chainは1件伸び実効HEADは新headになる", function () {
   assert.ok(
     record.artifacts.includes("journal/reanchor.jsonl"),
     `staging recordが追記へ追随していません: ${JSON.stringify(record.artifacts)}`,
+  );
+});
+
+Then("再固定chainを重複させずstaging digestが新chainへ一致する", function () {
+  assert.equal(this.applied, true, String(this.error));
+  assert.equal(readEvidenceReanchorChain(this.staging).length, 1);
+  const stored = JSON.parse(
+    fs.readFileSync(path.join(this.staging, "staging-record.json"), "utf8"),
+  ) as { artifacts: string[]; digest: string };
+  assert.equal(
+    stored.digest,
+    calculateStagingDigest(this.staging, stored.artifacts),
   );
 });
 

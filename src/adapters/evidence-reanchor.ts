@@ -3,7 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 
 import { writeFileAtomic } from "../lib/atomic.js";
-import { parseJsonStrict } from "../lib/security.js";
+import { parseJsonStrict, stableJson } from "../lib/security.js";
 import {
   deriveEffectiveHead,
   isContentEquivalent,
@@ -21,6 +21,9 @@ import {
 } from "../domain/review-artifact.js";
 import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
 import {
+  calculateStagingDigest,
+  listStagingArtifacts,
+  readStoredStagingRecord,
   refreshStoredStagingDigest,
   withStagingMutationLock,
 } from "../domain/staging.js";
@@ -38,6 +41,79 @@ import {
 export const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
 
 const OID = /^[a-f0-9]{40}$/u;
+
+function renderEvidenceReanchorChain(
+  chain: readonly EvidenceReanchorRecord[],
+): string {
+  return `${chain.map((entry) => JSON.stringify(entry)).join("\n")}\n`;
+}
+
+/**
+ * reanchor公開後・staging record更新前の停止だけを前向き復旧する。
+ *
+ * 保存済みartifact集合と、terminal追記前のchainを使った投影digestが保存済み
+ * digestに完全一致する場合だけrefreshする。したがって、同じ入力の再実行を
+ * 口実に無関係なstaging変更を正当化しない。
+ */
+function recoverPublishedReanchorDigest(
+  staging: string,
+  chain: readonly EvidenceReanchorRecord[],
+): void {
+  const stored = readStoredStagingRecord(staging);
+  const currentArtifacts = listStagingArtifacts(staging);
+  const currentDigest = calculateStagingDigest(staging, currentArtifacts);
+  if (
+    stableJson(stored.artifacts) === stableJson(currentArtifacts) &&
+    stored.digest === currentDigest
+  )
+    return;
+
+  const previous = chain.slice(0, -1);
+  const expectedBeforeArtifacts =
+    previous.length === 0
+      ? currentArtifacts.filter(
+          (artifact) => artifact !== EVIDENCE_REANCHOR_FILE,
+        )
+      : currentArtifacts;
+  if (stableJson(stored.artifacts) !== stableJson(expectedBeforeArtifacts))
+    throw new Error(
+      "再固定再開時のartifact集合が公開前・公開後のどちらとも一致しません",
+    );
+  const previousDigest = crypto
+    .createHash("sha256")
+    .update(renderEvidenceReanchorChain(previous))
+    .digest("hex");
+  const projectedBefore = crypto
+    .createHash("sha256")
+    .update(
+      stableJson(
+        expectedBeforeArtifacts.map((relative) => ({
+          relative,
+          digest:
+            relative === EVIDENCE_REANCHOR_FILE
+              ? previousDigest
+              : crypto
+                  .createHash("sha256")
+                  .update(
+                    fs.readFileSync(path.join(staging, ...relative.split("/"))),
+                  )
+                  .digest("hex"),
+        })),
+      ),
+    )
+    .digest("hex");
+  if (stored.digest !== projectedBefore)
+    throw new Error(
+      "再固定以外のstaging成果物が変更されているためdigestを復旧できません",
+    );
+  refreshStoredStagingDigest(staging);
+  const refreshed = readStoredStagingRecord(staging);
+  if (
+    stableJson(refreshed.artifacts) !== stableJson(currentArtifacts) ||
+    refreshed.digest !== currentDigest
+  )
+    throw new Error("再固定公開後のstaging digest復旧確認に失敗しました");
+}
 
 export type EvidenceReanchorLayer = "delivery" | "review";
 
@@ -785,12 +861,14 @@ export function appendEvidenceReanchor(input: {
     /** applyだけが既存delivery transactionをlock内で復旧してから最新stateを評価する。 */
     readStoredDeliveryState(staging);
     const evaluation = evaluateEvidenceReanchor(input);
-    if (!evaluation.appended)
+    if (!evaluation.appended) {
+      recoverPublishedReanchorDigest(staging, evaluation.chain);
       return {
         chain: evaluation.chain,
         effectiveHeadSha: evaluation.effectiveHeadSha,
         appended: false,
       };
+    }
     const record: EvidenceReanchorRecord = {
       oldHeadSha: evaluation.oldHeadSha,
       newHeadSha: input.newHeadSha,
@@ -810,11 +888,9 @@ export function appendEvidenceReanchor(input: {
     };
     const file = path.join(staging, EVIDENCE_REANCHOR_FILE);
     const next = [...evaluation.chain, record];
-    writeFileAtomic(
-      file,
-      `${next.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
-      { temporaryDirectory: path.dirname(staging) },
-    );
+    writeFileAtomic(file, renderEvidenceReanchorChain(next), {
+      temporaryDirectory: path.dirname(staging),
+    });
     refreshStoredStagingDigest(staging);
     const reread = readEvidenceReanchorChain(staging);
     if (JSON.stringify(reread) !== JSON.stringify(next))
