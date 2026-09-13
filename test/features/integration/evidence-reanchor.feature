@@ -22,6 +22,7 @@ Feature: 証跡再固定がCLIと診断経路で機能する
       | chain断裂 |
       | 判定本文改変 |
       | 範囲漏れ判断改変 |
+      | fence解釈差 |
 
   @issue-1377
   Scenario: SCN-1377-03 step11-recordedの通常rebaseを維持する

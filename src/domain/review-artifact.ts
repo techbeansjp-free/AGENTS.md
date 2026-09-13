@@ -63,7 +63,7 @@ const REQUIRED_HEADINGS = Object.freeze([
 ]);
 
 /** Markdown fence内を空行へ置換し、行番号を維持したまま構造だけを読む。 */
-function visibleMarkdownLines(markdown: string): string[] {
+export function visibleMarkdownLines(markdown: string): string[] {
   const lines = markdown.replace(/\r\n/gu, "\n").split("\n");
   let fence: { character: "`" | "~"; length: number } | undefined;
   return lines.map((line) => {

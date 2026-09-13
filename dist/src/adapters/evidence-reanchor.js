@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { parseJsonStrict } from "../lib/security.js";
 import { deriveEffectiveHead, isContentEquivalent, isRebaseEquivalent, parseReviewIdentityAnchor, isEvidenceReanchorRecord, } from "../domain/evidence-reanchor.js";
-import { validateReviewArtifactStructure, parseReviewArtifactAudit, validateContextIsolatedApprovalRecord, } from "../domain/review-artifact.js";
+import { validateReviewArtifactStructure, parseReviewArtifactAudit, validateContextIsolatedApprovalRecord, visibleMarkdownLines, } from "../domain/review-artifact.js";
 import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
 import { refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { observeStoredDeliveryState, readStoredDeliveryState, } from "./delivery-state.js";
@@ -148,18 +148,11 @@ const REVIEW_ARTIFACT_NAME = /^\d+_課題\d+.*レビュー\.md$/u;
  */
 function comparableArtifactContent(markdown) {
     const output = [];
-    let fence;
     let ignoredSection;
-    for (const line of markdown.replaceAll("\r\n", "\n").split("\n")) {
-        const fenceMatch = /^\s*(`{3,}|~{3,})/u.exec(line);
-        if (fenceMatch) {
-            const marker = fenceMatch[1]?.[0];
-            if (fence === undefined)
-                fence = marker;
-            else if (fence === marker)
-                fence = undefined;
-        }
-        if (fence === undefined) {
+    const lines = markdown.replaceAll("\r\n", "\n").split("\n");
+    const visible = visibleMarkdownLines(markdown);
+    for (const [index, line] of lines.entries()) {
+        if (visible[index] !== "") {
             if (line === "### 1.1 変更ファイル個別監査") {
                 ignoredSection = "audit";
                 output.push(line, "<machine-audit>");

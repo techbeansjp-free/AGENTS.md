@@ -357,6 +357,22 @@ function legacyAuditableReviewArtifact(
     );
 }
 
+/** 4-backtick内の短いdelimiterを閉じ括弧と誤認すると判断行を隠せる反例。 */
+function fenceAmbiguousReviewArtifact(
+  artifact: string,
+  coverageRow: string,
+): string {
+  return artifact.replace(
+    "| 範囲漏れ | dist・文書・schema・test | pass | 22監査pathと生成物5 path |",
+    `\`\`\`\`text
+\`\`\`
+### 1.1 変更ファイル個別監査
+\`\`\`suffix
+\`\`\`\`
+${coverageRow}`,
+  );
+}
+
 function buildApprovedReviewBinding(
   world: ReanchorWorld,
   implementation: string,
@@ -410,10 +426,16 @@ Given("pr-boundの不正なartifact replacement「{word}」がある", function 
     "export const reviewed = 1;\n",
     "feat: review対象",
   );
+  const oldArtifact = auditableReviewArtifact(this.baseSha, implementation);
   this.oldHeadSha = commitPath(
     this.root,
     "docs/reviews/1377_レビュー.md",
-    auditableReviewArtifact(this.baseSha, implementation),
+    kind === "fence解釈差"
+      ? fenceAmbiguousReviewArtifact(
+          oldArtifact,
+          "| 範囲漏れ | dist・文書・schema・test | pass | 22監査pathと生成物5 path |",
+        )
+      : oldArtifact,
     "docs: old artifact",
   );
   this.staging = makeStaging(this);
@@ -451,7 +473,12 @@ Given("pr-boundの不正なartifact replacement「{word}」がある", function 
               "| 範囲漏れ | dist・文書・schema・test | pass | 22監査pathと生成物5 path |",
               "| 範囲漏れ | dist・文書・schema・test | finding | 未監査 |",
             )
-          : artifact,
+          : kind === "fence解釈差"
+            ? fenceAmbiguousReviewArtifact(
+                artifact,
+                "| 範囲漏れ | dist・文書・schema・test | finding | 未監査 |",
+              )
+            : artifact,
     "docs: invalid renamed artifact",
   );
   if (kind === "artifact外差分") {
