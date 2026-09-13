@@ -119,6 +119,8 @@ export interface MergeInput {
   approvals?: Approval[];
   /** context-isolatedで保存済みformal review sessionから導出したapproval ID。 */
   formalApprovalIds?: string[];
+  /** assistedで対象PRへの操作を明示承認し、write authorityを観測した証拠。 */
+  assistedAuthorityVerified?: boolean;
   headSha?: string;
   prAuthorActorId?: string;
   implementationAuthorActorId?: string;
@@ -873,27 +875,27 @@ export function authorizeMerge(input: MergeInput) {
   )
     return deny("formal review approval IDが不正です");
   const formalApprovals = new Set(input.formalApprovalIds ?? []);
-  const observedApprovals = actorIndependenceRequired
-    ? providerApprovals
-    : formalApprovals;
+  const observedApprovalCount = actorIndependenceRequired
+    ? providerApprovals.size
+    : formalApprovals.size + providerApprovals.size;
   const requiredIndependentReviews = Math.max(1, policy.requiredReviews ?? 0);
-  if (observedApprovals.size < requiredIndependentReviews)
+  if (observedApprovalCount < requiredIndependentReviews)
     return deny(
       "同じHEAD SHAに対する独立reviewが不足しています",
       independentReviewDiagnostic({
         mode: policy.mode,
         declaredRequiredReviews: policy.requiredReviews,
         appliedRequiredReviews: requiredIndependentReviews,
-        observedIndependentApprovals: observedApprovals.size,
+        observedIndependentApprovals: observedApprovalCount,
         headSha: input.headSha,
         reviewIndependence: actorIndependenceRequired
           ? "actor-independent"
           : "context-isolated",
       }),
     );
-  if (policy.mode === "assisted" && observedApprovals.size < 1)
+  if (policy.mode === "assisted" && input.assistedAuthorityVerified !== true)
     return deny(
-      "assistedモードには同じHEAD SHAに対する独立した人間承認が必要です",
+      "assistedモードには対象PRへの明示承認とrepository write authorityの照合が必要です",
     );
   return {
     allowed: true,

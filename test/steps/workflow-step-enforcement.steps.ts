@@ -2259,6 +2259,8 @@ function preparePullRequest(
    * 再計測するため、review artifactを載せると成立しない。
    */
   workflowMode: "quick" | "poc" = "quick",
+  requiredReviews = 0,
+  artifactDisposition: "valid" | "rejected" | "placeholder-context" = "valid",
 ): PreparedPullRequest {
   const fixturePast = fixtureInstant({ hoursAgo: 1 });
   const fixtureNow = fixtureInstant();
@@ -2292,7 +2294,7 @@ function preparePullRequest(
       branches: ["feature/x"],
       methods: [mergeMethod],
       requiredChecks: [],
-      requiredReviews: 0,
+      requiredReviews,
       ...(reviewIndependence ? { reviewIndependence } : {}),
     };
     fs.writeFileSync(policyFile, `${JSON.stringify(policy, null, 2)}\n`);
@@ -2338,9 +2340,20 @@ function preparePullRequest(
     spawnSync("git", ["commit", "-q", "-m", "poc fixture"], { cwd: root });
   } else {
     fs.mkdirSync(path.join(root, "docs", "reviews"), { recursive: true });
+    const reviewArtifact = contextIsolatedReviewArtifact(
+      baseSha,
+      implementationCommitSha,
+    );
     fs.writeFileSync(
       path.join(root, "docs", "reviews", "90_test_review.md"),
-      contextIsolatedReviewArtifact(baseSha, implementationCommitSha),
+      artifactDisposition === "rejected"
+        ? reviewArtifact.replace("判定: approved", "判定: rejected")
+        : artifactDisposition === "placeholder-context"
+          ? reviewArtifact.replace(
+              "reviewer-contextとimplementer-contextは別",
+              "{実体の観測値}",
+            )
+          : reviewArtifact,
     );
     spawnSync("git", ["add", "docs/reviews/90_test_review.md"], { cwd: root });
     spawnSync("git", ["commit", "-q", "-m", "review evidence"], {
@@ -2733,6 +2746,8 @@ function prepareDeliveryCli(
   mergeMethod: "merge" | "squash" | "rebase" = "merge",
   reviewIndependence?: "context-isolated" | "actor-independent",
   workflowMode: "quick" | "poc" = "quick",
+  requiredReviews = 0,
+  artifactDisposition: "valid" | "rejected" | "placeholder-context" = "valid",
 ): PreparedDeliveryCli {
   const prepared = preparePullRequest(
     world,
@@ -2741,6 +2756,8 @@ function prepareDeliveryCli(
     mergeMethod,
     reviewIndependence,
     workflowMode,
+    requiredReviews,
+    artifactDisposition,
   );
   const stubDirectory = world.temp("asc-delivery-cli-gh-");
   const stub = path.join(stubDirectory, "gh");
@@ -3277,6 +3294,7 @@ function deliveryMergeArgs(
     root?: string;
     staging?: string;
     method?: "merge" | "squash" | "rebase";
+    authorize?: boolean;
   } = {},
 ): string[] {
   const root = overrides.root ?? prepared.root;
@@ -3293,6 +3311,7 @@ function deliveryMergeArgs(
     `--root=${root}`,
     `--staging=${stagingArgument}`,
     "--apply",
+    ...(overrides.authorize === true ? ["--authorize=approved"] : []),
   ];
 }
 
@@ -3303,6 +3322,7 @@ function executeDeliveryMerge(
     root?: string;
     staging?: string;
     method?: "merge" | "squash" | "rebase";
+    authorize?: boolean;
   } = {},
 ) {
   return executeCli(
@@ -3867,6 +3887,85 @@ if (exact(["auth", "status"])) {
         /^[a-f0-9]{64}$/u,
         "formal review round digestがmerge intentのapproval IDに固定されていません",
       );
+      break;
+    }
+    case "SCN-INT-MERGE-019": {
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "context-isolated",
+        "quick",
+        2,
+      );
+      createDeliveryPullRequest(prepared);
+      const requested = executeDeliveryMerge(prepared);
+      assert.equal(
+        requested.status,
+        0,
+        `formal 1件とprovider 1件を合算できません: ${requested.stdout}${requested.stderr}`,
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        1,
+      );
+      break;
+    }
+    case "SCN-INT-MERGE-020": {
+      for (const disposition of ["rejected", "placeholder-context"] as const) {
+        const prepared = prepareDeliveryCli(
+          this,
+          { reviewDisposition: "none" },
+          "automatic",
+          "merge",
+          "context-isolated",
+          "quick",
+          1,
+          disposition,
+        );
+        createDeliveryPullRequest(prepared);
+        const rejected = executeDeliveryMerge(prepared);
+        assert.notEqual(
+          rejected.status,
+          0,
+          `${disposition} artifactを受理しました`,
+        );
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          0,
+        );
+      }
+
+      for (const mutation of ["missing-session", "head-digest"] as const) {
+        const prepared = prepareDeliveryCli(this, {
+          reviewDisposition: "none",
+        });
+        createDeliveryPullRequest(prepared);
+        const sessionFile = path.join(prepared.staging, "review-session.json");
+        if (mutation === "missing-session") {
+          fs.unlinkSync(sessionFile);
+          fs.writeFileSync(
+            path.join(prepared.staging, "candidate-formal-approval.json"),
+            `${JSON.stringify({ approved: true, headSha: prepared.headSha })}\n`,
+          );
+        } else {
+          const session = JSON.parse(fs.readFileSync(sessionFile, "utf8")) as {
+            latestCandidateHeadSha: string;
+            latestRoundDigest: string;
+          };
+          session.latestCandidateHeadSha = "f".repeat(40);
+          session.latestRoundDigest = "e".repeat(64);
+          fs.writeFileSync(sessionFile, `${JSON.stringify(session)}\n`);
+        }
+        refreshStoredStagingDigest(prepared.staging);
+        const rejected = executeDeliveryMerge(prepared);
+        assert.notEqual(rejected.status, 0, `${mutation}を受理しました`);
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          0,
+        );
+      }
       break;
     }
     case "SCN-E2E-WFSTEP-048": {
@@ -4526,7 +4625,7 @@ if (exact(["auth", "status"])) {
       );
       const created = createDeliveryPullRequest(approved);
       assert.match(created.stdout, /"state": "merge_pending"/u, created.stdout);
-      const requested = executeDeliveryMerge(approved);
+      const requested = executeDeliveryMerge(approved, { authorize: true });
       assert.equal(
         requested.status,
         0,
@@ -4536,7 +4635,7 @@ if (exact(["auth", "status"])) {
         phase: "merged",
         mergedAt: fixtureInstant({ minutesAhead: 5 }),
       });
-      const completed = executeDeliveryMerge(approved);
+      const completed = executeDeliveryMerge(approved, { authorize: true });
       assert.equal(
         completed.status,
         0,
@@ -4569,7 +4668,7 @@ if (exact(["auth", "status"])) {
       );
       createDeliveryPullRequest(denied);
       const before = deliveryProviderCalls(denied).filter(isMergeCall).length;
-      const rejected = executeDeliveryMerge(denied);
+      const rejected = executeDeliveryMerge(denied, { authorize: true });
       assert.notEqual(
         rejected.status,
         0,
@@ -4609,7 +4708,7 @@ if (exact(["auth", "status"])) {
       createDeliveryPullRequest(stale);
       const staleBefore =
         deliveryProviderCalls(stale).filter(isMergeCall).length;
-      const staleRejected = executeDeliveryMerge(stale);
+      const staleRejected = executeDeliveryMerge(stale, { authorize: true });
       assert.notEqual(
         staleRejected.status,
         0,

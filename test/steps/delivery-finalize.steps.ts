@@ -1649,6 +1649,7 @@ When("human approvalなしとありでmerge authorizationを評価する", funct
   this.withoutApproval = authorizeMerge(base);
   this.withApproval = authorizeMerge({
     ...base,
+    assistedAuthorityVerified: true,
     approvals: [
       {
         state: "APPROVED",

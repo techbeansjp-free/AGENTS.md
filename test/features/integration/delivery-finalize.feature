@@ -382,7 +382,7 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When merge authorizationを評価する
     Then 独立review不足の拒否診断が次の操作と必要authorityを持つ
 
-  Scenario: SCN-INT-MERGE-019 context-isolatedの拒否診断はactor除外を主張せず適用モードを述べる
+  Scenario: SCN-INT-MERGE-021 context-isolatedの拒否診断はactor除外を主張せず適用モードを述べる
     Given reviewIndependenceを宣言しないtrusted automatic policyがreview 1件を要求しapprovalが0件である
     When merge authorizationを評価する
     Then 独立review不足の拒否診断はactor除外を主張せず適用モードを述べる

@@ -512,23 +512,23 @@ export function authorizeMerge(input) {
             input.formalApprovalIds.some((approvalId) => !/^[a-f0-9]{64}$/u.test(approvalId))))
         return deny("formal review approval IDが不正です");
     const formalApprovals = new Set(input.formalApprovalIds ?? []);
-    const observedApprovals = actorIndependenceRequired
-        ? providerApprovals
-        : formalApprovals;
+    const observedApprovalCount = actorIndependenceRequired
+        ? providerApprovals.size
+        : formalApprovals.size + providerApprovals.size;
     const requiredIndependentReviews = Math.max(1, policy.requiredReviews ?? 0);
-    if (observedApprovals.size < requiredIndependentReviews)
+    if (observedApprovalCount < requiredIndependentReviews)
         return deny("同じHEAD SHAに対する独立reviewが不足しています", independentReviewDiagnostic({
             mode: policy.mode,
             declaredRequiredReviews: policy.requiredReviews,
             appliedRequiredReviews: requiredIndependentReviews,
-            observedIndependentApprovals: observedApprovals.size,
+            observedIndependentApprovals: observedApprovalCount,
             headSha: input.headSha,
             reviewIndependence: actorIndependenceRequired
                 ? "actor-independent"
                 : "context-isolated",
         }));
-    if (policy.mode === "assisted" && observedApprovals.size < 1)
-        return deny("assistedモードには同じHEAD SHAに対する独立した人間承認が必要です");
+    if (policy.mode === "assisted" && input.assistedAuthorityVerified !== true)
+        return deny("assistedモードには対象PRへの明示承認とrepository write authorityの照合が必要です");
     return {
         allowed: true,
         reason: "既定ブランチ上の信頼済みポリシーがマージを許可しています",

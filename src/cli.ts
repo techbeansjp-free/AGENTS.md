@@ -1438,6 +1438,7 @@ function observeMergeReviewEvidence(input: {
    * から解決した値だけを渡す。
    */
   independenceMode: "context-isolated" | "actor-independent";
+  assistedAuthorityVerified: boolean;
 }): {
   reviewEvidence: MergeReviewEvidence;
   approvals: ApprovalObservation[];
@@ -1460,14 +1461,11 @@ function observeMergeReviewEvidence(input: {
   );
   if (implementation.sha !== candidate.implementationCommitSha)
     throw new Error("実装commitのtrusted観測がH_implと一致しません");
-  const approvals =
-    input.independenceMode === "actor-independent"
-      ? github(
-          "pr.reviews",
-          { repository: input.repository, pr: input.pr },
-          input.root,
-        )
-      : [];
+  const approvals = github(
+    "pr.reviews",
+    { repository: input.repository, pr: input.pr },
+    input.root,
+  );
   const ci =
     input.fixedCiRunId === undefined
       ? undefined
@@ -1599,6 +1597,7 @@ function inspectAuthorizedPullRequestMerge(input: {
   state: DeliveryState;
   tracker: string | null;
   trustedSet: ReturnType<typeof loadEffectiveTrustedPolicySet>;
+  assistedAuthorityVerified: boolean;
   allowMerged?: boolean;
 }): {
   observed: PullRequestInspection;
@@ -1670,6 +1669,7 @@ function inspectAuthorizedPullRequestMerge(input: {
     observed,
     ciEventAt: ciDeliveryEventAt(input.staging, input.state),
     independenceMode: resolveReviewIndependence(input.trustedSet.policy),
+    assistedAuthorityVerified: input.assistedAuthorityVerified,
   });
   return {
     observed,
@@ -1684,6 +1684,7 @@ function inspectAuthorizedPullRequestMerge(input: {
       checks,
       approvals: reviewed.approvals,
       formalApprovalIds: reviewed.formalApprovalIds,
+      assistedAuthorityVerified: input.assistedAuthorityVerified,
       headSha: observed.headRefOid,
       prAuthorActorId: observed.author?.id,
       implementationAuthorActorId: reviewed.implementationAuthorActorId,
@@ -1955,6 +1956,7 @@ function readBackPreparedPullRequestMerge(input: {
         ciEventAt: ciDeliveryEventAt(input.staging, input.state),
         fixedCiRunId: input.state.merge.ciRunId,
         independenceMode,
+        assistedAuthorityVerified: trustedSet.policy.merge.mode === "assisted",
       });
       assertFixedMergeReviewEvidence(input.state, reviewed.reviewEvidence);
     } else {
@@ -1968,6 +1970,7 @@ function readBackPreparedPullRequestMerge(input: {
         state: input.state,
         tracker: input.tracker,
         trustedSet,
+        assistedAuthorityVerified: trustedSet.policy.merge.mode === "assisted",
       });
       if (!inspected.authorization.allowed)
         throw new Error(
@@ -2185,6 +2188,7 @@ function retryPreparedMergeAfterConfirmedAbsence(input: {
       state: input.state,
       tracker: input.tracker,
       trustedSet,
+      assistedAuthorityVerified: trustedSet.policy.merge.mode === "assisted",
     });
     if (!inspected.authorization.allowed)
       return {
@@ -2222,6 +2226,7 @@ function retryPreparedMergeAfterConfirmedAbsence(input: {
       state: input.state,
       tracker: input.tracker,
       trustedSet,
+      assistedAuthorityVerified: trustedSet.policy.merge.mode === "assisted",
     });
     if (
       !rechecked.authorization.allowed ||
@@ -2602,6 +2607,15 @@ function handlePullRequestMerge(flags: Flags): number {
 
     const base = defaultBranch(root);
     const trustedSet = loadEffectiveTrustedPolicySet(root, base);
+    const assistedAuthorityVerified =
+      trustedSet.policy.merge.mode === "assisted";
+    if (assistedAuthorityVerified) {
+      if (flags.authorize !== "approved")
+        throw new Error(
+          "assisted mergeには対象PR操作の明示承認--authorize=approvedが必要です",
+        );
+      github("repository.assert-write", { repository }, root);
+    }
     const inspected = inspectAuthorizedPullRequestMerge({
       root,
       staging,
@@ -2612,6 +2626,7 @@ function handlePullRequestMerge(flags: Flags): number {
       state: current,
       tracker: deliveryTracker,
       trustedSet,
+      assistedAuthorityVerified,
     });
     if (!inspected.authorization.allowed) {
       if (inspected.authorization.diagnostic) {
@@ -2652,6 +2667,7 @@ function handlePullRequestMerge(flags: Flags): number {
       state: current,
       tracker: deliveryTracker,
       trustedSet,
+      assistedAuthorityVerified,
     });
     if (
       rechecked.observed.headRefOid !== inspected.observed.headRefOid ||

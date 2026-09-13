@@ -276,6 +276,16 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-057"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  Scenario: SCN-INT-MERGE-019 context-isolatedはformal approvalとprovider approvalを合算してrequiredReviewsを満たす
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-INT-MERGE-019"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-INT-MERGE-020 context-isolatedはsession・artifact・HEAD・digest・candidate-only反例を拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-INT-MERGE-020"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-048 索引の反映待ちを経て1回のpr createでbindする
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-048"のE2E検査を実行する
