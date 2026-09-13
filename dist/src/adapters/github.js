@@ -340,6 +340,7 @@ function observeContextIsolatedAdminMerge(input, cwd) {
             "required_status_checks",
         ]);
         let allowedRulesOnly = true;
+        let pullRequestRuleObserved = false;
         const requiredCheckContexts = [];
         for (const value of rules) {
             if (!isRecord(value) ||
@@ -396,6 +397,7 @@ function observeContextIsolatedAdminMerge(input, cwd) {
                     allowedRulesOnly = false;
                     break;
                 }
+                pullRequestRuleObserved = true;
             }
             if (value.type === "required_status_checks") {
                 const p = value.parameters;
@@ -420,6 +422,7 @@ function observeContextIsolatedAdminMerge(input, cwd) {
                     : ""));
             }
         }
+        allowedRulesOnly &&= pullRequestRuleObserved;
         const [owner, repo, ...rest] = input.repository.split("/");
         if (!owner || !repo || rest.length > 0)
             return denied("repository identityが不正です");

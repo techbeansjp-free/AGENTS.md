@@ -2009,6 +2009,7 @@ interface DeliveryProviderControl {
   unresolvedReviewThreads: number;
   unknownBranchRule: boolean;
   unknownRuleParameter: boolean;
+  omitPullRequestRule: boolean;
   statusCheckConclusion: "SUCCESS" | "FAILURE";
   ghVersion: string;
   closingChanged: boolean;
@@ -2921,6 +2922,7 @@ function prepareDeliveryCli(
     unresolvedReviewThreads: 0,
     unknownBranchRule: false,
     unknownRuleParameter: false,
+    omitPullRequestRule: false,
     statusCheckConclusion: "SUCCESS",
     ghVersion: "2.97.0",
     closingChanged: false,
@@ -3241,7 +3243,7 @@ if (exact(["--version"])) {
   process.stdout.write(JSON.stringify([[
     { type: "deletion", ruleset_source_type: "Repository", ruleset_source: "o/r", ruleset_id: 1 },
     { type: "non_fast_forward", ruleset_source_type: "Repository", ruleset_source: "o/r", ruleset_id: 1 },
-    {
+    ...(control.omitPullRequestRule ? [] : [{
       type: "pull_request",
       parameters: {
         required_approving_review_count: 0,
@@ -3258,7 +3260,7 @@ if (exact(["--version"])) {
       ruleset_source_type: "Repository",
       ruleset_source: "o/r",
       ruleset_id: 1,
-    },
+    }]),
     {
       type: control.unknownBranchRule ? "required_signatures" : "required_status_checks",
       parameters: {
@@ -4172,6 +4174,12 @@ if (exact(["auth", "status"])) {
         calls[0]?.includes("--match-head-commit"),
         "exact head CASがありません",
       );
+      const matchHeadIndex = calls[0]?.indexOf("--match-head-commit") ?? -1;
+      assert.equal(
+        calls[0]?.[matchHeadIndex + 1],
+        prepared.headSha,
+        "exact head CASが認可済みHEADと一致しません",
+      );
       const state = parseDeliveryState(
         fs.readFileSync(
           path.join(prepared.staging, "journal", "delivery-state.json"),
@@ -4198,6 +4206,7 @@ if (exact(["auth", "status"])) {
       const variants: Array<Partial<DeliveryProviderControl>> = [
         { unknownBranchRule: true },
         { unknownRuleParameter: true },
+        { omitPullRequestRule: true },
         { unresolvedReviewThreads: 1 },
         { viewerPermission: "WRITE" },
         { statusCheckConclusion: "FAILURE" },

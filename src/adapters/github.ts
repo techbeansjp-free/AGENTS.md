@@ -713,6 +713,7 @@ function observeContextIsolatedAdminMerge(
       "required_status_checks",
     ]);
     let allowedRulesOnly = true;
+    let pullRequestRuleObserved = false;
     const requiredCheckContexts: string[] = [];
     for (const value of rules) {
       if (
@@ -776,6 +777,7 @@ function observeContextIsolatedAdminMerge(
           allowedRulesOnly = false;
           break;
         }
+        pullRequestRuleObserved = true;
       }
       if (value.type === "required_status_checks") {
         const p = value.parameters;
@@ -809,6 +811,7 @@ function observeContextIsolatedAdminMerge(
         );
       }
     }
+    allowedRulesOnly &&= pullRequestRuleObserved;
 
     const [owner, repo, ...rest] = input.repository.split("/");
     if (!owner || !repo || rest.length > 0)
