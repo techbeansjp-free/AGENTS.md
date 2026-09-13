@@ -461,6 +461,22 @@ function appendWorkflowJournalEntryLocked(
     throw new Error(
       "pr-bound中のStep 10再記録にはpost-PR intakeの明示が必要です",
     );
+  if (entry.postPrIntake) {
+    const previous = [...current.entries]
+      .reverse()
+      .find((candidate) => candidate.step === 10 && candidate.postPrIntake);
+    if (
+      previous?.reviewSession !== undefined &&
+      stableJson(previous.reviewSession) === stableJson(entry.reviewSession)
+    ) {
+      const stored = readStoredStagingRecord(staging);
+      return {
+        entry: previous,
+        journalDigest: sha256(current.source),
+        stagingDigest: stored.digest,
+      };
+    }
+  }
   /**
    * **post-terminal intakeはterminal delivery stateの後に置く記録である。**
    *

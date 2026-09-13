@@ -25,13 +25,17 @@ import {
   pullRequestContentDigest,
 } from "../../src/domain/delivery-state.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
+import { refreshStoredStagingDigest } from "../../src/domain/staging.js";
 import { parseReviewRoundInput } from "../../src/domain/review-convergence.js";
 import {
   observeReviewDiff,
   readStoredReviewSession,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
-import { appendWorkflowJournalEntry } from "../../src/adapters/workflow-journal.js";
+import {
+  appendWorkflowJournalEntry,
+  readWorkflowJournal,
+} from "../../src/adapters/workflow-journal.js";
 import { WORKFLOW_STEPS } from "../../src/domain/workflow.js";
 import { QUESTIONS } from "../../src/domain/mode.js";
 import {
@@ -70,6 +74,7 @@ class ReanchorWorld extends WorkflowWorld {
   observableBefore = "";
   observableAfter = "";
   invalidBaselineChainLength = 0;
+  intakeIdempotent = false;
 }
 
 const { Given, When, Then } = stepDefinitions<ReanchorWorld>();
@@ -371,24 +376,38 @@ function recordForwardRound(
   if (!recordIntake) return;
   const definition = WORKFLOW_STEPS.find((candidate) => candidate.step === 10);
   assert.ok(definition, "Step 10定義がありません");
-  appendWorkflowJournalEntry({
+  const intakeEntry = {
+    step: 10,
+    skillId: definition.skillId,
+    mode: "quick" as const,
+    recordedAt: INSTANT.toISOString(),
+    artifacts: [FORWARD_ARTIFACT],
+    evidence: "pr-bound後の外部review指摘を新roundで確認した",
+    reviewSession: {
+      sessionId: session.sessionId,
+      roundDigest: session.latestRoundDigest,
+      headSha: session.latestCandidateHeadSha,
+    },
+    postPrIntake: true as const,
+  };
+  const first = appendWorkflowJournalEntry({
+    staging: world.staging,
+    entry: intakeEntry,
+    headSha: implementation,
+  });
+  const beforeCount = readWorkflowJournal(world.staging).entries.length;
+  const repeated = appendWorkflowJournalEntry({
     staging: world.staging,
     entry: {
-      step: 10,
-      skillId: definition.skillId,
-      mode: "quick",
-      recordedAt: INSTANT.toISOString(),
-      artifacts: [FORWARD_ARTIFACT],
-      evidence: "pr-bound後の外部review指摘を新roundで確認した",
-      reviewSession: {
-        sessionId: session.sessionId,
-        roundDigest: session.latestRoundDigest,
-        headSha: session.latestCandidateHeadSha,
-      },
-      postPrIntake: true,
+      ...intakeEntry,
+      recordedAt: new Date(INSTANT.getTime() + 1000).toISOString(),
+      evidence: "同じbindingを安全に再実行した",
     },
     headSha: implementation,
   });
+  world.intakeIdempotent =
+    repeated.journalDigest === first.journalDigest &&
+    readWorkflowJournal(world.staging).entries.length === beforeCount;
 }
 
 function forwardFixture(world: ReanchorWorld, recordIntake: boolean): void {
@@ -432,6 +451,60 @@ Given(
     forwardFixture(this, true);
   },
 );
+
+Given("pr-bound後のreviewed-forward反例「{word}」がある", function (kind) {
+  forwardFixture(this, true);
+  if (kind === "未収束") {
+    const sessionFile = path.join(this.staging, "review-session.json");
+    const session = JSON.parse(fs.readFileSync(sessionFile, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    session.status = "active";
+    fs.writeFileSync(sessionFile, `${JSON.stringify(session, null, 2)}\n`);
+    refreshStoredStagingDigest(this.staging);
+  } else if (kind === "古いround") {
+    const journalFile = path.join(this.staging, "journal/steps.jsonl");
+    const entries = fs
+      .readFileSync(journalFile, "utf8")
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const latest = entries.at(-1) as Record<string, unknown>;
+    latest.reviewSession = {
+      ...(latest.reviewSession as Record<string, unknown>),
+      roundDigest: "0".repeat(64),
+    };
+    fs.writeFileSync(
+      journalFile,
+      `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+    );
+    refreshStoredStagingDigest(this.staging);
+  } else if (kind === "artifact外差分") {
+    this.newHeadSha = commit(
+      this.root,
+      "export const reviewed = 3;\n",
+      "fix: unreviewed product change",
+    );
+  } else if (kind === "非ancestor") {
+    const current = this.newHeadSha;
+    execFileSync("git", ["checkout", "-q", this.baseSha], { cwd: this.root });
+    const unrelated = commitPath(
+      this.root,
+      "unrelated.ts",
+      "export const unrelated = true;\n",
+      "feat: unrelated delivery head",
+    );
+    execFileSync("git", ["checkout", "-q", current], { cwd: this.root });
+    const deliveryFile = path.join(this.staging, "journal/delivery-state.json");
+    const delivery = JSON.parse(fs.readFileSync(deliveryFile, "utf8")) as {
+      create: { headSha: string };
+    };
+    delivery.create.headSha = unrelated;
+    fs.writeFileSync(deliveryFile, `${JSON.stringify(delivery, null, 2)}\n`);
+    refreshStoredStagingDigest(this.staging);
+  } else assert.fail(`未知の反例: ${kind}`);
+});
 
 Given(
   "pr-bound後に前進した実装と未記録のpost-PR intakeのreview artifactがある",
@@ -1589,6 +1662,19 @@ Then("reviewed-forwardのpreviewとapplyは拒否され追記しない", functio
     [1, 1],
   );
   assert.equal(readEvidenceReanchorChain(this.staging).length, 0);
+});
+
+When(
+  "reviewed-forward再固定後に新headでpr mergeのbinding検査を通す",
+  function () {
+    applyReanchor(this, "delivery");
+    assert.equal(this.applied, true, String(this.error));
+    observeBoundPullRequest(this, this.newHeadSha);
+  },
+);
+
+Then("post-PR intakeの同一binding再実行はno-opになる", function () {
+  assert.equal(this.intakeIdempotent, true);
 });
 
 Then("artifact replacementのpreviewとapplyは拒否され追記しない", function () {
