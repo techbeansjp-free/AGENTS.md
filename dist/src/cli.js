@@ -10,7 +10,7 @@ import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
 import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, validateReviewArtifactStructure, } from "./domain/review-artifact.js";
-import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, extractIssueClosingNumbers, } from "./domain/delivery.js";
+import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
 import { buildWorktreePath, createWorktree, canonicalWorktreePath, DEFAULT_WORKTREE_PLACEMENT, enforceTrustedWorktreeBoundary, inspectFinalizeState, inspectRecoveryState, validateWorktreePlacement, } from "./domain/worktree.js";
 import { applyWorkspaceHygiene, previewWorkspaceHygiene, } from "./domain/hygiene.js";
@@ -38,7 +38,7 @@ import { observeProvider } from "./adapters/provider.js";
 import { resolveRouting } from "./domain/routing.js";
 import { checkRoutingIndependence } from "./domain/routing-independence.js";
 import { appendCompletionRecord, appendEvidenceStateRecord, applyEvidencePrune, issueRoutingEvidence, previewEvidencePrune, } from "./domain/routing-evidence.js";
-import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssignment, validateTierSelection, validateCodexTier, CODEX_ADOPTION_SELECTOR, } from "./domain/role.js";
+import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssignment, validateTierSelection, validateCodexTier, validateClaudeTier, CODEX_ADOPTION_SELECTOR, CLAUDE_ADOPTION_SELECTOR, } from "./domain/role.js";
 import { readDeliveryEvidence, readEnforcementInput, readFinalizeEvidence, isPolicyInput, readJsonInput, readMigrationManifest, readMigrationState, readModeAssessment, readPolicyFileInput, readPolicyJson, readSpecReview, } from "./adapters/json-input.js";
 import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPocDeliveryChangeScope, assertWorkflowStaging, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
 import { assertConvergedReviewSession, buildReviewRoundDraft, evidenceOnlySuffix, previewReviewRound, recordReviewRound, STAGING_DIGEST_RERECORD_HINT, } from "./adapters/review-session.js";
@@ -947,6 +947,7 @@ function inspectAuthorizedPullRequestMerge(input) {
         authority.defaultBranchTipOid !== trustedCommitSha)
         throw new Error("provider authorityのrepository・既定branch・base・headがtrusted policy setと一致しません");
     const protection = github("branch.protection", { repository: input.repository, branch: input.base }, input.root);
+    const deliveryPolicy = github("branch.delivery-policy", { repository: input.repository, branch: input.base }, input.root);
     const checks = (observed.statusCheckRollup ?? [])
         .filter((item) => (item.conclusion ?? item.state ?? item.status) === "SUCCESS")
         .map((item) => item.name ?? item.context)
@@ -965,6 +966,8 @@ function inspectAuthorizedPullRequestMerge(input) {
         authority,
         implementationCommitSha: reviewed.reviewEvidence.implementationCommitSha,
         reviewEvidence: reviewed.reviewEvidence,
+        deliveryPolicy,
+        followCost: diagnoseBranchFollowCost(deliveryPolicy),
         authorization: authorizeMerge({
             trustedPolicy: input.trustedSet.policy,
             method: input.method,
@@ -1669,6 +1672,8 @@ function handlePullRequestMerge(flags) {
                 output: {
                     state: "preview",
                     authorization: inspected.authorization,
+                    deliveryPolicy: inspected.deliveryPolicy,
+                    followCost: inspected.followCost,
                     pr: inspected.observed.url,
                     headSha: inspected.observed.headRefOid,
                     baseSha: inspected.observed.baseRefOid,
@@ -3055,16 +3060,14 @@ export async function main(argv, dependencies = {}) {
         const mode = required(flags, "mode");
         const scope = required(flags, "scope");
         const model = required(flags, "model");
-        /**
-         * **受理値は仕様の`codex`と未指定だけである**（Issue #1350）。`claude`は仕様外の
-         * 互換aliasとして加わっていたが、未指定と同じworking tree判定を行いながら
-         * 診断がtrustedを主張するため、trusted検査を受けたと誤読させていた。
-         */
-        if (flags.provider !== undefined && flags.provider !== "codex")
-            throw new Error("--providerはcodexだけを受理します。未指定は既存台帳の互換検証であり、Codex自動起動の認可には使いません");
+        if (flags.provider !== undefined &&
+            flags.provider !== "codex" &&
+            flags.provider !== "claude")
+            throw new Error("--providerはcodexまたはclaudeだけを受理します。未指定は既存台帳の互換検証であり、自動起動の認可には使いません");
         const selected = modelTier(required(flags, "selected"), "selected");
         const computed = requiredTier({ risk, mode, scope });
-        if (flags.provider === "codex") {
+        if (flags.provider === "codex" || flags.provider === "claude") {
+            const provider = flags.provider;
             const trustedSet = loadOperationPolicy(root);
             const trustedMapping = trustedSet.policy.projectChoices?.modelMapping;
             const tierMapping = trustedMapping && typeof trustedMapping !== "string"
@@ -3073,38 +3076,46 @@ export async function main(argv, dependencies = {}) {
             const trustedMinimum = trustedMapping && typeof trustedMapping !== "string"
                 ? trustedMapping.minimumTierByRisk?.[risk]
                 : undefined;
-            const codexRequired = trustedMinimum &&
+            const providerRequired = trustedMinimum &&
                 MODEL_TIERS.indexOf(trustedMinimum) > MODEL_TIERS.indexOf(computed)
                 ? trustedMinimum
                 : computed;
-            const observation = await observeProvider("codex", undefined, undefined, {
+            const observation = await observeProvider(provider, undefined, undefined, {
                 cwd: root,
                 official: true,
             });
             const recommended = observation.modelMetadata.filter((entry) => entry.recommended);
-            const result = validateCodexTier({
-                required: codexRequired,
-                mapping: tierMapping,
-            });
+            const selector = provider === "codex"
+                ? CODEX_ADOPTION_SELECTOR
+                : CLAUDE_ADOPTION_SELECTOR;
+            const result = provider === "codex"
+                ? validateCodexTier({
+                    required: providerRequired,
+                    mapping: tierMapping,
+                })
+                : validateClaudeTier({
+                    required: providerRequired,
+                    mapping: tierMapping,
+                });
             if (observation.state !== "available" && observation.reason)
                 result.errors.push(observation.reason);
             if (observation.state !== "available" ||
                 recommended.length !== 1 ||
                 recommended[0]?.model !== model ||
                 !recommended[0]?.supportedReasoningEfforts.includes("high"))
-                result.errors.push("modelが今回の公式推奨high対応Codexと一致しません");
-            if (tierMapping[CODEX_ADOPTION_SELECTOR] !== selected)
+                result.errors.push(`modelが今回の公式推奨high対応${provider === "codex" ? "Codex" : "Claude"}と一致しません`);
+            if (tierMapping[selector] !== selected)
                 result.errors.push("選択tierがtrusted selector採用tierと一致しません");
             result.valid = result.errors.length === 0;
             print({
                 ...result,
-                required: codexRequired,
+                required: providerRequired,
                 selected,
                 model,
-                selector: CODEX_ADOPTION_SELECTOR,
+                selector,
                 observedAt: observation.observedAt,
                 provenance: tierProvenance(trustedSet.provenance),
-                usage: "codex-adoption",
+                usage: `${provider}-adoption`,
             });
             return result.valid ? 0 : 1;
         }

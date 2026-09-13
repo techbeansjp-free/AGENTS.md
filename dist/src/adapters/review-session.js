@@ -8,7 +8,7 @@ import { stableJson } from "../lib/security.js";
 import { buildReviewProgressInventory, PROGRESS_END, PROGRESS_START, } from "../domain/review-progress.js";
 import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
 import { observeReviewDiff } from "./review-diff.js";
-import { REVIEW_SESSION_FILE, readStoredReviewSession, } from "./review-session-store.js";
+import { isDefaultBranchFollowMerge, REVIEW_SESSION_FILE, readStoredReviewSession, } from "./review-session-store.js";
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
 import { isEvidenceOnlyPath } from "../domain/review.js";
@@ -159,6 +159,25 @@ export function buildReviewRoundDraft(input) {
     notes.push(`このroundは ${headSha.slice(0, 8)} (${commitSubject(root, headSha)}) を検分したものとして記録します。レビュー結果を反映したcommitを、このroundの記録より先に作らないでください`);
     return { round: parseReviewRoundInput(round), notes };
 }
+/**
+ * **既定branch追随だけのmergeかをGitから判定する**（Issue #1287）。
+ *
+ * 次の3条件をすべて満たすときだけ真とする。**いずれもGitから決定論的に観測でき、
+ * 呼び出し側の申告を入力にしない。**
+ *
+ * 1. `candidate`がmerge commitであり、**第1親が前roundのcandidate**である
+ * 2. **第2親がremote既定branch tipのancestor**である。任意branchの取り込みで
+ *    予算を回避させない
+ * 3. `git merge-tree --write-tree <第1親> <第2親>`が返すtreeが、**merge commitの
+ *    tree自身と一致する**
+ *
+ * 条件3が成り立つとき、merge commitのtreeは両親から完全に決まる。**除外された
+ * roundを通して実装を1 byteも持ち込めない。** 衝突解決はこの条件を満たさないため
+ * 予算へ数える側に落ちる。衝突解決は実装者が書いた内容であり独立reviewの対象である。
+ *
+ * **観測できない場合はfail-closedで偽を返す。** remoteを読めない、`merge-tree`が
+ * 使えない（git 2.38未満）などは「追随だと確認できなかった」であり、予算へ数える。
+ */
 export function previewReviewRound(input) {
     const staging = assertWorkflowStaging(input.staging);
     assertStoredStagingDigest(staging);
@@ -209,6 +228,15 @@ export function previewReviewRound(input) {
         const fixed = observeReviewDiff(root, previousHeadSha, input.round.candidateHeadSha).changedPaths;
         if (stableJson(fixed) !== stableJson(input.round.focus.fixedDiff))
             throw new Error("review roundのfixedDiffが前roundからの実Git差分と一致しません");
+        /**
+         * **`followOnly`は申告ではなくGit観測から導出する**（Issue #1287）。
+         *
+         * 呼び出し側が旗を立てるだけで予算を回避できてはならない。観測が条件を
+         * 満たさない申告は、理由を名指しして拒否する。
+         */
+        if (input.round.followOnly &&
+            !isDefaultBranchFollowMerge(root, previousHeadSha, input.round.candidateHeadSha))
+            throw new Error("既定branch追随として記録できるのは、前roundのcandidateを第1親、既定branch tipのancestorを第2親とし、treeが両親の自動merge結果と一致するmerge commitだけです");
     }
     return advanceReviewSession(previous, input.round);
 }

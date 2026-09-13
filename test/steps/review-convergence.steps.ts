@@ -11,8 +11,13 @@ import {
   createIssueStaging,
   recordStagingSync,
 } from "../../src/domain/issue.js";
+import { refreshStoredStagingDigest } from "../../src/domain/staging.js";
 import { QUESTIONS, type ModeAnswer } from "../../src/domain/mode.js";
 import {
+  REVIEW_RECOVERY_ROUND,
+  REVIEW_ROUND_BUDGET,
+  advanceReviewSession,
+  countedRounds,
   parseReviewRoundInput,
   type ReviewRoundInput,
   type ReviewSessionAnchor,
@@ -22,6 +27,10 @@ import {
   observeReviewDiff,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
+import {
+  REVIEW_SESSION_FILE,
+  readStoredReviewSession,
+} from "../../src/adapters/review-session-store.js";
 import {
   appendWorkflowJournalEntry,
   readWorkflowJournal,
@@ -41,6 +50,7 @@ interface ReviewConvergenceWorld extends WorkflowWorld {
   prArgs: string[];
   evidenceFile: string;
   providerMarker: string;
+  conflictCandidate: string;
 }
 
 const { Given, When, Then } = stepDefinitions<ReviewConvergenceWorld>();
@@ -93,6 +103,7 @@ function roundInput(input: {
   adjacentScope?: Array<{ path: string; graphEvidence: string }>;
   anchor?: ReviewSessionAnchor;
   findings: Array<Record<string, unknown>>;
+  followOnly?: true;
 }): ReviewRoundInput {
   const previousBlocking =
     input.round === 1
@@ -109,6 +120,7 @@ function roundInput(input: {
       adjacentScope: input.adjacentScope ?? [],
     },
     findings: input.findings,
+    ...(input.followOnly ? { followOnly: true } : {}),
   });
 }
 
@@ -300,8 +312,8 @@ Then("修正起因Highはcurrent blockerになる", function () {
   assert.equal(this.session.status, "active");
 });
 
-When("同じHigh findingをround 3まで未解決にする", function () {
-  for (const round of [2, 3]) {
+When("同じHigh findingを予算上限まで未解決にする", function () {
+  for (let round = 2; round <= REVIEW_ROUND_BUDGET; round += 1) {
     const candidate = commitFile(
       this.root,
       `export const reviewed = ${round};\n`,
@@ -323,10 +335,10 @@ When("同じHigh findingをround 3まで未解決にする", function () {
 
 Then("review sessionはbudget-exhaustedになる", function () {
   assert.equal(this.session.status, "budget-exhausted");
-  assert.equal(this.session.rounds.length, 3);
+  assert.equal(this.session.rounds.length, REVIEW_ROUND_BUDGET);
 });
 
-Then("round 4への自動継続を拒否する", function () {
+Then("取り直しroundへの自動継続を拒否する", function () {
   // **budget-exhaustedからの取り直しを拒否する。** 上限4への引き上げは収束後の
   // HEAD移動に限る。未解決blockerを抱えたまま新品の予算をもらえてはならない
   assert.throws(
@@ -335,7 +347,7 @@ Then("round 4への自動継続を拒否する", function () {
         staging: this.staging,
         round: roundInput({
           world: this,
-          round: 4,
+          round: REVIEW_ROUND_BUDGET + 1,
           candidateHeadSha: head(this.root),
           previousRoundDigest: this.session.latestRoundDigest,
           findings: [finding()],
@@ -345,34 +357,40 @@ Then("round 4への自動継続を拒否する", function () {
   );
 });
 
-When("収束後にHEADを進めてround 4で取り直す", function () {
-  const candidate = commitFile(
-    this.root,
-    "export const reviewed = 4;\n",
-    "fix: post-convergence recovery",
-  );
-  this.session = recordReviewRound({
-    staging: this.staging,
-    round: roundInput({
-      world: this,
-      round: 4,
-      candidateHeadSha: candidate,
-      previousRoundDigest: this.session.latestRoundDigest,
-      fixedDiff: [reviewedPath],
-      findings: [],
-    }),
-  });
+When("収束後にHEADを進めて取り直しroundを使い切る", function () {
+  for (
+    let round = REVIEW_ROUND_BUDGET + 1;
+    round <= REVIEW_RECOVERY_ROUND;
+    round += 1
+  ) {
+    const candidate = commitFile(
+      this.root,
+      `export const reviewed = ${round};\n`,
+      `fix: post-convergence recovery ${round}`,
+    );
+    this.session = recordReviewRound({
+      staging: this.staging,
+      round: roundInput({
+        world: this,
+        round,
+        candidateHeadSha: candidate,
+        previousRoundDigest: this.session.latestRoundDigest,
+        fixedDiff: [reviewedPath],
+        findings: [],
+      }),
+    });
+  }
 });
 
-Then("review sessionはround 4で再収束する", function () {
+Then("review sessionは取り直しroundで再収束する", function () {
   assert.equal(this.session.status, "converged");
-  assert.equal(this.session.rounds.length, 4);
+  assert.equal(this.session.rounds.length, REVIEW_RECOVERY_ROUND);
 });
 
-Then("round 5への自動継続を拒否する", function () {
+Then("取り直し上限を超える自動継続を拒否する", function () {
   const candidate = commitFile(
     this.root,
-    "export const reviewed = 5;\n",
+    "export const reviewed = beyond;\n",
     "fix: beyond recovery",
   );
   assert.throws(
@@ -381,18 +399,18 @@ Then("round 5への自動継続を拒否する", function () {
         staging: this.staging,
         round: roundInput({
           world: this,
-          round: 5,
+          round: REVIEW_RECOVERY_ROUND + 1,
           candidateHeadSha: candidate,
           previousRoundDigest: this.session.latestRoundDigest,
           fixedDiff: [reviewedPath],
           findings: [],
         }),
       }),
-    /4 roundを超えて/u,
+    new RegExp(`${REVIEW_RECOVERY_ROUND} roundを超えて`, "u"),
   );
 });
 
-When("収束後にHEADを進めてround 4で未解決を残す", function () {
+When("収束後にHEADを進めて取り直しroundで未解決を残す", function () {
   const candidate = commitFile(
     this.root,
     "export const reviewed = 4;\n",
@@ -402,7 +420,7 @@ When("収束後にHEADを進めてround 4で未解決を残す", function () {
     staging: this.staging,
     round: roundInput({
       world: this,
-      round: 4,
+      round: REVIEW_ROUND_BUDGET + 1,
       candidateHeadSha: candidate,
       previousRoundDigest: this.session.latestRoundDigest,
       fixedDiff: [reviewedPath],
@@ -411,11 +429,11 @@ When("収束後にHEADを進めてround 4で未解決を残す", function () {
   });
 });
 
-Then("review sessionはround 4でbudget-exhaustedになる", function () {
+Then("review sessionは取り直しroundでbudget-exhaustedになる", function () {
   // **取り直しラウンドの終端をactiveにしない。** activeのままだと、上限を超えた
   // 次roundを要求できる状態が残る
   assert.equal(this.session.status, "budget-exhausted");
-  assert.equal(this.session.rounds.length, 4);
+  assert.equal(this.session.rounds.length, REVIEW_ROUND_BUDGET + 1);
 });
 
 Then("budget終了後の追記を拒否する", function () {
@@ -425,18 +443,18 @@ Then("budget終了後の追記を拒否する", function () {
         staging: this.staging,
         round: roundInput({
           world: this,
-          round: 5,
+          round: REVIEW_ROUND_BUDGET + 2,
           candidateHeadSha: head(this.root),
           previousRoundDigest: this.session.latestRoundDigest,
           findings: [finding()],
         }),
       }),
-    /budget終了済み|4 roundを超えて/u,
+    /budget終了済み/u,
   );
 });
 
-When("収束させずにround 3まで進める", function () {
-  for (const round of [2, 3]) {
+When("収束させずに予算上限まで進める", function () {
+  for (let round = 2; round <= REVIEW_ROUND_BUDGET; round += 1) {
     const candidate = commitFile(
       this.root,
       `export const reviewed = ${round};\n`,
@@ -808,4 +826,428 @@ When("新しいbindingでPR previewする", async function () {
 
 Then("PR previewは成功する", function () {
   assert.equal(this.cliStatus, 0);
+});
+
+/**
+ * **既定branchへ1 commit積み、それを取り込むmergeをcandidateにする。**
+ * `mode`で3種の受理しない形を作り分ける。
+ */
+function upstreamCommit(root: string, target: string, body: string): string {
+  const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+  }).trim();
+  execFileSync("git", ["checkout", "-q", "refs/remotes/origin/main"], {
+    cwd: root,
+  });
+  const file = path.join(root, target);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, body);
+  execFileSync("git", ["add", target], { cwd: root });
+  execFileSync("git", ["commit", "-q", "-m", `feat: upstream ${target}`], {
+    cwd: root,
+  });
+  const upstream = head(root);
+  execFileSync("git", ["update-ref", "refs/remotes/origin/main", upstream], {
+    cwd: root,
+  });
+  execFileSync("git", ["checkout", "-q", branch], { cwd: root });
+  return upstream;
+}
+
+function initDefaultRef(root: string): void {
+  execFileSync("git", ["update-ref", "refs/remotes/origin/main", head(root)], {
+    cwd: root,
+  });
+  execFileSync(
+    "git",
+    ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+    { cwd: root },
+  );
+}
+
+function mergeUpstream(root: string, upstream: string): string {
+  execFileSync("git", ["merge", "--no-ff", "--no-edit", upstream], {
+    cwd: root,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return head(root);
+}
+
+When(
+  "既定branchを取り込む自動mergeだけでHEADを進めroundを3回記録する",
+  function () {
+    initDefaultRef(this.root);
+    for (let index = 0; index < 3; index += 1) {
+      const upstream = upstreamCommit(
+        this.root,
+        `docs/upstream-${index}.md`,
+        `upstream ${index}\n`,
+      );
+      const candidate = mergeUpstream(this.root, upstream);
+      this.session = recordReviewRound({
+        staging: this.staging,
+        round: roundInput({
+          world: this,
+          round: this.session.rounds.length + 1,
+          candidateHeadSha: candidate,
+          previousRoundDigest: this.session.latestRoundDigest,
+          fixedDiff: [`docs/upstream-${index}.md`],
+          findings: [],
+          followOnly: true,
+        }),
+      });
+    }
+  },
+);
+
+Then("どのroundも記録されるが予算へは数えない", function () {
+  assert.equal(this.session.rounds.length, 4);
+  for (const record of this.session.rounds.slice(1))
+    assert.equal(record.followOnly, true);
+  assert.equal(countedRounds(this.session), 1);
+  assert.equal(this.session.status, "converged");
+});
+
+When(
+  "未解決blockerを持ったまま既定branchの自動mergeだけを記録する",
+  function () {
+    initDefaultRef(this.root);
+    const upstream = upstreamCommit(
+      this.root,
+      "docs/active-follow.md",
+      "active follow\n",
+    );
+    const candidate = mergeUpstream(this.root, upstream);
+    this.session = recordReviewRound({
+      staging: this.staging,
+      round: roundInput({
+        world: this,
+        round: 2,
+        candidateHeadSha: candidate,
+        previousRoundDigest: this.session.latestRoundDigest,
+        fixedDiff: ["docs/active-follow.md"],
+        findings: [],
+        followOnly: true,
+      }),
+    });
+  },
+);
+
+Then("追随roundはblockerと予算を維持したactive状態になる", function () {
+  assert.equal(this.session.status, "active");
+  assert.deepEqual(this.session.rounds.at(-1)?.blocking, ["H-001"]);
+  assert.equal(countedRounds(this.session), 1);
+});
+
+When("Git条件を満たさないfollow-only sessionを保存して読み直す", function () {
+  const candidate = commitFile(
+    this.root,
+    "export const reviewed = 99;\n",
+    "fix: not a follow merge",
+  );
+  const fake = advanceReviewSession(
+    this.session,
+    roundInput({
+      world: this,
+      round: this.session.rounds.length + 1,
+      candidateHeadSha: candidate,
+      previousRoundDigest: this.session.latestRoundDigest,
+      fixedDiff: [reviewedPath],
+      findings: [],
+      followOnly: true,
+    }),
+  );
+  fs.writeFileSync(
+    path.join(this.staging, REVIEW_SESSION_FILE),
+    `${JSON.stringify(fake)}\n`,
+  );
+});
+
+Then("保存済みfollow-only roundはGit再検証で拒否される", function () {
+  assert.throws(
+    () => readStoredReviewSession(this.staging),
+    /保存済みreview sessionのfollow-only round 3を実Gitで再検証できません/u,
+  );
+});
+
+When(
+  "reanchor後の実効HEADから既定branchの自動mergeだけを記録する",
+  function () {
+    const oldHead = this.session.latestCandidateHeadSha;
+    execFileSync(
+      "git",
+      [
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "test: equivalent reanchored candidate",
+      ],
+      { cwd: this.root },
+    );
+    const effectiveHead = head(this.root);
+    fs.mkdirSync(path.join(this.staging, "journal"), { recursive: true });
+    fs.writeFileSync(
+      path.join(this.staging, "journal/reanchor.jsonl"),
+      `${JSON.stringify({
+        oldHeadSha: oldHead,
+        newHeadSha: effectiveHead,
+        oldBaseSha: this.anchor.diffBaseSha,
+        newBaseSha: oldHead,
+        diffDigest: "0".repeat(64),
+        method: "rebase",
+        reason: "SCN-UNIT-REVIEWCONV-011 fixture",
+        recordedAt: instant.toISOString(),
+      })}\n`,
+    );
+    refreshStoredStagingDigest(this.staging);
+    initDefaultRef(this.root);
+    const upstream = upstreamCommit(
+      this.root,
+      "docs/reanchored-follow.md",
+      "reanchored follow\n",
+    );
+    const candidate = mergeUpstream(this.root, upstream);
+    this.session = recordReviewRound({
+      staging: this.staging,
+      round: roundInput({
+        world: this,
+        round: 2,
+        candidateHeadSha: candidate,
+        previousRoundDigest: this.session.latestRoundDigest,
+        fixedDiff: ["docs/reanchored-follow.md"],
+        findings: [],
+        followOnly: true,
+      }),
+    });
+  },
+);
+
+Then("追随roundは保存後read-backでも受理される", function () {
+  const reread = readStoredReviewSession(this.staging);
+  assert.equal(reread?.latestRoundDigest, this.session.latestRoundDigest);
+  assert.equal(reread?.rounds.at(-1)?.followOnly, true);
+});
+
+Then(
+  "予算上限までの通常roundを続けて記録でき記録総数は予算上限を超える",
+  function () {
+    for (let counted = 2; counted <= REVIEW_ROUND_BUDGET; counted += 1) {
+      const candidate = commitFile(
+        this.root,
+        `export const reviewed = ${counted};\n`,
+        `fix: counted round ${counted}`,
+      );
+      this.session = recordReviewRound({
+        staging: this.staging,
+        round: roundInput({
+          world: this,
+          round: this.session.rounds.length + 1,
+          candidateHeadSha: candidate,
+          previousRoundDigest: this.session.latestRoundDigest,
+          fixedDiff: [reviewedPath],
+          findings: [],
+        }),
+      });
+    }
+    assert.equal(countedRounds(this.session), REVIEW_ROUND_BUDGET);
+    // **記録総数が取り直し上限を超えることがこのassertionの要点である。**
+    // 追随roundを予算へ数える実装では、ここへ到達する前に拒否される
+    assert.equal(this.session.rounds.length, REVIEW_ROUND_BUDGET + 3);
+    assert.ok(this.session.rounds.length > REVIEW_RECOVERY_ROUND);
+  },
+);
+
+function rejectsFollowOnly(
+  world: ReviewConvergenceWorld,
+  candidate: string,
+  fixedDiff: string[],
+  findings: Array<Record<string, unknown>>,
+  pattern: RegExp,
+): void {
+  assert.throws(
+    () =>
+      recordReviewRound({
+        staging: world.staging,
+        round: roundInput({
+          world,
+          round: world.session.rounds.length + 1,
+          candidateHeadSha: candidate,
+          previousRoundDigest: world.session.latestRoundDigest,
+          fixedDiff,
+          findings,
+          followOnly: true,
+        }),
+      }),
+    pattern,
+  );
+}
+
+Then(
+  "衝突を解決したmergeは自動merge結果と一致しないとして拒否される",
+  function () {
+    initDefaultRef(this.root);
+    const upstream = upstreamCommit(
+      this.root,
+      reviewedPath,
+      "export const upstream = 1;\n",
+    );
+    execFileSync("git", ["merge", "--no-ff", "--no-commit", upstream], {
+      cwd: this.root,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    fs.writeFileSync(
+      path.join(this.root, reviewedPath),
+      "export const resolvedByHand = true;\n",
+    );
+    execFileSync("git", ["add", reviewedPath], { cwd: this.root });
+    execFileSync("git", ["commit", "-q", "--no-edit"], { cwd: this.root });
+    rejectsFollowOnly(
+      this,
+      head(this.root),
+      [reviewedPath],
+      [],
+      /treeが両親の自動merge結果と一致するmerge commitだけです/u,
+    );
+    execFileSync("git", ["reset", "-q", "--hard", "HEAD~1"], {
+      cwd: this.root,
+    });
+  },
+);
+
+Then("既定branchのancestorでない第2親を持つmergeは拒否される", function () {
+  const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: this.root,
+    encoding: "utf8",
+  }).trim();
+  execFileSync("git", ["checkout", "-q", "-b", "side-branch"], {
+    cwd: this.root,
+  });
+  fs.mkdirSync(path.join(this.root, "docs"), { recursive: true });
+  fs.writeFileSync(path.join(this.root, "docs/side.md"), "side\n");
+  execFileSync("git", ["add", "docs/side.md"], { cwd: this.root });
+  execFileSync("git", ["commit", "-q", "-m", "feat: side"], {
+    cwd: this.root,
+  });
+  const side = head(this.root);
+  execFileSync("git", ["checkout", "-q", branch], { cwd: this.root });
+  const candidate = mergeUpstream(this.root, side);
+  rejectsFollowOnly(
+    this,
+    candidate,
+    ["docs/side.md"],
+    [],
+    /treeが両親の自動merge結果と一致するmerge commitだけです/u,
+  );
+  execFileSync("git", ["reset", "-q", "--hard", "HEAD~1"], {
+    cwd: this.root,
+  });
+});
+
+Then("第1親が前roundのcandidateでないmergeは拒否される", function () {
+  const upstream = upstreamCommit(
+    this.root,
+    "docs/upstream-first-parent.md",
+    "first parent\n",
+  );
+  // **第1親を入れ替える。** `merge -s ours`ではなく、upstream側からmergeし直す
+  const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: this.root,
+    encoding: "utf8",
+  }).trim();
+  const ours = head(this.root);
+  execFileSync("git", ["checkout", "-q", upstream], { cwd: this.root });
+  execFileSync("git", ["merge", "--no-ff", "--no-edit", ours], {
+    cwd: this.root,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const candidate = head(this.root);
+  /**
+   * **candidateを現在のHEADにしたまま判定させる。** branchへ戻すと
+   * 「candidate HEADがcurrent HEADと一致しません」で先に落ち、
+   * 第1親の検査へ到達しない
+   */
+  execFileSync("git", ["checkout", "-q", "-B", branch, candidate], {
+    cwd: this.root,
+  });
+  /**
+   * `fixedDiff`は実Gitから取る。**`review round --init`と同じ導出であり、
+   * 期待値を実装の判定から作っているわけではない。** ここで固定したいのは
+   * 「第1親が前roundのcandidateでない」ことへの拒否である
+   */
+  const fixed = observeReviewDiff(
+    this.root,
+    this.session.latestCandidateHeadSha,
+    candidate,
+  ).changedPaths;
+  rejectsFollowOnly(
+    this,
+    candidate,
+    [...fixed],
+    [],
+    /treeが両親の自動merge結果と一致するmerge commitだけです/u,
+  );
+  // 後続のstepのために、branchを前roundのcandidateへ戻す
+  execFileSync("git", ["checkout", "-q", "-B", branch, ours], {
+    cwd: this.root,
+  });
+});
+
+Then(
+  "追随roundへfindingを載せると予算へ数える旨を名指しして拒否される",
+  function () {
+    const upstream = upstreamCommit(
+      this.root,
+      "docs/upstream-finding.md",
+      "finding\n",
+    );
+    const candidate = mergeUpstream(this.root, upstream);
+    const fixed = observeReviewDiff(
+      this.root,
+      this.session.latestCandidateHeadSha,
+      candidate,
+    ).changedPaths;
+    rejectsFollowOnly(
+      this,
+      candidate,
+      [...fixed],
+      [finding()],
+      /指摘があるroundは予算へ数えます/u,
+    );
+  },
+);
+
+/**
+ * **第1親の検査が無いと、実装commitを挟んだmergeが追随として通る。**
+ *
+ * 前roundのcandidateの上に実装commitを1つ積み、そこへ既定branchを取り込むと、
+ * 第2親は既定branchのancestorで、treeも自動merge結果と一致する。それでも
+ * **そのroundには実装者が書いたcommitが含まれる**ため、予算へ数えなければならない。
+ * 第1親が前roundのcandidateであることが、この区別を担っている（Issue #1287）。
+ */
+Then("実装commitを挟んでからのmergeは拒否される", function () {
+  commitFile(
+    this.root,
+    "export const authored = true;\n",
+    "fix: authored commit before follow",
+  );
+  const upstream = upstreamCommit(
+    this.root,
+    "docs/upstream-after-authored.md",
+    "after authored\n",
+  );
+  const candidate = mergeUpstream(this.root, upstream);
+  const fixed = observeReviewDiff(
+    this.root,
+    this.session.latestCandidateHeadSha,
+    candidate,
+  ).changedPaths;
+  rejectsFollowOnly(
+    this,
+    candidate,
+    [...fixed],
+    [],
+    /treeが両親の自動merge結果と一致するmerge commitだけです/u,
+  );
 });

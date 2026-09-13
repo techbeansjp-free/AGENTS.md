@@ -39,6 +39,30 @@ function trustedRoot(world: TierProvenanceWorld): string {
     ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
     root,
   );
+  const fixtureBin = path.join(root, "fixture-bin");
+  fs.mkdirSync(fixtureBin);
+  const claude = path.join(fixtureBin, "claude");
+  const response = {
+    type: "control_response",
+    response: {
+      subtype: "success",
+      request_id: "asc-provider-observe",
+      response: {
+        models: [
+          {
+            value: "default",
+            resolvedModel: "claude-opus-5[1m]",
+            supportedEffortLevels: ["low", "high"],
+          },
+        ],
+      },
+    },
+  };
+  fs.writeFileSync(
+    claude,
+    `#!${process.execPath}\nprocess.stdin.resume(); process.stdin.once('data', () => { process.stdout.write(${JSON.stringify(`${JSON.stringify(response)}\n`)}); });\n`,
+  );
+  fs.chmodSync(claude, 0o755);
   return root;
 }
 
@@ -56,7 +80,14 @@ function tier(root: string, extra: string[]): SpawnSyncReturns<string> {
       "--selected=critical",
       ...extra,
     ],
-    { cwd: root, encoding: "utf8" },
+    {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${path.join(root, "fixture-bin")}:${process.env.PATH ?? ""}`,
+      },
+    },
   );
 }
 
@@ -101,8 +132,8 @@ Given(
   },
 );
 
-When("routing tierをcodex以外のprovider値で実行する", function () {
-  this.results = ["claude", "CODEX", "", "codex-preview"].map((provider) => ({
+When("routing tierを仕様外のprovider値で実行する", function () {
+  this.results = ["CLAUDE", "CODEX", "", "codex-preview"].map((provider) => ({
     label: provider === "" ? "(空)" : provider,
     result: tier(this.tierRoot, [
       "--model=claude-opus-5",
@@ -129,7 +160,7 @@ When("routing tierを未定義のmodelでprovider未指定で実行する", func
   ];
 });
 
-Then("すべてcodexだけを受理する案内つきで拒否される", function () {
+Then("すべてcodexまたはclaudeだけを受理する案内つきで拒否される", function () {
   for (const { label, result } of this.results) {
     assert.equal(result.status, 1, `${label}: ${result.stdout}`);
     const reasons = diagnosticOf(result).reasons;
@@ -138,13 +169,38 @@ Then("すべてcodexだけを受理する案内つきで拒否される", functi
       reasons.filter(
         (reason) =>
           typeof reason === "string" &&
-          reason.includes("--providerはcodexだけを受理します") &&
+          reason.includes("--providerはcodexまたはclaudeだけを受理します") &&
           reason.includes("互換検証"),
       ).length,
       1,
       `${label}: ${reasons.join("; ")}`,
     );
   }
+});
+
+When("routing tierをClaude公式defaultの解決modelで実行する", function () {
+  this.results = [
+    {
+      label: "claude",
+      result: tier(this.tierRoot, [
+        "--model=claude-opus-5[1m]",
+        "--provider=claude",
+      ]),
+    },
+  ];
+});
+
+Then("成功出力はClaude selectorと観測modelを分離して含む", function () {
+  const [entry] = this.results;
+  assert.equal(entry?.result.status, 0, entry?.result.stdout);
+  const parsed = output(entry!.result);
+  assert.equal(parsed.valid, true);
+  assert.equal(
+    parsed.selector,
+    "claude:provider_recommended_default:high:default",
+  );
+  assert.equal(parsed.model, "claude-opus-5[1m]");
+  assert.equal(parsed.usage, "claude-adoption");
 });
 
 Then(

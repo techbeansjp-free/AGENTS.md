@@ -300,6 +300,20 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     Then deletionだけのrulesetはknownかつunprotectedである
     And classic protection後にrulesetを確認する
 
+  Scenario Outline: SCN-1287-004 strictとmerge queueから人手追随費用だけを診断する
+    Given classic strict "<classic>"とruleset strict "<ruleset>"とmerge queue "<queue>"を返すgh stubがある
+    When branch delivery policy adapterを実行する
+    Then delivery診断のknownは"<known>"で人手追随必要は"<manual>"である
+    And classic protection成功時もrulesetを確認する
+
+    Examples:
+      | classic | ruleset | queue | known | manual  |
+      | true    | false   | none  | true  | true    |
+      | false   | true    | none  | true  | true    |
+      | true    | false   | yes   | true  | false   |
+      | false   | false   | none  | true  | false   |
+      | unknown | unknown | error | false | unknown |
+
   Scenario: SCN-INT-MERGE-001 candidate PR自身のautomatic policyで自己承認できない
     Given trusted policyはdisabledでcandidate policyはautomaticである
     When candidate branchのmerge authorizationを評価する

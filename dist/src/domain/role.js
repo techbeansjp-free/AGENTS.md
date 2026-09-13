@@ -230,15 +230,17 @@ export function validateProviderSelection(input) {
 }
 /** A project adoption policy, never a model slug or provider performance claim. */
 export const CODEX_ADOPTION_SELECTOR = "codex:provider_recommended_default:high:default";
-export function validateCodexTier(input) {
-    const adopted = Object.hasOwn(input.mapping, CODEX_ADOPTION_SELECTOR)
-        ? input.mapping[CODEX_ADOPTION_SELECTOR]
+/** A project adoption policy for Claude Code's account/provider default. */
+export const CLAUDE_ADOPTION_SELECTOR = "claude:provider_recommended_default:high:default";
+function validateAdoptionTier(input) {
+    const adopted = Object.hasOwn(input.mapping, input.selector)
+        ? input.mapping[input.selector]
         : undefined;
     if (adopted === undefined)
         return {
             valid: false,
             errors: [
-                `trusted project choiceのtierMappingに${CODEX_ADOPTION_SELECTOR}がありません。ownerがselector採用tierを既定branchへ設定してから再実行してください。固定model slugの追加は不要です`,
+                `trusted project choiceのtierMappingに${input.selector}がありません。ownerがselector採用tierを既定branchへ設定してから再実行してください。固定model slugの追加は不要です`,
             ],
         };
     return MODEL_TIERS.includes(adopted) &&
@@ -250,5 +252,17 @@ export function validateCodexTier(input) {
                 `必要tier ${input.required}に対しtrusted selector採用tier ${adopted}が不足しています`,
             ],
         };
+}
+export function validateCodexTier(input) {
+    return validateAdoptionTier({
+        ...input,
+        selector: CODEX_ADOPTION_SELECTOR,
+    });
+}
+export function validateClaudeTier(input) {
+    return validateAdoptionTier({
+        ...input,
+        selector: CLAUDE_ADOPTION_SELECTOR,
+    });
 }
 //# sourceMappingURL=role.js.map

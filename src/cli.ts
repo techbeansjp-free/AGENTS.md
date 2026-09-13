@@ -36,7 +36,9 @@ import {
   assertPullRequestTrackerBinding,
   createPullRequest,
   authorizeMerge,
+  diagnoseBranchFollowCost,
   extractIssueClosingNumbers,
+  type BranchDeliveryPolicyObservation,
 } from "./domain/delivery.js";
 import {
   assessImplementationDiscovery,
@@ -206,7 +208,9 @@ import {
   validateRoleAssignment,
   validateTierSelection,
   validateCodexTier,
+  validateClaudeTier,
   CODEX_ADOPTION_SELECTOR,
+  CLAUDE_ADOPTION_SELECTOR,
   type HumanOverride,
   type ModelTier,
 } from "./domain/role.js";
@@ -1561,6 +1565,8 @@ function inspectAuthorizedPullRequestMerge(input: {
   authority: PolicyAuthorityObservation;
   implementationCommitSha: string;
   reviewEvidence: MergeReviewEvidence;
+  deliveryPolicy: BranchDeliveryPolicyObservation;
+  followCost: ReturnType<typeof diagnoseBranchFollowCost>;
   authorization: ReturnType<typeof authorizeMerge>;
 } {
   const observed = github(
@@ -1604,6 +1610,11 @@ function inspectAuthorizedPullRequestMerge(input: {
     { repository: input.repository, branch: input.base },
     input.root,
   );
+  const deliveryPolicy = github(
+    "branch.delivery-policy",
+    { repository: input.repository, branch: input.base },
+    input.root,
+  );
   const checks = (observed.statusCheckRollup ?? [])
     .filter(
       (item) => (item.conclusion ?? item.state ?? item.status) === "SUCCESS",
@@ -1624,6 +1635,8 @@ function inspectAuthorizedPullRequestMerge(input: {
     authority,
     implementationCommitSha: reviewed.reviewEvidence.implementationCommitSha,
     reviewEvidence: reviewed.reviewEvidence,
+    deliveryPolicy,
+    followCost: diagnoseBranchFollowCost(deliveryPolicy),
     authorization: authorizeMerge({
       trustedPolicy: input.trustedSet.policy,
       method: input.method,
@@ -2577,6 +2590,8 @@ function handlePullRequestMerge(flags: Flags): number {
         output: {
           state: "preview",
           authorization: inspected.authorization,
+          deliveryPolicy: inspected.deliveryPolicy,
+          followCost: inspected.followCost,
           pr: inspected.observed.url,
           headSha: inspected.observed.headRefOid,
           baseSha: inspected.observed.baseRefOid,
@@ -4361,18 +4376,18 @@ export async function main(
     const mode = required(flags, "mode");
     const scope = required(flags, "scope");
     const model = required(flags, "model");
-    /**
-     * **受理値は仕様の`codex`と未指定だけである**（Issue #1350）。`claude`は仕様外の
-     * 互換aliasとして加わっていたが、未指定と同じworking tree判定を行いながら
-     * 診断がtrustedを主張するため、trusted検査を受けたと誤読させていた。
-     */
-    if (flags.provider !== undefined && flags.provider !== "codex")
+    if (
+      flags.provider !== undefined &&
+      flags.provider !== "codex" &&
+      flags.provider !== "claude"
+    )
       throw new Error(
-        "--providerはcodexだけを受理します。未指定は既存台帳の互換検証であり、Codex自動起動の認可には使いません",
+        "--providerはcodexまたはclaudeだけを受理します。未指定は既存台帳の互換検証であり、自動起動の認可には使いません",
       );
     const selected = modelTier(required(flags, "selected"), "selected");
     const computed = requiredTier({ risk, mode, scope });
-    if (flags.provider === "codex") {
+    if (flags.provider === "codex" || flags.provider === "claude") {
+      const provider = flags.provider;
       const trustedSet = loadOperationPolicy(root);
       const trustedMapping = trustedSet.policy.projectChoices?.modelMapping;
       const tierMapping =
@@ -4383,22 +4398,37 @@ export async function main(
         trustedMapping && typeof trustedMapping !== "string"
           ? trustedMapping.minimumTierByRisk?.[risk]
           : undefined;
-      const codexRequired =
+      const providerRequired =
         trustedMinimum &&
         MODEL_TIERS.indexOf(trustedMinimum) > MODEL_TIERS.indexOf(computed)
           ? trustedMinimum
           : computed;
-      const observation = await observeProvider("codex", undefined, undefined, {
-        cwd: root,
-        official: true,
-      });
+      const observation = await observeProvider(
+        provider,
+        undefined,
+        undefined,
+        {
+          cwd: root,
+          official: true,
+        },
+      );
       const recommended = observation.modelMetadata.filter(
         (entry) => entry.recommended,
       );
-      const result = validateCodexTier({
-        required: codexRequired,
-        mapping: tierMapping,
-      });
+      const selector =
+        provider === "codex"
+          ? CODEX_ADOPTION_SELECTOR
+          : CLAUDE_ADOPTION_SELECTOR;
+      const result =
+        provider === "codex"
+          ? validateCodexTier({
+              required: providerRequired,
+              mapping: tierMapping,
+            })
+          : validateClaudeTier({
+              required: providerRequired,
+              mapping: tierMapping,
+            });
       if (observation.state !== "available" && observation.reason)
         result.errors.push(observation.reason);
       if (
@@ -4407,19 +4437,21 @@ export async function main(
         recommended[0]?.model !== model ||
         !recommended[0]?.supportedReasoningEfforts.includes("high")
       )
-        result.errors.push("modelが今回の公式推奨high対応Codexと一致しません");
-      if (tierMapping[CODEX_ADOPTION_SELECTOR] !== selected)
+        result.errors.push(
+          `modelが今回の公式推奨high対応${provider === "codex" ? "Codex" : "Claude"}と一致しません`,
+        );
+      if (tierMapping[selector] !== selected)
         result.errors.push("選択tierがtrusted selector採用tierと一致しません");
       result.valid = result.errors.length === 0;
       print({
         ...result,
-        required: codexRequired,
+        required: providerRequired,
         selected,
         model,
-        selector: CODEX_ADOPTION_SELECTOR,
+        selector,
         observedAt: observation.observedAt,
         provenance: tierProvenance(trustedSet.provenance),
-        usage: "codex-adoption",
+        usage: `${provider}-adoption`,
       });
       return result.valid ? 0 : 1;
     }

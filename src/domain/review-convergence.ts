@@ -9,7 +9,7 @@ import {
 /**
  * 通常のreviewラウンド予算。round 1で全scopeを見て、2と3で未解決blockerを追う。
  */
-export const REVIEW_ROUND_BUDGET = 3;
+export const REVIEW_ROUND_BUDGET = 6;
 /**
  * 収束後にHEADが動いたときの取り直しへ、予算とは別枠で1 roundだけ許す上限。
  *
@@ -20,7 +20,15 @@ export const REVIEW_ROUND_BUDGET = 3;
  * **増分は収束後の取り直しに限る。** 未解決blockerを抱えたまま予算を使い切った
  * `budget-exhausted`からは開かない。開くと、任意の1 pushで新品の予算をもらえる。
  */
-export const REVIEW_RECOVERY_ROUND = REVIEW_ROUND_BUDGET + 1;
+export const REVIEW_RECOVERY_ROUND = REVIEW_ROUND_BUDGET + 2;
+
+/**
+ * 保存できるround記録の総数上限。**予算とは別の量である。**
+ *
+ * 既定branch追随だけのroundは予算へ数えないため、記録の総数は予算を超えうる。
+ * それでも無限には増やさない。**記録は残すが、際限なく増える保存領域は作らない。**
+ */
+export const REVIEW_ROUND_RECORD_LIMIT = 64;
 
 const OID = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
@@ -81,6 +89,19 @@ export interface ReviewRoundInput {
   candidateHeadSha: string;
   focus: ReviewRoundFocus;
   findings: readonly ReviewRoundFinding[];
+  /**
+   * **既定branch追随だけでHEADが動いたroundを表す**（Issue #1287）。
+   *
+   * 立てられるのは、新しいcandidate HEADが「前roundのcandidateを第1親、既定branch
+   * tipのancestorを第2親とし、treeが両親の自動merge結果と一致するmerge commit」で
+   * ある場合に限る。**判定はGit観測から導出し、呼び出し側の自己申告を信用しない**
+   * （`src/adapters/review-session.ts`が観測する）。
+   *
+   * この条件が成り立つとき、merge commitのtreeは両親から完全に決まる。**除外された
+   * roundを通して実装を1 byteも持ち込めないため、追随を装った予算回避が成立しない。**
+   * 衝突解決は実装者が書いた内容なので、この条件を満たさず予算へ数える。
+   */
+  followOnly?: true;
 }
 
 export interface AdmittedReviewFinding extends ReviewRoundFinding {
@@ -96,6 +117,8 @@ export interface ReviewRoundRecord {
   findings: readonly AdmittedReviewFinding[];
   blocking: readonly string[];
   recordOnly: readonly string[];
+  /** 既定branch追随だけのroundは予算へ数えない。**記録は残す。** */
+  followOnly?: true;
   roundDigest: string;
 }
 
@@ -118,13 +141,17 @@ export function unconvergedReviewSessionDiagnostic(
   return "review sessionが収束していません: status=active。reviewが未完了か、実際に検分したHEADとcandidateHeadShaの対応が誤っている可能性があります。ownerのrisk受容へ進まず、review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください";
 }
 
+/** `optionalFields`は必須にはせず、未知fieldとしても拒否しない。 */
 function exactObject(
   value: unknown,
   label: string,
   fields: readonly string[],
+  optionalFields: readonly string[] = [],
 ): Record<string, unknown> {
   if (!isRecord(value)) throw new Error(`${label}はobjectが必要です`);
-  const unknown = Object.keys(value).filter((field) => !fields.includes(field));
+  const unknown = Object.keys(value).filter(
+    (field) => !fields.includes(field) && !optionalFields.includes(field),
+  );
   const missing = fields.filter(
     (field) => !Object.prototype.hasOwnProperty.call(value, field),
   );
@@ -329,14 +356,21 @@ function parseFinding(value: unknown, index: number): ReviewRoundFinding {
 }
 
 export function parseReviewRoundInput(value: unknown): ReviewRoundInput {
-  const round = exactObject(value, "review round", [
-    "round",
-    "previousRoundDigest",
-    "anchor",
-    "candidateHeadSha",
-    "focus",
-    "findings",
-  ]);
+  const round = exactObject(
+    value,
+    "review round",
+    [
+      "round",
+      "previousRoundDigest",
+      "anchor",
+      "candidateHeadSha",
+      "focus",
+      "findings",
+    ],
+    ["followOnly"],
+  );
+  if (round.followOnly !== undefined && round.followOnly !== true)
+    throw new Error("review round.followOnlyはtrueだけを受理します");
   if (!Number.isInteger(round.round) || Number(round.round) < 1)
     throw new Error("review round.roundは1以上の整数が必要です");
   if (
@@ -361,6 +395,7 @@ export function parseReviewRoundInput(value: unknown): ReviewRoundInput {
     candidateHeadSha: String(round.candidateHeadSha),
     focus: parseFocus(round.focus),
     findings: Object.freeze(findings),
+    ...(round.followOnly === true ? { followOnly: true as const } : {}),
   });
 }
 
@@ -461,6 +496,17 @@ function findingAdmission(input: {
   };
 }
 
+/**
+ * 予算へ数えるroundの件数。**`followOnly`は数えない。**
+ *
+ * 予算の目的は「同型のblockingで発散するreviewを打ち切る」ことであり、外部要因に
+ * よる追随を数えることではない（Issue #1287）。
+ */
+export function countedRounds(state: ReviewSessionState | null): number {
+  if (state === null) return 0;
+  return state.rounds.filter((record) => !record.followOnly).length;
+}
+
 export function advanceReviewSession(
   previous: ReviewSessionState | null,
   round: ReviewRoundInput,
@@ -471,11 +517,29 @@ export function advanceReviewSession(
     throw new Error(
       `review round resetまたは飛び越しを拒否しました: expected=${expectedRound} actual=${round.round}`,
     );
-  if (round.round > REVIEW_RECOVERY_ROUND)
+  if (round.round > REVIEW_ROUND_RECORD_LIMIT)
+    throw new Error(
+      `同一review sessionへ${REVIEW_ROUND_RECORD_LIMIT}件を超えるroundを記録できません`,
+    );
+  /**
+   * **予算は「数えるround」に対して効かせる**（Issue #1287）。
+   *
+   * 既定branch追随だけのroundは実装者が1 byteも書いていないため、発散の指標に
+   * ならない。実装者は他PRのmerge時刻を制御できず、在庫期間の長いPRほど予算が
+   * 外部要因で削られる。**記録は残し、数えるroundだけを予算へ当てる。**
+   */
+  const countedRound = countedRounds(previous) + (round.followOnly ? 0 : 1);
+  if (!round.followOnly && countedRound > REVIEW_RECOVERY_ROUND)
     throw new Error(
       `同一review sessionは${REVIEW_RECOVERY_ROUND} roundを超えて自動拡大できません`,
     );
+  if (round.followOnly && round.findings.length > 0)
+    throw new Error(
+      "既定branch追随だけのroundへfindingを記録できません。指摘があるroundは予算へ数えます",
+    );
   if (previous === null) {
+    if (round.followOnly)
+      throw new Error("round 1を既定branch追随として記録できません");
     if (round.previousRoundDigest !== null)
       throw new Error("round 1にpreviousRoundDigestを指定できません");
     if (
@@ -533,7 +597,7 @@ export function advanceReviewSession(
       }),
     }),
   );
-  if (round.round >= 2) {
+  if (round.round >= 2 && !round.followOnly) {
     const reportedPrior = new Set(
       admittedFindings
         .filter(({ id }) => priorBlocking.has(id))
@@ -542,10 +606,17 @@ export function advanceReviewSession(
     if ([...priorBlocking].some((id) => !reportedPrior.has(id)))
       throw new Error("前round blockerの再評価結果をfindingから脱落できません");
   }
-  const blocking = admittedFindings
-    .filter(({ admission }) => admission === "block-current")
-    .map(({ id }) => id)
-    .sort();
+  /**
+   * follow-only roundはreviewを行わないため、直前の未解決blockerを解消したことにも
+   * できない。findingを要求すると「追随だけなのでfinding禁止」という契約と矛盾
+   * するため、保存済みblockerをそのまま次recordへ運ぶ。
+   */
+  const blocking = round.followOnly
+    ? [...priorBlocking].sort()
+    : admittedFindings
+        .filter(({ admission }) => admission === "block-current")
+        .map(({ id }) => id)
+        .sort();
   const recordOnly = admittedFindings
     .filter(({ admission }) => admission === "record-only")
     .map(({ id }) => id)
@@ -558,6 +629,7 @@ export function advanceReviewSession(
     findings: admittedFindings,
     blocking,
     recordOnly,
+    ...(round.followOnly ? { followOnly: true as const } : {}),
   };
   const roundDigest = crypto
     .createHash("sha256")
@@ -580,7 +652,7 @@ export function advanceReviewSession(
     status:
       blocking.length === 0
         ? "converged"
-        : round.round >= REVIEW_ROUND_BUDGET
+        : countedRound >= REVIEW_ROUND_BUDGET
           ? "budget-exhausted"
           : "active",
   });
@@ -605,23 +677,32 @@ export function parseReviewSessionState(value: unknown): ReviewSessionState {
   if (
     !Array.isArray(state.rounds) ||
     state.rounds.length < 1 ||
-    state.rounds.length > REVIEW_RECOVERY_ROUND
+    state.rounds.length > REVIEW_ROUND_RECORD_LIMIT
   )
     throw new Error(
-      `review session.roundsは1〜${REVIEW_RECOVERY_ROUND}件が必要です`,
+      `review session.roundsは1〜${REVIEW_ROUND_RECORD_LIMIT}件が必要です`,
     );
   let rebuilt: ReviewSessionState | null = null;
   for (const [index, candidate] of state.rounds.entries()) {
-    const record = exactObject(candidate, `review session.rounds[${index}]`, [
-      "round",
-      "previousRoundDigest",
-      "candidateHeadSha",
-      "focus",
-      "findings",
-      "blocking",
-      "recordOnly",
-      "roundDigest",
-    ]);
+    const record = exactObject(
+      candidate,
+      `review session.rounds[${index}]`,
+      [
+        "round",
+        "previousRoundDigest",
+        "candidateHeadSha",
+        "focus",
+        "findings",
+        "blocking",
+        "recordOnly",
+        "roundDigest",
+      ],
+      ["followOnly"],
+    );
+    if (record.followOnly !== undefined && record.followOnly !== true)
+      throw new Error(
+        `review session.rounds[${index}].followOnlyはtrueだけを受理します`,
+      );
     if (!Array.isArray(record.findings))
       throw new Error(
         `review session.rounds[${index}].findingsは配列が必要です`,
@@ -657,6 +738,7 @@ export function parseReviewSessionState(value: unknown): ReviewSessionState {
       candidateHeadSha: record.candidateHeadSha,
       focus: record.focus,
       findings,
+      ...(record.followOnly === true ? { followOnly: true } : {}),
     });
     rebuilt = advanceReviewSession(rebuilt, round);
     const rebuiltRecord = rebuilt.rounds.at(-1);
