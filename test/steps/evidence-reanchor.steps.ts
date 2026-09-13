@@ -69,6 +69,7 @@ class ReanchorWorld extends WorkflowWorld {
   > = [];
   observableBefore = "";
   observableAfter = "";
+  invalidBaselineChainLength = 0;
 }
 
 const { Given, When, Then } = stepDefinitions<ReanchorWorld>();
@@ -316,12 +317,51 @@ function auditableReviewArtifact(base: string, implementation: string): string {
 判断: 配布物を更新しない
 根拠: fixtureのreview artifact検査だけで配布物を変更しない。
 ## 9. 独立reviewの成立
-成立。
+
+| 項目 | 内容 |
+|---|---|
+| 適用した独立性モード | context-isolated（未宣言時の既定） |
+| その要求を満たすこと | はい（fixture） |
+| reviewerとimplementerのidentity・context比較 | reviewer-context != implementer-context |
+| reviewerが対象差分を変更していないこと | はい。製品path変更0件 |
+
 ## 10. 仕様整合性
 整合。
 ## 11. 総合判定と再開地点
-APPROVED。
+- 未解決Critical/High: 0件
+- 判定: approved
 `;
+}
+
+/** 旧命名時点から再生成される派生監査欄だけが異なる実運用相当artifact。 */
+function legacyAuditableReviewArtifact(
+  base: string,
+  implementation: string,
+): string {
+  return auditableReviewArtifact(base, implementation)
+    .replace("| Step chain | 経由: fixture |", "| Step chain | fixture |")
+    .replace(
+      "| `src/domain/reviewed.ts` | A | package owner | domain | fixture実装 | 循環なし | AC-1377-01 / SCN-1377-01 | revert可能 | pass |",
+      "| `src/domain/reviewed.ts` | A | package owner | domain | fixture実装 | 循環なし | AC-1377-01 / SCN-1377-01 | revert可能 | pass |\n| `dist/src/domain/reviewed.js` | A | generated | distribution | fixture配布物 | 循環なし | AC-1377-01 / SCN-1377-01 | buildで再生成 | pass |",
+    )
+    .replace(
+      "判断: 配布物を更新しない\n根拠: fixtureのreview artifact検査だけで配布物を変更しない。",
+      "判断: 配布物を更新した\n根拠: sourceとdistを更新した。",
+    );
+}
+
+function buildApprovedReviewBinding(
+  world: ReanchorWorld,
+  implementation: string,
+): void {
+  const finalHead = world.oldHeadSha;
+  const currentHead = git(world.root, ["rev-parse", "HEAD"]);
+  world.oldHeadSha = implementation;
+  execFileSync("git", ["checkout", "-q", implementation], { cwd: world.root });
+  buildReviewSession(world, true);
+  recordStep10Binding(world);
+  execFileSync("git", ["checkout", "-q", currentHead], { cwd: world.root });
+  world.oldHeadSha = finalHead;
 }
 
 Given(
@@ -337,10 +377,11 @@ Given(
     this.oldHeadSha = commitPath(
       this.root,
       "docs/reviews/1377_レビュー.md",
-      auditableReviewArtifact(this.baseSha, implementation),
+      legacyAuditableReviewArtifact(this.baseSha, implementation),
       "docs: old artifact",
     );
     this.staging = makeStaging(this);
+    buildApprovedReviewBinding(this, implementation);
     buildDelivery(this, false);
     snapshot(this);
     execFileSync("git", ["checkout", "-q", implementation], { cwd: this.root });
@@ -354,7 +395,7 @@ Given(
   },
 );
 
-Given("pr-boundの新artifactの監査表に不合格がある", function () {
+Given("pr-boundの不正なartifact replacement「{word}」がある", function (kind) {
   this.root = this.initRepo();
   this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
   const implementation = commit(
@@ -369,18 +410,68 @@ Given("pr-boundの新artifactの監査表に不合格がある", function () {
     "docs: old artifact",
   );
   this.staging = makeStaging(this);
+  buildApprovedReviewBinding(this, implementation);
   buildDelivery(this, false);
-  execFileSync("git", ["checkout", "-q", implementation], { cwd: this.root });
+  const replacementImplementation =
+    kind === "H_impl差替え"
+      ? (() => {
+          execFileSync("git", ["checkout", "-q", this.baseSha], {
+            cwd: this.root,
+          });
+          return commit(
+            this.root,
+            "export const reviewed = 1;\n",
+            "feat: alternate review対象",
+          );
+        })()
+      : implementation;
+  execFileSync("git", ["checkout", "-q", replacementImplementation], {
+    cwd: this.root,
+  });
+  const artifact = auditableReviewArtifact(
+    this.baseSha,
+    replacementImplementation,
+  );
   this.newHeadSha = commitPath(
     this.root,
     "docs/reviews/209_課題1377成果物再固定レビュー.md",
-    auditableReviewArtifact(this.baseSha, implementation).replace(
-      "| pass |",
-      "| fail |",
-    ),
+    kind === "監査不合格"
+      ? artifact.replace("| pass |", "| fail |")
+      : kind === "判定本文改変"
+        ? artifact.replace("反例確認済み。", "反例を省略した。")
+        : artifact,
     "docs: invalid renamed artifact",
   );
+  if (kind === "artifact外差分") {
+    fs.writeFileSync(
+      path.join(this.root, REVIEWED),
+      "export const reviewed = 2;\n",
+    );
+    execFileSync("git", ["add", REVIEWED], { cwd: this.root });
+    execFileSync("git", ["commit", "--amend", "--no-edit", "-q"], {
+      cwd: this.root,
+    });
+    this.newHeadSha = git(this.root, ["rev-parse", "HEAD"]);
+  }
   this.newBaseSha = this.baseSha;
+  if (kind === "chain断裂") {
+    const invalid: EvidenceReanchorRecord = {
+      oldHeadSha: "a".repeat(40),
+      newHeadSha: "b".repeat(40),
+      oldBaseSha: this.baseSha,
+      newBaseSha: this.baseSha,
+      diffDigest: "d".repeat(64),
+      method: "rebase",
+      reason: "連鎖しない記録",
+      recordedAt: INSTANT.toISOString(),
+    };
+    const file = path.join(this.staging, EVIDENCE_REANCHOR_FILE);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${JSON.stringify(invalid)}\n`);
+  }
+  this.invalidBaselineChainLength = readEvidenceReanchorChain(
+    this.staging,
+  ).length;
 });
 
 function commitPath(
@@ -1336,7 +1427,10 @@ Then("artifact replacementのpreviewとapplyは拒否され追記しない", fun
     this.reanchorCliResults.map((result) => result.status),
     [1, 1],
   );
-  assert.equal(readEvidenceReanchorChain(this.staging).length, 0);
+  assert.equal(
+    readEvidenceReanchorChain(this.staging).length,
+    this.invalidBaselineChainLength,
+  );
 });
 
 Then("内容非等価のpreviewとapplyが同じ既存理由で拒否される", function () {

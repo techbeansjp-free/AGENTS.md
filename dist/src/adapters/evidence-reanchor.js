@@ -4,13 +4,13 @@ import crypto from "node:crypto";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { parseJsonStrict } from "../lib/security.js";
 import { deriveEffectiveHead, isContentEquivalent, isRebaseEquivalent, parseReviewIdentityAnchor, isEvidenceReanchorRecord, } from "../domain/evidence-reanchor.js";
-import { validateReviewArtifactStructure, parseReviewArtifactAudit, } from "../domain/review-artifact.js";
+import { validateReviewArtifactStructure, parseReviewArtifactAudit, validateContextIsolatedApprovalRecord, } from "../domain/review-artifact.js";
 import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
 import { refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { observeStoredDeliveryState, readStoredDeliveryState, } from "./delivery-state.js";
 import { observeReviewDiff, readBlobAtCommit } from "./review-diff.js";
 import { readStoredReviewSession } from "./review-session-store.js";
-import { assertWorkflowStaging } from "./workflow-journal.js";
+import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
 export const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
 const OID = /^[a-f0-9]{40}$/u;
 /**
@@ -143,10 +143,65 @@ function observeRebaseEquivalence(root, input) {
 }
 const REVIEW_ARTIFACT_NAME = /^\d+_課題\d+.*レビュー\.md$/u;
 /**
+ * 命名是正で変わってよい機械導出・監査領域だけを正規化する。
+ * finding、判定、独立性、test証拠などreview判断の本文はbyte比較へ残す。
+ */
+function comparableArtifactContent(markdown) {
+    const output = [];
+    let fence;
+    let ignoredSection;
+    for (const line of markdown.replaceAll("\r\n", "\n").split("\n")) {
+        const fenceMatch = /^\s*(`{3,}|~{3,})/u.exec(line);
+        if (fenceMatch) {
+            const marker = fenceMatch[1]?.[0];
+            if (fence === undefined)
+                fence = marker;
+            else if (fence === marker)
+                fence = undefined;
+        }
+        if (fence === undefined) {
+            if (line === "### 1.1 変更ファイル個別監査") {
+                ignoredSection = "audit";
+                output.push(line, "<machine-audit>");
+                continue;
+            }
+            if (line === "## 8. 配布物影響") {
+                ignoredSection = "distribution";
+                output.push(line, "<distribution-audit>");
+                continue;
+            }
+            if (ignoredSection !== undefined &&
+                /^##(?: |$)/u.test(line) &&
+                line !== "## 8. 配布物影響")
+                ignoredSection = undefined;
+            if (ignoredSection === undefined &&
+                (/^\| Step chain \|/u.test(line) ||
+                    /^\| commit前candidate \|/u.test(line) ||
+                    /^\| 範囲漏れ \|/u.test(line))) {
+                output.push(`| ${line.split("|")[1]?.trim()} | <derived> |`);
+                continue;
+            }
+        }
+        if (ignoredSection === undefined)
+            output.push(line);
+    }
+    return output.join("\n");
+}
+/**
+ * strict validator導入前のartifactが使った同義表記だけを現行表記へ写像する。
+ * 比較対象の旧新artifactは先に本文等価を要求するため、この写像で判断変更は隠せない。
+ */
+function canonicalApprovalContent(markdown) {
+    return markdown
+        .replace("| 適用した独立性モード | context-isolated（未宣言時の既定） |", "| 適用した独立性モード | context-isolated |")
+        .replace("| reviewerが対象差分を変更していないこと | はい。製品path変更0件 |", "| reviewerが対象差分を変更していないこと | はい（製品path変更0件） |")
+        .replaceAll("- 未解決Critical/High: 0件", "- 未解決Critical/High: なし");
+}
+/**
  * 通常のrebase等価性から外れるartifact改名を、同じreview済み実装境界へ閉じる。
  * 新artifactの自己申告だけでは受理せず、Git構造・保存済みidentity・監査表を再計測する。
  */
-function observeArtifactReplacement(root, input) {
+function observeArtifactReplacement(staging, root, input) {
     const beforeAll = observeReanchorDiff(root, "旧base→旧head", input, input.oldBaseSha, input.oldHeadSha);
     const afterAll = observeReanchorDiff(root, "新base→新head", input, input.newBaseSha, input.newHeadSha);
     const oldPath = terminalArtifactPath(beforeAll.changedPaths);
@@ -158,14 +213,18 @@ function observeArtifactReplacement(root, input) {
         return undefined;
     const oldArtifact = readBlobAtCommit(root, input.oldHeadSha, oldPath);
     const newArtifact = readBlobAtCommit(root, input.newHeadSha, newPath);
-    if (oldArtifact === undefined || newArtifact === undefined)
+    if (oldArtifact === undefined ||
+        newArtifact === undefined ||
+        comparableArtifactContent(oldArtifact) !==
+            comparableArtifactContent(newArtifact))
         return undefined;
     const beforeAnchor = parseReviewIdentityAnchor(oldArtifact);
     const afterAnchor = parseReviewIdentityAnchor(newArtifact);
     if (beforeAnchor === undefined ||
         afterAnchor === undefined ||
         beforeAnchor.base !== input.oldBaseSha ||
-        afterAnchor.base !== input.newBaseSha)
+        afterAnchor.base !== input.newBaseSha ||
+        beforeAnchor.implementation !== afterAnchor.implementation)
         return undefined;
     if (!verifiedImplementationBoundary(root, input.oldHeadSha, oldPath, beforeAnchor.implementation, input, "旧H_impl→旧head").valid ||
         !verifiedImplementationBoundary(root, input.newHeadSha, newPath, afterAnchor.implementation, input, "新H_impl→新head").valid)
@@ -176,6 +235,12 @@ function observeArtifactReplacement(root, input) {
         return undefined;
     const structure = validateReviewArtifactStructure(newArtifact);
     const audit = parseReviewArtifactAudit(newArtifact);
+    const approval = validateContextIsolatedApprovalRecord(canonicalApprovalContent(newArtifact));
+    const session = readStoredReviewSession(staging);
+    const journal = readWorkflowJournal(staging);
+    const step10 = [...journal.entries]
+        .reverse()
+        .find((entry) => entry.step === 10)?.reviewSession;
     const expectedPaths = [...afterImplementation.changedPaths]
         .filter((entry) => !entry.startsWith("dist/"))
         .sort();
@@ -186,6 +251,15 @@ function observeArtifactReplacement(root, input) {
         structure.rounds === undefined ||
         structure.rounds < 1 ||
         structure.stepChain?.kind !== "via" ||
+        !approval.valid ||
+        session === null ||
+        session.status !== "converged" ||
+        session.latestCandidateHeadSha !== afterAnchor.implementation ||
+        step10 === undefined ||
+        step10.sessionId !== session.sessionId ||
+        step10.roundDigest !== session.latestRoundDigest ||
+        step10.headSha !== session.latestCandidateHeadSha ||
+        journal.errors.length > 0 ||
         audit.entries.some((entry) => entry.decision !== "pass") ||
         JSON.stringify(expectedPaths) !== JSON.stringify(auditedPaths))
         return undefined;
@@ -275,7 +349,7 @@ export function evaluateEvidenceReanchor(input) {
     if (!isContentEquivalent(before, after)) {
         const rebase = observeRebaseEquivalence(input.root, comparison);
         if (rebase.reason !== "ok") {
-            artifactReplacement = observeArtifactReplacement(input.root, comparison);
+            artifactReplacement = observeArtifactReplacement(staging, input.root, comparison);
             if (artifactReplacement === undefined)
                 throw new Error(`再固定前後の内容が等価ではありません（${rebase.reason}）: before=${before.digest} after=${after.digest}${rebase.gitFailure === undefined ? "" : `; ${rebase.gitFailure}`}`);
             method = "artifact-replacement";
