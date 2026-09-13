@@ -1,6 +1,35 @@
 @integration @evidence-reanchor
 Feature: 証跡再固定がCLIと診断経路で機能する
 
+  @issue-1377
+  Scenario: SCN-1377-01 pr-boundのreview artifact改名を再固定する
+    Given pr-boundの旧artifactと同一実装を監査した正規名の新artifactがある
+    When 二層等価な入力をpreviewして二回applyする
+    Then previewは成功し初回だけ追記して二回目はunchangedになる
+    And 再固定recordは旧新artifactのpathとdigestを保持する
+
+  @issue-1377
+  Scenario Outline: SCN-1377-02 pr-boundの不正なartifact replacementを再固定しない
+    Given pr-boundの不正なartifact replacement「<反例>」がある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then artifact replacementのpreviewとapplyは拒否され追記しない
+
+    Examples:
+      | 反例 |
+      | 監査不合格 |
+      | artifact外差分 |
+      | H_impl差替え |
+      | chain断裂 |
+      | 判定本文改変 |
+      | 範囲漏れ判断改変 |
+      | fence解釈差 |
+
+  @issue-1377
+  Scenario: SCN-1377-03 step11-recordedの通常rebaseを維持する
+    Given 固定済みPR identityを持つstagingと等価なrebaseがある
+    When delivery層の再固定のあとにpr mergeのbinding検査を通す
+    Then pr mergeのbinding検査は通過する
+
   Scenario: SCN-INT-REANCHOR-001 再固定がprovider呼び出しを行わない
     Given 固定済みPR identityを持つstagingと等価なrebaseがある
     When 再固定をCLIから適用する

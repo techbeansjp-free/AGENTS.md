@@ -20,7 +20,7 @@ const REQUIRED_HEADINGS = Object.freeze([
     "## 11. 総合判定と再開地点",
 ]);
 /** Markdown fence内を空行へ置換し、行番号を維持したまま構造だけを読む。 */
-function visibleMarkdownLines(markdown) {
+export function visibleMarkdownLines(markdown) {
     const lines = markdown.replace(/\r\n/gu, "\n").split("\n");
     let fence;
     return lines.map((line) => {
