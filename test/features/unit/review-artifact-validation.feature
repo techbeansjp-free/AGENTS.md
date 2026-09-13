@@ -16,3 +16,8 @@ Feature: Markdown review artifactの構造検証
     Given section不足と曖昧な配布物影響を持つreview artifactがある
     When Markdown review artifactの構造を検証する
     Then sectionと配布物影響の診断をまとめて返す
+
+  Scenario: SCN-UNIT-REVARTVAL-004 context-isolated formal approvalはclosedな意味記録を要求する
+    Given context-isolated formal approvalの正常例と反例がある
+    When context-isolated formal approvalを検証する
+    Then 正常例だけをformal approvalと判定する

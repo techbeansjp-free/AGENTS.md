@@ -2051,7 +2051,7 @@ interface DeliveryProviderControl {
    */
   reviewCommitSha: "head" | "stale";
   reviewDisposition:
-    "approved" | "changes-requested" | "commented-after-approval";
+    "approved" | "changes-requested" | "commented-after-approval" | "none";
   mergeTreeTampered: boolean;
   terminalParentTampered: boolean;
   mergeOnDefaultBranch: boolean;
@@ -2128,6 +2128,78 @@ function preparedMergeReviewEvidence(prepared: PreparedPullRequest) {
   };
 }
 
+function contextIsolatedReviewArtifact(
+  baseSha: string,
+  implementationSha: string,
+): string {
+  return `# 04 レビュー
+
+## 0. レビュー識別情報
+
+| 項目 | 内容 |
+|---|---|
+| 比較基点 | \`${baseSha}\` |
+| H_impl | \`${implementationSha}\` |
+| ラウンド数 | 1 |
+| Step chain | 経由: fixture staging |
+
+## 1. 入力証拠
+
+### 1.1 変更ファイル個別監査
+
+| path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
+|---|---|---|---|---|---|---|---|---|
+| \`.agent-skill-chain/policy/default.json\` | M | package owner | package | fixture policy | pass | AC-WF-005 | revert可能 | pass |
+
+## 2. 受け入れ条件の確認
+
+pass
+
+## 3. 肯定的評価
+
+pass
+
+## 4. 敵対的評価
+
+pass
+
+## 5. 指摘
+
+指摘なし
+
+## 6. ラウンド固有の確認
+
+round 1完了
+
+## 7. テスト結果
+
+fixture pass
+
+## 8. 配布物影響
+
+判断: 配布物を更新しない
+根拠: fixture内の検査である
+
+## 9. 独立reviewの成立
+
+| 項目 | 内容 |
+|---|---|
+| 適用した独立性モード | context-isolated |
+| その要求を満たすこと | はい |
+| reviewerとimplementerのidentity・context比較 | reviewer-contextとimplementer-contextは別 |
+| reviewerが対象差分を変更していないこと | はい（変更pathなし） |
+
+## 10. 仕様整合性
+
+updated
+
+## 11. 総合判定と再開地点
+
+- 未解決Critical/High: なし
+- 判定: approved
+`;
+}
+
 function convergedReviewBinding(
   root: string,
   staging: string,
@@ -2189,6 +2261,14 @@ function preparePullRequest(
    * 再計測するため、review artifactを載せると成立しない。
    */
   workflowMode: "quick" | "poc" = "quick",
+  requiredReviews = 0,
+  artifactDisposition:
+    | "valid"
+    | "rejected"
+    | "placeholder-context"
+    | "himpl-mismatch"
+    | "untracked"
+    | "extra-file" = "valid",
 ): PreparedPullRequest {
   const fixturePast = fixtureInstant({ hoursAgo: 1 });
   const fixtureNow = fixtureInstant();
@@ -2222,7 +2302,7 @@ function preparePullRequest(
       branches: ["feature/x"],
       methods: [mergeMethod],
       requiredChecks: [],
-      requiredReviews: 0,
+      requiredReviews,
       ...(reviewIndependence ? { reviewIndependence } : {}),
     };
     fs.writeFileSync(policyFile, `${JSON.stringify(policy, null, 2)}\n`);
@@ -2268,14 +2348,46 @@ function preparePullRequest(
     spawnSync("git", ["commit", "-q", "-m", "poc fixture"], { cwd: root });
   } else {
     fs.mkdirSync(path.join(root, "docs", "reviews"), { recursive: true });
-    fs.writeFileSync(
-      path.join(root, "docs", "reviews", "90_test_review.md"),
-      "# test review artifact\n",
+    const reviewArtifact = contextIsolatedReviewArtifact(
+      baseSha,
+      implementationCommitSha,
     );
-    spawnSync("git", ["add", "docs/reviews/90_test_review.md"], { cwd: root });
-    spawnSync("git", ["commit", "-q", "-m", "review evidence"], {
-      cwd: root,
-    });
+    if (artifactDisposition !== "untracked")
+      fs.writeFileSync(
+        path.join(root, "docs", "reviews", "90_test_review.md"),
+        artifactDisposition === "rejected"
+          ? reviewArtifact.replace("判定: approved", "判定: rejected")
+          : artifactDisposition === "placeholder-context"
+            ? reviewArtifact.replace(
+                "reviewer-contextとimplementer-contextは別",
+                "{実体の観測値}",
+              )
+            : artifactDisposition === "himpl-mismatch"
+              ? reviewArtifact.replace(
+                  `| H_impl | \`${implementationCommitSha}\` |`,
+                  `| H_impl | \`${"f".repeat(40)}\` |`,
+                )
+              : reviewArtifact,
+      );
+    if (artifactDisposition !== "untracked") {
+      if (artifactDisposition === "extra-file")
+        fs.writeFileSync(
+          path.join(root, "unexpected.txt"),
+          "not evidence-only\n",
+        );
+      spawnSync(
+        "git",
+        [
+          "add",
+          "docs/reviews/90_test_review.md",
+          ...(artifactDisposition === "extra-file" ? ["unexpected.txt"] : []),
+        ],
+        { cwd: root },
+      );
+      spawnSync("git", ["commit", "-q", "-m", "review evidence"], {
+        cwd: root,
+      });
+    }
   }
   const headSha = spawnSync("git", ["rev-parse", "HEAD"], {
     cwd: root,
@@ -2391,6 +2503,11 @@ function preparePullRequest(
     bodyDigest: "a".repeat(64),
     readBackDigest: "a".repeat(64),
   });
+  if (artifactDisposition === "untracked")
+    fs.writeFileSync(
+      path.join(root, "docs", "reviews", "90_test_review.md"),
+      contextIsolatedReviewArtifact(baseSha, implementationCommitSha),
+    );
   return finalizePreparedPullRequest({
     world,
     root,
@@ -2753,6 +2870,14 @@ function prepareDeliveryCli(
   mergeMethod: "merge" | "squash" | "rebase" = "merge",
   reviewIndependence?: "context-isolated" | "actor-independent",
   workflowMode: "quick" | "poc" = "quick",
+  requiredReviews = 0,
+  artifactDisposition:
+    | "valid"
+    | "rejected"
+    | "placeholder-context"
+    | "himpl-mismatch"
+    | "untracked"
+    | "extra-file" = "valid",
 ): PreparedDeliveryCli {
   const prepared = preparePullRequest(
     world,
@@ -2761,6 +2886,8 @@ function prepareDeliveryCli(
     mergeMethod,
     reviewIndependence,
     workflowMode,
+    requiredReviews,
+    artifactDisposition,
   );
   const stubDirectory = world.temp("asc-delivery-cli-gh-");
   const stub = path.join(stubDirectory, "gh");
@@ -2885,7 +3012,8 @@ const observation = () => ({
   headRepository: { nameWithOwner: control.headRepository },
   isCrossRepository: control.isCrossRepository,
   mergeStateStatus: "CLEAN",
-  reviewDecision: "APPROVED",
+  reviewDecision:
+    control.reviewDisposition === "none" ? null : "APPROVED",
   statusCheckRollup: [],
   closingIssuesReferences:
     control.closingChanged || control.extraClosingIndexOnly
@@ -3076,14 +3204,16 @@ if (exact(["--version"])) {
         user: { node_id: "draft-reviewer" },
         submitted_at: null,
       },
-      {
-        id: 7,
-        state: "APPROVED",
-        commit_id:
-          control.reviewCommitSha === "stale" ? "0".repeat(40) : sha,
-        user: { node_id: control.reviewerId },
-        submitted_at: control.requestedAt,
-      },
+      ...(control.reviewDisposition === "none"
+        ? []
+        : [{
+            id: 7,
+            state: "APPROVED",
+            commit_id:
+              control.reviewCommitSha === "stale" ? "0".repeat(40) : sha,
+            user: { node_id: control.reviewerId },
+            submitted_at: control.requestedAt,
+          }]),
       // merge後にprovider側のreview状態が動いた場合（Issue #1280）。
       ...(control.phase === "merged" && control.postMergeReviewShift === "replaced"
         ? [{
@@ -3103,7 +3233,7 @@ if (exact(["--version"])) {
             submitted_at: new Date(Date.parse(control.requestedAt) + 2000).toISOString(),
           }]
         : []),
-      ...(control.reviewDisposition !== "approved"
+      ...(control.reviewDisposition !== "approved" && control.reviewDisposition !== "none"
         ? [{
             id: 8,
             state: control.reviewDisposition === "changes-requested"
@@ -3299,6 +3429,7 @@ function deliveryMergeArgs(
     staging?: string;
     method?: "merge" | "squash" | "rebase";
     reopenTerminal?: boolean;
+    authorize?: boolean;
   } = {},
 ): string[] {
   const root = overrides.root ?? prepared.root;
@@ -3316,6 +3447,7 @@ function deliveryMergeArgs(
     `--staging=${stagingArgument}`,
     "--apply",
     ...(overrides.reopenTerminal ? ["--reopen-terminal=approved"] : []),
+    ...(overrides.authorize === true ? ["--authorize=approved"] : []),
   ];
 }
 
@@ -3327,6 +3459,7 @@ function executeDeliveryMerge(
     staging?: string;
     method?: "merge" | "squash" | "rebase";
     reopenTerminal?: boolean;
+    authorize?: boolean;
   } = {},
 ) {
   return executeCli(
@@ -3624,7 +3757,13 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-E2E-WFSTEP-006": {
-      const prepared = prepareDeliveryCli(this);
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       const created = createDeliveryPullRequest(prepared);
       assert.match(created.stdout, /merge_pending/u);
       const delivery = parseDeliveryState(
@@ -3856,6 +3995,166 @@ if (exact(["auth", "status"])) {
       );
       break;
     }
+    case "SCN-E2E-WFSTEP-057": {
+      const sameActor = "sole-operator";
+      const prepared = prepareDeliveryCli(this, {
+        prAuthorId: sameActor,
+        implementationAuthorId: sameActor,
+        reviewerId: sameActor,
+        reviewDisposition: "none",
+      });
+      createDeliveryPullRequest(prepared);
+      const requested = executeDeliveryMerge(prepared);
+      assert.equal(
+        requested.status,
+        0,
+        `context-isolated formal reviewがmerge認可へ接続されていません: ${requested.stdout}${requested.stderr}`,
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        1,
+        "formal reviewで認可したmerge requestは1回だけでなければなりません",
+      );
+      const state = parseDeliveryState(
+        fs.readFileSync(
+          path.join(prepared.staging, "journal", "delivery-state.json"),
+          "utf8",
+        ),
+      );
+      assert.match(
+        state.merge?.reviewId ?? "",
+        /^[a-f0-9]{64}$/u,
+        "formal review round digestがmerge intentのapproval IDに固定されていません",
+      );
+      const session = JSON.parse(
+        fs.readFileSync(
+          path.join(prepared.staging, "review-session.json"),
+          "utf8",
+        ),
+      ) as { latestRoundDigest: string };
+      assert.equal(
+        state.merge?.reviewId,
+        session.latestRoundDigest,
+        "merge intentのreviewIdがactual latestRoundDigestと一致しません",
+      );
+      break;
+    }
+    case "SCN-INT-MERGE-019": {
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "context-isolated",
+        "quick",
+        2,
+      );
+      createDeliveryPullRequest(prepared);
+      const requested = executeDeliveryMerge(prepared);
+      assert.equal(
+        requested.status,
+        0,
+        `formal 1件とprovider 1件を合算できません: ${requested.stdout}${requested.stderr}`,
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        1,
+      );
+      break;
+    }
+    case "SCN-INT-MERGE-020": {
+      for (const disposition of [
+        "rejected",
+        "placeholder-context",
+        "himpl-mismatch",
+        "untracked",
+        "extra-file",
+      ] as const) {
+        const prepared = prepareDeliveryCli(
+          this,
+          { reviewDisposition: "none" },
+          "automatic",
+          "merge",
+          "context-isolated",
+          "quick",
+          1,
+          disposition,
+        );
+        const created = executeCli(
+          [...prepared.args, "--apply", "--authorize=approved"],
+          prepared.root,
+          prepared.env,
+        );
+        const rejected =
+          created.status === 0 ? executeDeliveryMerge(prepared) : created;
+        assert.notEqual(
+          rejected.status,
+          0,
+          `${disposition} artifactを受理しました`,
+        );
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          0,
+        );
+      }
+
+      for (const mutation of [
+        "missing-session",
+        "head-digest",
+        "step10-digest",
+      ] as const) {
+        const prepared = prepareDeliveryCli(this, {
+          reviewDisposition: "none",
+        });
+        createDeliveryPullRequest(prepared);
+        const sessionFile = path.join(prepared.staging, "review-session.json");
+        if (mutation === "missing-session") {
+          fs.unlinkSync(sessionFile);
+          fs.writeFileSync(
+            path.join(prepared.staging, "candidate-formal-approval.json"),
+            `${JSON.stringify({ approved: true, headSha: prepared.headSha })}\n`,
+          );
+        } else if (mutation === "head-digest") {
+          const session = JSON.parse(fs.readFileSync(sessionFile, "utf8")) as {
+            latestCandidateHeadSha: string;
+            latestRoundDigest: string;
+          };
+          session.latestCandidateHeadSha = "f".repeat(40);
+          session.latestRoundDigest = "e".repeat(64);
+          fs.writeFileSync(sessionFile, `${JSON.stringify(session)}\n`);
+        } else {
+          const journalFile = path.join(prepared.staging, STEP_JOURNAL_FILE);
+          const entries = fs
+            .readFileSync(journalFile, "utf8")
+            .trimEnd()
+            .split("\n")
+            .map((line) => JSON.parse(line) as StepJournalEntry)
+            .map((entry) =>
+              entry.step === 10 && entry.reviewSession
+                ? {
+                    ...entry,
+                    reviewSession: {
+                      ...entry.reviewSession,
+                      roundDigest: "d".repeat(64),
+                    },
+                  }
+                : entry,
+            );
+          fs.writeFileSync(
+            journalFile,
+            `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+          );
+        }
+        refreshStoredStagingDigest(prepared.staging);
+        const rejected = executeDeliveryMerge(prepared);
+        assert.notEqual(rejected.status, 0, `${mutation}を受理しました`);
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          0,
+        );
+      }
+      break;
+    }
     case "SCN-E2E-WFSTEP-048": {
       /**
        * **索引の反映待ちを合成経路で通す**（Issue #1271）。
@@ -4073,7 +4372,13 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-E2E-WFSTEP-012": {
-      const prepared = prepareDeliveryCli(this);
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       createDeliveryPullRequest(prepared);
       const bound = parseDeliveryState(
         fs.readFileSync(
@@ -4105,7 +4410,13 @@ if (exact(["auth", "status"])) {
         "providerがmerge要求なしを確定した同一intentは一度だけ再送する",
       );
 
-      const unsupported = prepareDeliveryCli(this, { ghVersion: "2.12.1" });
+      const unsupported = prepareDeliveryCli(
+        this,
+        { ghVersion: "2.12.1" },
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       createDeliveryPullRequest(unsupported);
       const unsupportedResult = executeDeliveryMerge(unsupported);
       assert.notEqual(unsupportedResult.status, 0);
@@ -4442,7 +4753,10 @@ if (exact(["auth", "status"])) {
         "assisted",
       );
       const before = deliveryProviderCalls(prepared).filter(isMergeCall).length;
-      const resumed = executeDeliveryMerge(prepared, { reopenTerminal: true });
+      const resumed = executeDeliveryMerge(prepared, {
+        reopenTerminal: true,
+        authorize: true,
+      });
       assert.equal(resumed.status, 0, resumed.stdout + resumed.stderr);
       assert.doesNotMatch(resumed.stdout, /pull_request_complete/u);
       assert.equal(
@@ -4583,10 +4897,16 @@ if (exact(["auth", "status"])) {
        * 「独立approvalが無ければ到達しない」ことであって、`assisted`固有の門では
        * ない。** 実装の是正はIssue #1036が所有する。
        */
-      const approved = prepareDeliveryCli(this, {}, "assisted");
+      const approved = prepareDeliveryCli(
+        this,
+        {},
+        "assisted",
+        "merge",
+        "actor-independent",
+      );
       const created = createDeliveryPullRequest(approved);
       assert.match(created.stdout, /"state": "merge_pending"/u, created.stdout);
-      const requested = executeDeliveryMerge(approved);
+      const requested = executeDeliveryMerge(approved, { authorize: true });
       assert.equal(
         requested.status,
         0,
@@ -4596,7 +4916,7 @@ if (exact(["auth", "status"])) {
         phase: "merged",
         mergedAt: fixtureInstant({ minutesAhead: 5 }),
       });
-      const completed = executeDeliveryMerge(approved);
+      const completed = executeDeliveryMerge(approved, { authorize: true });
       assert.equal(
         completed.status,
         0,
@@ -4624,10 +4944,12 @@ if (exact(["auth", "status"])) {
         this,
         { reviewDisposition: "changes-requested" },
         "assisted",
+        "merge",
+        "actor-independent",
       );
       createDeliveryPullRequest(denied);
       const before = deliveryProviderCalls(denied).filter(isMergeCall).length;
-      const rejected = executeDeliveryMerge(denied);
+      const rejected = executeDeliveryMerge(denied, { authorize: true });
       assert.notEqual(
         rejected.status,
         0,
@@ -4641,7 +4963,7 @@ if (exact(["auth", "status"])) {
        */
       assert.match(
         rejected.stdout + rejected.stderr,
-        /current H_finalそのものを対象とするAPPROVED reviewがありません/u,
+        /current H_final.*独立したreviewがありません/u,
         rejected.stdout + rejected.stderr,
       );
       assert.equal(
@@ -4661,11 +4983,13 @@ if (exact(["auth", "status"])) {
         this,
         { reviewCommitSha: "stale" },
         "assisted",
+        "merge",
+        "actor-independent",
       );
       createDeliveryPullRequest(stale);
       const staleBefore =
         deliveryProviderCalls(stale).filter(isMergeCall).length;
-      const staleRejected = executeDeliveryMerge(stale);
+      const staleRejected = executeDeliveryMerge(stale, { authorize: true });
       assert.notEqual(
         staleRejected.status,
         0,
@@ -4673,7 +4997,7 @@ if (exact(["auth", "status"])) {
       );
       assert.match(
         staleRejected.stdout + staleRejected.stderr,
-        /current H_finalそのものを対象とするAPPROVED reviewがありません/u,
+        /current H_final.*独立したreviewがありません/u,
         staleRejected.stdout + staleRejected.stderr,
       );
       assert.equal(
@@ -4953,7 +5277,13 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-E2E-WFSTEP-020": {
-      const prepared = prepareDeliveryCli(this);
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       createDeliveryPullRequest(prepared);
       writeDeliveryProviderControl(prepared, {
         providerDefaultBranch: "develop",
@@ -5142,20 +5472,29 @@ if (exact(["auth", "status"])) {
        * `replaced`はidentity照合を、`revoked`は独立approvalの再確認を殺す変異を
        * 捕まえる。**Step 11を記録しないことまで測る。**
        */
-      const prepared = prepareDeliveryCli(this);
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       for (const [shift, pattern] of [
         ["replaced", /固定済みmerge review identityと一致しません/u],
         /**
-         * **既定の`context-isolated`が返す診断を名指しする**（Issue #1317）。
+         * **`actor-independent`が返す診断を名指しする**（Issue #1317）。
          * reviewerは実装者と別actorなので、ここで検査しているのは
          * 「承認取り下げ後に対象HEADへのAPPROVEDが無い」ことである。
          */
-        [
-          "revoked",
-          /current H_finalそのものを対象とするAPPROVED reviewがありません/u,
-        ],
+        ["revoked", /current H_final.*独立したreviewがありません/u],
       ] as const) {
-        const scenario = prepareDeliveryCli(this);
+        const scenario = prepareDeliveryCli(
+          this,
+          {},
+          "automatic",
+          "merge",
+          "actor-independent",
+        );
         createDeliveryPullRequest(scenario);
         const requested = executeDeliveryMerge(scenario);
         assert.equal(requested.status, 0, requested.stdout + requested.stderr);
@@ -5610,7 +5949,13 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-E2E-WFSTEP-032": {
-      const rejectedPrepared = prepareDeliveryCli(this);
+      const rejectedPrepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       createDeliveryPullRequest(rejectedPrepared);
       writeDeliveryProviderControl(rejectedPrepared, {
         reviewDisposition: "changes-requested",
@@ -5626,7 +5971,13 @@ if (exact(["auth", "status"])) {
         0,
       );
 
-      const acceptedPrepared = prepareDeliveryCli(this);
+      const acceptedPrepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
       createDeliveryPullRequest(acceptedPrepared);
       writeDeliveryProviderControl(acceptedPrepared, {
         reviewDisposition: "commented-after-approval",

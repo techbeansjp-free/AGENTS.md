@@ -100,7 +100,7 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
   Scenario: SCN-UNIT-REVIEW-013 tracked Phase A artifactはH_final後に更新しない
     Given tracked Phase A review recordを読む
     When Phase A artifactのimmutable契約を検査する
-    Then H_final後は更新せず外部attestationだけで完了すると明記されている
+    Then H_final後は更新せずmode別approval authorityで完了すると明記されている
 
   Scenario: SCN-UNIT-REVIEW-014 review成果物も4つの開発考慮事項を必須とする
     Given 開発考慮事項を欠く完全なreviewがある
