@@ -66,7 +66,7 @@ Feature: rebase後の証跡再固定を内容等価性で受理する
     When 再固定を適用する
     Then 再固定は拒否される
 
-  Scenario: SCN-UNIT-REANCHOR-014 step11-recorded以外の状態で両方の再固定を拒否する
+  Scenario: SCN-UNIT-REANCHOR-014 pr-boundでは通常rebaseとreview層再固定を拒否する
     Given delivery stateがstep11-recorded以外のstagingがある
     When 両方の再固定を適用する
     Then どちらも拒否され復旧経路が案内される
