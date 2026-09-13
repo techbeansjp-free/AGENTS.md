@@ -10,7 +10,7 @@ const SHA256 = /^[a-f0-9]{64}$/u;
  * **閉じた列挙にする。** 内容が変わる supersession を再固定で表現できるようにすると、
  * 未reviewの内容をreview済みとして参照させる洗浄経路になる。
  */
-const METHODS = ["rebase", "artifact-replacement"];
+const METHODS = ["rebase", "artifact-replacement", "reviewed-forward"];
 export function isEvidenceReanchorRecord(value) {
     const replacement = isRecord(value) ? value.artifactReplacement : undefined;
     const validReplacement = isRecord(replacement) &&
@@ -23,6 +23,18 @@ export function isEvidenceReanchorRecord(value) {
         SHA256.test(replacement.oldDigest) &&
         typeof replacement.newDigest === "string" &&
         SHA256.test(replacement.newDigest);
+    const reviewedForward = isRecord(value) ? value.reviewedForward : undefined;
+    const validReviewedForward = isRecord(reviewedForward) &&
+        typeof reviewedForward.sessionId === "string" &&
+        SHA256.test(reviewedForward.sessionId) &&
+        typeof reviewedForward.roundDigest === "string" &&
+        SHA256.test(reviewedForward.roundDigest) &&
+        typeof reviewedForward.implementationSha === "string" &&
+        OID.test(reviewedForward.implementationSha) &&
+        typeof reviewedForward.artifactPath === "string" &&
+        reviewedForward.artifactPath.length > 0 &&
+        typeof reviewedForward.artifactDigest === "string" &&
+        SHA256.test(reviewedForward.artifactDigest);
     return (isRecord(value) &&
         typeof value.oldHeadSha === "string" &&
         OID.test(value.oldHeadSha) &&
@@ -42,7 +54,10 @@ export function isEvidenceReanchorRecord(value) {
         value.recordedAt.trim().length > 0 &&
         (replacement === undefined ||
             (value.method === "artifact-replacement" && validReplacement)) &&
-        (value.method !== "artifact-replacement" || replacement !== undefined));
+        (value.method !== "artifact-replacement" || replacement !== undefined) &&
+        (reviewedForward === undefined ||
+            (value.method === "reviewed-forward" && validReviewedForward)) &&
+        (value.method !== "reviewed-forward" || reviewedForward !== undefined));
 }
 /**
  * 2つの差分観測が内容として等価かを決める。

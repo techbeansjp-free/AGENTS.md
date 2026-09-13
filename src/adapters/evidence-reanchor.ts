@@ -278,6 +278,14 @@ interface ArtifactReplacementEvidence {
   newDigest: string;
 }
 
+interface ReviewedForwardEvidence {
+  sessionId: string;
+  roundDigest: string;
+  implementationSha: string;
+  artifactPath: string;
+  artifactDigest: string;
+}
+
 const REVIEW_ARTIFACT_NAME = /^\d+_課題\d+.*レビュー\.md$/u;
 
 /**
@@ -478,13 +486,111 @@ function observeArtifactReplacement(
   };
 }
 
+/**
+ * `pr-bound`後に外部reviewer指摘を取り込んだ前進commitを、新しいreview roundへ
+ * 束縛する。旧delivery headをancestorに持つこと、exact session、明示intake、
+ * review artifactの構造と監査をすべて再観測し、force rewriteや未review差分を拒否する。
+ */
+function observeReviewedForward(
+  staging: string,
+  root: string,
+  input: ReanchorComparison,
+): ReviewedForwardEvidence | undefined {
+  if (input.oldBaseSha !== input.newBaseSha) return undefined;
+  const afterAll = observeReanchorDiff(
+    root,
+    "新base→新head",
+    input,
+    input.newBaseSha,
+    input.newHeadSha,
+  );
+  const artifactPath = terminalArtifactPath(afterAll.changedPaths);
+  if (
+    artifactPath === undefined ||
+    !REVIEW_ARTIFACT_NAME.test(path.posix.basename(artifactPath))
+  )
+    return undefined;
+  const artifact = readBlobAtCommit(root, input.newHeadSha, artifactPath);
+  if (artifact === undefined) return undefined;
+  const anchor = parseReviewIdentityAnchor(artifact);
+  if (anchor === undefined || anchor.base !== input.newBaseSha)
+    return undefined;
+  if (input.oldHeadSha === anchor.implementation) return undefined;
+  try {
+    /** `observeReviewDiff`の固定Git環境でstrict ancestorを再観測する。 */
+    observeReviewDiff(root, input.oldHeadSha, anchor.implementation);
+  } catch {
+    return undefined;
+  }
+  if (
+    !verifiedImplementationBoundary(
+      root,
+      input.newHeadSha,
+      artifactPath,
+      anchor.implementation,
+      input,
+      "新H_impl→新head",
+    ).valid
+  )
+    return undefined;
+  const implementation = observeReanchorDiff(
+    root,
+    "新base→新H_impl",
+    input,
+    input.newBaseSha,
+    anchor.implementation,
+    anchor.implementation,
+  );
+  const structure = validateReviewArtifactStructure(artifact);
+  const audit = parseReviewArtifactAudit(artifact);
+  const approval = validateContextIsolatedApprovalRecord(
+    canonicalApprovalContent(artifact),
+  );
+  const session = readStoredReviewSession(staging);
+  const journal = readWorkflowJournal(staging);
+  const step10 = [...journal.entries]
+    .reverse()
+    .find((entry) => entry.step === 10 && entry.postPrIntake);
+  const expectedPaths = [...implementation.changedPaths]
+    .filter((entry) => !entry.startsWith("dist/"))
+    .sort();
+  const auditedPaths = audit.entries.map((entry) => entry.path).sort();
+  if (
+    structure.diagnostics.length > 0 ||
+    structure.base !== input.newBaseSha ||
+    structure.implementation !== anchor.implementation ||
+    structure.rounds === undefined ||
+    structure.rounds < 1 ||
+    structure.stepChain?.kind !== "via" ||
+    !approval.valid ||
+    session === null ||
+    session.status !== "converged" ||
+    session.latestCandidateHeadSha !== anchor.implementation ||
+    step10?.reviewSession === undefined ||
+    step10.reviewSession.sessionId !== session.sessionId ||
+    step10.reviewSession.roundDigest !== session.latestRoundDigest ||
+    step10.reviewSession.headSha !== session.latestCandidateHeadSha ||
+    journal.errors.length > 0 ||
+    audit.entries.some((entry) => entry.decision !== "pass") ||
+    JSON.stringify(expectedPaths) !== JSON.stringify(auditedPaths)
+  )
+    return undefined;
+  return {
+    sessionId: session.sessionId,
+    roundDigest: session.latestRoundDigest,
+    implementationSha: anchor.implementation,
+    artifactPath,
+    artifactDigest: crypto.createHash("sha256").update(artifact).digest("hex"),
+  };
+}
+
 function resolveAnchor(
   staging: string,
   layer: EvidenceReanchorLayer,
 ): {
   anchoredHeadSha: string;
   anchoredBaseSha: string;
-  artifactReplacementRequired: boolean;
+  prBound: boolean;
 } {
   const deliveryState = observeStoredDeliveryState(staging);
   if (layer === "delivery") {
@@ -500,7 +606,7 @@ function resolveAnchor(
     return {
       anchoredHeadSha: state.create.headSha,
       anchoredBaseSha: state.create.baseSha,
-      artifactReplacementRequired: state.state === "pr-bound",
+      prBound: state.state === "pr-bound",
     };
   }
   if (deliveryState?.create)
@@ -515,7 +621,7 @@ function resolveAnchor(
   return {
     anchoredHeadSha: session.latestCandidateHeadSha,
     anchoredBaseSha: session.anchor.diffBaseSha,
-    artifactReplacementRequired: false,
+    prBound: false,
   };
 }
 
@@ -529,8 +635,9 @@ export interface EvidenceReanchorEvaluation extends EvidenceReanchorResult {
   oldHeadSha: string;
   oldBaseSha: string;
   diffDigest: string | undefined;
-  method: "rebase" | "artifact-replacement" | undefined;
+  method: "rebase" | "artifact-replacement" | "reviewed-forward" | undefined;
   artifactReplacement: ArtifactReplacementEvidence | undefined;
+  reviewedForward: ReviewedForwardEvidence | undefined;
 }
 
 function validateEvidenceReanchorInput(input: {
@@ -585,6 +692,7 @@ export function evaluateEvidenceReanchor(input: {
       diffDigest: undefined,
       method: undefined,
       artifactReplacement: undefined,
+      reviewedForward: undefined,
     };
   if (oldHeadSha === input.newHeadSha)
     throw new Error("再固定は移動していないheadに対して行えません");
@@ -608,8 +716,9 @@ export function evaluateEvidenceReanchor(input: {
     input.newBaseSha,
     input.newHeadSha,
   );
-  let method: "rebase" | "artifact-replacement" = "rebase";
+  let method: "rebase" | "artifact-replacement" | "reviewed-forward" = "rebase";
   let artifactReplacement: ArtifactReplacementEvidence | undefined;
+  let reviewedForward: ReviewedForwardEvidence | undefined;
   if (!isContentEquivalent(before, after)) {
     const rebase = observeRebaseEquivalence(input.root, comparison);
     if (rebase.reason !== "ok") {
@@ -618,16 +727,28 @@ export function evaluateEvidenceReanchor(input: {
         input.root,
         comparison,
       );
-      if (artifactReplacement === undefined)
+      if (artifactReplacement !== undefined) method = "artifact-replacement";
+      else if (anchor.prBound) {
+        reviewedForward = observeReviewedForward(
+          staging,
+          input.root,
+          comparison,
+        );
+        if (reviewedForward !== undefined) method = "reviewed-forward";
+      }
+      if (artifactReplacement === undefined && reviewedForward === undefined)
         throw new Error(
           `再固定前後の内容が等価ではありません（${rebase.reason}）: before=${before.digest} after=${after.digest}${rebase.gitFailure === undefined ? "" : `; ${rebase.gitFailure}`}`,
         );
-      method = "artifact-replacement";
     }
   }
-  if (anchor.artifactReplacementRequired && method !== "artifact-replacement")
+  if (
+    anchor.prBound &&
+    method !== "artifact-replacement" &&
+    method !== "reviewed-forward"
+  )
     throw new Error(
-      "pr reanchorのpr-bound再固定は同一review済み実装に対する監査合格済みartifact改名だけを受理します",
+      "pr reanchorのpr-bound再固定は監査合格済みartifact改名、または明示したpost-PR intakeとexact review bindingを持つ前進commitだけを受理します",
     );
   return {
     chain: existing,
@@ -638,6 +759,7 @@ export function evaluateEvidenceReanchor(input: {
     diffDigest: before.digest,
     method,
     artifactReplacement,
+    reviewedForward,
   };
 }
 
@@ -675,12 +797,16 @@ export function appendEvidenceReanchor(input: {
       oldBaseSha: evaluation.oldBaseSha,
       newBaseSha: input.newBaseSha,
       diffDigest: evaluation.diffDigest as string,
-      method: evaluation.method as "rebase" | "artifact-replacement",
+      method: evaluation.method as
+        "rebase" | "artifact-replacement" | "reviewed-forward",
       reason: input.reason,
       recordedAt: input.recordedAt,
       ...(evaluation.artifactReplacement === undefined
         ? {}
         : { artifactReplacement: evaluation.artifactReplacement }),
+      ...(evaluation.reviewedForward === undefined
+        ? {}
+        : { reviewedForward: evaluation.reviewedForward }),
     };
     const file = path.join(staging, EVIDENCE_REANCHOR_FILE);
     const next = [...evaluation.chain, record];

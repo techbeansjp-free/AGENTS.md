@@ -246,6 +246,21 @@ Feature: ワークフローStepの定義とjournalを決定的に検証する
     When "SCN-UNIT-WFJRNL-028"の単体検査を実行する
     Then ワークフローStep単体検査は期待結果になる
 
+  Scenario: SCN-UNIT-WFJRNL-029 Step 11前のpost-PR intake記録を順序違反にしない
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-029"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-030 先行Step 10のないpost-PR intakeを拒否する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-030"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
+  Scenario: SCN-UNIT-WFJRNL-031 post-PR intakeの型と排他契約を検証する
+    Given ワークフローStep単体検査の準備がある
+    When "SCN-UNIT-WFJRNL-031"の単体検査を実行する
+    Then ワークフローStep単体検査は期待結果になる
+
   Scenario: SCN-UNIT-ADVANCE-001 次Step 4をrequirements検証付きIssue同期として計画する
     Given ワークフローStep単体検査の準備がある
     When "SCN-UNIT-ADVANCE-001"の単体検査を実行する

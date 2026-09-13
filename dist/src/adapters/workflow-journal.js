@@ -259,6 +259,16 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
     if (current.entries.some(({ step }) => step === 11) &&
         !entry.postTerminalIntake)
         throw new Error("Step 11記録後にworkflow journalへ追記できるのはpost-terminal intakeのStep 10だけです");
+    const deliveryFile = path.join(staging, DELIVERY_STATE_FILE);
+    const delivery = fs.existsSync(deliveryFile)
+        ? parseDeliveryState(fs.readFileSync(deliveryFile, "utf8"))
+        : undefined;
+    if (entry.postPrIntake && delivery?.state !== "pr-bound")
+        throw new Error("post-PR intakeのStep 10はdelivery stateがpr-boundのときだけ追記できます");
+    if (entry.step === 10 &&
+        delivery?.state === "pr-bound" &&
+        !entry.postPrIntake)
+        throw new Error("pr-bound中のStep 10再記録にはpost-PR intakeの明示が必要です");
     /**
      * **post-terminal intakeはterminal delivery stateの後に置く記録である。**
      *
@@ -267,9 +277,7 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
      * 引き続き拒否する。**
      */
     if (entry.step < 11 && !entry.postTerminalIntake) {
-        const deliveryFile = path.join(staging, DELIVERY_STATE_FILE);
-        if (fs.existsSync(deliveryFile)) {
-            const delivery = parseDeliveryState(fs.readFileSync(deliveryFile, "utf8"));
+        if (delivery !== undefined) {
             if (delivery.state === "merge-observed" ||
                 delivery.state === "step11-recorded")
                 throw new Error("terminal delivery state後はStep 0〜10を追記できません");

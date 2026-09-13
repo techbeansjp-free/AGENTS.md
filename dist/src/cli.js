@@ -55,6 +55,7 @@ function workflowArguments(args) {
         "apply",
         "dry-run",
         "post-terminal-intake",
+        "post-pr-intake",
         "reconfirm",
     ]);
     for (let index = 0; index < args.length; index += 1) {
@@ -4022,6 +4023,7 @@ export async function main(argv, dependencies = {}) {
             "recorded-at",
             "review-session-digest",
             "post-terminal-intake",
+            "post-pr-intake",
             "reconfirm",
         ].includes(flag));
         if (unknown.length > 0)
@@ -4075,9 +4077,14 @@ export async function main(argv, dependencies = {}) {
             : undefined;
         if (step.step === 9)
             entry.implementationHeadSha = headSha;
-        const intake = presentFlag(flags, "post-terminal-intake");
-        if (intake && step.step !== 10)
+        const terminalIntake = presentFlag(flags, "post-terminal-intake");
+        const postPrIntake = presentFlag(flags, "post-pr-intake");
+        if (terminalIntake && postPrIntake)
+            throw new Error("--post-terminal-intakeと--post-pr-intakeは同時に指定できません");
+        if (terminalIntake && step.step !== 10)
             throw new Error("--post-terminal-intakeはworkflow record --step=10だけに指定できます");
+        if (postPrIntake && step.step !== 10)
+            throw new Error("--post-pr-intakeはworkflow record --step=10だけに指定できます");
         if (step.step === 10) {
             const session = assertConvergedReviewSession({
                 staging,
@@ -4091,10 +4098,15 @@ export async function main(argv, dependencies = {}) {
              * Step 11を経ていない工程で順序判定を外す抜け道になる（Issue #1194）。
              */
             const hasTerminal = journal.entries.some((item) => item.step === 11);
-            if (intake && !hasTerminal)
+            const delivery = readStoredDeliveryState(staging);
+            if (terminalIntake && !hasTerminal)
                 throw new Error("--post-terminal-intakeはStep 11記録後にだけ指定できます");
-            if (!intake && hasTerminal)
+            if (postPrIntake && (hasTerminal || delivery?.state !== "pr-bound"))
+                throw new Error("--post-pr-intakeはStep 11記録前かつdelivery stateがpr-boundのときだけ指定できます");
+            if (!terminalIntake && hasTerminal)
                 throw new Error("Step 11記録後のStep 10再記録には--post-terminal-intakeが必要です。外部reviewer指摘を同じPRで取り込んだroundであることを明示してください");
+            if (!postPrIntake && delivery?.state === "pr-bound" && !hasTerminal)
+                throw new Error("pr-bound中のStep 10再記録には--post-pr-intakeが必要です。外部reviewer指摘を同じPRで取り込んだroundであることを明示してください");
             entry = {
                 ...entry,
                 reviewSession: {
@@ -4102,7 +4114,8 @@ export async function main(argv, dependencies = {}) {
                     roundDigest: session.latestRoundDigest,
                     headSha: session.latestCandidateHeadSha,
                 },
-                ...(intake ? { postTerminalIntake: true } : {}),
+                ...(terminalIntake ? { postTerminalIntake: true } : {}),
+                ...(postPrIntake ? { postPrIntake: true } : {}),
             };
         }
         else if (flags["review-session-digest"] !== undefined) {

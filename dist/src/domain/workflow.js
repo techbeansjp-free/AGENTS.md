@@ -223,6 +223,7 @@ const JOURNAL_FIELDS = new Set([
     "reviewSession",
     "humanOverride",
     "postTerminalIntake",
+    "postPrIntake",
     "reconfirmation",
 ]);
 const POC_OBSERVATION_BINDING_FIELDS = new Set(["headSha", "evidenceDigest"]);
@@ -422,6 +423,17 @@ function parseJournalEntry(value, line) {
         else
             postTerminalIntake = true;
     }
+    let postPrIntake;
+    if (value.postPrIntake !== undefined) {
+        if (value.postPrIntake !== true)
+            errors.push(`${label}のpostPrIntakeはtrueだけを受理します`);
+        else if (Number(value.step) !== 10)
+            errors.push(`${label}のpostPrIntakeはStep 10にだけ指定できます`);
+        else
+            postPrIntake = true;
+    }
+    if (postTerminalIntake && postPrIntake)
+        errors.push(`${label}のpostTerminalIntakeとpostPrIntakeは同時に指定できません`);
     let reconfirmation;
     if (value.reconfirmation !== undefined) {
         if (value.reconfirmation !== true)
@@ -446,6 +458,7 @@ function parseJournalEntry(value, line) {
             ...(reviewSession ? { reviewSession } : {}),
             ...(parsedOverride.value ? { humanOverride: parsedOverride.value } : {}),
             ...(postTerminalIntake ? { postTerminalIntake } : {}),
+            ...(postPrIntake ? { postPrIntake } : {}),
             ...(reconfirmation ? { reconfirmation } : {}),
         },
         errors,
@@ -509,7 +522,7 @@ export function validateStepJournal(input) {
      * 通常entryが先行していることを別途要求する。
      */
     input.entries.forEach((entry, index) => {
-        if (entry.postTerminalIntake || entry.reconfirmation)
+        if (entry.postTerminalIntake || entry.postPrIntake || entry.reconfirmation)
             return;
         lastByStep.set(entry.step, { entry, index });
     });
@@ -529,6 +542,7 @@ export function validateStepJournal(input) {
             .some((candidate) => candidate.step === entry.step &&
             !candidate.reconfirmation &&
             !candidate.postTerminalIntake &&
+            !candidate.postPrIntake &&
             !candidate.humanOverride);
         if (!preceded)
             errors.push(`Step ${entry.step}の上流再確定entryに先行する通常entryがありません`);
@@ -539,6 +553,20 @@ export function validateStepJournal(input) {
             return;
         if (terminalIndex < 0 || index < terminalIndex)
             errors.push("post-terminal intakeのStep 10記録はStep 11より後に置いてください");
+    });
+    input.entries.forEach((entry, index) => {
+        if (!entry.postPrIntake)
+            return;
+        const preceded = input.entries
+            .slice(0, index)
+            .some((candidate) => candidate.step === 10 &&
+            !candidate.postTerminalIntake &&
+            !candidate.postPrIntake &&
+            !candidate.humanOverride);
+        if (!preceded)
+            errors.push("post-PR intakeのStep 10記録に先行する通常のStep 10記録がありません");
+        if (terminalIndex >= 0 && index > terminalIndex)
+            errors.push("post-PR intakeのStep 10記録はStep 11より前に置いてください");
     });
     /**
      * **上流再確定entryはStep 11より後に置けない**（Issue #1342）。
