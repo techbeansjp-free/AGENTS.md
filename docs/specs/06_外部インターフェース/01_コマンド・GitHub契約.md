@@ -186,7 +186,7 @@ PR CIで`origin/HEAD`がない場合も、workflowはevent値をquoted environme
 
 ## workspace-writeのGit起動境界
 
-`routing launch --sandbox=workspace-write`はcanonical rootをGitのtop-level、`--git-dir`、`--git-common-dir`と照合する。registered linked worktreeはGit metadata write roots（TERM-ASC-115）として検証済みgit directory、common directoryの順で`--add-dir <directory>`を各1回配送し、primaryとread-onlyは配送しない。`--add-dir`をASC公開flagとしては受理しない。
+`routing launch --sandbox=workspace-write`はcanonical rootをGitのtop-level、`--git-dir`、`--git-common-dir`と照合する。registered linked worktreeはGit metadata write roots（TERM-ASC-116）として検証済みgit directory、common directoryの順で`--add-dir <directory>`を各1回配送し、primaryとread-onlyは配送しない。`--add-dir`をASC公開flagとしては受理しない。
 
 非Git、未登録・不正metadata、symlink脱出、separate-git-dir、不一致または解決不能は`state=rejected`、`dispatched=false`、終了値1で返す。公開理由は固定文であり、prompt、Git stdout/stderr、home・repository・metadataのabsolute pathを含めない。修復後の新要求だけを受理する。
 

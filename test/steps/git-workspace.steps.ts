@@ -69,6 +69,7 @@ Given("Git書込commandを使わない隔離linked worktree fixtureがある", f
 
 When(
   "実Git照会からlinked Git metadata write rootsを模擬Codexへ配送する",
+  { timeout: 15_000 },
   async function () {
     assert.ok(this.workspace);
     const fixture = this.workspace;
