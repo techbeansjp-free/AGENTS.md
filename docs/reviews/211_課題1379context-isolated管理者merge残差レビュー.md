@@ -5,14 +5,14 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | Issue #1379 context-isolated管理者merge残差 |
-| ラウンド | 1〜2 |
-| 対象SHA・文書ダイジェスト | `36f71d96e4b7891c1310d6e8464e7adbdf3d5093` |
+| ラウンド | 1〜3 |
+| 対象SHA・文書ダイジェスト | `b79db9f0bb508e5644af6c7fdc5e251147db8e7f` |
 | 比較基点 | `ad225506bc53c038f2c2c1b1dbce487089e37503` |
-| H_impl | `36f71d96e4b7891c1310d6e8464e7adbdf3d5093` |
+| H_impl | `b79db9f0bb508e5644af6c7fdc5e251147db8e7f` |
 | 対象差分 | 比較基点からH_implまでの22 path |
 | 対象外 | 比較基点に存在し変更していない範囲 |
-| 残り予算 | 同一scope 4 counted round、取り直し2 round |
-| ラウンド数 | 2 |
+| 残り予算 | 同一scope 4 counted round、取り直し1 round |
+| ラウンド数 | 3 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260913_212007_context-isolated-formal-reviewでGitHub自己承認制約を安全にバイパスする |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md` REQ-WF-005/013、TERM-ASC-114 |
 | 成果物行数 | 追加1095行、削除74行。閾値判定には使用しない |
@@ -30,12 +30,12 @@
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | Issue #1379 staging | AC-1379-01〜04、INV-01〜03 | tracker・staging |
-| 差分 | `ad225506b..36f71d96` | 22 path | Git |
+| 差分 | `ad225506b..b79db9f0` | 22 path | Git |
 | テスト | H_impl | full 1967 scenarios、対象9 scenarios / 45 steps、conformance 87 / 468、失敗0 | テスト出力 |
 | 仕様 | workflow・要件・機能・CLI/GitHub・data・信頼境界・用語・追跡 | updated | 既存文書 |
-| commit前candidate | H_impl tree | 22 path、tree `5740f51ffa5bd233db359d7bb295d201221a4a31` | Git |
+| commit前candidate | H_impl tree | 22 path、tree `815ee35e88e72538968455e58c371e8ca56585b8` | Git |
 | Phase A artifact | 本file | H_impl後のartifact-only commitで固定予定 | Git |
-| review session | staging `review-session.json` | session `0a4be8d62df760698d5dc889f28e16b9a9d7633868ebbe54d9bdf469f655d237`、Round 2 digest `928d5144fa19175c29374818de91b0cba4b96bbed9a4dab6b6c929dfe19a26b8`、converged | 耐久session |
+| review session | staging `review-session.json` | session `0a4be8d62df760698d5dc889f28e16b9a9d7633868ebbe54d9bdf469f655d237`、Round 3 digest `c9906c860e77474d8f746e8968e57efdd6a02557089c23d1b6701080740df1ee`、converged | 耐久session |
 
 - authority/evidence graphはpolicy→観測→pure認可→immutable intent→CAS dispatchの一方向で、cycle・自己評価がない。
 - H_implからH_finalは本artifactだけを追加し、commit後にauditで確認する。
@@ -56,6 +56,7 @@
 | `docs/specs/10_セキュリティ/01_信頼境界.md` | M | security owner | spec | admin境界 | policy→provider | AC-1379-02/03 | fail-closed | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | trace owner | spec | 要件追跡 | verified-by | 全SCN | orphan 0 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | trace owner | spec | 変更理由 | 現行仕様参照 | Issue #1379 | 履歴保持 | pass |
+| `docs/reviews/211_課題1379context-isolated管理者merge残差レビュー.md` | A | review owner | evidence | formal review履歴 | 実装後の証拠 | Round 1〜3 | findingと収束を保持 | pass |
 | `src/adapters/github.ts` | M | adapter owner | package | rule/check/thread観測 | domainへ閉じた観測 | AC-1379-01/02/04 | unknown拒否・CAS | pass |
 | `src/cli.ts` | M | application owner | package | 認可合成・preview | domain→adapter | AC-1379-01〜04 | 二重観測 | pass |
 | `src/domain/delivery-state.ts` | M | domain owner | package | immutable intent | adapter非依存 | AC-1379-03/04 | 旧state normal | pass |
@@ -125,6 +126,8 @@
 | F-1379-H01 | High | 旧stateを必須field検査が拒否 | Round 1 | state | optionalとしてnormalへ復元 | resolved | なし |
 | F-1379-H02 | High | 未知parameterを無視 | Round 1 | observer | nestedを含むexact field閉集合 | resolved | なし |
 | F-1379-M01 | Medium | previewにdispatchModeなし | Round 1 | CLI | previewへ追加しE2E化 | resolved | なし |
+| CR-1379-001 | High | pull_request rule未観測でもadmin候補になりうる | CodeRabbit | observer | 適合rule 1件以上を必須化 | resolved | なし |
+| CR-1379-002 | Medium | CAS flagの値を直接検査していない | CodeRabbit | E2E | flag直後をexact HEADと照合 | resolved | なし |
 
 ## 6. ラウンド固有の確認
 
@@ -141,9 +144,9 @@
 
 ### ラウンド3
 
-- 実施不要。Round 2で全findingが収束した。
-- 危険範囲は正条件閉集合とnormal既定へ限定した。
-- 同じ範囲の予算を更新していない。最終裁定はapproved。
+- PR後のCodeRabbit指摘2件を前進commitで修正した。
+- 別contextが修正6 pathと隣接範囲を再確認し、CR-1379-001/002をresolvedとした。
+- 未解決findingは0件。同じ範囲の予算を更新せず、最終裁定はapproved。
 
 ## 7. テスト結果
 
@@ -189,7 +192,7 @@
 ## 11. 総合判定と再開地点
 
 - 未解決Critical/High: なし
-- Medium/Lowの記録: F-1379-M01はresolved
+- Medium/Lowの記録: F-1379-M01、CR-1379-002はresolved
 - 判定: approved
 - 新しい権限が必要な事項: なし。merge権限は明示済み
 - 残存リスク: ruleset変更は未知parameterとして安全側停止し実装更新が必要
