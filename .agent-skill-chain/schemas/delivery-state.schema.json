@@ -43,6 +43,7 @@
     "step11": {
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/step11" }]
     },
+    "redelivery": { "$ref": "#/$defs/redelivery" },
     "reconciliation": {
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/reconciliation" }]
     }
@@ -322,6 +323,62 @@
         "evidenceId": { "$ref": "#/$defs/digest" }
       }
     },
+    "redelivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decisionId",
+        "startedAt",
+        "priorStep11EvidenceId",
+        "trustedPolicyCommitSha",
+        "authorizedHeadSha",
+        "authority",
+        "outcome",
+        "completedAt",
+        "observationId"
+      ],
+      "properties": {
+        "decisionId": { "type": "string", "pattern": "^[a-f0-9]{32,64}$" },
+        "startedAt": { "$ref": "#/$defs/instant" },
+        "priorStep11EvidenceId": { "$ref": "#/$defs/digest" },
+        "trustedPolicyCommitSha": { "$ref": "#/$defs/oid" },
+        "authorizedHeadSha": { "$ref": "#/$defs/oid" },
+        "authority": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "actorId",
+            "repository",
+            "repositoryWriteSource",
+            "repositoryWriteEvidenceId"
+          ],
+          "properties": {
+            "source": { "const": "cli.--reopen-terminal=approved" },
+            "actorId": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            },
+            "repository": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+            },
+            "repositoryWriteSource": {
+              "const": "github.repository.assert-write"
+            },
+            "repositoryWriteEvidenceId": { "$ref": "#/$defs/digest" }
+          }
+        },
+        "outcome": { "enum": ["pending", "merged"] },
+        "completedAt": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/instant" }]
+        },
+        "observationId": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/digest" }]
+        }
+      }
+    },
     "reconciliation": {
       "type": "object",
       "additionalProperties": false,
@@ -344,6 +401,7 @@
           "pr": { "type": "null" },
           "merge": { "type": "null" },
           "step11": { "type": "null" },
+          "redelivery": false,
           "reconciliation": { "type": "null" }
         }
       }
@@ -358,6 +416,7 @@
           "pr": { "$ref": "#/$defs/pr" },
           "merge": { "type": "null" },
           "step11": { "type": "null" },
+          "redelivery": false,
           "reconciliation": { "type": "null" }
         }
       }
@@ -378,7 +437,6 @@
               }
             ]
           },
-          "step11": { "type": "null" },
           "reconciliation": { "type": "null" }
         }
       }
@@ -401,7 +459,6 @@
               }
             ]
           },
-          "step11": { "type": "null" },
           "reconciliation": { "type": "null" }
         }
       }
@@ -421,6 +478,7 @@
           {
             "properties": {
               "merge": { "type": "null" },
+              "redelivery": false,
               "step11": {
                 "allOf": [
                   { "$ref": "#/$defs/step11" },
@@ -458,8 +516,121 @@
                 ]
               }
             }
+          },
+          {
+            "required": ["redelivery"],
+            "properties": {
+              "merge": {
+                "allOf": [
+                  { "$ref": "#/$defs/merge" },
+                  {
+                    "properties": {
+                      "observation": {
+                        "allOf": [
+                          { "$ref": "#/$defs/observation" },
+                          {
+                            "properties": {
+                              "providerState": { "const": "merged" },
+                              "mergeCommitSha": { "$ref": "#/$defs/oid" }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "step11": {
+                "allOf": [
+                  { "$ref": "#/$defs/step11" },
+                  { "properties": { "outcome": { "const": "pull-request" } } }
+                ]
+              },
+              "redelivery": {
+                "allOf": [
+                  { "$ref": "#/$defs/redelivery" },
+                  { "properties": { "outcome": { "const": "merged" } } }
+                ]
+              }
+            }
           }
         ]
+      }
+    },
+    {
+      "if": { "required": ["redelivery"] },
+      "then": {
+        "properties": {
+          "step11": {
+            "allOf": [
+              { "$ref": "#/$defs/step11" },
+              { "properties": { "outcome": { "const": "pull-request" } } }
+            ]
+          },
+          "merge": { "$ref": "#/$defs/merge" }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["redelivery"],
+        "properties": {
+          "redelivery": {
+            "properties": { "outcome": { "const": "pending" } },
+            "required": ["outcome"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "redelivery": {
+            "properties": {
+              "completedAt": { "type": "null" },
+              "observationId": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["redelivery"],
+        "properties": {
+          "redelivery": {
+            "properties": { "outcome": { "const": "merged" } },
+            "required": ["outcome"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "merge": {
+            "allOf": [
+              { "$ref": "#/$defs/merge" },
+              {
+                "properties": {
+                  "observation": {
+                    "allOf": [
+                      { "$ref": "#/$defs/observation" },
+                      {
+                        "properties": {
+                          "providerState": { "const": "merged" },
+                          "mergeCommitSha": { "$ref": "#/$defs/oid" }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "redelivery": {
+            "properties": {
+              "completedAt": { "$ref": "#/$defs/instant" },
+              "observationId": { "$ref": "#/$defs/digest" }
+            }
+          }
+        }
       }
     },
     {
@@ -471,7 +642,6 @@
       },
       "then": {
         "properties": {
-          "step11": { "type": "null" },
           "reconciliation": { "$ref": "#/$defs/reconciliation" }
         }
       }

@@ -792,7 +792,9 @@ export const COMMAND_USAGE = Object.freeze([
             flag("method", "merge|squash|rebase", "merge方式"),
             flag("staging", "path", "Step 10までを検証するstaging directory"),
         ],
-        conditionalFlags: [],
+        conditionalFlags: [
+            conditional("reopen-terminal", "approved", "旧outcome=pull-request終端から新しいowner delivery判断を開始する", "旧pull-request終端を現行trusted policyで再評価するとき"),
+        ],
         optionalFlags: [
             ROOT_FLAG,
             optional("authorize", "approved", "assistedで対象PR操作を明示承認する", "automaticでは不要、assistedでは必須"),

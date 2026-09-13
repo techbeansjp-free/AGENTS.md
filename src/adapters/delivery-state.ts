@@ -6,10 +6,12 @@ import {
   bindPullRequest,
   claimMergeDispatch,
   claimPullRequestCreationDispatch,
+  completeTerminalRedelivery,
   deliveryStateDigest,
   observeMerge,
   parseDeliveryState,
   prepareMergeIntent,
+  prepareTerminalRedeliveryMergeIntent,
   preparePullRequestCreation,
   recordStep11,
   renderDeliveryState,
@@ -23,6 +25,7 @@ import {
   type PullRequestBinding,
   type ReconciliationRecord,
   type Step11Record,
+  type TerminalRedeliveryAuthority,
 } from "../domain/delivery-state.js";
 import {
   calculateStagingDigest,
@@ -732,6 +735,70 @@ export function prepareStoredMergeIntent(
       state: current,
       requestAllowed: current.merge.dispatchClaimedAt === null,
     };
+  });
+}
+
+export function prepareStoredTerminalRedeliveryMergeIntent(
+  directory: string,
+  merge: MergeIntentInput,
+  decisionId: string,
+  authority: TerminalRedeliveryAuthority,
+): { state: DeliveryState; requestAllowed: boolean } {
+  const staging = assertWorkflowStaging(directory);
+  return withStagingMutationLock(staging, () => {
+    const current = recoverAndReadLocked(staging);
+    if (!current) throw new Error("再配送より前のdelivery stateがありません");
+    if (
+      current.state === "step11-recorded" &&
+      current.step11?.outcome === "pull-request" &&
+      !current.redelivery
+    )
+      return {
+        state: persistLocked(
+          staging,
+          prepareTerminalRedeliveryMergeIntent(
+            current,
+            merge,
+            decisionId,
+            authority,
+          ),
+        ),
+        requestAllowed: true,
+      };
+    if (!current.redelivery || !current.merge)
+      throw new Error(
+        `${current.state}にterminal redelivery intentがありません`,
+      );
+    const {
+      dispatchClaimedAt: _dispatchClaim,
+      observation: _observation,
+      ...currentIdentity
+    } = current.merge;
+    if (stableJson(currentIdentity) !== stableJson(merge))
+      throw new Error(
+        "既存terminal redelivery intentのidentityを変更できません",
+      );
+    return {
+      state: current,
+      requestAllowed: current.merge.dispatchClaimedAt === null,
+    };
+  });
+}
+
+export function completeStoredTerminalRedelivery(
+  directory: string,
+  completedAt: string,
+): DeliveryState {
+  const staging = assertWorkflowStaging(directory);
+  return withStagingMutationLock(staging, () => {
+    const current = recoverAndReadLocked(staging);
+    if (!current)
+      throw new Error("再配送完了より前のdelivery stateがありません");
+    if (current.redelivery?.outcome === "merged") return current;
+    return persistLocked(
+      staging,
+      completeTerminalRedelivery(current, completedAt),
+    );
   });
 }
 

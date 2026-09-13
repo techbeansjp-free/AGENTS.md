@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
-import { DELIVERY_STATE_FILE, bindPullRequest, claimMergeDispatch, claimPullRequestCreationDispatch, deliveryStateDigest, observeMerge, parseDeliveryState, prepareMergeIntent, preparePullRequestCreation, recordStep11, renderDeliveryState, requireDeliveryReconciliation, resumePullRequestCreationAfterConfirmedAbsence, } from "../domain/delivery-state.js";
+import { DELIVERY_STATE_FILE, bindPullRequest, claimMergeDispatch, claimPullRequestCreationDispatch, completeTerminalRedelivery, deliveryStateDigest, observeMerge, parseDeliveryState, prepareMergeIntent, prepareTerminalRedeliveryMergeIntent, preparePullRequestCreation, recordStep11, renderDeliveryState, requireDeliveryReconciliation, resumePullRequestCreationAfterConfirmedAbsence, } from "../domain/delivery-state.js";
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, STAGING_RECORD_FILE, withStagingMutationLock, } from "../domain/staging.js";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
@@ -482,6 +482,41 @@ export function prepareStoredMergeIntent(directory, merge) {
             state: current,
             requestAllowed: current.merge.dispatchClaimedAt === null,
         };
+    });
+}
+export function prepareStoredTerminalRedeliveryMergeIntent(directory, merge, decisionId, authority) {
+    const staging = assertWorkflowStaging(directory);
+    return withStagingMutationLock(staging, () => {
+        const current = recoverAndReadLocked(staging);
+        if (!current)
+            throw new Error("再配送より前のdelivery stateがありません");
+        if (current.state === "step11-recorded" &&
+            current.step11?.outcome === "pull-request" &&
+            !current.redelivery)
+            return {
+                state: persistLocked(staging, prepareTerminalRedeliveryMergeIntent(current, merge, decisionId, authority)),
+                requestAllowed: true,
+            };
+        if (!current.redelivery || !current.merge)
+            throw new Error(`${current.state}にterminal redelivery intentがありません`);
+        const { dispatchClaimedAt: _dispatchClaim, observation: _observation, ...currentIdentity } = current.merge;
+        if (stableJson(currentIdentity) !== stableJson(merge))
+            throw new Error("既存terminal redelivery intentのidentityを変更できません");
+        return {
+            state: current,
+            requestAllowed: current.merge.dispatchClaimedAt === null,
+        };
+    });
+}
+export function completeStoredTerminalRedelivery(directory, completedAt) {
+    const staging = assertWorkflowStaging(directory);
+    return withStagingMutationLock(staging, () => {
+        const current = recoverAndReadLocked(staging);
+        if (!current)
+            throw new Error("再配送完了より前のdelivery stateがありません");
+        if (current.redelivery?.outcome === "merged")
+            return current;
+        return persistLocked(staging, completeTerminalRedelivery(current, completedAt));
     });
 }
 /** merge provider callにもcreateと同じdurable one-shot claimを適用する。 */

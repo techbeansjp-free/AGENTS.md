@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import {
@@ -2018,6 +2019,7 @@ interface DeliveryProviderControl {
   failMerge: boolean;
   mergedAt: string;
   remoteBaseSha: string;
+  mergeTreeSha: string;
   autoMergeMethod: "MERGE" | "SQUASH" | "REBASE";
   providerDefaultBranch: "main" | "develop";
   requestedAt: string;
@@ -2614,6 +2616,96 @@ function writeDeliveryProviderControl(
   );
 }
 
+function advanceDeliveryTrustedMergeMode(
+  prepared: PreparedDeliveryCli,
+  mode: FixtureMergeMode,
+): string {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "asc-policy-index-"));
+  const indexFile = path.join(scratch, "index");
+  const policyPath = ".agent-skill-chain/policy/default.json";
+  const shown = spawnSync(
+    "git",
+    ["show", `${prepared.baseSha}:${policyPath}`],
+    {
+      cwd: prepared.root,
+      encoding: "utf8",
+    },
+  );
+  assert.equal(shown.status, 0, shown.stderr);
+  const policy = JSON.parse(shown.stdout) as Record<string, unknown>;
+  policy.merge = {
+    mode,
+    branches: ["feature/x"],
+    methods: ["merge"],
+    requiredChecks: [],
+    requiredReviews: 0,
+  };
+  const materialized = path.join(scratch, "policy.json");
+  fs.writeFileSync(materialized, `${JSON.stringify(policy, null, 2)}\n`);
+  const environment = { ...process.env, GIT_INDEX_FILE: indexFile };
+  const readTree = spawnSync("git", ["read-tree", prepared.baseSha], {
+    cwd: prepared.root,
+    env: environment,
+    encoding: "utf8",
+  });
+  assert.equal(readTree.status, 0, readTree.stderr);
+  const blob = spawnSync("git", ["hash-object", "-w", materialized], {
+    cwd: prepared.root,
+    encoding: "utf8",
+  });
+  assert.equal(blob.status, 0, blob.stderr);
+  const updateIndex = spawnSync(
+    "git",
+    [
+      "update-index",
+      "--add",
+      "--cacheinfo",
+      `100644,${blob.stdout.trim()},${policyPath}`,
+    ],
+    { cwd: prepared.root, env: environment, encoding: "utf8" },
+  );
+  assert.equal(updateIndex.status, 0, updateIndex.stderr);
+  const tree = spawnSync("git", ["write-tree"], {
+    cwd: prepared.root,
+    env: environment,
+    encoding: "utf8",
+  });
+  assert.equal(tree.status, 0, tree.stderr);
+  const commit = spawnSync(
+    "git",
+    [
+      "commit-tree",
+      tree.stdout.trim(),
+      "-p",
+      prepared.baseSha,
+      "-m",
+      `merge mode ${mode}`,
+    ],
+    { cwd: prepared.root, encoding: "utf8" },
+  );
+  assert.equal(commit.status, 0, commit.stderr);
+  const advanced = commit.stdout.trim();
+  const updateRef = spawnSync(
+    "git",
+    ["update-ref", "refs/remotes/origin/main", advanced],
+    { cwd: prepared.root, encoding: "utf8" },
+  );
+  assert.equal(updateRef.status, 0, updateRef.stderr);
+  const mergeTree = spawnSync(
+    "git",
+    ["merge-tree", "--write-tree", advanced, prepared.headSha],
+    { cwd: prepared.root, encoding: "utf8" },
+  );
+  assert.equal(mergeTree.status, 0, mergeTree.stderr);
+  const mergeTreeSha = mergeTree.stdout.trim();
+  assert.match(mergeTreeSha, /^[a-f0-9]{40}$/u);
+  writeDeliveryProviderControl(prepared, {
+    remoteBaseSha: advanced,
+    mergeTreeSha,
+  });
+  return advanced;
+}
+
 function deliveryProviderCalls(prepared: PreparedDeliveryCli): string[][] {
   if (!fs.existsSync(prepared.logFile)) return [];
   const source = fs.readFileSync(prepared.logFile, "utf8").trim();
@@ -2804,6 +2896,14 @@ function prepareDeliveryCli(
   const observedBody = path.join(stubDirectory, "observed-pr-body.md");
   const issueBodyFile = path.join(stubDirectory, "issue-body.md");
   const issueViewCountFile = path.join(stubDirectory, "issue-view-count.txt");
+  const mergeTree = spawnSync(
+    "git",
+    ["merge-tree", "--write-tree", prepared.baseSha, prepared.headSha],
+    { cwd: prepared.root, encoding: "utf8" },
+  );
+  assert.equal(mergeTree.status, 0, mergeTree.stderr);
+  const mergeTreeSha = mergeTree.stdout.trim();
+  assert.match(mergeTreeSha, /^[a-f0-9]{40}$/u);
   const control: DeliveryProviderControl = {
     phase: "ready",
     ghVersion: "2.97.0",
@@ -2813,6 +2913,7 @@ function prepareDeliveryCli(
     failMerge: false,
     mergedAt: fixtureInstant({ secondsAhead: 1 }),
     remoteBaseSha: prepared.baseSha,
+    mergeTreeSha,
     autoMergeMethod: "MERGE",
     providerDefaultBranch: "main",
     requestedAt: fixtureInstant(),
@@ -2841,14 +2942,6 @@ function prepareDeliveryCli(
   const canonicalDocument = splitPullRequestDocument(
     fs.readFileSync(prepared.bodyFile, "utf8"),
   );
-  const mergeTree = spawnSync(
-    "git",
-    ["merge-tree", "--write-tree", prepared.baseSha, prepared.headSha],
-    { cwd: prepared.root, encoding: "utf8" },
-  );
-  assert.equal(mergeTree.status, 0, mergeTree.stderr);
-  const mergeTreeSha = mergeTree.stdout.trim();
-  assert.match(mergeTreeSha, /^[a-f0-9]{40}$/u);
   fs.writeFileSync(controlFile, `${JSON.stringify(control)}\n`);
   fs.writeFileSync(
     stub,
@@ -2858,7 +2951,6 @@ const args = process.argv.slice(2);
 const sha = ${JSON.stringify(prepared.headSha)};
 const implementationSha = ${JSON.stringify(prepared.implementationCommitSha)};
 const mergeSha = ${JSON.stringify("b".repeat(40))};
-const mergeTreeSha = ${JSON.stringify(mergeTreeSha)};
 const prUrl = "https://github.com/o/r/pull/1";
 const issueUrl = "https://github.com/o/r/issues/877";
 const controlFile = ${JSON.stringify(controlFile)};
@@ -2942,6 +3034,8 @@ if (exact(["--version"])) {
   process.stdout.write(
     JSON.stringify({ nameWithOwner: "o/r", viewerPermission: "WRITE" }),
   );
+} else if (exact(["api", "user", "--jq", ".node_id"])) {
+  process.stdout.write("repository-owner-node-id\\n");
 } else if (
   exact(["repo", "view", "o/r", "--json", "nameWithOwner,defaultBranchRef"])
 ) {
@@ -3240,7 +3334,9 @@ if (exact(["--version"])) {
       sha: mergeSha,
       commit: {
         tree: {
-          sha: control.mergeTreeTampered ? "c".repeat(40) : mergeTreeSha,
+          sha: control.mergeTreeTampered
+            ? "c".repeat(40)
+            : control.mergeTreeSha,
         },
       },
       parents,
@@ -3332,6 +3428,7 @@ function deliveryMergeArgs(
     root?: string;
     staging?: string;
     method?: "merge" | "squash" | "rebase";
+    reopenTerminal?: boolean;
     authorize?: boolean;
   } = {},
 ): string[] {
@@ -3349,6 +3446,7 @@ function deliveryMergeArgs(
     `--root=${root}`,
     `--staging=${stagingArgument}`,
     "--apply",
+    ...(overrides.reopenTerminal ? ["--reopen-terminal=approved"] : []),
     ...(overrides.authorize === true ? ["--authorize=approved"] : []),
   ];
 }
@@ -3360,6 +3458,7 @@ function executeDeliveryMerge(
     root?: string;
     staging?: string;
     method?: "merge" | "squash" | "rebase";
+    reopenTerminal?: boolean;
     authorize?: boolean;
   } = {},
 ) {
@@ -3488,6 +3587,8 @@ if (exact(["auth", "status"])) {
   process.stdout.write(
     JSON.stringify({ nameWithOwner: "o/r", viewerPermission: "WRITE" }),
   );
+} else if (exact(["api", "user", "--jq", ".node_id"])) {
+  process.stdout.write("repository-owner-node-id\\n");
 } else if (
   exact(["repo", "view", "o/r", "--json", "nameWithOwner,defaultBranchRef"])
 ) {
@@ -4612,7 +4713,7 @@ if (exact(["auth", "status"])) {
       assert.match(output, /"state": "pull_request_complete"/u, output);
       assert.match(
         output,
-        /このworkflowはPR停止点で完了済みです。mergeする場合はownerが別のdelivery判断を開始してください/u,
+        /このworkflowはPR停止点で完了済みです。新しいowner判断で再開する場合だけ--reopen-terminal=approvedを指定してください/u,
         output,
       );
       assert.equal(
@@ -4629,6 +4730,100 @@ if (exact(["auth", "status"])) {
           ),
         ).entries.filter((entry) => entry.step === 11).length,
         1,
+      );
+      break;
+    }
+    case "SCN-E2E-DELIVERY-REOPEN-001": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const created = createDeliveryPullRequest(prepared);
+      assert.match(created.stdout, /pull_request_complete/u);
+      const stateFile = path.join(
+        prepared.staging,
+        ...DELIVERY_STATE_FILE.split("/"),
+      );
+      const terminal = parseDeliveryState(fs.readFileSync(stateFile, "utf8"));
+      const originalEvidenceId = terminal.step11?.evidenceId;
+      assert.equal(terminal.step11?.outcome, "pull-request");
+      const originalJournal = fs.readFileSync(
+        path.join(prepared.staging, STEP_JOURNAL_FILE),
+        "utf8",
+      );
+      const trustedPolicyCommitSha = advanceDeliveryTrustedMergeMode(
+        prepared,
+        "assisted",
+      );
+      const before = deliveryProviderCalls(prepared).filter(isMergeCall).length;
+      const resumed = executeDeliveryMerge(prepared, {
+        reopenTerminal: true,
+        authorize: true,
+      });
+      assert.equal(resumed.status, 0, resumed.stdout + resumed.stderr);
+      assert.doesNotMatch(resumed.stdout, /pull_request_complete/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        before + 1,
+      );
+      const current = parseDeliveryState(fs.readFileSync(stateFile, "utf8"));
+      const redelivery = (
+        current as unknown as { redelivery?: Record<string, unknown> }
+      ).redelivery;
+      assert.equal(redelivery?.priorStep11EvidenceId, originalEvidenceId);
+      assert.equal(redelivery?.trustedPolicyCommitSha, trustedPolicyCommitSha);
+      assert.equal(redelivery?.authorizedHeadSha, prepared.headSha);
+      writeDeliveryProviderControl(prepared, {
+        phase: "merged",
+        mergedAt: fixtureInstant({ minutesAhead: 5 }),
+      });
+      const completed = executeDeliveryMerge(prepared);
+      assert.equal(completed.status, 0, completed.stdout + completed.stderr);
+      assert.match(completed.stdout, /"state": "merged"/u);
+      assert.equal(
+        fs.readFileSync(path.join(prepared.staging, STEP_JOURNAL_FILE), "utf8"),
+        originalJournal,
+        "旧Step 11 journalを変更しています",
+      );
+      const callsAfterCompletion =
+        deliveryProviderCalls(prepared).filter(isMergeCall).length;
+      const replayed = executeDeliveryMerge(prepared);
+      assert.equal(replayed.status, 0, replayed.stdout + replayed.stderr);
+      assert.match(replayed.stdout, /"state": "merged"/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        callsAfterCompletion,
+        "完了済みredeliveryをproviderへ再送しています",
+      );
+      break;
+    }
+    case "SCN-E2E-DELIVERY-REOPEN-002": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const created = createDeliveryPullRequest(prepared);
+      assert.match(created.stdout, /pull_request_complete/u);
+      advanceDeliveryTrustedMergeMode(prepared, "assisted");
+      const before = deliveryProviderCalls(prepared).filter(isMergeCall).length;
+      const rejected = executeDeliveryMerge(prepared);
+      assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+      assert.match(rejected.stdout, /pull_request_complete/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        before,
+      );
+
+      const stillDisabled = prepareDeliveryCli(this, {}, "disabled");
+      createDeliveryPullRequest(stillDisabled);
+      const disabledBefore =
+        deliveryProviderCalls(stillDisabled).filter(isMergeCall).length;
+      const disabledRejected = executeDeliveryMerge(stillDisabled, {
+        reopenTerminal: true,
+      });
+      assert.equal(
+        disabledRejected.status,
+        1,
+        disabledRejected.stdout + disabledRejected.stderr,
+      );
+      assert.equal(
+        deliveryProviderCalls(stillDisabled).filter(isMergeCall).length,
+        disabledBefore,
+        "現在もdisabledなのにproviderへmergeを要求しています",
       );
       break;
     }

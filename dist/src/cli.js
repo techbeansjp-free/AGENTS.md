@@ -44,7 +44,7 @@ import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertP
 import { assertConvergedReviewSession, buildReviewRoundDraft, evidenceOnlySuffix, previewReviewRound, recordReviewRound, STAGING_DIGEST_RERECORD_HINT, } from "./adapters/review-session.js";
 import { appendEvidenceReanchor, evaluateEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
 import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
-import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, observeStoredMerge, prepareStoredMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
+import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, completeStoredTerminalRedelivery, observeStoredMerge, prepareStoredMergeIntent, prepareStoredTerminalRedeliveryMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
 import { DELIVERY_STATE_FILE, assertImmutablePullRequestBinding, canonicalDigest, closingContractDigest, pullRequestContentDigest, pullRequestTerminalEvidenceId, } from "./domain/delivery-state.js";
 import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, } from "./domain/workflow.js";
 import { reconcileFixedMergeRun, CI_DELIVERY_GRACE_MINUTES, inspectCiDelivery, } from "./domain/ci-delivery.js";
@@ -297,6 +297,27 @@ export function assertWorkflowReadyForDelivery(staging) {
         ].join("; ")}`);
     return inspection;
 }
+function assertWorkflowReadyForTerminalRedelivery(staging) {
+    const stored = readStoredStagingRecord(staging);
+    const currentArtifacts = listStagingArtifacts(staging);
+    const currentDigest = calculateStagingDigest(staging, currentArtifacts);
+    if (stableJson(stored.artifacts) !== stableJson(currentArtifacts) ||
+        stored.digest !== currentDigest)
+        throw new Error(`再配送直前のstaging成果物またはcontent digestが記録から変化しています${STAGING_DIGEST_RERECORD_HINT}`);
+    const inspection = inspectWorkflowStaging(staging, 11);
+    if (!inspection.modeDecision.valid ||
+        !inspection.validation.valid ||
+        inspection.state !== "sync-verified")
+        throw new Error(`再配送直前の完了済みworkflow再検証に失敗しました: ${[
+            ...inspection.modeDecision.errors,
+            ...inspection.validation.errors,
+            ...inspection.validation.modeConflicts,
+            ...(inspection.state === "sync-verified"
+                ? []
+                : ["staging recordがsync-verifiedではありません"]),
+        ].join("; ")}`);
+    return inspection;
+}
 export function assertCurrentReviewJournalBinding(staging, headSha) {
     const journal = readWorkflowJournal(staging);
     if (journal.errors.length > 0)
@@ -517,6 +538,26 @@ function finishObservedMerge(staging, current, mode) {
     if (existingEntries.length > 1)
         throw new Error("Step 11 journal entryが重複しています");
     const existing = existingEntries[0];
+    if (current.redelivery) {
+        if (!existing ||
+            !current.step11 ||
+            !existing.artifacts.includes(current.pr.url) ||
+            !existing.artifacts.includes(DELIVERY_STATE_FILE) ||
+            !existing.evidence.includes(current.step11.evidenceId) ||
+            !existing.evidence.includes("outcome=pull-request"))
+            throw new Error("再配送前の旧Step 11 journal Evidenceが一致しません");
+        const completed = completeStoredTerminalRedelivery(staging, deliveryEventTime(observation.observedAt));
+        return {
+            exitCode: 0,
+            output: {
+                state: "merged",
+                url: current.pr.url,
+                observation,
+                redelivery: completed.redelivery,
+                deliveryState: completed,
+            },
+        };
+    }
     let workflow;
     if (existing) {
         if (!existing.artifacts.includes(current.pr.url) ||
@@ -656,7 +697,7 @@ function assertRecordedStep11Evidence(staging, current) {
         current.step11.evidenceId !==
             current.merge?.observation?.observationId) ||
         (current.step11.outcome === "pull-request" &&
-            (current.merge !== null ||
+            ((!current.redelivery && current.merge !== null) ||
                 current.step11.evidenceId !==
                     pullRequestTerminalEvidenceId(current.create, current.pr))))
         throw new Error("固定済みStep 11のoutcomeとdelivery stateが一致しません");
@@ -1498,6 +1539,10 @@ export function writeReviewRoundDraft(realParent, basename, content, hooks = {})
 }
 function handlePullRequestMerge(flags) {
     const apply = applyMode(flags);
+    const reopenTerminal = flags["reopen-terminal"] === "approved";
+    if (flags["reopen-terminal"] !== undefined &&
+        flags["reopen-terminal"] !== "approved")
+        throw new Error("--reopen-terminalはapprovedだけを受理します");
     const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
     const requestedStaging = resolveContained(root, required(flags, "staging"));
     const issuesRoot = path.join(root, ".agent-skill-chain", "tmp", "issues");
@@ -1536,17 +1581,27 @@ function handlePullRequestMerge(flags) {
         throw new Error("固定済みmerge intentのmethodを変更できません");
     if (initial.state === "step11-recorded") {
         assertRecordedStep11Evidence(staging, initial);
-        const pullRequestTerminal = initial.step11?.outcome === "pull-request";
-        print({
-            state: pullRequestTerminal ? "pull_request_complete" : "merged",
-            url: initial.pr.url,
-            deliveryState: initial,
-            next: pullRequestTerminal
-                ? "このworkflowはPR停止点で完了済みです。mergeする場合はownerが別のdelivery判断を開始してください"
-                : "固定済みmerge observationによるStep 11記録は完了しています",
-        });
-        return pullRequestTerminal ? 1 : 0;
+        const redeliveryMerged = initial.redelivery?.outcome === "merged";
+        const pullRequestTerminal = initial.step11?.outcome === "pull-request" && !redeliveryMerged;
+        if (pullRequestTerminal && reopenTerminal) {
+            // 現行trusted policyとprovider identityを下の通常merge認可経路で再検証する。
+        }
+        else {
+            print({
+                state: pullRequestTerminal ? "pull_request_complete" : "merged",
+                url: initial.pr.url,
+                deliveryState: initial,
+                next: pullRequestTerminal
+                    ? "このworkflowはPR停止点で完了済みです。新しいowner判断で再開する場合だけ--reopen-terminal=approvedを指定してください"
+                    : "固定済みmerge observationによる配送完了を再検証しました",
+            });
+            return pullRequestTerminal ? 1 : 0;
+        }
     }
+    if (reopenTerminal &&
+        initial.state !== "step11-recorded" &&
+        initial.redelivery === undefined)
+        throw new Error("--reopen-terminal=approvedは旧pull-request終端にだけ指定できます");
     const initialJournal = readWorkflowJournal(staging);
     const initialStep11 = initialJournal.entries.filter((entry) => entry.step === 11);
     if (initial.state === "merge-observed" &&
@@ -1578,7 +1633,10 @@ function handlePullRequestMerge(flags) {
     const result = withStagingMutationLock(staging, () => {
         if (apply)
             recoverPendingJournalTransaction(staging);
-        const workflowInspection = assertWorkflowReadyForDelivery(staging);
+        const workflowInspection = initial.redelivery ||
+            (initial.state === "step11-recorded" && reopenTerminal)
+            ? assertWorkflowReadyForTerminalRedelivery(staging)
+            : assertWorkflowReadyForDelivery(staging);
         assertWorkflowMergeAllowed(workflowInspection.mode);
         let stagingRecord = readStoredStagingRecord(staging);
         const current = readStoredDeliveryState(staging);
@@ -1613,7 +1671,17 @@ function handlePullRequestMerge(flags) {
             throw new Error("固定済みmerge intentのmethodを変更できません");
         if (current.state === "step11-recorded") {
             assertRecordedStep11Evidence(staging, current);
-            if (current.step11?.outcome === "pull-request")
+            if (current.redelivery?.outcome === "merged")
+                return {
+                    exitCode: 0,
+                    output: {
+                        state: "merged",
+                        url: current.pr.url,
+                        deliveryState: current,
+                        next: "固定済みterminal redeliveryのmerged observationを再検証しました",
+                    },
+                };
+            if (current.step11?.outcome === "pull-request" && !reopenTerminal)
                 return {
                     exitCode: 1,
                     output: {
@@ -1623,15 +1691,16 @@ function handlePullRequestMerge(flags) {
                         next: "このworkflowはPR停止点で完了済みです。mergeする場合はownerが別のdelivery判断を開始してください",
                     },
                 };
-            return {
-                exitCode: 0,
-                output: {
-                    state: "merged",
-                    url: current.pr.url,
-                    deliveryState: current,
-                    next: "固定済みmerge observationによるStep 11記録は完了しています",
-                },
-            };
+            if (current.step11?.outcome === "merged")
+                return {
+                    exitCode: 0,
+                    output: {
+                        state: "merged",
+                        url: current.pr.url,
+                        deliveryState: current,
+                        next: "固定済みmerge observationによるStep 11記録は完了しています",
+                    },
+                };
         }
         if (current.state === "merge-observed") {
             return readBackPreparedPullRequestMerge({
@@ -1669,7 +1738,11 @@ function handlePullRequestMerge(flags) {
                 mode: workflowInspection.mode,
                 apply,
             });
-        if (current.state !== "pr-bound")
+        const terminalRedeliveryStart = current.state === "step11-recorded" &&
+            current.step11?.outcome === "pull-request" &&
+            reopenTerminal &&
+            current.redelivery === undefined;
+        if (current.state !== "pr-bound" && !terminalRedeliveryStart)
             throw new Error(`${current.state}からmergeを開始できません。create照合を先に完了してください`);
         const base = defaultBranch(root);
         const trustedSet = loadEffectiveTrustedPolicySet(root, base);
@@ -1752,7 +1825,7 @@ function handlePullRequestMerge(flags) {
         const existingQueue = github("pr.queue", { repository, pr }, root);
         if (existingQueue.entry)
             throw new Error("ASC merge intent作成前にprovider上の既存merge queue entryを観測しました");
-        github("repository.assert-write", { repository }, root);
+        const writeAuthority = github("repository.assert-write", { repository }, root);
         assertMinimumExecutableVersion("git", ["--version"], root, MINIMUM_GIT_VERSION);
         assertMinimumExecutableVersion("gh", ["--version"], root, MINIMUM_GH_VERSION);
         fixedMergeSourceCommitCount({
@@ -1761,7 +1834,7 @@ function handlePullRequestMerge(flags) {
             baseSha: rechecked.authority.baseRefOid,
             headSha: rechecked.observed.headRefOid,
         });
-        const prepared = prepareStoredMergeIntent(staging, {
+        const mergeInput = {
             method,
             authorizedHeadSha: rechecked.observed.headRefOid,
             authorizedBaseRef: rechecked.authority.baseRefName,
@@ -1775,7 +1848,16 @@ function handlePullRequestMerge(flags) {
             reviewEvidenceId: rechecked.reviewEvidence.reviewEvidenceId,
             intentId: crypto.randomBytes(16).toString("hex"),
             preparedAt: deliveryEventTime(current.pr.boundAt),
-        });
+        };
+        const prepared = terminalRedeliveryStart
+            ? prepareStoredTerminalRedeliveryMergeIntent(staging, mergeInput, crypto.randomBytes(16).toString("hex"), {
+                source: "cli.--reopen-terminal=approved",
+                actorId: writeAuthority.actorId,
+                repository: writeAuthority.repository,
+                repositoryWriteSource: writeAuthority.provenance.source,
+                repositoryWriteEvidenceId: writeAuthority.evidenceId,
+            })
+            : prepareStoredMergeIntent(staging, mergeInput);
         if (!prepared.requestAllowed)
             return readBackPreparedPullRequestMerge({
                 root,
@@ -6236,6 +6318,7 @@ export async function main(argv, dependencies = {}) {
         required(flags, "pr");
         required(flags, "method");
         required(flags, "staging");
+        void flags["reopen-terminal"];
         return handlePullRequestMerge(flags);
     }
     const lifecycleCommand = canonicalLifecycleCommand(command);

@@ -93,6 +93,16 @@ export interface RepositoryAuthorityObservation {
   defaultBranchTipOid: string;
   provenance: { source: string; repository: string };
 }
+export interface RepositoryWriteAuthorityObservation {
+  repository: string;
+  writable: true;
+  actorId: string;
+  evidenceId: string;
+  provenance: {
+    source: "github.repository.assert-write";
+    repository: string;
+  };
+}
 export interface PolicyAuthorityObservation {
   repository: string;
   prNumber: number;
@@ -696,7 +706,7 @@ export function github(
   operation: "repository.assert-write",
   input: Pick<GitHubInput, "repository">,
   cwd: string,
-): { repository: string; writable: true };
+): RepositoryWriteAuthorityObservation;
 export function github(
   operation: "pr.merge",
   input: Pick<GitHubInput, "repository" | "pr" | "method" | "headSha">,
@@ -836,7 +846,31 @@ export function github(
   }
   if (operation === "repository.assert-write") {
     verifyRepository(input.repository, cwd, "write");
-    return { repository: input.repository, writable: true };
+    const actorId = run(
+      "gh",
+      ["api", "user", "--jq", ".node_id"],
+      cwd,
+    ).stdout.trim();
+    if (!actorId || /[\u0000-\u001f\u007f]/u.test(actorId))
+      throw new Error(
+        "GitHub write authorityのstable actor IDを観測できません",
+      );
+    const observation = {
+      repository: input.repository,
+      writable: true as const,
+      actorId,
+      provenance: {
+        source: "github.repository.assert-write" as const,
+        repository: input.repository,
+      },
+    };
+    return {
+      ...observation,
+      evidenceId: crypto
+        .createHash("sha256")
+        .update(JSON.stringify(observation))
+        .digest("hex"),
+    };
   }
   if (operation === "repository.authority") {
     return observeRepositoryAuthority(input.repository, cwd);

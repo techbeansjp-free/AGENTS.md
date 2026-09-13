@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import {
   assertImmutablePullRequestBinding,
@@ -6,12 +7,14 @@ import {
   canonicalDigest,
   claimMergeDispatch,
   claimPullRequestCreationDispatch,
+  completeTerminalRedelivery,
   closingContractDigest,
   deliveryStateDigest,
   observeMerge,
   parseDeliveryState,
   prepareMergeIntent,
   preparePullRequestCreation,
+  prepareTerminalRedeliveryMergeIntent,
   pullRequestContentDigest,
   pullRequestTerminalEvidenceId,
   recordStep11,
@@ -38,6 +41,14 @@ const T1 = "2026-08-30T00:00:01.000Z";
 const T2 = "2026-08-30T00:00:02.000Z";
 const T3 = "2026-08-30T00:00:03.000Z";
 const T4 = "2026-08-30T00:00:04.000Z";
+const T5 = "2026-08-30T00:00:05.000Z";
+const REDELIVERY_AUTHORITY = {
+  source: "cli.--reopen-terminal=approved" as const,
+  actorId: "repository-owner-node-id",
+  repository: REPOSITORY,
+  repositoryWriteSource: "github.repository.assert-write" as const,
+  repositoryWriteEvidenceId: "a".repeat(64),
+};
 
 function createIntent(): DeliveryCreateIntentInput {
   const issueUrl = `https://github.com/${REPOSITORY}/issues/${ISSUE}`;
@@ -139,6 +150,125 @@ function mergeObserved(
 }
 
 const CHECKS: Readonly<Record<string, () => void>> = {
+  "SCN-INT-DELIVERY-REOPEN-001": () => {
+    CHECKS["SCN-UNIT-DELIVERY-REOPEN-001"]!();
+  },
+  "SCN-INT-DELIVERY-REOPEN-002": () => {
+    const terminal = recordStep11(prBound(), {
+      outcome: "pull-request",
+      recordedAt: T2,
+      journalDigest: JOURNAL_DIGEST,
+    });
+    const standardMerge = mergePrepared().merge!;
+    const {
+      dispatchClaimedAt: _claim,
+      observation: _observation,
+      ...mergeInput
+    } = standardMerge;
+    const reopened = prepareTerminalRedeliveryMergeIntent(
+      terminal,
+      { ...mergeInput, preparedAt: T3 },
+      "7".repeat(32),
+      REDELIVERY_AUTHORITY,
+    );
+    const claimed = claimMergeDispatch(reopened, T4);
+    assert.throws(() => claimMergeDispatch(claimed, T5), /既に消費/u);
+    const requested = observeMerge(claimed, {
+      ...observation("merge-requested"),
+      observedAt: T5,
+    });
+    assert.equal(requested.redelivery?.outcome, "pending");
+    assert.equal(requested.merge?.dispatchClaimedAt, T4);
+  },
+  "SCN-UNIT-DELIVERY-REOPEN-001": () => {
+    const terminal = recordStep11(prBound(), {
+      outcome: "pull-request",
+      recordedAt: T2,
+      journalDigest: JOURNAL_DIGEST,
+    });
+    const standardMerge = mergePrepared().merge!;
+    const {
+      dispatchClaimedAt: _claim,
+      observation: _observation,
+      ...mergeInput
+    } = standardMerge;
+    const reopened = prepareTerminalRedeliveryMergeIntent(
+      terminal,
+      { ...mergeInput, preparedAt: T3 },
+      "9".repeat(32),
+      REDELIVERY_AUTHORITY,
+    );
+    assert.equal(reopened.state, "merge-prepared");
+    assert.equal(reopened.step11?.evidenceId, terminal.step11?.evidenceId);
+    assert.equal(
+      reopened.redelivery?.priorStep11EvidenceId,
+      terminal.step11?.evidenceId,
+    );
+    const observed = observeMerge(reopened, {
+      ...observation("merged"),
+      observedAt: T4,
+      providerMergedAt: T4,
+    });
+    const completed = completeTerminalRedelivery(observed, T5);
+    assert.equal(completed.state, "step11-recorded");
+    assert.equal(completed.step11?.outcome, "pull-request");
+    assert.equal(completed.redelivery?.outcome, "merged");
+    assert.equal(
+      completed.redelivery?.observationId,
+      completed.merge?.observation?.observationId,
+    );
+    assert.deepEqual(
+      parseDeliveryState(renderDeliveryState(completed)),
+      completed,
+    );
+    const missingAuthority = JSON.parse(
+      renderDeliveryState(reopened),
+    ) as Record<string, unknown>;
+    delete (missingAuthority.redelivery as Record<string, unknown>).authority;
+    assert.throws(
+      () => parseDeliveryState(JSON.stringify(missingAuthority)),
+      /redeliveryの必須fieldがありません: authority/u,
+    );
+    const impossibleMerged = JSON.parse(
+      renderDeliveryState(completed),
+    ) as Record<string, unknown>;
+    impossibleMerged.state = "merge-prepared";
+    (impossibleMerged.merge as Record<string, unknown>).observation = null;
+    assert.throws(
+      () => parseDeliveryState(JSON.stringify(impossibleMerged)),
+      /merged redeliveryがprovider observationと一致しません/u,
+    );
+    const deliverySchema = JSON.parse(
+      fs.readFileSync(
+        ".agent-skill-chain/schemas/delivery-state.schema.json",
+        "utf8",
+      ),
+    ) as { allOf: Array<Record<string, unknown>> };
+    const mergedRedeliveryRule = deliverySchema.allOf.find((rule) =>
+      JSON.stringify(rule).includes(
+        '"redelivery":{"properties":{"outcome":{"const":"merged"}',
+      ),
+    );
+    assert.ok(
+      mergedRedeliveryRule,
+      "merged redelivery schema ruleがありません",
+    );
+    assert.match(
+      JSON.stringify(mergedRedeliveryRule),
+      /"merge".*"observation".*"providerState":\{"const":"merged"\}.*"mergeCommitSha"/u,
+      "schemaがmerged redeliveryへprovider merged observationを要求していません",
+    );
+    assert.throws(
+      () =>
+        prepareTerminalRedeliveryMergeIntent(
+          completed,
+          { ...mergeInput, preparedAt: T3 },
+          "8".repeat(32),
+          REDELIVERY_AUTHORITY,
+        ),
+      /開始できません/u,
+    );
+  },
   "SCN-UNIT-DELSTATE-001": () => {
     const prepared = createPrepared();
     const bound = prBound();

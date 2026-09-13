@@ -91,6 +91,16 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-053"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  Scenario: SCN-E2E-DELIVERY-REOPEN-001 旧PR停止終端を現行policyの明示判断で再開する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-DELIVERY-REOPEN-001"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-DELIVERY-REOPEN-002 旧PR停止終端の暗黙再開を拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-DELIVERY-REOPEN-002"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-054 assistedのauthority未成立はStep 11を記録せず再開可能な待機になる
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-054"のE2E検査を実行する
