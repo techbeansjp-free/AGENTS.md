@@ -387,6 +387,16 @@ Feature: PR停止、条件付きmerge、safe finalizeを操作単位で分離す
     When merge authorizationを評価する
     Then 独立review不足の拒否診断はactor除外を主張せず適用モードを述べる
 
+  Scenario: SCN-INT-MERGE-019 context-isolatedはformal approvalとprovider approvalを合算してrequiredReviewsを満たす
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-INT-MERGE-019"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-INT-MERGE-020 context-isolatedはsession・artifact・HEAD・digest・candidate-only反例を拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-INT-MERGE-020"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-INT-MERGE-014 拒否の根拠が要求数と観測数を示しactor IDを出さない
     Given trusted automatic policyがreview 1件を要求しapprovalが0件である
     When merge authorizationを評価する

@@ -2260,7 +2260,13 @@ function preparePullRequest(
    */
   workflowMode: "quick" | "poc" = "quick",
   requiredReviews = 0,
-  artifactDisposition: "valid" | "rejected" | "placeholder-context" = "valid",
+  artifactDisposition:
+    | "valid"
+    | "rejected"
+    | "placeholder-context"
+    | "himpl-mismatch"
+    | "untracked"
+    | "extra-file" = "valid",
 ): PreparedPullRequest {
   const fixturePast = fixtureInstant({ hoursAgo: 1 });
   const fixtureNow = fixtureInstant();
@@ -2344,21 +2350,42 @@ function preparePullRequest(
       baseSha,
       implementationCommitSha,
     );
-    fs.writeFileSync(
-      path.join(root, "docs", "reviews", "90_test_review.md"),
-      artifactDisposition === "rejected"
-        ? reviewArtifact.replace("判定: approved", "判定: rejected")
-        : artifactDisposition === "placeholder-context"
-          ? reviewArtifact.replace(
-              "reviewer-contextとimplementer-contextは別",
-              "{実体の観測値}",
-            )
-          : reviewArtifact,
-    );
-    spawnSync("git", ["add", "docs/reviews/90_test_review.md"], { cwd: root });
-    spawnSync("git", ["commit", "-q", "-m", "review evidence"], {
-      cwd: root,
-    });
+    if (artifactDisposition !== "untracked")
+      fs.writeFileSync(
+        path.join(root, "docs", "reviews", "90_test_review.md"),
+        artifactDisposition === "rejected"
+          ? reviewArtifact.replace("判定: approved", "判定: rejected")
+          : artifactDisposition === "placeholder-context"
+            ? reviewArtifact.replace(
+                "reviewer-contextとimplementer-contextは別",
+                "{実体の観測値}",
+              )
+            : artifactDisposition === "himpl-mismatch"
+              ? reviewArtifact.replace(
+                  `| H_impl | \`${implementationCommitSha}\` |`,
+                  `| H_impl | \`${"f".repeat(40)}\` |`,
+                )
+              : reviewArtifact,
+      );
+    if (artifactDisposition !== "untracked") {
+      if (artifactDisposition === "extra-file")
+        fs.writeFileSync(
+          path.join(root, "unexpected.txt"),
+          "not evidence-only\n",
+        );
+      spawnSync(
+        "git",
+        [
+          "add",
+          "docs/reviews/90_test_review.md",
+          ...(artifactDisposition === "extra-file" ? ["unexpected.txt"] : []),
+        ],
+        { cwd: root },
+      );
+      spawnSync("git", ["commit", "-q", "-m", "review evidence"], {
+        cwd: root,
+      });
+    }
   }
   const headSha = spawnSync("git", ["rev-parse", "HEAD"], {
     cwd: root,
@@ -2474,6 +2501,11 @@ function preparePullRequest(
     bodyDigest: "a".repeat(64),
     readBackDigest: "a".repeat(64),
   });
+  if (artifactDisposition === "untracked")
+    fs.writeFileSync(
+      path.join(root, "docs", "reviews", "90_test_review.md"),
+      contextIsolatedReviewArtifact(baseSha, implementationCommitSha),
+    );
   return finalizePreparedPullRequest({
     world,
     root,
@@ -2747,7 +2779,13 @@ function prepareDeliveryCli(
   reviewIndependence?: "context-isolated" | "actor-independent",
   workflowMode: "quick" | "poc" = "quick",
   requiredReviews = 0,
-  artifactDisposition: "valid" | "rejected" | "placeholder-context" = "valid",
+  artifactDisposition:
+    | "valid"
+    | "rejected"
+    | "placeholder-context"
+    | "himpl-mismatch"
+    | "untracked"
+    | "extra-file" = "valid",
 ): PreparedDeliveryCli {
   const prepared = preparePullRequest(
     world,
@@ -3887,6 +3925,17 @@ if (exact(["auth", "status"])) {
         /^[a-f0-9]{64}$/u,
         "formal review round digestがmerge intentのapproval IDに固定されていません",
       );
+      const session = JSON.parse(
+        fs.readFileSync(
+          path.join(prepared.staging, "review-session.json"),
+          "utf8",
+        ),
+      ) as { latestRoundDigest: string };
+      assert.equal(
+        state.merge?.reviewId,
+        session.latestRoundDigest,
+        "merge intentのreviewIdがactual latestRoundDigestと一致しません",
+      );
       break;
     }
     case "SCN-INT-MERGE-019": {
@@ -3913,7 +3962,13 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-INT-MERGE-020": {
-      for (const disposition of ["rejected", "placeholder-context"] as const) {
+      for (const disposition of [
+        "rejected",
+        "placeholder-context",
+        "himpl-mismatch",
+        "untracked",
+        "extra-file",
+      ] as const) {
         const prepared = prepareDeliveryCli(
           this,
           { reviewDisposition: "none" },
@@ -3924,8 +3979,13 @@ if (exact(["auth", "status"])) {
           1,
           disposition,
         );
-        createDeliveryPullRequest(prepared);
-        const rejected = executeDeliveryMerge(prepared);
+        const created = executeCli(
+          [...prepared.args, "--apply", "--authorize=approved"],
+          prepared.root,
+          prepared.env,
+        );
+        const rejected =
+          created.status === 0 ? executeDeliveryMerge(prepared) : created;
         assert.notEqual(
           rejected.status,
           0,
@@ -3937,7 +3997,11 @@ if (exact(["auth", "status"])) {
         );
       }
 
-      for (const mutation of ["missing-session", "head-digest"] as const) {
+      for (const mutation of [
+        "missing-session",
+        "head-digest",
+        "step10-digest",
+      ] as const) {
         const prepared = prepareDeliveryCli(this, {
           reviewDisposition: "none",
         });
@@ -3949,7 +4013,7 @@ if (exact(["auth", "status"])) {
             path.join(prepared.staging, "candidate-formal-approval.json"),
             `${JSON.stringify({ approved: true, headSha: prepared.headSha })}\n`,
           );
-        } else {
+        } else if (mutation === "head-digest") {
           const session = JSON.parse(fs.readFileSync(sessionFile, "utf8")) as {
             latestCandidateHeadSha: string;
             latestRoundDigest: string;
@@ -3957,6 +4021,28 @@ if (exact(["auth", "status"])) {
           session.latestCandidateHeadSha = "f".repeat(40);
           session.latestRoundDigest = "e".repeat(64);
           fs.writeFileSync(sessionFile, `${JSON.stringify(session)}\n`);
+        } else {
+          const journalFile = path.join(prepared.staging, STEP_JOURNAL_FILE);
+          const entries = fs
+            .readFileSync(journalFile, "utf8")
+            .trimEnd()
+            .split("\n")
+            .map((line) => JSON.parse(line) as StepJournalEntry)
+            .map((entry) =>
+              entry.step === 10 && entry.reviewSession
+                ? {
+                    ...entry,
+                    reviewSession: {
+                      ...entry.reviewSession,
+                      roundDigest: "d".repeat(64),
+                    },
+                  }
+                : entry,
+            );
+          fs.writeFileSync(
+            journalFile,
+            `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+          );
         }
         refreshStoredStagingDigest(prepared.staging);
         const rejected = executeDeliveryMerge(prepared);
