@@ -8,6 +8,7 @@ import {
   bindStoredPullRequest,
   claimStoredPullRequestCreationDispatch,
   deliveryStateTransactionPath,
+  observeStoredDeliveryState,
   prepareStoredPullRequestCreation,
   readStoredDeliveryState,
   recordStoredStep11,
@@ -58,6 +59,7 @@ interface DeliveryTransactionWorld extends WorkflowWorld {
 
 interface DiskSnapshot {
   delivery: string | null;
+  marker: string | null;
   record: string;
   requirement: string;
 }
@@ -143,6 +145,7 @@ function setDeliverySource(staging: string, source: string | null): void {
 function snapshot(staging: string): DiskSnapshot {
   return {
     delivery: optionalSource(deliveryFile(staging)),
+    marker: optionalSource(deliveryStateTransactionPath(staging)),
     record: fs.readFileSync(path.join(staging, STAGING_RECORD_FILE), "utf8"),
     requirement: fs.readFileSync(path.join(staging, "00_要求定義.md"), "utf8"),
   };
@@ -391,6 +394,16 @@ When("delivery readiness readでpending transactionを復旧する", function ()
   }
 });
 
+When("delivery stateをread-onlyで観測する", function () {
+  const staging = stagingOf(this);
+  this.beforeOperation = snapshot(staging);
+  try {
+    this.value = observeStoredDeliveryState(staging);
+  } catch (error) {
+    this.error = error;
+  }
+});
+
 When("別時刻でPR create dispatchを再claimする", function () {
   try {
     this.dispatchResult = claimStoredPullRequestCreationDispatch(
@@ -459,4 +472,16 @@ Then("最初のdispatch claimだけを保持し再dispatchを許可しない", f
 Then("終端delivery stateとstaging recordはbyte単位で変わらない", function () {
   assert.ok(this.error instanceof Error, "終端後の変更が受理されました");
   assert.deepEqual(snapshot(stagingOf(this)), this.beforeOperation);
+});
+
+Then("pending delivery transactionは変更されずに保持される", function () {
+  assert.equal(this.error, undefined);
+  const fixture = this.fixture;
+  assert.ok(fixture);
+  assert.deepEqual(this.value, fixture.beforeState);
+  assert.deepEqual(snapshot(fixture.staging), this.beforeOperation);
+  assert.equal(
+    fs.existsSync(deliveryStateTransactionPath(fixture.staging)),
+    true,
+  );
 });

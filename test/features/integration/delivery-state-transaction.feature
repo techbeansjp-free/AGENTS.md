@@ -46,3 +46,8 @@ Feature: delivery stateとstaging recordを永続transactionで一体更新す�
     Given Step 11をPR停止終端として記録済みである
     When 異なるStep 11 evidenceへの変更を試みる
     Then 終端delivery stateとstaging recordはbyte単位で変わらない
+
+  Scenario: SCN-INT-DELTXN-007 read-only観測はpending transactionを復旧しない
+    Given delivery state transactionが"publish前"で停止している
+    When delivery stateをread-onlyで観測する
+    Then pending delivery transactionは変更されずに保持される

@@ -318,6 +318,12 @@ export interface StepJournalEntry {
    */
   postTerminalIntake?: true;
   /**
+   * `pr create`後、Step 11記録前の`pr-bound`中に届いた外部reviewer指摘を
+   * 同じPRへ取り込んだStep 10 roundであることを示す。**Step 10にだけ許す。**
+   * delivery再固定はこの明示記録とexact review bindingを要求する（Issue #1389）。
+   */
+  postPrIntake?: true;
+  /**
    * 上流再確定entryであることを示す（TERM-ASC-109、Issue #1342）。**Step 1〜9にだけ許す。**
    *
    * 後続Stepを記録した後に上流Stepを再実施した事実を、順序判定から外して追記する。
@@ -350,6 +356,7 @@ const JOURNAL_FIELDS = new Set([
   "reviewSession",
   "humanOverride",
   "postTerminalIntake",
+  "postPrIntake",
   "reconfirmation",
 ]);
 const POC_OBSERVATION_BINDING_FIELDS = new Set(["headSha", "evidenceDigest"]);
@@ -575,6 +582,18 @@ function parseJournalEntry(
       errors.push(`${label}のpostTerminalIntakeはStep 10にだけ指定できます`);
     else postTerminalIntake = true;
   }
+  let postPrIntake: true | undefined;
+  if (value.postPrIntake !== undefined) {
+    if (value.postPrIntake !== true)
+      errors.push(`${label}のpostPrIntakeはtrueだけを受理します`);
+    else if (Number(value.step) !== 10)
+      errors.push(`${label}のpostPrIntakeはStep 10にだけ指定できます`);
+    else postPrIntake = true;
+  }
+  if (postTerminalIntake && postPrIntake)
+    errors.push(
+      `${label}のpostTerminalIntakeとpostPrIntakeは同時に指定できません`,
+    );
   let reconfirmation: true | undefined;
   if (value.reconfirmation !== undefined) {
     if (value.reconfirmation !== true)
@@ -597,6 +616,7 @@ function parseJournalEntry(
       ...(reviewSession ? { reviewSession } : {}),
       ...(parsedOverride.value ? { humanOverride: parsedOverride.value } : {}),
       ...(postTerminalIntake ? { postTerminalIntake } : {}),
+      ...(postPrIntake ? { postPrIntake } : {}),
       ...(reconfirmation ? { reconfirmation } : {}),
     },
     errors,
@@ -691,7 +711,8 @@ export function validateStepJournal(input: {
    * 通常entryが先行していることを別途要求する。
    */
   input.entries.forEach((entry, index) => {
-    if (entry.postTerminalIntake || entry.reconfirmation) return;
+    if (entry.postTerminalIntake || entry.postPrIntake || entry.reconfirmation)
+      return;
     lastByStep.set(entry.step, { entry, index });
   });
   input.entries.forEach((entry, index) => {
@@ -711,6 +732,7 @@ export function validateStepJournal(input: {
           candidate.step === entry.step &&
           !candidate.reconfirmation &&
           !candidate.postTerminalIntake &&
+          !candidate.postPrIntake &&
           !candidate.humanOverride,
       );
     if (!preceded)
@@ -725,6 +747,24 @@ export function validateStepJournal(input: {
       errors.push(
         "post-terminal intakeのStep 10記録はStep 11より後に置いてください",
       );
+  });
+  input.entries.forEach((entry, index) => {
+    if (!entry.postPrIntake) return;
+    const preceded = input.entries
+      .slice(0, index)
+      .some(
+        (candidate) =>
+          candidate.step === 10 &&
+          !candidate.postTerminalIntake &&
+          !candidate.postPrIntake &&
+          !candidate.humanOverride,
+      );
+    if (!preceded)
+      errors.push(
+        "post-PR intakeのStep 10記録に先行する通常のStep 10記録がありません",
+      );
+    if (terminalIndex >= 0 && index > terminalIndex)
+      errors.push("post-PR intakeのStep 10記録はStep 11より前に置いてください");
   });
   /**
    * **上流再確定entryはStep 11より後に置けない**（Issue #1342）。

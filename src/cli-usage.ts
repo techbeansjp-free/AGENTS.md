@@ -549,6 +549,12 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "通常のStep記録",
       ),
       optional(
+        "post-pr-intake",
+        "",
+        "pr-bound中に外部reviewer指摘を同じPRで取り込んだroundとして記録する",
+        "通常のStep記録",
+      ),
+      optional(
         "reconfirm",
         "",
         "後続Step記録後に上流Step 1〜9を再確定した事実を、順序判定から外すentryとして記録する。同じStepの通常記録が先行しているときだけ受理する",

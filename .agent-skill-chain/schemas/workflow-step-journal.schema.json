@@ -91,6 +91,9 @@
     "postTerminalIntake": {
       "const": true
     },
+    "postPrIntake": {
+      "const": true
+    },
     "reconfirmation": {
       "const": true
     }
@@ -102,6 +105,16 @@
         "required": ["step"]
       },
       "else": { "not": { "required": ["postTerminalIntake"] } }
+    },
+    {
+      "if": {
+        "properties": { "step": { "const": 10 } },
+        "required": ["step"]
+      },
+      "else": { "not": { "required": ["postPrIntake"] } }
+    },
+    {
+      "not": { "required": ["postTerminalIntake", "postPrIntake"] }
     },
     {
       "if": {

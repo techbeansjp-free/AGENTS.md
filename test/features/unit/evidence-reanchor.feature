@@ -156,3 +156,8 @@ Feature: rebase後の証跡再固定を内容等価性で受理する
     Given 共通評価が成功した再固定fixtureがある
     When 評価後に連鎖不正なchainを保存して再固定を適用する
     Then 最新chainの不整合を拒否しchainへ追記しない
+
+  Scenario: SCN-UNIT-REANCHOR-032 reanchor公開後の停止からdigestだけを前向き復旧する
+    Given 固定済みPR identityを持つstagingと等価なrebaseがある
+    When reanchor公開後かつstaging digest更新前の停止から同じ入力を再実行する
+    Then 再固定chainを重複させずstaging digestが新chainへ一致する
