@@ -2,17 +2,64 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { writeFileAtomic } from "../lib/atomic.js";
-import { parseJsonStrict } from "../lib/security.js";
+import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { deriveEffectiveHead, isContentEquivalent, isRebaseEquivalent, parseReviewIdentityAnchor, isEvidenceReanchorRecord, } from "../domain/evidence-reanchor.js";
 import { validateReviewArtifactStructure, parseReviewArtifactAudit, validateContextIsolatedApprovalRecord, visibleMarkdownLines, } from "../domain/review-artifact.js";
 import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
-import { refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
+import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { observeStoredDeliveryState, readStoredDeliveryState, } from "./delivery-state.js";
-import { observeReviewDiff, readBlobAtCommit } from "./review-diff.js";
+import { observeReviewDiff, observeSingleCommitParent, readBlobAtCommit, } from "./review-diff.js";
 import { readStoredReviewSession } from "./review-session-store.js";
 import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
 export const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
 const OID = /^[a-f0-9]{40}$/u;
+function renderEvidenceReanchorChain(chain) {
+    return `${chain.map((entry) => JSON.stringify(entry)).join("\n")}\n`;
+}
+/**
+ * reanchor公開後・staging record更新前の停止だけを前向き復旧する。
+ *
+ * 保存済みartifact集合と、terminal追記前のchainを使った投影digestが保存済み
+ * digestに完全一致する場合だけrefreshする。したがって、同じ入力の再実行を
+ * 口実に無関係なstaging変更を正当化しない。
+ */
+function recoverPublishedReanchorDigest(staging, chain) {
+    const stored = readStoredStagingRecord(staging);
+    const currentArtifacts = listStagingArtifacts(staging);
+    const currentDigest = calculateStagingDigest(staging, currentArtifacts);
+    if (stableJson(stored.artifacts) === stableJson(currentArtifacts) &&
+        stored.digest === currentDigest)
+        return;
+    const previous = chain.slice(0, -1);
+    const expectedBeforeArtifacts = previous.length === 0
+        ? currentArtifacts.filter((artifact) => artifact !== EVIDENCE_REANCHOR_FILE)
+        : currentArtifacts;
+    if (stableJson(stored.artifacts) !== stableJson(expectedBeforeArtifacts))
+        throw new Error("再固定再開時のartifact集合が公開前・公開後のどちらとも一致しません");
+    const previousDigest = crypto
+        .createHash("sha256")
+        .update(renderEvidenceReanchorChain(previous))
+        .digest("hex");
+    const projectedBefore = crypto
+        .createHash("sha256")
+        .update(stableJson(expectedBeforeArtifacts.map((relative) => ({
+        relative,
+        digest: relative === EVIDENCE_REANCHOR_FILE
+            ? previousDigest
+            : crypto
+                .createHash("sha256")
+                .update(fs.readFileSync(path.join(staging, ...relative.split("/"))))
+                .digest("hex"),
+    }))))
+        .digest("hex");
+    if (stored.digest !== projectedBefore)
+        throw new Error("再固定以外のstaging成果物が変更されているためdigestを復旧できません");
+    refreshStoredStagingDigest(staging);
+    const refreshed = readStoredStagingRecord(staging);
+    if (stableJson(refreshed.artifacts) !== stableJson(currentArtifacts) ||
+        refreshed.digest !== currentDigest)
+        throw new Error("再固定公開後のstaging digest復旧確認に失敗しました");
+}
 /**
  * 追記済みの再固定chainを読む。
  *
@@ -267,6 +314,78 @@ function observeArtifactReplacement(staging, root, input) {
         newDigest: crypto.createHash("sha256").update(newArtifact).digest("hex"),
     };
 }
+/**
+ * `pr-bound`後に外部reviewer指摘を取り込んだ前進commitを、新しいreview roundへ
+ * 束縛する。旧delivery headをancestorに持つこと、exact session、明示intake、
+ * review artifactの構造と監査をすべて再観測し、force rewriteや未review差分を拒否する。
+ */
+function observeReviewedForward(staging, root, input) {
+    if (input.oldBaseSha !== input.newBaseSha)
+        return undefined;
+    const finalParent = observeSingleCommitParent(root, input.newHeadSha);
+    const finalSuffix = observeReanchorDiff(root, "新H_final親→新H_final", input, finalParent, input.newHeadSha);
+    const artifactPath = terminalArtifactPath(finalSuffix.changedPaths);
+    if (artifactPath === undefined ||
+        !REVIEW_ARTIFACT_NAME.test(path.posix.basename(artifactPath)))
+        return undefined;
+    const artifact = readBlobAtCommit(root, input.newHeadSha, artifactPath);
+    if (artifact === undefined)
+        return undefined;
+    const anchor = parseReviewIdentityAnchor(artifact);
+    if (anchor === undefined || anchor.base !== input.newBaseSha)
+        return undefined;
+    if (finalParent !== anchor.implementation)
+        return undefined;
+    if (input.oldHeadSha === anchor.implementation)
+        return undefined;
+    try {
+        /** `observeReviewDiff`の固定Git環境でstrict ancestorを再観測する。 */
+        observeReviewDiff(root, input.oldHeadSha, anchor.implementation);
+    }
+    catch {
+        return undefined;
+    }
+    if (!verifiedImplementationBoundary(root, input.newHeadSha, artifactPath, anchor.implementation, input, "新H_impl→新head").valid)
+        return undefined;
+    const implementation = observeReanchorDiff(root, "新base→新H_impl", input, input.newBaseSha, anchor.implementation, anchor.implementation);
+    const structure = validateReviewArtifactStructure(artifact);
+    const audit = parseReviewArtifactAudit(artifact);
+    const approval = validateContextIsolatedApprovalRecord(canonicalApprovalContent(artifact));
+    const session = readStoredReviewSession(staging);
+    const journal = readWorkflowJournal(staging);
+    const step10 = [...journal.entries]
+        .reverse()
+        .find((entry) => entry.step === 10 && entry.postPrIntake);
+    const expectedPaths = [...implementation.changedPaths]
+        .filter((entry) => !entry.startsWith("dist/"))
+        .sort();
+    const auditedPaths = audit.entries.map((entry) => entry.path).sort();
+    if (structure.diagnostics.length > 0 ||
+        structure.base !== input.newBaseSha ||
+        structure.implementation !== anchor.implementation ||
+        structure.rounds === undefined ||
+        structure.rounds < 1 ||
+        structure.stepChain?.kind !== "via" ||
+        !approval.valid ||
+        session === null ||
+        session.status !== "converged" ||
+        session.latestCandidateHeadSha !== anchor.implementation ||
+        step10?.reviewSession === undefined ||
+        step10.reviewSession.sessionId !== session.sessionId ||
+        step10.reviewSession.roundDigest !== session.latestRoundDigest ||
+        step10.reviewSession.headSha !== session.latestCandidateHeadSha ||
+        journal.errors.length > 0 ||
+        audit.entries.some((entry) => entry.decision !== "pass") ||
+        JSON.stringify(expectedPaths) !== JSON.stringify(auditedPaths))
+        return undefined;
+    return {
+        sessionId: session.sessionId,
+        roundDigest: session.latestRoundDigest,
+        implementationSha: anchor.implementation,
+        artifactPath,
+        artifactDigest: crypto.createHash("sha256").update(artifact).digest("hex"),
+    };
+}
 function resolveAnchor(staging, layer) {
     const deliveryState = observeStoredDeliveryState(staging);
     if (layer === "delivery") {
@@ -278,7 +397,7 @@ function resolveAnchor(staging, layer) {
         return {
             anchoredHeadSha: state.create.headSha,
             anchoredBaseSha: state.create.baseSha,
-            artifactReplacementRequired: state.state === "pr-bound",
+            prBound: state.state === "pr-bound",
         };
     }
     if (deliveryState?.create)
@@ -291,7 +410,7 @@ function resolveAnchor(staging, layer) {
     return {
         anchoredHeadSha: session.latestCandidateHeadSha,
         anchoredBaseSha: session.anchor.diffBaseSha,
-        artifactReplacementRequired: false,
+        prBound: false,
     };
 }
 function validateEvidenceReanchorInput(input) {
@@ -330,6 +449,7 @@ export function evaluateEvidenceReanchor(input) {
             diffDigest: undefined,
             method: undefined,
             artifactReplacement: undefined,
+            reviewedForward: undefined,
         };
     if (oldHeadSha === input.newHeadSha)
         throw new Error("再固定は移動していないheadに対して行えません");
@@ -343,17 +463,26 @@ export function evaluateEvidenceReanchor(input) {
     const after = observeReanchorDiff(input.root, "新base→新head", comparison, input.newBaseSha, input.newHeadSha);
     let method = "rebase";
     let artifactReplacement;
+    let reviewedForward;
     if (!isContentEquivalent(before, after)) {
         const rebase = observeRebaseEquivalence(input.root, comparison);
         if (rebase.reason !== "ok") {
             artifactReplacement = observeArtifactReplacement(staging, input.root, comparison);
-            if (artifactReplacement === undefined)
+            if (artifactReplacement !== undefined)
+                method = "artifact-replacement";
+            else if (anchor.prBound) {
+                reviewedForward = observeReviewedForward(staging, input.root, comparison);
+                if (reviewedForward !== undefined)
+                    method = "reviewed-forward";
+            }
+            if (artifactReplacement === undefined && reviewedForward === undefined)
                 throw new Error(`再固定前後の内容が等価ではありません（${rebase.reason}）: before=${before.digest} after=${after.digest}${rebase.gitFailure === undefined ? "" : `; ${rebase.gitFailure}`}`);
-            method = "artifact-replacement";
         }
     }
-    if (anchor.artifactReplacementRequired && method !== "artifact-replacement")
-        throw new Error("pr reanchorのpr-bound再固定は同一review済み実装に対する監査合格済みartifact改名だけを受理します");
+    if (anchor.prBound &&
+        method !== "artifact-replacement" &&
+        method !== "reviewed-forward")
+        throw new Error("pr reanchorのpr-bound再固定は監査合格済みartifact改名、または明示したpost-PR intakeとexact review bindingを持つ前進commitだけを受理します");
     return {
         chain: existing,
         effectiveHeadSha: input.newHeadSha,
@@ -363,6 +492,7 @@ export function evaluateEvidenceReanchor(input) {
         diffDigest: before.digest,
         method,
         artifactReplacement,
+        reviewedForward,
     };
 }
 /**
@@ -379,12 +509,14 @@ export function appendEvidenceReanchor(input) {
         /** applyだけが既存delivery transactionをlock内で復旧してから最新stateを評価する。 */
         readStoredDeliveryState(staging);
         const evaluation = evaluateEvidenceReanchor(input);
-        if (!evaluation.appended)
+        if (!evaluation.appended) {
+            recoverPublishedReanchorDigest(staging, evaluation.chain);
             return {
                 chain: evaluation.chain,
                 effectiveHeadSha: evaluation.effectiveHeadSha,
                 appended: false,
             };
+        }
         const record = {
             oldHeadSha: evaluation.oldHeadSha,
             newHeadSha: input.newHeadSha,
@@ -397,10 +529,15 @@ export function appendEvidenceReanchor(input) {
             ...(evaluation.artifactReplacement === undefined
                 ? {}
                 : { artifactReplacement: evaluation.artifactReplacement }),
+            ...(evaluation.reviewedForward === undefined
+                ? {}
+                : { reviewedForward: evaluation.reviewedForward }),
         };
         const file = path.join(staging, EVIDENCE_REANCHOR_FILE);
         const next = [...evaluation.chain, record];
-        writeFileAtomic(file, `${next.map((entry) => JSON.stringify(entry)).join("\n")}\n`, { temporaryDirectory: path.dirname(staging) });
+        writeFileAtomic(file, renderEvidenceReanchorChain(next), {
+            temporaryDirectory: path.dirname(staging),
+        });
         refreshStoredStagingDigest(staging);
         const reread = readEvidenceReanchorChain(staging);
         if (JSON.stringify(reread) !== JSON.stringify(next))

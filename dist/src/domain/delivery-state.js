@@ -322,7 +322,7 @@ export function closingContractDigest(input) {
         closingIssueNumbers: [issue],
     });
 }
-function normalizeObservation(value, create, pr) {
+function normalizeObservation(value, create, pr, authorizedHeadSha) {
     const providerState = value.providerState;
     if (providerState !== "merge-requested" && providerState !== "merged")
         throw new Error("merge.observation.providerStateが不正です");
@@ -354,16 +354,16 @@ function normalizeObservation(value, create, pr) {
         observedAt: instant(value.observedAt, "merge.observation.observedAt"),
         mergeCommitSha,
     };
-    assertObservationMatchesBinding(create, pr, withoutId);
+    assertObservationMatchesBinding(create, pr, authorizedHeadSha, withoutId);
     return withoutId;
 }
-function parseObservation(value, create, pr) {
+function parseObservation(value, create, pr, authorizedHeadSha) {
     if (value === null)
         return null;
     if (!isRecord(value))
         throw new Error("merge.observationはobjectまたはnullが必要です");
     unknownFields(value, OBSERVATION_FIELDS, "merge.observation");
-    const withoutId = normalizeObservation(value, create, pr);
+    const withoutId = normalizeObservation(value, create, pr, authorizedHeadSha);
     const observationId = digest(value.observationId, "merge.observation.observationId");
     if (observationId !== canonicalDigest(observationIdentityValue(withoutId)))
         throw new Error("merge.observation.observationIdが観測内容と一致しません");
@@ -382,8 +382,6 @@ function parseMerge(value, create, pr) {
         value.method !== "rebase")
         throw new Error("merge.methodが不正です");
     const authorizedHeadSha = oid(value.authorizedHeadSha, "merge.authorizedHeadSha");
-    if (authorizedHeadSha !== create.headSha)
-        throw new Error("merge.authorizedHeadShaが固定HEADと一致しません");
     const authorizedBaseRef = ref(value.authorizedBaseRef, "merge.authorizedBaseRef");
     if (authorizedBaseRef !== create.baseRef)
         throw new Error("merge.authorizedBaseRefが固定base refと一致しません");
@@ -426,13 +424,13 @@ function parseMerge(value, create, pr) {
         dispatchClaimedAt: value.dispatchClaimedAt === null
             ? null
             : instant(value.dispatchClaimedAt, "merge.dispatchClaimedAt"),
-        observation: parseObservation(value.observation, create, pr),
+        observation: parseObservation(value.observation, create, pr, authorizedHeadSha),
     };
     const expectedReviewEvidenceId = canonicalDigest({
         domain: "agent-skill-chain/merge-review-evidence/v1",
         repository: create.repository,
         prNumber: pr.number,
-        finalHeadSha: create.headSha,
+        finalHeadSha: authorizedHeadSha,
         implementationCommitSha: parsed.implementationCommitSha,
         reviewArtifactPath: parsed.reviewArtifactPath,
         reviewArtifactDigest: parsed.reviewArtifactDigest,
@@ -449,7 +447,7 @@ function parseMerge(value, create, pr) {
     if (parsed.observation) {
         const request = parsed.observation.providerRequest;
         if (request &&
-            (request.headSha !== create.headSha ||
+            (request.headSha !== authorizedHeadSha ||
                 request.baseSha !== parsed.authorizedBaseSha))
             throw new Error("merge providerRequestのhead/baseが固定済み認可tupleと一致しません");
         // dispatchClaimedAt is produced by the local clock while requestedAt and
@@ -851,12 +849,12 @@ export function claimMergeDispatch(current, claimedAt) {
     };
     return parseDeliveryState(stableJson(candidate));
 }
-function assertObservationMatchesBinding(create, pr, observation) {
+function assertObservationMatchesBinding(create, pr, authorizedHeadSha, observation) {
     const expected = {
         repository: create.repository.toLowerCase(),
         prNumber: pr.number,
         prUrl: pr.url.toLowerCase(),
-        headSha: create.headSha,
+        headSha: authorizedHeadSha,
         issue: create.issue,
         issueUrl: create.issueUrl.toLowerCase(),
         bodyClosingDigest: create.bodyClosingDigest,
@@ -884,7 +882,7 @@ export function observeMerge(current, observation) {
     if (!isRecord(observation))
         throw new Error("merge observationはobjectが必要です");
     unknownFields(observation, OBSERVATION_INPUT_FIELDS, "merge observation");
-    const canonical = normalizeObservation(observation, current.create, current.pr);
+    const canonical = normalizeObservation(observation, current.create, current.pr, current.merge.authorizedHeadSha);
     const complete = {
         ...canonical,
         observationId: canonicalDigest(observationIdentityValue(canonical)),

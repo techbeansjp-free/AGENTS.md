@@ -44,7 +44,7 @@ import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertP
 import { assertConvergedReviewSession, buildReviewRoundDraft, evidenceOnlySuffix, previewReviewRound, recordReviewRound, STAGING_DIGEST_RERECORD_HINT, } from "./adapters/review-session.js";
 import { appendEvidenceReanchor, evaluateEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
 import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
-import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, completeStoredTerminalRedelivery, observeStoredMerge, prepareStoredMergeIntent, prepareStoredTerminalRedeliveryMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
+import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, completeStoredTerminalRedelivery, observeStoredMerge, observeStoredDeliveryState, prepareStoredMergeIntent, prepareStoredTerminalRedeliveryMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
 import { DELIVERY_STATE_FILE, assertImmutablePullRequestBinding, canonicalDigest, closingContractDigest, pullRequestContentDigest, pullRequestTerminalEvidenceId, } from "./domain/delivery-state.js";
 import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, } from "./domain/workflow.js";
 import { reconcileFixedMergeRun, CI_DELIVERY_GRACE_MINUTES, inspectCiDelivery, } from "./domain/ci-delivery.js";
@@ -55,6 +55,7 @@ function workflowArguments(args) {
         "apply",
         "dry-run",
         "post-terminal-intake",
+        "post-pr-intake",
         "reconfirm",
     ]);
     for (let index = 0; index < args.length; index += 1) {
@@ -447,6 +448,9 @@ export function assertBoundPullRequestObservation(input) {
 function mergeObservationFromProvider(input) {
     if (!input.state.pr)
         throw new Error("固定済みPR bindingがありません");
+    if (!input.state.merge)
+        throw new Error("merge observationには固定済みmerge intentが必要です");
+    const authorizedHeadSha = input.state.merge.authorizedHeadSha;
     const closing = assertBoundPullRequestObservation(input);
     const merged = String(input.observed.state ?? "").toUpperCase() === "MERGED";
     const autoMergeRequest = isRecord(input.observed.autoMergeRequest)
@@ -458,7 +462,7 @@ function mergeObservationFromProvider(input) {
         (input.queue.repository.toLowerCase() !==
             input.state.create.repository.toLowerCase() ||
             input.queue.prNumber !== input.state.pr.number ||
-            input.queue.headRefOid !== input.state.create.headSha))
+            input.queue.headRefOid !== authorizedHeadSha))
         throw new Error("merge queue観測が固定済みPR bindingと一致しません");
     if (!merged && !autoMergeRequested && !queueEntry)
         throw new Error("merge要求またはnative auto-merge登録をproviderのread-backで観測できません");
@@ -477,7 +481,7 @@ function mergeObservationFromProvider(input) {
             kind: "auto-merge",
             requestedAt: canonicalProviderInstant(autoMergeRequest.enabledAt, "auto-merge enabledAt"),
             method: input.state.merge.method,
-            headSha: input.state.create.headSha,
+            headSha: authorizedHeadSha,
             baseSha: input.state.merge.authorizedBaseSha,
         };
     };
@@ -514,7 +518,7 @@ function mergeObservationFromProvider(input) {
         repository: input.state.create.repository,
         prNumber: input.state.pr.number,
         prUrl: input.state.pr.url,
-        headSha: input.state.create.headSha,
+        headSha: authorizedHeadSha,
         issue: closing.issue,
         issueUrl: closing.issueUrl,
         bodyClosingDigest: closing.bodyClosingDigest,
@@ -579,7 +583,7 @@ function finishObservedMerge(staging, current, mode) {
             throw new Error("step 11の定義がありません");
         workflow = appendDeliveryTerminalJournalEntry({
             staging,
-            headSha: current.create.headSha,
+            headSha: current.merge.authorizedHeadSha,
             entry: {
                 step: 11,
                 skillId: definition.skillId,
@@ -707,6 +711,40 @@ function assertRecordedStep11Evidence(staging, current) {
         .digest("hex");
     if (digest !== current.step11.journalDigest)
         throw new Error("固定済みStep 11 journal digestが現在のjournalと一致しません");
+}
+function postPrIntakeDeliveryErrors(staging) {
+    const journal = readWorkflowJournal(staging);
+    if (!journal.entries.some((entry) => entry.postPrIntake))
+        return [];
+    const delivery = observeStoredDeliveryState(staging);
+    if (!delivery)
+        return ["post-PR intakeに対応するdelivery stateがありません"];
+    const allowed = new Set([
+        "pr-bound",
+        "merge-prepared",
+        "merge-observed",
+        "step11-recorded",
+    ]);
+    if (delivery.state === "reconciliation-required" &&
+        delivery.reconciliation?.phase === "merge")
+        allowed.add("reconciliation-required");
+    if (!allowed.has(delivery.state))
+        return [`post-PR intakeに対応しないdelivery stateです: ${delivery.state}`];
+    try {
+        if (delivery.state === "step11-recorded")
+            assertRecordedStep11Evidence(staging, delivery);
+        else
+            assertStoredStagingContentDigest(staging, "post-PR intake検証時");
+        return [];
+    }
+    catch (error) {
+        return [error instanceof Error ? error.message : String(error)];
+    }
+}
+function exactMergeDispatchHead(input) {
+    if (input.observedHeadSha !== input.authorizedHeadSha)
+        throw new Error("merge送信直前のprovider HEADが永続化した認可HEADと一致しません");
+    return input.observedHeadSha;
 }
 function deliveryEventTime(lowerBound) {
     const now = new Date().toISOString();
@@ -1519,7 +1557,10 @@ function retryPreparedMergeAfterConfirmedAbsence(input) {
             repository: input.repository,
             pr: input.pr,
             method: input.method,
-            headSha: rechecked.observed.headRefOid,
+            headSha: exactMergeDispatchHead({
+                observedHeadSha: rechecked.observed.headRefOid,
+                authorizedHeadSha: input.state.merge.authorizedHeadSha,
+            }),
             dispatchMode: input.state.merge.dispatchMode,
         }, input.root);
         return readBackPreparedPullRequestMerge({ ...input, state: claimed.state });
@@ -1935,7 +1976,10 @@ function handlePullRequestMerge(flags) {
                 repository,
                 pr,
                 method,
-                headSha: rechecked.observed.headRefOid,
+                headSha: exactMergeDispatchHead({
+                    observedHeadSha: rechecked.observed.headRefOid,
+                    authorizedHeadSha: prepared.state.merge.authorizedHeadSha,
+                }),
                 dispatchMode: prepared.state.merge.dispatchMode,
             }, root);
         }
@@ -4022,6 +4066,7 @@ export async function main(argv, dependencies = {}) {
             "recorded-at",
             "review-session-digest",
             "post-terminal-intake",
+            "post-pr-intake",
             "reconfirm",
         ].includes(flag));
         if (unknown.length > 0)
@@ -4075,9 +4120,14 @@ export async function main(argv, dependencies = {}) {
             : undefined;
         if (step.step === 9)
             entry.implementationHeadSha = headSha;
-        const intake = presentFlag(flags, "post-terminal-intake");
-        if (intake && step.step !== 10)
+        const terminalIntake = presentFlag(flags, "post-terminal-intake");
+        const postPrIntake = presentFlag(flags, "post-pr-intake");
+        if (terminalIntake && postPrIntake)
+            throw new Error("--post-terminal-intakeと--post-pr-intakeは同時に指定できません");
+        if (terminalIntake && step.step !== 10)
             throw new Error("--post-terminal-intakeはworkflow record --step=10だけに指定できます");
+        if (postPrIntake && step.step !== 10)
+            throw new Error("--post-pr-intakeはworkflow record --step=10だけに指定できます");
         if (step.step === 10) {
             const session = assertConvergedReviewSession({
                 staging,
@@ -4091,10 +4141,15 @@ export async function main(argv, dependencies = {}) {
              * Step 11を経ていない工程で順序判定を外す抜け道になる（Issue #1194）。
              */
             const hasTerminal = journal.entries.some((item) => item.step === 11);
-            if (intake && !hasTerminal)
+            const delivery = readStoredDeliveryState(staging);
+            if (terminalIntake && !hasTerminal)
                 throw new Error("--post-terminal-intakeはStep 11記録後にだけ指定できます");
-            if (!intake && hasTerminal)
+            if (postPrIntake && (hasTerminal || delivery?.state !== "pr-bound"))
+                throw new Error("--post-pr-intakeはStep 11記録前かつdelivery stateがpr-boundのときだけ指定できます");
+            if (!terminalIntake && hasTerminal)
                 throw new Error("Step 11記録後のStep 10再記録には--post-terminal-intakeが必要です。外部reviewer指摘を同じPRで取り込んだroundであることを明示してください");
+            if (!postPrIntake && delivery?.state === "pr-bound" && !hasTerminal)
+                throw new Error("pr-bound中のStep 10再記録には--post-pr-intakeが必要です。外部reviewer指摘を同じPRで取り込んだroundであることを明示してください");
             entry = {
                 ...entry,
                 reviewSession: {
@@ -4102,7 +4157,8 @@ export async function main(argv, dependencies = {}) {
                     roundDigest: session.latestRoundDigest,
                     headSha: session.latestCandidateHeadSha,
                 },
-                ...(intake ? { postTerminalIntake: true } : {}),
+                ...(terminalIntake ? { postTerminalIntake: true } : {}),
+                ...(postPrIntake ? { postPrIntake: true } : {}),
             };
         }
         else if (flags["review-session-digest"] !== undefined) {
@@ -4124,6 +4180,7 @@ export async function main(argv, dependencies = {}) {
             ? workflowStepNumber(flags["up-to"], "up-to")
             : 11;
         const inspection = inspectWorkflowStaging(flags.staging, upTo);
+        const postPrIntakeErrors = postPrIntakeDeliveryErrors(inspection.staging);
         if (inspection.mode === "poc" && upTo >= 9) {
             const headSha = git(["rev-parse", "--verify", "HEAD^{commit}"], path.resolve(inspection.staging, "../../../..")).stdout.trim();
             const observation = inspectStoredPocObservationEvidence(inspection.staging, headSha);
@@ -4137,8 +4194,8 @@ export async function main(argv, dependencies = {}) {
                 return 1;
             }
         }
-        if (!inspection.valid) {
-            print(workflowDiagnostic(inspection.staging, inspection.mode, inspection.validation, inspection.errors));
+        if (!inspection.valid || postPrIntakeErrors.length > 0) {
+            print(workflowDiagnostic(inspection.staging, inspection.mode, inspection.validation, [...inspection.errors, ...postPrIntakeErrors]));
             return 1;
         }
         print({

@@ -296,6 +296,12 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-059"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  @issue-1389
+  Scenario: SCN-E2E-WFSTEP-060 pr mergeは再固定後の実効HEADをprovider CASへ渡す
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-060"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-048 索引の反映待ちを経て1回のpr createでbindする
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-048"のE2E検査を実行する

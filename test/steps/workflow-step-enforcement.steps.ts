@@ -72,6 +72,7 @@ import {
 } from "../../src/domain/delivery-state.js";
 import { splitPullRequestDocument } from "../../src/domain/delivery.js";
 import {
+  bindStoredPullRequest,
   claimStoredMergeDispatch,
   claimStoredPullRequestCreationDispatch,
   prepareStoredMergeIntent,
@@ -276,7 +277,7 @@ Given("ワークフローStep単体検査の準備がある", function () {
   this.workflowCheckPassed = false;
 });
 
-When("{string}の単体検査を実行する", function (scenarioId: string) {
+When("{string}の単体検査を実行する", async function (scenarioId: string) {
   switch (scenarioId) {
     case "SCN-UNIT-WFSTEP-001":
       assert.deepEqual(
@@ -1035,6 +1036,134 @@ When("{string}の単体検査を実行する", function (scenarioId: string) {
         fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
       );
       assert.equal(stored.entries.at(-1)?.postTerminalIntake, true);
+      break;
+    }
+    case "SCN-UNIT-WFJRNL-029": {
+      const entries = [
+        ...[0, 1, 4, 9, 10].map((step) => entry(step)),
+        { ...entry(10), postPrIntake: true as const },
+        entry(11),
+      ];
+      const outcome = result("quick", entries, 11);
+      assert.deepEqual(outcome.outOfOrder, []);
+      assert.equal(outcome.valid, true, outcome.errors.join("; "));
+      break;
+    }
+    case "SCN-UNIT-WFJRNL-030": {
+      const outcome = result(
+        "quick",
+        [
+          ...[0, 1, 4, 9].map((step) => entry(step)),
+          { ...entry(10), postPrIntake: true as const },
+        ],
+        10,
+      );
+      assert.equal(outcome.valid, false);
+      assert.match(
+        outcome.errors.join("\n"),
+        /先行する通常のStep 10記録がありません/u,
+      );
+      break;
+    }
+    case "SCN-UNIT-WFJRNL-031": {
+      const valid = parseStepJournal(
+        `${JSON.stringify({ ...entry(10), postPrIntake: true })}\n`,
+      );
+      assert.deepEqual(valid.errors, []);
+      assert.equal(valid.entries[0]?.postPrIntake, true);
+      const invalidStep = parseStepJournal(
+        `${JSON.stringify({ ...entry(9), postPrIntake: true })}\n`,
+      );
+      assert.match(
+        invalidStep.errors.join("\n"),
+        /postPrIntakeはStep 10にだけ指定できます/u,
+      );
+      const conflicting = parseStepJournal(
+        `${JSON.stringify({
+          ...entry(10),
+          postPrIntake: true,
+          postTerminalIntake: true,
+        })}\n`,
+      );
+      assert.match(conflicting.errors.join("\n"), /同時に指定できません/u);
+      break;
+    }
+    case "SCN-UNIT-WFJRNL-032":
+    case "SCN-UNIT-WFJRNL-033":
+    case "SCN-UNIT-WFJRNL-034":
+    case "SCN-UNIT-WFJRNL-035": {
+      const root = this.temp("asc-journal-post-pr-verify-");
+      const staging = createIssueStaging(root, {
+        title: "post-pr-intake-verify",
+        answers: answers(),
+        now: new Date(fixtureInstantMs()),
+        requestedMode: "quick",
+      }).path;
+      for (const step of [1, 4, 9, 10])
+        appendWorkflowJournalEntry({ staging, entry: entry(step) });
+      const issueUrl = "https://github.com/o/r/issues/877";
+      prepareStoredPullRequestCreation(staging, {
+        repository: "o/r",
+        issue: 877,
+        issueUrl,
+        headRef: "feature/x",
+        headSha: "c".repeat(40),
+        baseRef: "main",
+        baseSha: "d".repeat(40),
+        pullRequestDigest: pullRequestContentDigest({
+          title: "post-PR intake",
+          body: "Closes #877",
+        }),
+        bodyClosingDigest: closingContractDigest({
+          canonicalIssue: 877,
+          canonicalIssueUrl: issueUrl,
+          closingIssueNumbers: [877],
+        }),
+        preparedAt: instant,
+      });
+      if (scenarioId === "SCN-UNIT-WFJRNL-035") {
+        fs.appendFileSync(
+          path.join(staging, STEP_JOURNAL_FILE),
+          `${JSON.stringify({ ...entry(10), postPrIntake: true })}\n`,
+        );
+        refreshStoredStagingDigest(staging);
+      } else {
+        bindStoredPullRequest(staging, {
+          number: 1,
+          url: "https://github.com/o/r/pull/1",
+          boundAt: instant,
+        });
+        appendWorkflowJournalEntry({
+          staging,
+          entry: { ...entry(10), postPrIntake: true as const },
+        });
+      }
+      if (scenarioId === "SCN-UNIT-WFJRNL-033") {
+        fs.rmSync(path.join(staging, ...DELIVERY_STATE_FILE.split("/")));
+        refreshStoredStagingDigest(staging);
+      } else if (scenarioId === "SCN-UNIT-WFJRNL-034") {
+        fs.appendFileSync(path.join(staging, "00_要求定義.md"), "\n改変\n");
+      }
+      const verified = await executeMain([
+        "workflow",
+        "verify",
+        `--staging=${staging}`,
+        "--up-to=10",
+      ]);
+      if (scenarioId === "SCN-UNIT-WFJRNL-032") {
+        assert.equal(verified.status, 0, verified.stdout);
+        assert.match(verified.stdout, /"valid": true/u);
+      } else {
+        assert.equal(verified.status, 1, verified.stdout);
+        assert.match(
+          verified.stdout,
+          scenarioId === "SCN-UNIT-WFJRNL-033"
+            ? /delivery stateがありません/u
+            : scenarioId === "SCN-UNIT-WFJRNL-035"
+              ? /対応しないdelivery stateです: create-prepared/u
+              : /content digestが保存値と一致しません/u,
+        );
+      }
       break;
     }
     case "SCN-UNIT-WFJRNL-021": {
@@ -4231,6 +4360,51 @@ if (exact(["auth", "status"])) {
           "拒否したadmin mergeをproviderへ送っています",
         );
       }
+      break;
+    }
+    case "SCN-E2E-WFSTEP-060": {
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      const deliveryFile = path.join(
+        prepared.staging,
+        ...DELIVERY_STATE_FILE.split("/"),
+      );
+      const delivery = JSON.parse(fs.readFileSync(deliveryFile, "utf8")) as {
+        create: { headSha: string };
+      };
+      delivery.create.headSha = prepared.implementationCommitSha;
+      fs.writeFileSync(deliveryFile, `${JSON.stringify(delivery, null, 2)}\n`);
+      fs.writeFileSync(
+        path.join(prepared.staging, "journal", "reanchor.jsonl"),
+        `${JSON.stringify({
+          oldHeadSha: prepared.implementationCommitSha,
+          newHeadSha: prepared.headSha,
+          oldBaseSha: prepared.baseSha,
+          newBaseSha: prepared.baseSha,
+          diffDigest: "a".repeat(64),
+          method: "reviewed-forward",
+          reason: "外部reviewer指摘後のexact headへ再固定した",
+          recordedAt: fixtureInstant(),
+          reviewedForward: {
+            sessionId: "b".repeat(64),
+            roundDigest: "c".repeat(64),
+            implementationSha: prepared.implementationCommitSha,
+            artifactPath: "docs/reviews/fixture.md",
+            artifactDigest: "d".repeat(64),
+          },
+        })}\n`,
+      );
+      refreshStoredStagingDigest(prepared.staging);
+      const requested = executeDeliveryMerge(prepared);
+      assert.equal(requested.status, 0, requested.stdout + requested.stderr);
+      const mergeCalls = deliveryProviderCalls(prepared).filter(isMergeCall);
+      assert.equal(mergeCalls.length, 1);
+      const headIndex = mergeCalls[0]!.indexOf("--match-head-commit");
+      assert.equal(
+        mergeCalls[0]![headIndex + 1],
+        prepared.headSha,
+        "pr mergeが固定create HEADではなく再固定後の実効HEADを送っていません",
+      );
       break;
     }
     case "SCN-INT-MERGE-019": {

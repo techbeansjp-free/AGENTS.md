@@ -1,6 +1,41 @@
 @integration @evidence-reanchor
 Feature: 証跡再固定がCLIと診断経路で機能する
 
+  @issue-1389
+  Scenario: SCN-1389-01 pr-bound後の外部review指摘を新roundへ束縛して再固定する
+    Given pr-bound後に前進した実装と明示済みpost-PR intakeのreview artifactがある
+    When 二層等価な入力をpreviewして二回applyする
+    Then previewは成功し初回だけ追記して二回目はunchangedになる
+    And 再固定recordはexact post-PR review bindingを保持する
+
+  @issue-1389
+  Scenario: SCN-1389-02 post-PR intake記録のない前進実装を再固定しない
+    Given pr-bound後に前進した実装と未記録のpost-PR intakeのreview artifactがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then reviewed-forwardのpreviewとapplyは拒否され追記しない
+
+  @issue-1389
+  Scenario Outline: SCN-1389-03 不正なHEAD移送を再固定しない
+    Given pr-bound後のreviewed-forward反例「<反例>」がある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then reviewed-forwardのpreviewとapplyは拒否され追記しない
+
+    Examples:
+      | 反例 |
+      | 非ancestor |
+      | 未収束 |
+      | 古いround |
+      | artifact外差分 |
+      | artifact二段 |
+
+  @issue-1389
+  Scenario: SCN-1389-04 再固定後の新exact HEADをmerge bindingに使う
+    Given pr-bound後に前進した実装と明示済みpost-PR intakeのreview artifactがある
+    When reviewed-forward再固定後に新headでpr mergeのbinding検査を通す
+    Then pr mergeのbinding検査は通過する
+    And merge providerは新H_finalをexact headとして受け取る
+    And post-PR intakeの同一binding再実行はno-opになる
+
   @issue-1377
   Scenario: SCN-1377-01 pr-boundのreview artifact改名を再固定する
     Given pr-boundの旧artifactと同一実装を監査した正規名の新artifactがある

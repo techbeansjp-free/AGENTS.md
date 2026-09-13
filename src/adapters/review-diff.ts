@@ -64,6 +64,27 @@ export function observeReviewDiff(
   };
 }
 
+/** exact commitが持つ唯一の親をworktreeへ触れずに観測する。 */
+export function observeSingleCommitParent(
+  root: string,
+  headSha: string,
+): string {
+  const observed = git(["rev-parse", "--verify", `${headSha}^{commit}`], root, {
+    env: GIT_ENV,
+  }).stdout.trim();
+  if (observed !== headSha)
+    throw new Error("review suffix HEADをexact commitへ解決できません");
+  const parents = git(["show", "-s", "--format=%P", headSha], root, {
+    env: GIT_ENV,
+  })
+    .stdout.trim()
+    .split(/\s+/u)
+    .filter(Boolean);
+  if (parents.length !== 1)
+    throw new Error("review suffix HEADは単一親commitでなければなりません");
+  return parents[0]!;
+}
+
 /**
  * commit時点のblobをtextとして読む。存在しなければ`undefined`。
  *
