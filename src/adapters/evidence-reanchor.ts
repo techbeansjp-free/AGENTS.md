@@ -340,10 +340,7 @@ function canonicalApprovalContent(markdown: string): string {
       "| reviewerが対象差分を変更していないこと | はい。製品path変更0件 |",
       "| reviewerが対象差分を変更していないこと | はい（製品path変更0件） |",
     )
-    .replaceAll(
-      "- 未解決Critical/High: 0件",
-      "- 未解決Critical/High: なし",
-    );
+    .replaceAll("- 未解決Critical/High: 0件", "- 未解決Critical/High: なし");
 }
 
 /**
