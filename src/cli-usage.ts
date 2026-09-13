@@ -184,12 +184,16 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     summary: "同一scopeのrole割当が独立identityであることを検証する",
     requiredFlags: [
       flag("scope", "text", "role割当を評価するscope"),
-      flag("assignments", "path", "role割当を記述したJSON file"),
+      flag(
+        "assignments",
+        "JSON",
+        "role割当のinline JSON配列。file pathではなくJSON本文を渡す",
+      ),
     ],
     conditionalFlags: [],
     optionalFlags: [],
     example:
-      "npx agent-skill-chain routing roles --scope=issue-886 --assignments=./assignments.json",
+      'npx agent-skill-chain routing roles --scope=issue-886 --assignments=\'[{"role":"coordinator","identity":"coord","context":"session-a"}]\'',
   },
   {
     command: "routing",
@@ -229,10 +233,15 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     conditionalFlags: [],
     optionalFlags: [
       optional("now", "ISO8601", "評価基準時刻", "実行時刻"),
-      optional("override", "path", "人間overrideのJSON file", "overrideなし"),
+      optional(
+        "override",
+        "JSON",
+        '人間overrideのinline JSON object（{"provider":…,"selection":…,"issue":…,"scope":…,"instructedBy":…,"instructedAt":…,"expiresAt":…}）。file pathではなくJSON本文を渡す',
+        "overrideなし",
+      ),
     ],
     example:
-      "npx agent-skill-chain routing ceiling --issue=886 --scope=issue-886 --provider=codex --selection=autonomous",
+      'npx agent-skill-chain routing ceiling --issue=886 --scope=issue-886 --provider=claude --selection=fable --now=2026-09-01T12:00:00Z --override=\'{"provider":"claude","selection":"fable","issue":886,"scope":"issue-886","instructedBy":"owner","instructedAt":"2026-09-01T00:00:00Z","expiresAt":"2026-09-02T00:00:00Z"}\'',
   },
   {
     command: "routing",

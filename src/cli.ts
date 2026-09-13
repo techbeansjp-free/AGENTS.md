@@ -4045,12 +4045,32 @@ function roleTierFailure(
   });
 }
 
+/**
+ * usageが`<JSON>`と宣言するflagの解析errorへ、是正操作を併記する。`<path>`宣言を信じて
+ * pathを渡した利用者は`offset 0`だけでは原因を特定できなかった（Issue #1340）。
+ * fileは読まず、値本文も診断へ転記しない。正当なJSON本文は従来どおり解析し、
+ * 型の診断（配列・object）は解析後の既存検査が担う（round 1 REV-02・REV-03）。
+ */
+function inlineJsonInput(
+  source: string,
+  flag: string,
+): ReturnType<typeof parseJsonStrict> {
+  try {
+    return parseJsonStrict(source, flag);
+  } catch (error) {
+    throw new Error(
+      `${flag}: 値が不正です。--${flag}にはinline JSONを渡します（file pathではありません）。JSON本文を--${flag}='…'の形式で指定してください`,
+      { cause: error },
+    );
+  }
+}
+
 function assignmentInput(source: string): Array<{
   role: string;
   identity: string;
   context: string;
 }> {
-  const parsed = parseJsonStrict(source, "assignments");
+  const parsed = inlineJsonInput(source, "assignments");
   if (!Array.isArray(parsed))
     throw new Error("--assignmentsはJSON配列でなければなりません");
   return parsed.map((item, index) => {
@@ -4070,7 +4090,7 @@ function assignmentInput(source: string): Array<{
 }
 
 function humanOverrideInput(source: string): HumanOverride {
-  const parsed = parseJsonStrict(source, "override");
+  const parsed = inlineJsonInput(source, "override");
   if (!isRecord(parsed))
     throw new Error("--overrideはobjectでなければなりません");
   for (const field of [
