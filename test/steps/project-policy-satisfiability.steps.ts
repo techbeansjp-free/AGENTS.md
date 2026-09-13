@@ -1026,6 +1026,24 @@ Then(
   },
 );
 
+Then("repositoryのmerge policyは明示承認型である", function () {
+  const set = loadProjectPolicySet(this.root);
+  assert.equal(set.policy.merge.mode, "assisted");
+  assert.deepEqual(set.policy.merge.methods, ["merge"]);
+  assert.equal(set.policy.merge.requiredReviews, 1);
+  assert.deepEqual(set.policy.merge.requiredChecks, []);
+  assert.deepEqual(set.policy.merge.branches, [
+    "feature/*",
+    "fix/*",
+    "bugfix/*",
+    "refactor/*",
+    "test/*",
+    "docs/*",
+    "chore/*",
+    "process/*",
+  ]);
+});
+
 Given("現行conformanceを3種類弱化した反例がある", function () {
   this.root = process.cwd();
   this.contract = readJson(".agent-skill-chain/policy/conformance.json");
