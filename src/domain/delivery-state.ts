@@ -79,6 +79,8 @@ export interface MergeObservation {
 
 export interface MergeIntent {
   method: "merge" | "squash" | "rebase";
+  /** providerへ送る通常mergeまたはcontext-isolated限定admin merge。 */
+  dispatchMode: "normal" | "admin";
   authorizedHeadSha: string;
   authorizedBaseRef: string;
   authorizedBaseSha: string;
@@ -99,8 +101,8 @@ export interface MergeIntent {
 
 export type MergeIntentInput = Omit<
   MergeIntent,
-  "dispatchClaimedAt" | "observation"
->;
+  "dispatchMode" | "dispatchClaimedAt" | "observation"
+> & { dispatchMode?: "normal" | "admin" };
 
 export interface Step11Record {
   outcome: "pull-request" | "merged";
@@ -174,6 +176,7 @@ const CREATE_FIELDS = new Set([
 const PR_FIELDS = new Set(["number", "url", "boundAt"]);
 const MERGE_FIELDS = new Set([
   "method",
+  "dispatchMode",
   "authorizedHeadSha",
   "authorizedBaseRef",
   "authorizedBaseSha",
@@ -250,9 +253,12 @@ function unknownFields(
   value: Record<string, unknown>,
   allowed: ReadonlySet<string>,
   label: string,
+  optional: ReadonlySet<string> = new Set(),
 ): void {
   const unknown = Object.keys(value).filter((field) => !allowed.has(field));
-  const missing = [...allowed].filter((field) => !(field in value));
+  const missing = [...allowed].filter(
+    (field) => !optional.has(field) && !(field in value),
+  );
   if (unknown.length > 0)
     throw new Error(`${label}の未知fieldを拒否しました: ${unknown.join(", ")}`);
   if (missing.length > 0)
@@ -640,7 +646,7 @@ function parseMerge(
   if (value === null) return null;
   if (!pr) throw new Error("mergeには固定済みpr bindingが必要です");
   if (!isRecord(value)) throw new Error("mergeはobjectまたはnullが必要です");
-  unknownFields(value, MERGE_FIELDS, "merge");
+  unknownFields(value, MERGE_FIELDS, "merge", new Set(["dispatchMode"]));
   if (
     value.method !== "merge" &&
     value.method !== "squash" &&
@@ -691,6 +697,14 @@ function parseMerge(
     );
   const parsed: MergeIntent = {
     method: value.method,
+    dispatchMode:
+      value.dispatchMode === undefined || value.dispatchMode === "normal"
+        ? "normal"
+        : value.dispatchMode === "admin"
+          ? "admin"
+          : (() => {
+              throw new Error("merge.dispatchModeが不正です");
+            })(),
     authorizedHeadSha,
     authorizedBaseRef,
     authorizedBaseSha,
@@ -1201,7 +1215,12 @@ export function prepareMergeIntent(
     ...current,
     revision: current.revision + 1,
     state: "merge-prepared",
-    merge: { ...merge, dispatchClaimedAt: null, observation: null },
+    merge: {
+      ...merge,
+      dispatchMode: merge.dispatchMode ?? "normal",
+      dispatchClaimedAt: null,
+      observation: null,
+    },
   };
   return parseDeliveryState(stableJson(candidate));
 }
@@ -1223,7 +1242,12 @@ export function prepareTerminalRedeliveryMergeIntent(
     ...current,
     revision: current.revision + 1,
     state: "merge-prepared",
-    merge: { ...merge, dispatchClaimedAt: null, observation: null },
+    merge: {
+      ...merge,
+      dispatchMode: merge.dispatchMode ?? "normal",
+      dispatchClaimedAt: null,
+      observation: null,
+    },
     redelivery: {
       decisionId,
       startedAt: merge.preparedAt,

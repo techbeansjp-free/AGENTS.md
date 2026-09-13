@@ -10,7 +10,7 @@ import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
 import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, validateContextIsolatedApprovalRecord, validateReviewArtifactStructure, } from "./domain/review-artifact.js";
-import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, } from "./domain/delivery.js";
+import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
 import { buildWorktreePath, createWorktree, canonicalWorktreePath, DEFAULT_WORKTREE_PLACEMENT, enforceTrustedWorktreeBoundary, inspectFinalizeState, inspectRecoveryState, validateWorktreePlacement, } from "./domain/worktree.js";
 import { applyWorkspaceHygiene, previewWorkspaceHygiene, } from "./domain/hygiene.js";
@@ -1007,7 +1007,8 @@ function inspectAuthorizedPullRequestMerge(input) {
         throw new Error("provider authorityのrepository・既定branch・base・headがtrusted policy setと一致しません");
     const protection = github("branch.protection", { repository: input.repository, branch: input.base }, input.root);
     const deliveryPolicy = github("branch.delivery-policy", { repository: input.repository, branch: input.base }, input.root);
-    const checks = (observed.statusCheckRollup ?? [])
+    const statusCheckRollup = observed.statusCheckRollup;
+    const checks = (statusCheckRollup ?? [])
         .filter((item) => (item.conclusion ?? item.state ?? item.status) === "SUCCESS")
         .map((item) => item.name ?? item.context)
         .filter((item) => typeof item === "string");
@@ -1022,6 +1023,67 @@ function inspectAuthorizedPullRequestMerge(input) {
         independenceMode: resolveReviewIndependence(input.trustedSet.policy),
         assistedAuthorityVerified: input.assistedAuthorityVerified,
     });
+    const independenceMode = resolveReviewIndependence(input.trustedSet.policy);
+    const adminCandidate = input.allowMerged !== true &&
+        independenceMode === "context-isolated" &&
+        reviewed.formalApprovalIds.length > 0 &&
+        observed.isDraft === false &&
+        observed.mergeable === "MERGEABLE" &&
+        observed.mergeStateStatus === "BLOCKED";
+    const adminObservation = adminCandidate
+        ? github("pr.context-isolated-admin-merge", {
+            repository: input.repository,
+            pr: input.pr,
+            branch: input.base,
+            method: input.method,
+            successfulChecks: checks,
+            allChecksSuccessful: Array.isArray(statusCheckRollup) &&
+                statusCheckRollup.every((item) => (item.conclusion ?? item.state ?? item.status) === "SUCCESS"),
+        }, input.root)
+        : undefined;
+    const adminDecision = adminObservation
+        ? authorizeContextIsolatedAdminMerge(adminObservation)
+        : { allowed: false, reasons: [] };
+    const dispatchMode = adminDecision.allowed
+        ? "admin"
+        : "normal";
+    const authorization = authorizeMerge({
+        trustedPolicy: input.trustedSet.policy,
+        method: input.method,
+        checks,
+        approvals: reviewed.approvals,
+        formalApprovalIds: reviewed.formalApprovalIds,
+        assistedAuthorityVerified: input.assistedAuthorityVerified,
+        headSha: observed.headRefOid,
+        prAuthorActorId: observed.author?.id,
+        implementationAuthorActorId: reviewed.implementationAuthorActorId,
+        branch: observed.headRefName ?? "",
+        baseRef: observed.baseRefName ?? "",
+        headRef: observed.headRefName ?? "",
+        repositoryVerified: true,
+        shaVerified: Boolean(observed.headRefOid && observed.baseRefOid),
+        protectionVerified: protection.known && protection.protected,
+        mergeableVerified: (input.allowMerged === true &&
+            String(observed.state ?? "").toUpperCase() === "MERGED") ||
+            (observed.isDraft === false && observed.mergeStateStatus === "CLEAN") ||
+            dispatchMode === "admin",
+    });
+    if (adminCandidate &&
+        !adminDecision.allowed &&
+        authorization.allowed === false)
+        return {
+            observed,
+            authority,
+            implementationCommitSha: reviewed.reviewEvidence.implementationCommitSha,
+            reviewEvidence: reviewed.reviewEvidence,
+            deliveryPolicy,
+            followCost: diagnoseBranchFollowCost(deliveryPolicy),
+            authorization: {
+                ...authorization,
+                reason: `context-isolated admin mergeを拒否しました: ${adminDecision.reasons.join("; ")}`,
+            },
+            dispatchMode,
+        };
     return {
         observed,
         authority,
@@ -1029,26 +1091,8 @@ function inspectAuthorizedPullRequestMerge(input) {
         reviewEvidence: reviewed.reviewEvidence,
         deliveryPolicy,
         followCost: diagnoseBranchFollowCost(deliveryPolicy),
-        authorization: authorizeMerge({
-            trustedPolicy: input.trustedSet.policy,
-            method: input.method,
-            checks,
-            approvals: reviewed.approvals,
-            formalApprovalIds: reviewed.formalApprovalIds,
-            assistedAuthorityVerified: input.assistedAuthorityVerified,
-            headSha: observed.headRefOid,
-            prAuthorActorId: observed.author?.id,
-            implementationAuthorActorId: reviewed.implementationAuthorActorId,
-            branch: observed.headRefName ?? "",
-            baseRef: observed.baseRefName ?? "",
-            headRef: observed.headRefName ?? "",
-            repositoryVerified: true,
-            shaVerified: Boolean(observed.headRefOid && observed.baseRefOid),
-            protectionVerified: protection.known && protection.protected,
-            mergeableVerified: (input.allowMerged === true &&
-                String(observed.state ?? "").toUpperCase() === "MERGED") ||
-                (observed.isDraft === false && observed.mergeStateStatus === "CLEAN"),
-        }),
+        authorization,
+        dispatchMode,
     };
 }
 function assertTerminalMergeProof(input) {
@@ -1440,6 +1484,7 @@ function retryPreparedMergeAfterConfirmedAbsence(input) {
             rechecked.implementationCommitSha !== inspected.implementationCommitSha ||
             rechecked.reviewEvidence.reviewEvidenceId !==
                 inspected.reviewEvidence.reviewEvidenceId ||
+            rechecked.dispatchMode !== input.state.merge.dispatchMode ||
             !samePolicyAuthorityObservation(inspected.authority, rechecked.authority))
             throw new Error("merge intent再試行直前のidentityまたは認可が初回照合から変化しました");
         if (typeof rechecked.observed.headRefOid !== "string" ||
@@ -1475,6 +1520,7 @@ function retryPreparedMergeAfterConfirmedAbsence(input) {
             pr: input.pr,
             method: input.method,
             headSha: rechecked.observed.headRefOid,
+            dispatchMode: input.state.merge.dispatchMode,
         }, input.root);
         return readBackPreparedPullRequestMerge({ ...input, state: claimed.state });
     }
@@ -1784,6 +1830,7 @@ function handlePullRequestMerge(flags) {
                     pr: inspected.observed.url,
                     headSha: inspected.observed.headRefOid,
                     baseSha: inspected.observed.baseRefOid,
+                    dispatchMode: inspected.dispatchMode,
                     deliveryState: current,
                 },
             };
@@ -1807,6 +1854,7 @@ function handlePullRequestMerge(flags) {
             rechecked.implementationCommitSha !== inspected.implementationCommitSha ||
             rechecked.reviewEvidence.reviewEvidenceId !==
                 inspected.reviewEvidence.reviewEvidenceId ||
+            rechecked.dispatchMode !== inspected.dispatchMode ||
             !samePolicyAuthorityObservation(inspected.authority, rechecked.authority))
             throw new Error("マージ直前にPR identityが変化しました（TOCTOU）");
         if (!rechecked.authorization.allowed) {
@@ -1836,6 +1884,7 @@ function handlePullRequestMerge(flags) {
         });
         const mergeInput = {
             method,
+            dispatchMode: rechecked.dispatchMode,
             authorizedHeadSha: rechecked.observed.headRefOid,
             authorizedBaseRef: rechecked.authority.baseRefName,
             authorizedBaseSha: rechecked.authority.baseRefOid,
@@ -1887,6 +1936,7 @@ function handlePullRequestMerge(flags) {
                 pr,
                 method,
                 headSha: rechecked.observed.headRefOid,
+                dispatchMode: prepared.state.merge.dispatchMode,
             }, root);
         }
         catch (error) {

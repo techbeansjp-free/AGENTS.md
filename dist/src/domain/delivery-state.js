@@ -30,6 +30,7 @@ const CREATE_FIELDS = new Set([
 const PR_FIELDS = new Set(["number", "url", "boundAt"]);
 const MERGE_FIELDS = new Set([
     "method",
+    "dispatchMode",
     "authorizedHeadSha",
     "authorizedBaseRef",
     "authorizedBaseSha",
@@ -98,9 +99,9 @@ const SHA256 = /^[a-f0-9]{64}$/u;
 const OID = /^[a-f0-9]{40}$/u;
 const REPOSITORY = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9][A-Za-z0-9_.-]*$/u;
 const INTENT_ID = /^[a-f0-9]{32,64}$/u;
-function unknownFields(value, allowed, label) {
+function unknownFields(value, allowed, label, optional = new Set()) {
     const unknown = Object.keys(value).filter((field) => !allowed.has(field));
-    const missing = [...allowed].filter((field) => !(field in value));
+    const missing = [...allowed].filter((field) => !optional.has(field) && !(field in value));
     if (unknown.length > 0)
         throw new Error(`${label}の未知fieldを拒否しました: ${unknown.join(", ")}`);
     if (missing.length > 0)
@@ -375,7 +376,7 @@ function parseMerge(value, create, pr) {
         throw new Error("mergeには固定済みpr bindingが必要です");
     if (!isRecord(value))
         throw new Error("mergeはobjectまたはnullが必要です");
-    unknownFields(value, MERGE_FIELDS, "merge");
+    unknownFields(value, MERGE_FIELDS, "merge", new Set(["dispatchMode"]));
     if (value.method !== "merge" &&
         value.method !== "squash" &&
         value.method !== "rebase")
@@ -403,6 +404,13 @@ function parseMerge(value, create, pr) {
         throw new Error("mergeのCI run IDは正の整数、review IDは正の整数またはformal review round digestが必要です");
     const parsed = {
         method: value.method,
+        dispatchMode: value.dispatchMode === undefined || value.dispatchMode === "normal"
+            ? "normal"
+            : value.dispatchMode === "admin"
+                ? "admin"
+                : (() => {
+                    throw new Error("merge.dispatchModeが不正です");
+                })(),
         authorizedHeadSha,
         authorizedBaseRef,
         authorizedBaseSha,
@@ -774,7 +782,12 @@ export function prepareMergeIntent(current, merge) {
         ...current,
         revision: current.revision + 1,
         state: "merge-prepared",
-        merge: { ...merge, dispatchClaimedAt: null, observation: null },
+        merge: {
+            ...merge,
+            dispatchMode: merge.dispatchMode ?? "normal",
+            dispatchClaimedAt: null,
+            observation: null,
+        },
     };
     return parseDeliveryState(stableJson(candidate));
 }
@@ -788,7 +801,12 @@ export function prepareTerminalRedeliveryMergeIntent(current, merge, decisionId,
         ...current,
         revision: current.revision + 1,
         state: "merge-prepared",
-        merge: { ...merge, dispatchClaimedAt: null, observation: null },
+        merge: {
+            ...merge,
+            dispatchMode: merge.dispatchMode ?? "normal",
+            dispatchClaimedAt: null,
+            observation: null,
+        },
         redelivery: {
             decisionId,
             startedAt: merge.preparedAt,

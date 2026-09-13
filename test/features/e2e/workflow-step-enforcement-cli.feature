@@ -286,6 +286,16 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-057"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  Scenario: SCN-E2E-WFSTEP-058 context-isolated formal reviewはGitHub自己承認blockだけをadmin mergeする
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-058"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-059 admin mergeは未知rule・未解決thread・admin権限不足を拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-059"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-048 索引の反映待ちを経て1回のpr createでbindする
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-048"のE2E検査を実行する

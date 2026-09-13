@@ -3,6 +3,20 @@ import { isScenarioId } from "./scenario-id.js";
 import { isRecord, } from "../types.js";
 import { validatePullRequestBody, withoutMarkdownCode } from "./issue.js";
 import { validatePolicy } from "./policy.js";
+export function authorizeContextIsolatedAdminMerge(observation) {
+    const reasons = [...observation.reasons];
+    if (!observation.known)
+        reasons.push("admin merge条件の観測が不完全です");
+    if (!observation.repositoryAdmin)
+        reasons.push("repository admin authorityがありません");
+    if (!observation.allowedRulesOnly)
+        reasons.push("formal reviewで代替できないbranch ruleがあります");
+    if (!observation.allChecksSuccessful)
+        reasons.push("成功していないstatus checkがあります");
+    if (observation.unresolvedReviewThreads !== 0)
+        reasons.push("未解決review threadがあるか件数を観測できません");
+    return { allowed: reasons.length === 0, reasons };
+}
 /**
  * strict required checksとmerge queue構成から追随費用だけを診断する。
  *

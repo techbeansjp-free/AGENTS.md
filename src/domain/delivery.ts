@@ -142,6 +142,41 @@ export interface BranchDeliveryPolicyObservation {
   reasons: readonly string[];
 }
 
+/**
+ * GitHubの通常mergeを止めている条件のうち、context-isolated formal reviewで
+ * 代替してよいreview制約以外がすべて成立していることのprovider観測。
+ * 不明値をbooleanへ丸めず、adapterが閉集合として型付けできた場合だけknownにする。
+ */
+export interface ContextIsolatedAdminMergeObservation {
+  known: boolean;
+  repositoryAdmin: boolean;
+  allowedRulesOnly: boolean;
+  allChecksSuccessful: boolean;
+  unresolvedReviewThreads: number | null;
+  reasons: readonly string[];
+}
+
+export interface ContextIsolatedAdminMergeDecision {
+  allowed: boolean;
+  reasons: readonly string[];
+}
+
+export function authorizeContextIsolatedAdminMerge(
+  observation: ContextIsolatedAdminMergeObservation,
+): ContextIsolatedAdminMergeDecision {
+  const reasons = [...observation.reasons];
+  if (!observation.known) reasons.push("admin merge条件の観測が不完全です");
+  if (!observation.repositoryAdmin)
+    reasons.push("repository admin authorityがありません");
+  if (!observation.allowedRulesOnly)
+    reasons.push("formal reviewで代替できないbranch ruleがあります");
+  if (!observation.allChecksSuccessful)
+    reasons.push("成功していないstatus checkがあります");
+  if (observation.unresolvedReviewThreads !== 0)
+    reasons.push("未解決review threadがあるか件数を観測できません");
+  return { allowed: reasons.length === 0, reasons };
+}
+
 export interface BranchFollowCostDiagnostic {
   known: boolean;
   manualFollowRequired: boolean | null;
