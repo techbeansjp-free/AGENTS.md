@@ -665,11 +665,35 @@ function withoutGherkin(
 
 const UNRESOLVED_PLACEHOLDER_SAMPLE_LIMIT = 5;
 
+/** 完全なcommentだけを除き、未終端と前後の行境界を保持する。 */
+function withoutCompleteHtmlComments(text: string): string {
+  const visible: string[] = [];
+  let cursor = 0;
+  while (cursor < text.length) {
+    const opening = text.indexOf("<!--", cursor);
+    if (opening < 0) break;
+    const closing = text.indexOf("-->", opening + 4);
+    if (closing < 0) break;
+    visible.push(text.slice(cursor, opening));
+    let newlines = 0;
+    for (let index = opening; index < closing + 3; index += 1)
+      if (text[index] === "\n") newlines += 1;
+    // 空commentでも前後の断片を新しいplaceholderへ結合しない。
+    visible.push("\n".repeat(Math.max(1, newlines)));
+    cursor = closing + 3;
+  }
+  visible.push(text.slice(cursor));
+  return visible.join("");
+}
+
 function unresolvedPlaceholders(
   text: string,
   dialect: string = DEFAULT_GHERKIN_DIALECT,
 ): string[] {
-  const prose = withoutGherkin(withoutCode(text), dialect);
+  const prose = withoutGherkin(
+    withoutCode(withoutCompleteHtmlComments(text)),
+    dialect,
+  );
   const found = new Set<string>();
   for (const match of prose.matchAll(/<[^>\n]+>|\{[^}\n]+\}/gu))
     found.add(match[0]);
