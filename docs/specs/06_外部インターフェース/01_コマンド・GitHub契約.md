@@ -184,6 +184,12 @@ squash/rebaseの終端検証は、固定base..headからsource commit数を1〜2
 
 PR CIで`origin/HEAD`がない場合も、workflowはevent値をquoted environment経由の明示入力とし、read-only tokenを使う唯一のGitHub adapterがexact repository/PRのbase ref/OID、head OID、repository default branchとcurrent tip OIDを再観測する。provider tip OIDが`refs/remotes/origin/<default>` tipと完全一致し、base refがobserved default branchで、observed base OIDが両SHAに一致し、そのSHAがtipのancestorである場合だけauthorityとする。explicit modeのcandidateはfilesystemでなくprovider-observed head commitのGit objectからentrypointと全fragment inventoryを読み、manifestを正本として検証する。そのcommitにないhead、monolith、mixed inventory、orphan/missing fragment、stale local remote refをfail-closedにし、dirty/missing/orphan worktreeが検証対象を差し替えることを許さない。初回bootstrapのproject set不在はtrusted commit側だけに認める。候補側の環境変数やcheckout中のfile、feature-only commitをtrusted SHAの代替にしない。
 
+## workspace-writeのGit起動境界
+
+`routing launch --sandbox=workspace-write`はcanonical rootをGitのtop-level、`--git-dir`、`--git-common-dir`と照合する。registered linked worktreeはGit metadata write roots（TERM-ASC-116）として検証済みgit directory、common directoryの順で`--add-dir <directory>`を各1回配送し、primaryとread-onlyは配送しない。`--add-dir`をASC公開flagとしては受理しない。
+
+非Git、未登録・不正metadata、symlink脱出、separate-git-dir、不一致または解決不能は`state=rejected`、`dispatched=false`、終了値1で返す。公開理由は固定文であり、prompt、Git stdout/stderr、home・repository・metadataのabsolute pathを含めない。修復後の新要求だけを受理する。
+
 ## 最新Codexモデルの起動契約
 
 `routing launch`はroot内の1MiB以下の非空通常fileを`--prompt-file`で受け取り、task本文をshell評価せずstdinへ渡す。scope、identity、contextは非空・512文字以下・制御文字なしとし、modeはfull/quick/poc、riskはtrusted `minimumTierByRisk`に存在する値を要求する。coordinator/implementer、implementer/reviewerのidentityと、implementer/reviewerのcontextは分離する。root・prompt fileのsymlink脱出、不正path、非NFCのprompt file名を拒否する。

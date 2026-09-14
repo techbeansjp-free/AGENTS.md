@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { parseJsonStrict } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import { CODEX_SELECTION_CONFIG } from "./provider.js";
@@ -8,6 +10,8 @@ export interface CodexExecutionInput {
   model: string;
   prompt: string;
   sandbox: "read-only" | "workspace-write";
+  /** Internal preflight result; never accepted from public CLI flags. */
+  gitMetadataWriteRoots?: readonly string[];
 }
 
 export interface CodexExecutionResult {
@@ -26,6 +30,24 @@ export function codexExecutionArguments(input: CodexExecutionInput): string[] {
     !["read-only", "workspace-write"].includes(input.sandbox)
   )
     throw new Error("Codex起動modelまたはsandboxが不正です");
+  const roots = input.gitMetadataWriteRoots ?? [];
+  try {
+    if (
+      (roots.length !== 0 &&
+        (input.sandbox !== "workspace-write" || roots.length !== 2)) ||
+      new Set(roots).size !== roots.length ||
+      roots.some(
+        (root) =>
+          !path.isAbsolute(root) ||
+          /[\p{Cc}\p{Cf}]/u.test(root) ||
+          fs.realpathSync(root) !== root ||
+          !fs.statSync(root).isDirectory(),
+      )
+    )
+      throw new Error();
+  } catch {
+    throw new Error("Codex Git metadata write rootsが不正です");
+  }
   return [
     "exec",
     "--json",
@@ -37,6 +59,7 @@ export function codexExecutionArguments(input: CodexExecutionInput): string[] {
     input.sandbox,
     "--cd",
     input.root,
+    ...roots.flatMap((root) => ["--add-dir", root]),
     "-",
   ];
 }
