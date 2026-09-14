@@ -70,7 +70,17 @@ When("起票時点の規律への相対リンクを解決する", function () {
     match,
     "Step 0のskill契約に起票時点の規律への相対リンクがありません",
   );
-  const [target] = match[1].split("#");
+  const [target, fragment] = match[1].split("#");
+  /**
+   * **fragmentまで判定する。** fileの存在だけを見ると、別の節を指すfragmentへ
+   * 差し替える変異も、fragmentごと削る変異も生存する。ACは「規律の節へ到達する」
+   * ことを要求しており、到達先の節を特定できなければ充足しない。
+   */
+  assert.equal(
+    fragment,
+    SECTION_HEADING.replace(/^#+\s*/u, ""),
+    `相対リンクのfragmentが規律の節を指していません: ${match[1]}`,
+  );
   const resolved = path.resolve(
     path.join(repositoryRoot, path.dirname(STEP_ZERO_SKILL)),
     target,
@@ -89,18 +99,29 @@ When("必須欄を読み取る", function () {
 Then(
   "canonical Issueを作成してよい条件と別セッションからの再開への導出が同じ節にある",
   function () {
-    assert.match(this.sectionText, /着手をcommitした時点/u);
+    assert.match(this.sectionText, /着手を決めた時点/u);
     assert.match(
       this.sectionText,
-      /未commitの内部計画をcanonical implementation Issueにしない/u,
+      /着手を決めていない内部計画をcanonical implementation Issueにしない/u,
     );
     assert.match(this.sectionText, /別セッションからの再開/u);
+    /**
+     * **多義を閉じた1句まで判定する。** これが無いと「commit」がGit commitと
+     * 読まれ、gitignore下のstagingを持つASC自身のStep 4が本節へ違反する
+     * （round 1のF-01）。限定句を落とす変異を生存させない。
+     */
+    assert.match(this.sectionText, /Git commitの有無を指さない/u);
   },
 );
 
 Then("外部由来事象を規律の対象外とする列挙がある", function () {
   assert.match(this.sectionText, /この規律の対象外/u);
-  for (const item of ["bug報告", "security事象", "期限", "依存要求"])
+  for (const item of [
+    "bug報告",
+    "security事象",
+    "法令・契約上の期限",
+    "他チームからの依存要求",
+  ])
     assert.match(
       this.sectionText,
       new RegExp(item, "u"),
@@ -152,6 +173,22 @@ Then("MVPと完了条件と対象外とタスク表と依存の5欄がある", f
    * 列名を持つ見出し行だけを見る。
    */
   const lines = this.sectionText.split("\n");
+  /**
+   * **見出しの存在だけでは欄が空でも合格する。** 各必須欄が実体を持つことを、
+   * 表を持つ節についてはheader行で確かめる。
+   */
+  for (const [heading, header] of [
+    ["## 2. 完了条件", "| ID | 検証可能な条件 |"],
+    ["## 4. タスク", "| ID | 独立した成果 |"],
+    ["## 6. 持ち越しと再開", "| 項目 | MVPへの影響 |"],
+  ] as const) {
+    const index = lines.indexOf(heading);
+    assert.notEqual(index, -1, `必須欄がありません: ${heading}`);
+    assert.ok(
+      lines.slice(index).some((line) => line.startsWith(header)),
+      `必須欄の表が空です: ${heading} -> ${header}`,
+    );
+  }
   const taskHeadingIndex = lines.indexOf("## 4. タスク");
   assert.notEqual(taskHeadingIndex, -1, "タスク節がありません");
   const taskTableHeader = lines
