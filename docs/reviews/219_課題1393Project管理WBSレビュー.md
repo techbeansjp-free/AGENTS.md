@@ -5,19 +5,19 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 2 |
-| 対象SHA・文書ダイジェスト | `948a5755435f14f88a398df64f8219262186f28e`、diff SHA-256 `9b3bb36fdb03f6d102778c34b4efbcb758a99984897f3331510f4a71b2167fef` |
+| ラウンド | 3 |
+| 対象SHA・文書ダイジェスト | `9b688ce3188a6431643711a4367fabf11696b042`、diff SHA-256 `3a51cf62ba95f452025abef56ae0fa70b53b376b12af44c305c484550dcc3f9e` |
 | 比較基点 | `dc479419982dbba973bc022fadff2adc718abe00` |
-| H_impl | `948a5755435f14f88a398df64f8219262186f28e` |
+| H_impl | `9b688ce3188a6431643711a4367fabf11696b042` |
 | 対象差分 | `AGENTS.md`、`README.md`、`docs/PROJECT_MANAGEMENT.md`、先行版の本review artifactの4 path |
 | 対象外 | 比較基点に存在し変更されていない製品source、test、spec、ASC本体 |
-| 残り予算 | counted round 5、収束後のHEAD移動に対する取り直し1 |
-| ラウンド数 | 2 |
+| 残り予算 | counted round 5、収束後のHEAD移動に対する取り直し0 |
+| ラウンド数 | 3 |
 | Step chain | 経由: `.agent-skill-chain/tmp/issues/20260914_165439_GitHub-Project-8をWBSと着手順序の正本にする` |
 | 仕様の所有箇所 | repository固有運用は`docs/PROJECT_MANAGEMENT.md`、製品仕様はno-spec-impact |
 | 成果物行数 | repository運用文書58追加0削除。支援層の追加なし |
 | 縮小の先行評価 | 可変Issue一覧を複製せず、詳細正本1 fileと既存入口2 fileの最小linkだけに縮小した |
-| 実施者・日時 | reviewer: Claude Opus 5 / effort high / toolsなしread-only、round 2は2026-09-15T03:16+09:00まで。CodeRabbit指摘とcoordinatorのGit・Project・test一次証拠を照合 |
+| 実施者・日時 | reviewer: Claude Opus 5 / effort high / toolsなしread-only、round 3は2026-09-15T03:40+09:00まで。CodeRabbit指摘とcoordinatorのGit・Project・test・parser一次証拠を照合 |
 
 ### 0.1 routing入力契約
 
@@ -30,12 +30,12 @@
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | Issue #1393、staging 00〜03 | AC-PM-001〜008、INV-PM-01〜03 | 既存文書 |
-| 差分 | `dc479419982dbba973bc022fadff2adc718abe00`..`948a5755435f14f88a398df64f8219262186f28e` | 実装3 pathと先行review artifact、diff digest `9b3bb36fdb03f6d102778c34b4efbcb758a99984897f3331510f4a71b2167fef` | Git観測 |
+| 差分 | `dc479419982dbba973bc022fadff2adc718abe00`..`9b688ce3188a6431643711a4367fabf11696b042` | 実装3 pathと先行review artifact、diff digest `3a51cf62ba95f452025abef56ae0fa70b53b376b12af44c305c484550dcc3f9e` | Git観測 |
 | テスト | `npm run verify:distribution`と`npm run package:check` | 2031 scenarios失敗0、conformance 87/87、artifact監査以外の全gate合格 | テスト出力 |
 | 仕様 | `docs/specs/`の製品仕様 | no-spec-impact | Git差分と既存文書 |
-| commit前candidate | 3実装pathと先行review artifact | H_impl `948a5755435f14f88a398df64f8219262186f28e` | Git観測 |
+| commit前candidate | 3実装pathと先行review artifact | H_impl `9b688ce3188a6431643711a4367fabf11696b042` | Git観測 |
 | Phase A artifact | 本file | H_impl後に本fileだけをcommitしてH_finalとする | Git観測 |
-| review session | 上記staging | session `6c26f744adcff5f26a597328c003ed99559b95a4b09e5f874af56c962b3b214e`、round 2 digest `29254217ac3e15f812d905cc38453100c81b30cd432fd75c6f89bdbe852412e4` | ASC保存session |
+| review session | 上記staging | session `6c26f744adcff5f26a597328c003ed99559b95a4b09e5f874af56c962b3b214e`、round 3 digest `562a18c68f2be704c85bcccd307999aea6e35cf5378743be5d628cab244bbf98` | ASC保存session |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: はい。
 - `H_impl`から`H_final`への差分は本artifact 1 fileだけにする: はい。
@@ -50,7 +50,7 @@
 | `AGENTS.md` | M | repository / package入口 | project | agent向けProject・詳細正本への入口だけを追加 | 一方向link、循環なし | AC-PM-001、SCN-PM-001 | 2行をrevert可能 | pass |
 | `README.md` | M | repository / package入口 | project | 人向け正本一覧へ入口1行だけを追加 | 一方向link、循環なし | AC-PM-001、SCN-PM-001 | 1行をrevert可能 | pass |
 | `docs/PROJECT_MANAGEMENT.md` | A | repository開発管理 | project | WBS、Status、順序、分解、完了を一箇所で所有 | Issueは作業契約、Projectは可変状態、本文は規則を所有 | AC-PM-002〜008、SCN-PM-002〜008 | 文書をrevertしProject状態をread-back可能 | pass |
-| `docs/reviews/219_課題1393Project管理WBSレビュー.md` | A | repository review証拠 | evidence | round 1のexact-head判定を版管理下で保持し、round 2で前向き更新 | 実装に依存する終端証拠で逆依存・循環なし | Step 10、SCN-PM-001〜008 | review履歴を保持しPR再固定前ならcommitをrevert可能 | pass |
+| `docs/reviews/219_課題1393Project管理WBSレビュー.md` | A | repository review証拠 | evidence | round 1〜3のexact-head判定を版管理下で前向き保持 | 実装に依存する終端証拠で逆依存・循環なし | Step 10、SCN-PM-001〜008 | review履歴を保持しPR再固定前ならcommitをrevert可能 | pass |
 
 - 基準SHAとの差分path集合と表のpath集合が完全一致する: はい、4件。
 - package層へproject固有の汎用機構、spec/evidence層へ実行authorityを混入していない: はい。入口2 fileは配布対象だが実行契約を変えない案内である。
@@ -124,6 +124,10 @@
 | CODERABBIT-1393-F1-R2 | Low | In review不合格時の遷移・理由・再review条件が未定義 | `docs/PROJECT_MANAGEMENT.md:21` | review | 3条件を同じStatus行へ追加 | resolved / improvement | なし |
 | CLAUDE-1393-R2-F7 | Low | Backlog分岐で再開条件を同じ行に再掲していない | Backlog行・直後規則 | review | 同一文書の既存規則が常に要求するため記録 | valid / improvement | point-of-useの読解負荷 |
 | CLAUDE-1393-R2-F8 | Low | 修正可能と再検証待ちの分岐が重なる余地 | Status表・停止規則 | review | 判断不能時は移動しないfail-closedを確認 | valid / improvement | 手動判断 |
+| CLAUDE-1393-R3-A | Medium | merge形状がリモート側証拠を落とす可能性 | merge両親 | evidence | 両親diffを照合し、差分は意図した3セルだけと確認 | resolved / fix-regression | なし |
+| AUDIT-1393-R3-B | Low | formal approvalの未解決件数行に末尾句点がある | 総合判定節 | evidence | exact parser契約の`なし`へ正規化 | resolved / improvement | なし |
+| CLAUDE-1393-R3-C | Low | 先行artifactを個別監査する自己参照懸念 | reviewed-forward構造 | evidence | ASCの終端artifact-only境界として監査対象を明示 | false-positive | なし |
+| CLAUDE-1393-R3-D | Low | round 2 Lowの対応方針が必要 | session・指摘表 | evidence | record-only理由を既に各findingへ保存 | false-positive | なし |
 
 ## 6. ラウンド固有の確認
 
@@ -142,10 +146,10 @@
 
 ### ラウンド3
 
-- 全指摘の最終分類: round 2で確定。未解決Critical/High/Mediumなし。
-- 任意の危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: 追加の危険範囲なし。
-- 同じ範囲の予算を自動更新していない: はい。
-- AIによる最終裁定: Claude Opusは元指摘resolved、Critical/High/Mediumなしで承認推奨。一次資料照合後も同じ判定。
+- 全指摘の最終分類: Medium 1件は両親diffでresolved。Low 1件を本artifactでresolved、Low 2件をfalse-positiveとした。未解決Critical/Highなし。
+- 任意の危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: force pushを使わずリモートcommitを親に保持し、差分を証拠1 pathへ限定。
+- 同じ範囲の予算を自動更新していない: はい。収束後取り直し枠を使い切りround 3で終了。
+- AIによる最終裁定: Claude Opusはevidence-onlyかつround 2判断を保持すると承認推奨。条件付きMediumは両親diffで解消し、formal parserのLowは本artifactで正規化。
 
 ## 7. テスト結果
 
@@ -153,7 +157,7 @@
 - 全layer合計: 2031 scenarios、2015 passed、0 failed、16 skipped。10660 steps、10610 passed、0 failed、50 skipped。
 - skipがある層: unit・integration・e2eを含む全体で16 scenario・50 step。既存条件付きskipで本変更の失敗ではない。
 - runner・Gherkin方言: cucumber-js、`en`。説明は日本語。
-- conformance: 87 scenarios / 468 steps、失敗0。新H_implでbuild、docs/test format、trace、architecture合格。artifact監査とpackage検査は本fileのcommit後に再実行する。
+- conformance: 87 scenarios / 468 steps、失敗0。機能修正H_impl `948a5755`でbuild、docs/test format、trace、architecture合格。round 3候補はreview artifactだけを前向き統合し、review validate合格。artifact監査とpackage検査は本fileのcommit後に再実行する。
 
 ## 8. 配布物影響
 
@@ -189,10 +193,10 @@
 
 ## 11. 総合判定と再開地点
 
-- 未解決Critical/High: なし。
-- Medium/Lowの記録: round 1のMedium 2件・Low 6件、round 2のLow 3件をsessionと本artifactへ記録。F6とCodeRabbit指摘はresolved。
+- 未解決Critical/High: なし
+- Medium/Lowの記録: round 1のMedium 2件・Low 6件、round 2のLow 3件、round 3のMedium 1件・Low 3件を記録。F6、CodeRabbit指摘、round 3のMediumとparser表記はresolved。
 - 判定: approved
 - 新しい権限が必要な事項: PR作成・mergeはユーザーが常時許可済み。release、publish、cleanupは対象外。
 - 残存リスク: view sort、認証actor明文化、誤Status復旧、分岐のpoint-of-use表現は将来改善候補。現行ACを妨げない。
 - 次に許可される操作: 本artifactだけをcommitし、audit合格後にpost-PR Step 10を固定してPR #1397を再固定する。
-- 次回の再開地点: session `6c26f744adcff5f26a597328c003ed99559b95a4b09e5f874af56c962b3b214e`、round `29254217ac3e15f812d905cc38453100c81b30cd432fd75c6f89bdbe852412e4`、H_impl `948a5755435f14f88a398df64f8219262186f28e`。
+- 次回の再開地点: session `6c26f744adcff5f26a597328c003ed99559b95a4b09e5f874af56c962b3b214e`、round `562a18c68f2be704c85bcccd307999aea6e35cf5378743be5d628cab244bbf98`、H_impl `9b688ce3188a6431643711a4367fabf11696b042`。
