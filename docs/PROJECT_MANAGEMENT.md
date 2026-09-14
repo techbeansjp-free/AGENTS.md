@@ -18,7 +18,7 @@
 | `Backlog` | 判断、依存、外部条件、再検証を待つ作業 | blocking理由と再開条件をIssueへ記録する |
 | `Ready` | 依存と開始条件を満たした未着手作業 | 実行可能性を確認する |
 | `In progress` | 現在実施している作業 | `Ready`最上位から着手し、ASCの開始条件を満たす |
-| `In review` | 実装と検証を終えてreview中の作業 | 受け入れ条件と検証証拠を揃える |
+| `In review` | 実装と検証を終えてreview中の作業 | 提出時は受け入れ条件と検証証拠を揃える。review不合格時は理由をIssueへ記録し、修正可能なら`In progress`、依存・判断・外部条件・再検証を待つなら`Backlog`へ戻す。指摘対応と検証証拠の更新後に再reviewを依頼する |
 | `Done` | deliveryを完了した作業 | reviewとmerge、または合意したdelivery終端を読み戻し、Issueをcloseする |
 
 作業を続けられなくなった場合は、blocking理由と再開条件をIssueへ記録して`Backlog`へ戻す。状態を判断できない場合は移動せず、安全側で停止する。
