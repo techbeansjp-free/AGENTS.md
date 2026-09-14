@@ -1,6 +1,13 @@
 @integration
 Feature: 出荷Issue templateとCLI・品質gateの統合契約
 
+  Scenario: SCN-INT-ISSUECOMMENT-001 validation後の出荷markerをreview初期化のinventoryへbindingする
+    Given 出荷03のprogress markerを保持した記入済みfull Issueがある
+    When CLIでstageを指定せずIssueを検証する
+    Then CLIのIssue検証は合格する
+    When 検証済みIssueのreview round初期化draftを生成する
+    Then 初回review previewは同じ03のprogress inventoryを受理する
+
   Scenario: SCN-INT-ISSUETPL-001 出荷full templateを埋めた文書がIssue検証を通る
     Given 出荷full templateを埋めたIssueがある
     When CLIでstageを指定せずIssueを検証する

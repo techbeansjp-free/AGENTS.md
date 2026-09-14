@@ -102,3 +102,82 @@ Feature: Issue templateと段階別検証の契約
       | full |
       | quick |
       | poc |
+
+  Scenario: SCN-UNIT-ISSUECOMMENT-001 正規progress markerを含むIssueは合格する
+    Given placeholder検査用のMarkdownがある
+      """
+      <!-- asc:parallel-progress:start -->
+      <!-- asc:parallel-progress:end -->
+      """
+    When quick Issueのplaceholderを検証する
+    Then placeholder errorなしでIssue検証は合格する
+
+  Scenario Outline: SCN-UNIT-ISSUECOMMENT-002 完全コメントを除外して前後の断片を結合しない
+    Given placeholder検査用のMarkdownがある
+      """
+      <body>
+      """
+    When IssueとPR本文の共有placeholder境界を検証する
+    Then IssueとPR本文はplaceholderなしで合格する
+
+    Examples:
+      | body |
+      | <!-- <hidden> {hidden} （人が識別できる件名） --> |
+      | <!--\n<hidden>\n{hidden}\n（人が識別できる件名）\n--> |
+      | <!----> |
+      | <!-- {a} --><!-- <b> --> |
+      | <left<!-- comment -->right> |
+      | {left<!----><!-- adjacent -->right} |
+      | （人が<!--\ncomment\n-->識別できる件名） |
+      | `Promise<T>`\n```ts\n{example}\n```\n<!-- {hidden} --> |
+      | <!--\n```\n{hidden}\n--> |
+      | <!-- ` {hidden} --> |
+      | <!-- `code` {hidden} --> |
+      | <!--\n~~~md\n{hidden}\n--> |
+      | <!--\n```md\n{hidden}\n```\n{also-hidden}\n--> |
+
+  Scenario Outline: SCN-UNIT-ISSUECOMMENT-003 コメント外と未終端コメントのplaceholderは名指しで拒否する
+    Given placeholder検査用のMarkdownがある
+      """
+      <body>
+      """
+    When IssueとPR本文の共有placeholder境界を検証する
+    Then Issueのplaceholder候補は"<expected>"だけになる
+    And PR本文のplaceholder候補は"<expected>"だけになる
+
+    Examples:
+      | body | expected |
+      | {outside}<!-- {hidden} --> | {outside} |
+      | <!-- {hidden} -->{outside} | {outside} |
+      | <!--\n<angle>\n{brace}\n（人が識別できる件名） | <angle>、{brace}、（人が識別できる件名） |
+      | <!-- {hidden} -->\n<!--\n{unclosed}\n本文は{following} | {following}、{unclosed} |
+      | <!--\n```\n-->\n{outside} | {outside} |
+      | <!--\nGiven <hidden>\n-->\n本文は{outside} | {outside} |
+      | ＜！-- {unicode} --＞ | {unicode} |
+      | `<!--` {outside} --> | {outside} |
+      | ``<!-- ` nested`` {outside} --> | {outside} |
+      | ```html\n<!--\n```\n{outside}\n--> | {outside} |
+      | ~~~html\n<!--\n~~~\n{outside}\n--> | {outside} |
+      | ````html\n<!--\n```\n{inside}\n````\n{outside}\n--> | {outside} |
+      | ```html <!--\n```\n{outside}\n--> | {outside} |
+      | <!-- ` -->{outside} ` | {outside} |
+      | <!--\n~~~md\n-->\n{outside} | {outside} |
+      | `<!--` <!-- {hidden} --> {outside} --> | {outside} |
+      | ```html\n<!--\n```\n<!-- {hidden} -->\n{outside}\n--> | {outside} |
+      | <!-- 補足 --> Given <outside> | <outside> |
+      | <!-- `{inline}` | {inline} |
+      | <!--\n```md\n{fenced}\n``` | {fenced} |
+      | <!-- {hidden} -->{f} {d} {c} <e> <b> <a> {c} | <a>、<b>、<e>、{c}、{d}、ほか1件 |
+
+  Scenario: SCN-UNIT-ISSUECOMMENT-004 PR本文は共有comment境界と必須見出しを維持する
+    Given placeholder検査用のMarkdownがある
+      """
+      <!--
+      <hidden> {hidden} （人が識別できる件名）
+      -->
+      <left<!---->right>
+      """
+    When IssueとPR本文の共有placeholder境界を検証する
+    Then IssueとPR本文はplaceholderなしで合格する
+    And 完全コメント付きPR本文でも概要見出しの欠落は拒否する
+    And PR本文でもコメント外と未終端のplaceholderは名指しで拒否する
