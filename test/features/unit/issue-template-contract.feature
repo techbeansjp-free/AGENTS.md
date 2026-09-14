@@ -117,8 +117,8 @@ Feature: Issue templateと段階別検証の契約
       """
       <body>
       """
-    When quick Issueのplaceholderを検証する
-    Then placeholder errorなしでIssue検証は合格する
+    When IssueとPR本文の共有placeholder境界を検証する
+    Then IssueとPR本文はplaceholderなしで合格する
 
     Examples:
       | body |
@@ -131,14 +131,19 @@ Feature: Issue templateと段階別検証の契約
       | （人が<!--\ncomment\n-->識別できる件名） |
       | `Promise<T>`\n```ts\n{example}\n```\n<!-- {hidden} --> |
       | <!--\n```\n{hidden}\n--> |
+      | <!-- ` {hidden} --> |
+      | <!-- `code` {hidden} --> |
+      | <!--\n~~~md\n{hidden}\n--> |
+      | <!--\n```md\n{hidden}\n```\n{also-hidden}\n--> |
 
   Scenario Outline: SCN-UNIT-ISSUECOMMENT-003 コメント外と未終端コメントのplaceholderは名指しで拒否する
     Given placeholder検査用のMarkdownがある
       """
       <body>
       """
-    When quick Issueのplaceholderを検証する
+    When IssueとPR本文の共有placeholder境界を検証する
     Then Issueのplaceholder候補は"<expected>"だけになる
+    And PR本文のplaceholder候補は"<expected>"だけになる
 
     Examples:
       | body | expected |
@@ -149,6 +154,16 @@ Feature: Issue templateと段階別検証の契約
       | <!--\n```\n-->\n{outside} | {outside} |
       | <!--\nGiven <hidden>\n-->\n本文は{outside} | {outside} |
       | ＜！-- {unicode} --＞ | {unicode} |
+      | `<!--` {outside} --> | {outside} |
+      | ``<!-- ` nested`` {outside} --> | {outside} |
+      | ```html\n<!--\n```\n{outside}\n--> | {outside} |
+      | ~~~html\n<!--\n~~~\n{outside}\n--> | {outside} |
+      | ````html\n<!--\n```\n{inside}\n````\n{outside}\n--> | {outside} |
+      | ```html <!--\n```\n{outside}\n--> | {outside} |
+      | <!-- ` -->{outside} ` | {outside} |
+      | <!--\n~~~md\n-->\n{outside} | {outside} |
+      | `<!--` <!-- {hidden} --> {outside} --> | {outside} |
+      | ```html\n<!--\n```\n<!-- {hidden} -->\n{outside}\n--> | {outside} |
       | <!-- {hidden} -->{f} {d} {c} <e> <b> <a> {c} | <a>、<b>、<e>、{c}、{d}、ほか1件 |
 
   Scenario: SCN-UNIT-ISSUECOMMENT-004 PR本文は共有comment境界と必須見出しを維持する
