@@ -677,9 +677,10 @@ function withoutPlaceholderCodeAndComments(text: string): string {
     const lineEnd = newline < 0 ? text.length : newline;
     const line = text.slice(cursor, lineEnd);
     const atLineStart = cursor === 0 || text[cursor - 1] === "\n";
-    const opening = atLineStart
-      ? /^\s*(`{3,}|~{3,})/u.exec(line)?.[1]
-      : undefined;
+    const opening =
+      !unclosedComment && atLineStart
+        ? /^\s*(`{3,}|~{3,})/u.exec(line)?.[1]
+        : undefined;
     if (fence || opening) {
       if (fence) {
         if (
@@ -706,6 +707,9 @@ function withoutPlaceholderCodeAndComments(text: string): string {
             if (text[index] === "\n") newlines += 1;
           // 空commentでも前後の断片を新しいplaceholderへ結合しない。
           visible.push("\n".repeat(Math.max(1, newlines)));
+          // comment終端後の同一行は、原文ではGherkinの行頭ではない。
+          if (closing + 3 < text.length && text[closing + 3] !== "\n")
+            visible.push("_");
           cursor = closing + 3;
           if (cursor > lineEnd) break;
           continue;
@@ -713,7 +717,7 @@ function withoutPlaceholderCodeAndComments(text: string): string {
         // 後続のopenerも未終端。繰り返し末尾まで検索しない。
         unclosedComment = true;
       }
-      if (inlineAllowed && text[cursor] === "`") {
+      if (!unclosedComment && inlineAllowed && text[cursor] === "`") {
         let length = 1;
         while (text[cursor + length] === "`") length += 1;
         const closing = line.indexOf(

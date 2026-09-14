@@ -164,6 +164,9 @@ Feature: Issue templateと段階別検証の契約
       | <!--\n~~~md\n-->\n{outside} | {outside} |
       | `<!--` <!-- {hidden} --> {outside} --> | {outside} |
       | ```html\n<!--\n```\n<!-- {hidden} -->\n{outside}\n--> | {outside} |
+      | <!-- 補足 --> Given <outside> | <outside> |
+      | <!-- `{inline}` | {inline} |
+      | <!--\n```md\n{fenced}\n``` | {fenced} |
       | <!-- {hidden} -->{f} {d} {c} <e> <b> <a> {c} | <a>、<b>、<e>、{c}、{d}、ほか1件 |
 
   Scenario: SCN-UNIT-ISSUECOMMENT-004 PR本文は共有comment境界と必須見出しを維持する
