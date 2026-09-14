@@ -665,24 +665,76 @@ function withoutGherkin(
 
 const UNRESOLVED_PLACEHOLDER_SAMPLE_LIMIT = 5;
 
-/** 完全なcommentだけを除き、未終端と前後の行境界を保持する。 */
-function withoutCompleteHtmlComments(text: string): string {
+/** placeholder専用。code内ではcommentを開始せず、実comment内ではcodeを解釈しない。 */
+function withoutPlaceholderCodeAndComments(text: string): string {
   const visible: string[] = [];
   let cursor = 0;
+  let fence: { marker: string; length: number } | undefined;
+  let unclosedComment = false;
   while (cursor < text.length) {
-    const opening = text.indexOf("<!--", cursor);
-    if (opening < 0) break;
-    const closing = text.indexOf("-->", opening + 4);
-    if (closing < 0) break;
-    visible.push(text.slice(cursor, opening));
-    let newlines = 0;
-    for (let index = opening; index < closing + 3; index += 1)
-      if (text[index] === "\n") newlines += 1;
-    // 空commentでも前後の断片を新しいplaceholderへ結合しない。
-    visible.push("\n".repeat(Math.max(1, newlines)));
-    cursor = closing + 3;
+    const lineStart = cursor;
+    const newline = text.indexOf("\n", cursor);
+    const lineEnd = newline < 0 ? text.length : newline;
+    const line = text.slice(cursor, lineEnd);
+    const atLineStart = cursor === 0 || text[cursor - 1] === "\n";
+    const opening = atLineStart
+      ? /^\s*(`{3,}|~{3,})/u.exec(line)?.[1]
+      : undefined;
+    if (fence || opening) {
+      if (fence) {
+        if (
+          new RegExp(
+            `^\\s*${escapeRegExp(fence.marker)}{${fence.length},}\\s*$`,
+            "u",
+          ).test(line)
+        )
+          fence = undefined;
+      } else if (opening) {
+        fence = { marker: opening[0] ?? "`", length: opening.length };
+      }
+      visible.push("\n");
+      cursor = lineEnd + 1;
+      continue;
+    }
+    let inlineAllowed = true;
+    while (cursor < lineEnd) {
+      if (!unclosedComment && text.startsWith("<!--", cursor)) {
+        const closing = text.indexOf("-->", cursor + 4);
+        if (closing >= 0) {
+          let newlines = 0;
+          for (let index = cursor; index < closing + 3; index += 1)
+            if (text[index] === "\n") newlines += 1;
+          // 空commentでも前後の断片を新しいplaceholderへ結合しない。
+          visible.push("\n".repeat(Math.max(1, newlines)));
+          cursor = closing + 3;
+          if (cursor > lineEnd) break;
+          continue;
+        }
+        // 後続のopenerも未終端。繰り返し末尾まで検索しない。
+        unclosedComment = true;
+      }
+      if (inlineAllowed && text[cursor] === "`") {
+        let length = 1;
+        while (text[cursor + length] === "`") length += 1;
+        const closing = line.indexOf(
+          "`".repeat(length),
+          cursor - lineStart + length,
+        );
+        if (closing >= 0) {
+          cursor = lineStart + closing + length;
+          continue;
+        }
+        // inline codeは従来どおり同じ行で閉じるものだけを除く。
+        inlineAllowed = false;
+      }
+      visible.push(text[cursor] ?? "");
+      cursor += 1;
+    }
+    if (cursor === lineEnd) {
+      if (newline >= 0) visible.push("\n");
+      cursor += 1;
+    }
   }
-  visible.push(text.slice(cursor));
   return visible.join("");
 }
 
@@ -691,7 +743,7 @@ function unresolvedPlaceholders(
   dialect: string = DEFAULT_GHERKIN_DIALECT,
 ): string[] {
   const prose = withoutGherkin(
-    withoutCode(withoutCompleteHtmlComments(text)),
+    withoutPlaceholderCodeAndComments(text),
     dialect,
   );
   const found = new Set<string>();

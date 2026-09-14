@@ -332,6 +332,16 @@ Then("Issueのplaceholder候補は{string}だけになる", function (expected: 
   assert.equal(placeholderError(this), suffix);
 });
 
+Then(
+  "PR本文のplaceholder候補は{string}だけになる",
+  function (expected: string) {
+    assert.deepEqual(this.bodyValidation, {
+      valid: false,
+      errors: [`PR本文に未解決のplaceholderが残っています: ${expected}`],
+    });
+  },
+);
+
 Then("完全コメント付きPR本文でも概要見出しの欠落は拒否する", function () {
   const body = conformingPullRequestBody({
     title: "記入済み",
