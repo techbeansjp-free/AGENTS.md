@@ -9,19 +9,19 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 2 |
-| 対象SHA・文書ダイジェスト | 0c06312698ab667ef74f91bd4f388adb7f491a65 |
+| ラウンド | 3 |
+| 対象SHA・文書ダイジェスト | 328cfa828e1976991f0c2778152b6f1ba08fdc23 |
 | 比較基点 | `6159c46897c39ce0a185ae3468e6b0b729c1bb69` |
-| H_impl | `0c06312698ab667ef74f91bd4f388adb7f491a65` |
+| H_impl | `328cfa828e1976991f0c2778152b6f1ba08fdc23` |
 | 対象差分 | .agent-skill-chain/docs/01_開発ワークフロー.md、.agent-skill-chain/skills/step-10-review/SKILL.md、dist/src/adapters/review-session.js、dist/src/cli.js、dist/src/domain/workflow.js、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/00_要件一覧.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/review-session.ts、src/cli.ts、src/domain/workflow.ts、test/features/integration/staging-digest-recovery-hint-cli.feature、test/features/unit/staging-digest-recovery-hint.feature、test/steps/staging-digest-recovery-hint-cli.steps.ts、test/steps/staging-digest-recovery-hint.steps.ts |
 | 対象外 | 比較基点に存在し変更されていない範囲。`appendWorkflowJournalEntryLocked`の受理集合、`workflow record --reconfirm`の実装、staging digestの算出式は本変更の対象外で1行も変更していない |
-| 残り予算 | counted round 2、上限4のため残り2ラウンド。収束後のHEAD移動に対する取り直しは未使用 |
-| ラウンド数 | 2 |
+| 残り予算 | counted round 3、上限4のため残り1ラウンド。round 3はPR #1402の外部review（CodeRabbit）をpr-bound中に取り込んだ復旧ラウンドである |
+| ラウンド数 | 3 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260915_152055_staging-digest不一致の診断が実在しない復旧手順を案内する |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md`のREQ-WF-024（本変更で新設）。着手時、staging digest不一致の診断文言を所有していたのは同fileのREQ-WF-009で、その本文は「staging digestの不一致が案内する手順」を無条件に最新Stepの再記録と述べていた。**その記述自体が本Issueの欠陥だった**ため、REQ-WF-009からは所有を外してREQ-WF-024へ委譲し、同段落が自ら宣言する「同じ事実を二度書かない」を維持した |
-| 成果物行数 | 製品`src/`116追加6削除、生成物`dist/`106追加6削除（`npm run build`の出力で手書きなし）、支援層`test/`445追加0削除、仕様`docs/specs/`19追加2削除、配布規範`.agent-skill-chain/`4追加0削除。支援層対製品は3.84倍。閾値判定はせず記録だけを残す |
+| 成果物行数 | 製品`src/`145追加17削除、生成物`dist/`134追加17削除（`npm run build`の出力で手書きなし）、支援層`test/`660追加10削除、仕様`docs/specs/`22追加5削除、配布規範`.agent-skill-chain/`4追加0削除。支援層対製品は4.55倍（round 3で検査を足したため上がった）。閾値判定はせず記録だけを残す |
 | 縮小の先行評価 | 最小形は既存の定数`STAGING_DIGEST_RERECORD_HINT`の文字列を書き換えるだけ（1行）で、Step 10後の誤案内は消える。**これを採らなかった理由は、Step 10前には旧案内が実際に成功するため、一律置換は正しい案内を壊す点にある。** 状態に依存する以上、分岐を持つ関数が必要になる。分岐の置き場所として3 call siteへの個別実装も評価したが、文言が複製されて片方だけ実態から外れても検出できないため、判定を持たない単一関数への集約を選んだ。CLI flag・schema・delivery stateの新設、`appendWorkflowJournalEntryLocked`の受理集合変更はいずれも不要と判断し実装していない |
-| 実施者・日時 | reviewer: 独立context（Claude、読み取り専用）2026-09-15。round 1でchanges-requested、round 2でapproved。coordinatorがGit・gate・変異の一次証拠を照合 |
+| 実施者・日時 | reviewer: 独立context（Claude、読み取り専用）2026-09-15。round 1でchanges-requested、round 2でapproved。round 3は外部reviewer（CodeRabbit）の5指摘をcoordinatorが全件実測で検証して取り込んだ |
 
 `比較基点`と`H_impl`の2行は`review reanchor`と`audit:check`が機械的に読む。値は40桁の小文字hexをbacktickで囲んだものだけにし、注記・branch名・短縮SHAを同じcellへ書かない（識別行が一意に解決できず`identity-unresolvable`で拒否される）。由来の説明は`比較基点の由来`のような別行へ書く。
 
@@ -44,12 +44,12 @@ providerとmodel設定はproject choiceとrouting evidenceの観測値を用い�
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | .agent-skill-chain/tmp/issues/20260915_152055_staging-digest不一致の診断が実在しない復旧手順を案内する | checkpoint 8で`sync-verified`。00〜03が同期済みでREQ-WF-024・AC-WF-024・INV-01〜03を固定 | 既存文書 |
-| 差分 | `6159c46897c39ce0a185ae3468e6b0b729c1bb69`..`0c06312698ab667ef74f91bd4f388adb7f491a65` | 17 path（A 4・M 13）。うち`dist/`3 pathは`npm run build`の生成物 | Git観測 |
-| テスト | `npm test`、`npm run verify:distribution` | §7に実測を記録。unit・integration・E2E全layer合格 | テスト出力 |
-| 仕様 | `docs/specs/02_要件/01_ワークフロー要件.md`、`docs/specs/15_要件追跡/00_追跡表.md` | REQ-WF-024を新設しAC-WF-024へ9 SCNを追跡。`npm run trace:check`が`orphanRequirements`・`orphanScenarios`・`orphanImplementations`すべて0件 | 既存文書 |
-| commit前candidate | 上記17 path | H_impl 0c06312698ab667ef74f91bd4f388adb7f491a65、作業tree clean | Git index |
+| 差分 | `6159c46897c39ce0a185ae3468e6b0b729c1bb69`..`328cfa828e1976991f0c2778152b6f1ba08fdc23` | 18 path（A 5・M 13）。うち`dist/`3 pathは`npm run build`の生成物。**round 3の是正commitがartifact commitの後へ来たため、本artifact自身が範囲へ入る** | Git観測 |
+| テスト | `npm test`（全layer）、変異試験12件 | §7に実測を記録。2,052 scenarios中2,036合格・16 skip・失敗0。`verify:distribution`と`audit:check`は本artifact commit後に実行する（§7） | テスト出力 |
+| 仕様 | `docs/specs/02_要件/01_ワークフロー要件.md`、`docs/specs/15_要件追跡/00_追跡表.md` | REQ-WF-024を新設しAC-WF-024へ13 SCNを追跡。`npm run trace:check`が`orphanRequirements`・`orphanScenarios`・`orphanImplementations`すべて0件 | 既存文書 |
+| commit前candidate | 上記18 path | H_impl 328cfa828e1976991f0c2778152b6f1ba08fdc23、作業tree clean | Git index |
 | Phase A artifact | `docs/reviews/221_課題1312staging-digest復旧手順案内レビュー.md` | 本fileをH_implの子として単独commitしH_finalにする | Git観測 |
-| review session | review-session.json（sessionId `5a8f07e1707f0a735d6ae7e1f1286b8472d5df1bfeceba7c241912d1c69439c7`） | status `converged`、round 2、latestRoundDigest `c7fcfe0af9c2411af8b68c7c3575001b7268732399a3362938aff41b3da28f3d`、latestCandidateHeadSha `0c063126…` | Git観測 |
+| review session | review-session.json（sessionId `5a8f07e1707f0a735d6ae7e1f1286b8472d5df1bfeceba7c241912d1c69439c7`） | status `converged`、round 2で収束。round 3はpr-bound中の外部review取り込みで、`workflow record --step=10 --post-pr-intake`が記録する | Git観測 |
 
 **Phase Bの外部証拠をこの表へ書かない。** PR number、Actions run ID、immutable review IDはPR作成後にしか存在しない。**それらは`review evidence`とdelivery stateがappend-onlyで保持する正本であり、tracked review artifactは参照先を持たない。**
 
@@ -71,20 +71,21 @@ providerとmodel設定はproject choiceとrouting evidenceの観測値を用い�
 | `.agent-skill-chain/skills/step-10-review/SKILL.md` | M | package | package | Step 10入口からの到達点。条件と手順の正本は規範文書と明記し本文を複写しない | skill→規範の一方向 | SCN-UNIT-RECOVERYHINT-004 | 1段落revert | pass |
 | `docs/specs/01_システム概要/02_用語・略語.md` | M | package | spec | TERM-ASC-119「上流再確定」1行。着手時の最大IDは118で他branchのstagingにも119の採番なし | 用語→要件 | TERM-ASC-119 | 1行revert | pass |
 | `docs/specs/02_要件/00_要件一覧.md` | M | package | spec | REQ-WF-024行をREQ-WF-023の直後へ | 一覧→要件本文 | REQ-WF-024 | 1行revert | pass |
-| `docs/specs/02_要件/01_ワークフロー要件.md` | M | package | spec | REQ-WF-024本文とAC-WF-024を新設し、REQ-WF-009からは所有を外して委譲した（round 1のI-02） | 要件→実装path | REQ-WF-024 / AC-WF-024 | 追加分revert | pass |
-| `docs/specs/15_要件追跡/00_追跡表.md` | M | package | spec | unit行とintegration行の2行。`trace:check`合格 | 要件→SCN→feature→実装 | 全9 SCN | 2行revert | pass |
-| `docs/specs/15_要件追跡/01_変更履歴.md` | M | package | spec | header区切りの直後へ挿入し末尾の移行表へ混入していない | 記録のみ | REQ-WF-024 / TERM-ASC-119 | 1行revert | pass |
-| `src/adapters/review-session.ts` | M | package | src | review session更新前検査の診断を`recoveryHint`経由へ委譲。journal・delivery stateの読み取り失敗をcatchし、案内の生成でdigest不一致の判定を止めない | adapters→domainの一方向。`architecture:check`合格 | SCN-INT-RECOVERYHINT-009 | 委譲を定数へ戻せばrevert | pass |
-| `src/cli.ts` | M | package | src | delivery直前検査と再配送直前検査の2 call site。`STAGING_DIGEST_RERECORD_HINT`のimportを削除し、同じ関数へ委譲する`stagingRecoveryHint`を置いた | cli→domain・adapters | SCN-INT-RECOVERYHINT-005 | 同上 | pass |
-| `src/domain/workflow.ts` | M | package | src | 案内生成の単一所有者`stagingDigestRecoveryHint`を追加。判定・受理集合・CLI終了値を1つも変更しない | domainは外向き依存を持たない | REQ-WF-024 / SCN-UNIT-RECOVERYHINT-001〜003・006〜008 | 関数削除でrevert | pass |
-| `test/features/integration/staging-digest-recovery-hint-cli.feature` | A | package | evidence | CLI経路2 scenario。3 call siteのうちcli.ts側とreview-session.ts側の合成経路を観測する | feature→steps | SCN-INT-RECOVERYHINT-005・009 | file削除 | pass |
+| `docs/specs/02_要件/01_ワークフロー要件.md` | M | package | spec | REQ-WF-024本文とAC-WF-024を新設し、REQ-WF-009からは所有を外して委譲した（round 1のI-02）。round 3で単独実行可能性と2入力の独立読み取りを条項へ追加 | 要件→実装path | REQ-WF-024 / AC-WF-024 | 追加分revert | pass |
+| `docs/specs/15_要件追跡/00_追跡表.md` | M | package | spec | unit行とintegration行の2行。`trace:check`合格 | 要件→SCN→feature→実装 | 全13 SCN | 2行revert | pass |
+| `docs/specs/15_要件追跡/01_変更履歴.md` | M | package | spec | header区切りの直後へ挿入し末尾の移行表へ混入していない。round 3でSCN列を全13件の個別列挙へ直した（L-01の解消） | 記録のみ | REQ-WF-024 / TERM-ASC-119 / 全13 SCN | 1行revert | pass |
+| `src/adapters/review-session.ts` | M | package | src | review session更新前検査の診断を`recoveryHint`経由へ委譲。round 3でjournalとdelivery stateを独立に読む形へ直し、片方の失敗で他方の観測値を捨てない | adapters→domainの一方向。`architecture:check`合格 | SCN-INT-RECOVERYHINT-009・011・013 | 委譲を定数へ戻せばrevert | pass |
+| `src/cli.ts` | M | package | src | delivery直前検査と再配送直前検査の2 call site。round 3でjournalとdelivery stateを独立に読む2 helperへ分離した | cli→domain・adapters | SCN-INT-RECOVERYHINT-005・010・012 | 同上 | pass |
+| `src/domain/workflow.ts` | M | package | src | 案内生成の単一所有者`stagingDigestRecoveryHint`を追加。round 3で候補ごとに単独実行できるcommandを並べる形へ直した。判定・受理集合・CLI終了値を1つも変更しない | domainは外向き依存を持たない | REQ-WF-024 / SCN-UNIT-RECOVERYHINT-001〜003・006〜008 | 関数削除でrevert | pass |
+| `test/features/integration/staging-digest-recovery-hint-cli.feature` | A | package | evidence | CLI経路6 scenario。3 call siteの合成経路と、terminal判定の2経路（journal・delivery state）を観測する | feature→steps | SCN-INT-RECOVERYHINT-005・009〜013 | file削除 | pass |
 | `test/features/unit/staging-digest-recovery-hint.feature` | A | package | evidence | unit 7 scenario。AC-WF-024の各条項へ1対1で対応する | feature→steps | SCN-UNIT-RECOVERYHINT-001〜004・006〜008 | file削除 | pass |
-| `test/steps/staging-digest-recovery-hint-cli.steps.ts` | A | package | evidence | 隔離stagingを作りCLI経路の診断文を実観測する。実repositoryのstagingを読まない | steps→src・filesystem | SCN-INT-RECOVERYHINT-005・009 | 隔離dirのみ書く | pass |
-| `test/steps/staging-digest-recovery-hint.steps.ts` | A | package | evidence | 案内文の字面と、案内した手順が実際に受理されることの両方を観測する | steps→src・filesystem | SCN-UNIT-RECOVERYHINT-001〜004・006〜008 | file削除 | pass |
+| `test/steps/staging-digest-recovery-hint-cli.steps.ts` | A | package | evidence | 隔離stagingを作りCLI経路の診断文を実観測する。実repositoryのstagingを読まない。round 3でterminal delivery stateとjournal読み取り失敗のfixtureを追加した | steps→src・filesystem | SCN-INT-RECOVERYHINT-005・009〜013 | 隔離dirのみ書く | pass |
+| `test/steps/staging-digest-recovery-hint.steps.ts` | A | package | evidence | 案内文の字面と、**案内が印字した完全なcommandを公開CLIへ渡した結果**の両方を観測する（round 3で後者へ差し替え） | steps→src・cli・filesystem | SCN-UNIT-RECOVERYHINT-001〜004・006〜008 | file削除 | pass |
+| `docs/reviews/221_課題1312staging-digest復旧手順案内レビュー.md` | A | package | evidence | 本review artifact自身。**round 3の是正commitがartifact commitの後へ来たため`比較基点..H_impl`へ入った** | artifact→H_implの一方向。自身のcommit SHAは書かない | AC-WF-024 | file削除でrevert | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: はい、**14件**（A 4・M 10）。`git diff --name-status`の17 pathのうち`dist/src/adapters/review-session.js`・`dist/src/cli.js`・`dist/src/domain/workflow.js`の3 pathを除外した。`scripts/check_file_audit.ts`の`isGeneratedDistributionPath`が生成物を個別監査の対象から外すためで、**表へ書くと`個別監査とGit差分path集合が一致しません`で落ちる。** 生成物は§8の配布物影響で`dist/src/`として1行で扱う。
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: はい、**15件**（A 5・M 10）。`git diff --name-status`の18 pathのうち`dist/src/adapters/review-session.js`・`dist/src/cli.js`・`dist/src/domain/workflow.js`の3 pathを除外した。`scripts/check_file_audit.ts`の`isGeneratedDistributionPath`が生成物を個別監査の対象から外すためで、**表へ書くと`個別監査とGit差分path集合が一致しません`で落ちる。** 生成物は§8の配布物影響で`dist/src/`として1行で扱う。
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: はい。案内文はstagingの相対pathとcommand名だけを含み、環境変数・token・絶対pathを出さない。`schemas/`・`policy/`・保護fileへの変更は0行で、proposal二段階を要さない。
-- 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: はい。round 2の修正は9 pathに限られ、上流の00要求定義は目的・scopeが変わらないため変更していない。
+- 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: はい。round 2の修正は**11 path**、round 3の修正は**12 path**に限られ、上流の00要求定義は目的・scopeが変わらないため両ラウンドとも変更していない。
 
 ## 2. 受け入れ条件の確認
 
@@ -105,9 +106,11 @@ providerとmodel設定はproject choiceとrouting evidenceの観測値を用い�
 | AC-WF-024（Step 10記録後は記録済みの上流Stepだけを名指しする） | SCN-UNIT-RECOVERYHINT-001、SCN-UNIT-RECOVERYHINT-008 | `src/domain/workflow.ts`の`stagingDigestRecoveryHint` | 2 scenario合格 | pass | 001は案内が`--reconfirm`と対象Step範囲を名指しすることを観測する。008はquickのStep集合（0,1,4,9,10,11）を与え、案内が記録済みの上流Stepだけを名指しし未記録の2,3,5,6,7,8を含まないことを観測する |
 | AC-WF-024（Step 10記録前は従来の案内を返す） | SCN-UNIT-RECOVERYHINT-002 | 同上 | 1 scenario合格 | pass | 案内が最新Stepの再記録を示し、上流再確定を名指ししないことを観測する。既存の診断契約SCN-UNIT-DIAGHINT-001・002が検査する字面を変えていない |
 | AC-WF-024（Step 11記録済みとterminal delivery stateでは上流再確定を名指しせず内容を戻す手順を返す） | SCN-UNIT-RECOVERYHINT-006、SCN-UNIT-RECOVERYHINT-007 | 同上 | 2 scenario合格 | pass | 006はjournalのStep 11 entry、007はdelivery stateの`merge-observed`を入力にする。**007はround 1のI-01で追加した。** `recordStep11`は`merge-observed`からしか遷移しないため、merge観測とStep 11記録の間に必ずこの窓が開き、journalのStep集合だけを見ると見落とす |
-| AC-WF-024（案内した手順がその状態で実際に受理されstaging digestが再固定される） | SCN-UNIT-RECOVERYHINT-003 | 同上・`workflow record --reconfirm` | 1 scenario合格 | pass | 隔離stagingでStep 10まで記録しstagingを編集したうえで、案内が名指しする上流Stepの再確定を実際に適用し、追記が受理されstaging digestが再固定されることを観測する。**申告ではなく実行結果を測る。** round 1のI-04で、それまでのSCN-003が02設計の定義した量と別の量を測っていたため差し替えた |
+| AC-WF-024（案内する各commandが単独で実行できる形である） | SCN-UNIT-RECOVERYHINT-001、SCN-UNIT-RECOVERYHINT-008、SCN-INT-RECOVERYHINT-005、SCN-INT-RECOVERYHINT-009 | `src/domain/workflow.ts` | 4 scenario合格 | pass | **round 3で追加した条項。** 案内文から`workflow record`で始まる断片を切り出し、1件ずつが`^workflow record --step=<数字> --reconfirm$`に一致することを検査する。候補を1つの`--step`値へ連結する変異はここで落ちる |
+| AC-WF-024（案内した手順を公開CLIへそのまま渡して受理されdigestが再固定される） | SCN-UNIT-RECOVERYHINT-003 | 同上・`main()`経由の`workflow record --reconfirm` | 1 scenario合格 | pass | 隔離stagingでStep 10まで記録しstagingを編集したうえで、**案内が印字した完全なcommandをargvへ組み立て`main()`へ渡して実行**し、終了値0と staging digestの再固定を観測する。**round 3で公開CLI経由へ差し替えた。** それ以前は最初の数値だけを抜き出しdomain APIを直接呼んでおり、CLIが拒否する値を案内していても受理に見えていた |
 | AC-WF-024（規範文書とStep skillの双方から到達できる） | SCN-UNIT-RECOVERYHINT-004 | `.agent-skill-chain/docs/01_開発ワークフロー.md`、`.agent-skill-chain/skills/step-10-review/SKILL.md` | 1 scenario合格 | pass | 両方に上流再確定の記述があることを観測し、あわせてSKILLが規則本文を複写していないことを3字面で検査する（round 1のI-10で1字面から拡張） |
 | AC-WF-024（3 call siteすべての診断に案内が届く） | SCN-INT-RECOVERYHINT-005、SCN-INT-RECOVERYHINT-009 | `src/cli.ts`、`src/adapters/review-session.ts` | 2 scenario合格 | pass | 005はCLI経路のdelivery直前検査、009はreview session更新前検査を実行し、返された診断に上流Step再確定の案内が含まれることを観測する。**判定関数を直接呼ばず合成経路を通す。** |
+| AC-WF-024（journalとdelivery stateの一方を読めなくても他方からterminal判定が保たれる） | SCN-INT-RECOVERYHINT-010、SCN-INT-RECOVERYHINT-011、SCN-INT-RECOVERYHINT-012、SCN-INT-RECOVERYHINT-013 | `src/cli.ts`、`src/adapters/review-session.ts` | 4 scenario合格 | pass | **round 3で追加した条項。** 010・011はdelivery stateをdirectoryにして読み取りを確定的に失敗させjournalのStep 11だけで終端案内へ倒れることを、012はjournalにStep 11を置かずdelivery stateだけがterminalな場合を、013はjournalを読めずdelivery stateがterminalな場合を観測する。2 call siteの両方を通す |
 
 ### 2.2 開発考慮事項の適用判定（必須）
 
@@ -157,9 +160,15 @@ providerとmodel設定はproject choiceとrouting evidenceの観測値を用い�
 | I-10 | Low | SKILL複写禁止の検査が「順序判定から除外」の1字面のみで、他の規則本文を複写しても検出しない | `test/steps/staging-digest-recovery-hint.steps.ts` | 検査の強度 | skill複写禁止の検査を3字面へ広げた | resolved | なし |
 | I-11 | Low | export削除によりmodule surfaceは縮小しており、変更履歴の「後方互換」の記載が厳密には過大 | `docs/specs/15_要件追跡/01_変更履歴.md` | 記録の正確性 | module surfaceが縮小した事実を記載へ加えた | resolved | なし |
 | M-SURVIVE | High | implementerの自作変異7件は「名指しした字面を落とす」ものに偏り、値の空洞化・条件の狭窄・走査回避を十分に作っていない。reviewerの自作変異9件中8件が生存し、うちC5・D2・D3は全1,918 scenarioでも生存した | round 1 reviewerの変異実行結果 | 検査の強度全体 | reviewerが生存させた8変異を再実行して全killを確認し、B1相当の狭窄変異2件を追加した。数量条項を具体値で縛り、3 call siteそれぞれの合成経路を観測する形にした | resolved | なし。**変異11件すべてkill・生存0**（round 2で実行しreview sessionへ記録） |
-| L-01 | Low | `docs/specs/15_要件追跡/01_変更履歴.md`の当該行のSCN列が`SCN-UNIT-RECOVERYHINT-001〜004、SCN-INT-RECOVERYHINT-005`のままで、round 2で追加したSCN-UNIT-RECOVERYHINT-006〜008とSCN-INT-RECOVERYHINT-009を含まない | round 2のcommit `0c063126`が`00_追跡表.md`は更新したが`01_変更履歴.md`は触れていない（`git show --stat`で確認） | 記録の可読性のみ。追跡の正本である`00_追跡表.md`は9 SCN全件を持ち`trace:check`も合格する | **是正しない。** `docs/specs/02_要件/04_仕様・品質管理要件.md` L59が個別列挙を要求するのは用語ID列だけで、**SCN列には網羅を要求する規則が無く**、隣接行（`SCN-UNIT-ADMIT-001〜006`、`SCN-UNIT-ISSUECOMMENT-001〜004`）も範囲記法を用いている。**適用される規則はすべて満たしているため個別判定はpassである。** 全件列挙は望ましいが要件ではないので、次にこのfileへ触れる変更で揃える | valid | 変更履歴の当該行だけを読むとSCNが5件に見える。追跡の正本は`00_追跡表.md`であり、そちらは9件全件で一致する |
+| L-01 | Low | **（round 3でresolved）** `docs/specs/15_要件追跡/01_変更履歴.md`の当該行のSCN列が`SCN-UNIT-RECOVERYHINT-001〜004、SCN-INT-RECOVERYHINT-005`のままで、round 2で追加したSCN-UNIT-RECOVERYHINT-006〜008とSCN-INT-RECOVERYHINT-009を含まない | round 2のcommit `0c063126`が`00_追跡表.md`は更新したが`01_変更履歴.md`は触れていない（`git show --stat`で確認） | 記録の可読性のみ。追跡の正本である`00_追跡表.md`は9 SCN全件を持ち`trace:check`も合格する | **是正しない。** `docs/specs/02_要件/04_仕様・品質管理要件.md` L59が個別列挙を要求するのは用語ID列だけで、**SCN列には網羅を要求する規則が無く**、隣接行（`SCN-UNIT-ADMIT-001〜006`、`SCN-UNIT-ISSUECOMMENT-001〜004`）も範囲記法を用いている。**適用される規則はすべて満たしているため個別判定はpassである。** 全件列挙は望ましいが要件ではないので、次にこのfileへ触れる変更で揃える | resolved | なし。**round 3で当該fileへ触れる必要が生じたため、SCN列を全13件の個別列挙へ直して解消した。** 前ラウンドで「次にこのfileへ触れる変更で揃える」と記録したとおりになった |
 
-指摘なしの場合は「指摘なし」と明記する。本ラウンドの未解決Critical/Highは0件である。
+| CR-01 | Major | 案内が複数候補を1つの`--step`値へ連結する。`workflow record --step=1または4または9 --reconfirm`は`workflowStepNumber`の`/^\d+$/`に一致せずCLIが必ず拒否する | 関数を実行して案内文を採取し、`src/cli.ts`の`workflowStepNumber`（L562-568）の受理形と突き合わせて確認した | `src/domain/workflow.ts`、3 call siteすべての診断 | 候補ごとに完全なcommandを並べる形へ直した。**本Issueが消そうとした欠陥そのものの再生産だった** | resolved | なし。変異M-A1がkillされる |
+| CR-02 | Minor | SCN-UNIT-RECOVERYHINT-003が`または`連結を前提にした正規表現で最初の数値だけを取り出し、公開CLIを通さず`appendWorkflowJournalEntry`を直接呼ぶ。**不正な案内でも受理に見える** | steps実装L136-139を読み、CR-01の案内でも合格することを確認した | AC-WF-024の中心条項の充足判定 | 案内が印字した完全なcommandをargvへ組み立て`main()`へ渡す形へ差し替えた | resolved | なし。CR-01の変異が本scenarioでkillされる |
+| CR-03 | Minor | `src/cli.ts`のcatchがjournalとdelivery stateを1つの`try`で囲むため、片方の読み取り失敗で他方の観測値を捨てる。terminal状態で必ず失敗する再記録操作を案内する | 変異M-B4を作成して再現。**是正前は検査が1件も無く、変異3件が生存していた** | `src/cli.ts`、`src/adapters/review-session.ts` | 2つの入力を独立に読むhelperへ分離し、失敗した入力だけを空値へ倒す。SCN-INT-RECOVERYHINT-010〜013を追加 | resolved | なし。変異M-B4・B5・B8・B9・B10がkillされる |
+| CR-04 | Minor | 個別監査表の「round 2の修正は9 path」が実際の件数と一致しない | `git show --name-only 0c063126`で実測。**実際は11件で、外部reviewerの主張した10件も誤り**（`.agent-skill-chain/docs/01_開発ワークフロー.md`を数え落としている） | 本artifactの記述のみ | 11件へ訂正した。指摘の指摘先は正しいが件数は採用しない | resolved | なし |
+| CR-05 | Minor | §1の証拠表が`verify:distribution`を実測済みと記録する一方、§7は本artifact commit後まで未実行と記載しており矛盾する | 本artifactのL48とL203を突き合わせて確認した | 本artifactの記述のみ | §1を「artifact commit後に実行する」へ揃え、実行結果は§7が単独で持つ形にした | resolved | なし |
+
+指摘なしの場合は「指摘なし」と明記する。**本ラウンドの未解決Critical/Highは0件である。** round 3は外部reviewerの5指摘を全件実測で検証し、うち4件を採用、1件（CR-04）は指摘先を採用し件数だけ訂正した。
 
 ## 6. ラウンド固有の確認
 
@@ -180,28 +189,29 @@ providerとmodel設定はproject choiceとrouting evidenceの観測値を用い�
 
 ### ラウンド3
 
-**実施していない。** round 2でblockingが空になり収束したため、ラウンド3の予算は消費していない。
+**PR #1402のpr-bound中に外部review（CodeRabbit）を取り込んだ復旧ラウンドである。** round 2で一度収束した後、PR作成によってCodeRabbitが起動し5指摘を返した。`workflow record --step=10 --post-pr-intake`で記録する。
 
-- 全指摘の最終分類: 該当なし（round 2で確定済み。valid 13件のうちresolved 12件、未解決はLowのL-01 1件のみ）。
-- 任意の危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: 該当なし。
-- 同じ範囲の予算を自動更新していない: はい。上限4に対して2ラウンドで収束し、予算の引き上げを行っていない。
-- AIによる最終裁定: 該当なし。
+- 全指摘の最終分類: 外部指摘5件すべてresolved（CR-01 Major、CR-02〜CR-05 Minor）。前ラウンドからの繰り越しL-01もresolved。**未解決のvalid findingは0件。**
+- **外部指摘を鵜呑みにせず全件を実測で検証した。** CR-01は関数を実行して案内文を採取し`workflowStepNumber`の受理形と突き合わせ、CR-03は変異を作って再現させた。**CR-04は指摘先は正しいが件数が誤っており**（外部reviewerは10件と述べたが実測11件）、訂正した数値を採用した。
+- 任意の危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: 該当なし。本ラウンドは検査の追加と案内文の形式是正だけで、権限・受理集合・CLI終了値を1つも変更していない。
+- 同じ範囲の予算を自動更新していない: はい。上限4に対して3ラウンド目であり、残り1ラウンド。予算の引き上げを行っていない。
+- AIによる最終裁定: 該当なし。未解決Critical/Highが0件のため裁定を要さない。
 
 ## 7. テスト結果
 
 - 実行したcommandの一覧: 本ラウンドで実際に実行し、結果を観測したものだけを挙げる。
-  - `npm test`（全layer）: **2,048 scenarios（2,032 passed・16 skipped）、10,745 steps（10,695 passed・50 skipped）、7分50秒、exit 0。** 失敗0件。
-  - `--name "RECOVERYHINT"`絞り込み: **9 scenarios（9 passed）、45 steps（45 passed）、0.25秒。** 本変更で追加した9 SCN（unit 7・integration 2）が全件合格する。
-  - `npm run project:quality`・`lint`・`format:check`・`typecheck`・`source:check`・`docs:format`・`test:format`・`architecture:check`: 全件合格。
-  - `npm run conformance:check`: **87 scenarios（87 passed）、468 steps、合格**（project rule 21件、orphan 0件、I1〜I12、実在source/export、成功SCN証拠、固定model slug 0件）。
+  - `npm test`（全layer）: **2,052 scenarios（2,036 passed・16 skipped）、10,765 steps（10,715 passed・50 skipped）、7分39秒、exit 0。** 失敗0件。round 2時点の2,048から、追加した4 scenarioぶん増えている。
+  - `--name "RECOVERYHINT"`絞り込み: **13 scenarios（13 passed）、65 steps。** 本変更の13 SCN（unit 7・integration 6）が全件合格する。
+  - `npm run build`後の`git status`: `dist/`に差分が残らないことを確認した。committed済みの生成物がcompile結果と一致する。
   - `npm run trace:check`: 合格。`orphanRequirements`・`orphanScenarios`・`orphanImplementations`いずれも0件。
-  - `npm run workflow:check`: 合格（steps 12・modes 3）。
-  - `npm run package:check`: 合格（実行・配布ファイル388件）。
-  - `npm run build`後の`git status`: `docs/reviews/`の本artifact以外に差分なし。**committed済みの`dist/`がcompile結果と一致する**ことを確認した（`asc-stale-dist-hides-regressions`の回帰防止）。
-- 全layerの合計: 2,048 scenarios中2,032合格・16 skip・**失敗0**。skip 16件はいずれも本変更の対象外で、比較基点`6159c468`時点と同数である。
-- runner・Gherkin方言: `@cucumber/cucumber`（`cucumber.mjs`のconfig）。方言は英語キーワード（`Feature`/`Scenario`/`Given`/`When`/`Then`）で、scenario名とstep本文は日本語。`npm run test:format`が全feature fileの書式を検査して合格する。
-- **`npm run audit:check`は本artifactをcommitした後に実行する。** 本fileが`H_final`として存在しない状態では監査対象が確定しないため、この時点では未実行である。`npm run verify:distribution`も同じ理由でartifact commit後に通す。
-- **変異試験はround 2で実行し、review sessionへ記録した（本ラウンドで再実行していない）。** 変異11件すべてkill・生存0。内訳は系統A削除2件、B分岐反転・狭窄4件、C走査回避3件、D合成経路2件。round 1ではreviewerの自作変異9件中8件が生存し、うちC5・D2・D3の3件は全1,918 scenarioでも生存した。その8件を再実行して全killを確認し、狭窄変異2件を追加したのがround 2の最終形である。
+  - round 2で実行済みの`project:quality`・`lint`・`format:check`・`typecheck`・`source:check`・`docs:format`・`test:format`・`architecture:check`・`conformance:check`・`package:check`は、**本artifact commit後に`verify:distribution`として通しで再実行する。**
+- 全layerの合計: 2,052 scenarios中2,036合格・16 skip・**失敗0**。skip 16件はいずれも本変更の対象外で、比較基点`6159c468`時点と同数である。
+- runner・Gherkin方言: `@cucumber/cucumber`（`cucumber.mjs`のconfig）。方言は英語キーワード（`Feature`/`Scenario`/`Given`/`When`/`Then`）で、scenario名とstep本文は日本語。`npm run test:format`が全feature fileの書式を検査する。
+- **`npm run audit:check`と`npm run verify:distribution`は本artifactをcommitした後に実行する。** 本fileが`H_final`として存在しない状態では監査対象が確定しない。**この2つはこの時点では未実行であり、§1の証拠表もそのように記載している。**
+- **変異試験12件すべてkill・生存0（round 3で実行）。**
+  - 系統A（案内文の形式・4件）: 候補を1つの`--step`へ連結、最初の候補だけ出す、`--reconfirm`を落とす、上流範囲を1〜11へ広げる。
+  - 系統B（合成経路と入力の独立性・8件）: 2つの読み取りを1つの`try`へ戻す（cli・review-sessionの2 call site）、terminal判定を常にfalse、`step11-recorded`を列挙から落とす（2 call site）、`steps.has(11)`を落とす、委譲を旧定数へ戻す（2 call site）。
+  - **round 3の開始時点では系統Bの3件が生存していた。** 是正コードに検査が1件も無かったためで、SCN-INT-RECOVERYHINT-010〜013の追加後に全件killへ変わった。**「変異を作って初めて、足したはずの是正が何にも守られていないと分かった」**のが本ラウンドの主要な学びである。
 
 ## 8. 配布物影響
 
@@ -254,17 +264,17 @@ projectがpackageとして配布される場合だけ記入する。配布境界
 - 更新した仕様: `docs/specs/02_要件/00_要件一覧.md`（REQ-WF-024行）、`docs/specs/02_要件/01_ワークフロー要件.md`（REQ-WF-024本文・AC-WF-024の新設と、REQ-WF-009からREQ-WF-024への委譲）、`docs/specs/01_システム概要/02_用語・略語.md`（TERM-ASC-119）、`docs/specs/15_要件追跡/00_追跡表.md`（unit行・integration行）、`docs/specs/15_要件追跡/01_変更履歴.md`（1行）。配布側は`.agent-skill-chain/docs/01_開発ワークフロー.md`と`.agent-skill-chain/skills/step-10-review/SKILL.md`。
 - ドメイン用語台帳の候補・確定・現在有効な定義が一方向に追跡できる: はい。TERM-ASC-119「上流再確定」を`active`・`v0.3.2`・廃止なしで登録し、成立例（Step 10後に`--reconfirm`でStep 1へ追記しdigestを再固定）と反例（Step 11記録後の同じ操作は拒否される）の両方を持つ。着手時の最大IDは118で、他branchのstagingを含めて119の採番が無いことを確認した。
 - 未定義語、同一コンテキスト内の重複定義、根拠なしの意味変更、表記揺れ、置換先なしの廃止がない: はい。TERM-ASC-119は禁止表現として「やり直し」「再実行」「Step 0からの再開」を明示し、規範文書・SKILL・実装docstring・診断文がすべて「上流再確定」で揃っている。`STAGING_DIGEST_RERECORD_HINT`は置換先（`stagingDigestRecoveryHint`）を持って削除した。
-- 要件・変更・SCN・テストの追跡: REQ-WF-024 → AC-WF-024 → 9 SCN（unit 7・integration 2）→ 2 feature file → 2 steps file → 実装3 fileと配布2 file。`npm run trace:check`が`orphanRequirements`・`orphanScenarios`・`orphanImplementations`すべて0件を報告する。
+- 要件・変更・SCN・テストの追跡: REQ-WF-024 → AC-WF-024 → 13 SCN（unit 7・integration 6）→ 2 feature file → 2 steps file → 実装3 fileと配布2 file。`npm run trace:check`が`orphanRequirements`・`orphanScenarios`・`orphanImplementations`すべて0件を報告する。
 - `no-spec-impact`の場合の限定的根拠: 該当しない。判定は`updated`である。
 - UI・トークンの判断: DC-TOKENSを`not-applicable`と判定した。描画層を持たずstylesheet・theme・componentへの変更が0行であるため。DC-UXは`applicable`として、CLI診断文を利用者が読む唯一の出口と位置づけ3状態それぞれに実行可能な次の1手を置いた。
-- 既知の未解決: §5のL-01。`docs/specs/15_要件追跡/01_変更履歴.md`のSCN列がround 2で追加した4 SCNを含まない。**SCN列に網羅を要求する規則は無く**（`04_仕様・品質管理要件.md` L59が個別列挙を課すのは用語ID列だけ）、隣接行も範囲記法を用いるため規則違反ではない。**追跡の正本は`00_追跡表.md`であり、そちらは9件全件で一致する。**
+- 既知の未解決: **なし。** 前ラウンドのL-01（変更履歴のSCN列の不足）はround 3で解消した。旧記載: `docs/specs/15_要件追跡/01_変更履歴.md`のSCN列がround 2で追加した4 SCNを含まない。**SCN列に網羅を要求する規則は無く**（`04_仕様・品質管理要件.md` L59が個別列挙を課すのは用語ID列だけ）、隣接行も範囲記法を用いるため規則違反ではない。**追跡の正本は`00_追跡表.md`であり、そちらは9件全件で一致する。**
 
 ## 11. 総合判定と再開地点
 
-- 未解決Critical/High: 0件。round 1のblocking 3件（I-01・I-02・I-04）とM-SURVIVEはすべてround 2でresolvedになり、round 2のblockingは空である。
-- Medium/Lowの記録: Medium 3件（I-03・I-05・I-06）はすべてresolved。Low 6件のうちI-07〜I-11の5件はresolved、L-01（変更履歴のSCN列が4件不足）はvalidのまま残す。SCN列に網羅を要求する規則が無いため個別監査はpassで、次にこのfileへ触れる変更で揃える。
+- 未解決Critical/High: 0件。round 1のblocking 3件（I-01・I-02・I-04）とM-SURVIVEはround 2で、外部指摘のCR-01（Major）はround 3でresolvedになった。
+- Medium/Lowの記録: Medium 3件（I-03・I-05・I-06）とLow 5件（I-07〜I-11）はround 2でresolved。外部指摘のMinor 4件（CR-02〜CR-05）とL-01はround 3でresolved。**validのまま残る指摘は0件。**
 - 判定: approved
 - 新しい権限が必要な事項: なし。保護fileへの変更が0行のためproposal二段階を要さない。branch protection・authority境界・merge権限のいずれも変更していない。
-- 残存リスク: L-01のみ。変更履歴の当該行だけを読むとSCNが5件に見える。実装・test・追跡表・配布物への影響は無い。
-- 次に許可される操作: 本artifactを`H_impl`の子として単独commitして`H_final`にする → `workflow record --step=10 --review-session-digest=c7fcfe0af9c2411af8b68c7c3575001b7268732399a3362938aff41b3da28f3d` → `npm run verify:distribution` → push → `pr create --issue=1312 --canonical-issue=1312 --head-sha=<H_final>`。**`pr create`の前に`mergeStateStatus`を確認し、`BEHIND`ならmergeで追随する（rebaseは使わない）。**
-- 次回の再開地点: PR作成後のPhase B。`review evidence`がPR number・Actions run ID・CI conclusionを実観測して記録する。CodeRabbitのreviewはDraft解除後に走るため、実装完了時点でreadyにしておく。
+- 残存リスク: なし。**ただし本ラウンドで、是正コードに検査が伴わない状態が実際に起きた**（CR-03の是正が変異3件に守られていなかった）。同型の再発は、是正を入れた直後に必ず変異を当てることでしか防げない。
+- 次に許可される操作: 本artifactを`H_impl`の子として単独commitして`H_final`にする → `workflow record --step=10 --post-pr-intake` → `npm run verify:distribution` → push（PR #1402は作成済みなので`pr create`は不要） → 外部reviewスレッド5件へ返信して解決。**merge・Issue終了・cleanupはそれぞれ別承認を待つ。**
+- 次回の再開地点: push後のCI再実行とCodeRabbitの再review。ラウンド予算は残り1で、**次に同型の外部指摘が来た場合は上限に達するため、機構ごと別Issueへ分離するかを先に判断する。**
