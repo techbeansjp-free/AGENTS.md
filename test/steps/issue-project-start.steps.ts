@@ -298,6 +298,14 @@ Given("Issue stagingではない入れ子directoryのfixtureがある", function
   fs.mkdirSync(this.staging);
 });
 
+Given("Issue stagingの祖先がsymlinkのfixtureがある", function () {
+  setup(this);
+  const chain = path.join(this.root, ".agent-skill-chain");
+  const realChain = path.join(this.root, ".agent-skill-chain-real");
+  fs.renameSync(chain, realChain);
+  fs.symlinkSync(realChain, chain, "dir");
+});
+
 Given("write直前の再観測でitemが出現するfixtureがある", function () {
   setup(this, { raceItemOnSecondInspect: true });
 });

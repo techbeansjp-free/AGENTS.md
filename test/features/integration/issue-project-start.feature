@@ -61,7 +61,7 @@ Feature: trusted GitHub Projectでcanonical Issueの着手を同期する
     When Issue着手を承認して実行する
     Then 非0終了してProject writeは0回である
 
-  Scenario: SCN-INT-GHPROJ-013 symlink祖先または非直下stagingを拒否する
+  Scenario: SCN-INT-GHPROJ-013 非直下stagingを拒否する
     Given Issue stagingではない入れ子directoryのfixtureがある
     When Issue着手を承認して実行する
     Then 非0終了してprovider callは0回である
@@ -70,3 +70,8 @@ Feature: trusted GitHub Projectでcanonical Issueの着手を同期する
     Given write直前の再観測でitemが出現するfixtureがある
     When Issue着手を承認して実行する
     Then 非0終了してProject writeは0回である
+
+  Scenario: SCN-INT-GHPROJ-015 symlink祖先stagingを拒否する
+    Given Issue stagingの祖先がsymlinkのfixtureがある
+    When Issue着手を承認して実行する
+    Then 非0終了してprovider callは0回である
