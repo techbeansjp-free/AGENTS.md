@@ -16,6 +16,7 @@ interface AdmissionWorld extends WorkflowWorld {
   documentText: string;
   sectionText: string;
   linkTarget: string;
+  restatements: Array<{ path: string; text: string }>;
 }
 
 const { Given, When, Then } = stepDefinitions<AdmissionWorld>();
@@ -205,4 +206,52 @@ Then("MVPと完了条件と対象外とタスク表と依存の5欄がある", f
       !columns.some((column) => column.includes(forbidden)),
       `進捗・担当・優先度は外部トラッカーが正本であり、タスク表の列にしない: ${forbidden}`,
     );
+});
+
+/**
+ * **単一正本は「複製が無いこと」だけでは守れない。** 規律を別の語で言い換えた下流が、
+ * 正本と食い違ったまま残る経路がある。実際にround 2で規範文書を「着手を決めた時点」へ
+ * 直した際、用語台帳・要件本文・template・変更履歴の4箇所が「着手をcommit」のまま
+ * 取り残され、独立reviewerも見逃した。外部reviewが検出するまで残った。
+ *
+ * **ここで禁じるのはGit commitを起票条件にする言い換えである。** 正本は
+ * 「Git commitの有無を指さない」と明記しており、下流がそれと矛盾してはならない。
+ */
+const RESTATEMENT_SOURCES = [
+  "docs/specs/01_システム概要/02_用語・略語.md",
+  "docs/specs/02_要件/01_ワークフロー要件.md",
+  ".agent-skill-chain/templates/planning/01_計画単位.md",
+];
+
+/** 起票条件をGit commitへ結び付ける言い換え。正本の否定と直接矛盾する */
+const COMMIT_CONDITIONED = /着手(を|の)?(commit|コミット)/u;
+
+Given("規律を言い換える配布物と仕様がある", function () {
+  this.restatements = RESTATEMENT_SOURCES.map((relative) => ({
+    path: relative,
+    text: read(relative),
+  }));
+  assert.equal(
+    this.restatements.length,
+    RESTATEMENT_SOURCES.length,
+    "言い換えの走査対象を読み取れません",
+  );
+});
+
+When("起票条件の言い換えを読み取る", function () {
+  assert.ok(
+    this.restatements.every(({ text }) => text.includes("起票")),
+    "走査対象が起票時点に言及していません。対象選定が誤っています",
+  );
+});
+
+Then("Git commitを起票条件にした記述が1件もない", function () {
+  const violations = this.restatements
+    .filter(({ text }) => COMMIT_CONDITIONED.test(text))
+    .map(({ path: relative }) => relative);
+  assert.deepEqual(
+    violations,
+    [],
+    `起票条件をGit commitへ結び付けた言い換えが残っています: ${violations.join(", ")}`,
+  );
 });
