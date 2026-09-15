@@ -16,6 +16,10 @@ interface ProviderState {
   duplicateItem: boolean;
   incompleteItems: boolean;
   failStatus: boolean;
+  projectWritable: boolean;
+  providerTip: string;
+  inspectCount: number;
+  raceItemOnSecondInspect: boolean;
   calls: string[];
 }
 
@@ -63,8 +67,11 @@ const state=JSON.parse(fs.readFileSync(stateFile,'utf8'));
 const save=()=>fs.writeFileSync(stateFile,JSON.stringify(state));
 if(args[0]==='auth'){process.exit(0)}
 if(args[0]==='repo'){
-  process.stdout.write(JSON.stringify({nameWithOwner:'example/repository',viewerPermission:'ADMIN'}));
+  process.stdout.write(JSON.stringify({nameWithOwner:'example/repository',viewerPermission:'ADMIN',defaultBranchRef:{name:'main'}}));
   process.exit(0);
+}
+if(args[0]==='api'&&String(args[1]).startsWith('repos/example/repository/commits/')){
+  process.stdout.write(state.providerTip+'\\n'); process.exit(0);
 }
 if(args[0]!=='api'||args[1]!=='graphql'){process.exit(2)}
 const query=(args.find(value=>value.startsWith('query='))||'').slice(6);
@@ -78,7 +85,9 @@ if(query.includes('updateProjectV2ItemFieldValue')){
   state.status=true; save();
   process.stdout.write(JSON.stringify({data:{updateProjectV2ItemFieldValue:{projectV2Item:{id:'ITEM'}}}})); process.exit(0);
 }
-state.calls.push('inspect'); save();
+state.calls.push('inspect'); state.inspectCount++;
+if(state.raceItemOnSecondInspect&&state.inspectCount===2) state.item=true;
+save();
 const options=state.duplicateOption
   ? [{id:'STARTED',name:'In progress'},{id:'STARTED2',name:'In progress'}]
   : [{id:'STARTED',name:'In progress'}];
@@ -91,7 +100,7 @@ if(state.duplicateItem) nodes.push({
   fieldValueByName:{optionId:'BACKLOG',name:'Backlog'}
 });
 process.stdout.write(JSON.stringify({data:{
-  organization:{projectV2:{id:'PROJECT',number:8,field:{id:'STATUS',name:'Status',options}}},
+  organization:{projectV2:{id:'PROJECT',number:8,viewerCanUpdate:state.projectWritable,field:{id:'STATUS',name:'Status',options}}},
   repository:{nameWithOwner:'example/repository',issue:{id:'ISSUE',number:1404,repository:{nameWithOwner:'example/repository'},projectItems:{nodes,pageInfo:{hasNextPage:state.incompleteItems}}}}
 }}));
 `;
@@ -174,6 +183,15 @@ function setup(
       duplicateItem: options.duplicateItem ?? false,
       incompleteItems: options.incompleteItems ?? false,
       failStatus: options.failStatus ?? false,
+      projectWritable: options.projectWritable ?? true,
+      providerTip:
+        options.providerTip ??
+        spawnSync("git", ["rev-parse", "HEAD"], {
+          cwd: world.root,
+          encoding: "utf8",
+        }).stdout.trim(),
+      inspectCount: 0,
+      raceItemOnSecondInspect: options.raceItemOnSecondInspect ?? false,
       calls: [],
     } satisfies ProviderState),
   );
@@ -261,6 +279,27 @@ Given("trusted Issue Project設定が不正なfixtureがある", function () {
 
 Given("trusted Issue Projectのitemが重複したfixtureがある", function () {
   setup(this, { item: true, duplicateItem: true });
+});
+
+Given(
+  "provider default tipがlocal trusted commitと不一致のfixtureがある",
+  function () {
+    setup(this, { providerTip: "b".repeat(40) });
+  },
+);
+
+Given("trusted Issue Projectのwrite authorityがないfixtureがある", function () {
+  setup(this, { projectWritable: false });
+});
+
+Given("Issue stagingではない入れ子directoryのfixtureがある", function () {
+  setup(this);
+  this.staging = path.join(this.staging, "nested");
+  fs.mkdirSync(this.staging);
+});
+
+Given("write直前の再観測でitemが出現するfixtureがある", function () {
+  setup(this, { raceItemOnSecondInspect: true });
 });
 
 When("Issue着手を承認して実行する", function () {

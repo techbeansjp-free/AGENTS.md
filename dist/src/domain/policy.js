@@ -1109,7 +1109,7 @@ export function loadEffectiveTrustedPolicySet(root, defaultBranch) {
     return loadEffectiveTrustedPolicySetAtCommit(root, resolved.stdout.trim());
 }
 /** Assemble floor and project extension exclusively from an already resolved commit. */
-function loadEffectiveTrustedPolicySetAtCommit(root, ref) {
+export function loadEffectiveTrustedPolicySetAtCommit(root, ref) {
     const packageFloorFile = path.join(packageRoot, ".agent-skill-chain", "policy", "default.json");
     const packageFloor = requirePolicy(parseJsonStrict(fs.readFileSync(packageFloorFile, "utf8"), "package default safety floor"), "package default safety floor");
     const trustedFloor = git(["show", `${ref}:.agent-skill-chain/policy/default.json`], root, { allowFailure: true });

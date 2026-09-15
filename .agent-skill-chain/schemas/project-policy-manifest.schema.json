@@ -34,16 +34,16 @@
           "properties": {
             "owner": {
               "type": "string",
-              "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}]+$"
+              "pattern": "^(?=\\S(?:.*\\S)?$)[^\\p{Cc}\\p{Cf}]+$"
             },
             "number": { "type": "integer", "minimum": 1 },
             "statusField": {
               "type": "string",
-              "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}]+$"
+              "pattern": "^(?=\\S(?:.*\\S)?$)[^\\p{Cc}\\p{Cf}]+$"
             },
             "startedStatus": {
               "type": "string",
-              "pattern": "^(?=.*\\S)[^\\p{Cc}\\p{Cf}]+$"
+              "pattern": "^(?=\\S(?:.*\\S)?$)[^\\p{Cc}\\p{Cf}]+$"
             }
           }
         },

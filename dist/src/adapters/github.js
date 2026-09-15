@@ -26,7 +26,7 @@ function mergeMethodFlag(method) {
     throw new Error(`merge方式を解決できません: ${method}。merge、rebase、squashのいずれかを指定してください`);
 }
 const ISSUE_PROJECT_QUERY = `query($owner:String!,$projectNumber:Int!,$repoOwner:String!,$repoName:String!,$issueNumber:Int!,$statusField:String!){
-  organization(login:$owner){projectV2(number:$projectNumber){id number field(name:$statusField){... on ProjectV2SingleSelectField{id name options{id name}}}}}
+  organization(login:$owner){projectV2(number:$projectNumber){id number viewerCanUpdate field(name:$statusField){... on ProjectV2SingleSelectField{id name options{id name}}}}}
   repository(owner:$repoOwner,name:$repoName){nameWithOwner issue(number:$issueNumber){id number repository{nameWithOwner} projectItems(first:100){nodes{id project{id} fieldValueByName(name:$statusField){... on ProjectV2ItemFieldSingleSelectValue{optionId name}}} pageInfo{hasNextPage}}}}
 }`;
 function projectGraphql(query, variables, cwd) {
@@ -67,6 +67,7 @@ export function inspectIssueProject(input, cwd) {
     const project = organization.projectV2;
     if (typeof project.id !== "string" ||
         project.number !== input.connection.number ||
+        typeof project.viewerCanUpdate !== "boolean" ||
         !isRecord(project.field) ||
         typeof project.field.id !== "string" ||
         project.field.name !== input.connection.statusField ||
@@ -115,6 +116,7 @@ export function inspectIssueProject(input, cwd) {
         projectNumber: input.connection.number,
         statusFieldId: project.field.id,
         startedOptionId: options[0].id,
+        viewerCanUpdate: project.viewerCanUpdate,
         items,
         complete: repository.issue.projectItems.pageInfo.hasNextPage === false,
     };

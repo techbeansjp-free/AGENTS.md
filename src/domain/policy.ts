@@ -1666,7 +1666,10 @@ export function loadEffectiveTrustedPolicySet(
 }
 
 /** Assemble floor and project extension exclusively from an already resolved commit. */
-function loadEffectiveTrustedPolicySetAtCommit(root: string, ref: string) {
+export function loadEffectiveTrustedPolicySetAtCommit(
+  root: string,
+  ref: string,
+) {
   const packageFloorFile = path.join(
     packageRoot,
     ".agent-skill-chain",

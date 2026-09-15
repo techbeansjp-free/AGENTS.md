@@ -91,6 +91,7 @@ import {
   loadConsumerPolicyAtCommit,
   conformanceDeclarationFromPolicySet,
   loadEffectiveTrustedPolicySet,
+  loadEffectiveTrustedPolicySetAtCommit,
   choicesFragmentSource,
   ruleFragmentSources,
   loadOperationPolicy,
@@ -6291,13 +6292,12 @@ export async function main(
     );
     const repository = required(flags, "repo");
     const issue = Number(issueRaw);
-    const staging = path.resolve(required(flags, "staging-path"));
-    const relativeStaging = path.relative(root, staging);
+    const staging = assertWorkflowStaging(
+      path.resolve(required(flags, "staging-path")),
+    );
     if (
-      relativeStaging.startsWith("..") ||
-      path.isAbsolute(relativeStaging) ||
-      !relativeStaging.startsWith(".agent-skill-chain/tmp/issues/") ||
-      fs.lstatSync(staging).isSymbolicLink()
+      path.dirname(staging) !==
+      path.join(root, ".agent-skill-chain", "tmp", "issues")
     )
       throw new Error(
         "stagingは対象rootのIssue staging直下でなければなりません",
@@ -6312,9 +6312,9 @@ export async function main(
         "sync-verifiedなstagingとrepository/Issue identityが一致しません",
       );
     const base = defaultBranch(root);
-    const trustedPolicy = loadEffectiveTrustedPolicySet(root, base).policy;
-    const connection = trustedPolicy.issueProject;
-    if (!connection) {
+    const locallyConfigured = loadEffectiveTrustedPolicySet(root, base).policy
+      .issueProject;
+    if (!locallyConfigured) {
       print({
         state: "not-configured",
         repository,
@@ -6323,6 +6323,32 @@ export async function main(
         next: "trusted default branchのproject policyへissueProjectを設定してください",
       });
       return 0;
+    }
+    const observeAuthority = () => {
+      const authority = github("repository.authority", { repository }, root);
+      const localTrustedCommit = git(
+        ["rev-parse", "--verify", `origin/${base}^{commit}`],
+        root,
+      ).stdout.trim();
+      if (
+        authority.repository !== repository ||
+        authority.defaultBranch !== base ||
+        authority.defaultBranchTipOid.toLowerCase() !==
+          localTrustedCommit.toLowerCase()
+      )
+        throw new Error(
+          "provider default branch tipとlocal trusted policy commitが一致しません",
+        );
+      return { authority, localTrustedCommit };
+    };
+    const initialAuthority = observeAuthority();
+    const trustedPolicy = loadEffectiveTrustedPolicySetAtCommit(
+      root,
+      initialAuthority.localTrustedCommit,
+    ).policy;
+    const connection = trustedPolicy.issueProject;
+    if (!connection) {
+      throw new Error("provider tipのtrusted policyにissueProjectがありません");
     }
     let observation = inspectIssueProject(
       { repository, issue, connection },
@@ -6353,6 +6379,23 @@ export async function main(
     if (plan.state === "rejected") throw new Error(plan.reason);
     const operations: string[] = [];
     if (plan.state === "pending" && plan.operations[0] === "add-item") {
+      const currentAuthority = observeAuthority();
+      if (
+        currentAuthority.authority.defaultBranchTipOid !==
+        initialAuthority.authority.defaultBranchTipOid
+      )
+        throw new Error(
+          "Issue着手中にprovider default branch tipが変化しました",
+        );
+      observation = inspectIssueProject(
+        { repository, issue, connection },
+        root,
+      );
+      plan = planIssueStart(observation);
+      if (plan.state !== "pending" || plan.operations[0] !== "add-item")
+        throw new Error(
+          "Issue着手の直前状態が変化しました。再previewしてください",
+        );
       try {
         addIssueProjectItem(
           {
@@ -6390,6 +6433,29 @@ export async function main(
       plan.operations[0] === "set-status" &&
       "itemId" in plan
     ) {
+      const expectedItemId = plan.itemId;
+      const currentAuthority = observeAuthority();
+      if (
+        currentAuthority.authority.defaultBranchTipOid !==
+        initialAuthority.authority.defaultBranchTipOid
+      )
+        throw new Error(
+          "Issue着手中にprovider default branch tipが変化しました",
+        );
+      observation = inspectIssueProject(
+        { repository, issue, connection },
+        root,
+      );
+      plan = planIssueStart(observation);
+      if (
+        plan.state !== "pending" ||
+        plan.operations[0] !== "set-status" ||
+        !("itemId" in plan) ||
+        plan.itemId !== expectedItemId
+      )
+        throw new Error(
+          "Issue着手の直前状態が変化しました。再previewしてください",
+        );
       try {
         updateIssueProjectStatus(
           {

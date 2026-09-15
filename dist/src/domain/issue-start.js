@@ -1,4 +1,10 @@
 export function planIssueStart(observation) {
+    if (!observation.viewerCanUpdate)
+        return {
+            state: "rejected",
+            reason: "GitHub Projectのwrite authorityを確認できません",
+            operations: [],
+        };
     if (!observation.complete)
         return {
             state: "rejected",

@@ -50,3 +50,23 @@ Feature: trusted GitHub Projectでcanonical Issueの着手を同期する
     Given trusted Issue Projectのitemが重複したfixtureがある
     When Issue着手を承認して実行する
     Then 非0終了してProject writeは0回である
+
+  Scenario: SCN-INT-GHPROJ-011 provider default tipとlocal trusted commitが違えばwriteしない
+    Given provider default tipがlocal trusted commitと不一致のfixtureがある
+    When Issue着手を承認して実行する
+    Then 非0終了してProject writeは0回である
+
+  Scenario: SCN-INT-GHPROJ-012 Project write authorityがなければwriteしない
+    Given trusted Issue Projectのwrite authorityがないfixtureがある
+    When Issue着手を承認して実行する
+    Then 非0終了してProject writeは0回である
+
+  Scenario: SCN-INT-GHPROJ-013 symlink祖先または非直下stagingを拒否する
+    Given Issue stagingではない入れ子directoryのfixtureがある
+    When Issue着手を承認して実行する
+    Then 非0終了してprovider callは0回である
+
+  Scenario: SCN-INT-GHPROJ-014 inspect後にitemが出現したらwriteしない
+    Given write直前の再観測でitemが出現するfixtureがある
+    When Issue着手を承認して実行する
+    Then 非0終了してProject writeは0回である

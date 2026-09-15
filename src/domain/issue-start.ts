@@ -19,6 +19,7 @@ export interface IssueProjectObservation {
   projectNumber: number;
   statusFieldId: string;
   startedOptionId: string;
+  viewerCanUpdate: boolean;
   items: IssueProjectItem[];
   complete: boolean;
 }
@@ -32,6 +33,12 @@ export type IssueStartPlan =
 export function planIssueStart(
   observation: IssueProjectObservation,
 ): IssueStartPlan {
+  if (!observation.viewerCanUpdate)
+    return {
+      state: "rejected",
+      reason: "GitHub Projectのwrite authorityを確認できません",
+      operations: [],
+    };
   if (!observation.complete)
     return {
       state: "rejected",
