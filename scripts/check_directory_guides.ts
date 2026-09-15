@@ -35,6 +35,10 @@ const ENTRY_DOCUMENTS = new Map([
     ".agent-skill-chain/templates/common/02_利用案内.md",
   ],
   [
+    ".agent-skill-chain/templates/planning",
+    ".agent-skill-chain/templates/planning/00_利用案内.md",
+  ],
+  [
     ".agent-skill-chain/templates/issue",
     ".agent-skill-chain/templates/issue/12_利用案内.md",
   ],
