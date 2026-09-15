@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { assertWorkflowReadyForDelivery } from "../../src/cli.js";
+import { assertStoredStagingDigestForTest } from "../../src/adapters/review-session.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
 import { STEP_JOURNAL_FILE } from "../../src/domain/workflow.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
@@ -105,5 +106,25 @@ Then("返された診断に上流Step再確定の案内が含まれる", functio
     /--reconfirm/u,
     "案内がCLI経路を通って届いていません。call siteが委譲していない可能性があります",
   );
-  assert.match(this.diagnostic, /1〜9/u);
+  /**
+   * **範囲表記ではなく記録済みの具体Stepを名指しすることまで縛る。** 部分一致だと
+   * 未記録のStepを含む案内も通り、利用者が選んだ時点で拒否される。
+   */
+  const named = /--step=([0-9]+(?:または[0-9]+)*)/u.exec(this.diagnostic);
+  assert.ok(named, `診断が対象Stepを名指ししていません: ${this.diagnostic}`);
+  assert.deepEqual(named[1].split("または").map(Number), [1, 4, 9]);
+});
+
+/**
+ * **3 call siteのうちreview session更新前検査は別のadapterにある。**
+ * delivery側だけを検査すると、この経路の委譲を旧案内へ戻す変異が生存する
+ * （round 1のI-05・変異D3）。経路ごとに合成を観測する。
+ */
+When("review session更新前検査を実行する", function () {
+  this.diagnostic = "";
+  try {
+    assertStoredStagingDigestForTest(this.staging);
+  } catch (error) {
+    this.diagnostic = error instanceof Error ? error.message : String(error);
+  }
 });

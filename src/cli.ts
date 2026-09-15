@@ -623,6 +623,25 @@ function workflowDiagnostic(
   };
 }
 
+/**
+ * staging digest不一致の案内を、journalとdelivery stateの両方から決める。
+ *
+ * **journalを読めない場合に判定を止めない。** `assertWorkflowStaging`や
+ * `assertRegularJournalPath`が投げると、digest不一致という本来の診断が
+ * 別の診断へ置き換わる。案内の生成は診断の付随であって判定ではない。
+ */
+function stagingRecoveryHint(staging: string): string {
+  try {
+    const state = readStoredDeliveryState(staging)?.state;
+    return stagingDigestRecoveryHint(
+      readWorkflowJournal(staging).entries.map((entry) => entry.step),
+      state === "merge-observed" || state === "step11-recorded",
+    );
+  } catch {
+    return stagingDigestRecoveryHint([]);
+  }
+}
+
 export function assertWorkflowReadyForDelivery(
   staging: string,
 ): ReturnType<typeof inspectWorkflowStaging> {
@@ -634,7 +653,7 @@ export function assertWorkflowReadyForDelivery(
     stored.digest !== currentDigest
   )
     throw new Error(
-      `delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${stagingDigestRecoveryHint(readWorkflowJournal(staging).entries.map((entry) => entry.step))}`,
+      `delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${stagingRecoveryHint(staging)}`,
     );
   const inspection = inspectWorkflowStaging(staging, 10);
   if (
@@ -669,7 +688,7 @@ function assertWorkflowReadyForTerminalRedelivery(
     stored.digest !== currentDigest
   )
     throw new Error(
-      `再配送直前のstaging成果物またはcontent digestが記録から変化しています${stagingDigestRecoveryHint(readWorkflowJournal(staging).entries.map((entry) => entry.step))}`,
+      `再配送直前のstaging成果物またはcontent digestが記録から変化しています${stagingRecoveryHint(staging)}`,
     );
   const inspection = inspectWorkflowStaging(staging, 11);
   if (

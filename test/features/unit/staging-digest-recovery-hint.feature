@@ -11,10 +11,25 @@ Feature: staging digest不一致の復旧案内
     When staging digest不一致の案内を生成する
     Then 案内が最新Stepの再記録を示し上流再確定を名指ししない
 
-  Scenario: SCN-UNIT-RECOVERYHINT-003 Step 11記録後は上流再確定を案内しない
+  Scenario: SCN-UNIT-RECOVERYHINT-003 案内した手順がその状態で実際に受理される
+    Given Step 10まで記録しstagingを編集した隔離stagingがある
+    When 案内が名指しする上流Stepの再確定を適用する
+    Then 追記が受理されstaging digestが再固定される
+
+  Scenario: SCN-UNIT-RECOVERYHINT-006 Step 11記録後は上流再確定を案内しない
     Given Step 11まで記録したjournalの記録状態がある
     When staging digest不一致の案内を生成する
-    Then 案内が上流再確定を名指しせずstagingを編集しないことを示す
+    Then 案内が上流再確定を名指しせず内容を戻す手順を示す
+
+  Scenario: SCN-UNIT-RECOVERYHINT-007 terminal delivery stateでは上流再確定を案内しない
+    Given Step 10まで記録しdelivery stateがterminalな記録状態がある
+    When staging digest不一致の案内を生成する
+    Then 案内が上流再確定を名指しせず内容を戻す手順を示す
+
+  Scenario: SCN-UNIT-RECOVERYHINT-008 案内が記録済みの上流Stepだけを名指しする
+    Given Step 10まで記録しquickのStep集合を持つ記録状態がある
+    When staging digest不一致の案内を生成する
+    Then 案内が記録済みの上流Stepだけを名指しし未記録のStepを含まない
 
   Scenario: SCN-UNIT-RECOVERYHINT-004 規範文書とStep skillから到達できる
     Given 配布される規範文書とStep 10のskill契約がある

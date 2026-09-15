@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { stagingDigestRecoveryHint } from "../../src/domain/workflow.js";
+import {
+  STEP_JOURNAL_FILE,
+  stagingDigestRecoveryHint,
+} from "../../src/domain/workflow.js";
+import { createIssueStaging } from "../../src/domain/issue.js";
+import { appendWorkflowJournalEntry } from "../../src/adapters/workflow-journal.js";
+import { readStoredStagingRecord } from "../../src/domain/staging.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
 /**
@@ -14,8 +20,13 @@ import { WorkflowWorld, stepDefinitions } from "../support/world.js";
  */
 interface HintWorld extends WorkflowWorld {
   recordedSteps: number[];
+  terminalDelivery: boolean;
   hint: string;
   documents: Array<{ path: string; text: string }>;
+  staging: string;
+  digestBefore: string;
+  digestAfter: string;
+  accepted: boolean;
 }
 
 const { Given, When, Then } = stepDefinitions<HintWorld>();
@@ -37,6 +48,70 @@ Given("Step 10を記録していないjournalの記録状態がある", function
 
 Given("Step 11まで記録したjournalの記録状態がある", function () {
   this.recordedSteps = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  this.terminalDelivery = false;
+});
+
+Given("Step 10まで記録しdelivery stateがterminalな記録状態がある", function () {
+  /**
+   * **journalにStep 11 entryが無くてもterminalになりうる。** merge観測と
+   * Step 11記録の間に必ずこの窓が開く。journalのStep集合だけを見ると見落とす。
+   */
+  this.recordedSteps = [0, 1, 4, 9, 10];
+  this.terminalDelivery = true;
+});
+
+Given("Step 10まで記録しquickのStep集合を持つ記録状態がある", function () {
+  /** quickは0,1,4,9,10,11しか持たない。2,3,5〜8は先行通常entryが無く拒否される */
+  this.recordedSteps = [0, 1, 4, 9, 10];
+  this.terminalDelivery = false;
+});
+
+Given("Step 10まで記録しstagingを編集した隔離stagingがある", function () {
+  const root = this.initRepo();
+  this.staging = createIssueStaging(root, {
+    title: "recovery-hint-accept",
+    answers: Object.fromEntries(
+      Array.from({ length: 8 }, (_, index) => [
+        `Q-0${index + 1}`,
+        { answer: true as const, evidence: "対象外である根拠を確認した" },
+      ]),
+    ) as never,
+    now: new Date("2026-09-15T00:00:00.000Z"),
+    requestedMode: "quick",
+  }).path;
+  const sha = "a".repeat(40);
+  for (const [step, skillId] of [
+    [1, "step-01-request"],
+    [4, "step-04-issue-sync"],
+    [9, "step-09-implement"],
+    [10, "step-10-review"],
+  ] as Array<[number, string]>)
+    fs.appendFileSync(
+      path.join(this.staging, STEP_JOURNAL_FILE),
+      `${JSON.stringify({
+        step,
+        skillId,
+        mode: "quick",
+        recordedAt: "2026-09-15T00:00:00.000Z",
+        artifacts: ["00_要求定義.md"],
+        evidence: "fixtureが記録した",
+        ...(step === 10
+          ? {
+              reviewSession: {
+                sessionId: "b".repeat(64),
+                roundDigest: "c".repeat(64),
+                headSha: sha,
+              },
+            }
+          : {}),
+        ...(step === 9 ? { implementationHeadSha: sha } : {}),
+      })}\n`,
+    );
+  fs.appendFileSync(
+    path.join(this.staging, "00_要求定義.md"),
+    "\n是正のため追記した\n",
+  );
+  this.digestBefore = readStoredStagingRecord(this.staging).digest;
 });
 
 Given("配布される規範文書とStep 10のskill契約がある", function () {
@@ -47,7 +122,36 @@ Given("配布される規範文書とStep 10のskill契約がある", function (
 });
 
 When("staging digest不一致の案内を生成する", function () {
-  this.hint = stagingDigestRecoveryHint(this.recordedSteps);
+  this.hint = stagingDigestRecoveryHint(
+    this.recordedSteps,
+    this.terminalDelivery,
+  );
+});
+
+When("案内が名指しする上流Stepの再確定を適用する", function () {
+  /**
+   * **案内から対象Stepを読み取って実行する。** 固定値で実行すると、案内が
+   * 別のStepを名指しするよう変異しても検出できない。
+   */
+  const hint = stagingDigestRecoveryHint([0, 1, 4, 9, 10], false);
+  const named = /--step=([0-9]+(?:または[0-9]+)*)/u.exec(hint);
+  assert.ok(named, `案内が対象Stepを名指ししていません: ${hint}`);
+  const step = Number(named[1].split("または")[0]);
+  this.accepted = false;
+  appendWorkflowJournalEntry({
+    staging: this.staging,
+    entry: {
+      step,
+      skillId: "step-01-request",
+      mode: "quick",
+      recordedAt: "2026-09-15T01:00:00.000Z",
+      artifacts: ["00_要求定義.md"],
+      evidence: "案内どおり上流Stepを再確定した",
+      reconfirmation: true,
+    } as never,
+  });
+  this.accepted = true;
+  this.digestAfter = readStoredStagingRecord(this.staging).digest;
 });
 
 When("上流再確定の記述を読み取る", function () {
@@ -56,9 +160,20 @@ When("上流再確定の記述を読み取る", function () {
 
 Then("案内が上流Step再確定と対象Step範囲を名指しする", function () {
   assert.match(this.hint, /--reconfirm/u);
-  /** 対象Step範囲まで名指しする。`--reconfirm`だけでは利用者がStepを選べない */
-  assert.match(this.hint, /1〜9/u);
   assert.match(this.hint, /workflow record/u);
+  /**
+   * **対象Stepを具体値で名指しする。** 範囲表記だけでは、modeによって
+   * 存在しないStepまで含んでしまう。記録済みの上流Stepだけが選べる。
+   */
+  const named = /--step=([0-9]+(?:または[0-9]+)*)/u.exec(this.hint);
+  assert.ok(named, `案内が対象Stepを名指ししていません: ${this.hint}`);
+  assert.deepEqual(
+    named[1].split("または").map(Number),
+    [1, 2, 3, 4, 5, 6, 7, 8, 9],
+  );
+  /** 上流Stepを再確定しdigestを再固定するという行動まで示す */
+  assert.match(this.hint, /上流Stepを再確定/u);
+  assert.match(this.hint, /digestを再固定/u);
 });
 
 Then("案内が最新Stepの再記録を示し上流再確定を名指ししない", function () {
@@ -70,15 +185,50 @@ Then("案内が最新Stepの再記録を示し上流再確定を名指ししな�
   );
 });
 
-Then("案内が上流再確定を名指しせずstagingを編集しないことを示す", function () {
+Then("追記が受理されstaging digestが再固定される", function () {
+  assert.equal(this.accepted, true, "案内どおりの再確定が受理されませんでした");
+  assert.notEqual(
+    this.digestAfter,
+    this.digestBefore,
+    "staging digestが再固定されていません",
+  );
+  /** 再固定後も是正した内容が残る。案内が目的を達したことの観測 */
+  assert.ok(
+    fs
+      .readFileSync(path.join(this.staging, "00_要求定義.md"), "utf8")
+      .includes("是正のため追記した"),
+    "是正した内容が残っていません",
+  );
+});
+
+Then("案内が上流再確定を名指しせず内容を戻す手順を示す", function () {
   assert.doesNotMatch(
     this.hint,
     /--reconfirm/u,
-    "Step 11記録後は上流再確定を置けないため、案内しても必ず失敗する",
+    "上流再確定を置けない状態で案内すると、必ず失敗する手順を示すことになる",
   );
-  assert.match(this.hint, /Step 11記録後/u);
-  assert.match(this.hint, /編集せず/u);
+  /** 行動可能な次の1手を持つ。「編集しない」は既に編集した後では行動にならない */
+  assert.match(this.hint, /編集前の内容へ戻す/u);
 });
+
+Then(
+  "案内が記録済みの上流Stepだけを名指しし未記録のStepを含まない",
+  function () {
+    const named = /--step=([0-9]+(?:または[0-9]+)*)/u.exec(this.hint);
+    assert.ok(named, `案内が対象Stepを名指ししていません: ${this.hint}`);
+    const cited = named[1].split("または").map(Number);
+    assert.deepEqual(
+      cited,
+      [1, 4, 9],
+      "記録済みの上流Stepだけを名指ししていません",
+    );
+    for (const absent of [2, 3, 5, 6, 7, 8])
+      assert.ok(
+        !cited.includes(absent),
+        `未記録のStepを名指ししています: ${absent}`,
+      );
+  },
+);
 
 Then("両方に上流再確定の記述がある", function () {
   for (const { path: relative, text } of this.documents) {
@@ -99,9 +249,18 @@ Then("両方に上流再確定の記述がある", function () {
    */
   const [workflow, skill] = this.documents;
   assert.match(workflow.text, /順序判定から除外/u);
-  assert.doesNotMatch(
-    skill.text,
+  /**
+   * **1字面だけを見ると、別の規則本文を複写しても検出できない。** 規範文書だけが
+   * 所有する条件を複数挙げ、skillがそのいずれも持たないことを確かめる。
+   */
+  for (const owned of [
     /順序判定から除外/u,
-    "skillは参照だけを持ち、規則本文を複製しない",
-  );
+    /merge-observed/u,
+    /記録済みの上流Step/u,
+  ])
+    assert.doesNotMatch(
+      skill.text,
+      owned,
+      `skillは参照だけを持ち、規則本文を複製しない: ${String(owned)}`,
+    );
 });

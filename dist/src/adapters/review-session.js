@@ -12,6 +12,7 @@ import { isDefaultBranchFollowMerge, REVIEW_SESSION_FILE, readStoredReviewSessio
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
 import { stagingDigestRecoveryHint } from "../domain/workflow.js";
+import { readStoredDeliveryState } from "./delivery-state.js";
 import { isEvidenceOnlyPath } from "../domain/review.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
 const GIT_ENV = {
@@ -30,17 +31,39 @@ const GIT_ENV = {
  *
  * **手順はjournalの記録状態で変わる**（Issue #1312）。Step 10記録後に最新Stepの
  * 再記録を案内すると必ず失敗するため、`stagingDigestRecoveryHint`へ委譲する。
- * **この定数は生成logicを持たない。** 3 call siteで文言が複製されると、
+ * **この関数は生成logicを持たない。** 3 call siteで文言が複製されると、
  * 片方だけが実態から外れても検出できない。
  */
 function recoveryHint(staging) {
     try {
-        return stagingDigestRecoveryHint(readWorkflowJournal(staging).entries.map((entry) => entry.step));
+        return stagingDigestRecoveryHint(readWorkflowJournal(staging).entries.map((entry) => entry.step), isTerminalDelivery(staging));
     }
     catch {
         /** journalを読めない場合は従来の案内へ倒す。案内の生成で判定を止めない */
         return stagingDigestRecoveryHint([]);
     }
+}
+/**
+ * **delivery stateがterminalなら上流再確定を案内しない。** journalにStep 11 entryが
+ * 無くても`merge-observed`ならStep 0〜10の追記は拒否される（`appendWorkflowJournalEntryLocked`）。
+ * 読めない場合はfalseへ倒す。**案内の生成で判定を止めない。**
+ */
+function isTerminalDelivery(staging) {
+    try {
+        const state = readStoredDeliveryState(staging)?.state;
+        return state === "merge-observed" || state === "step11-recorded";
+    }
+    catch {
+        return false;
+    }
+}
+/**
+ * **合成経路の検査点。** `assertStoredStagingDigest`はmodule内部の判定だが、
+ * ここが`recoveryHint`へ委譲しているかを外から観測できないと、この経路の委譲を
+ * 旧案内へ戻す変異が生存する。判定を変えず同じ関数を公開するだけにする。
+ */
+export function assertStoredStagingDigestForTest(staging) {
+    assertStoredStagingDigest(staging);
 }
 function assertStoredStagingDigest(staging) {
     const stored = readStoredStagingRecord(staging);

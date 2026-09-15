@@ -1070,7 +1070,7 @@ export function completePullRequestWorkflow(created, staging, record, recovery =
  *
  * **Step 10記録後は「最新Stepの再記録」が必ず失敗する。** `workflow record --step=10`は
  * `assertConvergedReviewSession`が`assertStoredStagingDigest`を先に呼ぶため、staging編集後は
- * round番号にも予算にも関係なく拒否される。**実在する復旧手順は上流Step（1〜9）の再確定である**
+ * round番号にも予算にも関係なく拒否される。**実在する復旧手順は上流Stepの再確定である**
  * （`--reconfirm`。Issue #1342）。再確定entryは順序判定から除外され、追記後にstaging digestを
  * 再固定する。
  *
@@ -1078,17 +1078,33 @@ export function completePullRequestWorkflow(created, staging, record, recovery =
  * 利用者は案内どおり実行して失敗し、製品内に出口が無いと誤認した。`00_運用ポリシー.md`の
  * risk比例型ruleは拒否時に「安全な次の行動」を返すことを求めており、失敗する手順はそれを満たさない。
  *
- * **Step 11記録後は上流再確定を案内しない。** `--reconfirm`はStep 11より後に置けないため、
- * 案内しても必ず失敗する。同じ誤りを反対側で繰り返さない。
+ * **反対側の誤案内も作らない。** 上流再確定が使えない状態で`--reconfirm`を案内すれば、
+ * 直そうとした欠陥を別の状態で再現するだけである。使えないのは次の2つで、どちらも
+ * `appendWorkflowJournalEntryLocked`が拒否する。
+ *
+ * 1. journalにStep 11 entryがある
+ * 2. **delivery stateが`merge-observed`または`step11-recorded`である。** journalにStep 11 entryが
+ *    無くてもこの状態になりうる。`recordStep11`は`merge-observed`からしか遷移しないため、
+ *    **merge観測とStep 11記録の間に必ずこの窓が開く。** journalのStep集合だけを見ると見落とす。
+ *
+ * **対象Stepを「1〜9」と数え上げない。** `MODE_STEP_SEQUENCES`はmodeで異なり、`quick`と`poc`は
+ * `0,1,4,9,10,11`しか持たない。再確定entryは同じStepの通常記録が先行することを要求するため、
+ * quickで`--step=5`を選ぶと拒否される（実測で9件中6件）。**記録済みの上流Stepだけが選べる。**
  *
  * @param recordedSteps journalに記録済みのStep番号の集合
+ * @param terminalDelivery delivery stateが`merge-observed`または`step11-recorded`のときtrue
  */
-export function stagingDigestRecoveryHint(recordedSteps) {
+export function stagingDigestRecoveryHint(recordedSteps, terminalDelivery = false) {
     const steps = new Set(recordedSteps);
-    if (steps.has(11))
-        return "。Step 11記録後はstagingのdigestを再固定できません。stagingを編集せず、delivery状態と証跡を確認してください";
-    if (steps.has(10))
-        return "。Step 10記録後にstagingを編集した場合は workflow record --step=<1〜9のいずれか> --reconfirm を実行して上流Stepを再確定し、digestを再固定してから再試行してください";
+    if (terminalDelivery || steps.has(11))
+        return "。terminal delivery stateではstagingのdigestを再固定できません。編集した成果物を編集前の内容へ戻すとdigestは一致します。内容を戻せない場合はdelivery状態と証跡を確認してください";
+    if (steps.has(10)) {
+        const upstream = [...steps]
+            .filter((step) => step >= 1 && step <= 9)
+            .sort((left, right) => left - right);
+        const choices = upstream.length > 0 ? upstream.join("または") : "記録済みの上流Step";
+        return `。Step 10記録後にstagingを編集した場合は workflow record --step=${choices} --reconfirm を実行して上流Stepを再確定し、digestを再固定してから再試行してください`;
+    }
     /**
      * **Step 10未記録の案内は従来の字面のまま返す。** この状態では最新Stepの再記録が
      * 実際に成功するため、変える理由が無い。既存の診断契約（SCN-UNIT-DIAGHINT-001・002）が
