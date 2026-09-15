@@ -9,14 +9,14 @@
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 3 |
-| 対象SHA・文書ダイジェスト | 328cfa828e1976991f0c2778152b6f1ba08fdc23 |
+| ラウンド | 4 |
+| 対象SHA・文書ダイジェスト | 553c2e101fc245912d55958f4c06750c986983b8 |
 | 比較基点 | `6159c46897c39ce0a185ae3468e6b0b729c1bb69` |
-| H_impl | `328cfa828e1976991f0c2778152b6f1ba08fdc23` |
+| H_impl | `553c2e101fc245912d55958f4c06750c986983b8` |
 | 対象差分 | .agent-skill-chain/docs/01_開発ワークフロー.md、.agent-skill-chain/skills/step-10-review/SKILL.md、dist/src/adapters/review-session.js、dist/src/cli.js、dist/src/domain/workflow.js、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/00_要件一覧.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/review-session.ts、src/cli.ts、src/domain/workflow.ts、test/features/integration/staging-digest-recovery-hint-cli.feature、test/features/unit/staging-digest-recovery-hint.feature、test/steps/staging-digest-recovery-hint-cli.steps.ts、test/steps/staging-digest-recovery-hint.steps.ts |
 | 対象外 | 比較基点に存在し変更されていない範囲。`appendWorkflowJournalEntryLocked`の受理集合、`workflow record --reconfirm`の実装、staging digestの算出式は本変更の対象外で1行も変更していない |
-| 残り予算 | counted round 3、上限4のため残り1ラウンド。round 3はPR #1402の外部review（CodeRabbit）をpr-bound中に取り込んだ復旧ラウンドである |
-| ラウンド数 | 3 |
+| 残り予算 | counted round 4、上限4に到達。round 3で外部review（CodeRabbit）5指摘を取り込み、round 4は`format:check`に合わせる整形commitでHEADが動いたぶんの取り直しである。**次に同型の指摘が来た場合は予算が無いため、機構ごと別Issueへ分離する** |
+| ラウンド数 | 4 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260915_152055_staging-digest不一致の診断が実在しない復旧手順を案内する |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md`のREQ-WF-024（本変更で新設）。着手時、staging digest不一致の診断文言を所有していたのは同fileのREQ-WF-009で、その本文は「staging digestの不一致が案内する手順」を無条件に最新Stepの再記録と述べていた。**その記述自体が本Issueの欠陥だった**ため、REQ-WF-009からは所有を外してREQ-WF-024へ委譲し、同段落が自ら宣言する「同じ事実を二度書かない」を維持した |
 | 成果物行数 | 製品`src/`145追加17削除、生成物`dist/`134追加17削除（`npm run build`の出力で手書きなし）、支援層`test/`660追加10削除、仕様`docs/specs/`22追加5削除、配布規範`.agent-skill-chain/`4追加0削除。支援層対製品は4.55倍（round 3で検査を足したため上がった）。閾値判定はせず記録だけを残す |
@@ -44,10 +44,10 @@ providerとmodel設定はproject choiceとrouting evidenceの観測値を用い�
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | .agent-skill-chain/tmp/issues/20260915_152055_staging-digest不一致の診断が実在しない復旧手順を案内する | checkpoint 8で`sync-verified`。00〜03が同期済みでREQ-WF-024・AC-WF-024・INV-01〜03を固定 | 既存文書 |
-| 差分 | `6159c46897c39ce0a185ae3468e6b0b729c1bb69`..`328cfa828e1976991f0c2778152b6f1ba08fdc23` | 18 path（A 5・M 13）。うち`dist/`3 pathは`npm run build`の生成物。**round 3の是正commitがartifact commitの後へ来たため、本artifact自身が範囲へ入る** | Git観測 |
+| 差分 | `6159c46897c39ce0a185ae3468e6b0b729c1bb69`..`553c2e101fc245912d55958f4c06750c986983b8` | 18 path（A 5・M 13）。うち`dist/`3 pathは`npm run build`の生成物。**round 3の是正commitがartifact commitの後へ来たため、本artifact自身が範囲へ入る** | Git観測 |
 | テスト | `npm test`（全layer）、変異試験12件 | §7に実測を記録。2,052 scenarios中2,036合格・16 skip・失敗0。`verify:distribution`と`audit:check`は本artifact commit後に実行する（§7） | テスト出力 |
 | 仕様 | `docs/specs/02_要件/01_ワークフロー要件.md`、`docs/specs/15_要件追跡/00_追跡表.md` | REQ-WF-024を新設しAC-WF-024へ13 SCNを追跡。`npm run trace:check`が`orphanRequirements`・`orphanScenarios`・`orphanImplementations`すべて0件 | 既存文書 |
-| commit前candidate | 上記18 path | H_impl 328cfa828e1976991f0c2778152b6f1ba08fdc23、作業tree clean | Git index |
+| commit前candidate | 上記18 path | H_impl 553c2e101fc245912d55958f4c06750c986983b8、作業tree clean | Git index |
 | Phase A artifact | `docs/reviews/221_課題1312staging-digest復旧手順案内レビュー.md` | 本fileをH_implの子として単独commitしH_finalにする | Git観測 |
 | review session | review-session.json（sessionId `5a8f07e1707f0a735d6ae7e1f1286b8472d5df1bfeceba7c241912d1c69439c7`） | status `converged`、round 2で収束。round 3はpr-bound中の外部review取り込みで、`workflow record --step=10 --post-pr-intake`が記録する | Git観測 |
 
@@ -197,6 +197,19 @@ providerとmodel設定はproject choiceとrouting evidenceの観測値を用い�
 - 同じ範囲の予算を自動更新していない: はい。上限4に対して3ラウンド目であり、残り1ラウンド。予算の引き上げを行っていない。
 - AIによる最終裁定: 該当なし。未解決Critical/Highが0件のため裁定を要さない。
 
+### ラウンド4
+
+**整形commitでHEADが動いたぶんの取り直しラウンドである。新しい指摘は無い。**
+
+round 3で追加したhelperの整形が`prettier`の出力と一致せず`format:check`が落ちた。`prettier --write`の出力をそのまま取り込む5行の整形commit（`553c2e10`）を作ったため、`H_impl`が動き、review sessionのcandidate HEADを取り直した。
+
+- 全指摘の最終分類: 変更なし。round 3で全件resolvedになっており、本ラウンドで新たに確定した指摘は0件。
+- 任意の危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: 該当なし。整形のみで挙動の変更が無いことは、`npm test`の結果が2,052 scenarios・失敗0で変わらないことから確認した。
+- 同じ範囲の予算を自動更新していない: はい。**上限4に到達しており、予算を引き上げていない。** 次に同型の外部指摘が来た場合は、取り込みではなく機構ごと別Issueへ分離する。
+- AIによる最終裁定: 該当なし。
+
+**このラウンドは`verify:distribution`を`tail`へpipeして終了値を取り違えたことで生じた。** `tail`の終了値が0なので全ゲート合格に見えたが、実際は`format:check`で停止していた。**pipeの先の終了値を合格根拠にしない。**
+
 ## 7. テスト結果
 
 - 実行したcommandの一覧: 本ラウンドで実際に実行し、結果を観測したものだけを挙げる。
@@ -204,6 +217,7 @@ providerとmodel設定はproject choiceとrouting evidenceの観測値を用い�
   - `--name "RECOVERYHINT"`絞り込み: **13 scenarios（13 passed）、65 steps。** 本変更の13 SCN（unit 7・integration 6）が全件合格する。
   - `npm run build`後の`git status`: `dist/`に差分が残らないことを確認した。committed済みの生成物がcompile結果と一致する。
   - `npm run trace:check`: 合格。`orphanRequirements`・`orphanScenarios`・`orphanImplementations`いずれも0件。
+  - `npm run format:check`: **round 3時点では失敗していた**（2 fileの整形差）。`prettier --write`で是正し、現在は合格。
   - round 2で実行済みの`project:quality`・`lint`・`format:check`・`typecheck`・`source:check`・`docs:format`・`test:format`・`architecture:check`・`conformance:check`・`package:check`は、**本artifact commit後に`verify:distribution`として通しで再実行する。**
 - 全layerの合計: 2,052 scenarios中2,036合格・16 skip・**失敗0**。skip 16件はいずれも本変更の対象外で、比較基点`6159c468`時点と同数である。
 - runner・Gherkin方言: `@cucumber/cucumber`（`cucumber.mjs`のconfig）。方言は英語キーワード（`Feature`/`Scenario`/`Given`/`When`/`Then`）で、scenario名とstep本文は日本語。`npm run test:format`が全feature fileの書式を検査する。
