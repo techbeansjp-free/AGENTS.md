@@ -1016,6 +1016,7 @@ export function resolveEffectivePolicy(
         ? (project.delivery ?? floor.delivery)
         : floor.delivery,
       merge: options.trusted ? (project.merge ?? floor.merge) : floor.merge,
+      issueProject: options.trusted ? project.issueProject : floor.issueProject,
       budgets: project.budgets ?? floor.budgets,
       projectChoices: project.projectChoices,
       /**

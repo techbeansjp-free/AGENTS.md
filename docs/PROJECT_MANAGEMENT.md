@@ -27,6 +27,8 @@
 
 実行可能な作業は`Ready`へ置き、列の最上位から1件ずつ着手する。着手時に対象を`In progress`へ移す。
 
+trusted project policyに`issueProject`が設定されている場合は、canonical Issueの同期確認後に`agent-skill-chain issue start --repo=<owner/name> --issue=<番号> --staging-path=<staging> --dry-run`で計画を確認し、明示承認後に`--apply --authorize=approved`で反映する。既に追加済み・`In progress`済みでも同じ操作を使い、書き込み0件の着手済み状態へ収束させる。未設定、対象重複、観測不完全、read-back不一致では手作業で推測せず停止する。
+
 順序を変える場合は、作業へ着手する前にProject上の並びを変更する。会話、Issue番号、priorityラベル、ProjectのPriority fieldだけを根拠に下位のIssueを先取りしない。`Ready`が空なら、`Backlog`から推測で選ばず、再開条件またはownerの判断を待つ。
 
 ## WBSとしての分解

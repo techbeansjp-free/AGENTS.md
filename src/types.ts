@@ -159,6 +159,12 @@ export interface ProjectChoiceShrinkProposal {
 export interface Policy {
   schemaVersion: string;
   delivery: { stopAt: "pull_request" };
+  issueProject?: {
+    owner: string;
+    number: number;
+    statusField: string;
+    startedStatus: string;
+  };
   merge: {
     mode: "disabled" | "assisted" | "automatic";
     branches: string[];

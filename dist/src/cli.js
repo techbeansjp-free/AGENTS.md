@@ -23,7 +23,8 @@ import { applyFileMigration, planFileMigration, recoverFileMigration, retryFileM
 import { validateScenarioTrace } from "./domain/trace.js";
 import { DEFAULT_GRAPH_BUDGET, GraphFreshnessError, SEMANTIC_EDGE_KINDS, assessGraphFreshness, semanticGraphContentHash, shortestSemanticPath, topologicalSemanticOrder, traverseSemanticGraph, } from "./domain/semantic-graph.js";
 import { buildRepositorySemanticGraphWithDiagnostics, observeRepositoryGraphSource, } from "./adapters/repository-graph.js";
-import { canonicalProviderInstant, github, GitHubProviderUnavailableError, samePolicyAuthorityObservation, } from "./adapters/github.js";
+import { canonicalProviderInstant, addIssueProjectItem, github, GitHubProviderUnavailableError, inspectIssueProject, samePolicyAuthorityObservation, updateIssueProjectStatus, } from "./adapters/github.js";
+import { planIssueStart } from "./domain/issue-start.js";
 import { assertMinimumExecutableVersion, MINIMUM_GH_VERSION, MINIMUM_GIT_VERSION, } from "./lib/executable-version.js";
 import { git } from "./lib/process.js";
 import { ExclusivePinnedWriteError, writeFileAtomic, writeFileExclusivePinned, } from "./lib/atomic.js";
@@ -4547,6 +4548,134 @@ export async function main(argv, dependencies = {}) {
             issue: Number(issueRaw),
         }, path.resolve(typeof flags.root === "string" ? flags.root : "."));
         print(observed);
+        return 0;
+    }
+    if (command === "issue" && subcommand === "start") {
+        const { flags } = parse(rest);
+        const apply = applyMode(flags);
+        const issueRaw = required(flags, "issue");
+        if (!/^[1-9]\d*$/u.test(issueRaw))
+            throw new Error("--issueは正のIssue番号で指定してください");
+        if (apply && flags.authorize !== "approved")
+            throw new Error("Issue着手には--authorize=approvedが必要です");
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const repository = required(flags, "repo");
+        const issue = Number(issueRaw);
+        const staging = path.resolve(required(flags, "staging-path"));
+        const relativeStaging = path.relative(root, staging);
+        if (relativeStaging.startsWith("..") ||
+            path.isAbsolute(relativeStaging) ||
+            !relativeStaging.startsWith(".agent-skill-chain/tmp/issues/") ||
+            fs.lstatSync(staging).isSymbolicLink())
+            throw new Error("stagingは対象rootのIssue staging直下でなければなりません");
+        const stagingRecord = readStoredStagingRecord(staging);
+        const expectedTracker = `https://github.com/${repository}/issues/${issue}`;
+        if (stagingRecord.state !== "sync-verified" ||
+            stagingRecord.tracker !== expectedTracker)
+            throw new Error("sync-verifiedなstagingとrepository/Issue identityが一致しません");
+        const base = defaultBranch(root);
+        const trustedPolicy = loadEffectiveTrustedPolicySet(root, base).policy;
+        const connection = trustedPolicy.issueProject;
+        if (!connection) {
+            print({
+                state: "not-configured",
+                repository,
+                issue,
+                operations: [],
+                next: "trusted default branchのproject policyへissueProjectを設定してください",
+            });
+            return 0;
+        }
+        let observation = inspectIssueProject({ repository, issue, connection }, root);
+        let plan = planIssueStart(observation);
+        if (!apply) {
+            print({
+                state: "preview",
+                repository,
+                issue,
+                project: {
+                    owner: connection.owner,
+                    number: connection.number,
+                    id: observation.projectId,
+                },
+                status: {
+                    field: connection.statusField,
+                    fieldId: observation.statusFieldId,
+                    name: connection.startedStatus,
+                    optionId: observation.startedOptionId,
+                },
+                currentItems: observation.items,
+                plan,
+            });
+            return plan.state === "rejected" ? 1 : 0;
+        }
+        if (plan.state === "rejected")
+            throw new Error(plan.reason);
+        const operations = [];
+        if (plan.state === "pending" && plan.operations[0] === "add-item") {
+            try {
+                addIssueProjectItem({
+                    repository,
+                    projectId: observation.projectId,
+                    issueId: observation.issueId,
+                }, root);
+                operations.push("add-item");
+            }
+            catch (error) {
+                observation = inspectIssueProject({ repository, issue, connection }, root);
+                plan = planIssueStart(observation);
+                if (plan.state === "rejected" ||
+                    (plan.state === "pending" && plan.operations[0] === "add-item"))
+                    throw new Error(`reconciliation-required: Project item追加結果を確定できません: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+            }
+            observation = inspectIssueProject({ repository, issue, connection }, root);
+            plan = planIssueStart(observation);
+        }
+        if (plan.state === "rejected")
+            throw new Error(plan.reason);
+        if (plan.state === "pending" &&
+            plan.operations[0] === "set-status" &&
+            "itemId" in plan) {
+            try {
+                updateIssueProjectStatus({
+                    repository,
+                    projectId: observation.projectId,
+                    itemId: plan.itemId,
+                    fieldId: observation.statusFieldId,
+                    optionId: observation.startedOptionId,
+                }, root);
+                operations.push("set-status");
+            }
+            catch (error) {
+                observation = inspectIssueProject({ repository, issue, connection }, root);
+                plan = planIssueStart(observation);
+                if (plan.state !== "started")
+                    throw new Error(`reconciliation-required: Status更新結果を確定できません: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+            }
+            observation = inspectIssueProject({ repository, issue, connection }, root);
+            plan = planIssueStart(observation);
+        }
+        if (plan.state !== "started")
+            throw new Error("reconciliation-required: final read-backでIssue着手を確認できません");
+        print({
+            state: "started",
+            repository,
+            issue,
+            project: {
+                owner: connection.owner,
+                number: connection.number,
+                id: observation.projectId,
+            },
+            itemId: plan.itemId,
+            status: {
+                field: connection.statusField,
+                fieldId: observation.statusFieldId,
+                name: connection.startedStatus,
+                optionId: observation.startedOptionId,
+            },
+            operations,
+            readBack: true,
+        });
         return 0;
     }
     if (command === "issue" && subcommand === "sync") {

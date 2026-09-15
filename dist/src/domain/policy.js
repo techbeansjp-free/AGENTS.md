@@ -511,6 +511,7 @@ export function validatePolicy(policy) {
     rejectUnknownKeys(policy, [
         "schemaVersion",
         "delivery",
+        "issueProject",
         "merge",
         "rules",
         "budgets",
@@ -520,6 +521,23 @@ export function validatePolicy(policy) {
         "projectRuleRetirementProposals",
     ], "policy", errors);
     rejectUnknownKeys(candidate.delivery, ["stopAt"], "delivery", errors);
+    if (candidate.issueProject !== undefined) {
+        rejectUnknownKeys(candidate.issueProject, ["owner", "number", "statusField", "startedStatus"], "issueProject", errors);
+        const issueProject = isRecord(candidate.issueProject)
+            ? candidate.issueProject
+            : {};
+        for (const field of ["owner", "statusField", "startedStatus"])
+            if (typeof issueProject[field] !== "string" ||
+                issueProject[field].trim() !== issueProject[field] ||
+                issueProject[field].length === 0 ||
+                issueProject[field] !== issueProject[field].normalize("NFC") ||
+                /[\p{Cc}\p{Cf}]/u.test(issueProject[field]))
+                errors.push(`issueProject.${field}が不正です`);
+        if (typeof issueProject.number !== "number" ||
+            !Number.isInteger(issueProject.number) ||
+            issueProject.number < 1)
+            errors.push("issueProject.numberは1以上の整数でなければなりません");
+    }
     if (candidate.projectRuleRetirementProposals !== undefined &&
         !validRuleRetirementProposals(candidate.projectRuleRetirementProposals))
         errors.push("projectRuleRetirementProposalsが不正です（最大16件、一意、ruleId、beforeSha256、制御文字なしのreason・ownerが必要です）");
@@ -550,8 +568,9 @@ export function validatePolicy(policy) {
             candidate.budgets !== undefined ||
             candidate.worktree !== undefined ||
             candidate.projectChoices !== undefined ||
+            candidate.issueProject !== undefined ||
             merge.branchMethods !== undefined))
-        errors.push(`${compatiblePolicyVersionLabels}ではrules、budgets、worktree、projectChoices、merge.branchMethodsを使用できません。${currentPolicyVersionLabel}へstaged migrationしてください`);
+        errors.push(`${compatiblePolicyVersionLabels}ではrules、budgets、worktree、projectChoices、issueProject、merge.branchMethodsを使用できません。${currentPolicyVersionLabel}へstaged migrationしてください`);
     if (delivery.stopAt !== "pull_request")
         errors.push("delivery.stopAtはpull_requestでなければなりません");
     if (!["disabled", "assisted", "automatic"].some((value) => value === merge.mode))
@@ -708,6 +727,7 @@ export function validateProjectPolicyManifest(manifest) {
     rejectUnknownKeys(manifest.policy, [
         "schemaVersion",
         "delivery",
+        "issueProject",
         "merge",
         "budgets",
         "worktree",
@@ -718,6 +738,23 @@ export function validateProjectPolicyManifest(manifest) {
         !validRuleRetirementProposals(policy.projectRuleRetirementProposals))
         errors.push("manifest.policy.projectRuleRetirementProposalsが不正です");
     rejectUnknownKeys(policy.delivery, ["stopAt"], "manifest.policy.delivery", errors);
+    if (policy.issueProject !== undefined) {
+        rejectUnknownKeys(policy.issueProject, ["owner", "number", "statusField", "startedStatus"], "manifest.policy.issueProject", errors);
+        const issueProject = isRecord(policy.issueProject)
+            ? policy.issueProject
+            : {};
+        for (const field of ["owner", "statusField", "startedStatus"])
+            if (typeof issueProject[field] !== "string" ||
+                issueProject[field].trim() !== issueProject[field] ||
+                issueProject[field].length === 0 ||
+                issueProject[field] !== issueProject[field].normalize("NFC") ||
+                /[\p{Cc}\p{Cf}]/u.test(issueProject[field]))
+                errors.push(`manifest.policy.issueProject.${field}が不正です`);
+        if (typeof issueProject.number !== "number" ||
+            !Number.isInteger(issueProject.number) ||
+            issueProject.number < 1)
+            errors.push("manifest.policy.issueProject.numberは1以上の整数でなければなりません");
+    }
     if (worktree !== undefined)
         validateWorktreePlacementPolicy(worktree, "manifest.policy.worktree", errors);
     rejectUnknownKeys(policy.merge, [
