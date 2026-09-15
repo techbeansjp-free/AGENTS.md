@@ -41,12 +41,12 @@ import { appendCompletionRecord, appendEvidenceStateRecord, applyEvidencePrune, 
 import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssignment, validateTierSelection, validateCodexTier, validateClaudeTier, CODEX_ADOPTION_SELECTOR, CLAUDE_ADOPTION_SELECTOR, } from "./domain/role.js";
 import { readDeliveryEvidence, readEnforcementInput, readFinalizeEvidence, isPolicyInput, readJsonInput, readMigrationManifest, readMigrationState, readModeAssessment, readPolicyFileInput, readPolicyJson, readSpecReview, } from "./adapters/json-input.js";
 import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPocDeliveryChangeScope, assertWorkflowStaging, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
-import { assertConvergedReviewSession, buildReviewRoundDraft, evidenceOnlySuffix, previewReviewRound, recordReviewRound, STAGING_DIGEST_RERECORD_HINT, } from "./adapters/review-session.js";
+import { assertConvergedReviewSession, buildReviewRoundDraft, evidenceOnlySuffix, previewReviewRound, recordReviewRound, } from "./adapters/review-session.js";
 import { appendEvidenceReanchor, evaluateEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
 import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
 import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, completeStoredTerminalRedelivery, observeStoredMerge, observeStoredDeliveryState, prepareStoredMergeIntent, prepareStoredTerminalRedeliveryMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
 import { DELIVERY_STATE_FILE, assertImmutablePullRequestBinding, canonicalDigest, closingContractDigest, pullRequestContentDigest, pullRequestTerminalEvidenceId, } from "./domain/delivery-state.js";
-import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, } from "./domain/workflow.js";
+import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, stagingDigestRecoveryHint, } from "./domain/workflow.js";
 import { reconcileFixedMergeRun, CI_DELIVERY_GRACE_MINUTES, inspectCiDelivery, } from "./domain/ci-delivery.js";
 function workflowArguments(args) {
     const flags = {};
@@ -274,13 +274,50 @@ function workflowDiagnostic(staging, mode, result, extra = []) {
         },
     };
 }
+/**
+ * staging digest不一致の案内を、journalとdelivery stateの両方から決める。
+ *
+ * **journalを読めない場合に判定を止めない。** `assertWorkflowStaging`や
+ * `assertRegularJournalPath`が投げると、digest不一致という本来の診断が
+ * 別の診断へ置き換わる。案内の生成は診断の付随であって判定ではない。
+ */
+/**
+ * **2つの入力を独立に読む。** 片方の失敗でもう片方の観測値を捨てない。
+ *
+ * 1つの`try`で囲むと、delivery stateが`merge-observed`でもjournalの読み取りが
+ * 失敗した時点でterminal判定ごと落ち、**terminal状態の利用者へ必ず失敗する
+ * 再記録操作を案内する**（PR #1402の外部review指摘）。逆向きも同じで、
+ * delivery stateだけ読めない場合もjournalのStep 11判定は使える。
+ */
+function isTerminalDeliveryOrFalse(staging) {
+    try {
+        const state = readStoredDeliveryState(staging)?.state;
+        return state === "merge-observed" || state === "step11-recorded";
+    }
+    catch {
+        /** delivery stateを読めない場合はfalseへ倒す。案内の生成で判定を止めない */
+        return false;
+    }
+}
+function readJournalStepsOrEmpty(staging) {
+    try {
+        return readWorkflowJournal(staging).entries.map((entry) => entry.step);
+    }
+    catch {
+        /** journalを読めない場合は空集合へ倒す。案内の生成で判定を止めない */
+        return [];
+    }
+}
+function stagingRecoveryHint(staging) {
+    return stagingDigestRecoveryHint(readJournalStepsOrEmpty(staging), isTerminalDeliveryOrFalse(staging));
+}
 export function assertWorkflowReadyForDelivery(staging) {
     const stored = readStoredStagingRecord(staging);
     const currentArtifacts = listStagingArtifacts(staging);
     const currentDigest = calculateStagingDigest(staging, currentArtifacts);
     if (stableJson(stored.artifacts) !== stableJson(currentArtifacts) ||
         stored.digest !== currentDigest)
-        throw new Error(`delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${STAGING_DIGEST_RERECORD_HINT}`);
+        throw new Error(`delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${stagingRecoveryHint(staging)}`);
     const inspection = inspectWorkflowStaging(staging, 10);
     if (!inspection.modeDecision.valid ||
         !inspection.validation.valid ||
@@ -304,7 +341,7 @@ function assertWorkflowReadyForTerminalRedelivery(staging) {
     const currentDigest = calculateStagingDigest(staging, currentArtifacts);
     if (stableJson(stored.artifacts) !== stableJson(currentArtifacts) ||
         stored.digest !== currentDigest)
-        throw new Error(`再配送直前のstaging成果物またはcontent digestが記録から変化しています${STAGING_DIGEST_RERECORD_HINT}`);
+        throw new Error(`再配送直前のstaging成果物またはcontent digestが記録から変化しています${stagingRecoveryHint(staging)}`);
     const inspection = inspectWorkflowStaging(staging, 11);
     if (!inspection.modeDecision.valid ||
         !inspection.validation.valid ||

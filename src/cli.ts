@@ -252,7 +252,6 @@ import {
   evidenceOnlySuffix,
   previewReviewRound,
   recordReviewRound,
-  STAGING_DIGEST_RERECORD_HINT,
 } from "./adapters/review-session.js";
 import {
   appendEvidenceReanchor,
@@ -297,6 +296,7 @@ import {
   WORKFLOW_STEPS,
   type JournalHumanOverride,
   type StepJournalEntry,
+  stagingDigestRecoveryHint,
 } from "./domain/workflow.js";
 import {
   reconcileFixedMergeRun,
@@ -623,6 +623,47 @@ function workflowDiagnostic(
   };
 }
 
+/**
+ * staging digest不一致の案内を、journalとdelivery stateの両方から決める。
+ *
+ * **journalを読めない場合に判定を止めない。** `assertWorkflowStaging`や
+ * `assertRegularJournalPath`が投げると、digest不一致という本来の診断が
+ * 別の診断へ置き換わる。案内の生成は診断の付随であって判定ではない。
+ */
+/**
+ * **2つの入力を独立に読む。** 片方の失敗でもう片方の観測値を捨てない。
+ *
+ * 1つの`try`で囲むと、delivery stateが`merge-observed`でもjournalの読み取りが
+ * 失敗した時点でterminal判定ごと落ち、**terminal状態の利用者へ必ず失敗する
+ * 再記録操作を案内する**（PR #1402の外部review指摘）。逆向きも同じで、
+ * delivery stateだけ読めない場合もjournalのStep 11判定は使える。
+ */
+function isTerminalDeliveryOrFalse(staging: string): boolean {
+  try {
+    const state = readStoredDeliveryState(staging)?.state;
+    return state === "merge-observed" || state === "step11-recorded";
+  } catch {
+    /** delivery stateを読めない場合はfalseへ倒す。案内の生成で判定を止めない */
+    return false;
+  }
+}
+
+function readJournalStepsOrEmpty(staging: string): number[] {
+  try {
+    return readWorkflowJournal(staging).entries.map((entry) => entry.step);
+  } catch {
+    /** journalを読めない場合は空集合へ倒す。案内の生成で判定を止めない */
+    return [];
+  }
+}
+
+function stagingRecoveryHint(staging: string): string {
+  return stagingDigestRecoveryHint(
+    readJournalStepsOrEmpty(staging),
+    isTerminalDeliveryOrFalse(staging),
+  );
+}
+
 export function assertWorkflowReadyForDelivery(
   staging: string,
 ): ReturnType<typeof inspectWorkflowStaging> {
@@ -634,7 +675,7 @@ export function assertWorkflowReadyForDelivery(
     stored.digest !== currentDigest
   )
     throw new Error(
-      `delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${STAGING_DIGEST_RERECORD_HINT}`,
+      `delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${stagingRecoveryHint(staging)}`,
     );
   const inspection = inspectWorkflowStaging(staging, 10);
   if (
@@ -669,7 +710,7 @@ function assertWorkflowReadyForTerminalRedelivery(
     stored.digest !== currentDigest
   )
     throw new Error(
-      `再配送直前のstaging成果物またはcontent digestが記録から変化しています${STAGING_DIGEST_RERECORD_HINT}`,
+      `再配送直前のstaging成果物またはcontent digestが記録から変化しています${stagingRecoveryHint(staging)}`,
     );
   const inspection = inspectWorkflowStaging(staging, 11);
   if (
