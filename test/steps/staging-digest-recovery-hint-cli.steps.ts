@@ -173,7 +173,6 @@ Given(
   },
 );
 
-
 /**
  * **delivery stateだけがterminalを示す隔離stagingを作る。**
  *

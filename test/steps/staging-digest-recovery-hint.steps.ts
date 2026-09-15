@@ -204,10 +204,7 @@ Then("案内が上流Step再確定と対象Step範囲を名指しする", functi
    * **対象Stepを具体値で名指しする。** 範囲表記だけでは、modeによって
    * 存在しないStepまで含んでしまう。記録済みの上流Stepだけが選べる。
    */
-  assert.deepEqual(
-    citedReconfirmSteps(this.hint),
-    [1, 2, 3, 4, 5, 6, 7, 8, 9],
-  );
+  assert.deepEqual(citedReconfirmSteps(this.hint), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   /** 上流Stepを再確定しdigestを再固定するという行動まで示す */
   assert.match(this.hint, /上流Stepを再確定/u);
   assert.match(this.hint, /digestを再固定/u);
