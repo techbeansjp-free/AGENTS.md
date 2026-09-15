@@ -1102,8 +1102,19 @@ export function stagingDigestRecoveryHint(recordedSteps, terminalDelivery = fals
         const upstream = [...steps]
             .filter((step) => step >= 1 && step <= 9)
             .sort((left, right) => left - right);
-        const choices = upstream.length > 0 ? upstream.join("または") : "記録済みの上流Step";
-        return `。Step 10記録後にstagingを編集した場合は workflow record --step=${choices} --reconfirm を実行して上流Stepを再確定し、digestを再固定してから再試行してください`;
+        /**
+         * **候補を1つの`--step`値へ連結しない。** `workflow record --step=1または4`は
+         * `workflowStepNumber`の`/^\d+$/`に一致せず、CLIが必ず拒否する。
+         * **案内どおり実行すると失敗する**という、本要件が消そうとした欠陥そのものになる
+         * （Issue #1312、PR #1402の外部review指摘）。**候補ごとに独立して実行できる
+         * 完全なcommandを並べる。**
+         */
+        if (upstream.length === 0)
+            return "。Step 10記録後にstagingを編集した場合は、記録済みの上流Stepを workflow record --reconfirm で再確定し、digestを再固定してから再試行してください";
+        const commands = upstream
+            .map((step) => `workflow record --step=${step} --reconfirm`)
+            .join("、");
+        return `。Step 10記録後にstagingを編集した場合は、次のcommandのいずれかを実行して上流Stepを再確定し、digestを再固定してから再試行してください: ${commands}`;
     }
     /**
      * **Step 10未記録の案内は従来の字面のまま返す。** この状態では最新Stepの再記録が

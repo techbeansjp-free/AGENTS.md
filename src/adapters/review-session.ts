@@ -61,14 +61,23 @@ const GIT_ENV: NodeJS.ProcessEnv = {
  * 片方だけが実態から外れても検出できない。
  */
 function recoveryHint(staging: string): string {
+  /**
+   * **journalとdelivery stateを独立に読む。** 外側の1つの`try`で囲むと、
+   * journalの読み取り失敗が`isTerminalDelivery`の観測値ごと捨て、terminal状態でも
+   * 通常の再記録案内へ戻ってしまう（PR #1402の外部review指摘）。
+   */
+  return stagingDigestRecoveryHint(
+    readJournalSteps(staging),
+    isTerminalDelivery(staging),
+  );
+}
+
+function readJournalSteps(staging: string): number[] {
   try {
-    return stagingDigestRecoveryHint(
-      readWorkflowJournal(staging).entries.map((entry) => entry.step),
-      isTerminalDelivery(staging),
-    );
+    return readWorkflowJournal(staging).entries.map((entry) => entry.step);
   } catch {
-    /** journalを読めない場合は従来の案内へ倒す。案内の生成で判定を止めない */
-    return stagingDigestRecoveryHint([]);
+    /** journalを読めない場合は空集合へ倒す。案内の生成で判定を止めない */
+    return [];
   }
 }
 

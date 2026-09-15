@@ -630,16 +630,38 @@ function workflowDiagnostic(
  * `assertRegularJournalPath`が投げると、digest不一致という本来の診断が
  * 別の診断へ置き換わる。案内の生成は診断の付随であって判定ではない。
  */
-function stagingRecoveryHint(staging: string): string {
+/**
+ * **2つの入力を独立に読む。** 片方の失敗でもう片方の観測値を捨てない。
+ *
+ * 1つの`try`で囲むと、delivery stateが`merge-observed`でもjournalの読み取りが
+ * 失敗した時点でterminal判定ごと落ち、**terminal状態の利用者へ必ず失敗する
+ * 再記録操作を案内する**（PR #1402の外部review指摘）。逆向きも同じで、
+ * delivery stateだけ読めない場合もjournalのStep 11判定は使える。
+ */
+function isTerminalDeliveryOrFalse(staging: string): boolean {
   try {
     const state = readStoredDeliveryState(staging)?.state;
-    return stagingDigestRecoveryHint(
-      readWorkflowJournal(staging).entries.map((entry) => entry.step),
-      state === "merge-observed" || state === "step11-recorded",
-    );
+    return state === "merge-observed" || state === "step11-recorded";
   } catch {
-    return stagingDigestRecoveryHint([]);
+    /** delivery stateを読めない場合はfalseへ倒す。案内の生成で判定を止めない */
+    return false;
   }
+}
+
+function readJournalStepsOrEmpty(staging: string): number[] {
+  try {
+    return readWorkflowJournal(staging).entries.map((entry) => entry.step);
+  } catch {
+    /** journalを読めない場合は空集合へ倒す。案内の生成で判定を止めない */
+    return [];
+  }
+}
+
+function stagingRecoveryHint(staging: string): string {
+  return stagingDigestRecoveryHint(
+    readJournalStepsOrEmpty(staging),
+    isTerminalDeliveryOrFalse(staging),
+  );
 }
 
 export function assertWorkflowReadyForDelivery(

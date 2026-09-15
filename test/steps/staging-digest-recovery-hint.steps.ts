@@ -7,7 +7,7 @@ import {
   stagingDigestRecoveryHint,
 } from "../../src/domain/workflow.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
-import { appendWorkflowJournalEntry } from "../../src/adapters/workflow-journal.js";
+import { main } from "../../src/cli.js";
 import { readStoredStagingRecord } from "../../src/domain/staging.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
@@ -34,6 +34,29 @@ const repositoryRoot = process.cwd();
 
 const WORKFLOW_DOCUMENT = ".agent-skill-chain/docs/01_開発ワークフロー.md";
 const STEP_TEN_SKILL = ".agent-skill-chain/skills/step-10-review/SKILL.md";
+
+/**
+ * 案内が印字したcommandを取り出し、**1件ずつが単独で実行できる形か**まで検査する。
+ *
+ * 件数や最初の数字だけを見ると、複数候補を1つの`--step`値へ連結する変異
+ * （`--step=1または4`）が生存する。その値は`workflowStepNumber`の`/^\d+$/`に
+ * 一致せずCLIが必ず拒否するため、**案内どおり実行すると失敗する**という
+ * 本要件が消そうとした欠陥そのものになる（PR #1402の外部review指摘）。
+ */
+function citedReconfirmSteps(text: string): number[] {
+  const commands = [...text.matchAll(/workflow record[^、]*/gu)].map((match) =>
+    match[0].trim(),
+  );
+  assert.ok(commands.length > 0, `案内がcommandを示していません: ${text}`);
+  return commands.map((command) => {
+    const matched = /^workflow record --step=(\d+) --reconfirm$/u.exec(command);
+    assert.ok(
+      matched,
+      `案内したcommandが単独で実行できる形ではありません: ${command}`,
+    );
+    return Number(matched[1]);
+  });
+}
 
 Given(
   "Step 10を記録しStep 11を記録していないjournalの記録状態がある",
@@ -128,28 +151,44 @@ When("staging digest不一致の案内を生成する", function () {
   );
 });
 
-When("案内が名指しする上流Stepの再確定を適用する", function () {
+When("案内が名指しする上流Stepの再確定を適用する", async function () {
   /**
-   * **案内から対象Stepを読み取って実行する。** 固定値で実行すると、案内が
-   * 別のStepを名指しするよう変異しても検出できない。
+   * **案内が印字した完全なcommandを、そのまま公開CLIへ渡して実行する。**
+   *
+   * 以前は`--step=`の値から最初の数字だけを抜き出し`appendWorkflowJournalEntry`を
+   * 直接呼んでいた。その形では`--step=1または4または9`のように**CLIが必ず拒否する
+   * 値を案内していても受理に見え**、AC-WF-024の中心条項「案内した手順がその状態で
+   * 実際に受理される」を測れていなかった（PR #1402の外部review指摘）。
+   *
+   * **argvを案内文から組み立てる。** 固定値で実行すると、案内が別のStepや不正な値を
+   * 名指しするよう変異しても検出できない。`workflow record`から次の区切りまでを
+   * 1 commandとして切り出すため、複数候補を1つの`--step`へ連結する変異は
+   * そのまま不正なargvになり`workflowStepNumber`が拒否する。
    */
   const hint = stagingDigestRecoveryHint([0, 1, 4, 9, 10], false);
-  const named = /--step=([0-9]+(?:または[0-9]+)*)/u.exec(hint);
-  assert.ok(named, `案内が対象Stepを名指ししていません: ${hint}`);
-  const step = Number(named[1].split("または")[0]);
+  const commands = [...hint.matchAll(/workflow record[^、]*/gu)].map((match) =>
+    match[0].trim(),
+  );
+  assert.ok(
+    commands.length > 0,
+    `案内が実行可能なcommandを示していません: ${hint}`,
+  );
   this.accepted = false;
-  appendWorkflowJournalEntry({
-    staging: this.staging,
-    entry: {
-      step,
-      skillId: "step-01-request",
-      mode: "quick",
-      recordedAt: "2026-09-15T01:00:00.000Z",
-      artifacts: ["00_要求定義.md"],
-      evidence: "案内どおり上流Stepを再確定した",
-      reconfirmation: true,
-    } as never,
-  });
+  for (const command of commands) {
+    /**
+     * **`--staging`・`--evidence`・`--artifact`だけを足す。** これらは案内文へ
+     * 含めない運用値であり、`--step`と`--reconfirm`は案内が示した字面をそのまま使う。
+     * Step 4の再確定は同期証拠に64桁hex digestとsync語を要求するため、
+     * どのStepでも満たす証跡を渡す。
+     */
+    const status = await main([
+      ...command.split(/\s+/u),
+      `--staging=${this.staging}`,
+      `--evidence=sync digest ${"0".repeat(64)} 案内どおり上流Stepを再確定した`,
+      "--artifact=00_要求定義.md",
+    ]);
+    assert.equal(status, 0, `案内したcommandが受理されません: ${command}`);
+  }
   this.accepted = true;
   this.digestAfter = readStoredStagingRecord(this.staging).digest;
 });
@@ -165,10 +204,8 @@ Then("案内が上流Step再確定と対象Step範囲を名指しする", functi
    * **対象Stepを具体値で名指しする。** 範囲表記だけでは、modeによって
    * 存在しないStepまで含んでしまう。記録済みの上流Stepだけが選べる。
    */
-  const named = /--step=([0-9]+(?:または[0-9]+)*)/u.exec(this.hint);
-  assert.ok(named, `案内が対象Stepを名指ししていません: ${this.hint}`);
   assert.deepEqual(
-    named[1].split("または").map(Number),
+    citedReconfirmSteps(this.hint),
     [1, 2, 3, 4, 5, 6, 7, 8, 9],
   );
   /** 上流Stepを再確定しdigestを再固定するという行動まで示す */
@@ -214,9 +251,7 @@ Then("案内が上流再確定を名指しせず内容を戻す手順を示す",
 Then(
   "案内が記録済みの上流Stepだけを名指しし未記録のStepを含まない",
   function () {
-    const named = /--step=([0-9]+(?:または[0-9]+)*)/u.exec(this.hint);
-    assert.ok(named, `案内が対象Stepを名指ししていません: ${this.hint}`);
-    const cited = named[1].split("または").map(Number);
+    const cited = citedReconfirmSteps(this.hint);
     assert.deepEqual(
       cited,
       [1, 4, 9],
