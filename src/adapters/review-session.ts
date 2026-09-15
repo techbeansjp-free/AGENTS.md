@@ -35,6 +35,7 @@ import {
 
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
+import { stagingDigestRecoveryHint } from "../domain/workflow.js";
 import { isEvidenceOnlyPath } from "../domain/review.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
 
@@ -52,9 +53,22 @@ const GIT_ENV: NodeJS.ProcessEnv = {
  * **staging digest不一致の診断に付ける再開手順。** digestを再固定できるのは
  * `workflow record`だけであり、拒否だけを返すと利用者はsourceを読むまで
  * 次の1手が分からない（Issue #1323、A-3）。判定は変えず文言だけを足す。
+ *
+ * **手順はjournalの記録状態で変わる**（Issue #1312）。Step 10記録後に最新Stepの
+ * 再記録を案内すると必ず失敗するため、`stagingDigestRecoveryHint`へ委譲する。
+ * **この定数は生成logicを持たない。** 3 call siteで文言が複製されると、
+ * 片方だけが実態から外れても検出できない。
  */
-export const STAGING_DIGEST_RERECORD_HINT =
-  "。stagingを編集した場合は workflow record --step=<最新のStep> を再実行してdigestを更新してから再試行してください";
+function recoveryHint(staging: string): string {
+  try {
+    return stagingDigestRecoveryHint(
+      readWorkflowJournal(staging).entries.map((entry) => entry.step),
+    );
+  } catch {
+    /** journalを読めない場合は従来の案内へ倒す。案内の生成で判定を止めない */
+    return stagingDigestRecoveryHint([]);
+  }
+}
 
 function assertStoredStagingDigest(staging: string): void {
   const stored = readStoredStagingRecord(staging);
@@ -64,7 +78,7 @@ function assertStoredStagingDigest(staging: string): void {
     stored.digest !== calculateStagingDigest(staging, artifacts)
   )
     throw new Error(
-      `review session更新前のstaging成果物一覧またはdigestが一致しません${STAGING_DIGEST_RERECORD_HINT}`,
+      `review session更新前のstaging成果物一覧またはdigestが一致しません${recoveryHint(staging)}`,
     );
 }
 

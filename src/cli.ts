@@ -252,7 +252,6 @@ import {
   evidenceOnlySuffix,
   previewReviewRound,
   recordReviewRound,
-  STAGING_DIGEST_RERECORD_HINT,
 } from "./adapters/review-session.js";
 import {
   appendEvidenceReanchor,
@@ -297,6 +296,7 @@ import {
   WORKFLOW_STEPS,
   type JournalHumanOverride,
   type StepJournalEntry,
+  stagingDigestRecoveryHint,
 } from "./domain/workflow.js";
 import {
   reconcileFixedMergeRun,
@@ -634,7 +634,7 @@ export function assertWorkflowReadyForDelivery(
     stored.digest !== currentDigest
   )
     throw new Error(
-      `delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${STAGING_DIGEST_RERECORD_HINT}`,
+      `delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${stagingDigestRecoveryHint(readWorkflowJournal(staging).entries.map((entry) => entry.step))}`,
     );
   const inspection = inspectWorkflowStaging(staging, 10);
   if (
@@ -669,7 +669,7 @@ function assertWorkflowReadyForTerminalRedelivery(
     stored.digest !== currentDigest
   )
     throw new Error(
-      `再配送直前のstaging成果物またはcontent digestが記録から変化しています${STAGING_DIGEST_RERECORD_HINT}`,
+      `再配送直前のstaging成果物またはcontent digestが記録から変化しています${stagingDigestRecoveryHint(readWorkflowJournal(staging).entries.map((entry) => entry.step))}`,
     );
   const inspection = inspectWorkflowStaging(staging, 11);
   if (

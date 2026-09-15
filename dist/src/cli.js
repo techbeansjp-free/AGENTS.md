@@ -41,12 +41,12 @@ import { appendCompletionRecord, appendEvidenceStateRecord, applyEvidencePrune, 
 import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssignment, validateTierSelection, validateCodexTier, validateClaudeTier, CODEX_ADOPTION_SELECTOR, CLAUDE_ADOPTION_SELECTOR, } from "./domain/role.js";
 import { readDeliveryEvidence, readEnforcementInput, readFinalizeEvidence, isPolicyInput, readJsonInput, readMigrationManifest, readMigrationState, readModeAssessment, readPolicyFileInput, readPolicyJson, readSpecReview, } from "./adapters/json-input.js";
 import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPocDeliveryChangeScope, assertWorkflowStaging, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
-import { assertConvergedReviewSession, buildReviewRoundDraft, evidenceOnlySuffix, previewReviewRound, recordReviewRound, STAGING_DIGEST_RERECORD_HINT, } from "./adapters/review-session.js";
+import { assertConvergedReviewSession, buildReviewRoundDraft, evidenceOnlySuffix, previewReviewRound, recordReviewRound, } from "./adapters/review-session.js";
 import { appendEvidenceReanchor, evaluateEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
 import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
 import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, completeStoredTerminalRedelivery, observeStoredMerge, observeStoredDeliveryState, prepareStoredMergeIntent, prepareStoredTerminalRedeliveryMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
 import { DELIVERY_STATE_FILE, assertImmutablePullRequestBinding, canonicalDigest, closingContractDigest, pullRequestContentDigest, pullRequestTerminalEvidenceId, } from "./domain/delivery-state.js";
-import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, } from "./domain/workflow.js";
+import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, stagingDigestRecoveryHint, } from "./domain/workflow.js";
 import { reconcileFixedMergeRun, CI_DELIVERY_GRACE_MINUTES, inspectCiDelivery, } from "./domain/ci-delivery.js";
 function workflowArguments(args) {
     const flags = {};
@@ -280,7 +280,7 @@ export function assertWorkflowReadyForDelivery(staging) {
     const currentDigest = calculateStagingDigest(staging, currentArtifacts);
     if (stableJson(stored.artifacts) !== stableJson(currentArtifacts) ||
         stored.digest !== currentDigest)
-        throw new Error(`delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${STAGING_DIGEST_RERECORD_HINT}`);
+        throw new Error(`delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${stagingDigestRecoveryHint(readWorkflowJournal(staging).entries.map((entry) => entry.step))}`);
     const inspection = inspectWorkflowStaging(staging, 10);
     if (!inspection.modeDecision.valid ||
         !inspection.validation.valid ||
@@ -304,7 +304,7 @@ function assertWorkflowReadyForTerminalRedelivery(staging) {
     const currentDigest = calculateStagingDigest(staging, currentArtifacts);
     if (stableJson(stored.artifacts) !== stableJson(currentArtifacts) ||
         stored.digest !== currentDigest)
-        throw new Error(`再配送直前のstaging成果物またはcontent digestが記録から変化しています${STAGING_DIGEST_RERECORD_HINT}`);
+        throw new Error(`再配送直前のstaging成果物またはcontent digestが記録から変化しています${stagingDigestRecoveryHint(readWorkflowJournal(staging).entries.map((entry) => entry.step))}`);
     const inspection = inspectWorkflowStaging(staging, 11);
     if (!inspection.modeDecision.valid ||
         !inspection.validation.valid ||

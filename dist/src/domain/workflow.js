@@ -1065,4 +1065,35 @@ export function completePullRequestWorkflow(created, staging, record, recovery =
         };
     }
 }
+/**
+ * staging digest不一致の診断に付ける復旧手順。**判定は行わず案内文だけを返す。**
+ *
+ * **Step 10記録後は「最新Stepの再記録」が必ず失敗する。** `workflow record --step=10`は
+ * `assertConvergedReviewSession`が`assertStoredStagingDigest`を先に呼ぶため、staging編集後は
+ * round番号にも予算にも関係なく拒否される。**実在する復旧手順は上流Step（1〜9）の再確定である**
+ * （`--reconfirm`。Issue #1342）。再確定entryは順序判定から除外され、追記後にstaging digestを
+ * 再固定する。
+ *
+ * **従来の文言はこの区別を持たず、Step 10記録後も最新Stepを案内していた**（Issue #1312）。
+ * 利用者は案内どおり実行して失敗し、製品内に出口が無いと誤認した。`00_運用ポリシー.md`の
+ * risk比例型ruleは拒否時に「安全な次の行動」を返すことを求めており、失敗する手順はそれを満たさない。
+ *
+ * **Step 11記録後は上流再確定を案内しない。** `--reconfirm`はStep 11より後に置けないため、
+ * 案内しても必ず失敗する。同じ誤りを反対側で繰り返さない。
+ *
+ * @param recordedSteps journalに記録済みのStep番号の集合
+ */
+export function stagingDigestRecoveryHint(recordedSteps) {
+    const steps = new Set(recordedSteps);
+    if (steps.has(11))
+        return "。Step 11記録後はstagingのdigestを再固定できません。stagingを編集せず、delivery状態と証跡を確認してください";
+    if (steps.has(10))
+        return "。Step 10記録後にstagingを編集した場合は workflow record --step=<1〜9のいずれか> --reconfirm を実行して上流Stepを再確定し、digestを再固定してから再試行してください";
+    /**
+     * **Step 10未記録の案内は従来の字面のまま返す。** この状態では最新Stepの再記録が
+     * 実際に成功するため、変える理由が無い。既存の診断契約（SCN-UNIT-DIAGHINT-001・002）が
+     * この字面を検査しており、必要のない変更で既存の担保を落とさない。
+     */
+    return "。stagingを編集した場合は workflow record --step=<最新のStep> を再実行してdigestを更新してから再試行してください";
+}
 //# sourceMappingURL=workflow.js.map
