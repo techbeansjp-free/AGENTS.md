@@ -471,7 +471,16 @@ export function inspectFinalizeState(repoRoot, worktreePath, evidence, ignoredPa
     // `git worktree list`はsymlinkを解決した実pathを出す（例: macOSの既定TMPDIRは
     // /var/folders/...で/varが/private/varへのsymlink）。path.resolveはsymlinkを
     // 解決しないため、symlink配下のworktreeでexact一致が常に失敗していた。
-    const resolvedWorktreePath = fs.realpathSync(path.resolve(worktreePath));
+    // 対象が存在しない・壊れたsymlinkの場合はrealpathSyncがENOENTを投げるため、
+    // その場合は未解決pathのまま比較し、従来どおりの「未登録」domain errorへ落とす。
+    const resolvedWorktreePath = (() => {
+        try {
+            return fs.realpathSync(path.resolve(worktreePath));
+        }
+        catch {
+            return path.resolve(worktreePath);
+        }
+    })();
     const exact = `worktree ${resolvedWorktreePath}\n`;
     if (!listed.includes(exact))
         throw new Error("対象は登録済みworktreeではありません");
