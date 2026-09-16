@@ -336,6 +336,7 @@ When("staging-rootとnameを指定してissue createする", function () {
     stagingRoot: SPRINT_PARENT,
     name: STAGING_NAME,
   }).path;
+  fs.writeFileSync(path.join(this.staging, "verification-input.json"), "{}\n");
 });
 
 Then("stagingは指定したsprint配下に指定した名前で作られる", function () {
@@ -352,9 +353,12 @@ Then("stagingには機械記録だけを除外するgitignoreがある", functio
     "journal/",
     "staging-record.json",
     "review-session*.json",
+    ".full-promotion-transaction.json",
+    "00_モード判定.json",
+    "verification-input.json",
   ])
     assert.ok(ignore.includes(entry), `${entry}を除外する`);
-  assert.ok(!ignore.includes("00_"), "文書は除外しない");
+  assert.ok(!ignore.includes("00_要求定義.md"), "Markdown文書は除外しない");
 });
 
 Then("git statusは文書を未追跡として見せ機械記録を見せない", function () {
@@ -367,6 +371,8 @@ Then("git statusは文書を未追跡として見せ機械記録を見せない"
   assert.ok(shown.some((item) => item === `${relative}/03_実装計画.md`));
   assert.ok(!shown.some((item) => item.includes("staging-record.json")));
   assert.ok(!shown.some((item) => item.includes("/journal/")));
+  assert.ok(!shown.some((item) => item.includes("00_モード判定.json")));
+  assert.ok(!shown.some((item) => item.includes("verification-input.json")));
 });
 
 Then("版管理下のstagingからrepository rootを導ける", function () {
