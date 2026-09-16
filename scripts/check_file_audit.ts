@@ -25,7 +25,10 @@ import { isPackageVersion } from "../src/lib/version.js";
 import { REVIEW_RECOVERY_ROUND } from "../src/domain/review-convergence.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
-const AUDIT_DIRECTORY = "docs/reviews";
+const AUDIT_DIRECTORIES = [
+  "docs/reviews",
+  ".agent-skill-chain/reviews",
+] as const;
 const AUDIT_NAME_PATTERN = /^\d+_課題\d+.*レビュー\.md$/u;
 const RELEASE_BUMP_PREFIX = "chore(release): bump version to ";
 const RELEASE_BUMP_PATHS = new Set(["package.json", "package-lock.json"]);
@@ -593,7 +596,7 @@ function withoutTrailingAuditCommits(root: string, head: string): string {
     const changed = changedPathsWithoutRenames(root, parent, cursor);
     /**
      * **artifact 1 fileだけを変えるcommitだけを遡る。** 0件や2件以上、
-     * `docs/reviews/`配下でないpathを含む場合は実装commitであり境界になる。
+     * 許可されたreview directory配下でないpathを含む場合は実装commitであり境界になる。
      */
     if (changed.length !== 1 || !isAuditPath(changed[0]!)) break;
     cursor = parent;
@@ -715,7 +718,9 @@ function inferReviewBoundary(
 }
 
 function isAuditPath(auditPath: string): boolean {
-  return auditPath.startsWith(`${AUDIT_DIRECTORY}/`);
+  return AUDIT_DIRECTORIES.some((directory) =>
+    auditPath.startsWith(`${directory}/`),
+  );
 }
 
 /**
@@ -1128,7 +1133,7 @@ export function checkFileAudit(
       valid: false,
       errors: [
         [
-          `H_impl..currentの差分path ${auditPath} は${AUDIT_DIRECTORY}/配下ではありません。実装commitの後にreview artifactだけをcommitしてください`,
+          `H_impl..currentの差分path ${auditPath} は${AUDIT_DIRECTORIES.map((directory) => `${directory}/`).join(" または ")}配下ではありません。実装commitの後にreview artifactだけをcommitしてください`,
           ...candidateSideNote(inferred),
         ].join("\n"),
       ],

@@ -42,8 +42,9 @@ function writeAuditArtifact(
   base: string,
   implementation: string,
   generated: "complete" | "missing" | undefined = undefined,
+  auditDirectory = "docs/reviews",
 ): void {
-  const auditPath = "docs/reviews/01_課題873実装レビュー.md";
+  const auditPath = `${auditDirectory}/01_課題873実装レビュー.md`;
   const artifact = `# 課題873 実装レビュー
 
 ## 0. レビュー識別情報
@@ -76,7 +77,10 @@ ${
   fs.writeFileSync(artifactFile, artifact);
 }
 
-function createAuditedRepository(world: AuditBumpWorld): string {
+function createAuditedRepository(
+  world: AuditBumpWorld,
+  auditDirectory = "docs/reviews",
+): string {
   const root = world.initRepo();
   writeJson(root, "package.json", {
     name: "audit-fixture",
@@ -93,7 +97,7 @@ function createAuditedRepository(world: AuditBumpWorld): string {
   const base = commitAll(root, "test: 監査fixtureの基点を作る");
   fs.writeFileSync(path.join(root, "implementation.txt"), "implemented\n");
   const implementation = commitAll(root, "feat: 監査対象を実装する");
-  writeAuditArtifact(root, base, implementation);
+  writeAuditArtifact(root, base, implementation, undefined, auditDirectory);
   commitAll(root, "docs: 課題873実装レビューを記録する");
   world.auditRoot = root;
   return root;
@@ -183,6 +187,13 @@ Given("根拠のない生成物dist行を持つ隔離repository", function () {
   commitAll(root, "docs: 課題873実装レビューを記録する");
   this.auditRoot = root;
 });
+
+Given(
+  "package内review directoryに監査artifactがある隔離repository",
+  function () {
+    createAuditedRepository(this, ".agent-skill-chain/reviews");
+  },
+);
 
 Given(
   "監査artifact後に正規のrelease bump commitがある隔離repository",

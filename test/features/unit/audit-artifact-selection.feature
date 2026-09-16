@@ -22,10 +22,10 @@ Feature: review artifactの差分選択
     When 監査選択repositoryのfile監査を実行する
     Then 複数差分の診断に全pathが列挙される
 
-  Scenario: SCN-UNIT-AUDITSEL-005 差分の1件がdocs reviews配下でないときerrorとする
-    Given 差分1件がdocs reviews配下でない監査選択repository
+  Scenario: SCN-UNIT-AUDITSEL-005 差分の1件が許可review directory配下でないときerrorとする
+    Given 差分1件が許可review directory配下でない監査選択repository
     When 監査選択repositoryのfile監査を実行する
-    Then docs reviews配下でないpathと修正方法を示して失敗する
+    Then 許可review directory配下でないpathと修正方法を示して失敗する
 
   Scenario: SCN-UNIT-AUDITSEL-006 release bump commitを除外したうえで差分1件と判定する
     Given review artifact後に正規のrelease bumpがある監査選択repository

@@ -336,7 +336,7 @@ Given(
   },
 );
 
-Given("差分1件がdocs reviews配下でない監査選択repository", function () {
+Given("差分1件が許可review directory配下でない監査選択repository", function () {
   const fixture = createImplementation(this);
   writeFile(fixture.root, "notes/review.md", "# review\n");
   commitPaths(fixture.root, "docs: 誤った場所へreviewを記録する", [
@@ -1233,11 +1233,12 @@ Then("複数差分の診断に全pathが列挙される", function () {
   assert.ok(!errors.includes("docs/reviews/42_課題892実装レビュー.md"));
 });
 
-Then("docs reviews配下でないpathと修正方法を示して失敗する", function () {
+Then("許可review directory配下でないpathと修正方法を示して失敗する", function () {
   assert.equal(this.auditResult?.valid, false);
   const errors = this.auditResult?.errors.join("\n") ?? "";
   assert.ok(errors.includes("notes/review.md"));
-  assert.match(errors, /docs\/reviews\/配下/u);
+  assert.ok(errors.includes("docs/reviews/"));
+  assert.ok(errors.includes(".agent-skill-chain/reviews/"));
 });
 
 Then("release bumpを除外してreview artifact 1件が選ばれる", function () {

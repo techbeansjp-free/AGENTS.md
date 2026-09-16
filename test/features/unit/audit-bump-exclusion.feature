@@ -46,3 +46,8 @@ Feature: release bump commitの監査対象除外
     Given 根拠のない生成物dist行を持つ隔離repository
     When 隔離repositoryのfile監査を実行する
     Then file監査は生成物行の確認方法不足を理由に失敗する
+
+  Scenario: SCN-UNIT-AUDITBUMP-010 package内review directoryの監査成果物を受理する
+    Given package内review directoryに監査artifactがある隔離repository
+    When 隔離repositoryのfile監査を実行する
+    Then file監査は合格する
