@@ -275,6 +275,25 @@ When("256 KiBを超えるround bundleを構築する", function () {
     this.bundleError =
       error instanceof Error ? error : new Error(String(error));
   }
+  assert.throws(() => parseReviewRoundInput({}), /review round/u);
+  const valid = buildReviewRoundDraft({
+    staging: this.staging,
+    headSha: this.head,
+    baseSha: this.base,
+    scopeIds: ["SCOPE-001"],
+    acceptanceCriteriaIds: ["AC-001"],
+  }).round;
+  assert.throws(
+    () =>
+      previewReviewRound({
+        staging: this.staging,
+        round: parseReviewRoundInput({
+          ...valid,
+          anchor: { ...valid.anchor, initialDiffDigest: "0".repeat(64) },
+        }),
+      }),
+    /diff digest/u,
+  );
 });
 
 Then("bundle上限超過として拒否される", function () {

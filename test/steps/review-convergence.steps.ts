@@ -24,6 +24,7 @@ import {
   type ReviewSessionState,
 } from "../../src/domain/review-convergence.js";
 import {
+  buildReviewRoundDraft,
   observeReviewDiff,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
@@ -163,17 +164,18 @@ When("findingありの通常round 2をdomainへ記録する", function () {
     "export const reviewed = 3;\n",
     "fix: reviewed implementation",
   );
-  this.session = advanceReviewSession(
-    this.session,
-    roundInput({
-      world: this,
-      round: 2,
-      candidateHeadSha: candidate,
-      previousRoundDigest: this.session.latestRoundDigest,
-      fixedDiff: [reviewedPath],
+  const draft = buildReviewRoundDraft({
+    staging: this.staging,
+    headSha: candidate,
+  });
+  assert.equal(draft.round.recordLayerOnly, undefined);
+  this.session = recordReviewRound({
+    staging: this.staging,
+    round: parseReviewRoundInput({
+      ...draft.round,
       findings: [finding({ id: "H-RECORD" })],
     }),
-  );
+  });
 });
 
 Then("findingありroundは予算へ数える", function () {

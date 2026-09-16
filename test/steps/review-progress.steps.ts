@@ -18,6 +18,7 @@ import {
   type ReviewProgressRecord,
 } from "../../src/domain/review-progress.js";
 import {
+  advanceReviewSession,
   parseReviewRoundInput,
   reviewSessionId,
   type ReviewSessionState,
@@ -355,6 +356,41 @@ When(
           ),
           ["docs/reviews/1418.md", repositoryTarget],
         );
+        const roundOne = advanceReviewSession(
+          null,
+          parseReviewRoundInput({
+            round: 1,
+            previousRoundDigest: null,
+            anchor,
+            candidateHeadSha: implementationHeadSha,
+            focus: {
+              previousBlocking: [],
+              fixedDiff: [],
+              adjacentScope: [],
+            },
+            findings: [],
+          }),
+        );
+        const recordLayerSession = advanceReviewSession(
+          roundOne,
+          parseReviewRoundInput({
+            round: 2,
+            previousRoundDigest: roundOne.latestRoundDigest,
+            anchor,
+            candidateHeadSha: finalHead,
+            focus: {
+              previousBlocking: [],
+              fixedDiff: ["docs/reviews/1418.md", repositoryTarget],
+              adjacentScope: [],
+            },
+            findings: [],
+            recordLayerOnly: true,
+          }),
+        );
+        assert.equal(
+          recordLayerSession.latestCandidateHeadSha,
+          implementationHeadSha,
+        );
         fs.appendFileSync(path.join(staging, targetPath), "manual edit\n");
         execFileSync("git", ["add", repositoryTarget], { cwd: root });
         execFileSync("git", ["commit", "-q", "--amend", "--no-edit"], {
@@ -373,6 +409,24 @@ When(
         fs.writeFileSync(path.join(staging, targetPath), projected);
         fs.writeFileSync(path.join(root, "unexpected.txt"), "unexpected\n");
         execFileSync("git", ["add", repositoryTarget, "unexpected.txt"], {
+          cwd: root,
+        });
+        execFileSync("git", ["commit", "-q", "--amend", "--no-edit"], {
+          cwd: root,
+        });
+        assert.equal(
+          recordLayerSuffix(
+            staging,
+            root,
+            implementationHeadSha,
+            gitHead(root),
+            session,
+          ),
+          undefined,
+        );
+        fs.writeFileSync(path.join(staging, targetPath), projected);
+        execFileSync("git", ["rm", "-q", "unexpected.txt"], { cwd: root });
+        execFileSync("git", ["mv", repositoryTarget, "tasks/1418/RENAMED.md"], {
           cwd: root,
         });
         execFileSync("git", ["commit", "-q", "--amend", "--no-edit"], {
