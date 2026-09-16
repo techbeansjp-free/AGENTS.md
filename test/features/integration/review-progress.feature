@@ -1,6 +1,11 @@
 @integration
 Feature: parallel progress evidenceのadapter境界
 
+  Scenario: SCN-INT-RECORDLAYER-001 旧artifact-onlyと単一target経路を維持する
+    Given parallel progressの純粋fixtureがある
+    When "legacy-record-layer" のparallel progress反例を評価する
+    Then parallel progress契約を満たす
+
   Scenario: SCN-INT-PROGRESS-001 固定H_implへ実adapterで進捗を追記する
     Given parallel progressの実adapter fixtureがある
     When review入力を変えずcompleted進捗を実際にappendする

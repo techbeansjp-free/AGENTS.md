@@ -77,3 +77,8 @@ Feature: Review sessionを固定契約へ収束させる
     Given findingなしでround 1が収束したreview sessionがある
     When 検証済みrecord layerとしてround 2をdomainへ記録する
     Then record layer roundは保存され予算へ数えない
+
+  Scenario: SCN-UNIT-RECORDLAYER-005 findingありroundを予算へ数える
+    Given findingなしでround 1が収束したreview sessionがある
+    When findingありの通常round 2をdomainへ記録する
+    Then findingありroundは予算へ数える

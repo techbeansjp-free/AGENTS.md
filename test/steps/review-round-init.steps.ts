@@ -54,6 +54,7 @@ interface ReviewRoundInitWorld extends WorkflowWorld {
   completion: ReturnType<typeof planCompletion>;
   reasonSets: string[][];
   writeError: Error | undefined;
+  bundleError: Error | undefined;
   raceParent: string;
   unrelatedFile: string;
 }
@@ -255,6 +256,29 @@ Then("bundleはSHA-256 digestを持ち256 KiB以下である", function () {
   };
   assert.match(bundle.bundleDigest, /^[a-f0-9]{64}$/u);
   assert.ok(bundle.bundleBytes > 0 && bundle.bundleBytes <= 256 * 1024);
+});
+
+When("256 KiBを超えるround bundleを構築する", function () {
+  this.bundleError = undefined;
+  try {
+    buildReviewRoundDraft({
+      staging: this.staging,
+      headSha: this.head,
+      baseSha: this.base,
+      scopeIds: Array.from(
+        { length: 24_000 },
+        (_, index) => `SCOPE-${index.toString().padStart(5, "0")}`,
+      ),
+      acceptanceCriteriaIds: ["AC-001"],
+    });
+  } catch (error) {
+    this.bundleError =
+      error instanceof Error ? error : new Error(String(error));
+  }
+});
+
+Then("bundle上限超過として拒否される", function () {
+  assert.match(this.bundleError?.message ?? "", /256 KiB以下/u);
 });
 
 Then("雛形をfileへ渡したreview round previewが受理される", function () {

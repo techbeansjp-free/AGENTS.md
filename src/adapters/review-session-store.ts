@@ -124,16 +124,11 @@ export function readStoredReviewSession(
   );
   const root = stagingRepositoryRoot(staging);
   const reanchorRecords = readReanchorChain(staging);
-  for (const [index, record] of session.rounds.entries()) {
-    const previous = session.rounds[index - 1];
-    const previousHead = previous
-      ? deriveEffectiveHead({
-          records: reanchorRecords,
-          anchoredHeadSha: previous.candidateHeadSha,
-        }).effectiveHeadSha
-      : undefined;
+  let effectiveHead: string | undefined;
+  for (const record of session.rounds) {
+    const previousHead = effectiveHead;
     if (
-      (record.followOnly && previous === undefined) ||
+      (record.followOnly && previousHead === undefined) ||
       (record.followOnly &&
         !isDefaultBranchFollowMerge(
           root,
@@ -158,6 +153,11 @@ export function readStoredReviewSession(
       throw new Error(
         `保存済みreview sessionのrecord-layer-only round ${record.round}を実Gitで再検証できません`,
       );
+    if (!record.recordLayerOnly)
+      effectiveHead = deriveEffectiveHead({
+        records: reanchorRecords,
+        anchoredHeadSha: record.candidateHeadSha,
+      }).effectiveHeadSha;
   }
   return session;
 }

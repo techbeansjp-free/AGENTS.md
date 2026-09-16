@@ -150,7 +150,35 @@ Then("record layer roundは保存され予算へ数えない", function () {
   assert.equal(this.session.rounds.length, 2);
   assert.equal(this.session.rounds.at(-1)?.recordLayerOnly, true);
   assert.equal(countedRounds(this.session), 1);
+  assert.equal(
+    this.session.latestCandidateHeadSha,
+    this.session.anchor.initialHeadSha,
+  );
   assert.equal(this.session.status, "converged");
+});
+
+When("findingありの通常round 2をdomainへ記録する", function () {
+  const candidate = commitFile(
+    this.root,
+    "export const reviewed = 3;\n",
+    "fix: reviewed implementation",
+  );
+  this.session = advanceReviewSession(
+    this.session,
+    roundInput({
+      world: this,
+      round: 2,
+      candidateHeadSha: candidate,
+      previousRoundDigest: this.session.latestRoundDigest,
+      fixedDiff: [reviewedPath],
+      findings: [finding({ id: "H-RECORD" })],
+    }),
+  );
+});
+
+Then("findingありroundは予算へ数える", function () {
+  assert.equal(countedRounds(this.session), 2);
+  assert.deepEqual(this.session.rounds.at(-1)?.blocking, ["H-RECORD"]);
 });
 
 function createFixture(

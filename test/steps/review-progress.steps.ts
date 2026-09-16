@@ -31,6 +31,7 @@ import {
 } from "../../src/adapters/review-progress.js";
 import {
   buildReviewRoundDraft,
+  evidenceOnlySuffix,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
 import { recordLayerSuffix } from "../../src/adapters/review-record-layer.js";
@@ -386,6 +387,23 @@ When(
             session,
           ),
           undefined,
+        );
+        break;
+      }
+      case "legacy-record-layer": {
+        assert.equal(this.inventory.schemaVersion, undefined);
+        assert.equal(this.inventory.targets, undefined);
+        const root = this.initRepo();
+        const implementationHeadSha = gitHead(root);
+        fs.mkdirSync(path.join(root, "docs/reviews"), { recursive: true });
+        fs.writeFileSync(path.join(root, "docs/reviews/1418.md"), "# review\n");
+        execFileSync("git", ["add", "docs/reviews/1418.md"], { cwd: root });
+        execFileSync("git", ["commit", "-q", "-m", "docs: review"], {
+          cwd: root,
+        });
+        assert.equal(
+          evidenceOnlySuffix(root, implementationHeadSha, gitHead(root)),
+          "docs/reviews/1418.md",
         );
         break;
       }

@@ -661,7 +661,9 @@ export function advanceReviewSession(
     anchor: round.anchor,
     rounds,
     latestRoundDigest: roundDigest,
-    latestCandidateHeadSha: round.candidateHeadSha,
+    latestCandidateHeadSha: round.recordLayerOnly
+      ? previous!.latestCandidateHeadSha
+      : round.candidateHeadSha,
     /**
      * **取り直しのroundで未解決が残ればそこで終端にする。** `round === 3`だけを
      * 見ると`REVIEW_RECOVERY_ROUND`が`active`になり、上限を超えた次roundを
