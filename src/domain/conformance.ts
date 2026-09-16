@@ -47,8 +47,11 @@ export const DEVELOPMENT_CONSIDERATION_IDS = [
 ] as const;
 
 /**
- * **fullの01〜03で4行の表の代わりに置ける参照行。** 00の判定を正本とし、
- * この成果物に書いた行だけを差分として個別に検証する（Issue #1326）。
+ * **fullの01〜03、および04レビュー成果物の§2.2で4行の表の代わりに置ける参照行。** 00の判定を
+ * 正本とし、この成果物に書いた行だけを差分として個別に検証する（Issue #1326）。この判定は文字列
+ * 一致だけで、呼び出し元（`issue validate`・`review validate`のどちらか）を区別しない（2026-09-17、
+ * 利用projectの実地検証で`review validate --artifact=`が既にこの参照行を受理することを確認し、
+ * 04レビュー成果物templateへも案内を追加した。PR #1421）。
  * 自由記述（「00と同じ」「同上」）は参照行として扱わない。
  */
 export const DEVELOPMENT_CONSIDERATION_REFERENCE_LINE =
