@@ -26,6 +26,7 @@ import {
 import {
   calculateStagingDigest,
   listStagingArtifacts,
+  readStoredStagingRecord,
   refreshStoredStagingDigest,
 } from "../../src/domain/staging.js";
 import { STEP_JOURNAL_FILE } from "../../src/domain/workflow.js";
@@ -663,6 +664,22 @@ When("delivery直前の再検証を実行する", function () {
     this.diagnostic = error instanceof Error ? error.message : String(error);
   }
 });
+
+Then(
+  "digest不一致では拒否されず保存記録のdigestが現在の成果物へ再固定される",
+  function () {
+    assert.doesNotMatch(
+      this.diagnostic,
+      /digestが一致しません|同期済み記録から変化しています/u,
+    );
+    const stored = readStoredStagingRecord(this.staging);
+    const artifacts = listStagingArtifacts(this.staging);
+    assert.equal(
+      stored.digest,
+      calculateStagingDigest(this.staging, artifacts),
+    );
+  },
+);
 
 Then("digest不一致の診断はworkflow recordの再実行を案内する", function () {
   assert.match(
