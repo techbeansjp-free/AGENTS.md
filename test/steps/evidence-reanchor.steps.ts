@@ -316,7 +316,7 @@ function auditableReviewArtifact(
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
-| \`${REVIEWED}\` | A | package owner | domain | fixture実装 | 循環なし | AC-1377-01 / SCN-1377-01 | revert可能 | pass |${includeGenerated ? `\n| \`${GENERATED}\` | A | package owner | 生成物 | 生成元${REVIEWED}と対応 | source → dist | AC-1418-03 / SCN-1418-REANCHOR-01 | 配布影響確認済み、revert可能 | pass |` : ""}
+| \`${REVIEWED}\` | A | package owner | domain | fixture実装 | 循環なし | AC-1377-01 / SCN-1377-01 | revert可能 | pass |${includeGenerated ? `\n| \`${GENERATED}\` | A | package owner | 生成物 | 生成元${REVIEWED}と対応 | source → dist | AC-WF-005 / SCN-1389-01 | 配布影響確認済み、revert可能 | pass |` : ""}
 
 ## 2. 受け入れ条件の確認
 合格。
