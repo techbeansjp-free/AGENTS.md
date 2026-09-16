@@ -26,6 +26,7 @@ const WORKFLOW_DOCUMENT = ".agent-skill-chain/docs/01_開発ワークフロー.m
 const STEP_ZERO_SKILL = ".agent-skill-chain/skills/step-00-stage/SKILL.md";
 const PLANNING_TEMPLATE =
   ".agent-skill-chain/templates/planning/01_計画単位.md";
+const PLANNING_GUIDE = ".agent-skill-chain/templates/planning/00_利用案内.md";
 const SECTION_HEADING = "### 起票時点と計画単位";
 
 function read(relative: string): string {
@@ -58,6 +59,10 @@ Given("配布されるStep 0のskill契約がある", function () {
 
 Given("配布される計画単位テンプレートがある", function () {
   this.documentText = read(PLANNING_TEMPLATE);
+});
+
+Given("配布される計画template利用案内がある", function () {
+  this.documentText = read(PLANNING_GUIDE);
 });
 
 When("起票時点と計画単位の節を読み取る", function () {
@@ -94,6 +99,10 @@ When("起票時点の規律への相対リンクを解決する", function () {
 });
 
 When("必須欄を読み取る", function () {
+  this.sectionText = this.documentText;
+});
+
+When("計画期間の所有境界を読み取る", function () {
   this.sectionText = this.documentText;
 });
 
@@ -207,6 +216,15 @@ Then("MVPと完了条件と対象外とタスク表と依存の5欄がある", f
       `進捗・担当・優先度は外部トラッカーが正本であり、タスク表の列にしない: ${forbidden}`,
     );
 });
+
+Then(
+  "計画期間の既定と変更規則は無く開発ワークフローだけを正本として指す",
+  function () {
+    assert.doesNotMatch(this.sectionText, /既定1週間/u);
+    assert.doesNotMatch(this.sectionText, /利用projectが変更できる/u);
+    assert.match(this.sectionText, /開発ワークフロー.*唯一所有/u);
+  },
+);
 
 /**
  * **単一正本は「複製が無いこと」だけでは守れない。** 規律を別の語で言い換えた下流が、

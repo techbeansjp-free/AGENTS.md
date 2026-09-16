@@ -167,6 +167,20 @@ const POST_PR_INTAKE_MARKERS = [
 /** 規範文書と正反対になる表現。混入を拒否する。 */
 const POST_PR_INTAKE_FORBIDDEN = ["同じPRへ取り込まない"] as const;
 
+/** Step 10がtracked stagingとformal approval artifactを区別するための記述。 */
+const TRACKED_STAGING_REVIEW_MARKERS = [
+  "staging.tracked=false",
+  "staging.tracked=true",
+  "文書00〜04を版管理する",
+  "staging内の`04_レビュー.md`はformal approval artifactとして扱わない",
+  "docs/reviews/",
+] as const;
+
+/** tracked設定を無視してstaging全体を版管理外とする旧記述。 */
+const TRACKED_STAGING_REVIEW_FORBIDDEN = [
+  "一時ステージングは版管理外",
+] as const;
+
 const HOST_ADAPTER_SKILL = "asc-step";
 
 const EXPECTED_TEMPLATE_LINKS = new Map<string, string[]>([
@@ -522,6 +536,16 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
       if (markdown.includes(forbidden))
         errors.push(
           `${STATIC_ANALYSIS_REVIEW_SKILL}: 規範文書と反対の記述「${forbidden}」があります`,
+        );
+    for (const marker of TRACKED_STAGING_REVIEW_MARKERS)
+      if (!markdown.includes(marker))
+        errors.push(
+          `${STATIC_ANALYSIS_REVIEW_SKILL}: tracked stagingのreview成果物契約「${marker}」がありません`,
+        );
+    for (const forbidden of TRACKED_STAGING_REVIEW_FORBIDDEN)
+      if (markdown.includes(forbidden))
+        errors.push(
+          `${STATIC_ANALYSIS_REVIEW_SKILL}: tracked設定を無視する記述「${forbidden}」があります`,
         );
   }
   for (const relative of DEVELOPMENT_CONSIDERATION_TEMPLATES) {
