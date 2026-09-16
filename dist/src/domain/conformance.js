@@ -32,8 +32,13 @@ export const DEVELOPMENT_CONSIDERATION_IDS = [
     "DC-TOKENS",
 ];
 /**
- * **fullの01〜03で4行の表の代わりに置ける参照行。** 00の判定を正本とし、
- * この成果物に書いた行だけを差分として個別に検証する（Issue #1326）。
+ * **fullの01〜03、および04レビュー成果物の§2.2で4行の表の代わりに置ける参照行。** 00の判定を
+ * 正本とし、この成果物に書いた行だけを差分として個別に検証する（Issue #1326）。この定数は文字列
+ * 一致の判定材料であり、`validateDevelopmentConsiderations`（`issue validate`が01〜03へ適用）
+ * だけが検証する。**`review validate --artifact=`（`validateReviewArtifactStructure`）は
+ * §2.2の内容を一切検査しない。** そのため04レビュー成果物への参照行は機械検証されない、人・
+ * エージェント向けの記述量削減の案内にとどまる（2026-09-17、Issue #1423 独立reviewのF1指摘で
+ * 「実地検証で受理を確認した」という誤った記述を訂正。PR #1421）。
  * 自由記述（「00と同じ」「同上」）は参照行として扱わない。
  */
 export const DEVELOPMENT_CONSIDERATION_REFERENCE_LINE = "開発考慮事項の適用判定は00_要求定義.md §6.1と同じ";
