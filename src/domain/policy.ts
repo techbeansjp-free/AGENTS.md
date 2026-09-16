@@ -768,6 +768,7 @@ export function validatePolicy(policy: unknown) {
     [
       "schemaVersion",
       "delivery",
+      "issueProject",
       "merge",
       "rules",
       "budgets",
@@ -780,6 +781,32 @@ export function validatePolicy(policy: unknown) {
     errors,
   );
   rejectUnknownKeys(candidate.delivery, ["stopAt"], "delivery", errors);
+  if (candidate.issueProject !== undefined) {
+    rejectUnknownKeys(
+      candidate.issueProject,
+      ["owner", "number", "statusField", "startedStatus"],
+      "issueProject",
+      errors,
+    );
+    const issueProject = isRecord(candidate.issueProject)
+      ? candidate.issueProject
+      : {};
+    for (const field of ["owner", "statusField", "startedStatus"])
+      if (
+        typeof issueProject[field] !== "string" ||
+        issueProject[field].trim() !== issueProject[field] ||
+        issueProject[field].length === 0 ||
+        issueProject[field] !== issueProject[field].normalize("NFC") ||
+        /[\p{Cc}\p{Cf}]/u.test(issueProject[field])
+      )
+        errors.push(`issueProject.${field}が不正です`);
+    if (
+      typeof issueProject.number !== "number" ||
+      !Number.isInteger(issueProject.number) ||
+      issueProject.number < 1
+    )
+      errors.push("issueProject.numberは1以上の整数でなければなりません");
+  }
   if (
     candidate.projectRuleRetirementProposals !== undefined &&
     !validRuleRetirementProposals(candidate.projectRuleRetirementProposals)
@@ -829,10 +856,11 @@ export function validatePolicy(policy: unknown) {
       candidate.budgets !== undefined ||
       candidate.worktree !== undefined ||
       candidate.projectChoices !== undefined ||
+      candidate.issueProject !== undefined ||
       merge.branchMethods !== undefined)
   )
     errors.push(
-      `${compatiblePolicyVersionLabels}ではrules、budgets、worktree、projectChoices、merge.branchMethodsを使用できません。${currentPolicyVersionLabel}へstaged migrationしてください`,
+      `${compatiblePolicyVersionLabels}ではrules、budgets、worktree、projectChoices、issueProject、merge.branchMethodsを使用できません。${currentPolicyVersionLabel}へstaged migrationしてください`,
     );
   if (delivery.stopAt !== "pull_request")
     errors.push("delivery.stopAtはpull_requestでなければなりません");
@@ -1074,6 +1102,7 @@ export function validateProjectPolicyManifest(manifest: unknown) {
     [
       "schemaVersion",
       "delivery",
+      "issueProject",
       "merge",
       "budgets",
       "worktree",
@@ -1094,6 +1123,34 @@ export function validateProjectPolicyManifest(manifest: unknown) {
     "manifest.policy.delivery",
     errors,
   );
+  if (policy.issueProject !== undefined) {
+    rejectUnknownKeys(
+      policy.issueProject,
+      ["owner", "number", "statusField", "startedStatus"],
+      "manifest.policy.issueProject",
+      errors,
+    );
+    const issueProject = isRecord(policy.issueProject)
+      ? policy.issueProject
+      : {};
+    for (const field of ["owner", "statusField", "startedStatus"])
+      if (
+        typeof issueProject[field] !== "string" ||
+        issueProject[field].trim() !== issueProject[field] ||
+        issueProject[field].length === 0 ||
+        issueProject[field] !== issueProject[field].normalize("NFC") ||
+        /[\p{Cc}\p{Cf}]/u.test(issueProject[field])
+      )
+        errors.push(`manifest.policy.issueProject.${field}が不正です`);
+    if (
+      typeof issueProject.number !== "number" ||
+      !Number.isInteger(issueProject.number) ||
+      issueProject.number < 1
+    )
+      errors.push(
+        "manifest.policy.issueProject.numberは1以上の整数でなければなりません",
+      );
+  }
   if (worktree !== undefined)
     validateWorktreePlacementPolicy(
       worktree,
@@ -1609,7 +1666,10 @@ export function loadEffectiveTrustedPolicySet(
 }
 
 /** Assemble floor and project extension exclusively from an already resolved commit. */
-function loadEffectiveTrustedPolicySetAtCommit(root: string, ref: string) {
+export function loadEffectiveTrustedPolicySetAtCommit(
+  root: string,
+  ref: string,
+) {
   const packageFloorFile = path.join(
     packageRoot,
     ".agent-skill-chain",

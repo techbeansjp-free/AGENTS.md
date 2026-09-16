@@ -25,6 +25,130 @@ function mergeMethodFlag(method) {
         return "--squash";
     throw new Error(`merge方式を解決できません: ${method}。merge、rebase、squashのいずれかを指定してください`);
 }
+const ISSUE_PROJECT_QUERY = `query($owner:String!,$projectNumber:Int!,$repoOwner:String!,$repoName:String!,$issueNumber:Int!,$statusField:String!){
+  organization(login:$owner){projectV2(number:$projectNumber){id number viewerCanUpdate field(name:$statusField){... on ProjectV2SingleSelectField{id name options{id name}}}}}
+  repository(owner:$repoOwner,name:$repoName){nameWithOwner issue(number:$issueNumber){id number repository{nameWithOwner} projectItems(first:100){nodes{id project{id} fieldValueByName(name:$statusField){... on ProjectV2ItemFieldSingleSelectValue{optionId name}}} pageInfo{hasNextPage}}}}
+}`;
+function projectGraphql(query, variables, cwd) {
+    const args = ["api", "graphql", "-f", `query=${query}`];
+    for (const [name, value] of Object.entries(variables))
+        args.push(typeof value === "number" ? "-F" : "-f", `${name}=${value}`);
+    const raw = run("gh", args, cwd).stdout;
+    try {
+        return JSON.parse(raw);
+    }
+    catch {
+        throw new Error("GitHub GraphQL応答がJSONではありません");
+    }
+}
+function repositoryParts(repository) {
+    const match = /^([^/\s]+)\/([^/\s]+)$/u.exec(repository);
+    if (!match)
+        throw new Error("repositoryはowner/nameで指定してください");
+    return [match[1], match[2]];
+}
+export function inspectIssueProject(input, cwd) {
+    verifyRepository(input.repository, cwd, "read");
+    const [repoOwner, repoName] = repositoryParts(input.repository);
+    const result = projectGraphql(ISSUE_PROJECT_QUERY, {
+        owner: input.connection.owner,
+        projectNumber: input.connection.number,
+        repoOwner,
+        repoName,
+        issueNumber: input.issue,
+        statusField: input.connection.statusField,
+    }, cwd);
+    if (!isRecord(result) || !isRecord(result.data))
+        throw new Error("GitHub Project応答にdataがありません");
+    const organization = result.data.organization;
+    const repository = result.data.repository;
+    if (!isRecord(organization) || !isRecord(organization.projectV2))
+        throw new Error("構成済みGitHub Projectを一意に解決できません");
+    const project = organization.projectV2;
+    if (typeof project.id !== "string" ||
+        project.number !== input.connection.number ||
+        typeof project.viewerCanUpdate !== "boolean" ||
+        !isRecord(project.field) ||
+        typeof project.field.id !== "string" ||
+        project.field.name !== input.connection.statusField ||
+        !Array.isArray(project.field.options))
+        throw new Error("構成済みProjectのStatus fieldを一意に解決できません");
+    const options = project.field.options.filter((option) => isRecord(option) && option.name === input.connection.startedStatus);
+    if (options.length !== 1 || typeof options[0].id !== "string")
+        throw new Error("着手Status optionを一意に解決できません");
+    if (!isRecord(repository) ||
+        repository.nameWithOwner !== input.repository ||
+        !isRecord(repository.issue) ||
+        repository.issue.number !== input.issue ||
+        typeof repository.issue.id !== "string" ||
+        !isRecord(repository.issue.repository) ||
+        repository.issue.repository.nameWithOwner !== input.repository ||
+        !isRecord(repository.issue.projectItems) ||
+        !Array.isArray(repository.issue.projectItems.nodes) ||
+        !isRecord(repository.issue.projectItems.pageInfo) ||
+        typeof repository.issue.projectItems.pageInfo.hasNextPage !== "boolean")
+        throw new Error("canonical IssueまたはProject item応答が不正です");
+    const items = repository.issue.projectItems.nodes.flatMap((entry) => {
+        if (!isRecord(entry) || !isRecord(entry.project))
+            throw new Error("Project item応答が不正です");
+        if (entry.project.id !== project.id)
+            return [];
+        if (typeof entry.id !== "string")
+            throw new Error("Project item IDが不正です");
+        const field = entry.fieldValueByName;
+        if (field !== null && field !== undefined && !isRecord(field))
+            throw new Error("Project item Status応答が不正です");
+        return [
+            {
+                id: entry.id,
+                statusOptionId: isRecord(field) && typeof field.optionId === "string"
+                    ? field.optionId
+                    : null,
+                statusName: isRecord(field) && typeof field.name === "string" ? field.name : null,
+            },
+        ];
+    });
+    return {
+        repository: input.repository,
+        issue: input.issue,
+        issueId: repository.issue.id,
+        projectId: project.id,
+        projectNumber: input.connection.number,
+        statusFieldId: project.field.id,
+        startedOptionId: options[0].id,
+        viewerCanUpdate: project.viewerCanUpdate,
+        items,
+        complete: repository.issue.projectItems.pageInfo.hasNextPage === false,
+    };
+}
+export function addIssueProjectItem(input, cwd) {
+    verifyRepository(input.repository, cwd, "write");
+    const result = projectGraphql(`mutation($projectId:ID!,$contentId:ID!){addProjectV2ItemById(input:{projectId:$projectId,contentId:$contentId}){item{id}}}`, { projectId: input.projectId, contentId: input.issueId }, cwd);
+    const item = isRecord(result) &&
+        isRecord(result.data) &&
+        isRecord(result.data.addProjectV2ItemById)
+        ? result.data.addProjectV2ItemById.item
+        : undefined;
+    if (!isRecord(item) || typeof item.id !== "string")
+        throw new Error("Project item追加結果を確認できません");
+    return item.id;
+}
+export function updateIssueProjectStatus(input, cwd) {
+    verifyRepository(input.repository, cwd, "write");
+    const result = projectGraphql(`mutation($projectId:ID!,$itemId:ID!,$fieldId:ID!,$optionId:String!){updateProjectV2ItemFieldValue(input:{projectId:$projectId,itemId:$itemId,fieldId:$fieldId,value:{singleSelectOptionId:$optionId}}){projectV2Item{id}}}`, {
+        projectId: input.projectId,
+        itemId: input.itemId,
+        fieldId: input.fieldId,
+        optionId: input.optionId,
+    }, cwd);
+    const item = isRecord(result) &&
+        isRecord(result.data) &&
+        isRecord(result.data.updateProjectV2ItemFieldValue)
+        ? result.data.updateProjectV2ItemFieldValue.projectV2Item
+        : undefined;
+    if (!isRecord(item) || item.id !== input.itemId)
+        throw new Error("Project Status更新結果を確認できません");
+}
 /**
  * **既定値をadapter内に1箇所だけ持つ**（Issue #1271）。
  *

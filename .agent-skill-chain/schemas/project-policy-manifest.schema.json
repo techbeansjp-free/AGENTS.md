@@ -27,6 +27,26 @@
           "required": ["stopAt"],
           "properties": { "stopAt": { "const": "pull_request" } }
         },
+        "issueProject": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["owner", "number", "statusField", "startedStatus"],
+          "properties": {
+            "owner": {
+              "type": "string",
+              "pattern": "^(?=\\S(?:.*\\S)?$)[^\\p{Cc}\\p{Cf}]+$"
+            },
+            "number": { "type": "integer", "minimum": 1 },
+            "statusField": {
+              "type": "string",
+              "pattern": "^(?=\\S(?:.*\\S)?$)[^\\p{Cc}\\p{Cf}]+$"
+            },
+            "startedStatus": {
+              "type": "string",
+              "pattern": "^(?=\\S(?:.*\\S)?$)[^\\p{Cc}\\p{Cf}]+$"
+            }
+          }
+        },
         "merge": {
           "type": "object",
           "additionalProperties": false,

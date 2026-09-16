@@ -91,6 +91,7 @@ import {
   loadConsumerPolicyAtCommit,
   conformanceDeclarationFromPolicySet,
   loadEffectiveTrustedPolicySet,
+  loadEffectiveTrustedPolicySetAtCommit,
   choicesFragmentSource,
   ruleFragmentSources,
   loadOperationPolicy,
@@ -137,9 +138,12 @@ import {
 } from "./adapters/repository-graph.js";
 import {
   canonicalProviderInstant,
+  addIssueProjectItem,
   github,
   GitHubProviderUnavailableError,
+  inspectIssueProject,
   samePolicyAuthorityObservation,
+  updateIssueProjectStatus,
   type ApprovalObservation,
   type CommitAncestryObservation,
   type CommitTopologyObservation,
@@ -147,6 +151,7 @@ import {
   type PullRequestInspection,
   type PullRequestQueueObservation,
 } from "./adapters/github.js";
+import { planIssueStart } from "./domain/issue-start.js";
 import {
   assertMinimumExecutableVersion,
   MINIMUM_GH_VERSION,
@@ -6272,6 +6277,238 @@ export async function main(
       path.resolve(typeof flags.root === "string" ? flags.root : "."),
     );
     print(observed);
+    return 0;
+  }
+  if (command === "issue" && subcommand === "start") {
+    const { flags } = parse(rest);
+    const apply = applyMode(flags);
+    const issueRaw = required(flags, "issue");
+    if (!/^[1-9]\d*$/u.test(issueRaw))
+      throw new Error("--issueは正のIssue番号で指定してください");
+    if (apply && flags.authorize !== "approved")
+      throw new Error("Issue着手には--authorize=approvedが必要です");
+    const root = path.resolve(
+      typeof flags.root === "string" ? flags.root : process.cwd(),
+    );
+    const repository = required(flags, "repo");
+    const issue = Number(issueRaw);
+    const staging = assertWorkflowStaging(
+      path.resolve(required(flags, "staging-path")),
+    );
+    if (
+      path.dirname(staging) !==
+      path.join(root, ".agent-skill-chain", "tmp", "issues")
+    )
+      throw new Error(
+        "stagingは対象rootのIssue staging直下でなければなりません",
+      );
+    const stagingRecord = readStoredStagingRecord(staging);
+    const expectedTracker = `https://github.com/${repository}/issues/${issue}`;
+    if (
+      stagingRecord.state !== "sync-verified" ||
+      stagingRecord.tracker !== expectedTracker
+    )
+      throw new Error(
+        "sync-verifiedなstagingとrepository/Issue identityが一致しません",
+      );
+    const base = defaultBranch(root);
+    const locallyConfigured = loadEffectiveTrustedPolicySet(root, base).policy
+      .issueProject;
+    if (!locallyConfigured) {
+      print({
+        state: "not-configured",
+        repository,
+        issue,
+        operations: [],
+        next: "trusted default branchのproject policyへissueProjectを設定してください",
+      });
+      return 0;
+    }
+    const observeAuthority = () => {
+      const authority = github("repository.authority", { repository }, root);
+      const localTrustedCommit = git(
+        ["rev-parse", "--verify", `origin/${base}^{commit}`],
+        root,
+      ).stdout.trim();
+      if (
+        authority.repository !== repository ||
+        authority.defaultBranch !== base ||
+        authority.defaultBranchTipOid.toLowerCase() !==
+          localTrustedCommit.toLowerCase()
+      )
+        throw new Error(
+          "provider default branch tipとlocal trusted policy commitが一致しません",
+        );
+      return { authority, localTrustedCommit };
+    };
+    const initialAuthority = observeAuthority();
+    const trustedPolicy = loadEffectiveTrustedPolicySetAtCommit(
+      root,
+      initialAuthority.localTrustedCommit,
+    ).policy;
+    const connection = trustedPolicy.issueProject;
+    if (!connection) {
+      throw new Error("provider tipのtrusted policyにissueProjectがありません");
+    }
+    let observation = inspectIssueProject(
+      { repository, issue, connection },
+      root,
+    );
+    let plan = planIssueStart(observation);
+    if (!apply) {
+      print({
+        state: "preview",
+        repository,
+        issue,
+        project: {
+          owner: connection.owner,
+          number: connection.number,
+          id: observation.projectId,
+        },
+        status: {
+          field: connection.statusField,
+          fieldId: observation.statusFieldId,
+          name: connection.startedStatus,
+          optionId: observation.startedOptionId,
+        },
+        currentItems: observation.items,
+        plan,
+      });
+      return plan.state === "rejected" ? 1 : 0;
+    }
+    if (plan.state === "rejected") throw new Error(plan.reason);
+    const operations: string[] = [];
+    if (plan.state === "pending" && plan.operations[0] === "add-item") {
+      const currentAuthority = observeAuthority();
+      if (
+        currentAuthority.authority.defaultBranchTipOid !==
+        initialAuthority.authority.defaultBranchTipOid
+      )
+        throw new Error(
+          "Issue着手中にprovider default branch tipが変化しました",
+        );
+      observation = inspectIssueProject(
+        { repository, issue, connection },
+        root,
+      );
+      plan = planIssueStart(observation);
+      if (plan.state !== "pending" || plan.operations[0] !== "add-item")
+        throw new Error(
+          "Issue着手の直前状態が変化しました。再previewしてください",
+        );
+      try {
+        addIssueProjectItem(
+          {
+            repository,
+            projectId: observation.projectId,
+            issueId: observation.issueId,
+          },
+          root,
+        );
+        operations.push("add-item");
+      } catch (error) {
+        observation = inspectIssueProject(
+          { repository, issue, connection },
+          root,
+        );
+        plan = planIssueStart(observation);
+        if (
+          plan.state === "rejected" ||
+          (plan.state === "pending" && plan.operations[0] === "add-item")
+        )
+          throw new Error(
+            `reconciliation-required: Project item追加結果を確定できません: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error },
+          );
+      }
+      observation = inspectIssueProject(
+        { repository, issue, connection },
+        root,
+      );
+      plan = planIssueStart(observation);
+    }
+    if (plan.state === "rejected") throw new Error(plan.reason);
+    if (
+      plan.state === "pending" &&
+      plan.operations[0] === "set-status" &&
+      "itemId" in plan
+    ) {
+      const expectedItemId = plan.itemId;
+      const currentAuthority = observeAuthority();
+      if (
+        currentAuthority.authority.defaultBranchTipOid !==
+        initialAuthority.authority.defaultBranchTipOid
+      )
+        throw new Error(
+          "Issue着手中にprovider default branch tipが変化しました",
+        );
+      observation = inspectIssueProject(
+        { repository, issue, connection },
+        root,
+      );
+      plan = planIssueStart(observation);
+      if (
+        plan.state !== "pending" ||
+        plan.operations[0] !== "set-status" ||
+        !("itemId" in plan) ||
+        plan.itemId !== expectedItemId
+      )
+        throw new Error(
+          "Issue着手の直前状態が変化しました。再previewしてください",
+        );
+      try {
+        updateIssueProjectStatus(
+          {
+            repository,
+            projectId: observation.projectId,
+            itemId: plan.itemId,
+            fieldId: observation.statusFieldId,
+            optionId: observation.startedOptionId,
+          },
+          root,
+        );
+        operations.push("set-status");
+      } catch (error) {
+        observation = inspectIssueProject(
+          { repository, issue, connection },
+          root,
+        );
+        plan = planIssueStart(observation);
+        if (plan.state !== "started")
+          throw new Error(
+            `reconciliation-required: Status更新結果を確定できません: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error },
+          );
+      }
+      observation = inspectIssueProject(
+        { repository, issue, connection },
+        root,
+      );
+      plan = planIssueStart(observation);
+    }
+    if (plan.state !== "started")
+      throw new Error(
+        "reconciliation-required: final read-backでIssue着手を確認できません",
+      );
+    print({
+      state: "started",
+      repository,
+      issue,
+      project: {
+        owner: connection.owner,
+        number: connection.number,
+        id: observation.projectId,
+      },
+      itemId: plan.itemId,
+      status: {
+        field: connection.statusField,
+        fieldId: observation.statusFieldId,
+        name: connection.startedStatus,
+        optionId: observation.startedOptionId,
+      },
+      operations,
+      readBack: true,
+    });
     return 0;
   }
   if (command === "issue" && subcommand === "sync") {

@@ -414,6 +414,23 @@ export const COMMAND_USAGE = Object.freeze([
     },
     {
         command: "issue",
+        subcommand: "start",
+        summary: "canonical Issueをtrusted GitHub Projectで着手状態にする",
+        requiredFlags: [
+            flag("issue", "整数", "対象Issue番号"),
+            flag("repo", "owner/name", "対象repository"),
+            flag("staging-path", "path", "同期済みIssue staging"),
+        ],
+        conditionalFlags: [],
+        optionalFlags: [
+            ROOT_FLAG,
+            optional("authorize", "approved", "Project書き込みの承認", "承認なし"),
+            ...APPLY_MODE,
+        ],
+        example: "npx agent-skill-chain issue start --issue=886 --repo=owner/name --staging-path=.agent-skill-chain/tmp/issues/example --dry-run",
+    },
+    {
+        command: "issue",
         subcommand: "staging",
         summary: "Issue stagingの保持期限を点検する",
         requiredFlags: [],

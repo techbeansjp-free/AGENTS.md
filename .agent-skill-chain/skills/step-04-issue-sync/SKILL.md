@@ -15,6 +15,8 @@ description: 検証済み要求・要件を事前確認後に同じ耐久トラ�
 
 同期前の構造検証には`agent-skill-chain issue validate --path=<directory> --stage=requirements`を使う。fullではStep 4時点の`00_要求定義.md`と`01_要件定義.md`だけを要求し、quickとpocでは00へ集約した全内容を従来どおり検証する。段階にかかわらずGherkin scenario IDを必須とする。
 
+同期確認後、trusted project policyに`issueProject`が設定されている場合は、同じcanonical Issueとstagingを指定して`issue start --dry-run`を確認し、書き込み承認を得た`--apply --authorize=approved`でProject追加と着手Status更新を行う。`started`のread-backまでをIssue着手とし、未設定時の`not-configured`はprovider callなしで従来運用を維持する。候補branchの設定を当該操作のauthorityにせず、このskillから`gh`を直接呼ばない。
+
 ## テンプレート契約
 
 直接使用するテンプレートはない。このステップは、各modeの前工程でテンプレートに従って検証済みとなった成果物を内容正本として同期し、別構成へ再生成しない。
