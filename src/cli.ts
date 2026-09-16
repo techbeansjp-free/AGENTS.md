@@ -159,6 +159,12 @@ import {
 } from "./lib/executable-version.js";
 import { git } from "./lib/process.js";
 import {
+  assertIssueStagingLocation,
+  readStagingLayout,
+  stagingExcludePathspec,
+  stagingRepositoryRoot,
+} from "./domain/staging-layout.js";
+import {
   ExclusivePinnedWriteError,
   writeFileAtomic,
   writeFileExclusivePinned,
@@ -480,7 +486,7 @@ function assertWorkflowAdvanceArtifacts(
       `Step ${targetStep}のartifactは${[...allowed].join("、")}だけを指定できます`,
     );
   if (targetStep !== 9) return undefined;
-  const repositoryRoot = path.resolve(staging, "../../../..");
+  const repositoryRoot = stagingRepositoryRoot(staging);
   const candidateHeadSha = git(
     ["rev-parse", "--verify", "HEAD^{commit}"],
     repositoryRoot,
@@ -493,7 +499,7 @@ function assertWorkflowAdvanceArtifacts(
       "--untracked-files=all",
       "--",
       ".",
-      ":(exclude).agent-skill-chain/tmp/issues",
+      stagingExcludePathspec(readStagingLayout(repositoryRoot)),
     ],
     repositoryRoot,
   ).stdout;
@@ -770,7 +776,7 @@ export function assertCurrentReviewJournalBinding(
   if (
     bindingEffectiveHead !== headSha &&
     evidenceOnlySuffix(
-      path.resolve(staging, "../../../.."),
+      stagingRepositoryRoot(staging),
       bindingEffectiveHead,
       headSha,
     ) === undefined
@@ -1481,7 +1487,7 @@ function resolveContextIsolatedFormalApproval(
   );
   const markdown = git(
     ["show", `${candidate.finalHeadSha}:${candidate.reviewArtifactPath}`],
-    path.resolve(staging, "../../../.."),
+    stagingRepositoryRoot(staging),
   ).stdout;
   const structure = validateReviewArtifactStructure(markdown);
   if (structure.implementation !== candidate.implementationCommitSha)
@@ -2555,7 +2561,12 @@ function retryPreparedMergeAfterConfirmedAbsence(input: {
  * **宣言できても参照されない値を残さない**（Issue #1324）。
  */
 function issueStagingGherkinDialect(issuePath: string): string | undefined {
-  const root = path.resolve(issuePath, "../../../..");
+  let root: string;
+  try {
+    root = stagingRepositoryRoot(issuePath);
+  } catch {
+    return undefined;
+  }
   const manifest = path.join(root, ".agent-skill-chain", "project-policy.json");
   if (!fs.existsSync(manifest)) return undefined;
   return loadProjectPolicySet(root).policy.projectChoices?.gherkinDialect;
@@ -2616,11 +2627,13 @@ function handlePullRequestMerge(flags: Flags): number {
     typeof flags.root === "string" ? flags.root : process.cwd(),
   );
   const requestedStaging = resolveContained(root, required(flags, "staging"));
-  const issuesRoot = path.join(root, ".agent-skill-chain", "tmp", "issues");
-  if (path.dirname(path.resolve(requestedStaging)) !== issuesRoot)
+  try {
+    assertIssueStagingLocation(requestedStaging, root);
+  } catch {
     throw new Error(
-      "pr mergeのstagingは対象rootの.agent-skill-chain/tmp/issues/直下が必要です",
+      `pr mergeのstagingは対象rootの${readStagingLayout(root).rootPattern}/直下が必要です`,
     );
+  }
   const candidate = assertWorkflowStaging(requestedStaging);
   const earlyInspection = inspectWorkflowStaging(candidate);
   assertWorkflowMergeAllowed(earlyInspection.mode);
@@ -5457,7 +5470,7 @@ export async function main(
           candidateHeadSha !== undefined &&
           git(
             ["rev-parse", "--verify", "HEAD^{commit}"],
-            path.resolve(staging, "../../../.."),
+            stagingRepositoryRoot(staging),
           ).stdout.trim() !== candidateHeadSha
         )
           throw new Error(
@@ -5795,7 +5808,7 @@ export async function main(
     if (reconfirm && (step.step < 1 || step.step > 9))
       throw new Error("--reconfirmはStep 1〜9にだけ指定できます");
     if (reconfirm) entry = { ...entry, reconfirmation: true };
-    const repositoryRoot = path.resolve(staging, "../../../..");
+    const repositoryRoot = stagingRepositoryRoot(staging);
     const needsHeadSha =
       step.step === 9 ||
       step.step === 10 ||
@@ -5890,7 +5903,7 @@ export async function main(
     if (inspection.mode === "poc" && upTo >= 9) {
       const headSha = git(
         ["rev-parse", "--verify", "HEAD^{commit}"],
-        path.resolve(inspection.staging, "../../../.."),
+        stagingRepositoryRoot(inspection.staging),
       ).stdout.trim();
       const observation = inspectStoredPocObservationEvidence(
         inspection.staging,
@@ -6231,6 +6244,10 @@ export async function main(
             : [],
         now: new Date(),
         ...(projectChoices ? { projectChoices } : {}),
+        ...(typeof flags["staging-root"] === "string"
+          ? { stagingRoot: flags["staging-root"] }
+          : {}),
+        ...(typeof flags.name === "string" ? { name: flags.name } : {}),
       }),
     );
     return 0;
@@ -6934,7 +6951,7 @@ export async function main(
     const staging = resolveContained(root, path.relative(root, stagingInput));
     if (!isReviewArtifactStagingDirectChild(root, staging))
       throw new Error(
-        "review artifactの--stagingは対象rootの.agent-skill-chain/tmp/issues/直下が必要です",
+        `review artifactの--stagingは対象rootの${readStagingLayout(root).rootPattern}/直下が必要です`,
       );
     const record = readStoredStagingRecord(staging);
     const artifacts = listStagingArtifacts(staging);

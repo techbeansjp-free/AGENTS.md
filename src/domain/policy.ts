@@ -38,6 +38,7 @@ import {
   type RuleFragmentSource,
 } from "./project-rule-retirement.js";
 import { isSafeFinalizeIgnoredPathPrefix } from "./worktree-removal-safety.js";
+import { validateStagingPolicy } from "./staging-layout.js";
 
 const PROJECT_CHOICE_FIELDS = [
   "language",
@@ -772,6 +773,7 @@ export function validatePolicy(policy: unknown) {
       "merge",
       "rules",
       "budgets",
+      "staging",
       "worktree",
       "projectChoices",
       "projectChoiceShrinkProposals",
@@ -855,6 +857,7 @@ export function validatePolicy(policy: unknown) {
     (candidate.rules !== undefined ||
       candidate.budgets !== undefined ||
       candidate.worktree !== undefined ||
+      candidate.staging !== undefined ||
       candidate.projectChoices !== undefined ||
       candidate.issueProject !== undefined ||
       merge.branchMethods !== undefined)
@@ -931,6 +934,8 @@ export function validatePolicy(policy: unknown) {
     errors.push(...enforcement.errors);
     if (candidate.worktree !== undefined)
       validateWorktreePlacementPolicy(candidate.worktree, "worktree", errors);
+    if (candidate.staging !== undefined)
+      validateStagingPolicy(candidate.staging, "staging", errors);
     if (projectChoices !== undefined)
       errors.push(...validateProjectChoices(projectChoices).errors);
   }
@@ -1105,6 +1110,7 @@ export function validateProjectPolicyManifest(manifest: unknown) {
       "issueProject",
       "merge",
       "budgets",
+      "staging",
       "worktree",
       "projectChoiceShrinkProposals",
       "projectRuleRetirementProposals",
@@ -1157,6 +1163,8 @@ export function validateProjectPolicyManifest(manifest: unknown) {
       "manifest.policy.worktree",
       errors,
     );
+  if (policy.staging !== undefined)
+    validateStagingPolicy(policy.staging, "manifest.policy.staging", errors);
   rejectUnknownKeys(
     policy.merge,
     [
@@ -1760,6 +1768,7 @@ export function loadEffectiveTrustedPolicySetAtCommit(
   const effectivePolicy: Policy = {
     ...effective.policy,
     worktree: project.worktree ?? floor.worktree,
+    staging: project.staging ?? floor.staging,
   };
   const setEntries = [
     ...baseEntries,

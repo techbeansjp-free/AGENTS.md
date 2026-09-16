@@ -1,4 +1,5 @@
 import path from "node:path";
+import { matchesStagingRoot, readStagingLayout } from "./staging-layout.js";
 
 export interface ReviewArtifactPath {
   readonly path: string;
@@ -463,13 +464,17 @@ export function isReviewArtifactStagingDirectChild(
   staging: string,
 ): boolean {
   const resolvedRoot = path.resolve(root);
-  const issuesRoot = path.join(
-    resolvedRoot,
-    ".agent-skill-chain",
-    "tmp",
-    "issues",
+  const parent = path.dirname(path.resolve(staging));
+  const relative = path
+    .relative(resolvedRoot, parent)
+    .split(path.sep)
+    .join("/");
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative))
+    return false;
+  return matchesStagingRoot(
+    readStagingLayout(resolvedRoot).rootPattern,
+    relative,
   );
-  return path.dirname(path.resolve(staging)) === issuesRoot;
 }
 
 /** lexical rootから期待する親とreal parentが一致し、repository内に留まることを判定する。 */
@@ -505,6 +510,69 @@ function replaceRow(content: string, label: string, value: string): string {
 }
 
 /** reviewer判断を確定せず、Gitとstagingから導ける04欄だけを埋める。 */
+/**
+ * 変更pathの種別から機械的に導出できる監査列を事前充填する。
+ *
+ * 利用projectの実測では、80 pathの9列を毎roundreviewerが手で書いていた。
+ * 文書・lockfile・生成物・test・設定は、owner（layer）・依存方向・安全/rollbackの
+ * 列がpathから決まる。**判定列（個別判定）と仕様・AC列は事前充填しない。** これらは
+ * reviewerの判断であり、`finding`と「reviewerが確認」のまま残す。product code
+ * （source）は全列をreviewerが書く。
+ */
+export function auditRowDraft(
+  pathValue: string,
+  changeType: "A" | "M" | "D" | "R",
+): string {
+  const p = pathValue.replaceAll("\\", "/");
+  const rollback = changeType === "D" ? "git履歴に残る。revert" : "revert";
+  let kind: string | undefined;
+  let layer = "reviewerが確認";
+  let dependency = "reviewerが確認";
+  if (
+    /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|uv\.lock|poetry\.lock|Cargo\.lock)$/u.test(
+      p,
+    )
+  ) {
+    kind = "lockfile。依存の完全固定";
+    layer = "依存";
+    dependency = "依存のみ。循環なし";
+  } else if (/(^|\/)docs\/reviews\//u.test(p)) {
+    kind = "review artifact";
+    layer = "docs/reviews";
+    dependency = "記録。循環なし";
+  } else if (/(^|\/)docs\/specs\//u.test(p)) {
+    kind = "システム仕様書";
+    layer = "docs/specs";
+    dependency = "spec → src（許可された向き）";
+  } else if (/(^|\/)docs\//u.test(p) || /\.(md|adoc|rst|txt)$/u.test(p)) {
+    kind = "文書";
+    layer = "docs";
+    dependency = "文書。循環なし";
+  } else if (/(^|\/)(generated|__generated__|dist|build)\//u.test(p)) {
+    kind = "生成物。生成元からの再生成で一致";
+    layer = "生成物";
+    dependency = "生成元 → 生成物";
+  } else if (
+    /(^|\/)(tests?|__tests__|spec|features)\//u.test(p) ||
+    /\.(test|spec)\.[jt]sx?$|_test\.py$|^test_.*\.py$|\.feature$/u.test(p)
+  ) {
+    kind = "test。検証内容はreviewerが確認";
+    layer = "test";
+    dependency = "test → 対象（許可された向き）";
+  } else if (
+    /\.(json|ya?ml|toml|ini|cfg|env\.example)$|(^|\/)\.[^/]+$/u.test(p)
+  ) {
+    kind = "設定。値の意味はreviewerが確認";
+    layer = "設定";
+    dependency = "設定。循環なし";
+  }
+  const responsibility = kind ?? "reviewerが確認";
+  const safety = kind
+    ? `${kind.split("。")[0]}。${rollback}`
+    : "reviewerが確認";
+  return `| \`${escapeCell(p)}\` | ${changeType} | reviewerが確認 | ${layer} | ${responsibility} | ${dependency} | reviewerが確認 | ${safety} | finding |`;
+}
+
 export function renderReviewArtifactDraft(input: {
   readonly template: string;
   readonly staging: string;
@@ -531,10 +599,7 @@ export function renderReviewArtifactDraft(input: {
   content = replaceRow(content, "ラウンド数", "0（review未実施）");
   content = replaceRow(content, "Step chain", `経由: ${input.staging}`);
   const auditRows = input.paths
-    .map(
-      (item) =>
-        `| \`${escapeCell(item.path)}\` | ${item.changeType} | reviewerが確認 | reviewerが確認 | reviewerが確認 | reviewerが確認 | reviewerが確認 | reviewerが確認 | finding |`,
-    )
+    .map((item) => auditRowDraft(item.path, item.changeType))
     .join("\n");
   content = content.replace(
     /^\| （repository相対path） \| A \/ M \/ D \/ R \|[^\n]*$/mu,

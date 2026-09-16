@@ -15,6 +15,7 @@ import { stagingDigestRecoveryHint } from "../domain/workflow.js";
 import { readStoredDeliveryState } from "./delivery-state.js";
 import { isEvidenceOnlyPath } from "../domain/review.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
+import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 const GIT_ENV = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     LANG: "C",
@@ -116,7 +117,7 @@ function commitSubject(root, sha) {
  */
 export function buildReviewRoundDraft(input) {
     const staging = assertWorkflowStaging(input.staging);
-    const root = path.resolve(staging, "../../../..");
+    const root = stagingRepositoryRoot(staging);
     const headSha = resolveCommit(root, "--head", input.headSha);
     const previous = readStoredReviewSession(staging);
     const notes = [];
@@ -186,16 +187,35 @@ export function buildReviewRoundDraft(input) {
         const fixed = observeReviewDiff(root, previousHeadSha, headSha).changedPaths;
         const last = previous.rounds.at(-1);
         const previousBlocking = [...(last?.blocking ?? [])];
+        /**
+         * **前round blockerの再評価行を雛形へ写す。** 判定はreviewerが`status`を
+         * `resolved`へ変えるか`valid`のまま残すだけでよく、ID・contractId・relation・
+         * pathを毎round書き直させない（利用projectの実測では再掲finding 1,142件が
+         * 新規finding 935件を上回っていた）。`admission`等の判定結果は写さない。
+         */
+        const carried = (last?.findings ?? [])
+            .filter(({ id }) => previousBlocking.includes(id))
+            .map((finding) => ({
+            id: finding.id,
+            severity: finding.severity,
+            status: finding.status,
+            source: finding.source,
+            relation: finding.relation,
+            evidence: finding.evidence,
+            path: finding.path,
+            contractId: finding.contractId,
+            causedByFindingId: finding.causedByFindingId,
+        }));
         round = {
             round: previous.rounds.length + 1,
             previousRoundDigest: previous.latestRoundDigest,
             anchor: previous.anchor,
             candidateHeadSha: headSha,
             focus: { previousBlocking, fixedDiff: fixed, adjacentScope: [] },
-            findings: [],
+            findings: carried,
         };
         if (previousBlocking.length > 0)
-            notes.push(`前round blocker ${previousBlocking.join("、")} の再評価結果（resolvedまたはvalid）をfindingsへ同じIDで入れる。脱落は拒否される`);
+            notes.push(`前round blocker ${previousBlocking.join("、")} をfindingsへ写した。是正済みならstatusをresolvedへ変え、evidenceに確認内容を書く。未解決はvalidのまま残す。脱落は拒否される`);
         if (fixed.length === 0)
             throw new Error("review round --init: 前round headからの実Git差分が空です。前roundのcandidate HEADが現在のHEADと同じです。多くの場合、前roundの--headに「そのroundを検分したHEAD」ではなく「そのroundの指摘を是正した後のHEAD」を渡しています。その場合、HEADを進めても取り違えが重なるだけです。review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください");
         if (previous.status === "converged")
@@ -223,11 +243,28 @@ export function buildReviewRoundDraft(input) {
  * **観測できない場合はfail-closedで偽を返す。** remoteを読めない、`merge-tree`が
  * 使えない（git 2.38未満）などは「追随だと確認できなかった」であり、予算へ数える。
  */
+/**
+ * **round記録の前にstaging digestを再固定する。**
+ *
+ * reviewが固定するのはcandidate HEADであってstaging文書ではない。ところがASC自身が
+ * 実装中の発見を03（quick/pocは00）へ追記させるため、従来はDISCを1件書くたびに
+ * 「Issue再同期 → Step 9再確定 → round」の順序を強いていた（利用projectの実測で
+ * 是正1周20〜30分の主因）。round側では不一致を拒否せず、現在の成果物一覧とdigestを
+ * staging記録へ再固定してから判定する。**Issue同期との一致は`pr create`が
+ * journalの同期証拠で引き続き検証する**ので、同期漏れは終端で止まる。
+ */
+function refixStagingDigestForRound(staging) {
+    const stored = readStoredStagingRecord(staging);
+    const artifacts = listStagingArtifacts(staging);
+    if (stableJson(stored.artifacts) !== stableJson(artifacts) ||
+        stored.digest !== calculateStagingDigest(staging, artifacts))
+        refreshStoredStagingDigest(staging);
+}
 export function previewReviewRound(input) {
     const staging = assertWorkflowStaging(input.staging);
-    assertStoredStagingDigest(staging);
+    refixStagingDigestForRound(staging);
     const previous = readStoredReviewSession(staging);
-    const root = path.resolve(staging, "../../../..");
+    const root = stagingRepositoryRoot(staging);
     const currentHeadSha = git(["rev-parse", "--verify", "HEAD^{commit}"], root, {
         env: GIT_ENV,
     }).stdout.trim();
@@ -380,7 +417,7 @@ export function assertConvergedReviewSession(input) {
         anchoredHeadSha: session.latestCandidateHeadSha,
     }).effectiveHeadSha;
     if (effectiveHeadSha !== input.currentHeadSha &&
-        evidenceOnlySuffix(path.resolve(staging, "../../../.."), effectiveHeadSha, input.currentHeadSha) === undefined)
+        evidenceOnlySuffix(stagingRepositoryRoot(staging), effectiveHeadSha, input.currentHeadSha) === undefined)
         throw new Error("review sessionのcandidate HEADがcurrent HEADと一致しません");
     return session;
 }

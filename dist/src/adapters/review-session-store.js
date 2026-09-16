@@ -5,6 +5,7 @@ import { deriveEffectiveHead, isEvidenceReanchorRecord, } from "../domain/eviden
 import { parseReviewSessionState, } from "../domain/review-convergence.js";
 import { git } from "../lib/process.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
+import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 export const REVIEW_SESSION_FILE = "review-session.json";
 const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
 const GIT_ENV = {
@@ -77,7 +78,7 @@ export function readStoredReviewSession(stagingInput) {
         return null;
     assertRegularSessionFile(file);
     const session = parseReviewSessionState(parseJsonStrict(fs.readFileSync(file, "utf8"), "review session"));
-    const root = path.resolve(staging, "../../../..");
+    const root = stagingRepositoryRoot(staging);
     const reanchorRecords = readReanchorChain(staging);
     for (const [index, record] of session.rounds.entries()) {
         if (!record.followOnly)
