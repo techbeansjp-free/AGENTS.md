@@ -22,6 +22,7 @@ import {
   describeReviewProgressUnbuildable,
   tryBuildReviewProgressInventory,
   type ReviewProgressInventory,
+  type ReviewProgressUnbuildableReason,
   PROGRESS_END,
   PROGRESS_START,
 } from "../domain/review-progress.js";
@@ -214,10 +215,23 @@ export function buildReviewRoundDraft(input: {
     const baseSha = resolveCommit(root, "--base", input.baseSha);
     const observed = observeReviewDiff(root, baseSha, headSha);
     const progressTarget = path.join(staging, "03_実装計画.md");
-    const progressStat = fs.existsSync(progressTarget)
-      ? fs.lstatSync(progressTarget)
-      : undefined;
-    const progressSource = progressStat
+    /**
+     * **不在だけを不在として扱う。** `fs.existsSync`はEACCES等でも`false`を
+     * 返すため、読めない03を「03が無い」と誤認して案内も出さずroundを開く
+     * fail-open経路になる（実測: 親directoryが`0o000`のとき`existsSync`は
+     * `false`、`lstatSync`はEACCES）。ENOENT以外は従来どおり伝播させる。
+     */
+    let progressStat: fs.Stats | undefined;
+    try {
+      progressStat = fs.lstatSync(progressTarget);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    /**
+     * **種別を判定してから読む。** `readFileSync`を先に置くと、directoryや
+     * FIFOが分類より前にthrowして「通常fileでない」の分類へ到達しない。
+     */
+    const progressSource = progressStat?.isFile()
       ? fs.readFileSync(progressTarget, "utf8")
       : undefined;
     /**
@@ -226,14 +240,34 @@ export function buildReviewRoundDraft(input: {
      * optionalなinventoryの構築例外を本線へ伝播させると、REQ-WF-021が明文で
      * 禁じている「review gateがprogressの失敗を拒否理由にする」状態になる。
      * 分類済みの不成立は値で受け取って案内へ回し、roundはそのまま開く。
-     * **try/catchを置かない。** 分類外の失敗は従来どおり例外として伝播させ、
-     * fail-openを構造的に成立させない。
+     * **分類済みの不成立だけを値で受け取る。** 例外を握り潰す枝を作らず、
+     * 分類外の失敗は従来どおり伝播させてfail-openを成立させない。
+     * `lstat`のENOENTだけは「03が無い」として扱う（上の判定を参照）。
      */
     let progressInventory: ReviewProgressInventory | undefined;
-    if (
+    let unbuildable:
+      | {
+          reason: ReviewProgressUnbuildableReason;
+          observedMode: number;
+          isSymbolicLink: boolean;
+        }
+      | undefined;
+    if (progressStat && !progressStat.isFile())
+      unbuildable = {
+        reason: "not-regular-file",
+        observedMode: progressStat.mode & 0o777,
+        isSymbolicLink: progressStat.isSymbolicLink(),
+      };
+    else if (
       progressStat &&
-      progressSource?.includes(PROGRESS_START) &&
-      progressSource.includes(PROGRESS_END)
+      progressSource !== undefined &&
+      /**
+       * **片側markerでも判定へ回す。** 両方揃った場合だけ判定すると、
+       * 壊れたmarkerが`marker-not-single-pair`の案内を経由せず、
+       * markerを使っていないstagingと区別できないまま無言で落ちる。
+       */
+      (progressSource.includes(PROGRESS_START) ||
+        progressSource.includes(PROGRESS_END))
     ) {
       const outcome = tryBuildReviewProgressInventory(
         "03_実装計画.md",
@@ -244,17 +278,18 @@ export function buildReviewRoundDraft(input: {
         },
       );
       if (outcome.state === "built") progressInventory = outcome.inventory;
-      else {
-        const guidance = describeReviewProgressUnbuildable({
-          reason: outcome.reason,
-          observedMode: outcome.observedMode,
-          isSymbolicLink: outcome.isSymbolicLink,
-          targetPath: "03_実装計画.md",
-        });
-        progressNotes.push(
-          `[${guidance.code}] ${guidance.target}のparallel progress inventoryを構築できません（${guidance.reason}）。実測=${guidance.observed} 期待=${guidance.expected}。${guidance.effect}。${guidance.action}${guidance.repairArgv ? `: ${guidance.repairArgv.join(" ")}` : ""}。必要authority=${guidance.requiredAuthority}。rollback=${guidance.rollback}`,
-        );
-      }
+      else unbuildable = outcome;
+    }
+    if (unbuildable) {
+      const guidance = describeReviewProgressUnbuildable({
+        reason: unbuildable.reason,
+        observedMode: unbuildable.observedMode,
+        isSymbolicLink: unbuildable.isSymbolicLink,
+        targetPath: "03_実装計画.md",
+      });
+      progressNotes.push(
+        `[${guidance.code}] ${guidance.target}のparallel progress inventoryを構築できません（${guidance.reason}）。実測=${guidance.observed} 期待=${guidance.expected}。${guidance.effect}。${guidance.action}${guidance.repairArgv ? `: ${guidance.repairArgv.join(" ")}` : ""}。必要authority=${guidance.requiredAuthority}。rollback=${guidance.rollback}`,
+      );
     }
     round = {
       round: 1,

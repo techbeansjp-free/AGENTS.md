@@ -60,3 +60,9 @@ Feature: 判定入力から分離したparallel progress evidenceの純粋契約
     Given parallel progressの純粋fixtureがある
     When "inventory-unbuildable" のparallel progress反例を評価する
     Then parallel progress契約を満たす
+
+  Scenario: SCN-UNIT-PROGRESS-040 必要authorityを分類ごとに分ける
+    Given parallel progressの純粋fixtureがある
+    When "authority-per-reason" のparallel progress反例を評価する
+    Then parallel progress契約を満たす
+

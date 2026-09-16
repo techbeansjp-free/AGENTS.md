@@ -1113,7 +1113,16 @@ export function createIssueStaging(
        * 経路を塞がないため、ここへ停止点を作らない。固定できなかった場合は
        * `review round --init`の非停止経路と案内が受け止める。
        */
-      fs.chmodSync(path.join(temporary, "03_実装計画.md"), 0o644);
+      try {
+        fs.chmodSync(path.join(temporary, "03_実装計画.md"), 0o644);
+      } catch {
+        /**
+         * **固定に失敗しても生成を止めない。** vfat・exfat・一部のFUSE/CIFS/9p
+         * のようにchmodがEPERM・ENOTSUPを返すfilesystemで、唯一の生成経路を
+         * 塞がないためである。固定できなかった場合はREQ-WF-021の非停止と
+         * `review round --init`の案内が受け止める。
+         */
+      }
     }
     const artifacts = listStagingArtifacts(temporary);
     const record: StoredStagingRecord = {

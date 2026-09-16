@@ -96,3 +96,23 @@ Feature: parallel progress evidenceのadapter境界
     When それぞれでreview round --initを実行する
     Then どの分類でも案内がnotesへ出る
 
+  Scenario: SCN-INT-PROGRESS-036 読めないstagingは非停止化後も拒否する
+    Given 親directoryが読めない03を持つstagingがある
+    When lstatが不在以外の理由で失敗する
+    Then 不在と区別して拒否する
+
+  Scenario: SCN-INT-PROGRESS-037 通常fileでない03を分類して案内する
+    Given 03が通常fileでないstagingがある
+    When review round --initを実行する
+    Then not-regular-fileとして案内する
+
+  Scenario: SCN-INT-PROGRESS-038 片側markerを無言で落とさない
+    Given markerが片側だけの03を持つstagingがある
+    When review round --initを実行する
+    Then marker不正として案内する
+
+  Scenario: SCN-INT-PROGRESS-039 full昇格で生成する03も0644になる
+    Given full昇格で03を生成するquick stagingがある
+    When full昇格を適用する
+    Then 昇格で生成された03のmodeは0644である
+

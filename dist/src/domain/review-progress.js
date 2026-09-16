@@ -10,7 +10,13 @@ const STATES = ["planned", "started", "completed", "blocked"];
 function sha256(value) {
     return crypto.createHash("sha256").update(value).digest("hex");
 }
-function splitTarget(source) {
+/**
+ * markerの1組を切り出す。**例外でなく判別可能な値を返す。**
+ *
+ * 呼び出し側でcatchすると、将来この関数へ足した別の失敗まで無言で
+ * `marker-not-single-pair`へ束ねられ、分類の閉じた列挙という安全性の根拠が崩れる。
+ */
+function trySplitTarget(source) {
     const start = source.indexOf(PROGRESS_START);
     const end = source.indexOf(PROGRESS_END);
     if (start < 0 ||
@@ -18,13 +24,20 @@ function splitTarget(source) {
         source.indexOf(PROGRESS_START, start + 1) >= 0 ||
         source.indexOf(PROGRESS_END, end + 1) >= 0 ||
         end <= start)
-        throw new Error("parallel progress markerは正確に1組必要です");
+        return { ok: false };
     const bodyStart = start + PROGRESS_START.length;
     return {
+        ok: true,
         prefix: source.slice(0, bodyStart),
         body: source.slice(bodyStart, end),
         suffix: source.slice(end),
     };
+}
+function splitTarget(source) {
+    const split = trySplitTarget(source);
+    if (!split.ok)
+        throw new Error("parallel progress markerは正確に1組必要です");
+    return { prefix: split.prefix, body: split.body, suffix: split.suffix };
 }
 /**
  * inventoryを構築できない分類。**閉じた列挙にする。**
@@ -66,14 +79,10 @@ export function tryBuildReviewProgressInventory(targetPath, source, target) {
         return unbuildable("not-regular-file");
     if (target.fileMode !== 0o644)
         return unbuildable("mode-mismatch");
-    let prefix;
-    let suffix;
-    try {
-        ({ prefix, suffix } = splitTarget(source));
-    }
-    catch {
+    const split = trySplitTarget(source);
+    if (!split.ok)
         return unbuildable("marker-not-single-pair");
-    }
+    const { prefix, suffix } = split;
     const allowedTaskIds = [
         ...new Set([...source.matchAll(/^\|\s*([A-Z][A-Z0-9._-]{1,63})\s*\|/gmu)].map((match) => match[1])),
     ].sort();
@@ -91,6 +100,17 @@ export function tryBuildReviewProgressInventory(targetPath, source, target) {
         }),
     });
 }
+/**
+ * 分類ごとに必要なauthorityは違う。**modeの変更権限で全分類を代表させない。**
+ * markerやtask IDの是正は内容の編集権限、通常fileへの置換はdirectory entryの
+ * 変更権限を要するため、案内が行動可能にならない。
+ */
+const REQUIRED_AUTHORITY = Object.freeze({
+    "mode-mismatch": "対象fileのmode変更権限",
+    "not-regular-file": "staging directoryのentry変更権限（対象を通常fileへ置き換える）",
+    "marker-not-single-pair": "対象fileの内容編集権限",
+    "no-task-id": "対象fileの内容編集権限",
+});
 const UNBUILDABLE_MESSAGES = Object.freeze({
     "mode-mismatch": "parallel progress targetはmode 100644が必要です",
     "not-regular-file": "parallel progress targetはmode 100644が必要です",
@@ -136,7 +156,7 @@ export function describeReviewProgressUnbuildable(input) {
         observed,
         expected: "100644",
         effect: "このroundではparallel progressを利用できません。reviewは通常どおり継続し、round番号と予算は変わりません",
-        requiredAuthority: "対象fileのowner（mode変更権限）",
+        requiredAuthority: REQUIRED_AUTHORITY[input.reason],
         rollback: "review sessionを変更していません。対象fileを元の状態へ戻せます",
     };
     if (input.reason === "not-regular-file")
