@@ -194,3 +194,15 @@ Feature: Issue templateと段階別検証の契約
     When 複写したstagingをdesign段階で検証する
     Then 複写したstagingの検証は合格する
     And 複写した00から必須見出しを1つ削ると必須項目の不足で拒否される
+
+  Scenario: SCN-UNIT-ISSUETPL-013 複写した成果物は管理情報より先に目的の節が来る
+    Given 出荷Issue templateと検証器の見出し契約がある
+    When 配布templateからfullの件名と作成日時でstagingを複写する
+    Then 00から03の最初の節見出しは管理情報ではない
+    And 00から03の管理情報の節は最後の節である
+
+  Scenario: SCN-UNIT-ISSUETPL-014 配布するIssue templateは全件が読者表を持ちreview templateは要約を持つ
+    Given 出荷Issue templateと検証器の見出し契約がある
+    When 配布するIssue templateを全件読む
+    Then 全templateは冒頭に読者3区分の読者表を持つ
+    And review templateは問題・解決・実施・確認・判定の要約表を持つ

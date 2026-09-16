@@ -12,6 +12,7 @@ import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 interface TemplateBrevityWorld extends WorkflowWorld {
   staging: string;
   validation: ReturnType<typeof validateIssue>;
+  templates: Map<string, string>;
 }
 
 const { Given, When, Then } = stepDefinitions<TemplateBrevityWorld>();
@@ -149,5 +150,100 @@ Then(
       ),
       validation.errors.join("; "),
     );
+  },
+);
+
+/**
+ * **管理情報より先に目的が来ることを構造で固定する。** 読者が最初に見るのが件名・日付では、
+ * 何を求めている文書かが画面外へ出る。分量の閾値は置かない（INV-04）。
+ */
+Then("00から03の最初の節見出しは管理情報ではない", function () {
+  for (const name of FULL_FILES) {
+    const first = read(this.staging, name)
+      .split("\n")
+      .find((line) => line.startsWith("## "));
+    assert.ok(first, `${name}に節見出しがありません`);
+    assert.doesNotMatch(
+      first,
+      /管理情報|レビュー識別情報/u,
+      `${name}: ${first}`,
+    );
+  }
+});
+
+Then("00から03の管理情報の節は最後の節である", function () {
+  for (const name of FULL_FILES) {
+    const headings = read(this.staging, name)
+      .split("\n")
+      .filter((line) => line.startsWith("## "));
+    assert.match(headings.at(-1) ?? "", /管理情報/u, `${name}の末尾節`);
+  }
+});
+
+const DISTRIBUTED_ISSUE_TEMPLATES = [
+  "00_要求定義_full.md",
+  "00_要求定義_quick.md",
+  "00_要求定義_poc.md",
+  "01_要件定義.md",
+  "02_設計.md",
+  "03_実装計画.md",
+  "04_レビュー.md",
+  "11_プルリクエスト事前確認.md",
+  "11_プルリクエスト本文.md",
+  "12_利用案内.md",
+] as const;
+const READERS = [
+  "発注・評価する人",
+  "実装・レビューする人",
+  "運用する人",
+] as const;
+const REVIEW_SUMMARY_ITEMS = [
+  "何が問題だったか",
+  "何を解決しようとしたか",
+  "何を行ったか",
+  "何を確認したか",
+  "判定",
+] as const;
+
+When("配布するIssue templateを全件読む", function () {
+  this.templates = new Map(
+    DISTRIBUTED_ISSUE_TEMPLATES.map((name) => [
+      name,
+      fs.readFileSync(
+        path.join(process.cwd(), ".agent-skill-chain/templates/issue", name),
+        "utf8",
+      ),
+    ]),
+  );
+});
+
+Then("全templateは冒頭に読者3区分の読者表を持つ", function () {
+  assert.equal(this.templates.size, DISTRIBUTED_ISSUE_TEMPLATES.length);
+  for (const [name, text] of this.templates) {
+    const head = text.split("\n").slice(0, 16).join("\n");
+    assert.match(
+      head,
+      /^\| 読者 \| 読む節 \|$/mu,
+      `${name}に読者表がありません`,
+    );
+    for (const reader of READERS)
+      assert.match(
+        head,
+        new RegExp(`^\\| ${reader} \\|`, "mu"),
+        `${name} ${reader}`,
+      );
+  }
+});
+
+Then(
+  "review templateは問題・解決・実施・確認・判定の要約表を持つ",
+  function () {
+    const text = this.templates.get("04_レビュー.md");
+    assert.ok(text, "04_レビュー.mdを読んでいません");
+    const start = text.indexOf("## 要約");
+    assert.notEqual(start, -1, "要約の節がありません");
+    const section = text.slice(start, text.indexOf("\n## ", start + 1));
+    for (const item of REVIEW_SUMMARY_ITEMS)
+      assert.match(section, new RegExp(`^\\| ${item} \\|`, "mu"), item);
   },
 );
