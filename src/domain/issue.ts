@@ -1126,6 +1126,70 @@ export function createIssueStaging(
   };
 }
 
+/**
+ * 折りたたみ区画へ入れる本文から、**構造を壊す閉じtagだけ**を実体参照へ置き換える。
+ *
+ * **表示内容は保たれる。** `&lt;/details&gt;`はGitHub上で`</details>`という文字として
+ * 表示されるため、読者が見る内容は変わらない。置き換えないと、成果物本文が持つ生の
+ * `</details>`がbrowserのHTML parserで折りたたみを閉じ、**以降の本文と後続の成果物が
+ * 区画の外へ出る**（PR #1407の外部review指摘）。
+ *
+ * **codeの内側は置き換えない。** fenced blockとinline codeはGFMが実体参照へ変換して
+ * 出力するため、そのままでも折りたたみを壊さない。判定はこのfileの`withoutCode`・
+ * `withoutInlineCode`と同じfence規則を使う。
+ */
+export function escapeFoldBoundary(text: string): string {
+  const closing = /<\/\s*details\s*>/giu;
+  let fence: { marker: "`" | "~"; length: number } | undefined;
+  return text
+    .split("\n")
+    .map((line) => {
+      const opening = /^\s*(`{3,}|~{3,})/u.exec(line)?.[1];
+      if (fence) {
+        if (
+          new RegExp(
+            `^\\s*${escapeRegExp(fence.marker)}{${fence.length},}\\s*$`,
+            "u",
+          ).test(line)
+        )
+          fence = undefined;
+        return line;
+      }
+      if (opening) {
+        fence = {
+          marker: opening[0] as "`" | "~",
+          length: opening.length,
+        };
+        return line;
+      }
+      // inline code span内は保持し、その外側だけを置き換える。
+      let result = "";
+      let cursor = 0;
+      while (cursor < line.length) {
+        const start = line.indexOf("`", cursor);
+        if (start < 0) {
+          result += line.slice(cursor).replace(closing, "&lt;/details&gt;");
+          break;
+        }
+        result += line
+          .slice(cursor, start)
+          .replace(closing, "&lt;/details&gt;");
+        let length = 1;
+        while (line[start + length] === "`") length += 1;
+        const marker = "`".repeat(length);
+        const end = line.indexOf(marker, start + length);
+        if (end < 0) {
+          result += line.slice(start);
+          break;
+        }
+        result += line.slice(start, end + length);
+        cursor = end + length;
+      }
+      return result;
+    })
+    .join("\n");
+}
+
 export interface IssueSyncArtifactText {
   readonly name: string;
   readonly text: string;
@@ -1151,7 +1215,7 @@ export function renderIssueSyncBody(
     return `${lead!.text.trimEnd()}${folded
       .map(
         (artifact) =>
-          `\n\n<details>\n<summary>${artifact.name}</summary>\n\n${artifact.text.trimEnd()}\n\n</details>`,
+          `\n\n<details>\n<summary>${artifact.name}</summary>\n\n${escapeFoldBoundary(artifact.text.trimEnd())}\n\n</details>`,
       )
       .join("")}\n`;
   }

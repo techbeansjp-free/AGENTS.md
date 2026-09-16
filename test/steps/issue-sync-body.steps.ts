@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   buildIssueSyncBody,
   createIssueStaging,
+  escapeFoldBoundary,
   renderIssueSyncBody,
   type IssueSyncArtifactText,
 } from "../../src/domain/issue.js";
@@ -38,7 +39,7 @@ function knownInputs(): IssueSyncArtifactText[] {
     { name: ARTIFACT_NAMES[1], text: "" },
     {
       name: ARTIFACT_NAMES[2],
-      text: "# 02 設計\n\n本文に</details>が現れる。\n",
+      text: "# 02 設計\n\n本文に</details>が現れる。\n\n`</details>`はinline code。\n\n```\n</details>はfence内。\n```\n",
     },
     { name: ARTIFACT_NAMES[3], text: "# 03 実装計画\n\n| T01 | 完了 |\n" },
   ];
@@ -76,6 +77,11 @@ function considerationDocument(title: string): string {
     )
     .join("\n");
   return `# ${title}\n\n${rows}\n`;
+}
+
+/** 折りたたみへ入れた本文の期待形。生の閉じtagだけが実体参照になる。 */
+function expectedInner(text: string): string {
+  return escapeFoldBoundary(text.trimEnd());
 }
 
 function foldedSections(body: string): { summary: string; inner: string }[] {
@@ -126,7 +132,7 @@ Then("各折りたたみの中身は対応する成果物の全文と一致す�
   const inner = foldedSections(this.rendered).map((section) => section.inner);
   assert.deepEqual(
     inner,
-    this.syncInputs.slice(1).map((artifact) => artifact.text.trimEnd()),
+    this.syncInputs.slice(1).map((artifact) => expectedInner(artifact.text)),
   );
   assert.ok(this.rendered.endsWith("</details>\n"), "末尾は改行1つで終わる");
 });
@@ -174,4 +180,22 @@ Then("同期本文は成果物を区切り線で連結した従来形式であ�
     .join("\n\n---\n\n")}\n`;
   assert.equal(this.rendered, expected);
   assert.ok(!this.rendered.includes("<details>"), "折りたたみを含まない");
+});
+
+/**
+ * **HTML境界と表示内容の両方を見る。** 本文が持つ生の閉じtagは折りたたみを早期に閉じ、
+ * 以降の成果物が区画の外へ出る。構造の均衡だけでなく、codeの内側が保たれることも確かめる。
+ */
+Then("折りたたみの構造は本文中の閉じtagで壊れない", function () {
+  const structural = this.rendered.split("\n\n</details>").length - 1;
+  assert.equal(
+    structural,
+    (this.rendered.match(/<details>/gu) ?? []).length,
+    "開始と構造上の終端が釣り合わない",
+  );
+  const design = foldedSections(this.rendered)[1];
+  assert.ok(design, "02の折りたたみがありません");
+  assert.match(design.inner, /本文に&lt;\/details&gt;が現れる。/u);
+  assert.match(design.inner, /`<\/details>`はinline code。/u);
+  assert.match(design.inner, /```\n<\/details>はfence内。\n```/u);
 });
