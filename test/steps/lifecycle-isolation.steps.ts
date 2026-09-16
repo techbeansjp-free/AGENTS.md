@@ -253,6 +253,15 @@ When("setupを適用する", function (this: IsolationWorld) {
   init(this.root, { apply: true });
 });
 
+Then(
+  "展開したAGENTSは利用project固有の管理を上書きしない",
+  function (this: IsolationWorld) {
+    const agents = fs.readFileSync(path.join(this.root, "AGENTS.md"), "utf8");
+    assert.doesNotMatch(agents, /GitHub Project #8/u);
+    assert.doesNotMatch(agents, /docs\/PROJECT_MANAGEMENT\.md/u);
+  },
+);
+
 /**
  * **消えた展開先の復元を測る**（Issue #1105）。
  *

@@ -58,7 +58,7 @@ npx agent-skill-chain worktree create --help
 ## 正本と仕様
 
 - リポジトリでの入口: [AGENTS.md](AGENTS.md)
-- 開発WBSと着手順序: [GitHub Project #8](https://github.com/orgs/techbeansjp-free/projects/8/views/1?system_template=kanban)（運用規則は[プロジェクト管理](docs/PROJECT_MANAGEMENT.md)）
+- 開発WBSと着手順序: [GitHub Project #8](https://github.com/orgs/techbeansjp-free/projects/8/views/1?system_template=kanban)（運用規則は[プロジェクト管理](https://github.com/techbeansjp-free/AGENTS.md/blob/main/docs/PROJECT_MANAGEMENT.md)）
 - package全体の案内: [中央利用案内](.agent-skill-chain/00_利用案内.md)
 - 権限と所有権: [運用ポリシー](.agent-skill-chain/docs/00_運用ポリシー.md)
 - Step 0〜11の順序: [開発ワークフロー](.agent-skill-chain/docs/01_開発ワークフロー.md)

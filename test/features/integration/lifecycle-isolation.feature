@@ -213,6 +213,11 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     When 隔離先でdoctorを実行する
     Then doctorは管理対象外の資産を判定不能として次の操作つきで報告する
 
+  Scenario: SCN-INT-LIFECYCLE-044 展開するAGENTSにpackage開発固有の管理指示を含めない
+    Given lifecycle検証用の隔離directoryがある
+    When setupを適用する
+    Then 展開したAGENTSは利用project固有の管理を上書きしない
+
   Scenario: SCN-INT-LIFECYCLE-042 復旧で管理対象から外れた資産をdoctorが報告しhealthyを変えない
     Given 導入後にrecordを失い展開済み資産が正本と異なる隔離先がある
     When 明示指定つきで復旧してからdoctorを実行する
