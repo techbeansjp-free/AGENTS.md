@@ -86,6 +86,7 @@ const { Given, When, Then } = stepDefinitions<ReanchorWorld>();
 
 const INSTANT = new Date("2026-09-01T00:00:00.000Z");
 const REVIEWED = "src/domain/reviewed.ts";
+const GENERATED = "dist/src/domain/reviewed.js";
 
 function runReanchorCli(
   world: ReanchorWorld,
@@ -293,7 +294,11 @@ approved${extra}
 `;
 }
 
-function auditableReviewArtifact(base: string, implementation: string): string {
+function auditableReviewArtifact(
+  base: string,
+  implementation: string,
+  includeGenerated = false,
+): string {
   return `# 04 レビュー
 
 ## 0. レビュー識別情報
@@ -311,7 +316,7 @@ function auditableReviewArtifact(base: string, implementation: string): string {
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
-| \`${REVIEWED}\` | A | package owner | domain | fixture実装 | 循環なし | AC-1377-01 / SCN-1377-01 | revert可能 | pass |
+| \`${REVIEWED}\` | A | package owner | domain | fixture実装 | 循環なし | AC-1377-01 / SCN-1377-01 | revert可能 | pass |${includeGenerated ? `\n| \`${GENERATED}\` | A | package owner | 生成物 | 生成元${REVIEWED}と対応 | source → dist | AC-1418-03 / SCN-1418-REANCHOR-01 | 配布影響確認済み、revert可能 | pass |` : ""}
 
 ## 2. 受け入れ条件の確認
 合格。
@@ -348,8 +353,16 @@ function auditableReviewArtifact(base: string, implementation: string): string {
 `;
 }
 
-function forwardReviewArtifact(base: string, implementation: string): string {
-  return auditableReviewArtifact(base, implementation).replace(
+function forwardReviewArtifact(
+  base: string,
+  implementation: string,
+  includeGenerated = false,
+): string {
+  return auditableReviewArtifact(
+    base,
+    implementation,
+    includeGenerated,
+  ).replace(
     `| \`${REVIEWED}\` | A | package owner | domain | fixture実装 | 循環なし | AC-1377-01 / SCN-1377-01 | revert可能 | pass |`,
     `| \`${REVIEWED}\` | A | package owner | domain | fixture実装 | 循環なし | AC-1389-01 / SCN-1389-01 | revert可能 | pass |\n| \`${INITIAL_FORWARD_ARTIFACT}\` | A | package owner | documentation | 前round証跡を保持 | 循環なし | AC-1389-01 / SCN-1389-01 | revert可能 | pass |`,
   );
@@ -359,6 +372,7 @@ function recordForwardRound(
   world: ReanchorWorld,
   implementation: string,
   recordIntake: boolean,
+  includeGenerated = false,
 ): void {
   const previous = readStoredReviewSession(world.staging);
   assert.ok(previous, "先行review sessionがありません");
@@ -371,7 +385,11 @@ function recordForwardRound(
       candidateHeadSha: implementation,
       focus: {
         previousBlocking: [],
-        fixedDiff: [INITIAL_FORWARD_ARTIFACT, REVIEWED],
+        fixedDiff: [
+          INITIAL_FORWARD_ARTIFACT,
+          REVIEWED,
+          ...(includeGenerated ? [GENERATED] : []),
+        ].sort(),
         adjacentScope: [],
       },
       findings: [],
@@ -416,18 +434,33 @@ function recordForwardRound(
     readWorkflowJournal(world.staging).entries.length === beforeCount;
 }
 
-function forwardFixture(world: ReanchorWorld, recordIntake: boolean): void {
+function forwardFixture(
+  world: ReanchorWorld,
+  recordIntake: boolean,
+  includeGenerated = false,
+): void {
   world.root = world.initRepo();
   world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
-  const initialImplementation = commit(
+  let initialImplementation = commit(
     world.root,
     "export const reviewed = 1;\n",
     "feat: initial review対象",
   );
+  if (includeGenerated)
+    initialImplementation = commitPath(
+      world.root,
+      GENERATED,
+      "export const reviewed = 1;\n",
+      "build: initial generated review対象",
+    );
   world.oldHeadSha = commitPath(
     world.root,
     INITIAL_FORWARD_ARTIFACT,
-    auditableReviewArtifact(world.baseSha, initialImplementation),
+    auditableReviewArtifact(
+      world.baseSha,
+      initialImplementation,
+      includeGenerated,
+    ),
     "docs: initial review artifact",
   );
   world.staging = makeStaging(world);
@@ -436,16 +469,23 @@ function forwardFixture(world: ReanchorWorld, recordIntake: boolean): void {
   execFileSync("git", ["checkout", "-q", world.oldHeadSha], {
     cwd: world.root,
   });
-  const implementation = commit(
+  let implementation = commit(
     world.root,
     "export const reviewed = 2;\n",
     "fix: external reviewer指摘を反映",
   );
-  recordForwardRound(world, implementation, recordIntake);
+  if (includeGenerated)
+    implementation = commitPath(
+      world.root,
+      GENERATED,
+      "export const reviewed = 2;\n",
+      "build: generated review対象を同期",
+    );
+  recordForwardRound(world, implementation, recordIntake, includeGenerated);
   world.newHeadSha = commitPath(
     world.root,
     FORWARD_ARTIFACT,
-    forwardReviewArtifact(world.baseSha, implementation),
+    forwardReviewArtifact(world.baseSha, implementation, includeGenerated),
     "docs: post-PR review artifact",
   );
   world.newBaseSha = world.baseSha;
@@ -455,6 +495,13 @@ Given(
   "pr-bound後に前進した実装と明示済みpost-PR intakeのreview artifactがある",
   function () {
     forwardFixture(this, true);
+  },
+);
+
+Given(
+  "pr-bound後に版管理下の生成物を含む前進実装とpost-PR intakeのreview artifactがある",
+  function () {
+    forwardFixture(this, true, true);
   },
 );
 

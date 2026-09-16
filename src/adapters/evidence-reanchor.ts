@@ -535,9 +535,8 @@ function observeArtifactReplacement(
   const step10 = [...journal.entries]
     .reverse()
     .find((entry) => entry.step === 10)?.reviewSession;
-  const expectedPaths = [...afterImplementation.changedPaths]
-    .filter((entry) => !entry.startsWith("dist/"))
-    .sort();
+  /** 版管理下の生成物も監査表では1 file 1行の対象である。 */
+  const expectedPaths = [...afterImplementation.changedPaths].sort();
   const auditedPaths = audit.entries.map((entry) => entry.path).sort();
   if (
     structure.diagnostics.length > 0 ||
@@ -634,9 +633,8 @@ function observeReviewedForward(
   const step10 = [...journal.entries]
     .reverse()
     .find((entry) => entry.step === 10 && entry.postPrIntake);
-  const expectedPaths = [...implementation.changedPaths]
-    .filter((entry) => !entry.startsWith("dist/"))
-    .sort();
+  /** 版管理下の生成物も監査表では1 file 1行の対象である。 */
+  const expectedPaths = [...implementation.changedPaths].sort();
   const auditedPaths = audit.entries.map((entry) => entry.path).sort();
   if (
     structure.diagnostics.length > 0 ||
