@@ -821,6 +821,25 @@ export function createIssueStaging(root, options) {
         synced: false,
     };
 }
+/**
+ * 同期本文を組み立てる純粋関数。fileを読まず、外部副作用を持たない。
+ *
+ * **fullのStep 8は00を先頭に置き、01〜03を`<details>`へ入れる。** 実測では00〜03を
+ * 区切り線で連結した本文が715〜888行・26,055〜47,215字になり、要求を読みに来た人が
+ * 設計と実装計画を連結で受け取っていた（Issue #1406）。折りたたみは内容を1文字も落とさず、
+ * 最初の画面を00だけにする。`<summary>`の直後に空行を置くのは、GitHubが折りたたみ内の
+ * Markdownを描画する条件だからである。checkpoint 4とquick・pocは従来の区切り線連結のまま
+ * 変えない。同期対象の集合（`issueSyncArtifactNames`）とdigest規則もここでは変えない。
+ */
+export function renderIssueSyncBody(mode, checkpoint, artifacts) {
+    if (mode === "full" && checkpoint === 8 && artifacts.length > 1) {
+        const [lead, ...folded] = artifacts;
+        return `${lead.text.trimEnd()}${folded
+            .map((artifact) => `\n\n<details>\n<summary>${artifact.name}</summary>\n\n${artifact.text.trimEnd()}\n\n</details>`)
+            .join("")}\n`;
+    }
+    return `${artifacts.map((artifact) => artifact.text.trimEnd()).join("\n\n---\n\n")}\n`;
+}
 /** 検証済みstaging成果物をmode/checkpointの規定順で連結する。外部副作用は持たない。 */
 export function buildIssueSyncBody(stagingInput, checkpoint, gherkinDialect) {
     const staging = path.resolve(stagingInput);
@@ -842,9 +861,10 @@ export function buildIssueSyncBody(stagingInput, checkpoint, gherkinDialect) {
     if (!validation.valid)
         throw new Error(`同期本文の成果物が未検証です: ${validation.errors.join("; ")}`);
     const artifacts = issueSyncArtifactNames(record.mode, checkpoint);
-    const body = `${artifacts
-        .map((name) => fs.readFileSync(path.join(staging, name), "utf8").trimEnd())
-        .join("\n\n---\n\n")}\n`;
+    const body = renderIssueSyncBody(record.mode, checkpoint, artifacts.map((name) => ({
+        name,
+        text: fs.readFileSync(path.join(staging, name), "utf8"),
+    })));
     return Object.freeze({
         body,
         bodySha256: crypto
