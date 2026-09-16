@@ -1233,13 +1233,16 @@ Then("複数差分の診断に全pathが列挙される", function () {
   assert.ok(!errors.includes("docs/reviews/42_課題892実装レビュー.md"));
 });
 
-Then("許可review directory配下でないpathと修正方法を示して失敗する", function () {
-  assert.equal(this.auditResult?.valid, false);
-  const errors = this.auditResult?.errors.join("\n") ?? "";
-  assert.ok(errors.includes("notes/review.md"));
-  assert.ok(errors.includes("docs/reviews/"));
-  assert.ok(errors.includes(".agent-skill-chain/reviews/"));
-});
+Then(
+  "許可review directory配下でないpathと修正方法を示して失敗する",
+  function () {
+    assert.equal(this.auditResult?.valid, false);
+    const errors = this.auditResult?.errors.join("\n") ?? "";
+    assert.ok(errors.includes("notes/review.md"));
+    assert.ok(errors.includes("docs/reviews/"));
+    assert.ok(errors.includes(".agent-skill-chain/reviews/"));
+  },
+);
 
 Then("release bumpを除外してreview artifact 1件が選ばれる", function () {
   assert.equal(
