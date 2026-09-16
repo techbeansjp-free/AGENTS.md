@@ -4,18 +4,24 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   buildReviewProgressInventory,
+  buildReviewProgressInventories,
   makeReviewProgressEntry,
   makeReviewProgressSeal,
   parallelCriticalPath,
   parseReviewProgressRecords,
   projectReviewProgressTarget,
+  reviewProgressTargets,
   PROGRESS_END,
   PROGRESS_START,
   verifyReviewProgressTarget,
   type ReviewProgressInventory,
   type ReviewProgressRecord,
 } from "../../src/domain/review-progress.js";
-import { parseReviewRoundInput } from "../../src/domain/review-convergence.js";
+import {
+  parseReviewRoundInput,
+  reviewSessionId,
+  type ReviewSessionState,
+} from "../../src/domain/review-convergence.js";
 import { COMMAND_USAGE } from "../../src/cli-usage.js";
 import { stableJson } from "../../src/lib/security.js";
 import { checkParallelProgressSourceIsolation } from "../../scripts/check_conformance.js";
@@ -27,6 +33,7 @@ import {
   buildReviewRoundDraft,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
+import { recordLayerSuffix } from "../../src/adapters/review-record-layer.js";
 import { main } from "../../src/cli.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
 import { QUESTIONS, type ModeAnswer } from "../../src/domain/mode.js";
@@ -57,6 +64,8 @@ const isolatedSources = {
     'export const REVIEW_PROGRESS_JOURNAL_FILE = "journal/review-progress.jsonl";',
   "src/adapters/review-progress.ts":
     'import { REVIEW_PROGRESS_JOURNAL_FILE } from "../domain/staging.js";',
+  "src/adapters/review-record-layer.ts":
+    'const journal = "journal/review-progress.jsonl";',
   "src/adapters/review-session.ts":
     'import { buildReviewProgressInventory } from "../domain/review-progress.js";',
   "src/domain/delivery.ts": "export const delivery = true;",
@@ -213,6 +222,171 @@ When(
           records: [entry()],
         });
         assert.match(projected, /\| T01 \| completed \|/u);
+        break;
+      }
+      case "multiple-targets": {
+        const readme = this.source.replace("# plan", "# task README");
+        const inventory = buildReviewProgressInventories([
+          {
+            targetPath: "03_実装計画.md",
+            source: this.source,
+            fileMode: 0o644,
+          },
+          {
+            targetPath: "tasks/README.md",
+            source: readme,
+            fileMode: 0o644,
+          },
+        ]);
+        const targets = reviewProgressTargets(inventory);
+        assert.deepEqual(
+          targets.map(({ targetPath }) => targetPath),
+          ["03_実装計画.md", "tasks/README.md"],
+        );
+        for (const target of targets) {
+          const projected = projectReviewProgressTarget({
+            inventory: target,
+            source:
+              target.targetPath === "03_実装計画.md" ? this.source : readme,
+            records: [entry()],
+          });
+          assert.match(projected, /\| T01 \| completed \|/u);
+        }
+        const parsed = parseReviewRoundInput({
+          round: 1,
+          previousRoundDigest: null,
+          anchor: {
+            scopeIds: ["ISSUE-1418"],
+            acceptanceCriteriaIds: ["AC-1418-01"],
+            invariantIds: [],
+            diffBaseSha: head,
+            initialHeadSha: head,
+            initialDiffDigest: "c".repeat(64),
+            progressInventory: inventory,
+          },
+          candidateHeadSha: head,
+          focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
+          findings: [],
+        });
+        assert.equal(
+          reviewProgressTargets(parsed.anchor.progressInventory!).length,
+          2,
+        );
+        break;
+      }
+      case "record-layer": {
+        const root = this.initRepo();
+        const staging = path.join(root, "tasks/1418");
+        const targetPath = "README.md";
+        const repositoryTarget = "tasks/1418/README.md";
+        fs.mkdirSync(staging, { recursive: true });
+        fs.writeFileSync(path.join(staging, targetPath), this.source);
+        execFileSync("git", ["add", repositoryTarget], { cwd: root });
+        execFileSync("git", ["commit", "-q", "-m", "docs: baseline task"], {
+          cwd: root,
+        });
+        const implementationHeadSha = gitHead(root);
+        const progressInventory = buildReviewProgressInventory(
+          targetPath,
+          this.source,
+          0o644,
+        );
+        const anchor = {
+          scopeIds: ["ISSUE-1418"],
+          acceptanceCriteriaIds: ["AC-1418-02"],
+          invariantIds: ["INV-01"],
+          diffBaseSha: implementationHeadSha,
+          initialHeadSha: implementationHeadSha,
+          initialDiffDigest: "c".repeat(64),
+          progressInventory,
+        };
+        const boundSessionId = reviewSessionId(anchor);
+        const progressEntry = makeReviewProgressEntry({
+          previous: [],
+          sessionId: boundSessionId,
+          implementationHeadSha,
+          taskId: "T01",
+          state: "completed",
+          recordedAt: instant,
+        });
+        const progressSeal = makeReviewProgressSeal({
+          previous: [progressEntry],
+          sessionId: boundSessionId,
+          implementationHeadSha,
+          sealedAt: instant,
+        });
+        fs.mkdirSync(path.join(staging, "journal"), { recursive: true });
+        fs.writeFileSync(
+          path.join(staging, "journal/review-progress.jsonl"),
+          `${stableJson(progressEntry)}\n${stableJson(progressSeal)}\n`,
+        );
+        const projected = projectReviewProgressTarget({
+          inventory: progressInventory,
+          source: this.source,
+          records: [progressEntry, progressSeal],
+        });
+        fs.writeFileSync(path.join(staging, targetPath), projected);
+        fs.mkdirSync(path.join(root, "docs/reviews"), { recursive: true });
+        fs.writeFileSync(path.join(root, "docs/reviews/1418.md"), "# review\n");
+        execFileSync("git", ["add", repositoryTarget, "docs/reviews/1418.md"], {
+          cwd: root,
+        });
+        execFileSync("git", ["commit", "-q", "-m", "docs: record layer"], {
+          cwd: root,
+        });
+        const finalHead = gitHead(root);
+        const session = {
+          schemaVersion: "agent-skill-chain/review-session/v1",
+          sessionId: boundSessionId,
+          anchor,
+          rounds: [],
+          latestRoundDigest: "d".repeat(64),
+          latestCandidateHeadSha: implementationHeadSha,
+          status: "converged",
+        } as unknown as ReviewSessionState;
+        assert.deepEqual(
+          recordLayerSuffix(
+            staging,
+            root,
+            implementationHeadSha,
+            finalHead,
+            session,
+          ),
+          ["docs/reviews/1418.md", repositoryTarget],
+        );
+        fs.appendFileSync(path.join(staging, targetPath), "manual edit\n");
+        execFileSync("git", ["add", repositoryTarget], { cwd: root });
+        execFileSync("git", ["commit", "-q", "--amend", "--no-edit"], {
+          cwd: root,
+        });
+        assert.equal(
+          recordLayerSuffix(
+            staging,
+            root,
+            implementationHeadSha,
+            gitHead(root),
+            session,
+          ),
+          undefined,
+        );
+        fs.writeFileSync(path.join(staging, targetPath), projected);
+        fs.writeFileSync(path.join(root, "unexpected.txt"), "unexpected\n");
+        execFileSync("git", ["add", repositoryTarget, "unexpected.txt"], {
+          cwd: root,
+        });
+        execFileSync("git", ["commit", "-q", "--amend", "--no-edit"], {
+          cwd: root,
+        });
+        assert.equal(
+          recordLayerSuffix(
+            staging,
+            root,
+            implementationHeadSha,
+            gitHead(root),
+            session,
+          ),
+          undefined,
+        );
         break;
       }
       case "prefix":

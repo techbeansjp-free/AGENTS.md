@@ -856,12 +856,18 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "anchor.invariantIds（--init round 1）",
         "空",
       ),
+      optional(
+        "progress-target",
+        "path,path",
+        "parallel progress markerを持つstaging相対target（round 1、最大16件）",
+        "03_実装計画.mdを自動検出",
+      ),
     ],
     example:
       "npx agent-skill-chain review round --staging=.agent-skill-chain/tmp/issues/20260830_120000-change --file=./review-round.json --apply",
     inputContract: {
       description:
-        "--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。blocking findingのcontractIdはanchorのACまたはINVに一致させる。IDは大文字英数と._-で、anchorの各ID列は重複なし昇順。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた雛形を書く。**followOnly: trueは既定branch追随だけでHEADが動いたroundを表し、予算へ数えない。** 第1親が前roundのcandidate、第2親が既定branch tipのancestor、treeが両親の自動merge結果と一致するmerge commitの場合だけ受理し、findingsは空でなければならない",
+        "--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。blocking findingのcontractIdはanchorのACまたはINVに一致させる。IDは大文字英数と._-で、anchorの各ID列は重複なし昇順。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた256 KiB以下の正準reviewer input bundleを書き、digestとbyte数を返す。followOnly: trueは検証済み既定branch追随、recordLayerOnly: trueはformal artifactとsealed progress投影だけの検証済みrecord layerを表し、いずれもfindingsが無い場合だけ予算へ数えない",
       example: {
         round: 1,
         previousRoundDigest: null,

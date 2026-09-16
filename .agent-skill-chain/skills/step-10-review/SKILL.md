@@ -33,6 +33,8 @@ Codex起動差分では`routing launch`の観測時刻・入口・selectedModel/
 
 **成果物は版管理下へ置く。** `staging.tracked=false`のstagingは版管理外である。`staging.tracked=true`では文書00〜04を版管理するが、どちらの場合もstaging内の`04_レビュー.md`はformal approval artifactとして扱わない。収束後に`docs/reviews/`または`.agent-skill-chain/reviews/`配下へ複写し、実装commitの後にその1 fileだけをcommitして`H_final`にする。**このartifact commitに対する取り直しroundは要らない。** `workflow record --step=10`は`H_final`で実行でき、bindingはsessionのcandidate HEAD（`H_impl`）のまま記録される。`pr create --head-sha=<H_final>`も同じ規則で受理する。
 
+`staging.tracked=true`でround 1にprogress targetを明示した場合、sealed journalからbyte一致を検証できる投影targetとformal artifactを同じrecord layer commitへ置ける。対象path、mode、marker外byte、journal bindingのいずれかを検証できない場合はartifact-onlyへ暗黙縮退せず拒否する。
+
 前述の外部reviewer指摘をStep 11前の`pr-bound`中に取り込む場合は、正本に従って`workflow record --step=10 --post-pr-intake`を使う。`--post-terminal-intake`はStep 11記録後の経路に限る。
 
 差分が触れた範囲の追跡先を確認するときは[Semantic Graphの利用](../../docs/01_開発ワークフロー.md#semantic-graphの利用)を読み、追跡の問いと言及の問いでedge種別を選び分ける。

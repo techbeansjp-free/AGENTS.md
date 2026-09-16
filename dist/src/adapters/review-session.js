@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { advanceReviewSession, parseReviewRoundInput, unconvergedReviewSessionDiagnostic, } from "../domain/review-convergence.js";
@@ -5,7 +6,7 @@ import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, 
 import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
 import { stableJson } from "../lib/security.js";
-import { buildReviewProgressInventory, PROGRESS_END, PROGRESS_START, } from "../domain/review-progress.js";
+import { buildReviewProgressInventories, PROGRESS_END, PROGRESS_START, reviewProgressTargets, } from "../domain/review-progress.js";
 import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
 import { observeReviewDiff } from "./review-diff.js";
 import { isDefaultBranchFollowMerge, REVIEW_SESSION_FILE, readStoredReviewSession, } from "./review-session-store.js";
@@ -16,6 +17,7 @@ import { readStoredDeliveryState } from "./delivery-state.js";
 import { isEvidenceOnlyPath } from "../domain/review.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
+import { recordLayerSuffix } from "./review-record-layer.js";
 const GIT_ENV = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     LANG: "C",
@@ -144,13 +146,32 @@ export function buildReviewRoundDraft(input) {
             throw new Error("review round --initはsessionが無いとき--scope=<ID,...>と--ac=<ID,...>が必要です");
         const baseSha = resolveCommit(root, "--base", input.baseSha);
         const observed = observeReviewDiff(root, baseSha, headSha);
-        const progressTarget = path.join(staging, "03_実装計画.md");
-        const progressSource = fs.existsSync(progressTarget)
-            ? fs.readFileSync(progressTarget, "utf8")
-            : undefined;
-        const progressInventory = progressSource?.includes(PROGRESS_START) &&
-            progressSource.includes(PROGRESS_END)
-            ? buildReviewProgressInventory("03_実装計画.md", progressSource, fs.lstatSync(progressTarget).mode & 0o777)
+        const requestedTargets = input.progressTargetPaths?.length
+            ? [...new Set(input.progressTargetPaths)].sort()
+            : ["03_実装計画.md"];
+        const progressTargets = requestedTargets.flatMap((targetPath) => {
+            const target = path.join(staging, targetPath);
+            if (!fs.existsSync(target)) {
+                if (input.progressTargetPaths?.length)
+                    throw new Error(`parallel progress targetが存在しません: ${targetPath}`);
+                return [];
+            }
+            const source = fs.readFileSync(target, "utf8");
+            if (!source.includes(PROGRESS_START) || !source.includes(PROGRESS_END)) {
+                if (input.progressTargetPaths?.length)
+                    throw new Error(`parallel progress markerがありません: ${targetPath}`);
+                return [];
+            }
+            return [
+                {
+                    targetPath,
+                    source,
+                    fileMode: fs.lstatSync(target).mode & 0o777,
+                },
+            ];
+        });
+        const progressInventory = progressTargets.length
+            ? buildReviewProgressInventories(progressTargets)
             : undefined;
         round = {
             round: 1,
@@ -213,6 +234,10 @@ export function buildReviewRoundDraft(input) {
             candidateHeadSha: headSha,
             focus: { previousBlocking, fixedDiff: fixed, adjacentScope: [] },
             findings: carried,
+            ...(previous.status === "converged" &&
+                recordLayerSuffix(staging, root, previousHeadSha, headSha, previous)
+                ? { recordLayerOnly: true }
+                : {}),
         };
         if (previousBlocking.length > 0)
             notes.push(`前round blocker ${previousBlocking.join("、")} をfindingsへ写した。是正済みならstatusをresolvedへ変え、evidenceに確認内容を書く。未解決はvalidのまま残す。脱落は拒否される`);
@@ -222,7 +247,17 @@ export function buildReviewRoundDraft(input) {
             notes.push("sessionはconvergedである。取り直しroundは収束後のHEAD移動に対して1回だけ許される");
     }
     notes.push(`このroundは ${headSha.slice(0, 8)} (${commitSubject(root, headSha)}) を検分したものとして記録します。レビュー結果を反映したcommitを、このroundの記録より先に作らないでください`);
-    return { round: parseReviewRoundInput(round), notes };
+    const parsed = parseReviewRoundInput(round);
+    const canonical = stableJson(parsed);
+    const bundleBytes = Buffer.byteLength(canonical, "utf8");
+    if (bundleBytes > 256 * 1024)
+        throw new Error("reviewer input bundleは256 KiB以下が必要です");
+    return {
+        round: parsed,
+        notes,
+        bundleDigest: crypto.createHash("sha256").update(canonical).digest("hex"),
+        bundleBytes,
+    };
 }
 /**
  * **既定branch追随だけのmergeかをGitから判定する**（Issue #1287）。
@@ -281,15 +316,22 @@ export function previewReviewRound(input) {
             throw new Error("review roundのinitial diff digestがGit観測値と一致しません");
         const inventory = input.round.anchor.progressInventory;
         if (inventory) {
-            const target = path.join(staging, inventory.targetPath);
-            const targetStat = fs.lstatSync(target);
-            if (targetStat.isSymbolicLink() ||
-                !targetStat.isFile() ||
-                targetStat.nlink !== 1 ||
-                (targetStat.mode & 0o777) !== inventory.fileMode ||
-                fs.realpathSync(target) !== target)
-                throw new Error("review roundのprogress target identityが不正です");
-            const observedInventory = buildReviewProgressInventory(inventory.targetPath, fs.readFileSync(target, "utf8"), targetStat.mode & 0o777);
+            const observedTargets = reviewProgressTargets(inventory).map((item) => {
+                const target = path.join(staging, item.targetPath);
+                const targetStat = fs.lstatSync(target);
+                if (targetStat.isSymbolicLink() ||
+                    !targetStat.isFile() ||
+                    targetStat.nlink !== 1 ||
+                    (targetStat.mode & 0o777) !== item.fileMode ||
+                    fs.realpathSync(target) !== target)
+                    throw new Error("review roundのprogress target identityが不正です");
+                return {
+                    targetPath: item.targetPath,
+                    source: fs.readFileSync(target, "utf8"),
+                    fileMode: targetStat.mode & 0o777,
+                };
+            });
+            const observedInventory = buildReviewProgressInventories(observedTargets);
             if (stableJson(observedInventory) !== stableJson(inventory))
                 throw new Error("review roundのprogress inventoryが実targetと一致しません");
         }
@@ -319,6 +361,9 @@ export function previewReviewRound(input) {
         if (input.round.followOnly &&
             !isDefaultBranchFollowMerge(root, previousHeadSha, input.round.candidateHeadSha))
             throw new Error("既定branch追随として記録できるのは、前roundのcandidateを第1親、既定branch tipのancestorを第2親とし、treeが両親の自動merge結果と一致するmerge commitだけです");
+        if (input.round.recordLayerOnly &&
+            !recordLayerSuffix(staging, root, previousHeadSha, input.round.candidateHeadSha, previous))
+            throw new Error("record layerとして記録できるのはformal artifactとsealed journalから一致を証明したprogress投影だけです");
     }
     return advanceReviewSession(previous, input.round);
 }
@@ -398,6 +443,7 @@ export function evidenceOnlySuffix(root, fromSha, toSha) {
         return undefined;
     return isEvidenceOnlyPath(only) ? only : undefined;
 }
+/** formal artifactと検証済みprogress投影だけの単一commitを観測する。 */
 export function assertConvergedReviewSession(input) {
     const staging = assertWorkflowStaging(input.staging);
     assertStoredStagingDigest(staging);
@@ -417,7 +463,8 @@ export function assertConvergedReviewSession(input) {
         anchoredHeadSha: session.latestCandidateHeadSha,
     }).effectiveHeadSha;
     if (effectiveHeadSha !== input.currentHeadSha &&
-        evidenceOnlySuffix(stagingRepositoryRoot(staging), effectiveHeadSha, input.currentHeadSha) === undefined)
+        evidenceOnlySuffix(stagingRepositoryRoot(staging), effectiveHeadSha, input.currentHeadSha) === undefined &&
+        recordLayerSuffix(staging, stagingRepositoryRoot(staging), effectiveHeadSha, input.currentHeadSha, session) === undefined)
         throw new Error("review sessionのcandidate HEADがcurrent HEADと一致しません");
     return session;
 }

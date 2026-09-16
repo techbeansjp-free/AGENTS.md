@@ -102,6 +102,8 @@ export interface ReviewRoundInput {
    * 衝突解決は実装者が書いた内容なので、この条件を満たさず予算へ数える。
    */
   followOnly?: true;
+  /** Gitで検証済みのrecord layerだけを記録する非消費round。 */
+  recordLayerOnly?: true;
 }
 
 export interface AdmittedReviewFinding extends ReviewRoundFinding {
@@ -119,6 +121,7 @@ export interface ReviewRoundRecord {
   recordOnly: readonly string[];
   /** 既定branch追随だけのroundは予算へ数えない。**記録は残す。** */
   followOnly?: true;
+  recordLayerOnly?: true;
   roundDigest: string;
 }
 
@@ -367,10 +370,14 @@ export function parseReviewRoundInput(value: unknown): ReviewRoundInput {
       "focus",
       "findings",
     ],
-    ["followOnly"],
+    ["followOnly", "recordLayerOnly"],
   );
   if (round.followOnly !== undefined && round.followOnly !== true)
     throw new Error("review round.followOnlyはtrueだけを受理します");
+  if (round.recordLayerOnly !== undefined && round.recordLayerOnly !== true)
+    throw new Error("review round.recordLayerOnlyはtrueだけを受理します");
+  if (round.followOnly === true && round.recordLayerOnly === true)
+    throw new Error("followOnlyとrecordLayerOnlyは併用できません");
   if (!Number.isInteger(round.round) || Number(round.round) < 1)
     throw new Error("review round.roundは1以上の整数が必要です");
   if (
@@ -396,6 +403,9 @@ export function parseReviewRoundInput(value: unknown): ReviewRoundInput {
     focus: parseFocus(round.focus),
     findings: Object.freeze(findings),
     ...(round.followOnly === true ? { followOnly: true as const } : {}),
+    ...(round.recordLayerOnly === true
+      ? { recordLayerOnly: true as const }
+      : {}),
   });
 }
 
@@ -497,14 +507,16 @@ function findingAdmission(input: {
 }
 
 /**
- * 予算へ数えるroundの件数。**`followOnly`は数えない。**
+ * 予算へ数えるroundの件数。検証済みfollow/record layerだけは数えない。
  *
  * 予算の目的は「同型のblockingで発散するreviewを打ち切る」ことであり、外部要因に
  * よる追随を数えることではない（Issue #1287）。
  */
 export function countedRounds(state: ReviewSessionState | null): number {
   if (state === null) return 0;
-  return state.rounds.filter((record) => !record.followOnly).length;
+  return state.rounds.filter(
+    (record) => !record.followOnly && !record.recordLayerOnly,
+  ).length;
 }
 
 export function advanceReviewSession(
@@ -528,8 +540,9 @@ export function advanceReviewSession(
    * ならない。実装者は他PRのmerge時刻を制御できず、在庫期間の長いPRほど予算が
    * 外部要因で削られる。**記録は残し、数えるroundだけを予算へ当てる。**
    */
-  const countedRound = countedRounds(previous) + (round.followOnly ? 0 : 1);
-  if (!round.followOnly && countedRound > REVIEW_RECOVERY_ROUND)
+  const nonCounting = round.followOnly || round.recordLayerOnly;
+  const countedRound = countedRounds(previous) + (nonCounting ? 0 : 1);
+  if (!nonCounting && countedRound > REVIEW_RECOVERY_ROUND)
     throw new Error(
       `同一review sessionは${REVIEW_RECOVERY_ROUND} roundを超えて自動拡大できません`,
     );
@@ -537,9 +550,13 @@ export function advanceReviewSession(
     throw new Error(
       "既定branch追随だけのroundへfindingを記録できません。指摘があるroundは予算へ数えます",
     );
+  if (round.recordLayerOnly && round.findings.length > 0)
+    throw new Error(
+      "record layerだけのroundへfindingを記録できません。指摘があるroundは予算へ数えます",
+    );
   if (previous === null) {
-    if (round.followOnly)
-      throw new Error("round 1を既定branch追随として記録できません");
+    if (nonCounting)
+      throw new Error("round 1を非消費roundとして記録できません");
     if (round.previousRoundDigest !== null)
       throw new Error("round 1にpreviousRoundDigestを指定できません");
     if (
@@ -597,7 +614,7 @@ export function advanceReviewSession(
       }),
     }),
   );
-  if (round.round >= 2 && !round.followOnly) {
+  if (round.round >= 2 && !nonCounting) {
     const reportedPrior = new Set(
       admittedFindings
         .filter(({ id }) => priorBlocking.has(id))
@@ -611,7 +628,7 @@ export function advanceReviewSession(
    * できない。findingを要求すると「追随だけなのでfinding禁止」という契約と矛盾
    * するため、保存済みblockerをそのまま次recordへ運ぶ。
    */
-  const blocking = round.followOnly
+  const blocking = nonCounting
     ? [...priorBlocking].sort()
     : admittedFindings
         .filter(({ admission }) => admission === "block-current")
@@ -630,6 +647,7 @@ export function advanceReviewSession(
     blocking,
     recordOnly,
     ...(round.followOnly ? { followOnly: true as const } : {}),
+    ...(round.recordLayerOnly ? { recordLayerOnly: true as const } : {}),
   };
   const roundDigest = crypto
     .createHash("sha256")
@@ -697,11 +715,15 @@ export function parseReviewSessionState(value: unknown): ReviewSessionState {
         "recordOnly",
         "roundDigest",
       ],
-      ["followOnly"],
+      ["followOnly", "recordLayerOnly"],
     );
     if (record.followOnly !== undefined && record.followOnly !== true)
       throw new Error(
         `review session.rounds[${index}].followOnlyはtrueだけを受理します`,
+      );
+    if (record.recordLayerOnly !== undefined && record.recordLayerOnly !== true)
+      throw new Error(
+        `review session.rounds[${index}].recordLayerOnlyはtrueだけを受理します`,
       );
     if (!Array.isArray(record.findings))
       throw new Error(
@@ -739,6 +761,7 @@ export function parseReviewSessionState(value: unknown): ReviewSessionState {
       focus: record.focus,
       findings,
       ...(record.followOnly === true ? { followOnly: true } : {}),
+      ...(record.recordLayerOnly === true ? { recordLayerOnly: true } : {}),
     });
     rebuilt = advanceReviewSession(rebuilt, round);
     const rebuiltRecord = rebuilt.rounds.at(-1);

@@ -470,6 +470,7 @@ export function checkParallelProgressSourceIsolation(
   const journalReaders = new Set([
     "src/domain/staging.ts",
     "src/adapters/review-progress.ts",
+    "src/adapters/review-record-layer.ts",
   ]);
   for (const [relative, source] of Object.entries(sources)) {
     if (

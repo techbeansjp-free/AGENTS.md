@@ -241,7 +241,20 @@ When("round 1の雛形を直接構築する", function () {
     acceptanceCriteriaIds: ["AC-001"],
   });
   this.draft = draft.round;
-  this.cliOutput = JSON.stringify({ notes: draft.notes });
+  this.cliOutput = JSON.stringify({
+    notes: draft.notes,
+    bundleDigest: draft.bundleDigest,
+    bundleBytes: draft.bundleBytes,
+  });
+});
+
+Then("bundleはSHA-256 digestを持ち256 KiB以下である", function () {
+  const bundle = JSON.parse(this.cliOutput) as {
+    bundleDigest: string;
+    bundleBytes: number;
+  };
+  assert.match(bundle.bundleDigest, /^[a-f0-9]{64}$/u);
+  assert.ok(bundle.bundleBytes > 0 && bundle.bundleBytes <= 256 * 1024);
 });
 
 Then("雛形をfileへ渡したreview round previewが受理される", function () {
