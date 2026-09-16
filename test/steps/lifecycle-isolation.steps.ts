@@ -254,11 +254,17 @@ When("setupを適用する", function (this: IsolationWorld) {
 });
 
 Then(
-  "展開したAGENTSは利用project固有の管理を上書きしない",
+  "配布入口は利用project固有の管理を上書きしない",
   function (this: IsolationWorld) {
-    const agents = fs.readFileSync(path.join(this.root, "AGENTS.md"), "utf8");
-    assert.doesNotMatch(agents, /GitHub Project #8/u);
-    assert.doesNotMatch(agents, /docs\/PROJECT_MANAGEMENT\.md/u);
+    const distributedEntries = [
+      path.join(this.root, "AGENTS.md"),
+      path.resolve("README.md"),
+    ];
+    for (const file of distributedEntries) {
+      const contents = fs.readFileSync(file, "utf8");
+      assert.doesNotMatch(contents, /GitHub Project #8/u, file);
+      assert.doesNotMatch(contents, /PROJECT_MANAGEMENT\.md/u, file);
+    }
   },
 );
 
