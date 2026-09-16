@@ -8,13 +8,6 @@ Feature: 証跡再固定がCLIと診断経路で機能する
     Then previewは成功し初回だけ追記して二回目はunchangedになる
     And 再固定recordはexact post-PR review bindingを保持する
 
-  @issue-1418
-  Scenario: SCN-1418-REANCHOR-01 版管理下の生成物を含む監査表でreviewed-forwardを再固定する
-    Given pr-bound後に版管理下の生成物を含む前進実装とpost-PR intakeのreview artifactがある
-    When 二層等価な入力をpreviewして二回applyする
-    Then previewは成功し初回だけ追記して二回目はunchangedになる
-    And 再固定recordはexact post-PR review bindingを保持する
-
   @issue-1389
   Scenario: SCN-1389-02 post-PR intake記録のない前進実装を再固定しない
     Given pr-bound後に前進した実装と未記録のpost-PR intakeのreview artifactがある

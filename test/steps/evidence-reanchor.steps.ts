@@ -494,13 +494,7 @@ function forwardFixture(
 Given(
   "pr-bound後に前進した実装と明示済みpost-PR intakeのreview artifactがある",
   function () {
-    forwardFixture(this, true);
-  },
-);
-
-Given(
-  "pr-bound後に版管理下の生成物を含む前進実装とpost-PR intakeのreview artifactがある",
-  function () {
+    /** 版管理下の生成物を含む監査表もreviewed-forwardで受理する。 */
     forwardFixture(this, true, true);
   },
 );
