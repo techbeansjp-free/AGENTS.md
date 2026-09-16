@@ -834,7 +834,13 @@ export function createIssueStaging(root, options) {
  * `withoutInlineCode`と同じfence規則を使う。
  */
 export function escapeFoldBoundary(text) {
-    const closing = /<\/\s*details\s*>/giu;
+    // 属性付きの終了tag（`</details foo>`）もHTML parserは終了として扱う。開始tagは
+    // 入れ子を作り、構造上の終端が内側を閉じて外側が開いたまま残るため同じく置き換える。
+    // **行を跨ぐ形（`</details\n>`）は行単位走査では扱えない。** 既知の限界として残す。
+    const structural = /<\/?\s*details\b[^>]*>/giu;
+    const replace = (value) => value.replace(structural, (tag) => tag.startsWith("</") || /^<\s*\/?\s*details\b/iu.test(tag)
+        ? `&lt;${tag.slice(1, -1)}&gt;`
+        : tag);
     let fence;
     return text
         .split("\n")
@@ -858,12 +864,10 @@ export function escapeFoldBoundary(text) {
         while (cursor < line.length) {
             const start = line.indexOf("`", cursor);
             if (start < 0) {
-                result += line.slice(cursor).replace(closing, "&lt;/details&gt;");
+                result += replace(line.slice(cursor));
                 break;
             }
-            result += line
-                .slice(cursor, start)
-                .replace(closing, "&lt;/details&gt;");
+            result += replace(line.slice(cursor, start));
             let length = 1;
             while (line[start + length] === "`")
                 length += 1;

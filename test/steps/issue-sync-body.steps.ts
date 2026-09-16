@@ -79,10 +79,16 @@ function considerationDocument(title: string): string {
   return `# ${title}\n\n${rows}\n`;
 }
 
-/** 折りたたみへ入れた本文の期待形。生の閉じtagだけが実体参照になる。 */
-function expectedInner(text: string): string {
-  return escapeFoldBoundary(text.trimEnd());
-}
+/**
+ * 折りたたみへ入れた本文の期待形。**実装から導出せず、字面で書く。**
+ * `escapeFoldBoundary`から導くと、実装と期待が同じ向きへずれても検出できない。
+ */
+const EXPECTED_INNER: Readonly<Record<string, string>> = Object.freeze({
+  "01_要件定義.md": "",
+  "02_設計.md":
+    "# 02 設計\n\n本文に&lt;/details&gt;が現れる。\n\n`</details>`はinline code。\n\n```\n</details>はfence内。\n```",
+  "03_実装計画.md": "# 03 実装計画\n\n| T01 | 完了 |",
+});
 
 function foldedSections(body: string): { summary: string; inner: string }[] {
   const sections: { summary: string; inner: string }[] = [];
@@ -132,7 +138,7 @@ Then("各折りたたみの中身は対応する成果物の全文と一致す�
   const inner = foldedSections(this.rendered).map((section) => section.inner);
   assert.deepEqual(
     inner,
-    this.syncInputs.slice(1).map((artifact) => expectedInner(artifact.text)),
+    this.syncInputs.slice(1).map((artifact) => EXPECTED_INNER[artifact.name]),
   );
   assert.ok(this.rendered.endsWith("</details>\n"), "末尾は改行1つで終わる");
 });
@@ -198,4 +204,29 @@ Then("折りたたみの構造は本文中の閉じtagで壊れない", function
   assert.match(design.inner, /本文に&lt;\/details&gt;が現れる。/u);
   assert.match(design.inner, /`<\/details>`はinline code。/u);
   assert.match(design.inner, /```\n<\/details>はfence内。\n```/u);
+});
+
+/**
+ * **境界の判定そのものを字面で固定する。** 折りたたみ本文の一致検査は正常入力だけを通すため、
+ * 属性付き・大文字・開始tagのような形を取りこぼしても気付けない。
+ */
+Then("折りたたみ境界の置き換えは形を変えた閉じtagも捕まえる", function () {
+  const replaced: readonly [string, string][] = [
+    ["</details>", "&lt;/details&gt;"],
+    ["</DETAILS>", "&lt;/DETAILS&gt;"],
+    ["</ details >", "&lt;/ details &gt;"],
+    ["</details foo>", "&lt;/details foo&gt;"],
+    ["<details>", "&lt;details&gt;"],
+    ["<details open>", "&lt;details open&gt;"],
+  ];
+  for (const [input, expected] of replaced)
+    assert.equal(escapeFoldBoundary(input), expected, input);
+  const kept = [
+    "`</details>`",
+    "```\n</details>\n```",
+    "~~~\n</details>\n~~~",
+    "< /details>",
+  ];
+  for (const input of kept)
+    assert.equal(escapeFoldBoundary(input), input, input);
 });

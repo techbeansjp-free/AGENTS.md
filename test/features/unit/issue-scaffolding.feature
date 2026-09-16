@@ -48,6 +48,7 @@ Feature: Issue工程の機械導出欄を安全に生成する
     And 折りたたみは3つあり見出しは01_要件定義.md、02_設計.md、03_実装計画.mdの順である
     And 各折りたたみの中身は対応する成果物の全文と一致する
     And 折りたたみの構造は本文中の閉じtagで壊れない
+    And 折りたたみ境界の置き換えは形を変えた閉じtagも捕まえる
     And 検証済みfull stagingから生成した同期本文は同じ入力の描画結果と一致する
 
   Scenario Outline: SCN-UNIT-ISSUESYNC-003 checkpoint 4とquick・pocの同期本文は区切り線連結のまま変えない
