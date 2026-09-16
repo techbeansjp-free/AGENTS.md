@@ -8,13 +8,15 @@ export const DEFAULT_STAGING_LAYOUT = Object.freeze({
     tracked: false,
     issueBody: "full",
 });
-/** 版管理下stagingで除外する機械記録。文書（00〜04）は追跡する。 */
+/** 版管理下stagingで除外する機械記録。文書（00〜04のMarkdown）は追跡する。 */
 export const TRACKED_STAGING_GITIGNORE = [
-    "# agent-skill-chain: 機械記録は版管理しない（文書00〜04は追跡する）",
+    "# agent-skill-chain: 機械記録は版管理しない（文書00〜04のMarkdownは追跡する）",
     "journal/",
     "staging-record.json",
     "review-session*.json",
     ".full-promotion-transaction.json",
+    "00_モード判定.json",
+    "verification-input.json",
     "",
 ].join("\n");
 const SEGMENT = /^[A-Za-z0-9._\-\p{L}\p{N}]+$/u;
