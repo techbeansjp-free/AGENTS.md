@@ -18,6 +18,7 @@ import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
 import { stableJson } from "../lib/security.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
+import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { readStoredReviewSession } from "./review-session-store.js";
 
 function context(stagingInput: string) {
@@ -27,7 +28,7 @@ function context(stagingInput: string) {
     throw new Error(
       "review sessionにparallel progress inventoryがありません。従来の直列経路を使用してください",
     );
-  const root = path.resolve(staging, "../../../..");
+  const root = stagingRepositoryRoot(staging);
   const head = git(
     ["rev-parse", "--verify", "HEAD^{commit}"],
     root,

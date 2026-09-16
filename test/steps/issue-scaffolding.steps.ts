@@ -115,7 +115,7 @@ Then("全変更pathが個別監査表にある", function () {
 });
 
 Then("review判定とtest結果は未確定である", function () {
-  assert.match(this.reviewDraft, /review未実施/u);
+  assert.match(this.reviewDraft, /reviewerが実施したround数へ更新する/u);
   assert.match(this.reviewDraft, /未実行（reviewerが実行後に記録）/u);
   assert.doesNotMatch(this.reviewDraft, /\| ラウンド数 \| 1 \|/u);
 });

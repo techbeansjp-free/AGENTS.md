@@ -10,7 +10,7 @@ export const WORKFLOW_STEPS = Object.freeze([
         step: 0,
         skillId: "step-00-stage",
         responsibility: "モード判定と一時ステージングの原子的開始",
-        artifact: "`.agent-skill-chain/tmp/issues/<timestamp>_<title>/`",
+        artifact: "`<staging root>/<timestamp>_<title>/`（既定root `.agent-skill-chain/tmp/issues`。project policy `staging.root`で変更可）",
     },
     {
         step: 1,

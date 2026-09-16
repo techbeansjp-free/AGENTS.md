@@ -176,6 +176,18 @@
             "prGateMs": { "type": "integer", "minimum": 1 }
           }
         },
+        "staging": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "type": "string",
+              "pattern": "^(?!/)(?:(?:\\*|[^/*\\\\]+)/){0,15}[^/*\\\\]+$"
+            },
+            "tracked": { "type": "boolean" },
+            "issueBody": { "enum": ["full", "pointer"] }
+          }
+        },
         "worktree": {
           "type": "object",
           "additionalProperties": false,

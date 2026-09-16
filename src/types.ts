@@ -185,6 +185,16 @@ export interface Policy {
     reviewIndependence?: "context-isolated" | "actor-independent";
   };
   budgets?: { localFeedbackMs?: number; prGateMs?: number };
+  /**
+   * Issue stagingの配置（`staging-layout.ts`が所有）。`root`はrepository相対の
+   * staging root（`*`は1 segment）、`tracked`はrootが版管理下か、`issueBody`は
+   * Issue同期本文を全文にするか要点と配置へのpointerにするか。
+   */
+  staging?: {
+    root?: string;
+    tracked?: boolean;
+    issueBody?: "full" | "pointer";
+  };
   worktree?: {
     root: string;
     namePattern: string;

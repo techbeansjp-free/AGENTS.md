@@ -13,6 +13,7 @@ import {
 } from "../domain/review-convergence.js";
 import { git } from "../lib/process.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
+import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 
 export const REVIEW_SESSION_FILE = "review-session.json";
 const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
@@ -120,7 +121,7 @@ export function readStoredReviewSession(
   const session = parseReviewSessionState(
     parseJsonStrict(fs.readFileSync(file, "utf8"), "review session"),
   );
-  const root = path.resolve(staging, "../../../..");
+  const root = stagingRepositoryRoot(staging);
   const reanchorRecords = readReanchorChain(staging);
   for (const [index, record] of session.rounds.entries()) {
     if (!record.followOnly) continue;

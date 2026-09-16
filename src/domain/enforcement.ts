@@ -1018,6 +1018,7 @@ export function resolveEffectivePolicy(
       merge: options.trusted ? (project.merge ?? floor.merge) : floor.merge,
       issueProject: options.trusted ? project.issueProject : floor.issueProject,
       budgets: project.budgets ?? floor.budgets,
+      staging: project.staging ?? floor.staging,
       projectChoices: project.projectChoices,
       /**
        * **trusted合成のときだけ縮小提案を持ち越す。**

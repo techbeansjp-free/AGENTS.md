@@ -362,8 +362,11 @@ export const COMMAND_USAGE = Object.freeze([
         optionalFlags: [
             ROOT_FLAG,
             optional("changed", "path,path", "既知の変更path", "なし"),
+            optional("staging-root", "path", "stagingを作る親directory（repository相対）。project policyのstaging.rootに一致させる。rootが*を含むときは必須", "project policyのstaging.root（既定 .agent-skill-chain/tmp/issues）"),
+            optional("name", "text", "staging directory名。版管理下のstagingで人が読む名前（例: S1-T02_安定ID）を付けるときに使う", "<JST timestamp>_<title slug>"),
         ],
         example: "npx agent-skill-chain issue create --title=不具合 --mode=full --assessment=./assessment.json",
+        note: "stagingの配置はproject policyのstaging節（root・tracked・issueBody）が決めます。tracked=trueのrootでは文書00〜04を版管理し、機械記録だけを.gitignoreで除外します",
     },
     {
         command: "issue",
