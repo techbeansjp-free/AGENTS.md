@@ -1095,6 +1095,25 @@ export function createIssueStaging(
         root,
         projectChoices: options.projectChoices,
       });
+      /**
+       * **生成modeを宣言値へ固定する。**
+       *
+       * `docs/specs/07_データ/01_管理データ.md`はprogress inventoryの対象を
+       * mode 100644へ閉じると宣言しているが、この03は`copyFileSync`が
+       * templateのon-disk modeをそのまま複製して作られる。そのmodeは
+       * checkout・展開時の`0666 & ~umask`で決まるため、`umask 0002`では
+       * `0664`になり、宣言と食い違う。
+       *
+       * **`writeFileSync`へ`mode`を渡す形では足りない。** `open(2)`のmodeは
+       * umaskでmaskされ、`umask 0077`で`0600`、`0027`で`0640`になる。
+       * umaskから独立するのは`chmod`だけである（`src/lib/atomic.ts`が
+       * `openSync`の直後に`fchmodSync`を置いているのと同じ理由）。
+       *
+       * **失敗しても拒否しない。** modeを保持しないfilesystemで唯一の生成
+       * 経路を塞がないため、ここへ停止点を作らない。固定できなかった場合は
+       * `review round --init`の非停止経路と案内が受け止める。
+       */
+      fs.chmodSync(path.join(temporary, "03_実装計画.md"), 0o644);
     }
     const artifacts = listStagingArtifacts(temporary);
     const record: StoredStagingRecord = {

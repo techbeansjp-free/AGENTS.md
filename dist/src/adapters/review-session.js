@@ -5,7 +5,7 @@ import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, 
 import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
 import { stableJson } from "../lib/security.js";
-import { buildReviewProgressInventory, PROGRESS_END, PROGRESS_START, } from "../domain/review-progress.js";
+import { buildReviewProgressInventory, describeReviewProgressUnbuildable, tryBuildReviewProgressInventory, PROGRESS_END, PROGRESS_START, } from "../domain/review-progress.js";
 import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
 import { observeReviewDiff } from "./review-diff.js";
 import { isDefaultBranchFollowMerge, REVIEW_SESSION_FILE, readStoredReviewSession, } from "./review-session-store.js";
@@ -120,6 +120,12 @@ export function buildReviewRoundDraft(input) {
     const headSha = resolveCommit(root, "--head", input.headSha);
     const previous = readStoredReviewSession(staging);
     const notes = [];
+    /**
+     * progress不成立の案内。**`round`へは入れない。**
+     * `notes`は`parseReviewRoundInput`にも`review-convergence.ts`にも現れない
+     * 表示専用の枠であり、ここへ載せる限りanchorとround digestを変えない。
+     */
+    const progressNotes = [];
     const currentHeadSha = git(["rev-parse", "--verify", "HEAD^{commit}"], root, {
         env: GIT_ENV,
     }).stdout.trim();
@@ -144,13 +150,41 @@ export function buildReviewRoundDraft(input) {
         const baseSha = resolveCommit(root, "--base", input.baseSha);
         const observed = observeReviewDiff(root, baseSha, headSha);
         const progressTarget = path.join(staging, "03_実装計画.md");
-        const progressSource = fs.existsSync(progressTarget)
+        const progressStat = fs.existsSync(progressTarget)
+            ? fs.lstatSync(progressTarget)
+            : undefined;
+        const progressSource = progressStat
             ? fs.readFileSync(progressTarget, "utf8")
             : undefined;
-        const progressInventory = progressSource?.includes(PROGRESS_START) &&
-            progressSource.includes(PROGRESS_END)
-            ? buildReviewProgressInventory("03_実装計画.md", progressSource, fs.lstatSync(progressTarget).mode & 0o777)
-            : undefined;
+        /**
+         * **progressの構築失敗をreviewの拒否理由にしない**（REQ-WF-021）。
+         *
+         * optionalなinventoryの構築例外を本線へ伝播させると、REQ-WF-021が明文で
+         * 禁じている「review gateがprogressの失敗を拒否理由にする」状態になる。
+         * 分類済みの不成立は値で受け取って案内へ回し、roundはそのまま開く。
+         * **try/catchを置かない。** 分類外の失敗は従来どおり例外として伝播させ、
+         * fail-openを構造的に成立させない。
+         */
+        let progressInventory;
+        if (progressStat &&
+            progressSource?.includes(PROGRESS_START) &&
+            progressSource.includes(PROGRESS_END)) {
+            const outcome = tryBuildReviewProgressInventory("03_実装計画.md", progressSource, {
+                fileMode: progressStat.mode & 0o777,
+                isSymbolicLink: progressStat.isSymbolicLink(),
+            });
+            if (outcome.state === "built")
+                progressInventory = outcome.inventory;
+            else {
+                const guidance = describeReviewProgressUnbuildable({
+                    reason: outcome.reason,
+                    observedMode: outcome.observedMode,
+                    isSymbolicLink: outcome.isSymbolicLink,
+                    targetPath: "03_実装計画.md",
+                });
+                progressNotes.push(`[${guidance.code}] ${guidance.target}のparallel progress inventoryを構築できません（${guidance.reason}）。実測=${guidance.observed} 期待=${guidance.expected}。${guidance.effect}。${guidance.action}${guidance.repairArgv ? `: ${guidance.repairArgv.join(" ")}` : ""}。必要authority=${guidance.requiredAuthority}。rollback=${guidance.rollback}`);
+            }
+        }
         round = {
             round: 1,
             previousRoundDigest: null,
@@ -202,6 +236,7 @@ export function buildReviewRoundDraft(input) {
             notes.push("sessionはconvergedである。取り直しroundは収束後のHEAD移動に対して1回だけ許される");
     }
     notes.push(`このroundは ${headSha.slice(0, 8)} (${commitSubject(root, headSha)}) を検分したものとして記録します。レビュー結果を反映したcommitを、このroundの記録より先に作らないでください`);
+    notes.push(...progressNotes);
     return { round: parseReviewRoundInput(round), notes };
 }
 /**

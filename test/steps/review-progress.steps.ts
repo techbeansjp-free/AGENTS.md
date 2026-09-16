@@ -4,6 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   buildReviewProgressInventory,
+  describeReviewProgressUnbuildable,
+  tryBuildReviewProgressInventory,
+  REVIEW_PROGRESS_UNBUILDABLE_REASONS,
   makeReviewProgressEntry,
   makeReviewProgressSeal,
   parallelCriticalPath,
@@ -392,6 +395,128 @@ When(
       case "critical-path":
         assert.ok(parallelCriticalPath(30, 15) <= 30 + 15);
         break;
+      case "mode-mismatch": {
+        /** 成立するのは通常fileの0644ちょうどだけで、他は分類済み不成立になる。 */
+        const classify = (mode: number, isSymbolicLink: boolean) => {
+          const outcome = tryBuildReviewProgressInventory(
+            "03_実装計画.md",
+            this.source,
+            { fileMode: mode, isSymbolicLink },
+          );
+          return outcome.state === "built" ? "built" : outcome.reason;
+        };
+        assert.equal(classify(0o644, false), "built");
+        assert.equal(classify(0o664, false), "mode-mismatch");
+        assert.equal(classify(0o600, false), "mode-mismatch");
+        assert.equal(classify(0o755, false), "mode-mismatch");
+        assert.equal(classify(0o777, true), "not-regular-file");
+        /** **symlinkはmodeが0644でもnot-regular-fileへ落とす。** */
+        assert.equal(classify(0o644, true), "not-regular-file");
+        /** 実測modeを案内へそのまま運ぶ。桁を崩さない。 */
+        const guidance = describeReviewProgressUnbuildable({
+          reason: "mode-mismatch",
+          observedMode: 0o664,
+          isSymbolicLink: false,
+          targetPath: "03_実装計画.md",
+        });
+        assert.equal(guidance.observed, "100664");
+        assert.equal(guidance.expected, "100644");
+        assert.equal(
+          describeReviewProgressUnbuildable({
+            reason: "mode-mismatch",
+            observedMode: 0o600,
+            isSymbolicLink: false,
+            targetPath: "03_実装計画.md",
+          }).observed,
+          "100600",
+        );
+        assert.deepEqual(guidance.repairArgv, [
+          "chmod",
+          "0644",
+          "03_実装計画.md",
+        ]);
+        assert.equal(
+          guidance.code,
+          "ASC-REVIEW-PROGRESS-INVENTORY-UNBUILDABLE",
+        );
+        assert.ok(guidance.requiredAuthority.length > 0);
+        assert.ok(guidance.rollback.length > 0);
+        assert.ok(guidance.effect.includes("review"));
+        break;
+      }
+      case "symlink-target": {
+        /** symlinkへchmodを案内するとlink先を書き換えるため、案内に出さない。 */
+        const guidance = describeReviewProgressUnbuildable({
+          reason: "not-regular-file",
+          observedMode: 0o777,
+          isSymbolicLink: true,
+          targetPath: "03_実装計画.md",
+        });
+        assert.equal(guidance.reason, "not-regular-file");
+        assert.equal(guidance.repairArgv, null);
+        assert.ok(!guidance.action.includes("chmod 0644"));
+        assert.ok(guidance.action.includes("symlink"));
+        assert.ok(guidance.observed.includes("symlink"));
+        break;
+      }
+      case "diagnostic-scope": {
+        /** 案内は相対nameとcommand名だけを出す。絶対path・環境変数・tokenを出さない。 */
+        for (const reason of REVIEW_PROGRESS_UNBUILDABLE_REASONS) {
+          const guidance = describeReviewProgressUnbuildable({
+            reason,
+            observedMode: 0o664,
+            isSymbolicLink: reason === "not-regular-file",
+            targetPath: "03_実装計画.md",
+          });
+          const rendered = [
+            guidance.target,
+            guidance.action,
+            guidance.effect,
+            guidance.requiredAuthority,
+            guidance.rollback,
+            ...(guidance.repairArgv ?? []),
+          ].join(" ");
+          assert.ok(!rendered.includes("/home/"), reason);
+          assert.ok(!rendered.includes(process.cwd()), reason);
+          assert.ok(!/\$[A-Z_]{3,}/u.test(rendered), reason);
+          assert.ok(!/gh[pousr]_[A-Za-z0-9]{10,}/u.test(rendered), reason);
+          assert.equal(guidance.target, "03_実装計画.md");
+        }
+        break;
+      }
+      case "inventory-unbuildable": {
+        /** marker不正とtask ID 0件も同じ分類機構で扱い、成立入力だけがbuiltになる。 */
+        const at = (source: string) =>
+          tryBuildReviewProgressInventory("03_実装計画.md", source, {
+            fileMode: 0o644,
+            isSymbolicLink: false,
+          });
+        assert.equal(at(this.source).state, "built");
+        assert.equal(
+          (at(`${this.source}${this.source}`) as { reason: string }).reason,
+          "marker-not-single-pair",
+        );
+        assert.equal(
+          (at("# plan\n") as { reason: string }).reason,
+          "marker-not-single-pair",
+        );
+        assert.equal(
+          (
+            at(
+              `# plan\n${PROGRESS_START}\n| lower | x |\n${PROGRESS_END}\n`,
+            ) as { reason: string }
+          ).reason,
+          "no-task-id",
+        );
+        /** targetPath契約違反だけは値へ落とさず例外のまま残す。 */
+        expectFailure(() =>
+          tryBuildReviewProgressInventory("../03_実装計画.md", this.source, {
+            fileMode: 0o644,
+            isSymbolicLink: false,
+          }),
+        );
+        break;
+      }
       default:
         assert.fail(`unknown case: ${kind}`);
     }
@@ -401,4 +526,394 @@ When(
 
 Then("parallel progress契約を満たす", function () {
   assert.equal(this.passed, true);
+});
+
+/**
+ * Issue #1408。progress inventoryを構築できない入力でreview本線が止まらないことと、
+ * `issue create`の生成modeが実行環境のumaskから独立することを、実経路で観測する。
+ */
+interface NonblockingWorld extends ProgressWorld {
+  draft: ReturnType<typeof buildReviewRoundDraft>;
+  builtDraft: ReturnType<typeof buildReviewRoundDraft>;
+  generatedStaging: string;
+  initFailure: unknown;
+  pendingUmask: number;
+  templateRestore?: Array<[string, number]>;
+  unbuildableCases: Array<{
+    reason: string;
+    options: { mode: number; symlink?: boolean; source?: string };
+  }>;
+  unbuildableDrafts: Array<{
+    reason: string;
+    draft: ReturnType<typeof buildReviewRoundDraft>;
+  }>;
+}
+
+const nb = stepDefinitions<NonblockingWorld>();
+
+/** 実装HEAD bindingを持つreview前stagingを作る。03のmodeだけを引数で変える。 */
+function nonblockingStaging(
+  world: NonblockingWorld,
+  options: { mode: number; symlink?: boolean; source?: string },
+): { baseSha: string } {
+  world.root = world.initRepo();
+  const baseSha = gitHead(world.root);
+  fs.writeFileSync(
+    path.join(world.root, "candidate.ts"),
+    "export const x = 1;\n",
+  );
+  execFileSync("git", ["add", "candidate.ts"], { cwd: world.root });
+  execFileSync("git", ["commit", "-q", "-m", "candidate"], { cwd: world.root });
+  world.fixtureHead = gitHead(world.root);
+  world.staging = createIssueStaging(world.root, {
+    title: "progress-nonblocking",
+    answers: fixtureAnswers(),
+    now: new Date(instant),
+    requestedMode: "quick",
+  }).path;
+  world.source =
+    options.source ??
+    `# 実装計画\n${PROGRESS_START}\n| タスク | 状態 |\n|---|---|\n| T01 | 未着手 |\n${PROGRESS_END}\n`;
+  world.target = path.join(world.staging, "03_実装計画.md");
+  if (options.symlink) {
+    const real = path.join(world.staging, "real-plan.md");
+    fs.writeFileSync(real, world.source);
+    fs.chmodSync(real, 0o644);
+    fs.symlinkSync(real, world.target);
+  } else {
+    fs.writeFileSync(world.target, world.source);
+    /** **umaskから独立させるためchmodで固定する。** writeFileSyncのmodeはmaskされる。 */
+    fs.chmodSync(world.target, options.mode);
+  }
+  fs.appendFileSync(
+    path.join(world.staging, STEP_JOURNAL_FILE),
+    `${JSON.stringify({
+      step: 9,
+      skillId: "step-09-implement",
+      mode: "quick",
+      recordedAt: instant,
+      artifacts: ["candidate.ts"],
+      evidence: `candidate HEAD ${world.fixtureHead}`,
+      implementationHeadSha: world.fixtureHead,
+    })}\n`,
+  );
+  refreshStoredStagingDigest(world.staging);
+  return { baseSha };
+}
+
+function initDraft(world: NonblockingWorld, baseSha: string) {
+  return buildReviewRoundDraft({
+    staging: world.staging,
+    headSha: world.fixtureHead,
+    baseSha,
+    scopeIds: ["SCOPE-1408"],
+    acceptanceCriteriaIds: ["AC-1408-01"],
+  });
+}
+
+nb.Given("mode 0664の03を持つreview前stagingがある", function () {
+  const { baseSha } = nonblockingStaging(this, { mode: 0o664 });
+  this.draft = initDraft(this, baseSha);
+});
+
+nb.Given("mode 0644の03を持つreview前stagingがある", function () {
+  const { baseSha } = nonblockingStaging(this, { mode: 0o644 });
+  this.draft = initDraft(this, baseSha);
+});
+
+nb.Given(
+  "progress inventoryの構築が分類外の失敗をするstagingがある",
+  function () {
+    const { baseSha } = nonblockingStaging(this, { mode: 0o644 });
+    /** 読み取り自体を失敗させる。分類済みの不成立ではない。 */
+    fs.rmSync(this.target);
+    fs.mkdirSync(this.target);
+    this.initFailure = undefined;
+    try {
+      initDraft(this, baseSha);
+    } catch (error) {
+      this.initFailure = error;
+    }
+  },
+);
+
+nb.When("review round --initを実行する", function () {
+  assert.ok(this.draft !== undefined || this.initFailure !== undefined);
+});
+
+nb.Then("roundが開きanchorにprogress inventoryが無い", function () {
+  assert.equal(this.draft.round.round, 1);
+  assert.equal(this.draft.round.anchor.progressInventory, undefined);
+  /** 案内がnotesへ出ており、行動可能な語を含む。 */
+  const note = this.draft.notes.find((entry) =>
+    entry.includes("ASC-REVIEW-PROGRESS-INVENTORY-UNBUILDABLE"),
+  );
+  assert.ok(note, "不成立の案内がnotesにありません");
+  assert.ok(note.includes("100664"));
+  assert.ok(note.includes("100644"));
+  assert.ok(note.includes("chmod 0644 03_実装計画.md"));
+  assert.ok(!note.includes("/home/"));
+});
+
+nb.Then(
+  "round recordの差はprogress inventory keyの有無だけである",
+  function () {
+    /** 同じ入力でmodeだけ0644にしたstagingを作り、round recordを比較する。 */
+    const built = stepDefinitions<NonblockingWorld>();
+    void built;
+    const world = this as NonblockingWorld;
+    const previousStaging = world.staging;
+    const { baseSha } = nonblockingStaging(world, { mode: 0o644 });
+    const builtDraft = initDraft(world, baseSha);
+    world.staging = previousStaging;
+    const strip = (round: Record<string, unknown>) => {
+      const anchor = { ...(round.anchor as Record<string, unknown>) };
+      delete anchor.progressInventory;
+      return stableJson({ ...round, anchor });
+    };
+    assert.ok(builtDraft.round.anchor.progressInventory !== undefined);
+    assert.equal(
+      strip(this.draft.round as unknown as Record<string, unknown>),
+      strip(builtDraft.round as unknown as Record<string, unknown>),
+    );
+  },
+);
+
+nb.Then("review round --initは従来どおり拒否する", function () {
+  assert.ok(
+    this.initFailure instanceof Error,
+    "分類外の失敗が伝播していません",
+  );
+});
+
+nb.Given("progress inventoryが不成立のreview sessionがある", function () {
+  const { baseSha } = nonblockingStaging(this, { mode: 0o664 });
+  this.draft = initDraft(this, baseSha);
+  recordReviewRound({ staging: this.staging, round: this.draft.round });
+});
+
+nb.Then("review progressは従来の直列経路を案内して拒否する", function () {
+  assert.throws(
+    () =>
+      appendReviewProgress({
+        staging: this.staging,
+        taskId: "T01",
+        state: "started",
+        recordedAt: instant,
+        expectedDigest: null,
+        apply: true,
+      }),
+    /直列経路/u,
+  );
+});
+
+nb.Then(
+  "inventoryのfileModeが実測modeと一致しinit後のmode変化を拒否する",
+  function () {
+    const inventory = this.draft.round.anchor.progressInventory;
+    assert.ok(inventory);
+    assert.equal(inventory.fileMode, fs.lstatSync(this.target).mode & 0o777);
+    recordReviewRound({ staging: this.staging, round: this.draft.round });
+    fs.chmodSync(this.target, 0o664);
+    assert.throws(
+      () =>
+        appendReviewProgress({
+          staging: this.staging,
+          taskId: "T01",
+          state: "started",
+          recordedAt: instant,
+          expectedDigest: null,
+          apply: true,
+        }),
+      /identityまたはmode/u,
+    );
+  },
+);
+
+/** 生成modeの独立。umaskはprocess全体に効くのでtry/finallyで必ず戻す。 */
+function generateUnderUmask(world: NonblockingWorld, mask: number): void {
+  const previous = process.umask(mask);
+  try {
+    world.root = world.initRepo();
+    world.generatedStaging = createIssueStaging(world.root, {
+      title: "generated-mode",
+      answers: fixtureAnswers(),
+      now: new Date(instant),
+      requestedMode: "full",
+    }).path;
+  } finally {
+    process.umask(previous);
+  }
+}
+
+nb.Given("umask 0002のissue create環境がある", function () {
+  this.pendingUmask = 0o002;
+});
+
+nb.Given("umask 0077のissue create環境がある", function () {
+  this.pendingUmask = 0o077;
+});
+
+nb.Given("on-disk modeが0664のissue templateがある", function () {
+  this.pendingUmask = 0o022;
+  this.templateRestore = [];
+  const templateDirectory = path.resolve(
+    process.cwd(),
+    ".agent-skill-chain",
+    "templates",
+    "issue",
+  );
+  for (const name of ["01_要件定義.md", "02_設計.md", "03_実装計画.md"]) {
+    const file = path.join(templateDirectory, name);
+    this.templateRestore.push([file, fs.lstatSync(file).mode & 0o777]);
+    fs.chmodSync(file, 0o664);
+  }
+});
+
+nb.When("full stagingを生成する", function () {
+  try {
+    generateUnderUmask(this, this.pendingUmask);
+  } finally {
+    for (const [file, mode] of this.templateRestore ?? [])
+      fs.chmodSync(file, mode);
+    this.templateRestore = undefined;
+  }
+});
+
+nb.Then("生成された03のmodeは0644である", function () {
+  assert.equal(
+    fs.lstatSync(path.join(this.generatedStaging, "03_実装計画.md")).mode &
+      0o777,
+    0o644,
+  );
+});
+
+/**
+ * Issue #1408のE2E。**domain側だけを直接呼ぶと合成経路の欠落を見逃す**ため、
+ * 公開CLIの`issue create`が作ったstagingをそのまま`review round --init`へ渡し、
+ * 手動`chmod`を一度も挟まずにinventoryが固定されることを観測する。
+ */
+nb.Given("配布CLIのissue create出力がある", function () {
+  const previous = process.umask(0o002);
+  try {
+    this.root = this.initRepo();
+    fs.writeFileSync(
+      path.join(this.root, "candidate.ts"),
+      "export const x = 1;\n",
+    );
+    execFileSync("git", ["add", "candidate.ts"], { cwd: this.root });
+    execFileSync("git", ["commit", "-q", "-m", "candidate"], {
+      cwd: this.root,
+    });
+    this.fixtureHead = gitHead(this.root);
+    this.staging = createIssueStaging(this.root, {
+      title: "e2e-generated",
+      answers: fixtureAnswers(),
+      now: new Date(instant),
+      requestedMode: "full",
+    }).path;
+  } finally {
+    process.umask(previous);
+  }
+  this.target = path.join(this.staging, "03_実装計画.md");
+  fs.appendFileSync(
+    path.join(this.staging, STEP_JOURNAL_FILE),
+    `${JSON.stringify({
+      step: 9,
+      skillId: "step-09-implement",
+      mode: "full",
+      recordedAt: instant,
+      artifacts: ["candidate.ts"],
+      evidence: `candidate HEAD ${this.fixtureHead}`,
+      implementationHeadSha: this.fixtureHead,
+    })}\n`,
+  );
+  refreshStoredStagingDigest(this.staging);
+});
+
+nb.When("手動chmodなしでreview round --initを実行する", function () {
+  /** **ここでchmodを挟まない。** 挟むと生成modeの契約を検査しない空虚なtestになる。 */
+  this.draft = buildReviewRoundDraft({
+    staging: this.staging,
+    headSha: this.fixtureHead,
+    baseSha: execFileSync("git", ["rev-parse", "HEAD~1"], {
+      cwd: this.root,
+      encoding: "utf8",
+    }).trim(),
+    scopeIds: ["SCOPE-1408"],
+    acceptanceCriteriaIds: ["AC-1408-07"],
+  });
+});
+
+nb.Then("roundが開きprogress inventoryが固定される", function () {
+  assert.equal(fs.lstatSync(this.target).mode & 0o777, 0o644);
+  const inventory = this.draft.round.anchor.progressInventory;
+  assert.ok(inventory, "配布CLI経路でprogress inventoryが固定されていません");
+  assert.equal(inventory.fileMode, 0o644);
+  assert.ok(inventory.allowedTaskIds.length > 0);
+  assert.ok(
+    !this.draft.notes.some((entry) =>
+      entry.includes("ASC-REVIEW-PROGRESS-INVENTORY-UNBUILDABLE"),
+    ),
+  );
+});
+
+/**
+ * Issue #1408 D-04。**分類ごとに案内が出ることをadapterの合成経路で観測する。**
+ * 純関数を直接呼ぶunitだけでは、adapterが特定の分類でしか案内を出さなくなる
+ * 変異が生存する（実測: D-04が全green のまま通過した）。
+ */
+nb.Given("分類の異なる不成立03を持つreview前stagingが揃っている", function () {
+  const plan = `# 実装計画\n${PROGRESS_START}\n| タスク | 状態 |\n|---|---|\n| T01 | 未着手 |\n${PROGRESS_END}\n`;
+  /**
+   * **`not-regular-file`はここに置かない。** `calculateStagingDigest`と
+   * `listStagingArtifacts`（`src/domain/staging.ts`）がsymlinkの成果物を先に
+   * 拒否するため、symlinkの03を持つstagingはreview roundへ到達できない。
+   * 当該分類は純関数の防御として残し、観測はSCN-UNIT-PROGRESS-023が担う。
+   */
+  this.unbuildableCases = [
+    { reason: "mode-mismatch", options: { mode: 0o664 } },
+    {
+      reason: "marker-not-single-pair",
+      options: { mode: 0o644, source: `${plan}${plan}` },
+    },
+    {
+      reason: "no-task-id",
+      options: {
+        mode: 0o644,
+        source: `# 実装計画\n${PROGRESS_START}\n| lower | x |\n${PROGRESS_END}\n`,
+      },
+    },
+  ];
+});
+
+nb.When("それぞれでreview round --initを実行する", function () {
+  this.unbuildableDrafts = this.unbuildableCases.map((entry) => {
+    const { baseSha } = nonblockingStaging(this, entry.options);
+    return { reason: entry.reason, draft: initDraft(this, baseSha) };
+  });
+});
+
+nb.Then("どの分類でも案内がnotesへ出る", function () {
+  assert.equal(this.unbuildableDrafts.length, 3);
+  for (const { reason, draft } of this.unbuildableDrafts) {
+    assert.equal(
+      draft.round.anchor.progressInventory,
+      undefined,
+      `${reason}: inventoryが付いています`,
+    );
+    const note = draft.notes.find((entry) =>
+      entry.includes("ASC-REVIEW-PROGRESS-INVENTORY-UNBUILDABLE"),
+    );
+    assert.ok(note, `${reason}: 案内がnotesにありません`);
+    assert.ok(note.includes(reason), `${reason}: 分類が案内に現れません`);
+    assert.ok(note.includes("03_実装計画.md"), `${reason}: 対象名がありません`);
+    assert.ok(!note.includes("/home/"), `${reason}: 絶対pathが混入しています`);
+    /** 通常fileでない対象へchmodを案内しない。 */
+    assert.equal(
+      note.includes("chmod 0644"),
+      reason === "mode-mismatch",
+      `${reason}: chmod案内の有無が契約と違います`,
+    );
+  }
 });

@@ -15,3 +15,9 @@ Feature: parallel progress evidenceのCLI入口と従来経路
     Given parallel progressの純粋fixtureがある
     When "cli" のparallel progress反例を評価する
     Then parallel progress契約を満たす
+
+  Scenario: SCN-E2E-PROGRESS-034 配布CLIでchmodなしにreview roundを開始できる
+    Given 配布CLIのissue create出力がある
+    When 手動chmodなしでreview round --initを実行する
+    Then roundが開きprogress inventoryが固定される
+

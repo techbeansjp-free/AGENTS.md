@@ -50,3 +50,49 @@ Feature: parallel progress evidenceのadapter境界
     Given parallel progressの純粋fixtureがある
     When "critical-path" のparallel progress反例を評価する
     Then parallel progress契約を満たす
+
+  Scenario: SCN-INT-PROGRESS-026 mode不一致でもreview roundを開く
+    Given mode 0664の03を持つreview前stagingがある
+    When review round --initを実行する
+    Then roundが開きanchorにprogress inventoryが無い
+
+  Scenario: SCN-INT-PROGRESS-027 構築可否がroundと予算とdigestを変えない
+    Given mode 0664の03を持つreview前stagingがある
+    When review round --initを実行する
+    Then round recordの差はprogress inventory keyの有無だけである
+
+  Scenario: SCN-INT-PROGRESS-028 分類外の失敗は従来どおり伝播する
+    Given progress inventoryの構築が分類外の失敗をするstagingがある
+    When review round --initを実行する
+    Then review round --initは従来どおり拒否する
+
+  Scenario: SCN-INT-PROGRESS-029 inventory不成立sessionでは直列経路を案内する
+    Given progress inventoryが不成立のreview sessionがある
+    When review round --initを実行する
+    Then review progressは従来の直列経路を案内して拒否する
+
+  Scenario: SCN-INT-PROGRESS-030 成立時のfileModeは実測modeと一致し変化を拒否する
+    Given mode 0644の03を持つreview前stagingがある
+    When review round --initを実行する
+    Then inventoryのfileModeが実測modeと一致しinit後のmode変化を拒否する
+
+  Scenario: SCN-INT-PROGRESS-031 umask 0002でも生成03は0644になる
+    Given umask 0002のissue create環境がある
+    When full stagingを生成する
+    Then 生成された03のmodeは0644である
+
+  Scenario: SCN-INT-PROGRESS-032 umask 0077でも生成03は0644になる
+    Given umask 0077のissue create環境がある
+    When full stagingを生成する
+    Then 生成された03のmodeは0644である
+
+  Scenario: SCN-INT-PROGRESS-033 template mode 0664を生成物へ継がない
+    Given on-disk modeが0664のissue templateがある
+    When full stagingを生成する
+    Then 生成された03のmodeは0644である
+
+  Scenario: SCN-INT-PROGRESS-035 全分類で案内をnotesへ返す
+    Given 分類の異なる不成立03を持つreview前stagingが揃っている
+    When それぞれでreview round --initを実行する
+    Then どの分類でも案内がnotesへ出る
+
