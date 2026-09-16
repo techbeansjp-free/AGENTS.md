@@ -425,3 +425,72 @@ audit.Then("product codeの行は全列が未確定のままである", function
     assert.equal(cells[index], "reviewerが確認");
   assert.equal(cells[9], "finding");
 });
+
+import { renderReviewArtifactDraft } from "../../src/domain/review-artifact.js";
+
+interface DraftWorld extends LayoutWorld {
+  draft: string;
+}
+const draft = stepDefinitions<DraftWorld>();
+
+draft.Given("生成物を含む変更pathとpackage filesがある", function () {
+  this.draft = "";
+});
+
+draft.When("review artifact雛形をpackage filesつきで描画する", function () {
+  const template = fs.readFileSync(
+    path.join(
+      repositoryRoot,
+      ".agent-skill-chain/templates/issue/04_レビュー.md",
+    ),
+    "utf8",
+  );
+  this.draft = renderReviewArtifactDraft({
+    template,
+    staging: ".agent-skill-chain/tmp/issues/x",
+    stagingDigest: "a".repeat(64),
+    baseSha: "1".repeat(40),
+    headSha: "2".repeat(40),
+    paths: [
+      { path: "src/domain/staging-layout.ts", changeType: "A" },
+      { path: "dist/src/domain/staging-layout.js", changeType: "A" },
+      { path: "dist/src/cli.js", changeType: "M" },
+      { path: "docs/specs/02_要件/00_要件一覧.md", changeType: "M" },
+      { path: "test/features/unit/staging-layout.feature", changeType: "A" },
+    ],
+    packageFiles: ["dist/src/", "dist/bin/", ".agent-skill-chain/docs/"],
+  });
+});
+
+draft.Then("個別監査表に生成物の行が無くsourceと文書の行がある", function () {
+  const audit = this.draft.slice(
+    this.draft.indexOf("### 1.1 変更ファイル個別監査"),
+    this.draft.indexOf("## 2. 受け入れ条件の確認"),
+  );
+  assert.doesNotMatch(audit, /^\| `dist\//mu, "生成物の行が無い");
+  assert.ok(audit.includes("`src/domain/staging-layout.ts`"));
+  assert.ok(audit.includes("`docs/specs/02_要件/00_要件一覧.md`"));
+  assert.ok(audit.includes("`test/features/unit/staging-layout.feature`"));
+});
+
+draft.Then(
+  "配布物影響の表は生成物を境界単位にまとめ入る入らないを判定している",
+  function () {
+    const section = this.draft.slice(
+      this.draft.indexOf("## 8. 配布物影響"),
+      this.draft.indexOf("## 9. 独立reviewの成立"),
+    );
+    assert.match(section, /^\| dist\/src\/ \| 入る \|/mu);
+    assert.ok(!section.includes("dist/src/cli.js"), "生成物は個別に並べない");
+    assert.match(section, /^\| src\/domain\/staging-layout\.ts \| 入る \|/mu);
+    assert.match(
+      section,
+      /^\| docs\/specs\/02_要件\/00_要件一覧\.md \| 入らない \| なし \|/mu,
+    );
+    assert.ok(!section.includes("{パス}"));
+  },
+);
+
+draft.Then("ラウンド数は整数で始まる", function () {
+  assert.match(this.draft, /^\| ラウンド数 \| \d+/mu);
+});

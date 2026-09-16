@@ -5113,6 +5113,17 @@ export async function main(argv, dependencies = {}) {
         if (fs.lstatSync(out, { throwIfNoEntry: false }))
             throw new Error(`review artifactの--outが既に存在します: ${out}`);
         const template = fs.readFileSync(path.join(root, ".agent-skill-chain", "templates", "issue", "04_レビュー.md"), "utf8");
+        const packageManifest = path.join(root, "package.json");
+        const packageFiles = fs.existsSync(packageManifest)
+            ? (() => {
+                const parsed = parseJsonStrict(fs.readFileSync(packageManifest, "utf8"), "package.json");
+                const files = isRecord(parsed) ? parsed.files : undefined;
+                return Array.isArray(files) &&
+                    files.every((item) => typeof item === "string")
+                    ? files
+                    : undefined;
+            })()
+            : undefined;
         const content = renderReviewArtifactDraft({
             template,
             staging: path.relative(root, staging),
@@ -5120,6 +5131,7 @@ export async function main(argv, dependencies = {}) {
             baseSha,
             headSha,
             paths: changedPaths,
+            ...(packageFiles ? { packageFiles } : {}),
         });
         try {
             writeFileExclusivePinned(outParent, path.basename(out), content);

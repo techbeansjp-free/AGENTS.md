@@ -1,4 +1,5 @@
 import path from "node:path";
+import { distributedPaths } from "./conformance.js";
 import { matchesStagingRoot, readStagingLayout } from "./staging-layout.js";
 
 export interface ReviewArtifactPath {
@@ -580,10 +581,21 @@ export function renderReviewArtifactDraft(input: {
   readonly baseSha: string;
   readonly headSha: string;
   readonly paths: readonly ReviewArtifactPath[];
+  /** package.jsonの`files`。与えると§8配布物影響の行を境界判定つきで生成する。 */
+  readonly packageFiles?: readonly string[];
 }): string {
   let content = input.template;
   const targetPaths =
     input.paths.map((item) => item.path).join("、") || "差分なし";
+  /**
+   * **個別監査表から版管理下の生成物（`dist/`）を外す。** `audit:check`はsourceから
+   * 決定的に導出される生成物を個別監査の照合から除外する（PR #1218、Issue #1187）。
+   * 雛形が生成物の行を持つと、照合で「path集合が一致しません」となり、reviewerが
+   * 手で行を削る往復になる。配布物影響（§8）には`dist/<top>/`の単位で残す。
+   */
+  const audited = input.paths.filter(
+    (item) => item.path !== "dist" && !item.path.startsWith("dist/"),
+  );
   content = replaceRow(content, "対象", "実装");
   content = replaceRow(content, "ラウンド", "1");
   content = replaceRow(content, "対象SHA・文書ダイジェスト", input.headSha);
@@ -596,9 +608,13 @@ export function renderReviewArtifactDraft(input: {
     "比較基点に存在し変更されていない範囲",
   );
   content = replaceRow(content, "残り予算", "3ラウンド");
-  content = replaceRow(content, "ラウンド数", "0（review未実施）");
+  content = replaceRow(
+    content,
+    "ラウンド数",
+    "1（reviewerが実施したround数へ更新する）",
+  );
   content = replaceRow(content, "Step chain", `経由: ${input.staging}`);
-  const auditRows = input.paths
+  const auditRows = audited
     .map((item) => auditRowDraft(item.path, item.changeType))
     .join("\n");
   content = content.replace(
@@ -606,6 +622,33 @@ export function renderReviewArtifactDraft(input: {
     auditRows ||
       "| 差分なし | M | reviewerが確認 | reviewerが確認 | reviewerが確認 | reviewerが確認 | reviewerが確認 | reviewerが確認 | finding |",
   );
+  if (input.packageFiles !== undefined) {
+    const grouped = [
+      ...new Set(
+        input.paths.map((item) =>
+          item.path === "dist" || item.path.startsWith("dist/")
+            ? `dist/${item.path.split("/")[1] ?? ""}${item.path.split("/")[1] ? "/" : ""}`
+            : item.path,
+        ),
+      ),
+    ];
+    const distributed = new Set(
+      distributedPaths({
+        changedPaths: grouped,
+        packageFiles: input.packageFiles,
+      }),
+    );
+    const distributionRows = grouped
+      .map(
+        (target) =>
+          `| ${escapeCell(target)} | ${distributed.has(target) ? "入る" : "入らない"} | ${distributed.has(target) ? "reviewerが確認" : "なし"} |`,
+      )
+      .join("\n");
+    content = content.replace(
+      /^\| \{パス\} \| 入る \/ 入らない \|[^\n]*$/mu,
+      distributionRows || "| 差分なし | 入らない | なし |",
+    );
+  }
   const evidenceRows = [
     `| 要求・受け入れ条件 | ${escapeCell(input.staging)} | staging digest ${input.stagingDigest} | 既存コード |`,
     `| 差分 | \`${input.baseSha}\`..\`${input.headSha}\` | ${input.paths.length} path | 既存コード |`,
