@@ -12,6 +12,7 @@ import type { ModeAnswer } from "../../src/domain/mode.js";
 import { refreshStoredStagingDigest } from "../../src/domain/staging.js";
 import {
   DEFAULT_ISSUE_STAGING_ROOT,
+  isValidStagingRootPattern,
   readStagingLayout,
   stagingExcludePathspec,
   stagingRepositoryRoot,
@@ -28,6 +29,13 @@ interface LayoutWorld extends WorkflowWorld {
   lastError: string;
   syncBody: string;
   request: string;
+  stagingRootCases: Array<{ value: string; valid: boolean }>;
+  stagingRootResults: Array<{
+    value: string;
+    valid: boolean;
+    runtime: boolean;
+    schemas: boolean[];
+  }>;
 }
 
 const { Given, When, Then } = stepDefinitions<LayoutWorld>();
@@ -200,6 +208,85 @@ Then(
     ])
       assert.ok((this.rejections[key] ?? []).length > 0, `${key}は拒否される`);
     assert.deepEqual(this.rejections.valid, []);
+  },
+);
+
+Given("staging rootの正常例と反例がある", function () {
+  this.stagingRootCases = [
+    { value: "docs/tasks", valid: true },
+    { value: "docs/05_スプリント/*/tasks", valid: true },
+    {
+      value: Array.from({ length: 16 }, (_, index) => `s${index}`).join("/"),
+      valid: true,
+    },
+    { value: "./tasks", valid: false },
+    { value: "docs/./tasks", valid: false },
+    { value: "docs/../tasks", valid: false },
+    { value: "docs/\u0000/tasks", valid: false },
+    { value: "docs/\u202e/tasks", valid: false },
+    {
+      value: Array.from({ length: 17 }, (_, index) => `s${index}`).join("/"),
+      valid: false,
+    },
+    { value: "/docs/tasks", valid: false },
+    { value: "docs\\tasks", valid: false },
+    { value: "docs/*", valid: false },
+  ];
+});
+
+When("runtimeと2つのpolicy schemaでrootを検証する", function () {
+  const assembled = JSON.parse(
+    fs.readFileSync(
+      path.join(
+        repositoryRoot,
+        ".agent-skill-chain/schemas/project-policy.schema.json",
+      ),
+      "utf8",
+    ),
+  ) as {
+    properties: { staging: { properties: { root: { pattern: string } } } };
+  };
+  const manifest = JSON.parse(
+    fs.readFileSync(
+      path.join(
+        repositoryRoot,
+        ".agent-skill-chain/schemas/project-policy-manifest.schema.json",
+      ),
+      "utf8",
+    ),
+  ) as {
+    properties: {
+      policy: {
+        properties: { staging: { properties: { root: { pattern: string } } } };
+      };
+    };
+  };
+  const patterns = [
+    assembled.properties.staging.properties.root.pattern,
+    manifest.properties.policy.properties.staging.properties.root.pattern,
+  ].map((pattern) => new RegExp(pattern, "u"));
+  this.stagingRootResults = this.stagingRootCases.map((item) => ({
+    ...item,
+    runtime: isValidStagingRootPattern(item.value),
+    schemas: patterns.map((pattern) => pattern.test(item.value)),
+  }));
+});
+
+Then(
+  "正常なrepository相対pathだけを受理しdot segmentと制御文字と既存の境界違反を拒否する",
+  function () {
+    for (const result of this.stagingRootResults) {
+      assert.equal(
+        result.runtime,
+        result.valid,
+        `runtime: ${JSON.stringify(result.value)}`,
+      );
+      assert.deepEqual(
+        result.schemas,
+        [result.valid, result.valid],
+        `schemas: ${JSON.stringify(result.value)}`,
+      );
+    }
   },
 );
 
@@ -462,16 +549,34 @@ draft.When("review artifact雛形をpackage filesつきで描画する", functio
   });
 });
 
-draft.Then("個別監査表に生成物の行が無くsourceと文書の行がある", function () {
+draft.Then("個別監査表に生成物を含む全変更pathの行がある", function () {
   const audit = this.draft.slice(
     this.draft.indexOf("### 1.1 変更ファイル個別監査"),
     this.draft.indexOf("## 2. 受け入れ条件の確認"),
   );
-  assert.doesNotMatch(audit, /^\| `dist\//mu, "生成物の行が無い");
-  assert.ok(audit.includes("`src/domain/staging-layout.ts`"));
-  assert.ok(audit.includes("`docs/specs/02_要件/00_要件一覧.md`"));
-  assert.ok(audit.includes("`test/features/unit/staging-layout.feature`"));
+  for (const changed of [
+    "src/domain/staging-layout.ts",
+    "dist/src/domain/staging-layout.js",
+    "dist/src/cli.js",
+    "docs/specs/02_要件/00_要件一覧.md",
+    "test/features/unit/staging-layout.feature",
+  ])
+    assert.ok(audit.includes(`\`${changed}\``), changed);
 });
+
+draft.Then(
+  "生成物行に生成元との対応確認と配布影響の確認方法がある",
+  function () {
+    const generatedRows = this.draft
+      .split("\n")
+      .filter((line) => line.startsWith("| `dist/"));
+    assert.equal(generatedRows.length, 2);
+    for (const row of generatedRows) {
+      assert.match(row, /生成元/u);
+      assert.match(row, /配布物影響/u);
+    }
+  },
+);
 
 draft.Then(
   "配布物影響の表は生成物を境界単位にまとめ入る入らないを判定している",

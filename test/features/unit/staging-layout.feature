@@ -11,6 +11,11 @@ Feature: stagingの配置をproject policyで版管理下へ置ける
     When 各候補を検証する
     Then 末尾がアスタリスクのrootと絶対pathと親参照とroot無しのtrackedは拒否される
 
+  Scenario: SCN-UNIT-STGLAYOUT-011 schemaとruntimeが危険なroot segmentを同じく拒否する
+    Given staging rootの正常例と反例がある
+    When runtimeと2つのpolicy schemaでrootを検証する
+    Then 正常なrepository相対pathだけを受理しdot segmentと制御文字と既存の境界違反を拒否する
+
   Scenario: SCN-UNIT-STGLAYOUT-003 アスタリスクを含むrootではstaging-rootを明示させる
     Given sprint配下をrootにする版管理下のstaging policyがある
     When staging-rootを省略してissue createする
@@ -58,6 +63,7 @@ Feature: stagingの配置をproject policyで版管理下へ置ける
   Scenario: SCN-UNIT-STGLAYOUT-010 review artifact雛形はauditと同じ差分集合と配布物影響の行を持つ
     Given 生成物を含む変更pathとpackage filesがある
     When review artifact雛形をpackage filesつきで描画する
-    Then 個別監査表に生成物の行が無くsourceと文書の行がある
+    Then 個別監査表に生成物を含む全変更pathの行がある
+    And 生成物行に生成元との対応確認と配布影響の確認方法がある
     And 配布物影響の表は生成物を境界単位にまとめ入る入らないを判定している
     And ラウンド数は整数で始まる

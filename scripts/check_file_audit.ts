@@ -83,21 +83,6 @@ function commitParents(root: string, commit: string): string[] {
 }
 
 /**
- * 版管理下の生成物。個別監査の対象から外す。
- *
- * **`dist/`はsourceから決定的に導出される**（Issue #1187で版管理下へ置いた）。
- * 承認機構つき環境では`prepare`が実行されずbuildできないため、Git remoteからの
- * 取得でそのまま実行できるようcommitしている。
- *
- * **監査の目的は「変更を人が確認したこと」の記録である。** 生成物を1行ずつ
- * 書かせても、確認しているのは同じsourceであり、**表が生成file行で埋まって
- * 本来確認すべき変更が埋没する**（Issue #995 と同じ形）。
- *
- * **導出の正しさは別の機構が見る。** CIは`npm run build`の後に
- * `git status --porcelain`が空であることを要求しており、commit済み`dist`と
- * 再build結果の乖離はそこで落ちる。
- */
-/**
  * 生成物pathを配布境界の単位（`dist/<top>/`）へまとめる。
  *
  * **`dist/`は配布境界の中にある。** 除外すると、生成物を直接書き換えた変更が
@@ -1243,17 +1228,7 @@ export function checkFileAudit(
       const [status, ...parts] = line.split("\t");
       return { status: status?.[0] ?? "", path: parts.at(-1) ?? "" };
     });
-  /**
-   * **個別監査表の照合だけから生成物を外す。**
-   *
-   * `dist/`は配布境界の中にあるため、**配布物影響の検査には生の差分を渡す**
-   * （PR #1218 の外部指摘）。除外を共有すると、生成物を直接書き換えた変更が
-   * 配布物影響の記述を要求されなくなる。
-   */
-  const auditedExpected = expected.filter(
-    (entry) => !isGeneratedDistributionPath(entry.path),
-  );
-  const expectedKeys = auditedExpected
+  const expectedKeys = expected
     .map((entry) => `${entry.status}\u0000${entry.path}`)
     .sort();
   const actualKeys = parsed.entries
@@ -1263,7 +1238,7 @@ export function checkFileAudit(
     errors.push("個別監査に重複pathがあります");
   if (JSON.stringify(expectedKeys) !== JSON.stringify(actualKeys))
     errors.push(
-      `個別監査とGit差分path集合が一致しません: expected=${auditedExpected.length} actual=${parsed.entries.length}`,
+      `個別監査とGit差分path集合が一致しません: expected=${expected.length} actual=${parsed.entries.length}`,
     );
   for (const entry of parsed.entries) {
     if (entry.fields.some((field) => field === "" || field === "-"))
@@ -1272,6 +1247,18 @@ export function checkFileAudit(
       );
     if (entry.decision !== "pass")
       errors.push(`${entry.path}の個別判定がpassではありません`);
+    if (
+      isGeneratedDistributionPath(entry.path) &&
+      !entry.fields.some((field) => field.includes("生成元"))
+    )
+      errors.push(
+        `${entry.path}の生成物行に生成元との対応確認方法がありません`,
+      );
+    if (
+      isGeneratedDistributionPath(entry.path) &&
+      !entry.fields.some((field) => field.includes("配布"))
+    )
+      errors.push(`${entry.path}の生成物行に配布影響の確認方法がありません`);
   }
   const ancestry = git(
     ["merge-base", "--is-ancestor", parsed.implementation, current],
