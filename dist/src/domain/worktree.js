@@ -468,7 +468,11 @@ export function createWorktree(input) {
 }
 export function inspectFinalizeState(repoRoot, worktreePath, evidence, ignoredPathAllowlist = resolveFinalizeIgnoredPathAllowlist()) {
     const listed = git(["worktree", "list", "--porcelain"], repoRoot).stdout;
-    const exact = `worktree ${path.resolve(worktreePath)}\n`;
+    // `git worktree list`はsymlinkを解決した実pathを出す（例: macOSの既定TMPDIRは
+    // /var/folders/...で/varが/private/varへのsymlink）。path.resolveはsymlinkを
+    // 解決しないため、symlink配下のworktreeでexact一致が常に失敗していた。
+    const resolvedWorktreePath = fs.realpathSync(path.resolve(worktreePath));
+    const exact = `worktree ${resolvedWorktreePath}\n`;
     if (!listed.includes(exact))
         throw new Error("対象は登録済みworktreeではありません");
     const branch = git(["branch", "--show-current"], worktreePath).stdout.trim();
