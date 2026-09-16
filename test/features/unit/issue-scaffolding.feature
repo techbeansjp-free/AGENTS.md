@@ -40,3 +40,25 @@ Feature: Issue工程の機械導出欄を安全に生成する
       | poc   | 4          | 00_要求定義.md                                           |
       | full  | 4          | 00_要求定義.md,01_要件定義.md                            |
       | full  | 8          | 00_要求定義.md,01_要件定義.md,02_設計.md,03_実装計画.md |
+
+  Scenario: SCN-UNIT-ISSUESYNC-002 full Step 8の同期本文は00を先頭に置き01〜03を折りたたむ
+    Given 00から03の内容が既知の同期本文入力がある
+    When full checkpoint 8の同期本文を描画する
+    Then 最初の折りたたみより前は00の全文と一致する
+    And 折りたたみは3つあり見出しは01_要件定義.md、02_設計.md、03_実装計画.mdの順である
+    And 各折りたたみの中身は対応する成果物の全文と一致する
+    And 折りたたみの構造は本文中の閉じtagで壊れない
+    And 折りたたみ境界の置き換えは形を変えた閉じtagも捕まえる
+    And 検証済みfull stagingから生成した同期本文は同じ入力の描画結果と一致する
+
+  Scenario Outline: SCN-UNIT-ISSUESYNC-003 checkpoint 4とquick・pocの同期本文は区切り線連結のまま変えない
+    Given 00から03の内容が既知の同期本文入力がある
+    And <mode> modeのcheckpoint <checkpoint>という同期条件がある
+    When 同期条件で先頭<count>件の同期本文を描画する
+    Then 同期本文は成果物を区切り線で連結した従来形式である
+
+    Examples:
+      | mode  | checkpoint | count |
+      | quick | 4          | 1     |
+      | poc   | 4          | 1     |
+      | full  | 4          | 2     |

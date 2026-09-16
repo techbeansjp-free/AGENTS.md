@@ -1126,6 +1126,107 @@ export function createIssueStaging(
   };
 }
 
+/**
+ * 折りたたみ区画へ入れる本文から、**構造を壊す閉じtagだけ**を実体参照へ置き換える。
+ *
+ * **表示内容は保たれる。** `&lt;/details&gt;`はGitHub上で`</details>`という文字として
+ * 表示されるため、読者が見る内容は変わらない。置き換えないと、成果物本文が持つ生の
+ * `</details>`がbrowserのHTML parserで折りたたみを閉じ、**以降の本文と後続の成果物が
+ * 区画の外へ出る**（PR #1407の外部review指摘）。
+ *
+ * **codeの内側は置き換えない。** fenced blockとinline codeはGFMが実体参照へ変換して
+ * 出力するため、そのままでも折りたたみを壊さない。判定はこのfileの`withoutCode`・
+ * `withoutInlineCode`と同じfence規則を使う。
+ */
+export function escapeFoldBoundary(text: string): string {
+  // 属性付きの終了tag（`</details foo>`）もHTML parserは終了として扱う。開始tagは
+  // 入れ子を作り、構造上の終端が内側を閉じて外側が開いたまま残るため同じく置き換える。
+  // **次の2形は置き換えない。** 行を跨ぐ形（`</details\n>`）は行単位走査では扱えない。
+  // 未閉のinline backtick以降はcode spanとして扱うため、GFMがliteralとして描画する場合に
+  // 生tagが残る。どちらも既知の限界であり、成果物側で閉じることを前提にする。
+  const structural = /<\/?\s*details\b[^>]*>/giu;
+  const replace = (value: string): string =>
+    value.replace(structural, (tag) => `&lt;${tag.slice(1, -1)}&gt;`);
+  let fence: { marker: "`" | "~"; length: number } | undefined;
+  return text
+    .split("\n")
+    .map((line) => {
+      const opening = /^\s*(`{3,}|~{3,})/u.exec(line)?.[1];
+      if (fence) {
+        if (
+          new RegExp(
+            `^\\s*${escapeRegExp(fence.marker)}{${fence.length},}\\s*$`,
+            "u",
+          ).test(line)
+        )
+          fence = undefined;
+        return line;
+      }
+      if (opening) {
+        fence = {
+          marker: opening[0] as "`" | "~",
+          length: opening.length,
+        };
+        return line;
+      }
+      // inline code span内は保持し、その外側だけを置き換える。
+      let result = "";
+      let cursor = 0;
+      while (cursor < line.length) {
+        const start = line.indexOf("`", cursor);
+        if (start < 0) {
+          result += replace(line.slice(cursor));
+          break;
+        }
+        result += replace(line.slice(cursor, start));
+        let length = 1;
+        while (line[start + length] === "`") length += 1;
+        const marker = "`".repeat(length);
+        const end = line.indexOf(marker, start + length);
+        if (end < 0) {
+          result += line.slice(start);
+          break;
+        }
+        result += line.slice(start, end + length);
+        cursor = end + length;
+      }
+      return result;
+    })
+    .join("\n");
+}
+
+export interface IssueSyncArtifactText {
+  readonly name: string;
+  readonly text: string;
+}
+
+/**
+ * 同期本文を組み立てる純粋関数。fileを読まず、外部副作用を持たない。
+ *
+ * **fullのStep 8は00を先頭に置き、01〜03を`<details>`へ入れる。** 実測では00〜03を
+ * 区切り線で連結した本文が715〜888行・26,055〜47,215字になり、要求を読みに来た人が
+ * 設計と実装計画を連結で受け取っていた（Issue #1406）。折りたたみは内容を1文字も落とさず、
+ * 最初の画面を00だけにする。`<summary>`の直後に空行を置くのは、GitHubが折りたたみ内の
+ * Markdownを描画する条件だからである。checkpoint 4とquick・pocは従来の区切り線連結のまま
+ * 変えない。同期対象の集合（`issueSyncArtifactNames`）とdigest規則もここでは変えない。
+ */
+export function renderIssueSyncBody(
+  mode: Mode,
+  checkpoint: 4 | 8,
+  artifacts: readonly IssueSyncArtifactText[],
+): string {
+  if (mode === "full" && checkpoint === 8 && artifacts.length > 1) {
+    const [lead, ...folded] = artifacts;
+    return `${lead!.text.trimEnd()}${folded
+      .map(
+        (artifact) =>
+          `\n\n<details>\n<summary>${artifact.name}</summary>\n\n${escapeFoldBoundary(artifact.text.trimEnd())}\n\n</details>`,
+      )
+      .join("")}\n`;
+  }
+  return `${artifacts.map((artifact) => artifact.text.trimEnd()).join("\n\n---\n\n")}\n`;
+}
+
 /** 検証済みstaging成果物をmode/checkpointの規定順で連結する。外部副作用は持たない。 */
 export function buildIssueSyncBody(
   stagingInput: string,
@@ -1160,9 +1261,14 @@ export function buildIssueSyncBody(
       `同期本文の成果物が未検証です: ${validation.errors.join("; ")}`,
     );
   const artifacts = issueSyncArtifactNames(record.mode, checkpoint);
-  const body = `${artifacts
-    .map((name) => fs.readFileSync(path.join(staging, name), "utf8").trimEnd())
-    .join("\n\n---\n\n")}\n`;
+  const body = renderIssueSyncBody(
+    record.mode,
+    checkpoint,
+    artifacts.map((name) => ({
+      name,
+      text: fs.readFileSync(path.join(staging, name), "utf8"),
+    })),
+  );
   return Object.freeze({
     body,
     bodySha256: crypto
