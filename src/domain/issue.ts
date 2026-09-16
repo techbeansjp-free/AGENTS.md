@@ -1141,14 +1141,12 @@ export function createIssueStaging(
 export function escapeFoldBoundary(text: string): string {
   // 属性付きの終了tag（`</details foo>`）もHTML parserは終了として扱う。開始tagは
   // 入れ子を作り、構造上の終端が内側を閉じて外側が開いたまま残るため同じく置き換える。
-  // **行を跨ぐ形（`</details\n>`）は行単位走査では扱えない。** 既知の限界として残す。
+  // **次の2形は置き換えない。** 行を跨ぐ形（`</details\n>`）は行単位走査では扱えない。
+  // 未閉のinline backtick以降はcode spanとして扱うため、GFMがliteralとして描画する場合に
+  // 生tagが残る。どちらも既知の限界であり、成果物側で閉じることを前提にする。
   const structural = /<\/?\s*details\b[^>]*>/giu;
   const replace = (value: string): string =>
-    value.replace(structural, (tag) =>
-      tag.startsWith("</") || /^<\s*\/?\s*details\b/iu.test(tag)
-        ? `&lt;${tag.slice(1, -1)}&gt;`
-        : tag,
-    );
+    value.replace(structural, (tag) => `&lt;${tag.slice(1, -1)}&gt;`);
   let fence: { marker: "`" | "~"; length: number } | undefined;
   return text
     .split("\n")
