@@ -875,6 +875,7 @@ function resolveImplementationCommitForMerge(root, staging, finalHeadSha) {
     const changedPaths = git([
         "diff",
         "--name-only",
+        "--no-renames",
         "-z",
         `${implementationCommitSha}..${finalHeadSha}`,
         "--",

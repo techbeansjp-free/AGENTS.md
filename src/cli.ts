@@ -1434,6 +1434,7 @@ function resolveImplementationCommitForMerge(
     [
       "diff",
       "--name-only",
+      "--no-renames",
       "-z",
       `${implementationCommitSha}..${finalHeadSha}`,
       "--",

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
@@ -30,6 +31,7 @@ import {
   refreshStoredStagingDigest,
 } from "../../src/domain/staging.js";
 import { STEP_JOURNAL_FILE } from "../../src/domain/workflow.js";
+import { stableJson } from "../../src/lib/security.js";
 import {
   planCompletion,
   planRootUpdate,
@@ -255,7 +257,13 @@ Then("bundleはSHA-256 digestを持ち256 KiB以下である", function () {
     bundleBytes: number;
   };
   assert.match(bundle.bundleDigest, /^[a-f0-9]{64}$/u);
-  assert.ok(bundle.bundleBytes > 0 && bundle.bundleBytes <= 256 * 1024);
+  const persistedBytes = `${stableJson(this.draft)}\n`;
+  assert.equal(bundle.bundleBytes, Buffer.byteLength(persistedBytes, "utf8"));
+  assert.equal(
+    bundle.bundleDigest,
+    crypto.createHash("sha256").update(persistedBytes).digest("hex"),
+  );
+  assert.ok(bundle.bundleBytes <= 256 * 1024);
 });
 
 When("256 KiBを超えるround bundleを構築する", function () {

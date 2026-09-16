@@ -339,7 +339,8 @@ export function buildReviewRoundDraft(input: {
     `このroundは ${headSha.slice(0, 8)} (${commitSubject(root, headSha)}) を検分したものとして記録します。レビュー結果を反映したcommitを、このroundの記録より先に作らないでください`,
   );
   const parsed = parseReviewRoundInput(round);
-  const canonical = stableJson(parsed);
+  /** CLIが保存するreviewer input bundleの実byte列（末尾改行を含む）へ固定する。 */
+  const canonical = `${stableJson(parsed)}\n`;
   const bundleBytes = Buffer.byteLength(canonical, "utf8");
   if (bundleBytes > 256 * 1024)
     throw new Error("reviewer input bundleは256 KiB以下が必要です");

@@ -145,7 +145,11 @@ export function appendReviewProgress(input: {
     )
   )
     throw new Error(
-      "progress taskIdは03_実装計画.mdに宣言済みでなければなりません",
+      `progress taskIdは宣言済みprogress targetに存在しなければなりません: ${reviewProgressTargets(
+        observed.inventory,
+      )
+        .map(({ targetPath }) => targetPath)
+        .join("、")}`,
     );
   const entry = makeReviewProgressEntry({
     previous: observed.records,

@@ -86,7 +86,9 @@ export function appendReviewProgress(input) {
             journalDigest: latestReviewProgressDigest(observed.records),
         };
     if (!reviewProgressTargets(observed.inventory).some(({ allowedTaskIds }) => allowedTaskIds.includes(input.taskId)))
-        throw new Error("progress taskIdは03_実装計画.mdに宣言済みでなければなりません");
+        throw new Error(`progress taskIdは宣言済みprogress targetに存在しなければなりません: ${reviewProgressTargets(observed.inventory)
+            .map(({ targetPath }) => targetPath)
+            .join("、")}`);
     const entry = makeReviewProgressEntry({
         previous: observed.records,
         sessionId: observed.session.sessionId,

@@ -122,6 +122,11 @@ Given("parallel progressの実adapter fixtureがある", function () {
   this.source = `# 実装計画\n${PROGRESS_START}\n| タスク | 状態 |\n|---|---|\n| T01 | 未着手 |\n${PROGRESS_END}\n`;
   this.target = path.join(this.staging, "03_実装計画.md");
   fs.writeFileSync(this.target, this.source, { mode: 0o644 });
+  fs.writeFileSync(
+    path.join(this.staging, "README.md"),
+    `# task\n${PROGRESS_START}\n| T02 | 未着手 |\n${PROGRESS_END}\n`,
+    { mode: 0o644 },
+  );
   fs.appendFileSync(
     path.join(this.staging, STEP_JOURNAL_FILE),
     `${JSON.stringify({
@@ -141,6 +146,7 @@ Given("parallel progressの実adapter fixtureがある", function () {
     baseSha: base,
     scopeIds: ["ISSUE-1336"],
     acceptanceCriteriaIds: ["AC-1336-01"],
+    progressTargetPaths: ["03_実装計画.md", "README.md"],
   });
   recordReviewRound({ staging: this.staging, round });
   this.passed = false;
@@ -165,6 +171,18 @@ When("review入力を変えずcompleted進捗を実際にappendする", function
     apply: true,
   });
   assert.equal(applied.applied, true);
+  assert.throws(
+    () =>
+      appendReviewProgress({
+        staging: this.staging,
+        taskId: "T99",
+        state: "completed",
+        recordedAt: instant,
+        expectedDigest: applied.journalDigest,
+        apply: false,
+      }),
+    /03_実装計画\.md、README\.md/u,
+  );
   assert.equal(fs.readFileSync(this.target, "utf8"), this.source);
   assert.equal(
     fs.statSync(path.join(this.staging, REVIEW_PROGRESS_JOURNAL_FILE)).mode &
@@ -356,6 +374,38 @@ When(
           ),
           ["docs/reviews/1418.md", repositoryTarget],
         );
+        const foreignEntry = makeReviewProgressEntry({
+          previous: [],
+          sessionId: "f".repeat(64),
+          implementationHeadSha,
+          taskId: "T01",
+          state: "completed",
+          recordedAt: instant,
+        });
+        const mixedSeal = makeReviewProgressSeal({
+          previous: [foreignEntry],
+          sessionId: boundSessionId,
+          implementationHeadSha,
+          sealedAt: instant,
+        });
+        fs.writeFileSync(
+          path.join(staging, "journal/review-progress.jsonl"),
+          `${stableJson(foreignEntry)}\n${stableJson(mixedSeal)}\n`,
+        );
+        assert.equal(
+          recordLayerSuffix(
+            staging,
+            root,
+            implementationHeadSha,
+            finalHead,
+            session,
+          ),
+          undefined,
+        );
+        fs.writeFileSync(
+          path.join(staging, "journal/review-progress.jsonl"),
+          `${stableJson(progressEntry)}\n${stableJson(progressSeal)}\n`,
+        );
         const roundOne = advanceReviewSession(
           null,
           parseReviewRoundInput({
@@ -396,16 +446,19 @@ When(
         execFileSync("git", ["commit", "-q", "--amend", "--no-edit"], {
           cwd: root,
         });
+        const unsafeHead = gitHead(root);
+        execFileSync("git", ["replace", unsafeHead, finalHead], { cwd: root });
         assert.equal(
           recordLayerSuffix(
             staging,
             root,
             implementationHeadSha,
-            gitHead(root),
+            unsafeHead,
             session,
           ),
           undefined,
         );
+        execFileSync("git", ["replace", "-d", unsafeHead], { cwd: root });
         fs.writeFileSync(path.join(staging, targetPath), projected);
         fs.writeFileSync(path.join(root, "unexpected.txt"), "unexpected\n");
         execFileSync("git", ["add", repositoryTarget, "unexpected.txt"], {

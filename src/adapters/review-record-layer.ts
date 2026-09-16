@@ -13,6 +13,7 @@ const GIT_ENV: NodeJS.ProcessEnv = {
   PATH: process.env.PATH ?? "/usr/bin:/bin",
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
+  GIT_NO_REPLACE_OBJECTS: "1",
 };
 
 /** formal artifactとsealed journalから再現したprogress投影だけを受理する。 */
@@ -91,8 +92,11 @@ export function recordLayerSuffix(
   if (
     !seal ||
     !("sealDigest" in seal) ||
-    seal.sessionId !== session.sessionId ||
-    seal.implementationHeadSha !== fromSha
+    records.some(
+      (record) =>
+        record.sessionId !== session.sessionId ||
+        record.implementationHeadSha !== fromSha,
+    )
   )
     return undefined;
   for (const changedPath of changed) {
