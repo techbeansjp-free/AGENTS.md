@@ -5,6 +5,8 @@ import {
   RELATED_FILE_LIMIT,
 } from "./supplemental-review-collect.js";
 import { REVIEWER_EXECUTORS } from "./reviewer-executors.js";
+import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
+import type { ReviewerExecutor } from "../domain/reviewer-provider.js";
 import { isRecord } from "../types.js";
 
 /**
@@ -29,7 +31,8 @@ export type SupplementalReviewResult =
       findings: SupplementalReviewFinding[];
       truncated: boolean;
     }
-  | { state: "degraded"; reason: string; truncated: boolean };
+  | { state: "degraded"; reason: string; truncated: boolean }
+  | { state: "error"; reason: string };
 
 /**
  * CodeRabbit等の商用AIレビュアーが公開する観点（バグ・セキュリティ・
@@ -118,14 +121,30 @@ async function dispatch(
     timeoutMs: number;
   },
   truncated: boolean,
+  execute: ReviewerExecutor | undefined,
 ): Promise<SupplementalReviewResult> {
-  const executor = REVIEWER_EXECUTORS[config.provider];
+  const executor = execute ?? REVIEWER_EXECUTORS[config.provider];
   if (!executor)
     return {
       state: "degraded",
       reason: `provider ${config.provider} の実行adapterが未登録です`,
       truncated,
     };
+  /**
+   * `executeLocalLlm`（Issue #1425既存部品）も内部で同じ検証を行うが、
+   * そちらは失敗時に例外を投げる。ここで事前検証してcatchすることで、
+   * 送信を行わずAC-1428-06/SCN-SUPPL-006が要求する`degraded`へ倒す
+   * （dispatch呼出し前に例外がCLI全体を異常終了させる回帰を防ぐ）。
+   */
+  try {
+    assertLoopbackEndpoint(config.endpoint);
+  } catch (error) {
+    return {
+      state: "degraded",
+      reason: error instanceof Error ? error.message : String(error),
+      truncated,
+    };
+  }
   const prompt = `${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
   const executed = await executor({
     endpoint: config.endpoint,
@@ -144,38 +163,69 @@ async function dispatch(
   return { state: "findings", findings, truncated };
 }
 
+/**
+ * base/head解決不可、非loopback endpoint（`assertLoopbackEndpoint`の拒否）、
+ * その他収集・送信段の例外はここで`error`へ変換し、呼出し元（Step 03/07/10の
+ * 既存実施）を例外で止めない（NFR-1428-02、AC-1428-06）。
+ */
+function toErrorResult(error: unknown): SupplementalReviewResult {
+  return {
+    state: "error",
+    reason: error instanceof Error ? error.message : String(error),
+  };
+}
+
 /** Step 10相当の対象（exact-head diff＋関連ファイル）に対する補助レビューを実行する（FR-1428-02、FR-1428-04）。 */
-export async function launchSupplementalReviewDiff(input: {
-  root: string;
-  baseSha: string;
-  headSha: string;
-  configPath?: string;
-  limit?: number;
-}): Promise<SupplementalReviewResult> {
+export async function launchSupplementalReviewDiff(
+  input: {
+    root: string;
+    baseSha: string;
+    headSha: string;
+    configPath?: string;
+    limit?: number;
+  },
+  dependencies: { execute?: ReviewerExecutor } = {},
+): Promise<SupplementalReviewResult> {
   const config = loadSupplementalReviewConfig(input.root, input.configPath);
   if (config === undefined) return { state: "disabled" };
-  const collected = collectSupplementalReviewDiff(
-    input.root,
-    input.baseSha,
-    input.headSha,
-    input.limit ?? RELATED_FILE_LIMIT,
-  );
-  const promptBody = `${DIFF_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
-  return dispatch(promptBody, config, collected.truncated);
+  try {
+    const collected = collectSupplementalReviewDiff(
+      input.root,
+      input.baseSha,
+      input.headSha,
+      input.limit ?? RELATED_FILE_LIMIT,
+    );
+    const promptBody = `${DIFF_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
+    return await dispatch(
+      promptBody,
+      config,
+      collected.truncated,
+      dependencies.execute,
+    );
+  } catch (error) {
+    return toErrorResult(error);
+  }
 }
 
 /** Step 03/07相当の対象（staging文書間のID整合性）に対する補助レビューを実行する（FR-1428-03、FR-1428-04）。 */
-export async function launchSupplementalReviewStaging(input: {
-  root: string;
-  stagingPath: string;
-  configPath?: string;
-}): Promise<SupplementalReviewResult> {
+export async function launchSupplementalReviewStaging(
+  input: {
+    root: string;
+    stagingPath: string;
+    configPath?: string;
+  },
+  dependencies: { execute?: ReviewerExecutor } = {},
+): Promise<SupplementalReviewResult> {
   const config = loadSupplementalReviewConfig(input.root, input.configPath);
   if (config === undefined) return { state: "disabled" };
-  const collected = collectSupplementalReviewStaging(
-    input.root,
-    input.stagingPath,
-  );
-  const promptBody = `${STAGING_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
-  return dispatch(promptBody, config, false);
+  try {
+    const collected = collectSupplementalReviewStaging(
+      input.root,
+      input.stagingPath,
+    );
+    const promptBody = `${STAGING_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
+    return await dispatch(promptBody, config, false, dependencies.execute);
+  } catch (error) {
+    return toErrorResult(error);
+  }
 }
