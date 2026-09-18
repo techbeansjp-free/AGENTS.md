@@ -921,11 +921,17 @@ function prefillRoutingRows(
   if (typeof choices?.modelMapping !== "object") return content;
   const roles = choices.modelMapping.roles;
   const fallback = `${choices.modelMapping.fallback.when}: ${choices.modelMapping.fallback.role}/${choices.modelMapping.fallback.modelSelection}`;
+  const modelSettingCell = (
+    selected: (typeof roles)["implementer" | "reviewer"],
+  ): string =>
+    "mode" in selected
+      ? `${selected.mode}/${selected.endpoint}/${selected.model}`
+      : `${selected.logicalTier}/${selected.reasoningEffort}/${selected.speed}`;
   const row = (role: "implementer" | "reviewer", task: string): string => {
     const selected = roles[role];
     return kind === "design"
-      ? `| ${role} | project choiceのrole contract | ${role === "reviewer" ? "肯定・敵対review、finding分類" : "failing test、test result"} | critical | ${escapeCell(selected.provider)} | ${escapeCell(`${selected.logicalTier}/${selected.reasoningEffort}/${selected.speed}`)} | ${escapeCell(fallback)} | implementerとreviewerのprovider・context差を記録 |`
-      : `| ${task} | ${role} | project choiceのrole contract | ${role === "reviewer" ? "肯定・敵対review、finding分類" : "failing test、test result"} | critical | ${escapeCell(selected.provider)} | ${escapeCell(`${selected.logicalTier}/${selected.reasoningEffort}/${selected.speed}`)} | ${escapeCell(fallback)} | implementerとreviewerのprovider・context差を記録 |`;
+      ? `| ${role} | project choiceのrole contract | ${role === "reviewer" ? "肯定・敵対review、finding分類" : "failing test、test result"} | critical | ${escapeCell(selected.provider)} | ${escapeCell(modelSettingCell(selected))} | ${escapeCell(fallback)} | implementerとreviewerのprovider・context差を記録 |`
+      : `| ${task} | ${role} | project choiceのrole contract | ${role === "reviewer" ? "肯定・敵対review、finding分類" : "failing test、test result"} | critical | ${escapeCell(selected.provider)} | ${escapeCell(modelSettingCell(selected))} | ${escapeCell(fallback)} | implementerとreviewerのprovider・context差を記録 |`;
   };
   const replacement = [
     row("implementer", "実装・検証"),

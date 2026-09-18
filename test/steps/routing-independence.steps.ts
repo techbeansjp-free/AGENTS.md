@@ -238,10 +238,12 @@ Given(
     );
     const roleConfiguration = structuredClone(choices);
     const modelMapping = structuredMapping(roleConfiguration);
-    modelMapping.roles.reviewer.provider =
-      modelMapping.roles.implementer.provider;
-    modelMapping.roles.reviewer.logicalTier =
-      modelMapping.roles.implementer.logicalTier;
+    const reviewerAsRecord = modelMapping.roles.reviewer as unknown as Record<
+      string,
+      unknown
+    >;
+    reviewerAsRecord.provider = modelMapping.roles.implementer.provider;
+    reviewerAsRecord.logicalTier = modelMapping.roles.implementer.logicalTier;
     this.roleConfiguration = roleConfiguration;
   },
 );
