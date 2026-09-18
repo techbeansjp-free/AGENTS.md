@@ -57,3 +57,8 @@ Feature: reviewer役割へのローカルLLMプロバイダーdispatch決定
     Given localhostホストのendpointを指定したreviewer routing入力がある
     When resolveReviewRoutingを実行する
     Then reviewer routingはresolved状態でprovider・model・modeを返す
+
+  Scenario: SCN-UNIT-REVIEW-1425-015 mode field保有かつ未知providerのreviewer routingを拒否する
+    Given mode fieldを保有するが未知providerのreviewer routing入力がある
+    When resolveReviewRoutingを実行する
+    Then reviewer routingはrejected状態を返す

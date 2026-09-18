@@ -224,6 +224,18 @@ Given("不正なmode文字列を指定したreviewer routing入力がある", fu
 });
 
 Given(
+  "mode fieldを保有するが未知providerのreviewer routing入力がある",
+  function () {
+    // schema検証を経ない不正入力を模擬する（独立レビューREV-06: 実行時防御の反例）。
+    const input = reviewRoutingInput();
+    const reviewer = (input.modelMapping as ModelMappingChoice).roles
+      .reviewer as unknown as Record<string, unknown>;
+    reviewer.provider = "unknown-local-llm";
+    this.routingInput = input;
+  },
+);
+
+Given(
   "loopback以外のendpointを指定したreviewer routing入力がある",
   function () {
     this.routingInput = reviewRoutingInput(
