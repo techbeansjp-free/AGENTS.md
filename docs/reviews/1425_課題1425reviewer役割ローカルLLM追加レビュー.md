@@ -13,7 +13,7 @@
 | 何が問題だったか | 初回Step 10承認（H_impl=`019f1a2f`）後、PR #1426作成後にCIが2件（trusted品質契約の保護対象file自己変更、review artifact命名規則違反）失敗し、CodeRabbitが9件指摘。全件を実コードで裏取りし誤検知0件、加えて独立に1件（小文字枝番SCN IDの再発）を発見した |
 | 何を解決しようとしたか | CI 2件・CodeRabbit 9件・自己発見1件を是正し、あわせてreviewer側provider dispatchの抽象化（ユーザー指摘）を行う。是正過程の独立reviewで新たにCritical 1件（ローカルLLMのriskAcceptance自己承認）を検出し、これも解消する |
 | 何を行ったか | `src/lib/security.ts`から無関係な`assertLoopbackEndpoint`を`src/lib/local-llm-endpoint.ts`へ切り出し保護対象file自己変更を解消（commit `eed84b40`）。provider dispatchを`DISPATCHABLE_REVIEWER_PROVIDERS`/`REVIEWER_EXECUTORS`のレジストリ形式へ抽象化し、allowlist casing・human override・coordinator/reviewer独立性・review-resolveの無関係な依存を是正（`eed84b40`）。応答本文保持・stream読取timeout捕捉・dispatch後policy再検証・FR-107結線（`evaluateReviewJudgment`切り出し、`review-verdict.ts`新設）を実装（`af2140e5`）。小文字枝番SCN IDの是正と新規scenario追加（`0ef9a191`）。仕様更新（`7251335b`）。旧命名review artifactの削除（`2155957b`）。独立reviewが検出したriskAcceptance自己承認の脆弱性を`stripRiskAcceptance`で是正（`7af39f7b`） |
-| 何を確認したか | ローカル全品質ゲート合格、`@routing-1425`タグ34 scenario/205 steps全合格。新規・修正testは実装を一時的に無効化して失敗することを確認したうえで復元し判別性を確認（post-dispatch policy再検証、Critical finding blocking判定、riskAcceptance剥奪）。2回の独立review（別context agent、計3 subagent）で検証し、riskAcceptance自己承認の迂回経路（プロトタイプ汚染・重複JSONキー・大文字小文字トリック・別名フィールド）も実際に試行し突破口なしと確認 |
+| 何を確認したか | typecheck/lint/format:check/architecture:check/trace:check等のローカル静的ゲート全合格、`@routing-1425`タグ34 scenario/205 steps全合格。`test:unit`（134件）・`conformance:check`（3件）の既知失敗はsandbox環境固有でclean baselineと一致し回帰ではない（§7参照）。新規・修正testは実装を一時的に無効化して失敗することを確認したうえで復元し判別性を確認（post-dispatch policy再検証、Critical finding blocking判定、riskAcceptance剥奪）。2回の独立review（別context agent、計3 subagent）で検証し、riskAcceptance自己承認の迂回経路（プロトタイプ汚染・重複JSONキー・大文字小文字トリック・別名フィールド）も実際に試行し突破口なしと確認 |
 | 判定 | approved（§11と一致。未解決Critical/Highなし） |
 
 ## 0. レビュー識別情報
