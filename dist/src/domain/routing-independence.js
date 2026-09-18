@@ -74,7 +74,7 @@ export function validateRoleConfigurationIndependence(roles) {
             reason: "reviewer roleはimplementerと異なる独立性制約が必要です",
         };
     /**
-     * reviewerがローカルLLM形状（`mode`を持つ、TERM-101/TERM-102）の場合、
+     * reviewerがローカルLLM形状（`mode`を持つ、TERM-ASC-122/TERM-ASC-123）の場合、
      * `logicalTier`はimplementer向け（Codex/Claude）専用の概念であり存在しない。
      * その場合は`provider`の存在だけを比較可能性の条件にする。
      */

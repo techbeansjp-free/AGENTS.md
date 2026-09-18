@@ -44,7 +44,7 @@ export interface AgentReviewerRoleModelChoice extends RoleModelChoice {
   independence: ReviewerIndependence;
 }
 
-/** reviewer役割をローカルLLM providerへ差し替え/補強するための選択値。TERM-101, TERM-102参照。 */
+/** reviewer役割をローカルLLM providerへ差し替え/補強するための選択値。TERM-ASC-122, TERM-ASC-123参照。 */
 export interface LocalLlmReviewerRoleModelChoice {
   provider: "ollama";
   mode: "supplement" | "replace";

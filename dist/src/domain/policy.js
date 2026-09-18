@@ -329,7 +329,7 @@ function validateModelMapping(value, errors) {
         const roleChoice = roles.reviewer;
         /**
          * reviewer役割はCodex/Claude形状（agent）とローカルLLM形状（`mode`を持つ）の
-         * どちらかを取る（TERM-101, TERM-102）。`mode`fieldの有無で判別し、implementer
+         * どちらかを取る（TERM-ASC-122, TERM-ASC-123）。`mode`fieldの有無で判別し、implementer
          * 向けの固定値検証（logicalTier="highest_available"等）を持ち込まない（INV-05）。
          */
         const record = isRecord(roleChoice) ? roleChoice : {};

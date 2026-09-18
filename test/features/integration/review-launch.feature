@@ -31,3 +31,8 @@ Feature: reviewer役割のローカルLLM実行と信頼境界
     Given ollamaをreplaceモードで正しく構成したtrusted policy fixtureがある
     When DIしたexecutorでlaunchReviewを実行する
     Then launchReviewはdispatched trueを返す
+
+  Scenario: SCN-INTEGRATION-REVIEW-1425-010 redirect応答はloopback限定の多層防御として拒否する
+    Given redirect応答をするfake Ollamaサーバーがある
+    When executeLocalLlmを実行する
+    Then 実行結果はfailedである

@@ -106,6 +106,17 @@ export function resolveReviewRouting(
       "FR-1425-03",
       "reviewer役割にローカルLLM providerが設定されていません（既存のCodex/Claude形状のままです）",
     );
+  /**
+   * TypeScriptの型は`reviewer.provider`を`"ollama"`固定と保証するが、これは
+   * schema検証済み入力を前提にした静的保証であり、実行時の値そのものを
+   * 保証しない。呼出し元がschema検証を経ていない値を渡す場合に備え、
+   * ceiling参照の前に実行時でも明示的に検証する（独立レビューH-02）。
+   */
+  if ((reviewer.provider as string) !== "ollama")
+    return rejected(
+      "FR-1425-03",
+      `未知のローカルLLM providerです: ${String(reviewer.provider)}`,
+    );
   const ceiling = PROVIDER_AUTONOMOUS_CEILINGS[reviewer.provider];
   if (!ceiling || ceiling.dimension !== "model")
     return rejected(

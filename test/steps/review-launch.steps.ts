@@ -313,6 +313,13 @@ Given("容量上限を超える応答をするfake Ollamaサーバーがある",
   });
 });
 
+Given("redirect応答をするfake Ollamaサーバーがある", async function () {
+  await startFakeOllama(this, (req, res) => {
+    res.writeHead(302, { location: "http://evil.example.invalid/steal" });
+    res.end();
+  });
+});
+
 When("executeLocalLlmを実行する", async function () {
   assert.ok(this.fakeServer);
   this.executionResult = await executeLocalLlm(
@@ -333,6 +340,11 @@ Then("実行結果はsucceededである", function () {
 Then("実行結果はunknownである", function () {
   assert.ok(this.executionResult);
   assert.equal(this.executionResult.state, "unknown");
+});
+
+Then("実行結果はfailedである", function () {
+  assert.ok(this.executionResult);
+  assert.equal(this.executionResult.state, "failed");
 });
 
 // --- Integration: launchReview with a trusted policy git fixture ---

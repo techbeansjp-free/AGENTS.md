@@ -51,7 +51,19 @@ export async function executeLocalLlm(
           stream: false,
         }),
         signal: controller.signal,
+        /**
+         * loopback限定の多層防御をredirectで迂回させない（独立レビューH-01）。
+         * `manual`ではNodeが自動追従せず`type: "opaqueredirect"`を返すため、
+         * 応答先が実際にloopbackであることを保証できる範囲だけへ限定する。
+         */
+        redirect: "manual",
       });
+      if (response.type === "opaqueredirect")
+        return {
+          state: "failed",
+          reason:
+            "ローカルLLMがredirect応答を返しました。loopback限定の多層防御に反するため追従しません",
+        };
     } catch (error) {
       if (controller.signal.aborted)
         return {
