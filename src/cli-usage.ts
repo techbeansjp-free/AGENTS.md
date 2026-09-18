@@ -293,6 +293,41 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "routing",
+    subcommand: "review-resolve",
+    summary: "reviewer役割のローカルLLM providerへのroutingを解決する（implementer向けresolveとは独立）",
+    requiredFlags: [
+      flag("scope", "text", "解決するscope"),
+      flag("coordinator", "text", "coordinatorのidentity"),
+      flag("implementer", "text", "implementerのidentity"),
+      flag("reviewer", "text", "reviewerのidentity"),
+      flag("implementer-context", "text", "implementer context"),
+      flag("reviewer-context", "text", "独立reviewer context"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG],
+    example:
+      "npx agent-skill-chain routing review-resolve --scope=issue-1425 --coordinator=a --implementer=b --reviewer=c --implementer-context=b1 --reviewer-context=c1",
+  },
+  {
+    command: "routing",
+    subcommand: "review-launch",
+    summary: "reviewer役割のローカルLLM providerを起動する（implementer向けlaunchとは独立）",
+    requiredFlags: [
+      flag("scope", "text", "実行scope"),
+      flag("coordinator", "text", "coordinator identity"),
+      flag("implementer", "text", "implementer identity"),
+      flag("reviewer", "text", "reviewer identity"),
+      flag("implementer-context", "text", "implementer context"),
+      flag("reviewer-context", "text", "独立reviewer context"),
+      flag("prompt-file", "path", "root内のreview対象本文file"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG],
+    example:
+      "npx agent-skill-chain routing review-launch --scope=issue-1425 --coordinator=a --implementer=b --reviewer=c --implementer-context=b1 --reviewer-context=c1 --prompt-file=review.txt",
+  },
+  {
+    command: "routing",
     subcommand: "independence",
     summary: "implementerとreviewerの独立性を検証する",
     requiredFlags: [

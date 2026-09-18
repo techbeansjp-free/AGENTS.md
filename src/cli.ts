@@ -1,4 +1,6 @@
 import { launchCodex } from "./adapters/codex-launch.js";
+import { launchReview } from "./adapters/review-launch.js";
+import { resolveReviewRouting } from "./domain/review-routing.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -4987,6 +4989,53 @@ export async function main(
       ),
     );
     return 1;
+  }
+  if (command === "routing" && subcommand === "review-resolve") {
+    const { flags } = parse(rest);
+    const root = path.resolve(
+      typeof flags.root === "string" ? flags.root : process.cwd(),
+    );
+    const { modelMapping } = routingProject(root);
+    const decision = resolveReviewRouting({
+      scope: required(flags, "scope"),
+      coordinatorIdentity: required(flags, "coordinator"),
+      implementerIdentity: required(flags, "implementer"),
+      reviewerIdentity: required(flags, "reviewer"),
+      implementerContext: required(flags, "implementer-context"),
+      reviewerContext: required(flags, "reviewer-context"),
+      modelMapping,
+    });
+    print(decision);
+    return decision.state === "resolved" ? 0 : 1;
+  }
+  if (command === "routing" && subcommand === "review-launch") {
+    const { flags, positionals } = parse(rest);
+    if (usage === undefined)
+      throw new Error("routing review-launchのusageが未定義です");
+    const allowed = new Set(
+      [...usage.requiredFlags, ...usage.optionalFlags].map(
+        (entry) => entry.name,
+      ),
+    );
+    if (
+      positionals.length > 0 ||
+      Object.keys(flags).some((name) => !allowed.has(name))
+    )
+      throw new Error(
+        "routing review-launchは定義済みflagだけを受理します",
+      );
+    const result = await launchReview({
+      root: typeof flags.root === "string" ? flags.root : process.cwd(),
+      scope: required(flags, "scope"),
+      coordinator: required(flags, "coordinator"),
+      implementer: required(flags, "implementer"),
+      reviewer: required(flags, "reviewer"),
+      implementerContext: required(flags, "implementer-context"),
+      reviewerContext: required(flags, "reviewer-context"),
+      promptFile: required(flags, "prompt-file"),
+    });
+    print(result);
+    return result.state === "succeeded" ? 0 : 1;
   }
   if (command === "routing" && subcommand === "independence") {
     const { flags } = parse(rest);
