@@ -36,11 +36,26 @@ export interface RoleModelChoice {
   speed: "standard";
 }
 
-export interface ReviewerRoleModelChoice extends RoleModelChoice {
-  independence: {
-    differentFrom: "implementer";
-  };
+export interface ReviewerIndependence {
+  differentFrom: "implementer";
 }
+
+export interface AgentReviewerRoleModelChoice extends RoleModelChoice {
+  independence: ReviewerIndependence;
+}
+
+/** reviewer役割をローカルLLM providerへ差し替え/補強するための選択値。TERM-101, TERM-102参照。 */
+export interface LocalLlmReviewerRoleModelChoice {
+  provider: "ollama";
+  mode: "supplement" | "replace";
+  endpoint: string;
+  model: string;
+  independence: ReviewerIndependence;
+}
+
+export type ReviewerRoleModelChoice =
+  | AgentReviewerRoleModelChoice
+  | LocalLlmReviewerRoleModelChoice;
 
 export interface RoutingEvidenceRetentionChoice {
   retentionDays: number;
