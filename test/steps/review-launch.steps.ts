@@ -226,11 +226,19 @@ Given("不正なmode文字列を指定したreviewer routing入力がある", fu
 Given(
   "mode fieldを保有するが未知providerのreviewer routing入力がある",
   function () {
-    // schema検証を経ない不正入力を模擬する（独立レビューREV-06: 実行時防御の反例）。
+    /**
+     * schema検証を経ない不正入力を模擬する（独立レビューREV-06: 実行時防御の反例）。
+     * `provider`を既存ceiling（claude、dimension:"model"）と衝突する値にし、
+     * `model`もそのceilingのallowedに含めることで、実行時のprovider検証
+     * （REV-02修正）を経ずに`PROVIDER_AUTONOMOUS_CEILINGS["claude"]`のdimension・
+     * allowed判定だけを通過してしまう経路を再現する。provider未登録として
+     * 拒否される既存分岐（FR-1425-04）とは別の分岐を判別するため。
+     */
     const input = reviewRoutingInput();
     const reviewer = (input.modelMapping as ModelMappingChoice).roles
       .reviewer as unknown as Record<string, unknown>;
-    reviewer.provider = "unknown-local-llm";
+    reviewer.provider = "claude";
+    reviewer.model = "opus";
     this.routingInput = input;
   },
 );
