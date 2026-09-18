@@ -1,5 +1,6 @@
 import { launchCodex } from "./adapters/codex-launch.js";
 import { launchReview } from "./adapters/review-launch.js";
+import { launchSupplementalReviewDiff, launchSupplementalReviewStaging, } from "./adapters/supplemental-review-launch.js";
 import { resolveReviewRouting } from "./domain/review-routing.js";
 import fs from "node:fs";
 import os from "node:os";
@@ -3564,6 +3565,37 @@ export async function main(argv, dependencies = {}) {
         });
         print(result);
         return result.state === "succeeded" ? 0 : 1;
+    }
+    if (command === "routing" && subcommand === "supplemental-review-diff") {
+        const { flags } = parse(rest);
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const limitRaw = typeof flags.limit === "string" ? Number(flags.limit) : undefined;
+        const result = await launchSupplementalReviewDiff({
+            root,
+            baseSha: required(flags, "base"),
+            headSha: required(flags, "head"),
+            configPath: typeof flags["config-path"] === "string"
+                ? flags["config-path"]
+                : undefined,
+            limit: limitRaw !== undefined && Number.isInteger(limitRaw) && limitRaw > 0
+                ? limitRaw
+                : undefined,
+        });
+        print(result);
+        return 0;
+    }
+    if (command === "routing" && subcommand === "supplemental-review-staging") {
+        const { flags } = parse(rest);
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const result = await launchSupplementalReviewStaging({
+            root,
+            stagingPath: required(flags, "staging"),
+            configPath: typeof flags["config-path"] === "string"
+                ? flags["config-path"]
+                : undefined,
+        });
+        print(result);
+        return 0;
     }
     if (command === "routing" && subcommand === "independence") {
         const { flags } = parse(rest);

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-skill-chain/supplemental-review-config/v1",
+  "title": "補助レビュー設定（TERM-ASC-124）",
+  "description": "git管理外の個別設定。modelMapping.roles.reviewer（Issue #1425）とは独立し、reviewer役割を差し替えない。実体は利用projectの.gitignoreで除外した.agent-skill-chain/local/supplemental-review.jsonに置く。この schemaは文書化・人の記入補助用であり、CLI自身はsrc/domain/supplemental-review-config.tsの手書き検証で読み込む（jsonschemaライブラリは経由しない）。",
+  "type": "object",
+  "required": ["enabled", "provider", "model", "endpoint"],
+  "additionalProperties": false,
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "description": "trueのときだけ有効。falseまたは省略時は補助レビューを実行しない"
+    },
+    "provider": {
+      "type": "string",
+      "enum": ["ollama"],
+      "description": "dispatch可能providerの識別子。現状はollamaだけを受理する"
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "providerのmodel名"
+    },
+    "endpoint": {
+      "type": "string",
+      "minLength": 1,
+      "description": "providerのHTTP endpoint。loopback（http://127.0.0.1またはhttp://localhost）以外は実行時に拒否される"
+    },
+    "timeoutMs": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "省略時は300000（5分）"
+    }
+  }
+}
