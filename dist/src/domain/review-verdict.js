@@ -1,5 +1,24 @@
 import { evaluateReviewJudgment } from "./review.js";
 import { isRecord } from "../types.js";
+/**
+ * `findings[].riskAcceptance`は「人間の権限者がこのリスクを受容した」という
+ * 承認の主張であり、主観的な評価（affirmative/adversarial・所見の内容）とは
+ * 性質が異なる。LLM応答にそのまま含めさせると、Critical/High findingを
+ * `status: "valid"`のまま自分自身の`riskAcceptance`で`acceptedRisks`側へ
+ * 動かし、`blocking`を回避できてしまう（自己承認。独立レビュー指摘）。
+ * ここで機械的に剥奪し、`riskAcceptance`はLLM出力からは絶対に採用しない。
+ */
+function stripRiskAcceptance(findings) {
+    if (!Array.isArray(findings))
+        return findings;
+    const items = findings;
+    return items.map((finding) => {
+        if (!isRecord(finding))
+            return finding;
+        const { riskAcceptance: _riskAcceptance, ...rest } = finding;
+        return rest;
+    });
+}
 const SUBJECTIVE_FIELDS = [
     "round",
     "developmentConsiderations",
@@ -28,6 +47,12 @@ const SUBJECTIVE_FIELDS = [
  * LLM出力からは主観的な評価部分（affirmative/adversarial評価・findings・
  * developmentConsiderations等）だけを採用する。それ以外のkeyが含まれていても
  * 無視する（客観evidence関連のkeyを注入しようとする応答への防御）。
+ *
+ * `findings[].riskAcceptance`はさらに個別に剥奪する（`stripRiskAcceptance`）。
+ * これは「人間の権限者が承認した」という主張であり主観的評価ではないため、
+ * LLM自身に付与させるとCritical/High findingを自己承認で`acceptedRisks`へ
+ * 動かせてしまう。`replace`モードのローカルLLM経路からはriskAcceptanceを
+ * 一切成立させない（受容が必要な指摘は常に`blocking`として安全側に倒す）。
  */
 export function evaluateLocalLlmReview(output) {
     let parsed;
@@ -53,6 +78,8 @@ export function evaluateLocalLlmReview(output) {
     for (const field of SUBJECTIVE_FIELDS)
         if (Object.hasOwn(parsed, field))
             subjective[field] = parsed[field];
+    if (Object.hasOwn(subjective, "findings"))
+        subjective.findings = stripRiskAcceptance(subjective.findings);
     try {
         const judgment = evaluateReviewJudgment(subjective);
         return {

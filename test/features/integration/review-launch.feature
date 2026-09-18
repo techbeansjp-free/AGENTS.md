@@ -71,3 +71,9 @@ Feature: reviewer役割のローカルLLM実行と信頼境界
     Given ollamaを正しく構成したtrusted policy fixtureがある
     When review合格のJSON出力を返すDIしたexecutorでlaunchReviewを実行する
     Then launchReviewはverdictを含まない
+
+  Scenario: SCN-INTEGRATION-REVIEW-1425-018 replaceモードはCritical指摘のriskAcceptance自己承認を採用しない
+    Given ollamaをreplaceモードで正しく構成したtrusted policy fixtureがある
+    When riskAcceptance付きCritical指摘を含むJSON出力を返すDIしたexecutorでlaunchReviewを実行する
+    Then launchReviewのverdictはblocking指摘を返す
+    And launchReviewのverdictはacceptedRisksを含まない
