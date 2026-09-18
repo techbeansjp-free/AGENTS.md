@@ -16,3 +16,5 @@ description: 02設計と03実装計画が実装開始可能かを一度確認し
 [ドメイン用語台帳](../../docs/01_開発ワークフロー.md#ドメイン用語台帳)と01確定差分を作業開始前に全文読み、設計上のモデル・境界・interfaceと標準語・用語IDの不一致、未承認の新語をfindingにする。
 
 開始可能性、修正した契約穴、次に許可される工程をjournal evidenceへ記録する。最終品質review用の`04_レビュー.md`はStep 10だけが完成させる。修正する02/03はそれぞれの作成元テンプレート構造を維持する。
+
+`.agent-skill-chain/local/supplemental-review.json`が有効な場合、`routing supplemental-review-staging`を実行し指摘を確認できる（任意、判定には用いない）。
