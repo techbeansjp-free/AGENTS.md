@@ -5072,7 +5072,7 @@ export async function main(
           : undefined,
     });
     print(result);
-    return 0;
+    return result.state === "error" ? 1 : 0;
   }
   if (command === "routing" && subcommand === "supplemental-review-staging") {
     const { flags } = parse(rest);
@@ -5088,7 +5088,7 @@ export async function main(
           : undefined,
     });
     print(result);
-    return 0;
+    return result.state === "error" ? 1 : 0;
   }
   if (command === "routing" && subcommand === "independence") {
     const { flags } = parse(rest);
