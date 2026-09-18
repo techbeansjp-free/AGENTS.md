@@ -143,6 +143,74 @@ When("allowlist内のmodel名でvalidateProviderSelectionを実行する", funct
   this.providerResult = validateProviderSelection(this.providerInput);
 });
 
+Given("大文字を含むallowlist内のmodel名の入力がある", function () {
+  const mixedCaseModel = PROVIDER_AUTONOMOUS_CEILINGS.ollama!.allowed.find(
+    (model) => model !== model.toLowerCase(),
+  )!;
+  this.providerInput = {
+    provider: "ollama",
+    selection: mixedCaseModel,
+    issue: 1425,
+    scope: "issue-1425",
+    now: "2026-09-18T00:00:00.000Z",
+  };
+});
+
+Given(
+  "allowlist外のollama modelを有効なhuman override付きの入力がある",
+  function () {
+    this.providerInput = {
+      provider: "ollama",
+      selection: "unapproved-model:999b",
+      issue: 1425,
+      scope: "issue-1425",
+      now: "2026-09-18T00:00:00.000Z",
+      override: {
+        provider: "ollama",
+        selection: "unapproved-model:999b",
+        issue: 1425,
+        scope: "issue-1425",
+        instructedBy: "human-owner",
+        instructedAt: "2026-09-17T00:00:00.000Z",
+        expiresAt: "2026-09-25T00:00:00.000Z",
+      },
+    };
+  },
+);
+
+Given("allowlist外のollama modelをAI発行override付きの入力がある", function () {
+  this.providerInput = {
+    provider: "ollama",
+    selection: "unapproved-model:999b",
+    issue: 1425,
+    scope: "issue-1425",
+    now: "2026-09-18T00:00:00.000Z",
+    override: {
+      provider: "ollama",
+      selection: "unapproved-model:999b",
+      issue: 1425,
+      scope: "issue-1425",
+      instructedBy: "claude",
+      instructedAt: "2026-09-17T00:00:00.000Z",
+      expiresAt: "2026-09-25T00:00:00.000Z",
+    },
+  };
+});
+
+When("この入力でvalidateProviderSelectionを実行する", function () {
+  assert.ok(this.providerInput);
+  this.providerResult = validateProviderSelection(this.providerInput);
+});
+
+Then("AI発行のoverrideとして拒否される", function () {
+  assert.ok(this.providerResult);
+  assert.equal(this.providerResult.valid, false);
+  assert.match(
+    this.providerResult.errors.join(" "),
+    /AI agentまたはroleによる自己発行override/u,
+  );
+});
+
 Then(
   "providerの自律選択上限を超えるため人間overrideが必要として拒否される",
   function () {
@@ -179,6 +247,13 @@ Given(
     this.routingInput = reviewRoutingInput({
       reviewerContext: "impl-context",
     });
+  },
+);
+
+Given(
+  "coordinatorとreviewerに同一identityを割り当てたreviewer routing入力がある",
+  function () {
+    this.routingInput = reviewRoutingInput({ reviewerIdentity: "coord" });
   },
 );
 
@@ -357,6 +432,20 @@ Then("実行結果はsucceededである", function () {
   assert.equal(this.executionResult.state, "succeeded");
 });
 
+Then("実行結果のoutputは応答本文を保持する", function () {
+  assert.ok(this.executionResult);
+  assert.equal(this.executionResult.state, "succeeded");
+  assert.equal(this.executionResult.output, "指摘なし");
+});
+
+Given("応答途中で停止するfake Ollamaサーバーがある", async function () {
+  await startFakeOllama(this, (req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.write('{"response":"partial');
+    /* end()を呼ばない: body読取中のtimeout/abortを検証する */
+  });
+});
+
 Then("実行結果はunknownである", function () {
   assert.ok(this.executionResult);
   assert.equal(this.executionResult.state, "unknown");
@@ -453,6 +542,167 @@ When("DIしたexecutorでlaunchReviewを実行する", async function () {
   );
 });
 
+const REVIEW_DEVELOPMENT_CONSIDERATIONS = () => [
+  {
+    id: "DC-PRIVACY",
+    status: "applicable",
+    reason: "個人情報と秘密の境界を確認する",
+    evidence: "SCN-INTEGRATION-REVIEW-1425-014",
+  },
+  {
+    id: "DC-OBSERVABILITY",
+    status: "applicable",
+    reason: "診断と監査記録を確認する",
+    evidence: "SCN-INTEGRATION-REVIEW-1425-014",
+  },
+  {
+    id: "DC-UX",
+    status: "not-applicable",
+    reason: "対象製品は画面を持たないCLIである",
+    evidence: "projectKind=cli",
+  },
+  {
+    id: "DC-TOKENS",
+    status: "not-applicable",
+    reason: "視覚componentとlayoutを所有しない",
+    evidence: "UI sourceなし",
+  },
+];
+
+const PASSING_REVIEW_JUDGMENT = () => ({
+  round: 1,
+  developmentConsiderations: REVIEW_DEVELOPMENT_CONSIDERATIONS(),
+  affirmative: {
+    correctness: "pass",
+    value: "pass",
+    feasibility: "pass",
+    consistency: "pass",
+    maintainability: "pass",
+  },
+  adversarial: {
+    counterexamples: "pass",
+    failures: "pass",
+    boundaries: "pass",
+    abuse: "pass",
+    security: "pass",
+    dataLoss: "pass",
+    rollback: "pass",
+    scope: "pass",
+  },
+  findings: [],
+  tests: "pass",
+  specConsistency: "pass",
+});
+
+When(
+  "review合格のJSON出力を返すDIしたexecutorでlaunchReviewを実行する",
+  async function () {
+    this.launchResult = await launchReview(
+      {
+        root: this.launchRoot,
+        scope: "issue-1425",
+        coordinator: "a",
+        implementer: "b",
+        reviewer: "c",
+        implementerContext: "b1",
+        reviewerContext: "c1",
+        promptFile: "review.txt",
+      },
+      {
+        execute: async () => ({
+          state: "succeeded",
+          reason: "fake executor",
+          output: JSON.stringify(PASSING_REVIEW_JUDGMENT()),
+        }),
+      },
+    );
+  },
+);
+
+When(
+  "Critical指摘を含むJSON出力を返すDIしたexecutorでlaunchReviewを実行する",
+  async function () {
+    const judgment = PASSING_REVIEW_JUDGMENT() as Record<string, unknown>;
+    judgment.findings = [
+      {
+        id: "LLM-001",
+        severity: "Critical",
+        status: "valid",
+        evidence: "src/domain/review-verdict.ts:1",
+      },
+    ];
+    this.launchResult = await launchReview(
+      {
+        root: this.launchRoot,
+        scope: "issue-1425",
+        coordinator: "a",
+        implementer: "b",
+        reviewer: "c",
+        implementerContext: "b1",
+        reviewerContext: "c1",
+        promptFile: "review.txt",
+      },
+      {
+        execute: async () => ({
+          state: "succeeded",
+          reason: "fake executor",
+          output: JSON.stringify(judgment),
+        }),
+      },
+    );
+  },
+);
+
+When(
+  "不正なJSON出力を返すDIしたexecutorでlaunchReviewを実行する",
+  async function () {
+    this.launchResult = await launchReview(
+      {
+        root: this.launchRoot,
+        scope: "issue-1425",
+        coordinator: "a",
+        implementer: "b",
+        reviewer: "c",
+        implementerContext: "b1",
+        reviewerContext: "c1",
+        promptFile: "review.txt",
+      },
+      {
+        execute: async () => ({
+          state: "succeeded",
+          reason: "fake executor",
+          output: "{not valid json",
+        }),
+      },
+    );
+  },
+);
+
+Then("launchReviewのverdictはapproved trueを返す", function () {
+  assert.ok(this.launchResult);
+  assert.ok("verdict" in this.launchResult && this.launchResult.verdict);
+  assert.equal(this.launchResult.verdict!.approved, true);
+  assert.deepEqual(this.launchResult.verdict!.blocking, []);
+});
+
+Then("launchReviewのverdictはblocking指摘を返す", function () {
+  assert.ok(this.launchResult);
+  assert.ok("verdict" in this.launchResult && this.launchResult.verdict);
+  assert.equal(this.launchResult.verdict!.approved, false);
+  assert.deepEqual(this.launchResult.verdict!.blocking, ["LLM-001"]);
+});
+
+Then("launchReviewのverdictはapproved falseを返す", function () {
+  assert.ok(this.launchResult);
+  assert.ok("verdict" in this.launchResult && this.launchResult.verdict);
+  assert.equal(this.launchResult.verdict!.approved, false);
+});
+
+Then("launchReviewはverdictを含まない", function () {
+  assert.ok(this.launchResult);
+  assert.equal("verdict" in this.launchResult, false);
+});
+
 When(
   "trusted policyのcommit SHAを起動直前に変更してlaunchReviewを実行する",
   async function () {
@@ -469,9 +719,18 @@ When(
       },
       {
         execute: async () => {
-          // dispatch直前にHEADを進め、再検証で不一致を起こす
+          /**
+           * `loadOperationPolicy`は`refs/remotes/origin/main`を信頼源として
+           * 読む（`commitTrusted`と同じ配線）。ローカルHEADを進めるだけでは
+           * 再検証が変化を検出しない（本stepが以前未使用のまま放置され、この
+           * 不備が気づかれていなかった。独立レビューでの再発見）。
+           */
           git(
             ["commit", "-q", "-m", "mid-flight change", "--allow-empty"],
+            this.launchRoot,
+          );
+          git(
+            ["update-ref", "refs/remotes/origin/main", "HEAD"],
             this.launchRoot,
           );
           return { state: "succeeded", reason: "fake executor" };
@@ -534,6 +793,34 @@ Given("build済みCLIでreviewerがローカルLLM未設定のprojectがある",
   });
 });
 
+Given(
+  "build済みCLIでprovider capability mapping未設定・reviewerがollama構成済みのprojectがある",
+  function () {
+    this.launchRoot = fs.realpathSync(this.initRepo());
+    writeTrustedReviewerFixture(this.launchRoot, {
+      provider: "ollama",
+      mode: "supplement",
+      endpoint: "http://127.0.0.1:11434",
+      model: OLLAMA_MODEL,
+      independence: { differentFrom: "implementer" },
+    });
+    const manifestPath = path.join(
+      this.launchRoot,
+      ".agent-skill-chain/project-policy.json",
+    );
+    const manifest = JSON.parse(
+      fs.readFileSync(manifestPath, "utf8"),
+    ) as Record<string, unknown>;
+    manifest.providerFiles = [];
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+    fs.rmSync(
+      path.join(this.launchRoot, ".agent-skill-chain/project/providers"),
+      { recursive: true, force: true },
+    );
+    commitTrusted(this.launchRoot);
+  },
+);
+
 When("CLIでrouting review-resolveを実行する", function () {
   this.cliResult = spawnSync(
     process.execPath,
@@ -576,4 +863,11 @@ Then("CLIは非0かつrejected状態のJSONを返す", function () {
 Then("既存のroutingコマンドは変わらず利用できる", function () {
   assert.ok(this.cliResult);
   assert.equal(this.cliResult.status, 0);
+});
+
+Then("CLIは0かつresolved状態のJSONを返す", function () {
+  assert.ok(this.cliResult);
+  assert.equal(this.cliResult.status, 0);
+  const parsed = JSON.parse(this.cliResult.stdout) as { state: string };
+  assert.equal(parsed.state, "resolved");
 });

@@ -36,3 +36,38 @@ Feature: reviewer役割のローカルLLM実行と信頼境界
     Given redirect応答をするfake Ollamaサーバーがある
     When executeLocalLlmを実行する
     Then 実行結果はfailedである
+
+  Scenario: SCN-INTEGRATION-REVIEW-1425-011 正常応答は指摘内容(output)を保持する
+    Given 正常応答するfake Ollamaサーバーがある
+    When executeLocalLlmを実行する
+    Then 実行結果のoutputは応答本文を保持する
+
+  Scenario: SCN-INTEGRATION-REVIEW-1425-012 応答途中で停止した場合はunknownとして扱う
+    Given 応答途中で停止するfake Ollamaサーバーがある
+    When executeLocalLlmを実行する
+    Then 実行結果はunknownである
+
+  Scenario: SCN-INTEGRATION-REVIEW-1425-013 dispatch中にtrusted policyが変化した場合はrejectedを返す
+    Given ollamaを正しく構成したtrusted policy fixtureがある
+    When trusted policyのcommit SHAを起動直前に変更してlaunchReviewを実行する
+    Then launchReviewはrejected状態を返す
+
+  Scenario: SCN-INTEGRATION-REVIEW-1425-014 replaceモードは合格判定のLLM出力でverdict approvedを返す
+    Given ollamaをreplaceモードで正しく構成したtrusted policy fixtureがある
+    When review合格のJSON出力を返すDIしたexecutorでlaunchReviewを実行する
+    Then launchReviewのverdictはapproved trueを返す
+
+  Scenario: SCN-INTEGRATION-REVIEW-1425-015 replaceモードはCritical指摘を含むLLM出力でverdict blockingを返す
+    Given ollamaをreplaceモードで正しく構成したtrusted policy fixtureがある
+    When Critical指摘を含むJSON出力を返すDIしたexecutorでlaunchReviewを実行する
+    Then launchReviewのverdictはblocking指摘を返す
+
+  Scenario: SCN-INTEGRATION-REVIEW-1425-016 replaceモードは不正なJSON出力でverdict approved falseを返す
+    Given ollamaをreplaceモードで正しく構成したtrusted policy fixtureがある
+    When 不正なJSON出力を返すDIしたexecutorでlaunchReviewを実行する
+    Then launchReviewのverdictはapproved falseを返す
+
+  Scenario: SCN-INTEGRATION-REVIEW-1425-017 supplementモードはLLM出力を判定に用いない
+    Given ollamaを正しく構成したtrusted policy fixtureがある
+    When review合格のJSON出力を返すDIしたexecutorでlaunchReviewを実行する
+    Then launchReviewはverdictを含まない

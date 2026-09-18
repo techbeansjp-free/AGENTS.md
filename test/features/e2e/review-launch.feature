@@ -10,3 +10,8 @@ Feature: CLIからreviewer routingを解決し既存commandと共存する
     Given build済みCLIでreviewerがローカルLLM未設定のprojectがある
     When CLIで既存のrouting resolveを実行する
     Then 既存のroutingコマンドは変わらず利用できる
+
+  Scenario: SCN-E2E-REVIEW-1425-010 review-resolveはprovider capability mapping未設定でも解決できる
+    Given build済みCLIでprovider capability mapping未設定・reviewerがollama構成済みのprojectがある
+    When CLIでrouting review-resolveを実行する
+    Then CLIは0かつresolved状態のJSONを返す
