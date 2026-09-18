@@ -25,7 +25,7 @@
 | 対象SHA・文書ダイジェスト | `7af39f7bb5f3cdcd7391494795b505aeef8e46bd` |
 | 比較基点 | `019f1a2f0c1528616b6dc28c8b52fcfc2539355f` |
 | H_impl | `7af39f7bb5f3cdcd7391494795b505aeef8e46bd` |
-| 対象差分 | 比較基点..H_implの19 path（生成物`dist/`12件を除く）。`docs/specs/`3件、`src/adapters/`3件、`src/cli.ts`、`src/domain/`5件、`src/lib/`2件、`test/`4件 |
+| 対象差分 | 比較基点..H_implの31 path。`docs/specs/`3件、`src/adapters/`3件、`src/cli.ts`、`src/domain/`5件、`src/lib/`2件、`test/`4件、生成物`dist/`12件 |
 | 対象外 | 比較基点（`019f1a2f`）より前の範囲。初回Step 10承認（round1〜3）で既に個別監査済み |
 | 残り予算 | 同一範囲で最大6 counted roundのうち4round実施（初回3 + 本round1）。収束後のHEAD移動に対する取り直し2 counted roundのうち1round使用済み |
 | ラウンド数 | 4 |
@@ -41,14 +41,14 @@
 
 | role欄（担当role） | 必要証拠 | 必要model tier | provider欄 | model設定欄 | fallback欄 | 独立性証拠欄・非変更証拠 |
 |---|---|---|---|---|---|---|
-| reviewer | 肯定・敵対review、finding分類 | highest_available相当（別context agent、独立分析） | claude | project policy観測値 | 未解決時は`changes-requested`として停止・再開 | reviewerはimplementerと別session/context。対象差分（19 path）を変更していない |
+| reviewer | 肯定・敵対review、finding分類 | highest_available相当（別context agent、独立分析） | claude | project policy観測値 | 未解決時は`changes-requested`として停止・再開 | reviewerはimplementerと別session/context。対象差分（31 path）を変更していない |
 
 ## 1. 入力証拠
 
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | Issue #1425、staging 01_要件定義.md AC-101〜108 | FR-105〜107の記述を実装（output保持、riskAcceptance剥奪を含む）と整合させた | 一次資料 |
-| 差分 | `019f1a2f`..`7af39f7b` | 19 path（生成物除く） | 既存コード |
+| 差分 | `019f1a2f`..`7af39f7b` | 31 path（生成物`dist/`12件を含む） | 既存コード |
 | テスト | `node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs --tags @routing-1425` | 34 scenarios / 205 steps 全合格 | テスト出力 |
 | 仕様 | `docs/specs/10_セキュリティ/01_信頼境界.md`、`02_要件/01_ワークフロー要件.md`、`15_要件追跡/00_追跡表.md` | updated | 既存文書 |
 | commit前candidate | git index（`7af39f7b`） | 作業treeとcommitが一致（`git status`clean） | Git index |
@@ -62,7 +62,7 @@
 
 ### 1.1 変更ファイル個別監査
 
-版管理下の生成物（`dist/`）は`audit:check`が照合対象から外すため本表に載せず、生成元を監査して配布影響は§8で判定する。
+版管理下の生成物（`dist/`）も含め、基準SHAとの差分にある全ファイルを1ファイル1行で記録する。
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
@@ -71,22 +71,34 @@
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | repository maintainer | spec | 追加・是正した全SCN IDを反映。AC-109の「該当なし」行を削除し01_要件定義.md側へ一本化 | `trace:check`合格（orphan 0） | REQ-WF-007 | 追記・削除、revertで戻る | pass |
 | `src/adapters/local-llm-execution.ts` | M | package owner | package | 成功時に応答本文を`output`として保持（従来は破棄）。body読取ループをtry/catchで囲みstream読取中timeoutを捕捉 | `ReviewerExecutionResult`型を`reviewer-provider.ts`と共有。既存timeout/容量上限ロジックは不変 | FR-105、SCN-INTEGRATION-REVIEW-1425-011/012 | 追加のみ、revertで戻る | pass |
 | `src/adapters/review-launch.ts` | M | package owner | package | dispatch後の`loadOperationPolicy`再検証を追加。`REVIEWER_EXECUTORS`レジストリ経由でexecutorを解決。replaceモード成功時に`evaluateLocalLlmReview`を呼び`verdict`を付与 | `routing.ts`・`codex-launch.ts`・`codex-execution.ts`への依存なし（INV-05、`architecture:check`で確認） | FR-104/106/107、SCN-INTEGRATION-REVIEW-1425-013〜018 | 追加のみ、revertで戻る | pass |
-| `src/adapters/reviewer-executors.ts`（新設） | A | package owner | package | providerからexecutorを引くレジストリ表`REVIEWER_EXECUTORS`。1エントリ（ollama）のみ | `reviewer-provider.ts`・`local-llm-execution.ts`へ依存。`routing.ts`系への依存なし | FR-101、SCN-INTEGRATION-REVIEW-1425-004 | 新設ファイル、削除で戻る | pass |
+| `src/adapters/reviewer-executors.ts` | A | package owner | package | providerからexecutorを引くレジストリ表`REVIEWER_EXECUTORS`。1エントリ（ollama）のみ | `reviewer-provider.ts`・`local-llm-execution.ts`へ依存。`routing.ts`系への依存なし | FR-101、SCN-INTEGRATION-REVIEW-1425-004 | 新設ファイル、削除で戻る | pass |
 | `src/cli.ts` | M | package owner | package | `reviewerModelMapping`ヘルパーを新設し`routing review-resolve`から使用（無関係な`providerMappings`未設定での失敗を解消） | 既存`routingProject`は`routing resolve`等の既存経路で不変利用 | AC-108、SCN-E2E-REVIEW-1425-010 | 関数追加のみ、revertで戻る | pass |
 | `src/domain/policy.ts` | M | package owner | package | reviewer providerの妥当性検証を`DISPATCHABLE_REVIEWER_PROVIDERS`照合へ変更（"ollama"固定文字列比較を廃止） | `reviewer-provider.ts`へ依存。既存implementer向け検証ロジックは不変 | FR-102 | 1関数の条件変更、revertで戻る | pass |
 | `src/domain/review-routing.ts` | M | package owner | package | provider判定をレジストリ照合へ変更。coordinatorとreviewerの同一identity拒否を追加 | `reviewer-provider.ts`へ依存。`role.ts`・`types.ts`への既存依存は不変 | FR-103、AC-102、SCN-UNIT-REVIEW-1425-018 | 追加条件のみ、revertで戻る | pass |
-| `src/domain/review-verdict.ts`（新設） | A | package owner | package | ローカルLLM応答から主観評価部分だけを抽出し`evaluateReviewJudgment`へ渡す。`findings[].riskAcceptance`を剥奪しCritical/High指摘の自己承認を防ぐ | `review.ts`の`evaluateReviewJudgment`へ依存。GitHub外部事実検証（`validateImmutableCandidateEvidence`）は経由しない | FR-107、SCN-INTEGRATION-REVIEW-1425-014〜018 | 新設ファイル、削除で戻る。riskAcceptance剥奪の判別性を2独立subagentが実装無効化で確認 | pass |
+| `src/domain/review-verdict.ts` | A | package owner | package | ローカルLLM応答から主観評価部分だけを抽出し`evaluateReviewJudgment`へ渡す。`findings[].riskAcceptance`を剥奪しCritical/High指摘の自己承認を防ぐ | `review.ts`の`evaluateReviewJudgment`へ依存。GitHub外部事実検証（`validateImmutableCandidateEvidence`）は経由しない | FR-107、SCN-INTEGRATION-REVIEW-1425-014〜018 | 新設ファイル、削除で戻る。riskAcceptance剥奪の判別性を2独立subagentが実装無効化で確認 | pass |
 | `src/domain/review.ts` | M | package owner | package | `evaluateReview`から`evaluateReviewJudgment`（GitHub外部事実に依存しない判定部分）を切り出す。既存`evaluateReview`の戻り値・挙動は不変 | 既存の全呼出し元（`src/cli.ts`、`test/steps/issue-development-considerations.steps.ts`、`test/steps/unit.steps.ts`、`test/steps/risk-policy.steps.ts`、`test/steps/review-reproduction.steps.ts`）を独立reviewが確認し回帰なし | AC-107 | 関数分割のみ、revertで戻る | pass |
-| `src/domain/reviewer-provider.ts`（新設） | A | package owner | package | reviewer dispatch可能providerの集合`DISPATCHABLE_REVIEWER_PROVIDERS`と共有型`ReviewerExecutor`等 | 依存なし（定数・型のみ）。`role.ts`・`review-routing.ts`・`policy.ts`・`reviewer-executors.ts`から参照される | FR-101 | 新設ファイル、削除で戻る | pass |
+| `src/domain/reviewer-provider.ts` | A | package owner | package | reviewer dispatch可能providerの集合`DISPATCHABLE_REVIEWER_PROVIDERS`と共有型`ReviewerExecutor`等 | 依存なし（定数・型のみ）。`role.ts`・`review-routing.ts`・`policy.ts`・`reviewer-executors.ts`から参照される | FR-101 | 新設ファイル、削除で戻る | pass |
 | `src/domain/role.ts` | M | package owner | package | `validateProviderSelection`のallowlist照合をNFC正規化+小文字化。allowlist外ollama modelのhuman override経路（`overrideEligible`）を追加。`AI_ISSUERS`へollamaを追加 | `reviewer-provider.ts`へ新規依存。既存codex/claude向けロジックは不変（値を変えていない） | AC-101、SCN-UNIT-REVIEW-1425-019〜021 | 条件式の変更のみ、revertで戻る | pass |
-| `src/lib/local-llm-endpoint.ts`（新設） | A | package owner | package | `assertLoopbackEndpoint`を`src/lib/security.ts`（trusted品質契約の保護対象）から独立させた新規file。内容はsecurity.ts時点と同一 | 依存なし。`local-llm-execution.ts`・`review-routing.ts`から参照される | INV-01 | 新設ファイル、削除で戻る | pass |
+| `src/lib/local-llm-endpoint.ts` | A | package owner | package | `assertLoopbackEndpoint`を`src/lib/security.ts`（trusted品質契約の保護対象）から独立させた新規file。内容はsecurity.ts時点と同一 | 依存なし。`local-llm-execution.ts`・`review-routing.ts`から参照される | INV-01 | 新設ファイル、削除で戻る | pass |
 | `src/lib/security.ts` | M | package owner | package | `assertLoopbackEndpoint`を除去し基点commitの内容へ原状復帰（trusted品質契約のPROTECTED_FILES自己変更というCI失敗の解消） | 保護対象fileのhashが基点commitと一致することを`base validatorで品質自己緩和を拒否`のCI成功で確認 | CI: trusted project品質契約 | 削除のみ、基点内容と同一 | pass |
 | `test/features/e2e/review-launch.feature` | M | package owner | evidence | SCN-E2E-REVIEW-1425-010（review-resolveがprovider capability mapping未設定でも解決できる）を追加 | 既存008/009は不変 | AC-108 | 削除で戻る | pass |
 | `test/features/integration/review-launch.feature` | M | package owner | evidence | SCN-INTEGRATION-REVIEW-1425-011〜018を追加（output保持・timeout捕捉・policy再検証・FR-107結線・riskAcceptance剥奪） | 既存004〜010は不変 | AC-104〜107 | 削除で戻る | pass |
 | `test/features/unit/review-launch.feature` | M | package owner | evidence | 小文字枝番SCN ID（001b/003b）を016/017へ是正。018〜021を追加（coordinator同一identity、casing正規化、human override経路） | 既存001/002/003/009〜015は不変 | AC-101/102 | 削除で戻る | pass |
 | `test/steps/review-launch.steps.ts` | M | package owner | evidence | 上記全scenarioのstep定義を追加。post-dispatch再検証stepの`refs/remotes/origin/main`更新漏れを是正（従来未使用のまま放置されていた） | `WorkflowWorld`・実Git fixtureへ依存。既存step定義は不変 | 上記SCN一式 | 削除で戻る。2独立subagentが判別性を確認 | pass |
+| `dist/src/adapters/local-llm-execution.js` | M | package owner | package | `src/adapters/local-llm-execution.ts`の`npm run build`出力 | 生成元との対応確認方法: `src/adapters/local-llm-execution.ts`と同一の依存構造（tscの機械的変換） | 配布影響の確認方法: `package:check`合格・§8参照 | srcを直し再buildすれば復元、revertで戻る | pass |
+| `dist/src/adapters/review-launch.js` | M | package owner | package | `src/adapters/review-launch.ts`の`npm run build`出力 | 生成元との対応確認方法: `src/adapters/review-launch.ts`と同一の依存構造（tscの機械的変換） | 配布影響の確認方法: `package:check`合格・§8参照 | srcを直し再buildすれば復元、revertで戻る | pass |
+| `dist/src/adapters/reviewer-executors.js` | A | package owner | package | `src/adapters/reviewer-executors.ts`の`npm run build`出力 | 生成元との対応確認方法: `src/adapters/reviewer-executors.ts`と同一の依存構造（tscの機械的変換） | 配布影響の確認方法: `package:check`合格・§8参照 | srcを直し再buildすれば復元、revertで戻る | pass |
+| `dist/src/cli.js` | M | package owner | package | `src/cli.ts`の`npm run build`出力 | 生成元との対応確認方法: `src/cli.ts`と同一の依存構造（tscの機械的変換） | 配布影響の確認方法: `package:check`合格・§8参照 | srcを直し再buildすれば復元、revertで戻る | pass |
+| `dist/src/domain/policy.js` | M | package owner | package | `src/domain/policy.ts`の`npm run build`出力 | 生成元との対応確認方法: `src/domain/policy.ts`と同一の依存構造（tscの機械的変換） | 配布影響の確認方法: `package:check`合格・§8参照 | srcを直し再buildすれば復元、revertで戻る | pass |
+| `dist/src/domain/review-routing.js` | M | package owner | package | `src/domain/review-routing.ts`の`npm run build`出力 | 生成元との対応確認方法: `src/domain/review-routing.ts`と同一の依存構造（tscの機械的変換） | 配布影響の確認方法: `package:check`合格・§8参照 | srcを直し再buildすれば復元、revertで戻る | pass |
+| `dist/src/domain/review-verdict.js` | A | package owner | package | `src/domain/review-verdict.ts`の`npm run build`出力 | 生成元との対応確認方法: `src/domain/review-verdict.ts`と同一の依存構造（tscの機械的変換） | 配布影響の確認方法: `package:check`合格・§8参照 | srcを直し再buildすれば復元、revertで戻る | pass |
+| `dist/src/domain/review.js` | M | package owner | package | `src/domain/review.ts`の`npm run build`出力 | 生成元との対応確認方法: `src/domain/review.ts`と同一の依存構造（tscの機械的変換） | 配布影響の確認方法: `package:check`合格・§8参照 | srcを直し再buildすれば復元、revertで戻る | pass |
+| `dist/src/domain/reviewer-provider.js` | A | package owner | package | `src/domain/reviewer-provider.ts`の`npm run build`出力 | 生成元との対応確認方法: `src/domain/reviewer-provider.ts`と同一の依存構造（tscの機械的変換） | 配布影響の確認方法: `package:check`合格・§8参照 | srcを直し再buildすれば復元、revertで戻る | pass |
+| `dist/src/domain/role.js` | M | package owner | package | `src/domain/role.ts`の`npm run build`出力 | 生成元との対応確認方法: `src/domain/role.ts`と同一の依存構造（tscの機械的変換） | 配布影響の確認方法: `package:check`合格・§8参照 | srcを直し再buildすれば復元、revertで戻る | pass |
+| `dist/src/lib/local-llm-endpoint.js` | A | package owner | package | `src/lib/local-llm-endpoint.ts`の`npm run build`出力 | 生成元との対応確認方法: `src/lib/local-llm-endpoint.ts`と同一の依存構造（tscの機械的変換） | 配布影響の確認方法: `package:check`合格・§8参照 | srcを直し再buildすれば復元、revertで戻る | pass |
+| `dist/src/lib/security.js` | M | package owner | package | `src/lib/security.ts`の`npm run build`出力（`assertLoopbackEndpoint`除去を反映） | 生成元との対応確認方法: `src/lib/security.ts`と同一の依存構造（tscの機械的変換） | 配布影響の確認方法: `package:check`合格・§8参照 | srcを直し再buildすれば復元、revertで戻る | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: はい。`git diff --name-status 019f1a2f 7af39f7b -- . ':!dist'`の19 pathと本表の19行が一致
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: はい。`git diff --name-status 019f1a2f 7af39f7b`の31 path（`dist/`12件を含む）と本表の31行が一致
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: はい
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: はい。REV3-01/REV3-02の是正は`review-verdict.ts`・`01_ワークフロー要件.md`・関連test 2fileだけに閉じている
 
@@ -152,7 +164,7 @@
 
 - 未解決Critical/High: なし
 - 修正差分と、触れた隣接範囲: `src/domain/review-verdict.ts`（`stripRiskAcceptance`追加）、`docs/specs/02_要件/01_ワークフロー要件.md`（AC-109記述訂正）、対応test 2file
-- 既承認・未変更範囲を再走査していない: はい。round1〜3で承認済みの範囲（`019f1a2f`以前）は再走査せず、`019f1a2f`..`7af39f7b`の19 pathだけを監査した
+- 既承認・未変更範囲を再走査していない: はい。round1〜3で承認済みの範囲（`019f1a2f`以前）は再走査せず、`019f1a2f`..`7af39f7b`の31 pathだけを監査した
 
 ## 7. テスト結果
 
@@ -167,7 +179,19 @@
 
 | 変更path | 配布境界に入るか | 影響 |
 |---|---|---|
-| `dist/src/adapters/local-llm-execution.js` 他11 dist file | 入る | 対応する`src/*.ts`のbuild出力。利用者に見える変化はsrcと同一 |
+| `dist/src/` | 入る | 全変更srcに対応する`dist/`のbuild出力一式 |
+| `src/adapters/local-llm-execution.ts` | 入る | `output`保持・stream読取timeout捕捉。利用者が受け取るreview応答本文が増える |
+| `src/adapters/review-launch.ts` | 入る | dispatch後policy再検証・`verdict`付与。`routing review-launch`の出力にverdict fieldが増える場合がある |
+| `src/adapters/reviewer-executors.ts` | 入る | 新設。provider→executorのレジストリ表 |
+| `src/cli.ts` | 入る | `routing review-resolve`が`providerMappings`未設定でも動作するようになる |
+| `src/domain/policy.ts` | 入る | reviewer provider検証をレジストリ照合へ変更（挙動は不変） |
+| `src/domain/review-routing.ts` | 入る | coordinator/reviewer同一identityを追加で拒否するようになる |
+| `src/domain/review-verdict.ts` | 入る | 新設。replaceモードのverdict判定 |
+| `src/domain/review.ts` | 入る | `evaluateReviewJudgment`切り出し。既存`evaluateReview`の戻り値は不変 |
+| `src/domain/reviewer-provider.ts` | 入る | 新設。provider registryの定数・型 |
+| `src/domain/role.ts` | 入る | allowlist casing正規化・human override経路追加。allowlist内の大文字混在modelが選択可能になる |
+| `src/lib/local-llm-endpoint.ts` | 入る | 新設。`assertLoopbackEndpoint`（`security.ts`から移動、内容は同一） |
+| `src/lib/security.ts` | 入る | `assertLoopbackEndpoint`除去、基点commit内容へ復帰 |
 | `docs/specs/` 3 file | 入らない | 配布物ではなく開発文書 |
 | `test/` 4 file | 入らない | test資産、配布境界外 |
 
@@ -182,7 +206,7 @@
 | 適用した独立性モード | context-isolated |
 | その要求を満たすこと | はい |
 | reviewerとimplementerのidentity・context比較 | reviewerはAgent tool経由の別context agent（subagent ID `a542791a2808ac75a`・`aa60c1735be621dac`）。implementerの会話コンテキストを共有しない |
-| reviewerが対象差分を変更していないこと | はい（対象差分19 pathは`019f1a2f`..`7af39f7b`間でimplementer側のみが変更し、reviewer subagentは読取・実行検証のみ） |
+| reviewerが対象差分を変更していないこと | はい（対象差分31 pathは`019f1a2f`..`7af39f7b`間でimplementer側のみが変更し、reviewer subagentは読取・実行検証のみ） |
 
 ## 10. 仕様整合性
 
