@@ -1,3 +1,4 @@
+import { DISPATCHABLE_REVIEWER_PROVIDERS } from "./reviewer-provider.js";
 export const ROLES = [
     "coordinator",
     "analyst",
@@ -193,6 +194,7 @@ const AI_ISSUERS = new Set([
     "assistant",
     "codex",
     "claude",
+    ...DISPATCHABLE_REVIEWER_PROVIDERS,
 ]);
 function validTimestamp(value) {
     const timestamp = Date.parse(value);
@@ -209,10 +211,17 @@ export function validateProviderSelection(input) {
         errors.push(`provider ${input.provider} の自律選択上限が未定義です`);
         return { valid: false, errors };
     }
-    if (ceiling.allowed.includes(selection))
+    /**
+     * `selection`はNFC正規化・小文字化済みである。`ceiling.allowed`も同じ正規化を
+     * 経ないと、大文字を含む承認済み値（例: `qwen3-coder:30b-a3b-q4_K_M`）自身が
+     * 拒否される（CodeRabbit指摘）。
+     */
+    const normalizedAllowed = ceiling.allowed.map((model) => model.normalize("NFC").toLowerCase());
+    if (normalizedAllowed.includes(selection))
         return { valid: true, errors };
     const overrideEligible = (provider === "codex" && ["xhigh", "max", "ultra"].includes(selection)) ||
-        (provider === "claude" && selection === "fable");
+        (provider === "claude" && selection === "fable") ||
+        DISPATCHABLE_REVIEWER_PROVIDERS.has(provider);
     if (!overrideEligible) {
         errors.push(`${input.selection}はalias・自動routing・fallbackを含む未承認の選択値です`);
         return { valid: false, errors };

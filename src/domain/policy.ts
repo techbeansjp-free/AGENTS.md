@@ -33,6 +33,7 @@ import {
 import { validateProviderCapabilityMapping } from "./provider-capability.js";
 import { validateRoleConfigurationIndependence } from "./routing-independence.js";
 import { MODEL_TIERS, ROLES } from "./role.js";
+import { DISPATCHABLE_REVIEWER_PROVIDERS } from "./reviewer-provider.js";
 import {
   validRuleRetirementProposals,
   type RuleFragmentSource,
@@ -506,8 +507,10 @@ function validateModelMapping(value: unknown, errors: string[]): void {
         name,
         errors,
       );
-      if (record.provider !== "ollama")
-        errors.push(`${name}.providerはollamaでなければなりません`);
+      if (!DISPATCHABLE_REVIEWER_PROVIDERS.has(String(record.provider)))
+        errors.push(
+          `${name}.providerは承認済みローカルLLM providerでなければなりません`,
+        );
       if (record.mode !== "supplement" && record.mode !== "replace")
         errors.push(
           `${name}.modeはsupplementまたはreplaceでなければなりません`,

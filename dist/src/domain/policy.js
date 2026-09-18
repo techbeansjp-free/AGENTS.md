@@ -11,6 +11,7 @@ import { isRecord, } from "../types.js";
 import { validateProviderCapabilityMapping } from "./provider-capability.js";
 import { validateRoleConfigurationIndependence } from "./routing-independence.js";
 import { MODEL_TIERS, ROLES } from "./role.js";
+import { DISPATCHABLE_REVIEWER_PROVIDERS } from "./reviewer-provider.js";
 import { validRuleRetirementProposals, } from "./project-rule-retirement.js";
 import { isSafeFinalizeIgnoredPathPrefix } from "./worktree-removal-safety.js";
 import { validateStagingPolicy } from "./staging-layout.js";
@@ -335,8 +336,8 @@ function validateModelMapping(value, errors) {
         const record = isRecord(roleChoice) ? roleChoice : {};
         if (Object.hasOwn(record, "mode")) {
             rejectUnknownKeys(roleChoice, ["provider", "mode", "endpoint", "model", "independence"], name, errors);
-            if (record.provider !== "ollama")
-                errors.push(`${name}.providerはollamaでなければなりません`);
+            if (!DISPATCHABLE_REVIEWER_PROVIDERS.has(String(record.provider)))
+                errors.push(`${name}.providerは承認済みローカルLLM providerでなければなりません`);
             if (record.mode !== "supplement" && record.mode !== "replace")
                 errors.push(`${name}.modeはsupplementまたはreplaceでなければなりません`);
             if (typeof record.endpoint !== "string" ||

@@ -4234,15 +4234,27 @@ function completionPhaseResult(
   return { phase, state, reasons, recovery };
 }
 
-function routingProject(root: string) {
+/**
+ * reviewer routingが必要とするのは`modelMapping`だけである。implementer向け
+ * `providerMappings`まで要求すると、reviewer routingの確認だけをしたい呼出しが
+ * 無関係な設定不備で失敗し、reviewer側の独立性方針（INV-05）にも反する
+ * （CodeRabbit指摘）。
+ */
+function reviewerModelMapping(root: string) {
   const policySet = loadProjectPolicySet(root);
   const choices = policySet.choices[0];
   const modelMapping = choices?.modelMapping;
-  const mapping = policySet.providerMappings[0];
   if (!choices || !modelMapping || typeof modelMapping === "string")
     throw new Error(
       "project choiceのmodelMappingは構造化設定が有効化されていません",
     );
+  return { modelMapping };
+}
+
+function routingProject(root: string) {
+  const { modelMapping } = reviewerModelMapping(root);
+  const policySet = loadProjectPolicySet(root);
+  const mapping = policySet.providerMappings[0];
   if (!mapping) throw new Error("provider capability mappingが未設定です");
   return { modelMapping, mapping };
 }
@@ -4995,7 +5007,7 @@ export async function main(
     const root = path.resolve(
       typeof flags.root === "string" ? flags.root : process.cwd(),
     );
-    const { modelMapping } = routingProject(root);
+    const { modelMapping } = reviewerModelMapping(root);
     const decision = resolveReviewRouting({
       scope: required(flags, "scope"),
       coordinatorIdentity: required(flags, "coordinator"),
