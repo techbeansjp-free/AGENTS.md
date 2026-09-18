@@ -1,5 +1,5 @@
 import { assertLoopbackEndpoint } from "../lib/security.js";
-import { PROVIDER_AUTONOMOUS_CEILINGS, validateRoleAssignment } from "./role.js";
+import { PROVIDER_AUTONOMOUS_CEILINGS, validateRoleAssignment, } from "./role.js";
 function pending(ruleId, reason) {
     return { state: "pending", ruleId, reason };
 }

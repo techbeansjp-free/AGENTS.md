@@ -54,8 +54,7 @@ export interface LocalLlmReviewerRoleModelChoice {
 }
 
 export type ReviewerRoleModelChoice =
-  | AgentReviewerRoleModelChoice
-  | LocalLlmReviewerRoleModelChoice;
+  AgentReviewerRoleModelChoice | LocalLlmReviewerRoleModelChoice;
 
 export interface RoutingEvidenceRetentionChoice {
   retentionDays: number;

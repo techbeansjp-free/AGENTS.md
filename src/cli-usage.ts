@@ -294,7 +294,8 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   {
     command: "routing",
     subcommand: "review-resolve",
-    summary: "reviewer役割のローカルLLM providerへのroutingを解決する（implementer向けresolveとは独立）",
+    summary:
+      "reviewer役割のローカルLLM providerへのroutingを解決する（implementer向けresolveとは独立）",
     requiredFlags: [
       flag("scope", "text", "解決するscope"),
       flag("coordinator", "text", "coordinatorのidentity"),
@@ -311,7 +312,8 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   {
     command: "routing",
     subcommand: "review-launch",
-    summary: "reviewer役割のローカルLLM providerを起動する（implementer向けlaunchとは独立）",
+    summary:
+      "reviewer役割のローカルLLM providerを起動する（implementer向けlaunchとは独立）",
     requiredFlags: [
       flag("scope", "text", "実行scope"),
       flag("coordinator", "text", "coordinator identity"),

@@ -61,7 +61,8 @@ export async function launchReview(input, dependencies = {}) {
         value.length > 512 ||
         /[\p{Cc}\p{Cf}]/u.test(value)))
         return rejection("scope、identity、contextは制御文字を含まない非空値が必要です");
-    if (input.coordinator === input.reviewer || input.implementer === input.reviewer)
+    if (input.coordinator === input.reviewer ||
+        input.implementer === input.reviewer)
         return rejection("reviewerはcoordinator・implementerと異なるidentityへ割り当ててください");
     let root;
     let prompt;
@@ -69,7 +70,9 @@ export async function launchReview(input, dependencies = {}) {
         ({ root, prompt } = readPrompt(input));
     }
     catch (error) {
-        return rejection(error instanceof Error ? error.message : "prompt-fileの読み取りに失敗しました");
+        return rejection(error instanceof Error
+            ? error.message
+            : "prompt-fileの読み取りに失敗しました");
     }
     const trusted = loadOperationPolicy(root);
     const choices = trusted.policy.projectChoices?.modelMapping;

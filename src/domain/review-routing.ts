@@ -1,6 +1,9 @@
 import { assertLoopbackEndpoint } from "../lib/security.js";
 import type { ModelMappingChoice } from "../types.js";
-import { PROVIDER_AUTONOMOUS_CEILINGS, validateRoleAssignment } from "./role.js";
+import {
+  PROVIDER_AUTONOMOUS_CEILINGS,
+  validateRoleAssignment,
+} from "./role.js";
 
 export interface ReviewRoutingResolutionInput {
   scope: string;
@@ -59,7 +62,10 @@ export function resolveReviewRouting(
 ): ReviewRoutingDecision {
   const choices = input.modelMapping;
   if (choices === undefined)
-    return pending("FR-1425-01", "trusted project choiceのmodelMappingが未設定です");
+    return pending(
+      "FR-1425-01",
+      "trusted project choiceのmodelMappingが未設定です",
+    );
   if (
     input.scope.trim() === "" ||
     input.coordinatorIdentity.trim() === "" ||

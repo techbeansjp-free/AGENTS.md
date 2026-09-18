@@ -33,7 +33,10 @@ function rejection(reason: string) {
  * symlink拒否、fd一致確認、1MiB上限）を独立に実装する。既存implementer向け
  * fileへは依存しない（INV-05）。
  */
-function readPrompt(input: ReviewLaunchInput): { root: string; prompt: string } {
+function readPrompt(input: ReviewLaunchInput): {
+  root: string;
+  prompt: string;
+} {
   const root = path.resolve(input.root);
   if (fs.realpathSync(root) !== root || !fs.statSync(root).isDirectory())
     throw new Error("rootはsymlinkを含まない通常directoryが必要です");
@@ -96,7 +99,10 @@ export async function launchReview(
     return rejection(
       "scope、identity、contextは制御文字を含まない非空値が必要です",
     );
-  if (input.coordinator === input.reviewer || input.implementer === input.reviewer)
+  if (
+    input.coordinator === input.reviewer ||
+    input.implementer === input.reviewer
+  )
     return rejection(
       "reviewerはcoordinator・implementerと異なるidentityへ割り当ててください",
     );
@@ -106,7 +112,11 @@ export async function launchReview(
   try {
     ({ root, prompt } = readPrompt(input));
   } catch (error) {
-    return rejection(error instanceof Error ? error.message : "prompt-fileの読み取りに失敗しました");
+    return rejection(
+      error instanceof Error
+        ? error.message
+        : "prompt-fileの読み取りに失敗しました",
+    );
   }
 
   const trusted = loadOperationPolicy(root);

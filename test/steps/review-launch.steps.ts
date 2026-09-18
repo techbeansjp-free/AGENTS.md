@@ -34,9 +34,7 @@ class ReviewLaunchWorld extends WorkflowWorld {
   routingInput: ReviewRoutingResolutionInput | undefined;
   routingDecision: ReviewRoutingDecision | undefined;
   launchRoot = "";
-  launchResult:
-    | Awaited<ReturnType<typeof launchReview>>
-    | undefined;
+  launchResult: Awaited<ReturnType<typeof launchReview>> | undefined;
   executionResult: LocalLlmExecutionResult | undefined;
   fakeServer: http.Server | undefined;
   fakeServerPort = 0;
@@ -47,7 +45,9 @@ const { Given, When, Then } = stepDefinitions<ReviewLaunchWorld>();
 
 After<ReviewLaunchWorld>(async function () {
   if (this.fakeServer) {
-    await new Promise<void>((resolve) => this.fakeServer!.close(() => resolve()));
+    await new Promise<void>((resolve) =>
+      this.fakeServer!.close(() => resolve()),
+    );
     this.fakeServer = undefined;
   }
 });
@@ -217,26 +217,31 @@ Given("allowlist外のmodelを指定したreviewer routing入力がある", func
 
 Given("不正なmode文字列を指定したreviewer routing入力がある", function () {
   const input = reviewRoutingInput();
-  const reviewer = (
-    input.modelMapping as ModelMappingChoice
-  ).roles.reviewer as unknown as Record<string, unknown>;
+  const reviewer = (input.modelMapping as ModelMappingChoice).roles
+    .reviewer as unknown as Record<string, unknown>;
   reviewer.mode = "invalid-mode";
   this.routingInput = input;
 });
 
-Given("loopback以外のendpointを指定したreviewer routing入力がある", function () {
-  this.routingInput = reviewRoutingInput(
-    {},
-    { endpoint: "http://evil.example.invalid:11434" },
-  );
-});
+Given(
+  "loopback以外のendpointを指定したreviewer routing入力がある",
+  function () {
+    this.routingInput = reviewRoutingInput(
+      {},
+      { endpoint: "http://evil.example.invalid:11434" },
+    );
+  },
+);
 
-Given("localhostホストのendpointを指定したreviewer routing入力がある", function () {
-  this.routingInput = reviewRoutingInput(
-    {},
-    { endpoint: "http://localhost:11434" },
-  );
-});
+Given(
+  "localhostホストのendpointを指定したreviewer routing入力がある",
+  function () {
+    this.routingInput = reviewRoutingInput(
+      {},
+      { endpoint: "http://localhost:11434" },
+    );
+  },
+);
 
 When("resolveReviewRoutingを実行する", function () {
   assert.ok(this.routingInput);
@@ -395,29 +400,26 @@ Given("ollamaを正しく構成したtrusted policy fixtureがある", function 
   });
 });
 
-When(
-  "DIしたexecutorでlaunchReviewを実行する",
-  async function () {
-    this.launchResult = await launchReview(
-      {
-        root: this.launchRoot,
-        scope: "issue-1425",
-        coordinator: "a",
-        implementer: "b",
-        reviewer: "c",
-        implementerContext: "b1",
-        reviewerContext: "c1",
-        promptFile: "review.txt",
-      },
-      {
-        execute: async () => ({
-          state: "succeeded",
-          reason: "fake executor",
-        }),
-      },
-    );
-  },
-);
+When("DIしたexecutorでlaunchReviewを実行する", async function () {
+  this.launchResult = await launchReview(
+    {
+      root: this.launchRoot,
+      scope: "issue-1425",
+      coordinator: "a",
+      implementer: "b",
+      reviewer: "c",
+      implementerContext: "b1",
+      reviewerContext: "c1",
+      promptFile: "review.txt",
+    },
+    {
+      execute: async () => ({
+        state: "succeeded",
+        reason: "fake executor",
+      }),
+    },
+  );
+});
 
 When(
   "trusted policyのcommit SHAを起動直前に変更してlaunchReviewを実行する",
@@ -458,20 +460,23 @@ Then("launchReviewはrejected状態を返す", function () {
   assert.equal(this.launchResult.state, "rejected");
 });
 
-Given("ollamaをreplaceモードで正しく構成したtrusted policy fixtureがある", function () {
-  this.launchRoot = fs.realpathSync(this.initRepo());
-  writeTrustedReviewerFixture(this.launchRoot, {
-    provider: "ollama",
-    mode: "replace",
-    endpoint: "http://127.0.0.1:11434",
-    model: OLLAMA_MODEL,
-    independence: { differentFrom: "implementer" },
-  });
-  fs.writeFileSync(
-    path.join(this.launchRoot, "review.txt"),
-    "review this diff for cross-file consistency",
-  );
-});
+Given(
+  "ollamaをreplaceモードで正しく構成したtrusted policy fixtureがある",
+  function () {
+    this.launchRoot = fs.realpathSync(this.initRepo());
+    writeTrustedReviewerFixture(this.launchRoot, {
+      provider: "ollama",
+      mode: "replace",
+      endpoint: "http://127.0.0.1:11434",
+      model: OLLAMA_MODEL,
+      independence: { differentFrom: "implementer" },
+    });
+    fs.writeFileSync(
+      path.join(this.launchRoot, "review.txt"),
+      "review this diff for cross-file consistency",
+    );
+  },
+);
 
 Given("ローカルLLM未設定のtrusted policy fixtureがある", function () {
   this.launchRoot = fs.realpathSync(this.initRepo());

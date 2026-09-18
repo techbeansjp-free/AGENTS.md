@@ -450,7 +450,10 @@ function validateModelMapping(value: unknown, errors: string[]): void {
     errors,
   );
   const roles = isRecord(mapping.roles) ? mapping.roles : {};
-  const validateIndependence = (record: Record<string, unknown>, name: string): void => {
+  const validateIndependence = (
+    record: Record<string, unknown>,
+    name: string,
+  ): void => {
     rejectUnknownKeys(
       record.independence,
       ["differentFrom"],
@@ -506,7 +509,9 @@ function validateModelMapping(value: unknown, errors: string[]): void {
       if (record.provider !== "ollama")
         errors.push(`${name}.providerはollamaでなければなりません`);
       if (record.mode !== "supplement" && record.mode !== "replace")
-        errors.push(`${name}.modeはsupplementまたはreplaceでなければなりません`);
+        errors.push(
+          `${name}.modeはsupplementまたはreplaceでなければなりません`,
+        );
       if (
         typeof record.endpoint !== "string" ||
         !/^http:\/\/(127\.0\.0\.1|localhost)(:[0-9]+)?(\/.*)?$/u.test(

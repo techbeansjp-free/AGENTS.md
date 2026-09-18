@@ -5021,9 +5021,7 @@ export async function main(
       positionals.length > 0 ||
       Object.keys(flags).some((name) => !allowed.has(name))
     )
-      throw new Error(
-        "routing review-launchは定義済みflagだけを受理します",
-      );
+      throw new Error("routing review-launchは定義済みflagだけを受理します");
     const result = await launchReview({
       root: typeof flags.root === "string" ? flags.root : process.cwd(),
       scope: required(flags, "scope"),
