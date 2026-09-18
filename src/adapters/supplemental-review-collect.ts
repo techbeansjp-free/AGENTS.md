@@ -83,10 +83,8 @@ export function collectSupplementalReviewDiff(
     .join("\n\n");
 
   const promptBody =
-    "以下はexact-head diffと、その呼び出し元・関連ファイルです。" +
-    "変更ファイル単体では気づけない横断的な不整合・見落としだけを指摘してください。\n\n" +
     `## diff (${baseSha}..${headSha})\n${diffText}\n\n` +
-    `## 関連ファイル（未変更、上限${limit}件）\n${relatedText}`;
+    `## 関連ファイル（未変更、上限${limit}件、呼び出し元・呼び出し先の文脈として提供）\n${relatedText}`;
 
   return { target: "diff", changed, related, truncated, promptBody };
 }
@@ -119,10 +117,7 @@ export function collectSupplementalReviewStaging(
     );
   }
 
-  const promptBody =
-    "以下はASC Issue staging内の文書です。" +
-    "同一IDが文書間で異なる内容を指している不整合（暗黙の再定義、ID衝突、追跡切れ）だけを指摘してください。\n\n" +
-    sections.join("\n\n");
+  const promptBody = sections.join("\n\n");
 
   return { target: "staging", changed, promptBody };
 }

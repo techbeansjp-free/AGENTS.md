@@ -31,6 +31,44 @@ export type SupplementalReviewResult =
     }
   | { state: "degraded"; reason: string; truncated: boolean };
 
+/**
+ * CodeRabbit等の商用AIレビュアーが公開する観点（バグ・セキュリティ・
+ * パフォーマンス・品質・機能性の5分類）に合わせた、diff対象向けの
+ * レビュー観点。ユーザーからの明示要求により、「横断的な不整合だけ」
+ * という限定を撤去し、この機能単体でCodeRabbit相当以上の精度を
+ * 目指す（#1428フォローアップ）。
+ */
+const DIFF_REVIEW_INSTRUCTION =
+  "あなたはCodeRabbit相当以上の精度を持つコードレビュアーです。" +
+  "以下のdiffと関連ファイルの文脈をもとに、次の観点でレビューしてください。" +
+  "書式・styleだけの指摘や、実害の無い好みの指摘はしないでください。\n" +
+  "1. バグ・ロジック誤り: off-by-one・境界条件の誤り、null/undefined参照、" +
+  "race condition、コード（コメント・関数名・呼び出し元）が示す意図との不一致\n" +
+  "2. セキュリティ脆弱性: SQLインジェクション、XSS、安全でないデシリアライズ、" +
+  "認証・認可の不備、ハードコードされた資格情報・秘密情報、入力検証の欠如、" +
+  "機密情報のログ出力・エラーメッセージへの露出、暗号関数の誤用\n" +
+  "3. パフォーマンス: 不要に高い計算量、N+1、リソースリーク、無制限ループ・再帰\n" +
+  "4. 保守性・品質: 複雑度に見合わないコメント欠如、重複コード、誤解を招く命名\n" +
+  "5. 機能性: エッジケースの未処理、失敗経路（エラー処理）の欠落、" +
+  "既存testで検出できない回帰\n" +
+  "6. 変更ファイル単体では気づけない横断的な不整合: 呼び出し元・呼び出し先との" +
+  "型・契約の不一致\n" +
+  "各指摘は、実際にファイル内容から読み取れる根拠がある場合だけ行ってください。";
+
+/** Step 03/07相当（要求・要件・設計文書）向けのレビュー観点。 */
+const STAGING_REVIEW_INSTRUCTION =
+  "あなたは要求・要件・設計文書のレビュアーです。" +
+  "以下のASC Issue staging内の文書をもとに、次の観点でレビューしてください。\n" +
+  "1. 文書間のID不整合: 同一ID（AC/FR/NFR/INV/RQ/OUTCOME/DC/TERM-ASC）が文書間で" +
+  "異なる内容を指している、参照されているのに定義がない、定義されているのに" +
+  "参照されていない\n" +
+  "2. 曖昧・検証不能な受け入れ条件や要件: 誰が読んでも同じ判定になる客観的な" +
+  "条件になっているか\n" +
+  "3. 矛盾する記述: 文書間または同一文書内で矛盾する記述\n" +
+  "4. 抜け漏れ: 述べられている前提・制約に対して考慮されていないエッジケースや" +
+  "異常系\n" +
+  "各指摘は、文書から読み取れる根拠がある場合だけ行ってください。";
+
 const RESPONSE_FORMAT_INSTRUCTION =
   "出力は必ず次の形式のJSONだけにしてください（前後に説明文を付けない）: " +
   '{"findings": [{"file": "対象file", "location": "該当箇所", ' +
@@ -122,7 +160,8 @@ export async function launchSupplementalReviewDiff(input: {
     input.headSha,
     input.limit ?? RELATED_FILE_LIMIT,
   );
-  return dispatch(collected.promptBody, config, collected.truncated);
+  const promptBody = `${DIFF_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
+  return dispatch(promptBody, config, collected.truncated);
 }
 
 /** Step 03/07相当の対象（staging文書間のID整合性）に対する補助レビューを実行する（FR-1428-03、FR-1428-04）。 */
@@ -137,5 +176,6 @@ export async function launchSupplementalReviewStaging(input: {
     input.root,
     input.stagingPath,
   );
-  return dispatch(collected.promptBody, config, false);
+  const promptBody = `${STAGING_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
+  return dispatch(promptBody, config, false);
 }
