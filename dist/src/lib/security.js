@@ -59,23 +59,6 @@ export function redactSecrets(input) {
         .replace(/(Authorization\s*:\s*Bearer\s+)[^\s]+/gi, "$1[REDACTED]")
         .replace(/\b(?:token|password|secret|api[_-]?key|apiKey|databaseUrl|connectionString|privateKey)\s*[=:]\s*[^\s,;]+/gi, "[REDACTED_SECRET]");
 }
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost"]);
-/**
- * ローカルLLM endpointの信頼境界。trusted project policy由来であっても、
- * 実行直前に再検証する多層防御としてschema検証（呼出し元）とは独立に使う。
- */
-export function assertLoopbackEndpoint(endpoint) {
-    let url;
-    try {
-        url = new URL(endpoint);
-    }
-    catch {
-        throw new Error("ローカルLLM endpointが不正なURLです");
-    }
-    if (url.protocol !== "http:" || !LOOPBACK_HOSTS.has(url.hostname))
-        throw new Error("ローカルLLM endpointはhttp://127.0.0.1またはhttp://localhostだけを許可します");
-    return url;
-}
 export function stableJson(value) {
     if (Array.isArray(value))
         return `[${value.map(stableJson).join(",")}]`;

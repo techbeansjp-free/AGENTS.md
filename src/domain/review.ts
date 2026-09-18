@@ -604,15 +604,31 @@ export function buildReviewEvidence(observation: ReviewObservation) {
   };
 }
 
-export function evaluateReview(reviewValue: unknown) {
-  if (!reviewInput(reviewValue))
-    return {
-      approved: false,
-      blocking: [],
-      acceptedRisks: [],
-      errors: ["review入力の構造または未知fieldが不正です"],
-    };
-  const review = reviewValue;
+/**
+ * `evaluateReview`のうち、GitHub外部事実（headSha・PR・CI・review提出の観測証拠）
+ * に**依存しない**部分だけを切り出す。affirmative/adversarial評価の完了、
+ * round進行の整合性、tests/specConsistency合格、findingsのCritical/High
+ * blocking判定を担う。
+ *
+ * **`validateImmutableCandidateEvidence`はここに含めない。** 同関数は
+ * 「GitHub上で実際にreviewがapprovedとして提出された」という外部事実の
+ * 存在を要求しており、これから判定しようとしている対象（まだ外部review
+ * が存在しない候補）には適用できない。ここへ含めると、呼出し元が
+ * `externalEvidence.review.verdict = "approved"`を自己申告するだけで
+ * 通ってしまい、この関数が守るべき「外部の実在するreviewだけが承認を
+ * 与える」という前提を、まさにこの経路で崩す（FR-107結線の設計レビュー
+ * で判明。docs/reviews参照）。
+ */
+export type ReviewJudgmentInput = Omit<
+  ReviewInput,
+  keyof ImmutableReviewEvidence
+>;
+
+export function evaluateReviewJudgment(review: ReviewJudgmentInput): {
+  blocking: string[];
+  acceptedRisks: string[];
+  errors: string[];
+} {
   if (!Number.isInteger(review.round) || review.round < 1 || review.round > 3)
     throw new Error("レビューのラウンドは1〜3で指定してください");
   const errors: string[] = [];
@@ -654,8 +670,6 @@ export function evaluateReview(reviewValue: unknown) {
     if (review.focus?.fullRescan !== false)
       errors.push(`ラウンド${review.round}で既承認範囲の全再走査はできません`);
   }
-  if (!commitOid(review.headSha)) errors.push("headShaが不正です");
-  errors.push(...validateImmutableCandidateEvidence(review));
   if (review.tests !== "pass") errors.push("テスト合格が必要です");
   if (review.specConsistency !== "pass")
     errors.push("仕様整合性の合格が必要です");
@@ -700,10 +714,26 @@ export function evaluateReview(reviewValue: unknown) {
       else blocking.push(finding.id);
     }
   }
+  return { blocking, acceptedRisks, errors };
+}
+
+export function evaluateReview(reviewValue: unknown) {
+  if (!reviewInput(reviewValue))
+    return {
+      approved: false,
+      blocking: [],
+      acceptedRisks: [],
+      errors: ["review入力の構造または未知fieldが不正です"],
+    };
+  const review = reviewValue;
+  const judgment = evaluateReviewJudgment(review);
+  const errors = [...judgment.errors];
+  if (!commitOid(review.headSha)) errors.push("headShaが不正です");
+  errors.push(...validateImmutableCandidateEvidence(review));
   return {
-    approved: errors.length === 0 && blocking.length === 0,
-    blocking,
-    acceptedRisks,
+    approved: errors.length === 0 && judgment.blocking.length === 0,
+    blocking: judgment.blocking,
+    acceptedRisks: judgment.acceptedRisks,
     errors,
   };
 }

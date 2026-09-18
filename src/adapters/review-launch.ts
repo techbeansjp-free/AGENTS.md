@@ -2,11 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { loadOperationPolicy } from "../domain/policy.js";
 import { resolveReviewRouting } from "../domain/review-routing.js";
-import { resolveContained } from "../lib/security.js";
 import {
-  executeLocalLlm,
-  type LocalLlmExecutor,
-} from "./local-llm-execution.js";
+  evaluateLocalLlmReview,
+  type LocalLlmReviewVerdict,
+} from "../domain/review-verdict.js";
+import { resolveContained } from "../lib/security.js";
+import type { ReviewerExecutor } from "../domain/reviewer-provider.js";
+import { REVIEWER_EXECUTORS } from "./reviewer-executors.js";
 
 export interface ReviewLaunchInput {
   root: string;
@@ -33,19 +35,13 @@ function rejection(reason: string) {
  * symlink拒否、fd一致確認、1MiB上限）を独立に実装する。既存implementer向け
  * fileへは依存しない（INV-05）。
  */
-function readPrompt(input: ReviewLaunchInput): {
-  root: string;
-  prompt: string;
-} {
-  const root = path.resolve(input.root);
-  if (fs.realpathSync(root) !== root || !fs.statSync(root).isDirectory())
-    throw new Error("rootはsymlinkを含まない通常directoryが必要です");
+function readPrompt(root: string, promptFile: string): string {
   if (
-    /[\p{Cc}\p{Cf}]/u.test(input.promptFile) ||
-    input.promptFile.normalize("NFC") !== input.promptFile
+    /[\p{Cc}\p{Cf}]/u.test(promptFile) ||
+    promptFile.normalize("NFC") !== promptFile
   )
     throw new Error("prompt-fileに制御文字または非NFC名を使用できません");
-  const file = resolveContained(root, input.promptFile);
+  const file = resolveContained(root, promptFile);
   const stat = fs.lstatSync(file);
   if (
     !stat.isFile() ||
@@ -69,7 +65,7 @@ function readPrompt(input: ReviewLaunchInput): {
     const prompt = fs.readFileSync(descriptor, "utf8");
     if (prompt.trim() === "" || Buffer.byteLength(prompt) > 1024 * 1024)
       throw new Error("prompt-fileは空でない1MiB以下のtask本文が必要です");
-    return { root, prompt };
+    return prompt;
   } finally {
     fs.closeSync(descriptor);
   }
@@ -78,7 +74,7 @@ function readPrompt(input: ReviewLaunchInput): {
 /** Each invocation reloads trusted policy before and after dispatch to detect mid-flight changes. */
 export async function launchReview(
   input: ReviewLaunchInput,
-  dependencies: { execute?: LocalLlmExecutor } = {},
+  dependencies: { execute?: ReviewerExecutor } = {},
 ) {
   const identifiers = [
     input.scope,
@@ -110,7 +106,10 @@ export async function launchReview(
   let root: string;
   let prompt: string;
   try {
-    ({ root, prompt } = readPrompt(input));
+    root = path.resolve(input.root);
+    if (fs.realpathSync(root) !== root || !fs.statSync(root).isDirectory())
+      throw new Error("rootはsymlinkを含まない通常directoryが必要です");
+    prompt = readPrompt(root, input.promptFile);
   } catch (error) {
     return rejection(
       error instanceof Error
@@ -138,17 +137,41 @@ export async function launchReview(
   });
   if (decision.state !== "resolved") return rejection(decision.reason);
 
+  const executor =
+    dependencies.execute ?? REVIEWER_EXECUTORS[decision.provider];
+  if (!executor)
+    return rejection(`provider ${decision.provider} の実行adapterが未登録です`);
+
+  const executed = await executor({
+    endpoint: decision.endpoint,
+    model: decision.model,
+    prompt,
+  });
+
+  /**
+   * dispatch後（ローカルLLM応答待ちの最大既定5分間）にtrusted policyが変化した
+   * ケースを検出する。dispatch前の2回だけでは、応答待ち中の変更を見逃す
+   * （独立レビュー指摘）。前回同様、検出のみでdispatch自体は取り消さない
+   * （Git/Codexの既存failed/unknown契約と同じ、実行結果は既に確定している）。
+   */
   const rechecked = loadOperationPolicy(root);
   if (rechecked.provenance.commitSha !== policySha)
     return rejection(
       "trusted policyが観測中に変化しました。新しい起動要求で再検証してください",
     );
 
-  const executed = await (dependencies.execute ?? executeLocalLlm)({
-    endpoint: decision.endpoint,
-    model: decision.model,
-    prompt,
-  });
+  /**
+   * FR-107（`replace`）はローカルLLM結果でreviewer役割の正式な充足条件を満たす。
+   * `evaluateLocalLlmReview`はLLM出力の主観的な評価部分だけを既存
+   * `evaluateReviewJudgment`（Claude/Codexレビューと同一のCritical/High
+   * blocking判定）へ流し込む。`supplement`はFR-106のとおり既存reviewの充足
+   * 条件を変えないため評価しない。
+   */
+  let verdict: LocalLlmReviewVerdict | undefined;
+  if (decision.mode === "replace" && executed.state === "succeeded") {
+    verdict = evaluateLocalLlmReview(executed.output ?? "");
+  }
+
   return {
     ...executed,
     dispatched: executed.state === "succeeded",
@@ -157,5 +180,6 @@ export async function launchReview(
     model: decision.model,
     mode: decision.mode,
     trustedPolicySha: policySha,
+    ...(verdict ? { verdict } : {}),
   };
 }

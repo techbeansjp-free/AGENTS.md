@@ -1,4 +1,8 @@
-import { assertLoopbackEndpoint } from "../lib/security.js";
+import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
+import type {
+  ReviewerExecutionResult,
+  ReviewerExecutor,
+} from "../domain/reviewer-provider.js";
 import { isRecord } from "../types.js";
 
 export interface LocalLlmExecutionInput {
@@ -7,16 +11,16 @@ export interface LocalLlmExecutionInput {
   prompt: string;
 }
 
-export interface LocalLlmExecutionResult {
-  state: "succeeded" | "failed" | "unknown";
-  reason: string;
-}
+export type LocalLlmExecutionResult = ReviewerExecutionResult;
 
-export type LocalLlmExecutor = (
-  input: LocalLlmExecutionInput,
-) => Promise<LocalLlmExecutionResult>;
+export type LocalLlmExecutor = ReviewerExecutor;
 
-/** Stream応答を有限timeout・有限出力上限で読み取り、raw応答本文を保持しない。 */
+/**
+ * Stream応答を有限timeout・有限出力上限で読み取る。`succeeded`時は応答本文を
+ * `output`として返す（reviewer役割の指摘内容を伝えるため必須。破棄すると
+ * ローカルLLMが何を指摘したか呼出し元へ一切伝わらない）。raw stdout/stderrや
+ * prompt本文をログへ書き出すのは呼出し元の責務であり、この関数自体は転記しない。
+ */
 export async function executeLocalLlm(
   input: LocalLlmExecutionInput,
   limits: { timeoutMs?: number; maxOutputBytes?: number } = {},
@@ -90,19 +94,37 @@ export async function executeLocalLlm(
     let bytes = 0;
     let text = "";
     const decoder = new TextDecoder();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      bytes += value.byteLength;
-      if (bytes > maxBytes) {
-        await reader.cancel();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        if (bytes > maxBytes) {
+          await reader.cancel();
+          return {
+            state: "unknown",
+            reason:
+              "ローカルLLM出力が容量上限に達しました。対象を縮小して再実行してください",
+          };
+        }
+        text += decoder.decode(value, { stream: true });
+      }
+    } catch (error) {
+      /**
+       * timeoutがstream読取中に発火すると`controller.abort()`がreader.read()を
+       * rejectさせる。接続確立前のabortはfetch自体のcatch（上）が処理するが、
+       * 読取中のabortはここでも捕捉しないと未捕捉rejectionになる（独立レビュー指摘）。
+       */
+      if (controller.signal.aborted)
         return {
           state: "unknown",
           reason:
-            "ローカルLLM出力が容量上限に達しました。対象を縮小して再実行してください",
+            "ローカルLLM実行が有限時間上限に達しました。応答を確認してから明示的に再開してください",
         };
-      }
-      text += decoder.decode(value, { stream: true });
+      return {
+        state: "unknown",
+        reason: `ローカルLLM応答の読み取りに失敗しました: ${error instanceof Error ? error.message : "不明なエラー"}`,
+      };
     }
     let parsed: unknown;
     try {
@@ -125,6 +147,7 @@ export async function executeLocalLlm(
     return {
       state: "succeeded",
       reason: "ローカルLLMの正常完了を確認しました",
+      output: parsed.response,
     };
   } finally {
     clearTimeout(timer);
