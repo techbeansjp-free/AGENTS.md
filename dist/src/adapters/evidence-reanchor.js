@@ -5,6 +5,7 @@ import { writeFileAtomic } from "../lib/atomic.js";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { deriveEffectiveHead, isContentEquivalent, isRebaseEquivalent, parseReviewIdentityAnchor, isEvidenceReanchorRecord, } from "../domain/evidence-reanchor.js";
 import { validateReviewArtifactStructure, parseReviewArtifactAudit, validateContextIsolatedApprovalRecord, visibleMarkdownLines, } from "../domain/review-artifact.js";
+import { isEvidenceOnlyPath } from "../domain/review.js";
 import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { observeStoredDeliveryState, readStoredDeliveryState, } from "./delivery-state.js";
@@ -89,8 +90,6 @@ export function readEvidenceReanchorChain(stagingInput) {
  * 「旧diffと新diffが一致する」対を作れてしまい、未reviewのbase内容を含むheadへ
  * 証跡を移送できる。束縛先は既存stateにある。
  */
-/** review artifactのpathとみなす接頭辞。`audit:check`の`AUDIT_DIRECTORY`と同じ。 */
-const REVIEW_ARTIFACT_PREFIX = "docs/reviews/";
 /**
  * 宣言された`H_impl`を構造で検証する。
  *
@@ -121,8 +120,22 @@ function verifiedImplementationBoundary(root, head, artifactPath, declared, comp
             observed.changedPaths[0] === artifactPath,
     };
 }
+/**
+ * 差分path集合からreview artifact候補を1件だけ同定する。
+ *
+ * **同定規則の正本はevidence-only allowlistである。** 判定は`pr create`、delivery
+ * state、review sessionと同じ`isEvidenceOnlyPath`へ委ねる。以前はこのadapterが
+ * `docs/reviews/`だけの単純前方一致を持っていたが、それはASC自repoの`audit:check`
+ * が使う運用上の狭い集合であって製品の契約ではない。**製品allowlistは利用側の
+ * 配置自由度であり、正本は`docs/reviews/`と`.agent-skill-chain/reviews/`の2つを
+ * 許す。** 同定規則を製品内の2箇所で別々に持つと、片方だけが正本から外れる
+ * （Issue #1433）。
+ *
+ * **file名の字面を受理条件にしない。** 正本は配置だけを定め、`02_品質基準.md`は
+ * 汎用packageが特定のfile名を強制しないことを要求する。
+ */
 function terminalArtifactPath(paths) {
-    const artifacts = paths.filter((entry) => entry.startsWith(REVIEW_ARTIFACT_PREFIX));
+    const artifacts = paths.filter(isEvidenceOnlyPath);
     /** **artifactが1件でない差分は同定できない。** 受理しない。 */
     return artifacts.length === 1 ? artifacts[0] : undefined;
 }
@@ -188,9 +201,8 @@ function observeRebaseEquivalence(root, input) {
         }),
     };
 }
-const REVIEW_ARTIFACT_NAME = /^\d+_課題\d+.*レビュー\.md$/u;
 /**
- * 命名是正で変わってよい機械導出・監査領域だけを正規化する。
+ * path是正で変わってよい機械導出・監査領域だけを正規化する。
  * finding、判定、独立性、test証拠などreview判断の本文はbyte比較へ残す。
  */
 function comparableArtifactContent(markdown) {
@@ -250,10 +262,11 @@ function observeArtifactReplacement(staging, root, input) {
     const afterAll = observeReanchorDiff(root, "新base→新head", input, input.newBaseSha, input.newHeadSha);
     const oldPath = terminalArtifactPath(beforeAll.changedPaths);
     const newPath = terminalArtifactPath(afterAll.changedPaths);
-    if (oldPath === undefined ||
-        newPath === undefined ||
-        oldPath === newPath ||
-        !REVIEW_ARTIFACT_NAME.test(path.posix.basename(newPath)))
+    /**
+     * **新artifactがevidence-only allowlist配下であることは`terminalArtifactPath`が
+     * 既に保証している。** basenameの字面を重ねて要求しない（Issue #1433）。
+     */
+    if (oldPath === undefined || newPath === undefined || oldPath === newPath)
         return undefined;
     const oldArtifact = readBlobAtCommit(root, input.oldHeadSha, oldPath);
     const newArtifact = readBlobAtCommit(root, input.newHeadSha, newPath);
@@ -324,8 +337,7 @@ function observeReviewedForward(staging, root, input) {
     const finalParent = observeSingleCommitParent(root, input.newHeadSha);
     const finalSuffix = observeReanchorDiff(root, "新H_final親→新H_final", input, finalParent, input.newHeadSha);
     const artifactPath = terminalArtifactPath(finalSuffix.changedPaths);
-    if (artifactPath === undefined ||
-        !REVIEW_ARTIFACT_NAME.test(path.posix.basename(artifactPath)))
+    if (artifactPath === undefined)
         return undefined;
     const artifact = readBlobAtCommit(root, input.newHeadSha, artifactPath);
     if (artifact === undefined)
