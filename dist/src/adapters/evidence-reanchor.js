@@ -123,10 +123,12 @@ function verifiedImplementationBoundary(root, head, artifactPath, declared, comp
 /**
  * 差分path集合からreview artifact候補を1件だけ同定する。
  *
- * **同定規則の正本はevidence-only allowlistである。** 判定は`review session`と同じ
- * `isEvidenceOnlyPath`へ委ねる。`pr create`とdelivery stateは同じ2 prefixを直書きで
- * 持つが述語自体は共有していない（`..`・backslash・制御文字の拒否clauseを持たない）。
- * **本変更のscopeは再固定であり、残り2箇所の合流は別Issueとする。** 以前はこのadapterが
+ * **同定規則の正本はevidence-only allowlistである。** 判定は`pr create`・review session・
+ * record layerと同じ`isEvidenceOnlyPath`へ委ねる。`pr create`は
+ * `assertConvergedReviewSession`から`evidenceOnlySuffix`を経てこの述語へ到達する。
+ * **2 prefixを直書きで持つ箇所が`pr merge`側に残る**（`resolveImplementationCommitForMerge`と
+ * delivery stateのMergeIntent解析）。そこは`pr merge`の認可判定であり本変更のscope外で、
+ * 合流は別Issueとする。以前はこのadapterが
  * `docs/reviews/`だけの単純前方一致を持っていたが、それはASC自repoの`audit:check`
  * が使う運用上の狭い集合であって製品の契約ではない。**製品allowlistは利用側の
  * 配置自由度であり、正本は`docs/reviews/`と`.agent-skill-chain/reviews/`の2つを
