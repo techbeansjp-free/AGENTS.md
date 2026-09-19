@@ -36,11 +36,25 @@ export interface RoleModelChoice {
   speed: "standard";
 }
 
-export interface ReviewerRoleModelChoice extends RoleModelChoice {
-  independence: {
-    differentFrom: "implementer";
-  };
+export interface ReviewerIndependence {
+  differentFrom: "implementer";
 }
+
+export interface AgentReviewerRoleModelChoice extends RoleModelChoice {
+  independence: ReviewerIndependence;
+}
+
+/** reviewer役割をローカルLLM providerへ差し替え/補強するための選択値。TERM-ASC-122, TERM-ASC-123参照。 */
+export interface LocalLlmReviewerRoleModelChoice {
+  provider: "ollama";
+  mode: "supplement" | "replace";
+  endpoint: string;
+  model: string;
+  independence: ReviewerIndependence;
+}
+
+export type ReviewerRoleModelChoice =
+  AgentReviewerRoleModelChoice | LocalLlmReviewerRoleModelChoice;
 
 export interface RoutingEvidenceRetentionChoice {
   retentionDays: number;
@@ -185,6 +199,16 @@ export interface Policy {
     reviewIndependence?: "context-isolated" | "actor-independent";
   };
   budgets?: { localFeedbackMs?: number; prGateMs?: number };
+  /**
+   * Issue stagingの配置（`staging-layout.ts`が所有）。`root`はrepository相対の
+   * staging root（`*`は1 segment）、`tracked`はrootが版管理下か、`issueBody`は
+   * Issue同期本文を全文にするか要点と配置へのpointerにするか。
+   */
+  staging?: {
+    root?: string;
+    tracked?: boolean;
+    issueBody?: "full" | "pointer";
+  };
   worktree?: {
     root: string;
     namePattern: string;

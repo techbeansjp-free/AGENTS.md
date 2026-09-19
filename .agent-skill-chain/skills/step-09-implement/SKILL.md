@@ -5,7 +5,7 @@ description: 検証済みトラッカーとモード別実装計画に従い、�
 
 # ステップ9: 専用worktreeでの実装
 
-**stagingは実装するworktreeの中に置く。** `review round`・`workflow record`はstagingのpathからrepository rootを導出してcurrent HEADと突合し、`pr create`・`pr merge`はstagingが対象rootの`.agent-skill-chain/tmp/issues/`直下にあることを要求する。root（既定branch）側にstagingを残したまま専用worktreeでHEADを進めると、Step 10以降の全commandが「candidate HEADがcurrent HEADと一致しません」で止まる。Issue番号が既知なら`worktree create`を先に実行し、Step 0の`issue create --root=<worktree>`でstagingを最初からworktree内へ作る。Step 4でIssueを起票する場合は、worktree作成の直後にroot側のstaging directoryを同じ相対path（`.agent-skill-chain/tmp/issues/<staging>`）へ`mv`で移し、root側へ複製を残さない。journalはworktree側だけが正本になる。
+**stagingは実装するworktreeの中に置く。** Step 0からPR作成・mergeまでproject policyで解決した同じ`staging.root`を使う。`staging.tracked=true`ではworktreeを先に作り、その中のpolicy解決済みrootへ`issue create`する。root patternに`*`があれば`--staging-root=<実際の親directory> --name=<directory名>`を指定するため、`mv`は要らない。`staging.tracked=false`でroot（既定branch）側にStep 0 stagingを作成済みなら、worktree作成の直後に同じpolicy解決済み相対pathへ`mv`し、root側へ複製を残さない（既定rootは`.agent-skill-chain/tmp/issues`）。Issue番号が既知なら`worktree create`を先に実行し、`issue create --root=<worktree>`で最初からworktree内へ作る。`review round`・`workflow record`・`pr create`・`pr merge`はいずれも、stagingが対象worktreeのpolicy解決済みroot直下にあることを要求し、そのpathからrepository rootを導出してcurrent HEADと突合する。root側へstagingを残したまま専用worktreeでHEADを進めると、Step 10以降の全commandが「candidate HEADがcurrent HEADと一致しません」で止まる。journalはworktree側だけが正本になる。
 
 入力は検証済みトラッカーと明示した基点。成果物は専用ブランチ・worktree、BDD例とACを立証するrisk比例Evidence、最小コード、合格したプロジェクト検証一式、merge前に成立状態を反映した`docs/specs/`。作業元の変更状態を検査して同一に保持し、暗黙のstash・reset・checkout・clean・deleteをしない。テストは一時リポジトリ・模擬処理だけを使い、実リモート・他のworktreeを変更しない。
 
@@ -14,6 +14,8 @@ description: 検証済みトラッカーとモード別実装計画に従い、�
 role欄の担当roleが`implementer`であること、許可path・操作、必要証拠、要求能力tier、provider欄の上限、model設定欄、fallback欄、独立性証拠欄を実装開始前に検証する。providerとmodel設定はproject choiceの解決結果を入力とし、汎用skillは固有のmodel slugを要求しない。要求能力を満たす解決、ACに対応するVerification Set、または別identity・contextのreviewer割当が欠ける場合は実装を開始せず、停止点と再開条件を報告する。implementerは自分の差分を最終承認せず、mergeを裁定しない。
 
 [ASC本体の是正を作業scopeへ入れない](../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない)を作業開始前に全文読む。**この作業の目的にASC本体の保守を含まないなら、発見したASC本体の欠陥を当該scopeへ追加して是正しない。** **記録し、別Issueとして起票してから前進する。起票を省くとASC本体の修正要求が耐久記録へ残らない。** 軽微かどうかは正本の3条件で決め、1つでも偽または不明なら軽微としない。軽微でない場合は停止・記録・別Issueへの分離・owner決裁の順に扱う。作業の成果物をASCの契約へ合わせることは従来どおり必須だが、**検査を通すための変更が検査の無い状態で弁護できないなら成果物を歪めず同じ経路へ入る。**
+
+実装・テスト・仕様の各fileは[読取と書込の量](../../docs/01_開発ワークフロー.md#読取と書込の量)に従って差分で編集し、検証は判定結果だけを出力する。03または集約00への実装中発見の追記も該当節だけを変える。
 
 実装中に発見した問題は、fullでは03、quickとpocでは集約00の「実装中発見の前向き記録」へ発見ID・事実・影響・判断・対処・検証・仕様更新を追記する。発見ごとに一度だけ`DISC-*`形式の安定した`discoveryId`を割り当て、再評価・昇格・reviewで変更または別の発見へ再利用しない。`discoveryId`、現在モード、目的・scope・ACの変更有無、security境界拡大、不可逆操作、`changedContractKinds`、発見したモード失格条件の`{ id, evidence }`配列をJSON化し、`workflow assess-discovery --input=<JSON>`の出力で影響成果物を確定する。失格条件と契約種別はcanonical IDだけを使い、空値、重複、未知ID・未知fieldを拒否する。
 

@@ -87,6 +87,18 @@
       "type": "array",
       "items": { "$ref": "#/$defs/rule" }
     },
+    "staging": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "root": {
+          "type": "string",
+          "pattern": "^(?!/)(?:(?!\\.{1,2}/)(?:\\*|[^/*\\\\\\p{Cc}\\p{Cf}]+)/){0,15}(?!\\.{1,2}$)[^/*\\\\\\p{Cc}\\p{Cf}]+$"
+        },
+        "tracked": { "type": "boolean" },
+        "issueBody": { "enum": ["full", "pointer"] }
+      }
+    },
     "worktree": {
       "type": "object",
       "additionalProperties": false,

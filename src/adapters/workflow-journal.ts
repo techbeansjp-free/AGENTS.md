@@ -37,6 +37,13 @@ import {
 import { writeFileAtomic } from "../lib/atomic.js";
 import { findPackageRoot } from "../lib/package-root.js";
 import { git } from "../lib/process.js";
+import {
+  assertIssueStagingLocation,
+  listStagingRoots,
+  readStagingLayout,
+  stagingExcludePathspec,
+  stagingRepositoryRoot,
+} from "../domain/staging-layout.js";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import {
@@ -259,18 +266,8 @@ export function recoverPendingJournalTransaction(
 }
 
 export function assertWorkflowStaging(staging: string): string {
-  const resolved = path.resolve(staging);
-  const parent = path.dirname(resolved);
-  if (
-    path.basename(parent) !== "issues" ||
-    path.basename(path.dirname(parent)) !== "tmp" ||
-    path.basename(path.dirname(path.dirname(parent))) !==
-      ".agent-skill-chain" ||
-    path.basename(resolved).includes("..")
-  )
-    throw new Error(
-      "--stagingは.agent-skill-chain/tmp/issues/直下のdirectoryが必要です",
-    );
+  // 配置契約（既定の.agent-skill-chain/tmp/issues、またはproject policyのstaging.root）
+  const resolved = assertIssueStagingLocation(staging).staging;
   const stat = fs.lstatSync(resolved);
   if (stat.isSymbolicLink() || !stat.isDirectory())
     throw new Error("--stagingはsymlinkでない通常directoryが必要です");
@@ -499,7 +496,7 @@ function appendWorkflowJournalEntryLocked(
     throw new Error(
       `entry mode ${entry.mode}がstaging mode ${current.mode}と一致しません`,
     );
-  const repositoryRoot = path.resolve(staging, "../../../..");
+  const repositoryRoot = stagingRepositoryRoot(staging);
   if (
     entry.step === 9 &&
     headSha !== undefined &&
@@ -518,7 +515,7 @@ function appendWorkflowJournalEntryLocked(
         "--untracked-files=all",
         "--",
         ".",
-        ":(exclude).agent-skill-chain/tmp/issues",
+        stagingExcludePathspec(readStagingLayout(repositoryRoot)),
       ],
       repositoryRoot,
     ).stdout;
@@ -855,7 +852,7 @@ export function inspectCurrentPocJournalBinding(
   try {
     const context = pocContextAtStaging(staging);
     assertPocHeadChangeScope({
-      repositoryRoot: path.resolve(staging, "../../../.."),
+      repositoryRoot: stagingRepositoryRoot(staging),
       baselineHeadSha: context.baselineHeadSha,
       headSha,
       fixtureRoot: context.declaration.fixture.root,
@@ -887,7 +884,7 @@ export function assertPocDeliveryChangeScope(
   const staging = assertWorkflowStaging(stagingInput);
   const context = pocContextAtStaging(staging);
   return assertPocHeadChangeScope({
-    repositoryRoot: path.resolve(staging, "../../../.."),
+    repositoryRoot: stagingRepositoryRoot(staging),
     baselineHeadSha: baseSha,
     headSha,
     fixtureRoot: context.declaration.fixture.root,
@@ -1304,7 +1301,7 @@ export function executePocObservation(input: {
     }
     const context = pocContextAtStaging(staging);
     const evidence = executePocSandboxObservation({
-      repositoryRoot: path.resolve(staging, "../../../.."),
+      repositoryRoot: stagingRepositoryRoot(staging),
       declaration: context.declaration,
       baselineHeadSha: context.baselineHeadSha,
       headSha: input.headSha,
@@ -2155,31 +2152,35 @@ export function resolvePullRequestStaging(input: {
       Number(matched[3]) === input.issue,
     );
   };
-  const issuesRoot = path.join(
-    path.resolve(input.root),
-    ".agent-skill-chain",
-    "tmp",
-    "issues",
-  );
+  const root = path.resolve(input.root);
+  const layout = readStagingLayout(root);
   if (input.staging) {
     const requested = path.resolve(input.staging);
-    if (path.dirname(requested) !== issuesRoot)
+    let located: string;
+    try {
+      located = assertIssueStagingLocation(requested, root).staging;
+    } catch {
       throw new Error(
-        "明示stagingは対象rootの.agent-skill-chain/tmp/issues/直下にあるdirectoryが必要です",
+        `明示stagingは対象rootの${layout.rootPattern}/直下にあるdirectoryが必要です`,
       );
-    const staging = assertWorkflowStaging(requested);
+    }
+    const staging = assertWorkflowStaging(located);
     if (!trackerMatches(staging))
       throw new Error(
         "明示stagingのtrackerが対象repository・Issueと一致しません",
       );
     return staging;
   }
-  if (!fs.existsSync(issuesRoot))
+  const issuesRoots = listStagingRoots(root, layout.rootPattern);
+  if (issuesRoots.length === 0)
     throw new Error("PR作成に必要なIssue staging directoryがありません");
-  const candidates = fs
-    .readdirSync(issuesRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(issuesRoot, entry.name))
+  const candidates = issuesRoots
+    .flatMap((issuesRoot) =>
+      fs
+        .readdirSync(issuesRoot, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => path.join(issuesRoot, entry.name)),
+    )
     .filter((candidate) => {
       try {
         return trackerMatches(candidate);

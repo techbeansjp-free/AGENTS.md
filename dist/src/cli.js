@@ -1,4 +1,7 @@
 import { launchCodex } from "./adapters/codex-launch.js";
+import { launchReview } from "./adapters/review-launch.js";
+import { launchSupplementalReviewDiff, launchSupplementalReviewStaging, } from "./adapters/supplemental-review-launch.js";
+import { resolveReviewRouting } from "./domain/review-routing.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -27,6 +30,7 @@ import { canonicalProviderInstant, addIssueProjectItem, github, GitHubProviderUn
 import { planIssueStart } from "./domain/issue-start.js";
 import { assertMinimumExecutableVersion, MINIMUM_GH_VERSION, MINIMUM_GIT_VERSION, } from "./lib/executable-version.js";
 import { git } from "./lib/process.js";
+import { assertIssueStagingLocation, readStagingLayout, stagingExcludePathspec, stagingRepositoryRoot, } from "./domain/staging-layout.js";
 import { ExclusivePinnedWriteError, writeFileAtomic, writeFileExclusivePinned, } from "./lib/atomic.js";
 import { validateRepositoryConformance } from "./domain/conformance.js";
 import { parseJsonStrict, resolveContained, stableJson, } from "./lib/security.js";
@@ -172,7 +176,7 @@ function assertWorkflowAdvanceArtifacts(staging, targetStep, artifacts) {
         throw new Error(`Step ${targetStep}のartifactは${[...allowed].join("、")}だけを指定できます`);
     if (targetStep !== 9)
         return undefined;
-    const repositoryRoot = path.resolve(staging, "../../../..");
+    const repositoryRoot = stagingRepositoryRoot(staging);
     const candidateHeadSha = git(["rev-parse", "--verify", "HEAD^{commit}"], repositoryRoot).stdout.trim();
     const worktreeStatus = git([
         "status",
@@ -181,7 +185,7 @@ function assertWorkflowAdvanceArtifacts(staging, targetStep, artifacts) {
         "--untracked-files=all",
         "--",
         ".",
-        ":(exclude).agent-skill-chain/tmp/issues",
+        stagingExcludePathspec(readStagingLayout(repositoryRoot)),
     ], repositoryRoot).stdout;
     if (worktreeStatus !== "")
         throw new Error("Step 9を記録する候補worktree全体は現在HEADと完全一致する必要があります");
@@ -384,7 +388,7 @@ export function assertCurrentReviewJournalBinding(staging, headSha) {
      * HEAD移動は従来どおり拒否する。
      */
     if (bindingEffectiveHead !== headSha &&
-        evidenceOnlySuffix(path.resolve(staging, "../../../.."), bindingEffectiveHead, headSha) === undefined)
+        evidenceOnlySuffix(stagingRepositoryRoot(staging), bindingEffectiveHead, headSha) === undefined)
         throw new Error("Step 10のreviewSession binding HEADがPR作成対象HEADと一致しません");
     const session = assertConvergedReviewSession({
         staging,
@@ -900,7 +904,7 @@ function resolveImplementationCommitForMerge(root, finalHeadSha) {
 }
 function resolveContextIsolatedFormalApproval(staging, candidate) {
     const { binding } = assertCurrentReviewJournalBinding(staging, candidate.finalHeadSha);
-    const markdown = git(["show", `${candidate.finalHeadSha}:${candidate.reviewArtifactPath}`], path.resolve(staging, "../../../..")).stdout;
+    const markdown = git(["show", `${candidate.finalHeadSha}:${candidate.reviewArtifactPath}`], stagingRepositoryRoot(staging)).stdout;
     const structure = validateReviewArtifactStructure(markdown);
     if (structure.implementation !== candidate.implementationCommitSha)
         throw new Error("formal review artifactのH_implがmerge対象と一致しません");
@@ -1634,7 +1638,13 @@ function retryPreparedMergeAfterConfirmedAbsence(input) {
  * **宣言できても参照されない値を残さない**（Issue #1324）。
  */
 function issueStagingGherkinDialect(issuePath) {
-    const root = path.resolve(issuePath, "../../../..");
+    let root;
+    try {
+        root = stagingRepositoryRoot(issuePath);
+    }
+    catch {
+        return undefined;
+    }
     const manifest = path.join(root, ".agent-skill-chain", "project-policy.json");
     if (!fs.existsSync(manifest))
         return undefined;
@@ -1670,9 +1680,12 @@ function handlePullRequestMerge(flags) {
         throw new Error("--reopen-terminalはapprovedだけを受理します");
     const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
     const requestedStaging = resolveContained(root, required(flags, "staging"));
-    const issuesRoot = path.join(root, ".agent-skill-chain", "tmp", "issues");
-    if (path.dirname(path.resolve(requestedStaging)) !== issuesRoot)
-        throw new Error("pr mergeのstagingは対象rootの.agent-skill-chain/tmp/issues/直下が必要です");
+    try {
+        assertIssueStagingLocation(requestedStaging, root);
+    }
+    catch {
+        throw new Error(`pr mergeのstagingは対象rootの${readStagingLayout(root).rootPattern}/直下が必要です`);
+    }
     const candidate = assertWorkflowStaging(requestedStaging);
     const earlyInspection = inspectWorkflowStaging(candidate);
     assertWorkflowMergeAllowed(earlyInspection.mode);
@@ -2935,13 +2948,24 @@ function executeCompletionFlow(input) {
 function completionPhaseResult(phase, state, reasons = [], recovery = []) {
     return { phase, state, reasons, recovery };
 }
-function routingProject(root) {
+/**
+ * reviewer routingが必要とするのは`modelMapping`だけである。implementer向け
+ * `providerMappings`まで要求すると、reviewer routingの確認だけをしたい呼出しが
+ * 無関係な設定不備で失敗し、reviewer側の独立性方針（INV-05）にも反する
+ * （CodeRabbit指摘）。
+ */
+function reviewerModelMapping(root) {
     const policySet = loadProjectPolicySet(root);
     const choices = policySet.choices[0];
     const modelMapping = choices?.modelMapping;
-    const mapping = policySet.providerMappings[0];
     if (!choices || !modelMapping || typeof modelMapping === "string")
         throw new Error("project choiceのmodelMappingは構造化設定が有効化されていません");
+    return { modelMapping };
+}
+function routingProject(root) {
+    const { modelMapping } = reviewerModelMapping(root);
+    const policySet = loadProjectPolicySet(root);
+    const mapping = policySet.providerMappings[0];
     if (!mapping)
         throw new Error("provider capability mappingが未設定です");
     return { modelMapping, mapping };
@@ -3505,6 +3529,74 @@ export async function main(argv, dependencies = {}) {
         print(routingFailure(decision.state, decision.ruleId, decision.reason, observation.entrypoint));
         return 1;
     }
+    if (command === "routing" && subcommand === "review-resolve") {
+        const { flags } = parse(rest);
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const { modelMapping } = reviewerModelMapping(root);
+        const decision = resolveReviewRouting({
+            scope: required(flags, "scope"),
+            coordinatorIdentity: required(flags, "coordinator"),
+            implementerIdentity: required(flags, "implementer"),
+            reviewerIdentity: required(flags, "reviewer"),
+            implementerContext: required(flags, "implementer-context"),
+            reviewerContext: required(flags, "reviewer-context"),
+            modelMapping,
+        });
+        print(decision);
+        return decision.state === "resolved" ? 0 : 1;
+    }
+    if (command === "routing" && subcommand === "review-launch") {
+        const { flags, positionals } = parse(rest);
+        if (usage === undefined)
+            throw new Error("routing review-launchのusageが未定義です");
+        const allowed = new Set([...usage.requiredFlags, ...usage.optionalFlags].map((entry) => entry.name));
+        if (positionals.length > 0 ||
+            Object.keys(flags).some((name) => !allowed.has(name)))
+            throw new Error("routing review-launchは定義済みflagだけを受理します");
+        const result = await launchReview({
+            root: typeof flags.root === "string" ? flags.root : process.cwd(),
+            scope: required(flags, "scope"),
+            coordinator: required(flags, "coordinator"),
+            implementer: required(flags, "implementer"),
+            reviewer: required(flags, "reviewer"),
+            implementerContext: required(flags, "implementer-context"),
+            reviewerContext: required(flags, "reviewer-context"),
+            promptFile: required(flags, "prompt-file"),
+        });
+        print(result);
+        return result.state === "succeeded" ? 0 : 1;
+    }
+    if (command === "routing" && subcommand === "supplemental-review-diff") {
+        const { flags } = parse(rest);
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        if (typeof flags.limit === "string" && !/^[1-9]\d*$/u.test(flags.limit))
+            throw new Error("--limitは正の整数で指定してください");
+        const limit = typeof flags.limit === "string" ? Number(flags.limit) : undefined;
+        const result = await launchSupplementalReviewDiff({
+            root,
+            baseSha: required(flags, "base"),
+            headSha: required(flags, "head"),
+            configPath: typeof flags["config-path"] === "string"
+                ? flags["config-path"]
+                : undefined,
+            limit,
+        });
+        print(result);
+        return result.state === "error" ? 1 : 0;
+    }
+    if (command === "routing" && subcommand === "supplemental-review-staging") {
+        const { flags } = parse(rest);
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const result = await launchSupplementalReviewStaging({
+            root,
+            stagingPath: required(flags, "staging"),
+            configPath: typeof flags["config-path"] === "string"
+                ? flags["config-path"]
+                : undefined,
+        });
+        print(result);
+        return result.state === "error" ? 1 : 0;
+    }
     if (command === "routing" && subcommand === "independence") {
         const { flags } = parse(rest);
         const result = checkRoutingIndependence({
@@ -3865,7 +3957,7 @@ export async function main(argv, dependencies = {}) {
                         : { implementationHeadSha: candidateHeadSha }),
                 };
                 if (candidateHeadSha !== undefined &&
-                    git(["rev-parse", "--verify", "HEAD^{commit}"], path.resolve(staging, "../../../..")).stdout.trim() !== candidateHeadSha)
+                    git(["rev-parse", "--verify", "HEAD^{commit}"], stagingRepositoryRoot(staging)).stdout.trim() !== candidateHeadSha)
                     throw new Error("Step 9の成果物検証中に候補HEADが変更されました。新しいHEADから再実行してください");
                 const result = appendWorkflowJournalEntry({
                     staging,
@@ -4149,7 +4241,7 @@ export async function main(argv, dependencies = {}) {
             throw new Error("--reconfirmはStep 1〜9にだけ指定できます");
         if (reconfirm)
             entry = { ...entry, reconfirmation: true };
-        const repositoryRoot = path.resolve(staging, "../../../..");
+        const repositoryRoot = stagingRepositoryRoot(staging);
         const needsHeadSha = step.step === 9 ||
             step.step === 10 ||
             (journal.mode === "poc" && step.step >= 9);
@@ -4220,7 +4312,7 @@ export async function main(argv, dependencies = {}) {
         const inspection = inspectWorkflowStaging(flags.staging, upTo);
         const postPrIntakeErrors = postPrIntakeDeliveryErrors(inspection.staging);
         if (inspection.mode === "poc" && upTo >= 9) {
-            const headSha = git(["rev-parse", "--verify", "HEAD^{commit}"], path.resolve(inspection.staging, "../../../..")).stdout.trim();
+            const headSha = git(["rev-parse", "--verify", "HEAD^{commit}"], stagingRepositoryRoot(inspection.staging)).stdout.trim();
             const observation = inspectStoredPocObservationEvidence(inspection.staging, headSha);
             if (!observation.valid) {
                 print(workflowDiagnostic(inspection.staging, inspection.mode, inspection.validation, [...inspection.errors, ...observation.errors]));
@@ -4508,6 +4600,10 @@ export async function main(argv, dependencies = {}) {
                 : [],
             now: new Date(),
             ...(projectChoices ? { projectChoices } : {}),
+            ...(typeof flags["staging-root"] === "string"
+                ? { stagingRoot: flags["staging-root"] }
+                : {}),
+            ...(typeof flags.name === "string" ? { name: flags.name } : {}),
         }));
         return 0;
     }
@@ -5051,7 +5147,7 @@ export async function main(argv, dependencies = {}) {
         const stagingInput = path.resolve(root, required(flags, "staging"));
         const staging = resolveContained(root, path.relative(root, stagingInput));
         if (!isReviewArtifactStagingDirectChild(root, staging))
-            throw new Error("review artifactの--stagingは対象rootの.agent-skill-chain/tmp/issues/直下が必要です");
+            throw new Error(`review artifactの--stagingは対象rootの${readStagingLayout(root).rootPattern}/直下が必要です`);
         const record = readStoredStagingRecord(staging);
         const artifacts = listStagingArtifacts(staging);
         if (JSON.stringify(record.artifacts) !== JSON.stringify(artifacts) ||
@@ -5099,6 +5195,17 @@ export async function main(argv, dependencies = {}) {
         if (fs.lstatSync(out, { throwIfNoEntry: false }))
             throw new Error(`review artifactの--outが既に存在します: ${out}`);
         const template = fs.readFileSync(path.join(root, ".agent-skill-chain", "templates", "issue", "04_レビュー.md"), "utf8");
+        const packageManifest = path.join(root, "package.json");
+        const packageFiles = fs.existsSync(packageManifest)
+            ? (() => {
+                const parsed = parseJsonStrict(fs.readFileSync(packageManifest, "utf8"), "package.json");
+                const files = isRecord(parsed) ? parsed.files : undefined;
+                return Array.isArray(files) &&
+                    files.every((item) => typeof item === "string")
+                    ? files
+                    : undefined;
+            })()
+            : undefined;
         const content = renderReviewArtifactDraft({
             template,
             staging: path.relative(root, staging),
@@ -5106,6 +5213,7 @@ export async function main(argv, dependencies = {}) {
             baseSha,
             headSha,
             paths: changedPaths,
+            ...(packageFiles ? { packageFiles } : {}),
         });
         try {
             writeFileExclusivePinned(outParent, path.basename(out), content);

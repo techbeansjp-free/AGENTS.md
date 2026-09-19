@@ -1,4 +1,6 @@
 import path from "node:path";
+import { distributedPaths } from "./conformance.js";
+import { matchesStagingRoot, readStagingLayout } from "./staging-layout.js";
 const REVIEW_IDENTITY_HEADING = "## 0. レビュー識別情報";
 const IDENTITY_BASE_EXPECTED = "| 比較基点 | `<40桁の小文字hex>` |";
 const IDENTITY_IMPL_EXPECTED = "| H_impl | `<40桁の小文字hex>` |";
@@ -294,8 +296,14 @@ export function validateContextIsolatedApprovalRecord(markdown) {
 /** review artifact用stagingが対象rootの規定issues directory直下にあるか判定する。 */
 export function isReviewArtifactStagingDirectChild(root, staging) {
     const resolvedRoot = path.resolve(root);
-    const issuesRoot = path.join(resolvedRoot, ".agent-skill-chain", "tmp", "issues");
-    return path.dirname(path.resolve(staging)) === issuesRoot;
+    const parent = path.dirname(path.resolve(staging));
+    const relative = path
+        .relative(resolvedRoot, parent)
+        .split(path.sep)
+        .join("/");
+    if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative))
+        return false;
+    return matchesStagingRoot(readStagingLayout(resolvedRoot).rootPattern, relative);
 }
 /** lexical rootから期待する親とreal parentが一致し、repository内に留まることを判定する。 */
 export function isReviewArtifactParentContained(lexicalRoot, realRoot, lexicalParent, realParent) {
@@ -317,6 +325,68 @@ function replaceRow(content, label, value) {
     return content.replace(new RegExp(`^\\|[ \\t]*${escaped}[ \\t]*\\|[^\\n]*$`, "mu"), `| ${label} | ${escapeCell(value)} |`);
 }
 /** reviewer判断を確定せず、Gitとstagingから導ける04欄だけを埋める。 */
+/**
+ * 変更pathの種別から機械的に導出できる監査列を事前充填する。
+ *
+ * 利用projectの実測では、80 pathの9列を毎roundreviewerが手で書いていた。
+ * 文書・lockfile・生成物・test・設定は、owner（layer）・依存方向・安全/rollbackの
+ * 列がpathから決まる。**判定列（個別判定）と仕様・AC列は事前充填しない。** これらは
+ * reviewerの判断であり、`finding`と「reviewerが確認」のまま残す。product code
+ * （source）は全列をreviewerが書く。owner列は実際の担当者名をpathから特定できない
+ * ため確定しないが、layerが判明した行はowner列に領域heading（layer）を添えて、
+ * reviewerが同じ行内の他列と照合する読み直しを減らす。
+ */
+export function auditRowDraft(pathValue, changeType) {
+    const p = pathValue.replaceAll("\\", "/");
+    const rollback = changeType === "D" ? "git履歴に残る。revert" : "revert";
+    let kind;
+    let layer = "reviewerが確認";
+    let dependency = "reviewerが確認";
+    if (/(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|uv\.lock|poetry\.lock|Cargo\.lock)$/u.test(p)) {
+        kind = "lockfile。依存の完全固定";
+        layer = "依存";
+        dependency = "依存のみ。循環なし";
+    }
+    else if (/(^|\/)docs\/reviews\//u.test(p)) {
+        kind = "review artifact";
+        layer = "docs/reviews";
+        dependency = "記録。循環なし";
+    }
+    else if (/(^|\/)docs\/specs\//u.test(p)) {
+        kind = "システム仕様書";
+        layer = "docs/specs";
+        dependency = "spec → src（許可された向き）";
+    }
+    else if (/(^|\/)docs\//u.test(p) || /\.(md|adoc|rst|txt)$/u.test(p)) {
+        kind = "文書";
+        layer = "docs";
+        dependency = "文書。循環なし";
+    }
+    else if (/(^|\/)(generated|__generated__|dist|build)\//u.test(p)) {
+        kind = "生成物。生成元との対応を再build後のclean差分で確認";
+        layer = "生成物";
+        dependency = "生成元 → 生成物";
+    }
+    else if (/(^|\/)(tests?|__tests__|spec|features)\//u.test(p) ||
+        /\.(test|spec)\.[jt]sx?$|_test\.py$|^test_.*\.py$|\.feature$/u.test(p)) {
+        kind = "test。検証内容はreviewerが確認";
+        layer = "test";
+        dependency = "test → 対象（許可された向き）";
+    }
+    else if (/\.(json|ya?ml|toml|ini|cfg|env\.example)$|(^|\/)\.[^/]+$/u.test(p)) {
+        kind = "設定。値の意味はreviewerが確認";
+        layer = "設定";
+        dependency = "設定。循環なし";
+    }
+    const responsibility = kind ?? "reviewerが確認";
+    const owner = kind ? `reviewerが確認（領域: ${layer}）` : "reviewerが確認";
+    const safety = layer === "生成物"
+        ? `§8の配布物影響表とpackage filesで確認。${rollback}`
+        : kind
+            ? `${kind.split("。")[0]}。${rollback}`
+            : "reviewerが確認";
+    return `| \`${escapeCell(p)}\` | ${changeType} | ${owner} | ${layer} | ${responsibility} | ${dependency} | reviewerが確認 | ${safety} | finding |`;
+}
 export function renderReviewArtifactDraft(input) {
     let content = input.template;
     const targetPaths = input.paths.map((item) => item.path).join("、") || "差分なし";
@@ -328,13 +398,28 @@ export function renderReviewArtifactDraft(input) {
     content = replaceRow(content, "対象差分", targetPaths);
     content = replaceRow(content, "対象外", "比較基点に存在し変更されていない範囲");
     content = replaceRow(content, "残り予算", "3ラウンド");
-    content = replaceRow(content, "ラウンド数", "0（review未実施）");
+    content = replaceRow(content, "ラウンド数", "1（reviewerが実施したround数へ更新する）");
     content = replaceRow(content, "Step chain", `経由: ${input.staging}`);
     const auditRows = input.paths
-        .map((item) => `| \`${escapeCell(item.path)}\` | ${item.changeType} | reviewerが確認 | reviewerが確認 | reviewerが確認 | reviewerが確認 | reviewerが確認 | reviewerが確認 | finding |`)
+        .map((item) => auditRowDraft(item.path, item.changeType))
         .join("\n");
     content = content.replace(/^\| （repository相対path） \| A \/ M \/ D \/ R \|[^\n]*$/mu, auditRows ||
         "| 差分なし | M | reviewerが確認 | reviewerが確認 | reviewerが確認 | reviewerが確認 | reviewerが確認 | reviewerが確認 | finding |");
+    if (input.packageFiles !== undefined) {
+        const grouped = [
+            ...new Set(input.paths.map((item) => item.path === "dist" || item.path.startsWith("dist/")
+                ? `dist/${item.path.split("/")[1] ?? ""}${item.path.split("/")[1] ? "/" : ""}`
+                : item.path)),
+        ];
+        const distributed = new Set(distributedPaths({
+            changedPaths: grouped,
+            packageFiles: input.packageFiles,
+        }));
+        const distributionRows = grouped
+            .map((target) => `| ${escapeCell(target)} | ${distributed.has(target) ? "入る" : "入らない"} | ${distributed.has(target) ? "reviewerが確認" : "なし"} |`)
+            .join("\n");
+        content = content.replace(/^\| \{パス\} \| 入る \/ 入らない \|[^\n]*$/mu, distributionRows || "| 差分なし | 入らない | なし |");
+    }
     const evidenceRows = [
         `| 要求・受け入れ条件 | ${escapeCell(input.staging)} | staging digest ${input.stagingDigest} | 既存コード |`,
         `| 差分 | \`${input.baseSha}\`..\`${input.headSha}\` | ${input.paths.length} path | 既存コード |`,

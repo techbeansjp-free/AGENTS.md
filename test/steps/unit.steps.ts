@@ -186,6 +186,10 @@ interface UnitWorld extends WorkflowWorld {
   postPrIntakeContracts: {
     [k: string]: { valid: boolean; errors: string[]; skills: number };
   };
+  trackedStagingReviewRoots: { [k: string]: string };
+  trackedStagingReviewContracts: {
+    [k: string]: { valid: boolean; errors: string[]; skills: number };
+  };
   missingDomainGlossaryContractRoot: string;
   missingDomainGlossaryContracts: {
     valid: boolean;
@@ -2625,6 +2629,17 @@ const POST_PR_INTAKE_MARKERS = [
 /** 規範文書と正反対になる表現。 */
 const POST_PR_INTAKE_FORBIDDEN_PHRASE = "同じPRへ取り込まない";
 
+/** Step 10 skillが保持すべきtracked stagingとformal artifactの境界。 */
+const TRACKED_STAGING_REVIEW_MARKERS = [
+  "staging.tracked=false",
+  "staging.tracked=true",
+  "文書00〜04を版管理する",
+  "staging内の`04_レビュー.md`はformal approval artifactとして扱わない",
+  "docs/reviews/",
+] as const;
+
+const TRACKED_STAGING_REVIEW_FORBIDDEN_PHRASE = "一時ステージングは版管理外";
+
 function skillPackageCopy(world: WorkflowWorld, key: string): string {
   const root = world.temp(`asc-post-pr-intake-${key}-`);
   fs.mkdirSync(path.join(root, ".agent-skill-chain"), { recursive: true });
@@ -2709,6 +2724,60 @@ Then("正規の配布物は取り込み記述の検査に合格する", function
   assert.equal(this.postPrIntakeContracts.intact!.valid, true);
   assert.deepEqual(this.postPrIntakeContracts.intact!.errors, []);
 });
+
+Given("tracked stagingのreview成果物契約を欠いたpackageがある", function () {
+  this.trackedStagingReviewRoots = {};
+  for (const [index, marker] of TRACKED_STAGING_REVIEW_MARKERS.entries()) {
+    const root = skillPackageCopy(this, `tracked-staging-missing-${index}`);
+    const skillFile = path.join(root, POST_PR_INTAKE_SKILL_RELATIVE);
+    const markdown = fs.readFileSync(skillFile, "utf8");
+    assert.ok(
+      markdown.includes(marker),
+      `削る対象のmarkerが見つかりません: ${marker}`,
+    );
+    fs.writeFileSync(skillFile, markdown.split(marker).join("（削除）"));
+    this.trackedStagingReviewRoots[`missing-${index}`] = root;
+  }
+  const forbiddenRoot = skillPackageCopy(this, "tracked-staging-forbidden");
+  const forbiddenFile = path.join(forbiddenRoot, POST_PR_INTAKE_SKILL_RELATIVE);
+  const original = fs.readFileSync(forbiddenFile, "utf8");
+  assert.ok(!original.includes(TRACKED_STAGING_REVIEW_FORBIDDEN_PHRASE));
+  fs.writeFileSync(
+    forbiddenFile,
+    `${original}\n\n**${TRACKED_STAGING_REVIEW_FORBIDDEN_PHRASE}。**\n`,
+  );
+  this.trackedStagingReviewRoots.forbidden = forbiddenRoot;
+});
+
+When("Step skillのtracked staging契約を検証する", function () {
+  this.trackedStagingReviewContracts = {
+    intact: checkSkillTemplateContracts(process.cwd()),
+  };
+  for (const [key, root] of Object.entries(this.trackedStagingReviewRoots))
+    this.trackedStagingReviewContracts[key] = checkSkillTemplateContracts(root);
+});
+
+Then(
+  "欠落とtracked設定を無視する記述が拒否され正規の配布物だけが合格する",
+  function () {
+    assert.equal(this.trackedStagingReviewContracts.intact!.valid, true);
+    assert.deepEqual(this.trackedStagingReviewContracts.intact!.errors, []);
+    TRACKED_STAGING_REVIEW_MARKERS.forEach((marker, index) => {
+      const observed = this.trackedStagingReviewContracts[`missing-${index}`]!;
+      assert.equal(observed.valid, false);
+      assert.ok(
+        observed.errors.some((error) => error.includes(`「${marker}」`)),
+      );
+    });
+    const forbidden = this.trackedStagingReviewContracts.forbidden!;
+    assert.equal(forbidden.valid, false);
+    assert.ok(
+      forbidden.errors.some((error) =>
+        error.includes(`「${TRACKED_STAGING_REVIEW_FORBIDDEN_PHRASE}」`),
+      ),
+    );
+  },
+);
 
 Given("Step 10 skillの静的解析markerを欠いたpackageがある", function () {
   this.staticAnalysisMarkerRoots = {};

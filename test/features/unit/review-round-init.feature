@@ -83,10 +83,10 @@ Feature: review round雛形と契約の露出
     When review roundとpr createのhelpを取得する
     Then 両方のhelpにdescriptionとexampleを持つinputContractがある
 
-  Scenario: SCN-UNIT-DIAGHINT-001 staging編集後のreview roundは再記録手順を案内する
+  Scenario: SCN-UNIT-DIAGHINT-001 staging編集後のreview roundはdigestを再固定して判定する
     Given round 1を記録した後にstagingを編集した状態がある
     When 編集後のstagingでreview roundを実行する
-    Then digest不一致の診断はworkflow recordの再実行を案内する
+    Then digest不一致では拒否されず保存記録のdigestが現在の成果物へ再固定される
 
   Scenario: SCN-UNIT-DIAGHINT-002 delivery直前のdigest不一致は再記録手順を案内する
     Given round 1を記録した後にstagingを編集した状態がある

@@ -364,15 +364,7 @@ export function buildReviewEvidence(observation) {
         ...evidence,
     };
 }
-export function evaluateReview(reviewValue) {
-    if (!reviewInput(reviewValue))
-        return {
-            approved: false,
-            blocking: [],
-            acceptedRisks: [],
-            errors: ["review入力の構造または未知fieldが不正です"],
-        };
-    const review = reviewValue;
+export function evaluateReviewJudgment(review) {
     if (!Number.isInteger(review.round) || review.round < 1 || review.round > 3)
         throw new Error("レビューのラウンドは1〜3で指定してください");
     const errors = [];
@@ -403,9 +395,6 @@ export function evaluateReview(reviewValue) {
         if (review.focus?.fullRescan !== false)
             errors.push(`ラウンド${review.round}で既承認範囲の全再走査はできません`);
     }
-    if (!commitOid(review.headSha))
-        errors.push("headShaが不正です");
-    errors.push(...validateImmutableCandidateEvidence(review));
     if (review.tests !== "pass")
         errors.push("テスト合格が必要です");
     if (review.specConsistency !== "pass")
@@ -442,10 +431,26 @@ export function evaluateReview(reviewValue) {
                 blocking.push(finding.id);
         }
     }
+    return { blocking, acceptedRisks, errors };
+}
+export function evaluateReview(reviewValue) {
+    if (!reviewInput(reviewValue))
+        return {
+            approved: false,
+            blocking: [],
+            acceptedRisks: [],
+            errors: ["review入力の構造または未知fieldが不正です"],
+        };
+    const review = reviewValue;
+    const judgment = evaluateReviewJudgment(review);
+    const errors = [...judgment.errors];
+    if (!commitOid(review.headSha))
+        errors.push("headShaが不正です");
+    errors.push(...validateImmutableCandidateEvidence(review));
     return {
-        approved: errors.length === 0 && blocking.length === 0,
-        blocking,
-        acceptedRisks,
+        approved: errors.length === 0 && judgment.blocking.length === 0,
+        blocking: judgment.blocking,
+        acceptedRisks: judgment.acceptedRisks,
         errors,
     };
 }

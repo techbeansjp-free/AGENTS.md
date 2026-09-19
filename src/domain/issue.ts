@@ -38,6 +38,14 @@ import {
   type StepJournalEntry,
 } from "./workflow.js";
 import type { ProjectChoices } from "../types.js";
+import {
+  assertIssueStagingLocation,
+  DEFAULT_ISSUE_STAGING_ROOT,
+  matchesStagingRoot,
+  readStagingLayout,
+  stagingRepositoryRoot,
+  TRACKED_STAGING_GITIGNORE,
+} from "./staging-layout.js";
 
 const packageRoot = findPackageRoot(import.meta.url);
 const templateRoot = path.join(
@@ -913,11 +921,17 @@ function prefillRoutingRows(
   if (typeof choices?.modelMapping !== "object") return content;
   const roles = choices.modelMapping.roles;
   const fallback = `${choices.modelMapping.fallback.when}: ${choices.modelMapping.fallback.role}/${choices.modelMapping.fallback.modelSelection}`;
+  const modelSettingCell = (
+    selected: (typeof roles)["implementer" | "reviewer"],
+  ): string =>
+    "mode" in selected
+      ? `${selected.mode}/${selected.endpoint}/${selected.model}`
+      : `${selected.logicalTier}/${selected.reasoningEffort}/${selected.speed}`;
   const row = (role: "implementer" | "reviewer", task: string): string => {
     const selected = roles[role];
     return kind === "design"
-      ? `| ${role} | project choiceのrole contract | ${role === "reviewer" ? "肯定・敵対review、finding分類" : "failing test、test result"} | critical | ${escapeCell(selected.provider)} | ${escapeCell(`${selected.logicalTier}/${selected.reasoningEffort}/${selected.speed}`)} | ${escapeCell(fallback)} | implementerとreviewerのprovider・context差を記録 |`
-      : `| ${task} | ${role} | project choiceのrole contract | ${role === "reviewer" ? "肯定・敵対review、finding分類" : "failing test、test result"} | critical | ${escapeCell(selected.provider)} | ${escapeCell(`${selected.logicalTier}/${selected.reasoningEffort}/${selected.speed}`)} | ${escapeCell(fallback)} | implementerとreviewerのprovider・context差を記録 |`;
+      ? `| ${role} | project choiceのrole contract | ${role === "reviewer" ? "肯定・敵対review、finding分類" : "failing test、test result"} | critical | ${escapeCell(selected.provider)} | ${escapeCell(modelSettingCell(selected))} | ${escapeCell(fallback)} | implementerとreviewerのprovider・context差を記録 |`
+      : `| ${task} | ${role} | project choiceのrole contract | ${role === "reviewer" ? "肯定・敵対review、finding分類" : "failing test、test result"} | critical | ${escapeCell(selected.provider)} | ${escapeCell(modelSettingCell(selected))} | ${escapeCell(fallback)} | implementerとreviewerのprovider・context差を記録 |`;
   };
   const replacement = [
     row("implementer", "実装・検証"),
@@ -1000,6 +1014,61 @@ function prefillFullArtifacts(
   }
 }
 
+/** stagingのdirectory名として許す形。`..`、区切り、制御文字、先頭`.`を拒否する。 */
+function assertStagingDirectoryName(name: string): string {
+  if (
+    name === "" ||
+    name !== name.normalize("NFC") ||
+    name.startsWith(".") ||
+    /[\\/\0\p{Cc}\p{Cf}]/u.test(name) ||
+    name.split(".").every((part) => part === "")
+  )
+    throw new Error(
+      "--nameは区切り・制御文字・先頭.を含まないdirectory名が必要です",
+    );
+  return name;
+}
+
+/**
+ * stagingを作る親directoryを決める。
+ *
+ * 既定は`.agent-skill-chain/tmp/issues`。project policyの`staging.root`が`*`を含む
+ * （例: `docs/05_スプリント/*` + `/tasks`）場合は、`--staging-root`でその1つを
+ * 明示する。`*`を含まないrootは省略できる。明示した値は必ずpatternに一致させる。
+ */
+function resolveStagingParent(
+  root: string,
+  requested: string | undefined,
+): { parent: string; relativeParent: string; tracked: boolean } {
+  const layout = readStagingLayout(root);
+  const pattern = layout.rootPattern;
+  if (requested === undefined) {
+    if (pattern.includes("*"))
+      throw new Error(
+        `project policyのstaging.root（${pattern}）は*を含むため、--staging-rootで実際のdirectoryを指定してください`,
+      );
+    return {
+      parent: path.join(root, ...pattern.split("/")),
+      relativeParent: pattern,
+      tracked: layout.tracked,
+    };
+  }
+  const normalized = requested.replaceAll("\\", "/").replace(/\/+$/u, "");
+  if (path.isAbsolute(normalized) || normalized.split("/").includes(".."))
+    throw new Error(
+      "--staging-rootはrepository相対の親参照を含まないpathが必要です",
+    );
+  if (!matchesStagingRoot(pattern, normalized))
+    throw new Error(
+      `--staging-root（${normalized}）がproject policyのstaging.root（${pattern}）に一致しません`,
+    );
+  return {
+    parent: path.join(root, ...normalized.split("/")),
+    relativeParent: normalized,
+    tracked: layout.tracked,
+  };
+}
+
 export function createIssueStaging(
   root: string,
   options: {
@@ -1010,6 +1079,10 @@ export function createIssueStaging(
     poc?: PocDeclaration;
     changedFiles?: string[];
     projectChoices?: ProjectChoices;
+    /** project policyのstaging.rootに一致する、実際の親directory（repository相対） */
+    stagingRoot?: string;
+    /** staging directory名。省略時は`<JST timestamp>_<slug>` */
+    name?: string;
   },
 ) {
   const slug = safeSlug(options.title);
@@ -1018,14 +1091,22 @@ export function createIssueStaging(
     poc: options.poc,
     changedFiles: options.changedFiles,
   });
-  const finalPath = path.join(
-    root,
-    ".agent-skill-chain",
-    "tmp",
-    "issues",
-    `${jstTimestamp(options.now)}_${slug}`,
-  );
+  const placement = resolveStagingParent(root, options.stagingRoot);
+  const directoryName =
+    options.name !== undefined
+      ? assertStagingDirectoryName(options.name)
+      : `${jstTimestamp(options.now)}_${slug}`;
+  fs.mkdirSync(placement.parent, { recursive: true });
+  const finalPath = path.join(placement.parent, directoryName);
   publishDirectoryAtomic(finalPath, (temporary) => {
+    if (placement.tracked)
+      fs.writeFileSync(
+        path.join(temporary, ".gitignore"),
+        TRACKED_STAGING_GITIGNORE,
+        {
+          flag: "wx",
+        },
+      );
     const decidedAt = options.now.toISOString();
     fs.writeFileSync(
       path.join(temporary, "00_要求定義.md"),
@@ -1255,6 +1336,75 @@ export function renderIssueSyncBody(
   return `${artifacts.map((artifact) => artifact.text.trimEnd()).join("\n\n---\n\n")}\n`;
 }
 
+/**
+ * H2見出しに指定語を含む節（次のH2または末尾まで）を返す。fence内の`## `は見出しにしない。
+ */
+function extractSections(
+  markdown: string,
+  needles: readonly string[],
+): string[] {
+  const lines = markdown.split("\n");
+  const out: string[] = [];
+  let current: string[] | undefined;
+  let fence = false;
+  for (const line of lines) {
+    if (/^\s*(```|~~~)/u.test(line)) fence = !fence;
+    if (!fence && /^## /u.test(line)) {
+      if (current) out.push(current.join("\n").trimEnd());
+      current = needles.some((needle) => line.includes(needle))
+        ? [line]
+        : undefined;
+      continue;
+    }
+    if (current) current.push(line);
+  }
+  if (current) out.push(current.join("\n").trimEnd());
+  return out;
+}
+
+/**
+ * pointer形の同期本文。**成果物の全文を複製しない。**
+ *
+ * 版管理下のstaging（project policy `staging.tracked=true`）では成果物はrepositoryが
+ * 正本であり、Issue本文へ全文を複製すると同じ文書が2箇所で独立に更新される。
+ * 本文には、読み手が判断に要る目的と受け入れ条件、成果物の配置とdigestだけを置く。
+ * digestは`sync-verified`の再照合に使える。
+ */
+export function renderIssueSyncPointerBody(
+  mode: Mode,
+  checkpoint: 4 | 8,
+  artifacts: readonly IssueSyncArtifactText[],
+  relativeStaging: string,
+): string {
+  const lead = artifacts[0];
+  const title =
+    lead?.text.split("\n").find((line) => line.startsWith("# ")) ??
+    "# 00 要求定義";
+  const rows = artifacts
+    .map(
+      (artifact) =>
+        `| \`${artifact.name}\` | \`${relativeStaging}/${artifact.name}\` | \`${crypto.createHash("sha256").update(artifact.text).digest("hex")}\` |`,
+    )
+    .join("\n");
+  const sections = lead
+    ? extractSections(lead.text, ["目的", "受け入れ条件"])
+    : [];
+  return [
+    title,
+    "",
+    `> 成果物の正本はrepositoryの \`${relativeStaging}/\` にある（mode \`${mode}\`、checkpoint ${checkpoint}）。この本文は要点と配置だけを同期する。`,
+    "",
+    "| 成果物 | path | SHA-256 |",
+    "|---|---|---|",
+    rows,
+    "",
+    ...sections.flatMap((section) => [section, ""]),
+  ]
+    .join("\n")
+    .trimEnd()
+    .concat("\n");
+}
+
 /** 検証済みstaging成果物をmode/checkpointの規定順で連結する。外部副作用は持たない。 */
 export function buildIssueSyncBody(
   stagingInput: string,
@@ -1289,14 +1439,23 @@ export function buildIssueSyncBody(
       `同期本文の成果物が未検証です: ${validation.errors.join("; ")}`,
     );
   const artifacts = issueSyncArtifactNames(record.mode, checkpoint);
-  const body = renderIssueSyncBody(
-    record.mode,
-    checkpoint,
-    artifacts.map((name) => ({
-      name,
-      text: fs.readFileSync(path.join(staging, name), "utf8"),
-    })),
+  const texts = artifacts.map((name) => ({
+    name,
+    text: fs.readFileSync(path.join(staging, name), "utf8"),
+  }));
+  const location = assertIssueStagingLocation(
+    staging,
+    stagingRepositoryRoot(staging),
   );
+  const body =
+    location.layout.issueBody === "pointer"
+      ? renderIssueSyncPointerBody(
+          record.mode,
+          checkpoint,
+          texts,
+          location.relative,
+        )
+      : renderIssueSyncBody(record.mode, checkpoint, texts);
   return Object.freeze({
     body,
     bodySha256: crypto
@@ -1325,20 +1484,13 @@ export function assertStagingSyncTarget(
   options: Readonly<{ allowPromotionStep4?: boolean }> = {},
 ): StoredStagingRecord {
   const resolved = path.resolve(stagingPath);
-  const repositoryRoot = path.dirname(
-    path.dirname(path.dirname(path.dirname(resolved))),
-  );
-  const expected = path.join(
-    repositoryRoot,
-    ".agent-skill-chain",
-    "tmp",
-    "issues",
-    path.basename(resolved),
-  );
-  if (resolved !== expected || path.basename(resolved).includes(".."))
+  try {
+    assertIssueStagingLocation(resolved);
+  } catch {
     throw new Error(
-      "同期記録は.agent-skill-chain/tmp/issues/直下のstagingだけに書き込めます",
+      `同期記録は${DEFAULT_ISSUE_STAGING_ROOT}/またはproject policyのstaging.root直下のstagingだけに書き込めます`,
     );
+  }
   const stat = fs.lstatSync(resolved);
   if (stat.isSymbolicLink() || !stat.isDirectory())
     throw new Error("同期記録の対象はsymlinkでない通常directoryが必要です");

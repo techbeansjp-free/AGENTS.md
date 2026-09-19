@@ -9,6 +9,8 @@ description: exact-headの実装・テスト・仕様証拠を有限にレビュ
 
 各`review round`の入力JSON fileはstagingの外に置く。blocking findingの`contractId`はanchorのAcceptance Criteria IDまたはInvariant IDに一致させ、単な記録対象へ読み替えない。
 
+`.agent-skill-chain/local/supplemental-review.json`が有効な場合、`routing supplemental-review-diff`を実行し指摘を確認できる（任意、判定には用いない）。
+
 ## routing入力契約
 
 role欄の担当roleが`reviewer`であること、必要能力tier、provider欄の上限、model設定欄、fallback欄、独立性証拠欄、肯定・敵対review、finding分類、対象差分を変更していない証拠を実装時のrouting evidenceと突合する。providerとmodel設定はproject choiceの入力契約として扱い、固有のmodel slugからreview authorityを推測しない。**reviewerの独立性はproject policyの`merge.reviewIndependence`が決める。** `context-isolated`（既定）はimplementerと別session/context、exact HEAD固定、対象差分を変更していないこと、肯定・敵対レビューとfinding記録を要求し、**同一GitHub actorでも成立する。** `actor-independent`はPR author・implementation commit authorと別のstable actor IDを要求し、高リスク変更・不可逆操作・releaseでpolicyが宣言して引き上げる。**要求水準を独立性証拠欄で確認できない場合は停止条件を適用し、承認しない。** **同一provider・同一論理tierだけを理由に独立性違反としない。**reviewerはfindingを隠す修正を行わない。
@@ -21,7 +23,9 @@ Codex起動差分では`routing launch`の観測時刻・入口・selectedModel/
 
 [ドメイン用語台帳](../../docs/01_開発ワークフロー.md#ドメイン用語台帳)と要求・要件の用語差分、耐久用語台帳を作業開始前に全文読む。未定義語、重複定義、根拠なしの意味変更、置換先なしの廃止、成果物間の表記揺れをfindingにする。
 
-作業開始前に[04_レビュー.md](../../templates/issue/04_レビュー.md)を全文読み、その見出し構造・変更ファイル個別監査・評価欄を使ってレビュー成果物を作る。`review artifact --init --staging=<staging> --base=<比較基点SHA> --head=<H_impl>`で機械導出できる欄を新規fileへ事前充填し、reviewerが判定・finding・test結果を記入する。独自の要約だけで代替せず、生成時点の未確定欄を実装者判断で合格へ変えない。
+作業開始前に[04_レビュー.md](../../templates/issue/04_レビュー.md)を全文読み、その見出し構造・変更ファイル個別監査・評価欄を使ってレビュー成果物を作る。`review artifact --init --staging=<staging> --base=<比較基点SHA> --head=<H_impl>`で機械導出できる欄を新規fileへ事前充填し、reviewerが判定・finding・test結果を記入する。個別監査表はlockfile・文書・システム仕様書・生成物・test・設定の行について層・責務・依存方向・安全/rollbackの列が事前充填されるので、reviewerは仕様・AC列と個別判定、およびproduct codeの行だけを書く。`review round --init`はsessionがあるとき前round blockerのfindingを雛形へ写すので、statusの更新と新規findingだけを書く。独自の要約だけで代替せず、生成時点の未確定欄を実装者判断で合格へ変えない。
+
+review artifactは`review artifact --init`、各roundの入力JSONは`review round --init`が生成した骨子を充填し、[読取と書込の量](../../docs/01_開発ワークフロー.md#読取と書込の量)に従って是正はfindingの該当行だけを差分で書く。artifactやround JSONの全文をheredocで書き直さない。 §2.2の開発考慮事項の適用判定は00と差分が無ければ01〜03と同じ参照行（`開発考慮事項の適用判定は00_要求定義.md §6.1と同じ`）を置き、4行の表を書き直さない。
 
 **`pr create`より後に届いた外部reviewerの指摘は、条件を満たす場合に同じPRへ取り込む。** 守る性質は「独立reviewerが確認した内容とmergeされる内容が一致すること」であり、HEADが動いても同sessionの次roundで再reviewすれば保たれる。**条件と手順の正本は`../../docs/01_開発ワークフロー.md`である。ここへ複写しない。** 記録は`workflow record --step=10 --post-terminal-intake`で行い、Step 11より後に置く。**取り直し1ラウンドは収束後にだけ開く。** 未解決blockerを抱えたまま予算を使い切った`budget-exhausted`からは開かない。開くと任意の1 pushで新品の予算をもらえる。**予算を超える指摘、受け入れ条件を満たさない指摘、安全境界・authority・不可逆操作へ及ぶ指摘は取り込まず、follow-up Issueとする。** いずれの場合も元のPRのreviewスレッドへ判定を返信して解決する。**指摘を無記録で通過させない。**
 
@@ -31,7 +35,7 @@ Codex起動差分では`routing launch`の観測時刻・入口・selectedModel/
 
 **Step 10記録後にstagingを是正した場合の復旧経路は規範文書が所有する。** 上流Step（1〜9）の再確定でstaging digestを再固定する（`workflow record --reconfirm`）。**最新Stepの再記録では復旧できない。** 条件と手順の正本は`../../docs/01_開発ワークフロー.md`であり、ここへ複写しない。
 
-**成果物は版管理下へ置く。** 一時ステージングは版管理外であり、そこに置いたままでは`review evidence`も履歴監査も成立しない。収束後に`docs/reviews/`または`.agent-skill-chain/reviews/`配下へ複写し、実装commitの後にその1 fileだけをcommitして`H_final`にする。**このartifact commitに対する取り直しroundは要らない。** `workflow record --step=10`は`H_final`で実行でき、bindingはsessionのcandidate HEAD（`H_impl`）のまま記録される。`pr create --head-sha=<H_final>`も同じ規則で受理する。
+**成果物は版管理下へ置く。** `staging.tracked=false`のstagingは版管理外である。`staging.tracked=true`では文書00〜04を版管理するが、どちらの場合もstaging内の`04_レビュー.md`はformal approval artifactとして扱わない。収束後に`docs/reviews/`または`.agent-skill-chain/reviews/`配下へ複写し、実装commitの後にその1 fileだけをcommitして`H_final`にする。**このartifact commitに対する取り直しroundは要らない。** `workflow record --step=10`は`H_final`で実行でき、bindingはsessionのcandidate HEAD（`H_impl`）のまま記録される。`pr create --head-sha=<H_final>`も同じ規則で受理する。
 
 前述の外部reviewer指摘をStep 11前の`pr-bound`中に取り込む場合は、正本に従って`workflow record --step=10 --post-pr-intake`を使う。`--post-terminal-intake`はStep 11記録後の経路に限る。
 

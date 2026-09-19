@@ -224,6 +224,12 @@
       }
     },
     "reviewerRoleModelChoice": {
+      "oneOf": [
+        { "$ref": "#/$defs/agentReviewerRoleModelChoice" },
+        { "$ref": "#/$defs/localLlmReviewerRoleModelChoice" }
+      ]
+    },
+    "agentReviewerRoleModelChoice": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -240,6 +246,29 @@
         },
         "reasoningEffort": { "const": "high" },
         "speed": { "const": "standard" },
+        "independence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["differentFrom"],
+          "properties": {
+            "differentFrom": { "const": "implementer" }
+          }
+        }
+      }
+    },
+    "localLlmReviewerRoleModelChoice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "mode", "endpoint", "model", "independence"],
+      "properties": {
+        "provider": { "const": "ollama" },
+        "mode": { "enum": ["supplement", "replace"] },
+        "endpoint": {
+          "type": "string",
+          "pattern": "^http://(127\\.0\\.0\\.1|localhost)(:[0-9]+)?(/.*)?$",
+          "maxLength": 2048
+        },
+        "model": { "type": "string", "minLength": 1, "maxLength": 128 },
         "independence": {
           "type": "object",
           "additionalProperties": false,
