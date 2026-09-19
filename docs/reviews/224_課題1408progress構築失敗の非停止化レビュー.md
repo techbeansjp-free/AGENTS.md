@@ -47,6 +47,11 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
+| `dist/src/adapters/review-session.js` | M | package | 生成物 | `src/adapters/review-session.ts`のcompile結果。生成元と1対1で対応し手書きしていない | 生成元 → 生成物 | AC-WF-021 | §8の配布物影響表とpackage filesで確認。生成元をrevertして再buildすれば戻る | pass |
+| `dist/src/adapters/workflow-journal.js` | M | package | 生成物 | `src/adapters/workflow-journal.ts`のcompile結果 | 生成元 → 生成物 | AC-WF-021 | §8の配布物影響表とpackage filesで確認。生成元をrevertして再buildすれば戻る | pass |
+| `dist/src/domain/issue.js` | M | package | 生成物 | `src/domain/issue.ts`のcompile結果 | 生成元 → 生成物 | AC-WF-021 | §8の配布物影響表とpackage filesで確認。生成元をrevertして再buildすれば戻る | pass |
+| `dist/src/domain/review-progress.js` | M | package | 生成物 | `src/domain/review-progress.ts`のcompile結果 | 生成元 → 生成物 | AC-WF-021 | §8の配布物影響表とpackage filesで確認。生成元をrevertして再buildすれば戻る | pass |
+| `docs/reviews/224_課題1408progress構築失敗の非停止化レビュー.md` | A | reviewerが確認（領域: docs/reviews） | evidence | 本review成果物。外部review取り込み（ラウンド3）のcommitが既定branch追随mergeより前にあるため、監査範囲`比較基点..H_impl`へ自身が入る | evidence。循環なし（本文へ自身のcommit SHAを書いていない） | 該当なし（監査記録） | 文書。revert | pass |
 | `docs/specs/01_システム概要/02_用語・略語.md` | M | package owner | spec | TERM-ASC-125を1行追加。既存語の再定義なし | なし（文書） | REQ-WF-021 / 全AC | 追記のみでrevert可能 | pass |
 | `docs/specs/02_要件/01_ワークフロー要件.md` | M | package owner | spec | REQ-WF-021へ非停止・案内・producer mode契約を追加 | なし（文書） | REQ-WF-021 / AC-1408-01〜07 | 既存文『modeを100644へ閉じ』を変更していない | pass |
 | `docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md` | M | package owner | spec | CLI外部契約へ非停止・案内・生成modeを追加 | なし（文書） | REQ-WF-021 / AC-1408-02、04 | 段落の主語をREV-13で是正済み | pass |
@@ -178,7 +183,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 ## 7. テスト結果
 
 - 実行したcommandの一覧: `npm test`、`npm run conformance:check`、`npm run lint`、`npm run format:check`、`npm run typecheck`、`npm run source:check`、`npm run docs:format`、`npm run test:format`、`npm run trace:check`、`npm run architecture:check`、`npm run workflow:check`、`npm run cli:check`
-- 全layerの合計: `npm test` 2,096 scenarios（2,080 passed、16 skipped、**失敗0**）、13,098 steps。`conformance:check` 87 scenarios合格。静的検査10種すべて合格
+- 全layerの合計: 既定branch追随merge（`d82f93b1`）後のHEADで再実行し、`npm test` 2,154 scenarios（2,138 passed、16 skipped、**失敗0**）、17,769 steps（17,719 passed、50 skipped）。`conformance:check`・`package:check`・`project:quality`・`lint`・`format:check`・`typecheck`・`source:check`・`docs:format`・`test:format`・`trace:check`・`architecture:check`・`audit:check`はいずれも合格。**追随merge前のラウンド2時点の実測は2,096 scenarios・13,098 stepsであり、増分は取り込んだ既定branch側のSCNである。**
 - runner・Gherkin方言: cucumber-js、`gherkinDialect=en`、日本語step。project choicesの`testLayers`は`unit`/`integration`/`e2e`で、新規19 SCNは各層へ配置した
 
 ### 変異試験
