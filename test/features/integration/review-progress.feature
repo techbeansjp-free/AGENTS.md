@@ -1,6 +1,11 @@
 @integration
 Feature: parallel progress evidenceのadapter境界
 
+  Scenario: SCN-INT-RECORDLAYER-001 旧artifact-onlyと単一target経路を維持する
+    Given parallel progressの純粋fixtureがある
+    When "legacy-record-layer" のparallel progress反例を評価する
+    Then parallel progress契約を満たす
+
   Scenario: SCN-INT-PROGRESS-001 固定H_implへ実adapterで進捗を追記する
     Given parallel progressの実adapter fixtureがある
     When review入力を変えずcompleted進捗を実際にappendする
@@ -105,6 +110,11 @@ Feature: parallel progress evidenceのadapter境界
     Given 03が通常fileでないstagingがある
     When review round --initを実行する
     Then not-regular-fileとして案内する
+
+  Scenario: SCN-INT-PROGRESS-040 複数targetの1件が不成立でもroundを開き対象を名指しする
+    Given 2件のprogress targetのうち1件がmode不一致のstagingがある
+    When review round --initを実行する
+    Then inventoryを付けずroundを開き不成立targetを名指しする
 
   Scenario: SCN-INT-PROGRESS-038 片側markerを無言で落とさない
     Given markerが片側だけの03を持つstagingがある

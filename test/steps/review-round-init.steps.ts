@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
@@ -30,6 +31,7 @@ import {
   refreshStoredStagingDigest,
 } from "../../src/domain/staging.js";
 import { STEP_JOURNAL_FILE } from "../../src/domain/workflow.js";
+import { stableJson } from "../../src/lib/security.js";
 import {
   planCompletion,
   planRootUpdate,
@@ -54,6 +56,7 @@ interface ReviewRoundInitWorld extends WorkflowWorld {
   completion: ReturnType<typeof planCompletion>;
   reasonSets: string[][];
   writeError: Error | undefined;
+  bundleError: Error | undefined;
   raceParent: string;
   unrelatedFile: string;
 }
@@ -241,7 +244,68 @@ When("round 1の雛形を直接構築する", function () {
     acceptanceCriteriaIds: ["AC-001"],
   });
   this.draft = draft.round;
-  this.cliOutput = JSON.stringify({ notes: draft.notes });
+  this.cliOutput = JSON.stringify({
+    notes: draft.notes,
+    bundleDigest: draft.bundleDigest,
+    bundleBytes: draft.bundleBytes,
+  });
+});
+
+Then("bundleはSHA-256 digestを持ち256 KiB以下である", function () {
+  const bundle = JSON.parse(this.cliOutput) as {
+    bundleDigest: string;
+    bundleBytes: number;
+  };
+  assert.match(bundle.bundleDigest, /^[a-f0-9]{64}$/u);
+  const persistedBytes = `${stableJson(this.draft)}\n`;
+  assert.equal(bundle.bundleBytes, Buffer.byteLength(persistedBytes, "utf8"));
+  assert.equal(
+    bundle.bundleDigest,
+    crypto.createHash("sha256").update(persistedBytes).digest("hex"),
+  );
+  assert.ok(bundle.bundleBytes <= 256 * 1024);
+});
+
+When("256 KiBを超えるround bundleを構築する", function () {
+  this.bundleError = undefined;
+  try {
+    buildReviewRoundDraft({
+      staging: this.staging,
+      headSha: this.head,
+      baseSha: this.base,
+      scopeIds: Array.from(
+        { length: 24_000 },
+        (_, index) => `SCOPE-${index.toString().padStart(5, "0")}`,
+      ),
+      acceptanceCriteriaIds: ["AC-001"],
+    });
+  } catch (error) {
+    this.bundleError =
+      error instanceof Error ? error : new Error(String(error));
+  }
+  assert.throws(() => parseReviewRoundInput({}), /review round/u);
+  const valid = buildReviewRoundDraft({
+    staging: this.staging,
+    headSha: this.head,
+    baseSha: this.base,
+    scopeIds: ["SCOPE-001"],
+    acceptanceCriteriaIds: ["AC-001"],
+  }).round;
+  assert.throws(
+    () =>
+      previewReviewRound({
+        staging: this.staging,
+        round: parseReviewRoundInput({
+          ...valid,
+          anchor: { ...valid.anchor, initialDiffDigest: "0".repeat(64) },
+        }),
+      }),
+    /diff digest/u,
+  );
+});
+
+Then("bundle上限超過として拒否される", function () {
+  assert.match(this.bundleError?.message ?? "", /256 KiB以下/u);
 });
 
 Then("雛形をfileへ渡したreview round previewが受理される", function () {

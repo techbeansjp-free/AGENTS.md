@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -18,13 +19,14 @@ import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
 import { stableJson } from "../lib/security.js";
 import {
-  buildReviewProgressInventory,
+  buildReviewProgressInventories,
   describeReviewProgressUnbuildable,
-  tryBuildReviewProgressInventory,
+  tryBuildReviewProgressInventories,
   type ReviewProgressInventory,
-  type ReviewProgressUnbuildableReason,
+  type ReviewProgressInventoryOutcome,
   PROGRESS_END,
   PROGRESS_START,
+  reviewProgressTargets,
 } from "../domain/review-progress.js";
 import {
   assertWorkflowStaging,
@@ -44,6 +46,7 @@ import { readStoredDeliveryState } from "./delivery-state.js";
 import { isEvidenceOnlyPath } from "../domain/review.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
+import { recordLayerSuffix } from "./review-record-layer.js";
 
 const GIT_ENV: NodeJS.ProcessEnv = {
   PATH: process.env.PATH ?? "/usr/bin:/bin",
@@ -170,7 +173,13 @@ export function buildReviewRoundDraft(input: {
   scopeIds?: readonly string[];
   acceptanceCriteriaIds?: readonly string[];
   invariantIds?: readonly string[];
-}): { round: ReviewRoundInput; notes: readonly string[] } {
+  progressTargetPaths?: readonly string[];
+}): {
+  round: ReviewRoundInput;
+  notes: readonly string[];
+  bundleDigest: string;
+  bundleBytes: number;
+} {
   const staging = assertWorkflowStaging(input.staging);
   const root = stagingRepositoryRoot(staging);
   const headSha = resolveCommit(root, "--head", input.headSha);
@@ -215,72 +224,92 @@ export function buildReviewRoundDraft(input: {
       );
     const baseSha = resolveCommit(root, "--base", input.baseSha);
     const observed = observeReviewDiff(root, baseSha, headSha);
-    const progressTarget = path.join(staging, "03_実装計画.md");
     /**
-     * **不在だけを不在として扱う。** `fs.existsSync`はEACCES等でも`false`を
-     * 返すため、読めない03を「03が無い」と誤認して案内も出さずroundを開く
-     * fail-open経路になる（実測: 親directoryが`0o000`のとき`existsSync`は
-     * `false`、`lstatSync`はEACCES）。ENOENT以外は従来どおり伝播させる。
-     */
-    let progressStat: fs.Stats | undefined;
-    try {
-      progressStat = fs.lstatSync(progressTarget);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    /**
-     * **種別を判定してから読む。** `readFileSync`を先に置くと、directoryや
-     * FIFOが分類より前にthrowして「通常fileでない」の分類へ到達しない。
-     */
-    const progressSource = progressStat?.isFile()
-      ? fs.readFileSync(progressTarget, "utf8")
-      : undefined;
-    /**
-     * **progressの構築失敗をreviewの拒否理由にしない**（REQ-WF-021）。
+     * **宣言済みtargetを1件ずつ分類してから一体で構築する。**
      *
-     * optionalなinventoryの構築例外を本線へ伝播させると、REQ-WF-021が明文で
-     * 禁じている「review gateがprogressの失敗を拒否理由にする」状態になる。
-     * 分類済みの不成立は値で受け取って案内へ回し、roundはそのまま開く。
-     * **分類済みの不成立だけを値で受け取る。** 例外を握り潰す枝を作らず、
-     * 分類外の失敗は従来どおり伝播させてfail-openを成立させない。
-     * `lstat`のENOENTだけは「03が無い」として扱う（上の判定を参照）。
+     * 複数target（最大16）とREQ-WF-021の非停止化は両立させる必要がある。
+     * 例外で構築するとtargetが1件でも不成立なときroundが止まり、REQ-WF-021が
+     * 明文で禁じる「review gateがprogressの失敗を拒否理由にする」状態へ戻る。
+     * file状態の不成立は値で受け取って案内へ回し、roundはそのまま開く。
      */
-    let progressInventory: ReviewProgressInventory | undefined;
+    const explicitTargets = Boolean(input.progressTargetPaths?.length);
+    const requestedTargets = explicitTargets
+      ? [...new Set(input.progressTargetPaths)].sort()
+      : ["03_実装計画.md"];
     let unbuildable:
-      | {
-          reason: ReviewProgressUnbuildableReason;
-          observedMode: number;
-          isSymbolicLink: boolean;
-          isRegularFile: boolean;
-        }
+      | Extract<ReviewProgressInventoryOutcome, { state: "unbuildable" }>
       | undefined;
-    if (progressStat && !progressStat.isFile())
-      unbuildable = {
-        reason: "not-regular-file",
-        observedMode: progressStat.mode & 0o777,
-        isSymbolicLink: progressStat.isSymbolicLink(),
-        isRegularFile: false,
+    const observedTargets: {
+      targetPath: string;
+      source: string;
+      target: {
+        fileMode: number;
+        isSymbolicLink: boolean;
+        isRegularFile: boolean;
       };
-    else if (
-      progressStat &&
-      progressSource !== undefined &&
+    }[] = [];
+    for (const targetPath of requestedTargets) {
+      const file = path.join(staging, targetPath);
+      /**
+       * **不在だけを不在として扱う。** `fs.existsSync`はEACCES等でも`false`を
+       * 返すため、読めない対象を「無い」と誤認して案内も出さずroundを開く
+       * fail-open経路になる（実測: 親directoryが`0o000`のとき`existsSync`は
+       * `false`、`lstatSync`はEACCES）。ENOENT以外は従来どおり伝播させる。
+       */
+      let stat: fs.Stats | undefined;
+      try {
+        stat = fs.lstatSync(file);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      if (!stat) {
+        if (explicitTargets)
+          throw new Error(
+            `parallel progress targetが存在しません: ${targetPath}`,
+          );
+        continue;
+      }
+      /**
+       * **種別を判定してから読む。** `readFileSync`を先に置くと、directoryや
+       * FIFOが分類より前にthrowして「通常fileでない」の分類へ到達しない。
+       */
+      if (!stat.isFile()) {
+        unbuildable = Object.freeze({
+          state: "unbuildable" as const,
+          targetPath,
+          reason: "not-regular-file" as const,
+          observedMode: stat.mode & 0o777,
+          isSymbolicLink: stat.isSymbolicLink(),
+          isRegularFile: false,
+        });
+        break;
+      }
+      const source = fs.readFileSync(file, "utf8");
       /**
        * **片側markerでも判定へ回す。** 両方揃った場合だけ判定すると、
        * 壊れたmarkerが`marker-not-single-pair`の案内を経由せず、
        * markerを使っていないstagingと区別できないまま無言で落ちる。
        */
-      (progressSource.includes(PROGRESS_START) ||
-        progressSource.includes(PROGRESS_END))
-    ) {
-      const outcome = tryBuildReviewProgressInventory(
-        "03_実装計画.md",
-        progressSource,
-        {
-          fileMode: progressStat.mode & 0o777,
-          isSymbolicLink: progressStat.isSymbolicLink(),
-          isRegularFile: progressStat.isFile(),
+      if (!source.includes(PROGRESS_START) && !source.includes(PROGRESS_END)) {
+        if (explicitTargets)
+          throw new Error(
+            `parallel progress markerがありません: ${targetPath}`,
+          );
+        continue;
+      }
+      observedTargets.push({
+        targetPath,
+        source,
+        target: {
+          fileMode: stat.mode & 0o777,
+          isSymbolicLink: stat.isSymbolicLink(),
+          isRegularFile: true,
         },
-      );
+      });
+    }
+    let progressInventory: ReviewProgressInventory | undefined;
+    if (!unbuildable && observedTargets.length) {
+      const outcome = tryBuildReviewProgressInventories(observedTargets);
       if (outcome.state === "built") progressInventory = outcome.inventory;
       else unbuildable = outcome;
     }
@@ -290,7 +319,7 @@ export function buildReviewRoundDraft(input: {
         observedMode: unbuildable.observedMode,
         isSymbolicLink: unbuildable.isSymbolicLink,
         isRegularFile: unbuildable.isRegularFile,
-        targetPath: "03_実装計画.md",
+        targetPath: unbuildable.targetPath,
       });
       progressNotes.push(
         `[${guidance.code}] ${guidance.target}のparallel progress inventoryを構築できません（${guidance.reason}）。実測=${guidance.observed} 期待=${guidance.expected}。${guidance.effect}。${guidance.action}${guidance.repairArgv ? `: ${guidance.repairArgv.join(" ")}` : ""}。必要authority=${guidance.requiredAuthority}。rollback=${guidance.rollback}`,
@@ -368,6 +397,10 @@ export function buildReviewRoundDraft(input: {
       candidateHeadSha: headSha,
       focus: { previousBlocking, fixedDiff: fixed, adjacentScope: [] },
       findings: carried,
+      ...(previous.status === "converged" &&
+      recordLayerSuffix(staging, root, previousHeadSha, headSha, previous)
+        ? { recordLayerOnly: true }
+        : {}),
     };
     if (previousBlocking.length > 0)
       notes.push(
@@ -386,7 +419,18 @@ export function buildReviewRoundDraft(input: {
     `このroundは ${headSha.slice(0, 8)} (${commitSubject(root, headSha)}) を検分したものとして記録します。レビュー結果を反映したcommitを、このroundの記録より先に作らないでください`,
   );
   notes.push(...progressNotes);
-  return { round: parseReviewRoundInput(round), notes };
+  const parsed = parseReviewRoundInput(round);
+  /** CLIが保存するreviewer input bundleの実byte列（末尾改行を含む）へ固定する。 */
+  const canonical = `${stableJson(parsed)}\n`;
+  const bundleBytes = Buffer.byteLength(canonical, "utf8");
+  if (bundleBytes > 256 * 1024)
+    throw new Error("reviewer input bundleは256 KiB以下が必要です");
+  return {
+    round: parsed,
+    notes,
+    bundleDigest: crypto.createHash("sha256").update(canonical).digest("hex"),
+    bundleBytes,
+  };
 }
 
 /**
@@ -464,21 +508,24 @@ export function previewReviewRound(input: {
       );
     const inventory = input.round.anchor.progressInventory;
     if (inventory) {
-      const target = path.join(staging, inventory.targetPath);
-      const targetStat = fs.lstatSync(target);
-      if (
-        targetStat.isSymbolicLink() ||
-        !targetStat.isFile() ||
-        targetStat.nlink !== 1 ||
-        (targetStat.mode & 0o777) !== inventory.fileMode ||
-        fs.realpathSync(target) !== target
-      )
-        throw new Error("review roundのprogress target identityが不正です");
-      const observedInventory = buildReviewProgressInventory(
-        inventory.targetPath,
-        fs.readFileSync(target, "utf8"),
-        targetStat.mode & 0o777,
-      );
+      const observedTargets = reviewProgressTargets(inventory).map((item) => {
+        const target = path.join(staging, item.targetPath);
+        const targetStat = fs.lstatSync(target);
+        if (
+          targetStat.isSymbolicLink() ||
+          !targetStat.isFile() ||
+          targetStat.nlink !== 1 ||
+          (targetStat.mode & 0o777) !== item.fileMode ||
+          fs.realpathSync(target) !== target
+        )
+          throw new Error("review roundのprogress target identityが不正です");
+        return {
+          targetPath: item.targetPath,
+          source: fs.readFileSync(target, "utf8"),
+          fileMode: targetStat.mode & 0o777,
+        };
+      });
+      const observedInventory = buildReviewProgressInventories(observedTargets);
       if (stableJson(observedInventory) !== stableJson(inventory))
         throw new Error(
           "review roundのprogress inventoryが実targetと一致しません",
@@ -522,6 +569,19 @@ export function previewReviewRound(input: {
     )
       throw new Error(
         "既定branch追随として記録できるのは、前roundのcandidateを第1親、既定branch tipのancestorを第2親とし、treeが両親の自動merge結果と一致するmerge commitだけです",
+      );
+    if (
+      input.round.recordLayerOnly &&
+      !recordLayerSuffix(
+        staging,
+        root,
+        previousHeadSha,
+        input.round.candidateHeadSha,
+        previous,
+      )
+    )
+      throw new Error(
+        "record layerとして記録できるのはformal artifactとsealed journalから一致を証明したprogress投影だけです",
       );
   }
   return advanceReviewSession(previous, input.round);
@@ -616,6 +676,7 @@ export function evidenceOnlySuffix(
   return isEvidenceOnlyPath(only) ? only : undefined;
 }
 
+/** formal artifactと検証済みprogress投影だけの単一commitを観測する。 */
 export function assertConvergedReviewSession(input: {
   staging: string;
   expectedDigest: string;
@@ -646,6 +707,13 @@ export function assertConvergedReviewSession(input: {
       stagingRepositoryRoot(staging),
       effectiveHeadSha,
       input.currentHeadSha,
+    ) === undefined &&
+    recordLayerSuffix(
+      staging,
+      stagingRepositoryRoot(staging),
+      effectiveHeadSha,
+      input.currentHeadSha,
+      session,
     ) === undefined
   )
     throw new Error(

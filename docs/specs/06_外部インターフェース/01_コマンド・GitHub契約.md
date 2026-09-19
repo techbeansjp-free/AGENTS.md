@@ -19,6 +19,8 @@ GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報�
 
 ## usageと必須入力の提示
 
+`review round --init`はround 1で任意の`--progress-target=<staging相対path,...>`を受理する。省略時は従来どおり`03_実装計画.md`を自動検出する。明示時は1〜16件すべての存在、mode、marker、path正規形を要求する。出力round JSONはstable key順のreviewer input bundleであり、256 KiB超過を拒否し、CLI結果へ`bundleDigest`と`bundleBytes`を返す。
+
 `src/cli-usage.ts`がsubcommandごとの要約、必須flag、条件付きflag、任意flagと既定値、位置引数、実行例を保持する単一正本である。CLIはcommandとsubcommandを解決した直後にこの定義を引き、次の順で評価する。
 
 1. `--help`または`-h`があればusageをJSONで返し終了code 0とする。必須flag検証より先に評価する。入力fileの契約を持つsubcommandは`inputContract`（`description`と`example`）を含める。

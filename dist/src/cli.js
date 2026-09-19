@@ -46,7 +46,8 @@ import { appendCompletionRecord, appendEvidenceStateRecord, applyEvidencePrune, 
 import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssignment, validateTierSelection, validateCodexTier, validateClaudeTier, CODEX_ADOPTION_SELECTOR, CLAUDE_ADOPTION_SELECTOR, } from "./domain/role.js";
 import { readDeliveryEvidence, readEnforcementInput, readFinalizeEvidence, isPolicyInput, readJsonInput, readMigrationManifest, readMigrationState, readModeAssessment, readPolicyFileInput, readPolicyJson, readSpecReview, } from "./adapters/json-input.js";
 import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPocDeliveryChangeScope, assertWorkflowStaging, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
-import { assertConvergedReviewSession, buildReviewRoundDraft, evidenceOnlySuffix, previewReviewRound, recordReviewRound, } from "./adapters/review-session.js";
+import { assertConvergedReviewSession, buildReviewRoundDraft, previewReviewRound, readStoredReviewSession, recordReviewRound, } from "./adapters/review-session.js";
+import { recordLayerSuffix } from "./adapters/review-record-layer.js";
 import { appendEvidenceReanchor, evaluateEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
 import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
 import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, completeStoredTerminalRedelivery, observeStoredMerge, observeStoredDeliveryState, prepareStoredMergeIntent, prepareStoredTerminalRedeliveryMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
@@ -387,9 +388,6 @@ export function assertCurrentReviewJournalBinding(staging, headSha) {
      * （Issue #1272）。bindingは`H_impl`のまま、PR対象は`H_final`でよい。それ以外の
      * HEAD移動は従来どおり拒否する。
      */
-    if (bindingEffectiveHead !== headSha &&
-        evidenceOnlySuffix(stagingRepositoryRoot(staging), bindingEffectiveHead, headSha) === undefined)
-        throw new Error("Step 10のreviewSession binding HEADがPR作成対象HEADと一致しません");
     const session = assertConvergedReviewSession({
         staging,
         expectedDigest: binding.roundDigest,
@@ -865,7 +863,7 @@ function currentIndependentApprovals(input) {
                 approval.actorId !== input.implementationAuthorActorId)))
         .sort((left, right) => left.reviewId.localeCompare(right.reviewId, "en", { numeric: true }));
 }
-function resolveImplementationCommitForMerge(root, finalHeadSha) {
+function resolveImplementationCommitForMerge(root, staging, finalHeadSha) {
     const localHead = git(["rev-parse", "--verify", "HEAD^{commit}"], root)
         .stdout.trim()
         .toLowerCase();
@@ -880,17 +878,24 @@ function resolveImplementationCommitForMerge(root, finalHeadSha) {
     const changedPaths = git([
         "diff",
         "--name-only",
+        "--no-renames",
         "-z",
         `${implementationCommitSha}..${finalHeadSha}`,
         "--",
     ], root)
         .stdout.split("\0")
         .filter(Boolean);
-    if (changedPaths.length !== 1 ||
-        !(changedPaths[0].startsWith("docs/reviews/") ||
-            changedPaths[0].startsWith(".agent-skill-chain/reviews/")))
-        throw new Error("H_impl..H_finalは許可されたreview artifact 1件だけでなければなりません");
-    const reviewArtifactPath = changedPaths[0];
+    const reviewArtifacts = changedPaths.filter((changedPath) => changedPath.startsWith("docs/reviews/") ||
+        changedPath.startsWith(".agent-skill-chain/reviews/"));
+    if (reviewArtifacts.length !== 1)
+        throw new Error("H_impl..H_finalには許可されたreview artifactが1件必要です");
+    if (changedPaths.length > 1) {
+        const session = readStoredReviewSession(staging);
+        if (!session ||
+            !recordLayerSuffix(staging, root, implementationCommitSha, finalHeadSha, session))
+            throw new Error("H_impl..H_finalの追加pathは検証済みrecord layerでなければなりません");
+    }
+    const reviewArtifactPath = reviewArtifacts[0];
     const artifactContent = git(["show", `${finalHeadSha}:${reviewArtifactPath}`], root).stdout;
     return {
         implementationCommitSha,
@@ -960,7 +965,7 @@ function reconcileFixedMergeCiRun(input, fixedCiRunId) {
 function observeMergeReviewEvidence(input) {
     if (typeof input.observed.headRefOid !== "string")
         throw new Error("PR HEAD SHAが不正です");
-    const candidate = resolveImplementationCommitForMerge(input.root, input.observed.headRefOid);
+    const candidate = resolveImplementationCommitForMerge(input.root, input.staging, input.observed.headRefOid);
     const implementation = github("commit.inspect", {
         repository: input.repository,
         sha: candidate.implementationCommitSha,
@@ -5247,6 +5252,7 @@ export async function main(argv, dependencies = {}) {
             "scope",
             "ac",
             "invariant",
+            "progress-target",
         ].includes(flag));
         if (unknown.length > 0)
             throw new Error(`review roundの未知optionです: --${unknown.join(", --")}`);
@@ -5295,12 +5301,15 @@ export async function main(argv, dependencies = {}) {
                 scopeIds: ids(flags.scope),
                 acceptanceCriteriaIds: ids(flags.ac),
                 invariantIds: ids(flags.invariant),
+                progressTargetPaths: ids(flags["progress-target"]),
             });
-            writeReviewRoundDraft(outParentReal, path.basename(out), `${JSON.stringify(draft.round, null, 2)}\n`);
+            writeReviewRoundDraft(outParentReal, path.basename(out), `${stableJson(draft.round)}\n`);
             print({
                 written: out,
                 round: draft.round.round,
                 candidateHeadSha: draft.round.candidateHeadSha,
+                bundleDigest: draft.bundleDigest,
+                bundleBytes: draft.bundleBytes,
                 notes: draft.notes,
             });
             return 0;

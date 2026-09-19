@@ -72,3 +72,13 @@ Feature: Review sessionを固定契約へ収束させる
     Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
     When reanchor後の実効HEADから既定branchの自動mergeだけを記録する
     Then 追随roundは保存後read-backでも受理される
+
+  Scenario: SCN-UNIT-RECORDLAYER-004 検証済みrecord layer roundを記録して予算へ数えない
+    Given findingなしでround 1が収束したreview sessionがある
+    When 検証済みrecord layerとしてround 2をdomainへ記録する
+    Then record layer roundは保存され予算へ数えない
+
+  Scenario: SCN-UNIT-RECORDLAYER-005 findingありroundを予算へ数える
+    Given findingなしでround 1が収束したreview sessionがある
+    When findingありの通常round 2をdomainへ記録する
+    Then findingありroundは予算へ数える

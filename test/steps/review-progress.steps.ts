@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
   buildReviewProgressInventory,
+  buildReviewProgressInventories,
   describeReviewProgressUnbuildable,
   tryBuildReviewProgressInventory,
   REVIEW_PROGRESS_UNBUILDABLE_REASONS,
@@ -13,13 +15,19 @@ import {
   parallelCriticalPath,
   parseReviewProgressRecords,
   projectReviewProgressTarget,
+  reviewProgressTargets,
   PROGRESS_END,
   PROGRESS_START,
   verifyReviewProgressTarget,
   type ReviewProgressInventory,
   type ReviewProgressRecord,
 } from "../../src/domain/review-progress.js";
-import { parseReviewRoundInput } from "../../src/domain/review-convergence.js";
+import {
+  advanceReviewSession,
+  parseReviewRoundInput,
+  reviewSessionId,
+  type ReviewSessionState,
+} from "../../src/domain/review-convergence.js";
 import { COMMAND_USAGE } from "../../src/cli-usage.js";
 import { stableJson } from "../../src/lib/security.js";
 import { checkParallelProgressSourceIsolation } from "../../scripts/check_conformance.js";
@@ -29,8 +37,10 @@ import {
 } from "../../src/adapters/review-progress.js";
 import {
   buildReviewRoundDraft,
+  evidenceOnlySuffix,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
+import { recordLayerSuffix } from "../../src/adapters/review-record-layer.js";
 import { main } from "../../src/cli.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
 import { promoteWorkflowStagingToFull } from "../../src/adapters/workflow-journal.js";
@@ -63,6 +73,8 @@ const isolatedSources = {
     'export const REVIEW_PROGRESS_JOURNAL_FILE = "journal/review-progress.jsonl";',
   "src/adapters/review-progress.ts":
     'import { REVIEW_PROGRESS_JOURNAL_FILE } from "../domain/staging.js";',
+  "src/adapters/review-record-layer.ts":
+    'const journal = "journal/review-progress.jsonl";',
   "src/adapters/review-session.ts":
     'import { buildReviewProgressInventory } from "../domain/review-progress.js";',
   "src/domain/delivery.ts": "export const delivery = true;",
@@ -117,6 +129,11 @@ Given("parallel progressの実adapter fixtureがある", function () {
   this.source = `# 実装計画\n${PROGRESS_START}\n| タスク | 状態 |\n|---|---|\n| T01 | 未着手 |\n${PROGRESS_END}\n`;
   this.target = path.join(this.staging, "03_実装計画.md");
   fs.writeFileSync(this.target, this.source, { mode: 0o644 });
+  fs.writeFileSync(
+    path.join(this.staging, "README.md"),
+    `# task\n${PROGRESS_START}\n| T02 | 未着手 |\n${PROGRESS_END}\n`,
+    { mode: 0o644 },
+  );
   fs.appendFileSync(
     path.join(this.staging, STEP_JOURNAL_FILE),
     `${JSON.stringify({
@@ -136,6 +153,7 @@ Given("parallel progressの実adapter fixtureがある", function () {
     baseSha: base,
     scopeIds: ["ISSUE-1336"],
     acceptanceCriteriaIds: ["AC-1336-01"],
+    progressTargetPaths: ["03_実装計画.md", "README.md"],
   });
   recordReviewRound({ staging: this.staging, round });
   this.passed = false;
@@ -160,6 +178,18 @@ When("review入力を変えずcompleted進捗を実際にappendする", function
     apply: true,
   });
   assert.equal(applied.applied, true);
+  assert.throws(
+    () =>
+      appendReviewProgress({
+        staging: this.staging,
+        taskId: "T99",
+        state: "completed",
+        recordedAt: instant,
+        expectedDigest: applied.journalDigest,
+        apply: false,
+      }),
+    /03_実装計画\.md、README\.md/u,
+  );
   assert.equal(fs.readFileSync(this.target, "utf8"), this.source);
   assert.equal(
     fs.statSync(path.join(this.staging, REVIEW_PROGRESS_JOURNAL_FILE)).mode &
@@ -219,6 +249,276 @@ When(
           records: [entry()],
         });
         assert.match(projected, /\| T01 \| completed \|/u);
+        break;
+      }
+      case "multiple-targets": {
+        const readme = this.source.replace("# plan", "# task README");
+        const inventory = buildReviewProgressInventories([
+          {
+            targetPath: "03_実装計画.md",
+            source: this.source,
+            fileMode: 0o644,
+          },
+          {
+            targetPath: "tasks/README.md",
+            source: readme,
+            fileMode: 0o644,
+          },
+        ]);
+        const targets = reviewProgressTargets(inventory);
+        assert.deepEqual(
+          targets.map(({ targetPath }) => targetPath),
+          ["03_実装計画.md", "tasks/README.md"],
+        );
+        for (const target of targets) {
+          const projected = projectReviewProgressTarget({
+            inventory: target,
+            source:
+              target.targetPath === "03_実装計画.md" ? this.source : readme,
+            records: [entry()],
+          });
+          assert.match(projected, /\| T01 \| completed \|/u);
+        }
+        const parsed = parseReviewRoundInput({
+          round: 1,
+          previousRoundDigest: null,
+          anchor: {
+            scopeIds: ["ISSUE-1418"],
+            acceptanceCriteriaIds: ["AC-1418-01"],
+            invariantIds: [],
+            diffBaseSha: head,
+            initialHeadSha: head,
+            initialDiffDigest: "c".repeat(64),
+            progressInventory: inventory,
+          },
+          candidateHeadSha: head,
+          focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
+          findings: [],
+        });
+        assert.equal(
+          reviewProgressTargets(parsed.anchor.progressInventory!).length,
+          2,
+        );
+        break;
+      }
+      case "record-layer": {
+        const root = this.initRepo();
+        const staging = path.join(root, "tasks/1418");
+        const targetPath = "README.md";
+        const repositoryTarget = "tasks/1418/README.md";
+        fs.mkdirSync(staging, { recursive: true });
+        fs.writeFileSync(path.join(staging, targetPath), this.source);
+        execFileSync("git", ["add", repositoryTarget], { cwd: root });
+        execFileSync("git", ["commit", "-q", "-m", "docs: baseline task"], {
+          cwd: root,
+        });
+        const implementationHeadSha = gitHead(root);
+        const progressInventory = buildReviewProgressInventory(
+          targetPath,
+          this.source,
+          0o644,
+        );
+        const anchor = {
+          scopeIds: ["ISSUE-1418"],
+          acceptanceCriteriaIds: ["AC-1418-02"],
+          invariantIds: ["INV-01"],
+          diffBaseSha: implementationHeadSha,
+          initialHeadSha: implementationHeadSha,
+          initialDiffDigest: "c".repeat(64),
+          progressInventory,
+        };
+        const boundSessionId = reviewSessionId(anchor);
+        const progressEntry = makeReviewProgressEntry({
+          previous: [],
+          sessionId: boundSessionId,
+          implementationHeadSha,
+          taskId: "T01",
+          state: "completed",
+          recordedAt: instant,
+        });
+        const progressSeal = makeReviewProgressSeal({
+          previous: [progressEntry],
+          sessionId: boundSessionId,
+          implementationHeadSha,
+          sealedAt: instant,
+        });
+        fs.mkdirSync(path.join(staging, "journal"), { recursive: true });
+        fs.writeFileSync(
+          path.join(staging, "journal/review-progress.jsonl"),
+          `${stableJson(progressEntry)}\n${stableJson(progressSeal)}\n`,
+        );
+        const projected = projectReviewProgressTarget({
+          inventory: progressInventory,
+          source: this.source,
+          records: [progressEntry, progressSeal],
+        });
+        fs.writeFileSync(path.join(staging, targetPath), projected);
+        fs.mkdirSync(path.join(root, "docs/reviews"), { recursive: true });
+        fs.writeFileSync(path.join(root, "docs/reviews/1418.md"), "# review\n");
+        execFileSync("git", ["add", repositoryTarget, "docs/reviews/1418.md"], {
+          cwd: root,
+        });
+        execFileSync("git", ["commit", "-q", "-m", "docs: record layer"], {
+          cwd: root,
+        });
+        const finalHead = gitHead(root);
+        const session = {
+          schemaVersion: "agent-skill-chain/review-session/v1",
+          sessionId: boundSessionId,
+          anchor,
+          rounds: [],
+          latestRoundDigest: "d".repeat(64),
+          latestCandidateHeadSha: implementationHeadSha,
+          status: "converged",
+        } as unknown as ReviewSessionState;
+        assert.deepEqual(
+          recordLayerSuffix(
+            staging,
+            root,
+            implementationHeadSha,
+            finalHead,
+            session,
+          ),
+          ["docs/reviews/1418.md", repositoryTarget],
+        );
+        const foreignEntry = makeReviewProgressEntry({
+          previous: [],
+          sessionId: "f".repeat(64),
+          implementationHeadSha,
+          taskId: "T01",
+          state: "completed",
+          recordedAt: instant,
+        });
+        const mixedSeal = makeReviewProgressSeal({
+          previous: [foreignEntry],
+          sessionId: boundSessionId,
+          implementationHeadSha,
+          sealedAt: instant,
+        });
+        fs.writeFileSync(
+          path.join(staging, "journal/review-progress.jsonl"),
+          `${stableJson(foreignEntry)}\n${stableJson(mixedSeal)}\n`,
+        );
+        assert.equal(
+          recordLayerSuffix(
+            staging,
+            root,
+            implementationHeadSha,
+            finalHead,
+            session,
+          ),
+          undefined,
+        );
+        fs.writeFileSync(
+          path.join(staging, "journal/review-progress.jsonl"),
+          `${stableJson(progressEntry)}\n${stableJson(progressSeal)}\n`,
+        );
+        const roundOne = advanceReviewSession(
+          null,
+          parseReviewRoundInput({
+            round: 1,
+            previousRoundDigest: null,
+            anchor,
+            candidateHeadSha: implementationHeadSha,
+            focus: {
+              previousBlocking: [],
+              fixedDiff: [],
+              adjacentScope: [],
+            },
+            findings: [],
+          }),
+        );
+        const recordLayerSession = advanceReviewSession(
+          roundOne,
+          parseReviewRoundInput({
+            round: 2,
+            previousRoundDigest: roundOne.latestRoundDigest,
+            anchor,
+            candidateHeadSha: finalHead,
+            focus: {
+              previousBlocking: [],
+              fixedDiff: ["docs/reviews/1418.md", repositoryTarget],
+              adjacentScope: [],
+            },
+            findings: [],
+            recordLayerOnly: true,
+          }),
+        );
+        assert.equal(
+          recordLayerSession.latestCandidateHeadSha,
+          implementationHeadSha,
+        );
+        fs.appendFileSync(path.join(staging, targetPath), "manual edit\n");
+        execFileSync("git", ["add", repositoryTarget], { cwd: root });
+        execFileSync("git", ["commit", "-q", "--amend", "--no-edit"], {
+          cwd: root,
+        });
+        const unsafeHead = gitHead(root);
+        execFileSync("git", ["replace", unsafeHead, finalHead], { cwd: root });
+        assert.equal(
+          recordLayerSuffix(
+            staging,
+            root,
+            implementationHeadSha,
+            unsafeHead,
+            session,
+          ),
+          undefined,
+        );
+        execFileSync("git", ["replace", "-d", unsafeHead], { cwd: root });
+        fs.writeFileSync(path.join(staging, targetPath), projected);
+        fs.writeFileSync(path.join(root, "unexpected.txt"), "unexpected\n");
+        execFileSync("git", ["add", repositoryTarget, "unexpected.txt"], {
+          cwd: root,
+        });
+        execFileSync("git", ["commit", "-q", "--amend", "--no-edit"], {
+          cwd: root,
+        });
+        assert.equal(
+          recordLayerSuffix(
+            staging,
+            root,
+            implementationHeadSha,
+            gitHead(root),
+            session,
+          ),
+          undefined,
+        );
+        fs.writeFileSync(path.join(staging, targetPath), projected);
+        execFileSync("git", ["rm", "-q", "unexpected.txt"], { cwd: root });
+        execFileSync("git", ["mv", repositoryTarget, "tasks/1418/RENAMED.md"], {
+          cwd: root,
+        });
+        execFileSync("git", ["commit", "-q", "--amend", "--no-edit"], {
+          cwd: root,
+        });
+        assert.equal(
+          recordLayerSuffix(
+            staging,
+            root,
+            implementationHeadSha,
+            gitHead(root),
+            session,
+          ),
+          undefined,
+        );
+        break;
+      }
+      case "legacy-record-layer": {
+        assert.equal(this.inventory.schemaVersion, undefined);
+        assert.equal(this.inventory.targets, undefined);
+        const root = this.initRepo();
+        const implementationHeadSha = gitHead(root);
+        fs.mkdirSync(path.join(root, "docs/reviews"), { recursive: true });
+        fs.writeFileSync(path.join(root, "docs/reviews/1418.md"), "# review\n");
+        execFileSync("git", ["add", "docs/reviews/1418.md"], { cwd: root });
+        execFileSync("git", ["commit", "-q", "-m", "docs: review"], {
+          cwd: root,
+        });
+        assert.equal(
+          evidenceOnlySuffix(root, implementationHeadSha, gitHead(root)),
+          "docs/reviews/1418.md",
+        );
         break;
       }
       case "prefix":
@@ -710,6 +1010,48 @@ function initDraft(world: NonblockingWorld, baseSha: string) {
   });
 }
 
+/**
+ * SCN-INT-PROGRESS-040。**複数targetでも非停止化を保つ**（REQ-WF-021）。
+ *
+ * 03は正しく、`tasks/README.md`だけmodeを外す。all-or-nothingなので
+ * inventoryは付かず、案内は不成立になった側のstaging相対nameを示す。
+ */
+nb.Given(
+  "2件のprogress targetのうち1件がmode不一致のstagingがある",
+  function () {
+    const { baseSha } = nonblockingStaging(this, { mode: 0o644 });
+    const second = path.join(this.staging, "tasks", "README.md");
+    fs.mkdirSync(path.dirname(second), { recursive: true });
+    fs.writeFileSync(second, this.source.replace("# 実装計画", "# task"));
+    fs.chmodSync(second, 0o664);
+    this.draft = buildReviewRoundDraft({
+      staging: this.staging,
+      headSha: this.fixtureHead,
+      baseSha,
+      scopeIds: ["SCOPE-1408"],
+      acceptanceCriteriaIds: ["AC-1408-01"],
+      progressTargetPaths: ["03_実装計画.md", "tasks/README.md"],
+    });
+  },
+);
+
+nb.Then("inventoryを付けずroundを開き不成立targetを名指しする", function () {
+  /** **roundは開く。** 例外で止まるとREQ-WF-021の明文違反へ戻る。 */
+  assert.equal(this.draft.round.anchor.progressInventory, undefined);
+  const note = this.draft.notes.find((entry) =>
+    entry.includes("ASC-REVIEW-PROGRESS-INVENTORY-UNBUILDABLE"),
+  );
+  assert.ok(note, "複数targetの不成立に案内がありません");
+  /**
+   * **不成立になった側を名指しする。** 先頭targetの名で案内すると、
+   * 利用者は正しい03をchmodし直して直らない原因を探すことになる。
+   */
+  assert.ok(note.includes("tasks/README.md"), note);
+  assert.ok(!note.includes("03_実装計画.mdのparallel"), note);
+  assert.ok(note.includes("mode-mismatch"), note);
+  assert.ok(note.includes("実測=100664"), note);
+});
+
 nb.Given("mode 0664の03を持つreview前stagingがある", function () {
   const { baseSha } = nonblockingStaging(this, { mode: 0o664 });
   this.draft = initDraft(this, baseSha);
@@ -1015,11 +1357,18 @@ nb.When("手動chmodなしでreview round --initを実行する", async function
     process.stdout.write = write;
   }
   this.cliOutput = output;
+  /**
+   * **bundleの実byte列から digest と byte数を取る。** 固定値を書くと、
+   * `review round --init`が書き出したbundleと一致しない値でも通ってしまう。
+   */
+  const canonical = fs.readFileSync(out, "utf8");
   this.draft = {
-    round: JSON.parse(fs.readFileSync(out, "utf8")) as ReturnType<
+    round: JSON.parse(canonical) as ReturnType<
       typeof buildReviewRoundDraft
     >["round"],
     notes: [],
+    bundleDigest: crypto.createHash("sha256").update(canonical).digest("hex"),
+    bundleBytes: Buffer.byteLength(canonical, "utf8"),
   } as ReturnType<typeof buildReviewRoundDraft>;
 });
 

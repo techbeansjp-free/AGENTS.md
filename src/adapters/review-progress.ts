@@ -7,6 +7,7 @@ import {
   makeReviewProgressSeal,
   parseReviewProgressRecords,
   projectReviewProgressTarget,
+  reviewProgressTargets,
   type ReviewProgressRecord,
   type ReviewProgressState,
 } from "../domain/review-progress.js";
@@ -47,27 +48,31 @@ function context(stagingInput: string) {
       throw new Error(
         "progress journalのreview sessionまたはH_impl bindingが不正です",
       );
-  const target = path.join(
-    staging,
-    session.anchor.progressInventory.targetPath,
+  const targets = reviewProgressTargets(session.anchor.progressInventory).map(
+    (inventory) => {
+      const target = path.join(staging, inventory.targetPath);
+      const targetStat = fs.lstatSync(target);
+      if (
+        targetStat.isSymbolicLink() ||
+        !targetStat.isFile() ||
+        targetStat.nlink !== 1 ||
+        (targetStat.mode & 0o777) !== inventory.fileMode ||
+        fs.realpathSync(target) !== target
+      )
+        throw new Error(
+          `parallel progress targetのidentityまたはmodeが不正です: ${inventory.targetPath}`,
+        );
+      const targetDigest = crypto
+        .createHash("sha256")
+        .update(fs.readFileSync(target))
+        .digest("hex");
+      if (targetDigest !== inventory.baselineDigest)
+        throw new Error(
+          `parallel progress targetがreview開始時点から変化しました: ${inventory.targetPath}`,
+        );
+      return { inventory, target };
+    },
   );
-  const targetStat = fs.lstatSync(target);
-  if (
-    targetStat.isSymbolicLink() ||
-    !targetStat.isFile() ||
-    targetStat.nlink !== 1 ||
-    (targetStat.mode & 0o777) !== session.anchor.progressInventory.fileMode ||
-    fs.realpathSync(target) !== target
-  )
-    throw new Error("parallel progress targetのidentityまたはmodeが不正です");
-  const targetDigest = crypto
-    .createHash("sha256")
-    .update(fs.readFileSync(target))
-    .digest("hex");
-  if (targetDigest !== session.anchor.progressInventory.baselineDigest)
-    throw new Error(
-      "parallel progress targetがreview開始時点から変化しました。従来の直列経路を使用してください",
-    );
   return {
     staging,
     session,
@@ -75,7 +80,7 @@ function context(stagingInput: string) {
     journal,
     records,
     inventory: session.anchor.progressInventory,
-    target,
+    targets,
   };
 }
 
@@ -134,9 +139,17 @@ export function appendReviewProgress(input: {
       entry: duplicate,
       journalDigest: latestReviewProgressDigest(observed.records),
     };
-  if (!observed.inventory.allowedTaskIds.includes(input.taskId))
+  if (
+    !reviewProgressTargets(observed.inventory).some(({ allowedTaskIds }) =>
+      allowedTaskIds.includes(input.taskId),
+    )
+  )
     throw new Error(
-      "progress taskIdは03_実装計画.mdに宣言済みでなければなりません",
+      `progress taskIdは宣言済みprogress targetに存在しなければなりません: ${reviewProgressTargets(
+        observed.inventory,
+      )
+        .map(({ targetPath }) => targetPath)
+        .join("、")}`,
     );
   const entry = makeReviewProgressEntry({
     previous: observed.records,
@@ -192,30 +205,47 @@ export function projectReviewProgress(input: {
       "parallel progress projectionはread-onlyです。review入力treeへ書き込めません",
     );
   const observed = context(input.staging);
-  const source = fs.readFileSync(observed.target, "utf8");
-  const targetDigest = crypto.createHash("sha256").update(source).digest("hex");
-  const projected = projectReviewProgressTarget({
-    inventory: observed.inventory,
-    source,
-    records: observed.records,
+  const targets = observed.targets.map(({ inventory, target }) => {
+    const source = fs.readFileSync(target, "utf8");
+    return {
+      targetPath: inventory.targetPath,
+      targetDigest: crypto.createHash("sha256").update(source).digest("hex"),
+      projected: projectReviewProgressTarget({
+        inventory,
+        source,
+        records: observed.records,
+      }),
+    };
   });
-  return { applied: false, projected, targetDigest };
+  return {
+    applied: false,
+    targets,
+    targetDigest: targets[0]!.targetDigest,
+    projected: targets[0]!.projected,
+  };
 }
 
 export function verifyStoredReviewProgress(staging: string) {
   const observed = context(staging);
-  const source = fs.readFileSync(observed.target, "utf8");
-  const projected = projectReviewProgressTarget({
-    inventory: observed.inventory,
-    source,
-    records: observed.records,
+  const targets = observed.targets.map(({ inventory, target }) => {
+    const source = fs.readFileSync(target, "utf8");
+    return {
+      targetPath: inventory.targetPath,
+      targetDigest: crypto.createHash("sha256").update(source).digest("hex"),
+      projected: projectReviewProgressTarget({
+        inventory,
+        source,
+        records: observed.records,
+      }),
+    };
   });
   return {
     verified: true,
     sessionId: observed.session.sessionId,
     implementationHeadSha: observed.head,
     journalDigest: latestReviewProgressDigest(observed.records),
-    targetDigest: crypto.createHash("sha256").update(source).digest("hex"),
-    projected,
+    targets,
+    targetDigest: targets[0]!.targetDigest,
+    projected: targets[0]!.projected,
   };
 }

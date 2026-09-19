@@ -1,6 +1,16 @@
 @unit
 Feature: review round雛形と契約の露出
 
+  Scenario: SCN-UNIT-REVIEWBUNDLE-001 round draftを有限な正準bundleとして固定する
+    Given 初回candidateを持つstagingがある
+    When round 1の雛形を直接構築する
+    Then bundleはSHA-256 digestを持ち256 KiB以下である
+
+  Scenario: SCN-UNIT-REVIEWBUNDLE-002 上限を超えるround bundleを拒否する
+    Given 初回candidateを持つstagingがある
+    When 256 KiBを超えるround bundleを構築する
+    Then bundle上限超過として拒否される
+
   Scenario: SCN-UNIT-REVINIT-001 round 1の雛形をreview roundが受理する
     Given 初回candidateを持つstagingがある
     When review round --initでround 1の雛形を書く

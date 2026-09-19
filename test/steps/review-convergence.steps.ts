@@ -24,6 +24,7 @@ import {
   type ReviewSessionState,
 } from "../../src/domain/review-convergence.js";
 import {
+  buildReviewRoundDraft,
   observeReviewDiff,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
@@ -104,6 +105,7 @@ function roundInput(input: {
   anchor?: ReviewSessionAnchor;
   findings: Array<Record<string, unknown>>;
   followOnly?: true;
+  recordLayerOnly?: true;
 }): ReviewRoundInput {
   const previousBlocking =
     input.round === 1
@@ -121,8 +123,65 @@ function roundInput(input: {
     },
     findings: input.findings,
     ...(input.followOnly ? { followOnly: true } : {}),
+    ...(input.recordLayerOnly ? { recordLayerOnly: true } : {}),
   });
 }
+
+When("検証済みrecord layerとしてround 2をdomainへ記録する", function () {
+  const candidate = commitFile(
+    this.root,
+    "export const reviewed = 2;\n",
+    "docs: verified record layer fixture",
+  );
+  this.session = advanceReviewSession(
+    this.session,
+    roundInput({
+      world: this,
+      round: 2,
+      candidateHeadSha: candidate,
+      previousRoundDigest: this.session.latestRoundDigest,
+      fixedDiff: [reviewedPath],
+      findings: [],
+      recordLayerOnly: true,
+    }),
+  );
+});
+
+Then("record layer roundは保存され予算へ数えない", function () {
+  assert.equal(this.session.rounds.length, 2);
+  assert.equal(this.session.rounds.at(-1)?.recordLayerOnly, true);
+  assert.equal(countedRounds(this.session), 1);
+  assert.equal(
+    this.session.latestCandidateHeadSha,
+    this.session.anchor.initialHeadSha,
+  );
+  assert.equal(this.session.status, "converged");
+});
+
+When("findingありの通常round 2をdomainへ記録する", function () {
+  const candidate = commitFile(
+    this.root,
+    "export const reviewed = 3;\n",
+    "fix: reviewed implementation",
+  );
+  const draft = buildReviewRoundDraft({
+    staging: this.staging,
+    headSha: candidate,
+  });
+  assert.equal(draft.round.recordLayerOnly, undefined);
+  this.session = recordReviewRound({
+    staging: this.staging,
+    round: parseReviewRoundInput({
+      ...draft.round,
+      findings: [finding({ id: "H-RECORD" })],
+    }),
+  });
+});
+
+Then("findingありroundは予算へ数える", function () {
+  assert.equal(countedRounds(this.session), 2);
+  assert.deepEqual(this.session.rounds.at(-1)?.blocking, ["H-RECORD"]);
+});
 
 function createFixture(
   world: ReviewConvergenceWorld,

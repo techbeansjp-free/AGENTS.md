@@ -6,6 +6,7 @@ import { parseReviewSessionState, } from "../domain/review-convergence.js";
 import { git } from "../lib/process.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
+import { recordLayerSuffix } from "./review-record-layer.js";
 export const REVIEW_SESSION_FILE = "review-session.json";
 const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
 const GIT_ENV = {
@@ -80,16 +81,22 @@ export function readStoredReviewSession(stagingInput) {
     const session = parseReviewSessionState(parseJsonStrict(fs.readFileSync(file, "utf8"), "review session"));
     const root = stagingRepositoryRoot(staging);
     const reanchorRecords = readReanchorChain(staging);
-    for (const [index, record] of session.rounds.entries()) {
-        if (!record.followOnly)
-            continue;
-        const previous = session.rounds[index - 1];
-        if (previous === undefined ||
-            !isDefaultBranchFollowMerge(root, deriveEffectiveHead({
-                records: reanchorRecords,
-                anchoredHeadSha: previous.candidateHeadSha,
-            }).effectiveHeadSha, record.candidateHeadSha))
+    let effectiveHead;
+    for (const record of session.rounds) {
+        const previousHead = effectiveHead;
+        if ((record.followOnly && previousHead === undefined) ||
+            (record.followOnly &&
+                !isDefaultBranchFollowMerge(root, previousHead, record.candidateHeadSha)))
             throw new Error(`保存済みreview sessionのfollow-only round ${record.round}を実Gitで再検証できません`);
+        if (record.recordLayerOnly &&
+            (previousHead === undefined ||
+                recordLayerSuffix(staging, root, previousHead, record.candidateHeadSha, session) === undefined))
+            throw new Error(`保存済みreview sessionのrecord-layer-only round ${record.round}を実Gitで再検証できません`);
+        if (!record.recordLayerOnly)
+            effectiveHead = deriveEffectiveHead({
+                records: reanchorRecords,
+                anchoredHeadSha: record.candidateHeadSha,
+            }).effectiveHeadSha;
     }
     return session;
 }

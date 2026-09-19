@@ -1,6 +1,21 @@
 @unit
 Feature: 判定入力から分離したparallel progress evidenceの純粋契約
 
+  Scenario: SCN-UNIT-RECORDLAYER-001 実装計画とtask READMEを同じjournalから投影する
+    Given parallel progressの純粋fixtureがある
+    When "multiple-targets" のparallel progress反例を評価する
+    Then parallel progress契約を満たす
+
+  Scenario: SCN-UNIT-RECORDLAYER-002 artifactとsealed projectionだけをrecord layerとして観測し改変を拒否する
+    Given parallel progressの純粋fixtureがある
+    When "record-layer" のparallel progress反例を評価する
+    Then parallel progress契約を満たす
+
+  Scenario: SCN-UNIT-RECORDLAYER-003 手編集と余分pathをrecord layerとして拒否する
+    Given parallel progressの純粋fixtureがある
+    When "record-layer" のparallel progress反例を評価する
+    Then parallel progress契約を満たす
+
   Scenario: SCN-UNIT-PROGRESS-004 journalを決定論的に投影する
     Given parallel progressの純粋fixtureがある
     When "projection" のparallel progress反例を評価する

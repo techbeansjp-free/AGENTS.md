@@ -11,13 +11,18 @@ const STATES = ["planned", "started", "completed", "blocked"] as const;
 
 export type ReviewProgressState = (typeof STATES)[number];
 
-export interface ReviewProgressInventory {
-  targetPath: "03_実装計画.md";
+export interface ReviewProgressTargetInventory {
+  targetPath: string;
   baselineDigest: string;
   prefixDigest: string;
   suffixDigest: string;
   fileMode: 420;
   allowedTaskIds: readonly string[];
+}
+
+export interface ReviewProgressInventory extends ReviewProgressTargetInventory {
+  schemaVersion?: "agent-skill-chain/review-progress-inventory/v2";
+  targets?: readonly ReviewProgressTargetInventory[];
 }
 
 export interface ReviewProgressEntry {
@@ -120,6 +125,11 @@ export type ReviewProgressInventoryOutcome =
   | { readonly state: "built"; readonly inventory: ReviewProgressInventory }
   | {
       readonly state: "unbuildable";
+      /**
+       * **不成立になった対象を値で持つ。** targetは1件とは限らないため、
+       * 呼び出し側が「どのtargetの話か」を別経路で補うと取り違える。
+       */
+      readonly targetPath: string;
       readonly reason: ReviewProgressUnbuildableReason;
       readonly observedMode: number;
       readonly isSymbolicLink: boolean;
@@ -139,13 +149,19 @@ export function tryBuildReviewProgressInventory(
   source: string,
   target: ReviewProgressTargetObservation,
 ): ReviewProgressInventoryOutcome {
-  if (targetPath !== "03_実装計画.md")
-    throw new Error("parallel progress targetは03_実装計画.mdだけを許可します");
+  /**
+   * **宣言の誤りは例外、file状態の問題は分類。** targetPathは呼び出し側が
+   * 宣言する値であり、安全でないpathはfile状態の不成立ではなく契約違反である。
+   * ここで分類へ落とすと、不正なpath宣言が「案内つきでroundが開く」形になり
+   * 利用者が是正すべき対象を取り違える。
+   */
+  assertProgressTargetPath(targetPath);
   const unbuildable = (
     reason: ReviewProgressUnbuildableReason,
   ): ReviewProgressInventoryOutcome =>
     Object.freeze({
       state: "unbuildable" as const,
+      targetPath,
       reason,
       observedMode: target.fileMode,
       isSymbolicLink: target.isSymbolicLink,
@@ -315,6 +331,115 @@ export function describeReviewProgressUnbuildable(input: {
   });
 }
 
+function assertProgressTargetPath(targetPath: string): void {
+  if (
+    targetPath.length === 0 ||
+    targetPath.length > 512 ||
+    pathLikeSegments(targetPath).some(
+      (segment) => segment === "." || segment === ".." || segment === "",
+    ) ||
+    targetPath.startsWith("/") ||
+    targetPath.includes("\\") ||
+    /[\u0000-\u001f\u007f]/u.test(targetPath) ||
+    targetPath.normalize("NFC") !== targetPath
+  )
+    throw new Error(
+      "parallel progress targetは安全なrepository相対pathが必要です",
+    );
+}
+
+function pathLikeSegments(targetPath: string): readonly string[] {
+  return targetPath.split("/");
+}
+
+export function buildReviewProgressInventories(
+  targets: readonly {
+    targetPath: string;
+    source: string;
+    fileMode: number;
+  }[],
+): ReviewProgressInventory {
+  if (targets.length === 0 || targets.length > 16)
+    throw new Error("parallel progress targetは1件以上16件以下が必要です");
+  const built = targets.map((target) =>
+    buildReviewProgressInventory(
+      target.targetPath,
+      target.source,
+      target.fileMode,
+    ),
+  );
+  const paths = built.map(({ targetPath }) => targetPath);
+  if (
+    new Set(paths).size !== paths.length ||
+    stableJson(paths) !== stableJson([...paths].sort())
+  )
+    throw new Error("parallel progress targetは重複なし辞書順が必要です");
+  const [primary] = built;
+  if (built.length === 1) return primary!;
+  return Object.freeze({
+    ...primary!,
+    schemaVersion: "agent-skill-chain/review-progress-inventory/v2",
+    targets: Object.freeze(built),
+  });
+}
+
+/**
+ * 複数targetのinventoryを**例外ではなく判別可能な値**で構築する。
+ *
+ * **all-or-nothingにする。** inventoryはprefix/suffix digestとtask IDの集合を
+ * 一体で固定する契約であり、成立したtargetだけを取り込むと「宣言したのに
+ * 検証されないtarget」が残る。宣言済みtargetのいずれかが不成立なら
+ * inventory全体を付けず、その対象の案内を返してroundは開く（REQ-WF-021）。
+ *
+ * **件数・重複・順序の違反は例外のまま。** これらは呼び出し側の宣言の誤りで
+ * あり、file状態の不成立ではない。`assertProgressTargetPath`と同じ扱いにする。
+ */
+export function tryBuildReviewProgressInventories(
+  targets: readonly {
+    targetPath: string;
+    source: string;
+    target: ReviewProgressTargetObservation;
+  }[],
+): ReviewProgressInventoryOutcome {
+  if (targets.length === 0 || targets.length > 16)
+    throw new Error("parallel progress targetは1件以上16件以下が必要です");
+  const paths = targets.map(({ targetPath }) => targetPath);
+  if (
+    new Set(paths).size !== paths.length ||
+    stableJson(paths) !== stableJson([...paths].sort())
+  )
+    throw new Error("parallel progress targetは重複なし辞書順が必要です");
+  const built: ReviewProgressTargetInventory[] = [];
+  for (const item of targets) {
+    const outcome = tryBuildReviewProgressInventory(
+      item.targetPath,
+      item.source,
+      item.target,
+    );
+    if (outcome.state !== "built") return outcome;
+    built.push(outcome.inventory);
+  }
+  const [primary] = built;
+  return Object.freeze({
+    state: "built" as const,
+    inventory:
+      built.length === 1
+        ? primary!
+        : Object.freeze({
+            ...primary!,
+            schemaVersion:
+              "agent-skill-chain/review-progress-inventory/v2" as const,
+            targets: Object.freeze(built),
+          }),
+  });
+}
+
+export function reviewProgressTargets(
+  inventory: ReviewProgressInventory,
+): readonly ReviewProgressTargetInventory[] {
+  return inventory.targets ?? [inventory];
+}
+
 export function parseReviewProgressInventory(
   value: unknown,
 ): ReviewProgressInventory {
@@ -326,13 +451,18 @@ export function parseReviewProgressInventory(
     "suffixDigest",
     "fileMode",
     "allowedTaskIds",
+    "schemaVersion",
+    "targets",
   ];
+  const required = fields.filter(
+    (field) => field !== "schemaVersion" && field !== "targets",
+  );
   const unknown = Object.keys(value).filter((field) => !fields.includes(field));
-  const missing = fields.filter((field) => !(field in value));
+  const missing = required.filter((field) => !(field in value));
   if (unknown.length || missing.length)
     throw new Error("progress inventoryのfieldが不正です");
   if (
-    value.targetPath !== "03_実装計画.md" ||
+    typeof value.targetPath !== "string" ||
     !SHA256.test(String(value.baselineDigest ?? "")) ||
     !SHA256.test(String(value.prefixDigest ?? "")) ||
     !SHA256.test(String(value.suffixDigest ?? "")) ||
@@ -346,13 +476,39 @@ export function parseReviewProgressInventory(
       stableJson([...new Set(value.allowedTaskIds as string[])].sort())
   )
     throw new Error("progress inventoryの値が不正です");
-  return Object.freeze({
+  assertProgressTargetPath(value.targetPath);
+  const primary = Object.freeze({
     targetPath: value.targetPath,
     baselineDigest: String(value.baselineDigest),
     prefixDigest: String(value.prefixDigest),
     suffixDigest: String(value.suffixDigest),
     fileMode: 0o644,
     allowedTaskIds: Object.freeze([...(value.allowedTaskIds as string[])]),
+  });
+  if (value.targets === undefined && value.schemaVersion === undefined)
+    return primary;
+  if (
+    value.schemaVersion !== "agent-skill-chain/review-progress-inventory/v2" ||
+    !Array.isArray(value.targets)
+  )
+    throw new Error("progress inventory v2の値が不正です");
+  const targets = value.targets.map((target) =>
+    parseReviewProgressInventory(target),
+  );
+  if (
+    targets.length < 2 ||
+    targets.length > 16 ||
+    stableJson(targets[0]) !== stableJson(primary) ||
+    new Set(targets.map(({ targetPath }) => targetPath)).size !==
+      targets.length ||
+    stableJson(targets.map(({ targetPath }) => targetPath)) !==
+      stableJson(targets.map(({ targetPath }) => targetPath).sort())
+  )
+    throw new Error("progress inventory v2のtargetが不正です");
+  return Object.freeze({
+    ...primary,
+    schemaVersion: "agent-skill-chain/review-progress-inventory/v2",
+    targets: Object.freeze(targets),
   });
 }
 

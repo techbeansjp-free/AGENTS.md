@@ -266,10 +266,11 @@ import {
 import {
   assertConvergedReviewSession,
   buildReviewRoundDraft,
-  evidenceOnlySuffix,
   previewReviewRound,
+  readStoredReviewSession,
   recordReviewRound,
 } from "./adapters/review-session.js";
+import { recordLayerSuffix } from "./adapters/review-record-layer.js";
 import {
   appendEvidenceReanchor,
   evaluateEvidenceReanchor,
@@ -779,17 +780,6 @@ export function assertCurrentReviewJournalBinding(
    * （Issue #1272）。bindingは`H_impl`のまま、PR対象は`H_final`でよい。それ以外の
    * HEAD移動は従来どおり拒否する。
    */
-  if (
-    bindingEffectiveHead !== headSha &&
-    evidenceOnlySuffix(
-      stagingRepositoryRoot(staging),
-      bindingEffectiveHead,
-      headSha,
-    ) === undefined
-  )
-    throw new Error(
-      "Step 10のreviewSession binding HEADがPR作成対象HEADと一致しません",
-    );
   const session = assertConvergedReviewSession({
     staging,
     expectedDigest: binding.roundDigest,
@@ -1428,6 +1418,7 @@ function currentIndependentApprovals(input: {
 
 function resolveImplementationCommitForMerge(
   root: string,
+  staging: string,
   finalHeadSha: string,
 ): MergeCandidateEvidence {
   const localHead = git(["rev-parse", "--verify", "HEAD^{commit}"], root)
@@ -1449,6 +1440,7 @@ function resolveImplementationCommitForMerge(
     [
       "diff",
       "--name-only",
+      "--no-renames",
       "-z",
       `${implementationCommitSha}..${finalHeadSha}`,
       "--",
@@ -1457,17 +1449,32 @@ function resolveImplementationCommitForMerge(
   )
     .stdout.split("\0")
     .filter(Boolean);
-  if (
-    changedPaths.length !== 1 ||
-    !(
-      changedPaths[0]!.startsWith("docs/reviews/") ||
-      changedPaths[0]!.startsWith(".agent-skill-chain/reviews/")
-    )
-  )
+  const reviewArtifacts = changedPaths.filter(
+    (changedPath) =>
+      changedPath.startsWith("docs/reviews/") ||
+      changedPath.startsWith(".agent-skill-chain/reviews/"),
+  );
+  if (reviewArtifacts.length !== 1)
     throw new Error(
-      "H_impl..H_finalは許可されたreview artifact 1件だけでなければなりません",
+      "H_impl..H_finalには許可されたreview artifactが1件必要です",
     );
-  const reviewArtifactPath = changedPaths[0]!;
+  if (changedPaths.length > 1) {
+    const session = readStoredReviewSession(staging);
+    if (
+      !session ||
+      !recordLayerSuffix(
+        staging,
+        root,
+        implementationCommitSha,
+        finalHeadSha,
+        session,
+      )
+    )
+      throw new Error(
+        "H_impl..H_finalの追加pathは検証済みrecord layerでなければなりません",
+      );
+  }
+  const reviewArtifactPath = reviewArtifacts[0]!;
   const artifactContent = git(
     ["show", `${finalHeadSha}:${reviewArtifactPath}`],
     root,
@@ -1611,6 +1618,7 @@ function observeMergeReviewEvidence(input: {
     throw new Error("PR HEAD SHAが不正です");
   const candidate = resolveImplementationCommitForMerge(
     input.root,
+    input.staging,
     input.observed.headRefOid,
   );
   const implementation = github(
@@ -7207,6 +7215,7 @@ export async function main(
           "scope",
           "ac",
           "invariant",
+          "progress-target",
         ].includes(flag),
     );
     if (unknown.length > 0)
@@ -7268,16 +7277,19 @@ export async function main(
         scopeIds: ids(flags.scope),
         acceptanceCriteriaIds: ids(flags.ac),
         invariantIds: ids(flags.invariant),
+        progressTargetPaths: ids(flags["progress-target"]),
       });
       writeReviewRoundDraft(
         outParentReal,
         path.basename(out),
-        `${JSON.stringify(draft.round, null, 2)}\n`,
+        `${stableJson(draft.round)}\n`,
       );
       print({
         written: out,
         round: draft.round.round,
         candidateHeadSha: draft.round.candidateHeadSha,
+        bundleDigest: draft.bundleDigest,
+        bundleBytes: draft.bundleBytes,
         notes: draft.notes,
       });
       return 0;
