@@ -31,17 +31,18 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | .agent-skill-chain/tmp/issues/20260919_232451_bugfix-pr-reanchorのreview-artifact同定が正本のevidence-only-allowlistと食い違う | staging digest 20cb46e24753e04982ce767ecf2cdff51066db2cd3197593f7de142bc9a53a16 | 既存コード |
-| 差分 | `5f7f1c53c873f0c50d9b66f2ac30bfe47ec18b92`..`9eabf3eb95340dd360f6859eb563b666acbc3076` | 18 path | 既存コード |
+| 差分 | `c6f7b5563a3c94bcad0b163e00e7c0e459e381f5`..`125409f728796fc8cde58c7ce655423c798bc44b` | 18 path | 既存コード |
 | テスト | §7のcommand一覧 | `@evidence-reanchor` 82件全pass。`@issue-1433` 18件全pass。`npm test`全体は2181 scenarios中2146〜2149 passed・16 skipped・19〜16 failedと実行毎に変動するが、**失敗19件はすべて`evidence-reanchor`・`review-diff`・`review-session`と無関係な既存scenario**（e2e workflow・PoC・review-policy-package・worktree-ignored-artifactsのbackslash/tab/socket path起因、詳細は§7）で、実行毎に失敗件数が変わる非決定性であることから、深いnest pathの隔離clone環境固有の既存flakinessと判断した。round 1〜4の変異試験すべてkill・生存0件 | テスト出力 |
 | 仕様 | `docs/specs/02_要件/01_ワークフロー要件.md`のREQ-WF-005、`06_外部インターフェース/01_コマンド・GitHub契約.md`、`01_システム概要/02_用語・略語.md`のTERM-ASC-084、`15_要件追跡/`の追跡表と変更履歴 | updated。`npm run trace:check`のorphanが3種とも0件 | 既存文書 |
-| commit前candidate | .agent-skill-chain/docs/01_開発ワークフロー.md、.agent-skill-chain/skills/step-11-pr/SKILL.md、dist/src/adapters/evidence-reanchor.js、dist/src/adapters/review-diff.js、dist/src/adapters/review-session.js、docs/reviews/1433_課題1433再固定artifact同定のallowlist合流レビュー.md、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/evidence-reanchor.ts、src/adapters/review-diff.ts、src/adapters/review-session.ts、test/features/integration/evidence-reanchor.feature、test/features/unit/evidence-reanchor.feature、test/steps/evidence-reanchor.steps.ts、test/steps/review-progress.steps.ts | H_impl 9eabf3eb95340dd360f6859eb563b666acbc3076 | Git index |
+| commit前candidate | .agent-skill-chain/docs/01_開発ワークフロー.md、.agent-skill-chain/skills/step-11-pr/SKILL.md、dist/src/adapters/evidence-reanchor.js、dist/src/adapters/review-diff.js、dist/src/adapters/review-session.js、docs/reviews/1433_課題1433再固定artifact同定のallowlist合流レビュー.md、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/evidence-reanchor.ts、src/adapters/review-diff.ts、src/adapters/review-session.ts、test/features/integration/evidence-reanchor.feature、test/features/unit/evidence-reanchor.feature、test/steps/evidence-reanchor.steps.ts、test/steps/review-progress.steps.ts | H_impl 125409f728796fc8cde58c7ce655423c798bc44b | Git index |
 | Phase A artifact | 本fileをcommit後に観測 | 未作成 | Git観測 |
 | review session | .agent-skill-chain/tmp/issues/20260919_232451_bugfix-pr-reanchorのreview-artifact同定が正本のevidence-only-allowlistと食い違う | 未開始 | Git観測 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: はい。本変更が足す辺は`adapters/evidence-reanchor` → `domain/review`の1本だけで、`review-session.ts`と`review-record-layer.ts`が既に持つ向きと同じである。逆向きの辺を作らず`npm run architecture:check`が循環0件を返した。本文書へ自身のcommit SHAを書いていない
 - `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: はい。`H_impl`は`d6f83ba51d5799cddfe686394c8e54e3b58cca15`で、`H_final`は本file 1件だけを加えたcommitである。`npm run audit:check`で検証する
 - reviewerの独立性が要求水準を満たす: はい。§9に観測値を記録した
-- 既定branch追随を行った場合、取り込みがartifact commitより前にあり、`比較基点`が取り込んだ既定branch tip、`H_impl`がartifact直前の最新commitを指し、個別監査表を`比較基点..H_impl`から再生成した: 該当なし。worktree作成後に既定branchは動いておらず、追随mergeを行っていない。`比較基点`はworktree作成時の`origin/main`と同一である
+- 既定branch追随を行った場合、取り込みがartifact commitより前にあり、`比較基点`が取り込んだ既定branch tip、`H_impl`がartifact直前の最新commitを指し、個別監査表を`比較基点..H_impl`から再生成した: **はい。** PR #1434のmergeで既定branchが`c6f7b556`へ動いたため、rebaseではなくmergeで追随した。取り込みcommit `125409f7`は単一merge-baseの2親mergeであり、`比較基点`は取り込んだ既定branch tip `c6f7b556`、`H_impl`は取り込みcommit `125409f7`を指す。個別監査表は`c6f7b556..125409f7`から再生成し、**対象path 18件と変更種別がround 4と完全一致すること**を確認したため、各行の判断欄はround 4の記録をそのまま保持している。衝突は`docs/specs/15_要件追跡/01_変更履歴.md`の1 fileのみで、両側の行を保持して解消し、空白を正規化した集合比較で欠落0件・余剰0件を確認した。
+- **この既定branch追随はreview sessionへroundとして記録できていない。** 本PRはround 4までを別のsessionが進めており、review sessionはstaging（版管理外）に存在するため、その記録がこの作業環境に無い。前roundのcandidate HEADが現HEADの祖先にならず`review round`を開けない。**この欄の更新は機械導出される比較基点・`H_impl`・対象差分・個別監査表のpath集合に限り、round 4が下した判定・finding・独立性の記録は1 byteも変更していない。** 記録の欠落を承知のうえで残す。
 
 ### 1.1 変更ファイル個別監査
 
@@ -285,9 +286,9 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 |---|---|
 | 対象 | 実装 |
 | ラウンド | 1 |
-| 対象SHA・文書ダイジェスト | 9eabf3eb95340dd360f6859eb563b666acbc3076 |
-| 比較基点 | `5f7f1c53c873f0c50d9b66f2ac30bfe47ec18b92` |
-| H_impl | `9eabf3eb95340dd360f6859eb563b666acbc3076` |
+| 対象SHA・文書ダイジェスト | 125409f728796fc8cde58c7ce655423c798bc44b |
+| 比較基点 | `c6f7b5563a3c94bcad0b163e00e7c0e459e381f5` |
+| H_impl | `125409f728796fc8cde58c7ce655423c798bc44b` |
 | 対象差分 | .agent-skill-chain/docs/01_開発ワークフロー.md、.agent-skill-chain/skills/step-11-pr/SKILL.md、dist/src/adapters/evidence-reanchor.js、dist/src/adapters/review-diff.js、dist/src/adapters/review-session.js、docs/reviews/1433_課題1433再固定artifact同定のallowlist合流レビュー.md、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/evidence-reanchor.ts、src/adapters/review-diff.ts、src/adapters/review-session.ts、test/features/integration/evidence-reanchor.feature、test/features/unit/evidence-reanchor.feature、test/steps/evidence-reanchor.steps.ts、test/steps/review-progress.steps.ts |
 | 対象外 | 比較基点に存在し変更されていない範囲 |
 | 残り予算 | 1ラウンド |
