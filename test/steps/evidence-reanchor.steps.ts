@@ -537,6 +537,63 @@ Given(
   },
 );
 
+/**
+ * **終端artifactのmode/typeだけをevidence-only suffixから外す（Issue #1433）。**
+ *
+ * path・本文・session binding・監査表は正当なfixtureと同一で、mode `100755`か
+ * symlinkだけが違う。`terminalArtifactPath`はpathしか見ないため、この差だけでは
+ * 拒否されないことを反例として固定する。
+ *
+ * **意図したmodeが実際にcommitされたことをassertする。** chmodやsymlinkが
+ * 環境都合で効かないと、拒否の理由が別条件へすり替わり反例が空振りする。
+ */
+function rewriteTerminalArtifactMode(
+  world: ReanchorWorld,
+  artifactPath: string,
+  kind: string,
+): void {
+  const file = path.join(world.root, artifactPath);
+  const body = fs.readFileSync(file, "utf8");
+  const parent = git(world.root, ["rev-parse", "HEAD^"]);
+  execFileSync("git", ["reset", "-q", "--hard", parent], { cwd: world.root });
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.rmSync(file, { force: true });
+  if (kind === "symlink") fs.symlinkSync("../../reviewed.ts", file);
+  else fs.writeFileSync(file, body);
+  execFileSync("git", ["add", "--", artifactPath], { cwd: world.root });
+  if (kind === "実行権限")
+    execFileSync("git", ["update-index", "--chmod=+x", "--", artifactPath], {
+      cwd: world.root,
+    });
+  execFileSync(
+    "git",
+    ["commit", "-q", "-m", "docs: terminal artifact with non-regular mode"],
+    { cwd: world.root },
+  );
+  world.newHeadSha = git(world.root, ["rev-parse", "HEAD"]);
+  const raw = git(world.root, [
+    "diff",
+    "--raw",
+    "--no-renames",
+    "--no-abbrev",
+    parent,
+    world.newHeadSha,
+  ]);
+  const expected = kind === "symlink" ? "120000" : "100755";
+  assert.ok(
+    raw.includes(` ${expected} `),
+    `終端artifactのmodeが${expected}になっていません: ${raw}`,
+  );
+}
+
+Given(
+  "pr-bound後に前進した実装とmode不正「{word}」のpost-PR intakeのreview artifactがある",
+  function (kind: string) {
+    forwardFixture(this, true, true);
+    rewriteTerminalArtifactMode(this, FORWARD_ARTIFACT, kind);
+  },
+);
+
 Given("pr-bound後のreviewed-forward反例「{word}」がある", function (kind) {
   forwardFixture(this, true);
   if (kind === "未収束") {
@@ -718,6 +775,39 @@ Given(
       auditableReviewArtifact(this.baseSha, implementation),
       "docs: relocated artifact",
     );
+    this.newBaseSha = this.baseSha;
+  },
+);
+
+Given(
+  "pr-boundの旧artifactと同一実装を監査したmode不正「{word}」の新artifactがある",
+  function (kind: string) {
+    this.root = this.initRepo();
+    this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
+    const implementation = commit(
+      this.root,
+      "export const reviewed = 1;\n",
+      "feat: review対象",
+    );
+    this.oldHeadSha = commitPath(
+      this.root,
+      "docs/reviews/1377_レビュー.md",
+      legacyAuditableReviewArtifact(this.baseSha, implementation),
+      "docs: old artifact",
+    );
+    this.staging = makeStaging(this);
+    buildApprovedReviewBinding(this, implementation);
+    buildDelivery(this, false);
+    snapshot(this);
+    execFileSync("git", ["checkout", "-q", implementation], { cwd: this.root });
+    const relocated = "docs/reviews/209_課題1377成果物再固定レビュー.md";
+    this.newHeadSha = commitPath(
+      this.root,
+      relocated,
+      auditableReviewArtifact(this.baseSha, implementation),
+      "docs: relocated artifact",
+    );
+    rewriteTerminalArtifactMode(this, relocated, kind);
     this.newBaseSha = this.baseSha;
   },
 );

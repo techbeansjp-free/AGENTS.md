@@ -206,3 +206,26 @@ Feature: rebase後の証跡再固定を内容等価性で受理する
     Given 固定済みPR identityを持つstagingと「自repo慣習名」へ置いた等価なrebaseがある
     When 再固定を適用する
     Then 再固定chainは1件伸び実効HEADは新headになる
+
+  @issue-1433
+  Scenario Outline: SCN-UNIT-REANCHOR-039 mode不正の終端artifactをreviewed-forwardで受理しない
+    Given pr-bound後に前進した実装とmode不正「<mode>」のpost-PR intakeのreview artifactがある
+    When 再固定を適用する
+    Then 再固定は拒否される
+
+    Examples:
+      | mode |
+      | 実行権限 |
+      | symlink |
+
+  @issue-1433
+  Scenario Outline: SCN-UNIT-REANCHOR-040 mode不正の新artifactをartifact replacementで受理しない
+    Given pr-boundの旧artifactと同一実装を監査したmode不正「<mode>」の新artifactがある
+    When 再固定を適用する
+    Then 再固定は拒否される
+
+    Examples:
+      | mode |
+      | 実行権限 |
+      | symlink |
+
