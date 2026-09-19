@@ -533,7 +533,9 @@ Given("対象3 field以外を弱化した入力の一覧がある", function () 
     },
     (value) => {
       const structured = mapping();
-      structured.roles.reviewer.logicalTier = "cheapest_available" as never;
+      (
+        structured.roles.reviewer as unknown as Record<string, unknown>
+      ).logicalTier = "cheapest_available";
       value.modelMapping = structured;
     },
     (value) => {

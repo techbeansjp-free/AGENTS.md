@@ -292,6 +292,11 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     When Codex側の記述を検査する
     Then 未確認である旨と実測した否定的観測が含まれる
 
+  Scenario: SCN-UNIT-PACKAGE-030 Step 10 skillはtracked stagingとformal approval artifactを区別する
+    Given tracked stagingのreview成果物契約を欠いたpackageがある
+    When Step skillのtracked staging契約を検証する
+    Then 欠落とtracked設定を無視する記述が拒否され正規の配布物だけが合格する
+
   Scenario: SCN-UNIT-DOCTORHOOK-001 登録済みの設定を登録済みとして報告する
     Given hookのentryを持つproject-local設定がある
     When hook登録状態を検査する

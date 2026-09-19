@@ -21,6 +21,9 @@ dist/**/*.js.map
 .agent-skill-chain/role-log/
 .agent-skill-chain/metrics/
 .agent-skill-chain/runtime/
+
+# 補助レビュー（Issue #1428、TERM-ASC-124）のgit管理外個別設定
+.agent-skill-chain/local/
 /issues/
 /memo/
 **/memo/

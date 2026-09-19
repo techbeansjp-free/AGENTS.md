@@ -25,7 +25,10 @@ import { isPackageVersion } from "../src/lib/version.js";
 import { REVIEW_RECOVERY_ROUND } from "../src/domain/review-convergence.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
-const AUDIT_DIRECTORY = "docs/reviews";
+const AUDIT_DIRECTORIES = [
+  "docs/reviews",
+  ".agent-skill-chain/reviews",
+] as const;
 const AUDIT_NAME_PATTERN = /^\d+_課題\d+.*レビュー\.md$/u;
 const RELEASE_BUMP_PREFIX = "chore(release): bump version to ";
 const RELEASE_BUMP_PATHS = new Set(["package.json", "package-lock.json"]);
@@ -82,21 +85,6 @@ function commitParents(root: string, commit: string): string[] {
     .filter(Boolean);
 }
 
-/**
- * 版管理下の生成物。個別監査の対象から外す。
- *
- * **`dist/`はsourceから決定的に導出される**（Issue #1187で版管理下へ置いた）。
- * 承認機構つき環境では`prepare`が実行されずbuildできないため、Git remoteからの
- * 取得でそのまま実行できるようcommitしている。
- *
- * **監査の目的は「変更を人が確認したこと」の記録である。** 生成物を1行ずつ
- * 書かせても、確認しているのは同じsourceであり、**表が生成file行で埋まって
- * 本来確認すべき変更が埋没する**（Issue #995 と同じ形）。
- *
- * **導出の正しさは別の機構が見る。** CIは`npm run build`の後に
- * `git status --porcelain`が空であることを要求しており、commit済み`dist`と
- * 再build結果の乖離はそこで落ちる。
- */
 /**
  * 生成物pathを配布境界の単位（`dist/<top>/`）へまとめる。
  *
@@ -608,7 +596,7 @@ function withoutTrailingAuditCommits(root: string, head: string): string {
     const changed = changedPathsWithoutRenames(root, parent, cursor);
     /**
      * **artifact 1 fileだけを変えるcommitだけを遡る。** 0件や2件以上、
-     * `docs/reviews/`配下でないpathを含む場合は実装commitであり境界になる。
+     * 許可されたreview directory配下でないpathを含む場合は実装commitであり境界になる。
      */
     if (changed.length !== 1 || !isAuditPath(changed[0]!)) break;
     cursor = parent;
@@ -730,7 +718,9 @@ function inferReviewBoundary(
 }
 
 function isAuditPath(auditPath: string): boolean {
-  return auditPath.startsWith(`${AUDIT_DIRECTORY}/`);
+  return AUDIT_DIRECTORIES.some((directory) =>
+    auditPath.startsWith(`${directory}/`),
+  );
 }
 
 /**
@@ -1143,7 +1133,7 @@ export function checkFileAudit(
       valid: false,
       errors: [
         [
-          `H_impl..currentの差分path ${auditPath} は${AUDIT_DIRECTORY}/配下ではありません。実装commitの後にreview artifactだけをcommitしてください`,
+          `H_impl..currentの差分path ${auditPath} は${AUDIT_DIRECTORIES.map((directory) => `${directory}/`).join(" または ")}配下ではありません。実装commitの後にreview artifactだけをcommitしてください`,
           ...candidateSideNote(inferred),
         ].join("\n"),
       ],
@@ -1243,17 +1233,7 @@ export function checkFileAudit(
       const [status, ...parts] = line.split("\t");
       return { status: status?.[0] ?? "", path: parts.at(-1) ?? "" };
     });
-  /**
-   * **個別監査表の照合だけから生成物を外す。**
-   *
-   * `dist/`は配布境界の中にあるため、**配布物影響の検査には生の差分を渡す**
-   * （PR #1218 の外部指摘）。除外を共有すると、生成物を直接書き換えた変更が
-   * 配布物影響の記述を要求されなくなる。
-   */
-  const auditedExpected = expected.filter(
-    (entry) => !isGeneratedDistributionPath(entry.path),
-  );
-  const expectedKeys = auditedExpected
+  const expectedKeys = expected
     .map((entry) => `${entry.status}\u0000${entry.path}`)
     .sort();
   const actualKeys = parsed.entries
@@ -1263,7 +1243,7 @@ export function checkFileAudit(
     errors.push("個別監査に重複pathがあります");
   if (JSON.stringify(expectedKeys) !== JSON.stringify(actualKeys))
     errors.push(
-      `個別監査とGit差分path集合が一致しません: expected=${auditedExpected.length} actual=${parsed.entries.length}`,
+      `個別監査とGit差分path集合が一致しません: expected=${expected.length} actual=${parsed.entries.length}`,
     );
   for (const entry of parsed.entries) {
     if (entry.fields.some((field) => field === "" || field === "-"))
@@ -1272,6 +1252,18 @@ export function checkFileAudit(
       );
     if (entry.decision !== "pass")
       errors.push(`${entry.path}の個別判定がpassではありません`);
+    if (
+      isGeneratedDistributionPath(entry.path) &&
+      !entry.fields.some((field) => field.includes("生成元"))
+    )
+      errors.push(
+        `${entry.path}の生成物行に生成元との対応確認方法がありません`,
+      );
+    if (
+      isGeneratedDistributionPath(entry.path) &&
+      !entry.fields.some((field) => field.includes("配布"))
+    )
+      errors.push(`${entry.path}の生成物行に配布影響の確認方法がありません`);
   }
   const ancestry = git(
     ["merge-base", "--is-ancestor", parsed.implementation, current],

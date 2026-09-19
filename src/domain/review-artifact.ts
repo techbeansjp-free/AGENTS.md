@@ -518,7 +518,9 @@ function replaceRow(content: string, label: string, value: string): string {
  * 文書・lockfile・生成物・test・設定は、owner（layer）・依存方向・安全/rollbackの
  * 列がpathから決まる。**判定列（個別判定）と仕様・AC列は事前充填しない。** これらは
  * reviewerの判断であり、`finding`と「reviewerが確認」のまま残す。product code
- * （source）は全列をreviewerが書く。
+ * （source）は全列をreviewerが書く。owner列は実際の担当者名をpathから特定できない
+ * ため確定しないが、layerが判明した行はowner列に領域heading（layer）を添えて、
+ * reviewerが同じ行内の他列と照合する読み直しを減らす。
  */
 export function auditRowDraft(
   pathValue: string,
@@ -550,7 +552,7 @@ export function auditRowDraft(
     layer = "docs";
     dependency = "文書。循環なし";
   } else if (/(^|\/)(generated|__generated__|dist|build)\//u.test(p)) {
-    kind = "生成物。生成元からの再生成で一致";
+    kind = "生成物。生成元との対応を再build後のclean差分で確認";
     layer = "生成物";
     dependency = "生成元 → 生成物";
   } else if (
@@ -568,10 +570,14 @@ export function auditRowDraft(
     dependency = "設定。循環なし";
   }
   const responsibility = kind ?? "reviewerが確認";
-  const safety = kind
-    ? `${kind.split("。")[0]}。${rollback}`
-    : "reviewerが確認";
-  return `| \`${escapeCell(p)}\` | ${changeType} | reviewerが確認 | ${layer} | ${responsibility} | ${dependency} | reviewerが確認 | ${safety} | finding |`;
+  const owner = kind ? `reviewerが確認（領域: ${layer}）` : "reviewerが確認";
+  const safety =
+    layer === "生成物"
+      ? `§8の配布物影響表とpackage filesで確認。${rollback}`
+      : kind
+        ? `${kind.split("。")[0]}。${rollback}`
+        : "reviewerが確認";
+  return `| \`${escapeCell(p)}\` | ${changeType} | ${owner} | ${layer} | ${responsibility} | ${dependency} | reviewerが確認 | ${safety} | finding |`;
 }
 
 export function renderReviewArtifactDraft(input: {
@@ -587,15 +593,6 @@ export function renderReviewArtifactDraft(input: {
   let content = input.template;
   const targetPaths =
     input.paths.map((item) => item.path).join("、") || "差分なし";
-  /**
-   * **個別監査表から版管理下の生成物（`dist/`）を外す。** `audit:check`はsourceから
-   * 決定的に導出される生成物を個別監査の照合から除外する（PR #1218、Issue #1187）。
-   * 雛形が生成物の行を持つと、照合で「path集合が一致しません」となり、reviewerが
-   * 手で行を削る往復になる。配布物影響（§8）には`dist/<top>/`の単位で残す。
-   */
-  const audited = input.paths.filter(
-    (item) => item.path !== "dist" && !item.path.startsWith("dist/"),
-  );
   content = replaceRow(content, "対象", "実装");
   content = replaceRow(content, "ラウンド", "1");
   content = replaceRow(content, "対象SHA・文書ダイジェスト", input.headSha);
@@ -614,7 +611,7 @@ export function renderReviewArtifactDraft(input: {
     "1（reviewerが実施したround数へ更新する）",
   );
   content = replaceRow(content, "Step chain", `経由: ${input.staging}`);
-  const auditRows = audited
+  const auditRows = input.paths
     .map((item) => auditRowDraft(item.path, item.changeType))
     .join("\n");
   content = content.replace(

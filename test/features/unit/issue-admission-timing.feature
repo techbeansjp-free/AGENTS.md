@@ -35,3 +35,8 @@ Feature: 起票時点の規律と計画単位
     Given 規律を言い換える配布物と仕様がある
     When 起票条件の言い換えを読み取る
     Then Git commitを起票条件にした記述が1件もない
+
+  Scenario: SCN-UNIT-ADMIT-009 計画template案内は計画期間の規則を複製しない
+    Given 配布される計画template利用案内がある
+    When 計画期間の所有境界を読み取る
+    Then 計画期間の既定と変更規則は無く開発ワークフローだけを正本として指す
