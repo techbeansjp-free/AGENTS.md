@@ -9,7 +9,7 @@ import { isEvidenceOnlyPath } from "../domain/review.js";
 import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { observeStoredDeliveryState, readStoredDeliveryState, } from "./delivery-state.js";
-import { observeReviewDiff, observeSingleCommitParent, readBlobAtCommit, } from "./review-diff.js";
+import { evidenceOnlySuffix, observeReviewDiff, observeSingleCommitParent, readBlobAtCommit, } from "./review-diff.js";
 import { readStoredReviewSession } from "./review-session-store.js";
 import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
 export const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
@@ -123,8 +123,10 @@ function verifiedImplementationBoundary(root, head, artifactPath, declared, comp
 /**
  * 差分path集合からreview artifact候補を1件だけ同定する。
  *
- * **同定規則の正本はevidence-only allowlistである。** 判定は`pr create`、delivery
- * state、review sessionと同じ`isEvidenceOnlyPath`へ委ねる。以前はこのadapterが
+ * **同定規則の正本はevidence-only allowlistである。** 判定は`review session`と同じ
+ * `isEvidenceOnlyPath`へ委ねる。`pr create`とdelivery stateは同じ2 prefixを直書きで
+ * 持つが述語自体は共有していない（`..`・backslash・制御文字の拒否clauseを持たない）。
+ * **本変更のscopeは再固定であり、残り2箇所の合流は別Issueとする。** 以前はこのadapterが
  * `docs/reviews/`だけの単純前方一致を持っていたが、それはASC自repoの`audit:check`
  * が使う運用上の狭い集合であって製品の契約ではない。**製品allowlistは利用側の
  * 配置自由度であり、正本は`docs/reviews/`と`.agent-skill-chain/reviews/`の2つを
@@ -286,6 +288,25 @@ function observeArtifactReplacement(staging, root, input) {
     if (!verifiedImplementationBoundary(root, input.oldHeadSha, oldPath, beforeAnchor.implementation, input, "旧H_impl→旧head").valid ||
         !verifiedImplementationBoundary(root, input.newHeadSha, newPath, afterAnchor.implementation, input, "新H_impl→新head").valid)
         return undefined;
+    /**
+     * **新`H_final`がevidence-only suffixの形をmodeまで満たすことを要求する。**
+     *
+     * `terminalArtifactPath`が見るのはpathだけである。mode `100755`のMarkdownは
+     * 通常fileなので`git show`で本文が読め、構造検証・identity anchor・approval・
+     * 個別監査表をすべて通過する。TERM-ASC-101はmode `100644`の通常file 1件の
+     * 追加または変更だけをevidence-only suffixとする。
+     *
+     * **`pr create`は`evidenceOnlySuffix`でこれを検査するが、再固定で実効HEADへ
+     * 入った新headは以後どこでも再検査されない。** `assertConvergedReviewSession`の
+     * suffix検査は実効HEADとcurrent HEADが異なるときだけ走り、再固定後は両者が
+     * 一致するため素通りする。**再固定がこの形を確かめる唯一の地点である**
+     * （Issue #1433、外部review round 2）。
+     *
+     * 旧`H_final`側へは適用しない。過去に受理した記録を遡って拒否へ変えない。
+     */
+    if (evidenceOnlySuffix(root, afterAnchor.implementation, input.newHeadSha) !==
+        newPath)
+        return undefined;
     const beforeImplementation = observeReanchorDiff(root, "旧base→旧H_impl", input, input.oldBaseSha, beforeAnchor.implementation, beforeAnchor.implementation);
     const afterImplementation = observeReanchorDiff(root, "新base→新H_impl", input, input.newBaseSha, afterAnchor.implementation, afterAnchor.implementation);
     if (!isContentEquivalent(beforeImplementation, afterImplementation))
@@ -357,6 +378,10 @@ function observeReviewedForward(staging, root, input) {
         return undefined;
     }
     if (!verifiedImplementationBoundary(root, input.newHeadSha, artifactPath, anchor.implementation, input, "新H_impl→新head").valid)
+        return undefined;
+    /** artifact-replacementと同じ理由でmodeまで確かめる（Issue #1433）。 */
+    if (evidenceOnlySuffix(root, anchor.implementation, input.newHeadSha) !==
+        artifactPath)
         return undefined;
     const implementation = observeReanchorDiff(root, "新base→新H_impl", input, input.newBaseSha, anchor.implementation, anchor.implementation);
     const structure = validateReviewArtifactStructure(artifact);
