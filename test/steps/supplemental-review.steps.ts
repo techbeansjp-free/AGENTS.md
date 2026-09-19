@@ -34,6 +34,7 @@ class SupplementalReviewWorld extends WorkflowWorld {
   collectLimit: number | undefined;
   fakeServer: http.Server | undefined;
   fakeServerPort = 0;
+  trailingSpacePath = "";
 }
 
 const { Given, When, Then } = stepDefinitions<SupplementalReviewWorld>();
@@ -363,6 +364,75 @@ Then("dotfile名由来の関連fileは収集されない", function () {
   assert.deepEqual(this.collection.changed, [".gitignore"]);
   assert.deepEqual(this.collection.related, []);
 });
+
+Given("末尾に空白を含む関連fileがある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-trailing-space-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  fs.writeFileSync(path.join(this.root, "target.ts"), "export const x = 1;\n");
+  /**
+   * NUL区切りで取得したgit grep結果をtrim()すると、pathの末尾空白が
+   * 削られてcandidateが実在しないpathへ壊れる（CodeRabbit指摘の再現）。
+   * 末尾に半角空白を持つfile名で、trim()が発火することを確認する。
+   */
+  this.trailingSpacePath = "caller-target ";
+  fs.writeFileSync(
+    path.join(this.root, this.trailingSpacePath),
+    "references target for related-file detection\n",
+  );
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(path.join(this.root, "target.ts"), "export const x = 2;\n");
+  this.headSha = commitAll(this.root, "change target");
+});
+
+Then("収集結果に末尾空白付きの実pathがそのまま含まれる", function () {
+  assert.ok(this.collection);
+  assert.deepEqual(this.collection.related, [this.trailingSpacePath]);
+});
+
+Given("汎用stemを持つ変更fileを実際にimportする呼び出し元がある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-generic-import-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  fs.writeFileSync(
+    path.join(this.root, "config.ts"),
+    "export const TOKEN_TTL_SECONDS = 3600; // invariant: <= 3600\n",
+  );
+  fs.writeFileSync(
+    path.join(this.root, "session.ts"),
+    'import { TOKEN_TTL_SECONDS } from "./config.js";\n\n' +
+      "export function issueToken() {\n  return { ttl: TOKEN_TTL_SECONDS };\n}\n",
+  );
+  /**
+   * "config"というstemは非specificなので、素朴な全文一致だけに頼ると
+   * これらの無関係fileと合わせてRELATED_STEM_MATCH_LIMITを超え、
+   * 本物の呼び出し元session.tsまで無言で除外されてしまう
+   * （over-exclusionによるfalse negative、修正前の実測で確認済み）。
+   */
+  for (let index = 0; index < 11; index += 1)
+    fs.writeFileSync(
+      path.join(this.root, `unrelated-${index}.md`),
+      "This document mentions config repeatedly: config config config.\n",
+    );
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(
+    path.join(this.root, "config.ts"),
+    "export const TOKEN_TTL_SECONDS = 360000; // BUG: exceeds the <= 3600 invariant\n",
+  );
+  this.headSha = commitAll(this.root, "change config ttl");
+});
+
+Then(
+  "import由来の呼び出し元は収集され汎用stem由来の無関係fileは除外される",
+  function () {
+    assert.ok(this.collection);
+    assert.deepEqual(this.collection.related, ["session.ts"]);
+  },
+);
 
 Given(
   "主worktreeのみに補助レビュー設定があり連結worktreeに差分がある",

@@ -61,3 +61,9 @@ Feature: 設定されたローカルLLMへのreview委譲
     Given 上限超のstaging文書とローカルreviewer設定がある
     When Step 3の委譲reviewを実行する
     Then 委譲reviewはdegradedでexecutorを起動しない
+
+  Scenario: SCN-UNIT-DELEGREVIEW-013 executor実行中にHEADが進んだら結果を破棄する
+    Given Step 10の委譲reviewerがCritical指摘と承認を返す
+    And 委譲reviewerの実行中にHEADが進む
+    When Step 10の委譲reviewを実行する
+    Then 委譲reviewはdegradedでHEAD不一致を理由に返す

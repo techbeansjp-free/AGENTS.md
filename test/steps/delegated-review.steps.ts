@@ -21,6 +21,7 @@ class DelegatedReviewWorld extends WorkflowWorld {
   result: DelegatedReviewResult | undefined;
   baseSha = "";
   headSha = "";
+  driftHeadDuringExecution = false;
   response = JSON.stringify({
     decision: "ready",
     affirmative: "要求と受け入れ条件が対応する",
@@ -89,6 +90,13 @@ function executor(world: DelegatedReviewWorld): ReviewerExecutor {
     world.reviewCalls += 1;
     world.dispatchedModel = input.model;
     world.dispatchedPrompt = input.prompt;
+    /**
+     * LLM応答待ち中（executor実行中）にHEADが動いた状況を再現する。
+     * ここでの追加commitはexecutorが「成功応答」を返す直前、すなわち
+     * launchDelegatedReviewが最初にHEADを固定確認した後に発生する。
+     */
+    if (world.driftHeadDuringExecution)
+      git(world.root, ["commit", "-q", "--allow-empty", "-m", "drift"]);
     return { state: "succeeded", reason: "ok", output: world.response };
   };
 }
@@ -214,6 +222,10 @@ Given("Step 10の委譲reviewerがCritical指摘と承認を返す", function ()
 
 Given("委譲reviewの対象HEADが古い", function () {
   this.headSha = this.baseSha;
+});
+
+Given("委譲reviewerの実行中にHEADが進む", function () {
+  this.driftHeadDuringExecution = true;
 });
 
 Given("Step 10の委譲reviewerが差分外ファイルのCritical指摘を返す", function () {
@@ -352,6 +364,13 @@ Then("差分外の指摘を除外して対象差分の判定を返す", function
 Then("委譲reviewはdegradedでexecutorを起動しない", function () {
   assert.equal(this.result?.state, "degraded");
   assert.equal(this.reviewCalls, 0);
+});
+
+Then("委譲reviewはdegradedでHEAD不一致を理由に返す", function () {
+  assert.equal(this.result?.state, "degraded", JSON.stringify(this.result));
+  assert.equal(this.reviewCalls, 1);
+  if (this.result?.state !== "degraded") return;
+  assert.match(this.result.reason, /HEAD/u);
 });
 
 Then("委譲reviewの判定はchanges_requestedとなりHEADへ固定される", function () {

@@ -269,6 +269,11 @@ export async function launchDelegatedReview(
   }
   if (executed.state !== "succeeded")
     return { state: "degraded", reason: executed.reason };
+  if (
+    input.step === 10 &&
+    git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha
+  )
+    return { state: "degraded", reason: "対象HEADを固定できませんでした" };
   const output = executed.output ?? "";
   const parsed = parseReview(output, input.step, targetFiles);
   if (!parsed)

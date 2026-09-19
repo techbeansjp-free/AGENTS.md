@@ -53,3 +53,13 @@ Feature: reviewer役割に依存しない補助レビュー
     Given 汎用stemの検索結果が1MiBを超える差分がある
     When 補助レビューCLI(diff対象)で収集処理を行う
     Then 汎用stem由来の関連fileは収集されない
+
+  Scenario: SCN-SUPPL-015 末尾に空白を含む関連pathを壊さずに収集する
+    Given 末尾に空白を含む関連fileがある
+    When 補助レビューCLI(diff対象)で収集処理を行う
+    Then 収集結果に末尾空白付きの実pathがそのまま含まれる
+
+  Scenario: SCN-SUPPL-016 汎用stemでも実際のimport元は閾値超過で除外しない
+    Given 汎用stemを持つ変更fileを実際にimportする呼び出し元がある
+    When 補助レビューCLI(diff対象)で収集処理を行う
+    Then import由来の呼び出し元は収集され汎用stem由来の無関係fileは除外される

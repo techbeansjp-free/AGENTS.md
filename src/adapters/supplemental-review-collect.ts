@@ -23,10 +23,59 @@ export interface SupplementalReviewStagingCollection {
 
 const ID_PATTERN = /\b(?:AC|FR|NFR|INV|RQ|OUTCOME|DC|TERM-ASC)-\d+\b/g;
 
+/** ERE metacharacterをescapeする（stemを`git grep -E`のpatternへ安全に埋め込むため）。 */
+function escapeExtendedRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * import/require/exportのmodule specifier内でstemが使われているかを狙う、
+ * 依存関係寄りのpattern（CodeRabbitのcode graphに相当するAST解析は持たないため、
+ * `import ... from "..."`・`require("...")`・`import("...")`の字面で近似する）。
+ * 一致は「呼び出し元/呼び出し先」の強い根拠として扱い、RELATED_STEM_MATCH_LIMIT
+ * （汎用stem対策の閾値）を適用しない。
+ */
+function importReferencePattern(stem: string): string {
+  const escaped = escapeExtendedRegex(stem);
+  return `(import|require|from)[^"']*["'][^"']*${escaped}[^"']*["']`;
+}
+
+function runRelatedFileGrep(
+  root: string,
+  headSha: string,
+  grepArgs: string[],
+): { matches: string[] } | { skipped: true } {
+  const grep = git(grepArgs, root, {
+    allowFailure: true,
+    maxBufferBytes: REVIEW_COLLECTION_BYTE_LIMIT,
+  });
+  // 過剰な一致は非specificなstemと同等に扱う。検索失敗とは区別する。
+  if (
+    grep.stderr.startsWith(
+      `git ${grepArgs.join(" ")}を実行できませんでした（ENOBUFS）:`,
+    )
+  )
+    return { skipped: true };
+  if (grep.status > 1 || grep.stderr !== "")
+    throw new Error("関連fileの探索を安全に完了できませんでした");
+  return {
+    matches: grep.stdout.split("\0").filter((line) => line !== ""),
+  };
+}
+
+function toCandidatePath(line: string, headSha: string): string {
+  return line.startsWith(`${headSha}:`) ? line.slice(headSha.length + 1) : line;
+}
+
 /**
  * Step 10相当の対象を収集する。base..headの変更fileと、その呼び出し元
  * （fileの識別子を含む他file）を関連fileとして追加する。dotfileと
  * 広範囲に現れる汎用名は検索根拠にしない。上限件数で打ち切る。
+ *
+ * 関連file検出は2段構え: (1) import/require/exportのmodule specifier内で
+ * stemが使われている一致は依存関係の強い根拠として無条件で採用し、
+ * 汎用stemの閾値を適用しない（over-exclusionでcross-file findingが
+ * 落ちるのを防ぐ）。(2) それ以外の全文一致は従来通り閾値で足切りする。
  */
 export function collectSupplementalReviewDiff(
   root: string,
@@ -56,7 +105,38 @@ export function collectSupplementalReviewDiff(
     if (basename.startsWith(".") && extension === "") continue;
     const stem = path.basename(basename, extension);
     if (stem === "") continue;
-    const grepArgs = [
+
+    const addCandidates = (matches: string[]): void => {
+      for (const line of matches) {
+        if (truncated) return;
+        const candidate = toCandidatePath(line, headSha);
+        if (
+          candidate === "" ||
+          changed.includes(candidate) ||
+          related.includes(candidate)
+        )
+          continue;
+        if (related.length >= limit) {
+          truncated = true;
+          return;
+        }
+        related.push(candidate);
+      }
+    };
+
+    const preciseResult = runRelatedFileGrep(root, headSha, [
+      "grep",
+      "-l",
+      "-z",
+      "-E",
+      "-e",
+      importReferencePattern(stem),
+      headSha,
+    ]);
+    if (!("skipped" in preciseResult)) addCandidates(preciseResult.matches);
+    if (truncated) break;
+
+    const genericResult = runRelatedFileGrep(root, headSha, [
       "grep",
       "-l",
       "-z",
@@ -64,39 +144,10 @@ export function collectSupplementalReviewDiff(
       "-e",
       stem,
       headSha,
-    ];
-    const grep = git(grepArgs, root, {
-      allowFailure: true,
-      maxBufferBytes: REVIEW_COLLECTION_BYTE_LIMIT,
-    });
-    // 過剰な一致は非specificなstemと同等に扱う。検索失敗とは区別する。
-    if (
-      grep.stderr.startsWith(
-        `git ${grepArgs.join(" ")}を実行できませんでした（ENOBUFS）:`,
-      )
-    )
-      continue;
-    if (grep.status > 1 || grep.stderr !== "")
-      throw new Error("関連fileの探索を安全に完了できませんでした");
-    const matches = grep.stdout.split("\0").filter((line) => line !== "");
-    if (matches.length > RELATED_STEM_MATCH_LIMIT) continue;
-    for (const line of matches) {
-      const trimmed = line.trim();
-      const candidate = trimmed.startsWith(`${headSha}:`)
-        ? trimmed.slice(headSha.length + 1)
-        : trimmed;
-      if (
-        candidate === "" ||
-        changed.includes(candidate) ||
-        related.includes(candidate)
-      )
-        continue;
-      if (related.length >= limit) {
-        truncated = true;
-        break;
-      }
-      related.push(candidate);
-    }
+    ]);
+    if ("skipped" in genericResult) continue;
+    if (genericResult.matches.length > RELATED_STEM_MATCH_LIMIT) continue;
+    addCandidates(genericResult.matches);
   }
 
   const relatedSections: string[] = [];
