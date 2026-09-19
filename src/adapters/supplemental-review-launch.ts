@@ -1,4 +1,9 @@
-import { loadSupplementalReviewConfig } from "../domain/supplemental-review-config.js";
+import fs from "node:fs";
+import path from "node:path";
+import {
+  loadSupplementalReviewConfig,
+  SUPPLEMENTAL_REVIEW_CONFIG_PATH,
+} from "../domain/supplemental-review-config.js";
 import {
   collectSupplementalReviewDiff,
   collectSupplementalReviewStaging,
@@ -8,6 +13,12 @@ import { REVIEWER_EXECUTORS } from "./reviewer-executors.js";
 import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
 import type { ReviewerExecutor } from "../domain/reviewer-provider.js";
 import { isRecord } from "../types.js";
+import { filterReviewFindingsToTarget } from "../domain/review-finding-scope.js";
+import {
+  peekPrimaryReviewRoot,
+  resolveReviewRoot,
+  resolveReviewWorkspace,
+} from "./review-workspace.js";
 
 /**
  * `modelMapping`・`resolveReviewRouting`・`launchReview`のいずれも
@@ -30,6 +41,7 @@ export type SupplementalReviewResult =
       state: "findings";
       findings: SupplementalReviewFinding[];
       truncated: boolean;
+      ignoredOutOfScopeCount: number;
     }
   | { state: "degraded"; reason: string; truncated: boolean }
   | { state: "error"; reason: string };
@@ -56,7 +68,12 @@ const DIFF_REVIEW_INSTRUCTION =
   "既存testで検出できない回帰\n" +
   "6. 変更ファイル単体では気づけない横断的な不整合: 呼び出し元・呼び出し先との" +
   "型・契約の不一致\n" +
-  "各指摘は、実際にファイル内容から読み取れる根拠がある場合だけ行ってください。";
+  "各指摘は、実際にファイル内容から読み取れる根拠がある場合だけ行ってください。" +
+  "findingはdiff適用後（現在のfile内容）に依然として残る問題だけを対象にしてください。" +
+  "diffが既存の欠陥を修正している場合、その修正前の状態や修正内容の説明をfindingとして" +
+  "報告しないでください（修正済みの問題を指摘として再掲しない）。ある行が既存の" +
+  "条件分岐・早期returnにより到達不能であるとコード自身が示している場合、" +
+  "その到達不能な行を根拠にfindingを作らないでください。";
 
 /** Step 03/07相当（要求・要件・設計文書）向けのレビュー観点。 */
 const STAGING_REVIEW_INSTRUCTION =
@@ -122,6 +139,7 @@ async function dispatch(
     timeoutMs: number;
   },
   truncated: boolean,
+  targetFiles: string[],
   execute: ReviewerExecutor | undefined,
 ): Promise<SupplementalReviewResult> {
   const executor = execute ?? REVIEWER_EXECUTORS[config.provider];
@@ -146,7 +164,9 @@ async function dispatch(
       truncated,
     };
   }
-  const prompt = `${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
+  const prompt =
+    `findingの対象fileは今回のreview対象に限ります: ${JSON.stringify(targetFiles)}。関連fileは文脈だけです。別taskや過去Issueの欠陥を今回のfindingへ混ぜないでください。\n\n` +
+    `${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
   const executed = await executor({
     endpoint: config.endpoint,
     model: config.model,
@@ -162,7 +182,8 @@ async function dispatch(
       reason: "補助レビュー応答を構造化findingsへparseできませんでした",
       truncated,
     };
-  return { state: "findings", findings, truncated };
+  const scoped = filterReviewFindingsToTarget(findings, targetFiles);
+  return { state: "findings", ...scoped, truncated };
 }
 
 /**
@@ -177,6 +198,40 @@ function toErrorResult(error: unknown): SupplementalReviewResult {
   };
 }
 
+function loadWorkspaceConfig(root: string, configPath?: string) {
+  const selected = configPath ?? SUPPLEMENTAL_REVIEW_CONFIG_PATH;
+  const local = loadSupplementalReviewConfig(root, selected);
+  let localPathExists = false;
+  try {
+    fs.lstatSync(path.resolve(root, selected));
+    localPathExists = true;
+  } catch (error) {
+    if (
+      typeof error !== "object" ||
+      error === null ||
+      !("code" in error) ||
+      error.code !== "ENOENT"
+    )
+      return undefined;
+  }
+  if (local || configPath || localPathExists) return local;
+  const candidatePrimary = peekPrimaryReviewRoot(root);
+  if (
+    candidatePrimary === undefined ||
+    candidatePrimary === root ||
+    !fs.existsSync(path.join(candidatePrimary, selected))
+  )
+    return undefined;
+  try {
+    const primaryRoot = resolveReviewRoot(root).primaryRoot;
+    return primaryRoot === root
+      ? undefined
+      : loadSupplementalReviewConfig(primaryRoot, selected);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Step 10相当の対象（exact-head diff＋関連ファイル）に対する補助レビューを実行する（FR-1428-02、FR-1428-04）。 */
 export async function launchSupplementalReviewDiff(
   input: {
@@ -188,9 +243,10 @@ export async function launchSupplementalReviewDiff(
   },
   dependencies: { execute?: ReviewerExecutor } = {},
 ): Promise<SupplementalReviewResult> {
-  const config = loadSupplementalReviewConfig(input.root, input.configPath);
+  const config = loadWorkspaceConfig(input.root, input.configPath);
   if (config === undefined) return { state: "disabled" };
   try {
+    resolveReviewRoot(input.root);
     const collected = collectSupplementalReviewDiff(
       input.root,
       input.baseSha,
@@ -202,6 +258,7 @@ export async function launchSupplementalReviewDiff(
       promptBody,
       config,
       collected.truncated,
+      collected.changed,
       dependencies.execute,
     );
   } catch (error) {
@@ -218,15 +275,22 @@ export async function launchSupplementalReviewStaging(
   },
   dependencies: { execute?: ReviewerExecutor } = {},
 ): Promise<SupplementalReviewResult> {
-  const config = loadSupplementalReviewConfig(input.root, input.configPath);
+  const config = loadWorkspaceConfig(input.root, input.configPath);
   if (config === undefined) return { state: "disabled" };
   try {
+    resolveReviewWorkspace(input.root, input.stagingPath);
     const collected = collectSupplementalReviewStaging(
       input.root,
       input.stagingPath,
     );
     const promptBody = `${STAGING_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
-    return await dispatch(promptBody, config, false, dependencies.execute);
+    return await dispatch(
+      promptBody,
+      config,
+      false,
+      collected.changed,
+      dependencies.execute,
+    );
   } catch (error) {
     return toErrorResult(error);
   }

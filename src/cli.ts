@@ -1,5 +1,6 @@
 import { launchCodex } from "./adapters/codex-launch.js";
 import { launchReview } from "./adapters/review-launch.js";
+import { launchDelegatedReview } from "./adapters/delegated-review-launch.js";
 import {
   launchSupplementalReviewDiff,
   launchSupplementalReviewStaging,
@@ -5096,6 +5097,35 @@ export async function main(
     });
     print(result);
     return result.state === "error" ? 1 : 0;
+  }
+  if (command === "routing" && subcommand === "delegated-review-staging") {
+    const { flags } = parse(rest);
+    const step = required(flags, "step");
+    if (step !== "3" && step !== "7")
+      throw new Error("--stepは3または7を指定してください");
+    const result = await launchDelegatedReview({
+      root: path.resolve(
+        typeof flags.root === "string" ? flags.root : process.cwd(),
+      ),
+      step: step === "3" ? 3 : 7,
+      stagingPath: required(flags, "staging"),
+    });
+    print(result);
+    return result.state === "degraded" ? 1 : 0;
+  }
+  if (command === "routing" && subcommand === "delegated-review-diff") {
+    const { flags } = parse(rest);
+    const result = await launchDelegatedReview({
+      root: path.resolve(
+        typeof flags.root === "string" ? flags.root : process.cwd(),
+      ),
+      step: 10,
+      baseSha: required(flags, "base"),
+      headSha: required(flags, "head"),
+      stagingPath: required(flags, "staging"),
+    });
+    print(result);
+    return result.state === "degraded" ? 1 : 0;
   }
   if (command === "routing" && subcommand === "independence") {
     const { flags } = parse(rest);

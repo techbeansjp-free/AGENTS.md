@@ -1,0 +1,69 @@
+@unit
+Feature: 設定されたローカルLLMへのreview委譲
+
+  Scenario: SCN-UNIT-DELEGREVIEW-001 設定が無ければ既存経路を維持する
+    Given 委譲reviewer設定の無い隔離projectがある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewはdisabledでexecutorを起動しない
+
+  Scenario: SCN-UNIT-DELEGREVIEW-002 ローカル設定を共通設定より優先する
+    Given 異なるmodelのローカル設定とユーザー共通設定がある
+    When Step 3の委譲reviewを実行する
+    Then ローカルmodelでStep 3の肯定と敵対の結果を返す
+
+  Scenario: SCN-UNIT-DELEGREVIEW-003 ローカルの明示無効化は共通設定を抑止する
+    Given ユーザー共通設定と無効化したローカル設定がある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewはdisabledでexecutorを起動しない
+
+  Scenario: SCN-UNIT-DELEGREVIEW-004 不正な送信先では起動しない
+    Given loopback以外の委譲reviewer設定がある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewはdegradedでexecutorを起動しない
+
+  Scenario: SCN-UNIT-DELEGREVIEW-005 Critical指摘は承認自己申告より優先する
+    Given Step 10の委譲reviewerがCritical指摘と承認を返す
+    When Step 10の委譲reviewを実行する
+    Then 委譲reviewの判定はchanges_requestedとなりHEADへ固定される
+
+  Scenario: SCN-UNIT-DELEGREVIEW-006 ユーザー共通設定だけでも委譲する
+    Given ユーザー共通の委譲reviewer設定だけがある
+    When Step 3の委譲reviewを実行する
+    Then 共通modelでStep 3の肯定と敵対の結果を返す
+
+  Scenario: SCN-UNIT-DELEGREVIEW-007 現在のHEADと異なる候補へは委譲しない
+    Given Step 10の委譲reviewerがCritical指摘と承認を返す
+    And 委譲reviewの対象HEADが古い
+    When Step 10の委譲reviewを実行する
+    Then 委譲reviewはdegradedでexecutorを起動しない
+
+  Scenario: SCN-UNIT-DELEGREVIEW-008 Step 7で設計文書をreviewerへ委譲する
+    Given Step 7用の設計文書とローカルreviewer設定がある
+    When Step 7の委譲reviewを実行する
+    Then 設計文書を含むStep 7の肯定と敵対の結果を返す
+
+  Scenario: SCN-UNIT-DELEGREVIEW-009 差分外タスクの指摘を採用しない
+    Given Step 10の委譲reviewerが差分外ファイルのCritical指摘を返す
+    When Step 10の委譲reviewを実行する
+    Then 差分外の指摘を除外して対象差分の判定を返す
+
+  Scenario: SCN-UNIT-DELEGREVIEW-010 連結worktreeから主worktreeのローカル設定を使う
+    Given 主worktreeに設定があり対象stagingは連結worktreeにある
+    When Step 3の委譲reviewを実行する
+    Then 主worktreeのmodelでStep 3の結果を返す
+
+  Scenario: SCN-UNIT-DELEGREVIEW-011 異なるworktreeのstagingを読まない
+    Given rootだけ主worktreeを指定してstagingは連結worktreeにある
+    When Step 3の委譲reviewを実行する
+    Then 異なるworktreeのstagingを拒否して起動しない
+
+  Scenario: SCN-UNIT-DELEGREVIEW-012 巨大staging文書は収集中に拒否する
+    Given 上限超のstaging文書とローカルreviewer設定がある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewはdegradedでexecutorを起動しない
+
+  Scenario: SCN-UNIT-DELEGREVIEW-013 executor実行中にHEADが進んだら結果を破棄する
+    Given Step 10の委譲reviewerがCritical指摘と承認を返す
+    And 委譲reviewerの実行中にHEADが進む
+    When Step 10の委譲reviewを実行する
+    Then 委譲reviewはdegradedでHEAD不一致を理由に返す

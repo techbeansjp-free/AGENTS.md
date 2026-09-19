@@ -1,15 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-skill-chain/supplemental-review-config/v1",
-  "title": "補助レビュー設定",
-  "description": "git管理外の個別設定。modelMapping.roles.reviewer（Issue #1425）とは独立し、reviewer役割を差し替えない。実体は利用projectの.gitignoreで除外した.agent-skill-chain/local/supplemental-review.jsonに置く。この schemaは文書化・人の記入補助用であり、CLI自身はsrc/domain/supplemental-review-config.tsの手書き検証で読み込む（jsonschemaライブラリは経由しない）。",
+  "title": "ローカルLLMレビュー設定",
+  "description": "Git管理外の個別設定。既存の補助レビューに加え、進行役からStep 03/07/10のreviewer委譲に用いる。modelMapping.roles.reviewerのtrusted policyやmerge権限は変更しない。対象worktreeまたは主worktreeの.agent-skill-chain/local/supplemental-review.json、またはユーザー共通の$XDG_CONFIG_HOME/agent-skill-chain/supplemental-review.jsonへ置く。CLIは手書き検証で読み込む。",
   "type": "object",
-  "required": ["enabled", "provider", "model", "endpoint"],
+  "required": ["enabled"],
+  "if": {
+    "properties": { "enabled": { "const": true } },
+    "required": ["enabled"]
+  },
+  "then": { "required": ["provider", "model", "endpoint"] },
   "additionalProperties": false,
   "properties": {
     "enabled": {
       "type": "boolean",
-      "description": "trueのときだけ有効。falseまたは省略時は補助レビューを実行しない"
+      "description": "trueのときだけ有効。対象または主worktreeでfalseなら後続の設定も抑止する"
     },
     "provider": {
       "type": "string",
