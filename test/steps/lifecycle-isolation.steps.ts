@@ -253,6 +253,40 @@ When("setupを適用する", function (this: IsolationWorld) {
   init(this.root, { apply: true });
 });
 
+Then(
+  "配布入口は利用project固有の管理を上書きしない",
+  function (this: IsolationWorld) {
+    /**
+     * **配布経路が2つあるので検査対象も2つに分ける。**
+     * `AGENTS.md`は`ROOT_ASSETS`としてsetupが隔離先へ展開するため、展開結果を
+     * 読む。`README.md`はsetupの展開対象ではなく、`package.json`の`files`で
+     * package rootの実体がそのまま配布される。したがって配布実体はpackage root
+     * の`README.md`自身であり、隔離先には存在しない。
+     *
+     * **`files`への登録も併せて確認する。** これが無いと、`README.md`が配布から
+     * 外れても本scenarioは合格し続け、「配布入口を検査している」という根拠が
+     * 失われる。
+     */
+    const packageManifest = JSON.parse(
+      fs.readFileSync(path.resolve("package.json"), "utf8"),
+    ) as { readonly files?: readonly string[] };
+    const packageFiles = packageManifest.files ?? [];
+    assert.ok(
+      packageFiles.includes("README.md"),
+      "README.mdがpackage.jsonのfilesに無い。配布入口の検査対象を見直すこと",
+    );
+    const distributedEntries = [
+      path.join(this.root, "AGENTS.md"),
+      path.resolve("README.md"),
+    ];
+    for (const file of distributedEntries) {
+      const contents = fs.readFileSync(file, "utf8");
+      assert.doesNotMatch(contents, /GitHub Project #8/u, file);
+      assert.doesNotMatch(contents, /PROJECT_MANAGEMENT\.md/u, file);
+    }
+  },
+);
+
 /**
  * **消えた展開先の復元を測る**（Issue #1105）。
  *
