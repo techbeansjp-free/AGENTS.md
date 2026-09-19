@@ -267,9 +267,10 @@ Then(
      * 外れても本scenarioは合格し続け、「配布入口を検査している」という根拠が
      * 失われる。
      */
-    const packageFiles = JSON.parse(
+    const packageManifest = JSON.parse(
       fs.readFileSync(path.resolve("package.json"), "utf8"),
-    ).files as readonly string[];
+    ) as { readonly files?: readonly string[] };
+    const packageFiles = packageManifest.files ?? [];
     assert.ok(
       packageFiles.includes("README.md"),
       "README.mdがpackage.jsonのfilesに無い。配布入口の検査対象を見直すこと",
