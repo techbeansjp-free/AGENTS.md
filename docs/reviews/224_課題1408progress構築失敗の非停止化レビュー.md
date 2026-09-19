@@ -31,7 +31,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | 要求・受け入れ条件 | .agent-skill-chain/tmp/issues/20260916_161015_progressの構築失敗でreview-gateを止めず生成modeをumaskから独立させる | staging digest e729dba5a74f5cb9b5bcaa1fa0874bc6cd11e7a7334528c033908e53537e7eb6 | 既存コード |
 | 差分 | `85160d595296982485886ff3f46f9064dd86e6e4`..`1e9ef564d268a529c4d43cbabfdd4a6e3d8fce44` | 18 path | 既存コード |
 | テスト | `npm test` / `npm run conformance:check` / 静的検査10種 | 2,096 scenarios（2,080 passed、16 skipped、失敗0）、conformance 87 scenarios合格、静的検査10種すべて合格 | テスト出力 |
-| 仕様 | `docs/specs/`6 file | updated。REQ-WF-021・TERM-ASC-122・管理データ・CLI契約・追跡表・変更履歴 | 既存文書 |
+| 仕様 | `docs/specs/`6 file | updated。REQ-WF-021・TERM-ASC-125・管理データ・CLI契約・追跡表・変更履歴 | 既存文書 |
 | commit前candidate | dist/src/adapters/review-session.js、dist/src/adapters/workflow-journal.js、dist/src/domain/issue.js、dist/src/domain/review-progress.js、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md、docs/specs/07_データ/01_管理データ.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/review-session.ts、src/adapters/workflow-journal.ts、src/domain/issue.ts、src/domain/review-progress.ts、test/features/e2e/review-progress-cli.feature、test/features/integration/review-progress.feature、test/features/unit/review-progress.feature、test/steps/review-progress.steps.ts | H_impl 1e9ef564d268a529c4d43cbabfdd4a6e3d8fce44 | Git index |
 | Phase A artifact | 本file | H_impl直後の1 commitで追加する evidence-only suffix | Git観測 |
 | review session | session `cf4ce1f280591ed22ec3092bc66c9e19977c53f4fde08a6dca4c5f9259535d53` | counted round 2で`converged`。latest round digest `bbef65b04c24cd1c51a8376477f75ee33057e655d5671ea679719c5f4ef99a42` | Git観測 |
@@ -47,7 +47,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
-| `docs/specs/01_システム概要/02_用語・略語.md` | M | package owner | spec | TERM-ASC-122を1行追加。既存語の再定義なし | なし（文書） | REQ-WF-021 / 全AC | 追記のみでrevert可能 | pass |
+| `docs/specs/01_システム概要/02_用語・略語.md` | M | package owner | spec | TERM-ASC-125を1行追加。既存語の再定義なし | なし（文書） | REQ-WF-021 / 全AC | 追記のみでrevert可能 | pass |
 | `docs/specs/02_要件/01_ワークフロー要件.md` | M | package owner | spec | REQ-WF-021へ非停止・案内・producer mode契約を追加 | なし（文書） | REQ-WF-021 / AC-1408-01〜07 | 既存文『modeを100644へ閉じ』を変更していない | pass |
 | `docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md` | M | package owner | spec | CLI外部契約へ非停止・案内・生成modeを追加 | なし（文書） | REQ-WF-021 / AC-1408-02、04 | 段落の主語をREV-13で是正済み | pass |
 | `docs/specs/07_データ/01_管理データ.md` | M | package owner | spec | inventory不成立時の扱いを追記 | なし（文書） | REQ-WF-021 / AC-1408-01 | 既存宣言を書き換えず追記のみ | pass |
@@ -110,7 +110,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | 価値（利用者・運用上の目的） | pass | `umask 002`と`0077`の環境で`full`が完走する。optionalな補助機能の失敗が主経路を止めない構造になり、marker不正・task ID欠落という同型の停止も同時に解けた |
 | 実現可能性（環境・依存・権限） | pass | 依存を追加せずnode:fsだけを使う。`chmod`がumaskから独立する根拠は実測済みで、`src/lib/atomic.ts`の`fchmodSync`先例と整合する。modeを保持しないfilesystemでも生成を止めない |
 | 整合性（設計・コード・テスト・仕様） | pass | 02の設計判断3件が実装と一致する。round 1で4箇所の記述と実装の食い違い（REV-01）と自分の契約違反（REV-04）を検出し、round 2で解消した |
-| 保守性（責務・命名・変更容易性） | pass | 構築・案内・表示を3責務へ分離し、分類を閉じた列挙として型で閉じた。分類名はTERM-ASC-122の定義と1対1 |
+| 保守性（責務・命名・変更容易性） | pass | 構築・案内・表示を3責務へ分離し、分類を閉じた列挙として型で閉じた。分類名はTERM-ASC-125の定義と1対1 |
 
 ## 4. 敵対的評価
 
@@ -147,6 +147,11 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | REV-14 | Low | INV-01の「round recordのdigestは当該keyの有無ぶんだけ変わる」は誤り。roundDigestはanchorを含まないため不変で、変わるのはanchorから導くsession ID | `computeRound`の`roundWithoutDigest` | 要件とINVの記述 | 記述を是正 | resolved / improvement | なし |
 | REV-15 | Low | `notes`の内容契約はREQ-WF-014が所有するが、項目を足したのに関係が明記されていなかった | REQ-WF-021とREQ-WF-014 | 仕様の所有境界 | 所有を明記 | resolved / improvement | なし |
 | REV-16 | Low | dead codeが残っていた | stepDefinitionsの戻り値をvoidで捨てる行 | 保守性 | 削除 | resolved / improvement | なし |
+| EXT-01 | Medium | `describeReviewProgressUnbuildable`がdirectory・FIFOの実測modeをGit風の`100${octal}`で案内しており、`100755`のような存在しない観測値を出していた | 外部review（CodeRabbit）の指摘。`isSymbolicLink`が偽の分類はすべて`100`接頭辞へ落ちていた | 非通常fileの03に対する案内文 | `isRegularFile`を入力へ加え、通常file以外はpermissionだけを示す | resolved / acceptance-violation | なし |
+| EXT-02 | Medium | template mode復元のAfter hookが`catch`で失敗を握り潰しており、追跡済みtemplateが0664のまま後続scenarioと開発環境へ残る経路があった | 外部reviewの指摘。gitは0644と0664の差を追跡しないので`git status`もCIのclean検査も検出しない | test fixture全体と開発環境 | 失敗を集約してAfter hookからthrowする | resolved / invariant-violation | なし |
+| EXT-03 | Minor | REQ-WF-021は`issue create`と`workflow promote-full`の両方を対象にするのに、管理データと変更履歴が`issue create`だけを記載していた | 外部reviewの指摘。仕様本文と実装（REV-05で両経路を是正済み）の食い違い | 仕様2文書 | 両文書へ`workflow promote-full`を追記 | resolved / acceptance-violation | なし |
+| EXT-04 | Major | SCN-E2E-PROGRESS-034が`createIssueStaging`を直接呼んでおり、「配布CLIのissue create出力」を名乗りながら公開CLIのhandlerを一行も実行していなかった | 外部reviewの指摘。doc commentは公開CLI経路と書いていたが実装が伴っていなかった | E2Eの合成経路検査 | `main(["issue","create",...])`経由へ変更。mode固定を落とす変異でkillすることを確認した | resolved / invariant-violation | なし |
+| EXT-05 | Low | R-01の生存変異を「観測可能な差を作れない」として等価と判定していたが、`EIO`や`ESTALE`は先行するrecord読み取りが成功したうえでも起こり得るため、主張が証拠を超えていた | 外部reviewの指摘 | 本artifactの記述 | 「現在のfixtureでは観測できない」という限定へ書き換え、等価とは判定しないことを明記した | resolved / improvement | 当該分岐を観測するfixtureは持たない |
 
 ## 6. ラウンド固有の確認
 
@@ -162,11 +167,13 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 - 修正差分と、触れた隣接範囲: H_impl `1e9ef564`。fixed diff 15 path（`src/`4、`test/`3、`docs/specs/`4、`dist/`4）。隣接範囲は`workflow promote-full`の昇格補完で、REV-05の是正として意図的に触れた
 - 既承認・未変更範囲を再走査していない: はい。round 1で判定済みかつ未変更のpathを再監査していない
 
-### ラウンド3
+### ラウンド3（外部reviewの取り込み）
 
-- 全指摘の最終分類: 実施していない。counted round 2で`converged`に到達したため
-- 危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: 該当なし
-- 同じ範囲の予算を自動更新していない: はい。counted roundは2で、予算6・通算8の範囲内
+- 全指摘の最終分類: 外部review（CodeRabbit）の未解決5件をEXT-01〜05として確定し、実コードで1件ずつ再現を確かめてから是正した。Major 1・Medium 2・Minor 1・Low 1で、Critical/Highは0件
+- 是正差分と、触れた隣接範囲: 実装commit `81ae6c62`。`src/`2、`test/`1、`docs/specs/`4、`dist/`2。隣接範囲はEXT-04の合成経路変更に伴うSCN-E2E-PROGRESS-034のGivenのみで、判定側（`review round --init` handler）は変更していない
+- 危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: EXT-01は案内文字列だけを変え、受理・拒否の集合を変えていない。EXT-02はtestのAfter hookのみで製品コードに触れない
+- 同じ範囲の予算を自動更新していない: はい。counted roundは3で、予算6・通算8の範囲内
+- 検査が空虚でないことの確認: EXT-04の是正について、`issue create`のmode固定を落とす変異を注入し、SCN-E2E-PROGRESS-034がkillすることを実測した。復元は複写で行い`git checkout`を使っていない
 
 ## 7. テスト結果
 
@@ -190,7 +197,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 **特筆すべき2件。**
 
 1. **B-06**: Issue #1408の案1を字面どおり実装する変異（`writeFileSync`へ`mode`を渡す）は、**4 SCN中3件を素通りし`umask 0077`のSCN-INT-PROGRESS-032だけがkillした。** CIのumaskは0022なので、この1件が無ければ誤った実装が全green で通っていた。
-2. **R-01**: `lstat`のENOENT限定をbare catchへ戻す変異は生存する。**等価と判定した根拠**は、`lstat(03)`がENOENT以外で失敗するにはstaging directoryが走査不能である必要があり、その場合は必ず先に`readStoredStagingRecord`が`staging-record.json`の読み取りでEACCESを投げるため（実測済み）。観測可能な差を作れない。分岐は防御として残す。
+2. **R-01**: `lstat`のENOENT限定をbare catchへ戻す変異は生存する。**現在のfixtureでは観測できない。** `lstat(03)`がENOENT以外で失敗する経路として実測できたのはstaging directoryが走査不能な場合だけであり、そのとき必ず先に`readStoredStagingRecord`が`staging-record.json`の読み取りでEACCESを投げる。**等価とは判定しない。** `EIO`や`ESTALE`は先行するrecord読み取りが成功したうえでも起こり得るため、bare catchへ戻すと本来ENOENT以外であるべき失敗を「03が無い」として扱う意味の差が残る。この差を観測するfixtureを現在持たないという限定で記録する。分岐は防御として残す。
 
 **C枠の生存1件**（`outcome.state === "built"`を`!== "unbuildable"`へ）は、`ReviewProgressInventoryOutcome`が2状態のunionであるため論理的に同値であり、等価と判定した。
 
@@ -238,9 +245,9 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 ## 10. 仕様整合性
 
 - 判定: updated
-- 更新した仕様: `docs/specs/02_要件/01_ワークフロー要件.md`（REQ-WF-021）、`01_システム概要/02_用語・略語.md`（TERM-ASC-122追加）、`07_データ/01_管理データ.md`、`06_外部インターフェース/01_コマンド・GitHub契約.md`、`15_要件追跡/00_追跡表.md`、`15_要件追跡/01_変更履歴.md`
-- ドメイン用語台帳の候補・確定・現在有効な定義が一方向に追跡できる: はい。00 §4.2の候補 → 01 §2.1の確定 → 耐久台帳のTERM-ASC-122という一方向。TERM-ASC-107は参照のみで再定義していない
-- 未定義語、同一コンテキスト内の重複定義、根拠なしの意味変更、表記揺れ、置換先なしの廃止がない: はい。TERM-ASC-122の分類語は実装の`REVIEW_PROGRESS_UNBUILDABLE_REASONS`と1対1で、SCN名・案内文・仕様本文で同じ語を使う。廃止した用語はない
+- 更新した仕様: `docs/specs/02_要件/01_ワークフロー要件.md`（REQ-WF-021）、`01_システム概要/02_用語・略語.md`（TERM-ASC-125追加）、`07_データ/01_管理データ.md`、`06_外部インターフェース/01_コマンド・GitHub契約.md`、`15_要件追跡/00_追跡表.md`、`15_要件追跡/01_変更履歴.md`
+- ドメイン用語台帳の候補・確定・現在有効な定義が一方向に追跡できる: はい。00 §4.2の候補 → 01 §2.1の確定 → 耐久台帳のTERM-ASC-125という一方向。TERM-ASC-107は参照のみで再定義していない
+- 未定義語、同一コンテキスト内の重複定義、根拠なしの意味変更、表記揺れ、置換先なしの廃止がない: はい。TERM-ASC-125の分類語は実装の`REVIEW_PROGRESS_UNBUILDABLE_REASONS`と1対1で、SCN名・案内文・仕様本文で同じ語を使う。廃止した用語はない
 - 要件・変更・SCN・テストの追跡: REQ-WF-021 → AC-WF-021 → SCN-UNIT-PROGRESS-022〜025・040、SCN-INT-PROGRESS-026〜039、SCN-E2E-PROGRESS-034。新規SCNはいずれも要件本文から到達でき、`trace:check`が合格している
 - `no-spec-impact`の場合の限定的根拠: 該当なし
 - UI・トークンの判断: DC-UXとDC-TOKENSは`not-applicable`（§2.2に理由と証拠）
@@ -260,14 +267,14 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 2 |
+| ラウンド | 3 |
 | 対象SHA・文書ダイジェスト | 1e9ef564d268a529c4d43cbabfdd4a6e3d8fce44 |
 | 比較基点 | `85160d595296982485886ff3f46f9064dd86e6e4` |
 | H_impl | `1e9ef564d268a529c4d43cbabfdd4a6e3d8fce44` |
 | 対象差分 | dist/src/adapters/review-session.js、dist/src/adapters/workflow-journal.js、dist/src/domain/issue.js、dist/src/domain/review-progress.js、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md、docs/specs/07_データ/01_管理データ.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/review-session.ts、src/adapters/workflow-journal.ts、src/domain/issue.ts、src/domain/review-progress.ts、test/features/e2e/review-progress-cli.feature、test/features/integration/review-progress.feature、test/features/unit/review-progress.feature、test/steps/review-progress.steps.ts |
 | 対象外 | 比較基点に存在し変更されていない範囲 |
-| 残り予算 | counted round 4（同一scope最大6、通算8） |
-| ラウンド数 | 2 |
+| 残り予算 | counted round 3（同一scope最大6、通算8） |
+| ラウンド数 | 3 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260916_161015_progressの構築失敗でreview-gateを止めず生成modeをumaskから独立させる |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md`のREQ-WF-021「review、test、PR、merge、releaseのgateは専用journalもprojectionも読まず、progressの失敗を拒否理由にしない」 |
 | 成果物行数 | 製品（`src/`4 file）+248 / -30行。支援層は`test/`+610行、`docs/specs/`+32行。testが製品の約2.5倍なのは、変異試験で検出した穴（D-04、R-01〜R-09）を合成経路の観測で塞いだため |
