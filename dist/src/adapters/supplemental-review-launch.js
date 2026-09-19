@@ -1,8 +1,12 @@
-import { loadSupplementalReviewConfig } from "../domain/supplemental-review-config.js";
+import fs from "node:fs";
+import path from "node:path";
+import { loadSupplementalReviewConfig, SUPPLEMENTAL_REVIEW_CONFIG_PATH, } from "../domain/supplemental-review-config.js";
 import { collectSupplementalReviewDiff, collectSupplementalReviewStaging, RELATED_FILE_LIMIT, } from "./supplemental-review-collect.js";
 import { REVIEWER_EXECUTORS } from "./reviewer-executors.js";
 import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
 import { isRecord } from "../types.js";
+import { filterReviewFindingsToTarget } from "../domain/review-finding-scope.js";
+import { peekPrimaryReviewRoot, resolveReviewRoot, resolveReviewWorkspace, } from "./review-workspace.js";
 /**
  * CodeRabbit等の商用AIレビュアーが公開する観点（バグ・セキュリティ・
  * パフォーマンス・品質・機能性の5分類）に合わせた、diff対象向けの
@@ -72,7 +76,7 @@ function parseFindings(output) {
     }
     return findings;
 }
-async function dispatch(promptBody, config, truncated, execute) {
+async function dispatch(promptBody, config, truncated, targetFiles, execute) {
     const executor = execute ?? REVIEWER_EXECUTORS[config.provider];
     if (!executor)
         return {
@@ -96,7 +100,8 @@ async function dispatch(promptBody, config, truncated, execute) {
             truncated,
         };
     }
-    const prompt = `${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
+    const prompt = `findingの対象fileは今回のreview対象に限ります: ${JSON.stringify(targetFiles)}。関連fileは文脈だけです。別taskや過去Issueの欠陥を今回のfindingへ混ぜないでください。\n\n` +
+        `${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
     const executed = await executor({
         endpoint: config.endpoint,
         model: config.model,
@@ -112,7 +117,8 @@ async function dispatch(promptBody, config, truncated, execute) {
             reason: "補助レビュー応答を構造化findingsへparseできませんでした",
             truncated,
         };
-    return { state: "findings", findings, truncated };
+    const scoped = filterReviewFindingsToTarget(findings, targetFiles);
+    return { state: "findings", ...scoped, truncated };
 }
 /**
  * base/head解決不可、非loopback endpoint（`assertLoopbackEndpoint`の拒否）、
@@ -125,15 +131,48 @@ function toErrorResult(error) {
         reason: error instanceof Error ? error.message : String(error),
     };
 }
+function loadWorkspaceConfig(root, configPath) {
+    const selected = configPath ?? SUPPLEMENTAL_REVIEW_CONFIG_PATH;
+    const local = loadSupplementalReviewConfig(root, selected);
+    let localPathExists = false;
+    try {
+        fs.lstatSync(path.resolve(root, selected));
+        localPathExists = true;
+    }
+    catch (error) {
+        if (typeof error !== "object" ||
+            error === null ||
+            !("code" in error) ||
+            error.code !== "ENOENT")
+            return undefined;
+    }
+    if (local || configPath || localPathExists)
+        return local;
+    const candidatePrimary = peekPrimaryReviewRoot(root);
+    if (candidatePrimary === undefined ||
+        candidatePrimary === root ||
+        !fs.existsSync(path.join(candidatePrimary, selected)))
+        return undefined;
+    try {
+        const primaryRoot = resolveReviewRoot(root).primaryRoot;
+        return primaryRoot === root
+            ? undefined
+            : loadSupplementalReviewConfig(primaryRoot, selected);
+    }
+    catch {
+        return undefined;
+    }
+}
 /** Step 10相当の対象（exact-head diff＋関連ファイル）に対する補助レビューを実行する（FR-1428-02、FR-1428-04）。 */
 export async function launchSupplementalReviewDiff(input, dependencies = {}) {
-    const config = loadSupplementalReviewConfig(input.root, input.configPath);
+    const config = loadWorkspaceConfig(input.root, input.configPath);
     if (config === undefined)
         return { state: "disabled" };
     try {
+        resolveReviewRoot(input.root);
         const collected = collectSupplementalReviewDiff(input.root, input.baseSha, input.headSha, input.limit ?? RELATED_FILE_LIMIT);
         const promptBody = `${DIFF_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
-        return await dispatch(promptBody, config, collected.truncated, dependencies.execute);
+        return await dispatch(promptBody, config, collected.truncated, collected.changed, dependencies.execute);
     }
     catch (error) {
         return toErrorResult(error);
@@ -141,13 +180,14 @@ export async function launchSupplementalReviewDiff(input, dependencies = {}) {
 }
 /** Step 03/07相当の対象（staging文書間のID整合性）に対する補助レビューを実行する（FR-1428-03、FR-1428-04）。 */
 export async function launchSupplementalReviewStaging(input, dependencies = {}) {
-    const config = loadSupplementalReviewConfig(input.root, input.configPath);
+    const config = loadWorkspaceConfig(input.root, input.configPath);
     if (config === undefined)
         return { state: "disabled" };
     try {
+        resolveReviewWorkspace(input.root, input.stagingPath);
         const collected = collectSupplementalReviewStaging(input.root, input.stagingPath);
         const promptBody = `${STAGING_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
-        return await dispatch(promptBody, config, false, dependencies.execute);
+        return await dispatch(promptBody, config, false, collected.changed, dependencies.execute);
     }
     catch (error) {
         return toErrorResult(error);

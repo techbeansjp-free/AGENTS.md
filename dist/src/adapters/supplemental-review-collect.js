@@ -3,11 +3,12 @@ import path from "node:path";
 import { git } from "../lib/process.js";
 import { resolveContained } from "../lib/security.js";
 export const RELATED_FILE_LIMIT = 20;
+export const RELATED_STEM_MATCH_LIMIT = 10;
 const ID_PATTERN = /\b(?:AC|FR|NFR|INV|RQ|OUTCOME|DC|TERM-ASC)-\d+\b/g;
 /**
  * Step 10相当の対象を収集する。base..headの変更fileと、その呼び出し元
- * （fileの識別子を含む他file）を関連fileとして追加する。上限件数で
- * 打ち切る（FR-1428-02、NFR-1428-06）。
+ * （fileの識別子を含む他file）を関連fileとして追加する。dotfileと
+ * 広範囲に現れる汎用名は検索根拠にしない。上限件数で打ち切る。
  */
 export function collectSupplementalReviewDiff(root, baseSha, headSha, limit = RELATED_FILE_LIMIT) {
     const nameStatus = git(["diff", "--name-status", `${baseSha}..${headSha}`], root).stdout;
@@ -22,13 +23,20 @@ export function collectSupplementalReviewDiff(root, baseSha, headSha, limit = RE
     for (const changedPath of changed) {
         if (truncated)
             break;
-        const stem = path.basename(changedPath, path.extname(changedPath));
+        const basename = path.basename(changedPath);
+        const extension = path.extname(basename);
+        if (basename.startsWith(".") && extension === "")
+            continue;
+        const stem = path.basename(basename, extension);
         if (stem === "")
             continue;
         const grep = git(["grep", "-l", "--fixed-strings", stem, headSha], root, {
             allowFailure: true,
         }).stdout;
-        for (const line of grep.split("\n")) {
+        const matches = grep.split("\n").filter((line) => line.trim() !== "");
+        if (matches.length > RELATED_STEM_MATCH_LIMIT)
+            continue;
+        for (const line of matches) {
             const trimmed = line.trim();
             const candidate = trimmed.startsWith(`${headSha}:`)
                 ? trimmed.slice(headSha.length + 1)

@@ -11,6 +11,7 @@ import {
 } from "../../src/adapters/supplemental-review-launch.js";
 import {
   collectSupplementalReviewDiff,
+  RELATED_STEM_MATCH_LIMIT,
   type SupplementalReviewDiffCollection,
 } from "../../src/adapters/supplemental-review-collect.js";
 import type {
@@ -263,6 +264,160 @@ Then("収集結果は上限件数までに打ち切られる", function () {
 Then("打ち切った旨が結果に含まれる", function () {
   assert.ok(this.collection);
   assert.equal(this.collection.truncated, true);
+});
+
+// --- SCN-SUPPL-004 ---
+
+Given("補助レビューの対象差分が1ファイルだけある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-scope-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  fs.writeFileSync(path.join(this.root, "target.ts"), "export const x = 1;\n");
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(path.join(this.root, "target.ts"), "export const x = 2;\n");
+  this.headSha = commitAll(this.root, "change");
+  this.configPath = ".agent-skill-chain/local/supplemental-review.json";
+  writeConfig(this.root, this.configPath);
+});
+
+When("補助reviewerが差分外ファイルの指摘を返す", async function () {
+  this.result = await launchSupplementalReviewDiff(
+    {
+      root: this.root,
+      baseSha: this.baseSha,
+      headSha: this.headSha,
+      configPath: this.configPath,
+    },
+    {
+      execute: fixedExecutor({
+        state: "succeeded",
+        reason: "ok",
+        output: JSON.stringify({
+          findings: [
+            {
+              file: "unrelated/task.md",
+              location: "1",
+              content: "別作業の既知欠陥",
+              severity: "Critical",
+            },
+          ],
+        }),
+      }),
+    },
+  );
+});
+
+Then("補助レビュー結果から差分外の指摘が除外される", function () {
+  assert.equal(this.result?.state, "findings");
+  if (this.result?.state !== "findings") return;
+  assert.deepEqual(this.result.findings, []);
+  assert.equal(this.result.ignoredOutOfScopeCount, 1);
+});
+
+Given("変更fileのstemが多数の無関係fileに現れる", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-generic-stem-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  fs.writeFileSync(path.join(this.root, "guide.md"), "# guide\n");
+  for (let index = 0; index <= RELATED_STEM_MATCH_LIMIT; index += 1)
+    fs.writeFileSync(
+      path.join(this.root, `unrelated-${index}.md`),
+      "This template mentions guide as a common word.\n",
+    );
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(path.join(this.root, "guide.md"), "# updated guide\n");
+  this.headSha = commitAll(this.root, "change guide");
+});
+
+Then("汎用stem由来の関連fileは収集されない", function () {
+  assert.ok(this.collection);
+  assert.deepEqual(this.collection.related, []);
+  assert.equal(this.collection.truncated, false);
+});
+
+Given("拡張子なしdotfileだけを変更した差分がある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-dotfile-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  fs.writeFileSync(path.join(this.root, ".gitignore"), "dist/\n");
+  fs.writeFileSync(
+    path.join(this.root, "unrelated.md"),
+    "Many templates mention .gitignore in prose.\n",
+  );
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(
+    path.join(this.root, ".gitignore"),
+    "dist/\nnode_modules/\n",
+  );
+  this.headSha = commitAll(this.root, "change gitignore");
+});
+
+Then("dotfile名由来の関連fileは収集されない", function () {
+  assert.ok(this.collection);
+  assert.deepEqual(this.collection.changed, [".gitignore"]);
+  assert.deepEqual(this.collection.related, []);
+});
+
+Given(
+  "主worktreeのみに補助レビュー設定があり連結worktreeに差分がある",
+  function () {
+    const primary = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-linked-")),
+    );
+    this.temporaryDirectories.push(primary);
+    initRepository(primary);
+    fs.writeFileSync(
+      path.join(primary, ".gitignore"),
+      ".agent-skill-chain/local/\n.worktrees/\n",
+    );
+    fs.writeFileSync(path.join(primary, "target.ts"), "export const x = 1;\n");
+    commitAll(primary, "base");
+    writeConfig(primary, ".agent-skill-chain/local/supplemental-review.json");
+    const linked = path.join(primary, ".worktrees", "review");
+    fs.mkdirSync(path.dirname(linked), { recursive: true });
+    runGit(primary, ["worktree", "add", "-q", "-b", "review", linked]);
+    this.root = linked;
+    this.baseSha = runGit(linked, ["rev-parse", "HEAD"]);
+    fs.writeFileSync(path.join(linked, "target.ts"), "export const x = 2;\n");
+    this.headSha = commitAll(linked, "change");
+  },
+);
+
+When(
+  "補助レビューCLI\\(diff対象\\)を連結worktreeから実行する",
+  async function () {
+    this.result = await launchSupplementalReviewDiff(
+      { root: this.root, baseSha: this.baseSha, headSha: this.headSha },
+      {
+        execute: fixedExecutor({
+          state: "succeeded",
+          reason: "ok",
+          output: JSON.stringify({
+            findings: [
+              {
+                file: "target.ts",
+                location: "1",
+                content: "対象差分を確認した",
+                severity: "Low",
+              },
+            ],
+          }),
+        }),
+      },
+    );
+  },
+);
+
+Then("連結worktreeの補助レビューがfindingsを返す", function () {
+  assert.equal(this.result?.state, "findings");
+  if (this.result?.state !== "findings") return;
+  assert.equal(this.result.findings[0]?.file, "target.ts");
 });
 
 // --- SCN-SUPPL-004 ---

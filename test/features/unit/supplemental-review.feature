@@ -22,3 +22,23 @@ Feature: reviewer役割に依存しない補助レビュー
     When 補助レビューCLI(diff対象)で収集処理を行う
     Then 収集結果は上限件数までに打ち切られる
     And 打ち切った旨が結果に含まれる
+
+  Scenario: SCN-SUPPL-009 差分外タスクの指摘を結果へ混ぜない
+    Given 補助レビューの対象差分が1ファイルだけある
+    When 補助reviewerが差分外ファイルの指摘を返す
+    Then 補助レビュー結果から差分外の指摘が除外される
+
+  Scenario: SCN-SUPPL-010 汎用stemが多数の無関係fileに現れたら関連候補にしない
+    Given 変更fileのstemが多数の無関係fileに現れる
+    When 補助レビューCLI(diff対象)で収集処理を行う
+    Then 汎用stem由来の関連fileは収集されない
+
+  Scenario: SCN-SUPPL-011 拡張子なしdotfileは関連file検索に使わない
+    Given 拡張子なしdotfileだけを変更した差分がある
+    When 補助レビューCLI(diff対象)で収集処理を行う
+    Then dotfile名由来の関連fileは収集されない
+
+  Scenario: SCN-SUPPL-012 連結worktreeは主worktreeの個人設定を使う
+    Given 主worktreeのみに補助レビュー設定があり連結worktreeに差分がある
+    When 補助レビューCLI(diff対象)を連結worktreeから実行する
+    Then 連結worktreeの補助レビューがfindingsを返す

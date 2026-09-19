@@ -241,6 +241,31 @@ export const COMMAND_USAGE = Object.freeze([
     },
     {
         command: "routing",
+        subcommand: "delegated-review-staging",
+        summary: "設定済みローカルLLMへStep 3/7のreadiness reviewを委譲する",
+        requiredFlags: [
+            flag("step", "3|7", "reviewするStep"),
+            flag("staging", "path", "対象staging directory"),
+        ],
+        conditionalFlags: [],
+        optionalFlags: [ROOT_FLAG],
+        example: "npx agent-skill-chain routing delegated-review-staging --root=<対象worktree> --step=3 --staging=.agent-skill-chain/tmp/issues/example",
+    },
+    {
+        command: "routing",
+        subcommand: "delegated-review-diff",
+        summary: "設定済みローカルLLMへStep 10のexact-head reviewを委譲する",
+        requiredFlags: [
+            flag("base", "sha", "比較基点SHA"),
+            flag("head", "sha", "対象H_impl SHA"),
+            flag("staging", "path", "要求・要件・設計・検証文書のstaging directory"),
+        ],
+        conditionalFlags: [],
+        optionalFlags: [ROOT_FLAG],
+        example: "npx agent-skill-chain routing delegated-review-diff --root=<対象worktree> --base=<比較基点SHA> --head=<H_impl SHA> --staging=<対象staging>",
+    },
+    {
+        command: "routing",
         subcommand: "independence",
         summary: "implementerとreviewerの独立性を検証する",
         requiredFlags: [
