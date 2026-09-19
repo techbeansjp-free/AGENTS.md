@@ -157,6 +157,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | EXT-03 | Minor | REQ-WF-021は`issue create`と`workflow promote-full`の両方を対象にするのに、管理データと変更履歴が`issue create`だけを記載していた | 外部reviewの指摘。仕様本文と実装（REV-05で両経路を是正済み）の食い違い | 仕様2文書 | 両文書へ`workflow promote-full`を追記 | resolved / acceptance-violation | なし |
 | EXT-04 | Major | SCN-E2E-PROGRESS-034が`createIssueStaging`を直接呼んでおり、「配布CLIのissue create出力」を名乗りながら公開CLIのhandlerを一行も実行していなかった | 外部reviewの指摘。doc commentは公開CLI経路と書いていたが実装が伴っていなかった | E2Eの合成経路検査 | `main(["issue","create",...])`経由へ変更。mode固定を落とす変異でkillすることを確認した | resolved / invariant-violation | なし |
 | EXT-05 | Low | R-01の生存変異を「観測可能な差を作れない」として等価と判定していたが、`EIO`や`ESTALE`は先行するrecord読み取りが成功したうえでも起こり得るため、主張が証拠を超えていた | 外部reviewの指摘 | 本artifactの記述 | 「現在のfixtureでは観測できない」という限定へ書き換え、等価とは判定しないことを明記した | resolved / improvement | 当該分岐を観測するfixtureは持たない |
+| EXT-06 | Minor | `describeReviewProgressUnbuildable`が`not-regular-file`のとき`isSymbolicLink`を見ずに常に「symlinkです」と案内しており、directoryやFIFOへsymlink固有の理由（chmodがlink先を書き換える）を出していた | 外部reviewの追加指摘。`observed`欄はEXT-01で種別を区別済みだったが`action`欄の是正が漏れていた | 通常fileでない03に対する案内文 | `isSymbolicLink`で案内を分岐。あわせてSCN-INT-PROGRESS-037へ案内本文を名指しするassertionを足し、分岐を潰す変異でkillすることを確認した | resolved / acceptance-violation | なし |
 
 ## 6. ラウンド固有の確認
 
@@ -174,8 +175,8 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 
 ### ラウンド3（外部reviewの取り込み）
 
-- 全指摘の最終分類: 外部review（CodeRabbit）の未解決5件をEXT-01〜05として確定し、実コードで1件ずつ再現を確かめてから是正した。Major 1・Medium 2・Minor 1・Low 1で、Critical/Highは0件
-- 是正差分と、触れた隣接範囲: 実装commit `81ae6c62`。`src/`2、`test/`1、`docs/specs/`4、`dist/`2。隣接範囲はEXT-04の合成経路変更に伴うSCN-E2E-PROGRESS-034のGivenのみで、判定側（`review round --init` handler）は変更していない
+- 全指摘の最終分類: 外部review（CodeRabbit）の指摘6件をEXT-01〜06として確定し（うちEXT-06は追随merge後の再reviewで受領）、実コードで1件ずつ再現を確かめてから是正した。Major 1・Medium 2・Minor 2・Low 1で、Critical/Highは0件
+- 是正差分と、触れた隣接範囲: 実装commit `81ae6c62`とEXT-06の`5bbd25c2`。`src/`2、`test/`1、`docs/specs/`4、`dist/`2。隣接範囲はEXT-04の合成経路変更に伴うSCN-E2E-PROGRESS-034のGivenのみで、判定側（`review round --init` handler）は変更していない
 - 危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: EXT-01は案内文字列だけを変え、受理・拒否の集合を変えていない。EXT-02はtestのAfter hookのみで製品コードに触れない
 - 同じ範囲の予算を自動更新していない: はい。counted roundは3で、予算6・通算8の範囲内
 - 検査が空虚でないことの確認: EXT-04の是正について、`issue create`のmode固定を落とす変異を注入し、SCN-E2E-PROGRESS-034がkillすることを実測した。復元は複写で行い`git checkout`を使っていない
@@ -273,9 +274,9 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 |---|---|
 | 対象 | 実装 |
 | ラウンド | 3 |
-| 対象SHA・文書ダイジェスト | d82f93b1cafa7e7194cab3235aa8d0ad70d1e6fe |
+| 対象SHA・文書ダイジェスト | 5bbd25c2efaee97caab9e5615936b8858da84545 |
 | 比較基点 | `a52fffcce1bf0dee0213bbe34b80b364f0580c3f` |
-| H_impl | `d82f93b1cafa7e7194cab3235aa8d0ad70d1e6fe` |
+| H_impl | `5bbd25c2efaee97caab9e5615936b8858da84545` |
 | 対象差分 | dist/src/adapters/review-session.js、dist/src/adapters/workflow-journal.js、dist/src/domain/issue.js、dist/src/domain/review-progress.js、docs/reviews/224_課題1408progress構築失敗の非停止化レビュー.md、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md、docs/specs/07_データ/01_管理データ.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/review-session.ts、src/adapters/workflow-journal.ts、src/domain/issue.ts、src/domain/review-progress.ts、test/features/e2e/review-progress-cli.feature、test/features/integration/review-progress.feature、test/features/unit/review-progress.feature、test/steps/review-progress.steps.ts |
 | 対象外 | 比較基点に存在し変更されていない範囲 |
 | 残り予算 | counted round 3（同一scope最大6、通算8） |
