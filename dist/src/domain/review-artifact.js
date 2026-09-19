@@ -332,7 +332,9 @@ function replaceRow(content, label, value) {
  * 文書・lockfile・生成物・test・設定は、owner（layer）・依存方向・安全/rollbackの
  * 列がpathから決まる。**判定列（個別判定）と仕様・AC列は事前充填しない。** これらは
  * reviewerの判断であり、`finding`と「reviewerが確認」のまま残す。product code
- * （source）は全列をreviewerが書く。
+ * （source）は全列をreviewerが書く。owner列は実際の担当者名をpathから特定できない
+ * ため確定しないが、layerが判明した行はowner列に領域heading（layer）を添えて、
+ * reviewerが同じ行内の他列と照合する読み直しを減らす。
  */
 export function auditRowDraft(pathValue, changeType) {
     const p = pathValue.replaceAll("\\", "/");
@@ -377,12 +379,13 @@ export function auditRowDraft(pathValue, changeType) {
         dependency = "設定。循環なし";
     }
     const responsibility = kind ?? "reviewerが確認";
+    const owner = kind ? `reviewerが確認（領域: ${layer}）` : "reviewerが確認";
     const safety = layer === "生成物"
         ? `§8の配布物影響表とpackage filesで確認。${rollback}`
         : kind
             ? `${kind.split("。")[0]}。${rollback}`
             : "reviewerが確認";
-    return `| \`${escapeCell(p)}\` | ${changeType} | reviewerが確認 | ${layer} | ${responsibility} | ${dependency} | reviewerが確認 | ${safety} | finding |`;
+    return `| \`${escapeCell(p)}\` | ${changeType} | ${owner} | ${layer} | ${responsibility} | ${dependency} | reviewerが確認 | ${safety} | finding |`;
 }
 export function renderReviewArtifactDraft(input) {
     let content = input.template;

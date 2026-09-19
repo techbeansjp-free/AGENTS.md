@@ -11,6 +11,7 @@ import { isRecord, } from "../types.js";
 import { validateProviderCapabilityMapping } from "./provider-capability.js";
 import { validateRoleConfigurationIndependence } from "./routing-independence.js";
 import { MODEL_TIERS, ROLES } from "./role.js";
+import { DISPATCHABLE_REVIEWER_PROVIDERS } from "./reviewer-provider.js";
 import { validRuleRetirementProposals, } from "./project-rule-retirement.js";
 import { isSafeFinalizeIgnoredPathPrefix } from "./worktree-removal-safety.js";
 import { validateStagingPolicy } from "./staging-layout.js";
@@ -301,16 +302,18 @@ function validateModelMapping(value, errors) {
     const mapping = isRecord(value) ? value : {};
     rejectUnknownKeys(mapping.roles, ["coordinator", "implementer", "reviewer"], "modelMapping.roles", errors);
     const roles = isRecord(mapping.roles) ? mapping.roles : {};
-    for (const role of ["coordinator", "implementer", "reviewer"]) {
+    const validateIndependence = (record, name) => {
+        rejectUnknownKeys(record.independence, ["differentFrom"], `${name}.independence`, errors);
+        const independence = isRecord(record.independence)
+            ? record.independence
+            : {};
+        if (independence.differentFrom !== "implementer")
+            errors.push(`${name}.independence.differentFromはimplementerでなければなりません`);
+    };
+    for (const role of ["coordinator", "implementer"]) {
         const name = `modelMapping.roles.${role}`;
         const roleChoice = roles[role];
-        rejectUnknownKeys(roleChoice, [
-            "provider",
-            "logicalTier",
-            "reasoningEffort",
-            "speed",
-            ...(role === "reviewer" ? ["independence"] : []),
-        ], name, errors);
+        rejectUnknownKeys(roleChoice, ["provider", "logicalTier", "reasoningEffort", "speed"], name, errors);
         const record = isRecord(roleChoice) ? roleChoice : {};
         if (typeof record.provider !== "string" || record.provider.trim() === "")
             errors.push(`${name}.providerは空でない文字列でなければなりません`);
@@ -321,13 +324,41 @@ function validateModelMapping(value, errors) {
             errors.push(`${name}.reasoningEffortはhighでなければなりません`);
         if (record.speed !== "standard")
             errors.push(`${name}.speedはstandardでなければなりません`);
-        if (role === "reviewer") {
-            rejectUnknownKeys(record.independence, ["differentFrom"], `${name}.independence`, errors);
-            const independence = isRecord(record.independence)
-                ? record.independence
-                : {};
-            if (independence.differentFrom !== "implementer")
-                errors.push(`${name}.independence.differentFromはimplementerでなければなりません`);
+    }
+    {
+        const name = "modelMapping.roles.reviewer";
+        const roleChoice = roles.reviewer;
+        /**
+         * reviewer役割はCodex/Claude形状（agent）とローカルLLM形状（`mode`を持つ）の
+         * どちらかを取る（TERM-ASC-122, TERM-ASC-123）。`mode`fieldの有無で判別し、implementer
+         * 向けの固定値検証（logicalTier="highest_available"等）を持ち込まない（INV-05）。
+         */
+        const record = isRecord(roleChoice) ? roleChoice : {};
+        if (Object.hasOwn(record, "mode")) {
+            rejectUnknownKeys(roleChoice, ["provider", "mode", "endpoint", "model", "independence"], name, errors);
+            if (!DISPATCHABLE_REVIEWER_PROVIDERS.has(String(record.provider)))
+                errors.push(`${name}.providerは承認済みローカルLLM providerでなければなりません`);
+            if (record.mode !== "supplement" && record.mode !== "replace")
+                errors.push(`${name}.modeはsupplementまたはreplaceでなければなりません`);
+            if (typeof record.endpoint !== "string" ||
+                !/^http:\/\/(127\.0\.0\.1|localhost)(:[0-9]+)?(\/.*)?$/u.test(record.endpoint))
+                errors.push(`${name}.endpointはhttp://127.0.0.1またはhttp://localhostでなければなりません`);
+            if (typeof record.model !== "string" || record.model.trim() === "")
+                errors.push(`${name}.modelは空でない文字列でなければなりません`);
+            validateIndependence(record, name);
+        }
+        else {
+            rejectUnknownKeys(roleChoice, ["provider", "logicalTier", "reasoningEffort", "speed", "independence"], name, errors);
+            if (typeof record.provider !== "string" || record.provider.trim() === "")
+                errors.push(`${name}.providerは空でない文字列でなければなりません`);
+            if (record.logicalTier !== "project_default" &&
+                record.logicalTier !== "highest_available")
+                errors.push(`${name}.logicalTierが不正です`);
+            if (record.reasoningEffort !== "high")
+                errors.push(`${name}.reasoningEffortはhighでなければなりません`);
+            if (record.speed !== "standard")
+                errors.push(`${name}.speedはstandardでなければなりません`);
+            validateIndependence(record, name);
         }
     }
     const independence = validateRoleConfigurationIndependence(mapping.roles);

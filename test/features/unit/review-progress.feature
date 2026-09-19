@@ -55,3 +55,29 @@ Feature: 判定入力から分離したparallel progress evidenceの純粋契約
     Given parallel progressの純粋fixtureがある
     When "acyclic" のparallel progress反例を評価する
     Then parallel progress契約を満たす
+
+  Scenario: SCN-UNIT-PROGRESS-022 mode不一致を分類済みの不成立として返す
+    Given parallel progressの純粋fixtureがある
+    When "mode-mismatch" のparallel progress反例を評価する
+    Then parallel progress契約を満たす
+
+  Scenario: SCN-UNIT-PROGRESS-023 symlink対象ではchmodを案内しない
+    Given parallel progressの純粋fixtureがある
+    When "symlink-target" のparallel progress反例を評価する
+    Then parallel progress契約を満たす
+
+  Scenario: SCN-UNIT-PROGRESS-024 診断は相対pathとcommand名だけを出す
+    Given parallel progressの純粋fixtureがある
+    When "diagnostic-scope" のparallel progress反例を評価する
+    Then parallel progress契約を満たす
+
+  Scenario: SCN-UNIT-PROGRESS-025 marker不正とtask ID 0件を同じ分類で扱う
+    Given parallel progressの純粋fixtureがある
+    When "inventory-unbuildable" のparallel progress反例を評価する
+    Then parallel progress契約を満たす
+
+  Scenario: SCN-UNIT-PROGRESS-040 必要authorityを分類ごとに分ける
+    Given parallel progressの純粋fixtureがある
+    When "authority-per-reason" のparallel progress反例を評価する
+    Then parallel progress契約を満たす
+

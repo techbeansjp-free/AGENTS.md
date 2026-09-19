@@ -16,6 +16,12 @@ interface RepositoryReadException {
 export const REPOSITORY_READ_EXCEPTIONS: readonly RepositoryReadException[] =
   Object.freeze([
     {
+      file: "test/steps/lifecycle-isolation.steps.ts",
+      target: "package.json",
+      reason:
+        "配布入口の検査対象が配布実体と対応していることをdogfoodingで検証する。README.mdはsetupの展開対象ではなくpackage.jsonのfilesで配布されるため、filesから外れたら本scenarioは失敗すべきであり、fixture化すると乖離を検出できない",
+    },
+    {
       file: "test/steps/project-choice-diff.steps.ts",
       target: ".agent-skill-chain/project/choices/development.json",
       reason:

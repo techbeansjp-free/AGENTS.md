@@ -1,0 +1,455 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import http from "node:http";
+import { spawnSync } from "node:child_process";
+import {
+  launchSupplementalReviewDiff,
+  launchSupplementalReviewStaging,
+  type SupplementalReviewResult,
+} from "../../src/adapters/supplemental-review-launch.js";
+import {
+  collectSupplementalReviewDiff,
+  type SupplementalReviewDiffCollection,
+} from "../../src/adapters/supplemental-review-collect.js";
+import type {
+  ReviewerExecutionResult,
+  ReviewerExecutor,
+} from "../../src/domain/reviewer-provider.js";
+import { stepDefinitions, WorkflowWorld } from "../support/world.js";
+import { After } from "@cucumber/cucumber";
+
+class SupplementalReviewWorld extends WorkflowWorld {
+  root = "";
+  configPath = "";
+  stagingPath = "";
+  modelMappingFile = "";
+  modelMappingBefore = "";
+  baseSha = "";
+  headSha = "";
+  result: SupplementalReviewResult | undefined;
+  collection: SupplementalReviewDiffCollection | undefined;
+  collectLimit: number | undefined;
+  fakeServer: http.Server | undefined;
+  fakeServerPort = 0;
+}
+
+const { Given, When, Then } = stepDefinitions<SupplementalReviewWorld>();
+
+After<SupplementalReviewWorld>(async function () {
+  if (this.fakeServer) {
+    await new Promise<void>((resolve) =>
+      this.fakeServer!.close(() => resolve()),
+    );
+    this.fakeServer = undefined;
+  }
+});
+
+function runGit(root: string, args: string[]): string {
+  const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
+function initRepository(root: string): void {
+  fs.mkdirSync(root, { recursive: true });
+  runGit(root, ["init", "-q", "-b", "main"]);
+  runGit(root, ["config", "user.name", "supplemental-review-test"]);
+  runGit(root, [
+    "config",
+    "user.email",
+    "supplemental-review-test@example.invalid",
+  ]);
+  fs.writeFileSync(path.join(root, "README.md"), "# fixture\n");
+}
+
+function commitAll(root: string, message: string): string {
+  runGit(root, ["add", "-A"]);
+  runGit(root, ["commit", "-q", "-m", message]);
+  return runGit(root, ["rev-parse", "HEAD"]);
+}
+
+function writeConfig(
+  root: string,
+  configPath: string,
+  overrides: Partial<{
+    enabled: boolean;
+    provider: string;
+    model: string;
+    endpoint: string;
+    timeoutMs: number;
+  }> = {},
+): string {
+  const resolved = path.join(root, configPath);
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  fs.writeFileSync(
+    resolved,
+    JSON.stringify(
+      {
+        enabled: true,
+        provider: "ollama",
+        model: "qwen2.5-coder:32b",
+        endpoint: "http://127.0.0.1:1",
+        timeoutMs: 5000,
+        ...overrides,
+      },
+      null,
+      2,
+    ),
+  );
+  return resolved;
+}
+
+function fixedExecutor(result: ReviewerExecutionResult): ReviewerExecutor {
+  return async () => result;
+}
+
+// --- SCN-SUPPL-001 ---
+
+Given("補助レビュー設定ファイルが存在しない", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-001-")),
+  );
+  initRepository(this.root);
+  this.headSha = commitAll(this.root, "init");
+  this.baseSha = this.headSha;
+  this.configPath = ".agent-skill-chain/local/supplemental-review.json";
+});
+
+When("補助レビューCLIを実行する", async function () {
+  this.result = await launchSupplementalReviewDiff({
+    root: this.root,
+    baseSha: this.baseSha,
+    headSha: this.headSha,
+    configPath: this.configPath,
+  });
+});
+
+Then("結果はdisabledである", function () {
+  assert.ok(this.result);
+  assert.equal(this.result.state, "disabled");
+});
+
+// --- SCN-SUPPL-002 ---
+
+Given("modelMapping.roles.reviewerがcodexとして宣言されている", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-002-")),
+  );
+  initRepository(this.root);
+  this.modelMappingFile = path.join(
+    this.root,
+    ".agent-skill-chain/project/providers/model-mapping.json",
+  );
+  fs.mkdirSync(path.dirname(this.modelMappingFile), { recursive: true });
+  fs.writeFileSync(
+    this.modelMappingFile,
+    JSON.stringify(
+      { roles: { reviewer: { provider: "codex", logicalTier: "high" } } },
+      null,
+      2,
+    ),
+  );
+  this.modelMappingBefore = fs.readFileSync(this.modelMappingFile, "utf8");
+  this.headSha = commitAll(this.root, "init");
+  this.baseSha = this.headSha;
+});
+
+When("補助レビューCLIを有効な設定で実行する", async function () {
+  this.configPath = ".agent-skill-chain/local/supplemental-review.json";
+  writeConfig(this.root, this.configPath, {
+    endpoint: "http://127.0.0.1:1",
+  });
+  this.result = await launchSupplementalReviewDiff(
+    {
+      root: this.root,
+      baseSha: this.baseSha,
+      headSha: this.headSha,
+      configPath: this.configPath,
+    },
+    {
+      execute: fixedExecutor({
+        state: "succeeded",
+        reason: "ok",
+        output: '{"findings":[]}',
+      }),
+    },
+  );
+});
+
+Then("実行後もmodelMapping.roles.reviewerはcodexのままである", function () {
+  assert.ok(this.result);
+  const after = fs.readFileSync(this.modelMappingFile, "utf8");
+  assert.equal(after, this.modelMappingBefore);
+  const parsed = JSON.parse(after) as {
+    roles: { reviewer: { provider: string } };
+  };
+  assert.equal(parsed.roles.reviewer.provider, "codex");
+});
+
+// --- SCN-SUPPL-003 ---
+
+Given(
+  "対象HEADに、呼び出し元Aと呼び出し先Bのうち、Bだけを変更した差分がある",
+  function () {
+    this.root = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-003-")),
+    );
+    initRepository(this.root);
+    fs.writeFileSync(
+      path.join(this.root, "callerA.ts"),
+      'import { helper } from "./calleeB";\nhelper();\n',
+    );
+    fs.writeFileSync(
+      path.join(this.root, "calleeB.ts"),
+      "export function helper() {}\n",
+    );
+    this.baseSha = commitAll(this.root, "base");
+    fs.writeFileSync(
+      path.join(this.root, "calleeB.ts"),
+      "export function helper() { return 1; }\n",
+    );
+    this.headSha = commitAll(this.root, "change calleeB");
+  },
+);
+
+When("補助レビューCLI\\(diff対象\\)で収集処理を行う", function () {
+  this.collection = collectSupplementalReviewDiff(
+    this.root,
+    this.baseSha,
+    this.headSha,
+    this.collectLimit,
+  );
+});
+
+Then("収集結果にBの差分が含まれる", function () {
+  assert.ok(this.collection);
+  assert.ok(this.collection.changed.includes("calleeB.ts"));
+});
+
+Then(
+  "収集結果に、変更していない呼び出し元Aも関連ファイルとして含まれる",
+  function () {
+    assert.ok(this.collection);
+    assert.ok(this.collection.related.includes("callerA.ts"));
+  },
+);
+
+// --- SCN-SUPPL-008 ---
+
+Given("関連ファイル候補が上限件数を超えている", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-008-")),
+  );
+  initRepository(this.root);
+  fs.writeFileSync(path.join(this.root, "target.ts"), "export const x = 1;\n");
+  for (const name of ["ref1.ts", "ref2.ts", "ref3.ts"])
+    fs.writeFileSync(
+      path.join(this.root, name),
+      "// references target for related-file detection\n",
+    );
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(path.join(this.root, "target.ts"), "export const x = 2;\n");
+  this.headSha = commitAll(this.root, "change target");
+  this.collectLimit = 2;
+});
+
+Then("収集結果は上限件数までに打ち切られる", function () {
+  assert.ok(this.collection);
+  assert.equal(this.collection.related.length, 2);
+});
+
+Then("打ち切った旨が結果に含まれる", function () {
+  assert.ok(this.collection);
+  assert.equal(this.collection.truncated, true);
+});
+
+// --- SCN-SUPPL-004 ---
+
+Given("staging内の文書が同じIDに異なる内容を割り当てている", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-004-")),
+  );
+  initRepository(this.root);
+  this.stagingPath = ".agent-skill-chain/tmp/issues/fixture-issue";
+  const stagingDir = path.join(this.root, this.stagingPath);
+  fs.mkdirSync(stagingDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(stagingDir, "00_要求定義.md"),
+    "# 要求\n\nAC-01: ログイン失敗時はエラーを表示する\n",
+  );
+  fs.writeFileSync(
+    path.join(stagingDir, "01_要件定義.md"),
+    "# 要件\n\nAC-01: ログイン成功時はダッシュボードへ遷移する\n",
+  );
+  commitAll(this.root, "staging fixture");
+});
+
+When("補助レビューCLI\\(staging対象\\)を実行する", async function () {
+  this.configPath = ".agent-skill-chain/local/supplemental-review.json";
+  writeConfig(this.root, this.configPath, { endpoint: "http://127.0.0.1:1" });
+  this.result = await launchSupplementalReviewStaging(
+    {
+      root: this.root,
+      stagingPath: this.stagingPath,
+      configPath: this.configPath,
+    },
+    {
+      execute: fixedExecutor({
+        state: "succeeded",
+        reason: "ok",
+        output: JSON.stringify({
+          findings: [
+            {
+              file: "01_要件定義.md",
+              location: "AC-01",
+              content: "AC-01が00と01で異なる内容を指しています",
+              severity: "Medium",
+            },
+          ],
+        }),
+      }),
+    },
+  );
+});
+
+Then("指摘一覧に当該IDの不整合が含まれる", function () {
+  assert.ok(this.result);
+  assert.equal(this.result.state, "findings");
+  if (this.result.state !== "findings") return;
+  assert.ok(
+    this.result.findings.some((finding) => finding.content.includes("AC-01")),
+  );
+});
+
+// --- SCN-SUPPL-005 ---
+
+function startFakeOllama(
+  world: SupplementalReviewWorld,
+  handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
+): Promise<void> {
+  return new Promise((resolve) => {
+    const server = http.createServer(handler);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      world.fakeServerPort =
+        typeof address === "object" && address !== null ? address.port : 0;
+      world.fakeServer = server;
+      resolve();
+    });
+  });
+}
+
+Given(
+  "Ollamaがlocalhostで起動しており、収集済みの対象がある",
+  async function () {
+    this.root = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-005-")),
+    );
+    initRepository(this.root);
+    fs.writeFileSync(path.join(this.root, "a.ts"), "export const a = 1;\n");
+    this.baseSha = commitAll(this.root, "base");
+    fs.writeFileSync(path.join(this.root, "a.ts"), "export const a = 2;\n");
+    this.headSha = commitAll(this.root, "change");
+    await startFakeOllama(this, (req, res) => {
+      let body = "";
+      req.on("data", (chunk: Buffer) => (body += chunk.toString("utf8")));
+      req.on("end", () => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            response: JSON.stringify({
+              findings: [
+                {
+                  file: "a.ts",
+                  location: "L1",
+                  content: "定数の初期値が変更されています",
+                  severity: "Low",
+                },
+              ],
+            }),
+            done: true,
+          }),
+        );
+      });
+    });
+  },
+);
+
+When("補助レビューCLIの送信処理を行う", async function () {
+  this.configPath = ".agent-skill-chain/local/supplemental-review.json";
+  writeConfig(this.root, this.configPath, {
+    endpoint: `http://127.0.0.1:${this.fakeServerPort}`,
+  });
+  this.result = await launchSupplementalReviewDiff({
+    root: this.root,
+    baseSha: this.baseSha,
+    headSha: this.headSha,
+    configPath: this.configPath,
+  });
+});
+
+Then("file・該当箇所・内容・重大度を持つ指摘一覧を受け取る", function () {
+  assert.ok(this.result);
+  assert.equal(this.result.state, "findings");
+  if (this.result.state !== "findings") return;
+  assert.equal(this.result.findings.length, 1);
+  const [finding] = this.result.findings;
+  assert.equal(finding.file, "a.ts");
+  assert.equal(finding.location, "L1");
+  assert.equal(finding.content, "定数の初期値が変更されています");
+  assert.equal(finding.severity, "Low");
+});
+
+// --- SCN-SUPPL-006 ---
+
+Given("endpointがlocalhost以外を指すよう設定されている", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-006-")),
+  );
+  initRepository(this.root);
+  this.headSha = commitAll(this.root, "init");
+  this.baseSha = this.headSha;
+  this.configPath = ".agent-skill-chain/local/supplemental-review.json";
+  writeConfig(this.root, this.configPath, {
+    endpoint: "http://evil.example.invalid:9999",
+  });
+});
+
+Then("送信は行われずdegradedを返す", function () {
+  assert.ok(this.result);
+  assert.equal(this.result.state, "degraded");
+  if (this.result.state !== "degraded") return;
+  assert.match(this.result.reason, /loopback|127\.0\.0\.1|localhost/u);
+});
+
+// --- SCN-SUPPL-007 ---
+
+Given("Ollamaが起動していない", async function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-007-")),
+  );
+  initRepository(this.root);
+  this.headSha = commitAll(this.root, "init");
+  this.baseSha = this.headSha;
+  this.configPath = ".agent-skill-chain/local/supplemental-review.json";
+  const unused = await new Promise<number>((resolve) => {
+    const probe = http.createServer();
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address();
+      const port =
+        typeof address === "object" && address !== null ? address.port : 0;
+      probe.close(() => resolve(port));
+    });
+  });
+  writeConfig(this.root, this.configPath, {
+    endpoint: `http://127.0.0.1:${unused}`,
+    timeoutMs: 2000,
+  });
+});
+
+Then("CLIはdegradedを返し異常終了しない", async function () {
+  assert.ok(this.result);
+  assert.equal(this.result.state, "degraded");
+});

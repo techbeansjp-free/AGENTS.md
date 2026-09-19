@@ -293,6 +293,85 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "routing",
+    subcommand: "review-resolve",
+    summary:
+      "reviewer役割のローカルLLM providerへのroutingを解決する（implementer向けresolveとは独立）",
+    requiredFlags: [
+      flag("scope", "text", "解決するscope"),
+      flag("coordinator", "text", "coordinatorのidentity"),
+      flag("implementer", "text", "implementerのidentity"),
+      flag("reviewer", "text", "reviewerのidentity"),
+      flag("implementer-context", "text", "implementer context"),
+      flag("reviewer-context", "text", "独立reviewer context"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG],
+    example:
+      "npx agent-skill-chain routing review-resolve --scope=issue-1425 --coordinator=a --implementer=b --reviewer=c --implementer-context=b1 --reviewer-context=c1",
+  },
+  {
+    command: "routing",
+    subcommand: "review-launch",
+    summary:
+      "reviewer役割のローカルLLM providerを起動する（implementer向けlaunchとは独立）",
+    requiredFlags: [
+      flag("scope", "text", "実行scope"),
+      flag("coordinator", "text", "coordinator identity"),
+      flag("implementer", "text", "implementer identity"),
+      flag("reviewer", "text", "reviewer identity"),
+      flag("implementer-context", "text", "implementer context"),
+      flag("reviewer-context", "text", "独立reviewer context"),
+      flag("prompt-file", "path", "root内のreview対象本文file"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG],
+    example:
+      "npx agent-skill-chain routing review-launch --scope=issue-1425 --coordinator=a --implementer=b --reviewer=c --implementer-context=b1 --reviewer-context=c1 --prompt-file=review.txt",
+  },
+  {
+    command: "routing",
+    subcommand: "supplemental-review-diff",
+    summary:
+      "modelMapping.roles.reviewerを変更せず、exact-head diff＋関連ファイルの補助レビューを実行する（Issue #1428、opt-in）",
+    requiredFlags: [
+      flag("base", "sha", "比較基点SHA"),
+      flag("head", "sha", "対象HEAD SHA"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [
+      ROOT_FLAG,
+      optional("limit", "整数", "関連ファイルの上限件数", "20"),
+      optional(
+        "config-path",
+        "path",
+        "補助レビュー設定fileのpath（root相対）",
+        ".agent-skill-chain/local/supplemental-review.json",
+      ),
+    ],
+    example:
+      "npx agent-skill-chain routing supplemental-review-diff --base=$(git merge-base HEAD origin/main) --head=$(git rev-parse HEAD)",
+  },
+  {
+    command: "routing",
+    subcommand: "supplemental-review-staging",
+    summary:
+      "modelMapping.roles.reviewerを変更せず、staging文書間のID整合性を対象にした補助レビューを実行する（Issue #1428、opt-in）",
+    requiredFlags: [flag("staging", "path", "staging directoryのpath")],
+    conditionalFlags: [],
+    optionalFlags: [
+      ROOT_FLAG,
+      optional(
+        "config-path",
+        "path",
+        "補助レビュー設定fileのpath（root相対）",
+        ".agent-skill-chain/local/supplemental-review.json",
+      ),
+    ],
+    example:
+      "npx agent-skill-chain routing supplemental-review-staging --staging=.agent-skill-chain/tmp/issues/20260919_change",
+  },
+  {
+    command: "routing",
     subcommand: "independence",
     summary: "implementerとreviewerの独立性を検証する",
     requiredFlags: [
