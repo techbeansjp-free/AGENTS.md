@@ -9,6 +9,8 @@ export interface LocalLlmExecutionInput {
   endpoint: string;
   model: string;
   prompt: string;
+  /** 指定時は第2引数`limits.timeoutMs`より優先する（呼出し元のconfig単位設定を通す経路） */
+  timeoutMs?: number;
 }
 
 export type LocalLlmExecutionResult = ReviewerExecutionResult;
@@ -30,7 +32,7 @@ export async function executeLocalLlm(
   if (!/^[a-zA-Z0-9][a-zA-Z0-9:._-]{0,127}$/u.test(input.model))
     throw new Error("ローカルLLM実行のmodel名が不正です");
   const url = assertLoopbackEndpoint(input.endpoint);
-  const timeoutMs = limits.timeoutMs ?? 5 * 60 * 1000;
+  const timeoutMs = input.timeoutMs ?? limits.timeoutMs ?? 5 * 60 * 1000;
   const maxBytes = limits.maxOutputBytes ?? 8 * 1024 * 1024;
   if (
     !Number.isInteger(timeoutMs) ||

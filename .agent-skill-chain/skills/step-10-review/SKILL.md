@@ -9,6 +9,8 @@ description: exact-headの実装・テスト・仕様証拠を有限にレビュ
 
 各`review round`の入力JSON fileはstagingの外に置く。blocking findingの`contractId`はanchorのAcceptance Criteria IDまたはInvariant IDに一致させ、単な記録対象へ読み替えない。
 
+`.agent-skill-chain/local/supplemental-review.json`が有効な場合、`routing supplemental-review-diff`を実行し指摘を確認できる（任意、判定には用いない）。
+
 ## routing入力契約
 
 role欄の担当roleが`reviewer`であること、必要能力tier、provider欄の上限、model設定欄、fallback欄、独立性証拠欄、肯定・敵対review、finding分類、対象差分を変更していない証拠を実装時のrouting evidenceと突合する。providerとmodel設定はproject choiceの入力契約として扱い、固有のmodel slugからreview authorityを推測しない。**reviewerの独立性はproject policyの`merge.reviewIndependence`が決める。** `context-isolated`（既定）はimplementerと別session/context、exact HEAD固定、対象差分を変更していないこと、肯定・敵対レビューとfinding記録を要求し、**同一GitHub actorでも成立する。** `actor-independent`はPR author・implementation commit authorと別のstable actor IDを要求し、高リスク変更・不可逆操作・releaseでpolicyが宣言して引き上げる。**要求水準を独立性証拠欄で確認できない場合は停止条件を適用し、承認しない。** **同一provider・同一論理tierだけを理由に独立性違反としない。**reviewerはfindingを隠す修正を行わない。

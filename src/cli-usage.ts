@@ -330,6 +330,48 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "routing",
+    subcommand: "supplemental-review-diff",
+    summary:
+      "modelMapping.roles.reviewerを変更せず、exact-head diff＋関連ファイルの補助レビューを実行する（Issue #1428、opt-in）",
+    requiredFlags: [
+      flag("base", "sha", "比較基点SHA"),
+      flag("head", "sha", "対象HEAD SHA"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [
+      ROOT_FLAG,
+      optional("limit", "整数", "関連ファイルの上限件数", "20"),
+      optional(
+        "config-path",
+        "path",
+        "補助レビュー設定fileのpath（root相対）",
+        ".agent-skill-chain/local/supplemental-review.json",
+      ),
+    ],
+    example:
+      "npx agent-skill-chain routing supplemental-review-diff --base=$(git merge-base HEAD origin/main) --head=$(git rev-parse HEAD)",
+  },
+  {
+    command: "routing",
+    subcommand: "supplemental-review-staging",
+    summary:
+      "modelMapping.roles.reviewerを変更せず、staging文書間のID整合性を対象にした補助レビューを実行する（Issue #1428、opt-in）",
+    requiredFlags: [flag("staging", "path", "staging directoryのpath")],
+    conditionalFlags: [],
+    optionalFlags: [
+      ROOT_FLAG,
+      optional(
+        "config-path",
+        "path",
+        "補助レビュー設定fileのpath（root相対）",
+        ".agent-skill-chain/local/supplemental-review.json",
+      ),
+    ],
+    example:
+      "npx agent-skill-chain routing supplemental-review-staging --staging=.agent-skill-chain/tmp/issues/20260919_change",
+  },
+  {
+    command: "routing",
     subcommand: "independence",
     summary: "implementerとreviewerの独立性を検証する",
     requiredFlags: [

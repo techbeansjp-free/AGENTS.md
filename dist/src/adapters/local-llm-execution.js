@@ -12,7 +12,7 @@ export async function executeLocalLlm(input, limits = {}) {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9:._-]{0,127}$/u.test(input.model))
         throw new Error("ローカルLLM実行のmodel名が不正です");
     const url = assertLoopbackEndpoint(input.endpoint);
-    const timeoutMs = limits.timeoutMs ?? 5 * 60 * 1000;
+    const timeoutMs = input.timeoutMs ?? limits.timeoutMs ?? 5 * 60 * 1000;
     const maxBytes = limits.maxOutputBytes ?? 8 * 1024 * 1024;
     if (!Number.isInteger(timeoutMs) ||
         timeoutMs <= 0 ||

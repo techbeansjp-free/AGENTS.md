@@ -21,4 +21,6 @@ export type ReviewerExecutor = (input: {
   endpoint: string;
   model: string;
   prompt: string;
+  /** 省略時は各executorの既定値（`executeLocalLlm`は5分）を使う */
+  timeoutMs?: number;
 }) => Promise<ReviewerExecutionResult>;

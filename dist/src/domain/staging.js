@@ -990,6 +990,7 @@ export const STAGING_LIFECYCLE_AREAS = Object.freeze([
     ".agent-skill-chain/role-log",
     ".agent-skill-chain/metrics",
     ".agent-skill-chain/runtime",
+    ".agent-skill-chain/local",
 ]);
 /**
  * 一時ライフサイクル領域配下かを判定する。
