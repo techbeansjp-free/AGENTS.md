@@ -194,6 +194,23 @@ function observeRebaseEquivalence(root, input) {
             reason: "boundary-mismatch",
             gitFailure: afterBoundary.gitFailure,
         };
+    /**
+     * **新`H_final`がevidence-only suffixの形をmodeまで満たすことを要求する。**
+     *
+     * `verifiedImplementationBoundary`は変更pathの件数と名前しか見ない。mode
+     * `100755`のMarkdownは通常fileなので`git show`で本文が読め、構造検証・
+     * identity anchor・approval・個別監査表をすべて通過する。round 2は
+     * `artifact-replacement`と`reviewed-forward`の2経路にこの検査を足したが、
+     * **通常rebase経路（本関数）は対象外のまま残っていた。** `isContentEquivalent`が
+     * mode変更を含む「new file mode」行の差でfalseになり必ずこの関数へ入るため、
+     * ここを通さない限り3経路のうち最も一般的な経路がmode検証を欠く
+     * （Issue #1433、外部review round 4・Codex）。
+     *
+     * 旧`H_final`側へは適用しない。過去に受理した記録を遡って拒否へ変えない。
+     */
+    if (evidenceOnlySuffix(root, afterAnchor.implementation, input.newHeadSha) !==
+        afterPath)
+        return { reason: "mode-mismatch" };
     return {
         reason: isRebaseEquivalent({
             beforeImplementation: observeReanchorDiff(root, "旧base→旧H_impl", input, input.oldBaseSha, beforeAnchor.implementation, beforeAnchor.implementation),
