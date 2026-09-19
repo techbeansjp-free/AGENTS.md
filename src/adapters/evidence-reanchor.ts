@@ -378,10 +378,8 @@ interface ReviewedForwardEvidence {
   artifactDigest: string;
 }
 
-const REVIEW_ARTIFACT_NAME = /^\d+_課題\d+.*レビュー\.md$/u;
-
 /**
- * 命名是正で変わってよい機械導出・監査領域だけを正規化する。
+ * path是正で変わってよい機械導出・監査領域だけを正規化する。
  * finding、判定、独立性、test証拠などreview判断の本文はbyte比較へ残す。
  */
 function comparableArtifactContent(markdown: string): string {
@@ -473,12 +471,11 @@ function observeArtifactReplacement(
   );
   const oldPath = terminalArtifactPath(beforeAll.changedPaths);
   const newPath = terminalArtifactPath(afterAll.changedPaths);
-  if (
-    oldPath === undefined ||
-    newPath === undefined ||
-    oldPath === newPath ||
-    !REVIEW_ARTIFACT_NAME.test(path.posix.basename(newPath))
-  )
+  /**
+   * **新artifactがevidence-only allowlist配下であることは`terminalArtifactPath`が
+   * 既に保証している。** basenameの字面を重ねて要求しない（Issue #1433）。
+   */
+  if (oldPath === undefined || newPath === undefined || oldPath === newPath)
     return undefined;
   const oldArtifact = readBlobAtCommit(root, input.oldHeadSha, oldPath);
   const newArtifact = readBlobAtCommit(root, input.newHeadSha, newPath);
@@ -597,11 +594,7 @@ function observeReviewedForward(
     input.newHeadSha,
   );
   const artifactPath = terminalArtifactPath(finalSuffix.changedPaths);
-  if (
-    artifactPath === undefined ||
-    !REVIEW_ARTIFACT_NAME.test(path.posix.basename(artifactPath))
-  )
-    return undefined;
+  if (artifactPath === undefined) return undefined;
   const artifact = readBlobAtCommit(root, input.newHeadSha, artifactPath);
   if (artifact === undefined) return undefined;
   const anchor = parseReviewIdentityAnchor(artifact);
