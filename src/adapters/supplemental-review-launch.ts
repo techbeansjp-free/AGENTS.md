@@ -186,16 +186,25 @@ async function dispatch(
     };
   const scoped = filterReviewFindingsToTarget(findings, targetFiles);
   if (!verification) return { state: "findings", ...scoped, truncated };
-  const verified = await verifyReviewFindings(
-    {
-      ...verification,
-      findings: scoped.findings,
-      endpoint: config.endpoint,
-      model: config.model,
-      timeoutMs: config.timeoutMs,
-    },
-    executor,
-  );
+  let verified: SupplementalReviewFinding[] | undefined;
+  try {
+    verified = await verifyReviewFindings(
+      {
+        ...verification,
+        findings: scoped.findings,
+        endpoint: config.endpoint,
+        model: config.model,
+        timeoutMs: config.timeoutMs,
+      },
+      executor,
+    );
+  } catch {
+    return {
+      state: "degraded",
+      reason: "findingの投稿前検証に失敗しました",
+      truncated,
+    };
+  }
   if (verified === undefined)
     return {
       state: "degraded",

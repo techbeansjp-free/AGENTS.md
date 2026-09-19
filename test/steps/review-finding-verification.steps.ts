@@ -95,7 +95,16 @@ Given(
   },
 );
 
-async function review(world: VerificationWorld, valid: boolean | null) {
+async function review(
+  world: VerificationWorld,
+  verdict:
+    | "accept"
+    | "reject"
+    | "unsubstantiated-reject"
+    | "contradictory"
+    | "invented"
+    | "malformed",
+) {
   const executor: ReviewerExecutor = async ({ prompt }) => {
     world.reviewCalls++;
     if (prompt.includes("投稿前の独立したfinding検証者")) {
@@ -104,16 +113,36 @@ async function review(world: VerificationWorld, valid: boolean | null) {
         state: "succeeded",
         reason: "ok",
         output:
-          valid === null
+          verdict === "malformed"
             ? "invalid"
             : JSON.stringify({
                 verdicts: [
                   {
                     index: 0,
-                    valid,
-                    reason: valid
-                      ? "現在も失敗経路がある"
-                      : "修正後には成立しない",
+                    valid:
+                      verdict !== "reject" &&
+                      verdict !== "unsubstantiated-reject",
+                    reason:
+                      verdict !== "reject" &&
+                      verdict !== "unsubstantiated-reject"
+                        ? "現在も失敗経路がある"
+                        : "修正後には成立しない",
+                    faultCode:
+                      verdict === "reject" ||
+                      verdict === "unsubstantiated-reject"
+                        ? ""
+                        : verdict === "invented"
+                          ? "存在しない障害行"
+                          : world.after.trim(),
+                    failurePath:
+                      verdict === "reject" ||
+                      verdict === "unsubstantiated-reject"
+                        ? ""
+                        : "入力から障害へ到達",
+                    blockingCode:
+                      verdict === "contradictory" || verdict === "reject"
+                        ? world.after.trim()
+                        : "",
                   },
                 ],
               }),
@@ -141,13 +170,29 @@ async function review(world: VerificationWorld, valid: boolean | null) {
 }
 
 When("初回reviewerが修正前の欠陥を再掲し検証者が却下する", async function () {
-  await review(this, false);
+  await review(this, "reject");
 });
 When("初回reviewerが現在の欠陥を報告し検証者が確認する", async function () {
-  await review(this, true);
+  await review(this, "accept");
 });
 When("検証者が不正な応答を返す", async function () {
-  await review(this, null);
+  await review(this, "malformed");
+});
+When("検証者の判定と遮断根拠が矛盾する", async function () {
+  await review(this, "contradictory");
+});
+When("検証者が存在しない障害行を根拠にする", async function () {
+  await review(this, "invented");
+});
+When("検証者が遮断根拠なしで却下する", async function () {
+  await review(this, "unsubstantiated-reject");
+});
+When("差分内のfileがHEADで削除されて検証者が確認する", async function () {
+  fs.rmSync(path.join(this.root, "target.ts"));
+  git(this.root, "add", "-u");
+  git(this.root, "commit", "-q", "-m", "delete");
+  this.headSha = git(this.root, "rev-parse", "HEAD");
+  await review(this, "accept");
 });
 
 Then("補助レビューのfindingは空で検証入力に修正後fileが含まれる", function () {

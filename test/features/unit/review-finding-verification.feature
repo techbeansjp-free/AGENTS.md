@@ -28,3 +28,23 @@ Feature: finding投稿前に確定HEADの内容で検証する
     Given "SQLi混入" の修正前後を持つ隔離Git repositoryがある
     When 検証者が不正な応答を返す
     Then 補助レビューはdegradedである
+
+  Scenario: SCN-UNIT-FINDVERIFY-004 valid判定に遮断根拠が併記されたら公開しない
+    Given "nullガード追加" の修正前後を持つ隔離Git repositoryがある
+    When 検証者の判定と遮断根拠が矛盾する
+    Then 補助レビューはdegradedである
+
+  Scenario: SCN-UNIT-FINDVERIFY-005 存在しない障害行を根拠にしたら公開しない
+    Given "SQLi混入" の修正前後を持つ隔離Git repositoryがある
+    When 検証者が存在しない障害行を根拠にする
+    Then 補助レビューはdegradedである
+
+  Scenario: SCN-UNIT-FINDVERIFY-006 遮断根拠のない却下を確定判定にしない
+    Given "authz削除" の修正前後を持つ隔離Git repositoryがある
+    When 検証者が遮断根拠なしで却下する
+    Then 補助レビューはdegradedである
+
+  Scenario: SCN-UNIT-FINDVERIFY-007 削除済みfileの検証失敗をdegradedへ倒す
+    Given "nullガード追加" の修正前後を持つ隔離Git repositoryがある
+    When 差分内のfileがHEADで削除されて検証者が確認する
+    Then 補助レビューはdegradedである
