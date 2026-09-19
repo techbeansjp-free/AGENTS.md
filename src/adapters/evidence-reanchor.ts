@@ -19,6 +19,7 @@ import {
   validateContextIsolatedApprovalRecord,
   visibleMarkdownLines,
 } from "../domain/review-artifact.js";
+import { isEvidenceOnlyPath } from "../domain/review.js";
 import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
 import {
   calculateStagingDigest,
@@ -151,8 +152,6 @@ export function readEvidenceReanchorChain(
  * 「旧diffと新diffが一致する」対を作れてしまい、未reviewのbase内容を含むheadへ
  * 証跡を移送できる。束縛先は既存stateにある。
  */
-/** review artifactのpathとみなす接頭辞。`audit:check`の`AUDIT_DIRECTORY`と同じ。 */
-const REVIEW_ARTIFACT_PREFIX = "docs/reviews/";
 
 /**
  * 宣言された`H_impl`を構造で検証する。
@@ -199,10 +198,22 @@ function verifiedImplementationBoundary(
   };
 }
 
+/**
+ * 差分path集合からreview artifact候補を1件だけ同定する。
+ *
+ * **同定規則の正本はevidence-only allowlistである。** 判定は`pr create`、delivery
+ * state、review sessionと同じ`isEvidenceOnlyPath`へ委ねる。以前はこのadapterが
+ * `docs/reviews/`だけの単純前方一致を持っていたが、それはASC自repoの`audit:check`
+ * が使う運用上の狭い集合であって製品の契約ではない。**製品allowlistは利用側の
+ * 配置自由度であり、正本は`docs/reviews/`と`.agent-skill-chain/reviews/`の2つを
+ * 許す。** 同定規則を製品内の2箇所で別々に持つと、片方だけが正本から外れる
+ * （Issue #1433）。
+ *
+ * **file名の字面を受理条件にしない。** 正本は配置だけを定め、`02_品質基準.md`は
+ * 汎用packageが特定のfile名を強制しないことを要求する。
+ */
 function terminalArtifactPath(paths: readonly string[]): string | undefined {
-  const artifacts = paths.filter((entry) =>
-    entry.startsWith(REVIEW_ARTIFACT_PREFIX),
-  );
+  const artifacts = paths.filter(isEvidenceOnlyPath);
   /** **artifactが1件でない差分は同定できない。** 受理しない。 */
   return artifacts.length === 1 ? artifacts[0] : undefined;
 }
