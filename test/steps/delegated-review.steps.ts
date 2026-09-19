@@ -22,6 +22,7 @@ class DelegatedReviewWorld extends WorkflowWorld {
   baseSha = "";
   headSha = "";
   driftHeadDuringExecution = false;
+  rejectVerification = false;
   response = JSON.stringify({
     decision: "ready",
     affirmative: "要求と受け入れ条件が対応する",
@@ -40,6 +41,7 @@ function setup(world: DelegatedReviewWorld): void {
   world.configHome = path.join(world.root, "config-home");
   world.staging = ".agent-skill-chain/tmp/issues/example";
   world.reviewCalls = 0;
+  world.rejectVerification = false;
   world.dispatchedPrompt = "";
   world.response = JSON.stringify({
     decision: "ready",
@@ -90,6 +92,22 @@ function executor(world: DelegatedReviewWorld): ReviewerExecutor {
     world.reviewCalls += 1;
     world.dispatchedModel = input.model;
     world.dispatchedPrompt = input.prompt;
+    if (input.prompt.includes("投稿前の独立したfinding検証者"))
+      return {
+        state: "succeeded",
+        reason: "ok",
+        output: JSON.stringify({
+          verdicts: [
+            {
+              index: 0,
+              valid: !world.rejectVerification,
+              reason: world.rejectVerification
+                ? "現在のfileでは成立しない"
+                : "現在のfileに重大な欠落が残る",
+            },
+          ],
+        }),
+      };
     /**
      * LLM応答待ち中（executor実行中）にHEADが動いた状況を再現する。
      * ここでの追加commitはexecutorが「成功応答」を返す直前、すなわち
@@ -381,4 +399,15 @@ Then("委譲reviewの判定はchanges_requestedとなりHEADへ固定される",
   assert.equal(this.result.headSha, this.headSha);
   assert.match(this.result.inputDigest, /^[a-f0-9]{64}$/u);
   assert.match(this.result.outputDigest, /^[a-f0-9]{64}$/u);
+});
+
+Given("投稿前検証者はfindingを却下する", function () {
+  this.rejectVerification = true;
+});
+Then("委譲reviewはfindingなしでapprovedを返す", function () {
+  assert.equal(this.result?.state, "reviewed", JSON.stringify(this.result));
+  if (this.result?.state !== "reviewed") return;
+  assert.deepEqual(this.result.findings, []);
+  assert.equal(this.result.decision, "approved");
+  assert.equal(this.reviewCalls, 2);
 });

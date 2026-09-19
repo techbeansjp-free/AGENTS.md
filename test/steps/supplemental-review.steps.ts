@@ -104,7 +104,18 @@ function writeConfig(
 }
 
 function fixedExecutor(result: ReviewerExecutionResult): ReviewerExecutor {
-  return async () => result;
+  return async ({ prompt }) =>
+    prompt.includes("投稿前の独立したfinding検証者")
+      ? {
+          state: "succeeded",
+          reason: "ok",
+          output: JSON.stringify({
+            verdicts: [
+              { index: 0, valid: true, reason: "変更後のfileで確認した" },
+            ],
+          }),
+        }
+      : result;
 }
 
 // --- SCN-SUPPL-001 ---
@@ -756,16 +767,22 @@ Given(
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
-            response: JSON.stringify({
-              findings: [
-                {
-                  file: "a.ts",
-                  location: "L1",
-                  content: "定数の初期値が変更されています",
-                  severity: "Low",
-                },
-              ],
-            }),
+            response: body.includes("投稿前の独立したfinding検証者")
+              ? JSON.stringify({
+                  verdicts: [
+                    { index: 0, valid: true, reason: "現在のfileで確認した" },
+                  ],
+                })
+              : JSON.stringify({
+                  findings: [
+                    {
+                      file: "a.ts",
+                      location: "L1",
+                      content: "定数の初期値が変更されています",
+                      severity: "Low",
+                    },
+                  ],
+                }),
             done: true,
           }),
         );
