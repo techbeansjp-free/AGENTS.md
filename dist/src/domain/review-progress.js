@@ -172,7 +172,14 @@ export function describeReviewProgressUnbuildable(input) {
     if (input.reason === "not-regular-file")
         return Object.freeze({
             ...base,
-            action: `${input.targetPath}がsymlinkです。chmodではlink先を書き換えてしまうため、staging内の通常fileへ置き換えてください`,
+            /**
+             * **種別ごとに案内を分ける。** `not-regular-file`はsymlinkだけでなく
+             * directoryやFIFOも含む。symlink固有の理由（chmodがlink先を書き換える）を
+             * directoryへ出すと、利用者は存在しない危険を避けようとして誤った手を打つ。
+             */
+            action: input.isSymbolicLink
+                ? `${input.targetPath}がsymlinkです。chmodではlink先を書き換えてしまうため、staging内の通常fileへ置き換えてください`
+                : `${input.targetPath}が通常fileではありません。chmodでは種別を変えられないため、staging内の通常fileへ置き換えてください`,
             repairArgv: null,
         });
     if (input.reason === "marker-not-single-pair")

@@ -1189,6 +1189,13 @@ nb.Then("not-regular-fileとして案内する", function () {
   assert.ok(note.includes("not-regular-file"), note);
   /** 通常fileでない対象へchmodを案内しない。 */
   assert.ok(!note.includes("chmod 0644"), note);
+  /**
+   * **案内の本文を名指しで検査する。** 本fixtureはdirectoryであり、
+   * symlinkではない。分類名だけを検査すると、種別によらず「symlinkです」と
+   * 出す実装を素通りさせる。
+   */
+  assert.ok(note.includes("が通常fileではありません"), note);
+  assert.ok(!note.includes("symlinkです"), note);
 });
 
 nb.Given("markerが片側だけの03を持つstagingがある", function () {
