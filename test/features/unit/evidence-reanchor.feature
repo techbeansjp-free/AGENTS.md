@@ -161,3 +161,48 @@ Feature: rebase後の証跡再固定を内容等価性で受理する
     Given 固定済みPR identityを持つstagingと等価なrebaseがある
     When reanchor公開後かつstaging digest更新前の停止から同じ入力を再実行する
     Then 再固定chainを重複させずstaging digestが新chainへ一致する
+
+  @issue-1433
+  Scenario: SCN-UNIT-REANCHOR-033 製品既定出力名のartifactをreviewed-forwardで受理する
+    Given pr-bound後に前進した実装と「製品既定出力名」へ置いたpost-PR intakeのreview artifactがある
+    When 再固定を適用する
+    Then 再固定chainは1件伸び実効HEADは新headになる
+    And 再固定recordのartifact pathは「製品既定出力名」と一致する
+
+  @issue-1433
+  Scenario: SCN-UNIT-REANCHOR-034 第2 allowlist配下の新artifactをartifact replacementで受理する
+    Given pr-boundの旧artifactと同一実装を監査した「第2allowlist」の新artifactがある
+    When 再固定を適用する
+    Then 再固定chainは1件伸び実効HEADは新headになる
+    And 再固定recordのartifact pathは「第2allowlist」と一致する
+
+  @issue-1433
+  Scenario: SCN-UNIT-REANCHOR-035 第2 allowlist配下のartifactを通常rebaseで同定する
+    Given 固定済みPR identityを持つstagingと「第2allowlist」へ置いた等価なrebaseがある
+    When 再固定を適用する
+    Then 再固定chainは1件伸び実効HEADは新headになる
+
+  @issue-1433
+  Scenario Outline: SCN-UNIT-REANCHOR-036 evidence-only allowlist外のpathを候補に数えない
+    Given 固定済みPR identityを持つstagingと「<配置>」へ置いた等価なrebaseがある
+    When 再固定を適用する
+    Then 再固定は"artifact-not-unique"を理由に拒否される
+
+    Examples:
+      | 配置 |
+      | prefix延長 |
+      | prefix短縮 |
+      | backslash |
+      | 制御文字 |
+
+  @issue-1433
+  Scenario: SCN-UNIT-REANCHOR-038 allowlist配下のartifactが2件ある差分を同定しない
+    Given 固定済みPR identityを持つstagingとartifactが2件変わる等価なrebaseがある
+    When 再固定を適用する
+    Then 再固定は"artifact-not-unique"を理由に拒否される
+
+  @issue-1433
+  Scenario: SCN-UNIT-REANCHOR-037 自repoの慣習名の受理が変わらない
+    Given 固定済みPR identityを持つstagingと「自repo慣習名」へ置いた等価なrebaseがある
+    When 再固定を適用する
+    Then 再固定chainは1件伸び実効HEADは新headになる
