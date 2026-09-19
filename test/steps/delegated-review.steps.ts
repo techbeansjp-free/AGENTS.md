@@ -382,3 +382,40 @@ Then("委譲reviewの判定はchanges_requestedとなりHEADへ固定される",
   assert.match(this.result.inputDigest, /^[a-f0-9]{64}$/u);
   assert.match(this.result.outputDigest, /^[a-f0-9]{64}$/u);
 });
+
+Given("chill profileのStep 3委譲reviewer設定がある", function () {
+  setup(this);
+  writeConfig(this, "local", config("qwen3-coder:30b", { profile: "chill" }));
+  this.response = JSON.stringify({
+    decision: "blocked",
+    affirmative: "要件を確認した",
+    adversarial: "失敗経路を確認した",
+    findings: [
+      {
+        file: "00_要求定義.md",
+        location: "1",
+        content: "重大な欠落",
+        severity: "High",
+        effort: "Quick win",
+      },
+      {
+        file: "00_要求定義.md",
+        location: "1",
+        content: "軽微な欠落",
+        severity: "Low",
+        effort: "Heavy lift",
+      },
+    ],
+  });
+});
+
+Then("委譲reviewはHighのEffortだけを返す", function () {
+  assert.equal(this.result?.state, "reviewed");
+  if (this.result?.state !== "reviewed") return;
+  assert.deepEqual(
+    this.result.findings.map((finding) => [finding.severity, finding.effort]),
+    [["High", "Quick win"]],
+  );
+  assert.equal(this.result.decision, "blocked");
+  assert.match(this.dispatchedPrompt, /chill profile/u);
+});

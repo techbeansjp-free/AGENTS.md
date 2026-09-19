@@ -850,3 +850,93 @@ Then("CLIはdegradedを返し異常終了しない", async function () {
   assert.ok(this.result);
   assert.equal(this.result.state, "degraded");
 });
+
+function setupProfileReview(
+  world: SupplementalReviewWorld,
+  profile: "chill" | "assertive",
+) {
+  world.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-profile-")),
+  );
+  world.temporaryDirectories.push(world.root);
+  initRepository(world.root);
+  fs.writeFileSync(
+    path.join(world.root, "target.ts"),
+    "export const value = 1;\n",
+  );
+  world.baseSha = commitAll(world.root, "base");
+  fs.writeFileSync(
+    path.join(world.root, "target.ts"),
+    "export const value = 2;\n",
+  );
+  world.headSha = commitAll(world.root, "change");
+  world.configPath = ".agent-skill-chain/local/supplemental-review.json";
+  writeConfig(world.root, world.configPath);
+  const file = path.join(world.root, world.configPath);
+  const config = JSON.parse(fs.readFileSync(file, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  config.profile = profile;
+  fs.writeFileSync(file, JSON.stringify(config));
+}
+
+Given("chill profileの補助レビュー対象差分がある", function () {
+  setupProfileReview(this, "chill");
+});
+Given("assertive profileの補助レビュー対象差分がある", function () {
+  setupProfileReview(this, "assertive");
+});
+When("補助reviewerがHighとLowのEffort付き指摘を返す", async function () {
+  this.result = await launchSupplementalReviewDiff(
+    {
+      root: this.root,
+      baseSha: this.baseSha,
+      headSha: this.headSha,
+      configPath: this.configPath,
+    },
+    {
+      execute: fixedExecutor({
+        state: "succeeded",
+        reason: "ok",
+        output: JSON.stringify({
+          findings: [
+            {
+              file: "target.ts",
+              location: "1",
+              content: "重大な問題",
+              severity: "High",
+              effort: "Quick win",
+            },
+            {
+              file: "target.ts",
+              location: "1",
+              content: "軽微な問題",
+              severity: "Low",
+              effort: "Heavy lift",
+            },
+          ],
+        }),
+      }),
+    },
+  );
+});
+Then("HighのQuick winだけが表示される", function () {
+  assert.equal(this.result?.state, "findings");
+  if (this.result?.state !== "findings") return;
+  assert.deepEqual(
+    this.result.findings.map((finding) => [finding.severity, finding.effort]),
+    [["High", "Quick win"]],
+  );
+});
+Then("HighとLowのEffort付き指摘が表示される", function () {
+  assert.equal(this.result?.state, "findings");
+  if (this.result?.state !== "findings") return;
+  assert.deepEqual(
+    this.result.findings.map((finding) => [finding.severity, finding.effort]),
+    [
+      ["High", "Quick win"],
+      ["Low", "Heavy lift"],
+    ],
+  );
+});

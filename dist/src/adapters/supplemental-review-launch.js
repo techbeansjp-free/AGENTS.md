@@ -6,6 +6,7 @@ import { REVIEWER_EXECUTORS } from "./reviewer-executors.js";
 import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
 import { isRecord } from "../types.js";
 import { filterReviewFindingsToTarget } from "../domain/review-finding-scope.js";
+import { REVIEW_EFFORTS, reviewProfileInstruction, visibleReviewFindings, } from "../domain/review-presentation.js";
 import { peekPrimaryReviewRoot, resolveReviewRoot, resolveReviewWorkspace, } from "./review-workspace.js";
 /**
  * CodeRabbit等の商用AIレビュアーが公開する観点（バグ・セキュリティ・
@@ -48,7 +49,8 @@ const STAGING_REVIEW_INSTRUCTION = "あなたは要求・要件・設計文書�
     "各指摘は、文書から読み取れる根拠がある場合だけ行ってください。";
 const RESPONSE_FORMAT_INSTRUCTION = "出力は必ず次の形式のJSONだけにしてください（前後に説明文を付けない）: " +
     '{"findings": [{"file": "対象file", "location": "該当箇所", ' +
-    '"content": "指摘内容（日本語）", "severity": "Critical|High|Medium|Low"}]}';
+    '"content": "指摘内容（日本語）", "severity": "Critical|High|Medium|Low", ' +
+    '"effort": "Quick win|Moderate|Heavy lift"}]}。effortは修正工数の目安です。';
 const VALID_SEVERITIES = [
     "Critical",
     "High",
@@ -72,11 +74,17 @@ function parseFindings(output) {
             typeof item.content !== "string" ||
             !VALID_SEVERITIES.includes(item.severity))
             return undefined;
+        if (item.effort !== undefined &&
+            !REVIEW_EFFORTS.includes(item.effort))
+            return undefined;
         findings.push({
             file: item.file,
             location: typeof item.location === "string" ? item.location : "",
             content: item.content,
             severity: item.severity,
+            ...(item.effort !== undefined
+                ? { effort: item.effort }
+                : {}),
         });
     }
     return findings;
@@ -106,7 +114,7 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute) {
         };
     }
     const prompt = `findingの対象fileは今回のreview対象に限ります: ${JSON.stringify(targetFiles)}。関連fileは文脈だけです。別taskや過去Issueの欠陥を今回のfindingへ混ぜないでください。\n\n` +
-        `${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
+        `${reviewProfileInstruction(config.profile)}${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
     const executed = await executor({
         endpoint: config.endpoint,
         model: config.model,
@@ -123,7 +131,12 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute) {
             truncated,
         };
     const scoped = filterReviewFindingsToTarget(findings, targetFiles);
-    return { state: "findings", ...scoped, truncated };
+    return {
+        state: "findings",
+        ...scoped,
+        findings: visibleReviewFindings(scoped.findings, config.profile),
+        truncated,
+    };
 }
 /**
  * base/head解決不可、非loopback endpoint（`assertLoopbackEndpoint`の拒否）、

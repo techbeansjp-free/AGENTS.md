@@ -35,6 +35,11 @@
       "type": "integer",
       "minimum": 1,
       "description": "省略時は300000（5分）"
+    },
+    "profile": {
+      "type": "string",
+      "enum": ["chill", "assertive"],
+      "description": "chillはCritical/Highだけ、assertiveは全severityを表示。省略時は従来互換のassertive"
     }
   }
 }

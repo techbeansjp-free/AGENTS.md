@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DISPATCHABLE_REVIEWER_PROVIDERS } from "./reviewer-provider.js";
+import type { ReviewProfile } from "./review-presentation.js";
 
 /**
  * 補助レビューの既定配置。`modelMapping.roles.reviewer`（Issue #1425、
@@ -16,6 +17,7 @@ export interface SupplementalReviewConfig {
   model: string;
   endpoint: string;
   timeoutMs: number;
+  profile: ReviewProfile;
 }
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
@@ -25,6 +27,7 @@ const ALLOWED_FIELDS = new Set([
   "model",
   "endpoint",
   "timeoutMs",
+  "profile",
 ]);
 
 /**
@@ -81,5 +84,18 @@ export function loadSupplementalReviewConfig(
   )
     return undefined;
   const timeoutMs = timeoutMsRaw ?? DEFAULT_TIMEOUT_MS;
-  return { enabled: true, provider, model, endpoint, timeoutMs };
+  if (
+    record.profile !== undefined &&
+    record.profile !== "chill" &&
+    record.profile !== "assertive"
+  )
+    return undefined;
+  return {
+    enabled: true,
+    provider,
+    model,
+    endpoint,
+    timeoutMs,
+    profile: (record.profile ?? "assertive") as ReviewProfile,
+  };
 }
