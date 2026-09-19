@@ -229,3 +229,14 @@ Feature: rebase後の証跡再固定を内容等価性で受理する
       | 実行権限 |
       | symlink |
 
+  @issue-1433
+  Scenario Outline: SCN-UNIT-REANCHOR-041 mode不正の終端artifactを通常rebaseで受理しない
+    Given 固定済みPR identityを持つstagingと等価なrebaseの終端artifactがmode不正「<mode>」になっている
+    When 再固定を適用する
+    Then 再固定は拒否される
+
+    Examples:
+      | mode |
+      | 実行権限 |
+      | symlink |
+

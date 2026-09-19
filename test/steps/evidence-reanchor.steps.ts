@@ -820,6 +820,21 @@ Given(
 );
 
 /**
+ * **通常rebase経路のmode検証を固定する（Issue #1433 round 4、外部review Codex）。**
+ *
+ * `artifactFixture`が等価なrebaseを組んだ直後の終端commitを
+ * `rewriteTerminalArtifactMode`で置き換え、review artifactのmodeだけを
+ * 不正にする。実装内容・比較基点・H_impl宣言は変えない。
+ */
+Given(
+  "固定済みPR identityを持つstagingと等価なrebaseの終端artifactがmode不正「{word}」になっている",
+  function (kind: string) {
+    artifactFixture(this);
+    rewriteTerminalArtifactMode(this, REVIEW_ARTIFACT, kind);
+  },
+);
+
+/**
  * **候補が1件でない差分は同定できない（Issue #1433）。**
  *
  * allowlist配下のartifactを新head側だけ2件にする。`terminalArtifactPath`が
