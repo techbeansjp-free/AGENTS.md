@@ -188,6 +188,7 @@ export function buildReviewRoundDraft(input) {
                 reason: "not-regular-file",
                 observedMode: progressStat.mode & 0o777,
                 isSymbolicLink: progressStat.isSymbolicLink(),
+                isRegularFile: false,
             };
         else if (progressStat &&
             progressSource !== undefined &&
@@ -201,6 +202,7 @@ export function buildReviewRoundDraft(input) {
             const outcome = tryBuildReviewProgressInventory("03_実装計画.md", progressSource, {
                 fileMode: progressStat.mode & 0o777,
                 isSymbolicLink: progressStat.isSymbolicLink(),
+                isRegularFile: progressStat.isFile(),
             });
             if (outcome.state === "built")
                 progressInventory = outcome.inventory;
@@ -212,6 +214,7 @@ export function buildReviewRoundDraft(input) {
                 reason: unbuildable.reason,
                 observedMode: unbuildable.observedMode,
                 isSymbolicLink: unbuildable.isSymbolicLink,
+                isRegularFile: unbuildable.isRegularFile,
                 targetPath: "03_実装計画.md",
             });
             progressNotes.push(`[${guidance.code}] ${guidance.target}のparallel progress inventoryを構築できません（${guidance.reason}）。実測=${guidance.observed} 期待=${guidance.expected}。${guidance.effect}。${guidance.action}${guidance.repairArgv ? `: ${guidance.repairArgv.join(" ")}` : ""}。必要authority=${guidance.requiredAuthority}。rollback=${guidance.rollback}`);

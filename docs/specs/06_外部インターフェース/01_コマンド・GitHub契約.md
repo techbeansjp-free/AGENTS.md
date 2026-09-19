@@ -74,7 +74,7 @@ finalize時に削除可能なignore対象は、package既定の`node_modules/`�
 
 Issue成果物とPR本文の未解決placeholder検査はREQ-SQ-008の共有comment境界を使う。code外で始まる完全な`<!-- ... -->`は空・複数行・隣接を含めて候補から除外し、未終端commentとcomment外の候補は拒否する。code内のcomment openerは後続本文を隠さず、実comment内のbacktickやfence風の行はcomment終端を変えない。各完全commentを最低1改行へ置換して内部改行を保持し、前後の断片を結合しない。正規parallel progress markerを保持した完成済みfull Issueはexit 0・valid trueとなり、入力fileのbytesとprogress inventory生成を維持する。実候補があれば従来どおりexit 1・valid falseと字面付きerrorを返し、sort・重複除去後の先頭5件と残数だけを表示する。PR本文の必須見出し検査は引き続き適用する。
 
-`review round --init`は、progress inventoryを構築できない03に対しても終了値を変えずroundを開き、分類・実測mode・期待mode `100644`・staging相対name・採る行動・必要authority・rollbackを持つ案内を返す（TERM-ASC-122）。対象が通常fileでない場合は`chmod`を案内せず通常fileへの置換を示す。案内はstaging相対nameとcommand名だけを含み、絶対path、環境変数、tokenを含めない。分類外の失敗は従来どおり拒否する。`issue create`と`workflow promote-full`が生成する`03_実装計画.md`のmodeは`100644`とし、実行環境のumaskとtemplateのon-disk modeに依存させない。固定できない環境でもどちらも拒否しない。
+`review round --init`は、progress inventoryを構築できない03に対しても終了値を変えずroundを開き、分類・実測mode・期待mode `100644`・staging相対name・採る行動・必要authority・rollbackを持つ案内を返す（TERM-ASC-125）。対象が通常fileでない場合は`chmod`を案内せず通常fileへの置換を示す。案内はstaging相対nameとcommand名だけを含み、絶対path、環境変数、tokenを含めない。分類外の失敗は従来どおり拒否する。`issue create`と`workflow promote-full`が生成する`03_実装計画.md`のmodeは`100644`とし、実行環境のumaskとtemplateのon-disk modeに依存させない。固定できない環境でもどちらも拒否しない。
 
 design相当の検証で02 §4.2・§8・§9または03 §5.2に`対象外: <理由>`が現れた場合は、`verification-input.json`をstrictに読み、risk=`low`かつ理由付き1行だけを受理する。medium・high・critical・unknown・入力不正・理由なしはartifactと節を示して終了code 1で拒否する。既存詳細形式とmode判定は変更しない。
 

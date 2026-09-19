@@ -404,7 +404,7 @@ When(
           const outcome = tryBuildReviewProgressInventory(
             "03_実装計画.md",
             this.source,
-            { fileMode: mode, isSymbolicLink },
+            { fileMode: mode, isSymbolicLink, isRegularFile: !isSymbolicLink },
           );
           return outcome.state === "built" ? "built" : outcome.reason;
         };
@@ -420,6 +420,7 @@ When(
           reason: "mode-mismatch",
           observedMode: 0o664,
           isSymbolicLink: false,
+          isRegularFile: true,
           targetPath: "03_実装計画.md",
         });
         assert.equal(guidance.observed, "100664");
@@ -429,6 +430,7 @@ When(
             reason: "mode-mismatch",
             observedMode: 0o600,
             isSymbolicLink: false,
+            isRegularFile: true,
             targetPath: "03_実装計画.md",
           }).observed,
           "100600",
@@ -443,6 +445,7 @@ When(
             reason: "mode-mismatch",
             observedMode: 0o044,
             isSymbolicLink: false,
+            isRegularFile: true,
             targetPath: "03_実装計画.md",
           }).observed,
           "100044",
@@ -452,6 +455,7 @@ When(
             reason: "mode-mismatch",
             observedMode: 0o100644,
             isSymbolicLink: false,
+            isRegularFile: true,
             targetPath: "03_実装計画.md",
           }).observed,
           "100644",
@@ -476,6 +480,7 @@ When(
           reason: "not-regular-file",
           observedMode: 0o777,
           isSymbolicLink: true,
+          isRegularFile: false,
           targetPath: "03_実装計画.md",
         });
         assert.equal(guidance.reason, "not-regular-file");
@@ -492,6 +497,7 @@ When(
             reason,
             observedMode: 0o664,
             isSymbolicLink: reason === "not-regular-file",
+            isRegularFile: reason !== "not-regular-file",
             targetPath: "03_実装計画.md",
           });
           const rendered = [
@@ -523,6 +529,7 @@ When(
             reason,
             observedMode: 0o664,
             isSymbolicLink: reason === "not-regular-file",
+            isRegularFile: reason !== "not-regular-file",
             targetPath: "03_実装計画.md",
           }).requiredAuthority;
         assert.equal(authority("mode-mismatch"), "対象fileのmode変更権限");
@@ -548,6 +555,7 @@ When(
           tryBuildReviewProgressInventory("03_実装計画.md", source, {
             fileMode: 0o644,
             isSymbolicLink: false,
+            isRegularFile: true,
           });
         assert.equal(at(this.source).state, "built");
         assert.equal(
@@ -571,6 +579,7 @@ When(
           tryBuildReviewProgressInventory("../03_実装計画.md", this.source, {
             fileMode: 0o644,
             isSymbolicLink: false,
+            isRegularFile: true,
           }),
         );
         break;
@@ -620,15 +629,25 @@ const nb = stepDefinitions<NonblockingWorld>();
  */
 const templateModeRestore: Array<[string, number]> = [];
 cucumberAfter(function () {
+  /**
+   * **復元失敗を握り潰さない。** 失敗したまま通すと追跡済みtemplateが0664で
+   * 残り、後続scenarioと開発環境を汚染する。gitは0644と0664の差を追跡しない
+   * ので`git status`もCIのclean検査も検出しない。ここで落とすのが唯一の signal。
+   */
+  const failures: string[] = [];
   while (templateModeRestore.length > 0) {
     const entry = templateModeRestore.pop();
     if (!entry) break;
     try {
       fs.chmodSync(entry[0], entry[1]);
-    } catch {
-      /* 復元不能でもtestの判定は変えない */
+    } catch (error) {
+      failures.push(`${entry[0]}: ${String(error)}`);
     }
   }
+  if (failures.length > 0)
+    throw new Error(
+      `templateのmode復元に失敗しました。追跡済みfileが変更されたまま残っています: ${failures.join("; ")}`,
+    );
 });
 
 /** 実装HEAD bindingを持つreview前stagingを作る。03のmodeだけを引数で変える。 */
@@ -890,7 +909,7 @@ nb.Then("生成された03のmodeは0644である", function () {
  * 公開CLIの`issue create`が作ったstagingをそのまま`review round --init`へ渡し、
  * 手動`chmod`を一度も挟まずにinventoryが固定されることを観測する。
  */
-nb.Given("配布CLIのissue create出力がある", function () {
+nb.Given("配布CLIのissue create出力がある", async function () {
   const previous = process.umask(0o002);
   try {
     this.root = this.initRepo();
@@ -903,12 +922,40 @@ nb.Given("配布CLIのissue create出力がある", function () {
       cwd: this.root,
     });
     this.fixtureHead = gitHead(this.root);
-    this.staging = createIssueStaging(this.root, {
-      title: "e2e-generated",
-      answers: fixtureAnswers(),
-      now: new Date(instant),
-      requestedMode: "full",
-    }).path;
+    /**
+     * **`createIssueStaging`を直接呼ばない。** adapterを直接呼ぶと
+     * `src/cli.ts`の`issue create` handlerが一行も実行されず、handler側の
+     * mode固定を消す変異が生存する。本scenarioは「配布CLIのissue create出力」
+     * を名乗るため、argv経路でstagingを生成する。
+     */
+    const assessment = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "asc-e2e-issue-create-")),
+      "assessment.json",
+    );
+    fs.writeFileSync(assessment, JSON.stringify(fixtureAnswers()));
+    assert.equal(
+      await main(
+        [
+          "issue",
+          "create",
+          `--root=${this.root}`,
+          "--title=e2e-generated",
+          "--mode=full",
+          `--assessment=${assessment}`,
+        ],
+        { now: () => new Date(instant) },
+      ),
+      0,
+    );
+    const stagingRoot = path.join(
+      this.root,
+      ".agent-skill-chain",
+      "tmp",
+      "issues",
+    );
+    const generated = fs.readdirSync(stagingRoot);
+    assert.equal(generated.length, 1);
+    this.staging = path.join(stagingRoot, generated[0]!);
   } finally {
     process.umask(previous);
   }
@@ -1061,6 +1108,7 @@ nb.Then("どの分類でも案内がnotesへ出る", function () {
       >[0]["reason"],
       observedMode: 0o664,
       isSymbolicLink: false,
+      isRegularFile: true,
       targetPath: "03_実装計画.md",
     });
     assert.ok(

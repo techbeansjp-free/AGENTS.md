@@ -250,6 +250,7 @@ export function buildReviewRoundDraft(input: {
           reason: ReviewProgressUnbuildableReason;
           observedMode: number;
           isSymbolicLink: boolean;
+          isRegularFile: boolean;
         }
       | undefined;
     if (progressStat && !progressStat.isFile())
@@ -257,6 +258,7 @@ export function buildReviewRoundDraft(input: {
         reason: "not-regular-file",
         observedMode: progressStat.mode & 0o777,
         isSymbolicLink: progressStat.isSymbolicLink(),
+        isRegularFile: false,
       };
     else if (
       progressStat &&
@@ -275,6 +277,7 @@ export function buildReviewRoundDraft(input: {
         {
           fileMode: progressStat.mode & 0o777,
           isSymbolicLink: progressStat.isSymbolicLink(),
+          isRegularFile: progressStat.isFile(),
         },
       );
       if (outcome.state === "built") progressInventory = outcome.inventory;
@@ -285,6 +288,7 @@ export function buildReviewRoundDraft(input: {
         reason: unbuildable.reason,
         observedMode: unbuildable.observedMode,
         isSymbolicLink: unbuildable.isSymbolicLink,
+        isRegularFile: unbuildable.isRegularFile,
         targetPath: "03_実装計画.md",
       });
       progressNotes.push(

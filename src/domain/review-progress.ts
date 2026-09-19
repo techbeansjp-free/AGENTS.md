@@ -94,7 +94,7 @@ function splitTarget(source: string): {
 /**
  * inventoryを構築できない分類。**閉じた列挙にする。**
  *
- * TERM-ASC-122「progress inventory不成立」の定義と1対1に対応する。ここへ
+ * TERM-ASC-125「progress inventory不成立」の定義と1対1に対応する。ここへ
  * 「読めなかった」のような分類外の失敗を足さない。分類へ入れた失敗だけが
  * review本線を止めずに済む扱いになるため、列挙を広げることは
  * **そのままfail-openの範囲を広げること**を意味する。
@@ -113,6 +113,7 @@ export type ReviewProgressUnbuildableReason =
 export interface ReviewProgressTargetObservation {
   fileMode: number;
   isSymbolicLink: boolean;
+  isRegularFile: boolean;
 }
 
 export type ReviewProgressInventoryOutcome =
@@ -122,6 +123,7 @@ export type ReviewProgressInventoryOutcome =
       readonly reason: ReviewProgressUnbuildableReason;
       readonly observedMode: number;
       readonly isSymbolicLink: boolean;
+      readonly isRegularFile: boolean;
     };
 
 /**
@@ -147,13 +149,15 @@ export function tryBuildReviewProgressInventory(
       reason,
       observedMode: target.fileMode,
       isSymbolicLink: target.isSymbolicLink,
+      isRegularFile: target.isRegularFile,
     });
   /**
    * **symlink判定をmode比較より前に置く。** symlinkの`lstat`のmodeはLinuxで
    * `0o777`であり、後ろに置くと必ず`mode-mismatch`として分類され、案内が
    * `chmod`を勧めてlink先を書き換えさせる。
    */
-  if (target.isSymbolicLink) return unbuildable("not-regular-file");
+  if (target.isSymbolicLink || !target.isRegularFile)
+    return unbuildable("not-regular-file");
   if (target.fileMode !== 0o644) return unbuildable("mode-mismatch");
   const split = trySplitTarget(source);
   if (!split.ok) return unbuildable("marker-not-single-pair");
@@ -218,6 +222,7 @@ export function buildReviewProgressInventory(
   const outcome = tryBuildReviewProgressInventory(targetPath, source, {
     fileMode,
     isSymbolicLink: false,
+    isRegularFile: true,
   });
   if (outcome.state === "unbuildable")
     throw new Error(UNBUILDABLE_MESSAGES[outcome.reason]);
@@ -248,6 +253,7 @@ export function describeReviewProgressUnbuildable(input: {
   reason: ReviewProgressUnbuildableReason;
   observedMode: number;
   isSymbolicLink: boolean;
+  isRegularFile: boolean;
   targetPath: string;
 }): ReviewProgressUnbuildableGuidance {
   /**
@@ -255,9 +261,17 @@ export function describeReviewProgressUnbuildable(input: {
    * 桁数を合わせないと`1000664`のような存在しない値を案内へ出す。
    */
   const octal = (input.observedMode & 0o777).toString(8).padStart(3, "0");
+  /**
+   * **通常file以外へGit風の`100`接頭辞を付けない。** `100`は通常fileを意味する
+   * ため、directoryやFIFOに対して`100755`のような**存在しない観測値**を案内へ
+   * 出すことになる。REQ-WF-021が求めるのは実測modeの表示であって、体裁を
+   * そろえた文字列ではない。
+   */
   const observed = input.isSymbolicLink
     ? `symlink（lstat permission 0${octal}）`
-    : `100${octal}`;
+    : input.isRegularFile
+      ? `100${octal}`
+      : `通常fileでない（lstat permission 0${octal}）`;
   const base = {
     code: "ASC-REVIEW-PROGRESS-INVENTORY-UNBUILDABLE" as const,
     reason: input.reason,
