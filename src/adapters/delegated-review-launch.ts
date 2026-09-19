@@ -12,6 +12,7 @@ import {
   collectSupplementalReviewStaging,
 } from "./supplemental-review-collect.js";
 import { REVIEWER_EXECUTORS } from "./reviewer-executors.js";
+import { verifyReviewFindings } from "./review-finding-verification.js";
 import {
   peekPrimaryReviewRoot,
   resolveReviewWorkspace,
@@ -282,6 +283,38 @@ export async function launchDelegatedReview(
   const parsed = parseReview(output, input.step, targetFiles);
   if (!parsed)
     return { state: "degraded", reason: "reviewer応答を検証できませんでした" };
+  if (input.step === 10) {
+    let verified;
+    try {
+      verified = await verifyReviewFindings(
+        {
+          root: input.root,
+          headSha: input.headSha,
+          findings: parsed.findings,
+          endpoint: config.endpoint,
+          model: config.model,
+          timeoutMs: config.timeoutMs,
+        },
+        executor,
+      );
+    } catch {
+      return { state: "degraded", reason: "findingの投稿前検証に失敗しました" };
+    }
+    if (verified === undefined)
+      return {
+        state: "degraded",
+        reason: "findingの投稿前検証を完了できませんでした",
+      };
+    if (git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha)
+      return { state: "degraded", reason: "対象HEADを固定できませんでした" };
+    parsed.findings = verified;
+    parsed.decision = verified.some(
+      (finding) =>
+        finding.severity === "Critical" || finding.severity === "High",
+    )
+      ? "changes_requested"
+      : "approved";
+  }
   return {
     state: "reviewed",
     step: input.step,

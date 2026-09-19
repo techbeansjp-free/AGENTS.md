@@ -67,3 +67,9 @@ Feature: 設定されたローカルLLMへのreview委譲
     And 委譲reviewerの実行中にHEADが進む
     When Step 10の委譲reviewを実行する
     Then 委譲reviewはdegradedでHEAD不一致を理由に返す
+
+  Scenario: SCN-UNIT-DELEGREVIEW-014 Step 10の修正済みfindingを投稿前に却下する
+    Given Step 10の委譲reviewerがCritical指摘と承認を返す
+    And 投稿前検証者はfindingを却下する
+    When Step 10の委譲reviewを実行する
+    Then 委譲reviewはfindingなしでapprovedを返す

@@ -14,6 +14,7 @@ import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
 import type { ReviewerExecutor } from "../domain/reviewer-provider.js";
 import { isRecord } from "../types.js";
 import { filterReviewFindingsToTarget } from "../domain/review-finding-scope.js";
+import { verifyReviewFindings } from "./review-finding-verification.js";
 import {
   peekPrimaryReviewRoot,
   resolveReviewRoot,
@@ -141,6 +142,7 @@ async function dispatch(
   truncated: boolean,
   targetFiles: string[],
   execute: ReviewerExecutor | undefined,
+  verification?: { root: string; headSha: string },
 ): Promise<SupplementalReviewResult> {
   const executor = execute ?? REVIEWER_EXECUTORS[config.provider];
   if (!executor)
@@ -183,7 +185,24 @@ async function dispatch(
       truncated,
     };
   const scoped = filterReviewFindingsToTarget(findings, targetFiles);
-  return { state: "findings", ...scoped, truncated };
+  if (!verification) return { state: "findings", ...scoped, truncated };
+  const verified = await verifyReviewFindings(
+    {
+      ...verification,
+      findings: scoped.findings,
+      endpoint: config.endpoint,
+      model: config.model,
+      timeoutMs: config.timeoutMs,
+    },
+    executor,
+  );
+  if (verified === undefined)
+    return {
+      state: "degraded",
+      reason: "findingの投稿前検証を完了できませんでした",
+      truncated,
+    };
+  return { state: "findings", ...scoped, findings: verified, truncated };
 }
 
 /**
@@ -260,6 +279,7 @@ export async function launchSupplementalReviewDiff(
       collected.truncated,
       collected.changed,
       dependencies.execute,
+      { root: input.root, headSha: input.headSha },
     );
   } catch (error) {
     return toErrorResult(error);
