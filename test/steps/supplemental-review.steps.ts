@@ -420,6 +420,93 @@ Then("連結worktreeの補助レビューがfindingsを返す", function () {
   assert.equal(this.result.findings[0]?.file, "target.ts");
 });
 
+Given("日本語pathの変更fileと呼び出し元fileがある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-unicode-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  fs.mkdirSync(path.join(this.root, "src"));
+  fs.writeFileSync(path.join(this.root, "src/呼出元.ts"), 'import "./対象";\n');
+  fs.writeFileSync(
+    path.join(this.root, "src/対象.ts"),
+    "export const x = 1;\n",
+  );
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(
+    path.join(this.root, "src/対象.ts"),
+    "export const x = 2;\n",
+  );
+  this.headSha = commitAll(this.root, "change japanese path");
+  this.configPath = ".agent-skill-chain/local/supplemental-review.json";
+  writeConfig(this.root, this.configPath);
+});
+
+Then("収集結果の日本語pathが実際のpathと一致する", function () {
+  assert.ok(this.collection);
+  assert.deepEqual(this.collection.changed, ["src/対象.ts"]);
+  assert.deepEqual(this.collection.related, ["src/呼出元.ts"]);
+});
+
+Then("補助レビュー結果に日本語pathの指摘が残る", async function () {
+  this.result = await launchSupplementalReviewDiff(
+    {
+      root: this.root,
+      baseSha: this.baseSha,
+      headSha: this.headSha,
+      configPath: this.configPath,
+    },
+    {
+      execute: fixedExecutor({
+        state: "succeeded",
+        reason: "ok",
+        output: JSON.stringify({
+          findings: [
+            {
+              file: "src/対象.ts",
+              location: "1",
+              content: "変更箇所の確認",
+              severity: "Low",
+            },
+          ],
+        }),
+      }),
+    },
+  );
+  assert.equal(this.result?.state, "findings");
+  if (this.result?.state !== "findings") return;
+  assert.equal(this.result.findings[0]?.file, "src/対象.ts");
+  assert.equal(this.result.ignoredOutOfScopeCount, 0);
+});
+
+Given("汎用stemの検索結果が1MiBを超える差分がある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-large-grep-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  const directory = path.join(
+    this.root,
+    "a".repeat(220),
+    "b".repeat(220),
+    "c".repeat(220),
+  );
+  fs.mkdirSync(directory, { recursive: true });
+  for (let index = 0; index < 1200; index++) {
+    fs.writeFileSync(
+      path.join(
+        directory,
+        `${"d".repeat(170)}${String(index).padStart(4, "0")}.md`,
+      ),
+      "generic\n",
+    );
+  }
+  fs.writeFileSync(path.join(this.root, "generic.ts"), "export const x = 1;\n");
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(path.join(this.root, "generic.ts"), "export const x = 2;\n");
+  this.headSha = commitAll(this.root, "change generic");
+});
+
 // --- SCN-SUPPL-004 ---
 
 Given("staging内の文書が同じIDに異なる内容を割り当てている", function () {

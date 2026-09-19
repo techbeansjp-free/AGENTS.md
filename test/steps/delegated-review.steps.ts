@@ -174,6 +174,15 @@ Given("loopback以外の委譲reviewer設定がある", function () {
   );
 });
 
+Given("上限超のstaging文書とローカルreviewer設定がある", function () {
+  setup(this);
+  writeConfig(this, "local", config("qwen3-coder:30b"));
+  fs.writeFileSync(
+    path.join(this.root, this.staging, "00_要求定義.md"),
+    "# 要求\n" + "あ".repeat(350000),
+  );
+});
+
 Given("Step 10の委譲reviewerがCritical指摘と承認を返す", function () {
   setup(this);
   writeConfig(this, "local", config("qwen3-coder:30b"));

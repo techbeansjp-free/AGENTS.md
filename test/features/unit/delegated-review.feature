@@ -56,3 +56,8 @@ Feature: 設定されたローカルLLMへのreview委譲
     Given rootだけ主worktreeを指定してstagingは連結worktreeにある
     When Step 3の委譲reviewを実行する
     Then 異なるworktreeのstagingを拒否して起動しない
+
+  Scenario: SCN-UNIT-DELEGREVIEW-012 巨大staging文書は収集中に拒否する
+    Given 上限超のstaging文書とローカルreviewer設定がある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewはdegradedでexecutorを起動しない

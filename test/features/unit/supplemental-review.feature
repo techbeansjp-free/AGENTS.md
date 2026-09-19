@@ -42,3 +42,14 @@ Feature: reviewer役割に依存しない補助レビュー
     Given 主worktreeのみに補助レビュー設定があり連結worktreeに差分がある
     When 補助レビューCLI(diff対象)を連結worktreeから実行する
     Then 連結worktreeの補助レビューがfindingsを返す
+
+  Scenario: SCN-SUPPL-013 日本語pathの変更fileと関連fileを実pathで収集する
+    Given 日本語pathの変更fileと呼び出し元fileがある
+    When 補助レビューCLI(diff対象)で収集処理を行う
+    Then 収集結果の日本語pathが実際のpathと一致する
+    And 補助レビュー結果に日本語pathの指摘が残る
+
+  Scenario: SCN-SUPPL-014 汎用stemの検索結果が容量上限を超えてもレビューを続ける
+    Given 汎用stemの検索結果が1MiBを超える差分がある
+    When 補助レビューCLI(diff対象)で収集処理を行う
+    Then 汎用stem由来の関連fileは収集されない
