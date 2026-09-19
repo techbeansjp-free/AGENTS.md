@@ -32,7 +32,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | 差分 | `85160d595296982485886ff3f46f9064dd86e6e4`..`1e9ef564d268a529c4d43cbabfdd4a6e3d8fce44` | 18 path | 既存コード |
 | テスト | `npm test` / `npm run conformance:check` / 静的検査10種 | 2,096 scenarios（2,080 passed、16 skipped、失敗0）、conformance 87 scenarios合格、静的検査10種すべて合格 | テスト出力 |
 | 仕様 | `docs/specs/`6 file | updated。REQ-WF-021・TERM-ASC-125・管理データ・CLI契約・追跡表・変更履歴 | 既存文書 |
-| commit前candidate | dist/src/adapters/review-session.js、dist/src/adapters/workflow-journal.js、dist/src/domain/issue.js、dist/src/domain/review-progress.js、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md、docs/specs/07_データ/01_管理データ.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/review-session.ts、src/adapters/workflow-journal.ts、src/domain/issue.ts、src/domain/review-progress.ts、test/features/e2e/review-progress-cli.feature、test/features/integration/review-progress.feature、test/features/unit/review-progress.feature、test/steps/review-progress.steps.ts | H_impl 1e9ef564d268a529c4d43cbabfdd4a6e3d8fce44 | Git index |
+| commit前candidate | dist/src/adapters/review-session.js、dist/src/adapters/workflow-journal.js、dist/src/domain/issue.js、dist/src/domain/review-progress.js、docs/reviews/224_課題1408progress構築失敗の非停止化レビュー.md、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md、docs/specs/07_データ/01_管理データ.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/review-session.ts、src/adapters/workflow-journal.ts、src/domain/issue.ts、src/domain/review-progress.ts、test/features/e2e/review-progress-cli.feature、test/features/integration/review-progress.feature、test/features/unit/review-progress.feature、test/steps/review-progress.steps.ts | H_impl 1e9ef564d268a529c4d43cbabfdd4a6e3d8fce44 | Git index |
 | Phase A artifact | 本file | H_impl直後の1 commitで追加する evidence-only suffix | Git観測 |
 | review session | session `cf4ce1f280591ed22ec3092bc66c9e19977c53f4fde08a6dca4c5f9259535d53` | counted round 2で`converged`。latest round digest `bbef65b04c24cd1c51a8376477f75ee33057e655d5671ea679719c5f4ef99a42` | Git観測 |
 
@@ -268,10 +268,10 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 |---|---|
 | 対象 | 実装 |
 | ラウンド | 3 |
-| 対象SHA・文書ダイジェスト | 1e9ef564d268a529c4d43cbabfdd4a6e3d8fce44 |
-| 比較基点 | `85160d595296982485886ff3f46f9064dd86e6e4` |
-| H_impl | `1e9ef564d268a529c4d43cbabfdd4a6e3d8fce44` |
-| 対象差分 | dist/src/adapters/review-session.js、dist/src/adapters/workflow-journal.js、dist/src/domain/issue.js、dist/src/domain/review-progress.js、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md、docs/specs/07_データ/01_管理データ.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/review-session.ts、src/adapters/workflow-journal.ts、src/domain/issue.ts、src/domain/review-progress.ts、test/features/e2e/review-progress-cli.feature、test/features/integration/review-progress.feature、test/features/unit/review-progress.feature、test/steps/review-progress.steps.ts |
+| 対象SHA・文書ダイジェスト | d82f93b1cafa7e7194cab3235aa8d0ad70d1e6fe |
+| 比較基点 | `a52fffcce1bf0dee0213bbe34b80b364f0580c3f` |
+| H_impl | `d82f93b1cafa7e7194cab3235aa8d0ad70d1e6fe` |
+| 対象差分 | dist/src/adapters/review-session.js、dist/src/adapters/workflow-journal.js、dist/src/domain/issue.js、dist/src/domain/review-progress.js、docs/reviews/224_課題1408progress構築失敗の非停止化レビュー.md、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md、docs/specs/07_データ/01_管理データ.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/review-session.ts、src/adapters/workflow-journal.ts、src/domain/issue.ts、src/domain/review-progress.ts、test/features/e2e/review-progress-cli.feature、test/features/integration/review-progress.feature、test/features/unit/review-progress.feature、test/steps/review-progress.steps.ts |
 | 対象外 | 比較基点に存在し変更されていない範囲 |
 | 残り予算 | counted round 3（同一scope最大6、通算8） |
 | ラウンド数 | 3 |
