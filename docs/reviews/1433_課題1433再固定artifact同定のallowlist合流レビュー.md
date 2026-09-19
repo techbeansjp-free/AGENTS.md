@@ -21,6 +21,7 @@
 | 何を行ったか | adapter固有の`REVIEW_ARTIFACT_PREFIX`と`REVIEW_ARTIFACT_NAME`を削除して`src/domain/review.ts`の`isEvidenceOnlyPath`へ合流させ、正本・要件・CLI契約・用語台帳・Step 11 skillから「正規命名」を除いてTERM-ASC-101参照にし、**round 2で新`H_final`のmode/type検証を既存の`evidenceOnlySuffix`の再利用として足した。** SCN-UNIT-REANCHOR-033〜040とSCN-INT-REANCHOR-016〜018を追加した |
 | 何を確認したか | 実装前に新規11 scenario中7件が落ちること、実装後に`@evidence-reanchor` 80件と`npm test` 2179件が失敗0で通ること、変異6件がすべてkillされること、T01とT02の各commitが独立に逆適用できることを実測した。**round 2では外部reviewer2体へ独立にセルフレビューを委譲し、codexのHigh 1件を実測で裏付けて是正した** |
 | 判定 | approved |
+| round 3の追加 | round 2で自分が入れた誤記（`cli.ts:1454`を`pr create`のselectorと誤認）を訂正した。判定logicは不変。外部reviewerが別Issueと判定した2件はIssue #1436・#1437として分離した |
 
 ## 1. 入力証拠
 
@@ -29,10 +30,10 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | .agent-skill-chain/tmp/issues/20260919_232451_bugfix-pr-reanchorのreview-artifact同定が正本のevidence-only-allowlistと食い違う | staging digest 20cb46e24753e04982ce767ecf2cdff51066db2cd3197593f7de142bc9a53a16 | 既存コード |
-| 差分 | `5f7f1c53c873f0c50d9b66f2ac30bfe47ec18b92`..`9c04bfab8fa8b9ea3fcadcb5f2f58b51703a5616` | 18 path | 既存コード |
+| 差分 | `5f7f1c53c873f0c50d9b66f2ac30bfe47ec18b92`..`df5e898df5fce05c173f95bbc3457b2eb58df84b` | 18 path | 既存コード |
 | テスト | §7のcommand一覧 | `npm test` 2174 scenarios（2158 passed・16 skipped・失敗0）。`@evidence-reanchor` 76件全pass。変異6件すべてkill・生存0件 | テスト出力 |
 | 仕様 | `docs/specs/02_要件/01_ワークフロー要件.md`のREQ-WF-005、`06_外部インターフェース/01_コマンド・GitHub契約.md`、`01_システム概要/02_用語・略語.md`のTERM-ASC-084、`15_要件追跡/`の追跡表と変更履歴 | updated。`npm run trace:check`のorphanが3種とも0件 | 既存文書 |
-| commit前candidate | .agent-skill-chain/docs/01_開発ワークフロー.md、.agent-skill-chain/skills/step-11-pr/SKILL.md、dist/src/adapters/evidence-reanchor.js、dist/src/adapters/review-diff.js、dist/src/adapters/review-session.js、docs/reviews/1433_課題1433再固定artifact同定のallowlist合流レビュー.md、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/evidence-reanchor.ts、src/adapters/review-diff.ts、src/adapters/review-session.ts、test/features/integration/evidence-reanchor.feature、test/features/unit/evidence-reanchor.feature、test/steps/evidence-reanchor.steps.ts、test/steps/review-progress.steps.ts | H_impl 9c04bfab8fa8b9ea3fcadcb5f2f58b51703a5616 | Git index |
+| commit前candidate | .agent-skill-chain/docs/01_開発ワークフロー.md、.agent-skill-chain/skills/step-11-pr/SKILL.md、dist/src/adapters/evidence-reanchor.js、dist/src/adapters/review-diff.js、dist/src/adapters/review-session.js、docs/reviews/1433_課題1433再固定artifact同定のallowlist合流レビュー.md、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/evidence-reanchor.ts、src/adapters/review-diff.ts、src/adapters/review-session.ts、test/features/integration/evidence-reanchor.feature、test/features/unit/evidence-reanchor.feature、test/steps/evidence-reanchor.steps.ts、test/steps/review-progress.steps.ts | H_impl df5e898df5fce05c173f95bbc3457b2eb58df84b | Git index |
 | Phase A artifact | 本fileをcommit後に観測 | 未作成 | Git観測 |
 | review session | .agent-skill-chain/tmp/issues/20260919_232451_bugfix-pr-reanchorのreview-artifact同定が正本のevidence-only-allowlistと食い違う | 未開始 | Git観測 |
 
@@ -118,7 +119,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | 正しさ（要件と観測結果の一致） | pass | FR-01〜FR-05がAC-1433-01〜11へ写り、AC-1433-09以外はすべてSCNで観測している。実装前に新規11 scenario中7件が落ち、実装後に12件全passすることでbug-reproductionが成立した |
 | 価値（利用者・運用上の目的） | pass | 製品自身が`review artifact --init`の既定で出力する名前が`pr reanchor`を通るようになった。**本reviewの成果物も当初は既定名`docs/reviews/1433_レビュー.md`で生成した。** 本repo運用scriptの命名規約に合わせて改名した経緯はDISC-1433-07に記録している。 正本が許すもう一方の配置`.agent-skill-chain/reviews/`も通る |
 | 実現可能性（環境・依存・権限） | pass | 依存packageもlockfileも実行時の外部存在も変えない。新しいauthorityも承認経路も作らない。保護fileへ触れていない |
-| 整合性（設計・コード・テスト・仕様） | pass | 同定規則が`pr create`・delivery state・review session・再固定の4箇所で`isEvidenceOnlyPath`に統一された。正本・要件・CLI契約・用語台帳・配布skillの5文書が同じ意味へ揃い、`trace:check`のorphanが0件である |
+| 整合性（設計・コード・テスト・仕様） | pass | 同定規則が`pr create`・review session・record layer・再固定で`isEvidenceOnlyPath`に統一された。`pr create`は`assertConvergedReviewSession`から`evidenceOnlySuffix`を経て到達する。2 prefixの直書きは`pr merge`側の2箇所に残るが、束縛済みpathの後段再読であり合成経路から受理集合の差へ到達しない。正本・要件・CLI契約・用語台帳・配布skillの5文書が同じ意味へ揃い、`trace:check`のorphanが0件である |
 | 保守性（責務・命名・変更容易性） | pass | 判定を足さず取り除いた。src差分は追加23行・削除19行だが、追加のうち17行はJSDocであり判定logicは正味で減っている。T01とT02が独立commitで各々単独に逆適用できる |
 
 ## 4. 敵対的評価
@@ -146,7 +147,8 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | REV-1433-04 | Medium | 変異C1が置換の空振りで「生存」に見えかけた | 変異scriptのassertが置換対象0件を検出 | 変異試験 | 探索文字列を実測へ合わせて再実行しkillを確認した | resolved | なし。assertが無ければ誤った反例追加に1ラウンド費やしていた |
 | REV-1433-07 | Medium | 製品側regexの出所が本repo運用scriptの`AUDIT_NAME_PATTERN`であることが、自repoでの実地適用で判明した。本reviewの成果物を製品既定出力名にすると`audit:check`が拒否する | `scripts/check_file_audit.ts:32`のregexと、commit `2155957b`による`1425_レビュー.md`の削除 | `scripts/check_file_audit.ts`、本fileのpath | 運用scriptは変更しない。本fileを規約名へ改名した。配布される製品がfile名を強制してはならないことと、利用側が自分の成果物へ規約を課してよいことは両立する | resolved | なし。本repoの命名規約は維持され、製品の受理範囲だけが正本へ揃う |
 | REV-1433-08 | High | 再固定が新`H_final`のmodeとtypeを検証しない。mode `100755`のMarkdownは通常fileなので`git show`で本文が読め、構造検証・identity anchor・approval・個別監査表をすべて通過する。**DISC-1433-01の反例列挙が`100755`を落としていた** | 外部reviewer（codex）の指摘。`assertConvergedReviewSession`のsuffix検査は実効HEADとcurrent HEADが異なるときだけ走り、再固定後は一致するため素通りすることを実測で確認 | `src/adapters/evidence-reanchor.ts`の2経路 | `evidenceOnlySuffix`を葉module`review-diff.ts`へ移し、新head側だけへ適用。INV-07・AC-1433-12・SCN-UNIT-REANCHOR-039/040で固定 | resolved | なし。旧`H_final`側は過去の受理を遡らない |
-| REV-1433-09 | Low | 「`pr create`、delivery state、review sessionと同じ述語」という記述が事実でない。`cli.ts:1452`と`delivery-state.ts:684`は2 prefixを直書きで、`..`・backslash・制御文字の拒否clauseを持たない | 外部reviewer2体（codex・fable）が独立に同一指摘。`grep`で`isEvidenceOnlyPath`の呼び出し元を確認 | JSDoc、REQ-WF-005 | 「`review session`とだけ共有」へ訂正し、残り2箇所の合流を別Issueと明記した | resolved | 低。合流は別Issueで評価する |
+| REV-1433-09 | Low | round 1の「`pr create`、delivery state、review sessionと同じ述語」という記述が不正確だった | 外部reviewer2体（codex・fable）が独立に同一指摘 | JSDoc、REQ-WF-005 | round 2で訂正したが**訂正内容自体が誤っていた**。round 3でREV-1433-12として再訂正した | resolved | なし |
+| REV-1433-12 | Medium | **round 2の訂正が事実と逆だった。** 「`pr create`とdelivery stateは2 prefixを直書きで持つ」と書いたが、`pr create`に直書きは存在せず`assertConvergedReviewSession`から`evidenceOnlySuffix`を経て`isEvidenceOnlyPath`を共有している。`cli.ts:1454`を`pr create`のselectorと誤認していた | 外部reviewer（fable）の指摘。`awk`で`cli.ts:1454`の包含関数が`resolveImplementationCommitForMerge`（1419行）であること、呼び出し元が`observeMergeReviewEvidence`（1573行）経由の`inspectAuthorizedPullRequestMerge`と`readBackPreparedPullRequestMerge`の**merge側2箇所だけ**であることを確認した | JSDoc、REQ-WF-005、01と00のINV-02・BR-02・RQ-BR-02 | 5箇所を実測どおりへ訂正。直書きが残るのは`pr merge`側であり、本Issueが§2.2で自ら対象外と宣言した領域である | resolved | なし。merge側2箇所は束縛済みpathの後段再読で、合成経路から受理集合の差へ到達しない |
 | REV-1433-10 | Low | `terminalArtifactPath`が`比較基点..head`の全域へ適用されるため、実装差分が`.agent-skill-chain/reviews/`配下を触るrepoでは候補2件となり拒否する。**INV-05と変更履歴がこの第2の狭まりを記述していなかった** | 外部reviewer（fable）の指摘。`evidence-reanchor.ts`の296・297・472・473行と`observeReanchorDiff`の引数を確認 | 01 §2.3、変更履歴 | INV-06として明示し互換性欄を狭まり3つの列挙へ直した。**製品は変更しない。** 候補1件要求はSCN-038が既に固定しており同型反例を増やしても検出力が増えない | resolved | なし |
 | REV-1433-11 | Low | 本fileの自己言及が改名後に陳腐化し、§6と§11のfinding件数が§5表と食い違っていた | 外部reviewer（fable）の指摘。file内grepで確認 | 本file | 旧path参照2箇所を直し、件数をround 2の実数へ更新した | resolved | なし |
 | REV-1433-05 | Low | `verifiedImplementationBoundary`がmode `100644`を検証しない | 実装読解 | `src/adapters/evidence-reanchor.ts` | **round 1では対象外としたがREV-1433-08で撤回した。** 当初の「到達可能な穴ではない」という根拠は`100755`を落としており誤りだった | resolved（REV-1433-08へ統合） | なし |
@@ -168,14 +170,14 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 
 ### ラウンド3
 
-- 全指摘の最終分類: 実施していない。ラウンド2で全11件の分類が確定し、未解決Critical/Highが0件である
-- 危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: 該当なし。round 2の是正は受理範囲を狭める方向であり、危険範囲を新たに作っていない
-- 同じ範囲の予算を自動更新していない: はい。counted roundは2で、同じ範囲へ追加の予算を与えていない。§0の残り予算欄は`review artifact --init`が機械導出した値である
+- 全指摘の最終分類: 全12件が確定した。Critical 0件、High 3件（すべて`resolved`）、Medium 4件（すべて`resolved`）、Low 5件（4件`resolved`、REV-1433-06だけ`out-of-scope`）。**未解決Critical/Highは0件。** round 3の対象はround 2で自分が入れた誤記の訂正（REV-1433-12）だけで、新しい外部指摘は無い
+- 危険範囲を除外・既定無効・ロールバック可能へ縮小した結果: 該当なし。round 3はJSDocと仕様記述の訂正だけで判定logicを変えていない。`npm test` 2179 scenariosの結果がround 2と同一であることで確認した
+- 同じ範囲の予算を自動更新していない: はい。counted roundは3で、同じ範囲へ追加の予算を与えていない。**外部reviewerが「別Issue」と判定した2件は本PRへ吸収せず、Issue #1436と#1437として分離した**
 
 ## 7. テスト結果
 
 - 実行したcommandの一覧: `npm test`、`npm run test:unit`相当の`--tags @issue-1433`と`--tags @evidence-reanchor`、`npm run lint`、`npm run format:check`、`npm run typecheck`、`npm run source:check`、`npm run docs:format`、`npm run test:format`、`npm run directories:check`、`npm run architecture:check`、`npm run cli:check`、`npm run skills:check`、`npm run workflow:check`、`npm run trace:check`、`npm run conformance:check`、`npm run package:check`、`npm run project:quality`、`npm run build`、`npm run audit:check`
-- 全layerの合計: round 2時点で`npm test`が2179 scenarios（2163 passed、16 skipped、失敗0）、17971 steps（17921 passed、50 skipped、失敗0）、8分27秒。`--tags @evidence-reanchor`が80 scenarios全pass。`--tags @issue-1433`が16 scenarios全pass。round 1時点は2174 scenarios（2158 passed、16 skipped、失敗0）だった。上記の静的・文書・配布検査はすべて違反0件
+- 全layerの合計: round 3時点で`npm test`が2179 scenarios（2163 passed、16 skipped、失敗0）、17971 steps（17921 passed、50 skipped、失敗0）、8分25秒。round 3はJSDocと仕様記述の訂正だけなので件数はround 2と同一である。round 2時点も同じ2179 scenariosだった。`--tags @evidence-reanchor`が80 scenarios全pass。`--tags @issue-1433`が16 scenarios全pass。round 1時点は2174 scenarios（2158 passed、16 skipped、失敗0）だった。上記の静的・文書・配布検査はすべて違反0件
 - runner・Gherkin方言: `cucumber-js`、`gherkinDialect=en`。`.agent-skill-chain/project/choices/development.json`の`testRunner`と`gherkinDialect`から確認した
 - **変異試験**: round 1で6変異すべてkill、生存0件。round 2で追加した検査に対する変異D（`evidenceOnlySuffix`検査2箇所の削除）もkill（SCN-039・040の実行権限2例が失敗）。**symlinkの2例は既存の構造検証で落ちるためこの変異では死なない。検出の由来を区別して記録する。** round 1の内訳は次のとおり。A1旧prefix定数の復活がKILL（5 failed）、A2旧basename regex復活（reviewed-forward）がKILL（3 failed）、A3同（artifact-replacement）がKILL（1 failed）、B1 allowlist判定の恒真化がKILL（17 failed）、B2候補1件要求の緩和が初回生存→SCN-UNIT-REANCHOR-038追加後にKILL（1 failed）、C1走査回避がKILL（5 failed）。すべて`src/adapters/evidence-reanchor.ts`の内側へ閉じ、domain側の述語本体を差し替えていない
 - **bug-reproduction**: 実装前に新規11 scenario中7件が落ちることを観測した。うちSCN-UNIT-REANCHOR-036のbackslashと制御文字の2件は「拒否されていません」で落ち、DISC-1433-03の狭まりを実測で裏付けた
@@ -243,9 +245,9 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 - Medium/Lowの記録: Medium 3件（REV-1433-03、REV-1433-04、REV-1433-07）はいずれも`resolved`。Low 5件のうちREV-1433-05はREV-1433-08へ統合して`resolved`、REV-1433-09・10・11も`resolved`、REV-1433-06だけが`out-of-scope`として残存リスクへ残る
 - 判定: approved
 - 新しい権限が必要な事項: なし。本変更は新しいauthorityも承認経路も作らず、保護fileへ触れていない
-- 残存リスク: (1) REV-1433-06。`resolveAnchor`のJSDocが本体から離れて孤立している。本変更より前からの状態で、可読性のみに影響する。(2) `pr create`とdelivery stateが同じ2 prefixを直書きで持つ点（REV-1433-09）。受理集合は同じだが`..`・backslash・制御文字の拒否clauseを持たない。**合流は別Issueとする。** (3) 未決事項2件。「正規命名」をTERM-ASC-101参照へ置き換える正本改定の可否と、Issue #1424のclose判断。いずれも決定権者はpackage ownerであり、本PRのmerge時に判断される。**mode検査の追加可否はownerがround 2で決裁済みである**
+- 残存リスク: (1) REV-1433-06。`resolveAnchor`のJSDocが本体から離れて孤立している。本変更より前からの状態で、可読性のみに影響する。(2) `pr merge`側の2箇所（`resolveImplementationCommitForMerge`とdelivery stateのMergeIntent解析）が2 prefixを直書きで持つ点（REV-1433-09、REV-1433-12）。受理集合は同じで、束縛済みpathの後段再読であるため合成経路から受理集合の差へ到達しない。**`pr merge`の認可判定は§2.2で対象外と宣言済みであり、合流は別Issueとする。** (3) 未決事項2件。「正規命名」をTERM-ASC-101参照へ置き換える正本改定の可否と、Issue #1424のclose判断。いずれも決定権者はpackage ownerであり、本PRのmerge時に判断される。**mode検査の追加可否はownerがround 2で決裁済みである。** (4) round 3で分離した2件。`review validate`がapproval recordを検証しない件はIssue #1436、「force push禁止」と「複数commit拒否」が両立しない件はIssue #1437として起票した。**#1437にはPR作成後にforce pushを実行した逸脱の事実を明記し、owner決裁を求めている**
 - 次に許可される操作: `workflow record --step=10 --post-pr-intake` → 本fileのcommit（新`H_final`）→ `pr reanchor --new-head=<新H_final> --new-base=<不変>`。`delivery.stopAt=pull_request`かつ`merge.mode=assisted`のためPR作成で停止し、mergeはowner承認を待つ。**mergeは`--merge`で行う。squashは2区間構造を壊し`audit:check`が落ちる**
-- 次回の再開地点: `H_impl` `9c04bfab8fa8b9ea3fcadcb5f2f58b51703a5616`、比較基点 `5f7f1c53c873f0c50d9b66f2ac30bfe47ec18b92`、branch `bugfix/1433-reanchor-artifact-allowlist`、worktree `.worktrees/20260919_234846-1433-reanchor-artifact-allowlist`、PR #1435（`pr-bound`）
+- 次回の再開地点: `H_impl` `df5e898df5fce05c173f95bbc3457b2eb58df84b`、比較基点 `5f7f1c53c873f0c50d9b66f2ac30bfe47ec18b92`、branch `bugfix/1433-reanchor-artifact-allowlist`、worktree `.worktrees/20260919_234846-1433-reanchor-artifact-allowlist`、PR #1435（`pr-bound`）
 
 ## 0. レビュー識別情報
 
@@ -253,18 +255,18 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 |---|---|
 | 対象 | 実装 |
 | ラウンド | 1 |
-| 対象SHA・文書ダイジェスト | 9c04bfab8fa8b9ea3fcadcb5f2f58b51703a5616 |
+| 対象SHA・文書ダイジェスト | df5e898df5fce05c173f95bbc3457b2eb58df84b |
 | 比較基点 | `5f7f1c53c873f0c50d9b66f2ac30bfe47ec18b92` |
-| H_impl | `9c04bfab8fa8b9ea3fcadcb5f2f58b51703a5616` |
+| H_impl | `df5e898df5fce05c173f95bbc3457b2eb58df84b` |
 | 対象差分 | .agent-skill-chain/docs/01_開発ワークフロー.md、.agent-skill-chain/skills/step-11-pr/SKILL.md、dist/src/adapters/evidence-reanchor.js、dist/src/adapters/review-diff.js、dist/src/adapters/review-session.js、docs/reviews/1433_課題1433再固定artifact同定のallowlist合流レビュー.md、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/evidence-reanchor.ts、src/adapters/review-diff.ts、src/adapters/review-session.ts、test/features/integration/evidence-reanchor.feature、test/features/unit/evidence-reanchor.feature、test/steps/evidence-reanchor.steps.ts、test/steps/review-progress.steps.ts |
 | 対象外 | 比較基点に存在し変更されていない範囲 |
 | 残り予算 | 3ラウンド |
-| ラウンド数 | 2 |
+| ラウンド数 | 3 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260919_232451_bugfix-pr-reanchorのreview-artifact同定が正本のevidence-only-allowlistと食い違う |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md`のREQ-WF-005。reviewed-forward条項は「新`H_final`が監査合格済みevidence-only suffixである場合に限り、`reviewed-forward`としてappend-only記録する」と定め、file名条項を持たない |
 | 成果物行数 | 製品: `src/adapters/evidence-reanchor.ts`が追加23行・削除19行。追加のうち17行はJSDocであり判定logicは正味で減っている。配布文書が3 pathで各1行。支援層: testが追加191行・削除5行、`docs/specs/`が追加9行・削除5行、staging成果物00〜03が1005行。**支援層が製品変更を大きく超えている。** fullは00〜03の個別管理を要求するためmode固有の固定費であり、閾値判定はしない |
 | 縮小の先行評価 | 評価のうえ縮小側を採った。同定述語は新設せず既存の`isEvidenceOnlyPath`を再利用し、adapter固有の定数2件を削除した。02 §12で7案の採否を記録し、project policyへの命名設定項目の新設、`pr resync-head`相当の新command、文書乖離を監視する新gate、mode検査の同時追加をいずれも不採用とした。**足す修正ではなく消す修正で成立する** |
-| 実施者・日時 | reviewer、2026-09-20T01:30:00+09:00 |
+| 実施者・日時 | reviewer、2026-09-20T02:30:00+09:00 |
 
 `比較基点`と`H_impl`の値は40桁の小文字hexをbacktickで囲んだものだけにする。注記・branch名・短縮SHAを同じcellへ書かない。由来は別行へ書く。
 
