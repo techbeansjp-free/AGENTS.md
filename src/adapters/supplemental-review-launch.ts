@@ -96,17 +96,18 @@ function parseFindings(
   if (!isRecord(parsed) || !Array.isArray(parsed.findings)) return undefined;
   const findings: SupplementalReviewFinding[] = [];
   for (const item of parsed.findings) {
-    if (!isRecord(item)) continue;
-    if (typeof item.file !== "string" || typeof item.content !== "string")
-      continue;
-    const severity = VALID_SEVERITIES.includes(item.severity as Severity)
-      ? (item.severity as Severity)
-      : "Low";
+    if (
+      !isRecord(item) ||
+      typeof item.file !== "string" ||
+      typeof item.content !== "string" ||
+      !VALID_SEVERITIES.includes(item.severity as Severity)
+    )
+      return undefined;
     findings.push({
       file: item.file,
       location: typeof item.location === "string" ? item.location : "",
       content: item.content,
-      severity,
+      severity: item.severity as Severity,
     });
   }
   return findings;
@@ -150,6 +151,7 @@ async function dispatch(
     endpoint: config.endpoint,
     model: config.model,
     prompt,
+    timeoutMs: config.timeoutMs,
   });
   if (executed.state !== "succeeded")
     return { state: "degraded", reason: executed.reason, truncated };

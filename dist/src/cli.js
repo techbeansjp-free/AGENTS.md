@@ -3569,7 +3569,9 @@ export async function main(argv, dependencies = {}) {
     if (command === "routing" && subcommand === "supplemental-review-diff") {
         const { flags } = parse(rest);
         const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
-        const limitRaw = typeof flags.limit === "string" ? Number(flags.limit) : undefined;
+        if (typeof flags.limit === "string" && !/^[1-9]\d*$/u.test(flags.limit))
+            throw new Error("--limitは正の整数で指定してください");
+        const limit = typeof flags.limit === "string" ? Number(flags.limit) : undefined;
         const result = await launchSupplementalReviewDiff({
             root,
             baseSha: required(flags, "base"),
@@ -3577,9 +3579,7 @@ export async function main(argv, dependencies = {}) {
             configPath: typeof flags["config-path"] === "string"
                 ? flags["config-path"]
                 : undefined,
-            limit: limitRaw !== undefined && Number.isInteger(limitRaw) && limitRaw > 0
-                ? limitRaw
-                : undefined,
+            limit,
         });
         print(result);
         return result.state === "error" ? 1 : 0;

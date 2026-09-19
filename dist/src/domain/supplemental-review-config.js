@@ -8,6 +8,13 @@ import { DISPATCHABLE_REVIEWER_PROVIDERS } from "./reviewer-provider.js";
  */
 export const SUPPLEMENTAL_REVIEW_CONFIG_PATH = ".agent-skill-chain/local/supplemental-review.json";
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+const ALLOWED_FIELDS = new Set([
+    "enabled",
+    "provider",
+    "model",
+    "endpoint",
+    "timeoutMs",
+]);
 /**
  * 設定fileが存在しない・読めない・形状が不正・`enabled`が`true`以外・
  * providerが未知の場合はすべて`undefined`（disabled）を返す。**例外を
@@ -38,6 +45,8 @@ export function loadSupplementalReviewConfig(root, configPath = SUPPLEMENTAL_REV
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
         return undefined;
     const record = parsed;
+    if (Object.keys(record).some((key) => !ALLOWED_FIELDS.has(key)))
+        return undefined;
     if (record.enabled !== true)
         return undefined;
     const provider = record.provider;
@@ -51,11 +60,12 @@ export function loadSupplementalReviewConfig(root, configPath = SUPPLEMENTAL_REV
     if (typeof endpoint !== "string" || endpoint.trim() === "")
         return undefined;
     const timeoutMsRaw = record.timeoutMs;
-    const timeoutMs = typeof timeoutMsRaw === "number" &&
-        Number.isInteger(timeoutMsRaw) &&
-        timeoutMsRaw > 0
-        ? timeoutMsRaw
-        : DEFAULT_TIMEOUT_MS;
+    if (timeoutMsRaw !== undefined &&
+        !(typeof timeoutMsRaw === "number" &&
+            Number.isInteger(timeoutMsRaw) &&
+            timeoutMsRaw > 0))
+        return undefined;
+    const timeoutMs = timeoutMsRaw ?? DEFAULT_TIMEOUT_MS;
     return { enabled: true, provider, model, endpoint, timeoutMs };
 }
 //# sourceMappingURL=supplemental-review-config.js.map

@@ -5056,7 +5056,9 @@ export async function main(
     const root = path.resolve(
       typeof flags.root === "string" ? flags.root : process.cwd(),
     );
-    const limitRaw =
+    if (typeof flags.limit === "string" && !/^[1-9]\d*$/u.test(flags.limit))
+      throw new Error("--limitは正の整数で指定してください");
+    const limit =
       typeof flags.limit === "string" ? Number(flags.limit) : undefined;
     const result = await launchSupplementalReviewDiff({
       root,
@@ -5066,10 +5068,7 @@ export async function main(
         typeof flags["config-path"] === "string"
           ? flags["config-path"]
           : undefined,
-      limit:
-        limitRaw !== undefined && Number.isInteger(limitRaw) && limitRaw > 0
-          ? limitRaw
-          : undefined,
+      limit,
     });
     print(result);
     return result.state === "error" ? 1 : 0;

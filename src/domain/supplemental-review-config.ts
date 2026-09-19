@@ -19,6 +19,13 @@ export interface SupplementalReviewConfig {
 }
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+const ALLOWED_FIELDS = new Set([
+  "enabled",
+  "provider",
+  "model",
+  "endpoint",
+  "timeoutMs",
+]);
 
 /**
  * 設定fileが存在しない・読めない・形状が不正・`enabled`が`true`以外・
@@ -50,6 +57,8 @@ export function loadSupplementalReviewConfig(
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
     return undefined;
   const record = parsed as Record<string, unknown>;
+  if (Object.keys(record).some((key) => !ALLOWED_FIELDS.has(key)))
+    return undefined;
   if (record.enabled !== true) return undefined;
   const provider = record.provider;
   if (
@@ -62,11 +71,15 @@ export function loadSupplementalReviewConfig(
   const endpoint = record.endpoint;
   if (typeof endpoint !== "string" || endpoint.trim() === "") return undefined;
   const timeoutMsRaw = record.timeoutMs;
-  const timeoutMs =
-    typeof timeoutMsRaw === "number" &&
-    Number.isInteger(timeoutMsRaw) &&
-    timeoutMsRaw > 0
-      ? timeoutMsRaw
-      : DEFAULT_TIMEOUT_MS;
+  if (
+    timeoutMsRaw !== undefined &&
+    !(
+      typeof timeoutMsRaw === "number" &&
+      Number.isInteger(timeoutMsRaw) &&
+      timeoutMsRaw > 0
+    )
+  )
+    return undefined;
+  const timeoutMs = timeoutMsRaw ?? DEFAULT_TIMEOUT_MS;
   return { enabled: true, provider, model, endpoint, timeoutMs };
 }

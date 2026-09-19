@@ -25,11 +25,14 @@ export function collectSupplementalReviewDiff(root, baseSha, headSha, limit = RE
         const stem = path.basename(changedPath, path.extname(changedPath));
         if (stem === "")
             continue;
-        const grep = git(["grep", "-l", "--fixed-strings", stem], root, {
+        const grep = git(["grep", "-l", "--fixed-strings", stem, headSha], root, {
             allowFailure: true,
         }).stdout;
         for (const line of grep.split("\n")) {
-            const candidate = line.trim();
+            const trimmed = line.trim();
+            const candidate = trimmed.startsWith(`${headSha}:`)
+                ? trimmed.slice(headSha.length + 1)
+                : trimmed;
             if (candidate === "" ||
                 changed.includes(candidate) ||
                 related.includes(candidate))
@@ -42,15 +45,10 @@ export function collectSupplementalReviewDiff(root, baseSha, headSha, limit = RE
         }
     }
     const relatedText = related
-        .filter((relatedPath) => {
-        try {
-            return fs.statSync(path.resolve(root, relatedPath)).isFile();
-        }
-        catch {
-            return false;
-        }
-    })
-        .map((relatedPath) => `### ${relatedPath}\n${fs.readFileSync(path.resolve(root, relatedPath), "utf8")}`)
+        .filter((relatedPath) => git(["cat-file", "-e", `${headSha}:${relatedPath}`], root, {
+        allowFailure: true,
+    }).status === 0)
+        .map((relatedPath) => `### ${relatedPath}\n${git(["show", `${headSha}:${relatedPath}`], root).stdout}`)
         .join("\n\n");
     const promptBody = `## diff (${baseSha}..${headSha})\n${diffText}\n\n` +
         `## 関連ファイル（未変更、上限${limit}件、呼び出し元・呼び出し先の文脈として提供）\n${relatedText}`;

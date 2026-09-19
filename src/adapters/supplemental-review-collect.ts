@@ -49,11 +49,14 @@ export function collectSupplementalReviewDiff(
     if (truncated) break;
     const stem = path.basename(changedPath, path.extname(changedPath));
     if (stem === "") continue;
-    const grep = git(["grep", "-l", "--fixed-strings", stem], root, {
+    const grep = git(["grep", "-l", "--fixed-strings", stem, headSha], root, {
       allowFailure: true,
     }).stdout;
     for (const line of grep.split("\n")) {
-      const candidate = line.trim();
+      const trimmed = line.trim();
+      const candidate = trimmed.startsWith(`${headSha}:`)
+        ? trimmed.slice(headSha.length + 1)
+        : trimmed;
       if (
         candidate === "" ||
         changed.includes(candidate) ||
@@ -69,16 +72,15 @@ export function collectSupplementalReviewDiff(
   }
 
   const relatedText = related
-    .filter((relatedPath) => {
-      try {
-        return fs.statSync(path.resolve(root, relatedPath)).isFile();
-      } catch {
-        return false;
-      }
-    })
+    .filter(
+      (relatedPath) =>
+        git(["cat-file", "-e", `${headSha}:${relatedPath}`], root, {
+          allowFailure: true,
+        }).status === 0,
+    )
     .map(
       (relatedPath) =>
-        `### ${relatedPath}\n${fs.readFileSync(path.resolve(root, relatedPath), "utf8")}`,
+        `### ${relatedPath}\n${git(["show", `${headSha}:${relatedPath}`], root).stdout}`,
     )
     .join("\n\n");
 

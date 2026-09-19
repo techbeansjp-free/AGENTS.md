@@ -58,18 +58,16 @@ function parseFindings(output) {
         return undefined;
     const findings = [];
     for (const item of parsed.findings) {
-        if (!isRecord(item))
-            continue;
-        if (typeof item.file !== "string" || typeof item.content !== "string")
-            continue;
-        const severity = VALID_SEVERITIES.includes(item.severity)
-            ? item.severity
-            : "Low";
+        if (!isRecord(item) ||
+            typeof item.file !== "string" ||
+            typeof item.content !== "string" ||
+            !VALID_SEVERITIES.includes(item.severity))
+            return undefined;
         findings.push({
             file: item.file,
             location: typeof item.location === "string" ? item.location : "",
             content: item.content,
-            severity,
+            severity: item.severity,
         });
     }
     return findings;
@@ -103,6 +101,7 @@ async function dispatch(promptBody, config, truncated, execute) {
         endpoint: config.endpoint,
         model: config.model,
         prompt,
+        timeoutMs: config.timeoutMs,
     });
     if (executed.state !== "succeeded")
         return { state: "degraded", reason: executed.reason, truncated };
