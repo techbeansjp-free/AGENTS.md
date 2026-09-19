@@ -10,7 +10,13 @@ const STATES = ["planned", "started", "completed", "blocked"];
 function sha256(value) {
     return crypto.createHash("sha256").update(value).digest("hex");
 }
-function splitTarget(source) {
+/**
+ * markerの1組を切り出す。**例外でなく判別可能な値を返す。**
+ *
+ * 呼び出し側でcatchすると、将来この関数へ足した別の失敗まで無言で
+ * `marker-not-single-pair`へ束ねられ、分類の閉じた列挙という安全性の根拠が崩れる。
+ */
+function trySplitTarget(source) {
     const start = source.indexOf(PROGRESS_START);
     const end = source.indexOf(PROGRESS_END);
     if (start < 0 ||
@@ -18,32 +24,180 @@ function splitTarget(source) {
         source.indexOf(PROGRESS_START, start + 1) >= 0 ||
         source.indexOf(PROGRESS_END, end + 1) >= 0 ||
         end <= start)
-        throw new Error("parallel progress markerは正確に1組必要です");
+        return { ok: false };
     const bodyStart = start + PROGRESS_START.length;
     return {
+        ok: true,
         prefix: source.slice(0, bodyStart),
         body: source.slice(bodyStart, end),
         suffix: source.slice(end),
     };
 }
-export function buildReviewProgressInventory(targetPath, source, fileMode) {
+function splitTarget(source) {
+    const split = trySplitTarget(source);
+    if (!split.ok)
+        throw new Error("parallel progress markerは正確に1組必要です");
+    return { prefix: split.prefix, body: split.body, suffix: split.suffix };
+}
+/**
+ * inventoryを構築できない分類。**閉じた列挙にする。**
+ *
+ * TERM-ASC-125「progress inventory不成立」の定義と1対1に対応する。ここへ
+ * 「読めなかった」のような分類外の失敗を足さない。分類へ入れた失敗だけが
+ * review本線を止めずに済む扱いになるため、列挙を広げることは
+ * **そのままfail-openの範囲を広げること**を意味する。
+ */
+export const REVIEW_PROGRESS_UNBUILDABLE_REASONS = [
+    "mode-mismatch",
+    "not-regular-file",
+    "marker-not-single-pair",
+    "no-task-id",
+];
+/**
+ * 構築の成否を**例外ではなく判別可能な値**で返す。
+ *
+ * **例外をcatchして非停止化しない。** catchで実装すると、分類外のI/O失敗や
+ * path identity異常まで同じ枝で握り潰され、REQ-WF-021が要求する
+ * 「progressの失敗を拒否理由にしない」を満たすかわりにfail-openを作る。
+ * 分類済みの失敗だけを値で返し、それ以外は従来どおり例外として伝播させる。
+ */
+export function tryBuildReviewProgressInventory(targetPath, source, target) {
     if (targetPath !== "03_実装計画.md")
         throw new Error("parallel progress targetは03_実装計画.mdだけを許可します");
-    if (fileMode !== 0o644)
-        throw new Error("parallel progress targetはmode 100644が必要です");
-    const { prefix, suffix } = splitTarget(source);
+    const unbuildable = (reason) => Object.freeze({
+        state: "unbuildable",
+        reason,
+        observedMode: target.fileMode,
+        isSymbolicLink: target.isSymbolicLink,
+        isRegularFile: target.isRegularFile,
+    });
+    /**
+     * **symlink判定をmode比較より前に置く。** symlinkの`lstat`のmodeはLinuxで
+     * `0o777`であり、後ろに置くと必ず`mode-mismatch`として分類され、案内が
+     * `chmod`を勧めてlink先を書き換えさせる。
+     */
+    if (target.isSymbolicLink || !target.isRegularFile)
+        return unbuildable("not-regular-file");
+    if (target.fileMode !== 0o644)
+        return unbuildable("mode-mismatch");
+    const split = trySplitTarget(source);
+    if (!split.ok)
+        return unbuildable("marker-not-single-pair");
+    const { prefix, suffix } = split;
     const allowedTaskIds = [
         ...new Set([...source.matchAll(/^\|\s*([A-Z][A-Z0-9._-]{1,63})\s*\|/gmu)].map((match) => match[1])),
     ].sort();
     if (allowedTaskIds.length === 0)
-        throw new Error("parallel progress targetにtask IDが必要です");
+        return unbuildable("no-task-id");
     return Object.freeze({
-        targetPath,
-        baselineDigest: sha256(source),
-        prefixDigest: sha256(prefix),
-        suffixDigest: sha256(suffix),
-        fileMode: 0o644,
-        allowedTaskIds: Object.freeze(allowedTaskIds),
+        state: "built",
+        inventory: Object.freeze({
+            targetPath,
+            baselineDigest: sha256(source),
+            prefixDigest: sha256(prefix),
+            suffixDigest: sha256(suffix),
+            fileMode: 0o644,
+            allowedTaskIds: Object.freeze(allowedTaskIds),
+        }),
+    });
+}
+/**
+ * 分類ごとに必要なauthorityは違う。**modeの変更権限で全分類を代表させない。**
+ * markerやtask IDの是正は内容の編集権限、通常fileへの置換はdirectory entryの
+ * 変更権限を要するため、案内が行動可能にならない。
+ */
+const REQUIRED_AUTHORITY = Object.freeze({
+    "mode-mismatch": "対象fileのmode変更権限",
+    "not-regular-file": "staging directoryのentry変更権限（対象を通常fileへ置き換える）",
+    "marker-not-single-pair": "対象fileの内容編集権限",
+    "no-task-id": "対象fileの内容編集権限",
+});
+const UNBUILDABLE_MESSAGES = Object.freeze({
+    "mode-mismatch": "parallel progress targetはmode 100644が必要です",
+    "not-regular-file": "parallel progress targetはmode 100644が必要です",
+    "marker-not-single-pair": "parallel progress markerは正確に1組必要です",
+    "no-task-id": "parallel progress targetにtask IDが必要です",
+});
+/**
+ * 構築できない入力をthrowへ写す薄い層。
+ *
+ * inventory成立後の再検証経路（`review progress`と`review round`のinventory照合）は
+ * 引き続きこちらを使う。**そこでの不一致は拒否でなければならない**ため、
+ * 非停止化の対象にしない。
+ */
+export function buildReviewProgressInventory(targetPath, source, fileMode) {
+    const outcome = tryBuildReviewProgressInventory(targetPath, source, {
+        fileMode,
+        isSymbolicLink: false,
+        isRegularFile: true,
+    });
+    if (outcome.state === "unbuildable")
+        throw new Error(UNBUILDABLE_MESSAGES[outcome.reason]);
+    return outcome.inventory;
+}
+/**
+ * 不成立の分類と実測値から、利用者が採る行動を生成する。
+ *
+ * **判定を持たない純関数である。** pathもfilesystemも知らず、受け取るのは
+ * staging相対のfile名だけとする。案内へ絶対path、環境変数、tokenを混ぜない
+ * 方針はREQ-WF-024が確立したものを踏襲する。
+ */
+export function describeReviewProgressUnbuildable(input) {
+    /**
+     * **permission tripleは3桁で綴る。** `100`を前置するGit風のmode表記と
+     * 桁数を合わせないと`1000664`のような存在しない値を案内へ出す。
+     */
+    const octal = (input.observedMode & 0o777).toString(8).padStart(3, "0");
+    /**
+     * **通常file以外へGit風の`100`接頭辞を付けない。** `100`は通常fileを意味する
+     * ため、directoryやFIFOに対して`100755`のような**存在しない観測値**を案内へ
+     * 出すことになる。REQ-WF-021が求めるのは実測modeの表示であって、体裁を
+     * そろえた文字列ではない。
+     */
+    const observed = input.isSymbolicLink
+        ? `symlink（lstat permission 0${octal}）`
+        : input.isRegularFile
+            ? `100${octal}`
+            : `通常fileでない（lstat permission 0${octal}）`;
+    const base = {
+        code: "ASC-REVIEW-PROGRESS-INVENTORY-UNBUILDABLE",
+        reason: input.reason,
+        target: input.targetPath,
+        observed,
+        expected: "100644",
+        effect: "このroundではparallel progressを利用できません。reviewは通常どおり継続し、round番号と予算は変わりません",
+        requiredAuthority: REQUIRED_AUTHORITY[input.reason],
+        rollback: "review sessionを変更していません。対象fileを元の状態へ戻せます",
+    };
+    if (input.reason === "not-regular-file")
+        return Object.freeze({
+            ...base,
+            /**
+             * **種別ごとに案内を分ける。** `not-regular-file`はsymlinkだけでなく
+             * directoryやFIFOも含む。symlink固有の理由（chmodがlink先を書き換える）を
+             * directoryへ出すと、利用者は存在しない危険を避けようとして誤った手を打つ。
+             */
+            action: input.isSymbolicLink
+                ? `${input.targetPath}がsymlinkです。chmodではlink先を書き換えてしまうため、staging内の通常fileへ置き換えてください`
+                : `${input.targetPath}が通常fileではありません。chmodでは種別を変えられないため、staging内の通常fileへ置き換えてください`,
+            repairArgv: null,
+        });
+    if (input.reason === "marker-not-single-pair")
+        return Object.freeze({
+            ...base,
+            action: `${input.targetPath}のparallel progress markerを正確に1組にしてください`,
+            repairArgv: null,
+        });
+    if (input.reason === "no-task-id")
+        return Object.freeze({
+            ...base,
+            action: `${input.targetPath}の進捗表へ宣言済みtask IDの行を1件以上置いてください`,
+            repairArgv: null,
+        });
+    return Object.freeze({
+        ...base,
+        action: `staging directoryで次を実行してください。再実行しても変わらない場合、そのfilesystemはmodeを保持しません`,
+        repairArgv: Object.freeze(["chmod", "0644", input.targetPath]),
     });
 }
 export function parseReviewProgressInventory(value) {

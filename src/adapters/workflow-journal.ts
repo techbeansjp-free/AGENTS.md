@@ -2066,6 +2066,18 @@ function promoteWorkflowStagingToFullLocked(input: {
         destination,
         fs.constants.COPYFILE_EXCL,
       );
+      /**
+       * **複製はtemplateのon-disk modeを引き継ぐ。** `createIssueStaging`と
+       * 同じ理由でmodeを宣言値へ固定する（REQ-WF-021）。ここを落とすと、
+       * 昇格経路で作った03だけが実行環境のumaskに従い、parallel progressが
+       * 黙って使えなくなる。失敗しても昇格を止めない。
+       */
+      if (artifact === "03_実装計画.md")
+        try {
+          fs.chmodSync(destination, 0o644);
+        } catch {
+          /* modeを保持しないfilesystem。非停止と案内が受け止める */
+        }
     }
     writeFileAtomic(
       discoveryPath,
