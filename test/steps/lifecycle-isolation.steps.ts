@@ -256,6 +256,24 @@ When("setupを適用する", function (this: IsolationWorld) {
 Then(
   "配布入口は利用project固有の管理を上書きしない",
   function (this: IsolationWorld) {
+    /**
+     * **配布経路が2つあるので検査対象も2つに分ける。**
+     * `AGENTS.md`は`ROOT_ASSETS`としてsetupが隔離先へ展開するため、展開結果を
+     * 読む。`README.md`はsetupの展開対象ではなく、`package.json`の`files`で
+     * package rootの実体がそのまま配布される。したがって配布実体はpackage root
+     * の`README.md`自身であり、隔離先には存在しない。
+     *
+     * **`files`への登録も併せて確認する。** これが無いと、`README.md`が配布から
+     * 外れても本scenarioは合格し続け、「配布入口を検査している」という根拠が
+     * 失われる。
+     */
+    const packageFiles = JSON.parse(
+      fs.readFileSync(path.resolve("package.json"), "utf8"),
+    ).files as readonly string[];
+    assert.ok(
+      packageFiles.includes("README.md"),
+      "README.mdがpackage.jsonのfilesに無い。配布入口の検査対象を見直すこと",
+    );
     const distributedEntries = [
       path.join(this.root, "AGENTS.md"),
       path.resolve("README.md"),
