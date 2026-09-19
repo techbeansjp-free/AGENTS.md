@@ -9,7 +9,7 @@ description: exact-headの実装・テスト・仕様証拠を有限にレビュ
 
 各`review round`の入力JSON fileはstagingの外に置く。blocking findingの`contractId`はanchorのAcceptance Criteria IDまたはInvariant IDに一致させ、単な記録対象へ読み替えない。
 
-`.agent-skill-chain/local/supplemental-review.json`が有効な場合、`routing supplemental-review-diff`を実行し指摘を確認できる（任意、判定には用いない）。
+ローカルまたはユーザー共通のローカルLLM reviewer設定が有効なら、進行役は各対象roundで`routing delegated-review-diff --root=<対象worktreeのroot> --base=<比較基点SHA> --head=<H_impl> --staging=<対象staging>`を実行してreviewを委譲する。`state=reviewed`の肯定・敵対評価と対象内findingを`review round`のadmission規則で分類し、差分外として除外された件数も確認し、`04_レビュー.md`へ入力・出力digest、model、固定HEADとともに記録する。`decision=changes_requested`または`degraded`なら収束としない。`disabled`なら既存経路でreviewする。指摘0件だけを承認根拠にせず、テスト・仕様・独立性・非変更の証拠を確認する。ローカル設定とLLM応答だけからmerge authorityを導かない。
 
 ## routing入力契約
 

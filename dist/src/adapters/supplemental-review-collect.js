@@ -3,53 +3,145 @@ import path from "node:path";
 import { git } from "../lib/process.js";
 import { resolveContained } from "../lib/security.js";
 export const RELATED_FILE_LIMIT = 20;
+export const RELATED_STEM_MATCH_LIMIT = 10;
+export const REVIEW_COLLECTION_BYTE_LIMIT = 1024 * 1024;
 const ID_PATTERN = /\b(?:AC|FR|NFR|INV|RQ|OUTCOME|DC|TERM-ASC)-\d+\b/g;
+/** ERE metacharacterをescapeする（stemを`git grep -E`のpatternへ安全に埋め込むため）。 */
+function escapeExtendedRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+/**
+ * import/require/exportのmodule specifier内でstemが使われているかを狙う、
+ * 依存関係寄りのpattern（CodeRabbitのcode graphに相当するAST解析は持たないため、
+ * `import ... from "..."`・`require("...")`・`import("...")`の字面で近似する）。
+ * 一致は「呼び出し元/呼び出し先」の強い根拠として扱い、RELATED_STEM_MATCH_LIMIT
+ * （汎用stem対策の閾値）を適用しない。そのため、module specifierの末尾segmentが
+ * stemと完全一致する場合だけを対象にする（先頭は任意のpath prefix、末尾は任意の
+ * 拡張子だけを許す）。前後を無制限にすると`config`が`configuration.js`や
+ * `old-config.js`にも一致し、閾値を迂回する無関係importでlimitを消費してしまう
+ * （CodeRabbit指摘）。
+ */
+function importReferencePattern(stem) {
+    const escaped = escapeExtendedRegex(stem);
+    return `(import|require|from)[^"']*["']([^"']*/)?${escaped}(\\.[^/"']+)?["']`;
+}
+function runRelatedFileGrep(root, headSha, grepArgs) {
+    const grep = git(grepArgs, root, {
+        allowFailure: true,
+        maxBufferBytes: REVIEW_COLLECTION_BYTE_LIMIT,
+    });
+    // 過剰な一致は非specificなstemと同等に扱う。検索失敗とは区別する。
+    if (grep.stderr.startsWith(`git ${grepArgs.join(" ")}を実行できませんでした（ENOBUFS）:`))
+        return { skipped: true };
+    if (grep.status > 1 || grep.stderr !== "")
+        throw new Error("関連fileの探索を安全に完了できませんでした");
+    return {
+        matches: grep.stdout.split("\0").filter((line) => line !== ""),
+    };
+}
+function toCandidatePath(line, headSha) {
+    return line.startsWith(`${headSha}:`) ? line.slice(headSha.length + 1) : line;
+}
 /**
  * Step 10相当の対象を収集する。base..headの変更fileと、その呼び出し元
- * （fileの識別子を含む他file）を関連fileとして追加する。上限件数で
- * 打ち切る（FR-1428-02、NFR-1428-06）。
+ * （fileの識別子を含む他file）を関連fileとして追加する。dotfileと
+ * 広範囲に現れる汎用名は検索根拠にしない。上限件数で打ち切る。
+ *
+ * 関連file検出は2段構え: (1) import/require/exportのmodule specifier内で
+ * stemが使われている一致は依存関係の強い根拠として無条件で採用し、
+ * 汎用stemの閾値を適用しない（over-exclusionでcross-file findingが
+ * 落ちるのを防ぐ）。(2) それ以外の全文一致は従来通り閾値で足切りする。
  */
 export function collectSupplementalReviewDiff(root, baseSha, headSha, limit = RELATED_FILE_LIMIT) {
-    const nameStatus = git(["diff", "--name-status", `${baseSha}..${headSha}`], root).stdout;
-    const changed = nameStatus
-        .split("\n")
-        .filter((line) => line.trim() !== "")
-        .map((line) => line.split("\t").at(-1) ?? "")
+    const changed = git(["diff", "--name-only", "-z", `${baseSha}..${headSha}`], root, { maxBufferBytes: REVIEW_COLLECTION_BYTE_LIMIT })
+        .stdout.split("\0")
         .filter((value) => value !== "");
-    const diffText = git(["diff", `${baseSha}..${headSha}`], root).stdout;
+    const diffText = git(["diff", `${baseSha}..${headSha}`], root, {
+        maxBufferBytes: REVIEW_COLLECTION_BYTE_LIMIT,
+    }).stdout;
+    if (Buffer.byteLength(diffText, "utf8") > REVIEW_COLLECTION_BYTE_LIMIT)
+        throw new Error("review差分が1MiBを超えました");
     const related = [];
     let truncated = false;
     for (const changedPath of changed) {
         if (truncated)
             break;
-        const stem = path.basename(changedPath, path.extname(changedPath));
+        const basename = path.basename(changedPath);
+        const extension = path.extname(basename);
+        if (basename.startsWith(".") && extension === "")
+            continue;
+        const stem = path.basename(basename, extension);
         if (stem === "")
             continue;
-        const grep = git(["grep", "-l", "--fixed-strings", stem, headSha], root, {
-            allowFailure: true,
-        }).stdout;
-        for (const line of grep.split("\n")) {
-            const trimmed = line.trim();
-            const candidate = trimmed.startsWith(`${headSha}:`)
-                ? trimmed.slice(headSha.length + 1)
-                : trimmed;
-            if (candidate === "" ||
-                changed.includes(candidate) ||
-                related.includes(candidate))
-                continue;
-            if (related.length >= limit) {
-                truncated = true;
-                break;
+        const addCandidates = (matches) => {
+            for (const line of matches) {
+                if (truncated)
+                    return;
+                const candidate = toCandidatePath(line, headSha);
+                if (candidate === "" ||
+                    changed.includes(candidate) ||
+                    related.includes(candidate))
+                    continue;
+                if (related.length >= limit) {
+                    truncated = true;
+                    return;
+                }
+                related.push(candidate);
             }
-            related.push(candidate);
+        };
+        const preciseResult = runRelatedFileGrep(root, headSha, [
+            "grep",
+            "-l",
+            "-z",
+            "-E",
+            "-e",
+            importReferencePattern(stem),
+            headSha,
+        ]);
+        /**
+         * precise検索は閾値を適用しない無条件signalなので、ENOBUFSで取得自体に
+         * 失敗した場合は「非specificだから除外」（生成側の判定）と区別し、
+         * 収集不能を`truncated`で呼出し元へ伝える（CodeRabbit指摘）。
+         */
+        if ("skipped" in preciseResult) {
+            truncated = true;
+            break;
         }
+        addCandidates(preciseResult.matches);
+        if (truncated)
+            break;
+        const genericResult = runRelatedFileGrep(root, headSha, [
+            "grep",
+            "-l",
+            "-z",
+            "--fixed-strings",
+            "-e",
+            stem,
+            headSha,
+        ]);
+        if ("skipped" in genericResult)
+            continue;
+        if (genericResult.matches.length > RELATED_STEM_MATCH_LIMIT)
+            continue;
+        addCandidates(genericResult.matches);
     }
-    const relatedText = related
-        .filter((relatedPath) => git(["cat-file", "-e", `${headSha}:${relatedPath}`], root, {
-        allowFailure: true,
-    }).status === 0)
-        .map((relatedPath) => `### ${relatedPath}\n${git(["show", `${headSha}:${relatedPath}`], root).stdout}`)
-        .join("\n\n");
+    const relatedSections = [];
+    let collectedBytes = Buffer.byteLength(diffText, "utf8");
+    for (const relatedPath of related) {
+        if (git(["cat-file", "-e", `${headSha}:${relatedPath}`], root, {
+            allowFailure: true,
+        }).status !== 0)
+            continue;
+        const body = git(["show", `${headSha}:${relatedPath}`], root, {
+            maxBufferBytes: REVIEW_COLLECTION_BYTE_LIMIT,
+        }).stdout;
+        const section = `### ${relatedPath}\n${body}`;
+        collectedBytes += Buffer.byteLength(section, "utf8") + 2;
+        if (collectedBytes > REVIEW_COLLECTION_BYTE_LIMIT)
+            throw new Error("review差分と関連fileが1MiBを超えました");
+        relatedSections.push(section);
+    }
+    const relatedText = relatedSections.join("\n\n");
     const promptBody = `## diff (${baseSha}..${headSha})\n${diffText}\n\n` +
         `## 関連ファイル（未変更、上限${limit}件、呼び出し元・呼び出し先の文脈として提供）\n${relatedText}`;
     return { target: "diff", changed, related, truncated, promptBody };
@@ -67,13 +159,32 @@ export function collectSupplementalReviewStaging(root, stagingPath) {
         .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
         .map((entry) => entry.name)
         .sort();
+    if (entries.length > 100)
+        throw new Error("review対象文書が100件を超えました");
     const changed = [];
     const sections = [];
+    let collectedBytes = 0;
     for (const name of entries) {
-        const text = fs.readFileSync(path.join(resolvedStaging, name), "utf8");
+        const file = path.join(resolvedStaging, name);
+        const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+        let text;
+        try {
+            const stat = fs.fstatSync(fd);
+            if (!stat.isFile() ||
+                stat.size > REVIEW_COLLECTION_BYTE_LIMIT - collectedBytes)
+                throw new Error("review対象文書が1MiBを超えました");
+            text = fs.readFileSync(fd, "utf8");
+        }
+        finally {
+            fs.closeSync(fd);
+        }
         changed.push(name);
         const ids = [...new Set(text.match(ID_PATTERN) ?? [])].sort();
-        sections.push(`### ${name}\n出現ID: ${ids.length > 0 ? ids.join("、") : "（なし）"}\n\n${text}`);
+        const section = `### ${name}\n出現ID: ${ids.length > 0 ? ids.join("、") : "（なし）"}\n\n${text}`;
+        collectedBytes += Buffer.byteLength(section, "utf8") + 2;
+        if (collectedBytes > REVIEW_COLLECTION_BYTE_LIMIT)
+            throw new Error("review対象文書が1MiBを超えました");
+        sections.push(section);
     }
     const promptBody = sections.join("\n\n");
     return { target: "staging", changed, promptBody };

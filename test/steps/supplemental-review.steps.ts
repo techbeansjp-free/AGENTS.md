@@ -11,6 +11,7 @@ import {
 } from "../../src/adapters/supplemental-review-launch.js";
 import {
   collectSupplementalReviewDiff,
+  RELATED_STEM_MATCH_LIMIT,
   type SupplementalReviewDiffCollection,
 } from "../../src/adapters/supplemental-review-collect.js";
 import type {
@@ -33,6 +34,7 @@ class SupplementalReviewWorld extends WorkflowWorld {
   collectLimit: number | undefined;
   fakeServer: http.Server | undefined;
   fakeServerPort = 0;
+  trailingSpacePath = "";
 }
 
 const { Given, When, Then } = stepDefinitions<SupplementalReviewWorld>();
@@ -263,6 +265,401 @@ Then("収集結果は上限件数までに打ち切られる", function () {
 Then("打ち切った旨が結果に含まれる", function () {
   assert.ok(this.collection);
   assert.equal(this.collection.truncated, true);
+});
+
+// --- SCN-SUPPL-004 ---
+
+Given("補助レビューの対象差分が1ファイルだけある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-scope-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  fs.writeFileSync(path.join(this.root, "target.ts"), "export const x = 1;\n");
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(path.join(this.root, "target.ts"), "export const x = 2;\n");
+  this.headSha = commitAll(this.root, "change");
+  this.configPath = ".agent-skill-chain/local/supplemental-review.json";
+  writeConfig(this.root, this.configPath);
+});
+
+When("補助reviewerが差分外ファイルの指摘を返す", async function () {
+  this.result = await launchSupplementalReviewDiff(
+    {
+      root: this.root,
+      baseSha: this.baseSha,
+      headSha: this.headSha,
+      configPath: this.configPath,
+    },
+    {
+      execute: fixedExecutor({
+        state: "succeeded",
+        reason: "ok",
+        output: JSON.stringify({
+          findings: [
+            {
+              file: "unrelated/task.md",
+              location: "1",
+              content: "別作業の既知欠陥",
+              severity: "Critical",
+            },
+          ],
+        }),
+      }),
+    },
+  );
+});
+
+Then("補助レビュー結果から差分外の指摘が除外される", function () {
+  assert.equal(this.result?.state, "findings");
+  if (this.result?.state !== "findings") return;
+  assert.deepEqual(this.result.findings, []);
+  assert.equal(this.result.ignoredOutOfScopeCount, 1);
+});
+
+Given("変更fileのstemが多数の無関係fileに現れる", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-generic-stem-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  fs.writeFileSync(path.join(this.root, "guide.md"), "# guide\n");
+  for (let index = 0; index <= RELATED_STEM_MATCH_LIMIT; index += 1)
+    fs.writeFileSync(
+      path.join(this.root, `unrelated-${index}.md`),
+      "This template mentions guide as a common word.\n",
+    );
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(path.join(this.root, "guide.md"), "# updated guide\n");
+  this.headSha = commitAll(this.root, "change guide");
+});
+
+Then("汎用stem由来の関連fileは収集されない", function () {
+  assert.ok(this.collection);
+  assert.deepEqual(this.collection.related, []);
+  assert.equal(this.collection.truncated, false);
+});
+
+Given("拡張子なしdotfileだけを変更した差分がある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-dotfile-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  fs.writeFileSync(path.join(this.root, ".gitignore"), "dist/\n");
+  fs.writeFileSync(
+    path.join(this.root, "unrelated.md"),
+    "Many templates mention .gitignore in prose.\n",
+  );
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(
+    path.join(this.root, ".gitignore"),
+    "dist/\nnode_modules/\n",
+  );
+  this.headSha = commitAll(this.root, "change gitignore");
+});
+
+Then("dotfile名由来の関連fileは収集されない", function () {
+  assert.ok(this.collection);
+  assert.deepEqual(this.collection.changed, [".gitignore"]);
+  assert.deepEqual(this.collection.related, []);
+});
+
+Given("末尾に空白を含む関連fileがある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-trailing-space-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  fs.writeFileSync(path.join(this.root, "target.ts"), "export const x = 1;\n");
+  /**
+   * NUL区切りで取得したgit grep結果をtrim()すると、pathの末尾空白が
+   * 削られてcandidateが実在しないpathへ壊れる（CodeRabbit指摘の再現）。
+   * 末尾に半角空白を持つfile名で、trim()が発火することを確認する。
+   */
+  this.trailingSpacePath = "caller-target ";
+  fs.writeFileSync(
+    path.join(this.root, this.trailingSpacePath),
+    "references target for related-file detection\n",
+  );
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(path.join(this.root, "target.ts"), "export const x = 2;\n");
+  this.headSha = commitAll(this.root, "change target");
+});
+
+Then("収集結果に末尾空白付きの実pathがそのまま含まれる", function () {
+  assert.ok(this.collection);
+  assert.deepEqual(this.collection.related, [this.trailingSpacePath]);
+});
+
+Given("汎用stemを持つ変更fileを実際にimportする呼び出し元がある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-generic-import-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  fs.writeFileSync(
+    path.join(this.root, "config.ts"),
+    "export const TOKEN_TTL_SECONDS = 3600; // invariant: <= 3600\n",
+  );
+  fs.writeFileSync(
+    path.join(this.root, "session.ts"),
+    'import { TOKEN_TTL_SECONDS } from "./config.js";\n\n' +
+      "export function issueToken() {\n  return { ttl: TOKEN_TTL_SECONDS };\n}\n",
+  );
+  /**
+   * "config"というstemは非specificなので、素朴な全文一致だけに頼ると
+   * これらの無関係fileと合わせてRELATED_STEM_MATCH_LIMITを超え、
+   * 本物の呼び出し元session.tsまで無言で除外されてしまう
+   * （over-exclusionによるfalse negative、修正前の実測で確認済み）。
+   */
+  for (let index = 0; index < 11; index += 1)
+    fs.writeFileSync(
+      path.join(this.root, `unrelated-${index}.md`),
+      "This document mentions config repeatedly: config config config.\n",
+    );
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(
+    path.join(this.root, "config.ts"),
+    "export const TOKEN_TTL_SECONDS = 360000; // BUG: exceeds the <= 3600 invariant\n",
+  );
+  this.headSha = commitAll(this.root, "change config ttl");
+});
+
+Then(
+  "import由来の呼び出し元は収集され汎用stem由来の無関係fileは除外される",
+  function () {
+    assert.ok(this.collection);
+    assert.deepEqual(this.collection.related, ["session.ts"]);
+  },
+);
+
+Given(
+  "stemを部分文字列として含むだけのimportを持つ無関係fileが多数ある",
+  function () {
+    this.root = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-substring-decoy-")),
+    );
+    this.temporaryDirectories.push(this.root);
+    initRepository(this.root);
+    fs.writeFileSync(
+      path.join(this.root, "config.ts"),
+      "export const TOKEN_TTL_SECONDS = 3600;\n",
+    );
+    fs.writeFileSync(
+      path.join(this.root, "session.ts"),
+      'import { TOKEN_TTL_SECONDS } from "./config.js";\n\n' +
+        "export function issueToken() {\n  return { ttl: TOKEN_TTL_SECONDS };\n}\n",
+    );
+    /**
+     * "config"を部分文字列として含むだけの実在しないimport（"./old-config-N.js"や
+     * "./configuration-N.js"）は、module specifierの末尾segmentが完全一致では
+     * ないため、precise検索の対象にしてはならない（CodeRabbit指摘A）。総数を
+     * RELATED_STEM_MATCH_LIMITより多くし、旧patternなら閾値を迂回してすべて
+     * 採用されていたことを反例として示す。
+     */
+    for (let index = 0; index < 11; index += 1)
+      fs.writeFileSync(
+        path.join(this.root, `decoy-${index}.ts`),
+        `import { y } from "./old-config-${index}.js";\n`,
+      );
+    this.baseSha = commitAll(this.root, "base");
+    fs.writeFileSync(
+      path.join(this.root, "config.ts"),
+      "export const TOKEN_TTL_SECONDS = 360000; // BUG\n",
+    );
+    this.headSha = commitAll(this.root, "change config ttl");
+  },
+);
+
+Then(
+  "部分一致のみのimport元は収集されず実際の呼び出し元だけが残る",
+  function () {
+    assert.ok(this.collection);
+    assert.deepEqual(this.collection.related, ["session.ts"]);
+  },
+);
+
+Given("import参照検索の結果が1MiBを超える差分がある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-precise-large-grep-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  const directory = path.join(
+    this.root,
+    "a".repeat(220),
+    "b".repeat(220),
+    "c".repeat(220),
+  );
+  fs.mkdirSync(directory, { recursive: true });
+  /**
+   * SCN-SUPPL-014と同じ超長pathの手法を使うが、内容を実際のimport構文にして
+   * precise検索（無条件採用のimport参照pattern）自体をENOBUFSへ追い込む。
+   * 生成側の閾値超過（非specificだから除外）とは異なり、precise検索の取得
+   * 失敗はtruncatedとして呼出し元へ伝えるべき（CodeRabbit指摘B）。
+   */
+  for (let index = 0; index < 1200; index++) {
+    fs.writeFileSync(
+      path.join(
+        directory,
+        `${"d".repeat(170)}${String(index).padStart(4, "0")}.md`,
+      ),
+      'import { x } from "./generic";\n',
+    );
+  }
+  fs.writeFileSync(path.join(this.root, "generic.ts"), "export const x = 1;\n");
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(path.join(this.root, "generic.ts"), "export const x = 2;\n");
+  this.headSha = commitAll(this.root, "change generic");
+});
+
+Then("収集結果は打ち切りとして報告される", function () {
+  assert.ok(this.collection);
+  assert.equal(this.collection.truncated, true);
+});
+
+Given(
+  "主worktreeのみに補助レビュー設定があり連結worktreeに差分がある",
+  function () {
+    const primary = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-linked-")),
+    );
+    this.temporaryDirectories.push(primary);
+    initRepository(primary);
+    fs.writeFileSync(
+      path.join(primary, ".gitignore"),
+      ".agent-skill-chain/local/\n.worktrees/\n",
+    );
+    fs.writeFileSync(path.join(primary, "target.ts"), "export const x = 1;\n");
+    commitAll(primary, "base");
+    writeConfig(primary, ".agent-skill-chain/local/supplemental-review.json");
+    const linked = path.join(primary, ".worktrees", "review");
+    fs.mkdirSync(path.dirname(linked), { recursive: true });
+    runGit(primary, ["worktree", "add", "-q", "-b", "review", linked]);
+    this.root = linked;
+    this.baseSha = runGit(linked, ["rev-parse", "HEAD"]);
+    fs.writeFileSync(path.join(linked, "target.ts"), "export const x = 2;\n");
+    this.headSha = commitAll(linked, "change");
+  },
+);
+
+When(
+  "補助レビューCLI\\(diff対象\\)を連結worktreeから実行する",
+  async function () {
+    this.result = await launchSupplementalReviewDiff(
+      { root: this.root, baseSha: this.baseSha, headSha: this.headSha },
+      {
+        execute: fixedExecutor({
+          state: "succeeded",
+          reason: "ok",
+          output: JSON.stringify({
+            findings: [
+              {
+                file: "target.ts",
+                location: "1",
+                content: "対象差分を確認した",
+                severity: "Low",
+              },
+            ],
+          }),
+        }),
+      },
+    );
+  },
+);
+
+Then("連結worktreeの補助レビューがfindingsを返す", function () {
+  assert.equal(this.result?.state, "findings");
+  if (this.result?.state !== "findings") return;
+  assert.equal(this.result.findings[0]?.file, "target.ts");
+});
+
+Given("日本語pathの変更fileと呼び出し元fileがある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-unicode-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  fs.mkdirSync(path.join(this.root, "src"));
+  fs.writeFileSync(path.join(this.root, "src/呼出元.ts"), 'import "./対象";\n');
+  fs.writeFileSync(
+    path.join(this.root, "src/対象.ts"),
+    "export const x = 1;\n",
+  );
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(
+    path.join(this.root, "src/対象.ts"),
+    "export const x = 2;\n",
+  );
+  this.headSha = commitAll(this.root, "change japanese path");
+  this.configPath = ".agent-skill-chain/local/supplemental-review.json";
+  writeConfig(this.root, this.configPath);
+});
+
+Then("収集結果の日本語pathが実際のpathと一致する", function () {
+  assert.ok(this.collection);
+  assert.deepEqual(this.collection.changed, ["src/対象.ts"]);
+  assert.deepEqual(this.collection.related, ["src/呼出元.ts"]);
+});
+
+Then("補助レビュー結果に日本語pathの指摘が残る", async function () {
+  this.result = await launchSupplementalReviewDiff(
+    {
+      root: this.root,
+      baseSha: this.baseSha,
+      headSha: this.headSha,
+      configPath: this.configPath,
+    },
+    {
+      execute: fixedExecutor({
+        state: "succeeded",
+        reason: "ok",
+        output: JSON.stringify({
+          findings: [
+            {
+              file: "src/対象.ts",
+              location: "1",
+              content: "変更箇所の確認",
+              severity: "Low",
+            },
+          ],
+        }),
+      }),
+    },
+  );
+  assert.equal(this.result?.state, "findings");
+  if (this.result?.state !== "findings") return;
+  assert.equal(this.result.findings[0]?.file, "src/対象.ts");
+  assert.equal(this.result.ignoredOutOfScopeCount, 0);
+});
+
+Given("汎用stemの検索結果が1MiBを超える差分がある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-large-grep-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  const directory = path.join(
+    this.root,
+    "a".repeat(220),
+    "b".repeat(220),
+    "c".repeat(220),
+  );
+  fs.mkdirSync(directory, { recursive: true });
+  for (let index = 0; index < 1200; index++) {
+    fs.writeFileSync(
+      path.join(
+        directory,
+        `${"d".repeat(170)}${String(index).padStart(4, "0")}.md`,
+      ),
+      "generic\n",
+    );
+  }
+  fs.writeFileSync(path.join(this.root, "generic.ts"), "export const x = 1;\n");
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(path.join(this.root, "generic.ts"), "export const x = 2;\n");
+  this.headSha = commitAll(this.root, "change generic");
 });
 
 // --- SCN-SUPPL-004 ---
