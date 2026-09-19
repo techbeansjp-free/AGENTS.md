@@ -11,6 +11,7 @@ const ALLOWED_KEYS = new Set([
     "model",
     "endpoint",
     "timeoutMs",
+    "profile",
 ]);
 /** Worktree selection wins, then the primary worktree, then the user setting. */
 export function resolveDelegatedReviewConfig(root, options = {}) {
@@ -85,6 +86,13 @@ export function resolveDelegatedReviewConfig(root, options = {}) {
         const model = value.model;
         const endpoint = value.endpoint;
         const timeoutMs = value.timeoutMs ?? 300000;
+        if (value.profile !== undefined &&
+            value.profile !== "chill" &&
+            value.profile !== "assertive")
+            return {
+                state: "invalid",
+                reason: `${candidate.source}設定のprofileが不正です`,
+            };
         if (typeof provider !== "string" ||
             !DISPATCHABLE_REVIEWER_PROVIDERS.has(provider))
             return {
@@ -127,6 +135,7 @@ export function resolveDelegatedReviewConfig(root, options = {}) {
                 endpoint,
                 timeoutMs,
                 source: candidate.source,
+                profile: (value.profile ?? "assertive"),
             },
         };
     }

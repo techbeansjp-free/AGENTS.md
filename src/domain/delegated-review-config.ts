@@ -4,6 +4,7 @@ import path from "node:path";
 import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
 import { PROVIDER_AUTONOMOUS_CEILINGS } from "./role.js";
 import { DISPATCHABLE_REVIEWER_PROVIDERS } from "./reviewer-provider.js";
+import type { ReviewProfile } from "./review-presentation.js";
 
 export interface DelegatedReviewConfig {
   provider: string;
@@ -11,6 +12,7 @@ export interface DelegatedReviewConfig {
   endpoint: string;
   timeoutMs: number;
   source: "local" | "primary" | "global";
+  profile: ReviewProfile;
 }
 
 export type DelegatedReviewConfigResult =
@@ -25,6 +27,7 @@ const ALLOWED_KEYS = new Set([
   "model",
   "endpoint",
   "timeoutMs",
+  "profile",
 ]);
 
 /** Worktree selection wins, then the primary worktree, then the user setting. */
@@ -104,6 +107,15 @@ export function resolveDelegatedReviewConfig(
     const endpoint = value.endpoint;
     const timeoutMs = value.timeoutMs ?? 300000;
     if (
+      value.profile !== undefined &&
+      value.profile !== "chill" &&
+      value.profile !== "assertive"
+    )
+      return {
+        state: "invalid",
+        reason: `${candidate.source}設定のprofileが不正です`,
+      };
+    if (
       typeof provider !== "string" ||
       !DISPATCHABLE_REVIEWER_PROVIDERS.has(provider)
     )
@@ -150,6 +162,7 @@ export function resolveDelegatedReviewConfig(
         endpoint,
         timeoutMs,
         source: candidate.source,
+        profile: (value.profile ?? "assertive") as ReviewProfile,
       },
     };
   }
