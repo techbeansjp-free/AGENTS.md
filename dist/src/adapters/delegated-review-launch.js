@@ -147,6 +147,10 @@ export async function launchDelegatedReview(input, dependencies = {}) {
                 };
             promptBody =
                 `Step 10: exact HEAD ${input.headSha} の実装差分を、受け入れ条件・仕様・安全性・保守性・失敗経路から肯定・敵対の両面でレビューしてください。\n` +
+                    "findingはdiff適用後（現在のfile内容）に依然として残る問題だけを対象にしてください。" +
+                    "diffが既存の欠陥を修正している場合、その修正前の状態や修正内容の説明をfindingとして" +
+                    "報告しないでください。ある行が既存の条件分岐・早期returnにより到達不能であると" +
+                    "コード自身が示している場合、その到達不能な行を根拠にfindingを作らないでください。\n" +
                     `## 要求・要件・設計・検証証拠\n${staging.promptBody}\n\n${collected.promptBody}`;
         }
         else {
