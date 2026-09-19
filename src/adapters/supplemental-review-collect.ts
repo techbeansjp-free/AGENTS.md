@@ -33,11 +33,15 @@ function escapeExtendedRegex(value: string): string {
  * 依存関係寄りのpattern（CodeRabbitのcode graphに相当するAST解析は持たないため、
  * `import ... from "..."`・`require("...")`・`import("...")`の字面で近似する）。
  * 一致は「呼び出し元/呼び出し先」の強い根拠として扱い、RELATED_STEM_MATCH_LIMIT
- * （汎用stem対策の閾値）を適用しない。
+ * （汎用stem対策の閾値）を適用しない。そのため、module specifierの末尾segmentが
+ * stemと完全一致する場合だけを対象にする（先頭は任意のpath prefix、末尾は任意の
+ * 拡張子だけを許す）。前後を無制限にすると`config`が`configuration.js`や
+ * `old-config.js`にも一致し、閾値を迂回する無関係importでlimitを消費してしまう
+ * （CodeRabbit指摘）。
  */
 function importReferencePattern(stem: string): string {
   const escaped = escapeExtendedRegex(stem);
-  return `(import|require|from)[^"']*["'][^"']*${escaped}[^"']*["']`;
+  return `(import|require|from)[^"']*["']([^"']*/)?${escaped}(\\.[^/"']+)?["']`;
 }
 
 function runRelatedFileGrep(
@@ -133,7 +137,16 @@ export function collectSupplementalReviewDiff(
       importReferencePattern(stem),
       headSha,
     ]);
-    if (!("skipped" in preciseResult)) addCandidates(preciseResult.matches);
+    /**
+     * precise検索は閾値を適用しない無条件signalなので、ENOBUFSで取得自体に
+     * 失敗した場合は「非specificだから除外」（生成側の判定）と区別し、
+     * 収集不能を`truncated`で呼出し元へ伝える（CodeRabbit指摘）。
+     */
+    if ("skipped" in preciseResult) {
+      truncated = true;
+      break;
+    }
+    addCandidates(preciseResult.matches);
     if (truncated) break;
 
     const genericResult = runRelatedFileGrep(root, headSha, [

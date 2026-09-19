@@ -63,3 +63,13 @@ Feature: reviewer役割に依存しない補助レビュー
     Given 汎用stemを持つ変更fileを実際にimportする呼び出し元がある
     When 補助レビューCLI(diff対象)で収集処理を行う
     Then import由来の呼び出し元は収集され汎用stem由来の無関係fileは除外される
+
+  Scenario: SCN-SUPPL-017 stemを部分文字列として含むだけのimportは関連fileにしない
+    Given stemを部分文字列として含むだけのimportを持つ無関係fileが多数ある
+    When 補助レビューCLI(diff対象)で収集処理を行う
+    Then 部分一致のみのimport元は収集されず実際の呼び出し元だけが残る
+
+  Scenario: SCN-SUPPL-018 import参照検索が取得不能なら打ち切りを報告する
+    Given import参照検索の結果が1MiBを超える差分がある
+    When 補助レビューCLI(diff対象)で収集処理を行う
+    Then 収集結果は打ち切りとして報告される

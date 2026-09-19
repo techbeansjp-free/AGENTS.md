@@ -435,6 +435,91 @@ Then(
 );
 
 Given(
+  "stemを部分文字列として含むだけのimportを持つ無関係fileが多数ある",
+  function () {
+    this.root = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-substring-decoy-")),
+    );
+    this.temporaryDirectories.push(this.root);
+    initRepository(this.root);
+    fs.writeFileSync(
+      path.join(this.root, "config.ts"),
+      "export const TOKEN_TTL_SECONDS = 3600;\n",
+    );
+    fs.writeFileSync(
+      path.join(this.root, "session.ts"),
+      'import { TOKEN_TTL_SECONDS } from "./config.js";\n\n' +
+        "export function issueToken() {\n  return { ttl: TOKEN_TTL_SECONDS };\n}\n",
+    );
+    /**
+     * "config"を部分文字列として含むだけの実在しないimport（"./old-config-N.js"や
+     * "./configuration-N.js"）は、module specifierの末尾segmentが完全一致では
+     * ないため、precise検索の対象にしてはならない（CodeRabbit指摘A）。総数を
+     * RELATED_STEM_MATCH_LIMITより多くし、旧patternなら閾値を迂回してすべて
+     * 採用されていたことを反例として示す。
+     */
+    for (let index = 0; index < 11; index += 1)
+      fs.writeFileSync(
+        path.join(this.root, `decoy-${index}.ts`),
+        `import { y } from "./old-config-${index}.js";\n`,
+      );
+    this.baseSha = commitAll(this.root, "base");
+    fs.writeFileSync(
+      path.join(this.root, "config.ts"),
+      "export const TOKEN_TTL_SECONDS = 360000; // BUG\n",
+    );
+    this.headSha = commitAll(this.root, "change config ttl");
+  },
+);
+
+Then(
+  "部分一致のみのimport元は収集されず実際の呼び出し元だけが残る",
+  function () {
+    assert.ok(this.collection);
+    assert.deepEqual(this.collection.related, ["session.ts"]);
+  },
+);
+
+Given("import参照検索の結果が1MiBを超える差分がある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-precise-large-grep-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  const directory = path.join(
+    this.root,
+    "a".repeat(220),
+    "b".repeat(220),
+    "c".repeat(220),
+  );
+  fs.mkdirSync(directory, { recursive: true });
+  /**
+   * SCN-SUPPL-014と同じ超長pathの手法を使うが、内容を実際のimport構文にして
+   * precise検索（無条件採用のimport参照pattern）自体をENOBUFSへ追い込む。
+   * 生成側の閾値超過（非specificだから除外）とは異なり、precise検索の取得
+   * 失敗はtruncatedとして呼出し元へ伝えるべき（CodeRabbit指摘B）。
+   */
+  for (let index = 0; index < 1200; index++) {
+    fs.writeFileSync(
+      path.join(
+        directory,
+        `${"d".repeat(170)}${String(index).padStart(4, "0")}.md`,
+      ),
+      'import { x } from "./generic";\n',
+    );
+  }
+  fs.writeFileSync(path.join(this.root, "generic.ts"), "export const x = 1;\n");
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(path.join(this.root, "generic.ts"), "export const x = 2;\n");
+  this.headSha = commitAll(this.root, "change generic");
+});
+
+Then("収集結果は打ち切りとして報告される", function () {
+  assert.ok(this.collection);
+  assert.equal(this.collection.truncated, true);
+});
+
+Given(
   "主worktreeのみに補助レビュー設定があり連結worktreeに差分がある",
   function () {
     const primary = fs.realpathSync(
