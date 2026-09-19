@@ -38,7 +38,7 @@ Feature: 証跡再固定がCLIと診断経路で機能する
 
   @issue-1377
   Scenario: SCN-1377-01 pr-boundのreview artifact改名を再固定する
-    Given pr-boundの旧artifactと同一実装を監査した正規名の新artifactがある
+    Given pr-boundの旧artifactと同一実装を監査したevidence-only配置の新artifactがある
     When 二層等価な入力をpreviewして二回applyする
     Then previewは成功し初回だけ追記して二回目はunchangedになる
     And 再固定recordは旧新artifactのpathとdigestを保持する
@@ -139,3 +139,21 @@ Feature: 証跡再固定がCLIと診断経路で機能する
     Given 旧baseが旧headの祖先でないdelivery stateがある
     When stagingとGitを観測して拒否previewを実行する
     Then 拒否previewはstaging親directoryとGitを変えない
+
+  @issue-1433
+  Scenario: SCN-INT-REANCHOR-016 製品既定出力名で再固定した新headをmerge bindingに使う
+    Given pr-bound後に前進した実装と「製品既定出力名」へ置いたpost-PR intakeのreview artifactがある
+    When reviewed-forward再固定後に新headでpr mergeのbinding検査を通す
+    Then pr mergeのbinding検査は通過する
+
+  @issue-1433
+  Scenario: SCN-INT-REANCHOR-017 第2 allowlist配下で再固定した新headをmerge bindingに使う
+    Given pr-bound後に前進した実装と「第2allowlist」へ置いたpost-PR intakeのreview artifactがある
+    When reviewed-forward再固定後に新headでpr mergeのbinding検査を通す
+    Then pr mergeのbinding検査は通過する
+
+  @issue-1433
+  Scenario: SCN-INT-REANCHOR-018 allowlist外へ置いたartifactはpreviewとapplyの双方が拒否する
+    Given pr-bound後に前進した実装と「prefix延長」へ置いたpost-PR intakeのreview artifactがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then reviewed-forwardのpreviewとapplyは拒否され追記しない

@@ -272,6 +272,36 @@ const REVIEW_ARTIFACT = "docs/reviews/99_課題1172再固定レビュー.md";
 const INITIAL_FORWARD_ARTIFACT = "docs/reviews/209_課題1389初回レビュー.md";
 const FORWARD_ARTIFACT = "docs/reviews/210_課題1389再固定レビュー.md";
 
+/**
+ * review artifactの配置variant（Issue #1433）。
+ *
+ * **正本はfile名規則を持たない。** `01_開発ワークフロー.md`はformal review成果物の
+ * 配置を`docs/reviews/`と`.agent-skill-chain/reviews/`の2 directoryだけで定め、
+ * `02_品質基準.md`は「汎用パッケージは特定runnerやfile名を強制しない」と定める。
+ * ここではその2 directoryと、製品自身が`review artifact --init`の既定で出力する
+ * `<Issue番号>_レビュー.md`を受理側のvariantとして持つ。
+ *
+ * **allowlist外のvariantは候補に数えない。** prefixの延長と短縮は区切り文字を
+ * 跨ぐ前方一致の誤りを、backslashと制御文字は`isEvidenceOnlyPath`が拒否する
+ * 安全条件を固定する。**後者2件はgitが実際に保持できるpathであり、旧実装の
+ * 単純前方一致では候補として受理されていた（INV-05）。**
+ */
+const ARTIFACT_PLACEMENTS: Record<string, string> = {
+  製品既定出力名: "docs/reviews/1433_レビュー.md",
+  第2allowlist: ".agent-skill-chain/reviews/1433_レビュー.md",
+  自repo慣習名: "docs/reviews/226_課題1433再固定レビュー.md",
+  prefix延長: "docs/reviewsX/1433_レビュー.md",
+  prefix短縮: "docs/review/1433_レビュー.md",
+  backslash: "docs/reviews/1433\\レビュー.md",
+  制御文字: "docs/reviews/1433\u0001レビュー.md",
+};
+
+function placement(name: string): string {
+  const value = ARTIFACT_PLACEMENTS[name];
+  assert.ok(value, `未知のartifact配置: ${name}`);
+  return value;
+}
+
 /** 「レビュー識別情報」節を持つreview artifactを組み立てる。 */
 function reviewArtifact(
   base: string,
@@ -438,6 +468,7 @@ function forwardFixture(
   world: ReanchorWorld,
   recordIntake: boolean,
   includeGenerated = false,
+  forwardArtifactPath = FORWARD_ARTIFACT,
 ): void {
   world.root = world.initRepo();
   world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
@@ -484,7 +515,7 @@ function forwardFixture(
   recordForwardRound(world, implementation, recordIntake, includeGenerated);
   world.newHeadSha = commitPath(
     world.root,
-    FORWARD_ARTIFACT,
+    forwardArtifactPath,
     forwardReviewArtifact(world.baseSha, implementation, includeGenerated),
     "docs: post-PR review artifact",
   );
@@ -496,6 +527,70 @@ Given(
   function () {
     /** 版管理下の生成物を含む監査表もreviewed-forwardで受理する。 */
     forwardFixture(this, true, true);
+  },
+);
+
+Given(
+  "pr-bound後に前進した実装と「{word}」へ置いたpost-PR intakeのreview artifactがある",
+  function (name: string) {
+    forwardFixture(this, true, true, placement(name));
+  },
+);
+
+/**
+ * **終端artifactのmode/typeだけをevidence-only suffixから外す（Issue #1433）。**
+ *
+ * path・本文・session binding・監査表は正当なfixtureと同一で、mode `100755`か
+ * symlinkだけが違う。`terminalArtifactPath`はpathしか見ないため、この差だけでは
+ * 拒否されないことを反例として固定する。
+ *
+ * **意図したmodeが実際にcommitされたことをassertする。** chmodやsymlinkが
+ * 環境都合で効かないと、拒否の理由が別条件へすり替わり反例が空振りする。
+ */
+function rewriteTerminalArtifactMode(
+  world: ReanchorWorld,
+  artifactPath: string,
+  kind: string,
+): void {
+  const file = path.join(world.root, artifactPath);
+  const body = fs.readFileSync(file, "utf8");
+  const parent = git(world.root, ["rev-parse", "HEAD^"]);
+  execFileSync("git", ["reset", "-q", "--hard", parent], { cwd: world.root });
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.rmSync(file, { force: true });
+  if (kind === "symlink") fs.symlinkSync("../../reviewed.ts", file);
+  else fs.writeFileSync(file, body);
+  execFileSync("git", ["add", "--", artifactPath], { cwd: world.root });
+  if (kind === "実行権限")
+    execFileSync("git", ["update-index", "--chmod=+x", "--", artifactPath], {
+      cwd: world.root,
+    });
+  execFileSync(
+    "git",
+    ["commit", "-q", "-m", "docs: terminal artifact with non-regular mode"],
+    { cwd: world.root },
+  );
+  world.newHeadSha = git(world.root, ["rev-parse", "HEAD"]);
+  const raw = git(world.root, [
+    "diff",
+    "--raw",
+    "--no-renames",
+    "--no-abbrev",
+    parent,
+    world.newHeadSha,
+  ]);
+  const expected = kind === "symlink" ? "120000" : "100755";
+  assert.ok(
+    raw.includes(` ${expected} `),
+    `終端artifactのmodeが${expected}になっていません: ${raw}`,
+  );
+}
+
+Given(
+  "pr-bound後に前進した実装とmode不正「{word}」のpost-PR intakeのreview artifactがある",
+  function (kind: string) {
+    forwardFixture(this, true, true);
+    rewriteTerminalArtifactMode(this, FORWARD_ARTIFACT, kind);
   },
 );
 
@@ -623,7 +718,7 @@ function buildApprovedReviewBinding(
 }
 
 Given(
-  "pr-boundの旧artifactと同一実装を監査した正規名の新artifactがある",
+  "pr-boundの旧artifactと同一実装を監査したevidence-only配置の新artifactがある",
   function () {
     this.root = this.initRepo();
     this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
@@ -650,6 +745,113 @@ Given(
       "docs: renamed artifact",
     );
     this.newBaseSha = this.baseSha;
+  },
+);
+
+Given(
+  "pr-boundの旧artifactと同一実装を監査した「{word}」の新artifactがある",
+  function (name: string) {
+    this.root = this.initRepo();
+    this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
+    const implementation = commit(
+      this.root,
+      "export const reviewed = 1;\n",
+      "feat: review対象",
+    );
+    this.oldHeadSha = commitPath(
+      this.root,
+      "docs/reviews/1377_レビュー.md",
+      legacyAuditableReviewArtifact(this.baseSha, implementation),
+      "docs: old artifact",
+    );
+    this.staging = makeStaging(this);
+    buildApprovedReviewBinding(this, implementation);
+    buildDelivery(this, false);
+    snapshot(this);
+    execFileSync("git", ["checkout", "-q", implementation], { cwd: this.root });
+    this.newHeadSha = commitPath(
+      this.root,
+      placement(name),
+      auditableReviewArtifact(this.baseSha, implementation),
+      "docs: relocated artifact",
+    );
+    this.newBaseSha = this.baseSha;
+  },
+);
+
+Given(
+  "pr-boundの旧artifactと同一実装を監査したmode不正「{word}」の新artifactがある",
+  function (kind: string) {
+    this.root = this.initRepo();
+    this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
+    const implementation = commit(
+      this.root,
+      "export const reviewed = 1;\n",
+      "feat: review対象",
+    );
+    this.oldHeadSha = commitPath(
+      this.root,
+      "docs/reviews/1377_レビュー.md",
+      legacyAuditableReviewArtifact(this.baseSha, implementation),
+      "docs: old artifact",
+    );
+    this.staging = makeStaging(this);
+    buildApprovedReviewBinding(this, implementation);
+    buildDelivery(this, false);
+    snapshot(this);
+    execFileSync("git", ["checkout", "-q", implementation], { cwd: this.root });
+    const relocated = "docs/reviews/209_課題1377成果物再固定レビュー.md";
+    this.newHeadSha = commitPath(
+      this.root,
+      relocated,
+      auditableReviewArtifact(this.baseSha, implementation),
+      "docs: relocated artifact",
+    );
+    rewriteTerminalArtifactMode(this, relocated, kind);
+    this.newBaseSha = this.baseSha;
+  },
+);
+
+Given(
+  "固定済みPR identityを持つstagingと「{word}」へ置いた等価なrebaseがある",
+  function (name: string) {
+    artifactFixture(this, undefined, placement(name));
+  },
+);
+
+/**
+ * **通常rebase経路のmode検証を固定する（Issue #1433 round 4、外部review Codex）。**
+ *
+ * `artifactFixture`が等価なrebaseを組んだ直後の終端commitを
+ * `rewriteTerminalArtifactMode`で置き換え、review artifactのmodeだけを
+ * 不正にする。実装内容・比較基点・H_impl宣言は変えない。
+ */
+Given(
+  "固定済みPR identityを持つstagingと等価なrebaseの終端artifactがmode不正「{word}」になっている",
+  function (kind: string) {
+    artifactFixture(this);
+    rewriteTerminalArtifactMode(this, REVIEW_ARTIFACT, kind);
+  },
+);
+
+/**
+ * **候補が1件でない差分は同定できない（Issue #1433）。**
+ *
+ * allowlist配下のartifactを新head側だけ2件にする。`terminalArtifactPath`が
+ * 1件へ絞れないことを要求する条件を、**変異試験B2（`length === 1`を`>= 1`へ
+ * 緩める）が生存したため足した。** 緩めると先頭1件を任意に選んでしまい、
+ * どのartifactをreview証跡とみなしたかが差分から決まらなくなる。
+ */
+Given(
+  "固定済みPR identityを持つstagingとartifactが2件変わる等価なrebaseがある",
+  function () {
+    artifactFixture(this);
+    this.newHeadSha = commitPath(
+      this.root,
+      "docs/reviews/227_課題1433二件目レビュー.md",
+      reviewArtifact(this.newBaseSha, this.newHeadSha),
+      "docs: 2件目のreview artifactを記録する",
+    );
   },
 );
 
@@ -772,6 +974,7 @@ function commitPath(
 function artifactFixture(
   world: ReanchorWorld,
   mutateArtifact?: (base: string, implementation: string) => string,
+  artifactPath = REVIEW_ARTIFACT,
 ): void {
   world.root = world.initRepo();
   world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
@@ -782,7 +985,7 @@ function artifactFixture(
   );
   world.oldHeadSha = commitPath(
     world.root,
-    REVIEW_ARTIFACT,
+    artifactPath,
     reviewArtifact(world.baseSha, implementation),
     "docs: review artifactを記録する",
   );
@@ -807,7 +1010,7 @@ function artifactFixture(
     : reviewArtifact(newBase, newImplementation);
   world.newHeadSha = commitPath(
     world.root,
-    REVIEW_ARTIFACT,
+    artifactPath,
     body,
     "docs: review artifactを記録する",
   );
@@ -1737,6 +1940,31 @@ Then("再固定recordはexact post-PR review bindingを保持する", function (
     /^[a-f0-9]{64}$/u,
   );
 });
+
+/**
+ * **記録したartifact pathが宣言した配置と一致することを測る（Issue #1433）。**
+ *
+ * 受理の成否だけを見ると、同定述語が別のpathを拾っても気付けない。methodと
+ * pathの両方を名指しする。
+ */
+Then(
+  "再固定recordのartifact pathは「{word}」と一致する",
+  function (name: string) {
+    const record = readEvidenceReanchorChain(this.staging)[0];
+    assert.ok(record, "再固定recordがありません");
+    const observed =
+      record.method === "reviewed-forward"
+        ? record.reviewedForward?.artifactPath
+        : record.method === "artifact-replacement"
+          ? record.artifactReplacement?.newPath
+          : undefined;
+    assert.equal(
+      observed,
+      placement(name),
+      `method=${record.method}のartifact pathが一致しません: ${String(observed)}`,
+    );
+  },
+);
 
 Then("reviewed-forwardのpreviewとapplyは拒否され追記しない", function () {
   assert.deepEqual(
