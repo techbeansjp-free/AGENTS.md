@@ -55,8 +55,6 @@ export type DelegatedReviewResult =
       configSource: "local" | "primary" | "global";
       inputDigest: string;
       outputDigest: string;
-      baseSha?: string;
-      headSha?: string;
     }
   | {
       state: "needs_coordinator_review";
@@ -176,7 +174,6 @@ function parseReview(
     (finding) => finding.severity === "Critical" || finding.severity === "High",
   );
   if (
-    profile === "assertive" &&
     !blocking &&
     scoped.ignoredOutOfScopeCount === 0 &&
     (parsed.decision === "blocked" || parsed.decision === "changes_requested")

@@ -87,8 +87,7 @@ function parseReview(output, step, targetFiles, profile) {
     const scoped = filterReviewFindingsToTarget(findings, targetFiles);
     const visible = visibleReviewFindings(scoped.findings, profile);
     const blocking = visible.some((finding) => finding.severity === "Critical" || finding.severity === "High");
-    if (profile === "assertive" &&
-        !blocking &&
+    if (!blocking &&
         scoped.ignoredOutOfScopeCount === 0 &&
         (parsed.decision === "blocked" || parsed.decision === "changes_requested"))
         return undefined;

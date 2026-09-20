@@ -433,6 +433,26 @@ Given("chill profileのStep 3委譲reviewer設定がある", function () {
   });
 });
 
+Given(
+  "chill profileのStep 3委譲reviewerが根拠のないblocked判定を返す",
+  function () {
+    setup(this);
+    writeConfig(this, "local", config("qwen3-coder:30b", { profile: "chill" }));
+    this.response = JSON.stringify({
+      decision: "blocked",
+      affirmative: "要件を確認した",
+      adversarial: "失敗経路を確認した",
+      findings: [],
+    });
+  },
+);
+
+Then("委譲reviewはdegradedで応答不正を返す", function () {
+  assert.equal(this.result?.state, "degraded");
+  if (this.result?.state !== "degraded") return;
+  assert.match(this.result.reason, /応答を検証できませんでした/u);
+});
+
 Then("委譲reviewはHighのEffortだけを返す", function () {
   assert.equal(this.result?.state, "reviewed");
   if (this.result?.state !== "reviewed") return;

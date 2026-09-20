@@ -118,6 +118,31 @@ function fixedExecutor(result: ReviewerExecutionResult): ReviewerExecutor {
       : result;
 }
 
+function profileExecutor(result: ReviewerExecutionResult): ReviewerExecutor {
+  const firstPass = fixedExecutor(result);
+  return async (request) => {
+    if (!request.prompt.includes("投稿前の独立したfinding検証者"))
+      return firstPass(request);
+    const candidatesJson = /^候補: (.+)$/mu.exec(request.prompt)?.[1];
+    assert.ok(candidatesJson);
+    const candidates = JSON.parse(candidatesJson) as unknown[];
+    return {
+      state: "succeeded",
+      reason: "ok",
+      output: JSON.stringify({
+        verdicts: candidates.map((_, index) => ({
+          index,
+          valid: true,
+          reason: "HEADの行と経路を確認した",
+          faultCode: "export const value = 2;",
+          failurePath: "対象を実行するとこの行へ到達する",
+          blockingCode: "",
+        })),
+      }),
+    };
+  };
+}
+
 // --- SCN-SUPPL-001 ---
 
 Given("補助レビュー設定ファイルが存在しない", function () {
@@ -913,7 +938,7 @@ When("補助reviewerがHighとLowのEffort付き指摘を返す", async function
       configPath: this.configPath,
     },
     {
-      execute: fixedExecutor({
+      execute: profileExecutor({
         state: "succeeded",
         reason: "ok",
         output: JSON.stringify({
@@ -945,6 +970,12 @@ Then("HighのQuick winだけが表示される", function () {
     this.result.findings.map((finding) => [finding.severity, finding.effort]),
     [["High", "Quick win"]],
   );
+  assert.equal(this.result.verificationAssessments?.length, 1);
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.evidenceStatus,
+    "quote_matched",
+  );
+  assert.equal(this.result.verificationSuggestedFindings?.length, 1);
 });
 Then("HighとLowのEffort付き指摘が表示される", function () {
   assert.equal(this.result?.state, "needs_coordinator_review");
@@ -956,4 +987,11 @@ Then("HighとLowのEffort付き指摘が表示される", function () {
       ["Low", "Heavy lift"],
     ],
   );
+  assert.equal(this.result.verificationAssessments?.length, 2);
+  assert.ok(
+    this.result.verificationAssessments?.every(
+      (item) => item.evidenceStatus === "quote_matched",
+    ),
+  );
+  assert.equal(this.result.verificationSuggestedFindings?.length, 2);
 });
