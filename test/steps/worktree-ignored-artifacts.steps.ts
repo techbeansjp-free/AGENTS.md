@@ -45,7 +45,10 @@ function ignoredNamesFor(kind: string): string[] {
   if (kind === "危険なpath")
     return [
       "ignored/tab\tname.txt",
-      `ignored/${"ガ".normalize("NFD")}.txt`,
+      // APFS may normalize a decomposed name before Git observes it. A bidi
+      // format control survives on both macOS and Linux and exercises the
+      // same unsafe-path rejection without depending on filesystem Unicode.
+      "ignored/bidi\u202Ename.txt",
       "ignored/back\\slash.txt",
     ];
   if (kind === "allowlist済み非ASCII名") return ["node_modules/メモ.txt"];
@@ -190,6 +193,24 @@ Then("後片付け判定は{string}である", function (expectation: string) {
       found.length,
       this.ignoredNames.length,
       `危険なpath ${this.ignoredNames.length}件のうち拒否されたのは${found.length}件です: ${found.join("; ")}`,
+    );
+    // APFS can normalize the on-disk NFD filename. Preserve the original
+    // non-NFC rejection check with a synthetic Git observation, independent
+    // of the host filesystem's filename normalization.
+    const decomposed = `ignored/${"ガ".normalize("NFD")}.txt`;
+    const observation = inspectFinalizeState(
+      this.repositoryRoot,
+      this.worktree,
+      EVIDENCE,
+      allowlistFor(String(this.value)),
+    );
+    const nonNfcReport = buildFinalizeReport({
+      ...observation,
+      ignoredArtifacts: [decomposed],
+    });
+    assert.ok(
+      unknownKind(nonNfcReport).some((reason) => reason.includes(decomposed)),
+      nonNfcReport.reasons.join("; "),
     );
     return;
   }
