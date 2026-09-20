@@ -19,6 +19,7 @@ import {
   validateContextIsolatedApprovalRecord,
   visibleMarkdownLines,
 } from "../domain/review-artifact.js";
+import { isEvidenceOnlyPath } from "../domain/review.js";
 import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
 import {
   calculateStagingDigest,
@@ -32,6 +33,7 @@ import {
   readStoredDeliveryState,
 } from "./delivery-state.js";
 import {
+  evidenceOnlySuffix,
   observeReviewDiff,
   observeSingleCommitParent,
   readBlobAtCommit,
@@ -151,8 +153,6 @@ export function readEvidenceReanchorChain(
  * 「旧diffと新diffが一致する」対を作れてしまい、未reviewのbase内容を含むheadへ
  * 証跡を移送できる。束縛先は既存stateにある。
  */
-/** review artifactのpathとみなす接頭辞。`audit:check`の`AUDIT_DIRECTORY`と同じ。 */
-const REVIEW_ARTIFACT_PREFIX = "docs/reviews/";
 
 /**
  * 宣言された`H_impl`を構造で検証する。
@@ -199,10 +199,26 @@ function verifiedImplementationBoundary(
   };
 }
 
+/**
+ * 差分path集合からreview artifact候補を1件だけ同定する。
+ *
+ * **同定規則の正本はevidence-only allowlistである。** 判定は`pr create`・review session・
+ * record layerと同じ`isEvidenceOnlyPath`へ委ねる。`pr create`は
+ * `assertConvergedReviewSession`から`evidenceOnlySuffix`を経てこの述語へ到達する。
+ * **2 prefixを直書きで持つ箇所が`pr merge`側に残る**（`resolveImplementationCommitForMerge`と
+ * delivery stateのMergeIntent解析）。そこは`pr merge`の認可判定であり本変更のscope外で、
+ * 合流は別Issueとする。以前はこのadapterが
+ * `docs/reviews/`だけの単純前方一致を持っていたが、それはASC自repoの`audit:check`
+ * が使う運用上の狭い集合であって製品の契約ではない。**製品allowlistは利用側の
+ * 配置自由度であり、正本は`docs/reviews/`と`.agent-skill-chain/reviews/`の2つを
+ * 許す。** 同定規則を製品内の2箇所で別々に持つと、片方だけが正本から外れる
+ * （Issue #1433）。
+ *
+ * **file名の字面を受理条件にしない。** 正本は配置だけを定め、`02_品質基準.md`は
+ * 汎用packageが特定のfile名を強制しないことを要求する。
+ */
 function terminalArtifactPath(paths: readonly string[]): string | undefined {
-  const artifacts = paths.filter((entry) =>
-    entry.startsWith(REVIEW_ARTIFACT_PREFIX),
-  );
+  const artifacts = paths.filter(isEvidenceOnlyPath);
   /** **artifactが1件でない差分は同定できない。** 受理しない。 */
   return artifacts.length === 1 ? artifacts[0] : undefined;
 }
@@ -265,7 +281,8 @@ function observeRebaseEquivalence(
     | "artifact-not-unique"
     | "artifact-unreadable"
     | "base-mismatch"
-    | "boundary-mismatch";
+    | "boundary-mismatch"
+    | "mode-mismatch";
   gitFailure?: string;
 } {
   const beforeAll = observeReanchorDiff(
@@ -326,6 +343,25 @@ function observeRebaseEquivalence(
       reason: "boundary-mismatch",
       gitFailure: afterBoundary.gitFailure,
     };
+  /**
+   * **新`H_final`がevidence-only suffixの形をmodeまで満たすことを要求する。**
+   *
+   * `verifiedImplementationBoundary`は変更pathの件数と名前しか見ない。mode
+   * `100755`のMarkdownは通常fileなので`git show`で本文が読め、構造検証・
+   * identity anchor・approval・個別監査表をすべて通過する。round 2は
+   * `artifact-replacement`と`reviewed-forward`の2経路にこの検査を足したが、
+   * **通常rebase経路（本関数）は対象外のまま残っていた。** `isContentEquivalent`が
+   * mode変更を含む「new file mode」行の差でfalseになり必ずこの関数へ入るため、
+   * ここを通さない限り3経路のうち最も一般的な経路がmode検証を欠く
+   * （Issue #1433、外部review round 4・Codex）。
+   *
+   * 旧`H_final`側へは適用しない。過去に受理した記録を遡って拒否へ変えない。
+   */
+  if (
+    evidenceOnlySuffix(root, afterAnchor.implementation, input.newHeadSha) !==
+    afterPath
+  )
+    return { reason: "mode-mismatch" };
   return {
     reason: isRebaseEquivalent({
       beforeImplementation: observeReanchorDiff(
@@ -367,10 +403,8 @@ interface ReviewedForwardEvidence {
   artifactDigest: string;
 }
 
-const REVIEW_ARTIFACT_NAME = /^\d+_課題\d+.*レビュー\.md$/u;
-
 /**
- * 命名是正で変わってよい機械導出・監査領域だけを正規化する。
+ * path是正で変わってよい機械導出・監査領域だけを正規化する。
  * finding、判定、独立性、test証拠などreview判断の本文はbyte比較へ残す。
  */
 function comparableArtifactContent(markdown: string): string {
@@ -462,12 +496,11 @@ function observeArtifactReplacement(
   );
   const oldPath = terminalArtifactPath(beforeAll.changedPaths);
   const newPath = terminalArtifactPath(afterAll.changedPaths);
-  if (
-    oldPath === undefined ||
-    newPath === undefined ||
-    oldPath === newPath ||
-    !REVIEW_ARTIFACT_NAME.test(path.posix.basename(newPath))
-  )
+  /**
+   * **新artifactがevidence-only allowlist配下であることは`terminalArtifactPath`が
+   * 既に保証している。** basenameの字面を重ねて要求しない（Issue #1433）。
+   */
+  if (oldPath === undefined || newPath === undefined || oldPath === newPath)
     return undefined;
   const oldArtifact = readBlobAtCommit(root, input.oldHeadSha, oldPath);
   const newArtifact = readBlobAtCommit(root, input.newHeadSha, newPath);
@@ -505,6 +538,27 @@ function observeArtifactReplacement(
       input,
       "新H_impl→新head",
     ).valid
+  )
+    return undefined;
+  /**
+   * **新`H_final`がevidence-only suffixの形をmodeまで満たすことを要求する。**
+   *
+   * `terminalArtifactPath`が見るのはpathだけである。mode `100755`のMarkdownは
+   * 通常fileなので`git show`で本文が読め、構造検証・identity anchor・approval・
+   * 個別監査表をすべて通過する。TERM-ASC-101はmode `100644`の通常file 1件の
+   * 追加または変更だけをevidence-only suffixとする。
+   *
+   * **`pr create`は`evidenceOnlySuffix`でこれを検査するが、再固定で実効HEADへ
+   * 入った新headは以後どこでも再検査されない。** `assertConvergedReviewSession`の
+   * suffix検査は実効HEADとcurrent HEADが異なるときだけ走り、再固定後は両者が
+   * 一致するため素通りする。**再固定がこの形を確かめる唯一の地点である**
+   * （Issue #1433、外部review round 2）。
+   *
+   * 旧`H_final`側へは適用しない。過去に受理した記録を遡って拒否へ変えない。
+   */
+  if (
+    evidenceOnlySuffix(root, afterAnchor.implementation, input.newHeadSha) !==
+    newPath
   )
     return undefined;
   const beforeImplementation = observeReanchorDiff(
@@ -586,11 +640,7 @@ function observeReviewedForward(
     input.newHeadSha,
   );
   const artifactPath = terminalArtifactPath(finalSuffix.changedPaths);
-  if (
-    artifactPath === undefined ||
-    !REVIEW_ARTIFACT_NAME.test(path.posix.basename(artifactPath))
-  )
-    return undefined;
+  if (artifactPath === undefined) return undefined;
   const artifact = readBlobAtCommit(root, input.newHeadSha, artifactPath);
   if (artifact === undefined) return undefined;
   const anchor = parseReviewIdentityAnchor(artifact);
@@ -613,6 +663,12 @@ function observeReviewedForward(
       input,
       "新H_impl→新head",
     ).valid
+  )
+    return undefined;
+  /** artifact-replacementと同じ理由でmodeまで確かめる（Issue #1433）。 */
+  if (
+    evidenceOnlySuffix(root, anchor.implementation, input.newHeadSha) !==
+    artifactPath
   )
     return undefined;
   const implementation = observeReanchorDiff(

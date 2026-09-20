@@ -37,9 +37,9 @@ import {
 } from "../../src/adapters/review-progress.js";
 import {
   buildReviewRoundDraft,
-  evidenceOnlySuffix,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
+import { evidenceOnlySuffix } from "../../src/adapters/review-diff.js";
 import { recordLayerSuffix } from "../../src/adapters/review-record-layer.js";
 import { main } from "../../src/cli.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
