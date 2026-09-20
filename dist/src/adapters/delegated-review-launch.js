@@ -214,7 +214,7 @@ export async function launchDelegatedReview(input, dependencies = {}) {
         if (git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha)
             return { state: "degraded", reason: "対象HEADを固定できませんでした" };
         return {
-            state: "needs_human_review",
+            state: "needs_coordinator_review",
             step: 10,
             affirmative: parsed.affirmative,
             adversarial: parsed.adversarial,

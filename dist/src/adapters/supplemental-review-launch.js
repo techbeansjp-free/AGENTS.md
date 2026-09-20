@@ -146,7 +146,7 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
     // A second LLM pass is only advisory: it can reject a real defect while
     // describing its failure path. Preserve every scoped first-pass candidate.
     return {
-        state: "needs_human_review",
+        state: "needs_coordinator_review",
         ...scoped,
         verificationSuggestedFindings: verified ?? null,
         truncated,

@@ -322,8 +322,8 @@ When("補助reviewerが差分外ファイルの指摘を返す", async function 
 });
 
 Then("補助レビュー結果から差分外の指摘が除外される", function () {
-  assert.equal(this.result?.state, "needs_human_review");
-  if (this.result?.state !== "needs_human_review") return;
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
   assert.deepEqual(this.result.findings, []);
   assert.equal(this.result.ignoredOutOfScopeCount, 1);
 });
@@ -580,9 +580,9 @@ When(
   },
 );
 
-Then("連結worktreeの補助レビューが人手確認候補を返す", function () {
-  assert.equal(this.result?.state, "needs_human_review");
-  if (this.result?.state !== "needs_human_review") return;
+Then("連結worktreeの補助レビューが進行役確認候補を返す", function () {
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
   assert.equal(this.result.findings[0]?.file, "target.ts");
 });
 
@@ -639,8 +639,8 @@ Then("補助レビュー結果に日本語pathの指摘が残る", async functio
       }),
     },
   );
-  assert.equal(this.result?.state, "needs_human_review");
-  if (this.result?.state !== "needs_human_review") return;
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
   assert.equal(this.result.findings[0]?.file, "src/対象.ts");
   assert.equal(this.result.ignoredOutOfScopeCount, 0);
 });
@@ -804,10 +804,10 @@ When("補助レビューCLIの送信処理を行う", async function () {
   });
 });
 
-Then("file・該当箇所・内容・重大度を持つ人手確認候補を受け取る", function () {
+Then("file・該当箇所・内容・重大度を持つ進行役確認候補を受け取る", function () {
   assert.ok(this.result);
-  assert.equal(this.result.state, "needs_human_review");
-  if (this.result.state !== "needs_human_review") return;
+  assert.equal(this.result.state, "needs_coordinator_review");
+  if (this.result.state !== "needs_coordinator_review") return;
   assert.equal(this.result.findings.length, 1);
   const [finding] = this.result.findings;
   assert.equal(finding.file, "a.ts");

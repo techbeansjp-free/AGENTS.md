@@ -21,10 +21,10 @@ Feature: 設定されたローカルLLMへのreview委譲
     When Step 3の委譲reviewを実行する
     Then 委譲reviewはdegradedでexecutorを起動しない
 
-  Scenario: SCN-UNIT-DELEGREVIEW-005 Critical指摘と承認自己申告を人手確認へ渡す
+  Scenario: SCN-UNIT-DELEGREVIEW-005 Critical指摘と承認自己申告を進行役確認へ渡す
     Given Step 10の委譲reviewerがCritical指摘と承認を返す
     When Step 10の委譲reviewを実行する
-    Then 委譲reviewのCritical候補は人手確認となりHEADへ固定される
+    Then 委譲reviewのCritical候補は進行役確認となりHEADへ固定される
 
   Scenario: SCN-UNIT-DELEGREVIEW-006 ユーザー共通設定だけでも委譲する
     Given ユーザー共通の委譲reviewer設定だけがある
@@ -45,7 +45,7 @@ Feature: 設定されたローカルLLMへのreview委譲
   Scenario: SCN-UNIT-DELEGREVIEW-009 差分外タスクの指摘を採用しない
     Given Step 10の委譲reviewerが差分外ファイルのCritical指摘を返す
     When Step 10の委譲reviewを実行する
-    Then 差分外の指摘を除外して人手確認へ渡す
+    Then 差分外の指摘を除外して進行役確認へ渡す
 
   Scenario: SCN-UNIT-DELEGREVIEW-010 連結worktreeから主worktreeのローカル設定を使う
     Given 主worktreeに設定があり対象stagingは連結worktreeにある
@@ -72,4 +72,4 @@ Feature: 設定されたローカルLLMへのreview委譲
     Given Step 10の委譲reviewerがCritical指摘と承認を返す
     And 投稿前検証者はfindingを却下する
     When Step 10の委譲reviewを実行する
-    Then 委譲reviewは初回候補と検証者の却下を人手確認へ渡す
+    Then 委譲reviewは初回候補と検証者の却下を進行役確認へ渡す
