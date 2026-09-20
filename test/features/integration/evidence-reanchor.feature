@@ -56,6 +56,12 @@ Feature: 証跡再固定がCLIと診断経路で機能する
     When 同じ再固定入力でpreviewとapplyをCLIから実行する
     Then supersessionのpreviewとapplyは拒否され追記しない
 
+  @issue-1437
+  Scenario: SCN-1437-03 High指摘の解決状態を書き換えた前進commitは拒否する
+    Given pr-bound後にHigh指摘の解決状態を書き換えた前進commitがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then supersessionのpreviewとapplyは拒否され追記しない
+
   @issue-1377
   Scenario Outline: SCN-1377-02 pr-boundの不正なartifact replacementを再固定しない
     Given pr-boundの不正なartifact replacement「<反例>」がある

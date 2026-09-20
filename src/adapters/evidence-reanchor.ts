@@ -464,11 +464,11 @@ function comparableArtifactContent(markdown: string): string {
 /** §9/§11の旧書式を正規書式へ直した場合だけ判断本文の比較から除く。 */
 function comparableSupersessionContent(markdown: string): {
   body: string;
-  resolvedFindingIds: string[];
+  judgmentDetails: string[];
 } {
   const lines = markdown.replaceAll("\r\n", "\n").split("\n");
   const visible = visibleMarkdownLines(markdown);
-  const resolved: string[] = [];
+  const judgmentDetails: string[] = [];
   const normalized = lines.flatMap((line, index) => {
     if (visible[index] === "") return [line];
     if (
@@ -484,24 +484,24 @@ function comparableSupersessionContent(markdown: string): {
         "| reviewerが対象差分を変更していないこと | はい（製品path変更0件） |"
     )
       return ["| reviewerが対象差分を変更していないこと | <確認済み書式> |"];
-    if (/^- 未解決Critical\/High: (?:0件|なし)(?:。.*)?$/u.test(line)) {
-      resolved.push(...(line.match(/REV-\d+-\d+/gu) ?? []));
+    const oldSummary = /^- 未解決Critical\/High: 0件(?:。(.*))?$/u.exec(line);
+    if (oldSummary !== null) {
+      if (oldSummary[1] !== undefined) judgmentDetails.push(oldSummary[1]);
       return ["- 未解決Critical/High: <0件>"];
     }
-    if (/^- Critical\/Highの内訳: Critical 0件、High \d+件/u.test(line)) {
-      const ids = line.match(/REV-\d+-\d+/gu) ?? [];
-      const high = /^- Critical\/Highの内訳: Critical 0件、High (\d+)件/u.exec(
-        line,
-      );
-      if (high === null || Number(high[1]) !== ids.length) return [line];
-      resolved.push(...ids);
+    if (line === "- 未解決Critical/High: なし")
+      return ["- 未解決Critical/High: <0件>"];
+    const detail =
+      /^- Critical\/Highの内訳: Critical 0件、(High \d+件.*)$/u.exec(line);
+    if (detail !== null) {
+      judgmentDetails.push(detail[1]!);
       return [];
     }
     return [line];
   });
   return {
     body: comparableArtifactContent(normalized.join("\n")),
-    resolvedFindingIds: [...new Set(resolved)].sort(),
+    judgmentDetails,
   };
 }
 
@@ -568,8 +568,7 @@ function observeArtifactSupersession(
   const newBody = comparableSupersessionContent(newArtifact);
   if (
     oldBody.body !== newBody.body ||
-    stableJson(oldBody.resolvedFindingIds) !==
-      stableJson(newBody.resolvedFindingIds)
+    stableJson(oldBody.judgmentDetails) !== stableJson(newBody.judgmentDetails)
   )
     return undefined;
   if (

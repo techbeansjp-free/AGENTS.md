@@ -858,6 +858,7 @@ Given(
 function supersessionFixture(
   world: ReanchorWorld,
   changeJudgment: boolean,
+  changeSummary = false,
 ): void {
   world.root = world.initRepo();
   world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
@@ -867,7 +868,15 @@ function supersessionFixture(
     "feat: review対象",
   );
   const artifactPath = "docs/reviews/1437_課題1437証跡是正レビュー.md";
-  const oldArtifact = auditableReviewArtifact(world.baseSha, implementation);
+  const oldArtifact = auditableReviewArtifact(
+    world.baseSha,
+    implementation,
+  ).replace(
+    "- 未解決Critical/High: 0件",
+    changeSummary
+      ? "- 未解決Critical/High: 0件。High 1件（REV-1437-01 は修正済み）"
+      : "- 未解決Critical/High: 0件",
+  );
   world.oldHeadSha = commitPath(
     world.root,
     artifactPath,
@@ -888,7 +897,14 @@ function supersessionFixture(
       "| reviewerが対象差分を変更していないこと | はい。製品path変更0件 |",
       "| reviewerが対象差分を変更していないこと | はい（製品path変更0件） |",
     )
-    .replace("- 未解決Critical/High: 0件", "- 未解決Critical/High: なし");
+    .replace(
+      changeSummary
+        ? "- 未解決Critical/High: 0件。High 1件（REV-1437-01 は修正済み）"
+        : "- 未解決Critical/High: 0件",
+      changeSummary
+        ? "- 未解決Critical/High: なし\n- Critical/Highの内訳: Critical 0件、High 1件（REV-1437-01 は未修正）"
+        : "- 未解決Critical/High: なし",
+    );
   if (changeJudgment)
     nextArtifact = nextArtifact.replace("- 判定: approved", "- 判定: rejected");
   world.newHeadSha = commitPath(
@@ -910,6 +926,13 @@ Given(
 Given("pr-bound後にartifactの判断本文を変えた前進commitがある", function () {
   supersessionFixture(this, true);
 });
+
+Given(
+  "pr-bound後にHigh指摘の解決状態を書き換えた前進commitがある",
+  function () {
+    supersessionFixture(this, false, true);
+  },
+);
 
 Given("pr-boundの不正なartifact replacement「{word}」がある", function (kind) {
   this.root = this.initRepo();
