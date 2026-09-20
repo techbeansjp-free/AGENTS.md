@@ -219,6 +219,40 @@ When("補助差分reviewに可変HEAD参照を指定する", async function () {
     },
   );
 });
+When("補助差分reviewに可変base参照を指定する", async function () {
+  this.result = await launchSupplementalReviewDiff(
+    { root: this.root, baseSha: "main", headSha: this.headSha },
+    {
+      execute: async () => {
+        this.reviewCalls++;
+        return { state: "succeeded", reason: "ok", output: "{}" };
+      },
+    },
+  );
+});
+When("補助差分reviewに古いHEAD SHAを指定する", async function () {
+  this.result = await launchSupplementalReviewDiff(
+    { root: this.root, baseSha: this.baseSha, headSha: this.baseSha },
+    {
+      execute: async () => {
+        this.reviewCalls++;
+        return { state: "succeeded", reason: "ok", output: "{}" };
+      },
+    },
+  );
+});
+When("補助差分reviewのdispatch中にHEADを移動する", async function () {
+  this.result = await launchSupplementalReviewDiff(
+    { root: this.root, baseSha: this.baseSha, headSha: this.headSha },
+    {
+      execute: async () => {
+        this.reviewCalls++;
+        git(this.root, "commit", "-q", "--allow-empty", "-m", "drift");
+        return { state: "succeeded", reason: "ok", output: "{}" };
+      },
+    },
+  );
+});
 When("差分内のfileがHEADで削除されて検証者が確認する", async function () {
   fs.rmSync(path.join(this.root, "target.ts"));
   git(this.root, "add", "-u");
@@ -353,4 +387,8 @@ Then("補助レビューは遮断コードだけの矛盾を進行役へ渡す",
 Then("補助レビューはHEAD参照を拒否しexecutorを起動しない", function () {
   assert.equal(this.result?.state, "error", JSON.stringify(this.result));
   assert.equal(this.reviewCalls, 0);
+});
+Then("補助レビューは移動したHEADの結果を拒否する", function () {
+  assert.equal(this.result?.state, "error", JSON.stringify(this.result));
+  assert.equal(this.reviewCalls, 1);
 });

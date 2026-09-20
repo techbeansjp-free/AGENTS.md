@@ -292,10 +292,14 @@ export async function launchSupplementalReviewDiff(
   try {
     resolveReviewRoot(input.root);
     if (
+      !/^[a-f0-9]{40}$/u.test(input.baseSha) ||
       !/^[a-f0-9]{40}$/u.test(input.headSha) ||
       git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha
     )
-      return { state: "error", reason: "対象HEADを固定できませんでした" };
+      return {
+        state: "error",
+        reason: "比較基点または対象HEADを固定できませんでした",
+      };
     const collected = collectSupplementalReviewDiff(
       input.root,
       input.baseSha,

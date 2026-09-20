@@ -73,3 +73,18 @@ Feature: 差分findingを進行役確認候補として渡す
     Given "null未チェック" の修正前後を持つ隔離Git repositoryがある
     When 補助差分reviewに可変HEAD参照を指定する
     Then 補助レビューはHEAD参照を拒否しexecutorを起動しない
+
+  Scenario: SCN-UNIT-FINDVERIFY-013 可変base参照を拒否する
+    Given "null未チェック" の修正前後を持つ隔離Git repositoryがある
+    When 補助差分reviewに可変base参照を指定する
+    Then 補助レビューはHEAD参照を拒否しexecutorを起動しない
+
+  Scenario: SCN-UNIT-FINDVERIFY-014 古いHEAD SHAを拒否する
+    Given "null未チェック" の修正前後を持つ隔離Git repositoryがある
+    When 補助差分reviewに古いHEAD SHAを指定する
+    Then 補助レビューはHEAD参照を拒否しexecutorを起動しない
+
+  Scenario: SCN-UNIT-FINDVERIFY-015 dispatch中にHEADが移動したら結果を拒否する
+    Given "null未チェック" の修正前後を持つ隔離Git repositoryがある
+    When 補助差分reviewのdispatch中にHEADを移動する
+    Then 補助レビューは移動したHEADの結果を拒否する

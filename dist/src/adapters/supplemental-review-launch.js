@@ -205,9 +205,13 @@ export async function launchSupplementalReviewDiff(input, dependencies = {}) {
         return { state: "disabled" };
     try {
         resolveReviewRoot(input.root);
-        if (!/^[a-f0-9]{40}$/u.test(input.headSha) ||
+        if (!/^[a-f0-9]{40}$/u.test(input.baseSha) ||
+            !/^[a-f0-9]{40}$/u.test(input.headSha) ||
             git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha)
-            return { state: "error", reason: "対象HEADを固定できませんでした" };
+            return {
+                state: "error",
+                reason: "比較基点または対象HEADを固定できませんでした",
+            };
         const collected = collectSupplementalReviewDiff(input.root, input.baseSha, input.headSha, input.limit ?? RELATED_FILE_LIMIT);
         const promptBody = `${DIFF_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
         const result = await dispatch(promptBody, config, collected.truncated, collected.changed, dependencies.execute, { root: input.root, headSha: input.headSha });
