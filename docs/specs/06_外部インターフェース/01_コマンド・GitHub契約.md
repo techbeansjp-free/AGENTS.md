@@ -189,7 +189,7 @@ squash/rebaseの終端検証は、固定base..headからsource commit数を1〜2
 
 `review artifact --init --staging=<path> --base=<sha> --head=<sha> [--out=<path>]`は、保存済みstaging digestと実Gitの`base..head`変更pathを04へ充填する。`head`はcurrent HEADの完全SHAに一致させ、全pathを個別監査表へ残す。既定出力はcanonical Issue番号から`docs/reviews/<issue>_レビュー.md`とし、repository外、staging内、既存path、symlink祖先を拒否して排他的に作成する。review判定とtest結果はreviewerが記録するまで未確定である。
 
-`review validate`は既存の`--file=<json>`または位置引数によるreview evidence評価と、排他的な`--artifact=<markdown> [--root=<path>]`による構造検証を持つ。artifact経路はroot内のsymlinkでない通常fileだけを読み、比較基点・H_implの厳密行、ラウンド数、Step chain、必須見出し、配布物影響の判断・根拠を検証する。成功は`{valid:true, kind:"review-artifact", errors:[]}`、不備は`errors[]`へcode、1-origin line、expected、messageを全件返して終了code 1とする。本文を診断へ出さず、fileを変更せず、approval・authorityを生成しない。
+`review validate`は既存の`--file=<json>`または位置引数によるreview evidence評価と、排他的な`--artifact=<markdown> [--root=<path>]`による構造検証を持つ。 `--artifact`と`--terminal`を併用した場合だけ、commit前のcontext-isolated最終成果物に必要な§9独立性記録・§11未解決Critical/Highなし・approvedも検証し、`approvalErrors`と非0終了値で報告する。途中round、JSON評価の既定動作は変えない。actor-independentのprovider承認はPR前に観測できないため、このflagの成功をその承認の代替にしない。artifact経路はroot内のsymlinkでない通常fileだけを読み、比較基点・H_implの厳密行、ラウンド数、Step chain、必須見出し、配布物影響の判断・根拠を検証する。成功は`{valid:true, kind:"review-artifact", errors:[]}`、不備は`errors[]`へcode、1-origin line、expected、messageを全件返して終了code 1とする。本文を診断へ出さず、fileを変更せず、approval・authorityを生成しない。
 
 `pr create --dry-run`はtrusted Git policyとlocal review/test/spec/ownership evidenceの構造を判定するが、GitHub authorityをattestしない`unverified-preview`とし、GitHub/`gh`を呼ばない。`--apply`は明示authorizationを必須とし、唯一のGitHub adapterが作成直前にexact repositoryのwrite authority、remote head/base refのOIDを観測し、作成後のrepository/base/head/head OID/base OIDまで再読取する。local evidence JSONのprovenance自己申告をauthorityとして扱わない。
 

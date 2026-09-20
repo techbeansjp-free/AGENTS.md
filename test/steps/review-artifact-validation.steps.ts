@@ -23,6 +23,9 @@ interface ReviewArtifactValidationWorld extends WorkflowWorld {
   unsafeErrors: Error[];
   approvalMarkdowns: string[];
   approvalRecords: ContextIsolatedApprovalRecord[];
+  defaultTerminalResult?: Awaited<ReturnType<typeof captureCli>>;
+  strictTerminalResult?: Awaited<ReturnType<typeof captureCli>>;
+  validTerminalResult?: Awaited<ReturnType<typeof captureCli>>;
 }
 
 const { Given, When, Then } = stepDefinitions<ReviewArtifactValidationWorld>();
@@ -88,6 +91,76 @@ async function captureCli(
 
 Given("構造が正しいMarkdown review artifactがある", function () {
   this.markdown = validArtifact();
+});
+
+Given("構造は正しいがapproval記録が不正なterminal artifactがある", function () {
+  this.cliRoot = this.temp("asc-review-terminal-");
+  const invalid = validArtifact()
+    .replace(
+      "## 9. 独立reviewの成立\n",
+      "## 9. 独立reviewの成立\n| 項目 | 内容 |\n|---|---|\n| 適用した独立性モード | context-isolated |\n| その要求を満たすこと | はい |\n| reviewerとimplementerのidentity・context比較 | 別session |\n| reviewerが対象差分を変更していないこと | はい。製品path変更0件 |\n",
+    )
+    .replace(
+      "## 11. 総合判定と再開地点\n",
+      "## 11. 総合判定と再開地点\n- 未解決Critical/High: 0件。High 2件は解決済み\n- 判定: approved\n",
+    );
+  fs.writeFileSync(path.join(this.cliRoot, "terminal.md"), invalid);
+  fs.writeFileSync(
+    path.join(this.cliRoot, "terminal-valid.md"),
+    invalid
+      .replace("はい。製品path変更0件", "はい（製品path変更0件）")
+      .replace(
+        "- 未解決Critical/High: 0件。High 2件は解決済み",
+        "- 未解決Critical/High: なし",
+      ),
+  );
+});
+
+When("既定とterminalのreview validateを実行する", async function () {
+  const args = [
+    "review",
+    "validate",
+    "--artifact=terminal.md",
+    `--root=${this.cliRoot}`,
+  ];
+  this.defaultTerminalResult = await captureCli(args);
+  this.strictTerminalResult = await captureCli([...args, "--terminal"]);
+  this.validTerminalResult = await captureCli([
+    "review",
+    "validate",
+    "--artifact=terminal-valid.md",
+    `--root=${this.cliRoot}`,
+    "--terminal",
+  ]);
+});
+
+Then("既定は構造validでterminalはapproval不備を報告する", function () {
+  assert.equal(this.defaultTerminalResult?.exitCode, 0);
+  assert.equal(this.defaultTerminalResult?.output?.valid, true);
+  assert.equal(this.strictTerminalResult?.exitCode, 1);
+  assert.equal(this.strictTerminalResult?.output?.valid, false);
+  assert.deepEqual(this.strictTerminalResult?.output?.approvalErrors, [
+    "reviewerが対象差分を変更していない記録が必要です",
+    "未解決Critical/Highがない記録が必要です",
+  ]);
+  const diagnostics = this.strictTerminalResult?.output?.errors as Array<{
+    code: string;
+    line: number;
+    expected: string;
+    message: string;
+  }>;
+  assert.equal(diagnostics.length, 2);
+  assert.ok(
+    diagnostics.every(
+      (item) =>
+        item.code === "terminal-approval" &&
+        item.line > 0 &&
+        item.expected !== "" &&
+        item.message !== "",
+    ),
+  );
+  assert.equal(this.validTerminalResult?.exitCode, 0);
+  assert.equal(this.validTerminalResult?.output?.valid, true);
 });
 
 Given("不正形式と重複したidentity行を持つreview artifactがある", function () {
