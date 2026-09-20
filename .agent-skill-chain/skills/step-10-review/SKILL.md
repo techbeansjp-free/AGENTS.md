@@ -31,6 +31,8 @@ Codex起動差分では`routing launch`の観測時刻・入口・selectedModel/
 
 作業開始前に[04_レビュー.md](../../templates/issue/04_レビュー.md)を全文読み、その見出し構造・変更ファイル個別監査・評価欄を使ってレビュー成果物を作る。`review artifact --init --staging=<staging> --base=<比較基点SHA> --head=<H_impl>`で機械導出できる欄を新規fileへ事前充填し、reviewerが判定・finding・test結果を記入する。個別監査表はlockfile・文書・システム仕様書・生成物・test・設定の行について層・責務・依存方向・安全/rollbackの列が事前充填されるので、reviewerは仕様・AC列と個別判定、およびproduct codeの行だけを書く。`review round --init`はsessionがあるとき前round blockerのfindingを雛形へ写すので、statusの更新と新規findingだけを書く。独自の要約だけで代替せず、生成時点の未確定欄を実装者判断で合格へ変えない。
 
+project policyの`merge.reviewIndependence`を確認し、`context-isolated`の場合は最終artifactをcommit・pushする前に`review validate --artifact=<path> --root=<root> --terminal`を実行し、§9・§11のapproval記録を事前検証する。途中roundは`--terminal`を指定しない。actor-independentの外部provider承認はPR作成前に存在しないため、この事前検証で代替しない。
+
 review artifactは`review artifact --init`、各roundの入力JSONは`review round --init`が生成した骨子を充填し、[読取と書込の量](../../docs/01_開発ワークフロー.md#読取と書込の量)に従って是正はfindingの該当行だけを差分で書く。artifactやround JSONの全文をheredocで書き直さない。 §2.2の開発考慮事項の適用判定は00と差分が無ければ01〜03と同じ参照行（`開発考慮事項の適用判定は00_要求定義.md §6.1と同じ`）を置き、4行の表を書き直さない。
 
 **`pr create`より後に届いた外部reviewerの指摘は、条件を満たす場合に同じPRへ取り込む。** 守る性質は「独立reviewerが確認した内容とmergeされる内容が一致すること」であり、HEADが動いても同sessionの次roundで再reviewすれば保たれる。**条件と手順の正本は`../../docs/01_開発ワークフロー.md`である。ここへ複写しない。** 記録は`workflow record --step=10 --post-terminal-intake`で行い、Step 11より後に置く。**取り直し1ラウンドは収束後にだけ開く。** 未解決blockerを抱えたまま予算を使い切った`budget-exhausted`からは開かない。開くと任意の1 pushで新品の予算をもらえる。**予算を超える指摘、受け入れ条件を満たさない指摘、安全境界・authority・不可逆操作へ及ぶ指摘は取り込まず、follow-up Issueとする。** いずれの場合も元のPRのreviewスレッドへ判定を返信して解決する。**指摘を無記録で通過させない。**

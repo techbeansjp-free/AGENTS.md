@@ -659,6 +659,7 @@ export const COMMAND_USAGE = Object.freeze([
         ],
         optionalFlags: [
             optional("artifact", "path", "構造を検証するMarkdown review artifact（--file・位置引数と排他）", "JSON review evidenceを検証する"),
+            optional("terminal", "", "最終review artifactのcontext-isolated approval記録を事前検証する", "途中roundでは構造だけを検証する"),
             ROOT_FLAG,
         ],
         example: "npx agent-skill-chain review validate --artifact=docs/reviews/47_レビュー.md --root=.",

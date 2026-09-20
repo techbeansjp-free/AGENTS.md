@@ -5117,7 +5117,7 @@ export async function main(argv, dependencies = {}) {
     }
     if (command === "review" && subcommand === "validate") {
         const { flags, positionals } = parse(rest);
-        const unknown = Object.keys(flags).filter((flag) => !["file", "artifact", "root"].includes(flag));
+        const unknown = Object.keys(flags).filter((flag) => !["file", "artifact", "root", "terminal"].includes(flag));
         if (unknown.length > 0)
             throw new Error(`review validateの未知optionです: --${unknown.join(", --")}`);
         if (flags.file !== undefined && typeof flags.file !== "string")
@@ -5126,6 +5126,8 @@ export async function main(argv, dependencies = {}) {
             throw new Error("review validateの--artifactにはpathが必要です");
         if (flags.root !== undefined && typeof flags.root !== "string")
             throw new Error("review validateの--rootにはpathが必要です");
+        if (flags.terminal !== undefined && flags.terminal !== true)
+            throw new Error("review validateの--terminalは値を取りません");
         if (positionals.length > 1)
             throw new Error("review validateの位置引数は1件までです");
         const positional = positionals[0];
@@ -5135,6 +5137,8 @@ export async function main(argv, dependencies = {}) {
         const artifact = typeof flags.artifact === "string" ? flags.artifact : undefined;
         if (file !== undefined && artifact !== undefined)
             throw new Error("review validateは--file（または位置引数）と--artifactを同時に使用できません");
+        if (flags.terminal === true && artifact === undefined)
+            throw new Error("review validateの--terminalは--artifactと併用してください");
         if (artifact !== undefined) {
             const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
             const artifactFile = resolveContained(root, artifact);
@@ -5156,11 +5160,21 @@ export async function main(argv, dependencies = {}) {
                 fs.closeSync(descriptor);
             }
             const structure = validateReviewArtifactStructure(markdown);
+            const approval = flags.terminal === true
+                ? validateContextIsolatedApprovalRecord(markdown)
+                : undefined;
+            const approvalDiagnostics = approval?.diagnostics ?? [];
             const result = {
-                valid: structure.diagnostics.length === 0,
+                valid: structure.diagnostics.length === 0 && (approval?.valid ?? true),
                 kind: "review-artifact",
                 artifact: path.relative(root, artifactFile),
-                errors: structure.diagnostics,
+                errors: [...structure.diagnostics, ...approvalDiagnostics],
+                ...(approval === undefined
+                    ? {}
+                    : {
+                        terminal: true,
+                        approvalErrors: approvalDiagnostics.map((item) => item.message),
+                    }),
             };
             print(result);
             return result.valid ? 0 : 1;
