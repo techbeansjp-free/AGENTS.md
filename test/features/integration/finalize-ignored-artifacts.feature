@@ -66,3 +66,7 @@ Feature: CLIがignore対象を分類してworktree finalizeを判定する
     When fixture worktreeをfinalize applyする
     Then applyは到達不能を理由に完了しない
 
+  Scenario: SCN-INT-FINALIGN-014 trusted policyの再帰patternでネストした生成物を受理する
+    Given ネストした生成物を持つmerge済みfinalize fixtureがある
+    When fixture worktreeをfinalize dry-runする
+    Then finalize dry-runは対象を受理する
