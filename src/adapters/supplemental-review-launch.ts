@@ -16,6 +16,13 @@ import type { ReviewerExecutor } from "../domain/reviewer-provider.js";
 import { isRecord } from "../types.js";
 import { filterReviewFindingsToTarget } from "../domain/review-finding-scope.js";
 import {
+  REVIEW_EFFORTS,
+  reviewProfileInstruction,
+  visibleReviewFindings,
+  type ReviewEffort,
+  type ReviewProfile,
+} from "../domain/review-presentation.js";
+import {
   verifyReviewFindings,
   type ReviewFindingAssessment,
 } from "./review-finding-verification.js";
@@ -38,6 +45,7 @@ export interface SupplementalReviewFinding {
   location: string;
   content: string;
   severity: Severity;
+  effort?: ReviewEffort;
 }
 
 export type SupplementalReviewResult =
@@ -106,7 +114,8 @@ const STAGING_REVIEW_INSTRUCTION =
 const RESPONSE_FORMAT_INSTRUCTION =
   "出力は必ず次の形式のJSONだけにしてください（前後に説明文を付けない）: " +
   '{"findings": [{"file": "対象file", "location": "該当箇所", ' +
-  '"content": "指摘内容（日本語）", "severity": "Critical|High|Medium|Low"}]}';
+  '"content": "指摘内容（日本語）", "severity": "Critical|High|Medium|Low", ' +
+  '"effort": "Quick win|Moderate|Heavy lift"}]}。effortは修正工数の目安です。';
 
 const VALID_SEVERITIES: readonly Severity[] = [
   "Critical",
@@ -134,11 +143,19 @@ function parseFindings(
       !VALID_SEVERITIES.includes(item.severity as Severity)
     )
       return undefined;
+    if (
+      item.effort !== undefined &&
+      !REVIEW_EFFORTS.includes(item.effort as ReviewEffort)
+    )
+      return undefined;
     findings.push({
       file: item.file,
       location: typeof item.location === "string" ? item.location : "",
       content: item.content,
       severity: item.severity as Severity,
+      ...(item.effort !== undefined
+        ? { effort: item.effort as ReviewEffort }
+        : {}),
     });
   }
   return findings;
@@ -151,6 +168,7 @@ async function dispatch(
     model: string;
     endpoint: string;
     timeoutMs: number;
+    profile: ReviewProfile;
   },
   truncated: boolean,
   targetFiles: string[],
@@ -181,7 +199,7 @@ async function dispatch(
   }
   const prompt =
     `findingの対象fileは今回のreview対象に限ります: ${JSON.stringify(targetFiles)}。関連fileは文脈だけです。別taskや過去Issueの欠陥を今回のfindingへ混ぜないでください。\n\n` +
-    `${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
+    `${reviewProfileInstruction(config.profile)}${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
   const executed = await executor({
     endpoint: config.endpoint,
     model: config.model,
@@ -198,13 +216,17 @@ async function dispatch(
       truncated,
     };
   const scoped = filterReviewFindingsToTarget(findings, targetFiles);
-  if (!verification) return { state: "findings", ...scoped, truncated };
+  const presented = {
+    ...scoped,
+    findings: visibleReviewFindings(scoped.findings, config.profile),
+  };
+  if (!verification) return { state: "findings", ...presented, truncated };
   let verified;
   try {
     verified = await verifyReviewFindings(
       {
         ...verification,
-        findings: scoped.findings,
+        findings: presented.findings,
         endpoint: config.endpoint,
         model: config.model,
         timeoutMs: config.timeoutMs,
@@ -222,7 +244,7 @@ async function dispatch(
   // describing its failure path. Preserve every scoped first-pass candidate.
   return {
     state: "needs_coordinator_review",
-    ...scoped,
+    ...presented,
     verificationSuggestedFindings: verified?.suggestedFindings ?? null,
     verificationAssessments: verified?.assessments ?? null,
     headSha: verification.headSha,
