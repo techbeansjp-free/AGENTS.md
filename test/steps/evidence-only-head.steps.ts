@@ -317,6 +317,37 @@ Given(
 );
 
 Given(
+  /^収束したsessionの後にartifact commitを(8|9)本積んだstagingがある$/u,
+  function (countText: string) {
+    convergedFixture(this);
+    const count = Number(countText);
+    for (let index = 1; index <= count; index++)
+      this.finalHead = commitFiles(
+        this.root,
+        { [artifactPath]: `# 04 レビュー\n\n追記${index}\n` },
+        `docs: artifact ${index}`,
+      );
+  },
+);
+
+Given(
+  "収束したsessionの後にartifactの中間commitだけを実行権限付きにしたstagingがある",
+  function () {
+    convergedFixture(this);
+    commitFiles(
+      this.root,
+      { [artifactPath]: "# 04 レビュー\n" },
+      "docs: artifact 1",
+    );
+    git(this.root, ["update-index", "--chmod=+x", artifactPath]);
+    git(this.root, ["commit", "-q", "-m", "docs: executable intermediate"]);
+    git(this.root, ["update-index", "--chmod=-x", artifactPath]);
+    git(this.root, ["commit", "-q", "-m", "docs: restore normal mode"]);
+    this.finalHead = git(this.root, ["rev-parse", "HEAD"]);
+  },
+);
+
+Given(
   "収束したsessionの後に実行権限付きでartifactをcommitしたstagingがある",
   function () {
     convergedFixture(this);
@@ -390,6 +421,10 @@ Given(
 
 When("H_finalでconverged session検査を行う", function () {
   assertSession(this);
+});
+
+Then("candidate HEADは受理される", function () {
+  assert.equal(this.error, undefined, String(this.error));
 });
 
 Then("candidate HEADがcurrent HEADと一致しないerrorで拒否する", function () {

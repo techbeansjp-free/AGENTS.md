@@ -41,6 +41,21 @@ Feature: artifact-onlyのHEAD移動の受理
     When H_finalでconverged session検査とbinding検査を行う
     Then 両方が受理される
 
+  Scenario: SCN-UNIT-EVIDHEAD-014 artifactだけの8 commitは受理する
+    Given 収束したsessionの後にartifact commitを8本積んだstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADは受理される
+
+  Scenario: SCN-UNIT-EVIDHEAD-015 artifactだけでも9 commitは拒否する
+    Given 収束したsessionの後にartifact commitを9本積んだstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
+  Scenario: SCN-UNIT-EVIDHEAD-016 中間commitのmode変更は最終modeを戻しても拒否する
+    Given 収束したsessionの後にartifactの中間commitだけを実行権限付きにしたstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
   Scenario: SCN-UNIT-EVIDHEAD-010 実行権限付きのartifactは拒否する
     Given 収束したsessionの後に実行権限付きでartifactをcommitしたstagingがある
     When H_finalでconverged session検査を行う
