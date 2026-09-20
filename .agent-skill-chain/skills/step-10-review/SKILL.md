@@ -9,11 +9,13 @@ description: exact-headの実装・テスト・仕様証拠を有限にレビュ
 
 各`review round`の入力JSON fileはstagingの外に置く。blocking findingの`contractId`はanchorのAcceptance Criteria IDまたはInvariant IDに一致させ、単な記録対象へ読み替えない。
 
-ローカルまたはユーザー共通のローカルLLM reviewer設定が有効なら、進行役は各対象roundで`routing delegated-review-diff --root=<対象worktreeのroot> --base=<比較基点SHA> --head=<H_impl> --staging=<対象staging>`を実行してreviewを委譲する。`state=needs_coordinator_review`の肯定・敵対評価、対象内の初回候補、第二passの参考提案と`verificationAssessments`、差分外の除外件数を読む。進行役が確定HEADのコード・仕様・test・失敗経路に照らして候補ごとに採否を判断し、`review round`のadmission規則で根拠付き分類を記録する。入力・出力digest、model、固定HEADも`04_レビュー.md`へ記録する。`degraded`を収束とみなさず、`disabled`なら既存経路でreviewする。候補0件やモデル間の一致だけを承認根拠にせず、テスト・仕様・独立性・非変更の証拠を確認する。進行役による候補分類をformal independent approvalへ読み替えず、ローカル設定とLLM応答だけからmerge authorityを導かない。
+ローカルまたはユーザー共通のローカルLLM reviewer設定が有効なら、進行役は各対象roundで`routing delegated-review-diff --root=<対象worktreeのroot> --base=<比較基点SHA> --head=<H_impl> --staging=<対象staging>`を実行してreviewを委譲する。`state=needs_coordinator_review`の肯定・敵対評価、対象内の初回候補、第二passの参考提案と`verificationAssessments`、差分外の除外件数を読む。進行役が確定HEADのコード・仕様・test・失敗経路に照らして候補ごとに採否を判断し、`review round`のadmission規則で根拠付き分類を記録する。入力・出力digest、model、固定HEADも`04_レビュー.md`へ記録する。`degraded`をローカルLLMのreview完了とみなさず、別reviewerの証拠で確認を続ける。`disabled`なら利用可能な別reviewerで確認する。候補0件やモデル間の一致だけを承認根拠にせず、テスト・仕様・独立性・非変更の証拠を確認する。進行役による候補分類をformal independent approvalへ読み替えず、ローカル設定とLLM応答だけからmerge authorityを導かない。
 
 候補ごとの検証記録には、候補ID・主張、出典のcommit/file/位置、成立条件と到達経路、支持根拠、反証候補、実施した検証方法と観測結果、分類と理由を残す。未確認項目は「未確認」と明記し、モデルの自己申告を観測済みtestへ書き換えない。`verificationAssessments`の`faultCode`・`blockingCode`は第二passの引用主張であり、`sourceCommit`のGit blobと照合する。`evidenceStatus=quote_matched`は引用文字列がblob内にあることだけを示し、到達可能性・意味論・severityを証明しない。`conflicting`または`unsubstantiated`でも初回候補を捨てず、何が矛盾または未裏付けかを記録する。進行役はguard、呼出元の契約、例外経路などの反証を確かめ、再現testまたは静的な経路確認の実測から結論を導く。
 
 表示profileで隠れた`suppressedFindings`も候補として確認し、差分reviewの第二passでは全対象内候補の検証結果を照合する。`verificationAssessments.findingIndex`は`firstPassFindings`の元の順序に対応させる。
+
+進行役はローカルLLMの判定を最終判定へ直結せず、同じ固定HEADと仕様・test証拠をCodex SolまたはOpusなど利用可能な別reviewerにも独立に渡す。ローカルLLM設定がない場合はCodex Solを基本候補とし、利用できない環境ではOpusなどを選ぶ。ローカルLLM設定時は別の独立reviewerを少なくとも1人必ず使い、担当とさらに追加するreviewerの選定は進行役がscope・リスク・費用に基づき決める。CodeRabbitが利用枠の制限中ならOpusとCodex Solの両方に固定HEADの独立レビューを委譲し、片方を利用できないときは未実施を成果物へ記録して人間へ再開条件の判断を求める。複数reviewerのfindingは出典、成立条件、反証、再現結果を進行役が確認して採否を記録し、多数決やモデルの`decision`のみで承認・却下しない。追加reviewerが利用不能な場合は試した経路と理由を成果物へ記録し、独立性と未解決Critical/Highの条件を満たせないときは停止する。
 
 ## routing入力契約
 
