@@ -118,6 +118,31 @@ function fixedExecutor(result: ReviewerExecutionResult): ReviewerExecutor {
       : result;
 }
 
+function profileExecutor(result: ReviewerExecutionResult): ReviewerExecutor {
+  const firstPass = fixedExecutor(result);
+  return async (request) => {
+    if (!request.prompt.includes("投稿前の独立したfinding検証者"))
+      return firstPass(request);
+    const candidatesJson = /^候補: (.+)$/mu.exec(request.prompt)?.[1];
+    assert.ok(candidatesJson);
+    const candidates = JSON.parse(candidatesJson) as unknown[];
+    return {
+      state: "succeeded",
+      reason: "ok",
+      output: JSON.stringify({
+        verdicts: candidates.map((_, index) => ({
+          index,
+          valid: true,
+          reason: "HEADの行と経路を確認した",
+          faultCode: "export const value = 2;",
+          failurePath: "対象を実行するとこの行へ到達する",
+          blockingCode: "",
+        })),
+      }),
+    };
+  };
+}
+
 // --- SCN-SUPPL-001 ---
 
 Given("補助レビュー設定ファイルが存在しない", function () {
@@ -866,4 +891,119 @@ Given("Ollamaが起動していない", async function () {
 Then("CLIはdegradedを返し異常終了しない", async function () {
   assert.ok(this.result);
   assert.equal(this.result.state, "degraded");
+});
+
+function setupProfileReview(
+  world: SupplementalReviewWorld,
+  profile: "chill" | "assertive",
+) {
+  world.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-profile-")),
+  );
+  world.temporaryDirectories.push(world.root);
+  initRepository(world.root);
+  fs.writeFileSync(
+    path.join(world.root, "target.ts"),
+    "export const value = 1;\n",
+  );
+  world.baseSha = commitAll(world.root, "base");
+  fs.writeFileSync(
+    path.join(world.root, "target.ts"),
+    "export const value = 2;\n",
+  );
+  world.headSha = commitAll(world.root, "change");
+  world.configPath = ".agent-skill-chain/local/supplemental-review.json";
+  writeConfig(world.root, world.configPath);
+  const file = path.join(world.root, world.configPath);
+  const config = JSON.parse(fs.readFileSync(file, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  config.profile = profile;
+  fs.writeFileSync(file, JSON.stringify(config));
+}
+
+Given("chill profileの補助レビュー対象差分がある", function () {
+  setupProfileReview(this, "chill");
+});
+Given("assertive profileの補助レビュー対象差分がある", function () {
+  setupProfileReview(this, "assertive");
+});
+When("補助reviewerがHighとLowのEffort付き指摘を返す", async function () {
+  this.result = await launchSupplementalReviewDiff(
+    {
+      root: this.root,
+      baseSha: this.baseSha,
+      headSha: this.headSha,
+      configPath: this.configPath,
+    },
+    {
+      execute: profileExecutor({
+        state: "succeeded",
+        reason: "ok",
+        output: JSON.stringify({
+          findings: [
+            {
+              file: "target.ts",
+              location: "1",
+              content: "重大な問題",
+              severity: "High",
+              effort: "Quick win",
+            },
+            {
+              file: "target.ts",
+              location: "1",
+              content: "軽微な問題",
+              severity: "Low",
+              effort: "Heavy lift",
+            },
+          ],
+        }),
+      }),
+    },
+  );
+});
+Then("HighのQuick winだけが表示される", function () {
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
+  assert.deepEqual(
+    this.result.findings.map((finding) => [finding.severity, finding.effort]),
+    [["High", "Quick win"]],
+  );
+  assert.deepEqual(
+    this.result.suppressedFindings.map((finding) => [
+      finding.severity,
+      finding.effort,
+    ]),
+    [["Low", "Heavy lift"]],
+  );
+  assert.deepEqual(
+    this.result.firstPassFindings.map((finding) => finding.severity),
+    ["High", "Low"],
+  );
+  assert.equal(this.result.verificationAssessments?.length, 2);
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.evidenceStatus,
+    "quote_matched",
+  );
+  assert.equal(this.result.verificationSuggestedFindings?.length, 2);
+});
+Then("HighとLowのEffort付き指摘が表示される", function () {
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
+  assert.deepEqual(
+    this.result.findings.map((finding) => [finding.severity, finding.effort]),
+    [
+      ["High", "Quick win"],
+      ["Low", "Heavy lift"],
+    ],
+  );
+  assert.deepEqual(this.result.suppressedFindings, []);
+  assert.equal(this.result.verificationAssessments?.length, 2);
+  assert.ok(
+    this.result.verificationAssessments?.every(
+      (item) => item.evidenceStatus === "quote_matched",
+    ),
+  );
+  assert.equal(this.result.verificationSuggestedFindings?.length, 2);
 });

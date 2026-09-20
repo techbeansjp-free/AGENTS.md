@@ -7,6 +7,7 @@ import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
 import { git } from "../lib/process.js";
 import { isRecord } from "../types.js";
 import { filterReviewFindingsToTarget } from "../domain/review-finding-scope.js";
+import { REVIEW_EFFORTS, reviewProfileInstruction, visibleReviewFindings, } from "../domain/review-presentation.js";
 import { verifyReviewFindings, } from "./review-finding-verification.js";
 import { peekPrimaryReviewRoot, resolveReviewRoot, resolveReviewWorkspace, } from "./review-workspace.js";
 /**
@@ -50,7 +51,8 @@ const STAGING_REVIEW_INSTRUCTION = "あなたは要求・要件・設計文書�
     "各指摘は、文書から読み取れる根拠がある場合だけ行ってください。";
 const RESPONSE_FORMAT_INSTRUCTION = "出力は必ず次の形式のJSONだけにしてください（前後に説明文を付けない）: " +
     '{"findings": [{"file": "対象file", "location": "該当箇所", ' +
-    '"content": "指摘内容（日本語）", "severity": "Critical|High|Medium|Low"}]}';
+    '"content": "指摘内容（日本語）", "severity": "Critical|High|Medium|Low", ' +
+    '"effort": "Quick win|Moderate|Heavy lift"}]}。effortは修正工数の目安です。';
 const VALID_SEVERITIES = [
     "Critical",
     "High",
@@ -74,11 +76,17 @@ function parseFindings(output) {
             typeof item.content !== "string" ||
             !VALID_SEVERITIES.includes(item.severity))
             return undefined;
+        if (item.effort !== undefined &&
+            !REVIEW_EFFORTS.includes(item.effort))
+            return undefined;
         findings.push({
             file: item.file,
             location: typeof item.location === "string" ? item.location : "",
             content: item.content,
             severity: item.severity,
+            ...(item.effort !== undefined
+                ? { effort: item.effort }
+                : {}),
         });
     }
     return findings;
@@ -108,7 +116,7 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
         };
     }
     const prompt = `findingの対象fileは今回のreview対象に限ります: ${JSON.stringify(targetFiles)}。関連fileは文脈だけです。別taskや過去Issueの欠陥を今回のfindingへ混ぜないでください。\n\n` +
-        `${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
+        `${reviewProfileInstruction(config.profile)}${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
     const executed = await executor({
         endpoint: config.endpoint,
         model: config.model,
@@ -125,8 +133,14 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
             truncated,
         };
     const scoped = filterReviewFindingsToTarget(findings, targetFiles);
+    const visible = visibleReviewFindings(scoped.findings, config.profile);
+    const presented = {
+        ...scoped,
+        findings: visible,
+        suppressedFindings: scoped.findings.filter((finding) => !visible.includes(finding)),
+    };
     if (!verification)
-        return { state: "findings", ...scoped, truncated };
+        return { state: "findings", ...presented, truncated };
     let verified;
     try {
         verified = await verifyReviewFindings({
@@ -145,10 +159,12 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
         };
     }
     // A second LLM pass is only advisory: it can reject a real defect while
-    // describing its failure path. Preserve every scoped first-pass candidate.
+    // describing its failure path. Verify every scoped first-pass candidate,
+    // including those hidden by the display profile.
     return {
         state: "needs_coordinator_review",
-        ...scoped,
+        ...presented,
+        firstPassFindings: scoped.findings,
         verificationSuggestedFindings: verified?.suggestedFindings ?? null,
         verificationAssessments: verified?.assessments ?? null,
         headSha: verification.headSha,

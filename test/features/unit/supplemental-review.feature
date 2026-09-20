@@ -73,3 +73,13 @@ Feature: reviewer役割に依存しない補助レビュー
     Given import参照検索の結果が1MiBを超える差分がある
     When 補助レビューCLI(diff対象)で収集処理を行う
     Then 収集結果は打ち切りとして報告される
+
+  Scenario: SCN-SUPPL-019 chill profileはHigh以上だけを表示しEffortを残す
+    Given chill profileの補助レビュー対象差分がある
+    When 補助reviewerがHighとLowのEffort付き指摘を返す
+    Then HighのQuick winだけが表示される
+
+  Scenario: SCN-SUPPL-020 assertive profileはLowも表示する
+    Given assertive profileの補助レビュー対象差分がある
+    When 補助reviewerがHighとLowのEffort付き指摘を返す
+    Then HighとLowのEffort付き指摘が表示される
