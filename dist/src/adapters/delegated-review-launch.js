@@ -8,7 +8,7 @@ import { git } from "../lib/process.js";
 import { isRecord } from "../types.js";
 import { collectSupplementalReviewDiff, collectSupplementalReviewStaging, } from "./supplemental-review-collect.js";
 import { REVIEWER_EXECUTORS } from "./reviewer-executors.js";
-import { verifyReviewFindings } from "./review-finding-verification.js";
+import { verifyReviewFindings, } from "./review-finding-verification.js";
 import { peekPrimaryReviewRoot, resolveReviewWorkspace, } from "./review-workspace.js";
 const SEVERITIES = new Set(["Critical", "High", "Medium", "Low"]);
 const MAX_FINDINGS = 100;
@@ -219,7 +219,8 @@ export async function launchDelegatedReview(input, dependencies = {}) {
             affirmative: parsed.affirmative,
             adversarial: parsed.adversarial,
             findings: parsed.findings,
-            verificationSuggestedFindings: verified ?? null,
+            verificationSuggestedFindings: verified?.suggestedFindings ?? null,
+            verificationAssessments: verified?.assessments ?? null,
             ignoredOutOfScopeCount: parsed.ignoredOutOfScopeCount,
             provider: config.provider,
             model: config.model,

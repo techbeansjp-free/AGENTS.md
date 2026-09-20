@@ -12,7 +12,10 @@ import {
   collectSupplementalReviewStaging,
 } from "./supplemental-review-collect.js";
 import { REVIEWER_EXECUTORS } from "./reviewer-executors.js";
-import { verifyReviewFindings } from "./review-finding-verification.js";
+import {
+  verifyReviewFindings,
+  type ReviewFindingAssessment,
+} from "./review-finding-verification.js";
 import {
   peekPrimaryReviewRoot,
   resolveReviewWorkspace,
@@ -54,6 +57,7 @@ export type DelegatedReviewResult =
       adversarial: string;
       findings: DelegatedReviewFinding[];
       verificationSuggestedFindings: DelegatedReviewFinding[] | null;
+      verificationAssessments: ReviewFindingAssessment[] | null;
       ignoredOutOfScopeCount: number;
       provider: string;
       model: string;
@@ -324,7 +328,8 @@ export async function launchDelegatedReview(
       affirmative: parsed.affirmative,
       adversarial: parsed.adversarial,
       findings: parsed.findings,
-      verificationSuggestedFindings: verified ?? null,
+      verificationSuggestedFindings: verified?.suggestedFindings ?? null,
+      verificationAssessments: verified?.assessments ?? null,
       ignoredOutOfScopeCount: parsed.ignoredOutOfScopeCount,
       provider: config.provider,
       model: config.model,

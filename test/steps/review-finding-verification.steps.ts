@@ -101,6 +101,7 @@ async function review(
     | "accept"
     | "reject"
     | "unsubstantiated-reject"
+    | "contradictory-reject"
     | "contradictory"
     | "invented"
     | "malformed",
@@ -121,10 +122,12 @@ async function review(
                     index: 0,
                     valid:
                       verdict !== "reject" &&
-                      verdict !== "unsubstantiated-reject",
+                      verdict !== "unsubstantiated-reject" &&
+                      verdict !== "contradictory-reject",
                     reason:
                       verdict !== "reject" &&
-                      verdict !== "unsubstantiated-reject"
+                      verdict !== "unsubstantiated-reject" &&
+                      verdict !== "contradictory-reject"
                         ? "現在も失敗経路がある"
                         : "修正後には成立しない",
                     faultCode:
@@ -187,6 +190,9 @@ When("検証者が存在しない障害行を根拠にする", async function ()
 When("検証者が遮断根拠なしで却下する", async function () {
   await review(this, "unsubstantiated-reject");
 });
+When("検証者が失敗経路を示しながら却下する", async function () {
+  await review(this, "contradictory-reject");
+});
 When("差分内のfileがHEADで削除されて検証者が確認する", async function () {
   fs.rmSync(path.join(this.root, "target.ts"));
   git(this.root, "add", "-u");
@@ -204,6 +210,11 @@ Then("補助レビューは初回候補と検証者の却下を進行役確認�
   if (this.result?.state !== "needs_coordinator_review") return;
   assert.equal(this.result.findings.length, 1);
   assert.deepEqual(this.result.verificationSuggestedFindings, []);
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.evidenceStatus,
+    "quote_matched",
+  );
+  assert.equal(this.result.verificationAssessments?.[0]?.modelValid, false);
   assert.ok(this.verificationPrompt.includes(this.after));
   assert.equal(this.reviewCalls, 2);
 });
@@ -217,6 +228,10 @@ Then("補助レビューはHigh候補と検証者の採用を進行役確認へ�
   assert.equal(this.result.findings.length, 1);
   assert.equal(this.result.findings[0]?.severity, "High");
   assert.equal(this.result.verificationSuggestedFindings?.length, 1);
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.evidenceStatus,
+    "quote_matched",
+  );
   assert.equal(this.reviewCalls, 2);
 });
 Then("補助レビューは検証不能の初回候補を進行役確認へ渡す", function () {
@@ -232,4 +247,49 @@ Then("補助レビューは検証不能の初回候補を進行役確認へ渡�
 });
 Then("補助レビューはdegradedである", function () {
   assert.equal(this.result?.state, "degraded", JSON.stringify(this.result));
+});
+
+Then("補助レビューは矛盾した検証根拠をHEAD出典付きで渡す", function () {
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
+  assert.equal(this.result.headSha, this.headSha);
+  assert.deepEqual(this.result.verificationSuggestedFindings, null);
+  assert.equal(this.result.verificationAssessments?.[0]?.findingIndex, 0);
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.sourceFile,
+    "target.ts",
+  );
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.sourceCommit,
+    this.headSha,
+  );
+  assert.equal(this.result.verificationAssessments?.[0]?.modelValid, true);
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.evidenceStatus,
+    "conflicting",
+  );
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.faultCode,
+    this.after.trim(),
+  );
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.blockingCode,
+    this.after.trim(),
+  );
+});
+
+Then("補助レビューは却下と失敗経路の矛盾を進行役へ渡す", function () {
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
+  assert.equal(this.result.findings.length, 1);
+  assert.equal(this.result.verificationSuggestedFindings, null);
+  assert.equal(this.result.verificationAssessments?.[0]?.modelValid, false);
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.evidenceStatus,
+    "conflicting",
+  );
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.failurePath,
+    "入力から障害へ到達",
+  );
 });

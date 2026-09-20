@@ -6,7 +6,7 @@ import { REVIEWER_EXECUTORS } from "./reviewer-executors.js";
 import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
 import { isRecord } from "../types.js";
 import { filterReviewFindingsToTarget } from "../domain/review-finding-scope.js";
-import { verifyReviewFindings } from "./review-finding-verification.js";
+import { verifyReviewFindings, } from "./review-finding-verification.js";
 import { peekPrimaryReviewRoot, resolveReviewRoot, resolveReviewWorkspace, } from "./review-workspace.js";
 /**
  * CodeRabbit等の商用AIレビュアーが公開する観点（バグ・セキュリティ・
@@ -148,7 +148,9 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
     return {
         state: "needs_coordinator_review",
         ...scoped,
-        verificationSuggestedFindings: verified ?? null,
+        verificationSuggestedFindings: verified?.suggestedFindings ?? null,
+        verificationAssessments: verified?.assessments ?? null,
+        headSha: verification.headSha,
         truncated,
     };
 }

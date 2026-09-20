@@ -48,3 +48,13 @@ Feature: 差分findingを進行役確認候補として渡す
     Given "nullガード追加" の修正前後を持つ隔離Git repositoryがある
     When 差分内のfileがHEADで削除されて検証者が確認する
     Then 補助レビューはdegradedである
+
+  Scenario: SCN-UNIT-FINDVERIFY-008 第二passの根拠と矛盾をHEAD出典付きで進行役へ渡す
+    Given "nullガード追加" の修正前後を持つ隔離Git repositoryがある
+    When 検証者の判定と遮断根拠が矛盾する
+    Then 補助レビューは矛盾した検証根拠をHEAD出典付きで渡す
+
+  Scenario: SCN-UNIT-FINDVERIFY-009 却下判定と失敗経路の矛盾を隠さない
+    Given "null未チェック" の修正前後を持つ隔離Git repositoryがある
+    When 検証者が失敗経路を示しながら却下する
+    Then 補助レビューは却下と失敗経路の矛盾を進行役へ渡す

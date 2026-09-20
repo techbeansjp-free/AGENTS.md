@@ -4,7 +4,7 @@ const MAX_VERIFICATION_BYTES = 1024 * 1024;
 /** Provide a second-pass suggestion from committed post-diff files; never decide publication. */
 export async function verifyReviewFindings(input, executor) {
     if (input.findings.length === 0)
-        return [];
+        return { suggestedFindings: [], assessments: [] };
     if (input.findings.length > 100)
         return undefined;
     const files = [...new Set(input.findings.map((finding) => finding.file))];
@@ -59,6 +59,7 @@ export async function verifyReviewFindings(input, executor) {
         return undefined;
     const valid = new Set();
     const seen = new Set();
+    const assessments = [];
     for (const verdict of parsed.verdicts) {
         if (!isRecord(verdict) ||
             typeof verdict.index !== "number" ||
@@ -78,21 +79,41 @@ export async function verifyReviewFindings(input, executor) {
         const blob = finding && blobs.get(finding.file);
         if (!blob)
             return undefined;
-        if (verdict.valid) {
-            if (verdict.faultCode.trim() === "" ||
-                !blob.includes(verdict.faultCode) ||
-                verdict.failurePath.trim() === "" ||
-                verdict.blockingCode.trim() !== "")
-                return undefined;
+        const faultClaimed = verdict.faultCode.trim() !== "" && verdict.failurePath.trim() !== "";
+        const blockClaimed = verdict.blockingCode.trim() !== "";
+        const conflicting = (faultClaimed && blockClaimed) || (!verdict.valid && faultClaimed);
+        const quoteMatched = verdict.valid
+            ? faultClaimed && blob.includes(verdict.faultCode) && !blockClaimed
+            : blockClaimed &&
+                blob.includes(verdict.blockingCode) &&
+                !faultClaimed &&
+                verdict.faultCode.trim() === "" &&
+                verdict.failurePath.trim() === "";
+        const evidenceStatus = conflicting
+            ? "conflicting"
+            : quoteMatched
+                ? "quote_matched"
+                : "unsubstantiated";
+        assessments.push({
+            findingIndex: verdict.index,
+            sourceFile: finding.file,
+            sourceCommit: input.headSha,
+            modelValid: verdict.valid,
+            reason: verdict.reason,
+            faultCode: verdict.faultCode,
+            failurePath: verdict.failurePath,
+            blockingCode: verdict.blockingCode,
+            evidenceStatus,
+        });
+        if (quoteMatched && verdict.valid)
             valid.add(verdict.index);
-        }
-        else if (verdict.blockingCode.trim() === "" ||
-            !blob.includes(verdict.blockingCode) ||
-            verdict.faultCode.trim() !== "" ||
-            verdict.failurePath.trim() !== "") {
-            return undefined;
-        }
     }
-    return input.findings.filter((_, index) => valid.has(index));
+    assessments.sort((a, b) => a.findingIndex - b.findingIndex);
+    return {
+        suggestedFindings: assessments.some((assessment) => assessment.evidenceStatus !== "quote_matched")
+            ? null
+            : input.findings.filter((_, index) => valid.has(index)),
+        assessments,
+    };
 }
 //# sourceMappingURL=review-finding-verification.js.map

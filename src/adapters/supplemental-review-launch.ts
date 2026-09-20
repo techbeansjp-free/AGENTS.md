@@ -14,7 +14,10 @@ import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
 import type { ReviewerExecutor } from "../domain/reviewer-provider.js";
 import { isRecord } from "../types.js";
 import { filterReviewFindingsToTarget } from "../domain/review-finding-scope.js";
-import { verifyReviewFindings } from "./review-finding-verification.js";
+import {
+  verifyReviewFindings,
+  type ReviewFindingAssessment,
+} from "./review-finding-verification.js";
 import {
   peekPrimaryReviewRoot,
   resolveReviewRoot,
@@ -48,6 +51,8 @@ export type SupplementalReviewResult =
       state: "needs_coordinator_review";
       findings: SupplementalReviewFinding[];
       verificationSuggestedFindings: SupplementalReviewFinding[] | null;
+      verificationAssessments: ReviewFindingAssessment[] | null;
+      headSha: string;
       truncated: boolean;
       ignoredOutOfScopeCount: number;
     }
@@ -193,7 +198,7 @@ async function dispatch(
     };
   const scoped = filterReviewFindingsToTarget(findings, targetFiles);
   if (!verification) return { state: "findings", ...scoped, truncated };
-  let verified: SupplementalReviewFinding[] | undefined;
+  let verified;
   try {
     verified = await verifyReviewFindings(
       {
@@ -217,7 +222,9 @@ async function dispatch(
   return {
     state: "needs_coordinator_review",
     ...scoped,
-    verificationSuggestedFindings: verified ?? null,
+    verificationSuggestedFindings: verified?.suggestedFindings ?? null,
+    verificationAssessments: verified?.assessments ?? null,
+    headSha: verification.headSha,
     truncated,
   };
 }
