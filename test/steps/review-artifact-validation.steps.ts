@@ -26,6 +26,7 @@ interface ReviewArtifactValidationWorld extends WorkflowWorld {
   defaultTerminalResult?: Awaited<ReturnType<typeof captureCli>>;
   strictTerminalResult?: Awaited<ReturnType<typeof captureCli>>;
   validTerminalResult?: Awaited<ReturnType<typeof captureCli>>;
+  structureTerminalResult?: Awaited<ReturnType<typeof captureCli>>;
 }
 
 const { Given, When, Then } = stepDefinitions<ReviewArtifactValidationWorld>();
@@ -98,7 +99,7 @@ Given("構造は正しいがapproval記録が不正なterminal artifactがある
   const invalid = validArtifact()
     .replace(
       "## 9. 独立reviewの成立\n",
-      "```md\n| reviewerが対象差分を変更していないこと | はい |\n- 未解決Critical/High: なし\n```\n## 9. 独立reviewの成立\n",
+      "## 9. 独立reviewの成立\n```md\n| reviewerが対象差分を変更していないこと | はい |\n```\n",
     )
     .replace(
       "## 9. 独立reviewの成立\n",
@@ -106,7 +107,7 @@ Given("構造は正しいがapproval記録が不正なterminal artifactがある
     )
     .replace(
       "## 11. 総合判定と再開地点\n",
-      "## 11. 総合判定と再開地点\n- 未解決Critical/High: 0件。High 2件は解決済み\n- 判定: approved\n",
+      "## 11. 総合判定と再開地点\n```md\n- 未解決Critical/High: なし\n```\n- 未解決Critical/High: 0件。High 2件は解決済み\n- 判定: approved\n",
     );
   fs.writeFileSync(path.join(this.cliRoot, "terminal.md"), invalid);
   fs.writeFileSync(
@@ -117,6 +118,10 @@ Given("構造は正しいがapproval記録が不正なterminal artifactがある
         "- 未解決Critical/High: 0件。High 2件は解決済み",
         "- 未解決Critical/High: なし",
       ),
+  );
+  fs.writeFileSync(
+    path.join(this.cliRoot, "terminal-structure-invalid.md"),
+    invalid.replace("## 10. 仕様整合性", "## 10. 仕様整合性の誤記"),
   );
 });
 
@@ -133,6 +138,13 @@ When("既定とterminalのreview validateを実行する", async function () {
     "review",
     "validate",
     "--artifact=terminal-valid.md",
+    `--root=${this.cliRoot}`,
+    "--terminal",
+  ]);
+  this.structureTerminalResult = await captureCli([
+    "review",
+    "validate",
+    "--artifact=terminal-structure-invalid.md",
     `--root=${this.cliRoot}`,
     "--terminal",
   ]);
@@ -171,7 +183,7 @@ Then("既定は構造validでterminalはapproval不備を報告する", function
       ?.line,
     artifactLines.reduce(
       (last, line, index) =>
-        line.startsWith("| reviewerが対象差分を変更していないこと |")
+        line.startsWith("| reviewerが対象差分を変更していないこと | はい。")
           ? index
           : last,
       -1,
@@ -182,12 +194,23 @@ Then("既定は構造validでterminalはapproval不備を報告する", function
       ?.line,
     artifactLines.reduce(
       (last, line, index) =>
-        line.startsWith("- 未解決Critical/High:") ? index : last,
+        line.startsWith("- 未解決Critical/High: 0件") ? index : last,
       -1,
     ) + 1,
   );
   assert.equal(this.validTerminalResult?.exitCode, 0);
   assert.equal(this.validTerminalResult?.output?.valid, true);
+  assert.equal(this.structureTerminalResult?.exitCode, 1);
+  const approvalErrors = this.structureTerminalResult?.output
+    ?.approvalErrors as string[];
+  assert.deepEqual(approvalErrors, [
+    "reviewerが対象差分を変更していない記録が必要です",
+    "未解決Critical/Highがない記録が必要です",
+  ]);
+  const allErrors = this.structureTerminalResult?.output?.errors as Array<{
+    code: string;
+  }>;
+  assert.ok(allErrors.some(({ code }) => code === "heading"));
 });
 
 Given("不正形式と重複したidentity行を持つreview artifactがある", function () {

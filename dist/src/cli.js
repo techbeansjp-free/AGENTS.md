@@ -13,7 +13,7 @@ import { bootstrapProject, validateSpecs, } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
-import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, validateContextIsolatedApprovalRecord, validateReviewArtifactStructure, visibleMarkdownLines, } from "./domain/review-artifact.js";
+import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, validateContextIsolatedApprovalRecord, validateReviewArtifactStructure, } from "./domain/review-artifact.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
 import { buildWorktreePath, createWorktree, canonicalWorktreePath, DEFAULT_WORKTREE_PLACEMENT, enforceTrustedWorktreeBoundary, inspectFinalizeState, inspectRecoveryState, validateWorktreePlacement, } from "./domain/worktree.js";
@@ -5163,38 +5163,7 @@ export async function main(argv, dependencies = {}) {
             const approval = flags.terminal === true
                 ? validateContextIsolatedApprovalRecord(markdown)
                 : undefined;
-            const approvalDiagnostics = approval === undefined
-                ? []
-                : approval.errors
-                    .filter((message) => !structure.diagnostics.some((item) => item.message === message))
-                    .map((message) => {
-                    const key = message.includes("未解決Critical/High")
-                        ? "- 未解決Critical/High:"
-                        : message.includes("総合判定")
-                            ? "- 判定:"
-                            : message.includes("reviewerが対象差分")
-                                ? "| reviewerが対象差分を変更していないこと |"
-                                : message.includes("identity・context比較")
-                                    ? "| reviewerとimplementerのidentity・context比較 |"
-                                    : message.includes("独立性モード")
-                                        ? "| 適用した独立性モード |"
-                                        : "| その要求を満たすこと |";
-                    const lines = visibleMarkdownLines(markdown);
-                    const heading = key.startsWith("-")
-                        ? "## 11. 総合判定と再開地点"
-                        : "## 9. 独立reviewの成立";
-                    const sectionStart = lines.indexOf(heading);
-                    const sectionEnd = lines.findIndex((line, index) => index > sectionStart && line.startsWith("## "));
-                    const index = lines.findIndex((line, offset) => offset > sectionStart &&
-                        (sectionEnd < 0 || offset < sectionEnd) &&
-                        line.startsWith(key));
-                    return {
-                        code: "terminal-approval",
-                        line: (index < 0 ? Math.max(sectionStart, 0) : index) + 1,
-                        expected: key,
-                        message,
-                    };
-                });
+            const approvalDiagnostics = approval?.diagnostics ?? [];
             const result = {
                 valid: structure.diagnostics.length === 0 && (approval?.valid ?? true),
                 kind: "review-artifact",
@@ -5202,7 +5171,10 @@ export async function main(argv, dependencies = {}) {
                 errors: [...structure.diagnostics, ...approvalDiagnostics],
                 ...(approval === undefined
                     ? {}
-                    : { terminal: true, approvalErrors: approval.errors }),
+                    : {
+                        terminal: true,
+                        approvalErrors: approvalDiagnostics.map((item) => item.message),
+                    }),
             };
             print(result);
             return result.valid ? 0 : 1;
