@@ -56,6 +56,16 @@ Feature: artifact-onlyのHEAD移動の受理
     When H_finalでconverged session検査を行う
     Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
 
+  Scenario: SCN-UNIT-EVIDHEAD-017 中間commitの製品path変更は最終差分で消えても拒否する
+    Given 収束したsessionの後に製品pathを中間commitだけ変更したstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
+  Scenario: SCN-UNIT-EVIDHEAD-018 中間commitの第二artifactは最終差分で消えても拒否する
+    Given 収束したsessionの後に第二artifactを中間commitだけ追加したstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
   Scenario: SCN-UNIT-EVIDHEAD-010 実行権限付きのartifactは拒否する
     Given 収束したsessionの後に実行権限付きでartifactをcommitしたstagingがある
     When H_finalでconverged session検査を行う

@@ -34,6 +34,7 @@ import {
   readStoredDeliveryState,
 } from "./delivery-state.js";
 import {
+  GIT_ENV,
   evidenceOnlySuffix,
   observeReviewDiff,
   observeSingleCommitParent,
@@ -542,7 +543,7 @@ function observeArtifactSupersession(
       input.newHeadSha,
     ],
     root,
-    { allowFailure: true },
+    { env: GIT_ENV, allowFailure: true },
   );
   if (
     raw.status !== 0 ||
@@ -565,6 +566,18 @@ function observeArtifactSupersession(
     oldAnchor.base !== input.oldBaseSha ||
     newAnchor.base !== input.newBaseSha ||
     oldAnchor.implementation !== newAnchor.implementation
+  )
+    return undefined;
+  const stepChainRows = (markdown: string): string[] =>
+    visibleMarkdownLines(markdown).filter((line) =>
+      /^\| Step chain \|/u.test(line),
+    );
+  const oldStepChainRows = stepChainRows(oldArtifact);
+  const newStepChainRows = stepChainRows(newArtifact);
+  if (
+    oldStepChainRows.length !== 1 ||
+    newStepChainRows.length !== 1 ||
+    oldStepChainRows[0] !== newStepChainRows[0]
   )
     return undefined;
   const oldBody = comparableSupersessionContent(oldArtifact);

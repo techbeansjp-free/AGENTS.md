@@ -69,6 +69,12 @@ Feature: 証跡再固定がCLIと診断経路で機能する
     Then supersessionのpreviewとapplyは拒否され追記しない
 
   @issue-1437
+  Scenario: SCN-1437-06 旧Step chainの迂回を経由へ書き換えた前進commitは拒否する
+    Given pr-bound後に旧Step chainを迂回から経由へ変えた前進commitがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then supersessionのpreviewとapplyは拒否され追記しない
+
+  @issue-1437
   Scenario: SCN-1437-05 配布物影響の判断を書き換えた前進commitは拒否する
     Given pr-bound後に配布物影響の判断を書き換えた前進commitがある
     When 同じ再固定入力でpreviewとapplyをCLIから実行する

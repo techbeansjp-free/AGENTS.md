@@ -10,7 +10,7 @@ import { isEvidenceOnlyPath } from "../domain/review.js";
 import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { observeStoredDeliveryState, readStoredDeliveryState, } from "./delivery-state.js";
-import { evidenceOnlySuffix, observeReviewDiff, observeSingleCommitParent, readBlobAtCommit, } from "./review-diff.js";
+import { GIT_ENV, evidenceOnlySuffix, observeReviewDiff, observeSingleCommitParent, readBlobAtCommit, } from "./review-diff.js";
 import { readStoredReviewSession } from "./review-session-store.js";
 import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
 export const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
@@ -320,7 +320,7 @@ function observeArtifactSupersession(staging, root, input) {
         "-z",
         input.oldHeadSha,
         input.newHeadSha,
-    ], root, { allowFailure: true });
+    ], root, { env: GIT_ENV, allowFailure: true });
     if (raw.status !== 0 ||
         !/^:100644 100644 [0-9a-f]+ [0-9a-f]+ M\0/u.test(raw.stdout))
         return undefined;
@@ -337,6 +337,13 @@ function observeArtifactSupersession(staging, root, input) {
         oldAnchor.base !== input.oldBaseSha ||
         newAnchor.base !== input.newBaseSha ||
         oldAnchor.implementation !== newAnchor.implementation)
+        return undefined;
+    const stepChainRows = (markdown) => visibleMarkdownLines(markdown).filter((line) => /^\| Step chain \|/u.test(line));
+    const oldStepChainRows = stepChainRows(oldArtifact);
+    const newStepChainRows = stepChainRows(newArtifact);
+    if (oldStepChainRows.length !== 1 ||
+        newStepChainRows.length !== 1 ||
+        oldStepChainRows[0] !== newStepChainRows[0])
         return undefined;
     const oldBody = comparableSupersessionContent(oldArtifact);
     const newBody = comparableSupersessionContent(newArtifact);

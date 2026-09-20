@@ -348,6 +348,58 @@ Given(
 );
 
 Given(
+  "収束したsessionの後に製品pathを中間commitだけ変更したstagingがある",
+  function () {
+    convergedFixture(this);
+    commitFiles(
+      this.root,
+      { [artifactPath]: "# 04 レビュー\n" },
+      "docs: artifact 1",
+    );
+    commitFiles(
+      this.root,
+      { [reviewedPath]: "export const reviewed = 2;\n" },
+      "fix: intermediate product",
+    );
+    commitFiles(
+      this.root,
+      { [reviewedPath]: "export const reviewed = 1;\n" },
+      "fix: restore product",
+    );
+    this.finalHead = commitFiles(
+      this.root,
+      { [artifactPath]: "# 04 レビュー\n追記\n" },
+      "docs: artifact 2",
+    );
+  },
+);
+
+Given(
+  "収束したsessionの後に第二artifactを中間commitだけ追加したstagingがある",
+  function () {
+    convergedFixture(this);
+    commitFiles(
+      this.root,
+      { [artifactPath]: "# 04 レビュー\n" },
+      "docs: artifact 1",
+    );
+    const second = "docs/reviews/2_追加レビュー.md";
+    commitFiles(
+      this.root,
+      { [second]: "# 追加レビュー\n" },
+      "docs: second artifact",
+    );
+    git(this.root, ["rm", second]);
+    git(this.root, ["commit", "-q", "-m", "docs: remove second artifact"]);
+    this.finalHead = commitFiles(
+      this.root,
+      { [artifactPath]: "# 04 レビュー\n追記\n" },
+      "docs: artifact 2",
+    );
+  },
+);
+
+Given(
   "収束したsessionの後に実行権限付きでartifactをcommitしたstagingがある",
   function () {
     convergedFixture(this);

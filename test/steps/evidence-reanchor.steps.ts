@@ -861,6 +861,7 @@ function supersessionFixture(
   changeSummary = false,
   changeStepChain = false,
   changeDistribution = false,
+  oldBypass = false,
 ): void {
   world.root = world.initRepo();
   world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
@@ -870,15 +871,19 @@ function supersessionFixture(
     "feat: review対象",
   );
   const artifactPath = "docs/reviews/1437_課題1437証跡是正レビュー.md";
-  const oldArtifact = auditableReviewArtifact(
-    world.baseSha,
-    implementation,
-  ).replace(
-    "- 未解決Critical/High: 0件",
-    changeSummary
-      ? "- 未解決Critical/High: 0件。High 1件（REV-1437-01 は修正済み）"
-      : "- 未解決Critical/High: 0件",
-  );
+  const oldArtifact = auditableReviewArtifact(world.baseSha, implementation)
+    .replace(
+      "- 未解決Critical/High: 0件",
+      changeSummary
+        ? "- 未解決Critical/High: 0件。High 1件（REV-1437-01 は修正済み）"
+        : "- 未解決Critical/High: 0件",
+    )
+    .replace(
+      "| Step chain | 経由: fixture |",
+      oldBypass
+        ? "| Step chain | 迂回: fixture |"
+        : "| Step chain | 経由: fixture |",
+    );
   world.oldHeadSha = commitPath(
     world.root,
     artifactPath,
@@ -913,6 +918,11 @@ function supersessionFixture(
     nextArtifact = nextArtifact.replace(
       "| Step chain | 経由: fixture |",
       "| Step chain | 迂回: fixture |",
+    );
+  if (oldBypass)
+    nextArtifact = nextArtifact.replace(
+      "| Step chain | 迂回: fixture |",
+      "| Step chain | 経由: fixture |",
     );
   if (changeDistribution)
     nextArtifact = nextArtifact.replace(
@@ -949,6 +959,13 @@ Given(
 Given("pr-bound後にStep chainを迂回へ変えた前進commitがある", function () {
   supersessionFixture(this, false, false, true);
 });
+
+Given(
+  "pr-bound後に旧Step chainを迂回から経由へ変えた前進commitがある",
+  function () {
+    supersessionFixture(this, false, false, false, false, true);
+  },
+);
 
 Given("pr-bound後に配布物影響の判断を書き換えた前進commitがある", function () {
   supersessionFixture(this, false, false, false, true);
