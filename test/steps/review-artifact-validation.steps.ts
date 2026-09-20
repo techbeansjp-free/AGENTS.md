@@ -163,21 +163,27 @@ Then("既定は構造validでterminalはapproval不備を報告する", function
         item.message !== "",
     ),
   );
-  const artifactLines = fs
+  const artifactLines: string[] = fs
     .readFileSync(path.join(this.cliRoot, "terminal.md"), "utf8")
     .split("\n");
   assert.equal(
     diagnostics.find((item) => item.message.includes("reviewerが対象差分"))
       ?.line,
-    artifactLines.findLastIndex((line) =>
-      line.startsWith("| reviewerが対象差分を変更していないこと |"),
+    artifactLines.reduce(
+      (last, line, index) =>
+        line.startsWith("| reviewerが対象差分を変更していないこと |")
+          ? index
+          : last,
+      -1,
     ) + 1,
   );
   assert.equal(
     diagnostics.find((item) => item.message.includes("未解決Critical/High"))
       ?.line,
-    artifactLines.findLastIndex((line) =>
-      line.startsWith("- 未解決Critical/High:"),
+    artifactLines.reduce(
+      (last, line, index) =>
+        line.startsWith("- 未解決Critical/High:") ? index : last,
+      -1,
     ) + 1,
   );
   assert.equal(this.validTerminalResult?.exitCode, 0);
