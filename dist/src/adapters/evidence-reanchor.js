@@ -356,12 +356,14 @@ function observeArtifactSupersession(staging, root, input) {
     const implementation = observeReanchorDiff(root, "新base→新H_impl", input, input.newBaseSha, newAnchor.implementation, newAnchor.implementation);
     if (structure.diagnostics.length > 0 ||
         structure.implementation !== newAnchor.implementation ||
+        structure.stepChain?.kind !== "via" ||
         !approval.valid ||
         session?.status !== "converged" ||
         session.latestCandidateHeadSha !== newAnchor.implementation ||
         step10?.sessionId !== session.sessionId ||
         step10.roundDigest !== session.latestRoundDigest ||
         step10.headSha !== session.latestCandidateHeadSha ||
+        journal.errors.length > 0 ||
         audit.entries.some((entry) => entry.decision !== "pass") ||
         stableJson(audit.entries.map((entry) => entry.path).sort()) !==
             stableJson([...implementation.changedPaths].sort()))
