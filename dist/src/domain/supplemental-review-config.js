@@ -14,6 +14,7 @@ const ALLOWED_FIELDS = new Set([
     "model",
     "endpoint",
     "timeoutMs",
+    "profile",
 ]);
 /**
  * 設定fileが存在しない・読めない・形状が不正・`enabled`が`true`以外・
@@ -66,6 +67,17 @@ export function loadSupplementalReviewConfig(root, configPath = SUPPLEMENTAL_REV
             timeoutMsRaw > 0))
         return undefined;
     const timeoutMs = timeoutMsRaw ?? DEFAULT_TIMEOUT_MS;
-    return { enabled: true, provider, model, endpoint, timeoutMs };
+    if (record.profile !== undefined &&
+        record.profile !== "chill" &&
+        record.profile !== "assertive")
+        return undefined;
+    return {
+        enabled: true,
+        provider,
+        model,
+        endpoint,
+        timeoutMs,
+        profile: (record.profile ?? "assertive"),
+    };
 }
 //# sourceMappingURL=supplemental-review-config.js.map

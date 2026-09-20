@@ -35,7 +35,12 @@ function runCli(args: string[]): SpawnSyncReturns<string> {
 function createFinalizeFixture(
   world: FinalizeIgnoredCliWorld,
   artifact:
-    "dist" | "ignored-env" | "untracked" | "remote-deleted" | "unreachable",
+    | "dist"
+    | "recursive"
+    | "ignored-env"
+    | "untracked"
+    | "remote-deleted"
+    | "unreachable",
 ): void {
   world.root = world.initRepo();
   const remote = world.temp("asc-finalign-remote-");
@@ -43,7 +48,7 @@ function createFinalizeFixture(
   git(remote, ["init", "--bare"]);
   fs.writeFileSync(
     path.join(world.root, ".gitignore"),
-    ".worktrees/\ndist/\nnode_modules/\n.env\n",
+    ".worktrees/\ndist/\nnode_modules/\n.env\n**/__pycache__/\n*.tsbuildinfo\n",
   );
   /**
    * apply経路は既定branch上のtrusted policyを要求する。
@@ -60,6 +65,21 @@ function createFinalizeFixture(
     path.resolve(".agent-skill-chain", "project-policy.json"),
     path.join(world.root, ".agent-skill-chain", "project-policy.json"),
   );
+  if (artifact === "recursive") {
+    const policyFile = path.join(
+      world.root,
+      ".agent-skill-chain",
+      "project-policy.json",
+    );
+    const manifest = JSON.parse(fs.readFileSync(policyFile, "utf8")) as {
+      policy: { worktree: { finalizeIgnoredPathAllowlist?: string[] } };
+    };
+    manifest.policy.worktree.finalizeIgnoredPathAllowlist = [
+      "**/__pycache__/",
+      "**/*.tsbuildinfo",
+    ];
+    fs.writeFileSync(policyFile, `${JSON.stringify(manifest, null, 2)}\n`);
+  }
   fs.cpSync(
     path.resolve(".agent-skill-chain", "project"),
     path.join(world.root, ".agent-skill-chain", "project"),
@@ -102,6 +122,18 @@ function createFinalizeFixture(
       recursive: true,
     });
     fs.writeFileSync(path.join(world.worktree, "dist", "src", "cli.js"), "x\n");
+  } else if (artifact === "recursive") {
+    fs.mkdirSync(path.join(world.worktree, "packages", "a", "__pycache__"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(world.worktree, "packages", "a", "__pycache__", "mod.pyc"),
+      "x\n",
+    );
+    fs.writeFileSync(
+      path.join(world.worktree, "packages", "a", "build.tsbuildinfo"),
+      "x\n",
+    );
   } else if (artifact === "ignored-env")
     fs.writeFileSync(path.join(world.worktree, ".env"), "SECRET=fixture\n");
   else if (artifact === "unreachable") {
@@ -167,6 +199,10 @@ function parsedFinalize(world: FinalizeIgnoredCliWorld) {
 
 Given("distだけを持つmerge済みfinalize fixtureがある", function () {
   createFinalizeFixture(this, "dist");
+});
+
+Given("ネストした生成物を持つmerge済みfinalize fixtureがある", function () {
+  createFinalizeFixture(this, "recursive");
 });
 
 Given("ignore済み.envを持つmerge済みfinalize fixtureがある", function () {
