@@ -11,7 +11,7 @@ description: exact-headの実装・テスト・仕様証拠を有限にレビュ
 
 ローカルまたはユーザー共通のローカルLLM reviewer設定が有効なら、進行役は各対象roundで`routing delegated-review-diff --root=<対象worktreeのroot> --base=<比較基点SHA> --head=<H_impl> --staging=<対象staging>`を実行してreviewを委譲する。`state=reviewed`の肯定・敵対評価と対象内findingを`review round`のadmission規則で分類し、差分外として除外された件数も確認し、`04_レビュー.md`へ入力・出力digest、model、固定HEADとともに記録する。`decision=changes_requested`は進行役が根拠を検証して採否を決める。`degraded`はローカルLLMのreview完了とみなさず、別reviewerの証拠でreviewを継続する。`disabled`なら利用可能な別reviewerで確認する。指摘0件だけを承認根拠にせず、テスト・仕様・独立性・非変更の証拠を確認する。ローカル設定とLLM応答だけからmerge authorityを導かない。
 
-進行役はローカルLLMの判定を最終判定へ直結せず、同じ固定HEADと仕様・test証拠をCodex SolまたはOpusなど利用可能な別reviewerにも独立に渡す。ローカルLLM設定がない場合はCodex Solを基本候補とし、利用できない環境ではOpusなどを選ぶ。両方利用できる場合も担当の選定と追加reviewの要否は進行役がscope・リスク・費用に基づき決める。複数reviewerのfindingは出典、成立条件、反証、再現結果を進行役が確認して採否を記録し、多数決やモデルの`decision`のみで承認・却下しない。追加reviewerが利用不能な場合は試した経路と理由を成果物へ記録し、独立性と未解決Critical/Highの条件を満たせないときは停止する。
+進行役はローカルLLMの判定を最終判定へ直結せず、同じ固定HEADと仕様・test証拠をCodex SolまたはOpusなど利用可能な別reviewerにも独立に渡す。ローカルLLM設定がない場合はCodex Solを基本候補とし、利用できない環境ではOpusなどを選ぶ。通常は担当の選定と追加reviewの要否を進行役がscope・リスク・費用に基づき決める。CodeRabbitが利用枠の制限中ならOpusとCodex Solの両方に固定HEADのセルフレビューを委譲し、片方を利用できないときは未実施を成果物へ記録して人間へ再開条件の判断を求める。複数reviewerのfindingは出典、成立条件、反証、再現結果を進行役が確認して採否を記録し、多数決やモデルの`decision`のみで承認・却下しない。追加reviewerが利用不能な場合は試した経路と理由を成果物へ記録し、独立性と未解決Critical/Highの条件を満たせないときは停止する。
 
 ## routing入力契約
 
