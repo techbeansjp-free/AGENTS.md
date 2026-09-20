@@ -114,6 +114,9 @@ const ACCEPTED_FINALIZE_IGNORED_PATH_INPUTS = [
   "a.b/",
   "a-b/",
   "a_b/",
+  "**/__pycache__/",
+  "**/.pnpm-store/",
+  "**/*.tsbuildinfo",
 ] as const;
 
 const REJECTED_FINALIZE_IGNORED_PATH_INPUTS = [
@@ -124,6 +127,11 @@ const REJECTED_FINALIZE_IGNORED_PATH_INPUTS = [
   ".git/",
   "/abs/",
   "a*/",
+  "**/",
+  "**/.git/",
+  "**/../",
+  "**/foo/*/",
+  "**/*.env*",
   "a?/",
   "a[/",
   "a{/",
@@ -354,6 +362,16 @@ Given("利用projectがglob patternをallowlistへ追加する", function () {
   this.schemaAllowsPattern = new RegExp(pattern, "u").test("**/");
 });
 
+Given("利用projectが限定された再帰patternをallowlistへ追加する", function () {
+  const manifest = projectManifest();
+  manifestWorktree(manifest).finalizeIgnoredPathAllowlist = [
+    "**/__pycache__/",
+    "**/*.tsbuildinfo",
+  ];
+  this.manifest = manifest;
+  this.schemaPatterns = readFinalizeIgnoredPathPatterns();
+});
+
 When("project policy manifestをruntime検証する", function () {
   this.validation = validateProjectPolicyManifest(this.manifest);
 });
@@ -371,6 +389,14 @@ Then("過度に広いallowlistはschemaとruntime検証で拒否される", func
       error.includes("安全な相対directory prefix"),
     ),
   );
+});
+
+Then("限定された再帰patternはschemaとruntime検証で受理される", function () {
+  assert.equal(this.validation.valid, true, this.validation.errors.join("\n"));
+  for (const pattern of this.schemaPatterns) {
+    assert.equal(new RegExp(pattern, "u").test("**/__pycache__/"), true);
+    assert.equal(new RegExp(pattern, "u").test("**/*.tsbuildinfo"), true);
+  }
 });
 
 Given("同じignore対象を持つsurvey観測とfinalize状態がある", function () {
@@ -770,4 +796,48 @@ Then("safeと無視対象資産の分類は双方で一致する", function () {
     withoutHint.blockingIgnoredArtifacts,
     HINT_NON_OWNED_ARTIFACTS,
   );
+});
+
+Given("再帰patternとネストした生成物を持つ削除観測がある", function () {
+  this.observation = {
+    ...safeObservation(),
+    ignoredArtifacts: [
+      "packages/a/__pycache__/module.pyc",
+      "packages/b/__pycache__",
+      "packages/a/cache.tsbuildinfo",
+      "packages/a/.pnpm-store/sha256/abc",
+      "packages/a/__pycache__-backup/keep",
+      "packages/a/cache.tsbuildinfo.bak",
+      ".agent-skill-chain/tmp/issues/task/__pycache__/record",
+      ".agent-skill-chain/tmp/issues/task/cache.tsbuildinfo",
+    ],
+  };
+});
+
+When("再帰patternの削除安全性を判定する", function () {
+  this.hintAssessment = assessWorktreeRemovalSafety({
+    ...HINT_OBSERVATION_BASE,
+    ignoredArtifacts: this.observation.ignoredArtifacts,
+    ignoredPathAllowlist: resolveFinalizeIgnoredPathAllowlist([
+      "**/__pycache__/",
+      "**/.pnpm-store/",
+      "**/*.tsbuildinfo",
+    ]),
+  });
+});
+
+Then("再帰patternに一致する生成物だけが許可される", function () {
+  assert.deepEqual(this.hintAssessment.allowedIgnoredArtifacts, [
+    "packages/a/__pycache__/module.pyc",
+    "packages/b/__pycache__",
+    "packages/a/cache.tsbuildinfo",
+    "packages/a/.pnpm-store/sha256/abc",
+  ]);
+  assert.deepEqual(this.hintAssessment.blockingIgnoredArtifacts, [
+    "packages/a/__pycache__-backup/keep",
+    "packages/a/cache.tsbuildinfo.bak",
+    ".agent-skill-chain/tmp/issues/task/__pycache__/record",
+    ".agent-skill-chain/tmp/issues/task/cache.tsbuildinfo",
+  ]);
+  assert.equal(this.hintAssessment.safe, false);
 });
