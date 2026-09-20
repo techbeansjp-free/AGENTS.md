@@ -9,7 +9,7 @@ description: 02設計と03実装計画が実装開始可能かを一度確認し
 
 ローカルまたはユーザー共通のローカルLLM reviewer設定が有効なら、進行役は`routing delegated-review-staging --root=<対象worktreeのroot> --step=7 --staging=<対象staging>`を実行してreviewを委譲する。`state=reviewed`の肯定・敵対評価と対象内finding、差分外として除外された件数を読み、`decision=blocked`の指摘は進行役が根拠を検証し、成立した開始不能な点を是正する。`degraded`をローカルLLMの完了とみなさず、設定・実行条件の修正または別reviewerの証拠で確認を続ける。`disabled`なら利用可能な別reviewerで確認する。実行結果の入力・出力digestと採否をjournal evidenceへ記録し、LLMの自己申告だけを設計変更の権限にしない。
 
-進行役はローカルLLMの結果に加え、利用可能ならCodex SolまたはOpusなど別reviewerの独立したreadiness checkも確認する。ローカル設定がない場合はCodex Solを基本候補とし、利用不能ならOpusなどを選ぶ。CodeRabbitが利用枠の制限中ならOpusとCodex Solの両方へ独立したセルフレビューを委譲し、片方を利用できないときは未実施を記録して人間へ再開条件を確認する。採否は進行役が出典と反証を確認して決め、追加reviewerを呼べない場合は理由をjournal evidenceへ記録する。
+進行役はローカルLLMの結果に加え、利用可能ならCodex SolまたはOpusなど別reviewerの独立したreadiness checkも確認する。ローカル設定がない場合はCodex Solを基本候補とし、利用不能ならOpusなどを選ぶ。PRのCodeRabbit利用枠制限に応じた二者レビューはStep 10で判定する。採否は進行役が出典と反証を確認して決め、追加reviewerを呼べない場合は理由をjournal evidenceへ記録する。
 
 ## テンプレート契約
 
