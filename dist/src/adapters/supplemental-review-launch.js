@@ -143,13 +143,14 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
             truncated,
         };
     }
-    if (verified === undefined)
-        return {
-            state: "degraded",
-            reason: "findingの投稿前検証を完了できませんでした",
-            truncated,
-        };
-    return { state: "findings", ...scoped, findings: verified, truncated };
+    // A second LLM pass is only advisory: it can reject a real defect while
+    // describing its failure path. Preserve every scoped first-pass candidate.
+    return {
+        state: "needs_human_review",
+        ...scoped,
+        verificationSuggestedFindings: verified ?? null,
+        truncated,
+    };
 }
 /**
  * base/head解決不可、非loopback endpoint（`assertLoopbackEndpoint`の拒否）、

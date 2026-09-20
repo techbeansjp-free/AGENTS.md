@@ -44,6 +44,13 @@ export type SupplementalReviewResult =
       truncated: boolean;
       ignoredOutOfScopeCount: number;
     }
+  | {
+      state: "needs_human_review";
+      findings: SupplementalReviewFinding[];
+      verificationSuggestedFindings: SupplementalReviewFinding[] | null;
+      truncated: boolean;
+      ignoredOutOfScopeCount: number;
+    }
   | { state: "degraded"; reason: string; truncated: boolean }
   | { state: "error"; reason: string };
 
@@ -205,13 +212,14 @@ async function dispatch(
       truncated,
     };
   }
-  if (verified === undefined)
-    return {
-      state: "degraded",
-      reason: "findingの投稿前検証を完了できませんでした",
-      truncated,
-    };
-  return { state: "findings", ...scoped, findings: verified, truncated };
+  // A second LLM pass is only advisory: it can reject a real defect while
+  // describing its failure path. Preserve every scoped first-pass candidate.
+  return {
+    state: "needs_human_review",
+    ...scoped,
+    verificationSuggestedFindings: verified ?? null,
+    truncated,
+  };
 }
 
 /**

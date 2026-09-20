@@ -11,7 +11,7 @@ interface Finding {
 
 const MAX_VERIFICATION_BYTES = 1024 * 1024;
 
-/** Verify candidates against committed post-diff files before exposing them. */
+/** Provide a second-pass suggestion from committed post-diff files; never decide publication. */
 export async function verifyReviewFindings<T extends Finding>(
   input: {
     root: string;

@@ -1,7 +1,7 @@
 import { git } from "../lib/process.js";
 import { isRecord } from "../types.js";
 const MAX_VERIFICATION_BYTES = 1024 * 1024;
-/** Verify candidates against committed post-diff files before exposing them. */
+/** Provide a second-pass suggestion from committed post-diff files; never decide publication. */
 export async function verifyReviewFindings(input, executor) {
     if (input.findings.length === 0)
         return [];

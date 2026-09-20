@@ -211,17 +211,24 @@ export async function launchDelegatedReview(input, dependencies = {}) {
         catch {
             return { state: "degraded", reason: "findingの投稿前検証に失敗しました" };
         }
-        if (verified === undefined)
-            return {
-                state: "degraded",
-                reason: "findingの投稿前検証を完了できませんでした",
-            };
         if (git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha)
             return { state: "degraded", reason: "対象HEADを固定できませんでした" };
-        parsed.findings = verified;
-        parsed.decision = verified.some((finding) => finding.severity === "Critical" || finding.severity === "High")
-            ? "changes_requested"
-            : "approved";
+        return {
+            state: "needs_human_review",
+            step: 10,
+            affirmative: parsed.affirmative,
+            adversarial: parsed.adversarial,
+            findings: parsed.findings,
+            verificationSuggestedFindings: verified ?? null,
+            ignoredOutOfScopeCount: parsed.ignoredOutOfScopeCount,
+            provider: config.provider,
+            model: config.model,
+            configSource: config.source,
+            inputDigest: digest(prompt),
+            outputDigest: digest(output),
+            baseSha: input.baseSha,
+            headSha: input.headSha,
+        };
     }
     return {
         state: "reviewed",
@@ -232,9 +239,6 @@ export async function launchDelegatedReview(input, dependencies = {}) {
         configSource: config.source,
         inputDigest: digest(prompt),
         outputDigest: digest(output),
-        ...(input.step === 10
-            ? { baseSha: input.baseSha, headSha: input.headSha }
-            : {}),
     };
 }
 //# sourceMappingURL=delegated-review-launch.js.map

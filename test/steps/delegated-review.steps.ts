@@ -104,6 +104,9 @@ function executor(world: DelegatedReviewWorld): ReviewerExecutor {
               reason: world.rejectVerification
                 ? "現在のfileでは成立しない"
                 : "現在のfileに重大な欠落が残る",
+              faultCode: world.rejectVerification ? "" : "after",
+              failurePath: world.rejectVerification ? "" : "入力から欠落に到達",
+              blockingCode: world.rejectVerification ? "after" : "",
             },
           ],
         }),
@@ -369,12 +372,11 @@ Then("設計文書を含むStep 7の肯定と敵対の結果を返す", function
   assert.equal(this.reviewCalls, 1);
 });
 
-Then("差分外の指摘を除外して対象差分の判定を返す", function () {
-  assert.equal(this.result?.state, "reviewed");
-  if (this.result?.state !== "reviewed") return;
+Then("差分外の指摘を除外して人手確認へ渡す", function () {
+  assert.equal(this.result?.state, "needs_human_review");
+  if (this.result?.state !== "needs_human_review") return;
   assert.deepEqual(this.result.findings, []);
   assert.equal(this.result.ignoredOutOfScopeCount, 1);
-  assert.equal(this.result.decision, "approved");
   assert.equal(this.reviewCalls, 1);
   assert.match(this.dispatchedPrompt, /review-target\.txt/u);
 });
@@ -391,10 +393,14 @@ Then("委譲reviewはdegradedでHEAD不一致を理由に返す", function () {
   assert.match(this.result.reason, /HEAD/u);
 });
 
-Then("委譲reviewの判定はchanges_requestedとなりHEADへ固定される", function () {
-  assert.equal(this.result?.state, "reviewed", JSON.stringify(this.result));
-  if (this.result?.state !== "reviewed") return;
-  assert.equal(this.result.decision, "changes_requested");
+Then("委譲reviewのCritical候補は人手確認となりHEADへ固定される", function () {
+  assert.equal(
+    this.result?.state,
+    "needs_human_review",
+    JSON.stringify(this.result),
+  );
+  if (this.result?.state !== "needs_human_review") return;
+  assert.equal(this.result.findings[0]?.severity, "Critical");
   assert.equal(this.result.baseSha, this.baseSha);
   assert.equal(this.result.headSha, this.headSha);
   assert.match(this.result.inputDigest, /^[a-f0-9]{64}$/u);
@@ -404,10 +410,14 @@ Then("委譲reviewの判定はchanges_requestedとなりHEADへ固定される",
 Given("投稿前検証者はfindingを却下する", function () {
   this.rejectVerification = true;
 });
-Then("委譲reviewはfindingなしでapprovedを返す", function () {
-  assert.equal(this.result?.state, "reviewed", JSON.stringify(this.result));
-  if (this.result?.state !== "reviewed") return;
-  assert.deepEqual(this.result.findings, []);
-  assert.equal(this.result.decision, "approved");
+Then("委譲reviewは初回候補と検証者の却下を人手確認へ渡す", function () {
+  assert.equal(
+    this.result?.state,
+    "needs_human_review",
+    JSON.stringify(this.result),
+  );
+  if (this.result?.state !== "needs_human_review") return;
+  assert.equal(this.result.findings.length, 1);
+  assert.deepEqual(this.result.verificationSuggestedFindings, []);
   assert.equal(this.reviewCalls, 2);
 });

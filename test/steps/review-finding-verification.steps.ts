@@ -195,18 +195,39 @@ When("差分内のfileがHEADで削除されて検証者が確認する", async 
   await review(this, "accept");
 });
 
-Then("補助レビューのfindingは空で検証入力に修正後fileが含まれる", function () {
-  assert.equal(this.result?.state, "findings", JSON.stringify(this.result));
-  if (this.result?.state !== "findings") return;
-  assert.equal(this.result.findings.length, 0);
+Then("補助レビューは初回候補と検証者の却下を人手確認へ渡す", function () {
+  assert.equal(
+    this.result?.state,
+    "needs_human_review",
+    JSON.stringify(this.result),
+  );
+  if (this.result?.state !== "needs_human_review") return;
+  assert.equal(this.result.findings.length, 1);
+  assert.deepEqual(this.result.verificationSuggestedFindings, []);
   assert.ok(this.verificationPrompt.includes(this.after));
   assert.equal(this.reviewCalls, 2);
 });
-Then("補助レビューにHigh findingが残る", function () {
-  assert.equal(this.result?.state, "findings", JSON.stringify(this.result));
-  if (this.result?.state !== "findings") return;
+Then("補助レビューはHigh候補と検証者の採用を人手確認へ渡す", function () {
+  assert.equal(
+    this.result?.state,
+    "needs_human_review",
+    JSON.stringify(this.result),
+  );
+  if (this.result?.state !== "needs_human_review") return;
   assert.equal(this.result.findings.length, 1);
   assert.equal(this.result.findings[0]?.severity, "High");
+  assert.equal(this.result.verificationSuggestedFindings?.length, 1);
+  assert.equal(this.reviewCalls, 2);
+});
+Then("補助レビューは検証不能の初回候補を人手確認へ渡す", function () {
+  assert.equal(
+    this.result?.state,
+    "needs_human_review",
+    JSON.stringify(this.result),
+  );
+  if (this.result?.state !== "needs_human_review") return;
+  assert.equal(this.result.findings.length, 1);
+  assert.equal(this.result.verificationSuggestedFindings, null);
   assert.equal(this.reviewCalls, 2);
 });
 Then("補助レビューはdegradedである", function () {
