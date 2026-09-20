@@ -855,6 +855,166 @@ Given(
   },
 );
 
+function supersessionFixture(
+  world: ReanchorWorld,
+  changeJudgment: boolean,
+  changeSummary = false,
+  changeStepChain = false,
+  changeDistribution = false,
+  oldBypass = false,
+  priorArtifactCommits = 1,
+  moveDetail = false,
+): void {
+  world.root = world.initRepo();
+  world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
+  const implementation = commit(
+    world.root,
+    "export const reviewed = 1;\n",
+    "feat: review対象",
+  );
+  const artifactPath = "docs/reviews/1437_課題1437証跡是正レビュー.md";
+  const oldArtifact = auditableReviewArtifact(world.baseSha, implementation)
+    .replace(
+      "- 未解決Critical/High: 0件",
+      changeSummary
+        ? "- 未解決Critical/High: 0件。High 1件（REV-1437-01 は修正済み）"
+        : "- 未解決Critical/High: 0件",
+    )
+    .replace(
+      "| Step chain | 経由: fixture |",
+      oldBypass
+        ? "| Step chain | 迂回: fixture |"
+        : "| Step chain | 経由: fixture |",
+    )
+    .replace(
+      "- 判定: approved",
+      moveDetail
+        ? "- Critical/Highの内訳: Critical 0件、High 1件は修正済み\n- 判定: approved"
+        : "- 判定: approved",
+    );
+  world.oldHeadSha = commitPath(
+    world.root,
+    artifactPath,
+    oldArtifact,
+    "docs: old artifact",
+  );
+  if (priorArtifactCommits === 8) {
+    const variants = [
+      `${oldArtifact}\n`,
+      oldArtifact,
+      `${oldArtifact}\n`,
+      oldArtifact,
+      `${oldArtifact}\n`,
+      `${oldArtifact}\n\n`,
+      oldArtifact,
+    ];
+    for (const [index, variant] of variants.entries())
+      world.oldHeadSha = commitPath(
+        world.root,
+        artifactPath,
+        variant,
+        `docs: prior artifact correction ${index + 2}`,
+      );
+  }
+  world.staging = makeStaging(world);
+  buildApprovedReviewBinding(world, implementation);
+  buildDelivery(world, false);
+  assert.equal(readStoredDeliveryState(world.staging)?.state, "pr-bound");
+  snapshot(world);
+  let nextArtifact = oldArtifact
+    .replace(
+      "| 適用した独立性モード | context-isolated（未宣言時の既定） |",
+      "| 適用した独立性モード | context-isolated |",
+    )
+    .replace(
+      "| reviewerが対象差分を変更していないこと | はい。製品path変更0件 |",
+      "| reviewerが対象差分を変更していないこと | はい（製品path変更0件） |",
+    )
+    .replace(
+      changeSummary
+        ? "- 未解決Critical/High: 0件。High 1件（REV-1437-01 は修正済み）"
+        : "- 未解決Critical/High: 0件",
+      changeSummary
+        ? "- 未解決Critical/High: なし\n- Critical/Highの内訳: Critical 0件、High 1件（REV-1437-01 は未修正）"
+        : "- 未解決Critical/High: なし",
+    );
+  if (changeJudgment)
+    nextArtifact = nextArtifact.replace("- 判定: approved", "- 判定: rejected");
+  if (changeStepChain)
+    nextArtifact = nextArtifact.replace(
+      "| Step chain | 経由: fixture |",
+      "| Step chain | 迂回: fixture |",
+    );
+  if (oldBypass)
+    nextArtifact = nextArtifact.replace(
+      "| Step chain | 迂回: fixture |",
+      "| Step chain | 経由: fixture |",
+    );
+  if (changeDistribution)
+    nextArtifact = nextArtifact.replace(
+      "判断: 配布物を更新しない",
+      "判断: 配布物を更新した",
+    );
+  if (moveDetail)
+    nextArtifact = nextArtifact
+      .replace(
+        "## 3. 肯定的評価\n成立。",
+        "## 3. 肯定的評価\n成立。\n- Critical/Highの内訳: Critical 0件、High 1件は修正済み",
+      )
+      .replace(
+        "- Critical/Highの内訳: Critical 0件、High 1件は修正済み\n- 判定: approved",
+        "- 判定: approved",
+      );
+  world.newHeadSha = commitPath(
+    world.root,
+    artifactPath,
+    nextArtifact,
+    "docs: supersede review artifact",
+  );
+  world.newBaseSha = world.baseSha;
+}
+
+Given(
+  "pr-bound後に同じartifactだけを書式是正した前進commitがある",
+  function () {
+    supersessionFixture(this, false);
+  },
+);
+
+Given("pr-bound後にartifactの判断本文を変えた前進commitがある", function () {
+  supersessionFixture(this, true);
+});
+
+Given(
+  "pr-bound後にHigh指摘の解決状態を書き換えた前進commitがある",
+  function () {
+    supersessionFixture(this, false, true);
+  },
+);
+
+Given("pr-bound後にStep chainを迂回へ変えた前進commitがある", function () {
+  supersessionFixture(this, false, false, true);
+});
+
+Given(
+  "pr-bound後に旧Step chainを迂回から経由へ変えた前進commitがある",
+  function () {
+    supersessionFixture(this, false, false, false, false, true);
+  },
+);
+
+Given("pr-bound後にartifactの9件目の前進是正commitがある", function () {
+  supersessionFixture(this, false, false, false, false, false, 8);
+});
+
+Given("pr-bound後にHigh内訳を判断節から移した前進commitがある", function () {
+  supersessionFixture(this, false, false, false, false, false, 1, true);
+});
+
+Given("pr-bound後に配布物影響の判断を書き換えた前進commitがある", function () {
+  supersessionFixture(this, false, false, false, true);
+});
+
 Given("pr-boundの不正なartifact replacement「{word}」がある", function (kind) {
   this.root = this.initRepo();
   this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
@@ -1895,6 +2055,7 @@ Then("previewは成功し初回だけ追記して二回目はunchangedになる"
   assert.deepEqual(
     this.reanchorCliResults.map((result) => result.status),
     [0, 0, 0],
+    JSON.stringify(this.reanchorCliResults.map((result) => result.output)),
   );
   assert.equal(this.observableAfter, this.observableBefore);
   assert.equal(readEvidenceReanchorChain(this.staging).length, 1);
@@ -1921,6 +2082,32 @@ Then("再固定recordは旧新artifactのpathとdigestを保持する", function
       fs.readFileSync(path.join(this.staging, relative), "utf8"),
       before,
     );
+});
+
+Then(
+  "再固定recordは旧新artifactのdigestをsupersessionとして保持する",
+  function () {
+    const record = readEvidenceReanchorChain(this.staging)[0];
+    assert.equal(record?.method, "artifact-supersession");
+    assert.equal(
+      record.artifactSupersession?.artifactPath,
+      "docs/reviews/1437_課題1437証跡是正レビュー.md",
+    );
+    assert.match(record.artifactSupersession.oldDigest, /^[a-f0-9]{64}$/u);
+    assert.match(record.artifactSupersession.newDigest, /^[a-f0-9]{64}$/u);
+    assert.notEqual(
+      record.artifactSupersession.oldDigest,
+      record.artifactSupersession.newDigest,
+    );
+  },
+);
+
+Then("supersessionのpreviewとapplyは拒否され追記しない", function () {
+  assert.deepEqual(
+    this.reanchorCliResults.map((result) => result.status),
+    [1, 1],
+  );
+  assert.equal(readEvidenceReanchorChain(this.staging).length, 0);
 });
 
 Then("再固定recordはexact post-PR review bindingを保持する", function () {
