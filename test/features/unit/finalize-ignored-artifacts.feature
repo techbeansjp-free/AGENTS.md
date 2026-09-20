@@ -185,3 +185,13 @@ Feature: worktree finalizeのignore対象を安全に判定する
     Given 案内対象を含む観測と含まない観測が他の条件で同一である
     When 双方のworktree削除の安全性を判定する
     Then safeと無視対象資産の分類は双方で一致する
+
+  Scenario: SCN-UNIT-FINALIGN-038 再帰directoryと拡張子patternはネストした生成物だけを許す
+    Given 再帰patternとネストした生成物を持つ削除観測がある
+    When 再帰patternの削除安全性を判定する
+    Then 再帰patternに一致する生成物だけが許可される
+
+  Scenario: SCN-UNIT-FINALIGN-039 限定された再帰patternをproject policyで指定できる
+    Given 利用projectが限定された再帰patternをallowlistへ追加する
+    When project policy manifestをruntime検証する
+    Then 限定された再帰patternはschemaとruntime検証で受理される

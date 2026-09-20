@@ -19,7 +19,7 @@
 | 何が問題だったか | `pr reanchor`がreview artifactの同定にASC自repoの運用慣習を使っており、正本が許す配置と命名を選んだ利用projectでは`pr-bound`後の正当な是正の後に`pr merge`へ到達する手段が恒久的に失われていた。報告2件はいずれもASC外の`gh pr merge`へ迂回しており、delivery認可の強制点が無効化されていた |
 | 何を解決しようとしたか | 再固定の3経路すべてが正本のevidence-only allowlistでreview artifactを同定し、file名の字面を受理条件にしない状態。他の受理条件は1つも弱めない |
 | 何を行ったか | adapter固有の`REVIEW_ARTIFACT_PREFIX`と`REVIEW_ARTIFACT_NAME`を削除して`src/domain/review.ts`の`isEvidenceOnlyPath`へ合流させ、正本・要件・CLI契約・用語台帳・Step 11 skillから「正規命名」を除いてTERM-ASC-101参照にし、**round 2で新`H_final`のmode/type検証を既存の`evidenceOnlySuffix`の再利用として足した。** SCN-UNIT-REANCHOR-033〜040とSCN-INT-REANCHOR-016〜018を追加した |
-| 何を確認したか | 実装前に新規11 scenario中7件が落ちること、実装後に`@evidence-reanchor` 80件と`npm test` 2179件が失敗0で通ること、変異6件がすべてkillされること、T01とT02の各commitが独立に逆適用できることを実測した。**round 2では外部reviewer2体へ独立にセルフレビューを委譲し、codexのHigh 1件を実測で裏付けて是正した** |
+| 何を確認したか | round 2までに、実装前の新規11 scenario中7件が落ちること、実装後に`@evidence-reanchor` 80件と`npm test` 2179件が失敗0で通ること、変異6件がすべてkillされること、T01とT02の各commitが独立に逆適用できることを実測した。round 4の対象tagは82件全pass（§7）。**round 2では外部reviewer2体へ独立にセルフレビューを委譲し、codexのHigh 1件を実測で裏付けて是正した** |
 | 判定 | approved |
 | round 3の追加 | round 2で自分が入れた誤記（`cli.ts:1454`を`pr create`のselectorと誤認）を訂正した。判定logicは不変。外部reviewerが別Issueと判定した2件はIssue #1436・#1437として分離した |
 | round 4の追加 | CodeRabbit rate limit中のためCodex CLIとローカルLLM（Ollama、qwen3-coder:30b）へ独立にセルフレビューを委譲した。Codexが新規High 1件（通常rebase経路がmode検証を欠く）を指摘し、実測で裏付けて是正した。ローカルLLMは新規0件。既知の欠陥（round2のmode/type是正）を一時的に巻き戻した較正実験でも、Codexは再検出したがローカルLLMは検出できなかった（§6ラウンド4に詳細） |
@@ -38,8 +38,8 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | Phase A artifact | 本fileをcommit後に観測 | 未作成 | Git観測 |
 | review session | .agent-skill-chain/tmp/issues/20260919_232451_bugfix-pr-reanchorのreview-artifact同定が正本のevidence-only-allowlistと食い違う | 未開始 | Git観測 |
 
-- dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: はい。本変更が足す辺は`adapters/evidence-reanchor` → `domain/review`の1本だけで、`review-session.ts`と`review-record-layer.ts`が既に持つ向きと同じである。逆向きの辺を作らず`npm run architecture:check`が循環0件を返した。本文書へ自身のcommit SHAを書いていない
-- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: はい。`H_impl`は`d6f83ba51d5799cddfe686394c8e54e3b58cca15`で、`H_final`は本file 1件だけを加えたcommitである。`npm run audit:check`で検証する
+- dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: はい。本変更が追加した辺は`adapters/evidence-reanchor` → `domain/review`と`adapters/review-diff` → `domain/review`の2本である。`isEvidenceOnlyPath`の依存を`review-session` → `domain/review`から`review-diff` → `domain/review`へ移し、`evidence-reanchor` → `review-diff`と`review-session` → `review-diff`は既存である。逆向きの辺を作らず`npm run architecture:check`が循環0件を返した。本文書へ自身のcommit SHAを書いていない
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: はい。現行の`H_impl`は`125409f728796fc8cde58c7ce655423c798bc44b`で、その後の前向き是正commitは本file 1件だけを変更した。**単一commitのrecord layer要件と追随後のreview session要件は満たしていない**。`npm run audit:check`はpath集合を検証するが、その不足を解消しない
 - reviewerの独立性が要求水準を満たす: はい。§9に観測値を記録した
 - 既定branch追随を行った場合、取り込みがartifact commitより前にあり、`比較基点`が取り込んだ既定branch tip、`H_impl`がartifact直前の最新commitを指し、個別監査表を`比較基点..H_impl`から再生成した: **はい。** PR #1434のmergeで既定branchが`c6f7b556`へ動いたため、rebaseではなくmergeで追随した。取り込みcommit `125409f7`は単一merge-baseの2親mergeであり、`比較基点`は取り込んだ既定branch tip `c6f7b556`、`H_impl`は取り込みcommit `125409f7`を指す。個別監査表は`c6f7b556..125409f7`から再生成し、**対象path 18件と変更種別がround 4と完全一致すること**を確認したため、各行の判断欄はround 4の記録をそのまま保持している。衝突は`docs/specs/15_要件追跡/01_変更履歴.md`の1 fileのみで、両側の行を保持して解消し、空白を正規化した集合比較で欠落0件・余剰0件を確認した。
 - **この既定branch追随はreview sessionへroundとして記録できていない。** 本PRはround 4までを別のsessionが進めており、review sessionはstaging（版管理外）に存在するため、その記録がこの作業環境に無い。前roundのcandidate HEADが現HEADの祖先にならず`review round`を開けない。**この欄の更新は機械導出される比較基点・`H_impl`・対象差分・個別監査表のpath集合に限り、round 4が下した判定・finding・独立性の記録は1 byteも変更していない。** 記録の欠落を承知のうえで残す。
@@ -62,14 +62,14 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | package owner | docs/specs | 新規SCNの追跡行2件を追加し、round 2でSCN-039・040とreview-diff.tsを同じ行へ足した。既存行を書き換えていない。round 4でSCN-041を同じ行へ追加した | spec → src（許可された向き） | 全AC / `npm run trace:check` | 2行の削除でrevert可能 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | package owner | docs/specs | header区切りの直後へ1行追加。末尾の8列移行表へ入れていない。過去の履歴行を書き換えていない。round 2で同じ行の互換性欄を狭まり3つの列挙へ直した。round 4で新しい変更行を1行追加した（過去行は書き換えない） | spec → src（許可された向き） | 全AC | 1〜2行の削除でrevert可能 | pass |
 | `src/adapters/evidence-reanchor.ts` | M | package owner | adapter | review artifact同定の1責務を`domain/review.ts`の`isEvidenceOnlyPath`へ委ね、adapter固有の定数2件を削除した。round 2で新head側のmode/type検証を`evidenceOnlySuffix`の再利用として足した。round 4で同じ検証を通常rebase経路（`observeRebaseEquivalence`）へも足し、新しい理由`mode-mismatch`を追加した | adapter → domain と adapter → adapter（葉）の既存の向きのみ。`architecture:check`で循環0件 | FR-01〜FR-04、AC-1433-12・13 / SCN-UNIT-REANCHOR-033〜041 | T01・T02・T03（round4分）が独立commitで、`git apply --check -R`により各々単独で逆適用可能 | pass |
-| `src/adapters/review-diff.ts` | M | package owner | adapter | `evidenceOnlySuffix`の移設先。`node:crypto`と`lib/process`だけに依存する葉であり、`review-session.ts`と`evidence-reanchor.ts`の双方が既にimportしている。**定義は1つのまま循環を作らない** | `domain/review.js`への依存を1本追加。逆向きなし | AC-1433-12 / SCN-UNIT-REANCHOR-039・040 | 関数の移設であり判定logicを変えていない。revert可能 | pass |
+| `src/adapters/review-diff.ts` | M | package owner | adapter | `evidenceOnlySuffix`の移設先。`node:crypto`・`lib/process`・`domain/review.js`に依存し、`review-session.ts`と`evidence-reanchor.ts`の双方が既にimportしている。**定義は1つのまま循環を作らない** | `domain/review.js`への依存を1本追加。逆向きなし | AC-1433-12 / SCN-UNIT-REANCHOR-039・040 | 関数の移設であり判定logicを変えていない。revert可能 | pass |
 | `src/adapters/review-session.ts` | M | package owner | adapter | `evidenceOnlySuffix`の移設元。未使用になった`isEvidenceOnlyPath`のimportを外し、`review-diff.js`から取り込む。**判定logicを変えていない** | 既存の向きのみ | AC-1433-12 | 同上 | pass |
 | `test/features/integration/evidence-reanchor.feature` | M | package owner | test | SCN-INT-REANCHOR-016〜018を追加。既存scenarioのIDとassertionを変更していない。SCN-1377-01のGiven文言のみ禁止表現を除いた | test → 対象（許可された向き） | AC-1433-06〜08 | 追加行の削除でrevert可能 | pass |
 | `test/features/unit/evidence-reanchor.feature` | M | package owner | test | SCN-UNIT-REANCHOR-033〜040を追加。既存32 scenarioを1件も変更していない。round 4でSCN-UNIT-REANCHOR-041（実行権限・symlinkの2 Examples）を追加した | test → 対象（許可された向き） | AC-1433-01〜05、10〜13 | 追加行の削除でrevert可能 | pass |
 | `test/steps/evidence-reanchor.steps.ts` | M | package owner | test | 配置variantの表とGiven 5件、Then 1件、mode不正fixture 1件を追加し、既存fixture 2件を配置引数でparameterizeした。既定引数により既存の呼び出し結果は変わらない。round 4で`artifactFixture`と`rewriteTerminalArtifactMode`を再利用するGiven 1件を追加した | test → 対象（許可された向き） | AC-1433-01〜08、10〜13 | 追加行の削除と既定引数の除去でrevert可能 | pass |
 | `test/steps/review-progress.steps.ts` | M | package owner | test | `evidenceOnlySuffix`のimport元を移設先の`review-diff.js`へ付け替えた1行のみ。**検証内容を変えていない** | test → 対象（許可された向き） | AC-1433-12 | 1行の置換でrevert可能 | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: はい。`git diff --numstat 5f7f1c53..d6f83ba5`が返す12 pathと表の12行が一致する。まとめ行と「同上」を使っていない
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: はい。現行の`git diff --name-only c6f7b5563a3c94bcad0b163e00e7c0e459e381f5..125409f728796fc8cde58c7ce655423c798bc44b`が返す18 pathと表の18行が一致する。旧`5f7f1c53..d6f83ba5`の12 pathはround 2の履歴である
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: はい。**本変更はその混入そのものを取り除くものである。** ASC自repoの命名慣習と`docs/reviews/`単独のdirectory集合という2つのproject固有値が、配布される`src/adapters/evidence-reanchor.ts`へ入り込んでいた。削除後、同定規則はpackage層の`domain/review.ts`だけが持つ
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: 個別findingは0件
 
@@ -123,7 +123,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | 価値（利用者・運用上の目的） | pass | 製品自身が`review artifact --init`の既定で出力する名前が`pr reanchor`を通るようになった。**本reviewの成果物も当初は既定名`docs/reviews/1433_レビュー.md`で生成した。** 本repo運用scriptの命名規約に合わせて改名した経緯はDISC-1433-07に記録している。 正本が許すもう一方の配置`.agent-skill-chain/reviews/`も通る |
 | 実現可能性（環境・依存・権限） | pass | 依存packageもlockfileも実行時の外部存在も変えない。新しいauthorityも承認経路も作らない。保護fileへ触れていない |
 | 整合性（設計・コード・テスト・仕様） | pass | 同定規則が`pr create`・review session・record layer・再固定で`isEvidenceOnlyPath`に統一された。`pr create`は`assertConvergedReviewSession`から`evidenceOnlySuffix`を経て到達する。2 prefixの直書きは`pr merge`側の2箇所に残るが、束縛済みpathの後段再読であり合成経路から受理集合の差へ到達しない。正本・要件・CLI契約・用語台帳・配布skillの5文書が同じ意味へ揃い、`trace:check`のorphanが0件である |
-| 保守性（責務・命名・変更容易性） | pass | 判定を足さず取り除いた。src差分は追加23行・削除19行だが、追加のうち17行はJSDocであり判定logicは正味で減っている。T01とT02が独立commitで各々単独に逆適用できる |
+| 保守性（責務・命名・変更容易性） | pass | round 1ではadapter固有のartifact名判定を削除し共通述語へ統合した。round 2・4ではmode/type検査を3経路へ追加した。現行差分の`src/adapters/`は3 fileで追加147行・削除91行（`c6f7b556..125409f7`の`git diff --numstat`）。T01〜T03は独立に逆適用を確認した |
 
 ## 4. 敵対的評価
 
@@ -248,7 +248,7 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 |---|---|
 | 適用した独立性モード | context-isolated |
 | その要求を満たすこと | はい |
-| reviewerとimplementerのidentity・context比較 | project policyの`merge.reviewIndependence`は未宣言のため既定の`context-isolated`を適用した。exact HEADは`d6f83ba51d5799cddfe686394c8e54e3b58cca15`に固定されている。肯定5観点と敵対8観点を§3・§4に記録し、findingをREV-1433-01からREV-1433-06として分類した。設計段階では別providerのアドバイザーへ正本の原文を渡して4問を諮問し、着手可否・scope・用語の扱い・securityの4点について独立した判定を得ている |
+| reviewerとimplementerのidentity・context比較 | project policyの`merge.reviewIndependence`は未宣言のため既定の`context-isolated`を適用した。§3・§4の肯定5観点と敵対8観点、REV-1433-01〜06はround 2のexact HEAD `d6f83ba51d5799cddfe686394c8e54e3b58cca15`に対する記録である。現行`H_impl`は`125409f728796fc8cde58c7ce655423c798bc44b`であり、追随後のformal review sessionは欠けている（§1）。設計段階では別providerのアドバイザーへ正本の原文を渡して4問を諮問した |
 | reviewerが対象差分を変更していないこと | はい（round 1は製品path変更0件。round 2は外部reviewer指摘REV-1433-08の是正として`src/`と`dist/`を変更したが、これはreviewerが自分の判断を通すための変更ではなく、正本が要求する条件を実装が満たしていないという指摘への是正である。新`H_impl` `9c04bfab8fa8b9ea3fcadcb5f2f58b51703a5616`に対して本roundがあらためて全観点を評価した。round 4も同様に外部reviewer指摘REV-1433-13の是正として`src/`・`test/`・`dist/`を変更した。新`H_impl` `9eabf3eb95340dd360f6859eb563b666acbc3076`） |
 | round 4のreviewer構成 | CodeRabbit rate limit中のため、owner指示によりCodex CLIとローカルLLM（Ollama、`qwen3-coder:30b`、`http://127.0.0.1:11434`のloopback限定endpoint）へ独立に委譲した。round 1・2のFableをローカルLLMへ差し替えた点が従来との違いである。両者はimplementerと別context・別processで、対象差分（`git diff origin/main...HEAD`）以外を書き換えていない（読み取り専用sandbox） |
 
@@ -278,14 +278,14 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 - 新しい権限が必要な事項: なし。本変更は新しいauthorityも承認経路も作らず、保護fileへ触れていない
 - 残存リスク: (1) REV-1433-06。`resolveAnchor`のJSDocが本体から離れて孤立している。本変更より前からの状態で、可読性のみに影響する。(2) `pr merge`側の2箇所（`resolveImplementationCommitForMerge`とdelivery stateのMergeIntent解析）が2 prefixを直書きで持つ点（REV-1433-09、REV-1433-12）。受理集合は同じで、束縛済みpathの後段再読であるため合成経路から受理集合の差へ到達しない。**`pr merge`の認可判定は§2.2で対象外と宣言済みであり、合流は別Issueとする。** (3) 未決事項2件。「正規命名」をTERM-ASC-101参照へ置き換える正本改定の可否と、Issue #1424のclose判断。いずれも決定権者はpackage ownerであり、本PRのmerge時に判断される。**mode検査の追加可否はownerがround 2で決裁済みである。** (4) round 3で分離した2件。`review validate`がapproval recordを検証しない件はIssue #1436、「force push禁止」と「複数commit拒否」が両立しない件はIssue #1437として起票した。**#1437にはPR作成後にforce pushを実行した逸脱の事実を明記し、owner決裁を求めている。** (5) round 4で判明したレビュアー較正結果。ローカルLLM（Ollama、`qwen3-coder:30b`）は既知の欠陥（REV-1433-08相当）を再現実験でも検出できず、round 4自身の「新規0件」報告の信頼度はCodexほど高くない。owner懸念への回答として§6ラウンド4に記録した
 - 次に許可される操作: `workflow record --step=10 --post-pr-intake` → 本fileのcommit（新`H_final`）→ `pr reanchor --new-head=<新H_final> --new-base=<不変>`。`delivery.stopAt=pull_request`かつ`merge.mode=assisted`のためPR作成で停止し、mergeはowner承認を待つ。**mergeは`--merge`で行う。squashは2区間構造を壊し`audit:check`が落ちる**
-- 次回の再開地点: `H_impl` `9eabf3eb95340dd360f6859eb563b666acbc3076`、比較基点 `5f7f1c53c873f0c50d9b66f2ac30bfe47ec18b92`、branch `bugfix/1433-reanchor-artifact-allowlist`、worktree `.worktrees/20260919_234846-1433-reanchor-artifact-allowlist`、PR #1435（`pr-bound`）
+- 次回の再開地点: 現行`H_impl` `125409f728796fc8cde58c7ce655423c798bc44b`、比較基点 `c6f7b5563a3c94bcad0b163e00e7c0e459e381f5`、branch `bugfix/1433-reanchor-artifact-allowlist`、PR #1435。旧`9eabf3eb`はround 4の履歴であり、現在の承認HEADではない。追随merge後のreview sessionが欠けていることは§1に開示した。
 
 ## 0. レビュー識別情報
 
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 1 |
+| ラウンド | 4（追随後のformal session欠落は§1に開示） |
 | 対象SHA・文書ダイジェスト | 125409f728796fc8cde58c7ce655423c798bc44b |
 | 比較基点 | `c6f7b5563a3c94bcad0b163e00e7c0e459e381f5` |
 | H_impl | `125409f728796fc8cde58c7ce655423c798bc44b` |
@@ -295,7 +295,7 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 | ラウンド数 | 4 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260919_232451_bugfix-pr-reanchorのreview-artifact同定が正本のevidence-only-allowlistと食い違う |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md`のREQ-WF-005。reviewed-forward条項は「新`H_final`が監査合格済みevidence-only suffixである場合に限り、`reviewed-forward`としてappend-only記録する」と定め、file名条項を持たない |
-| 成果物行数 | 製品: `src/adapters/evidence-reanchor.ts`が追加23行・削除19行。追加のうち17行はJSDocであり判定logicは正味で減っている。配布文書が3 pathで各1行。支援層: testが追加191行・削除5行、`docs/specs/`が追加9行・削除5行、staging成果物00〜03が1005行。**支援層が製品変更を大きく超えている。** fullは00〜03の個別管理を要求するためmode固有の固定費であり、閾値判定はしない。round 4はさらに`evidence-reanchor.ts`へ約20行（うち半分JSDoc）、`test/`へ約90行を追加した |
+| 成果物行数 | 現行比較基点`c6f7b556..125409f7`の実測では`src/adapters/evidence-reanchor.ts`が追加76行・削除20行、`review-diff.ts`が追加70行・削除0行、`review-session.ts`が追加1行・削除71行。test 4 pathは追加331行・削除6行、`docs/specs/` 5 pathは追加10行・削除4行。旧23/19・191/5はround 2の履歴値であり現行差分の説明には使わない。staging成果物00〜03の1005行は版管理外の履歴値である |
 | 縮小の先行評価 | 評価のうえ縮小側を採った。同定述語は新設せず既存の`isEvidenceOnlyPath`を再利用し、adapter固有の定数2件を削除した。02 §12で7案の採否を記録し、project policyへの命名設定項目の新設、`pr resync-head`相当の新command、文書乖離を監視する新gate、mode検査の同時追加をいずれも不採用とした。**足す修正ではなく消す修正で成立する。** round 4はround 2で足した検査を新しい経路へ複製するだけで、新しい判定軸は増やしていない |
 | 実施者・日時 | reviewer、2026-09-20T02:50:00+09:00 |
 
@@ -305,4 +305,4 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 
 | role欄（担当role） | 必要証拠 | 必要model tier | provider欄 | model設定欄 | fallback欄 | 独立性証拠欄・非変更証拠 |
 |---|---|---|---|---|---|---|
-| reviewer | 肯定5観点と敵対8観点を§3・§4へ記録し、findingをREV-1433-01〜06として重大度と状態で分類した | critical。変更種別bug-fix、risk high、信頼境界と不可逆操作への到達性に触れるため | project choiceの解決結果に従う。本reviewでは`routing launch`を使わず、設計段階の諮問だけを別providerへ委ねた | project choiceの`modelMapping`を入力とし、固有のmodel slugを要求していない | 要求水準を独立性証拠欄で確認できない場合は承認せず停止する。本reviewでは§9の観測値で確認できた | §9に記録。exact HEADは`d6f83ba51d5799cddfe686394c8e54e3b58cca15`に固定。review中の製品path変更は0件 |
+| reviewer | 肯定5観点と敵対8観点を§3・§4へ記録し、findingをREV-1433-01〜06として重大度と状態で分類した | critical。変更種別bug-fix、risk high、信頼境界と不可逆操作への到達性に触れるため | project choiceの解決結果に従う。本reviewでは`routing launch`を使わず、設計段階の諮問だけを別providerへ委ねた | project choiceの`modelMapping`を入力とし、固有のmodel slugを要求していない | 要求水準を独立性証拠欄で確認できない場合は承認せず停止する。追随後のformal session欠落は§1に開示した | §9のround 2ではexact HEAD `d6f83ba51d5799cddfe686394c8e54e3b58cca15`、現行`H_impl`は`125409f728796fc8cde58c7ce655423c798bc44b`。round 2のreview中に製品path変更は0件 |

@@ -22,6 +22,8 @@ class DelegatedReviewWorld extends WorkflowWorld {
   baseSha = "";
   headSha = "";
   driftHeadDuringExecution = false;
+  rejectVerification = false;
+  twoCandidateVerification = false;
   response = JSON.stringify({
     decision: "ready",
     affirmative: "要求と受け入れ条件が対応する",
@@ -40,6 +42,8 @@ function setup(world: DelegatedReviewWorld): void {
   world.configHome = path.join(world.root, "config-home");
   world.staging = ".agent-skill-chain/tmp/issues/example";
   world.reviewCalls = 0;
+  world.rejectVerification = false;
+  world.twoCandidateVerification = false;
   world.dispatchedPrompt = "";
   world.response = JSON.stringify({
     decision: "ready",
@@ -90,6 +94,37 @@ function executor(world: DelegatedReviewWorld): ReviewerExecutor {
     world.reviewCalls += 1;
     world.dispatchedModel = input.model;
     world.dispatchedPrompt = input.prompt;
+    if (input.prompt.includes("投稿前の独立したfinding検証者"))
+      return {
+        state: "succeeded",
+        reason: "ok",
+        output: JSON.stringify({
+          verdicts: [
+            {
+              index: 0,
+              valid: !world.rejectVerification,
+              reason: world.rejectVerification
+                ? "現在のfileでは成立しない"
+                : "現在のfileに重大な欠落が残る",
+              faultCode: world.rejectVerification ? "" : "after",
+              failurePath: world.rejectVerification ? "" : "入力から欠落に到達",
+              blockingCode: world.rejectVerification ? "after" : "",
+            },
+            ...(world.twoCandidateVerification
+              ? [
+                  {
+                    index: 1,
+                    valid: true,
+                    reason: "現在のfileに軽微な欠落が残る",
+                    faultCode: "after",
+                    failurePath: "入力から軽微な欠落に到達",
+                    blockingCode: "",
+                  },
+                ]
+              : []),
+          ],
+        }),
+      };
     /**
      * LLM応答待ち中（executor実行中）にHEADが動いた状況を再現する。
      * ここでの追加commitはexecutorが「成功応答」を返す直前、すなわち
@@ -351,12 +386,11 @@ Then("設計文書を含むStep 7の肯定と敵対の結果を返す", function
   assert.equal(this.reviewCalls, 1);
 });
 
-Then("差分外の指摘を除外して対象差分の判定を返す", function () {
-  assert.equal(this.result?.state, "reviewed");
-  if (this.result?.state !== "reviewed") return;
+Then("差分外の指摘を除外して進行役確認へ渡す", function () {
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
   assert.deepEqual(this.result.findings, []);
   assert.equal(this.result.ignoredOutOfScopeCount, 1);
-  assert.equal(this.result.decision, "approved");
   assert.equal(this.reviewCalls, 1);
   assert.match(this.dispatchedPrompt, /review-target\.txt/u);
 });
@@ -373,12 +407,161 @@ Then("委譲reviewはdegradedでHEAD不一致を理由に返す", function () {
   assert.match(this.result.reason, /HEAD/u);
 });
 
-Then("委譲reviewの判定はchanges_requestedとなりHEADへ固定される", function () {
-  assert.equal(this.result?.state, "reviewed", JSON.stringify(this.result));
-  if (this.result?.state !== "reviewed") return;
-  assert.equal(this.result.decision, "changes_requested");
+Then("委譲reviewのCritical候補は進行役確認となりHEADへ固定される", function () {
+  assert.equal(
+    this.result?.state,
+    "needs_coordinator_review",
+    JSON.stringify(this.result),
+  );
+  if (this.result?.state !== "needs_coordinator_review") return;
+  assert.equal(this.result.findings[0]?.severity, "Critical");
   assert.equal(this.result.baseSha, this.baseSha);
   assert.equal(this.result.headSha, this.headSha);
   assert.match(this.result.inputDigest, /^[a-f0-9]{64}$/u);
   assert.match(this.result.outputDigest, /^[a-f0-9]{64}$/u);
+});
+
+Given("chill profileのStep 3委譲reviewer設定がある", function () {
+  setup(this);
+  writeConfig(this, "local", config("qwen3-coder:30b", { profile: "chill" }));
+  this.response = JSON.stringify({
+    decision: "blocked",
+    affirmative: "要件を確認した",
+    adversarial: "失敗経路を確認した",
+    findings: [
+      {
+        file: "00_要求定義.md",
+        location: "1",
+        content: "重大な欠落",
+        severity: "High",
+        effort: "Quick win",
+      },
+      {
+        file: "00_要求定義.md",
+        location: "1",
+        content: "軽微な欠落",
+        severity: "Low",
+        effort: "Heavy lift",
+      },
+    ],
+  });
+});
+
+Given("chill profileのStep 10委譲reviewerがHighとLowの指摘を返す", function () {
+  setup(this);
+  writeConfig(this, "local", config("qwen3-coder:30b", { profile: "chill" }));
+  fs.writeFileSync(path.join(this.root, "review-target.txt"), "before\n");
+  git(this.root, ["add", "review-target.txt"]);
+  git(this.root, ["commit", "-q", "-m", "base"]);
+  this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
+  fs.writeFileSync(path.join(this.root, "review-target.txt"), "after\n");
+  git(this.root, ["add", "review-target.txt"]);
+  git(this.root, ["commit", "-q", "-m", "change"]);
+  this.headSha = git(this.root, ["rev-parse", "HEAD"]);
+  this.twoCandidateVerification = true;
+  this.response = JSON.stringify({
+    decision: "changes_requested",
+    affirmative: "差分の目的は明確",
+    adversarial: "境界値を検討",
+    findings: [
+      {
+        file: "review-target.txt",
+        location: "1",
+        content: "重大な欠落",
+        severity: "High",
+      },
+      {
+        file: "review-target.txt",
+        location: "1",
+        content: "軽微な欠落",
+        severity: "Low",
+      },
+    ],
+  });
+});
+
+Then("隠れたLow候補も第二passのindexへ結線される", function () {
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
+  assert.deepEqual(
+    this.result.findings.map((finding) => finding.severity),
+    ["High"],
+  );
+  assert.deepEqual(
+    this.result.suppressedFindings.map((finding) => finding.severity),
+    ["Low"],
+  );
+  assert.deepEqual(
+    this.result.firstPassFindings.map((finding) => finding.severity),
+    ["High", "Low"],
+  );
+  assert.deepEqual(
+    this.result.verificationAssessments?.map((item) => item.findingIndex),
+    [0, 1],
+  );
+});
+
+Given(
+  "chill profileのStep 3委譲reviewerが根拠のないblocked判定を返す",
+  function () {
+    setup(this);
+    writeConfig(this, "local", config("qwen3-coder:30b", { profile: "chill" }));
+    this.response = JSON.stringify({
+      decision: "blocked",
+      affirmative: "要件を確認した",
+      adversarial: "失敗経路を確認した",
+      findings: [],
+    });
+  },
+);
+
+Then("委譲reviewはdegradedで応答不正を返す", function () {
+  assert.equal(this.result?.state, "degraded");
+  if (this.result?.state !== "degraded") return;
+  assert.match(this.result.reason, /応答を検証できませんでした/u);
+});
+
+Then("委譲reviewはHighのEffortだけを返す", function () {
+  assert.equal(this.result?.state, "reviewed");
+  if (this.result?.state !== "reviewed") return;
+  assert.deepEqual(
+    this.result.findings.map((finding) => [finding.severity, finding.effort]),
+    [["High", "Quick win"]],
+  );
+  assert.deepEqual(
+    this.result.suppressedFindings.map((finding) => [
+      finding.severity,
+      finding.effort,
+    ]),
+    [["Low", "Heavy lift"]],
+  );
+  assert.equal(this.result.decision, "blocked");
+  assert.match(this.dispatchedPrompt, /chill profile/u);
+});
+Given("投稿前検証者はfindingを却下する", function () {
+  this.rejectVerification = true;
+});
+Then("委譲reviewは初回候補と検証者の却下を進行役確認へ渡す", function () {
+  assert.equal(
+    this.result?.state,
+    "needs_coordinator_review",
+    JSON.stringify(this.result),
+  );
+  if (this.result?.state !== "needs_coordinator_review") return;
+  assert.equal(this.result.findings.length, 1);
+  assert.deepEqual(this.result.verificationSuggestedFindings, []);
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.sourceFile,
+    "review-target.txt",
+  );
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.sourceCommit,
+    this.headSha,
+  );
+  assert.equal(this.result.verificationAssessments?.[0]?.modelValid, false);
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.evidenceStatus,
+    "quote_matched",
+  );
+  assert.equal(this.reviewCalls, 2);
 });
