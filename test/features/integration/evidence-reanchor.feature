@@ -38,10 +38,59 @@ Feature: 証跡再固定がCLIと診断経路で機能する
 
   @issue-1377
   Scenario: SCN-1377-01 pr-boundのreview artifact改名を再固定する
-    Given pr-boundの旧artifactと同一実装を監査した正規名の新artifactがある
+    Given pr-boundの旧artifactと同一実装を監査したevidence-only配置の新artifactがある
     When 二層等価な入力をpreviewして二回applyする
     Then previewは成功し初回だけ追記して二回目はunchangedになる
     And 再固定recordは旧新artifactのpathとdigestを保持する
+
+  @issue-1437
+  Scenario: SCN-1437-01 push済みartifactの書式是正を前進commitで再固定する
+    Given pr-bound後に同じartifactだけを書式是正した前進commitがある
+    When 二層等価な入力をpreviewして二回applyする
+    Then previewは成功し初回だけ追記して二回目はunchangedになる
+    And 再固定recordは旧新artifactのdigestをsupersessionとして保持する
+
+  @issue-1437
+  Scenario: SCN-1437-02 判断本文を変えたartifact是正は再固定しない
+    Given pr-bound後にartifactの判断本文を変えた前進commitがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then supersessionのpreviewとapplyは拒否され追記しない
+
+  @issue-1437
+  Scenario: SCN-1437-03 High指摘の解決状態を書き換えた前進commitは拒否する
+    Given pr-bound後にHigh指摘の解決状態を書き換えた前進commitがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then supersessionのpreviewとapplyは拒否され追記しない
+
+  @issue-1437
+  Scenario: SCN-1437-04 Step chainを迂回へ変えた前進commitは拒否する
+    Given pr-bound後にStep chainを迂回へ変えた前進commitがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then supersessionのpreviewとapplyは拒否され追記しない
+
+  @issue-1437
+  Scenario: SCN-1437-06 旧Step chainの迂回を経由へ書き換えた前進commitは拒否する
+    Given pr-bound後に旧Step chainを迂回から経由へ変えた前進commitがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then supersessionのpreviewとapplyは拒否され追記しない
+
+  @issue-1437
+  Scenario: SCN-1437-07 artifactの9件目の前進是正は再固定しない
+    Given pr-bound後にartifactの9件目の前進是正commitがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then supersessionのpreviewとapplyは拒否され追記しない
+
+  @issue-1437
+  Scenario: SCN-1437-08 High内訳を判断節から移した前進是正は拒否する
+    Given pr-bound後にHigh内訳を判断節から移した前進commitがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then supersessionのpreviewとapplyは拒否され追記しない
+
+  @issue-1437
+  Scenario: SCN-1437-05 配布物影響の判断を書き換えた前進commitは拒否する
+    Given pr-bound後に配布物影響の判断を書き換えた前進commitがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then supersessionのpreviewとapplyは拒否され追記しない
 
   @issue-1377
   Scenario Outline: SCN-1377-02 pr-boundの不正なartifact replacementを再固定しない
@@ -139,3 +188,21 @@ Feature: 証跡再固定がCLIと診断経路で機能する
     Given 旧baseが旧headの祖先でないdelivery stateがある
     When stagingとGitを観測して拒否previewを実行する
     Then 拒否previewはstaging親directoryとGitを変えない
+
+  @issue-1433
+  Scenario: SCN-INT-REANCHOR-016 製品既定出力名で再固定した新headをmerge bindingに使う
+    Given pr-bound後に前進した実装と「製品既定出力名」へ置いたpost-PR intakeのreview artifactがある
+    When reviewed-forward再固定後に新headでpr mergeのbinding検査を通す
+    Then pr mergeのbinding検査は通過する
+
+  @issue-1433
+  Scenario: SCN-INT-REANCHOR-017 第2 allowlist配下で再固定した新headをmerge bindingに使う
+    Given pr-bound後に前進した実装と「第2allowlist」へ置いたpost-PR intakeのreview artifactがある
+    When reviewed-forward再固定後に新headでpr mergeのbinding検査を通す
+    Then pr mergeのbinding検査は通過する
+
+  @issue-1433
+  Scenario: SCN-INT-REANCHOR-018 allowlist外へ置いたartifactはpreviewとapplyの双方が拒否する
+    Given pr-bound後に前進した実装と「prefix延長」へ置いたpost-PR intakeのreview artifactがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then reviewed-forwardのpreviewとapplyは拒否され追記しない

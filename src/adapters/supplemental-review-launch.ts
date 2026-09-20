@@ -11,9 +11,21 @@ import {
 } from "./supplemental-review-collect.js";
 import { REVIEWER_EXECUTORS } from "./reviewer-executors.js";
 import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
+import { git } from "../lib/process.js";
 import type { ReviewerExecutor } from "../domain/reviewer-provider.js";
 import { isRecord } from "../types.js";
 import { filterReviewFindingsToTarget } from "../domain/review-finding-scope.js";
+import {
+  REVIEW_EFFORTS,
+  reviewProfileInstruction,
+  visibleReviewFindings,
+  type ReviewEffort,
+  type ReviewProfile,
+} from "../domain/review-presentation.js";
+import {
+  verifyReviewFindings,
+  type ReviewFindingAssessment,
+} from "./review-finding-verification.js";
 import {
   peekPrimaryReviewRoot,
   resolveReviewRoot,
@@ -33,6 +45,7 @@ export interface SupplementalReviewFinding {
   location: string;
   content: string;
   severity: Severity;
+  effort?: ReviewEffort;
 }
 
 export type SupplementalReviewResult =
@@ -40,6 +53,18 @@ export type SupplementalReviewResult =
   | {
       state: "findings";
       findings: SupplementalReviewFinding[];
+      suppressedFindings: SupplementalReviewFinding[];
+      truncated: boolean;
+      ignoredOutOfScopeCount: number;
+    }
+  | {
+      state: "needs_coordinator_review";
+      findings: SupplementalReviewFinding[];
+      suppressedFindings: SupplementalReviewFinding[];
+      firstPassFindings: SupplementalReviewFinding[];
+      verificationSuggestedFindings: SupplementalReviewFinding[] | null;
+      verificationAssessments: ReviewFindingAssessment[] | null;
+      headSha: string;
       truncated: boolean;
       ignoredOutOfScopeCount: number;
     }
@@ -92,7 +117,8 @@ const STAGING_REVIEW_INSTRUCTION =
 const RESPONSE_FORMAT_INSTRUCTION =
   "出力は必ず次の形式のJSONだけにしてください（前後に説明文を付けない）: " +
   '{"findings": [{"file": "対象file", "location": "該当箇所", ' +
-  '"content": "指摘内容（日本語）", "severity": "Critical|High|Medium|Low"}]}';
+  '"content": "指摘内容（日本語）", "severity": "Critical|High|Medium|Low", ' +
+  '"effort": "Quick win|Moderate|Heavy lift"}]}。effortは修正工数の目安です。';
 
 const VALID_SEVERITIES: readonly Severity[] = [
   "Critical",
@@ -120,11 +146,19 @@ function parseFindings(
       !VALID_SEVERITIES.includes(item.severity as Severity)
     )
       return undefined;
+    if (
+      item.effort !== undefined &&
+      !REVIEW_EFFORTS.includes(item.effort as ReviewEffort)
+    )
+      return undefined;
     findings.push({
       file: item.file,
       location: typeof item.location === "string" ? item.location : "",
       content: item.content,
       severity: item.severity as Severity,
+      ...(item.effort !== undefined
+        ? { effort: item.effort as ReviewEffort }
+        : {}),
     });
   }
   return findings;
@@ -137,10 +171,12 @@ async function dispatch(
     model: string;
     endpoint: string;
     timeoutMs: number;
+    profile: ReviewProfile;
   },
   truncated: boolean,
   targetFiles: string[],
   execute: ReviewerExecutor | undefined,
+  verification?: { root: string; headSha: string },
 ): Promise<SupplementalReviewResult> {
   const executor = execute ?? REVIEWER_EXECUTORS[config.provider];
   if (!executor)
@@ -166,7 +202,7 @@ async function dispatch(
   }
   const prompt =
     `findingの対象fileは今回のreview対象に限ります: ${JSON.stringify(targetFiles)}。関連fileは文脈だけです。別taskや過去Issueの欠陥を今回のfindingへ混ぜないでください。\n\n` +
-    `${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
+    `${reviewProfileInstruction(config.profile)}${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
   const executed = await executor({
     endpoint: config.endpoint,
     model: config.model,
@@ -183,7 +219,46 @@ async function dispatch(
       truncated,
     };
   const scoped = filterReviewFindingsToTarget(findings, targetFiles);
-  return { state: "findings", ...scoped, truncated };
+  const visible = visibleReviewFindings(scoped.findings, config.profile);
+  const presented = {
+    ...scoped,
+    findings: visible,
+    suppressedFindings: scoped.findings.filter(
+      (finding) => !visible.includes(finding),
+    ),
+  };
+  if (!verification) return { state: "findings", ...presented, truncated };
+  let verified;
+  try {
+    verified = await verifyReviewFindings(
+      {
+        ...verification,
+        findings: scoped.findings,
+        endpoint: config.endpoint,
+        model: config.model,
+        timeoutMs: config.timeoutMs,
+      },
+      executor,
+    );
+  } catch {
+    return {
+      state: "degraded",
+      reason: "findingの投稿前検証に失敗しました",
+      truncated,
+    };
+  }
+  // A second LLM pass is only advisory: it can reject a real defect while
+  // describing its failure path. Verify every scoped first-pass candidate,
+  // including those hidden by the display profile.
+  return {
+    state: "needs_coordinator_review",
+    ...presented,
+    firstPassFindings: scoped.findings,
+    verificationSuggestedFindings: verified?.suggestedFindings ?? null,
+    verificationAssessments: verified?.assessments ?? null,
+    headSha: verification.headSha,
+    truncated,
+  };
 }
 
 /**
@@ -247,6 +322,15 @@ export async function launchSupplementalReviewDiff(
   if (config === undefined) return { state: "disabled" };
   try {
     resolveReviewRoot(input.root);
+    if (
+      !/^[a-f0-9]{40}$/u.test(input.baseSha) ||
+      !/^[a-f0-9]{40}$/u.test(input.headSha) ||
+      git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha
+    )
+      return {
+        state: "error",
+        reason: "比較基点または対象HEADを固定できませんでした",
+      };
     const collected = collectSupplementalReviewDiff(
       input.root,
       input.baseSha,
@@ -254,13 +338,17 @@ export async function launchSupplementalReviewDiff(
       input.limit ?? RELATED_FILE_LIMIT,
     );
     const promptBody = `${DIFF_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
-    return await dispatch(
+    const result = await dispatch(
       promptBody,
       config,
       collected.truncated,
       collected.changed,
       dependencies.execute,
+      { root: input.root, headSha: input.headSha },
     );
+    if (git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha)
+      return { state: "error", reason: "対象HEADを固定できませんでした" };
+    return result;
   } catch (error) {
     return toErrorResult(error);
   }
