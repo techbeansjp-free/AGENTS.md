@@ -99,6 +99,8 @@ fullの00 §2.1直下にある`- [成果物:<kind>] 説明`形式を構造解析
 
 再固定のGit比較が失敗した場合は、`旧base→旧head`、`新base→新head`、`旧H_impl→旧head`、`新H_impl→新head`、`旧base→旧H_impl`、`新base→新H_impl`のいずれかの役割と、旧・新のbase/head SHAを診断へ含める。`H_impl`を使う比較では該当SHAも示す。入力、anchor、chain、内容不一致の既存診断と`ASC-CLI-VALIDATION-001`の構造は維持する。
 
+`pr-bound`中のpush済みreview artifact書式是正は、同じartifact pathの前進commitを`pr reanchor`の`artifact-supersession`として再固定する。旧・新artifactの実装境界、監査対象、判断本文を一致させ、現行承認形式への限定的な表記修正だけを許す。保存済みreview sessionとStep 10を再照合し、旧・新digestをappend-onlyで記録する。判断変更や製品差分、rename、mode変更、mergeを拒否する。
+
 `pr-bound`中の実装前進は、収束した次roundを`workflow record --step=10 --post-pr-intake`で記録した後に`pr reanchor`する。`pr reanchor`は旧delivery実効HEADから新`H_impl`へのstrict ancestor、base不変、exact session binding、監査合格済みevidence-only suffixを要求し、`reviewed-forward`記録へsession ID・round digest・`H_impl`・artifact path/digestを固定する。
 
 新artifactは`H_impl`を唯一の親とする`H_final`の末尾1 commitから一意に選び、比較基点から新HEADまでに旧review artifactが複数残っていても候補数へ含めない。

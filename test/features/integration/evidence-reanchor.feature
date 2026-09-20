@@ -43,6 +43,19 @@ Feature: 証跡再固定がCLIと診断経路で機能する
     Then previewは成功し初回だけ追記して二回目はunchangedになる
     And 再固定recordは旧新artifactのpathとdigestを保持する
 
+  @issue-1437
+  Scenario: SCN-1437-01 push済みartifactの書式是正を前進commitで再固定する
+    Given pr-bound後に同じartifactだけを書式是正した前進commitがある
+    When 二層等価な入力をpreviewして二回applyする
+    Then previewは成功し初回だけ追記して二回目はunchangedになる
+    And 再固定recordは旧新artifactのdigestをsupersessionとして保持する
+
+  @issue-1437
+  Scenario: SCN-1437-02 判断本文を変えたartifact是正は再固定しない
+    Given pr-bound後にartifactの判断本文を変えた前進commitがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then supersessionのpreviewとapplyは拒否され追記しない
+
   @issue-1377
   Scenario Outline: SCN-1377-02 pr-boundの不正なartifact replacementを再固定しない
     Given pr-boundの不正なartifact replacement「<反例>」がある

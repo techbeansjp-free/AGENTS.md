@@ -36,10 +36,10 @@ Feature: artifact-onlyのHEAD移動の受理
     When H_finalでconverged session検査を行う
     Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
 
-  Scenario: SCN-UNIT-EVIDHEAD-009 artifact-only commitを2本積んだHEADは拒否する
+  Scenario: SCN-UNIT-EVIDHEAD-009 artifactのみの前進是正commitを受理する
     Given 収束したsessionの後にartifact commitを2本積んだstagingがある
-    When H_finalでconverged session検査を行う
-    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+    When H_finalでconverged session検査とbinding検査を行う
+    Then 両方が受理される
 
   Scenario: SCN-UNIT-EVIDHEAD-010 実行権限付きのartifactは拒否する
     Given 収束したsessionの後に実行権限付きでartifactをcommitしたstagingがある

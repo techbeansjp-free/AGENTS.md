@@ -271,6 +271,7 @@ import {
   readStoredReviewSession,
   recordReviewRound,
 } from "./adapters/review-session.js";
+import { evidenceOnlySuffix } from "./adapters/review-diff.js";
 import { recordLayerSuffix } from "./adapters/review-record-layer.js";
 import {
   appendEvidenceReanchor,
@@ -1436,14 +1437,14 @@ function resolveImplementationCommitForMerge(
     throw new Error(
       "H_finalはreview artifactだけを加えた単一親commitでなければなりません",
     );
-  const implementationCommitSha = ancestry[1]!.toLowerCase();
+  const immediateParentSha = ancestry[1]!.toLowerCase();
   const changedPaths = git(
     [
       "diff",
       "--name-only",
       "--no-renames",
       "-z",
-      `${implementationCommitSha}..${finalHeadSha}`,
+      `${immediateParentSha}..${finalHeadSha}`,
       "--",
     ],
     root,
@@ -1459,14 +1460,36 @@ function resolveImplementationCommitForMerge(
     throw new Error(
       "H_impl..H_finalには許可されたreview artifactが1件必要です",
     );
-  if (changedPaths.length > 1) {
-    const session = readStoredReviewSession(staging);
+  const reviewArtifactPath = reviewArtifacts[0]!;
+  const artifactContent = git(
+    ["show", `${finalHeadSha}:${reviewArtifactPath}`],
+    root,
+  ).stdout;
+  const structure = validateReviewArtifactStructure(artifactContent);
+  if (
+    structure.diagnostics.length > 0 ||
+    structure.implementation === undefined
+  )
+    throw new Error("formal review artifactの構造とH_implが不正です");
+  const session = readStoredReviewSession(staging);
+  const declaredImplementation = structure.implementation?.toLowerCase();
+  const forwardArtifactSuffix =
+    declaredImplementation !== undefined &&
+    session?.latestCandidateHeadSha.toLowerCase() === declaredImplementation &&
+    evidenceOnlySuffix(root, declaredImplementation, finalHeadSha) ===
+      reviewArtifactPath;
+  const implementationCommitSha = forwardArtifactSuffix
+    ? declaredImplementation
+    : immediateParentSha;
+  if (declaredImplementation !== implementationCommitSha)
+    throw new Error("formal review artifactのH_implがmerge対象と一致しません");
+  if (changedPaths.length > 1 && !forwardArtifactSuffix) {
     if (
       !session ||
       !recordLayerSuffix(
         staging,
         root,
-        implementationCommitSha,
+        immediateParentSha,
         finalHeadSha,
         session,
       )
@@ -1475,11 +1498,15 @@ function resolveImplementationCommitForMerge(
         "H_impl..H_finalの追加pathは検証済みrecord layerでなければなりません",
       );
   }
-  const reviewArtifactPath = reviewArtifacts[0]!;
-  const artifactContent = git(
-    ["show", `${finalHeadSha}:${reviewArtifactPath}`],
-    root,
-  ).stdout;
+  if (
+    !forwardArtifactSuffix &&
+    evidenceOnlySuffix(root, immediateParentSha, finalHeadSha) !==
+      reviewArtifactPath &&
+    changedPaths.length === 1
+  )
+    throw new Error(
+      "H_finalのartifact commitがevidence-only条件を満たしません",
+    );
   return {
     implementationCommitSha,
     finalHeadSha: finalHeadSha.toLowerCase(),

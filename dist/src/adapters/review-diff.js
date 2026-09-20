@@ -77,8 +77,8 @@ export function readBlobAtCommit(root, commit, filePath) {
     return shown.status === 0 ? shown.stdout : undefined;
 }
 /**
- * **evidence-only suffix**: `fromSha`が`toSha`のancestorで、`fromSha..toSha`の
- * 差分がevidence-only allowlist配下の1 pathだけならそのpathを返す（Issue #1272）。
+ * **evidence-only suffix**: `fromSha`から`toSha`までの第1親chainの各commitが
+ * 同じreview artifact 1 fileだけを追加・変更する場合にそのpathを返す。
  *
  * review artifactをcommitするとHEADが`H_impl`から`H_final`へ動く。reviewerが
  * 確認した内容とPR・mergeされる内容の一致という性質は、artifact 1 fileの追加では
@@ -90,50 +90,39 @@ export function readBlobAtCommit(root, commit, filePath) {
 export function evidenceOnlySuffix(root, fromSha, toSha) {
     if (fromSha === toSha)
         return undefined;
-    /**
-     * **1 commitだけを受理する**（round 1 R1-H-02）。`toSha`の第1親が`fromSha`で
-     * なければ、途中commitのauthorをmerge認可が実装者と誤認しうるため拒否する。
-     * ancestor関係はこの条件に含まれる。
-     */
-    const parent = git(["rev-parse", "--verify", `${toSha}^1^{commit}`], root, {
-        env: GIT_ENV,
-        allowFailure: true,
-    });
-    if (parent.status !== 0 || parent.stdout.trim() !== fromSha)
-        return undefined;
-    const parents = git(["rev-list", "--parents", "-n", "1", toSha], root, {
-        env: GIT_ENV,
-        allowFailure: true,
-    });
-    if (parents.status !== 0 || parents.stdout.trim().split(/\s+/u).length !== 2)
-        return undefined;
-    /**
-     * **rename検出を切り、change typeとmodeまで見る**（round 1 R1-H-01）。
-     * `--name-only`はrename先だけを1 pathとして出すため、製品fileをartifact pathへ
-     * `git mv`した差分が「artifact 1件の追加」に見える。`--raw`で追加(A)または
-     * 変更(M)の通常file（mode 100644）1件だけを受理し、削除・rename・copy・
-     * type変更・symlink・gitlink・実行権限付与を拒否する。
-     */
-    const raw = git(["diff", "--raw", "--no-renames", "--no-abbrev", "-z", fromSha, toSha], root, { env: GIT_ENV, allowFailure: true });
-    if (raw.status !== 0)
-        return undefined;
-    const fields = raw.stdout.split("\0").filter((item) => item.length > 0);
-    if (fields.length !== 2)
-        return undefined;
-    const [meta, only] = fields;
-    const matched = /^:(?<srcMode>[0-7]{6}) (?<dstMode>[0-7]{6}) [0-9a-f]+ [0-9a-f]+ (?<status>[AM])$/u.exec(meta ?? "");
-    if (!matched?.groups)
-        return undefined;
-    /**
-     * 追加は000000→100644、変更は100644→100644だけを受理する。
-     * 削除・type変更・symlink・gitlink・実行権限の付与と除去を落とす。
-     * `--no-renames`によりrename・copyは2 pathとして上の件数検査で落ちる。
-     */
-    const { srcMode, dstMode, status } = matched.groups;
-    if (dstMode !== "100644" ||
-        (status === "A" && srcMode !== "000000") ||
-        (status === "M" && srcMode !== "100644"))
-        return undefined;
-    return isEvidenceOnlyPath(only) ? only : undefined;
+    let cursor = toSha;
+    let artifactPath;
+    // 初回artifactと前進是正を有限個だけ受理する。途中の製品変更は通さない。
+    for (let count = 0; count < 8 && cursor !== fromSha; count++) {
+        const parents = git(["rev-list", "--parents", "-n", "1", cursor], root, {
+            env: GIT_ENV,
+            allowFailure: true,
+        });
+        const parts = parents.stdout.trim().split(/\s+/u);
+        if (parents.status !== 0 || parts.length !== 2 || parts[0] !== cursor)
+            return undefined;
+        const parent = parts[1];
+        // 各commit単位でraw change type・mode・pathを検査する。net diffだけでは
+        // 中間commitの削除・rename・製品変更を見逃す。
+        const raw = git(["diff", "--raw", "--no-renames", "--no-abbrev", "-z", parent, cursor], root, { env: GIT_ENV, allowFailure: true });
+        if (raw.status !== 0)
+            return undefined;
+        const fields = raw.stdout.split("\0").filter((item) => item.length > 0);
+        if (fields.length !== 2)
+            return undefined;
+        const [meta, only] = fields;
+        const matched = /^:(?<srcMode>[0-7]{6}) (?<dstMode>[0-7]{6}) [0-9a-f]+ [0-9a-f]+ (?<status>[AM])$/u.exec(meta ?? "");
+        if (!matched?.groups || !only || !isEvidenceOnlyPath(only))
+            return undefined;
+        const { srcMode, dstMode, status } = matched.groups;
+        if (dstMode !== "100644" ||
+            (status === "A" && srcMode !== "000000") ||
+            (status === "M" && srcMode !== "100644") ||
+            (artifactPath !== undefined && artifactPath !== only))
+            return undefined;
+        artifactPath = only;
+        cursor = parent;
+    }
+    return cursor === fromSha ? artifactPath : undefined;
 }
 //# sourceMappingURL=review-diff.js.map

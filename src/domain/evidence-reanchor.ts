@@ -13,10 +13,15 @@ const SHA256 = /^[a-f0-9]{64}$/u;
 /**
  * 再固定で許す移動の種別。
  *
- * **閉じた列挙にする。** 内容が変わる supersession を再固定で表現できるようにすると、
- * 未reviewの内容をreview済みとして参照させる洗浄経路になる。
+ * **閉じた列挙にする。** artifact-supersessionは同一実装・同一pathの
+ * 限定した書式是正だけを表し、判断本文の変更を受理しない。
  */
-const METHODS = ["rebase", "artifact-replacement", "reviewed-forward"] as const;
+const METHODS = [
+  "rebase",
+  "artifact-replacement",
+  "artifact-supersession",
+  "reviewed-forward",
+] as const;
 
 export type EvidenceReanchorMethod = (typeof METHODS)[number];
 
@@ -32,6 +37,11 @@ export interface EvidenceReanchorRecord {
   artifactReplacement?: {
     oldPath: string;
     newPath: string;
+    oldDigest: string;
+    newDigest: string;
+  };
+  artifactSupersession?: {
+    artifactPath: string;
     oldDigest: string;
     newDigest: string;
   };
@@ -67,6 +77,16 @@ export function isEvidenceReanchorRecord(
     typeof replacement.newDigest === "string" &&
     SHA256.test(replacement.newDigest);
   const reviewedForward = isRecord(value) ? value.reviewedForward : undefined;
+  const supersession = isRecord(value) ? value.artifactSupersession : undefined;
+  const validSupersession =
+    isRecord(supersession) &&
+    typeof supersession.artifactPath === "string" &&
+    supersession.artifactPath.length > 0 &&
+    typeof supersession.oldDigest === "string" &&
+    SHA256.test(supersession.oldDigest) &&
+    typeof supersession.newDigest === "string" &&
+    SHA256.test(supersession.newDigest) &&
+    supersession.oldDigest !== supersession.newDigest;
   const validReviewedForward =
     isRecord(reviewedForward) &&
     typeof reviewedForward.sessionId === "string" &&
@@ -100,6 +120,9 @@ export function isEvidenceReanchorRecord(
     (replacement === undefined ||
       (value.method === "artifact-replacement" && validReplacement)) &&
     (value.method !== "artifact-replacement" || replacement !== undefined) &&
+    (supersession === undefined ||
+      (value.method === "artifact-supersession" && validSupersession)) &&
+    (value.method !== "artifact-supersession" || supersession !== undefined) &&
     (reviewedForward === undefined ||
       (value.method === "reviewed-forward" && validReviewedForward)) &&
     (value.method !== "reviewed-forward" || reviewedForward !== undefined)
