@@ -77,6 +77,12 @@ Feature: 設定されたローカルLLMへのreview委譲
     Given chill profileのStep 3委譲reviewerが根拠のないblocked判定を返す
     When Step 3の委譲reviewを実行する
     Then 委譲reviewはdegradedで応答不正を返す
+
+  Scenario: SCN-UNIT-DELEGREVIEW-017 chillのStep 10も隠れた候補を第二passで検証する
+    Given chill profileのStep 10委譲reviewerがHighとLowの指摘を返す
+    When Step 10の委譲reviewを実行する
+    Then 隠れたLow候補も第二passのindexへ結線される
+
   Scenario: SCN-UNIT-DELEGREVIEW-014 Step 10の検証者による却下は候補を消さない
     Given Step 10の委譲reviewerがCritical指摘と承認を返す
     And 投稿前検証者はfindingを却下する
