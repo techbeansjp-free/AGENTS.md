@@ -41,7 +41,7 @@ Feature: reviewer役割に依存しない補助レビュー
   Scenario: SCN-SUPPL-012 連結worktreeは主worktreeの個人設定を使う
     Given 主worktreeのみに補助レビュー設定があり連結worktreeに差分がある
     When 補助レビューCLI(diff対象)を連結worktreeから実行する
-    Then 連結worktreeの補助レビューがfindingsを返す
+    Then 連結worktreeの補助レビューが進行役確認候補を返す
 
   Scenario: SCN-SUPPL-013 日本語pathの変更fileと関連fileを実pathで収集する
     Given 日本語pathの変更fileと呼び出し元fileがある

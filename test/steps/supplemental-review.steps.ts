@@ -104,7 +104,18 @@ function writeConfig(
 }
 
 function fixedExecutor(result: ReviewerExecutionResult): ReviewerExecutor {
-  return async () => result;
+  return async ({ prompt }) =>
+    prompt.includes("投稿前の独立したfinding検証者")
+      ? {
+          state: "succeeded",
+          reason: "ok",
+          output: JSON.stringify({
+            verdicts: [
+              { index: 0, valid: true, reason: "変更後のfileで確認した" },
+            ],
+          }),
+        }
+      : result;
 }
 
 // --- SCN-SUPPL-001 ---
@@ -311,8 +322,8 @@ When("補助reviewerが差分外ファイルの指摘を返す", async function 
 });
 
 Then("補助レビュー結果から差分外の指摘が除外される", function () {
-  assert.equal(this.result?.state, "findings");
-  if (this.result?.state !== "findings") return;
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
   assert.deepEqual(this.result.findings, []);
   assert.equal(this.result.ignoredOutOfScopeCount, 1);
 });
@@ -569,9 +580,9 @@ When(
   },
 );
 
-Then("連結worktreeの補助レビューがfindingsを返す", function () {
-  assert.equal(this.result?.state, "findings");
-  if (this.result?.state !== "findings") return;
+Then("連結worktreeの補助レビューが進行役確認候補を返す", function () {
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
   assert.equal(this.result.findings[0]?.file, "target.ts");
 });
 
@@ -628,8 +639,8 @@ Then("補助レビュー結果に日本語pathの指摘が残る", async functio
       }),
     },
   );
-  assert.equal(this.result?.state, "findings");
-  if (this.result?.state !== "findings") return;
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
   assert.equal(this.result.findings[0]?.file, "src/対象.ts");
   assert.equal(this.result.ignoredOutOfScopeCount, 0);
 });
@@ -756,16 +767,22 @@ Given(
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
-            response: JSON.stringify({
-              findings: [
-                {
-                  file: "a.ts",
-                  location: "L1",
-                  content: "定数の初期値が変更されています",
-                  severity: "Low",
-                },
-              ],
-            }),
+            response: body.includes("投稿前の独立したfinding検証者")
+              ? JSON.stringify({
+                  verdicts: [
+                    { index: 0, valid: true, reason: "現在のfileで確認した" },
+                  ],
+                })
+              : JSON.stringify({
+                  findings: [
+                    {
+                      file: "a.ts",
+                      location: "L1",
+                      content: "定数の初期値が変更されています",
+                      severity: "Low",
+                    },
+                  ],
+                }),
             done: true,
           }),
         );
@@ -787,10 +804,10 @@ When("補助レビューCLIの送信処理を行う", async function () {
   });
 });
 
-Then("file・該当箇所・内容・重大度を持つ指摘一覧を受け取る", function () {
+Then("file・該当箇所・内容・重大度を持つ進行役確認候補を受け取る", function () {
   assert.ok(this.result);
-  assert.equal(this.result.state, "findings");
-  if (this.result.state !== "findings") return;
+  assert.equal(this.result.state, "needs_coordinator_review");
+  if (this.result.state !== "needs_coordinator_review") return;
   assert.equal(this.result.findings.length, 1);
   const [finding] = this.result.findings;
   assert.equal(finding.file, "a.ts");

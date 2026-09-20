@@ -11,9 +11,14 @@ import {
 } from "./supplemental-review-collect.js";
 import { REVIEWER_EXECUTORS } from "./reviewer-executors.js";
 import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
+import { git } from "../lib/process.js";
 import type { ReviewerExecutor } from "../domain/reviewer-provider.js";
 import { isRecord } from "../types.js";
 import { filterReviewFindingsToTarget } from "../domain/review-finding-scope.js";
+import {
+  verifyReviewFindings,
+  type ReviewFindingAssessment,
+} from "./review-finding-verification.js";
 import {
   peekPrimaryReviewRoot,
   resolveReviewRoot,
@@ -40,6 +45,15 @@ export type SupplementalReviewResult =
   | {
       state: "findings";
       findings: SupplementalReviewFinding[];
+      truncated: boolean;
+      ignoredOutOfScopeCount: number;
+    }
+  | {
+      state: "needs_coordinator_review";
+      findings: SupplementalReviewFinding[];
+      verificationSuggestedFindings: SupplementalReviewFinding[] | null;
+      verificationAssessments: ReviewFindingAssessment[] | null;
+      headSha: string;
       truncated: boolean;
       ignoredOutOfScopeCount: number;
     }
@@ -141,6 +155,7 @@ async function dispatch(
   truncated: boolean,
   targetFiles: string[],
   execute: ReviewerExecutor | undefined,
+  verification?: { root: string; headSha: string },
 ): Promise<SupplementalReviewResult> {
   const executor = execute ?? REVIEWER_EXECUTORS[config.provider];
   if (!executor)
@@ -183,7 +198,36 @@ async function dispatch(
       truncated,
     };
   const scoped = filterReviewFindingsToTarget(findings, targetFiles);
-  return { state: "findings", ...scoped, truncated };
+  if (!verification) return { state: "findings", ...scoped, truncated };
+  let verified;
+  try {
+    verified = await verifyReviewFindings(
+      {
+        ...verification,
+        findings: scoped.findings,
+        endpoint: config.endpoint,
+        model: config.model,
+        timeoutMs: config.timeoutMs,
+      },
+      executor,
+    );
+  } catch {
+    return {
+      state: "degraded",
+      reason: "findingの投稿前検証に失敗しました",
+      truncated,
+    };
+  }
+  // A second LLM pass is only advisory: it can reject a real defect while
+  // describing its failure path. Preserve every scoped first-pass candidate.
+  return {
+    state: "needs_coordinator_review",
+    ...scoped,
+    verificationSuggestedFindings: verified?.suggestedFindings ?? null,
+    verificationAssessments: verified?.assessments ?? null,
+    headSha: verification.headSha,
+    truncated,
+  };
 }
 
 /**
@@ -247,6 +291,15 @@ export async function launchSupplementalReviewDiff(
   if (config === undefined) return { state: "disabled" };
   try {
     resolveReviewRoot(input.root);
+    if (
+      !/^[a-f0-9]{40}$/u.test(input.baseSha) ||
+      !/^[a-f0-9]{40}$/u.test(input.headSha) ||
+      git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha
+    )
+      return {
+        state: "error",
+        reason: "比較基点または対象HEADを固定できませんでした",
+      };
     const collected = collectSupplementalReviewDiff(
       input.root,
       input.baseSha,
@@ -254,13 +307,17 @@ export async function launchSupplementalReviewDiff(
       input.limit ?? RELATED_FILE_LIMIT,
     );
     const promptBody = `${DIFF_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
-    return await dispatch(
+    const result = await dispatch(
       promptBody,
       config,
       collected.truncated,
       collected.changed,
       dependencies.execute,
+      { root: input.root, headSha: input.headSha },
     );
+    if (git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha)
+      return { state: "error", reason: "対象HEADを固定できませんでした" };
+    return result;
   } catch (error) {
     return toErrorResult(error);
   }
