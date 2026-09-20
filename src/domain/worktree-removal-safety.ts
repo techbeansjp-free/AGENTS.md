@@ -7,6 +7,8 @@ export const DEFAULT_FINALIZE_IGNORED_PATH_ALLOWLIST = [
 
 const CONTROL = /\p{C}/u;
 const PATTERN_META = /[\\*?[\]{}()|^$+]/u;
+const RECURSIVE_DIRECTORY = /^\*\*\/([A-Za-z0-9._-]+)\/$/u;
+const RECURSIVE_EXTENSION = /^\*\*\/\*\.([A-Za-z0-9._-]+)$/u;
 
 /**
  * blocking資産のpathから、その領域を所有するcommandの案内を返す。
@@ -49,6 +51,18 @@ function owningCommandHint(artifact: string): string | undefined {
 export function isSafeFinalizeIgnoredPathPrefix(
   value: unknown,
 ): value is string {
+  if (typeof value === "string") {
+    const directory = RECURSIVE_DIRECTORY.exec(value);
+    const extension = RECURSIVE_EXTENSION.exec(value);
+    if (directory || extension)
+      return (
+        value === value.normalize("NFC") &&
+        !CONTROL.test(value) &&
+        directory?.[1] !== ".git" &&
+        directory?.[1] !== "." &&
+        directory?.[1] !== ".."
+      );
+  }
   if (
     typeof value !== "string" ||
     value === "" ||
@@ -103,6 +117,29 @@ function validArtifactPath(value: unknown): value is string {
 }
 
 function matchesPrefix(artifact: string, prefix: string): boolean {
+  const directory = RECURSIVE_DIRECTORY.exec(prefix);
+  const extension = RECURSIVE_EXTENSION.exec(prefix);
+  // ASCの一時記録は所有commandで処理する。再帰指定で削除権限を迂回させない。
+  if (
+    (directory || extension) &&
+    (artifact === ".agent-skill-chain" ||
+      artifact.startsWith(".agent-skill-chain/"))
+  )
+    return false;
+  if (directory) {
+    const name = directory[1];
+    return (
+      artifact === name ||
+      artifact.startsWith(`${name}/`) ||
+      artifact.includes(`/${name}/`) ||
+      artifact.endsWith(`/${name}`)
+    );
+  }
+  if (extension) {
+    const basename = artifact.slice(artifact.lastIndexOf("/") + 1);
+    const suffix = `.${extension[1]}`;
+    return basename.length > suffix.length && basename.endsWith(suffix);
+  }
   return artifact === prefix.slice(0, -1) || artifact.startsWith(prefix);
 }
 

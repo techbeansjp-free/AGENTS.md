@@ -365,7 +365,7 @@ function validateWorktreePlacementPolicy(
       )
     )
       errors.push(
-        `${name}.finalizeIgnoredPathAllowlistは末尾/の安全な相対directory prefixだけを指定してください`,
+        `${name}.finalizeIgnoredPathAllowlistは安全な相対directory prefixまたは限定された再帰patternだけを指定してください`,
       );
   }
 }
