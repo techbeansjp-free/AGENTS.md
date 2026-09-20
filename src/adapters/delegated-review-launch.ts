@@ -20,6 +20,10 @@ import {
 } from "./supplemental-review-collect.js";
 import { REVIEWER_EXECUTORS } from "./reviewer-executors.js";
 import {
+  verifyReviewFindings,
+  type ReviewFindingAssessment,
+} from "./review-finding-verification.js";
+import {
   peekPrimaryReviewRoot,
   resolveReviewWorkspace,
 } from "./review-workspace.js";
@@ -53,6 +57,23 @@ export type DelegatedReviewResult =
       outputDigest: string;
       baseSha?: string;
       headSha?: string;
+    }
+  | {
+      state: "needs_coordinator_review";
+      step: 10;
+      affirmative: string;
+      adversarial: string;
+      findings: DelegatedReviewFinding[];
+      verificationSuggestedFindings: DelegatedReviewFinding[] | null;
+      verificationAssessments: ReviewFindingAssessment[] | null;
+      ignoredOutOfScopeCount: number;
+      provider: string;
+      model: string;
+      configSource: "local" | "primary" | "global";
+      inputDigest: string;
+      outputDigest: string;
+      baseSha: string;
+      headSha: string;
     };
 
 const SEVERITIES = new Set<Severity>(["Critical", "High", "Medium", "Low"]);
@@ -305,6 +326,43 @@ export async function launchDelegatedReview(
   const parsed = parseReview(output, input.step, targetFiles, config.profile);
   if (!parsed)
     return { state: "degraded", reason: "reviewer応答を検証できませんでした" };
+  if (input.step === 10) {
+    let verified;
+    try {
+      verified = await verifyReviewFindings(
+        {
+          root: input.root,
+          headSha: input.headSha,
+          findings: parsed.findings,
+          endpoint: config.endpoint,
+          model: config.model,
+          timeoutMs: config.timeoutMs,
+        },
+        executor,
+      );
+    } catch {
+      return { state: "degraded", reason: "findingの投稿前検証に失敗しました" };
+    }
+    if (git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha)
+      return { state: "degraded", reason: "対象HEADを固定できませんでした" };
+    return {
+      state: "needs_coordinator_review",
+      step: 10,
+      affirmative: parsed.affirmative,
+      adversarial: parsed.adversarial,
+      findings: parsed.findings,
+      verificationSuggestedFindings: verified?.suggestedFindings ?? null,
+      verificationAssessments: verified?.assessments ?? null,
+      ignoredOutOfScopeCount: parsed.ignoredOutOfScopeCount,
+      provider: config.provider,
+      model: config.model,
+      configSource: config.source,
+      inputDigest: digest(prompt),
+      outputDigest: digest(output),
+      baseSha: input.baseSha,
+      headSha: input.headSha,
+    };
+  }
   return {
     state: "reviewed",
     step: input.step,
@@ -314,8 +372,5 @@ export async function launchDelegatedReview(
     configSource: config.source,
     inputDigest: digest(prompt),
     outputDigest: digest(output),
-    ...(input.step === 10
-      ? { baseSha: input.baseSha, headSha: input.headSha }
-      : {}),
   };
 }
