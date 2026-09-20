@@ -98,6 +98,10 @@ Given("構造は正しいがapproval記録が不正なterminal artifactがある
   const invalid = validArtifact()
     .replace(
       "## 9. 独立reviewの成立\n",
+      "```md\n| reviewerが対象差分を変更していないこと | はい |\n- 未解決Critical/High: なし\n```\n## 9. 独立reviewの成立\n",
+    )
+    .replace(
+      "## 9. 独立reviewの成立\n",
       "## 9. 独立reviewの成立\n| 項目 | 内容 |\n|---|---|\n| 適用した独立性モード | context-isolated |\n| その要求を満たすこと | はい |\n| reviewerとimplementerのidentity・context比較 | 別session |\n| reviewerが対象差分を変更していないこと | はい。製品path変更0件 |\n",
     )
     .replace(
@@ -158,6 +162,23 @@ Then("既定は構造validでterminalはapproval不備を報告する", function
         item.expected !== "" &&
         item.message !== "",
     ),
+  );
+  const artifactLines = fs
+    .readFileSync(path.join(this.cliRoot, "terminal.md"), "utf8")
+    .split("\n");
+  assert.equal(
+    diagnostics.find((item) => item.message.includes("reviewerが対象差分"))
+      ?.line,
+    artifactLines.findLastIndex((line) =>
+      line.startsWith("| reviewerが対象差分を変更していないこと |"),
+    ) + 1,
+  );
+  assert.equal(
+    diagnostics.find((item) => item.message.includes("未解決Critical/High"))
+      ?.line,
+    artifactLines.findLastIndex((line) =>
+      line.startsWith("- 未解決Critical/High:"),
+    ) + 1,
   );
   assert.equal(this.validTerminalResult?.exitCode, 0);
   assert.equal(this.validTerminalResult?.output?.valid, true);

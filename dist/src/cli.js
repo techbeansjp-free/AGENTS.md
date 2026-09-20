@@ -13,7 +13,7 @@ import { bootstrapProject, validateSpecs, } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
-import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, validateContextIsolatedApprovalRecord, validateReviewArtifactStructure, } from "./domain/review-artifact.js";
+import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, validateContextIsolatedApprovalRecord, validateReviewArtifactStructure, visibleMarkdownLines, } from "./domain/review-artifact.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
 import { buildWorktreePath, createWorktree, canonicalWorktreePath, DEFAULT_WORKTREE_PLACEMENT, enforceTrustedWorktreeBoundary, inspectFinalizeState, inspectRecoveryState, validateWorktreePlacement, } from "./domain/worktree.js";
@@ -5159,11 +5159,18 @@ export async function main(argv, dependencies = {}) {
                                     : message.includes("独立性モード")
                                         ? "| 適用した独立性モード |"
                                         : "| その要求を満たすこと |";
-                    const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-                    const index = lines.findIndex((line) => line.startsWith(key));
+                    const lines = visibleMarkdownLines(markdown);
+                    const heading = key.startsWith("-")
+                        ? "## 11. 総合判定と再開地点"
+                        : "## 9. 独立reviewの成立";
+                    const sectionStart = lines.indexOf(heading);
+                    const sectionEnd = lines.findIndex((line, index) => index > sectionStart && line.startsWith("## "));
+                    const index = lines.findIndex((line, offset) => offset > sectionStart &&
+                        (sectionEnd < 0 || offset < sectionEnd) &&
+                        line.startsWith(key));
                     return {
                         code: "terminal-approval",
-                        line: index < 0 ? 1 : index + 1,
+                        line: (index < 0 ? Math.max(sectionStart, 0) : index) + 1,
                         expected: key,
                         message,
                     };

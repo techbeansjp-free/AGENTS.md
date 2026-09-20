@@ -39,6 +39,7 @@ import {
   renderReviewArtifactDraft,
   validateContextIsolatedApprovalRecord,
   validateReviewArtifactStructure,
+  visibleMarkdownLines,
 } from "./domain/review-artifact.js";
 import {
   assertPullRequestTrackerBinding,
@@ -7072,11 +7073,24 @@ export async function main(
                         : message.includes("独立性モード")
                           ? "| 適用した独立性モード |"
                           : "| その要求を満たすこと |";
-                const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-                const index = lines.findIndex((line) => line.startsWith(key));
+                const lines = visibleMarkdownLines(markdown);
+                const heading = key.startsWith("-")
+                  ? "## 11. 総合判定と再開地点"
+                  : "## 9. 独立reviewの成立";
+                const sectionStart = lines.indexOf(heading);
+                const sectionEnd = lines.findIndex(
+                  (line, index) =>
+                    index > sectionStart && line.startsWith("## "),
+                );
+                const index = lines.findIndex(
+                  (line, offset) =>
+                    offset > sectionStart &&
+                    (sectionEnd < 0 || offset < sectionEnd) &&
+                    line.startsWith(key),
+                );
                 return {
                   code: "terminal-approval",
-                  line: index < 0 ? 1 : index + 1,
+                  line: (index < 0 ? Math.max(sectionStart, 0) : index) + 1,
                   expected: key,
                   message,
                 };
