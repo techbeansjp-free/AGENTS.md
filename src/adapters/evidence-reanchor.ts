@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 
 import { writeFileAtomic } from "../lib/atomic.js";
+import { git } from "../lib/process.js";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
 import {
   deriveEffectiveHead,
@@ -19,6 +20,7 @@ import {
   validateContextIsolatedApprovalRecord,
   visibleMarkdownLines,
 } from "../domain/review-artifact.js";
+import { isEvidenceOnlyPath } from "../domain/review.js";
 import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
 import {
   calculateStagingDigest,
@@ -32,6 +34,8 @@ import {
   readStoredDeliveryState,
 } from "./delivery-state.js";
 import {
+  GIT_ENV,
+  evidenceOnlySuffix,
   observeReviewDiff,
   observeSingleCommitParent,
   readBlobAtCommit,
@@ -151,8 +155,6 @@ export function readEvidenceReanchorChain(
  * 「旧diffと新diffが一致する」対を作れてしまい、未reviewのbase内容を含むheadへ
  * 証跡を移送できる。束縛先は既存stateにある。
  */
-/** review artifactのpathとみなす接頭辞。`audit:check`の`AUDIT_DIRECTORY`と同じ。 */
-const REVIEW_ARTIFACT_PREFIX = "docs/reviews/";
 
 /**
  * 宣言された`H_impl`を構造で検証する。
@@ -199,10 +201,26 @@ function verifiedImplementationBoundary(
   };
 }
 
+/**
+ * 差分path集合からreview artifact候補を1件だけ同定する。
+ *
+ * **同定規則の正本はevidence-only allowlistである。** 判定は`pr create`・review session・
+ * record layerと同じ`isEvidenceOnlyPath`へ委ねる。`pr create`は
+ * `assertConvergedReviewSession`から`evidenceOnlySuffix`を経てこの述語へ到達する。
+ * **2 prefixを直書きで持つ箇所が`pr merge`側に残る**（`resolveImplementationCommitForMerge`と
+ * delivery stateのMergeIntent解析）。そこは`pr merge`の認可判定であり本変更のscope外で、
+ * 合流は別Issueとする。以前はこのadapterが
+ * `docs/reviews/`だけの単純前方一致を持っていたが、それはASC自repoの`audit:check`
+ * が使う運用上の狭い集合であって製品の契約ではない。**製品allowlistは利用側の
+ * 配置自由度であり、正本は`docs/reviews/`と`.agent-skill-chain/reviews/`の2つを
+ * 許す。** 同定規則を製品内の2箇所で別々に持つと、片方だけが正本から外れる
+ * （Issue #1433）。
+ *
+ * **file名の字面を受理条件にしない。** 正本は配置だけを定め、`02_品質基準.md`は
+ * 汎用packageが特定のfile名を強制しないことを要求する。
+ */
 function terminalArtifactPath(paths: readonly string[]): string | undefined {
-  const artifacts = paths.filter((entry) =>
-    entry.startsWith(REVIEW_ARTIFACT_PREFIX),
-  );
+  const artifacts = paths.filter(isEvidenceOnlyPath);
   /** **artifactが1件でない差分は同定できない。** 受理しない。 */
   return artifacts.length === 1 ? artifacts[0] : undefined;
 }
@@ -265,7 +283,8 @@ function observeRebaseEquivalence(
     | "artifact-not-unique"
     | "artifact-unreadable"
     | "base-mismatch"
-    | "boundary-mismatch";
+    | "boundary-mismatch"
+    | "mode-mismatch";
   gitFailure?: string;
 } {
   const beforeAll = observeReanchorDiff(
@@ -326,6 +345,25 @@ function observeRebaseEquivalence(
       reason: "boundary-mismatch",
       gitFailure: afterBoundary.gitFailure,
     };
+  /**
+   * **新`H_final`がevidence-only suffixの形をmodeまで満たすことを要求する。**
+   *
+   * `verifiedImplementationBoundary`は変更pathの件数と名前しか見ない。mode
+   * `100755`のMarkdownは通常fileなので`git show`で本文が読め、構造検証・
+   * identity anchor・approval・個別監査表をすべて通過する。round 2は
+   * `artifact-replacement`と`reviewed-forward`の2経路にこの検査を足したが、
+   * **通常rebase経路（本関数）は対象外のまま残っていた。** `isContentEquivalent`が
+   * mode変更を含む「new file mode」行の差でfalseになり必ずこの関数へ入るため、
+   * ここを通さない限り3経路のうち最も一般的な経路がmode検証を欠く
+   * （Issue #1433、外部review round 4・Codex）。
+   *
+   * 旧`H_final`側へは適用しない。過去に受理した記録を遡って拒否へ変えない。
+   */
+  if (
+    evidenceOnlySuffix(root, afterAnchor.implementation, input.newHeadSha) !==
+    afterPath
+  )
+    return { reason: "mode-mismatch" };
   return {
     reason: isRebaseEquivalent({
       beforeImplementation: observeReanchorDiff(
@@ -359,6 +397,12 @@ interface ArtifactReplacementEvidence {
   newDigest: string;
 }
 
+interface ArtifactSupersessionEvidence {
+  artifactPath: string;
+  oldDigest: string;
+  newDigest: string;
+}
+
 interface ReviewedForwardEvidence {
   sessionId: string;
   roundDigest: string;
@@ -367,13 +411,14 @@ interface ReviewedForwardEvidence {
   artifactDigest: string;
 }
 
-const REVIEW_ARTIFACT_NAME = /^\d+_課題\d+.*レビュー\.md$/u;
-
 /**
- * 命名是正で変わってよい機械導出・監査領域だけを正規化する。
+ * path是正で変わってよい機械導出・監査領域だけを正規化する。
  * finding、判定、独立性、test証拠などreview判断の本文はbyte比較へ残す。
  */
-function comparableArtifactContent(markdown: string): string {
+function comparableArtifactContent(
+  markdown: string,
+  ignoreDistribution = true,
+): string {
   const output: string[] = [];
   let ignoredSection: "audit" | "distribution" | undefined;
   const lines = markdown.replaceAll("\r\n", "\n").split("\n");
@@ -385,7 +430,7 @@ function comparableArtifactContent(markdown: string): string {
         output.push(line, "<machine-audit>");
         continue;
       }
-      if (line === "## 8. 配布物影響") {
+      if (ignoreDistribution && line === "## 8. 配布物影響") {
         ignoredSection = "distribution";
         output.push(line, "<distribution-audit>");
         continue;
@@ -393,7 +438,7 @@ function comparableArtifactContent(markdown: string): string {
       if (
         ignoredSection !== undefined &&
         /^##(?: |$)/u.test(line) &&
-        line !== "## 8. 配布物影響"
+        (line !== "## 8. 配布物影響" || !ignoreDistribution)
       )
         ignoredSection = undefined;
       if (
@@ -418,6 +463,185 @@ function comparableArtifactContent(markdown: string): string {
     if (ignoredSection === undefined) output.push(line);
   }
   return output.join("\n");
+}
+
+/** §9/§11の旧書式を正規書式へ直した場合だけ判断本文の比較から除く。 */
+function comparableSupersessionContent(markdown: string): {
+  body: string;
+  judgmentDetails: string[];
+} {
+  const lines = markdown.replaceAll("\r\n", "\n").split("\n");
+  const visible = visibleMarkdownLines(markdown);
+  const judgmentDetails: string[] = [];
+  const normalized = lines.flatMap((line, index) => {
+    if (visible[index] === "") return [line];
+    if (
+      /^\| 適用した独立性モード \| context-isolated(?:（未宣言時の既定）)? \|$/u.test(
+        line,
+      )
+    )
+      return ["| 適用した独立性モード | context-isolated |"];
+    if (
+      line ===
+        "| reviewerが対象差分を変更していないこと | はい。製品path変更0件 |" ||
+      line ===
+        "| reviewerが対象差分を変更していないこと | はい（製品path変更0件） |"
+    )
+      return ["| reviewerが対象差分を変更していないこと | <確認済み書式> |"];
+    const oldSummary = /^- 未解決Critical\/High: 0件(?:。(.*))?$/u.exec(line);
+    if (oldSummary !== null) {
+      if (oldSummary[1] !== undefined) judgmentDetails.push(oldSummary[1]);
+      return oldSummary[1] === undefined
+        ? ["- 未解決Critical/High: <0件>"]
+        : ["- 未解決Critical/High: <0件>", "- Critical/Highの内訳: <detail>"];
+    }
+    if (line === "- 未解決Critical/High: なし")
+      return ["- 未解決Critical/High: <0件>"];
+    const detail =
+      /^- Critical\/Highの内訳: Critical 0件、(High \d+件.*)$/u.exec(line);
+    if (detail !== null) {
+      judgmentDetails.push(detail[1]!);
+      return ["- Critical/Highの内訳: <detail>"];
+    }
+    return [line];
+  });
+  return {
+    body: comparableArtifactContent(normalized.join("\n"), false),
+    judgmentDetails,
+  };
+}
+
+/** push済みartifactの同一path前進修正を、判断本文が同じ場合だけ受理する。 */
+function observeArtifactSupersession(
+  staging: string,
+  root: string,
+  input: ReanchorComparison,
+): ArtifactSupersessionEvidence | undefined {
+  if (input.oldBaseSha !== input.newBaseSha) return undefined;
+  if (observeSingleCommitParent(root, input.newHeadSha) !== input.oldHeadSha)
+    return undefined;
+  const changed = observeReanchorDiff(
+    root,
+    "新H_final親→新H_final",
+    input,
+    input.oldHeadSha,
+    input.newHeadSha,
+  );
+  const artifactPath = terminalArtifactPath(changed.changedPaths);
+  if (
+    artifactPath === undefined ||
+    changed.changedPaths.length !== 1 ||
+    !isEvidenceOnlyPath(artifactPath)
+  )
+    return undefined;
+  const raw = git(
+    [
+      "diff",
+      "--raw",
+      "--no-renames",
+      "--no-abbrev",
+      "-z",
+      input.oldHeadSha,
+      input.newHeadSha,
+    ],
+    root,
+    { env: GIT_ENV, allowFailure: true },
+  );
+  if (
+    raw.status !== 0 ||
+    !/^:100644 100644 [0-9a-f]+ [0-9a-f]+ M\0/u.test(raw.stdout)
+  )
+    return undefined;
+  const oldArtifact = readBlobAtCommit(root, input.oldHeadSha, artifactPath);
+  const newArtifact = readBlobAtCommit(root, input.newHeadSha, artifactPath);
+  if (
+    oldArtifact === undefined ||
+    newArtifact === undefined ||
+    oldArtifact === newArtifact
+  )
+    return undefined;
+  const oldAnchor = parseReviewIdentityAnchor(oldArtifact);
+  const newAnchor = parseReviewIdentityAnchor(newArtifact);
+  if (
+    oldAnchor === undefined ||
+    newAnchor === undefined ||
+    oldAnchor.base !== input.oldBaseSha ||
+    newAnchor.base !== input.newBaseSha ||
+    oldAnchor.implementation !== newAnchor.implementation
+  )
+    return undefined;
+  const stepChainRows = (markdown: string): string[] =>
+    visibleMarkdownLines(markdown).filter((line) =>
+      /^\| Step chain \|/u.test(line),
+    );
+  const oldStepChainRows = stepChainRows(oldArtifact);
+  const newStepChainRows = stepChainRows(newArtifact);
+  if (
+    oldStepChainRows.length !== 1 ||
+    newStepChainRows.length !== 1 ||
+    oldStepChainRows[0] !== newStepChainRows[0]
+  )
+    return undefined;
+  if (
+    evidenceOnlySuffix(root, newAnchor.implementation, input.newHeadSha) !==
+    artifactPath
+  )
+    return undefined;
+  const oldBody = comparableSupersessionContent(oldArtifact);
+  const newBody = comparableSupersessionContent(newArtifact);
+  if (
+    oldBody.body !== newBody.body ||
+    stableJson(oldBody.judgmentDetails) !== stableJson(newBody.judgmentDetails)
+  )
+    return undefined;
+  if (
+    !verifiedImplementationBoundary(
+      root,
+      input.newHeadSha,
+      artifactPath,
+      newAnchor.implementation,
+      input,
+      "新H_impl→新head",
+    ).valid
+  )
+    return undefined;
+  const structure = validateReviewArtifactStructure(newArtifact);
+  const approval = validateContextIsolatedApprovalRecord(newArtifact);
+  const audit = parseReviewArtifactAudit(newArtifact);
+  const session = readStoredReviewSession(staging);
+  const journal = readWorkflowJournal(staging);
+  const step10 = [...journal.entries]
+    .reverse()
+    .find((entry) => entry.step === 10)?.reviewSession;
+  const implementation = observeReanchorDiff(
+    root,
+    "新base→新H_impl",
+    input,
+    input.newBaseSha,
+    newAnchor.implementation,
+    newAnchor.implementation,
+  );
+  if (
+    structure.diagnostics.length > 0 ||
+    structure.implementation !== newAnchor.implementation ||
+    structure.stepChain?.kind !== "via" ||
+    !approval.valid ||
+    session?.status !== "converged" ||
+    session.latestCandidateHeadSha !== newAnchor.implementation ||
+    step10?.sessionId !== session.sessionId ||
+    step10.roundDigest !== session.latestRoundDigest ||
+    step10.headSha !== session.latestCandidateHeadSha ||
+    journal.errors.length > 0 ||
+    audit.entries.some((entry) => entry.decision !== "pass") ||
+    stableJson(audit.entries.map((entry) => entry.path).sort()) !==
+      stableJson([...implementation.changedPaths].sort())
+  )
+    return undefined;
+  return {
+    artifactPath,
+    oldDigest: crypto.createHash("sha256").update(oldArtifact).digest("hex"),
+    newDigest: crypto.createHash("sha256").update(newArtifact).digest("hex"),
+  };
 }
 
 /**
@@ -462,12 +686,11 @@ function observeArtifactReplacement(
   );
   const oldPath = terminalArtifactPath(beforeAll.changedPaths);
   const newPath = terminalArtifactPath(afterAll.changedPaths);
-  if (
-    oldPath === undefined ||
-    newPath === undefined ||
-    oldPath === newPath ||
-    !REVIEW_ARTIFACT_NAME.test(path.posix.basename(newPath))
-  )
+  /**
+   * **新artifactがevidence-only allowlist配下であることは`terminalArtifactPath`が
+   * 既に保証している。** basenameの字面を重ねて要求しない（Issue #1433）。
+   */
+  if (oldPath === undefined || newPath === undefined || oldPath === newPath)
     return undefined;
   const oldArtifact = readBlobAtCommit(root, input.oldHeadSha, oldPath);
   const newArtifact = readBlobAtCommit(root, input.newHeadSha, newPath);
@@ -505,6 +728,27 @@ function observeArtifactReplacement(
       input,
       "新H_impl→新head",
     ).valid
+  )
+    return undefined;
+  /**
+   * **新`H_final`がevidence-only suffixの形をmodeまで満たすことを要求する。**
+   *
+   * `terminalArtifactPath`が見るのはpathだけである。mode `100755`のMarkdownは
+   * 通常fileなので`git show`で本文が読め、構造検証・identity anchor・approval・
+   * 個別監査表をすべて通過する。TERM-ASC-101はmode `100644`の通常file 1件の
+   * 追加または変更だけをevidence-only suffixとする。
+   *
+   * **`pr create`は`evidenceOnlySuffix`でこれを検査するが、再固定で実効HEADへ
+   * 入った新headは以後どこでも再検査されない。** `assertConvergedReviewSession`の
+   * suffix検査は実効HEADとcurrent HEADが異なるときだけ走り、再固定後は両者が
+   * 一致するため素通りする。**再固定がこの形を確かめる唯一の地点である**
+   * （Issue #1433、外部review round 2）。
+   *
+   * 旧`H_final`側へは適用しない。過去に受理した記録を遡って拒否へ変えない。
+   */
+  if (
+    evidenceOnlySuffix(root, afterAnchor.implementation, input.newHeadSha) !==
+    newPath
   )
     return undefined;
   const beforeImplementation = observeReanchorDiff(
@@ -586,11 +830,7 @@ function observeReviewedForward(
     input.newHeadSha,
   );
   const artifactPath = terminalArtifactPath(finalSuffix.changedPaths);
-  if (
-    artifactPath === undefined ||
-    !REVIEW_ARTIFACT_NAME.test(path.posix.basename(artifactPath))
-  )
-    return undefined;
+  if (artifactPath === undefined) return undefined;
   const artifact = readBlobAtCommit(root, input.newHeadSha, artifactPath);
   if (artifact === undefined) return undefined;
   const anchor = parseReviewIdentityAnchor(artifact);
@@ -613,6 +853,12 @@ function observeReviewedForward(
       input,
       "新H_impl→新head",
     ).valid
+  )
+    return undefined;
+  /** artifact-replacementと同じ理由でmodeまで確かめる（Issue #1433）。 */
+  if (
+    evidenceOnlySuffix(root, anchor.implementation, input.newHeadSha) !==
+    artifactPath
   )
     return undefined;
   const implementation = observeReanchorDiff(
@@ -716,8 +962,14 @@ export interface EvidenceReanchorEvaluation extends EvidenceReanchorResult {
   oldHeadSha: string;
   oldBaseSha: string;
   diffDigest: string | undefined;
-  method: "rebase" | "artifact-replacement" | "reviewed-forward" | undefined;
+  method:
+    | "rebase"
+    | "artifact-replacement"
+    | "artifact-supersession"
+    | "reviewed-forward"
+    | undefined;
   artifactReplacement: ArtifactReplacementEvidence | undefined;
+  artifactSupersession: ArtifactSupersessionEvidence | undefined;
   reviewedForward: ReviewedForwardEvidence | undefined;
 }
 
@@ -773,6 +1025,7 @@ export function evaluateEvidenceReanchor(input: {
       diffDigest: undefined,
       method: undefined,
       artifactReplacement: undefined,
+      artifactSupersession: undefined,
       reviewedForward: undefined,
     };
   if (oldHeadSha === input.newHeadSha)
@@ -797,8 +1050,13 @@ export function evaluateEvidenceReanchor(input: {
     input.newBaseSha,
     input.newHeadSha,
   );
-  let method: "rebase" | "artifact-replacement" | "reviewed-forward" = "rebase";
+  let method:
+    | "rebase"
+    | "artifact-replacement"
+    | "artifact-supersession"
+    | "reviewed-forward" = "rebase";
   let artifactReplacement: ArtifactReplacementEvidence | undefined;
+  let artifactSupersession: ArtifactSupersessionEvidence | undefined;
   let reviewedForward: ReviewedForwardEvidence | undefined;
   if (!isContentEquivalent(before, after)) {
     const rebase = observeRebaseEquivalence(input.root, comparison);
@@ -810,14 +1068,27 @@ export function evaluateEvidenceReanchor(input: {
       );
       if (artifactReplacement !== undefined) method = "artifact-replacement";
       else if (anchor.prBound) {
-        reviewedForward = observeReviewedForward(
+        artifactSupersession = observeArtifactSupersession(
           staging,
           input.root,
           comparison,
         );
-        if (reviewedForward !== undefined) method = "reviewed-forward";
+        if (artifactSupersession !== undefined)
+          method = "artifact-supersession";
+        else {
+          reviewedForward = observeReviewedForward(
+            staging,
+            input.root,
+            comparison,
+          );
+          if (reviewedForward !== undefined) method = "reviewed-forward";
+        }
       }
-      if (artifactReplacement === undefined && reviewedForward === undefined)
+      if (
+        artifactReplacement === undefined &&
+        artifactSupersession === undefined &&
+        reviewedForward === undefined
+      )
         throw new Error(
           `再固定前後の内容が等価ではありません（${rebase.reason}）: before=${before.digest} after=${after.digest}${rebase.gitFailure === undefined ? "" : `; ${rebase.gitFailure}`}`,
         );
@@ -826,6 +1097,7 @@ export function evaluateEvidenceReanchor(input: {
   if (
     anchor.prBound &&
     method !== "artifact-replacement" &&
+    method !== "artifact-supersession" &&
     method !== "reviewed-forward"
   )
     throw new Error(
@@ -840,6 +1112,7 @@ export function evaluateEvidenceReanchor(input: {
     diffDigest: before.digest,
     method,
     artifactReplacement,
+    artifactSupersession,
     reviewedForward,
   };
 }
@@ -881,12 +1154,18 @@ export function appendEvidenceReanchor(input: {
       newBaseSha: input.newBaseSha,
       diffDigest: evaluation.diffDigest as string,
       method: evaluation.method as
-        "rebase" | "artifact-replacement" | "reviewed-forward",
+        | "rebase"
+        | "artifact-replacement"
+        | "artifact-supersession"
+        | "reviewed-forward",
       reason: input.reason,
       recordedAt: input.recordedAt,
       ...(evaluation.artifactReplacement === undefined
         ? {}
         : { artifactReplacement: evaluation.artifactReplacement }),
+      ...(evaluation.artifactSupersession === undefined
+        ? {}
+        : { artifactSupersession: evaluation.artifactSupersession }),
       ...(evaluation.reviewedForward === undefined
         ? {}
         : { reviewedForward: evaluation.reviewedForward }),

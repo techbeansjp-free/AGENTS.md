@@ -41,7 +41,7 @@ Feature: reviewer役割に依存しない補助レビュー
   Scenario: SCN-SUPPL-012 連結worktreeは主worktreeの個人設定を使う
     Given 主worktreeのみに補助レビュー設定があり連結worktreeに差分がある
     When 補助レビューCLI(diff対象)を連結worktreeから実行する
-    Then 連結worktreeの補助レビューがfindingsを返す
+    Then 連結worktreeの補助レビューが進行役確認候補を返す
 
   Scenario: SCN-SUPPL-013 日本語pathの変更fileと関連fileを実pathで収集する
     Given 日本語pathの変更fileと呼び出し元fileがある
@@ -73,3 +73,13 @@ Feature: reviewer役割に依存しない補助レビュー
     Given import参照検索の結果が1MiBを超える差分がある
     When 補助レビューCLI(diff対象)で収集処理を行う
     Then 収集結果は打ち切りとして報告される
+
+  Scenario: SCN-SUPPL-019 chill profileはHigh以上だけを表示しEffortを残す
+    Given chill profileの補助レビュー対象差分がある
+    When 補助reviewerがHighとLowのEffort付き指摘を返す
+    Then HighのQuick winだけが表示される
+
+  Scenario: SCN-SUPPL-020 assertive profileはLowも表示する
+    Given assertive profileの補助レビュー対象差分がある
+    When 補助reviewerがHighとLowのEffort付き指摘を返す
+    Then HighとLowのEffort付き指摘が表示される

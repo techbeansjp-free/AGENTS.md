@@ -36,10 +36,45 @@ Feature: artifact-onlyのHEAD移動の受理
     When H_finalでconverged session検査を行う
     Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
 
-  Scenario: SCN-UNIT-EVIDHEAD-009 artifact-only commitを2本積んだHEADは拒否する
+  Scenario: SCN-UNIT-EVIDHEAD-009 artifactのみの前進是正commitを受理する
     Given 収束したsessionの後にartifact commitを2本積んだstagingがある
+    When H_finalでconverged session検査とbinding検査を行う
+    Then 両方が受理される
+
+  Scenario: SCN-UNIT-EVIDHEAD-014 artifactだけの8 commitは受理する
+    Given 収束したsessionの後にartifact commitを8本積んだstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADは受理される
+
+  Scenario: SCN-UNIT-EVIDHEAD-015 artifactだけでも9 commitは拒否する
+    Given 収束したsessionの後にartifact commitを9本積んだstagingがある
     When H_finalでconverged session検査を行う
     Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
+  Scenario: SCN-UNIT-EVIDHEAD-016 中間commitのmode変更は最終modeを戻しても拒否する
+    Given 収束したsessionの後にartifactの中間commitだけを実行権限付きにしたstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
+  Scenario: SCN-UNIT-EVIDHEAD-017 中間commitの製品path変更は最終差分で消えても拒否する
+    Given 収束したsessionの後に製品pathを中間commitだけ変更したstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
+  Scenario: SCN-UNIT-EVIDHEAD-018 中間commitの第二artifactは最終差分で消えても拒否する
+    Given 収束したsessionの後に第二artifactを中間commitだけ追加したstagingがある
+    When H_finalでconverged session検査を行う
+    Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
+
+  Scenario: SCN-UNIT-EVIDHEAD-019 artifact前進commit後のmergeは元のH_implを導出する
+    Given 収束したsessionの後に正式artifactを2 commit積んだstagingがある
+    When merge候補の実装HEADを導出する
+    Then merge候補の実装HEADは収束済みH_implである
+
+  Scenario: SCN-UNIT-EVIDHEAD-020 artifactが9 commitならmerge候補の導出を拒否する
+    Given 収束したsessionの後に正式artifactを9 commit積んだstagingがある
+    When merge候補の実装HEADを導出する
+    Then merge候補の実装HEAD導出は拒否する
 
   Scenario: SCN-UNIT-EVIDHEAD-010 実行権限付きのartifactは拒否する
     Given 収束したsessionの後に実行権限付きでartifactをcommitしたstagingがある
