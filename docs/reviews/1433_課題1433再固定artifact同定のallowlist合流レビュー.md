@@ -62,7 +62,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | package owner | docs/specs | 新規SCNの追跡行2件を追加し、round 2でSCN-039・040とreview-diff.tsを同じ行へ足した。既存行を書き換えていない。round 4でSCN-041を同じ行へ追加した | spec → src（許可された向き） | 全AC / `npm run trace:check` | 2行の削除でrevert可能 | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | package owner | docs/specs | header区切りの直後へ1行追加。末尾の8列移行表へ入れていない。過去の履歴行を書き換えていない。round 2で同じ行の互換性欄を狭まり3つの列挙へ直した。round 4で新しい変更行を1行追加した（過去行は書き換えない） | spec → src（許可された向き） | 全AC | 1〜2行の削除でrevert可能 | pass |
 | `src/adapters/evidence-reanchor.ts` | M | package owner | adapter | review artifact同定の1責務を`domain/review.ts`の`isEvidenceOnlyPath`へ委ね、adapter固有の定数2件を削除した。round 2で新head側のmode/type検証を`evidenceOnlySuffix`の再利用として足した。round 4で同じ検証を通常rebase経路（`observeRebaseEquivalence`）へも足し、新しい理由`mode-mismatch`を追加した | adapter → domain と adapter → adapter（葉）の既存の向きのみ。`architecture:check`で循環0件 | FR-01〜FR-04、AC-1433-12・13 / SCN-UNIT-REANCHOR-033〜041 | T01・T02・T03（round4分）が独立commitで、`git apply --check -R`により各々単独で逆適用可能 | pass |
-| `src/adapters/review-diff.ts` | M | package owner | adapter | `evidenceOnlySuffix`の移設先。`node:crypto`と`lib/process`だけに依存する葉であり、`review-session.ts`と`evidence-reanchor.ts`の双方が既にimportしている。**定義は1つのまま循環を作らない** | `domain/review.js`への依存を1本追加。逆向きなし | AC-1433-12 / SCN-UNIT-REANCHOR-039・040 | 関数の移設であり判定logicを変えていない。revert可能 | pass |
+| `src/adapters/review-diff.ts` | M | package owner | adapter | `evidenceOnlySuffix`の移設先。`node:crypto`・`lib/process`・`domain/review.js`に依存し、`review-session.ts`と`evidence-reanchor.ts`の双方が既にimportしている。**定義は1つのまま循環を作らない** | `domain/review.js`への依存を1本追加。逆向きなし | AC-1433-12 / SCN-UNIT-REANCHOR-039・040 | 関数の移設であり判定logicを変えていない。revert可能 | pass |
 | `src/adapters/review-session.ts` | M | package owner | adapter | `evidenceOnlySuffix`の移設元。未使用になった`isEvidenceOnlyPath`のimportを外し、`review-diff.js`から取り込む。**判定logicを変えていない** | 既存の向きのみ | AC-1433-12 | 同上 | pass |
 | `test/features/integration/evidence-reanchor.feature` | M | package owner | test | SCN-INT-REANCHOR-016〜018を追加。既存scenarioのIDとassertionを変更していない。SCN-1377-01のGiven文言のみ禁止表現を除いた | test → 対象（許可された向き） | AC-1433-06〜08 | 追加行の削除でrevert可能 | pass |
 | `test/features/unit/evidence-reanchor.feature` | M | package owner | test | SCN-UNIT-REANCHOR-033〜040を追加。既存32 scenarioを1件も変更していない。round 4でSCN-UNIT-REANCHOR-041（実行権限・symlinkの2 Examples）を追加した | test → 対象（許可された向き） | AC-1433-01〜05、10〜13 | 追加行の削除でrevert可能 | pass |
@@ -123,7 +123,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | 価値（利用者・運用上の目的） | pass | 製品自身が`review artifact --init`の既定で出力する名前が`pr reanchor`を通るようになった。**本reviewの成果物も当初は既定名`docs/reviews/1433_レビュー.md`で生成した。** 本repo運用scriptの命名規約に合わせて改名した経緯はDISC-1433-07に記録している。 正本が許すもう一方の配置`.agent-skill-chain/reviews/`も通る |
 | 実現可能性（環境・依存・権限） | pass | 依存packageもlockfileも実行時の外部存在も変えない。新しいauthorityも承認経路も作らない。保護fileへ触れていない |
 | 整合性（設計・コード・テスト・仕様） | pass | 同定規則が`pr create`・review session・record layer・再固定で`isEvidenceOnlyPath`に統一された。`pr create`は`assertConvergedReviewSession`から`evidenceOnlySuffix`を経て到達する。2 prefixの直書きは`pr merge`側の2箇所に残るが、束縛済みpathの後段再読であり合成経路から受理集合の差へ到達しない。正本・要件・CLI契約・用語台帳・配布skillの5文書が同じ意味へ揃い、`trace:check`のorphanが0件である |
-| 保守性（責務・命名・変更容易性） | pass | 判定を足さず取り除いた。src差分は追加23行・削除19行だが、追加のうち17行はJSDocであり判定logicは正味で減っている。T01とT02が独立commitで各々単独に逆適用できる |
+| 保守性（責務・命名・変更容易性） | pass | round 1ではadapter固有のartifact名判定を削除し共通述語へ統合した。round 2・4ではmode/type検査を3経路へ追加した。現行差分の`src/adapters/`は3 fileで追加147行・削除91行（`c6f7b556..125409f7`の`git diff --numstat`）。T01〜T03は独立に逆適用を確認した |
 
 ## 4. 敵対的評価
 
@@ -285,7 +285,7 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 1 |
+| ラウンド | 4（追随後のformal session欠落は§1に開示） |
 | 対象SHA・文書ダイジェスト | 125409f728796fc8cde58c7ce655423c798bc44b |
 | 比較基点 | `c6f7b5563a3c94bcad0b163e00e7c0e459e381f5` |
 | H_impl | `125409f728796fc8cde58c7ce655423c798bc44b` |
@@ -295,7 +295,7 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 | ラウンド数 | 4 |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260919_232451_bugfix-pr-reanchorのreview-artifact同定が正本のevidence-only-allowlistと食い違う |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md`のREQ-WF-005。reviewed-forward条項は「新`H_final`が監査合格済みevidence-only suffixである場合に限り、`reviewed-forward`としてappend-only記録する」と定め、file名条項を持たない |
-| 成果物行数 | 製品: `src/adapters/evidence-reanchor.ts`が追加23行・削除19行。追加のうち17行はJSDocであり判定logicは正味で減っている。配布文書が3 pathで各1行。支援層: testが追加191行・削除5行、`docs/specs/`が追加9行・削除5行、staging成果物00〜03が1005行。**支援層が製品変更を大きく超えている。** fullは00〜03の個別管理を要求するためmode固有の固定費であり、閾値判定はしない。round 4はさらに`evidence-reanchor.ts`へ約20行（うち半分JSDoc）、`test/`へ約90行を追加した |
+| 成果物行数 | 現行比較基点`c6f7b556..125409f7`の実測では`src/adapters/evidence-reanchor.ts`が追加76行・削除20行、`review-diff.ts`が追加70行・削除0行、`review-session.ts`が追加1行・削除71行。test 4 pathは追加331行・削除6行、`docs/specs/` 5 pathは追加10行・削除4行。旧23/19・191/5はround 2の履歴値であり現行差分の説明には使わない。staging成果物00〜03の1005行は版管理外の履歴値である |
 | 縮小の先行評価 | 評価のうえ縮小側を採った。同定述語は新設せず既存の`isEvidenceOnlyPath`を再利用し、adapter固有の定数2件を削除した。02 §12で7案の採否を記録し、project policyへの命名設定項目の新設、`pr resync-head`相当の新command、文書乖離を監視する新gate、mode検査の同時追加をいずれも不採用とした。**足す修正ではなく消す修正で成立する。** round 4はround 2で足した検査を新しい経路へ複製するだけで、新しい判定軸は増やしていない |
 | 実施者・日時 | reviewer、2026-09-20T02:50:00+09:00 |
 
