@@ -3,7 +3,11 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
-import { assertCurrentReviewJournalBinding, main } from "../../src/cli.js";
+import {
+  assertCurrentReviewJournalBinding,
+  main,
+  resolveImplementationCommitForMerge,
+} from "../../src/cli.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
 import { QUESTIONS, type ModeAnswer } from "../../src/domain/mode.js";
 import {
@@ -33,6 +37,7 @@ interface EvidenceOnlyHeadWorld extends WorkflowWorld {
   session: ReviewSessionState;
   error: unknown;
   cliStatus: number;
+  mergeImplementationSha?: string;
 }
 
 const { Given, When, Then } = stepDefinitions<EvidenceOnlyHeadWorld>();
@@ -155,6 +160,97 @@ function assertSession(world: EvidenceOnlyHeadWorld): void {
     world.error = error;
   }
 }
+
+function formalArtifact(
+  base: string,
+  implementation: string,
+  revision: number,
+): string {
+  return `# 04 レビュー
+
+## 0. レビュー識別情報
+
+| 項目 | 内容 |
+|---|---|
+| 比較基点 | \`${base}\` |
+| H_impl | \`${implementation}\` |
+| ラウンド数 | 1 |
+| Step chain | 経由: fixture |
+
+## 1. 入力証拠
+
+### 1.1 変更ファイル個別監査
+
+| path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
+|---|---|---|---|---|---|---|---|---|
+| \`${reviewedPath}\` | A | owner | domain | fixture | 循環なし | AC-WF-005 / SCN-UNIT-EVIDHEAD-019 | revert可能 | pass |
+
+## 2. 受け入れ条件の確認
+合格。
+## 3. 肯定的評価
+revision ${revision}。
+## 4. 敵対的評価
+反例を確認。
+## 5. 指摘
+なし。
+## 6. ラウンド固有の確認
+収束。
+## 7. テスト結果
+合格。
+## 8. 配布物影響
+判断: 配布物を更新しない
+根拠: fixtureのみ。
+## 9. 独立reviewの成立
+確認。
+## 10. 仕様整合性
+整合。
+## 11. 総合判定と再開地点
+承認。
+`;
+}
+
+Given(
+  /^収束したsessionの後に正式artifactを(2|9) commit積んだstagingがある$/u,
+  function (countText: string) {
+    convergedFixture(this);
+    for (let revision = 1; revision <= Number(countText); revision++)
+      this.finalHead = commitFiles(
+        this.root,
+        {
+          [artifactPath]: formalArtifact(
+            this.base,
+            this.implementationHead,
+            revision,
+          ),
+        },
+        `docs: formal artifact ${revision}`,
+      );
+  },
+);
+
+When("merge候補の実装HEADを導出する", function () {
+  this.error = undefined;
+  this.mergeImplementationSha = undefined;
+  try {
+    this.mergeImplementationSha = resolveImplementationCommitForMerge(
+      this.root,
+      this.staging,
+      this.finalHead,
+    ).implementationCommitSha;
+  } catch (error) {
+    this.error = error;
+  }
+});
+
+Then("merge候補の実装HEADは収束済みH_implである", function () {
+  assert.equal(this.error, undefined, String(this.error));
+  assert.equal(this.mergeImplementationSha, this.implementationHead);
+});
+
+Then("merge候補の実装HEAD導出は拒否する", function () {
+  assert.ok(this.error instanceof Error);
+  assert.equal(this.mergeImplementationSha, undefined);
+});
 
 Given(
   "収束したsessionの後にartifact 1 fileだけをcommitしたstagingがある",

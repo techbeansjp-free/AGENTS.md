@@ -865,7 +865,7 @@ function currentIndependentApprovals(input) {
                 approval.actorId !== input.implementationAuthorActorId)))
         .sort((left, right) => left.reviewId.localeCompare(right.reviewId, "en", { numeric: true }));
 }
-function resolveImplementationCommitForMerge(root, staging, finalHeadSha) {
+export function resolveImplementationCommitForMerge(root, staging, finalHeadSha) {
     const localHead = git(["rev-parse", "--verify", "HEAD^{commit}"], root)
         .stdout.trim()
         .toLowerCase();

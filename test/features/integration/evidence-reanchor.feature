@@ -75,6 +75,18 @@ Feature: 証跡再固定がCLIと診断経路で機能する
     Then supersessionのpreviewとapplyは拒否され追記しない
 
   @issue-1437
+  Scenario: SCN-1437-07 artifactの9件目の前進是正は再固定しない
+    Given pr-bound後にartifactの9件目の前進是正commitがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then supersessionのpreviewとapplyは拒否され追記しない
+
+  @issue-1437
+  Scenario: SCN-1437-08 High内訳を判断節から移した前進是正は拒否する
+    Given pr-bound後にHigh内訳を判断節から移した前進commitがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then supersessionのpreviewとapplyは拒否され追記しない
+
+  @issue-1437
   Scenario: SCN-1437-05 配布物影響の判断を書き換えた前進commitは拒否する
     Given pr-bound後に配布物影響の判断を書き換えた前進commitがある
     When 同じ再固定入力でpreviewとapplyをCLIから実行する

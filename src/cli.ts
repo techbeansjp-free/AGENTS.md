@@ -1306,7 +1306,7 @@ function deliveryEventTime(lowerBound?: string): string {
 
 /**
  * H_finalはreview artifactだけを加えた単一親commitでなければならない。
- * merge認可ではcurrent HEAD authorではなく、その親H_implのprovider authorを使う。
+ * merge認可ではcurrent HEAD authorではなく、検証済みartifact suffixの起点H_implのprovider authorを使う。
  */
 interface MergeCandidateEvidence {
   implementationCommitSha: string;
@@ -1418,7 +1418,7 @@ function currentIndependentApprovals(input: {
     );
 }
 
-function resolveImplementationCommitForMerge(
+export function resolveImplementationCommitForMerge(
   root: string,
   staging: string,
   finalHeadSha: string,

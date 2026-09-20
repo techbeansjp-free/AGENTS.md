@@ -491,7 +491,9 @@ function comparableSupersessionContent(markdown: string): {
     const oldSummary = /^- 未解決Critical\/High: 0件(?:。(.*))?$/u.exec(line);
     if (oldSummary !== null) {
       if (oldSummary[1] !== undefined) judgmentDetails.push(oldSummary[1]);
-      return ["- 未解決Critical/High: <0件>"];
+      return oldSummary[1] === undefined
+        ? ["- 未解決Critical/High: <0件>"]
+        : ["- 未解決Critical/High: <0件>", "- Critical/Highの内訳: <detail>"];
     }
     if (line === "- 未解決Critical/High: なし")
       return ["- 未解決Critical/High: <0件>"];
@@ -499,7 +501,7 @@ function comparableSupersessionContent(markdown: string): {
       /^- Critical\/Highの内訳: Critical 0件、(High \d+件.*)$/u.exec(line);
     if (detail !== null) {
       judgmentDetails.push(detail[1]!);
-      return [];
+      return ["- Critical/Highの内訳: <detail>"];
     }
     return [line];
   });
@@ -578,6 +580,11 @@ function observeArtifactSupersession(
     oldStepChainRows.length !== 1 ||
     newStepChainRows.length !== 1 ||
     oldStepChainRows[0] !== newStepChainRows[0]
+  )
+    return undefined;
+  if (
+    evidenceOnlySuffix(root, newAnchor.implementation, input.newHeadSha) !==
+    artifactPath
   )
     return undefined;
   const oldBody = comparableSupersessionContent(oldArtifact);

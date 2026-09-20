@@ -66,6 +66,16 @@ Feature: artifact-onlyのHEAD移動の受理
     When H_finalでconverged session検査を行う
     Then candidate HEADがcurrent HEADと一致しないerrorで拒否する
 
+  Scenario: SCN-UNIT-EVIDHEAD-019 artifact前進commit後のmergeは元のH_implを導出する
+    Given 収束したsessionの後に正式artifactを2 commit積んだstagingがある
+    When merge候補の実装HEADを導出する
+    Then merge候補の実装HEADは収束済みH_implである
+
+  Scenario: SCN-UNIT-EVIDHEAD-020 artifactが9 commitならmerge候補の導出を拒否する
+    Given 収束したsessionの後に正式artifactを9 commit積んだstagingがある
+    When merge候補の実装HEADを導出する
+    Then merge候補の実装HEAD導出は拒否する
+
   Scenario: SCN-UNIT-EVIDHEAD-010 実行権限付きのartifactは拒否する
     Given 収束したsessionの後に実行権限付きでartifactをcommitしたstagingがある
     When H_finalでconverged session検査を行う

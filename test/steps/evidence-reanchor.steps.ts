@@ -862,6 +862,8 @@ function supersessionFixture(
   changeStepChain = false,
   changeDistribution = false,
   oldBypass = false,
+  priorArtifactCommits = 1,
+  moveDetail = false,
 ): void {
   world.root = world.initRepo();
   world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
@@ -883,6 +885,12 @@ function supersessionFixture(
       oldBypass
         ? "| Step chain | 迂回: fixture |"
         : "| Step chain | 経由: fixture |",
+    )
+    .replace(
+      "- 判定: approved",
+      moveDetail
+        ? "- Critical/Highの内訳: Critical 0件、High 1件は修正済み\n- 判定: approved"
+        : "- 判定: approved",
     );
   world.oldHeadSha = commitPath(
     world.root,
@@ -890,6 +898,24 @@ function supersessionFixture(
     oldArtifact,
     "docs: old artifact",
   );
+  if (priorArtifactCommits === 8) {
+    const variants = [
+      `${oldArtifact}\n`,
+      oldArtifact,
+      `${oldArtifact}\n`,
+      oldArtifact,
+      `${oldArtifact}\n`,
+      `${oldArtifact}\n\n`,
+      oldArtifact,
+    ];
+    for (const [index, variant] of variants.entries())
+      world.oldHeadSha = commitPath(
+        world.root,
+        artifactPath,
+        variant,
+        `docs: prior artifact correction ${index + 2}`,
+      );
+  }
   world.staging = makeStaging(world);
   buildApprovedReviewBinding(world, implementation);
   buildDelivery(world, false);
@@ -929,6 +955,16 @@ function supersessionFixture(
       "判断: 配布物を更新しない",
       "判断: 配布物を更新した",
     );
+  if (moveDetail)
+    nextArtifact = nextArtifact
+      .replace(
+        "## 3. 肯定的評価\n成立。",
+        "## 3. 肯定的評価\n成立。\n- Critical/Highの内訳: Critical 0件、High 1件は修正済み",
+      )
+      .replace(
+        "- Critical/Highの内訳: Critical 0件、High 1件は修正済み\n- 判定: approved",
+        "- 判定: approved",
+      );
   world.newHeadSha = commitPath(
     world.root,
     artifactPath,
@@ -966,6 +1002,14 @@ Given(
     supersessionFixture(this, false, false, false, false, true);
   },
 );
+
+Given("pr-bound後にartifactの9件目の前進是正commitがある", function () {
+  supersessionFixture(this, false, false, false, false, false, 8);
+});
+
+Given("pr-bound後にHigh内訳を判断節から移した前進commitがある", function () {
+  supersessionFixture(this, false, false, false, false, false, 1, true);
+});
 
 Given("pr-bound後に配布物影響の判断を書き換えた前進commitがある", function () {
   supersessionFixture(this, false, false, false, true);
