@@ -38,8 +38,8 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | Phase A artifact | 本fileをcommit後に観測 | 未作成 | Git観測 |
 | review session | .agent-skill-chain/tmp/issues/20260919_232451_bugfix-pr-reanchorのreview-artifact同定が正本のevidence-only-allowlistと食い違う | 未開始 | Git観測 |
 
-- dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: はい。本変更が足す辺は`adapters/evidence-reanchor` → `domain/review`の1本だけで、`review-session.ts`と`review-record-layer.ts`が既に持つ向きと同じである。逆向きの辺を作らず`npm run architecture:check`が循環0件を返した。本文書へ自身のcommit SHAを書いていない
-- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: はい。`H_impl`は`d6f83ba51d5799cddfe686394c8e54e3b58cca15`で、`H_final`は本file 1件だけを加えたcommitである。`npm run audit:check`で検証する
+- dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: はい。本変更が追加した辺は`adapters/evidence-reanchor` → `domain/review`と`adapters/review-diff` → `domain/review`の2本である。`isEvidenceOnlyPath`の依存を`review-session` → `domain/review`から`review-diff` → `domain/review`へ移し、`evidence-reanchor` → `review-diff`と`review-session` → `review-diff`は既存である。逆向きの辺を作らず`npm run architecture:check`が循環0件を返した。本文書へ自身のcommit SHAを書いていない
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: はい。現行の`H_impl`は`125409f728796fc8cde58c7ce655423c798bc44b`で、`H_final`は本file 1件だけを前向きに追記したcommitである。`npm run audit:check`で検証する
 - reviewerの独立性が要求水準を満たす: はい。§9に観測値を記録した
 - 既定branch追随を行った場合、取り込みがartifact commitより前にあり、`比較基点`が取り込んだ既定branch tip、`H_impl`がartifact直前の最新commitを指し、個別監査表を`比較基点..H_impl`から再生成した: **はい。** PR #1434のmergeで既定branchが`c6f7b556`へ動いたため、rebaseではなくmergeで追随した。取り込みcommit `125409f7`は単一merge-baseの2親mergeであり、`比較基点`は取り込んだ既定branch tip `c6f7b556`、`H_impl`は取り込みcommit `125409f7`を指す。個別監査表は`c6f7b556..125409f7`から再生成し、**対象path 18件と変更種別がround 4と完全一致すること**を確認したため、各行の判断欄はround 4の記録をそのまま保持している。衝突は`docs/specs/15_要件追跡/01_変更履歴.md`の1 fileのみで、両側の行を保持して解消し、空白を正規化した集合比較で欠落0件・余剰0件を確認した。
 - **この既定branch追随はreview sessionへroundとして記録できていない。** 本PRはround 4までを別のsessionが進めており、review sessionはstaging（版管理外）に存在するため、その記録がこの作業環境に無い。前roundのcandidate HEADが現HEADの祖先にならず`review round`を開けない。**この欄の更新は機械導出される比較基点・`H_impl`・対象差分・個別監査表のpath集合に限り、round 4が下した判定・finding・独立性の記録は1 byteも変更していない。** 記録の欠落を承知のうえで残す。
@@ -278,7 +278,7 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 - 新しい権限が必要な事項: なし。本変更は新しいauthorityも承認経路も作らず、保護fileへ触れていない
 - 残存リスク: (1) REV-1433-06。`resolveAnchor`のJSDocが本体から離れて孤立している。本変更より前からの状態で、可読性のみに影響する。(2) `pr merge`側の2箇所（`resolveImplementationCommitForMerge`とdelivery stateのMergeIntent解析）が2 prefixを直書きで持つ点（REV-1433-09、REV-1433-12）。受理集合は同じで、束縛済みpathの後段再読であるため合成経路から受理集合の差へ到達しない。**`pr merge`の認可判定は§2.2で対象外と宣言済みであり、合流は別Issueとする。** (3) 未決事項2件。「正規命名」をTERM-ASC-101参照へ置き換える正本改定の可否と、Issue #1424のclose判断。いずれも決定権者はpackage ownerであり、本PRのmerge時に判断される。**mode検査の追加可否はownerがround 2で決裁済みである。** (4) round 3で分離した2件。`review validate`がapproval recordを検証しない件はIssue #1436、「force push禁止」と「複数commit拒否」が両立しない件はIssue #1437として起票した。**#1437にはPR作成後にforce pushを実行した逸脱の事実を明記し、owner決裁を求めている。** (5) round 4で判明したレビュアー較正結果。ローカルLLM（Ollama、`qwen3-coder:30b`）は既知の欠陥（REV-1433-08相当）を再現実験でも検出できず、round 4自身の「新規0件」報告の信頼度はCodexほど高くない。owner懸念への回答として§6ラウンド4に記録した
 - 次に許可される操作: `workflow record --step=10 --post-pr-intake` → 本fileのcommit（新`H_final`）→ `pr reanchor --new-head=<新H_final> --new-base=<不変>`。`delivery.stopAt=pull_request`かつ`merge.mode=assisted`のためPR作成で停止し、mergeはowner承認を待つ。**mergeは`--merge`で行う。squashは2区間構造を壊し`audit:check`が落ちる**
-- 次回の再開地点: `H_impl` `9eabf3eb95340dd360f6859eb563b666acbc3076`、比較基点 `5f7f1c53c873f0c50d9b66f2ac30bfe47ec18b92`、branch `bugfix/1433-reanchor-artifact-allowlist`、worktree `.worktrees/20260919_234846-1433-reanchor-artifact-allowlist`、PR #1435（`pr-bound`）
+- 次回の再開地点: 現行`H_impl` `125409f728796fc8cde58c7ce655423c798bc44b`、比較基点 `c6f7b5563a3c94bcad0b163e00e7c0e459e381f5`、branch `bugfix/1433-reanchor-artifact-allowlist`、PR #1435。旧`9eabf3eb`はround 4の履歴であり、現在の承認HEADではない。追随merge後のreview sessionが欠けていることは§1に開示した。
 
 ## 0. レビュー識別情報
 
