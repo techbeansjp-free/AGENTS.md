@@ -239,4 +239,3 @@ Feature: rebase後の証跡再固定を内容等価性で受理する
       | mode |
       | 実行権限 |
       | symlink |
-
