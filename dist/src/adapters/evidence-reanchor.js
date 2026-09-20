@@ -227,7 +227,7 @@ function observeRebaseEquivalence(root, input) {
  * path是正で変わってよい機械導出・監査領域だけを正規化する。
  * finding、判定、独立性、test証拠などreview判断の本文はbyte比較へ残す。
  */
-function comparableArtifactContent(markdown) {
+function comparableArtifactContent(markdown, ignoreDistribution = true) {
     const output = [];
     let ignoredSection;
     const lines = markdown.replaceAll("\r\n", "\n").split("\n");
@@ -239,14 +239,14 @@ function comparableArtifactContent(markdown) {
                 output.push(line, "<machine-audit>");
                 continue;
             }
-            if (line === "## 8. 配布物影響") {
+            if (ignoreDistribution && line === "## 8. 配布物影響") {
                 ignoredSection = "distribution";
                 output.push(line, "<distribution-audit>");
                 continue;
             }
             if (ignoredSection !== undefined &&
                 /^##(?: |$)/u.test(line) &&
-                line !== "## 8. 配布物影響")
+                (line !== "## 8. 配布物影響" || !ignoreDistribution))
                 ignoredSection = undefined;
             if (ignoredSection === undefined &&
                 (/^\| Step chain \|/u.test(line) ||
@@ -296,7 +296,7 @@ function comparableSupersessionContent(markdown) {
         return [line];
     });
     return {
-        body: comparableArtifactContent(normalized.join("\n")),
+        body: comparableArtifactContent(normalized.join("\n"), false),
         judgmentDetails,
     };
 }

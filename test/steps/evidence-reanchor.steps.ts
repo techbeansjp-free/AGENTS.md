@@ -860,6 +860,7 @@ function supersessionFixture(
   changeJudgment: boolean,
   changeSummary = false,
   changeStepChain = false,
+  changeDistribution = false,
 ): void {
   world.root = world.initRepo();
   world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
@@ -913,6 +914,11 @@ function supersessionFixture(
       "| Step chain | 経由: fixture |",
       "| Step chain | 迂回: fixture |",
     );
+  if (changeDistribution)
+    nextArtifact = nextArtifact.replace(
+      "判断: 配布物を更新しない",
+      "判断: 配布物を更新した",
+    );
   world.newHeadSha = commitPath(
     world.root,
     artifactPath,
@@ -942,6 +948,10 @@ Given(
 
 Given("pr-bound後にStep chainを迂回へ変えた前進commitがある", function () {
   supersessionFixture(this, false, false, true);
+});
+
+Given("pr-bound後に配布物影響の判断を書き換えた前進commitがある", function () {
+  supersessionFixture(this, false, false, false, true);
 });
 
 Given("pr-boundの不正なartifact replacement「{word}」がある", function (kind) {

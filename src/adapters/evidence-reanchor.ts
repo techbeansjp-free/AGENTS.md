@@ -414,7 +414,10 @@ interface ReviewedForwardEvidence {
  * path是正で変わってよい機械導出・監査領域だけを正規化する。
  * finding、判定、独立性、test証拠などreview判断の本文はbyte比較へ残す。
  */
-function comparableArtifactContent(markdown: string): string {
+function comparableArtifactContent(
+  markdown: string,
+  ignoreDistribution = true,
+): string {
   const output: string[] = [];
   let ignoredSection: "audit" | "distribution" | undefined;
   const lines = markdown.replaceAll("\r\n", "\n").split("\n");
@@ -426,7 +429,7 @@ function comparableArtifactContent(markdown: string): string {
         output.push(line, "<machine-audit>");
         continue;
       }
-      if (line === "## 8. 配布物影響") {
+      if (ignoreDistribution && line === "## 8. 配布物影響") {
         ignoredSection = "distribution";
         output.push(line, "<distribution-audit>");
         continue;
@@ -434,7 +437,7 @@ function comparableArtifactContent(markdown: string): string {
       if (
         ignoredSection !== undefined &&
         /^##(?: |$)/u.test(line) &&
-        line !== "## 8. 配布物影響"
+        (line !== "## 8. 配布物影響" || !ignoreDistribution)
       )
         ignoredSection = undefined;
       if (
@@ -500,7 +503,7 @@ function comparableSupersessionContent(markdown: string): {
     return [line];
   });
   return {
-    body: comparableArtifactContent(normalized.join("\n")),
+    body: comparableArtifactContent(normalized.join("\n"), false),
     judgmentDetails,
   };
 }
