@@ -11,6 +11,7 @@ import {
 } from "./supplemental-review-collect.js";
 import { REVIEWER_EXECUTORS } from "./reviewer-executors.js";
 import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
+import { git } from "../lib/process.js";
 import type { ReviewerExecutor } from "../domain/reviewer-provider.js";
 import { isRecord } from "../types.js";
 import { filterReviewFindingsToTarget } from "../domain/review-finding-scope.js";
@@ -290,6 +291,11 @@ export async function launchSupplementalReviewDiff(
   if (config === undefined) return { state: "disabled" };
   try {
     resolveReviewRoot(input.root);
+    if (
+      !/^[a-f0-9]{40}$/u.test(input.headSha) ||
+      git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha
+    )
+      return { state: "error", reason: "対象HEADを固定できませんでした" };
     const collected = collectSupplementalReviewDiff(
       input.root,
       input.baseSha,
@@ -297,7 +303,7 @@ export async function launchSupplementalReviewDiff(
       input.limit ?? RELATED_FILE_LIMIT,
     );
     const promptBody = `${DIFF_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
-    return await dispatch(
+    const result = await dispatch(
       promptBody,
       config,
       collected.truncated,
@@ -305,6 +311,9 @@ export async function launchSupplementalReviewDiff(
       dependencies.execute,
       { root: input.root, headSha: input.headSha },
     );
+    if (git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha)
+      return { state: "error", reason: "対象HEADを固定できませんでした" };
+    return result;
   } catch (error) {
     return toErrorResult(error);
   }

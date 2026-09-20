@@ -419,5 +419,18 @@ Then("委譲reviewは初回候補と検証者の却下を進行役確認へ渡�
   if (this.result?.state !== "needs_coordinator_review") return;
   assert.equal(this.result.findings.length, 1);
   assert.deepEqual(this.result.verificationSuggestedFindings, []);
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.sourceFile,
+    "review-target.txt",
+  );
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.sourceCommit,
+    this.headSha,
+  );
+  assert.equal(this.result.verificationAssessments?.[0]?.modelValid, false);
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.evidenceStatus,
+    "quote_matched",
+  );
   assert.equal(this.reviewCalls, 2);
 });

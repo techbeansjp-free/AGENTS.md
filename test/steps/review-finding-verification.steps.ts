@@ -103,6 +103,8 @@ async function review(
     | "unsubstantiated-reject"
     | "contradictory-reject"
     | "contradictory"
+    | "valid-block-only"
+    | "reject-fault-only"
     | "invented"
     | "malformed",
 ) {
@@ -123,27 +125,34 @@ async function review(
                     valid:
                       verdict !== "reject" &&
                       verdict !== "unsubstantiated-reject" &&
-                      verdict !== "contradictory-reject",
+                      verdict !== "contradictory-reject" &&
+                      verdict !== "reject-fault-only",
                     reason:
                       verdict !== "reject" &&
                       verdict !== "unsubstantiated-reject" &&
-                      verdict !== "contradictory-reject"
+                      verdict !== "contradictory-reject" &&
+                      verdict !== "reject-fault-only"
                         ? "現在も失敗経路がある"
                         : "修正後には成立しない",
                     faultCode:
                       verdict === "reject" ||
-                      verdict === "unsubstantiated-reject"
+                      verdict === "unsubstantiated-reject" ||
+                      verdict === "valid-block-only"
                         ? ""
                         : verdict === "invented"
                           ? "存在しない障害行"
                           : world.after.trim(),
                     failurePath:
                       verdict === "reject" ||
-                      verdict === "unsubstantiated-reject"
+                      verdict === "unsubstantiated-reject" ||
+                      verdict === "valid-block-only" ||
+                      verdict === "reject-fault-only"
                         ? ""
                         : "入力から障害へ到達",
                     blockingCode:
-                      verdict === "contradictory" || verdict === "reject"
+                      verdict === "contradictory" ||
+                      verdict === "reject" ||
+                      verdict === "valid-block-only"
                         ? world.after.trim()
                         : "",
                   },
@@ -192,6 +201,23 @@ When("検証者が遮断根拠なしで却下する", async function () {
 });
 When("検証者が失敗経路を示しながら却下する", async function () {
   await review(this, "contradictory-reject");
+});
+When("検証者が採用判定と遮断コードだけを返す", async function () {
+  await review(this, "valid-block-only");
+});
+When("検証者が却下判定と障害コードだけを返す", async function () {
+  await review(this, "reject-fault-only");
+});
+When("補助差分reviewに可変HEAD参照を指定する", async function () {
+  this.result = await launchSupplementalReviewDiff(
+    { root: this.root, baseSha: this.baseSha, headSha: "main" },
+    {
+      execute: async () => {
+        this.reviewCalls++;
+        return { state: "succeeded", reason: "ok", output: "{}" };
+      },
+    },
+  );
 });
 When("差分内のfileがHEADで削除されて検証者が確認する", async function () {
   fs.rmSync(path.join(this.root, "target.ts"));
@@ -292,4 +318,39 @@ Then("補助レビューは却下と失敗経路の矛盾を進行役へ渡す",
     this.result.verificationAssessments?.[0]?.failurePath,
     "入力から障害へ到達",
   );
+});
+
+Then("補助レビューは障害コードだけの矛盾を進行役へ渡す", function () {
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
+  assert.equal(this.result.findings.length, 1);
+  assert.equal(this.result.verificationAssessments?.[0]?.modelValid, false);
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.evidenceStatus,
+    "conflicting",
+  );
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.faultCode,
+    this.after.trim(),
+  );
+});
+
+Then("補助レビューは遮断コードだけの矛盾を進行役へ渡す", function () {
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
+  assert.equal(this.result.findings.length, 1);
+  assert.equal(this.result.verificationAssessments?.[0]?.modelValid, true);
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.evidenceStatus,
+    "conflicting",
+  );
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.blockingCode,
+    this.after.trim(),
+  );
+});
+
+Then("補助レビューはHEAD参照を拒否しexecutorを起動しない", function () {
+  assert.equal(this.result?.state, "error", JSON.stringify(this.result));
+  assert.equal(this.reviewCalls, 0);
 });

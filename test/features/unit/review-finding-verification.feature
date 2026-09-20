@@ -58,3 +58,18 @@ Feature: 差分findingを進行役確認候補として渡す
     Given "null未チェック" の修正前後を持つ隔離Git repositoryがある
     When 検証者が失敗経路を示しながら却下する
     Then 補助レビューは却下と失敗経路の矛盾を進行役へ渡す
+
+  Scenario: SCN-UNIT-FINDVERIFY-010 採用判定に遮断コードだけがあれば矛盾とする
+    Given "nullガード追加" の修正前後を持つ隔離Git repositoryがある
+    When 検証者が採用判定と遮断コードだけを返す
+    Then 補助レビューは遮断コードだけの矛盾を進行役へ渡す
+
+  Scenario: SCN-UNIT-FINDVERIFY-011 却下判定に障害コードだけがあれば矛盾とする
+    Given "null未チェック" の修正前後を持つ隔離Git repositoryがある
+    When 検証者が却下判定と障害コードだけを返す
+    Then 補助レビューは障害コードだけの矛盾を進行役へ渡す
+
+  Scenario: SCN-UNIT-FINDVERIFY-012 可変HEAD参照を拒否する
+    Given "null未チェック" の修正前後を持つ隔離Git repositoryがある
+    When 補助差分reviewに可変HEAD参照を指定する
+    Then 補助レビューはHEAD参照を拒否しexecutorを起動しない

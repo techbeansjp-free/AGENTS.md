@@ -79,9 +79,13 @@ export async function verifyReviewFindings(input, executor) {
         const blob = finding && blobs.get(finding.file);
         if (!blob)
             return undefined;
-        const faultClaimed = verdict.faultCode.trim() !== "" && verdict.failurePath.trim() !== "";
+        const faultCodeClaimed = verdict.faultCode.trim() !== "";
+        const failurePathClaimed = verdict.failurePath.trim() !== "";
+        const faultClaimed = faultCodeClaimed && failurePathClaimed;
         const blockClaimed = verdict.blockingCode.trim() !== "";
-        const conflicting = (faultClaimed && blockClaimed) || (!verdict.valid && faultClaimed);
+        const conflicting = verdict.valid
+            ? blockClaimed
+            : faultCodeClaimed || failurePathClaimed;
         const quoteMatched = verdict.valid
             ? faultClaimed && blob.includes(verdict.faultCode) && !blockClaimed
             : blockClaimed &&
