@@ -460,6 +460,13 @@ Then("委譲reviewはHighのEffortだけを返す", function () {
     this.result.findings.map((finding) => [finding.severity, finding.effort]),
     [["High", "Quick win"]],
   );
+  assert.deepEqual(
+    this.result.suppressedFindings.map((finding) => [
+      finding.severity,
+      finding.effort,
+    ]),
+    [["Low", "Heavy lift"]],
+  );
   assert.equal(this.result.decision, "blocked");
   assert.match(this.dispatchedPrompt, /chill profile/u);
 });

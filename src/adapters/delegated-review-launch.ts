@@ -49,6 +49,7 @@ export type DelegatedReviewResult =
       affirmative: string;
       adversarial: string;
       findings: DelegatedReviewFinding[];
+      suppressedFindings: DelegatedReviewFinding[];
       ignoredOutOfScopeCount: number;
       provider: string;
       model: string;
@@ -62,6 +63,8 @@ export type DelegatedReviewResult =
       affirmative: string;
       adversarial: string;
       findings: DelegatedReviewFinding[];
+      suppressedFindings: DelegatedReviewFinding[];
+      firstPassFindings: DelegatedReviewFinding[];
       verificationSuggestedFindings: DelegatedReviewFinding[] | null;
       verificationAssessments: ReviewFindingAssessment[] | null;
       ignoredOutOfScopeCount: number;
@@ -192,6 +195,10 @@ function parseReview(
     affirmative: parsed.affirmative,
     adversarial: parsed.adversarial,
     findings: visible,
+    suppressedFindings: scoped.findings.filter(
+      (finding) => !visible.includes(finding),
+    ),
+    scopedFindings: scoped.findings,
     ignoredOutOfScopeCount: scoped.ignoredOutOfScopeCount,
   };
 }
@@ -330,7 +337,7 @@ export async function launchDelegatedReview(
         {
           root: input.root,
           headSha: input.headSha,
-          findings: parsed.findings,
+          findings: parsed.scopedFindings,
           endpoint: config.endpoint,
           model: config.model,
           timeoutMs: config.timeoutMs,
@@ -348,6 +355,8 @@ export async function launchDelegatedReview(
       affirmative: parsed.affirmative,
       adversarial: parsed.adversarial,
       findings: parsed.findings,
+      suppressedFindings: parsed.suppressedFindings,
+      firstPassFindings: parsed.scopedFindings,
       verificationSuggestedFindings: verified?.suggestedFindings ?? null,
       verificationAssessments: verified?.assessments ?? null,
       ignoredOutOfScopeCount: parsed.ignoredOutOfScopeCount,
@@ -363,7 +372,12 @@ export async function launchDelegatedReview(
   return {
     state: "reviewed",
     step: input.step,
-    ...parsed,
+    decision: parsed.decision,
+    affirmative: parsed.affirmative,
+    adversarial: parsed.adversarial,
+    findings: parsed.findings,
+    suppressedFindings: parsed.suppressedFindings,
+    ignoredOutOfScopeCount: parsed.ignoredOutOfScopeCount,
     provider: config.provider,
     model: config.model,
     configSource: config.source,

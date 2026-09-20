@@ -133,9 +133,11 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
             truncated,
         };
     const scoped = filterReviewFindingsToTarget(findings, targetFiles);
+    const visible = visibleReviewFindings(scoped.findings, config.profile);
     const presented = {
         ...scoped,
-        findings: visibleReviewFindings(scoped.findings, config.profile),
+        findings: visible,
+        suppressedFindings: scoped.findings.filter((finding) => !visible.includes(finding)),
     };
     if (!verification)
         return { state: "findings", ...presented, truncated };
@@ -143,7 +145,7 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
     try {
         verified = await verifyReviewFindings({
             ...verification,
-            findings: presented.findings,
+            findings: scoped.findings,
             endpoint: config.endpoint,
             model: config.model,
             timeoutMs: config.timeoutMs,
@@ -157,10 +159,12 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
         };
     }
     // A second LLM pass is only advisory: it can reject a real defect while
-    // describing its failure path. Preserve every scoped first-pass candidate.
+    // describing its failure path. Verify every scoped first-pass candidate,
+    // including those hidden by the display profile.
     return {
         state: "needs_coordinator_review",
         ...presented,
+        firstPassFindings: scoped.findings,
         verificationSuggestedFindings: verified?.suggestedFindings ?? null,
         verificationAssessments: verified?.assessments ?? null,
         headSha: verification.headSha,

@@ -103,6 +103,8 @@ function parseReview(output, step, targetFiles, profile) {
         affirmative: parsed.affirmative,
         adversarial: parsed.adversarial,
         findings: visible,
+        suppressedFindings: scoped.findings.filter((finding) => !visible.includes(finding)),
+        scopedFindings: scoped.findings,
         ignoredOutOfScopeCount: scoped.ignoredOutOfScopeCount,
     };
 }
@@ -210,7 +212,7 @@ export async function launchDelegatedReview(input, dependencies = {}) {
             verified = await verifyReviewFindings({
                 root: input.root,
                 headSha: input.headSha,
-                findings: parsed.findings,
+                findings: parsed.scopedFindings,
                 endpoint: config.endpoint,
                 model: config.model,
                 timeoutMs: config.timeoutMs,
@@ -227,6 +229,8 @@ export async function launchDelegatedReview(input, dependencies = {}) {
             affirmative: parsed.affirmative,
             adversarial: parsed.adversarial,
             findings: parsed.findings,
+            suppressedFindings: parsed.suppressedFindings,
+            firstPassFindings: parsed.scopedFindings,
             verificationSuggestedFindings: verified?.suggestedFindings ?? null,
             verificationAssessments: verified?.assessments ?? null,
             ignoredOutOfScopeCount: parsed.ignoredOutOfScopeCount,
@@ -242,7 +246,12 @@ export async function launchDelegatedReview(input, dependencies = {}) {
     return {
         state: "reviewed",
         step: input.step,
-        ...parsed,
+        decision: parsed.decision,
+        affirmative: parsed.affirmative,
+        adversarial: parsed.adversarial,
+        findings: parsed.findings,
+        suppressedFindings: parsed.suppressedFindings,
+        ignoredOutOfScopeCount: parsed.ignoredOutOfScopeCount,
         provider: config.provider,
         model: config.model,
         configSource: config.source,

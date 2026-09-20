@@ -13,6 +13,8 @@ description: exact-headの実装・テスト・仕様証拠を有限にレビュ
 
 候補ごとの検証記録には、候補ID・主張、出典のcommit/file/位置、成立条件と到達経路、支持根拠、反証候補、実施した検証方法と観測結果、分類と理由を残す。未確認項目は「未確認」と明記し、モデルの自己申告を観測済みtestへ書き換えない。`verificationAssessments`の`faultCode`・`blockingCode`は第二passの引用主張であり、`sourceCommit`のGit blobと照合する。`evidenceStatus=quote_matched`は引用文字列がblob内にあることだけを示し、到達可能性・意味論・severityを証明しない。`conflicting`または`unsubstantiated`でも初回候補を捨てず、何が矛盾または未裏付けかを記録する。進行役はguard、呼出元の契約、例外経路などの反証を確かめ、再現testまたは静的な経路確認の実測から結論を導く。
 
+表示profileで隠れた`suppressedFindings`も候補として確認し、差分reviewの第二passでは全対象内候補の検証結果を照合する。`verificationAssessments.findingIndex`は`firstPassFindings`の元の順序に対応させる。
+
 ## routing入力契約
 
 role欄の担当roleが`reviewer`であること、必要能力tier、provider欄の上限、model設定欄、fallback欄、独立性証拠欄、肯定・敵対review、finding分類、対象差分を変更していない証拠を実装時のrouting evidenceと突合する。providerとmodel設定はproject choiceの入力契約として扱い、固有のmodel slugからreview authorityを推測しない。**reviewerの独立性はproject policyの`merge.reviewIndependence`が決める。** `context-isolated`（既定）はimplementerと別session/context、exact HEAD固定、対象差分を変更していないこと、肯定・敵対レビューとfinding記録を要求し、**同一GitHub actorでも成立する。** `actor-independent`はPR author・implementation commit authorと別のstable actor IDを要求し、高リスク変更・不可逆操作・releaseでpolicyが宣言して引き上げる。**要求水準を独立性証拠欄で確認できない場合は停止条件を適用し、承認しない。** **同一provider・同一論理tierだけを理由に独立性違反としない。**reviewerはfindingを隠す修正を行わない。

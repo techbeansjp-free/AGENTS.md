@@ -970,12 +970,23 @@ Then("HighのQuick winだけが表示される", function () {
     this.result.findings.map((finding) => [finding.severity, finding.effort]),
     [["High", "Quick win"]],
   );
-  assert.equal(this.result.verificationAssessments?.length, 1);
+  assert.deepEqual(
+    this.result.suppressedFindings.map((finding) => [
+      finding.severity,
+      finding.effort,
+    ]),
+    [["Low", "Heavy lift"]],
+  );
+  assert.deepEqual(
+    this.result.firstPassFindings.map((finding) => finding.severity),
+    ["High", "Low"],
+  );
+  assert.equal(this.result.verificationAssessments?.length, 2);
   assert.equal(
     this.result.verificationAssessments?.[0]?.evidenceStatus,
     "quote_matched",
   );
-  assert.equal(this.result.verificationSuggestedFindings?.length, 1);
+  assert.equal(this.result.verificationSuggestedFindings?.length, 2);
 });
 Then("HighとLowのEffort付き指摘が表示される", function () {
   assert.equal(this.result?.state, "needs_coordinator_review");
@@ -987,6 +998,7 @@ Then("HighとLowのEffort付き指摘が表示される", function () {
       ["Low", "Heavy lift"],
     ],
   );
+  assert.deepEqual(this.result.suppressedFindings, []);
   assert.equal(this.result.verificationAssessments?.length, 2);
   assert.ok(
     this.result.verificationAssessments?.every(

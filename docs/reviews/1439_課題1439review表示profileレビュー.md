@@ -59,7 +59,7 @@
 
 | AC ID | SCN ID | 実装 | テスト結果 | 判定 | 証拠 |
 |---|---|---|---|---|---|
-| Issue #1439 | SCN-SUPPL-019〜020、SCN-UNIT-DELEGREVIEW-014 | 本差分 | 対象合格 | pass | Cucumber |
+| Issue #1439 | SCN-SUPPL-019〜020、SCN-UNIT-DELEGREVIEW-015〜016 | 本差分 | 対象合格 | pass | Cucumber |
 
 ### 2.2 開発考慮事項の適用判定（必須）
 

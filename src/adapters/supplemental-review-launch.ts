@@ -53,12 +53,15 @@ export type SupplementalReviewResult =
   | {
       state: "findings";
       findings: SupplementalReviewFinding[];
+      suppressedFindings: SupplementalReviewFinding[];
       truncated: boolean;
       ignoredOutOfScopeCount: number;
     }
   | {
       state: "needs_coordinator_review";
       findings: SupplementalReviewFinding[];
+      suppressedFindings: SupplementalReviewFinding[];
+      firstPassFindings: SupplementalReviewFinding[];
       verificationSuggestedFindings: SupplementalReviewFinding[] | null;
       verificationAssessments: ReviewFindingAssessment[] | null;
       headSha: string;
@@ -216,9 +219,13 @@ async function dispatch(
       truncated,
     };
   const scoped = filterReviewFindingsToTarget(findings, targetFiles);
+  const visible = visibleReviewFindings(scoped.findings, config.profile);
   const presented = {
     ...scoped,
-    findings: visibleReviewFindings(scoped.findings, config.profile),
+    findings: visible,
+    suppressedFindings: scoped.findings.filter(
+      (finding) => !visible.includes(finding),
+    ),
   };
   if (!verification) return { state: "findings", ...presented, truncated };
   let verified;
@@ -226,7 +233,7 @@ async function dispatch(
     verified = await verifyReviewFindings(
       {
         ...verification,
-        findings: presented.findings,
+        findings: scoped.findings,
         endpoint: config.endpoint,
         model: config.model,
         timeoutMs: config.timeoutMs,
@@ -241,10 +248,12 @@ async function dispatch(
     };
   }
   // A second LLM pass is only advisory: it can reject a real defect while
-  // describing its failure path. Preserve every scoped first-pass candidate.
+  // describing its failure path. Verify every scoped first-pass candidate,
+  // including those hidden by the display profile.
   return {
     state: "needs_coordinator_review",
     ...presented,
+    firstPassFindings: scoped.findings,
     verificationSuggestedFindings: verified?.suggestedFindings ?? null,
     verificationAssessments: verified?.assessments ?? null,
     headSha: verification.headSha,
