@@ -7,7 +7,9 @@ description: fullモードの要求・要件が設計開始可能かを一度確
 
 入力は対象文書のダイジェストと`full`の00/01。Problem、Goal、scope、受け入れ条件、security境界、未決事項が設計開始に十分かを一度確認する。これはexact-head独立reviewではなく、最大3ラウンド契約を適用しない。開始不能な欠落・矛盾だけを00/01へ修正し、Medium/Lowの改善提案で設計開始を止めない。`poc`では独立実行せず00の最小gateへ集約する。
 
-ローカルまたはユーザー共通のローカルLLM reviewer設定が有効なら、進行役は`routing delegated-review-staging --root=<対象worktreeのroot> --step=3 --staging=<対象staging>`を実行してreviewを委譲する。`state=reviewed`の肯定・敵対評価と対象内finding、差分外として除外された件数を読み、`decision=blocked`なら開始不能な点を是正する。`degraded`を完了とみなさず、設定または実行条件を直す。`disabled`なら既存経路で確認する。実行結果の入力・出力digestと採否をjournal evidenceへ記録し、LLMの自己申告だけを上流契約の変更権限にしない。
+ローカルまたはユーザー共通のローカルLLM reviewer設定が有効なら、進行役は`routing delegated-review-staging --root=<対象worktreeのroot> --step=3 --staging=<対象staging>`を実行してreviewを委譲する。`state=reviewed`の肯定・敵対評価と対象内finding、差分外として除外された件数を読み、`decision=blocked`の指摘は進行役が根拠を検証し、成立した開始不能な点を是正する。`degraded`をローカルLLMの完了とみなさず、設定・実行条件の修正または別reviewerの証拠で確認を続ける。`disabled`なら利用可能な別reviewerで確認する。実行結果の入力・出力digestと採否をjournal evidenceへ記録し、LLMの自己申告だけを上流契約の変更権限にしない。
+
+進行役はローカルLLMの結果に加え、利用可能ならCodex SolまたはOpusなど別reviewerの独立したreadiness checkも確認する。ローカル設定がない場合はCodex Solを基本候補とし、利用不能ならOpusなどを選ぶ。採否は進行役が出典と反証を確認して決め、追加reviewerを呼べない場合は理由をjournal evidenceへ記録する。
 
 ## テンプレート契約
 
