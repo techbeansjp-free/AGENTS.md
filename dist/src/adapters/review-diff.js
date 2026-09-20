@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { git } from "../lib/process.js";
 import { isEvidenceOnlyPath } from "../domain/review.js";
 const GIT_ENV = {
+    PATH: process.env.PATH ?? "/usr/bin:/bin",
     LANG: "C",
     LC_ALL: "C",
     GIT_CONFIG_GLOBAL: "/dev/null",
