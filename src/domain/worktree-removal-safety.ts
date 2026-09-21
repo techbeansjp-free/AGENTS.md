@@ -13,6 +13,7 @@ const RECURSIVE_PREFIX = "**/";
 type FinalizeIgnoredPathPattern =
   | { kind: "directory-prefix"; value: string }
   | { kind: "recursive-directory"; name: string }
+  | { kind: "recursive-extension"; suffix: string }
   | {
       kind: "recursive-basename";
       prefix: string;
@@ -73,6 +74,8 @@ function parseFinalizeIgnoredPathPattern(
       (suffix !== "" && !safeLiteralSegment(suffix))
     )
       return undefined;
+    if (prefix === "" && suffix.startsWith("."))
+      return { kind: "recursive-extension", suffix };
     return { kind: "recursive-basename", prefix, suffix, wildcard: true };
   }
 
@@ -173,6 +176,13 @@ function matchesPrefix(artifact: string, prefix: string): boolean {
       artifact.startsWith(`${name}/`) ||
       artifact.includes(`/${name}/`) ||
       artifact.endsWith(`/${name}`)
+    );
+  }
+  if (pattern.kind === "recursive-extension") {
+    const basename = artifact.slice(artifact.lastIndexOf("/") + 1);
+    return (
+      basename.length > pattern.suffix.length &&
+      basename.endsWith(pattern.suffix)
     );
   }
   if (pattern.kind === "recursive-basename") {

@@ -52,6 +52,8 @@ function parseFinalizeIgnoredPathPattern(value) {
             (prefix !== "" && !safeLiteralSegment(prefix)) ||
             (suffix !== "" && !safeLiteralSegment(suffix)))
             return undefined;
+        if (prefix === "" && suffix.startsWith("."))
+            return { kind: "recursive-extension", suffix };
         return { kind: "recursive-basename", prefix, suffix, wildcard: true };
     }
     if (!value.endsWith("/") || PATTERN_META.test(value))
@@ -134,6 +136,11 @@ function matchesPrefix(artifact, prefix) {
             artifact.startsWith(`${name}/`) ||
             artifact.includes(`/${name}/`) ||
             artifact.endsWith(`/${name}`));
+    }
+    if (pattern.kind === "recursive-extension") {
+        const basename = artifact.slice(artifact.lastIndexOf("/") + 1);
+        return (basename.length > pattern.suffix.length &&
+            basename.endsWith(pattern.suffix));
     }
     if (pattern.kind === "recursive-basename") {
         const basename = artifact.slice(artifact.lastIndexOf("/") + 1);
