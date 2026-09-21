@@ -4,6 +4,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import {
   MAX_SUGGESTION_BYTES,
+  validateReviewSuggestionSyntax,
   verifyReviewSuggestion,
 } from "../../src/adapters/review-suggestion.js";
 import { attachVerifiedReviewSuggestions } from "../../src/adapters/review-suggestion-launch.js";
@@ -16,6 +17,8 @@ class SuggestionWorld extends WorkflowWorld {
   result: { headSha: string; patch: string } | undefined;
   status = "";
   original = "";
+  syntaxResult = true;
+  elapsedMs = 0;
   resultFindings: Array<{
     file: string;
     committableSuggestion?: { headSha: string; patch: string };
@@ -23,6 +26,10 @@ class SuggestionWorld extends WorkflowWorld {
 }
 
 const { Given, When, Then } = stepDefinitions<SuggestionWorld>();
+
+Given("修正提案の構文検証器がある", function () {
+  this.syntaxResult = true;
+});
 
 function git(root: string, ...args: string[]): string {
   const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
@@ -112,6 +119,13 @@ When("過大候補の次に有効な修正提案を検証する", function () {
   });
 });
 
+When("大きなTypeScript sourceを1ms期限で構文検証する", function () {
+  const source = `export const value = ${"1 + ".repeat(200_000)}0;\n`;
+  const started = Date.now();
+  this.syntaxResult = validateReviewSuggestionSyntax("target.ts", source, 1);
+  this.elapsedMs = Date.now() - started;
+});
+
 When("{string} の修正提案を検証する", function (caseName: string) {
   let headSha = this.headSha;
   let patch = this.patch;
@@ -180,6 +194,10 @@ Then("対象HEADとpatchを持つ修正提案が返る", function () {
 });
 Then("修正提案は省略される", function () {
   assert.equal(this.result, undefined);
+});
+Then("構文検証は1秒以内に失敗する", function () {
+  assert.equal(this.syntaxResult, false);
+  assert.ok(this.elapsedMs < 1000, `elapsed=${this.elapsedMs}`);
 });
 Then("後続の有効提案だけがfindingへ添えられる", function () {
   assert.equal(this.resultFindings.length, 2);

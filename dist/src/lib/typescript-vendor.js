@@ -45,7 +45,7 @@ export function installVerifiedTypeScriptVendorAssets(root) {
             throw new Error(`固定TypeScript compiler資産のcopy後SHA-256が一致しません: ${asset.destination}`);
     }
 }
-function verifiedCompilerPath() {
+export function resolveVerifiedTypeScriptCompilerPath() {
     const bundled = path.resolve(import.meta.dirname, "..", "..", "vendor", "typescript.cjs");
     let compiler = bundled;
     if (!fs.existsSync(compiler))
@@ -65,7 +65,7 @@ function verifiedCompilerPath() {
 export function loadTypeScriptCompiler() {
     if (cachedTypeScript !== undefined)
         return cachedTypeScript;
-    const compiler = requireFromModule(verifiedCompilerPath());
+    const compiler = requireFromModule(resolveVerifiedTypeScriptCompilerPath());
     if (compiler.version !== TYPESCRIPT_VENDOR.version)
         throw new Error("固定TypeScript compiler runtimeのversionが一致しません");
     cachedTypeScript = compiler;

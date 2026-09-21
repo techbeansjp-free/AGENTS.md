@@ -64,7 +64,7 @@ export function installVerifiedTypeScriptVendorAssets(root: string): void {
   }
 }
 
-function verifiedCompilerPath(): string {
+export function resolveVerifiedTypeScriptCompilerPath(): string {
   const bundled = path.resolve(
     import.meta.dirname,
     "..",
@@ -89,7 +89,9 @@ function verifiedCompilerPath(): string {
 
 export function loadTypeScriptCompiler(): TypeScriptApi {
   if (cachedTypeScript !== undefined) return cachedTypeScript;
-  const compiler = requireFromModule(verifiedCompilerPath()) as TypeScriptApi;
+  const compiler = requireFromModule(
+    resolveVerifiedTypeScriptCompilerPath(),
+  ) as TypeScriptApi;
   if (compiler.version !== TYPESCRIPT_VENDOR.version)
     throw new Error("固定TypeScript compiler runtimeのversionが一致しません");
   cachedTypeScript = compiler;

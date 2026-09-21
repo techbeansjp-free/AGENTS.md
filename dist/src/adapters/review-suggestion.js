@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { git } from "../lib/process.js";
-import { loadTypeScriptCompiler } from "../lib/typescript-vendor.js";
+import { resolveVerifiedTypeScriptCompilerPath } from "../lib/typescript-vendor.js";
 export const MAX_SUGGESTION_BYTES = 64 * 1024;
 const MAX_SOURCE_BYTES = 1024 * 1024;
 const MAX_VERIFICATION_MS = 5000;
@@ -58,50 +58,49 @@ function hasNoWorktreeSymlink(root, file) {
     }
     return fs.statSync(current).isFile();
 }
-function validSyntax(file, source) {
+const SYNTAX_VALIDATOR = String.raw `
+const fs = require("node:fs");
+const ts = require(process.argv[1]);
+const file = process.argv[2];
+const source = fs.readFileSync(0, "utf8");
+const kind = file.endsWith(".tsx") ? ts.ScriptKind.TSX
+  : file.endsWith(".jsx") ? ts.ScriptKind.JSX
+  : /\.(?:js|mjs|cjs)$/.test(file) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
+const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
+let valid = Array.isArray(parsed.parseDiagnostics) && parsed.parseDiagnostics.length === 0;
+if (valid && /\.(?:js|jsx|mjs|cjs)$/.test(file)) {
+  const diagnostics = ts.transpileModule(source, {
+    fileName: file,
+    reportDiagnostics: true,
+    compilerOptions: { allowJs: true, checkJs: true, jsx: ts.JsxEmit.Preserve },
+  }).diagnostics;
+  valid = Array.isArray(diagnostics) && diagnostics.length === 0;
+  if (valid && !file.endsWith(".jsx")) {
+    let jsx = false;
+    const walk = (node) => {
+      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) jsx = true;
+      if (!jsx) ts.forEachChild(node, walk);
+    };
+    walk(parsed);
+    valid = !jsx;
+  }
+}
+process.stdout.write(valid ? "valid" : "invalid");
+`;
+export function validateReviewSuggestionSyntax(file, source, timeoutMs) {
     if (file.endsWith(".json")) {
         JSON.parse(source);
         return true;
     }
-    const ts = loadTypeScriptCompiler();
-    const kind = file.endsWith(".tsx")
-        ? ts.ScriptKind.TSX
-        : file.endsWith(".jsx")
-            ? ts.ScriptKind.JSX
-            : /\.(?:js|mjs|cjs)$/u.test(file)
-                ? ts.ScriptKind.JS
-                : ts.ScriptKind.TS;
-    const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
-    if (!parsed.parseDiagnostics || parsed.parseDiagnostics.length > 0)
+    if (timeoutMs < 1)
         return false;
-    if (/\.(?:js|jsx|mjs|cjs)$/u.test(file)) {
-        const diagnostics = ts.transpileModule(source, {
-            fileName: file,
-            reportDiagnostics: true,
-            compilerOptions: {
-                allowJs: true,
-                checkJs: true,
-                jsx: ts.JsxEmit.Preserve,
-            },
-        }).diagnostics;
-        if (!diagnostics || diagnostics.length > 0)
-            return false;
-        if (!file.endsWith(".jsx")) {
-            let jsx = false;
-            const walk = (node) => {
-                if (ts.isJsxElement(node) ||
-                    ts.isJsxSelfClosingElement(node) ||
-                    ts.isJsxFragment(node))
-                    jsx = true;
-                if (!jsx)
-                    ts.forEachChild(node, walk);
-            };
-            walk(parsed);
-            if (jsx)
-                return false;
-        }
-    }
-    return true;
+    const checked = spawnSync(process.execPath, ["-e", SYNTAX_VALIDATOR, resolveVerifiedTypeScriptCompilerPath(), file], {
+        input: source,
+        encoding: "utf8",
+        timeout: timeoutMs,
+        maxBuffer: 1024,
+    });
+    return !checked.error && checked.status === 0 && checked.stdout === "valid";
 }
 /** Validate an untrusted patch against the committed blob without changing the repository. */
 export function verifyReviewSuggestion(input) {
@@ -178,9 +177,10 @@ export function verifyReviewSuggestion(input) {
                     return undefined;
             }
             const after = fs.readFileSync(copied, "utf8");
+            const syntaxTimeoutMs = remaining();
             if (after === original ||
-                Date.now() >= deadline ||
-                !validSyntax(input.file, after))
+                syntaxTimeoutMs < 1 ||
+                !validateReviewSuggestionSyntax(input.file, after, syntaxTimeoutMs))
                 return undefined;
             if (Date.now() >= deadline)
                 return undefined;
