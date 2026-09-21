@@ -6,6 +6,7 @@ import {
   MAX_SUGGESTION_BYTES,
   verifyReviewSuggestion,
 } from "../../src/adapters/review-suggestion.js";
+import { attachVerifiedReviewSuggestions } from "../../src/adapters/review-suggestion-launch.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class SuggestionWorld extends WorkflowWorld {
@@ -15,6 +16,10 @@ class SuggestionWorld extends WorkflowWorld {
   result: { headSha: string; patch: string } | undefined;
   status = "";
   original = "";
+  resultFindings: Array<{
+    file: string;
+    committableSuggestion?: { headSha: string; patch: string };
+  }> = [];
 }
 
 const { Given, When, Then } = stepDefinitions<SuggestionWorld>();
@@ -45,7 +50,21 @@ Given("修正提案用の隔離Git repositoryがある", function () {
   this.original = "export const value = 1;\n";
   fs.writeFileSync(path.join(this.root, "target.ts"), this.original);
   fs.writeFileSync(path.join(this.root, "other.ts"), this.original);
-  git(this.root, "add", "target.ts", "other.ts");
+  fs.writeFileSync(path.join(this.root, "vite.config.ts"), this.original);
+  fs.writeFileSync(path.join(this.root, "target.js"), "const limit = 1;\n");
+  fs.writeFileSync(
+    path.join(this.root, "legacy.js"),
+    Buffer.from([0x2f, 0x2f, 0x20, 0x80, 0x0a]),
+  );
+  git(
+    this.root,
+    "add",
+    "target.ts",
+    "other.ts",
+    "vite.config.ts",
+    "target.js",
+    "legacy.js",
+  );
   git(this.root, "commit", "-q", "-m", "fixture");
   this.headSha = git(this.root, "rev-parse", "HEAD");
   this.status = git(this.root, "status", "--porcelain");
@@ -62,6 +81,34 @@ When("対象HEADの有効な修正提案を検証する", function () {
     headSha: this.headSha,
     file: "target.ts",
     patch: this.patch,
+  });
+});
+
+When("複数ドット名の有効な修正提案を検証する", function () {
+  this.patch = patchFor(
+    "vite.config.ts",
+    "export const value = 1;",
+    "export const value = 2;",
+  );
+  this.result = verifyReviewSuggestion({
+    root: this.root,
+    headSha: this.headSha,
+    file: "vite.config.ts",
+    patch: this.patch,
+  });
+});
+
+When("過大候補の次に有効な修正提案を検証する", function () {
+  const first = { file: "target.ts" };
+  const second = { file: "target.ts" };
+  this.resultFindings = attachVerifiedReviewSuggestions({
+    root: this.root,
+    headSha: this.headSha,
+    findings: [first, second],
+    candidates: new Map([
+      [first, "x".repeat(MAX_SUGGESTION_BYTES + 1)],
+      [second, this.patch],
+    ]),
   });
 });
 
@@ -100,6 +147,16 @@ When("{string} の修正提案を検証する", function (caseName: string) {
       "export const value = 2;",
     );
   if (caseName === "64KiB超過") patch += " ".repeat(MAX_SUGGESTION_BYTES);
+  if (caseName === "JS内の型注釈")
+    patch = patchFor(
+      "target.js",
+      "const limit = 1;",
+      "const limit: number = 2;",
+    );
+  if (caseName === "JS内のJSX")
+    patch = patchFor("target.js", "const limit = 1;", "const limit = <div/>;");
+  if (caseName === "UTF-8でないblob")
+    patch = patchFor("legacy.js", "// �", "// fixed");
   if (caseName === "symlink") {
     fs.rmSync(path.join(this.root, "target.ts"));
     fs.symlinkSync("other.ts", path.join(this.root, "target.ts"));
@@ -108,7 +165,12 @@ When("{string} の修正提案を検証する", function (caseName: string) {
   this.result = verifyReviewSuggestion({
     root: this.root,
     headSha,
-    file: "target.ts",
+    file:
+      caseName === "JS内の型注釈" || caseName === "JS内のJSX"
+        ? "target.js"
+        : caseName === "UTF-8でないblob"
+          ? "legacy.js"
+          : "target.ts",
     patch,
   });
 });
@@ -118,6 +180,14 @@ Then("対象HEADとpatchを持つ修正提案が返る", function () {
 });
 Then("修正提案は省略される", function () {
   assert.equal(this.result, undefined);
+});
+Then("後続の有効提案だけがfindingへ添えられる", function () {
+  assert.equal(this.resultFindings.length, 2);
+  assert.equal(this.resultFindings[0]?.committableSuggestion, undefined);
+  assert.deepEqual(this.resultFindings[1]?.committableSuggestion, {
+    headSha: this.headSha,
+    patch: this.patch,
+  });
 });
 Then("修正提案の検証は作業treeを変更しない", function () {
   assert.equal(git(this.root, "status", "--porcelain"), this.status);

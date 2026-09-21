@@ -1,4 +1,4 @@
-import { verifyReviewSuggestion } from "./review-suggestion.js";
+import { MAX_SUGGESTION_BYTES, verifyReviewSuggestion, } from "./review-suggestion.js";
 const MAX_CANDIDATES = 8;
 const MAX_TOTAL_PATCH_BYTES = 256 * 1024;
 const MAX_VALIDATION_MS = 5_000;
@@ -12,11 +12,13 @@ export function attachVerifiedReviewSuggestions(input) {
         if (patch === undefined)
             return finding;
         const bytes = Buffer.byteLength(patch, "utf8");
-        totalBytes += bytes;
+        if (bytes > MAX_SUGGESTION_BYTES)
+            return finding;
         if (checked >= MAX_CANDIDATES ||
-            totalBytes > MAX_TOTAL_PATCH_BYTES ||
+            totalBytes + bytes > MAX_TOTAL_PATCH_BYTES ||
             Date.now() >= deadline)
             return finding;
+        totalBytes += bytes;
         checked += 1;
         try {
             const committableSuggestion = verifyReviewSuggestion({

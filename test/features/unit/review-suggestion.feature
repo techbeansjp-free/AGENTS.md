@@ -7,6 +7,18 @@ Feature: finding修正提案を隔離検証する
     Then 対象HEADとpatchを持つ修正提案が返る
     And 修正提案の検証は作業treeを変更しない
 
+  Scenario: SCN-UNIT-SUGGESTION-003 複数ドット名のsource fileへのpatchを受理する
+    Given 修正提案用の隔離Git repositoryがある
+    When 複数ドット名の有効な修正提案を検証する
+    Then 対象HEADとpatchを持つ修正提案が返る
+    And 修正提案の検証は作業treeを変更しない
+
+  Scenario: SCN-UNIT-SUGGESTION-004 過大候補を省略して後続の有効提案を検証する
+    Given 修正提案用の隔離Git repositoryがある
+    When 過大候補の次に有効な修正提案を検証する
+    Then 後続の有効提案だけがfindingへ添えられる
+    And 修正提案の検証は作業treeを変更しない
+
   Scenario Outline: SCN-UNIT-SUGGESTION-002 無効なpatchを省略する
     Given 修正提案用の隔離Git repositoryがある
     When "<case>" の修正提案を検証する
@@ -23,3 +35,6 @@ Feature: finding修正提案を隔離検証する
       | path脱出 |
       | 64KiB超過 |
       | symlink |
+      | JS内の型注釈 |
+      | JS内のJSX |
+      | UTF-8でないblob |

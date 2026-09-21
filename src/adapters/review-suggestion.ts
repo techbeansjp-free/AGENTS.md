@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import type { Diagnostic, SourceFile } from "typescript";
+import type { Diagnostic, Node, SourceFile } from "typescript";
 import { git } from "../lib/process.js";
 import { loadTypeScriptCompiler } from "../lib/typescript-vendor.js";
 
@@ -11,7 +11,7 @@ const MAX_SOURCE_BYTES = 1024 * 1024;
 const MAX_VERIFICATION_MS = 5000;
 const MAX_GIT_MS = 2000;
 const SOURCE_PATH =
-  /^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*\.(?:ts|tsx|js|jsx|mjs|cjs|json)$/u;
+  /^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:ts|tsx|js|jsx|mjs|cjs|json)$/u;
 
 export interface ReviewSuggestionInput {
   root: string;
@@ -94,7 +94,35 @@ function validSyntax(file: string, source: string): boolean {
   ) as SourceFile & {
     parseDiagnostics?: readonly Diagnostic[];
   };
-  return (parsed.parseDiagnostics?.length ?? 0) === 0;
+  if (!parsed.parseDiagnostics || parsed.parseDiagnostics.length > 0)
+    return false;
+  if (/\.(?:js|jsx|mjs|cjs)$/u.test(file)) {
+    const diagnostics = ts.transpileModule(source, {
+      fileName: file,
+      reportDiagnostics: true,
+      compilerOptions: {
+        allowJs: true,
+        checkJs: true,
+        jsx: ts.JsxEmit.Preserve,
+      },
+    }).diagnostics;
+    if (!diagnostics || diagnostics.length > 0) return false;
+    if (!file.endsWith(".jsx")) {
+      let jsx = false;
+      const walk = (node: Node): void => {
+        if (
+          ts.isJsxElement(node) ||
+          ts.isJsxSelfClosingElement(node) ||
+          ts.isJsxFragment(node)
+        )
+          jsx = true;
+        if (!jsx) ts.forEachChild(node, walk);
+      };
+      walk(parsed);
+      if (jsx) return false;
+    }
+  }
+  return true;
 }
 
 /** Validate an untrusted patch against the committed blob without changing the repository. */
@@ -142,16 +170,32 @@ export function verifyReviewSuggestion(
         extra !== undefined
       )
         return undefined;
-      const original = checkedGit(["show", `${input.headSha}:${input.file}`]);
+      const timeoutMs = remaining();
+      if (timeoutMs < 1) return undefined;
+      const blob = spawnSync(
+        "git",
+        ["cat-file", "blob", `${input.headSha}:${input.file}`],
+        {
+          cwd: input.root,
+          timeout: timeoutMs,
+          maxBuffer: MAX_SOURCE_BYTES + 1,
+        },
+      );
+      const originalBytes = blob.stdout;
       if (
-        original === undefined ||
-        Buffer.byteLength(original, "utf8") > MAX_SOURCE_BYTES
+        blob.error ||
+        blob.status !== 0 ||
+        !Buffer.isBuffer(originalBytes) ||
+        originalBytes.length > MAX_SOURCE_BYTES
       )
+        return undefined;
+      const original = originalBytes.toString("utf8");
+      if (!Buffer.from(original, "utf8").equals(originalBytes))
         return undefined;
       temporary = fs.mkdtempSync(path.join(os.tmpdir(), "asc-suggestion-"));
       const copied = path.join(temporary, input.file);
       fs.mkdirSync(path.dirname(copied), { recursive: true });
-      fs.writeFileSync(copied, original, { flag: "wx", mode: 0o600 });
+      fs.writeFileSync(copied, originalBytes, { flag: "wx", mode: 0o600 });
       for (const args of [
         ["apply", "--check", "--whitespace=nowarn", "-"],
         ["apply", "--whitespace=nowarn", "-"],

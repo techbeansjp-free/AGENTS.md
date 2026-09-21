@@ -1,4 +1,7 @@
-import { verifyReviewSuggestion } from "./review-suggestion.js";
+import {
+  MAX_SUGGESTION_BYTES,
+  verifyReviewSuggestion,
+} from "./review-suggestion.js";
 
 export interface CommittableSuggestion {
   headSha: string;
@@ -29,13 +32,14 @@ export function attachVerifiedReviewSuggestions<
     const patch = input.candidates.get(finding);
     if (patch === undefined) return finding;
     const bytes = Buffer.byteLength(patch, "utf8");
-    totalBytes += bytes;
+    if (bytes > MAX_SUGGESTION_BYTES) return finding;
     if (
       checked >= MAX_CANDIDATES ||
-      totalBytes > MAX_TOTAL_PATCH_BYTES ||
+      totalBytes + bytes > MAX_TOTAL_PATCH_BYTES ||
       Date.now() >= deadline
     )
       return finding;
+    totalBytes += bytes;
     checked += 1;
     try {
       const committableSuggestion = verifyReviewSuggestion({
