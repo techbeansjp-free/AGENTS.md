@@ -34,6 +34,7 @@
 | `.agent-skill-chain/schemas/project-policy-manifest.schema.json` | M | package owner | schema | manifest validation | schema → policy | AC-1458-01・04 / SCN-040 | revert | pass |
 | `.agent-skill-chain/schemas/project-policy.schema.json` | M | package owner | schema | policy validation | schema → policy | AC-1458-01・04 / SCN-040 | revert | pass |
 | `dist/src/domain/worktree-removal-safety.js` | M | package owner | dist | 生成物。生成元との対応を再build後のclean差分で確認 | src → dist | AC-1458-01〜04 | §8の配布物影響表とpackage filesで確認。revert | pass |
+| `docs/reviews/1458_課題1458finalize許可path表現拡張レビュー.md` | M | review owner | review evidence | 既存artifactを前向き更新 | review session → artifact | Step 10 | 旧記録を履歴保持し最新commitでsupersede | pass |
 | `docs/specs/01_システム概要/02_用語・略語.md` | M | 仕様owner | docs/specs | 用語正本 | spec → src | TERM-ASC-065 | revert | pass |
 | `docs/specs/02_要件/02_プロジェクトライフサイクル要件.md` | M | 仕様owner | docs/specs | lifecycle要件 | spec → src | REQ-LC-009 | revert | pass |
 | `docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md` | M | 仕様owner | docs/specs | CLI契約 | spec → src | AC-1458-01〜04 | revert | pass |
@@ -45,7 +46,7 @@
 | `test/steps/finalize-ignored-artifacts-cli.steps.ts` | M | test owner | test | integration用の日本語fixture | test → src | SCN-INT-FINALIGN-015 | revert | pass |
 | `test/steps/finalize-ignored-artifacts.steps.ts` | M | test owner | test | unit用の日本語fixture | test → src | SCN-040〜042 | revert | pass |
 
-- 差分path集合と14行の監査表は一致する。
+- 差分path集合と15行の監査表は一致する。
 - package層へproject固有値や実行authorityを追加していない。
 
 ## 2. 受け入れ条件の確認
