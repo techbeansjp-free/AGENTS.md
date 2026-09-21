@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { After as cucumberAfter } from "@cucumber/cucumber";
 import {
   launchDelegatedReview,
   type DelegatedReviewResult,
@@ -19,6 +20,7 @@ class DelegatedReviewWorld extends WorkflowWorld {
   reviewCalls = 0;
   dispatchedModel = "";
   dispatchedPrompt = "";
+  registeredCloudProvider = false;
   result: DelegatedReviewResult | undefined;
   baseSha = "";
   headSha = "";
@@ -34,6 +36,13 @@ class DelegatedReviewWorld extends WorkflowWorld {
 }
 
 const { Given, When, Then } = stepDefinitions<DelegatedReviewWorld>();
+
+cucumberAfter(function (this: DelegatedReviewWorld) {
+  if (this.registeredCloudProvider) {
+    (DISPATCHABLE_REVIEWER_PROVIDERS as Set<string>).delete("cloud");
+    this.registeredCloudProvider = false;
+  }
+});
 
 function setup(world: DelegatedReviewWorld): void {
   world.root = fs.realpathSync(
@@ -174,6 +183,7 @@ Given("未登録providerの委譲reviewer設定がある", function () {
 
 Given("別providerをreviewer registryへ登録した個人設定がある", function () {
   setup(this);
+  this.registeredCloudProvider = true;
   (DISPATCHABLE_REVIEWER_PROVIDERS as Set<string>).add("cloud");
   writeConfig(this, "local", config("qwen3.8:27b", { provider: "cloud" }));
 });
@@ -468,12 +478,8 @@ Then("qwen3.8でStep 10の候補を進行役へ返す", function () {
 });
 
 Then("登録済みの非Ollama providerを起動前に拒否する", function () {
-  try {
-    assert.equal(this.result?.state, "degraded", JSON.stringify(this.result));
-    assert.equal(this.reviewCalls, 0);
-  } finally {
-    (DISPATCHABLE_REVIEWER_PROVIDERS as Set<string>).delete("cloud");
-  }
+  assert.equal(this.result?.state, "degraded", JSON.stringify(this.result));
+  assert.equal(this.reviewCalls, 0);
 });
 
 Then("委譲reviewはdegradedでHEAD不一致を理由に返す", function () {
