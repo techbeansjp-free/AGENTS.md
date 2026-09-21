@@ -142,6 +142,8 @@ const REJECTED_FINALIZE_IGNORED_PATH_INPUTS = [
   "**/review**.json",
   "**/*.git",
   "**/.git*",
+  "**/foo*.git",
+  "**/.*json",
   "**/*.",
   "**/.*",
   "**/*..",
