@@ -25,6 +25,7 @@ class DelegatedReviewWorld extends WorkflowWorld {
   baseSha = "";
   headSha = "";
   driftHeadDuringExecution = false;
+  driftHeadAfterSuggestion = false;
   rejectVerification = false;
   twoCandidateVerification = false;
   response = JSON.stringify({
@@ -186,6 +187,10 @@ Given("別providerをreviewer registryへ登録した個人設定がある", fun
   this.registeredCloudProvider = true;
   (DISPATCHABLE_REVIEWER_PROVIDERS as Set<string>).add("cloud");
   writeConfig(this, "local", config("qwen3.8:27b", { provider: "cloud" }));
+});
+
+Given("提案検証後に委譲reviewのHEADが進む", function () {
+  this.driftHeadAfterSuggestion = true;
 });
 
 Given("委譲modelをqwen3.8へ変更する", function () {
@@ -372,7 +377,21 @@ When("Step 10の委譲reviewを実行する", async function () {
       stagingPath: this.staging,
       globalConfigHome: this.configHome,
     },
-    { execute: executor(this) },
+    {
+      execute: executor(this),
+      ...(this.driftHeadAfterSuggestion
+        ? {
+            afterSuggestionValidation: () => {
+              fs.writeFileSync(
+                path.join(this.root, "drift-after-suggestion.md"),
+                "drift\n",
+              );
+              git(this.root, ["add", "drift-after-suggestion.md"]);
+              git(this.root, ["commit", "-q", "-m", "drift-after-suggestion"]);
+            },
+          }
+        : {}),
+    },
   );
 });
 
@@ -484,7 +503,7 @@ Then("登録済みの非Ollama providerを起動前に拒否する", function ()
 
 Then("委譲reviewはdegradedでHEAD不一致を理由に返す", function () {
   assert.equal(this.result?.state, "degraded", JSON.stringify(this.result));
-  assert.equal(this.reviewCalls, 1);
+  assert.equal(this.reviewCalls, this.driftHeadAfterSuggestion ? 2 : 1);
   if (this.result?.state !== "degraded") return;
   assert.match(this.result.reason, /HEAD/u);
 });

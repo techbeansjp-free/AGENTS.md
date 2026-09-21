@@ -230,6 +230,13 @@ export async function launchDelegatedReview(input, dependencies = {}) {
         catch {
             return { state: "degraded", reason: "findingの投稿前検証に失敗しました" };
         }
+        const findings = attachVerifiedReviewSuggestions({
+            root: input.root,
+            headSha: input.headSha,
+            findings: parsed.findings,
+            candidates: parsed.suggestionCandidates,
+        });
+        dependencies.afterSuggestionValidation?.();
         if (git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha)
             return { state: "degraded", reason: "対象HEADを固定できませんでした" };
         return {
@@ -237,12 +244,7 @@ export async function launchDelegatedReview(input, dependencies = {}) {
             step: 10,
             affirmative: parsed.affirmative,
             adversarial: parsed.adversarial,
-            findings: attachVerifiedReviewSuggestions({
-                root: input.root,
-                headSha: input.headSha,
-                findings: parsed.findings,
-                candidates: parsed.suggestionCandidates,
-            }),
+            findings,
             suppressedFindings: parsed.suppressedFindings,
             firstPassFindings: parsed.scopedFindings,
             verificationSuggestedFindings: verified?.suggestedFindings ?? null,
