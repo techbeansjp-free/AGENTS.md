@@ -1,4 +1,5 @@
 import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
+import { isValidLocalLlmModel } from "../lib/local-llm-model.js";
 import type {
   ReviewerExecutionResult,
   ReviewerExecutor,
@@ -29,7 +30,7 @@ export async function executeLocalLlm(
 ): Promise<LocalLlmExecutionResult> {
   if (input.prompt.trim() === "")
     throw new Error("ローカルLLM実行のpromptが空です");
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9:._-]{0,127}$/u.test(input.model))
+  if (!isValidLocalLlmModel(input.model))
     throw new Error("ローカルLLM実行のmodel名が不正です");
   const url = assertLoopbackEndpoint(input.endpoint);
   const timeoutMs = input.timeoutMs ?? limits.timeoutMs ?? 5 * 60 * 1000;

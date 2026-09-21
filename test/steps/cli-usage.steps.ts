@@ -176,7 +176,9 @@ const CHECKS: Readonly<
    * `--assessment`の入力ではない。記録を渡した利用者へ期待形式を名指しで返す（Issue #996）。
    */
   "SCN-UNIT-CLIUSAGE-013": async () => {
-    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "asc-assessment-"));
+    const directory = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "asc-assessment-")),
+    );
     const file = path.join(directory, "record.json");
     const answers = Object.fromEntries(
       Array.from({ length: 8 }, (_unused, index) => [
@@ -218,7 +220,9 @@ const CHECKS: Readonly<
    * ここではGitHubへ到達しないことを、拒否理由が案内文であることで確かめる。
    */
   "SCN-UNIT-CLIUSAGE-014": async () => {
-    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "asc-sync-"));
+    const directory = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "asc-sync-")),
+    );
     const bodyFile = path.join(directory, "ISSUE_BODY.md");
     fs.writeFileSync(bodyFile, "# 本文\n");
     const result = await run([

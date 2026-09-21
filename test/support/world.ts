@@ -28,7 +28,9 @@ export class WorkflowWorld extends World<WorkflowParameters> {
   }
 
   temp(prefix = "asc-v03-") {
-    const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    const directory = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), prefix)),
+    );
     this.temporaryDirectories.push(directory);
     return directory;
   }
@@ -75,6 +77,15 @@ cucumberBefore<WorkflowWorld>(function () {
   this.error = undefined;
   this.calls = [];
   this.validationOutcome = undefined;
+});
+cucumberBefore<WorkflowWorld>({ tags: "@requires-linux-poc" }, function () {
+  // PoC execution is explicitly bound to /usr/bin/bwrap and /usr/bin/prlimit.
+  // macOS has neither path; retain these scenarios on Linux without weakening
+  // the runtime preflight that rejects an unavailable isolation boundary.
+  if (process.platform !== "linux") return "skipped";
+});
+cucumberBefore<WorkflowWorld>({ tags: "@requires-nonlinux-poc" }, function () {
+  if (process.platform === "linux") return "skipped";
 });
 cucumberAfter<WorkflowWorld>(function () {
   for (const directory of this.temporaryDirectories.reverse())

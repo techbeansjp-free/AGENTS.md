@@ -166,7 +166,10 @@ export const PROVIDER_AUTONOMOUS_CEILINGS = {
         allowed: ["haiku", "sonnet", "opus"],
     },
     /**
-     * reviewer役割向けローカルLLM provider。2026-09時点でOllama公式library上、
+     * 自律的なreviewer役割選択向けの上限。補助的なdelegated reviewのmodel選択には
+     * 適用しない。delegated reviewはOllamaとloopbackの境界を別途検証し、結果を
+     * 進行役の判断材料として扱うため、この一覧でpoint releaseを固定しない。
+     * 2026-09時点でOllama公式library上、
      * 消費者向けハードウェア（~24〜32GB級）で実行可能なコード理解モデルに限定する。
      * 複数vendor（Alibaba Qwen、Mistral Devstral）を含めるのは、implementerと同一
      * modelでは生じにくいが同一vendor・同世代のモデル間では共有されうる見落としの
