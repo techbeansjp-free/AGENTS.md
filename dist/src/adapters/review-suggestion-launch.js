@@ -28,6 +28,7 @@ export function attachVerifiedReviewSuggestions(input) {
                 patch,
                 timeoutMs: Math.max(1, deadline - Date.now()),
             });
+            input.afterCandidateValidation?.();
             return committableSuggestion
                 ? { ...finding, committableSuggestion }
                 : finding;

@@ -24,6 +24,7 @@ export function attachVerifiedReviewSuggestions<
   headSha: string;
   findings: T[];
   candidates: ReadonlyMap<T, string>;
+  afterCandidateValidation?: () => void;
 }): Array<T & { committableSuggestion?: CommittableSuggestion }> {
   const deadline = Date.now() + MAX_VALIDATION_MS;
   let checked = 0;
@@ -49,6 +50,7 @@ export function attachVerifiedReviewSuggestions<
         patch,
         timeoutMs: Math.max(1, deadline - Date.now()),
       });
+      input.afterCandidateValidation?.();
       return committableSuggestion
         ? { ...finding, committableSuggestion }
         : finding;

@@ -68,9 +68,9 @@ Feature: 設定されたローカルLLMへのreview委譲
     When Step 10の委譲reviewを実行する
     Then 委譲reviewはdegradedでHEAD不一致を理由に返す
 
-  Scenario: SCN-UNIT-DELEGREVIEW-026 提案検証後にHEADが進んだら結果を破棄する
-    Given Step 10の委譲reviewerがCritical指摘と承認を返す
-    And 提案検証後に委譲reviewのHEADが進む
+  Scenario: SCN-UNIT-DELEGREVIEW-026 提案検証中にHEADが進んだら結果を破棄する
+    Given Step 10の委譲reviewerが適用可能な提案を返す
+    And 提案検証中に委譲reviewのHEADが進む
     When Step 10の委譲reviewを実行する
     Then 委譲reviewはdegradedでHEAD不一致を理由に返す
 

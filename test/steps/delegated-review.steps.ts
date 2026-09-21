@@ -25,7 +25,7 @@ class DelegatedReviewWorld extends WorkflowWorld {
   baseSha = "";
   headSha = "";
   driftHeadDuringExecution = false;
-  driftHeadAfterSuggestion = false;
+  driftHeadDuringSuggestion = false;
   rejectVerification = false;
   twoCandidateVerification = false;
   response = JSON.stringify({
@@ -189,8 +189,8 @@ Given("別providerをreviewer registryへ登録した個人設定がある", fun
   writeConfig(this, "local", config("qwen3.8:27b", { provider: "cloud" }));
 });
 
-Given("提案検証後に委譲reviewのHEADが進む", function () {
-  this.driftHeadAfterSuggestion = true;
+Given("提案検証中に委譲reviewのHEADが進む", function () {
+  this.driftHeadDuringSuggestion = true;
 });
 
 Given("委譲modelをqwen3.8へ変更する", function () {
@@ -306,6 +306,40 @@ Given("Step 10の委譲reviewerがCritical指摘と承認を返す", function ()
   });
 });
 
+Given("Step 10の委譲reviewerが適用可能な提案を返す", function () {
+  setup(this);
+  writeConfig(this, "local", config("qwen3-coder:30b"));
+  fs.writeFileSync(
+    path.join(this.root, "review-target.ts"),
+    "const value = 1;\n",
+  );
+  git(this.root, ["add", "review-target.ts"]);
+  git(this.root, ["commit", "-q", "-m", "base"]);
+  this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
+  fs.writeFileSync(
+    path.join(this.root, "review-target.ts"),
+    "const value = 2;\n",
+  );
+  git(this.root, ["add", "review-target.ts"]);
+  git(this.root, ["commit", "-q", "-m", "change"]);
+  this.headSha = git(this.root, ["rev-parse", "HEAD"]);
+  this.response = JSON.stringify({
+    decision: "approved",
+    affirmative: "差分の目的は明確",
+    adversarial: "境界値を検討",
+    findings: [
+      {
+        file: "review-target.ts",
+        location: "1",
+        content: "値の更新が不足",
+        severity: "Critical",
+        suggestionPatch:
+          "--- a/review-target.ts\n+++ b/review-target.ts\n@@ -1 +1 @@\n-const value = 2;\n+const value = 3;\n",
+      },
+    ],
+  });
+});
+
 Given("委譲reviewの対象HEADが古い", function () {
   this.headSha = this.baseSha;
 });
@@ -379,9 +413,9 @@ When("Step 10の委譲reviewを実行する", async function () {
     },
     {
       execute: executor(this),
-      ...(this.driftHeadAfterSuggestion
+      ...(this.driftHeadDuringSuggestion
         ? {
-            afterSuggestionValidation: () => {
+            afterSuggestionCandidateValidation: () => {
               fs.writeFileSync(
                 path.join(this.root, "drift-after-suggestion.md"),
                 "drift\n",
@@ -503,7 +537,7 @@ Then("登録済みの非Ollama providerを起動前に拒否する", function ()
 
 Then("委譲reviewはdegradedでHEAD不一致を理由に返す", function () {
   assert.equal(this.result?.state, "degraded", JSON.stringify(this.result));
-  assert.equal(this.reviewCalls, this.driftHeadAfterSuggestion ? 2 : 1);
+  assert.equal(this.reviewCalls, this.driftHeadDuringSuggestion ? 2 : 1);
   if (this.result?.state !== "degraded") return;
   assert.match(this.result.reason, /HEAD/u);
 });

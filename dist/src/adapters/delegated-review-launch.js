@@ -235,8 +235,8 @@ export async function launchDelegatedReview(input, dependencies = {}) {
             headSha: input.headSha,
             findings: parsed.findings,
             candidates: parsed.suggestionCandidates,
+            afterCandidateValidation: dependencies.afterSuggestionCandidateValidation,
         });
-        dependencies.afterSuggestionValidation?.();
         if (git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha)
             return { state: "degraded", reason: "対象HEADを固定できませんでした" };
         return {
