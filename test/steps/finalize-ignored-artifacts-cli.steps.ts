@@ -37,6 +37,7 @@ function createFinalizeFixture(
   artifact:
     | "dist"
     | "recursive"
+    | "recursive-basename"
     | "ignored-env"
     | "untracked"
     | "remote-deleted"
@@ -48,7 +49,7 @@ function createFinalizeFixture(
   git(remote, ["init", "--bare"]);
   fs.writeFileSync(
     path.join(world.root, ".gitignore"),
-    ".worktrees/\ndist/\nnode_modules/\n.env\n**/__pycache__/\n*.tsbuildinfo\n",
+    ".worktrees/\ndist/\nnode_modules/\n.env\n**/__pycache__/\n*.tsbuildinfo\nstaging-record.json\nreview-session*.json\n00_モード判定.json\n",
   );
   /**
    * apply経路は既定branch上のtrusted policyを要求する。
@@ -65,7 +66,7 @@ function createFinalizeFixture(
     path.resolve(".agent-skill-chain", "project-policy.json"),
     path.join(world.root, ".agent-skill-chain", "project-policy.json"),
   );
-  if (artifact === "recursive") {
+  if (artifact === "recursive" || artifact === "recursive-basename") {
     const policyFile = path.join(
       world.root,
       ".agent-skill-chain",
@@ -74,10 +75,14 @@ function createFinalizeFixture(
     const manifest = JSON.parse(fs.readFileSync(policyFile, "utf8")) as {
       policy: { worktree: { finalizeIgnoredPathAllowlist?: string[] } };
     };
-    manifest.policy.worktree.finalizeIgnoredPathAllowlist = [
-      "**/__pycache__/",
-      "**/*.tsbuildinfo",
-    ];
+    manifest.policy.worktree.finalizeIgnoredPathAllowlist =
+      artifact === "recursive"
+        ? ["**/__pycache__/", "**/*.tsbuildinfo"]
+        : [
+            "**/staging-record.json",
+            "**/review-session*.json",
+            "**/00_モード判定.json",
+          ];
     fs.writeFileSync(policyFile, `${JSON.stringify(manifest, null, 2)}\n`);
   }
   fs.cpSync(
@@ -134,6 +139,16 @@ function createFinalizeFixture(
       path.join(world.worktree, "packages", "a", "build.tsbuildinfo"),
       "x\n",
     );
+  } else if (artifact === "recursive-basename") {
+    const staging = path.join(world.worktree, "docs", "tasks", "日本語");
+    fs.mkdirSync(staging, { recursive: true });
+    for (const name of [
+      "staging-record.json",
+      "review-session.json",
+      "review-session-02.json",
+      "00_モード判定.json",
+    ])
+      fs.writeFileSync(path.join(staging, name), "{}\n");
   } else if (artifact === "ignored-env")
     fs.writeFileSync(path.join(world.worktree, ".env"), "SECRET=fixture\n");
   else if (artifact === "unreachable") {
@@ -204,6 +219,13 @@ Given("distだけを持つmerge済みfinalize fixtureがある", function () {
 Given("ネストした生成物を持つmerge済みfinalize fixtureがある", function () {
   createFinalizeFixture(this, "recursive");
 });
+
+Given(
+  "Unicode staging機械記録を持つmerge済みfinalize fixtureがある",
+  function () {
+    createFinalizeFixture(this, "recursive-basename");
+  },
+);
 
 Given("ignore済み.envを持つmerge済みfinalize fixtureがある", function () {
   createFinalizeFixture(this, "ignored-env");

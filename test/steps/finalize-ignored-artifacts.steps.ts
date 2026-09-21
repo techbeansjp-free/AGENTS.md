@@ -114,9 +114,14 @@ const ACCEPTED_FINALIZE_IGNORED_PATH_INPUTS = [
   "a.b/",
   "a-b/",
   "a_b/",
+  "成果物/日本語/",
   "**/__pycache__/",
   "**/.pnpm-store/",
+  "**/日本語/",
   "**/*.tsbuildinfo",
+  "**/staging-record.json",
+  "**/review-session*.json",
+  "**/00_モード判定.json",
 ] as const;
 
 const REJECTED_FINALIZE_IGNORED_PATH_INPUTS = [
@@ -132,6 +137,11 @@ const REJECTED_FINALIZE_IGNORED_PATH_INPUTS = [
   "**/../",
   "**/foo/*/",
   "**/*.env*",
+  "**/*",
+  "**/*.*",
+  "**/review**.json",
+  "**/café.json",
+  "**/制御\u202E.json",
   "a?/",
   "a[/",
   "a{/",
@@ -840,4 +850,64 @@ Then("再帰patternに一致する生成物だけが許可される", function (
     ".agent-skill-chain/tmp/issues/task/cache.tsbuildinfo",
   ]);
   assert.equal(this.hintAssessment.safe, false);
+});
+
+Given("Unicode tracked stagingと機械記録を持つ削除観測がある", function () {
+  this.observation = {
+    ...safeObservation(),
+    ignoredArtifacts: [
+      "docs/tasks/日本語/staging-record.json",
+      "docs/tasks/日本語/staging-record.json.bak",
+      "docs/tasks/日本語/review-session.json",
+      "docs/tasks/日本語/review-session-02.json",
+      "docs/tasks/日本語/00_モード判定.json",
+      "docs/tasks/日本語/unrelated.json",
+      "docs/tasks/日本語/review-session.json.bak",
+      ".agent-skill-chain/tmp/issues/日本語/staging-record.json",
+    ],
+  };
+});
+
+When("限定再帰basename patternの削除安全性を判定する", function () {
+  this.hintAssessment = assessWorktreeRemovalSafety({
+    ...HINT_OBSERVATION_BASE,
+    ignoredArtifacts: this.observation.ignoredArtifacts,
+    ignoredPathAllowlist: resolveFinalizeIgnoredPathAllowlist([
+      "**/staging-record.json",
+      "**/review-session*.json",
+      "**/00_モード判定.json",
+    ]),
+  });
+});
+
+Then("対象の機械記録だけが許可され無関係なJSONは拒否される", function () {
+  assert.deepEqual(this.hintAssessment.allowedIgnoredArtifacts, [
+    "docs/tasks/日本語/staging-record.json",
+    "docs/tasks/日本語/review-session.json",
+    "docs/tasks/日本語/review-session-02.json",
+    "docs/tasks/日本語/00_モード判定.json",
+  ]);
+  assert.ok(
+    this.hintAssessment.blockingIgnoredArtifacts.includes(
+      "docs/tasks/日本語/unrelated.json",
+    ),
+  );
+  assert.ok(
+    this.hintAssessment.blockingIgnoredArtifacts.includes(
+      "docs/tasks/日本語/staging-record.json.bak",
+    ),
+  );
+  assert.ok(
+    this.hintAssessment.blockingIgnoredArtifacts.includes(
+      "docs/tasks/日本語/review-session.json.bak",
+    ),
+  );
+});
+
+Then("ASC内部領域の同名機械記録は拒否される", function () {
+  assert.ok(
+    this.hintAssessment.blockingIgnoredArtifacts.includes(
+      ".agent-skill-chain/tmp/issues/日本語/staging-record.json",
+    ),
+  );
 });
