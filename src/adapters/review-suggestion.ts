@@ -211,7 +211,7 @@ export function verifyReviewSuggestion(
         if (applied.error || applied.status !== 0) return undefined;
       }
       const after = fs.readFileSync(copied, "utf8");
-      const syntaxTimeoutMs = remaining();
+      const syntaxTimeoutMs = Math.max(0, deadline - Date.now());
       if (
         after === original ||
         syntaxTimeoutMs < 1 ||

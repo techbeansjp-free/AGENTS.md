@@ -177,7 +177,7 @@ export function verifyReviewSuggestion(input) {
                     return undefined;
             }
             const after = fs.readFileSync(copied, "utf8");
-            const syntaxTimeoutMs = remaining();
+            const syntaxTimeoutMs = Math.max(0, deadline - Date.now());
             if (after === original ||
                 syntaxTimeoutMs < 1 ||
                 !validateReviewSuggestionSyntax(input.file, after, syntaxTimeoutMs))
