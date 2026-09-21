@@ -7,8 +7,84 @@ export const DEFAULT_FINALIZE_IGNORED_PATH_ALLOWLIST = [
 
 const CONTROL = /\p{C}/u;
 const PATTERN_META = /[\\*?[\]{}()|^$+]/u;
-const RECURSIVE_DIRECTORY = /^\*\*\/([A-Za-z0-9._-]+)\/$/u;
-const RECURSIVE_EXTENSION = /^\*\*\/\*\.([A-Za-z0-9._-]+)$/u;
+const SAFE_SEGMENT = /^[\p{L}\p{N}._-]+$/u;
+const RECURSIVE_PREFIX = "**/";
+
+type FinalizeIgnoredPathPattern =
+  | { kind: "directory-prefix"; value: string }
+  | { kind: "recursive-directory"; name: string }
+  | { kind: "recursive-extension"; suffix: string }
+  | {
+      kind: "recursive-basename";
+      prefix: string;
+      suffix: string;
+      wildcard: boolean;
+    };
+
+function safeLiteralSegment(value: string): boolean {
+  return (
+    value !== "" &&
+    value !== "." &&
+    value !== ".." &&
+    value !== ".git" &&
+    value === value.normalize("NFC") &&
+    !CONTROL.test(value) &&
+    SAFE_SEGMENT.test(value)
+  );
+}
+
+function parseFinalizeIgnoredPathPattern(
+  value: unknown,
+): FinalizeIgnoredPathPattern | undefined {
+  if (
+    typeof value !== "string" ||
+    value === "" ||
+    value !== value.normalize("NFC") ||
+    path.isAbsolute(value) ||
+    value.includes("\\") ||
+    CONTROL.test(value)
+  )
+    return undefined;
+
+  if (value.startsWith(RECURSIVE_PREFIX)) {
+    const body = value.slice(RECURSIVE_PREFIX.length);
+    if (body.endsWith("/")) {
+      const name = body.slice(0, -1);
+      return safeLiteralSegment(name)
+        ? { kind: "recursive-directory", name }
+        : undefined;
+    }
+    if (body.includes("/")) return undefined;
+    const wildcard = body.indexOf("*");
+    if (wildcard !== body.lastIndexOf("*")) return undefined;
+    if (wildcard === -1)
+      return safeLiteralSegment(body)
+        ? {
+            kind: "recursive-basename",
+            prefix: body,
+            suffix: "",
+            wildcard: false,
+          }
+        : undefined;
+    const prefix = body.slice(0, wildcard);
+    const suffix = body.slice(wildcard + 1);
+    if (
+      (prefix === "" && suffix === "") ||
+      (prefix !== "" && !safeLiteralSegment(prefix)) ||
+      (suffix !== "" && !safeLiteralSegment(suffix))
+    )
+      return undefined;
+    if (prefix === "" && suffix.startsWith("."))
+      return { kind: "recursive-extension", suffix };
+    return { kind: "recursive-basename", prefix, suffix, wildcard: true };
+  }
+
+  if (!value.endsWith("/") || PATTERN_META.test(value)) return undefined;
+  const segments = value.slice(0, -1).split("/");
+  return segments.length > 0 && segments.every(safeLiteralSegment)
+    ? { kind: "directory-prefix", value }
+    : undefined;
+}
 
 /**
  * blocking資産のpathから、その領域を所有するcommandの案内を返す。
@@ -51,40 +127,7 @@ function owningCommandHint(artifact: string): string | undefined {
 export function isSafeFinalizeIgnoredPathPrefix(
   value: unknown,
 ): value is string {
-  if (typeof value === "string") {
-    const directory = RECURSIVE_DIRECTORY.exec(value);
-    const extension = RECURSIVE_EXTENSION.exec(value);
-    if (directory || extension)
-      return (
-        value === value.normalize("NFC") &&
-        !CONTROL.test(value) &&
-        directory?.[1] !== ".git" &&
-        directory?.[1] !== "." &&
-        directory?.[1] !== ".."
-      );
-  }
-  if (
-    typeof value !== "string" ||
-    value === "" ||
-    value !== value.normalize("NFC") ||
-    !value.endsWith("/") ||
-    path.isAbsolute(value) ||
-    CONTROL.test(value) ||
-    PATTERN_META.test(value)
-  )
-    return false;
-  const segments = value.slice(0, -1).split("/");
-  return (
-    segments.length > 0 &&
-    segments.every(
-      (segment) =>
-        /^[A-Za-z0-9._-]+$/u.test(segment) &&
-        segment !== "" &&
-        segment !== "." &&
-        segment !== ".." &&
-        segment !== ".git",
-    )
-  );
+  return parseFinalizeIgnoredPathPattern(value) !== undefined;
 }
 
 export function resolveFinalizeIgnoredPathAllowlist(
@@ -117,17 +160,17 @@ function validArtifactPath(value: unknown): value is string {
 }
 
 function matchesPrefix(artifact: string, prefix: string): boolean {
-  const directory = RECURSIVE_DIRECTORY.exec(prefix);
-  const extension = RECURSIVE_EXTENSION.exec(prefix);
+  const pattern = parseFinalizeIgnoredPathPattern(prefix);
+  if (pattern === undefined) return false;
   // ASCの一時記録は所有commandで処理する。再帰指定で削除権限を迂回させない。
   if (
-    (directory || extension) &&
+    pattern.kind !== "directory-prefix" &&
     (artifact === ".agent-skill-chain" ||
       artifact.startsWith(".agent-skill-chain/"))
   )
     return false;
-  if (directory) {
-    const name = directory[1];
+  if (pattern.kind === "recursive-directory") {
+    const { name } = pattern;
     return (
       artifact === name ||
       artifact.startsWith(`${name}/`) ||
@@ -135,12 +178,26 @@ function matchesPrefix(artifact: string, prefix: string): boolean {
       artifact.endsWith(`/${name}`)
     );
   }
-  if (extension) {
+  if (pattern.kind === "recursive-extension") {
     const basename = artifact.slice(artifact.lastIndexOf("/") + 1);
-    const suffix = `.${extension[1]}`;
-    return basename.length > suffix.length && basename.endsWith(suffix);
+    return (
+      basename.length > pattern.suffix.length &&
+      basename.endsWith(pattern.suffix)
+    );
   }
-  return artifact === prefix.slice(0, -1) || artifact.startsWith(prefix);
+  if (pattern.kind === "recursive-basename") {
+    const basename = artifact.slice(artifact.lastIndexOf("/") + 1);
+    if (!pattern.wildcard) return basename === pattern.prefix;
+    return (
+      basename.length >= pattern.prefix.length + pattern.suffix.length &&
+      basename.startsWith(pattern.prefix) &&
+      basename.endsWith(pattern.suffix)
+    );
+  }
+  return (
+    artifact === pattern.value.slice(0, -1) ||
+    artifact.startsWith(pattern.value)
+  );
 }
 
 function describeUnknownArtifact(value: unknown): string {

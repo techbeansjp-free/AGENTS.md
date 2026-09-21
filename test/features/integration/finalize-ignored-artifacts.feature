@@ -70,3 +70,8 @@ Feature: CLIがignore対象を分類してworktree finalizeを判定する
     Given ネストした生成物を持つmerge済みfinalize fixtureがある
     When fixture worktreeをfinalize dry-runする
     Then finalize dry-runは対象を受理する
+
+  Scenario: SCN-INT-FINALIGN-015 Unicode tracked stagingの機械記録を再帰basenameで受理する
+    Given Unicode staging機械記録を持つmerge済みfinalize fixtureがある
+    When fixture worktreeをfinalize dry-runする
+    Then finalize dry-runは対象を受理する
