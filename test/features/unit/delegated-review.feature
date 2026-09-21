@@ -88,3 +88,52 @@ Feature: 設定されたローカルLLMへのreview委譲
     And 投稿前検証者はfindingを却下する
     When Step 10の委譲reviewを実行する
     Then 委譲reviewは初回候補と検証者の却下を進行役確認へ渡す
+
+  Scenario Outline: SCN-UNIT-DELEGREVIEW-018 任意のローカルOllamaモデルを補助reviewへ委譲できる
+    Given "<model>" のローカル委譲reviewer設定がある
+    When Step 3の委譲reviewを実行する
+    Then "<model>" の委譲reviewが起動し進行役用の結果を返す
+
+    Examples:
+      | model |
+      | qwen3.8:27b |
+      | gemma3:27b |
+      | gpt-oss:20b |
+      | example/model:tag |
+
+  Scenario: SCN-UNIT-DELEGREVIEW-019 空のmodel名は起動前に拒否する
+    Given 空白のみのmodel識別子の委譲reviewer設定がある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewはdegradedでexecutorを起動しない
+
+  Scenario: SCN-UNIT-DELEGREVIEW-020 未登録providerは起動前に拒否する
+    Given 未登録providerの委譲reviewer設定がある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewはdegradedでexecutorを起動しない
+
+  Scenario: SCN-UNIT-DELEGREVIEW-021 新tagをStep 7の設計reviewにも使える
+    Given Step 7用の設計文書とローカルreviewer設定がある
+    And 委譲modelをqwen3.8へ変更する
+    When Step 7の委譲reviewを実行する
+    Then qwen3.8でStep 7の設計reviewを返す
+
+  Scenario: SCN-UNIT-DELEGREVIEW-022 新tagをStep 10の差分reviewにも使える
+    Given Step 10の委譲reviewerがCritical指摘と承認を返す
+    And 委譲modelをqwen3.8へ変更する
+    When Step 10の委譲reviewを実行する
+    Then qwen3.8でStep 10の候補を進行役へ返す
+
+  Scenario: SCN-UNIT-DELEGREVIEW-023 将来登録された非Ollama providerも個人設定では拒否する
+    Given 別providerをreviewer registryへ登録した個人設定がある
+    When Step 3の委譲reviewを実行する
+    Then 登録済みの非Ollama providerを起動前に拒否する
+
+  Scenario: SCN-UNIT-DELEGREVIEW-024 過大なmodel名は起動前に拒否する
+    Given 上限を超えるmodel識別子の委譲reviewer設定がある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewはdegradedでexecutorを起動しない
+
+  Scenario: SCN-UNIT-DELEGREVIEW-025 Unicode制御文字を含むmodel名は起動前に拒否する
+    Given C1制御文字を含むmodel識別子の委譲reviewer設定がある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewはdegradedでexecutorを起動しない

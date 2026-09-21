@@ -2,8 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
-import { PROVIDER_AUTONOMOUS_CEILINGS } from "./role.js";
-import { DISPATCHABLE_REVIEWER_PROVIDERS } from "./reviewer-provider.js";
+import { isValidLocalLlmModel } from "../lib/local-llm-model.js";
 import type { ReviewProfile } from "./review-presentation.js";
 
 export interface DelegatedReviewConfig {
@@ -115,21 +114,19 @@ export function resolveDelegatedReviewConfig(
         state: "invalid",
         reason: `${candidate.source}設定のprofileが不正です`,
       };
-    if (
-      typeof provider !== "string" ||
-      !DISPATCHABLE_REVIEWER_PROVIDERS.has(provider)
-    )
+    // This personal configuration is Ollama-only, even if the formal reviewer
+    // provider registry later gains another local runtime or a SaaS provider.
+    if (provider !== "ollama")
       return {
         state: "invalid",
         reason: `${candidate.source}設定のproviderが不正です`,
       };
-    if (
-      typeof model !== "string" ||
-      !PROVIDER_AUTONOMOUS_CEILINGS[provider]?.allowed.includes(model)
-    )
+    // The executor applies the same minimal transport hygiene before dispatch.
+    // Advisory review model choice does not grant autonomous reviewer authority.
+    if (!isValidLocalLlmModel(model))
       return {
         state: "invalid",
-        reason: `${candidate.source}設定のmodelが承認済み選択値ではありません`,
+        reason: `${candidate.source}設定のmodel名が不正です`,
       };
     if (typeof endpoint !== "string")
       return {

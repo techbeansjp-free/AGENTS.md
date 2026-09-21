@@ -3,11 +3,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { After as cucumberAfter } from "@cucumber/cucumber";
 import {
   launchDelegatedReview,
   type DelegatedReviewResult,
 } from "../../src/adapters/delegated-review-launch.js";
 import { resolveReviewWorkspace } from "../../src/adapters/review-workspace.js";
+import { DISPATCHABLE_REVIEWER_PROVIDERS } from "../../src/domain/reviewer-provider.js";
 import type { ReviewerExecutor } from "../../src/domain/reviewer-provider.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
@@ -18,6 +20,7 @@ class DelegatedReviewWorld extends WorkflowWorld {
   reviewCalls = 0;
   dispatchedModel = "";
   dispatchedPrompt = "";
+  registeredCloudProvider = false;
   result: DelegatedReviewResult | undefined;
   baseSha = "";
   headSha = "";
@@ -33,6 +36,13 @@ class DelegatedReviewWorld extends WorkflowWorld {
 }
 
 const { Given, When, Then } = stepDefinitions<DelegatedReviewWorld>();
+
+cucumberAfter(function (this: DelegatedReviewWorld) {
+  if (this.registeredCloudProvider) {
+    (DISPATCHABLE_REVIEWER_PROVIDERS as Set<string>).delete("cloud");
+    this.registeredCloudProvider = false;
+  }
+});
 
 function setup(world: DelegatedReviewWorld): void {
   world.root = fs.realpathSync(
@@ -146,6 +156,42 @@ Given("委譲reviewer設定の無い隔離projectがある", function () {
   setup(this);
 });
 
+Given('"{word}" のローカル委譲reviewer設定がある', function (model: string) {
+  setup(this);
+  writeConfig(this, "local", config(model));
+});
+
+Given("空白のみのmodel識別子の委譲reviewer設定がある", function () {
+  setup(this);
+  writeConfig(this, "local", config("   "));
+});
+
+Given("上限を超えるmodel識別子の委譲reviewer設定がある", function () {
+  setup(this);
+  writeConfig(this, "local", config("m".repeat(257)));
+});
+
+Given("C1制御文字を含むmodel識別子の委譲reviewer設定がある", function () {
+  setup(this);
+  writeConfig(this, "local", config("qwen\u0085:27b"));
+});
+
+Given("未登録providerの委譲reviewer設定がある", function () {
+  setup(this);
+  writeConfig(this, "local", config("qwen3.8:27b", { provider: "cloud" }));
+});
+
+Given("別providerをreviewer registryへ登録した個人設定がある", function () {
+  setup(this);
+  this.registeredCloudProvider = true;
+  (DISPATCHABLE_REVIEWER_PROVIDERS as Set<string>).add("cloud");
+  writeConfig(this, "local", config("qwen3.8:27b", { provider: "cloud" }));
+});
+
+Given("委譲modelをqwen3.8へ変更する", function () {
+  writeConfig(this, "local", config("qwen3.8:27b"));
+});
+
 Given("異なるmodelのローカル設定とユーザー共通設定がある", function () {
   setup(this);
   writeConfig(this, "global", config("qwen3.6:27b"));
@@ -213,7 +259,7 @@ Given("loopback以外の委譲reviewer設定がある", function () {
   writeConfig(
     this,
     "local",
-    config("qwen3-coder:30b", { endpoint: "https://example.com" }),
+    config("qwen3.8:27b", { endpoint: "https://example.com" }),
   );
 });
 
@@ -335,6 +381,17 @@ Then("委譲reviewはdisabledでexecutorを起動しない", function () {
   assert.equal(this.reviewCalls, 0);
 });
 
+Then(
+  '"{word}" の委譲reviewが起動し進行役用の結果を返す',
+  function (model: string) {
+    assert.equal(this.result?.state, "reviewed", JSON.stringify(this.result));
+    if (this.result?.state !== "reviewed") return;
+    assert.equal(this.result.model, model);
+    assert.equal(this.dispatchedModel, model);
+    assert.equal(this.reviewCalls, 1);
+  },
+);
+
 Then("ローカルmodelでStep 3の肯定と敵対の結果を返す", function () {
   assert.equal(this.result?.state, "reviewed");
   if (this.result?.state !== "reviewed") return;
@@ -397,6 +454,31 @@ Then("差分外の指摘を除外して進行役確認へ渡す", function () {
 
 Then("委譲reviewはdegradedでexecutorを起動しない", function () {
   assert.equal(this.result?.state, "degraded");
+  assert.equal(this.reviewCalls, 0);
+});
+
+Then("qwen3.8でStep 7の設計reviewを返す", function () {
+  assert.equal(this.result?.state, "reviewed", JSON.stringify(this.result));
+  if (this.result?.state !== "reviewed") return;
+  assert.equal(this.result.step, 7);
+  assert.equal(this.dispatchedModel, "qwen3.8:27b");
+  assert.equal(this.reviewCalls, 1);
+});
+
+Then("qwen3.8でStep 10の候補を進行役へ返す", function () {
+  assert.equal(
+    this.result?.state,
+    "needs_coordinator_review",
+    JSON.stringify(this.result),
+  );
+  if (this.result?.state !== "needs_coordinator_review") return;
+  assert.equal(this.dispatchedModel, "qwen3.8:27b");
+  assert.equal(this.result.headSha, this.headSha);
+  assert.equal(this.result.findings[0]?.severity, "Critical");
+});
+
+Then("登録済みの非Ollama providerを起動前に拒否する", function () {
+  assert.equal(this.result?.state, "degraded", JSON.stringify(this.result));
   assert.equal(this.reviewCalls, 0);
 });
 
