@@ -1,6 +1,7 @@
 @unit
 Feature: 差分findingを進行役確認候補として渡す
 
+
   Scenario Outline: SCN-UNIT-FINDVERIFY-001 健全な修正の誤検知を自動確定せず候補として渡す
     Given "<case>" の修正前後を持つ隔離Git repositoryがある
     When 初回reviewerが修正前の欠陥を再掲し検証者が却下する

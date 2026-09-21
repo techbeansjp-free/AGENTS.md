@@ -9,6 +9,7 @@ import { isRecord } from "../types.js";
 import { filterReviewFindingsToTarget } from "../domain/review-finding-scope.js";
 import { REVIEW_EFFORTS, reviewProfileInstruction, visibleReviewFindings, } from "../domain/review-presentation.js";
 import { verifyReviewFindings, } from "./review-finding-verification.js";
+import { attachVerifiedReviewSuggestions, } from "./review-suggestion-launch.js";
 import { peekPrimaryReviewRoot, resolveReviewRoot, resolveReviewWorkspace, } from "./review-workspace.js";
 /**
  * CodeRabbit等の商用AIレビュアーが公開する観点（バグ・セキュリティ・
@@ -53,6 +54,8 @@ const RESPONSE_FORMAT_INSTRUCTION = "出力は必ず次の形式のJSONだけに
     '{"findings": [{"file": "対象file", "location": "該当箇所", ' +
     '"content": "指摘内容（日本語）", "severity": "Critical|High|Medium|Low", ' +
     '"effort": "Quick win|Moderate|Heavy lift"}]}。effortは修正工数の目安です。';
+const SUGGESTION_INSTRUCTION = "差分reviewのfindingには、修正案がある場合だけ任意のsuggestionPatchに単一fileのunified diffを入れてください。" +
+    "検証できた提案だけを表示します。無効な提案もfinding自体は維持します。";
 const VALID_SEVERITIES = [
     "Critical",
     "High",
@@ -70,6 +73,7 @@ function parseFindings(output) {
     if (!isRecord(parsed) || !Array.isArray(parsed.findings))
         return undefined;
     const findings = [];
+    const suggestionCandidates = new Map();
     for (const item of parsed.findings) {
         if (!isRecord(item) ||
             typeof item.file !== "string" ||
@@ -79,7 +83,7 @@ function parseFindings(output) {
         if (item.effort !== undefined &&
             !REVIEW_EFFORTS.includes(item.effort))
             return undefined;
-        findings.push({
+        const finding = {
             file: item.file,
             location: typeof item.location === "string" ? item.location : "",
             content: item.content,
@@ -87,9 +91,12 @@ function parseFindings(output) {
             ...(item.effort !== undefined
                 ? { effort: item.effort }
                 : {}),
-        });
+        };
+        findings.push(finding);
+        if (typeof item.suggestionPatch === "string")
+            suggestionCandidates.set(finding, item.suggestionPatch);
     }
-    return findings;
+    return { findings, suggestionCandidates };
 }
 async function dispatch(promptBody, config, truncated, targetFiles, execute, verification) {
     const executor = execute ?? REVIEWER_EXECUTORS[config.provider];
@@ -116,7 +123,8 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
         };
     }
     const prompt = `findingの対象fileは今回のreview対象に限ります: ${JSON.stringify(targetFiles)}。関連fileは文脈だけです。別taskや過去Issueの欠陥を今回のfindingへ混ぜないでください。\n\n` +
-        `${reviewProfileInstruction(config.profile)}${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
+        `${reviewProfileInstruction(config.profile)}${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}` +
+        (verification ? SUGGESTION_INSTRUCTION : "");
     const executed = await executor({
         endpoint: config.endpoint,
         model: config.model,
@@ -125,14 +133,14 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
     });
     if (executed.state !== "succeeded")
         return { state: "degraded", reason: executed.reason, truncated };
-    const findings = parseFindings(executed.output ?? "");
-    if (findings === undefined)
+    const parsed = parseFindings(executed.output ?? "");
+    if (parsed === undefined)
         return {
             state: "degraded",
             reason: "補助レビュー応答を構造化findingsへparseできませんでした",
             truncated,
         };
-    const scoped = filterReviewFindingsToTarget(findings, targetFiles);
+    const scoped = filterReviewFindingsToTarget(parsed.findings, targetFiles);
     const visible = visibleReviewFindings(scoped.findings, config.profile);
     const presented = {
         ...scoped,
@@ -164,6 +172,12 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
     return {
         state: "needs_coordinator_review",
         ...presented,
+        findings: attachVerifiedReviewSuggestions({
+            root: verification.root,
+            headSha: verification.headSha,
+            findings: visible,
+            candidates: parsed.suggestionCandidates,
+        }),
         firstPassFindings: scoped.findings,
         verificationSuggestedFindings: verified?.suggestedFindings ?? null,
         verificationAssessments: verified?.assessments ?? null,

@@ -17,6 +17,8 @@ class VerificationWorld extends WorkflowWorld {
   result: SupplementalReviewResult | undefined;
   verificationPrompt = "";
   reviewCalls = 0;
+  suggestionPatch = "";
+  beforeStatus = "";
 }
 
 const { Given, When, Then } = stepDefinitions<VerificationWorld>();
@@ -55,6 +57,10 @@ const cases: Record<string, [string, string]> = {
   authz削除: [
     "if (!canEdit(user, resource)) throw new Error('forbidden');\nupdate(resource);\n",
     "update(resource);\n",
+  ],
+  committable提案: [
+    "export const greet = (name: string) => name;\n",
+    "export const greet = (name: string) => name.trim();\n",
   ],
 };
 
@@ -260,6 +266,85 @@ When("差分内のfileがHEADで削除されて検証者が確認する", async 
   this.headSha = git(this.root, "rev-parse", "HEAD");
   await review(this, "accept");
 });
+
+When("初回reviewerが {string} の修正提案を返す", async function (kind: string) {
+  const patch =
+    "diff --git a/target.ts b/target.ts\n" +
+    "--- a/target.ts\n+++ b/target.ts\n@@ -1 +1 @@\n" +
+    "-export const greet = (name: string) => name.trim();\n" +
+    (kind === "valid"
+      ? "+export const greet = (name: string) => name.trim().toUpperCase();\n"
+      : "+export const greet = (name: string) => ;\n");
+  this.suggestionPatch = patch;
+  this.beforeStatus = git(this.root, "status", "--porcelain");
+  const executor: ReviewerExecutor = async ({ prompt }) => {
+    this.reviewCalls++;
+    if (prompt.includes("投稿前の独立したfinding検証者")) {
+      this.verificationPrompt = prompt;
+      return {
+        state: "succeeded",
+        reason: "ok",
+        output: JSON.stringify({
+          verdicts: [
+            {
+              index: 0,
+              valid: true,
+              reason: "対象のコード行を確認",
+              faultCode: this.after.trim(),
+              failurePath: "入力で当該行へ到達",
+              blockingCode: "",
+            },
+          ],
+        }),
+      };
+    }
+    return {
+      state: "succeeded",
+      reason: "ok",
+      output: JSON.stringify({
+        findings: [
+          {
+            file: "target.ts",
+            location: "1",
+            content: "修正案",
+            severity: "High",
+            suggestionPatch: patch,
+          },
+        ],
+      }),
+    };
+  };
+  this.result = await launchSupplementalReviewDiff(
+    { root: this.root, baseSha: this.baseSha, headSha: this.headSha },
+    { execute: executor },
+  );
+});
+
+Then(
+  "補助レビューは {string} の提案だけを表示し第二passへ生patchを渡さない",
+  function (expected: string) {
+    assert.equal(this.result?.state, "needs_coordinator_review");
+    if (this.result?.state !== "needs_coordinator_review") return;
+    assert.equal(this.result.findings.length, 1);
+    assert.equal(this.result.firstPassFindings.length, 1);
+    assert.equal(
+      this.result.firstPassFindings[0]?.committableSuggestion,
+      undefined,
+    );
+    assert.equal(this.verificationPrompt.includes("suggestionPatch"), false);
+    assert.equal(this.verificationPrompt.includes(this.suggestionPatch), false);
+    if (expected === "verified") {
+      assert.deepEqual(this.result.findings[0]?.committableSuggestion, {
+        headSha: this.headSha,
+        patch: this.suggestionPatch,
+      });
+    } else {
+      assert.equal(this.result.findings[0]?.committableSuggestion, undefined);
+    }
+    assert.equal(git(this.root, "status", "--porcelain"), this.beforeStatus);
+    assert.equal(this.reviewCalls, 2);
+  },
+);
 
 Then("補助レビューは初回候補と検証者の却下を進行役確認へ渡す", function () {
   assert.equal(

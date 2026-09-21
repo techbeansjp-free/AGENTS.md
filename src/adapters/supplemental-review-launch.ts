@@ -27,6 +27,10 @@ import {
   type ReviewFindingAssessment,
 } from "./review-finding-verification.js";
 import {
+  attachVerifiedReviewSuggestions,
+  type CommittableSuggestion,
+} from "./review-suggestion-launch.js";
+import {
   peekPrimaryReviewRoot,
   resolveReviewRoot,
   resolveReviewWorkspace,
@@ -46,6 +50,7 @@ export interface SupplementalReviewFinding {
   content: string;
   severity: Severity;
   effort?: ReviewEffort;
+  committableSuggestion?: CommittableSuggestion;
 }
 
 export type SupplementalReviewResult =
@@ -120,6 +125,10 @@ const RESPONSE_FORMAT_INSTRUCTION =
   '"content": "指摘内容（日本語）", "severity": "Critical|High|Medium|Low", ' +
   '"effort": "Quick win|Moderate|Heavy lift"}]}。effortは修正工数の目安です。';
 
+const SUGGESTION_INSTRUCTION =
+  "差分reviewのfindingには、修正案がある場合だけ任意のsuggestionPatchに単一fileのunified diffを入れてください。" +
+  "検証できた提案だけを表示します。無効な提案もfinding自体は維持します。";
+
 const VALID_SEVERITIES: readonly Severity[] = [
   "Critical",
   "High",
@@ -127,9 +136,12 @@ const VALID_SEVERITIES: readonly Severity[] = [
   "Low",
 ];
 
-function parseFindings(
-  output: string,
-): SupplementalReviewFinding[] | undefined {
+function parseFindings(output: string):
+  | {
+      findings: SupplementalReviewFinding[];
+      suggestionCandidates: Map<SupplementalReviewFinding, string>;
+    }
+  | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(output);
@@ -138,6 +150,7 @@ function parseFindings(
   }
   if (!isRecord(parsed) || !Array.isArray(parsed.findings)) return undefined;
   const findings: SupplementalReviewFinding[] = [];
+  const suggestionCandidates = new Map<SupplementalReviewFinding, string>();
   for (const item of parsed.findings) {
     if (
       !isRecord(item) ||
@@ -151,7 +164,7 @@ function parseFindings(
       !REVIEW_EFFORTS.includes(item.effort as ReviewEffort)
     )
       return undefined;
-    findings.push({
+    const finding: SupplementalReviewFinding = {
       file: item.file,
       location: typeof item.location === "string" ? item.location : "",
       content: item.content,
@@ -159,9 +172,12 @@ function parseFindings(
       ...(item.effort !== undefined
         ? { effort: item.effort as ReviewEffort }
         : {}),
-    });
+    };
+    findings.push(finding);
+    if (typeof item.suggestionPatch === "string")
+      suggestionCandidates.set(finding, item.suggestionPatch);
   }
-  return findings;
+  return { findings, suggestionCandidates };
 }
 
 async function dispatch(
@@ -202,7 +218,8 @@ async function dispatch(
   }
   const prompt =
     `findingの対象fileは今回のreview対象に限ります: ${JSON.stringify(targetFiles)}。関連fileは文脈だけです。別taskや過去Issueの欠陥を今回のfindingへ混ぜないでください。\n\n` +
-    `${reviewProfileInstruction(config.profile)}${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}`;
+    `${reviewProfileInstruction(config.profile)}${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}` +
+    (verification ? SUGGESTION_INSTRUCTION : "");
   const executed = await executor({
     endpoint: config.endpoint,
     model: config.model,
@@ -211,14 +228,14 @@ async function dispatch(
   });
   if (executed.state !== "succeeded")
     return { state: "degraded", reason: executed.reason, truncated };
-  const findings = parseFindings(executed.output ?? "");
-  if (findings === undefined)
+  const parsed = parseFindings(executed.output ?? "");
+  if (parsed === undefined)
     return {
       state: "degraded",
       reason: "補助レビュー応答を構造化findingsへparseできませんでした",
       truncated,
     };
-  const scoped = filterReviewFindingsToTarget(findings, targetFiles);
+  const scoped = filterReviewFindingsToTarget(parsed.findings, targetFiles);
   const visible = visibleReviewFindings(scoped.findings, config.profile);
   const presented = {
     ...scoped,
@@ -253,6 +270,12 @@ async function dispatch(
   return {
     state: "needs_coordinator_review",
     ...presented,
+    findings: attachVerifiedReviewSuggestions({
+      root: verification.root,
+      headSha: verification.headSha,
+      findings: visible,
+      candidates: parsed.suggestionCandidates,
+    }),
     firstPassFindings: scoped.findings,
     verificationSuggestedFindings: verified?.suggestedFindings ?? null,
     verificationAssessments: verified?.assessments ?? null,
