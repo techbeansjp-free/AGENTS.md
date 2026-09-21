@@ -21,6 +21,7 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-004"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  @requires-linux-poc
   Scenario: SCN-E2E-WFSTEP-005 PoC stagingからのpr mergeをGitHub操作前に拒否する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-005"のE2E検査を実行する
@@ -116,6 +117,7 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-052"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  @requires-linux-poc
   Scenario: SCN-E2E-WFSTEP-056 pocはautomatic宣言下でもPR停止終端になりpr mergeを拒否する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-056"のE2E検査を実行する
@@ -337,6 +339,7 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-ADVANCE-005"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  @requires-linux-poc
   Scenario: SCN-E2E-ADVANCE-006 workflow advanceはPoC Step 9を現在HEADの観測証拠へ拘束する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-ADVANCE-006"のE2E検査を実行する

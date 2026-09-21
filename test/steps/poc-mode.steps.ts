@@ -721,6 +721,37 @@ Given("pocのStep 4までを記録済みである", function () {
   this.observationSource = observationSource(this.declaration, this.headSha);
 });
 
+When("非LinuxでPoC隔離観測を要求する", function () {
+  this.error = undefined;
+  try {
+    executePocObservation({
+      staging: this.issue.path,
+      headSha: this.headSha,
+      observedAt: "2026-08-25T00:00:02.000Z",
+    });
+  } catch (error) {
+    this.error = error;
+  }
+});
+
+Then("隔離実行物不足で拒否され観測とStep 9は残らない", function () {
+  assert.ok(this.error instanceof Error);
+  assert.match(this.error.message, /固定\/usr\/bin\/(bwrap|prlimit)/u);
+  assert.equal(
+    fs.existsSync(
+      path.join(this.issue.path, pocObservationArtifact(this.headSha)),
+    ),
+    false,
+  );
+  const journal = parseStepJournal(
+    fs.readFileSync(path.join(this.issue.path, STEP_JOURNAL_FILE), "utf8"),
+  );
+  assert.equal(
+    journal.entries.some(({ step }) => step === 9),
+    false,
+  );
+});
+
 When("PoC観測EvidenceなしでStep 9を記録する", function () {
   assert.throws(
     () =>
