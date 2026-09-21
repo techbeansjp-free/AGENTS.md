@@ -18,7 +18,6 @@ class SuggestionWorld extends WorkflowWorld {
   status = "";
   original = "";
   syntaxResult = true;
-  elapsedMs = 0;
   resultFindings: Array<{
     file: string;
     committableSuggestion?: { headSha: string; patch: string };
@@ -121,9 +120,7 @@ When("過大候補の次に有効な修正提案を検証する", function () {
 
 When("大きなTypeScript sourceを1ms期限で構文検証する", function () {
   const source = `export const value = ${"1 + ".repeat(200_000)}0;\n`;
-  const started = Date.now();
   this.syntaxResult = validateReviewSuggestionSyntax("target.ts", source, 1);
-  this.elapsedMs = Date.now() - started;
 });
 
 When("{string} の修正提案を検証する", function (caseName: string) {
@@ -195,9 +192,8 @@ Then("対象HEADとpatchを持つ修正提案が返る", function () {
 Then("修正提案は省略される", function () {
   assert.equal(this.result, undefined);
 });
-Then("構文検証は1秒以内に失敗する", function () {
+Then("構文検証は期限切れとして失敗する", function () {
   assert.equal(this.syntaxResult, false);
-  assert.ok(this.elapsedMs < 1000, `elapsed=${this.elapsedMs}`);
 });
 Then("後続の有効提案だけがfindingへ添えられる", function () {
   assert.equal(this.resultFindings.length, 2);

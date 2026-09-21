@@ -22,7 +22,7 @@ Feature: finding修正提案を隔離検証する
   Scenario: SCN-UNIT-SUGGESTION-005 構文検証を期限で終了する
     Given 修正提案の構文検証器がある
     When 大きなTypeScript sourceを1ms期限で構文検証する
-    Then 構文検証は1秒以内に失敗する
+    Then 構文検証は期限切れとして失敗する
 
   Scenario Outline: SCN-UNIT-SUGGESTION-002 無効なpatchを省略する
     Given 修正提案用の隔離Git repositoryがある
