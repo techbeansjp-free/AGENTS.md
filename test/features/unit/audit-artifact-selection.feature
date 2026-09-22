@@ -47,10 +47,10 @@ Feature: review artifactの差分選択
     When 監査選択repositoryのfile監査を実行する
     Then file監査は比較基点の不一致を報告する
 
-  Scenario: SCN-UNIT-AUDITSEL-010 境界commitが親1個のときは比較基点を導出しない
+  Scenario: SCN-UNIT-AUDITSEL-010 境界commitが親1個でもtrusted default tipから比較基点を導出する
     Given 比較基点を候補branch内へ前進させartifact commitをHEADにした監査選択repository
     When 監査選択repositoryのfile監査を実行する
-    Then file監査は比較基点を検証せず合格する
+    Then file監査は比較基点の不一致を報告する
 
   Scenario: SCN-UNIT-AUDITSEL-011 merge-baseが一意でないときを判定不能として拒否する
     Given merge-baseが一意でない履歴でmerge commitをHEADにした監査選択repository

@@ -72,23 +72,26 @@ function artifact(
     | "unicode"
     | "indented"
     | "comment"
-    | "format",
+    | "format"
+    | "reason-only",
   plan: boolean,
 ): string {
   const value =
     kind === "short"
-      ? "対象外: この変更では該当する判断がないため"
-      : kind === "empty"
-        ? "対象外:"
-        : kind === "comment"
-          ? "対象外: <!-- 非表示 -->"
-          : kind === "format"
-            ? "対象外: \u200B"
-            : kind === "unicode"
-              ? "対象外： この変更では該当する判断がないため"
-              : kind === "indented"
-                ? "    対象外: この変更では該当する判断がないため"
-                : "既存契約を維持し、具体的な判断と検証方法を記録する。";
+      ? "対象外: CLI成果物検証だけの変更で対象を限定できるため / 検証証拠: SCN-WF-1334-001"
+      : kind === "reason-only"
+        ? "対象外: この変更では該当する判断がないため"
+        : kind === "empty"
+          ? "対象外:"
+          : kind === "comment"
+            ? "対象外: <!-- 非表示 -->"
+            : kind === "format"
+              ? "対象外: \u200B"
+              : kind === "unicode"
+                ? "対象外： この変更では該当する判断がないため"
+                : kind === "indented"
+                  ? "    対象外: この変更では該当する判断がないため"
+                  : "既存契約を維持し、具体的な判断と検証方法を記録する。";
   const sections = plan
     ? [`## 5. 実行可能な受け入れ例とtest計画`, `### 5.2 安全性の必須観点`]
     : [
@@ -121,7 +124,8 @@ function writeStaging(
     | "unicode"
     | "indented"
     | "comment"
-    | "format",
+    | "format"
+    | "reason-only",
 ): void {
   world.issuePath = world.temp("asc-issue-risk-short-");
   fs.writeFileSync(path.join(world.issuePath, "00_要求定義.md"), requirement());
@@ -183,6 +187,13 @@ Given(
   /^Verification Set riskが"([^"]+)"で02と03の対象節が字下げcode短縮行である$/u,
   function (risk: string) {
     writeStaging(this, risk, "indented");
+  },
+);
+
+Given(
+  /^Verification Set riskが"([^"]+)"で02と03の対象節が理由だけの短縮行である$/u,
+  function (risk: string) {
+    writeStaging(this, risk, "reason-only");
   },
 );
 
@@ -315,7 +326,18 @@ Then("short formを許可するriskがlowだけだと示して拒否する", fun
 
 Then("理由付きの単一行書式を示して拒否する", function () {
   assert.equal(this.validation.valid, false);
-  assert.match(this.validation.errors.join(" "), /対象外: <理由>.*1行/u);
+  assert.match(
+    this.validation.errors.join(" "),
+    /対象外: <範囲を限定した理由>.*検証証拠.*1行/u,
+  );
+});
+
+Then("理由と検証証拠付きの単一行書式を示して拒否する", function () {
+  assert.equal(this.validation.valid, false);
+  assert.match(
+    this.validation.errors.join(" "),
+    /範囲を限定した理由.*検証証拠/u,
+  );
 });
 
 Then("Verification Set入力が通常fileでないと示して拒否する", function () {
@@ -344,7 +366,10 @@ When("risk比例短縮のtemplate注記を検査する", function () {
 Then("両templateがlow限定とissue validateを明記する", function () {
   for (const template of this.templates) {
     assert.match(template, /risk.*`low`/u);
-    assert.match(template, /`対象外: <理由>`/u);
+    assert.match(
+      template,
+      /`対象外: <範囲を限定した理由> \/ 検証証拠: <証拠>`/u,
+    );
     assert.match(template, /`issue validate`/u);
   }
 });

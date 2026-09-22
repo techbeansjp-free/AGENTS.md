@@ -10,6 +10,7 @@ type AuditResult = ReturnType<typeof checkFileAudit>;
 class AuditSelectionWorld extends WorkflowWorld {
   auditRoot = "";
   auditResult: AuditResult | undefined = undefined;
+  auditTrustedDefaultTip: string | undefined = undefined;
   /** fixtureが期待する`H_impl`。`valid`だけでなく導出結果そのものを照合する。 */
   expectedImplementation: string | undefined = undefined;
   auditResults: AuditResult[] = [];
@@ -400,6 +401,7 @@ function createBaseDerivationFixture(
   const mainTip = commitPaths(root, "test: 既定branchの基点を作る", [
     "keep.txt",
   ]);
+  world.auditTrustedDefaultTip = mainTip;
   git(root, ["checkout", "-q", "-b", "feature/966-base"]);
   let declaredBase = mainTip;
   if (options.narrowed) {
@@ -1185,6 +1187,9 @@ When("監査選択repositoryのfile監査を実行する", function () {
   this.auditResult = checkFileAudit(
     this.auditRoot,
     isolatedCutoff(this.auditRoot),
+    this.auditTrustedDefaultTip === undefined
+      ? {}
+      : { trustedDefaultTip: this.auditTrustedDefaultTip },
   );
 });
 

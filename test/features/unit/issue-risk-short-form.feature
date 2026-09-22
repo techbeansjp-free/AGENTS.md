@@ -76,3 +76,9 @@ Feature: Verification Set riskに比例した02/03短縮形式
       | kind           |
       | HTML comment   |
       | Unicode format |
+
+
+  Scenario: SCN-WF-1334-012 low-riskでも検証証拠のない短縮行を拒否する
+    Given Verification Set riskが"low"で02と03の対象節が理由だけの短縮行である
+    When risk比例のIssue成果物を検証する
+    Then 理由と検証証拠付きの単一行書式を示して拒否する

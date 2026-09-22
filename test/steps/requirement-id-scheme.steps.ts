@@ -52,7 +52,7 @@ const CHECKS: Readonly<Record<string, (world: WorkflowWorld) => void>> = {
   "SCN-UNIT-REQID-003": (world) => {
     const root = replicate(world);
     rewrite(root, NON_FUNCTIONAL, (text) =>
-      text.replace("| REQ-{domain}-001 |", "| NFR-001 |"),
+      text.replace(/\| REQ-\{domain\}-\{N\+1\} \|/u, "| NFR-001 |"),
     );
     const errors = checkRequirementIdScheme(root).errors;
     assert.ok(

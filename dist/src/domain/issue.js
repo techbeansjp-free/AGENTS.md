@@ -27,7 +27,7 @@ export const ARTIFACT_UNIT_KINDS = Object.freeze([
     "migration",
 ]);
 const LOW_RISK_SHORT_FORM_FILE = "verification-input.json";
-const LOW_RISK_SHORT_FORM = /^対象外:\s*(.*)$/u;
+const LOW_RISK_SHORT_FORM = /^対象外:\s*(.*?)\s*\/\s*検証証拠:\s*(.*)$/u;
 const LOW_RISK_SHORT_FORM_LIKE = /^\s*(?:(?:[-*+>])\s*)*対象外(?:$|(?=\s|[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}A-Za-z0-9_]))/u;
 const MAX_VERIFICATION_INPUT_BYTES = 1024 * 1024;
 const LOW_RISK_SHORT_FORM_TARGETS = Object.freeze([
@@ -177,7 +177,7 @@ function verificationRisk(issuePath) {
     }
     return parseVerificationSelectionInput(input).risk;
 }
-/** 指定4節にshort formが現れた場合だけ、low限定・理由付き1行を強制する。 */
+/** 指定4節にshort formが現れた場合だけ、low限定・理由・検証証拠付き1行を強制する。 */
 export function validateLowRiskShortForms(issuePath, includedFiles) {
     const candidates = LOW_RISK_SHORT_FORM_TARGETS.filter((target) => includedFiles === undefined || includedFiles.has(target.file)).flatMap((target) => {
         const artifact = path.join(issuePath, target.file);
@@ -199,7 +199,7 @@ export function validateLowRiskShortForms(issuePath, includedFiles) {
     }
     catch (error) {
         return Object.freeze([
-            `\`対象外: <理由>\`はrisk=lowだけで使用できます。riskを確認できません: ${error instanceof Error ? error.message : String(error)}`,
+            `\`対象外: <範囲を限定した理由> / 検証証拠: <証拠>\`はrisk=lowだけで使用できます。riskを確認できません: ${error instanceof Error ? error.message : String(error)}`,
         ]);
     }
     const errors = [];
@@ -211,10 +211,14 @@ export function validateLowRiskShortForms(issuePath, includedFiles) {
             .replace(/<!--[\s\S]*?-->/gu, "")
             .replace(/\p{Cf}/gu, "")
             .trim();
-        if (!match || visibleReason === "")
-            errors.push(`${candidate.file} §${candidate.heading}の短縮形式は\`対象外: <理由>\`の理由付き1行にしてください`);
+        const visibleEvidence = match?.[2]
+            .replace(/<!--[\s\S]*?-->/gu, "")
+            .replace(/\p{Cf}/gu, "")
+            .trim();
+        if (!match || visibleReason === "" || visibleEvidence === "")
+            errors.push(`${candidate.file} §${candidate.heading}の短縮形式は\`対象外: <範囲を限定した理由> / 検証証拠: <証拠>\`の1行にしてください`);
         if (risk !== "low")
-            errors.push(`${candidate.file} §${candidate.heading}の\`対象外: <理由>\`はrisk=lowだけで使用できます（現在: ${risk}）`);
+            errors.push(`${candidate.file} §${candidate.heading}の対象外短縮形式はrisk=lowだけで使用できます（現在: ${risk}）`);
     }
     return Object.freeze(errors);
 }
