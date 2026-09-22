@@ -19,6 +19,8 @@ class VerificationWorld extends WorkflowWorld {
   reviewCalls = 0;
   suggestionPatch = "";
   beforeStatus = "";
+  findingLocation = "1";
+  verificationEvidence = "";
 }
 
 const { Given, When, Then } = stepDefinitions<VerificationWorld>();
@@ -98,8 +100,26 @@ Given(
         timeoutMs: 5000,
       }),
     );
+    this.findingLocation = "1";
+    this.verificationEvidence = "";
   },
 );
+
+Given("HEADの対象fileが24KiBを超えfinding位置に障害行がある", function () {
+  const targetLine = 1800;
+  const lines = Array.from({ length: 3600 }, (_, index) =>
+    index === targetLine - 1
+      ? "return user.name;\n"
+      : `const safe_${index + 1} = ${index + 1};\n`,
+  );
+  this.after = lines.join("");
+  this.findingLocation = String(targetLine);
+  this.verificationEvidence = "return user.name;";
+  fs.writeFileSync(path.join(this.root, "target.ts"), this.after);
+  git(this.root, "add", "target.ts");
+  git(this.root, "commit", "-q", "-m", "large target");
+  this.headSha = git(this.root, "rev-parse", "HEAD");
+});
 
 async function review(
   world: VerificationWorld,
@@ -147,7 +167,7 @@ async function review(
                         ? ""
                         : verdict === "invented"
                           ? "存在しない障害行"
-                          : world.after.trim(),
+                          : world.verificationEvidence || world.after.trim(),
                     failurePath:
                       verdict === "reject" ||
                       verdict === "unsubstantiated-reject" ||
@@ -159,7 +179,7 @@ async function review(
                       verdict === "contradictory" ||
                       verdict === "reject" ||
                       verdict === "valid-block-only"
-                        ? world.after.trim()
+                        ? world.verificationEvidence || world.after.trim()
                         : "",
                   },
                 ],
@@ -173,7 +193,7 @@ async function review(
         findings: [
           {
             file: "target.ts",
-            location: "1",
+            location: world.findingLocation,
             content: "欠陥がある",
             severity: "High",
           },
@@ -378,6 +398,16 @@ Then("補助レビューはHigh候補と検証者の採用を進行役確認へ�
     "quote_matched",
   );
   assert.equal(this.reviewCalls, 2);
+});
+Then("補助レビューは24KiB以下のexcerptで障害行を検証する", function () {
+  assert.equal(this.result?.state, "needs_coordinator_review");
+  if (this.result?.state !== "needs_coordinator_review") return;
+  assert.ok(Buffer.byteLength(this.verificationPrompt, "utf8") <= 24 * 1024);
+  assert.ok(this.verificationPrompt.includes(this.verificationEvidence));
+  assert.equal(
+    this.result.verificationAssessments?.[0]?.evidenceStatus,
+    "quote_matched",
+  );
 });
 Then("補助レビューは検証不能の初回候補を進行役確認へ渡す", function () {
   assert.equal(

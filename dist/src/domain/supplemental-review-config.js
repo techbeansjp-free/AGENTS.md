@@ -1,13 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DISPATCHABLE_REVIEWER_PROVIDERS } from "./reviewer-provider.js";
+import { DEFAULT_LOCAL_REVIEW_MAX_OUTPUT_TOKENS, DEFAULT_LOCAL_REVIEW_PROMPT_CHUNK_BYTES, isValidLocalReviewMaxOutputTokens, isValidLocalReviewPromptChunkBytes, } from "./local-review-limits.js";
 /**
  * 補助レビューの既定配置。`modelMapping.roles.reviewer`（Issue #1425、
  * git管理下・project全体共有）とは独立に、エンジニア個別のgit管理外設定
  * として持つ（TERM-ASC-124、INV-1428-03、INV-1428-04）。
  */
 export const SUPPLEMENTAL_REVIEW_CONFIG_PATH = ".agent-skill-chain/local/supplemental-review.json";
-const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
 const ALLOWED_FIELDS = new Set([
     "enabled",
     "provider",
@@ -15,6 +16,8 @@ const ALLOWED_FIELDS = new Set([
     "endpoint",
     "timeoutMs",
     "profile",
+    "promptChunkBytes",
+    "maxOutputTokens",
 ]);
 /**
  * 設定fileが存在しない・読めない・形状が不正・`enabled`が`true`以外・
@@ -64,9 +67,15 @@ export function loadSupplementalReviewConfig(root, configPath = SUPPLEMENTAL_REV
     if (timeoutMsRaw !== undefined &&
         !(typeof timeoutMsRaw === "number" &&
             Number.isInteger(timeoutMsRaw) &&
-            timeoutMsRaw > 0))
+            timeoutMsRaw > 0 &&
+            timeoutMsRaw <= 30 * 60 * 1000))
         return undefined;
     const timeoutMs = timeoutMsRaw ?? DEFAULT_TIMEOUT_MS;
+    const promptChunkBytes = record.promptChunkBytes ?? DEFAULT_LOCAL_REVIEW_PROMPT_CHUNK_BYTES;
+    const maxOutputTokens = record.maxOutputTokens ?? DEFAULT_LOCAL_REVIEW_MAX_OUTPUT_TOKENS;
+    if (!isValidLocalReviewPromptChunkBytes(promptChunkBytes) ||
+        !isValidLocalReviewMaxOutputTokens(maxOutputTokens))
+        return undefined;
     if (record.profile !== undefined &&
         record.profile !== "chill" &&
         record.profile !== "assertive")
@@ -78,6 +87,8 @@ export function loadSupplementalReviewConfig(root, configPath = SUPPLEMENTAL_REV
         endpoint,
         timeoutMs,
         profile: (record.profile ?? "assertive"),
+        promptChunkBytes,
+        maxOutputTokens,
     };
 }
 //# sourceMappingURL=supplemental-review-config.js.map

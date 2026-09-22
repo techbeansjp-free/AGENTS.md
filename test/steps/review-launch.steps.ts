@@ -38,6 +38,7 @@ class ReviewLaunchWorld extends WorkflowWorld {
   executionResult: LocalLlmExecutionResult | undefined;
   fakeServer: http.Server | undefined;
   fakeServerPort = 0;
+  fakeRequestBody = "";
   cliResult: SpawnSyncReturns<string> | undefined;
 }
 
@@ -395,11 +396,54 @@ Given("正常応答するfake Ollamaサーバーがある", async function () {
   });
 });
 
+Given("分割stream応答を返すfake Ollamaサーバーがある", async function () {
+  await startFakeOllama(this, (req, res) => {
+    let body = "";
+    req.on("data", (chunk: Buffer) => (body += chunk.toString("utf8")));
+    req.on("end", () => {
+      this.fakeRequestBody = body;
+      res.writeHead(200, { "content-type": "application/x-ndjson" });
+      res.write(`${JSON.stringify({ response: "A", done: false })}\n`);
+      res.end(`${JSON.stringify({ response: "B", done: true })}\n`);
+    });
+  });
+});
+
+Given("生成token上限で終了するfake Ollamaサーバーがある", async function () {
+  await startFakeOllama(this, (req, res) => {
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "application/x-ndjson" });
+      res.write(
+        `${JSON.stringify({ response: '{"findings":[', done: false })}\n`,
+      );
+      res.end(
+        `${JSON.stringify({ response: "", done: true, done_reason: "length" })}\n`,
+      );
+    });
+  });
+});
+
 Given("応答しないfake Ollamaサーバーがある", async function () {
   await startFakeOllama(this, () => {
     /* 応答しない: クライアント側のtimeoutを検証する */
   });
 });
+
+Given(
+  "設定上限より早く遅延応答するfake Ollamaサーバーがある",
+  async function () {
+    await startFakeOllama(this, (req, res) => {
+      req.resume();
+      req.on("end", () => {
+        setTimeout(() => {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ response: "遅延応答", done: true }));
+        }, 1500);
+      });
+    });
+  },
+);
 
 Given("容量上限を超える応答をするfake Ollamaサーバーがある", async function () {
   await startFakeOllama(this, (req, res) => {
@@ -427,6 +471,30 @@ When("executeLocalLlmを実行する", async function () {
   );
 });
 
+When("executeLocalLlmを3秒上限で実行する", async function () {
+  assert.ok(this.fakeServer);
+  this.executionResult = await executeLocalLlm(
+    {
+      endpoint: `http://127.0.0.1:${this.fakeServerPort}`,
+      model: OLLAMA_MODEL,
+      prompt: "review this large diff",
+    },
+    { timeoutMs: 3000, maxOutputBytes: 64 },
+  );
+});
+
+When("executeLocalLlmを512 byte出力上限で実行する", async function () {
+  assert.ok(this.fakeServer);
+  this.executionResult = await executeLocalLlm(
+    {
+      endpoint: `http://127.0.0.1:${this.fakeServerPort}`,
+      model: OLLAMA_MODEL,
+      prompt: "review this diff",
+    },
+    { timeoutMs: 500, maxOutputBytes: 512 },
+  );
+});
+
 Then("実行結果はsucceededである", function () {
   assert.ok(this.executionResult);
   assert.equal(this.executionResult.state, "succeeded");
@@ -436,6 +504,32 @@ Then("実行結果のoutputは応答本文を保持する", function () {
   assert.ok(this.executionResult);
   assert.equal(this.executionResult.state, "succeeded");
   assert.equal(this.executionResult.output, "指摘なし");
+});
+
+Then("実行結果のoutputは遅延応答を保持する", function () {
+  assert.ok(this.executionResult);
+  assert.equal(this.executionResult.state, "succeeded");
+  assert.equal(this.executionResult.output, "遅延応答");
+});
+
+Then("実行結果のoutputはstream応答を連結する", function () {
+  assert.equal(this.executionResult?.output, "AB");
+});
+
+Then("Ollama要求はstream trueである", function () {
+  const request = JSON.parse(this.fakeRequestBody) as Record<string, unknown>;
+  assert.equal(request.stream, true);
+  assert.deepEqual(request.options, { temperature: 0, num_predict: 2048 });
+});
+
+Then("実行結果は有限時間上限を示す", function () {
+  assert.ok(this.executionResult);
+  assert.match(this.executionResult.reason, /有限時間上限/);
+  assert.doesNotMatch(this.executionResult.reason, /接続できません/);
+});
+
+Then("実行結果は生成token上限を示す", function () {
+  assert.match(this.executionResult?.reason ?? "", /生成token上限/u);
 });
 
 Given("応答途中で停止するfake Ollamaサーバーがある", async function () {

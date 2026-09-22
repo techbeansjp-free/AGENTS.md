@@ -35,6 +35,7 @@ import {
   resolveReviewRoot,
   resolveReviewWorkspace,
 } from "./review-workspace.js";
+import { buildReviewPromptBatches } from "./review-prompt-batching.js";
 
 /**
  * `modelMapping`・`resolveReviewRouting`・`launchReview`のいずれも
@@ -125,6 +126,8 @@ const RESPONSE_FORMAT_INSTRUCTION =
   '"content": "指摘内容（日本語）", "severity": "Critical|High|Medium|Low", ' +
   '"effort": "Quick win|Moderate|Heavy lift"}]}。effortは修正工数の目安です。';
 
+const MAX_FINDINGS = 100;
+
 const SUGGESTION_INSTRUCTION =
   "差分reviewのfindingには、修正案がある場合だけ任意のsuggestionPatchに単一fileのunified diffを入れてください。" +
   "検証できた提案だけを表示します。無効な提案もfinding自体は維持します。";
@@ -181,6 +184,7 @@ function parseFindings(output: string):
 }
 
 async function dispatch(
+  instruction: string,
   promptBody: string,
   config: {
     provider: string;
@@ -188,6 +192,8 @@ async function dispatch(
     endpoint: string;
     timeoutMs: number;
     profile: ReviewProfile;
+    promptChunkBytes: number;
+    maxOutputTokens: number;
   },
   truncated: boolean,
   targetFiles: string[],
@@ -216,26 +222,83 @@ async function dispatch(
       truncated,
     };
   }
-  const prompt =
-    `findingの対象fileは今回のreview対象に限ります: ${JSON.stringify(targetFiles)}。関連fileは文脈だけです。別taskや過去Issueの欠陥を今回のfindingへ混ぜないでください。\n\n` +
-    `${reviewProfileInstruction(config.profile)}${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}` +
+  const prefix =
+    "findingの対象fileは入力内でfileとして示された今回のreview対象に限ります。関連fileは文脈だけです。別taskや過去Issueの欠陥を今回のfindingへ混ぜないでください。\n\n" +
+    `${instruction}\n\n` +
+    reviewProfileInstruction(config.profile);
+  const suffix =
+    `\n\n${RESPONSE_FORMAT_INSTRUCTION}` +
     (verification ? SUGGESTION_INSTRUCTION : "");
-  const executed = await executor({
-    endpoint: config.endpoint,
-    model: config.model,
-    prompt,
-    timeoutMs: config.timeoutMs,
-  });
-  if (executed.state !== "succeeded")
-    return { state: "degraded", reason: executed.reason, truncated };
-  const parsed = parseFindings(executed.output ?? "");
-  if (parsed === undefined)
+  let prompts: string[];
+  try {
+    prompts = buildReviewPromptBatches({
+      prefix,
+      body: promptBody,
+      suffix,
+      maxBytes: config.promptChunkBytes,
+    });
+  } catch (error) {
     return {
       state: "degraded",
-      reason: "補助レビュー応答を構造化findingsへparseできませんでした",
+      reason: error instanceof Error ? error.message : String(error),
       truncated,
     };
-  const scoped = filterReviewFindingsToTarget(parsed.findings, targetFiles);
+  }
+  const allFindings: SupplementalReviewFinding[] = [];
+  const suggestionCandidates = new Map<SupplementalReviewFinding, string>();
+  const deadline = Date.now() + config.timeoutMs;
+  for (const prompt of prompts) {
+    const remainingTimeoutMs = Math.max(1, deadline - Date.now());
+    const executed = await executor({
+      endpoint: config.endpoint,
+      model: config.model,
+      prompt,
+      timeoutMs: remainingTimeoutMs,
+      maxOutputTokens: config.maxOutputTokens,
+    });
+    if (executed.state !== "succeeded")
+      return { state: "degraded", reason: executed.reason, truncated };
+    const parsed = parseFindings(executed.output ?? "");
+    if (parsed === undefined)
+      return {
+        state: "degraded",
+        reason: "補助レビュー応答を構造化findingsへparseできませんでした",
+        truncated,
+      };
+    allFindings.push(...parsed.findings);
+    for (const [finding, patch] of parsed.suggestionCandidates)
+      suggestionCandidates.set(finding, patch);
+  }
+  const findingKey = (finding: SupplementalReviewFinding) =>
+    JSON.stringify([
+      finding.file,
+      finding.location,
+      finding.content,
+      finding.severity,
+      finding.effort ?? "",
+    ]);
+  const findingsByKey = new Map<string, SupplementalReviewFinding>();
+  const suggestionsByKey = new Map<string, string>();
+  for (const finding of allFindings) {
+    const key = findingKey(finding);
+    if (!findingsByKey.has(key)) findingsByKey.set(key, finding);
+    const patch = suggestionCandidates.get(finding);
+    if (patch !== undefined) suggestionsByKey.set(key, patch);
+  }
+  const uniqueFindings = [...findingsByKey.values()];
+  const scoped = filterReviewFindingsToTarget(uniqueFindings, targetFiles);
+  if (scoped.findings.length > MAX_FINDINGS)
+    return {
+      state: "degraded",
+      reason: "統合後の補助レビュー指摘件数が有限上限を超えました",
+      truncated,
+    };
+  const uniqueSuggestionCandidates = new Map(
+    uniqueFindings.flatMap((finding) => {
+      const patch = suggestionsByKey.get(findingKey(finding));
+      return patch === undefined ? [] : [[finding, patch] as const];
+    }),
+  );
   const visible = visibleReviewFindings(scoped.findings, config.profile);
   const presented = {
     ...scoped,
@@ -253,7 +316,9 @@ async function dispatch(
         findings: scoped.findings,
         endpoint: config.endpoint,
         model: config.model,
-        timeoutMs: config.timeoutMs,
+        timeoutMs: Math.max(1, deadline - Date.now()),
+        maxOutputTokens: config.maxOutputTokens,
+        promptChunkBytes: config.promptChunkBytes,
       },
       executor,
     );
@@ -274,7 +339,7 @@ async function dispatch(
       root: verification.root,
       headSha: verification.headSha,
       findings: visible,
-      candidates: parsed.suggestionCandidates,
+      candidates: uniqueSuggestionCandidates,
     }),
     firstPassFindings: scoped.findings,
     verificationSuggestedFindings: verified?.suggestedFindings ?? null,
@@ -360,9 +425,9 @@ export async function launchSupplementalReviewDiff(
       input.headSha,
       input.limit ?? RELATED_FILE_LIMIT,
     );
-    const promptBody = `${DIFF_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
     const result = await dispatch(
-      promptBody,
+      DIFF_REVIEW_INSTRUCTION,
+      collected.promptBody,
       config,
       collected.truncated,
       collected.changed,
@@ -394,9 +459,9 @@ export async function launchSupplementalReviewStaging(
       input.root,
       input.stagingPath,
     );
-    const promptBody = `${STAGING_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
     return await dispatch(
-      promptBody,
+      STAGING_REVIEW_INSTRUCTION,
+      collected.promptBody,
       config,
       false,
       collected.changed,

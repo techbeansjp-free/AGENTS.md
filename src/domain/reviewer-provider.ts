@@ -21,6 +21,8 @@ export type ReviewerExecutor = (input: {
   endpoint: string;
   model: string;
   prompt: string;
-  /** 省略時は各executorの既定値（`executeLocalLlm`は5分）を使う */
+  /** 省略時は各executorの既定値（`executeLocalLlm`は15分）を使う */
   timeoutMs?: number;
+  /** Ollama等の生成token上限。省略時はexecutorの安全な既定値を使う */
+  maxOutputTokens?: number;
 }) => Promise<ReviewerExecutionResult>;

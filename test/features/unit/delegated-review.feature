@@ -143,3 +143,29 @@ Feature: 設定されたローカルLLMへのreview委譲
     Given C1制御文字を含むmodel識別子の委譲reviewer設定がある
     When Step 3の委譲reviewを実行する
     Then 委譲reviewはdegradedでexecutorを起動しない
+
+  Scenario: SCN-UNIT-DELEGREVIEW-027 巨大staging文書を有限入力へ分割して統合する
+    Given 350KiBを超えるstaging文書とローカルreviewer設定がある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewは複数の24KiB以下の入力を統合して返す
+
+  Scenario: SCN-UNIT-DELEGREVIEW-028 端末別の入力・出力上限を全chunkへ適用する
+    Given 端末別の入力32KiBと出力4096 token設定がある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewは端末別の入力上限と出力上限を全chunkへ適用する
+
+  Scenario: SCN-UNIT-DELEGREVIEW-029 安全範囲外の入力・出力上限を起動前に拒否する
+    Given 安全範囲外の端末別ローカルreviewer設定がある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewはdegradedでexecutorを起動しない
+
+  Scenario: SCN-UNIT-DELEGREVIEW-030 端末別上限を投稿前検証まで維持する
+    Given Step 10の委譲reviewerがCritical指摘と承認を返す
+    And 委譲reviewへ端末別の入力32KiBと出力4096 tokenを設定する
+    When Step 10の委譲reviewを実行する
+    Then 委譲reviewは端末別上限を初回と投稿前検証へ適用する
+
+  Scenario: SCN-UNIT-DELEGREVIEW-031 chunk配列の境界をdigestに保存する
+    Given 350KiBを超えるstaging文書とローカルreviewer設定がある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewはdigestにchunk配列の境界を保存する
