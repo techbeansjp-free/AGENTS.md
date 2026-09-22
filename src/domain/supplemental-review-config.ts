@@ -2,6 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { DISPATCHABLE_REVIEWER_PROVIDERS } from "./reviewer-provider.js";
 import type { ReviewProfile } from "./review-presentation.js";
+import {
+  DEFAULT_LOCAL_REVIEW_MAX_OUTPUT_TOKENS,
+  DEFAULT_LOCAL_REVIEW_PROMPT_CHUNK_BYTES,
+  isValidLocalReviewMaxOutputTokens,
+  isValidLocalReviewPromptChunkBytes,
+} from "./local-review-limits.js";
 
 /**
  * 補助レビューの既定配置。`modelMapping.roles.reviewer`（Issue #1425、
@@ -18,9 +24,11 @@ export interface SupplementalReviewConfig {
   endpoint: string;
   timeoutMs: number;
   profile: ReviewProfile;
+  promptChunkBytes: number;
+  maxOutputTokens: number;
 }
 
-const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
 const ALLOWED_FIELDS = new Set([
   "enabled",
   "provider",
@@ -28,6 +36,8 @@ const ALLOWED_FIELDS = new Set([
   "endpoint",
   "timeoutMs",
   "profile",
+  "promptChunkBytes",
+  "maxOutputTokens",
 ]);
 
 /**
@@ -79,11 +89,21 @@ export function loadSupplementalReviewConfig(
     !(
       typeof timeoutMsRaw === "number" &&
       Number.isInteger(timeoutMsRaw) &&
-      timeoutMsRaw > 0
+      timeoutMsRaw > 0 &&
+      timeoutMsRaw <= 30 * 60 * 1000
     )
   )
     return undefined;
   const timeoutMs = timeoutMsRaw ?? DEFAULT_TIMEOUT_MS;
+  const promptChunkBytes =
+    record.promptChunkBytes ?? DEFAULT_LOCAL_REVIEW_PROMPT_CHUNK_BYTES;
+  const maxOutputTokens =
+    record.maxOutputTokens ?? DEFAULT_LOCAL_REVIEW_MAX_OUTPUT_TOKENS;
+  if (
+    !isValidLocalReviewPromptChunkBytes(promptChunkBytes) ||
+    !isValidLocalReviewMaxOutputTokens(maxOutputTokens)
+  )
+    return undefined;
   if (
     record.profile !== undefined &&
     record.profile !== "chill" &&
@@ -97,5 +117,7 @@ export function loadSupplementalReviewConfig(
     endpoint,
     timeoutMs,
     profile: (record.profile ?? "assertive") as ReviewProfile,
+    promptChunkBytes,
+    maxOutputTokens,
   };
 }

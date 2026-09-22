@@ -11,6 +11,7 @@ import { REVIEW_EFFORTS, reviewProfileInstruction, visibleReviewFindings, } from
 import { verifyReviewFindings, } from "./review-finding-verification.js";
 import { attachVerifiedReviewSuggestions, } from "./review-suggestion-launch.js";
 import { peekPrimaryReviewRoot, resolveReviewRoot, resolveReviewWorkspace, } from "./review-workspace.js";
+import { buildReviewPromptBatches } from "./review-prompt-batching.js";
 /**
  * CodeRabbit等の商用AIレビュアーが公開する観点（バグ・セキュリティ・
  * パフォーマンス・品質・機能性の5分類）に合わせた、diff対象向けの
@@ -54,6 +55,7 @@ const RESPONSE_FORMAT_INSTRUCTION = "出力は必ず次の形式のJSONだけに
     '{"findings": [{"file": "対象file", "location": "該当箇所", ' +
     '"content": "指摘内容（日本語）", "severity": "Critical|High|Medium|Low", ' +
     '"effort": "Quick win|Moderate|Heavy lift"}]}。effortは修正工数の目安です。';
+const MAX_FINDINGS = 100;
 const SUGGESTION_INSTRUCTION = "差分reviewのfindingには、修正案がある場合だけ任意のsuggestionPatchに単一fileのunified diffを入れてください。" +
     "検証できた提案だけを表示します。無効な提案もfinding自体は維持します。";
 const VALID_SEVERITIES = [
@@ -98,7 +100,7 @@ function parseFindings(output) {
     }
     return { findings, suggestionCandidates };
 }
-async function dispatch(promptBody, config, truncated, targetFiles, execute, verification) {
+async function dispatch(instruction, promptBody, config, truncated, targetFiles, execute, verification) {
     const executor = execute ?? REVIEWER_EXECUTORS[config.provider];
     if (!executor)
         return {
@@ -122,25 +124,81 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
             truncated,
         };
     }
-    const prompt = `findingの対象fileは今回のreview対象に限ります: ${JSON.stringify(targetFiles)}。関連fileは文脈だけです。別taskや過去Issueの欠陥を今回のfindingへ混ぜないでください。\n\n` +
-        `${reviewProfileInstruction(config.profile)}${promptBody}\n\n${RESPONSE_FORMAT_INSTRUCTION}` +
+    const prefix = "findingの対象fileは入力内でfileとして示された今回のreview対象に限ります。関連fileは文脈だけです。別taskや過去Issueの欠陥を今回のfindingへ混ぜないでください。\n\n" +
+        `${instruction}\n\n` +
+        reviewProfileInstruction(config.profile);
+    const suffix = `\n\n${RESPONSE_FORMAT_INSTRUCTION}` +
         (verification ? SUGGESTION_INSTRUCTION : "");
-    const executed = await executor({
-        endpoint: config.endpoint,
-        model: config.model,
-        prompt,
-        timeoutMs: config.timeoutMs,
-    });
-    if (executed.state !== "succeeded")
-        return { state: "degraded", reason: executed.reason, truncated };
-    const parsed = parseFindings(executed.output ?? "");
-    if (parsed === undefined)
+    let prompts;
+    try {
+        prompts = buildReviewPromptBatches({
+            prefix,
+            body: promptBody,
+            suffix,
+            maxBytes: config.promptChunkBytes,
+        });
+    }
+    catch (error) {
         return {
             state: "degraded",
-            reason: "補助レビュー応答を構造化findingsへparseできませんでした",
+            reason: error instanceof Error ? error.message : String(error),
             truncated,
         };
-    const scoped = filterReviewFindingsToTarget(parsed.findings, targetFiles);
+    }
+    const allFindings = [];
+    const suggestionCandidates = new Map();
+    const deadline = Date.now() + config.timeoutMs;
+    for (const prompt of prompts) {
+        const remainingTimeoutMs = Math.max(1, deadline - Date.now());
+        const executed = await executor({
+            endpoint: config.endpoint,
+            model: config.model,
+            prompt,
+            timeoutMs: remainingTimeoutMs,
+            maxOutputTokens: config.maxOutputTokens,
+        });
+        if (executed.state !== "succeeded")
+            return { state: "degraded", reason: executed.reason, truncated };
+        const parsed = parseFindings(executed.output ?? "");
+        if (parsed === undefined)
+            return {
+                state: "degraded",
+                reason: "補助レビュー応答を構造化findingsへparseできませんでした",
+                truncated,
+            };
+        allFindings.push(...parsed.findings);
+        for (const [finding, patch] of parsed.suggestionCandidates)
+            suggestionCandidates.set(finding, patch);
+    }
+    const findingKey = (finding) => JSON.stringify([
+        finding.file,
+        finding.location,
+        finding.content,
+        finding.severity,
+        finding.effort ?? "",
+    ]);
+    const findingsByKey = new Map();
+    const suggestionsByKey = new Map();
+    for (const finding of allFindings) {
+        const key = findingKey(finding);
+        if (!findingsByKey.has(key))
+            findingsByKey.set(key, finding);
+        const patch = suggestionCandidates.get(finding);
+        if (patch !== undefined)
+            suggestionsByKey.set(key, patch);
+    }
+    const uniqueFindings = [...findingsByKey.values()];
+    if (uniqueFindings.length > MAX_FINDINGS)
+        return {
+            state: "degraded",
+            reason: "統合後の補助レビュー指摘件数が有限上限を超えました",
+            truncated,
+        };
+    const uniqueSuggestionCandidates = new Map(uniqueFindings.flatMap((finding) => {
+        const patch = suggestionsByKey.get(findingKey(finding));
+        return patch === undefined ? [] : [[finding, patch]];
+    }));
+    const scoped = filterReviewFindingsToTarget(uniqueFindings, targetFiles);
     const visible = visibleReviewFindings(scoped.findings, config.profile);
     const presented = {
         ...scoped,
@@ -156,7 +214,9 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
             findings: scoped.findings,
             endpoint: config.endpoint,
             model: config.model,
-            timeoutMs: config.timeoutMs,
+            timeoutMs: Math.max(1, deadline - Date.now()),
+            maxOutputTokens: config.maxOutputTokens,
+            promptChunkBytes: config.promptChunkBytes,
         }, executor);
     }
     catch {
@@ -176,7 +236,7 @@ async function dispatch(promptBody, config, truncated, targetFiles, execute, ver
             root: verification.root,
             headSha: verification.headSha,
             findings: visible,
-            candidates: parsed.suggestionCandidates,
+            candidates: uniqueSuggestionCandidates,
         }),
         firstPassFindings: scoped.findings,
         verificationSuggestedFindings: verified?.suggestedFindings ?? null,
@@ -243,8 +303,7 @@ export async function launchSupplementalReviewDiff(input, dependencies = {}) {
                 reason: "比較基点または対象HEADを固定できませんでした",
             };
         const collected = collectSupplementalReviewDiff(input.root, input.baseSha, input.headSha, input.limit ?? RELATED_FILE_LIMIT);
-        const promptBody = `${DIFF_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
-        const result = await dispatch(promptBody, config, collected.truncated, collected.changed, dependencies.execute, { root: input.root, headSha: input.headSha });
+        const result = await dispatch(DIFF_REVIEW_INSTRUCTION, collected.promptBody, config, collected.truncated, collected.changed, dependencies.execute, { root: input.root, headSha: input.headSha });
         if (git(["rev-parse", "HEAD"], input.root).stdout.trim() !== input.headSha)
             return { state: "error", reason: "対象HEADを固定できませんでした" };
         return result;
@@ -261,8 +320,7 @@ export async function launchSupplementalReviewStaging(input, dependencies = {}) 
     try {
         resolveReviewWorkspace(input.root, input.stagingPath);
         const collected = collectSupplementalReviewStaging(input.root, input.stagingPath);
-        const promptBody = `${STAGING_REVIEW_INSTRUCTION}\n\n${collected.promptBody}`;
-        return await dispatch(promptBody, config, false, collected.changed, dependencies.execute);
+        return await dispatch(STAGING_REVIEW_INSTRUCTION, collected.promptBody, config, false, collected.changed, dependencies.execute);
     }
     catch (error) {
         return toErrorResult(error);

@@ -20,6 +20,9 @@ class DelegatedReviewWorld extends WorkflowWorld {
   reviewCalls = 0;
   dispatchedModel = "";
   dispatchedPrompt = "";
+  dispatchedPrompts: string[] = [];
+  dispatchedPromptBytes: number[] = [];
+  dispatchedMaxOutputTokens: Array<number | undefined> = [];
   registeredCloudProvider = false;
   result: DelegatedReviewResult | undefined;
   baseSha = "";
@@ -56,6 +59,9 @@ function setup(world: DelegatedReviewWorld): void {
   world.rejectVerification = false;
   world.twoCandidateVerification = false;
   world.dispatchedPrompt = "";
+  world.dispatchedPrompts = [];
+  world.dispatchedPromptBytes = [];
+  world.dispatchedMaxOutputTokens = [];
   world.response = JSON.stringify({
     decision: "ready",
     affirmative: "要求と受け入れ条件が対応する",
@@ -105,6 +111,9 @@ function executor(world: DelegatedReviewWorld): ReviewerExecutor {
     world.reviewCalls += 1;
     world.dispatchedModel = input.model;
     world.dispatchedPrompt = input.prompt;
+    world.dispatchedPrompts.push(input.prompt);
+    world.dispatchedPromptBytes.push(Buffer.byteLength(input.prompt, "utf8"));
+    world.dispatchedMaxOutputTokens.push(input.maxOutputTokens);
     if (input.prompt.includes("投稿前の独立したfinding検証者"))
       return {
         state: "succeeded",
@@ -172,6 +181,43 @@ Given("上限を超えるmodel識別子の委譲reviewer設定がある", functi
   writeConfig(this, "local", config("m".repeat(257)));
 });
 
+Given("350KiBを超えるstaging文書とローカルreviewer設定がある", function () {
+  setup(this);
+  writeConfig(this, "local", config("qwen3.8:27b"));
+  fs.writeFileSync(
+    path.join(this.root, this.staging, "00_要求定義.md"),
+    `# 要求\nAC-001\n${"根拠を伴う要求本文\n".repeat(25_000)}`,
+  );
+});
+
+Given("端末別の入力32KiBと出力4096 token設定がある", function () {
+  setup(this);
+  writeConfig(
+    this,
+    "local",
+    config("qwen3.8:27b", {
+      promptChunkBytes: 32 * 1024,
+      maxOutputTokens: 4096,
+    }),
+  );
+  fs.writeFileSync(
+    path.join(this.root, this.staging, "00_要求定義.md"),
+    `# 要求\nAC-001\n${"端末別budgetを検証する本文\n".repeat(5_000)}`,
+  );
+});
+
+Given("安全範囲外の端末別ローカルreviewer設定がある", function () {
+  setup(this);
+  writeConfig(
+    this,
+    "local",
+    config("qwen3.8:27b", {
+      promptChunkBytes: 16 * 1024 - 1,
+      maxOutputTokens: 127,
+    }),
+  );
+});
+
 Given("C1制御文字を含むmodel識別子の委譲reviewer設定がある", function () {
   setup(this);
   writeConfig(this, "local", config("qwen\u0085:27b"));
@@ -195,6 +241,17 @@ Given("提案検証中に委譲reviewのHEADが進む", function () {
 
 Given("委譲modelをqwen3.8へ変更する", function () {
   writeConfig(this, "local", config("qwen3.8:27b"));
+});
+
+Given("委譲reviewへ端末別の入力32KiBと出力4096 tokenを設定する", function () {
+  writeConfig(
+    this,
+    "local",
+    config("qwen3-coder:30b", {
+      promptChunkBytes: 32 * 1024,
+      maxOutputTokens: 4096,
+    }),
+  );
 });
 
 Given("異なるmodelのローカル設定とユーザー共通設定がある", function () {
@@ -672,6 +729,42 @@ Then("委譲reviewはHighのEffortだけを返す", function () {
   );
   assert.equal(this.result.decision, "blocked");
   assert.match(this.dispatchedPrompt, /chill profile/u);
+});
+
+Then("委譲reviewは複数の24KiB以下の入力を統合して返す", function () {
+  assert.equal(this.result?.state, "reviewed", JSON.stringify(this.result));
+  assert.ok(this.reviewCalls > 1);
+  assert.ok(this.dispatchedPromptBytes.every((bytes) => bytes <= 24 * 1024));
+  assert.ok(
+    this.dispatchedPrompts.every((prompt) =>
+      prompt.includes("次工程の開始可能性を判定してください"),
+    ),
+  );
+  if (this.result?.state !== "reviewed") return;
+  assert.match(this.result.affirmative, /^\[1\/\d+\]/u);
+});
+
+Then("委譲reviewは端末別の入力上限と出力上限を全chunkへ適用する", function () {
+  assert.equal(this.result?.state, "reviewed", JSON.stringify(this.result));
+  assert.ok(this.reviewCalls > 1);
+  assert.ok(this.dispatchedPromptBytes.every((bytes) => bytes <= 32 * 1024));
+  assert.ok(this.dispatchedMaxOutputTokens.every((tokens) => tokens === 4096));
+});
+
+Then("委譲reviewは端末別上限を初回と投稿前検証へ適用する", function () {
+  assert.equal(
+    this.result?.state,
+    "needs_coordinator_review",
+    JSON.stringify(this.result),
+  );
+  assert.ok(this.reviewCalls >= 2);
+  assert.ok(this.dispatchedPromptBytes.every((bytes) => bytes <= 32 * 1024));
+  assert.ok(this.dispatchedMaxOutputTokens.every((tokens) => tokens === 4096));
+  assert.ok(
+    this.dispatchedPrompts.some((prompt) =>
+      prompt.includes("投稿前の独立したfinding検証者"),
+    ),
+  );
 });
 Given("投稿前検証者はfindingを却下する", function () {
   this.rejectVerification = true;

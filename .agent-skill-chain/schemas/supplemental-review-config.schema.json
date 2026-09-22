@@ -34,7 +34,20 @@
     "timeoutMs": {
       "type": "integer",
       "minimum": 1,
-      "description": "省略時は300000（5分）"
+      "maximum": 1800000,
+      "description": "省略時は900000（15分）"
+    },
+    "promptChunkBytes": {
+      "type": "integer",
+      "minimum": 16384,
+      "maximum": 1048576,
+      "description": "1回のOllama入力上限（UTF-8 byte）。省略時は24576（24 KiB）"
+    },
+    "maxOutputTokens": {
+      "type": "integer",
+      "minimum": 128,
+      "maximum": 32768,
+      "description": "1 chunkあたりの生成token上限。省略時は2048"
     },
     "profile": {
       "type": "string",

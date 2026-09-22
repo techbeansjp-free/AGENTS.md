@@ -83,3 +83,8 @@ Feature: reviewer役割に依存しない補助レビュー
     Given assertive profileの補助レビュー対象差分がある
     When 補助reviewerがHighとLowのEffort付き指摘を返す
     Then HighとLowのEffort付き指摘が表示される
+
+  Scenario: SCN-SUPPL-021 巨大なローカルレビュー入力を有限budgetへ分割する
+    Given 350KiBを超える日本語レビュー本文がある
+    When ローカルレビューpromptを入力budgetで分割する
+    Then 各promptは24KiB以下で本文を欠落なく保持する

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { assertLoopbackEndpoint } from "../lib/local-llm-endpoint.js";
 import { isValidLocalLlmModel } from "../lib/local-llm-model.js";
+import { DEFAULT_LOCAL_REVIEW_MAX_OUTPUT_TOKENS, DEFAULT_LOCAL_REVIEW_PROMPT_CHUNK_BYTES, isValidLocalReviewMaxOutputTokens, isValidLocalReviewPromptChunkBytes, } from "./local-review-limits.js";
 const LOCAL_PATH = ".agent-skill-chain/local/supplemental-review.json";
 const ALLOWED_KEYS = new Set([
     "enabled",
@@ -11,6 +12,8 @@ const ALLOWED_KEYS = new Set([
     "endpoint",
     "timeoutMs",
     "profile",
+    "promptChunkBytes",
+    "maxOutputTokens",
 ]);
 /** Worktree selection wins, then the primary worktree, then the user setting. */
 export function resolveDelegatedReviewConfig(root, options = {}) {
@@ -84,13 +87,25 @@ export function resolveDelegatedReviewConfig(root, options = {}) {
         const provider = value.provider;
         const model = value.model;
         const endpoint = value.endpoint;
-        const timeoutMs = value.timeoutMs ?? 300000;
+        const timeoutMs = value.timeoutMs ?? 15 * 60 * 1000;
+        const promptChunkBytes = value.promptChunkBytes ?? DEFAULT_LOCAL_REVIEW_PROMPT_CHUNK_BYTES;
+        const maxOutputTokens = value.maxOutputTokens ?? DEFAULT_LOCAL_REVIEW_MAX_OUTPUT_TOKENS;
         if (value.profile !== undefined &&
             value.profile !== "chill" &&
             value.profile !== "assertive")
             return {
                 state: "invalid",
                 reason: `${candidate.source}設定のprofileが不正です`,
+            };
+        if (!isValidLocalReviewPromptChunkBytes(promptChunkBytes))
+            return {
+                state: "invalid",
+                reason: `${candidate.source}設定のpromptChunkBytesが不正です`,
+            };
+        if (!isValidLocalReviewMaxOutputTokens(maxOutputTokens))
+            return {
+                state: "invalid",
+                reason: `${candidate.source}設定のmaxOutputTokensが不正です`,
             };
         // This personal configuration is Ollama-only, even if the formal reviewer
         // provider registry later gains another local runtime or a SaaS provider.
@@ -137,6 +152,8 @@ export function resolveDelegatedReviewConfig(root, options = {}) {
                 timeoutMs,
                 source: candidate.source,
                 profile: (value.profile ?? "assertive"),
+                promptChunkBytes,
+                maxOutputTokens,
             },
         };
     }

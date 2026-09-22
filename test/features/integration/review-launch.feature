@@ -16,6 +16,7 @@ Feature: reviewer役割のローカルLLM実行と信頼境界
     Given 応答しないfake Ollamaサーバーがある
     When executeLocalLlmを実行する
     Then 実行結果はunknownである
+    And 実行結果は有限時間上限を示す
 
   Scenario: SCN-INTEGRATION-REVIEW-1425-007 容量上限超過はunknownとして扱う
     Given 容量上限を超える応答をするfake Ollamaサーバーがある
@@ -77,3 +78,22 @@ Feature: reviewer役割のローカルLLM実行と信頼境界
     When riskAcceptance付きCritical指摘を含むJSON出力を返すDIしたexecutorでlaunchReviewを実行する
     Then launchReviewのverdictはblocking指摘を返す
     And launchReviewのverdictはacceptedRisksを含まない
+
+  Scenario: SCN-INTEGRATION-REVIEW-1461-001 設定したtimeout内の遅延応答を待機する
+    Given 設定上限より早く遅延応答するfake Ollamaサーバーがある
+    When executeLocalLlmを3秒上限で実行する
+    Then 実行結果はsucceededである
+    And 実行結果のoutputは遅延応答を保持する
+
+  Scenario: SCN-INTEGRATION-REVIEW-1461-002 Ollamaのstream応答を安全に連結する
+    Given 分割stream応答を返すfake Ollamaサーバーがある
+    When executeLocalLlmを実行する
+    Then 実行結果はsucceededである
+    And 実行結果のoutputはstream応答を連結する
+    And Ollama要求はstream trueである
+
+  Scenario: SCN-INTEGRATION-REVIEW-1461-003 生成token上限による途中終了を成功扱いしない
+    Given 生成token上限で終了するfake Ollamaサーバーがある
+    When executeLocalLlmを512 byte出力上限で実行する
+    Then 実行結果はunknownである
+    And 実行結果は生成token上限を示す

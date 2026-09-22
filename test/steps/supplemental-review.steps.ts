@@ -14,6 +14,10 @@ import {
   RELATED_STEM_MATCH_LIMIT,
   type SupplementalReviewDiffCollection,
 } from "../../src/adapters/supplemental-review-collect.js";
+import {
+  buildReviewPromptBatches,
+  LOCAL_REVIEW_PROMPT_BYTE_BUDGET,
+} from "../../src/adapters/review-prompt-batching.js";
 import type {
   ReviewerExecutionResult,
   ReviewerExecutor,
@@ -35,6 +39,8 @@ class SupplementalReviewWorld extends WorkflowWorld {
   fakeServer: http.Server | undefined;
   fakeServerPort = 0;
   trailingSpacePath = "";
+  largePromptBody = "";
+  promptBatches: string[] = [];
 }
 
 const { Given, When, Then } = stepDefinitions<SupplementalReviewWorld>();
@@ -1006,4 +1012,56 @@ Then("HighとLowのEffort付き指摘が表示される", function () {
     ),
   );
   assert.equal(this.result.verificationSuggestedFindings?.length, 2);
+});
+
+Given("350KiBを超える日本語レビュー本文がある", function () {
+  this.largePromptBody = "変更内容と根拠\n".repeat(30_000);
+  assert.ok(Buffer.byteLength(this.largePromptBody, "utf8") > 350 * 1024);
+});
+
+When("ローカルレビューpromptを入力budgetで分割する", function () {
+  this.promptBatches = buildReviewPromptBatches({
+    prefix: "共通指示\n",
+    body: this.largePromptBody,
+    suffix: "\nJSONだけを返す",
+  });
+});
+
+Then("各promptは24KiB以下で本文を欠落なく保持する", function () {
+  assert.ok(this.promptBatches.length > 1);
+  assert.ok(
+    this.promptBatches.every(
+      (prompt) =>
+        Buffer.byteLength(prompt, "utf8") <= LOCAL_REVIEW_PROMPT_BYTE_BUDGET,
+    ),
+  );
+  const recovered = this.promptBatches
+    .map((prompt) => {
+      const start = prompt.indexOf("\n", prompt.indexOf("## 入力分割")) + 1;
+      const bodyStart = prompt.indexOf("\n", start) + 1;
+      return prompt.slice(bodyStart, -"\nJSONだけを返す".length);
+    })
+    .join("");
+  assert.equal(recovered, this.largePromptBody);
+  const contextual = buildReviewPromptBatches({
+    prefix: "共通指示\n",
+    body: `### src/large.ts\n${"const value = 1;\n".repeat(4_000)}`,
+    suffix: "\nJSONだけを返す",
+  });
+  assert.ok(contextual.length > 1);
+  assert.ok(
+    contextual.slice(1).every((prompt) => prompt.includes("### src/large.ts")),
+  );
+  const longHeading = buildReviewPromptBatches({
+    prefix: "共通指示\n",
+    body: `### ${"長".repeat(2_000)}\n${"const value = 1;\n".repeat(4_000)}`,
+    suffix: "\nJSONだけを返す",
+  });
+  assert.ok(longHeading.length > 1);
+  assert.ok(
+    longHeading.every(
+      (prompt) =>
+        Buffer.byteLength(prompt, "utf8") <= LOCAL_REVIEW_PROMPT_BYTE_BUDGET,
+    ),
+  );
 });

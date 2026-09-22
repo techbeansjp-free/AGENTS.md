@@ -149,7 +149,7 @@ export async function launchReview(
   });
 
   /**
-   * dispatch後（ローカルLLM応答待ちの最大既定5分間）にtrusted policyが変化した
+   * dispatch後（ローカルLLM応答待ちの最大既定15分間）にtrusted policyが変化した
    * ケースを検出する。dispatch前の2回だけでは、応答待ち中の変更を見逃す
    * （独立レビュー指摘）。前回同様、検出のみでdispatch自体は取り消さない
    * （Git/Codexの既存failed/unknown契約と同じ、実行結果は既に確定している）。
