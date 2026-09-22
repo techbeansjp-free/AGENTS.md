@@ -1348,24 +1348,31 @@ export function checkFileAudit(
   };
 }
 
-function remoteDefaultTip(root: string): string | undefined {
-  const symbolic = git(
-    ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
-    root,
-    { allowFailure: true },
+/**
+ * candidate内のstaleな`refs/remotes/origin/HEAD`をauthorityにせず、remoteが現在
+ * 公開するHEADを直接固定する。通信失敗、対話認証要求、曖昧な応答はfail-closedにする。
+ */
+export function remoteDefaultTip(root: string): string | undefined {
+  const observed = git(["ls-remote", "--symref", "origin", "HEAD"], root, {
+    allowFailure: true,
+    timeoutMs: 30_000,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  });
+  if (observed.status !== 0) return undefined;
+  const symbolic = lines(observed.stdout).filter((line) =>
+    /^ref: refs\/heads\/[^\s]+\s+HEAD$/u.test(line),
   );
-  const reference = symbolic.stdout.trim();
-  if (symbolic.status !== 0 || !reference.startsWith("refs/remotes/origin/"))
-    return undefined;
-  const resolved = git(
-    ["rev-parse", "--verify", `${reference}^{commit}`],
-    root,
-    {
-      allowFailure: true,
-    },
-  );
-  const tip = resolved.stdout.trim();
-  return resolved.status === 0 && /^[a-f0-9]{40}$/u.test(tip) ? tip : undefined;
+  const tips = lines(observed.stdout)
+    .map((line) => /^([a-f0-9]{40})\s+HEAD$/u.exec(line)?.[1])
+    .filter((tip): tip is string => tip !== undefined);
+  if (symbolic.length !== 1 || tips.length !== 1) return undefined;
+  const tip = tips[0]!;
+  const resolved = git(["rev-parse", "--verify", `${tip}^{commit}`], root, {
+    allowFailure: true,
+  });
+  return resolved.status === 0 && resolved.stdout.trim() === tip
+    ? tip
+    : undefined;
 }
 
 if (isExecutionEntry(import.meta.url)) {

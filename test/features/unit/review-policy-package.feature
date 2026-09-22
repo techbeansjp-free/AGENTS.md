@@ -297,6 +297,11 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     When 相対pathを渡してcontract citation hookを実行する
     Then 相対pathの契約fileも引用不足として拒否される
 
+  Scenario: SCN-UNIT-PACKAGE-032 contract citation hookはroot直下の契約fileも検査する
+    Given 引用のないroot直下の契約fileがある
+    When root直下のfile名を渡してcontract citation hookを実行する
+    Then root直下の契約fileも引用不足として拒否される
+
   Scenario: SCN-UNIT-PACKAGE-030 Step 10 skillはtracked stagingとformal approval artifactを区別する
     Given tracked stagingのreview成果物契約を欠いたpackageがある
     When Step skillのtracked staging契約を検証する

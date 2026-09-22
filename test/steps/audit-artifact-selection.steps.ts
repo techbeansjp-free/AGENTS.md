@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { checkFileAudit } from "../../scripts/check_file_audit.js";
+import {
+  checkFileAudit,
+  remoteDefaultTip,
+} from "../../scripts/check_file_audit.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 type AuditResult = ReturnType<typeof checkFileAudit>;
@@ -15,6 +18,8 @@ class AuditSelectionWorld extends WorkflowWorld {
   expectedImplementation: string | undefined = undefined;
   auditResults: AuditResult[] = [];
   expectedAuditPath = "";
+  expectedRemoteDefaultTip: string | undefined = undefined;
+  observedRemoteDefaultTip: string | undefined = undefined;
 }
 
 const { Given, When, Then } = stepDefinitions<AuditSelectionWorld>();
@@ -1195,6 +1200,41 @@ When("監査選択repositoryのfile監査を実行する", function () {
 
 When("各branchのmerge後にfile監査を実行する", function () {
   assert.equal(this.auditResults.length, 2);
+});
+
+Given(
+  "local origin HEADより新しいremote default branchを持つ監査repository",
+  function () {
+    const root = this.initRepo();
+    const remote = this.temp("asc-audit-remote-");
+    git(remote, ["init", "--bare", "-q"]);
+    git(root, ["branch", "-M", "main"]);
+    git(root, ["remote", "add", "origin", remote]);
+    git(root, ["push", "-q", "-u", "origin", "main"]);
+    git(root, ["remote", "set-head", "origin", "main"]);
+    git(root, ["checkout", "-q", "-b", "next"]);
+    writeFile(root, "src/next.ts", "export const next = true;\n");
+    this.expectedRemoteDefaultTip = commitPaths(
+      root,
+      "feat: nextを既定branch候補にする",
+      ["src/next.ts"],
+    );
+    git(root, ["push", "-q", "origin", "next"]);
+    git(remote, ["symbolic-ref", "HEAD", "refs/heads/next"]);
+    assert.equal(
+      git(root, ["symbolic-ref", "refs/remotes/origin/HEAD"]),
+      "refs/remotes/origin/main",
+    );
+    this.auditRoot = root;
+  },
+);
+
+When("remoteの現在default tipを解決する", function () {
+  this.observedRemoteDefaultTip = remoteDefaultTip(this.auditRoot);
+});
+
+Then("remoteの現在default tipがtrust anchorとして返る", function () {
+  assert.equal(this.observedRemoteDefaultTip, this.expectedRemoteDefaultTip);
 });
 
 Then("差分内のreview artifactが選ばれてfile監査は合格する", function () {

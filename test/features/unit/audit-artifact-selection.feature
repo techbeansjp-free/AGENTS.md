@@ -92,3 +92,8 @@ Feature: review artifactの差分選択
     Given suffixの途中にmerge commitがある監査選択repository
     When 監査選択repositoryのfile監査を実行する
     Then 監査選択のfile監査は合格し導出したH_implが期待どおりである
+
+  Scenario: SCN-UNIT-AUDITSEL-019 staleなorigin HEADでなくremoteの現在HEADをtrust anchorにする
+    Given local origin HEADより新しいremote default branchを持つ監査repository
+    When remoteの現在default tipを解決する
+    Then remoteの現在default tipがtrust anchorとして返る

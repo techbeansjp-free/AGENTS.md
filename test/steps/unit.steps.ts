@@ -64,6 +64,7 @@ interface UnitWorld extends WorkflowWorld {
   hookSettings?: string;
   hookRegistration?: ReturnType<typeof inspectHookRegistration>;
   hookRelativePathResult?: SpawnSyncReturns<string>;
+  hookRootPathResult?: SpawnSyncReturns<string>;
   secondModeResult?: ReturnType<typeof classifyMode>;
   answers: Parameters<typeof classifyMode>[0];
   auditBase: string;
@@ -553,6 +554,35 @@ When("相対pathを渡してcontract citation hookを実行する", function () 
 Then("相対pathの契約fileも引用不足として拒否される", function () {
   assert.equal(this.hookRelativePathResult?.status, 0);
   const output = JSON.parse(this.hookRelativePathResult?.stdout ?? "{}") as {
+    hookSpecificOutput?: { permissionDecision?: string };
+  };
+  assert.equal(output.hookSpecificOutput?.permissionDecision, "deny");
+});
+
+Given("引用のないroot直下の契約fileがある", function () {
+  const root = this.temp("asc-hook-root-");
+  fs.writeFileSync(
+    path.join(root, "rules.md"),
+    "# Contract\n\nこの操作だけを許可する。\n",
+  );
+  this.root = root;
+});
+
+When("root直下のfile名を渡してcontract citation hookを実行する", function () {
+  this.hookRootPathResult = spawnSync(
+    process.execPath,
+    [path.resolve(".agent-skill-chain/hooks/asc-contract-citation.mjs")],
+    {
+      cwd: this.root,
+      encoding: "utf8",
+      input: JSON.stringify({ tool_input: { command: "codex exec rules.md" } }),
+    },
+  );
+});
+
+Then("root直下の契約fileも引用不足として拒否される", function () {
+  assert.equal(this.hookRootPathResult?.status, 0);
+  const output = JSON.parse(this.hookRootPathResult?.stdout ?? "{}") as {
     hookSpecificOutput?: { permissionDecision?: string };
   };
   assert.equal(output.hookSpecificOutput?.permissionDecision, "deny");
