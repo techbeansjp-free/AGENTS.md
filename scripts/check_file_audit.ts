@@ -42,12 +42,9 @@ interface ReviewBoundary {
   implementation: string;
   reviewHead: string;
   /**
-   * 比較基点の導出を試みたか。**境界commitが親を2個以上持つときだけ真。**
-   *
-   * 親2個の境界は、取り込み先branch上のPR mergeと、CIが`pull_request`でcheckoutする
-   * `refs/pull/<N>/merge`の双方に当たる。いずれも第1親が取り込み先branchのtipである。
-   * 候補branch上でreview artifact commitをHEADにした場合は親1個で、取り込み先が
-   * 構造から決まらないため導出を試みない。
+   * 比較基点の導出を試みたか。親2個のmerge境界では第1親、親1個のcandidate
+   * 境界ではcandidate外で固定したremote default tipをtrust anchorにする。
+   * 実行入口でanchorが無い場合も真として、検証不能を合格へ倒さない。
    */
   baseDerivable: boolean;
   /** 境界commitの親の個数。診断で親がちょうど2個でないことを示すために持つ。 */
@@ -72,6 +69,13 @@ interface ReviewBoundary {
    * ここで持つのは診断のためだけである。
    */
   candidateFinalPathCounts: readonly number[];
+}
+
+interface AuditTrustAnchor {
+  /** candidateの外部で固定した取り込み先branch tip。 */
+  trustedDefaultTip?: string;
+  /** 実行入口では、単一親でもtrust anchor無しの合格を禁止する。 */
+  requireSingleParentBase?: boolean;
 }
 
 function lines(output: string): string[] {
@@ -674,6 +678,7 @@ function inferReviewBoundary(
   root: string,
   current: string,
   cutoff: string,
+  trustAnchor: AuditTrustAnchor = {},
 ): ReviewBoundary {
   const boundary = withoutFinalReleaseBumps(root, current, cutoff);
   const boundaryParents = commitParents(root, boundary);
@@ -690,7 +695,10 @@ function inferReviewBoundary(
    * 別branch経由で間接的に取り込んだ場合も、この値へ収束する。第1親にrelease bumpが
    * 積まれていてもそれらは`H_impl`の祖先ではないため`merge-base`は動かない。
    */
-  const baseDerivable = boundaryParents.length > 1;
+  const baseDerivable =
+    boundaryParents.length > 1 ||
+    trustAnchor.trustedDefaultTip !== undefined ||
+    trustAnchor.requireSingleParentBase === true;
   /**
    * **親がちょうど2個の境界だけを導出対象にする。** 親3個以上のoctopus mergeでは、
    * どの親が候補branchかを構造から決められない。`QLT-MERGEINT-003`が損失検知で
@@ -699,7 +707,10 @@ function inferReviewBoundary(
   const base =
     boundaryParents.length === 2
       ? uniqueMergeBase(root, implementation, boundaryParents[0]!)
-      : undefined;
+      : boundaryParents.length === 1 &&
+          trustAnchor.trustedDefaultTip !== undefined
+        ? uniqueMergeBase(root, implementation, trustAnchor.trustedDefaultTip)
+        : undefined;
   const candidateFinalPathCounts =
     boundaryParents.length === 2
       ? boundaryParents.map((parent) =>
@@ -1093,6 +1104,7 @@ export function unsupportedClaimRows(markdown: string): string[] {
 export function checkFileAudit(
   root: string,
   legacyReleaseBumpCutoff: string = LEGACY_RELEASE_BUMP_CUTOFF,
+  trustAnchor: AuditTrustAnchor = {},
 ) {
   const errors: string[] = [];
   const current = git(["rev-parse", "HEAD"], root).stdout.trim();
@@ -1101,7 +1113,7 @@ export function checkFileAudit(
    * bumpを含まない履歴では解決不能なcutoffでも合格する。
    */
   const cutoff = resolveLegacyBumpCutoff(root, legacyReleaseBumpCutoff);
-  const inferred = inferReviewBoundary(root, current, cutoff);
+  const inferred = inferReviewBoundary(root, current, cutoff, trustAnchor);
   const finalPaths = finalAuditPaths(
     root,
     inferred.implementation,
@@ -1179,7 +1191,9 @@ export function checkFileAudit(
     errors.push(
       inferred.boundaryParentCount === 2
         ? `比較基点を導出できません。境界commitの第1親 ${inferred.boundaryFirstParent} とH_impl ${inferred.implementation} の一意なmerge-baseを解決できません。浅いcloneではfetch-depthを0にして全履歴を取得してください。merge-baseが複数ある履歴では、判定できる形へmergeを整理してください`
-        : `比較基点を導出できません。境界commitの親が${inferred.boundaryParentCount}個です。導出は親がちょうど2個の境界commitでのみ成立します。どの親が候補branchかを構造から決められないため、判定不能として拒否します`,
+        : inferred.boundaryParentCount === 1
+          ? `比較基点を導出できません。candidate外で固定したremote default branch tipを取得し、全履歴を取得して再実行してください`
+          : `比較基点を導出できません。境界commitの親が${inferred.boundaryParentCount}個です。どの親が候補branchかを構造から決められないため、判定不能として拒否します`,
     );
   else if (inferred.base !== undefined && parsed.base !== inferred.base)
     errors.push(
@@ -1334,8 +1348,39 @@ export function checkFileAudit(
   };
 }
 
+/**
+ * candidate内のstaleな`refs/remotes/origin/HEAD`をauthorityにせず、remoteが現在
+ * 公開するHEADを直接固定する。通信失敗、対話認証要求、曖昧な応答はfail-closedにする。
+ */
+export function remoteDefaultTip(root: string): string | undefined {
+  const observed = git(["ls-remote", "--symref", "origin", "HEAD"], root, {
+    allowFailure: true,
+    timeoutMs: 30_000,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  });
+  if (observed.status !== 0) return undefined;
+  const symbolic = lines(observed.stdout).filter((line) =>
+    /^ref: refs\/heads\/[^\s]+\s+HEAD$/u.test(line),
+  );
+  const tips = lines(observed.stdout)
+    .map((line) => /^([a-f0-9]{40})\s+HEAD$/u.exec(line)?.[1])
+    .filter((tip): tip is string => tip !== undefined);
+  if (symbolic.length !== 1 || tips.length !== 1) return undefined;
+  const tip = tips[0]!;
+  const resolved = git(["rev-parse", "--verify", `${tip}^{commit}`], root, {
+    allowFailure: true,
+  });
+  return resolved.status === 0 && resolved.stdout.trim() === tip
+    ? tip
+    : undefined;
+}
+
 if (isExecutionEntry(import.meta.url)) {
-  const result = checkFileAudit(process.cwd());
+  const root = process.cwd();
+  const result = checkFileAudit(root, LEGACY_RELEASE_BUMP_CUTOFF, {
+    trustedDefaultTip: remoteDefaultTip(root),
+    requireSingleParentBase: true,
+  });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   if (!result.valid) process.exitCode = 1;
 }

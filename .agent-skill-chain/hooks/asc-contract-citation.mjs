@@ -24,7 +24,15 @@ const NARROWING = /だけ|のみ|対象外|外す|限る|含めない|実行し�
  */
 const REQUIREMENT_ID = /(FR|REQ|AC|NFR|INV|BR)(-[A-Z]+)*-[0-9]/u;
 const QUOTED_LINE = /^> /mu;
-const CONTRACT_FILE = /\/[^ "']+\.(?:txt|md)/gu;
+/**
+ * absolute pathとrepository相対pathを先頭から保持して取り出す。
+ *
+ * 旧式は最初の`/`からしかmatchせず、`./contracts/rules.md`を
+ * `/contracts/rules.md`へ変形していた。存在しないpathをreadして検査をskipするため、
+ * relative pathがcitation検査を迂回できた。
+ */
+const CONTRACT_FILE =
+  /(?:^|[\s"'=])((?:(?:\.\.?\/)|\/)?[^\s"';&|<>/]+(?:\/[^\s"';&|<>/]+)*\.(?:txt|md))(?=$|[\s"';)&|<>])/gu;
 
 /**
  * 「## 規範の引用」節の中身だけを取り出す。
@@ -65,7 +73,13 @@ export function denialReason(file) {
  */
 export function firstUncitedContract(command, readFile) {
   if (!command.includes("codex exec")) return undefined;
-  const files = [...new Set(command.match(CONTRACT_FILE) ?? [])].sort();
+  const files = [
+    ...new Set(
+      [...command.matchAll(CONTRACT_FILE)]
+        .map((match) => match[1])
+        .filter((file) => file !== undefined),
+    ),
+  ].sort();
   for (const file of files) {
     const document = readFile(file);
     if (document === undefined) continue;
