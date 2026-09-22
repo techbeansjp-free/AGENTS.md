@@ -89,3 +89,9 @@ Feature: 差分findingを進行役確認候補として渡す
     Given "null未チェック" の修正前後を持つ隔離Git repositoryがある
     When 補助差分reviewのdispatch中にHEADを移動する
     Then 補助レビューは移動したHEADの結果を拒否する
+
+  Scenario: SCN-UNIT-FINDVERIFY-016 24KiBを超えるfileもfinding位置の有限excerptで検証する
+    Given "null未チェック" の修正前後を持つ隔離Git repositoryがある
+    And HEADの対象fileが24KiBを超えfinding位置に障害行がある
+    When 初回reviewerが現在の欠陥を報告し検証者が確認する
+    Then 補助レビューは24KiB以下のexcerptで障害行を検証する

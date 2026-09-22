@@ -41,6 +41,7 @@ class SupplementalReviewWorld extends WorkflowWorld {
   trailingSpacePath = "";
   largePromptBody = "";
   promptBatches: string[] = [];
+  expectedIgnoredOutOfScopeCount = 0;
 }
 
 const { Given, When, Then } = stepDefinitions<SupplementalReviewWorld>();
@@ -357,6 +358,105 @@ Then("補助レビュー結果から差分外の指摘が除外される", funct
   if (this.result?.state !== "needs_coordinator_review") return;
   assert.deepEqual(this.result.findings, []);
   assert.equal(this.result.ignoredOutOfScopeCount, 1);
+});
+
+Given("複数chunkの補助review対象差分がある", function () {
+  this.root = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "asc-suppl-scope-limit-")),
+  );
+  this.temporaryDirectories.push(this.root);
+  initRepository(this.root);
+  fs.writeFileSync(
+    path.join(this.root, "target.ts"),
+    `export const value = 1;\n${"const before = 1;\n".repeat(7_000)}`,
+  );
+  this.baseSha = commitAll(this.root, "base");
+  fs.writeFileSync(
+    path.join(this.root, "target.ts"),
+    `export const value = 2;\n${"const after = 2;\n".repeat(7_000)}`,
+  );
+  this.headSha = commitAll(this.root, "large change");
+  this.configPath = ".agent-skill-chain/local/supplemental-review.json";
+  writeConfig(this.root, this.configPath);
+  this.expectedIgnoredOutOfScopeCount = 0;
+});
+
+When(
+  "補助reviewerが100件超の差分外指摘と1件の対象内指摘を返す",
+  async function () {
+    let firstPassCalls = 0;
+    this.result = await launchSupplementalReviewDiff(
+      {
+        root: this.root,
+        baseSha: this.baseSha,
+        headSha: this.headSha,
+        configPath: this.configPath,
+      },
+      {
+        execute: async ({ prompt }) => {
+          if (prompt.includes("投稿前の独立したfinding検証者"))
+            return {
+              state: "succeeded",
+              reason: "ok",
+              output: JSON.stringify({
+                verdicts: [
+                  {
+                    index: 0,
+                    valid: true,
+                    reason: "HEADの障害行を確認した",
+                    faultCode: "export const value = 2;",
+                    failurePath: "target.tsの実行で当該行へ到達する",
+                    blockingCode: "",
+                  },
+                ],
+              }),
+            };
+          firstPassCalls += 1;
+          const outOfScope = Array.from({ length: 60 }, (_, index) => ({
+            file: `unrelated/${firstPassCalls}-${index}.ts`,
+            location: "1",
+            content: `差分外指摘 ${firstPassCalls}-${index}`,
+            severity: "High",
+          }));
+          this.expectedIgnoredOutOfScopeCount += outOfScope.length;
+          return {
+            state: "succeeded",
+            reason: "ok",
+            output: JSON.stringify({
+              findings: [
+                ...(firstPassCalls === 1
+                  ? [
+                      {
+                        file: "target.ts",
+                        location: "1",
+                        content: "対象内指摘",
+                        severity: "High",
+                      },
+                    ]
+                  : []),
+                ...outOfScope,
+              ],
+            }),
+          };
+        },
+      },
+    );
+  },
+);
+
+Then("補助レビューは対象内指摘1件と差分外件数を返す", function () {
+  assert.ok(this.expectedIgnoredOutOfScopeCount > 100);
+  assert.equal(
+    this.result?.state,
+    "needs_coordinator_review",
+    JSON.stringify(this.result),
+  );
+  if (this.result?.state !== "needs_coordinator_review") return;
+  assert.equal(this.result.firstPassFindings.length, 1);
+  assert.equal(
+    this.result.ignoredOutOfScopeCount,
+    this.expectedIgnoredOutOfScopeCount,
+  );
 });
 
 Given("変更fileのstemが多数の無関係fileに現れる", function () {

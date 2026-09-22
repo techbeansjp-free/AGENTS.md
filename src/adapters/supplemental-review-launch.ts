@@ -286,7 +286,8 @@ async function dispatch(
     if (patch !== undefined) suggestionsByKey.set(key, patch);
   }
   const uniqueFindings = [...findingsByKey.values()];
-  if (uniqueFindings.length > MAX_FINDINGS)
+  const scoped = filterReviewFindingsToTarget(uniqueFindings, targetFiles);
+  if (scoped.findings.length > MAX_FINDINGS)
     return {
       state: "degraded",
       reason: "統合後の補助レビュー指摘件数が有限上限を超えました",
@@ -298,7 +299,6 @@ async function dispatch(
       return patch === undefined ? [] : [[finding, patch] as const];
     }),
   );
-  const scoped = filterReviewFindingsToTarget(uniqueFindings, targetFiles);
   const visible = visibleReviewFindings(scoped.findings, config.profile);
   const presented = {
     ...scoped,

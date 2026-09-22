@@ -22,6 +22,85 @@ function buildVerificationPrompt(findings, headSha, blobs) {
         `候補: ${JSON.stringify(findings)}\n\nHEAD: ${headSha}\n\n` +
         sections.join("\n\n"));
 }
+function truncateUtf8(value, byteBudget) {
+    let result = "";
+    let bytes = 0;
+    for (const character of value) {
+        const size = Buffer.byteLength(character, "utf8");
+        if (bytes + size > byteBudget)
+            break;
+        result += character;
+        bytes += size;
+    }
+    return result;
+}
+function locationLine(location, lineCount) {
+    const match = /(?:\bL|\bline\s*|:)(\d+)/iu.exec(location) ??
+        /(\d+)\s*行/u.exec(location) ??
+        /^\s*(\d+)/u.exec(location);
+    if (!match)
+        return 0;
+    const parsed = Number.parseInt(match[1] ?? "", 10);
+    if (!Number.isSafeInteger(parsed) || parsed < 1)
+        return 0;
+    return Math.min(parsed - 1, Math.max(0, lineCount - 1));
+}
+/** Build a contiguous, UTF-8-safe excerpt centered on the finding location. */
+function buildFindingExcerpt(blob, location, byteBudget) {
+    if (byteBudget <= 0)
+        return "";
+    const lines = blob.match(/[^\n]*\n|[^\n]+$/gu) ?? [blob];
+    const target = locationLine(location, lines.length);
+    let start = target;
+    let end = target;
+    const render = () => {
+        const before = start > 0 ? "[前方のfile内容を省略]\n" : "";
+        const after = end < lines.length - 1 ? "[後方のfile内容を省略]\n" : "";
+        return before + lines.slice(start, end + 1).join("") + after;
+    };
+    if (Buffer.byteLength(render(), "utf8") > byteBudget) {
+        const markers = (start > 0 ? "[前方のfile内容を省略]\n" : "") +
+            (end < lines.length - 1 ? "[後方のfile内容を省略]\n" : "");
+        return ((start > 0 ? "[前方のfile内容を省略]\n" : "") +
+            truncateUtf8(lines[target] ?? "", Math.max(0, byteBudget - Buffer.byteLength(markers, "utf8"))) +
+            (end < lines.length - 1 ? "[後方のfile内容を省略]\n" : ""));
+    }
+    for (;;) {
+        let expanded = false;
+        if (start > 0) {
+            start -= 1;
+            if (Buffer.byteLength(render(), "utf8") <= byteBudget)
+                expanded = true;
+            else
+                start += 1;
+        }
+        if (end < lines.length - 1) {
+            end += 1;
+            if (Buffer.byteLength(render(), "utf8") <= byteBudget)
+                expanded = true;
+            else
+                end -= 1;
+        }
+        if (!expanded)
+            return render();
+    }
+}
+function excerptBlobsForFinding(finding, headSha, blobs, promptLimit) {
+    const blob = blobs.get(finding.file);
+    if (blob === undefined)
+        return undefined;
+    const emptyBlobs = new Map([[finding.file, ""]]);
+    const fixedBytes = Buffer.byteLength(buildVerificationPrompt([finding], headSha, emptyBlobs), "utf8");
+    const excerptBudget = promptLimit - fixedBytes;
+    if (excerptBudget < 1)
+        return undefined;
+    const excerptBlobs = new Map([
+        [finding.file, buildFindingExcerpt(blob, finding.location, excerptBudget)],
+    ]);
+    return Buffer.byteLength(buildVerificationPrompt([finding], headSha, excerptBlobs), "utf8") <= promptLimit
+        ? excerptBlobs
+        : undefined;
+}
 /** Provide a second-pass suggestion from committed post-diff files; never decide publication. */
 export async function verifyReviewFindings(input, executor) {
     if (input.findings.length === 0)
@@ -52,15 +131,21 @@ export async function verifyReviewFindings(input, executor) {
             current = candidate;
             continue;
         }
-        if (current.length === 0)
+        if (current.length > 0)
+            batches.push({ entries: current, promptBlobs: blobs });
+        const singlePrompt = buildVerificationPrompt([item.finding], input.headSha, blobs);
+        if (Buffer.byteLength(singlePrompt, "utf8") <= promptLimit) {
+            current = [item];
+            continue;
+        }
+        const excerptBlobs = excerptBlobsForFinding(item.finding, input.headSha, blobs, promptLimit);
+        if (!excerptBlobs)
             return undefined;
-        batches.push(current);
-        current = [item];
-        if (Buffer.byteLength(buildVerificationPrompt([item.finding], input.headSha, blobs), "utf8") > promptLimit)
-            return undefined;
+        batches.push({ entries: [item], promptBlobs: excerptBlobs });
+        current = [];
     }
     if (current.length > 0)
-        batches.push(current);
+        batches.push({ entries: current, promptBlobs: blobs });
     const valid = new Set();
     const assessments = [];
     const deadline = Date.now() + input.timeoutMs;
@@ -68,7 +153,7 @@ export async function verifyReviewFindings(input, executor) {
         const response = await executor({
             endpoint: input.endpoint,
             model: input.model,
-            prompt: buildVerificationPrompt(batch.map((entry) => entry.finding), input.headSha, blobs),
+            prompt: buildVerificationPrompt(batch.entries.map((entry) => entry.finding), input.headSha, batch.promptBlobs),
             timeoutMs: Math.max(1, deadline - Date.now()),
             maxOutputTokens: input.maxOutputTokens,
         });
@@ -83,7 +168,7 @@ export async function verifyReviewFindings(input, executor) {
         }
         if (!isRecord(parsed) || !Array.isArray(parsed.verdicts))
             return undefined;
-        if (parsed.verdicts.length !== batch.length)
+        if (parsed.verdicts.length !== batch.entries.length)
             return undefined;
         const seen = new Set();
         for (const verdict of parsed.verdicts) {
@@ -91,7 +176,7 @@ export async function verifyReviewFindings(input, executor) {
                 typeof verdict.index !== "number" ||
                 !Number.isInteger(verdict.index) ||
                 verdict.index < 0 ||
-                verdict.index >= batch.length ||
+                verdict.index >= batch.entries.length ||
                 seen.has(verdict.index) ||
                 typeof verdict.valid !== "boolean" ||
                 typeof verdict.reason !== "string" ||
@@ -101,7 +186,7 @@ export async function verifyReviewFindings(input, executor) {
                 typeof verdict.blockingCode !== "string")
                 return undefined;
             seen.add(verdict.index);
-            const indexedFinding = batch[verdict.index];
+            const indexedFinding = batch.entries[verdict.index];
             const finding = indexedFinding?.finding;
             const blob = finding && blobs.get(finding.file);
             if (!blob)

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -742,6 +743,21 @@ Then("委譲reviewは複数の24KiB以下の入力を統合して返す", functi
   );
   if (this.result?.state !== "reviewed") return;
   assert.match(this.result.affirmative, /^\[1\/\d+\]/u);
+});
+
+Then("委譲reviewはdigestにchunk配列の境界を保存する", function () {
+  assert.equal(this.result?.state, "reviewed", JSON.stringify(this.result));
+  if (this.result?.state !== "reviewed") return;
+  const digest = (value: string) =>
+    crypto.createHash("sha256").update(value).digest("hex");
+  assert.equal(
+    this.result.inputDigest,
+    digest(JSON.stringify(this.dispatchedPrompts)),
+  );
+  assert.equal(
+    this.result.outputDigest,
+    digest(JSON.stringify(this.dispatchedPrompts.map(() => this.response))),
+  );
 });
 
 Then("委譲reviewは端末別の入力上限と出力上限を全chunkへ適用する", function () {

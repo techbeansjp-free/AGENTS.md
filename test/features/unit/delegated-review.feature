@@ -164,3 +164,8 @@ Feature: 設定されたローカルLLMへのreview委譲
     And 委譲reviewへ端末別の入力32KiBと出力4096 tokenを設定する
     When Step 10の委譲reviewを実行する
     Then 委譲reviewは端末別上限を初回と投稿前検証へ適用する
+
+  Scenario: SCN-UNIT-DELEGREVIEW-031 chunk配列の境界をdigestに保存する
+    Given 350KiBを超えるstaging文書とローカルreviewer設定がある
+    When Step 3の委譲reviewを実行する
+    Then 委譲reviewはdigestにchunk配列の境界を保存する

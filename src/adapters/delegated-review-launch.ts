@@ -448,8 +448,10 @@ export async function launchDelegatedReview(
       0,
     ),
   };
-  const output = outputs.join("\n--- review chunk ---\n");
-  const promptDigestInput = prompts.join("\n--- review chunk ---\n");
+  // Preserve array boundaries: review data may contain the human-readable
+  // delimiter, so joining it cannot identify the exact request/response list.
+  const promptDigestInput = JSON.stringify(prompts);
+  const outputDigestInput = JSON.stringify(outputs);
   if (input.step === 10) {
     let verified;
     try {
@@ -493,7 +495,7 @@ export async function launchDelegatedReview(
       model: config.model,
       configSource: config.source,
       inputDigest: digest(promptDigestInput),
-      outputDigest: digest(output),
+      outputDigest: digest(outputDigestInput),
       baseSha: input.baseSha,
       headSha: input.headSha,
     };
@@ -511,6 +513,6 @@ export async function launchDelegatedReview(
     model: config.model,
     configSource: config.source,
     inputDigest: digest(promptDigestInput),
-    outputDigest: digest(output),
+    outputDigest: digest(outputDigestInput),
   };
 }
