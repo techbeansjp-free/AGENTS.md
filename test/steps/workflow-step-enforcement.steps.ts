@@ -2270,6 +2270,7 @@ function preparedMergeReviewEvidence(prepared: PreparedPullRequest) {
 function contextIsolatedReviewArtifact(
   baseSha: string,
   implementationSha: string,
+  reviewedPath: string,
 ): string {
   return `# 04 レビュー
 
@@ -2288,7 +2289,7 @@ function contextIsolatedReviewArtifact(
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
-| \`.agent-skill-chain/policy/default.json\` | M | package owner | package | fixture policy | pass | AC-WF-005 | revert可能 | pass |
+| \`${reviewedPath}\` | M | package owner | package | fixture implementation | pass | AC-WF-005 | revert可能 | pass |
 
 ## 2. 受け入れ条件の確認
 
@@ -2452,11 +2453,10 @@ function preparePullRequest(
   spawnSync("git", ["commit", "-q", "-m", "trusted policy"], {
     cwd: root,
   });
-  const implementationCommitSha = spawnSync("git", ["rev-parse", "HEAD"], {
+  const baseSha = spawnSync("git", ["rev-parse", "HEAD"], {
     cwd: root,
     encoding: "utf8",
   }).stdout.trim();
-  const baseSha = implementationCommitSha;
   spawnSync("git", ["update-ref", "refs/remotes/origin/main", baseSha], {
     cwd: root,
   });
@@ -2465,6 +2465,19 @@ function preparePullRequest(
     ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
     { cwd: root },
   );
+  // Merge可能なPRではreview対象の実装commitをbaseより後に置く。
+  // review artifactはさらに後の専用commitへ分離する。
+  if (mergeMode !== "disabled" && workflowMode !== "poc") {
+    fs.writeFileSync(path.join(root, "implementation.txt"), "product change\n");
+    spawnSync("git", ["add", "implementation.txt"], { cwd: root });
+    spawnSync("git", ["commit", "-q", "-m", "implementation"], {
+      cwd: root,
+    });
+  }
+  const implementationCommitSha = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+  }).stdout.trim();
   const pocDeclaration = workflowMode === "poc" ? validPoc() : undefined;
   /**
    * **PoC baselineはstaging生成時のHEADで固定される**（`src/domain/issue.ts`）。
@@ -2490,6 +2503,9 @@ function preparePullRequest(
     const reviewArtifact = contextIsolatedReviewArtifact(
       baseSha,
       implementationCommitSha,
+      implementationCommitSha === baseSha
+        ? ".agent-skill-chain/policy/default.json"
+        : "implementation.txt",
     );
     if (artifactDisposition !== "untracked")
       fs.writeFileSync(
@@ -2532,6 +2548,29 @@ function preparePullRequest(
     cwd: root,
     encoding: "utf8",
   }).stdout.trim();
+  const separatedReviewArtifact =
+    workflowMode !== "poc" &&
+    mergeMode !== "disabled" &&
+    artifactDisposition !== "untracked";
+  const reviewCandidateHeadSha = separatedReviewArtifact
+    ? implementationCommitSha
+    : headSha;
+  const reviewBaseSha = separatedReviewArtifact
+    ? spawnSync("git", ["rev-parse", `${implementationCommitSha}^`], {
+        cwd: root,
+        encoding: "utf8",
+      }).stdout.trim()
+    : baseSha;
+  const branchRef = separatedReviewArtifact
+    ? spawnSync("git", ["symbolic-ref", "--short", "HEAD"], {
+        cwd: root,
+        encoding: "utf8",
+      }).stdout.trim()
+    : undefined;
+  if (separatedReviewArtifact)
+    spawnSync("git", ["checkout", "-q", "--detach", implementationCommitSha], {
+      cwd: root,
+    });
   const staging =
     pocStaging ??
     createIssueStaging(root, {
@@ -2593,7 +2632,7 @@ function preparePullRequest(
   if (missingStep4) {
     const preReviewEntries = [0, 1, 9].map((step) => ({
       ...entry(step, "quick", fixturePast),
-      ...(step === 9 ? { implementationHeadSha: headSha } : {}),
+      ...(step === 9 ? { implementationHeadSha: reviewCandidateHeadSha } : {}),
     }));
     fs.writeFileSync(
       journalFile,
@@ -2603,8 +2642,8 @@ function preparePullRequest(
     const reviewSession = convergedReviewBinding(
       root,
       staging,
-      baseSha,
-      headSha,
+      reviewBaseSha,
+      reviewCandidateHeadSha,
     );
     fs.appendFileSync(
       journalFile,
@@ -2619,13 +2658,13 @@ function preparePullRequest(
       appendWorkflowJournalEntry({
         staging,
         entry: entry(step, "quick", fixturePast),
-        ...(step === 9 ? { headSha } : {}),
+        ...(step === 9 ? { headSha: reviewCandidateHeadSha } : {}),
       });
     const reviewSession = convergedReviewBinding(
       root,
       staging,
-      baseSha,
-      headSha,
+      reviewBaseSha,
+      reviewCandidateHeadSha,
     );
     appendWorkflowJournalEntry({
       staging,
@@ -2635,6 +2674,7 @@ function preparePullRequest(
       },
     });
   }
+  if (branchRef) spawnSync("git", ["checkout", "-q", branchRef], { cwd: root });
   recordStagingSync(staging, {
     tracker: "https://github.com/o/r/issues/877",
     checkpoint: 4,
@@ -2645,7 +2685,13 @@ function preparePullRequest(
   if (artifactDisposition === "untracked")
     fs.writeFileSync(
       path.join(root, "docs", "reviews", "90_test_review.md"),
-      contextIsolatedReviewArtifact(baseSha, implementationCommitSha),
+      contextIsolatedReviewArtifact(
+        baseSha,
+        implementationCommitSha,
+        implementationCommitSha === baseSha
+          ? ".agent-skill-chain/policy/default.json"
+          : "implementation.txt",
+      ),
     );
   return finalizePreparedPullRequest({
     world,
@@ -3099,6 +3145,7 @@ const args = process.argv.slice(2);
 const sha = ${JSON.stringify(prepared.headSha)};
 const implementationSha = ${JSON.stringify(prepared.implementationCommitSha)};
 const mergeSha = ${JSON.stringify("b".repeat(40))};
+const rebasedImplementationSha = ${JSON.stringify("c".repeat(40))};
 const prUrl = "https://github.com/o/r/pull/1";
 const issueUrl = "https://github.com/o/r/issues/877";
 const controlFile = ${JSON.stringify(controlFile)};
@@ -3545,10 +3592,22 @@ if (exact(["--version"])) {
         : { node_id: control.implementationAuthorId },
     }),
   );
+} else if (exact(["api", "repos/o/r/commits/" + rebasedImplementationSha])) {
+  process.stdout.write(
+    JSON.stringify({
+      sha: rebasedImplementationSha,
+      commit: { tree: { sha: control.mergeTreeSha } },
+      parents: [{ sha: control.terminalParentTampered ? "e".repeat(40) : baseSha }],
+    }),
+  );
 } else if (exact(["api", "repos/o/r/commits/" + mergeSha])) {
   const parents = control.autoMergeMethod === "MERGE"
     ? [{ sha: baseSha }, { sha }]
-    : [{ sha: control.terminalParentTampered ? "e".repeat(40) : baseSha }];
+    : [{ sha: control.autoMergeMethod === "REBASE"
+      ? rebasedImplementationSha
+      : control.terminalParentTampered
+        ? "e".repeat(40)
+        : baseSha }];
   process.stdout.write(
     JSON.stringify({
       sha: mergeSha,
@@ -3994,6 +4053,88 @@ When("{string}のE2E検査を実行する", async function (scenarioId: string) 
         ),
         false,
       );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-1410": {
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        undefined,
+        "quick",
+        0,
+        "untracked",
+      );
+      assert.equal(prepared.headSha, prepared.implementationCommitSha);
+      const checked = executeCli(
+        [...prepared.args, "--dry-run"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(checked.status, 0);
+      assert.match(checked.stdout + checked.stderr, /H_impl.*H_final.*同一/u);
+      assert.match(
+        checked.stdout + checked.stderr,
+        /review artifact.*独立.*commit/u,
+      );
+      const applied = executeCli(
+        [...prepared.args, "--apply", "--authorize=approved"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(applied.status, 0);
+      assert.match(applied.stdout + applied.stderr, /H_impl.*H_final.*同一/u);
+      assert.equal(
+        fs.existsSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+        ),
+        false,
+      );
+      const issueUrl = "https://github.com/o/r/issues/877";
+      prepareStoredPullRequestCreation(prepared.staging, {
+        repository: "o/r",
+        issue: 877,
+        issueUrl,
+        headRef: "feature/x",
+        headSha: prepared.headSha,
+        baseRef: "main",
+        baseSha: prepared.baseSha,
+        pullRequestDigest: preparedPullRequestDigest(prepared),
+        bodyClosingDigest: closingContractDigest({
+          canonicalIssue: 877,
+          canonicalIssueUrl: issueUrl,
+          closingIssueNumbers: [877],
+        }),
+        preparedAt: fixtureInstant({ secondsAgo: 1 }),
+      });
+      writeDeliveryProviderControl(prepared, {
+        existingPr: "open",
+      });
+      const recovered = executeCli(
+        [...prepared.args, "--apply", "--authorize=approved"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(recovered.status, 0, recovered.stdout + recovered.stderr);
+      assert.match(recovered.stdout, /merge_pending/u);
+      const callsAfterRecovery = deliveryProviderCalls(prepared);
+      assert.equal(callsAfterRecovery.filter(isPullRequestFindCall).length, 1);
+      assert.equal(callsAfterRecovery.filter(isCreateCall).length, 0);
+      const recoveredState = parseDeliveryState(
+        fs.readFileSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+          "utf8",
+        ),
+      );
+      assert.equal(recoveredState.state, "pr-bound");
+      const replayed = executeCli(
+        [...prepared.args, "--apply", "--authorize=approved"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(replayed.status, 0, replayed.stdout + replayed.stderr);
+      assert.match(replayed.stdout, /merge_pending/u);
       break;
     }
     case "SCN-E2E-WFSTEP-003": {
@@ -4702,6 +4843,19 @@ if (exact(["auth", "status"])) {
           prepared.root,
           prepared.env,
         );
+        // 新規PRでは同一HEAD・非artifact suffixを作成前に拒否する。
+        // 既存のmerge側拒否だけで偶然passしたと扱わない。
+        if (disposition === "untracked" || disposition === "extra-file")
+          assert.notEqual(
+            created.status,
+            0,
+            `${disposition} artifactはPR作成前に拒否する必要があります`,
+          );
+        if (disposition === "untracked")
+          assert.match(
+            created.stdout + created.stderr,
+            /H_impl.*H_final.*同一/u,
+          );
         const rejected =
           created.status === 0 ? executeDeliveryMerge(prepared) : created;
         assert.notEqual(
@@ -6846,7 +7000,7 @@ if (exact(["auth", "status"])) {
       assert.notEqual(rejected.status, 0);
       assert.match(
         rejected.stdout + rejected.stderr,
-        /rebase終端|first parent|chain/u,
+        /rebase終端chainのfirst parentが終端検証baseと一致しません/u,
       );
       const state = parseDeliveryState(
         fs.readFileSync(
