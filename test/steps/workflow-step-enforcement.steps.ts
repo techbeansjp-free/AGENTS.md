@@ -7586,6 +7586,129 @@ if (exact(["auth", "status"])) {
       assert.equal(journal.entries.at(-1)?.step, 4);
       break;
     }
+    case "SCN-INT-ISSUESYNC-024": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      fs.writeFileSync(prepared.issueBodyFile, "# existing issue body\n");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-exact-body-digest",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const preview = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+      const previewDigest = (
+        JSON.parse(preview.stdout) as { sync: { bodySha256: string } }
+      ).sync.bodySha256;
+      const applied = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--expected-body-sha256=${previewDigest}`,
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(applied.status, 0, applied.stdout + applied.stderr);
+      const synchronizedBody = fs.readFileSync(prepared.issueBodyFile, "utf8");
+      assert.equal(
+        previewDigest,
+        crypto.createHash("sha256").update(synchronizedBody).digest("hex"),
+      );
+      break;
+    }
+    case "SCN-INT-ISSUESYNC-025": {
+      const prepared = prepareDeliveryCli(
+        this,
+        { failIssueReadBackAfterEditOnce: true },
+        "disabled",
+      );
+      fs.writeFileSync(prepared.issueBodyFile, "# initial issue body\n");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-exact-readback-digest",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const applyFromPreview = () => {
+        const preview = executeCli(
+          [
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--repo=o/r",
+            "--issue=877",
+          ],
+          prepared.root,
+          prepared.env,
+        );
+        assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+        const digest = (
+          JSON.parse(preview.stdout) as { sync: { bodySha256: string } }
+        ).sync.bodySha256;
+        return executeCli(
+          [
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--repo=o/r",
+            "--issue=877",
+            "--authorize=approved",
+            `--expected-body-sha256=${digest}`,
+            `--recorded-at=${instant}`,
+            `--synced-at=${instant}`,
+            "--apply",
+          ],
+          prepared.root,
+          prepared.env,
+        );
+      };
+      const interrupted = applyFromPreview();
+      assert.notEqual(interrupted.status, 0);
+      const recovered = applyFromPreview();
+      assert.equal(recovered.status, 0, recovered.stdout + recovered.stderr);
+      const exactDigest = crypto
+        .createHash("sha256")
+        .update(fs.readFileSync(prepared.issueBodyFile, "utf8"))
+        .digest("hex");
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.match(
+        journal.entries.at(-1)?.evidence ?? "",
+        new RegExp(exactDigest, "u"),
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ).length,
+        1,
+      );
+      break;
+    }
     default:
       throw new Error(`未対応のe2e scenarioです: ${scenarioId}`);
   }

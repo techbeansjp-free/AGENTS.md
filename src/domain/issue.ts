@@ -1462,10 +1462,7 @@ export function buildIssueSyncBody(
       : renderIssueSyncBody(record.mode, checkpoint, texts);
   return Object.freeze({
     body,
-    bodySha256: crypto
-      .createHash("sha256")
-      .update(body.trimEnd())
-      .digest("hex"),
+    bodySha256: crypto.createHash("sha256").update(body).digest("hex"),
     artifacts: Object.freeze(artifacts),
     mode: record.mode,
     checkpoint,

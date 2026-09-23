@@ -62,3 +62,9 @@ Feature: Issue工程の機械導出欄を安全に生成する
       | quick | 4          | 1     |
       | poc   | 4          | 1     |
       | full  | 4          | 2     |
+
+  @issue-1396
+  Scenario: SCN-UNIT-ISSUESYNC-026 同期本文digestは末尾改行を含む本文byte列から計算する
+    Given 00から03の内容が既知の同期本文入力がある
+    When full checkpoint 8の同期本文を描画する
+    Then 検証済みfull stagingから生成した同期本文は同じ入力の描画結果と一致する

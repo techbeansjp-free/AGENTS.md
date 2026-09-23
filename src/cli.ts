@@ -5536,7 +5536,7 @@ export async function main(
         generatedBodySha256: generated.bodySha256,
         bodySha256: crypto
           .createHash("sha256")
-          .update(previewSyncBody.trimEnd())
+          .update(previewSyncBody)
           .digest("hex"),
       };
     }
@@ -5710,7 +5710,7 @@ export async function main(
       );
       const dispatchBodySha256 = crypto
         .createHash("sha256")
-        .update(dispatchBody.trimEnd())
+        .update(dispatchBody)
         .digest("hex");
       if (dispatchBodySha256 !== syncPreview?.bodySha256)
         throw new Error(
@@ -5751,7 +5751,7 @@ export async function main(
           );
         const observedDispatchBodySha256 = crypto
           .createHash("sha256")
-          .update(observed.body.trimEnd())
+          .update(observed.body)
           .digest("hex");
         const alreadyPublished =
           observedDispatchBodySha256 === dispatchBodySha256;
@@ -5821,7 +5821,7 @@ export async function main(
             );
             const recoveredDigest = crypto
               .createHash("sha256")
-              .update(recovered.body.trimEnd())
+              .update(recovered.body)
               .digest("hex");
             publicationState =
               recoveredDigest === dispatchBodySha256

@@ -3939,7 +3939,7 @@ export async function main(argv, dependencies = {}) {
                 generatedBodySha256: generated.bodySha256,
                 bodySha256: crypto
                     .createHash("sha256")
-                    .update(previewSyncBody.trimEnd())
+                    .update(previewSyncBody)
                     .digest("hex"),
             };
         }
@@ -4055,7 +4055,7 @@ export async function main(argv, dependencies = {}) {
             const dispatchBody = composeWorkflowAdvanceIssueBody(observed.body, draft.body);
             const dispatchBodySha256 = crypto
                 .createHash("sha256")
-                .update(dispatchBody.trimEnd())
+                .update(dispatchBody)
                 .digest("hex");
             if (dispatchBodySha256 !== syncPreview?.bodySha256)
                 throw new Error("workflow advanceのpreview後に同期本文が変更されました。新しいpreviewから再実行してください");
@@ -4081,7 +4081,7 @@ export async function main(argv, dependencies = {}) {
                     });
                 const observedDispatchBodySha256 = crypto
                     .createHash("sha256")
-                    .update(observed.body.trimEnd())
+                    .update(observed.body)
                     .digest("hex");
                 const alreadyPublished = observedDispatchBodySha256 === dispatchBodySha256;
                 let syncConfirmed = alreadyPublished;
@@ -4142,7 +4142,7 @@ export async function main(argv, dependencies = {}) {
                         const recovered = github("issue.read", { repository, issue: Number(issueRaw) }, process.cwd());
                         const recoveredDigest = crypto
                             .createHash("sha256")
-                            .update(recovered.body.trimEnd())
+                            .update(recovered.body)
                             .digest("hex");
                         publicationState =
                             recoveredDigest === dispatchBodySha256
