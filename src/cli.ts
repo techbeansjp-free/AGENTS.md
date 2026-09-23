@@ -799,7 +799,25 @@ export function assertCurrentReviewJournalBinding(
     throw new Error(
       "Step 10のreviewSession bindingが保存済み収束sessionと一致しません",
     );
-  return { binding, session };
+  return { binding, session, implementationHeadSha: bindingEffectiveHead };
+}
+
+function assertCreatableReviewHead(
+  staging: string,
+  headSha: string,
+  mode: "full" | "quick" | "poc",
+  mergeMode: "disabled" | "assisted" | "automatic",
+): void {
+  const reviewBinding = assertCurrentReviewJournalBinding(staging, headSha);
+  // PoC and a disabled merge stop at PR and need no mergeable artifact suffix.
+  if (
+    mode !== "poc" &&
+    mergeMode !== "disabled" &&
+    reviewBinding.implementationHeadSha === headSha
+  )
+    throw new Error(
+      "H_implとH_finalが同一のためPRを作成できません。review artifactを実装commitから分離し、独立したartifact専用commitを積んでから再実行してください",
+    );
 }
 
 function assertObservedClosingContract(input: {
@@ -8674,6 +8692,12 @@ export async function main(
         `PR base ${base}がlocal origin/HEADの既定branch ${localDefaultBranch}と一致しません`,
       );
     const trustedSet = loadEffectiveTrustedPolicySet(root, base);
+    assertCreatableReviewHead(
+      staging,
+      headSha,
+      inspection.mode,
+      trustedSet.policy.merge.mode,
+    );
     const prCandidateChoices = loadConsumerChoicesFragmentAtCommit(
       root,
       headSha,
@@ -8759,7 +8783,12 @@ export async function main(
     const result = withStagingMutationLock(staging, () => {
       recoverPendingJournalTransaction(staging);
       const lockedInspection = assertWorkflowReadyForDelivery(staging);
-      assertCurrentReviewJournalBinding(staging, headSha);
+      assertCreatableReviewHead(
+        staging,
+        headSha,
+        lockedInspection.mode,
+        trustedSet.policy.merge.mode,
+      );
       const stagingRecord = migrateLegacyStagingTrackerLocked(staging, {
         repository,
         issue,
@@ -8933,7 +8962,12 @@ export async function main(
           throw new Error(
             "provider create再試行には現在の既定branch tipと一致するtrusted policy provenanceが必要です",
           );
-        assertCurrentReviewJournalBinding(staging, headSha);
+        assertCreatableReviewHead(
+          staging,
+          headSha,
+          lockedInspection.mode,
+          trustedSet.policy.merge.mode,
+        );
         /**
          * **claimはprovider要求の直前でだけ消費する**（Issue #1157）。
          *

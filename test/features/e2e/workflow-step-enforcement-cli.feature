@@ -11,6 +11,11 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-002"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  Scenario: SCN-E2E-WFSTEP-1410 H_implとH_finalが同一のPRを作成前に拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-1410"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-003 workflow stepsのquick出力が機械可読な省略対象を返す
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-003"のE2E検査を実行する

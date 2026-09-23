@@ -2531,6 +2531,29 @@ function preparePullRequest(
     cwd: root,
     encoding: "utf8",
   }).stdout.trim();
+  const separatedReviewArtifact =
+    workflowMode !== "poc" &&
+    mergeMode !== "disabled" &&
+    artifactDisposition !== "untracked";
+  const reviewCandidateHeadSha = separatedReviewArtifact
+    ? implementationCommitSha
+    : headSha;
+  const reviewBaseSha = separatedReviewArtifact
+    ? spawnSync("git", ["rev-parse", `${implementationCommitSha}^`], {
+        cwd: root,
+        encoding: "utf8",
+      }).stdout.trim()
+    : baseSha;
+  const branchRef = separatedReviewArtifact
+    ? spawnSync("git", ["symbolic-ref", "--short", "HEAD"], {
+        cwd: root,
+        encoding: "utf8",
+      }).stdout.trim()
+    : undefined;
+  if (separatedReviewArtifact)
+    spawnSync("git", ["checkout", "-q", "--detach", implementationCommitSha], {
+      cwd: root,
+    });
   const staging =
     pocStaging ??
     createIssueStaging(root, {
@@ -2592,7 +2615,7 @@ function preparePullRequest(
   if (missingStep4) {
     const preReviewEntries = [0, 1, 9].map((step) => ({
       ...entry(step, "quick", fixturePast),
-      ...(step === 9 ? { implementationHeadSha: headSha } : {}),
+      ...(step === 9 ? { implementationHeadSha: reviewCandidateHeadSha } : {}),
     }));
     fs.writeFileSync(
       journalFile,
@@ -2602,8 +2625,8 @@ function preparePullRequest(
     const reviewSession = convergedReviewBinding(
       root,
       staging,
-      baseSha,
-      headSha,
+      reviewBaseSha,
+      reviewCandidateHeadSha,
     );
     fs.appendFileSync(
       journalFile,
@@ -2618,13 +2641,13 @@ function preparePullRequest(
       appendWorkflowJournalEntry({
         staging,
         entry: entry(step, "quick", fixturePast),
-        ...(step === 9 ? { headSha } : {}),
+        ...(step === 9 ? { headSha: reviewCandidateHeadSha } : {}),
       });
     const reviewSession = convergedReviewBinding(
       root,
       staging,
-      baseSha,
-      headSha,
+      reviewBaseSha,
+      reviewCandidateHeadSha,
     );
     appendWorkflowJournalEntry({
       staging,
@@ -2634,6 +2657,7 @@ function preparePullRequest(
       },
     });
   }
+  if (branchRef) spawnSync("git", ["checkout", "-q", branchRef], { cwd: root });
   recordStagingSync(staging, {
     tracker: "https://github.com/o/r/issues/877",
     checkpoint: 4,
@@ -3745,6 +3769,40 @@ When("{string}のE2E検査を実行する", async function (scenarioId: string) 
       );
       assert.equal(checked.status, 0, checked.stdout + checked.stderr);
       assert.match(checked.stdout, /preview/u);
+      break;
+    }
+    case "SCN-E2E-WFSTEP-1410": {
+      const prepared = preparePullRequest(
+        this,
+        false,
+        "automatic",
+        "merge",
+        undefined,
+        "quick",
+        0,
+        "untracked",
+      );
+      assert.equal(prepared.headSha, prepared.implementationCommitSha);
+      const checked = executeCli(
+        [...prepared.args, "--dry-run"],
+        prepared.root,
+      );
+      assert.notEqual(checked.status, 0);
+      assert.match(checked.stdout + checked.stderr, /H_impl.*H_final.*同一/u);
+      assert.match(
+        checked.stdout + checked.stderr,
+        /review artifact.*独立.*commit/u,
+      );
+      const applied = executeCli(
+        [...prepared.args, "--apply", "--authorize=approved"],
+        prepared.root,
+      );
+      assert.notEqual(applied.status, 0);
+      assert.match(applied.stdout + applied.stderr, /H_impl.*H_final.*同一/u);
+      assert.equal(
+        fs.existsSync(path.join(prepared.staging, "delivery-state.json")),
+        false,
+      );
       break;
     }
     case "SCN-E2E-WFSTEP-003": {
