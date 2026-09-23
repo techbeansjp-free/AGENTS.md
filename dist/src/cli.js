@@ -6473,6 +6473,25 @@ export async function main(argv, dependencies = {}) {
         if (currentHead.sha.toLowerCase() !== headSha.toLowerCase())
             throw new Error("providerのremote head SHAがPR作成Evidenceと一致しません");
         const observedBaseSha = existingBefore?.create.baseSha ?? repositoryAuthority.defaultBranchTipOid;
+        let ancestorWarning;
+        if (!existingBefore) {
+            const ancestry = git(["merge-base", "--is-ancestor", observedBaseSha, headSha], root, { allowFailure: true });
+            if (ancestry.status !== 0) {
+                const terminal = decideDeliveryContinuation({
+                    workflowMode: inspection.mode,
+                    trustedMergeMode: commonInput.trustedPolicy.merge.mode,
+                    assistedAuthorityVerified: false,
+                    mergeReadyVerified: false,
+                }) === "stop-at-pr";
+                const reason = `PR作成anchorのbase SHA ${observedBaseSha}がhead SHA ${headSha}のancestorではありません`;
+                const recovery = "既定branchをrebaseではなくmergeで取り込み、HEAD依存のtest・review artifact・Step 10を再生成してからpr createを再実行してください";
+                const authority = "必要なauthorityは既定branchを取り込む通常のbranch更新権限だけです。固定済みidentityの書換え権限は追加しません";
+                const rollback = "rollbackはPRとdelivery stateを作成せず、現在のbranchとstagingを保持することです";
+                if (!terminal)
+                    throw new Error(`${reason}。${recovery}。${authority}。${rollback}`);
+                ancestorWarning = `warning: ${reason}。このworkflowはPRを正式終端とするため作成を続行します。${recovery}`;
+            }
+        }
         if (inspection.mode === "poc")
             assertPocDeliveryChangeScope(staging, observedBaseSha, headSha);
         const result = withStagingMutationLock(staging, () => {
@@ -6766,7 +6785,9 @@ export async function main(argv, dependencies = {}) {
                 throw new Error(`未対応のdelivery continuationです: ${continuation}`);
             return finishBoundPullRequest(staging, bound, lockedInspection.mode, created);
         });
-        print(result.output);
+        print(ancestorWarning
+            ? { ...result.output, warnings: [ancestorWarning] }
+            : result.output);
         return result.exitCode;
     }
     if (command === "pr" && subcommand === "reanchor") {
