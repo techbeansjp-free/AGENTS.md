@@ -8592,6 +8592,7 @@ export async function main(
     const journal = readWorkflowJournal(staging);
     let workflowValidation = inspection.validation;
     let effectiveEntries = journal.entries;
+    let pendingOverrideEntries: StepJournalEntry[] = [];
     const overrideFile =
       typeof flags["workflow-override"] === "string"
         ? flags["workflow-override"]
@@ -8659,8 +8660,7 @@ export async function main(
         upToStep: 10,
       });
       if (workflowValidation.valid && apply)
-        for (const entry of overrideEntries)
-          appendWorkflowJournalEntry({ staging, entry });
+        pendingOverrideEntries = overrideEntries;
     }
     const mandatoryRecorded = [4, 10].every((step) =>
       effectiveEntries.some((entry) => entry.step === step),
@@ -8802,8 +8802,45 @@ export async function main(
       );
     const observedBaseSha =
       existingBefore?.create.baseSha ?? repositoryAuthority.defaultBranchTipOid;
+    let ancestorWarning: string | undefined;
+    if (!existingBefore) {
+      const mergeBase = git(
+        ["merge-base", "--all", observedBaseSha, headSha],
+        root,
+        { allowFailure: true },
+      );
+      const mergeBases = mergeBase.stdout
+        .trim()
+        .split(/\r?\n/u)
+        .filter((value) => /^[a-f0-9]{40}$/u.test(value));
+      if (mergeBase.status !== 0 || mergeBases.length !== 1)
+        throw new Error(
+          `PR作成anchorのbase SHA ${observedBaseSha}とhead SHA ${headSha}のancestor関係をGitで比較できません（exit ${mergeBase.status}、merge-base ${mergeBases.length}件）。PRとdelivery stateを作成せず、Git objectとrepositoryを復旧してから再実行してください`,
+        );
+      if (mergeBases[0]!.toLowerCase() !== observedBaseSha.toLowerCase()) {
+        const terminal =
+          decideDeliveryContinuation({
+            workflowMode: inspection.mode,
+            trustedMergeMode: commonInput.trustedPolicy.merge.mode,
+            assistedAuthorityVerified: false,
+            mergeReadyVerified: false,
+          }) === "stop-at-pr";
+        const reason = `PR作成anchorのbase SHA ${observedBaseSha}がhead SHA ${headSha}のancestorではありません`;
+        const recovery =
+          "既定branchをmergeで取り込んでHEAD依存のtest・review artifact・Step 10を再生成するか、内容等価なrebase後にreview reanchorで証拠を再固定してからpr createを再実行してください";
+        const authority =
+          "必要なauthorityは既定branchを取り込む通常のbranch更新権限だけです。固定済みidentityの書換え権限は追加しません";
+        const rollback =
+          "rollbackはPRとdelivery stateを作成せず、現在のbranchとstagingを保持することです";
+        if (!terminal || inspection.mode === "poc")
+          throw new Error(`${reason}。${recovery}。${authority}。${rollback}`);
+        ancestorWarning = `warning: ${reason}。このworkflowはPRを正式終端とするため作成を続行します。${recovery}`;
+      }
+    }
     if (inspection.mode === "poc")
       assertPocDeliveryChangeScope(staging, observedBaseSha, headSha);
+    for (const entry of pendingOverrideEntries)
+      appendWorkflowJournalEntry({ staging, entry });
     const result = withStagingMutationLock(staging, () => {
       recoverPendingJournalTransaction(staging);
       const lockedInspection = assertWorkflowReadyForDelivery(staging);
@@ -9145,7 +9182,11 @@ export async function main(
         created,
       );
     });
-    print(result.output);
+    print(
+      ancestorWarning
+        ? { ...result.output, warnings: [ancestorWarning] }
+        : result.output,
+    );
     return result.exitCode;
   }
   if (command === "pr" && subcommand === "reanchor") {

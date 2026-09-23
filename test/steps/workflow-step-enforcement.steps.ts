@@ -3641,6 +3641,75 @@ function createDeliveryPullRequest(prepared: PreparedDeliveryCli) {
   return result;
 }
 
+/** provider既定branchをHEADと親子関係のないexact commitへ進める。 */
+function divergeDeliveryBase(prepared: PreparedDeliveryCli): string {
+  const tree = spawnSync("git", ["rev-parse", `${prepared.baseSha}^{tree}`], {
+    cwd: prepared.root,
+    encoding: "utf8",
+  }).stdout.trim();
+  const parent = spawnSync("git", ["rev-parse", `${prepared.baseSha}^`], {
+    cwd: prepared.root,
+    encoding: "utf8",
+  }).stdout.trim();
+  const created = spawnSync(
+    "git",
+    ["commit-tree", tree, "-p", parent, "-m", "parallel base advance"],
+    { cwd: prepared.root, encoding: "utf8" },
+  );
+  assert.equal(created.status, 0, created.stderr);
+  const advanced = created.stdout.trim();
+  spawnSync("git", ["update-ref", "refs/remotes/origin/main", advanced], {
+    cwd: prepared.root,
+  });
+  const control = JSON.parse(
+    fs.readFileSync(prepared.controlFile, "utf8"),
+  ) as DeliveryProviderControl;
+  fs.writeFileSync(
+    prepared.controlFile,
+    `${JSON.stringify({ ...control, remoteBaseSha: advanced })}\n`,
+  );
+  return advanced;
+}
+
+/** `merge-base --all`だけをGit実行失敗にして比較不能を再現する。 */
+function failDeliveryAncestryComparison(prepared: PreparedDeliveryCli): void {
+  const stubDirectory = (prepared.env.PATH ?? "").split(path.delimiter)[0];
+  assert.ok(stubDirectory);
+  const realGit = spawnSync("which", ["git"], {
+    encoding: "utf8",
+  }).stdout.trim();
+  assert.ok(realGit);
+  const stub = path.join(stubDirectory, "git");
+  fs.writeFileSync(
+    stub,
+    `#!/usr/bin/env node
+const { spawnSync } = require("node:child_process");
+const args = process.argv.slice(2);
+if (args[0] === "merge-base" && args[1] === "--all") {
+  process.stderr.write("simulated incomparable Git objects\\n");
+  process.exitCode = 128;
+} else {
+  const result = spawnSync(${JSON.stringify(realGit)}, args, { stdio: "inherit" });
+  process.exitCode = result.status ?? 70;
+}
+`,
+  );
+  fs.chmodSync(stub, 0o755);
+}
+
+/** Step 4欠落を作り、既存review bindingを保ったHumanOverride経路を検査する。 */
+function removeDeliveryStep4(prepared: PreparedDeliveryCli): string {
+  const journalFile = path.join(prepared.staging, STEP_JOURNAL_FILE);
+  const entries = fs
+    .readFileSync(journalFile, "utf8")
+    .trimEnd()
+    .split("\n")
+    .filter((line) => (JSON.parse(line) as { step: number }).step !== 4);
+  fs.writeFileSync(journalFile, `${entries.join("\n")}\n`);
+  refreshStoredStagingDigest(prepared.staging);
+  return journalFile;
+}
+
 function deliveryMergeArgs(
   prepared: PreparedDeliveryCli,
   overrides: {
@@ -3750,6 +3819,178 @@ When("{string}のE2E検査を実行する", async function (scenarioId: string) 
       );
       assert.equal(checked.status, 0, checked.stdout + checked.stderr);
       assert.match(checked.stdout, /preview/u);
+      break;
+    }
+    case "SCN-E2E-WFSTEP-061":
+    case "SCN-E2E-WFSTEP-062": {
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        scenarioId.endsWith("061") ? "automatic" : "assisted",
+      );
+      const advanced = divergeDeliveryBase(prepared);
+      const stateFile = path.join(
+        prepared.staging,
+        ...DELIVERY_STATE_FILE.split("/"),
+      );
+      const createsBefore =
+        deliveryProviderCalls(prepared).filter(isCreateCall).length;
+      const rejected = executeCli(
+        [...prepared.args, "--apply", "--authorize=approved"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+      assert.match(rejected.stdout + rejected.stderr, /ancestor/u);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        new RegExp(advanced, "u"),
+      );
+      assert.match(rejected.stdout + rejected.stderr, /merge/u);
+      assert.match(rejected.stdout + rejected.stderr, /review reanchor/u);
+      assert.doesNotMatch(rejected.stdout + rejected.stderr, /\bpr reanchor\b/u);
+      assert.equal(fs.existsSync(stateFile), false);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isCreateCall).length,
+        createsBefore,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-063": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const advanced = divergeDeliveryBase(prepared);
+      const created = createDeliveryPullRequest(prepared);
+      assert.match(created.stdout, /warning/u);
+      assert.match(created.stdout, new RegExp(advanced, "u"));
+      assert.match(created.stdout, /pull_request_complete/u);
+      const state = parseDeliveryState(
+        fs.readFileSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+          "utf8",
+        ),
+      );
+      assert.equal(state.step11?.outcome, "pull-request");
+      break;
+    }
+    case "SCN-E2E-WFSTEP-064": {
+      const prepared = prepareDeliveryCli(this, {}, "automatic");
+      const journalFile = removeDeliveryStep4(prepared);
+      const overrideFile = path.join(
+        this.temp("asc-anchor-override-"),
+        "override.json",
+      );
+      fs.writeFileSync(
+        overrideFile,
+        `${JSON.stringify({
+          issue: 877,
+          scope: "workflow.pr.create",
+          instructedBy: "repository-owner",
+          instructedAt: fixtureInstant({ hoursAgo: 1 }),
+          expiresAt: fixtureInstant({ daysAhead: 1 }),
+          reason: "missing Step 4を明示承認する",
+        })}\n`,
+      );
+      divergeDeliveryBase(prepared);
+      const journalBefore = fs.readFileSync(journalFile, "utf8");
+      const rejected = executeCli(
+        [
+          ...prepared.args,
+          "--apply",
+          "--authorize=approved",
+          `--workflow-override=${overrideFile}`,
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+      assert.match(rejected.stdout + rejected.stderr, /ancestor/u);
+      assert.equal(fs.readFileSync(journalFile, "utf8"), journalBefore);
+      assert.equal(
+        fs.existsSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+        ),
+        false,
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isCreateCall).length,
+        0,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-065": {
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        undefined,
+        "poc",
+      );
+      const journalFile = removeDeliveryStep4(prepared);
+      const overrideFile = path.join(
+        this.temp("asc-anchor-poc-override-"),
+        "override.json",
+      );
+      fs.writeFileSync(
+        overrideFile,
+        `${JSON.stringify({
+          issue: 877,
+          scope: "workflow.pr.create",
+          instructedBy: "repository-owner",
+          instructedAt: fixtureInstant({ hoursAgo: 1 }),
+          expiresAt: fixtureInstant({ daysAhead: 1 }),
+          reason: "missing Step 4を明示承認する",
+        })}\n`,
+      );
+      divergeDeliveryBase(prepared);
+      const journalBefore = fs.readFileSync(journalFile, "utf8");
+      const rejected = executeCli(
+        [
+          ...prepared.args,
+          "--apply",
+          "--authorize=approved",
+          `--workflow-override=${overrideFile}`,
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+      assert.match(rejected.stdout + rejected.stderr, /ancestor/u);
+      assert.match(rejected.stdout + rejected.stderr, /merge/u);
+      assert.match(rejected.stdout + rejected.stderr, /authority/u);
+      assert.equal(fs.readFileSync(journalFile, "utf8"), journalBefore);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isCreateCall).length,
+        0,
+      );
+      assert.equal(
+        fs.existsSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+        ),
+        false,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-066": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      failDeliveryAncestryComparison(prepared);
+      const rejected = executeCli(
+        [...prepared.args, "--apply", "--authorize=approved"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+      assert.match(rejected.stdout + rejected.stderr, /比較できません/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isCreateCall).length,
+        0,
+      );
+      assert.equal(
+        fs.existsSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+        ),
+        false,
+      );
       break;
     }
     case "SCN-E2E-WFSTEP-003": {
@@ -5042,6 +5283,11 @@ if (exact(["auth", "status"])) {
       assert.equal(completed.merge, null);
       const before = deliveryProviderCalls(prepared);
       const revision = completed.revision;
+      /**
+       * 固定済みdelivery identityの再実行は、providerの既定branchが後から
+       * divergeしても新規anchor検査へ戻してはならない。
+       */
+      divergeDeliveryBase(prepared);
       const replay = createDeliveryPullRequest(prepared);
       assert.match(replay.stdout, /pull_request_complete/u);
       assert.deepEqual(deliveryProviderCalls(prepared), before);
