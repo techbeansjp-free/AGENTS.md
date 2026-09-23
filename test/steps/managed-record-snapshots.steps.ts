@@ -208,10 +208,7 @@ When("snapshot directoryだけでhardlinkを拒否する", function () {
       source: string,
       destination: string,
     ) => {
-      if (
-        destination.startsWith(snapshotDirectory(this.root)) &&
-        path.basename(destination).startsWith(".record-link-probe-")
-      ) {
+      if (path.basename(destination).startsWith(".record-link-probe-")) {
         blocked = true;
         throw new Error("snapshot hardlink unsupported");
       }
@@ -338,6 +335,20 @@ When("install後のsnapshot directoryに中断したprobeのfileが残る", func
       ".record-link-probe.json.tmp-1234-aaaaaaaaaaaaaaaaaaaaaaaa",
     ),
     "probe",
+  );
+  fs.writeFileSync(
+    path.join(
+      directory,
+      ".record-link-probe-1234-aaaaaaaaaaaaaaaaaaaaaaaa.tmp",
+    ),
+    "probe",
+  );
+  fs.writeFileSync(
+    path.join(
+      directory,
+      "..record-link-probe-1234-aaaaaaaaaaaaaaaaaaaaaaaa.tmp.tmp-5678-bbbbbbbbbbbbbbbbbbbbbbbb",
+    ),
+    "partial",
   );
 });
 

@@ -183,6 +183,10 @@ function snapshotEntries(target: string): string[] {
       (name) =>
         !/^\.(?:(?:legacy|snapshot)-[a-f0-9]{64}|record-link-probe(?:-target)?)\.json\.tmp-[0-9]+-[a-f0-9]{24}$/u.test(
           name,
+        ) &&
+        !/^\.record-link-probe-[0-9]+-[a-f0-9]{24}\.tmp$/u.test(name) &&
+        !/^\.\.record-link-probe-[0-9]+-[a-f0-9]{24}\.tmp\.tmp-[0-9]+-[a-f0-9]{24}$/u.test(
+          name,
         ),
     );
 }
