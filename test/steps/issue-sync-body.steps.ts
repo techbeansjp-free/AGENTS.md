@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -170,6 +171,11 @@ Then(
     refreshStoredStagingDigest(staging);
     const built = buildIssueSyncBody(staging, 8);
     assert.equal(built.body, renderIssueSyncBody("full", 8, contents));
+    assert.equal(
+      built.bodySha256,
+      crypto.createHash("sha256").update(built.body).digest("hex"),
+      "digestは末尾改行を含む実本文byte列から計算する",
+    );
     assert.ok(
       built.body.startsWith(materializedRequest().trimEnd()),
       "本文は00で始まる",
