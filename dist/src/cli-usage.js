@@ -492,6 +492,7 @@ export const COMMAND_USAGE = Object.freeze([
             conditional("body-file", "path", "反映する本文file", "--generate-bodyを指定しないとき", (provided) => provided["generate-body"] === undefined),
             conditional("staging-path", "path", "同期本文を生成するIssue staging", "--generate-bodyを指定するとき", (provided) => provided["generate-body"] !== undefined),
             conditional("checkpoint", "4|8", "mode別の同期checkpoint", "--generate-bodyを指定するとき", (provided) => provided["generate-body"] !== undefined),
+            conditional("expected-body-sha256", "64hex", "直前のpreviewが表示した同期本文digest", "--applyを指定するとき", (provided) => provided.apply !== undefined),
         ],
         optionalFlags: [
             optional("authorize", "approved", "書き込みの承認", "承認なし"),

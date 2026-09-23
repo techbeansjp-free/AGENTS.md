@@ -791,6 +791,13 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "--generate-bodyを指定するとき",
         (provided) => provided["generate-body"] !== undefined,
       ),
+      conditional(
+        "expected-body-sha256",
+        "64hex",
+        "直前のpreviewが表示した同期本文digest",
+        "--applyを指定するとき",
+        (provided) => provided.apply !== undefined,
+      ),
     ],
     optionalFlags: [
       optional("authorize", "approved", "書き込みの承認", "承認なし"),

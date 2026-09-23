@@ -5454,6 +5454,10 @@ if (exact(["auth", "status"])) {
         );
       };
       const syncIssue = (extra: string[]) => {
+        const expectedBodySha256 = crypto
+          .createHash("sha256")
+          .update(fs.readFileSync(path.join(fullStaging, "00_要求定義.md")))
+          .digest("hex");
         const result = executeCli(
           [
             "issue",
@@ -5463,6 +5467,7 @@ if (exact(["auth", "status"])) {
             `--body-file=${path.join(fullStaging, "00_要求定義.md")}`,
             "--authorize=approved",
             `--synced-at=${new Date(fixtureInstantMs()).toISOString()}`,
+            `--expected-body-sha256=${expectedBodySha256}`,
             ...extra,
             "--apply",
           ],
@@ -7808,6 +7813,31 @@ if (exact(["auth", "status"])) {
       const previewDigest = (
         JSON.parse(preview.stdout) as { bodySha256: string }
       ).bodySha256;
+      const stalePreview = executeCli(
+        [
+          "issue",
+          "sync",
+          "--generate-body",
+          `--staging-path=${staging}`,
+          "--checkpoint=8",
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--expected-body-sha256=${"0".repeat(64)}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(stalePreview.status, 0);
+      assert.match(stalePreview.stdout + stalePreview.stderr, /preview/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ).length,
+        0,
+      );
       const applied = executeCli(
         [
           "issue",
@@ -7818,6 +7848,7 @@ if (exact(["auth", "status"])) {
           "--repo=o/r",
           "--issue=877",
           "--authorize=approved",
+          `--expected-body-sha256=${previewDigest}`,
           `--synced-at=${instant}`,
           "--apply",
         ],
