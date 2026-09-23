@@ -38,6 +38,23 @@ function readRecord(root: string): {
   version: unknown;
   files: Record<string, string>;
 } {
+  const snapshots = path.join(
+    root,
+    ".agent-skill-chain",
+    "managed-assets-records",
+  );
+  if (fs.existsSync(snapshots)) {
+    const entries = fs
+      .readdirSync(snapshots)
+      .filter((name) => /^(?:legacy|snapshot)-[a-f0-9]{64}\.json$/u.test(name));
+    if (entries.length > 0) {
+      assert.equal(entries.length, 1, "このfixtureは更新snapshotを1件だけ作る");
+      const snapshot = JSON.parse(
+        fs.readFileSync(path.join(snapshots, entries[0]!), "utf8"),
+      ) as { record: { version: unknown; files: Record<string, string> } };
+      return snapshot.record;
+    }
+  }
   return JSON.parse(fs.readFileSync(recordPath(root), "utf8")) as {
     version: unknown;
     files: Record<string, string>;
