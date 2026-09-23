@@ -3919,17 +3919,39 @@ When("{string}のE2E検査を実行する", async function (scenarioId: string) 
         undefined,
         "poc",
       );
+      const journalFile = removeDeliveryStep4(prepared);
+      const overrideFile = path.join(
+        this.temp("asc-anchor-poc-override-"),
+        "override.json",
+      );
+      fs.writeFileSync(
+        overrideFile,
+        `${JSON.stringify({
+          issue: 877,
+          scope: "workflow.pr.create",
+          instructedBy: "repository-owner",
+          instructedAt: fixtureInstant({ hoursAgo: 1 }),
+          expiresAt: fixtureInstant({ daysAhead: 1 }),
+          reason: "missing Step 4を明示承認する",
+        })}\n`,
+      );
       divergeDeliveryBase(prepared);
+      const journalBefore = fs.readFileSync(journalFile, "utf8");
       const rejected = executeCli(
-        [...prepared.args, "--apply", "--authorize=approved"],
+        [
+          ...prepared.args,
+          "--apply",
+          "--authorize=approved",
+          `--workflow-override=${overrideFile}`,
+        ],
         prepared.root,
         prepared.env,
       );
       assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
-      assert.match(
-        rejected.stdout + rejected.stderr,
-        /PoC baseline.*ancestor/u,
-      );
+      assert.match(rejected.stdout + rejected.stderr, /ancestor/u);
+      assert.match(rejected.stdout + rejected.stderr, /merge/u);
+      assert.match(rejected.stdout + rejected.stderr, /authority/u);
+      assert.equal(fs.readFileSync(journalFile, "utf8"), journalBefore);
       assert.equal(
         deliveryProviderCalls(prepared).filter(isCreateCall).length,
         0,

@@ -32,7 +32,7 @@ Feature: 公開CLIでワークフローStepを強制する
     Then ワークフローStep公開CLI検査は期待結果になる
 
   @requires-linux-poc
-  Scenario: SCN-E2E-WFSTEP-065 PoCはprovider baseからのfixture限定差分を証明できずPR作成を拒否する
+  Scenario: SCN-E2E-WFSTEP-065 PoCのdiverged anchorはoverride journalを書かず回復手順付きで拒否する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-065"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる

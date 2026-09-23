@@ -6489,15 +6489,15 @@ export async function main(argv, dependencies = {}) {
                 const recovery = "既定branchをrebaseではなくmergeで取り込み、HEAD依存のtest・review artifact・Step 10を再生成してからpr createを再実行してください";
                 const authority = "必要なauthorityは既定branchを取り込む通常のbranch更新権限だけです。固定済みidentityの書換え権限は追加しません";
                 const rollback = "rollbackはPRとdelivery stateを作成せず、現在のbranchとstagingを保持することです";
-                if (!terminal)
+                if (!terminal || inspection.mode === "poc")
                     throw new Error(`${reason}。${recovery}。${authority}。${rollback}`);
                 ancestorWarning = `warning: ${reason}。このworkflowはPRを正式終端とするため作成を続行します。${recovery}`;
             }
         }
-        for (const entry of pendingOverrideEntries)
-            appendWorkflowJournalEntry({ staging, entry });
         if (inspection.mode === "poc")
             assertPocDeliveryChangeScope(staging, observedBaseSha, headSha);
+        for (const entry of pendingOverrideEntries)
+            appendWorkflowJournalEntry({ staging, entry });
         const result = withStagingMutationLock(staging, () => {
             recoverPendingJournalTransaction(staging);
             const lockedInspection = assertWorkflowReadyForDelivery(staging);
