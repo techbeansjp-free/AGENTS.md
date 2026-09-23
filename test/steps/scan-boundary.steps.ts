@@ -15,7 +15,10 @@ import {
   isStagingLifecyclePath,
   isStagingLifecycleScanPath,
 } from "../../src/domain/staging.js";
-import { expandIgnoredEntries } from "../../scripts/report_scan_boundary.js";
+import {
+  EXCLUSION_PREDICATE_SOURCES,
+  expandIgnoredEntries,
+} from "../../scripts/report_scan_boundary.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 /**
@@ -601,6 +604,17 @@ Then(
     );
     assert.ok(lifecycleScan?.owner.includes("check_source_quality.ts"));
     assert.ok(lifecycleScan?.appliesTo.includes("source品質検査"));
+    const registeredLifecycleScan = EXCLUSION_PREDICATE_SOURCES.find(
+      (entry) => entry.id === "staging-lifecycle-scan",
+    );
+    assert.ok(
+      registeredLifecycleScan?.owner.includes("source:check"),
+      registeredLifecycleScan?.owner,
+    );
+    assert.ok(
+      registeredLifecycleScan?.appliesTo.includes("source品質検査"),
+      registeredLifecycleScan?.appliesTo,
+    );
     assert.deepEqual(
       [...observation.uncovered],
       [],
