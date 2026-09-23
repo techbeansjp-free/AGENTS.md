@@ -636,7 +636,7 @@ fs.appendFileSync(${JSON.stringify(this.ghMarker)}, args.join(" ") + "\\n");
 if (args[0] === "repo" && args[1] === "view") {
   process.stdout.write(JSON.stringify({ nameWithOwner: "example/repository", viewerPermission: "WRITE" }));
 } else if (args[0] === "issue" && args[1] === "view") {
-  process.stdout.write("promotion body\\n");
+  process.stdout.write(JSON.stringify({ body: "promotion body\\n" }) + "\\n");
 }
 process.exit(0);
 `,
