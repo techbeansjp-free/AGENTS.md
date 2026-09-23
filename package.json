@@ -28,6 +28,7 @@
     ".agent-skill-chain/skills/",
     ".agent-skill-chain/templates/",
     ".agent-skill-chain/schemas/",
+    "!.agent-skill-chain/schemas/laya-sanitized-private-case.schema.json",
     ".agent-skill-chain/policy/",
     ".agent-skill-chain/hooks/",
     ".agent-skill-chain/docs/",

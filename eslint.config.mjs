@@ -9,6 +9,8 @@ export default tseslint.config(
       ".worktrees/**",
       "issues/**",
       "memo/**",
+      "src/domain/laya-private-corpus.ts",
+      "src/adapters/laya-private-corpus.ts",
     ],
   },
   eslint.configs.recommended,

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://techbeansjp-free.github.io/agent-skill-chain/schemas/laya-private-authorization.schema.json",
+  "title": "Laya private training authorization",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "repository",
+    "remote",
+    "revision",
+    "inputSha256",
+    "keyId",
+    "sanitizerVersion",
+    "structuralSchemaVersion",
+    "forbiddenLiterals"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "asc/laya-private-authorization/v1" },
+    "repository": { "type": "string", "minLength": 1 },
+    "remote": { "type": "string", "minLength": 1 },
+    "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "inputSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "keyId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "sanitizerVersion": { "const": "asc/laya-private-structural/v1" },
+    "structuralSchemaVersion": {
+      "const": "asc/laya-private-structural-case/v1"
+    },
+    "forbiddenLiterals": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 4 }
+    }
+  }
+}

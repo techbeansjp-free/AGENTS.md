@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://techbeansjp-free.github.io/agent-skill-chain/schemas/laya-private-structural-corpus.schema.json",
+  "title": "Laya private structural corpus",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "cases", "report"],
+  "properties": {
+    "schemaVersion": { "const": "asc/laya-private-structural-corpus/v1" },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "laya-private-structural-case.schema.json" }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "caseCount",
+        "secretCanaryMatches",
+        "rawIdentifierMatches",
+        "rawPathMatches",
+        "sourceIdentityMatches",
+        "rawTextFields",
+        "eligible"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "asc/laya-private-leakage-report/v2" },
+        "caseCount": { "type": "integer", "minimum": 1 },
+        "secretCanaryMatches": { "const": 0 },
+        "rawIdentifierMatches": { "const": 0 },
+        "rawPathMatches": { "const": 0 },
+        "sourceIdentityMatches": { "const": 0 },
+        "rawTextFields": { "const": 0 },
+        "eligible": { "const": true }
+      }
+    }
+  }
+}

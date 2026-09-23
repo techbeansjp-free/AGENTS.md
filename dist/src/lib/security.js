@@ -87,8 +87,14 @@ export function parseJsonStrict(source, label = "JSON") {
         let escaped = false;
         while (index < source.length) {
             const character = source[index++];
-            if (!escaped && character === '"')
-                return JSON.parse(source.slice(start, index));
+            if (!escaped && character === '"') {
+                try {
+                    return JSON.parse(source.slice(start, index));
+                }
+                catch {
+                    return fail("文字列escapeが不正です");
+                }
+            }
             if (!escaped && character === "\\")
                 escaped = true;
             else
@@ -110,8 +116,10 @@ export function parseJsonStrict(source, label = "JSON") {
             while (index < source.length) {
                 whitespace();
                 const key = string();
+                if (key === "__proto__")
+                    fail("禁止keyです");
                 if (keys.has(key))
-                    fail(`重複keyを拒否しました: ${key}`);
+                    fail("重複keyを拒否しました");
                 keys.add(key);
                 whitespace();
                 if (source[index++] !== ":")

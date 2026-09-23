@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://techbeansjp-free.github.io/agent-skill-chain/schemas/laya-training-manifest.schema.json",
+  "title": "ASC Laya Training Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceRepository",
+    "sourceCommit",
+    "datasetDigest",
+    "splitDigest",
+    "sealDigest",
+    "layaRevision",
+    "notebookSha256",
+    "baseModel",
+    "baseModelRevision",
+    "seed",
+    "trainPath",
+    "validationPath"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "asc/laya-training-manifest/v1" },
+    "sourceRepository": { "const": "techbeansjp-free/AGENTS.md" },
+    "sourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "datasetDigest": { "$ref": "#/$defs/digest" },
+    "splitDigest": { "$ref": "#/$defs/digest" },
+    "sealDigest": { "$ref": "#/$defs/digest" },
+    "layaRevision": { "const": "2c6c16baf3ea3149948777937d5005a7c7fba425" },
+    "notebookSha256": {
+      "const": "6b81f290bbd213008d3e79c80d207b9abc1d1b5ab0a23f3f4bd9a289611433ed"
+    },
+    "baseModel": { "const": "convaiinnovations/laya-multilingual" },
+    "baseModelRevision": {
+      "const": "82d57fc4f2d1be3d2caac494045f2ec51d0842f3"
+    },
+    "seed": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+    "trainPath": { "type": "string", "minLength": 1 },
+    "validationPath": { "type": "string", "minLength": 1 }
+  },
+  "$defs": { "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+}

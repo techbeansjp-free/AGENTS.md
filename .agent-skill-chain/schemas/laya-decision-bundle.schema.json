@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/techbeansjp-free/AGENTS.md/schemas/laya-decision-bundle.schema.json",
+  "title": "Laya Decision Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "bundleId",
+    "model",
+    "questionSchemaPath",
+    "questionSchemaSha256",
+    "thresholdPath",
+    "thresholdSha256",
+    "modelCardPath",
+    "modelCardSha256",
+    "evaluationPath",
+    "evaluationSha256",
+    "datasetDigest",
+    "splitDigest",
+    "sealDigest",
+    "eligibility",
+    "compatibleAscVersions",
+    "authority"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "asc/laya-decision-bundle/v1" },
+    "bundleId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$"
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "weightSha256"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$"
+        },
+        "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "weightSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "questionSchemaPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "questionSchemaSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "thresholdPath": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "thresholdSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "modelCardPath": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "modelCardSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "evaluationPath": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "datasetDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "splitDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "sealDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "eligibility": { "const": "eligible" },
+    "evaluationSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "compatibleAscVersions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^v?\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+      }
+    },
+    "authority": { "const": false }
+  }
+}

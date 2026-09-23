@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://techbeansjp-free.github.io/agent-skill-chain/schemas/laya-private-authorization-pins.schema.json",
+  "title": "Laya private training authorization pins",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sha256"],
+  "properties": {
+    "schemaVersion": { "const": "asc/laya-private-authorization-pins/v1" },
+    "sha256": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+    }
+  }
+}

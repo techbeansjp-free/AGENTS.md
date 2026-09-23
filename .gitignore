@@ -40,3 +40,4 @@ dist/**/*.js.map
 # ローカルツール設定と実行ログ
 test-execution.log
 *.log
+__pycache__/

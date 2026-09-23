@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://techbeansjp-free.github.io/agent-skill-chain/schemas/laya-decision-case.schema.json",
+  "title": "ASC Laya Decision Case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "caseId",
+    "sourceRepository",
+    "sourceCommit",
+    "observedAt",
+    "groupId",
+    "slice",
+    "claim",
+    "evidence",
+    "provenance",
+    "strength",
+    "gold",
+    "critical"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "asc/laya-decision-dataset/v1" },
+    "caseId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "sourceRepository": { "const": "techbeansjp-free/AGENTS.md" },
+    "sourceCommit": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "observedAt": { "type": "string", "format": "date-time" },
+    "groupId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "slice": { "enum": ["general", "distribution"] },
+    "claim": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "lineStart", "lineEnd", "excerpt"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "lineStart": { "type": "integer", "minimum": 1 },
+          "lineEnd": { "type": "integer", "minimum": 1 },
+          "excerpt": { "type": "string", "minLength": 1, "maxLength": 8192 }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "artifactPath",
+        "failBeforeCommit",
+        "passAfterCommit"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "review-artifact",
+            "fix-commit",
+            "test-reproduction",
+            "distribution-check"
+          ]
+        },
+        "artifactPath": { "type": "string", "minLength": 1 },
+        "failBeforeCommit": { "type": ["string", "null"] },
+        "passAfterCommit": { "type": ["string", "null"] }
+      }
+    },
+    "strength": { "enum": ["strong", "weak", "excluded"] },
+    "gold": { "type": "object", "additionalProperties": { "type": "string" } },
+    "critical": { "type": "boolean" }
+  }
+}

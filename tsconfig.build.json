@@ -11,5 +11,12 @@
     "outDir": "dist"
   },
   "include": ["src/**/*.ts", "bin/**/*.ts"],
-  "exclude": ["scripts", "test", "dist", "node_modules"]
+  "exclude": [
+    "scripts",
+    "test",
+    "dist",
+    "node_modules",
+    "src/domain/laya-private-corpus.ts",
+    "src/adapters/laya-private-corpus.ts"
+  ]
 }

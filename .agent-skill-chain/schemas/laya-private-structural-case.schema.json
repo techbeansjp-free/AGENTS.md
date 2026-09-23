@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://techbeansjp-free.github.io/agent-skill-chain/schemas/laya-private-structural-case.schema.json",
+  "title": "ASC Laya Private Structural Case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "caseId",
+    "sourceClass",
+    "groupId",
+    "category",
+    "signals",
+    "gold",
+    "sanitizationPolicy"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "asc/laya-private-structural-case/v1" },
+    "caseId": { "type": "string", "pattern": "^case-[0-9a-f]{24}$" },
+    "sourceClass": { "const": "authorized-private-structural" },
+    "groupId": { "type": "string", "pattern": "^group-[0-9a-f]{24}$" },
+    "category": {
+      "enum": [
+        "authorization",
+        "null-safety",
+        "resource-lifecycle",
+        "error-handling",
+        "data-validation",
+        "concurrency",
+        "distribution",
+        "documentation-consistency"
+      ]
+    },
+    "signals": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "reachable-path",
+          "guard-present",
+          "guard-absent",
+          "reproduced-before",
+          "passes-after",
+          "static-evidence",
+          "spec-evidence",
+          "consumer-failure"
+        ]
+      }
+    },
+    "gold": { "enum": ["yes", "no", "insufficient-evidence"] },
+    "sanitizationPolicy": { "const": "asc/laya-private-structural/v1" }
+  }
+}

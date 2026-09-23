@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { loadProjectPolicySet } from "../src/domain/policy.js";
 import { isStagingLifecycleScanPath } from "../src/domain/staging.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".mjs"]);
+const ALLOWED_PYTHON_SOURCES = new Set(["scripts/laya_training_runner.py"]);
 const SOURCE_FILE_EXTENSIONS = new Set([
   ...SOURCE_EXTENSIONS,
   ".bash",
@@ -84,10 +86,32 @@ export function checkSourceQuality(root = process.cwd()) {
   for (const file of files) {
     const relative = path.relative(root, file).split(path.sep).join("/");
     const extension = path.extname(file).toLowerCase();
-    if (!SOURCE_EXTENSIONS.has(extension))
+    const allowedPython =
+      extension === ".py" && ALLOWED_PYTHON_SOURCES.has(relative);
+    if (!SOURCE_EXTENSIONS.has(extension) && !allowedPython)
       errors.push(
         `実装言語をTypeScriptへ集約したprojectに対象外sourceがあります: ${relative}`,
       );
+    if (allowedPython) {
+      const source = fs.readFileSync(file, "utf8");
+      if (!source.startsWith("#!/usr/bin/env python3\n"))
+        errors.push(`Python補助sourceのshebangが不正です: ${relative}`);
+      if (/\b(?:eval|exec)\s*\(/u.test(source))
+        errors.push(`Python補助sourceでeval/execを使用できません: ${relative}`);
+      const syntax = spawnSync(
+        "python3",
+        [
+          "-I",
+          "-c",
+          "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+          file,
+        ],
+        { cwd: root, encoding: "utf8", stdio: ["ignore", "ignore", "pipe"] },
+      );
+      if (syntax.status !== 0)
+        errors.push(`Python補助sourceの構文が不正です: ${relative}`);
+      continue;
+    }
     if (!SOURCE_EXTENSIONS.has(extension)) continue;
     const source = fs.readFileSync(file, "utf8");
     errors.push(
@@ -115,12 +139,9 @@ export function checkSourceQuality(root = process.cwd()) {
   }
   for (const language of ["python", "shell"]) {
     const decision = choices?.quality.auxiliaryLanguages[language];
-    if (
-      decision?.status !== "not-applicable" ||
-      !decision.reason ||
-      !decision.evidence
-    )
-      errors.push(`${language}の対象外理由と証拠がありません`);
+    const expected = language === "python" ? "applicable" : "not-applicable";
+    if (decision?.status !== expected || !decision.reason || !decision.evidence)
+      errors.push(`${language}の適用判断、理由、証拠が不正です`);
   }
   return { valid: errors.length === 0, errors, files: files.length };
 }

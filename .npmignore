@@ -1,0 +1,4 @@
+.agent-skill-chain/schemas/laya-sanitized-private-case.schema.json
+dist/**/*.d.ts
+dist/**/*.d.ts.map
+dist/**/*.js.map

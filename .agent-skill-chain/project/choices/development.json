@@ -203,9 +203,9 @@
     "runtimeValidation": "外部JSONをunknownで読み、policy・manifest・state・evidenceの入力種別別type guardとdomain validatorで未知field・型不正を拒否する",
     "auxiliaryLanguages": {
       "python": {
-        "status": "not-applicable",
-        "reason": "検査3本をTypeScriptへ統合しPython実装を所有しない",
-        "evidence": "scripts配下に.pyがなくTypeScript検査へ移行済み"
+        "status": "applicable",
+        "reason": "ASC runtimeから隔離したLaya公式学習環境の開発専用runnerだけをPythonで所有する",
+        "evidence": "scripts/laya_training_runner.pyをsource:checkの限定allowlistとPython構文検査で検証しpackage配布から除外する"
       },
       "shell": {
         "status": "not-applicable",
