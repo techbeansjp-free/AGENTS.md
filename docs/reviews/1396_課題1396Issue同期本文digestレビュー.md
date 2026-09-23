@@ -41,14 +41,14 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 
 ### 1.1 変更ファイル個別監査
 
-比較基点`241990d6562fb7fb04279d5a9ce0d674a1f31aaf`からH_implまでの17 pathを個別に監査した。生成物は再build後のsource対応とpackage境界を確認した。
+比較基点`241990d6562fb7fb04279d5a9ce0d674a1f31aaf`からH_implまでの18 pathを個別に監査した。生成物は再build後のsource対応とpackage境界を確認した。
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
-| `dist/src/adapters/github.js` | M | ASC package owner | 生成物 | GitHub本文JSON読取とread-back照合のcompile出力。再build後のclean差分で確認 | source → dist | AC-1396-02、SCN-INT-ISSUESYNC-027 | §8とpackage filesを照合。revert | pass |
-| `dist/src/cli-usage.js` | M | ASC package owner | 生成物 | 期待digest必須表示のcompile出力。再build後のclean差分で確認 | source → dist | AC-1396-03、SCN-INT-ISSUESYNC-028 | §8とpackage filesを照合。revert | pass |
-| `dist/src/cli.js` | M | ASC package owner | 生成物 | preview・apply digest拘束のcompile出力。再build後のclean差分で確認 | source → dist | AC-1396-01〜03、SCN-INT-ISSUESYNC-024/025/028 | §8とpackage filesを照合。revert | pass |
-| `dist/src/domain/issue.js` | M | ASC package owner | 生成物 | exact本文digestのcompile出力。再build後のclean差分で確認 | source → dist | AC-1396-01/03、SCN-UNIT-ISSUESYNC-026 | §8とpackage filesを照合。revert | pass |
+| `dist/src/adapters/github.js` | M | ASC package owner | 生成物 | 生成元`src/adapters/github.ts`との対応を`npm run build`で確認 | source → dist | AC-1396-02、SCN-INT-ISSUESYNC-027 | package内容検査で配布影響を確認。revert | pass |
+| `dist/src/cli-usage.js` | M | ASC package owner | 生成物 | 生成元`src/cli-usage.ts`との対応を`npm run build`で確認 | source → dist | AC-1396-03、SCN-INT-ISSUESYNC-028 | package内容検査で配布影響を確認。revert | pass |
+| `dist/src/cli.js` | M | ASC package owner | 生成物 | 生成元`src/cli.ts`との対応を`npm run build`で確認 | source → dist | AC-1396-01〜03、SCN-INT-ISSUESYNC-024/025/028 | package内容検査で配布影響を確認。revert | pass |
+| `dist/src/domain/issue.js` | M | ASC package owner | 生成物 | 生成元`src/domain/issue.ts`との対応を`npm run build`で確認 | source → dist | AC-1396-01/03、SCN-UNIT-ISSUESYNC-026 | package内容検査で配布影響を確認。revert | pass |
 | `docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md` | M | ASC spec owner | docs/specs | exact本文・期待digestと旧preview再生成の契約 | spec → source/test | AC-1396-01〜03、SCN-INT-ISSUESYNC-028 | 履歴保持。revert | pass |
 | `docs/specs/15_要件追跡/00_追跡表.md` | M | ASC trace owner | docs/specs | 要件からSCN-028を含む検証経路を追跡 | spec → source/test | AC-1396-01〜03、SCN-INT-ISSUESYNC-024〜028 | orphan検査。revert | pass |
 | `docs/specs/15_要件追跡/01_変更履歴.md` | M | ASC trace owner | docs/specs | Issue #1396の変更理由・互換性を記録 | spec → source | Issue #1396 | 履歴保持。revert | pass |
@@ -58,12 +58,13 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | `src/domain/issue.ts` | M | ASC package owner | domain | 生成本文の末尾byteを保ったSHA-256 | adapter非依存 | AC-1396-01/03、SCN-UNIT-ISSUESYNC-026 | 純粋関数。revert | pass |
 | `test/features/e2e/workflow-step-enforcement-cli.feature` | M | ASC test owner | test | 公開CLIの末尾LF・stale preview・復旧反例 | test → CLI | SCN-INT-ISSUESYNC-024/025/027/028 | fake provider、外部writeなし。revert | pass |
 | `test/features/unit/issue-scaffolding.feature` | M | ASC test owner | test | LF 0/1/2件の境界値 | test → domain | SCN-UNIT-ISSUESYNC-026 | 固定SHA-256。revert | pass |
+| `test/steps/cli-usage.steps.ts` | M | ASC test owner | test | 必須digest追加後も既存staging事前検証へ到達するfixture | test → CLI | SCN-UNIT-CLIUSAGE-014 | digestは同じbody Bufferから算出、provider write前拒否。revert | pass |
 | `test/steps/delivery-finalize.steps.ts` | M | ASC test owner | test | GitHub JSON read-backにfixtureを整合 | test → adapter | SCN-INT-GITHUB-001/017/018 | 外部writeなし。revert | pass |
 | `test/steps/issue-sync-body.steps.ts` | M | ASC test owner | test | exact digest fixture | test → domain | SCN-UNIT-ISSUESYNC-026 | 固定expected SHA。revert | pass |
 | `test/steps/staging-lifecycle.steps.ts` | M | ASC test owner | test | staging運用のJSON provider fixture | test → CLI/adapter | SCN-INT-STAGING-006 | 外部writeなし。revert | pass |
 | `test/steps/workflow-step-enforcement.steps.ts` | M | ASC test owner | test | provider本文・stale digest時edit 0を観測 | test → CLI/adapter | SCN-INT-ISSUESYNC-024/025/027/028 | provider edit計数、外部writeなし。revert | pass |
 
-- 基準SHAとの差分17 pathと上表17行は一致する。
+- 基準SHAとの差分18 pathと上表18行は一致する。
 - 汎用Issue同期機構はpackageに、契約・追跡はspecに、外部writeを行わないfixtureはtestに置いた。循環やproject固有値の混入はない。
 - High修正後は`src/cli.ts`と隣接adapter、usage、SCN-028、生成物・仕様の差分を再確認した。
 
@@ -75,7 +76,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 |---|---|---|---|---|---|---|---|
 | DISC-1396-01 | 5つのhash経路の`trimEnd()`が本文を変形 | AC-1396-01〜03 | なし | raw UTF-8本文へ統一 | 末尾LF反例、SCN-024〜026 | updated | pass |
 | DISC-1396-02 | `--jq`表示LFとadapter末尾trimでremote本文を誤認 | AC-1396-02、INV-02/03 | なし | GitHub JSON envelopeのbodyを正本としbyte完全一致 | SCN-027、Opus review | updated | pass |
-| DISC-1396-03 | 別のfake providerが旧raw本文形式を返していた | 既存SCN-INT-GITHUB-001/017/018、SCN-INT-STAGING-006 | なし | fixtureをJSON envelopeへ修正 | 全件Cucumber（集計待ち） | no-spec-impact | pass |
+| DISC-1396-03 | 別のfake providerが旧raw本文形式を返していた | 既存SCN-INT-GITHUB-001/017/018、SCN-INT-STAGING-006 | なし | fixtureをJSON envelopeへ修正 | ホスト全件2,303 scenario合格 | no-spec-impact | pass |
 
 ### 2.1 受け入れ条件とシナリオ
 
