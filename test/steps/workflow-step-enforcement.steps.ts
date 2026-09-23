@@ -2451,11 +2451,10 @@ function preparePullRequest(
   spawnSync("git", ["commit", "-q", "-m", "trusted policy"], {
     cwd: root,
   });
-  const implementationCommitSha = spawnSync("git", ["rev-parse", "HEAD"], {
+  const baseSha = spawnSync("git", ["rev-parse", "HEAD"], {
     cwd: root,
     encoding: "utf8",
   }).stdout.trim();
-  const baseSha = implementationCommitSha;
   spawnSync("git", ["update-ref", "refs/remotes/origin/main", baseSha], {
     cwd: root,
   });
@@ -2464,6 +2463,19 @@ function preparePullRequest(
     ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
     { cwd: root },
   );
+  // Merge可能なPRではreview対象の実装commitをbaseより後に置く。
+  // review artifactはさらに後の専用commitへ分離する。
+  if (mergeMode !== "disabled" && workflowMode !== "poc") {
+    fs.writeFileSync(path.join(root, "implementation.txt"), "product change\n");
+    spawnSync("git", ["add", "implementation.txt"], { cwd: root });
+    spawnSync("git", ["commit", "-q", "-m", "implementation"], {
+      cwd: root,
+    });
+  }
+  const implementationCommitSha = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+  }).stdout.trim();
   const pocDeclaration = workflowMode === "poc" ? validPoc() : undefined;
   /**
    * **PoC baselineはstaging生成時のHEADで固定される**（`src/domain/issue.ts`）。
@@ -4511,6 +4523,19 @@ if (exact(["auth", "status"])) {
           prepared.root,
           prepared.env,
         );
+        // 新規PRでは同一HEAD・非artifact suffixを作成前に拒否する。
+        // 既存のmerge側拒否だけで偶然passしたと扱わない。
+        if (disposition === "untracked" || disposition === "extra-file")
+          assert.notEqual(
+            created.status,
+            0,
+            `${disposition} artifactはPR作成前に拒否する必要があります`,
+          );
+        if (disposition === "untracked")
+          assert.match(
+            created.stdout + created.stderr,
+            /H_impl.*H_final.*同一/u,
+          );
         const rejected =
           created.status === 0 ? executeDeliveryMerge(prepared) : created;
         assert.notEqual(
