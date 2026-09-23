@@ -2269,6 +2269,7 @@ function preparedMergeReviewEvidence(prepared: PreparedPullRequest) {
 function contextIsolatedReviewArtifact(
   baseSha: string,
   implementationSha: string,
+  reviewedPath: string,
 ): string {
   return `# 04 レビュー
 
@@ -2287,7 +2288,7 @@ function contextIsolatedReviewArtifact(
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
-| \`.agent-skill-chain/policy/default.json\` | M | package owner | package | fixture policy | pass | AC-WF-005 | revert可能 | pass |
+| \`${reviewedPath}\` | M | package owner | package | fixture implementation | pass | AC-WF-005 | revert可能 | pass |
 
 ## 2. 受け入れ条件の確認
 
@@ -2501,6 +2502,9 @@ function preparePullRequest(
     const reviewArtifact = contextIsolatedReviewArtifact(
       baseSha,
       implementationCommitSha,
+      implementationCommitSha === baseSha
+        ? ".agent-skill-chain/policy/default.json"
+        : "implementation.txt",
     );
     if (artifactDisposition !== "untracked")
       fs.writeFileSync(
@@ -2680,7 +2684,13 @@ function preparePullRequest(
   if (artifactDisposition === "untracked")
     fs.writeFileSync(
       path.join(root, "docs", "reviews", "90_test_review.md"),
-      contextIsolatedReviewArtifact(baseSha, implementationCommitSha),
+      contextIsolatedReviewArtifact(
+        baseSha,
+        implementationCommitSha,
+        implementationCommitSha === baseSha
+          ? ".agent-skill-chain/policy/default.json"
+          : "implementation.txt",
+      ),
     );
   return finalizePreparedPullRequest({
     world,
@@ -3134,6 +3144,7 @@ const args = process.argv.slice(2);
 const sha = ${JSON.stringify(prepared.headSha)};
 const implementationSha = ${JSON.stringify(prepared.implementationCommitSha)};
 const mergeSha = ${JSON.stringify("b".repeat(40))};
+const rebasedImplementationSha = ${JSON.stringify("c".repeat(40))};
 const prUrl = "https://github.com/o/r/pull/1";
 const issueUrl = "https://github.com/o/r/issues/877";
 const controlFile = ${JSON.stringify(controlFile)};
@@ -3576,10 +3587,22 @@ if (exact(["--version"])) {
         : { node_id: control.implementationAuthorId },
     }),
   );
+} else if (exact(["api", "repos/o/r/commits/" + rebasedImplementationSha])) {
+  process.stdout.write(
+    JSON.stringify({
+      sha: rebasedImplementationSha,
+      commit: { tree: { sha: control.mergeTreeSha } },
+      parents: [{ sha: baseSha }],
+    }),
+  );
 } else if (exact(["api", "repos/o/r/commits/" + mergeSha])) {
   const parents = control.autoMergeMethod === "MERGE"
     ? [{ sha: baseSha }, { sha }]
-    : [{ sha: control.terminalParentTampered ? "e".repeat(40) : baseSha }];
+    : [{ sha: control.terminalParentTampered
+      ? "e".repeat(40)
+      : control.autoMergeMethod === "REBASE"
+        ? rebasedImplementationSha
+        : baseSha }];
   process.stdout.write(
     JSON.stringify({
       sha: mergeSha,
