@@ -3848,7 +3848,10 @@ When("{string}のE2E検査を実行する", async function (scenarioId: string) 
       );
       assert.match(rejected.stdout + rejected.stderr, /merge/u);
       assert.match(rejected.stdout + rejected.stderr, /review reanchor/u);
-      assert.doesNotMatch(rejected.stdout + rejected.stderr, /\bpr reanchor\b/u);
+      assert.doesNotMatch(
+        rejected.stdout + rejected.stderr,
+        /\bpr reanchor\b/u,
+      );
       assert.equal(fs.existsSync(stateFile), false);
       assert.equal(
         deliveryProviderCalls(prepared).filter(isCreateCall).length,
