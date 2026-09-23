@@ -29,17 +29,17 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | .agent-skill-chain/tmp/issues/20260923_085958_課題1308一時ライフサイクル領域のsource走査除外 | staging digest 8b449bf9a63cd3f3fae06ec8cf50ab5f9ffd106a10d10923f1b9d33a94127461 | 既存コード |
-| 差分 | `77d4ba021ede59ca290b8eb077d301f307c65467`..`4aade831724f26bce8abe404b1fd88a36214abe2` | 1 path | 既存コード |
+| 差分 | `77d4ba021ede59ca290b8eb077d301f307c65467`..`5d48cc5bfc28395df76fb8a9f67120279634ba5d` | proposal 2 commits・1 path | 既存コード |
 | テスト | `npm run quality`ほか全品質gate | 2,316シナリオ。依存物symlinkによるdogfooding 6件の環境失敗を実体copy後に6/6再実行し、未解決失敗0。build・文書・trace・architecture・conformance・packageも合格 | テスト出力 |
 | 仕様 | `docs/specs/02_要件/04_仕様・品質管理要件.md` REQ-SQ-006・012 | proposal段階は既存の二段階契約を適用し、仕様変更なし | 既存文書 |
 | commit前candidate | .github/trusted-quality-proposals.json | H_impl 5d48cc5bfc28395df76fb8a9f67120279634ba5d | Git index |
-| Phase A artifact | `docs/reviews/1308_課題1308source走査除外proposalレビュー.md` | H_impl後にこの1 fileだけをcommitする | Git観測 |
+| Phase A artifact | `docs/reviews/1308_課題1308source走査除外proposal再構成レビュー.md` | H_impl後のevidence-only suffixでこの1 pathだけを変更する | Git観測 |
 | review session | 再構成review handoff | exact H_impl `5d48cc5bfc28395df76fb8a9f67120279634ba5d`、肯定・敵対reviewのread-only証拠 | review記録 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: はい。proposalは将来の適用targetを固定するだけで、本commitのprotected変更を承認しない。
-- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: artifact-only commit後にGitで再確認する。H_implは固定済み。
+- `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: はい。H_impl後のevidence-only suffixは本review artifact 1 pathだけである。
 - reviewerの独立性が要求水準を満たす: はい。実装contextと別のOpus contextがexact H_implをread-only再レビューした。
-- 既定branch追随を行った場合、取り込みがartifact commitより前にあり、`比較基点`が取り込んだ既定branch tip、`H_impl`がartifact直前の最新commitを指し、個別監査表を`比較基点..H_impl`から再生成した: 追随なし。比較基点は着手時のorigin/mainで、H_implはその直接の子である。
+- 既定branch追随を行った場合、取り込みがartifact commitより前にあり、`比較基点`が取り込んだ既定branch tip、`H_impl`がartifact直前の最新commitを指し、個別監査表を`比較基点..H_impl`から再生成した: 最新main `77d4ba021ede59ca290b8eb077d301f307c65467`からproposal登録とprotected closure修正の2 commitsを積み、その2件目をH_implへ固定した。H_impl以後は同じreview artifact 1 pathだけを変更した。
 
 ### 1.1 変更ファイル個別監査
 
