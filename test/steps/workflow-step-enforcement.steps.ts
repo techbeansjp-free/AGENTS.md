@@ -3919,22 +3919,27 @@ When("{string}のE2E検査を実行する", async function (scenarioId: string) 
         undefined,
         "poc",
       );
-      const advanced = divergeDeliveryBase(prepared);
-      const created = createDeliveryPullRequest(prepared);
-      assert.match(created.stdout, /warning/u);
-      assert.match(created.stdout, new RegExp(advanced, "u"));
-      assert.match(created.stdout, /pull_request_complete/u);
+      divergeDeliveryBase(prepared);
+      const rejected = executeCli(
+        [...prepared.args, "--apply", "--authorize=approved"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /PoC baseline.*ancestor/u,
+      );
       assert.equal(
         deliveryProviderCalls(prepared).filter(isCreateCall).length,
-        1,
+        0,
       );
-      const state = parseDeliveryState(
-        fs.readFileSync(
+      assert.equal(
+        fs.existsSync(
           path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
-          "utf8",
         ),
+        false,
       );
-      assert.equal(state.step11?.outcome, "pull-request");
       break;
     }
     case "SCN-E2E-WFSTEP-066": {
