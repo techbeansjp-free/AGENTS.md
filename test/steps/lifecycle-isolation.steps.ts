@@ -589,7 +589,13 @@ Then("削除済みと未処理と復旧方法を報告してrecordを保持す�
   assert.equal(this.applyResult.applied, false);
   assert.ok(this.applyResult.removed.length > 0);
   assert.ok(this.applyResult.pending.includes("AGENTS.md"));
-  assert.match(this.applyResult.recovery, /再実行/u);
+  assert.match(this.applyResult.recovery, /recordと資産を照合/u);
+  assert.equal(
+    fs.existsSync(
+      path.join(this.root, ".agent-skill-chain/managed-assets-mutation.lock"),
+    ),
+    true,
+  );
   assert.equal(fs.existsSync(recordPath(this.root)), true);
 });
 

@@ -50,3 +50,13 @@ Feature: managed asset recordを既存entryの置換なしで公開する
     Given managed record公開検証用の隔離directoryがある
     When 同じ親へ2つのupdateが競合する
     Then 先着のsnapshotだけが残りdoctorは健全である
+
+  Scenario: SCN-INT-LIFECYCLE-055 hardlink確認probeの競合entryを消さない
+    Given managed record公開検証用の隔離directoryがある
+    When hardlink確認の公開直前に別のsymlinkを挿入する
+    Then 競合したprobe entryと参照先は保持される
+
+  Scenario: SCN-INT-LIFECYCLE-056 途中失敗後のlockを保持し次の適用を止める
+    Given managed record公開検証用の隔離directoryがある
+    When 資産処理後のsnapshot公開が失敗する
+    Then 中断lockが残りdoctorと次の適用を停止する

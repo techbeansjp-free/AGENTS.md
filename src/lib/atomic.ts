@@ -533,6 +533,7 @@ export function writeFileNoReplace(
   const published = descriptorPath(pinned, path.basename(resolved));
   const expected = Buffer.from(contents);
   let descriptor: number | undefined;
+  let temporaryIdentity: fs.Stats | undefined;
   let failure: unknown;
   try {
     descriptor = fs.openSync(
@@ -543,6 +544,7 @@ export function writeFileNoReplace(
         fs.constants.O_NOFOLLOW,
       0o600,
     );
+    temporaryIdentity = fs.fstatSync(descriptor);
     writeFully(descriptor, expected);
     fs.fsyncSync(descriptor);
     const reread = Buffer.alloc(expected.length);
@@ -563,8 +565,22 @@ export function writeFileNoReplace(
       fs.fstatSync(descriptor).size !== expected.length
     )
       throw new Error("no-replace公開前の内容が一致しません");
+    const sourceEntry = fs.lstatSync(temporary);
+    if (
+      !sourceEntry.isFile() ||
+      sourceEntry.dev !== temporaryIdentity.dev ||
+      sourceEntry.ino !== temporaryIdentity.ino
+    )
+      throw new Error("no-replace公開用の一時fileが差し替えられました");
     assertPinnedDirectory(pinned);
     fs.linkSync(temporary, published);
+    const publishedEntry = fs.lstatSync(published);
+    if (
+      !publishedEntry.isFile() ||
+      publishedEntry.dev !== temporaryIdentity.dev ||
+      publishedEntry.ino !== temporaryIdentity.ino
+    )
+      throw new Error("no-replace公開先が検証済みfileと一致しません");
     fsyncDirectory(pinned);
   } catch (error) {
     failure = error;
@@ -576,11 +592,20 @@ export function writeFileNoReplace(
       failure ??= error;
     }
   }
-  try {
-    fs.unlinkSync(temporary);
-    fsyncDirectory(pinned);
-  } catch (error) {
-    failure ??= error;
+  if (temporaryIdentity !== undefined) {
+    try {
+      const sourceEntry = fs.lstatSync(temporary);
+      if (
+        !sourceEntry.isFile() ||
+        sourceEntry.dev !== temporaryIdentity.dev ||
+        sourceEntry.ino !== temporaryIdentity.ino
+      )
+        throw new Error("no-replace公開用の一時fileが差し替えられました");
+      fs.unlinkSync(temporary);
+      fsyncDirectory(pinned);
+    } catch (error) {
+      failure ??= error;
+    }
   }
   try {
     fs.closeSync(pinned.descriptor);

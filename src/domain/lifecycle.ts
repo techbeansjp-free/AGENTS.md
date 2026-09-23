@@ -47,6 +47,7 @@ const NAMESPACE_ASSETS = [
 ];
 const MANAGED_RECORD = ".agent-skill-chain/managed-assets.json";
 const MANAGED_RECORDS = ".agent-skill-chain/managed-assets-records";
+const MANAGED_MUTATION_LOCK = ".agent-skill-chain/managed-assets-mutation.lock";
 const HOST_SKILL_SOURCE = ".agent-skill-chain/skills/asc-step/SKILL.md";
 const HOST_SKILL_TARGETS = [
   ".claude/skills/asc-step/SKILL.md",
@@ -141,36 +142,21 @@ function sha256Bytes(contents: string): string {
 }
 
 /** Test the actual filesystem's hardlink operation before changing assets. */
-function assertSnapshotPublicationSupported(
-  target: string,
-  recordPresent: boolean,
-): void {
-  const directory = recordPresent
-    ? snapshotDirectory(target)
-    : path.join(target, ".agent-skill-chain");
-  const directoryWasPresent = pathEntryExists(directory);
-  fs.mkdirSync(directory, { recursive: true });
-  // Use the same temporary-name class as interrupted record writes. A crash
-  // must not leave a probe directory that the chain reader treats as an orphan.
-  const suffix = `${process.pid}-${crypto.randomBytes(12).toString("hex")}`;
-  const source = path.join(directory, `.record-link-probe.json.tmp-${suffix}`);
+function assertSnapshotPublicationSupported(target: string): void {
+  // Exercise the actual publication primitive, including its descriptor path
+  // on Linux. The probe lives outside the snapshot chain.
   const destination = path.join(
-    directory,
-    `.record-link-probe-target.json.tmp-${suffix}`,
+    target,
+    ".agent-skill-chain",
+    `.record-link-probe-${process.pid}-${crypto.randomBytes(12).toString("hex")}.tmp`,
   );
+  let published = false;
   try {
-    fs.writeFileSync(source, "probe", { flag: "wx" });
-    fs.linkSync(source, destination);
+    writeFileNoReplace(destination, "probe");
+    published = true;
   } finally {
-    fs.rmSync(destination, { force: true });
-    fs.rmSync(source, { force: true });
-    if (!directoryWasPresent) {
-      try {
-        fs.rmdirSync(directory);
-      } catch {
-        // A concurrent entry or a nonempty directory is never removed.
-      }
-    }
+    // A competing entry which made link fail is never ours to remove.
+    if (published) fs.rmSync(destination);
   }
 }
 
@@ -202,6 +188,53 @@ function hasManagedAssetRecord(target: string): boolean {
   if (!pathEntryExists(directory)) return false;
   if (!fs.lstatSync(directory).isDirectory()) return true;
   return snapshotEntries(target).length > 0;
+}
+
+/** Serialize cooperative lifecycle apply operations before observing assets. */
+function withManagedMutationLock<T>(
+  target: string,
+  action: (markDirty: () => void) => T,
+  complete: (result: T) => boolean = () => true,
+): T {
+  const parent = path.join(target, ".agent-skill-chain");
+  const parentWasPresent = pathEntryExists(parent);
+  fs.mkdirSync(parent, { recursive: true });
+  const lockDirectory = path.join(target, MANAGED_MUTATION_LOCK);
+  try {
+    fs.mkdirSync(lockDirectory, { mode: 0o700 });
+  } catch (error) {
+    if (isRecord(error) && error.code === "EEXIST")
+      throw new Error(
+        `${MANAGED_MUTATION_LOCK}が既にあります。進行中の操作または中断を確認し、recordと資産を照合するまで再実行しないでください`,
+        { cause: error },
+      );
+    throw error;
+  }
+  let dirty = false;
+  let finished = false;
+  try {
+    const result = action(() => {
+      dirty = true;
+    });
+    finished = complete(result);
+    return result;
+  } finally {
+    // An interrupted write leaves the lock as evidence until an operator
+    // reconciles record and assets; never turn an old record into success.
+    if (!dirty || finished) {
+      try {
+        fs.rmdirSync(lockDirectory);
+      } finally {
+        if (!parentWasPresent) {
+          try {
+            fs.rmdirSync(parent);
+          } catch {
+            // An operation created assets or a concurrent entry; preserve it.
+          }
+        }
+      }
+    }
+  }
 }
 
 function validateManagedAssetRecord(
@@ -540,6 +573,18 @@ function recoveryDiagnostic(target: string): string {
 }
 
 export function init(target: string, options: { apply: boolean }) {
+  return options.apply
+    ? withManagedMutationLock(target, (markDirty) =>
+        initUnlocked(target, options, markDirty),
+      )
+    : initUnlocked(target, options);
+}
+
+function initUnlocked(
+  target: string,
+  options: { apply: boolean },
+  markDirty: () => void = () => {},
+) {
   const assets = mappings(target);
   const conflicts = assets
     .filter(
@@ -559,7 +604,7 @@ export function init(target: string, options: { apply: boolean }) {
   if (!options.apply)
     return { applied: false, assets: assets.map(({ dest }) => dest) };
   const recordPresent = hasManagedAssetRecord(target);
-  assertSnapshotPublicationSupported(target, recordPresent);
+  assertSnapshotPublicationSupported(target);
   const expectedParent = recordPresent
     ? readCurrentManagedRecord(target).parent
     : null;
@@ -569,10 +614,13 @@ export function init(target: string, options: { apply: boolean }) {
   };
   for (const { src, dest } of assets) {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    if (!pathEntryExists(dest))
+    if (!pathEntryExists(dest)) {
+      markDirty();
       fs.copyFileSync(src, dest, fs.constants.COPYFILE_EXCL);
+    }
     record.files[relativeKey(target, dest)] = digest(dest);
   }
+  markDirty();
   publishManagedAssetRecord(target, record, recordPresent, expectedParent);
   return { applied: true, assets: Object.keys(record.files) };
 }
@@ -749,6 +797,18 @@ export function upgrade(
   target: string,
   options: { apply: boolean; recoverRecord?: boolean },
 ) {
+  return options.apply
+    ? withManagedMutationLock(target, (markDirty) =>
+        upgradeUnlocked(target, options, markDirty),
+      )
+    : upgradeUnlocked(target, options);
+}
+
+function upgradeUnlocked(
+  target: string,
+  options: { apply: boolean; recoverRecord?: boolean },
+  markDirty: () => void = () => {},
+) {
   const recordPresent = hasManagedAssetRecord(target);
   /**
    * **record不在からの復旧は明示の意図を要求する**（Issue #1305、#1307）。
@@ -815,7 +875,7 @@ export function upgrade(
       adopted: adoptable,
       retained,
     };
-  assertSnapshotPublicationSupported(target, recordPresent);
+  assertSnapshotPublicationSupported(target);
   const next: { version: string; files: Record<string, string> } = {
     version: PACKAGE_VERSION,
     files: { ...old.files },
@@ -834,13 +894,16 @@ export function upgrade(
       retained.push(item.key);
       continue;
     }
-    if (classification === "place")
+    if (classification === "place") {
+      markDirty();
       fs.copyFileSync(item.src, item.dest, fs.constants.COPYFILE_EXCL);
-    else if (classification === "overwrite")
+    } else if (classification === "overwrite") {
+      markDirty();
       fs.copyFileSync(item.src, item.dest);
-    else adopted.push(item.key);
+    } else adopted.push(item.key);
     next.files[item.key] = digest(item.dest);
   }
+  markDirty();
   publishManagedAssetRecord(target, next, recordPresent, expectedParent);
   return { applied: true, adopted, retained };
 }
@@ -848,6 +911,20 @@ export function upgrade(
 export function uninstall(
   target: string,
   options: { apply: boolean },
+): UninstallResult {
+  return options.apply
+    ? withManagedMutationLock(
+        target,
+        (markDirty) => uninstallUnlocked(target, options, markDirty),
+        (result) => result.applied,
+      )
+    : uninstallUnlocked(target, options);
+}
+
+function uninstallUnlocked(
+  target: string,
+  options: { apply: boolean },
+  markDirty: () => void = () => {},
 ): UninstallResult {
   const recordPath = path.join(target, MANAGED_RECORD);
   if (!hasManagedAssetRecord(target))
@@ -890,6 +967,11 @@ export function uninstall(
 
   const removed: string[] = [];
   const pending: string[] = [];
+  let partialMutation = false;
+  const noteRemoval = (): void => {
+    partialMutation = true;
+    markDirty();
+  };
   for (const asset of candidates) {
     try {
       const file = resolveManagedAsset(target, asset.relative);
@@ -903,6 +985,7 @@ export function uninstall(
         continue;
       }
       fs.rmSync(file);
+      noteRemoval();
       removed.push(asset.relative);
     } catch {
       pending.push(asset.relative);
@@ -913,6 +996,7 @@ export function uninstall(
     for (const file of snapshotPaths.reverse()) {
       try {
         fs.rmSync(file);
+        noteRemoval();
       } catch {
         pending.push(relativeKey(target, file));
         break;
@@ -921,6 +1005,7 @@ export function uninstall(
     if (pending.length === 0) {
       try {
         fs.rmSync(recordPath);
+        noteRemoval();
       } catch {
         pending.push(MANAGED_RECORD);
       }
@@ -935,7 +1020,9 @@ export function uninstall(
     pending,
     recovery: applied
       ? "不要"
-      : "権限と未処理対象を確認し、managed asset recordを保持したままdelete --applyを再実行してください",
+      : partialMutation
+        ? `${MANAGED_MUTATION_LOCK}を保持しました。recordと資産を照合し、中断した操作がないことを確認してから復旧してください`
+        : "権限と未処理対象を確認し、managed asset recordを保持したままdelete --applyを再実行してください",
     consumerAssetsPreserved: [
       ".agent-skill-chain/tmp",
       ".agent-skill-chain/project-policy.json",
@@ -1002,6 +1089,10 @@ export function doctor(target: string, worktreeObservations?: unknown) {
   ];
   const installed = hasManagedAssetRecord(target);
   const diagnostics: string[] = [];
+  if (pathEntryExists(path.join(target, MANAGED_MUTATION_LOCK)))
+    diagnostics.push(
+      `${MANAGED_MUTATION_LOCK}: 進行中または中断した操作があります。recordと資産を照合してから復旧してください`,
+    );
   let files: Record<string, string> = {};
   let managedAssets: ManagedAsset[] = [];
   /**

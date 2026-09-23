@@ -14,6 +14,7 @@ interface SnapshotWorld extends WorkflowWorld {
   root: string;
   recordPath: string;
   outsidePath: string;
+  probePath?: string;
   rejection?: unknown;
   originalRecord?: string;
   assetBefore?: string;
@@ -160,6 +161,43 @@ When("hardlinkを利用できない状態でinstallを適用する", function ()
   }
 });
 
+When("hardlink確認の公開直前に別のsymlinkを挿入する", function () {
+  const original = fs.linkSync;
+  let inserted = false;
+  try {
+    (fs as { linkSync: typeof fs.linkSync }).linkSync = ((
+      source: string,
+      destination: string,
+    ) => {
+      if (
+        !inserted &&
+        path.basename(destination).startsWith(".record-link-probe-")
+      ) {
+        fs.symlinkSync(this.outsidePath, destination);
+        this.probePath = path.join(
+          this.root,
+          ".agent-skill-chain",
+          path.basename(destination),
+        );
+        inserted = true;
+      }
+      return original(source, destination);
+    }) as typeof fs.linkSync;
+    assert.throws(() => init(this.root, { apply: true }), /EEXIST/u);
+  } finally {
+    (fs as { linkSync: typeof fs.linkSync }).linkSync = original;
+  }
+  assert.equal(inserted, true);
+});
+
+Then("競合したprobe entryと参照先は保持される", function () {
+  assert.ok(this.probePath);
+  assert.equal(fs.lstatSync(this.probePath).isSymbolicLink(), true);
+  assert.equal(fs.readFileSync(this.outsidePath, "utf8"), "outside\n");
+  assert.equal(fs.existsSync(this.recordPath), false);
+  assert.equal(fs.existsSync(path.join(this.root, "AGENTS.md")), false);
+});
+
 Then("recordとpackage資産は配置されない", function () {
   assert.equal(fs.existsSync(this.recordPath), false);
   assert.equal(fs.existsSync(path.join(this.root, "AGENTS.md")), false);
@@ -285,14 +323,14 @@ When("同じ親へ2つのupdateが競合する", function () {
         )
       ) {
         nested = true;
-        upgrade(this.root, { apply: true });
+        assert.throws(
+          () => upgrade(this.root, { apply: true }),
+          /managed-assets-mutation\.lock/u,
+        );
       }
       return original(source, destination);
     }) as typeof fs.linkSync;
-    assert.throws(
-      () => upgrade(this.root, { apply: true }),
-      /公開先に別のentry|並行更新/u,
-    );
+    assert.equal(upgrade(this.root, { apply: true }).applied, true);
   } finally {
     (fs as { linkSync: typeof fs.linkSync }).linkSync = original;
   }
@@ -302,4 +340,43 @@ When("同じ親へ2つのupdateが競合する", function () {
 Then("先着のsnapshotだけが残りdoctorは健全である", function () {
   assert.equal(fs.readdirSync(snapshotDirectory(this.root)).length, 1);
   assert.equal(doctor(this.root).healthy, true);
+});
+
+When("資産処理後のsnapshot公開が失敗する", function () {
+  init(this.root, { apply: true });
+  const original = fs.linkSync;
+  try {
+    (fs as { linkSync: typeof fs.linkSync }).linkSync = ((
+      source: string,
+      destination: string,
+    ) => {
+      if (
+        /^(?:legacy|snapshot)-[a-f0-9]{64}\.json$/u.test(
+          path.basename(destination),
+        )
+      )
+        throw new Error("snapshot publication interrupted");
+      return original(source, destination);
+    }) as typeof fs.linkSync;
+    assert.throws(
+      () => upgrade(this.root, { apply: true }),
+      /snapshot publication interrupted/u,
+    );
+  } finally {
+    (fs as { linkSync: typeof fs.linkSync }).linkSync = original;
+  }
+});
+
+Then("中断lockが残りdoctorと次の適用を停止する", function () {
+  const lockDirectory = path.join(
+    this.root,
+    ".agent-skill-chain",
+    "managed-assets-mutation.lock",
+  );
+  assert.equal(fs.lstatSync(lockDirectory).isDirectory(), true);
+  assert.equal(doctor(this.root).healthy, false);
+  assert.throws(
+    () => upgrade(this.root, { apply: true }),
+    /managed-assets-mutation\.lock/u,
+  );
 });
