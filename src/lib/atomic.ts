@@ -515,3 +515,102 @@ export function writeFileAtomic(
   }
   if (failure !== undefined) throw failure;
 }
+
+/** Publish complete bytes only when the destination entry is absent.
+ * `link` is the commit point: an entry inserted during validation is never
+ * replaced. The temporary file is fully written, fsynced and read back first.
+ */
+export function writeFileNoReplace(
+  destination: string,
+  contents: string,
+): void {
+  const resolved = path.resolve(destination);
+  const parent = path.dirname(resolved);
+  fs.mkdirSync(parent, { recursive: true });
+  const pinned = pinDirectory(parent);
+  const temporaryLeaf = `.${path.basename(resolved)}.tmp-${process.pid}-${crypto.randomBytes(12).toString("hex")}`;
+  const temporary = descriptorPath(pinned, temporaryLeaf);
+  const published = descriptorPath(pinned, path.basename(resolved));
+  const expected = Buffer.from(contents);
+  let descriptor: number | undefined;
+  let temporaryIdentity: fs.Stats | undefined;
+  let failure: unknown;
+  try {
+    descriptor = fs.openSync(
+      temporary,
+      fs.constants.O_RDWR |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        fs.constants.O_NOFOLLOW,
+      0o600,
+    );
+    temporaryIdentity = fs.fstatSync(descriptor);
+    writeFully(descriptor, expected);
+    fs.fsyncSync(descriptor);
+    const reread = Buffer.alloc(expected.length);
+    let offset = 0;
+    while (offset < reread.length) {
+      const count = fs.readSync(
+        descriptor,
+        reread,
+        offset,
+        reread.length - offset,
+        offset,
+      );
+      if (count <= 0) throw new Error("no-replace公開前の再読取に失敗しました");
+      offset += count;
+    }
+    if (
+      !reread.equals(expected) ||
+      fs.fstatSync(descriptor).size !== expected.length
+    )
+      throw new Error("no-replace公開前の内容が一致しません");
+    const sourceEntry = fs.lstatSync(temporary);
+    if (
+      !sourceEntry.isFile() ||
+      sourceEntry.dev !== temporaryIdentity.dev ||
+      sourceEntry.ino !== temporaryIdentity.ino
+    )
+      throw new Error("no-replace公開用の一時fileが差し替えられました");
+    assertPinnedDirectory(pinned);
+    fs.linkSync(temporary, published);
+    const publishedEntry = fs.lstatSync(published);
+    if (
+      !publishedEntry.isFile() ||
+      publishedEntry.dev !== temporaryIdentity.dev ||
+      publishedEntry.ino !== temporaryIdentity.ino
+    )
+      throw new Error("no-replace公開先が検証済みfileと一致しません");
+    fsyncDirectory(pinned);
+  } catch (error) {
+    failure = error;
+  }
+  if (descriptor !== undefined) {
+    try {
+      fs.closeSync(descriptor);
+    } catch (error) {
+      failure ??= error;
+    }
+  }
+  if (temporaryIdentity !== undefined) {
+    try {
+      const sourceEntry = fs.lstatSync(temporary);
+      if (
+        !sourceEntry.isFile() ||
+        sourceEntry.dev !== temporaryIdentity.dev ||
+        sourceEntry.ino !== temporaryIdentity.ino
+      )
+        throw new Error("no-replace公開用の一時fileが差し替えられました");
+      fs.unlinkSync(temporary);
+      fsyncDirectory(pinned);
+    } catch (error) {
+      failure ??= error;
+    }
+  }
+  try {
+    fs.closeSync(pinned.descriptor);
+  } catch (error) {
+    failure ??= error;
+  }
+  if (failure !== undefined) throw failure;
+}

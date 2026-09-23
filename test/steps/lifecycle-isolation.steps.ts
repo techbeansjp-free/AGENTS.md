@@ -589,7 +589,13 @@ Then("削除済みと未処理と復旧方法を報告してrecordを保持す�
   assert.equal(this.applyResult.applied, false);
   assert.ok(this.applyResult.removed.length > 0);
   assert.ok(this.applyResult.pending.includes("AGENTS.md"));
-  assert.match(this.applyResult.recovery, /再実行/u);
+  assert.match(this.applyResult.recovery, /recordと資産を照合/u);
+  assert.equal(
+    fs.existsSync(
+      path.join(this.root, ".agent-skill-chain/managed-assets-mutation.lock"),
+    ),
+    true,
+  );
   assert.equal(fs.existsSync(recordPath(this.root)), true);
 });
 
@@ -1990,8 +1996,8 @@ Then("明示指定の要求だけを返しrecordを再生成しない", function
 /**
  * record既存時の公開先再検証（Issue #1305、R2-H02・M-A11）。
  *
- * **record不在のno-replace公開とは別経路である。** 既存recordの再固定は`rename`で
- * 公開するため、`assertRecordPublishTarget`が直前のentryを検証する。読み取り時点では
+ * **record不在のno-replace公開とは別経路である。** 既存recordの更新は不変snapshotを
+ * no-replaceで公開するため、`assertRecordPublishTarget`が旧anchorの直前entryを検証する。読み取り時点では
  * 通常fileだったものが公開直前にsymlinkへ差し替わる場合を測る。
  */
 Given("導入済みで展開済み資産1件を失った隔離先がある", function () {
@@ -2040,8 +2046,8 @@ Then("updateは公開を中止し既存recordのsymlinkは保持される", func
   assert.notEqual(rejections[0], "", "公開先の差し替えが検出されていません");
   assert.match(
     String(rejections[0]),
-    /公開先が通常fileではありません/u,
-    `公開先の再検証による拒否ではありません: ${String(rejections[0])}`,
+    /公開先が通常fileではありません|公開先に別のentryが現れました/u,
+    `公開先のno-replace拒否ではありません: ${String(rejections[0])}`,
   );
   assert.equal(
     fs.lstatSync(recordPath(this.root)).isSymbolicLink(),
@@ -2162,8 +2168,8 @@ Then("installは公開を中止しrecord公開先のsymlinkは保持される", 
   assert.notEqual(rejections[0], "", "公開先の差し替えが検出されていません");
   assert.match(
     String(rejections[0]),
-    /公開先が通常fileではありません/u,
-    `公開先の再検証による拒否ではありません: ${String(rejections[0])}`,
+    /公開先が通常fileではありません|公開先に別のentryが現れました/u,
+    `公開先のno-replace拒否ではありません: ${String(rejections[0])}`,
   );
   assert.equal(
     fs.lstatSync(recordPath(this.root)).isSymbolicLink(),
