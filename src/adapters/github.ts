@@ -431,7 +431,12 @@ function requireFullOid(value: unknown, label: string): string {
 }
 
 function parseObject<T extends object>(source: string, label: string): T {
-  const parsed: unknown = JSON.parse(source);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    throw new Error("GitHub Issue本文のread-back形式が不正です");
+  }
   if (!isRecord(parsed)) throw new Error(`${label}がobjectではありません`);
   return parsed as T;
 }
@@ -1286,8 +1291,8 @@ export function github(
       "--body-file",
       input.bodyFile,
     ];
-    run("gh", args, cwd);
     const expected = fs.readFileSync(input.bodyFile, "utf8");
+    run("gh", args, cwd);
     const observed = readIssueBody(input.repository, input.issue, cwd);
     if (observed !== expected)
       throw new Error("Issue同期後の読み取り検証に失敗しました");

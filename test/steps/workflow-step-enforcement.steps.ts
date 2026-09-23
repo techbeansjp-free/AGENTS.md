@@ -2223,7 +2223,7 @@ interface DeliveryProviderControl {
   postMergeReviewShift: "none" | "replaced" | "revoked";
   concurrentIssueEditAtAdapterCas?: boolean;
   failIssueReadBackAfterEditOnce?: boolean;
-  mutateIssueBodyAfterEdit?: "drop-final-lf" | "append-space";
+  mutateIssueBodyAfterEdit?: "drop-final-lf";
 }
 
 interface PreparedDeliveryCli extends PreparedPullRequest {
@@ -3471,8 +3471,6 @@ if (exact(["--version"])) {
     const saved = fs.readFileSync(issueBodyFile, "utf8");
     fs.writeFileSync(issueBodyFile, saved.endsWith("\\n") ? saved.slice(0, -1) : saved);
   }
-  if (control.mutateIssueBodyAfterEdit === "append-space")
-    fs.appendFileSync(issueBodyFile, " ");
   if (control.failIssueReadBackAfterEditOnce) {
     control.failIssueReadBackAfterEditOnce = false;
     control.failNextIssueView = true;
