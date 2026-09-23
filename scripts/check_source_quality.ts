@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { loadProjectPolicySet } from "../src/domain/policy.js";
+import { isStagingLifecycleScanPath } from "../src/domain/staging.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".mjs"]);
@@ -53,6 +54,8 @@ function walk(directory: string, root = directory): string[] {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const resolved = path.join(directory, entry.name);
     if (entry.isDirectory()) {
+      const relative = path.relative(root, resolved).split(path.sep).join("/");
+      if (isStagingLifecycleScanPath(relative)) return [];
       const excluded =
         EXCLUDED_DIRECTORIES.has(entry.name) &&
         (entry.name !== "issues" ||

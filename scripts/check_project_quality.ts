@@ -44,6 +44,7 @@ const PROTECTED_FILES = [
   "package-lock.json",
   "scripts/check_project_quality.ts",
   "scripts/check_source_quality.ts",
+  "src/domain/staging.ts",
   "src/lib/entrypoint.ts",
   "src/lib/security.ts",
   "tsconfig.json",
