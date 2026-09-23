@@ -397,3 +397,8 @@ Feature: 公開CLIでワークフローStepを強制する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-INT-ISSUESYNC-027"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-INT-ISSUESYNC-028 issue syncは末尾改行を含む送信byte列のdigestを記録する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-INT-ISSUESYNC-028"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる

@@ -4894,9 +4894,7 @@ export async function main(argv, dependencies = {}) {
             ? buildIssueSyncBody(stagingPath, Number(checkpointRaw), issueStagingGherkinDialect(stagingPath))
             : undefined;
         const fullStep4Draft = generated?.mode === "full" && generated.checkpoint === 4;
-        const bodyBefore = (generated?.body ?? fs.readFileSync(providedBodyFile, "utf8"))
-            .replace(/\r\n/g, "\n")
-            .trimEnd();
+        const bodyBefore = generated?.body ?? fs.readFileSync(providedBodyFile, "utf8");
         const preview = {
             state: "preview",
             operation: "issue.sync",
@@ -4971,10 +4969,7 @@ export async function main(argv, dependencies = {}) {
                     staging: stagingBefore,
                     stagingRecordUpdated: false,
                 };
-            const bodyAfter = fs
-                .readFileSync(dispatchBodyFile, "utf8")
-                .replace(/\r\n/g, "\n")
-                .trimEnd();
+            const bodyAfter = fs.readFileSync(dispatchBodyFile, "utf8");
             const bodyDigest = crypto
                 .createHash("sha256")
                 .update(bodyBefore)

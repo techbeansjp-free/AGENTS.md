@@ -7780,6 +7780,64 @@ if (exact(["auth", "status"])) {
       );
       break;
     }
+    case "SCN-INT-ISSUESYNC-028": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      fs.writeFileSync(prepared.issueBodyFile, "# initial issue body\n");
+      const staging = createIssueStaging(prepared.root, {
+        title: "issue-sync-exact-body-digest",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3, 4, 5, 6, 7])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const preview = executeCli(
+        [
+          "issue",
+          "sync",
+          "--generate-body",
+          `--staging-path=${staging}`,
+          "--checkpoint=8",
+          "--repo=o/r",
+          "--issue=877",
+          "--dry-run",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+      const previewDigest = (
+        JSON.parse(preview.stdout) as { bodySha256: string }
+      ).bodySha256;
+      const applied = executeCli(
+        [
+          "issue",
+          "sync",
+          "--generate-body",
+          `--staging-path=${staging}`,
+          "--checkpoint=8",
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(applied.status, 0, applied.stdout + applied.stderr);
+      const synchronizedBody = fs.readFileSync(prepared.issueBodyFile, "utf8");
+      const exactDigest = crypto
+        .createHash("sha256")
+        .update(synchronizedBody)
+        .digest("hex");
+      assert.equal(previewDigest, exactDigest);
+      const record = readStoredStagingRecord(staging);
+      assert.equal(record.syncDigest, exactDigest);
+      assert.equal(record.readBackDigest, exactDigest);
+      break;
+    }
     default:
       throw new Error(`未対応のe2e scenarioです: ${scenarioId}`);
   }
