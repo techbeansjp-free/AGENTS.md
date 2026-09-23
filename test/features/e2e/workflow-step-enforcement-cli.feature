@@ -391,3 +391,9 @@ Feature: 公開CLIでワークフローStepを強制する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-INT-ISSUESYNC-025"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
+
+  @issue-1396
+  Scenario: SCN-INT-ISSUESYNC-027 workflow advanceは末尾が変わったread-backを同期成功にしない
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-INT-ISSUESYNC-027"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
