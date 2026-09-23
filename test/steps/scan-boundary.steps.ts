@@ -67,10 +67,10 @@ const LIFECYCLE_PREDICATE: ExclusionPredicateSource = {
 
 const LIFECYCLE_SCAN_PREDICATE: ExclusionPredicateSource = {
   id: "staging-lifecycle-scan",
-  owner: "check_trace.ts",
-  appliesTo: "SCN配置検査の走査範囲のみ",
+  owner: "check_trace.ts、check_source_quality.ts",
+  appliesTo: "SCN配置検査とsource品質検査のdirectory列挙",
   reasonCode: "staging-lifecycle-scan",
-  reason: "一時ステージング領域をSCN配置検査の走査範囲から除く",
+  reason: "一時ステージング領域をSCN配置検査とsource品質検査の走査範囲から除く",
   excludes: isStagingLifecycleScanPath,
 };
 
@@ -596,6 +596,11 @@ Then(
       ],
       "述語ごとの判定結果が実測と違います",
     );
+    const lifecycleScan = observation.predicates.find(
+      (entry) => entry.predicate === "staging-lifecycle-scan",
+    );
+    assert.ok(lifecycleScan?.owner.includes("check_source_quality.ts"));
+    assert.ok(lifecycleScan?.appliesTo.includes("source品質検査"));
     assert.deepEqual(
       [...observation.uncovered],
       [],

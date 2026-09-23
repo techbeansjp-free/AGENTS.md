@@ -114,6 +114,6 @@ Feature: project固有の型品質と汎用開発考慮事項
     Then 読み取り失敗errorとmigration検査のerrorを両方返す
 
   Scenario: SCN-UNIT-QUALITY-020 一時ライフサイクル領域の補助言語sourceを走査しない
-    Given 一時ライフサイクル領域にPythonとshell sourceを置いたprojectがある
+    Given 一時ライフサイクル領域にPythonとshell sourceを置き領域外にTypeScriptを置いたprojectがある
     When repositoryのsource品質を検証する
     Then 一時ライフサイクル領域のsourceは検査対象に数えられない

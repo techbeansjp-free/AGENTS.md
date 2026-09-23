@@ -47,12 +47,12 @@ export const EXCLUSION_PREDICATE_SOURCES: readonly ExclusionPredicateSource[] =
     },
     {
       id: "staging-lifecycle-scan",
-      owner: "trace:check",
+      owner: "trace:check、source:check",
       appliesTo:
-        "SCN配置検査の走査範囲のみ。同gateの要件本文検査へは同じMarkdownが届く",
+        "SCN配置検査とsource品質検査のdirectory列挙。trace gateの要件本文検査へは同じMarkdownが届く",
       reasonCode: "staging-lifecycle",
       reason:
-        "一時ライフサイクル領域をSCN配置検査の走査範囲から除く（REQ-SQ-017）",
+        "一時ライフサイクル領域をSCN配置検査とsource品質検査の走査範囲から除く（REQ-SQ-017、REQ-SQ-035）",
       excludes: isStagingLifecycleScanPath,
     },
     {
