@@ -5276,6 +5276,11 @@ if (exact(["auth", "status"])) {
       assert.equal(completed.merge, null);
       const before = deliveryProviderCalls(prepared);
       const revision = completed.revision;
+      /**
+       * 固定済みdelivery identityの再実行は、providerの既定branchが後から
+       * divergeしても新規anchor検査へ戻してはならない。
+       */
+      divergeDeliveryBase(prepared);
       const replay = createDeliveryPullRequest(prepared);
       assert.match(replay.stdout, /pull_request_complete/u);
       assert.deepEqual(deliveryProviderCalls(prepared), before);
