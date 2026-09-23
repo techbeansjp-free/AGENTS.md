@@ -437,7 +437,7 @@ const REQ_SQ_017_STALE_SCOPE = [
  * **判断の実体を1文ずつ**名指しする。
  */
 const REQ_SQ_017_CURRENT = [
-  "**除外は一時ライフサイクル領域`STAGING_LIFECYCLE_AREAS`の4件とする。**",
+  "**除外は一時ライフサイクル領域`STAGING_LIFECYCLE_AREAS`の5件とする。**",
   "除外範囲をこの検査が独自に持たず、分類の唯一の正本から導出する",
   "**`role-log/`と`metrics/`を除外しなかった旧来の理由は成立しない。**",
   "REQ-SQ-019がその非対称を解消し",
