@@ -403,7 +403,15 @@ export function assertCurrentReviewJournalBinding(staging, headSha) {
         session.latestRoundDigest !== binding.roundDigest ||
         sessionEffectiveHead !== bindingEffectiveHead)
         throw new Error("Step 10のreviewSession bindingが保存済み収束sessionと一致しません");
-    return { binding, session };
+    return { binding, session, implementationHeadSha: bindingEffectiveHead };
+}
+function assertCreatableReviewHead(staging, headSha, mode, mergeMode) {
+    const reviewBinding = assertCurrentReviewJournalBinding(staging, headSha);
+    // PoC and a disabled merge stop at PR and need no mergeable artifact suffix.
+    if (mode !== "poc" &&
+        mergeMode !== "disabled" &&
+        reviewBinding.implementationHeadSha === headSha)
+        throw new Error("H_implとH_finalが同一のためPRを作成できません。review artifactを実装commitから分離し、独立したartifact専用commitを積んでから再実行してください");
 }
 function assertObservedClosingContract(input) {
     if (input.observed.headRepository?.nameWithOwner?.toLowerCase() !==
@@ -6472,6 +6480,11 @@ export async function main(argv, dependencies = {}) {
             candidateChoicesRaw: prCandidateChoices?.raw,
             choicesFragmentPath: prCandidateChoices?.path,
         };
+        const existingBefore = readStoredDeliveryState(staging);
+        if (existingBefore)
+            assertCurrentReviewJournalBinding(staging, headSha);
+        else
+            assertCreatableReviewHead(staging, headSha, inspection.mode, trustedSet.policy.merge.mode);
         if (!apply) {
             const preview = createPullRequest(commonInput, () => {
                 throw new Error("previewでGitHub操作を呼び出してはなりません");
@@ -6494,7 +6507,6 @@ export async function main(argv, dependencies = {}) {
         github("repository.assert-write", { repository }, root);
         const repositoryAuthority = github("repository.authority", { repository }, root);
         const currentHead = github("ref.inspect", { repository, branch: head }, root);
-        const existingBefore = readStoredDeliveryState(staging);
         if (repositoryAuthority.repository !== repository ||
             repositoryAuthority.defaultBranch !== base)
             throw new Error("providerの既定branchが要求されたbaseと一致しません");
@@ -6537,7 +6549,10 @@ export async function main(argv, dependencies = {}) {
         const result = withStagingMutationLock(staging, () => {
             recoverPendingJournalTransaction(staging);
             const lockedInspection = assertWorkflowReadyForDelivery(staging);
-            assertCurrentReviewJournalBinding(staging, headSha);
+            if (readStoredDeliveryState(staging))
+                assertCurrentReviewJournalBinding(staging, headSha);
+            else
+                assertCreatableReviewHead(staging, headSha, lockedInspection.mode, trustedSet.policy.merge.mode);
             const stagingRecord = migrateLegacyStagingTrackerLocked(staging, {
                 repository,
                 issue,
@@ -6687,7 +6702,7 @@ export async function main(argv, dependencies = {}) {
                 if (trustedSet.provenance?.commitSha?.toLowerCase() !==
                     repositoryAuthority.defaultBranchTipOid.toLowerCase())
                     throw new Error("provider create再試行には現在の既定branch tipと一致するtrusted policy provenanceが必要です");
-                assertCurrentReviewJournalBinding(staging, headSha);
+                assertCreatableReviewHead(staging, headSha, lockedInspection.mode, trustedSet.policy.merge.mode);
                 /**
                  * **claimはprovider要求の直前でだけ消費する**（Issue #1157）。
                  *
