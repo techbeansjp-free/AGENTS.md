@@ -8544,6 +8544,7 @@ export async function main(
     const journal = readWorkflowJournal(staging);
     let workflowValidation = inspection.validation;
     let effectiveEntries = journal.entries;
+    let pendingOverrideEntries: StepJournalEntry[] = [];
     const overrideFile =
       typeof flags["workflow-override"] === "string"
         ? flags["workflow-override"]
@@ -8611,8 +8612,7 @@ export async function main(
         upToStep: 10,
       });
       if (workflowValidation.valid && apply)
-        for (const entry of overrideEntries)
-          appendWorkflowJournalEntry({ staging, entry });
+        pendingOverrideEntries = overrideEntries;
     }
     const mandatoryRecorded = [4, 10].every((step) =>
       effectiveEntries.some((entry) => entry.step === step),
@@ -8762,6 +8762,10 @@ export async function main(
         { allowFailure: true },
       );
       if (ancestry.status !== 0) {
+        if (ancestry.status !== 1)
+          throw new Error(
+            `PR作成anchorのbase SHA ${observedBaseSha}とhead SHA ${headSha}のancestor関係をGitで比較できません（exit ${ancestry.status}）。PRとdelivery stateを作成せず、Git objectとrepositoryを復旧してから再実行してください`,
+          );
         const terminal =
           decideDeliveryContinuation({
             workflowMode: inspection.mode,
@@ -8781,6 +8785,8 @@ export async function main(
         ancestorWarning = `warning: ${reason}。このworkflowはPRを正式終端とするため作成を続行します。${recovery}`;
       }
     }
+    for (const entry of pendingOverrideEntries)
+      appendWorkflowJournalEntry({ staging, entry });
     if (inspection.mode === "poc")
       assertPocDeliveryChangeScope(staging, observedBaseSha, headSha);
     const result = withStagingMutationLock(staging, () => {

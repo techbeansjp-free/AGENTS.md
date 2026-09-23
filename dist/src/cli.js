@@ -6311,6 +6311,7 @@ export async function main(argv, dependencies = {}) {
         const journal = readWorkflowJournal(staging);
         let workflowValidation = inspection.validation;
         let effectiveEntries = journal.entries;
+        let pendingOverrideEntries = [];
         const overrideFile = typeof flags["workflow-override"] === "string"
             ? flags["workflow-override"]
             : undefined;
@@ -6369,8 +6370,7 @@ export async function main(argv, dependencies = {}) {
                 upToStep: 10,
             });
             if (workflowValidation.valid && apply)
-                for (const entry of overrideEntries)
-                    appendWorkflowJournalEntry({ staging, entry });
+                pendingOverrideEntries = overrideEntries;
         }
         const mandatoryRecorded = [4, 10].every((step) => effectiveEntries.some((entry) => entry.step === step));
         const stagingReady = inspection.state === "sync-verified";
@@ -6477,6 +6477,8 @@ export async function main(argv, dependencies = {}) {
         if (!existingBefore) {
             const ancestry = git(["merge-base", "--is-ancestor", observedBaseSha, headSha], root, { allowFailure: true });
             if (ancestry.status !== 0) {
+                if (ancestry.status !== 1)
+                    throw new Error(`PR作成anchorのbase SHA ${observedBaseSha}とhead SHA ${headSha}のancestor関係をGitで比較できません（exit ${ancestry.status}）。PRとdelivery stateを作成せず、Git objectとrepositoryを復旧してから再実行してください`);
                 const terminal = decideDeliveryContinuation({
                     workflowMode: inspection.mode,
                     trustedMergeMode: commonInput.trustedPolicy.merge.mode,
@@ -6492,6 +6494,8 @@ export async function main(argv, dependencies = {}) {
                 ancestorWarning = `warning: ${reason}。このworkflowはPRを正式終端とするため作成を続行します。${recovery}`;
             }
         }
+        for (const entry of pendingOverrideEntries)
+            appendWorkflowJournalEntry({ staging, entry });
         if (inspection.mode === "poc")
             assertPocDeliveryChangeScope(staging, observedBaseSha, headSha);
         const result = withStagingMutationLock(staging, () => {

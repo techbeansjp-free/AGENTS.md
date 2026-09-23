@@ -26,6 +26,22 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-063"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  Scenario: SCN-E2E-WFSTEP-064 diverged拒否は有効なHumanOverrideもjournalへ永続化しない
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-064"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  @requires-linux-poc
+  Scenario: SCN-E2E-WFSTEP-065 PoCは既定branchより遅れたHEADを警告してPR終端へ進む
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-065"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-WFSTEP-066 Git ancestor比較不能はPR終端でも書込み前に拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-066"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-003 workflow stepsのquick出力が機械可読な省略対象を返す
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-003"のE2E検査を実行する
