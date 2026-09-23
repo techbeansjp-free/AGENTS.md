@@ -14,6 +14,7 @@ import {
   createIssueStaging,
   buildIssueSyncBody,
   assertStagingSyncTarget,
+  issueBodySha256,
   recordStagingSync,
   validateIssue,
   withoutMarkdownCode,
@@ -5536,7 +5537,7 @@ export async function main(
         generatedBodySha256: generated.bodySha256,
         bodySha256: crypto
           .createHash("sha256")
-          .update(previewSyncBody.trimEnd())
+          .update(previewSyncBody)
           .digest("hex"),
       };
     }
@@ -5710,7 +5711,7 @@ export async function main(
       );
       const dispatchBodySha256 = crypto
         .createHash("sha256")
-        .update(dispatchBody.trimEnd())
+        .update(dispatchBody)
         .digest("hex");
       if (dispatchBodySha256 !== syncPreview?.bodySha256)
         throw new Error(
@@ -5751,7 +5752,7 @@ export async function main(
           );
         const observedDispatchBodySha256 = crypto
           .createHash("sha256")
-          .update(observed.body.trimEnd())
+          .update(observed.body)
           .digest("hex");
         const alreadyPublished =
           observedDispatchBodySha256 === dispatchBodySha256;
@@ -5821,7 +5822,7 @@ export async function main(
             );
             const recoveredDigest = crypto
               .createHash("sha256")
-              .update(recovered.body.trimEnd())
+              .update(recovered.body)
               .digest("hex");
             publicationState =
               recoveredDigest === dispatchBodySha256
@@ -6747,19 +6748,18 @@ export async function main(
       : undefined;
     const fullStep4Draft =
       generated?.mode === "full" && generated.checkpoint === 4;
-    const bodyBefore = (
-      generated?.body ?? fs.readFileSync(providedBodyFile!, "utf8")
-    )
-      .replace(/\r\n/g, "\n")
-      .trimEnd();
+    const bodyBefore =
+      generated?.body ?? fs.readFileSync(providedBodyFile!, "utf8");
+    const repository = required(flags, "repo");
+    const issue = Number(required(flags, "issue"));
     const preview = {
       state: "preview",
       operation: "issue.sync",
-      repository: required(flags, "repo"),
-      issue: Number(required(flags, "issue")),
+      repository,
+      issue,
       bodySource: generated ? "generated" : "body-file",
       bodyFile: providedBodyFile,
-      bodySha256: crypto.createHash("sha256").update(bodyBefore).digest("hex"),
+      bodySha256: issueBodySha256(bodyBefore),
       ...(generated
         ? {
             artifacts: generated.artifacts,
@@ -6769,29 +6769,18 @@ export async function main(
         : {}),
     };
     if (!apply) {
-      print(preview);
+      const currentRemote = github(
+        "issue.read",
+        { repository, issue },
+        process.cwd(),
+      ) as { bodySha256: string };
+      print({ ...preview, currentBodySha256: currentRemote.bodySha256 });
       return 0;
     }
     if (flags.authorize !== "approved")
       throw new Error("Issue同期には--authorize=approvedが必要です");
     let temporaryDirectory: string | undefined;
-    let dispatchBodyFile = providedBodyFile;
-    if (generated) {
-      temporaryDirectory = fs.mkdtempSync(
-        path.join(os.tmpdir(), "asc-issue-sync-"),
-      );
-      dispatchBodyFile = path.join(temporaryDirectory, "body.md");
-      fs.writeFileSync(dispatchBodyFile, generated.body, {
-        flag: "wx",
-        mode: 0o600,
-      });
-    }
-    const input = {
-      operation: "issue.sync",
-      repository: preview.repository,
-      issue: preview.issue,
-      bodyFile: dispatchBodyFile!,
-    };
+    let dispatchBodyFile: string | undefined;
     const syncAndRecord = () => {
       if (stagingPath !== undefined)
         recoverPendingJournalTransaction(stagingPath);
@@ -6819,11 +6808,56 @@ export async function main(
                 stagingPath,
                 Number(checkpointRaw),
                 {
-                  repository: input.repository,
-                  issue: input.issue,
+                  repository: preview.repository,
+                  issue: preview.issue,
                 },
                 { allowPromotionStep4: true },
               );
+      const expectedBodySha256 = flags["expected-body-sha256"];
+      if (
+        typeof expectedBodySha256 !== "string" ||
+        !/^[a-f0-9]{64}$/u.test(expectedBodySha256)
+      )
+        throw new Error(
+          "issue sync --applyにはpreviewの--expected-body-sha256=<64hex>が必要です",
+        );
+      if (expectedBodySha256 !== preview.bodySha256)
+        throw new Error(
+          "issue syncのpreview後に同期本文が変更されました。新しいpreviewから再実行してください",
+        );
+      const expectedCurrentBodySha256 = flags["expected-current-body-sha256"];
+      if (
+        typeof expectedCurrentBodySha256 !== "string" ||
+        !/^[a-f0-9]{64}$/u.test(expectedCurrentBodySha256)
+      )
+        throw new Error(
+          "issue sync --applyにはpreviewの--expected-current-body-sha256=<64hex>が必要です",
+        );
+      const currentRemote = github(
+        "issue.read",
+        { repository, issue },
+        process.cwd(),
+      ) as { bodySha256: string };
+      if (expectedCurrentBodySha256 !== currentRemote.bodySha256)
+        throw new Error(
+          "issue syncのpreview後にremote本文が変更されました。新しいpreviewから再実行してください",
+        );
+      /** mutableな利用者fileをそのまま外部processへ渡さず、検証済み本文を固定する。 */
+      temporaryDirectory = fs.mkdtempSync(
+        path.join(os.tmpdir(), "asc-issue-sync-"),
+      );
+      dispatchBodyFile = path.join(temporaryDirectory, "body.md");
+      fs.writeFileSync(dispatchBodyFile, bodyBefore, {
+        flag: "wx",
+        mode: 0o600,
+      });
+      const input = {
+        operation: "issue.sync" as const,
+        repository: preview.repository,
+        issue: preview.issue,
+        bodyFile: dispatchBodyFile,
+        expectedBodySha256: expectedCurrentBodySha256,
+      };
       const result = github("issue.sync", input, process.cwd());
       if (stagingPath === undefined) return result;
       if (fullStep4Draft)
@@ -6841,10 +6875,7 @@ export async function main(
           staging: stagingBefore,
           stagingRecordUpdated: false,
         };
-      const bodyAfter = fs
-        .readFileSync(dispatchBodyFile!, "utf8")
-        .replace(/\r\n/g, "\n")
-        .trimEnd();
+      const bodyAfter = fs.readFileSync(dispatchBodyFile!, "utf8");
       const bodyDigest = crypto
         .createHash("sha256")
         .update(bodyBefore)

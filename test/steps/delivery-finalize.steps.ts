@@ -548,7 +548,7 @@ function prepareGhStub(
   const stub = path.join(directory, "gh");
   fs.writeFileSync(
     stub,
-    `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(world.ghLog)},args.join(' ')+'\\n');if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:'o/r',viewerPermission:${JSON.stringify(permission)}}));if(args[0]==='issue'&&args[1]==='view')process.stdout.write(${JSON.stringify(matchingBody ? "# 同期本文\n" : "# 不一致\n")});\n`,
+    `#!/usr/bin/env node\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(world.ghLog)},args.join(' ')+'\\n');if(args[0]==='repo')process.stdout.write(JSON.stringify({nameWithOwner:'o/r',viewerPermission:${JSON.stringify(permission)}}));if(args[0]==='issue'&&args[1]==='view')process.stdout.write(JSON.stringify({body:${JSON.stringify(matchingBody ? "# 同期本文\n" : "# 不一致\n")}})+'\\n');\n`,
   );
   fs.chmodSync(stub, 0o755);
   world.stubPath = `${directory}${path.delimiter}${process.env.PATH ?? ""}`;

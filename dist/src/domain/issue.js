@@ -1079,14 +1079,15 @@ export function buildIssueSyncBody(stagingInput, checkpoint, gherkinDialect) {
         : renderIssueSyncBody(record.mode, checkpoint, texts);
     return Object.freeze({
         body,
-        bodySha256: crypto
-            .createHash("sha256")
-            .update(body.trimEnd())
-            .digest("hex"),
+        bodySha256: issueBodySha256(body),
         artifacts: Object.freeze(artifacts),
         mode: record.mode,
         checkpoint,
     });
+}
+/** Issue同期で認可・送信・read-backへ共用する、本文byte列そのもののdigest。 */
+export function issueBodySha256(body) {
+    return crypto.createHash("sha256").update(body, "utf8").digest("hex");
 }
 /**
  * 同期記録の書き込み可否を、**同期の副作用より前に**判定できる部分だけで確かめる。

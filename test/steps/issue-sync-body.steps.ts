@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -6,6 +7,7 @@ import {
   buildIssueSyncBody,
   createIssueStaging,
   escapeFoldBoundary,
+  issueBodySha256,
   renderIssueSyncBody,
   type IssueSyncArtifactText,
 } from "../../src/domain/issue.js";
@@ -170,6 +172,11 @@ Then(
     refreshStoredStagingDigest(staging);
     const built = buildIssueSyncBody(staging, 8);
     assert.equal(built.body, renderIssueSyncBody("full", 8, contents));
+    assert.equal(
+      built.bodySha256,
+      crypto.createHash("sha256").update(built.body).digest("hex"),
+      "digestは末尾改行を含む実本文byte列から計算する",
+    );
     assert.ok(
       built.body.startsWith(materializedRequest().trimEnd()),
       "本文は00で始まる",
@@ -177,6 +184,14 @@ Then(
     assert.equal(foldedSections(built.body).length, 3);
   },
 );
+
+Then("同期本文digestは末尾改行0件1件2件を区別する", function () {
+  assert.deepEqual(["本文", "本文\n", "本文\n\n"].map(issueBodySha256), [
+    "2617ab4ad6fe995785421872bde4648311a8de11848c1f487fb7eb458572e87b",
+    "6b2676d80da84264c9c704f58ab4ba961651f6e4de14d639e54431c44fd5da8e",
+    "8838ab303d16f8b933da2e96dee6909d0d55c73204952fc13a8c6dfdd93d12f1",
+  ]);
+});
 
 Then("同期本文は成果物を区切り線で連結した従来形式である", function () {
   const count = this.syncMode === "full" ? 2 : 1;
