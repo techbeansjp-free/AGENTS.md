@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { writeFileAtomic } from "../lib/atomic.js";
+import { writeFileNoReplace } from "../lib/atomic.js";
 import { parseJsonStrict, resolveContained } from "../lib/security.js";
 import { findPackageRoot } from "../lib/package-root.js";
 import { PACKAGE_VERSION } from "../lib/version.js";
@@ -34,6 +34,7 @@ const NAMESPACE_ASSETS = [
     "hooks",
 ];
 const MANAGED_RECORD = ".agent-skill-chain/managed-assets.json";
+const MANAGED_RECORDS = ".agent-skill-chain/managed-assets-records";
 const HOST_SKILL_SOURCE = ".agent-skill-chain/skills/asc-step/SKILL.md";
 const HOST_SKILL_TARGETS = [
     ".claude/skills/asc-step/SKILL.md",
@@ -107,6 +108,135 @@ export function inspectHookRegistration(input) {
         };
 }
 const SHA256 = /^[a-f0-9]{64}$/u;
+function sha256Bytes(contents) {
+    return crypto.createHash("sha256").update(contents).digest("hex");
+}
+/** Test the actual filesystem's hardlink operation before changing assets. */
+function assertSnapshotPublicationSupported(target, recordPresent) {
+    const directory = recordPresent
+        ? snapshotDirectory(target)
+        : path.join(target, ".agent-skill-chain");
+    const directoryWasPresent = pathEntryExists(directory);
+    fs.mkdirSync(directory, { recursive: true });
+    // Use the same temporary-name class as interrupted record writes. A crash
+    // must not leave a probe directory that the chain reader treats as an orphan.
+    const suffix = `${process.pid}-${crypto.randomBytes(12).toString("hex")}`;
+    const source = path.join(directory, `.record-link-probe.json.tmp-${suffix}`);
+    const destination = path.join(directory, `.record-link-probe-target.json.tmp-${suffix}`);
+    try {
+        fs.writeFileSync(source, "probe", { flag: "wx" });
+        fs.linkSync(source, destination);
+    }
+    finally {
+        fs.rmSync(destination, { force: true });
+        fs.rmSync(source, { force: true });
+        if (!directoryWasPresent) {
+            try {
+                fs.rmdirSync(directory);
+            }
+            catch {
+                // A concurrent entry or a nonempty directory is never removed.
+            }
+        }
+    }
+}
+function snapshotDirectory(target) {
+    const directory = path.join(target, MANAGED_RECORDS);
+    if (pathEntryExists(directory) && !fs.lstatSync(directory).isDirectory())
+        throw new Error(`managed asset snapshot directoryが通常directoryではありません: ${MANAGED_RECORDS}`);
+    return directory;
+}
+function snapshotEntries(target) {
+    const directory = snapshotDirectory(target);
+    if (!pathEntryExists(directory))
+        return [];
+    return fs
+        .readdirSync(directory)
+        .filter((name) => !/^\.(?:(?:legacy|snapshot)-[a-f0-9]{64}|record-link-probe(?:-target)?)\.json\.tmp-[0-9]+-[a-f0-9]{24}$/u.test(name));
+}
+function hasManagedAssetRecord(target) {
+    if (pathEntryExists(path.join(target, MANAGED_RECORD)))
+        return true;
+    const directory = path.join(target, MANAGED_RECORDS);
+    if (!pathEntryExists(directory))
+        return false;
+    if (!fs.lstatSync(directory).isDirectory())
+        return true;
+    return snapshotEntries(target).length > 0;
+}
+function validateManagedAssetRecord(target, parsed) {
+    if (!isRecord(parsed) || !isRecord(parsed.files))
+        throw new Error("managed asset recordが不正です");
+    const files = {};
+    const assets = [];
+    for (const [recordKey, expected] of Object.entries(parsed.files)) {
+        if (typeof expected !== "string" || !SHA256.test(expected))
+            throw new Error(`managed asset recordが不正です: ${recordKey}`);
+        const relative = recordKey.replaceAll("\\", "/");
+        const file = resolveManagedAsset(target, recordKey);
+        if (files[relative] !== undefined)
+            throw new Error(`managed asset pathが重複しています: ${recordKey}`);
+        files[relative] = expected;
+        assets.push({ relative, file, expected });
+    }
+    return { record: { version: parsed.version, files }, assets };
+}
+function readCurrentManagedRecord(target) {
+    const legacyEntry = path.join(target, MANAGED_RECORD);
+    if (!pathEntryExists(legacyEntry))
+        throw new Error(`managed asset recordの旧anchorがありません。${MANAGED_RECORDS}のsnapshotを保持して中止します`);
+    if (pathEntryExists(legacyEntry) && !isRegularFile(legacyEntry))
+        throw new Error(`managed asset recordは通常fileでなければなりません: ${MANAGED_RECORD}`);
+    const recordPath = resolveContained(target, MANAGED_RECORD);
+    if (!isRegularFile(recordPath))
+        throw new Error(`managed asset recordは通常fileでなければなりません: ${MANAGED_RECORD}`);
+    const legacySource = fs.readFileSync(recordPath, "utf8");
+    let current = validateManagedAssetRecord(target, parseJsonStrict(legacySource, "managed asset record"));
+    let parent = `legacy-${sha256Bytes(legacySource)}`;
+    let currentPath = recordPath;
+    const entries = snapshotEntries(target);
+    const remaining = new Set(entries);
+    const snapshotPaths = [];
+    while (remaining.has(`${parent}.json`)) {
+        const name = `${parent}.json`;
+        const file = path.join(snapshotDirectory(target), name);
+        if (!isRegularFile(file))
+            throw new Error(`managed asset snapshotは通常fileでなければなりません: ${name}`);
+        const descriptor = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+        let source;
+        try {
+            if (!fs.fstatSync(descriptor).isFile())
+                throw new Error(`managed asset snapshotが不正です: ${name}`);
+            source = fs.readFileSync(descriptor, "utf8");
+        }
+        finally {
+            fs.closeSync(descriptor);
+        }
+        const parsed = parseJsonStrict(source, `managed asset snapshot ${name}`);
+        if (!isRecord(parsed) ||
+            parsed.schemaVersion !== 1 ||
+            parsed.parent !== parent ||
+            typeof parsed.payloadDigest !== "string" ||
+            !SHA256.test(parsed.payloadDigest))
+            throw new Error(`managed asset snapshotが不正です: ${name}`);
+        const candidate = validateManagedAssetRecord(target, parsed.record);
+        const payload = JSON.stringify({
+            schemaVersion: 1,
+            parent,
+            record: candidate.record,
+        });
+        if (sha256Bytes(payload) !== parsed.payloadDigest)
+            throw new Error(`managed asset snapshotのdigestが一致しません: ${name}`);
+        current = candidate;
+        currentPath = file;
+        snapshotPaths.push(file);
+        parent = `snapshot-${parsed.payloadDigest}`;
+        remaining.delete(name);
+    }
+    if (remaining.size > 0)
+        throw new Error(`managed asset snapshotの連鎖に未接続のentryがあります: ${[...remaining].join(", ")}`);
+    return { recordPath: currentPath, parent, ...current, snapshotPaths };
+}
 function isPackageOwnedPath(relative) {
     const normalized = relative.replaceAll("\\", "/");
     return (
@@ -168,39 +298,7 @@ function resolveManagedAsset(target, relative) {
     }
 }
 function readManagedAssetRecord(target) {
-    /**
-     * **entryの種別を`resolveContained`より前に見る**（Issue #1305、F-04）。
-     *
-     * `resolveContained`はlink先を解決するため、dangling symlinkのrecordでは
-     * 「パスが存在しません」で止まり、**recordがsymlinkであることも対象pathも
-     * 出ない。** 要件は「解消すべき原因と対象を名指しする」を求めている。
-     */
-    const recordEntry = path.join(target, MANAGED_RECORD);
-    if (pathEntryExists(recordEntry) && !isRegularFile(recordEntry))
-        throw new Error(`managed asset recordは通常fileでなければなりません: ${MANAGED_RECORD}`);
-    const recordPath = resolveContained(target, MANAGED_RECORD);
-    if (!isRegularFile(recordPath))
-        throw new Error(`managed asset recordは通常fileでなければなりません: ${MANAGED_RECORD}`);
-    const parsed = JSON.parse(fs.readFileSync(recordPath, "utf8"));
-    if (!isRecord(parsed) || !isRecord(parsed.files))
-        throw new Error("managed asset recordが不正です");
-    const files = {};
-    const assets = [];
-    for (const [recordKey, expected] of Object.entries(parsed.files)) {
-        if (typeof expected !== "string" || !SHA256.test(expected))
-            throw new Error(`managed asset recordが不正です: ${recordKey}`);
-        const relative = recordKey.replaceAll("\\", "/");
-        const file = resolveManagedAsset(target, recordKey);
-        if (files[relative] !== undefined)
-            throw new Error(`managed asset pathが重複しています: ${recordKey}`);
-        files[relative] = expected;
-        assets.push({ relative, file, expected });
-    }
-    return {
-        recordPath,
-        record: { version: parsed.version, files },
-        assets,
-    };
+    return readCurrentManagedRecord(target);
 }
 function walkFiles(directory) {
     return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -348,6 +446,11 @@ export function init(target, options) {
         `初期導入先が競合しています。ファイルは書き込んでいません: ${conflicts.join(", ")}`);
     if (!options.apply)
         return { applied: false, assets: assets.map(({ dest }) => dest) };
+    const recordPresent = hasManagedAssetRecord(target);
+    assertSnapshotPublicationSupported(target, recordPresent);
+    const expectedParent = recordPresent
+        ? readCurrentManagedRecord(target).parent
+        : null;
     const record = {
         version: PACKAGE_VERSION,
         files: {},
@@ -358,8 +461,7 @@ export function init(target, options) {
             fs.copyFileSync(src, dest, fs.constants.COPYFILE_EXCL);
         record.files[relativeKey(target, dest)] = digest(dest);
     }
-    assertRecordPublishTarget(path.join(target, MANAGED_RECORD));
-    writeFileAtomic(path.join(target, MANAGED_RECORD), `${JSON.stringify(record, null, 2)}\n`);
+    publishManagedAssetRecord(target, record, recordPresent, expectedParent);
     return { applied: true, assets: Object.keys(record.files) };
 }
 export function classifyManagedAsset(input) {
@@ -384,10 +486,8 @@ function readManagedAssetRecordAt(target, recordPresent) {
     /**
      * **`fs.existsSync`ではなく`pathEntryExists`で判定する。** `existsSync`は
      * link先を解決するため、**dangling symlinkに対して`false`を返す。** それを
-     * 「record不在」と読むと、後続の`writeFileAtomic`がrename でsymlinkの
-     * directory entryを通常fileへ置換し、**REQ-LC-001が保持を求めるsymlinkを
-     * 破壊する。** 是正前の`upgrade`はrecord不在でthrowして何も書かなかったため、
-     * この破壊は本変更が到達可能にしたものである。
+     * 「record不在」と読むと復旧の明示門を誤って通過する。公開はno-replaceでも、
+     * dangling symlinkを失われたrecordへ降格させてはならない。
      *
      * **entryがあるなら必ず`readManagedAssetRecord`へ通す。** 同関数が
      * 非通常fileを拒否し、JSON不正・digest不正・path重複も拒否する。
@@ -399,7 +499,7 @@ function readManagedAssetRecordAt(target, recordPresent) {
      * 以前はここで`pathEntryExists`を独立に呼んでいた。呼び出し側の観測と
      * この観測の間に別processが有効なrecordを配置すると、**新しく現れたrecordの
      * digestが`expected`として上書き権限を与え**、利用者fileが正本へ上書きされる。
-     * そのうえ公開は古い観測に従って`wx`で行われ`EEXIST`で失敗するため、
+     * そのうえ公開は古い観測に従ってno-replaceで行われ`EEXIST`で失敗するため、
      * **「commandは失敗したのに利用者fileだけ上書き済み」**という状態が残る。
      * 観測は1回だけ行い、その結果を引数で受ける。
      *
@@ -436,14 +536,8 @@ function observeManagedAsset(item, expected) {
 /**
  * record公開の直前に、公開先のentryを再検証する（Issue #1305、R2-H02）。
  *
- * **観測から公開までの間にentryが差し替わりうる。** `writeFileAtomic`は
- * `rename`で公開するため、その時点でrecord pathがsymlinkやdirectoryであれば
- * **entryを置換する。** REQ-LC-001は「hash・containment・TOCTOUを各write前に
- * 検証する」を要求しており、この再検証はその履行である。
- *
- * **残存する競合は閉じていない。** 検査と`rename`の間には依然として窓がある。
- * 窓を完全に閉じるにはno-replaceな公開方式が要り、それは`init`にも同じ形で
- * 存在する既存の性質であるため、別Issueで扱う。
+ * 既存の診断を維持する。検査と公開の間の競合はこの検査では閉じないため、
+ * 実際の公開にはno-replaceのhardlinkを使う。非通常fileなら公開前に原因を名指しする。
  */
 function assertRecordPublishTarget(recordPath) {
     if (!pathEntryExists(recordPath))
@@ -453,23 +547,16 @@ function assertRecordPublishTarget(recordPath) {
             "当該pathのsymlinkまたはdirectoryを解消してください");
 }
 /**
- * recordを公開する（Issue #1305、R2-H02）。
- *
- * **record不在からの復旧はno-replaceで公開する。** `writeFileAtomic`は`rename`で
- * 公開するため、検査から`rename`までの間に現れたentryを置換する。是正前の`upgrade`は
- * record不在で公開処理へ到達しなかったため、**この窓は本変更が到達可能にしたもので
- * ある。** `wx`（`O_CREAT | O_EXCL`）で作成すると、entryが存在する場合は`EEXIST`で
- * 失敗し、**symlinkのentryを置換しない。**
- *
- * recordが既に存在する場合の再固定は置換が意図された動作であるため、従来どおり
- * `writeFileAtomic`を使う。**その一般化はIssue #1306が所有する。**
+ * 初回recordは一時fileを完全にfsync・再読取した後no-replaceで公開する。
+ * 既存recordは置換せず、旧recordのdigestに結び付けた不変snapshotを追記する。
+ * 同じ親の並行公開は同じleafで競合し、先着以外を拒否する（Issue #1306）。
  */
-function publishManagedAssetRecord(recordPath, record, recordPresent) {
+function publishManagedAssetRecord(target, record, recordPresent, expectedParent) {
+    const recordPath = path.join(target, MANAGED_RECORD);
     const contents = `${JSON.stringify(record, null, 2)}\n`;
     if (!recordPresent) {
-        fs.mkdirSync(path.dirname(recordPath), { recursive: true });
         try {
-            fs.writeFileSync(recordPath, contents, { flag: "wx" });
+            writeFileNoReplace(recordPath, contents);
         }
         catch (error) {
             if (isRecord(error) && error.code === "EEXIST")
@@ -480,11 +567,25 @@ function publishManagedAssetRecord(recordPath, record, recordPresent) {
         return;
     }
     assertRecordPublishTarget(recordPath);
-    writeFileAtomic(recordPath, contents);
+    const current = readCurrentManagedRecord(target);
+    if (current.parent !== expectedParent)
+        throw new Error("managed asset recordが並行更新されました。既存snapshotを保持して中止します");
+    const parent = current.parent;
+    const payload = { schemaVersion: 1, parent, record };
+    const payloadDigest = sha256Bytes(JSON.stringify(payload));
+    const snapshot = { ...payload, payloadDigest };
+    const destination = path.join(snapshotDirectory(target), `${parent}.json`);
+    try {
+        writeFileNoReplace(destination, `${JSON.stringify(snapshot, null, 2)}\n`);
+    }
+    catch (error) {
+        if (isRecord(error) && error.code === "EEXIST")
+            throw new Error("managed asset snapshotの公開先に別のentryが現れました。当該pathを確認してから再実行してください", { cause: error });
+        throw error;
+    }
 }
 export function upgrade(target, options) {
-    const recordPath = path.join(target, MANAGED_RECORD);
-    const recordPresent = pathEntryExists(recordPath);
+    const recordPresent = hasManagedAssetRecord(target);
     /**
      * **record不在からの復旧は明示の意図を要求する**（Issue #1305、#1307）。
      *
@@ -502,7 +603,11 @@ export function upgrade(target, options) {
      */
     if (!recordPresent && options.recoverRecord !== true)
         throw new Error(`managed asset recordがありません。${recoveryDiagnostic(target)}`);
-    const old = readManagedAssetRecordAt(target, recordPresent);
+    // Classify assets and bind the eventual append to one observed generation.
+    // A second read could classify against the old digest but publish as a newer parent.
+    const observed = recordPresent ? readCurrentManagedRecord(target) : null;
+    const old = observed?.record ?? readManagedAssetRecordAt(target, false);
+    const expectedParent = observed?.parent ?? null;
     const current = mappings(target);
     /**
      * **record不在は「導入済み」の代わりにならない**（Issue #1305）。
@@ -538,6 +643,7 @@ export function upgrade(target, options) {
             adopted: adoptable,
             retained,
         };
+    assertSnapshotPublicationSupported(target, recordPresent);
     const next = {
         version: PACKAGE_VERSION,
         files: { ...old.files },
@@ -562,12 +668,12 @@ export function upgrade(target, options) {
             adopted.push(item.key);
         next.files[item.key] = digest(item.dest);
     }
-    publishManagedAssetRecord(recordPath, next, recordPresent);
+    publishManagedAssetRecord(target, next, recordPresent, expectedParent);
     return { applied: true, adopted, retained };
 }
 export function uninstall(target, options) {
     const recordPath = path.join(target, MANAGED_RECORD);
-    if (!pathEntryExists(recordPath))
+    if (!hasManagedAssetRecord(target))
         throw new Error(`managed asset recordがありません。撤去対象を確定できません。${recoveryDiagnostic(target)}`);
     const managed = readManagedAssetRecord(target);
     const removable = [];
@@ -623,11 +729,23 @@ export function uninstall(target, options) {
         }
     }
     if (pending.length === 0) {
-        try {
-            fs.rmSync(managed.recordPath);
+        const snapshotPaths = readCurrentManagedRecord(target).snapshotPaths;
+        for (const file of snapshotPaths.reverse()) {
+            try {
+                fs.rmSync(file);
+            }
+            catch {
+                pending.push(relativeKey(target, file));
+                break;
+            }
         }
-        catch {
-            pending.push(MANAGED_RECORD);
+        if (pending.length === 0) {
+            try {
+                fs.rmSync(recordPath);
+            }
+            catch {
+                pending.push(MANAGED_RECORD);
+            }
         }
     }
     const applied = pending.length === 0;
@@ -696,8 +814,7 @@ export function doctor(target, worktreeObservations) {
         ...(hasLegacyAgentsAssets(target) ? [".agents"] : []),
         ...(pathEntryExists(path.join(target, ".workflow")) ? [".workflow"] : []),
     ];
-    const recordPath = path.join(target, MANAGED_RECORD);
-    const installed = pathEntryExists(recordPath);
+    const installed = hasManagedAssetRecord(target);
     const diagnostics = [];
     let files = {};
     let managedAssets = [];
@@ -708,6 +825,7 @@ export function doctor(target, worktreeObservations) {
      * 未管理資産を数えると、**展開済みの全fileを「recordに無い」と報告する。**
      */
     let recordRead = false;
+    let recordFailure;
     if (!installed)
         diagnostics.push(`${MANAGED_RECORD}: managed recordがありません`);
     else {
@@ -718,7 +836,8 @@ export function doctor(target, worktreeObservations) {
             recordRead = true;
         }
         catch (error) {
-            diagnostics.push(`${MANAGED_RECORD}: ${error instanceof Error ? error.message : "検証できません"}`);
+            recordFailure = error instanceof Error ? error.message : "検証できません";
+            diagnostics.push(`${MANAGED_RECORD}: ${recordFailure}`);
         }
     }
     for (const asset of managedAssets) {
@@ -911,6 +1030,17 @@ export function doctor(target, worktreeObservations) {
             };
         }
     })();
+    const snapshotFolder = path.join(target, MANAGED_RECORDS);
+    const brokenSnapshotChain = installed &&
+        !recordRead &&
+        pathEntryExists(snapshotFolder) &&
+        (!fs.lstatSync(snapshotFolder).isDirectory() ||
+            snapshotEntries(target).length > 0);
+    const unobservedAction = brokenSnapshotChain
+        ? `${recordFailure}。${recordFailure?.includes("未接続のentry") ? "未接続entryの由来を確認し、正本外のentryを隔離してから再検証してください" : "anchorとsnapshotの正しい組をバックアップから復元してください"}`
+        : installed && !recordRead
+            ? recoveryDiagnostic(target)
+            : "managed recordの状態を確認してください";
     return {
         healthy: installed && diagnostics.length === 0,
         installed,
@@ -918,7 +1048,7 @@ export function doctor(target, worktreeObservations) {
             observed: unmanagedAssets.observed,
             paths: unmanagedAssets.paths,
             note: !unmanagedAssets.observed
-                ? `判定不能: ${unmanagedAssets.unobservedReason}。先に install または update --recover-record --apply で managed record を回復してから再実行する`
+                ? `判定不能: ${unmanagedAssets.unobservedReason}。${unobservedAction}`
                 : unmanagedAssets.paths.length === 0
                     ? "なし"
                     : `展開先に存在するがmanaged recordに無い管理対象が${unmanagedAssets.paths.length}件ある。これらは update の対象にならず現在の版で固定される。正本へ戻すか、update --recover-record --apply で再評価する`,

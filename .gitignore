@@ -33,6 +33,7 @@ dist/**/*.js.map
 .agents/
 .codex/
 .agent-skill-chain/managed-assets.json
+.agent-skill-chain/managed-assets-records/
 
 # ローカルツール設定と実行ログ
 test-execution.log

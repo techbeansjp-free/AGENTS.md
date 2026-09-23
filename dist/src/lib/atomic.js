@@ -404,4 +404,68 @@ export function writeFileAtomic(destination, contents, options = {}) {
     if (failure !== undefined)
         throw failure;
 }
+/** Publish complete bytes only when the destination entry is absent.
+ * `link` is the commit point: an entry inserted during validation is never
+ * replaced. The temporary file is fully written, fsynced and read back first.
+ */
+export function writeFileNoReplace(destination, contents) {
+    const resolved = path.resolve(destination);
+    const parent = path.dirname(resolved);
+    fs.mkdirSync(parent, { recursive: true });
+    const pinned = pinDirectory(parent);
+    const temporaryLeaf = `.${path.basename(resolved)}.tmp-${process.pid}-${crypto.randomBytes(12).toString("hex")}`;
+    const temporary = descriptorPath(pinned, temporaryLeaf);
+    const published = descriptorPath(pinned, path.basename(resolved));
+    const expected = Buffer.from(contents);
+    let descriptor;
+    let failure;
+    try {
+        descriptor = fs.openSync(temporary, fs.constants.O_RDWR |
+            fs.constants.O_CREAT |
+            fs.constants.O_EXCL |
+            fs.constants.O_NOFOLLOW, 0o600);
+        writeFully(descriptor, expected);
+        fs.fsyncSync(descriptor);
+        const reread = Buffer.alloc(expected.length);
+        let offset = 0;
+        while (offset < reread.length) {
+            const count = fs.readSync(descriptor, reread, offset, reread.length - offset, offset);
+            if (count <= 0)
+                throw new Error("no-replace公開前の再読取に失敗しました");
+            offset += count;
+        }
+        if (!reread.equals(expected) ||
+            fs.fstatSync(descriptor).size !== expected.length)
+            throw new Error("no-replace公開前の内容が一致しません");
+        assertPinnedDirectory(pinned);
+        fs.linkSync(temporary, published);
+        fsyncDirectory(pinned);
+    }
+    catch (error) {
+        failure = error;
+    }
+    if (descriptor !== undefined) {
+        try {
+            fs.closeSync(descriptor);
+        }
+        catch (error) {
+            failure ??= error;
+        }
+    }
+    try {
+        fs.unlinkSync(temporary);
+        fsyncDirectory(pinned);
+    }
+    catch (error) {
+        failure ??= error;
+    }
+    try {
+        fs.closeSync(pinned.descriptor);
+    }
+    catch (error) {
+        failure ??= error;
+    }
+    if (failure !== undefined)
+        throw failure;
+}
 //# sourceMappingURL=atomic.js.map
