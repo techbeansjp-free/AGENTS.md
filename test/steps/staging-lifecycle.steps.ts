@@ -636,7 +636,7 @@ fs.appendFileSync(${JSON.stringify(this.ghMarker)}, args.join(" ") + "\\n");
 if (args[0] === "repo" && args[1] === "view") {
   process.stdout.write(JSON.stringify({ nameWithOwner: "example/repository", viewerPermission: "WRITE" }));
 } else if (args[0] === "issue" && args[1] === "view") {
-  process.stdout.write("promotion body\\n");
+  process.stdout.write(JSON.stringify({ body: "promotion body\\n" }) + "\\n");
 }
 process.exit(0);
 `,
@@ -661,6 +661,8 @@ When("別Issueへの再同期を適用する", function () {
       `--staging-path=${this.target ?? ""}`,
       "--checkpoint=4",
       "--synced-at=2026-06-03T00:00:00.000Z",
+      `--expected-body-sha256=${sha256(fs.readFileSync(this.bodyFile ?? "", "utf8"))}`,
+      `--expected-current-body-sha256=${sha256("promotion body\n")}`,
       "--apply",
       "--authorize=approved",
     ],
@@ -729,6 +731,8 @@ When("full補完中のStep 4を元Issueへ同期する", function () {
       `--staging-path=${this.target ?? ""}`,
       "--checkpoint=4",
       "--synced-at=2026-06-03T00:00:00.000Z",
+      `--expected-body-sha256=${sha256(fs.readFileSync(this.bodyFile ?? "", "utf8"))}`,
+      `--expected-current-body-sha256=${sha256("promotion body\n")}`,
       "--apply",
       "--authorize=approved",
     ],

@@ -2223,6 +2223,7 @@ interface DeliveryProviderControl {
   postMergeReviewShift: "none" | "replaced" | "revoked";
   concurrentIssueEditAtAdapterCas?: boolean;
   failIssueReadBackAfterEditOnce?: boolean;
+  mutateIssueBodyAfterEdit?: "drop-final-lf";
 }
 
 interface PreparedDeliveryCli extends PreparedPullRequest {
@@ -3466,6 +3467,10 @@ if (exact(["--version"])) {
   // GitHub固有の正規化は模さない。
   const index = args.indexOf("--body-file");
   fs.writeFileSync(issueBodyFile, fs.readFileSync(args[index + 1], "utf8"));
+  if (control.mutateIssueBodyAfterEdit === "drop-final-lf") {
+    const saved = fs.readFileSync(issueBodyFile, "utf8");
+    fs.writeFileSync(issueBodyFile, saved.endsWith("\\n") ? saved.slice(0, -1) : saved);
+  }
   if (control.failIssueReadBackAfterEditOnce) {
     control.failIssueReadBackAfterEditOnce = false;
     control.failNextIssueView = true;
@@ -3484,9 +3489,9 @@ if (exact(["--version"])) {
   }
   if (control.concurrentIssueEditAtAdapterCas && issueViewCount === 4)
     fs.writeFileSync(issueBodyFile, "# concurrent edit\\n");
-  process.stdout.write(
-    fs.existsSync(issueBodyFile) ? fs.readFileSync(issueBodyFile, "utf8") : "",
-  );
+  process.stdout.write(JSON.stringify({
+    body: fs.existsSync(issueBodyFile) ? fs.readFileSync(issueBodyFile, "utf8") : "",
+  }) + "\\n");
 } else if (exact(["api", "repos/o/r/actions/runs/42"])) {
   // merge後の固定run ID直読み。pull_requests はPRが閉じると空になる実仕様を保つ。
   process.stdout.write(
@@ -5449,6 +5454,18 @@ if (exact(["auth", "status"])) {
         );
       };
       const syncIssue = (extra: string[]) => {
+        const expectedBodySha256 = crypto
+          .createHash("sha256")
+          .update(fs.readFileSync(path.join(fullStaging, "00_要求定義.md")))
+          .digest("hex");
+        const expectedCurrentBodySha256 = crypto
+          .createHash("sha256")
+          .update(
+            fs.existsSync(prepared.issueBodyFile)
+              ? fs.readFileSync(prepared.issueBodyFile)
+              : "",
+          )
+          .digest("hex");
         const result = executeCli(
           [
             "issue",
@@ -5458,6 +5475,8 @@ if (exact(["auth", "status"])) {
             `--body-file=${path.join(fullStaging, "00_要求定義.md")}`,
             "--authorize=approved",
             `--synced-at=${new Date(fixtureInstantMs()).toISOString()}`,
+            `--expected-body-sha256=${expectedBodySha256}`,
+            `--expected-current-body-sha256=${expectedCurrentBodySha256}`,
             ...extra,
             "--apply",
           ],
@@ -7584,6 +7603,331 @@ if (exact(["auth", "status"])) {
         fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
       );
       assert.equal(journal.entries.at(-1)?.step, 4);
+      break;
+    }
+    case "SCN-INT-ISSUESYNC-024": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      fs.writeFileSync(prepared.issueBodyFile, "# existing issue body\n");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-exact-body-digest",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const preview = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+      const previewDigest = (
+        JSON.parse(preview.stdout) as { sync: { bodySha256: string } }
+      ).sync.bodySha256;
+      const applied = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--expected-body-sha256=${previewDigest}`,
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(applied.status, 0, applied.stdout + applied.stderr);
+      const synchronizedBody = fs.readFileSync(prepared.issueBodyFile, "utf8");
+      assert.equal(
+        previewDigest,
+        crypto.createHash("sha256").update(synchronizedBody).digest("hex"),
+      );
+      break;
+    }
+    case "SCN-INT-ISSUESYNC-025": {
+      const prepared = prepareDeliveryCli(
+        this,
+        { failIssueReadBackAfterEditOnce: true },
+        "disabled",
+      );
+      fs.writeFileSync(prepared.issueBodyFile, "# initial issue body\n");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-exact-readback-digest",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const applyFromPreview = () => {
+        const preview = executeCli(
+          [
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--repo=o/r",
+            "--issue=877",
+          ],
+          prepared.root,
+          prepared.env,
+        );
+        assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+        const digest = (
+          JSON.parse(preview.stdout) as { sync: { bodySha256: string } }
+        ).sync.bodySha256;
+        return executeCli(
+          [
+            "workflow",
+            "advance",
+            `--staging=${staging}`,
+            "--repo=o/r",
+            "--issue=877",
+            "--authorize=approved",
+            `--expected-body-sha256=${digest}`,
+            `--recorded-at=${instant}`,
+            `--synced-at=${instant}`,
+            "--apply",
+          ],
+          prepared.root,
+          prepared.env,
+        );
+      };
+      const interrupted = applyFromPreview();
+      assert.notEqual(interrupted.status, 0);
+      const recovered = applyFromPreview();
+      assert.equal(recovered.status, 0, recovered.stdout + recovered.stderr);
+      const exactDigest = crypto
+        .createHash("sha256")
+        .update(fs.readFileSync(prepared.issueBodyFile, "utf8"))
+        .digest("hex");
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.match(
+        journal.entries.at(-1)?.evidence ?? "",
+        new RegExp(exactDigest, "u"),
+      );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ).length,
+        1,
+      );
+      break;
+    }
+    case "SCN-INT-ISSUESYNC-027": {
+      const prepared = prepareDeliveryCli(
+        this,
+        { mutateIssueBodyAfterEdit: "drop-final-lf" },
+        "disabled",
+      );
+      fs.writeFileSync(prepared.issueBodyFile, "# initial issue body\n");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-reject-changed-readback",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const preview = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+      const previewDigest = (
+        JSON.parse(preview.stdout) as { sync: { bodySha256: string } }
+      ).sync.bodySha256;
+      const rejected = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--expected-body-sha256=${previewDigest}`,
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /Issue同期後の読み取り検証に失敗しました/u,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 3);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ).length,
+        1,
+      );
+      break;
+    }
+    case "SCN-INT-ISSUESYNC-028": {
+      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      fs.writeFileSync(prepared.issueBodyFile, "# initial issue body\n");
+      const staging = createIssueStaging(prepared.root, {
+        title: "issue-sync-exact-body-digest",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3, 4, 5, 6, 7])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const preview = executeCli(
+        [
+          "issue",
+          "sync",
+          "--generate-body",
+          `--staging-path=${staging}`,
+          "--checkpoint=8",
+          "--repo=o/r",
+          "--issue=877",
+          "--dry-run",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+      const previewObservation = JSON.parse(preview.stdout) as {
+        bodySha256: string;
+        currentBodySha256: string;
+      };
+      const previewDigest = previewObservation.bodySha256;
+      const stalePreview = executeCli(
+        [
+          "issue",
+          "sync",
+          "--generate-body",
+          `--staging-path=${staging}`,
+          "--checkpoint=8",
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--expected-body-sha256=${"0".repeat(64)}`,
+          `--expected-current-body-sha256=${previewObservation.currentBodySha256}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(stalePreview.status, 0);
+      assert.match(stalePreview.stdout + stalePreview.stderr, /preview/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ).length,
+        0,
+      );
+      fs.writeFileSync(prepared.issueBodyFile, "# concurrent remote edit\n");
+      const staleRemote = executeCli(
+        [
+          "issue",
+          "sync",
+          "--generate-body",
+          `--staging-path=${staging}`,
+          "--checkpoint=8",
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--expected-body-sha256=${previewDigest}`,
+          `--expected-current-body-sha256=${previewObservation.currentBodySha256}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(staleRemote.status, 0);
+      assert.match(staleRemote.stdout + staleRemote.stderr, /remote本文/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ).length,
+        0,
+      );
+      const refreshedPreview = executeCli(
+        [
+          "issue",
+          "sync",
+          "--generate-body",
+          `--staging-path=${staging}`,
+          "--checkpoint=8",
+          "--repo=o/r",
+          "--issue=877",
+          "--dry-run",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(
+        refreshedPreview.status,
+        0,
+        refreshedPreview.stdout + refreshedPreview.stderr,
+      );
+      const refreshedObservation = JSON.parse(refreshedPreview.stdout) as {
+        bodySha256: string;
+        currentBodySha256: string;
+      };
+      const applied = executeCli(
+        [
+          "issue",
+          "sync",
+          "--generate-body",
+          `--staging-path=${staging}`,
+          "--checkpoint=8",
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--expected-body-sha256=${refreshedObservation.bodySha256}`,
+          `--expected-current-body-sha256=${refreshedObservation.currentBodySha256}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(applied.status, 0, applied.stdout + applied.stderr);
+      const synchronizedBody = fs.readFileSync(prepared.issueBodyFile, "utf8");
+      const exactDigest = crypto
+        .createHash("sha256")
+        .update(synchronizedBody)
+        .digest("hex");
+      assert.equal(refreshedObservation.bodySha256, exactDigest);
+      const record = readStoredStagingRecord(staging);
+      assert.equal(record.syncDigest, exactDigest);
+      assert.equal(record.readBackDigest, exactDigest);
       break;
     }
     default:

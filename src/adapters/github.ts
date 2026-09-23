@@ -431,7 +431,12 @@ function requireFullOid(value: unknown, label: string): string {
 }
 
 function parseObject<T extends object>(source: string, label: string): T {
-  const parsed: unknown = JSON.parse(source);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    throw new Error(`${label}のJSON形式が不正です`);
+  }
   if (!isRecord(parsed)) throw new Error(`${label}がobjectではありません`);
   return parsed as T;
 }
@@ -1073,6 +1078,24 @@ function observeContextIsolatedAdminMerge(
   }
 }
 
+/** GitHub CLIの表示用改行を本文byte列へ混入させず、JSON文字列を正本として読む。 */
+function readIssueBody(repository: string, issue: number, cwd: string): string {
+  const source = run(
+    "gh",
+    ["issue", "view", String(issue), "--repo", repository, "--json", "body"],
+    cwd,
+  ).stdout;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    throw new Error("GitHub Issue本文のread-back JSON形式が不正です");
+  }
+  if (!isRecord(parsed) || typeof parsed.body !== "string")
+    throw new Error("GitHub Issue本文のread-back形式が不正です");
+  return parsed.body;
+}
+
 /**
  * The only GitHub CLI process boundary. Domain code and skills never invoke gh.
  */
@@ -1238,21 +1261,7 @@ export function github(
      * 書き込みを行わないため`repository read`で足りる。
      */
     verifyRepository(input.repository, cwd, "read");
-    const body = run(
-      "gh",
-      [
-        "issue",
-        "view",
-        String(input.issue),
-        "--repo",
-        input.repository,
-        "--json",
-        "body",
-        "--jq",
-        ".body",
-      ],
-      cwd,
-    ).stdout.replace(/\r\n/g, "\n");
+    const body = readIssueBody(input.repository, input.issue, cwd);
     return {
       repository: input.repository,
       issue: input.issue,
@@ -1268,21 +1277,7 @@ export function github(
     if (input.expectedBodySha256 !== undefined) {
       if (!/^[a-f0-9]{64}$/u.test(input.expectedBodySha256))
         throw new Error("Issue同期前の期待body digestが不正です");
-      const currentBody = run(
-        "gh",
-        [
-          "issue",
-          "view",
-          String(input.issue),
-          "--repo",
-          input.repository,
-          "--json",
-          "body",
-          "--jq",
-          ".body",
-        ],
-        cwd,
-      ).stdout.replace(/\r\n/g, "\n");
+      const currentBody = readIssueBody(input.repository, input.issue, cwd);
       const currentDigest = crypto
         .createHash("sha256")
         .update(currentBody, "utf8")
@@ -1301,28 +1296,9 @@ export function github(
       "--body-file",
       input.bodyFile,
     ];
+    const expected = fs.readFileSync(input.bodyFile, "utf8");
     run("gh", args, cwd);
-    const expected = fs
-      .readFileSync(input.bodyFile, "utf8")
-      .replace(/\r\n/g, "\n")
-      .trimEnd();
-    const observed = run(
-      "gh",
-      [
-        "issue",
-        "view",
-        String(input.issue),
-        "--repo",
-        input.repository,
-        "--json",
-        "body",
-        "--jq",
-        ".body",
-      ],
-      cwd,
-    )
-      .stdout.replace(/\r\n/g, "\n")
-      .trimEnd();
+    const observed = readIssueBody(input.repository, input.issue, cwd);
     if (observed !== expected)
       throw new Error("Issue同期後の読み取り検証に失敗しました");
     return {
