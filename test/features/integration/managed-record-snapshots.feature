@@ -60,3 +60,8 @@ Feature: managed asset recordを既存entryの置換なしで公開する
     Given managed record公開検証用の隔離directoryがある
     When 資産処理後のsnapshot公開が失敗する
     Then 中断lockが残りdoctorと次の適用を停止する
+
+  Scenario: SCN-INT-LIFECYCLE-057 snapshot配置先だけがhardlink非対応なら資産変更前に止める
+    Given managed record公開検証用の隔離directoryがある
+    When snapshot directoryだけでhardlinkを拒否する
+    Then 不足資産を配置せず変更lockを残さない

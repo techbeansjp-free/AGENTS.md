@@ -198,6 +198,45 @@ Then("競合したprobe entryと参照先は保持される", function () {
   assert.equal(fs.existsSync(path.join(this.root, "AGENTS.md")), false);
 });
 
+When("snapshot directoryだけでhardlinkを拒否する", function () {
+  init(this.root, { apply: true });
+  fs.rmSync(path.join(this.root, "AGENTS.md"));
+  const original = fs.linkSync;
+  let blocked = false;
+  try {
+    (fs as { linkSync: typeof fs.linkSync }).linkSync = ((
+      source: string,
+      destination: string,
+    ) => {
+      if (
+        destination.startsWith(snapshotDirectory(this.root)) &&
+        path.basename(destination).startsWith(".record-link-probe-")
+      ) {
+        blocked = true;
+        throw new Error("snapshot hardlink unsupported");
+      }
+      return original(source, destination);
+    }) as typeof fs.linkSync;
+    assert.throws(
+      () => upgrade(this.root, { apply: true }),
+      /snapshot hardlink unsupported/u,
+    );
+  } finally {
+    (fs as { linkSync: typeof fs.linkSync }).linkSync = original;
+  }
+  assert.equal(blocked, true);
+});
+
+Then("不足資産を配置せず変更lockを残さない", function () {
+  assert.equal(fs.existsSync(path.join(this.root, "AGENTS.md")), false);
+  assert.equal(
+    fs.existsSync(
+      path.join(this.root, ".agent-skill-chain/managed-assets-mutation.lock"),
+    ),
+    false,
+  );
+});
+
 Then("recordとpackage資産は配置されない", function () {
   assert.equal(fs.existsSync(this.recordPath), false);
   assert.equal(fs.existsSync(path.join(this.root, "AGENTS.md")), false);

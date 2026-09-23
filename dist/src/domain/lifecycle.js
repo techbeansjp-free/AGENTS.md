@@ -113,10 +113,13 @@ function sha256Bytes(contents) {
     return crypto.createHash("sha256").update(contents).digest("hex");
 }
 /** Test the actual filesystem's hardlink operation before changing assets. */
-function assertSnapshotPublicationSupported(target) {
+function assertSnapshotPublicationSupported(target, recordPresent) {
     // Exercise the actual publication primitive, including its descriptor path
     // on Linux. The probe lives outside the snapshot chain.
-    const destination = path.join(target, ".agent-skill-chain", `.record-link-probe-${process.pid}-${crypto.randomBytes(12).toString("hex")}.tmp`);
+    const directory = recordPresent
+        ? snapshotDirectory(target)
+        : path.join(target, ".agent-skill-chain");
+    const destination = path.join(directory, `.record-link-probe-${process.pid}-${crypto.randomBytes(12).toString("hex")}.tmp`);
     let published = false;
     try {
         writeFileNoReplace(destination, "probe");
@@ -483,7 +486,7 @@ function initUnlocked(target, options, markDirty = () => { }) {
     if (!options.apply)
         return { applied: false, assets: assets.map(({ dest }) => dest) };
     const recordPresent = hasManagedAssetRecord(target);
-    assertSnapshotPublicationSupported(target);
+    assertSnapshotPublicationSupported(target, recordPresent);
     const expectedParent = recordPresent
         ? readCurrentManagedRecord(target).parent
         : null;
@@ -687,7 +690,7 @@ function upgradeUnlocked(target, options, markDirty = () => { }) {
             adopted: adoptable,
             retained,
         };
-    assertSnapshotPublicationSupported(target);
+    assertSnapshotPublicationSupported(target, recordPresent);
     const next = {
         version: PACKAGE_VERSION,
         files: { ...old.files },
