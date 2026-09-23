@@ -2223,6 +2223,7 @@ interface DeliveryProviderControl {
   postMergeReviewShift: "none" | "replaced" | "revoked";
   concurrentIssueEditAtAdapterCas?: boolean;
   failIssueReadBackAfterEditOnce?: boolean;
+  mutateIssueBodyAfterEdit?: "drop-final-lf" | "append-space";
 }
 
 interface PreparedDeliveryCli extends PreparedPullRequest {
@@ -3466,6 +3467,12 @@ if (exact(["--version"])) {
   // GitHub固有の正規化は模さない。
   const index = args.indexOf("--body-file");
   fs.writeFileSync(issueBodyFile, fs.readFileSync(args[index + 1], "utf8"));
+  if (control.mutateIssueBodyAfterEdit === "drop-final-lf") {
+    const saved = fs.readFileSync(issueBodyFile, "utf8");
+    fs.writeFileSync(issueBodyFile, saved.endsWith("\\n") ? saved.slice(0, -1) : saved);
+  }
+  if (control.mutateIssueBodyAfterEdit === "append-space")
+    fs.appendFileSync(issueBodyFile, " ");
   if (control.failIssueReadBackAfterEditOnce) {
     control.failIssueReadBackAfterEditOnce = false;
     control.failNextIssueView = true;
@@ -3484,9 +3491,9 @@ if (exact(["--version"])) {
   }
   if (control.concurrentIssueEditAtAdapterCas && issueViewCount === 4)
     fs.writeFileSync(issueBodyFile, "# concurrent edit\\n");
-  process.stdout.write(
-    fs.existsSync(issueBodyFile) ? fs.readFileSync(issueBodyFile, "utf8") : "",
-  );
+  process.stdout.write(JSON.stringify({
+    body: fs.existsSync(issueBodyFile) ? fs.readFileSync(issueBodyFile, "utf8") : "",
+  }) + "\\n");
 } else if (exact(["api", "repos/o/r/actions/runs/42"])) {
   // merge後の固定run ID直読み。pull_requests はPRが閉じると空になる実仕様を保つ。
   process.stdout.write(
@@ -7701,6 +7708,70 @@ if (exact(["auth", "status"])) {
         journal.entries.at(-1)?.evidence ?? "",
         new RegExp(exactDigest, "u"),
       );
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(
+          (args) => args[0] === "issue" && args[1] === "edit",
+        ).length,
+        1,
+      );
+      break;
+    }
+    case "SCN-INT-ISSUESYNC-027": {
+      const prepared = prepareDeliveryCli(
+        this,
+        { mutateIssueBodyAfterEdit: "drop-final-lf" },
+        "disabled",
+      );
+      fs.writeFileSync(prepared.issueBodyFile, "# initial issue body\n");
+      const staging = createIssueStaging(prepared.root, {
+        title: "workflow-advance-reject-changed-readback",
+        answers: answers(false),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      writeFullStagingArtifacts(staging);
+      for (const step of [1, 2, 3])
+        appendWorkflowJournalEntry({ staging, entry: entry(step, "full") });
+      const preview = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+      const previewDigest = (
+        JSON.parse(preview.stdout) as { sync: { bodySha256: string } }
+      ).sync.bodySha256;
+      const rejected = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          "--repo=o/r",
+          "--issue=877",
+          "--authorize=approved",
+          `--expected-body-sha256=${previewDigest}`,
+          `--recorded-at=${instant}`,
+          `--synced-at=${instant}`,
+          "--apply",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(rejected.status, 0);
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /Issue同期後の読み取り検証に失敗しました/u,
+      );
+      const journal = parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      );
+      assert.equal(journal.entries.at(-1)?.step, 3);
       assert.equal(
         deliveryProviderCalls(prepared).filter(
           (args) => args[0] === "issue" && args[1] === "edit",
