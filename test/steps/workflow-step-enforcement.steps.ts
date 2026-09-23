@@ -3592,16 +3592,16 @@ if (exact(["--version"])) {
     JSON.stringify({
       sha: rebasedImplementationSha,
       commit: { tree: { sha: control.mergeTreeSha } },
-      parents: [{ sha: baseSha }],
+      parents: [{ sha: control.terminalParentTampered ? "e".repeat(40) : baseSha }],
     }),
   );
 } else if (exact(["api", "repos/o/r/commits/" + mergeSha])) {
   const parents = control.autoMergeMethod === "MERGE"
     ? [{ sha: baseSha }, { sha }]
-    : [{ sha: control.terminalParentTampered
-      ? "e".repeat(40)
-      : control.autoMergeMethod === "REBASE"
-        ? rebasedImplementationSha
+    : [{ sha: control.autoMergeMethod === "REBASE"
+      ? rebasedImplementationSha
+      : control.terminalParentTampered
+        ? "e".repeat(40)
         : baseSha }];
   process.stdout.write(
     JSON.stringify({
@@ -6684,7 +6684,7 @@ if (exact(["auth", "status"])) {
       assert.notEqual(rejected.status, 0);
       assert.match(
         rejected.stdout + rejected.stderr,
-        /rebase終端|first parent|chain/u,
+        /rebase終端chainのfirst parentが終端検証baseと一致しません/u,
       );
       const state = parseDeliveryState(
         fs.readFileSync(
