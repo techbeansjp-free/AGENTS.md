@@ -15,6 +15,7 @@ import {
 } from "../../src/lib/security.js";
 import { evaluateReview } from "../../src/domain/review.js";
 import { inspectHookRegistration } from "../../src/domain/lifecycle.js";
+import { STAGING_LIFECYCLE_AREAS } from "../../src/domain/staging.js";
 import {
   loadOperationPolicy,
   validatePolicy,
@@ -691,6 +692,49 @@ Then("大文字拡張子とshebangのPython source再混入を拒否する", fun
     );
 });
 Given(
+  "一時ライフサイクル領域にPythonとshell sourceを置き領域外にTypeScriptを置いたprojectがある",
+  function () {
+    this.sourceQualityRoot = this.temp("asc-source-lifecycle-");
+    fs.mkdirSync(path.join(this.sourceQualityRoot, ".agent-skill-chain"), {
+      recursive: true,
+    });
+    fs.copyFileSync(
+      ".agent-skill-chain/project-policy.json",
+      path.join(
+        this.sourceQualityRoot,
+        ".agent-skill-chain/project-policy.json",
+      ),
+    );
+    fs.cpSync(
+      ".agent-skill-chain/project",
+      path.join(this.sourceQualityRoot, ".agent-skill-chain/project"),
+      { recursive: true },
+    );
+    fs.writeFileSync(
+      path.join(
+        this.sourceQualityRoot,
+        ".agent-skill-chain/retained-source.ts",
+      ),
+      "export const retained = true;\n",
+    );
+    for (const [index, area] of STAGING_LIFECYCLE_AREAS.entries()) {
+      const generated = path.join(this.sourceQualityRoot, area, "nested");
+      fs.mkdirSync(generated, { recursive: true });
+      fs.writeFileSync(
+        path.join(generated, `generated-${index}.PY`),
+        "x = 1\n",
+      );
+      fs.writeFileSync(
+        path.join(generated, `generated-${index}`),
+        "#!/usr/bin/env sh\nexit 0\n",
+      );
+    }
+  },
+);
+Then("一時ライフサイクル領域のsourceは検査対象に数えられない", function () {
+  assert.deepEqual(this.sourceQuality, { valid: true, errors: [], files: 1 });
+});
+Given(
   "project choiceを乖離させtestとconformanceをtrue、runnerを空、ESLintをoff、trusted jobをfalseへ変更したprojectがある",
   function () {
     this.projectQualityRoot = this.temp("asc-quality-relaxation-");
@@ -807,6 +851,7 @@ function copyQualityContractFixture(root: string): void {
     "package.json",
     "scripts/check_project_quality.ts",
     "scripts/check_source_quality.ts",
+    "src/domain/staging.ts",
     "src/lib/entrypoint.ts",
     "src/lib/security.ts",
     "tsconfig.json",

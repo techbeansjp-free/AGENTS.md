@@ -46,13 +46,13 @@ Feature: SCN配置検査の走査範囲を規範側だけに限る
     When SCN配置検査を実行する
     Then 検査はSCN配置違反を1件だけ報告する
 
-  Scenario: SCN-UNIT-SCNSCOPE-010 一時ライフサイクル領域4件のSCN定義を違反にしない
-    Given 一時ライフサイクル領域4件すべてにSCN定義がある
+  Scenario: SCN-UNIT-SCNSCOPE-010 一時ライフサイクル領域5件のSCN定義を違反にしない
+    Given 一時ライフサイクル領域5件すべてにSCN定義がある
     When SCN配置検査を実行する
     Then 検査はSCN配置違反を報告しない
 
-  Scenario: SCN-UNIT-SCNSCOPE-011 4領域の近似pathと所定locationを取り違えない
-    Given 4領域それぞれの近似pathと所定locationと領域外にSCN定義がある
+  Scenario: SCN-UNIT-SCNSCOPE-011 5領域の近似pathと所定locationを取り違えない
+    Given 5領域それぞれの近似pathと所定locationと領域外にSCN定義がある
     When SCN配置検査を実行する
     Then 検査は固定の期待集合どおりに配置違反を報告する
 

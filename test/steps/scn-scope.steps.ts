@@ -309,23 +309,26 @@ const PLACEMENT_FIXTURE: ReadonlyArray<readonly [string, boolean]> = [
   [".agent-skill-chain/role-log-old/near.feature", true],
   [".agent-skill-chain/metrics-old/near.md", true],
   [".agent-skill-chain/runtime-old/near.feature", true],
+  [".agent-skill-chain/local-old/near.feature", true],
   [".agent-skill-chain/tmp/handoffs/draft.md", false],
   [".agent-skill-chain/tmp/issues-old/draft.feature", false],
   [".agent-skill-chain/role-log/draft.feature", false],
   [".agent-skill-chain/metrics/draft.md", false],
   [".agent-skill-chain/runtime/draft.feature", false],
+  [".agent-skill-chain/local/draft.feature", false],
 ];
 
-Given("一時ライフサイクル領域4件すべてにSCN定義がある", function () {
+Given("一時ライフサイクル領域5件すべてにSCN定義がある", function () {
   this.root = this.temp();
   write(this.root, ".agent-skill-chain/tmp/handoffs/例.md", SCN_LINE);
   write(this.root, ".agent-skill-chain/role-log/例.feature", SCN_LINE);
   write(this.root, ".agent-skill-chain/metrics/例.md", SCN_LINE);
   write(this.root, ".agent-skill-chain/runtime/例.feature", SCN_LINE);
+  write(this.root, ".agent-skill-chain/local/例.feature", SCN_LINE);
 });
 
 Given(
-  "4領域それぞれの近似pathと所定locationと領域外にSCN定義がある",
+  "5領域それぞれの近似pathと所定locationと領域外にSCN定義がある",
   function () {
     this.root = this.temp();
     for (const [relative] of PLACEMENT_FIXTURE)
@@ -437,7 +440,7 @@ const REQ_SQ_017_STALE_SCOPE = [
  * **判断の実体を1文ずつ**名指しする。
  */
 const REQ_SQ_017_CURRENT = [
-  "**除外は一時ライフサイクル領域`STAGING_LIFECYCLE_AREAS`の4件とする。**",
+  "**除外は一時ライフサイクル領域`STAGING_LIFECYCLE_AREAS`の5件とする。**",
   "除外範囲をこの検査が独自に持たず、分類の唯一の正本から導出する",
   "**`role-log/`と`metrics/`を除外しなかった旧来の理由は成立しない。**",
   "REQ-SQ-019がその非対称を解消し",
