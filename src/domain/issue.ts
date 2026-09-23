@@ -1462,14 +1462,16 @@ export function buildIssueSyncBody(
       : renderIssueSyncBody(record.mode, checkpoint, texts);
   return Object.freeze({
     body,
-    bodySha256: crypto
-      .createHash("sha256")
-      .update(body.trimEnd())
-      .digest("hex"),
+    bodySha256: issueBodySha256(body),
     artifacts: Object.freeze(artifacts),
     mode: record.mode,
     checkpoint,
   });
+}
+
+/** Issue同期で認可・送信・read-backへ共用する、本文byte列そのもののdigest。 */
+export function issueBodySha256(body: string): string {
+  return crypto.createHash("sha256").update(body, "utf8").digest("hex");
 }
 
 /**

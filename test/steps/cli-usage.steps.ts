@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -225,6 +226,10 @@ const CHECKS: Readonly<
     );
     const bodyFile = path.join(directory, "ISSUE_BODY.md");
     fs.writeFileSync(bodyFile, "# 本文\n");
+    const bodySha256 = crypto
+      .createHash("sha256")
+      .update(fs.readFileSync(bodyFile))
+      .digest("hex");
     const result = await run([
       "issue",
       "sync",
@@ -233,6 +238,8 @@ const CHECKS: Readonly<
       `--body-file=${bodyFile}`,
       "--apply",
       "--authorize=approved",
+      `--expected-body-sha256=${bodySha256}`,
+      `--expected-current-body-sha256=${"0".repeat(64)}`,
       `--staging-path=${directory}`,
     ]);
     assert.notEqual(result.status, 0);
@@ -256,6 +263,8 @@ const CHECKS: Readonly<
       `--body-file=${bodyFile}`,
       "--apply",
       "--authorize=approved",
+      `--expected-body-sha256=${bodySha256}`,
+      `--expected-current-body-sha256=${"0".repeat(64)}`,
       `--staging-path=${directory}`,
       "--checkpoint=4",
     ]);
