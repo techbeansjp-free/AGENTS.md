@@ -357,6 +357,29 @@
           "afterSha256": "6b51d431df5d7f141cbececcf79edf3dd861c3b4069f0b11661a3eefacbba918"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-SOURCE-LIFECYCLE-SCAN-001",
+      "status": "staged",
+      "fromVersion": 12,
+      "toVersion": 13,
+      "owner": "repository maintainer",
+      "rationale": "source:checkはGit管理外の一時ライフサイクル領域まで再帰走査し、別sessionのhandoffやstagingに残るPython・shell sourceを管理対象sourceの混入として拒否する。同一commitでもlocal一時状態だけでqualityとconformanceの成否が変わり、clean treeで偽陽性になる。scripts/check_trace.tsが既に使うsrc/domain/staging.tsのisStagingLifecycleScanPathをsource walkerにも適用し、path集合を複製せず一時領域だけを除外する。一時領域外の大文字拡張子・shebangを含む補助言語検出は維持する。完成予定contentは隔離copyのcommit ca7b2409067bbde59feec4fd629660eaf7464153で固定し、新規SCN-UNIT-QUALITY-020の修正前失敗・修正後成功、既存SCN-UNIT-QUALITY-005の回帰合格、述語呼出しを無効化する変異のkillを確認した",
+      "rollback": "登録済みproposalは削除できず、qualityContractVersionの減少も受理されない。適用前は有効化せず保持する。適用後に戻す場合は、check_source_quality.tsを本proposal適用前の内容へ戻す新規proposalを次versionとして登録し、同じ二段階手順で前進させる",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "scripts/check_source_quality.ts",
+          "beforeSha256": "3b790dc97116c4457cd94f1443b31275d701edf103a1b77626031434d6ad3c8a",
+          "afterSha256": "a853f3917651391ad0d1794acf1c9e2a45a5e5918de8f03cc14d35895ff681ba"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "6b51d431df5d7f141cbececcf79edf3dd861c3b4069f0b11661a3eefacbba918",
+          "afterSha256": "3fdba35f04dc8c462986c992bcf875546257113072a909c162f7e470e581e278"
+        }
+      ]
     }
   ]
 }
