@@ -101,4 +101,21 @@ findingの選択肢順序flipは14.5%、required actionは20.6%で、Jevの3.8% 
 | JevK5 4B 通常順 | 76.63% | 35.00% | 93.30% | 71.40% | 14.5% | 20.6% |
 | JevK5 4B 反転順 | 74.63% | 17.25% | 97.00% | 67.70% | 14.5% | 20.6% |
 
-現行synthetic contractではJev 1.13.0が最も安定した。ただしJevもfinding balanced accuracy 67%台、action 68〜71%に留まり、実repositoryのreview精度を測った結果でもない。Jevは進行役がEvidenceを再検証する補助decision signalに限定する。JevK5、Laya、SemIf、Kevは採用しない。
+現行synthetic contractではJev 1.13.0が最も安定した。ただしJevもfinding balanced accuracy 67%台、action 68〜71%に留まり、実repositoryのreview精度を測った結果でもない。Jevは進行役がEvidenceを再検証する補助decision signalに限定する。
+
+JevK5・Kev・SemIfは、今回の実測値だけで一様に「不採用」と扱うべきではない。用途によって使用可否が分かれる。
+
+| 用途 | JevK5 | Kev | SemIf |
+| --- | --- | --- | --- |
+| finding自動却下(rejector) | 禁止 | 禁止 | 禁止 |
+| formal approval / merge authority | 禁止 | 禁止 | 禁止 |
+| finding valid時の再検証優先度付け(advisory signal) | 使用候補 | 不可(ほぼ全件yes) | 本評価では未評価 |
+| severity推定の補助 | 使用候補(93.30% / 97.00%) | 未評価 | 未評価 |
+| required actionの候補提示 | 使用候補(71.40% / 67.70%) | 未評価 | 未評価 |
+| high-recall候補生成(後段Evidence検証必須) | 未評価 | 本評価の対象外、別途評価が要る | 未評価 |
+
+理由: JevK5はfinding `yes` recallが35.00% / 17.25%とfalse negativeが多く、findingを消す方向の判断(rejector)には使えない。一方severityは93.30% / 97.00%、required actionは71.40% / 67.70%であり、単独のformal gateではなく進行役へのadvisory signal(severity推定・優先順位付け・required action候補)としての価値は本評価で否定されていない。Kevはholdoutで通常順90%・反転順100%が`yes`となるalways-valid傾向のためverifierとして使えないが、precision40%を前提に後段でEvidence検証を必須とするhigh-recall候補生成という用途は本評価の対象外であり、採否は別途評価する。
+
+したがって本評価で不採用と確定するのは「finding自動却下・formal approval・merge authorityへの使用」であり、「severity推定・優先順位付け・required action候補・high-recall候補生成としての利用可能性」は本評価では判定していない。採用を検討する場合は、出力を`{"value", "confidence", "authority": "advisory", "model"}`のように型で区別し、advisory用途ごとに個別の継続gateを設計したうえで再評価する。
+
+Laya候補(本Issueで学習した候補model)は、##結論に記載の品質基準を満たさないため不採用のままとする。この判断はJevK5・Kev・SemIfの外部model評価とは独立である。
