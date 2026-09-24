@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -46,6 +47,24 @@ import {
   type SealedSplit,
   type TeacherAssessment,
 } from "../../src/domain/laya-decision-training.js";
+import {
+  createLayaTrainingArtifactBindings,
+  digestLayaTrainingInput,
+  evaluateLayaValidationPredictions,
+  validateLayaTrainingDatasets,
+  validateLayaValidationPredictions,
+  type LayaValidationEvaluation,
+  type LayaTrainingArtifactBindings,
+  type LayaTrainingRow,
+} from "../../src/domain/laya-training-contract.js";
+import { stableJson } from "../../src/lib/security.js";
+import {
+  convertSyntheticTrainingInput,
+  createSyntheticTeacherPackets,
+  importSyntheticTeacherAnswers,
+  type SyntheticImportResult,
+  type TeacherSet,
+} from "../../scripts/laya_synthetic_import.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class LayaWorld extends WorkflowWorld {
@@ -70,6 +89,19 @@ class LayaWorld extends WorkflowWorld {
   trustedPinCount = -1;
   movedRoot = "";
   gitTarget = "";
+  trainingSource = "";
+  validationSource = "";
+  validationPredictionSource = "";
+  validationEvaluation: LayaValidationEvaluation | undefined;
+  pythonValidationEvaluation: LayaValidationEvaluation | undefined;
+  syntheticProblems: unknown;
+  syntheticLabels: unknown;
+  syntheticImport: SyntheticImportResult | undefined;
+  syntheticPacketSource = "";
+  syntheticAnswerSource = "";
+  syntheticTeacherSets: TeacherSet[] = [];
+  trainingArtifactBindings: LayaTrainingArtifactBindings | undefined;
+  pythonStatus = 0;
 }
 
 const { Given, When, Then } = stepDefinitions<LayaWorld>();
@@ -80,6 +112,106 @@ const PRIVATE_KEY =
   "7d4f38f976ace218e6d3dee8e27c2592848418dd9446bd3c2ef882dfee7755a8";
 const CORPUS_SALT =
   "abcdef01234567899876543210abcdeffedcba01234567890123456789abcde0";
+const TRAIN_IDS = ["weak-review", "shared-case", "soft-gold", "runner-train"];
+const VALIDATION_IDS = ["validation-1", "runner-validation"];
+const TRAIN_SPLIT_UNSIGNED = {
+  schemaVersion: "asc/laya-split/v1" as const,
+  createdAt: NOW,
+  sourceDigest: DIGEST,
+  partitions: {
+    train: TRAIN_IDS,
+    validation: VALIDATION_IDS,
+    holdout: ["holdout-only"],
+    reserve: ["reserve-only"],
+  },
+};
+const TRAIN_SPLIT: SealedSplit = {
+  ...TRAIN_SPLIT_UNSIGNED,
+  splitDigest: digestLayaArtifact(TRAIN_SPLIT_UNSIGNED),
+};
+
+function fixtureTrainingState() {
+  return {
+    claim: "A reachable path violates an invariant",
+    evidence: [{ path: "src/example.ts", lineStart: 1, lineEnd: 1 }],
+    slice: "general",
+  };
+}
+
+function fixtureTrainingQuestions() {
+  return {
+    "finding-validity": {
+      type: "choice",
+      instructions: "Decide from evidence",
+      criteria: {
+        yes: "valid",
+        no: "invalid",
+        "insufficient-evidence": "unknown",
+      },
+    },
+    "required-action": {
+      type: "choice",
+      instructions: "Choose the required action",
+      criteria: {
+        fix: "fix",
+        investigate: "investigate",
+        dismiss: "dismiss",
+      },
+    },
+    severity: {
+      type: "choice",
+      instructions: "Choose severity",
+      criteria: {
+        critical: "critical",
+        high: "high",
+        medium: "medium",
+        low: "low",
+      },
+    },
+  };
+}
+
+function teacherArtifact(teacher: "codex" | "opus") {
+  return {
+    schemaVersion: "asc/laya-teacher-assessment-set/v1",
+    teacher,
+    assessments: (["train", "validation"] as const).flatMap((partition) =>
+      TRAIN_SPLIT.partitions[partition].flatMap((caseId) =>
+        (
+          [
+            ["finding-validity", "yes"],
+            ["required-action", "fix"],
+            ["severity", "medium"],
+          ] as const
+        ).map(([questionId, answer]) => ({
+          schemaVersion: "asc/laya-teacher-assessment/v1",
+          teacher,
+          runId: `${teacher}-fixture`,
+          caseId,
+          questionId,
+          purpose: "train-label",
+          partition,
+          answer,
+          inputDigest: digestLayaTrainingInput(
+            fixtureTrainingState(),
+            questionId,
+            fixtureTrainingQuestions()[questionId],
+          ),
+          confidence: 1,
+          evidenceReason: "fixture evidence",
+          splitDigest: TRAIN_SPLIT.splitDigest,
+          sealDigest: DIGEST,
+          recordedAt: NOW,
+        })),
+      ),
+    ),
+  };
+}
+
+const CODEX_TEACHER = teacherArtifact("codex");
+const OPUS_TEACHER = teacherArtifact("opus");
+const CODEX_TEACHER_SHA = digestLayaArtifact(CODEX_TEACHER);
+const OPUS_TEACHER_SHA = digestLayaArtifact(OPUS_TEACHER);
 
 function baseCase(index = 1): LayaDecisionCase {
   return {
@@ -117,7 +249,7 @@ function validManifest(): LayaTrainingManifest {
     sourceRepository: "techbeansjp-free/AGENTS.md",
     sourceCommit: SHA,
     datasetDigest: DIGEST,
-    splitDigest: DIGEST,
+    splitDigest: TRAIN_SPLIT.splitDigest,
     sealDigest: DIGEST,
     layaRevision: "2c6c16baf3ea3149948777937d5005a7c7fba425",
     notebookSha256:
@@ -127,7 +259,346 @@ function validManifest(): LayaTrainingManifest {
     seed: 1480,
     trainPath: "runs/train.jsonl",
     validationPath: "runs/validation.jsonl",
+    environmentDigest:
+      "0795cbc6120e9d75db2ff77390ac0b82ab4a59de9d1ccbfe8a15acdad032426e",
+    splitArtifact: {
+      path: "runs/split.json",
+      sha256: digestLayaArtifact(TRAIN_SPLIT),
+    },
+    teacherArtifacts: [
+      {
+        teacher: "codex",
+        path: "runs/codex.json",
+        sha256: CODEX_TEACHER_SHA,
+      },
+      {
+        teacher: "opus",
+        path: "runs/opus.json",
+        sha256: OPUS_TEACHER_SHA,
+      },
+    ],
+    adjudicationArtifacts: [],
   };
+}
+
+function trainingBindings(
+  manifest = validManifest(),
+): LayaTrainingArtifactBindings {
+  return createLayaTrainingArtifactBindings({
+    manifest,
+    split: TRAIN_SPLIT,
+    teachers: [
+      {
+        teacher: "codex",
+        sha256: CODEX_TEACHER_SHA,
+        value: CODEX_TEACHER,
+      },
+      {
+        teacher: "opus",
+        sha256: OPUS_TEACHER_SHA,
+        value: OPUS_TEACHER,
+      },
+    ],
+    adjudications: [],
+  });
+}
+
+function trainingRow(
+  id: string,
+  provenance: LayaTrainingRow["provenance"] = {
+    labelSource: "teacher-consensus",
+    sourceCaseId: id,
+    splitDigest: TRAIN_SPLIT.splitDigest,
+    sealDigest: DIGEST,
+    purpose: "train-label",
+    partition: id.startsWith("validation") ? "validation" : "train",
+    teacherAssessments: [
+      {
+        teacher: "codex",
+        assessmentDigest: CODEX_TEACHER_SHA,
+        answers: {
+          "finding-validity": "yes",
+          "required-action": "fix",
+          severity: "medium",
+        },
+      },
+      {
+        teacher: "opus",
+        assessmentDigest: OPUS_TEACHER_SHA,
+        answers: {
+          "finding-validity": "yes",
+          "required-action": "fix",
+          severity: "medium",
+        },
+      },
+    ],
+  },
+): LayaTrainingRow {
+  return {
+    schemaVersion: "asc/laya-training-row/v1",
+    id,
+    workflow: "general",
+    state: stableJson(fixtureTrainingState()),
+    questions: stableJson(fixtureTrainingQuestions()),
+    gold: stableJson({
+      "finding-validity": {
+        label: "yes",
+        probabilities: { yes: 1, no: 0, "insufficient-evidence": 0 },
+      },
+      "required-action": {
+        label: "fix",
+        probabilities: { fix: 1, investigate: 0, dismiss: 0 },
+      },
+      severity: {
+        label: "medium",
+        probabilities: { critical: 0, high: 0, medium: 1, low: 0 },
+      },
+    }),
+    provenance,
+  };
+}
+
+function jsonl(row: unknown): string {
+  return `${JSON.stringify(row)}\n`;
+}
+
+function sourceSha(source: string): string {
+  return crypto.createHash("sha256").update(source).digest("hex");
+}
+
+function datasetDigest(trainSource: string, validationSource: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(sourceSha(trainSource) + sourceSha(validationSource))
+    .digest("hex");
+}
+
+function syntheticFixture(): { problems: unknown; labels: unknown } {
+  const cases = Array.from({ length: 4 }, (_, index) => ({
+    caseId: `SYN-${index + 1}`,
+    groupId: `SG-${index + 1}`,
+    workflow: "general",
+    claim: "A nullable value is dereferenced after a reachable branch.",
+    evidence: [
+      {
+        path: "synthetic/typescript/example.ts",
+        lineStart: 10,
+        lineEnd: 10,
+        excerpt: "return value.name;",
+      },
+    ],
+  }));
+  const partitions = {
+    train: ["SYN-1", "SYN-2"],
+    validation: ["SYN-3"],
+    holdout: ["SYN-4"],
+    reserve: [],
+  };
+  const unsignedSplit = {
+    schemaVersion: "asc/laya-split/v1",
+    createdAt: NOW,
+    sourceDigest: digestLayaArtifact(cases),
+    partitions,
+  };
+  const split = {
+    ...unsignedSplit,
+    splitDigest: digestLayaArtifact(unsignedSplit),
+  };
+  const unsignedProblems = {
+    schemaVersion: "asc/laya-synthetic-problem-set/v1",
+    sourceCommit: SHA,
+    createdAt: NOW,
+    cases,
+    split,
+  };
+  const sealDigest = digestLayaArtifact(unsignedProblems);
+  const problems = { ...unsignedProblems, sealDigest };
+  const answerByQuestion = {
+    "finding-validity": "yes",
+    severity: "high",
+    "required-action": "fix",
+    "distribution-impact": "yes",
+  } as const;
+  const answerSource = createSyntheticTeacherPackets(problems, 4)
+    .packets.map((packet) =>
+      stableJson({
+        caseId: packet.caseId,
+        questionId: packet.questionId,
+        answer: answerByQuestion[packet.questionId],
+        confidence: 1,
+        evidenceReason: "The synthetic evidence supports this answer.",
+      }),
+    )
+    .join("\n");
+  return {
+    problems,
+    labels: {
+      schemaVersion: "asc/laya-synthetic-teacher-labels/v1",
+      sealDigest,
+      teachers: [
+        importSyntheticTeacherAnswers(problems, answerSource, {
+          expectedCount: 4,
+          teacher: "codex",
+          runId: "codex-synthetic-fixture",
+          recordedAt: NOW,
+        }),
+        importSyntheticTeacherAnswers(problems, answerSource, {
+          expectedCount: 4,
+          teacher: "opus",
+          runId: "opus-synthetic-fixture",
+          recordedAt: NOW,
+        }),
+      ],
+    },
+  };
+}
+
+function resealSyntheticFixture(
+  problemsInput: unknown,
+  labelsInput: unknown,
+): { problems: unknown; labels: unknown } {
+  const problems = structuredClone(problemsInput) as {
+    schemaVersion: "asc/laya-synthetic-problem-set/v1";
+    sourceCommit: string;
+    createdAt: string;
+    cases: Array<{ caseId: string; groupId: string }>;
+    split: SealedSplit;
+    sealDigest: string;
+  };
+  problems.split.sourceDigest = digestLayaArtifact(problems.cases);
+  problems.split.splitDigest = digestLayaArtifact({
+    schemaVersion: problems.split.schemaVersion,
+    createdAt: problems.split.createdAt,
+    sourceDigest: problems.split.sourceDigest,
+    partitions: problems.split.partitions,
+  });
+  problems.sealDigest = digestLayaArtifact({
+    schemaVersion: problems.schemaVersion,
+    sourceCommit: problems.sourceCommit,
+    createdAt: problems.createdAt,
+    cases: problems.cases,
+    split: problems.split,
+  });
+  const labels = structuredClone(labelsInput) as {
+    sealDigest: string;
+    teachers: Array<{
+      assessments: Array<{ splitDigest: string; sealDigest: string }>;
+    }>;
+  };
+  labels.sealDigest = problems.sealDigest;
+  for (const teacher of labels.teachers) {
+    for (const assessment of teacher.assessments) {
+      assessment.splitDigest = problems.split.splitDigest;
+      assessment.sealDigest = problems.sealDigest;
+    }
+  }
+  return { problems, labels };
+}
+
+function syntheticTrainingResult(): SyntheticImportResult {
+  const fixture = syntheticFixture();
+  return convertSyntheticTrainingInput(fixture.problems, fixture.labels, {
+    expectedCount: 4,
+    trainPath: "runs/train.jsonl",
+    validationPath: "runs/validation.jsonl",
+    splitPath: "runs/split.json",
+    codexPath: "runs/codex.json",
+    opusPath: "runs/opus.json",
+  });
+}
+
+function bindingsForSyntheticResult(
+  result: SyntheticImportResult,
+): LayaTrainingArtifactBindings {
+  return createLayaTrainingArtifactBindings({
+    manifest: result.manifest,
+    split: result.split,
+    teachers: [
+      {
+        teacher: "codex",
+        sha256: result.manifest.teacherArtifacts[0].sha256,
+        value: result.codex,
+      },
+      {
+        teacher: "opus",
+        sha256: result.manifest.teacherArtifacts[1].sha256,
+        value: result.opus,
+      },
+    ],
+    adjudications: [],
+  });
+}
+
+function writeSyntheticRunnerFixture(
+  world: LayaWorld,
+  result: SyntheticImportResult,
+): void {
+  world.root = fs.realpathSync(world.temp("asc-laya-strict-runner-"));
+  fs.mkdirSync(path.join(world.root, "runs"), { recursive: true });
+  fs.mkdirSync(path.join(world.root, ".agent-skill-chain/local/laya-runs"), {
+    recursive: true,
+  });
+  fs.writeFileSync(
+    path.join(world.root, "runs/train.jsonl"),
+    world.trainingSource,
+  );
+  fs.writeFileSync(
+    path.join(world.root, "runs/validation.jsonl"),
+    world.validationSource,
+  );
+  for (const [relative, value] of [
+    ["runs/split.json", result.split],
+    ["runs/codex.json", result.codex],
+    ["runs/opus.json", result.opus],
+  ] as const)
+    fs.writeFileSync(path.join(world.root, relative), `${stableJson(value)}\n`);
+  fs.writeFileSync(
+    path.join(world.root, "manifest.json"),
+    stableJson(world.manifest),
+  );
+}
+
+function runPythonRowPreflight(root: string): number {
+  const runner = path.resolve("scripts/laya_training_runner.py");
+  const script = [
+    "import os, runpy, sys",
+    "from pathlib import Path",
+    "os.chdir(sys.argv[1])",
+    "module = runpy.run_path(sys.argv[2])",
+    'manifest = module["load_manifest"](Path("manifest.json").resolve())',
+    'bindings = module["load_training_bindings"](Path.cwd(), manifest)',
+    'module["read_rows"](Path("runs/train.jsonl"), manifest, "train", bindings)',
+    'module["read_rows"](Path("runs/validation.jsonl"), manifest, "validation", bindings)',
+  ].join("; ");
+  return (
+    spawnSync("python3", ["-I", "-c", script, root, runner], {
+      encoding: "utf8",
+    }).status ?? 1
+  );
+}
+
+function evaluatePythonPredictions(source: string): LayaValidationEvaluation {
+  const runner = path.resolve("scripts/laya_training_runner.py");
+  const script = [
+    "import json, runpy, sys",
+    "module = runpy.run_path(sys.argv[1])",
+    'print(json.dumps(module["question_metrics"](json.loads(sys.stdin.read())), sort_keys=True))',
+  ].join("; ");
+  const result = spawnSync("python3", ["-I", "-c", script, runner], {
+    encoding: "utf8",
+    input: `[${source.split("\n").filter(Boolean).join(",")}]`,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  return JSON.parse(result.stdout) as LayaValidationEvaluation;
+}
+
+function writeTrainingEvidence(root: string): void {
+  fs.writeFileSync(path.join(root, "runs/split.json"), stableJson(TRAIN_SPLIT));
+  fs.writeFileSync(
+    path.join(root, "runs/codex.json"),
+    stableJson(CODEX_TEACHER),
+  );
+  fs.writeFileSync(path.join(root, "runs/opus.json"), stableJson(OPUS_TEACHER));
 }
 
 function git(root: string, ...args: string[]): string {
@@ -213,6 +684,7 @@ function assessment(world: LayaWorld, splitDigest: string): TeacherAssessment {
     purpose: "train-label",
     partition: "holdout",
     answer: "yes",
+    inputDigest: DIGEST,
     confidence: 0.8,
     evidenceReason: "Evidence reaches the fault",
     splitDigest,
@@ -238,6 +710,157 @@ When("assessmentへ異なるsplit digestを指定する", function () {
       this.split!,
       DIGEST,
     );
+  } catch (error) {
+    this.error = error;
+  }
+});
+
+Given("弱いreview status由来のLaya training rowがある", function () {
+  const row = trainingRow("weak-review", {
+    labelSource: "review-status" as "teacher-consensus",
+    sourceCaseId: "weak-review",
+    splitDigest: TRAIN_SPLIT.splitDigest,
+    sealDigest: DIGEST,
+    purpose: "train-label",
+    partition: "train",
+  });
+  this.trainingSource = jsonl(row);
+  this.validationSource = jsonl(trainingRow("validation-1"));
+});
+Given("同じcaseを含むLaya trainとvalidationがある", function () {
+  const row = trainingRow("shared-case");
+  this.trainingSource = jsonl(row);
+  this.validationSource = jsonl(row);
+});
+Given("one-hotでないLaya training goldがある", function () {
+  const row = trainingRow("soft-gold");
+  const gold = JSON.parse(row.gold) as Record<
+    string,
+    { label: string; probabilities: Record<string, number> }
+  >;
+  gold["finding-validity"]!.probabilities = {
+    yes: 0.6,
+    no: 0.2,
+    "insufficient-evidence": 0.2,
+  };
+  row.gold = stableJson(gold);
+  this.trainingSource = jsonl(row);
+  this.validationSource = jsonl(trainingRow("validation-1"));
+});
+Given(
+  "teacher artifactと異なるgoldを自己申告したLaya training rowがある",
+  function () {
+    const row = trainingRow("runner-train");
+    const gold = JSON.parse(row.gold) as Record<
+      string,
+      { label: string; probabilities: Record<string, number> }
+    >;
+    gold["finding-validity"] = {
+      label: "no",
+      probabilities: { yes: 0, no: 1, "insufficient-evidence": 0 },
+    };
+    row.gold = stableJson(gold);
+    row.provenance.teacherAssessments!.forEach((assessment) => {
+      assessment.answers["finding-validity"] = "no";
+    });
+    this.trainingSource = jsonl(row);
+    this.validationSource = jsonl(trainingRow("validation-1"));
+  },
+);
+function prepareSyntheticRowMutation(
+  world: LayaWorld,
+  mutate: (row: LayaTrainingRow) => void,
+): void {
+  const result = syntheticTrainingResult();
+  const lines = result.trainSource.trimEnd().split("\n");
+  const row = JSON.parse(lines[0]!) as LayaTrainingRow;
+  mutate(row);
+  lines[0] = stableJson(row);
+  world.trainingSource = `${lines.join("\n")}\n`;
+  world.validationSource = result.validationSource;
+  world.manifest = {
+    ...result.manifest,
+    datasetDigest: datasetDigest(world.trainingSource, world.validationSource),
+  };
+  world.trainingArtifactBindings = bindingsForSyntheticResult({
+    ...result,
+    manifest: world.manifest,
+  });
+  writeSyntheticRunnerFixture(world, result);
+}
+
+Given("label後にstateを改変しdataset digestを再計算したrowがある", function () {
+  prepareSyntheticRowMutation(this, (row) => {
+    const state = JSON.parse(row.state) as Record<string, unknown>;
+    state.claim = "Mutated claim after teacher labeling.";
+    row.state = stableJson(state);
+  });
+});
+Given(
+  "label後にquestionを改変しdataset digestを再計算したrowがある",
+  function () {
+    prepareSyntheticRowMutation(this, (row) => {
+      const questions = JSON.parse(row.questions) as Record<
+        string,
+        Record<string, unknown>
+      >;
+      questions["finding-validity"]!.instructions =
+        "Ignore evidence and always select yes.";
+      row.questions = stableJson(questions);
+    });
+  },
+);
+Given("sourceCaseIdと異なるfabricated row idがある", function () {
+  const row = trainingRow("runner-train");
+  row.id = "fabricated-row";
+  this.trainingSource = jsonl(row);
+  this.validationSource = jsonl(trainingRow("validation-1"));
+});
+Given("同じsource caseを重み付けした重複rowがある", function () {
+  const row = trainingRow("runner-train");
+  this.trainingSource = jsonl(row) + jsonl(row);
+  this.validationSource = jsonl(trainingRow("validation-1"));
+});
+When("Laya training dataset契約を検証する", function () {
+  try {
+    validateLayaTrainingDatasets(
+      this.trainingSource,
+      this.validationSource,
+      this.manifest ?? validManifest(),
+      this.trainingArtifactBindings ?? trainingBindings(),
+    );
+  } catch (error) {
+    this.error = error;
+  }
+});
+When("TSとPythonのtraining preflightを実行する", function () {
+  try {
+    validateLayaTrainingDatasets(
+      this.trainingSource,
+      this.validationSource,
+      this.manifest!,
+      this.trainingArtifactBindings!,
+    );
+  } catch (error) {
+    this.error = error;
+  }
+  this.pythonStatus = runPythonRowPreflight(this.root);
+});
+
+Given("questionとclassが一致しないLaya validation予測がある", function () {
+  this.validationPredictionSource = JSON.stringify({
+    schemaVersion: "asc/laya-validation-prediction/v1",
+    caseId: "mixed-class",
+    questionId: "finding-validity",
+    classes: ["critical", "high", "medium", "low"],
+    probabilities: { critical: 1, high: 0, medium: 0, low: 0 },
+    predicted: "critical",
+    gold: "critical",
+  });
+});
+When("Laya validation予測契約を検証する", function () {
+  try {
+    validateLayaValidationPredictions(this.validationPredictionSource);
   } catch (error) {
     this.error = error;
   }
@@ -298,6 +921,289 @@ Then("Laya reportに必須metricがある", function () {
   assert.equal(typeof this.report!.macroF1, "number");
   assert.equal(typeof this.report!.brier, "number");
   assert.deepEqual(this.report!.errorCaseIds, []);
+});
+
+Given("複数質問を含むLaya validation予測がある", function () {
+  const predictions = [
+    {
+      schemaVersion: "asc/laya-validation-prediction/v1",
+      caseId: "critical-case",
+      questionId: "finding-validity",
+      classes: ["yes", "no", "insufficient-evidence"],
+      probabilities: { yes: 0.01, no: 0.98, "insufficient-evidence": 0.01 },
+      predicted: "no",
+      gold: "yes",
+    },
+    {
+      schemaVersion: "asc/laya-validation-prediction/v1",
+      caseId: "critical-case",
+      questionId: "severity",
+      classes: ["critical", "high", "medium", "low"],
+      probabilities: { critical: 0.91, high: 0.03, medium: 0.03, low: 0.03 },
+      predicted: "critical",
+      gold: "critical",
+    },
+  ];
+  this.validationPredictionSource = predictions
+    .map((prediction) => JSON.stringify(prediction))
+    .join("\n");
+});
+Given(
+  "無効criticalと未検出criticalを含むLaya validation予測がある",
+  function () {
+    const prediction = (
+      caseId: string,
+      questionId: "finding-validity" | "severity" | "required-action",
+      predicted: string,
+      gold: string,
+    ) => {
+      const classes =
+        questionId === "finding-validity"
+          ? ["yes", "no", "insufficient-evidence"]
+          : questionId === "required-action"
+            ? ["fix", "investigate", "dismiss"]
+            : ["critical", "high", "medium", "low"];
+      return {
+        schemaVersion: "asc/laya-validation-prediction/v1",
+        caseId,
+        questionId,
+        classes,
+        probabilities: Object.fromEntries(
+          classes.map((choice) => [choice, choice === predicted ? 1 : 0]),
+        ),
+        predicted,
+        gold,
+      };
+    };
+    const predictions = [
+      prediction("invalid-critical", "finding-validity", "no", "no"),
+      prediction("invalid-critical", "severity", "critical", "critical"),
+      prediction(
+        "missed-critical",
+        "finding-validity",
+        "insufficient-evidence",
+        "yes",
+      ),
+      prediction("missed-critical", "severity", "critical", "critical"),
+      prediction("detected-critical", "required-action", "fix", "fix"),
+      prediction("detected-critical", "severity", "critical", "critical"),
+    ];
+    this.validationPredictionSource = predictions
+      .map((item) => stableJson(item))
+      .join("\n");
+  },
+);
+When("Laya validation予測を共通契約で評価する", function () {
+  this.validationEvaluation = evaluateLayaValidationPredictions(
+    validateLayaValidationPredictions(this.validationPredictionSource),
+  );
+  this.pythonValidationEvaluation = evaluatePythonPredictions(
+    this.validationPredictionSource,
+  );
+});
+Then("質問単位metricと利用可能な安全metricだけが記録される", function () {
+  assert.equal(this.validationEvaluation?.sampleCount, 2);
+  assert.equal(
+    this.validationEvaluation?.byQuestion["finding-validity"]?.macroF1,
+    0,
+  );
+  assert.equal(
+    this.validationEvaluation?.byQuestion["finding-validity"]
+      ?.highConfidenceErrorRate,
+    1,
+  );
+  assert.equal(this.validationEvaluation?.safety.criticalRecall, 0);
+  assert.equal(this.validationEvaluation?.safety.falseEscalationRate, null);
+  assert.deepEqual(this.validationEvaluation?.safety.criticalMissCaseIds, [
+    "critical-case",
+  ]);
+});
+Then("実criticalだけの検出recallが記録される", function () {
+  assert.equal(this.validationEvaluation?.safety.criticalRecall, 0.5);
+  assert.deepEqual(this.validationEvaluation?.safety.criticalMissCaseIds, [
+    "missed-critical",
+  ]);
+  assert.equal(this.pythonValidationEvaluation?.safety.criticalRecall, 0.5);
+  assert.deepEqual(
+    this.pythonValidationEvaluation?.safety.criticalMissCaseIds,
+    ["missed-critical"],
+  );
+});
+
+Given("seal済み合成problemと独立teacher labelがある", function () {
+  const fixture = syntheticFixture();
+  this.syntheticProblems = fixture.problems;
+  this.syntheticLabels = fixture.labels;
+});
+Given("oracle fieldを含む合成teacher回答がある", function () {
+  const fixture = syntheticFixture();
+  this.syntheticProblems = fixture.problems;
+  const { packets } = createSyntheticTeacherPackets(fixture.problems, 4);
+  this.syntheticAnswerSource = packets
+    .map((packet) =>
+      JSON.stringify({
+        caseId: packet.caseId,
+        questionId: packet.questionId,
+        answer: packet.allowedChoices[0],
+        confidence: 1,
+        evidenceReason: "Synthetic evidence supports the selected choice.",
+        gold: packet.allowedChoices[0],
+      }),
+    )
+    .join("\n");
+});
+Given("label作成後に内容を変えた合成problemがある", function () {
+  const fixture = syntheticFixture();
+  const problems = structuredClone(fixture.problems) as {
+    cases: Array<{ claim: string }>;
+  };
+  problems.cases[0]!.claim = "Changed after teacher labeling.";
+  this.syntheticProblems = problems;
+  this.syntheticLabels = fixture.labels;
+});
+Given("同じgroupをtrainとvalidationへ分割した合成problemがある", function () {
+  const fixture = syntheticFixture();
+  const problems = structuredClone(fixture.problems) as {
+    cases: Array<{ groupId: string }>;
+  };
+  problems.cases[2]!.groupId = problems.cases[0]!.groupId;
+  const resealed = resealSyntheticFixture(problems, fixture.labels);
+  this.syntheticProblems = resealed.problems;
+  this.syntheticLabels = resealed.labels;
+});
+When("blind packetを生成してCodexとOpus回答を取込む", function () {
+  const generated = createSyntheticTeacherPackets(this.syntheticProblems, 4);
+  this.syntheticPacketSource = generated.source;
+  const answers = generated.packets
+    .map((packet) =>
+      stableJson({
+        caseId: packet.caseId,
+        questionId: packet.questionId,
+        answer: packet.allowedChoices[0],
+        confidence: 0.9,
+        evidenceReason: "Synthetic evidence supports the selected choice.",
+      }),
+    )
+    .join("\n");
+  this.syntheticTeacherSets = [
+    importSyntheticTeacherAnswers(this.syntheticProblems, answers, {
+      expectedCount: 4,
+      teacher: "codex",
+      runId: "codex-synthetic-run",
+      recordedAt: NOW,
+    }),
+    importSyntheticTeacherAnswers(this.syntheticProblems, answers, {
+      expectedCount: 4,
+      teacher: "opus",
+      runId: "opus-synthetic-run",
+      recordedAt: "2026-09-24T00:01:00.000Z",
+    }),
+  ];
+});
+When("合成teacher回答をassessmentへ変換する", function () {
+  try {
+    importSyntheticTeacherAnswers(
+      this.syntheticProblems,
+      this.syntheticAnswerSource,
+      {
+        expectedCount: 4,
+        teacher: "codex",
+        runId: "codex-invalid-run",
+        recordedAt: NOW,
+      },
+    );
+  } catch (error) {
+    this.error = error;
+  }
+});
+When("合成problemをLaya training入力へ変換する", function () {
+  try {
+    this.syntheticImport = convertSyntheticTrainingInput(
+      this.syntheticProblems,
+      this.syntheticLabels,
+      {
+        expectedCount: 4,
+        trainPath:
+          ".agent-skill-chain/local/laya-runs/synthetic-fixture/train.jsonl",
+        validationPath:
+          ".agent-skill-chain/local/laya-runs/synthetic-fixture/validation.jsonl",
+        splitPath:
+          ".agent-skill-chain/local/laya-runs/synthetic-fixture/split.json",
+        codexPath:
+          ".agent-skill-chain/local/laya-runs/synthetic-fixture/teacher-codex.json",
+        opusPath:
+          ".agent-skill-chain/local/laya-runs/synthetic-fixture/teacher-opus.json",
+      },
+    );
+  } catch (error) {
+    this.error = error;
+  }
+});
+Then("teacher binding済みrowと非権威reportだけが生成される", function () {
+  assert.equal(this.syntheticImport?.report.authority, false);
+  assert.equal(this.syntheticImport?.report.problemCount, 4);
+  assert.equal(this.syntheticImport?.report.trainRowCount, 2);
+  assert.equal(this.syntheticImport?.report.validationRowCount, 1);
+  assert.equal(this.syntheticImport?.report.excludedQuestionCount, 0);
+  assert.equal(this.syntheticImport?.manifest.teacherArtifacts.length, 2);
+  assert.match(this.syntheticImport?.trainSource ?? "", /teacher-consensus/u);
+});
+Then("packetはoracleを含まずholdoutとreserveを除外する", function () {
+  const packets = this.syntheticPacketSource
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  assert.equal(packets.length, 9);
+  assert.ok(packets.every((packet) => packet.caseId !== "SYN-4"));
+  assert.ok(
+    packets.every(
+      (packet) =>
+        packet.partition === "train" || packet.partition === "validation",
+    ),
+  );
+  assert.ok(
+    packets.every(
+      (packet) =>
+        !Object.keys(packet).some((key) =>
+          ["gold", "oracle", "answer", "label"].includes(key),
+        ),
+    ),
+  );
+  assert.deepEqual(
+    Object.keys(packets[0]!).sort(),
+    [
+      "allowedChoices",
+      "caseId",
+      "claim",
+      "evidence",
+      "partition",
+      "purpose",
+      "questionId",
+      "sealDigest",
+      "splitDigest",
+    ].sort(),
+  );
+});
+Then("teacher artifactはmodel別run情報を保持する", function () {
+  const [codex, opus] = this.syntheticTeacherSets;
+  assert.equal(codex?.teacher, "codex");
+  assert.equal(opus?.teacher, "opus");
+  assert.ok(
+    codex?.assessments.every((item) => item.runId === "codex-synthetic-run"),
+  );
+  assert.ok(
+    opus?.assessments.every((item) => item.runId === "opus-synthetic-run"),
+  );
+  assert.ok(codex?.assessments.every((item) => item.recordedAt === NOW));
+  assert.ok(
+    opus?.assessments.every(
+      (item) => item.recordedAt === "2026-09-24T00:01:00.000Z",
+    ),
+  );
+});
+Then("TSとPythonの両方がtraining起動前に拒否する", function () {
+  assert.ok(this.error);
+  assert.notEqual(this.pythonStatus, 0);
 });
 
 Given("teacher token上限を超えるLaya caseがある", function () {
@@ -386,6 +1292,85 @@ When("Laya runner preflightを実行する", function () {
         repositoryRoot: this.root,
         manifestPath: "manifest.json",
         outputPath: "output",
+      },
+      (..._args) => {
+        this.processCalls++;
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    );
+  } catch (error) {
+    this.error = error;
+  }
+});
+When("Git管理対象pathをLaya runner outputに指定する", function () {
+  this.root = fs.realpathSync(this.temp("asc-laya-runner-output-"));
+  fs.mkdirSync(path.join(this.root, "scripts"), { recursive: true });
+  fs.mkdirSync(path.join(this.root, "runs"), { recursive: true });
+  fs.mkdirSync(path.join(this.root, ".agent-skill-chain/local/laya-runs"), {
+    recursive: true,
+  });
+  fs.writeFileSync(path.join(this.root, "scripts/laya_training_runner.py"), "");
+  fs.writeFileSync(
+    path.join(this.root, "runs/train.jsonl"),
+    jsonl(trainingRow("runner-train")),
+  );
+  fs.writeFileSync(
+    path.join(this.root, "runs/validation.jsonl"),
+    jsonl(trainingRow("runner-validation")),
+  );
+  writeTrainingEvidence(this.root);
+  fs.writeFileSync(
+    path.join(this.root, "manifest.json"),
+    JSON.stringify(this.manifest),
+  );
+  this.processCalls = 0;
+  try {
+    launchLayaTrainingRunner(
+      {
+        repositoryRoot: this.root,
+        manifestPath: "manifest.json",
+        outputPath: "dist/candidate-model",
+      },
+      (..._args) => {
+        this.processCalls++;
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    );
+  } catch (error) {
+    this.error = error;
+  }
+});
+Given("SHA結合後に改変したLaya teacher artifactがある", function () {
+  this.root = fs.realpathSync(this.temp("asc-laya-bound-artifact-"));
+  fs.mkdirSync(path.join(this.root, "scripts"), { recursive: true });
+  fs.mkdirSync(path.join(this.root, "runs"), { recursive: true });
+  fs.mkdirSync(path.join(this.root, ".agent-skill-chain/local/laya-runs"), {
+    recursive: true,
+  });
+  fs.writeFileSync(path.join(this.root, "scripts/laya_training_runner.py"), "");
+  fs.writeFileSync(
+    path.join(this.root, "runs/train.jsonl"),
+    jsonl(trainingRow("runner-train")),
+  );
+  fs.writeFileSync(
+    path.join(this.root, "runs/validation.jsonl"),
+    jsonl(trainingRow("runner-validation")),
+  );
+  writeTrainingEvidence(this.root);
+  fs.appendFileSync(path.join(this.root, "runs/codex.json"), "\n");
+  fs.writeFileSync(
+    path.join(this.root, "manifest.json"),
+    JSON.stringify(validManifest()),
+  );
+  this.processCalls = 0;
+});
+When("改変済みartifactでLaya runner preflightを実行する", function () {
+  try {
+    launchLayaTrainingRunner(
+      {
+        repositoryRoot: this.root,
+        manifestPath: "manifest.json",
+        outputPath: ".agent-skill-chain/local/laya-runs/candidate",
       },
       (..._args) => {
         this.processCalls++;

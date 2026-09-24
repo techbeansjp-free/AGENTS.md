@@ -232,9 +232,13 @@ export function validateTrainingManifest(value) {
         "notebookSha256",
         "baseModel",
         "baseModelRevision",
+        "environmentDigest",
         "seed",
         "trainPath",
         "validationPath",
+        "splitArtifact",
+        "teacherArtifacts",
+        "adjudicationArtifacts",
     ], "TrainingManifest");
     if (value.schemaVersion !== "asc/laya-training-manifest/v1")
         throw new Error("training manifest schemaが不正です");
@@ -252,15 +256,33 @@ export function validateTrainingManifest(value) {
         value.notebookSha256 !==
             "6b81f290bbd213008d3e79c80d207b9abc1d1b5ab0a23f3f4bd9a289611433ed" ||
         value.baseModel !== "convaiinnovations/laya-multilingual" ||
-        value.baseModelRevision !== "82d57fc4f2d1be3d2caac494045f2ec51d0842f3")
+        value.baseModelRevision !== "82d57fc4f2d1be3d2caac494045f2ec51d0842f3" ||
+        value.environmentDigest !==
+            "0795cbc6120e9d75db2ff77390ac0b82ab4a59de9d1ccbfe8a15acdad032426e")
         throw new Error("review済みLaya/base model pinと一致しません");
     if (!Number.isSafeInteger(value.seed) ||
         value.seed < 0 ||
         value.seed > 2_147_483_647)
         throw new Error("seedが不正です");
+    if (typeof value.splitArtifact !== "object" ||
+        value.splitArtifact === null ||
+        !Array.isArray(value.teacherArtifacts) ||
+        value.teacherArtifacts.length !== 2 ||
+        !Array.isArray(value.adjudicationArtifacts) ||
+        [...value.teacherArtifacts, ...value.adjudicationArtifacts].some((artifact) => typeof artifact !== "object" || artifact === null))
+        throw new Error("学習根拠artifact参照が不正です");
     for (const [label, file] of [
         ["trainPath", value.trainPath],
         ["validationPath", value.validationPath],
+        ["splitArtifact.path", value.splitArtifact?.path],
+        ...(value.teacherArtifacts ?? []).map((artifact, index) => [
+            `teacherArtifacts[${index}].path`,
+            artifact.path,
+        ]),
+        ...(value.adjudicationArtifacts ?? []).map((artifact, index) => [
+            `adjudicationArtifacts[${index}].path`,
+            artifact.path,
+        ]),
     ])
         if (!file ||
             file.startsWith("/") ||
@@ -268,6 +290,24 @@ export function validateTrainingManifest(value) {
             file.includes("\\") ||
             CONTROL.test(file))
             throw new Error(`${label}は安全なrepository相対pathが必要です`);
+    const artifactRefs = [
+        value.splitArtifact,
+        ...(value.teacherArtifacts ?? []),
+        ...(value.adjudicationArtifacts ?? []),
+    ];
+    if (new Set(value.teacherArtifacts.map((artifact) => artifact.teacher)).size !==
+        2 ||
+        !value.teacherArtifacts.every((artifact) => ["codex", "opus"].includes(artifact.teacher)) ||
+        artifactRefs.some((artifact) => typeof artifact !== "object" ||
+            artifact === null ||
+            !/^[0-9a-f]{64}$/u.test(artifact.sha256)))
+        throw new Error("学習根拠artifact参照が不正です");
+    for (const artifact of artifactRefs) {
+        const allowed = "teacher" in artifact
+            ? ["path", "sha256", "teacher"]
+            : ["path", "sha256"];
+        assertExactKeys(artifact, allowed, "学習根拠artifact参照");
+    }
     return value;
 }
 function argmax(probabilities, classes) {

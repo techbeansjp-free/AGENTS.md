@@ -97,6 +97,7 @@ export interface TeacherAssessment {
   purpose: "train-label" | "holdout-baseline";
   partition: Exclude<DatasetPartition, "reserve">;
   answer: string;
+  inputDigest: string;
   confidence: number;
   evidenceReason: string;
   splitDigest: string;
@@ -115,9 +116,25 @@ export interface LayaTrainingManifest {
   notebookSha256: "6b81f290bbd213008d3e79c80d207b9abc1d1b5ab0a23f3f4bd9a289611433ed";
   baseModel: "convaiinnovations/laya-multilingual";
   baseModelRevision: "82d57fc4f2d1be3d2caac494045f2ec51d0842f3";
+  environmentDigest: "0795cbc6120e9d75db2ff77390ac0b82ab4a59de9d1ccbfe8a15acdad032426e";
   seed: number;
   trainPath: string;
   validationPath: string;
+  splitArtifact: LayaArtifactReference;
+  teacherArtifacts: [
+    LayaTeacherArtifactReference,
+    LayaTeacherArtifactReference,
+  ];
+  adjudicationArtifacts: LayaArtifactReference[];
+}
+
+export interface LayaArtifactReference {
+  path: string;
+  sha256: string;
+}
+
+export interface LayaTeacherArtifactReference extends LayaArtifactReference {
+  teacher: "opus" | "codex";
 }
 
 export interface Prediction {
@@ -438,9 +455,13 @@ export function validateTrainingManifest(
       "notebookSha256",
       "baseModel",
       "baseModelRevision",
+      "environmentDigest",
       "seed",
       "trainPath",
       "validationPath",
+      "splitArtifact",
+      "teacherArtifacts",
+      "adjudicationArtifacts",
     ],
     "TrainingManifest",
   );
@@ -460,7 +481,9 @@ export function validateTrainingManifest(
     value.notebookSha256 !==
       "6b81f290bbd213008d3e79c80d207b9abc1d1b5ab0a23f3f4bd9a289611433ed" ||
     value.baseModel !== "convaiinnovations/laya-multilingual" ||
-    value.baseModelRevision !== "82d57fc4f2d1be3d2caac494045f2ec51d0842f3"
+    value.baseModelRevision !== "82d57fc4f2d1be3d2caac494045f2ec51d0842f3" ||
+    value.environmentDigest !==
+      "0795cbc6120e9d75db2ff77390ac0b82ab4a59de9d1ccbfe8a15acdad032426e"
   )
     throw new Error("review済みLaya/base model pinと一致しません");
   if (
@@ -469,9 +492,29 @@ export function validateTrainingManifest(
     value.seed > 2_147_483_647
   )
     throw new Error("seedが不正です");
+  if (
+    typeof value.splitArtifact !== "object" ||
+    value.splitArtifact === null ||
+    !Array.isArray(value.teacherArtifacts) ||
+    value.teacherArtifacts.length !== 2 ||
+    !Array.isArray(value.adjudicationArtifacts) ||
+    [...value.teacherArtifacts, ...value.adjudicationArtifacts].some(
+      (artifact) => typeof artifact !== "object" || artifact === null,
+    )
+  )
+    throw new Error("学習根拠artifact参照が不正です");
   for (const [label, file] of [
     ["trainPath", value.trainPath],
     ["validationPath", value.validationPath],
+    ["splitArtifact.path", value.splitArtifact?.path],
+    ...((value.teacherArtifacts ?? []).map((artifact, index) => [
+      `teacherArtifacts[${index}].path`,
+      artifact.path,
+    ]) as Array<[string, string]>),
+    ...((value.adjudicationArtifacts ?? []).map((artifact, index) => [
+      `adjudicationArtifacts[${index}].path`,
+      artifact.path,
+    ]) as Array<[string, string]>),
   ] as const)
     if (
       !file ||
@@ -481,6 +524,32 @@ export function validateTrainingManifest(
       CONTROL.test(file)
     )
       throw new Error(`${label}は安全なrepository相対pathが必要です`);
+  const artifactRefs = [
+    value.splitArtifact,
+    ...(value.teacherArtifacts ?? []),
+    ...(value.adjudicationArtifacts ?? []),
+  ];
+  if (
+    new Set(value.teacherArtifacts.map((artifact) => artifact.teacher)).size !==
+      2 ||
+    !value.teacherArtifacts.every((artifact) =>
+      ["codex", "opus"].includes(artifact.teacher),
+    ) ||
+    artifactRefs.some(
+      (artifact) =>
+        typeof artifact !== "object" ||
+        artifact === null ||
+        !/^[0-9a-f]{64}$/u.test(artifact.sha256),
+    )
+  )
+    throw new Error("学習根拠artifact参照が不正です");
+  for (const artifact of artifactRefs) {
+    const allowed =
+      "teacher" in artifact
+        ? ["path", "sha256", "teacher"]
+        : ["path", "sha256"];
+    assertExactKeys(artifact, allowed, "学習根拠artifact参照");
+  }
   return value;
 }
 

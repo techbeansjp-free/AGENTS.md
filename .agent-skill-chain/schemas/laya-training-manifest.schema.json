@@ -15,9 +15,13 @@
     "notebookSha256",
     "baseModel",
     "baseModelRevision",
+    "environmentDigest",
     "seed",
     "trainPath",
-    "validationPath"
+    "validationPath",
+    "splitArtifact",
+    "teacherArtifacts",
+    "adjudicationArtifacts"
   ],
   "properties": {
     "schemaVersion": { "const": "asc/laya-training-manifest/v1" },
@@ -34,9 +38,44 @@
     "baseModelRevision": {
       "const": "82d57fc4f2d1be3d2caac494045f2ec51d0842f3"
     },
+    "environmentDigest": {
+      "const": "0795cbc6120e9d75db2ff77390ac0b82ab4a59de9d1ccbfe8a15acdad032426e"
+    },
     "seed": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
     "trainPath": { "type": "string", "minLength": 1 },
-    "validationPath": { "type": "string", "minLength": 1 }
+    "validationPath": { "type": "string", "minLength": 1 },
+    "splitArtifact": { "$ref": "#/$defs/artifact" },
+    "teacherArtifacts": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/teacherArtifact" }
+    },
+    "adjudicationArtifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifact" }
+    }
   },
-  "$defs": { "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "teacherArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "teacher"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/digest" },
+        "teacher": { "enum": ["codex", "opus"] }
+      }
+    }
+  }
 }

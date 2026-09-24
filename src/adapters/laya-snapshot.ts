@@ -124,6 +124,9 @@ export function extractPublicAscReviewCases(
           passAfterCommit: null,
         },
         strength: "weak",
+        // Historical review classifications are observations, not ground truth.
+        // Gold labels are added only after independent teacher consensus or a
+        // separately recorded strong adjudication at training-row construction.
         gold: {},
         critical: severity === "Critical",
       };

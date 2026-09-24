@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://techbeansjp-free.github.io/agent-skill-chain/schemas/laya-validation-prediction.schema.json",
+  "title": "ASC Laya Validation Prediction",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "caseId",
+    "questionId",
+    "classes",
+    "probabilities",
+    "predicted",
+    "gold"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "asc/laya-validation-prediction/v1" },
+    "caseId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "questionId": {
+      "enum": [
+        "finding-validity",
+        "severity",
+        "required-action",
+        "distribution-impact"
+      ]
+    },
+    "classes": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "probabilities": {
+      "type": "object",
+      "minProperties": 2,
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "predicted": { "type": "string", "minLength": 1 },
+    "gold": { "type": "string", "minLength": 1 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "questionId": { "const": "finding-validity" } } },
+      "then": {
+        "properties": {
+          "classes": { "const": ["yes", "no", "insufficient-evidence"] },
+          "probabilities": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["yes", "no", "insufficient-evidence"],
+            "properties": {
+              "yes": { "$ref": "#/$defs/probability" },
+              "no": { "$ref": "#/$defs/probability" },
+              "insufficient-evidence": { "$ref": "#/$defs/probability" }
+            }
+          },
+          "predicted": { "enum": ["yes", "no", "insufficient-evidence"] },
+          "gold": { "enum": ["yes", "no", "insufficient-evidence"] }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "questionId": { "const": "distribution-impact" } }
+      },
+      "then": {
+        "properties": {
+          "classes": { "const": ["yes", "no", "insufficient-evidence"] },
+          "probabilities": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["yes", "no", "insufficient-evidence"],
+            "properties": {
+              "yes": { "$ref": "#/$defs/probability" },
+              "no": { "$ref": "#/$defs/probability" },
+              "insufficient-evidence": { "$ref": "#/$defs/probability" }
+            }
+          },
+          "predicted": { "enum": ["yes", "no", "insufficient-evidence"] },
+          "gold": { "enum": ["yes", "no", "insufficient-evidence"] }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "questionId": { "const": "required-action" } } },
+      "then": {
+        "properties": {
+          "classes": { "const": ["fix", "investigate", "dismiss"] },
+          "probabilities": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["fix", "investigate", "dismiss"],
+            "properties": {
+              "fix": { "$ref": "#/$defs/probability" },
+              "investigate": { "$ref": "#/$defs/probability" },
+              "dismiss": { "$ref": "#/$defs/probability" }
+            }
+          },
+          "predicted": { "enum": ["fix", "investigate", "dismiss"] },
+          "gold": { "enum": ["fix", "investigate", "dismiss"] }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "questionId": { "const": "severity" } } },
+      "then": {
+        "properties": {
+          "classes": { "const": ["critical", "high", "medium", "low"] },
+          "probabilities": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["critical", "high", "medium", "low"],
+            "properties": {
+              "critical": { "$ref": "#/$defs/probability" },
+              "high": { "$ref": "#/$defs/probability" },
+              "medium": { "$ref": "#/$defs/probability" },
+              "low": { "$ref": "#/$defs/probability" }
+            }
+          },
+          "predicted": { "enum": ["critical", "high", "medium", "low"] },
+          "gold": { "enum": ["critical", "high", "medium", "low"] }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "probability": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}
