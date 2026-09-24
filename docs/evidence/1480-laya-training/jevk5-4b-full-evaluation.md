@@ -4,7 +4,7 @@
 
 JevK5 4B Q8_0は現行synthetic conformance setの全1,000件に対し、通常順76.63%、選択肢反転順74.63%の総合accuracyだった。severityは93.30% / 97.00%、required actionは71.40% / 67.70%だった。一方、finding `yes` recallは35.00% / 17.25%に留まり、findingの選択肢順序flipも14.5%だった。
 
-従来のholdout 100件だけで観測したfinding recall 20%は全体値ではなかったが、全件でも欠陥側を多数見逃す傾向は解消しなかった。反転順ではさらに悪化するため、JevK5をJevのローカル代替、findingの自動却下、formal approval、merge authorityには使用しない。
+従来のholdout 100件だけで観測したfinding recall 20%は全体値ではなかったが、全件でも欠陥側を多数見逃す傾向は解消しなかった。反転順ではさらに悪化するため、現行3判断を一括して担うJev互換decision backendとして直接置換せず、findingの自動却下、formal approval、merge authorityには使用しない。severity推定とrequired action候補提示はadvisory用途の個別評価対象として残す。
 
 この結果はpacket内に規則と値を明示した合成判断契約への適合度であり、実repositoryのcode review精度ではない。
 

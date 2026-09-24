@@ -39,8 +39,34 @@ const GENERIC_PRIVATE_MARKERS = [
   /github\.com/iu,
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/u,
   /AKIA[0-9A-Z]{16}/u,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/u,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}\b/u,
+  /\bsk-[A-Za-z0-9_-]{16,}\b/u,
+  /\bAIza[0-9A-Za-z_-]{20,}\b/u,
+  /\bhf_[A-Za-z0-9]{20,}\b/u,
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/u,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}/iu,
+  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/u,
+  /\b(?:api[_-]?key|access[_-]?token|secret[_-]?key|client[_-]?secret)\s*[:=]\s*["']?[^\s"',;]{8,}/iu,
   /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu,
 ];
+
+const GENERIC_MARKER_CANARIES = [
+  ["ghp_", "a".repeat(32)].join(""),
+  ["github_pat_", "a".repeat(32)].join(""),
+  ["sk-", "a".repeat(24)].join(""),
+  ["AIza", "a".repeat(32)].join(""),
+  ["hf_", "a".repeat(24)].join(""),
+  ["xoxb-", "1".repeat(12), "-", "a".repeat(24)].join(""),
+  ["Bearer ", "a".repeat(24)].join(""),
+  ["eyJ", "a".repeat(12), ".", "b".repeat(12), ".", "c".repeat(12)].join(""),
+  ["API_KEY=", "a".repeat(24)].join(""),
+];
+
+for (const canary of GENERIC_MARKER_CANARIES) {
+  if (!GENERIC_PRIVATE_MARKERS.some((pattern) => pattern.test(canary)))
+    fail("generic private marker canary was not rejected");
+}
 
 const LOCAL_TERMS_PATH = path.resolve(
   ".agent-skill-chain/local/laya-private-fixture-terms.json",

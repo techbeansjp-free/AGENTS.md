@@ -56,7 +56,7 @@ model binaryは大きく、候補も不採用なのでGitへ保存しない。da
 ## 情報保護
 
 - 問題は合成値だけから生成し、許可されたprivate repositoryの本文を変換元にしていない。
-- fixture検査はlocal path、repository名、URL、email、鍵・代表的credential形式を拒否する。
+- fixture検査はlocal path、repository名、URL、email、PEM秘密鍵、AWS access key、GitHub・OpenAI・Google・Hugging Face・Slack token、Bearer/JWT、汎用credential代入を拒否する。
 - private corpusを扱う既存境界は広げていない。
 - training出力は`.agent-skill-chain/local/`配下に限定し、権威を持たない。
 
@@ -90,7 +90,7 @@ Jevのfinding balanced accuracyは67%台、required actionは68〜71%であり�
 
 JevK5も同じ全1,000件、3 question、通常順・反転順の6,000判断を実行した。通常順は総合76.63%、finding recall 35.00%、severity 93.30%、required action 71.40%だった。反転順は総合74.63%、finding recall 17.25%、severity 97.00%、action 67.70%だった。
 
-findingの選択肢順序flipは14.5%、required actionは20.6%で、Jevの3.8% / 5.5%より大きい。従来のholdout 100件に限定したfinding recall 20%は全体値ではなかったが、全件でもfalse-negative biasは残った。Jevのローカル代替には採用しない。実行条件、partition別値、同一case比較は[JevK5 4B Q8_0全1,000件評価](jevk5-4b-full-evaluation.md)に記録した。
+findingの選択肢順序flipは14.5%、required actionは20.6%で、Jevの3.8% / 5.5%より大きい。従来のholdout 100件に限定したfinding recall 20%は全体値ではなかったが、全件でもfalse-negative biasは残った。現行3判断を一括して担うJev互換decision backendとして直接置換せず、finding rejector・formal authorityには使用しない。severity推定とrequired action候補提示はadvisory用途の個別評価対象として残す。実行条件、partition別値、同一case比較は[JevK5 4B Q8_0全1,000件評価](jevk5-4b-full-evaluation.md)に記録した。
 
 ## 全件比較の最終判断
 
