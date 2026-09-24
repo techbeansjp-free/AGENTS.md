@@ -77,3 +77,28 @@ model binaryは大きく、候補も不採用なのでGitへ保存しない。da
 同じholdout 100件を使い、公式Kev-4BのApple Silicon向けMLX backendでfinding validityだけを通常順・選択肢反転順の計200回評価した。通常順のfinding recallは90%だった一方、100件中90件を`yes`とし、balanced accuracyは36.7%、precisionは40.0%だった。反転順では100件すべてを`yes`とし、option-order flipは10.0%だった。
 
 事前に定めた継続条件（recall 70%以上、balanced accuracy 70%以上、flip 5%以下）のうち2条件を満たさないため、severityとrequired actionは評価していない。中央値460.9msで速度要件は満たしたが、無差別にfindingを有効とする傾向が強く、このsynthetic contractの検証器には採用しない。実行条件、confusion matrix、pin、weight digestは[Kev-4B評価記録](kev-4b-finding-evaluation.md)に記録した。
+
+## 追加比較: Jev 1.13.0
+
+TypeSafe公式APIのJev 1.13.0へ合成データだけを送り、全1,000件を通常順・選択肢反転順で評価した。通常順の総合accuracyは80.23%、finding `yes` recallは84.50%、severityは100%、required actionは68.30%だった。反転順は総合81.23%、finding recall 84.00%、severity 100%、action 70.70%だった。
+
+この全件評価により、従来比較に使ったholdout 100件が全件`trace`形式で、全体代表標本ではないことが判明した。validationは全件`shell`、reserveは全件`xml`、trainは残り7形式である。Jevのfinding accuracyも形式別59%〜92%だったため、100件holdoutだけによる候補順位を撤回する。
+
+Jevのfinding balanced accuracyは67%台、required actionは68〜71%であり、単独authorityには使用しない。全結果とpartition・形式別の監査は[Jev 1.13.0全1,000件評価](jev-1.13.0-full-evaluation.md)に記録した。
+
+## 追加比較: JevK5 4B Q8_0
+
+JevK5も同じ全1,000件、3 question、通常順・反転順の6,000判断を実行した。通常順は総合76.63%、finding recall 35.00%、severity 93.30%、required action 71.40%だった。反転順は総合74.63%、finding recall 17.25%、severity 97.00%、action 67.70%だった。
+
+findingの選択肢順序flipは14.5%、required actionは20.6%で、Jevの3.8% / 5.5%より大きい。従来のholdout 100件に限定したfinding recall 20%は全体値ではなかったが、全件でもfalse-negative biasは残った。Jevのローカル代替には採用しない。実行条件、partition別値、同一case比較は[JevK5 4B Q8_0全1,000件評価](jevk5-4b-full-evaluation.md)に記録した。
+
+## 全件比較の最終判断
+
+| model | 総合accuracy | finding recall | severity | action | finding flip | action flip |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Jev 1.13.0 通常順 | 80.23% | 84.50% | 100.00% | 68.30% | 3.8% | 5.5% |
+| Jev 1.13.0 反転順 | 81.23% | 84.00% | 100.00% | 70.70% | 3.8% | 5.5% |
+| JevK5 4B 通常順 | 76.63% | 35.00% | 93.30% | 71.40% | 14.5% | 20.6% |
+| JevK5 4B 反転順 | 74.63% | 17.25% | 97.00% | 67.70% | 14.5% | 20.6% |
+
+現行synthetic contractではJev 1.13.0が最も安定した。ただしJevもfinding balanced accuracy 67%台、action 68〜71%に留まり、実repositoryのreview精度を測った結果でもない。Jevは進行役がEvidenceを再検証する補助decision signalに限定する。JevK5、Laya、SemIf、Kevは採用しない。

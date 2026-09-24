@@ -60,6 +60,7 @@ validatorは10種類のartifact表現をdecodeし、規則適合性、impact tie
 
 - generatorとoracle validatorは同じrule family定義を共有するため、独立したReality truthの証明ではない。
 - 1,000件は100 archetype、10 rule familyからの規則的展開であり、実際のreview findingの意味空間を代表しない。
+- partitionとartifact formatが完全に交絡している。validation 100件は全件shell、holdout 100件は全件trace、reserve 100件は全件XMLであり、train 700件は残り7形式である。各100件partitionを全形式の代表標本として扱えない。
 - option reverse以外のparaphrase、irrelevant evidence、identifier rename、evidence shuffle不変性は固定datasetとして未評価である。
 - 実コードの到達可能性、guard、型制約、仕様と実装の矛盾、修正前後、再現testを含まない。
 
@@ -69,4 +70,4 @@ validatorは10種類のartifact表現をdecodeし、規則適合性、impact tie
 
 Jevは全1,000件を通常順・反転順で評価する。3 questionを1 requestへまとめるため、2,000 request・6,000 decisionとなる。全体値だけでなくtrain 700、validation 100、holdout 100、reserve 100を別々に集計する。
 
-比較の正本は従来と同じholdout 100件とし、全1,000件の値はtemplateやpartitionによる偏りを検出する補助値とする。結果はsynthetic conformance性能として報告し、実repositoryのreview性能とは表現しない。
+従来のholdout 100件はtrace形式だけなので比較の正本から外す。dataset全体の比較には全1,000件を使い、partition別・artifact format別・rule family別の値を併記する。Laya自身はtrain 700件で学習済みなので、全1,000件の値を未知データ性能として扱わず、未学習形式からなるvalidation・holdout・reserveを個別に扱う。結果はsynthetic conformance性能として報告し、実repositoryのreview性能とは表現しない。
