@@ -65,3 +65,9 @@ model binaryは大きく、候補も不採用なのでGitへ保存しない。da
 この1,000件は10規則familyを展開した基礎教材であり、件数だけを10,000件へ増やしても一般化を保証しない。次の実験を行う場合は、誤答から作る最小対例、複数証拠、権限・例外・guard、仕様とcodeの矛盾、教師間で判断が割れる境界例を追加し、独立holdoutで改善傾向を先に確認する。
 
 現段階ではLayaをASCのreview判定へ採用せず、このPRは学習・評価基盤と再現可能な不採用Evidenceをレビュー可能にするところで停止する。
+
+## 追加比較: Kev-4B
+
+同じholdout 100件を使い、公式Kev-4BのApple Silicon向けMLX backendでfinding validityだけを通常順・選択肢反転順の計200回評価した。通常順のfinding recallは90%だった一方、100件中90件を`yes`とし、balanced accuracyは36.7%、precisionは40.0%だった。反転順では100件すべてを`yes`とし、option-order flipは10.0%だった。
+
+事前に定めた継続条件（recall 70%以上、balanced accuracy 70%以上、flip 5%以下）のうち2条件を満たさないため、severityとrequired actionは評価していない。中央値460.9msで速度要件は満たしたが、無差別にfindingを有効とする傾向が強く、ASCの検証器には採用しない。実行条件、confusion matrix、pin、weight digestは[Kev-4B評価記録](kev-4b-finding-evaluation.md)に記録した。
