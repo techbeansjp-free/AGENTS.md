@@ -66,8 +66,14 @@ model binaryは大きく、候補も不採用なのでGitへ保存しない。da
 
 現段階ではLayaをASCのreview判定へ採用せず、このPRは学習・評価基盤と再現可能な不採用Evidenceをレビュー可能にするところで停止する。
 
+### Datasetとしての適用範囲
+
+このdatasetは実repositoryのreview品質を直接測るreal-evidence holdoutではない。packet内へ明示した規則、after payload、encoding、impact、actionの読解とdecision consistencyを測るsynthetic conformance setである。したがって本レポートの各model評価は「このsynthetic contract上の結果」であり、実コードreview全般のprecision・recallとは解釈しない。
+
+全1,000件についてpacket truthとoracle truthの機械監査を再実行した。詳細は[評価dataset契約監査](dataset-contract-audit.md)に記録する。実コードに対するReality truthはこのdatasetでは定義せず、別のreal-evidence setが必要である。
+
 ## 追加比較: Kev-4B
 
 同じholdout 100件を使い、公式Kev-4BのApple Silicon向けMLX backendでfinding validityだけを通常順・選択肢反転順の計200回評価した。通常順のfinding recallは90%だった一方、100件中90件を`yes`とし、balanced accuracyは36.7%、precisionは40.0%だった。反転順では100件すべてを`yes`とし、option-order flipは10.0%だった。
 
-事前に定めた継続条件（recall 70%以上、balanced accuracy 70%以上、flip 5%以下）のうち2条件を満たさないため、severityとrequired actionは評価していない。中央値460.9msで速度要件は満たしたが、無差別にfindingを有効とする傾向が強く、ASCの検証器には採用しない。実行条件、confusion matrix、pin、weight digestは[Kev-4B評価記録](kev-4b-finding-evaluation.md)に記録した。
+事前に定めた継続条件（recall 70%以上、balanced accuracy 70%以上、flip 5%以下）のうち2条件を満たさないため、severityとrequired actionは評価していない。中央値460.9msで速度要件は満たしたが、無差別にfindingを有効とする傾向が強く、このsynthetic contractの検証器には採用しない。実行条件、confusion matrix、pin、weight digestは[Kev-4B評価記録](kev-4b-finding-evaluation.md)に記録した。

@@ -79,4 +79,4 @@ weightは上記digestを実ファイルから再計算し、pin済みHub metadat
 
 総合判定は**不合格**である。
 
-Kev-4Bは速度課題を解消したが、decision品質を解消しなかった。negativeまたはinsufficientの60件中54件をfalse positiveとしたため、ほぼalways-valid classifierとして振る舞う。finding生成modelではなく検証器として使う場合、この出力は候補の絞り込みに寄与しない。
+Kev-4Bは速度課題を解消したが、このsynthetic conformance setに対するdecision品質を解消しなかった。negativeまたはinsufficientの60件中54件をfalse positiveとしたため、ほぼalways-valid classifierとして振る舞う。finding生成modelではなく当該contractの検証器として使う場合、この出力は候補の絞り込みに寄与しない。この結果だけから実repositoryに対するreview能力は判定しない。
