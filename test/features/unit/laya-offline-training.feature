@@ -76,6 +76,11 @@ Feature: ASC公開履歴を使うLaya契約
     When 合成teacher回答をassessmentへ変換する
     Then Laya操作は拒否される
 
+  Scenario: SCN-UNIT-LAYA-048 blind packetと異なるinput digestのteacher回答を受理しない
+    Given blind packetと異なるinput digestの合成teacher回答がある
+    When 合成teacher回答をassessmentへ変換する
+    Then Laya操作は拒否される
+
   Scenario: SCN-UNIT-LAYA-043 invalid criticalをrecall分母から除外し未検出をmissにする
     Given 無効criticalと未検出criticalを含むLaya validation予測がある
     When Laya validation予測を共通契約で評価する

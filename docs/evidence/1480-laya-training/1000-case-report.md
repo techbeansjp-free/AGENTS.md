@@ -18,13 +18,13 @@
 | artifact format | 10 |
 | rule family | 10 |
 
-問題集合SHA-256は`8a27d281028b5aea61fa5a1ae8e10548016b0d9cf4b994678216ec83d132622b`、教師label SHA-256は`a0cae0f3b5f4fa50a38e4d0a514b0d6633749ec7748aa44e308d632ee0442ba6`である。dataset本体は`docs/evidence/1480-laya-training/dataset/`へ保存した。
+問題集合SHA-256は`8a27d281028b5aea61fa5a1ae8e10548016b0d9cf4b994678216ec83d132622b`である。Codex回答は`6d1fed7950520941fede6a0b3c79ad702a8e98f92d809bde12185ffee6f451e5`、Opus回答は`3c015cd8fb708e834d4b564c673e3f863a5cf4f372147c91128e2890246864e6`、validation予測は`fd2a2f4ffc7fd020d00e2cabbcead8db2841d64bdc6ebdbcbf879b3af2f4db78`である。dataset本体は`docs/evidence/1480-laya-training/dataset/`へ保存した。
 
 ## 教師判定
 
 CodexとOpusは、oracleを含まない同一のblind packetを別々に判定した。trainとvalidationの800 case、3 question、計2,400回答について、両teacherは2,400件すべて一致した。oracleは両teacher成果物の完成後に生成し、両者とも2,400件すべて一致した。
 
-teacher labelはcanonical stateとquestionの`inputDigest`へ結合した。dataset digestだけを再計算してclaim、evidence、question、case IDを差し替える入力はTypeScript preflightとPython runnerの双方で拒否する。
+この教師実行は、回答に`inputDigest`を返させる新契約の導入前に行った。そのため教師が読んだ入力を暗号学的に証明する資料とは扱わず、回答を`legacy-unbound` Evidenceとして保存する。レビューで判明した不足を受け、新規実行のblind packetにはcanonical state、question、`inputDigest`を含め、回答側のdigest一致をimport時に必須とした。dataset digestだけを再計算してclaim、evidence、question、case IDを差し替える入力はTypeScript preflightとPython runnerの双方で拒否する。
 
 ## 学習実行
 
@@ -35,7 +35,7 @@ teacher labelはcanonical stateとquestionの`inputDigest`へ結合した。data
 - 学習時間: 734.04秒
 - checkpoint SHA-256: `a7223b47cf005367c866381bdef6662da1d218fe285521d7429906f455d2ddb5`
 
-model binaryは大きく、候補も不採用なのでGitへ保存しない。dataset、生成器、教師label、契約、評価結果を保存する。
+model binaryは大きく、候補も不採用なのでGitへ保存しない。dataset、生成器、履歴教師回答、契約、validation予測を保存する。
 
 ## Validation結果
 
@@ -51,7 +51,7 @@ model binaryは大きく、候補も不採用なのでGitへ保存しない。da
 | false escalation rate | 57.50% |
 | actual Critical finding recall | 33.33%（4/12） |
 
-初回reportのCritical recallは、finding validityが`no`のcaseにも仮定上のCritical severityを数えていた。修正版は実際に有効なCritical findingだけを分母とし、validity=`yes`またはaction=`fix`を検出として数える。この定義でも8/12件を見逃すため、candidateは`rejected`である。
+初回reportのCritical recallは、finding validityが`no`のcaseにも仮定上のCritical severityを数えていた。修正版は実際に有効なCritical findingだけを分母とし、validity=`yes`またはaction=`fix`を検出として数える。表の4/12は、Git管理した履歴validation予測を修正版evaluatorへ入力した事後再評価値であり、新契約による再学習値ではない。この定義でも8/12件を見逃すため、candidateは`rejected`である。
 
 ## 情報保護
 

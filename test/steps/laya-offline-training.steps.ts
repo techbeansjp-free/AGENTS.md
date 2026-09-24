@@ -424,6 +424,7 @@ function syntheticFixture(): { problems: unknown; labels: unknown } {
       stableJson({
         caseId: packet.caseId,
         questionId: packet.questionId,
+        inputDigest: packet.inputDigest,
         answer: answerByQuestion[packet.questionId],
         confidence: 1,
         evidenceReason: "The synthetic evidence supports this answer.",
@@ -1044,10 +1045,28 @@ Given("oracle fieldを含む合成teacher回答がある", function () {
       JSON.stringify({
         caseId: packet.caseId,
         questionId: packet.questionId,
+        inputDigest: packet.inputDigest,
         answer: packet.allowedChoices[0],
         confidence: 1,
         evidenceReason: "Synthetic evidence supports the selected choice.",
         gold: packet.allowedChoices[0],
+      }),
+    )
+    .join("\n");
+});
+Given("blind packetと異なるinput digestの合成teacher回答がある", function () {
+  const fixture = syntheticFixture();
+  this.syntheticProblems = fixture.problems;
+  const { packets } = createSyntheticTeacherPackets(fixture.problems, 4);
+  this.syntheticAnswerSource = packets
+    .map((packet, index) =>
+      stableJson({
+        caseId: packet.caseId,
+        questionId: packet.questionId,
+        inputDigest: index === 0 ? "f".repeat(64) : packet.inputDigest,
+        answer: packet.allowedChoices[0],
+        confidence: 1,
+        evidenceReason: "Synthetic evidence supports the selected choice.",
       }),
     )
     .join("\n");
@@ -1079,6 +1098,7 @@ When("blind packetを生成してCodexとOpus回答を取込む", function () {
       stableJson({
         caseId: packet.caseId,
         questionId: packet.questionId,
+        inputDigest: packet.inputDigest,
         answer: packet.allowedChoices[0],
         confidence: 0.9,
         evidenceReason: "Synthetic evidence supports the selected choice.",
@@ -1174,14 +1194,30 @@ Then("packetはoracleを含まずholdoutとreserveを除外する", function () 
     [
       "allowedChoices",
       "caseId",
-      "claim",
-      "evidence",
+      "inputDigest",
       "partition",
       "purpose",
+      "question",
       "questionId",
       "sealDigest",
       "splitDigest",
+      "state",
     ].sort(),
+  );
+  assert.ok(
+    packets.every((packet) => {
+      const questionId = packet.questionId as Parameters<
+        typeof digestLayaTrainingInput
+      >[1];
+      return (
+        packet.inputDigest ===
+        digestLayaTrainingInput(
+          packet.state as Record<string, unknown>,
+          questionId,
+          packet.question as Record<string, unknown>,
+        )
+      );
+    }),
   );
 });
 Then("teacher artifactはmodel別run情報を保持する", function () {

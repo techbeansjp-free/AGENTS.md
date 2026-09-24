@@ -71,8 +71,13 @@ export interface TeacherSet {
 export interface SyntheticTeacherPacket {
   caseId: string;
   questionId: LayaQuestionId;
-  claim: string;
-  evidence: LayaEvidence[];
+  state: {
+    claim: string;
+    evidence: LayaEvidence[];
+    slice: "general" | "distribution";
+  };
+  question: Record<string, unknown>;
+  inputDigest: string;
   allowedChoices: readonly string[];
   splitDigest: string;
   sealDigest: string;
@@ -83,6 +88,7 @@ export interface SyntheticTeacherPacket {
 interface RawSyntheticTeacherAnswer {
   caseId: string;
   questionId: LayaQuestionId;
+  inputDigest: string;
   answer: string;
   confidence: number;
   evidenceReason: string;
@@ -422,11 +428,18 @@ export function createSyntheticTeacherPackets(
       if (!decisionCase) throw new Error(`split caseがありません: ${caseId}`);
       return questionIdsForCase(decisionCase).map((questionId) => {
         const view = createTeacherView(decisionCase, questionId);
+        const state = {
+          claim: view.claim,
+          evidence: view.evidence,
+          slice: decisionCase.slice,
+        };
+        const question = questionDefinition(questionId);
         return {
           caseId: view.caseId,
           questionId: view.questionId,
-          claim: view.claim,
-          evidence: view.evidence,
+          state,
+          question,
+          inputDigest: digestLayaTrainingInput(state, questionId, question),
           allowedChoices: [...choicesForQuestion(questionId)],
           splitDigest: problems.split.splitDigest,
           sealDigest: problems.sealDigest,
@@ -453,7 +466,14 @@ function parseRawTeacherAnswers(source: string): RawSyntheticTeacherAnswer[] {
     );
     exactKeys(
       value,
-      ["caseId", "questionId", "answer", "confidence", "evidenceReason"],
+      [
+        "caseId",
+        "questionId",
+        "inputDigest",
+        "answer",
+        "confidence",
+        "evidenceReason",
+      ],
       `teacher answers[${index}]`,
     );
     if (
@@ -466,6 +486,8 @@ function parseRawTeacherAnswers(source: string): RawSyntheticTeacherAnswer[] {
         "required-action",
         "distribution-impact",
       ].includes(value.questionId) ||
+      typeof value.inputDigest !== "string" ||
+      !DIGEST.test(value.inputDigest) ||
       typeof value.answer !== "string" ||
       typeof value.confidence !== "number" ||
       !Number.isFinite(value.confidence) ||
@@ -512,19 +534,12 @@ export function importSyntheticTeacherAnswers(
     const packet = packetByKey.get(key);
     if (!packet || seen.has(key))
       throw new Error("teacher answerがpacketと一致しないか重複しています");
+    if (answer.inputDigest !== packet.inputDigest)
+      throw new Error("teacher answerのinputDigestがpacketと一致しません");
     if (!packet.allowedChoices.includes(answer.answer))
       throw new Error("teacher answerが許可choiceにありません");
-    const problem = caseById.get(answer.caseId);
-    if (!problem) throw new Error("teacher answerのcaseがありません");
-    const inputDigest = digestLayaTrainingInput(
-      {
-        claim: problem.claim,
-        evidence: problem.evidence,
-        slice: problem.workflow,
-      },
-      answer.questionId,
-      questionDefinition(answer.questionId),
-    );
+    if (!caseById.has(answer.caseId))
+      throw new Error("teacher answerのcaseがありません");
     seen.add(key);
     const assessment: TeacherAssessment = {
       schemaVersion: "asc/laya-teacher-assessment/v1",
@@ -535,7 +550,7 @@ export function importSyntheticTeacherAnswers(
       purpose: packet.purpose,
       partition: packet.partition,
       answer: answer.answer,
-      inputDigest,
+      inputDigest: packet.inputDigest,
       confidence: answer.confidence,
       evidenceReason: answer.evidenceReason,
       splitDigest: packet.splitDigest,
