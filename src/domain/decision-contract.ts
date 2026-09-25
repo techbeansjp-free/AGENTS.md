@@ -51,6 +51,8 @@ interface DecisionCandidateEntryBase {
  */
 export interface AdoptedDecisionCandidateEntry extends DecisionCandidateEntryBase {
   readonly disposition: "adopted";
+  /** REQ-WF-026により採用候補はfail-closed方向に限定する。基底型のfail-openを型で排除する。 */
+  readonly direction: "fail-closed";
   /** 判断結果を消費する呼び出し元file。 */
   readonly callerFile: string;
   /** `callerFile`内の行番号または行範囲。 */

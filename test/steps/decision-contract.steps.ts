@@ -17,6 +17,7 @@ interface DecisionContractWorld extends WorkflowWorld {
   journalFieldNames?: readonly string[];
   collidingFieldNames?: readonly string[];
   compileDiagnostics?: readonly ts.Diagnostic[];
+  rejectedCallableTargetLiteral?: string;
 }
 
 const { Given, When, Then } = stepDefinitions<DecisionContractWorld>();
@@ -271,6 +272,7 @@ Then("field名の衝突が無い", function (this: DecisionContractWorld) {
 Given(
   "fail-open方向を表す文字列リテラル{string}をcallableTargetへ代入するsourceがある",
   function (this: DecisionContractWorld, literal: string) {
+    this.rejectedCallableTargetLiteral = literal;
     this.value = `
       import type { DecisionContract } from "../../src/domain/decision-contract.js";
       const invalid: DecisionContract = {
@@ -319,13 +321,25 @@ When(
 Then(
   "型の不一致によるcompile errorが報告される",
   function (this: DecisionContractWorld) {
+    const literal = this.rejectedCallableTargetLiteral;
+    assert.ok(literal, "rejectedCallableTargetLiteralが設定されていません");
     const diagnostics = this.compileDiagnostics ?? [];
-    const messages = diagnostics.map((diagnostic) =>
+    // TS2322（型不一致）に限定し、対象がcallableTargetの宣言型DecisionCallableTargetと
+    // 拒否対象literalであることまで確認する。診断コードや対象を確認しないと、無関係な
+    // compile errorでも本Scenarioが誤って成功する（CodeRabbit指摘、Step 10後の是正）。
+    const relevant = diagnostics.filter(
+      (diagnostic) => diagnostic.code === 2322,
+    );
+    const messages = relevant.map((diagnostic) =>
       ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
     );
     assert.ok(
-      messages.some((message) => /is not assignable to type/u.test(message)),
-      `callableTargetのfail-open値がcompile errorになりませんでした: ${messages.join(" / ")}`,
+      messages.some(
+        (message) =>
+          message.includes(`"${literal}"`) &&
+          message.includes("DecisionCallableTarget"),
+      ),
+      `callableTarget="${literal}"がTS2322としてDecisionCallableTargetへの不一致で報告されませんでした: ${messages.join(" / ")}`,
     );
   },
 );
