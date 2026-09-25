@@ -352,6 +352,12 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-068"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  @issue-1493
+  Scenario: SCN-E2E-WFSTEP-069 pr mergeは同じ非ancestor baseを維持する2件目のreanchorも拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-069"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-048 索引の反映待ちを経て1回のpr createでbindする
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-048"のE2E検査を実行する
