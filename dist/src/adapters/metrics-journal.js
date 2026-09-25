@@ -26,7 +26,12 @@ function metricsReportPath(repositoryRoot, staging) {
     const slug = path.basename(staging);
     return path.join(repositoryRoot, METRICS_OUTPUT_DIRECTORY, `${slug}.json`);
 }
-function assertRegularFilePath(target, label) {
+function assertRegularFilePath(rawTarget, label) {
+    // 呼び出し元は絶対pathで渡すとは限らない（--review-sessionはCLI利用者の
+    // 相対path指定を受理する）。realpathは常に絶対pathを返すため、先に
+    // 絶対化しないと相対dirnameとの比較が常に不一致になる（独立reviewの
+    // 新規指摘：round2で発見）。
+    const target = path.resolve(rawTarget);
     const directory = path.dirname(target);
     if (fs.existsSync(directory)) {
         const directoryStat = fs.lstatSync(directory);

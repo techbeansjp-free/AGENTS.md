@@ -201,6 +201,34 @@ Then("INV-04により拒否される", function () {
 });
 
 Given(
+  "kind=roleでlabel=implementerがopen状態（start=00:00:00）である",
+  function () {
+    this.metricsEvents = [
+      {
+        kind: "role",
+        phase: "start",
+        label: "implementer",
+        recordedAt: "2026-09-25T00:00:00.000Z",
+      },
+    ];
+  },
+);
+
+When("異なるlabel=reviewerでendの新規イベントを検証する", function () {
+  this.transitionResult = validateNextMetricsEvent(this.metricsEvents, {
+    kind: "role",
+    phase: "end",
+    label: "reviewer",
+  });
+});
+
+Then("labelが一致しないため拒否される", function () {
+  assert.equal(this.transitionResult.ok, false);
+  if (this.transitionResult.ok === false)
+    assert.match(this.transitionResult.reason, /一致しません/u);
+});
+
+Given(
   "kind=roleでlabel=implementerが1000ms、label=reviewerが500ms記録済みのイベント系列である",
   function () {
     this.metricsEvents = [

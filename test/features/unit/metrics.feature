@@ -67,3 +67,8 @@ Feature: 計測基盤（step_ms・role_ms・model_ms・deterministic_ms・review
     Given repository rootのsrc/domain/metrics.tsを対象にする
     When src/domain/metrics.tsの依存importを検査する
     Then src/adapters配下とsrc/cli.tsへのimportは無い
+
+  Scenario: SCN-MT-1482-018 endのlabelが開区間のlabelと一致しない場合は拒否する
+    Given kind=roleでlabel=implementerがopen状態（start=00:00:00）である
+    When 異なるlabel=reviewerでendの新規イベントを検証する
+    Then labelが一致しないため拒否される

@@ -60,7 +60,7 @@ function isMetricsEventPhase(value) {
     return METRICS_EVENT_PHASES.some((phase) => phase === value);
 }
 /**
- * `journal/metrics-events.jsonl`の1行をstrictに検証する。
+ * 計測event log（`.agent-skill-chain/metrics/<staging名>/events.jsonl`）の1行をstrictに検証する。
  *
  * 既存`journal/steps.jsonl`のparser（`parseStepJournal`、`src/domain/workflow.ts`）と
  * 同じ様式（未知field拒否、ISO 8601 UTC厳密一致、行番号付きエラー）を踏襲するが、
@@ -162,6 +162,11 @@ export function validateNextMetricsEvent(existing, candidate) {
             ok: false,
             reason: `kind=${candidate.kind}はidle状態のためphase=endを記録できません（INV-04）。対応するphase=startが必要です`,
         };
+    if (candidate.label !== current.label)
+        return {
+            ok: false,
+            reason: `kind=${candidate.kind}の開区間はlabel="${current.label}"です。end側のlabel="${candidate.label}"と一致しません（独立reviewの指摘: labelが一致しない場合の誤帰属を防ぐ）`,
+        };
     if (candidate.recordedAt !== undefined) {
         const startMs = Date.parse(current.recordedAt);
         const endMs = Date.parse(candidate.recordedAt);
@@ -208,7 +213,7 @@ export function computeReviewRounds(state) {
     return countedRounds(state);
 }
 /**
- * FR-1482-04。`journal/metrics-events.jsonl`のstart/end対から
+ * FR-1482-04。計測event logのstart/end対から
  * `role_ms`/`model_ms`/`deterministic_ms`とlabel別内訳を算出する。
  *
  * 未終了区間（開いたままのstart）はwarningとして報告し合計から除外する（02 §6）。
@@ -277,7 +282,7 @@ export function computeSupportArtifactSplit(input) {
 }
 /**
  * 計測window全体のms。`journal/steps.jsonl`の全entryと
- * `journal/metrics-events.jsonl`の全eventを**合わせた集合**の最古・最新timestampの
+ * 計測event logの全eventを**合わせた集合**の最古・最新timestampの
  * 差分を採る（独立reviewのM1指摘。以前の実装は2つの個別spanをmaxしていたため、
  * 一方の集合がもう一方の範囲外に出る場合に過小評価していた）。
  */
