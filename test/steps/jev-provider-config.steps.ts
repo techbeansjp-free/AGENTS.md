@@ -1,0 +1,247 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import {
+  loadJevProviderConfig,
+  JEV_PROVIDER_CONFIG_PATH,
+  type JevProviderConfig,
+} from "../../src/domain/jev-provider-config.js";
+import { stepDefinitions, WorkflowWorld } from "../support/world.js";
+
+class JevProviderConfigWorld extends WorkflowWorld {
+  root = "";
+  configPath = JEV_PROVIDER_CONFIG_PATH;
+  envVarName = "";
+  previousEnvValue: string | undefined = undefined;
+  result: JevProviderConfig | undefined = undefined;
+  fixtureSnapshotBefore: string = "";
+  fixtureSnapshotAfter: string = "";
+  secretValue = "";
+}
+
+const { Given, When, Then } = stepDefinitions<JevProviderConfigWorld>();
+
+function writeConfig(root: string, content: unknown): void {
+  const resolved = path.join(root, JEV_PROVIDER_CONFIG_PATH);
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  fs.writeFileSync(resolved, JSON.stringify(content, null, 2));
+}
+
+function snapshotLocalDir(root: string): string {
+  const dir = path.join(root, ".agent-skill-chain/local");
+  if (!fs.existsSync(dir)) return "";
+  const parts: string[] = [];
+  for (const name of fs.readdirSync(dir).sort()) {
+    const filePath = path.join(dir, name);
+    if (fs.statSync(filePath).isFile())
+      parts.push(`${name}:${fs.readFileSync(filePath, "utf8")}`);
+  }
+  return parts.join("\n---\n");
+}
+
+function setEnvVar(world: JevProviderConfigWorld, name: string, value: string) {
+  world.envVarName = name;
+  world.previousEnvValue = process.env[name];
+  process.env[name] = value;
+}
+
+// --- SCN-UNIT-JEVCFG-001 ---
+
+Given(
+  "jev-provider.jsonがenabled trueかつ有効なapiKeyEnvVarで存在する",
+  function () {
+    this.root = this.temp("asc-jevcfg-001-");
+    writeConfig(this.root, {
+      enabled: true,
+      apiKeyEnvVar: "JEV_API_KEY",
+      endpoint: "https://api.jev.example.invalid/v1",
+      model: "jev-decision-1",
+    });
+  },
+);
+
+Given("指定したenv varがprocess.envに設定されている", function () {
+  setEnvVar(this, "JEV_API_KEY", "test-secret-value-should-not-leak");
+});
+
+When("loadJevProviderConfigを実行する", function () {
+  this.result = loadJevProviderConfig(this.root, this.configPath);
+});
+
+Then("有効なJevProviderConfigが返る", function () {
+  assert.deepEqual(this.result, {
+    enabled: true,
+    apiKeyEnvVar: "JEV_API_KEY",
+    endpoint: "https://api.jev.example.invalid/v1",
+    model: "jev-decision-1",
+  });
+});
+
+// --- SCN-UNIT-JEVCFG-002 ---
+
+Given("jev-provider.jsonが存在しない", function () {
+  this.root = this.temp("asc-jevcfg-002-");
+});
+
+Then("例外を投げずundefinedが返る", function () {
+  assert.equal(this.result, undefined);
+});
+
+// --- SCN-UNIT-JEVCFG-003 ---
+
+Given("jev-provider.jsonのJSON構文が壊れている", function () {
+  this.root = this.temp("asc-jevcfg-003-");
+  const resolved = path.join(this.root, JEV_PROVIDER_CONFIG_PATH);
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  fs.writeFileSync(resolved, "{ enabled: true, ");
+});
+
+// --- SCN-UNIT-JEVCFG-004 ---
+
+Given("jev-provider.jsonに未知keyが含まれている", function () {
+  this.root = this.temp("asc-jevcfg-004-");
+  writeConfig(this.root, {
+    enabled: true,
+    apiKeyEnvVar: "JEV_API_KEY",
+    endpoint: "https://api.jev.example.invalid/v1",
+    model: "jev-decision-1",
+    unexpectedField: "should be rejected",
+  });
+});
+
+// --- SCN-UNIT-JEVCFG-005 ---
+
+Given("jev-provider.jsonのenabledがfalseまたは欠落している", function () {
+  this.root = this.temp("asc-jevcfg-005-");
+  writeConfig(this.root, {
+    enabled: false,
+    apiKeyEnvVar: "JEV_API_KEY",
+    endpoint: "https://api.jev.example.invalid/v1",
+    model: "jev-decision-1",
+  });
+});
+
+// --- SCN-UNIT-JEVCFG-006 ---
+
+Given(
+  "jev-provider.jsonは有効だが指定env varがprocess.envに設定されていない",
+  function () {
+    this.root = this.temp("asc-jevcfg-006-");
+    this.envVarName = "JEV_API_KEY_UNSET_006";
+    delete process.env[this.envVarName];
+    writeConfig(this.root, {
+      enabled: true,
+      apiKeyEnvVar: this.envVarName,
+      endpoint: "https://api.jev.example.invalid/v1",
+      model: "jev-decision-1",
+    });
+  },
+);
+
+// --- SCN-UNIT-JEVCFG-007 ---
+
+Given("env varへ設定したAPIキー値を持つ実行環境がある", function () {
+  this.root = this.temp("asc-jevcfg-007-");
+  this.secretValue = "sk-test-secret-9f3ce2b1-4a7d-fixed-must-not-leak";
+  setEnvVar(this, "JEV_API_KEY", this.secretValue);
+  writeConfig(this.root, {
+    enabled: true,
+    apiKeyEnvVar: "JEV_API_KEY",
+    endpoint: "https://api.jev.example.invalid/v1",
+    model: "jev-decision-1",
+  });
+  this.fixtureSnapshotBefore = snapshotLocalDir(this.root);
+});
+
+When("loadJevProviderConfigを実行し関連fileを走査する", function () {
+  this.result = loadJevProviderConfig(this.root, this.configPath);
+  this.fixtureSnapshotAfter = snapshotLocalDir(this.root);
+});
+
+Then(
+  "APIキー値を含む代入形が.agent-skill-chain\\/local\\/配下のどのfileにも見つからない",
+  function () {
+    // (a) 戻り値のJSON表現に秘密値が含まれない
+    assert.ok(this.result);
+    assert.ok(!JSON.stringify(this.result).includes(this.secretValue));
+
+    // (b) loader呼び出し前後でfixture配下のfile内容が1 byteも変化しない
+    assert.equal(this.fixtureSnapshotBefore, this.fixtureSnapshotAfter);
+    assert.ok(!this.fixtureSnapshotAfter.includes(this.secretValue));
+
+    // (c) 実装ソースに書き込みAPI呼び出しの文字列が存在しない
+    const implementationPath = new URL(
+      "../../src/domain/jev-provider-config.ts",
+      import.meta.url,
+    );
+    const source = fs.readFileSync(implementationPath, "utf8");
+    for (const writeApi of ["writeFile", "appendFile", "fs.write("])
+      assert.ok(
+        !source.includes(writeApi),
+        `実装ソースに書込みAPI(${writeApi})が含まれています`,
+      );
+  },
+);
+
+// --- SCN-UNIT-JEVCFG-008 ---
+
+Given(
+  "modelMapping.jsonとproject-policy.jsonが対象repositoryに存在する",
+  function () {
+    this.root = this.temp("asc-jevcfg-008-");
+    writeConfig(this.root, {
+      enabled: true,
+      apiKeyEnvVar: "JEV_API_KEY",
+      endpoint: "https://api.jev.example.invalid/v1",
+      model: "jev-decision-1",
+    });
+    setEnvVar(this, "JEV_API_KEY", "test-secret-value-008");
+    const modelMappingPath = path.join(
+      this.root,
+      ".agent-skill-chain/project/providers/model-mapping.json",
+    );
+    fs.mkdirSync(path.dirname(modelMappingPath), { recursive: true });
+    fs.writeFileSync(
+      modelMappingPath,
+      JSON.stringify({ roles: { reviewer: { provider: "codex" } } }),
+    );
+    const projectPolicyPath = path.join(
+      this.root,
+      ".agent-skill-chain/project-policy.json",
+    );
+    fs.writeFileSync(
+      projectPolicyPath,
+      JSON.stringify({ schemaVersion: "fixture", policy: {} }),
+    );
+  },
+);
+
+Then(
+  "modelMappingとtrusted project policyの内容は結果に影響せず読み込まれない",
+  function () {
+    // 実行時挙動: fixtureが存在してもloaderの結果は変わらない
+    assert.deepEqual(this.result, {
+      enabled: true,
+      apiKeyEnvVar: "JEV_API_KEY",
+      endpoint: "https://api.jev.example.invalid/v1",
+      model: "jev-decision-1",
+    });
+
+    // 静的: 実装のimport文（コメントは対象外）にtrusted pathが一切現れない。
+    // ソース中のJSDocコメントはmodelMappingへ「触れない」設計を説明するために
+    // その語を含むため、コメントを含む全文一致ではなくimport specifierだけを見る。
+    const implementationPath = new URL(
+      "../../src/domain/jev-provider-config.ts",
+      import.meta.url,
+    );
+    const source = fs.readFileSync(implementationPath, "utf8");
+    const importSpecifiers = [
+      ...source.matchAll(/^import\b[^;]*from\s+["']([^"']+)["']/gmu),
+    ].map((match) => match[1]);
+    for (const specifier of importSpecifiers)
+      assert.ok(
+        !/model-?mapping|project-policy/iu.test(specifier),
+        `trusted pathをimportしています: ${specifier}`,
+      );
+  },
+);

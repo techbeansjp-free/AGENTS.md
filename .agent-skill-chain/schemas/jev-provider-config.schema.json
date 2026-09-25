@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-skill-chain/jev-provider-config/v1",
+  "title": "ローカルJev provider設定",
+  "description": "Git管理外の個人ローカル設定。modelMapping.roles.reviewerやtrusted project policyとは独立に、開発者個別のJev（Decision Provider）設定を保持する。値そのもの（APIキー）は書かず、値を読む環境変数名だけを書く。`.agent-skill-chain/local/jev-provider.json`へ置く。CLIは手書き検証で読み込み、`modelMapping`・trusted project policyへは触れない。",
+  "type": "object",
+  "required": ["enabled"],
+  "if": {
+    "properties": { "enabled": { "const": true } },
+    "required": ["enabled"]
+  },
+  "then": { "required": ["apiKeyEnvVar", "endpoint", "model"] },
+  "additionalProperties": false,
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "description": "trueのときだけ有効。false・省略時はloaderがundefinedを返す"
+    },
+    "apiKeyEnvVar": {
+      "type": "string",
+      "pattern": "^[A-Z_][A-Z0-9_]*$",
+      "description": "APIキーの値を保持する環境変数の名前。値そのものはこのfileへ書かない"
+    },
+    "endpoint": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Jev providerのHTTP endpoint（本Issueのloaderは値を読むだけで、接続は行わない）"
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Jev providerのmodel名"
+    }
+  }
+}
