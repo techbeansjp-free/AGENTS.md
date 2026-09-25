@@ -48,6 +48,8 @@ import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssig
 import { readDeliveryEvidence, readEnforcementInput, readFinalizeEvidence, isPolicyInput, readJsonInput, readMigrationManifest, readMigrationState, readModeAssessment, readPolicyFileInput, readPolicyJson, readSpecReview, } from "./adapters/json-input.js";
 import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPocDeliveryChangeScope, assertWorkflowStaging, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
 import { assertConvergedReviewSession, buildReviewRoundDraft, previewReviewRound, readStoredReviewSession, recordReviewRound, } from "./adapters/review-session.js";
+import { appendMetricsEvent, buildMetricsReport, writeMetricsReport, } from "./adapters/metrics-journal.js";
+import { METRICS_EVENT_KINDS, METRICS_EVENT_PHASES, } from "./domain/metrics.js";
 import { evidenceOnlySuffix } from "./adapters/review-diff.js";
 import { recordLayerSuffix } from "./adapters/review-record-layer.js";
 import { appendEvidenceReanchor, evaluateEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
@@ -65,6 +67,7 @@ function workflowArguments(args) {
         "post-terminal-intake",
         "post-pr-intake",
         "reconfirm",
+        "out",
     ]);
     for (let index = 0; index < args.length; index += 1) {
         const argument = args[index] ?? "";
@@ -4356,6 +4359,56 @@ export async function main(argv, dependencies = {}) {
         print(appendWorkflowJournalEntry({ staging, entry, headSha }));
         return 0;
     }
+    if (command === "workflow" && subcommand === "mark") {
+        const { flags, artifacts } = workflowArguments(rest);
+        if (artifacts.length > 0)
+            throw new Error("workflow markで--artifactは使用できません");
+        const unknown = Object.keys(flags).filter((flag) => !["staging", "kind", "phase", "label", "now"].includes(flag));
+        if (unknown.length > 0)
+            throw new Error(`workflow markの未知optionです: --${unknown.join(", --")}`);
+        const staging = flags.staging;
+        if (!staging)
+            throw new Error("workflow markには--stagingが必要です");
+        const kind = flags.kind;
+        if (!kind || !METRICS_EVENT_KINDS.some((candidate) => candidate === kind))
+            throw new Error(`workflow markの--kindはrole・model・deterministicのいずれかが必要です`);
+        const phase = flags.phase;
+        if (!phase ||
+            !METRICS_EVENT_PHASES.some((candidate) => candidate === phase))
+            throw new Error("workflow markの--phaseはstart・endのいずれかが必要です");
+        const label = flags.label;
+        if (!label)
+            throw new Error("workflow markには--labelが必要です");
+        print(appendMetricsEvent({
+            staging,
+            kind: kind,
+            phase: phase,
+            label,
+            now: flags.now,
+        }));
+        return 0;
+    }
+    if (command === "workflow" && subcommand === "metrics") {
+        const { flags, artifacts } = workflowArguments(rest);
+        if (artifacts.length > 0)
+            throw new Error("workflow metricsで--artifactは使用できません");
+        const unknown = Object.keys(flags).filter((flag) => !["staging", "review-session", "out"].includes(flag));
+        if (unknown.length > 0)
+            throw new Error(`workflow metricsの未知optionです: --${unknown.join(", --")}`);
+        const staging = flags.staging;
+        if (!staging)
+            throw new Error("workflow metricsには--stagingが必要です");
+        const outRequested = presentFlag(flags, "out");
+        const report = buildMetricsReport({
+            staging,
+            reviewSessionPath: flags["review-session"],
+        });
+        const written = outRequested
+            ? writeMetricsReport({ staging, report })
+            : undefined;
+        print(written ? { ...report, writtenTo: written.path } : report);
+        return 0;
+    }
     if (command === "workflow" && subcommand === "verify") {
         const { flags, artifacts } = workflowArguments(rest);
         if (artifacts.length > 0)
@@ -4399,7 +4452,7 @@ export async function main(argv, dependencies = {}) {
         return 0;
     }
     if (command === "workflow")
-        throw new Error("workflowにはsteps、advance、verification-set、assess-discovery、promote-full、record、verifyのいずれかが必要です");
+        throw new Error("workflowにはsteps、advance、verification-set、assess-discovery、promote-full、record、mark、metrics、verifyのいずれかが必要です");
     if (command === "graph" && subcommand === "install") {
         const { flags } = parse(rest);
         const root = graphRoot(flags);
