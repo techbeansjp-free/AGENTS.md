@@ -48,6 +48,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
 | `dist/src/domain/decision-contract.js` | A | package（ASC本体、生成物） | 生成物 | 生成物。`src/domain/decision-contract.ts`からの`npm run build`出力（tsc compile）。生成元との対応は`git diff`で確認済み（手編集なし） | 生成元 → 生成物 | src側と同じRQ-01〜04/AC-01〜05 | §8の配布物影響表とpackage filesで確認。`git rm`で即時rollback可能 | pass |
+| `docs/reviews/1483_課題1483DecisionContract定義レビュー.md` | A | package（ASC本体、review artifact） | docs/reviews | 本file自身。Step 10のreview記録（本文書）。round 2時点のH_impl（`da6fcd96`）は比較基点からの累積diffに本file自体の初回追加（round 1のH_final `fb2e3958`由来）を含むため個別監査対象になる | 記録。循環なし | 本review記録の§0〜§11全体がAC-01〜05・INV-01〜02を追跡する | 記録目的のfileでrollback対象の実行コードを持たない。`git revert`で即時rollback可能 | pass |
 | `docs/specs/01_システム概要/02_用語・略語.md` | M | package（ASC本体） | docs/specs | システム仕様書。TERM-DC-001（Decision Contract）を追加する1行 | spec → src（許可された向き） | TERM-DC-001、RQ-01 | システム仕様書。追記のみで既存行を変更しない。`git revert`で即時rollback可能 | pass |
 | `docs/specs/02_要件/00_要件一覧.md` | M | package（ASC本体） | docs/specs | システム仕様書。REQ-WF-026を追加する1行 | spec → src（許可された向き） | REQ-WF-026 | システム仕様書。追記のみ。`git revert`で即時rollback可能 | pass |
 | `docs/specs/02_要件/01_ワークフロー要件.md` | M | package（ASC本体） | docs/specs | システム仕様書。REQ-WF-026の詳細節とAC-WF-026を追加 | spec → src（許可された向き） | REQ-WF-026、AC-WF-026 | システム仕様書。末尾への追記のみで既存節を変更しない。`git revert`で即時rollback可能 | pass |
@@ -58,7 +59,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | `test/features/unit/decision-contract.feature` | A | package（ASC本体） | test | SCN-UNIT-DC-001〜005のGherkinシナリオ。単一feature fileに閉じる | test → 対象（許可された向き） | AC-01〜05を1シナリオ1AC対応で被覆 | testのみで副作用なし。`git rm`で即時rollback可能 | pass |
 | `test/steps/decision-contract.steps.ts` | A | package（ASC本体） | test | feature内Given/When/Thenの実装。DECISION_CANDIDATESの構造検証・4 schemaとのfield名diff・TypeScript Compiler APIによる型陰性testを担う | test → 対象（許可された向き）。`typescript`packageは既存devDependency | AC-01〜05に対応する検証ロジックを実装 | filesystem読み取りは`.agent-skill-chain/schemas/*.schema.json`の読み取り専用open限定。`git rm`で即時rollback可能 | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: はい（`review artifact --init`が10 pathを機械抽出し、上表もその10 pathと一致）
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: はい。round 1の`review artifact --init`は10 pathを機械抽出した。round 2ではH_implが`da6fcd96`（round 1のH_final `fb2e3958`の子孫）へ進んだため、比較基点..H_implのtree diffに本review artifact自身（round 1で追加された`docs/reviews/1483_...md`）が11件目として含まれる。`node --import tsx scripts/check_file_audit.ts`で11件の完全一致を確認済み
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: はい（本Issueは新規file1つ+docs/specs追記のみで、project choiceやexecution authorityに触れない）
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: 該当なし（round 1時点で未修正）
 
@@ -238,7 +239,7 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 | 対象SHA・文書ダイジェスト | da6fcd968d9e9b368fd0fa8f30a468b396f99f95 |
 | 比較基点 | `bb16faba15027304a11071631ddb6d21cf4c7d7a` |
 | H_impl | `da6fcd968d9e9b368fd0fa8f30a468b396f99f95` |
-| 対象差分 | dist/src/domain/decision-contract.js、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/00_要件一覧.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/03_アーキテクチャ/00_全体構成.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/domain/decision-contract.ts、test/features/unit/decision-contract.feature、test/steps/decision-contract.steps.ts |
+| 対象差分 | dist/src/domain/decision-contract.js、docs/reviews/1483_課題1483DecisionContract定義レビュー.md（本file自身、round 1 H_final由来）、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/00_要件一覧.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/03_アーキテクチャ/00_全体構成.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/domain/decision-contract.ts、test/features/unit/decision-contract.feature、test/steps/decision-contract.steps.ts |
 | 対象外 | 比較基点に存在し変更されていない範囲 |
 | 残り予算 | 4ラウンド（同一scope上限6のうち2ラウンド消費、収束済み） |
 | ラウンド数 | 2（`review round --apply`で記録済み、status=converged。round 2はpr-bound後にCI失敗とCodeRabbit指摘を取り込んだ取り直し） |
