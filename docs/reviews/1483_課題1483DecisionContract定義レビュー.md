@@ -131,9 +131,11 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | H-06 | Medium | main追随（Issue #1482/PR #1492）のmergeでsrc/cli.tsへ行が追加され、DCAND-002のcallerLine「1726」とDCAND-003のcallerLine「7066」が実際のinspectCiDelivery呼び出し・validateSpecs呼び出し行と一致しなくなった | merge直後`npm test`全件再実行でSCN-UNIT-DC-002のanchorPresent検証が失敗（AssertionError: DCAND-002のcallerAnchorがsrc/cli.ts:1726近傍に見つかりません） | AC-02/AC-03の呼び出し元citation精度 | `grep -n "inspectCiDelivery(" src/cli.ts`・`grep -n "validateSpecs(root" src/cli.ts`で実測した新しい行番号（1738、7139）へ、REQ-WF-026→029改名・review artifact除去と同じcommit`f8053815`で修正。SCN-UNIT-DC-001〜005再実行5/5 pass、`npm test`全件2352 scenarios中2335 passed・17 skipped・0 failedを確認 | resolved（source=audit、round 3で発見・同commitで解消） | 残存なし。H-01が追加した`anchorPresent`機構が意図どおりこの破損を検出した事例であり、main追随のたびにcli.ts等の行番号citationが無言で陳腐化しない設計であることを裏付けた |
 
 Low（Codex round 1指摘、記録のみ）:
-- Low: `DecisionCandidateEntry.id`が`DCAND-###`形式であることをJSDocコメントで案内しているが型（string）としては強制していない。対象外: 型でformatまで強制すると`readonly id: \`DCAND-${number}\``のようなtemplate literal型が必要になり、3桁ゼロ埋め表現（例: `001`）をTypeScriptのnumber型で自然に表現できず可読性が下がる。`DECISION_CANDIDATES`が12件と少数であり目視確認で足りると判断し対象外とした
+- Low: `DecisionCandidateEntry.id`が`DCAND-###`形式であることをJSDocコメントで案内しているが型（string）としては強制していない。対象外: 型でformatまで強制すると``readonly id: `DCAND-${number}` ``のようなtemplate literal型が必要になり、3桁ゼロ埋め表現（例: `001`）をTypeScriptのnumber型で自然に表現できず可読性が下がる。`DECISION_CANDIDATES`が12件と少数であり目視確認で足りると判断し対象外とした
 
 CI失敗（`日本語文書・Gherkin・型・配布物の品質検証`、round 2で発見）: `docs/reviews/1483_課題1483DecisionContract定義レビュー.md`の見出し「review session」が`check_japanese_docs.ts`の日本語文字数判定に抵触した。「レビューセッション」「セッションID」へ訳語化して解消。findingとしては計上せず、CI設定検証の直接対応として記録する。
+
+Markdown表記（CodeRabbit review id `5318667595`、H_final `f4718330`確定後にPR #1490で発見）: 本節の「Low（Codex round 1指摘、記録のみ）」段落内、`DecisionCandidateEntry.id`のtemplate literal型例（`` `readonly id: \`DCAND-${number}\`` ``）が単一バッククォートの code span 内でバッククォートをエスケープしようとしており、Markdown上は正しく描画されない。進行役が実際の行内容で再現・有効と判断し、二重バッククォート区切りへ修正（forward commit、H_implは移動しない。`evidenceOnlySuffix`が許す初回artifact＋前進是正の範囲内）。findingとしては計上せず、review artifact自身の表記是正として記録する。
 
 ## 6. ラウンド固有の確認
 
