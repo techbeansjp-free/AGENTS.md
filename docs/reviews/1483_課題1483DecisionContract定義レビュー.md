@@ -125,9 +125,20 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | H-01 | High | `SCN-UNIT-DC-002`（および`SCN-UNIT-DC-003`）がfile:line形式とfile存在しか検査せず、claimした行番号の内容が実際にその主張と一致するかを検査していなかった。DCAND-006のlabelが「finding severityの分類そのもの」としていたが、SKILL.md:14の原文は severity分類を名指しした記述ではなく検証記録の記入項目一般（分類と理由の記入）についての記述だった | `test/steps/decision-contract.steps.ts:112-159`（是正前）、`.agent-skill-chain/skills/step-10-review/SKILL.md:14` | `DECISION_CANDIDATES`全12件のfile:line主張の信頼性、C-02/C-03の充足根拠 | `anchorPresent`関数を追加し、各候補へ`decisionSiteAnchor`（採用候補は`callerAnchor`も）を必須fieldとして追加。行近傍の実文字列一致をSCN-UNIT-DC-002/003の両方で機械検証するようにした。検証を追加した結果、DCAND-009・DCAND-011のanchor文字列が実際の原文と一致していなかったことを追加で発見し修正した（本指摘の是正作業そのものが新たな不一致を検出した）。DCAND-006のlabelと除外理由も、SKILL.md:14が実際に説明する内容（進行役による検証記録の記入項目）へ即した記述へ訂正した | resolved | 残存なし。今後`DECISION_CANDIDATES`へ候補を追加する際は`decisionSiteAnchor`が無いとtypecheckが通らないため、同種の不一致は構造的に混入しにくい |
 | H-02 | High | DCAND-012の除外理由「production codeに呼び出し元が無い」に対し、`pathIsSensitive`/`contentIsSensitive`が`validatePackageManifest`（同fileのenforcement.ts）から呼ばれている点が未考慮ではないかとの指摘 | `src/domain/enforcement.ts:1546-1549`（`validatePackageManifest`内の呼び出し） | DCAND-012の除外根拠（BR-01）の正確性 | 進行役が`grep -rn "classifyPackageAssets\|validatePackageManifest" src scripts bin`を実施し、両関数とも`src/cli.ts`・`scripts/check_package_contents.ts`を含むproduction経路から一切呼ばれていないことを実測で再確認した（該当するのは`test/steps/risk-policy.steps.ts`のtestだけ）。指摘が示す呼び出しは`validatePackageManifest`という同じく未使用の関数の内部実装同士の呼び出しであり、「判断結果を消費する呼び出し元」（BR-01が問う対象）には当たらない。ただし指摘を機に、除外理由を`classifyPackageAssets`単体の言及から`classifyPackageAssets`と`validatePackageManifest`の両方を明示し、`pathIsSensitive`/`contentIsSensitive`が後者の内部から呼ばれるが後者自体が到達不能である旨を明記する形へ精度を上げた | false-positive（reviewerの指摘した呼び出し関係自体は事実だが、BR-01が問う「判断結果を消費する呼び出し元」には該当しないため除外の結論は変わらない。exclusionReasonの記述精度は是正した） | 残存なし。除外理由の記述精度向上により同種の誤解を防止 |
 
-Medium/Low（Codex round 1指摘、記録のみ）:
-- Medium: `docs/specs/02_要件/01_ワークフロー要件.md`のREQ-WF-026本文が是正前の`decisionId`表記を残していた点。round 1のDISC-001是正と同時に`decisionRecordId`へ統一済み（本round時点で解消済み、round 1開始前のCodex観測時点の指摘）
+Low（Codex round 1指摘、記録のみ）:
 - Low: `DecisionCandidateEntry.id`が`DCAND-###`形式であることをJSDocコメントで案内しているが型（string）としては強制していない。対象外: 型でformatまで強制すると`readonly id: \`DCAND-${number}\``のようなtemplate literal型が必要になり、3桁ゼロ埋め表現（例: `001`）をTypeScriptのnumber型で自然に表現できず可読性が下がる。`DECISION_CANDIDATES`が12件と少数であり目視確認で足りると判断し対象外とした
+
+**round 1時点の誤り（round 2で訂正）**: round 1では「`docs/specs/02_要件/01_ワークフロー要件.md`のdecisionId表記はDISC-001是正と同時に解消済み」と記録したが、これは誤りだった。実際には`01_ワークフロー要件.md:388`の1箇所だけ改名が反映されておらず、PR #1490のCodeRabbit reviewで実際に検出された（H-03参照）。round 1のself-reviewで対象fileの全箇所を再grepしていなかったことが原因。round 2でこの誤りを訂正し、外部reviewerの指摘を正としてH-03へ記録した。
+
+### ラウンド2の指摘（PR #1490のCI失敗・CodeRabbit reviewを契機に取り込み）
+
+| ID | 重大度 | 内容 | 証拠 | 影響範囲 | 対応 | 状態・分類 | 残存リスク |
+|---|---|---|---|---|---|---|---|
+| H-03 | Medium | CodeRabbit inline comment（`docs/specs/02_要件/01_ワークフロー要件.md:388`）: DISC-001での`decisionId`→`decisionRecordId`改名が1箇所だけ追随していなかった | GitHub review comment id `4103345636` | AC-04の記述整合性 | 進行役が実コード・実文書と照合し有効と判断。当該行を`decisionRecordId`へ修正（commit `da6fcd96`） | resolved | 残存なし |
+| H-04 | Medium | CodeRabbit inline comment（`src/domain/decision-contract.ts:53`）: `AdoptedDecisionCandidateEntry`が基底型の`direction: "fail-closed"｜"fail-open"`をそのまま継承し、REQ-WF-026（採用候補はfail-closed限定）を型として強制できていなかった | GitHub review comment id `4103345646` | INV-01、C-03のfail-open除外原則の型的強制力 | 進行役が実コードで検証し有効と判断。`AdoptedDecisionCandidateEntry`へ`readonly direction: "fail-closed"`を追加（commit `da6fcd96`）。既存5採用候補は全件fail-closedのためdata変更不要、`npm run typecheck`合格を確認 | resolved | 残存なし。今後fail-openの採用候補を追加しようとしてもtypecheckが拒否する |
+| H-05 | Low | CodeRabbit nitpick（review id `5316234453`）: SCN-UNIT-DC-005のThenステップが診断メッセージの正規表現一致だけで、対象がcallableTarget/DecisionCallableTarget/該当literalかを見ておらず、無関係なcompile errorでもscenarioが誤って成功しうる | `test/steps/decision-contract.steps.ts:269-331`（是正前） | AC-05の検証の実効性 | 進行役がtsc診断を手元で再現し有効と判断。診断`code=2322`へ限定し、メッセージが対象literalと`DecisionCallableTarget`の両方を含むことを検証するよう強化（commit `da6fcd96`）。5 scenario全合格を再確認 | resolved | 残存なし |
+
+CI失敗（`日本語文書・Gherkin・型・配布物の品質検証`）: `docs/reviews/1483_課題1483DecisionContract定義レビュー.md:232`の見出し「review session」が`check_japanese_docs.ts`の日本語文字数判定に抵触した。「レビューセッション」「セッションID」「最新ラウンドdigest」へ訳語化して解消（`node --import tsx scripts/check_japanese_docs.ts`で再確認済み）。findingとしては計上せず、CI設定検証の直接対応として記録する。
 
 ## 6. ラウンド固有の確認
 
@@ -139,9 +150,11 @@ Medium/Low（Codex round 1指摘、記録のみ）:
 
 ### ラウンド2
 
-- 未解決Critical/High:
-- 修正差分と、触れた隣接範囲:
-- 既承認・未変更範囲を再走査していない:
+pr-bound後にPR #1490のCI失敗とCodeRabbit reviewの指摘を取り込んだ取り直しラウンド（`workflow record --step=10 --post-pr-intake`で記録）。
+
+- 未解決Critical/High: 無し（Critical/High自体が今回0件。H-03〜H-05はMedium/Lowでいずれもresolved）
+- 修正差分と、触れた隣接範囲: `docs/specs/02_要件/01_ワークフロー要件.md`（1行）、`src/domain/decision-contract.ts`（`AdoptedDecisionCandidateEntry`へ1 field追加）、`test/steps/decision-contract.steps.ts`（SCN-UNIT-DC-005のThenステップ強化）。いずれも指摘対象そのものであり隣接範囲への波及なし（`npm test`全件0 failedで確認）
+- 既承認・未変更範囲を再走査していない: はい。round 1で承認済みの`DECISION_CANDIDATES`データ・§1〜§4の評価・§7〜§10は再走査せず、`focus.fixedDiff`の4 fileだけを対象にした
 
 ### ラウンド3
 
@@ -152,8 +165,9 @@ Medium/Low（Codex round 1指摘、記録のみ）:
 ## 7. テスト結果
 
 - 実行したcommandの一覧: `npm run typecheck`、`npm run lint`、`npm run format:check`、`npm run source:check`、`node --import tsx scripts/check_trace.ts`、`node --import tsx scripts/check_dependency_graph.ts`、`node --import tsx scripts/check_project_quality.ts`、`node --import tsx scripts/check_workflow_steps.ts`、`node --import tsx scripts/check_skill_templates.ts`、`node --import tsx scripts/check_directory_guides.ts`、`node --import tsx scripts/check_cli_contract.ts`、`node --import tsx scripts/check_package_contents.ts`、`npm test`
-- 全layerの合計: `npm test`（unit/integration/e2e全layer） 2329 scenarios中2312 passed・17 skipped・0 failed、21544 steps中21489 passed・55 skipped・0 failed（新規SCN-UNIT-DC-001〜005を含め全合格）。個別filter実行`--name "SCN-UNIT-DC-00[1-5]"`でも5/5 pass
+- 全layerの合計: `npm test`（unit/integration/e2e全layer） round 1時点で2329 scenarios中2312 passed・17 skipped・0 failed、21544 steps中21489 passed・55 skipped・0 failed（新規SCN-UNIT-DC-001〜005を含め全合格）。個別filter実行`--name "SCN-UNIT-DC-00[1-5]"`でも5/5 pass
 - runner・Gherkin方言: Node.js + `@cucumber/cucumber`、`gherkinDialect=en`（project choice `development.json`と一致）
+- round 2の再検証: commit `da6fcd96`適用後に`npm run typecheck`・`npm run lint`・`npm run format:check`・`node --import tsx scripts/check_japanese_docs.ts`・`node --import tsx scripts/check_gherkin_format.ts`・`node --import tsx scripts/check_trace.ts`・`node --import tsx scripts/check_dependency_graph.ts`・`node --import tsx scripts/check_source_quality.ts`・`node --import tsx scripts/check_project_quality.ts`・`node --import tsx scripts/check_package_contents.ts`を再実行し全合格。`--name "SCN-UNIT-DC-00[1-5]"`で5/5 pass（SCN-UNIT-DC-005は強化後のcode=2322＋対象文字列一致assertionで合格）。`npm test`全件も再実行し2329 scenarios中2312 passed・17 skipped・**0 failed**、21544 steps中21489 passed・55 skipped・0 failed（round 1と同一件数、regressionなしを確認）
 
 ## 8. 配布物影響
 
@@ -184,7 +198,7 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 |---|---|
 | 適用した独立性モード | context-isolated |
 | その要求を満たすこと | はい（project policyに`merge.reviewIndependence`未宣言のため既定値`context-isolated`を適用） |
-| reviewerとimplementerのidentity・context比較 | implementer: Claude（Sonnet 5、本worktree内の対話session、product code編集）。reviewer: Codex（`codex exec -s read-only`、別process・別provider・別contextで起動、product code非変更） |
+| reviewerとimplementerのidentity・context比較 | implementer: Claude（Sonnet 5、本worktree内の対話session、product code編集）。round 1 reviewer: Codex（`codex exec -s read-only`、別process・別provider・別contextで起動、product code非変更）。round 2 reviewer: CodeRabbit（GitHub App、PR #1490上で自動実行される別process・別provider・別context、product code非変更。進行役が指摘3件を実コードで再検証したうえで採否を記録） |
 | reviewerが対象差分を変更していないこと | はい（reviewerは`-s read-only` sandboxで起動しfilesystem書き込み権限を持たない。review実施後の`git status`で対象差分に変更が無いことを確認） |
 
 外部への不可逆な配布で外部証拠を要求され、かつ無い場合だけ次を記入する。承認元・承認者・承認日時・失効日時は正本を参照し複製しない。
@@ -220,16 +234,16 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 1 |
-| 対象SHA・文書ダイジェスト | fc5a24ab515f09accabb3863bdaa764279267eb8 |
+| ラウンド | 2 |
+| 対象SHA・文書ダイジェスト | da6fcd968d9e9b368fd0fa8f30a468b396f99f95 |
 | 比較基点 | `bb16faba15027304a11071631ddb6d21cf4c7d7a` |
-| H_impl | `fc5a24ab515f09accabb3863bdaa764279267eb8` |
+| H_impl | `da6fcd968d9e9b368fd0fa8f30a468b396f99f95` |
 | 対象差分 | dist/src/domain/decision-contract.js、docs/specs/01_システム概要/02_用語・略語.md、docs/specs/02_要件/00_要件一覧.md、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/03_アーキテクチャ/00_全体構成.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/domain/decision-contract.ts、test/features/unit/decision-contract.feature、test/steps/decision-contract.steps.ts |
 | 対象外 | 比較基点に存在し変更されていない範囲 |
-| 残り予算 | 5ラウンド（同一scope上限6のうち1ラウンド消費、収束済み） |
-| ラウンド数 | 1（`review round --apply`で記録済み、status=converged） |
+| 残り予算 | 4ラウンド（同一scope上限6のうち2ラウンド消費、収束済み） |
+| ラウンド数 | 2（`review round --apply`で記録済み、status=converged。round 2はpr-bound後にCI失敗とCodeRabbit指摘を取り込んだ取り直し） |
 | Step chain | 経由: .agent-skill-chain/tmp/issues/20260925_170425_v0.4.1-Decision-Contract定義-呼び出し元の名指し |
-| review session | sessionId `d0fc134ae90c871fa20335542a2d92092a862567897cd895c46d32257278c09c`、latestRoundDigest `96d5fadccb1782aa5770a46f0d67dcd7d205c902cf09c6f3282bb3e9594145e1` |
+| レビューセッション | セッションID `d0fc134ae90c871fa20335542a2d92092a862567897cd895c46d32257278c09c`、最新ラウンドdigest `cfa878b2b89757e2abb6bbe7cae8206585b11660a51903c725f830996d971b4e`（round 1 digest `96d5fadccb1782aa5770a46f0d67dcd7d205c902cf09c6f3282bb3e9594145e1`） |
 | 仕様の所有箇所 | 着手時点で新規概念のため`docs/specs/`に所有箇所は無し（01 §0管理情報、00_要求定義.md §0参照）。実装成立後の本Issueで`docs/specs/03_アーキテクチャ/00_全体構成.md`（境界づけられたコンテキスト一覧）が新たに所有する |
 | 成果物行数 | 製品: `src/domain/decision-contract.ts` 234行、`docs/specs`6file追記 計約60行。支援層: `test/features/unit/decision-contract.feature` 27行、`test/steps/decision-contract.steps.ts` 267行、本review artifact。判断のある箇所だけを記述し閾値判定はしない |
 | 縮小の先行評価 | 00 §3問3と同じ（`memo`計画時点の評価）。既存`src/types.ts`の`tierMapping`型への統合は不採用（v0.4.2の対象へ先食いするため）。candidate一覧を別JSONファイルにする案も不採用（TypeScript constant配列の方がtypecheckとtest両方から直接検証できJSON+schema二重管理を避けられる、02設計§12参照） |
@@ -241,4 +255,5 @@ PR作成前に観測できるものだけを書く。immutable review IDやappro
 
 | role欄（担当role） | 必要証拠 | 必要model tier | provider欄 | model設定欄 | fallback欄 | 独立性証拠欄・非変更証拠 |
 |---|---|---|---|---|---|---|
-| reviewer | 肯定・敵対review（§3・§4）、finding分類（§5） | advanced（risk=low、scope=1 file、Codex推論レベルはprovider既定=high、上限内） | codex（Codex Sol基本候補。ローカルLLM設定なしのため既定候補を使用） | provider既定modelをそのまま使用（`--model`で固定しない、asc-codex-model-must-be-provider-default） | Codex利用不能ならOpus等別reviewerへ切替え理由をjournal evidenceへ記録する（今回は到達可能につき未発動） | implementer(Claude、本worktree session、product code編集)とreviewer(Codex、別process起動、`-s read-only`でproduct code非変更)のidentity・provider・context分離を確認。review後`git status`で対象差分不変を確認 |
+| reviewer（round 1） | 肯定・敵対review（§3・§4）、finding分類（§5） | advanced（risk=low、scope=1 file、Codex推論レベルはprovider既定=high、上限内） | codex（Codex Sol基本候補。ローカルLLM設定なしのため既定候補を使用） | provider既定modelをそのまま使用（`--model`で固定しない、asc-codex-model-must-be-provider-default） | Codex利用不能ならOpus等別reviewerへ切替え理由をjournal evidenceへ記録する（今回は到達可能につき未発動） | implementer(Claude、本worktree session、product code編集)とreviewer(Codex、別process起動、`-s read-only`でproduct code非変更)のidentity・provider・context分離を確認。review後`git status`で対象差分不変を確認 |
+| reviewer（round 2） | PR差分に対するfinding分類（§5 H-03〜H-05） | advanced相当（PR上のCI/自動reviewのfixed pipeline） | CodeRabbit（GitHub App、PR #1490で自動起動） | CodeRabbit既定設定（ASC側でmodel選択を制御しない） | CodeRabbitが利用枠制限中の場合はOpus/Codex Solへ委譲する規定だが、今回は正常完走（rate limitなし）につき未発動 | implementer(Claude)とreviewer(CodeRabbit、GitHub App、別process・別provider)のidentity分離を確認。GitHub App はPRのcommit権限を持たずcomment投稿のみのためproduct code非変更。進行役が3件の指摘を実コード照合で採否確認 |
