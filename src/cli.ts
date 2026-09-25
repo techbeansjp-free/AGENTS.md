@@ -283,7 +283,7 @@ import {
   type MetricsEventKind,
   type MetricsEventPhase,
 } from "./domain/metrics.js";
-import { evidenceOnlySuffix } from "./adapters/review-diff.js";
+import { GIT_ENV, evidenceOnlySuffix } from "./adapters/review-diff.js";
 import { recordLayerSuffix } from "./adapters/review-record-layer.js";
 import {
   appendEvidenceReanchor,
@@ -1874,6 +1874,56 @@ function inspectAuthorizedPullRequestMerge(input: {
     throw new Error(
       "provider authorityのrepository・既定branch・base・headがtrusted policy setと一致しません",
     );
+  /**
+   * **有効なreanchor chainの実効baseを、検証済み既定branch tipへ再確認する
+   * （Issue #1493 round 3、独立reviewの2件目のHigh指摘）。**
+   *
+   * `observeReviewedForward`はoldBaseShaがnewBaseShaのancestorであることしか
+   * 要求しない。newBaseShaへ既定branch以外の未audit commitを混ぜると、
+   * audit範囲（newBase..H_impl）がその分だけ縮み、範囲外のfileが監査を経ず
+   * mergeへ到達しうる（Issue #966と同型のaudit-range-shrinking attack）。
+   *
+   * **round 2ではterminal recordが`reviewed-forward`かつbase変更ありの場合だけ
+   * 検査していたが、これは迂回できる。** 一度base X（未audit commit経由）へ
+   * `reviewed-forward`したのち、同じXを起点とする2件目のreanchor（`reviewed-forward`で
+   * oldBaseSha=newBaseSha=X、または`artifact-supersession`）を積むと、terminal recordの
+   * `oldBaseSha !== newBaseSha`が偽になり検査が発火しない。**
+   *
+   * したがって判定対象をmethodやbase変更の有無で狭めず、**有効な
+   * （`deriveEffectiveHead`と同じlink検証を通過した）chainが1件以上あるときは
+   * 常に、その実効terminal recordのnewBaseShaを検査する。** `rebase`・
+   * `artifact-replacement`・`artifact-supersession`はbase不変または別の等価性
+   * 条件で成立するため、実効base は最終的に元のanchored base（`state.create.baseSha`）
+   * まで遡るだけであり、legitimateな流れでは常に既定branch tipのancestorになる
+   * （既定branchは前進しかしないため）。chainが空（`validCount === 0`）の場合は
+   * 既存のbase一致検査（上の`authority`検証）だけで十分であり、本チェックは行わない。
+   * `pr reanchor`自体はprovider呼び出しを行わない既存設計を保つため、この
+   * 再確認はmerge直前・上で検証済みの`authority.defaultBranchTipOid`を
+   * 基点にlocal Gitのancestor関係だけで行う。
+   */
+  const reanchorChain = readEvidenceReanchorChain(input.staging);
+  const effectiveReanchor = deriveEffectiveHead({
+    records: reanchorChain,
+    anchoredHeadSha: input.state.create.headSha,
+  });
+  if (effectiveReanchor.validCount > 0) {
+    const effectiveBaseSha =
+      reanchorChain[effectiveReanchor.validCount - 1]!.newBaseSha;
+    const ancestor = git(
+      [
+        "merge-base",
+        "--is-ancestor",
+        effectiveBaseSha,
+        authority.defaultBranchTipOid,
+      ],
+      input.root,
+      { env: GIT_ENV, allowFailure: true },
+    );
+    if (ancestor.status !== 0)
+      throw new Error(
+        "有効なreanchor chainの実効baseが検証済み既定branch tipのancestorではありません",
+      );
+  }
   const protection = github(
     "branch.protection",
     { repository: input.repository, branch: input.base },

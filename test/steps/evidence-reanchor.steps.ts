@@ -403,6 +403,7 @@ function recordForwardRound(
   implementation: string,
   recordIntake: boolean,
   includeGenerated = false,
+  extraFixedDiffPaths: readonly string[] = [],
 ): void {
   const previous = readStoredReviewSession(world.staging);
   assert.ok(previous, "先行review sessionがありません");
@@ -419,6 +420,7 @@ function recordForwardRound(
           INITIAL_FORWARD_ARTIFACT,
           REVIEWED,
           ...(includeGenerated ? [GENERATED] : []),
+          ...extraFixedDiffPaths,
         ].sort(),
         adjacentScope: [],
       },
@@ -534,6 +536,143 @@ Given(
   "pr-bound後に前進した実装と「{word}」へ置いたpost-PR intakeのreview artifactがある",
   function (name: string) {
     forwardFixture(this, true, true, placement(name));
+  },
+);
+
+/**
+ * `forwardFixture`のbase不変reviewed-forward構成に、既定branch追随（または反例としての
+ * 無関係な履歴のbase）をmerge commitで取り込む前進commitを重ねる（Issue #1493）。
+ *
+ * **`replay`・`artifactFixture`と違いrebaseではなく実mergeで取り込む。** 既定branch追随は
+ * `.agent-skill-chain/docs/02_品質基準.md`が定めるmerge手順であり、rebase手順の
+ * fixtureとは別の形（新base・新headが2親commitを介して繋がる形）を検証する必要がある。
+ *
+ * `"無関係な履歴"`は、newBaseSha自体がnewHeadShaのancestorであり続けながら
+ * oldBaseShaのancestorではない反例を作る。newBaseの実tree（README.md+upstream.ts）は
+ * 通常のbase前進と同一にし、違いを祖先関係だけへ絞る。
+ */
+function forwardFixtureWithBaseAdvance(
+  world: ReanchorWorld,
+  advanceKind: "既定branch追随" | "無関係な履歴",
+): void {
+  world.root = world.initRepo();
+  world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
+  const initialImplementation = commit(
+    world.root,
+    "export const reviewed = 1;\n",
+    "feat: initial review対象",
+  );
+  world.oldHeadSha = commitPath(
+    world.root,
+    INITIAL_FORWARD_ARTIFACT,
+    auditableReviewArtifact(world.baseSha, initialImplementation),
+    "docs: initial review artifact",
+  );
+  world.staging = makeStaging(world);
+  buildApprovedReviewBinding(world, initialImplementation);
+  buildDelivery(world, false);
+  execFileSync("git", ["checkout", "-q", world.oldHeadSha], {
+    cwd: world.root,
+  });
+  const fixCommit = commit(
+    world.root,
+    "export const reviewed = 2;\n",
+    "fix: external reviewer指摘を反映",
+  );
+  let newBase: string;
+  if (advanceKind === "既定branch追随") {
+    execFileSync("git", ["checkout", "-q", world.baseSha], {
+      cwd: world.root,
+    });
+    newBase = commitPath(
+      world.root,
+      "upstream.ts",
+      "export const upstream = 1;\n",
+      "chore: 既定branchが進む",
+    );
+  } else {
+    execFileSync("git", ["checkout", "-q", "--orphan", "unrelated-default"], {
+      cwd: world.root,
+    });
+    execFileSync("git", ["rm", "-rf", "--cached", "."], {
+      cwd: world.root,
+      stdio: "ignore",
+    });
+    /**
+     * **stagingは`world.root`直下の版管理外directoryである（`staging.tracked=false`）。**
+     * orphan branchの作業treeを掃除する目的でrepository内の全entryを削除すると、
+     * git管理下にないstagingまで一緒に消えて後続の`recordForwardRound`が
+     * `assertWorkflowStaging`でENOENTになる（Issue #1493）。stagingの先頭segmentと
+     * `.git`だけを削除対象から除く。
+     */
+    const preserve = new Set([
+      ".git",
+      path.relative(world.root, world.staging).split(path.sep)[0],
+    ]);
+    for (const entry of fs.readdirSync(world.root))
+      if (!preserve.has(entry))
+        fs.rmSync(path.join(world.root, entry), {
+          recursive: true,
+          force: true,
+        });
+    fs.writeFileSync(path.join(world.root, "README.md"), "# fixture\n");
+    fs.writeFileSync(
+      path.join(world.root, "upstream.ts"),
+      "export const upstream = 1;\n",
+    );
+    execFileSync("git", ["add", "README.md", "upstream.ts"], {
+      cwd: world.root,
+    });
+    execFileSync(
+      "git",
+      ["commit", "-q", "-m", "chore: 無関係な履歴の既定branch"],
+      { cwd: world.root },
+    );
+    newBase = git(world.root, ["rev-parse", "HEAD"]);
+  }
+  execFileSync("git", ["checkout", "-q", fixCommit], { cwd: world.root });
+  execFileSync(
+    "git",
+    [
+      "merge",
+      "-q",
+      "--no-ff",
+      "--no-edit",
+      "--allow-unrelated-histories",
+      newBase,
+    ],
+    { cwd: world.root },
+  );
+  const mergeCommit = git(world.root, ["rev-parse", "HEAD"]);
+  recordForwardRound(world, mergeCommit, true, false, ["upstream.ts"]);
+  world.newHeadSha = commitPath(
+    world.root,
+    FORWARD_ARTIFACT,
+    forwardReviewArtifact(newBase, mergeCommit, false),
+    "docs: post-PR review artifact",
+  );
+  world.newBaseSha = newBase;
+}
+
+Given(
+  "pr-bound後に既定branchが前進し、その前進をmergeで取り込んだ前進実装と明示済みpost-PR intakeのreview artifactがある",
+  function () {
+    forwardFixtureWithBaseAdvance(this, "既定branch追随");
+  },
+);
+
+Given(
+  "pr-bound後に既定branchが前進した前進実装と、oldBaseShaのancestorではない無関係commitをnewBaseShaに指定した再固定入力がある",
+  function () {
+    forwardFixtureWithBaseAdvance(this, "無関係な履歴");
+  },
+);
+
+Given(
+  "pr-bound後に既定branchが前進した前進実装と、repository内に存在しないSHAをnewBaseShaに指定した再固定入力がある",
+  function () {
+    forwardFixtureWithBaseAdvance(this, "既定branch追随");
+    this.newBaseSha = "f".repeat(40);
   },
 );
 
@@ -2109,6 +2248,33 @@ Then("supersessionのpreviewとapplyは拒否され追記しない", function ()
   );
   assert.equal(readEvidenceReanchorChain(this.staging).length, 0);
 });
+
+/**
+ * **既定branch追随を伴う再固定recordのoldBaseSha/newBaseShaを直接確かめる（Issue #1493）。**
+ *
+ * base不変の既存reviewed-forward検証（`再固定recordはexact post-PR review bindingを保持する`）は
+ * base欄を見ない。ここではbaseが実際に動き、record自身へ両側が別々に記録されたことを固定する。
+ */
+Then(
+  "previewとapplyは成功しreviewed-forwardで新しいbaseとheadを再固定recordへ追記する",
+  function () {
+    assert.deepEqual(
+      this.reanchorCliResults.map((result) => result.status),
+      [0, 0],
+      JSON.stringify(this.reanchorCliResults.map((result) => result.output)),
+    );
+    assert.equal(this.reanchorCliResults[0]?.output.willAppend, true);
+    assert.equal(this.reanchorCliResults[1]?.output.state, "reanchored");
+    const record = readEvidenceReanchorChain(this.staging).at(-1);
+    assert.ok(record, "再固定recordがありません");
+    assert.equal(record.method, "reviewed-forward");
+    assert.equal(record.oldBaseSha, this.baseSha);
+    assert.equal(record.newBaseSha, this.newBaseSha);
+    assert.notEqual(record.oldBaseSha, record.newBaseSha);
+    assert.equal(record.oldHeadSha, this.oldHeadSha);
+    assert.equal(record.newHeadSha, this.newHeadSha);
+  },
+);
 
 Then("再固定recordはexact post-PR review bindingを保持する", function () {
   const record = readEvidenceReanchorChain(this.staging)[0];

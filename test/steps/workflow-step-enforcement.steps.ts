@@ -4797,6 +4797,194 @@ if (exact(["auth", "status"])) {
       );
       break;
     }
+    case "SCN-E2E-WFSTEP-067": {
+      /**
+       * **reviewed-forwardが記録したnewBaseShaは、oldBaseShaのancestorであっても
+       * 検証済み既定branch tipのancestorでなければmergeを拒否する（Issue #1493
+       * round 2、独立reviewの発見）。** `prepared.headSha`はcandidate自身の
+       * exact head（`prepared.baseSha`の子孫）であり、既定branch tip
+       * （`prepared.baseSha`）のancestorではない。observeReviewedForward自体の
+       * ancestor検証（oldBaseSha→newBaseSha）はここでは満たしても、merge直前の
+       * 既定branch tip照合で拒否されることを確認する。
+       */
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      const deliveryFile = path.join(
+        prepared.staging,
+        ...DELIVERY_STATE_FILE.split("/"),
+      );
+      const delivery = JSON.parse(fs.readFileSync(deliveryFile, "utf8")) as {
+        create: { headSha: string };
+      };
+      delivery.create.headSha = prepared.implementationCommitSha;
+      fs.writeFileSync(deliveryFile, `${JSON.stringify(delivery, null, 2)}\n`);
+      fs.writeFileSync(
+        path.join(prepared.staging, "journal", "reanchor.jsonl"),
+        `${JSON.stringify({
+          oldHeadSha: prepared.implementationCommitSha,
+          newHeadSha: prepared.headSha,
+          oldBaseSha: prepared.baseSha,
+          newBaseSha: prepared.headSha,
+          diffDigest: "a".repeat(64),
+          method: "reviewed-forward",
+          reason: "既定branch以外へ差し替えたnewBaseSha（攻撃反例）",
+          recordedAt: fixtureInstant(),
+          reviewedForward: {
+            sessionId: "b".repeat(64),
+            roundDigest: "c".repeat(64),
+            implementationSha: prepared.implementationCommitSha,
+            artifactPath: "docs/reviews/fixture.md",
+            artifactDigest: "d".repeat(64),
+          },
+        })}\n`,
+      );
+      refreshStoredStagingDigest(prepared.staging);
+      const requested = executeDeliveryMerge(prepared);
+      assert.notEqual(
+        requested.status,
+        0,
+        "既定branch tipのancestorでないnewBaseShaのreviewed-forwardがmergeを通過しました",
+      );
+      assert.match(requested.stdout + requested.stderr, /実効base.*ancestor/u);
+      const mergeCalls = deliveryProviderCalls(prepared).filter(isMergeCall);
+      assert.equal(
+        mergeCalls.length,
+        0,
+        "拒否前にmerge要求をproviderへ送っています",
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-068": {
+      /**
+       * **oldBaseShaが検証済み既定branch tip（`prepared.baseSha`）のancestorで、
+       * newBaseShaがtip自体と一致する既定branch追随は許可する。** round 2の
+       * 拒否条件（SCN-E2E-WFSTEP-067）と対になる、正当なbase変更の回帰確認。
+       */
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      const rootCommit = spawnSync(
+        "git",
+        ["rev-list", "--max-parents=0", prepared.baseSha],
+        { cwd: prepared.root, encoding: "utf8" },
+      );
+      assert.equal(rootCommit.status, 0, rootCommit.stderr);
+      const oldBaseSha = rootCommit.stdout.trim().split("\n")[0]!;
+      assert.match(oldBaseSha, /^[a-f0-9]{40}$/u);
+      assert.notEqual(oldBaseSha, prepared.baseSha);
+      const deliveryFile = path.join(
+        prepared.staging,
+        ...DELIVERY_STATE_FILE.split("/"),
+      );
+      const delivery = JSON.parse(fs.readFileSync(deliveryFile, "utf8")) as {
+        create: { headSha: string };
+      };
+      delivery.create.headSha = prepared.implementationCommitSha;
+      fs.writeFileSync(deliveryFile, `${JSON.stringify(delivery, null, 2)}\n`);
+      fs.writeFileSync(
+        path.join(prepared.staging, "journal", "reanchor.jsonl"),
+        `${JSON.stringify({
+          oldHeadSha: prepared.implementationCommitSha,
+          newHeadSha: prepared.headSha,
+          oldBaseSha,
+          newBaseSha: prepared.baseSha,
+          diffDigest: "a".repeat(64),
+          method: "reviewed-forward",
+          reason: "既定branch追随（正当なbase前進）",
+          recordedAt: fixtureInstant(),
+          reviewedForward: {
+            sessionId: "b".repeat(64),
+            roundDigest: "c".repeat(64),
+            implementationSha: prepared.implementationCommitSha,
+            artifactPath: "docs/reviews/fixture.md",
+            artifactDigest: "d".repeat(64),
+          },
+        })}\n`,
+      );
+      refreshStoredStagingDigest(prepared.staging);
+      const requested = executeDeliveryMerge(prepared);
+      assert.equal(requested.status, 0, requested.stdout + requested.stderr);
+      const mergeCalls = deliveryProviderCalls(prepared).filter(isMergeCall);
+      assert.equal(mergeCalls.length, 1);
+      break;
+    }
+    case "SCN-E2E-WFSTEP-069": {
+      /**
+       * **同じ非ancestor baseを維持する2件目のreanchorも拒否する（Issue #1493
+       * round 3、独立reviewの2件目のHigh指摘）。** 1件目のreanchorで
+       * `newBaseSha`をprepared.headSha（既定branch tipのancestorではない）へ
+       * 変更し、2件目のreanchorはbaseを変えずにそのまま維持する（`oldBaseSha
+       * === newBaseSha`）。round 2時点の実装はterminal recordの
+       * `oldBaseSha !== newBaseSha`だけを検査条件にしていたため、この2件目は
+       * 検査を素通りしていた。round 3は`deriveEffectiveHead`と同じlink検証を
+       * 通過した実効baseを常に検査するため、2件chainでも拒否できることを確認する。
+       */
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      const deliveryFile = path.join(
+        prepared.staging,
+        ...DELIVERY_STATE_FILE.split("/"),
+      );
+      const delivery = JSON.parse(fs.readFileSync(deliveryFile, "utf8")) as {
+        create: { headSha: string };
+      };
+      delivery.create.headSha = prepared.implementationCommitSha;
+      fs.writeFileSync(deliveryFile, `${JSON.stringify(delivery, null, 2)}\n`);
+      const intermediateHeadSha = "e".repeat(40);
+      const maliciousBaseSha = prepared.headSha;
+      const record1 = {
+        oldHeadSha: prepared.implementationCommitSha,
+        newHeadSha: intermediateHeadSha,
+        oldBaseSha: prepared.baseSha,
+        newBaseSha: maliciousBaseSha,
+        diffDigest: "a".repeat(64),
+        method: "reviewed-forward",
+        reason: "既定branch以外へ差し替えたnewBaseSha（1件目、攻撃反例）",
+        recordedAt: fixtureInstant(),
+        reviewedForward: {
+          sessionId: "b".repeat(64),
+          roundDigest: "c".repeat(64),
+          implementationSha: intermediateHeadSha,
+          artifactPath: "docs/reviews/fixture.md",
+          artifactDigest: "d".repeat(64),
+        },
+      };
+      const record2 = {
+        oldHeadSha: intermediateHeadSha,
+        newHeadSha: prepared.headSha,
+        oldBaseSha: maliciousBaseSha,
+        newBaseSha: maliciousBaseSha,
+        diffDigest: "a".repeat(64),
+        method: "reviewed-forward",
+        reason: "同じ非ancestor baseを維持した2件目（攻撃反例）",
+        recordedAt: fixtureInstant({ secondsAhead: 1 }),
+        reviewedForward: {
+          sessionId: "b".repeat(64),
+          roundDigest: "c".repeat(64),
+          implementationSha: prepared.implementationCommitSha,
+          artifactPath: "docs/reviews/fixture.md",
+          artifactDigest: "d".repeat(64),
+        },
+      };
+      fs.writeFileSync(
+        path.join(prepared.staging, "journal", "reanchor.jsonl"),
+        `${JSON.stringify(record1)}\n${JSON.stringify(record2)}\n`,
+      );
+      refreshStoredStagingDigest(prepared.staging);
+      const requested = executeDeliveryMerge(prepared);
+      assert.notEqual(
+        requested.status,
+        0,
+        "2件目のreanchorで同じ非ancestor baseを維持したままmergeが通過しました",
+      );
+      assert.match(requested.stdout + requested.stderr, /実効base.*ancestor/u);
+      const mergeCalls = deliveryProviderCalls(prepared).filter(isMergeCall);
+      assert.equal(
+        mergeCalls.length,
+        0,
+        "拒否前にmerge要求をproviderへ送っています",
+      );
+      break;
+    }
     case "SCN-INT-MERGE-019": {
       const prepared = prepareDeliveryCli(
         this,

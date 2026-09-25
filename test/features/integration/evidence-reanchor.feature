@@ -206,3 +206,22 @@ Feature: 証跡再固定がCLIと診断経路で機能する
     Given pr-bound後に前進した実装と「prefix延長」へ置いたpost-PR intakeのreview artifactがある
     When 同じ再固定入力でpreviewとapplyをCLIから実行する
     Then reviewed-forwardのpreviewとapplyは拒否され追記しない
+
+  @issue-1493
+  Scenario: SCN-1493-01 既定branch追随を伴う前進commitをreviewed-forwardで受理する
+    Given pr-bound後に既定branchが前進し、その前進をmergeで取り込んだ前進実装と明示済みpost-PR intakeのreview artifactがある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then previewとapplyは成功しreviewed-forwardで新しいbaseとheadを再固定recordへ追記する
+    And 再固定recordはexact post-PR review bindingを保持する
+
+  @issue-1493
+  Scenario: SCN-1493-02 oldBaseShaのancestorでないnewBaseShaを再固定しない
+    Given pr-bound後に既定branchが前進した前進実装と、oldBaseShaのancestorではない無関係commitをnewBaseShaに指定した再固定入力がある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then reviewed-forwardのpreviewとapplyは拒否され追記しない
+
+  @issue-1493
+  Scenario: SCN-1493-03 解決できないnewBaseShaを再固定しない
+    Given pr-bound後に既定branchが前進した前進実装と、repository内に存在しないSHAをnewBaseShaに指定した再固定入力がある
+    When 同じ再固定入力でpreviewとapplyをCLIから実行する
+    Then reviewed-forwardのpreviewとapplyは拒否され追記しない
