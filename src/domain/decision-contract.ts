@@ -36,6 +36,11 @@ interface DecisionCandidateEntryBase {
   readonly decisionSiteFile: string;
   /** `decisionSiteFile`内の行番号または行範囲。 */
   readonly decisionSiteLine: string;
+  /**
+   * `decisionSiteFile`の`decisionSiteLine`近傍に実在するべき文字列。
+   * SCN-UNIT-DC-002がfile存在だけでなく行内容の実在も検査する（Step 10独立review Highで追加）。
+   */
+  readonly decisionSiteAnchor: string;
   /** fail-closed方向かfail-open方向か。 */
   readonly direction: DecisionCandidateDirection;
 }
@@ -50,6 +55,8 @@ export interface AdoptedDecisionCandidateEntry extends DecisionCandidateEntryBas
   readonly callerFile: string;
   /** `callerFile`内の行番号または行範囲。 */
   readonly callerLine: string;
+  /** `callerFile`の`callerLine`近傍に実在するべき文字列。 */
+  readonly callerAnchor: string;
 }
 
 /**
@@ -82,10 +89,12 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
         "quick失格分類の検出（detectQuickDisqualifiers。変更fileのpathからdependency/public-api/data-migration/security-boundary/infrastructureを正規表現で推定する）",
       decisionSiteFile: "src/domain/mode.ts",
       decisionSiteLine: "484",
+      decisionSiteAnchor: "export function detectQuickDisqualifiers",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/domain/issue.ts",
       callerLine: "1688",
+      callerAnchor: "detectQuickDisqualifiers(options.changedFiles",
     }),
     Object.freeze({
       id: "DCAND-002",
@@ -93,10 +102,12 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
         "CI run配信状態の3値判定（inspectCiDelivery/nextActionFor。固定30分の猶予閾値でdelivered/pending/undeliveredを判定し人間呼び出しの要否を返す）",
       decisionSiteFile: "src/domain/ci-delivery.ts",
       decisionSiteLine: "81",
+      decisionSiteAnchor: "export function inspectCiDelivery",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
       callerLine: "1726",
+      callerAnchor: "inspectCiDelivery({",
     }),
     Object.freeze({
       id: "DCAND-003",
@@ -104,10 +115,12 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
         "仕様更新要否の判定（requiresSpecUpdate。変更file pathの正規表現一致でdocs/specs/更新の要否を推定する）",
       decisionSiteFile: "src/domain/spec.ts",
       decisionSiteLine: "303",
+      decisionSiteAnchor: "requiresSpecUpdate = changes.some",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
       callerLine: "7066",
+      callerAnchor: "validateSpecs(root",
     }),
     Object.freeze({
       id: "DCAND-004",
@@ -115,10 +128,12 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
         "個別監査表の行分類（auditRowDraft。変更fileを7分類＋fallbackへ正規表現cascadeで振り分け監査表を事前充填する）",
       decisionSiteFile: "src/domain/review-artifact.ts",
       decisionSiteLine: "564",
+      decisionSiteAnchor: "export function auditRowDraft",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/domain/review-artifact.ts",
       callerLine: "654",
+      callerAnchor: "auditRowDraft(item.path, item.changeType)",
     }),
     Object.freeze({
       id: "DCAND-005",
@@ -126,26 +141,31 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
         "開発考慮事項の決定文言が具体的かの判定（hasConcreteDecisionText。長さ閾値＋定型文除外の正規表現でplaceholderを検出する）",
       decisionSiteFile: "src/domain/policy.ts",
       decisionSiteLine: "373",
+      decisionSiteAnchor: "function hasConcreteDecisionText",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/domain/policy.ts",
       callerLine: "395",
+      callerAnchor: "hasConcreteDecisionText(record[field], minimum)",
     }),
     Object.freeze({
       id: "DCAND-006",
-      label: "finding severityの分類そのもの",
+      label:
+        "review findingの検証記録に含める分類・理由の記入（進行役がfindingの分類と理由を記録する手順）",
       decisionSiteFile: ".agent-skill-chain/skills/step-10-review/SKILL.md",
       decisionSiteLine: "14",
+      decisionSiteAnchor: "分類と理由を残す",
       direction: "fail-closed",
       disposition: "excluded",
       exclusionReason:
-        "BR-01（呼び出し元を名指しできない）。分類行為自体はSKILL.md手順内で進行役が行い、review-convergence.ts:347のoneOf(finding.severity, ...)は分類結果を検証するだけでcompiled codeへのseamが無い",
+        "BR-01（呼び出し元を名指しできない）。当該行はStep 10の検証記録欄に何を記入するかを定めた記述であり、進行役が候補ごとに分類（severity等）と理由を記入する。分類の実施主体は進行役でありcompiled codeではないため、review-convergence.ts:347のoneOf(finding.severity, ...)は記入結果を構造検証するだけでcompiled codeへのseamが無い。Step 10独立reviewで「severity分類そのもの」という当初の一次資料の言い回しがこの行の説明対象（検証記録の記入項目）と厳密には異なると指摘され、記述を訂正した",
     }),
     Object.freeze({
       id: "DCAND-007",
       label: "finding relationの分類（acceptance-violation等5種）",
       decisionSiteFile: "src/domain/review-convergence.ts",
       decisionSiteLine: "39-45",
+      decisionSiteAnchor: "acceptance-violation",
       direction: "fail-open",
       disposition: "excluded",
       exclusionReason:
@@ -156,6 +176,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label: "CodeRabbit利用枠制限の判定",
       decisionSiteFile: ".agent-skill-chain/docs/01_開発ワークフロー.md",
       decisionSiteLine: "214",
+      decisionSiteAnchor: "CodeRabbitの利用枠制限は",
       direction: "fail-closed",
       disposition: "excluded",
       exclusionReason:
@@ -166,6 +187,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label: "reviewer選定（Codex Sol/Opus）の判断",
       decisionSiteFile: ".agent-skill-chain/skills/step-10-review/SKILL.md",
       decisionSiteLine: "18",
+      decisionSiteAnchor: "Codex SolまたはOpusなど利用可能な別reviewer",
       direction: "fail-closed",
       disposition: "excluded",
       exclusionReason:
@@ -176,6 +198,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label: "「軽微な矛盾」3条件判定",
       decisionSiteFile: ".agent-skill-chain/docs/01_開発ワークフロー.md",
       decisionSiteLine: "266-272",
+      decisionSiteAnchor: "軽微かどうかは判断ではなく次の3条件で決める",
       direction: "fail-closed",
       disposition: "excluded",
       exclusionReason:
@@ -185,7 +208,8 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       id: "DCAND-011",
       label: "Q-01〜Q-08モード判定質問への回答行為そのもの",
       decisionSiteFile: ".agent-skill-chain/docs/01_開発ワークフロー.md",
-      decisionSiteLine: "25-74",
+      decisionSiteLine: "25-30",
+      decisionSiteAnchor: "を選べるかは次の8問で決める",
       direction: "fail-closed",
       disposition: "excluded",
       exclusionReason:
@@ -194,13 +218,14 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
     Object.freeze({
       id: "DCAND-012",
       label:
-        "classifyPackageAssets/pathIsSensitive/contentIsSensitive（secret/credentialのfilename・content heuristic分類）",
+        "classifyPackageAssets/validatePackageManifest（secret/credentialのfilename・content heuristic分類）",
       decisionSiteFile: "src/domain/enforcement.ts",
-      decisionSiteLine: "1478-1530",
+      decisionSiteLine: "1478-1481",
+      decisionSiteAnchor: "export function classifyPackageAssets",
       direction: "fail-closed",
       disposition: "excluded",
       exclusionReason:
-        "BR-01（production codeに呼び出し元が無い）。参照はtest/steps/risk-policy.steps.tsのtestだけであり、Semantic Graphと同型の「実装されているが誰も呼ばない」状態",
+        "BR-01（呼び出し元を名指しできない）。`classifyPackageAssets`と`validatePackageManifest`（この分類結果を消費する入口）自体はsrc/cli.ts・scripts/check_package_contents.ts等のどこからも呼ばれていない（grep実測、production callerは0件）。内部heuristicの`pathIsSensitive`/`contentIsSensitive`は同fileの`validatePackageManifest`定義内から呼ばれるが、その`validatePackageManifest`自体が到達不能なため実行経路が存在しない。参照は`test/steps/risk-policy.steps.ts`のtestだけであり、Semantic Graphと同型の「実装されているが誰も呼ばない」状態（Step 10独立reviewで`pathIsSensitive`の呼び出し元を指摘され、`classifyPackageAssets`単体ではなく`validatePackageManifest`を含めて実測を訂正した）",
     }),
   ]);
 

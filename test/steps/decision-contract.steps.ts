@@ -43,6 +43,29 @@ function collectSchemaPropertyNames(schema: unknown, names: Set<string>): void {
       collectSchemaPropertyNames(value, names);
 }
 
+/**
+ * `lineSpec`（"484"または"39-45"）が指す行の前後2行を含む窓を`filePath`から読む。
+ *
+ * **file存在だけでなく行内容の実在も検査する。** Step 10独立reviewで、file:line形式と
+ * fileの存在しか確認しておらず行番号が実際に主張する内容を指しているかを検査していない
+ * 点をHighとして指摘され追加した。
+ */
+function anchorPresent(
+  filePath: string,
+  lineSpec: string,
+  anchor: string,
+): boolean {
+  const lines = fs.readFileSync(filePath, "utf8").split("\n");
+  const match = /^(\d+)(?:-(\d+))?$/u.exec(lineSpec);
+  if (!match) return false;
+  const start = Number(match[1]);
+  const end = match[2] ? Number(match[2]) : start;
+  const windowStart = Math.max(0, start - 1 - 2);
+  const windowEnd = Math.min(lines.length, end + 2);
+  const window = lines.slice(windowStart, windowEnd).join("\n");
+  return window.includes(anchor);
+}
+
 // --- SCN-UNIT-DC-001 -------------------------------------------------------
 
 Given(
@@ -131,6 +154,31 @@ Then(
         true,
         `${candidate.id}のdecisionSiteFileが存在しません: ${candidate.decisionSiteFile}`,
       );
+      assert.equal(
+        fs.existsSync(candidate.callerFile),
+        true,
+        `${candidate.id}のcallerFileが存在しません: ${candidate.callerFile}`,
+      );
+      // file存在だけでなく、主張する行の近傍に実際にその内容があることを検査する
+      // （Step 10独立reviewのHigh指摘で追加。形式と存在だけでは偽陽性を防げない）。
+      assert.equal(
+        anchorPresent(
+          candidate.decisionSiteFile,
+          candidate.decisionSiteLine,
+          candidate.decisionSiteAnchor,
+        ),
+        true,
+        `${candidate.id}のdecisionSiteAnchor"${candidate.decisionSiteAnchor}"が${decisionSite}近傍に見つかりません`,
+      );
+      assert.equal(
+        anchorPresent(
+          candidate.callerFile,
+          candidate.callerLine,
+          candidate.callerAnchor,
+        ),
+        true,
+        `${candidate.id}のcallerAnchor"${candidate.callerAnchor}"が${callerSite}近傍に見つかりません`,
+      );
     }
   },
 );
@@ -155,6 +203,22 @@ Then("除外理由が空でない", function (this: DecisionContractWorld) {
   assert.ok(excluded.length > 0, "除外candidateが1件も無い");
   for (const candidate of excluded) {
     assert.equal(candidate.disposition, "excluded");
+    // 除外候補も判断箇所の実在（file存在＋行近傍の内容）を検査する。
+    // 除外理由の正しさは引用元の実在に依存するため（Step 10独立reviewのHigh指摘）。
+    assert.equal(
+      fs.existsSync(candidate.decisionSiteFile),
+      true,
+      `${candidate.id}のdecisionSiteFileが存在しません: ${candidate.decisionSiteFile}`,
+    );
+    assert.equal(
+      anchorPresent(
+        candidate.decisionSiteFile,
+        candidate.decisionSiteLine,
+        candidate.decisionSiteAnchor,
+      ),
+      true,
+      `${candidate.id}のdecisionSiteAnchor"${candidate.decisionSiteAnchor}"が${candidate.decisionSiteFile}:${candidate.decisionSiteLine}近傍に見つかりません`,
+    );
     assert.ok(
       candidate.exclusionReason.trim().length > 0,
       `${candidate.id}のexclusionReasonが空です`,
