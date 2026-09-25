@@ -199,7 +199,10 @@ Given(
   "jev-provider.jsonは有効だが指定env varがprocess.envに設定されていない",
   function () {
     this.root = this.temp("asc-jevcfg-006-");
-    this.envVarName = "JEV_API_KEY_UNSET_006";
+    // readiness reviewのcodex指摘（round 1最終確認）: previousEnvValueを
+    // 削除前に必ず捕捉する。setEnvVar()を経由しない直接deleteだと、
+    // 実行環境に同名変数が既に存在した場合にAfter hookが値を復元できない。
+    setEnvVar(this, "JEV_API_KEY_UNSET_006", "");
     delete process.env[this.envVarName];
     writeConfig(this.root, {
       enabled: true,
