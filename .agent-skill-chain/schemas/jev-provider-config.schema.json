@@ -24,12 +24,14 @@
     "endpoint": {
       "type": "string",
       "minLength": 1,
-      "description": "Jev providerのHTTP endpoint（本Issueのloaderは値を読むだけで、接続は行わない）"
+      "pattern": "\\S",
+      "description": "Jev providerのHTTP endpoint（本Issueのloaderは値を読むだけで、接続は行わない）。空白文字だけの値はloaderの実装と同じくschema側でも無効とする"
     },
     "model": {
       "type": "string",
       "minLength": 1,
-      "description": "Jev providerのmodel名"
+      "pattern": "\\S",
+      "description": "Jev providerのmodel名。空白文字だけの値はloaderの実装と同じくschema側でも無効とする"
     }
   }
 }

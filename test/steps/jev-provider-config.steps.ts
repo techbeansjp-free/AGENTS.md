@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { After } from "@cucumber/cucumber";
 import {
   loadJevProviderConfig,
   JEV_PROVIDER_CONFIG_PATH,
@@ -17,9 +18,27 @@ class JevProviderConfigWorld extends WorkflowWorld {
   fixtureSnapshotBefore: string = "";
   fixtureSnapshotAfter: string = "";
   secretValue = "";
+  /**
+   * loader呼び出し中に実際にfsへ渡されたpath（readFileSync/statSync）。
+   * import specifierの静的走査だけでは、読み取った結果を捨てる変異
+   * （例えばmodelMappingをreadFileSyncしても戻り値を使わない）を見逃す
+   * （readiness reviewのcodex指摘M-02）。この配列は実際に発生したfs
+   * 呼び出しを記録し、SCN-008がtrusted pathの不在を動的に確認する。
+   */
+  readPaths: string[] = [];
 }
 
 const { Given, When, Then } = stepDefinitions<JevProviderConfigWorld>();
+
+After<JevProviderConfigWorld>(function () {
+  // L-01是正（readiness reviewのcodex指摘）:
+  // 変更したenv varを必ず元の値へ戻し、後続scenarioへ漏らさない。
+  if (this.envVarName !== "") {
+    if (this.previousEnvValue === undefined)
+      delete process.env[this.envVarName];
+    else process.env[this.envVarName] = this.previousEnvValue;
+  }
+});
 
 function writeConfig(root: string, content: unknown): void {
   const resolved = path.join(root, JEV_PROVIDER_CONFIG_PATH);
@@ -28,14 +47,22 @@ function writeConfig(root: string, content: unknown): void {
 }
 
 function snapshotLocalDir(root: string): string {
+  // M-03是正（readiness reviewのcodex指摘）:
+  // 直下fileだけでなく配下を再帰的に走査し、nested pathへの書込みも検知する。
   const dir = path.join(root, ".agent-skill-chain/local");
   if (!fs.existsSync(dir)) return "";
   const parts: string[] = [];
-  for (const name of fs.readdirSync(dir).sort()) {
-    const filePath = path.join(dir, name);
-    if (fs.statSync(filePath).isFile())
-      parts.push(`${name}:${fs.readFileSync(filePath, "utf8")}`);
-  }
+  const walk = (current: string, prefix: string) => {
+    for (const name of fs.readdirSync(current).sort()) {
+      const filePath = path.join(current, name);
+      const relative = prefix === "" ? name : `${prefix}/${name}`;
+      const stat = fs.statSync(filePath);
+      if (stat.isDirectory()) walk(filePath, relative);
+      else if (stat.isFile())
+        parts.push(`${relative}:${fs.readFileSync(filePath, "utf8")}`);
+    }
+  };
+  walk(dir, "");
   return parts.join("\n---\n");
 }
 
@@ -43,6 +70,51 @@ function setEnvVar(world: JevProviderConfigWorld, name: string, value: string) {
   world.envVarName = name;
   world.previousEnvValue = process.env[name];
   process.env[name] = value;
+}
+
+/**
+ * `loadJevProviderConfig`呼び出し中にfsへ渡された実際のpathを記録する。
+ * import specifierの静的一致だけでは、読み取った結果を破棄する変異を
+ * 見逃すため（readiness reviewのcodex指摘M-02）、実行時のfs呼び出しを
+ * 直接計測する。
+ */
+/**
+ * `loadJevProviderConfig`は`fs.readFileSync(path, "utf8")`と
+ * `fs.statSync(path)`のこの2形状だけを呼ぶ。spyは実装が実際に使う
+ * 形状だけを対象とし、fsモジュール全体のoverload型を保持しない。
+ */
+type NarrowReadFileSync = (
+  targetPath: fs.PathOrFileDescriptor,
+  encoding: BufferEncoding,
+) => string;
+type NarrowStatSync = (targetPath: fs.PathLike) => fs.Stats;
+interface MutableFsReadSurface {
+  readFileSync: NarrowReadFileSync;
+  statSync: NarrowStatSync;
+}
+
+function callLoaderWithReadSpy(
+  world: JevProviderConfigWorld,
+): JevProviderConfig | undefined {
+  const mutableFs = fs as unknown as MutableFsReadSurface;
+  const originalReadFileSync: NarrowReadFileSync = fs.readFileSync;
+  const originalStatSync: NarrowStatSync = fs.statSync;
+  const readPaths: string[] = [];
+  mutableFs.readFileSync = (targetPath, encoding) => {
+    readPaths.push(String(targetPath));
+    return originalReadFileSync(targetPath, encoding);
+  };
+  mutableFs.statSync = (targetPath) => {
+    readPaths.push(String(targetPath));
+    return originalStatSync(targetPath);
+  };
+  try {
+    return loadJevProviderConfig(world.root, world.configPath);
+  } finally {
+    mutableFs.readFileSync = originalReadFileSync;
+    mutableFs.statSync = originalStatSync;
+    world.readPaths = readPaths;
+  }
 }
 
 // --- SCN-UNIT-JEVCFG-001 ---
@@ -65,7 +137,7 @@ Given("指定したenv varがprocess.envに設定されている", function () {
 });
 
 When("loadJevProviderConfigを実行する", function () {
-  this.result = loadJevProviderConfig(this.root, this.configPath);
+  this.result = callLoaderWithReadSpy(this);
 });
 
 Then("有効なJevProviderConfigが返る", function () {
@@ -242,6 +314,17 @@ Then(
       assert.ok(
         !/model-?mapping|project-policy/iu.test(specifier),
         `trusted pathをimportしています: ${specifier}`,
+      );
+
+    // 動的: loader呼び出し中に実際にfsへ渡されたpathのいずれもtrusted
+    // pathを含まない（readiness reviewのcodex指摘M-02：読み取った結果を
+    // 破棄するだけの変異はimport走査だけでは検出できないため、実際の
+    // fs呼び出しを計測する）。
+    assert.ok(this.readPaths.length > 0, "fs呼び出しが記録されていません");
+    for (const readPath of this.readPaths)
+      assert.ok(
+        !/model-?mapping|project-policy/iu.test(readPath),
+        `trusted pathを読み取っています: ${readPath}`,
       );
   },
 );
