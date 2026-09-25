@@ -50,7 +50,7 @@ import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertP
 import { assertConvergedReviewSession, buildReviewRoundDraft, previewReviewRound, readStoredReviewSession, recordReviewRound, } from "./adapters/review-session.js";
 import { appendMetricsEvent, buildMetricsReport, writeMetricsReport, } from "./adapters/metrics-journal.js";
 import { METRICS_EVENT_KINDS, METRICS_EVENT_PHASES, } from "./domain/metrics.js";
-import { evidenceOnlySuffix } from "./adapters/review-diff.js";
+import { GIT_ENV, evidenceOnlySuffix } from "./adapters/review-diff.js";
 import { recordLayerSuffix } from "./adapters/review-record-layer.js";
 import { appendEvidenceReanchor, evaluateEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
 import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
@@ -1161,7 +1161,7 @@ function inspectAuthorizedPullRequestMerge(input) {
             "--is-ancestor",
             effectiveBaseSha,
             authority.defaultBranchTipOid,
-        ], input.root, { allowFailure: true });
+        ], input.root, { env: GIT_ENV, allowFailure: true });
         if (ancestor.status !== 0)
             throw new Error("有効なreanchor chainの実効baseが検証済み既定branch tipのancestorではありません");
     }

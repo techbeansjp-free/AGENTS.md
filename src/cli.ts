@@ -283,7 +283,7 @@ import {
   type MetricsEventKind,
   type MetricsEventPhase,
 } from "./domain/metrics.js";
-import { evidenceOnlySuffix } from "./adapters/review-diff.js";
+import { GIT_ENV, evidenceOnlySuffix } from "./adapters/review-diff.js";
 import { recordLayerSuffix } from "./adapters/review-record-layer.js";
 import {
   appendEvidenceReanchor,
@@ -1917,7 +1917,7 @@ function inspectAuthorizedPullRequestMerge(input: {
         authority.defaultBranchTipOid,
       ],
       input.root,
-      { allowFailure: true },
+      { env: GIT_ENV, allowFailure: true },
     );
     if (ancestor.status !== 0)
       throw new Error(
