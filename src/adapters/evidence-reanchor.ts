@@ -247,8 +247,7 @@ function observeReanchorDiff(
     | "新H_impl→新head"
     | "新H_final親→新H_final"
     | "旧base→旧H_impl"
-    | "新base→新H_impl"
-    | "旧base→新base",
+    | "新base→新H_impl",
   comparison: ReanchorComparison,
   baseSha: string,
   headSha: string,
@@ -819,10 +818,13 @@ function observeArtifactReplacement(
  * **base変更（既定branch追随）も同じ経路で扱う（Issue #1493）。** 以降の全チェックは
  * `input.newBaseSha`だけを参照し`input.oldBaseSha`には依存しないため、base自体を
  * 固定する必要はない。base変更を認識するために必要な追加条件は「oldBaseShaが
- * newBaseShaの正当な前進（ancestor）であること」の1点であり、それを`observeReviewDiff`の
- * 既存ancestor検証（非ancestorなら例外）へ委ねて確認する。newBaseShaが実際の
- * GitHub既定branch tipであることまではここで検証しない。それは`pr merge`が
- * provider観測で別途行う（`.agent-skill-chain/docs/01_開発ワークフロー.md`Step 11節）。
+ * newBaseShaの正当な前進（ancestor）であること」の1点であり、`merge-base --is-ancestor`
+ * だけをlocal Gitへ問い合わせて確認する。**フルdiffは計算しない。** 全scope diffの
+ * digest計算（`observeReanchorDiff`経由）を流用すると、既定branchが大きく前進した場合に
+ * diff本体が出力上限を超えて例外になり、正当な前進が「非ancestor」と誤って拒否される
+ * （Step 10前の独立reviewの指摘）。newBaseShaが実際のGitHub既定branch tipであること
+ * まではここで検証しない。それは`pr merge`が既定branch tipの観測値を基点に
+ * ancestor再確認として行う（`inspectAuthorizedPullRequestMerge`、Issue #1493）。
  */
 function observeReviewedForward(
   staging: string,
@@ -830,17 +832,12 @@ function observeReviewedForward(
   input: ReanchorComparison,
 ): ReviewedForwardEvidence | undefined {
   if (input.oldBaseSha !== input.newBaseSha) {
-    try {
-      observeReanchorDiff(
-        root,
-        "旧base→新base",
-        input,
-        input.oldBaseSha,
-        input.newBaseSha,
-      );
-    } catch {
-      return undefined;
-    }
+    const ancestor = git(
+      ["merge-base", "--is-ancestor", input.oldBaseSha, input.newBaseSha],
+      root,
+      { env: GIT_ENV, allowFailure: true },
+    );
+    if (ancestor.status !== 0) return undefined;
   }
   const finalParent = observeSingleCommitParent(root, input.newHeadSha);
   const finalSuffix = observeReanchorDiff(
