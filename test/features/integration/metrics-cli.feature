@@ -38,7 +38,7 @@ Feature: workflow mark・workflow metricsのCLI統合
     Then review_roundsがrelative pathからも算出される
 
   Scenario: SCN-MT-1482-021 計測event logが無い場合は個別fieldがunavailableになる
-    Given journal付きの隔離issue stagingを計測event logなしで用意する
+    Given 隔離issue stagingを計測event logなしで用意する
     When 計測event logが無い状態でworkflow metricsを実行する
     Then role_msとmodel_msとdeterministic_msとartifact_build_msとsupport_msはunavailableである
 

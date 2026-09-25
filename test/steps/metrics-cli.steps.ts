@@ -433,17 +433,22 @@ Given(
 When(
   "relative pathの--review-sessionでworkflow metricsを実行する",
   async function () {
-    const result = await executeMain([
-      "workflow",
-      "metrics",
-      `--staging=${this.staging}`,
-      `--review-session=${this.reviewSessionRelativePath}`,
-    ]);
-    this.lastStatus = result.status;
-    this.lastStdout = result.stdout;
-    this.report = JSON.parse(result.stdout) as Record<string, unknown>;
-    if (this.temporaryReviewSessionPath)
-      fs.rmSync(this.temporaryReviewSessionPath, { force: true });
+    // round3独立reviewの指摘: main()が例外を投げると一時fileがrepository
+    // rootに残る。try/finallyでcleanupを保証する。
+    try {
+      const result = await executeMain([
+        "workflow",
+        "metrics",
+        `--staging=${this.staging}`,
+        `--review-session=${this.reviewSessionRelativePath}`,
+      ]);
+      this.lastStatus = result.status;
+      this.lastStdout = result.stdout;
+      this.report = JSON.parse(result.stdout) as Record<string, unknown>;
+    } finally {
+      if (this.temporaryReviewSessionPath)
+        fs.rmSync(this.temporaryReviewSessionPath, { force: true });
+    }
   },
 );
 
@@ -452,19 +457,16 @@ Then("review_roundsがrelative pathからも算出される", function () {
   assert.equal(this.report.review_rounds, 1);
 });
 
-Given(
-  "journal付きの隔離issue stagingを計測event logなしで用意する",
-  function () {
-    const root = this.temp();
-    const created = createIssueStaging(root, {
-      title: "metrics-cli-missinglog-fixture",
-      answers: quickAnswers(),
-      now: new Date("2026-09-25T00:00:00.000Z"),
-      requestedMode: "quick",
-    });
-    this.staging = created.path;
-  },
-);
+Given("隔離issue stagingを計測event logなしで用意する", function () {
+  const root = this.temp();
+  const created = createIssueStaging(root, {
+    title: "metrics-cli-missinglog-fixture",
+    answers: quickAnswers(),
+    now: new Date("2026-09-25T00:00:00.000Z"),
+    requestedMode: "quick",
+  });
+  this.staging = created.path;
+});
 
 When("計測event logが無い状態でworkflow metricsを実行する", async function () {
   const result = await executeMain([
@@ -538,16 +540,25 @@ Given(
       requestedMode: "quick",
     });
     this.staging = created.path;
-    const markResult = await executeMain([
-      "workflow",
-      "mark",
-      `--staging=${this.staging}`,
-      "--kind=role",
-      "--phase=start",
-      "--label=implementer",
-      "--now=2026-09-25T00:00:00.000Z",
-    ]);
-    assert.equal(markResult.status, 0, markResult.stdout);
+    // role=implementerの区間を実際に閉じてから不正行を追加する。これにより
+    // 「既に閉じた実測データがあってもfail-closedで丸ごとunavailableにする」
+    // ことを検証できる（round3独立reviewの指摘: 旧fixtureはopen区間しか
+    // 持たず、suppressされるべきdataが実在しなかった）。
+    for (const [phase, now] of [
+      ["start", "2026-09-25T00:00:00.000Z"],
+      ["end", "2026-09-25T00:00:05.000Z"],
+    ] as const) {
+      const markResult = await executeMain([
+        "workflow",
+        "mark",
+        `--staging=${this.staging}`,
+        "--kind=role",
+        `--phase=${phase}`,
+        "--label=implementer",
+        `--now=${now}`,
+      ]);
+      assert.equal(markResult.status, 0, markResult.stdout);
+    }
     const repositoryRoot = stagingRepositoryRoot(this.staging);
     const logPath = path.join(
       repositoryRoot,
@@ -556,7 +567,8 @@ Given(
       path.basename(this.staging),
       "events.jsonl",
     );
-    fs.appendFileSync(logPath, '{"kind":"role","phase":"start"}\n');
+    // kind=modelの不正行を追加する（role区間の閉区間はそのまま残す）。
+    fs.appendFileSync(logPath, '{"kind":"model","phase":"start"}\n');
   },
 );
 
@@ -575,11 +587,15 @@ Then(
   "role_msはfail-closedでunavailableになり不正行のwarningが含まれる",
   function () {
     // 独立reviewのM2指摘: 不正行をwarningとして無視し残りから部分計算するfail-open
-    // ではなく、fileごとfail-closedでunavailableにする（既にlabelが正しく閉じている
-    // implementer区間の値も、fileに不正行が1件でもあれば公開しない）。
+    // ではなく、fileごとfail-closedでunavailableにする。このfixtureはrole=
+    // implementerの実際に閉じた5000ms区間を持つため、fail-openだった場合は
+    // role_ms=5000として観測されるはずが、不正行（kind=model）が1件でも
+    // 含まれるとfile全体がunavailableになり、既に閉じているrole区間の値も
+    // 公開されないことを検証する（round3独立reviewの指摘を反映）。
     assert.equal(this.lastStatus, 0, this.lastStdout);
     assert.equal(this.report.role_ms, null);
     assert.deepEqual(this.report.role_breakdown, {});
+    assert.equal(this.report.model_ms, null);
     const warnings = this.report.warnings as string[];
     assert.ok(
       warnings.some((warning) => /不正な行/u.test(warning)),
