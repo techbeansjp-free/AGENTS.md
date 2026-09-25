@@ -16,3 +16,13 @@ Feature: workflow mark・workflow metricsのCLI統合
     Given journal付きの隔離issue stagingを用意する
     When 制御文字を含むlabelでworkflow markを試みる
     Then workflow markは拒否される
+
+  Scenario: SCN-MT-1482-016 step_msはStep番号が重複するjournalでも全entryを保持する
+    Given journal/steps.jsonlにStep9が2回記録されたstagingを用意する
+    When workflow metricsのstep_msを取得する
+    Then step_msはStep9の両entryを縮約せず保持する
+
+  Scenario: SCN-MT-1482-017 workflow markの後もworkflow recordがstaging digestを壊さない
+    Given 隔離issue stagingでworkflow markを1回実行済みである
+    When 同じstagingへworkflow recordでStep1を記録する
+    Then workflow recordはstaging digest不一致を起こさず成功する

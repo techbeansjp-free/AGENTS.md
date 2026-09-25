@@ -4398,13 +4398,12 @@ export async function main(argv, dependencies = {}) {
         const staging = flags.staging;
         if (!staging)
             throw new Error("workflow metricsには--stagingが必要です");
-        if (flags.out !== undefined && flags.out !== "__present__")
-            throw new Error("--outは値を付けずに指定してください");
+        const outRequested = presentFlag(flags, "out");
         const report = buildMetricsReport({
             staging,
             reviewSessionPath: flags["review-session"],
         });
-        const written = flags.out === "__present__"
+        const written = outRequested
             ? writeMetricsReport({ staging, report })
             : undefined;
         print(written ? { ...report, writtenTo: written.path } : report);

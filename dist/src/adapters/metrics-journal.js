@@ -7,67 +7,89 @@ import { computeEventDurationsMs, computeMetricsWindowMs, computeReviewRounds, c
 import { parseReviewSessionState } from "../domain/review-convergence.js";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { parseJsonStrict } from "../lib/security.js";
-/** staging配下、`journal/steps.jsonl`と同じ`journal/`directoryへ置く（02 §4.1）。 */
-export const METRICS_EVENT_LOG_FILE = "journal/metrics-events.jsonl";
-/** `.agent-skill-chain/metrics/`はdocs/specs/14_開発・品質/00_ディレクトリ構成.mdが既に予約するrepository-root相対の実行時領域。 */
+/**
+ * `.agent-skill-chain/metrics/`配下、staging名で分けたdirectory。
+ *
+ * **staging配下（`journal/`）へは置かない。** stagingのdigest inventory
+ * （`src/domain/staging.ts`の`inventory()`）は少数の既知除外fileを除く全fileを
+ * artifactとして数えるため、staging配下へ置くと`workflow mark`のたびにdigestが変わり、`workflow record`・
+ * `review artifact`・`pr create`等の既存digest一致検査を壊す（独立reviewのH1指摘）。
+ * `.agent-skill-chain/metrics/`はdocs/specs/14_開発・品質/00_ディレクトリ構成.mdが
+ * 既に予約するrepository-root相対の実行時領域であり、staging digestの対象外。
+ */
 export const METRICS_OUTPUT_DIRECTORY = ".agent-skill-chain/metrics";
-function assertRegularMetricsLogPath(logPath) {
-    const directory = path.dirname(logPath);
-    const directoryStat = fs.lstatSync(directory);
-    if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory())
-        throw new Error("metrics events log directoryはsymlinkでない通常directoryが必要です");
-    if (fs.realpathSync(directory) !== directory)
-        throw new Error("metrics events log directoryにsymlink祖先を使用できません");
-    if (!fs.existsSync(logPath))
+function metricsEventLogPath(repositoryRoot, staging) {
+    const slug = path.basename(staging);
+    return path.join(repositoryRoot, METRICS_OUTPUT_DIRECTORY, slug, "events.jsonl");
+}
+function metricsReportPath(repositoryRoot, staging) {
+    const slug = path.basename(staging);
+    return path.join(repositoryRoot, METRICS_OUTPUT_DIRECTORY, `${slug}.json`);
+}
+function assertRegularFilePath(target, label) {
+    const directory = path.dirname(target);
+    if (fs.existsSync(directory)) {
+        const directoryStat = fs.lstatSync(directory);
+        if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory())
+            throw new Error(`${label} directoryはsymlinkでない通常directoryが必要です`);
+        if (fs.realpathSync(directory) !== directory)
+            throw new Error(`${label} directoryにsymlink祖先を使用できません`);
+    }
+    if (!fs.existsSync(target))
         return;
-    const stat = fs.lstatSync(logPath);
+    const stat = fs.lstatSync(target);
     if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1)
-        throw new Error("metrics events logはsymlink・hardlinkでない通常fileが必要です");
-    if (fs.realpathSync(logPath) !== logPath)
-        throw new Error("metrics events logにsymlink祖先を使用できません");
+        throw new Error(`${label}はsymlink・hardlinkでない通常fileが必要です`);
+    if (fs.realpathSync(target) !== target)
+        throw new Error(`${label}にsymlink祖先を使用できません`);
 }
 export function readMetricsEventLog(staging) {
     const resolved = assertWorkflowStaging(staging);
-    const logPath = path.join(resolved, METRICS_EVENT_LOG_FILE);
+    const repositoryRoot = stagingRepositoryRoot(resolved);
+    const logPath = metricsEventLogPath(repositoryRoot, resolved);
     if (!fs.existsSync(logPath))
-        return { entries: [], errors: [], source: "" };
-    assertRegularMetricsLogPath(logPath);
+        return { entries: [], errors: [], source: "", path: logPath };
+    assertRegularFilePath(logPath, "metrics events log");
     const source = fs.readFileSync(logPath, "utf8");
     const parsed = parseMetricsEventLog(source);
-    return { ...parsed, source };
+    return { ...parsed, source, path: logPath };
 }
 /**
- * FR-1482-03。`journal/metrics-events.jsonl`へ1行追記する。
+ * FR-1482-03。計測イベントを1行追記する。
  *
  * 既存`workflow record`（`src/adapters/workflow-journal.ts`）と同じ
  * trusted boundary判定（`assertWorkflowStaging`）とsingle-writer lock
  * （`withStagingMutationLock`）を再利用し、専用の耐久保証機構を新設しない（NFR-02）。
+ * lockはstaging単位（`--staging`が指すdirectory）で取得し、実ファイルは
+ * staging外の`.agent-skill-chain/metrics/`配下へ書く。
  */
 export function appendMetricsEvent(input) {
     const resolved = assertWorkflowStaging(input.staging);
     return withStagingMutationLock(resolved, () => {
-        const logPath = path.join(resolved, METRICS_EVENT_LOG_FILE);
+        const repositoryRoot = stagingRepositoryRoot(resolved);
+        const logPath = metricsEventLogPath(repositoryRoot, resolved);
         const existing = fs.existsSync(logPath)
             ? (() => {
-                assertRegularMetricsLogPath(logPath);
+                assertRegularFilePath(logPath, "metrics events log");
                 return parseMetricsEventLog(fs.readFileSync(logPath, "utf8"));
             })()
             : { entries: [], errors: [] };
         if (existing.errors.length > 0)
             throw new Error(`metrics events logの既存内容が不正です: ${existing.errors.join("; ")}`);
-        const candidate = {
+        const candidateRecordedAt = input.now ?? new Date().toISOString();
+        const transition = validateNextMetricsEvent(existing.entries, {
             kind: input.kind,
             phase: input.phase,
             label: input.label,
-        };
-        const transition = validateNextMetricsEvent(existing.entries, candidate);
+            recordedAt: candidateRecordedAt,
+        });
         if (!transition.ok)
             throw new Error(transition.reason);
         const entryCheck = parseMetricsEventLine({
             kind: input.kind,
             phase: input.phase,
             label: input.label,
-            recordedAt: input.now ?? new Date().toISOString(),
+            recordedAt: candidateRecordedAt,
         }, existing.entries.length + 1);
         if (entryCheck.errors.length > 0 || !entryCheck.entry)
             throw new Error(entryCheck.errors.join("; "));
@@ -90,24 +112,31 @@ function byLabelForKind(byLabel, kind) {
 }
 /**
  * FR-1482-05。T01〜T03の算出結果を1つのreportへ統合する。
- * `review-session`の入力が無い場合は`review_rounds`・`support_ms`をunavailable（null）として
- * 報告し、他fieldの算出は継続する（NFR-03）。
+ *
+ * metrics event logが存在しない、またはparse errorを含む場合は
+ * role_ms/model_ms/deterministic_ms（およびそのbreakdown・artifact_build_ms・
+ * support_ms）をunavailable（null）として報告し、fail-closedとする
+ * （02 §6、独立reviewのM2指摘）。`review-session`の入力が無い場合は
+ * `review_rounds`をunavailable（null）として報告し、他fieldの算出は継続する（NFR-03）。
  */
 export function buildMetricsReport(input) {
     const journal = readWorkflowJournal(input.staging);
     const warnings = [...journal.errors];
     const stepDurations = computeStepDurationsMs(journal.entries);
-    const stepMs = {};
-    for (const duration of stepDurations)
-        stepMs[String(duration.step)] = duration.ms;
     const eventLog = readMetricsEventLog(input.staging);
     warnings.push(...eventLog.errors);
+    const eventLogUnavailable = eventLog.source === "" || eventLog.errors.length > 0;
     if (eventLog.source === "")
-        warnings.push(`${METRICS_EVENT_LOG_FILE}がありません。role_ms/model_ms/deterministic_msはunavailableです`);
-    const eventDurations = computeEventDurationsMs(eventLog.entries);
+        warnings.push(`${eventLog.path}がありません。role_ms/model_ms/deterministic_msはunavailableです`);
+    else if (eventLog.errors.length > 0)
+        warnings.push("metrics event logに不正な行が含まれるため、role_ms/model_ms/deterministic_msをfail-closedでunavailableとしました");
+    const eventDurations = eventLogUnavailable
+        ? { totals: {}, byLabel: {}, openKinds: [], warnings: [] }
+        : computeEventDurationsMs(eventLog.entries);
     warnings.push(...eventDurations.warnings);
     let reviewRounds = null;
     if (input.reviewSessionPath) {
+        assertRegularFilePath(input.reviewSessionPath, "review session file");
         if (!fs.existsSync(input.reviewSessionPath)) {
             warnings.push(`review session file(${input.reviewSessionPath})がありません。review_roundsはunavailableです`);
         }
@@ -124,19 +153,27 @@ export function buildMetricsReport(input) {
     }
     const windowMs = computeMetricsWindowMs({
         stepEntries: journal.entries,
-        eventEntries: eventLog.entries,
+        eventEntries: eventLogUnavailable ? [] : eventLog.entries,
     });
-    const split = computeSupportArtifactSplit({
-        windowMs,
-        roleByLabel: eventDurations.byLabel,
-    });
+    const split = eventLogUnavailable
+        ? { artifact_build_ms: null, support_ms: null }
+        : computeSupportArtifactSplit({
+            windowMs,
+            roleByLabel: eventDurations.byLabel,
+            roleOpen: eventDurations.openKinds.includes("role"),
+        });
     return {
-        step_ms: stepMs,
-        role_ms: byLabelForKind(eventDurations.byLabel, "role"),
-        model_ms: byLabelForKind(eventDurations.byLabel, "model"),
-        deterministic_ms: byLabelForKind(eventDurations.byLabel, "deterministic"),
+        step_ms: stepDurations,
+        role_ms: eventLogUnavailable ? null : (eventDurations.totals.role ?? 0),
+        model_ms: eventLogUnavailable ? null : (eventDurations.totals.model ?? 0),
+        deterministic_ms: eventLogUnavailable
+            ? null
+            : (eventDurations.totals.deterministic ?? 0),
+        role_breakdown: byLabelForKind(eventDurations.byLabel, "role"),
+        model_breakdown: byLabelForKind(eventDurations.byLabel, "model"),
+        deterministic_breakdown: byLabelForKind(eventDurations.byLabel, "deterministic"),
         review_rounds: reviewRounds,
-        support_ms: eventLog.source === "" ? null : split.support_ms,
+        support_ms: split.support_ms,
         artifact_build_ms: split.artifact_build_ms,
         warnings,
     };
@@ -145,8 +182,7 @@ export function buildMetricsReport(input) {
 export function writeMetricsReport(input) {
     const resolved = assertWorkflowStaging(input.staging);
     const repositoryRoot = stagingRepositoryRoot(resolved);
-    const slug = path.basename(resolved);
-    const destination = path.join(repositoryRoot, METRICS_OUTPUT_DIRECTORY, `${slug}.json`);
+    const destination = metricsReportPath(repositoryRoot, resolved);
     writeFileAtomic(destination, `${JSON.stringify(input.report, null, 2)}\n`);
     return { path: destination };
 }

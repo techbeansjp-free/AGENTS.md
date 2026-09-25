@@ -7,6 +7,7 @@ import {
   computeReviewRounds,
   computeStepDurationsMs,
   computeSupportArtifactSplit,
+  parseMetricsEventLine,
   validateNextMetricsEvent,
   type MetricsEvent,
 } from "../../src/domain/metrics.js";
@@ -27,6 +28,7 @@ interface MetricsWorld extends WorkflowWorld {
   split: ReturnType<typeof computeSupportArtifactSplit>;
   transitionResult: ReturnType<typeof validateNextMetricsEvent>;
   metricsImportViolations: string[];
+  parseMetricsEventLineResult: ReturnType<typeof parseMetricsEventLine>;
 }
 
 const { Given, When, Then } = stepDefinitions<MetricsWorld>();
@@ -248,12 +250,36 @@ When("support_msとartifact_build_msを算出する", function () {
   this.split = computeSupportArtifactSplit({
     windowMs: this.windowMs,
     roleByLabel: this.eventDurations.byLabel,
+    roleOpen: this.eventDurations.openKinds.includes("role"),
   });
 });
 
 Then("artifact_build_msは1000でsupport_msは1000である", function () {
   assert.equal(this.split.artifact_build_ms, 1000);
   assert.equal(this.split.support_ms, 1000);
+});
+
+Given(
+  "kind=roleでlabel=implementerが開いたままのイベント系列である",
+  function () {
+    this.metricsEvents = [
+      {
+        kind: "role",
+        phase: "start",
+        label: "implementer",
+        recordedAt: "2026-09-25T00:00:00.000Z",
+      },
+    ];
+    this.stepEntries = [
+      baseStepEntry(1, "2026-09-25T00:00:00.000Z"),
+      baseStepEntry(2, "2026-09-25T00:00:02.000Z"),
+    ];
+  },
+);
+
+Then("artifact_build_msとsupport_msはunavailableである", function () {
+  assert.equal(this.split.artifact_build_ms, null);
+  assert.equal(this.split.support_ms, null);
 });
 
 Given(
@@ -301,4 +327,83 @@ When("src\\/domain\\/metrics.tsの依存importを検査する", function () {
 
 Then("src\\/adapters配下とsrc\\/cli.tsへのimportは無い", function () {
   assert.deepEqual(this.metricsImportViolations, []);
+});
+
+Given("kind=roleでlabelがROLES列挙値でないイベント行である", function () {
+  this.value = {
+    kind: "role",
+    phase: "start",
+    label: "Implementer",
+    recordedAt: "2026-09-25T00:00:00.000Z",
+  };
+});
+
+When("その行をparseする", function () {
+  this.parseMetricsEventLineResult = parseMetricsEventLine(this.value, 1);
+});
+
+Then("ROLES列挙値エラーで拒否される", function () {
+  const result = this.parseMetricsEventLineResult;
+  assert.ok(result);
+  assert.equal(result.entry, undefined);
+  assert.ok(result.errors.some((error) => /ROLES列挙値/u.test(error)));
+});
+
+Given("kind=modelでlabel=codexがopen状態（start=00:00:05）である", function () {
+  this.metricsEvents = [
+    {
+      kind: "model",
+      phase: "start",
+      label: "codex",
+      recordedAt: "2026-09-25T00:00:05.000Z",
+    },
+  ];
+});
+
+When("startより前の時刻でendの新規イベントを検証する", function () {
+  this.transitionResult = validateNextMetricsEvent(this.metricsEvents, {
+    kind: "model",
+    phase: "end",
+    label: "codex",
+    recordedAt: "2026-09-25T00:00:01.000Z",
+  });
+});
+
+Then("時間逆行として拒否される", function () {
+  assert.equal(this.transitionResult.ok, false);
+  if (this.transitionResult.ok === false)
+    assert.match(this.transitionResult.reason, /時間逆行/u);
+});
+
+Given(
+  "journal\\/steps.jsonlの範囲外に計測イベントがあるfixtureである",
+  function () {
+    // stepEntriesは[00:00:05, 00:00:10]（span=5000ms）、
+    // eventEntriesは[00:00:00]（stepより前）1件だけを持つ。
+    // 個別spanのmaxだと5000msのままだが、合わせた集合の最古〜最新は
+    // 00:00:00〜00:00:10で10000msになるはずである。
+    this.stepEntries = [
+      baseStepEntry(1, "2026-09-25T00:00:05.000Z"),
+      baseStepEntry(2, "2026-09-25T00:00:10.000Z"),
+    ];
+    this.metricsEvents = [
+      {
+        kind: "deterministic",
+        phase: "start",
+        label: "npm-test",
+        recordedAt: "2026-09-25T00:00:00.000Z",
+      },
+    ];
+  },
+);
+
+When("計測windowを算出する", function () {
+  this.windowMs = computeMetricsWindowMs({
+    stepEntries: this.stepEntries,
+    eventEntries: this.metricsEvents,
+  });
+});
+
+Then("計測windowは合わせた集合の最古から最新までの10000msである", function () {
+  assert.equal(this.windowMs, 10000);
 });

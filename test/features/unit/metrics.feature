@@ -30,6 +30,26 @@ Feature: 計測基盤（step_ms・role_ms・model_ms・deterministic_ms・review
     When support_msとartifact_build_msを算出する
     Then artifact_build_msは1000でsupport_msは1000である
 
+  Scenario: SCN-MT-1482-012 kind=roleのlabelはROLES列挙値でなければ拒否する
+    Given kind=roleでlabelがROLES列挙値でないイベント行である
+    When その行をparseする
+    Then ROLES列挙値エラーで拒否される
+
+  Scenario: SCN-MT-1482-013 endがstartより前の時刻なら時間逆行として拒否する
+    Given kind=modelでlabel=codexがopen状態（start=00:00:05）である
+    When startより前の時刻でendの新規イベントを検証する
+    Then 時間逆行として拒否される
+
+  Scenario: SCN-MT-1482-014 計測windowはjournalとevent両方を合わせた最古から最新までである
+    Given journal/steps.jsonlの範囲外に計測イベントがあるfixtureである
+    When 計測windowを算出する
+    Then 計測windowは合わせた集合の最古から最新までの10000msである
+
+  Scenario: SCN-MT-1482-015 role区間が開いたままならartifact_build_msとsupport_msはunavailableである
+    Given kind=roleでlabel=implementerが開いたままのイベント系列である
+    When support_msとartifact_build_msを算出する
+    Then artifact_build_msとsupport_msはunavailableである
+
   Scenario: SCN-MT-1482-008 step_msの境界値（0件・1件）で例外にならない
     Given journal/steps.jsonlのentryが0件である
     When 対象journalのstep_msを算出する
