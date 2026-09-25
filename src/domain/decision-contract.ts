@@ -51,7 +51,7 @@ interface DecisionCandidateEntryBase {
  */
 export interface AdoptedDecisionCandidateEntry extends DecisionCandidateEntryBase {
   readonly disposition: "adopted";
-  /** REQ-WF-026により採用候補はfail-closed方向に限定する。基底型のfail-openを型で排除する。 */
+  /** REQ-WF-029により採用候補はfail-closed方向に限定する。基底型のfail-openを型で排除する。 */
   readonly direction: "fail-closed";
   /** 判断結果を消費する呼び出し元file。 */
   readonly callerFile: string;
@@ -108,7 +108,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "1726",
+      callerLine: "1738",
       callerAnchor: "inspectCiDelivery({",
     }),
     Object.freeze({
@@ -121,7 +121,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "7066",
+      callerLine: "7139",
       callerAnchor: "validateSpecs(root",
     }),
     Object.freeze({
