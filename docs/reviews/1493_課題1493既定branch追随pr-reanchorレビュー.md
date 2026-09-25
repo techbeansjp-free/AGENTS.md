@@ -27,12 +27,12 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | 証拠 | 参照先 | 観測結果 | 根拠種別 |
 |---|---|---|---|
 | 要求・受け入れ条件 | `.agent-skill-chain/tmp/issues/20260926_010231_既定branch追随を伴うpr-bound前進commitをpr-reanchorが受理できない` | staging digest（`workflow record --step=10`実行時点の値） | 既存コード |
-| 差分 | `920d0af0d37724dbbaee45fd15b4ceeaa64adb41`..`3ee231f8e5cb622890a7ca00822b88f4db801f91`（既定branch追随後の`比較基点..H_impl`） | 13 path | 既存コード |
-| テスト | `npm test`（`npm run compile --silent && cucumber-js`） | 2366 scenarios（2349 passed、17 skipped、0 failed）、24263 steps（24208 passed、55 skipped）。既定branch追随後に再実行し合格を再確認 | テスト出力 |
+| 差分 | `920d0af0d37724dbbaee45fd15b4ceeaa64adb41`..`c68d8bacefb083373722d95a832246f217e23d06`（比較基点..H_impl、round 3でCodeRabbit指摘是正を反映） | 14 path（round 2で追加したreview artifact自身1件を含む） | 既存コード |
+| テスト | `npm test`（`npm run compile --silent && cucumber-js`） | 2366 scenarios（2349 passed、17 skipped、0 failed）、24263 steps（24208 passed、55 skipped）。round 3是正後に再実行し合格を再確認 | テスト出力 |
 | 仕様 | `docs/specs/02_要件/01_ワークフロー要件.md`、`docs/specs/15_要件追跡/00_追跡表.md`・`01_変更履歴.md` | 実装内容と一致するよう更新済み。既定branch追随によるmerge後もSCN-1493-01〜03の追跡行を保持していることを確認 | 既存文書 |
-| commit前candidate | dist/src/adapters/evidence-reanchor.js、dist/src/cli.js、dist/src/domain/decision-contract.js、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/evidence-reanchor.ts、src/cli.ts、src/domain/decision-contract.ts、test/features/e2e/workflow-step-enforcement-cli.feature、test/features/integration/evidence-reanchor.feature、test/steps/evidence-reanchor.steps.ts、test/steps/workflow-step-enforcement.steps.ts | H_impl `3ee231f8e5cb622890a7ca00822b88f4db801f91` | Git index |
+| commit前candidate | dist/src/adapters/evidence-reanchor.js、dist/src/cli.js、dist/src/domain/decision-contract.js、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/evidence-reanchor.ts、src/cli.ts、src/domain/decision-contract.ts、test/features/e2e/workflow-step-enforcement-cli.feature、test/features/integration/evidence-reanchor.feature、test/steps/evidence-reanchor.steps.ts、test/steps/workflow-step-enforcement.steps.ts | H_impl `c68d8bacefb083373722d95a832246f217e23d06` | Git index |
 | Phase A artifact | 本fileをcommit後に観測 | 未作成（本round確定後にcommitする） | Git観測 |
-| review session | 同staging | `converged`（round 2、findings 0件、sessionId `24f4f4bbcd782eeaf697497d65ded401cd219150893b439d081d3b85de6dab96`） | Git観測 |
+| review session | 同staging | `converged`（round 3、finding 1件resolved、sessionId `24f4f4bbcd782eeaf697497d65ded401cd219150893b439d081d3b85de6dab96`） | Git観測 |
 
 - dependency/authority/evidence graphにcycle、self-loop、unknown node、candidate自己評価、tracked artifact自己SHAがない: はい（02_設計.md §2.3参照。既定branch追随のmergeも新規edgeを追加しない）。
 - `H_impl`が`H_final`のancestorで、その差分がreview artifactだけである: はい（本artifactのcommit後に成立する）。
@@ -45,6 +45,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 
 | path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
 |---|---|---|---|---|---|---|---|---|
+| `docs/reviews/1493_課題1493既定branch追随pr-reanchorレビュー.md` | A | implementer（領域: review artifact自身） | review artifact | round 2確定後のH_impl前進（round 3、GIT_ENV是正の取り込み）により、round 2で追加した本artifact自身が`比較基点..H_impl`区間へ含まれた。内容はStep 10 review記録そのものであり製品差分ではない | 該当なし | 該当なし（review記録） | 追記のみ。`git revert`で即時rollback可能 | pass |
 | `dist/src/adapters/evidence-reanchor.js` | M | implementer（領域: 生成物） | 生成物 | `src/adapters/evidence-reanchor.ts`のcompile出力。`npm run build`後のclean差分で生成元との対応を確認済み | 生成元 → 生成物 | AC-01、AC-02 | §8の配布物影響表で確認。git revertで復帰可能 | pass |
 | `dist/src/cli.js` | M | implementer（領域: 生成物） | 生成物 | `src/cli.ts`のcompile出力。`npm run build`後のclean差分で生成元との対応を確認済み | 生成元 → 生成物 | AC-05、AC-06 | §8の配布物影響表で確認。git revertで復帰可能 | pass |
 | `dist/src/domain/decision-contract.js` | M | implementer（領域: 生成物） | 生成物 | `src/domain/decision-contract.ts`のcompile出力。`npm run build`後のclean差分で生成元との対応を確認済み | 生成元 → 生成物 | 対象外（記録用メタデータのline pin更新） | §8の配布物影響表で確認。git revertで復帰可能 | pass |
@@ -59,7 +60,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | `test/steps/evidence-reanchor.steps.ts` | M | implementer（領域: test） | test | `forwardFixtureWithBaseAdvance`ヘルパーとSCN-1493-01〜03のstep定義を追加 | test → 対象（許可された向き） | AC-01、AC-02、AC-03、AC-04 | test。revert可能 | pass |
 | `test/steps/workflow-step-enforcement.steps.ts` | M | implementer（領域: test） | test | SCN-E2E-WFSTEP-067〜069のcase追加。既存の`prepareDeliveryCli`/`executeDeliveryMerge`ハーネスを再利用 | test → 対象（許可された向き） | AC-05、AC-06 | test。revert可能 | pass |
 
-- 基準SHAとの差分path集合と表のpath集合が完全一致する: はい（13 path、上表と一致。既定branch追随後の再生成でも同一集合）。
+- 基準SHAとの差分path集合と表のpath集合が完全一致する: はい（14 path、上表と一致。round 3でreview artifact自身1件が区間内に入った）。
 - package層へproject固有値、project層へ汎用機構、spec/evidence層へ実行authorityを混入していない: はい。
 - 個別findingを修正した場合、そのファイルと隣接依存だけを再監査した: はい。
 
@@ -73,6 +74,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | DISC-002 | Step 10前の独立review（1回目、High）: `observeReviewedForward`のancestor検証だけでは、既定branch以外の未audit commitをnewBaseShaへ混ぜてaudit範囲を縮められる（Issue #966同型のattack）。`pr merge`の既存base一致確認はreanchor chainの`newBaseSha`を一度も参照しないことをgrepで確認 | AC-01の安全性要件が未充足のまま実装完了していた | AC変更（新規AC-05/AC-06の実質追加） | `inspectAuthorizedPullRequestMerge`へterminal reviewed-forward recordのnewBaseSha ancestor再確認checkを追加（T03初版） | scratch環境でのPoC再現、SCN-E2E-WFSTEP-067/068追加、`npm test`全合格 | updated | pass |
 | DISC-003 | Step 10前の独立review（2回目、High）: DISC-002の対処（terminal recordのmethod・base変更有無で絞り込み）は、1件目のreanchorで非ancestor baseを確立後、2件目のreanchorで同じbaseを維持することでbypassできる。scratch環境でPoC再現済み | AC-05が2件以上のreanchor chainで未充足 | なし（AC文言は変更せず実装を修正） | 判定条件を`deriveEffectiveHead`と同じlink検証を通過した実効terminal recordを常に検査する形へ一般化 | SCN-E2E-WFSTEP-069追加、mutation test（checkを無効化した場合に067/069が失敗することを確認）、`npm test`全合格 | 対象外（コード修正、仕様文の意味は変わらない） | pass |
 | DISC-004 | Step 10前の独立review（3〜4回目、Medium/Low）: (a) `docs/specs/`がDISC-003で撤回した旧絞り込み条件をまだ記述、(b) `observeReviewedForward`のancestor検証が`observeReanchorDiff`（フルdiff計算）を流用し既定branch大幅前進時に出力上限超過で誤拒否しうる。(c) reanchor機構全体（base変更の有無と無関係）に、宣言baseと実際のmerge-baseの食い違いによるaudit-range-shrinking（Issue #966同型）の既存欠陥が別途存在するが、Issue #1389の設計時点から存在し本Issueの変更に依存しない | (a)(b)は本Issueの成果物の正確性に関わる。(c)は本Issueの受け入れ条件に無関係 | なし | (a)(b)を是正。(c)は「派生欠陥は出所のIssue内で直す・問題以上をしない」に従いIssue #1495へ分離 | (a)(b)是正後の`npm test`全合格、5回目（formal round 1）独立reviewで指摘0件 | updated（(a)のみ） | pass |
+| DISC-005 | PR作成後にCodeRabbitが指摘（round 3、§5参照）: `src/cli.ts`の新規`merge-base --is-ancestor`呼び出し（T03）がGIT_ENVを渡しておらず、`process.env`を継承していた。`GIT_DIR`等の環境変数操作でancestor判定の参照先を差し替えられる可能性があり、INV-02（Git objectからの再計算による確認）が要求する非改ざん性を弱めていた | INV-02（実装済みのつもりだったfail-closed性の一部が未達） | なし（実装のみの是正、契約文言は変更しない） | `src/adapters/review-diff.ts`の既存`GIT_ENV`を`src/cli.ts`へimportし、該当`git()`呼び出しへ`env: GIT_ENV`を追加（commit `c68d8bac`） | 是正後`npm test`2366 scenarios全合格、typecheck/lint/format:check/build全合格 | no-spec-impact（実装の防御強化のみ、契約文言に変更なし） | pass |
 
 ### 2.1 受け入れ条件とシナリオ
 
@@ -112,9 +114,11 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | ロールバック（復旧参照、状態保持、再開可能性） | pass | 実装commit（T01/T02/T03、DISC-002〜004の各是正commit）はいずれもrevertで前状態へ完全復帰可能 |
 | 範囲漏れ（呼び出し元、利用側、配布物、文書） | pass | `dist/src/`（配布物）、`docs/specs/`、testの3領域すべてを§1.1の個別監査で確認した |
 
-## 5. 指摘
+| ID | 重大度 | 内容 | 証拠 | 影響範囲 | 対応 | 状態・分類 | 残存リスク |
+|---|---|---|---|---|---|---|---|
+| REV-1493-01 | High | `src/cli.ts`の`merge-base --is-ancestor`検査がGIT_ENVを渡さずprocess.envを継承していた（DISC-005参照） | CodeRabbit inline comment（PR #1496、`src/cli.ts:1921`）、`src/adapters/review-diff.ts`の既存GIT_ENVパターンとの比較 | `inspectAuthorizedPullRequestMerge`のancestor再確認check1箇所 | `GIT_ENV`をimportし該当`git()`呼び出しへ追加（commit `c68d8bac`） | resolved | なし（是正済み、他の同種呼び出しは元からGIT_ENV使用済みで対象外） |
 
-指摘なし（Step 10前の実装段階で発見したDISC-001〜004はいずれも前進commitで是正済みであり、上記2.0で追跡している。DISC-004(c)はIssue #1493のscope外の既存欠陥としてIssue #1495へ分離した。round 1・round 2（既定branch追随の取り直し）のいずれも新規指摘は0件だった）。
+round 1・round 2（既定branch追随の取り直し）は指摘0件。round 3でCodeRabbitのPR後レビューにより1件（REV-1493-01、上記）が見つかり、同ラウンド内で是正・resolved済み。Step 10前の実装段階で発見したDISC-001〜004はいずれも前進commitで是正済みであり、上記2.0で追跡している。DISC-004(c)はIssue #1493のscope外の既存欠陥としてIssue #1495へ分離した。
 
 ## 6. ラウンド固有の確認
 
@@ -128,6 +132,12 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 
 - 全評価基準を確認した: はい。round 1確定後にPR #1494（要件追跡表の空行修正）がmainへmergeされたため、`.agent-skill-chain/docs/02_品質基準.md`「既定branch追随」節の手順で取込・`H_impl`更新・個別監査表再生成を行い、`npm test`全体を再実行して合格を確認した。
 - 指摘を確定した: 指摘0件。round 1のfixedDiff（`docs/reviews/1494_課題1494要件追跡表空行修正レビュー.md`・`docs/specs/15_要件追跡/00_追跡表.md`）はいずれも既定branch側の変更であり、candidate側の製品差分ではない。
+- 次ラウンド対象のCritical/High: なし。
+
+### ラウンド3（PR作成後の外部reviewer指摘取り込み）
+
+- 全評価基準を確認した: はい。PR #1496 push後、CodeRabbitが`src/cli.ts`のancestor検査へGIT_ENV欠落を指摘（inline comment、`src/cli.ts:1921`）。`.agent-skill-chain/docs/01_開発ワークフロー.md`「pr createより後に届いた外部reviewerの指摘は条件を満たす場合に同じPRへ取り込む」の手順に従い、前進commit（amendなし）・次round記録・review artifact H_impl更新・Step 10再記録・CodeRabbitスレッドへの返信解決の5条件で取り込んだ。
+- 指摘を確定した: REV-1493-01（High、§5参照）。指摘は有効と判断し、`GIT_ENV`未使用箇所を修正して同ラウンド内でresolvedとした。
 - 次ラウンド対象のCritical/High: なし。
 
 ## 7. テスト結果
@@ -183,7 +193,7 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 
 ## 11. 総合判定と再開地点
 
-- 未解決Critical/High: なし
+- 未解決Critical/High: なし（round 3のREV-1493-01はresolved済み）
 - Medium/Lowの記録: DISC-004で発見した2件（(a) docs/specs不整合、(b) observeReviewedForwardのdiff計算robustness）はいずれも前進commitで是正済み。関連するがIssue #1493のscope外の既存欠陥1件（audit-range-shrinking、base変更の有無と無関係）はIssue #1495へ分離済み。
 - 判定: approved
 - 新しい権限が必要な事項: なし。
@@ -196,14 +206,14 @@ PR番号、Actions run ID、immutable review IDはPR作成後にしか存在し�
 | 項目 | 内容 |
 |---|---|
 | 対象 | 実装 |
-| ラウンド | 2 |
-| 対象SHA・文書ダイジェスト | 3ee231f8e5cb622890a7ca00822b88f4db801f91 |
+| ラウンド | 3 |
+| 対象SHA・文書ダイジェスト | c68d8bacefb083373722d95a832246f217e23d06 |
 | 比較基点 | `920d0af0d37724dbbaee45fd15b4ceeaa64adb41` |
-| H_impl | `3ee231f8e5cb622890a7ca00822b88f4db801f91` |
-| 対象差分 | dist/src/adapters/evidence-reanchor.js、dist/src/cli.js、dist/src/domain/decision-contract.js、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/evidence-reanchor.ts、src/cli.ts、src/domain/decision-contract.ts、test/features/e2e/workflow-step-enforcement-cli.feature、test/features/integration/evidence-reanchor.feature、test/steps/evidence-reanchor.steps.ts、test/steps/workflow-step-enforcement.steps.ts |
+| H_impl | `c68d8bacefb083373722d95a832246f217e23d06` |
+| 対象差分 | docs/reviews/1493_課題1493既定branch追随pr-reanchorレビュー.md（round 2記録分）、dist/src/adapters/evidence-reanchor.js、dist/src/cli.js、dist/src/domain/decision-contract.js、docs/specs/02_要件/01_ワークフロー要件.md、docs/specs/15_要件追跡/00_追跡表.md、docs/specs/15_要件追跡/01_変更履歴.md、src/adapters/evidence-reanchor.ts、src/cli.ts、src/domain/decision-contract.ts、test/features/e2e/workflow-step-enforcement-cli.feature、test/features/integration/evidence-reanchor.feature、test/steps/evidence-reanchor.steps.ts、test/steps/workflow-step-enforcement.steps.ts |
 | 対象外 | 比較基点に存在し変更されていない範囲 |
-| 残り予算 | 5ラウンド（同一scope上限6ラウンド中round 1で1消費。round 2は既定branch追随の取り直しでGitの自動merge treeと一致・findings 0件のため予算に数えない） |
-| ラウンド数 | 2（round 2は取り直し） |
+| 残り予算 | 4ラウンド（同一scope上限6ラウンド中round 1・round 3で2消費。round 2は既定branch追随の取り直しでGitの自動merge treeと一致・findings 0件のため予算に数えない） |
+| ラウンド数 | 3（round 2は取り直し、round 3はPR後のCodeRabbit指摘取り込み） |
 | Step chain | 経由: `.agent-skill-chain/tmp/issues/20260926_010231_既定branch追随を伴うpr-bound前進commitをpr-reanchorが受理できない` |
 | 仕様の所有箇所 | `docs/specs/02_要件/01_ワークフロー要件.md`のreviewed-forward不変条件段落、`.agent-skill-chain/docs/02_品質基準.md`「既定branch追随」節 |
 | 成果物行数 | 製品変更: `src/adapters/evidence-reanchor.ts`約20行、`src/cli.ts`約35行、`src/domain/decision-contract.ts`1行。test変更: 約280行。docs/specs変更: 約15行 |
