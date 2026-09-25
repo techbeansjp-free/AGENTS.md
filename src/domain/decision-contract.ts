@@ -121,7 +121,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "7139",
+      callerLine: "7176",
       callerAnchor: "validateSpecs(root",
     }),
     Object.freeze({

@@ -340,6 +340,18 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-060"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  @issue-1493
+  Scenario: SCN-E2E-WFSTEP-067 pr mergeはreviewed-forwardのnewBaseShaが既定branch tipのancestorでない場合を拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-067"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  @issue-1493
+  Scenario: SCN-E2E-WFSTEP-068 pr mergeはreviewed-forwardのnewBaseShaが既定branch tipと一致する場合を許可する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-068"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-048 索引の反映待ちを経て1回のpr createでbindする
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-048"のE2E検査を実行する

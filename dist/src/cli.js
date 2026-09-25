@@ -1122,6 +1122,35 @@ function inspectAuthorizedPullRequestMerge(input) {
         authority.headRefOid !== observed.headRefOid ||
         authority.defaultBranchTipOid !== trustedCommitSha)
         throw new Error("provider authorityのrepository・既定branch・base・headがtrusted policy setと一致しません");
+    /**
+     * **base変更を伴うreviewed-forwardのnewBaseShaを、検証済み既定branch tipへ
+     * 再確認する（Issue #1493 round 2、独立reviewの発見）。**
+     *
+     * `observeReviewedForward`はoldBaseShaがnewBaseShaのancestorであることしか
+     * 要求しない。newBaseShaへ既定branch以外の未audit commitを混ぜると、
+     * audit範囲（newBase..H_impl）がその分だけ縮み、範囲外のfileが監査を経ず
+     * mergeへ到達しうる（Issue #966と同型のaudit-range-shrinking attack）。
+     * `pr reanchor`自体はprovider呼び出しを行わない既存設計を保つため、この
+     * 再確認はmerge直前・上で検証済みの`authority.defaultBranchTipOid`を
+     * 基点にlocal Gitのancestor関係だけで行う。
+     *
+     * **対象はterminal reanchor recordの`reviewed-forward`だけである。** `rebase`・
+     * `artifact-replacement`・`artifact-supersession`はbase不変または別の等価性
+     * 条件で成立するため、本チェックの対象外とする（`rebase`のnewBase起点混入は
+     * 別種のexposureとして別Issueへ分離する）。
+     */
+    const terminalReanchor = readEvidenceReanchorChain(input.staging).at(-1);
+    if (terminalReanchor?.method === "reviewed-forward" &&
+        terminalReanchor.oldBaseSha !== terminalReanchor.newBaseSha) {
+        const ancestor = git([
+            "merge-base",
+            "--is-ancestor",
+            terminalReanchor.newBaseSha,
+            authority.defaultBranchTipOid,
+        ], input.root, { allowFailure: true });
+        if (ancestor.status !== 0)
+            throw new Error("reviewed-forwardが記録したnewBaseShaが検証済み既定branch tipのancestorではありません");
+    }
     const protection = github("branch.protection", { repository: input.repository, branch: input.base }, input.root);
     const deliveryPolicy = github("branch.delivery-policy", { repository: input.repository, branch: input.base }, input.root);
     const statusCheckRollup = observed.statusCheckRollup;
