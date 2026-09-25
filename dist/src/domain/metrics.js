@@ -1,0 +1,228 @@
+import { isRecord } from "../types.js";
+import { countedRounds, } from "./review-convergence.js";
+/**
+ * TERM-ASC-131（計測イベント）。role切替・model呼び出し・deterministic tool呼び出しの
+ * 開始・終了を、staging配下`journal/metrics-events.jsonl`へ追記専用で記録する最小単位。
+ *
+ * **compiled codeが自動生成しない。** Step境界は現状SKILL.md（進行役が読む手順書）にしか
+ * 表現がなく、compiled codeが役割切替・model呼び出しを自動観測する経路は無い
+ * （Issue #1482調査、`memo/v0.4.*-計画/01_v0.4.0_計測基盤.md`）。進行役の明示発行だけを受理する。
+ */
+export const METRICS_EVENT_KINDS = ["role", "model", "deterministic"];
+export const METRICS_EVENT_PHASES = ["start", "end"];
+const METRICS_EVENT_FIELDS = new Set(["kind", "phase", "label", "recordedAt"]);
+function nonEmptyString(value) {
+    return typeof value === "string" && value.trim() !== "";
+}
+/** 制御文字（tab・改行を含む）を含む文字列を拒否する。悪用試験SCN-MT-1482-010が対象。 */
+function hasControlCharacter(value) {
+    return /[\u0000-\u001f\u007f]/u.test(value);
+}
+function isUtcInstant(value) {
+    if (typeof value !== "string")
+        return false;
+    const timestamp = Date.parse(value);
+    return (Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value);
+}
+function isMetricsEventKind(value) {
+    return METRICS_EVENT_KINDS.some((kind) => kind === value);
+}
+function isMetricsEventPhase(value) {
+    return METRICS_EVENT_PHASES.some((phase) => phase === value);
+}
+/**
+ * `journal/metrics-events.jsonl`の1行をstrictに検証する。
+ *
+ * 既存`journal/steps.jsonl`のparser（`parseStepJournal`、`src/domain/workflow.ts`）と
+ * 同じ様式（未知field拒否、ISO 8601 UTC厳密一致、行番号付きエラー）を踏襲するが、
+ * `StepJournalEntry`のschemaは変更しない（BR-1482-01）。
+ */
+export function parseMetricsEventLine(value, line) {
+    const label = `metrics events ${line}行目`;
+    const errors = [];
+    if (!isRecord(value))
+        return { errors: [`${label}はobjectが必要です`] };
+    const unknown = Object.keys(value).filter((field) => !METRICS_EVENT_FIELDS.has(field));
+    if (unknown.length > 0)
+        errors.push(`${label}の未知fieldを拒否しました: ${unknown.join(", ")}`);
+    if (!isMetricsEventKind(value.kind))
+        errors.push(`${label}.kindはrole・model・deterministicのいずれかが必要です`);
+    if (!isMetricsEventPhase(value.phase))
+        errors.push(`${label}.phaseはstart・endのいずれかが必要です`);
+    if (!nonEmptyString(value.label))
+        errors.push(`${label}.labelは空でない文字列が必要です`);
+    else if (hasControlCharacter(value.label))
+        errors.push(`${label}.labelに制御文字を含めることはできません`);
+    if (!isUtcInstant(value.recordedAt))
+        errors.push(`${label}.recordedAtはISO 8601 UTC日時が必要です`);
+    if (errors.length > 0)
+        return { errors };
+    return {
+        entry: {
+            kind: value.kind,
+            phase: value.phase,
+            label: value.label,
+            recordedAt: value.recordedAt,
+        },
+        errors: [],
+    };
+}
+/** JSONL全体をparseする。既存`parseStepJournal`と同じ空行スキップ・行番号付き様式。 */
+export function parseMetricsEventLog(text) {
+    const entries = [];
+    const errors = [];
+    const lines = text.split(/\r?\n/u);
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index] ?? "";
+        if (line.trim() === "")
+            continue;
+        try {
+            const parsed = parseMetricsEventLine(JSON.parse(line), index + 1);
+            errors.push(...parsed.errors);
+            if (parsed.entry)
+                entries.push(parsed.entry);
+        }
+        catch {
+            errors.push(`metrics events ${index + 1}行目は正しいJSONではありません`);
+        }
+    }
+    return { entries, errors };
+}
+/** kindごとの現在の開区間label。無ければidle（undefined）。INV-03/04の判定に使う。 */
+export function openLabelsByKind(entries) {
+    const open = {};
+    for (const entry of entries) {
+        if (entry.phase === "start")
+            open[entry.kind] = entry.label;
+        else
+            delete open[entry.kind];
+    }
+    return open;
+}
+/**
+ * 新規eventが状態遷移契約（INV-03・INV-04）を満たすかを検証する。
+ *
+ * 各kindは独立にidle/openの2状態を持つ（01 §2.4）。startはidleのときだけ、
+ * endはopenのときだけ受理する。単一進行役の逐次実行を前提とし、
+ * 同一kindの並行開区間は扱わない（02 §4.3「対象外」）。
+ */
+export function validateNextMetricsEvent(existing, candidate) {
+    const open = openLabelsByKind(existing);
+    const currentLabel = open[candidate.kind];
+    if (candidate.phase === "start") {
+        if (currentLabel !== undefined)
+            return {
+                ok: false,
+                reason: `kind=${candidate.kind}は既にlabel="${currentLabel}"でopen状態です（INV-03）。先にphase=endを記録してください`,
+            };
+        return { ok: true };
+    }
+    if (currentLabel === undefined)
+        return {
+            ok: false,
+            reason: `kind=${candidate.kind}はidle状態のためphase=endを記録できません（INV-04）。対応するphase=startが必要です`,
+        };
+    return { ok: true };
+}
+/**
+ * FR-1482-01。`journal/steps.jsonl`の**行順**（append順）で連続するentry間の
+ * `recordedAt`差分を`step_ms`として算出する。行順を正本とし時刻順で並べ替えない
+ * （TERM-ASC-063「行順で検証し、時刻順だけで実施を推測しない」）。
+ */
+export function computeStepDurationsMs(entries) {
+    const durations = [];
+    for (let index = 1; index < entries.length; index += 1) {
+        const previous = entries[index - 1];
+        const current = entries[index];
+        if (!previous || !current)
+            continue;
+        const fromMs = Date.parse(previous.recordedAt);
+        const toMs = Date.parse(current.recordedAt);
+        if (!Number.isFinite(fromMs) || !Number.isFinite(toMs))
+            continue;
+        durations.push({
+            step: current.step,
+            ms: Math.max(0, toMs - fromMs),
+            fromRecordedAt: previous.recordedAt,
+            toRecordedAt: current.recordedAt,
+        });
+    }
+    return durations;
+}
+/**
+ * FR-1482-02。`countedRounds`（`src/domain/review-convergence.ts`）をそのまま再利用する。
+ * `followOnly`・`recordLayerOnly`のroundは予算に数えないという既存契約と同じ定義を使う。
+ */
+export function computeReviewRounds(state) {
+    return countedRounds(state);
+}
+/**
+ * FR-1482-04。`journal/metrics-events.jsonl`のstart/end対から
+ * `role_ms`/`model_ms`/`deterministic_ms`とlabel別内訳を算出する。
+ *
+ * 未終了区間（開いたままのstart）はwarningとして報告し合計から除外する（02 §6）。
+ */
+export function computeEventDurationsMs(entries) {
+    const totals = {};
+    const byLabel = {};
+    const warnings = [];
+    const open = {};
+    for (const entry of entries) {
+        if (entry.phase === "start") {
+            if (open[entry.kind])
+                warnings.push(`kind=${entry.kind}で未終了のstart（label="${open[entry.kind].label}"）を新しいstartが上書きしました`);
+            open[entry.kind] = { label: entry.label, recordedAt: entry.recordedAt };
+            continue;
+        }
+        const started = open[entry.kind];
+        if (!started) {
+            warnings.push(`kind=${entry.kind}のend（label="${entry.label}"）に対応するstartがありません`);
+            continue;
+        }
+        const fromMs = Date.parse(started.recordedAt);
+        const toMs = Date.parse(entry.recordedAt);
+        const ms = Number.isFinite(fromMs) && Number.isFinite(toMs)
+            ? Math.max(0, toMs - fromMs)
+            : 0;
+        totals[entry.kind] = (totals[entry.kind] ?? 0) + ms;
+        const key = `${entry.kind}:${started.label}`;
+        byLabel[key] = (byLabel[key] ?? 0) + ms;
+        delete open[entry.kind];
+    }
+    for (const [kind, interval] of Object.entries(open)) {
+        if (interval)
+            warnings.push(`kind=${kind}のstart（label="${interval.label}"）が終了していません（unavailable扱い）`);
+    }
+    return { totals, byLabel, warnings };
+}
+/**
+ * FR-1482-05・BR-1482-03。`artifact_build_ms`はrole=implementerのrole_msだけから
+ * 算出し（`src/domain/role.ts`のROLES列挙のうちimplementerだけを対象にする）、
+ * `support_ms`は計測window全体からそれを差し引いた値とする（02 §12で確定した式）。
+ */
+export function computeSupportArtifactSplit(input) {
+    const artifactBuildMs = input.roleByLabel["role:implementer"] ?? 0;
+    const supportMs = Math.max(0, input.windowMs - artifactBuildMs);
+    return { artifact_build_ms: artifactBuildMs, support_ms: supportMs };
+}
+/**
+ * 計測window全体のms。`journal/steps.jsonl`の最初と最後のentry、および
+ * `journal/metrics-events.jsonl`の最初と最後のeventのうち、経過msが大きい方を採用する
+ * （02 §12・03 T04で確定した式）。
+ */
+export function computeMetricsWindowMs(input) {
+    const span = (timestamps) => {
+        if (timestamps.length < 2)
+            return 0;
+        const parsed = timestamps
+            .map((value) => Date.parse(value))
+            .filter((value) => Number.isFinite(value));
+        if (parsed.length < 2)
+            return 0;
+        return Math.max(0, Math.max(...parsed) - Math.min(...parsed));
+    };
+    const stepSpan = span(input.stepEntries.map((entry) => entry.recordedAt));
+    const eventSpan = span(input.eventEntries.map((entry) => entry.recordedAt));
+    return Math.max(stepSpan, eventSpan);
+}
+//# sourceMappingURL=metrics.js.map
