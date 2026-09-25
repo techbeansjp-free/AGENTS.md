@@ -492,10 +492,24 @@ function observeArtifactReplacement(staging, root, input) {
  * `pr-bound`後に外部reviewer指摘を取り込んだ前進commitを、新しいreview roundへ
  * 束縛する。旧delivery headをancestorに持つこと、exact session、明示intake、
  * review artifactの構造と監査をすべて再観測し、force rewriteや未review差分を拒否する。
+ *
+ * **base変更（既定branch追随）も同じ経路で扱う（Issue #1493）。** 以降の全チェックは
+ * `input.newBaseSha`だけを参照し`input.oldBaseSha`には依存しないため、base自体を
+ * 固定する必要はない。base変更を認識するために必要な追加条件は「oldBaseShaが
+ * newBaseShaの正当な前進（ancestor）であること」の1点であり、それを`observeReviewDiff`の
+ * 既存ancestor検証（非ancestorなら例外）へ委ねて確認する。newBaseShaが実際の
+ * GitHub既定branch tipであることまではここで検証しない。それは`pr merge`が
+ * provider観測で別途行う（`.agent-skill-chain/docs/01_開発ワークフロー.md`Step 11節）。
  */
 function observeReviewedForward(staging, root, input) {
-    if (input.oldBaseSha !== input.newBaseSha)
-        return undefined;
+    if (input.oldBaseSha !== input.newBaseSha) {
+        try {
+            observeReanchorDiff(root, "旧base→新base", input, input.oldBaseSha, input.newBaseSha);
+        }
+        catch {
+            return undefined;
+        }
+    }
     const finalParent = observeSingleCommitParent(root, input.newHeadSha);
     const finalSuffix = observeReanchorDiff(root, "新H_final親→新H_final", input, finalParent, input.newHeadSha);
     const artifactPath = terminalArtifactPath(finalSuffix.changedPaths);
