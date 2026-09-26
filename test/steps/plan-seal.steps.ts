@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
+import { appendLegacyJournal } from "../support/legacy-journal.js";
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import { assertWorkflowReadyForDelivery, main } from "../../src/cli.js";
-import { assertStoredStagingDigestForTest } from "../../src/adapters/review-session.js";
+import {
+  assertStoredStagingDigestForTest,
+  previewReviewRound,
+} from "../../src/adapters/review-session.js";
+import { assertPlanFrozenForEntries } from "../../src/adapters/plan-seal.js";
+import type { ReviewRoundInput } from "../../src/domain/review-convergence.js";
 import {
   appendWorkflowJournalEntry,
   assertPlanFrozen,
@@ -32,7 +38,12 @@ import {
   stagingDriftDiagnostic,
   validatePlanAmendment,
 } from "../../src/domain/plan-seal.js";
-import { refreshStoredStagingDigest } from "../../src/domain/staging.js";
+import {
+  calculateStagingDigest,
+  listStagingArtifacts,
+  readStoredStagingRecord,
+  refreshStoredStagingDigest,
+} from "../../src/domain/staging.js";
 import {
   parseStepJournal,
   STEP_JOURNAL_FILE,
@@ -301,7 +312,7 @@ Given(
       [1, "step-01-request"],
       [4, "step-04-issue-sync"],
     ] as const)
-      fs.appendFileSync(
+      appendLegacyJournal(
         path.join(this.staging, STEP_JOURNAL_FILE),
         `${JSON.stringify({
           step,
@@ -778,7 +789,7 @@ function driftedStaging(
   world.staging = stage(world, "quick", world.root);
   const sha = "a".repeat(40);
   for (const step of steps)
-    fs.appendFileSync(
+    appendLegacyJournal(
       path.join(world.staging, STEP_JOURNAL_FILE),
       `${journalLine(step, "quick", {
         ...(step === 9 ? { implementationHeadSha: sha } : {}),
@@ -1463,3 +1474,300 @@ Then("AMD-001をcommitするとStep 9は世代2を記録する", async function 
     { id: "AMD-001", digest: sha256Text(amendmentEntry("AMD-001")) },
   ]);
 });
+
+// ---- journal hash chain（SCN-UNIT-PLANSEAL-021〜025） ----
+
+/**
+ * **期待するchain値は実装の関数ではなく、journal本文のbyte列から直接計算する。**
+ * 実装の`journalPrefixDigest`を使うと、計算式の変異が両側で同じ向きにずれて生存する。
+ */
+function expectedChain(text: string): Array<string | null> {
+  const expected: Array<string | null> = [];
+  let offset = 0;
+  for (const line of text.split("\n")) {
+    if (line.trim() !== "")
+      expected.push(offset === 0 ? null : sha256Text(text.slice(0, offset)));
+    offset += line.length + 1;
+  }
+  return expected;
+}
+
+function rawChainValues(text: string): unknown[] {
+  return text
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => {
+      const value = JSON.parse(line) as Record<string, unknown>;
+      return "previousEntryDigest" in value
+        ? value.previousEntryDigest
+        : "（なし）";
+    });
+}
+
+/** journalのうち`step`に一致する最後の行を書き換える。他の行のbyte列は変えない。 */
+function rewriteJournalLine(
+  staging: string,
+  step: number,
+  mutate: (value: Record<string, unknown>) => void,
+): void {
+  const file = path.join(staging, STEP_JOURNAL_FILE);
+  const lines = fs.readFileSync(file, "utf8").split("\n");
+  let index = -1;
+  lines.forEach((line, candidate) => {
+    if (
+      line.trim() !== "" &&
+      (JSON.parse(line) as { step: number }).step === step
+    )
+      index = candidate;
+  });
+  assert.ok(index >= 0, `Step ${step}の行がありません`);
+  const value = JSON.parse(lines[index] ?? "") as Record<string, unknown>;
+  mutate(value);
+  lines[index] = JSON.stringify(value);
+  fs.writeFileSync(file, lines.join("\n"));
+}
+
+function reviewRoundError(staging: string): string {
+  try {
+    previewReviewRound({ staging, round: {} as ReviewRoundInput });
+    return "";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+function currentStagingDigest(staging: string): string {
+  return calculateStagingDigest(staging, listStagingArtifacts(staging));
+}
+
+When("呼出し側の偽のpreviousEntryDigest付きでStep 9を記録する", function () {
+  appendWorkflowJournalEntry({
+    staging: this.staging,
+    entry: quickEntry(9, { previousEntryDigest: "f".repeat(64) }),
+  });
+});
+
+Then(
+  "Step 0行はpreviousEntryDigestにnullを持ち以降の各行は先行するjournal本文のdigestを持つ",
+  function () {
+    const text = journalOf(this.staging);
+    const parsed = parseStepJournal(text);
+    assert.deepEqual(parsed.errors, []);
+    assert.deepEqual(
+      parsed.entries.map((entry) => entry.step),
+      [0, 1, 4, 9],
+    );
+    assert.equal(parsed.entries[0]?.previousEntryDigest, null);
+    assert.deepEqual(rawChainValues(text), expectedChain(text));
+    assert.equal(
+      new Set(rawChainValues(text)).size,
+      4,
+      "各行のchain値は異なる先行本文を束縛します",
+    );
+  },
+);
+
+Then("Step 9行は呼出し側の偽のpreviousEntryDigestを採用しない", function () {
+  const entry = lastEntry(this.staging);
+  assert.equal(entry.step, 9);
+  assert.notEqual(entry.previousEntryDigest, "f".repeat(64));
+  assert.equal(
+    entry.previousEntryDigest,
+    expectedChain(journalOf(this.staging)).at(-1),
+  );
+});
+
+Given("Step 9まで記録したchain付きquick stagingがある", async function () {
+  await sealedQuick(this);
+  await recordAll(this.staging, [9]);
+  this.journalBefore = journalOf(this.staging);
+});
+
+When("Step 4行からplanSealを除きstaging digestを再固定する", function () {
+  rewriteJournalLine(this.staging, 4, (value) => {
+    assert.ok(value.planSeal, "Step 4行に封印がありません");
+    delete value.planSeal;
+  });
+  /** 改変者が集合digestも再固定した状態。digest照合だけでは検出できない */
+  refreshStoredStagingDigest(this.staging);
+  this.journalBefore = journalOf(this.staging);
+});
+
+Then(
+  "Step 10記録と配送直前検査とreview roundの再固定は拒否しjournalは変わらない",
+  function () {
+    const broken =
+      /journal 4行目\.previousEntryDigestが先行するjournal本文と一致しません/u;
+    const step10 = appendError(this.staging, quickEntry(10));
+    assert.match(step10, /journalの追記前検査に失敗しました/u);
+    assert.match(step10, broken);
+    const delivery = deliveryError(this.staging);
+    assert.match(delivery, /計画凍結検査のworkflow journalが不正です/u);
+    assert.match(delivery, broken);
+    /** 成果物を追加してdigestをずらし、review roundが再固定しないことを観測する */
+    fs.writeFileSync(path.join(this.staging, "99_メモ.md"), "追加した\n");
+    const storedBefore = readStoredStagingRecord(this.staging).digest;
+    assert.notEqual(storedBefore, currentStagingDigest(this.staging));
+    const round = reviewRoundError(this.staging);
+    assert.match(
+      round,
+      /workflow journalが不正なためreview roundのstaging digest再固定を拒否しました/u,
+    );
+    assert.match(round, broken);
+    assert.equal(readStoredStagingRecord(this.staging).digest, storedBefore);
+    assert.equal(journalOf(this.staging), this.journalBefore);
+  },
+);
+
+Then(
+  "末尾の封印Step行からplanSealを除いてもjournal構造検査が拒否する",
+  async function () {
+    const staging = stage(this, "quick", this.initRepo());
+    await recordAll(staging, [1, 4]);
+    rewriteJournalLine(staging, 4, (value) => {
+      assert.ok(value.planSeal, "Step 4行に封印がありません");
+      delete value.planSeal;
+    });
+    refreshStoredStagingDigest(staging);
+    const missing =
+      /journal 3行目はchain付きjournalの封印Step（quickのStep 4）ですがplanSealがありません/u;
+    assert.ok(
+      parseStepJournal(journalOf(staging)).errors.some((error) =>
+        missing.test(error),
+      ),
+    );
+    assert.match(appendError(staging, quickEntry(9)), missing);
+    assert.match(deliveryError(staging), missing);
+    assert.match(reviewRoundError(staging), missing);
+  },
+);
+
+When("chain付きjournalの先行行を1箇所ずつ改変する", function () {
+  const file = path.join(this.staging, STEP_JOURNAL_FILE);
+  const original = journalOf(this.staging);
+  const lines = original.trimEnd().split("\n");
+  assert.equal(lines.length, 4);
+  const withoutChain = (line: string): string => {
+    const value = JSON.parse(line) as Record<string, unknown>;
+    delete value.previousEntryDigest;
+    return JSON.stringify(value);
+  };
+  const cases: Record<string, string> = {
+    edit: original.replace("Step 1の証跡", "Step 1の書き換えた証跡"),
+    remove: `${lines.slice(1).join("\n")}\n`,
+    insert: `${[lines[0], lines[1], lines[1], ...lines.slice(2)].join("\n")}\n`,
+    reorder: `${[lines[0], lines[2], lines[1], lines[3]].join("\n")}\n`,
+    strip: `${[...lines.slice(0, 3), withoutChain(lines[3] ?? "")].join("\n")}\n`,
+  };
+  assert.notEqual(cases.edit, original, "編集の置換が空振りしています");
+  this.drifts = {};
+  for (const [label, text] of Object.entries(cases)) {
+    fs.writeFileSync(file, text);
+    this.drifts[label] = parseStepJournal(journalOf(this.staging)).errors.join(
+      "; ",
+    );
+  }
+  fs.writeFileSync(file, original);
+  assert.deepEqual(parseStepJournal(journalOf(this.staging)).errors, []);
+});
+
+Then("各改変はchainの不一致または欠落を名指しして拒否される", function () {
+  const mismatch = (line: number): RegExp =>
+    new RegExp(
+      `journal ${line}行目\\.previousEntryDigestが先行するjournal本文と一致しません`,
+      "u",
+    );
+  const expectations: Record<string, RegExp> = {
+    edit: mismatch(3),
+    remove: mismatch(1),
+    insert: mismatch(3),
+    reorder: mismatch(2),
+    strip: /journal 4行目にpreviousEntryDigestがありません/u,
+  };
+  for (const [label, pattern] of Object.entries(expectations))
+    assert.match(this.drifts[label] ?? "", pattern, label);
+});
+
+When("末尾のStep 10行からplanGenerationを除く", function () {
+  rewriteJournalLine(this.staging, 10, (value) => {
+    assert.ok(value.planGeneration, "Step 10行に計画世代がありません");
+    delete value.planGeneration;
+  });
+  refreshStoredStagingDigest(this.staging);
+});
+
+Then("配送直前検査はplanGenerationの欠落を名指しして拒否する", function () {
+  const diagnostic = deliveryError(this.staging);
+  assert.match(
+    diagnostic,
+    /journal 5行目はchain付きjournalの封印後のStep 10ですがplanGenerationがありません/u,
+  );
+  assert.doesNotMatch(diagnostic, /同期済み記録から変化しています/u);
+});
+
+Then(
+  "行単位の検査を経ない配送時の世代検査もplanGenerationの欠落を拒否する",
+  function () {
+    const entries = parseStepJournal(journalOf(this.staging)).entries;
+    assert.equal(entries.at(-1)?.step, 10);
+    assert.throws(
+      () =>
+        assertPlanFrozenForEntries(this.staging, entries, "HEAD", {
+          delivery: true,
+        }),
+      /chain付きjournalの封印後の最後のStep 10にplanGenerationがありません/u,
+    );
+    /** chainを持たない旧journalでは従来どおり世代検査を読み飛ばす */
+    const legacy = entries.map((entry) => {
+      const copy = { ...entry };
+      delete copy.previousEntryDigest;
+      return copy;
+    });
+    assert.doesNotThrow(() =>
+      assertPlanFrozenForEntries(this.staging, legacy, "HEAD", {
+        delivery: true,
+      }),
+    );
+  },
+);
+
+When("旧journalへCLIでStep 9を追記する", function () {
+  this.journalBefore = journalOf(this.staging);
+  appendWorkflowJournalEntry({ staging: this.staging, entry: quickEntry(9) });
+});
+
+Then("旧journalは構造検査を通りStep 9行だけがchainを持つ", function () {
+  assert.deepEqual(rawChainValues(this.journalBefore), [
+    "（なし）",
+    "（なし）",
+    "（なし）",
+  ]);
+  const text = journalOf(this.staging);
+  assert.ok(text.startsWith(this.journalBefore), "旧行が書き換えられています");
+  assert.deepEqual(parseStepJournal(text).errors, []);
+  assert.deepEqual(rawChainValues(text), [
+    "（なし）",
+    "（なし）",
+    "（なし）",
+    sha256Text(this.journalBefore),
+  ]);
+});
+
+Then(
+  "Step 9より前の旧行を編集するとchainの不一致として拒否される",
+  function () {
+    rewriteJournalLine(this.staging, 1, (value) => {
+      value.evidence = "旧行を書き換えた証跡";
+    });
+    const errors = parseStepJournal(journalOf(this.staging)).errors;
+    assert.equal(errors.length, 1, errors.join("; "));
+    assert.match(
+      errors[0] ?? "",
+      /journal 4行目\.previousEntryDigestが先行するjournal本文と一致しません/u,
+    );
+    assert.match(
+      deliveryError(this.staging),
+      /計画凍結検査のworkflow journalが不正です/u,
+    );
+  },
+);

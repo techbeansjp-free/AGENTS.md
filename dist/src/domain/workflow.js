@@ -1,7 +1,8 @@
 import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import { classifyMode, POC_LIMITS, POC_OBSERVABLE_KINDS, QUESTIONS, } from "./mode.js";
-import { parsePlanGeneration, parsePlanSeal, } from "./plan-seal.js";
+import { parsePlanGeneration, parsePlanSeal, planSealStep, } from "./plan-seal.js";
+import crypto from "node:crypto";
 export const MODE_DECISION_FILE = "00_モード判定.json";
 export const WORKFLOW_JOURNAL_DIRECTORY = "journal";
 export const STEP_JOURNAL_BASENAME = "steps.jsonl";
@@ -228,6 +229,7 @@ const JOURNAL_FIELDS = new Set([
     "reconfirmation",
     "planSeal",
     "planGeneration",
+    "previousEntryDigest",
 ]);
 const POC_OBSERVATION_BINDING_FIELDS = new Set(["headSha", "evidenceDigest"]);
 const REVIEW_SESSION_BINDING_FIELDS = new Set([
@@ -467,6 +469,14 @@ function parseJournalEntry(value, line) {
         errors.push(...parsed.errors);
         planGeneration = parsed.value;
     }
+    let previousEntryDigest;
+    if (value.previousEntryDigest !== undefined) {
+        if (value.previousEntryDigest !== null &&
+            !/^[a-f0-9]{64}$/u.test(String(value.previousEntryDigest)))
+            errors.push(`${label}.previousEntryDigestは64桁SHA-256またはnullが必要です`);
+        else
+            previousEntryDigest = value.previousEntryDigest;
+    }
     if (errors.length > 0)
         return { errors };
     return {
@@ -486,21 +496,70 @@ function parseJournalEntry(value, line) {
             ...(reconfirmation ? { reconfirmation } : {}),
             ...(planSeal ? { planSeal } : {}),
             ...(planGeneration ? { planGeneration } : {}),
+            ...(previousEntryDigest !== undefined ? { previousEntryDigest } : {}),
         },
         errors,
     };
 }
+/**
+ * journal hash chainの値（REQ-WF-036）。追記する行より前のjournal本文全体の
+ * SHA-256であり、本文が空（先頭行）なら`null`である。
+ */
+export function journalPrefixDigest(prefix) {
+    return prefix === ""
+        ? null
+        : crypto.createHash("sha256").update(prefix, "utf8").digest("hex");
+}
+/**
+ * chain付きentryの整合（REQ-WF-036）。**chainはCLIが計算した記録であることの証拠であり、
+ * chain付きjournalでは封印関連fieldの欠落を旧journal互換として扱わない。**
+ */
+function chainedEntryErrors(entry, earlier, label) {
+    const errors = [];
+    if (entry.step === planSealStep(entry.mode) &&
+        entry.humanOverride === undefined &&
+        entry.planSeal === undefined)
+        errors.push(`${label}はchain付きjournalの封印Step（${entry.mode}のStep ${entry.step}）ですがplanSealがありません。旧journal互換として扱わず拒否します`);
+    if ((entry.step === 9 || entry.step === 10) &&
+        entry.planGeneration === undefined &&
+        earlier.some((candidate) => candidate.planSeal !== undefined))
+        errors.push(`${label}はchain付きjournalの封印後のStep ${entry.step}ですがplanGenerationがありません。旧journal互換として扱わず拒否します`);
+    return errors;
+}
 export function parseStepJournal(text) {
     const entries = [];
     const errors = [];
-    const lines = text.split(/\r?\n/u);
+    const lines = text.split("\n");
+    /**
+     * **hash chain（REQ-WF-036）。** 1行でも`previousEntryDigest`を持てば、それ以降の全行が
+     * 持ち、各値が行より前のjournal本文のexact digestと一致しなければならない。先行行の
+     * 編集・削除・挿入・並べ替えと、chain以降の行からのfield除去を拒否する。
+     */
+    let chained = false;
+    let offset = 0;
     for (let index = 0; index < lines.length; index += 1) {
-        const line = lines[index] ?? "";
+        const raw = lines[index] ?? "";
+        const prefix = text.slice(0, offset);
+        offset += raw.length + 1;
+        const line = raw.replace(/\r$/u, "");
         if (line.trim() === "")
             continue;
+        const label = `journal ${index + 1}行目`;
         try {
-            const parsed = parseJournalEntry(parseJsonStrict(line, `journal ${index + 1}行目`), index + 1);
+            const value = parseJsonStrict(line, label);
+            const parsed = parseJournalEntry(value, index + 1);
             errors.push(...parsed.errors);
+            const hasDigest = isRecord(value) && value.previousEntryDigest !== undefined;
+            if (hasDigest) {
+                chained = true;
+                if (parsed.entry &&
+                    parsed.entry.previousEntryDigest !== journalPrefixDigest(prefix))
+                    errors.push(`${label}.previousEntryDigestが先行するjournal本文と一致しません。記録済み行の編集・削除・挿入・並べ替えを拒否します`);
+            }
+            else if (chained)
+                errors.push(`${label}にpreviousEntryDigestがありません。chain付きjournalでは以降の全行にhash chainが必要です`);
+            if (parsed.entry && hasDigest)
+                errors.push(...chainedEntryErrors(parsed.entry, entries, label));
             if (parsed.entry)
                 entries.push(parsed.entry);
         }

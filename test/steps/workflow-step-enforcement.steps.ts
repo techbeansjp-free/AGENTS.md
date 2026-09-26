@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import {
+  appendLegacyJournal,
+  unchainedJournalText,
+} from "../support/legacy-journal.js";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -792,7 +796,14 @@ When("{string}の単体検査を実行する", async function (scenarioId: strin
         }).path;
         const journal = path.join(staging, STEP_JOURNAL_FILE);
         const beforeSource = fs.readFileSync(journal, "utf8");
-        const proposedSource = `${beforeSource}${JSON.stringify(entry(1))}\n`;
+        /** CLIが公開する行と同じく、先行するjournal本文のhash chainを持たせる */
+        const proposedSource = `${beforeSource}${JSON.stringify({
+          ...entry(1),
+          previousEntryDigest: crypto
+            .createHash("sha256")
+            .update(beforeSource)
+            .digest("hex"),
+        })}\n`;
         const stored = readStoredStagingRecord(staging);
         const otherArtifacts = stored.artifacts.filter(
           (artifact) => artifact !== STEP_JOURNAL_FILE,
@@ -1135,7 +1146,7 @@ When("{string}の単体検査を実行する", async function (scenarioId: strin
         preparedAt: instant,
       });
       if (scenarioId === "SCN-UNIT-WFJRNL-035") {
-        fs.appendFileSync(
+        appendLegacyJournal(
           path.join(staging, STEP_JOURNAL_FILE),
           `${JSON.stringify({ ...entry(10), postPrIntake: true })}\n`,
         );
@@ -2622,7 +2633,7 @@ function preparePullRequest(
       reviewBaseSha,
       reviewCandidateHeadSha,
     );
-    fs.appendFileSync(
+    appendLegacyJournal(
       journalFile,
       `${JSON.stringify({
         ...entry(10, "quick", fixturePast),
@@ -3747,8 +3758,8 @@ if (args[0] === "merge-base" && args[1] === "--all") {
 /** Step 4欠落を作り、既存review bindingを保ったHumanOverride経路を検査する。 */
 function removeDeliveryStep4(prepared: PreparedDeliveryCli): string {
   const journalFile = path.join(prepared.staging, STEP_JOURNAL_FILE);
-  const entries = fs
-    .readFileSync(journalFile, "utf8")
+  /** Step 4を欠く手書きjournalは旧journal（hash chainなし）として作る */
+  const entries = unchainedJournalText(journalFile)
     .trimEnd()
     .split("\n")
     .filter((line) => (JSON.parse(line) as { step: number }).step !== 4);
@@ -7711,6 +7722,8 @@ if (exact(["auth", "status"])) {
       const step4 = journalLines.find((item) => item.step === 4);
       assert.ok(step4);
       step4.artifacts.push("https://github.com/o/r/issues/878");
+      /** 手書きで改変したjournalは旧journal（hash chainなし）として作る */
+      for (const item of journalLines) delete item.previousEntryDigest;
       fs.writeFileSync(
         journalFile,
         `${journalLines.map((item) => JSON.stringify(item)).join("\n")}\n`,

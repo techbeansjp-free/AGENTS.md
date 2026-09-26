@@ -493,6 +493,17 @@ export function buildReviewRoundDraft(input: {
  * journalの同期証拠で引き続き検証する**ので、同期漏れは終端で止まる。
  */
 function refixStagingDigestForRound(staging: string): void {
+  /**
+   * **journalの整合を確かめてから再固定する**（REQ-WF-036）。staging記録は集合digestしか
+   * 持たないため、再固定は記録済みjournal行の改変も現在の内容として固定してしまう。
+   * hash chainの破損とchain付きjournalでの封印field欠落はstrict parserが拒否するので、
+   * その検査を通らないjournalではroundを成立させない（fail-closed）。
+   */
+  const journal = readWorkflowJournal(staging);
+  if (journal.errors.length > 0)
+    throw new Error(
+      `workflow journalが不正なためreview roundのstaging digest再固定を拒否しました: ${journal.errors.join("; ")}`,
+    );
   const stored = readStoredStagingRecord(staging);
   const artifacts = listStagingArtifacts(staging);
   if (

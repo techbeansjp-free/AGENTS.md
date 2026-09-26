@@ -35,7 +35,7 @@ export const DECISION_CANDIDATES = Object.freeze([
         direction: "fail-closed",
         disposition: "adopted",
         callerFile: "src/domain/issue.ts",
-        callerLine: "1688",
+        callerLine: "1693",
         callerAnchor: "detectQuickDisqualifiers(options.changedFiles",
     }),
     Object.freeze({
