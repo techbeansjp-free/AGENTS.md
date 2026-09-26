@@ -20,10 +20,31 @@ import { appendDecisionJournalRecord, findDecisionJournalRecord, } from "./decis
 import { computeDecisionInputDigest, computeDecisionRecordId, computeFindingClassificationInputDigest, } from "../domain/decision-journal.js";
 import { DECISION_TYPES, DCAND_010_SAFE_VALUE, findDecisionType, } from "../domain/decision-types.js";
 import { resolveAuthorityDecision } from "../domain/decision-authority.js";
+import { PROVIDER_AUTONOMOUS_CEILINGS } from "../domain/role.js";
 import { resolveDcand001, resolveDcand002, resolveDcand003, resolveDcand004, resolveDcand005, resolveDcand008, } from "../domain/decision-resolvers.js";
 import { isRecord } from "../types.js";
 /** lightweight-tier（自己申告provider）の現在バージョン。 */
 export const LIGHTWEIGHT_TIER_PROVIDER_VERSION = "lightweight-tier/v1";
+/**
+ * DCAND-009（reviewer選定）のPolicy Allowed部分（Issue #1485、round 2、DISC-004）。
+ *
+ * 設計正本「最終確定仕様」§1は候補集合を「Policy Allowed ∩ Configured/Dispatchable
+ * ∩ Independence Eligible（すべてcompiled codeが算出）」と定める。**round 1の実装は
+ * `--input.payload.candidateSet`を無検証で信頼しており、呼び出し側が任意の値を
+ * 候補集合として宣言できたため、compiled codeが計算した安全な集合という前提が
+ * 成立していなかった（独立reviewの指摘）。**
+ *
+ * この定数はPolicy Allowedだけを表す。`PROVIDER_AUTONOMOUS_CEILINGS`
+ * （`src/domain/role.ts`）のうち`ollama`は補助的なdelegated review（Step 3/7/10の
+ * 進行役委譲）専用であり、DCAND-009が選ぶ対象（Step 10の独立reviewer本体、
+ * `01_開発ワークフロー.md`の「Codex Sol／Opus」）ではないため除く。
+ *
+ * **Configured/Dispatchable・Independence Eligibleを算出するcompiled codeは
+ * 本Issueの時点で存在しない。** これらの絞り込みは実装せず、Policy Allowedとの
+ * 積集合だけを強制する（disclosed residual gap。`docs/reviews/1485_レビュー.md`
+ * round 2とPR本文へ明記する）。
+ */
+export const DCAND009_POLICY_ALLOWED_PROVIDERS = Object.keys(PROVIDER_AUTONOMOUS_CEILINGS).filter((provider) => provider !== "ollama");
 function requiredString(value, label) {
     if (typeof value !== "string" || value === "")
         throw new Error(`decision invoke入力の${label}は空でない文字列が必要です`);
@@ -166,7 +187,20 @@ export function invokeDecision(input) {
     if (authorityMode === "constrained-choice") {
         if (!isRecord(raw.payload) || !Array.isArray(raw.payload.candidateSet))
             throw new Error("constrained-choiceのdecision typeには--input.payload.candidateSet（配列）が必要です");
-        candidateSet = raw.payload.candidateSet.map((entry, index) => requiredString(entry, `payload.candidateSet[${index}]`));
+        const declaredCandidateSet = raw.payload.candidateSet.map((entry, index) => requiredString(entry, `payload.candidateSet[${index}]`));
+        if (type.id === "DCAND-009") {
+            // Policy Allowedとの積集合だけを実効候補集合にする。呼び出し側の宣言を
+            // そのまま信頼しない（round 1のgapの是正。上のDCAND009_POLICY_ALLOWED_PROVIDERS
+            // のコメント参照）。
+            proposedValue = proposedValue.normalize("NFC").toLowerCase();
+            const normalizedDeclared = new Set(declaredCandidateSet.map((entry) => entry.normalize("NFC").toLowerCase()));
+            candidateSet = DCAND009_POLICY_ALLOWED_PROVIDERS.filter((provider) => normalizedDeclared.has(provider));
+            if (candidateSet.length === 0)
+                throw new Error(`DCAND-009の候補集合がPolicy Allowed（${DCAND009_POLICY_ALLOWED_PROVIDERS.join("、")}）と重ならないため実行できません。--input.payload.candidateSetはPolicy Allowedの部分集合として宣言してください`);
+        }
+        else {
+            candidateSet = declaredCandidateSet;
+        }
     }
     const decision = resolveAuthorityDecision({
         authorityMode,
@@ -224,7 +258,10 @@ export function invokeDecision(input) {
         rejected: decision.rejected,
         adjudicationReason,
         ...(resolverOutput === undefined ? {} : { resolverOutput }),
-        workspace: { activeRoot: workspace.activeRoot, primaryRoot: workspace.primaryRoot },
+        workspace: {
+            activeRoot: workspace.activeRoot,
+            primaryRoot: workspace.primaryRoot,
+        },
         jevProviderConfig: jevSummary,
         providerNote: executor.kind === "provider"
             ? "lightweight-tier（自己申告provider）で処理した。Jevへの実dispatchは#1486以降まで未実装（本呼び出しでは行わない）"

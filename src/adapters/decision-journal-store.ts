@@ -16,7 +16,8 @@ import type { DecisionJournalRecord } from "../domain/decision-journal.js";
  * いた設計を踏襲すると、worktree削除でjournalが失われる（INV-03）。
  * `.gitignore`済みの`runtime/`配下であり、staging digestの対象外。
  */
-export const DECISION_JOURNAL_DIRECTORY = ".agent-skill-chain/runtime/decisions";
+export const DECISION_JOURNAL_DIRECTORY =
+  ".agent-skill-chain/runtime/decisions";
 
 function decisionJournalDirectory(primaryRoot: string, id: string): string {
   return path.join(primaryRoot, DECISION_JOURNAL_DIRECTORY, path.basename(id));
@@ -49,7 +50,9 @@ function parseExecutor(value: unknown): DecisionExecutor {
     if (value.target !== "lightweight-tier" && value.target !== "jev")
       throw new Error("executor.targetが不正です");
     const model =
-      value.model === undefined ? undefined : requiredString(value.model, "executor.model");
+      value.model === undefined
+        ? undefined
+        : requiredString(value.model, "executor.model");
     return model === undefined
       ? { kind: "provider", target: value.target }
       : { kind: "provider", target: value.target, model };
@@ -65,33 +68,51 @@ const AUTHORITY_MODES: readonly DecisionAuthorityMode[] = [
 ];
 
 function parseAuthorityMode(value: unknown): DecisionAuthorityMode {
-  if (typeof value === "string" && (AUTHORITY_MODES as readonly string[]).includes(value))
+  if (
+    typeof value === "string" &&
+    (AUTHORITY_MODES as readonly string[]).includes(value)
+  )
     return value as DecisionAuthorityMode;
   throw new Error("authorityModeが不正です");
 }
 
 /** journalの1行をpure domain型へ検証しながら変換する。 */
-export function parseDecisionJournalLine(value: unknown): DecisionJournalRecord {
+export function parseDecisionJournalLine(
+  value: unknown,
+): DecisionJournalRecord {
   if (!isRecord(value)) throw new Error("decision journal行はobjectが必要です");
   const latencyMs = value.latencyMs;
   const cost = value.cost;
-  if (typeof latencyMs !== "number" || latencyMs < 0 || !Number.isFinite(latencyMs))
+  if (
+    typeof latencyMs !== "number" ||
+    latencyMs < 0 ||
+    !Number.isFinite(latencyMs)
+  )
     throw new Error("latencyMsが不正です");
   if (typeof cost !== "number" || cost < 0 || !Number.isFinite(cost))
     throw new Error("costが不正です");
   return {
-    decisionRecordId: requiredString(value.decisionRecordId, "decisionRecordId"),
+    decisionRecordId: requiredString(
+      value.decisionRecordId,
+      "decisionRecordId",
+    ),
     decisionTypeId: requiredString(value.decisionTypeId, "decisionTypeId"),
     inputDigest: requiredString(value.inputDigest, "inputDigest"),
     subjectRef: requiredString(value.subjectRef, "subjectRef"),
-    candidateHeadSha: requiredString(value.candidateHeadSha, "candidateHeadSha"),
+    candidateHeadSha: requiredString(
+      value.candidateHeadSha,
+      "candidateHeadSha",
+    ),
     executor: parseExecutor(value.executor),
     providerModel: nullableString(value.providerModel, "providerModel"),
     providerVersion: nullableString(value.providerVersion, "providerVersion"),
     proposedValue: requiredString(value.proposedValue, "proposedValue"),
     effectiveValue: nullableString(value.effectiveValue, "effectiveValue"),
     authorityMode: parseAuthorityMode(value.authorityMode),
-    adjudicationReason: requiredString(value.adjudicationReason, "adjudicationReason"),
+    adjudicationReason: requiredString(
+      value.adjudicationReason,
+      "adjudicationReason",
+    ),
     latencyMs,
     cost,
     decidedAt: requiredString(value.decidedAt, "decidedAt"),
@@ -156,7 +177,11 @@ export function appendDecisionJournalRecord(
       throw new Error(
         `decision journalの既存内容が不正です: ${existing.errors.join("; ")}`,
       );
-    if (existing.records.some((entry) => entry.decisionRecordId === record.decisionRecordId))
+    if (
+      existing.records.some(
+        (entry) => entry.decisionRecordId === record.decisionRecordId,
+      )
+    )
       throw new Error(
         `decisionRecordIdが既存journalと重複しています: ${record.decisionRecordId}`,
       );
@@ -171,7 +196,9 @@ export function appendDecisionJournalRecord(
     const reread = readDecisionJournal(primaryRoot, id);
     if (
       reread.errors.length > 0 ||
-      !reread.records.some((entry) => entry.decisionRecordId === record.decisionRecordId)
+      !reread.records.some(
+        (entry) => entry.decisionRecordId === record.decisionRecordId,
+      )
     )
       throw new Error("decision journalの書き込み後read-backが一致しません");
   });

@@ -140,11 +140,9 @@ Given(
     const primary = this.initRepo();
     const linked = path.join(primary, ".worktrees", "linked");
     fs.mkdirSync(path.dirname(linked), { recursive: true });
-    execFileSync(
-      "git",
-      ["worktree", "add", "-q", "-b", "linked", linked],
-      { cwd: primary },
-    );
+    execFileSync("git", ["worktree", "add", "-q", "-b", "linked", linked], {
+      cwd: primary,
+    });
     createFixture(this, linked);
     this.decisionTypeId = "DCAND-006";
     this.decisionInput = {
@@ -166,7 +164,40 @@ Given(
     this.decisionInput = {
       candidateHeadSha: this.headSha,
       subjectRef: "reviewer-selection",
-      payload: { candidateSet: ["codex-sol", "opus"] },
+      payload: { candidateSet: ["codex", "claude"] },
+      proposedValue: "gemini",
+    };
+  },
+);
+
+Given(
+  "Policy Allowed外の値だけを宣言したDCAND-009入力がある",
+  function (this: DecisionInvokeWorld) {
+    const root = this.initRepo();
+    createFixture(this, root);
+    this.decisionTypeId = "DCAND-009";
+    this.decisionInput = {
+      candidateHeadSha: this.headSha,
+      subjectRef: "reviewer-selection",
+      payload: { candidateSet: ["gemini", "mistral"] },
+      proposedValue: "gemini",
+    };
+  },
+);
+
+Given(
+  "Policy Allowed外の値を混入させたcandidateSetとそれに一致するproposedValueを持つDCAND-009入力がある",
+  function (this: DecisionInvokeWorld) {
+    const root = this.initRepo();
+    createFixture(this, root);
+    this.decisionTypeId = "DCAND-009";
+    this.decisionInput = {
+      candidateHeadSha: this.headSha,
+      subjectRef: "reviewer-selection",
+      // 呼び出し側がcandidateSetとproposedValueの両方に同じPolicy Allowed外の
+      // 値（gemini）を宣言しても、実効candidateSetはPolicy Allowedとの積集合
+      // （codex/claude）だけになるため、geminiはrejectedになる（round 1のgap是正）。
+      payload: { candidateSet: ["codex", "claude", "gemini"] },
       proposedValue: "gemini",
     };
   },
@@ -244,7 +275,9 @@ Then(
   function (this: DecisionInvokeWorld) {
     assert.ok(this.result?.applied);
     const decisionRecordId = this.result?.decisionRecordId;
-    assert.ok(typeof decisionRecordId === "string" && decisionRecordId.length > 0);
+    assert.ok(
+      typeof decisionRecordId === "string" && decisionRecordId.length > 0,
+    );
     const primaryRoot = resolveGitWorkspace(this.root).primaryRoot;
     const record = findDecisionJournalRecord(
       primaryRoot,

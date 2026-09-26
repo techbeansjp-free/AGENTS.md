@@ -34,6 +34,7 @@ import {
   type DecisionExecutor,
 } from "../domain/decision-types.js";
 import { resolveAuthorityDecision } from "../domain/decision-authority.js";
+import { PROVIDER_AUTONOMOUS_CEILINGS } from "../domain/role.js";
 import {
   resolveDcand001,
   resolveDcand002,
@@ -52,6 +53,29 @@ import { isRecord } from "../types.js";
 
 /** lightweight-tier（自己申告provider）の現在バージョン。 */
 export const LIGHTWEIGHT_TIER_PROVIDER_VERSION = "lightweight-tier/v1";
+
+/**
+ * DCAND-009（reviewer選定）のPolicy Allowed部分（Issue #1485、round 2、DISC-004）。
+ *
+ * 設計正本「最終確定仕様」§1は候補集合を「Policy Allowed ∩ Configured/Dispatchable
+ * ∩ Independence Eligible（すべてcompiled codeが算出）」と定める。**round 1の実装は
+ * `--input.payload.candidateSet`を無検証で信頼しており、呼び出し側が任意の値を
+ * 候補集合として宣言できたため、compiled codeが計算した安全な集合という前提が
+ * 成立していなかった（独立reviewの指摘）。**
+ *
+ * この定数はPolicy Allowedだけを表す。`PROVIDER_AUTONOMOUS_CEILINGS`
+ * （`src/domain/role.ts`）のうち`ollama`は補助的なdelegated review（Step 3/7/10の
+ * 進行役委譲）専用であり、DCAND-009が選ぶ対象（Step 10の独立reviewer本体、
+ * `01_開発ワークフロー.md`の「Codex Sol／Opus」）ではないため除く。
+ *
+ * **Configured/Dispatchable・Independence Eligibleを算出するcompiled codeは
+ * 本Issueの時点で存在しない。** これらの絞り込みは実装せず、Policy Allowedとの
+ * 積集合だけを強制する（disclosed residual gap。`docs/reviews/1485_レビュー.md`
+ * round 2とPR本文へ明記する）。
+ */
+export const DCAND009_POLICY_ALLOWED_PROVIDERS: readonly string[] = Object.keys(
+  PROVIDER_AUTONOMOUS_CEILINGS,
+).filter((provider) => provider !== "ollama");
 
 export interface DecisionInvokeInput {
   readonly root: string;
@@ -72,7 +96,10 @@ export interface DecisionInvokeResult {
   readonly rejected: boolean;
   readonly adjudicationReason: string;
   readonly resolverOutput?: unknown;
-  readonly workspace: { readonly activeRoot: string; readonly primaryRoot: string };
+  readonly workspace: {
+    readonly activeRoot: string;
+    readonly primaryRoot: string;
+  };
   /**
    * Jev provider configの解決結果（構造fieldのみ。API key値は含まない）。
    * `decision invoke`はJevをdispatchしない（#1486以降）が、「なぜJevが
@@ -167,7 +194,9 @@ function runDeterministicResolver(
   }
 }
 
-export function invokeDecision(input: DecisionInvokeInput): DecisionInvokeResult {
+export function invokeDecision(
+  input: DecisionInvokeInput,
+): DecisionInvokeResult {
   const type = findDecisionType(input.decisionTypeId);
   if (type === undefined)
     throw new Error(
@@ -187,7 +216,10 @@ export function invokeDecision(input: DecisionInvokeInput): DecisionInvokeResult
   if (!isRecord(input.input))
     throw new Error("decision invokeの--input fileはobjectが必要です");
   const raw = input.input;
-  const candidateHeadSha = requiredString(raw.candidateHeadSha, "candidateHeadSha");
+  const candidateHeadSha = requiredString(
+    raw.candidateHeadSha,
+    "candidateHeadSha",
+  );
   if (!HEAD_SHA_PATTERN.test(candidateHeadSha))
     throw new Error("decision invokeのcandidateHeadShaは40桁16進数が必要です");
   const actualHeadSha = git(
@@ -260,17 +292,36 @@ export function invokeDecision(input: DecisionInvokeInput): DecisionInvokeResult
       throw new Error(
         "constrained-choiceのdecision typeには--input.payload.candidateSet（配列）が必要です",
       );
-    candidateSet = raw.payload.candidateSet.map((entry, index) =>
+    const declaredCandidateSet = raw.payload.candidateSet.map((entry, index) =>
       requiredString(entry, `payload.candidateSet[${index}]`),
     );
+    if (type.id === "DCAND-009") {
+      // Policy Allowedとの積集合だけを実効候補集合にする。呼び出し側の宣言を
+      // そのまま信頼しない（round 1のgapの是正。上のDCAND009_POLICY_ALLOWED_PROVIDERS
+      // のコメント参照）。
+      proposedValue = proposedValue.normalize("NFC").toLowerCase();
+      const normalizedDeclared = new Set(
+        declaredCandidateSet.map((entry) =>
+          entry.normalize("NFC").toLowerCase(),
+        ),
+      );
+      candidateSet = DCAND009_POLICY_ALLOWED_PROVIDERS.filter((provider) =>
+        normalizedDeclared.has(provider),
+      );
+      if (candidateSet.length === 0)
+        throw new Error(
+          `DCAND-009の候補集合がPolicy Allowed（${DCAND009_POLICY_ALLOWED_PROVIDERS.join("、")}）と重ならないため実行できません。--input.payload.candidateSetはPolicy Allowedの部分集合として宣言してください`,
+        );
+    } else {
+      candidateSet = declaredCandidateSet;
+    }
   }
 
   const decision = resolveAuthorityDecision({
     authorityMode,
     proposedValue,
     confirmedBy,
-    oneWaySafeValue:
-      type.id === "DCAND-010" ? DCAND_010_SAFE_VALUE : undefined,
+    oneWaySafeValue: type.id === "DCAND-010" ? DCAND_010_SAFE_VALUE : undefined,
     candidateSet,
   });
 
@@ -328,7 +379,10 @@ export function invokeDecision(input: DecisionInvokeInput): DecisionInvokeResult
     rejected: decision.rejected,
     adjudicationReason,
     ...(resolverOutput === undefined ? {} : { resolverOutput }),
-    workspace: { activeRoot: workspace.activeRoot, primaryRoot: workspace.primaryRoot },
+    workspace: {
+      activeRoot: workspace.activeRoot,
+      primaryRoot: workspace.primaryRoot,
+    },
     jevProviderConfig: jevSummary,
     providerNote:
       executor.kind === "provider"
@@ -340,7 +394,9 @@ export function invokeDecision(input: DecisionInvokeInput): DecisionInvokeResult
 }
 
 /** 診断出力用。API key値そのものは含めない（`JevProviderConfig`自体が既に含まない）。 */
-function jevSummaryFor(resolution: ReturnType<typeof resolveJevProviderConfig>): unknown {
+function jevSummaryFor(
+  resolution: ReturnType<typeof resolveJevProviderConfig>,
+): unknown {
   if (resolution.state === "enabled")
     return {
       state: "enabled",

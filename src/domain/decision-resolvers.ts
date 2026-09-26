@@ -13,9 +13,7 @@
  * 確定できない場合は`"unknown"`を返し、呼び出し側（`decision-invoke.ts`）が
  * providerへadvisoryで委譲する。
  */
-import {
-  detectQuickDisqualifiers,
-} from "./mode.js";
+import { detectQuickDisqualifiers } from "./mode.js";
 import {
   inspectCiDelivery,
   type CiDeliveryInput,
@@ -60,9 +58,7 @@ export function resolveDcand005(input: Dcand005Input): boolean {
 }
 
 export type CodeRabbitLimitEvidenceValue =
-  | "confirmed-limited"
-  | "no-limit-evidence"
-  | "unknown";
+  "confirmed-limited" | "no-limit-evidence" | "unknown";
 
 export interface CodeRabbitLimitObservation {
   /** GitHub上でこの観測がどこから来たか。 */
@@ -112,6 +108,9 @@ export function resolveDcand008(
       observation.kind === "check-run" || observation.kind === "review",
   );
   if (completedActivity.length > 0)
-    return { value: "no-limit-evidence", matchedObservations: completedActivity };
+    return {
+      value: "no-limit-evidence",
+      matchedObservations: completedActivity,
+    };
   return { value: "unknown", matchedObservations: [] };
 }

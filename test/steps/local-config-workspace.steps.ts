@@ -48,7 +48,10 @@ function commitAll(root: string, message: string): string {
   return runGit(root, ["rev-parse", "HEAD"]);
 }
 
-function writeJevConfig(root: string, overrides: Record<string, unknown>): void {
+function writeJevConfig(
+  root: string,
+  overrides: Record<string, unknown>,
+): void {
   const resolved = path.join(root, JEV_PROVIDER_CONFIG_PATH);
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
   fs.writeFileSync(

@@ -354,7 +354,9 @@ function parseFinding(value: unknown, index: number): ReviewRoundFinding {
   };
   const decisionRef = finding.decisionRef;
   if (decisionRef !== null && !/^DR-[0-9a-f]{1,64}$/u.test(String(decisionRef)))
-    throw new Error(`${label}.decisionRefはnullまたは"DR-"接頭辞のIDが必要です`);
+    throw new Error(
+      `${label}.decisionRefはnullまたは"DR-"接頭辞のIDが必要です`,
+    );
   return Object.freeze({
     id: requiredStableId(finding.id, `${label}.id`),
     severity: oneOf(finding.severity, SEVERITIES, `${label}.severity`),

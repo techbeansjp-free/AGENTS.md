@@ -93,8 +93,7 @@ export interface DecisionRefExpectation {
 }
 
 export type DecisionRefVerification =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly reason: string };
+  { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
 /**
  * consumer側（Step 10 review round等）が`decisionRef`を検証するpure判定
@@ -115,7 +114,8 @@ export function verifyDecisionRefBinding(
   if (record.candidateHeadSha !== expected.candidateHeadSha)
     return {
       ok: false,
-      reason: "decisionRefのcandidateHeadShaがround.candidateHeadShaと不一致です",
+      reason:
+        "decisionRefのcandidateHeadShaがround.candidateHeadShaと不一致です",
     };
   if (record.inputDigest !== expected.inputDigest)
     return {

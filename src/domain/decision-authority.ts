@@ -55,7 +55,8 @@ export function resolveAuthorityDecision(
       effectiveValue: null,
       requiresConfirmation: true,
       rejected: false,
-      reason: "advisory: 提案は記録したが進行役の確認が無いため有効値へ反映しない",
+      reason:
+        "advisory: 提案は記録したが進行役の確認が無いため有効値へ反映しない",
     };
   }
 
@@ -67,7 +68,8 @@ export function resolveAuthorityDecision(
         effectiveValue: proposedValue,
         requiresConfirmation: false,
         rejected: false,
-        reason: "one-way-escalation: 安全側（fail-closed）方向のため確認なしで有効値へ反映した",
+        reason:
+          "one-way-escalation: 安全側（fail-closed）方向のため確認なしで有効値へ反映した",
       };
     if (confirmed)
       return {
@@ -80,7 +82,8 @@ export function resolveAuthorityDecision(
       effectiveValue: null,
       requiresConfirmation: true,
       rejected: false,
-      reason: "one-way-escalation: 緩和方向の提案は進行役の確認が無いため有効値へ反映しない",
+      reason:
+        "one-way-escalation: 緩和方向の提案は進行役の確認が無いため有効値へ反映しない",
     };
   }
 

@@ -1029,7 +1029,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       "npx agent-skill-chain review round --staging=.agent-skill-chain/tmp/issues/20260830_120000-change --file=./review-round.json --apply",
     inputContract: {
       description:
-        "--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。blocking findingのcontractIdはanchorのACまたはINVに一致させる。decisionRefはfinding分類をDecision Skill（`agent-skill-chain decision invoke`、Issue #1485）のDCAND-006で行った場合の`decisionRecordId`（\"DR-\"接頭辞）、人・進行役が直接記入した場合はnull。null以外の場合、type・candidateHeadSha・inputDigest・provider versionのいずれかが不一致だとroundを拒否する。IDは大文字英数と._-で、anchorの各ID列は重複なし昇順。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた256 KiB以下の正準reviewer input bundleを書き、digestとbyte数を返す。followOnly: trueは検証済み既定branch追随、recordLayerOnly: trueはformal artifactとsealed progress投影だけの検証済みrecord layerを表し、いずれもfindingsが無い場合だけ予算へ数えない",
+        '--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。blocking findingのcontractIdはanchorのACまたはINVに一致させる。decisionRefはfinding分類をDecision Skill（`agent-skill-chain decision invoke`、Issue #1485）のDCAND-006で行った場合の`decisionRecordId`（"DR-"接頭辞）、人・進行役が直接記入した場合はnull。null以外の場合、type・candidateHeadSha・inputDigest・provider versionのいずれかが不一致だとroundを拒否する。IDは大文字英数と._-で、anchorの各ID列は重複なし昇順。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた256 KiB以下の正準reviewer input bundleを書き、digestとbyte数を返す。followOnly: trueは検証済み既定branch追随、recordLayerOnly: trueはformal artifactとsealed progress投影だけの検証済みrecord layerを表し、いずれもfindingsが無い場合だけ予算へ数えない',
       example: {
         round: 1,
         previousRoundDigest: null,
@@ -1564,9 +1564,17 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     summary:
       "有限選択判断（Decision Type）を1件実行する。deterministic resolverを先に試し、無ければ設定済みprovider（既定lightweight-tier）へ委譲する（Issue #1485）",
     requiredFlags: [
-      flag("type", "DCAND-XXX", "実行するdecision typeのID（decision types参照）"),
+      flag(
+        "type",
+        "DCAND-XXX",
+        "実行するdecision typeのID（decision types参照）",
+      ),
       flag("input", "path", "root相対の入力JSON file"),
-      flag("staging", "path", "対象staging directory。primaryRootの導出とjournalの束ね先に使う"),
+      flag(
+        "staging",
+        "path",
+        "対象staging directory。primaryRootの導出とjournalの束ね先に使う",
+      ),
     ],
     conditionalFlags: [],
     optionalFlags: [ROOT_FLAG, ...APPLY_MODE],
@@ -1574,7 +1582,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       "npx agent-skill-chain decision invoke --type=DCAND-002 --input=./ci-delivery-input.json --staging=.agent-skill-chain/tmp/issues/example --apply",
     inputContract: {
       description:
-        "共通envelope: {candidateHeadSha（40桁16進数、実HEADと一致必須）, subjectRef（判断対象を指す文字列）, payload?（deterministic resolverへ渡す型別入力）, proposedValue?（provider実行時の提案。lightweight-tierは呼び出し側の提案をそのまま受ける自己申告provider）, confirmedBy?（advisory/one-way-escalationの緩和方向を確認した進行役識別子）}。constrained-choice（DCAND-009）は payload.candidateSet（文字列配列）が必須。出力の state/resolution系field（jevProviderConfig、workspace、authorityMode、requiresConfirmation、rejected）を読めば、なぜProviderが使われた/使われなかったかを別途スクリプトなしで確認できる",
+        "共通envelope: {candidateHeadSha（40桁16進数、実HEADと一致必須）, subjectRef（判断対象を指す文字列）, payload?（deterministic resolverへ渡す型別入力）, proposedValue?（provider実行時の提案。lightweight-tierは呼び出し側の提案をそのまま受ける自己申告provider）, confirmedBy?（advisory/one-way-escalationの緩和方向を確認した進行役識別子）}。constrained-choice（DCAND-009）は payload.candidateSet（文字列配列）が必須で、decision invoke自身がPolicy Allowed（role.tsのPROVIDER_AUTONOMOUS_CEILINGS。codex/claude）との積集合へ絞り込んだ上で判定する（Configured/Dispatchable・Independence Eligibleの絞り込みは未実装のdisclosed residual gap）。出力の state/resolution系field（jevProviderConfig、workspace、authorityMode、requiresConfirmation、rejected）を読めば、なぜProviderが使われた/使われなかったかを別途スクリプトなしで確認できる",
       example: {
         candidateHeadSha: "0123456789abcdef0123456789abcdef01234567",
         subjectRef: "PR#1485 finding F-01",
@@ -1585,7 +1593,8 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   {
     command: "decision",
     subcommand: "types",
-    summary: "Decision Type Registryの一覧（id・executor・authorityMode）を表示する",
+    summary:
+      "Decision Type Registryの一覧（id・executor・authorityMode）を表示する",
     requiredFlags: [],
     conditionalFlags: [],
     optionalFlags: [],

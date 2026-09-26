@@ -13,7 +13,10 @@
 import type { DecisionCallableTarget } from "./decision-contract.js";
 
 /** `DecisionCallableTarget`から`"unassigned"`を除いた、実際に委譲可能な対象。 */
-export type DecisionProviderTarget = Exclude<DecisionCallableTarget, "unassigned">;
+export type DecisionProviderTarget = Exclude<
+  DecisionCallableTarget,
+  "unassigned"
+>;
 
 export type DecisionExecutor =
   | { readonly kind: "deterministic"; readonly resolverId: string }
@@ -38,10 +41,7 @@ export type DecisionExecutor =
  *   中からの選択だけを自動反映する。候補集合外の値は拒否する（DCAND-009）。
  */
 export type DecisionAuthorityMode =
-  | "authoritative"
-  | "advisory"
-  | "one-way-escalation"
-  | "constrained-choice";
+  "authoritative" | "advisory" | "one-way-escalation" | "constrained-choice";
 
 export interface DecisionTypeDefinition {
   readonly id: string;
@@ -122,7 +122,9 @@ export const DECISION_TYPES: readonly DecisionTypeDefinition[] = Object.freeze([
   }),
 ]);
 
-export function findDecisionType(id: string): DecisionTypeDefinition | undefined {
+export function findDecisionType(
+  id: string,
+): DecisionTypeDefinition | undefined {
   return DECISION_TYPES.find((entry) => entry.id === id);
 }
 

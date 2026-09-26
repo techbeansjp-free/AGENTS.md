@@ -55,7 +55,10 @@ function answers(): Record<string, ModeAnswer> {
   );
 }
 
-function createFixture(world: DecisionRefWorld): { base: string; head: string } {
+function createFixture(world: DecisionRefWorld): {
+  base: string;
+  head: string;
+} {
   const root = world.initRepo();
   world.root = root;
   const base = head(root);
@@ -261,7 +264,10 @@ When("previewReviewRoundを実行する", function (this: DecisionRefWorld) {
   this.error = undefined;
   if (this.round === undefined) throw new Error("roundが未設定です");
   try {
-    this.value = previewReviewRound({ staging: this.staging, round: this.round });
+    this.value = previewReviewRound({
+      staging: this.staging,
+      round: this.round,
+    });
   } catch (error) {
     this.error = error instanceof Error ? error : new Error(String(error));
   }
@@ -274,16 +280,19 @@ Then("roundが受理される", function (this: DecisionRefWorld) {
 
 Then("decisionRef欠落として拒否される", function (this: DecisionRefWorld) {
   assert.ok(this.error instanceof Error);
-  assert.match((this.error as Error).message, /見つかりません|decisionRef欠落/u);
-});
-
-Then("candidateHeadSha不一致として拒否される", function (this: DecisionRefWorld) {
-  assert.ok(this.error instanceof Error);
   assert.match(
     (this.error as Error).message,
-    /candidateHeadSha.*不一致/u,
+    /見つかりません|decisionRef欠落/u,
   );
 });
+
+Then(
+  "candidateHeadSha不一致として拒否される",
+  function (this: DecisionRefWorld) {
+    assert.ok(this.error instanceof Error);
+    assert.match((this.error as Error).message, /candidateHeadSha.*不一致/u);
+  },
+);
 
 Then("inputDigest不一致として拒否される", function (this: DecisionRefWorld) {
   assert.ok(this.error instanceof Error);

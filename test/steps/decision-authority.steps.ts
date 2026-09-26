@@ -15,7 +15,7 @@ interface DecisionAuthorityWorld extends WorkflowWorld {
 const { Given, When, Then } = stepDefinitions<DecisionAuthorityWorld>();
 
 Given(
-  'authorityMode {string} とproposedValue {string} がある',
+  "authorityMode {string} とproposedValue {string} がある",
   function (this: DecisionAuthorityWorld, mode: string, proposedValue: string) {
     this.input = {
       authorityMode: mode as DecisionAuthorityMode,
@@ -25,7 +25,7 @@ Given(
 );
 
 Given(
-  'authorityMode {string} とproposedValue {string} があり確認者が無い',
+  "authorityMode {string} とproposedValue {string} があり確認者が無い",
   function (this: DecisionAuthorityWorld, mode: string, proposedValue: string) {
     this.input = {
       authorityMode: mode as DecisionAuthorityMode,
@@ -35,7 +35,7 @@ Given(
 );
 
 Given(
-  'authorityMode {string} とproposedValue {string} があり確認者 {string} がいる',
+  "authorityMode {string} とproposedValue {string} があり確認者 {string} がいる",
   function (
     this: DecisionAuthorityWorld,
     mode: string,
@@ -51,7 +51,7 @@ Given(
 );
 
 Given(
-  'authorityMode {string} とproposedValue {string} があり安全側の値は{string}で確認者は無い',
+  "authorityMode {string} とproposedValue {string} があり安全側の値は{string}で確認者は無い",
   function (
     this: DecisionAuthorityWorld,
     mode: string,
@@ -67,7 +67,7 @@ Given(
 );
 
 Given(
-  'authorityMode {string} とproposedValue {string} があり安全側の値は{string}で確認者 {string} がいる',
+  "authorityMode {string} とproposedValue {string} があり安全側の値は{string}で確認者 {string} がいる",
   function (
     this: DecisionAuthorityWorld,
     mode: string,
@@ -85,7 +85,7 @@ Given(
 );
 
 Given(
-  'authorityMode {string} とproposedValue {string} があり候補集合は{string}である',
+  "authorityMode {string} とproposedValue {string} があり候補集合は{string}である",
   function (
     this: DecisionAuthorityWorld,
     mode: string,
@@ -100,13 +100,16 @@ Given(
   },
 );
 
-When("resolveAuthorityDecisionを実行する", function (this: DecisionAuthorityWorld) {
-  if (this.input === undefined) throw new Error("inputが未設定です");
-  this.result = resolveAuthorityDecision(this.input);
-});
+When(
+  "resolveAuthorityDecisionを実行する",
+  function (this: DecisionAuthorityWorld) {
+    if (this.input === undefined) throw new Error("inputが未設定です");
+    this.result = resolveAuthorityDecision(this.input);
+  },
+);
 
 Then(
-  'effectiveValueは{string}で確認不要である',
+  "effectiveValueは{string}で確認不要である",
   function (this: DecisionAuthorityWorld, expected: string) {
     assert.equal(this.result?.effectiveValue, expected);
     assert.equal(this.result?.requiresConfirmation, false);
@@ -114,11 +117,14 @@ Then(
   },
 );
 
-Then("effectiveValueはnullで確認が必要である", function (this: DecisionAuthorityWorld) {
-  assert.equal(this.result?.effectiveValue, null);
-  assert.equal(this.result?.requiresConfirmation, true);
-  assert.equal(this.result?.rejected, false);
-});
+Then(
+  "effectiveValueはnullで確認が必要である",
+  function (this: DecisionAuthorityWorld) {
+    assert.equal(this.result?.effectiveValue, null);
+    assert.equal(this.result?.requiresConfirmation, true);
+    assert.equal(this.result?.rejected, false);
+  },
+);
 
 Then("拒否される", function (this: DecisionAuthorityWorld) {
   assert.equal(this.result?.rejected, true);

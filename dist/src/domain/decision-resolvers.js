@@ -7,13 +7,13 @@
  * 既存関数を呼び続ける（L-01「現在の呼び出し元の挙動を変えない」）。
  *
  * DCAND-008は本Issueで新設するdeterministic resolverであり、
- * `.agent-skill-chain/docs/01_開発ワークフロー.md`「CodeRabbitの利用枠制限は」
+ * `.agent-skill-chain/docs/01_開発ワークフロー.md`「CodeRabbitの利用枠制限の判定」
  * 節の基準（対象PRの最新HEADに対する明示的なrate limit観測だけを証拠にし、
  * checkの不在・過去HEADの通知・単なるreview待ちは証拠にしない）を機械化する。
  * 確定できない場合は`"unknown"`を返し、呼び出し側（`decision-invoke.ts`）が
  * providerへadvisoryで委譲する。
  */
-import { detectQuickDisqualifiers, } from "./mode.js";
+import { detectQuickDisqualifiers } from "./mode.js";
 import { inspectCiDelivery, } from "./ci-delivery.js";
 import { requiresSpecUpdate } from "./spec.js";
 import { auditRowDraft } from "./review-artifact.js";
@@ -49,7 +49,10 @@ export function resolveDcand008(input) {
     // rate limit言及が無い場合だけ`no-limit-evidence`とする。
     const completedActivity = relevant.filter((observation) => observation.kind === "check-run" || observation.kind === "review");
     if (completedActivity.length > 0)
-        return { value: "no-limit-evidence", matchedObservations: completedActivity };
+        return {
+            value: "no-limit-evidence",
+            matchedObservations: completedActivity,
+        };
     return { value: "unknown", matchedObservations: [] };
 }
 //# sourceMappingURL=decision-resolvers.js.map

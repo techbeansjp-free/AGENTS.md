@@ -39,7 +39,9 @@ function parseExecutor(value) {
     if (value.kind === "provider") {
         if (value.target !== "lightweight-tier" && value.target !== "jev")
             throw new Error("executor.targetが不正です");
-        const model = value.model === undefined ? undefined : requiredString(value.model, "executor.model");
+        const model = value.model === undefined
+            ? undefined
+            : requiredString(value.model, "executor.model");
         return model === undefined
             ? { kind: "provider", target: value.target }
             : { kind: "provider", target: value.target, model };
@@ -53,7 +55,8 @@ const AUTHORITY_MODES = [
     "constrained-choice",
 ];
 function parseAuthorityMode(value) {
-    if (typeof value === "string" && AUTHORITY_MODES.includes(value))
+    if (typeof value === "string" &&
+        AUTHORITY_MODES.includes(value))
         return value;
     throw new Error("authorityModeが不正です");
 }
@@ -63,7 +66,9 @@ export function parseDecisionJournalLine(value) {
         throw new Error("decision journal行はobjectが必要です");
     const latencyMs = value.latencyMs;
     const cost = value.cost;
-    if (typeof latencyMs !== "number" || latencyMs < 0 || !Number.isFinite(latencyMs))
+    if (typeof latencyMs !== "number" ||
+        latencyMs < 0 ||
+        !Number.isFinite(latencyMs))
         throw new Error("latencyMsが不正です");
     if (typeof cost !== "number" || cost < 0 || !Number.isFinite(cost))
         throw new Error("costが不正です");

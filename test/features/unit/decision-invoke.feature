@@ -35,3 +35,13 @@ Feature: decision invoke（Decision Type Registryの実行、Issue #1485）
     Given 候補集合外の提案を持つDCAND-009入力がある
     When invokeDecisionを実行する
     Then rejectedである
+
+  Scenario: SCN-UNIT-DECINV-008 DCAND-009はPolicy Allowed外だけの候補集合を拒否する
+    Given Policy Allowed外の値だけを宣言したDCAND-009入力がある
+    When invokeDecisionを実行する
+    Then エラーで拒否される
+
+  Scenario: SCN-UNIT-DECINV-009 DCAND-009は呼び出し側が宣言したPolicy Allowed外の値を候補集合へ混入させても採用しない
+    Given Policy Allowed外の値を混入させたcandidateSetとそれに一致するproposedValueを持つDCAND-009入力がある
+    When invokeDecisionを実行する
+    Then rejectedである

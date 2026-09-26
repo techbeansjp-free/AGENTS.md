@@ -338,9 +338,12 @@ Then(
 
 // --- classifyJevProviderConfig（Issue #1485、L-04）--------------------------
 
-When("classifyJevProviderConfigを実行する", function (this: JevProviderConfigWorld) {
-  this.classification = classifyJevProviderConfig(this.root, this.configPath);
-});
+When(
+  "classifyJevProviderConfigを実行する",
+  function (this: JevProviderConfigWorld) {
+    this.classification = classifyJevProviderConfig(this.root, this.configPath);
+  },
+);
 
 Then("分類結果はabsentである", function (this: JevProviderConfigWorld) {
   assert.equal(this.classification?.state, "absent");
