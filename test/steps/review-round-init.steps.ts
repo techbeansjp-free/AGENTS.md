@@ -383,6 +383,7 @@ Given(
             path: reviewedPath,
             contractId: "AC-001",
             causedByFindingId: null,
+            decisionRef: null,
           },
         ],
       }),
@@ -436,6 +437,7 @@ Then(
           path: reviewedPath,
           contractId: "AC-001",
           causedByFindingId: null,
+          decisionRef: null,
         },
       ],
     });
@@ -1085,6 +1087,7 @@ Given("budget-exhaustedのsessionを持つstagingがある", function () {
     path: reviewedPath,
     contractId: "AC-001",
     causedByFindingId: null,
+    decisionRef: null,
   });
   this.session = recordReviewRound({
     staging: this.staging,

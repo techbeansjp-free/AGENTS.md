@@ -254,7 +254,12 @@ function validateWorktreePlacementPolicy(value, name, errors) {
             errors.push(`${name}.finalizeIgnoredPathAllowlistは安全な相対directory prefixまたは限定された再帰patternだけを指定してください`);
     }
 }
-function hasConcreteDecisionText(value, minimum) {
+/**
+ * DCAND-005（`src/domain/decision-contract.ts`）。exportを追加しただけで
+ * 判定内容・既存呼び出し元（`validateApplicabilityDecision`、この直後）の
+ * 挙動は変えない（Issue #1485、L-01）。
+ */
+export function hasConcreteDecisionText(value, minimum) {
     return (typeof value === "string" &&
         value.trim().length >= minimum &&
         !/^(?:-|なし|未定|不明|x+)$/iu.test(value.trim()) &&

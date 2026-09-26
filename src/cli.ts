@@ -213,6 +213,8 @@ import {
 } from "./domain/worktree-survey.js";
 import { resolveFinalizeIgnoredPathAllowlist } from "./domain/worktree-removal-safety.js";
 import { observeProvider } from "./adapters/provider.js";
+import { invokeDecision } from "./adapters/decision-invoke.js";
+import { DECISION_TYPES } from "./domain/decision-types.js";
 import { resolveRouting } from "./domain/routing.js";
 import { checkRoutingIndependence } from "./domain/routing-independence.js";
 import {
@@ -4848,6 +4850,38 @@ export async function main(
     command,
     dependencies.nodeVersion ?? process.versions.node,
   );
+  if (command === "decision" && subcommand === "invoke") {
+    const { flags } = parse(rest);
+    const root = path.resolve(
+      typeof flags.root === "string" ? flags.root : process.cwd(),
+    );
+    const staging = required(flags, "staging");
+    const decisionTypeId = required(flags, "type");
+    const decisionInput = readJsonInput(
+      resolveContained(root, required(flags, "input")),
+    );
+    const apply = applyMode(flags);
+    const result = invokeDecision({
+      root,
+      staging,
+      decisionTypeId,
+      input: decisionInput,
+      apply,
+    });
+    print(result);
+    return result.rejected ? 1 : 0;
+  }
+  if (command === "decision" && subcommand === "types") {
+    print({
+      types: DECISION_TYPES.map((entry) => ({
+        id: entry.id,
+        label: entry.label,
+        executor: entry.executor,
+        authorityMode: entry.authorityMode,
+      })),
+    });
+    return 0;
+  }
   if (command === "routing" && subcommand === "roles") {
     const { flags } = parse(rest);
     const scope = required(flags, "scope");

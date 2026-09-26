@@ -53,8 +53,15 @@ function readMetadataFile(file) {
         throw new Error("Git metadata fileが不正です");
     return fs.readFileSync(file, "utf8").trimEnd();
 }
-/** Read-only Git identity check for reviewer inputs and inherited local config. */
-export function resolveReviewRoot(root) {
+/**
+ * Read-only Git identity check for reviewer inputs and inherited local config。
+ *
+ * **`resolveReviewRoot`・`loadWorkspaceConfig`（Issue #1428）が個別に持っていた
+ * primary worktree検証を一般化した共通adapter。** `resolveReviewRoot`はこの関数の
+ * 薄いwrapperであり、既存呼び出し元（`supplemental-review-launch.ts`）の挙動を
+ * 変えない（Issue #1485、L-04）。
+ */
+export function resolveGitWorkspace(root) {
     if (Object.keys(process.env).some((key) => /^GIT_(?:DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|NAMESPACE|CONFIG.*)$/u.test(key) && process.env[key] !== undefined) ||
         !isCanonicalDirectory(root))
         throw new Error("Git worktree境界を検証できません");
@@ -87,7 +94,11 @@ export function resolveReviewRoot(root) {
     const registered = git(["worktree", "list", "--porcelain"], root).stdout;
     if (!registered.split("\n").includes(`worktree ${root}`))
         throw new Error("Git worktreeが登録されていません");
-    return { primaryRoot };
+    return { activeRoot: root, primaryRoot };
+}
+/** Read-only Git identity check for reviewer inputs and inherited local config. */
+export function resolveReviewRoot(root) {
+    return { primaryRoot: resolveGitWorkspace(root).primaryRoot };
 }
 /** Bind staging documents to the same registered Git worktree as root. */
 export function resolveReviewWorkspace(root, stagingPath) {

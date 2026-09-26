@@ -179,12 +179,16 @@ function parseFinding(value, index) {
         "path",
         "contractId",
         "causedByFindingId",
+        "decisionRef",
     ]);
     const nullableId = (candidate, field) => {
         if (candidate === null)
             return null;
         return requiredStableId(candidate, `${label}.${field}`);
     };
+    const decisionRef = finding.decisionRef;
+    if (decisionRef !== null && !/^DR-[0-9a-f]{1,64}$/u.test(String(decisionRef)))
+        throw new Error(`${label}.decisionRefはnullまたは"DR-"接頭辞のIDが必要です`);
     return Object.freeze({
         id: requiredStableId(finding.id, `${label}.id`),
         severity: oneOf(finding.severity, SEVERITIES, `${label}.severity`),
@@ -195,6 +199,7 @@ function parseFinding(value, index) {
         path: safePath(finding.path, `${label}.path`),
         contractId: nullableId(finding.contractId, "contractId"),
         causedByFindingId: nullableId(finding.causedByFindingId, "causedByFindingId"),
+        decisionRef: decisionRef === null ? null : String(decisionRef),
     });
 }
 export function parseReviewRoundInput(value) {
@@ -501,6 +506,7 @@ export function parseReviewSessionState(value) {
                 "path",
                 "contractId",
                 "causedByFindingId",
+                "decisionRef",
                 "admission",
                 "admissionReason",
             ]);

@@ -41,3 +41,29 @@ Feature: ローカルJev provider設定のloader
     Given modelMapping.jsonとproject-policy.jsonが対象repositoryに存在する
     When loadJevProviderConfigを実行する
     Then modelMappingとtrusted project policyの内容は結果に影響せず読み込まれない
+
+  Scenario: SCN-UNIT-JEVCFG-009 classifyはfile不在をabsentと分類する
+    Given jev-provider.jsonが存在しない
+    When classifyJevProviderConfigを実行する
+    Then 分類結果はabsentである
+
+  Scenario: SCN-UNIT-JEVCFG-010 classifyはenabled falseをdisabledと分類する
+    Given jev-provider.jsonのenabledがfalseまたは欠落している
+    When classifyJevProviderConfigを実行する
+    Then 分類結果はdisabledである
+
+  Scenario: SCN-UNIT-JEVCFG-011 classifyはJSON構文破損をinvalidと理由付きで分類する
+    Given jev-provider.jsonのJSON構文が壊れている
+    When classifyJevProviderConfigを実行する
+    Then 分類結果はinvalidであり理由が空でない
+
+  Scenario: SCN-UNIT-JEVCFG-012 classifyは指定env var未設定をinvalidと理由付きで分類する
+    Given jev-provider.jsonは有効だが指定env varがprocess.envに設定されていない
+    When classifyJevProviderConfigを実行する
+    Then 分類結果はinvalidであり理由が空でない
+
+  Scenario: SCN-UNIT-JEVCFG-013 classifyは有効な設定をenabledと分類する
+    Given jev-provider.jsonがenabled trueかつ有効なapiKeyEnvVarで存在する
+    And 指定したenv varがprocess.envに設定されている
+    When classifyJevProviderConfigを実行する
+    Then 分類結果はenabledである

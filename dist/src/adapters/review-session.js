@@ -10,6 +10,10 @@ import { buildReviewProgressInventories, describeReviewProgressUnbuildable, tryB
 import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
 import { evidenceOnlySuffix, observeReviewDiff } from "./review-diff.js";
 import { isDefaultBranchFollowMerge, REVIEW_SESSION_FILE, readStoredReviewSession, } from "./review-session-store.js";
+import { resolveGitWorkspace } from "./review-workspace.js";
+import { findDecisionJournalRecord } from "./decision-journal-store.js";
+import { LIGHTWEIGHT_TIER_PROVIDER_VERSION } from "./decision-invoke.js";
+import { computeFindingClassificationInputDigest, verifyDecisionRefBinding, } from "../domain/decision-journal.js";
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
 import { stagingDigestRecoveryHint } from "../domain/workflow.js";
@@ -293,6 +297,7 @@ export function buildReviewRoundDraft(input) {
             path: finding.path,
             contractId: finding.contractId,
             causedByFindingId: finding.causedByFindingId,
+            decisionRef: finding.decisionRef,
         }));
         round = {
             round: previous.rounds.length + 1,
@@ -364,6 +369,45 @@ function refixStagingDigestForRound(staging) {
         stored.digest !== calculateStagingDigest(staging, artifacts))
         refreshStoredStagingDigest(staging);
 }
+/**
+ * Step 10 review round consumer側の`decisionRef`機械検証（Issue #1485、L-03）。
+ * `decisionRef !== null`のfindingだけを対象にする。人・進行役が直接記入した
+ * 分類（`decisionRef === null`）は検証しない（BR-01強化の対象は
+ * Decision Skill経由の判断だけ）。
+ *
+ * 拒否理由は設計正本「最終確定仕様」§2の5種（decisionRef欠落／type不一致／
+ * candidateHeadSha不一致／inputDigest不一致／provider version期限切れ）に
+ * 対応する。**`findingAdmission`を緩めない。** ここでの拒否は
+ * `previewReviewRound`全体を例外で止め、round自体を成立させない
+ * （fail-closed。record-onlyへ黒く落とさない）。
+ */
+function verifyReviewRoundDecisionRefs(root, staging, candidateHeadSha, findings) {
+    const decisionRefFindings = findings.filter((finding) => finding.decisionRef !== null);
+    if (decisionRefFindings.length === 0)
+        return;
+    const primaryRoot = resolveGitWorkspace(root).primaryRoot;
+    for (const finding of decisionRefFindings) {
+        const decisionRecordId = finding.decisionRef;
+        const record = findDecisionJournalRecord(primaryRoot, staging, decisionRecordId);
+        if (record === undefined)
+            throw new Error(`review round finding ${finding.id}のdecisionRef ${decisionRecordId} がdecision journalで見つかりません（decisionRef欠落）`);
+        const expectedInputDigest = computeFindingClassificationInputDigest({
+            subjectRef: finding.id,
+            path: finding.path,
+            evidence: finding.evidence,
+        });
+        const verification = verifyDecisionRefBinding(record, {
+            decisionTypeId: "DCAND-006",
+            candidateHeadSha,
+            inputDigest: expectedInputDigest,
+            currentProviderVersion: record.executor.kind === "provider"
+                ? LIGHTWEIGHT_TIER_PROVIDER_VERSION
+                : null,
+        });
+        if (!verification.ok)
+            throw new Error(`review round finding ${finding.id}のdecisionRef ${decisionRecordId} を検証できません: ${verification.reason}`);
+    }
+}
 export function previewReviewRound(input) {
     const staging = assertWorkflowStaging(input.staging);
     refixStagingDigestForRound(staging);
@@ -374,6 +418,7 @@ export function previewReviewRound(input) {
     }).stdout.trim();
     if (currentHeadSha !== input.round.candidateHeadSha)
         throw new Error("review round candidate HEADがrepositoryのcurrent HEADと一致しません");
+    verifyReviewRoundDecisionRefs(root, staging, input.round.candidateHeadSha, input.round.findings);
     if (previous === null) {
         const implementation = latestImplementationEntry(staging);
         if (!implementation?.implementationHeadSha)

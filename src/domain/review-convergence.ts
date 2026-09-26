@@ -80,6 +80,15 @@ export interface ReviewRoundFinding {
   path: string;
   contractId: string | null;
   causedByFindingId: string | null;
+  /**
+   * finding分類がDecision Skill（`agent-skill-chain decision invoke`）の
+   * DCAND-006（finding分類記入）で行われた場合の`decisionRecordId`（`DR-...`）。
+   * 人・進行役が直接記入した分類には`null`を使う（Issue #1485、L-03）。
+   * `null`でない場合、`src/adapters/review-session.ts`の`previewReviewRound`が
+   * 参照するdecision journal記録のtype・candidateHeadSha・inputDigest・
+   * provider versionを検証し、いずれか不一致ならroundを拒否する。
+   */
+  decisionRef: string | null;
 }
 
 export interface ReviewRoundInput {
@@ -337,11 +346,15 @@ function parseFinding(value: unknown, index: number): ReviewRoundFinding {
     "path",
     "contractId",
     "causedByFindingId",
+    "decisionRef",
   ]);
   const nullableId = (candidate: unknown, field: string): string | null => {
     if (candidate === null) return null;
     return requiredStableId(candidate, `${label}.${field}`);
   };
+  const decisionRef = finding.decisionRef;
+  if (decisionRef !== null && !/^DR-[0-9a-f]{1,64}$/u.test(String(decisionRef)))
+    throw new Error(`${label}.decisionRefはnullまたは"DR-"接頭辞のIDが必要です`);
   return Object.freeze({
     id: requiredStableId(finding.id, `${label}.id`),
     severity: oneOf(finding.severity, SEVERITIES, `${label}.severity`),
@@ -355,6 +368,7 @@ function parseFinding(value: unknown, index: number): ReviewRoundFinding {
       finding.causedByFindingId,
       "causedByFindingId",
     ),
+    decisionRef: decisionRef === null ? null : String(decisionRef),
   });
 }
 
@@ -745,6 +759,7 @@ export function parseReviewSessionState(value: unknown): ReviewSessionState {
           "path",
           "contractId",
           "causedByFindingId",
+          "decisionRef",
           "admission",
           "admissionReason",
         ],
