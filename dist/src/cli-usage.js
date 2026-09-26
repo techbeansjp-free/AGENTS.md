@@ -1015,12 +1015,55 @@ export const COMMAND_USAGE = Object.freeze([
     },
     {
         command: "decision",
+        subcommand: "label",
+        summary: "EvaluationLabel（Issue #1486 T-03）を1件記録する。referenceValue（事後に確定した正解）をdecisionRecordIdへ紐付ける。対象decisionRecordIdはdecision journalに実在する必要がある",
+        requiredFlags: [
+            flag("input", "path", "root相対の入力JSON file"),
+            flag("staging", "path", "対象staging directory。primaryRootの導出に使う（decision invokeと同じ）"),
+        ],
+        conditionalFlags: [],
+        optionalFlags: [ROOT_FLAG, ...APPLY_MODE],
+        example: "npx agent-skill-chain decision label --input=./label.json --staging=.agent-skill-chain/tmp/issues/example --apply",
+        inputContract: {
+            description: "{decisionRecordId（既存decision journalのDR-...）, referenceValue（事後に確定した正解）, labelSource（deterministic-oracle/evidence-adjudicated/independent-review/owner-adjudicatedのいずれか）, evidenceRefs（1件以上の文字列配列。owner-adjudicatedだけ省略可）, labeledAt（ISO 8601）}",
+            example: {
+                decisionRecordId: "DR-0123456789abcdef",
+                referenceValue: "not-minor",
+                labelSource: "evidence-adjudicated",
+                evidenceRefs: ["test/features/unit/example.feature:10"],
+                labeledAt: "2026-09-26T00:00:00.000Z",
+            },
+        },
+    },
+    {
+        command: "decision",
         subcommand: "types",
         summary: "Decision Type Registryの一覧（id・executor・authorityMode）を表示する",
         requiredFlags: [],
         conditionalFlags: [],
         optionalFlags: [],
         example: "npx agent-skill-chain decision types",
+    },
+    {
+        command: "decision",
+        subcommand: "configure",
+        summary: "Jev provider設定のguided setup（Issue #1486）。既定は.agent-skill-chain/local/jev-provider.jsonの生成。--shell-rc-appendを付けると、代わりに検出した shell起動file（~/.bashrc等）へ export <apiKeyEnvVar>=... を確認付きで追記する。値そのものはこのcommandの引数として渡さない——--shell-rc-appendは常にprocess.env[apiKeyEnvVar]（呼び出し時点でそのshellに既にexport済みの値）を読むだけで、AIエージェントが代行実行してもコマンド履歴・出力へ値が現れない",
+        requiredFlags: [
+            flag("provider", "jev", "対応providerはjevのみ"),
+            flag("api-key-env-var", "ENV_VAR_NAME", "APIキーを保持するenv var名（値そのものは渡さない）"),
+        ],
+        conditionalFlags: [
+            conditional("endpoint", "url", "Jev APIのendpoint（https://で始まる必要がある）", "--shell-rc-appendを指定しない場合", (provided) => provided["shell-rc-append"] !== true),
+            conditional("model", "name", "利用するJev model名（vendor側のドキュメント・アカウントから得る）", "--shell-rc-appendを指定しない場合", (provided) => provided["shell-rc-append"] !== true),
+        ],
+        optionalFlags: [
+            ROOT_FLAG,
+            optional("shell-rc-append", "", "jev-provider.json生成の代わりに、shell起動fileへのexport追記モードへ切り替える", "指定なし（jev-provider.json生成モード）"),
+            optional("rc-path", "path", "shell-rc-append時、追記先fileを明示指定する", "$SHELLから検出（bash→~/.bashrc、zsh→~/.zshrc）"),
+            optional("confirm", "APPEND", "shell-rc-append かつ --apply のとき、値の書き込みに同意する明示確認token。一致しなければ書き込まない", "未指定（--applyのみでは書き込まない）"),
+            ...APPLY_MODE,
+        ],
+        example: "npx agent-skill-chain decision configure --provider=jev --endpoint=https://api.typesafe.ai/v1/systemone --model=jev-latest --api-key-env-var=JEV_API_KEY --dry-run",
     },
     {
         command: "delete",

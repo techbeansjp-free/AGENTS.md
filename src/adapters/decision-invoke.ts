@@ -90,6 +90,15 @@ export interface DecisionInvokeResult {
   readonly decisionTypeId: string;
   readonly executor: DecisionExecutor;
   readonly authorityMode: DecisionAuthorityMode;
+  readonly candidateHeadSha: string;
+  readonly subjectRef: string;
+  /**
+   * `constrained-choice`（DCAND-009）のときだけ、Policy Allowedとの積集合で
+   * 絞り込んだ実効候補集合。他のauthorityModeでは`undefined`（Issue #1486、
+   * T-02のcontinuous shadowがDCAND-009のJev choice optionsを組み立てる際に
+   * 使う。積集合を`decision invoke`の外で再計算させない）。
+   */
+  readonly candidateSet?: readonly string[];
   readonly proposedValue: string;
   readonly effectiveValue: string | null;
   readonly requiresConfirmation: boolean;
@@ -373,6 +382,9 @@ export function invokeDecision(
     decisionTypeId: type.id,
     executor,
     authorityMode,
+    candidateHeadSha,
+    subjectRef,
+    ...(candidateSet === undefined ? {} : { candidateSet }),
     proposedValue,
     effectiveValue: decision.effectiveValue,
     requiresConfirmation: decision.requiresConfirmation,
@@ -386,7 +398,7 @@ export function invokeDecision(
     jevProviderConfig: jevSummary,
     providerNote:
       executor.kind === "provider"
-        ? "lightweight-tier（自己申告provider）で処理した。Jevへの実dispatchは#1486以降まで未実装（本呼び出しでは行わない）"
+        ? "lightweight-tier（自己申告provider）で処理した。有効なJev provider設定があればcontinuous shadow（jevShadow参照）として追加でJevへも問い合わせるが、この判断自体のexecutor・effectiveValueには一切影響しない（Issue #1486）"
         : null,
     applied,
     decisionRecordId: appliedDecisionRecordId,

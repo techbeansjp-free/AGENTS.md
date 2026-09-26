@@ -42,6 +42,11 @@ import { parseWorktreeHeads, surveyWorktrees, } from "./domain/worktree-survey.j
 import { resolveFinalizeIgnoredPathAllowlist } from "./domain/worktree-removal-safety.js";
 import { observeProvider } from "./adapters/provider.js";
 import { invokeDecision } from "./adapters/decision-invoke.js";
+import { runJevContinuousShadow } from "./adapters/jev-shadow-dispatch.js";
+import { configureJevProviderConfig, appendJevApiKeyToShellRc, detectShellRcFile, } from "./adapters/jev-guided-setup.js";
+import { appendEvaluationLabel } from "./adapters/evaluation-label-store.js";
+import { parseEvaluationLabelInput } from "./domain/evaluation-label.js";
+import { resolveGitWorkspace } from "./adapters/review-workspace.js";
 import { DECISION_TYPES } from "./domain/decision-types.js";
 import { resolveRouting } from "./domain/routing.js";
 import { checkRoutingIndependence } from "./domain/routing-independence.js";
@@ -3424,8 +3429,84 @@ export async function main(argv, dependencies = {}) {
             input: decisionInput,
             apply,
         });
-        print(result);
+        // Continuous shadow（Issue #1486、T-02）: --applyされた提供者判断だけ、
+        // best-effortでJevへも問い合わせて記録する。失敗してもresultの
+        // effectiveValue等には一切影響しない。
+        let jevShadow = null;
+        if (apply) {
+            jevShadow = await runJevContinuousShadow({
+                activeRoot: result.workspace.activeRoot,
+                primaryRoot: result.workspace.primaryRoot,
+                staging,
+                result,
+            });
+        }
+        print({ ...result, jevShadow });
         return result.rejected ? 1 : 0;
+    }
+    if (command === "decision" && subcommand === "configure") {
+        const { flags } = parse(rest);
+        const provider = required(flags, "provider");
+        if (provider !== "jev")
+            throw new Error(`未対応のprovider指定です: ${provider}（対応: jev）`);
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const apiKeyEnvVar = required(flags, "api-key-env-var");
+        const apply = applyMode(flags);
+        if (flags["shell-rc-append"] === true) {
+            // T-07: shell起動fileへのexport追記（確認付き自動化）。値そのものは
+            // このcommandへ渡さない——process.env[apiKeyEnvVar]から直接読む。
+            let rcPath;
+            if (typeof flags["rc-path"] === "string" && flags["rc-path"] !== "") {
+                rcPath = path.resolve(flags["rc-path"]);
+            }
+            else {
+                const detection = detectShellRcFile();
+                if (!detection.ok)
+                    throw new Error(detection.reason);
+                rcPath = detection.rcPath;
+            }
+            const confirm = typeof flags.confirm === "string" ? flags.confirm : undefined;
+            const result = appendJevApiKeyToShellRc({
+                apiKeyEnvVar,
+                rcPath,
+                apply,
+                confirm,
+            });
+            print(result);
+            // dry-run（apply=false）は常に情報提示のみで成功扱い。apply=trueの
+            // ときは、実際に追記できた場合と、既に追記済みで変更不要だった場合
+            // （alreadyPresent）だけを成功とする。
+            const shellRcSucceeded = !apply || result.applied || result.alreadyPresent;
+            return shellRcSucceeded ? 0 : 1;
+        }
+        const endpoint = required(flags, "endpoint");
+        const model = required(flags, "model");
+        const result = configureJevProviderConfig({
+            root,
+            endpoint,
+            model,
+            apiKeyEnvVar,
+            apply,
+        });
+        print(result);
+        return result.validationErrors.length > 0 ? 1 : 0;
+    }
+    if (command === "decision" && subcommand === "label") {
+        const { flags } = parse(rest);
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const staging = required(flags, "staging");
+        assertWorkflowStaging(staging);
+        const activeRoot = stagingRepositoryRoot(staging);
+        if (root !== activeRoot)
+            throw new Error("decision labelの--rootは--stagingが属するrepository rootと一致する必要があります");
+        const primaryRoot = resolveGitWorkspace(activeRoot).primaryRoot;
+        const labelInput = readJsonInput(resolveContained(root, required(flags, "input")));
+        const label = parseEvaluationLabelInput(labelInput);
+        const apply = applyMode(flags);
+        if (apply)
+            appendEvaluationLabel(primaryRoot, staging, label);
+        print({ label, applied: apply, primaryRoot });
+        return 0;
     }
     if (command === "decision" && subcommand === "types") {
         print({

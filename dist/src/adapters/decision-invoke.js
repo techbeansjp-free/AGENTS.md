@@ -252,6 +252,9 @@ export function invokeDecision(input) {
         decisionTypeId: type.id,
         executor,
         authorityMode,
+        candidateHeadSha,
+        subjectRef,
+        ...(candidateSet === undefined ? {} : { candidateSet }),
         proposedValue,
         effectiveValue: decision.effectiveValue,
         requiresConfirmation: decision.requiresConfirmation,
@@ -264,7 +267,7 @@ export function invokeDecision(input) {
         },
         jevProviderConfig: jevSummary,
         providerNote: executor.kind === "provider"
-            ? "lightweight-tier（自己申告provider）で処理した。Jevへの実dispatchは#1486以降まで未実装（本呼び出しでは行わない）"
+            ? "lightweight-tier（自己申告provider）で処理した。有効なJev provider設定があればcontinuous shadow（jevShadow参照）として追加でJevへも問い合わせるが、この判断自体のexecutor・effectiveValueには一切影響しない（Issue #1486）"
             : null,
         applied,
         decisionRecordId: appliedDecisionRecordId,
