@@ -14,6 +14,7 @@ import { resolveGitWorkspace } from "./review-workspace.js";
 import { findDecisionJournalRecord } from "./decision-journal-store.js";
 import { LIGHTWEIGHT_TIER_PROVIDER_VERSION } from "./decision-invoke.js";
 import { computeFindingClassificationInputDigest, verifyDecisionRefBinding, } from "../domain/decision-journal.js";
+import { deriveReviewRoundImpact } from "./impact-set.js";
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
@@ -42,6 +43,20 @@ function assertStoredStagingDigest(staging) {
     if (stableJson(stored.artifacts) !== stableJson(artifacts) ||
         stored.digest !== calculateStagingDigest(staging, artifacts))
         throw new Error(`review session更新前のstaging成果物一覧またはdigestが一致しません${describeStagingDigestDrift(staging)}`);
+}
+/**
+ * 影響集合の案内。**表示専用であり`round`へ入れない。**
+ * fullのときは全体reviewが適用されることを理由付きで示す。
+ */
+function impactNotes(impact) {
+    const notes = [];
+    if (impact.mode === "targeted")
+        notes.push(`影響集合（digest ${impact.digest.slice(0, 12)}）から隣接範囲${impact.adjacent.length}件をfocus.adjacentScopeへ設定した。隣接範囲の前round blocker起因のHigh回帰と固定契約違反はcurrent blockerになる`);
+    else
+        notes.push(`影響集合を証明できないため全体reviewを適用する（focus.adjacentScopeは空）: ${impact.reasons.slice(0, 3).join("; ")}${impact.reasons.length > 3 ? ` ほか${impact.reasons.length - 3}件` : ""}`);
+    if (impact.securitySensitive)
+        notes.push(`security上の注意を要するpathが変更または隣接範囲にある。縮小せず確認する: ${impact.securityPaths.join(", ")}`);
+    return notes;
 }
 function sortedUnique(values) {
     return [...new Set(values)].sort();
@@ -273,12 +288,26 @@ export function buildReviewRoundDraft(input) {
         });
         if (carriedDecisionRefCleared)
             notes.push("前round blockerが持っていたdecisionRefはnullへ戻した。前roundのcandidateHeadShaに束縛されており新HEADでは検証できないため。是正済みならevidenceに確認内容を書く。Decision Journalの記録を再利用したい場合は新HEADでdecisionを再invokeしてからdecisionRefへ記入する");
+        /**
+         * **隣接範囲は影響集合から導出する**（REQ-WF-039）。差分が空のときは下で
+         * 拒否するため導出しない。記録時は`previewReviewRound`が同じ関数で再導出し照合する。
+         */
+        let adjacentScope = [];
+        if (fixed.length > 0) {
+            const derived = deriveReviewRoundImpact({
+                root,
+                previousHeadSha,
+                headSha,
+            });
+            adjacentScope = derived.adjacentScope;
+            notes.push(...impactNotes(derived.impact));
+        }
         round = {
             round: previous.rounds.length + 1,
             previousRoundDigest: previous.latestRoundDigest,
             anchor: previous.anchor,
             candidateHeadSha: headSha,
-            focus: { previousBlocking, fixedDiff: fixed, adjacentScope: [] },
+            focus: { previousBlocking, fixedDiff: fixed, adjacentScope },
             findings: carried,
             ...(previous.status === "converged" &&
                 recordLayerSuffix(staging, root, previousHeadSha, headSha, previous)
@@ -457,6 +486,24 @@ export function previewReviewRound(input) {
         const fixed = observeReviewDiff(root, previousHeadSha, input.round.candidateHeadSha).changedPaths;
         if (stableJson(fixed) !== stableJson(input.round.focus.fixedDiff))
             throw new Error("review roundのfixedDiffが前roundからの実Git差分と一致しません");
+        /**
+         * **隣接範囲を実Gitから再導出して照合する**（REQ-WF-039）。
+         *
+         * `findingAdmission`は隣接範囲を修正差分と同じくcurrent scopeへ含めるため、
+         * 申告された`adjacentScope`をそのまま受理すると、reviewerや進行役が任意の
+         * 64桁digestを添えて範囲を広げられる。雛形と同じ関数で導出した値との
+         * 完全一致だけを受理する。
+         */
+        const expectedAdjacent = fixed.length === 0
+            ? []
+            : deriveReviewRoundImpact({
+                root,
+                previousHeadSha,
+                headSha: input.round.candidateHeadSha,
+            }).adjacentScope;
+        if (stableJson(expectedAdjacent) !==
+            stableJson(input.round.focus.adjacentScope))
+            throw new Error("review roundのadjacentScopeが実Gitから導出した影響集合の隣接範囲と一致しません。review round --initの雛形を書き換えずに使ってください");
         /**
          * **`followOnly`は申告ではなくGit観測から導出する**（Issue #1287）。
          *

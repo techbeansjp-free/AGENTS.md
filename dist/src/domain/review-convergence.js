@@ -293,19 +293,28 @@ function findingAdmission(input) {
             admissionReason: "前roundの未解決blockerを同じsessionで追跡する",
         };
     const inFixedDiff = focus.fixedDiff.includes(finding.path);
-    if (round >= 2 && !inFixedDiff)
+    /**
+     * **隣接範囲はGitから再導出済みの影響集合である**（REQ-WF-039）。
+     * `previewReviewRound`が記録前に`adjacentScope`を実Gitの影響集合と照合し、
+     * 不一致を拒否する。したがってここへ届く隣接pathは申告ではなく観測であり、
+     * 修正差分と同じくcurrent scopeへ含める。
+     */
+    const inAdjacentScope = round >= 2 &&
+        !inFixedDiff &&
+        focus.adjacentScope.some(({ path }) => path === finding.path);
+    if (round >= 2 && !inFixedDiff && !inAdjacentScope)
         return {
             admission: "record-only",
-            admissionReason: focus.adjacentScope.some(({ path }) => path === finding.path)
-                ? "Graph Evidenceの実照合が未導入なので隣接範囲はcurrent blockerへ昇格しない"
-                : "実Gitの修正差分外なのでcurrent scopeへ追加しない",
+            admissionReason: "実Gitの修正差分外なのでcurrent scopeへ追加しない",
         };
     if (finding.relation === "acceptance-violation") {
         if (finding.contractId !== null &&
             anchor.acceptanceCriteriaIds.includes(finding.contractId))
             return {
                 admission: "block-current",
-                admissionReason: "固定済みAcceptance Criteriaへの違反を再現した",
+                admissionReason: inAdjacentScope
+                    ? "影響集合の隣接範囲で固定済みAcceptance Criteriaへの違反を再現した"
+                    : "固定済みAcceptance Criteriaへの違反を再現した",
             };
         return {
             admission: "record-only",
@@ -317,7 +326,9 @@ function findingAdmission(input) {
             anchor.invariantIds.includes(finding.contractId))
             return {
                 admission: "block-current",
-                admissionReason: "固定済みdomain invariantへの違反を再現した",
+                admissionReason: inAdjacentScope
+                    ? "影響集合の隣接範囲で固定済みdomain invariantへの違反を再現した"
+                    : "固定済みdomain invariantへの違反を再現した",
             };
         return {
             admission: "record-only",
@@ -327,10 +338,12 @@ function findingAdmission(input) {
     if (finding.relation === "fix-regression" &&
         finding.causedByFindingId !== null &&
         priorBlocking.has(finding.causedByFindingId) &&
-        inFixedDiff)
+        (inFixedDiff || inAdjacentScope))
         return {
             admission: "block-current",
-            admissionReason: "前round blockerの修正差分がCritical/High回帰を導入した",
+            admissionReason: inAdjacentScope
+                ? "前round blockerの修正差分が影響集合の隣接範囲へCritical/High回帰を導入した"
+                : "前round blockerの修正差分がCritical/High回帰を導入した",
         };
     return {
         admission: "record-only",

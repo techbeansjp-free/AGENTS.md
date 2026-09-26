@@ -67,6 +67,17 @@ finalize時に削除可能なignore対象は、package既定の`node_modules/`�
 
 `status / impact / path / order`はfilesystem・networkに書かない。探索結果はworktree固有投影のfreshnessを先に検証し、drift、inferred edge、budget超過、不完全結果をexact Gate PASSに使用しない。GraphQLite adapterは固定queryとbound parameterだけを使い、利用者指定のSQL・Cypher・汎用CRUDを受理しない。
 
+## 影響集合コマンド
+
+`impact --base=<commit> --head=<commit>`（任意の`--root --format=json|features`）は、2 commit間の実Git差分とhead commitのtreeから構築した意味Graphだけから影響集合（TERM-ASC-WR-04）を導出する。worktreeと保存済みGraph projectionを読まず、filesystem・networkに書かない。`--base`は`--head`のancestorでなければならず、解決できないcommitと非ancestorは拒否する。
+
+| 形式       | 出力・終了code                                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `json`     | `agent-skill-chain/impact-set/v1`の影響集合全体（変更path、隣接範囲、security注意、feature・scenario・検査の選択、`mode`、理由、digest）を終了値0で返す |
+| `features` | `mode: "targeted"`では実行するfeature pathを1行1件で出力し終了値0を返す。`mode: "full"`では標準出力を空にし、理由を標準エラーへ出して終了値1を返す         |
+
+選択の実行は利用projectのtest commandに委ねる。条件と全体検証へ倒す理由の正本はREQ-WF-039とREQ-WF-040である。
+
 ## Issue検証コマンド
 
 | コマンド         | 入力                                                                                            | 出力・終了code                                                      |

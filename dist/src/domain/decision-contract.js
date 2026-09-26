@@ -46,7 +46,7 @@ export const DECISION_CANDIDATES = Object.freeze([
         direction: "fail-closed",
         disposition: "adopted",
         callerFile: "src/cli.ts",
-        callerLine: "1724",
+        callerLine: "1725",
         callerAnchor: "inspectCiDelivery({",
     }),
     Object.freeze({
@@ -58,7 +58,7 @@ export const DECISION_CANDIDATES = Object.freeze([
         direction: "fail-closed",
         disposition: "adopted",
         callerFile: "src/cli.ts",
-        callerLine: "7321",
+        callerLine: "7322",
         callerAnchor: "validateSpecs(root",
     }),
     Object.freeze({

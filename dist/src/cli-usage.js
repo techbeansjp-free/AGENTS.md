@@ -61,6 +61,20 @@ export const COMMAND_USAGE = Object.freeze([
         example: "npx agent-skill-chain graph impact --root=. --start=file:src/cli.ts --direction=incoming",
     },
     {
+        command: "impact",
+        summary: "2 commit間の影響集合（隣接範囲・security注意・検証feature選択）を実Gitから導出する。影響を証明できない場合はmode=fullで全体検証を要求する",
+        requiredFlags: [
+            flag("base", "commit", "比較基点commit（headのancestor）"),
+            flag("head", "commit", "対象commit"),
+        ],
+        conditionalFlags: [],
+        optionalFlags: [
+            ROOT_FLAG,
+            optional("format", "json|features", "json=影響集合全体、features=実行するfeature pathを1行1件（mode=fullは終了値1）", "json"),
+        ],
+        example: "npx agent-skill-chain impact --root=. --base=origin/main --head=HEAD --format=features",
+    },
+    {
         command: "graph",
         subcommand: "path",
         summary: "BFSまたはDijkstraで決定論的な説明経路を取得する",

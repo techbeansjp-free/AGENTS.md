@@ -59,6 +59,7 @@ import { assertConvergedReviewSession, buildReviewRoundDraft, previewReviewRound
 import { appendMetricsEvent, buildMetricsReport, writeMetricsReport, } from "./adapters/metrics-journal.js";
 import { METRICS_EVENT_KINDS, METRICS_EVENT_PHASES, } from "./domain/metrics.js";
 import { GIT_ENV, evidenceOnlySuffix } from "./adapters/review-diff.js";
+import { computeImpactSet } from "./adapters/impact-set.js";
 import { recordLayerSuffix } from "./adapters/review-record-layer.js";
 import { appendEvidenceReanchor, evaluateEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
 import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
@@ -7100,6 +7101,47 @@ export async function main(argv, dependencies = {}) {
                     recoverRecord: flags["recover-record"] === true,
                 })
                 : uninstall(root, { apply }));
+        return 0;
+    }
+    if (command === "impact") {
+        const forwarded = subcommand ? [subcommand, ...rest] : rest;
+        const { flags, positionals } = parse(forwarded);
+        if (positionals.length > 0)
+            throw new Error(`impactは位置引数を受け付けません: ${positionals[0]}`);
+        const unknown = Object.keys(flags).filter((flag) => !["base", "head", "root", "format"].includes(flag));
+        if (unknown.length > 0)
+            throw new Error(`impactの未知optionです: --${unknown.join(", --")}`);
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const format = flags.format ?? "json";
+        if (format !== "json" && format !== "features")
+            throw new Error("--formatはjsonまたはfeaturesが必要です");
+        const resolveImpactCommit = (label, value) => {
+            const observed = git(["rev-parse", "--verify", `${value}^{commit}`], root, {
+                env: GIT_ENV,
+                allowFailure: true,
+            });
+            if (observed.status !== 0)
+                throw new Error(`impactの--${label}をcommitへ解決できません: ${value}`);
+            return observed.stdout.trim();
+        };
+        const impact = computeImpactSet({
+            root,
+            baseSha: resolveImpactCommit("base", required(flags, "base")),
+            headSha: resolveImpactCommit("head", required(flags, "head")),
+        });
+        if (format === "json") {
+            print(impact);
+            return 0;
+        }
+        /**
+         * **fullのとき空の選択を出力しない。** 空出力を「実行するfeatureが無い」と
+         * 読み違えると検証が0件で通るため、終了値1で全体検証を要求する。
+         */
+        if (impact.mode === "full") {
+            process.stderr.write(`impact mode=full: 影響を証明できないため全体検証が必要です\n${impact.reasons.map((reason) => `- ${reason}`).join("\n")}\n`);
+            return 1;
+        }
+        process.stdout.write(impact.features.length > 0 ? `${impact.features.join("\n")}\n` : "");
         return 0;
     }
     if (command === "doctor") {
