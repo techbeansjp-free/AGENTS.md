@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { calculateStagingDigest, finalizeStoredStagingPromotion, listStagingArtifacts, promoteStoredStagingModeToFull, refreshStoredStagingDigest, readStoredStagingRecord, STAGING_RECORD_FILE, STAGING_PROMOTION_TRANSACTION_FILE as PROMOTION_TRANSACTION_FILE, withStagingMutationLock, } from "../domain/staging.js";
-import { MODE_DECISION_FILE, parseModeDecision, parseStepJournal, renderModeDecision, STEP_JOURNAL_FILE, inspectWorkflowStagingArtifacts, validateStepJournal, WORKFLOW_STEPS, } from "../domain/workflow.js";
+import { MODE_DECISION_FILE, parseModeDecision, parseStepJournal, renderModeDecision, STEP_JOURNAL_FILE, inspectWorkflowStagingArtifacts, journalPrefixDigest, validateStepJournal, WORKFLOW_STEPS, } from "../domain/workflow.js";
 import { assessImplementationDiscovery, parseImplementationDiscoveryInput, } from "../domain/agile-verification.js";
 import { MODE_QUESTIONS, } from "../domain/mode.js";
 import { writeFileAtomic } from "../lib/atomic.js";
@@ -226,6 +226,12 @@ export function readWorkflowJournal(staging) {
  */
 export function assertPlanFrozen(staging, commit = "HEAD", options = {}) {
     const journal = readWorkflowJournal(staging);
+    /**
+     * **journalが不正なら凍結検査を成立させない**（fail-closed）。hash chainの破損や
+     * chain付きjournalでの封印field欠落を、読めた行だけで判定して通さない。
+     */
+    if (journal.errors.length > 0)
+        throw new Error(`計画凍結検査のworkflow journalが不正です: ${journal.errors.join("; ")}`);
     assertPlanFrozenForEntries(staging, journal.entries, commit, options);
 }
 /**
@@ -435,6 +441,7 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
     let entryToWrite = { ...entry };
     delete entryToWrite.planSeal;
     delete entryToWrite.planGeneration;
+    delete entryToWrite.previousEntryDigest;
     if (sealsPlan)
         entryToWrite = {
             ...entryToWrite,
@@ -486,6 +493,15 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
     finally {
         fs.closeSync(descriptor);
     }
+    /**
+     * **hash chainはCLIが計算する**（REQ-WF-036）。呼出し側の`previousEntryDigest`は捨て、
+     * 追記直前に固定したjournal本文全体のdigestを記録する。chain付きjournalでは封印関連fieldの
+     * 欠落を旧journal互換として扱わないため、記録済み行からの除去を検出できる。
+     */
+    entryToWrite = {
+        ...entryToWrite,
+        previousEntryDigest: journalPrefixDigest(pinnedSource),
+    };
     const line = `${JSON.stringify(entryToWrite)}\n`;
     const proposedSource = `${pinnedSource}${line}`;
     const parsedProposed = parseStepJournal(proposedSource);

@@ -87,6 +87,8 @@ function readCommittedAmendment(staging, commit) {
 /**
  * 封印後の計画凍結と計画変更記録を検査し、記録すべき計画世代を返す（REQ-WF-036）。
  * **封印が無いjournal（本機構以前のstaging）では検査せず`undefined`を返す。**
+ * hash chain付きjournalでは封印Stepの`planSeal`欠落をparserが拒否するため、この互換は
+ * chainを持たない旧journalにだけ成立する。
  *
  * 1. 封印済み計画文書はworktreeと、版管理下stagingでは`commit`（既定はHEAD。配送時は
  *    配送するhead SHA）上の内容の両方で封印と一致しなければならない。
@@ -135,6 +137,14 @@ export function assertPlanFrozenForEntries(staging, entries, commit = "HEAD", op
         const reviewed = [...sinceSeal]
             .reverse()
             .find((entry) => entry.step === 10);
+        /**
+         * **chain付きjournalでは欠落を旧journal互換として読み飛ばさない**（REQ-WF-036）。
+         * CLIは封印後のStep 10へ必ず`planGeneration`を記録するため、欠落は記録後の除去である。
+         */
+        if (reviewed !== undefined &&
+            reviewed.planGeneration === undefined &&
+            reviewed.previousEntryDigest !== undefined)
+            throw new Error("配送前の計画変更検査: chain付きjournalの封印後の最後のStep 10にplanGenerationがありません。旧journal互換として扱わず配送を拒否します");
         if (reviewed?.planGeneration !== undefined) {
             const violation = deliveredAmendmentViolation(reviewed.planGeneration, current, "配送前の計画変更検査");
             if (violation)

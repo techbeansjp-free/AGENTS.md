@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { appendLegacyJournal } from "../support/legacy-journal.js";
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -145,7 +146,7 @@ function appendStepNine(
   implementationHeadSha?: string,
 ): void {
   const journal = path.join(world.staging, STEP_JOURNAL_FILE);
-  fs.appendFileSync(
+  appendLegacyJournal(
     journal,
     `${JSON.stringify({
       step: 9,

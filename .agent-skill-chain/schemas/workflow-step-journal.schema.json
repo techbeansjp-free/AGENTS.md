@@ -137,6 +137,13 @@
         },
         "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
       }
+    },
+    "previousEntryDigest": {
+      "description": "journal hash chain。この行より前のjournal本文（先行する全行と各行末の改行を含むexact byte列）のSHA-256で、先頭行はnull。CLIが追記時に計算する。1行でも持てば以降の全行が持ち、chain付きjournalでは封印Stepの非HumanOverride entryにplanSeal、封印後のStep 9・10にplanGenerationが必須になる（行をまたぐ検査はstrict parserが行う。REQ-WF-036）",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      ]
     }
   },
   "allOf": [
@@ -230,6 +237,28 @@
         ]
       },
       "else": { "not": { "required": ["planSeal"] } }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "mode": { "const": "full" },
+              "step": { "const": 8 }
+            },
+            "required": ["mode", "step", "previousEntryDigest"]
+          },
+          {
+            "properties": {
+              "mode": { "enum": ["quick", "poc"] },
+              "step": { "const": 4 }
+            },
+            "required": ["mode", "step", "previousEntryDigest"]
+          }
+        ],
+        "not": { "required": ["humanOverride"] }
+      },
+      "then": { "required": ["planSeal"] }
     },
     {
       "if": {

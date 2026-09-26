@@ -113,3 +113,32 @@ Feature: 承認済み計画の封印と計画変更記録
     Given Step 9・10以外と未知key・digest不一致・世代1の不正と正しいplanGenerationを持つjournal行がある
     When journal行を構造検査する
     Then 不正な4行だけが理由を名指しして拒否され正しい2行は世代を保持する
+
+  Scenario: SCN-UNIT-PLANSEAL-021 新しいstagingのjournalはStep 0からCLIが計算したhash chainを持つ
+    Given Step 4で封印したquick stagingとcommit済みrepositoryがある
+    When 呼出し側の偽のpreviousEntryDigest付きでStep 9を記録する
+    Then Step 0行はpreviousEntryDigestにnullを持ち以降の各行は先行するjournal本文のdigestを持つ
+    And Step 9行は呼出し側の偽のpreviousEntryDigestを採用しない
+
+  Scenario: SCN-UNIT-PLANSEAL-022 chain付きjournalの封印Step行からplanSealを除くと旧journal扱いせず拒否する
+    Given Step 9まで記録したchain付きquick stagingがある
+    When Step 4行からplanSealを除きstaging digestを再固定する
+    Then Step 10記録と配送直前検査とreview roundの再固定は拒否しjournalは変わらない
+    And 末尾の封印Step行からplanSealを除いてもjournal構造検査が拒否する
+
+  Scenario: SCN-UNIT-PLANSEAL-023 chain付きjournalの先行行の編集とchain fieldの除去を拒否する
+    Given Step 9まで記録したchain付きquick stagingがある
+    When chain付きjournalの先行行を1箇所ずつ改変する
+    Then 各改変はchainの不一致または欠落を名指しして拒否される
+
+  Scenario: SCN-UNIT-PLANSEAL-024 chain付きjournalで封印後のStep 10にplanGenerationが無いと配送を拒否する
+    Given AMD-001を記録したStep 10までのquick stagingがある
+    When 末尾のStep 10行からplanGenerationを除く
+    Then 配送直前検査はplanGenerationの欠落を名指しして拒否する
+    And 行単位の検査を経ない配送時の世代検査もplanGenerationの欠落を拒否する
+
+  Scenario: SCN-UNIT-PLANSEAL-025 chainを持たない旧journalは従来どおり読みCLIの追記は旧行全体を束縛する
+    Given 封印を持たないStep 4 entryだけを記録した旧quick stagingがある
+    When 旧journalへCLIでStep 9を追記する
+    Then 旧journalは構造検査を通りStep 9行だけがchainを持つ
+    And Step 9より前の旧行を編集するとchainの不一致として拒否される
