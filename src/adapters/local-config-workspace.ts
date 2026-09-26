@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { git } from "../lib/process.js";
 import {
   peekPrimaryReviewRoot,
   resolveGitWorkspace,
@@ -70,6 +71,41 @@ export function resolveLocalConfigWithWorkspaceFallback<T>(
 }
 
 /**
+ * `target`がそのfileの属するGit repositoryで追跡されていればtrue。Git
+ * repositoryでない場所（tmpdir fixture等）では`git ls-files`が失敗するため
+ * false（未追跡）になる。
+ */
+function isTrackedByGit(target: string): boolean {
+  const result = git(
+    ["ls-files", "--error-unmatch", "--", path.basename(target)],
+    path.dirname(target),
+    { allowFailure: true },
+  );
+  return result.status === 0;
+}
+
+/**
+ * `classifyJevProviderConfig`へ「Git追跡下の設定fileを拒否する」検査を足す
+ * （独立security review L2）。個人ローカル設定はgit管理外が前提であり、
+ * repositoryへcommitされた`jev-provider.json`は第三者（clone元）が
+ * 内容を選べるため、`enabled`でもfail-closedで`invalid`にする。
+ */
+function classifyUntrackedJevProviderConfig(
+  root: string,
+  configPath: string,
+): LocalConfigClassification<JevProviderConfig> {
+  const classified = classifyJevProviderConfig(root, configPath);
+  if (classified.state !== "enabled") return classified;
+  if (isTrackedByGit(path.resolve(root, configPath)))
+    return {
+      state: "invalid",
+      reason:
+        "設定fileがGitで追跡されています。個人ローカル設定はcommitせず、git rm --cachedで追跡を外してください",
+    };
+  return classified;
+}
+
+/**
  * Jev provider configを、active worktree local→primary worktree localの順で
  * 解決する（Issue #1485、L-04）。`decision invoke`のprovider診断出力が使う。
  */
@@ -80,6 +116,6 @@ export function resolveJevProviderConfig(
   return resolveLocalConfigWithWorkspaceFallback(
     root,
     configPath,
-    classifyJevProviderConfig,
+    classifyUntrackedJevProviderConfig,
   );
 }

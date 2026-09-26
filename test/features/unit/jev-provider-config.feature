@@ -72,3 +72,18 @@ Feature: ローカルJev provider設定のloader
     Given jev-provider.jsonが存在するが読み取り権限が無い
     When classifyJevProviderConfigを実行する
     Then 分類結果はinvalidであり理由が空でない
+
+  Scenario: SCN-UNIT-JEVCFG-015 classifyはJEV_で始まらないapiKeyEnvVarをinvalidと分類する
+    Given jev-provider.jsonのapiKeyEnvVarがJEV_で始まらない名前で指定env varも設定されている
+    When classifyJevProviderConfigを実行する
+    Then 分類結果はinvalidであり理由が空でない
+
+  Scenario: SCN-UNIT-JEVCFG-016 Gitで追跡されたjev-provider.jsonは有効な内容でも読み込まない
+    Given Git repositoryでjev-provider.jsonが強制的に追跡されている
+    When resolveJevProviderConfigを実行する
+    Then 解決結果はGit追跡を理由とするinvalidである
+
+  Scenario: SCN-UNIT-JEVCFG-017 Gitで追跡されていないjev-provider.jsonはenabledとして読み込む
+    Given Git repositoryでjev-provider.jsonが追跡されずignoreされている
+    When resolveJevProviderConfigを実行する
+    Then 解決結果はenabledである

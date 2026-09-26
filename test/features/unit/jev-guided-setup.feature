@@ -46,12 +46,33 @@ Feature: Jev guided setup（provider設定生成とshell-rc追記）
     When confirmを指定せずappendJevApiKeyToShellRcをapplyで実行する
     Then 呼び出しは例外を投げる
 
-  Scenario: SCN-UNIT-JEVSETUP-010 applyかつconfirm一致でrc fileへ追記され値は戻り値に含まれない
+  Scenario: SCN-UNIT-JEVSETUP-010 applyかつconfirm一致で値は0600の専用fileへ書かれrc fileにはsource行だけが追記される
     Given env var設定済みでrc fileが存在しない
     When confirmを指定してappendJevApiKeyToShellRcをapplyで実行する
-    Then rc fileに秘密値を含むexport行が書き込まれ戻り値に秘密値が含まれない
+    Then 秘密値は0600の専用fileへ書かれrc fileにはsource行だけが追記され戻り値に秘密値が含まれない
 
   Scenario: SCN-UNIT-JEVSETUP-011 既にexport行がある場合は値を読まず無変更で返す
     Given 既に対象env varのexport行を含むrc fileがある
     When confirmを指定してappendJevApiKeyToShellRcをapplyで実行する
     Then 追記は行われずalreadyPresentがtrueである
+
+  Scenario: SCN-UNIT-JEVSETUP-012 shell metacharacterやquoteを含む値はquoteして0600の専用fileへ書かれrcにはsource行だけが入る
+    Given shell metacharacterとquoteを含む値がenv varに設定されrc fileが存在しない
+    When confirmを指定してappendJevApiKeyToShellRcをapplyで実行する
+    Then 専用fileの値はquoteされshellで読み込むと元の値に一致しコマンドは実行されない
+
+  Scenario: SCN-UNIT-JEVSETUP-013 改行を含む値は書き込まずに拒否する
+    Given 改行を含む値がenv varに設定されrc fileが存在しない
+    When confirmを指定してappendJevApiKeyToShellRcをapplyで実行し例外を捕捉する
+    Then 例外になりどのfileも書き込まれず例外messageに値が含まれない
+
+  Scenario: SCN-UNIT-JEVSETUP-014 2回目の追記は冪等でsource行を重複させない
+    Given env var設定済みでrc fileが存在しない
+    When confirmを指定してappendJevApiKeyToShellRcをapplyで2回実行する
+    Then 2回目はalreadyPresentでrc fileのsource行は1行だけである
+
+  Scenario: SCN-UNIT-JEVSETUP-015 JEV_で始まらないapiKeyEnvVarはconfigureでもshell rc追記でも拒否する
+    Given JEV_で始まらないapiKeyEnvVarを持つconfigure入力がある
+    When configureJevProviderConfigをapplyで実行する
+    Then 書き込まれずvalidationErrorsが空でない
+    And JEV_で始まらないenv var名ではappendJevApiKeyToShellRcが例外を投げる

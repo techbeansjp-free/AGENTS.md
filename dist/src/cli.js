@@ -43,7 +43,7 @@ import { resolveFinalizeIgnoredPathAllowlist } from "./domain/worktree-removal-s
 import { observeProvider } from "./adapters/provider.js";
 import { invokeDecision } from "./adapters/decision-invoke.js";
 import { runJevContinuousShadow } from "./adapters/jev-shadow-dispatch.js";
-import { configureJevProviderConfig, appendJevApiKeyToShellRc, detectShellRcFile, } from "./adapters/jev-guided-setup.js";
+import { configureJevProviderConfig, appendJevApiKeyToShellRc, defaultJevSecretFilePath, detectShellRcFile, } from "./adapters/jev-guided-setup.js";
 import { appendEvaluationLabel } from "./adapters/evaluation-label-store.js";
 import { parseEvaluationLabelInput } from "./domain/evaluation-label.js";
 import { resolveGitWorkspace } from "./adapters/review-workspace.js";
@@ -3453,8 +3453,9 @@ export async function main(argv, dependencies = {}) {
         const apiKeyEnvVar = required(flags, "api-key-env-var");
         const apply = applyMode(flags);
         if (flags["shell-rc-append"] === true) {
-            // T-07: shell起動fileへのexport追記（確認付き自動化）。値そのものは
-            // このcommandへ渡さない——process.env[apiKeyEnvVar]から直接読む。
+            // T-07: 値はmode 0600の専用fileへ書き、shell起動fileへはそのfileを
+            // 読み込む行だけを追記する（確認付き自動化）。値そのものはこの
+            // commandへ渡さない——process.env[apiKeyEnvVar]から直接読む。
             let rcPath;
             if (typeof flags["rc-path"] === "string" && flags["rc-path"] !== "") {
                 rcPath = path.resolve(flags["rc-path"]);
@@ -3469,6 +3470,7 @@ export async function main(argv, dependencies = {}) {
             const result = appendJevApiKeyToShellRc({
                 apiKeyEnvVar,
                 rcPath,
+                secretFilePath: defaultJevSecretFilePath(),
                 apply,
                 confirm,
             });

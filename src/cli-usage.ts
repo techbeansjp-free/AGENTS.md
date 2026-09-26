@@ -1633,13 +1633,13 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     command: "decision",
     subcommand: "configure",
     summary:
-      "Jev provider設定のguided setup（Issue #1486）。既定は.agent-skill-chain/local/jev-provider.jsonの生成。--shell-rc-appendを付けると、代わりに検出した shell起動file（~/.bashrc等）へ export <apiKeyEnvVar>=... を確認付きで追記する。値そのものはこのcommandの引数として渡さない——--shell-rc-appendは常にprocess.env[apiKeyEnvVar]（呼び出し時点でそのshellに既にexport済みの値）を読むだけで、AIエージェントが代行実行してもコマンド履歴・出力へ値が現れない",
+      "Jev provider設定のguided setup（Issue #1486）。既定は.agent-skill-chain/local/jev-provider.jsonの生成。--shell-rc-appendを付けると、代わりに export <apiKeyEnvVar>='...' をmode 0600の専用file（~/.config/agent-skill-chain/jev.env）へ確認付きで書き、検出した shell起動file（~/.bashrc等）へはそのfileを読み込む値を含まない行だけを追記する。改行・制御文字を含む値は書き込まない。値そのものはこのcommandの引数として渡さない——--shell-rc-appendは常にprocess.env[apiKeyEnvVar]（呼び出し時点でそのshellに既にexport済みの値）を読むだけで、AIエージェントが代行実行してもコマンド履歴・出力へ値が現れない",
     requiredFlags: [
       flag("provider", "jev", "対応providerはjevのみ"),
       flag(
         "api-key-env-var",
         "ENV_VAR_NAME",
-        "APIキーを保持するenv var名（値そのものは渡さない）",
+        "APIキーを保持するenv var名（JEV_で始まる英大文字・数字・_。値そのものは渡さない）",
       ),
     ],
     conditionalFlags: [
@@ -1663,13 +1663,13 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       optional(
         "shell-rc-append",
         "",
-        "jev-provider.json生成の代わりに、shell起動fileへのexport追記モードへ切り替える",
+        "jev-provider.json生成の代わりに、APIキー値を0600の専用fileへ書きshell起動fileへはその読み込み行だけを追記するモードへ切り替える",
         "指定なし（jev-provider.json生成モード）",
       ),
       optional(
         "rc-path",
         "path",
-        "shell-rc-append時、追記先fileを明示指定する",
+        "shell-rc-append時、読み込み行の追記先fileを明示指定する",
         "$SHELLから検出（bash→~/.bashrc、zsh→~/.zshrc）",
       ),
       optional(

@@ -218,6 +218,7 @@ import { runJevContinuousShadow } from "./adapters/jev-shadow-dispatch.js";
 import {
   configureJevProviderConfig,
   appendJevApiKeyToShellRc,
+  defaultJevSecretFilePath,
   detectShellRcFile,
 } from "./adapters/jev-guided-setup.js";
 import { appendEvaluationLabel } from "./adapters/evaluation-label-store.js";
@@ -4903,8 +4904,9 @@ export async function main(
     const apiKeyEnvVar = required(flags, "api-key-env-var");
     const apply = applyMode(flags);
     if (flags["shell-rc-append"] === true) {
-      // T-07: shell起動fileへのexport追記（確認付き自動化）。値そのものは
-      // このcommandへ渡さない——process.env[apiKeyEnvVar]から直接読む。
+      // T-07: 値はmode 0600の専用fileへ書き、shell起動fileへはそのfileを
+      // 読み込む行だけを追記する（確認付き自動化）。値そのものはこの
+      // commandへ渡さない——process.env[apiKeyEnvVar]から直接読む。
       let rcPath: string;
       if (typeof flags["rc-path"] === "string" && flags["rc-path"] !== "") {
         rcPath = path.resolve(flags["rc-path"]);
@@ -4918,6 +4920,7 @@ export async function main(
       const result = appendJevApiKeyToShellRc({
         apiKeyEnvVar,
         rcPath,
+        secretFilePath: defaultJevSecretFilePath(),
         apply,
         confirm,
       });
