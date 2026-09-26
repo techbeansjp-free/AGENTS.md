@@ -167,6 +167,21 @@ function parseFocus(value) {
         adjacentScope: Object.freeze(adjacentScope),
     });
 }
+/**
+ * **`decisionRef`はoptional field（PR #1497独立review round 4指摘）。**
+ * `decisionRef`導入前（Issue #1485より前）に記録されたfindingにはfield自体が
+ * 無く、必須fieldのまま受理すると`review-session.json`のschemaVersionを
+ * 変えずに既存のstored round・legacy findingを拒否する後方互換break になる。
+ * `exactObject`のoptionalFieldsへ移し、値の有無を`hasOwnProperty`で区別する。
+ *
+ * **`undefined`と`null`をdigestへ同じ寄与にしない。** `stableJson`は
+ * `Object.entries`で列挙するため、fieldを`decisionRef: undefined`として
+ * 持たせると`JSON.stringify(undefined) ?? "null"`経由で`null`と同一の
+ * 直列化になり、legacy findingの`roundDigest`が`decisionRef`導入後に
+ * 変わってしまう（保存済みroundとの再検証が食い違う）。fieldが無かった
+ * findingはこの関数の戻り値でも`decisionRef`キー自体を持たせない
+ * （spread条件分岐）ことで、導入前と同じ直列化を保つ。
+ */
 function parseFinding(value, index) {
     const label = `review round.findings[${index}]`;
     const finding = exactObject(value, label, [
@@ -179,12 +194,18 @@ function parseFinding(value, index) {
         "path",
         "contractId",
         "causedByFindingId",
-    ]);
+    ], ["decisionRef"]);
     const nullableId = (candidate, field) => {
         if (candidate === null)
             return null;
         return requiredStableId(candidate, `${label}.${field}`);
     };
+    const hasDecisionRef = Object.prototype.hasOwnProperty.call(finding, "decisionRef");
+    const decisionRef = finding.decisionRef;
+    if (hasDecisionRef &&
+        decisionRef !== null &&
+        !/^DR-[0-9a-f]{1,64}$/u.test(String(decisionRef)))
+        throw new Error(`${label}.decisionRefはnullまたは"DR-"接頭辞のIDが必要です`);
     return Object.freeze({
         id: requiredStableId(finding.id, `${label}.id`),
         severity: oneOf(finding.severity, SEVERITIES, `${label}.severity`),
@@ -195,6 +216,9 @@ function parseFinding(value, index) {
         path: safePath(finding.path, `${label}.path`),
         contractId: nullableId(finding.contractId, "contractId"),
         causedByFindingId: nullableId(finding.causedByFindingId, "causedByFindingId"),
+        ...(hasDecisionRef
+            ? { decisionRef: decisionRef === null ? null : String(decisionRef) }
+            : {}),
     });
 }
 export function parseReviewRoundInput(value) {
@@ -503,7 +527,7 @@ export function parseReviewSessionState(value) {
                 "causedByFindingId",
                 "admission",
                 "admissionReason",
-            ]);
+            ], ["decisionRef"]);
             return Object.fromEntries(Object.entries(admitted).filter(([field]) => field !== "admission" && field !== "admissionReason"));
         });
         const round = parseReviewRoundInput({

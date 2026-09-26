@@ -4,8 +4,11 @@
  *
  * **この module は型定義と候補一覧だけを持ち、呼び出し実行ロジックを持たない。**
  * 実際にrouting/authorityへ組み込むこと（callableTargetを実際に呼び出す実行ロジック）は
- * v0.4.2以降が実装する。ここでは「この判断は有限選択として切り出せるか」を型と
- * チェックリストで機械的に判定できる状態と、候補のfile:line一覧だけを届ける。
+ * v0.4.2（Issue #1485、Decision Type Registry・`agent-skill-chain decision invoke`・
+ * `src/adapters/decision-invoke.ts`）が実装した。ここでは「この判断は有限選択として
+ * 切り出せるか」を型とチェックリストで機械的に判定できる状態と、候補のfile:line一覧
+ * だけを届ける。DCAND-001〜010の`executor`/`authorityMode`対応は
+ * `src/domain/decision-types.ts`のDecision Type Registryが所有し、ここへ複製しない。
  *
  * **fail-open方向（quick化・tier降格・Gate PASS判定等）の呼び出し先は恒久的に対象外。**
  * `DecisionCallableTarget`にfail-open方向の識別子を追加しない。
@@ -78,8 +81,11 @@ export type DecisionCandidateEntry =
 /**
  * C-02の候補一覧（実行時に自分でgrep・読み込みして実在確認済み。2026-09-25）。
  *
- * 採用5件（`disposition: "adopted"`、全件fail-closed方向）。
- * 除外7件（`disposition: "excluded"`、BR-01・BR-02・「有限選択の対象外」のいずれかを理由に持つ）。
+ * 採用9件（`disposition: "adopted"`、全件fail-closed方向。DCAND-001〜005はIssue #1483時点
+ * から採用済み、DCAND-006/008/009/010はIssue #1485がDecision Skill自身（
+ * `src/adapters/decision-invoke.ts`）をBR-01が要求する呼び出し元として新設し採用へ変更した）。
+ * 除外3件（`disposition: "excluded"`、DCAND-007・011・012。BR-02（fail-open方向）または
+ * 「有限選択の対象外」を理由に持つ。恒久的に対象外）。
  *
  * 詳細は`03_実装計画.md` T01配下の候補一覧表を正本とする。
  */
@@ -116,12 +122,12 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label:
         "仕様更新要否の判定（requiresSpecUpdate。変更file pathの正規表現一致でdocs/specs/更新の要否を推定する）",
       decisionSiteFile: "src/domain/spec.ts",
-      decisionSiteLine: "303",
-      decisionSiteAnchor: "requiresSpecUpdate = changes.some",
+      decisionSiteLine: "265",
+      decisionSiteAnchor: "export function requiresSpecUpdate",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "7189",
+      callerLine: "7223",
       callerAnchor: "validateSpecs(root",
     }),
     Object.freeze({
@@ -142,12 +148,12 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label:
         "開発考慮事項の決定文言が具体的かの判定（hasConcreteDecisionText。長さ閾値＋定型文除外の正規表現でplaceholderを検出する）",
       decisionSiteFile: "src/domain/policy.ts",
-      decisionSiteLine: "373",
+      decisionSiteLine: "378",
       decisionSiteAnchor: "function hasConcreteDecisionText",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/domain/policy.ts",
-      callerLine: "395",
+      callerLine: "403",
       callerAnchor: "hasConcreteDecisionText(record[field], minimum)",
     }),
     Object.freeze({
@@ -156,11 +162,12 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
         "review findingの検証記録に含める分類・理由の記入（進行役がfindingの分類と理由を記録する手順）",
       decisionSiteFile: ".agent-skill-chain/skills/step-10-review/SKILL.md",
       decisionSiteLine: "14",
-      decisionSiteAnchor: "分類と理由を残す",
+      decisionSiteAnchor: "分類（severity等）と理由の記入（DCAND-006）は",
       direction: "fail-closed",
-      disposition: "excluded",
-      exclusionReason:
-        "BR-01（呼び出し元を名指しできない）。当該行はStep 10の検証記録欄に何を記入するかを定めた記述であり、進行役が候補ごとに分類（severity等）と理由を記入する。分類の実施主体は進行役でありcompiled codeではないため、review-convergence.ts:347のoneOf(finding.severity, ...)は記入結果を構造検証するだけでcompiled codeへのseamが無い。Step 10独立reviewで「severity分類そのもの」という当初の一次資料の言い回しがこの行の説明対象（検証記録の記入項目）と厳密には異なると指摘され、記述を訂正した",
+      disposition: "adopted",
+      callerFile: "src/adapters/decision-invoke.ts",
+      callerLine: "273",
+      callerAnchor: 'if (type.id === "DCAND-006") {',
     }),
     Object.freeze({
       id: "DCAND-007",
@@ -178,22 +185,24 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label: "CodeRabbit利用枠制限の判定",
       decisionSiteFile: ".agent-skill-chain/docs/01_開発ワークフロー.md",
       decisionSiteLine: "214",
-      decisionSiteAnchor: "CodeRabbitの利用枠制限は",
+      decisionSiteAnchor: "CodeRabbitの利用枠制限の判定（DCAND-008）は",
       direction: "fail-closed",
-      disposition: "excluded",
-      exclusionReason:
-        "BR-01（呼び出し元を名指しできない）。src/全体をgrepしても対応するcompiled codeが無い（DCAND-006と同型）",
+      disposition: "adopted",
+      callerFile: "src/adapters/decision-invoke.ts",
+      callerLine: "180",
+      callerAnchor: 'case "DCAND-008": {',
     }),
     Object.freeze({
       id: "DCAND-009",
       label: "reviewer選定（Codex Sol/Opus）の判断",
       decisionSiteFile: ".agent-skill-chain/skills/step-10-review/SKILL.md",
       decisionSiteLine: "18",
-      decisionSiteAnchor: "Codex SolまたはOpusなど利用可能な別reviewer",
+      decisionSiteAnchor: "reviewer選定（DCAND-009）は",
       direction: "fail-closed",
-      disposition: "excluded",
-      exclusionReason:
-        "BR-01（判断を消費する呼び出し元が無い）。role.ts:338-405のvalidateProviderSelectionは既になされた選択のauthorityを検証するだけで、選定の判断自体を消費しない",
+      disposition: "adopted",
+      callerFile: "src/adapters/decision-invoke.ts",
+      callerLine: "290",
+      callerAnchor: 'if (authorityMode === "constrained-choice") {',
     }),
     Object.freeze({
       id: "DCAND-010",
@@ -202,9 +211,10 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       decisionSiteLine: "266-272",
       decisionSiteAnchor: "軽微かどうかは判断ではなく次の3条件で決める",
       direction: "fail-closed",
-      disposition: "excluded",
-      exclusionReason:
-        "BR-01（呼び出し元を名指しできない）。src/全体をgrepしても対応するcompiled codeが無い",
+      disposition: "adopted",
+      callerFile: "src/adapters/decision-invoke.ts",
+      callerLine: "324",
+      callerAnchor: 'type.id === "DCAND-010" ? DCAND_010_SAFE_VALUE',
     }),
     Object.freeze({
       id: "DCAND-011",

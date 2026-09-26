@@ -1959,6 +1959,7 @@ function buildReviewSession(world: ReanchorWorld, converged: boolean): void {
               path: REVIEWED,
               contractId: "AC-1093-07",
               causedByFindingId: null,
+              decisionRef: null,
             },
           ],
     }),

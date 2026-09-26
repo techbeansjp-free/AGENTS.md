@@ -370,7 +370,15 @@ function validateWorktreePlacementPolicy(
   }
 }
 
-function hasConcreteDecisionText(value: unknown, minimum: number): boolean {
+/**
+ * DCAND-005（`src/domain/decision-contract.ts`）。exportを追加しただけで
+ * 判定内容・既存呼び出し元（`validateApplicabilityDecision`、この直後）の
+ * 挙動は変えない（Issue #1485、L-01）。
+ */
+export function hasConcreteDecisionText(
+  value: unknown,
+  minimum: number,
+): boolean {
   return (
     typeof value === "string" &&
     value.trim().length >= minimum &&

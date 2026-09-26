@@ -3,10 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { After } from "@cucumber/cucumber";
 import {
+  classifyJevProviderConfig,
   loadJevProviderConfig,
   JEV_PROVIDER_CONFIG_PATH,
   type JevProviderConfig,
 } from "../../src/domain/jev-provider-config.js";
+import type { LocalConfigClassification } from "../../src/domain/local-config-resolution.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class JevProviderConfigWorld extends WorkflowWorld {
@@ -18,6 +20,8 @@ class JevProviderConfigWorld extends WorkflowWorld {
   fixtureSnapshotBefore: string = "";
   fixtureSnapshotAfter: string = "";
   secretValue = "";
+  classification: LocalConfigClassification<JevProviderConfig> | undefined =
+    undefined;
   /**
    * loader呼び出し中に実際にfsへ渡されたpath（readFileSync/statSync）。
    * import specifierの静的走査だけでは、読み取った結果を捨てる変異
@@ -26,6 +30,7 @@ class JevProviderConfigWorld extends WorkflowWorld {
    * 呼び出しを記録し、SCN-008がtrusted pathの不在を動的に確認する。
    */
   readPaths: string[] = [];
+  restoreReadFileSync: (() => void) | undefined = undefined;
 }
 
 const { Given, When, Then } = stepDefinitions<JevProviderConfigWorld>();
@@ -331,3 +336,78 @@ Then(
       );
   },
 );
+
+// --- classifyJevProviderConfig（Issue #1485、L-04）--------------------------
+
+When(
+  "classifyJevProviderConfigを実行する",
+  function (this: JevProviderConfigWorld) {
+    this.classification = classifyJevProviderConfig(this.root, this.configPath);
+  },
+);
+
+Then("分類結果はabsentである", function (this: JevProviderConfigWorld) {
+  assert.equal(this.classification?.state, "absent");
+});
+
+Then("分類結果はdisabledである", function (this: JevProviderConfigWorld) {
+  assert.equal(this.classification?.state, "disabled");
+});
+
+Then(
+  "分類結果はinvalidであり理由が空でない",
+  function (this: JevProviderConfigWorld) {
+    assert.equal(this.classification?.state, "invalid");
+    assert.ok(
+      this.classification?.state === "invalid" &&
+        this.classification.reason.length > 0,
+    );
+  },
+);
+
+Then("分類結果はenabledである", function (this: JevProviderConfigWorld) {
+  assert.equal(this.classification?.state, "enabled");
+});
+
+// --- SCN-UNIT-JEVCFG-014（PR #1497独立review round 4指摘） ------------------
+
+Given(
+  "jev-provider.jsonが存在するが読み取り権限が無い",
+  function (this: JevProviderConfigWorld) {
+    // PR #1497独立review round 4の追加指摘（CodeRabbit）: `chmod 0o000`は
+    // root権限で実行されるCI環境ではreadFileSyncを止められず、実行環境に
+    // よってSCN-UNIT-JEVCFG-014の結果が不安定になる。既存の
+    // `callLoaderWithReadSpy`と同じfs.readFileSyncの一時的な置き換えで、
+    // OS権限を一切変更せずに対象pathだけへEACCESを発生させる
+    // （`ENOTDIR`はabsentへ分類されるため使わない）。
+    this.root = this.temp("asc-jevcfg-014-");
+    writeConfig(this.root, {
+      enabled: true,
+      apiKeyEnvVar: "JEV_API_KEY",
+      endpoint: "https://api.jev.example.invalid/v1",
+      model: "jev-decision-1",
+    });
+    const resolved = path.join(this.root, JEV_PROVIDER_CONFIG_PATH);
+    const mutableFs = fs as unknown as MutableFsReadSurface;
+    const originalReadFileSync: NarrowReadFileSync = fs.readFileSync;
+    mutableFs.readFileSync = (targetPath, encoding) => {
+      if (path.resolve(String(targetPath)) === path.resolve(resolved)) {
+        const error = new Error(
+          "EACCES: permission denied",
+        ) as NodeJS.ErrnoException;
+        error.code = "EACCES";
+        throw error;
+      }
+      return originalReadFileSync(targetPath, encoding);
+    };
+    this.restoreReadFileSync = () => {
+      mutableFs.readFileSync = originalReadFileSync;
+    };
+  },
+);
+
+After<JevProviderConfigWorld>(function () {
+  // fs.readFileSyncを差し替えたままにすると後続scenarioへ漏れるため、
+  // EACCES fixtureが使ったmonkey patchを必ず元へ戻す。
+  this.restoreReadFileSync?.();
+});

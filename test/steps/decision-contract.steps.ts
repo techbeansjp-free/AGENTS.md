@@ -22,7 +22,12 @@ interface DecisionContractWorld extends WorkflowWorld {
 
 const { Given, When, Then } = stepDefinitions<DecisionContractWorld>();
 
-const FILE_LINE_PATTERN = /^[\w./-]+:\d+(?:-\d+)?$/u;
+// Issue #1485でDCAND-008/010が採用（adopted）へ変わり、decisionSiteFileとして
+// `.agent-skill-chain/docs/01_開発ワークフロー.md`（Unicode文字を含む正本文書名）を
+// 初めてこの形式検査へ通す。`\w`はASCIIだけを含むため、`\p{L}`・`\p{N}`を追加して
+// 既存repositoryのUnicodeファイル名を実在するpathとして受理できるようにする
+// （検査対象は固定文字列であり外部入力ではないため、緩和は安全側）。
+const FILE_LINE_PATTERN = /^[\w./\p{L}\p{N}-]+:\d+(?:-\d+)?$/u;
 
 const JOURNAL_SCHEMA_PATHS = [
   ".agent-skill-chain/schemas/workflow-step-journal.schema.json",

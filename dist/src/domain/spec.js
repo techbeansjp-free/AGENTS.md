@@ -200,6 +200,21 @@ export function bootstrapProject(root, options) {
     });
     return { applied: true, planned, tokenSpecs: withTokens, ...policyNotice };
 }
+/**
+ * 変更file pathの正規表現一致から仕様更新の要否を推定する（DCAND-003、
+ * `src/domain/decision-contract.ts`）。**`validateSpecs`から抽出しただけで
+ * 判定内容は変えない**（Issue #1485、L-01。既存の唯一の呼び出し元だった
+ * `validateSpecs`は本関数を呼ぶだけになった）。
+ */
+export function requiresSpecUpdate(changedFiles) {
+    return changedFiles.some((file) => {
+        const normalized = file.replaceAll("\\", "/");
+        return (/^(?:src|bin)\//.test(normalized) ||
+            /^(?:package(?:-lock)?\.json|\.github\/workflows\/)/.test(normalized) ||
+            /^\.agent-skill-chain\/(?:docs|skills|templates|schemas|policy)\//.test(normalized) ||
+            /(^|\/)architecture(\/|\.|$)/i.test(normalized));
+    });
+}
 export function validateSpecs(root, options = {}) {
     const errors = [];
     const specs = path.join(root, "docs", "specs");
@@ -230,16 +245,10 @@ export function validateSpecs(root, options = {}) {
         }
     }
     const changes = options.changedFiles ?? [];
-    const requiresSpecUpdate = changes.some((file) => {
-        const normalized = file.replaceAll("\\", "/");
-        return (/^(?:src|bin)\//.test(normalized) ||
-            /^(?:package(?:-lock)?\.json|\.github\/workflows\/)/.test(normalized) ||
-            /^\.agent-skill-chain\/(?:docs|skills|templates|schemas|policy)\//.test(normalized) ||
-            /(^|\/)architecture(\/|\.|$)/i.test(normalized));
-    });
+    const requiresSpecUpdateResult = requiresSpecUpdate(changes);
     if (changes.length > 0 && !options.review?.specImpact)
         errors.push("仕様影響が不明です");
-    if (requiresSpecUpdate && options.review?.specImpact !== "updated")
+    if (requiresSpecUpdateResult && options.review?.specImpact !== "updated")
         errors.push("振る舞い・構造・安全・policyへ影響する変更には仕様更新が必要です");
     if (options.review?.specImpact === "updated") {
         const trace = options.review.trace;

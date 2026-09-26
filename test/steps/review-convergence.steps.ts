@@ -91,6 +91,7 @@ function finding(overrides: Record<string, unknown> = {}) {
     path: reviewedPath,
     contractId: "AC-001",
     causedByFindingId: null,
+    decisionRef: null,
     ...overrides,
   };
 }
@@ -360,6 +361,7 @@ When("round 2の修正差分で前round finding起因のHigh回帰を記録す�
           relation: "fix-regression",
           contractId: null,
           causedByFindingId: "H-001",
+          decisionRef: null,
         }),
       ],
     }),

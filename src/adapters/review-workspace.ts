@@ -64,8 +64,25 @@ function readMetadataFile(file: string): string {
   return fs.readFileSync(file, "utf8").trimEnd();
 }
 
-/** Read-only Git identity check for reviewer inputs and inherited local config. */
-export function resolveReviewRoot(root: string): ReviewWorkspace {
+/**
+ * `root`が属するGit worktree一式を表す（Issue #1485、L-04設計正本§3）。
+ * `activeRoot`は検証済みの`root`そのもの、`primaryRoot`は連結先の主worktreeで、
+ * `root`自身が主worktreeの場合は両者が一致する。
+ */
+export interface GitWorkspace {
+  readonly activeRoot: string;
+  readonly primaryRoot: string;
+}
+
+/**
+ * Read-only Git identity check for reviewer inputs and inherited local config。
+ *
+ * **`resolveReviewRoot`・`loadWorkspaceConfig`（Issue #1428）が個別に持っていた
+ * primary worktree検証を一般化した共通adapter。** `resolveReviewRoot`はこの関数の
+ * 薄いwrapperであり、既存呼び出し元（`supplemental-review-launch.ts`）の挙動を
+ * 変えない（Issue #1485、L-04）。
+ */
+export function resolveGitWorkspace(root: string): GitWorkspace {
   if (
     Object.keys(process.env).some(
       (key) =>
@@ -111,7 +128,12 @@ export function resolveReviewRoot(root: string): ReviewWorkspace {
   const registered = git(["worktree", "list", "--porcelain"], root).stdout;
   if (!registered.split("\n").includes(`worktree ${root}`))
     throw new Error("Git worktreeが登録されていません");
-  return { primaryRoot };
+  return { activeRoot: root, primaryRoot };
+}
+
+/** Read-only Git identity check for reviewer inputs and inherited local config. */
+export function resolveReviewRoot(root: string): ReviewWorkspace {
+  return { primaryRoot: resolveGitWorkspace(root).primaryRoot };
 }
 
 /** Bind staging documents to the same registered Git worktree as root. */
