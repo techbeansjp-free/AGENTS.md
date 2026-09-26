@@ -2372,6 +2372,11 @@ function preparePullRequest(
     | "himpl-mismatch"
     | "untracked"
     | "extra-file" = "valid",
+  /**
+   * disabledでも実装commitと証跡commitを分離する。後からmergeへ再開する
+   * scenarioは、review sessionと一致する証跡を`H_final`に持つ必要がある。
+   */
+  separateArtifact = false,
 ): PreparedPullRequest {
   const fixturePast = fixtureInstant({ hoursAgo: 1 });
   const fixtureNow = fixtureInstant();
@@ -2430,7 +2435,10 @@ function preparePullRequest(
   );
   // Merge可能なPRではreview対象の実装commitをbaseより後に置く。
   // review artifactはさらに後の専用commitへ分離する。
-  if (mergeMode !== "disabled" && workflowMode !== "poc") {
+  if (
+    (mergeMode !== "disabled" || separateArtifact) &&
+    workflowMode !== "poc"
+  ) {
     fs.writeFileSync(path.join(root, "implementation.txt"), "product change\n");
     spawnSync("git", ["add", "implementation.txt"], { cwd: root });
     spawnSync("git", ["commit", "-q", "-m", "implementation"], {
@@ -2517,7 +2525,7 @@ function preparePullRequest(
   }).stdout.trim();
   const separatedReviewArtifact =
     workflowMode !== "poc" &&
-    mergeMode !== "disabled" &&
+    (mergeMode !== "disabled" || separateArtifact) &&
     artifactDisposition !== "untracked";
   const reviewCandidateHeadSha = separatedReviewArtifact
     ? implementationCommitSha
@@ -3031,6 +3039,7 @@ function prepareDeliveryCli(
     | "himpl-mismatch"
     | "untracked"
     | "extra-file" = "valid",
+  separateArtifact = false,
 ): PreparedDeliveryCli {
   const prepared = preparePullRequest(
     world,
@@ -3041,6 +3050,7 @@ function prepareDeliveryCli(
     workflowMode,
     requiredReviews,
     artifactDisposition,
+    separateArtifact,
   );
   const stubDirectory = world.temp("asc-delivery-cli-gh-");
   const stub = path.join(stubDirectory, "gh");
@@ -5666,7 +5676,17 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-E2E-DELIVERY-REOPEN-001": {
-      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "disabled",
+        "merge",
+        undefined,
+        "quick",
+        0,
+        "valid",
+        true,
+      );
       const created = createDeliveryPullRequest(prepared);
       assert.match(created.stdout, /pull_request_complete/u);
       const stateFile = path.join(

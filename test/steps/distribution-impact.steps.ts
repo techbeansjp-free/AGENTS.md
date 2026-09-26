@@ -62,7 +62,11 @@ const CHECKS: Readonly<Record<string, () => void>> = {
     /** 配布物影響はGitの変更pathから導出し、散文の節を要求しない（REQ-WF-038）。 */
     assert.deepEqual(
       deriveDistributionImpact({
-        changedPaths: ["src/cli.ts", "scripts/check_file_audit.ts", "README.md"],
+        changedPaths: [
+          "src/cli.ts",
+          "scripts/check_file_audit.ts",
+          "README.md",
+        ],
         packageFiles: PACKAGE_FILES,
       }),
       ["README.md", "src/cli.ts"],

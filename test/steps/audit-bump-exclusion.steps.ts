@@ -370,7 +370,6 @@ Then("file監査は合格する", function () {
   );
 });
 
-
 Then("file監査はreview artifact以外のpathを理由に失敗する", function () {
   assert.equal(this.auditResult?.valid, false);
   assert.match(

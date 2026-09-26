@@ -163,7 +163,10 @@ function assertSession(world: EvidenceOnlyHeadWorld): void {
 }
 
 /** 収束済みsessionから生成したreview証跡。`revision`ごとに検証記録だけを変える。 */
-function formalArtifact(world: EvidenceOnlyHeadWorld, revision: number): string {
+function formalArtifact(
+  world: EvidenceOnlyHeadWorld,
+  revision: number,
+): string {
   return reviewEvidenceContentFromStaging(world.staging, {
     issue: 1272,
     verification: ["npm test", `npm test -- --revision=${revision}`],

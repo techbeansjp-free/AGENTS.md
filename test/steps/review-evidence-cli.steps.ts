@@ -273,7 +273,7 @@ When("不正な条件でreview exportを実行する", async function () {
 Then("各条件を理由つきで拒否し証跡を書かない", function () {
   const expected = [
     /reviewerと--implementerは異なるidentity/u,
-    /--verified=<command>で1件以上/u,
+    /--verified=/u,
     /docs\/reviews\/または\.agent-skill-chain\/reviews\/配下/u,
     /1500_review\.json/u,
     /symlinkを含まない親directory/u,

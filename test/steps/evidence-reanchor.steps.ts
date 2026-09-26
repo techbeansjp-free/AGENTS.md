@@ -48,6 +48,16 @@ import {
 } from "../../src/cli.js";
 import { readStoredDeliveryState } from "../../src/adapters/delivery-state.js";
 import { github } from "../../src/adapters/github.js";
+import {
+  parseReviewEvidence,
+  type ReviewEvidence,
+} from "../../src/domain/review-evidence.js";
+import {
+  resealReviewEvidence,
+  reviewEvidenceContentFromStaging,
+  syntheticReviewEvidence,
+  syntheticReviewEvidenceContent,
+} from "../support/review-evidence-fixture.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
 class ReanchorWorld extends WorkflowWorld {
@@ -268,18 +278,22 @@ function snapshot(world: ReanchorWorld): void {
   }
 }
 
-const REVIEW_ARTIFACT = "docs/reviews/99_課題1172再固定レビュー.md";
-const INITIAL_FORWARD_ARTIFACT = "docs/reviews/209_課題1389初回レビュー.md";
-const FORWARD_ARTIFACT = "docs/reviews/210_課題1389再固定レビュー.md";
+const REVIEW_ARTIFACT = "docs/reviews/1172_review.json";
+const INITIAL_FORWARD_ARTIFACT = "docs/reviews/209_review.json";
+const FORWARD_ARTIFACT = "docs/reviews/1389_review.json";
+/** artifact replacementの旧path。Issue番号を誤った証跡を正しい名前へ移す。 */
+const REPLACED_ARTIFACT = "docs/reviews/1376_review.json";
+const REPLACEMENT_ARTIFACT = "docs/reviews/1377_review.json";
+const SUPERSESSION_ARTIFACT = "docs/reviews/1437_review.json";
 
 /**
- * review artifactの配置variant（Issue #1433）。
+ * review証跡の配置variant（Issue #1433）。
  *
  * **正本はfile名規則を持たない。** `01_開発ワークフロー.md`はformal review成果物の
  * 配置を`docs/reviews/`と`.agent-skill-chain/reviews/`の2 directoryだけで定め、
  * `02_品質基準.md`は「汎用パッケージは特定runnerやfile名を強制しない」と定める。
- * ここではその2 directoryと、製品自身が`review artifact --init`の既定で出力する
- * `<Issue番号>_レビュー.md`を受理側のvariantとして持つ。
+ * ここではその2 directoryと、製品自身が`review export`で出力する
+ * `<Issue番号>_review.json`を受理側のvariantとして持つ。
  *
  * **allowlist外のvariantは候補に数えない。** prefixの延長と短縮は区切り文字を
  * 跨ぐ前方一致の誤りを、backslashと制御文字は`isEvidenceOnlyPath`が拒否する
@@ -287,13 +301,13 @@ const FORWARD_ARTIFACT = "docs/reviews/210_課題1389再固定レビュー.md";
  * 単純前方一致では候補として受理されていた（INV-05）。**
  */
 const ARTIFACT_PLACEMENTS: Record<string, string> = {
-  製品既定出力名: "docs/reviews/1433_レビュー.md",
-  第2allowlist: ".agent-skill-chain/reviews/1433_レビュー.md",
-  自repo慣習名: "docs/reviews/226_課題1433再固定レビュー.md",
-  prefix延長: "docs/reviewsX/1433_レビュー.md",
-  prefix短縮: "docs/review/1433_レビュー.md",
-  backslash: "docs/reviews/1433\\レビュー.md",
-  制御文字: "docs/reviews/1433\u0001レビュー.md",
+  製品既定出力名: "docs/reviews/1433_review.json",
+  第2allowlist: ".agent-skill-chain/reviews/1433_review.json",
+  自repo慣習名: "docs/reviews/226_review.json",
+  prefix延長: "docs/reviewsX/1433_review.json",
+  prefix短縮: "docs/review/1433_review.json",
+  backslash: "docs/reviews/1433\\review.json",
+  制御文字: "docs/reviews/1433\u0001review.json",
 };
 
 function placement(name: string): string {
@@ -302,100 +316,45 @@ function placement(name: string): string {
   return value;
 }
 
-/** 「レビュー識別情報」節を持つreview artifactを組み立てる。 */
+/**
+ * rebase経路のreview証跡。
+ *
+ * 通常rebaseの再固定は保存済みsessionと照合しないため、sessionを持たない
+ * 合成証跡を使う。**session欄は全variantで共有する。** 比較基点と`H_impl`以外が
+ * 1 fieldでも違えば`artifact-body-changed`になるためである。
+ */
+const REBASE_EVIDENCE = syntheticReviewEvidence({
+  baseSha: "0".repeat(40),
+  implementationHeadSha: "1".repeat(40),
+  issue: 1172,
+});
+
 function reviewArtifact(
   base: string,
   implementation: string,
-  extra = "",
+  change: Partial<Omit<ReviewEvidence, "evidenceDigest">> = {},
 ): string {
-  return `# 04 レビュー
-
-## 0. レビュー識別情報
-
-| 項目 | 内容 |
-|---|---|
-| 比較基点 | \`${base}\` |
-| H_impl | \`${implementation}\` |
-| 実施者 | reviewer |
-
-## 1. 判定
-
-approved${extra}
-`;
+  return resealReviewEvidence(REBASE_EVIDENCE, {
+    baseSha: base,
+    implementationHeadSha: implementation,
+    ...change,
+  });
 }
 
-function auditableReviewArtifact(
-  base: string,
-  implementation: string,
-  includeGenerated = false,
-): string {
-  return `# 04 レビュー
-
-## 0. レビュー識別情報
-
-| 項目 | 内容 |
-|---|---|
-| 比較基点 | \`${base}\` |
-| H_impl | \`${implementation}\` |
-| ラウンド数 | 1 |
-| Step chain | 経由: fixture |
-
-## 1. 入力証拠
-
-### 1.1 変更ファイル個別監査
-
-| path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
-|---|---|---|---|---|---|---|---|---|
-| \`${REVIEWED}\` | A | package owner | domain | fixture実装 | 循環なし | AC-1377-01 / SCN-1377-01 | revert可能 | pass |${includeGenerated ? `\n| \`${GENERATED}\` | A | package owner | 生成物 | 生成元${REVIEWED}と対応 | source → dist | AC-WF-005 / SCN-1389-01 | 配布影響確認済み、revert可能 | pass |` : ""}
-
-## 2. 受け入れ条件の確認
-合格。
-## 3. 肯定的評価
-成立。
-## 4. 敵対的評価
-| 観点 | 確認内容 | 判定 | 根拠 |
-|---|---|---|---|
-| 反例 | 直接反例 | pass | 反例確認済み。 |
-| 範囲漏れ | dist・文書・schema・test | pass | 22監査pathと生成物5 path |
-## 5. 指摘
-なし。
-## 6. ラウンド固有の確認
-収束。
-## 7. テスト結果
-合格。
-## 8. 配布物影響
-判断: 配布物を更新しない
-根拠: fixtureのreview artifact検査だけで配布物を変更しない。
-## 9. 独立reviewの成立
-
-| 項目 | 内容 |
-|---|---|
-| 適用した独立性モード | context-isolated（未宣言時の既定） |
-| その要求を満たすこと | はい（fixture） |
-| reviewerとimplementerのidentity・context比較 | reviewer-context != implementer-context |
-| reviewerが対象差分を変更していないこと | はい。製品path変更0件 |
-
-## 10. 仕様整合性
-整合。
-## 11. 総合判定と再開地点
-- 未解決Critical/High: 0件
-- 判定: approved
-`;
+/** 検証commandを1件追加した同じ証跡。`verification`以外は変えない。 */
+function withAddedVerification(
+  evidence: ReviewEvidence,
+  command = "npm run lint",
+): ReviewEvidence["verification"] {
+  return [...evidence.verification, { command, result: "pass" as const }];
 }
 
-function forwardReviewArtifact(
-  base: string,
-  implementation: string,
-  includeGenerated = false,
+/** stagingの保存済みsessionから、製品と同じ生成関数で証跡を作る。 */
+function sessionEvidence(
+  world: ReanchorWorld,
+  options: Parameters<typeof reviewEvidenceContentFromStaging>[1],
 ): string {
-  return auditableReviewArtifact(
-    base,
-    implementation,
-    includeGenerated,
-  ).replace(
-    `| \`${REVIEWED}\` | A | package owner | domain | fixture実装 | 循環なし | AC-1377-01 / SCN-1377-01 | revert可能 | pass |`,
-    `| \`${REVIEWED}\` | A | package owner | domain | fixture実装 | 循環なし | AC-1389-01 / SCN-1389-01 | revert可能 | pass |\n| \`${INITIAL_FORWARD_ARTIFACT}\` | A | package owner | documentation | 前round証跡を保持 | 循環なし | AC-1389-01 / SCN-1389-01 | revert可能 | pass |`,
-  );
+  return reviewEvidenceContentFromStaging(world.staging, options);
 }
 
 function recordForwardRound(
@@ -466,6 +425,31 @@ function recordForwardRound(
     readWorkflowJournal(world.staging).entries.length === beforeCount;
 }
 
+/**
+ * review済み実装の上へ、保存済みsessionから生成した初回証跡を積む。
+ *
+ * **証跡はsessionの記録後にしか生成できない。** sessionIdとround digestを持つため、
+ * stagingとStep 10 bindingを先に作り、その後で証跡commitを作る。
+ */
+function commitInitialEvidence(
+  world: ReanchorWorld,
+  implementation: string,
+  artifactPath: string,
+  issue: number,
+  findings: readonly Record<string, unknown>[] = [],
+): string {
+  world.staging = makeStaging(world);
+  buildApprovedReviewBinding(world, implementation, findings);
+  const content = sessionEvidence(world, { issue });
+  world.oldHeadSha = commitPath(
+    world.root,
+    artifactPath,
+    content,
+    "docs: review証跡を記録する",
+  );
+  return content;
+}
+
 function forwardFixture(
   world: ReanchorWorld,
   recordIntake: boolean,
@@ -486,18 +470,12 @@ function forwardFixture(
       "export const reviewed = 1;\n",
       "build: initial generated review対象",
     );
-  world.oldHeadSha = commitPath(
-    world.root,
+  commitInitialEvidence(
+    world,
+    initialImplementation,
     INITIAL_FORWARD_ARTIFACT,
-    auditableReviewArtifact(
-      world.baseSha,
-      initialImplementation,
-      includeGenerated,
-    ),
-    "docs: initial review artifact",
+    1389,
   );
-  world.staging = makeStaging(world);
-  buildApprovedReviewBinding(world, initialImplementation);
   buildDelivery(world, false);
   execFileSync("git", ["checkout", "-q", world.oldHeadSha], {
     cwd: world.root,
@@ -518,8 +496,8 @@ function forwardFixture(
   world.newHeadSha = commitPath(
     world.root,
     forwardArtifactPath,
-    forwardReviewArtifact(world.baseSha, implementation, includeGenerated),
-    "docs: post-PR review artifact",
+    sessionEvidence(world, { issue: 1389 }),
+    "docs: post-PR review証跡",
   );
   world.newBaseSha = world.baseSha;
 }
@@ -527,7 +505,7 @@ function forwardFixture(
 Given(
   "pr-bound後に前進した実装と明示済みpost-PR intakeのreview artifactがある",
   function () {
-    /** 版管理下の生成物を含む監査表もreviewed-forwardで受理する。 */
+    /** 版管理下の生成物を含む前進実装もreviewed-forwardで受理する。 */
     forwardFixture(this, true, true);
   },
 );
@@ -562,14 +540,12 @@ function forwardFixtureWithBaseAdvance(
     "export const reviewed = 1;\n",
     "feat: initial review対象",
   );
-  world.oldHeadSha = commitPath(
-    world.root,
+  commitInitialEvidence(
+    world,
+    initialImplementation,
     INITIAL_FORWARD_ARTIFACT,
-    auditableReviewArtifact(world.baseSha, initialImplementation),
-    "docs: initial review artifact",
+    1493,
   );
-  world.staging = makeStaging(world);
-  buildApprovedReviewBinding(world, initialImplementation);
   buildDelivery(world, false);
   execFileSync("git", ["checkout", "-q", world.oldHeadSha], {
     cwd: world.root,
@@ -648,8 +624,8 @@ function forwardFixtureWithBaseAdvance(
   world.newHeadSha = commitPath(
     world.root,
     FORWARD_ARTIFACT,
-    forwardReviewArtifact(newBase, mergeCommit, false),
-    "docs: post-PR review artifact",
+    sessionEvidence(world, { issue: 1493, baseSha: newBase }),
+    "docs: post-PR review証跡",
   );
   world.newBaseSha = newBase;
 }
@@ -679,7 +655,7 @@ Given(
 /**
  * **終端artifactのmode/typeだけをevidence-only suffixから外す（Issue #1433）。**
  *
- * path・本文・session binding・監査表は正当なfixtureと同一で、mode `100755`か
+ * path・本文・session bindingは正当なfixtureと同一で、mode `100755`か
  * symlinkだけが違う。`terminalArtifactPath`はpathしか見ないため、この差だけでは
  * 拒否されないことを反例として固定する。
  *
@@ -768,15 +744,20 @@ Given("pr-bound後のreviewed-forward反例「{word}」がある", function (kin
       "fix: unreviewed product change",
     );
   } else if (kind === "artifact二段") {
-    const artifact = fs.readFileSync(
-      path.join(this.root, FORWARD_ARTIFACT),
-      "utf8",
+    /**
+     * **2段目も正当な証跡にする。** 本文を壊すと解析失敗で拒否され、
+     * 「新H_finalの親がH_implでない」条件を測れない。
+     */
+    const first = parseReviewEvidence(
+      fs.readFileSync(path.join(this.root, FORWARD_ARTIFACT), "utf8"),
     );
     this.newHeadSha = commitPath(
       this.root,
       FORWARD_ARTIFACT,
-      `${artifact}\n`,
-      "docs: mutate terminal artifact twice",
+      resealReviewEvidence(first, {
+        verification: withAddedVerification(first),
+      }),
+      "docs: 終端証跡へ2段目の是正を積む",
     );
   } else if (kind === "非ancestor") {
     const current = this.newHeadSha;
@@ -805,149 +786,72 @@ Given(
   },
 );
 
-/** 旧命名時点から再生成される派生監査欄だけが異なる実運用相当artifact。 */
-function legacyAuditableReviewArtifact(
-  base: string,
-  implementation: string,
-): string {
-  return auditableReviewArtifact(base, implementation)
-    .replace("| Step chain | 経由: fixture |", "| Step chain | fixture |")
-    .replace(
-      "| `src/domain/reviewed.ts` | A | package owner | domain | fixture実装 | 循環なし | AC-1377-01 / SCN-1377-01 | revert可能 | pass |",
-      "| `src/domain/reviewed.ts` | A | package owner | domain | fixture実装 | 循環なし | AC-1377-01 / SCN-1377-01 | revert可能 | pass |\n| `dist/src/domain/reviewed.js` | A | generated | distribution | fixture配布物 | 循環なし | AC-1377-01 / SCN-1377-01 | buildで再生成 | pass |",
-    )
-    .replace(
-      "判断: 配布物を更新しない\n根拠: fixtureのreview artifact検査だけで配布物を変更しない。",
-      "判断: 配布物を更新した\n根拠: sourceとdistを更新した。",
-    )
-    .replace(
-      "| 範囲漏れ | dist・文書・schema・test | pass | 22監査pathと生成物5 path |",
-      "| 範囲漏れ | dist・文書・schema・test | pass | 27 path監査 |",
-    );
-}
-
-/** 4-backtick内の短いdelimiterを閉じ括弧と誤認すると判断行を隠せる反例。 */
-function fenceAmbiguousReviewArtifact(
-  artifact: string,
-  coverageRow: string,
-): string {
-  return artifact.replace(
-    "| 範囲漏れ | dist・文書・schema・test | pass | 22監査pathと生成物5 path |",
-    `\`\`\`\`text
-\`\`\`
-### 1.1 変更ファイル個別監査
-\`\`\`suffix
-\`\`\`\`
-${coverageRow}`,
-  );
-}
-
 function buildApprovedReviewBinding(
   world: ReanchorWorld,
   implementation: string,
+  findings: readonly Record<string, unknown>[] = [],
 ): void {
   const finalHead = world.oldHeadSha;
   const currentHead = git(world.root, ["rev-parse", "HEAD"]);
   world.oldHeadSha = implementation;
   execFileSync("git", ["checkout", "-q", implementation], { cwd: world.root });
-  buildReviewSession(world, true);
+  buildReviewSession(world, true, findings);
   recordStep10Binding(world);
   execFileSync("git", ["checkout", "-q", currentHead], { cwd: world.root });
   world.oldHeadSha = finalHead;
 }
 
+/**
+ * pr-boundの旧証跡を、同じ実装の上で別pathへ移す（artifact replacement）。
+ *
+ * **旧新の証跡はbyte一致する。** path是正だけを受理する経路であり、内容の差は
+ * `artifact-replacement`の受理条件にならない。
+ */
+function replacementFixture(world: ReanchorWorld, newPath: string): void {
+  world.root = world.initRepo();
+  world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
+  const implementation = commit(
+    world.root,
+    "export const reviewed = 1;\n",
+    "feat: review対象",
+  );
+  const content = commitInitialEvidence(
+    world,
+    implementation,
+    REPLACED_ARTIFACT,
+    1377,
+  );
+  buildDelivery(world, false);
+  snapshot(world);
+  execFileSync("git", ["checkout", "-q", implementation], { cwd: world.root });
+  world.newHeadSha = commitPath(
+    world.root,
+    newPath,
+    content,
+    "docs: review証跡を正しいpathへ移す",
+  );
+  world.newBaseSha = world.baseSha;
+}
+
 Given(
   "pr-boundの旧artifactと同一実装を監査したevidence-only配置の新artifactがある",
   function () {
-    this.root = this.initRepo();
-    this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
-    const implementation = commit(
-      this.root,
-      "export const reviewed = 1;\n",
-      "feat: review対象",
-    );
-    this.oldHeadSha = commitPath(
-      this.root,
-      "docs/reviews/1377_レビュー.md",
-      legacyAuditableReviewArtifact(this.baseSha, implementation),
-      "docs: old artifact",
-    );
-    this.staging = makeStaging(this);
-    buildApprovedReviewBinding(this, implementation);
-    buildDelivery(this, false);
-    snapshot(this);
-    execFileSync("git", ["checkout", "-q", implementation], { cwd: this.root });
-    this.newHeadSha = commitPath(
-      this.root,
-      "docs/reviews/209_課題1377成果物再固定レビュー.md",
-      auditableReviewArtifact(this.baseSha, implementation),
-      "docs: renamed artifact",
-    );
-    this.newBaseSha = this.baseSha;
+    replacementFixture(this, REPLACEMENT_ARTIFACT);
   },
 );
 
 Given(
   "pr-boundの旧artifactと同一実装を監査した「{word}」の新artifactがある",
   function (name: string) {
-    this.root = this.initRepo();
-    this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
-    const implementation = commit(
-      this.root,
-      "export const reviewed = 1;\n",
-      "feat: review対象",
-    );
-    this.oldHeadSha = commitPath(
-      this.root,
-      "docs/reviews/1377_レビュー.md",
-      legacyAuditableReviewArtifact(this.baseSha, implementation),
-      "docs: old artifact",
-    );
-    this.staging = makeStaging(this);
-    buildApprovedReviewBinding(this, implementation);
-    buildDelivery(this, false);
-    snapshot(this);
-    execFileSync("git", ["checkout", "-q", implementation], { cwd: this.root });
-    this.newHeadSha = commitPath(
-      this.root,
-      placement(name),
-      auditableReviewArtifact(this.baseSha, implementation),
-      "docs: relocated artifact",
-    );
-    this.newBaseSha = this.baseSha;
+    replacementFixture(this, placement(name));
   },
 );
 
 Given(
   "pr-boundの旧artifactと同一実装を監査したmode不正「{word}」の新artifactがある",
   function (kind: string) {
-    this.root = this.initRepo();
-    this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
-    const implementation = commit(
-      this.root,
-      "export const reviewed = 1;\n",
-      "feat: review対象",
-    );
-    this.oldHeadSha = commitPath(
-      this.root,
-      "docs/reviews/1377_レビュー.md",
-      legacyAuditableReviewArtifact(this.baseSha, implementation),
-      "docs: old artifact",
-    );
-    this.staging = makeStaging(this);
-    buildApprovedReviewBinding(this, implementation);
-    buildDelivery(this, false);
-    snapshot(this);
-    execFileSync("git", ["checkout", "-q", implementation], { cwd: this.root });
-    const relocated = "docs/reviews/209_課題1377成果物再固定レビュー.md";
-    this.newHeadSha = commitPath(
-      this.root,
-      relocated,
-      auditableReviewArtifact(this.baseSha, implementation),
-      "docs: relocated artifact",
-    );
-    rewriteTerminalArtifactMode(this, relocated, kind);
-    this.newBaseSha = this.baseSha;
+    replacementFixture(this, REPLACEMENT_ARTIFACT);
+    rewriteTerminalArtifactMode(this, REPLACEMENT_ARTIFACT, kind);
   },
 );
 
@@ -962,7 +866,7 @@ Given(
  * **通常rebase経路のmode検証を固定する（Issue #1433 round 4、外部review Codex）。**
  *
  * `artifactFixture`が等価なrebaseを組んだ直後の終端commitを
- * `rewriteTerminalArtifactMode`で置き換え、review artifactのmodeだけを
+ * `rewriteTerminalArtifactMode`で置き換え、review証跡のmodeだけを
  * 不正にする。実装内容・比較基点・H_impl宣言は変えない。
  */
 Given(
@@ -987,22 +891,40 @@ Given(
     artifactFixture(this);
     this.newHeadSha = commitPath(
       this.root,
-      "docs/reviews/227_課題1433二件目レビュー.md",
+      "docs/reviews/227_review.json",
       reviewArtifact(this.newBaseSha, this.newHeadSha),
-      "docs: 2件目のreview artifactを記録する",
+      "docs: 2件目のreview証跡を記録する",
     );
   },
 );
 
+/** 判定を変えずにHigh指摘を修正済みとして記録したreview round 1のfinding。 */
+const RESOLVED_HIGH_FINDING = {
+  id: "REV-1437-01",
+  severity: "High",
+  status: "resolved",
+  source: "review",
+  relation: "acceptance-violation",
+  evidence: "High指摘を修正済みとして記録する",
+  path: REVIEWED,
+  contractId: "AC-1093-07",
+  causedByFindingId: null,
+  decisionRef: null,
+} as const;
+
+/**
+ * push済み証跡を同じpathで前進修正する（artifact supersession）。
+ *
+ * 旧証跡は保存済みsession（High 1件を修正済みとして持つ）から生成する。新証跡は
+ * 検証commandを1件追加し、`change`で渡したfieldをさらに書き換える。
+ * `priorArtifactCommits`件の是正commitを旧head側へ先に積む。
+ */
 function supersessionFixture(
   world: ReanchorWorld,
-  changeJudgment: boolean,
-  changeSummary = false,
-  changeStepChain = false,
-  changeDistribution = false,
-  oldBypass = false,
+  change: (
+    evidence: ReviewEvidence,
+  ) => Partial<Omit<ReviewEvidence, "evidenceDigest">> = () => ({}),
   priorArtifactCommits = 1,
-  moveDetail = false,
 ): void {
   world.root = world.initRepo();
   world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
@@ -1011,147 +933,72 @@ function supersessionFixture(
     "export const reviewed = 1;\n",
     "feat: review対象",
   );
-  const artifactPath = "docs/reviews/1437_課題1437証跡是正レビュー.md";
-  const oldArtifact = auditableReviewArtifact(world.baseSha, implementation)
-    .replace(
-      "- 未解決Critical/High: 0件",
-      changeSummary
-        ? "- 未解決Critical/High: 0件。High 1件（REV-1437-01 は修正済み）"
-        : "- 未解決Critical/High: 0件",
-    )
-    .replace(
-      "| Step chain | 経由: fixture |",
-      oldBypass
-        ? "| Step chain | 迂回: fixture |"
-        : "| Step chain | 経由: fixture |",
-    )
-    .replace(
-      "- 判定: approved",
-      moveDetail
-        ? "- Critical/Highの内訳: Critical 0件、High 1件は修正済み\n- 判定: approved"
-        : "- 判定: approved",
-    );
-  world.oldHeadSha = commitPath(
-    world.root,
-    artifactPath,
-    oldArtifact,
-    "docs: old artifact",
+  const oldContent = commitInitialEvidence(
+    world,
+    implementation,
+    SUPERSESSION_ARTIFACT,
+    1437,
+    [RESOLVED_HIGH_FINDING],
   );
-  if (priorArtifactCommits === 8) {
-    const variants = [
-      `${oldArtifact}\n`,
-      oldArtifact,
-      `${oldArtifact}\n`,
-      oldArtifact,
-      `${oldArtifact}\n`,
-      `${oldArtifact}\n\n`,
-      oldArtifact,
-    ];
-    for (const [index, variant] of variants.entries())
-      world.oldHeadSha = commitPath(
-        world.root,
-        artifactPath,
-        variant,
-        `docs: prior artifact correction ${index + 2}`,
-      );
-  }
-  world.staging = makeStaging(world);
-  buildApprovedReviewBinding(world, implementation);
+  const oldEvidence = parseReviewEvidence(oldContent);
+  assert.equal(oldEvidence.findings.length, 1, "High指摘が証跡にありません");
+  for (let index = 2; index <= priorArtifactCommits; index += 1)
+    world.oldHeadSha = commitPath(
+      world.root,
+      SUPERSESSION_ARTIFACT,
+      resealReviewEvidence(oldEvidence, {
+        verification: withAddedVerification(
+          oldEvidence,
+          `npm run check:${index}`,
+        ),
+      }),
+      `docs: prior artifact correction ${index}`,
+    );
   buildDelivery(world, false);
   assert.equal(readStoredDeliveryState(world.staging)?.state, "pr-bound");
   snapshot(world);
-  let nextArtifact = oldArtifact
-    .replace(
-      "| 適用した独立性モード | context-isolated（未宣言時の既定） |",
-      "| 適用した独立性モード | context-isolated |",
-    )
-    .replace(
-      "| reviewerが対象差分を変更していないこと | はい。製品path変更0件 |",
-      "| reviewerが対象差分を変更していないこと | はい（製品path変更0件） |",
-    )
-    .replace(
-      changeSummary
-        ? "- 未解決Critical/High: 0件。High 1件（REV-1437-01 は修正済み）"
-        : "- 未解決Critical/High: 0件",
-      changeSummary
-        ? "- 未解決Critical/High: なし\n- Critical/Highの内訳: Critical 0件、High 1件（REV-1437-01 は未修正）"
-        : "- 未解決Critical/High: なし",
-    );
-  if (changeJudgment)
-    nextArtifact = nextArtifact.replace("- 判定: approved", "- 判定: rejected");
-  if (changeStepChain)
-    nextArtifact = nextArtifact.replace(
-      "| Step chain | 経由: fixture |",
-      "| Step chain | 迂回: fixture |",
-    );
-  if (oldBypass)
-    nextArtifact = nextArtifact.replace(
-      "| Step chain | 迂回: fixture |",
-      "| Step chain | 経由: fixture |",
-    );
-  if (changeDistribution)
-    nextArtifact = nextArtifact.replace(
-      "判断: 配布物を更新しない",
-      "判断: 配布物を更新した",
-    );
-  if (moveDetail)
-    nextArtifact = nextArtifact
-      .replace(
-        "## 3. 肯定的評価\n成立。",
-        "## 3. 肯定的評価\n成立。\n- Critical/Highの内訳: Critical 0件、High 1件は修正済み",
-      )
-      .replace(
-        "- Critical/Highの内訳: Critical 0件、High 1件は修正済み\n- 判定: approved",
-        "- 判定: approved",
-      );
   world.newHeadSha = commitPath(
     world.root,
-    artifactPath,
-    nextArtifact,
-    "docs: supersede review artifact",
+    SUPERSESSION_ARTIFACT,
+    resealReviewEvidence(oldEvidence, {
+      verification: withAddedVerification(oldEvidence),
+      ...change(oldEvidence),
+    }),
+    "docs: supersede review証跡",
   );
   world.newBaseSha = world.baseSha;
 }
 
 Given(
-  "pr-bound後に同じartifactだけを書式是正した前進commitがある",
+  "pr-bound後に同じartifactへ検証commandだけを追加した前進commitがある",
   function () {
-    supersessionFixture(this, false);
+    supersessionFixture(this);
   },
 );
 
-Given("pr-bound後にartifactの判断本文を変えた前進commitがある", function () {
-  supersessionFixture(this, true);
-});
+Given(
+  "pr-bound後にartifactの独立性の記録を変えた前進commitがある",
+  function () {
+    supersessionFixture(this, (evidence) => ({
+      independence: { ...evidence.independence, mode: "actor-independent" },
+    }));
+  },
+);
 
 Given(
   "pr-bound後にHigh指摘の解決状態を書き換えた前進commitがある",
   function () {
-    supersessionFixture(this, false, true);
-  },
-);
-
-Given("pr-bound後にStep chainを迂回へ変えた前進commitがある", function () {
-  supersessionFixture(this, false, false, true);
-});
-
-Given(
-  "pr-bound後に旧Step chainを迂回から経由へ変えた前進commitがある",
-  function () {
-    supersessionFixture(this, false, false, false, false, true);
+    supersessionFixture(this, (evidence) => ({
+      findings: evidence.findings.map((finding) => ({
+        ...finding,
+        status: "false-positive" as const,
+      })),
+    }));
   },
 );
 
 Given("pr-bound後にartifactの9件目の前進是正commitがある", function () {
-  supersessionFixture(this, false, false, false, false, false, 8);
-});
-
-Given("pr-bound後にHigh内訳を判断節から移した前進commitがある", function () {
-  supersessionFixture(this, false, false, false, false, false, 1, true);
-});
-
-Given("pr-bound後に配布物影響の判断を書き換えた前進commitがある", function () {
-  supersessionFixture(this, false, false, false, true);
+  supersessionFixture(this, () => ({}), 8);
 });
 
 Given("pr-boundの不正なartifact replacement「{word}」がある", function (kind) {
@@ -1162,21 +1009,37 @@ Given("pr-boundの不正なartifact replacement「{word}」がある", function 
     "export const reviewed = 1;\n",
     "feat: review対象",
   );
-  const oldArtifact = auditableReviewArtifact(this.baseSha, implementation);
-  this.oldHeadSha = commitPath(
-    this.root,
-    "docs/reviews/1377_レビュー.md",
-    kind === "fence解釈差"
-      ? fenceAmbiguousReviewArtifact(
-          oldArtifact,
-          "| 範囲漏れ | dist・文書・schema・test | pass | 22監査pathと生成物5 path |",
-        )
-      : oldArtifact,
-    "docs: old artifact",
+  const sessionContent = commitInitialEvidence(
+    this,
+    implementation,
+    REPLACED_ARTIFACT,
+    1377,
   );
-  this.staging = makeStaging(this);
-  buildApprovedReviewBinding(this, implementation);
+  /**
+   * **session不一致は旧新とも同じbyteの別session証跡にする。** byte一致・境界・
+   * modeは満たし、保存済みsessionとの照合だけで拒否されることを測る。
+   */
+  const oldContent =
+    kind === "session不一致"
+      ? syntheticReviewEvidenceContent({
+          baseSha: this.baseSha,
+          implementationHeadSha: implementation,
+          issue: 1377,
+        })
+      : sessionContent;
+  if (kind === "session不一致")
+    this.oldHeadSha = commitPath(
+      this.root,
+      REPLACED_ARTIFACT,
+      oldContent,
+      "docs: 別sessionの証跡へ差し替える",
+    );
   buildDelivery(this, false);
+  /**
+   * **H_impl差替えは同じtreeを持つ別commitの上へ同じ証跡を置く。** 証跡のbyteと
+   * `H_impl..新head`の差分は正当なfixtureと同一で、宣言した`H_impl`が新headの
+   * 祖先でないことだけが違う。
+   */
   const replacementImplementation =
     kind === "H_impl差替え"
       ? (() => {
@@ -1193,28 +1056,15 @@ Given("pr-boundの不正なartifact replacement「{word}」がある", function 
   execFileSync("git", ["checkout", "-q", replacementImplementation], {
     cwd: this.root,
   });
-  const artifact = auditableReviewArtifact(
-    this.baseSha,
-    replacementImplementation,
-  );
+  const oldEvidence = parseReviewEvidence(oldContent);
   this.newHeadSha = commitPath(
     this.root,
-    "docs/reviews/209_課題1377成果物再固定レビュー.md",
-    kind === "監査不合格"
-      ? artifact.replace("| pass |", "| fail |")
-      : kind === "判定本文改変"
-        ? artifact.replace("反例確認済み。", "反例を省略した。")
-        : kind === "範囲漏れ判断改変"
-          ? artifact.replace(
-              "| 範囲漏れ | dist・文書・schema・test | pass | 22監査pathと生成物5 path |",
-              "| 範囲漏れ | dist・文書・schema・test | finding | 未監査 |",
-            )
-          : kind === "fence解釈差"
-            ? fenceAmbiguousReviewArtifact(
-                artifact,
-                "| 範囲漏れ | dist・文書・schema・test | finding | 未監査 |",
-              )
-            : artifact,
+    REPLACEMENT_ARTIFACT,
+    kind === "内容改変"
+      ? resealReviewEvidence(oldEvidence, {
+          verification: withAddedVerification(oldEvidence),
+        })
+      : oldContent,
     "docs: invalid renamed artifact",
   );
   if (kind === "artifact外差分") {
@@ -1266,9 +1116,9 @@ function commitPath(
 /**
  * ASCの規定するrebase手順を再現する。
  *
- * 実装commitとreview artifact commitの2 commit構造を作り、rebase後に
- * **artifactのSHA行だけを更新する**。`audit:check`はこの更新を要求し、
- * 従来の完全diff digestはこの更新を必ず拒否する（Issue #1172）。
+ * 実装commitとreview証跡commitの2 commit構造を作り、rebase後に
+ * **証跡の`baseSha`と`implementationHeadSha`だけを更新する**。`audit:check`はこの
+ * 更新を要求し、従来の完全diff digestはこの更新を必ず拒否する（Issue #1172）。
  */
 function artifactFixture(
   world: ReanchorWorld,
@@ -1286,7 +1136,7 @@ function artifactFixture(
     world.root,
     artifactPath,
     reviewArtifact(world.baseSha, implementation),
-    "docs: review artifactを記録する",
+    "docs: review証跡を記録する",
   );
   world.staging = makeStaging(world);
   buildDelivery(world);
@@ -1311,12 +1161,12 @@ function artifactFixture(
     world.root,
     artifactPath,
     body,
-    "docs: review artifactを記録する",
+    "docs: review証跡を記録する",
   );
   world.newBaseSha = newBase;
 }
 
-/** artifactの記述は保ったまま実装fileの内容だけを変えるrebase。 */
+/** 証跡の記述は保ったまま実装fileの内容だけを変えるrebase。 */
 function artifactFixtureWithChangedImplementation(world: ReanchorWorld): void {
   artifactFixture(world);
   /** 新head側の実装内容を変えて2 commit構造を作り直す。 */
@@ -1332,7 +1182,7 @@ function artifactFixtureWithChangedImplementation(world: ReanchorWorld): void {
     world.root,
     REVIEW_ARTIFACT,
     reviewArtifact(world.newBaseSha, implementation),
-    "docs: review artifactを記録する",
+    "docs: review証跡を記録する",
   );
 }
 
@@ -1340,12 +1190,12 @@ Given("実装の内容まで変わったrebase後のreview証跡がある", func
   artifactFixtureWithChangedImplementation(this);
 });
 
-Given("識別情報の節が2つあるrebase後のreview証跡がある", function () {
-  artifactFixture(
-    this,
-    (base, implementation) =>
-      `${reviewArtifact(base, implementation)}\n## 0. レビュー識別情報\n\n二重の節\n`,
-  );
+/** 正規直列化の後ろへ2つ目のJSON文書を連結した証跡。厳密解析が拒否する。 */
+Given("2つのJSON文書を連結したrebase後のreview証跡がある", function () {
+  artifactFixture(this, (base, implementation) => {
+    const evidence = reviewArtifact(base, implementation);
+    return `${evidence}${evidence}`;
+  });
 });
 
 Given(
@@ -1359,7 +1209,7 @@ Given(
 
 Given("artifactのpathが変わったrebase後のreview証跡がある", function () {
   artifactFixture(this);
-  execFileSync("git", ["checkout", "-q", world_newBase(this)], {
+  execFileSync("git", ["checkout", "-q", this.newBaseSha], {
     cwd: this.root,
   });
   const implementation = commit(
@@ -1369,53 +1219,59 @@ Given("artifactのpathが変わったrebase後のreview証跡がある", functio
   );
   this.newHeadSha = commitPath(
     this.root,
-    "docs/reviews/98_課題1172別名レビュー.md",
+    "docs/reviews/98_review.json",
     reviewArtifact(this.newBaseSha, implementation),
-    "docs: review artifactを記録する",
+    "docs: review証跡を記録する",
   );
 });
 
-function world_newBase(world: ReanchorWorld): string {
-  return world.newBaseSha;
-}
-
-Given(
-  "識別情報の見出しが本文中にしかないrebase後のreview証跡がある",
-  function () {
-    artifactFixture(
-      this,
-      (base, implementation) =>
-        `# 04 レビュー\n\n本文で ## 0. レビュー識別情報 と書くだけで見出しは無い。\n\n| 比較基点 | \`${base}\` |\n| H_impl | \`${implementation}\` |\n`,
-    );
-  },
-);
+/**
+ * 旧形式（Markdown）のreview artifact。見出しと識別表を字面では含むが、
+ * 構造化証跡として解析できないため識別情報を同定できない。
+ */
+Given("旧Markdown形式のrebase後のreview証跡がある", function () {
+  artifactFixture(
+    this,
+    (base, implementation) =>
+      `# 04 レビュー\n\n本文で ## 0. レビュー識別情報 と書くだけで見出しは無い。\n\n| 比較基点 | \`${base}\` |\n| H_impl | \`${implementation}\` |\n`,
+  );
+});
 
 Given("存在しないH_implを宣言したrebase後のreview証跡がある", function () {
   artifactFixture(this, (base) => reviewArtifact(base, "0".repeat(40)));
 });
 
-Given("SHA行だけを更新したrebase後のreview証跡がある", function () {
+Given("比較基点とH_implだけを更新したrebase後のreview証跡がある", function () {
   artifactFixture(this);
 });
 
-Given("SHA行に加えて判定も書き換えたrebase後のreview証跡がある", function () {
-  artifactFixture(this, (base, implementation) =>
-    reviewArtifact(base, implementation).replace("approved", "rejected"),
-  );
-});
+/** 比較基点と`H_impl`に加えて、検証記録も書き換えた証跡。 */
+Given(
+  "比較基点とH_implに加えて検証記録も書き換えたrebase後のreview証跡がある",
+  function () {
+    artifactFixture(this, (base, implementation) =>
+      reviewArtifact(base, implementation, {
+        verification: withAddedVerification(REBASE_EVIDENCE),
+      }),
+    );
+  },
+);
 
-Given("識別情報の欄を重複させたrebase後のreview証跡がある", function () {
-  artifactFixture(this, (base, implementation) =>
-    reviewArtifact(
-      base,
-      implementation,
-      `\n\n| H_impl | \`${"0".repeat(40)}\` |`,
-    ).replace(
-      "| 実施者 | reviewer |",
-      `| 実施者 | reviewer |\n| H_impl | \`${"0".repeat(40)}\` |`,
-    ),
-  );
-});
+/** `implementationHeadSha`のkeyを重複させた証跡。厳密解析が拒否する。 */
+Given(
+  "implementationHeadShaのkeyを重複させたrebase後のreview証跡がある",
+  function () {
+    artifactFixture(this, (base, implementation) => {
+      const evidence = reviewArtifact(base, implementation);
+      const line = `  "implementationHeadSha": "${implementation}",\n`;
+      assert.ok(evidence.includes(line), "H_impl行がありません");
+      return evidence.replace(
+        line,
+        `  "implementationHeadSha": "${"0".repeat(40)}",\n${line}`,
+      );
+    });
+  },
+);
 
 Given("H_implの宣言が構造と一致しないrebase後のreview証跡がある", function () {
   artifactFixture(this, (base) => reviewArtifact(base, base));
@@ -1907,7 +1763,11 @@ Then("旧baseと旧headを受け取る引数が存在しない", function () {
  * **`recordReviewRound`を実際に通す。** session fileを手で書くと、round契約と
  * 実装の乖離を検査できない。
  */
-function buildReviewSession(world: ReanchorWorld, converged: boolean): void {
+function buildReviewSession(
+  world: ReanchorWorld,
+  converged: boolean,
+  recordedFindings: readonly Record<string, unknown>[] = [],
+): void {
   const observed = observeReviewDiff(
     world.root,
     world.baseSha,
@@ -1947,7 +1807,7 @@ function buildReviewSession(world: ReanchorWorld, converged: boolean): void {
       candidateHeadSha: world.oldHeadSha,
       focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
       findings: converged
-        ? []
+        ? [...recordedFindings]
         : [
             {
               id: "H-1093",
@@ -2207,16 +2067,14 @@ Then("previewは成功し初回だけ追記して二回目はunchangedになる"
 Then("再固定recordは旧新artifactのpathとdigestを保持する", function () {
   const record = readEvidenceReanchorChain(this.staging)[0];
   assert.equal(record?.method, "artifact-replacement");
-  assert.equal(
-    record?.artifactReplacement?.oldPath,
-    "docs/reviews/1377_レビュー.md",
-  );
-  assert.equal(
-    record?.artifactReplacement?.newPath,
-    "docs/reviews/209_課題1377成果物再固定レビュー.md",
-  );
+  assert.equal(record?.artifactReplacement?.oldPath, REPLACED_ARTIFACT);
+  assert.equal(record?.artifactReplacement?.newPath, REPLACEMENT_ARTIFACT);
   assert.match(record?.artifactReplacement?.oldDigest ?? "", /^[a-f0-9]{64}$/u);
-  assert.match(record?.artifactReplacement?.newDigest ?? "", /^[a-f0-9]{64}$/u);
+  /** **path是正だけを受理するため旧新の証跡はbyte一致する。** */
+  assert.equal(
+    record?.artifactReplacement?.oldDigest,
+    record?.artifactReplacement?.newDigest,
+  );
   for (const [relative, before] of Object.entries(this.before))
     assert.equal(
       fs.readFileSync(path.join(this.staging, relative), "utf8"),
@@ -2231,7 +2089,7 @@ Then(
     assert.equal(record?.method, "artifact-supersession");
     assert.equal(
       record.artifactSupersession?.artifactPath,
-      "docs/reviews/1437_課題1437証跡是正レビュー.md",
+      SUPERSESSION_ARTIFACT,
     );
     assert.match(record.artifactSupersession.oldDigest, /^[a-f0-9]{64}$/u);
     assert.match(record.artifactSupersession.newDigest, /^[a-f0-9]{64}$/u);

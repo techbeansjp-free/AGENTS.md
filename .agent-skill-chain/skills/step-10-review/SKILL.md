@@ -41,7 +41,7 @@ Codex起動差分では`routing launch`の観測時刻・入口・selectedModel/
 
 **Step 10記録後にstagingを是正した場合の復旧経路は規範文書が所有する。** 上流Step（1〜9）の再確定でstaging digestを再固定する（`workflow record --reconfirm`）。**最新Stepの再記録では復旧できない。** 条件と手順の正本は`../../docs/01_開発ワークフロー.md`であり、ここへ複写しない。
 
-**成果物は版管理下へ置く。** `staging.tracked=false`のstagingは版管理外である。`staging.tracked=true`では文書00〜04を版管理するが、どちらの場合もstaging内の`04_レビュー.md`はformal approval artifactとして扱わない。収束後に`review export`で`docs/reviews/`配下へreview証跡を生成し、実装commitの後にその1 fileだけをcommitして`H_final`にする。**この証跡commitに対する取り直しroundは要らない。** `workflow record --step=10`は`H_final`で実行でき、bindingはsessionのcandidate HEAD（`H_impl`）のまま記録される。`pr create --head-sha=<H_final>`も同じ規則で受理する。
+**成果物は版管理下へ置く。** `staging.tracked=false`のstagingは版管理外である。`staging.tracked=true`では文書00〜04を版管理するが、どちらの場合もstaging内の`04_レビュー.md`はformal approval artifactとして扱わない。収束後に`review export`で`docs/reviews/`配下へreview証跡を生成し、実装commitの後にその1 fileだけをcommitして`H_final`にする。**このartifact commitに対する取り直しroundは要らない。** `workflow record --step=10`は`H_final`で実行でき、bindingはsessionのcandidate HEAD（`H_impl`）のまま記録される。`pr create --head-sha=<H_final>`も同じ規則で受理する。
 
 `staging.tracked=true`でround 1にprogress targetを明示した場合、sealed journalからbyte一致を検証できる投影targetとformal artifactを同じrecord layer commitへ置ける。対象path、mode、marker外byte、journal bindingのいずれかを検証できない場合はartifact-onlyへ暗黙縮退せず拒否する。
 

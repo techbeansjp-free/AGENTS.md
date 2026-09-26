@@ -115,7 +115,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "1749",
+      callerLine: "1758",
       callerAnchor: "inspectCiDelivery({",
     }),
     Object.freeze({
@@ -128,7 +128,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "7315",
+      callerLine: "7324",
       callerAnchor: "validateSpecs(root",
     }),
     Object.freeze({
@@ -154,7 +154,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/adapters/decision-invoke.ts",
-      callerLine: "282",
+      callerLine: "271",
       callerAnchor: 'if (type.id === "DCAND-006") {',
     }),
     Object.freeze({
@@ -177,7 +177,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/adapters/decision-invoke.ts",
-      callerLine: "189",
+      callerLine: "178",
       callerAnchor: 'case "DCAND-008": {',
     }),
     Object.freeze({
@@ -189,7 +189,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/adapters/decision-invoke.ts",
-      callerLine: "299",
+      callerLine: "288",
       callerAnchor: 'if (authorityMode === "constrained-choice") {',
     }),
     Object.freeze({
@@ -201,7 +201,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/adapters/decision-invoke.ts",
-      callerLine: "333",
+      callerLine: "322",
       callerAnchor: 'type.id === "DCAND-010" ? DCAND_010_SAFE_VALUE',
     }),
     Object.freeze({
