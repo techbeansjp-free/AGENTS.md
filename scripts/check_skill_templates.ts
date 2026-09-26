@@ -630,10 +630,10 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
         "要求 → 要件・受け入れ条件 → 設計・設計判断 → 実装計画 → 実装・検証証拠 → レビュー",
       ) ||
       !workflow.includes(
-        "契約が変わる場合だけ所有する成果物の影響部分と追跡を再確定する",
+        "上流文書を書き直さず、次の順で行き先を1つ決める",
       )
     )
-      errors.push("成果物の正方向と影響範囲だけを再確定する契約がありません");
+      errors.push("成果物の正方向と発見の行き先を決める契約がありません");
     if (!workflow.includes("## ドメイン用語台帳"))
       errors.push("開発ワークフローにドメイン用語台帳契約がありません");
     for (const marker of [
