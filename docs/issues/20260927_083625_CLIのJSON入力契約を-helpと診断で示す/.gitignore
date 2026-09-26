@@ -1,0 +1,7 @@
+# agent-skill-chain: 機械記録は版管理しない（文書00〜04のMarkdownは追跡する）
+journal/
+staging-record.json
+review-session*.json
+.full-promotion-transaction.json
+00_モード判定.json
+verification-input.json
