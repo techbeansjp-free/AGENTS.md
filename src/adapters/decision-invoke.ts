@@ -90,6 +90,15 @@ export interface DecisionInvokeResult {
   readonly decisionTypeId: string;
   readonly executor: DecisionExecutor;
   readonly authorityMode: DecisionAuthorityMode;
+  readonly candidateHeadSha: string;
+  readonly subjectRef: string;
+  /**
+   * `constrained-choice`（DCAND-009）のときだけ、Policy Allowedとの積集合で
+   * 絞り込んだ実効候補集合。他のauthorityModeでは`undefined`（Issue #1486、
+   * T-02のcontinuous shadowがDCAND-009のJev choice optionsを組み立てる際に
+   * 使う。積集合を`decision invoke`の外で再計算させない）。
+   */
+  readonly candidateSet?: readonly string[];
   readonly proposedValue: string;
   readonly effectiveValue: string | null;
   readonly requiresConfirmation: boolean;
@@ -373,6 +382,9 @@ export function invokeDecision(
     decisionTypeId: type.id,
     executor,
     authorityMode,
+    candidateHeadSha,
+    subjectRef,
+    ...(candidateSet === undefined ? {} : { candidateSet }),
     proposedValue,
     effectiveValue: decision.effectiveValue,
     requiresConfirmation: decision.requiresConfirmation,

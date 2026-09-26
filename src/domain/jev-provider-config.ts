@@ -25,7 +25,12 @@ const ALLOWED_FIELDS = new Set([
   "model",
 ]);
 
-const ENV_VAR_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
+/**
+ * env var名の許容pattern。`src/adapters/jev-guided-setup.ts`（Issue #1486、
+ * T-06）が`decision configure`の入力検証で再利用する（同じ規則を2箇所へ
+ * 書かない）。
+ */
+export const ENV_VAR_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 
 /**
  * 設定fileが存在しない・読めない・形状が不正・`enabled`が`true`以外・
