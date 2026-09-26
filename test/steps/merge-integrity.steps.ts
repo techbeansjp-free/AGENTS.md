@@ -14,6 +14,7 @@ import {
   type TokenObservation,
 } from "../../src/domain/merge-integrity.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
+import { syntheticReviewEvidenceContent } from "../support/review-evidence-fixture.js";
 
 type AuditResult = ReturnType<typeof checkFileAudit>;
 type IntegrityResult = ReturnType<typeof evaluateMergeIntegrity>;
@@ -25,13 +26,13 @@ const AUDIT_RESULT_KEYS = [
   "implementation",
   "current",
   "auditPath",
-  "auditedFiles",
+  "changedFiles",
+  "countedRounds",
   "distributedPaths",
 ];
 
 const PROCEDURE_DOCUMENTS = [
   ".agent-skill-chain/docs/02_品質基準.md",
-  ".agent-skill-chain/templates/issue/04_レビュー.md",
   ".agent-skill-chain/templates/issue/11_プルリクエスト事前確認.md",
 ];
 
@@ -116,76 +117,22 @@ function commit(root: string, message: string, paths: string[]): string {
   return git(root, ["rev-parse", "HEAD"]);
 }
 
-function auditMarkdown(
-  base: string,
-  implementation: string,
-  rows: Array<{ path: string; status: string }>,
-): string {
-  const body = rows
-    .map(
-      (row) =>
-        `| \`${row.path}\` | ${row.status} | test owner | fixture | 監査対象 | 依存なし | AC-962 | commitを戻す | pass |`,
-    )
-    .join("\n");
-  return `# fixture実装レビュー
-
-## 0. レビュー識別情報
-
-| 項目 | 値 |
-|---|---|
-| 比較基点 | \`${base}\` |
-| H_impl | \`${implementation}\` |
-| ラウンド数 | 1 |
-| Step chain | 迂回: fixtureのため製品経路を通していない |
-| 仕様の所有箇所 | docs/specs/fixture.md:1「fixtureの仕様」 |
-| 成果物行数 | 製品 1行 / 支援層 2行 |
-| 縮小の先行評価 | 既存fixtureの流用では監査経路を通らないため |
-
-## 変更ファイル個別監査
-
-| path | status | owner | target layer | 責務・配置 | 依存・循環 | 仕様・追跡 | 安全・rollback | 個別判定 |
-|---|---|---|---|---|---|---|---|---|
-${body}
-`;
-}
-
-function changedRows(
-  root: string,
-  base: string,
-  implementation: string,
-): Array<{ path: string; status: string }> {
-  const output = git(root, [
-    "-c",
-    "core.quotepath=false",
-    "diff",
-    "--name-status",
-    `${base}..${implementation}`,
-  ]);
-  return output
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const cells = line.split("\t");
-      return { status: cells[0]?.[0] ?? "", path: cells.at(-1) ?? "" };
-    });
-}
-
 function recordArtifact(
   world: MergeIntegrityWorld,
   base: string,
   implementation: string,
 ): void {
-  const artifactPath = "docs/reviews/01_課題962追随レビュー.md";
+  const artifactPath = "docs/reviews/962_review.json";
   writeFile(
     world.root,
     artifactPath,
-    auditMarkdown(
-      base,
-      implementation,
-      changedRows(world.root, base, implementation),
-    ),
+    syntheticReviewEvidenceContent({
+      issue: 962,
+      baseSha: base,
+      implementationHeadSha: implementation,
+    }),
   );
-  commit(world.root, "docs: review artifactを記録する", [artifactPath]);
+  commit(world.root, "docs: review証跡を記録する", [artifactPath]);
 }
 
 /** 既定branch上に共通の基点を作ってからcandidate branchを切る。 */
@@ -678,13 +625,13 @@ When("配布される品質基準を読む", function () {
 });
 
 Then(
-  "追随の位置とH_implと比較基点の指し先と個別監査表の再生成が書かれている",
+  "追随の位置とH_implと比較基点の指し先と監査差分の再導出が書かれている",
   function () {
     const text = String(this.value);
-    assert.match(text, /review artifact commitより前/u);
+    assert.match(text, /review証跡commitより前/u);
     assert.match(text, /比較基点.*取り込んだ既定branch tip/u);
-    assert.match(text, /H_impl.*artifact直前の最新commit/u);
-    assert.match(text, /個別監査表.*再生成/u);
+    assert.match(text, /H_impl.*review証跡直前の最新commit/u);
+    assert.match(text, /監査対象の差分は追随前の値を流用せず.*Gitで導出/u);
   },
 );
 
@@ -699,7 +646,6 @@ Given(
   "配布されるreviewテンプレートとPR事前確認テンプレートがある",
   function () {
     this.documents = [
-      ".agent-skill-chain/templates/issue/04_レビュー.md",
       ".agent-skill-chain/templates/issue/11_プルリクエスト事前確認.md",
     ];
   },

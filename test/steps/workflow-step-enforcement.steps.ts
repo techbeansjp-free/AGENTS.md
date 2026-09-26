@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import {
+  appendLegacyJournal,
+  unchainedJournalText,
+} from "../support/legacy-journal.js";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -86,7 +90,24 @@ import {
   observeReviewDiff,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
-import { parseReviewRoundInput } from "../../src/domain/review-convergence.js";
+import {
+  advanceReviewSession,
+  parseReviewRoundInput,
+} from "../../src/domain/review-convergence.js";
+import {
+  renderReviewEvidence,
+  type ReviewEvidence,
+} from "../../src/domain/review-evidence.js";
+import {
+  appendFixtureVerificationRecords,
+  observeFixtureVerification,
+  observedReviewEvidenceFromSession,
+  resealObservedEvidence,
+} from "../support/review-evidence-fixture.js";
+import {
+  TRUSTED_POLICY_PATHS,
+  writeTrustedPolicySet,
+} from "../support/trusted-verification-policy.js";
 
 interface WorkflowStepWorld extends WorkflowWorld {
   workflowCheckPassed: boolean;
@@ -779,7 +800,14 @@ When("{string}の単体検査を実行する", async function (scenarioId: strin
         }).path;
         const journal = path.join(staging, STEP_JOURNAL_FILE);
         const beforeSource = fs.readFileSync(journal, "utf8");
-        const proposedSource = `${beforeSource}${JSON.stringify(entry(1))}\n`;
+        /** CLIが公開する行と同じく、先行するjournal本文のhash chainを持たせる */
+        const proposedSource = `${beforeSource}${JSON.stringify({
+          ...entry(1),
+          previousEntryDigest: crypto
+            .createHash("sha256")
+            .update(beforeSource)
+            .digest("hex"),
+        })}\n`;
         const stored = readStoredStagingRecord(staging);
         const otherArtifacts = stored.artifacts.filter(
           (artifact) => artifact !== STEP_JOURNAL_FILE,
@@ -1122,7 +1150,7 @@ When("{string}の単体検査を実行する", async function (scenarioId: strin
         preparedAt: instant,
       });
       if (scenarioId === "SCN-UNIT-WFJRNL-035") {
-        fs.appendFileSync(
+        appendLegacyJournal(
           path.join(staging, STEP_JOURNAL_FILE),
           `${JSON.stringify({ ...entry(10), postPrIntake: true })}\n`,
         );
@@ -2241,7 +2269,7 @@ function preparedPullRequestDigest(prepared: PreparedPullRequest): string {
 }
 
 function preparedMergeReviewEvidence(prepared: PreparedPullRequest) {
-  const reviewArtifactPath = "docs/reviews/90_test_review.md";
+  const reviewArtifactPath = "docs/reviews/877_review.json";
   const reviewArtifactDigest = crypto
     .createHash("sha256")
     .update(fs.readFileSync(path.join(prepared.root, reviewArtifactPath)))
@@ -2267,77 +2295,44 @@ function preparedMergeReviewEvidence(prepared: PreparedPullRequest) {
   };
 }
 
-function contextIsolatedReviewArtifact(
+function reviewRoundFixture(root: string, baseSha: string, headSha: string) {
+  const observed = observeReviewDiff(root, baseSha, headSha);
+  return parseReviewRoundInput({
+    round: 1,
+    previousRoundDigest: null,
+    anchor: {
+      scopeIds: ["SCOPE-WORKFLOW"],
+      acceptanceCriteriaIds: ["AC-WF-005"],
+      invariantIds: ["INV-WORKFLOW"],
+      diffBaseSha: baseSha,
+      initialHeadSha: headSha,
+      initialDiffDigest: observed.digest,
+    },
+    candidateHeadSha: headSha,
+    focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
+    findings: [],
+  });
+}
+
+/**
+ * `convergedReviewBinding`が後で記録するsessionと同じ値を先に導出し、そこから
+ * review証跡を生成する。**session値はround入力だけから決まる**ため、証跡commitを
+ * session記録より前に置いても一致する。
+ */
+function contextIsolatedReviewEvidence(
+  root: string,
   baseSha: string,
   implementationSha: string,
-  reviewedPath: string,
-): string {
-  return `# 04 レビュー
-
-## 0. レビュー識別情報
-
-| 項目 | 内容 |
-|---|---|
-| 比較基点 | \`${baseSha}\` |
-| H_impl | \`${implementationSha}\` |
-| ラウンド数 | 1 |
-| Step chain | 経由: fixture staging |
-
-## 1. 入力証拠
-
-### 1.1 変更ファイル個別監査
-
-| path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
-|---|---|---|---|---|---|---|---|---|
-| \`${reviewedPath}\` | M | package owner | package | fixture implementation | pass | AC-WF-005 | revert可能 | pass |
-
-## 2. 受け入れ条件の確認
-
-pass
-
-## 3. 肯定的評価
-
-pass
-
-## 4. 敵対的評価
-
-pass
-
-## 5. 指摘
-
-指摘なし
-
-## 6. ラウンド固有の確認
-
-round 1完了
-
-## 7. テスト結果
-
-fixture pass
-
-## 8. 配布物影響
-
-判断: 配布物を更新しない
-根拠: fixture内の検査である
-
-## 9. 独立reviewの成立
-
-| 項目 | 内容 |
-|---|---|
-| 適用した独立性モード | context-isolated |
-| その要求を満たすこと | はい |
-| reviewerとimplementerのidentity・context比較 | reviewer-contextとimplementer-contextは別 |
-| reviewerが対象差分を変更していないこと | はい（変更pathなし） |
-
-## 10. 仕様整合性
-
-updated
-
-## 11. 総合判定と再開地点
-
-- 未解決Critical/High: なし
-- 判定: approved
-`;
+  independenceMode: "context-isolated" | "actor-independent",
+): ReviewEvidence {
+  const session = advanceReviewSession(
+    null,
+    reviewRoundFixture(root, baseSha, implementationSha),
+  );
+  return observedReviewEvidenceFromSession(root, session, {
+    issue: 877,
+    independenceMode,
+  });
 }
 
 function convergedReviewBinding(
@@ -2346,24 +2341,9 @@ function convergedReviewBinding(
   baseSha: string,
   headSha: string,
 ): NonNullable<StepJournalEntry["reviewSession"]> {
-  const observed = observeReviewDiff(root, baseSha, headSha);
   const session = recordReviewRound({
     staging,
-    round: parseReviewRoundInput({
-      round: 1,
-      previousRoundDigest: null,
-      anchor: {
-        scopeIds: ["SCOPE-WORKFLOW"],
-        acceptanceCriteriaIds: ["AC-WF-005"],
-        invariantIds: ["INV-WORKFLOW"],
-        diffBaseSha: baseSha,
-        initialHeadSha: headSha,
-        initialDiffDigest: observed.digest,
-      },
-      candidateHeadSha: headSha,
-      focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
-      findings: [],
-    }),
+    round: reviewRoundFixture(root, baseSha, headSha),
   });
   return {
     sessionId: session.sessionId,
@@ -2405,10 +2385,16 @@ function preparePullRequest(
   artifactDisposition:
     | "valid"
     | "rejected"
-    | "placeholder-context"
+    | "session-mismatch"
     | "himpl-mismatch"
     | "untracked"
-    | "extra-file" = "valid",
+    | "extra-file"
+    | "stale-verification" = "valid",
+  /**
+   * disabledでも実装commitと証跡commitを分離する。後からmergeへ再開する
+   * scenarioは、review sessionと一致する証跡を`H_final`に持つ必要がある。
+   */
+  separateArtifact = false,
 ): PreparedPullRequest {
   const fixturePast = fixtureInstant({ hoursAgo: 1 });
   const fixtureNow = fixtureInstant();
@@ -2447,7 +2433,12 @@ function preparePullRequest(
     };
     fs.writeFileSync(policyFile, `${JSON.stringify(policy, null, 2)}\n`);
   }
-  spawnSync("git", ["add", ".agent-skill-chain/policy/default.json"], {
+  /**
+   * **trusted commitは検証command宣言を持つproject policy setを含む**（REQ-WF-040）。
+   * manifestの`policy`は上で書いた既定policyと同じ値にし、merge条件を動かさない。
+   */
+  writeTrustedPolicySet(root);
+  spawnSync("git", ["add", "--", ...TRUSTED_POLICY_PATHS], {
     cwd: root,
   });
   spawnSync("git", ["commit", "-q", "-m", "trusted policy"], {
@@ -2467,7 +2458,10 @@ function preparePullRequest(
   );
   // Merge可能なPRではreview対象の実装commitをbaseより後に置く。
   // review artifactはさらに後の専用commitへ分離する。
-  if (mergeMode !== "disabled" && workflowMode !== "poc") {
+  if (
+    (mergeMode !== "disabled" || separateArtifact) &&
+    workflowMode !== "poc"
+  ) {
     fs.writeFileSync(path.join(root, "implementation.txt"), "product change\n");
     spawnSync("git", ["add", "implementation.txt"], { cwd: root });
     spawnSync("git", ["commit", "-q", "-m", "implementation"], {
@@ -2500,28 +2494,32 @@ function preparePullRequest(
     spawnSync("git", ["commit", "-q", "-m", "poc fixture"], { cwd: root });
   } else {
     fs.mkdirSync(path.join(root, "docs", "reviews"), { recursive: true });
-    const reviewArtifact = contextIsolatedReviewArtifact(
+    const reviewEvidence = contextIsolatedReviewEvidence(
+      root,
       baseSha,
       implementationCommitSha,
-      implementationCommitSha === baseSha
-        ? ".agent-skill-chain/policy/default.json"
-        : "implementation.txt",
+      reviewIndependence ?? "context-isolated",
     );
+    const reviewArtifact = renderReviewEvidence(reviewEvidence);
     if (artifactDisposition !== "untracked")
       fs.writeFileSync(
-        path.join(root, "docs", "reviews", "90_test_review.md"),
+        path.join(root, "docs", "reviews", "877_review.json"),
         artifactDisposition === "rejected"
-          ? reviewArtifact.replace("判定: approved", "判定: rejected")
-          : artifactDisposition === "placeholder-context"
-            ? reviewArtifact.replace(
-                "reviewer-contextとimplementer-contextは別",
-                "{実体の観測値}",
-              )
+          ? reviewArtifact.replace(
+              '"verdict": "approved"',
+              '"verdict": "rejected"',
+            )
+          : artifactDisposition === "session-mismatch"
+            ? resealObservedEvidence(reviewEvidence, {
+                session: {
+                  ...reviewEvidence.observed.session,
+                  latestRoundDigest: "0".repeat(64),
+                },
+              })
             : artifactDisposition === "himpl-mismatch"
-              ? reviewArtifact.replace(
-                  `| H_impl | \`${implementationCommitSha}\` |`,
-                  `| H_impl | \`${"f".repeat(40)}\` |`,
-                )
+              ? resealObservedEvidence(reviewEvidence, {
+                  implementationHeadSha: "f".repeat(40),
+                })
               : reviewArtifact,
       );
     if (artifactDisposition !== "untracked") {
@@ -2534,7 +2532,7 @@ function preparePullRequest(
         "git",
         [
           "add",
-          "docs/reviews/90_test_review.md",
+          "docs/reviews/877_review.json",
           ...(artifactDisposition === "extra-file" ? ["unexpected.txt"] : []),
         ],
         { cwd: root },
@@ -2550,7 +2548,7 @@ function preparePullRequest(
   }).stdout.trim();
   const separatedReviewArtifact =
     workflowMode !== "poc" &&
-    mergeMode !== "disabled" &&
+    (mergeMode !== "disabled" || separateArtifact) &&
     artifactDisposition !== "untracked";
   const reviewCandidateHeadSha = separatedReviewArtifact
     ? implementationCommitSha
@@ -2645,7 +2643,7 @@ function preparePullRequest(
       reviewBaseSha,
       reviewCandidateHeadSha,
     );
-    fs.appendFileSync(
+    appendLegacyJournal(
       journalFile,
       `${JSON.stringify({
         ...entry(10, "quick", fixturePast),
@@ -2675,6 +2673,28 @@ function preparePullRequest(
     });
   }
   if (branchRef) spawnSync("git", ["checkout", "-q", branchRef], { cwd: root });
+  /** 証跡の検証欄と同じ観測記録をstagingへ置く（verify runの記録に相当）。 */
+  appendFixtureVerificationRecords(
+    staging,
+    observeFixtureVerification(root, {
+      baseSha,
+      implementationHeadSha: implementationCommitSha,
+    }).records,
+  );
+  /**
+   * `stale-verification`は証跡の生成後に同じcommandを再実行した記録を足す。
+   * 証跡の検証欄の記録は存在し合格だが、stagingから再導出した検証欄（最新の実行）とは
+   * 一致しない。staging digestはこの状態で同期する。
+   */
+  if (artifactDisposition === "stale-verification")
+    appendFixtureVerificationRecords(
+      staging,
+      observeFixtureVerification(root, {
+        baseSha,
+        implementationHeadSha: implementationCommitSha,
+        finishedAt: "2026-09-26T00:00:30.000Z",
+      }).records,
+    );
   recordStagingSync(staging, {
     tracker: "https://github.com/o/r/issues/877",
     checkpoint: 4,
@@ -2684,13 +2704,14 @@ function preparePullRequest(
   });
   if (artifactDisposition === "untracked")
     fs.writeFileSync(
-      path.join(root, "docs", "reviews", "90_test_review.md"),
-      contextIsolatedReviewArtifact(
-        baseSha,
-        implementationCommitSha,
-        implementationCommitSha === baseSha
-          ? ".agent-skill-chain/policy/default.json"
-          : "implementation.txt",
+      path.join(root, "docs", "reviews", "877_review.json"),
+      renderReviewEvidence(
+        contextIsolatedReviewEvidence(
+          root,
+          baseSha,
+          implementationCommitSha,
+          reviewIndependence ?? "context-isolated",
+        ),
       ),
     );
   return finalizePreparedPullRequest({
@@ -2817,16 +2838,31 @@ function advanceDeliveryTrustedMergeMode(
     },
   );
   assert.equal(shown.status, 0, shown.stderr);
-  const policy = JSON.parse(shown.stdout) as Record<string, unknown>;
-  policy.merge = {
+  const merge = {
     mode,
     branches: ["feature/x"],
     methods: ["merge"],
     requiredChecks: [],
     requiredReviews: 0,
   };
-  const materialized = path.join(scratch, "policy.json");
-  fs.writeFileSync(materialized, `${JSON.stringify(policy, null, 2)}\n`);
+  const policy = JSON.parse(shown.stdout) as Record<string, unknown>;
+  policy.merge = merge;
+  /**
+   * **trusted project policy manifestの`policy.merge`も同じ値へ進める**（REQ-WF-040で
+   * trusted commitがproject policy setを持つため）。既定policyだけを変えると、
+   * project側のmerge宣言がそのまま残る。
+   */
+  const manifestPath = ".agent-skill-chain/project-policy.json";
+  const manifestShown = spawnSync(
+    "git",
+    ["show", `${prepared.baseSha}:${manifestPath}`],
+    { cwd: prepared.root, encoding: "utf8" },
+  );
+  assert.equal(manifestShown.status, 0, manifestShown.stderr);
+  const manifest = JSON.parse(manifestShown.stdout) as {
+    policy: Record<string, unknown>;
+  };
+  manifest.policy.merge = merge;
   const environment = { ...process.env, GIT_INDEX_FILE: indexFile };
   const readTree = spawnSync("git", ["read-tree", prepared.baseSha], {
     cwd: prepared.root,
@@ -2834,22 +2870,29 @@ function advanceDeliveryTrustedMergeMode(
     encoding: "utf8",
   });
   assert.equal(readTree.status, 0, readTree.stderr);
-  const blob = spawnSync("git", ["hash-object", "-w", materialized], {
-    cwd: prepared.root,
-    encoding: "utf8",
-  });
-  assert.equal(blob.status, 0, blob.stderr);
-  const updateIndex = spawnSync(
-    "git",
-    [
-      "update-index",
-      "--add",
-      "--cacheinfo",
-      `100644,${blob.stdout.trim()},${policyPath}`,
-    ],
-    { cwd: prepared.root, env: environment, encoding: "utf8" },
-  );
-  assert.equal(updateIndex.status, 0, updateIndex.stderr);
+  for (const [target, value] of [
+    [policyPath, policy],
+    [manifestPath, manifest],
+  ] as const) {
+    const materialized = path.join(scratch, path.basename(target));
+    fs.writeFileSync(materialized, `${JSON.stringify(value, null, 2)}\n`);
+    const blob = spawnSync("git", ["hash-object", "-w", materialized], {
+      cwd: prepared.root,
+      encoding: "utf8",
+    });
+    assert.equal(blob.status, 0, blob.stderr);
+    const updateIndex = spawnSync(
+      "git",
+      [
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        `100644,${blob.stdout.trim()},${target}`,
+      ],
+      { cwd: prepared.root, env: environment, encoding: "utf8" },
+    );
+    assert.equal(updateIndex.status, 0, updateIndex.stderr);
+  }
   const tree = spawnSync("git", ["write-tree"], {
     cwd: prepared.root,
     env: environment,
@@ -3059,10 +3102,12 @@ function prepareDeliveryCli(
   artifactDisposition:
     | "valid"
     | "rejected"
-    | "placeholder-context"
+    | "session-mismatch"
     | "himpl-mismatch"
     | "untracked"
-    | "extra-file" = "valid",
+    | "extra-file"
+    | "stale-verification" = "valid",
+  separateArtifact = false,
 ): PreparedDeliveryCli {
   const prepared = preparePullRequest(
     world,
@@ -3073,6 +3118,7 @@ function prepareDeliveryCli(
     workflowMode,
     requiredReviews,
     artifactDisposition,
+    separateArtifact,
   );
   const stubDirectory = world.temp("asc-delivery-cli-gh-");
   const stub = path.join(stubDirectory, "gh");
@@ -3759,8 +3805,8 @@ if (args[0] === "merge-base" && args[1] === "--all") {
 /** Step 4欠落を作り、既存review bindingを保ったHumanOverride経路を検査する。 */
 function removeDeliveryStep4(prepared: PreparedDeliveryCli): string {
   const journalFile = path.join(prepared.staging, STEP_JOURNAL_FILE);
-  const entries = fs
-    .readFileSync(journalFile, "utf8")
+  /** Step 4を欠く手書きjournalは旧journal（hash chainなし）として作る */
+  const entries = unchainedJournalText(journalFile)
     .trimEnd()
     .split("\n")
     .filter((line) => (JSON.parse(line) as { step: number }).step !== 4);
@@ -4076,7 +4122,7 @@ When("{string}のE2E検査を実行する", async function (scenarioId: string) 
       assert.match(checked.stdout + checked.stderr, /H_impl.*H_final.*同一/u);
       assert.match(
         checked.stdout + checked.stderr,
-        /review artifact.*独立.*commit/u,
+        /review export.*review証跡.*commit/u,
       );
       const applied = executeCli(
         [...prepared.args, "--apply", "--authorize=approved"],
@@ -5011,7 +5057,7 @@ if (exact(["auth", "status"])) {
     case "SCN-INT-MERGE-020": {
       for (const disposition of [
         "rejected",
-        "placeholder-context",
+        "session-mismatch",
         "himpl-mismatch",
         "untracked",
         "extra-file",
@@ -5407,7 +5453,7 @@ if (exact(["auth", "status"])) {
       }).stdout.trim();
       fs.writeFileSync(
         gitStub,
-        `#!/usr/bin/env node\nconst {spawnSync}=require("node:child_process");const args=process.argv.slice(2);if(args.length===1&&args[0]==="--version"){process.stdout.write("git version 2.37.9\\n");}else{const result=spawnSync(${JSON.stringify(realGit)},args);process.stdout.write(result.stdout);process.stderr.write(result.stderr);process.exitCode=result.status??1;}\n`,
+        `#!/usr/bin/env node\nconst {spawnSync}=require("node:child_process");const args=process.argv.slice(2);if(args.length===1&&args[0]==="--version"){process.stdout.write("git version 2.37.9\\n");}else{const result=spawnSync(${JSON.stringify(realGit)},args,{stdio:"inherit"});process.exitCode=result.status??1;}\n`,
       );
       fs.chmodSync(gitStub, 0o755);
       unsupportedGit.env = {
@@ -5698,7 +5744,17 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-E2E-DELIVERY-REOPEN-001": {
-      const prepared = prepareDeliveryCli(this, {}, "disabled");
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "disabled",
+        "merge",
+        undefined,
+        "quick",
+        0,
+        "valid",
+        true,
+      );
       const created = createDeliveryPullRequest(prepared);
       assert.match(created.stdout, /pull_request_complete/u);
       const stateFile = path.join(
@@ -5842,6 +5898,56 @@ if (exact(["auth", "status"])) {
         bound.state,
         "pr-bound",
         `再開可能な待機ではない状態になっています: ${bound.state}`,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-070": {
+      /**
+       * **actor-independentでもreview証跡の観測値を再導出する**（REQ-WF-038）。
+       * 独立approvalが揃っていても、stagingの検証記録が証跡の検証欄を再導出できなければ
+       * mergeを要求しない。対照として記録が揃った同じ構成はmergeを要求する。
+       */
+      const permitted = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
+      createDeliveryPullRequest(permitted);
+      const accepted = executeDeliveryMerge(permitted);
+      assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+      assert.equal(
+        deliveryProviderCalls(permitted).filter(isMergeCall).length,
+        1,
+        "記録が揃ったactor-independentのmergeを要求していません",
+      );
+      const tampered = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+        "quick",
+        0,
+        "stale-verification",
+      );
+      createDeliveryPullRequest(tampered);
+      const before = deliveryProviderCalls(tampered).filter(isMergeCall).length;
+      const rejected = executeDeliveryMerge(tampered);
+      assert.notEqual(
+        rejected.status,
+        0,
+        "検証記録を再導出できないactor-independentのmergeを受理しました",
+      );
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /actor-independentのreview証跡が観測値と一致しません.*再導出した検証欄と一致しません/u,
+      );
+      assert.equal(
+        deliveryProviderCalls(tampered).filter(isMergeCall).length,
+        before,
+        "拒否したのにproviderへmergeを要求しています",
       );
       break;
     }
@@ -7713,6 +7819,8 @@ if (exact(["auth", "status"])) {
       const step4 = journalLines.find((item) => item.step === 4);
       assert.ok(step4);
       step4.artifacts.push("https://github.com/o/r/issues/878");
+      /** 手書きで改変したjournalは旧journal（hash chainなし）として作る */
+      for (const item of journalLines) delete item.previousEntryDigest;
       fs.writeFileSync(
         journalFile,
         `${journalLines.map((item) => JSON.stringify(item)).join("\n")}\n`,

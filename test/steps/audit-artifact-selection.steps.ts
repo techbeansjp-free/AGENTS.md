@@ -7,6 +7,10 @@ import {
   remoteDefaultTip,
 } from "../../scripts/check_file_audit.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
+import {
+  syntheticReviewEvidenceContent,
+  unvalidatedReviewEvidenceContent,
+} from "../support/review-evidence-fixture.js";
 
 type AuditResult = ReturnType<typeof checkFileAudit>;
 
@@ -52,35 +56,26 @@ function writeFile(root: string, relativePath: string, content: string): void {
   fs.writeFileSync(target, content);
 }
 
-function auditMarkdown(
+/**
+ * review証跡の正規byte列。Issue番号はfile名から導く。`variant`は同じ実装境界のまま
+ * 検証記録だけを変えた前進commitを作るために使う。
+ */
+function auditEvidence(
+  auditPath: string,
   base: string,
   implementation: string,
-  auditedPath: string,
-  status = "A",
-  identity = [
-    "| ラウンド数 | 1 |",
-    "| Step chain | 迂回: fixtureのため製品経路を通していない |",
-    "| 仕様の所有箇所 | `docs/specs/fixture.md:1`「fixtureの仕様」 |",
-    "| 成果物行数 | 製品 1行 / 支援層 2行 |",
-    "| 縮小の先行評価 | 既存fixtureの流用では監査経路を通らないため |",
-  ].join("\n"),
+  variant = 0,
 ): string {
-  return `# fixture実装レビュー
-
-## 0. レビュー識別情報
-
-| 項目 | 値 |
-|---|---|
-| 比較基点 | \`${base}\` |
-| H_impl | \`${implementation}\` |
-${identity}
-
-## 変更ファイル個別監査
-
-| path | status | owner | target layer | 責務・配置 | 依存・循環 | 仕様・追跡 | 安全・rollback | 個別判定 |
-|---|---|---|---|---|---|---|---|---|
-| \`${auditedPath}\` | ${status} | test owner | fixture | 監査対象 | 依存なし | AC-892 | commitを戻す | pass |
-`;
+  const issue = Number(/(\d+)_review\.json$/u.exec(auditPath)?.[1] ?? "1");
+  return syntheticReviewEvidenceContent({
+    issue,
+    baseSha: base,
+    implementationHeadSha: implementation,
+    verification:
+      variant === 0
+        ? ["npm test"]
+        : ["npm test", `npm test -- --variant=${variant}`],
+  });
 }
 
 function addHistoricalArtifacts(root: string, count: number): void {
@@ -119,7 +114,7 @@ function commitArtifact(
   writeFile(
     fixture.root,
     auditPath,
-    auditMarkdown(fixture.base, recordedImplementation, fixture.changedPath),
+    auditEvidence(auditPath, fixture.base, recordedImplementation),
   );
   for (const extra of extras)
     writeFile(fixture.root, extra, `余分な差分: ${extra}\n`);
@@ -167,7 +162,7 @@ function appendAuditOnlyCommits(
     writeFile(
       fixture.root,
       auditPath,
-      `${auditMarkdown(fixture.base, recordedImplementation, fixture.changedPath)}\n<!-- 帳簿合わせ ${index} -->\n`,
+      auditEvidence(auditPath, fixture.base, recordedImplementation, index + 1),
     );
     commitPaths(fixture.root, `docs: review artifactの記載を直す ${index}`, [
       auditPath,
@@ -179,7 +174,7 @@ Given(
   "review artifactだけを直す前進commitを2本積んだ監査選択repository",
   function () {
     const fixture = createImplementation(this);
-    const auditPath = "docs/reviews/41_課題1074境界安定化レビュー.md";
+    const auditPath = "docs/reviews/1074_review.json";
     commitArtifact(this, fixture, auditPath);
     /** **記載する`H_impl`は実装commitのまま動かさない。** 安定化の観測点である。 */
     appendAuditOnlyCommits(fixture, auditPath, 2, fixture.implementation);
@@ -191,7 +186,7 @@ Given(
   "review artifactの直後に実装を変える前進commitを積んだ監査選択repository",
   function () {
     const fixture = createImplementation(this);
-    const auditPath = "docs/reviews/42_課題1074境界停止レビュー.md";
+    const auditPath = "docs/reviews/1074_review.json";
     commitArtifact(this, fixture, auditPath);
     /**
      * artifactでないpathを含むcommitは境界になる。**遡りはここで止まる。**
@@ -212,7 +207,7 @@ Given(
     writeFile(
       fixture.root,
       auditPath,
-      `${auditMarkdown(fixture.base, second, fixture.changedPath)}| \`${auditPath}\` | A | test owner | fixture | 本レビュー成果物 | 依存なし | AC-892 | commitを戻す | pass |\n`,
+      auditEvidence(auditPath, fixture.base, second),
     );
     commitPaths(fixture.root, "docs: review artifactを追随させる", [auditPath]);
     this.expectedImplementation = second;
@@ -221,8 +216,8 @@ Given(
 
 Given("suffixの途中でartifactを2件同時に変える監査選択repository", function () {
   const fixture = createImplementation(this);
-  const auditPath = "docs/reviews/43_課題1074境界複数レビュー.md";
-  const otherPath = "docs/reviews/44_課題1074別レビュー.md";
+  const auditPath = "docs/reviews/1074_review.json";
+  const otherPath = "docs/reviews/1075_review.json";
   commitArtifact(this, fixture, auditPath);
   /**
    * **artifactが2件同時に変わるcommitで遡りを止める。** 1 fileだけの帳簿合わせと
@@ -233,7 +228,7 @@ Given("suffixの途中でartifactを2件同時に変える監査選択repository
   writeFile(
     fixture.root,
     auditPath,
-    `${auditMarkdown(fixture.base, fixture.implementation, fixture.changedPath)}<!-- 2件同時 -->\n`,
+    auditEvidence(auditPath, fixture.base, fixture.implementation, 7),
   );
   writeFile(fixture.root, otherPath, "# 別\n");
   const boundary = commitPaths(
@@ -244,7 +239,7 @@ Given("suffixの途中でartifactを2件同時に変える監査選択repository
   writeFile(
     fixture.root,
     auditPath,
-    `${auditMarkdown(fixture.base, boundary, fixture.changedPath)}| \`${auditPath}\` | A | test owner | fixture | 本レビュー成果物 | 依存なし | AC-892 | commitを戻す | pass |\n| \`${otherPath}\` | A | test owner | fixture | 別の成果物 | 依存なし | AC-892 | commitを戻す | pass |\n`,
+    auditEvidence(auditPath, fixture.base, boundary),
   );
   commitPaths(fixture.root, "docs: review artifactの記載を直す", [auditPath]);
   this.expectedImplementation = boundary;
@@ -252,7 +247,7 @@ Given("suffixの途中でartifactを2件同時に変える監査選択repository
 
 Given("suffixの途中にmerge commitがある監査選択repository", function () {
   const fixture = createImplementation(this);
-  const auditPath = "docs/reviews/45_課題1074境界mergeレビュー.md";
+  const auditPath = "docs/reviews/1074_review.json";
   commitArtifact(this, fixture, auditPath);
   /**
    * **merge commitで遡りを止める。**
@@ -265,7 +260,7 @@ Given("suffixの途中にmerge commitがある監査選択repository", function 
   writeFile(
     fixture.root,
     auditPath,
-    `${auditMarkdown(fixture.base, fixture.implementation, fixture.changedPath)}<!-- 別branchの帳簿合わせ -->\n`,
+    auditEvidence(auditPath, fixture.base, fixture.implementation, 8),
   );
   commitPaths(fixture.root, "docs: 別branchでartifactを直す", [auditPath]);
   git(fixture.root, ["checkout", "-q", "main"]);
@@ -282,7 +277,7 @@ Given("suffixの途中にmerge commitがある監査選択repository", function 
   writeFile(
     fixture.root,
     auditPath,
-    `${auditMarkdown(fixture.base, merged, fixture.changedPath)}| \`${auditPath}\` | A | test owner | fixture | 本レビュー成果物 | 依存なし | AC-892 | commitを戻す | pass |\n`,
+    auditEvidence(auditPath, fixture.base, merged),
   );
   commitPaths(fixture.root, "docs: review artifactの記載を直す", [auditPath]);
   this.expectedImplementation = merged;
@@ -290,7 +285,7 @@ Given("suffixの途中にmerge commitがある監査選択repository", function 
 
 Given("差分がreview artifact 1件だけの監査選択repository", function () {
   const fixture = createImplementation(this);
-  commitArtifact(this, fixture, "docs/reviews/40_課題892実装レビュー.md");
+  commitArtifact(this, fixture, "docs/reviews/892_review.json");
 });
 
 Given(
@@ -313,7 +308,7 @@ Given(
       implementation,
       changedPath: "src/lower.ts",
     };
-    commitArtifact(this, fixture, "docs/reviews/05_課題892実装レビュー.md");
+    commitArtifact(this, fixture, "docs/reviews/892_review.json");
   },
 );
 
@@ -335,7 +330,7 @@ Given(
     commitArtifact(
       this,
       fixture,
-      "docs/reviews/42_課題892実装レビュー.md",
+      "docs/reviews/892_review.json",
       fixture.implementation,
       ["unexpected/first.txt", "unexpected/second.txt"],
     );
@@ -376,7 +371,7 @@ Given(
         implementation,
         changedPath: "src/release-safe.ts",
       },
-      "docs/reviews/42_課題892実装レビュー.md",
+      "docs/reviews/892_review.json",
     );
     writePackage(fixture.root, "0.3.1-beta.2");
     commitPaths(
@@ -417,11 +412,11 @@ function createBaseDerivationFixture(
   }
   writeFile(root, "keep.txt", "changed\n");
   const implementation = commitPaths(root, "feat: 申告する変更", ["keep.txt"]);
-  const auditPath = "docs/reviews/42_課題966実装レビュー.md";
+  const auditPath = "docs/reviews/966_review.json";
   writeFile(
     root,
     auditPath,
-    auditMarkdown(declaredBase, implementation, "keep.txt", "M"),
+    auditEvidence(auditPath, declaredBase, implementation),
   );
   const head = commitPaths(root, "docs: review artifactを記録する", [
     auditPath,
@@ -532,12 +527,8 @@ Given(
     const implementation = commitPaths(root, "feat: 申告する変更", [
       "keep.txt",
     ]);
-    const auditPath = "docs/reviews/42_課題1004実装レビュー.md";
-    writeFile(
-      root,
-      auditPath,
-      auditMarkdown(start, implementation, "keep.txt", "M"),
-    );
+    const auditPath = "docs/reviews/1004_review.json";
+    writeFile(root, auditPath, auditEvidence(auditPath, start, implementation));
     const candidateHead = commitPaths(root, "docs: review artifactを記録する", [
       auditPath,
     ]);
@@ -599,12 +590,8 @@ Given("親が3個の境界commitをHEADにした監査選択repository", functio
   git(root, ["checkout", "-q", "-b", "candidate", start]);
   writeFile(root, "keep.txt", "changed\n");
   const implementation = commitPaths(root, "feat: 申告する変更", ["keep.txt"]);
-  const auditPath = "docs/reviews/42_課題966実装レビュー.md";
-  writeFile(
-    root,
-    auditPath,
-    auditMarkdown(start, implementation, "keep.txt", "M"),
-  );
+  const auditPath = "docs/reviews/966_review.json";
+  writeFile(root, auditPath, auditEvidence(auditPath, start, implementation));
   const head = commitPaths(root, "docs: review artifactを記録する", [
     auditPath,
   ]);
@@ -663,11 +650,11 @@ Given(
     const implementation = commitPaths(root, "feat: 申告する変更", [
       "keep.txt",
     ]);
-    const auditPath = "docs/reviews/42_課題966実装レビュー.md";
+    const auditPath = "docs/reviews/966_review.json";
     writeFile(
       root,
       auditPath,
-      auditMarkdown(targetTip, implementation, "keep.txt", "M"),
+      auditEvidence(auditPath, targetTip, implementation),
     );
     const head = commitPaths(root, "docs: review artifactを記録する", [
       auditPath,
@@ -698,12 +685,12 @@ Given("fork点を取得範囲の外に置いた浅いcloneの監査選択reposit
   const implementation = commitPaths(origin, "feat: 申告する変更", [
     "keep.txt",
   ]);
-  const auditPath = "docs/reviews/42_課題966実装レビュー.md";
+  const auditPath = "docs/reviews/966_review.json";
   // 比較基点を候補branch内へ前進させた申告。浅いcloneで導出を飛ばすと通ってしまう
   writeFile(
     origin,
     auditPath,
-    auditMarkdown(hidden, implementation, "keep.txt", "M"),
+    auditEvidence(auditPath, hidden, implementation),
   );
   const head = commitPaths(origin, "docs: review artifactを記録する", [
     auditPath,
@@ -764,12 +751,7 @@ Given(
   "artifact本文のH_implがreview headの親と異なる監査選択repository",
   function () {
     const fixture = createImplementation(this);
-    commitArtifact(
-      this,
-      fixture,
-      "docs/reviews/42_課題892実装レビュー.md",
-      fixture.base,
-    );
+    commitArtifact(this, fixture, "docs/reviews/892_review.json", fixture.base);
   },
 );
 
@@ -790,210 +772,87 @@ Given(
     commitArtifact(
       this,
       { root, base, implementation, changedPath: "src/ten.ts" },
-      "docs/reviews/10_課題892実装レビュー.md",
+      "docs/reviews/892_review.json",
     );
   },
 );
 
-/** identity欄だけを差し替えたartifactを最終commitにする。他の条件は既存fixtureと同じ。 */
-function commitArtifactWithIdentity(
-  world: AuditSelectionWorld,
-  identity: string,
-): void {
-  const fixture = createImplementation(world, { historicalArtifacts: 1 });
-  const auditPath = "docs/reviews/02_課題986実装レビュー.md";
-  writeFile(
-    fixture.root,
-    auditPath,
-    auditMarkdown(
-      fixture.base,
-      fixture.implementation,
-      fixture.changedPath,
-      "A",
-      identity,
-    ),
-  );
-  commitPaths(fixture.root, "docs: review artifactを記録する", [auditPath]);
-  world.expectedAuditPath = auditPath;
-}
-
-const OBSERVATION_ROWS: Readonly<Record<string, string>> = {
-  仕様の所有箇所: "`docs/specs/fixture.md:1`「fixtureの仕様」",
-  成果物行数: "製品 1行 / 支援層 2行",
-  縮小の先行評価: "既存fixtureの流用では監査経路を通らないため",
-};
-
-/** 観測基準の欄を組み立てる。`overrides`で1欄だけ差し替え、`undefined`で欄ごと落とす。 */
-function observationRows(
-  overrides: Readonly<Record<string, string | undefined>> = {},
-): string {
-  return Object.entries(OBSERVATION_ROWS)
-    .map(([label, value]) => [
-      label,
-      label in overrides ? overrides[label] : value,
-    ])
-    .filter(([, value]) => value !== undefined)
-    .map(([label, value]) => `| ${label} | ${value} |`)
-    .join("\n");
-}
-
-const BYPASS_IDENTITY = [
-  "| Step chain | 迂回: fixtureのため製品経路を通していない |",
-  observationRows(),
-].join("\n");
-
-Given(
-  "{string}の欄が無いreview artifactを持つ統合監査repository",
-  function (label: string) {
-    commitArtifactWithIdentity(
-      this,
-      [
-        "| ラウンド数 | 1 |",
-        "| Step chain | 迂回: fixtureのため製品経路を通していない |",
-        observationRows({ [label]: undefined }),
-      ].join("\n"),
-    );
-  },
-);
-
-Given(
-  "{string}が空欄のreview artifactを持つ統合監査repository",
-  function (label: string) {
-    commitArtifactWithIdentity(
-      this,
-      [
-        "| ラウンド数 | 1 |",
-        "| Step chain | 迂回: fixtureのため製品経路を通していない |",
-        observationRows({ [label]: "" }),
-      ].join("\n"),
-    );
-  },
-);
-
-Given(
-  "仕様の所有箇所が{string}のreview artifactを持つ統合監査repository",
-  function (value: string) {
-    commitArtifactWithIdentity(
-      this,
-      [
-        "| ラウンド数 | 1 |",
-        "| Step chain | 迂回: fixtureのため製品経路を通していない |",
-        observationRows({ 仕様の所有箇所: value }),
-      ].join("\n"),
-    );
-  },
-);
-
-Given(
-  "成果物行数が{string}のreview artifactを持つ統合監査repository",
-  function (value: string) {
-    commitArtifactWithIdentity(
-      this,
-      [
-        "| ラウンド数 | 1 |",
-        "| Step chain | 迂回: fixtureのため製品経路を通していない |",
-        observationRows({ 成果物行数: value }),
-      ].join("\n"),
-    );
-  },
-);
-
-Then("file監査は{string}の欠落を報告する", function (label: string) {
-  assertReported(this, `| ${label} | … |」がありません`);
-});
-
-Then("file監査は仕様側の起票先の欠落を報告する", function () {
-  assertReported(this, "仕様側の欠落を起票したIssue番号");
-});
-
+/** 上限を超えたround数を持つ証跡を最終commitにする。parserの上限検査を通さずに書く。 */
 Given(
   "ラウンド数が{string}のreview artifactを持つ統合監査repository",
   function (rounds: string) {
-    commitArtifactWithIdentity(
-      this,
-      `| ラウンド数 | ${rounds} |\n${BYPASS_IDENTITY}`,
-    );
-  },
-);
-
-Given("ラウンド数欄が無いreview artifactを持つ統合監査repository", function () {
-  commitArtifactWithIdentity(this, BYPASS_IDENTITY);
-});
-
-Given("Step chain欄が無いreview artifactを持つ統合監査repository", function () {
-  commitArtifactWithIdentity(this, "| ラウンド数 | 1 |");
-});
-
-Given(
-  "Step chainを理由なしで迂回と申告したreview artifactを持つ統合監査repository",
-  function () {
-    /** 理由が空の申告は申告として成立しない。parserが`(.+)`で非空を保証する。 */
-    commitArtifactWithIdentity(
-      this,
-      "| ラウンド数 | 1 |\n| Step chain | 迂回: |",
-    );
-  },
-);
-
-Given(
-  "申告行を本文とcode fenceだけに置いたreview artifactを持つ統合監査repository",
-  function () {
-    /**
-     * 識別情報の節には申告を置かず、**本文とcode fenceにだけ**申告の形をした行を置く。
-     * 全文検索する実装はこれを申告として受理してしまう。
-     */
     const fixture = createImplementation(this, { historicalArtifacts: 1 });
-    const auditPath = "docs/reviews/02_課題986実装レビュー.md";
-    /**
-     * 識別情報の節の**中**にcode fenceを置き、節の**外**に平文の申告行を置く。
-     * 節の限定とcodeの除去の**どちらを外しても**受理されてしまう配置である。
-     */
-    const body = auditMarkdown(
-      fixture.base,
-      fixture.implementation,
-      fixture.changedPath,
-      "A",
-      [
-        "| reviewer | fixture |",
-        "",
-        "```markdown",
-        "| ラウンド数 | 1 |",
-        "| Step chain | 迂回: 節の中のcode fence |",
-        "```",
-      ].join("\n"),
-    );
+    const auditPath = "docs/reviews/986_review.json";
     writeFile(
       fixture.root,
       auditPath,
-      [
-        body,
-        "",
-        "## 9. 補足",
-        "",
-        "| ラウンド数 | 1 |",
-        "| Step chain | 迂回: 本文へ書いただけ |",
-        "",
-        "",
-      ].join("\n"),
+      unvalidatedReviewEvidenceContent({
+        issue: 986,
+        baseSha: fixture.base,
+        implementationHeadSha: fixture.implementation,
+        countedRounds: Number(rounds),
+      }),
     );
-    commitPaths(fixture.root, "docs: review artifactを記録する", [auditPath]);
+    commitPaths(fixture.root, "docs: review証跡を記録する", [auditPath]);
     this.expectedAuditPath = auditPath;
   },
 );
 
 Given(
-  "Step chainを{string}と申告したreview artifactを持つ統合監査repository",
-  function (declaration: string) {
-    commitArtifactWithIdentity(
-      this,
-      [
-        "| ラウンド数 | 1 |",
-        `| Step chain | ${declaration} |`,
-        observationRows(),
-      ].join("\n"),
+  "file名のIssue番号とissueが一致しないreview証跡を持つ統合監査repository",
+  function () {
+    const fixture = createImplementation(this);
+    const auditPath = "docs/reviews/987_review.json";
+    writeFile(
+      fixture.root,
+      auditPath,
+      auditEvidence(
+        "docs/reviews/986_review.json",
+        fixture.base,
+        fixture.implementation,
+      ),
     );
+    commitPaths(fixture.root, "docs: review証跡を記録する", [auditPath]);
   },
 );
+
+Given("Markdownのreview artifactを持つ統合監査repository", function () {
+  const fixture = createImplementation(this);
+  const auditPath = "docs/reviews/42_課題892実装レビュー.md";
+  writeFile(fixture.root, auditPath, "# 手書きreview\n");
+  commitPaths(fixture.root, "docs: 手書きreviewを記録する", [auditPath]);
+});
+
+Given("手で書き直したreview証跡を持つ統合監査repository", function () {
+  const fixture = createImplementation(this);
+  const auditPath = "docs/reviews/892_review.json";
+  const canonical = auditEvidence(
+    auditPath,
+    fixture.base,
+    fixture.implementation,
+  );
+  writeFile(
+    fixture.root,
+    auditPath,
+    `${JSON.stringify(JSON.parse(canonical) as unknown)}\n`,
+  );
+  commitPaths(fixture.root, "docs: review証跡を記録する", [auditPath]);
+});
+
+Then("file監査はfile名書式の不一致を報告する", function () {
+  assertReported(this, "review証跡のfile名書式に一致しません");
+});
+
+Then("file監査はIssue番号の不一致を報告する", function () {
+  assertReported(
+    this,
+    "file名のIssue番号とreview証跡のissue 986 が一致しません",
+  );
+});
+
+Then("file監査は正規直列化の不一致を報告する", function () {
+  assertReported(this, "正規直列化と一致しません");
+});
 
 Then(
   "file監査は選択した親が候補側でない可能性と両親の着地形file数を示す",
@@ -1038,7 +897,7 @@ Then("file監査は比較基点の不一致を報告する", function () {
   assert.equal(this.auditResult?.valid, false);
   assert.match(
     this.auditResult?.errors.join("\n") ?? "",
-    /review artifact本文の比較基点 [a-f0-9]{40} が実際のcommit構造から導出した比較基点 [a-f0-9]{40} と一致しません/u,
+    /review証跡の比較基点 [a-f0-9]{40} が実際のcommit構造から導出した比較基点 [a-f0-9]{40} と一致しません/u,
   );
 });
 
@@ -1094,20 +953,12 @@ function assertReported(world: AuditSelectionWorld, fragment: string): void {
 }
 
 Then("file監査はラウンド上限超過を報告する", function () {
-  assertReported(this, "reviewラウンドが上限を超えています");
-});
-
-Then("file監査はラウンド数の欠落を報告する", function () {
-  assertReported(this, "ラウンド数");
-});
-
-Then("file監査はStep chain申告の欠落を報告する", function () {
-  assertReported(this, "Step chain");
+  assertReported(this, "countedRoundsが上限8を超えています");
 });
 
 Given("review artifactを最終commitにした統合監査repository", function () {
   const fixture = createImplementation(this, { historicalArtifacts: 3 });
-  commitArtifact(this, fixture, "docs/reviews/02_課題892実装レビュー.md");
+  commitArtifact(this, fixture, "docs/reviews/892_review.json");
 });
 
 Given(
@@ -1133,7 +984,7 @@ Given(
       writeFile(
         root,
         auditPath,
-        auditMarkdown(base, implementation, implementationPath),
+        auditEvidence(auditPath, base, implementation),
       );
       commitPaths(root, `docs: ${branch}のreview artifactを記録する`, [
         auditPath,
@@ -1142,12 +993,12 @@ Given(
     createBranch(
       "parallel-a",
       "src/parallel-a.ts",
-      "docs/reviews/22_課題892並行Aレビュー.md",
+      "docs/reviews/892_review.json",
     );
     createBranch(
       "parallel-b",
       "src/parallel-b.ts",
-      "docs/reviews/22_課題893並行Bレビュー.md",
+      "docs/reviews/893_review.json",
     );
     git(root, ["checkout", "-q", "main"]);
     git(root, [
@@ -1177,7 +1028,7 @@ Given("review artifactと余分なpathをcommitした統合監査repository", fu
   commitArtifact(
     this,
     fixture,
-    "docs/reviews/42_課題892実装レビュー.md",
+    "docs/reviews/892_review.json",
     fixture.implementation,
     ["unexpected/integration.txt"],
   );
@@ -1185,7 +1036,7 @@ Given("review artifactと余分なpathをcommitした統合監査repository", fu
 
 Given("既存41件のreview artifactを持つ統合監査repository", function () {
   const fixture = createImplementation(this, { historicalArtifacts: 40 });
-  commitArtifact(this, fixture, "docs/reviews/41_課題892実装レビュー.md");
+  commitArtifact(this, fixture, "docs/reviews/892_review.json");
 });
 
 When("監査選択repositoryのfile監査を実行する", function () {
@@ -1252,17 +1103,14 @@ Then("05番のreview artifactが選ばれてfile監査は合格する", function
     true,
     this.auditResult?.errors.join("\n"),
   );
-  assert.equal(
-    this.auditResult?.auditPath,
-    "docs/reviews/05_課題892実装レビュー.md",
-  );
+  assert.equal(this.auditResult?.auditPath, "docs/reviews/892_review.json");
 });
 
 Then("review artifact commitの追加方法を示して失敗する", function () {
   assert.equal(this.auditResult?.valid, false);
   assert.match(
     this.auditResult?.errors.join("\n") ?? "",
-    /review artifactのcommitがありません。実装commitの後にreview artifactだけをcommitしてください/u,
+    /review証跡のcommitがありません。実装commitの後に`review export`で生成したreview証跡だけをcommitしてください/u,
   );
 });
 
@@ -1271,11 +1119,11 @@ Then("複数差分の診断に全pathが列挙される", function () {
   const errors = this.auditResult?.errors.join("\n") ?? "";
   assert.match(
     errors,
-    /H_impl\.\.currentにreview artifact以外のfileが含まれています/u,
+    /H_impl\.\.currentにreview証跡以外のfileが含まれています/u,
   );
   for (const expected of ["unexpected/first.txt", "unexpected/second.txt"])
     assert.ok(errors.includes(expected), expected);
-  assert.ok(!errors.includes("docs/reviews/42_課題892実装レビュー.md"));
+  assert.ok(!errors.includes("docs/reviews/892_review.json"));
 });
 
 Then(
@@ -1295,10 +1143,7 @@ Then("release bumpを除外してreview artifact 1件が選ばれる", function 
     true,
     this.auditResult?.errors.join("\n"),
   );
-  assert.equal(
-    this.auditResult?.auditPath,
-    "docs/reviews/42_課題892実装レビュー.md",
-  );
+  assert.equal(this.auditResult?.auditPath, "docs/reviews/892_review.json");
 });
 
 Then("H_implとcommit構造の不一致を示して失敗する", function () {
@@ -1315,10 +1160,7 @@ Then("10番のreview artifactが選ばれてfile監査は合格する", function
     true,
     this.auditResult?.errors.join("\n"),
   );
-  assert.equal(
-    this.auditResult?.auditPath,
-    "docs/reviews/10_課題892実装レビュー.md",
-  );
+  assert.equal(this.auditResult?.auditPath, "docs/reviews/892_review.json");
 });
 
 Then("両方のmerge後に対応するreview artifactが選ばれて合格する", function () {
@@ -1328,8 +1170,8 @@ Then("両方のmerge後に対応するreview artifactが選ばれて合格する
       auditPath: result.auditPath,
     })),
     [
-      { valid: true, auditPath: "docs/reviews/22_課題892並行Aレビュー.md" },
-      { valid: true, auditPath: "docs/reviews/22_課題893並行Bレビュー.md" },
+      { valid: true, auditPath: "docs/reviews/892_review.json" },
+      { valid: true, auditPath: "docs/reviews/893_review.json" },
     ],
     this.auditResults.flatMap((result) => result.errors).join("\n"),
   );
@@ -1340,7 +1182,7 @@ Then("統合監査の複数差分診断に余分なpathが含まれる", functio
   const errors = this.auditResult?.errors.join("\n") ?? "";
   assert.match(
     errors,
-    /H_impl\.\.currentにreview artifact以外のfileが含まれています/u,
+    /H_impl\.\.currentにreview証跡以外のfileが含まれています/u,
   );
   assert.ok(errors.includes("unexpected/integration.txt"));
 });
@@ -1351,8 +1193,5 @@ Then("41件目のreview artifactが選ばれてfile監査は合格する", funct
     true,
     this.auditResult?.errors.join("\n"),
   );
-  assert.equal(
-    this.auditResult?.auditPath,
-    "docs/reviews/41_課題892実装レビュー.md",
-  );
+  assert.equal(this.auditResult?.auditPath, "docs/reviews/892_review.json");
 });

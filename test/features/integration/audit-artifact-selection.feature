@@ -1,6 +1,6 @@
 @integration @audit-artifact-selection
-Feature: fixture repositoryでのreview artifact差分選択
-  branchとmergeを含むGit履歴からreview artifactをfile名の大小に依存せず選ぶ。
+Feature: fixture repositoryでのreview証跡差分選択
+  branchとmergeを含むGit履歴からreview証跡をfile名の大小に依存せず選ぶ。
 
   Scenario: SCN-INT-AUDITSEL-001 fixture repositoryでaudit checkが差分から成果物を選ぶ
     Given review artifactを最終commitにした統合監査repository
@@ -32,80 +32,6 @@ Feature: fixture repositoryでのreview artifact差分選択
     When 監査選択repositoryのfile監査を実行する
     Then 監査選択のfile監査は合格する
 
-  Scenario: SCN-INT-STEPCHAIN-002 ラウンド数の記録が無いartifactを拒否する
-    Given ラウンド数欄が無いreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then file監査はラウンド数の欠落を報告する
-
-  Scenario: SCN-INT-STEPCHAIN-003 Step chainの申告が無いartifactを拒否する
-    Given Step chain欄が無いreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then file監査はStep chain申告の欠落を報告する
-
-  Scenario: SCN-INT-STEPCHAIN-004 理由を伴わない迂回の申告を拒否する
-    Given Step chainを理由なしで迂回と申告したreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then file監査はStep chain申告の欠落を報告する
-
-  Scenario: SCN-INT-STEPCHAIN-005 経由の申告を記録として受理する
-    Given Step chainを"経由: .agent-skill-chain/tmp/issues/986"と申告したreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then 監査選択のfile監査は合格する
-
-  Scenario: SCN-INT-STEPCHAIN-006 短い理由の迂回申告を受理する
-    Given Step chainを"迂回: CI障害"と申告したreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then 監査選択のfile監査は合格する
-
-
-
-  Scenario: SCN-INT-STEPCHAIN-007 注記付きのラウンド数から先頭の整数を読む
-    Given ラウンド数が"3（うち1ラウンドは自動review）"のreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then 監査選択のfile監査は合格する
-
-  Scenario: SCN-INT-STEPCHAIN-008 先頭が整数でないラウンド数を記録の欠落として扱う
-    Given ラウンド数が"（自動review込み）2"のreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then file監査はラウンド数の欠落を報告する
-
-  Scenario: SCN-INT-STEPCHAIN-009 識別情報の節の外にある申告行を数えない
-    Given 申告行を本文とcode fenceだけに置いたreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then file監査はラウンド数の欠落を報告する
-    And file監査はStep chain申告の欠落を報告する
-
-  Scenario Outline: SCN-INT-SPEEDOBS-001 観測基準の欄が無いartifactを拒否する
-    Given "<label>"の欄が無いreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then file監査は"<label>"の欠落を報告する
-
-    Examples:
-      | label |
-      | 仕様の所有箇所 |
-      | 成果物行数 |
-      | 縮小の先行評価 |
-
-  Scenario: SCN-INT-SPEEDOBS-002 空欄の観測基準を未記入として扱う
-    Given "縮小の先行評価"が空欄のreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then file監査は"縮小の先行評価"の欠落を報告する
-
-  Scenario: SCN-INT-SPEEDOBS-003 該当なしの仕様所有箇所に起票先を要求する
-    Given 仕様の所有箇所が"該当なし"のreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then file監査は仕様側の起票先の欠落を報告する
-
-  Scenario: SCN-INT-SPEEDOBS-004 該当なしでも起票先があれば受理する
-    Given 仕様の所有箇所が"該当なし: #1234"のreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then 監査選択のfile監査は合格する
-
-  Scenario: SCN-INT-SPEEDOBS-005 支援層が成果物を上回る記録でも停止しない
-    Given 成果物行数が"製品 8行 / 支援層 172行"のreview artifactを持つ統合監査repository
-    When 監査選択repositoryのfile監査を実行する
-    Then 監査選択のfile監査は合格する
-
   Scenario: SCN-INT-AUDITSEL-005 第1親が既定branch tipのmerge commitから比較基点を導出して合格する
     Given 第1親が既定branch tipのmerge commitをHEADにした監査選択repository
     When 監査選択repositoryのfile監査を実行する
@@ -115,3 +41,18 @@ Feature: fixture repositoryでのreview artifact差分選択
     Given fork点を取得範囲の外に置いた浅いcloneの監査選択repository
     When 監査選択repositoryのfile監査を実行する
     Then file監査は比較基点の導出不能を報告する
+
+  Scenario: SCN-INT-REVEVID-006 file名が<Issue番号>_review.jsonでない証跡を拒否する
+    Given Markdownのreview artifactを持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査はfile名書式の不一致を報告する
+
+  Scenario: SCN-INT-REVEVID-007 file名のIssue番号と証跡のissueの不一致を拒否する
+    Given file名のIssue番号とissueが一致しないreview証跡を持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査はIssue番号の不一致を報告する
+
+  Scenario: SCN-INT-REVEVID-008 手で書き直した証跡を拒否する
+    Given 手で書き直したreview証跡を持つ統合監査repository
+    When 監査選択repositoryのfile監査を実行する
+    Then file監査は正規直列化の不一致を報告する

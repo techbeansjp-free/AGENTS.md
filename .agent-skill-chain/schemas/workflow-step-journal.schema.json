@@ -95,7 +95,55 @@
       "const": true
     },
     "reconfirmation": {
+      "description": "旧上流再確定entry。読取り互換のためだけに受理し、新規には書き込まない（REQ-WF-036）",
       "const": true
+    },
+    "planSeal": {
+      "description": "計画封印。fullのStep 8、quick/pocのStep 4の記録時にCLIが計画文書から計算したSHA-256（REQ-WF-036）",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "00_要求定義.md": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "01_要件定義.md": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "02_設計.md": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "03_実装計画.md": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "planGeneration": {
+      "description": "計画世代。封印後のStep 9・10の記録時にCLIが05_計画変更.mdから計算した追記専用の世代chain。世代1は封印（previousDigest=null、digestは封印digest）、世代2以降のdigestはsha256(stableJson({previousDigest, amendments}))（REQ-WF-036）",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generation", "previousDigest", "amendments", "digest"],
+      "properties": {
+        "generation": { "type": "integer", "minimum": 1 },
+        "previousDigest": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          ]
+        },
+        "amendments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "digest"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^AMD-\\d{3}$" },
+              "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            }
+          }
+        },
+        "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "previousEntryDigest": {
+      "description": "journal hash chain。この行より前のjournal本文（先行する全行と各行末の改行を含むexact byte列）のSHA-256で、先頭行はnull。CLIが追記時に計算する。1行でも持てば以降の全行が持ち、chain付きjournalでは封印Stepの非HumanOverride entryにplanSeal、封印後のStep 9・10にplanGenerationが必須になる（行をまたぐ検査はstrict parserが行う。REQ-WF-036）",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      ]
     }
   },
   "allOf": [
@@ -126,6 +174,91 @@
     {
       "if": { "properties": { "step": { "const": 9 } } },
       "else": { "not": { "required": ["implementationHeadSha"] } }
+    },
+    {
+      "if": {
+        "properties": { "step": { "enum": [9, 10] } },
+        "required": ["step"]
+      },
+      "else": { "not": { "required": ["planGeneration"] } }
+    },
+    {
+      "if": {
+        "properties": { "mode": { "const": "full" }, "step": { "const": 8 } },
+        "required": ["mode", "step"]
+      },
+      "then": {
+        "properties": {
+          "planSeal": {
+            "required": [
+              "00_要求定義.md",
+              "01_要件定義.md",
+              "02_設計.md",
+              "03_実装計画.md"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": { "enum": ["quick", "poc"] },
+          "step": { "const": 4 }
+        },
+        "required": ["mode", "step"]
+      },
+      "then": {
+        "properties": {
+          "planSeal": {
+            "required": ["00_要求定義.md"],
+            "maxProperties": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "mode": { "const": "full" },
+              "step": { "const": 8 }
+            },
+            "required": ["mode", "step"]
+          },
+          {
+            "properties": {
+              "mode": { "enum": ["quick", "poc"] },
+              "step": { "const": 4 }
+            },
+            "required": ["mode", "step"]
+          }
+        ]
+      },
+      "else": { "not": { "required": ["planSeal"] } }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "mode": { "const": "full" },
+              "step": { "const": 8 }
+            },
+            "required": ["mode", "step", "previousEntryDigest"]
+          },
+          {
+            "properties": {
+              "mode": { "enum": ["quick", "poc"] },
+              "step": { "const": 4 }
+            },
+            "required": ["mode", "step", "previousEntryDigest"]
+          }
+        ],
+        "not": { "required": ["humanOverride"] }
+      },
+      "then": { "required": ["planSeal"] }
     },
     {
       "if": {

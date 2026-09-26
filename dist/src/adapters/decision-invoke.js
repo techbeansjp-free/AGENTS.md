@@ -21,7 +21,7 @@ import { computeDecisionInputDigest, computeDecisionRecordId, computeFindingClas
 import { DECISION_TYPES, DCAND_010_SAFE_VALUE, findDecisionType, } from "../domain/decision-types.js";
 import { resolveAuthorityDecision } from "../domain/decision-authority.js";
 import { PROVIDER_AUTONOMOUS_CEILINGS } from "../domain/role.js";
-import { resolveDcand001, resolveDcand002, resolveDcand003, resolveDcand004, resolveDcand005, resolveDcand008, } from "../domain/decision-resolvers.js";
+import { resolveDcand001, resolveDcand002, resolveDcand003, resolveDcand005, resolveDcand008, } from "../domain/decision-resolvers.js";
 import { isRecord } from "../types.js";
 /** lightweight-tier（自己申告provider）の現在バージョン。 */
 export const LIGHTWEIGHT_TIER_PROVIDER_VERSION = "lightweight-tier/v1";
@@ -77,15 +77,6 @@ function runDeterministicResolver(decisionTypeId, payload) {
                 proposedValue: String(result),
                 resolverOutput: result,
                 adjudicationReason: `requiresSpecUpdate=${result}`,
-                deferToProvider: false,
-            };
-        }
-        case "DCAND-004": {
-            const result = resolveDcand004(payload);
-            return {
-                proposedValue: result,
-                resolverOutput: result,
-                adjudicationReason: "auditRowDraftによる事前充填",
                 deferToProvider: false,
             };
         }

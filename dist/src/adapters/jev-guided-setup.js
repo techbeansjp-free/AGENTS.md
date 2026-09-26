@@ -12,6 +12,8 @@
  * - APIキーの値そのものは、このmoduleのどの関数も引数として受け取らない。
  *   `appendJevApiKeyToShellRc`（T-07）は`process.env[apiKeyEnvVar]`から
  *   実行時に読むだけであり、値がCLI引数・コマンド履歴へ現れる経路が無い。
+ *   値はmode 0600の専用file（`~/.config/agent-skill-chain/jev.env`）へ
+ *   single quoteして書き、shell起動fileには値を含まないsource行だけを追記する
  *   Issue本文が求める役割分担（「値はAIへ渡さず、人間が自分のshellで
  *   `export`する」）は、値をこのCLIの引数にしないという設計そのもので
  *   実現する——値を渡す入力経路自体が存在しない
@@ -54,7 +56,7 @@ export function configureJevProviderConfig(input) {
     if (input.model.trim() === "")
         errors.push("modelは空でない文字列が必要です");
     if (!ENV_VAR_NAME_PATTERN.test(input.apiKeyEnvVar))
-        errors.push("apiKeyEnvVarは英大文字・数字・_のみで先頭は英字か_が必要です（例: JEV_API_KEY）");
+        errors.push("apiKeyEnvVarはJEV_で始まる英大文字・数字・_のみが必要です（例: JEV_API_KEY）");
     const configPath = path.resolve(input.root, JEV_PROVIDER_CONFIG_PATH);
     const wouldWrite = {
         enabled: true,
@@ -124,68 +126,121 @@ export function detectShellRcFile(env = process.env, homeDir = os.homedir()) {
 function exportLinePattern(apiKeyEnvVar) {
     return new RegExp(`^\\s*export\\s+${apiKeyEnvVar}=`, "mu");
 }
+/**
+ * 秘密値の保存先の既定（独立security review M1/M2）。rc fileは多くの場合
+ * 0644でdotfile repositoryにも追跡されるため、値はrcへ書かず、この専用
+ * file（0600、親directory 0700）へだけ書く。rcへはこのfileを読み込む
+ * 非秘密の1行だけを追記する。
+ */
+export function defaultJevSecretFilePath(homeDir = os.homedir()) {
+    return path.join(homeDir, ".config", "agent-skill-chain", "jev.env");
+}
+/** POSIX shellのsingle quoteで囲む（`'`は`'\''`へ置換）。 */
+function shellSingleQuote(value) {
+    return `'${value.replace(/'/gu, "'\\''")}'`;
+}
+/**
+ * rcへ追記する非秘密の行。secret fileが存在する場合だけ読み込む。pathは
+ * single quoteで囲み、値を一切含まない。
+ */
+export function jevSecretSourceLine(secretFilePath) {
+    const quoted = shellSingleQuote(secretFilePath);
+    return `[ -f ${quoted} ] && . ${quoted}`;
+}
+// 改行・NUL・その他の制御文字を含む値は、quoteしても行注入・切り詰めの
+// 原因になるため書き込まずに拒否する（値は出力しない）。
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
 const REQUIRED_CONFIRM_TOKEN = "APPEND";
 /**
- * `rcPath`へ`export <apiKeyEnvVar>=<値>`を追記する。**値は引数として
- * 受け取らない**——`process.env[apiKeyEnvVar]`（呼び出し時にその shell で
- * 既に`export`済みの値）を直接読むだけで、CLI引数・コマンド履歴には値が
- * 一切現れない。戻り値にも値を含めない。
+ * `secretFilePath`（mode 0600）へ`export <apiKeyEnvVar>='<値>'`を書き、
+ * `rcPath`へはそのfileを読み込む非秘密の1行だけを追記する（独立security
+ * review M1/M2）。**値は引数として受け取らない**——`process.env[apiKeyEnvVar]`
+ * （呼び出し時にその shell で既に`export`済みの値）を直接読むだけで、CLI
+ * 引数・コマンド履歴には値が一切現れない。戻り値・例外messageにも値を
+ * 含めない。
  *
  * 書き込みには`apply: true`と`confirm: "APPEND"`の両方が必要（Issue本文
- * 「確認を挟んだ上でのopt-in」「無言で書き換えない」）。既に同名変数の
- * `export`行が存在する場合は、内容を検査せず（値を読まず）常に無変更で
- * `alreadyPresent: true`を返す（重複追記・既存記述の上書きを避ける）。
+ * 「確認を挟んだ上でのopt-in」「無言で書き換えない」）。rcに同名変数の
+ * `export`行が既にある場合、またはsecret fileのexport行とrcのsource行が
+ * 両方揃っている場合は、常に無変更で`alreadyPresent: true`を返す
+ * （重複追記・既存記述の上書きを避ける）。
  */
 export function appendJevApiKeyToShellRc(input) {
     if (!ENV_VAR_NAME_PATTERN.test(input.apiKeyEnvVar))
-        throw new Error("apiKeyEnvVarは英大文字・数字・_のみで先頭は英字か_が必要です");
+        throw new Error("apiKeyEnvVarはJEV_で始まる英大文字・数字・_のみが必要です（例: JEV_API_KEY）");
     const envValue = process.env[input.apiKeyEnvVar];
     const envVarSetInCurrentShell = typeof envValue === "string" && envValue.length > 0;
-    const existingContent = fs.existsSync(input.rcPath)
+    const existingRc = fs.existsSync(input.rcPath)
         ? readRegularFile(input.rcPath)
         : "";
-    const alreadyPresent = exportLinePattern(input.apiKeyEnvVar).test(existingContent);
-    if (alreadyPresent)
+    const existingKeyFileContent = fs.existsSync(input.secretFilePath)
+        ? readRegularFile(input.secretFilePath)
+        : "";
+    const sourceLine = jevSecretSourceLine(input.secretFilePath);
+    const exportPattern = exportLinePattern(input.apiKeyEnvVar);
+    const secretPresent = exportPattern.test(existingKeyFileContent);
+    const sourcePresent = existingRc
+        .split("\n")
+        .some((line) => line.trim() === sourceLine);
+    const base = { rcPath: input.rcPath, secretFilePath: input.secretFilePath };
+    if (exportPattern.test(existingRc) || (secretPresent && sourcePresent))
         return {
-            rcPath: input.rcPath,
+            ...base,
             alreadyPresent: true,
             envVarSetInCurrentShell,
             applied: false,
-            reason: `${input.rcPath}に既に${input.apiKeyEnvVar}のexport行があるため変更しません`,
+            reason: `${input.apiKeyEnvVar}のexport行とその読み込みは既に設定済みのため変更しません`,
         };
-    if (!envVarSetInCurrentShell)
+    if (!secretPresent && !envVarSetInCurrentShell)
         return {
-            rcPath: input.rcPath,
+            ...base,
             alreadyPresent: false,
             envVarSetInCurrentShell: false,
             applied: false,
             reason: `現在のshellで${input.apiKeyEnvVar}が設定されていないため追記できません。先に export ${input.apiKeyEnvVar}=<値> を実行してから再度呼び出してください`,
         };
+    if (!secretPresent &&
+        typeof envValue === "string" &&
+        CONTROL_CHARACTER_PATTERN.test(envValue))
+        throw new Error(`${input.apiKeyEnvVar}の値が改行・NUL等の制御文字を含むため書き込みません（値は表示しません）`);
     if (!input.apply)
         return {
-            rcPath: input.rcPath,
+            ...base,
             alreadyPresent: false,
-            envVarSetInCurrentShell: true,
+            envVarSetInCurrentShell,
             applied: false,
-            reason: `dry-run: --applyと--confirm=${REQUIRED_CONFIRM_TOKEN}を指定すると${input.rcPath}へexport ${input.apiKeyEnvVar}=(値は表示しません) を追記します`,
+            reason: `dry-run: --applyと--confirm=${REQUIRED_CONFIRM_TOKEN}を指定すると${input.secretFilePath}（mode 0600）へexport ${input.apiKeyEnvVar}=(値は表示しません) を書き、${input.rcPath}へはそのfileを読み込む行だけを追記します`,
         };
     if (input.confirm !== REQUIRED_CONFIRM_TOKEN)
         throw new Error(`shell rcへの追記には--confirm=${REQUIRED_CONFIRM_TOKEN}の明示指定が必要です（無言で書き換えない）`);
-    const separator = existingContent === "" || existingContent.endsWith("\n") ? "" : "\n";
-    const nextContent = `${existingContent}${separator}export ${input.apiKeyEnvVar}=${envValue}\n`;
-    // 追記後のrc fileは秘密値を含む通常fileになる。既存fileのpermissionは
-    // 尊重し（利用者自身の設定を変えない）、新規作成時だけ秘密値を含むfileの
-    // 既定として0600を使う。
-    const existingMode = fs.existsSync(input.rcPath)
-        ? fs.statSync(input.rcPath).mode & 0o777
-        : 0o600;
-    writeFileAtomic(input.rcPath, nextContent, { fileMode: existingMode });
+    if (!secretPresent && typeof envValue === "string") {
+        const secretDirectory = path.dirname(input.secretFilePath);
+        fs.mkdirSync(secretDirectory, { recursive: true, mode: 0o700 });
+        const directoryStat = fs.lstatSync(secretDirectory);
+        if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory())
+            throw new Error(`${secretDirectory}はsymlinkでない通常directoryが必要です`);
+        const separator = existingKeyFileContent === "" || existingKeyFileContent.endsWith("\n")
+            ? ""
+            : "\n";
+        writeFileAtomic(input.secretFilePath, `${existingKeyFileContent}${separator}export ${input.apiKeyEnvVar}=${shellSingleQuote(envValue)}\n`, { fileMode: 0o600 });
+    }
+    if (!sourcePresent) {
+        const separator = existingRc === "" || existingRc.endsWith("\n") ? "" : "\n";
+        // rcへ追記するのは値を含まないsource行だけなので、既存fileのpermission
+        // は尊重する（利用者自身の設定を変えない）。
+        const existingMode = fs.existsSync(input.rcPath)
+            ? fs.statSync(input.rcPath).mode & 0o777
+            : 0o644;
+        writeFileAtomic(input.rcPath, `${existingRc}${separator}${sourceLine}\n`, {
+            fileMode: existingMode,
+        });
+    }
     return {
-        rcPath: input.rcPath,
+        ...base,
         alreadyPresent: false,
-        envVarSetInCurrentShell: true,
+        envVarSetInCurrentShell,
         applied: true,
-        reason: `${input.rcPath}へ${input.apiKeyEnvVar}のexport行を追記しました（値はこの出力に含まれません）`,
+        reason: `${input.secretFilePath}（mode 0600）へ${input.apiKeyEnvVar}のexport行を書き、${input.rcPath}へそのfileを読み込む行を追記しました（値はこの出力に含まれません）`,
     };
 }
 function readRegularFile(target) {

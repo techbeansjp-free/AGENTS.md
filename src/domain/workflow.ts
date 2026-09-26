@@ -10,6 +10,14 @@ import {
   type PocDeclaration,
 } from "./mode.js";
 import type { HumanOverride } from "./role.js";
+import {
+  parsePlanGeneration,
+  parsePlanSeal,
+  planSealStep,
+  type PlanGeneration,
+  type PlanSeal,
+} from "./plan-seal.js";
+import crypto from "node:crypto";
 
 export const MODE_DECISION_FILE = "00_モード判定.json";
 export const WORKFLOW_JOURNAL_DIRECTORY = "journal";
@@ -89,7 +97,7 @@ export const WORKFLOW_STEPS: readonly WorkflowStep[] = Object.freeze([
     step: 10,
     skillId: "step-10-review",
     responsibility: "exact-head最終レビュー、検証、仕様整合性",
-    artifact: "実装中発見を含む有限レビューの承認証拠",
+    artifact: "収束したreview sessionと生成したreview証跡",
   },
   {
     step: 11,
@@ -325,13 +333,31 @@ export interface StepJournalEntry {
    */
   postPrIntake?: true;
   /**
-   * 上流再確定entryであることを示す（TERM-ASC-109、Issue #1342）。**Step 1〜9にだけ許す。**
+   * 旧上流再確定entry（TERM-ASC-109、Issue #1342）。**読取り互換のためだけに受理する。**
    *
-   * 後続Stepを記録した後に上流Stepを再実施した事実を、順序判定から外して追記する。
-   * 同じStepの通常entryが先行していることを要し、先行entryの無い後付けは受理しない。
-   * Step 10はreview session binding、Step 11はdelivery終端が所有するため対象外。
+   * `workflow record --reconfirm`はREQ-WF-036で廃止した。承認済み計画は封印後に
+   * 書き換えないため、staging digestを再固定する上流再確定は不要になった。
+   * 既存journalに残る行は従来どおり順序判定から外して読むが、新規には書き込まない。
    */
   reconfirmation?: true;
+  /**
+   * 計画封印（TERM-ASC-WR-01、REQ-WF-036）。modeの同期checkpoint（fullはStep 8、
+   * quick/pocはStep 4）の記録時にCLIが計画文書から計算したSHA-256。利用者入力は受理しない。
+   */
+  planSeal?: PlanSeal;
+  /**
+   * 計画世代（REQ-WF-036）。封印後のStep 9・10の記録時にCLIが`05_計画変更.md`から
+   * 計算した世代chainの記録。利用者入力は受理しない。
+   */
+  planGeneration?: PlanGeneration;
+  /**
+   * journal hash chain（REQ-WF-036）。この行より前のjournal本文（先行する全行と各行末の
+   * 改行を含むexact byte列）のSHA-256であり、先頭行では`null`である。CLIが追記時に計算し、
+   * 利用者入力は受理しない。**1行でも持てばそれ以降の全行が持たなければならず**、
+   * chain付きjournalでは封印Stepの`planSeal`と封印後のStep 9・10の`planGeneration`の
+   * 欠落を旧journal互換として扱わず拒否する。
+   */
+  previousEntryDigest?: string | null;
 }
 
 export interface ModeDecision {
@@ -359,6 +385,9 @@ const JOURNAL_FIELDS = new Set([
   "postTerminalIntake",
   "postPrIntake",
   "reconfirmation",
+  "planSeal",
+  "planGeneration",
+  "previousEntryDigest",
 ]);
 const POC_OBSERVATION_BINDING_FIELDS = new Set(["headSha", "evidenceDigest"]);
 const REVIEW_SESSION_BINDING_FIELDS = new Set([
@@ -603,6 +632,38 @@ function parseJournalEntry(
       errors.push(`${label}のreconfirmationはStep 1〜9にだけ指定できます`);
     else reconfirmation = true;
   }
+  let planSeal: PlanSeal | undefined;
+  if (value.planSeal !== undefined) {
+    const parsed = parsePlanSeal({
+      value: value.planSeal,
+      mode: value.mode,
+      step: value.step,
+      label,
+    });
+    errors.push(...parsed.errors);
+    planSeal = parsed.value;
+  }
+  let planGeneration: PlanGeneration | undefined;
+  if (value.planGeneration !== undefined) {
+    const parsed = parsePlanGeneration({
+      value: value.planGeneration,
+      step: value.step,
+      label,
+    });
+    errors.push(...parsed.errors);
+    planGeneration = parsed.value;
+  }
+  let previousEntryDigest: string | null | undefined;
+  if (value.previousEntryDigest !== undefined) {
+    if (
+      value.previousEntryDigest !== null &&
+      !/^[a-f0-9]{64}$/u.test(String(value.previousEntryDigest))
+    )
+      errors.push(
+        `${label}.previousEntryDigestは64桁SHA-256またはnullが必要です`,
+      );
+    else previousEntryDigest = value.previousEntryDigest as string | null;
+  }
   if (errors.length > 0) return { errors };
   return {
     entry: {
@@ -619,9 +680,51 @@ function parseJournalEntry(
       ...(postTerminalIntake ? { postTerminalIntake } : {}),
       ...(postPrIntake ? { postPrIntake } : {}),
       ...(reconfirmation ? { reconfirmation } : {}),
+      ...(planSeal ? { planSeal } : {}),
+      ...(planGeneration ? { planGeneration } : {}),
+      ...(previousEntryDigest !== undefined ? { previousEntryDigest } : {}),
     },
     errors,
   };
+}
+
+/**
+ * journal hash chainの値（REQ-WF-036）。追記する行より前のjournal本文全体の
+ * SHA-256であり、本文が空（先頭行）なら`null`である。
+ */
+export function journalPrefixDigest(prefix: string): string | null {
+  return prefix === ""
+    ? null
+    : crypto.createHash("sha256").update(prefix, "utf8").digest("hex");
+}
+
+/**
+ * chain付きentryの整合（REQ-WF-036）。**chainはCLIが計算した記録であることの証拠であり、
+ * chain付きjournalでは封印関連fieldの欠落を旧journal互換として扱わない。**
+ */
+function chainedEntryErrors(
+  entry: StepJournalEntry,
+  earlier: readonly StepJournalEntry[],
+  label: string,
+): string[] {
+  const errors: string[] = [];
+  if (
+    entry.step === planSealStep(entry.mode) &&
+    entry.humanOverride === undefined &&
+    entry.planSeal === undefined
+  )
+    errors.push(
+      `${label}はchain付きjournalの封印Step（${entry.mode}のStep ${entry.step}）ですがplanSealがありません。旧journal互換として扱わず拒否します`,
+    );
+  if (
+    (entry.step === 9 || entry.step === 10) &&
+    entry.planGeneration === undefined &&
+    earlier.some((candidate) => candidate.planSeal !== undefined)
+  )
+    errors.push(
+      `${label}はchain付きjournalの封印後のStep ${entry.step}ですがplanGenerationがありません。旧journal互換として扱わず拒否します`,
+    );
+  return errors;
 }
 
 export function parseStepJournal(text: string): {
@@ -630,16 +733,42 @@ export function parseStepJournal(text: string): {
 } {
   const entries: StepJournalEntry[] = [];
   const errors: string[] = [];
-  const lines = text.split(/\r?\n/u);
+  const lines = text.split("\n");
+  /**
+   * **hash chain（REQ-WF-036）。** 1行でも`previousEntryDigest`を持てば、それ以降の全行が
+   * 持ち、各値が行より前のjournal本文のexact digestと一致しなければならない。先行行の
+   * 編集・削除・挿入・並べ替えと、chain以降の行からのfield除去を拒否する。
+   */
+  let chained = false;
+  let offset = 0;
   for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? "";
+    const raw = lines[index] ?? "";
+    const prefix = text.slice(0, offset);
+    offset += raw.length + 1;
+    const line = raw.replace(/\r$/u, "");
     if (line.trim() === "") continue;
+    const label = `journal ${index + 1}行目`;
     try {
-      const parsed = parseJournalEntry(
-        parseJsonStrict(line, `journal ${index + 1}行目`),
-        index + 1,
-      );
+      const value = parseJsonStrict(line, label);
+      const parsed = parseJournalEntry(value, index + 1);
       errors.push(...parsed.errors);
+      const hasDigest =
+        isRecord(value) && value.previousEntryDigest !== undefined;
+      if (hasDigest) {
+        chained = true;
+        if (
+          parsed.entry &&
+          parsed.entry.previousEntryDigest !== journalPrefixDigest(prefix)
+        )
+          errors.push(
+            `${label}.previousEntryDigestが先行するjournal本文と一致しません。記録済み行の編集・削除・挿入・並べ替えを拒否します`,
+          );
+      } else if (chained)
+        errors.push(
+          `${label}にpreviousEntryDigestがありません。chain付きjournalでは以降の全行にhash chainが必要です`,
+        );
+      if (parsed.entry && hasDigest)
+        errors.push(...chainedEntryErrors(parsed.entry, entries, label));
       if (parsed.entry) entries.push(parsed.entry);
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
@@ -707,9 +836,10 @@ export function validateStepJournal(input: {
    * 判定だけであり、記録は残る**（Issue #1194）。
    */
   /**
-   * **上流再確定entryも順序判定から外す**（Issue #1342）。外すのは順序の判定だけで、
-   * 記録は残る。flagだけで過去Stepを後付けする抜け道にしないため、同じStepの
-   * 通常entryが先行していることを別途要求する。
+   * **旧上流再確定entryも順序判定から外す**（Issue #1342）。書込み経路はREQ-WF-036で
+   * 廃止したが、既存journalを読めるよう判定は残す。外すのは順序の判定だけで、記録は残る。
+   * 手編集で過去Stepを後付けする抜け道にしないため、同じStepの通常entryが先行している
+   * ことを別途要求する。
    */
   input.entries.forEach((entry, index) => {
     if (entry.postTerminalIntake || entry.postPrIntake || entry.reconfirmation)
@@ -1369,66 +1499,4 @@ export function completePullRequestWorkflow<
       },
     };
   }
-}
-
-/**
- * staging digest不一致の診断に付ける復旧手順。**判定は行わず案内文だけを返す。**
- *
- * **Step 10記録後は「最新Stepの再記録」が必ず失敗する。** `workflow record --step=10`は
- * `assertConvergedReviewSession`が`assertStoredStagingDigest`を先に呼ぶため、staging編集後は
- * round番号にも予算にも関係なく拒否される。**実在する復旧手順は上流Stepの再確定である**
- * （`--reconfirm`。Issue #1342）。再確定entryは順序判定から除外され、追記後にstaging digestを
- * 再固定する。
- *
- * **従来の文言はこの区別を持たず、Step 10記録後も最新Stepを案内していた**（Issue #1312）。
- * 利用者は案内どおり実行して失敗し、製品内に出口が無いと誤認した。`00_運用ポリシー.md`の
- * risk比例型ruleは拒否時に「安全な次の行動」を返すことを求めており、失敗する手順はそれを満たさない。
- *
- * **反対側の誤案内も作らない。** 上流再確定が使えない状態で`--reconfirm`を案内すれば、
- * 直そうとした欠陥を別の状態で再現するだけである。使えないのは次の2つで、どちらも
- * `appendWorkflowJournalEntryLocked`が拒否する。
- *
- * 1. journalにStep 11 entryがある
- * 2. **delivery stateが`merge-observed`または`step11-recorded`である。** journalにStep 11 entryが
- *    無くてもこの状態になりうる。`recordStep11`は`merge-observed`からしか遷移しないため、
- *    **merge観測とStep 11記録の間に必ずこの窓が開く。** journalのStep集合だけを見ると見落とす。
- *
- * **対象Stepを「1〜9」と数え上げない。** `MODE_STEP_SEQUENCES`はmodeで異なり、`quick`と`poc`は
- * `0,1,4,9,10,11`しか持たない。再確定entryは同じStepの通常記録が先行することを要求するため、
- * quickで`--step=5`を選ぶと拒否される（実測で9件中6件）。**記録済みの上流Stepだけが選べる。**
- *
- * @param recordedSteps journalに記録済みのStep番号の集合
- * @param terminalDelivery delivery stateが`merge-observed`または`step11-recorded`のときtrue
- */
-export function stagingDigestRecoveryHint(
-  recordedSteps: Iterable<number>,
-  terminalDelivery = false,
-): string {
-  const steps = new Set(recordedSteps);
-  if (terminalDelivery || steps.has(11))
-    return "。terminal delivery stateではstagingのdigestを再固定できません。編集した成果物を編集前の内容へ戻すとdigestは一致します。内容を戻せない場合はdelivery状態と証跡を確認してください";
-  if (steps.has(10)) {
-    const upstream = [...steps]
-      .filter((step) => step >= 1 && step <= 9)
-      .sort((left, right) => left - right);
-    /**
-     * **候補を1つの`--step`値へ連結しない。** `workflow record --step=1または4`は
-     * `workflowStepNumber`の`/^\d+$/`に一致せず、CLIが必ず拒否する。
-     * **案内どおり実行すると失敗する**という、本要件が消そうとした欠陥そのものになる
-     * （Issue #1312、PR #1402の外部review指摘）。**候補ごとに独立して実行できる
-     * 完全なcommandを並べる。**
-     */
-    if (upstream.length === 0)
-      return "。Step 10記録後にstagingを編集した場合は、記録済みの上流Stepを workflow record --reconfirm で再確定し、digestを再固定してから再試行してください";
-    const commands = upstream
-      .map((step) => `workflow record --step=${step} --reconfirm`)
-      .join("、");
-    return `。Step 10記録後にstagingを編集した場合は、次のcommandのいずれかを実行して上流Stepを再確定し、digestを再固定してから再試行してください: ${commands}`;
-  }
-  /**
-   * **Step 10未記録の案内は従来の字面のまま返す。** この状態では最新Stepの再記録が
-   * 実際に成功するため、変える理由が無い。既存の診断契約（SCN-UNIT-DIAGHINT-001・002）が
-   * この字面を検査しており、必要のない変更で既存の担保を落とさない。
-   */
-  return "。stagingを編集した場合は workflow record --step=<最新のStep> を再実行してdigestを更新してから再試行してください";
 }

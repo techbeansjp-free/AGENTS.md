@@ -1,11 +1,9 @@
 import { stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import {
-  normalizeReviewIdentityAnchor,
-  parseReviewIdentityAnchor,
-} from "./review-artifact.js";
-
-export { normalizeReviewIdentityAnchor, parseReviewIdentityAnchor };
+  comparableReviewEvidence,
+  tryParseReviewEvidence,
+} from "./review-evidence.js";
 
 const OID = /^[a-f0-9]{40}$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
@@ -153,15 +151,13 @@ export function isContentEquivalent(
 /**
  * rebase後の再固定で成立させる二層の等価性。
  *
- * **現行の完全diff digestは`base..H_final`全体を見るため、artifactのSHA行を1行
- * 変えるだけで必ず不一致になる。** ASCの規定するrebase手順は`audit:check`のために
- * SHA行の更新を要求するので、**両者の要求が同時に満たせない**（Issue #1172）。
- *
- * 層を分ける。
+ * **現行の完全diff digestは`base..H_final`全体を見るため、review証跡の比較基点と
+ * `H_impl`が変わるだけで必ず不一致になる。** rebaseは証跡の再生成を要求するので、
+ * 層を分ける（Issue #1172）。
  *
  * 1. `base..H_impl`の完全diff digestは**一致を要求する**。強さを落とさない
- * 2. terminal review artifactは、上記2欄だけを正規化して**byte一致を要求する**
- * 3. 変更path集合とartifact pathは**完全一致を要求する**
+ * 2. review証跡は比較基点・`H_impl`・`evidenceDigest`以外の全fieldの**一致を要求する**
+ * 3. 変更path集合と証跡pathは**完全一致を要求する**
  */
 export type RebaseEquivalenceReason =
   | "ok"
@@ -184,11 +180,14 @@ export function isRebaseEquivalent(input: {
     !isContentEquivalent(input.beforeImplementation, input.afterImplementation)
   )
     return "implementation-diff-changed";
-  const before = normalizeReviewIdentityAnchor(input.beforeArtifact);
-  const after = normalizeReviewIdentityAnchor(input.afterArtifact);
-  if (before === undefined || after === undefined)
+  const before = tryParseReviewEvidence(input.beforeArtifact);
+  const after = tryParseReviewEvidence(input.afterArtifact);
+  if (!("evidence" in before) || !("evidence" in after))
     return "identity-unresolvable";
-  return before === after ? "ok" : "artifact-body-changed";
+  return comparableReviewEvidence(before.evidence, "rebase") ===
+    comparableReviewEvidence(after.evidence, "rebase")
+    ? "ok"
+    : "artifact-body-changed";
 }
 
 export interface EffectiveHead {

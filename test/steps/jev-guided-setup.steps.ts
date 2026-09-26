@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { After, Before } from "@cucumber/cucumber";
@@ -6,6 +7,7 @@ import {
   configureJevProviderConfig,
   appendJevApiKeyToShellRc,
   detectShellRcFile,
+  jevSecretSourceLine,
   type AppendJevApiKeyResult,
   type ConfigureJevProviderResult,
   type ShellRcDetection,
@@ -26,6 +28,7 @@ class JevGuidedSetupWorld extends WorkflowWorld {
   shellEnv: NodeJS.ProcessEnv = {};
   detection: ShellRcDetection | undefined = undefined;
   rcPath = "";
+  secretFilePath = "";
   secretValue = "";
   envVarName = "";
   previousEnvValue: string | undefined = undefined;
@@ -42,9 +45,15 @@ Before<JevGuidedSetupWorld>(function () {
   this.apiKeyEnvVar = "JEV_SETUP_TEST_KEY";
   this.shellEnv = {};
   this.rcPath = "";
+  this.secretFilePath = "";
+  this.appendError = undefined;
   this.secretValue = "sk-guided-setup-secret-must-not-leak";
   this.envVarName = "";
 });
+
+function secretFileIn(directory: string): string {
+  return path.join(directory, ".config", "agent-skill-chain", "jev.env");
+}
 
 function setEnvVar(world: JevGuidedSetupWorld, name: string, value: string) {
   world.envVarName = name;
@@ -174,6 +183,7 @@ Given(
   function (this: JevGuidedSetupWorld) {
     const directory = this.temp("asc-jevsetup-rc-");
     this.rcPath = path.join(directory, ".bashrc");
+    this.secretFilePath = secretFileIn(directory);
     delete process.env[this.apiKeyEnvVar];
   },
 );
@@ -183,6 +193,7 @@ Given(
   function (this: JevGuidedSetupWorld) {
     const directory = this.temp("asc-jevsetup-rc-");
     this.rcPath = path.join(directory, ".bashrc");
+    this.secretFilePath = secretFileIn(directory);
     setEnvVar(this, this.apiKeyEnvVar, this.secretValue);
   },
 );
@@ -192,6 +203,7 @@ Given(
   function (this: JevGuidedSetupWorld) {
     const directory = this.temp("asc-jevsetup-rc-");
     this.rcPath = path.join(directory, ".bashrc");
+    this.secretFilePath = secretFileIn(directory);
     fs.writeFileSync(
       this.rcPath,
       `export ${this.apiKeyEnvVar}=already-there\n`,
@@ -206,6 +218,7 @@ When(
     this.appendResult = appendJevApiKeyToShellRc({
       apiKeyEnvVar: this.apiKeyEnvVar,
       rcPath: this.rcPath,
+      secretFilePath: this.secretFilePath,
       apply: true,
     });
   },
@@ -217,6 +230,7 @@ When(
     this.appendResult = appendJevApiKeyToShellRc({
       apiKeyEnvVar: this.apiKeyEnvVar,
       rcPath: this.rcPath,
+      secretFilePath: this.secretFilePath,
       apply: false,
     });
   },
@@ -229,6 +243,7 @@ When(
       this.appendResult = appendJevApiKeyToShellRc({
         apiKeyEnvVar: this.apiKeyEnvVar,
         rcPath: this.rcPath,
+        secretFilePath: this.secretFilePath,
         apply: true,
       });
     } catch (error) {
@@ -243,6 +258,7 @@ When(
     this.appendResult = appendJevApiKeyToShellRc({
       apiKeyEnvVar: this.apiKeyEnvVar,
       rcPath: this.rcPath,
+      secretFilePath: this.secretFilePath,
       apply: true,
       confirm: "APPEND",
     });
@@ -263,6 +279,7 @@ Then(
   function (this: JevGuidedSetupWorld) {
     assert.equal(this.appendResult?.applied, false);
     assert.equal(fs.existsSync(this.rcPath), false);
+    assert.equal(fs.existsSync(this.secretFilePath), false);
     assert.ok(!JSON.stringify(this.appendResult).includes(this.secretValue));
   },
 );
@@ -275,11 +292,21 @@ Then("呼び出しは例外を投げる", function (this: JevGuidedSetupWorld) {
 });
 
 Then(
-  "rc fileに秘密値を含むexport行が書き込まれ戻り値に秘密値が含まれない",
+  "秘密値は0600の専用fileへ書かれrc fileにはsource行だけが追記され戻り値に秘密値が含まれない",
   function (this: JevGuidedSetupWorld) {
     assert.equal(this.appendResult?.applied, true);
-    const content = fs.readFileSync(this.rcPath, "utf8");
-    assert.equal(content, `export ${this.apiKeyEnvVar}=${this.secretValue}\n`);
+    assert.equal(
+      fs.readFileSync(this.secretFilePath, "utf8"),
+      `export ${this.apiKeyEnvVar}='${this.secretValue}'\n`,
+    );
+    assert.equal(fs.statSync(this.secretFilePath).mode & 0o777, 0o600);
+    assert.equal(
+      fs.statSync(path.dirname(this.secretFilePath)).mode & 0o077,
+      0,
+    );
+    const rcContent = fs.readFileSync(this.rcPath, "utf8");
+    assert.equal(rcContent, `${jevSecretSourceLine(this.secretFilePath)}\n`);
+    assert.ok(!rcContent.includes(this.secretValue));
     assert.ok(!JSON.stringify(this.appendResult).includes(this.secretValue));
   },
 );
@@ -291,5 +318,141 @@ Then(
     assert.equal(this.appendResult?.alreadyPresent, true);
     const content = fs.readFileSync(this.rcPath, "utf8");
     assert.equal(content, `export ${this.apiKeyEnvVar}=already-there\n`);
+    assert.equal(fs.existsSync(this.secretFilePath), false);
+  },
+);
+
+// --- 独立security review M1/M2/L2 -------------------------------------------
+
+Given(
+  "shell metacharacterとquoteを含む値がenv varに設定されrc fileが存在しない",
+  function (this: JevGuidedSetupWorld) {
+    const directory = this.temp("asc-jevsetup-rc-");
+    this.rcPath = path.join(directory, ".bashrc");
+    this.secretFilePath = secretFileIn(directory);
+    const marker = path.join(directory, "pwned");
+    this.secretValue = `sk-$(touch ${marker})\`touch ${marker}\`'x;#y z`;
+    setEnvVar(this, this.apiKeyEnvVar, this.secretValue);
+  },
+);
+
+Given(
+  "改行を含む値がenv varに設定されrc fileが存在しない",
+  function (this: JevGuidedSetupWorld) {
+    const directory = this.temp("asc-jevsetup-rc-");
+    this.rcPath = path.join(directory, ".bashrc");
+    this.secretFilePath = secretFileIn(directory);
+    this.secretValue = "sk-line-one\nexport INJECTED=1";
+    setEnvVar(this, this.apiKeyEnvVar, this.secretValue);
+  },
+);
+
+Given(
+  "JEV_で始まらないapiKeyEnvVarを持つconfigure入力がある",
+  function (this: JevGuidedSetupWorld) {
+    this.root = this.temp("asc-jevsetup-015-");
+    this.apiKeyEnvVar = "GITHUB_TOKEN";
+  },
+);
+
+When(
+  "confirmを指定してappendJevApiKeyToShellRcをapplyで2回実行する",
+  function (this: JevGuidedSetupWorld) {
+    const input = {
+      apiKeyEnvVar: this.apiKeyEnvVar,
+      rcPath: this.rcPath,
+      secretFilePath: this.secretFilePath,
+      apply: true,
+      confirm: "APPEND",
+    };
+    appendJevApiKeyToShellRc(input);
+    this.appendResult = appendJevApiKeyToShellRc(input);
+  },
+);
+
+When(
+  "confirmを指定してappendJevApiKeyToShellRcをapplyで実行し例外を捕捉する",
+  function (this: JevGuidedSetupWorld) {
+    try {
+      this.appendResult = appendJevApiKeyToShellRc({
+        apiKeyEnvVar: this.apiKeyEnvVar,
+        rcPath: this.rcPath,
+        secretFilePath: this.secretFilePath,
+        apply: true,
+        confirm: "APPEND",
+      });
+    } catch (error) {
+      this.appendError = error;
+    }
+  },
+);
+
+Then(
+  "専用fileの値はquoteされshellで読み込むと元の値に一致しコマンドは実行されない",
+  function (this: JevGuidedSetupWorld) {
+    assert.equal(this.appendResult?.applied, true);
+    assert.equal(fs.statSync(this.secretFilePath).mode & 0o777, 0o600);
+    const rcContent = fs.readFileSync(this.rcPath, "utf8");
+    assert.equal(rcContent, `${jevSecretSourceLine(this.secretFilePath)}\n`);
+    assert.ok(!rcContent.includes(this.secretValue));
+    const env: NodeJS.ProcessEnv = { PATH: process.env.PATH };
+    const sourced = spawnSync(
+      "sh",
+      ["-c", `. "$1" && printf %s "$${this.apiKeyEnvVar}"`, "sh", this.rcPath],
+      { encoding: "utf8", env },
+    );
+    assert.equal(sourced.status, 0, sourced.stderr);
+    assert.equal(sourced.stdout, this.secretValue);
+    const marker = path.join(path.dirname(this.rcPath), "pwned");
+    assert.equal(fs.existsSync(marker), false);
+    assert.ok(!JSON.stringify(this.appendResult).includes(this.secretValue));
+  },
+);
+
+Then(
+  "例外になりどのfileも書き込まれず例外messageに値が含まれない",
+  function (this: JevGuidedSetupWorld) {
+    assert.ok(this.appendError instanceof Error);
+    assert.ok(!(this.appendError as Error).message.includes("sk-line-one"));
+    assert.equal(fs.existsSync(this.rcPath), false);
+    assert.equal(fs.existsSync(this.secretFilePath), false);
+  },
+);
+
+Then(
+  "2回目はalreadyPresentでrc fileのsource行は1行だけである",
+  function (this: JevGuidedSetupWorld) {
+    assert.equal(this.appendResult?.alreadyPresent, true);
+    assert.equal(this.appendResult?.applied, false);
+    const sourceLine = jevSecretSourceLine(this.secretFilePath);
+    const rcLines = fs
+      .readFileSync(this.rcPath, "utf8")
+      .split("\n")
+      .filter((line) => line === sourceLine);
+    assert.equal(rcLines.length, 1);
+    const secretLines = fs
+      .readFileSync(this.secretFilePath, "utf8")
+      .split("\n")
+      .filter((line) => line.startsWith(`export ${this.apiKeyEnvVar}=`));
+    assert.equal(secretLines.length, 1);
+  },
+);
+
+Then(
+  "JEV_で始まらないenv var名ではappendJevApiKeyToShellRcが例外を投げる",
+  function (this: JevGuidedSetupWorld) {
+    const directory = this.temp("asc-jevsetup-rc-");
+    assert.throws(
+      () =>
+        appendJevApiKeyToShellRc({
+          apiKeyEnvVar: "GITHUB_TOKEN",
+          rcPath: path.join(directory, ".bashrc"),
+          secretFilePath: secretFileIn(directory),
+          apply: true,
+          confirm: "APPEND",
+        }),
+      /JEV_/u,
+    );
+    assert.equal(fs.existsSync(path.join(directory, ".bashrc")), false);
   },
 );

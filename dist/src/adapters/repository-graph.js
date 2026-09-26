@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -535,13 +536,16 @@ function isTraceEndpointCandidate(candidate) {
     return (SOURCE_BASENAMES.has(candidate) ||
         SOURCE_EXTENSIONS.has(path.posix.extname(candidate).toLowerCase()));
 }
+function isGraphSourcePath(entry) {
+    return (safeRepositoryPath(entry) &&
+        (SOURCE_EXTENSIONS.has(path.posix.extname(entry).toLowerCase()) ||
+            SOURCE_BASENAMES.has(path.posix.basename(entry))));
+}
 function sourcePaths(root, limits = DEFAULT_SOURCE_OBSERVATION_LIMITS) {
     const listed = git(["ls-files", "-co", "--exclude-standard", "-z", "--"], root).stdout.split("\0");
     const result = [...new Set(listed)]
         .filter(Boolean)
-        .filter(safeRepositoryPath)
-        .filter((entry) => SOURCE_EXTENSIONS.has(path.posix.extname(entry).toLowerCase()) ||
-        SOURCE_BASENAMES.has(path.posix.basename(entry)))
+        .filter(isGraphSourcePath)
         .sort(compareText);
     if (result.length > limits.maxFiles)
         throw new Error("graph source file件数上限を超えました");
@@ -733,6 +737,25 @@ export function buildRepositorySemanticGraphWithDiagnostics(root, limits = DEFAU
     const resolvedRoot = fs.realpathSync(root);
     const { files, oversized, oversizedRegularFiles } = observeSourceFiles(resolvedRoot, limits);
     const source = repositoryIdentity(resolvedRoot, files);
+    const snapshot = projectRepositorySemanticGraph({
+        files,
+        oversized,
+        oversizedRegularFiles,
+        source,
+    });
+    const { files: afterFiles } = observeSourceFiles(resolvedRoot, limits);
+    const afterSource = repositoryIdentity(resolvedRoot, afterFiles);
+    if (stableJson(afterSource) !== stableJson(source))
+        throw new Error("semantic graph構築中にsourceが変化しました。再実行してください");
+    return { snapshot, oversizedPaths: oversized };
+}
+/**
+ * **観測済みsource集合から意味Graphを投影する。** worktree観測と
+ * commit観測（`buildCommitSemanticGraph`）が同じ投影規則を共有するための分離であり、
+ * 投影規則そのものは変えない。
+ */
+function projectRepositorySemanticGraph(input) {
+    const { files, oversized, oversizedRegularFiles, source } = input;
     /**
      * import解決の到達先はnodeでなければならないため、除外fileを含めない。
      * 一方で実在判定は取り込みの有無と独立なので、除外した通常fileを含める。
@@ -935,10 +958,147 @@ export function buildRepositorySemanticGraphWithDiagnostics(root, limits = DEFAU
     const errors = validateSemanticGraphSnapshot(snapshot);
     if (errors.length > 0)
         throw new Error(`semantic graph projectionを構築できません: ${errors.join("; ")}`);
-    const { files: afterFiles } = observeSourceFiles(resolvedRoot, limits);
-    const afterSource = repositoryIdentity(resolvedRoot, afterFiles);
-    if (stableJson(afterSource) !== stableJson(source))
-        throw new Error("semantic graph構築中にsourceが変化しました。再実行してください");
-    return { snapshot, oversizedPaths: oversized };
+    return snapshot;
+}
+const COMMIT_OBJECT_PATTERN = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
+/**
+ * **commitのtreeからsource集合を観測する。** worktreeを読まないため、
+ * 作業treeの汚れやcheckout位置に依存せず、同じcommitからは同じ集合が返る。
+ * 選別規則と上限はworktree観測（`observeSourceFiles`）と同一である。
+ */
+function observeCommitSourceFiles(root, commitSha, limits) {
+    const entries = [];
+    for (const line of git(["ls-tree", "-r", "-z", "-l", "--full-tree", commitSha], root).stdout.split("\0")) {
+        if (line === "")
+            continue;
+        const match = /^(\d{6}) (\w+) ([0-9a-f]+) +(-|\d+)\t(.+)$/su.exec(line);
+        if (match === null)
+            throw new Error(`commit treeの観測行を解釈できません: ${line}`);
+        const [, mode, type, oid, size, entryPath] = match;
+        if (type !== "blob" || !isGraphSourcePath(entryPath))
+            continue;
+        entries.push({
+            path: entryPath,
+            symlink: mode === "120000",
+            oid: oid,
+            size: Number(size),
+        });
+    }
+    entries.sort((left, right) => compareText(left.path, right.path));
+    if (entries.length > limits.maxFiles)
+        throw new Error("graph source file件数上限を超えました");
+    const oversized = [];
+    const oversizedRegularFiles = [];
+    const selected = [];
+    let totalBytes = 0;
+    for (const entry of entries) {
+        if (entry.size > limits.maxFileBytes) {
+            oversized.push(entry.path);
+            if (!entry.symlink)
+                oversizedRegularFiles.push(entry.path);
+            continue;
+        }
+        totalBytes += entry.size;
+        if (totalBytes > limits.maxSetBytes)
+            throw new Error("graph source集合のbyte上限を超えました");
+        selected.push(entry);
+    }
+    const contents = readCommitBlobs(root, selected.map(({ oid }) => oid), totalBytes);
+    const files = selected.map((entry, index) => {
+        const content = contents[index];
+        if (entry.symlink)
+            return {
+                path: entry.path,
+                state: "symlink",
+                sha256: sha256(content.toString("utf8")),
+                size: content.length,
+            };
+        return {
+            path: entry.path,
+            state: "file",
+            sha256: sha256(content),
+            size: content.length,
+            ...(content.includes(0) ? {} : { text: content.toString("utf8") }),
+        };
+    });
+    return {
+        files,
+        oversized: Object.freeze([...oversized]),
+        oversizedRegularFiles: Object.freeze([...oversizedRegularFiles]),
+    };
+}
+/** `git cat-file --batch`で複数blobを1 processで読み、要求順に返す。 */
+function readCommitBlobs(root, oids, totalBytes) {
+    if (oids.length === 0)
+        return [];
+    const result = spawnSync("git", ["cat-file", "--batch"], {
+        cwd: root,
+        input: `${oids.join("\n")}\n`,
+        maxBuffer: totalBytes + oids.length * 128 + 1024 * 1024,
+    });
+    if (result.error !== undefined || result.status !== 0)
+        throw new Error("commit treeのblobを読み取れません");
+    const output = result.stdout;
+    const blobs = [];
+    let cursor = 0;
+    for (const oid of oids) {
+        const newline = output.indexOf(0x0a, cursor);
+        if (newline < 0)
+            throw new Error("commit blobの応答が途中で切れました");
+        const header = output.subarray(cursor, newline).toString("utf8");
+        const match = /^([0-9a-f]+) blob (\d+)$/u.exec(header);
+        if (match === null || match[1] !== oid)
+            throw new Error(`commit blobの応答が要求と一致しません: ${oid}`);
+        const size = Number(match[2]);
+        const start = newline + 1;
+        blobs.push(Buffer.from(output.subarray(start, start + size)));
+        cursor = start + size + 1;
+    }
+    return blobs;
+}
+/**
+ * **commitのtreeから意味Graphを構築する。** worktreeの状態（dirty・checkout位置）に
+ * 依存しないため、任意の2 commit間の影響集合を同じ入力から同じ結果で導出できる。
+ * `source.dirty`は常に`false`、`source.headSha`は指定commitである。
+ */
+export function buildCommitSemanticGraph(root, commitSha, limits = DEFAULT_SOURCE_OBSERVATION_LIMITS) {
+    if (!COMMIT_OBJECT_PATTERN.test(commitSha))
+        throw new Error("semantic graphのcommitはexact object IDが必要です");
+    const resolvedRoot = fs.realpathSync(root);
+    const observed = git(["rev-parse", "--verify", `${commitSha}^{commit}`], resolvedRoot).stdout.trim();
+    if (observed !== commitSha)
+        throw new Error("semantic graphのcommitをexact commitへ解決できません");
+    const top = fs.realpathSync(git(["rev-parse", "--show-toplevel"], resolvedRoot).stdout.trim());
+    if (top !== resolvedRoot)
+        throw new Error("semantic graphはrepository rootから構築してください");
+    const { files, oversized, oversizedRegularFiles } = observeCommitSourceFiles(resolvedRoot, commitSha, limits);
+    const gitDirectory = fs.realpathSync(git(["rev-parse", "--absolute-git-dir"], resolvedRoot).stdout.trim());
+    const remote = git(["config", "--get", "remote.origin.url"], resolvedRoot, {
+        allowFailure: true,
+    }).stdout.trim();
+    const source = {
+        repositoryId: repositoryIdentifier(remote, top),
+        worktreeId: sha256(stableJson({ gitDirectory, top })),
+        headSha: commitSha,
+        treeSha: git(["rev-parse", `${commitSha}^{tree}`], resolvedRoot).stdout.trim(),
+        contentDigest: sha256(stableJson(files.map(({ path: file, sha256: digest, size, state }) => ({
+            path: file,
+            sha256: digest,
+            size,
+            state,
+        })))),
+        dirty: false,
+    };
+    const snapshot = projectRepositorySemanticGraph({
+        files,
+        oversized,
+        oversizedRegularFiles,
+        source,
+    });
+    return {
+        snapshot,
+        oversizedPaths: oversized,
+        sources: new Map(files.flatMap(({ path: file, text }) => text === undefined ? [] : [[file, text]])),
+    };
 }
 //# sourceMappingURL=repository-graph.js.map

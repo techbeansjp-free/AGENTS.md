@@ -838,6 +838,11 @@ export function createIssueStaging(root, options) {
             recordedAt: decidedAt,
             artifacts: [MODE_DECISION_FILE],
             evidence: "モード判定成果物と一時stagingを原子的に生成した",
+            /**
+             * **新しいstagingはStep 0からhash chainを持つ**（REQ-WF-036）。先頭行は`null`であり、
+             * 以降の追記はCLIが直前までのjournal本文のdigestを記録する。
+             */
+            previousEntryDigest: null,
         };
         fs.mkdirSync(path.join(temporary, WORKFLOW_JOURNAL_DIRECTORY), {
             mode: 0o700,

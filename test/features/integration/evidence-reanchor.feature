@@ -44,15 +44,15 @@ Feature: 証跡再固定がCLIと診断経路で機能する
     And 再固定recordは旧新artifactのpathとdigestを保持する
 
   @issue-1437
-  Scenario: SCN-1437-01 push済みartifactの書式是正を前進commitで再固定する
-    Given pr-bound後に同じartifactだけを書式是正した前進commitがある
+  Scenario: SCN-1437-01 push済み証跡へ検証commandだけを追加した前進commitを再固定する
+    Given pr-bound後に同じartifactへ検証commandだけを追加した前進commitがある
     When 二層等価な入力をpreviewして二回applyする
     Then previewは成功し初回だけ追記して二回目はunchangedになる
     And 再固定recordは旧新artifactのdigestをsupersessionとして保持する
 
   @issue-1437
-  Scenario: SCN-1437-02 判断本文を変えたartifact是正は再固定しない
-    Given pr-bound後にartifactの判断本文を変えた前進commitがある
+  Scenario: SCN-1437-02 verification以外の記録を変えた証跡是正は再固定しない
+    Given pr-bound後にartifactの独立性の記録を変えた前進commitがある
     When 同じ再固定入力でpreviewとapplyをCLIから実行する
     Then supersessionのpreviewとapplyは拒否され追記しない
 
@@ -63,32 +63,8 @@ Feature: 証跡再固定がCLIと診断経路で機能する
     Then supersessionのpreviewとapplyは拒否され追記しない
 
   @issue-1437
-  Scenario: SCN-1437-04 Step chainを迂回へ変えた前進commitは拒否する
-    Given pr-bound後にStep chainを迂回へ変えた前進commitがある
-    When 同じ再固定入力でpreviewとapplyをCLIから実行する
-    Then supersessionのpreviewとapplyは拒否され追記しない
-
-  @issue-1437
-  Scenario: SCN-1437-06 旧Step chainの迂回を経由へ書き換えた前進commitは拒否する
-    Given pr-bound後に旧Step chainを迂回から経由へ変えた前進commitがある
-    When 同じ再固定入力でpreviewとapplyをCLIから実行する
-    Then supersessionのpreviewとapplyは拒否され追記しない
-
-  @issue-1437
   Scenario: SCN-1437-07 artifactの9件目の前進是正は再固定しない
     Given pr-bound後にartifactの9件目の前進是正commitがある
-    When 同じ再固定入力でpreviewとapplyをCLIから実行する
-    Then supersessionのpreviewとapplyは拒否され追記しない
-
-  @issue-1437
-  Scenario: SCN-1437-08 High内訳を判断節から移した前進是正は拒否する
-    Given pr-bound後にHigh内訳を判断節から移した前進commitがある
-    When 同じ再固定入力でpreviewとapplyをCLIから実行する
-    Then supersessionのpreviewとapplyは拒否され追記しない
-
-  @issue-1437
-  Scenario: SCN-1437-05 配布物影響の判断を書き換えた前進commitは拒否する
-    Given pr-bound後に配布物影響の判断を書き換えた前進commitがある
     When 同じ再固定入力でpreviewとapplyをCLIから実行する
     Then supersessionのpreviewとapplyは拒否され追記しない
 
@@ -100,13 +76,11 @@ Feature: 証跡再固定がCLIと診断経路で機能する
 
     Examples:
       | 反例 |
-      | 監査不合格 |
+      | session不一致 |
       | artifact外差分 |
       | H_impl差替え |
       | chain断裂 |
-      | 判定本文改変 |
-      | 範囲漏れ判断改変 |
-      | fence解釈差 |
+      | 内容改変 |
 
   @issue-1377
   Scenario: SCN-1377-03 step11-recordedの通常rebaseを維持する
@@ -170,12 +144,12 @@ Feature: 証跡再固定がCLIと診断経路で機能する
     Then previewはstaging親directoryとGitを変えずapplyだけが追記する
 
   Scenario: SCN-INT-REANCHOR-012 二層等価と冪等性をpreviewでも維持
-    Given SHA行だけを更新したrebase後のreview証跡がある
+    Given 比較基点とH_implだけを更新したrebase後のreview証跡がある
     When 二層等価な入力をpreviewして二回applyする
     Then previewは成功し初回だけ追記して二回目はunchangedになる
 
   Scenario: SCN-INT-REANCHOR-013 内容非等価とartifact不正の拒否一致
-    Given SHA行に加えて判定も書き換えたrebase後のreview証跡がある
+    Given 比較基点とH_implに加えて検証記録も書き換えたrebase後のreview証跡がある
     When 同じ再固定入力でpreviewとapplyをCLIから実行する
     Then 内容非等価のpreviewとapplyが同じ既存理由で拒否される
 

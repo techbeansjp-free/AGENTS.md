@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
+import { deriveDistributionImpact } from "../src/domain/conformance.js";
 import {
-  extractMarkdownSection,
-  validateDistributionImpact,
-} from "../src/domain/conformance.js";
-import { withoutMarkdownCode } from "../src/domain/issue.js";
-import { parseReviewArtifactAudit } from "../src/domain/review-artifact.js";
+  parseReviewEvidence,
+  REVIEW_EVIDENCE_NAME_PATTERN,
+  type ReviewEvidence,
+} from "../src/domain/review-evidence.js";
 import {
   evaluateMergeIntegrity,
   extractLossTokens,
@@ -29,7 +29,7 @@ const AUDIT_DIRECTORIES = [
   "docs/reviews",
   ".agent-skill-chain/reviews",
 ] as const;
-const AUDIT_NAME_PATTERN = /^\d+_課題\d+.*レビュー\.md$/u;
+const AUDIT_NAME_PATTERN = REVIEW_EVIDENCE_NAME_PATTERN;
 const RELEASE_BUMP_PREFIX = "chore(release): bump version to ";
 const RELEASE_BUMP_PATHS = new Set(["package.json", "package-lock.json"]);
 
@@ -757,9 +757,9 @@ function candidateSideNote(inferred: ReviewBoundary): string[] {
       inferred.candidateFinalPathCounts
         .map((count, index) => `第${index + 1}親=${count}件`)
         .join("、") +
-      "であり、選択した最後の親はreview artifactちょうど1 fileの着地形になっていない。",
-    "既定branchを取り込む追随merge（親順が[候補head, 取り込み先tip]）をHEADにしている場合、選択した親は取り込み先側である。候補branchのreview artifact commitをHEADにして再実行してほしい。",
-    "review artifactをまだcommitしていない場合は、実装commitの後にreview artifactだけをcommitしてほしい。",
+      "であり、選択した最後の親はreview証跡ちょうど1 fileの着地形になっていない。",
+    "既定branchを取り込む追随merge（親順が[候補head, 取り込み先tip]）をHEADにしている場合、選択した親は取り込み先側である。候補branchのreview証跡commitをHEADにして再実行してほしい。",
+    "review証跡をまだcommitしていない場合は、実装commitの後にreview証跡だけをcommitしてほしい。",
   ];
 }
 
@@ -770,7 +770,7 @@ function invalidFinalPathsError(finalPaths: string[]): string {
       ? finalPaths.filter((changedPath) => changedPath !== auditPaths[0])
       : finalPaths;
   return [
-    "H_impl..currentはreview artifactだけでなければなりません。H_impl..currentにreview artifact以外のfileが含まれています。実装commitの後にはreview artifactだけをcommitしてください。余分なpath:",
+    "H_impl..currentはreview証跡だけでなければなりません。H_impl..currentにreview証跡以外のfileが含まれています。実装commitの後にはreview証跡だけをcommitしてください。余分なpath:",
     ...extraPaths.map((changedPath) => `- ${changedPath}`),
   ].join("\n");
 }
@@ -798,302 +798,6 @@ function packageDistributionFiles(root: string): string[] | undefined {
  * 判定の正本である`review-convergence.ts`からimportして乖離を構造的に断つ。
  */
 const MAX_REVIEW_ROUNDS = REVIEW_RECOVERY_ROUND;
-const STEP_CHAIN_VIA = "経由";
-const STEP_CHAIN_BYPASS = "迂回";
-
-/** 申告欄を持つ節。**本文や例示を申告として数えないための境界。** */
-const IDENTITY_HEADING = "レビュー識別情報";
-
-/**
- * 申告を読む対象を識別情報の節へ限定し、codeを取り除く。
- *
- * **全文検索では監査目的を迂回できる。** 識別情報の表に欄が無くても、本文・引用・code
- * fenceへ`| ラウンド数 | 1 |`と書くだけで通ってしまう。節を限定し、さらにcodeを除く。
- */
-function identitySection(markdown: string): string | undefined {
-  const section = extractMarkdownSection(markdown, IDENTITY_HEADING);
-  return section === undefined ? undefined : withoutMarkdownCode(section);
-}
-
-/**
- * 運用ポリシーが宣言する開発速度の観測基準を、artifactへ残させる欄。
- *
- * `.agent-skill-chain/docs/00_運用ポリシー.md`は「支援層の所要時間が成果物構築の所要時間を
- * 上回らないこと」と「手段の追加を提案する前に、既存手段の縮小で目的を満たせないかを先に
- * 評価すること」を観測基準として宣言しているが、**観測する場所がどこにも無かった。**
- *
- * **閾値で自動停止させない。** 比率は文脈依存で、ドメイン関数のtestが成果物の4倍になるのは
- * 正常である。記録を残させ、人が読んで判断する。
- */
-const OBSERVATION_FIELDS = [
-  {
-    label: "仕様の所有箇所",
-    hint: "着手時に読んだ仕様の正本と引用。`該当なし: #<Issue番号>`で仕様側の欠落を起票したことを示す",
-  },
-  { label: "成果物行数", hint: "製品の変更行数と支援層の行数" },
-  {
-    label: "縮小の先行評価",
-    hint: "既存手段の流用・縮小で足りない理由。評価していない状態を残さない",
-  },
-] as const;
-
-/** 識別情報の節から`| <label> | <値> |`の値を読む。空欄は未記入として扱う。 */
-function identityCell(section: string, label: string): string | undefined {
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  const cell = new RegExp(`\\| *${escaped} *\\| *([^|]*?) *\\|`, "u").exec(
-    section,
-  )?.[1];
-  return cell === undefined || cell.trim() === "" ? undefined : cell.trim();
-}
-
-/**
- * 観測基準の欄が記入されているかを確かめる。
- *
- * `仕様の所有箇所`が`該当なし`のときだけ追加を要求する。仕様に所有箇所が無いなら、
- * **実装を進める前に仕様側の欠落として起票する**のが運用ポリシーの求める順序であり、
- * その起票先をここで指させる。
- */
-function observationErrors(section: string): string[] {
-  const errors: string[] = [];
-  for (const field of OBSERVATION_FIELDS) {
-    const value = identityCell(section, field.label);
-    if (value === undefined) {
-      errors.push(
-        `review artifactに「| ${field.label} | … |」がありません。${field.hint}を記録してください`,
-      );
-      continue;
-    }
-    if (
-      field.label === "仕様の所有箇所" &&
-      value.startsWith("該当なし") &&
-      !/#\d+/u.test(value)
-    )
-      errors.push(
-        "仕様の所有箇所が該当なしの場合は、仕様側の欠落を起票したIssue番号を`#<番号>`で示してください",
-      );
-  }
-  return errors;
-}
-
-export function parseFileAudit(markdown: string) {
-  return parseReviewArtifactAudit(markdown);
-}
-
-/**
- * `pass`根拠として書いてよい主張の語彙。**人が明示登録した語だけを見る。**
- *
- * 規範性を推測して拡張しない。契約正本registryが「検出tokenは人が明示登録した
- * 語だけとし、規範性を推測して拡張しない」と定めるのと同じ設計である
- * （`docs/specs/02_要件/04_仕様・品質管理要件.md`）。
- *
- * **`常に`・`必ず`・`すべて`のような一般的全称語は入れない。** 誤検出が急増し、
- * 「散文の論理検査器は作らない」という打ち切り線を越える。
- */
-const HIGH_RISK_CLAIM_TOKENS: readonly string[] = Object.freeze([
-  "純関数",
-  "pure function",
-  "副作用を持たない",
-  "副作用がない",
-  "例外を投げ",
-  "never throws",
-  "全入力",
-  "全ての入力",
-  "すべての入力",
-  "all inputs",
-  "冪等",
-  "idempotent",
-  "決定的",
-  "deterministic",
-]);
-
-/**
- * 表のcellを分割する。エスケープ済みの`\|`は区切りにしない。
- */
-function splitTableRow(line: string): string[] {
-  const body = line.trim().replace(/^\|/u, "").replace(/\|$/u, "");
-  const cells: string[] = [];
-  let current = "";
-  for (let index = 0; index < body.length; index += 1) {
-    const char = body[index];
-    if (char === "\\" && body[index + 1] === "|") {
-      current += "|";
-      index += 1;
-      continue;
-    }
-    if (char === "|") {
-      cells.push(current);
-      current = "";
-      continue;
-    }
-    current += char;
-  }
-  cells.push(current);
-  return cells.map((cell) => cell.trim());
-}
-
-/**
- * Markdown装飾を除いた判定値。
- *
- * **内部文字を削らない。** `/[*`\s]/gu`で全除去すると`p ass`や`p*ass`まで`pass`になり、
- * 判定列を厳密な`pass`に限る仕様から外れる（Issue #1188のF-04）。前後の空白と
- * **外側の**装飾だけを剥がす。
- */
-function verdictValue(cell: string): string {
-  let value = cell.trim();
-  let previous = "";
-  while (value !== previous) {
-    previous = value;
-    value = value.replace(/^\*\*(.*)\*\*$/su, "$1").trim();
-    value = value.replace(/^\*(.*)\*$/su, "$1").trim();
-    value = value.replace(/^`(.*)`$/su, "$1").trim();
-  }
-  return value;
-}
-
-/** code fenceのdelimiter。**文字と長さの両方を保持する。** */
-interface FenceDelimiter {
-  character: string;
-  length: number;
-  infoString: string;
-}
-
-/**
- * 行がcode fenceのdelimiterか。**行頭の3文字以上の ``` または ~~~ に限る。**
- *
- * 表のcell内に現れるbacktickを誤って開始と読まないよう、行頭に限定する。
- * **先頭1文字へ潰さない。** 潰すと4個で開いたfenceを3個で閉じてしまい、
- * fence内の表が監査対象になる（PR #1192 の外部指摘）。
- */
-function fenceDelimiter(line: string): FenceDelimiter | undefined {
-  const match = /^\s{0,3}(`{3,}|~{3,})(.*)$/u.exec(line);
-  const run = match?.[1];
-  if (!run) return undefined;
-  return {
-    character: run[0]!,
-    length: run.length,
-    infoString: (match[2] ?? "").trim(),
-  };
-}
-
-/**
- * `candidate`が`open`を閉じるdelimiterか。
- *
- * CommonMarkに合わせて3条件を要求する。**同じ文字であること、開始以上の長さであること、
- * info stringを持たないこと。** ` ```typescript `のようなinfo string付きの行は
- * 閉鎖ではなく、閉鎖判定に使うと後続の表が監査対象になる。
- */
-function closesFence(open: FenceDelimiter, candidate: FenceDelimiter): boolean {
-  return (
-    candidate.character === open.character &&
-    candidate.length >= open.length &&
-    candidate.infoString.length === 0
-  );
-}
-
-/**
- * `pass`判定の根拠行に、検証不能な性質の主張が裸で置かれていないか検査する。
- *
- * **真偽は判定しない。** 判定するのは「登録語彙を含む`pass`行に、SCN参照か
- * 原文引用のどちらかがあるか」だけである。原文引用があってもそれが本当に
- * 実装の原文であることは証明できない。**機構が塞ぐのは、未検証の主張が黙って
- * `pass`根拠として使われる経路である**（Issue #1169）。
- *
- * 対象は判定列が厳密に`pass`である表の行だけとする。finding表・not-applicable・
- * 説明文・訂正記録は対象外である。**範囲を構造で限定することで、根拠らしさの
- * 推測を要さない。**
- */
-export function unsupportedClaimRows(markdown: string): string[] {
-  const findings: string[] = [];
-  let headerCells: string[] | undefined;
-  let verdictIndex = -1;
-  /**
-   * **開いたfenceは同じ記号でだけ閉じる。閉じない場合は以降すべてを対象外にする。**
-   *
-   * 「閉じていないので本文として扱う」とすると、fenceを開くだけで残り全体を
-   * 検査対象へ戻せる。偽陽性を塞ぐ変更なので、開いたら閉じるまで対象外が安全側である
-   * （Issue #1188のF-01）。
-   */
-  let openFence: FenceDelimiter | undefined;
-  for (const line of markdown.split("\n")) {
-    const delimiter = fenceDelimiter(line);
-    if (delimiter !== undefined) {
-      if (openFence === undefined) openFence = delimiter;
-      else if (closesFence(openFence, delimiter)) openFence = undefined;
-      headerCells = undefined;
-      verdictIndex = -1;
-      continue;
-    }
-    if (openFence !== undefined) continue;
-    if (!line.trim().startsWith("|")) {
-      headerCells = undefined;
-      verdictIndex = -1;
-      continue;
-    }
-    const cells = splitTableRow(line);
-    if (headerCells === undefined) {
-      headerCells = cells;
-      verdictIndex = cells.findIndex(
-        (cell) => cell === "判定" || cell === "個別判定",
-      );
-      continue;
-    }
-    if (/^[-:\s|]+$/u.test(line.replace(/\|/gu, ""))) continue;
-    /**
-     * **防御的な早期returnである。** `verdictIndex`が-1のとき
-     * `cells[-1]`は`undefined`になり直後のpass判定で必ず弾かれるため、
-     * この行を消しても挙動は変わらない（変異試験で等価と確認済み）。
-     * 判定列を持たない表を対象にしない意図を明示するために残す。
-     */
-    if (verdictIndex < 0) continue;
-    if (verdictValue(cells[verdictIndex] ?? "") !== "pass") continue;
-    /**
-     * **登録語彙とcellの直積をすべて見る。**
-     *
-     * `HIGH_RISK_CLAIM_TOKENS.find`は宣言順で最初に一致した1語しか返さず、
-     * `cells.find`は最初の1 cellしか見ない。`| idempotent | pass | pure function。SCN-… |`
-     * では`pure function`が選ばれてSCN併記で通り、**1列目の裸の`idempotent`が
-     * 検査されなかった**（Issue #1188のF-02）。
-     *
-     * **併記は登録語彙と同じcell内で数える。** 行のどこかにbacktickがあれば通す形に
-     * すると、個別監査表のpath列（`src/a.ts`）だけで受理されてしまう。
-     */
-    for (const [index, claimCell] of cells.entries()) {
-      /**
-       * **判定列を対象から外す。** この行を消しても挙動は変わらない。判定列のcellは
-       * `verdictValue`で厳密に`pass`へ正規化されたものだけがここへ来るため、
-       * 登録語彙を含み得ない（`pass`はどの登録語彙の部分文字列でもない）。
-       * **変異試験で等価と確認済み。** 責務を明示するために残す。
-       */
-      if (index === verdictIndex) continue;
-      for (const token of HIGH_RISK_CLAIM_TOKENS) {
-        if (!claimCell.includes(token)) continue;
-        if (/SCN-[A-Z0-9-]+/u.test(claimCell)) continue;
-        /**
-         * **登録語彙そのものの引用は併記にしない。** 「純関数である。根拠は `純関数`」
-         * という循環は、引用が証拠として機能していないことが字面だけで確定する
-         * （Issue #1188のF-03）。実測で16件中2件が該当した。
-         *
-         * **引用が対象コードに実在するかは判定しない。** `grep -n "純関数"`や
-         * `[skip ci]`のように対象source本文に無い正当な引用があり、実在検査は
-         * F-01と逆向きの偽陽性を作る。
-         */
-        const quotations = [...claimCell.matchAll(/`([^`]+)`/gu)].map(
-          (match) => match[1] ?? "",
-        );
-        if (
-          quotations.some(
-            (quotation) => !HIGH_RISK_CLAIM_TOKENS.includes(quotation.trim()),
-          )
-        )
-          continue;
-        findings.push(
-          `pass判定の根拠へ検証を伴わない性質の主張があります: 「${token}」。同じ行へSCN IDか対象コードの原文引用を併記してください。cell: ${claimCell.slice(0, 120)}`,
-        );
-      }
-    }
-  }
-  return findings;
-}
 
 /**
  * @param legacyReleaseBumpCutoff 旧release bump除外を認める境界commit。
@@ -1124,7 +828,7 @@ export function checkFileAudit(
       valid: false,
       errors: [
         [
-          "review artifactのcommitがありません。実装commitの後にreview artifactだけをcommitしてください",
+          "review証跡のcommitがありません。実装commitの後に`review export`で生成したreview証跡だけをcommitしてください",
           ...candidateSideNote(inferred),
         ].join("\n"),
       ],
@@ -1145,17 +849,18 @@ export function checkFileAudit(
       valid: false,
       errors: [
         [
-          `H_impl..currentの差分path ${auditPath} は${AUDIT_DIRECTORIES.map((directory) => `${directory}/`).join(" または ")}配下ではありません。実装commitの後にreview artifactだけをcommitしてください`,
+          `H_impl..currentの差分path ${auditPath} は${AUDIT_DIRECTORIES.map((directory) => `${directory}/`).join(" または ")}配下ではありません。実装commitの後にreview証跡だけをcommitしてください`,
           ...candidateSideNote(inferred),
         ].join("\n"),
       ],
     };
-  if (!AUDIT_NAME_PATTERN.test(path.posix.basename(auditPath)))
+  const name = AUDIT_NAME_PATTERN.exec(path.posix.basename(auditPath));
+  if (name === null)
     return {
       valid: false,
       errors: [
         [
-          `${auditPath}はreview artifactのfile名書式に一致しません。連番_課題番号…レビュー.mdの書式へ直してください`,
+          `${auditPath}はreview証跡のfile名書式に一致しません。\`review export\`が生成する<Issue番号>_review.jsonを使ってください`,
           ...candidateSideNote(inferred),
         ].join("\n"),
       ],
@@ -1165,23 +870,33 @@ export function checkFileAudit(
     return {
       valid: false,
       errors: [
-        `${auditPath}がありません。review artifactを追加した状態でcommitしてください`,
+        `${auditPath}がありません。review証跡を追加した状態でcommitしてください`,
       ],
     };
-  const parsed = parseFileAudit(fs.readFileSync(artifact, "utf8"));
-  if (!parsed.base || !parsed.implementation)
+  let evidence: ReviewEvidence;
+  try {
+    evidence = parseReviewEvidence(fs.readFileSync(artifact, "utf8"));
+  } catch (error) {
     return {
       valid: false,
-      errors: ["比較基点またはH_implの完全SHAがありません"],
+      errors: [
+        `${auditPath}をreview証跡として読めません: ${error instanceof Error ? error.message : String(error)}`,
+      ],
     };
-  if (parsed.implementation !== inferred.implementation)
+  }
+  if (Number(name[1]) !== evidence.issue)
     errors.push(
-      `review artifact本文のH_impl ${parsed.implementation} が実際のcommit構造から導出したH_impl ${inferred.implementation} と一致しません。review artifactのH_implをreview headの親commitへ直してください`,
+      `${auditPath}のfile名のIssue番号とreview証跡のissue ${evidence.issue} が一致しません`,
+    );
+  const base = evidence.observed.baseSha;
+  const implementation = evidence.observed.implementationHeadSha;
+  if (implementation !== inferred.implementation)
+    errors.push(
+      `review証跡のH_impl ${implementation} が実際のcommit構造から導出したH_impl ${inferred.implementation} と一致しません。review headの親commitで\`review export\`を実行し直してください`,
     );
   /**
-   * **比較基点を前へ進めると監査範囲が縮む。** 個別監査表は`比較基点..H_impl`との完全一致
-   * だけを要求されるため、縮めた範囲に合わせた表を書けば、除外したcommitは表からも
-   * 損失検知の走査範囲からも消える（Issue #966）。`H_impl`と同じ二重確認を課す。
+   * **比較基点を前へ進めると監査範囲が縮む。** 縮めた範囲では、除外したcommitが
+   * 損失検知の走査範囲から消える（Issue #966）。`H_impl`と同じ二重確認を課す。
    *
    * **導出を試みて決まらなかった場合は合格へ倒さない。** 浅いcloneでは境界commitの親は
    * 2個に見えるがfork点を観測できず、`undefined`を対象外と同じに扱うと、検証すべき
@@ -1195,11 +910,11 @@ export function checkFileAudit(
           ? `比較基点を導出できません。candidate外で固定したremote default branch tipを取得し、全履歴を取得して再実行してください`
           : `比較基点を導出できません。境界commitの親が${inferred.boundaryParentCount}個です。どの親が候補branchかを構造から決められないため、判定不能として拒否します`,
     );
-  else if (inferred.base !== undefined && parsed.base !== inferred.base)
+  else if (inferred.base !== undefined && base !== inferred.base)
     errors.push(
-      `review artifact本文の比較基点 ${parsed.base} が実際のcommit構造から導出した比較基点 ${inferred.base} と一致しません。比較基点をH_implが含む最新の取り込み先branch commit ${inferred.base} へ直し、個別監査表を比較基点..H_implから再生成してください`,
+      `review証跡の比較基点 ${base} が実際のcommit構造から導出した比較基点 ${inferred.base} と一致しません。H_implが含む最新の取り込み先branch commit ${inferred.base} を\`review export --base\`へ渡して再生成してください`,
     );
-  for (const oid of [parsed.base, parsed.implementation]) {
+  for (const oid of [base, implementation]) {
     const resolved = git(["rev-parse", "--verify", `${oid}^{commit}`], root, {
       allowFailure: true,
     });
@@ -1207,144 +922,63 @@ export function checkFileAudit(
       errors.push(`固定commitを解決できません: ${oid}`);
   }
   if (errors.length > 0)
-    return {
-      valid: false,
-      errors,
-      base: parsed.base,
-      implementation: parsed.implementation,
-      auditedFiles: parsed.entries.length,
-    };
-  if (parsed.base === parsed.implementation)
+    return { valid: false, errors, base, implementation, auditPath };
+  if (base === implementation)
     errors.push("比較基点とH_implは異なるcommitでなければなりません");
   const baseAncestry = git(
-    ["merge-base", "--is-ancestor", parsed.base, parsed.implementation],
+    ["merge-base", "--is-ancestor", base, implementation],
     root,
     { allowFailure: true },
   );
   if (baseAncestry.status !== 0)
     errors.push("比較基点がH_implのancestorではありません");
-  else if (parsed.base !== parsed.implementation)
+  else if (base !== implementation)
     errors.push(
       ...evaluateMergeIntegrity(
-        collectMergeObservations(root, parsed.base, parsed.implementation),
+        collectMergeObservations(root, base, implementation),
       ).errors,
     );
-  const expected = git(
-    [
-      "-c",
-      "core.quotepath=false",
-      "diff",
-      "--name-status",
-      `${parsed.base}..${parsed.implementation}`,
-      "--",
-    ],
-    root,
-  )
-    .stdout.trim()
-    .split(/\r?\n/u)
-    .filter(Boolean)
-    .map((line) => {
-      const [status, ...parts] = line.split("\t");
-      return { status: status?.[0] ?? "", path: parts.at(-1) ?? "" };
-    });
-  const expectedKeys = expected
-    .map((entry) => `${entry.status}\u0000${entry.path}`)
-    .sort();
-  const actualKeys = parsed.entries
-    .map((entry) => `${entry.status}\u0000${entry.path}`)
-    .sort();
-  if (new Set(actualKeys).size !== actualKeys.length)
-    errors.push("個別監査に重複pathがあります");
-  if (JSON.stringify(expectedKeys) !== JSON.stringify(actualKeys))
-    errors.push(
-      `個別監査とGit差分path集合が一致しません: expected=${expected.length} actual=${parsed.entries.length}`,
-    );
-  for (const entry of parsed.entries) {
-    if (entry.fields.some((field) => field === "" || field === "-"))
-      errors.push(
-        `${entry.path}のowner・layer・責務・依存・追跡・安全性に空欄があります`,
-      );
-    if (entry.decision !== "pass")
-      errors.push(`${entry.path}の個別判定がpassではありません`);
-    if (
-      isGeneratedDistributionPath(entry.path) &&
-      !entry.fields.some((field) => field.includes("生成元"))
-    )
-      errors.push(
-        `${entry.path}の生成物行に生成元との対応確認方法がありません`,
-      );
-    if (
-      isGeneratedDistributionPath(entry.path) &&
-      !entry.fields.some((field) => field.includes("配布"))
-    )
-      errors.push(`${entry.path}の生成物行に配布影響の確認方法がありません`);
-  }
   const ancestry = git(
-    ["merge-base", "--is-ancestor", parsed.implementation, current],
+    ["merge-base", "--is-ancestor", implementation, current],
     root,
     { allowFailure: true },
   );
   if (ancestry.status !== 0)
     errors.push("H_implがcurrent HEADのancestorではありません");
-  const artifactText = fs.readFileSync(artifact, "utf8");
-  errors.push(...unsupportedClaimRows(artifactText));
-  const identity = identitySection(artifactText);
-  if (identity === undefined)
+  if (evidence.observed.session.countedRounds > MAX_REVIEW_ROUNDS)
     errors.push(
-      `review artifactに「## ${IDENTITY_HEADING}」の節がありません。申告はこの節の表だけを正本にします`,
+      `reviewラウンドが上限を超えています: ${evidence.observed.session.countedRounds}（上限${MAX_REVIEW_ROUNDS}）。同じ範囲の予算は自動更新しません`,
     );
-  const rounds = parsed.rounds;
-  if (rounds === undefined)
-    errors.push(
-      "review artifactに「| ラウンド数 | N |」がありません。実施したラウンド数を記録してください",
-    );
-  else if (rounds > MAX_REVIEW_ROUNDS)
-    errors.push(
-      `reviewラウンドが上限を超えています: ${rounds}（上限${MAX_REVIEW_ROUNDS}）。同じ範囲の予算は自動更新しません`,
-    );
-  else if (rounds < 1)
-    errors.push(`reviewラウンドは1以上で記録してください: ${rounds}`);
-  if (parsed.stepChain === undefined)
-    errors.push(
-      `review artifactに「| Step chain | ${STEP_CHAIN_VIA}: <staging path> |」または「| Step chain | ${STEP_CHAIN_BYPASS}: <理由> |」がありません`,
-    );
-  errors.push(...observationErrors(identity ?? ""));
+  /**
+   * **配布物影響はGitとpackage filesから導出して報告する。** 散文の記述は要求しない。
+   * 生成物は配布境界の単位（`dist/<top>/`）へまとめる。
+   */
+  const changed =
+    baseAncestry.status === 0 ? changedPaths(root, base, implementation) : [];
   const packageFiles = packageDistributionFiles(root);
-  const impact =
+  const distributed =
     packageFiles === undefined
-      ? { errors: [], distributed: [] }
-      : validateDistributionImpact({
-          markdown: artifactText,
-          /**
-           * **生成物は`dist/`1件へまとめる。**
-           *
-           * `dist/`は配布境界の中にあるため、除外すると生成物を直接書き換えた
-           * 変更が配布物影響の記述を要求されなくなる（PR #1218 の外部指摘）。
-           * 一方で61 fileを1行ずつ書かせると、**src変更のたび配布物影響の表が
-           * 生成file行で埋まり、本来確認すべき配布影響が埋没する。**
-           *
-           * **1件へまとめると両方を満たす。** 生成物へ触れた事実は残り、記述量は
-           * 1行で済む。
-           */
+      ? []
+      : deriveDistributionImpact({
           changedPaths: [
             ...new Set(
-              expected.map(
-                (entry) => generatedDistributionGroup(entry.path) ?? entry.path,
+              changed.map(
+                (entry) => generatedDistributionGroup(entry) ?? entry,
               ),
             ),
           ],
           packageFiles,
         });
-  errors.push(...impact.errors);
   return {
     valid: errors.length === 0,
     errors,
-    base: parsed.base,
-    implementation: parsed.implementation,
+    base,
+    implementation,
     current,
     auditPath,
-    auditedFiles: parsed.entries.length,
-    distributedPaths: impact.distributed,
+    changedFiles: changed.length,
+    countedRounds: evidence.observed.session.countedRounds,
+    distributedPaths: distributed,
   };
 }
 

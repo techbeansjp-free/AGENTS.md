@@ -201,8 +201,7 @@ Feature: Issue templateと段階別検証の契約
     Then 00から03の最初の節見出しは管理情報ではない
     And 00から03の管理情報の節は最後の節である
 
-  Scenario: SCN-UNIT-ISSUETPL-014 配布するIssue templateは全件が読者表を持ちreview templateは要約を持つ
+  Scenario: SCN-UNIT-ISSUETPL-014 配布するIssue templateは全件が読者表を持つ
     Given 出荷Issue templateと検証器の見出し契約がある
     When 配布するIssue templateを全件読む
     Then 全templateは冒頭に読者3区分の読者表を持つ
-    And review templateは問題・解決・実施・確認・判定の要約表を持つ

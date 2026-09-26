@@ -38,6 +38,10 @@ import {
   validRuleRetirementProposals,
   type RuleFragmentSource,
 } from "./project-rule-retirement.js";
+import {
+  parseVerificationPolicy,
+  type VerificationPolicy,
+} from "./verification-run.js";
 import { isSafeFinalizeIgnoredPathPrefix } from "./worktree-removal-safety.js";
 import { validateStagingPolicy } from "./staging-layout.js";
 
@@ -1064,6 +1068,8 @@ export interface PolicyManifest {
   conformanceScope?: "repository-bound" | "package-attested";
   providerFiles?: string[];
   conformanceDirectory: "project/conformance";
+  /** 検証command宣言（REQ-WF-040）。trusted commitの値だけをauthorityにする。 */
+  verification?: VerificationPolicy;
 }
 
 interface Fragment {
@@ -1147,11 +1153,18 @@ export function validateProjectPolicyManifest(manifest: unknown) {
       "conformanceScope",
       "providerFiles",
       "conformanceDirectory",
+      "verification",
     ],
     "manifest",
     errors,
   );
   if (!isRecord(manifest)) return { valid: false, errors };
+  if (manifest.verification !== undefined)
+    try {
+      parseVerificationPolicy(manifest.verification, "manifest.verification");
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
   const policy = isRecord(manifest.policy) ? manifest.policy : {};
   const delivery = isRecord(policy.delivery) ? policy.delivery : {};
   const merge = isRecord(policy.merge) ? policy.merge : {};
@@ -1862,6 +1875,48 @@ export function loadEffectiveTrustedPolicySetAtCommit(
       .digest("hex"),
     provenance: { ...projectSet.provenance, floorCommitSha: ref },
   };
+}
+
+/**
+ * trusted policy setから検証command宣言を取り出す（REQ-WF-040）。
+ *
+ * **宣言が無ければ拒否する（fail closed）。** 宣言の無いprojectで任意のargvを
+ * `scope=full`として受理すると、`true`の実行が全体検証を名乗れる。入力は
+ * `loadOperationPolicy`等が既定branchのtrusted commitから組み立てたsetでなければ
+ * ならない。candidateのfilesystemから読んだsetを渡してはならない。
+ */
+export function trustedVerificationPolicy(
+  policySet: unknown,
+): VerificationPolicy {
+  const manifest = isRecord(policySet) ? policySet.manifest : undefined;
+  const commit =
+    isRecord(policySet) && isRecord(policySet.provenance)
+      ? policySet.provenance.commitSha
+      : undefined;
+  const where =
+    typeof commit === "string" ? `（trusted commit ${commit}）` : "";
+  if (
+    !isRecord(manifest) ||
+    manifest.schemaVersion !== MANIFEST_VERSION ||
+    manifest.verification === undefined
+  )
+    throw new Error(
+      `trusted project policy${where}に検証command宣言（.agent-skill-chain/project-policy.jsonのverification.fullCommandとverification.targetedRunner）がありません。検証は既定branchのproject policyが宣言したcommandの観測だけを受理します。宣言を既定branchへmergeしてから再実行してください`,
+    );
+  return parseVerificationPolicy(
+    manifest.verification,
+    `trusted project policy${where}のverification`,
+  );
+}
+
+/**
+ * 既定branch（`origin/HEAD`）のtrusted commitから検証command宣言を読む。
+ * **remote-tracking refが無いrepositoryでもcandidateのmanifestへ倒さない。**
+ */
+export function loadTrustedVerificationPolicy(
+  root: string,
+): VerificationPolicy {
+  return trustedVerificationPolicy(loadOperationPolicy(root));
 }
 
 /** Resolve authority policy only from a fixed trusted commit and trusted provider observation. */

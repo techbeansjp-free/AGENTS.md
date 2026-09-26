@@ -7,17 +7,16 @@ import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
 import { stableJson } from "../lib/security.js";
 import { buildReviewProgressInventories, describeReviewProgressUnbuildable, tryBuildReviewProgressInventories, PROGRESS_END, PROGRESS_START, reviewProgressTargets, } from "../domain/review-progress.js";
-import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
+import { assertWorkflowStaging, describeStagingDigestDrift, readWorkflowJournal, } from "./workflow-journal.js";
 import { evidenceOnlySuffix, observeReviewDiff } from "./review-diff.js";
 import { isDefaultBranchFollowMerge, REVIEW_SESSION_FILE, readStoredReviewSession, } from "./review-session-store.js";
 import { resolveGitWorkspace } from "./review-workspace.js";
 import { findDecisionJournalRecord } from "./decision-journal-store.js";
 import { LIGHTWEIGHT_TIER_PROVIDER_VERSION } from "./decision-invoke.js";
 import { computeFindingClassificationInputDigest, verifyDecisionRefBinding, } from "../domain/decision-journal.js";
+import { deriveReviewRoundImpact } from "./impact-set.js";
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
-import { stagingDigestRecoveryHint } from "../domain/workflow.js";
-import { readStoredDeliveryState } from "./delivery-state.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { recordLayerSuffix } from "./review-record-layer.js";
@@ -31,50 +30,9 @@ const GIT_ENV = {
     GIT_OPTIONAL_LOCKS: "0",
 };
 /**
- * **staging digest不一致の診断に付ける再開手順。** digestを再固定できるのは
- * `workflow record`だけであり、拒否だけを返すと利用者はsourceを読むまで
- * 次の1手が分からない（Issue #1323、A-3）。判定は変えず文言だけを足す。
- *
- * **手順はjournalの記録状態で変わる**（Issue #1312）。Step 10記録後に最新Stepの
- * 再記録を案内すると必ず失敗するため、`stagingDigestRecoveryHint`へ委譲する。
- * **この関数は生成logicを持たない。** 3 call siteで文言が複製されると、
- * 片方だけが実態から外れても検出できない。
- */
-function recoveryHint(staging) {
-    /**
-     * **journalとdelivery stateを独立に読む。** 外側の1つの`try`で囲むと、
-     * journalの読み取り失敗が`isTerminalDelivery`の観測値ごと捨て、terminal状態でも
-     * 通常の再記録案内へ戻ってしまう（PR #1402の外部review指摘）。
-     */
-    return stagingDigestRecoveryHint(readJournalSteps(staging), isTerminalDelivery(staging));
-}
-function readJournalSteps(staging) {
-    try {
-        return readWorkflowJournal(staging).entries.map((entry) => entry.step);
-    }
-    catch {
-        /** journalを読めない場合は空集合へ倒す。案内の生成で判定を止めない */
-        return [];
-    }
-}
-/**
- * **delivery stateがterminalなら上流再確定を案内しない。** journalにStep 11 entryが
- * 無くても`merge-observed`ならStep 0〜10の追記は拒否される（`appendWorkflowJournalEntryLocked`）。
- * 読めない場合はfalseへ倒す。**案内の生成で判定を止めない。**
- */
-function isTerminalDelivery(staging) {
-    try {
-        const state = readStoredDeliveryState(staging)?.state;
-        return state === "merge-observed" || state === "step11-recorded";
-    }
-    catch {
-        return false;
-    }
-}
-/**
  * **合成経路の検査点。** `assertStoredStagingDigest`はmodule内部の判定だが、
- * ここが`recoveryHint`へ委譲しているかを外から観測できないと、この経路の委譲を
- * 旧案内へ戻す変異が生存する。判定を変えず同じ関数を公開するだけにする。
+ * ここが`describeStagingDigestDrift`へ委譲しているかを外から観測できないと、この経路の
+ * 委譲を落とす変異が生存する。判定を変えず同じ関数を公開するだけにする。
  */
 export function assertStoredStagingDigestForTest(staging) {
     assertStoredStagingDigest(staging);
@@ -84,7 +42,21 @@ function assertStoredStagingDigest(staging) {
     const artifacts = listStagingArtifacts(staging);
     if (stableJson(stored.artifacts) !== stableJson(artifacts) ||
         stored.digest !== calculateStagingDigest(staging, artifacts))
-        throw new Error(`review session更新前のstaging成果物一覧またはdigestが一致しません${recoveryHint(staging)}`);
+        throw new Error(`review session更新前のstaging成果物一覧またはdigestが一致しません${describeStagingDigestDrift(staging)}`);
+}
+/**
+ * 影響集合の案内。**表示専用であり`round`へ入れない。**
+ * fullのときは全体reviewが適用されることを理由付きで示す。
+ */
+function impactNotes(impact) {
+    const notes = [];
+    if (impact.mode === "targeted")
+        notes.push(`影響集合（digest ${impact.digest.slice(0, 12)}）から隣接範囲${impact.adjacent.length}件をfocus.adjacentScopeへ設定した。隣接範囲の前round blocker起因のHigh回帰と固定契約違反はcurrent blockerになる`);
+    else
+        notes.push(`影響集合を証明できないため全体reviewを適用する（focus.adjacentScopeUnbounded=true。全pathを隣接範囲として扱い、前round blocker起因のHigh回帰と固定契約違反は修正差分外でもcurrent blockerになる）: ${impact.reasons.slice(0, 3).join("; ")}${impact.reasons.length > 3 ? ` ほか${impact.reasons.length - 3}件` : ""}`);
+    if (impact.securitySensitive)
+        notes.push(`security上の注意を要するpathが変更または隣接範囲にある。縮小せず確認する: ${impact.securityPaths.join(", ")}`);
+    return notes;
 }
 function sortedUnique(values) {
     return [...new Set(values)].sort();
@@ -316,12 +288,35 @@ export function buildReviewRoundDraft(input) {
         });
         if (carriedDecisionRefCleared)
             notes.push("前round blockerが持っていたdecisionRefはnullへ戻した。前roundのcandidateHeadShaに束縛されており新HEADでは検証できないため。是正済みならevidenceに確認内容を書く。Decision Journalの記録を再利用したい場合は新HEADでdecisionを再invokeしてからdecisionRefへ記入する");
+        /**
+         * **隣接範囲は影響集合から導出する**（REQ-WF-039）。差分が空のときは下で
+         * 拒否するため導出しない。記録時は`previewReviewRound`が同じ関数で再導出し照合する。
+         */
+        let adjacentScope = [];
+        let adjacentScopeUnbounded = false;
+        if (fixed.length > 0) {
+            const derived = deriveReviewRoundImpact({
+                root,
+                previousHeadSha,
+                headSha,
+            });
+            adjacentScope = derived.adjacentScope;
+            adjacentScopeUnbounded = derived.adjacentScopeUnbounded;
+            notes.push(...impactNotes(derived.impact));
+        }
         round = {
             round: previous.rounds.length + 1,
             previousRoundDigest: previous.latestRoundDigest,
             anchor: previous.anchor,
             candidateHeadSha: headSha,
-            focus: { previousBlocking, fixedDiff: fixed, adjacentScope: [] },
+            focus: {
+                previousBlocking,
+                fixedDiff: fixed,
+                adjacentScope,
+                ...(adjacentScopeUnbounded
+                    ? { adjacentScopeUnbounded: true }
+                    : {}),
+            },
             findings: carried,
             ...(previous.status === "converged" &&
                 recordLayerSuffix(staging, root, previousHeadSha, headSha, previous)
@@ -380,6 +375,15 @@ export function buildReviewRoundDraft(input) {
  * journalの同期証拠で引き続き検証する**ので、同期漏れは終端で止まる。
  */
 function refixStagingDigestForRound(staging) {
+    /**
+     * **journalの整合を確かめてから再固定する**（REQ-WF-036）。staging記録は集合digestしか
+     * 持たないため、再固定は記録済みjournal行の改変も現在の内容として固定してしまう。
+     * hash chainの破損とchain付きjournalでの封印field欠落はstrict parserが拒否するので、
+     * その検査を通らないjournalではroundを成立させない（fail-closed）。
+     */
+    const journal = readWorkflowJournal(staging);
+    if (journal.errors.length > 0)
+        throw new Error(`workflow journalが不正なためreview roundのstaging digest再固定を拒否しました: ${journal.errors.join("; ")}`);
     const stored = readStoredStagingRecord(staging);
     const artifacts = listStagingArtifacts(staging);
     if (stableJson(stored.artifacts) !== stableJson(artifacts) ||
@@ -446,6 +450,7 @@ export function previewReviewRound(input) {
     const staging = assertWorkflowStaging(input.staging);
     refixStagingDigestForRound(staging);
     const previous = readStoredReviewSession(staging);
+    let round = input.round;
     const root = stagingRepositoryRoot(staging);
     const currentHeadSha = git(["rev-parse", "--verify", "HEAD^{commit}"], root, {
         env: GIT_ENV,
@@ -501,6 +506,39 @@ export function previewReviewRound(input) {
         if (stableJson(fixed) !== stableJson(input.round.focus.fixedDiff))
             throw new Error("review roundのfixedDiffが前roundからの実Git差分と一致しません");
         /**
+         * **隣接範囲を実Gitから再導出して照合する**（REQ-WF-039）。
+         *
+         * `findingAdmission`は隣接範囲を修正差分と同じくcurrent scopeへ含めるため、
+         * 申告された`adjacentScope`をそのまま受理すると、reviewerや進行役が任意の
+         * 64桁digestを添えて範囲を広げられる。雛形と同じ関数で導出した値との
+         * 完全一致だけを受理する。
+         */
+        const expectedImpact = fixed.length === 0
+            ? { adjacentScope: [], adjacentScopeUnbounded: false }
+            : deriveReviewRoundImpact({
+                root,
+                previousHeadSha,
+                headSha: input.round.candidateHeadSha,
+            });
+        if (stableJson(expectedImpact.adjacentScope) !==
+            stableJson(input.round.focus.adjacentScope))
+            throw new Error("review roundのadjacentScopeが実Gitから導出した影響集合の隣接範囲と一致しません。review round --initの雛形を書き換えずに使ってください");
+        /**
+         * **無制限の印も実Gitから再導出する。** 影響集合がfullなのに印が無いと
+         * 修正差分外の回帰がrecord-onlyへ落ち、targetedより狭いadmissionになる。
+         * 印の欠落（印導入前の雛形を含む）は観測値へ補い、観測が支えない印は拒否する。
+         * 記録するroundは常に観測値の印を持つ。
+         */
+        if (input.round.focus.adjacentScopeUnbounded === true &&
+            !expectedImpact.adjacentScopeUnbounded)
+            throw new Error("review roundのadjacentScopeUnboundedが実Gitから導出した影響集合と一致しません。review round --initの雛形を書き換えずに使ってください");
+        if (expectedImpact.adjacentScopeUnbounded &&
+            input.round.focus.adjacentScopeUnbounded !== true)
+            round = {
+                ...input.round,
+                focus: { ...input.round.focus, adjacentScopeUnbounded: true },
+            };
+        /**
          * **`followOnly`は申告ではなくGit観測から導出する**（Issue #1287）。
          *
          * 呼び出し側が旗を立てるだけで予算を回避できてはならない。観測が条件を
@@ -513,7 +551,7 @@ export function previewReviewRound(input) {
             !recordLayerSuffix(staging, root, previousHeadSha, input.round.candidateHeadSha, previous))
             throw new Error("record layerとして記録できるのはformal artifactとsealed journalから一致を証明したprogress投影だけです");
     }
-    return advanceReviewSession(previous, input.round);
+    return advanceReviewSession(previous, round);
 }
 export function recordReviewRound(input) {
     const staging = assertWorkflowStaging(input.staging);

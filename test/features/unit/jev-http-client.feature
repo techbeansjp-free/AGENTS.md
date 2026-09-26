@@ -35,3 +35,13 @@ Feature: Jev HTTP adapter（fake transport経由の決定的検証）
     Given 秘密値を持つconfigとfakeなok transportがある
     When dispatchJevChoiceを実行する
     Then Authorization headerには秘密値のBearer tokenが渡り戻り値には秘密値が含まれない
+
+  Scenario: SCN-UNIT-JEVHTTP-008 改行を含むAPIキー値はtransportを呼ばずauth-errorとし値を結果へ含めない
+    Given 改行を含む秘密値を持つconfigとfakeなtransportがある
+    When dispatchJevChoiceを実行する
+    Then outcomeはauth-errorでtransportは呼ばれずdetailに秘密値が含まれない
+
+  Scenario: SCN-UNIT-JEVHTTP-009 transport例外のmessageは複製せず固定文言とerror class・codeだけを返す
+    Given 秘密値を含むmessageで例外を投げるfakeなtransportがある
+    When dispatchJevChoiceを実行する
+    Then outcomeはnetwork-errorでdetailは固定文言でありmessageも秘密値も含まない

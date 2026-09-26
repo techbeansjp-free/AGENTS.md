@@ -9,7 +9,6 @@ const ROUTING_CONTRACT_PATHS = [
   ".agent-skill-chain/skills/step-10-review/SKILL.md",
   ".agent-skill-chain/templates/issue/02_設計.md",
   ".agent-skill-chain/templates/issue/03_実装計画.md",
-  ".agent-skill-chain/templates/issue/04_レビュー.md",
 ] as const;
 
 const ROUTING_CONTRACT_MARKERS = [

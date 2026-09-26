@@ -261,3 +261,58 @@ Then(
     );
   },
 );
+
+// --- 独立security review L1 -------------------------------------------------
+
+Given(
+  "改行を含む秘密値を持つconfigとfakeなtransportがある",
+  function (this: JevHttpClientWorld) {
+    setEnvVar(this, "JEV_HTTP_TEST_KEY", "sk-newline-secret-7b21\nX: y");
+    this.transport = async () => {
+      this.transportCalls.push({
+        url: "should-not-be-called",
+        body: null,
+        headers: {},
+      });
+      return fakeJsonResponse(200, {});
+    };
+  },
+);
+
+Given(
+  "秘密値を含むmessageで例外を投げるfakeなtransportがある",
+  function (this: JevHttpClientWorld) {
+    setEnvVar(this, "JEV_HTTP_TEST_KEY", "sk-thrown-secret-4e8d");
+    this.transport = async (_url, init) => {
+      const error = new TypeError(
+        `Headers.append: "${init.headers.Authorization}" is an invalid header value`,
+      ) as TypeError & { code?: string };
+      error.code = "ERR_INVALID_CHAR";
+      throw error;
+    };
+  },
+);
+
+Then(
+  "outcomeはauth-errorでtransportは呼ばれずdetailに秘密値が含まれない",
+  function (this: JevHttpClientWorld) {
+    assert.equal(this.result?.outcome.kind, "auth-error");
+    assert.equal(this.transportCalls.length, 0);
+    assert.ok(!JSON.stringify(this.result).includes("sk-newline-secret-7b21"));
+  },
+);
+
+Then(
+  "outcomeはnetwork-errorでdetailは固定文言でありmessageも秘密値も含まない",
+  function (this: JevHttpClientWorld) {
+    assert.equal(this.result?.outcome.kind, "network-error");
+    assert.ok(
+      this.result?.outcome.kind === "network-error" &&
+        this.result.outcome.detail ===
+          "transport error (TypeError/ERR_INVALID_CHAR)",
+    );
+    const serialized = JSON.stringify(this.result);
+    assert.ok(!serialized.includes("sk-thrown-secret-4e8d"));
+    assert.ok(!serialized.includes("Headers.append"));
+  },
+);

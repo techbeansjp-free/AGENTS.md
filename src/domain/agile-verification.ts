@@ -1,5 +1,6 @@
 import { isRecord } from "../types.js";
 import { POC_HIGH_RISK_IDS, QUICK_DISQUALIFIER_IDS } from "./mode.js";
+import { PLAN_AMENDMENT_FILE } from "./plan-seal.js";
 
 export type ChangeType =
   | "bug-fix"
@@ -450,6 +451,7 @@ export function parseImplementationDiscoveryInput(
 export type DiscoveryDisposition =
   | "continue"
   | "rebaseline-affected-contracts"
+  | "record-planning-amendment"
   | "promote-to-full"
   | "stop-or-promote-full";
 
@@ -460,6 +462,8 @@ export interface DiscoveryAssessment {
   disposition: DiscoveryDisposition;
   affectedArtifacts: readonly string[];
   promotionArtifacts?: readonly string[];
+  /** 封印済み計画のうち、計画変更記録が変更を述べる対象文書（REQ-WF-036）。 */
+  amendmentTargets?: readonly string[];
   requiredRecordFields: readonly string[];
 }
 
@@ -480,7 +484,32 @@ const FULL_CONTRACT_ARTIFACTS = Object.freeze([
   "03_実装計画.md",
 ]);
 
+/**
+ * 実装中発見の振り分け。**計画封印後（REQ-WF-036）は、影響成果物の再確定を
+ * 計画変更記録`05_計画変更.md`への追記へ置き換える。** 承認済み00〜03は書き換えず、
+ * 変更対象の文書を`amendmentTargets`として返す。full昇格と停止の判定は封印に
+ * よらず変えない（昇格後のStep 8記録が新しい封印になる）。`planSealed`は
+ * 利用者入力ではなく、呼出し側がjournalから観測した値である。
+ */
 export function assessImplementationDiscovery(
+  discovery: ImplementationDiscovery,
+  context: { planSealed?: boolean } = {},
+): DiscoveryAssessment {
+  const assessment = assessUnsealedDiscovery(discovery);
+  if (
+    context.planSealed !== true ||
+    assessment.disposition !== "rebaseline-affected-contracts"
+  )
+    return assessment;
+  return {
+    ...assessment,
+    disposition: "record-planning-amendment",
+    affectedArtifacts: Object.freeze([PLAN_AMENDMENT_FILE]),
+    amendmentTargets: assessment.affectedArtifacts,
+  };
+}
+
+function assessUnsealedDiscovery(
   discovery: ImplementationDiscovery,
 ): DiscoveryAssessment {
   const workflowMode = discovery.workflowMode;

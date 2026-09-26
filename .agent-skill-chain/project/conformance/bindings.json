@@ -47,7 +47,7 @@
       "id": "I4",
       "sourcePaths": [
         ".agent-skill-chain/project-policy.json",
-        ".agent-skill-chain/templates/issue/04_レビュー.md"
+        ".agent-skill-chain/schemas/review-evidence.schema.json"
       ],
       "enforcement": [
         {
@@ -102,7 +102,7 @@
       "sourcePaths": [
         "docs/specs/11_非機能/01_品質要件.md",
         ".agent-skill-chain/docs/02_品質基準.md",
-        ".agent-skill-chain/templates/issue/04_レビュー.md",
+        ".agent-skill-chain/schemas/review-evidence.schema.json",
         "scripts/check_project_quality.ts"
       ],
       "enforcement": [

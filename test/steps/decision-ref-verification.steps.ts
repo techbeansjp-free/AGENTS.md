@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { appendLegacyJournal } from "../support/legacy-journal.js";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -79,7 +80,7 @@ function createFixture(world: DecisionRefWorld): {
     requestedMode: "quick",
   }).path;
   const journal = path.join(world.staging, STEP_JOURNAL_FILE);
-  fs.appendFileSync(
+  appendLegacyJournal(
     journal,
     `${JSON.stringify({
       step: 9,
@@ -192,7 +193,7 @@ Given(
       "fix: follow-up",
     );
     const journal = path.join(this.staging, STEP_JOURNAL_FILE);
-    fs.appendFileSync(
+    appendLegacyJournal(
       journal,
       `${JSON.stringify({
         step: 9,

@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { checkFileAudit } from "../../scripts/check_file_audit.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
+import { syntheticReviewEvidenceContent } from "../support/review-evidence-fixture.js";
 
 type AuditResult = ReturnType<typeof checkFileAudit>;
 
@@ -41,40 +42,18 @@ function writeAuditArtifact(
   root: string,
   base: string,
   implementation: string,
-  generated: "complete" | "missing" | undefined = undefined,
   auditDirectory = "docs/reviews",
 ): void {
-  const auditPath = `${auditDirectory}/01_課題873実装レビュー.md`;
-  const artifact = `# 課題873 実装レビュー
-
-## 0. レビュー識別情報
-
-| 項目 | 値 |
-|---|---|
-| 比較基点 | \`${base}\` |
-| H_impl | \`${implementation}\` |
-| ラウンド数 | 1 |
-| Step chain | 迂回: fixtureのため製品経路を通していない |
-| 仕様の所有箇所 | docs/specs/fixture.md:1「fixtureの仕様」 |
-| 成果物行数 | 製品 1行 / 支援層 2行 |
-| 縮小の先行評価 | 既存fixtureの流用では監査経路を通らないため |
-
-## 変更ファイル個別監査
-
-| path | status | owner | target layer | 責務・配置 | 依存・循環 | 仕様・追跡 | 安全・rollback | 個別判定 |
-|---|---|---|---|---|---|---|---|---|
-| \`implementation.txt\` | M | maintainer | fixture | 実装 | 依存なし | AC-873 | 差分を戻す | pass |
-${
-  generated === undefined
-    ? ""
-    : generated === "complete"
-      ? "| `dist/src/generated.js` | A | maintainer | 生成物 | 生成元との対応を再build後のclean差分で確認 | 生成元 → 生成物 | AC-873 | §8の配布物影響表とpackage filesで確認。revert | pass |"
-      : "| `dist/src/generated.js` | A | maintainer | 生成物 | build結果 | sourceから導出 | AC-873 | revert | pass |"
-}
-`;
-  const artifactFile = path.join(root, auditPath);
+  const artifactFile = path.join(root, auditDirectory, "873_review.json");
   fs.mkdirSync(path.dirname(artifactFile), { recursive: true });
-  fs.writeFileSync(artifactFile, artifact);
+  fs.writeFileSync(
+    artifactFile,
+    syntheticReviewEvidenceContent({
+      issue: 873,
+      baseSha: base,
+      implementationHeadSha: implementation,
+    }),
+  );
 }
 
 function createAuditedRepository(
@@ -97,7 +76,7 @@ function createAuditedRepository(
   const base = commitAll(root, "test: 監査fixtureの基点を作る");
   fs.writeFileSync(path.join(root, "implementation.txt"), "implemented\n");
   const implementation = commitAll(root, "feat: 監査対象を実装する");
-  writeAuditArtifact(root, base, implementation, undefined, auditDirectory);
+  writeAuditArtifact(root, base, implementation, auditDirectory);
   commitAll(root, "docs: 課題873実装レビューを記録する");
   world.auditRoot = root;
   return root;
@@ -162,28 +141,7 @@ Given("生成物distを実装commitへ含む隔離repository", function () {
     "export const generated = true;\n",
   );
   const implementation = commitAll(root, "feat: 監査対象と生成物を実装する");
-  writeAuditArtifact(root, base, implementation, "complete");
-  commitAll(root, "docs: 課題873実装レビューを記録する");
-  this.auditRoot = root;
-});
-
-Given("根拠のない生成物dist行を持つ隔離repository", function () {
-  const root = this.initRepo();
-  writeJson(root, "package.json", {
-    name: "audit-fixture",
-    version: "0.3.1-beta.1",
-    description: "fixture",
-  });
-  fs.writeFileSync(path.join(root, "implementation.txt"), "base\n");
-  const base = commitAll(root, "test: 監査fixtureの基点を作る");
-  fs.writeFileSync(path.join(root, "implementation.txt"), "implemented\n");
-  fs.mkdirSync(path.join(root, "dist", "src"), { recursive: true });
-  fs.writeFileSync(
-    path.join(root, "dist", "src", "generated.js"),
-    "generated\n",
-  );
-  const implementation = commitAll(root, "feat: 生成物を変更する");
-  writeAuditArtifact(root, base, implementation, "missing");
+  writeAuditArtifact(root, base, implementation);
   commitAll(root, "docs: 課題873実装レビューを記録する");
   this.auditRoot = root;
 });
@@ -393,7 +351,7 @@ Then("file監査はbump commitを境界に含めたことを理由に失敗す�
    */
   assert.match(
     (this.auditResult?.errors ?? []).join(" "),
-    /review artifactのcommitがありません/u,
+    /review証跡のcommitがありません/u,
   );
 });
 
@@ -412,17 +370,10 @@ Then("file監査は合格する", function () {
   );
 });
 
-Then("file監査は生成物行の確認方法不足を理由に失敗する", function () {
-  assert.equal(this.auditResult?.valid, false);
-  const errors = this.auditResult?.errors.join("\n") ?? "";
-  assert.match(errors, /生成元との対応確認方法がありません/u);
-  assert.match(errors, /配布影響の確認方法がありません/u);
-});
-
 Then("file監査はreview artifact以外のpathを理由に失敗する", function () {
   assert.equal(this.auditResult?.valid, false);
   assert.match(
     this.auditResult?.errors.join("\n") ?? "",
-    /H_impl\.\.currentはreview artifactだけ/u,
+    /H_impl\.\.currentはreview証跡だけ/u,
   );
 });

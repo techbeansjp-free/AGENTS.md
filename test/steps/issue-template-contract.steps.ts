@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { appendLegacyJournal } from "../support/legacy-journal.js";
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -441,7 +442,7 @@ When("検証済みIssueのreview round初期化draftを生成する", function (
   this.issuePath = staging;
   const validation = validateIssue(staging);
   assert.equal(validation.valid, true, validation.errors.join("; "));
-  fs.appendFileSync(
+  appendLegacyJournal(
     path.join(staging, STEP_JOURNAL_FILE),
     `${JSON.stringify({
       step: 9,

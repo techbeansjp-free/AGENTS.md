@@ -39,12 +39,10 @@ import {
   resolveDcand001,
   resolveDcand002,
   resolveDcand003,
-  resolveDcand004,
   resolveDcand005,
   resolveDcand008,
   type Dcand001Input,
   type Dcand003Input,
-  type Dcand004Input,
   type Dcand005Input,
   type Dcand008Input,
 } from "../domain/decision-resolvers.js";
@@ -165,15 +163,6 @@ function runDeterministicResolver(
         proposedValue: String(result),
         resolverOutput: result,
         adjudicationReason: `requiresSpecUpdate=${result}`,
-        deferToProvider: false,
-      };
-    }
-    case "DCAND-004": {
-      const result = resolveDcand004(payload as Dcand004Input);
-      return {
-        proposedValue: result,
-        resolverOutput: result,
-        adjudicationReason: "auditRowDraftによる事前充填",
         deferToProvider: false,
       };
     }

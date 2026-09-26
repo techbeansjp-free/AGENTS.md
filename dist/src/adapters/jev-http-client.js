@@ -1,5 +1,32 @@
 import { JEV_ENDPOINT, buildJevChoiceRequestBody, parseJevChoiceResponse, validateJevEgressPayload, } from "../domain/jev-dispatch.js";
 const DEFAULT_TIMEOUT_MS = 15000;
+const BEARER_TOKEN_PATTERN = /^[\x21-\x7e]+$/u;
+const SAFE_ERROR_TOKEN = /^[A-Za-z0-9_]{1,64}$/u;
+function safeErrorToken(value) {
+    return typeof value === "string" && SAFE_ERROR_TOKEN.test(value)
+        ? value
+        : undefined;
+}
+function errorCode(error) {
+    if (typeof error !== "object" || error === null)
+        return undefined;
+    const direct = safeErrorToken(error.code);
+    if (direct !== undefined)
+        return direct;
+    const cause = error.cause;
+    if (typeof cause !== "object" || cause === null)
+        return undefined;
+    return safeErrorToken(cause.code);
+}
+function describeTransportError(error) {
+    const name = error instanceof Error
+        ? (safeErrorToken(error.name) ?? "Error")
+        : "unknown";
+    const code = errorCode(error);
+    return code === undefined
+        ? `transport error (${name})`
+        : `transport error (${name}/${code})`;
+}
 function defaultFetchTransport(url, init) {
     return fetch(url, init);
 }
@@ -30,6 +57,18 @@ export async function dispatchJevChoice(params) {
             outcome: {
                 kind: "auth-error",
                 detail: `env var ${params.config.apiKeyEnvVar} が未設定です`,
+            },
+            latencyMs: 0,
+        };
+    // HTTP header値として安全な印字可能ASCII（空白・制御文字を含まない）だけを
+    // 受け付ける。改行・NUL等を含む値をfetchへ渡すと、例外messageへ
+    // `Bearer <値>`がそのまま載り、outcome.detail経由でjev-shadow.jsonlへ
+    // 永続化される（独立security review L1）。値そのものは出力しない。
+    if (!BEARER_TOKEN_PATTERN.test(resolvedKeyValue))
+        return {
+            outcome: {
+                kind: "auth-error",
+                detail: `env var ${params.config.apiKeyEnvVar} の値がHTTP header値として不正な文字を含みます`,
             },
             latencyMs: 0,
         };
@@ -87,7 +126,9 @@ export async function dispatchJevChoice(params) {
     }
     catch (error) {
         const latencyMs = Date.now() - startedAt;
-        const detail = error instanceof Error ? error.message : String(error);
+        // transport例外のmessageは複製しない（値やheaderを含み得る）。固定文言と
+        // error class名・codeだけを残す（独立security review L1）。
+        const detail = describeTransportError(error);
         return {
             outcome: {
                 kind: "network-error",

@@ -97,6 +97,14 @@
         },
         "tracked": { "type": "boolean" },
         "issueBody": { "enum": ["full", "pointer"] }
+      },
+      "if": {
+        "required": ["issueBody"],
+        "properties": { "issueBody": { "const": "pointer" } }
+      },
+      "then": {
+        "required": ["root", "tracked"],
+        "properties": { "tracked": { "const": true } }
       }
     },
     "worktree": {
