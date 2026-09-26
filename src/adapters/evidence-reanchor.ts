@@ -9,17 +9,16 @@ import {
   deriveEffectiveHead,
   isContentEquivalent,
   isRebaseEquivalent,
-  parseReviewIdentityAnchor,
   type RebaseEquivalenceReason,
   isEvidenceReanchorRecord,
   type EvidenceReanchorRecord,
 } from "../domain/evidence-reanchor.js";
 import {
-  validateReviewArtifactStructure,
-  parseReviewArtifactAudit,
-  validateContextIsolatedApprovalRecord,
-  visibleMarkdownLines,
-} from "../domain/review-artifact.js";
+  comparableReviewEvidence,
+  tryParseReviewEvidence,
+  validateReviewEvidenceAgainstSession,
+  type ReviewEvidence,
+} from "../domain/review-evidence.js";
 import { isEvidenceOnlyPath } from "../domain/review.js";
 import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
 import {
@@ -173,7 +172,7 @@ function verifiedImplementationBoundary(
   /**
    * **Git観測の失敗を例外のまま外へ出さない。**
    *
-   * `parseReviewIdentityAnchor`は40桁hexの書式だけを見るため、**存在しないSHAも
+   * `parseReviewEvidence`はSHAの書式だけを見るため、**存在しないSHAも
    * 通す。** その値で`observeReviewDiff`を呼ぶと`git rev-parse`が失敗して例外になり、
    * 拒否理由へ変換されないまま呼び出し元へ伝播する（Issue #1172、外部review）。
    * **同定できない入力は理由つきで拒否する。**
@@ -309,10 +308,18 @@ function observeRebaseEquivalence(
   const afterArtifact = readBlobAtCommit(root, input.newHeadSha, afterPath);
   if (beforeArtifact === undefined || afterArtifact === undefined)
     return { reason: "artifact-unreadable" };
-  const beforeAnchor = parseReviewIdentityAnchor(beforeArtifact);
-  const afterAnchor = parseReviewIdentityAnchor(afterArtifact);
-  if (beforeAnchor === undefined || afterAnchor === undefined)
+  const beforeParsed = tryParseReviewEvidence(beforeArtifact);
+  const afterParsed = tryParseReviewEvidence(afterArtifact);
+  if (!("evidence" in beforeParsed) || !("evidence" in afterParsed))
     return { reason: "identity-unresolvable" };
+  const beforeAnchor = {
+    base: beforeParsed.evidence.baseSha,
+    implementation: beforeParsed.evidence.implementationHeadSha,
+  };
+  const afterAnchor = {
+    base: afterParsed.evidence.baseSha,
+    implementation: afterParsed.evidence.implementationHeadSha,
+  };
   /** **宣言した比較基点が再固定の基点と一致することを要求する。** */
   if (
     beforeAnchor.base !== input.oldBaseSha ||
@@ -349,8 +356,8 @@ function observeRebaseEquivalence(
    * **新`H_final`がevidence-only suffixの形をmodeまで満たすことを要求する。**
    *
    * `verifiedImplementationBoundary`は変更pathの件数と名前しか見ない。mode
-   * `100755`のMarkdownは通常fileなので`git show`で本文が読め、構造検証・
-   * identity anchor・approval・個別監査表をすべて通過する。round 2は
+   * `100755`の証跡は通常fileなので`git show`で本文が読め、証跡の厳密解析を
+   * すべて通過する。round 2は
    * `artifact-replacement`と`reviewed-forward`の2経路にこの検査を足したが、
    * **通常rebase経路（本関数）は対象外のまま残っていた。** `isContentEquivalent`が
    * mode変更を含む「new file mode」行の差でfalseになり必ずこの関数へ入るため、
@@ -411,107 +418,49 @@ interface ReviewedForwardEvidence {
   artifactDigest: string;
 }
 
+function digestOf(content: string): string {
+  return crypto.createHash("sha256").update(content).digest("hex");
+}
+
 /**
- * path是正で変わってよい機械導出・監査領域だけを正規化する。
- * finding、判定、独立性、test証拠などreview判断の本文はbyte比較へ残す。
+ * 新しいreview証跡を保存済みsessionと最新Step 10 bindingへ照合する。
+ *
+ * **証跡の値をauthorityにしない。** findingの最終状態・未解決Critical/High・
+ * count済みround数はsessionから再導出した値との一致だけを受理し、`H_impl`は
+ * sessionの収束candidate HEADそのものを要求する。
  */
-function comparableArtifactContent(
-  markdown: string,
-  ignoreDistribution = true,
-): string {
-  const output: string[] = [];
-  let ignoredSection: "audit" | "distribution" | undefined;
-  const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-  const visible = visibleMarkdownLines(markdown);
-  for (const [index, line] of lines.entries()) {
-    if (visible[index] !== "") {
-      if (line === "### 1.1 変更ファイル個別監査") {
-        ignoredSection = "audit";
-        output.push(line, "<machine-audit>");
-        continue;
-      }
-      if (ignoreDistribution && line === "## 8. 配布物影響") {
-        ignoredSection = "distribution";
-        output.push(line, "<distribution-audit>");
-        continue;
-      }
-      if (
-        ignoredSection !== undefined &&
-        /^##(?: |$)/u.test(line) &&
-        (line !== "## 8. 配布物影響" || !ignoreDistribution)
-      )
-        ignoredSection = undefined;
-      if (
-        ignoredSection === undefined &&
-        (/^\| Step chain \|/u.test(line) ||
-          /^\| commit前candidate \|/u.test(line))
-      ) {
-        output.push(`| ${line.split("|")[1]?.trim()} | <derived> |`);
-        continue;
-      }
-      const coverage =
-        /^\| 範囲漏れ \| ([^|]+) \| ([^|]+) \| (\d+ path監査|\d+監査pathと生成物\d+ path) \|$/u.exec(
-          line,
-        );
-      if (ignoredSection === undefined && coverage !== null) {
-        output.push(
-          `| 範囲漏れ | ${coverage[1]} | ${coverage[2]} | <derived-audit-count> |`,
-        );
-        continue;
-      }
-    }
-    if (ignoredSection === undefined) output.push(line);
-  }
-  return output.join("\n");
+function acceptedSessionEvidence(
+  staging: string,
+  evidence: ReviewEvidence,
+  options: { postPrIntake: boolean },
+): boolean {
+  const session = readStoredReviewSession(staging);
+  const journal = readWorkflowJournal(staging);
+  const step10 = [...journal.entries]
+    .reverse()
+    .find(
+      (entry) =>
+        entry.step === 10 && (!options.postPrIntake || entry.postPrIntake),
+    )?.reviewSession;
+  return (
+    session !== null &&
+    session.status === "converged" &&
+    session.latestCandidateHeadSha === evidence.implementationHeadSha &&
+    validateReviewEvidenceAgainstSession(evidence, session).length === 0 &&
+    step10 !== undefined &&
+    step10.sessionId === session.sessionId &&
+    step10.roundDigest === session.latestRoundDigest &&
+    step10.headSha === session.latestCandidateHeadSha &&
+    journal.errors.length === 0
+  );
 }
 
-/** §9/§11の旧書式を正規書式へ直した場合だけ判断本文の比較から除く。 */
-function comparableSupersessionContent(markdown: string): {
-  body: string;
-  judgmentDetails: string[];
-} {
-  const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-  const visible = visibleMarkdownLines(markdown);
-  const judgmentDetails: string[] = [];
-  const normalized = lines.flatMap((line, index) => {
-    if (visible[index] === "") return [line];
-    if (
-      /^\| 適用した独立性モード \| context-isolated(?:（未宣言時の既定）)? \|$/u.test(
-        line,
-      )
-    )
-      return ["| 適用した独立性モード | context-isolated |"];
-    if (
-      line ===
-        "| reviewerが対象差分を変更していないこと | はい。製品path変更0件 |" ||
-      line ===
-        "| reviewerが対象差分を変更していないこと | はい（製品path変更0件） |"
-    )
-      return ["| reviewerが対象差分を変更していないこと | <確認済み書式> |"];
-    const oldSummary = /^- 未解決Critical\/High: 0件(?:。(.*))?$/u.exec(line);
-    if (oldSummary !== null) {
-      if (oldSummary[1] !== undefined) judgmentDetails.push(oldSummary[1]);
-      return oldSummary[1] === undefined
-        ? ["- 未解決Critical/High: <0件>"]
-        : ["- 未解決Critical/High: <0件>", "- Critical/Highの内訳: <detail>"];
-    }
-    if (line === "- 未解決Critical/High: なし")
-      return ["- 未解決Critical/High: <0件>"];
-    const detail =
-      /^- Critical\/Highの内訳: Critical 0件、(High \d+件.*)$/u.exec(line);
-    if (detail !== null) {
-      judgmentDetails.push(detail[1]!);
-      return ["- Critical/Highの内訳: <detail>"];
-    }
-    return [line];
-  });
-  return {
-    body: comparableArtifactContent(normalized.join("\n"), false),
-    judgmentDetails,
-  };
-}
-
-/** push済みartifactの同一path前進修正を、判断本文が同じ場合だけ受理する。 */
+/**
+ * push済み証跡の同一path前進修正を、review判断が同じ場合だけ受理する。
+ *
+ * **変わってよいのは検証記録（`verification`）だけである。** 比較基点・`H_impl`・
+ * session・finding・独立性・判定は完全一致を要求する。
+ */
 function observeArtifactSupersession(
   staging: string,
   root: string,
@@ -560,38 +509,26 @@ function observeArtifactSupersession(
     oldArtifact === newArtifact
   )
     return undefined;
-  const oldAnchor = parseReviewIdentityAnchor(oldArtifact);
-  const newAnchor = parseReviewIdentityAnchor(newArtifact);
-  if (
-    oldAnchor === undefined ||
-    newAnchor === undefined ||
-    oldAnchor.base !== input.oldBaseSha ||
-    newAnchor.base !== input.newBaseSha ||
-    oldAnchor.implementation !== newAnchor.implementation
-  )
+  const oldParsed = tryParseReviewEvidence(oldArtifact);
+  const newParsed = tryParseReviewEvidence(newArtifact);
+  if (!("evidence" in oldParsed) || !("evidence" in newParsed))
     return undefined;
-  const stepChainRows = (markdown: string): string[] =>
-    visibleMarkdownLines(markdown).filter((line) =>
-      /^\| Step chain \|/u.test(line),
-    );
-  const oldStepChainRows = stepChainRows(oldArtifact);
-  const newStepChainRows = stepChainRows(newArtifact);
+  const oldEvidence = oldParsed.evidence;
+  const newEvidence = newParsed.evidence;
   if (
-    oldStepChainRows.length !== 1 ||
-    newStepChainRows.length !== 1 ||
-    oldStepChainRows[0] !== newStepChainRows[0]
+    oldEvidence.baseSha !== input.oldBaseSha ||
+    newEvidence.baseSha !== input.newBaseSha ||
+    oldEvidence.implementationHeadSha !== newEvidence.implementationHeadSha ||
+    comparableReviewEvidence(oldEvidence, "supersession") !==
+      comparableReviewEvidence(newEvidence, "supersession")
   )
     return undefined;
   if (
-    evidenceOnlySuffix(root, newAnchor.implementation, input.newHeadSha) !==
-    artifactPath
-  )
-    return undefined;
-  const oldBody = comparableSupersessionContent(oldArtifact);
-  const newBody = comparableSupersessionContent(newArtifact);
-  if (
-    oldBody.body !== newBody.body ||
-    stableJson(oldBody.judgmentDetails) !== stableJson(newBody.judgmentDetails)
+    evidenceOnlySuffix(
+      root,
+      newEvidence.implementationHeadSha,
+      input.newHeadSha,
+    ) !== artifactPath
   )
     return undefined;
   if (
@@ -599,71 +536,26 @@ function observeArtifactSupersession(
       root,
       input.newHeadSha,
       artifactPath,
-      newAnchor.implementation,
+      newEvidence.implementationHeadSha,
       input,
       "新H_impl→新head",
     ).valid
   )
     return undefined;
-  const structure = validateReviewArtifactStructure(newArtifact);
-  const approval = validateContextIsolatedApprovalRecord(newArtifact);
-  const audit = parseReviewArtifactAudit(newArtifact);
-  const session = readStoredReviewSession(staging);
-  const journal = readWorkflowJournal(staging);
-  const step10 = [...journal.entries]
-    .reverse()
-    .find((entry) => entry.step === 10)?.reviewSession;
-  const implementation = observeReanchorDiff(
-    root,
-    "新base→新H_impl",
-    input,
-    input.newBaseSha,
-    newAnchor.implementation,
-    newAnchor.implementation,
-  );
-  if (
-    structure.diagnostics.length > 0 ||
-    structure.implementation !== newAnchor.implementation ||
-    structure.stepChain?.kind !== "via" ||
-    !approval.valid ||
-    session?.status !== "converged" ||
-    session.latestCandidateHeadSha !== newAnchor.implementation ||
-    step10?.sessionId !== session.sessionId ||
-    step10.roundDigest !== session.latestRoundDigest ||
-    step10.headSha !== session.latestCandidateHeadSha ||
-    journal.errors.length > 0 ||
-    audit.entries.some((entry) => entry.decision !== "pass") ||
-    stableJson(audit.entries.map((entry) => entry.path).sort()) !==
-      stableJson([...implementation.changedPaths].sort())
-  )
+  if (!acceptedSessionEvidence(staging, newEvidence, { postPrIntake: false }))
     return undefined;
   return {
     artifactPath,
-    oldDigest: crypto.createHash("sha256").update(oldArtifact).digest("hex"),
-    newDigest: crypto.createHash("sha256").update(newArtifact).digest("hex"),
+    oldDigest: digestOf(oldArtifact),
+    newDigest: digestOf(newArtifact),
   };
 }
 
 /**
- * strict validator導入前のartifactが使った同義表記だけを現行表記へ写像する。
- * 比較対象の旧新artifactは先に本文等価を要求するため、この写像で判断変更は隠せない。
- */
-function canonicalApprovalContent(markdown: string): string {
-  return markdown
-    .replace(
-      "| 適用した独立性モード | context-isolated（未宣言時の既定） |",
-      "| 適用した独立性モード | context-isolated |",
-    )
-    .replace(
-      "| reviewerが対象差分を変更していないこと | はい。製品path変更0件 |",
-      "| reviewerが対象差分を変更していないこと | はい（製品path変更0件） |",
-    )
-    .replaceAll("- 未解決Critical/High: 0件", "- 未解決Critical/High: なし");
-}
-
-/**
- * 通常のrebase等価性から外れるartifact改名を、同じreview済み実装境界へ閉じる。
- * 新artifactの自己申告だけでは受理せず、Git構造・保存済みidentity・監査表を再計測する。
+ * 通常のrebase等価性から外れる証跡の改名を、同じreview済み実装境界へ閉じる。
+ *
+ * **path是正だけを受理するため、証跡の内容はbyte一致を要求する。** 新pathの
+ * 自己申告だけでは受理せず、Git構造・保存済みsession・Step 10 bindingを再計測する。
  */
 function observeArtifactReplacement(
   staging: string,
@@ -687,7 +579,7 @@ function observeArtifactReplacement(
   const oldPath = terminalArtifactPath(beforeAll.changedPaths);
   const newPath = terminalArtifactPath(afterAll.changedPaths);
   /**
-   * **新artifactがevidence-only allowlist配下であることは`terminalArtifactPath`が
+   * **新証跡がevidence-only allowlist配下であることは`terminalArtifactPath`が
    * 既に保証している。** basenameの字面を重ねて要求しない（Issue #1433）。
    */
   if (oldPath === undefined || newPath === undefined || oldPath === newPath)
@@ -697,18 +589,15 @@ function observeArtifactReplacement(
   if (
     oldArtifact === undefined ||
     newArtifact === undefined ||
-    comparableArtifactContent(oldArtifact) !==
-      comparableArtifactContent(newArtifact)
+    oldArtifact !== newArtifact
   )
     return undefined;
-  const beforeAnchor = parseReviewIdentityAnchor(oldArtifact);
-  const afterAnchor = parseReviewIdentityAnchor(newArtifact);
+  const parsed = tryParseReviewEvidence(newArtifact);
+  if (!("evidence" in parsed)) return undefined;
+  const evidence = parsed.evidence;
   if (
-    beforeAnchor === undefined ||
-    afterAnchor === undefined ||
-    beforeAnchor.base !== input.oldBaseSha ||
-    afterAnchor.base !== input.newBaseSha ||
-    beforeAnchor.implementation !== afterAnchor.implementation
+    evidence.baseSha !== input.oldBaseSha ||
+    evidence.baseSha !== input.newBaseSha
   )
     return undefined;
   if (
@@ -716,7 +605,7 @@ function observeArtifactReplacement(
       root,
       input.oldHeadSha,
       oldPath,
-      beforeAnchor.implementation,
+      evidence.implementationHeadSha,
       input,
       "旧H_impl→旧head",
     ).valid ||
@@ -724,7 +613,7 @@ function observeArtifactReplacement(
       root,
       input.newHeadSha,
       newPath,
-      afterAnchor.implementation,
+      evidence.implementationHeadSha,
       input,
       "新H_impl→新head",
     ).valid
@@ -733,98 +622,35 @@ function observeArtifactReplacement(
   /**
    * **新`H_final`がevidence-only suffixの形をmodeまで満たすことを要求する。**
    *
-   * `terminalArtifactPath`が見るのはpathだけである。mode `100755`のMarkdownは
-   * 通常fileなので`git show`で本文が読め、構造検証・identity anchor・approval・
-   * 個別監査表をすべて通過する。TERM-ASC-101はmode `100644`の通常file 1件の
-   * 追加または変更だけをevidence-only suffixとする。
-   *
-   * **`pr create`は`evidenceOnlySuffix`でこれを検査するが、再固定で実効HEADへ
-   * 入った新headは以後どこでも再検査されない。** `assertConvergedReviewSession`の
-   * suffix検査は実効HEADとcurrent HEADが異なるときだけ走り、再固定後は両者が
-   * 一致するため素通りする。**再固定がこの形を確かめる唯一の地点である**
-   * （Issue #1433、外部review round 2）。
-   *
-   * 旧`H_final`側へは適用しない。過去に受理した記録を遡って拒否へ変えない。
+   * `terminalArtifactPath`が見るのはpathだけである。TERM-ASC-101はmode `100644`の
+   * 通常file 1件の追加または変更だけをevidence-only suffixとする。再固定で実効HEADへ
+   * 入った新headは以後どこでも再検査されないため、**再固定がこの形を確かめる唯一の
+   * 地点である**（Issue #1433、外部review round 2）。
    */
   if (
-    evidenceOnlySuffix(root, afterAnchor.implementation, input.newHeadSha) !==
-    newPath
+    evidenceOnlySuffix(
+      root,
+      evidence.implementationHeadSha,
+      input.newHeadSha,
+    ) !== newPath
   )
     return undefined;
-  const beforeImplementation = observeReanchorDiff(
-    root,
-    "旧base→旧H_impl",
-    input,
-    input.oldBaseSha,
-    beforeAnchor.implementation,
-    beforeAnchor.implementation,
-  );
-  const afterImplementation = observeReanchorDiff(
-    root,
-    "新base→新H_impl",
-    input,
-    input.newBaseSha,
-    afterAnchor.implementation,
-    afterAnchor.implementation,
-  );
-  if (!isContentEquivalent(beforeImplementation, afterImplementation))
+  if (!acceptedSessionEvidence(staging, evidence, { postPrIntake: false }))
     return undefined;
-  const structure = validateReviewArtifactStructure(newArtifact);
-  const audit = parseReviewArtifactAudit(newArtifact);
-  const approval = validateContextIsolatedApprovalRecord(
-    canonicalApprovalContent(newArtifact),
-  );
-  const session = readStoredReviewSession(staging);
-  const journal = readWorkflowJournal(staging);
-  const step10 = [...journal.entries]
-    .reverse()
-    .find((entry) => entry.step === 10)?.reviewSession;
-  /** 版管理下の生成物も監査表では1 file 1行の対象である。 */
-  const expectedPaths = [...afterImplementation.changedPaths].sort();
-  const auditedPaths = audit.entries.map((entry) => entry.path).sort();
-  if (
-    structure.diagnostics.length > 0 ||
-    structure.base !== input.newBaseSha ||
-    structure.implementation !== afterAnchor.implementation ||
-    structure.rounds === undefined ||
-    structure.rounds < 1 ||
-    structure.stepChain?.kind !== "via" ||
-    !approval.valid ||
-    session === null ||
-    session.status !== "converged" ||
-    session.latestCandidateHeadSha !== afterAnchor.implementation ||
-    step10 === undefined ||
-    step10.sessionId !== session.sessionId ||
-    step10.roundDigest !== session.latestRoundDigest ||
-    step10.headSha !== session.latestCandidateHeadSha ||
-    journal.errors.length > 0 ||
-    audit.entries.some((entry) => entry.decision !== "pass") ||
-    JSON.stringify(expectedPaths) !== JSON.stringify(auditedPaths)
-  )
-    return undefined;
-  return {
-    oldPath,
-    newPath,
-    oldDigest: crypto.createHash("sha256").update(oldArtifact).digest("hex"),
-    newDigest: crypto.createHash("sha256").update(newArtifact).digest("hex"),
-  };
+  const digest = digestOf(newArtifact);
+  return { oldPath, newPath, oldDigest: digest, newDigest: digest };
 }
 
 /**
  * `pr-bound`後に外部reviewer指摘を取り込んだ前進commitを、新しいreview roundへ
  * 束縛する。旧delivery headをancestorに持つこと、exact session、明示intake、
- * review artifactの構造と監査をすべて再観測し、force rewriteや未review差分を拒否する。
+ * review証跡とsessionの一致をすべて再観測し、force rewriteや未review差分を拒否する。
  *
  * **base変更（既定branch追随）も同じ経路で扱う（Issue #1493）。** 以降の全チェックは
- * `input.newBaseSha`だけを参照し`input.oldBaseSha`には依存しないため、base自体を
- * 固定する必要はない。base変更を認識するために必要な追加条件は「oldBaseShaが
- * newBaseShaの正当な前進（ancestor）であること」の1点であり、`merge-base --is-ancestor`
- * だけをlocal Gitへ問い合わせて確認する。**フルdiffは計算しない。** 全scope diffの
- * digest計算（`observeReanchorDiff`経由）を流用すると、既定branchが大きく前進した場合に
- * diff本体が出力上限を超えて例外になり、正当な前進が「非ancestor」と誤って拒否される
- * （Step 10前の独立reviewの指摘）。newBaseShaが実際のGitHub既定branch tipであること
- * まではここで検証しない。それは`pr merge`が既定branch tipの観測値を基点に
- * ancestor再確認として行う（`inspectAuthorizedPullRequestMerge`、Issue #1493）。
+ * `input.newBaseSha`だけを参照するため、必要な追加条件は「oldBaseShaがnewBaseShaの
+ * 正当な前進（ancestor）であること」の1点であり、`merge-base --is-ancestor`だけを
+ * local Gitへ問い合わせて確認する。**フルdiffは計算しない。** newBaseShaが実際の
+ * GitHub既定branch tipであることは`pr merge`が確認する（`inspectAuthorizedPullRequestMerge`）。
  */
 function observeReviewedForward(
   staging: string,
@@ -851,14 +677,15 @@ function observeReviewedForward(
   if (artifactPath === undefined) return undefined;
   const artifact = readBlobAtCommit(root, input.newHeadSha, artifactPath);
   if (artifact === undefined) return undefined;
-  const anchor = parseReviewIdentityAnchor(artifact);
-  if (anchor === undefined || anchor.base !== input.newBaseSha)
-    return undefined;
-  if (finalParent !== anchor.implementation) return undefined;
-  if (input.oldHeadSha === anchor.implementation) return undefined;
+  const parsed = tryParseReviewEvidence(artifact);
+  if (!("evidence" in parsed)) return undefined;
+  const evidence = parsed.evidence;
+  if (evidence.baseSha !== input.newBaseSha) return undefined;
+  if (finalParent !== evidence.implementationHeadSha) return undefined;
+  if (input.oldHeadSha === evidence.implementationHeadSha) return undefined;
   try {
     /** `observeReviewDiff`の固定Git環境でstrict ancestorを再観測する。 */
-    observeReviewDiff(root, input.oldHeadSha, anchor.implementation);
+    observeReviewDiff(root, input.oldHeadSha, evidence.implementationHeadSha);
   } catch {
     return undefined;
   }
@@ -867,7 +694,7 @@ function observeReviewedForward(
       root,
       input.newHeadSha,
       artifactPath,
-      anchor.implementation,
+      evidence.implementationHeadSha,
       input,
       "新H_impl→新head",
     ).valid
@@ -875,57 +702,21 @@ function observeReviewedForward(
     return undefined;
   /** artifact-replacementと同じ理由でmodeまで確かめる（Issue #1433）。 */
   if (
-    evidenceOnlySuffix(root, anchor.implementation, input.newHeadSha) !==
-    artifactPath
+    evidenceOnlySuffix(
+      root,
+      evidence.implementationHeadSha,
+      input.newHeadSha,
+    ) !== artifactPath
   )
     return undefined;
-  const implementation = observeReanchorDiff(
-    root,
-    "新base→新H_impl",
-    input,
-    input.newBaseSha,
-    anchor.implementation,
-    anchor.implementation,
-  );
-  const structure = validateReviewArtifactStructure(artifact);
-  const audit = parseReviewArtifactAudit(artifact);
-  const approval = validateContextIsolatedApprovalRecord(
-    canonicalApprovalContent(artifact),
-  );
-  const session = readStoredReviewSession(staging);
-  const journal = readWorkflowJournal(staging);
-  const step10 = [...journal.entries]
-    .reverse()
-    .find((entry) => entry.step === 10 && entry.postPrIntake);
-  /** 版管理下の生成物も監査表では1 file 1行の対象である。 */
-  const expectedPaths = [...implementation.changedPaths].sort();
-  const auditedPaths = audit.entries.map((entry) => entry.path).sort();
-  if (
-    structure.diagnostics.length > 0 ||
-    structure.base !== input.newBaseSha ||
-    structure.implementation !== anchor.implementation ||
-    structure.rounds === undefined ||
-    structure.rounds < 1 ||
-    structure.stepChain?.kind !== "via" ||
-    !approval.valid ||
-    session === null ||
-    session.status !== "converged" ||
-    session.latestCandidateHeadSha !== anchor.implementation ||
-    step10?.reviewSession === undefined ||
-    step10.reviewSession.sessionId !== session.sessionId ||
-    step10.reviewSession.roundDigest !== session.latestRoundDigest ||
-    step10.reviewSession.headSha !== session.latestCandidateHeadSha ||
-    journal.errors.length > 0 ||
-    audit.entries.some((entry) => entry.decision !== "pass") ||
-    JSON.stringify(expectedPaths) !== JSON.stringify(auditedPaths)
-  )
+  if (!acceptedSessionEvidence(staging, evidence, { postPrIntake: true }))
     return undefined;
   return {
-    sessionId: session.sessionId,
-    roundDigest: session.latestRoundDigest,
-    implementationSha: anchor.implementation,
+    sessionId: evidence.session.sessionId,
+    roundDigest: evidence.session.latestRoundDigest,
+    implementationSha: evidence.implementationHeadSha,
     artifactPath,
-    artifactDigest: crypto.createHash("sha256").update(artifact).digest("hex"),
+    artifactDigest: digestOf(artifact),
   };
 }
 

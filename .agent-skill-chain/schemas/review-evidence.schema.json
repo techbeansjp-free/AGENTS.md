@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/agent-skill-chain/review-evidence.schema.json",
+  "title": "Step 10 structured review evidence",
+  "description": "`review export`が収束済みreview sessionから生成するreview証跡。手で書かない。evidenceDigestはevidenceDigestを除く全fieldの正規JSONのsha256であり、fileは正規直列化とbyte一致しなければならない。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "issue",
+    "baseSha",
+    "implementationHeadSha",
+    "session",
+    "findings",
+    "unresolvedCriticalHigh",
+    "independence",
+    "verdict",
+    "verification",
+    "evidenceDigest"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "agent-skill-chain/review-evidence/v1" },
+    "issue": { "type": "integer", "minimum": 1 },
+    "baseSha": { "$ref": "#/$defs/gitOid" },
+    "implementationHeadSha": { "$ref": "#/$defs/gitOid" },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sessionId", "latestRoundDigest", "status", "countedRounds"],
+      "properties": {
+        "sessionId": { "$ref": "#/$defs/sha256" },
+        "latestRoundDigest": { "$ref": "#/$defs/sha256" },
+        "status": { "const": "converged" },
+        "countedRounds": { "type": "integer", "minimum": 1, "maximum": 8 }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "severity",
+          "status",
+          "relation",
+          "path",
+          "contractId"
+        ],
+        "properties": {
+          "id": { "$ref": "#/$defs/stableId" },
+          "severity": { "enum": ["Critical", "High", "Medium", "Low"] },
+          "status": {
+            "enum": ["valid", "resolved", "duplicate", "false-positive"]
+          },
+          "relation": {
+            "enum": [
+              "acceptance-violation",
+              "invariant-violation",
+              "fix-regression",
+              "improvement",
+              "out-of-scope"
+            ]
+          },
+          "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+          "contractId": {
+            "oneOf": [{ "$ref": "#/$defs/stableId" }, { "type": "null" }]
+          }
+        }
+      }
+    },
+    "unresolvedCriticalHigh": { "type": "array", "maxItems": 0 },
+    "independence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "reviewer",
+        "implementer",
+        "reviewerModifiedCandidate"
+      ],
+      "properties": {
+        "mode": { "enum": ["context-isolated", "actor-independent"] },
+        "reviewer": { "$ref": "#/$defs/actorId" },
+        "implementer": { "$ref": "#/$defs/actorId" },
+        "reviewerModifiedCandidate": { "const": false }
+      }
+    },
+    "verdict": { "const": "approved" },
+    "verification": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "result"],
+        "properties": {
+          "command": { "type": "string", "minLength": 1, "maxLength": 4096 },
+          "result": { "const": "pass" }
+        }
+      }
+    },
+    "evidenceDigest": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "gitOid": {
+      "type": "string",
+      "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9._-]{1,127}$"
+    },
+    "actorId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:=/@-]{0,255}$"
+    }
+  }
+}
