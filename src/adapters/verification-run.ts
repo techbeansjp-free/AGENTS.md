@@ -19,11 +19,16 @@ import {
   stagingRepositoryRoot,
 } from "../domain/staging-layout.js";
 import {
-  missingTargetedFeatures,
+  DELIVERY_STATE_FILE,
+  parseDeliveryState,
+} from "../domain/delivery-state.js";
+import { loadTrustedVerificationPolicy } from "../domain/policy.js";
+import {
   parseVerificationRuns,
   renderVerificationRuns,
   sealVerificationRun,
   validateVerificationArgv,
+  verificationCommandViolation,
   VERIFICATION_RUN_FILE,
   VERIFICATION_RUN_SCHEMA_VERSION,
   type VerificationRunRecord,
@@ -33,7 +38,10 @@ import type { ImpactSet } from "../domain/impact-set.js";
 import { computeImpactSet } from "./impact-set.js";
 import { GIT_ENV } from "./review-diff.js";
 import { readStoredReviewSession } from "./review-session-store.js";
-import { assertWorkflowStaging } from "./workflow-journal.js";
+import {
+  assertWorkflowStaging,
+  readWorkflowJournal,
+} from "./workflow-journal.js";
 
 /** 記録fileの上限。超えたら読まずに拒否する（fail closed）。 */
 const MAX_RECORD_FILE_BYTES = 8 * 1024 * 1024;
@@ -88,11 +96,51 @@ function stagingDigestConsistent(staging: string): boolean {
 }
 
 /**
+ * delivery段階から`verify run`の可否を判定する（REQ-WF-040）。
+ *
+ * - **merge段階以降（`merge-prepared`・`merge-observed`・`reconciliation-required`、
+ *   merge済みまたは再配送中の`step11-recorded`）は拒否する。** mergeへ渡した証跡の
+ *   検証欄は確定済みであり、後から記録を足してstagingを動かさない
+ * - PR停止のStep 11記録後（post-terminal intakeの窓）は記録だけを許し、
+ *   **staging digestを再固定しない。** Step 11後のdigestを更新できるのは
+ *   `workflow record`のpost-terminal intakeだけである
+ *
+ * 読めないjournal・delivery stateは拒否する（fail closed）。
+ */
+function verificationDeliveryPhase(staging: string): "open" | "post-terminal" {
+  const file = path.join(staging, ...DELIVERY_STATE_FILE.split("/"));
+  const delivery = fs.existsSync(file)
+    ? parseDeliveryState(fs.readFileSync(file, "utf8"))
+    : undefined;
+  if (
+    delivery !== undefined &&
+    (delivery.state === "merge-prepared" ||
+      delivery.state === "merge-observed" ||
+      delivery.state === "reconciliation-required" ||
+      (delivery.state === "step11-recorded" &&
+        (delivery.step11?.outcome !== "pull-request" ||
+          delivery.redelivery !== undefined)))
+  )
+    throw new Error(
+      `delivery stateが${delivery.state}（merge段階以降）のためverify runを記録できません。merge済み・merge準備済みの証跡へ後から検証記録を足してstagingを動かすことはできません`,
+    );
+  const journal = readWorkflowJournal(staging);
+  if (journal.errors.length > 0)
+    throw new Error(
+      `workflow journalを読めないためverify runを記録できません: ${journal.errors.join("; ")}`,
+    );
+  return journal.entries.some(({ step }) => step === 11) ||
+    delivery?.state === "step11-recorded"
+    ? "post-terminal"
+    : "open";
+}
+
+/**
  * 検証記録を1件追記する。既存記録を厳密に読み直してから、全体をatomicに書き換える。
  *
  * **staging digestは、追記前に記録と一致していた場合だけ再固定する。** 追記前から
  * 不一致なら無関係な変更を正当化しないためそのままにする（review roundとStep記録が
- * 従来どおり再固定する）。
+ * 従来どおり再固定する）。**Step 11記録後は再固定しない**（`verificationDeliveryPhase`）。
  */
 export function appendVerificationRun(
   stagingInput: string,
@@ -103,7 +151,8 @@ export function appendVerificationRun(
     const existing = readVerificationRuns(staging);
     if (existing.some((item) => item.recordDigest === record.recordDigest))
       throw new Error("同じrecordDigestの検証記録が既にあります");
-    const consistent = stagingDigestConsistent(staging);
+    const phase = verificationDeliveryPhase(staging);
+    const consistent = phase === "open" && stagingDigestConsistent(staging);
     const next = [...existing, record];
     const file = path.join(staging, ...VERIFICATION_RUN_FILE.split("/"));
     const directory = path.dirname(file);
@@ -187,9 +236,12 @@ export interface VerificationRunResult {
  * 検証commandを**shellを通さず**argvのまま実行し、結果を機械記録へ追記する
  * （`verify run`、REQ-WF-040）。
  *
+ * 0. merge段階以降のdelivery stateと、trusted policyに検証command宣言が無い場合は拒否する
  * 1. 候補worktreeが現在HEADと完全一致することを要求し、HEADのexact SHAを記録する
- * 2. 比較基点..HEADの影響集合を導出する。影響集合がfullなら`scope=targeted`を拒否し、
- *    targetedなら`scope=targeted`のargvが影響集合の選んだfeatureを全部含むことを要求する
+ * 2. 比較基点..HEADの影響集合を導出する。影響集合がfullなら`scope=targeted`を拒否する。
+ *    argvは既定branchのtrusted policyの宣言に一致しなければならない。`scope=full`は
+ *    `verification.fullCommand`と完全一致、`scope=targeted`は`verification.targetedRunner`
+ *    で始まり影響集合の選んだfeatureを全部含む
  * 3. commandを実行する。出力は標準エラーへ中継し、記録にはdigestだけを残す
  * 4. 実行後もHEADとworktreeが変わっていないことを確かめてから記録する
  */
@@ -206,6 +258,14 @@ export async function runVerification(input: {
   const argv = validateVerificationArgv([...input.argv], "verify runのcommand");
   const now = input.now ?? (() => new Date());
   const output = input.output ?? process.stderr;
+  if (input.scope !== "targeted" && input.scope !== "full")
+    throw new Error("verify runの--scopeはtargetedまたはfullが必要です");
+  verificationDeliveryPhase(staging);
+  /**
+   * **commandはtrusted policyの宣言に束縛する。** 既定branchのtrusted commitから
+   * 読み、candidateのworktreeは読まない。宣言が無ければ実行前に拒否する。
+   */
+  const policy = loadTrustedVerificationPolicy(root);
   if (worktreeDifferences(root) !== "")
     throw new Error(
       "verify runは追跡fileと未追跡fileが現在HEADと完全一致するworktreeでだけ実行できます。変更をcommitしてから再実行してください",
@@ -220,13 +280,14 @@ export async function runVerification(input: {
     throw new Error(
       `影響集合がfullのためscope=targetedの検証は記録できません: ${impact.reasons.slice(0, 3).join("; ")}`,
     );
-  if (input.scope === "targeted") {
-    const missing = missingTargetedFeatures(argv, impact.features);
-    if (missing.length > 0)
-      throw new Error(
-        `scope=targetedのcommandは影響集合が選んだfeatureを全部argvに含む必要があります: ${missing.join(", ")}`,
-      );
-  }
+  const violation = verificationCommandViolation(
+    argv,
+    input.scope,
+    policy,
+    impact.features,
+  );
+  if (violation !== undefined)
+    throw new Error(`verify runを拒否しました: ${violation}`);
   const [file, ...args] = argv as [string, ...string[]];
   const startedAt = now().toISOString();
   const stdout = crypto.createHash("sha256");

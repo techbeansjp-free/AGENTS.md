@@ -17,3 +17,8 @@ Feature: verify runの観測記録を厳密に読み証跡の検証欄を導出�
     Given 合格した検証記録がある
     When 検証欄を記録の欠落・不一致・後続の不合格と照合する
     Then 記録と一致する検証欄だけを受理する
+
+  Scenario: SCN-UNIT-VERIFYRUN-004 scopeの名乗りではなくtrusted policyの宣言にcommandを束縛する
+    Given 合格した検証記録がある
+    When trusted policyの宣言外のcommandを含む記録から検証欄を導出する
+    Then scopeの名乗りではなくtrusted policyの宣言と一致するcommandだけを導く

@@ -13,7 +13,7 @@ import { bootstrapProject, validateSpecs, } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
-import { parseReviewEvidence } from "./domain/review-evidence.js";
+import { parseReviewEvidence, } from "./domain/review-evidence.js";
 import { exportReviewEvidence, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
 import { runVerification } from "./adapters/verification-run.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, } from "./domain/delivery.js";
@@ -24,7 +24,7 @@ import { applyWorkspaceHygiene, previewWorkspaceHygiene, } from "./domain/hygien
 import { applyStagingCleanup, calculateStagingDigest, listStagingArtifacts, migrateLegacyStagingTrackerLocked, planStagingCleanup, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "./domain/staging.js";
 import { buildFinalizeReport, applyFinalize, planCompletion, planRootUpdate, planWorktreeCleanup, summarizeCompletion, } from "./domain/finalize.js";
 import { init, upgrade, uninstall, doctor } from "./domain/lifecycle.js";
-import { loadConsumerChoicesFragmentAtCommit, loadConsumerPolicyAtCommit, conformanceDeclarationFromPolicySet, loadEffectiveTrustedPolicySet, loadEffectiveTrustedPolicySetAtCommit, choicesFragmentSource, ruleFragmentSources, loadOperationPolicy, loadProjectPolicySet, loadProjectPolicySetAtCommit, mergeMethodPolicyWarnings, resolveReviewIndependence, validatePolicy, } from "./domain/policy.js";
+import { loadConsumerChoicesFragmentAtCommit, loadConsumerPolicyAtCommit, conformanceDeclarationFromPolicySet, loadEffectiveTrustedPolicySet, loadEffectiveTrustedPolicySetAtCommit, choicesFragmentSource, ruleFragmentSources, loadOperationPolicy, loadProjectPolicySet, loadProjectPolicySetAtCommit, mergeMethodPolicyWarnings, resolveReviewIndependence, trustedVerificationPolicy, validatePolicy, } from "./domain/policy.js";
 import { applyMigration, compareTrustedPolicy, enforceOperation, planMigration, resolveEffectivePolicy, retryMigration, rollbackMigration, sanitizeOutput, serializeDiagnostic, } from "./domain/enforcement.js";
 import { applyFileMigration, planFileMigration, recoverFileMigration, retryFileMigration, rollbackFileMigration, } from "./domain/migration.js";
 import { validateScenarioTrace } from "./domain/trace.js";
@@ -926,23 +926,39 @@ export function resolveImplementationCommitForMerge(root, staging, finalHeadSha)
             .digest("hex"),
     };
 }
-function resolveContextIsolatedFormalApproval(staging, candidate) {
-    const { binding } = assertCurrentReviewJournalBinding(staging, candidate.finalHeadSha);
-    const content = git(["show", `${candidate.finalHeadSha}:${candidate.reviewArtifactPath}`], stagingRepositoryRoot(staging)).stdout;
+/**
+ * `H_final`のreview証跡を読み、`observed`節をGit・stagingの観測記録・trusted policy
+ * から再導出して照合する（REQ-WF-038、REQ-WF-040）。
+ *
+ * **独立性modeによらず必ず走らせる。** modeが選ぶのは承認の出所（context-isolatedの
+ * formal approvalか、actor-independentのprovider review）だけであり、証跡の観測値の
+ * 照合を省く理由にはならない。actor-independentで照合を省くと、手で組んだ証跡が
+ * 合格記録だけを載せたままmergeへ到達する。
+ */
+export function verifyMergeReviewEvidenceObserved(input) {
+    const content = git([
+        "show",
+        `${input.candidate.finalHeadSha}:${input.candidate.reviewArtifactPath}`,
+    ], stagingRepositoryRoot(input.staging)).stdout;
     const evidence = parseReviewEvidence(content);
     if (evidence.observed.implementationHeadSha !==
-        candidate.implementationCommitSha)
+        input.candidate.implementationCommitSha)
         throw new Error("review証跡のH_implがmerge対象と一致しません");
     const errors = verifyReviewEvidenceWithStaging({
-        staging,
+        staging: input.staging,
         evidence,
-        independenceMode: "context-isolated",
+        independenceMode: input.independenceMode,
+        verificationPolicy: input.verificationPolicy,
     });
+    if (errors.length > 0)
+        throw new Error(`${input.independenceMode}のreview証跡が観測値と一致しません: ${errors.join("; ")}`);
+    return evidence;
+}
+function resolveContextIsolatedFormalApproval(staging, candidate, evidence) {
+    const { binding } = assertCurrentReviewJournalBinding(staging, candidate.finalHeadSha);
     if (evidence.observed.session.sessionId !== binding.sessionId ||
         evidence.observed.session.latestRoundDigest !== binding.roundDigest)
-        errors.push("review証跡のsessionが最新Step 10 bindingと一致しません");
-    if (errors.length > 0)
-        throw new Error(`context-isolated formal review approvalが不正です: ${errors.join("; ")}`);
+        throw new Error("context-isolated formal review approvalが不正です: review証跡のsessionが最新Step 10 bindingと一致しません");
     return binding.roundDigest;
 }
 /**
@@ -1041,8 +1057,14 @@ function observeMergeReviewEvidence(input) {
             `head=${delivery.headSha} イベント時刻=${delivery.eventAt} 観測時刻=${delivery.observedAt} ` +
             `経過=${delivery.elapsedMinutes.toFixed(1)}分 猶予=${delivery.graceMinutes}分。${delivery.nextAction}`);
     }
+    const evidence = verifyMergeReviewEvidenceObserved({
+        staging: input.staging,
+        candidate,
+        independenceMode: input.independenceMode,
+        verificationPolicy: input.verificationPolicy,
+    });
     const formalApprovalId = input.independenceMode === "context-isolated"
-        ? resolveContextIsolatedFormalApproval(input.staging, candidate)
+        ? resolveContextIsolatedFormalApproval(input.staging, candidate, evidence)
         : undefined;
     const independentReview = input.independenceMode === "actor-independent"
         ? currentIndependentApprovals({
@@ -1176,6 +1198,7 @@ function inspectAuthorizedPullRequestMerge(input) {
         observed,
         ciEventAt: ciDeliveryEventAt(input.staging, input.state),
         independenceMode: resolveReviewIndependence(input.trustedSet.policy),
+        verificationPolicy: trustedVerificationPolicy(input.trustedSet),
         assistedAuthorityVerified: input.assistedAuthorityVerified,
     });
     const independenceMode = resolveReviewIndependence(input.trustedSet.policy);
@@ -1422,6 +1445,7 @@ function readBackPreparedPullRequestMerge(input) {
                 ciEventAt: ciDeliveryEventAt(input.staging, input.state),
                 fixedCiRunId: input.state.merge.ciRunId,
                 independenceMode,
+                verificationPolicy: trustedVerificationPolicy(trustedSet),
                 assistedAuthorityVerified: trustedSet.policy.merge.mode === "assisted",
             });
             assertFixedMergeReviewEvidence(input.state, reviewed.reviewEvidence);
@@ -5476,7 +5500,7 @@ export async function main(argv, dependencies = {}) {
          * 旧`--verified`は未知optionとして拒否せず、移行先を名指しする。
          */
         if (rest.some((argument) => argument.startsWith("--verified")))
-            throw new Error("review exportの--verifiedは廃止されました。検証は申告ではなく観測です。H_implで verify run --staging=<staging> -- <command> を実行してからreview exportを再実行してください");
+            throw new Error("review exportの--verifiedは廃止されました。検証は申告ではなく観測です。H_implで verify run --staging=<staging> --scope=full -- <trusted policyのverification.fullCommand> を実行してからreview exportを再実行してください");
         if (positionals.length > 0)
             throw new Error("review exportに位置引数は使用できません");
         const unknown = Object.keys(flags).filter((flag) => ![
@@ -5527,14 +5551,20 @@ export async function main(argv, dependencies = {}) {
          */
         const separator = rest.indexOf("--");
         if (separator < 0 || separator === rest.length - 1)
-            throw new Error("verify runには`--`の後に実行するcommandのargvが必要です（例: verify run --staging=<staging> -- npm test）");
+            throw new Error("verify runには`--`の後に実行するcommandのargvが必要です（例: verify run --staging=<staging> --scope=full -- npm test）");
         const { flags, positionals } = parse(rest.slice(0, separator));
         if (positionals.length > 0)
             throw new Error(`verify runの位置引数は\`--\`の後に置いてください: ${positionals[0]}`);
         const unknown = Object.keys(flags).filter((flag) => !["staging", "scope", "base", "root"].includes(flag));
         if (unknown.length > 0)
             throw new Error(`verify runの未知optionです: --${unknown.join(", --")}`);
-        const scope = flags.scope ?? "full";
+        /**
+         * **scopeに既定値を置かない。** 省略を`full`と読むと、宣言していない全体検証を
+         * 名乗らせることになる。scopeとargvの対応はtrusted policyで照合する。
+         */
+        const scope = flags.scope;
+        if (scope === undefined)
+            throw new Error("verify runには--scope=targetedまたは--scope=fullが必要です。fullはtrusted policyのverification.fullCommand、targetedはverification.targetedRunnerに影響集合のfeatureを並べたargvだけを受理します");
         if (scope !== "targeted" && scope !== "full")
             throw new Error("verify runの--scopeはtargetedまたはfullが必要です");
         if (flags.base !== undefined && typeof flags.base !== "string")

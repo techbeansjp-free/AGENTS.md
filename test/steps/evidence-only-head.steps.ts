@@ -169,7 +169,8 @@ function formalArtifact(
 ): string {
   return reviewEvidenceContentFromStaging(world.staging, {
     issue: 1272,
-    verification: ["npm test", `npm test -- --revision=${revision}`],
+    /** trusted policyが宣言したcommandの再実行（revisionごとに別の記録） */
+    verificationFinishedAt: `2026-09-26T00:00:${String(revision).padStart(2, "0")}.000Z`,
   });
 }
 

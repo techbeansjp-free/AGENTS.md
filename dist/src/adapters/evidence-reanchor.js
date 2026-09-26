@@ -11,9 +11,9 @@ import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { observeStoredDeliveryState, readStoredDeliveryState, } from "./delivery-state.js";
 import { GIT_ENV, evidenceOnlySuffix, observeReviewDiff, observeSingleCommitParent, readBlobAtCommit, } from "./review-diff.js";
-import { verificationRecordErrors } from "../domain/verification-run.js";
+import { stagingRepositoryRoot } from "../domain/staging-layout.js";
+import { observedEvidenceErrors } from "./review-evidence.js";
 import { readStoredReviewSession } from "./review-session-store.js";
-import { readVerificationRuns } from "./verification-run.js";
 import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
 export const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
 const OID = /^[a-f0-9]{40}$/u;
@@ -241,14 +241,16 @@ function digestOf(content) {
  *
  * **証跡の値をauthorityにしない。** findingの最終状態・未解決Critical/High・
  * count済みround数はsessionから再導出した値との一致だけを受理し、`H_impl`は
- * sessionの収束candidate HEADそのものを要求する。検証欄はstagingの観測記録に
- * 同じ`recordDigest`の合格記録があることを要求する（読めなければ受理しない）。
+ * sessionの収束candidate HEADそのものを要求する。diff・影響集合・検証欄は
+ * `observedEvidenceErrors`でGit・stagingの観測記録・trusted policyから再導出した
+ * 値との一致を要求する（読めなければ受理しない）。
  */
 function acceptedSessionEvidence(staging, evidence, options) {
     let recorded;
     try {
         recorded =
-            verificationRecordErrors(evidence.observed.verification, readVerificationRuns(staging)).length === 0;
+            observedEvidenceErrors(stagingRepositoryRoot(staging), staging, evidence)
+                .length === 0;
     }
     catch {
         recorded = false;
@@ -518,7 +520,14 @@ export function evaluateEvidenceReanchor(input) {
     let reviewedForward;
     if (!isContentEquivalent(before, after)) {
         const rebase = observeRebaseEquivalence(input.root, comparison);
-        if (rebase.reason !== "ok") {
+        /**
+         * **pr-boundではrebase等価でもrebaseとしては受理しない**（末尾の拒否）。検証記録の
+         * 再実行だけを差し替えた証跡是正は、検証commandとscopeの集合が変わらないため
+         * rebase等価に分類される。trusted policyが宣言するfull commandは1つだけなので
+         * （REQ-WF-040）、pr-bound後の検証欄の是正はこの形になる。各方法は自身の検査を
+         * 全部行うため、pr-boundで他の方法を試しても受理集合は各方法の範囲を超えない。
+         */
+        if (rebase.reason !== "ok" || anchor.prBound) {
             artifactReplacement = observeArtifactReplacement(staging, input.root, comparison);
             if (artifactReplacement !== undefined)
                 method = "artifact-replacement";
@@ -532,7 +541,8 @@ export function evaluateEvidenceReanchor(input) {
                         method = "reviewed-forward";
                 }
             }
-            if (artifactReplacement === undefined &&
+            if (rebase.reason !== "ok" &&
+                artifactReplacement === undefined &&
                 artifactSupersession === undefined &&
                 reviewedForward === undefined)
                 throw new Error(`再固定前後の内容が等価ではありません（${rebase.reason}）: before=${before.digest} after=${after.digest}${rebase.gitFailure === undefined ? "" : `; ${rebase.gitFailure}`}`);

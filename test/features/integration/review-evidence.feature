@@ -38,3 +38,9 @@ Feature: review exportとreview validateでreview証跡を生成・照合する
     When H_implでreview exportを実行する
     And 観測記録を消すか改竄してreview validateを実行する
     Then 記録の欠落・改竄・後続の不合格をそれぞれ拒否する
+
+  Scenario: SCN-INT-REVEVID-011 review validate --stagingは検証欄を観測記録とtrusted policyから再導出し手組みの部分集合を拒否する
+    Given review証跡用に収束済みsessionを持つrepositoryがある
+    When H_implでreview exportを実行する
+    And 手で組んだ証跡で検証欄を差し替えてreview validateを実行する
+    Then 記録に存在する合格だけを載せた証跡も再導出と一致しなければ拒否する

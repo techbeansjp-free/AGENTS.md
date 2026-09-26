@@ -34,7 +34,11 @@ import {
   sealReviewProgress,
   verifyStoredReviewProgress,
 } from "./adapters/review-progress.js";
-import { parseReviewEvidence } from "./domain/review-evidence.js";
+import {
+  parseReviewEvidence,
+  type ReviewEvidence,
+} from "./domain/review-evidence.js";
+import type { VerificationPolicy } from "./domain/verification-run.js";
 import {
   exportReviewEvidence,
   verifyReviewEvidenceWithStaging,
@@ -107,6 +111,7 @@ import {
   loadProjectPolicySetAtCommit,
   mergeMethodPolicyWarnings,
   resolveReviewIndependence,
+  trustedVerificationPolicy,
   validatePolicy,
 } from "./domain/policy.js";
 import {
@@ -1542,37 +1547,65 @@ export function resolveImplementationCommitForMerge(
   };
 }
 
+/**
+ * `H_final`のreview証跡を読み、`observed`節をGit・stagingの観測記録・trusted policy
+ * から再導出して照合する（REQ-WF-038、REQ-WF-040）。
+ *
+ * **独立性modeによらず必ず走らせる。** modeが選ぶのは承認の出所（context-isolatedの
+ * formal approvalか、actor-independentのprovider review）だけであり、証跡の観測値の
+ * 照合を省く理由にはならない。actor-independentで照合を省くと、手で組んだ証跡が
+ * 合格記録だけを載せたままmergeへ到達する。
+ */
+export function verifyMergeReviewEvidenceObserved(input: {
+  staging: string;
+  candidate: Pick<
+    MergeCandidateEvidence,
+    "finalHeadSha" | "implementationCommitSha" | "reviewArtifactPath"
+  >;
+  independenceMode: "context-isolated" | "actor-independent";
+  verificationPolicy: VerificationPolicy;
+}): ReviewEvidence {
+  const content = git(
+    [
+      "show",
+      `${input.candidate.finalHeadSha}:${input.candidate.reviewArtifactPath}`,
+    ],
+    stagingRepositoryRoot(input.staging),
+  ).stdout;
+  const evidence = parseReviewEvidence(content);
+  if (
+    evidence.observed.implementationHeadSha !==
+    input.candidate.implementationCommitSha
+  )
+    throw new Error("review証跡のH_implがmerge対象と一致しません");
+  const errors = verifyReviewEvidenceWithStaging({
+    staging: input.staging,
+    evidence,
+    independenceMode: input.independenceMode,
+    verificationPolicy: input.verificationPolicy,
+  });
+  if (errors.length > 0)
+    throw new Error(
+      `${input.independenceMode}のreview証跡が観測値と一致しません: ${errors.join("; ")}`,
+    );
+  return evidence;
+}
+
 function resolveContextIsolatedFormalApproval(
   staging: string,
   candidate: MergeCandidateEvidence,
+  evidence: ReviewEvidence,
 ): string {
   const { binding } = assertCurrentReviewJournalBinding(
     staging,
     candidate.finalHeadSha,
   );
-  const content = git(
-    ["show", `${candidate.finalHeadSha}:${candidate.reviewArtifactPath}`],
-    stagingRepositoryRoot(staging),
-  ).stdout;
-  const evidence = parseReviewEvidence(content);
-  if (
-    evidence.observed.implementationHeadSha !==
-    candidate.implementationCommitSha
-  )
-    throw new Error("review証跡のH_implがmerge対象と一致しません");
-  const errors = verifyReviewEvidenceWithStaging({
-    staging,
-    evidence,
-    independenceMode: "context-isolated",
-  });
   if (
     evidence.observed.session.sessionId !== binding.sessionId ||
     evidence.observed.session.latestRoundDigest !== binding.roundDigest
   )
-    errors.push("review証跡のsessionが最新Step 10 bindingと一致しません");
-  if (errors.length > 0)
     throw new Error(
-      `context-isolated formal review approvalが不正です: ${errors.join("; ")}`,
+      "context-isolated formal review approvalが不正です: review証跡のsessionが最新Step 10 bindingと一致しません",
     );
   return binding.roundDigest;
 }
@@ -1671,6 +1704,11 @@ function observeMergeReviewEvidence(input: {
    * から解決した値だけを渡す。
    */
   independenceMode: "context-isolated" | "actor-independent";
+  /**
+   * **trusted policy由来の検証command宣言**（REQ-WF-040）。証跡の検証欄を
+   * stagingの観測記録から再導出するときに使う。candidate filesystemから読まない。
+   */
+  verificationPolicy: VerificationPolicy;
   assistedAuthorityVerified: boolean;
 }): {
   reviewEvidence: MergeReviewEvidence;
@@ -1755,9 +1793,15 @@ function observeMergeReviewEvidence(input: {
         `経過=${delivery.elapsedMinutes.toFixed(1)}分 猶予=${delivery.graceMinutes}分。${delivery.nextAction}`,
     );
   }
+  const evidence = verifyMergeReviewEvidenceObserved({
+    staging: input.staging,
+    candidate,
+    independenceMode: input.independenceMode,
+    verificationPolicy: input.verificationPolicy,
+  });
   const formalApprovalId =
     input.independenceMode === "context-isolated"
-      ? resolveContextIsolatedFormalApproval(input.staging, candidate)
+      ? resolveContextIsolatedFormalApproval(input.staging, candidate, evidence)
       : undefined;
   const independentReview =
     input.independenceMode === "actor-independent"
@@ -1955,6 +1999,7 @@ function inspectAuthorizedPullRequestMerge(input: {
     observed,
     ciEventAt: ciDeliveryEventAt(input.staging, input.state),
     independenceMode: resolveReviewIndependence(input.trustedSet.policy),
+    verificationPolicy: trustedVerificationPolicy(input.trustedSet),
     assistedAuthorityVerified: input.assistedAuthorityVerified,
   });
   const independenceMode = resolveReviewIndependence(input.trustedSet.policy);
@@ -2296,6 +2341,7 @@ function readBackPreparedPullRequestMerge(input: {
         ciEventAt: ciDeliveryEventAt(input.staging, input.state),
         fixedCiRunId: input.state.merge.ciRunId,
         independenceMode,
+        verificationPolicy: trustedVerificationPolicy(trustedSet),
         assistedAuthorityVerified: trustedSet.policy.merge.mode === "assisted",
       });
       assertFixedMergeReviewEvidence(input.state, reviewed.reviewEvidence);
@@ -7478,7 +7524,7 @@ export async function main(
      */
     if (rest.some((argument) => argument.startsWith("--verified")))
       throw new Error(
-        "review exportの--verifiedは廃止されました。検証は申告ではなく観測です。H_implで verify run --staging=<staging> -- <command> を実行してからreview exportを再実行してください",
+        "review exportの--verifiedは廃止されました。検証は申告ではなく観測です。H_implで verify run --staging=<staging> --scope=full -- <trusted policyのverification.fullCommand> を実行してからreview exportを再実行してください",
       );
     if (positionals.length > 0)
       throw new Error("review exportに位置引数は使用できません");
@@ -7538,7 +7584,7 @@ export async function main(
     const separator = rest.indexOf("--");
     if (separator < 0 || separator === rest.length - 1)
       throw new Error(
-        "verify runには`--`の後に実行するcommandのargvが必要です（例: verify run --staging=<staging> -- npm test）",
+        "verify runには`--`の後に実行するcommandのargvが必要です（例: verify run --staging=<staging> --scope=full -- npm test）",
       );
     const { flags, positionals } = parse(rest.slice(0, separator));
     if (positionals.length > 0)
@@ -7550,7 +7596,15 @@ export async function main(
     );
     if (unknown.length > 0)
       throw new Error(`verify runの未知optionです: --${unknown.join(", --")}`);
-    const scope = flags.scope ?? "full";
+    /**
+     * **scopeに既定値を置かない。** 省略を`full`と読むと、宣言していない全体検証を
+     * 名乗らせることになる。scopeとargvの対応はtrusted policyで照合する。
+     */
+    const scope = flags.scope;
+    if (scope === undefined)
+      throw new Error(
+        "verify runには--scope=targetedまたは--scope=fullが必要です。fullはtrusted policyのverification.fullCommand、targetedはverification.targetedRunnerに影響集合のfeatureを並べたargvだけを受理します",
+      );
     if (scope !== "targeted" && scope !== "full")
       throw new Error("verify runの--scopeはtargetedまたはfullが必要です");
     if (flags.base !== undefined && typeof flags.base !== "string")

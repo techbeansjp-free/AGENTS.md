@@ -100,6 +100,10 @@ import {
   observedReviewEvidenceFromSession,
   resealObservedEvidence,
 } from "../support/review-evidence-fixture.js";
+import {
+  TRUSTED_POLICY_PATHS,
+  writeTrustedPolicySet,
+} from "../support/trusted-verification-policy.js";
 
 interface WorkflowStepWorld extends WorkflowWorld {
   workflowCheckPassed: boolean;
@@ -2373,7 +2377,8 @@ function preparePullRequest(
     | "session-mismatch"
     | "himpl-mismatch"
     | "untracked"
-    | "extra-file" = "valid",
+    | "extra-file"
+    | "stale-verification" = "valid",
   /**
    * disabledでも実装commitと証跡commitを分離する。後からmergeへ再開する
    * scenarioは、review sessionと一致する証跡を`H_final`に持つ必要がある。
@@ -2417,7 +2422,12 @@ function preparePullRequest(
     };
     fs.writeFileSync(policyFile, `${JSON.stringify(policy, null, 2)}\n`);
   }
-  spawnSync("git", ["add", ".agent-skill-chain/policy/default.json"], {
+  /**
+   * **trusted commitは検証command宣言を持つproject policy setを含む**（REQ-WF-040）。
+   * manifestの`policy`は上で書いた既定policyと同じ値にし、merge条件を動かさない。
+   */
+  writeTrustedPolicySet(root);
+  spawnSync("git", ["add", "--", ...TRUSTED_POLICY_PATHS], {
     cwd: root,
   });
   spawnSync("git", ["commit", "-q", "-m", "trusted policy"], {
@@ -2660,6 +2670,20 @@ function preparePullRequest(
       implementationHeadSha: implementationCommitSha,
     }).records,
   );
+  /**
+   * `stale-verification`は証跡の生成後に同じcommandを再実行した記録を足す。
+   * 証跡の検証欄の記録は存在し合格だが、stagingから再導出した検証欄（最新の実行）とは
+   * 一致しない。staging digestはこの状態で同期する。
+   */
+  if (artifactDisposition === "stale-verification")
+    appendFixtureVerificationRecords(
+      staging,
+      observeFixtureVerification(root, {
+        baseSha,
+        implementationHeadSha: implementationCommitSha,
+        finishedAt: "2026-09-26T00:00:30.000Z",
+      }).records,
+    );
   recordStagingSync(staging, {
     tracker: "https://github.com/o/r/issues/877",
     checkpoint: 4,
@@ -2803,16 +2827,31 @@ function advanceDeliveryTrustedMergeMode(
     },
   );
   assert.equal(shown.status, 0, shown.stderr);
-  const policy = JSON.parse(shown.stdout) as Record<string, unknown>;
-  policy.merge = {
+  const merge = {
     mode,
     branches: ["feature/x"],
     methods: ["merge"],
     requiredChecks: [],
     requiredReviews: 0,
   };
-  const materialized = path.join(scratch, "policy.json");
-  fs.writeFileSync(materialized, `${JSON.stringify(policy, null, 2)}\n`);
+  const policy = JSON.parse(shown.stdout) as Record<string, unknown>;
+  policy.merge = merge;
+  /**
+   * **trusted project policy manifestの`policy.merge`も同じ値へ進める**（REQ-WF-040で
+   * trusted commitがproject policy setを持つため）。既定policyだけを変えると、
+   * project側のmerge宣言がそのまま残る。
+   */
+  const manifestPath = ".agent-skill-chain/project-policy.json";
+  const manifestShown = spawnSync(
+    "git",
+    ["show", `${prepared.baseSha}:${manifestPath}`],
+    { cwd: prepared.root, encoding: "utf8" },
+  );
+  assert.equal(manifestShown.status, 0, manifestShown.stderr);
+  const manifest = JSON.parse(manifestShown.stdout) as {
+    policy: Record<string, unknown>;
+  };
+  manifest.policy.merge = merge;
   const environment = { ...process.env, GIT_INDEX_FILE: indexFile };
   const readTree = spawnSync("git", ["read-tree", prepared.baseSha], {
     cwd: prepared.root,
@@ -2820,22 +2859,29 @@ function advanceDeliveryTrustedMergeMode(
     encoding: "utf8",
   });
   assert.equal(readTree.status, 0, readTree.stderr);
-  const blob = spawnSync("git", ["hash-object", "-w", materialized], {
-    cwd: prepared.root,
-    encoding: "utf8",
-  });
-  assert.equal(blob.status, 0, blob.stderr);
-  const updateIndex = spawnSync(
-    "git",
-    [
-      "update-index",
-      "--add",
-      "--cacheinfo",
-      `100644,${blob.stdout.trim()},${policyPath}`,
-    ],
-    { cwd: prepared.root, env: environment, encoding: "utf8" },
-  );
-  assert.equal(updateIndex.status, 0, updateIndex.stderr);
+  for (const [target, value] of [
+    [policyPath, policy],
+    [manifestPath, manifest],
+  ] as const) {
+    const materialized = path.join(scratch, path.basename(target));
+    fs.writeFileSync(materialized, `${JSON.stringify(value, null, 2)}\n`);
+    const blob = spawnSync("git", ["hash-object", "-w", materialized], {
+      cwd: prepared.root,
+      encoding: "utf8",
+    });
+    assert.equal(blob.status, 0, blob.stderr);
+    const updateIndex = spawnSync(
+      "git",
+      [
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        `100644,${blob.stdout.trim()},${target}`,
+      ],
+      { cwd: prepared.root, env: environment, encoding: "utf8" },
+    );
+    assert.equal(updateIndex.status, 0, updateIndex.stderr);
+  }
   const tree = spawnSync("git", ["write-tree"], {
     cwd: prepared.root,
     env: environment,
@@ -3048,7 +3094,8 @@ function prepareDeliveryCli(
     | "session-mismatch"
     | "himpl-mismatch"
     | "untracked"
-    | "extra-file" = "valid",
+    | "extra-file"
+    | "stale-verification" = "valid",
   separateArtifact = false,
 ): PreparedDeliveryCli {
   const prepared = preparePullRequest(
@@ -5840,6 +5887,56 @@ if (exact(["auth", "status"])) {
         bound.state,
         "pr-bound",
         `再開可能な待機ではない状態になっています: ${bound.state}`,
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-070": {
+      /**
+       * **actor-independentでもreview証跡の観測値を再導出する**（REQ-WF-038）。
+       * 独立approvalが揃っていても、stagingの検証記録が証跡の検証欄を再導出できなければ
+       * mergeを要求しない。対照として記録が揃った同じ構成はmergeを要求する。
+       */
+      const permitted = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+      );
+      createDeliveryPullRequest(permitted);
+      const accepted = executeDeliveryMerge(permitted);
+      assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+      assert.equal(
+        deliveryProviderCalls(permitted).filter(isMergeCall).length,
+        1,
+        "記録が揃ったactor-independentのmergeを要求していません",
+      );
+      const tampered = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        "actor-independent",
+        "quick",
+        0,
+        "stale-verification",
+      );
+      createDeliveryPullRequest(tampered);
+      const before = deliveryProviderCalls(tampered).filter(isMergeCall).length;
+      const rejected = executeDeliveryMerge(tampered);
+      assert.notEqual(
+        rejected.status,
+        0,
+        "検証記録を再導出できないactor-independentのmergeを受理しました",
+      );
+      assert.match(
+        rejected.stdout + rejected.stderr,
+        /actor-independentのreview証跡が観測値と一致しません.*再導出した検証欄と一致しません/u,
+      );
+      assert.equal(
+        deliveryProviderCalls(tampered).filter(isMergeCall).length,
+        before,
+        "拒否したのにproviderへmergeを要求しています",
       );
       break;
     }

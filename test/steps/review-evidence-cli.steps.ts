@@ -25,6 +25,8 @@ import {
   WORKFLOW_STEPS,
   type StepJournalEntry,
 } from "../../src/domain/workflow.js";
+import { resealObservedEvidence } from "../support/review-evidence-fixture.js";
+import { installTrustedVerificationPolicy } from "../support/trusted-verification-policy.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 interface ReviewEvidenceCliWorld extends WorkflowWorld {
@@ -38,6 +40,9 @@ interface ReviewEvidenceCliWorld extends WorkflowWorld {
   validations: Record<string, CliResult>;
   rebasedBase?: string;
   rebasedHead?: string;
+  /** trusted policyの`verification.fullCommand`。marker fileがあれば同じargvで失敗する */
+  fullCommand: string[];
+  marker: string;
 }
 
 interface CliResult {
@@ -99,9 +104,27 @@ async function captureCli(args: string[]): Promise<CliResult> {
   }
 }
 
+/**
+ * 同じargvで合否を切り替えるcommand。worktree外のmarker fileがあれば終了値3で失敗する。
+ * **argvが同じ記録の最新が不合格なら、古い合格で隠させない**ことを測るために使う。
+ */
+function markerArgv(marker: string): string[] {
+  return [
+    process.execPath,
+    "-e",
+    `process.exit(require("node:fs").existsSync(${JSON.stringify(marker)}) ? 3 : 0)`,
+  ];
+}
+
 function prepare(world: ReviewEvidenceCliWorld, blocking: boolean): void {
   world.root = world.initRepo();
-  world.base = git(world.root, ["rev-parse", "HEAD"]);
+  world.marker = path.join(world.temp("asc-verify-marker-"), "fail");
+  world.fullCommand = markerArgv(world.marker);
+  /** 検証commandは既定branchのtrusted policyが宣言する。比較基点はtrusted commit */
+  world.base = installTrustedVerificationPolicy(world.root, {
+    fullCommand: world.fullCommand,
+    targetedRunner: [process.execPath, "-e", "process.exit(0)"],
+  });
   world.implementationHead = commitFile(
     world.root,
     reviewedPath,
@@ -196,14 +219,6 @@ function exportArgs(
   ];
 }
 
-/** shellを通さず実行される検証command。argvのまま記録される。 */
-const PASSING_TEST_ARGV = [process.execPath, "-e", "process.exit(0)"];
-const PASSING_LINT_ARGV = [
-  process.execPath,
-  "-e",
-  "process.stdout.write('lint')",
-];
-
 /** `verify run`をCLIから実行する。commandの出力は標準エラーへ中継される。 */
 async function verifyRun(
   world: ReviewEvidenceCliWorld,
@@ -230,11 +245,12 @@ async function verifyPassing(
   world: ReviewEvidenceCliWorld,
   flags: readonly string[] = [],
 ): Promise<void> {
-  for (const argv of [PASSING_TEST_ARGV, PASSING_LINT_ARGV]) {
-    const result = await verifyRun(world, argv, flags);
-    assert.equal(result.error, undefined, String(result.error));
-    assert.equal(result.exitCode, 0);
-  }
+  const result = await verifyRun(world, world.fullCommand, [
+    "--scope=full",
+    ...flags,
+  ]);
+  assert.equal(result.error, undefined, String(result.error));
+  assert.equal(result.exitCode, 0);
 }
 
 Given("review証跡用に収束済みsessionを持つrepositoryがある", function () {
@@ -273,7 +289,7 @@ Then(
     assert.equal(evidence.declared.independenceMode, "context-isolated");
     assert.deepEqual(
       evidence.observed.verification.map(({ command }) => command),
-      [PASSING_TEST_ARGV, PASSING_LINT_ARGV],
+      [this.fullCommand],
     );
     assert.ok(
       evidence.observed.verification.every(
@@ -380,7 +396,7 @@ When(
     const canonical = fs.readFileSync(file, "utf8");
     fs.writeFileSync(
       path.join(this.root, "docs", "reviews", "tampered.json"),
-      canonical.replace("write('lint')", "write('typecheck')"),
+      canonical.replace("? 3 : 0", "? 4 : 0"),
     );
     fs.symlinkSync(file, path.join(this.root, "docs", "reviews", "link.json"));
     fs.writeFileSync(path.join(this.root, "review.json"), '{"round":1}\n');
@@ -475,25 +491,12 @@ Then(
   },
 );
 
-/**
- * 同じargvで合否を切り替えるcommand。worktree外のmarker fileがあれば終了値3で失敗する。
- * **argvが同じ記録の最新が不合格なら、古い合格で隠させない**ことを測るために使う。
- */
-function markerArgv(marker: string): string[] {
-  return [
-    process.execPath,
-    "-e",
-    `process.exit(require("node:fs").existsSync(${JSON.stringify(marker)}) ? 3 : 0)`,
-  ];
-}
-
 When("観測記録の条件を変えてreview exportを実行する", async function () {
   this.failures.push(await captureCli(exportArgs(this)));
-  const marker = path.join(this.temp("asc-verify-marker-"), "fail");
-  const passed = await verifyRun(this, markerArgv(marker));
+  const passed = await verifyRun(this, this.fullCommand, ["--scope=full"]);
   assert.equal(passed.exitCode, 0, JSON.stringify(passed));
-  fs.writeFileSync(marker, "fail\n");
-  const failed = await verifyRun(this, markerArgv(marker));
+  fs.writeFileSync(this.marker, "fail\n");
+  const failed = await verifyRun(this, this.fullCommand, ["--scope=full"]);
   assert.equal(failed.exitCode, 3, "commandの終了値をそのまま返す");
   assert.equal(failed.output?.exitCode, 3);
   this.failures.push(await captureCli(exportArgs(this)));
@@ -534,7 +537,7 @@ When("観測記録を消すか改竄してreview validateを実行する", async
    */
   const [latest] = readVerificationRuns(this.staging).filter(
     (record) =>
-      JSON.stringify(record.command) === JSON.stringify(PASSING_LINT_ARGV),
+      JSON.stringify(record.command) === JSON.stringify(this.fullCommand),
   );
   appendVerificationRun(
     this.staging,
@@ -559,9 +562,100 @@ Then("記録の欠落・改竄・後続の不合格をそれぞれ拒否する",
     errorsOf("intact"),
   );
   assert.equal(this.validations.removed?.output?.valid, false);
-  assert.match(errorsOf("removed"), /観測記録にありません/u);
+  assert.match(errorsOf("removed"), /再導出できません.*検証記録がありません/u);
   assert.equal(this.validations.tampered?.output?.valid, false);
-  assert.match(errorsOf("tampered"), /検証記録を読めません.*recordDigest/u);
+  assert.match(errorsOf("tampered"), /再導出できません.*recordDigest/u);
   assert.equal(this.validations.laterFailure?.output?.valid, false);
-  assert.match(errorsOf("laterFailure"), /後続実行が不合格/u);
+  assert.match(errorsOf("laterFailure"), /最新の実行が不合格/u);
 });
+
+When(
+  "手で組んだ証跡で検証欄を差し替えてreview validateを実行する",
+  async function () {
+    assert.equal(this.exported?.error, undefined, String(this.exported?.error));
+    const file = path.join(this.root, EVIDENCE);
+    const exported = parseReviewEvidence(fs.readFileSync(file, "utf8"));
+    const validate = (artifact: string) =>
+      captureCli([
+        "review",
+        "validate",
+        `--artifact=${artifact}`,
+        `--staging=${this.staging}`,
+        `--root=${this.root}`,
+      ]);
+    const [passed] = readVerificationRuns(this.staging);
+    /**
+     * 1. 同じcommandを後から再実行して合格した。証跡の記録は存在し合格だが、
+     *    **再導出の結果（最新の実行）と一致しない**
+     */
+    appendVerificationRun(
+      this.staging,
+      sealVerificationRun({
+        ...passed!,
+        startedAt: "2099-01-01T00:00:00.000Z",
+        finishedAt: "2099-01-01T00:00:01.000Z",
+      }),
+    );
+    this.validations.stale = await validate(EVIDENCE);
+    /**
+     * 2. 宣言外の`true`をscope=fullとして合格させた記録を置き、宣言した
+     *    commandはその後に失敗した。**`true`だけを載せた手組みの証跡は、記録が
+     *    存在し合格でも受理しない**
+     */
+    const undeclared = sealVerificationRun({
+      ...passed!,
+      command: ["true"],
+      startedAt: "2099-01-01T00:00:02.000Z",
+      finishedAt: "2099-01-01T00:00:03.000Z",
+    });
+    appendVerificationRun(this.staging, undeclared);
+    appendVerificationRun(
+      this.staging,
+      sealVerificationRun({
+        ...passed!,
+        exitCode: 1,
+        startedAt: "2099-01-01T00:00:04.000Z",
+        finishedAt: "2099-01-01T00:00:05.000Z",
+      }),
+    );
+    fs.writeFileSync(
+      path.join(this.root, "docs", "reviews", "hand.json"),
+      resealObservedEvidence(exported, {
+        verification: [
+          {
+            command: undeclared.command,
+            scope: undeclared.scope,
+            exitCode: 0,
+            headSha: undeclared.headSha,
+            impactDigest: undeclared.impactDigest,
+            finishedAt: undeclared.finishedAt,
+            recordDigest: undeclared.recordDigest,
+          },
+        ],
+      }),
+    );
+    this.validations.handBuilt = await validate("docs/reviews/hand.json");
+  },
+);
+
+Then(
+  "記録に存在する合格だけを載せた証跡も再導出と一致しなければ拒否する",
+  function () {
+    const errorsOf = (key: string) =>
+      (
+        (this.validations[key]?.output?.errors as string[] | undefined) ?? []
+      ).join(" / ");
+    assert.equal(this.validations.stale?.output?.valid, false);
+    assert.match(
+      errorsOf("stale"),
+      /再導出した検証欄と一致しません/u,
+      errorsOf("stale"),
+    );
+    assert.equal(this.validations.handBuilt?.output?.valid, false);
+    assert.match(
+      errorsOf("handBuilt"),
+      /再導出できません.*最新の実行が不合格/u,
+      errorsOf("handBuilt"),
+    );
+  },
+);

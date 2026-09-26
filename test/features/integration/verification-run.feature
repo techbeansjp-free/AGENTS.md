@@ -12,3 +12,13 @@ Feature: verify runで検証をshellを通さず実行し観測だけを記録�
     Given verify run用のIssue stagingを持つrepositoryがある
     When 不正な条件でverify runを実行する
     Then 各条件を理由つきで拒否し観測記録を追記しない
+
+  Scenario: SCN-INT-VERIFYRUN-003 trusted policyの宣言外のcommand・scope省略・宣言なしを実行前に拒否する
+    Given verify run用のIssue stagingを持つrepositoryがある
+    When trusted policyの宣言と異なるcommandとscope省略でverify runを実行する
+    Then trusted policyの宣言外とscope省略と宣言なしを実行前に拒否し記録しない
+
+  Scenario: SCN-INT-VERIFYRUN-004 Step 11記録後はstaging digestを再固定せずmerge段階以降は拒否する
+    Given verify run用のIssue stagingを持つrepositoryがある
+    When PR停止のStep 11記録後とmerge準備後にverify runを実行する
+    Then Step 11後は記録してもstaging digestを再固定せずmerge段階では拒否する
