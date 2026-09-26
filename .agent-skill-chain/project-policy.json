@@ -42,6 +42,11 @@
     "budgets": {
       "localFeedbackMs": 120000,
       "prGateMs": 900000
+    },
+    "staging": {
+      "root": "docs/issues",
+      "tracked": true,
+      "issueBody": "pointer"
     }
   },
   "choiceFiles": ["project/choices/development.json"],
