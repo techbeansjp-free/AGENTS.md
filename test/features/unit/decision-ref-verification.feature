@@ -20,3 +20,23 @@ Feature: Step 10 review round consumer側のdecisionRef機械検証（Issue #148
     Given decisionRef記録後にevidenceを書き換えたfindingがあるround入力がある
     When previewReviewRoundを実行する
     Then inputDigest不一致として拒否される
+
+  Scenario: SCN-UNIT-DECREF-005 decisionRefのeffectiveValueとfinding.severityが不一致だと拒否される
+    Given effectiveValueがHighのdecisionRefをseverity Lowのfindingへ設定したround入力がある
+    When previewReviewRoundを実行する
+    Then severityとeffectiveValueの不一致として拒否される
+
+  Scenario: SCN-UNIT-DECREF-006 decision journalに不正な行があると有効なdecisionRefでも拒否される
+    Given 有効なdecisionRefを持つがdecision journalに不正な行も混在するfindingがあるround入力がある
+    When previewReviewRoundを実行する
+    Then decision journalの不正な行として拒否される
+
+  Scenario: SCN-UNIT-DECREF-007 decisionRef field自体が無いlegacy findingは受理され機械検証の対象外になる
+    Given decisionRef導入前のfield無しfindingを持つround入力がある
+    When previewReviewRoundを実行する
+    Then roundが受理される
+
+  Scenario: SCN-UNIT-DECREF-008 decisionRef field無しとdecisionRef nullは異なるroundDigestになる
+    Given decisionRef field無しのfindingとdecisionRef nullのfindingで同内容のround入力を用意する
+    When 両方のroundDigestを比較する
+    Then roundDigestは異なる

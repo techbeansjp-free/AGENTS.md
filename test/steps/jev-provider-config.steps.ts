@@ -30,6 +30,7 @@ class JevProviderConfigWorld extends WorkflowWorld {
    * 呼び出しを記録し、SCN-008がtrusted pathの不在を動的に確認する。
    */
   readPaths: string[] = [];
+  restorePermissions: (() => void) | undefined = undefined;
 }
 
 const { Given, When, Then } = stepDefinitions<JevProviderConfigWorld>();
@@ -366,4 +367,28 @@ Then(
 
 Then("分類結果はenabledである", function (this: JevProviderConfigWorld) {
   assert.equal(this.classification?.state, "enabled");
+});
+
+// --- SCN-UNIT-JEVCFG-014（PR #1497独立review round 4指摘） ------------------
+
+Given(
+  "jev-provider.jsonが存在するが読み取り権限が無い",
+  function (this: JevProviderConfigWorld) {
+    this.root = this.temp("asc-jevcfg-014-");
+    writeConfig(this.root, {
+      enabled: true,
+      apiKeyEnvVar: "JEV_API_KEY",
+      endpoint: "https://api.jev.example.invalid/v1",
+      model: "jev-decision-1",
+    });
+    const resolved = path.join(this.root, JEV_PROVIDER_CONFIG_PATH);
+    fs.chmodSync(resolved, 0o000);
+    this.restorePermissions = () => fs.chmodSync(resolved, 0o644);
+  },
+);
+
+After<JevProviderConfigWorld>(function () {
+  // 読み取り不可のままにするとtemp directoryの後始末（他stepの削除処理）が
+  // 失敗しうるため、EACCES fixtureのpermissionを必ず元へ戻す。
+  this.restorePermissions?.();
 });

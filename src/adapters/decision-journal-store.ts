@@ -146,14 +146,28 @@ export function readDecisionJournal(
   return { records, errors };
 }
 
+/**
+ * **journalが1行でも不正ならfail-closedで例外化する（PR #1497独立review
+ * round 4指摘）。** 従来は`errors`を無視し`records`だけで検索していたため、
+ * 一部行が不正なjournalでも参照対象のrecordが解析できていれば見つかって
+ * しまい、`verifyReviewRoundDecisionRefs`（review-session.ts）経由の
+ * `previewReviewRound`が破損したjournalを部分的に受理していた。呼び出し元は
+ * `decisionRecordId`1件の照会だけを求めており、journal全体の整合性を
+ * 呼び出し元へ判定させる理由がない。ここで拒否することで
+ * `decision invoke --apply`（decision-invoke.ts、重複record検出）と
+ * decisionRef機械検証の両方が同じ保証を受ける。
+ */
 export function findDecisionJournalRecord(
   primaryRoot: string,
   id: string,
   decisionRecordId: string,
 ): DecisionJournalRecord | undefined {
-  return readDecisionJournal(primaryRoot, id).records.find(
-    (record) => record.decisionRecordId === decisionRecordId,
-  );
+  const { records, errors } = readDecisionJournal(primaryRoot, id);
+  if (errors.length > 0)
+    throw new Error(
+      `decision journal（${id}）に不正な行があるため参照できません: ${errors.join("; ")}`,
+    );
+  return records.find((record) => record.decisionRecordId === decisionRecordId);
 }
 
 /**

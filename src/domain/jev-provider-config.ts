@@ -73,8 +73,23 @@ export function classifyJevProviderConfig(
   try {
     if (!fs.statSync(resolved).isFile()) return { state: "absent" };
     raw = fs.readFileSync(resolved, "utf8");
-  } catch {
-    return { state: "absent" };
+  } catch (error) {
+    /**
+     * **`ENOENT`／`ENOTDIR`だけを`absent`にする（PR #1497独立review round 4
+     * 指摘）。** 二重の`fs`呼び出し（`statSync`→`readFileSync`）を1つの
+     * `catch`でまとめて`absent`へ潰していたため、`EACCES`（権限拒否）等の
+     * 「fileはあるが読めない」も"absent"として扱われ、`resolveLocalConfig
+     * WithWorkspaceFallback`（local-config-workspace.ts）がactive worktreeの
+     * 本当のerrorを隠してprimary worktreeへ誤ってfallbackしていた。fallback
+     * はabsent（未設定）時だけの意図であり、読めないfileはinvalidとして
+     * 呼び出し元へ伝える。
+     */
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+    if (code === "ENOENT" || code === "ENOTDIR") return { state: "absent" };
+    return { state: "invalid", reason: "設定fileを読み取れません" };
   }
   let parsed: unknown;
   try {

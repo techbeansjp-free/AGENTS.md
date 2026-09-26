@@ -67,3 +67,8 @@ Feature: ローカルJev provider設定のloader
     And 指定したenv varがprocess.envに設定されている
     When classifyJevProviderConfigを実行する
     Then 分類結果はenabledである
+
+  Scenario: SCN-UNIT-JEVCFG-014 classifyは読み取り権限が無いfileをabsentではなくinvalidと分類する
+    Given jev-provider.jsonが存在するが読み取り権限が無い
+    When classifyJevProviderConfigを実行する
+    Then 分類結果はinvalidであり理由が空でない

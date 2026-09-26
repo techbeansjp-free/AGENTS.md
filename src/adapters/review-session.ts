@@ -384,20 +384,39 @@ export function buildReviewRoundDraft(input: {
      * pathを毎round書き直させない（利用projectの実測では再掲finding 1,142件が
      * 新規finding 935件を上回っていた）。`admission`等の判定結果は写さない。
      */
+    /**
+     * **前roundのdecisionRefは新roundへ引き継がない（PR #1497独立review
+     * round 4指摘）。** `decisionRef`は記録時のround（`candidateHeadSha`）へ
+     * 束縛されている。ここは新HEAD向けの雛形を書くだけで、`fixedDiff`が
+     * 非空のため`candidateHeadSha`は前roundと異なる。引き継いだ`decisionRef`は
+     * `verifyReviewRoundDecisionRefs`のcandidateHeadSha検証で必ず拒否され、
+     * 「decisionRefが引き継がれている」という事実を教えない不親切なerrorに
+     * なる（fail-closed自体は保たれるためsafetyの問題ではない。UXの問題）。
+     * 事前にnullへ戻し、新HEADで再invokeしてから記入するようnotesへ書く。
+     */
+    let carriedDecisionRefCleared = false;
     const carried = (last?.findings ?? [])
       .filter(({ id }) => previousBlocking.includes(id))
-      .map((finding) => ({
-        id: finding.id,
-        severity: finding.severity,
-        status: finding.status,
-        source: finding.source,
-        relation: finding.relation,
-        evidence: finding.evidence,
-        path: finding.path,
-        contractId: finding.contractId,
-        causedByFindingId: finding.causedByFindingId,
-        decisionRef: finding.decisionRef,
-      }));
+      .map((finding) => {
+        if (finding.decisionRef !== null && finding.decisionRef !== undefined)
+          carriedDecisionRefCleared = true;
+        return {
+          id: finding.id,
+          severity: finding.severity,
+          status: finding.status,
+          source: finding.source,
+          relation: finding.relation,
+          evidence: finding.evidence,
+          path: finding.path,
+          contractId: finding.contractId,
+          causedByFindingId: finding.causedByFindingId,
+          decisionRef: null,
+        };
+      });
+    if (carriedDecisionRefCleared)
+      notes.push(
+        "前round blockerが持っていたdecisionRefはnullへ戻した。前roundのcandidateHeadShaに束縛されており新HEADでは検証できないため。是正済みならevidenceに確認内容を書く。Decision Journalの記録を再利用したい場合は新HEADでdecisionを再invokeしてからdecisionRefへ記入する",
+      );
     round = {
       round: previous.rounds.length + 1,
       previousRoundDigest: previous.latestRoundDigest,
@@ -484,7 +503,12 @@ function refixStagingDigestForRound(staging: string): void {
  * Step 10 review round consumer側の`decisionRef`機械検証（Issue #1485、L-03）。
  * `decisionRef !== null`のfindingだけを対象にする。人・進行役が直接記入した
  * 分類（`decisionRef === null`）は検証しない（BR-01強化の対象は
- * Decision Skill経由の判断だけ）。
+ * Decision Skill経由の判断だけ）。**`decisionRef`が未設定（`undefined`）の
+ * legacy findingも同様に対象外とする**（PR #1497独立review round 4指摘。
+ * `decisionRef`導入前に記録されたfindingにfieldそのものが無い場合を
+ * nullと区別せず、Decision Journal検証の対象外＝人・進行役の直接記入と
+ * 同じ扱いにする。§`decisionRef`はoptional field、`review-convergence.ts`
+ * 参照）。
  *
  * 拒否理由は設計正本「最終確定仕様」§2の5種（decisionRef欠落／type不一致／
  * candidateHeadSha不一致／inputDigest不一致／provider version期限切れ）に
@@ -499,7 +523,8 @@ function verifyReviewRoundDecisionRefs(
   findings: readonly ReviewRoundFinding[],
 ): void {
   const decisionRefFindings = findings.filter(
-    (finding) => finding.decisionRef !== null,
+    (finding) =>
+      finding.decisionRef !== null && finding.decisionRef !== undefined,
   );
   if (decisionRefFindings.length === 0) return;
   const primaryRoot = resolveGitWorkspace(root).primaryRoot;
@@ -531,6 +556,20 @@ function verifyReviewRoundDecisionRefs(
     if (!verification.ok)
       throw new Error(
         `review round finding ${finding.id}のdecisionRef ${decisionRecordId} を検証できません: ${verification.reason}`,
+      );
+    /**
+     * **`effectiveValue`とfinding.severityの一致も検証する（PR #1497独立review
+     * round 4指摘）。** `inputDigest`はseverityを含まないため、上のbinding検証
+     * だけではCritical〜HighのeffectiveValueを持つ確定decisionRecordを
+     * severity: "Low"のfindingへ紐づけられてしまう。DCAND-006の
+     * effectiveValueはfinding.severityと同じ値域（severity文字列そのもの）
+     * を持つ既存仕様であり、不一致はround 2が防ぐべき「Critical→Lowの
+     * 無言de-escalation」を`decisionRef`経由で素通りさせる。fail-closedで
+     * roundそのものを拒否する（record-onlyへ黒く落とさない）。
+     */
+    if (record.effectiveValue !== finding.severity)
+      throw new Error(
+        `review round finding ${finding.id}のseverity ${finding.severity} がdecisionRef ${decisionRecordId} のeffectiveValue ${record.effectiveValue} と一致しません`,
       );
   }
 }
