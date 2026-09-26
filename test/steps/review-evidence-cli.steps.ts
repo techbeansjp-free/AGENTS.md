@@ -17,6 +17,11 @@ import {
 } from "../../src/adapters/review-session.js";
 import { appendWorkflowJournalEntry } from "../../src/adapters/workflow-journal.js";
 import {
+  appendVerificationRun,
+  readVerificationRuns,
+} from "../../src/adapters/verification-run.js";
+import { sealVerificationRun } from "../../src/domain/verification-run.js";
+import {
   WORKFLOW_STEPS,
   type StepJournalEntry,
 } from "../../src/domain/workflow.js";
@@ -188,10 +193,48 @@ function exportArgs(
     ...Object.entries(values)
       .filter(([, value]) => value !== undefined)
       .map(([key, value]) => `--${key}=${value}`),
-    ...(overrides.noVerified === "true"
-      ? []
-      : ["--verified=npm test", "--verified=npm run lint"]),
-  ].filter((argument) => !argument.startsWith("--noVerified"));
+  ];
+}
+
+/** shellを通さず実行される検証command。argvのまま記録される。 */
+const PASSING_TEST_ARGV = [process.execPath, "-e", "process.exit(0)"];
+const PASSING_LINT_ARGV = [
+  process.execPath,
+  "-e",
+  "process.stdout.write('lint')",
+];
+
+/** `verify run`をCLIから実行する。commandの出力は標準エラーへ中継される。 */
+async function verifyRun(
+  world: ReviewEvidenceCliWorld,
+  argv: readonly string[],
+  flags: readonly string[] = [],
+): Promise<CliResult> {
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    return await captureCli([
+      "verify",
+      "run",
+      `--staging=${world.staging}`,
+      ...flags,
+      "--",
+      ...argv,
+    ]);
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+}
+
+async function verifyPassing(
+  world: ReviewEvidenceCliWorld,
+  flags: readonly string[] = [],
+): Promise<void> {
+  for (const argv of [PASSING_TEST_ARGV, PASSING_LINT_ARGV]) {
+    const result = await verifyRun(world, argv, flags);
+    assert.equal(result.error, undefined, String(result.error));
+    assert.equal(result.exitCode, 0);
+  }
 }
 
 Given("review証跡用に収束済みsessionを持つrepositoryがある", function () {
@@ -208,6 +251,7 @@ Given(
 );
 
 When("H_implでreview exportを実行する", async function () {
+  await verifyPassing(this);
   this.exported = await captureCli(exportArgs(this));
 });
 
@@ -220,13 +264,23 @@ Then(
     assert.equal(fs.statSync(file).mode & 0o777, 0o644);
     const evidence = parseReviewEvidence(fs.readFileSync(file, "utf8"));
     assert.equal(evidence.issue, ISSUE);
-    assert.equal(evidence.baseSha, this.base);
-    assert.equal(evidence.implementationHeadSha, this.implementationHead);
-    assert.equal(evidence.session.sessionId, this.session.sessionId);
-    assert.equal(evidence.independence.mode, "context-isolated");
+    assert.equal(evidence.observed.baseSha, this.base);
+    assert.equal(
+      evidence.observed.implementationHeadSha,
+      this.implementationHead,
+    );
+    assert.equal(evidence.observed.session.sessionId, this.session.sessionId);
+    assert.equal(evidence.declared.independenceMode, "context-isolated");
     assert.deepEqual(
-      evidence.verification.map(({ command }) => command),
-      ["npm test", "npm run lint"],
+      evidence.observed.verification.map(({ command }) => command),
+      [PASSING_TEST_ARGV, PASSING_LINT_ARGV],
+    );
+    assert.ok(
+      evidence.observed.verification.every(
+        (item) =>
+          item.headSha === this.implementationHead &&
+          item.impactDigest === evidence.observed.impact.digest,
+      ),
     );
     const validation = await captureCli([
       "review",
@@ -244,11 +298,13 @@ Then(
 );
 
 When("不正な条件でreview exportを実行する", async function () {
+  /** 観測記録が無い拒否と区別するため、各条件は合格記録を持つ状態で測る */
+  await verifyPassing(this);
   this.failures.push(
     await captureCli(exportArgs(this, { implementer: "reviewer-context" })),
   );
   this.failures.push(
-    await captureCli(exportArgs(this, { noVerified: "true" })),
+    await captureCli([...exportArgs(this), "--verified=npm test"]),
   );
   this.failures.push(
     await captureCli(exportArgs(this, { out: "docs/other/1500_review.json" })),
@@ -282,7 +338,7 @@ When("不正な条件でreview exportを実行する", async function () {
 Then("各条件を理由つきで拒否し証跡を書かない", function () {
   const expected = [
     /reviewerと--implementerは異なるidentity/u,
-    /--verified=/u,
+    /--verifiedは廃止/u,
     /docs\/reviews\/または\.agent-skill-chain\/reviews\/配下/u,
     /1500_review\.json/u,
     /symlinkを含まない親directory/u,
@@ -324,7 +380,7 @@ When(
     const canonical = fs.readFileSync(file, "utf8");
     fs.writeFileSync(
       path.join(this.root, "docs", "reviews", "tampered.json"),
-      canonical.replace('"npm run lint"', '"npm run typecheck"'),
+      canonical.replace("write('lint')", "write('typecheck')"),
     );
     fs.symlinkSync(file, path.join(this.root, "docs", "reviews", "link.json"));
     fs.writeFileSync(path.join(this.root, "review.json"), '{"round":1}\n');
@@ -387,6 +443,7 @@ When(
     git(this.root, ["cherry-pick", this.implementationHead]);
     this.rebasedHead = git(this.root, ["rev-parse", "HEAD"]);
     this.failures.push(await captureCli(exportArgs(this)));
+    await verifyPassing(this, [`--base=${this.rebasedBase}`]);
     this.exported = await captureCli(
       exportArgs(this, { base: this.rebasedBase }),
     );
@@ -405,8 +462,8 @@ Then(
     const evidence = parseReviewEvidence(
       fs.readFileSync(path.join(this.root, EVIDENCE), "utf8"),
     );
-    assert.equal(evidence.baseSha, this.rebasedBase);
-    assert.equal(evidence.implementationHeadSha, this.rebasedHead);
+    assert.equal(evidence.observed.baseSha, this.rebasedBase);
+    assert.equal(evidence.observed.implementationHeadSha, this.rebasedHead);
     const validation = await captureCli([
       "review",
       "validate",
@@ -417,3 +474,94 @@ Then(
     assert.equal(validation.output?.valid, true, JSON.stringify(validation));
   },
 );
+
+/**
+ * 同じargvで合否を切り替えるcommand。worktree外のmarker fileがあれば終了値3で失敗する。
+ * **argvが同じ記録の最新が不合格なら、古い合格で隠させない**ことを測るために使う。
+ */
+function markerArgv(marker: string): string[] {
+  return [
+    process.execPath,
+    "-e",
+    `process.exit(require("node:fs").existsSync(${JSON.stringify(marker)}) ? 3 : 0)`,
+  ];
+}
+
+When("観測記録の条件を変えてreview exportを実行する", async function () {
+  this.failures.push(await captureCli(exportArgs(this)));
+  const marker = path.join(this.temp("asc-verify-marker-"), "fail");
+  const passed = await verifyRun(this, markerArgv(marker));
+  assert.equal(passed.exitCode, 0, JSON.stringify(passed));
+  fs.writeFileSync(marker, "fail\n");
+  const failed = await verifyRun(this, markerArgv(marker));
+  assert.equal(failed.exitCode, 3, "commandの終了値をそのまま返す");
+  assert.equal(failed.output?.exitCode, 3);
+  this.failures.push(await captureCli(exportArgs(this)));
+});
+
+Then("各条件を観測記録の理由つきで拒否し証跡を書かない", function () {
+  assert.match(
+    String(this.failures[0]?.error?.message),
+    /検証記録がありません.*verify run/u,
+  );
+  assert.match(String(this.failures[1]?.error?.message), /最新の実行が不合格/u);
+  assert.equal(fs.existsSync(path.join(this.root, EVIDENCE)), false);
+});
+
+When("観測記録を消すか改竄してreview validateを実行する", async function () {
+  assert.equal(this.exported?.error, undefined, String(this.exported?.error));
+  const records = path.join(this.staging, "journal", "verification-runs.jsonl");
+  const original = fs.readFileSync(records, "utf8");
+  const validate = () =>
+    captureCli([
+      "review",
+      "validate",
+      `--artifact=${EVIDENCE}`,
+      `--staging=${this.staging}`,
+      `--root=${this.root}`,
+    ]);
+  this.validations.intact = await validate();
+  fs.rmSync(records);
+  this.validations.removed = await validate();
+  fs.writeFileSync(records, original.replace('"exitCode":0', '"exitCode":1'));
+  this.validations.tampered = await validate();
+  fs.writeFileSync(records, original);
+  /**
+   * 証跡に含まれるargvと同じcommandが、同じH_implと影響集合で後から失敗した記録。
+   * **同じargvの後続実行が失敗した事実を、先の合格記録で隠させない。**
+   * （証跡fileが未commitのためverify runはworktree不一致で拒否する。記録は製品の
+   * 追記関数で置く）
+   */
+  const [latest] = readVerificationRuns(this.staging).filter(
+    (record) =>
+      JSON.stringify(record.command) === JSON.stringify(PASSING_LINT_ARGV),
+  );
+  appendVerificationRun(
+    this.staging,
+    sealVerificationRun({
+      ...latest!,
+      exitCode: 5,
+      startedAt: "2099-01-01T00:00:00.000Z",
+      finishedAt: "2099-01-01T00:00:01.000Z",
+    }),
+  );
+  this.validations.laterFailure = await validate();
+});
+
+Then("記録の欠落・改竄・後続の不合格をそれぞれ拒否する", function () {
+  const errorsOf = (key: string) =>
+    (
+      (this.validations[key]?.output?.errors as string[] | undefined) ?? []
+    ).join(" / ");
+  assert.equal(
+    this.validations.intact?.output?.valid,
+    true,
+    errorsOf("intact"),
+  );
+  assert.equal(this.validations.removed?.output?.valid, false);
+  assert.match(errorsOf("removed"), /観測記録にありません/u);
+  assert.equal(this.validations.tampered?.output?.valid, false);
+  assert.match(errorsOf("tampered"), /検証記録を読めません.*recordDigest/u);
+  assert.equal(this.validations.laterFailure?.output?.valid, false);
+  assert.match(errorsOf("laterFailure"), /後続実行が不合格/u);
+});

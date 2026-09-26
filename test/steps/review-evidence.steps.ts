@@ -17,8 +17,11 @@ import {
 } from "../../src/domain/review-evidence.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 import {
+  resealObservedEvidence,
   resealReviewEvidence,
   reviewEvidenceFromSession,
+  syntheticVerification,
+  withAddedObservedVerification,
 } from "../support/review-evidence-fixture.js";
 
 interface ReviewEvidenceWorld extends WorkflowWorld {
@@ -103,6 +106,10 @@ function converged(): ReviewSessionState {
   return second;
 }
 
+function observedOf(value: Record<string, unknown>): Record<string, unknown> {
+  return value.observed as Record<string, unknown>;
+}
+
 function rejectionOf(action: () => unknown): string {
   try {
     action();
@@ -129,19 +136,27 @@ When("review証跡を生成して正規直列化から読み戻す", function ()
 Then("読み戻した証跡は生成した証跡と一致しsessionの値を持つ", function () {
   assert.deepEqual(this.reread, this.evidence);
   assert.equal(this.reread.issue, 1500);
-  assert.equal(this.reread.baseSha, BASE);
-  assert.equal(this.reread.implementationHeadSha, FIXED);
-  assert.equal(this.reread.session.sessionId, this.session.sessionId);
+  assert.equal(this.reread.observed.baseSha, BASE);
+  assert.equal(this.reread.observed.implementationHeadSha, FIXED);
+  assert.equal(this.reread.observed.session.sessionId, this.session.sessionId);
   assert.equal(
-    this.reread.session.latestRoundDigest,
+    this.reread.observed.session.latestRoundDigest,
     this.session.latestRoundDigest,
   );
-  assert.equal(this.reread.session.countedRounds, 2);
+  assert.equal(this.reread.observed.session.countedRounds, 2);
   assert.equal(this.reread.verdict, "approved");
-  assert.equal(this.reread.independence.reviewerModifiedCandidate, false);
-  assert.deepEqual(this.reread.verification, [
-    { command: "npm test", result: "pass" },
-  ]);
+  assert.equal(this.reread.declared.reviewerModifiedCandidate, false);
+  assert.deepEqual(
+    this.reread.observed.verification.map(
+      ({ command, scope, exitCode, headSha }) => ({
+        command,
+        scope,
+        exitCode,
+        headSha,
+      }),
+    ),
+    [{ command: ["npm", "test"], scope: "full", exitCode: 0, headSha: FIXED }],
+  );
   assert.equal(this.reread.evidenceDigest, reviewEvidenceDigest(this.reread));
   assert.deepEqual(
     validateReviewEvidenceAgainstSession(this.reread, this.session, {
@@ -191,24 +206,27 @@ When("review証跡の構造を1箇所ずつ壊して読む", function () {
   this.errors = [
     mutate((value) => (value.extra = true)),
     mutate((value) => (value.issue = "1")),
-    mutate((value) => (value.baseSha = "ABC")),
-    mutate((value) => (value.implementationHeadSha = "1".repeat(39))),
+    mutate((value) => (observedOf(value).baseSha = "ABC")),
     mutate(
-      (value) => ((value.session as Record<string, unknown>).status = "active"),
+      (value) => (observedOf(value).implementationHeadSha = "1".repeat(39)),
+    ),
+    mutate(
+      (value) =>
+        ((observedOf(value).session as Record<string, unknown>).status =
+          "active"),
     ),
     mutate((value) => (value.unresolvedCriticalHigh = ["F-001"])),
     mutate((value) => (value.verdict = "rejected")),
-    mutate((value) => (value.verification = [])),
+    mutate((value) => (observedOf(value).verification = [])),
     mutate(
       (value) =>
-        ((value.independence as Record<string, unknown>).implementer =
+        ((value.declared as Record<string, unknown>).implementer =
           "reviewer-context"),
     ),
     mutate(
       (value) =>
-        ((
-          value.independence as Record<string, unknown>
-        ).reviewerModifiedCandidate = true),
+        ((value.declared as Record<string, unknown>).reviewerModifiedCandidate =
+          true),
     ),
     mutate(
       (value) =>
@@ -243,7 +261,7 @@ When("review証跡の値を書き換えるか再整形して読む", function ()
   const canonical = renderReviewEvidence(evidence);
   this.errors = [
     rejectionOf(() =>
-      parseReviewEvidence(canonical.replace('"npm test"', '"npm run lint"')),
+      parseReviewEvidence(canonical.replace('"test"', '"lint"')),
     ),
     rejectionOf(() =>
       parseReviewEvidence(`${JSON.stringify(JSON.parse(canonical))}\n`),
@@ -268,7 +286,12 @@ When("不正な入力でreview証跡を生成する", function () {
     independenceMode: "context-isolated" as const,
     reviewer: "reviewer-context",
     implementer: "implementer-context",
-    verification: ["npm test"],
+    diffDigest: "d".repeat(64),
+    impact: { digest: "e".repeat(64), mode: "full" },
+    verification: syntheticVerification({
+      implementationHeadSha: INITIAL,
+      impactDigest: "e".repeat(64),
+    }),
   };
   const convergedSession = converged();
   this.errors = [
@@ -346,23 +369,26 @@ Then(
 
 When("比較基点と検証記録をそれぞれ変えた証跡を比較する", function () {
   const evidence = reviewEvidenceFromSession(this.session);
+  /** rebase後の再生成と同じく、影響集合と各検証記録の束縛値も新しいH_implへ変わる。 */
   const rebased = parseReviewEvidence(
-    resealReviewEvidence(evidence, {
+    resealObservedEvidence(evidence, {
       baseSha: "4".repeat(40),
       implementationHeadSha: "5".repeat(40),
+      impact: { digest: "6".repeat(64), mode: "full" },
+      verification: syntheticVerification({
+        implementationHeadSha: "5".repeat(40),
+        impactDigest: "6".repeat(64),
+      }),
     }),
   );
   const verified = parseReviewEvidence(
-    resealReviewEvidence(evidence, {
-      verification: [
-        { command: "npm test", result: "pass" },
-        { command: "npm run lint", result: "pass" },
-      ],
+    resealObservedEvidence(evidence, {
+      verification: withAddedObservedVerification(evidence),
     }),
   );
   const reviewer = parseReviewEvidence(
     resealReviewEvidence(evidence, {
-      independence: { ...evidence.independence, reviewer: "other-reviewer" },
+      declared: { ...evidence.declared, reviewer: "other-reviewer" },
     }),
   );
   const same = (
@@ -403,7 +429,13 @@ When("countedRoundsが上限を超える証跡を読む", function () {
   const evidence = reviewEvidenceFromSession(this.session);
   const tooMany = {
     ...evidence,
-    session: { ...evidence.session, countedRounds: REVIEW_RECOVERY_ROUND + 1 },
+    observed: {
+      ...evidence.observed,
+      session: {
+        ...evidence.observed.session,
+        countedRounds: REVIEW_RECOVERY_ROUND + 1,
+      },
+    },
   };
   const sealed = { ...tooMany, evidenceDigest: reviewEvidenceDigest(tooMany) };
   this.errors = [
@@ -414,3 +446,67 @@ When("countedRoundsが上限を超える証跡を読む", function () {
 Then("round上限超過として拒否する", function () {
   assert.match(this.errors[0]!, /countedRounds.*上限/u);
 });
+
+When("schemaVersionがv1の証跡を読む", function () {
+  const plain = JSON.parse(
+    renderReviewEvidence(reviewEvidenceFromSession(this.session)),
+  ) as Record<string, unknown>;
+  plain.schemaVersion = "agent-skill-chain/review-evidence/v1";
+  this.errors = [
+    rejectionOf(() =>
+      parseReviewEvidence(`${JSON.stringify(plain, null, 2)}\n`),
+    ),
+  ];
+});
+
+Then(
+  "v1証跡はverify runとreview exportでの再生成を名指しして拒否する",
+  function () {
+    assert.match(this.errors[0]!, /review-evidence\/v1 は受理しません/u);
+    assert.match(this.errors[0]!, /verify run/u);
+    assert.match(this.errors[0]!, /review-evidence\/v2/u);
+  },
+);
+
+When("検証欄の束縛を1箇所ずつ崩した証跡を読む", function () {
+  const evidence = reviewEvidenceFromSession(this.session);
+  const first = evidence.observed.verification[0]!;
+  const attempt = (verification: readonly object[]): string =>
+    rejectionOf(() =>
+      parseReviewEvidence(
+        resealReviewEvidence(evidence, {
+          observed: {
+            ...evidence.observed,
+            verification:
+              verification as unknown as typeof evidence.observed.verification,
+          },
+        }),
+      ),
+    );
+  this.errors = [
+    attempt([{ ...first, headSha: "9".repeat(40) }]),
+    attempt([{ ...first, impactDigest: "9".repeat(64) }]),
+    attempt([{ ...first, exitCode: 1 }]),
+    attempt([{ ...first, scope: "targeted" }]),
+    attempt([first, { ...first, command: ["npm", "run", "lint"] }]),
+    /** 崩さない対照。同じ変更経路が正当な証跡を受理することを確かめる */
+    attempt([first]),
+  ];
+});
+
+Then(
+  "headSha・impactDigest・exitCode・scope=full欠落・recordDigest重複をそれぞれ拒否する",
+  function () {
+    const expected = [
+      /verification\[0\]\.headShaはobserved\.implementationHeadSha/u,
+      /verification\[0\]\.impactDigestはobserved\.impact\.digest/u,
+      /verification\[0\]\.exitCodeは0だけ/u,
+      /modeがfullのためscope=fullの検証記録が必要/u,
+      /recordDigestが重複/u,
+    ];
+    assert.equal(this.errors.length, expected.length + 1);
+    for (const [index, pattern] of expected.entries())
+      assert.match(this.errors[index]!, pattern, `mutation ${index}`);
+    assert.equal(this.errors[expected.length], "", "対照は受理する");
+  },
+);

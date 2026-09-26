@@ -42,3 +42,13 @@ Feature: Step 10のreview証跡を収束済みsessionから生成し厳密に読
     Given 2 roundで収束したreview sessionがある
     When countedRoundsが上限を超える証跡を読む
     Then round上限超過として拒否する
+
+  Scenario: SCN-UNIT-REVEVID-009 申告文字列の検証欄を持つv1証跡を移行先つきで拒否する
+    Given 2 roundで収束したreview sessionがある
+    When schemaVersionがv1の証跡を読む
+    Then v1証跡はverify runとreview exportでの再生成を名指しして拒否する
+
+  Scenario: SCN-UNIT-REVEVID-010 検証欄はH_implと影響集合digestと合格に束縛されfullにはscope=fullを要求する
+    Given 2 roundで収束したreview sessionがある
+    When 検証欄の束縛を1箇所ずつ崩した証跡を読む
+    Then headSha・impactDigest・exitCode・scope=full欠落・recordDigest重複をそれぞれ拒否する

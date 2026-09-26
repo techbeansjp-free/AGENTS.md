@@ -888,8 +888,8 @@ export function checkFileAudit(
     errors.push(
       `${auditPath}のfile名のIssue番号とreview証跡のissue ${evidence.issue} が一致しません`,
     );
-  const base = evidence.baseSha;
-  const implementation = evidence.implementationHeadSha;
+  const base = evidence.observed.baseSha;
+  const implementation = evidence.observed.implementationHeadSha;
   if (implementation !== inferred.implementation)
     errors.push(
       `review証跡のH_impl ${implementation} が実際のcommit構造から導出したH_impl ${inferred.implementation} と一致しません。review headの親commitで\`review export\`を実行し直してください`,
@@ -945,9 +945,9 @@ export function checkFileAudit(
   );
   if (ancestry.status !== 0)
     errors.push("H_implがcurrent HEADのancestorではありません");
-  if (evidence.session.countedRounds > MAX_REVIEW_ROUNDS)
+  if (evidence.observed.session.countedRounds > MAX_REVIEW_ROUNDS)
     errors.push(
-      `reviewラウンドが上限を超えています: ${evidence.session.countedRounds}（上限${MAX_REVIEW_ROUNDS}）。同じ範囲の予算は自動更新しません`,
+      `reviewラウンドが上限を超えています: ${evidence.observed.session.countedRounds}（上限${MAX_REVIEW_ROUNDS}）。同じ範囲の予算は自動更新しません`,
     );
   /**
    * **配布物影響はGitとpackage filesから導出して報告する。** 散文の記述は要求しない。
@@ -977,7 +977,7 @@ export function checkFileAudit(
     current,
     auditPath,
     changedFiles: changed.length,
-    countedRounds: evidence.session.countedRounds,
+    countedRounds: evidence.observed.session.countedRounds,
     distributedPaths: distributed,
   };
 }
