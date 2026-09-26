@@ -29,7 +29,7 @@ Codex起動差分では`routing launch`の観測時刻・入口・selectedModel/
 
 [ドメイン用語台帳](../../docs/01_開発ワークフロー.md#ドメイン用語台帳)と要求・要件の用語差分、耐久用語台帳を作業開始前に全文読む。未定義語、重複定義、根拠なしの意味変更、置換先なしの廃止、成果物間の表記揺れをfindingにする。
 
-**review証跡のテンプレートはない。** review証跡は`review export --staging=<staging> --issue=<Issue番号> --reviewer=<reviewer identity> --implementer=<implementer identity> --verified=<実行して合格したcommand>`（`--verified`は繰り返し指定）が、収束済みreview session・trusted policyの`merge.reviewIndependence`・current HEAD（`H_impl`）から`docs/reviews/<Issue番号>_review.json`へ生成する。**人もAIも手で書かない。** Gitが示す差分path・変更種別・配布物影響は書き直さない。sessionが収束していない、未解決Critical/Highが残る、reviewerとimplementerが同一、検証commandが無い場合は生成されない。生成後は`review validate --artifact=<path> --staging=<staging>`で保存済みsessionとGitに照合できる。
+**review証跡のテンプレートはない。** review証跡は`review export --staging=<staging> --issue=<Issue番号> --reviewer=<reviewer identity> --implementer=<implementer identity> --verified=<実行して合格したcommand>`（`--verified`は繰り返し指定）が、収束済みreview session・trusted policyの`merge.reviewIndependence`・current HEAD（`H_impl`）から`docs/reviews/<Issue番号>_review.json`へ生成する。**人もAIも手で書かない。** Gitが示す差分path・変更種別・配布物影響は書き直さない。sessionが収束していない、未解決Critical/Highが残る、reviewerとimplementerが同一、検証commandが無い場合は生成されない。生成後は`review validate --artifact=<path> --staging=<staging>`で保存済みsessionとGitに照合できる。H_final後は証跡を更新しない。検証記録を加える同一pathの前進修正とpath是正だけを`pr reanchor`が受理する。
 
 各roundの入力JSONは`review round --init`が生成した骨子を充填し、[読取と書込の量](../../docs/01_開発ワークフロー.md#読取と書込の量)に従って是正はfindingの該当行だけを差分で書く。`review round --init`はsessionがあるとき前round blockerのfindingを雛形へ写すので、statusの更新と新規findingだけを書く。round JSONの全文をheredocで書き直さない。
 

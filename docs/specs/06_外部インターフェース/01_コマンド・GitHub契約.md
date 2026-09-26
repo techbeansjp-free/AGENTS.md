@@ -101,11 +101,11 @@ fullの00 §2.1直下にある`- [成果物:<kind>] 説明`形式を構造解析
 
 再固定のGit比較が失敗した場合は、`旧base→旧head`、`新base→新head`、`旧H_impl→旧head`、`新H_impl→新head`、`旧base→旧H_impl`、`新base→新H_impl`のいずれかの役割と、旧・新のbase/head SHAを診断へ含める。`H_impl`を使う比較では該当SHAも示す。入力、anchor、chain、内容不一致の既存診断と`ASC-CLI-VALIDATION-001`の構造は維持する。
 
-`pr-bound`中のpush済みreview artifact書式是正は、同じartifact pathの前進commitを`pr reanchor`の`artifact-supersession`として再固定する。旧・新artifactの実装境界、監査対象、判断本文、§8配布物影響を一致させ、現行承認形式への限定的な表記修正だけを許す。保存済みreview sessionとStep 10を再照合し、旧・新digestをappend-onlyで記録する。判断変更や製品差分、rename、mode変更、mergeを拒否する。
+`pr-bound`中のpush済みreview証跡（REQ-WF-038）の前進修正は、同じ証跡pathの前進commitを`pr reanchor`の`artifact-supersession`として再固定する。旧・新証跡は比較基点・`H_impl`・session束縛・finding・独立性・判定を一致させ、検証記録（`verification`）の追加だけを許す。保存済みreview sessionとStep 10を再照合し、旧・新digestをappend-onlyで記録する。判断変更や製品差分、rename、mode変更、mergeを拒否する。証跡pathだけを是正する`artifact-replacement`は証跡のbyte一致を要求する。
 
-`pr-bound`中の実装前進は、収束した次roundを`workflow record --step=10 --post-pr-intake`で記録した後に`pr reanchor`する。`pr reanchor`は旧delivery実効HEADから新`H_impl`へのstrict ancestor、base不変、exact session binding、監査合格済みevidence-only suffixを要求し、`reviewed-forward`記録へsession ID・round digest・`H_impl`・artifact path/digestを固定する。
+`pr-bound`中の実装前進は、収束した次roundを`workflow record --step=10 --post-pr-intake`で記録した後に`pr reanchor`する。`pr reanchor`は旧delivery実効HEADから新`H_impl`へのstrict ancestor、base不変、exact session binding、sessionと一致するreview証跡のevidence-only suffixを要求し、`reviewed-forward`記録へsession ID・round digest・`H_impl`・artifact path/digestを固定する。
 
-新artifactは`H_final`の末尾1 commitから一意に選び、比較基点から新HEADまでに旧review artifactが複数残っていても候補数へ含めない。初回は`H_impl`を唯一の親とし、前向き訂正後は同じartifact pathだけを変更する最大8件の第一親commitから`H_impl`へ遡る。各commitの通常file mode `100644`と同一pathを検査し、review sessionのcandidate HEADと宣言`H_impl`を一致させる。
+新証跡は`H_final`の末尾1 commitから一意に選び、比較基点から新HEADまでに旧review成果物が複数残っていても候補数へ含めない。初回は`H_impl`を唯一の親とし、前向き訂正後は同じartifact pathだけを変更する最大8件の第一親commitから`H_impl`へ遡る。各commitの通常file mode `100644`と同一pathを検査し、review sessionのcandidate HEADと宣言`H_impl`を一致させる。
 
 ## Workflowサブコマンド
 
@@ -193,9 +193,9 @@ squash/rebaseの終端検証は、固定base..headからsource commit数を1〜2
 
 `issue create`は`--staging-root=<親directory>`と`--name=<directory名>`を受ける。配置の契約はproject policyの`staging`節（REQ-WF-025）が所有し、`*`を含むrootでは`--staging-root`が必須である。
 
-`review artifact --init --staging=<path> --base=<sha> --head=<sha> [--out=<path>]`は、保存済みstaging digestと実Gitの`base..head`変更pathを04へ充填する。`head`はcurrent HEADの完全SHAに一致させ、全pathを個別監査表へ残す。既定出力はcanonical Issue番号から`docs/reviews/<issue>_レビュー.md`とし、repository外、staging内、既存path、symlink祖先を拒否して排他的に作成する。review判定とtest結果はreviewerが記録するまで未確定である。
+`review export --staging=<path> --issue=<N> --reviewer=<id> --implementer=<id> --verified=<command>...[--base=<sha>] [--out=<path>]`は、収束済みreview sessionとtrusted policyの`merge.reviewIndependence`とcurrent HEAD（`H_impl`）からreview証跡（REQ-WF-038）を生成する。既定出力は`docs/reviews/<issue>_review.json`とし、`docs/reviews/`・`.agent-skill-chain/reviews/`配下の同名file以外、repository外、staging内、symlink祖先を拒否してatomicに書き、書込み後に厳密に読み戻す。未収束・budget-exhausted・blocker残存のsession、reviewerとimplementerの同一、`--verified`の欠落、stagingのtracker Issueと異なる`--issue`、review済みcandidate HEADでも内容等価なrebase後の`H_impl`でもないHEADを拒否する。`--base`はrebase後または既定branch追随後の比較基点を指定する。
 
-`review validate`は既存の`--file=<json>`または位置引数によるreview evidence評価と、排他的な`--artifact=<markdown> [--root=<path>]`による構造検証を持つ。 `--artifact`と`--terminal`を併用した場合だけ、commit前のcontext-isolated最終成果物に必要な§9独立性記録・§11未解決Critical/Highなし・approvedも検証し、`approvalErrors`と非0終了値で報告する。途中round、JSON評価の既定動作は変えない。actor-independentのprovider承認はPR前に観測できないため、このflagの成功をその承認の代替にしない。artifact経路はroot内のsymlinkでない通常fileだけを読み、比較基点・H_implの厳密行、ラウンド数、Step chain、必須見出し、配布物影響の判断・根拠を検証する。成功は`{valid:true, kind:"review-artifact", errors:[]}`、不備は`errors[]`へcode、1-origin line、expected、messageを全件返して終了code 1とする。本文を診断へ出さず、fileを変更せず、approval・authorityを生成しない。
+`review validate`は既存の`--file=<json>`または位置引数によるreview入力評価と、排他的な`--artifact=<path> [--staging=<path>] [--root=<path>]`によるreview証跡の検証を持つ。artifact経路はroot内のsymlinkでない通常fileだけを読み、未知field・型違い・不正なSHA・`evidenceDigest`不一致・正規直列化とのbyte不一致を拒否する。`--staging`を指定した場合だけ保存済みreview session・trusted policyの独立性モード・Gitの比較基点と`H_impl`へ照合する。成功は`{valid:true, kind:"review-evidence", errors:[]}`、不備は`errors[]`へ理由を返して終了code 1とする。fileを変更せず、approval・authorityを生成しない。
 
 `pr create --dry-run`はtrusted Git policyとlocal review/test/spec/ownership evidenceの構造を判定するが、GitHub authorityをattestしない`unverified-preview`とし、GitHub/`gh`を呼ばない。`--apply`は明示authorizationを必須とし、唯一のGitHub adapterが作成直前にexact repositoryのwrite authority、remote head/base refのOIDを観測し、作成後のrepository/base/head/head OID/base OIDまで再読取する。local evidence JSONのprovenance自己申告をauthorityとして扱わない。
 

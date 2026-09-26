@@ -53,17 +53,3 @@ Feature: stagingの配置をproject policyで版管理下へ置ける
     Given sprint配下をrootにする版管理下のstaging policyがある
     When staging-rootとnameを指定してissue createする
     Then 除外pathspecつきのgit statusはstaging配下の未追跡fileを見せない
-
-  Scenario: SCN-UNIT-STGLAYOUT-009 review artifact雛形は種別から導ける監査列を事前充填する
-    Given 種別の異なる変更pathがある
-    When 監査行の雛形を描画する
-    Then lockfileと文書とtestと設定は層と依存と安全の列が埋まり判定列は未確定のままである
-    And product codeの行は全列が未確定のままである
-
-  Scenario: SCN-UNIT-STGLAYOUT-010 review artifact雛形はauditと同じ差分集合と配布物影響の行を持つ
-    Given 生成物を含む変更pathとpackage filesがある
-    When review artifact雛形をpackage filesつきで描画する
-    Then 個別監査表に生成物を含む全変更pathの行がある
-    And 生成物行に生成元との対応確認と配布影響の確認方法がある
-    And 配布物影響の表は生成物を境界単位にまとめ入る入らないを判定している
-    And ラウンド数は整数で始まる

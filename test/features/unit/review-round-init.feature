@@ -111,7 +111,7 @@ Feature: review round雛形と契約の露出
   Scenario: SCN-UNIT-DOCROW-001 配布文書に暗黙契約の行がある
     Given 配布template・規範文書・step-09 skillがある
     When 配布template・規範文書・step-09 skillを読む
-    Then 04にH_impl行、01にQ-08の判定例表、step-09にstaging配置の手順がある
+    Then 証跡schemaにH_implと比較基点、01にQ-08の判定例表、step-09にstaging配置の手順がある
 
   Scenario: SCN-UNIT-REVINIT-011 検査後の親差し替えでもstaging内へ書かない
     Given 初回candidateを持つstagingがある
@@ -174,7 +174,7 @@ Feature: review round雛形と契約の露出
     When completion状態を評価する
     Then cleanup-applyの拒否は--approved-digestだけを案内し--report-hashを含まない
 
-  Scenario: SCN-UNIT-DOCROW-002 REQ-WF-009とtemplate 04に注記がある
+  Scenario: SCN-UNIT-DOCROW-002 REQ-WF-009に注記がある
     Given 配布template・規範文書・step-09 skillがある
     When 配布template・規範文書・step-09 skillを読む
-    Then session依存flagの個別報告とDC-UX根拠と発見IDの注記がある
+    Then session依存flagの個別報告の注記がある

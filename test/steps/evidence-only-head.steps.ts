@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
+import { reviewEvidenceContentFromStaging } from "../support/review-evidence-fixture.js";
 import {
   assertCurrentReviewJournalBinding,
   main,
@@ -44,7 +45,7 @@ const { Given, When, Then } = stepDefinitions<EvidenceOnlyHeadWorld>();
 const repositoryRoot = process.cwd();
 const instant = new Date("2026-09-11T00:00:00.000Z");
 const reviewedPath = "src/domain/review.ts";
-const artifactPath = "docs/reviews/1_課題1272レビュー.md";
+const artifactPath = "docs/reviews/1272_review.json";
 
 function answers(): Record<string, ModeAnswer> {
   return Object.fromEntries(
@@ -161,52 +162,12 @@ function assertSession(world: EvidenceOnlyHeadWorld): void {
   }
 }
 
-function formalArtifact(
-  base: string,
-  implementation: string,
-  revision: number,
-): string {
-  return `# 04 レビュー
-
-## 0. レビュー識別情報
-
-| 項目 | 内容 |
-|---|---|
-| 比較基点 | \`${base}\` |
-| H_impl | \`${implementation}\` |
-| ラウンド数 | 1 |
-| Step chain | 経由: fixture |
-
-## 1. 入力証拠
-
-### 1.1 変更ファイル個別監査
-
-| path | 変更種別 | owner | target layer | 単一責務・配置根拠 | 依存方向・循環 | 仕様・AC・SCN | 安全・rollback | 個別判定 |
-|---|---|---|---|---|---|---|---|---|
-| \`${reviewedPath}\` | A | owner | domain | fixture | 循環なし | AC-WF-005 / SCN-UNIT-EVIDHEAD-019 | revert可能 | pass |
-
-## 2. 受け入れ条件の確認
-合格。
-## 3. 肯定的評価
-revision ${revision}。
-## 4. 敵対的評価
-反例を確認。
-## 5. 指摘
-なし。
-## 6. ラウンド固有の確認
-収束。
-## 7. テスト結果
-合格。
-## 8. 配布物影響
-判断: 配布物を更新しない
-根拠: fixtureのみ。
-## 9. 独立reviewの成立
-確認。
-## 10. 仕様整合性
-整合。
-## 11. 総合判定と再開地点
-承認。
-`;
+/** 収束済みsessionから生成したreview証跡。`revision`ごとに検証記録だけを変える。 */
+function formalArtifact(world: EvidenceOnlyHeadWorld, revision: number): string {
+  return reviewEvidenceContentFromStaging(world.staging, {
+    issue: 1272,
+    verification: ["npm test", `npm test -- --revision=${revision}`],
+  });
 }
 
 Given(
@@ -217,11 +178,7 @@ Given(
       this.finalHead = commitFiles(
         this.root,
         {
-          [artifactPath]: formalArtifact(
-            this.base,
-            this.implementationHead,
-            revision,
-          ),
+          [artifactPath]: formalArtifact(this, revision),
         },
         `docs: formal artifact ${revision}`,
       );

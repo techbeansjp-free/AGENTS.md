@@ -1,7 +1,7 @@
 /**
  * DCAND-006/008/009/010は本Issueで初めてSkill化される。DCAND-001〜005は
  * 既存compiled codeをdeterministic resolverとしてラップするだけで、既存
- * 呼び出し元（`issue.ts`・`cli.ts`・`review-artifact.ts`・`policy.ts`）の
+ * 呼び出し元（`issue.ts`・`cli.ts`・`policy.ts`）の
  * 挙動を変えない。DCAND-007/011/012は恒久的に対象外（fail-open方向、または
  * 有限選択の対象外）であり、このRegistryへ加えない。
  */
@@ -22,12 +22,6 @@ export const DECISION_TYPES = Object.freeze([
         id: "DCAND-003",
         label: "仕様更新要否の判定（requiresSpecUpdate）",
         executor: Object.freeze({ kind: "deterministic", resolverId: "DCAND-003" }),
-        authorityMode: "authoritative",
-    }),
-    Object.freeze({
-        id: "DCAND-004",
-        label: "個別監査表の行分類（auditRowDraft）",
-        executor: Object.freeze({ kind: "deterministic", resolverId: "DCAND-004" }),
         authorityMode: "authoritative",
     }),
     Object.freeze({

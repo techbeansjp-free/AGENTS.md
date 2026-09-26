@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import assert from "node:assert/strict";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { syntheticReviewEvidenceContent } from "../support/review-evidence-fixture.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import {
   classifyMode,
@@ -135,34 +136,7 @@ interface UnitWorld extends WorkflowWorld {
     | "Feature: 日本語機能\nScenario: SCN-X-001 日本語scenario\n Given 日本語前提\n Then 日本語結果\n"
     | "機能: 日本語機能\nシナリオ: SCN-X-002 日本語scenario\n 前提 日本語前提\n もし 日本語操作\n ならば 日本語結果\n";
   graph: { nodes: string[]; edges: { from: string; to: string }[] };
-  invalidAudit:
-    | {
-        valid: boolean;
-        errors: string[];
-        base?: undefined;
-        implementation?: undefined;
-        auditedFiles?: undefined;
-        current?: undefined;
-        auditPath?: undefined;
-      }
-    | {
-        valid: boolean;
-        errors: string[];
-        base: string;
-        implementation: string;
-        auditedFiles: number;
-        current?: undefined;
-        auditPath?: undefined;
-      }
-    | {
-        valid: boolean;
-        errors: string[];
-        base: string;
-        implementation: string;
-        current: string;
-        auditPath: string;
-        auditedFiles: number;
-      };
+  invalidAudit: ReturnType<typeof checkFileAudit>;
   largeOutputArgs: string[];
   /** session境界の反例で起動する子processの引数。 */
   sessionArgs: string[];
@@ -213,34 +187,7 @@ interface UnitWorld extends WorkflowWorld {
   };
   nameOffenders: string[];
   namespaceNormative: string[];
-  nonAncestorAudit:
-    | {
-        valid: boolean;
-        errors: string[];
-        base?: undefined;
-        implementation?: undefined;
-        auditedFiles?: undefined;
-        current?: undefined;
-        auditPath?: undefined;
-      }
-    | {
-        valid: boolean;
-        errors: string[];
-        base: string;
-        implementation: string;
-        auditedFiles: number;
-        current?: undefined;
-        auditPath?: undefined;
-      }
-    | {
-        valid: boolean;
-        errors: string[];
-        base: string;
-        implementation: string;
-        current: string;
-        auditPath: string;
-        auditedFiles: number;
-      };
+  nonAncestorAudit: ReturnType<typeof checkFileAudit>;
   offenders: unknown;
   omittedSkillContractRoot: string;
   omittedSkillContracts: { valid: boolean; errors: string[]; skills: number };
@@ -278,34 +225,7 @@ interface UnitWorld extends WorkflowWorld {
   reviewTemplate: string;
   root: string;
   rootNormative: string[];
-  sameCommitAudit:
-    | {
-        valid: boolean;
-        errors: string[];
-        base?: undefined;
-        implementation?: undefined;
-        auditedFiles?: undefined;
-        current?: undefined;
-        auditPath?: undefined;
-      }
-    | {
-        valid: boolean;
-        errors: string[];
-        base: string;
-        implementation: string;
-        auditedFiles: number;
-        current?: undefined;
-        auditPath?: undefined;
-      }
-    | {
-        valid: boolean;
-        errors: string[];
-        base: string;
-        implementation: string;
-        current: string;
-        auditPath: string;
-        auditedFiles: number;
-      };
+  sameCommitAudit: ReturnType<typeof checkFileAudit>;
   skillContractRoot: string;
   skills: string[];
   sourceFiles: string[];
@@ -351,34 +271,7 @@ interface UnitWorld extends WorkflowWorld {
   };
   unroutedSkillContractRoot: string;
   unroutedSkillContracts: { valid: boolean; errors: string[]; skills: number };
-  validAudit:
-    | {
-        valid: boolean;
-        errors: string[];
-        base?: undefined;
-        implementation?: undefined;
-        auditedFiles?: undefined;
-        current?: undefined;
-        auditPath?: undefined;
-      }
-    | {
-        valid: boolean;
-        errors: string[];
-        base: string;
-        implementation: string;
-        auditedFiles: number;
-        current?: undefined;
-        auditPath?: undefined;
-      }
-    | {
-        valid: boolean;
-        errors: string[];
-        base: string;
-        implementation: string;
-        current: string;
-        auditPath: string;
-        auditedFiles: number;
-      };
+  validAudit: ReturnType<typeof checkFileAudit>;
   validCliContract: { valid: boolean; errors: string[]; commands: number };
   validCliContractRoot: string;
   validDirectoryGuides: {
@@ -2123,10 +2016,12 @@ Then(/^reviewはrejectedであり(.+)を返す$/u, function (diagnostic: string)
   );
 });
 Given("tracked Phase A review recordを読む", function () {
-  this.phaseAReview = fs.readFileSync(
-    ".agent-skill-chain/templates/issue/04_レビュー.md",
-    "utf8",
-  );
+  this.phaseAReview = [
+    ".agent-skill-chain/skills/step-10-review/SKILL.md",
+    ".agent-skill-chain/skills/step-11-pr/SKILL.md",
+  ]
+    .map((file) => fs.readFileSync(file, "utf8"))
+    .join("\n");
 });
 When("Phase A artifactのimmutable契約を検査する", function () {
   this.phaseAContractInspected = true;
@@ -2449,7 +2344,7 @@ Then("汎用packageの所有境界違反は0件である", function () {
 
 Given("review templateとPR事前確認を読む", function () {
   this.reviewTemplate = fs.readFileSync(
-    ".agent-skill-chain/templates/issue/04_レビュー.md",
+    ".agent-skill-chain/skills/step-10-review/SKILL.md",
     "utf8",
   );
   this.prChecklist = fs.readFileSync(
@@ -2460,17 +2355,18 @@ Given("review templateとPR事前確認を読む", function () {
 When("全変更file監査契約を検査する", function () {
   this.fileAuditContract = `${this.reviewTemplate}\n${this.prChecklist}`;
 });
-Then("1ファイル1行と差分path集合完全一致が必須である", function () {
+Then("review証跡の生成と照合が必須である", function () {
   for (const fragment of [
-    "1ファイル1行",
-    "path集合",
-    "完全一致",
-    "owner",
-    "target layer",
-    "依存方向",
-    "個別判定",
+    "review export",
+    "review validate --artifact=<path> --staging=<staging>",
+    "_review.json",
+    "手で書かない",
+    "その差分がreview証跡だけ",
   ])
     assert.ok(this.fileAuditContract.includes(fragment), fragment);
+  assert.ok(
+    !fs.existsSync(".agent-skill-chain/templates/issue/04_レビュー.md"),
+  );
 });
 
 Given("H_implの全変更pathと一致する個別監査artifactがある", function () {
@@ -2493,15 +2389,14 @@ Given("H_implの全変更pathと一致する個別監査artifactがある", func
     encoding: "utf8",
   }).stdout.trim();
   fs.mkdirSync(path.join(this.root, "docs", "reviews"), { recursive: true });
-  this.auditFile = path.join(
-    this.root,
-    "docs",
-    "reviews",
-    "08_課題836実装レビュー.md",
-  );
-  this.auditMarkdown = `# review\n\n## 0. レビュー識別情報\n\n| 項目 | 観測値 |\n|---|---|\n| 比較基点 | \`${this.auditBase}\` |\n| H_impl | \`${this.auditImplementation}\` |\n| ラウンド数 | 1 |\n| Step chain | 迂回: fixtureのため製品経路を通していない |\n| 仕様の所有箇所 | docs/specs/fixture.md:1「fixtureの仕様」 |\n| 成果物行数 | 製品 1行 / 支援層 2行 |\n| 縮小の先行評価 | 既存fixtureの流用では監査経路を通らないため |\n\n## 変更ファイル個別監査\n\n| path | status | owner | target layer | 責務・配置 | 依存・循環 | 仕様・追跡 | 安全・rollback | 個別判定 |\n|---|---|---|---|---|---|---|---|---|\n| \`src/x.ts\` | A | package owner | package | 単一責務 | 非循環 | SCN-X-001 | 削除でrollback | pass |\n`;
+  this.auditFile = path.join(this.root, "docs", "reviews", "836_review.json");
+  this.auditMarkdown = syntheticReviewEvidenceContent({
+    issue: 836,
+    baseSha: this.auditBase,
+    implementationHeadSha: this.auditImplementation,
+  });
   fs.writeFileSync(this.auditFile, this.auditMarkdown);
-  spawnSync("git", ["add", "docs/reviews/08_課題836実装レビュー.md"], {
+  spawnSync("git", ["add", "docs/reviews/836_review.json"], {
     cwd: this.root,
   });
   spawnSync("git", ["commit", "-q", "-m", "review evidence"], {
@@ -2521,12 +2416,16 @@ When("個別監査gateを正規表と余分なpathで検証する", function () 
   this.validAudit = checkFileAudit(this.root, cutoff);
   fs.writeFileSync(
     this.auditFile,
-    `${this.auditMarkdown}| \`extra.js\` | A | package owner | package | 単一責務 | 非循環 | SCN-X-002 | 削除でrollback | pass |\n`,
+    this.auditMarkdown.replace('"npm test"', '"npm run lint"'),
   );
   this.invalidAudit = checkFileAudit(this.root, cutoff);
   fs.writeFileSync(
     this.auditFile,
-    this.auditMarkdown.replace(this.auditBase, this.auditImplementation),
+    syntheticReviewEvidenceContent({
+      issue: 836,
+      baseSha: this.auditImplementation,
+      implementationHeadSha: this.auditImplementation,
+    }),
   );
   this.sameCommitAudit = checkFileAudit(this.root, cutoff);
   const unrelated = spawnSync(
@@ -2536,19 +2435,30 @@ When("個別監査gateを正規表と余分なpathで検証する", function () 
   ).stdout.trim();
   fs.writeFileSync(
     this.auditFile,
-    this.auditMarkdown.replace(this.auditBase, unrelated),
+    syntheticReviewEvidenceContent({
+      issue: 836,
+      baseSha: unrelated,
+      implementationHeadSha: this.auditImplementation,
+    }),
   );
   this.nonAncestorAudit = checkFileAudit(this.root, cutoff);
 });
-Then("正規表だけが合格し余分なpathと空差分基点は拒否される", function () {
-  assert.equal(this.validAudit.valid, true, this.validAudit.errors.join("; "));
-  assert.equal(this.invalidAudit.valid, false);
-  assert.match(this.invalidAudit.errors.join(" "), /path集合/u);
-  assert.equal(this.sameCommitAudit.valid, false);
-  assert.match(this.sameCommitAudit.errors.join(" "), /異なるcommit/u);
-  assert.equal(this.nonAncestorAudit.valid, false);
-  assert.match(this.nonAncestorAudit.errors.join(" "), /ancestor/u);
-});
+Then(
+  "正規の証跡だけが合格し改竄と空差分基点と非ancestor基点は拒否される",
+  function () {
+    assert.equal(
+      this.validAudit.valid,
+      true,
+      this.validAudit.errors.join("; "),
+    );
+    assert.equal(this.invalidAudit.valid, false);
+    assert.match(this.invalidAudit.errors.join(" "), /evidenceDigest/u);
+    assert.equal(this.sameCommitAudit.valid, false);
+    assert.match(this.sameCommitAudit.errors.join(" "), /異なるcommit/u);
+    assert.equal(this.nonAncestorAudit.valid, false);
+    assert.match(this.nonAncestorAudit.errors.join(" "), /ancestor/u);
+  },
+);
 
 Given("package metadataとpolicy version artifactがある", function () {
   this.packageMetadata = JSON.parse(

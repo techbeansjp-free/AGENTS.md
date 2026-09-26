@@ -32,13 +32,11 @@ export const DEVELOPMENT_CONSIDERATION_IDS = [
     "DC-TOKENS",
 ];
 /**
- * **fullの01〜03、および04レビュー成果物の§2.2で4行の表の代わりに置ける参照行。** 00の判定を
+ * **fullの01〜03の§2.2で4行の表の代わりに置ける参照行。** 00の判定を
  * 正本とし、この成果物に書いた行だけを差分として個別に検証する（Issue #1326）。この定数は文字列
  * 一致の判定材料であり、`validateDevelopmentConsiderations`（`issue validate`が01〜03へ適用）
- * だけが検証する。**`review validate --artifact=`（`validateReviewArtifactStructure`）は
- * §2.2の内容を一切検査しない。** そのため04レビュー成果物への参照行は機械検証されない、人・
- * エージェント向けの記述量削減の案内にとどまる（2026-09-17、Issue #1423 独立reviewのF1指摘で
- * 「実地検証で受理を確認した」という誤った記述を訂正。PR #1421）。
+ * だけが検証する。Step 10のreview証跡は`review export`が生成する構造化JSONであり、
+ * 開発考慮事項の表を持たない（REQ-WF-038）。
  * 自由記述（「00と同じ」「同上」）は参照行として扱わない。
  */
 export const DEVELOPMENT_CONSIDERATION_REFERENCE_LINE = "開発考慮事項の適用判定は00_要求定義.md §6.1と同じ";
@@ -96,7 +94,7 @@ export const PROJECT_RULE_ENFORCEMENT_POINTS = Object.fromEntries([
     ["OWNERSHIP-PR-001", "validateOwnershipBoundary"],
     ["PACKAGE-001", "checkPackageDistributionBoundary"],
     ["PACKAGE-MANAGER-001", "checkPackageManagerBoundary"],
-    ["DISTRIBUTION-IMPACT-001", "validateDistributionImpact"],
+    ["DISTRIBUTION-IMPACT-001", "deriveDistributionImpact"],
     ["QUALITY-COMMAND-001", "checkQualityCommands"],
     ["REVIEW-EXCEPTION-001", "validateReviewExceptions"],
     ["RUNTIME-001", "checkNodeRuntimeAlignment"],
@@ -1125,10 +1123,6 @@ export function classifyConformanceDeclarationDiff(trusted, candidate) {
     }
     return diff;
 }
-export const DISTRIBUTION_IMPACT_HEADING = "## 配布物影響";
-const DISTRIBUTION_IMPACT_HEADING_TEXT = "配布物影響";
-const DISTRIBUTION_DECISION_UPDATED = "配布物を更新した";
-const DISTRIBUTION_DECISION_NOT_UPDATED = "配布物を更新しない";
 function normalizeRelative(value) {
     return value.replaceAll("\\", "/").replace(/^\.\//u, "");
 }
@@ -1220,58 +1214,15 @@ export function distributedPaths(input) {
     }
     return [...new Set(matched)].sort();
 }
-export function extractMarkdownSection(markdown, headingText) {
-    const pattern = new RegExp(`^## (?:\\d+\\.\\s*)?${headingText.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\s*$`, "u");
-    const lines = markdown.split(/\r?\n/u);
-    const start = lines.findIndex((line) => pattern.test(line.trimEnd()));
-    if (start === -1)
-        return undefined;
-    const rest = lines.slice(start + 1);
-    const end = rest.findIndex((line) => /^## /u.test(line));
-    return (end === -1 ? rest : rest.slice(0, end)).join("\n");
-}
-export function validateDistributionImpact(input) {
-    const errors = [];
-    const distributed = distributedPaths({
-        changedPaths: input.changedPaths,
-        packageFiles: input.packageFiles,
-    });
-    const section = extractMarkdownSection(input.markdown, DISTRIBUTION_IMPACT_HEADING_TEXT);
-    if (section === undefined) {
-        errors.push(`review artifactへ「${DISTRIBUTION_IMPACT_HEADING}」の節が必要です。配布境界へ入る変更pathと、配布物を更新したか更新しない理由を記述してください`);
-        return { valid: false, errors, distributed };
-    }
-    for (const relative of distributed)
-        if (!section.includes(relative))
-            errors.push(`配布物影響の節に配布境界へ入る変更pathがありません: ${relative}`);
-    const decisionLines = section
-        .split(/\r?\n/u)
-        .map((line) => line.trim())
-        .filter((line) => line.startsWith("判断:"));
-    const decisions = decisionLines.map((line) => line.slice("判断:".length).trim());
-    const allowed = [
-        DISTRIBUTION_DECISION_UPDATED,
-        DISTRIBUTION_DECISION_NOT_UPDATED,
-    ];
-    if (decisions.length !== 1)
-        errors.push(`配布物影響の節へ「判断: ${DISTRIBUTION_DECISION_UPDATED}」または「判断: ${DISTRIBUTION_DECISION_NOT_UPDATED}」の行が1件だけ必要です`);
-    else if (!allowed.includes(decisions[0] ?? ""))
-        errors.push(`配布物影響の判断は「${DISTRIBUTION_DECISION_UPDATED}」または「${DISTRIBUTION_DECISION_NOT_UPDATED}」のいずれかでなければなりません: ${decisions[0]}`);
-    const groundLines = section
-        .split(/\r?\n/u)
-        .map((line) => line.trim())
-        .filter((line) => line.startsWith("根拠:"));
-    const grounds = groundLines.map((line) => line.slice("根拠:".length).trim());
-    if (grounds.length !== 1)
-        errors.push("配布物影響の節へ「根拠:」の行が1件だけ必要です");
-    else {
-        const ground = grounds[0] ?? "";
-        if (ground.length < 20)
-            errors.push("配布物影響の根拠が短すぎます。判断した理由を記述してください");
-        if (/^\{.*\}$/u.test(ground) || ground.includes("{"))
-            errors.push("配布物影響の根拠にplaceholderが残っています");
-    }
-    return { valid: errors.length === 0, errors, distributed };
+/**
+ * 配布物影響を変更pathとpackage filesから導出する（REQ-WF-038）。
+ *
+ * **散文の記述を要求しない。** 配布境界へ入る変更pathは`package.json`の`files`と
+ * 変更path集合から決まり、review証跡へ書き直す必要がない。`audit:check`がこの値を
+ * 報告し、package内容は`package:check`が検査する。
+ */
+export function deriveDistributionImpact(input) {
+    return distributedPaths(input);
 }
 export const REVIEW_EXCEPTION_SCHEMA_VERSION = "agent-skill-chain/project-review-exceptions/v1";
 export const REVIEW_EXCEPTION_KINDS = [
