@@ -128,11 +128,16 @@ ASCは検証対象HEADに追跡済みでlive bytesとも一致するfixtureだ�
 
 ### 実装中発見の前向き記録
 
-`workflow assess-discovery`へ`changedContractKinds`を含む構造化入力を渡す。`stop-or-promote-full`は判定だけではfileを変更しない。停止を選ぶ場合はその理由を下表へ記録し、正式開発を選ぶ場合だけ同じstagingへ`workflow promote-full`を明示実行する。
+`workflow assess-discovery`へ`changedContractKinds`を含む構造化入力を渡す。`stop-or-promote-full`は判定だけではfileを変更しない。停止を選ぶ場合はその理由を`05_計画変更.md`へ記録し、正式開発を選ぶ場合だけ同じstagingへ`workflow promote-full`を明示実行する。
 
-| 発見ID | 事実 | 影響 | 判断 | 対処 | 検証 | 仕様更新 | CLI disposition |
-|---|---|---|---|---|---|---|---|
-| DISC-001 | （観測事実） | （仮説・境界・AC） | （継続 / 契約再確定 / 停止 / full昇格） | （実施内容） | （再現可能なEvidence） | （更新先 / no-spec-impact根拠） | continue / rebaseline-affected-contracts / stop-or-promote-full |
+本書はStep 4の計画封印後に編集しない。実装中の発見は本節へ追記せず、次の記録先へ振り分ける。
+
+| 発見の種類 | 記録先 |
+|---|---|
+| 実装事実（計画と契約を変えない） | commit履歴。追加の記録は不要 |
+| 計画の変更 | `05_計画変更.md`へ`AMD-NNN`を追記 |
+| 現在のsystem契約の変更 | `docs/specs/` |
+| このIssueのscope外 | follow-up Issue |
 
 ## 9. P-01〜P-07の証拠
 

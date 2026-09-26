@@ -14,6 +14,8 @@ import { isRecord } from "../types.js";
 import { DELIVERY_STATE_FILE, parseDeliveryState, } from "../domain/delivery-state.js";
 import { POC_OBSERVATION_DIRECTORY, pocObservationArtifact, validatePocObservationEvidence, } from "../domain/poc-observation.js";
 import { assertPocHeadChangeScope, executePocSandboxObservation, } from "./poc-execution.js";
+import { isPlanFrozenCheckStep, planSealStep, stagingDriftDiagnostic, } from "../domain/plan-seal.js";
+import { assertPlanFrozenForEntries, changedPlanningSince, computePlanSeal, } from "./plan-seal.js";
 export { calculatePocFixtureDigest } from "./poc-execution.js";
 const packageRoot = findPackageRoot(import.meta.url);
 const issueTemplateRoot = path.join(packageRoot, ".agent-skill-chain", "templates", "issue");
@@ -218,6 +220,62 @@ export function readWorkflowJournal(staging) {
     const parsed = parseStepJournal(source);
     return { mode: record.mode, ...parsed, source };
 }
+/**
+ * 封印後の計画凍結を検査する（REQ-WF-036）。`pr create`・`pr merge`・`workflow record`の
+ * Step 9・10が呼ぶ。journalに封印が無ければ（本機構以前のstaging）検査しない。
+ */
+export function assertPlanFrozen(staging) {
+    const journal = readWorkflowJournal(staging);
+    assertPlanFrozenForEntries(staging, journal.entries);
+}
+/**
+ * staging digest不一致の診断文。記録済み成果物一覧との追加・削除と、封印と比べた
+ * 計画文書の変化を名指しし、記録状態で成立する次の行動を添える。**案内の生成で
+ * 判定を止めない**ため、journalとdelivery stateは独立に読み、読めない側は観測なしへ倒す。
+ */
+export function describeStagingDigestDrift(staging) {
+    let added = [];
+    let removed = [];
+    try {
+        const stored = new Set(readStoredStagingRecord(staging).artifacts);
+        const current = listStagingArtifacts(staging);
+        const currentSet = new Set(current);
+        added = current.filter((artifact) => !stored.has(artifact));
+        removed = [...stored].filter((artifact) => !currentSet.has(artifact));
+    }
+    catch {
+        /** 記録または一覧を読めない場合は追加・削除を名指ししない */
+    }
+    let steps = [];
+    let changedPlanning = [];
+    try {
+        const entries = readWorkflowJournal(staging).entries;
+        steps = entries.map((entry) => entry.step);
+        changedPlanning = changedPlanningSince(staging, entries).changed;
+    }
+    catch {
+        /** journalを読めない場合は空集合へ倒す */
+    }
+    let terminalDelivery = false;
+    try {
+        const file = path.join(staging, DELIVERY_STATE_FILE);
+        const state = fs.existsSync(file)
+            ? parseDeliveryState(fs.readFileSync(file, "utf8")).state
+            : undefined;
+        terminalDelivery =
+            state === "merge-observed" || state === "step11-recorded";
+    }
+    catch {
+        /** delivery stateを読めない場合はfalseへ倒す */
+    }
+    return stagingDriftDiagnostic({
+        added,
+        removed,
+        changedPlanning,
+        recordedSteps: steps,
+        terminalDelivery,
+    });
+}
 export function appendWorkflowJournalEntry(input) {
     if (input.entry.step === 0 || input.entry.step === 11)
         throw new Error("Step 0はstaging初期化専用、Step 11はdelivery終端専用です。汎用journal追記では記録できません");
@@ -254,6 +312,17 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
     if (current.entries.some(({ step }) => step === 11) &&
         !entry.postTerminalIntake)
         throw new Error("Step 11記録後にworkflow journalへ追記できるのはpost-terminal intakeのStep 10だけです");
+    /**
+     * **旧上流再確定entryは新規に書き込まない**（REQ-WF-036）。読取り互換だけを残す。
+     */
+    if (entry.reconfirmation)
+        throw new Error("上流再確定entry（reconfirmation）は廃止されました。承認済み計画は封印後に編集せず、計画の変更は05_計画変更.mdへ追記してください");
+    /**
+     * **封印後のStep 9・10は計画凍結を検査する**（REQ-WF-036）。封印の無い旧journalは
+     * 検査しない。
+     */
+    if (isPlanFrozenCheckStep(entry.step))
+        assertPlanFrozenForEntries(staging, current.entries);
     const deliveryFile = path.join(staging, DELIVERY_STATE_FILE);
     const delivery = fs.existsSync(deliveryFile)
         ? parseDeliveryState(fs.readFileSync(deliveryFile, "utf8"))
@@ -319,9 +388,19 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
         if (currentHeadSha !== headSha)
             throw new Error("Step 9の検証対象HEADがjournal追記前に変更されました");
     }
-    let entryToWrite = entry;
+    /**
+     * **封印値は呼出し側から受け取らない。** 渡された`planSeal`は捨て、modeの同期
+     * checkpointでだけ成果物fileから計算し直す（REQ-WF-036）。
+     */
+    let entryToWrite = { ...entry };
+    delete entryToWrite.planSeal;
+    if (entry.step === planSealStep(current.mode))
+        entryToWrite = {
+            ...entryToWrite,
+            planSeal: computePlanSeal(staging, current.mode),
+        };
     if (entry.step === 9 && headSha !== undefined)
-        entryToWrite = { ...entry, implementationHeadSha: headSha };
+        entryToWrite = { ...entryToWrite, implementationHeadSha: headSha };
     if (current.mode === "poc" && entry.step >= 9) {
         if (!headSha)
             throw new Error("PoCのStep 9以降には検証対象HEAD SHAとpoc-observation Evidenceが必要です");

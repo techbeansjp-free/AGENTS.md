@@ -347,7 +347,10 @@ export const COMMAND_USAGE = Object.freeze([
             flag("input", "path", "repository root内の実装中発見入力JSON file"),
         ],
         conditionalFlags: [],
-        optionalFlags: [ROOT_FLAG],
+        optionalFlags: [
+            ROOT_FLAG,
+            optional("staging", "path", "Issue staging directory。journalに計画封印があれば、契約変更をrecord-planning-amendment（05_計画変更.mdへの追記）へ振り分ける", "封印を観測しない"),
+        ],
         example: "npx agent-skill-chain workflow assess-discovery --input=.asc/discovery.json --root=.",
         acceptsSpaceSeparatedFlags: true,
     },
@@ -394,7 +397,7 @@ export const COMMAND_USAGE = Object.freeze([
     {
         command: "workflow",
         subcommand: "record",
-        summary: "Step実施をstep journalへ追記する",
+        summary: "Step実施をstep journalへ追記する。fullのStep 8・quick/pocのStep 4は計画封印を記録し、封印後のStep 9・10は計画凍結を検査する",
         requiredFlags: [
             flag("staging", "path", "staging directory"),
             flag("step", "1..10", "記録するStep番号"),
@@ -408,7 +411,6 @@ export const COMMAND_USAGE = Object.freeze([
             optional("recorded-at", "ISO8601", "記録時刻", "実行時刻"),
             optional("post-terminal-intake", "", "Step 11記録後に外部reviewer指摘を同じPRで取り込んだroundとして記録する", "通常のStep記録"),
             optional("post-pr-intake", "", "pr-bound中に外部reviewer指摘を同じPRで取り込んだroundとして記録する", "通常のStep記録"),
-            optional("reconfirm", "", "後続Step記録後に上流Step 1〜9を再確定した事実を、順序判定から外すentryとして記録する。同じStepの通常記録が先行しているときだけ受理する", "通常のStep記録"),
         ],
         example: "npx agent-skill-chain workflow record --staging=.asc/886 --step=4 --evidence='sync digest 0000000000000000000000000000000000000000000000000000000000000000' --artifact=src/cli-usage.ts",
         acceptsSpaceSeparatedFlags: true,

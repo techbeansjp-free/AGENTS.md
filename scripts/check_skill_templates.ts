@@ -585,18 +585,20 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
       continue;
     }
     const markdown = fs.readFileSync(template, "utf8");
+    /**
+     * **計画封印後の発見は計画文書へ追記しない**（REQ-WF-036）。templateは
+     * 記録表ではなく、4種の記録先への振り分けを持つ。
+     */
     for (const marker of [
       "実装中発見の前向き記録",
-      "発見ID",
-      "事実",
-      "影響",
-      "判断",
-      "対処",
-      "検証",
-      "仕様更新",
+      "計画封印後",
+      "commit履歴",
+      "05_計画変更.md",
+      "docs/specs/",
+      "follow-up Issue",
     ])
       if (!markdown.includes(marker))
-        errors.push(`${relative}: 実装中発見の${marker}欄がありません`);
+        errors.push(`${relative}: 実装中発見の振り分け先${marker}がありません`);
   }
   const workflowFile = path.resolve(
     root,

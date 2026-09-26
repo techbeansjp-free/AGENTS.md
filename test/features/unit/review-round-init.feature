@@ -98,10 +98,10 @@ Feature: review round雛形と契約の露出
     When 編集後のstagingでreview roundを実行する
     Then digest不一致では拒否されず保存記録のdigestが現在の成果物へ再固定される
 
-  Scenario: SCN-UNIT-DIAGHINT-002 delivery直前のdigest不一致は再記録手順を案内する
+  Scenario: SCN-UNIT-DIAGHINT-002 delivery直前のdigest不一致はdigestの再固定手順を案内する
     Given round 1を記録した後にstagingを編集した状態がある
     When delivery直前の再検証を実行する
-    Then digest不一致の診断はworkflow recordの再実行を案内する
+    Then digest不一致の診断はreview roundによる再固定を案内する
 
   Scenario: SCN-UNIT-DIAGHINT-003 cleanup-apply拒否はapproved-digest flagを案内する
     Given 承認済みdigestがpreview digestと一致しないcompletion入力がある

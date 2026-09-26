@@ -30,6 +30,7 @@ import {
 } from "../domain/review-progress.js";
 import {
   assertWorkflowStaging,
+  describeStagingDigestDrift,
   readWorkflowJournal,
 } from "./workflow-journal.js";
 import { evidenceOnlySuffix, observeReviewDiff } from "./review-diff.js";
@@ -49,8 +50,6 @@ import type { ReviewRoundFinding } from "../domain/review-convergence.js";
 
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
-import { stagingDigestRecoveryHint } from "../domain/workflow.js";
-import { readStoredDeliveryState } from "./delivery-state.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { recordLayerSuffix } from "./review-record-layer.js";
@@ -66,54 +65,9 @@ const GIT_ENV: NodeJS.ProcessEnv = {
 };
 
 /**
- * **staging digest不一致の診断に付ける再開手順。** digestを再固定できるのは
- * `workflow record`だけであり、拒否だけを返すと利用者はsourceを読むまで
- * 次の1手が分からない（Issue #1323、A-3）。判定は変えず文言だけを足す。
- *
- * **手順はjournalの記録状態で変わる**（Issue #1312）。Step 10記録後に最新Stepの
- * 再記録を案内すると必ず失敗するため、`stagingDigestRecoveryHint`へ委譲する。
- * **この関数は生成logicを持たない。** 3 call siteで文言が複製されると、
- * 片方だけが実態から外れても検出できない。
- */
-function recoveryHint(staging: string): string {
-  /**
-   * **journalとdelivery stateを独立に読む。** 外側の1つの`try`で囲むと、
-   * journalの読み取り失敗が`isTerminalDelivery`の観測値ごと捨て、terminal状態でも
-   * 通常の再記録案内へ戻ってしまう（PR #1402の外部review指摘）。
-   */
-  return stagingDigestRecoveryHint(
-    readJournalSteps(staging),
-    isTerminalDelivery(staging),
-  );
-}
-
-function readJournalSteps(staging: string): number[] {
-  try {
-    return readWorkflowJournal(staging).entries.map((entry) => entry.step);
-  } catch {
-    /** journalを読めない場合は空集合へ倒す。案内の生成で判定を止めない */
-    return [];
-  }
-}
-
-/**
- * **delivery stateがterminalなら上流再確定を案内しない。** journalにStep 11 entryが
- * 無くても`merge-observed`ならStep 0〜10の追記は拒否される（`appendWorkflowJournalEntryLocked`）。
- * 読めない場合はfalseへ倒す。**案内の生成で判定を止めない。**
- */
-function isTerminalDelivery(staging: string): boolean {
-  try {
-    const state = readStoredDeliveryState(staging)?.state;
-    return state === "merge-observed" || state === "step11-recorded";
-  } catch {
-    return false;
-  }
-}
-
-/**
  * **合成経路の検査点。** `assertStoredStagingDigest`はmodule内部の判定だが、
- * ここが`recoveryHint`へ委譲しているかを外から観測できないと、この経路の委譲を
- * 旧案内へ戻す変異が生存する。判定を変えず同じ関数を公開するだけにする。
+ * ここが`describeStagingDigestDrift`へ委譲しているかを外から観測できないと、この経路の
+ * 委譲を落とす変異が生存する。判定を変えず同じ関数を公開するだけにする。
  */
 export function assertStoredStagingDigestForTest(staging: string): void {
   assertStoredStagingDigest(staging);
@@ -127,7 +81,7 @@ function assertStoredStagingDigest(staging: string): void {
     stored.digest !== calculateStagingDigest(staging, artifacts)
   )
     throw new Error(
-      `review session更新前のstaging成果物一覧またはdigestが一致しません${recoveryHint(staging)}`,
+      `review session更新前のstaging成果物一覧またはdigestが一致しません${describeStagingDigestDrift(staging)}`,
     );
 }
 

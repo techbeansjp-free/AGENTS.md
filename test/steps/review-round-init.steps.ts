@@ -747,15 +747,20 @@ Then(
   },
 );
 
-Then("digest不一致の診断はworkflow recordの再実行を案内する", function () {
+Then("digest不一致の診断はreview roundによる再固定を案内する", function () {
   assert.match(
     this.diagnostic,
     /digestが一致しません|同期済み記録から変化しています/u,
   );
+  /**
+   * **Step 9記録後はreview roundが再固定する**（REQ-WF-024、REQ-WF-036）。
+   * 上流再確定は廃止したため案内しない。
+   */
   assert.match(
     this.diagnostic,
-    /workflow record --step=<最新のStep> を再実行/u,
+    /review roundを実行するとstaging digestが現在の成果物へ再固定されます/u,
   );
+  assert.doesNotMatch(this.diagnostic, /reconfirm/u);
 });
 
 Given(

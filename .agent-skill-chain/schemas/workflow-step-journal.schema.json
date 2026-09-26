@@ -95,7 +95,20 @@
       "const": true
     },
     "reconfirmation": {
+      "description": "旧上流再確定entry。読取り互換のためだけに受理し、新規には書き込まない（REQ-WF-036）",
       "const": true
+    },
+    "planSeal": {
+      "description": "計画封印。fullのStep 8、quick/pocのStep 4の記録時にCLIが計画文書から計算したSHA-256（REQ-WF-036）",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "00_要求定義.md": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "01_要件定義.md": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "02_設計.md": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "03_実装計画.md": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
     }
   },
   "allOf": [
@@ -126,6 +139,62 @@
     {
       "if": { "properties": { "step": { "const": 9 } } },
       "else": { "not": { "required": ["implementationHeadSha"] } }
+    },
+    {
+      "if": {
+        "properties": { "mode": { "const": "full" }, "step": { "const": 8 } },
+        "required": ["mode", "step"]
+      },
+      "then": {
+        "properties": {
+          "planSeal": {
+            "required": [
+              "00_要求定義.md",
+              "01_要件定義.md",
+              "02_設計.md",
+              "03_実装計画.md"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": { "enum": ["quick", "poc"] },
+          "step": { "const": 4 }
+        },
+        "required": ["mode", "step"]
+      },
+      "then": {
+        "properties": {
+          "planSeal": {
+            "required": ["00_要求定義.md"],
+            "maxProperties": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "mode": { "const": "full" },
+              "step": { "const": 8 }
+            },
+            "required": ["mode", "step"]
+          },
+          {
+            "properties": {
+              "mode": { "enum": ["quick", "poc"] },
+              "step": { "const": 4 }
+            },
+            "required": ["mode", "step"]
+          }
+        ]
+      },
+      "else": { "not": { "required": ["planSeal"] } }
     },
     {
       "if": {
