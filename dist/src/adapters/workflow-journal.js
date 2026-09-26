@@ -8,7 +8,7 @@ import { MODE_QUESTIONS, } from "../domain/mode.js";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { findPackageRoot } from "../lib/package-root.js";
 import { git } from "../lib/process.js";
-import { assertIssueStagingLocation, listStagingRoots, readStagingLayout, stagingExcludePathspec, stagingRepositoryRoot, } from "../domain/staging-layout.js";
+import { assertIssueStagingLocation, listStagingRoots, readStagingLayout, stagingExcludePathspec, stagingRepositoryRoot, stagingRootPatterns, } from "../domain/staging-layout.js";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import { DELIVERY_STATE_FILE, parseDeliveryState, } from "../domain/delivery-state.js";
@@ -1482,7 +1482,8 @@ export function resolvePullRequestStaging(input) {
             throw new Error("明示stagingのtrackerが対象repository・Issueと一致しません");
         return staging;
     }
-    const issuesRoots = listStagingRoots(root, layout.rootPattern);
+    // 宣言rootへ移行する前のstagingが既定rootに残っていれば、それも候補にする
+    const issuesRoots = stagingRootPatterns(layout).flatMap((pattern) => listStagingRoots(root, pattern));
     if (issuesRoots.length === 0)
         throw new Error("PR作成に必要なIssue staging directoryがありません");
     const candidates = issuesRoots
