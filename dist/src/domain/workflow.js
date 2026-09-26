@@ -71,7 +71,7 @@ export const WORKFLOW_STEPS = Object.freeze([
         step: 10,
         skillId: "step-10-review",
         responsibility: "exact-head最終レビュー、検証、仕様整合性",
-        artifact: "実装中発見を含む有限レビューの承認証拠",
+        artifact: "収束したreview sessionと生成したreview証跡",
     },
     {
         step: 11,

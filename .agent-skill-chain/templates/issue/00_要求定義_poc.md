@@ -126,7 +126,7 @@ ASCは検証対象HEADに追跡済みでlive bytesとも一致するfixtureだ�
 - project policyが選択した静的検査:
 - 実環境、実リモート、他worktreeを変更しない方法:
 
-### 実装中発見の前向き記録
+### 実装中発見の振り分け
 
 `workflow assess-discovery`へ`changedContractKinds`を含む構造化入力を渡す。`stop-or-promote-full`は判定だけではfileを変更しない。停止を選ぶ場合はその理由を`05_計画変更.md`へ記録し、正式開発を選ぶ場合だけ同じstagingへ`workflow promote-full`を明示実行する。
 

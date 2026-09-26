@@ -91,7 +91,7 @@ Q-01〜Q-08の内容は[モード判定質問](../../docs/01_開発ワークフ�
 
 - 実装中発見は目的・scope・AC変更、security境界拡大、不可逆操作、`changedContractKinds`、根拠付きcanonicalモード失格条件`{ id, evidence }[]`を`workflow assess-discovery --input=<JSON>`で判定する。Step 4の計画封印後は通常の契約変更を`workflow assess-discovery --staging=<staging>`の`record-planning-amendment`に従って`05_計画変更.md`へ記録し、この集約成果物00を書き換えない。`promote-to-full`は同じ入力とstagingを`workflow promote-full`へ渡して同じIssueのまま00〜03を補完する。
 
-### 実装中発見の前向き記録
+### 実装中発見の振り分け
 
 本書はStep 4の計画封印後に編集しない。実装中の発見は本節へ追記せず、次の記録先へ振り分ける。
 

@@ -609,7 +609,7 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
      * 記録表ではなく、4種の記録先への振り分けを持つ。
      */
     for (const marker of [
-      "実装中発見の前向き記録",
+      "実装中発見の振り分け",
       "計画封印後",
       "commit履歴",
       "05_計画変更.md",
