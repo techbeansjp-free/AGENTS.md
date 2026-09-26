@@ -30,9 +30,14 @@ export async function runJevContinuousShadow(input) {
             ran: false,
             reason: "この decision type / 候補集合では shadow question を構成できません",
         };
+    if (input.result.decisionRecordId === null)
+        return {
+            ran: false,
+            reason: "--applyされていないためshadowを記録しません",
+        };
     let existing;
     try {
-        existing = findJevShadowRecord(input.primaryRoot, input.staging, input.result.decisionRecordId ?? "");
+        existing = findJevShadowRecord(input.primaryRoot, input.staging, input.result.decisionRecordId);
     }
     catch (error) {
         return {
@@ -40,11 +45,6 @@ export async function runJevContinuousShadow(input) {
             reason: `既存jev-shadow journalの読み取りに失敗: ${error instanceof Error ? error.message : String(error)}`,
         };
     }
-    if (input.result.decisionRecordId === null)
-        return {
-            ran: false,
-            reason: "--applyされていないためshadowを記録しません",
-        };
     if (existing !== undefined)
         return { ran: false, reason: "既にshadow記録済みです" };
     const now = (input.now ?? (() => new Date()))();
