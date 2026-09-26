@@ -184,6 +184,44 @@ export function missingTargetedFeatures(command, features) {
     const argv = new Set(command);
     return features.filter((feature) => !argv.has(feature));
 }
+const POLICY_FIELDS = ["fullCommand", "targetedRunner"];
+/** manifestの`verification`節を厳密に読む。未知field・不正なargvを拒否する。 */
+export function parseVerificationPolicy(value, label = "verification") {
+    const policy = exactFields(value, label, POLICY_FIELDS);
+    return Object.freeze({
+        fullCommand: validateVerificationArgv(policy.fullCommand, `${label}.fullCommand`),
+        targetedRunner: validateVerificationArgv(policy.targetedRunner, `${label}.targetedRunner`),
+    });
+}
+function startsWithArgv(command, prefix) {
+    return (command.length >= prefix.length &&
+        prefix.every((argument, index) => command[index] === argument));
+}
+/**
+ * 1件の実行がtrusted policyの宣言したcommandかを判定し、違反理由を返す（空なら充足）。
+ *
+ * - `full`: argvが`fullCommand`と完全一致する
+ * - `targeted`: argvが`targetedRunner`で始まり、後続は`-`で始まらないpathだけで、
+ *   影響集合の選んだfeatureを全部含む。**runnerの後ろへoptionを足して実行範囲を
+ *   狭める形（`--dry-run`、`--tags`等）を拒否する**
+ */
+export function verificationCommandViolation(command, scope, policy, features) {
+    if (scope === "full")
+        return sameArgv(command, policy.fullCommand)
+            ? undefined
+            : `scope=fullのcommand ${JSON.stringify(command)} がtrusted policyのverification.fullCommand ${JSON.stringify(policy.fullCommand)} と一致しません`;
+    if (!startsWithArgv(command, policy.targetedRunner))
+        return `scope=targetedのcommand ${JSON.stringify(command)} がtrusted policyのverification.targetedRunner ${JSON.stringify(policy.targetedRunner)} で始まりません`;
+    const options = command
+        .slice(policy.targetedRunner.length)
+        .filter((argument) => argument.startsWith("-"));
+    if (options.length > 0)
+        return `scope=targetedのcommandはtargetedRunnerの後ろにfeature pathだけを置けます。optionを拒否しました: ${options.join(", ")}`;
+    const missing = missingTargetedFeatures(command, features);
+    if (missing.length > 0)
+        return `scope=targetedのcommandが影響集合のfeatureを含みません: ${missing.join(", ")}`;
+    return undefined;
+}
 /**
  * `H_impl`と影響集合に一致する記録から、証跡へ埋め込む検証欄を導出する。
  *
@@ -191,8 +229,9 @@ export function missingTargetedFeatures(command, features) {
  * 2. **同じargvの記録は最新の1件だけを見る。** 最新が不合格のcommandがあれば拒否する。
  *    合格した後の再実行で失敗した事実を、古い合格で隠させない
  * 3. 合格（`exitCode=0`・`signal=null`）した実行が1件以上必要である
- * 4. 影響集合がfullなら`scope=full`の合格実行が必要である
- * 5. `scope=targeted`の合格実行は影響集合の選んだfeatureを全部argvに含む
+ * 4. 各記録のcommandが導出時点のtrusted policyの宣言（`fullCommand`・
+ *    `targetedRunner`＋feature）に一致する
+ * 5. 影響集合がfullなら`scope=full`の合格実行が必要である
  */
 export function selectObservedVerification(records, target) {
     const matching = records.filter((record) => record.headSha === target.headSha &&
@@ -201,7 +240,7 @@ export function selectObservedVerification(records, target) {
         const atHead = records.filter((record) => record.headSha === target.headSha).length;
         throw new Error(atHead > 0
             ? `H_impl ${target.headSha} の検証記録${atHead}件はいずれも現在の影響集合（digest ${target.impactDigest}）と一致しません。比較基点を揃えてverify runを再実行してください`
-            : `H_impl ${target.headSha} で観測した検証記録がありません。H_implで verify run --staging=<staging> -- <command> を実行してください`);
+            : `H_impl ${target.headSha} で観測した検証記録がありません。H_implで verify run --staging=<staging> --scope=full -- <trusted policyのverification.fullCommand> を実行してください`);
     }
     const latest = [];
     for (const record of matching) {
@@ -215,15 +254,18 @@ export function selectObservedVerification(records, target) {
         throw new Error(`最新の実行が不合格の検証commandがあります: ${failed
             .map((record) => `${JSON.stringify(record.command)}（exitCode=${String(record.exitCode)}, signal=${String(record.signal)}）`)
             .join("; ")}`);
+    /**
+     * **導出時点のtrusted policyで全記録のcommandを照合し直す。** 記録時に照合して
+     * いても、記録fileはlocalにあり、policyも記録後に変わり得る。1件でも宣言外の
+     * commandがあれば導出しない（fail closed）。
+     */
+    const violations = latest
+        .map((record) => verificationCommandViolation(record.command, record.scope, target.policy, target.impactFeatures))
+        .filter((violation) => violation !== undefined);
+    if (violations.length > 0)
+        throw new Error(`trusted policyの宣言外の検証記録があります: ${violations.join("; ")}`);
     if (target.impactMode === "full" && !latest.some((r) => r.scope === "full"))
         throw new Error("影響集合がfullのためscope=fullの合格した検証記録が必要です");
-    for (const record of latest) {
-        if (record.scope !== "targeted")
-            continue;
-        const missing = missingTargetedFeatures(record.command, target.impactFeatures);
-        if (missing.length > 0)
-            throw new Error(`scope=targetedの検証記録が影響集合のfeatureを含みません: ${missing.join(", ")}`);
-    }
     return Object.freeze(latest.map((record) => Object.freeze({
         command: record.command,
         scope: record.scope,

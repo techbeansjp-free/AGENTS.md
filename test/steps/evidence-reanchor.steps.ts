@@ -60,6 +60,10 @@ import {
   syntheticReviewEvidence,
   syntheticReviewEvidenceContent,
 } from "../support/review-evidence-fixture.js";
+import {
+  installTrustedVerificationPolicy,
+  TRUSTED_POLICY_PATHS,
+} from "../support/trusted-verification-policy.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 
 class ReanchorWorld extends WorkflowWorld {
@@ -352,21 +356,20 @@ function withAddedVerification(
 }
 
 /**
- * 検証commandを1件追加した検証欄を、stagingへ実際の検証記録を追記して導く。
- * **session照合と記録照合を通る正当な前進修正を作る。**
+ * trusted policyが宣言したcommandを再実行した検証欄を、stagingへ実際の検証記録を
+ * 追記して導く。**session照合と記録照合を通る正当な前進修正を作る。**
+ * trusted policyはfull commandを1つだけ宣言するため、検証欄だけを変える前進修正は
+ * 同じcommandの再実行（新しい記録）で作る。
  */
 function withRecordedVerification(
   world: ReanchorWorld,
   evidence: ReviewEvidence,
-  command = "npm run lint",
+  finishedAt = "2026-09-26T00:00:30.000Z",
 ): ReviewEvidence["observed"]["verification"] {
   return recordObservedVerification(world.staging, {
     baseSha: evidence.observed.baseSha,
     implementationHeadSha: evidence.observed.implementationHeadSha,
-    commands: [
-      ...evidence.observed.verification.map((item) => item.command.join(" ")),
-      command,
-    ],
+    finishedAt,
   }).verification;
 }
 
@@ -478,7 +481,7 @@ function forwardFixture(
   forwardArtifactPath = FORWARD_ARTIFACT,
 ): void {
   world.root = world.initRepo();
-  world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
+  world.baseSha = installTrustedVerificationPolicy(world.root);
   let initialImplementation = commit(
     world.root,
     "export const reviewed = 1;\n",
@@ -555,7 +558,7 @@ function forwardFixtureWithBaseAdvance(
   advanceKind: "既定branch追随" | "無関係な履歴",
 ): void {
   world.root = world.initRepo();
-  world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
+  world.baseSha = installTrustedVerificationPolicy(world.root);
   const initialImplementation = commit(
     world.root,
     "export const reviewed = 1;\n",
@@ -612,6 +615,9 @@ function forwardFixtureWithBaseAdvance(
           recursive: true,
           force: true,
         });
+    /** stagingと同じ先頭segment配下のtrusted policy setも版管理外として残るため消す */
+    for (const relative of TRUSTED_POLICY_PATHS)
+      fs.rmSync(path.join(world.root, relative), { force: true });
     fs.writeFileSync(path.join(world.root, "README.md"), "# fixture\n");
     fs.writeFileSync(
       path.join(world.root, "upstream.ts"),
@@ -830,7 +836,7 @@ function buildApprovedReviewBinding(
  */
 function replacementFixture(world: ReanchorWorld, newPath: string): void {
   world.root = world.initRepo();
-  world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
+  world.baseSha = installTrustedVerificationPolicy(world.root);
   const implementation = commit(
     world.root,
     "export const reviewed = 1;\n",
@@ -950,7 +956,7 @@ function supersessionFixture(
   priorArtifactCommits = 1,
 ): void {
   world.root = world.initRepo();
-  world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
+  world.baseSha = installTrustedVerificationPolicy(world.root);
   const implementation = commit(
     world.root,
     "export const reviewed = 1;\n",
@@ -1029,7 +1035,7 @@ Given("pr-bound後にartifactの9件目の前進是正commitがある", function
 
 Given("pr-boundの不正なartifact replacement「{word}」がある", function (kind) {
   this.root = this.initRepo();
-  this.baseSha = git(this.root, ["rev-parse", "HEAD"]);
+  this.baseSha = installTrustedVerificationPolicy(this.root);
   const implementation = commit(
     this.root,
     "export const reviewed = 1;\n",
@@ -1152,7 +1158,7 @@ function artifactFixture(
   artifactPath = REVIEW_ARTIFACT,
 ): void {
   world.root = world.initRepo();
-  world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
+  world.baseSha = installTrustedVerificationPolicy(world.root);
   const implementation = commit(
     world.root,
     "export const reviewed = 1;\n",
@@ -1307,7 +1313,7 @@ Given("H_implの宣言が構造と一致しないrebase後のreview証跡があ�
 
 function baseFixture(world: ReanchorWorld): void {
   world.root = world.initRepo();
-  world.baseSha = git(world.root, ["rev-parse", "HEAD"]);
+  world.baseSha = installTrustedVerificationPolicy(world.root);
   world.oldHeadSha = commit(
     world.root,
     "export const reviewed = 1;\n",

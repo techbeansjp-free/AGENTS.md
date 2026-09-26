@@ -18,7 +18,7 @@ description: exact-headの実装をGitから直接reviewし、finding状態と�
 2. **findingは状態として扱う。** 前round blockerは同じIDのまま骨子へ写されるので、是正済みなら`status`を`resolved`へ変え、`evidence`へ確認した事実を1行で書く。新しい文章として作り直さない。`adjacentScope`は手で書き換えない。記録時にGitから導出し直し、一致しなければ拒否される。
 3. 評価基準（`02_品質基準.md`の有限レビュー契約が定める肯定・敵対）は全roundで確認するが、`pass`の項目を文章で残さない。残すのはfindingと判定だけである。
 4. 修正は前進commitで行い、次roundは修正差分と影響集合だけを見る。予算と取り直しの規則は`02_品質基準.md`の有限レビュー契約が所有する。
-5. 収束したら`H_impl`をcheckoutした変更のないworktreeで`verify run --staging=<staging> [--scope=targeted|full] -- <検証commandのargv>`を実行する。commandはshellを通さず実行され、HEAD・影響集合digest・終了値がstagingの観測記録へ追記される。影響集合が`full`なら`--scope=full`の実行が必要である。**検証の合格は申告ではなく観測である。** 「実行した」と書いても証跡にはならない。
+5. 収束したら`H_impl`をcheckoutした変更のないworktreeで`verify run --staging=<staging> --scope=targeted|full -- <検証commandのargv>`を実行する。argvは既定branchのproject policyが`verification`で宣言したcommandだけを受理する（`full`は`fullCommand`そのもの、`targeted`は`targetedRunner`の後ろに影響集合のfeatureを並べたもの）。commandはshellを通さず実行され、HEAD・影響集合digest・終了値がstagingの観測記録へ追記される。影響集合が`full`なら`--scope=full`の実行が必要である。**検証の合格は申告ではなく観測である。** 「実行した」と書いても証跡にはならない。
 6. `review export --staging=<staging> --issue=<番号> --reviewer=<reviewer ID> --implementer=<implementer ID>`でreview証跡（`<Issue番号>_review.json`）を生成し、実装commitの後にその1 fileだけをcommitして`H_final`にする。証跡の検証欄は`H_impl`と影響集合に一致する合格した観測記録から導出され、無ければ生成しない。reviewer・implementer・独立性は`declared`（申告）として記録され、hard gateの根拠にならない。`workflow record --step=10`は`H_final`で実行でき、bindingはsessionのcandidate HEAD（`H_impl`）のまま記録される。
 
 ## reviewerと判定

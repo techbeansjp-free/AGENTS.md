@@ -9,6 +9,7 @@ import {
   verificationRecordErrors,
   verificationRunDigest,
   VERIFICATION_RUN_SCHEMA_VERSION,
+  type VerificationPolicy,
   type VerificationRunBody,
   type VerificationRunRecord,
   type VerificationTarget,
@@ -27,6 +28,11 @@ const BASE = "1".repeat(40);
 const HEAD = "2".repeat(40);
 const IMPACT = "a".repeat(64);
 const FEATURE = "test/features/unit/sample.feature";
+/** 既定branchのtrusted policyが宣言した検証command（導出時に渡す）。 */
+const POLICY: VerificationPolicy = {
+  fullCommand: ["npm", "test"],
+  targetedRunner: ["cucumber"],
+};
 
 function body(change: Partial<VerificationRunBody> = {}): VerificationRunBody {
   return {
@@ -143,6 +149,7 @@ When("記録の組み合わせごとに検証欄を導出する", function () {
     impactDigest: IMPACT,
     impactMode: "full",
     impactFeatures: [],
+    policy: POLICY,
   };
   const failed = sealVerificationRun(
     body({ exitCode: 1, finishedAt: "2026-09-26T00:00:02.000Z" }),
@@ -164,26 +171,25 @@ When("記録の組み合わせごとに検証欄を導出する", function () {
       command: ["cucumber", "other.feature"],
     }),
   );
-  const lint = sealVerificationRun(body({ command: ["npm", "run", "lint"] }));
+
   const select = (
     records: readonly VerificationRunRecord[],
     change: Partial<typeof target> = {},
   ) => selectObservedVerification(records, { ...target, ...change });
+  const targeted = {
+    impactMode: "targeted" as const,
+    impactFeatures: [FEATURE],
+  };
   this.errors = [
     rejectionOf(() => select([])),
     rejectionOf(() => select([this.record], { impactDigest: "d".repeat(64) })),
     rejectionOf(() => select([this.record, failed])),
     rejectionOf(() => select([targetedOnly])),
-    rejectionOf(() =>
-      select([targetedPartial], {
-        impactMode: "targeted",
-        impactFeatures: [FEATURE],
-      }),
-    ),
+    rejectionOf(() => select([targetedPartial], targeted)),
   ];
   this.selected = [
     JSON.stringify(
-      select([this.record, failed, passedAgain, lint]).map((item) => [
+      select([this.record, failed, passedAgain]).map((item) => [
         item.command,
         item.recordDigest,
       ]),
@@ -194,10 +200,7 @@ When("記録の組み合わせごとに検証欄を導出する", function () {
         impactFeatures: [FEATURE],
       }).map((item) => item.scope),
     ),
-    JSON.stringify([
-      [passedAgain.command, passedAgain.recordDigest],
-      [lint.command, lint.recordDigest],
-    ]),
+    JSON.stringify([[passedAgain.command, passedAgain.recordDigest]]),
   ];
 });
 
@@ -229,6 +232,7 @@ When("検証欄を記録の欠落・不一致・後続の不合格と照合す�
     impactDigest: IMPACT,
     impactMode: "full",
     impactFeatures: [],
+    policy: POLICY,
   });
   const laterFailure = sealVerificationRun(
     body({ exitCode: 2, finishedAt: "2026-09-26T00:00:05.000Z" }),
@@ -251,3 +255,68 @@ Then("記録と一致する検証欄だけを受理する", function () {
   assert.match(this.errors[2]!, /後続実行が不合格/u);
   assert.equal(this.errors[3], "");
 });
+
+When(
+  "trusted policyの宣言外のcommandを含む記録から検証欄を導出する",
+  function () {
+    const target: VerificationTarget = {
+      headSha: HEAD,
+      impactDigest: IMPACT,
+      impactMode: "full",
+      impactFeatures: [],
+      policy: POLICY,
+    };
+    const targeted = {
+      impactMode: "targeted" as const,
+      impactFeatures: [FEATURE],
+    };
+    /** scope=fullを名乗るだけの`true`・宣言外のfull command・option付きtargeted・別runner */
+    const undeclaredFull = sealVerificationRun(body({ command: ["true"] }));
+    const lint = sealVerificationRun(body({ command: ["npm", "run", "lint"] }));
+    const targetedBody = (command: string[]) =>
+      sealVerificationRun(
+        body({ scope: "targeted", impactMode: "targeted", command }),
+      );
+    const select = (
+      records: readonly VerificationRunRecord[],
+      change: Partial<VerificationTarget> = {},
+    ) => selectObservedVerification(records, { ...target, ...change });
+    this.errors = [
+      rejectionOf(() => select([undeclaredFull])),
+      rejectionOf(() => select([this.record, lint])),
+      rejectionOf(() =>
+        select([targetedBody(["cucumber", FEATURE, "--dry-run"])], targeted),
+      ),
+      rejectionOf(() =>
+        select([targetedBody(["other-runner", FEATURE])], targeted),
+      ),
+      rejectionOf(() =>
+        select([this.record], {
+          policy: { ...POLICY, fullCommand: ["npm", "run", "test:all"] },
+        }),
+      ),
+      /** 対照。宣言どおりのfullとtargetedは導出する */
+      rejectionOf(() => select([this.record])),
+      rejectionOf(() =>
+        select([targetedBody(["cucumber", FEATURE])], targeted),
+      ),
+    ];
+  },
+);
+
+Then(
+  "scopeの名乗りではなくtrusted policyの宣言と一致するcommandだけを導く",
+  function () {
+    const expected = [
+      /宣言外.*\["true"\].*verification\.fullCommand/u,
+      /宣言外.*"lint"\].*verification\.fullCommand/u,
+      /宣言外.*optionを拒否しました: --dry-run/u,
+      /宣言外.*"other-runner".*verification\.targetedRunner/u,
+      /宣言外.*"test:all"/u,
+    ];
+    assert.equal(this.errors.length, expected.length + 2);
+    for (const [index, pattern] of expected.entries())
+      assert.match(this.errors[index]!, pattern, `case ${index}`);
+    assert.deepEqual(this.errors.slice(expected.length), ["", ""]);
+  },
+);

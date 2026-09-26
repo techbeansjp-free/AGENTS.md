@@ -327,7 +327,30 @@
         "pattern": "^project/providers/[a-z0-9][a-z0-9.-]*\\.json$"
       }
     },
-    "conformanceDirectory": { "const": "project/conformance" }
+    "conformanceDirectory": { "const": "project/conformance" },
+    "verification": {
+      "type": "object",
+      "description": "verify runが受理する検証commandの宣言。既定branchのtrusted commitの値だけを使い、candidate側の値は使わない。scope=fullはargvがfullCommandと完全一致する実行、scope=targetedはtargetedRunnerで始まり後ろに影響集合のfeature pathだけを並べた実行だけを受理する。未宣言のprojectではverify run・review export・review証跡の照合を拒否する",
+      "additionalProperties": false,
+      "required": ["fullCommand", "targetedRunner"],
+      "properties": {
+        "fullCommand": { "$ref": "#/$defs/verificationArgv" },
+        "targetedRunner": { "$ref": "#/$defs/verificationArgv" }
+      }
+    }
+  },
+  "$defs": {
+    "verificationArgv": {
+      "type": "array",
+      "description": "shellを通さずに実行するargv。制御文字を含まない空でないNFC文字列",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+      }
+    }
   },
   "allOf": [
     {

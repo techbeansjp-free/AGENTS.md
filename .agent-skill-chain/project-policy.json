@@ -75,5 +75,16 @@
   ],
   "conformanceFiles": ["project/conformance/bindings.json"],
   "providerFiles": ["project/providers/capability-mapping.json"],
-  "conformanceDirectory": "project/conformance"
+  "conformanceDirectory": "project/conformance",
+  "verification": {
+    "fullCommand": ["npm", "test"],
+    "targetedRunner": [
+      "node",
+      "--import",
+      "tsx",
+      "./node_modules/@cucumber/cucumber/bin/cucumber.js",
+      "--config",
+      "cucumber.targeted.mjs"
+    ]
+  }
 }

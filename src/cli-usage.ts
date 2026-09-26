@@ -997,18 +997,19 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     command: "verify",
     subcommand: "run",
     summary:
-      "`--`の後の検証commandをshellを通さずH_implで実行し、HEAD・影響集合digest・終了値をstagingの観測記録（journal/verification-runs.jsonl）へ追記する。終了値はcommandの終了値",
+      "`--`の後の検証commandをshellを通さずH_implで実行し、HEAD・影響集合digest・終了値をstagingの観測記録（journal/verification-runs.jsonl）へ追記する。commandは既定branchのtrusted policyが宣言したものだけを受理し、merge段階以降は拒否する。終了値はcommandの終了値",
     positional:
       "-- <command> [args...] 実行する検証commandのargv。shellを通さずそのまま実行する",
-    requiredFlags: [flag("staging", "path", "対象Issue staging")],
-    conditionalFlags: [],
-    optionalFlags: [
-      optional(
+    requiredFlags: [
+      flag("staging", "path", "対象Issue staging"),
+      flag(
         "scope",
         "targeted|full",
-        "検証範囲。targetedは影響集合がtargetedで、選ばれたfeatureを全部argvに含む場合だけ記録できる",
-        "full",
+        "検証範囲。既定値は無い。fullはargvが既定branchのtrusted policyのverification.fullCommandと完全一致する場合、targetedは影響集合がtargetedでargvがverification.targetedRunnerに選ばれたfeatureを全部並べた形の場合だけ記録できる",
       ),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [
       optional(
         "base",
         "sha",

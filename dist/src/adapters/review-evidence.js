@@ -8,7 +8,9 @@ import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence
 import { createReviewEvidence, isReviewActorId, parseReviewEvidence, renderReviewEvidence, REVIEW_EVIDENCE_NAME_PATTERN, validateReviewEvidenceAgainstSession, } from "../domain/review-evidence.js";
 import { readStoredStagingRecord } from "../domain/staging.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
-import { selectObservedVerification, verificationRecordErrors, } from "../domain/verification-run.js";
+import { loadTrustedVerificationPolicy } from "../domain/policy.js";
+import { stableJson } from "../lib/security.js";
+import { selectObservedVerification, } from "../domain/verification-run.js";
 import { computeImpactSet } from "./impact-set.js";
 import { GIT_ENV, observeReviewDiff } from "./review-diff.js";
 import { readStoredReviewSession } from "./review-session-store.js";
@@ -73,16 +75,20 @@ export function reviewEvidenceBindingErrors(root, session, evidence) {
 /**
  * 証跡の`observed`節をGitと検証記録から再導出して照合する。**証跡の値を
  * authorityにしない。** diff digest・影響集合digestとmodeは`比較基点..H_impl`から
- * 再計算し、検証欄はstagingの機械記録に同じ`recordDigest`の合格記録があることを求める。
+ * 再計算する。**検証欄も再導出する。** stagingの全記録から、再計算した影響集合と
+ * 照合時点のtrusted policyで`selectObservedVerification`を実行し、証跡の検証欄が
+ * その導出結果と完全一致することを要求する。手で組んだ証跡が合格記録だけを
+ * 抜き出し、後続の不合格や宣言外のcommandを隠す形を拒否する。
  */
-export function observedEvidenceErrors(root, staging, evidence) {
+export function observedEvidenceErrors(root, staging, evidence, verificationPolicy) {
     const { baseSha, implementationHeadSha } = evidence.observed;
     const errors = [];
+    let impact;
     try {
         const diff = observeReviewDiff(root, baseSha, implementationHeadSha);
         if (diff.digest !== evidence.observed.diffDigest)
             errors.push("review証跡のdiffDigestが比較基点..H_implのGit差分と一致しません");
-        const impact = computeImpactSet({
+        impact = computeImpactSet({
             root,
             baseSha,
             headSha: implementationHeadSha,
@@ -95,15 +101,29 @@ export function observedEvidenceErrors(root, staging, evidence) {
     catch (error) {
         errors.push(`review証跡のdiff・影響集合をGitで観測できません: ${error instanceof Error ? error.message : String(error)}`);
     }
+    if (impact === undefined)
+        return errors;
     try {
-        errors.push(...verificationRecordErrors(evidence.observed.verification, readVerificationRuns(staging)));
+        const derived = selectObservedVerification(readVerificationRuns(staging), {
+            headSha: implementationHeadSha,
+            impactDigest: impact.digest,
+            impactMode: impact.mode,
+            impactFeatures: impact.features,
+            policy: verificationPolicy ?? loadTrustedVerificationPolicy(root),
+        });
+        if (stableJson(derived) !== stableJson(evidence.observed.verification))
+            errors.push("review証跡の検証欄がstagingの観測記録とtrusted policyから再導出した検証欄と一致しません。H_implでverify runを実行した後にreview exportを再実行してください");
     }
     catch (error) {
-        errors.push(`stagingの検証記録を読めません: ${error instanceof Error ? error.message : String(error)}`);
+        errors.push(`review証跡の検証欄をstagingの観測記録から再導出できません: ${error instanceof Error ? error.message : String(error)}`);
     }
     return errors;
 }
-/** stagingとGitから証跡を照合する。`review validate --artifact --staging`と消費側が共有する。 */
+/**
+ * stagingとGitから証跡を照合する。`review validate --artifact --staging`と消費側
+ * （`pr merge`は独立性modeによらず）が共有する。`verificationPolicy`を省略すると
+ * `origin/HEAD`のtrusted commitから読む。`pr merge`はPR baseのtrusted setから渡す。
+ */
 export function verifyReviewEvidenceWithStaging(input) {
     const staging = assertWorkflowStaging(input.staging);
     const session = readStoredReviewSession(staging);
@@ -117,7 +137,7 @@ export function verifyReviewEvidenceWithStaging(input) {
         const binding = reviewEvidenceBindingErrors(root, session, input.evidence.observed);
         errors.push(...binding);
         if (binding.length === 0)
-            errors.push(...observedEvidenceErrors(root, staging, input.evidence));
+            errors.push(...observedEvidenceErrors(root, staging, input.evidence, input.verificationPolicy));
     }
     return errors;
 }
@@ -163,7 +183,8 @@ export function exportReviewEvidence(input) {
     /**
      * **検証欄は申告ではなく観測から導出する。** `比較基点..H_impl`の影響集合を
      * 再計算し、同じ`H_impl`と影響集合digestで`verify run`が記録した合格実行だけを
-     * 埋め込む。影響集合がfullなら`scope=full`の合格実行を要求する。
+     * 埋め込む。影響集合がfullなら`scope=full`の合格実行を要求する。commandは
+     * 既定branchのtrusted policyの宣言と照合する。
      */
     const impact = computeImpactSet({
         root: gitRoot,
@@ -175,6 +196,7 @@ export function exportReviewEvidence(input) {
         impactDigest: impact.digest,
         impactMode: impact.mode,
         impactFeatures: impact.features,
+        policy: loadTrustedVerificationPolicy(gitRoot),
     });
     const evidence = createReviewEvidence({
         issue: input.issue,

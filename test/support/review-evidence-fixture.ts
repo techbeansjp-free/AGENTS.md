@@ -31,6 +31,7 @@ import {
   appendVerificationRun,
   readVerificationRuns,
 } from "../../src/adapters/verification-run.js";
+import { FIXTURE_VERIFICATION_POLICY } from "./trusted-verification-policy.js";
 
 /**
  * testが共有するreview証跡fixture。**製品と同じ生成関数を通す。**
@@ -48,6 +49,18 @@ export function fixtureArgv(command: string): string[] {
 }
 
 /**
+ * fixture commandのscope。trusted fixture policyの`targetedRunner`で始まるものだけを
+ * targetedとし、他はfullとして記録する（宣言外のfullは導出で拒否される）。
+ */
+export function fixtureScope(command: string): VerificationScope {
+  const argv = fixtureArgv(command);
+  const runner = FIXTURE_VERIFICATION_POLICY.targetedRunner;
+  return runner.every((argument, index) => argv[index] === argument)
+    ? "targeted"
+    : "full";
+}
+
+/**
  * 記録を持たない合成の検証欄。session照合・記録照合を行わない経路（parser、
  * `audit:check`、比較関数）専用である。
  */
@@ -59,7 +72,7 @@ export function syntheticVerification(input: {
 }): ReviewEvidenceVerification[] {
   return (input.commands ?? ["npm test"]).map((command) => ({
     command: fixtureArgv(command),
-    scope: input.scope ?? "full",
+    scope: input.scope ?? fixtureScope(command),
     exitCode: 0 as const,
     headSha: input.implementationHeadSha,
     impactDigest: input.impactDigest,
@@ -84,6 +97,12 @@ export function reviewEvidenceFromSession(
     reviewer?: string;
     implementer?: string;
     verification?: readonly string[];
+    /**
+     * 検証記録の終了時刻。**同じcommandの再実行**を別の記録として作るときに変える
+     * （trusted policyはfull commandを1つしか宣言しないため、検証欄を変える前進修正は
+     * 再実行で作る）。
+     */
+    verificationFinishedAt?: string;
     diffDigest?: string;
     impact?: { digest: string; mode: "targeted" | "full" };
     observedVerification?: readonly ReviewEvidenceVerification[];
@@ -130,6 +149,7 @@ export function recordObservedVerification(
     baseSha: string;
     implementationHeadSha: string;
     commands?: readonly string[];
+    finishedAt?: string;
   },
 ): {
   diffDigest: string;
@@ -149,6 +169,7 @@ export function recordObservedVerification(
       impactDigest: observed.impact.digest,
       impactMode: observed.impact.mode,
       impactFeatures: observed.features,
+      policy: FIXTURE_VERIFICATION_POLICY,
     }),
   };
 }
@@ -178,6 +199,7 @@ export function observeFixtureVerification(
     baseSha: string;
     implementationHeadSha: string;
     commands?: readonly string[];
+    finishedAt?: string;
   },
 ): {
   diffDigest: string;
@@ -197,13 +219,13 @@ export function observeFixtureVerification(
       baseSha: input.baseSha,
       headSha: input.implementationHeadSha,
       command: fixtureArgv(command),
-      scope: "full",
+      scope: fixtureScope(command),
       impactDigest: impact.digest,
       impactMode: impact.mode,
       exitCode: 0,
       signal: null,
-      startedAt: FIXED_FINISHED_AT,
-      finishedAt: FIXED_FINISHED_AT,
+      startedAt: input.finishedAt ?? FIXED_FINISHED_AT,
+      finishedAt: input.finishedAt ?? FIXED_FINISHED_AT,
       stdoutDigest: fakeDigest("stdout"),
       stderrDigest: fakeDigest("stderr"),
     }),
@@ -222,6 +244,7 @@ export function observeFixtureVerification(
       impactDigest: impact.digest,
       impactMode: impact.mode,
       impactFeatures: impact.features,
+      policy: FIXTURE_VERIFICATION_POLICY,
     }),
   };
 }
@@ -244,6 +267,9 @@ export function observedReviewEvidenceFromSession(
     ...(options.verification === undefined
       ? {}
       : { commands: options.verification }),
+    ...(options.verificationFinishedAt === undefined
+      ? {}
+      : { finishedAt: options.verificationFinishedAt }),
   });
   return reviewEvidenceFromSession(session, {
     ...options,
@@ -278,6 +304,9 @@ export function reviewEvidenceContentFromStaging(
     ...(options.verification === undefined
       ? {}
       : { commands: options.verification }),
+    ...(options.verificationFinishedAt === undefined
+      ? {}
+      : { finishedAt: options.verificationFinishedAt }),
   });
   return renderReviewEvidence(
     reviewEvidenceFromSession(session, {

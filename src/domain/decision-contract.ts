@@ -115,7 +115,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "1743",
+      callerLine: "1781",
       callerAnchor: "inspectCiDelivery({",
     }),
     Object.freeze({
@@ -128,7 +128,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "7350",
+      callerLine: "7396",
       callerAnchor: "validateSpecs(root",
     }),
     Object.freeze({
@@ -136,12 +136,12 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label:
         "開発考慮事項の決定文言が具体的かの判定（hasConcreteDecisionText。長さ閾値＋定型文除外の正規表現でplaceholderを検出する）",
       decisionSiteFile: "src/domain/policy.ts",
-      decisionSiteLine: "378",
+      decisionSiteLine: "382",
       decisionSiteAnchor: "function hasConcreteDecisionText",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/domain/policy.ts",
-      callerLine: "403",
+      callerLine: "407",
       callerAnchor: "hasConcreteDecisionText(record[field], minimum)",
     }),
     Object.freeze({
