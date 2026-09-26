@@ -625,13 +625,13 @@ When("配布される品質基準を読む", function () {
 });
 
 Then(
-  "追随の位置とH_implと比較基点の指し先と個別監査表の再生成が書かれている",
+  "追随の位置とH_implと比較基点の指し先と監査差分の再導出が書かれている",
   function () {
     const text = String(this.value);
-    assert.match(text, /review artifact commitより前/u);
+    assert.match(text, /review証跡commitより前/u);
     assert.match(text, /比較基点.*取り込んだ既定branch tip/u);
-    assert.match(text, /H_impl.*artifact直前の最新commit/u);
-    assert.match(text, /個別監査表.*再生成/u);
+    assert.match(text, /H_impl.*review証跡直前の最新commit/u);
+    assert.match(text, /監査対象の差分は追随前の値を流用せず.*Gitで導出/u);
   },
 );
 

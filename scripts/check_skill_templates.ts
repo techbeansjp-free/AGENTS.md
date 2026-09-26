@@ -168,8 +168,7 @@ const POST_PR_INTAKE_FORBIDDEN = ["同じPRへ取り込まない"] as const;
 const TRACKED_STAGING_REVIEW_MARKERS = [
   "staging.tracked=false",
   "staging.tracked=true",
-  "文書00〜04を版管理する",
-  "staging内の`04_レビュー.md`はformal approval artifactとして扱わない",
+  "staging内のfileをreview証跡として扱わない",
   "docs/reviews/",
 ] as const;
 
