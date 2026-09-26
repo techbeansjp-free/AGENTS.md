@@ -16,8 +16,8 @@ description: exact-headの実装をGitから直接reviewし、finding状態と�
 
 1. `review round --init --staging=<staging> --head=<H_impl>`（round 1は`--base`・`--scope`・`--ac`を加える）で骨子を生成し、reviewの指摘だけを`findings`へ書いて`review round --apply`で記録する。入力JSON fileはstagingの外に置く。blocking findingの`contractId`はanchorのAcceptance Criteria IDまたはInvariant IDに一致させる。
 2. **findingは状態として扱う。** 前round blockerは同じIDのまま骨子へ写されるので、是正済みなら`status`を`resolved`へ変え、`evidence`へ確認した事実を1行で書く。新しい文章として作り直さない。`adjacentScope`は手で書き換えない。記録時にGitから導出し直し、一致しなければ拒否される。
-3. 評価基準（[02_品質基準.md](../../docs/02_品質基準.md#有限レビュー契約)の肯定・敵対）は全roundで確認するが、`pass`の項目を文章で残さない。残すのはfindingと判定だけである。
-4. 修正は前進commitで行い、次roundは修正差分と影響集合だけを見る。予算と取り直しの規則は[02_品質基準.md](../../docs/02_品質基準.md#有限レビュー契約)が所有する。
+3. 評価基準（`02_品質基準.md`の有限レビュー契約が定める肯定・敵対）は全roundで確認するが、`pass`の項目を文章で残さない。残すのはfindingと判定だけである。
+4. 修正は前進commitで行い、次roundは修正差分と影響集合だけを見る。予算と取り直しの規則は`02_品質基準.md`の有限レビュー契約が所有する。
 5. 収束したら`review export --staging=<staging> --issue=<番号> --reviewer=<reviewer ID> --implementer=<implementer ID> --verified=<実行した検証command>`でreview証跡（`<Issue番号>_review.json`）を生成し、実装commitの後にその1 fileだけをcommitして`H_final`にする。`workflow record --step=10`は`H_final`で実行でき、bindingはsessionのcandidate HEAD（`H_impl`）のまま記録される。
 
 ## reviewerと判定
@@ -30,9 +30,9 @@ role欄の担当roleが`reviewer`であること、必要能力tier、provider�
 
 ローカルまたはユーザー共通のローカルLLM reviewer設定が有効なら、`routing delegated-review-diff --root=<root> --base=<比較基点SHA> --head=<H_impl> --staging=<staging>`で委譲し、返った候補を進行役がHEADのcode・仕様・test・失敗経路で確かめて採否を決める。ローカルLLMの判定を最終判定へ直結しない。利用可能な別reviewer（Codex SolまたはOpus）にも同じ固定HEADを独立にreviewさせる。
 
-- finding分類（DCAND-006）: `agent-skill-chain decision invoke --type=DCAND-006 --staging=<staging> --input=<file> --apply`。advisoryなので進行役が確認して`confirmedBy`を付けて再実行し、`effectiveValue`確定後の`decisionRecordId`をfindingの`decisionRef`へ書く。人・進行役が直接分類した場合は`null`。
-- reviewer選定（DCAND-009）: `decision invoke --type=DCAND-009`。`candidateSet`と`proposedValue`はprovider ID（`codex`・`claude`）。
-- CodeRabbitの利用枠制限（DCAND-008）: `decision invoke --type=DCAND-008`。`confirmed-limited`ならOpusとCodex Solの両方へ独立reviewを委譲し、片方を利用できなければ未実施として人間へ再開条件の判断を求める。
+- 分類（severity等）と理由の記入（DCAND-006）は`agent-skill-chain decision invoke --type=DCAND-006 --staging=<staging> --input=<file> --apply`で行う。advisoryなので進行役が確認して`confirmedBy`を付けて再実行し、`effectiveValue`確定後の`decisionRecordId`をfindingの`decisionRef`へ書く。人・進行役が直接分類した場合は`null`。
+- reviewer選定（DCAND-009）は`decision invoke --type=DCAND-009`で行う。`candidateSet`と`proposedValue`はprovider ID（`codex`・`claude`）。
+- CodeRabbitの利用枠制限の判定（DCAND-008）は`decision invoke --type=DCAND-008`で行う。`confirmed-limited`ならOpusとCodex Solの両方へ独立reviewを委譲し、片方を利用できなければ未実施として人間へ再開条件の判断を求める。
 
 モデルの多数決や`decision`だけで承認・却下しない。候補0件やモデル間の一致だけを承認根拠にしない。
 
@@ -52,9 +52,11 @@ Makefileは`make -n <target>`で展開した実commandへ当てる。**ただし
 
 ## review証跡の配置
 
-**review証跡のテンプレートはない。** 証跡は`review export`が収束済みreview sessionから生成する`docs/reviews/<Issue番号>_review.json`であり、人もAIも手で書かない。`staging.tracked=false`のstagingは版管理外である。`staging.tracked=true`ではstagingの計画文書を版管理するが、どちらの場合もstaging内のfileをreview証跡として扱わない。証跡は`docs/reviews/`または`.agent-skill-chain/reviews/`配下へ置き、実装commitの後にその1 fileだけをcommitして`H_final`にする。この証跡commitに対する取り直しroundは要らない。
+**review証跡のテンプレートはない。** 証跡は`review export`が収束済みreview sessionから生成する`docs/reviews/<Issue番号>_review.json`であり、人もAIも手で書かない。`staging.tracked=false`のstagingは版管理外である。`staging.tracked=true`ではstagingの計画文書を版管理するが、どちらの場合もstaging内のfileをreview証跡として扱わない。証跡は`docs/reviews/`または`.agent-skill-chain/reviews/`配下へ置き、実装commitの後にその1 fileだけをcommitして`H_final`にする。この証跡commitに対する取り直しroundは要らない。H_final後は証跡を更新しない。是正が必要なら前進commitで次roundを収束させ、`review export`で生成し直す。
 
 ## テンプレート契約
+
+差分が触れた範囲の追跡先を確認するときは[Semantic Graphの利用](../../docs/01_開発ワークフロー.md#semantic-graphの利用)を読み、影響集合は`impact`で導出する。
 
 作業開始前に[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)と[ドメイン用語台帳](../../docs/01_開発ワークフロー.md#ドメイン用語台帳)を読み、成果物間の責務越境、封印済み計画の書き換え、対象版とシステム仕様書の不一致、未定義語・重複定義・根拠なしの意味変更をfindingにする。
 

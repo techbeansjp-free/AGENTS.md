@@ -563,11 +563,11 @@ Then("artifact 1 fileのcommitに取り直しroundは要らない旨がある", 
     fs.readFileSync(path.join(repositoryRoot, relative), "utf8");
   assert.match(
     read(".agent-skill-chain/docs/01_開発ワークフロー.md"),
-    /review artifact 1 fileだけのこのHEAD移動.*には取り直しroundを要求しない/u,
+    /review証跡1 fileだけのこのHEAD移動.*には取り直しroundを要求しない/u,
   );
   assert.match(
     read(".agent-skill-chain/skills/step-10-review/SKILL.md"),
-    /このartifact commitに対する取り直しroundは要らない/u,
+    /この証跡commitに対する取り直しroundは要らない/u,
   );
   assert.match(
     read(".agent-skill-chain/docs/02_品質基準.md"),
