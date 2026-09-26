@@ -1,7 +1,7 @@
 import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import { classifyMode, POC_LIMITS, POC_OBSERVABLE_KINDS, QUESTIONS, } from "./mode.js";
-import { parsePlanSeal } from "./plan-seal.js";
+import { parsePlanGeneration, parsePlanSeal, } from "./plan-seal.js";
 export const MODE_DECISION_FILE = "00_モード判定.json";
 export const WORKFLOW_JOURNAL_DIRECTORY = "journal";
 export const STEP_JOURNAL_BASENAME = "steps.jsonl";
@@ -227,6 +227,7 @@ const JOURNAL_FIELDS = new Set([
     "postPrIntake",
     "reconfirmation",
     "planSeal",
+    "planGeneration",
 ]);
 const POC_OBSERVATION_BINDING_FIELDS = new Set(["headSha", "evidenceDigest"]);
 const REVIEW_SESSION_BINDING_FIELDS = new Set([
@@ -456,6 +457,16 @@ function parseJournalEntry(value, line) {
         errors.push(...parsed.errors);
         planSeal = parsed.value;
     }
+    let planGeneration;
+    if (value.planGeneration !== undefined) {
+        const parsed = parsePlanGeneration({
+            value: value.planGeneration,
+            step: value.step,
+            label,
+        });
+        errors.push(...parsed.errors);
+        planGeneration = parsed.value;
+    }
     if (errors.length > 0)
         return { errors };
     return {
@@ -474,6 +485,7 @@ function parseJournalEntry(value, line) {
             ...(postPrIntake ? { postPrIntake } : {}),
             ...(reconfirmation ? { reconfirmation } : {}),
             ...(planSeal ? { planSeal } : {}),
+            ...(planGeneration ? { planGeneration } : {}),
         },
         errors,
     };

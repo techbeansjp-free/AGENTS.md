@@ -14,7 +14,7 @@ import { isRecord } from "../types.js";
 import { DELIVERY_STATE_FILE, parseDeliveryState, } from "../domain/delivery-state.js";
 import { POC_OBSERVATION_DIRECTORY, pocObservationArtifact, validatePocObservationEvidence, } from "../domain/poc-observation.js";
 import { assertPocHeadChangeScope, executePocSandboxObservation, } from "./poc-execution.js";
-import { isPlanFrozenCheckStep, PLAN_AMENDMENT_FILE, planSealStep, stagingDriftDiagnostic, } from "../domain/plan-seal.js";
+import { isPlanFrozenCheckStep, planResealRejection, planSealStep, stagingDriftDiagnostic, } from "../domain/plan-seal.js";
 import { assertPlanFrozenForEntries, changedPlanningSince, computePlanSeal, } from "./plan-seal.js";
 export { calculatePocFixtureDigest } from "./poc-execution.js";
 const packageRoot = findPackageRoot(import.meta.url);
@@ -224,9 +224,25 @@ export function readWorkflowJournal(staging) {
  * 封印後の計画凍結を検査する（REQ-WF-036）。`pr create`・`pr merge`・`workflow record`の
  * Step 9・10が呼ぶ。journalに封印が無ければ（本機構以前のstaging）検査しない。
  */
-export function assertPlanFrozen(staging, commit = "HEAD") {
+export function assertPlanFrozen(staging, commit = "HEAD", options = {}) {
     const journal = readWorkflowJournal(staging);
-    assertPlanFrozenForEntries(staging, journal.entries, commit);
+    assertPlanFrozenForEntries(staging, journal.entries, commit, options);
+}
+/**
+ * 封印Stepの再記録を外部副作用より前に拒否する（REQ-WF-036）。**封印は不変である。**
+ * `workflow advance`のIssue同期のように、journal追記より前に外部へ書き込む経路が呼ぶ。
+ * journal追記経路も同じ判定を持つ。
+ */
+export function assertPlanSealOpen(staging, step, humanOverride = false) {
+    const journal = readWorkflowJournal(staging);
+    const rejection = planResealRejection({
+        entries: journal.entries,
+        mode: journal.mode,
+        step,
+        humanOverride,
+    });
+    if (rejection)
+        throw new Error(rejection);
 }
 /**
  * staging digest不一致の診断文。記録済み成果物一覧との追加・削除と、封印と比べた
@@ -321,8 +337,13 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
      * **封印後のStep 9・10は計画凍結を検査する**（REQ-WF-036）。封印の無い旧journalは
      * 検査しない。
      */
-    if (isPlanFrozenCheckStep(entry.step))
-        assertPlanFrozenForEntries(staging, current.entries, headSha ?? "HEAD");
+    /**
+     * **計画世代はCLIが計算する。** 呼出し側の`planGeneration`は捨て、封印後のStep 9・10では
+     * `05_計画変更.md`から追記専用の世代chainを計算して記録する。
+     */
+    const planGeneration = isPlanFrozenCheckStep(entry.step)
+        ? assertPlanFrozenForEntries(staging, current.entries, headSha ?? "HEAD")
+        : undefined;
     const deliveryFile = path.join(staging, DELIVERY_STATE_FILE);
     const delivery = fs.existsSync(deliveryFile)
         ? parseDeliveryState(fs.readFileSync(deliveryFile, "utf8"))
@@ -393,26 +414,34 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
      * checkpointでだけ成果物fileから計算し直す（REQ-WF-036）。
      */
     /**
-     * **Step 9以降を記録した後に封印Stepを追記して再封印しない**（REQ-WF-036）。
-     * PoCの順序検査は記録範囲より後ろのStepを見ないため、Step 9・10の後にStep 4を
-     * 記録すると編集後の計画が新しい封印になる。quick/pocからfullへの昇格前の記録は
-     * modeが異なるため数えず、昇格後のfull Step 8封印は従来どおり成立する。
-     */
-    /**
+     * **封印は不変である**（REQ-WF-036）。現在のmodeの封印が既にあれば、封印Stepの再記録は
+     * Step 9の前後・内容の同異を問わず拒否する。「最後に存在した計画を封印する」のではなく
+     * 「reviewした計画を凍結する」ためである。封印の無い旧journalでもStep 9以降の記録後の
+     * 封印は拒否する。quick/pocからfullへの昇格前の記録はmodeが異なるため数えず、
+     * 昇格後のfull Step 8封印は最初のfull封印として成立する。
+     *
      * HumanOverrideによる欠落Stepの明示承認は同期記録ではないため、封印を作らず
      * 再封印の拒否対象にもしない。
      */
+    const resealRejection = planResealRejection({
+        entries: current.entries,
+        mode: current.mode,
+        step: entry.step,
+        humanOverride: entry.humanOverride !== undefined,
+    });
+    if (resealRejection)
+        throw new Error(resealRejection);
     const sealsPlan = entry.step === planSealStep(current.mode) && !entry.humanOverride;
-    if (sealsPlan &&
-        current.entries.some((recorded) => recorded.step >= 9 && recorded.mode === current.mode))
-        throw new Error(`Step 9以降の記録後にStep ${entry.step}を追記して計画を再封印できません。計画の変更は${PLAN_AMENDMENT_FILE}へAMD-NNNとして追記してください`);
     let entryToWrite = { ...entry };
     delete entryToWrite.planSeal;
+    delete entryToWrite.planGeneration;
     if (sealsPlan)
         entryToWrite = {
             ...entryToWrite,
             planSeal: computePlanSeal(staging, current.mode),
         };
+    if (planGeneration !== undefined)
+        entryToWrite = { ...entryToWrite, planGeneration };
     if (entry.step === 9 && headSha !== undefined)
         entryToWrite = { ...entryToWrite, implementationHeadSha: headSha };
     if (current.mode === "poc" && entry.step >= 9) {

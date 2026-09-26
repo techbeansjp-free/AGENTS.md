@@ -265,6 +265,7 @@ import {
   appendDeliveryTerminalJournalEntry,
   appendWorkflowJournalEntry,
   assertPlanFrozen,
+  assertPlanSealOpen,
   assertPocDeliveryChangeScope,
   assertWorkflowStaging,
   describeStagingDigestDrift,
@@ -684,7 +685,7 @@ export function assertWorkflowReadyForDelivery(
   staging: string,
   deliveredHeadSha = "HEAD",
 ): ReturnType<typeof inspectWorkflowStaging> {
-  assertPlanFrozen(staging, deliveredHeadSha);
+  assertPlanFrozen(staging, deliveredHeadSha, { delivery: true });
   const stored = readStoredStagingRecord(staging);
   const currentArtifacts = listStagingArtifacts(staging);
   const currentDigest = calculateStagingDigest(staging, currentArtifacts);
@@ -721,7 +722,7 @@ function assertWorkflowReadyForTerminalRedelivery(
   staging: string,
   deliveredHeadSha = "HEAD",
 ): ReturnType<typeof inspectWorkflowStaging> {
-  assertPlanFrozen(staging, deliveredHeadSha);
+  assertPlanFrozen(staging, deliveredHeadSha, { delivery: true });
   const stored = readStoredStagingRecord(staging);
   const currentArtifacts = listStagingArtifacts(staging);
   const currentDigest = calculateStagingDigest(staging, currentArtifacts);
@@ -5827,6 +5828,8 @@ export async function main(
           "workflow advanceのpreview後にstaging stateが変更されました。新しいpreviewから再実行してください",
         );
       const targetStep = plan.targetStep!;
+      /** 封印済みの封印Stepは外部同期より前に拒否する（REQ-WF-036） */
+      assertPlanSealOpen(staging, targetStep);
       const definition = workflowStep(targetStep);
       if (!definition) throw new Error("workflow step定義がありません");
       if (plan.operation === "record") {

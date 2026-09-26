@@ -10,7 +10,12 @@ import {
   type PocDeclaration,
 } from "./mode.js";
 import type { HumanOverride } from "./role.js";
-import { parsePlanSeal, type PlanSeal } from "./plan-seal.js";
+import {
+  parsePlanGeneration,
+  parsePlanSeal,
+  type PlanGeneration,
+  type PlanSeal,
+} from "./plan-seal.js";
 
 export const MODE_DECISION_FILE = "00_モード判定.json";
 export const WORKFLOW_JOURNAL_DIRECTORY = "journal";
@@ -338,6 +343,11 @@ export interface StepJournalEntry {
    * quick/pocはStep 4）の記録時にCLIが計画文書から計算したSHA-256。利用者入力は受理しない。
    */
   planSeal?: PlanSeal;
+  /**
+   * 計画世代（REQ-WF-036）。封印後のStep 9・10の記録時にCLIが`05_計画変更.md`から
+   * 計算した世代chainの記録。利用者入力は受理しない。
+   */
+  planGeneration?: PlanGeneration;
 }
 
 export interface ModeDecision {
@@ -366,6 +376,7 @@ const JOURNAL_FIELDS = new Set([
   "postPrIntake",
   "reconfirmation",
   "planSeal",
+  "planGeneration",
 ]);
 const POC_OBSERVATION_BINDING_FIELDS = new Set(["headSha", "evidenceDigest"]);
 const REVIEW_SESSION_BINDING_FIELDS = new Set([
@@ -621,6 +632,16 @@ function parseJournalEntry(
     errors.push(...parsed.errors);
     planSeal = parsed.value;
   }
+  let planGeneration: PlanGeneration | undefined;
+  if (value.planGeneration !== undefined) {
+    const parsed = parsePlanGeneration({
+      value: value.planGeneration,
+      step: value.step,
+      label,
+    });
+    errors.push(...parsed.errors);
+    planGeneration = parsed.value;
+  }
   if (errors.length > 0) return { errors };
   return {
     entry: {
@@ -638,6 +659,7 @@ function parseJournalEntry(
       ...(postPrIntake ? { postPrIntake } : {}),
       ...(reconfirmation ? { reconfirmation } : {}),
       ...(planSeal ? { planSeal } : {}),
+      ...(planGeneration ? { planGeneration } : {}),
     },
     errors,
   };
