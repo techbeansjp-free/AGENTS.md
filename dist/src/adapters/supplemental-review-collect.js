@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { git } from "../lib/process.js";
 import { resolveContained } from "../lib/security.js";
+import { computeImpactSet } from "./impact-set.js";
 export const RELATED_FILE_LIMIT = 20;
 export const RELATED_STEM_MATCH_LIMIT = 10;
 export const REVIEW_COLLECTION_BYTE_LIMIT = 1024 * 1024;
@@ -39,6 +40,17 @@ function runRelatedFileGrep(root, headSha, grepArgs) {
         matches: grep.stdout.split("\0").filter((line) => line !== ""),
     };
 }
+function targetedImpactRelated(root, baseSha, headSha) {
+    try {
+        const impact = computeImpactSet({ root, baseSha, headSha });
+        if (impact.mode !== "targeted")
+            return undefined;
+        return impact.adjacent.map(({ path: adjacentPath }) => adjacentPath);
+    }
+    catch {
+        return undefined;
+    }
+}
 function toCandidatePath(line, headSha) {
     return line.startsWith(`${headSha}:`) ? line.slice(headSha.length + 1) : line;
 }
@@ -63,7 +75,18 @@ export function collectSupplementalReviewDiff(root, baseSha, headSha, limit = RE
         throw new Error("review差分が1MiBを超えました");
     const related = [];
     let truncated = false;
-    for (const changedPath of changed) {
+    /**
+     * **影響集合がtargetedなら、その隣接範囲を関連fileにする**（REQ-WF-039）。
+     * 意味Graphのimport edgeから導出した直接import元・import先であり、stemの
+     * 字面一致より根拠が強い。fullのとき（影響を証明できないとき）と、SHAを
+     * exact commitへ解決できない等で導出自体ができないときは従来の探索へ戻る。
+     */
+    const impactRelated = targetedImpactRelated(root, baseSha, headSha);
+    if (impactRelated !== undefined) {
+        related.push(...impactRelated.slice(0, limit));
+        truncated = impactRelated.length > limit;
+    }
+    for (const changedPath of impactRelated === undefined ? changed : []) {
         if (truncated)
             break;
         const basename = path.basename(changedPath);

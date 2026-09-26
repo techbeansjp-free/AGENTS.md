@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { git } from "../lib/process.js";
 import { resolveContained } from "../lib/security.js";
+import { computeImpactSet } from "./impact-set.js";
 
 export const RELATED_FILE_LIMIT = 20;
 export const RELATED_STEM_MATCH_LIMIT = 10;
@@ -67,6 +68,20 @@ function runRelatedFileGrep(
   };
 }
 
+function targetedImpactRelated(
+  root: string,
+  baseSha: string,
+  headSha: string,
+): string[] | undefined {
+  try {
+    const impact = computeImpactSet({ root, baseSha, headSha });
+    if (impact.mode !== "targeted") return undefined;
+    return impact.adjacent.map(({ path: adjacentPath }) => adjacentPath);
+  } catch {
+    return undefined;
+  }
+}
+
 function toCandidatePath(line: string, headSha: string): string {
   return line.startsWith(`${headSha}:`) ? line.slice(headSha.length + 1) : line;
 }
@@ -102,7 +117,18 @@ export function collectSupplementalReviewDiff(
 
   const related: string[] = [];
   let truncated = false;
-  for (const changedPath of changed) {
+  /**
+   * **影響集合がtargetedなら、その隣接範囲を関連fileにする**（REQ-WF-039）。
+   * 意味Graphのimport edgeから導出した直接import元・import先であり、stemの
+   * 字面一致より根拠が強い。fullのとき（影響を証明できないとき）と、SHAを
+   * exact commitへ解決できない等で導出自体ができないときは従来の探索へ戻る。
+   */
+  const impactRelated = targetedImpactRelated(root, baseSha, headSha);
+  if (impactRelated !== undefined) {
+    related.push(...impactRelated.slice(0, limit));
+    truncated = impactRelated.length > limit;
+  }
+  for (const changedPath of impactRelated === undefined ? changed : []) {
     if (truncated) break;
     const basename = path.basename(changedPath);
     const extension = path.extname(basename);

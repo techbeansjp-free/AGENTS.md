@@ -249,9 +249,6 @@ When("round 2で既存findingを解消し範囲外audit改善提案を追加す�
       candidateHeadSha: candidate,
       previousRoundDigest: this.session.latestRoundDigest,
       fixedDiff: [reviewedPath],
-      adjacentScope: [
-        { path: "src/adjacent.ts", graphEvidence: "f".repeat(64) },
-      ],
       findings: [
         finding({ status: "resolved" }),
         finding({
@@ -284,12 +281,16 @@ Then("範囲外audit改善提案はrecord-onlyである", function () {
   assert.equal(this.session.rounds[1]?.blocking.length, 0);
 });
 
-Then("未照合Graph digestによる隣接Highはrecord-onlyである", function () {
-  const adjacent = this.session.rounds[1]?.findings.find(
+Then("影響集合の隣接範囲外で修正差分外のHighはrecord-onlyである", function () {
+  const outside = this.session.rounds[1]?.findings.find(
     ({ id }) => id === "H-ADJ",
   );
-  assert.equal(adjacent?.admission, "record-only");
-  assert.match(adjacent?.admissionReason ?? "", /実照合が未導入/u);
+  assert.deepEqual(this.session.rounds[1]?.focus.adjacentScope, []);
+  assert.equal(outside?.admission, "record-only");
+  assert.equal(
+    outside?.admissionReason,
+    "実Gitの修正差分外なのでcurrent scopeへ追加しない",
+  );
 });
 
 When("同じstagingでround 1へresetする", function () {
