@@ -1007,9 +1007,7 @@ function amendmentEntry(id: string, body = "計画変更の記述"): string {
   return [
     `## ${id} 変更`,
     "",
-    ...["対象", "変更", "理由"].map(
-      (field) => `- ${field}: ${field}の${body}`,
-    ),
+    ...["対象", "変更", "理由"].map((field) => `- ${field}: ${field}の${body}`),
   ].join("\n");
 }
 
