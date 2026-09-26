@@ -128,14 +128,14 @@ ASCは検証対象HEADに追跡済みでlive bytesとも一致するfixtureだ�
 
 ### 実装中発見の振り分け
 
-`workflow assess-discovery`へ`changedContractKinds`を含む構造化入力を渡す。`stop-or-promote-full`は判定だけではfileを変更しない。停止を選ぶ場合はその理由を`05_計画変更.md`へ記録し、正式開発を選ぶ場合だけ同じstagingへ`workflow promote-full`を明示実行する。
+security境界の拡大、不可逆操作の追加、PoCのhigh risk条件に当たる発見だけを`workflow assess-discovery`へ`changedContractKinds`を含む構造化入力で渡す。`stop-or-promote-full`は判定だけではfileを変更しない。停止を選ぶ場合はその理由を`05_計画変更.md`へ記録し、正式開発を選ぶ場合だけ同じstagingへ`workflow promote-full`を明示実行する。
 
-本書はStep 4の計画封印後に編集しない。実装中の発見は本節へ追記せず、次の記録先へ振り分ける。
+本書はStep 4の計画封印後に編集しない。実装中の発見は本節へ追記しない。既定は記録せず実装を続け、契約が変わる場合だけ次の記録先へ振り分ける。
 
 | 発見の種類 | 記録先 |
 |---|---|
-| 実装事実（計画と契約を変えない） | commit履歴。追加の記録は不要 |
-| 計画の変更 | `05_計画変更.md`へ`AMD-NNN`を追記 |
+| 実装上の判断（関数名、分割、helper、library、test構成、file配置など） | commit履歴。追加の記録は不要 |
+| 目的・受け入れ条件・不変条件・scopeの変更 | `05_計画変更.md`へ`AMD-NNN`（対象・変更・理由）を追記 |
 | 現在のsystem契約の変更 | `docs/specs/` |
 | このIssueのscope外 | follow-up Issue |
 

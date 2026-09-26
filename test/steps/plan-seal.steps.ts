@@ -369,14 +369,7 @@ Then(
 function amendment(
   entries: ReadonlyArray<{ id: string; skip?: string; value?: string }>,
 ): string {
-  const fields = [
-    "対象",
-    "Before",
-    "After",
-    "理由",
-    "影響する契約",
-    "影響範囲",
-  ];
+  const fields = ["対象", "変更", "理由"];
   return [
     "# 05 計画変更",
     "",
@@ -401,7 +394,7 @@ When("それぞれを構造検査する", function () {
     ["empty", "# 05 計画変更\n"],
     ["gap", amendment([{ id: "AMD-001" }, { id: "AMD-003" }])],
     ["duplicate", amendment([{ id: "AMD-001" }, { id: "AMD-001" }])],
-    ["missing", amendment([{ id: "AMD-001", skip: "影響する契約" }])],
+    ["missing", amendment([{ id: "AMD-001", skip: "理由" }])],
     ["placeholder", amendment([{ id: "AMD-001", value: "（未記入）" }])],
     ["malformed", amendment([{ id: "AMD-1" }])],
     [
@@ -426,7 +419,7 @@ Then("正しい例だけを受理し不正な例は理由を名指しして拒�
   const expectations: Array<[string, RegExp]> = [
     ["gap", /AMD-003はAMD-002であるべきです/u],
     ["duplicate", /AMD-001はAMD-002であるべきです/u],
-    ["missing", /AMD-001に影響する契約がありません/u],
+    ["missing", /AMD-001に理由がありません/u],
     ["placeholder", /AMD-001に対象がありません/u],
     ["malformed", /見出しAMD-1はAMD-NNN形式が必要です/u],
   ];
@@ -1014,7 +1007,7 @@ function amendmentEntry(id: string, body = "計画変更の記述"): string {
   return [
     `## ${id} 変更`,
     "",
-    ...["対象", "Before", "After", "理由", "影響する契約", "影響範囲"].map(
+    ...["対象", "変更", "理由"].map(
       (field) => `- ${field}: ${field}の${body}`,
     ),
   ].join("\n");

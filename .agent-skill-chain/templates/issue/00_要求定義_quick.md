@@ -89,16 +89,16 @@ Q-01〜Q-08の内容は[モード判定質問](../../docs/01_開発ワークフ�
 
 - cycle/self-loop/unknown nodeを拒否するSCNと観測結果:
 
-- 実装中発見は目的・scope・AC変更、security境界拡大、不可逆操作、`changedContractKinds`、根拠付きcanonicalモード失格条件`{ id, evidence }[]`を`workflow assess-discovery --input=<JSON>`で判定する。Step 4の計画封印後は通常の契約変更を`workflow assess-discovery --staging=<staging>`の`record-planning-amendment`に従って`05_計画変更.md`へ記録し、この集約成果物00を書き換えない。`promote-to-full`は同じ入力とstagingを`workflow promote-full`へ渡して同じIssueのまま00〜03を補完する。
+- 実装中の発見は既定では記録せず実装を続ける。目的・scope・ACが変わる場合は`05_計画変更.md`へ追記し、security境界の拡大・不可逆操作・quick失格条件に当たる場合だけ`workflow assess-discovery --input=<JSON> --staging=<staging>`で判定して、`promote-to-full`なら`workflow promote-full`で同じIssueのままfullへ昇格する。この集約成果物00は書き換えない。
 
 ### 実装中発見の振り分け
 
-本書はStep 4の計画封印後に編集しない。実装中の発見は本節へ追記せず、次の記録先へ振り分ける。
+本書はStep 4の計画封印後に編集しない。実装中の発見は本節へ追記しない。既定は記録せず実装を続け、契約が変わる場合だけ次の記録先へ振り分ける。
 
 | 発見の種類 | 記録先 |
 |---|---|
-| 実装事実（計画と契約を変えない） | commit履歴。追加の記録は不要 |
-| 計画の変更 | `05_計画変更.md`へ`AMD-NNN`を追記 |
+| 実装上の判断（関数名、分割、helper、library、test構成、file配置など） | commit履歴。追加の記録は不要 |
+| 目的・受け入れ条件・不変条件・scopeの変更 | `05_計画変更.md`へ`AMD-NNN`（対象・変更・理由）を追記 |
 | 現在のsystem契約の変更 | `docs/specs/` |
 | このIssueのscope外 | follow-up Issue |
 

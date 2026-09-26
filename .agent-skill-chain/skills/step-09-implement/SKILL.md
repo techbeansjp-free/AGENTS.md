@@ -13,22 +13,29 @@ description: 検証済みトラッカーとモード別実装計画に従い、�
 
 role欄の担当roleが`implementer`であること、許可path・操作、必要証拠、要求能力tier、provider欄の上限、model設定欄、fallback欄、独立性証拠欄を実装開始前に検証する。providerとmodel設定はproject choiceの解決結果を入力とし、汎用skillは固有のmodel slugを要求しない。要求能力を満たす解決、ACに対応するVerification Set、または別identity・contextのreviewer割当が欠ける場合は実装を開始せず、停止点と再開条件を報告する。implementerは自分の差分を最終承認せず、mergeを裁定しない。
 
-[ASC本体の是正を作業scopeへ入れない](../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない)を作業開始前に全文読む。**この作業の目的にASC本体の保守を含まないなら、発見したASC本体の欠陥を当該scopeへ追加して是正しない。** **記録し、別Issueとして起票してから前進する。起票を省くとASC本体の修正要求が耐久記録へ残らない。** 軽微かどうかは正本の3条件で決め、1つでも偽または不明なら軽微としない。軽微でない場合は停止・記録・別Issueへの分離・owner決裁の順に扱う。作業の成果物をASCの契約へ合わせることは従来どおり必須だが、**検査を通すための変更が検査の無い状態で弁護できないなら成果物を歪めず同じ経路へ入る。**
+ASC本体の欠陥に当たったときは[ASC本体の是正を作業scopeへ入れない](../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない)を読む。**この作業の目的にASC本体の保守を含まないなら、発見したASC本体の欠陥を当該scopeへ追加して是正しない。** **記録し、別Issueとして起票してから前進する。起票を省くとASC本体の修正要求が耐久記録へ残らない。** 軽微かどうかは正本の3条件で決め、1つでも偽または不明なら軽微としない。軽微でない場合は停止・記録・別Issueへの分離・owner決裁の順に扱う。作業の成果物をASCの契約へ合わせることは従来どおり必須だが、**検査を通すための変更が検査の無い状態で弁護できないなら成果物を歪めず同じ経路へ入る。**
 
 実装・テスト・仕様の各fileは[読取と書込の量](../../docs/01_開発ワークフロー.md#読取と書込の量)に従って差分で編集し、検証は判定結果だけを出力する。`05_計画変更.md`への追記も該当entryだけを加える。
 
-**承認済み計画（fullは00〜03、quick/pocは00）はStep 8（quick/pocはStep 4）の記録時に計画封印され、本Stepでは編集しない。** 封印後に計画文書を変えると`workflow record --step=9`・`--step=10`、`pr create`、`pr merge`が拒否する。実装中の発見は、実装事実ならcommit履歴だけに残し、計画の変更は`05_計画変更.md`へ`AMD-NNN`を追記し（templateは`templates/issue/05_計画変更.md`）、現在のsystem契約の変更は`docs/specs/`へ、scope外はfollow-up Issueへ振り分ける。発見ごとに一度だけ`DISC-*`形式の安定した`discoveryId`を割り当て、再評価・昇格・reviewで変更または別の発見へ再利用しない。`discoveryId`、現在モード、目的・scope・ACの変更有無、security境界拡大、不可逆操作、`changedContractKinds`、発見したモード失格条件の`{ id, evidence }`配列をJSON化し、`workflow assess-discovery --input=<JSON> --staging=<staging>`の出力で記録先を確定する。失格条件と契約種別はcanonical IDだけを使い、空値、重複、未知ID・未知fieldを拒否する。
+**承認済み計画（fullは00〜03、quick/pocは00）は編集しない。** 照合はCLIが裏側で行うので、封印を意識した操作は要らない。
 
-`continue`は実装を継続する。`record-planning-amendment`は`amendmentTargets`の文書に対する変更を`05_計画変更.md`へ追記する。`rebaseline-affected-contracts`は封印前だけに現れ、出力された影響成果物だけを再確定する。`promote-to-full`でquickをfullへ昇格する場合は、まず`workflow promote-full --staging=<同じstaging> --input=<同じ発見JSON>`をflagなしで実行する。既定は副作用のないpreviewであり、対象と診断を確認後、同じstaging・発見JSONへ`--apply`を付けた明示実行だけが00〜03を補完する。`stop-or-promote-full`は判定時点ではfileを変更せず、停止を記録するか、同じpreviewと明示`--apply`でPoCからfullへの昇格を選ぶ。昇格は元のモード判定と00をbackupし、排他lock・永続transaction・digest検証で途中停止から再実行可能にする。既同期stagingは`promotion-active`となり、同じIssueのStep 8再同期までPRへ進めない。昇格後は旧modeのStep 0・1だけを継承し、fullのStep 2〜10を補完する。Issueや変更のない成果物を作り直さない。
+**実装中の発見は、既定では分類も記録もせず実装を続ける。** 予定と違う関数名、class分割、helper追加、library選択、test構成、file配置、SQLの調整などはGitに残れば足りる。次のどれかが変わると分かった場合だけ手を止める。
+
+- 目的、受け入れ条件、不変条件、scope → `05_計画変更.md`へ`AMD-NNN`を1件追記する（対象・変更・理由の3項目。templateは`templates/issue/05_計画変更.md`）
+- 現在のsystem契約（公開interface、外部契約、data互換性） → `docs/specs/`へ反映し、計画の変更でもあればAMDも追記する
+- security境界の拡大、不可逆操作の追加、quick・pocの失格条件 → `workflow assess-discovery --input=<JSON> --staging=<staging>`で判定し、`promote-to-full`なら`workflow promote-full`（既定はpreview、`--apply`で適用）で同じIssueのままfullへ昇格する。PoCの`stop-or-promote-full`は停止か昇格を選ぶ
+- このIssueのscope外 → follow-up Issue
+
+`workflow assess-discovery`を使うのは上の3番目だけであり、すべての発見をJSON化して判定しない。
 
 Codexを新しく起動するときは必ず`routing launch --help`で入力を確認し、当該taskのfile、root、独立identity/context、risk、modeを渡して実行する。編集taskだけ`--sandbox=workspace-write`を明示する。launch自身が毎回公式config/readとmodel/listを観測し、trusted selector採用tier、具体model、high、標準速度を検証してCodexを起動する。手書きmodel名、以前のresolve結果、旧Evidenceを新しい起動の選択元にしない。launchが起動したimplementer自身は同じtaskを再launchせず、このStepの実装を続ける。取得不能・採用不足は起動前に停止し、旧modelや別providerで暗黙に実行しない。
 
 ## テンプレート契約
 
-作業開始前に[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)を全文読み、システム仕様書には実装後に成立する現在状態だけを反映する。未実装の計画を仕様済みにしない。
+[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)に従い、システム仕様書には実装後に成立する現在状態だけを反映する。未実装の計画を仕様済みにしない。
 
-[ドメイン用語台帳](../../docs/01_開発ワークフロー.md#ドメイン用語台帳)を作業開始前に全文読み、実装済みの用語差分だけを`docs/specs/01_システム概要/02_用語・略語.md`と仕様変更履歴へ反映する。API・CLI、データ、UI、ログ・診断、testの表記を同じ標準語へ揃える。
+用語を追加・変更するときだけ[ドメイン用語台帳](../../docs/01_開発ワークフロー.md#ドメイン用語台帳)を読み、実装済みの用語差分だけを`docs/specs/01_システム概要/02_用語・略語.md`と仕様変更履歴へ反映する。API・CLI、データ、UI、ログ・診断、testの表記を同じ標準語へ揃える。
 
-仕様更新の範囲を決めるときは[Semantic Graphの利用](../../docs/01_開発ワークフロー.md#semantic-graphの利用)を読み、実装した差分がどの要件と受け入れ条件とシナリオへ届くかを特定する。
+仕様更新の範囲を決めるときは[Semantic Graphの利用](../../docs/01_開発ワークフロー.md#semantic-graphの利用)を読み、`impact --base=<比較基点> --head=<HEAD>`で影響集合を導出して、それが指す要件・シナリオ・仕様節だけを読む。
 
 コード自体に直接使用するテンプレートはない。仕様影響がある場合は、作業開始前に[仕様書索引](../../templates/specs/00_仕様書構成/00_仕様書索引.md)と[記入・分割ルール](../../templates/specs/00_仕様書構成/01_記入・分割ルール.md)を全文読み、対象カテゴリの正確なテンプレートを選んでからそのファイルも全文読み、構造を維持して`docs/specs/`を更新する。仕様影響がない場合は、ステップ10で範囲を限定した`no-spec-impact`根拠を記録する。

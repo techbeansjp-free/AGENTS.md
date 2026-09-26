@@ -469,18 +469,15 @@ export function stagingDriftDiagnostic(input: {
   return `。${parts.join("。")}`;
 }
 
-export const PLAN_AMENDMENT_FIELDS = Object.freeze([
-  "対象",
-  "Before",
-  "After",
-  "理由",
-  "影響する契約",
-  "影響範囲",
-]);
+/**
+ * 計画変更記録は判断だけを書く。変更前の記述は封印済み計画から、影響範囲は影響集合から
+ * 導出できるため書かせない。
+ */
+export const PLAN_AMENDMENT_FIELDS = Object.freeze(["対象", "変更", "理由"]);
 
 /**
  * `05_計画変更.md`の構造検査。**履歴はGitが所有するため、ここでは形だけを見る。**
- * `## AMD-NNN`見出しが001から欠番・重複なく昇順に並び、各entryが6項目を
+ * `## AMD-NNN`見出しが001から欠番・重複なく昇順に並び、各entryが3項目（対象・変更・理由）を
  * 空でない値（`（…）`だけのplaceholderを除く）で持つことを要求する。
  */
 export function validatePlanAmendment(markdown: string): {
