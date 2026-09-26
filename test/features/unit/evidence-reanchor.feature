@@ -101,18 +101,18 @@ Feature: rebase後の証跡再固定を内容等価性で受理する
     When 実効HEADを導出する
     Then 再固定時刻を返さない
 
-  Scenario: SCN-UNIT-REANCHOR-021 SHA行だけを更新したrebaseを再固定できる
-    Given SHA行だけを更新したrebase後のreview証跡がある
+  Scenario: SCN-UNIT-REANCHOR-021 比較基点とH_implだけを更新したrebaseを再固定できる
+    Given 比較基点とH_implだけを更新したrebase後のreview証跡がある
     When 再固定を適用する
     Then 再固定chainは1件伸び実効HEADは新headになる
 
-  Scenario: SCN-UNIT-REANCHOR-022 SHA行以外を書き換えたrebaseを拒否する
-    Given SHA行に加えて判定も書き換えたrebase後のreview証跡がある
+  Scenario: SCN-UNIT-REANCHOR-022 比較基点とH_impl以外も書き換えたrebaseを拒否する
+    Given 比較基点とH_implに加えて検証記録も書き換えたrebase後のreview証跡がある
     When 再固定を適用する
     Then 再固定は"artifact-body-changed"を理由に拒否される
 
-  Scenario: SCN-UNIT-REANCHOR-023 識別情報の欄が重複する証跡を拒否する
-    Given 識別情報の欄を重複させたrebase後のreview証跡がある
+  Scenario: SCN-UNIT-REANCHOR-023 keyが重複する証跡を拒否する
+    Given implementationHeadShaのkeyを重複させたrebase後のreview証跡がある
     When 再固定を適用する
     Then 再固定は"identity-unresolvable"を理由に拒否される
 
@@ -126,8 +126,8 @@ Feature: rebase後の証跡再固定を内容等価性で受理する
     When 再固定を適用する
     Then 再固定は"implementation-diff-changed"を理由に拒否される
 
-  Scenario: SCN-UNIT-REANCHOR-026 識別情報の節が一意でない証跡を拒否する
-    Given 識別情報の節が2つあるrebase後のreview証跡がある
+  Scenario: SCN-UNIT-REANCHOR-026 正規直列化の後ろに別の文書を連結した証跡を拒否する
+    Given 2つのJSON文書を連結したrebase後のreview証跡がある
     When 再固定を適用する
     Then 再固定は"identity-unresolvable"を理由に拒否される
 
@@ -141,8 +141,8 @@ Feature: rebase後の証跡再固定を内容等価性で受理する
     When 再固定を適用する
     Then 再固定は"artifact-path-changed"を理由に拒否される
 
-  Scenario: SCN-UNIT-REANCHOR-029 識別情報の見出しが本文中にしかない証跡を拒否する
-    Given 識別情報の見出しが本文中にしかないrebase後のreview証跡がある
+  Scenario: SCN-UNIT-REANCHOR-029 旧Markdown形式の証跡を拒否する
+    Given 旧Markdown形式のrebase後のreview証跡がある
     When 再固定を適用する
     Then 再固定は"identity-unresolvable"を理由に拒否される
 

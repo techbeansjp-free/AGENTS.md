@@ -249,9 +249,6 @@ When("round 2で既存findingを解消し範囲外audit改善提案を追加す�
       candidateHeadSha: candidate,
       previousRoundDigest: this.session.latestRoundDigest,
       fixedDiff: [reviewedPath],
-      adjacentScope: [
-        { path: "src/adjacent.ts", graphEvidence: "f".repeat(64) },
-      ],
       findings: [
         finding({ status: "resolved" }),
         finding({
@@ -261,7 +258,13 @@ When("round 2で既存findingを解消し範囲外audit改善提案を追加す�
           path: "src/optional.ts",
           contractId: null,
         }),
-        finding({ id: "H-ADJ", path: "src/adjacent.ts" }),
+        finding({
+          id: "H-ADJ",
+          relation: "fix-regression",
+          path: "src/adjacent.ts",
+          contractId: null,
+          causedByFindingId: null,
+        }),
       ],
     }),
   });
@@ -284,13 +287,25 @@ Then("範囲外audit改善提案はrecord-onlyである", function () {
   assert.equal(this.session.rounds[1]?.blocking.length, 0);
 });
 
-Then("未照合Graph digestによる隣接Highはrecord-onlyである", function () {
-  const adjacent = this.session.rounds[1]?.findings.find(
-    ({ id }) => id === "H-ADJ",
-  );
-  assert.equal(adjacent?.admission, "record-only");
-  assert.match(adjacent?.admissionReason ?? "", /実照合が未導入/u);
-});
+/**
+ * このfixtureの影響集合は証明できない（full）。全pathが隣接範囲になるため、
+ * 修正差分外でも前round blockerへ結び付かないHighだけがrecord-onlyになる。
+ */
+Then(
+  "影響集合を証明できない修正差分外で前round blockerへ結び付かないHighはrecord-onlyである",
+  function () {
+    const outside = this.session.rounds[1]?.findings.find(
+      ({ id }) => id === "H-ADJ",
+    );
+    assert.deepEqual(this.session.rounds[1]?.focus.adjacentScope, []);
+    assert.equal(this.session.rounds[1]?.focus.adjacentScopeUnbounded, true);
+    assert.equal(outside?.admission, "record-only");
+    assert.equal(
+      outside?.admissionReason,
+      "修正起因を前round blockerと固定修正差分へ立証できない",
+    );
+  },
+);
 
 When("同じstagingでround 1へresetする", function () {
   this.error = undefined;

@@ -2,18 +2,20 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { calculateStagingDigest, finalizeStoredStagingPromotion, listStagingArtifacts, promoteStoredStagingModeToFull, refreshStoredStagingDigest, readStoredStagingRecord, STAGING_RECORD_FILE, STAGING_PROMOTION_TRANSACTION_FILE as PROMOTION_TRANSACTION_FILE, withStagingMutationLock, } from "../domain/staging.js";
-import { MODE_DECISION_FILE, parseModeDecision, parseStepJournal, renderModeDecision, STEP_JOURNAL_FILE, inspectWorkflowStagingArtifacts, validateStepJournal, WORKFLOW_STEPS, } from "../domain/workflow.js";
+import { MODE_DECISION_FILE, parseModeDecision, parseStepJournal, renderModeDecision, STEP_JOURNAL_FILE, inspectWorkflowStagingArtifacts, journalPrefixDigest, validateStepJournal, WORKFLOW_STEPS, } from "../domain/workflow.js";
 import { assessImplementationDiscovery, parseImplementationDiscoveryInput, } from "../domain/agile-verification.js";
 import { MODE_QUESTIONS, } from "../domain/mode.js";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { findPackageRoot } from "../lib/package-root.js";
 import { git } from "../lib/process.js";
-import { assertIssueStagingLocation, listStagingRoots, readStagingLayout, stagingExcludePathspec, stagingRepositoryRoot, } from "../domain/staging-layout.js";
+import { assertIssueStagingLocation, listStagingRoots, readStagingLayout, stagingExcludePathspec, stagingRepositoryRoot, stagingRootPatterns, } from "../domain/staging-layout.js";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import { DELIVERY_STATE_FILE, parseDeliveryState, } from "../domain/delivery-state.js";
 import { POC_OBSERVATION_DIRECTORY, pocObservationArtifact, validatePocObservationEvidence, } from "../domain/poc-observation.js";
 import { assertPocHeadChangeScope, executePocSandboxObservation, } from "./poc-execution.js";
+import { isPlanFrozenCheckStep, planResealRejection, planSealStep, stagingDriftDiagnostic, } from "../domain/plan-seal.js";
+import { assertPlanFrozenForEntries, changedPlanningSince, computePlanSeal, } from "./plan-seal.js";
 export { calculatePocFixtureDigest } from "./poc-execution.js";
 const packageRoot = findPackageRoot(import.meta.url);
 const issueTemplateRoot = path.join(packageRoot, ".agent-skill-chain", "templates", "issue");
@@ -218,6 +220,84 @@ export function readWorkflowJournal(staging) {
     const parsed = parseStepJournal(source);
     return { mode: record.mode, ...parsed, source };
 }
+/**
+ * 封印後の計画凍結を検査する（REQ-WF-036）。`pr create`・`pr merge`・`workflow record`の
+ * Step 9・10が呼ぶ。journalに封印が無ければ（本機構以前のstaging）検査しない。
+ */
+export function assertPlanFrozen(staging, commit = "HEAD", options = {}) {
+    const journal = readWorkflowJournal(staging);
+    /**
+     * **journalが不正なら凍結検査を成立させない**（fail-closed）。hash chainの破損や
+     * chain付きjournalでの封印field欠落を、読めた行だけで判定して通さない。
+     */
+    if (journal.errors.length > 0)
+        throw new Error(`計画凍結検査のworkflow journalが不正です: ${journal.errors.join("; ")}`);
+    assertPlanFrozenForEntries(staging, journal.entries, commit, options);
+}
+/**
+ * 封印Stepの再記録を外部副作用より前に拒否する（REQ-WF-036）。**封印は不変である。**
+ * `workflow advance`のIssue同期のように、journal追記より前に外部へ書き込む経路が呼ぶ。
+ * journal追記経路も同じ判定を持つ。
+ */
+export function assertPlanSealOpen(staging, step, humanOverride = false) {
+    const journal = readWorkflowJournal(staging);
+    const rejection = planResealRejection({
+        entries: journal.entries,
+        mode: journal.mode,
+        step,
+        humanOverride,
+    });
+    if (rejection)
+        throw new Error(rejection);
+}
+/**
+ * staging digest不一致の診断文。記録済み成果物一覧との追加・削除と、封印と比べた
+ * 計画文書の変化を名指しし、記録状態で成立する次の行動を添える。**案内の生成で
+ * 判定を止めない**ため、journalとdelivery stateは独立に読み、読めない側は観測なしへ倒す。
+ */
+export function describeStagingDigestDrift(staging) {
+    let added = [];
+    let removed = [];
+    try {
+        const stored = new Set(readStoredStagingRecord(staging).artifacts);
+        const current = listStagingArtifacts(staging);
+        const currentSet = new Set(current);
+        added = current.filter((artifact) => !stored.has(artifact));
+        removed = [...stored].filter((artifact) => !currentSet.has(artifact));
+    }
+    catch {
+        /** 記録または一覧を読めない場合は追加・削除を名指ししない */
+    }
+    let steps = [];
+    let changedPlanning = [];
+    try {
+        const entries = readWorkflowJournal(staging).entries;
+        steps = entries.map((entry) => entry.step);
+        changedPlanning = changedPlanningSince(staging, entries).changed;
+    }
+    catch {
+        /** journalを読めない場合は空集合へ倒す */
+    }
+    let terminalDelivery = false;
+    try {
+        const file = path.join(staging, DELIVERY_STATE_FILE);
+        const state = fs.existsSync(file)
+            ? parseDeliveryState(fs.readFileSync(file, "utf8")).state
+            : undefined;
+        terminalDelivery =
+            state === "merge-observed" || state === "step11-recorded";
+    }
+    catch {
+        /** delivery stateを読めない場合はfalseへ倒す */
+    }
+    return stagingDriftDiagnostic({
+        added,
+        removed,
+        changedPlanning,
+        recordedSteps: steps,
+        terminalDelivery,
+    });
+}
 export function appendWorkflowJournalEntry(input) {
     if (input.entry.step === 0 || input.entry.step === 11)
         throw new Error("Step 0はstaging初期化専用、Step 11はdelivery終端専用です。汎用journal追記では記録できません");
@@ -254,6 +334,22 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
     if (current.entries.some(({ step }) => step === 11) &&
         !entry.postTerminalIntake)
         throw new Error("Step 11記録後にworkflow journalへ追記できるのはpost-terminal intakeのStep 10だけです");
+    /**
+     * **旧上流再確定entryは新規に書き込まない**（REQ-WF-036）。読取り互換だけを残す。
+     */
+    if (entry.reconfirmation)
+        throw new Error("上流再確定entry（reconfirmation）は廃止されました。承認済み計画は封印後に編集せず、計画の変更は05_計画変更.mdへ追記してください");
+    /**
+     * **封印後のStep 9・10は計画凍結を検査する**（REQ-WF-036）。封印の無い旧journalは
+     * 検査しない。
+     */
+    /**
+     * **計画世代はCLIが計算する。** 呼出し側の`planGeneration`は捨て、封印後のStep 9・10では
+     * `05_計画変更.md`から追記専用の世代chainを計算して記録する。
+     */
+    const planGeneration = isPlanFrozenCheckStep(entry.step)
+        ? assertPlanFrozenForEntries(staging, current.entries, headSha ?? "HEAD")
+        : undefined;
     const deliveryFile = path.join(staging, DELIVERY_STATE_FILE);
     const delivery = fs.existsSync(deliveryFile)
         ? parseDeliveryState(fs.readFileSync(deliveryFile, "utf8"))
@@ -319,9 +415,42 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
         if (currentHeadSha !== headSha)
             throw new Error("Step 9の検証対象HEADがjournal追記前に変更されました");
     }
-    let entryToWrite = entry;
+    /**
+     * **封印値は呼出し側から受け取らない。** 渡された`planSeal`は捨て、modeの同期
+     * checkpointでだけ成果物fileから計算し直す（REQ-WF-036）。
+     */
+    /**
+     * **封印は不変である**（REQ-WF-036）。現在のmodeの封印が既にあれば、封印Stepの再記録は
+     * Step 9の前後・内容の同異を問わず拒否する。「最後に存在した計画を封印する」のではなく
+     * 「reviewした計画を凍結する」ためである。封印の無い旧journalでもStep 9以降の記録後の
+     * 封印は拒否する。quick/pocからfullへの昇格前の記録はmodeが異なるため数えず、
+     * 昇格後のfull Step 8封印は最初のfull封印として成立する。
+     *
+     * HumanOverrideによる欠落Stepの明示承認は同期記録ではないため、封印を作らず
+     * 再封印の拒否対象にもしない。
+     */
+    const resealRejection = planResealRejection({
+        entries: current.entries,
+        mode: current.mode,
+        step: entry.step,
+        humanOverride: entry.humanOverride !== undefined,
+    });
+    if (resealRejection)
+        throw new Error(resealRejection);
+    const sealsPlan = entry.step === planSealStep(current.mode) && !entry.humanOverride;
+    let entryToWrite = { ...entry };
+    delete entryToWrite.planSeal;
+    delete entryToWrite.planGeneration;
+    delete entryToWrite.previousEntryDigest;
+    if (sealsPlan)
+        entryToWrite = {
+            ...entryToWrite,
+            planSeal: computePlanSeal(staging, current.mode),
+        };
+    if (planGeneration !== undefined)
+        entryToWrite = { ...entryToWrite, planGeneration };
     if (entry.step === 9 && headSha !== undefined)
-        entryToWrite = { ...entry, implementationHeadSha: headSha };
+        entryToWrite = { ...entryToWrite, implementationHeadSha: headSha };
     if (current.mode === "poc" && entry.step >= 9) {
         if (!headSha)
             throw new Error("PoCのStep 9以降には検証対象HEAD SHAとpoc-observation Evidenceが必要です");
@@ -364,6 +493,15 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
     finally {
         fs.closeSync(descriptor);
     }
+    /**
+     * **hash chainはCLIが計算する**（REQ-WF-036）。呼出し側の`previousEntryDigest`は捨て、
+     * 追記直前に固定したjournal本文全体のdigestを記録する。chain付きjournalでは封印関連fieldの
+     * 欠落を旧journal互換として扱わないため、記録済み行からの除去を検出できる。
+     */
+    entryToWrite = {
+        ...entryToWrite,
+        previousEntryDigest: journalPrefixDigest(pinnedSource),
+    };
     const line = `${JSON.stringify(entryToWrite)}\n`;
     const proposedSource = `${pinnedSource}${line}`;
     const parsedProposed = parseStepJournal(proposedSource);
@@ -1482,7 +1620,8 @@ export function resolvePullRequestStaging(input) {
             throw new Error("明示stagingのtrackerが対象repository・Issueと一致しません");
         return staging;
     }
-    const issuesRoots = listStagingRoots(root, layout.rootPattern);
+    // 宣言rootへ移行する前のstagingが既定rootに残っていれば、それも候補にする
+    const issuesRoots = stagingRootPatterns(layout).flatMap((pattern) => listStagingRoots(root, pattern));
     if (issuesRoots.length === 0)
         throw new Error("PR作成に必要なIssue staging directoryがありません");
     const candidates = issuesRoots

@@ -187,7 +187,7 @@ const DISTRIBUTED_ISSUE_TEMPLATES = [
   "01_要件定義.md",
   "02_設計.md",
   "03_実装計画.md",
-  "04_レビュー.md",
+  "05_計画変更.md",
   "11_プルリクエスト事前確認.md",
   "11_プルリクエスト本文.md",
   "12_利用案内.md",
@@ -196,13 +196,6 @@ const READERS = [
   "発注・評価する人",
   "実装・レビューする人",
   "運用する人",
-] as const;
-const REVIEW_SUMMARY_ITEMS = [
-  "何が問題だったか",
-  "何を解決しようとしたか",
-  "何を行ったか",
-  "何を確認したか",
-  "判定",
 ] as const;
 
 When("配布するIssue templateを全件読む", function () {
@@ -234,16 +227,3 @@ Then("全templateは冒頭に読者3区分の読者表を持つ", function () {
       );
   }
 });
-
-Then(
-  "review templateは問題・解決・実施・確認・判定の要約表を持つ",
-  function () {
-    const text = this.templates.get("04_レビュー.md");
-    assert.ok(text, "04_レビュー.mdを読んでいません");
-    const start = text.indexOf("## 要約");
-    assert.notEqual(start, -1, "要約の節がありません");
-    const section = text.slice(start, text.indexOf("\n## ", start + 1));
-    for (const item of REVIEW_SUMMARY_ITEMS)
-      assert.match(section, new RegExp(`^\\| ${item} \\|`, "mu"), item);
-  },
-);

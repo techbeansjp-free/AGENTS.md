@@ -1,7 +1,6 @@
 import { stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
-import { normalizeReviewIdentityAnchor, parseReviewIdentityAnchor, } from "./review-artifact.js";
-export { normalizeReviewIdentityAnchor, parseReviewIdentityAnchor };
+import { comparableReviewEvidence, tryParseReviewEvidence, } from "./review-evidence.js";
 const OID = /^[a-f0-9]{40}$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
 /**
@@ -96,11 +95,14 @@ export function isRebaseEquivalent(input) {
         return "artifact-path-changed";
     if (!isContentEquivalent(input.beforeImplementation, input.afterImplementation))
         return "implementation-diff-changed";
-    const before = normalizeReviewIdentityAnchor(input.beforeArtifact);
-    const after = normalizeReviewIdentityAnchor(input.afterArtifact);
-    if (before === undefined || after === undefined)
+    const before = tryParseReviewEvidence(input.beforeArtifact);
+    const after = tryParseReviewEvidence(input.afterArtifact);
+    if (!("evidence" in before) || !("evidence" in after))
         return "identity-unresolvable";
-    return before === after ? "ok" : "artifact-body-changed";
+    return comparableReviewEvidence(before.evidence, "rebase") ===
+        comparableReviewEvidence(after.evidence, "rebase")
+        ? "ok"
+        : "artifact-body-changed";
 }
 /**
  * append-only chainから実効HEADを導出する。

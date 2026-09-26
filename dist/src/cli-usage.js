@@ -61,6 +61,20 @@ export const COMMAND_USAGE = Object.freeze([
         example: "npx agent-skill-chain graph impact --root=. --start=file:src/cli.ts --direction=incoming",
     },
     {
+        command: "impact",
+        summary: "2 commit間の影響集合（隣接範囲・security注意・検証feature選択）を実Gitから導出する。影響を証明できない場合はmode=fullで全体検証を要求する",
+        requiredFlags: [
+            flag("base", "commit", "比較基点commit（headのancestor）"),
+            flag("head", "commit", "対象commit"),
+        ],
+        conditionalFlags: [],
+        optionalFlags: [
+            ROOT_FLAG,
+            optional("format", "json|features", "json=影響集合全体、features=実行するfeature pathを1行1件（mode=fullは終了値1）", "json"),
+        ],
+        example: "npx agent-skill-chain impact --root=. --base=origin/main --head=HEAD --format=features",
+    },
+    {
         command: "graph",
         subcommand: "path",
         summary: "BFSまたはDijkstraで決定論的な説明経路を取得する",
@@ -347,7 +361,10 @@ export const COMMAND_USAGE = Object.freeze([
             flag("input", "path", "repository root内の実装中発見入力JSON file"),
         ],
         conditionalFlags: [],
-        optionalFlags: [ROOT_FLAG],
+        optionalFlags: [
+            ROOT_FLAG,
+            optional("staging", "path", "Issue staging directory。journalに計画封印があれば、契約変更をrecord-planning-amendment（05_計画変更.mdへの追記）へ振り分ける", "封印を観測しない"),
+        ],
         example: "npx agent-skill-chain workflow assess-discovery --input=.asc/discovery.json --root=.",
         acceptsSpaceSeparatedFlags: true,
     },
@@ -394,7 +411,7 @@ export const COMMAND_USAGE = Object.freeze([
     {
         command: "workflow",
         subcommand: "record",
-        summary: "Step実施をstep journalへ追記する",
+        summary: "Step実施をstep journalへ追記する。fullのStep 8・quick/pocのStep 4は計画封印を記録し、封印後のStep 9・10は計画凍結を検査する",
         requiredFlags: [
             flag("staging", "path", "staging directory"),
             flag("step", "1..10", "記録するStep番号"),
@@ -408,7 +425,6 @@ export const COMMAND_USAGE = Object.freeze([
             optional("recorded-at", "ISO8601", "記録時刻", "実行時刻"),
             optional("post-terminal-intake", "", "Step 11記録後に外部reviewer指摘を同じPRで取り込んだroundとして記録する", "通常のStep記録"),
             optional("post-pr-intake", "", "pr-bound中に外部reviewer指摘を同じPRで取り込んだroundとして記録する", "通常のStep記録"),
-            optional("reconfirm", "", "後続Step記録後に上流Step 1〜9を再確定した事実を、順序判定から外すentryとして記録する。同じStepの通常記録が先行しているときだけ受理する", "通常のStep記録"),
         ],
         example: "npx agent-skill-chain workflow record --staging=.asc/886 --step=4 --evidence='sync digest 0000000000000000000000000000000000000000000000000000000000000000' --artifact=src/cli-usage.ts",
         acceptsSpaceSeparatedFlags: true,
@@ -480,7 +496,7 @@ export const COMMAND_USAGE = Object.freeze([
             optional("name", "text", "staging directory名。版管理下のstagingで人が読む名前（例: S1-T02_安定ID）を付けるときに使う", "<JST timestamp>_<title slug>"),
         ],
         example: "npx agent-skill-chain issue create --title=不具合 --mode=full --assessment=./assessment.json",
-        note: "stagingの配置はproject policyのstaging節（root・tracked・issueBody）が決めます。tracked=trueのrootでは文書00〜04を版管理し、機械記録だけを.gitignoreで除外します",
+        note: "stagingの配置はproject policyのstaging節（root・tracked・issueBody）が決めます。tracked=trueのrootでは文書00〜04を版管理し、機械記録だけを.gitignoreで除外します。issueBody=pointerはtracked=trueでだけ使えます。版管理外かつ全文同期の配置では版管理下・pointer配置を勧める1行の通知をstderrへ出します",
     },
     {
         command: "issue",
@@ -593,20 +609,38 @@ export const COMMAND_USAGE = Object.freeze([
     },
     {
         command: "review",
-        subcommand: "artifact",
-        summary: "Git差分とstagingから未承認のreview artifact雛形を生成する",
+        subcommand: "export",
+        summary: "収束したreview sessionとverify runの観測記録からreview証跡JSON（docs/reviews/<Issue番号>_review.json）を生成する。H_implで合格した観測記録が無ければ生成しない",
         requiredFlags: [
             flag("staging", "path", "対象Issue staging"),
-            flag("base", "sha", "比較基点commit"),
-            flag("head", "sha", "current H_impl commit"),
+            flag("issue", "整数", "対象Issue番号。stagingのtrackerと一致させる"),
+            flag("reviewer", "id", "reviewerのstable identity（session/context）。申告としてdeclaredへ記録する"),
+            flag("implementer", "id", "implementerのstable identity。reviewerと異なる値が必要。申告としてdeclaredへ記録する"),
         ],
         conditionalFlags: [],
         optionalFlags: [
             ROOT_FLAG,
-            optional("init", "", "§0・§1・個別監査表・§7を初期化する。実行には--initが必要です", "--initなしの実行は拒否する"),
-            optional("out", "path", "新規artifact出力先", "tracker番号からdocs/reviewsへ導出"),
+            optional("base", "sha", "比較基点。rebase後または既定branch追随後の比較基点を指定する", "review sessionの比較基点"),
+            optional("out", "path", "証跡の出力先。docs/reviews/または.agent-skill-chain/reviews/配下の<Issue番号>_review.json", "docs/reviews/<Issue番号>_review.json"),
         ],
-        example: "npx agent-skill-chain review artifact --init --staging=.agent-skill-chain/tmp/issues/20260911_change --base=0123456789012345678901234567890123456789 --head=abcdefabcdefabcdefabcdefabcdefabcdefabcd --out=docs/reviews/1333_レビュー.md",
+        example: "npx agent-skill-chain review export --staging=.agent-skill-chain/tmp/issues/20260911_change --issue=1333 --reviewer=reviewer-context --implementer=implementer-context",
+    },
+    {
+        command: "verify",
+        subcommand: "run",
+        summary: "`--`の後の検証commandをshellを通さずH_implで実行し、HEAD・影響集合digest・終了値をstagingの観測記録（journal/verification-runs.jsonl）へ追記する。commandは既定branchのtrusted policyが宣言したものだけを受理し、merge段階以降は拒否する。終了値はcommandの終了値",
+        positional: "-- <command> [args...] 実行する検証commandのargv。shellを通さずそのまま実行する",
+        requiredFlags: [
+            flag("staging", "path", "対象Issue staging"),
+            flag("scope", "targeted|full", "検証範囲。既定値は無い。fullはargvが既定branchのtrusted policyのverification.fullCommandと完全一致する場合、targetedは影響集合がtargetedでargvがverification.targetedRunnerに選ばれたfeatureを全部並べた形の場合だけ記録できる"),
+        ],
+        conditionalFlags: [],
+        optionalFlags: [
+            optional("base", "sha", "影響集合の比較基点。rebase後または既定branch追随後はreview exportと同じ基点を指定する", "review sessionの比較基点（sessionが無ければ必須）"),
+            optional("root", "path", "対象repositoryのroot。stagingを置いたrepositoryと一致させる", "現在の作業directory"),
+        ],
+        acceptsCommandArgv: true,
+        example: "npx agent-skill-chain verify run --staging=.agent-skill-chain/tmp/issues/20260911_change --scope=full -- npm test",
     },
     {
         command: "review",
@@ -682,18 +716,18 @@ export const COMMAND_USAGE = Object.freeze([
     {
         command: "review",
         subcommand: "validate",
-        summary: "review evidence JSONまたはMarkdown artifactを検証する",
-        positional: "[file] 検証するreview evidence JSON。--fileの代わりに使える",
+        summary: "review入力JSONまたはreview証跡JSONを検証する",
+        positional: "[file] 検証するreview入力JSON。--fileの代わりに使える",
         requiredFlags: [],
         conditionalFlags: [
-            conditional("file", "path", "検証するreview evidence JSON", "--artifactを指定しないとき（位置引数でも指定可能）", (provided) => provided.artifact === undefined),
+            conditional("file", "path", "検証するreview入力JSON", "--artifactを指定しないとき（位置引数でも指定可能）", (provided) => provided.artifact === undefined),
         ],
         optionalFlags: [
-            optional("artifact", "path", "構造を検証するMarkdown review artifact（--file・位置引数と排他）", "JSON review evidenceを検証する"),
-            optional("terminal", "", "最終review artifactのcontext-isolated approval記録を事前検証する", "途中roundでは構造だけを検証する"),
+            optional("artifact", "path", "`review export`が生成したreview証跡JSON（--file・位置引数と排他）", "review入力JSONを検証する"),
+            optional("staging", "path", "review証跡を保存済みreview session・trusted policy・Gitと照合する", "証跡単体の構造とdigestだけを検証する"),
             ROOT_FLAG,
         ],
-        example: "npx agent-skill-chain review validate --artifact=docs/reviews/47_レビュー.md --root=.",
+        example: "npx agent-skill-chain review validate --artifact=docs/reviews/47_review.json --staging=.agent-skill-chain/tmp/issues/20260911_change --root=.",
     },
     {
         command: "review",
@@ -1047,10 +1081,10 @@ export const COMMAND_USAGE = Object.freeze([
     {
         command: "decision",
         subcommand: "configure",
-        summary: "Jev provider設定のguided setup（Issue #1486）。既定は.agent-skill-chain/local/jev-provider.jsonの生成。--shell-rc-appendを付けると、代わりに検出した shell起動file（~/.bashrc等）へ export <apiKeyEnvVar>=... を確認付きで追記する。値そのものはこのcommandの引数として渡さない——--shell-rc-appendは常にprocess.env[apiKeyEnvVar]（呼び出し時点でそのshellに既にexport済みの値）を読むだけで、AIエージェントが代行実行してもコマンド履歴・出力へ値が現れない",
+        summary: "Jev provider設定のguided setup（Issue #1486）。既定は.agent-skill-chain/local/jev-provider.jsonの生成。--shell-rc-appendを付けると、代わりに export <apiKeyEnvVar>='...' をmode 0600の専用file（~/.config/agent-skill-chain/jev.env）へ確認付きで書き、検出した shell起動file（~/.bashrc等）へはそのfileを読み込む値を含まない行だけを追記する。改行・制御文字を含む値は書き込まない。値そのものはこのcommandの引数として渡さない——--shell-rc-appendは常にprocess.env[apiKeyEnvVar]（呼び出し時点でそのshellに既にexport済みの値）を読むだけで、AIエージェントが代行実行してもコマンド履歴・出力へ値が現れない",
         requiredFlags: [
             flag("provider", "jev", "対応providerはjevのみ"),
-            flag("api-key-env-var", "ENV_VAR_NAME", "APIキーを保持するenv var名（値そのものは渡さない）"),
+            flag("api-key-env-var", "ENV_VAR_NAME", "APIキーを保持するenv var名（JEV_で始まる英大文字・数字・_。値そのものは渡さない）"),
         ],
         conditionalFlags: [
             conditional("endpoint", "url", "Jev APIのendpoint（https://で始まる必要がある）", "--shell-rc-appendを指定しない場合", (provided) => provided["shell-rc-append"] !== true),
@@ -1058,8 +1092,8 @@ export const COMMAND_USAGE = Object.freeze([
         ],
         optionalFlags: [
             ROOT_FLAG,
-            optional("shell-rc-append", "", "jev-provider.json生成の代わりに、shell起動fileへのexport追記モードへ切り替える", "指定なし（jev-provider.json生成モード）"),
-            optional("rc-path", "path", "shell-rc-append時、追記先fileを明示指定する", "$SHELLから検出（bash→~/.bashrc、zsh→~/.zshrc）"),
+            optional("shell-rc-append", "", "jev-provider.json生成の代わりに、APIキー値を0600の専用fileへ書きshell起動fileへはその読み込み行だけを追記するモードへ切り替える", "指定なし（jev-provider.json生成モード）"),
+            optional("rc-path", "path", "shell-rc-append時、読み込み行の追記先fileを明示指定する", "$SHELLから検出（bash→~/.bashrc、zsh→~/.zshrc）"),
             optional("confirm", "APPEND", "shell-rc-append かつ --apply のとき、値の書き込みに同意する明示確認token。一致しなければ書き込まない", "未指定（--applyのみでは書き込まない）"),
             ...APPLY_MODE,
         ],

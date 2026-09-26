@@ -12,7 +12,6 @@ const DEVELOPMENT_CONSIDERATION_TEMPLATES = [
   "issue/01_要件定義.md",
   "issue/02_設計.md",
   "issue/03_実装計画.md",
-  "issue/04_レビュー.md",
 ];
 
 const IMPLEMENTATION_DISCOVERY_TEMPLATES = [
@@ -84,7 +83,6 @@ const DOMAIN_GLOSSARY_TEMPLATE_MARKERS = new Map<string, string[]>([
   ],
   ["issue/02_設計.md", ["参照するドメイン用語IDと標準語"]],
   ["issue/03_実装計画.md", ["ドメイン用語台帳の追加・変更・廃止task"]],
-  ["issue/04_レビュー.md", ["ドメイン用語台帳の候補・確定・現在有効な定義"]],
   [
     "specs/01_システム概要/02_用語・略語.md",
     [
@@ -116,7 +114,6 @@ const ROUTING_INPUT_CONTRACT_ASSETS = [
   "skills/step-10-review/SKILL.md",
   "templates/issue/02_設計.md",
   "templates/issue/03_実装計画.md",
-  "templates/issue/04_レビュー.md",
 ] as const;
 
 const ROUTING_INPUT_CONTRACT_MARKERS = [
@@ -171,14 +168,28 @@ const POST_PR_INTAKE_FORBIDDEN = ["同じPRへ取り込まない"] as const;
 const TRACKED_STAGING_REVIEW_MARKERS = [
   "staging.tracked=false",
   "staging.tracked=true",
-  "文書00〜04を版管理する",
-  "staging内の`04_レビュー.md`はformal approval artifactとして扱わない",
+  "staging内のfileをreview証跡として扱わない",
   "docs/reviews/",
 ] as const;
 
 /** tracked設定を無視してstaging全体を版管理外とする旧記述。 */
 const TRACKED_STAGING_REVIEW_FORBIDDEN = [
   "一時ステージングは版管理外",
+] as const;
+
+/**
+ * Step 10はcontent templateを持たない（REQ-WF-038）。review証跡は`review export`が
+ * 収束済みreview sessionから生成するJSONであり、見出し構造を人やAIが埋める成果物ではない。
+ * **template非適用の宣言として、生成commandと手書き禁止の記述を要求する。**
+ * 同期Stepの「直接使用するテンプレートはない」と同じ位置づけの宣言である。
+ */
+const REVIEW_EVIDENCE_SKILL = "skills/step-10-review/SKILL.md";
+
+const REVIEW_EVIDENCE_GENERATED_MARKERS = [
+  "review証跡のテンプレートはない",
+  "review export",
+  "docs/reviews/<Issue番号>_review.json",
+  "手で書かない",
 ] as const;
 
 const HOST_ADAPTER_SKILL = "asc-step";
@@ -248,7 +259,6 @@ const EXPECTED_TEMPLATE_LINKS = new Map<string, string[]>([
   [
     "step-10-review",
     [
-      "../../templates/issue/04_レビュー.md",
       "../../templates/specs/10_セキュリティ/02_脅威・対策・監査.md",
       "../../templates/specs/11_非機能/02_利用性・互換性・保守性.md",
       "../../templates/specs/12_運用保守/01_監視・障害対応.md",
@@ -278,7 +288,7 @@ const EXPECTED_OUTPUT_MARKERS = new Map<string, string>([
   ["step-07-design-review", "開始可能性"],
   ["step-08-design-sync", "書き込み後読み取り検証"],
   ["step-09-implement", "docs/specs/"],
-  ["step-10-review", "04_レビュー.md"],
+  ["step-10-review", "_review.json"],
   ["step-11-pr", "merge-observed"],
 ]);
 
@@ -548,6 +558,15 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
           `${STATIC_ANALYSIS_REVIEW_SKILL}: tracked設定を無視する記述「${forbidden}」があります`,
         );
   }
+  const reviewEvidenceSkill = path.join(namespaceRoot, REVIEW_EVIDENCE_SKILL);
+  if (fs.existsSync(reviewEvidenceSkill)) {
+    const markdown = fs.readFileSync(reviewEvidenceSkill, "utf8");
+    for (const marker of REVIEW_EVIDENCE_GENERATED_MARKERS)
+      if (!markdown.includes(marker))
+        errors.push(
+          `${REVIEW_EVIDENCE_SKILL}: 生成されるreview証跡の宣言「${marker}」がありません`,
+        );
+  }
   for (const relative of DEVELOPMENT_CONSIDERATION_TEMPLATES) {
     const template = path.join(templatesRoot, relative);
     if (!fs.existsSync(template)) {
@@ -585,18 +604,20 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
       continue;
     }
     const markdown = fs.readFileSync(template, "utf8");
+    /**
+     * **計画封印後の発見は計画文書へ追記しない**（REQ-WF-036）。templateは
+     * 記録表ではなく、4種の記録先への振り分けを持つ。
+     */
     for (const marker of [
-      "実装中発見の前向き記録",
-      "発見ID",
-      "事実",
-      "影響",
-      "判断",
-      "対処",
-      "検証",
-      "仕様更新",
+      "実装中発見の振り分け",
+      "計画封印後",
+      "commit履歴",
+      "05_計画変更.md",
+      "docs/specs/",
+      "follow-up Issue",
     ])
       if (!markdown.includes(marker))
-        errors.push(`${relative}: 実装中発見の${marker}欄がありません`);
+        errors.push(`${relative}: 実装中発見の振り分け先${marker}がありません`);
   }
   const workflowFile = path.resolve(
     root,
@@ -629,11 +650,9 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
       !workflow.includes(
         "要求 → 要件・受け入れ条件 → 設計・設計判断 → 実装計画 → 実装・検証証拠 → レビュー",
       ) ||
-      !workflow.includes(
-        "契約が変わる場合だけ所有する成果物の影響部分と追跡を再確定する",
-      )
+      !workflow.includes("上流文書を書き直さず、次の順で行き先を1つ決める")
     )
-      errors.push("成果物の正方向と影響範囲だけを再確定する契約がありません");
+      errors.push("成果物の正方向と発見の行き先を決める契約がありません");
     if (!workflow.includes("## ドメイン用語台帳"))
       errors.push("開発ワークフローにドメイン用語台帳契約がありません");
     for (const marker of [

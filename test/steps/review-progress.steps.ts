@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { appendLegacyJournal } from "../support/legacy-journal.js";
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -134,7 +135,7 @@ Given("parallel progressの実adapter fixtureがある", function () {
     `# task\n${PROGRESS_START}\n| T02 | 未着手 |\n${PROGRESS_END}\n`,
     { mode: 0o644 },
   );
-  fs.appendFileSync(
+  appendLegacyJournal(
     path.join(this.staging, STEP_JOURNAL_FILE),
     `${JSON.stringify({
       step: 9,
@@ -984,7 +985,7 @@ function nonblockingStaging(
     /** **umaskから独立させるためchmodで固定する。** writeFileSyncのmodeはmaskされる。 */
     fs.chmodSync(world.target, options.mode);
   }
-  fs.appendFileSync(
+  appendLegacyJournal(
     path.join(world.staging, STEP_JOURNAL_FILE),
     `${JSON.stringify({
       step: 9,
@@ -1302,7 +1303,7 @@ nb.Given("配布CLIのissue create出力がある", async function () {
     process.umask(previous);
   }
   this.target = path.join(this.staging, "03_実装計画.md");
-  fs.appendFileSync(
+  appendLegacyJournal(
     path.join(this.staging, STEP_JOURNAL_FILE),
     `${JSON.stringify({
       step: 9,

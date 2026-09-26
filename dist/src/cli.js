@@ -13,15 +13,18 @@ import { bootstrapProject, validateSpecs, } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
-import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, validateContextIsolatedApprovalRecord, validateReviewArtifactStructure, } from "./domain/review-artifact.js";
+import { parseReviewEvidence, } from "./domain/review-evidence.js";
+import { exportReviewEvidence, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
+import { runVerification } from "./adapters/verification-run.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
+import { isPlanFrozenCheckStep, latestPlanSeal } from "./domain/plan-seal.js";
 import { buildWorktreePath, createWorktree, canonicalWorktreePath, DEFAULT_WORKTREE_PLACEMENT, enforceTrustedWorktreeBoundary, inspectFinalizeState, inspectRecoveryState, validateWorktreePlacement, } from "./domain/worktree.js";
 import { applyWorkspaceHygiene, previewWorkspaceHygiene, } from "./domain/hygiene.js";
 import { applyStagingCleanup, calculateStagingDigest, listStagingArtifacts, migrateLegacyStagingTrackerLocked, planStagingCleanup, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "./domain/staging.js";
 import { buildFinalizeReport, applyFinalize, planCompletion, planRootUpdate, planWorktreeCleanup, summarizeCompletion, } from "./domain/finalize.js";
 import { init, upgrade, uninstall, doctor } from "./domain/lifecycle.js";
-import { loadConsumerChoicesFragmentAtCommit, loadConsumerPolicyAtCommit, conformanceDeclarationFromPolicySet, loadEffectiveTrustedPolicySet, loadEffectiveTrustedPolicySetAtCommit, choicesFragmentSource, ruleFragmentSources, loadOperationPolicy, loadProjectPolicySet, loadProjectPolicySetAtCommit, mergeMethodPolicyWarnings, resolveReviewIndependence, validatePolicy, } from "./domain/policy.js";
+import { loadConsumerChoicesFragmentAtCommit, loadConsumerPolicyAtCommit, conformanceDeclarationFromPolicySet, loadEffectiveTrustedPolicySet, loadEffectiveTrustedPolicySetAtCommit, choicesFragmentSource, ruleFragmentSources, loadOperationPolicy, loadProjectPolicySet, loadProjectPolicySetAtCommit, mergeMethodPolicyWarnings, resolveReviewIndependence, trustedVerificationPolicy, validatePolicy, } from "./domain/policy.js";
 import { applyMigration, compareTrustedPolicy, enforceOperation, planMigration, resolveEffectivePolicy, retryMigration, rollbackMigration, sanitizeOutput, serializeDiagnostic, } from "./domain/enforcement.js";
 import { applyFileMigration, planFileMigration, recoverFileMigration, retryFileMigration, rollbackFileMigration, } from "./domain/migration.js";
 import { validateScenarioTrace } from "./domain/trace.js";
@@ -31,7 +34,7 @@ import { canonicalProviderInstant, addIssueProjectItem, github, GitHubProviderUn
 import { planIssueStart } from "./domain/issue-start.js";
 import { assertMinimumExecutableVersion, MINIMUM_GH_VERSION, MINIMUM_GIT_VERSION, } from "./lib/executable-version.js";
 import { git } from "./lib/process.js";
-import { assertIssueStagingLocation, readStagingLayout, stagingExcludePathspec, stagingRepositoryRoot, } from "./domain/staging-layout.js";
+import { assertIssueStagingLocation, isLegacyStagingLayout, LEGACY_STAGING_LAYOUT_NOTICE, readStagingLayout, stagingExcludePathspec, stagingRepositoryRoot, } from "./domain/staging-layout.js";
 import { ExclusivePinnedWriteError, writeFileAtomic, writeFileExclusivePinned, } from "./lib/atomic.js";
 import { validateRepositoryConformance } from "./domain/conformance.js";
 import { parseJsonStrict, resolveContained, stableJson, } from "./lib/security.js";
@@ -43,7 +46,7 @@ import { resolveFinalizeIgnoredPathAllowlist } from "./domain/worktree-removal-s
 import { observeProvider } from "./adapters/provider.js";
 import { invokeDecision } from "./adapters/decision-invoke.js";
 import { runJevContinuousShadow } from "./adapters/jev-shadow-dispatch.js";
-import { configureJevProviderConfig, appendJevApiKeyToShellRc, detectShellRcFile, } from "./adapters/jev-guided-setup.js";
+import { configureJevProviderConfig, appendJevApiKeyToShellRc, defaultJevSecretFilePath, detectShellRcFile, } from "./adapters/jev-guided-setup.js";
 import { appendEvaluationLabel } from "./adapters/evaluation-label-store.js";
 import { parseEvaluationLabelInput } from "./domain/evaluation-label.js";
 import { resolveGitWorkspace } from "./adapters/review-workspace.js";
@@ -53,17 +56,18 @@ import { checkRoutingIndependence } from "./domain/routing-independence.js";
 import { appendCompletionRecord, appendEvidenceStateRecord, applyEvidencePrune, issueRoutingEvidence, previewEvidencePrune, } from "./domain/routing-evidence.js";
 import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssignment, validateTierSelection, validateCodexTier, validateClaudeTier, CODEX_ADOPTION_SELECTOR, CLAUDE_ADOPTION_SELECTOR, } from "./domain/role.js";
 import { readDeliveryEvidence, readEnforcementInput, readFinalizeEvidence, isPolicyInput, readJsonInput, readMigrationManifest, readMigrationState, readModeAssessment, readPolicyFileInput, readPolicyJson, readSpecReview, } from "./adapters/json-input.js";
-import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPocDeliveryChangeScope, assertWorkflowStaging, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
+import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPlanFrozen, assertPlanSealOpen, assertPocDeliveryChangeScope, assertWorkflowStaging, describeStagingDigestDrift, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
 import { assertConvergedReviewSession, buildReviewRoundDraft, previewReviewRound, readStoredReviewSession, recordReviewRound, } from "./adapters/review-session.js";
 import { appendMetricsEvent, buildMetricsReport, writeMetricsReport, } from "./adapters/metrics-journal.js";
 import { METRICS_EVENT_KINDS, METRICS_EVENT_PHASES, } from "./domain/metrics.js";
 import { GIT_ENV, evidenceOnlySuffix } from "./adapters/review-diff.js";
+import { computeImpactSet } from "./adapters/impact-set.js";
 import { recordLayerSuffix } from "./adapters/review-record-layer.js";
 import { appendEvidenceReanchor, evaluateEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
 import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
 import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, completeStoredTerminalRedelivery, observeStoredMerge, observeStoredDeliveryState, prepareStoredMergeIntent, prepareStoredTerminalRedeliveryMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
 import { DELIVERY_STATE_FILE, assertImmutablePullRequestBinding, canonicalDigest, closingContractDigest, pullRequestContentDigest, pullRequestTerminalEvidenceId, } from "./domain/delivery-state.js";
-import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, stagingDigestRecoveryHint, } from "./domain/workflow.js";
+import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, } from "./domain/workflow.js";
 import { reconcileFixedMergeRun, CI_DELIVERY_GRACE_MINUTES, inspectCiDelivery, } from "./domain/ci-delivery.js";
 function workflowArguments(args) {
     const flags = {};
@@ -73,6 +77,10 @@ function workflowArguments(args) {
         "dry-run",
         "post-terminal-intake",
         "post-pr-intake",
+        /**
+         * 廃止済みの`--reconfirm`（REQ-WF-036）。値なしのまま解析させ、`workflow record`が
+         * 廃止を名指しして拒否する。後続の位置引数を値として飲み込まない。
+         */
         "reconfirm",
         "out",
     ]);
@@ -112,7 +120,7 @@ function workflowArguments(args) {
  * 値を取らないflagの受理。**値付き形式を無言で真として扱わない。**
  *
  * parserは`--name`だけを`__present__`にし、`--name=値`は値をそのまま保存する。
- * 存在判定を`!== undefined`で書くと、`--reconfirm=false`が有効として通る。
+ * 存在判定を`!== undefined`で書くと、`--post-pr-intake=false`が有効として通る。
  */
 function presentFlag(flags, key) {
     if (flags[key] === undefined)
@@ -293,49 +301,18 @@ function workflowDiagnostic(staging, mode, result, extra = []) {
     };
 }
 /**
- * staging digest不一致の案内を、journalとdelivery stateの両方から決める。
- *
- * **journalを読めない場合に判定を止めない。** `assertWorkflowStaging`や
- * `assertRegularJournalPath`が投げると、digest不一致という本来の診断が
- * 別の診断へ置き換わる。案内の生成は診断の付随であって判定ではない。
+ * delivery直前の再検証。**計画凍結をdigest照合より先に検査する**（REQ-WF-036）。
+ * 封印済み計画の編集はdigest不一致としても現れるが、先に名指しすることで
+ * 「計画は05_計画変更.mdへ」という次の行動を返す。
  */
-/**
- * **2つの入力を独立に読む。** 片方の失敗でもう片方の観測値を捨てない。
- *
- * 1つの`try`で囲むと、delivery stateが`merge-observed`でもjournalの読み取りが
- * 失敗した時点でterminal判定ごと落ち、**terminal状態の利用者へ必ず失敗する
- * 再記録操作を案内する**（PR #1402の外部review指摘）。逆向きも同じで、
- * delivery stateだけ読めない場合もjournalのStep 11判定は使える。
- */
-function isTerminalDeliveryOrFalse(staging) {
-    try {
-        const state = readStoredDeliveryState(staging)?.state;
-        return state === "merge-observed" || state === "step11-recorded";
-    }
-    catch {
-        /** delivery stateを読めない場合はfalseへ倒す。案内の生成で判定を止めない */
-        return false;
-    }
-}
-function readJournalStepsOrEmpty(staging) {
-    try {
-        return readWorkflowJournal(staging).entries.map((entry) => entry.step);
-    }
-    catch {
-        /** journalを読めない場合は空集合へ倒す。案内の生成で判定を止めない */
-        return [];
-    }
-}
-function stagingRecoveryHint(staging) {
-    return stagingDigestRecoveryHint(readJournalStepsOrEmpty(staging), isTerminalDeliveryOrFalse(staging));
-}
-export function assertWorkflowReadyForDelivery(staging) {
+export function assertWorkflowReadyForDelivery(staging, deliveredHeadSha = "HEAD") {
+    assertPlanFrozen(staging, deliveredHeadSha, { delivery: true });
     const stored = readStoredStagingRecord(staging);
     const currentArtifacts = listStagingArtifacts(staging);
     const currentDigest = calculateStagingDigest(staging, currentArtifacts);
     if (stableJson(stored.artifacts) !== stableJson(currentArtifacts) ||
         stored.digest !== currentDigest)
-        throw new Error(`delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${stagingRecoveryHint(staging)}`);
+        throw new Error(`delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${describeStagingDigestDrift(staging)}`);
     const inspection = inspectWorkflowStaging(staging, 10);
     if (!inspection.modeDecision.valid ||
         !inspection.validation.valid ||
@@ -353,13 +330,14 @@ export function assertWorkflowReadyForDelivery(staging) {
         ].join("; ")}`);
     return inspection;
 }
-function assertWorkflowReadyForTerminalRedelivery(staging) {
+function assertWorkflowReadyForTerminalRedelivery(staging, deliveredHeadSha = "HEAD") {
+    assertPlanFrozen(staging, deliveredHeadSha, { delivery: true });
     const stored = readStoredStagingRecord(staging);
     const currentArtifacts = listStagingArtifacts(staging);
     const currentDigest = calculateStagingDigest(staging, currentArtifacts);
     if (stableJson(stored.artifacts) !== stableJson(currentArtifacts) ||
         stored.digest !== currentDigest)
-        throw new Error(`再配送直前のstaging成果物またはcontent digestが記録から変化しています${stagingRecoveryHint(staging)}`);
+        throw new Error(`再配送直前のstaging成果物またはcontent digestが記録から変化しています${describeStagingDigestDrift(staging)}`);
     const inspection = inspectWorkflowStaging(staging, 11);
     if (!inspection.modeDecision.valid ||
         !inspection.validation.valid ||
@@ -421,7 +399,7 @@ function assertCreatableReviewHead(staging, headSha, mode, mergeMode) {
     if (mode !== "poc" &&
         mergeMode !== "disabled" &&
         reviewBinding.implementationHeadSha === headSha)
-        throw new Error("H_implとH_finalが同一のためPRを作成できません。review artifactを実装commitから分離し、独立したartifact専用commitを積んでから再実行してください");
+        throw new Error("H_implとH_finalが同一のためPRを作成できません。H_implで`review export`を実行し、生成したreview証跡（docs/reviews/<Issue番号>_review.json）1 fileだけを実装commitの後にcommitしてから再実行してください");
 }
 function assertObservedClosingContract(input) {
     if (input.observed.headRepository?.nameWithOwner?.toLowerCase() !==
@@ -911,21 +889,23 @@ export function resolveImplementationCommitForMerge(root, staging, finalHeadSha)
         throw new Error("H_impl..H_finalには許可されたreview artifactが1件必要です");
     const reviewArtifactPath = reviewArtifacts[0];
     const artifactContent = git(["show", `${finalHeadSha}:${reviewArtifactPath}`], root).stdout;
-    const structure = validateReviewArtifactStructure(artifactContent);
-    if (structure.diagnostics.length > 0 ||
-        structure.implementation === undefined)
-        throw new Error("formal review artifactの構造とH_implが不正です");
+    let declaredImplementation;
+    try {
+        declaredImplementation =
+            parseReviewEvidence(artifactContent).observed.implementationHeadSha.toLowerCase();
+    }
+    catch (error) {
+        throw new Error(`review証跡の構造とH_implが不正です: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    }
     const session = readStoredReviewSession(staging);
-    const declaredImplementation = structure.implementation?.toLowerCase();
-    const forwardArtifactSuffix = declaredImplementation !== undefined &&
-        session?.latestCandidateHeadSha.toLowerCase() === declaredImplementation &&
+    const forwardArtifactSuffix = session?.latestCandidateHeadSha.toLowerCase() === declaredImplementation &&
         evidenceOnlySuffix(root, declaredImplementation, finalHeadSha) ===
             reviewArtifactPath;
     const implementationCommitSha = forwardArtifactSuffix
         ? declaredImplementation
         : immediateParentSha;
     if (declaredImplementation !== implementationCommitSha)
-        throw new Error("formal review artifactのH_implがmerge対象と一致しません");
+        throw new Error("review証跡のH_implがmerge対象と一致しません");
     if (changedPaths.length > 1 && !forwardArtifactSuffix) {
         if (!session ||
             !recordLayerSuffix(staging, root, immediateParentSha, finalHeadSha, session))
@@ -946,15 +926,39 @@ export function resolveImplementationCommitForMerge(root, staging, finalHeadSha)
             .digest("hex"),
     };
 }
-function resolveContextIsolatedFormalApproval(staging, candidate) {
+/**
+ * `H_final`のreview証跡を読み、`observed`節をGit・stagingの観測記録・trusted policy
+ * から再導出して照合する（REQ-WF-038、REQ-WF-040）。
+ *
+ * **独立性modeによらず必ず走らせる。** modeが選ぶのは承認の出所（context-isolatedの
+ * formal approvalか、actor-independentのprovider review）だけであり、証跡の観測値の
+ * 照合を省く理由にはならない。actor-independentで照合を省くと、手で組んだ証跡が
+ * 合格記録だけを載せたままmergeへ到達する。
+ */
+export function verifyMergeReviewEvidenceObserved(input) {
+    const content = git([
+        "show",
+        `${input.candidate.finalHeadSha}:${input.candidate.reviewArtifactPath}`,
+    ], stagingRepositoryRoot(input.staging)).stdout;
+    const evidence = parseReviewEvidence(content);
+    if (evidence.observed.implementationHeadSha !==
+        input.candidate.implementationCommitSha)
+        throw new Error("review証跡のH_implがmerge対象と一致しません");
+    const errors = verifyReviewEvidenceWithStaging({
+        staging: input.staging,
+        evidence,
+        independenceMode: input.independenceMode,
+        verificationPolicy: input.verificationPolicy,
+    });
+    if (errors.length > 0)
+        throw new Error(`${input.independenceMode}のreview証跡が観測値と一致しません: ${errors.join("; ")}`);
+    return evidence;
+}
+function resolveContextIsolatedFormalApproval(staging, candidate, evidence) {
     const { binding } = assertCurrentReviewJournalBinding(staging, candidate.finalHeadSha);
-    const markdown = git(["show", `${candidate.finalHeadSha}:${candidate.reviewArtifactPath}`], stagingRepositoryRoot(staging)).stdout;
-    const structure = validateReviewArtifactStructure(markdown);
-    if (structure.implementation !== candidate.implementationCommitSha)
-        throw new Error("formal review artifactのH_implがmerge対象と一致しません");
-    const approval = validateContextIsolatedApprovalRecord(markdown);
-    if (!approval.valid)
-        throw new Error(`context-isolated formal review approvalが不正です: ${approval.errors.join("; ")}`);
+    if (evidence.observed.session.sessionId !== binding.sessionId ||
+        evidence.observed.session.latestRoundDigest !== binding.roundDigest)
+        throw new Error("context-isolated formal review approvalが不正です: review証跡のsessionが最新Step 10 bindingと一致しません");
     return binding.roundDigest;
 }
 /**
@@ -1053,8 +1057,14 @@ function observeMergeReviewEvidence(input) {
             `head=${delivery.headSha} イベント時刻=${delivery.eventAt} 観測時刻=${delivery.observedAt} ` +
             `経過=${delivery.elapsedMinutes.toFixed(1)}分 猶予=${delivery.graceMinutes}分。${delivery.nextAction}`);
     }
+    const evidence = verifyMergeReviewEvidenceObserved({
+        staging: input.staging,
+        candidate,
+        independenceMode: input.independenceMode,
+        verificationPolicy: input.verificationPolicy,
+    });
     const formalApprovalId = input.independenceMode === "context-isolated"
-        ? resolveContextIsolatedFormalApproval(input.staging, candidate)
+        ? resolveContextIsolatedFormalApproval(input.staging, candidate, evidence)
         : undefined;
     const independentReview = input.independenceMode === "actor-independent"
         ? currentIndependentApprovals({
@@ -1188,6 +1198,7 @@ function inspectAuthorizedPullRequestMerge(input) {
         observed,
         ciEventAt: ciDeliveryEventAt(input.staging, input.state),
         independenceMode: resolveReviewIndependence(input.trustedSet.policy),
+        verificationPolicy: trustedVerificationPolicy(input.trustedSet),
         assistedAuthorityVerified: input.assistedAuthorityVerified,
     });
     const independenceMode = resolveReviewIndependence(input.trustedSet.policy);
@@ -1434,6 +1445,7 @@ function readBackPreparedPullRequestMerge(input) {
                 ciEventAt: ciDeliveryEventAt(input.staging, input.state),
                 fixedCiRunId: input.state.merge.ciRunId,
                 independenceMode,
+                verificationPolicy: trustedVerificationPolicy(trustedSet),
                 assistedAuthorityVerified: trustedSet.policy.merge.mode === "assisted",
             });
             assertFixedMergeReviewEvidence(input.state, reviewed.reviewEvidence);
@@ -1718,8 +1730,9 @@ function retryPreparedMergeAfterConfirmedAbsence(input) {
 /**
  * **`issue validate`が使うGherkin方言をproject choiceから解決する。**
  *
- * stagingは`<root>/.agent-skill-chain/tmp/issues/<staging>`に置かれるため、
- * `--path`の4階層上をrootとみなし、そこにproject policy manifestがあれば
+ * stagingは既定root（`<root>/.agent-skill-chain/tmp/issues/<staging>`）または
+ * project policyの`staging.root`直下に置かれるため、`stagingRepositoryRoot`で
+ * rootを導き、そこにproject policy manifestがあれば
  * `projectChoices.gherkinDialect`を返す。manifestが無い場合（一時directoryの
  * fixture等）は未指定とし、`validateIssue`の既定`en`に委ねる。
  * **宣言できても参照されない値を残さない**（Issue #1324）。
@@ -1860,8 +1873,8 @@ function handlePullRequestMerge(flags) {
             recoverPendingJournalTransaction(staging);
         const workflowInspection = initial.redelivery ||
             (initial.state === "step11-recorded" && reopenTerminal)
-            ? assertWorkflowReadyForTerminalRedelivery(staging)
-            : assertWorkflowReadyForDelivery(staging);
+            ? assertWorkflowReadyForTerminalRedelivery(staging, initial.create.headSha)
+            : assertWorkflowReadyForDelivery(staging, initial.create.headSha);
         assertWorkflowMergeAllowed(workflowInspection.mode);
         let stagingRecord = readStoredStagingRecord(staging);
         const current = readStoredDeliveryState(staging);
@@ -3405,9 +3418,12 @@ export async function main(argv, dependencies = {}) {
             throw new CliValidationError([`${command}にはsubcommandが必要です: ${subcommands.join("、")}`], `npx agent-skill-chain ${command} <${subcommands.join("|")}> --help でusageを確認してください`);
     }
     if (usage !== undefined) {
-        const usageArgs = usage.subcommand === undefined && subcommand !== undefined
+        const commandArgs = usage.subcommand === undefined && subcommand !== undefined
             ? [subcommand, ...rest]
             : rest;
+        /** `--`以降を実行argvとして受け取るcommandは、`--`より前だけをusage検査する。 */
+        const separator = usage.acceptsCommandArgv === true ? commandArgs.indexOf("--") : -1;
+        const usageArgs = separator < 0 ? commandArgs : commandArgs.slice(0, separator);
         if (usageArgs.some((argument) => isHelpToken(argument))) {
             print(renderUsage(usage));
             return 0;
@@ -3453,8 +3469,9 @@ export async function main(argv, dependencies = {}) {
         const apiKeyEnvVar = required(flags, "api-key-env-var");
         const apply = applyMode(flags);
         if (flags["shell-rc-append"] === true) {
-            // T-07: shell起動fileへのexport追記（確認付き自動化）。値そのものは
-            // このcommandへ渡さない——process.env[apiKeyEnvVar]から直接読む。
+            // T-07: 値はmode 0600の専用fileへ書き、shell起動fileへはそのfileを
+            // 読み込む行だけを追記する（確認付き自動化）。値そのものはこの
+            // commandへ渡さない——process.env[apiKeyEnvVar]から直接読む。
             let rcPath;
             if (typeof flags["rc-path"] === "string" && flags["rc-path"] !== "") {
                 rcPath = path.resolve(flags["rc-path"]);
@@ -3469,6 +3486,7 @@ export async function main(argv, dependencies = {}) {
             const result = appendJevApiKeyToShellRc({
                 apiKeyEnvVar,
                 rcPath,
+                secretFilePath: defaultJevSecretFilePath(),
                 apply,
                 confirm,
             });
@@ -3929,12 +3947,25 @@ export async function main(argv, dependencies = {}) {
         const { flags, artifacts } = workflowArguments(rest);
         if (artifacts.length > 0)
             throw new Error("workflow assess-discoveryで--artifactは使用できません");
-        const unknown = Object.keys(flags).filter((flag) => !["input", "root"].includes(flag));
+        const unknown = Object.keys(flags).filter((flag) => !["input", "root", "staging"].includes(flag));
         if (unknown.length > 0)
             throw new Error(`workflow assess-discoveryの未知optionです: --${unknown.join(", --")}`);
         const root = path.resolve(flags.root ?? process.cwd());
         const input = readJsonInput(resolveContained(root, flags.input ?? ""));
-        print(assessImplementationDiscovery(parseImplementationDiscoveryInput(input)));
+        /**
+         * **封印の有無は利用者入力ではなくjournalから観測する**（REQ-WF-036）。
+         * 封印済みなら契約変更を00〜03の書換えではなく計画変更記録へ振り分ける。
+         */
+        const sealJournal = flags.staging === undefined
+            ? undefined
+            : readWorkflowJournal(resolveContained(root, path.relative(root, path.resolve(root, flags.staging))));
+        if (sealJournal && sealJournal.errors.length > 0)
+            throw new Error(`workflow assess-discoveryのjournalが不正です: ${sealJournal.errors.join("; ")}`);
+        const planSealed = sealJournal !== undefined &&
+            latestPlanSeal(sealJournal.entries) !== undefined;
+        print(assessImplementationDiscovery(parseImplementationDiscoveryInput(input), {
+            planSealed,
+        }));
         return 0;
     }
     if (command === "workflow" && subcommand === "promote-full") {
@@ -4151,6 +4182,8 @@ export async function main(argv, dependencies = {}) {
                 currentPlan.operation !== plan.operation)
                 throw new Error("workflow advanceのpreview後にstaging stateが変更されました。新しいpreviewから再実行してください");
             const targetStep = plan.targetStep;
+            /** 封印済みの封印Stepは外部同期より前に拒否する（REQ-WF-036） */
+            assertPlanSealOpen(staging, targetStep);
             const definition = workflowStep(targetStep);
             if (!definition)
                 throw new Error("workflow step定義がありません");
@@ -4413,10 +4446,15 @@ export async function main(argv, dependencies = {}) {
             "review-session-digest",
             "post-terminal-intake",
             "post-pr-intake",
-            "reconfirm",
         ].includes(flag));
+        /**
+         * **廃止した`--reconfirm`は未知optionとして拒否し、廃止を名指しする**（REQ-WF-036）。
+         * 旧手順に従った利用者へ、失敗の理由と現在の手順を返す。
+         */
         if (unknown.length > 0)
-            throw new Error(`workflow recordの未知optionです: --${unknown.join(", --")}`);
+            throw new Error(`workflow recordの未知optionです: --${unknown.join(", --")}${unknown.includes("reconfirm")
+                ? "。--reconfirmは廃止されました（REQ-WF-036）。承認済み計画は封印後に編集せず、計画の変更は05_計画変更.mdへ追記してください"
+                : ""}`);
         if (artifacts.length === 0)
             throw new Error("workflow recordには--artifactが1件以上必要です");
         const staging = flags.staging;
@@ -4443,20 +4481,12 @@ export async function main(argv, dependencies = {}) {
             evidence,
         };
         /**
-         * 上流再確定entry（Issue #1342）。Step 10はreview binding、Step 11はdelivery終端が
-         * 所有するため対象外。先行する通常entryの存在はjournal本体の順序判定が検証する。
+         * **封印後のStep 9・10は、HEAD観測やreview検証より先に計画凍結を検査する**
+         * （REQ-WF-036）。封印済み計画の編集を「digest不一致」ではなく名指しで返す。
+         * journal追記経路も同じ検査を持つ。
          */
-        /**
-         * **値なしflagは`__present__`だけを受理する。** `--reconfirm=false`のような
-         * 値付き形式は文字列としてflagsへ入るため、`!== undefined`で判定すると
-         * **利用者が「無効にした」つもりの入力が有効として通る**（CodeRabbit指摘）。
-         * 同じ形の`--post-terminal-intake`も同様に扱う。
-         */
-        const reconfirm = presentFlag(flags, "reconfirm");
-        if (reconfirm && (step.step < 1 || step.step > 9))
-            throw new Error("--reconfirmはStep 1〜9にだけ指定できます");
-        if (reconfirm)
-            entry = { ...entry, reconfirmation: true };
+        if (isPlanFrozenCheckStep(step.step))
+            assertPlanFrozen(staging);
         const repositoryRoot = stagingRepositoryRoot(staging);
         const needsHeadSha = step.step === 9 ||
             step.step === 10 ||
@@ -4871,6 +4901,12 @@ export async function main(argv, dependencies = {}) {
                 : {}),
             ...(typeof flags.name === "string" ? { name: flags.name } : {}),
         }));
+        /**
+         * **既定配置（版管理外・全文同期）には1行の通知だけを出す。** 判定も終了値も
+         * 変えず、JSON出力（stdout）にも混ぜない。
+         */
+        if (isLegacyStagingLayout(readStagingLayout(root)))
+            process.stderr.write(`通知: ${LEGACY_STAGING_LAYOUT_NOTICE}\n`);
         return 0;
     }
     if (command === "issue" && subcommand === "validate") {
@@ -4924,9 +4960,13 @@ export async function main(argv, dependencies = {}) {
         const repository = required(flags, "repo");
         const issue = Number(issueRaw);
         const staging = assertWorkflowStaging(path.resolve(required(flags, "staging-path")));
-        if (path.dirname(staging) !==
-            path.join(root, ".agent-skill-chain", "tmp", "issues"))
+        // 配置契約（既定root、またはproject policyのstaging.root）を対象rootで判定する
+        try {
+            assertIssueStagingLocation(staging, root);
+        }
+        catch {
             throw new Error("stagingは対象rootのIssue staging直下でなければなりません");
+        }
         const stagingRecord = readStoredStagingRecord(staging);
         const expectedTracker = `https://github.com/${repository}/issues/${issue}`;
         if (stagingRecord.state !== "sync-verified" ||
@@ -5364,7 +5404,7 @@ export async function main(argv, dependencies = {}) {
     }
     if (command === "review" && subcommand === "validate") {
         const { flags, positionals } = parse(rest);
-        const unknown = Object.keys(flags).filter((flag) => !["file", "artifact", "root", "terminal"].includes(flag));
+        const unknown = Object.keys(flags).filter((flag) => !["file", "artifact", "root", "staging"].includes(flag));
         if (unknown.length > 0)
             throw new Error(`review validateの未知optionです: --${unknown.join(", --")}`);
         if (flags.file !== undefined && typeof flags.file !== "string")
@@ -5373,8 +5413,8 @@ export async function main(argv, dependencies = {}) {
             throw new Error("review validateの--artifactにはpathが必要です");
         if (flags.root !== undefined && typeof flags.root !== "string")
             throw new Error("review validateの--rootにはpathが必要です");
-        if (flags.terminal !== undefined && flags.terminal !== true)
-            throw new Error("review validateの--terminalは値を取りません");
+        if (flags.staging !== undefined && typeof flags.staging !== "string")
+            throw new Error("review validateの--stagingにはpathが必要です");
         if (positionals.length > 1)
             throw new Error("review validateの位置引数は1件までです");
         const positional = positionals[0];
@@ -5384,8 +5424,8 @@ export async function main(argv, dependencies = {}) {
         const artifact = typeof flags.artifact === "string" ? flags.artifact : undefined;
         if (file !== undefined && artifact !== undefined)
             throw new Error("review validateは--file（または位置引数）と--artifactを同時に使用できません");
-        if (flags.terminal === true && artifact === undefined)
-            throw new Error("review validateの--terminalは--artifactと併用してください");
+        if (flags.staging !== undefined && artifact === undefined)
+            throw new Error("review validateの--stagingは--artifactと併用してください");
         if (artifact !== undefined) {
             const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
             const artifactFile = resolveContained(root, artifact);
@@ -5394,34 +5434,41 @@ export async function main(argv, dependencies = {}) {
                 throw new Error("review validateの--artifactはrepository内の通常fileが必要です");
             dependencies.afterReviewArtifactStat?.(artifactFile);
             const descriptor = fs.openSync(artifactFile, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
-            let markdown;
+            let content;
             try {
                 const opened = fs.fstatSync(descriptor);
                 if (!opened.isFile() ||
                     opened.dev !== stat.dev ||
                     opened.ino !== stat.ino)
                     throw new Error("review validateの--artifactが読取直前に変化しました");
-                markdown = fs.readFileSync(descriptor, "utf8");
+                content = fs.readFileSync(descriptor, "utf8");
             }
             finally {
                 fs.closeSync(descriptor);
             }
-            const structure = validateReviewArtifactStructure(markdown);
-            const approval = flags.terminal === true
-                ? validateContextIsolatedApprovalRecord(markdown)
-                : undefined;
-            const approvalDiagnostics = approval?.diagnostics ?? [];
+            const errors = [];
+            let evidence;
+            try {
+                evidence = parseReviewEvidence(content);
+            }
+            catch (error) {
+                errors.push(error instanceof Error ? error.message : String(error));
+            }
+            if (evidence !== undefined && typeof flags.staging === "string")
+                errors.push(...verifyReviewEvidenceWithStaging({
+                    staging: path.resolve(root, flags.staging),
+                    evidence,
+                    independenceMode: resolveTrustedReviewIndependence(root),
+                }));
             const result = {
-                valid: structure.diagnostics.length === 0 && (approval?.valid ?? true),
-                kind: "review-artifact",
+                valid: errors.length === 0,
+                kind: "review-evidence",
                 artifact: path.relative(root, artifactFile),
-                errors: [...structure.diagnostics, ...approvalDiagnostics],
-                ...(approval === undefined
+                sessionChecked: typeof flags.staging === "string",
+                errors,
+                ...(evidence === undefined
                     ? {}
-                    : {
-                        terminal: true,
-                        approvalErrors: approvalDiagnostics.map((item) => item.message),
-                    }),
+                    : { evidenceDigest: evidence.evidenceDigest }),
             };
             print(result);
             return result.valid ? 0 : 1;
@@ -5446,105 +5493,106 @@ export async function main(argv, dependencies = {}) {
         print(result);
         return 1;
     }
-    if (command === "review" && subcommand === "artifact") {
+    if (command === "review" && subcommand === "export") {
         const { flags, positionals } = parse(rest);
+        /**
+         * **検証の申告は受け付けない。** 検証欄は`verify run`の観測記録から導出する。
+         * 旧`--verified`は未知optionとして拒否せず、移行先を名指しする。
+         */
+        if (rest.some((argument) => argument.startsWith("--verified")))
+            throw new Error("review exportの--verifiedは廃止されました。検証は申告ではなく観測です。H_implで verify run --staging=<staging> --scope=full -- <trusted policyのverification.fullCommand> を実行してからreview exportを再実行してください");
         if (positionals.length > 0)
-            throw new Error("review artifactに位置引数は使用できません");
-        if (flags.init !== true)
-            throw new Error("review artifactには値なしの--initが必要です");
-        const unknown = Object.keys(flags).filter((flag) => !["init", "staging", "base", "head", "out", "root"].includes(flag));
+            throw new Error("review exportに位置引数は使用できません");
+        const unknown = Object.keys(flags).filter((flag) => ![
+            "staging",
+            "issue",
+            "reviewer",
+            "implementer",
+            "base",
+            "out",
+            "root",
+        ].includes(flag));
         if (unknown.length > 0)
-            throw new Error(`review artifactの未知optionです: --${unknown.join(", --")}`);
+            throw new Error(`review exportの未知optionです: --${unknown.join(", --")}`);
         const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
-        const stagingInput = path.resolve(root, required(flags, "staging"));
-        const staging = resolveContained(root, path.relative(root, stagingInput));
-        if (!isReviewArtifactStagingDirectChild(root, staging))
-            throw new Error(`review artifactの--stagingは対象rootの${readStagingLayout(root).rootPattern}/直下が必要です`);
-        const record = readStoredStagingRecord(staging);
-        const artifacts = listStagingArtifacts(staging);
-        if (JSON.stringify(record.artifacts) !== JSON.stringify(artifacts) ||
-            record.digest !== calculateStagingDigest(staging, artifacts))
-            throw new Error("review artifact生成前のstaging成果物一覧またはdigestが一致しません。最新Stepをworkflow recordで再記録してください");
-        const resolveCommit = (label, value) => {
-            const observed = git(["rev-parse", "--verify", `${value}^{commit}`], root, { allowFailure: true });
-            if (observed.status !== 0)
-                throw new Error(`review artifactの${label}をexact commitへ解決できません: ${value}`);
-            return observed.stdout.trim();
-        };
-        const baseSha = resolveCommit("--base", required(flags, "base"));
-        const headSha = resolveCommit("--head", required(flags, "head"));
-        const currentHead = resolveCommit("current HEAD", "HEAD");
-        if (headSha !== currentHead)
-            throw new Error(`review artifactの--headはcurrent HEADと一致する必要があります: head=${headSha} current=${currentHead}`);
-        const diff = git(["diff", "--name-status", "--no-renames", "-z", baseSha, headSha], root)
-            .stdout.split("\0")
-            .filter(Boolean);
-        const changedPaths = [];
-        for (let index = 0; index < diff.length; index += 2) {
-            const status = diff[index];
-            const changedPath = diff[index + 1];
-            if (!changedPath || (status !== "A" && status !== "M" && status !== "D"))
-                throw new Error("review artifactのGit差分形式が不正です");
-            changedPaths.push({ path: changedPath, changeType: status });
-        }
-        if (changedPaths.length === 0)
-            throw new Error("review artifactは比較基点からの変更pathが1件以上必要です");
-        const issueNumber = /\/issues\/(?<issue>[1-9]\d*)$/u.exec(record.tracker ?? "")?.groups?.issue;
-        const out = path.resolve(typeof flags.out === "string"
-            ? flags.out
-            : path.join(root, "docs", "reviews", `${issueNumber ?? "review"}_レビュー.md`));
-        const relativeOut = path.relative(root, out);
-        if (relativeOut.startsWith("..") || path.isAbsolute(relativeOut))
-            throw new Error("review artifactの--outはrepository内が必要です");
-        const outParent = fs.realpathSync(path.dirname(out));
-        const realRoot = fs.realpathSync(root);
-        if (!isReviewArtifactParentContained(root, realRoot, path.resolve(path.dirname(out)), outParent))
-            throw new Error("review artifactの--outはrepository内のsymlinkを含まない親directoryが必要です");
-        const realStaging = fs.realpathSync(staging);
-        if (outParent === realStaging ||
-            outParent.startsWith(`${realStaging}${path.sep}`))
-            throw new Error("review artifactの--outはstaging外が必要です");
-        if (fs.lstatSync(out, { throwIfNoEntry: false }))
-            throw new Error(`review artifactの--outが既に存在します: ${out}`);
-        const template = fs.readFileSync(path.join(root, ".agent-skill-chain", "templates", "issue", "04_レビュー.md"), "utf8");
-        const packageManifest = path.join(root, "package.json");
-        const packageFiles = fs.existsSync(packageManifest)
-            ? (() => {
-                const parsed = parseJsonStrict(fs.readFileSync(packageManifest, "utf8"), "package.json");
-                const files = isRecord(parsed) ? parsed.files : undefined;
-                return Array.isArray(files) &&
-                    files.every((item) => typeof item === "string")
-                    ? files
-                    : undefined;
-            })()
-            : undefined;
-        const content = renderReviewArtifactDraft({
-            template,
-            staging: path.relative(root, staging),
-            stagingDigest: record.digest,
-            baseSha,
-            headSha,
-            paths: changedPaths,
-            ...(packageFiles ? { packageFiles } : {}),
+        const issueRaw = required(flags, "issue");
+        if (!/^[1-9]\d*$/u.test(issueRaw))
+            throw new Error("review exportの--issueは1以上の整数が必要です");
+        if (flags.base !== undefined && typeof flags.base !== "string")
+            throw new Error("review exportの--baseにはcommitが必要です");
+        if (flags.out !== undefined && typeof flags.out !== "string")
+            throw new Error("review exportの--outにはpathが必要です");
+        const exported = exportReviewEvidence({
+            root,
+            staging: path.resolve(root, required(flags, "staging")),
+            issue: Number(issueRaw),
+            reviewer: required(flags, "reviewer"),
+            implementer: required(flags, "implementer"),
+            independenceMode: resolveTrustedReviewIndependence(root),
+            ...(typeof flags.base === "string" ? { baseSha: flags.base } : {}),
+            ...(typeof flags.out === "string" ? { out: flags.out } : {}),
         });
-        try {
-            writeFileExclusivePinned(outParent, path.basename(out), content);
-        }
-        catch (error) {
-            if (error instanceof ExclusivePinnedWriteError)
-                throw new Error(`review artifact --initの雛形作成後に失敗しました。無関係fileの誤削除を避けるためpathname削除は行っていません。作成entryが残存している可能性があるため、指定--outの削除対象を確認してください`, { cause: error });
-            throw error;
-        }
         print({
-            written: out,
-            baseSha,
-            headSha,
-            changedPaths,
-            sha256: crypto.createHash("sha256").update(content).digest("hex"),
-            reviewVerdict: "unresolved",
-            testResult: "not-run",
+            written: exported.path,
+            path: path.relative(root, exported.path).split(path.sep).join("/"),
+            baseSha: exported.evidence.observed.baseSha,
+            implementationHeadSha: exported.evidence.observed.implementationHeadSha,
+            sessionId: exported.evidence.observed.session.sessionId,
+            latestRoundDigest: exported.evidence.observed.session.latestRoundDigest,
+            evidenceDigest: exported.evidence.evidenceDigest,
+            next: "この1 fileだけを実装commitの後にcommitしてH_finalにする",
         });
         return 0;
+    }
+    if (command === "verify" && subcommand === "run") {
+        /**
+         * **実行するcommandは`--`の後のargvだけで受け取り、shellを通さない。**
+         * `--`より前だけをflagとして解析する。後ろの`--config`等をflagと取り違えない。
+         */
+        const separator = rest.indexOf("--");
+        if (separator < 0 || separator === rest.length - 1)
+            throw new Error("verify runには`--`の後に実行するcommandのargvが必要です（例: verify run --staging=<staging> --scope=full -- npm test）");
+        const { flags, positionals } = parse(rest.slice(0, separator));
+        if (positionals.length > 0)
+            throw new Error(`verify runの位置引数は\`--\`の後に置いてください: ${positionals[0]}`);
+        const unknown = Object.keys(flags).filter((flag) => !["staging", "scope", "base", "root"].includes(flag));
+        if (unknown.length > 0)
+            throw new Error(`verify runの未知optionです: --${unknown.join(", --")}`);
+        /**
+         * **scopeに既定値を置かない。** 省略を`full`と読むと、宣言していない全体検証を
+         * 名乗らせることになる。scopeとargvの対応はtrusted policyで照合する。
+         */
+        const scope = flags.scope;
+        if (scope === undefined)
+            throw new Error("verify runには--scope=targetedまたは--scope=fullが必要です。fullはtrusted policyのverification.fullCommand、targetedはverification.targetedRunnerに影響集合のfeatureを並べたargvだけを受理します");
+        if (scope !== "targeted" && scope !== "full")
+            throw new Error("verify runの--scopeはtargetedまたはfullが必要です");
+        if (flags.base !== undefined && typeof flags.base !== "string")
+            throw new Error("verify runの--baseにはcommitが必要です");
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const staging = path.resolve(root, required(flags, "staging"));
+        if (flags.root !== undefined &&
+            fs.realpathSync(stagingRepositoryRoot(staging)) !== fs.realpathSync(root))
+            throw new Error("verify runの--rootはstagingを置いたrepositoryのrootと一致する必要があります");
+        const result = await runVerification({
+            staging,
+            argv: rest.slice(separator + 1),
+            scope,
+            ...(typeof flags.base === "string" ? { base: flags.base } : {}),
+        });
+        print({
+            recorded: true,
+            headSha: result.record.headSha,
+            baseSha: result.record.baseSha,
+            command: result.record.command,
+            scope: result.record.scope,
+            impactDigest: result.record.impactDigest,
+            impactMode: result.record.impactMode,
+            exitCode: result.record.exitCode,
+            signal: result.record.signal,
+            recordDigest: result.record.recordDigest,
+        });
+        return result.record.exitCode ?? 1;
     }
     if (command === "review" && subcommand === "round") {
         const { flags, positionals } = parse(rest);
@@ -6755,7 +6803,7 @@ export async function main(argv, dependencies = {}) {
             appendWorkflowJournalEntry({ staging, entry });
         const result = withStagingMutationLock(staging, () => {
             recoverPendingJournalTransaction(staging);
-            const lockedInspection = assertWorkflowReadyForDelivery(staging);
+            const lockedInspection = assertWorkflowReadyForDelivery(staging, headSha);
             if (readStoredDeliveryState(staging))
                 assertCurrentReviewJournalBinding(staging, headSha);
             else
@@ -7102,6 +7150,47 @@ export async function main(argv, dependencies = {}) {
                     recoverRecord: flags["recover-record"] === true,
                 })
                 : uninstall(root, { apply }));
+        return 0;
+    }
+    if (command === "impact") {
+        const forwarded = subcommand ? [subcommand, ...rest] : rest;
+        const { flags, positionals } = parse(forwarded);
+        if (positionals.length > 0)
+            throw new Error(`impactは位置引数を受け付けません: ${positionals[0]}`);
+        const unknown = Object.keys(flags).filter((flag) => !["base", "head", "root", "format"].includes(flag));
+        if (unknown.length > 0)
+            throw new Error(`impactの未知optionです: --${unknown.join(", --")}`);
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const format = flags.format ?? "json";
+        if (format !== "json" && format !== "features")
+            throw new Error("--formatはjsonまたはfeaturesが必要です");
+        const resolveImpactCommit = (label, value) => {
+            const observed = git(["rev-parse", "--verify", `${value}^{commit}`], root, {
+                env: GIT_ENV,
+                allowFailure: true,
+            });
+            if (observed.status !== 0)
+                throw new Error(`impactの--${label}をcommitへ解決できません: ${value}`);
+            return observed.stdout.trim();
+        };
+        const impact = computeImpactSet({
+            root,
+            baseSha: resolveImpactCommit("base", required(flags, "base")),
+            headSha: resolveImpactCommit("head", required(flags, "head")),
+        });
+        if (format === "json") {
+            print(impact);
+            return 0;
+        }
+        /**
+         * **fullのとき空の選択を出力しない。** 空出力を「実行するfeatureが無い」と
+         * 読み違えると検証が0件で通るため、終了値1で全体検証を要求する。
+         */
+        if (impact.mode === "full") {
+            process.stderr.write(`impact mode=full: 影響を証明できないため全体検証が必要です\n${impact.reasons.map((reason) => `- ${reason}`).join("\n")}\n`);
+            return 1;
+        }
+        process.stdout.write(impact.features.length > 0 ? `${impact.features.join("\n")}\n` : "");
         return 0;
     }
     if (command === "doctor") {

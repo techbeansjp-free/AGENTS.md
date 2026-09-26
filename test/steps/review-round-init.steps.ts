@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { appendLegacyJournal } from "../support/legacy-journal.js";
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -145,7 +146,7 @@ function appendStepNine(
   implementationHeadSha?: string,
 ): void {
   const journal = path.join(world.staging, STEP_JOURNAL_FILE);
-  fs.appendFileSync(
+  appendLegacyJournal(
     journal,
     `${JSON.stringify({
       step: 9,
@@ -515,7 +516,7 @@ Given("配布template・規範文書・step-09 skillがある", function () {
     fs.existsSync(
       path.join(
         repositoryRoot,
-        ".agent-skill-chain/templates/issue/04_レビュー.md",
+        ".agent-skill-chain/schemas/review-evidence.schema.json",
       ),
     ),
   );
@@ -747,15 +748,20 @@ Then(
   },
 );
 
-Then("digest不一致の診断はworkflow recordの再実行を案内する", function () {
+Then("digest不一致の診断はreview roundによる再固定を案内する", function () {
   assert.match(
     this.diagnostic,
     /digestが一致しません|同期済み記録から変化しています/u,
   );
+  /**
+   * **Step 9記録後はreview roundが再固定する**（REQ-WF-024、REQ-WF-036）。
+   * 上流再確定は廃止したため案内しない。
+   */
   assert.match(
     this.diagnostic,
-    /workflow record --step=<最新のStep> を再実行/u,
+    /review roundを実行するとstaging digestが現在の成果物へ再固定されます/u,
   );
+  assert.doesNotMatch(this.diagnostic, /reconfirm/u);
 });
 
 Given(
@@ -821,15 +827,21 @@ When("配布template・規範文書・step-09 skillを読む", function () {
 });
 
 Then(
-  "04にH_impl行、01にQ-08の判定例表、step-09にstaging配置の手順がある",
+  "証跡schemaにH_implと比較基点、01にQ-08の判定例表、step-09にstaging配置の手順がある",
   function () {
     const read = (relative: string): string =>
       fs.readFileSync(path.join(repositoryRoot, relative), "utf8");
-    const review = read(".agent-skill-chain/templates/issue/04_レビュー.md");
-    const identity =
-      review.split("## 0. レビュー識別情報")[1]?.split("\n### ")[0] ?? "";
-    assert.match(identity, /^\| H_impl \| （40桁SHA） \|$/mu);
-    assert.match(identity, /^\| 比較基点 \| （40桁SHA） \|$/mu);
+    const schema = JSON.parse(
+      read(".agent-skill-chain/schemas/review-evidence.schema.json"),
+    ) as {
+      required: string[];
+      properties: { observed: { required: string[] } };
+    };
+    assert.ok(schema.required.includes("observed"));
+    assert.ok(
+      schema.properties.observed.required.includes("implementationHeadSha"),
+    );
+    assert.ok(schema.properties.observed.required.includes("baseSha"));
     const workflow = read(".agent-skill-chain/docs/01_開発ワークフロー.md");
     assert.match(workflow, /\*\*Q-08の判定例。\*\*/u);
     assert.match(workflow, /付随する更新は別コンテキストに数えない/u);
@@ -1173,14 +1185,11 @@ Then(
   },
 );
 
-Then("session依存flagの個別報告とDC-UX根拠と発見IDの注記がある", function () {
+Then("session依存flagの個別報告の注記がある", function () {
   const read = (relative: string): string =>
     fs.readFileSync(path.join(repositoryRoot, relative), "utf8");
   assert.match(
     read("docs/specs/02_要件/01_ワークフロー要件.md"),
     /handlerが個別に報告する/u,
   );
-  const template = read(".agent-skill-chain/templates/issue/04_レビュー.md");
-  assert.match(template, /「JSON出力のみ」を非適用の根拠にせず/u);
-  assert.match(template, /`DISC-\*`と同じ字面を使い/u);
 });

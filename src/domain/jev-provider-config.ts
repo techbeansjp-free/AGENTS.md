@@ -29,8 +29,12 @@ const ALLOWED_FIELDS = new Set([
  * env var名の許容pattern。`src/adapters/jev-guided-setup.ts`（Issue #1486、
  * T-06）が`decision configure`の入力検証で再利用する（同じ規則を2箇所へ
  * 書かない）。
+ *
+ * **`JEV_`接頭辞を必須にする（独立security review L2）。** 任意名を許すと、
+ * 設定fileを差し込めた者が`GITHUB_TOKEN`等の無関係な秘密をBearer tokenとして
+ * Jev APIへ送らせられる。
  */
-export const ENV_VAR_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
+export const ENV_VAR_NAME_PATTERN = /^JEV_[A-Z0-9_]*$/;
 
 /**
  * 設定fileが存在しない・読めない・形状が不正・`enabled`が`true`以外・
@@ -122,7 +126,10 @@ export function classifyJevProviderConfig(
     typeof apiKeyEnvVar !== "string" ||
     !ENV_VAR_NAME_PATTERN.test(apiKeyEnvVar)
   )
-    return { state: "invalid", reason: "apiKeyEnvVarが不正です" };
+    return {
+      state: "invalid",
+      reason: "apiKeyEnvVarが不正です（JEV_で始まる英大文字・数字・_のみ）",
+    };
   const endpoint = record.endpoint;
   if (typeof endpoint !== "string" || endpoint.trim() === "")
     return { state: "invalid", reason: "endpointが不正です" };

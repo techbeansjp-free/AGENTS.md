@@ -98,10 +98,10 @@ Feature: review round雛形と契約の露出
     When 編集後のstagingでreview roundを実行する
     Then digest不一致では拒否されず保存記録のdigestが現在の成果物へ再固定される
 
-  Scenario: SCN-UNIT-DIAGHINT-002 delivery直前のdigest不一致は再記録手順を案内する
+  Scenario: SCN-UNIT-DIAGHINT-002 delivery直前のdigest不一致はdigestの再固定手順を案内する
     Given round 1を記録した後にstagingを編集した状態がある
     When delivery直前の再検証を実行する
-    Then digest不一致の診断はworkflow recordの再実行を案内する
+    Then digest不一致の診断はreview roundによる再固定を案内する
 
   Scenario: SCN-UNIT-DIAGHINT-003 cleanup-apply拒否はapproved-digest flagを案内する
     Given 承認済みdigestがpreview digestと一致しないcompletion入力がある
@@ -111,7 +111,7 @@ Feature: review round雛形と契約の露出
   Scenario: SCN-UNIT-DOCROW-001 配布文書に暗黙契約の行がある
     Given 配布template・規範文書・step-09 skillがある
     When 配布template・規範文書・step-09 skillを読む
-    Then 04にH_impl行、01にQ-08の判定例表、step-09にstaging配置の手順がある
+    Then 証跡schemaにH_implと比較基点、01にQ-08の判定例表、step-09にstaging配置の手順がある
 
   Scenario: SCN-UNIT-REVINIT-011 検査後の親差し替えでもstaging内へ書かない
     Given 初回candidateを持つstagingがある
@@ -174,7 +174,7 @@ Feature: review round雛形と契約の露出
     When completion状態を評価する
     Then cleanup-applyの拒否は--approved-digestだけを案内し--report-hashを含まない
 
-  Scenario: SCN-UNIT-DOCROW-002 REQ-WF-009とtemplate 04に注記がある
+  Scenario: SCN-UNIT-DOCROW-002 REQ-WF-009に注記がある
     Given 配布template・規範文書・step-09 skillがある
     When 配布template・規範文書・step-09 skillを読む
-    Then session依存flagの個別報告とDC-UX根拠と発見IDの注記がある
+    Then session依存flagの個別報告の注記がある

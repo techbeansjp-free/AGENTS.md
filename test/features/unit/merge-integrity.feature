@@ -72,7 +72,7 @@ Feature: 監査範囲内mergeの損失検知
   Scenario: SCN-UNIT-MERGEINT-014 品質基準が追随手順を定めている
     Given 配布される品質基準がある
     When 配布される品質基準を読む
-    Then 追随の位置とH_implと比較基点の指し先と個別監査表の再生成が書かれている
+    Then 追随の位置とH_implと比較基点の指し先と監査差分の再導出が書かれている
 
   Scenario: SCN-UNIT-MERGEINT-015 reviewテンプレートが追随時の確認項目を持つ
     Given 配布されるreviewテンプレートとPR事前確認テンプレートがある

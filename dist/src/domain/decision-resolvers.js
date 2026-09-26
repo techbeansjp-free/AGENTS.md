@@ -1,9 +1,9 @@
 /**
  * Decision Type Registryのdeterministic resolver実体（Issue #1485、L-01）。
  *
- * DCAND-001〜005は既存compiled codeを**そのまま**呼ぶだけのwrapperであり、
+ * DCAND-001〜003・005は既存compiled codeを**そのまま**呼ぶだけのwrapperであり、
  * 判定内容を1つも変えない。既存の呼び出し元（`issue.ts`・`cli.ts`・
- * `review-artifact.ts`・`policy.ts`）はこれらのresolverを経由せず、直接
+ * `policy.ts`）はこれらのresolverを経由せず、直接
  * 既存関数を呼び続ける（L-01「現在の呼び出し元の挙動を変えない」）。
  *
  * DCAND-008は本Issueで新設するdeterministic resolverであり、
@@ -16,7 +16,6 @@
 import { detectQuickDisqualifiers } from "./mode.js";
 import { inspectCiDelivery, } from "./ci-delivery.js";
 import { requiresSpecUpdate } from "./spec.js";
-import { auditRowDraft } from "./review-artifact.js";
 import { hasConcreteDecisionText } from "./policy.js";
 export function resolveDcand001(input) {
     return detectQuickDisqualifiers([...input.changedFiles]);
@@ -26,9 +25,6 @@ export function resolveDcand002(input) {
 }
 export function resolveDcand003(input) {
     return requiresSpecUpdate(input.changedFiles);
-}
-export function resolveDcand004(input) {
-    return auditRowDraft(input.path, input.changeType);
 }
 export function resolveDcand005(input) {
     return hasConcreteDecisionText(input.value, input.minimum);

@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { After } from "@cucumber/cucumber";
+import { resolveJevProviderConfig } from "../../src/adapters/local-config-workspace.js";
 import {
   classifyJevProviderConfig,
   loadJevProviderConfig,
   JEV_PROVIDER_CONFIG_PATH,
   type JevProviderConfig,
 } from "../../src/domain/jev-provider-config.js";
-import type { LocalConfigClassification } from "../../src/domain/local-config-resolution.js";
+import type {
+  LocalConfigClassification,
+  LocalConfigResolution,
+} from "../../src/domain/local-config-resolution.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class JevProviderConfigWorld extends WorkflowWorld {
@@ -31,6 +36,7 @@ class JevProviderConfigWorld extends WorkflowWorld {
    */
   readPaths: string[] = [];
   restoreReadFileSync: (() => void) | undefined = undefined;
+  resolution: LocalConfigResolution<JevProviderConfig> | undefined = undefined;
 }
 
 const { Given, When, Then } = stepDefinitions<JevProviderConfigWorld>();
@@ -411,3 +417,126 @@ After<JevProviderConfigWorld>(function () {
   // EACCES fixtureが使ったmonkey patchを必ず元へ戻す。
   this.restoreReadFileSync?.();
 });
+
+// --- 独立security review L2 -------------------------------------------------
+
+Given(
+  "jev-provider.jsonのapiKeyEnvVarがJEV_で始まらない名前で指定env varも設定されている",
+  function (this: JevProviderConfigWorld) {
+    this.root = this.temp("asc-jevcfg-015-");
+    setEnvVar(this, "GITHUB_TOKEN", "ghp-must-not-be-sent-to-jev");
+    writeConfig(this.root, {
+      enabled: true,
+      apiKeyEnvVar: "GITHUB_TOKEN",
+      endpoint: "https://api.jev.example.invalid/v1",
+      model: "jev-decision-1",
+    });
+  },
+);
+
+function runFixtureGit(root: string, args: string[]): void {
+  const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+}
+
+function writeConfigInGitRepository(
+  world: JevProviderConfigWorld,
+  prefix: string,
+  track: boolean,
+): void {
+  world.root = world.temp(prefix);
+  runFixtureGit(world.root, ["init", "-q", "-b", "main"]);
+  fs.writeFileSync(
+    path.join(world.root, ".gitignore"),
+    ".agent-skill-chain/local/\n",
+  );
+  writeConfig(world.root, {
+    enabled: true,
+    apiKeyEnvVar: "JEV_API_KEY",
+    endpoint: "https://api.jev.example.invalid/v1",
+    model: "jev-decision-1",
+  });
+  if (track)
+    runFixtureGit(world.root, ["add", "-f", "--", JEV_PROVIDER_CONFIG_PATH]);
+  setEnvVar(world, "JEV_API_KEY", "test-secret-value-should-not-leak");
+}
+
+Given(
+  "Git repositoryでjev-provider.jsonが強制的に追跡されている",
+  function (this: JevProviderConfigWorld) {
+    writeConfigInGitRepository(this, "asc-jevcfg-016-", true);
+  },
+);
+
+Given(
+  "Git repositoryでjev-provider.jsonが追跡されずignoreされている",
+  function (this: JevProviderConfigWorld) {
+    writeConfigInGitRepository(this, "asc-jevcfg-017-", false);
+  },
+);
+
+When(
+  "resolveJevProviderConfigを実行する",
+  function (this: JevProviderConfigWorld) {
+    this.resolution = resolveJevProviderConfig(this.root);
+  },
+);
+
+Then(
+  "解決結果はGit追跡を理由とするinvalidである",
+  function (this: JevProviderConfigWorld) {
+    assert.equal(this.resolution?.state, "invalid");
+    assert.ok(
+      this.resolution?.state === "invalid" &&
+        this.resolution.reason.includes("Gitで追跡"),
+    );
+  },
+);
+
+Then("解決結果はenabledである", function (this: JevProviderConfigWorld) {
+  assert.equal(this.resolution?.state, "enabled");
+});
+
+Given(
+  "Git repositoryでjev-provider.jsonが追跡されずindexが壊れている",
+  function (this: JevProviderConfigWorld) {
+    writeConfigInGitRepository(this, "asc-jevcfg-018-", false);
+    fs.writeFileSync(path.join(this.root, ".git", "index"), "garbage");
+  },
+);
+
+function assertTrackingUnknown(
+  resolution: JevProviderConfigWorld["resolution"],
+): void {
+  assert.equal(resolution?.state, "invalid");
+  assert.ok(
+    resolution?.state === "invalid" &&
+      resolution.reason.includes("Gitで追跡されているかを確認できません"),
+    JSON.stringify(resolution),
+  );
+}
+
+Then(
+  "解決結果はGit追跡を確認できないことを理由とするinvalidである",
+  function (this: JevProviderConfigWorld) {
+    assertTrackingUnknown(this.resolution);
+  },
+);
+
+Then(
+  "gitを実行できない環境でも解決結果はGit追跡を確認できないことを理由とするinvalidである",
+  function (this: JevProviderConfigWorld) {
+    fs.rmSync(path.join(this.root, ".git"), { recursive: true, force: true });
+    runFixtureGit(this.root, ["init", "-q", "-b", "main"]);
+    const emptyPath = this.temp("asc-jevcfg-018-nogit-");
+    const previousPath = process.env.PATH;
+    process.env.PATH = emptyPath;
+    try {
+      assertTrackingUnknown(resolveJevProviderConfig(this.root));
+    } finally {
+      process.env.PATH = previousPath;
+    }
+    /** 同じrepositoryでgitを実行できれば未追跡としてenabledになる */
+    assert.equal(resolveJevProviderConfig(this.root).state, "enabled");
+  },
+);

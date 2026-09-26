@@ -18,7 +18,7 @@
     },
     "apiKeyEnvVar": {
       "type": "string",
-      "pattern": "^[A-Z_][A-Z0-9_]*$",
+      "pattern": "^JEV_[A-Z0-9_]*$",
       "description": "APIキーの値を保持する環境変数の名前。値そのものはこのfileへ書かない"
     },
     "endpoint": {

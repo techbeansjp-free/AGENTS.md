@@ -94,9 +94,40 @@ const OWNING_COMMAND_HINTS = Object.freeze([
         hint: "この領域はissue stagingが所有します。まず issue staging --root=<worktree> を実行し、表示されたstate=deletion-readyとhashを確認してから issue staging --root=<worktree> --apply --approved-hash=<hash> を実行してください。その後にこのcommandを再実行します",
     }),
 ]);
+/**
+ * **版管理下staging（project policyの`staging.root`）の機械記録。**
+ *
+ * 版管理下stagingでは文書00〜04をGitが追跡し、機械記録だけをstagingの`.gitignore`が
+ * 除外する（`TRACKED_STAGING_GITIGNORE`）。その機械記録は`issue staging`の走査対象外
+ * であり、既定rootの案内は当てはまらない。rootはproject policyが決めるため接頭辞では
+ * 判定できず、`<staging>/<記録>`・`<staging>/journal/<file>`という末尾の形で判定する。
+ * **判定も分類も変えず、案内だけを足す。**
+ */
+const TRACKED_STAGING_RECORD_BASENAMES = new Set([
+    "staging-record.json",
+    ".full-promotion-transaction.json",
+    "00_モード判定.json",
+    "verification-input.json",
+]);
+const TRACKED_STAGING_RECORD_HINT = "版管理下stagingの機械記録です（文書00〜04はGitが追跡しています）。PRがmerge済みで記録を保全する必要がなければ、このstagingの.gitignoreが列挙する機械記録を退避または削除してからこのcommandを再実行してください";
+function isTrackedStagingRecord(artifact) {
+    const segments = artifact.split("/");
+    const basename = segments[segments.length - 1] ?? "";
+    // `<root>/<staging>/journal/<file>`。rootは1 segment以上
+    if (segments[segments.length - 2] === "journal")
+        return segments.length >= 4;
+    // `<root>/<staging>/<記録>`
+    return (segments.length >= 3 &&
+        (TRACKED_STAGING_RECORD_BASENAMES.has(basename) ||
+            /^review-session[^/]*\.json$/u.test(basename)));
+}
 function owningCommandHint(artifact) {
-    return OWNING_COMMAND_HINTS.find((entry) => artifact.startsWith(entry.prefix))
-        ?.hint;
+    const owned = OWNING_COMMAND_HINTS.find((entry) => artifact.startsWith(entry.prefix))?.hint;
+    if (owned !== undefined)
+        return owned;
+    return isTrackedStagingRecord(artifact)
+        ? TRACKED_STAGING_RECORD_HINT
+        : undefined;
 }
 export function isSafeFinalizeIgnoredPathPrefix(value) {
     return parseFinalizeIgnoredPathPattern(value) !== undefined;

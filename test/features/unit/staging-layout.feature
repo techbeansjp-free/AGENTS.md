@@ -54,16 +54,40 @@ Feature: stagingの配置をproject policyで版管理下へ置ける
     When staging-rootとnameを指定してissue createする
     Then 除外pathspecつきのgit statusはstaging配下の未追跡fileを見せない
 
-  Scenario: SCN-UNIT-STGLAYOUT-009 review artifact雛形は種別から導ける監査列を事前充填する
-    Given 種別の異なる変更pathがある
-    When 監査行の雛形を描画する
-    Then lockfileと文書とtestと設定は層と依存と安全の列が埋まり判定列は未確定のままである
-    And product codeの行は全列が未確定のままである
+  Scenario: SCN-UNIT-TRACKPTR-001 pointer本文は版管理下のstagingにだけ許す
+    Given pointer本文とtrackedの組み合わせの候補がある
+    When runtimeで各組み合わせを検証する
+    Then trackedが真でないpointerはtrackedを名指しして拒否される
+    And 版管理下のpointerと版管理外のfullは受理される
+    And 2つのpolicy schemaはpointerにrootとtracked=trueを要求する
 
-  Scenario: SCN-UNIT-STGLAYOUT-010 review artifact雛形はauditと同じ差分集合と配布物影響の行を持つ
-    Given 生成物を含む変更pathとpackage filesがある
-    When review artifact雛形をpackage filesつきで描画する
-    Then 個別監査表に生成物を含む全変更pathの行がある
-    And 生成物行に生成元との対応確認と配布影響の確認方法がある
-    And 配布物影響の表は生成物を境界単位にまとめ入る入らないを判定している
-    And ラウンド数は整数で始まる
+  Scenario: SCN-UNIT-TRACKPTR-002 版管理外のpointerを宣言したprojectは配置契約を読めない
+    Given 版管理外のpointerを宣言したrepositoryがある
+    When staging配置契約の読み取りを試みる
+    Then 配置契約の読み取りはtrackedを名指しして拒否される
+
+  Scenario: SCN-UNIT-TRACKPTR-003 既定配置だけを旧配置として通知対象にする
+    Given 既定配置と版管理下のpointer配置と版管理外の独自root配置がある
+    When 旧配置の通知対象かを判定する
+    Then 版管理外かつ全文同期の配置だけが通知対象である
+    And 通知は版管理下のpointer配置のstaging節を示す
+
+  Scenario: SCN-UNIT-TRACKPTR-004 doctorは版管理下rootの作業中stagingだけを検査する
+    Given 版管理下rootに作業中のstagingと文書だけのmerge済みstagingがある
+    When doctorで作業中のstagingを走査する
+    Then 作業中のstagingは検査対象に含まれる
+    And 文書だけのmerge済みstagingは検査対象に含まれない
+
+  Scenario: SCN-UNIT-TRACKPTR-005 版管理下stagingの機械記録へ削除前の案内を添える
+    Given 版管理下stagingの機械記録と文書と無関係な無視対象資産がある
+    When 機械記録を含む観測の削除安全性を判定する
+    Then 機械記録の理由にだけ版管理下stagingの案内が含まれる
+    And 既定rootの資産には従来のissue stagingの案内が付く
+    And 案内の有無は安全判定と資産分類を変えない
+
+  Scenario: SCN-UNIT-TRACKPTR-006 移行前に既定rootへ作ったstagingは全文同期のまま使える
+    Given 既定rootにstagingを作った後で版管理下のpointer配置へ移行したrepositoryがある
+    When 移行前のstagingの配置を検査して同期本文を生成する
+    Then 移行前のstagingは既定配置として受理される
+    And 移行前のstagingの同期本文は00の全文である
+    And 宣言rootにも既定rootにも無いstagingは拒否される

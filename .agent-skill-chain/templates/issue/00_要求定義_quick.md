@@ -89,13 +89,18 @@ Q-01〜Q-08の内容は[モード判定質問](../../docs/01_開発ワークフ�
 
 - cycle/self-loop/unknown nodeを拒否するSCNと観測結果:
 
-- 実装中発見は目的・scope・AC変更、security境界拡大、不可逆操作、`changedContractKinds`、根拠付きcanonicalモード失格条件`{ id, evidence }[]`を`workflow assess-discovery --input=<JSON>`で判定する。通常の契約変更はこの集約成果物00だけを再確定し、`promote-to-full`は同じ入力とstagingを`workflow promote-full`へ渡して同じIssueのまま00〜03を補完する。
+- 実装中の発見は既定では記録せず実装を続ける。目的・scope・ACが変わる場合は`05_計画変更.md`へ追記し、security境界の拡大・不可逆操作・quick失格条件に当たる場合だけ`workflow assess-discovery --input=<JSON> --staging=<staging>`で判定して、`promote-to-full`なら`workflow promote-full`で同じIssueのままfullへ昇格する。この集約成果物00は書き換えない。
 
-### 実装中発見の前向き記録
+### 実装中発見の振り分け
 
-| 発見ID | 事実 | 影響 | 判断 | 対処 | 検証 | 仕様更新 | CLI disposition |
-|---|---|---|---|---|---|---|---|
-| DISC-001 | （観測事実） | （境界・AC） | （継続 / 契約再確定 / full昇格） | （実施内容） | （再現可能なEvidence） | （更新先 / no-spec-impact根拠） | continue / rebaseline-affected-contracts / promote-to-full |
+本書はStep 4の計画封印後に編集しない。実装中の発見は本節へ追記しない。既定は記録せず実装を続け、契約が変わる場合だけ次の記録先へ振り分ける。
+
+| 発見の種類 | 記録先 |
+|---|---|
+| 実装上の判断（関数名、分割、helper、library、test構成、file配置など） | commit履歴。追加の記録は不要 |
+| 目的・受け入れ条件・不変条件・scopeの変更 | `05_計画変更.md`へ`AMD-NNN`（対象・変更・理由）を追記 |
+| 現在のsystem契約の変更 | `docs/specs/` |
+| このIssueのscope外 | follow-up Issue |
 
 - project policyが選択したtest layerごとの検証:
 - 型検査・既存テスト一式:
