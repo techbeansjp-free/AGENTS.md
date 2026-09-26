@@ -398,12 +398,17 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
      * 記録すると編集後の計画が新しい封印になる。quick/pocからfullへの昇格前の記録は
      * modeが異なるため数えず、昇格後のfull Step 8封印は従来どおり成立する。
      */
-    if (entry.step === planSealStep(current.mode) &&
+    /**
+     * HumanOverrideによる欠落Stepの明示承認は同期記録ではないため、封印を作らず
+     * 再封印の拒否対象にもしない。
+     */
+    const sealsPlan = entry.step === planSealStep(current.mode) && !entry.humanOverride;
+    if (sealsPlan &&
         current.entries.some((recorded) => recorded.step >= 9 && recorded.mode === current.mode))
         throw new Error(`Step 9以降の記録後にStep ${entry.step}を追記して計画を再封印できません。計画の変更は${PLAN_AMENDMENT_FILE}へAMD-NNNとして追記してください`);
     let entryToWrite = { ...entry };
     delete entryToWrite.planSeal;
-    if (entry.step === planSealStep(current.mode))
+    if (sealsPlan)
         entryToWrite = {
             ...entryToWrite,
             planSeal: computePlanSeal(staging, current.mode),

@@ -621,8 +621,14 @@ function appendWorkflowJournalEntryLocked(
    * 記録すると編集後の計画が新しい封印になる。quick/pocからfullへの昇格前の記録は
    * modeが異なるため数えず、昇格後のfull Step 8封印は従来どおり成立する。
    */
+  /**
+   * HumanOverrideによる欠落Stepの明示承認は同期記録ではないため、封印を作らず
+   * 再封印の拒否対象にもしない。
+   */
+  const sealsPlan =
+    entry.step === planSealStep(current.mode) && !entry.humanOverride;
   if (
-    entry.step === planSealStep(current.mode) &&
+    sealsPlan &&
     current.entries.some(
       (recorded) => recorded.step >= 9 && recorded.mode === current.mode,
     )
@@ -632,7 +638,7 @@ function appendWorkflowJournalEntryLocked(
     );
   let entryToWrite: StepJournalEntry = { ...entry };
   delete entryToWrite.planSeal;
-  if (entry.step === planSealStep(current.mode))
+  if (sealsPlan)
     entryToWrite = {
       ...entryToWrite,
       planSeal: computePlanSeal(staging, current.mode),
