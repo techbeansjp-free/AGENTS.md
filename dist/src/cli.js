@@ -55,7 +55,7 @@ import { checkRoutingIndependence } from "./domain/routing-independence.js";
 import { appendCompletionRecord, appendEvidenceStateRecord, applyEvidencePrune, issueRoutingEvidence, previewEvidencePrune, } from "./domain/routing-evidence.js";
 import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssignment, validateTierSelection, validateCodexTier, validateClaudeTier, CODEX_ADOPTION_SELECTOR, CLAUDE_ADOPTION_SELECTOR, } from "./domain/role.js";
 import { readDeliveryEvidence, readEnforcementInput, readFinalizeEvidence, isPolicyInput, readJsonInput, readMigrationManifest, readMigrationState, readModeAssessment, readPolicyFileInput, readPolicyJson, readSpecReview, } from "./adapters/json-input.js";
-import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPlanFrozen, assertPocDeliveryChangeScope, assertWorkflowStaging, describeStagingDigestDrift, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
+import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPlanFrozen, assertPlanSealOpen, assertPocDeliveryChangeScope, assertWorkflowStaging, describeStagingDigestDrift, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
 import { assertConvergedReviewSession, buildReviewRoundDraft, previewReviewRound, readStoredReviewSession, recordReviewRound, } from "./adapters/review-session.js";
 import { appendMetricsEvent, buildMetricsReport, writeMetricsReport, } from "./adapters/metrics-journal.js";
 import { METRICS_EVENT_KINDS, METRICS_EVENT_PHASES, } from "./domain/metrics.js";
@@ -305,7 +305,7 @@ function workflowDiagnostic(staging, mode, result, extra = []) {
  * 「計画は05_計画変更.mdへ」という次の行動を返す。
  */
 export function assertWorkflowReadyForDelivery(staging, deliveredHeadSha = "HEAD") {
-    assertPlanFrozen(staging, deliveredHeadSha);
+    assertPlanFrozen(staging, deliveredHeadSha, { delivery: true });
     const stored = readStoredStagingRecord(staging);
     const currentArtifacts = listStagingArtifacts(staging);
     const currentDigest = calculateStagingDigest(staging, currentArtifacts);
@@ -330,7 +330,7 @@ export function assertWorkflowReadyForDelivery(staging, deliveredHeadSha = "HEAD
     return inspection;
 }
 function assertWorkflowReadyForTerminalRedelivery(staging, deliveredHeadSha = "HEAD") {
-    assertPlanFrozen(staging, deliveredHeadSha);
+    assertPlanFrozen(staging, deliveredHeadSha, { delivery: true });
     const stored = readStoredStagingRecord(staging);
     const currentArtifacts = listStagingArtifacts(staging);
     const currentDigest = calculateStagingDigest(staging, currentArtifacts);
@@ -4153,6 +4153,8 @@ export async function main(argv, dependencies = {}) {
                 currentPlan.operation !== plan.operation)
                 throw new Error("workflow advanceのpreview後にstaging stateが変更されました。新しいpreviewから再実行してください");
             const targetStep = plan.targetStep;
+            /** 封印済みの封印Stepは外部同期より前に拒否する（REQ-WF-036） */
+            assertPlanSealOpen(staging, targetStep);
             const definition = workflowStep(targetStep);
             if (!definition)
                 throw new Error("workflow step定義がありません");

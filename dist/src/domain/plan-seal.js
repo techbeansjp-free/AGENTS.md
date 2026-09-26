@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+import { stableJson } from "../lib/security.js";
 /**
  * 計画封印（Planning Seal、TERM-ASC-WR-01）と計画変更記録（Planning Amendment、
  * TERM-ASC-WR-02）の純粋な判定。REQ-WF-036。
@@ -69,9 +71,235 @@ export function latestPlanSeal(entries) {
     for (let index = entries.length - 1; index >= 0; index -= 1) {
         const entry = entries[index];
         if (entry?.planSeal)
-            return { step: entry.step, seal: entry.planSeal };
+            return { step: entry.step, seal: entry.planSeal, index };
     }
     return undefined;
+}
+/**
+ * **封印は不変である。** 現在のmodeの封印が既にあれば、そのmodeの封印Stepを再記録して
+ * 封印し直すことはできない（Step 9の前後を問わない）。返すのは拒否理由であり、
+ * 封印できる場合は`undefined`を返す。
+ *
+ * 例外は2つだけである。quick/pocからfullへの昇格後のfull Step 8はmodeが異なるため
+ * 最初のfull封印になる。HumanOverrideの記録は封印を作らないため対象にしない。
+ */
+export function planResealRejection(input) {
+    if (input.humanOverride || input.step !== planSealStep(input.mode))
+        return undefined;
+    const sealed = input.entries.find((entry) => entry.planSeal !== undefined && entry.mode === input.mode);
+    if (sealed)
+        return `承認済みPlanningはStep ${sealed.step}で封印済みのため凍結されています。Step ${input.step}を再記録して封印し直すことはできません（内容が同じ場合も同じです）。封印後の計画の変更は${PLAN_AMENDMENT_FILE}へPlanning Amendment（AMD-NNN）として追記してください`;
+    if (input.entries.some((entry) => entry.step >= 9 && entry.mode === input.mode))
+        return `Step 9以降の記録後にStep ${input.step}を追記して計画を再封印できません。計画の変更は${PLAN_AMENDMENT_FILE}へAMD-NNNとして追記してください`;
+    return undefined;
+}
+function sha256Text(value) {
+    return crypto.createHash("sha256").update(value).digest("hex");
+}
+/** 封印のdigest。世代1の`digest`である。 */
+export function planSealDigest(seal) {
+    return sha256Text(stableJson(seal));
+}
+export function planGenerationDigest(previousDigest, amendments) {
+    return sha256Text(stableJson({ previousDigest, amendments }));
+}
+export function baseGeneration(seal) {
+    return {
+        generation: 1,
+        previousDigest: null,
+        amendments: [],
+        digest: planSealDigest(seal),
+    };
+}
+/**
+ * `05_計画変更.md`のAMD entryごとのdigest。entryは`## AMD-NNN`見出し行から次の`##`見出し
+ * （fence外）の直前までの原文であり、末尾の空行だけを除く（後続entryの追記で
+ * 既存entryのdigestが変わらないようにするため）。見出し形式の検査は
+ * `validatePlanAmendment`が行う。
+ */
+export function planAmendmentDigests(markdown) {
+    if (markdown === undefined)
+        return [];
+    const entries = [];
+    let current;
+    let fenced = false;
+    for (const line of markdown.split("\n")) {
+        const plain = line.replace(/\r$/u, "");
+        if (/^\s*(?:```|~~~)/u.test(plain))
+            fenced = !fenced;
+        if (!fenced && /^##\s/u.test(plain)) {
+            const heading = /^##\s+(AMD-\d{3})(?:\s|$)/u.exec(plain);
+            current = heading ? { id: heading[1] ?? "", lines: [] } : undefined;
+            if (current)
+                entries.push(current);
+        }
+        current?.lines.push(line);
+    }
+    return entries.map(({ id, lines }) => {
+        const kept = [...lines];
+        while (kept.length > 0 && (kept.at(-1) ?? "").trim() === "")
+            kept.pop();
+        return { id, digest: sha256Text(kept.join("\n")) };
+    });
+}
+function describeAmendments(amendments) {
+    return amendments.map(({ id }) => id).join("、");
+}
+/**
+ * 記録済み世代に対して現在のAMD列が追記専用を守っているかを返す。
+ * 記録済みAMDの編集・削除・並べ替えは不一致の先頭を名指しして拒否する。
+ */
+function appendOnlyViolation(recorded, current) {
+    const broken = recorded.amendments.find((amendment, index) => current[index]?.id !== amendment.id ||
+        current[index]?.digest !== amendment.digest);
+    if (!broken)
+        return undefined;
+    const present = current.some(({ id }) => id === broken.id);
+    return `記録済みの計画変更${broken.id}が${present ? "編集または並べ替え" : "削除"}されています（計画世代${recorded.generation}で記録済み）。${PLAN_AMENDMENT_FILE}は追記専用です。記録済みentryを記録時の内容へ戻し、計画の変更は新しいAMD-NNNとして末尾へ追記してください`;
+}
+/**
+ * journalに記録した世代列を封印から辿り、chainの整合と最新世代を返す。
+ * 各記録は直前の世代と同一か、`generation`が1つ進み`previousDigest`が直前の`digest`で
+ * `amendments`が直前の列を先頭に持つ次世代でなければならない。
+ */
+export function latestPlanGeneration(seal, recorded) {
+    let latest = baseGeneration(seal);
+    const errors = [];
+    for (const generation of recorded) {
+        if (stableJson(generation) === stableJson(latest))
+            continue;
+        const next = generation.generation === latest.generation + 1 &&
+            generation.previousDigest === latest.digest &&
+            appendOnlyViolation(latest, generation.amendments) === undefined &&
+            generation.amendments.length > latest.amendments.length &&
+            generation.digest ===
+                planGenerationDigest(latest.digest, generation.amendments);
+        if (!next) {
+            errors.push(`journalの計画世代${generation.generation}が封印と直前の世代${latest.generation}から辿れません`);
+            break;
+        }
+        latest = generation;
+    }
+    return { latest, errors };
+}
+/**
+ * 現在のAMD列から、記録する世代を計算する。記録済みAMDが変わっていれば拒否し、
+ * 新しいAMDが無ければ直前の世代をそのまま返す。
+ */
+export function nextPlanGeneration(previous, current) {
+    const violation = appendOnlyViolation(previous, current);
+    if (violation)
+        return { error: violation };
+    if (current.length === previous.amendments.length)
+        return { value: previous };
+    const amendments = current.map(({ id, digest }) => ({ id, digest }));
+    return {
+        value: {
+            generation: previous.generation + 1,
+            previousDigest: previous.digest,
+            amendments,
+            digest: planGenerationDigest(previous.digest, amendments),
+        },
+    };
+}
+/**
+ * 配送時の検査。現在のAMD列は最後のStep 10が記録した世代と完全に一致しなければならない。
+ * **Step 10記録後に追記したAMDはreviewを経ていないため配送に乗せない。**
+ */
+export function deliveredAmendmentViolation(reviewed, current, where) {
+    const violation = appendOnlyViolation(reviewed, current);
+    if (violation)
+        return `${where}: ${violation}`;
+    if (current.length === reviewed.amendments.length)
+        return undefined;
+    return `${where}: 最後のStep 10記録（計画世代${reviewed.generation}）の後に未記録の計画変更${describeAmendments(current.slice(reviewed.amendments.length))}が追記されています。計画変更はStep 10のreviewを経てから配送します。前進commitを伴う新しいreview roundを実行してStep 10を再記録（pr-bound中は--post-pr-intake）してから再実行してください`;
+}
+const PLAN_GENERATION_FIELDS = [
+    "amendments",
+    "digest",
+    "generation",
+    "previousDigest",
+];
+/**
+ * journal行の`planGeneration`を構造検査する。Step 9・10にだけ許し、exact keyと
+ * digestの計算式を検査する（封印との連結は`latestPlanGeneration`が見る）。
+ */
+export function parsePlanGeneration(input) {
+    const label = `${input.label}.planGeneration`;
+    if (input.step !== 9 && input.step !== 10)
+        return { errors: [`${label}はStep 9・10にだけ指定できます`] };
+    const value = input.value;
+    if (typeof value !== "object" || value === null || Array.isArray(value))
+        return { errors: [`${label}はobjectが必要です`] };
+    const record = value;
+    if (JSON.stringify(Object.keys(record).sort()) !==
+        JSON.stringify(PLAN_GENERATION_FIELDS))
+        return {
+            errors: [
+                `${label}のfield集合は${PLAN_GENERATION_FIELDS.join("、")}が必要です`,
+            ],
+        };
+    const { generation, previousDigest, amendments, digest } = record;
+    const hex = (candidate) => typeof candidate === "string" && /^[a-f0-9]{64}$/u.test(candidate);
+    if (typeof generation !== "number" ||
+        !Number.isInteger(generation) ||
+        generation < 1)
+        return { errors: [`${label}.generationは1以上の整数が必要です`] };
+    if (!hex(digest))
+        return { errors: [`${label}.digestは64桁SHA-256が必要です`] };
+    if (!Array.isArray(amendments))
+        return { errors: [`${label}.amendmentsは配列が必要です`] };
+    const parsed = [];
+    for (const [index, item] of amendments.entries()) {
+        const expectedId = `AMD-${String(index + 1).padStart(3, "0")}`;
+        if (typeof item !== "object" ||
+            item === null ||
+            Array.isArray(item) ||
+            JSON.stringify(Object.keys(item).sort()) !==
+                JSON.stringify(["digest", "id"]) ||
+            item.id !== expectedId ||
+            !hex(item.digest))
+            return {
+                errors: [
+                    `${label}.amendments[${index}]は{id: ${expectedId}, digest: 64桁SHA-256}が必要です`,
+                ],
+            };
+        parsed.push({
+            id: expectedId,
+            digest: item.digest,
+        });
+    }
+    if (generation === 1) {
+        if (previousDigest !== null || parsed.length > 0)
+            return {
+                errors: [
+                    `${label}の世代1はpreviousDigest=nullと空のamendmentsが必要です`,
+                ],
+            };
+    }
+    else {
+        if (!hex(previousDigest) || parsed.length === 0)
+            return {
+                errors: [
+                    `${label}の世代2以降は64桁SHA-256のpreviousDigestと1件以上のamendmentsが必要です`,
+                ],
+            };
+        if (digest !== planGenerationDigest(previousDigest, parsed))
+            return {
+                errors: [
+                    `${label}.digestがpreviousDigestとamendmentsから計算した値と一致しません`,
+                ],
+            };
+    }
+    return {
+        value: {
+            generation,
+            previousDigest: generation === 1 ? null : previousDigest,
+            amendments: parsed,
+            digest,
+        },
+        errors: [],
+    };
 }
 /**
  * 封印と現在のdigestを比べ、変化した計画文書を返す。現在値`undefined`は削除を表す。

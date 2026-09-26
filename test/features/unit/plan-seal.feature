@@ -27,6 +27,7 @@ Feature: 承認済み計画の封印と計画変更記録
     Given 封印を持たないStep 4 entryだけを記録した旧quick stagingがある
     When 00を編集して計画凍結を検査する
     Then 計画凍結の検査は拒否しない
+    And 封印の無い旧journalのStep 9は呼出し側のplanGenerationを記録しない
 
   Scenario: SCN-UNIT-PLANSEAL-006 計画変更記録は欠番・重複・項目欠落・placeholderを拒否する
     Given 計画変更記録の正しい例と不正な例がある
@@ -75,3 +76,40 @@ Feature: 承認済み計画の封印と計画変更記録
     Given Step 4で封印したquick stagingとcommit済みrepositoryがある
     When Step 9を記録した後に00を編集してStep 4を記録する
     Then 再封印を名指しして拒否しjournalと最新封印は変わらない
+
+  Scenario: SCN-UNIT-PLANSEAL-015 Step 8でPlanning Seal済みのfull stagingは封印Stepを再記録できない
+    Given Step 8でPlanning Seal済みのfull stagingがある
+    When 02_設計.mdを変更しStep 8を再記録する
+    Then 封印済みの凍結を名指しして拒否されPlanning Amendmentを要求しjournalと封印は変わらない
+    And 計画文書を封印時の内容へ戻して同じ内容のStep 8を再記録しても拒否される
+
+  Scenario: SCN-UNIT-PLANSEAL-016 Step 4でPlanning Seal済みのquick stagingはStep 9の前でも封印Stepを再記録できない
+    Given Step 4で封印したquick stagingとcommit済みrepositoryがある
+    When 00を変更しStep 4を再記録する
+    Then 封印済みの凍結を名指しして拒否されPlanning Amendmentを要求しjournalと封印は変わらない
+    And 計画文書を封印時の内容へ戻して同じ内容のStep 4を再記録しても拒否される
+
+  Scenario: SCN-UNIT-PLANSEAL-017 promote-full後のfull Step 8封印は成立する
+    Given Step 4で封印したquick stagingをfullへ昇格しStep 7まで記録した
+    When full modeのStep 8を記録する
+    Then full Step 8 entryは昇格後の00から03を封印しquickの封印は残る
+    And 同じfull stagingでStep 8を再記録すると拒否される
+
+  Scenario: SCN-UNIT-PLANSEAL-018 AMD-001を追記してStep 9を記録するとgeneration 2がpreviousDigestにseal digestを持つ
+    Given Step 4で封印したquick stagingとcommit済みrepositoryがある
+    When AMDを追記せずStep 9を記録しAMD-001を追記してStep 9を再記録する
+    Then 最初のStep 9は封印digestを持つ世代1を記録する
+    And 再記録したStep 9は封印digestをpreviousDigestに持ちAMD-001の原文digestを持つ世代2を記録する
+    And 呼出し側の偽のplanGenerationを渡しても採用しない
+
+  Scenario: SCN-UNIT-PLANSEAL-019 記録済みAMD-001を編集・削除するとStep 10記録とpr create相当の検査が拒否する
+    Given AMD-001を記録したStep 9までのquick stagingがある
+    When 記録済みAMD-001の本文を編集する
+    Then Step 10記録とdelivery直前検査はAMD-001の編集を名指しして拒否しjournalは変わらない
+    And AMD-001を削除するとStep 10記録とdelivery直前検査はAMD-001の削除を名指しして拒否する
+    And AMD-001を記録時の本文へ戻しAMD-002を追記するとStep 10は世代3を記録する
+
+  Scenario: SCN-UNIT-PLANSEAL-020 journal構造検査はStep 9・10以外と不正なplanGenerationを拒否する
+    Given Step 9・10以外と未知key・digest不一致・世代1の不正と正しいplanGenerationを持つjournal行がある
+    When journal行を構造検査する
+    Then 不正な4行だけが理由を名指しして拒否され正しい2行は世代を保持する

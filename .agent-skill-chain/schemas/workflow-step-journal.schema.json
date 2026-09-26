@@ -109,6 +109,34 @@
         "02_設計.md": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "03_実装計画.md": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
       }
+    },
+    "planGeneration": {
+      "description": "計画世代。封印後のStep 9・10の記録時にCLIが05_計画変更.mdから計算した追記専用の世代chain。世代1は封印（previousDigest=null、digestは封印digest）、世代2以降のdigestはsha256(stableJson({previousDigest, amendments}))（REQ-WF-036）",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generation", "previousDigest", "amendments", "digest"],
+      "properties": {
+        "generation": { "type": "integer", "minimum": 1 },
+        "previousDigest": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          ]
+        },
+        "amendments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "digest"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^AMD-\\d{3}$" },
+              "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            }
+          }
+        },
+        "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
     }
   },
   "allOf": [
@@ -139,6 +167,13 @@
     {
       "if": { "properties": { "step": { "const": 9 } } },
       "else": { "not": { "required": ["implementationHeadSha"] } }
+    },
+    {
+      "if": {
+        "properties": { "step": { "enum": [9, 10] } },
+        "required": ["step"]
+      },
+      "else": { "not": { "required": ["planGeneration"] } }
     },
     {
       "if": {

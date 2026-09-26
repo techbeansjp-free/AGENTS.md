@@ -9,13 +9,18 @@ import { assertStoredStagingDigestForTest } from "../../src/adapters/review-sess
 import {
   appendWorkflowJournalEntry,
   assertPlanFrozen,
+  promoteWorkflowStagingToFull,
 } from "../../src/adapters/workflow-journal.js";
 import {
   assessImplementationDiscovery,
   type ImplementationDiscovery,
 } from "../../src/domain/agile-verification.js";
 import { DELIVERY_STATE_FILE } from "../../src/domain/delivery-state.js";
-import { createIssueStaging } from "../../src/domain/issue.js";
+import {
+  createIssueStaging,
+  recordStagingSync,
+} from "../../src/domain/issue.js";
+import { stableJson } from "../../src/lib/security.js";
 import {
   QUESTIONS,
   type Mode,
@@ -23,6 +28,7 @@ import {
 } from "../../src/domain/mode.js";
 import {
   PLAN_AMENDMENT_FILE,
+  type PlanGeneration,
   stagingDriftDiagnostic,
   validatePlanAmendment,
 } from "../../src/domain/plan-seal.js";
@@ -328,6 +334,26 @@ Then("計画凍結の検査は拒否しない", function () {
     false,
   );
 });
+
+Then(
+  "封印の無い旧journalのStep 9は呼出し側のplanGenerationを記録しない",
+  function () {
+    appendWorkflowJournalEntry({
+      staging: this.staging,
+      entry: quickEntry(9, {
+        planGeneration: {
+          generation: 1,
+          previousDigest: null,
+          amendments: [],
+          digest: "f".repeat(64),
+        },
+      }),
+    });
+    const entry = lastEntry(this.staging);
+    assert.equal(entry.step, 9);
+    assert.equal(entry.planGeneration, undefined);
+  },
+);
 
 function amendment(
   entries: ReadonlyArray<{ id: string; skip?: string; value?: string }>,
@@ -953,7 +979,7 @@ Then("再封印を名指しして拒否しjournalと最新封印は変わらな�
   assert.equal(this.result.status, 1, this.result.stdout);
   assert.match(
     this.result.stdout,
-    /Step 9以降の記録後にStep 4を追記して計画を再封印できません/u,
+    /承認済みPlanningはStep 4で封印済みのため凍結されています/u,
   );
   assert.equal(journalOf(this.staging), this.journalBefore);
   const seals = parseStepJournal(journalOf(this.staging)).entries.filter(
@@ -961,4 +987,479 @@ Then("再封印を名指しして拒否しjournalと最新封印は変わらな�
   );
   assert.equal(seals.length, 1);
   assert.equal(seals[0]?.step, 4);
+});
+
+// ---- 封印の不変性と計画世代chain（SCN-UNIT-PLANSEAL-015〜020、SCN-INT-PLANSEAL-004・005） ----
+
+const RESEAL_REJECTED =
+  /承認済みPlanningはStep (?:4|8)で封印済みのため凍結されています/u;
+
+function sha256Text(value: string): string {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+/** AMD entryの原文。**期待digestは実装の分割処理ではなくこの原文から計算する。** */
+function amendmentEntry(id: string, body = "計画変更の記述"): string {
+  return [
+    `## ${id} 変更`,
+    "",
+    ...["対象", "Before", "After", "理由", "影響する契約", "影響範囲"].map(
+      (field) => `- ${field}: ${field}の${body}`,
+    ),
+  ].join("\n");
+}
+
+function writeAmendments(staging: string, entries: readonly string[]): void {
+  fs.writeFileSync(
+    path.join(staging, PLAN_AMENDMENT_FILE),
+    `# 05 計画変更\n\n${entries.join("\n\n")}\n`,
+  );
+}
+
+function sealOf(staging: string): Record<string, string> {
+  const seal = parseStepJournal(journalOf(staging))
+    .entries.reverse()
+    .find((entry) => entry.planSeal !== undefined)?.planSeal;
+  assert.ok(seal, "封印がありません");
+  return { ...seal };
+}
+
+function quickEntry(
+  step: number,
+  extra: Partial<StepJournalEntry> = {},
+): StepJournalEntry {
+  const skillId = WORKFLOW_STEPS.find((item) => item.step === step)?.skillId;
+  assert.ok(skillId);
+  return {
+    step,
+    skillId,
+    mode: "quick",
+    recordedAt: "2026-09-26T02:00:00.000Z",
+    artifacts: [REQUEST],
+    evidence: `Step ${step}の証跡`,
+    ...(step === 10
+      ? {
+          reviewSession: {
+            sessionId: "a".repeat(64),
+            roundDigest: "b".repeat(64),
+            headSha: "c".repeat(40),
+          },
+        }
+      : {}),
+    ...extra,
+  };
+}
+
+function appendError(staging: string, entry: StepJournalEntry): string {
+  try {
+    appendWorkflowJournalEntry({ staging, entry });
+    return "";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+function deliveryError(staging: string): string {
+  try {
+    assertWorkflowReadyForDelivery(staging);
+    return "";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+function sealStepCount(staging: string): number {
+  return parseStepJournal(journalOf(staging)).entries.filter(
+    (entry) => entry.planSeal !== undefined,
+  ).length;
+}
+
+Given("Step 8でPlanning Seal済みのfull stagingがある", async function () {
+  this.root = this.temp("asc-plan-seal-");
+  this.staging = stage(this, "full", this.root);
+  for (const name of FULL_PLAN.slice(1))
+    fs.writeFileSync(path.join(this.staging, name), `# ${name}\n本文\n`);
+  await recordAll(this.staging, [1, 2, 3, 4, 5, 6, 7, 8]);
+  this.original = fs.readFileSync(
+    path.join(this.staging, "02_設計.md"),
+    "utf8",
+  );
+  this.journalBefore = journalOf(this.staging);
+});
+
+When("02_設計.mdを変更しStep 8を再記録する", async function () {
+  fs.appendFileSync(
+    path.join(this.staging, "02_設計.md"),
+    "\n封印後の設計変更\n",
+  );
+  this.result = await record(this.staging, 8);
+});
+
+When("00を変更しStep 4を再記録する", async function () {
+  fs.appendFileSync(path.join(this.staging, REQUEST), "\n封印後の要求変更\n");
+  this.result = await record(this.staging, 4);
+});
+
+Then(
+  "封印済みの凍結を名指しして拒否されPlanning Amendmentを要求しjournalと封印は変わらない",
+  function () {
+    assert.equal(this.result.status, 1, this.result.stdout);
+    assert.match(this.result.stdout, RESEAL_REJECTED);
+    assert.match(
+      this.result.stdout,
+      /05_計画変更\.mdへPlanning Amendment（AMD-NNN）として追記/u,
+    );
+    assert.equal(journalOf(this.staging), this.journalBefore);
+    assert.equal(sealStepCount(this.staging), 1);
+  },
+);
+
+for (const [step, file] of [
+  [8, "02_設計.md"],
+  [4, REQUEST],
+] as const)
+  Then(
+    `計画文書を封印時の内容へ戻して同じ内容のStep ${step}を再記録しても拒否される`,
+    async function () {
+      fs.writeFileSync(path.join(this.staging, file), this.original);
+      const result = await record(this.staging, step);
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(result.stdout, RESEAL_REJECTED);
+      assert.match(result.stdout, /内容が同じ場合も同じです/u);
+      assert.equal(journalOf(this.staging), this.journalBefore);
+    },
+  );
+
+Given(
+  "Step 4で封印したquick stagingをfullへ昇格しStep 7まで記録した",
+  async function () {
+    await sealedQuick(this);
+    recordStagingSync(this.staging, {
+      tracker: "https://github.com/o/r/issues/1499",
+      checkpoint: 4,
+      syncedAt: "2026-09-26T01:00:00.000Z",
+      bodyDigest: "a".repeat(64),
+      readBackDigest: "a".repeat(64),
+    });
+    promoteWorkflowStagingToFull({
+      staging: this.staging,
+      promotedAt: "2026-09-26T03:00:00.000Z",
+      discovery: {
+        discoveryId: "DISC-PLANSEAL-PROMOTE",
+        workflowMode: "quick",
+        modeDisqualifiers: [
+          { id: "security-boundary", evidence: "認可境界の拡大を観測した" },
+        ],
+        changedContractKinds: ["interface"],
+        changesGoal: false,
+        changesScope: false,
+        changesAcceptanceCriteria: false,
+        expandsSecurityBoundary: true,
+        introducesIrreversibleOperation: false,
+      },
+    });
+    for (const step of [2, 3, 4, 5, 6, 7])
+      appendWorkflowJournalEntry({
+        staging: this.staging,
+        entry: quickEntry(step, { mode: "full" }),
+      });
+  },
+);
+
+When("full modeのStep 8を記録する", function () {
+  this.diagnostic = appendError(this.staging, quickEntry(8, { mode: "full" }));
+});
+
+Then(
+  "full Step 8 entryは昇格後の00から03を封印しquickの封印は残る",
+  function () {
+    assert.equal(this.diagnostic, "");
+    const entries = parseStepJournal(journalOf(this.staging)).entries;
+    const step8 = entries.at(-1);
+    assert.equal(step8?.step, 8);
+    assert.equal(step8?.mode, "full");
+    assert.deepEqual(
+      step8?.planSeal,
+      Object.fromEntries(
+        FULL_PLAN.map((name) => [
+          name,
+          sha256File(path.join(this.staging, name)),
+        ]),
+      ),
+    );
+    const quickSeal = entries.find(
+      (entry) => entry.mode === "quick" && entry.planSeal !== undefined,
+    );
+    assert.equal(quickSeal?.step, 4);
+  },
+);
+
+Then("同じfull stagingでStep 8を再記録すると拒否される", function () {
+  const before = journalOf(this.staging);
+  const message = appendError(this.staging, quickEntry(8, { mode: "full" }));
+  assert.match(message, /承認済みPlanningはStep 8で封印済み/u);
+  assert.equal(journalOf(this.staging), before);
+});
+
+When(
+  "AMDを追記せずStep 9を記録しAMD-001を追記してStep 9を再記録する",
+  async function () {
+    await recordAll(this.staging, [9]);
+    this.parsedEntries = [lastEntry(this.staging)];
+    writeAmendments(this.staging, [amendmentEntry("AMD-001")]);
+    await recordAll(this.staging, [9]);
+    this.parsedEntries.push(lastEntry(this.staging));
+  },
+);
+
+Then("最初のStep 9は封印digestを持つ世代1を記録する", function () {
+  const sealDigest = sha256Text(stableJson(sealOf(this.staging)));
+  assert.deepEqual(this.parsedEntries[0]?.planGeneration, {
+    generation: 1,
+    previousDigest: null,
+    amendments: [],
+    digest: sealDigest,
+  });
+});
+
+Then(
+  "再記録したStep 9は封印digestをpreviousDigestに持ちAMD-001の原文digestを持つ世代2を記録する",
+  function () {
+    const sealDigest = sha256Text(stableJson(sealOf(this.staging)));
+    const amendments = [
+      { id: "AMD-001", digest: sha256Text(amendmentEntry("AMD-001")) },
+    ];
+    assert.deepEqual(this.parsedEntries[1]?.planGeneration, {
+      generation: 2,
+      previousDigest: sealDigest,
+      amendments,
+      digest: sha256Text(
+        stableJson({ previousDigest: sealDigest, amendments }),
+      ),
+    });
+  },
+);
+
+Then("呼出し側の偽のplanGenerationを渡しても採用しない", function () {
+  const forged: PlanGeneration = {
+    generation: 1,
+    previousDigest: null,
+    amendments: [],
+    digest: "f".repeat(64),
+  };
+  appendWorkflowJournalEntry({
+    staging: this.staging,
+    entry: quickEntry(10, { planGeneration: forged }),
+  });
+  assert.deepEqual(
+    lastEntry(this.staging).planGeneration,
+    this.parsedEntries[1]?.planGeneration,
+  );
+});
+
+async function recordedAmendmentStaging(
+  world: PlanSealWorld,
+  withStep10: boolean,
+): Promise<void> {
+  await sealedQuick(world);
+  writeAmendments(world.staging, [amendmentEntry("AMD-001")]);
+  await recordAll(world.staging, [9]);
+  if (withStep10)
+    appendWorkflowJournalEntry({
+      staging: world.staging,
+      entry: quickEntry(10),
+    });
+  world.journalBefore = journalOf(world.staging);
+}
+
+Given("AMD-001を記録したStep 9までのquick stagingがある", async function () {
+  await recordedAmendmentStaging(this, false);
+});
+
+When("記録済みAMD-001の本文を編集する", function () {
+  writeAmendments(this.staging, [amendmentEntry("AMD-001", "書き換えた記述")]);
+});
+
+Then(
+  "Step 10記録とdelivery直前検査はAMD-001の編集を名指しして拒否しjournalは変わらない",
+  function () {
+    const pattern =
+      /記録済みの計画変更AMD-001が編集または並べ替えされています/u;
+    assert.match(appendError(this.staging, quickEntry(10)), pattern);
+    assert.match(deliveryError(this.staging), pattern);
+    assert.equal(journalOf(this.staging), this.journalBefore);
+  },
+);
+
+Then(
+  "AMD-001を削除するとStep 10記録とdelivery直前検査はAMD-001の削除を名指しして拒否する",
+  function () {
+    const file = path.join(this.staging, PLAN_AMENDMENT_FILE);
+    for (const remove of [
+      () => fs.writeFileSync(file, "# 05 計画変更\n"),
+      () => fs.unlinkSync(file),
+    ]) {
+      remove();
+      const pattern = /記録済みの計画変更AMD-001が削除されています/u;
+      assert.match(appendError(this.staging, quickEntry(10)), pattern);
+      assert.match(deliveryError(this.staging), pattern);
+      assert.equal(journalOf(this.staging), this.journalBefore);
+    }
+  },
+);
+
+Then(
+  "AMD-001を記録時の本文へ戻しAMD-002を追記するとStep 10は世代3を記録する",
+  function () {
+    const previous = lastEntry(this.staging).planGeneration;
+    assert.equal(previous?.generation, 2);
+    writeAmendments(this.staging, [
+      amendmentEntry("AMD-001"),
+      amendmentEntry("AMD-002", "追加の記述"),
+    ]);
+    assert.equal(appendError(this.staging, quickEntry(10)), "");
+    const amendments = [
+      { id: "AMD-001", digest: sha256Text(amendmentEntry("AMD-001")) },
+      {
+        id: "AMD-002",
+        digest: sha256Text(amendmentEntry("AMD-002", "追加の記述")),
+      },
+    ];
+    assert.deepEqual(lastEntry(this.staging).planGeneration, {
+      generation: 3,
+      previousDigest: previous?.digest,
+      amendments,
+      digest: sha256Text(
+        stableJson({ previousDigest: previous?.digest, amendments }),
+      ),
+    });
+  },
+);
+
+Given(
+  "Step 9・10以外と未知key・digest不一致・世代1の不正と正しいplanGenerationを持つjournal行がある",
+  function () {
+    const previousDigest = "a".repeat(64);
+    const amendments = [{ id: "AMD-001", digest: "b".repeat(64) }];
+    const valid2 = {
+      generation: 2,
+      previousDigest,
+      amendments,
+      digest: sha256Text(stableJson({ previousDigest, amendments })),
+    };
+    const valid1 = {
+      generation: 1,
+      previousDigest: null,
+      amendments: [],
+      digest: previousDigest,
+    };
+    const review = {
+      reviewSession: {
+        sessionId: "a".repeat(64),
+        roundDigest: "b".repeat(64),
+        headSha: "c".repeat(40),
+      },
+    };
+    this.journalBefore = [
+      journalLine(8, "quick", { planGeneration: valid1 }),
+      journalLine(9, "quick", { planGeneration: { ...valid1, extra: true } }),
+      journalLine(10, "quick", {
+        ...review,
+        planGeneration: { ...valid2, digest: "d".repeat(64) },
+      }),
+      journalLine(9, "quick", {
+        planGeneration: { ...valid1, previousDigest },
+      }),
+      journalLine(9, "quick", { planGeneration: valid1 }),
+      journalLine(10, "quick", { ...review, planGeneration: valid2 }),
+    ].join("\n");
+  },
+);
+
+Then(
+  "不正な4行だけが理由を名指しして拒否され正しい2行は世代を保持する",
+  function () {
+    const expectations = [
+      /journal 1行目\.planGenerationはStep 9・10にだけ指定できます/u,
+      /journal 2行目\.planGenerationのfield集合/u,
+      /journal 3行目\.planGeneration\.digestがpreviousDigestとamendmentsから計算した値と一致しません/u,
+      /journal 4行目\.planGenerationの世代1はpreviousDigest=null/u,
+    ];
+    assert.equal(
+      this.parseErrors.length,
+      expectations.length,
+      this.parseErrors.join("; "),
+    );
+    expectations.forEach((pattern, index) =>
+      assert.match(this.parseErrors[index] ?? "", pattern),
+    );
+    assert.deepEqual(
+      this.parsedEntries.map((entry) => [
+        entry.step,
+        entry.planGeneration?.generation,
+      ]),
+      [
+        [9, 1],
+        [10, 2],
+      ],
+    );
+  },
+);
+
+Given("AMD-001を記録したStep 10までのquick stagingがある", async function () {
+  await recordedAmendmentStaging(this, true);
+});
+
+When("未記録のAMD-002を追記してdelivery直前検査を実行する", function () {
+  writeAmendments(this.staging, [
+    amendmentEntry("AMD-001"),
+    amendmentEntry("AMD-002", "追加の記述"),
+  ]);
+  this.diagnostic = deliveryError(this.staging);
+});
+
+Then("診断は未記録のAMD-002とStep 10の再記録を名指しする", function () {
+  assert.match(
+    this.diagnostic,
+    /最後のStep 10記録（計画世代2）の後に未記録の計画変更AMD-002が追記されています/u,
+  );
+  assert.match(this.diagnostic, /新しいreview roundを実行してStep 10を再記録/u);
+});
+
+Then("AMD-002を含めてStep 10を再記録すると計画変更の診断は消える", function () {
+  assert.equal(appendError(this.staging, quickEntry(10)), "");
+  assert.equal(lastEntry(this.staging).planGeneration?.generation, 3);
+  assert.doesNotMatch(
+    deliveryError(this.staging),
+    /未記録の計画変更|記録済みの計画変更/u,
+  );
+});
+
+When("AMD-001をcommitせずにStep 9を記録する", async function () {
+  writeAmendments(this.staging, [amendmentEntry("AMD-001")]);
+  this.result = await record(this.staging, 9);
+});
+
+Then(
+  "commit上の05_計画変更.mdの不一致を名指しして拒否しjournalは変わらない",
+  function () {
+    assert.equal(this.result.status, 1, this.result.stdout);
+    assert.match(
+      this.result.stdout,
+      /commit HEAD上の05_計画変更\.mdがworktreeと一致しません/u,
+    );
+    assert.equal(journalOf(this.staging), this.journalBefore);
+  },
+);
+
+Then("AMD-001をcommitするとStep 9は世代2を記録する", async function () {
+  gitIn(this.root, ["add", "-A"]);
+  gitIn(this.root, ["commit", "-q", "-m", "record AMD-001"]);
+  const result = await record(this.staging, 9);
+  assert.equal(result.status, 0, result.stdout);
+  const generation = lastEntry(this.staging).planGeneration;
+  assert.equal(generation?.generation, 2);
+  assert.deepEqual(generation?.amendments, [
+    { id: "AMD-001", digest: sha256Text(amendmentEntry("AMD-001")) },
+  ]);
 });
