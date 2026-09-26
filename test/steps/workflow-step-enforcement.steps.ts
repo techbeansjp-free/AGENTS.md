@@ -95,8 +95,10 @@ import {
   type ReviewEvidence,
 } from "../../src/domain/review-evidence.js";
 import {
-  resealReviewEvidence,
-  reviewEvidenceFromSession,
+  appendFixtureVerificationRecords,
+  observeFixtureVerification,
+  observedReviewEvidenceFromSession,
+  resealObservedEvidence,
 } from "../support/review-evidence-fixture.js";
 
 interface WorkflowStepWorld extends WorkflowWorld {
@@ -2312,7 +2314,7 @@ function contextIsolatedReviewEvidence(
     null,
     reviewRoundFixture(root, baseSha, implementationSha),
   );
-  return reviewEvidenceFromSession(session, {
+  return observedReviewEvidenceFromSession(root, session, {
     issue: 877,
     independenceMode,
   });
@@ -2487,14 +2489,14 @@ function preparePullRequest(
               '"verdict": "rejected"',
             )
           : artifactDisposition === "session-mismatch"
-            ? resealReviewEvidence(reviewEvidence, {
+            ? resealObservedEvidence(reviewEvidence, {
                 session: {
-                  ...reviewEvidence.session,
+                  ...reviewEvidence.observed.session,
                   latestRoundDigest: "0".repeat(64),
                 },
               })
             : artifactDisposition === "himpl-mismatch"
-              ? resealReviewEvidence(reviewEvidence, {
+              ? resealObservedEvidence(reviewEvidence, {
                   implementationHeadSha: "f".repeat(40),
                 })
               : reviewArtifact,
@@ -2650,6 +2652,14 @@ function preparePullRequest(
     });
   }
   if (branchRef) spawnSync("git", ["checkout", "-q", branchRef], { cwd: root });
+  /** 証跡の検証欄と同じ観測記録をstagingへ置く（verify runの記録に相当）。 */
+  appendFixtureVerificationRecords(
+    staging,
+    observeFixtureVerification(root, {
+      baseSha,
+      implementationHeadSha: implementationCommitSha,
+    }).records,
+  );
   recordStagingSync(staging, {
     tracker: "https://github.com/o/r/issues/877",
     checkpoint: 4,
@@ -5385,7 +5395,7 @@ if (exact(["auth", "status"])) {
       }).stdout.trim();
       fs.writeFileSync(
         gitStub,
-        `#!/usr/bin/env node\nconst {spawnSync}=require("node:child_process");const args=process.argv.slice(2);if(args.length===1&&args[0]==="--version"){process.stdout.write("git version 2.37.9\\n");}else{const result=spawnSync(${JSON.stringify(realGit)},args);process.stdout.write(result.stdout);process.stderr.write(result.stderr);process.exitCode=result.status??1;}\n`,
+        `#!/usr/bin/env node\nconst {spawnSync}=require("node:child_process");const args=process.argv.slice(2);if(args.length===1&&args[0]==="--version"){process.stdout.write("git version 2.37.9\\n");}else{const result=spawnSync(${JSON.stringify(realGit)},args,{stdio:"inherit"});process.exitCode=result.status??1;}\n`,
       );
       fs.chmodSync(gitStub, 0o755);
       unsupportedGit.env = {

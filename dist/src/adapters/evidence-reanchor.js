@@ -11,7 +11,9 @@ import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { observeStoredDeliveryState, readStoredDeliveryState, } from "./delivery-state.js";
 import { GIT_ENV, evidenceOnlySuffix, observeReviewDiff, observeSingleCommitParent, readBlobAtCommit, } from "./review-diff.js";
+import { verificationRecordErrors } from "../domain/verification-run.js";
 import { readStoredReviewSession } from "./review-session-store.js";
+import { readVerificationRuns } from "./verification-run.js";
 import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
 export const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
 const OID = /^[a-f0-9]{40}$/u;
@@ -180,12 +182,12 @@ function observeRebaseEquivalence(root, input) {
     if (!("evidence" in beforeParsed) || !("evidence" in afterParsed))
         return { reason: "identity-unresolvable" };
     const beforeAnchor = {
-        base: beforeParsed.evidence.baseSha,
-        implementation: beforeParsed.evidence.implementationHeadSha,
+        base: beforeParsed.evidence.observed.baseSha,
+        implementation: beforeParsed.evidence.observed.implementationHeadSha,
     };
     const afterAnchor = {
-        base: afterParsed.evidence.baseSha,
-        implementation: afterParsed.evidence.implementationHeadSha,
+        base: afterParsed.evidence.observed.baseSha,
+        implementation: afterParsed.evidence.observed.implementationHeadSha,
     };
     /** **宣言した比較基点が再固定の基点と一致することを要求する。** */
     if (beforeAnchor.base !== input.oldBaseSha ||
@@ -239,9 +241,20 @@ function digestOf(content) {
  *
  * **証跡の値をauthorityにしない。** findingの最終状態・未解決Critical/High・
  * count済みround数はsessionから再導出した値との一致だけを受理し、`H_impl`は
- * sessionの収束candidate HEADそのものを要求する。
+ * sessionの収束candidate HEADそのものを要求する。検証欄はstagingの観測記録に
+ * 同じ`recordDigest`の合格記録があることを要求する（読めなければ受理しない）。
  */
 function acceptedSessionEvidence(staging, evidence, options) {
+    let recorded;
+    try {
+        recorded =
+            verificationRecordErrors(evidence.observed.verification, readVerificationRuns(staging)).length === 0;
+    }
+    catch {
+        recorded = false;
+    }
+    if (!recorded)
+        return false;
     const session = readStoredReviewSession(staging);
     const journal = readWorkflowJournal(staging);
     const step10 = [...journal.entries]
@@ -249,7 +262,8 @@ function acceptedSessionEvidence(staging, evidence, options) {
         .find((entry) => entry.step === 10 && (!options.postPrIntake || entry.postPrIntake))?.reviewSession;
     return (session !== null &&
         session.status === "converged" &&
-        session.latestCandidateHeadSha === evidence.implementationHeadSha &&
+        session.latestCandidateHeadSha ===
+            evidence.observed.implementationHeadSha &&
         validateReviewEvidenceAgainstSession(evidence, session).length === 0 &&
         step10 !== undefined &&
         step10.sessionId === session.sessionId &&
@@ -298,15 +312,16 @@ function observeArtifactSupersession(staging, root, input) {
         return undefined;
     const oldEvidence = oldParsed.evidence;
     const newEvidence = newParsed.evidence;
-    if (oldEvidence.baseSha !== input.oldBaseSha ||
-        newEvidence.baseSha !== input.newBaseSha ||
-        oldEvidence.implementationHeadSha !== newEvidence.implementationHeadSha ||
+    if (oldEvidence.observed.baseSha !== input.oldBaseSha ||
+        newEvidence.observed.baseSha !== input.newBaseSha ||
+        oldEvidence.observed.implementationHeadSha !==
+            newEvidence.observed.implementationHeadSha ||
         comparableReviewEvidence(oldEvidence, "supersession") !==
             comparableReviewEvidence(newEvidence, "supersession"))
         return undefined;
-    if (evidenceOnlySuffix(root, newEvidence.implementationHeadSha, input.newHeadSha) !== artifactPath)
+    if (evidenceOnlySuffix(root, newEvidence.observed.implementationHeadSha, input.newHeadSha) !== artifactPath)
         return undefined;
-    if (!verifiedImplementationBoundary(root, input.newHeadSha, artifactPath, newEvidence.implementationHeadSha, input, "新H_impl→新head").valid)
+    if (!verifiedImplementationBoundary(root, input.newHeadSha, artifactPath, newEvidence.observed.implementationHeadSha, input, "新H_impl→新head").valid)
         return undefined;
     if (!acceptedSessionEvidence(staging, newEvidence, { postPrIntake: false }))
         return undefined;
@@ -343,11 +358,11 @@ function observeArtifactReplacement(staging, root, input) {
     if (!("evidence" in parsed))
         return undefined;
     const evidence = parsed.evidence;
-    if (evidence.baseSha !== input.oldBaseSha ||
-        evidence.baseSha !== input.newBaseSha)
+    if (evidence.observed.baseSha !== input.oldBaseSha ||
+        evidence.observed.baseSha !== input.newBaseSha)
         return undefined;
-    if (!verifiedImplementationBoundary(root, input.oldHeadSha, oldPath, evidence.implementationHeadSha, input, "旧H_impl→旧head").valid ||
-        !verifiedImplementationBoundary(root, input.newHeadSha, newPath, evidence.implementationHeadSha, input, "新H_impl→新head").valid)
+    if (!verifiedImplementationBoundary(root, input.oldHeadSha, oldPath, evidence.observed.implementationHeadSha, input, "旧H_impl→旧head").valid ||
+        !verifiedImplementationBoundary(root, input.newHeadSha, newPath, evidence.observed.implementationHeadSha, input, "新H_impl→新head").valid)
         return undefined;
     /**
      * **新`H_final`がevidence-only suffixの形をmodeまで満たすことを要求する。**
@@ -357,7 +372,7 @@ function observeArtifactReplacement(staging, root, input) {
      * 入った新headは以後どこでも再検査されないため、**再固定がこの形を確かめる唯一の
      * 地点である**（Issue #1433、外部review round 2）。
      */
-    if (evidenceOnlySuffix(root, evidence.implementationHeadSha, input.newHeadSha) !== newPath)
+    if (evidenceOnlySuffix(root, evidence.observed.implementationHeadSha, input.newHeadSha) !== newPath)
         return undefined;
     if (!acceptedSessionEvidence(staging, evidence, { postPrIntake: false }))
         return undefined;
@@ -393,30 +408,30 @@ function observeReviewedForward(staging, root, input) {
     if (!("evidence" in parsed))
         return undefined;
     const evidence = parsed.evidence;
-    if (evidence.baseSha !== input.newBaseSha)
+    if (evidence.observed.baseSha !== input.newBaseSha)
         return undefined;
-    if (finalParent !== evidence.implementationHeadSha)
+    if (finalParent !== evidence.observed.implementationHeadSha)
         return undefined;
-    if (input.oldHeadSha === evidence.implementationHeadSha)
+    if (input.oldHeadSha === evidence.observed.implementationHeadSha)
         return undefined;
     try {
         /** `observeReviewDiff`の固定Git環境でstrict ancestorを再観測する。 */
-        observeReviewDiff(root, input.oldHeadSha, evidence.implementationHeadSha);
+        observeReviewDiff(root, input.oldHeadSha, evidence.observed.implementationHeadSha);
     }
     catch {
         return undefined;
     }
-    if (!verifiedImplementationBoundary(root, input.newHeadSha, artifactPath, evidence.implementationHeadSha, input, "新H_impl→新head").valid)
+    if (!verifiedImplementationBoundary(root, input.newHeadSha, artifactPath, evidence.observed.implementationHeadSha, input, "新H_impl→新head").valid)
         return undefined;
     /** artifact-replacementと同じ理由でmodeまで確かめる（Issue #1433）。 */
-    if (evidenceOnlySuffix(root, evidence.implementationHeadSha, input.newHeadSha) !== artifactPath)
+    if (evidenceOnlySuffix(root, evidence.observed.implementationHeadSha, input.newHeadSha) !== artifactPath)
         return undefined;
     if (!acceptedSessionEvidence(staging, evidence, { postPrIntake: true }))
         return undefined;
     return {
-        sessionId: evidence.session.sessionId,
-        roundDigest: evidence.session.latestRoundDigest,
-        implementationSha: evidence.implementationHeadSha,
+        sessionId: evidence.observed.session.sessionId,
+        roundDigest: evidence.observed.session.latestRoundDigest,
+        implementationSha: evidence.observed.implementationHeadSha,
         artifactPath,
         artifactDigest: digestOf(artifact),
     };

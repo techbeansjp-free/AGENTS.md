@@ -12,7 +12,7 @@ export const LEGACY_LIFECYCLE_ALIASES = Object.freeze({
 export function canonicalLifecycleCommand(command) {
     return LEGACY_LIFECYCLE_ALIASES[command] ?? command;
 }
-export const CLI_USAGE = "npx agent-skill-chain <issue|project|spec|review|trace|graph|impact|conformance|policy|decision|routing|workflow|worktree|pr|install|update|delete|doctor> ...";
+export const CLI_USAGE = "npx agent-skill-chain <issue|project|spec|review|verify|trace|graph|impact|conformance|policy|decision|routing|workflow|worktree|pr|install|update|delete|doctor> ...";
 export function routingRecovery(ruleId) {
     switch (ruleId) {
         case "FR-836-02":

@@ -8,8 +8,11 @@ import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence
 import { createReviewEvidence, isReviewActorId, parseReviewEvidence, renderReviewEvidence, REVIEW_EVIDENCE_NAME_PATTERN, validateReviewEvidenceAgainstSession, } from "../domain/review-evidence.js";
 import { readStoredStagingRecord } from "../domain/staging.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
+import { selectObservedVerification, verificationRecordErrors, } from "../domain/verification-run.js";
+import { computeImpactSet } from "./impact-set.js";
 import { GIT_ENV, observeReviewDiff } from "./review-diff.js";
 import { readStoredReviewSession } from "./review-session-store.js";
+import { readVerificationRuns } from "./verification-run.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
 function isAncestor(root, ancestor, descendant) {
     return (git(["merge-base", "--is-ancestor", ancestor, descendant], root, {
@@ -67,6 +70,39 @@ export function reviewEvidenceBindingErrors(root, session, evidence) {
         ];
     }
 }
+/**
+ * 証跡の`observed`節をGitと検証記録から再導出して照合する。**証跡の値を
+ * authorityにしない。** diff digest・影響集合digestとmodeは`比較基点..H_impl`から
+ * 再計算し、検証欄はstagingの機械記録に同じ`recordDigest`の合格記録があることを求める。
+ */
+export function observedEvidenceErrors(root, staging, evidence) {
+    const { baseSha, implementationHeadSha } = evidence.observed;
+    const errors = [];
+    try {
+        const diff = observeReviewDiff(root, baseSha, implementationHeadSha);
+        if (diff.digest !== evidence.observed.diffDigest)
+            errors.push("review証跡のdiffDigestが比較基点..H_implのGit差分と一致しません");
+        const impact = computeImpactSet({
+            root,
+            baseSha,
+            headSha: implementationHeadSha,
+        });
+        if (impact.digest !== evidence.observed.impact.digest)
+            errors.push("review証跡の影響集合digestが比較基点..H_implから再計算した影響集合と一致しません");
+        if (impact.mode !== evidence.observed.impact.mode)
+            errors.push(`review証跡の影響集合mode ${evidence.observed.impact.mode} が再計算したmode ${impact.mode} と一致しません`);
+    }
+    catch (error) {
+        errors.push(`review証跡のdiff・影響集合をGitで観測できません: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    try {
+        errors.push(...verificationRecordErrors(evidence.observed.verification, readVerificationRuns(staging)));
+    }
+    catch (error) {
+        errors.push(`stagingの検証記録を読めません: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return errors;
+}
 /** stagingとGitから証跡を照合する。`review validate --artifact --staging`と消費側が共有する。 */
 export function verifyReviewEvidenceWithStaging(input) {
     const staging = assertWorkflowStaging(input.staging);
@@ -76,8 +112,13 @@ export function verifyReviewEvidenceWithStaging(input) {
             ? {}
             : { independenceMode: input.independenceMode }),
     });
-    if (session !== null)
-        errors.push(...reviewEvidenceBindingErrors(stagingRepositoryRoot(staging), session, input.evidence));
+    if (session !== null) {
+        const root = stagingRepositoryRoot(staging);
+        const binding = reviewEvidenceBindingErrors(root, session, input.evidence.observed);
+        errors.push(...binding);
+        if (binding.length === 0)
+            errors.push(...observedEvidenceErrors(root, staging, input.evidence));
+    }
     return errors;
 }
 function issueFromTracker(tracker) {
@@ -104,8 +145,6 @@ export function exportReviewEvidence(input) {
         throw new Error("review exportの--reviewerと--implementerはstable identity（英数字で始まり英数字と_.:=/@-だけを含む）が必要です");
     if (input.reviewer === input.implementer)
         throw new Error("review exportの--reviewerと--implementerは異なるidentityが必要です。reviewerはimplementerと別のsession/contextでなければなりません");
-    if (input.verified.length === 0)
-        throw new Error("review exportには実行して合格した検証commandを--verified=<command>で1件以上指定してください");
     const session = readStoredReviewSession(staging);
     if (session === null)
         throw new Error("review exportには永続review sessionが必要です");
@@ -121,15 +160,34 @@ export function exportReviewEvidence(input) {
     });
     if (bindingErrors.length > 0)
         throw new Error(`${bindingErrors.join("; ")}。current HEADがreview済みの実装commit（H_impl）であることを確認してください。証跡commitの後（H_final）では実行できません`);
+    /**
+     * **検証欄は申告ではなく観測から導出する。** `比較基点..H_impl`の影響集合を
+     * 再計算し、同じ`H_impl`と影響集合digestで`verify run`が記録した合格実行だけを
+     * 埋め込む。影響集合がfullなら`scope=full`の合格実行を要求する。
+     */
+    const impact = computeImpactSet({
+        root: gitRoot,
+        baseSha,
+        headSha: implementationHeadSha,
+    });
+    const verification = selectObservedVerification(readVerificationRuns(staging), {
+        headSha: implementationHeadSha,
+        impactDigest: impact.digest,
+        impactMode: impact.mode,
+        impactFeatures: impact.features,
+    });
     const evidence = createReviewEvidence({
         issue: input.issue,
         baseSha,
         implementationHeadSha,
+        diffDigest: observeReviewDiff(gitRoot, baseSha, implementationHeadSha)
+            .digest,
         session,
+        impact: { digest: impact.digest, mode: impact.mode },
+        verification,
         independenceMode: input.independenceMode,
         reviewer: input.reviewer,
         implementer: input.implementer,
-        verification: input.verified,
     });
     const out = path.resolve(root, input.out ?? path.join("docs", "reviews", `${input.issue}_review.json`));
     const relative = path.relative(root, out).split(path.sep).join("/");

@@ -2416,7 +2416,7 @@ When("個別監査gateを正規表と余分なpathで検証する", function () 
   this.validAudit = checkFileAudit(this.root, cutoff);
   fs.writeFileSync(
     this.auditFile,
-    this.auditMarkdown.replace('"npm test"', '"npm run lint"'),
+    this.auditMarkdown.replace('"test"', '"lint"'),
   );
   this.invalidAudit = checkFileAudit(this.root, cutoff);
   fs.writeFileSync(

@@ -15,6 +15,7 @@ import { parseReviewRoundInput } from "./domain/review-convergence.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
 import { parseReviewEvidence } from "./domain/review-evidence.js";
 import { exportReviewEvidence, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
+import { runVerification } from "./adapters/verification-run.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
 import { isPlanFrozenCheckStep, latestPlanSeal } from "./domain/plan-seal.js";
@@ -891,7 +892,7 @@ export function resolveImplementationCommitForMerge(root, staging, finalHeadSha)
     let declaredImplementation;
     try {
         declaredImplementation =
-            parseReviewEvidence(artifactContent).implementationHeadSha.toLowerCase();
+            parseReviewEvidence(artifactContent).observed.implementationHeadSha.toLowerCase();
     }
     catch (error) {
         throw new Error(`review証跡の構造とH_implが不正です: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
@@ -929,15 +930,16 @@ function resolveContextIsolatedFormalApproval(staging, candidate) {
     const { binding } = assertCurrentReviewJournalBinding(staging, candidate.finalHeadSha);
     const content = git(["show", `${candidate.finalHeadSha}:${candidate.reviewArtifactPath}`], stagingRepositoryRoot(staging)).stdout;
     const evidence = parseReviewEvidence(content);
-    if (evidence.implementationHeadSha !== candidate.implementationCommitSha)
+    if (evidence.observed.implementationHeadSha !==
+        candidate.implementationCommitSha)
         throw new Error("review証跡のH_implがmerge対象と一致しません");
     const errors = verifyReviewEvidenceWithStaging({
         staging,
         evidence,
         independenceMode: "context-isolated",
     });
-    if (evidence.session.sessionId !== binding.sessionId ||
-        evidence.session.latestRoundDigest !== binding.roundDigest)
+    if (evidence.observed.session.sessionId !== binding.sessionId ||
+        evidence.observed.session.latestRoundDigest !== binding.roundDigest)
         errors.push("review証跡のsessionが最新Step 10 bindingと一致しません");
     if (errors.length > 0)
         throw new Error(`context-isolated formal review approvalが不正です: ${errors.join("; ")}`);
@@ -3392,9 +3394,12 @@ export async function main(argv, dependencies = {}) {
             throw new CliValidationError([`${command}にはsubcommandが必要です: ${subcommands.join("、")}`], `npx agent-skill-chain ${command} <${subcommands.join("|")}> --help でusageを確認してください`);
     }
     if (usage !== undefined) {
-        const usageArgs = usage.subcommand === undefined && subcommand !== undefined
+        const commandArgs = usage.subcommand === undefined && subcommand !== undefined
             ? [subcommand, ...rest]
             : rest;
+        /** `--`以降を実行argvとして受け取るcommandは、`--`より前だけをusage検査する。 */
+        const separator = usage.acceptsCommandArgv === true ? commandArgs.indexOf("--") : -1;
+        const usageArgs = separator < 0 ? commandArgs : commandArgs.slice(0, separator);
         if (usageArgs.some((argument) => isHelpToken(argument))) {
             print(renderUsage(usage));
             return 0;
@@ -5465,18 +5470,13 @@ export async function main(argv, dependencies = {}) {
         return 1;
     }
     if (command === "review" && subcommand === "export") {
+        const { flags, positionals } = parse(rest);
         /**
-         * `--verified`は複数回指定できる唯一のflagである。汎用`parse`は重複を拒否する
-         * ため、先に取り出してから残りを厳密に解析する。
+         * **検証の申告は受け付けない。** 検証欄は`verify run`の観測記録から導出する。
+         * 旧`--verified`は未知optionとして拒否せず、移行先を名指しする。
          */
-        const verified = rest
-            .filter((argument) => argument.startsWith("--verified="))
-            .map((argument) => argument.slice("--verified=".length).trim());
-        const { flags, positionals } = parse(rest.filter((argument) => !argument.startsWith("--verified=")));
-        if (flags.verified !== undefined ||
-            verified.length === 0 ||
-            verified.some((item) => item === ""))
-            throw new Error("review exportには実行して合格した検証commandを--verified=<command>で1件以上指定してください");
+        if (rest.some((argument) => argument.startsWith("--verified")))
+            throw new Error("review exportの--verifiedは廃止されました。検証は申告ではなく観測です。H_implで verify run --staging=<staging> -- <command> を実行してからreview exportを再実行してください");
         if (positionals.length > 0)
             throw new Error("review exportに位置引数は使用できません");
         const unknown = Object.keys(flags).filter((flag) => ![
@@ -5484,7 +5484,6 @@ export async function main(argv, dependencies = {}) {
             "issue",
             "reviewer",
             "implementer",
-            "verified",
             "base",
             "out",
             "root",
@@ -5505,7 +5504,6 @@ export async function main(argv, dependencies = {}) {
             issue: Number(issueRaw),
             reviewer: required(flags, "reviewer"),
             implementer: required(flags, "implementer"),
-            verified,
             independenceMode: resolveTrustedReviewIndependence(root),
             ...(typeof flags.base === "string" ? { baseSha: flags.base } : {}),
             ...(typeof flags.out === "string" ? { out: flags.out } : {}),
@@ -5513,14 +5511,58 @@ export async function main(argv, dependencies = {}) {
         print({
             written: exported.path,
             path: path.relative(root, exported.path).split(path.sep).join("/"),
-            baseSha: exported.evidence.baseSha,
-            implementationHeadSha: exported.evidence.implementationHeadSha,
-            sessionId: exported.evidence.session.sessionId,
-            latestRoundDigest: exported.evidence.session.latestRoundDigest,
+            baseSha: exported.evidence.observed.baseSha,
+            implementationHeadSha: exported.evidence.observed.implementationHeadSha,
+            sessionId: exported.evidence.observed.session.sessionId,
+            latestRoundDigest: exported.evidence.observed.session.latestRoundDigest,
             evidenceDigest: exported.evidence.evidenceDigest,
             next: "この1 fileだけを実装commitの後にcommitしてH_finalにする",
         });
         return 0;
+    }
+    if (command === "verify" && subcommand === "run") {
+        /**
+         * **実行するcommandは`--`の後のargvだけで受け取り、shellを通さない。**
+         * `--`より前だけをflagとして解析する。後ろの`--config`等をflagと取り違えない。
+         */
+        const separator = rest.indexOf("--");
+        if (separator < 0 || separator === rest.length - 1)
+            throw new Error("verify runには`--`の後に実行するcommandのargvが必要です（例: verify run --staging=<staging> -- npm test）");
+        const { flags, positionals } = parse(rest.slice(0, separator));
+        if (positionals.length > 0)
+            throw new Error(`verify runの位置引数は\`--\`の後に置いてください: ${positionals[0]}`);
+        const unknown = Object.keys(flags).filter((flag) => !["staging", "scope", "base", "root"].includes(flag));
+        if (unknown.length > 0)
+            throw new Error(`verify runの未知optionです: --${unknown.join(", --")}`);
+        const scope = flags.scope ?? "full";
+        if (scope !== "targeted" && scope !== "full")
+            throw new Error("verify runの--scopeはtargetedまたはfullが必要です");
+        if (flags.base !== undefined && typeof flags.base !== "string")
+            throw new Error("verify runの--baseにはcommitが必要です");
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const staging = path.resolve(root, required(flags, "staging"));
+        if (flags.root !== undefined &&
+            fs.realpathSync(stagingRepositoryRoot(staging)) !== fs.realpathSync(root))
+            throw new Error("verify runの--rootはstagingを置いたrepositoryのrootと一致する必要があります");
+        const result = await runVerification({
+            staging,
+            argv: rest.slice(separator + 1),
+            scope,
+            ...(typeof flags.base === "string" ? { base: flags.base } : {}),
+        });
+        print({
+            recorded: true,
+            headSha: result.record.headSha,
+            baseSha: result.record.baseSha,
+            command: result.record.command,
+            scope: result.record.scope,
+            impactDigest: result.record.impactDigest,
+            impactMode: result.record.impactMode,
+            exitCode: result.record.exitCode,
+            signal: result.record.signal,
+            recordDigest: result.record.recordDigest,
+        });
+        return result.record.exitCode ?? 1;
     }
     if (command === "review" && subcommand === "round") {
         const { flags, positionals } = parse(rest);

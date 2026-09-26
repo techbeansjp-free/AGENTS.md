@@ -53,8 +53,10 @@ import {
   type ReviewEvidence,
 } from "../../src/domain/review-evidence.js";
 import {
-  resealReviewEvidence,
+  recordObservedVerification,
+  resealObservedEvidence,
   reviewEvidenceContentFromStaging,
+  withAddedObservedVerification,
   syntheticReviewEvidence,
   syntheticReviewEvidenceContent,
 } from "../support/review-evidence-fixture.js";
@@ -332,21 +334,40 @@ const REBASE_EVIDENCE = syntheticReviewEvidence({
 function reviewArtifact(
   base: string,
   implementation: string,
-  change: Partial<Omit<ReviewEvidence, "evidenceDigest">> = {},
+  verification?: ReviewEvidence["observed"]["verification"],
 ): string {
-  return resealReviewEvidence(REBASE_EVIDENCE, {
+  return resealObservedEvidence(REBASE_EVIDENCE, {
     baseSha: base,
     implementationHeadSha: implementation,
-    ...change,
+    ...(verification === undefined ? {} : { verification }),
   });
 }
 
-/** 検証commandを1件追加した同じ証跡。`verification`以外は変えない。 */
+/** 検証commandを1件追加した同じ証跡。`verification`以外は変えない（記録なしの合成）。 */
 function withAddedVerification(
   evidence: ReviewEvidence,
   command = "npm run lint",
-): ReviewEvidence["verification"] {
-  return [...evidence.verification, { command, result: "pass" as const }];
+): ReviewEvidence["observed"]["verification"] {
+  return withAddedObservedVerification(evidence, command);
+}
+
+/**
+ * 検証commandを1件追加した検証欄を、stagingへ実際の検証記録を追記して導く。
+ * **session照合と記録照合を通る正当な前進修正を作る。**
+ */
+function withRecordedVerification(
+  world: ReanchorWorld,
+  evidence: ReviewEvidence,
+  command = "npm run lint",
+): ReviewEvidence["observed"]["verification"] {
+  return recordObservedVerification(world.staging, {
+    baseSha: evidence.observed.baseSha,
+    implementationHeadSha: evidence.observed.implementationHeadSha,
+    commands: [
+      ...evidence.observed.verification.map((item) => item.command.join(" ")),
+      command,
+    ],
+  }).verification;
 }
 
 /** stagingの保存済みsessionから、製品と同じ生成関数で証跡を作る。 */
@@ -754,8 +775,8 @@ Given("pr-bound後のreviewed-forward反例「{word}」がある", function (kin
     this.newHeadSha = commitPath(
       this.root,
       FORWARD_ARTIFACT,
-      resealReviewEvidence(first, {
-        verification: withAddedVerification(first),
+      resealObservedEvidence(first, {
+        verification: withRecordedVerification(this, first),
       }),
       "docs: 終端証跡へ2段目の是正を積む",
     );
@@ -923,7 +944,9 @@ function supersessionFixture(
   world: ReanchorWorld,
   change: (
     evidence: ReviewEvidence,
-  ) => Partial<Omit<ReviewEvidence, "evidenceDigest">> = () => ({}),
+  ) => Partial<
+    Omit<ReviewEvidence, "evidenceDigest" | "observed">
+  > = () => ({}),
   priorArtifactCommits = 1,
 ): void {
   world.root = world.initRepo();
@@ -946,7 +969,7 @@ function supersessionFixture(
     world.oldHeadSha = commitPath(
       world.root,
       SUPERSESSION_ARTIFACT,
-      resealReviewEvidence(oldEvidence, {
+      resealObservedEvidence(oldEvidence, {
         verification: withAddedVerification(
           oldEvidence,
           `npm run check:${index}`,
@@ -954,16 +977,19 @@ function supersessionFixture(
       }),
       `docs: prior artifact correction ${index}`,
     );
+  /** 追加する検証は実際の記録としてstagingへ先に追記する（delivery固定前）。 */
+  const addedVerification = withRecordedVerification(world, oldEvidence);
   buildDelivery(world, false);
   assert.equal(readStoredDeliveryState(world.staging)?.state, "pr-bound");
   snapshot(world);
   world.newHeadSha = commitPath(
     world.root,
     SUPERSESSION_ARTIFACT,
-    resealReviewEvidence(oldEvidence, {
-      verification: withAddedVerification(oldEvidence),
-      ...change(oldEvidence),
-    }),
+    resealObservedEvidence(
+      oldEvidence,
+      { verification: addedVerification },
+      change(oldEvidence),
+    ),
     "docs: supersede review証跡",
   );
   world.newBaseSha = world.baseSha;
@@ -980,7 +1006,7 @@ Given(
   "pr-bound後にartifactの独立性の記録を変えた前進commitがある",
   function () {
     supersessionFixture(this, (evidence) => ({
-      independence: { ...evidence.independence, mode: "actor-independent" },
+      declared: { ...evidence.declared, independenceMode: "actor-independent" },
     }));
   },
 );
@@ -1061,7 +1087,7 @@ Given("pr-boundの不正なartifact replacement「{word}」がある", function 
     this.root,
     REPLACEMENT_ARTIFACT,
     kind === "内容改変"
-      ? resealReviewEvidence(oldEvidence, {
+      ? resealObservedEvidence(oldEvidence, {
           verification: withAddedVerification(oldEvidence),
         })
       : oldContent,
@@ -1250,9 +1276,11 @@ Given(
   "比較基点とH_implに加えて検証記録も書き換えたrebase後のreview証跡がある",
   function () {
     artifactFixture(this, (base, implementation) =>
-      reviewArtifact(base, implementation, {
-        verification: withAddedVerification(REBASE_EVIDENCE),
-      }),
+      reviewArtifact(
+        base,
+        implementation,
+        withAddedVerification(REBASE_EVIDENCE),
+      ),
     );
   },
 );

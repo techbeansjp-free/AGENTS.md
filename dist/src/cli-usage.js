@@ -610,13 +610,12 @@ export const COMMAND_USAGE = Object.freeze([
     {
         command: "review",
         subcommand: "export",
-        summary: "収束したreview sessionからreview証跡JSON（docs/reviews/<Issue番号>_review.json）を生成する",
+        summary: "収束したreview sessionとverify runの観測記録からreview証跡JSON（docs/reviews/<Issue番号>_review.json）を生成する。H_implで合格した観測記録が無ければ生成しない",
         requiredFlags: [
             flag("staging", "path", "対象Issue staging"),
             flag("issue", "整数", "対象Issue番号。stagingのtrackerと一致させる"),
-            flag("reviewer", "id", "reviewerのstable identity（session/context）"),
-            flag("implementer", "id", "implementerのstable identity。reviewerと異なる値が必要"),
-            flag("verified", "command", "実行して合格した検証command。1件以上を繰り返し指定する"),
+            flag("reviewer", "id", "reviewerのstable identity（session/context）。申告としてdeclaredへ記録する"),
+            flag("implementer", "id", "implementerのstable identity。reviewerと異なる値が必要。申告としてdeclaredへ記録する"),
         ],
         conditionalFlags: [],
         optionalFlags: [
@@ -624,7 +623,22 @@ export const COMMAND_USAGE = Object.freeze([
             optional("base", "sha", "比較基点。rebase後または既定branch追随後の比較基点を指定する", "review sessionの比較基点"),
             optional("out", "path", "証跡の出力先。docs/reviews/または.agent-skill-chain/reviews/配下の<Issue番号>_review.json", "docs/reviews/<Issue番号>_review.json"),
         ],
-        example: 'npx agent-skill-chain review export --staging=.agent-skill-chain/tmp/issues/20260911_change --issue=1333 --reviewer=reviewer-context --implementer=implementer-context --verified="npm test"',
+        example: "npx agent-skill-chain review export --staging=.agent-skill-chain/tmp/issues/20260911_change --issue=1333 --reviewer=reviewer-context --implementer=implementer-context",
+    },
+    {
+        command: "verify",
+        subcommand: "run",
+        summary: "`--`の後の検証commandをshellを通さずH_implで実行し、HEAD・影響集合digest・終了値をstagingの観測記録（journal/verification-runs.jsonl）へ追記する。終了値はcommandの終了値",
+        positional: "-- <command> [args...] 実行する検証commandのargv。shellを通さずそのまま実行する",
+        requiredFlags: [flag("staging", "path", "対象Issue staging")],
+        conditionalFlags: [],
+        optionalFlags: [
+            optional("scope", "targeted|full", "検証範囲。targetedは影響集合がtargetedで、選ばれたfeatureを全部argvに含む場合だけ記録できる", "full"),
+            optional("base", "sha", "影響集合の比較基点。rebase後または既定branch追随後はreview exportと同じ基点を指定する", "review sessionの比較基点（sessionが無ければ必須）"),
+            optional("root", "path", "対象repositoryのroot。stagingを置いたrepositoryと一致させる", "現在の作業directory"),
+        ],
+        acceptsCommandArgv: true,
+        example: "npx agent-skill-chain verify run --staging=.agent-skill-chain/tmp/issues/20260911_change --scope=full -- npm test",
     },
     {
         command: "review",

@@ -27,3 +27,14 @@ Feature: review exportとreview validateでreview証跡を生成・照合する
     Given review証跡用に収束済みsessionを持つrepositoryがある
     When 既定branchを進めて実装を内容等価にrebaseしreview exportを実行する
     Then rebase後の比較基点とH_implを持つ証跡が生成されsessionに照合できる
+
+  Scenario: SCN-INT-REVEVID-009 観測記録が無いか最新の実行が不合格ならreview exportは証跡を生成しない
+    Given review証跡用に収束済みsessionを持つrepositoryがある
+    When 観測記録の条件を変えてreview exportを実行する
+    Then 各条件を観測記録の理由つきで拒否し証跡を書かない
+
+  Scenario: SCN-INT-REVEVID-010 review validate --stagingは観測記録の欠落・改竄・後続の不合格を拒否する
+    Given review証跡用に収束済みsessionを持つrepositoryがある
+    When H_implでreview exportを実行する
+    And 観測記録を消すか改竄してreview validateを実行する
+    Then 記録の欠落・改竄・後続の不合格をそれぞれ拒否する

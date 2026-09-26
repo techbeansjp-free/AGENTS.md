@@ -9,20 +9,31 @@ import {
   type ReviewFindingStatus,
   type ReviewSessionState,
 } from "./review-convergence.js";
+import {
+  validateVerificationArgv,
+  VERIFICATION_SCOPES,
+  type ObservedVerification,
+  type VerificationScope,
+} from "./verification-run.js";
 
 /**
  * Step 10の構造化review証跡（REQ-WF-038、TERM-ASC-WR-03）。
  *
  * **reviewの証明は散文ではなく構造化Evidenceである。Gitが示す事実を書き直さない。**
- * 本fileは`review export`だけが生成し、人やAIが手で書かない。安全性は次の3つで保つ。
+ * 本fileは`review export`だけが生成し、人やAIが手で書かない。安全性は次の4つで保つ。
  *
- * 1. 保存済みreview session（`review-session.json`）から導出できる値だけを持つ。
- *    消費側は毎回sessionから再導出し、fileの値をauthorityにしない
+ * 1. **観測（`observed`）と申告（`declared`）を分ける。** `observed`は保存済みreview
+ *    session・Git・`verify run`の機械記録から再導出できる値だけを持ち、消費側は毎回
+ *    再導出して一致だけを受理する。`declared`はreviewer・implementer identityと
+ *    独立性の申告であり、hard gateの根拠にしない（REQ-WF-038）
  * 2. `evidenceDigest`でfile全体の値を束縛する。1 byteの改変でも不一致になる
  * 3. 正規直列化（`renderReviewEvidence`）とbyte一致しないfileを拒否する。
  *    手書き・整形し直しを受理しない
+ * 4. 旧版（v1）は申告文字列の検証欄を持つため受理しない
  */
 export const REVIEW_EVIDENCE_SCHEMA_VERSION =
+  "agent-skill-chain/review-evidence/v2";
+const LEGACY_REVIEW_EVIDENCE_SCHEMA_VERSION =
   "agent-skill-chain/review-evidence/v1";
 
 /** review証跡のfile名。`docs/reviews/<Issue番号>_review.json`。 */
@@ -39,32 +50,48 @@ export interface ReviewEvidenceFinding {
   readonly contractId: string | null;
 }
 
-export interface ReviewEvidenceVerification {
-  readonly command: string;
-  readonly result: "pass";
-}
+export type ReviewEvidenceVerification = ObservedVerification;
 
-export interface ReviewEvidence {
-  readonly schemaVersion: typeof REVIEW_EVIDENCE_SCHEMA_VERSION;
-  readonly issue: number;
+/** session・Git・検証記録から再導出できる値。hard gateはこの節だけを根拠にする。 */
+export interface ReviewEvidenceObserved {
   readonly baseSha: string;
   readonly implementationHeadSha: string;
+  /** `observeReviewDiff(baseSha, implementationHeadSha)`のdigest。 */
+  readonly diffDigest: string;
   readonly session: {
     readonly sessionId: string;
     readonly latestRoundDigest: string;
     readonly status: "converged";
     readonly countedRounds: number;
   };
+  /** `computeImpactSet(baseSha, implementationHeadSha)`のdigestとmode。 */
+  readonly impact: {
+    readonly digest: string;
+    readonly mode: "targeted" | "full";
+  };
+  readonly verification: readonly ReviewEvidenceVerification[];
+}
+
+/**
+ * 呼び出し側の申告。**観測できないため、hard gateの根拠にしない。**
+ * `context-isolated`の独立性は申告であり、観測できるのは`actor-independent`の
+ * GitHub APPROVED eventだけである（REQ-WF-038）。
+ */
+export interface ReviewEvidenceDeclared {
+  readonly reviewer: string;
+  readonly implementer: string;
+  readonly independenceMode: ReviewIndependenceMode;
+  readonly reviewerModifiedCandidate: false;
+}
+
+export interface ReviewEvidence {
+  readonly schemaVersion: typeof REVIEW_EVIDENCE_SCHEMA_VERSION;
+  readonly issue: number;
+  readonly observed: ReviewEvidenceObserved;
   readonly findings: readonly ReviewEvidenceFinding[];
   readonly unresolvedCriticalHigh: readonly string[];
-  readonly independence: {
-    readonly mode: ReviewIndependenceMode;
-    readonly reviewer: string;
-    readonly implementer: string;
-    readonly reviewerModifiedCandidate: false;
-  };
   readonly verdict: "approved";
-  readonly verification: readonly ReviewEvidenceVerification[];
+  readonly declared: ReviewEvidenceDeclared;
   readonly evidenceDigest: string;
 }
 
@@ -74,6 +101,7 @@ const OID = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const STABLE_ID = /^[A-Z][A-Z0-9._-]{1,127}$/u;
 const ACTOR_ID = /^[A-Za-z0-9][A-Za-z0-9_.:=/@-]{0,255}$/u;
+const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const SEVERITIES = ["Critical", "High", "Medium", "Low"] as const;
 const STATUSES = ["valid", "resolved", "duplicate", "false-positive"] as const;
 const RELATIONS = [
@@ -84,6 +112,7 @@ const RELATIONS = [
   "out-of-scope",
 ] as const;
 const MODES = ["context-isolated", "actor-independent"] as const;
+const IMPACT_MODES = ["targeted", "full"] as const;
 const MAX_VERIFICATIONS = 64;
 const MAX_FINDINGS = 4096;
 
@@ -198,41 +227,205 @@ function parseFinding(value: unknown, index: number): ReviewEvidenceFinding {
   });
 }
 
+function parseVerification(
+  value: unknown,
+  index: number,
+  observed: { implementationHeadSha: string; impactDigest: string },
+): ReviewEvidenceVerification {
+  const label = `review evidence.observed.verification[${index}]`;
+  const item = exactObject(value, label, [
+    "command",
+    "scope",
+    "exitCode",
+    "headSha",
+    "impactDigest",
+    "finishedAt",
+    "recordDigest",
+  ]);
+  if (item.exitCode !== 0)
+    throw new Error(`${label}.exitCodeは0だけを受理します`);
+  const headSha = oid(item.headSha, `${label}.headSha`);
+  if (headSha !== observed.implementationHeadSha)
+    throw new Error(
+      `${label}.headShaはobserved.implementationHeadShaと一致する必要があります`,
+    );
+  const impactDigest = sha256(item.impactDigest, `${label}.impactDigest`);
+  if (impactDigest !== observed.impactDigest)
+    throw new Error(
+      `${label}.impactDigestはobserved.impact.digestと一致する必要があります`,
+    );
+  if (
+    typeof item.finishedAt !== "string" ||
+    !TIMESTAMP.test(item.finishedAt) ||
+    new Date(item.finishedAt).toISOString() !== item.finishedAt
+  )
+    throw new Error(`${label}.finishedAtはUTCのISO 8601時刻が必要です`);
+  return Object.freeze({
+    command: validateVerificationArgv(item.command, `${label}.command`),
+    scope: oneOf(
+      item.scope,
+      VERIFICATION_SCOPES,
+      `${label}.scope`,
+    ) as VerificationScope,
+    exitCode: 0 as const,
+    headSha,
+    impactDigest,
+    finishedAt: item.finishedAt,
+    recordDigest: sha256(item.recordDigest, `${label}.recordDigest`),
+  });
+}
+
+function parseObserved(value: unknown): ReviewEvidenceObserved {
+  const observed = exactObject(value, "review evidence.observed", [
+    "baseSha",
+    "implementationHeadSha",
+    "diffDigest",
+    "session",
+    "impact",
+    "verification",
+  ]);
+  const session = exactObject(
+    observed.session,
+    "review evidence.observed.session",
+    ["sessionId", "latestRoundDigest", "status", "countedRounds"],
+  );
+  if (session.status !== "converged")
+    throw new Error(
+      "review evidence.observed.session.statusはconvergedだけを受理します",
+    );
+  const counted = positiveInteger(
+    session.countedRounds,
+    "review evidence.observed.session.countedRounds",
+  );
+  if (counted > REVIEW_RECOVERY_ROUND)
+    throw new Error(
+      `review evidence.observed.session.countedRoundsが上限${REVIEW_RECOVERY_ROUND}を超えています: ${counted}`,
+    );
+  const impact = exactObject(
+    observed.impact,
+    "review evidence.observed.impact",
+    ["digest", "mode"],
+  );
+  const baseSha = oid(observed.baseSha, "review evidence.observed.baseSha");
+  const implementationHeadSha = oid(
+    observed.implementationHeadSha,
+    "review evidence.observed.implementationHeadSha",
+  );
+  const impactDigest = sha256(
+    impact.digest,
+    "review evidence.observed.impact.digest",
+  );
+  const impactMode = oneOf(
+    impact.mode,
+    IMPACT_MODES,
+    "review evidence.observed.impact.mode",
+  );
+  if (
+    !Array.isArray(observed.verification) ||
+    observed.verification.length < 1 ||
+    observed.verification.length > MAX_VERIFICATIONS
+  )
+    throw new Error(
+      `review evidence.observed.verificationは1〜${MAX_VERIFICATIONS}件が必要です`,
+    );
+  const verification = observed.verification.map((item, index) =>
+    parseVerification(item, index, { implementationHeadSha, impactDigest }),
+  );
+  const digests = verification.map(({ recordDigest }) => recordDigest);
+  if (new Set(digests).size !== digests.length)
+    throw new Error(
+      "review evidence.observed.verificationのrecordDigestが重複しています",
+    );
+  const commands = verification.map(({ command }) => stableJson(command));
+  if (new Set(commands).size !== commands.length)
+    throw new Error(
+      "review evidence.observed.verificationのcommandが重複しています",
+    );
+  if (impactMode === "full" && !verification.some((v) => v.scope === "full"))
+    throw new Error(
+      "review evidence.observed.impact.modeがfullのためscope=fullの検証記録が必要です",
+    );
+  return Object.freeze({
+    baseSha,
+    implementationHeadSha,
+    diffDigest: sha256(
+      observed.diffDigest,
+      "review evidence.observed.diffDigest",
+    ),
+    session: Object.freeze({
+      sessionId: sha256(
+        session.sessionId,
+        "review evidence.observed.session.sessionId",
+      ),
+      latestRoundDigest: sha256(
+        session.latestRoundDigest,
+        "review evidence.observed.session.latestRoundDigest",
+      ),
+      status: "converged" as const,
+      countedRounds: counted,
+    }),
+    impact: Object.freeze({ digest: impactDigest, mode: impactMode }),
+    verification: Object.freeze(verification),
+  });
+}
+
+function parseDeclared(value: unknown): ReviewEvidenceDeclared {
+  const declared = exactObject(value, "review evidence.declared", [
+    "reviewer",
+    "implementer",
+    "independenceMode",
+    "reviewerModifiedCandidate",
+  ]);
+  const reviewer = actor(
+    declared.reviewer,
+    "review evidence.declared.reviewer",
+  );
+  const implementer = actor(
+    declared.implementer,
+    "review evidence.declared.implementer",
+  );
+  if (reviewer === implementer)
+    throw new Error(
+      "review evidence.declared.reviewerとimplementerは異なるidentityが必要です",
+    );
+  if (declared.reviewerModifiedCandidate !== false)
+    throw new Error(
+      "review evidence.declared.reviewerModifiedCandidateはfalseだけを受理します",
+    );
+  return Object.freeze({
+    reviewer,
+    implementer,
+    independenceMode: oneOf(
+      declared.independenceMode,
+      MODES,
+      "review evidence.declared.independenceMode",
+    ),
+    reviewerModifiedCandidate: false as const,
+  });
+}
+
 /** 値の検査だけを行い、digestとbyte表現は検査しない。 */
 function parseEvidenceValue(value: unknown): ReviewEvidence {
+  if (
+    isRecord(value) &&
+    value.schemaVersion === LEGACY_REVIEW_EVIDENCE_SCHEMA_VERSION
+  )
+    throw new Error(
+      `review evidence.schemaVersion ${LEGACY_REVIEW_EVIDENCE_SCHEMA_VERSION} は受理しません。v1の検証欄は申告文字列であり観測ではありません。H_implで verify run を実行し review export で ${REVIEW_EVIDENCE_SCHEMA_VERSION} を再生成してください`,
+    );
   const evidence = exactObject(value, "review evidence", [
     "schemaVersion",
     "issue",
-    "baseSha",
-    "implementationHeadSha",
-    "session",
+    "observed",
     "findings",
     "unresolvedCriticalHigh",
-    "independence",
     "verdict",
-    "verification",
+    "declared",
     "evidenceDigest",
   ]);
   if (evidence.schemaVersion !== REVIEW_EVIDENCE_SCHEMA_VERSION)
     throw new Error("review evidence.schemaVersionが不正です");
-  const session = exactObject(evidence.session, "review evidence.session", [
-    "sessionId",
-    "latestRoundDigest",
-    "status",
-    "countedRounds",
-  ]);
-  if (session.status !== "converged")
-    throw new Error(
-      "review evidence.session.statusはconvergedだけを受理します",
-    );
-  const counted = positiveInteger(
-    session.countedRounds,
-    "review evidence.session.countedRounds",
-  );
-  if (counted > REVIEW_RECOVERY_ROUND)
-    throw new Error(
-      `review evidence.session.countedRoundsが上限${REVIEW_RECOVERY_ROUND}を超えています: ${counted}`,
-    );
+  const observed = parseObserved(evidence.observed);
   if (
     !Array.isArray(evidence.findings) ||
     evidence.findings.length > MAX_FINDINGS
@@ -251,89 +444,16 @@ function parseEvidenceValue(value: unknown): ReviewEvidence {
     throw new Error(
       "review evidence.unresolvedCriticalHighは空配列だけを受理します。未解決Critical/Highが残るreviewは証跡にできません",
     );
-  const independence = exactObject(
-    evidence.independence,
-    "review evidence.independence",
-    ["mode", "reviewer", "implementer", "reviewerModifiedCandidate"],
-  );
-  const reviewer = actor(
-    independence.reviewer,
-    "review evidence.independence.reviewer",
-  );
-  const implementer = actor(
-    independence.implementer,
-    "review evidence.independence.implementer",
-  );
-  if (reviewer === implementer)
-    throw new Error(
-      "review evidence.independence.reviewerとimplementerは異なるidentityが必要です",
-    );
-  if (independence.reviewerModifiedCandidate !== false)
-    throw new Error(
-      "review evidence.independence.reviewerModifiedCandidateはfalseだけを受理します",
-    );
   if (evidence.verdict !== "approved")
     throw new Error("review evidence.verdictはapprovedだけを受理します");
-  if (
-    !Array.isArray(evidence.verification) ||
-    evidence.verification.length < 1 ||
-    evidence.verification.length > MAX_VERIFICATIONS
-  )
-    throw new Error(
-      `review evidence.verificationは1〜${MAX_VERIFICATIONS}件が必要です`,
-    );
-  const verification = evidence.verification.map((candidate, index) => {
-    const item = exactObject(
-      candidate,
-      `review evidence.verification[${index}]`,
-      ["command", "result"],
-    );
-    if (item.result !== "pass")
-      throw new Error(
-        `review evidence.verification[${index}].resultはpassだけを受理します`,
-      );
-    return Object.freeze({
-      command: text(
-        item.command,
-        `review evidence.verification[${index}].command`,
-      ),
-      result: "pass" as const,
-    });
-  });
-  const commands = verification.map(({ command }) => command);
-  if (new Set(commands).size !== commands.length)
-    throw new Error("review evidence.verificationのcommandが重複しています");
   return Object.freeze({
     schemaVersion: REVIEW_EVIDENCE_SCHEMA_VERSION,
     issue: positiveInteger(evidence.issue, "review evidence.issue"),
-    baseSha: oid(evidence.baseSha, "review evidence.baseSha"),
-    implementationHeadSha: oid(
-      evidence.implementationHeadSha,
-      "review evidence.implementationHeadSha",
-    ),
-    session: Object.freeze({
-      sessionId: sha256(session.sessionId, "review evidence.session.sessionId"),
-      latestRoundDigest: sha256(
-        session.latestRoundDigest,
-        "review evidence.session.latestRoundDigest",
-      ),
-      status: "converged" as const,
-      countedRounds: counted,
-    }),
+    observed,
     findings: Object.freeze(findings),
     unresolvedCriticalHigh: Object.freeze([]),
-    independence: Object.freeze({
-      mode: oneOf(
-        independence.mode,
-        MODES,
-        "review evidence.independence.mode",
-      ),
-      reviewer,
-      implementer,
-      reviewerModifiedCandidate: false as const,
-    }),
     verdict: "approved" as const,
-    verification: Object.freeze(verification),
+    declared: parseDeclared(evidence.declared),
     evidenceDigest: sha256(
       evidence.evidenceDigest,
       "review evidence.evidenceDigest",
@@ -352,21 +472,33 @@ export function reviewEvidenceDigest(body: ReviewEvidenceBody): string {
     .digest("hex");
 }
 
-/**
- * 正規直列化。field順を固定し、2 space indentと末尾改行1つで出力する。
- * **同じ値は常に同じbyte列になる。** 再固定のbyte一致比較はこの性質に依存する。
- */
-export function renderReviewEvidence(evidence: ReviewEvidence): string {
-  const ordered = {
+function orderedEvidence(evidence: ReviewEvidence) {
+  return {
     schemaVersion: evidence.schemaVersion,
     issue: evidence.issue,
-    baseSha: evidence.baseSha,
-    implementationHeadSha: evidence.implementationHeadSha,
-    session: {
-      sessionId: evidence.session.sessionId,
-      latestRoundDigest: evidence.session.latestRoundDigest,
-      status: evidence.session.status,
-      countedRounds: evidence.session.countedRounds,
+    observed: {
+      baseSha: evidence.observed.baseSha,
+      implementationHeadSha: evidence.observed.implementationHeadSha,
+      diffDigest: evidence.observed.diffDigest,
+      session: {
+        sessionId: evidence.observed.session.sessionId,
+        latestRoundDigest: evidence.observed.session.latestRoundDigest,
+        status: evidence.observed.session.status,
+        countedRounds: evidence.observed.session.countedRounds,
+      },
+      impact: {
+        digest: evidence.observed.impact.digest,
+        mode: evidence.observed.impact.mode,
+      },
+      verification: evidence.observed.verification.map((item) => ({
+        command: [...item.command],
+        scope: item.scope,
+        exitCode: item.exitCode,
+        headSha: item.headSha,
+        impactDigest: item.impactDigest,
+        finishedAt: item.finishedAt,
+        recordDigest: item.recordDigest,
+      })),
     },
     findings: evidence.findings.map((finding) => ({
       id: finding.id,
@@ -377,21 +509,23 @@ export function renderReviewEvidence(evidence: ReviewEvidence): string {
       contractId: finding.contractId,
     })),
     unresolvedCriticalHigh: [...evidence.unresolvedCriticalHigh],
-    independence: {
-      mode: evidence.independence.mode,
-      reviewer: evidence.independence.reviewer,
-      implementer: evidence.independence.implementer,
-      reviewerModifiedCandidate:
-        evidence.independence.reviewerModifiedCandidate,
-    },
     verdict: evidence.verdict,
-    verification: evidence.verification.map((item) => ({
-      command: item.command,
-      result: item.result,
-    })),
+    declared: {
+      reviewer: evidence.declared.reviewer,
+      implementer: evidence.declared.implementer,
+      independenceMode: evidence.declared.independenceMode,
+      reviewerModifiedCandidate: evidence.declared.reviewerModifiedCandidate,
+    },
     evidenceDigest: evidence.evidenceDigest,
   };
-  return `${JSON.stringify(ordered, null, 2)}\n`;
+}
+
+/**
+ * 正規直列化。field順を固定し、2 space indentと末尾改行1つで出力する。
+ * **同じ値は常に同じbyte列になる。** 再固定のbyte一致比較はこの性質に依存する。
+ */
+export function renderReviewEvidence(evidence: ReviewEvidence): string {
+  return `${JSON.stringify(orderedEvidence(evidence), null, 2)}\n`;
 }
 
 /** bodyへdigestを付けて値を検査した証跡を返す。 */
@@ -468,18 +602,21 @@ export function unresolvedCriticalHighFindings(
 }
 
 /**
- * 収束済みsessionと外部入力から証跡を組み立てる。**収束していない、blockerが残る、
- * reviewerとimplementerが同一、検証commandが無い場合は生成しない。**
+ * 収束済みsessionと観測値から証跡を組み立てる。**収束していない、blockerが残る、
+ * reviewerとimplementerが同一、観測した合格検証が無い場合は生成しない。**
+ * 検証欄は`selectObservedVerification`が機械記録から導出した値だけを受け取る。
  */
 export function createReviewEvidence(input: {
   readonly issue: number;
   readonly baseSha: string;
   readonly implementationHeadSha: string;
+  readonly diffDigest: string;
   readonly session: ReviewSessionState;
+  readonly impact: { readonly digest: string; readonly mode: string };
+  readonly verification: readonly ReviewEvidenceVerification[];
   readonly independenceMode: ReviewIndependenceMode;
   readonly reviewer: string;
   readonly implementer: string;
-  readonly verification: readonly string[];
 }): ReviewEvidence {
   if (input.session.status !== "converged")
     throw new Error(
@@ -493,33 +630,38 @@ export function createReviewEvidence(input: {
   return sealReviewEvidence({
     schemaVersion: REVIEW_EVIDENCE_SCHEMA_VERSION,
     issue: input.issue,
-    baseSha: input.baseSha,
-    implementationHeadSha: input.implementationHeadSha,
-    session: {
-      sessionId: input.session.sessionId,
-      latestRoundDigest: input.session.latestRoundDigest,
-      status: "converged",
-      countedRounds: countedRounds(input.session),
+    observed: {
+      baseSha: input.baseSha,
+      implementationHeadSha: input.implementationHeadSha,
+      diffDigest: input.diffDigest,
+      session: {
+        sessionId: input.session.sessionId,
+        latestRoundDigest: input.session.latestRoundDigest,
+        status: "converged",
+        countedRounds: countedRounds(input.session),
+      },
+      impact: {
+        digest: input.impact.digest,
+        mode: input.impact.mode as "targeted" | "full",
+      },
+      verification: input.verification,
     },
     findings: finalReviewFindings(input.session),
     unresolvedCriticalHigh: unresolved,
-    independence: {
-      mode: input.independenceMode,
+    verdict: "approved",
+    declared: {
       reviewer: input.reviewer,
       implementer: input.implementer,
+      independenceMode: input.independenceMode,
       reviewerModifiedCandidate: false,
     },
-    verdict: "approved",
-    verification: input.verification.map((command) => ({
-      command,
-      result: "pass" as const,
-    })),
   });
 }
 
 /**
  * 証跡を保存済みsessionと照合する。**fileの値をauthorityにせず、sessionから再導出した
- * 値との一致だけを受理する。** H_implとbaseのGit観測との照合はcallerが行う。
+ * 値との一致だけを受理する。** Git（比較基点・`H_impl`・diff・影響集合）と検証記録の
+ * 照合はcallerが行う（`verifyReviewEvidenceWithStaging`）。
  */
 export function validateReviewEvidenceAgainstSession(
   evidence: ReviewEvidence,
@@ -533,15 +675,16 @@ export function validateReviewEvidenceAgainstSession(
   const errors: string[] = [];
   if (session === null)
     return ["review証跡を照合する永続review sessionがありません"];
+  const observed = evidence.observed;
   if (session.status !== "converged")
     errors.push(`review sessionが収束していません: status=${session.status}`);
-  if (evidence.session.sessionId !== session.sessionId)
+  if (observed.session.sessionId !== session.sessionId)
     errors.push("review証跡のsessionIdが保存済みsessionと一致しません");
-  if (evidence.session.latestRoundDigest !== session.latestRoundDigest)
+  if (observed.session.latestRoundDigest !== session.latestRoundDigest)
     errors.push(
       "review証跡のlatestRoundDigestが保存済みsessionの最新roundと一致しません",
     );
-  if (evidence.session.countedRounds !== countedRounds(session))
+  if (observed.session.countedRounds !== countedRounds(session))
     errors.push("review証跡のcountedRoundsが保存済みsessionと一致しません");
   if (
     stableJson(evidence.findings) !== stableJson(finalReviewFindings(session))
@@ -558,14 +701,14 @@ export function validateReviewEvidenceAgainstSession(
     );
   if (
     options.independenceMode !== undefined &&
-    evidence.independence.mode !== options.independenceMode
+    evidence.declared.independenceMode !== options.independenceMode
   )
     errors.push(
-      `review証跡の独立性モード${evidence.independence.mode}がtrusted policyの${options.independenceMode}と一致しません`,
+      `review証跡の独立性モード${evidence.declared.independenceMode}がtrusted policyの${options.independenceMode}と一致しません`,
     );
   if (
     options.requireSessionHead === true &&
-    evidence.implementationHeadSha !== session.latestCandidateHeadSha
+    observed.implementationHeadSha !== session.latestCandidateHeadSha
   )
     errors.push(
       "review証跡のimplementationHeadShaが保存済みsessionのcandidate HEADと一致しません",
@@ -576,23 +719,29 @@ export function validateReviewEvidenceAgainstSession(
 /**
  * 再固定で変わってよいfieldを除いた比較用の値。
  *
- * - `rebase`: 比較基点と`H_impl`だけが変わってよい
- * - `supersession`: 追加の検証記録（`verification`）だけが変わってよい
+ * - `rebase`: 比較基点・`H_impl`と、それに束縛される値（影響集合、各検証記録の
+ *   headSha・impactDigest・finishedAt・recordDigest）だけが変わってよい。
+ *   **検証したcommandとscopeの集合は一致を要求する。** diff digest（内容のdigest）・
+ *   session・finding・申告も一致を要求する
+ * - `supersession`: 追加の検証記録（`observed.verification`）だけが変わってよい
  * - `exact`: 何も変わってはならない（path是正）
  */
 export function comparableReviewEvidence(
   evidence: ReviewEvidence,
   kind: "rebase" | "supersession" | "exact",
 ): string {
-  const omitted = new Set<string>(["evidenceDigest"]);
+  const ordered = orderedEvidence(evidence);
+  const { evidenceDigest: _digest, ...body } = ordered;
+  void _digest;
+  const observed: Record<string, unknown> = { ...ordered.observed };
   if (kind === "rebase") {
-    omitted.add("baseSha");
-    omitted.add("implementationHeadSha");
+    delete observed.baseSha;
+    delete observed.implementationHeadSha;
+    delete observed.impact;
+    observed.verification = ordered.observed.verification
+      .map(({ command, scope }) => stableJson({ command, scope }))
+      .sort();
   }
-  if (kind === "supersession") omitted.add("verification");
-  return stableJson(
-    Object.fromEntries(
-      Object.entries(evidence).filter(([field]) => !omitted.has(field)),
-    ),
-  );
+  if (kind === "supersession") delete observed.verification;
+  return stableJson({ ...body, observed });
 }

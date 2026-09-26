@@ -832,9 +832,15 @@ Then(
       fs.readFileSync(path.join(repositoryRoot, relative), "utf8");
     const schema = JSON.parse(
       read(".agent-skill-chain/schemas/review-evidence.schema.json"),
-    ) as { required: string[] };
-    assert.ok(schema.required.includes("implementationHeadSha"));
-    assert.ok(schema.required.includes("baseSha"));
+    ) as {
+      required: string[];
+      properties: { observed: { required: string[] } };
+    };
+    assert.ok(schema.required.includes("observed"));
+    assert.ok(
+      schema.properties.observed.required.includes("implementationHeadSha"),
+    );
+    assert.ok(schema.properties.observed.required.includes("baseSha"));
     const workflow = read(".agent-skill-chain/docs/01_開発ワークフロー.md");
     assert.match(workflow, /\*\*Q-08の判定例。\*\*/u);
     assert.match(workflow, /付随する更新は別コンテキストに数えない/u);

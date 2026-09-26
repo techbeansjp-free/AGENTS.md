@@ -78,6 +78,8 @@ finalize時に削除可能なignore対象は、package既定の`node_modules/`�
 
 選択の実行は利用projectのtest commandに委ねる。条件と全体検証へ倒す理由の正本はREQ-WF-039とREQ-WF-040である。
 
+`verify run --staging=<path> [--scope=targeted|full] [--base=<commit>] [--root=<path>] -- <argv...>`は、`--`の後のargvをshellを通さず実行し、観測をstagingの`journal/verification-runs.jsonl`（`agent-skill-chain/verification-run/v1`）へ追記する（REQ-WF-040）。追跡fileと未追跡file（stagingの配置rootを除く）が現在HEADと完全一致しない、`--`またはargvが無い、比較基点（`--base`、無ければreview sessionの比較基点）が無い、影響集合が`full`なのに`--scope=targeted`、`--scope=targeted`のargvが影響集合の選んだfeatureを含まない場合は実行前に拒否する。実行後にHEADまたはworktreeが変わった場合と、commandを起動できない場合は記録しない。記録はHEAD・比較基点・argv・scope・影響集合digestとmode・終了値・signal・時刻・標準出力と標準エラーのdigest・`recordDigest`だけを持ち、生の出力を保存しない。commandの出力は標準エラーへ中継し、標準出力には記録の要約JSONを出す。終了値はcommandの終了値（signalで止まった場合は1）である。`--root`はstagingを置いたrepositoryと一致しなければならない。
+
 ## Issue検証コマンド
 
 | コマンド         | 入力                                                                                            | 出力・終了code                                                      |
@@ -204,7 +206,7 @@ squash/rebaseの終端検証は、固定base..headからsource commit数を1〜2
 
 `issue create`は`--staging-root=<親directory>`と`--name=<directory名>`を受ける。配置の契約はproject policyの`staging`節（REQ-WF-025）が所有し、`*`を含むrootでは`--staging-root`が必須である。
 
-`review export --staging=<path> --issue=<N> --reviewer=<id> --implementer=<id> --verified=<command>...[--base=<sha>] [--out=<path>]`は、収束済みreview sessionとtrusted policyの`merge.reviewIndependence`とcurrent HEAD（`H_impl`）からreview証跡（REQ-WF-038）を生成する。既定出力は`docs/reviews/<issue>_review.json`とし、`docs/reviews/`・`.agent-skill-chain/reviews/`配下の同名file以外、repository外、staging内、symlink祖先を拒否してatomicに書き、書込み後に厳密に読み戻す。未収束・budget-exhausted・blocker残存のsession、reviewerとimplementerの同一、`--verified`の欠落、stagingのtracker Issueと異なる`--issue`、review済みcandidate HEADでも内容等価なrebase後の`H_impl`でもないHEADを拒否する。`--base`はrebase後または既定branch追随後の比較基点を指定する。
+`review export --staging=<path> --issue=<N> --reviewer=<id> --implementer=<id> [--base=<sha>] [--out=<path>]`は、収束済みreview session、trusted policyの`merge.reviewIndependence`、current HEAD（`H_impl`）、`verify run`の観測記録からreview証跡（REQ-WF-038、schema `agent-skill-chain/review-evidence/v2`）を生成する。既定出力は`docs/reviews/<issue>_review.json`とし、`docs/reviews/`・`.agent-skill-chain/reviews/`配下の同名file以外、repository外、staging内、symlink祖先を拒否してatomicに書き、書込み後に厳密に読み戻す。未収束・budget-exhausted・blocker残存のsession、reviewerとimplementerの同一、stagingのtracker Issueと異なる`--issue`、review済みcandidate HEADでも内容等価なrebase後の`H_impl`でもないHEADを拒否する。検証欄は`比較基点..H_impl`の影響集合digestと`H_impl`に一致する観測記録から導出し、合格記録が無い、同じargvの最新記録が不合格、影響集合が`full`で`scope=full`の合格記録が無い場合は生成しない。廃止した`--verified`は移行先を名指しして拒否する。`--base`はrebase後または既定branch追随後の比較基点を指定する。reviewer・implementer・独立性モードは`declared`へ申告として記録する。
 
 `review validate`は既存の`--file=<json>`または位置引数によるreview入力評価と、排他的な`--artifact=<path> [--staging=<path>] [--root=<path>]`によるreview証跡の検証を持つ。artifact経路はroot内のsymlinkでない通常fileだけを読み、未知field・型違い・不正なSHA・`evidenceDigest`不一致・正規直列化とのbyte不一致を拒否する。`--staging`を指定した場合だけ保存済みreview session・trusted policyの独立性モード・Gitの比較基点と`H_impl`へ照合する。成功は`{valid:true, kind:"review-evidence", errors:[]}`、不備は`errors[]`へ理由を返して終了code 1とする。fileを変更せず、approval・authorityを生成しない。
 

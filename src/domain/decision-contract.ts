@@ -115,7 +115,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "1737",
+      callerLine: "1743",
       callerAnchor: "inspectCiDelivery({",
     }),
     Object.freeze({
@@ -128,7 +128,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "7339",
+      callerLine: "7350",
       callerAnchor: "validateSpecs(root",
     }),
     Object.freeze({
@@ -149,7 +149,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label:
         "review findingの検証記録に含める分類・理由の記入（進行役がfindingの分類と理由を記録する手順）",
       decisionSiteFile: ".agent-skill-chain/skills/step-10-review/SKILL.md",
-      decisionSiteLine: "33",
+      decisionSiteLine: "34",
       decisionSiteAnchor: "分類（severity等）と理由の記入（DCAND-006）は",
       direction: "fail-closed",
       disposition: "adopted",
@@ -184,7 +184,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       id: "DCAND-009",
       label: "reviewer選定（Codex Sol/Opus）の判断",
       decisionSiteFile: ".agent-skill-chain/skills/step-10-review/SKILL.md",
-      decisionSiteLine: "34",
+      decisionSiteLine: "35",
       decisionSiteAnchor: "reviewer選定（DCAND-009）は",
       direction: "fail-closed",
       disposition: "adopted",
