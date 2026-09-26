@@ -30,7 +30,7 @@ class JevProviderConfigWorld extends WorkflowWorld {
    * 呼び出しを記録し、SCN-008がtrusted pathの不在を動的に確認する。
    */
   readPaths: string[] = [];
-  restorePermissions: (() => void) | undefined = undefined;
+  restoreReadFileSync: (() => void) | undefined = undefined;
 }
 
 const { Given, When, Then } = stepDefinitions<JevProviderConfigWorld>();
@@ -374,6 +374,12 @@ Then("分類結果はenabledである", function (this: JevProviderConfigWorld) 
 Given(
   "jev-provider.jsonが存在するが読み取り権限が無い",
   function (this: JevProviderConfigWorld) {
+    // PR #1497独立review round 4の追加指摘（CodeRabbit）: `chmod 0o000`は
+    // root権限で実行されるCI環境ではreadFileSyncを止められず、実行環境に
+    // よってSCN-UNIT-JEVCFG-014の結果が不安定になる。既存の
+    // `callLoaderWithReadSpy`と同じfs.readFileSyncの一時的な置き換えで、
+    // OS権限を一切変更せずに対象pathだけへEACCESを発生させる
+    // （`ENOTDIR`はabsentへ分類されるため使わない）。
     this.root = this.temp("asc-jevcfg-014-");
     writeConfig(this.root, {
       enabled: true,
@@ -382,13 +388,26 @@ Given(
       model: "jev-decision-1",
     });
     const resolved = path.join(this.root, JEV_PROVIDER_CONFIG_PATH);
-    fs.chmodSync(resolved, 0o000);
-    this.restorePermissions = () => fs.chmodSync(resolved, 0o644);
+    const mutableFs = fs as unknown as MutableFsReadSurface;
+    const originalReadFileSync: NarrowReadFileSync = fs.readFileSync;
+    mutableFs.readFileSync = (targetPath, encoding) => {
+      if (path.resolve(String(targetPath)) === path.resolve(resolved)) {
+        const error = new Error(
+          "EACCES: permission denied",
+        ) as NodeJS.ErrnoException;
+        error.code = "EACCES";
+        throw error;
+      }
+      return originalReadFileSync(targetPath, encoding);
+    };
+    this.restoreReadFileSync = () => {
+      mutableFs.readFileSync = originalReadFileSync;
+    };
   },
 );
 
 After<JevProviderConfigWorld>(function () {
-  // 読み取り不可のままにするとtemp directoryの後始末（他stepの削除処理）が
-  // 失敗しうるため、EACCES fixtureのpermissionを必ず元へ戻す。
-  this.restorePermissions?.();
+  // fs.readFileSyncを差し替えたままにすると後続scenarioへ漏れるため、
+  // EACCES fixtureが使ったmonkey patchを必ず元へ戻す。
+  this.restoreReadFileSync?.();
 });
