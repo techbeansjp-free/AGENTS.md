@@ -32,7 +32,7 @@ import { canonicalProviderInstant, addIssueProjectItem, github, GitHubProviderUn
 import { planIssueStart } from "./domain/issue-start.js";
 import { assertMinimumExecutableVersion, MINIMUM_GH_VERSION, MINIMUM_GIT_VERSION, } from "./lib/executable-version.js";
 import { git } from "./lib/process.js";
-import { assertIssueStagingLocation, readStagingLayout, stagingExcludePathspec, stagingRepositoryRoot, } from "./domain/staging-layout.js";
+import { assertIssueStagingLocation, isLegacyStagingLayout, LEGACY_STAGING_LAYOUT_NOTICE, readStagingLayout, stagingExcludePathspec, stagingRepositoryRoot, } from "./domain/staging-layout.js";
 import { ExclusivePinnedWriteError, writeFileAtomic, writeFileExclusivePinned, } from "./lib/atomic.js";
 import { validateRepositoryConformance } from "./domain/conformance.js";
 import { parseJsonStrict, resolveContained, stableJson, } from "./lib/security.js";
@@ -1693,8 +1693,9 @@ function retryPreparedMergeAfterConfirmedAbsence(input) {
 /**
  * **`issue validate`が使うGherkin方言をproject choiceから解決する。**
  *
- * stagingは`<root>/.agent-skill-chain/tmp/issues/<staging>`に置かれるため、
- * `--path`の4階層上をrootとみなし、そこにproject policy manifestがあれば
+ * stagingは既定root（`<root>/.agent-skill-chain/tmp/issues/<staging>`）または
+ * project policyの`staging.root`直下に置かれるため、`stagingRepositoryRoot`で
+ * rootを導き、そこにproject policy manifestがあれば
  * `projectChoices.gherkinDialect`を返す。manifestが無い場合（一時directoryの
  * fixture等）は未指定とし、`validateIssue`の既定`en`に委ねる。
  * **宣言できても参照されない値を残さない**（Issue #1324）。
@@ -4858,6 +4859,12 @@ export async function main(argv, dependencies = {}) {
                 : {}),
             ...(typeof flags.name === "string" ? { name: flags.name } : {}),
         }));
+        /**
+         * **既定配置（版管理外・全文同期）には1行の通知だけを出す。** 判定も終了値も
+         * 変えず、JSON出力（stdout）にも混ぜない。
+         */
+        if (isLegacyStagingLayout(readStagingLayout(root)))
+            process.stderr.write(`通知: ${LEGACY_STAGING_LAYOUT_NOTICE}\n`);
         return 0;
     }
     if (command === "issue" && subcommand === "validate") {
@@ -4911,9 +4918,13 @@ export async function main(argv, dependencies = {}) {
         const repository = required(flags, "repo");
         const issue = Number(issueRaw);
         const staging = assertWorkflowStaging(path.resolve(required(flags, "staging-path")));
-        if (path.dirname(staging) !==
-            path.join(root, ".agent-skill-chain", "tmp", "issues"))
+        // 配置契約（既定root、またはproject policyのstaging.root）を対象rootで判定する
+        try {
+            assertIssueStagingLocation(staging, root);
+        }
+        catch {
             throw new Error("stagingは対象rootのIssue staging直下でなければなりません");
+        }
         const stagingRecord = readStoredStagingRecord(staging);
         const expectedTracker = `https://github.com/${repository}/issues/${issue}`;
         if (stagingRecord.state !== "sync-verified" ||

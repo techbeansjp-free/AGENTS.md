@@ -1,6 +1,6 @@
 import path from "node:path";
 import { distributedPaths } from "./conformance.js";
-import { matchesStagingRoot, readStagingLayout } from "./staging-layout.js";
+import { readStagingLayout, stagingLayoutForParent } from "./staging-layout.js";
 const REVIEW_IDENTITY_HEADING = "## 0. レビュー識別情報";
 const IDENTITY_BASE_EXPECTED = "| 比較基点 | `<40桁の小文字hex>` |";
 const IDENTITY_IMPL_EXPECTED = "| H_impl | `<40桁の小文字hex>` |";
@@ -317,7 +317,8 @@ export function isReviewArtifactStagingDirectChild(root, staging) {
         .join("/");
     if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative))
         return false;
-    return matchesStagingRoot(readStagingLayout(resolvedRoot).rootPattern, relative);
+    return (stagingLayoutForParent(readStagingLayout(resolvedRoot), relative) !==
+        undefined);
 }
 /** lexical rootから期待する親とreal parentが一致し、repository内に留まることを判定する。 */
 export function isReviewArtifactParentContained(lexicalRoot, realRoot, lexicalParent, realParent) {

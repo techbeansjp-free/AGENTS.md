@@ -26,7 +26,8 @@ export interface StagingLayout {
   readonly tracked: boolean;
   /**
    * Issue同期本文の形。`full`は成果物全文、`pointer`は目的・受け入れ条件・
-   * 成果物の配置とdigestだけを同期する。
+   * 成果物の配置とdigestだけを同期する。`pointer`は`tracked`が真の場合だけ許す
+   * （版管理外stagingへのpointerはmerge後に参照先が消える）。
    */
   readonly issueBody: "full" | "pointer";
 }
@@ -103,7 +104,25 @@ export function validateStagingPolicy(
     errors.push(
       `${name}.tracked=trueには版管理下のrootが必要です（既定rootは版管理外）`,
     );
+  /**
+   * **pointerは版管理下のstagingにだけ許す。** pointer本文は成果物の配置とdigestしか
+   * 持たず、全文の正本はstagingである。版管理外のstagingはPR mergeの後に消えるため、
+   * pointerと組み合わせると計画文書の永続的な複製が1つも残らない。
+   */
+  if (value.issueBody === "pointer" && value.tracked !== true)
+    errors.push(
+      `${name}.issueBody=pointerには${name}.tracked=true（版管理下のroot）が必要です。版管理外のstagingはmerge後に消え、pointer本文だけでは計画文書が失われます`,
+    );
 }
+
+/** 既定配置（版管理外・全文同期）か。新しい配置を勧める通知の判定に使う。 */
+export function isLegacyStagingLayout(layout: StagingLayout): boolean {
+  return !layout.tracked && layout.issueBody === "full";
+}
+
+/** 既定配置のprojectへ版管理下・pointer配置を勧める1行の通知。判定は変えない。 */
+export const LEGACY_STAGING_LAYOUT_NOTICE =
+  'stagingは版管理外の一時領域にあり、merge後はIssue本文の全文複製だけが残ります。project policyへ"staging": {"root": "docs/issues", "tracked": true, "issueBody": "pointer"}を宣言すると、計画文書をGitで一元管理しIssue本文をpointerにできます';
 
 export function resolveStagingLayout(value: unknown): StagingLayout {
   const errors: string[] = [];
@@ -238,6 +257,32 @@ export function stagingRepositoryRoot(staging: string): string {
   );
 }
 
+/**
+ * repository相対の親directoryに置かれたstagingへ適用する配置契約を返す。
+ *
+ * 宣言rootに一致すれば宣言した配置契約である。**宣言rootへ移行した後も、既定root
+ * （`.agent-skill-chain/tmp/issues`）に残る移行前のstagingは既定配置として扱う。**
+ * 移行前のstagingは版管理外なので、宣言が`pointer`でも全文同期（`full`）に倒す。
+ * pointer本文を版管理外のstagingへ向けると、merge後に参照先が消えるためである。
+ * どちらにも一致しなければ`undefined`。
+ */
+export function stagingLayoutForParent(
+  layout: StagingLayout,
+  relativeParent: string,
+): StagingLayout | undefined {
+  if (matchesStagingRoot(layout.rootPattern, relativeParent)) return layout;
+  if (matchesStagingRoot(DEFAULT_ISSUE_STAGING_ROOT, relativeParent))
+    return DEFAULT_STAGING_LAYOUT;
+  return undefined;
+}
+
+/** stagingを探すroot pattern。宣言rootと、移行前stagingが残りうる既定root。 */
+export function stagingRootPatterns(layout: StagingLayout): string[] {
+  return layout.rootPattern === DEFAULT_ISSUE_STAGING_ROOT
+    ? [layout.rootPattern]
+    : [layout.rootPattern, DEFAULT_ISSUE_STAGING_ROOT];
+}
+
 export interface StagingLocation {
   readonly staging: string;
   readonly repositoryRoot: string;
@@ -247,8 +292,10 @@ export interface StagingLocation {
 }
 
 /**
- * stagingが「repository rootのproject policyが定めるstaging rootの直下」に
- * あることを確かめる。symlink・`..`・rootの外を拒否する。
+ * stagingが「repository rootのproject policyが定めるstaging rootの直下」
+ * （または移行前stagingが残る既定rootの直下）にあることを確かめる。
+ * symlink・`..`・rootの外を拒否する。返す`layout`はそのstagingに実際に適用する
+ * 配置契約である（`stagingLayoutForParent`）。
  */
 export function assertIssueStagingLocation(
   staging: string,
@@ -258,20 +305,21 @@ export function assertIssueStagingLocation(
   const root = repositoryRoot
     ? path.resolve(repositoryRoot)
     : stagingRepositoryRoot(resolved);
-  const layout = readStagingLayout(root);
+  const declared = readStagingLayout(root);
   const relative = path.relative(root, resolved).split(path.sep).join("/");
   const name = path.basename(resolved);
   const parent = path.dirname(relative);
-  if (
+  const layout =
     relative === "" ||
     relative.startsWith("..") ||
     path.isAbsolute(relative) ||
     name === "" ||
-    name.includes("..") ||
-    !matchesStagingRoot(layout.rootPattern, parent)
-  )
+    name.includes("..")
+      ? undefined
+      : stagingLayoutForParent(declared, parent);
+  if (layout === undefined)
     throw new Error(
-      `--stagingは対象rootの${layout.rootPattern}/直下のdirectoryが必要です`,
+      `--stagingは対象rootの${declared.rootPattern}/直下のdirectoryが必要です`,
     );
   return Object.freeze({
     staging: resolved,

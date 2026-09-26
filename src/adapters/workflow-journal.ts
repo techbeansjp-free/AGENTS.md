@@ -43,6 +43,7 @@ import {
   readStagingLayout,
   stagingExcludePathspec,
   stagingRepositoryRoot,
+  stagingRootPatterns,
 } from "../domain/staging-layout.js";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
@@ -2259,7 +2260,10 @@ export function resolvePullRequestStaging(input: {
       );
     return staging;
   }
-  const issuesRoots = listStagingRoots(root, layout.rootPattern);
+  // 宣言rootへ移行する前のstagingが既定rootに残っていれば、それも候補にする
+  const issuesRoots = stagingRootPatterns(layout).flatMap((pattern) =>
+    listStagingRoots(root, pattern),
+  );
   if (issuesRoots.length === 0)
     throw new Error("PR作成に必要なIssue staging directoryがありません");
   const candidates = issuesRoots

@@ -46,7 +46,7 @@ export const DECISION_CANDIDATES = Object.freeze([
         direction: "fail-closed",
         disposition: "adopted",
         callerFile: "src/cli.ts",
-        callerLine: "1721",
+        callerLine: "1724",
         callerAnchor: "inspectCiDelivery({",
     }),
     Object.freeze({
@@ -58,7 +58,7 @@ export const DECISION_CANDIDATES = Object.freeze([
         direction: "fail-closed",
         disposition: "adopted",
         callerFile: "src/cli.ts",
-        callerLine: "7308",
+        callerLine: "7321",
         callerAnchor: "validateSpecs(root",
     }),
     Object.freeze({
@@ -111,7 +111,7 @@ export const DECISION_CANDIDATES = Object.freeze([
         id: "DCAND-008",
         label: "CodeRabbit利用枠制限の判定",
         decisionSiteFile: ".agent-skill-chain/docs/01_開発ワークフロー.md",
-        decisionSiteLine: "214",
+        decisionSiteLine: "219",
         decisionSiteAnchor: "CodeRabbitの利用枠制限の判定（DCAND-008）は",
         direction: "fail-closed",
         disposition: "adopted",

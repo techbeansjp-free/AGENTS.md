@@ -778,7 +778,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     ],
     example:
       "npx agent-skill-chain issue create --title=不具合 --mode=full --assessment=./assessment.json",
-    note: "stagingの配置はproject policyのstaging節（root・tracked・issueBody）が決めます。tracked=trueのrootでは文書00〜04を版管理し、機械記録だけを.gitignoreで除外します",
+    note: "stagingの配置はproject policyのstaging節（root・tracked・issueBody）が決めます。tracked=trueのrootでは文書00〜04を版管理し、機械記録だけを.gitignoreで除外します。issueBody=pointerはtracked=trueでだけ使えます。版管理外かつ全文同期の配置では版管理下・pointer配置を勧める1行の通知をstderrへ出します",
   },
   {
     command: "issue",

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { distributedPaths } from "./conformance.js";
-import { matchesStagingRoot, readStagingLayout } from "./staging-layout.js";
+import { readStagingLayout, stagingLayoutForParent } from "./staging-layout.js";
 
 export interface ReviewArtifactPath {
   readonly path: string;
@@ -511,9 +511,9 @@ export function isReviewArtifactStagingDirectChild(
     .join("/");
   if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative))
     return false;
-  return matchesStagingRoot(
-    readStagingLayout(resolvedRoot).rootPattern,
-    relative,
+  return (
+    stagingLayoutForParent(readStagingLayout(resolvedRoot), relative) !==
+    undefined
   );
 }
 

@@ -9,7 +9,8 @@ import { isRecord } from "../types.js";
 import { inspectExecutableVersion, MINIMUM_GH_VERSION, MINIMUM_GIT_VERSION, } from "../lib/executable-version.js";
 import { loadProjectPolicySet } from "./policy.js";
 import { DEPRECATED_POLICY_SCHEMA_ALIASES, SUPPORTED_POLICY_SCHEMA_VERSIONS, } from "../lib/version.js";
-import { readStoredStagingRecord } from "./staging.js";
+import { readStoredStagingRecord, STAGING_RECORD_FILE } from "./staging.js";
+import { DEFAULT_ISSUE_STAGING_ROOT, listStagingRoots, readStagingLayout, } from "./staging-layout.js";
 import { MODE_DECISION_FILE, STEP_JOURNAL_FILE, inspectWorkflowStagingArtifacts, } from "./workflow.js";
 import { surveyWorktrees } from "./worktree-survey.js";
 const packageRoot = findPackageRoot(import.meta.url);
@@ -973,23 +974,43 @@ export function doctor(target, worktreeObservations) {
                 "project policyが不正です。入力を変更せずpolicy validateの診断を確認してください";
         }
     }
-    const issuesRoot = path.join(target, ".agent-skill-chain", "tmp", "issues");
+    const issuesRoot = path.join(target, ...DEFAULT_ISSUE_STAGING_ROOT.split("/"));
+    /**
+     * **版管理下のstaging rootも走査する。** ただしmerge済みのstagingは文書だけが
+     * Gitに残り、機械記録（staging-record.json）は版管理外で存在しない。記録を持つ
+     * 作業中のstagingだけを検査し、文書だけの保管済みstagingを不正と報告しない。
+     * policyが読めない場合は既定rootだけを走査する（policyの不正は上で報告済み）。
+     */
+    let declaredRoots = [];
+    try {
+        const layout = readStagingLayout(target);
+        if (layout.rootPattern !== DEFAULT_ISSUE_STAGING_ROOT)
+            declaredRoots = listStagingRoots(target, layout.rootPattern);
+    }
+    catch {
+        declaredRoots = [];
+    }
     const workflowStagings = [];
-    if (pathEntryExists(issuesRoot) && fs.lstatSync(issuesRoot).isDirectory()) {
-        for (const entry of fs.readdirSync(issuesRoot, { withFileTypes: true })) {
-            if (!entry.isDirectory())
-                continue;
-            const staging = path.join(issuesRoot, entry.name);
-            try {
-                workflowStagings.push(inspectDoctorWorkflowStaging(staging));
-            }
-            catch (error) {
-                workflowStagings.push({
-                    staging,
-                    valid: false,
-                    errors: [error instanceof Error ? error.message : String(error)],
-                });
-            }
+    const stagingCandidates = [];
+    if (pathEntryExists(issuesRoot) && fs.lstatSync(issuesRoot).isDirectory())
+        for (const entry of fs.readdirSync(issuesRoot, { withFileTypes: true }))
+            if (entry.isDirectory())
+                stagingCandidates.push(path.join(issuesRoot, entry.name));
+    for (const root of declaredRoots)
+        for (const entry of fs.readdirSync(root, { withFileTypes: true }))
+            if (entry.isDirectory() &&
+                pathEntryExists(path.join(root, entry.name, STAGING_RECORD_FILE)))
+                stagingCandidates.push(path.join(root, entry.name));
+    for (const staging of stagingCandidates) {
+        try {
+            workflowStagings.push(inspectDoctorWorkflowStaging(staging));
+        }
+        catch (error) {
+            workflowStagings.push({
+                staging,
+                valid: false,
+                errors: [error instanceof Error ? error.message : String(error)],
+            });
         }
     }
     const workflowHealthy = workflowStagings.every((staging) => staging.valid);
