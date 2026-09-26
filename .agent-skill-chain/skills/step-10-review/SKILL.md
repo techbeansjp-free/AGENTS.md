@@ -41,7 +41,7 @@ review artifactは`review artifact --init`、各roundの入力JSONは`review rou
 
 **Makefileは`make -n <target>`で展開した実コマンドへ当てる。** レシピ本文をそのまま解析器へ渡すと`$$`と`@`が未展開のままparseが途中で止まり、**本物の欠陥が報告されない。**「当てたが指摘は無かった」という誤結論の原因になる。**ただし`make -n`は安全な静的展開器ではない。** 読み込み時に評価される`$(shell ...)`は`-n`でも実行されるため、候補が制御するMakefileへそのまま実行すると任意のコマンド実行になる。**書き込み不可のfilesystem、network分離、資源制限を持つsandbox内で実行し、対象targetを差分が触れた範囲に限る。** **sandboxは認証情報も分離する。** 環境変数は許可listだけを渡し（`env -i`相当）、credential mountとagent socketを到達不能にする。取得した出力に認証情報が混入していないことを確認し、レビュー成果物とCI logへ残さない。 変数展開後の定数比較に対する指摘は、**その比較が設計上つねに定数になる場合にかぎり**誤検知である。未定義変数や変数名の誤記で意図せず定数化した場合は真の欠陥であり、比較ごとに判断する。
 
-**Step 10記録後にstagingを是正した場合の復旧経路は規範文書が所有する。** 上流Step（1〜9）の再確定でstaging digestを再固定する（`workflow record --reconfirm`）。**最新Stepの再記録では復旧できない。** 条件と手順の正本は`../../docs/01_開発ワークフロー.md`であり、ここへ複写しない。
+**承認済み計画は封印済みであり、Step 10でも編集しない。** 計画の変更は`05_計画変更.md`へ追記する。上流再確定（`--reconfirm`）は廃止した。staging digest不一致の診断が、変化した成果物とその状態で成立する次の行動を返す。
 
 **成果物は版管理下へ置く。** `staging.tracked=false`のstagingは版管理外である。`staging.tracked=true`では文書00〜04を版管理するが、どちらの場合もstaging内の`04_レビュー.md`はformal approval artifactとして扱わない。収束後に`docs/reviews/`または`.agent-skill-chain/reviews/`配下へ複写し、実装commitの後にその1 fileだけをcommitして`H_final`にする。**このartifact commitに対する取り直しroundは要らない。** `workflow record --step=10`は`H_final`で実行でき、bindingはsessionのcandidate HEAD（`H_impl`）のまま記録される。`pr create --head-sha=<H_final>`も同じ規則で受理する。
 

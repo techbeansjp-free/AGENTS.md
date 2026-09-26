@@ -58,6 +58,7 @@ import {
   parseVerificationSelectionInput,
   selectVerificationSet,
 } from "./domain/agile-verification.js";
+import { isPlanFrozenCheckStep, latestPlanSeal } from "./domain/plan-seal.js";
 import {
   buildWorktreePath,
   createWorktree,
@@ -263,8 +264,10 @@ import {
 import {
   appendDeliveryTerminalJournalEntry,
   appendWorkflowJournalEntry,
+  assertPlanFrozen,
   assertPocDeliveryChangeScope,
   assertWorkflowStaging,
+  describeStagingDigestDrift,
   executePocObservation,
   inspectCurrentPocJournalBinding,
   inspectWorkflowStaging,
@@ -340,7 +343,6 @@ import {
   WORKFLOW_STEPS,
   type JournalHumanOverride,
   type StepJournalEntry,
-  stagingDigestRecoveryHint,
 } from "./domain/workflow.js";
 import {
   reconcileFixedMergeRun,
@@ -362,6 +364,10 @@ function workflowArguments(args: string[]): {
     "dry-run",
     "post-terminal-intake",
     "post-pr-intake",
+    /**
+     * 廃止済みの`--reconfirm`（REQ-WF-036）。値なしのまま解析させ、`workflow record`が
+     * 廃止を名指しして拒否する。後続の位置引数を値として飲み込まない。
+     */
     "reconfirm",
     "out",
   ]);
@@ -402,7 +408,7 @@ function workflowArguments(args: string[]): {
  * 値を取らないflagの受理。**値付き形式を無言で真として扱わない。**
  *
  * parserは`--name`だけを`__present__`にし、`--name=値`は値をそのまま保存する。
- * 存在判定を`!== undefined`で書くと、`--reconfirm=false`が有効として通る。
+ * 存在判定を`!== undefined`で書くと、`--post-pr-intake=false`が有効として通る。
  */
 function presentFlag(flags: Record<string, string>, key: string): boolean {
   if (flags[key] === undefined) return false;
@@ -669,49 +675,14 @@ function workflowDiagnostic(
 }
 
 /**
- * staging digest不一致の案内を、journalとdelivery stateの両方から決める。
- *
- * **journalを読めない場合に判定を止めない。** `assertWorkflowStaging`や
- * `assertRegularJournalPath`が投げると、digest不一致という本来の診断が
- * 別の診断へ置き換わる。案内の生成は診断の付随であって判定ではない。
+ * delivery直前の再検証。**計画凍結をdigest照合より先に検査する**（REQ-WF-036）。
+ * 封印済み計画の編集はdigest不一致としても現れるが、先に名指しすることで
+ * 「計画は05_計画変更.mdへ」という次の行動を返す。
  */
-/**
- * **2つの入力を独立に読む。** 片方の失敗でもう片方の観測値を捨てない。
- *
- * 1つの`try`で囲むと、delivery stateが`merge-observed`でもjournalの読み取りが
- * 失敗した時点でterminal判定ごと落ち、**terminal状態の利用者へ必ず失敗する
- * 再記録操作を案内する**（PR #1402の外部review指摘）。逆向きも同じで、
- * delivery stateだけ読めない場合もjournalのStep 11判定は使える。
- */
-function isTerminalDeliveryOrFalse(staging: string): boolean {
-  try {
-    const state = readStoredDeliveryState(staging)?.state;
-    return state === "merge-observed" || state === "step11-recorded";
-  } catch {
-    /** delivery stateを読めない場合はfalseへ倒す。案内の生成で判定を止めない */
-    return false;
-  }
-}
-
-function readJournalStepsOrEmpty(staging: string): number[] {
-  try {
-    return readWorkflowJournal(staging).entries.map((entry) => entry.step);
-  } catch {
-    /** journalを読めない場合は空集合へ倒す。案内の生成で判定を止めない */
-    return [];
-  }
-}
-
-function stagingRecoveryHint(staging: string): string {
-  return stagingDigestRecoveryHint(
-    readJournalStepsOrEmpty(staging),
-    isTerminalDeliveryOrFalse(staging),
-  );
-}
-
 export function assertWorkflowReadyForDelivery(
   staging: string,
 ): ReturnType<typeof inspectWorkflowStaging> {
+  assertPlanFrozen(staging);
   const stored = readStoredStagingRecord(staging);
   const currentArtifacts = listStagingArtifacts(staging);
   const currentDigest = calculateStagingDigest(staging, currentArtifacts);
@@ -720,7 +691,7 @@ export function assertWorkflowReadyForDelivery(
     stored.digest !== currentDigest
   )
     throw new Error(
-      `delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${stagingRecoveryHint(staging)}`,
+      `delivery直前のstaging成果物またはcontent digestが同期済み記録から変化しています${describeStagingDigestDrift(staging)}`,
     );
   const inspection = inspectWorkflowStaging(staging, 10);
   if (
@@ -747,6 +718,7 @@ export function assertWorkflowReadyForDelivery(
 function assertWorkflowReadyForTerminalRedelivery(
   staging: string,
 ): ReturnType<typeof inspectWorkflowStaging> {
+  assertPlanFrozen(staging);
   const stored = readStoredStagingRecord(staging);
   const currentArtifacts = listStagingArtifacts(staging);
   const currentDigest = calculateStagingDigest(staging, currentArtifacts);
@@ -755,7 +727,7 @@ function assertWorkflowReadyForTerminalRedelivery(
     stored.digest !== currentDigest
   )
     throw new Error(
-      `再配送直前のstaging成果物またはcontent digestが記録から変化しています${stagingRecoveryHint(staging)}`,
+      `再配送直前のstaging成果物またはcontent digestが記録から変化しています${describeStagingDigestDrift(staging)}`,
     );
   const inspection = inspectWorkflowStaging(staging, 11);
   if (
@@ -5499,7 +5471,7 @@ export async function main(
     if (artifacts.length > 0)
       throw new Error("workflow assess-discoveryで--artifactは使用できません");
     const unknown = Object.keys(flags).filter(
-      (flag) => !["input", "root"].includes(flag),
+      (flag) => !["input", "root", "staging"].includes(flag),
     );
     if (unknown.length > 0)
       throw new Error(
@@ -5507,8 +5479,30 @@ export async function main(
       );
     const root = path.resolve(flags.root ?? process.cwd());
     const input = readJsonInput(resolveContained(root, flags.input ?? ""));
+    /**
+     * **封印の有無は利用者入力ではなくjournalから観測する**（REQ-WF-036）。
+     * 封印済みなら契約変更を00〜03の書換えではなく計画変更記録へ振り分ける。
+     */
+    const sealJournal =
+      flags.staging === undefined
+        ? undefined
+        : readWorkflowJournal(
+            resolveContained(
+              root,
+              path.relative(root, path.resolve(root, flags.staging)),
+            ),
+          );
+    if (sealJournal && sealJournal.errors.length > 0)
+      throw new Error(
+        `workflow assess-discoveryのjournalが不正です: ${sealJournal.errors.join("; ")}`,
+      );
+    const planSealed =
+      sealJournal !== undefined &&
+      latestPlanSeal(sealJournal.entries) !== undefined;
     print(
-      assessImplementationDiscovery(parseImplementationDiscoveryInput(input)),
+      assessImplementationDiscovery(parseImplementationDiscoveryInput(input), {
+        planSealed,
+      }),
     );
     return 0;
   }
@@ -6140,12 +6134,19 @@ export async function main(
           "review-session-digest",
           "post-terminal-intake",
           "post-pr-intake",
-          "reconfirm",
         ].includes(flag),
     );
+    /**
+     * **廃止した`--reconfirm`は未知optionとして拒否し、廃止を名指しする**（REQ-WF-036）。
+     * 旧手順に従った利用者へ、失敗の理由と現在の手順を返す。
+     */
     if (unknown.length > 0)
       throw new Error(
-        `workflow recordの未知optionです: --${unknown.join(", --")}`,
+        `workflow recordの未知optionです: --${unknown.join(", --")}${
+          unknown.includes("reconfirm")
+            ? "。--reconfirmは廃止されました（REQ-WF-036）。承認済み計画は封印後に編集せず、計画の変更は05_計画変更.mdへ追記してください"
+            : ""
+        }`,
       );
     if (artifacts.length === 0)
       throw new Error("workflow recordには--artifactが1件以上必要です");
@@ -6171,19 +6172,11 @@ export async function main(
       evidence,
     };
     /**
-     * 上流再確定entry（Issue #1342）。Step 10はreview binding、Step 11はdelivery終端が
-     * 所有するため対象外。先行する通常entryの存在はjournal本体の順序判定が検証する。
+     * **封印後のStep 9・10は、HEAD観測やreview検証より先に計画凍結を検査する**
+     * （REQ-WF-036）。封印済み計画の編集を「digest不一致」ではなく名指しで返す。
+     * journal追記経路も同じ検査を持つ。
      */
-    /**
-     * **値なしflagは`__present__`だけを受理する。** `--reconfirm=false`のような
-     * 値付き形式は文字列としてflagsへ入るため、`!== undefined`で判定すると
-     * **利用者が「無効にした」つもりの入力が有効として通る**（CodeRabbit指摘）。
-     * 同じ形の`--post-terminal-intake`も同様に扱う。
-     */
-    const reconfirm = presentFlag(flags, "reconfirm");
-    if (reconfirm && (step.step < 1 || step.step > 9))
-      throw new Error("--reconfirmはStep 1〜9にだけ指定できます");
-    if (reconfirm) entry = { ...entry, reconfirmation: true };
+    if (isPlanFrozenCheckStep(step.step)) assertPlanFrozen(staging);
     const repositoryRoot = stagingRepositoryRoot(staging);
     const needsHeadSha =
       step.step === 9 ||
