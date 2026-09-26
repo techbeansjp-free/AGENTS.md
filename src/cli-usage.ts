@@ -955,31 +955,42 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "review",
-    subcommand: "artifact",
-    summary: "Git差分とstagingから未承認のreview artifact雛形を生成する",
+    subcommand: "export",
+    summary:
+      "収束したreview sessionからreview証跡JSON（docs/reviews/<Issue番号>_review.json）を生成する",
     requiredFlags: [
       flag("staging", "path", "対象Issue staging"),
-      flag("base", "sha", "比較基点commit"),
-      flag("head", "sha", "current H_impl commit"),
+      flag("issue", "整数", "対象Issue番号。stagingのtrackerと一致させる"),
+      flag("reviewer", "id", "reviewerのstable identity（session/context）"),
+      flag(
+        "implementer",
+        "id",
+        "implementerのstable identity。reviewerと異なる値が必要",
+      ),
+      flag(
+        "verified",
+        "command",
+        "実行して合格した検証command。1件以上を繰り返し指定する",
+      ),
     ],
     conditionalFlags: [],
     optionalFlags: [
       ROOT_FLAG,
       optional(
-        "init",
-        "",
-        "§0・§1・個別監査表・§7を初期化する。実行には--initが必要です",
-        "--initなしの実行は拒否する",
+        "base",
+        "sha",
+        "比較基点。rebase後または既定branch追随後の比較基点を指定する",
+        "review sessionの比較基点",
       ),
       optional(
         "out",
         "path",
-        "新規artifact出力先",
-        "tracker番号からdocs/reviewsへ導出",
+        "証跡の出力先。docs/reviews/または.agent-skill-chain/reviews/配下の<Issue番号>_review.json",
+        "docs/reviews/<Issue番号>_review.json",
       ),
     ],
     example:
-      "npx agent-skill-chain review artifact --init --staging=.agent-skill-chain/tmp/issues/20260911_change --base=0123456789012345678901234567890123456789 --head=abcdefabcdefabcdefabcdefabcdefabcdefabcd --out=docs/reviews/1333_レビュー.md",
+      'npx agent-skill-chain review export --staging=.agent-skill-chain/tmp/issues/20260911_change --issue=1333 --reviewer=reviewer-context --implementer=implementer-context --verified="npm test"',
   },
   {
     command: "review",
@@ -1118,14 +1129,14 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   {
     command: "review",
     subcommand: "validate",
-    summary: "review evidence JSONまたはMarkdown artifactを検証する",
-    positional: "[file] 検証するreview evidence JSON。--fileの代わりに使える",
+    summary: "review入力JSONまたはreview証跡JSONを検証する",
+    positional: "[file] 検証するreview入力JSON。--fileの代わりに使える",
     requiredFlags: [],
     conditionalFlags: [
       conditional(
         "file",
         "path",
-        "検証するreview evidence JSON",
+        "検証するreview入力JSON",
         "--artifactを指定しないとき（位置引数でも指定可能）",
         (provided) => provided.artifact === undefined,
       ),
@@ -1134,19 +1145,19 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       optional(
         "artifact",
         "path",
-        "構造を検証するMarkdown review artifact（--file・位置引数と排他）",
-        "JSON review evidenceを検証する",
+        "`review export`が生成したreview証跡JSON（--file・位置引数と排他）",
+        "review入力JSONを検証する",
       ),
       optional(
-        "terminal",
-        "",
-        "最終review artifactのcontext-isolated approval記録を事前検証する",
-        "途中roundでは構造だけを検証する",
+        "staging",
+        "path",
+        "review証跡を保存済みreview session・trusted policy・Gitと照合する",
+        "証跡単体の構造とdigestだけを検証する",
       ),
       ROOT_FLAG,
     ],
     example:
-      "npx agent-skill-chain review validate --artifact=docs/reviews/47_レビュー.md --root=.",
+      "npx agent-skill-chain review validate --artifact=docs/reviews/47_review.json --staging=.agent-skill-chain/tmp/issues/20260911_change --root=.",
   },
   {
     command: "review",

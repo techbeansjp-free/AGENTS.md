@@ -16,8 +16,9 @@
 /**
  * C-02の候補一覧（実行時に自分でgrep・読み込みして実在確認済み。2026-09-25）。
  *
- * 採用9件（`disposition: "adopted"`、全件fail-closed方向。DCAND-001〜005はIssue #1483時点
- * から採用済み、DCAND-006/008/009/010はIssue #1485がDecision Skill自身（
+ * 採用8件（`disposition: "adopted"`、全件fail-closed方向。DCAND-001〜003・005はIssue #1483時点
+ * から採用済み。DCAND-004（Markdown個別監査表の行分類）はREQ-WF-038でreview成果物の監査表ごと
+ * 廃止したため一覧から除いた。DCAND-006/008/009/010はIssue #1485がDecision Skill自身（
  * `src/adapters/decision-invoke.ts`）をBR-01が要求する呼び出し元として新設し採用へ変更した）。
  * 除外3件（`disposition: "excluded"`、DCAND-007・011・012。BR-02（fail-open方向）または
  * 「有限選択の対象外」を理由に持つ。恒久的に対象外）。
@@ -46,7 +47,7 @@ export const DECISION_CANDIDATES = Object.freeze([
         direction: "fail-closed",
         disposition: "adopted",
         callerFile: "src/cli.ts",
-        callerLine: "1725",
+        callerLine: "1734",
         callerAnchor: "inspectCiDelivery({",
     }),
     Object.freeze({
@@ -58,20 +59,8 @@ export const DECISION_CANDIDATES = Object.freeze([
         direction: "fail-closed",
         disposition: "adopted",
         callerFile: "src/cli.ts",
-        callerLine: "7322",
+        callerLine: "7331",
         callerAnchor: "validateSpecs(root",
-    }),
-    Object.freeze({
-        id: "DCAND-004",
-        label: "個別監査表の行分類（auditRowDraft。変更fileを7分類＋fallbackへ正規表現cascadeで振り分け監査表を事前充填する）",
-        decisionSiteFile: "src/domain/review-artifact.ts",
-        decisionSiteLine: "564",
-        decisionSiteAnchor: "export function auditRowDraft",
-        direction: "fail-closed",
-        disposition: "adopted",
-        callerFile: "src/domain/review-artifact.ts",
-        callerLine: "654",
-        callerAnchor: "auditRowDraft(item.path, item.changeType)",
     }),
     Object.freeze({
         id: "DCAND-005",
@@ -94,7 +83,7 @@ export const DECISION_CANDIDATES = Object.freeze([
         direction: "fail-closed",
         disposition: "adopted",
         callerFile: "src/adapters/decision-invoke.ts",
-        callerLine: "282",
+        callerLine: "271",
         callerAnchor: 'if (type.id === "DCAND-006") {',
     }),
     Object.freeze({
@@ -116,7 +105,7 @@ export const DECISION_CANDIDATES = Object.freeze([
         direction: "fail-closed",
         disposition: "adopted",
         callerFile: "src/adapters/decision-invoke.ts",
-        callerLine: "189",
+        callerLine: "178",
         callerAnchor: 'case "DCAND-008": {',
     }),
     Object.freeze({
@@ -128,7 +117,7 @@ export const DECISION_CANDIDATES = Object.freeze([
         direction: "fail-closed",
         disposition: "adopted",
         callerFile: "src/adapters/decision-invoke.ts",
-        callerLine: "299",
+        callerLine: "288",
         callerAnchor: 'if (authorityMode === "constrained-choice") {',
     }),
     Object.freeze({
@@ -140,7 +129,7 @@ export const DECISION_CANDIDATES = Object.freeze([
         direction: "fail-closed",
         disposition: "adopted",
         callerFile: "src/adapters/decision-invoke.ts",
-        callerLine: "333",
+        callerLine: "322",
         callerAnchor: 'type.id === "DCAND-010" ? DCAND_010_SAFE_VALUE',
     }),
     Object.freeze({

@@ -257,12 +257,12 @@ export function appendJevApiKeyToShellRc(
   const existingRc = fs.existsSync(input.rcPath)
     ? readRegularFile(input.rcPath)
     : "";
-  const existingSecret = fs.existsSync(input.secretFilePath)
+  const existingKeyFileContent = fs.existsSync(input.secretFilePath)
     ? readRegularFile(input.secretFilePath)
     : "";
   const sourceLine = jevSecretSourceLine(input.secretFilePath);
   const exportPattern = exportLinePattern(input.apiKeyEnvVar);
-  const secretPresent = exportPattern.test(existingSecret);
+  const secretPresent = exportPattern.test(existingKeyFileContent);
   const sourcePresent = existingRc
     .split("\n")
     .some((line) => line.trim() === sourceLine);
@@ -318,10 +318,12 @@ export function appendJevApiKeyToShellRc(
         `${secretDirectory}はsymlinkでない通常directoryが必要です`,
       );
     const separator =
-      existingSecret === "" || existingSecret.endsWith("\n") ? "" : "\n";
+      existingKeyFileContent === "" || existingKeyFileContent.endsWith("\n")
+        ? ""
+        : "\n";
     writeFileAtomic(
       input.secretFilePath,
-      `${existingSecret}${separator}export ${input.apiKeyEnvVar}=${shellSingleQuote(envValue)}\n`,
+      `${existingKeyFileContent}${separator}export ${input.apiKeyEnvVar}=${shellSingleQuote(envValue)}\n`,
       { fileMode: 0o600 },
     );
   }

@@ -12,7 +12,7 @@ Feature: 開発考慮事項の理由・証拠の具体性とGherkin方言のscen
     Then DC-PRIVACYの理由が具体化されていないerrorで拒否する
 
   Scenario: SCN-UNIT-ISSUEDC-003 review JSON経路でも同じplaceholderを拒否する
-    Given developmentConsiderationsの証拠に「（脅威、個人情報・秘密、保持・削除、SCN）」を残したreview JSONがある
+    Given developmentConsiderationsの証拠に「（task、SCN、検証）」を残したreview JSONがある
     When reviewを評価する
     Then reviewはDC-PRIVACYの証拠が具体化されていないerrorで拒否する
 

@@ -13,7 +13,8 @@ import { bootstrapProject, validateSpecs, } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
 import { parseReviewRoundInput } from "./domain/review-convergence.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
-import { isReviewArtifactParentContained, isReviewArtifactStagingDirectChild, renderReviewArtifactDraft, validateContextIsolatedApprovalRecord, validateReviewArtifactStructure, } from "./domain/review-artifact.js";
+import { parseReviewEvidence } from "./domain/review-evidence.js";
+import { exportReviewEvidence, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
 import { isPlanFrozenCheckStep, latestPlanSeal } from "./domain/plan-seal.js";
@@ -397,7 +398,7 @@ function assertCreatableReviewHead(staging, headSha, mode, mergeMode) {
     if (mode !== "poc" &&
         mergeMode !== "disabled" &&
         reviewBinding.implementationHeadSha === headSha)
-        throw new Error("H_implとH_finalが同一のためPRを作成できません。review artifactを実装commitから分離し、独立したartifact専用commitを積んでから再実行してください");
+        throw new Error("H_implとH_finalが同一のためPRを作成できません。H_implで`review export`を実行し、生成したreview証跡（docs/reviews/<Issue番号>_review.json）1 fileだけを実装commitの後にcommitしてから再実行してください");
 }
 function assertObservedClosingContract(input) {
     if (input.observed.headRepository?.nameWithOwner?.toLowerCase() !==
@@ -887,21 +888,23 @@ export function resolveImplementationCommitForMerge(root, staging, finalHeadSha)
         throw new Error("H_impl..H_finalには許可されたreview artifactが1件必要です");
     const reviewArtifactPath = reviewArtifacts[0];
     const artifactContent = git(["show", `${finalHeadSha}:${reviewArtifactPath}`], root).stdout;
-    const structure = validateReviewArtifactStructure(artifactContent);
-    if (structure.diagnostics.length > 0 ||
-        structure.implementation === undefined)
-        throw new Error("formal review artifactの構造とH_implが不正です");
+    let declaredImplementation;
+    try {
+        declaredImplementation =
+            parseReviewEvidence(artifactContent).implementationHeadSha.toLowerCase();
+    }
+    catch (error) {
+        throw new Error(`review証跡の構造とH_implが不正です: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    }
     const session = readStoredReviewSession(staging);
-    const declaredImplementation = structure.implementation?.toLowerCase();
-    const forwardArtifactSuffix = declaredImplementation !== undefined &&
-        session?.latestCandidateHeadSha.toLowerCase() === declaredImplementation &&
+    const forwardArtifactSuffix = session?.latestCandidateHeadSha.toLowerCase() === declaredImplementation &&
         evidenceOnlySuffix(root, declaredImplementation, finalHeadSha) ===
             reviewArtifactPath;
     const implementationCommitSha = forwardArtifactSuffix
         ? declaredImplementation
         : immediateParentSha;
     if (declaredImplementation !== implementationCommitSha)
-        throw new Error("formal review artifactのH_implがmerge対象と一致しません");
+        throw new Error("review証跡のH_implがmerge対象と一致しません");
     if (changedPaths.length > 1 && !forwardArtifactSuffix) {
         if (!session ||
             !recordLayerSuffix(staging, root, immediateParentSha, finalHeadSha, session))
@@ -924,13 +927,20 @@ export function resolveImplementationCommitForMerge(root, staging, finalHeadSha)
 }
 function resolveContextIsolatedFormalApproval(staging, candidate) {
     const { binding } = assertCurrentReviewJournalBinding(staging, candidate.finalHeadSha);
-    const markdown = git(["show", `${candidate.finalHeadSha}:${candidate.reviewArtifactPath}`], stagingRepositoryRoot(staging)).stdout;
-    const structure = validateReviewArtifactStructure(markdown);
-    if (structure.implementation !== candidate.implementationCommitSha)
-        throw new Error("formal review artifactのH_implがmerge対象と一致しません");
-    const approval = validateContextIsolatedApprovalRecord(markdown);
-    if (!approval.valid)
-        throw new Error(`context-isolated formal review approvalが不正です: ${approval.errors.join("; ")}`);
+    const content = git(["show", `${candidate.finalHeadSha}:${candidate.reviewArtifactPath}`], stagingRepositoryRoot(staging)).stdout;
+    const evidence = parseReviewEvidence(content);
+    if (evidence.implementationHeadSha !== candidate.implementationCommitSha)
+        throw new Error("review証跡のH_implがmerge対象と一致しません");
+    const errors = verifyReviewEvidenceWithStaging({
+        staging,
+        evidence,
+        independenceMode: "context-isolated",
+    });
+    if (evidence.session.sessionId !== binding.sessionId ||
+        evidence.session.latestRoundDigest !== binding.roundDigest)
+        errors.push("review証跡のsessionが最新Step 10 bindingと一致しません");
+    if (errors.length > 0)
+        throw new Error(`context-isolated formal review approvalが不正です: ${errors.join("; ")}`);
     return binding.roundDigest;
 }
 /**
@@ -5363,7 +5373,7 @@ export async function main(argv, dependencies = {}) {
     }
     if (command === "review" && subcommand === "validate") {
         const { flags, positionals } = parse(rest);
-        const unknown = Object.keys(flags).filter((flag) => !["file", "artifact", "root", "terminal"].includes(flag));
+        const unknown = Object.keys(flags).filter((flag) => !["file", "artifact", "root", "staging"].includes(flag));
         if (unknown.length > 0)
             throw new Error(`review validateの未知optionです: --${unknown.join(", --")}`);
         if (flags.file !== undefined && typeof flags.file !== "string")
@@ -5372,8 +5382,8 @@ export async function main(argv, dependencies = {}) {
             throw new Error("review validateの--artifactにはpathが必要です");
         if (flags.root !== undefined && typeof flags.root !== "string")
             throw new Error("review validateの--rootにはpathが必要です");
-        if (flags.terminal !== undefined && flags.terminal !== true)
-            throw new Error("review validateの--terminalは値を取りません");
+        if (flags.staging !== undefined && typeof flags.staging !== "string")
+            throw new Error("review validateの--stagingにはpathが必要です");
         if (positionals.length > 1)
             throw new Error("review validateの位置引数は1件までです");
         const positional = positionals[0];
@@ -5383,8 +5393,8 @@ export async function main(argv, dependencies = {}) {
         const artifact = typeof flags.artifact === "string" ? flags.artifact : undefined;
         if (file !== undefined && artifact !== undefined)
             throw new Error("review validateは--file（または位置引数）と--artifactを同時に使用できません");
-        if (flags.terminal === true && artifact === undefined)
-            throw new Error("review validateの--terminalは--artifactと併用してください");
+        if (flags.staging !== undefined && artifact === undefined)
+            throw new Error("review validateの--stagingは--artifactと併用してください");
         if (artifact !== undefined) {
             const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
             const artifactFile = resolveContained(root, artifact);
@@ -5393,34 +5403,41 @@ export async function main(argv, dependencies = {}) {
                 throw new Error("review validateの--artifactはrepository内の通常fileが必要です");
             dependencies.afterReviewArtifactStat?.(artifactFile);
             const descriptor = fs.openSync(artifactFile, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
-            let markdown;
+            let content;
             try {
                 const opened = fs.fstatSync(descriptor);
                 if (!opened.isFile() ||
                     opened.dev !== stat.dev ||
                     opened.ino !== stat.ino)
                     throw new Error("review validateの--artifactが読取直前に変化しました");
-                markdown = fs.readFileSync(descriptor, "utf8");
+                content = fs.readFileSync(descriptor, "utf8");
             }
             finally {
                 fs.closeSync(descriptor);
             }
-            const structure = validateReviewArtifactStructure(markdown);
-            const approval = flags.terminal === true
-                ? validateContextIsolatedApprovalRecord(markdown)
-                : undefined;
-            const approvalDiagnostics = approval?.diagnostics ?? [];
+            const errors = [];
+            let evidence;
+            try {
+                evidence = parseReviewEvidence(content);
+            }
+            catch (error) {
+                errors.push(error instanceof Error ? error.message : String(error));
+            }
+            if (evidence !== undefined && typeof flags.staging === "string")
+                errors.push(...verifyReviewEvidenceWithStaging({
+                    staging: path.resolve(root, flags.staging),
+                    evidence,
+                    independenceMode: resolveTrustedReviewIndependence(root),
+                }));
             const result = {
-                valid: structure.diagnostics.length === 0 && (approval?.valid ?? true),
-                kind: "review-artifact",
+                valid: errors.length === 0,
+                kind: "review-evidence",
                 artifact: path.relative(root, artifactFile),
-                errors: [...structure.diagnostics, ...approvalDiagnostics],
-                ...(approval === undefined
+                sessionChecked: typeof flags.staging === "string",
+                errors,
+                ...(evidence === undefined
                     ? {}
-                    : {
-                        terminal: true,
-                        approvalErrors: approvalDiagnostics.map((item) => item.message),
-                    }),
+                    : { evidenceDigest: evidence.evidenceDigest }),
             };
             print(result);
             return result.valid ? 0 : 1;
@@ -5445,103 +5462,61 @@ export async function main(argv, dependencies = {}) {
         print(result);
         return 1;
     }
-    if (command === "review" && subcommand === "artifact") {
-        const { flags, positionals } = parse(rest);
+    if (command === "review" && subcommand === "export") {
+        /**
+         * `--verified`は複数回指定できる唯一のflagである。汎用`parse`は重複を拒否する
+         * ため、先に取り出してから残りを厳密に解析する。
+         */
+        const verified = rest
+            .filter((argument) => argument.startsWith("--verified="))
+            .map((argument) => argument.slice("--verified=".length).trim());
+        const { flags, positionals } = parse(rest.filter((argument) => !argument.startsWith("--verified=")));
+        if (flags.verified !== undefined ||
+            verified.length === 0 ||
+            verified.some((item) => item === ""))
+            throw new Error("review exportには実行して合格した検証commandを--verified=<command>で1件以上指定してください");
         if (positionals.length > 0)
-            throw new Error("review artifactに位置引数は使用できません");
-        if (flags.init !== true)
-            throw new Error("review artifactには値なしの--initが必要です");
-        const unknown = Object.keys(flags).filter((flag) => !["init", "staging", "base", "head", "out", "root"].includes(flag));
+            throw new Error("review exportに位置引数は使用できません");
+        const unknown = Object.keys(flags).filter((flag) => ![
+            "staging",
+            "issue",
+            "reviewer",
+            "implementer",
+            "verified",
+            "base",
+            "out",
+            "root",
+        ].includes(flag));
         if (unknown.length > 0)
-            throw new Error(`review artifactの未知optionです: --${unknown.join(", --")}`);
+            throw new Error(`review exportの未知optionです: --${unknown.join(", --")}`);
         const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
-        const stagingInput = path.resolve(root, required(flags, "staging"));
-        const staging = resolveContained(root, path.relative(root, stagingInput));
-        if (!isReviewArtifactStagingDirectChild(root, staging))
-            throw new Error(`review artifactの--stagingは対象rootの${readStagingLayout(root).rootPattern}/直下が必要です`);
-        const record = readStoredStagingRecord(staging);
-        const artifacts = listStagingArtifacts(staging);
-        if (JSON.stringify(record.artifacts) !== JSON.stringify(artifacts) ||
-            record.digest !== calculateStagingDigest(staging, artifacts))
-            throw new Error("review artifact生成前のstaging成果物一覧またはdigestが一致しません。最新Stepをworkflow recordで再記録してください");
-        const resolveCommit = (label, value) => {
-            const observed = git(["rev-parse", "--verify", `${value}^{commit}`], root, { allowFailure: true });
-            if (observed.status !== 0)
-                throw new Error(`review artifactの${label}をexact commitへ解決できません: ${value}`);
-            return observed.stdout.trim();
-        };
-        const baseSha = resolveCommit("--base", required(flags, "base"));
-        const headSha = resolveCommit("--head", required(flags, "head"));
-        const currentHead = resolveCommit("current HEAD", "HEAD");
-        if (headSha !== currentHead)
-            throw new Error(`review artifactの--headはcurrent HEADと一致する必要があります: head=${headSha} current=${currentHead}`);
-        const diff = git(["diff", "--name-status", "--no-renames", "-z", baseSha, headSha], root)
-            .stdout.split("\0")
-            .filter(Boolean);
-        const changedPaths = [];
-        for (let index = 0; index < diff.length; index += 2) {
-            const status = diff[index];
-            const changedPath = diff[index + 1];
-            if (!changedPath || (status !== "A" && status !== "M" && status !== "D"))
-                throw new Error("review artifactのGit差分形式が不正です");
-            changedPaths.push({ path: changedPath, changeType: status });
-        }
-        if (changedPaths.length === 0)
-            throw new Error("review artifactは比較基点からの変更pathが1件以上必要です");
-        const issueNumber = /\/issues\/(?<issue>[1-9]\d*)$/u.exec(record.tracker ?? "")?.groups?.issue;
-        const out = path.resolve(typeof flags.out === "string"
-            ? flags.out
-            : path.join(root, "docs", "reviews", `${issueNumber ?? "review"}_レビュー.md`));
-        const relativeOut = path.relative(root, out);
-        if (relativeOut.startsWith("..") || path.isAbsolute(relativeOut))
-            throw new Error("review artifactの--outはrepository内が必要です");
-        const outParent = fs.realpathSync(path.dirname(out));
-        const realRoot = fs.realpathSync(root);
-        if (!isReviewArtifactParentContained(root, realRoot, path.resolve(path.dirname(out)), outParent))
-            throw new Error("review artifactの--outはrepository内のsymlinkを含まない親directoryが必要です");
-        const realStaging = fs.realpathSync(staging);
-        if (outParent === realStaging ||
-            outParent.startsWith(`${realStaging}${path.sep}`))
-            throw new Error("review artifactの--outはstaging外が必要です");
-        if (fs.lstatSync(out, { throwIfNoEntry: false }))
-            throw new Error(`review artifactの--outが既に存在します: ${out}`);
-        const template = fs.readFileSync(path.join(root, ".agent-skill-chain", "templates", "issue", "04_レビュー.md"), "utf8");
-        const packageManifest = path.join(root, "package.json");
-        const packageFiles = fs.existsSync(packageManifest)
-            ? (() => {
-                const parsed = parseJsonStrict(fs.readFileSync(packageManifest, "utf8"), "package.json");
-                const files = isRecord(parsed) ? parsed.files : undefined;
-                return Array.isArray(files) &&
-                    files.every((item) => typeof item === "string")
-                    ? files
-                    : undefined;
-            })()
-            : undefined;
-        const content = renderReviewArtifactDraft({
-            template,
-            staging: path.relative(root, staging),
-            stagingDigest: record.digest,
-            baseSha,
-            headSha,
-            paths: changedPaths,
-            ...(packageFiles ? { packageFiles } : {}),
+        const issueRaw = required(flags, "issue");
+        if (!/^[1-9]\d*$/u.test(issueRaw))
+            throw new Error("review exportの--issueは1以上の整数が必要です");
+        if (flags.base !== undefined && typeof flags.base !== "string")
+            throw new Error("review exportの--baseにはcommitが必要です");
+        if (flags.out !== undefined && typeof flags.out !== "string")
+            throw new Error("review exportの--outにはpathが必要です");
+        const exported = exportReviewEvidence({
+            root,
+            staging: path.resolve(root, required(flags, "staging")),
+            issue: Number(issueRaw),
+            reviewer: required(flags, "reviewer"),
+            implementer: required(flags, "implementer"),
+            verified,
+            independenceMode: resolveTrustedReviewIndependence(root),
+            ...(typeof flags.base === "string" ? { baseSha: flags.base } : {}),
+            ...(typeof flags.out === "string" ? { out: flags.out } : {}),
         });
-        try {
-            writeFileExclusivePinned(outParent, path.basename(out), content);
-        }
-        catch (error) {
-            if (error instanceof ExclusivePinnedWriteError)
-                throw new Error(`review artifact --initの雛形作成後に失敗しました。無関係fileの誤削除を避けるためpathname削除は行っていません。作成entryが残存している可能性があるため、指定--outの削除対象を確認してください`, { cause: error });
-            throw error;
-        }
         print({
-            written: out,
-            baseSha,
-            headSha,
-            changedPaths,
-            sha256: crypto.createHash("sha256").update(content).digest("hex"),
-            reviewVerdict: "unresolved",
-            testResult: "not-run",
+            written: exported.path,
+            path: path.relative(root, exported.path).split(path.sep).join("/"),
+            baseSha: exported.evidence.baseSha,
+            implementationHeadSha: exported.evidence.implementationHeadSha,
+            sessionId: exported.evidence.session.sessionId,
+            latestRoundDigest: exported.evidence.session.latestRoundDigest,
+            evidenceDigest: exported.evidence.evidenceDigest,
+            next: "この1 fileだけを実装commitの後にcommitしてH_finalにする",
         });
         return 0;
     }

@@ -515,7 +515,7 @@ Given("配布template・規範文書・step-09 skillがある", function () {
     fs.existsSync(
       path.join(
         repositoryRoot,
-        ".agent-skill-chain/templates/issue/04_レビュー.md",
+        ".agent-skill-chain/schemas/review-evidence.schema.json",
       ),
     ),
   );
@@ -826,15 +826,15 @@ When("配布template・規範文書・step-09 skillを読む", function () {
 });
 
 Then(
-  "04にH_impl行、01にQ-08の判定例表、step-09にstaging配置の手順がある",
+  "証跡schemaにH_implと比較基点、01にQ-08の判定例表、step-09にstaging配置の手順がある",
   function () {
     const read = (relative: string): string =>
       fs.readFileSync(path.join(repositoryRoot, relative), "utf8");
-    const review = read(".agent-skill-chain/templates/issue/04_レビュー.md");
-    const identity =
-      review.split("## 0. レビュー識別情報")[1]?.split("\n### ")[0] ?? "";
-    assert.match(identity, /^\| H_impl \| （40桁SHA） \|$/mu);
-    assert.match(identity, /^\| 比較基点 \| （40桁SHA） \|$/mu);
+    const schema = JSON.parse(
+      read(".agent-skill-chain/schemas/review-evidence.schema.json"),
+    ) as { required: string[] };
+    assert.ok(schema.required.includes("implementationHeadSha"));
+    assert.ok(schema.required.includes("baseSha"));
     const workflow = read(".agent-skill-chain/docs/01_開発ワークフロー.md");
     assert.match(workflow, /\*\*Q-08の判定例。\*\*/u);
     assert.match(workflow, /付随する更新は別コンテキストに数えない/u);
@@ -1178,14 +1178,11 @@ Then(
   },
 );
 
-Then("session依存flagの個別報告とDC-UX根拠と発見IDの注記がある", function () {
+Then("session依存flagの個別報告の注記がある", function () {
   const read = (relative: string): string =>
     fs.readFileSync(path.join(repositoryRoot, relative), "utf8");
   assert.match(
     read("docs/specs/02_要件/01_ワークフロー要件.md"),
     /handlerが個別に報告する/u,
   );
-  const template = read(".agent-skill-chain/templates/issue/04_レビュー.md");
-  assert.match(template, /「JSON出力のみ」を非適用の根拠にせず/u);
-  assert.match(template, /`DISC-\*`と同じ字面を使い/u);
 });

@@ -97,7 +97,7 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
       | submitted-at | submittedAt |
       | verdict | approved verdict |
 
-  Scenario: SCN-UNIT-REVIEW-013 tracked Phase A artifactはH_final後に更新しない
+  Scenario: SCN-UNIT-REVIEW-013 tracked review証跡はH_final後に更新しない
     Given tracked Phase A review recordを読む
     When Phase A artifactのimmutable契約を検査する
     Then H_final後は更新せずmode別approval authorityで完了すると明記されている
@@ -192,15 +192,15 @@ Feature: Review、policy、package境界を有限かつ説明可能にする
     When repository固有IDと固定表示labelを検査する
     Then 汎用packageの所有境界違反は0件である
 
-  Scenario: SCN-UNIT-PACKAGE-010 review templateは全変更fileの個別監査を要求する
+  Scenario: SCN-UNIT-PACKAGE-010 Step 10とPR事前確認はreview証跡の生成と照合を要求する
     Given review templateとPR事前確認を読む
     When 全変更file監査契約を検査する
-    Then 1ファイル1行と差分path集合完全一致が必須である
+    Then review証跡の生成と照合が必須である
 
-  Scenario: SCN-UNIT-PACKAGE-011 個別監査gateはGit差分と1ファイル1行を完全照合する
+  Scenario: SCN-UNIT-PACKAGE-011 監査gateはreview証跡をGit構造と照合する
     Given H_implの全変更pathと一致する個別監査artifactがある
     When 個別監査gateを正規表と余分なpathで検証する
-    Then 正規表だけが合格し余分なpathと空差分基点は拒否される
+    Then 正規の証跡だけが合格し改竄と空差分基点と非ancestor基点は拒否される
 
   Scenario: SCN-UNIT-PACKAGE-012 製品versionはreleaseに追随せずpolicy patch移行と一致する
     Given package metadataとpolicy version artifactがある
