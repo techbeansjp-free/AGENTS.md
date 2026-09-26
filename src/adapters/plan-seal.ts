@@ -2,6 +2,9 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { Mode } from "../domain/mode.js";
+import { assertIssueStagingLocation } from "../domain/staging-layout.js";
+import { git } from "../lib/process.js";
+import { GIT_ENV } from "./review-diff.js";
 import {
   changedSealedArtifacts,
   latestPlanSeal,
@@ -77,12 +80,46 @@ export function changedPlanningSince(
 }
 
 /**
+ * 版管理下stagingの封印済み文書を、配送されるcommit上の内容で観測する。
+ *
+ * **worktreeの一致だけでは不足する。** 版管理下stagingではcommitした計画文書がmainへ
+ * 入るため、編集版をcommitしてworktreeだけ封印時の本文へ戻すと凍結を迂回できる。
+ * commit上に無い・読めない文書は削除として扱い、封印と一致させない（fail-closed）。
+ * 版管理外stagingは空（検査対象なし）を返す。
+ */
+function observeCommittedSealedArtifacts(
+  staging: string,
+  seal: PlanSeal,
+  commit: string,
+): Record<string, string | undefined> | undefined {
+  const location = assertIssueStagingLocation(staging);
+  if (!location.layout.tracked) return undefined;
+  return Object.fromEntries(
+    Object.keys(seal).map((name) => {
+      const result = git(
+        ["cat-file", "blob", `${commit}:./${location.relative}/${name}`],
+        location.repositoryRoot,
+        { env: GIT_ENV, allowFailure: true },
+      );
+      return [
+        name,
+        result.status === 0
+          ? sha256(Buffer.from(result.stdout, "utf8"))
+          : undefined,
+      ];
+    }),
+  );
+}
+
+/**
  * 封印後の計画凍結と計画変更記録の構造を検査する。**封印が無いjournal（本機構以前の
- * staging）では検査しない。**
+ * staging）では検査しない。** 版管理下stagingでは、worktreeに加えて`commit`
+ * （既定はHEAD。配送時は配送するhead SHA）上の封印済み文書も封印と一致させる。
  */
 export function assertPlanFrozenForEntries(
   staging: string,
   entries: readonly { step: number; planSeal?: PlanSeal }[],
+  commit = "HEAD",
 ): void {
   const observed = changedPlanningSince(staging, entries);
   if (observed.sealStep === undefined) return;
@@ -92,6 +129,22 @@ export function assertPlanFrozenForEntries(
         sealStep: observed.sealStep,
         changed: observed.changed,
       }),
+    );
+  const latest = latestPlanSeal(entries);
+  const committed =
+    latest === undefined
+      ? undefined
+      : observeCommittedSealedArtifacts(staging, latest.seal, commit);
+  const committedChanged =
+    latest === undefined || committed === undefined
+      ? []
+      : changedSealedArtifacts(latest.seal, committed);
+  if (committedChanged.length > 0)
+    throw new Error(
+      `${planFrozenMessage({
+        sealStep: observed.sealStep,
+        changed: committedChanged,
+      })}（版管理下stagingのcommit ${commit}上の計画文書が封印と一致しません。worktreeだけを戻しても配送される内容は変わりません）`,
     );
   const amendment = readPlanningFile(staging, PLAN_AMENDMENT_FILE);
   if (amendment === undefined) return;

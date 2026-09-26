@@ -355,6 +355,19 @@ export function deriveImpactSet(input) {
                 scenarios.add(scenario);
             for (const name of scriptsReferencing(input.scripts, closure.affected))
                 checks.add(name);
+            /**
+             * **`src/`が字面で読む文書は製品の挙動を変える。** 閉包は`src/`の字面参照を
+             * 辿らないため、その文書から検証featureを選べなければ形式検査だけで
+             * targetedにせず全体へ倒す。
+             */
+            for (const document of documents) {
+                const readBySource = referenceNames(document).some((name) => (input.literalReferences[name] ?? []).some((referrer) => referrer.startsWith("src/")));
+                if (!readBySource)
+                    continue;
+                const own = selectFromClosure(affectedClosure([document], index, input.literalReferences), index, input, stepDefinitionFiles);
+                if (own.features.size === 0)
+                    reasons.push(`src/が字面で読む文書から検証featureへ到達できません: ${document}`);
+            }
         }
     }
     const adjacentPaths = sortedUnique(adjacent);

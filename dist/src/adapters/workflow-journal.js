@@ -14,7 +14,7 @@ import { isRecord } from "../types.js";
 import { DELIVERY_STATE_FILE, parseDeliveryState, } from "../domain/delivery-state.js";
 import { POC_OBSERVATION_DIRECTORY, pocObservationArtifact, validatePocObservationEvidence, } from "../domain/poc-observation.js";
 import { assertPocHeadChangeScope, executePocSandboxObservation, } from "./poc-execution.js";
-import { isPlanFrozenCheckStep, planSealStep, stagingDriftDiagnostic, } from "../domain/plan-seal.js";
+import { isPlanFrozenCheckStep, PLAN_AMENDMENT_FILE, planSealStep, stagingDriftDiagnostic, } from "../domain/plan-seal.js";
 import { assertPlanFrozenForEntries, changedPlanningSince, computePlanSeal, } from "./plan-seal.js";
 export { calculatePocFixtureDigest } from "./poc-execution.js";
 const packageRoot = findPackageRoot(import.meta.url);
@@ -224,9 +224,9 @@ export function readWorkflowJournal(staging) {
  * 封印後の計画凍結を検査する（REQ-WF-036）。`pr create`・`pr merge`・`workflow record`の
  * Step 9・10が呼ぶ。journalに封印が無ければ（本機構以前のstaging）検査しない。
  */
-export function assertPlanFrozen(staging) {
+export function assertPlanFrozen(staging, commit = "HEAD") {
     const journal = readWorkflowJournal(staging);
-    assertPlanFrozenForEntries(staging, journal.entries);
+    assertPlanFrozenForEntries(staging, journal.entries, commit);
 }
 /**
  * staging digest不一致の診断文。記録済み成果物一覧との追加・削除と、封印と比べた
@@ -322,7 +322,7 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
      * 検査しない。
      */
     if (isPlanFrozenCheckStep(entry.step))
-        assertPlanFrozenForEntries(staging, current.entries);
+        assertPlanFrozenForEntries(staging, current.entries, headSha ?? "HEAD");
     const deliveryFile = path.join(staging, DELIVERY_STATE_FILE);
     const delivery = fs.existsSync(deliveryFile)
         ? parseDeliveryState(fs.readFileSync(deliveryFile, "utf8"))
@@ -392,6 +392,15 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
      * **封印値は呼出し側から受け取らない。** 渡された`planSeal`は捨て、modeの同期
      * checkpointでだけ成果物fileから計算し直す（REQ-WF-036）。
      */
+    /**
+     * **Step 9以降を記録した後に封印Stepを追記して再封印しない**（REQ-WF-036）。
+     * PoCの順序検査は記録範囲より後ろのStepを見ないため、Step 9・10の後にStep 4を
+     * 記録すると編集後の計画が新しい封印になる。quick/pocからfullへの昇格前の記録は
+     * modeが異なるため数えず、昇格後のfull Step 8封印は従来どおり成立する。
+     */
+    if (entry.step === planSealStep(current.mode) &&
+        current.entries.some((recorded) => recorded.step >= 9 && recorded.mode === current.mode))
+        throw new Error(`Step 9以降の記録後にStep ${entry.step}を追記して計画を再封印できません。計画の変更は${PLAN_AMENDMENT_FILE}へAMD-NNNとして追記してください`);
     let entryToWrite = { ...entry };
     delete entryToWrite.planSeal;
     if (entry.step === planSealStep(current.mode))

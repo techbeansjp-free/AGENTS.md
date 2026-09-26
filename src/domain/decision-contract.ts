@@ -115,7 +115,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "1734",
+      callerLine: "1736",
       callerAnchor: "inspectCiDelivery({",
     }),
     Object.freeze({
@@ -128,7 +128,7 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "7331",
+      callerLine: "7336",
       callerAnchor: "validateSpecs(root",
     }),
     Object.freeze({

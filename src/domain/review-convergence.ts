@@ -68,6 +68,12 @@ export interface ReviewRoundFocus {
   previousBlocking: readonly string[];
   fixedDiff: readonly string[];
   adjacentScope: readonly ReviewAdjacentScope[];
+  /**
+   * 影響集合を証明できず（`full`）隣接範囲を限定できないこと。**真のとき全pathを
+   * 隣接範囲として扱う**（影響を証明できないことでadmissionを狭めない）。
+   * 旧sessionにはfieldが無く、無いことは偽を表す。偽は保存しない。
+   */
+  adjacentScopeUnbounded?: true;
 }
 
 export interface ReviewRoundFinding {
@@ -295,11 +301,27 @@ function parseAnchor(value: unknown): ReviewSessionAnchor {
 }
 
 function parseFocus(value: unknown): ReviewRoundFocus {
-  const focus = exactObject(value, "review round.focus", [
-    "previousBlocking",
-    "fixedDiff",
-    "adjacentScope",
-  ]);
+  const focus = exactObject(
+    value,
+    "review round.focus",
+    ["previousBlocking", "fixedDiff", "adjacentScope"],
+    ["adjacentScopeUnbounded"],
+  );
+  if (
+    focus.adjacentScopeUnbounded !== undefined &&
+    focus.adjacentScopeUnbounded !== true
+  )
+    throw new Error(
+      "review round.focus.adjacentScopeUnboundedはtrueだけを指定できます（限定済みはfieldを省略する）",
+    );
+  if (
+    focus.adjacentScopeUnbounded === true &&
+    Array.isArray(focus.adjacentScope) &&
+    focus.adjacentScope.length > 0
+  )
+    throw new Error(
+      "review round.focus.adjacentScopeUnboundedとadjacentScopeは同時に指定できません",
+    );
   if (!Array.isArray(focus.adjacentScope))
     throw new Error("review round.focus.adjacentScopeは配列が必要です");
   const adjacentScope = focus.adjacentScope.map((candidate, index) => {
@@ -336,6 +358,9 @@ function parseFocus(value: unknown): ReviewRoundFocus {
     ),
     fixedDiff: stableStrings(focus.fixedDiff, "review round.focus.fixedDiff"),
     adjacentScope: Object.freeze(adjacentScope),
+    ...(focus.adjacentScopeUnbounded === true
+      ? { adjacentScopeUnbounded: true as const }
+      : {}),
   });
 }
 
@@ -508,10 +533,15 @@ function findingAdmission(input: {
    * 不一致を拒否する。したがってここへ届く隣接pathは申告ではなく観測であり、
    * 修正差分と同じくcurrent scopeへ含める。
    */
+  /**
+   * **影響集合を証明できない（`adjacentScopeUnbounded`）ときは全pathを隣接範囲とする。**
+   * 証明できないことでtargetedより狭いadmissionにしない（fail-closed）。
+   */
   const inAdjacentScope =
     round >= 2 &&
     !inFixedDiff &&
-    focus.adjacentScope.some(({ path }) => path === finding.path);
+    (focus.adjacentScopeUnbounded === true ||
+      focus.adjacentScope.some(({ path }) => path === finding.path));
   if (round >= 2 && !inFixedDiff && !inAdjacentScope)
     return {
       admission: "record-only",
@@ -625,7 +655,8 @@ export function advanceReviewSession(
       round.candidateHeadSha !== round.anchor.initialHeadSha ||
       round.focus.previousBlocking.length > 0 ||
       round.focus.fixedDiff.length > 0 ||
-      round.focus.adjacentScope.length > 0
+      round.focus.adjacentScope.length > 0 ||
+      round.focus.adjacentScopeUnbounded === true
     )
       throw new Error("round 1は固定initial HEADの全scope reviewで開始します");
   } else {

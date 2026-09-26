@@ -244,6 +244,10 @@ export function deriveReviewRoundImpact(input) {
         baseSha: input.previousHeadSha,
         headSha: input.headSha,
     });
-    return { impact, adjacentScope: reviewAdjacentScope(impact) };
+    return {
+        impact,
+        adjacentScope: reviewAdjacentScope(impact),
+        adjacentScopeUnbounded: impact.mode === "full",
+    };
 }
 //# sourceMappingURL=impact-set.js.map

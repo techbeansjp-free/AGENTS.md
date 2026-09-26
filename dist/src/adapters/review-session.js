@@ -53,7 +53,7 @@ function impactNotes(impact) {
     if (impact.mode === "targeted")
         notes.push(`影響集合（digest ${impact.digest.slice(0, 12)}）から隣接範囲${impact.adjacent.length}件をfocus.adjacentScopeへ設定した。隣接範囲の前round blocker起因のHigh回帰と固定契約違反はcurrent blockerになる`);
     else
-        notes.push(`影響集合を証明できないため全体reviewを適用する（focus.adjacentScopeは空）: ${impact.reasons.slice(0, 3).join("; ")}${impact.reasons.length > 3 ? ` ほか${impact.reasons.length - 3}件` : ""}`);
+        notes.push(`影響集合を証明できないため全体reviewを適用する（focus.adjacentScopeUnbounded=true。全pathを隣接範囲として扱い、前round blocker起因のHigh回帰と固定契約違反は修正差分外でもcurrent blockerになる）: ${impact.reasons.slice(0, 3).join("; ")}${impact.reasons.length > 3 ? ` ほか${impact.reasons.length - 3}件` : ""}`);
     if (impact.securitySensitive)
         notes.push(`security上の注意を要するpathが変更または隣接範囲にある。縮小せず確認する: ${impact.securityPaths.join(", ")}`);
     return notes;
@@ -293,6 +293,7 @@ export function buildReviewRoundDraft(input) {
          * 拒否するため導出しない。記録時は`previewReviewRound`が同じ関数で再導出し照合する。
          */
         let adjacentScope = [];
+        let adjacentScopeUnbounded = false;
         if (fixed.length > 0) {
             const derived = deriveReviewRoundImpact({
                 root,
@@ -300,6 +301,7 @@ export function buildReviewRoundDraft(input) {
                 headSha,
             });
             adjacentScope = derived.adjacentScope;
+            adjacentScopeUnbounded = derived.adjacentScopeUnbounded;
             notes.push(...impactNotes(derived.impact));
         }
         round = {
@@ -307,7 +309,14 @@ export function buildReviewRoundDraft(input) {
             previousRoundDigest: previous.latestRoundDigest,
             anchor: previous.anchor,
             candidateHeadSha: headSha,
-            focus: { previousBlocking, fixedDiff: fixed, adjacentScope },
+            focus: {
+                previousBlocking,
+                fixedDiff: fixed,
+                adjacentScope,
+                ...(adjacentScopeUnbounded
+                    ? { adjacentScopeUnbounded: true }
+                    : {}),
+            },
             findings: carried,
             ...(previous.status === "converged" &&
                 recordLayerSuffix(staging, root, previousHeadSha, headSha, previous)
@@ -432,6 +441,7 @@ export function previewReviewRound(input) {
     const staging = assertWorkflowStaging(input.staging);
     refixStagingDigestForRound(staging);
     const previous = readStoredReviewSession(staging);
+    let round = input.round;
     const root = stagingRepositoryRoot(staging);
     const currentHeadSha = git(["rev-parse", "--verify", "HEAD^{commit}"], root, {
         env: GIT_ENV,
@@ -494,16 +504,31 @@ export function previewReviewRound(input) {
          * 64桁digestを添えて範囲を広げられる。雛形と同じ関数で導出した値との
          * 完全一致だけを受理する。
          */
-        const expectedAdjacent = fixed.length === 0
-            ? []
+        const expectedImpact = fixed.length === 0
+            ? { adjacentScope: [], adjacentScopeUnbounded: false }
             : deriveReviewRoundImpact({
                 root,
                 previousHeadSha,
                 headSha: input.round.candidateHeadSha,
-            }).adjacentScope;
-        if (stableJson(expectedAdjacent) !==
+            });
+        if (stableJson(expectedImpact.adjacentScope) !==
             stableJson(input.round.focus.adjacentScope))
             throw new Error("review roundのadjacentScopeが実Gitから導出した影響集合の隣接範囲と一致しません。review round --initの雛形を書き換えずに使ってください");
+        /**
+         * **無制限の印も実Gitから再導出する。** 影響集合がfullなのに印が無いと
+         * 修正差分外の回帰がrecord-onlyへ落ち、targetedより狭いadmissionになる。
+         * 印の欠落（印導入前の雛形を含む）は観測値へ補い、観測が支えない印は拒否する。
+         * 記録するroundは常に観測値の印を持つ。
+         */
+        if (input.round.focus.adjacentScopeUnbounded === true &&
+            !expectedImpact.adjacentScopeUnbounded)
+            throw new Error("review roundのadjacentScopeUnboundedが実Gitから導出した影響集合と一致しません。review round --initの雛形を書き換えずに使ってください");
+        if (expectedImpact.adjacentScopeUnbounded &&
+            input.round.focus.adjacentScopeUnbounded !== true)
+            round = {
+                ...input.round,
+                focus: { ...input.round.focus, adjacentScopeUnbounded: true },
+            };
         /**
          * **`followOnly`は申告ではなくGit観測から導出する**（Issue #1287）。
          *
@@ -517,7 +542,7 @@ export function previewReviewRound(input) {
             !recordLayerSuffix(staging, root, previousHeadSha, input.round.candidateHeadSha, previous))
             throw new Error("record layerとして記録できるのはformal artifactとsealed journalから一致を証明したprogress投影だけです");
     }
-    return advanceReviewSession(previous, input.round);
+    return advanceReviewSession(previous, round);
 }
 export function recordReviewRound(input) {
     const staging = assertWorkflowStaging(input.staging);

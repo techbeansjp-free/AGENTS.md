@@ -901,3 +901,132 @@ Then("補助reviewの関連fileは影響集合の隣接範囲と一致する", f
     this.impact.adjacent.map(({ path: adjacent }) => adjacent),
   );
 });
+
+/** ---- 影響集合を証明できないround（SCN-UNIT-IMPACT-014） ---- */
+
+function roundTwoInput(
+  world: ImpactWorld,
+  focus: Record<string, unknown>,
+  findings: unknown[],
+): ReviewRoundInput {
+  return parseReviewRoundInput({
+    round: 2,
+    previousRoundDigest: world.admitted.latestRoundDigest,
+    anchor: ANCHOR,
+    candidateHeadSha: "8".repeat(40),
+    focus: {
+      previousBlocking: ["H-001"],
+      fixedDiff: ["src/a.ts"],
+      adjacentScope: [],
+      ...focus,
+    },
+    findings,
+  });
+}
+
+Given("影響集合を証明できない印を持つround 2の入力がある", function () {
+  this.admitted = advanceReviewSession(
+    null,
+    parseReviewRoundInput({
+      round: 1,
+      previousRoundDigest: null,
+      anchor: ANCHOR,
+      candidateHeadSha: ANCHOR.initialHeadSha,
+      focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
+      findings: [reviewFinding({})],
+    }),
+  );
+  this.roundTwo = roundTwoInput(this, { adjacentScopeUnbounded: true }, [
+    reviewFinding({ status: "resolved" }),
+    reviewFinding({
+      id: "H-REG",
+      relation: "fix-regression",
+      path: "src/z.ts",
+      contractId: null,
+      causedByFindingId: "H-001",
+    }),
+    reviewFinding({ id: "H-AC", path: "src/z.ts" }),
+    reviewFinding({
+      id: "H-IMP",
+      relation: "improvement",
+      path: "src/z.ts",
+      contractId: null,
+    }),
+    reviewFinding({
+      id: "H-UNCAUSED",
+      relation: "fix-regression",
+      path: "src/z.ts",
+      contractId: null,
+      causedByFindingId: null,
+    }),
+  ]);
+  assert.equal(this.roundTwo.focus.adjacentScopeUnbounded, true);
+});
+
+When("修正差分外のfindingをadmissionへ通す", function () {
+  this.admitted = advanceReviewSession(this.admitted, this.roundTwo);
+});
+
+Then(
+  "修正差分外の前round blocker起因Highと固定Acceptance Criteria違反はcurrent blockerになる",
+  function () {
+    for (const id of ["H-REG", "H-AC"]) {
+      const finding = admittedFinding(this, id);
+      assert.equal(finding.admission, "block-current", id);
+      assert.match(finding.admissionReason, /影響集合の隣接範囲/u);
+    }
+    assert.deepEqual(this.admitted.rounds.at(-1)?.blocking, ["H-AC", "H-REG"]);
+    assert.equal(
+      this.admitted.rounds.at(-1)?.focus.adjacentScopeUnbounded,
+      true,
+    );
+  },
+);
+
+Then(
+  "修正差分外の改善提案と前round blockerに結び付かないHighはrecord-onlyである",
+  function () {
+    assert.equal(admittedFinding(this, "H-IMP").admission, "record-only");
+    assert.equal(admittedFinding(this, "H-UNCAUSED").admission, "record-only");
+  },
+);
+
+Then(
+  "印の無い旧roundは限定済みとして読み印にfalseを指定したroundと隣接pathを併記したroundは拒否する",
+  function () {
+    const legacy = roundTwoInput(this, {}, []);
+    assert.equal("adjacentScopeUnbounded" in legacy.focus, false);
+    assert.throws(
+      () => roundTwoInput(this, { adjacentScopeUnbounded: false }, []),
+      /adjacentScopeUnboundedはtrueだけを指定できます/u,
+    );
+    assert.throws(
+      () =>
+        roundTwoInput(
+          this,
+          {
+            adjacentScopeUnbounded: true,
+            adjacentScope: [
+              { path: "src/b.ts", graphEvidence: "9".repeat(64) },
+            ],
+          },
+          [],
+        ),
+      /adjacentScopeUnboundedとadjacentScopeは同時に指定できません/u,
+    );
+  },
+);
+
+/** ---- src/が字面で読む文書（SCN-UNIT-IMPACT-015） ---- */
+
+When(
+  "src\\/b.tsだけが字面で読むdocs\\/loaded.mdを変更した影響集合を導出する",
+  function () {
+    this.impact = derive(this, ["docs/loaded.md"], {
+      literalReferences: {
+        ...this.graphInput.literalReferences,
+        "loaded.md": ["src/b.ts"],
+      },
+    });
+  },
+);

@@ -258,6 +258,15 @@ When("不正な条件でreview exportを実行する", async function () {
       exportArgs(this, { out: "docs/reviews/1501_review.json" }),
     ),
   );
+  /** 祖先`docs`がsymlinkでも、拒否より前にsymlink先へdirectoryを作らない */
+  assert.equal(fs.existsSync(path.join(this.root, "docs")), false);
+  fs.mkdirSync(path.join(this.root, "outside-docs"), { recursive: true });
+  fs.symlinkSync(
+    path.join(this.root, "outside-docs"),
+    path.join(this.root, "docs"),
+  );
+  this.failures.push(await captureCli(exportArgs(this)));
+  fs.unlinkSync(path.join(this.root, "docs"));
   fs.mkdirSync(path.join(this.root, "outside"), { recursive: true });
   fs.mkdirSync(path.join(this.root, "docs"), { recursive: true });
   fs.symlinkSync(
@@ -277,6 +286,7 @@ Then("各条件を理由つきで拒否し証跡を書かない", function () {
     /docs\/reviews\/または\.agent-skill-chain\/reviews\/配下/u,
     /1500_review\.json/u,
     /symlinkを含まない親directory/u,
+    /symlinkを含まない親directory/u,
     /review済みcandidate HEAD.*H_final/u,
   ];
   assert.equal(this.failures.length, expected.length);
@@ -293,6 +303,11 @@ Then("各条件を理由つきで拒否し証跡を書かない", function () {
     fs.readdirSync(path.join(this.root, "outside")).length,
     0,
     "symlink先へ書かない",
+  );
+  assert.deepEqual(
+    fs.readdirSync(path.join(this.root, "outside-docs")),
+    [],
+    "symlink祖先の先へdirectoryを作らない",
   );
 });
 

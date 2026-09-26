@@ -304,8 +304,8 @@ function workflowDiagnostic(staging, mode, result, extra = []) {
  * 封印済み計画の編集はdigest不一致としても現れるが、先に名指しすることで
  * 「計画は05_計画変更.mdへ」という次の行動を返す。
  */
-export function assertWorkflowReadyForDelivery(staging) {
-    assertPlanFrozen(staging);
+export function assertWorkflowReadyForDelivery(staging, deliveredHeadSha = "HEAD") {
+    assertPlanFrozen(staging, deliveredHeadSha);
     const stored = readStoredStagingRecord(staging);
     const currentArtifacts = listStagingArtifacts(staging);
     const currentDigest = calculateStagingDigest(staging, currentArtifacts);
@@ -329,8 +329,8 @@ export function assertWorkflowReadyForDelivery(staging) {
         ].join("; ")}`);
     return inspection;
 }
-function assertWorkflowReadyForTerminalRedelivery(staging) {
-    assertPlanFrozen(staging);
+function assertWorkflowReadyForTerminalRedelivery(staging, deliveredHeadSha = "HEAD") {
+    assertPlanFrozen(staging, deliveredHeadSha);
     const stored = readStoredStagingRecord(staging);
     const currentArtifacts = listStagingArtifacts(staging);
     const currentDigest = calculateStagingDigest(staging, currentArtifacts);
@@ -1847,8 +1847,8 @@ function handlePullRequestMerge(flags) {
             recoverPendingJournalTransaction(staging);
         const workflowInspection = initial.redelivery ||
             (initial.state === "step11-recorded" && reopenTerminal)
-            ? assertWorkflowReadyForTerminalRedelivery(staging)
-            : assertWorkflowReadyForDelivery(staging);
+            ? assertWorkflowReadyForTerminalRedelivery(staging, initial.create.headSha)
+            : assertWorkflowReadyForDelivery(staging, initial.create.headSha);
         assertWorkflowMergeAllowed(workflowInspection.mode);
         let stagingRecord = readStoredStagingRecord(staging);
         const current = readStoredDeliveryState(staging);
@@ -6729,7 +6729,7 @@ export async function main(argv, dependencies = {}) {
             appendWorkflowJournalEntry({ staging, entry });
         const result = withStagingMutationLock(staging, () => {
             recoverPendingJournalTransaction(staging);
-            const lockedInspection = assertWorkflowReadyForDelivery(staging);
+            const lockedInspection = assertWorkflowReadyForDelivery(staging, headSha);
             if (readStoredDeliveryState(staging))
                 assertCurrentReviewJournalBinding(staging, headSha);
             else

@@ -71,17 +71,39 @@ export function resolveLocalConfigWithWorkspaceFallback<T>(
 }
 
 /**
- * `target`がそのfileの属するGit repositoryで追跡されていればtrue。Git
- * repositoryでない場所（tmpdir fixture等）では`git ls-files`が失敗するため
- * false（未追跡）になる。
+ * `target`がそのfileの属するGit repositoryで追跡されているかを観測する。
+ *
+ * **未追跡と判定するのはGitが明示した2つの場合だけである。** Git repositoryで
+ * ない場所（tmpdir fixture等、`not a git repository`）と、pathspecが追跡fileに
+ * 一致しない場合（`--error-unmatch`の終了値1）である。git不在・dubious
+ * ownership・index破損などの失敗は追跡の有無を観測できないため`unknown`を返し、
+ * 呼出し側はfail-closedで`invalid`にする。診断文の照合のためlocaleをCへ固定する。
  */
-function isTrackedByGit(target: string): boolean {
+function observeGitTracking(
+  target: string,
+): "tracked" | "untracked" | "unknown" {
   const result = git(
     ["ls-files", "--error-unmatch", "--", path.basename(target)],
     path.dirname(target),
-    { allowFailure: true },
+    {
+      allowFailure: true,
+      env: { ...process.env, LANG: "C", LC_ALL: "C", LANGUAGE: "C" },
+    },
   );
-  return result.status === 0;
+  if (result.status === 0) return "tracked";
+  if (
+    result.status === 1 &&
+    /^error: pathspec '.*' did not match any file\(s\) known to git/mu.test(
+      result.stderr,
+    )
+  )
+    return "untracked";
+  if (
+    result.status === 128 &&
+    /^fatal: not a git repository/mu.test(result.stderr)
+  )
+    return "untracked";
+  return "unknown";
 }
 
 /**
@@ -96,11 +118,18 @@ function classifyUntrackedJevProviderConfig(
 ): LocalConfigClassification<JevProviderConfig> {
   const classified = classifyJevProviderConfig(root, configPath);
   if (classified.state !== "enabled") return classified;
-  if (isTrackedByGit(path.resolve(root, configPath)))
+  const tracking = observeGitTracking(path.resolve(root, configPath));
+  if (tracking === "tracked")
     return {
       state: "invalid",
       reason:
         "設定fileがGitで追跡されています。個人ローカル設定はcommitせず、git rm --cachedで追跡を外してください",
+    };
+  if (tracking === "unknown")
+    return {
+      state: "invalid",
+      reason:
+        "設定fileがGitで追跡されているかを確認できません（git ls-filesが失敗しました）。gitの実行可否とrepositoryの状態を確認してください",
     };
   return classified;
 }

@@ -682,8 +682,9 @@ function workflowDiagnostic(
  */
 export function assertWorkflowReadyForDelivery(
   staging: string,
+  deliveredHeadSha = "HEAD",
 ): ReturnType<typeof inspectWorkflowStaging> {
-  assertPlanFrozen(staging);
+  assertPlanFrozen(staging, deliveredHeadSha);
   const stored = readStoredStagingRecord(staging);
   const currentArtifacts = listStagingArtifacts(staging);
   const currentDigest = calculateStagingDigest(staging, currentArtifacts);
@@ -718,8 +719,9 @@ export function assertWorkflowReadyForDelivery(
 
 function assertWorkflowReadyForTerminalRedelivery(
   staging: string,
+  deliveredHeadSha = "HEAD",
 ): ReturnType<typeof inspectWorkflowStaging> {
-  assertPlanFrozen(staging);
+  assertPlanFrozen(staging, deliveredHeadSha);
   const stored = readStoredStagingRecord(staging);
   const currentArtifacts = listStagingArtifacts(staging);
   const currentDigest = calculateStagingDigest(staging, currentArtifacts);
@@ -2866,8 +2868,11 @@ function handlePullRequestMerge(flags: Flags): number {
     const workflowInspection =
       initial.redelivery ||
       (initial.state === "step11-recorded" && reopenTerminal)
-        ? assertWorkflowReadyForTerminalRedelivery(staging)
-        : assertWorkflowReadyForDelivery(staging);
+        ? assertWorkflowReadyForTerminalRedelivery(
+            staging,
+            initial.create.headSha,
+          )
+        : assertWorkflowReadyForDelivery(staging, initial.create.headSha);
     assertWorkflowMergeAllowed(workflowInspection.mode);
     let stagingRecord = readStoredStagingRecord(staging);
     const current = readStoredDeliveryState(staging);
@@ -9051,7 +9056,7 @@ export async function main(
       appendWorkflowJournalEntry({ staging, entry });
     const result = withStagingMutationLock(staging, () => {
       recoverPendingJournalTransaction(staging);
-      const lockedInspection = assertWorkflowReadyForDelivery(staging);
+      const lockedInspection = assertWorkflowReadyForDelivery(staging, headSha);
       if (readStoredDeliveryState(staging))
         assertCurrentReviewJournalBinding(staging, headSha);
       else

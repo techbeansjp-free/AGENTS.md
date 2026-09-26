@@ -80,3 +80,17 @@ Feature: 実Git差分から影響集合を一度だけ導出し影響を証明�
     Then 隣接範囲の前round blocker起因Highはcurrent blockerになる
     And 隣接範囲の固定Acceptance Criteria違反はcurrent blockerになる
     And 隣接範囲の改善提案と範囲外Highはrecord-onlyである
+
+  Scenario: SCN-UNIT-IMPACT-014 影響集合を証明できないroundは全pathを隣接範囲として扱いtargetedより狭めない
+    Given 影響集合を証明できない印を持つround 2の入力がある
+    When 修正差分外のfindingをadmissionへ通す
+    Then 修正差分外の前round blocker起因Highと固定Acceptance Criteria違反はcurrent blockerになる
+    And 修正差分外の改善提案と前round blockerに結び付かないHighはrecord-onlyである
+    And 印の無い旧roundは限定済みとして読み印にfalseを指定したroundと隣接pathを併記したroundは拒否する
+
+  Scenario: SCN-UNIT-IMPACT-015 src/が字面で読む文書から検証featureを選べなければ全体へ倒れる
+    Given import鎖と追跡表とstep定義を持つ意味Graphがある
+    When src/b.tsだけが字面で読むdocs/loaded.mdを変更した影響集合を導出する
+    Then 影響集合はfullで理由に"src/が字面で読む文書から検証featureへ到達できません: docs/loaded.md"を含む
+    When step定義が字面で読むdocs/read.mdだけを変更した影響集合を導出する
+    Then 影響集合はtargetedで理由を持たない

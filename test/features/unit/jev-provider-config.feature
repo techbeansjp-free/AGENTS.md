@@ -87,3 +87,9 @@ Feature: ローカルJev provider設定のloader
     Given Git repositoryでjev-provider.jsonが追跡されずignoreされている
     When resolveJevProviderConfigを実行する
     Then 解決結果はenabledである
+
+  Scenario: SCN-UNIT-JEVCFG-018 Git追跡の有無を観測できないjev-provider.jsonは読み込まない
+    Given Git repositoryでjev-provider.jsonが追跡されずindexが壊れている
+    When resolveJevProviderConfigを実行する
+    Then 解決結果はGit追跡を確認できないことを理由とするinvalidである
+    And gitを実行できない環境でも解決結果はGit追跡を確認できないことを理由とするinvalidである

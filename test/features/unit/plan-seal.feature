@@ -63,3 +63,15 @@ Feature: 承認済み計画の封印と計画変更記録
     Given 追加・削除・封印済み計画の変化と各記録状態の組がある
     When digest不一致の診断文を生成する
     Then 変化した成果物を名指しし記録状態ごとの次の行動を返し--reconfirmを含まない
+
+  Scenario: SCN-UNIT-PLANSEAL-013 版管理下stagingではcommit上の計画文書も封印と一致させる
+    Given Step 4で封印した版管理下quick stagingとcommit済みrepositoryがある
+    When 00の編集をcommitしworktreeだけ封印時の内容へ戻す
+    Then Step 9記録と配送headのdelivery直前検査はcommit上の00の変化を名指しして拒否する
+    And commitから00を除くと削除として拒否する
+    And commit上の00を封印時の内容へ戻すとStep 9を記録できる
+
+  Scenario: SCN-UNIT-PLANSEAL-014 Step 9記録後は封印Stepを追記して再封印できない
+    Given Step 4で封印したquick stagingとcommit済みrepositoryがある
+    When Step 9を記録した後に00を編集してStep 4を記録する
+    Then 再封印を名指しして拒否しjournalと最新封印は変わらない

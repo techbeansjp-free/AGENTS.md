@@ -141,6 +141,21 @@ export function exportReviewEvidence(input) {
     if (name === null || Number(name[1]) !== input.issue)
         throw new Error(`review exportの--outのfile名は${input.issue}_review.jsonが必要です`);
     const parent = path.dirname(out);
+    /**
+     * **directoryを作る前に既存の祖先を全部検査する。** 先に`mkdirSync`すると、
+     * 祖先（例: `docs`）がsymlinkのとき拒否より前にrepository外へdirectoryを作る。
+     */
+    let ancestor = path.resolve(root);
+    for (const segment of path.relative(root, parent).split(path.sep)) {
+        if (segment === "")
+            continue;
+        ancestor = path.join(ancestor, segment);
+        const stat = fs.lstatSync(ancestor, { throwIfNoEntry: false });
+        if (stat === undefined)
+            break;
+        if (stat.isSymbolicLink() || !stat.isDirectory())
+            throw new Error("review exportの--outはrepository内のsymlinkを含まない親directoryが必要です");
+    }
     fs.mkdirSync(parent, { recursive: true });
     const realRoot = fs.realpathSync(root);
     const realParent = fs.realpathSync(parent);

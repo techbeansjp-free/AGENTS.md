@@ -304,11 +304,19 @@ export function deriveReviewRoundImpact(input: {
   root: string;
   previousHeadSha: string;
   headSha: string;
-}): { impact: ImpactSet; adjacentScope: readonly ReviewAdjacentScope[] } {
+}): {
+  impact: ImpactSet;
+  adjacentScope: readonly ReviewAdjacentScope[];
+  adjacentScopeUnbounded: boolean;
+} {
   const impact = computeImpactSet({
     root: input.root,
     baseSha: input.previousHeadSha,
     headSha: input.headSha,
   });
-  return { impact, adjacentScope: reviewAdjacentScope(impact) };
+  return {
+    impact,
+    adjacentScope: reviewAdjacentScope(impact),
+    adjacentScopeUnbounded: impact.mode === "full",
+  };
 }

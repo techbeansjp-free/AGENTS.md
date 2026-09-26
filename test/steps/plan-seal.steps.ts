@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -821,4 +822,143 @@ Then("診断は編集前の内容へ戻す手順を示し--reconfirmを含まな
   assert.match(this.diagnostic, /変化した成果物: 追加 99_メモ\.md/u);
   assert.match(this.diagnostic, /編集前の内容へ戻してください/u);
   assert.doesNotMatch(this.diagnostic, /reconfirm|review round/u);
+});
+
+// ---- 版管理下stagingのcommit上の計画文書（SCN-UNIT-PLANSEAL-013） ----
+
+const TRACKED_ROOT = "docs/issues";
+
+function gitIn(root: string, args: string[]): string {
+  return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+}
+
+/** 本repositoryのpolicy setを複製し、`staging`節だけを版管理下rootへ差し替える。 */
+function writeTrackedPolicySet(root: string): void {
+  const source = process.cwd();
+  const namespace = path.join(root, ".agent-skill-chain");
+  fs.mkdirSync(namespace, { recursive: true });
+  fs.cpSync(
+    path.join(source, ".agent-skill-chain", "project"),
+    path.join(namespace, "project"),
+    { recursive: true },
+  );
+  const manifest = JSON.parse(
+    fs.readFileSync(
+      path.join(source, ".agent-skill-chain", "project-policy.json"),
+      "utf8",
+    ),
+  ) as { policy: Record<string, unknown> };
+  manifest.policy.staging = { root: TRACKED_ROOT, tracked: true };
+  fs.writeFileSync(
+    path.join(namespace, "project-policy.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+}
+
+function deliveryDiagnostic(staging: string, headSha: string): string {
+  try {
+    assertWorkflowReadyForDelivery(staging, headSha);
+    return "";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+Given(
+  "Step 4で封印した版管理下quick stagingとcommit済みrepositoryがある",
+  async function () {
+    this.root = this.initRepo();
+    writeTrackedPolicySet(this.root);
+    fs.mkdirSync(path.join(this.root, ...TRACKED_ROOT.split("/")), {
+      recursive: true,
+    });
+    this.staging = createIssueStaging(this.root, {
+      title: "plan-seal-tracked",
+      answers: answers(),
+      now: new Date("2026-09-26T00:00:00Z"),
+      requestedMode: "quick",
+      stagingRoot: TRACKED_ROOT,
+    }).path;
+    await recordAll(this.staging, [1, 4]);
+    gitIn(this.root, ["add", "-A"]);
+    gitIn(this.root, ["commit", "-q", "-m", "sealed plan"]);
+    assert.equal(gitIn(this.root, ["status", "--porcelain"]), "");
+    this.original = fs.readFileSync(path.join(this.staging, REQUEST), "utf8");
+    this.journalBefore = journalOf(this.staging);
+  },
+);
+
+When("00の編集をcommitしworktreeだけ封印時の内容へ戻す", function () {
+  const file = path.join(this.staging, REQUEST);
+  fs.appendFileSync(file, "\n封印後にcommitした追記\n");
+  gitIn(this.root, ["commit", "-q", "-am", "edit sealed plan"]);
+  fs.writeFileSync(file, this.original);
+});
+
+Then(
+  "Step 9記録と配送headのdelivery直前検査はcommit上の00の変化を名指しして拒否する",
+  async function () {
+    const result = await record(this.staging, 9);
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stdout, /変化した計画文書: 00_要求定義\.md/u);
+    assert.match(result.stdout, /commit HEAD上の計画文書が封印と一致しません/u);
+    assert.equal(journalOf(this.staging), this.journalBefore);
+    const head = gitIn(this.root, ["rev-parse", "HEAD"]);
+    const diagnostic = deliveryDiagnostic(this.staging, head);
+    assert.match(diagnostic, /変化した計画文書: 00_要求定義\.md/u);
+    assert.match(
+      diagnostic,
+      new RegExp(`commit ${head}上の計画文書が封印と一致しません`, "u"),
+    );
+    /** 配送headが封印時のcommitなら同じ検査は計画凍結で止めない */
+    const sealed = gitIn(this.root, ["rev-parse", "HEAD^"]);
+    assert.doesNotMatch(
+      deliveryDiagnostic(this.staging, sealed),
+      /封印と一致しません/u,
+    );
+  },
+);
+
+Then("commitから00を除くと削除として拒否する", async function () {
+  const relative = path
+    .relative(this.root, path.join(this.staging, REQUEST))
+    .split(path.sep)
+    .join("/");
+  gitIn(this.root, ["rm", "-q", "--cached", "--", relative]);
+  gitIn(this.root, ["commit", "-q", "-m", "drop sealed plan"]);
+  const result = await record(this.staging, 9);
+  assert.equal(result.status, 1, result.stdout);
+  assert.match(result.stdout, /00_要求定義\.md（削除）/u);
+  assert.equal(journalOf(this.staging), this.journalBefore);
+});
+
+Then("commit上の00を封印時の内容へ戻すとStep 9を記録できる", async function () {
+  gitIn(this.root, ["add", "-A"]);
+  gitIn(this.root, ["commit", "-q", "-m", "restore sealed plan"]);
+  const result = await record(this.staging, 9);
+  assert.equal(result.status, 0, result.stdout);
+  assert.equal(lastEntry(this.staging).step, 9);
+});
+
+// ---- Step 9後の再封印（SCN-UNIT-PLANSEAL-014） ----
+
+When("Step 9を記録した後に00を編集してStep 4を記録する", async function () {
+  await recordAll(this.staging, [9]);
+  this.journalBefore = journalOf(this.staging);
+  fs.appendFileSync(path.join(this.staging, REQUEST), "\n封印後に追記した\n");
+  this.result = await record(this.staging, 4);
+});
+
+Then("再封印を名指しして拒否しjournalと最新封印は変わらない", function () {
+  assert.equal(this.result.status, 1, this.result.stdout);
+  assert.match(
+    this.result.stdout,
+    /Step 9以降の記録後にStep 4を追記して計画を再封印できません/u,
+  );
+  assert.equal(journalOf(this.staging), this.journalBefore);
+  const seals = parseStepJournal(journalOf(this.staging)).entries.filter(
+    (entry) => entry.planSeal !== undefined,
+  );
+  assert.equal(seals.length, 1);
+  assert.equal(seals[0]?.step, 4);
 });

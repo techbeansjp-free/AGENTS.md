@@ -6,7 +6,7 @@ Feature: Review sessionを固定契約へ収束させる
     When round 2で既存findingを解消し範囲外audit改善提案を追加する
     Then review sessionはdigest chainを保ってconvergedになる
     And 範囲外audit改善提案はrecord-onlyである
-    And 影響集合の隣接範囲外で修正差分外のHighはrecord-onlyである
+    And 影響集合を証明できない修正差分外で前round blockerへ結び付かないHighはrecord-onlyである
 
   Scenario: SCN-UNIT-REVIEWCONV-002 round自己申告resetとanchor変更を拒否する
     Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
