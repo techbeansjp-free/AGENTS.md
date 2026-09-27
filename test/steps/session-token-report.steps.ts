@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
+import { normalizeReadPath } from "../../scripts/report_session_tokens.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class SessionTokenWorld extends WorkflowWorld {
@@ -215,6 +216,11 @@ Then(
           options,
         ),
       ),
+      JSON.parse(this.tokenStdout),
+    );
+    /** 別名を先に指定しても、session IDと親子関係は実pathから決まる。 */
+    assert.deepEqual(
+      JSON.parse(runTokenScript([alias, this.tokenLog], options)),
       JSON.parse(this.tokenStdout),
     );
     /** subagentを先に明示しても、親は配置から決まり合計は変わらない。 */
@@ -448,3 +454,23 @@ Then(
       assert.equal(this.tokenStdout.includes(secret), false, secret);
   },
 );
+
+Then("token様の名前は除外し単語で区切った長いfile名は保持する", function () {
+  const root = "/repo";
+  assert.deepEqual(
+    [
+      "test/steps/issue-development-considerations.steps.ts",
+      "docs/0123456789abcdef0123456789abcdef.md",
+      `docs/${TOKEN_LIKE_NAME}`,
+      "docs/ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+      "docs/abcdefghijklmnopqrstuvwxyzabcdefgh.md",
+    ].map((candidate) => normalizeReadPath(candidate, root, root) ?? null),
+    [
+      "test/steps/issue-development-considerations.steps.ts",
+      null,
+      null,
+      null,
+      "docs/abcdefghijklmnopqrstuvwxyzabcdefgh.md",
+    ],
+  );
+});

@@ -106,8 +106,16 @@ export function distribution(values: readonly number[]): Distribution {
   return { median, p95, max: sorted.at(-1)! };
 }
 
-/** segmentの一部でも32文字以上の英数字列を含めばtoken様とみなす（拡張子・区切りを伴う場合も）。 */
-const TOKEN_LIKE_SEGMENT = /[A-Za-z0-9_-]{32,}/u;
+/**
+ * 区切り（`-`・`_`・`.`）を挟まない24文字以上の英数字列で、英字と数字の両方を含むものを
+ * token様とみなす（拡張子・接頭辞を伴う場合も）。単語を区切った長いfile名は保持する。
+ */
+const TOKEN_LIKE_RUN = /[A-Za-z0-9]{24,}/gu;
+function isTokenLikeSegment(segment: string): boolean {
+  return (segment.match(TOKEN_LIKE_RUN) ?? []).some(
+    (run) => /[0-9]/u.test(run) && /[A-Za-z]/u.test(run),
+  );
+}
 
 /** repository root配下の相対pathへ正規化できたものだけを返す。 */
 export function normalizeReadPath(
@@ -123,7 +131,7 @@ export function normalizeReadPath(
     relative === "" ||
     relative.startsWith("..") ||
     path.isAbsolute(relative) ||
-    relative.split(path.sep).some((segment) => TOKEN_LIKE_SEGMENT.test(segment))
+    relative.split(path.sep).some(isTokenLikeSegment)
   )
     return undefined;
   return relative.split(path.sep).join("/");
@@ -357,14 +365,16 @@ function expandLogs(
     string,
     { file: string; kind: "main" | "subagent"; parent: string | null }
   >();
-  const add = (file: string) => {
+  const add = (file: string): string => {
     const real = fs.realpathSync(file);
-    if (!expanded.has(real)) expanded.set(real, { file, ...logKind(real) });
+    if (!expanded.has(real))
+      expanded.set(real, { file: real, ...logKind(real) });
+    return real;
   };
   for (const file of files) {
-    add(file);
-    const id = path.basename(file, ".jsonl");
-    const directory = path.join(path.dirname(file), id, "subagents");
+    const real = add(file);
+    const id = path.basename(real, ".jsonl");
+    const directory = path.join(path.dirname(real), id, "subagents");
     if (!fs.existsSync(directory)) continue;
     for (const name of fs.readdirSync(directory).sort())
       if (name.endsWith(".jsonl")) add(path.join(directory, name));
