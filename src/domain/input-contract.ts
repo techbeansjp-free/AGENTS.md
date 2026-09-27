@@ -53,6 +53,16 @@ export function childFields(
   });
 }
 
+/** 別の定義の項目を`prefix`配下のpathとして合成する。 */
+export function nestedFields(
+  prefix: string,
+  specs: readonly InputFieldSpec[],
+): readonly InputFieldSpec[] {
+  return specs.map((spec) =>
+    Object.freeze({ ...spec, path: `${prefix}.${spec.path}` }),
+  );
+}
+
 /** enum違反の診断へ添える受理値の表記。 */
 export function acceptedValues(values: readonly string[]): string {
   return `（受理値: ${values.join("|")}）`;

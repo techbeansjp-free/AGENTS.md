@@ -1,6 +1,13 @@
 import crypto from "node:crypto";
 import { stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
+import {
+  acceptedValues,
+  childFields,
+  field,
+  unknownAndMissingError,
+  type InputFieldSpec,
+} from "./input-contract.js";
 
 export const PROGRESS_START = "<!-- asc:parallel-progress:start -->";
 export const PROGRESS_END = "<!-- asc:parallel-progress:end -->";
@@ -440,27 +447,39 @@ export function reviewProgressTargets(
   return inventory.targets ?? [inventory];
 }
 
+const PROGRESS_INVENTORY_V2 = "agent-skill-chain/review-progress-inventory/v2";
+
+/** progress inventoryの項目定義。`review round --help`と検証が共有する（Issue #1388）。 */
+export const PROGRESS_INVENTORY_FIELDS: readonly InputFieldSpec[] =
+  Object.freeze([
+    field("targetPath", "repository相対path"),
+    field("baselineDigest", "sha256"),
+    field("prefixDigest", "sha256"),
+    field("suffixDigest", "sha256"),
+    field("fileMode", "integer（420だけ。0o644）"),
+    field("allowedTaskIds", "taskId[]（1件以上、重複なし昇順）"),
+    field("schemaVersion", "string", {
+      required: false,
+      values: [PROGRESS_INVENTORY_V2],
+    }),
+    field(
+      "targets",
+      "object[]（2〜16件、targetPath昇順。各要素はこの定義の必須項目を持ち、先頭は親と同じ値）",
+      { required: false },
+    ),
+  ]);
+
 export function parseReviewProgressInventory(
   value: unknown,
 ): ReviewProgressInventory {
   if (!isRecord(value)) throw new Error("progress inventoryはobjectが必要です");
-  const fields = [
-    "targetPath",
-    "baselineDigest",
-    "prefixDigest",
-    "suffixDigest",
-    "fileMode",
-    "allowedTaskIds",
-    "schemaVersion",
-    "targets",
-  ];
-  const required = fields.filter(
-    (field) => field !== "schemaVersion" && field !== "targets",
+  const { required, optional } = childFields(PROGRESS_INVENTORY_FIELDS, "");
+  const unknown = Object.keys(value).filter(
+    (name) => !required.includes(name) && !optional.includes(name),
   );
-  const unknown = Object.keys(value).filter((field) => !fields.includes(field));
-  const missing = required.filter((field) => !(field in value));
-  if (unknown.length || missing.length)
-    throw new Error("progress inventoryのfieldが不正です");
+  const missing = required.filter((name) => !(name in value));
+  const error = unknownAndMissingError("progress inventory", unknown, missing);
+  if (error) throw new Error(error);
   if (
     typeof value.targetPath !== "string" ||
     !SHA256.test(String(value.baselineDigest ?? "")) ||
@@ -487,10 +506,11 @@ export function parseReviewProgressInventory(
   });
   if (value.targets === undefined && value.schemaVersion === undefined)
     return primary;
-  if (
-    value.schemaVersion !== "agent-skill-chain/review-progress-inventory/v2" ||
-    !Array.isArray(value.targets)
-  )
+  if (value.schemaVersion !== PROGRESS_INVENTORY_V2)
+    throw new Error(
+      `progress inventory.schemaVersionが不正です${acceptedValues([PROGRESS_INVENTORY_V2])}`,
+    );
+  if (!Array.isArray(value.targets))
     throw new Error("progress inventory v2の値が不正です");
   const targets = value.targets.map((target) =>
     parseReviewProgressInventory(target),
@@ -507,7 +527,7 @@ export function parseReviewProgressInventory(
     throw new Error("progress inventory v2のtargetが不正です");
   return Object.freeze({
     ...primary,
-    schemaVersion: "agent-skill-chain/review-progress-inventory/v2",
+    schemaVersion: PROGRESS_INVENTORY_V2,
     targets: Object.freeze(targets),
   });
 }

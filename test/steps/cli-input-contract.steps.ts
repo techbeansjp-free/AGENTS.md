@@ -95,10 +95,19 @@ function deepValid(target: Target): Record<string, unknown> {
     input.modeDisqualifiers = [{ id: "public-api", evidence: "根拠" }];
     input.changedContractKinds = ["requirement"];
   }
-  if (target.subcommand === "round")
+  if (target.subcommand === "round") {
     (input.focus as Record<string, unknown>).adjacentScope = [
       { path: "src/cli-usage.ts", graphEvidence: SHA256 },
     ];
+    (input.anchor as Record<string, unknown>).progressInventory = {
+      targetPath: "docs/issues/example/03_実装計画.md",
+      baselineDigest: SHA256,
+      prefixDigest: SHA256,
+      suffixDigest: SHA256,
+      fileMode: 0o644,
+      allowedTaskIds: ["T01"],
+    };
+  }
   return input;
 }
 
@@ -144,6 +153,14 @@ const EXPECTED_PATHS: Readonly<Record<string, readonly string[]>> = {
     "anchor.initialHeadSha",
     "anchor.initialDiffDigest",
     "anchor.progressInventory?",
+    "anchor.progressInventory.targetPath",
+    "anchor.progressInventory.baselineDigest",
+    "anchor.progressInventory.prefixDigest",
+    "anchor.progressInventory.suffixDigest",
+    "anchor.progressInventory.fileMode",
+    "anchor.progressInventory.allowedTaskIds",
+    "anchor.progressInventory.schemaVersion?",
+    "anchor.progressInventory.targets?",
     "candidateHeadSha",
     "focus",
     "focus.previousBlocking",

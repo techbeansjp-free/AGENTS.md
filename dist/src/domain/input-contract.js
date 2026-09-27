@@ -23,6 +23,10 @@ export function childFields(specs, parent) {
         optional: Object.freeze(children.filter(({ required }) => !required).map(({ name }) => name)),
     });
 }
+/** 別の定義の項目を`prefix`配下のpathとして合成する。 */
+export function nestedFields(prefix, specs) {
+    return specs.map((spec) => Object.freeze({ ...spec, path: `${prefix}.${spec.path}` }));
+}
 /** enum違反の診断へ添える受理値の表記。 */
 export function acceptedValues(values) {
     return `（受理値: ${values.join("|")}）`;

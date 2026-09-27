@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
-import { acceptedValues, childFields, field, unknownAndMissingError, } from "./input-contract.js";
-import { parseReviewProgressInventory, } from "./review-progress.js";
+import { acceptedValues, childFields, field, nestedFields, unknownAndMissingError, } from "./input-contract.js";
+import { PROGRESS_INVENTORY_FIELDS, parseReviewProgressInventory, } from "./review-progress.js";
 /**
  * 通常のreviewラウンド予算。round 1で全scopeを見て、2と3で未解決blockerを追う。
  */
@@ -225,17 +225,18 @@ export const REVIEW_ROUND_INPUT_FIELDS = Object.freeze([
     field("round", "integer（1以上）"),
     field("previousRoundDigest", "sha256 | null"),
     field("anchor", "object"),
-    field("anchor.scopeIds", "stableId[]（1件以上、重複なし昇順）"),
-    field("anchor.acceptanceCriteriaIds", "stableId[]（1件以上、重複なし昇順）"),
-    field("anchor.invariantIds", "stableId[]（重複なし昇順）"),
+    field("anchor.scopeIds", "string[]（空でないNFC正規化済み文字列、重複なし昇順、1件以上）"),
+    field("anchor.acceptanceCriteriaIds", "string[]（空でないNFC正規化済み文字列、重複なし昇順、1件以上）"),
+    field("anchor.invariantIds", "string[]（空でないNFC正規化済み文字列、重複なし昇順）"),
     field("anchor.diffBaseSha", "commit SHA"),
     field("anchor.initialHeadSha", "commit SHA"),
     field("anchor.initialDiffDigest", "sha256"),
     field("anchor.progressInventory", "object", { required: false }),
+    ...nestedFields("anchor.progressInventory", PROGRESS_INVENTORY_FIELDS),
     field("candidateHeadSha", "commit SHA"),
     field("focus", "object"),
-    field("focus.previousBlocking", "stableId[]"),
-    field("focus.fixedDiff", "path[]"),
+    field("focus.previousBlocking", "string[]（空でないNFC正規化済み文字列、重複なし昇順）"),
+    field("focus.fixedDiff", "string[]（空でないNFC正規化済み文字列、重複なし昇順）"),
     field("focus.adjacentScope", "object[]"),
     field("focus.adjacentScope[].path", "repository相対path"),
     field("focus.adjacentScope[].graphEvidence", "sha256"),
