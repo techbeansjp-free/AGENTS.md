@@ -376,7 +376,7 @@ Given(
 
 When(
   "shard数{int}でshard実行scriptを起動し実行中にSIGTERMを送る",
-  { timeout: 60_000 },
+  { timeout: 120_000 },
   async function (shardCount: number) {
     this.shardTemporaryRoot = fs.mkdtempSync(
       path.join(os.tmpdir(), "asc-shard-signal-"),
@@ -396,6 +396,8 @@ When(
           ASC_TEST_SHARDS: String(shardCount),
           TMPDIR: this.shardTemporaryRoot,
         },
+        /** 退行でhandlerが働かなくても待機中の孫processを回収できるよう、別のprocess groupにする。 */
+        detached: true,
       },
     );
     let stdout = "";
@@ -405,16 +407,28 @@ When(
     const closed = new Promise<number | null>((resolve) =>
       child.on("close", (code) => resolve(code)),
     );
-    /** shardの子processが起動し待機stepへ入るまで待ってから送る。 */
-    for (
-      let attempt = 0;
-      attempt < 300 && !stdout.includes("shardで実行します");
-      attempt += 1
-    )
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    await new Promise((resolve) => setTimeout(resolve, 3_000));
-    child.kill("SIGTERM");
-    this.shardRun = { status: await closed, stdout, stderr };
+    try {
+      /**
+       * shard 1の完了を待ってから送る。固定時間の待機では高負荷時にshard 1が終わらず、
+       * 「終了済みshardを中断として出さない」ことを検査できない。
+       */
+      for (
+        let attempt = 0;
+        attempt < 900 && !stdout.includes("===== shard 1/2 =====");
+        attempt += 1
+      )
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      if (!stdout.includes("===== shard 1/2 ====="))
+        assert.fail(`shard 1が完了しませんでした: ${stdout}${stderr}`);
+      child.kill("SIGTERM");
+      this.shardRun = { status: await closed, stdout, stderr };
+    } finally {
+      try {
+        if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
+      } catch {
+        /** process groupが既に空なら回収するものは無い。 */
+      }
+    }
   },
 );
 
