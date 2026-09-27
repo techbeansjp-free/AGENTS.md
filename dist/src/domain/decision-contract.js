@@ -90,7 +90,7 @@ export const DECISION_CANDIDATES = Object.freeze([
         id: "DCAND-007",
         label: "finding relationの分類（acceptance-violation等5種）",
         decisionSiteFile: "src/domain/review-convergence.ts",
-        decisionSiteLine: "39-45",
+        decisionSiteLine: "48-54",
         decisionSiteAnchor: "acceptance-violation",
         direction: "fail-open",
         disposition: "excluded",
