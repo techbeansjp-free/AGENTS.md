@@ -1495,6 +1495,47 @@ async function previewResume(staging: string): Promise<ResumePreview> {
   };
 }
 
+/**
+ * previewが書き込まないことの観測点（INV-01）。stagingの全fileのpathとSHA-256、
+ * `git count-objects -v`、`.git`直下のlock file。
+ */
+function resumeWriteSnapshot(root: string, staging: string): unknown {
+  const files: [string, string][] = [];
+  const walk = (directory: string) => {
+    for (const name of fs.readdirSync(directory).sort()) {
+      const file = path.join(directory, name);
+      const stat = fs.lstatSync(file);
+      if (stat.isDirectory()) walk(file);
+      else
+        files.push([
+          path.relative(staging, file),
+          crypto
+            .createHash("sha256")
+            .update(fs.readFileSync(file))
+            .digest("hex"),
+        ]);
+    }
+  };
+  walk(staging);
+  const objects = spawnSync("git", ["count-objects", "-v"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  assert.equal(objects.status, 0, objects.stderr);
+  const gitDirectory = spawnSync("git", ["rev-parse", "--absolute-git-dir"], {
+    cwd: root,
+    encoding: "utf8",
+  }).stdout.trim();
+  return {
+    files,
+    objects: objects.stdout,
+    locks: fs
+      .readdirSync(gitDirectory)
+      .filter((name) => name.endsWith(".lock"))
+      .sort(),
+  };
+}
+
 function gitHeadOf(root: string): string {
   return spawnSync("git", ["rev-parse", "HEAD"], {
     cwd: root,
@@ -8465,10 +8506,19 @@ if (exact(["auth", "status"])) {
         path.join(prepared.staging, "05_計画変更.md"),
         "# 05 計画変更\n\n## AMD-001 範囲\n\n- 対象: T01\n- 変更: 再開状態\n- 理由: 検査\n",
       );
+      const beforePreview = resumeWriteSnapshot(
+        prepared.root,
+        prepared.staging,
+      );
       const checked = executeCli(
         ["workflow", "advance", `--staging=${prepared.staging}`],
         prepared.root,
         prepared.env,
+      );
+      /** previewはstagingのfileもGitのobject・lockも変えない。 */
+      assert.deepEqual(
+        resumeWriteSnapshot(prepared.root, prepared.staging),
+        beforePreview,
       );
       const resume = (JSON.parse(checked.stdout) as ResumePreview["output"])
         .resume;
@@ -8530,22 +8580,28 @@ if (exact(["auth", "status"])) {
         resume.implementation.headSha,
         prepared.implementationCommitSha,
       );
+      /** 期待値は実装と同じ式から導出せず、fixtureの既知値をliteralで書く。 */
+      assert.deepEqual(
+        [latestRun.headSha, latestRun.exitCode, latestRun.signal],
+        [prepared.implementationCommitSha, 0, null],
+      );
       assert.deepEqual(resume.verification, {
-        headSha: latestRun.headSha,
-        scope: latestRun.scope,
-        passed: latestRun.exitCode === 0 && latestRun.signal === null,
+        headSha: prepared.implementationCommitSha,
+        scope: "full",
+        passed: true,
         recordDigest: latestRun.recordDigest,
-        matchesImplementationHead:
-          latestRun.headSha === prepared.implementationCommitSha,
+        matchesImplementationHead: true,
       });
-      assert.equal(resume.verification?.passed, true);
+      assert.equal(
+        session.latestCandidateHeadSha,
+        prepared.implementationCommitSha,
+      );
       assert.deepEqual(resume.review, {
-        status: session.status,
+        status: "converged",
         latestRoundDigest: session.latestRoundDigest,
-        candidateHeadSha: session.latestCandidateHeadSha,
-        rounds: session.rounds.length,
-        matchesImplementationHead:
-          session.latestCandidateHeadSha === prepared.implementationCommitSha,
+        candidateHeadSha: prepared.implementationCommitSha,
+        rounds: 1,
+        matchesImplementationHead: true,
       });
       assert.deepEqual(resume.delivery, {
         state: "pr-bound",
@@ -8555,6 +8611,49 @@ if (exact(["auth", "status"])) {
       const serialized = JSON.stringify(resume);
       for (const body of ["step 9の証拠", "artifact-9", "findings", "範囲"])
         assert.equal(serialized.includes(body), false, body);
+      /** 最新の検証記録がH_implと異なるHEADを指せば、一致をliteralのfalseで返す。 */
+      assert.notEqual(prepared.headSha, prepared.implementationCommitSha);
+      appendFixtureVerificationRecords(
+        prepared.staging,
+        observeFixtureVerification(prepared.root, {
+          baseSha: prepared.baseSha,
+          implementationHeadSha: prepared.headSha,
+          finishedAt: "2026-09-26T00:01:00.000Z",
+        }).records,
+      );
+      const stale = executeCli(
+        ["workflow", "advance", `--staging=${prepared.staging}`],
+        prepared.root,
+        prepared.env,
+      );
+      const staleResume = (JSON.parse(stale.stdout) as ResumePreview["output"])
+        .resume;
+      assert.equal(staleResume.verification?.headSha, prepared.headSha);
+      assert.equal(staleResume.verification?.passed, true);
+      assert.equal(staleResume.verification?.matchesImplementationHead, false);
+      /** Step 9が無いstagingのreview sessionは、H_impl不明のため一致をnullで返す。 */
+      const withoutStep9 = createQuickStaging(
+        this.temp("asc-resume-no-step9-"),
+      );
+      for (const step of [1, 4])
+        appendWorkflowJournalEntry({
+          staging: withoutStep9,
+          entry: entry(step),
+        });
+      fs.copyFileSync(
+        path.join(prepared.staging, "review-session.json"),
+        path.join(withoutStep9, "review-session.json"),
+      );
+      const unanchored = (await previewResume(withoutStep9)).output.resume;
+      assert.deepEqual(unanchored.implementation, {
+        headSha: null,
+        matchesHead: null,
+      });
+      assert.equal(
+        unanchored.review?.candidateHeadSha,
+        prepared.implementationCommitSha,
+      );
+      assert.equal(unanchored.review?.matchesImplementationHead, null);
       break;
     }
     case "SCN-E2E-ADVANCE-017": {
@@ -8599,6 +8698,44 @@ if (exact(["auth", "status"])) {
       });
       assert.equal(unobserved.output.resume.errors.length, 1);
       assert.match(unobserved.output.resume.errors[0] ?? "", /^HEAD: /u);
+      /** hash chainが壊れたjournalは信用せず、journal由来の項目を不明にする。 */
+      const chained = implementedResumeStaging(this);
+      const intact = await previewResume(chained.staging);
+      assert.deepEqual(intact.output.resume.implementation, {
+        headSha: chained.implementationHeadSha,
+        matchesHead: true,
+      });
+      assert.deepEqual(intact.output.resume.errors, []);
+      const journalFile = path.join(chained.staging, "journal", "steps.jsonl");
+      const lines = fs.readFileSync(journalFile, "utf8").split("\n");
+      const last = lines.findLastIndex((line) => line.trim() !== "");
+      const tampered = JSON.parse(lines[last]!) as {
+        previousEntryDigest: string;
+      };
+      assert.match(tampered.previousEntryDigest, /^[a-f0-9]{64}$/u);
+      tampered.previousEntryDigest = "0".repeat(64);
+      lines[last] = JSON.stringify(tampered);
+      fs.writeFileSync(journalFile, lines.join("\n"));
+      const broken = await previewResume(chained.staging);
+      /** 既存のpreview判定はjournalの破損を独自に拒否する。再開状態はそれを変えない。 */
+      const chainError =
+        "journal 4行目.previousEntryDigestが先行するjournal本文と一致しません。記録済み行の編集・削除・挿入・並べ替えを拒否します";
+      assert.deepEqual(
+        [
+          broken.status,
+          broken.output.state,
+          broken.output.operation,
+          broken.output.targetStep,
+          broken.output.reasons,
+        ],
+        [1, "blocked", "blocked", 10, [chainError]],
+      );
+      assert.equal(broken.output.resume.planning, null);
+      assert.deepEqual(broken.output.resume.implementation, {
+        headSha: null,
+        matchesHead: null,
+      });
+      assert.deepEqual(broken.output.resume.errors, [`journal: ${chainError}`]);
       break;
     }
     case "SCN-INT-ISSUESYNC-024": {

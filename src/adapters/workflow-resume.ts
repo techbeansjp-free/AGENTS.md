@@ -59,7 +59,12 @@ export function observeWorkflowResume(staging: string): WorkflowResume {
         { env: GIT_ENV },
       ).stdout.trim(),
     ),
-    journal: attempt(() => readWorkflowJournal(staging).entries),
+    /** 検査に失敗したjournalの行は信用しない。journal由来の項目を不明にする。 */
+    journal: attempt(() => {
+      const journal = readWorkflowJournal(staging);
+      if (journal.errors.length > 0) throw new Error(journal.errors.join("; "));
+      return journal.entries;
+    }),
     amendments: attempt(() =>
       readRegularFile(path.join(staging, PLAN_AMENDMENT_FILE)),
     ),

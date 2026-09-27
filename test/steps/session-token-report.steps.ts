@@ -15,7 +15,11 @@ class SessionTokenWorld extends WorkflowWorld {
 
 const { Given, When, Then } = stepDefinitions<SessionTokenWorld>();
 
+/** 拡張子付きでもtoken様の英数字列を含むpathは出力しない（F-1517-R1-01）。 */
+const TOKEN_LIKE_NAME = `sk-${"A1b2C3d4E5".repeat(4)}.txt`;
+
 const SECRETS = [
+  TOKEN_LIKE_NAME,
   "SECRET-PROMPT",
   "SECRET-TEXT",
   "SECRET-BASH",
@@ -53,6 +57,7 @@ Given("本体とsubagentのfixture logとjournalがある", function () {
   const root = this.temp("asc-token-root-");
   fs.mkdirSync(path.join(root, "docs"));
   fs.writeFileSync(path.join(root, "docs", "a.md"), "# a\n");
+  fs.writeFileSync(path.join(root, "docs", TOKEN_LIKE_NAME), "token\n");
   const logs = this.temp("asc-token-logs-");
   const main = path.join(logs, "main-session.jsonl");
   const read = (file: string) => ({
@@ -116,7 +121,12 @@ Given("本体とsubagentのfixture logとjournalがある", function () {
         id: "msg_c",
         at: "2026-09-01T10:20:00.000Z",
         usage: [1, 0, 3000, 10],
-        content: [read("/etc/passwd"), read("/etc/passwd")],
+        content: [
+          read("/etc/passwd"),
+          read("/etc/passwd"),
+          read(path.join(root, "docs", TOKEN_LIKE_NAME)),
+          read(path.join(root, "docs", TOKEN_LIKE_NAME)),
+        ],
         cwd: root,
       }),
       "",
@@ -159,23 +169,168 @@ Given("本体とsubagentのfixture logとjournalがある", function () {
   this.tokenStaging = staging;
 });
 
-When("token集計scriptを実行する", function () {
+function runTokenScript(logs: readonly string[], options: string[]): string {
   const result = spawnSync(
     process.execPath,
     [
       "--import",
       "tsx",
       path.resolve("scripts/report_session_tokens.ts"),
-      this.tokenLog,
-      `--staging=${this.tokenStaging}`,
-      `--root=${this.tokenRoot}`,
+      ...logs,
+      ...options,
     ],
     { encoding: "utf8" },
   );
-  this.tokenStatus = result.status;
-  this.tokenStdout = result.stdout;
   assert.equal(result.status, 0, result.stderr);
+  return result.stdout;
+}
+
+When("token集計scriptを実行する", function () {
+  this.tokenStdout = runTokenScript(
+    [this.tokenLog],
+    [`--staging=${this.tokenStaging}`, `--root=${this.tokenRoot}`],
+  );
+  this.tokenStatus = 0;
 });
+
+Then(
+  "subagent logの明示指定・同じlogの二重指定・別名pathでも同じcallを一度だけ数えsubagentの親を保つ",
+  function () {
+    const options = [
+      `--staging=${this.tokenStaging}`,
+      `--root=${this.tokenRoot}`,
+    ];
+    const subagent = path.join(
+      path.dirname(this.tokenLog),
+      "main-session",
+      "subagents",
+      "agent-x.jsonl",
+    );
+    const alias = path.join(this.temp("asc-token-alias-"), "alias.jsonl");
+    fs.symlinkSync(this.tokenLog, alias);
+    assert.deepEqual(
+      JSON.parse(
+        runTokenScript(
+          [this.tokenLog, this.tokenLog, subagent, alias],
+          options,
+        ),
+      ),
+      JSON.parse(this.tokenStdout),
+    );
+    /** subagentを先に明示しても、親は配置から決まり合計は変わらない。 */
+    const reversed = JSON.parse(
+      runTokenScript([subagent, this.tokenLog], options),
+    ) as {
+      sessions: { id: string; kind: string; parent: string | null }[];
+      totals: Record<string, unknown>;
+    };
+    assert.deepEqual(
+      reversed.sessions.map((session) => [
+        session.id,
+        session.kind,
+        session.parent,
+      ]),
+      [
+        ["agent-x", "subagent", "main-session"],
+        ["main-session", "main", null],
+      ],
+    );
+    assert.deepEqual(
+      [reversed.totals.sessions, reversed.totals.calls, reversed.totals.total],
+      [2, 5, 6671],
+    );
+  },
+);
+
+Then(
+  "Step別の稼働時間は異なるsessionのcall間隔を数えずsession内の間隔をStep区間で分ける",
+  function () {
+    const directory = this.temp("asc-token-active-");
+    const log = (name: string, times: string[]) => {
+      const file = path.join(directory, `${name}.jsonl`);
+      fs.writeFileSync(
+        file,
+        times
+          .map((at, index) =>
+            assistant({
+              id: `${name}-${index}`,
+              at,
+              usage: [1, 0, 0, 1],
+              content: [],
+              cwd: this.tokenRoot,
+            }),
+          )
+          .join("\n"),
+      );
+      return file;
+    };
+    const staging = (recordedAt: string) => {
+      const dir = this.temp("asc-token-active-staging-");
+      fs.mkdirSync(path.join(dir, "journal"));
+      fs.writeFileSync(
+        path.join(dir, "journal", "steps.jsonl"),
+        `${JSON.stringify({ step: 0, recordedAt })}\n`,
+      );
+      return dir;
+    };
+    const activeOf = (stdout: string) => {
+      const report = JSON.parse(stdout) as {
+        steps: { step: number | "pre"; calls: number; activeMs: number }[];
+        totals: { activeMs: number };
+      };
+      return [
+        report.steps.map((step) => [step.step, step.calls, step.activeMs]),
+        report.totals.activeMs,
+      ];
+    };
+    /** 10:00と10:01の別sessionは稼働0である。 */
+    assert.deepEqual(
+      activeOf(
+        runTokenScript(
+          [
+            log("first", ["2026-09-01T10:00:00.000Z"]),
+            log("second", ["2026-09-01T10:01:00.000Z"]),
+          ],
+          [
+            `--staging=${staging("2026-09-01T09:00:00.000Z")}`,
+            `--root=${this.tokenRoot}`,
+          ],
+        ),
+      ),
+      [
+        [
+          ["pre", 0, 0],
+          [0, 2, 0],
+        ],
+        0,
+      ],
+    );
+    /** 1 session内の10:00→10:04はStep境界10:02で2分ずつに分かれる。 */
+    assert.deepEqual(
+      activeOf(
+        runTokenScript(
+          [
+            log("split", [
+              "2026-09-01T10:00:00.000Z",
+              "2026-09-01T10:04:00.000Z",
+            ]),
+          ],
+          [
+            `--staging=${staging("2026-09-01T10:02:00.000Z")}`,
+            `--root=${this.tokenRoot}`,
+          ],
+        ),
+      ),
+      [
+        [
+          ["pre", 1, 120000],
+          [0, 1, 120000],
+        ],
+        240000,
+      ],
+    );
+  },
+);
 
 Then(
   "session・subagent・Step別合計とcache_read\\/callのmedian・p95・maxとskip行数を返し本文を出力しない",

@@ -46,7 +46,13 @@ export function observeWorkflowResume(staging) {
     return deriveWorkflowResume({
         staging,
         headSha: attempt(() => git(["rev-parse", "--verify", "HEAD^{commit}"], stagingRepositoryRoot(staging), { env: GIT_ENV }).stdout.trim()),
-        journal: attempt(() => readWorkflowJournal(staging).entries),
+        /** 検査に失敗したjournalの行は信用しない。journal由来の項目を不明にする。 */
+        journal: attempt(() => {
+            const journal = readWorkflowJournal(staging);
+            if (journal.errors.length > 0)
+                throw new Error(journal.errors.join("; "));
+            return journal.entries;
+        }),
         amendments: attempt(() => readRegularFile(path.join(staging, PLAN_AMENDMENT_FILE))),
         verificationRuns: attempt(() => readVerificationRuns(staging)),
         reviewSession: attempt(() => {

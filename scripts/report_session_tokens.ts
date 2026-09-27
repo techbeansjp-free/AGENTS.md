@@ -106,7 +106,8 @@ export function distribution(values: readonly number[]): Distribution {
   return { median, p95, max: sorted.at(-1)! };
 }
 
-const TOKEN_LIKE_SEGMENT = /^[A-Za-z0-9_-]{32,}$/u;
+/** segmentの一部でも32文字以上の英数字列を含めばtoken様とみなす（拡張子・区切りを伴う場合も）。 */
+const TOKEN_LIKE_SEGMENT = /[A-Za-z0-9_-]{32,}/u;
 
 /** repository root配下の相対pathへ正規化できたものだけを返す。 */
 export function normalizeReadPath(
@@ -218,6 +219,27 @@ function parseLog(file: string, root: string): ParsedLog {
   };
 }
 
+/**
+ * 1 session内のcall間隔のうち5分以下の区間を`[from, to)`へ切り取った長さの和。
+ * **異なるsessionのcall間隔を数えないため、呼び出し側はsessionごとに渡す。**
+ */
+function activeWithin(
+  calls: readonly Call[],
+  from: number | null,
+  to: number | null,
+): number {
+  let activeMs = 0;
+  for (let index = 1; index < calls.length; index += 1) {
+    const start = calls[index - 1]!.at;
+    const end = calls[index]!.at;
+    if (end - start > ACTIVE_GAP_MS) continue;
+    const clippedStart = from === null ? start : Math.max(start, from);
+    const clippedEnd = to === null ? end : Math.min(end, to);
+    if (clippedEnd > clippedStart) activeMs += clippedEnd - clippedStart;
+  }
+  return activeMs;
+}
+
 function metrics(calls: readonly Call[]): TokenMetrics {
   const sum = (field: keyof Omit<Call, "id" | "at">) =>
     calls.reduce((total, call) => total + call[field], 0);
@@ -225,11 +247,7 @@ function metrics(calls: readonly Call[]): TokenMetrics {
   const cacheCreation = sum("cacheCreation");
   const cacheRead = sum("cacheRead");
   const output = sum("output");
-  let activeMs = 0;
-  for (let index = 1; index < calls.length; index += 1) {
-    const gap = calls[index]!.at - calls[index - 1]!.at;
-    if (gap <= ACTIVE_GAP_MS) activeMs += gap;
-  }
+  const activeMs = activeWithin(calls, null, null);
   const first = calls[0];
   return {
     calls: calls.length,
@@ -287,7 +305,11 @@ function journalBoundaries(staging: string): { step: number; at: number }[] {
  * Step別の指標。**区間はjournalの各記録時刻から次の記録時刻の直前まで**であり、
  * そのStepの記録以後の作業を数える。最初の記録より前は`pre`である。
  */
-function stepReports(calls: readonly Call[], staging: string): StepReport[] {
+function stepReports(
+  sessionCalls: readonly (readonly Call[])[],
+  staging: string,
+): StepReport[] {
+  const calls = sessionCalls.flat().sort((left, right) => left.at - right.at);
   const boundaries = journalBoundaries(staging);
   const windows: { step: number | "pre"; from: number | null }[] = [
     { step: "pre", from: null },
@@ -305,33 +327,49 @@ function stepReports(calls: readonly Call[], staging: string): StepReport[] {
       from: window.from === null ? null : new Date(window.from).toISOString(),
       to: next === null ? null : new Date(next).toISOString(),
       ...metrics(selected),
+      activeMs: sessionCalls.reduce(
+        (sum, session) => sum + activeWithin(session, window.from, next),
+        0,
+      ),
     };
   });
 }
 
-/** 本体logの`<session>/subagents/*.jsonl`を自動で含める。 */
+/** `<session>/subagents/<agent>.jsonl`の配置ならsubagentであり、親は`<session>`である。 */
+function logKind(file: string): {
+  kind: "main" | "subagent";
+  parent: string | null;
+} {
+  const directory = path.dirname(file);
+  return path.basename(directory) === "subagents"
+    ? { kind: "subagent", parent: path.basename(path.dirname(directory)) }
+    : { kind: "main", parent: null };
+}
+
+/**
+ * 本体logの`<session>/subagents/*.jsonl`を自動で含める。**同じfileは実pathで1回だけ
+ * 数える**（明示指定と自動包含の重複、同じlogの二重指定）。
+ */
 function expandLogs(
   files: readonly string[],
 ): { file: string; kind: "main" | "subagent"; parent: string | null }[] {
-  const expanded: {
-    file: string;
-    kind: "main" | "subagent";
-    parent: string | null;
-  }[] = [];
+  const expanded = new Map<
+    string,
+    { file: string; kind: "main" | "subagent"; parent: string | null }
+  >();
+  const add = (file: string) => {
+    const real = fs.realpathSync(file);
+    if (!expanded.has(real)) expanded.set(real, { file, ...logKind(real) });
+  };
   for (const file of files) {
+    add(file);
     const id = path.basename(file, ".jsonl");
-    expanded.push({ file, kind: "main", parent: null });
     const directory = path.join(path.dirname(file), id, "subagents");
     if (!fs.existsSync(directory)) continue;
     for (const name of fs.readdirSync(directory).sort())
-      if (name.endsWith(".jsonl"))
-        expanded.push({
-          file: path.join(directory, name),
-          kind: "subagent",
-          parent: id,
-        });
+      if (name.endsWith(".jsonl")) add(path.join(directory, name));
   }
-  return expanded;
+  return [...expanded.values()];
 }
 
 export function reportSessionTokens(input: {
@@ -363,7 +401,12 @@ export function reportSessionTokens(input: {
   return {
     sessions,
     steps:
-      input.staging === undefined ? [] : stepReports(allCalls, input.staging),
+      input.staging === undefined
+        ? []
+        : stepReports(
+            parsed.map((log) => log.calls),
+            input.staging,
+          ),
     totals: {
       ...totalMetrics,
       activeMs,

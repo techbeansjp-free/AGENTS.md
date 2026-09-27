@@ -6,3 +6,5 @@ Feature: session logのtoken集計
     Given 本体とsubagentのfixture logとjournalがある
     When token集計scriptを実行する
     Then session・subagent・Step別合計とcache_read/callのmedian・p95・maxとskip行数を返し本文を出力しない
+    And subagent logの明示指定・同じlogの二重指定・別名pathでも同じcallを一度だけ数えsubagentの親を保つ
+    And Step別の稼働時間は異なるsessionのcall間隔を数えずsession内の間隔をStep区間で分ける
