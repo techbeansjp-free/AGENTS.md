@@ -3,16 +3,16 @@
   "issue": 1517,
   "observed": {
     "baseSha": "4560c844bf4acb94f7ec37810371f4c2df8f7a41",
-    "implementationHeadSha": "3e436a568fcd5de4b00036ad9a27a99c717687de",
-    "diffDigest": "985b687501f47892154b427700d82e48caab4759709d5932c5def0494448ced1",
+    "implementationHeadSha": "a7477c0a4e777f0a0035fdb42e2908518552d7e2",
+    "diffDigest": "2119f2d03449ea509cd496ff32d36caf9182e4a1667039568c861a8e84dea04c",
     "session": {
       "sessionId": "9ed40958af944e53d0d900a84238918039e01af553327052f75771e52ca89699",
-      "latestRoundDigest": "83dc525659e570ee2898c6bfb2c3628d08c66b702d067699d09749828b558539",
+      "latestRoundDigest": "46bb87b8949d4f6638c019b7605806423f27a3294ee7b68f5721adfc695064bb",
       "status": "converged",
-      "countedRounds": 4
+      "countedRounds": 5
     },
     "impact": {
-      "digest": "176aa5308c39cfaee411109e949356b7b82d2beb46eb5820bc3554f08867c621",
+      "digest": "cd4d73279157349ed21e2b2665a282b449f99fcaa45fce23b07d04e1894f0621",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "3e436a568fcd5de4b00036ad9a27a99c717687de",
-        "impactDigest": "176aa5308c39cfaee411109e949356b7b82d2beb46eb5820bc3554f08867c621",
-        "finishedAt": "2026-09-27T19:46:19.848Z",
-        "recordDigest": "cea72938b7872e99c94cac95f4f66ffd960197aaf378cba042b7e1080bd5098a"
+        "headSha": "a7477c0a4e777f0a0035fdb42e2908518552d7e2",
+        "impactDigest": "cd4d73279157349ed21e2b2665a282b449f99fcaa45fce23b07d04e1894f0621",
+        "finishedAt": "2026-09-27T20:40:39.926Z",
+        "recordDigest": "16d5c88c57be49db1235458d8083f9038c50f33f93f8be71f0c5455e071815b8"
       }
     ]
   },
@@ -112,5 +112,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "88a8a95645e40f328b479404316bedbef8b3ad4314d517d4a30fd2ae040aa2c9"
+  "evidenceDigest": "e3e8ecedf1878df96604292a6efe3815c82fcf2f98dbc9e413ee30b2cca57f98"
 }
