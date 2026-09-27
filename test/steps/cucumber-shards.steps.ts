@@ -410,11 +410,12 @@ When(
     try {
       /**
        * shard 1の完了を待ってから送る。固定時間の待機では高負荷時にshard 1が終わらず、
-       * 「終了済みshardを中断として出さない」ことを検査できない。
+       * 「終了済みshardを中断として出さない」ことを検査できない。上限の45秒は、fixtureの
+       * 待機step（60秒）が自然に終わるより前に置く。
        */
       for (
         let attempt = 0;
-        attempt < 900 && !stdout.includes("===== shard 1/2 =====");
+        attempt < 450 && !stdout.includes("===== shard 1/2 =====");
         attempt += 1
       )
         await new Promise((resolve) => setTimeout(resolve, 100));
