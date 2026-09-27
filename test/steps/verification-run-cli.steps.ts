@@ -12,6 +12,7 @@ import {
   prepareStoredPullRequestCreation,
   recordStoredStep11,
 } from "../../src/adapters/delivery-state.js";
+import { readStoredReviewSession } from "../../src/adapters/review-session.js";
 import { readVerificationRuns } from "../../src/adapters/verification-run.js";
 import {
   canonicalDigest,
@@ -62,6 +63,7 @@ const FIXTURE_SCRIPT = [
   `const mode = process.env.${MODE_VARIABLE};`,
   `if (mode === "fail") { process.stdout.write(${JSON.stringify(SECRET_OUTPUT.split("-"))}.join("-")); process.exit(3); }`,
   `if (mode === "signal") process.kill(process.pid, "SIGTERM");`,
+  `if (mode === "head") require("node:child_process").execFileSync("git", ["commit", "--allow-empty", "-q", "-m", "move fixture HEAD"]);`,
   `if (mode === "write") require("node:fs").writeFileSync("generated.txt", "x");`,
 ].join(" ");
 /** trusted policyが宣言するfull command。shell記法を含むargvのまま実行・記録される。 */
@@ -78,7 +80,7 @@ function git(root: string, args: string[]): string {
 /** stdoutのJSONと、commandの中継出力（標準エラー）を分けて捕捉する。 */
 async function captureCli(
   args: string[],
-  mode?: "fail" | "signal" | "write",
+  mode?: "fail" | "signal" | "write" | "head",
 ): Promise<CliResult> {
   const originalOut = process.stdout.write.bind(process.stdout);
   const originalErr = process.stderr.write.bind(process.stderr);
@@ -271,6 +273,10 @@ When("不正な条件でverify runを実行する", async function () {
     "write",
   );
   fs.rmSync(path.join(this.root, "generated.txt"), { force: true });
+  this.results.movesHead = await captureCli(
+    verifyArgs(this, full, FULL_COMMAND),
+    "head",
+  );
   /** 起動できないcommandはtrusted policyが宣言した場合にだけ実行まで到達する */
   retargetTrustedPolicy(this, {
     ...POLICY,
@@ -290,6 +296,7 @@ Then("各条件を理由つきで拒否し観測記録を追記しない", funct
     targetedOnFull: /影響集合がfullのためscope=targeted/u,
     dirty: /完全一致するworktree/u,
     writesTree: /実行後に追跡fileまたは未追跡fileが変わりました/u,
+    movesHead: /実行中にHEADが変わりました/u,
     missingProgram: /commandを起動できません/u,
   };
   for (const [key, pattern] of Object.entries(expected)) {
@@ -482,5 +489,41 @@ Then(
     assert.match(mergePrepared.error.message, /merge-prepared.*merge段階以降/u);
     assert.equal(mergePrepared.relayed, "", "merge段階ではcommandを実行しない");
     assert.equal(fs.existsSync(recordFile(this)), false);
+  },
+);
+
+When(
+  "review sessionを作成せず固定比較基点を明示してverify runを実行する",
+  async function () {
+    assert.equal(readStoredReviewSession(this.staging), null);
+    this.results.beforeReview = await captureCli(
+      verifyArgs(this, [`--base=${this.base}`, "--scope=full"], FULL_COMMAND),
+    );
+  },
+);
+
+Then(
+  "review sessionなしで同じ比較基点とHEADと影響集合の合格観測を記録する",
+  function () {
+    const result = this.results.beforeReview;
+    assert.equal(result?.error, undefined, String(result?.error));
+    assert.equal(result?.exitCode, 0);
+    assert.equal(readStoredReviewSession(this.staging), null);
+    const records = readVerificationRuns(this.staging);
+    assert.equal(records.length, 1);
+    const record = records[0]!;
+    const impact = computeImpactSet({
+      root: this.root,
+      baseSha: this.base,
+      headSha: this.head,
+    });
+    assert.equal(record.baseSha, this.base);
+    assert.equal(record.headSha, this.head);
+    assert.equal(record.impactDigest, impact.digest);
+    assert.equal(record.impactMode, impact.mode);
+    assert.equal(record.scope, "full");
+    assert.equal(record.exitCode, 0);
+    assert.equal(record.signal, null);
+    assert.equal(result?.output?.recordDigest, record.recordDigest);
   },
 );

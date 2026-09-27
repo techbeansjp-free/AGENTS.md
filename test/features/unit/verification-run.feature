@@ -11,7 +11,7 @@ Feature: verify runの観測記録を厳密に読み証跡の検証欄を導出�
   Scenario: SCN-UNIT-VERIFYRUN-002 H_implと影響集合に一致する最新の合格実行だけから検証欄を導く
     Given 合格した検証記録がある
     When 記録の組み合わせごとに検証欄を導出する
-    Then 記録なし・影響集合不一致・最新の不合格・scope=full欠落・targetedのfeature欠落を拒否し合格記録だけを導く
+    Then 記録なし・HEAD不一致・影響集合不一致・最新の不合格・scope=full欠落・targetedのfeature欠落を拒否し合格記録だけを導く
 
   Scenario: SCN-UNIT-VERIFYRUN-003 証跡の検証欄を保存済み記録と照合する
     Given 合格した検証記録がある

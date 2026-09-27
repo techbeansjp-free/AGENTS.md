@@ -75,3 +75,8 @@ Feature: packed artifactを隔離環境で利用者と同じ入口から観測�
     Given 機構別束縛の検査準備がある
     When 機構別の束縛宣言と縮小の妥当性を検査する
     Then 宣言外pathを記録した証跡は機構名つきで拒否される
+
+  Scenario: SCN-INT-CONSUMER-016 候補treeのコピーから作業treeだけを除外する
+    Given 保存対象と除外対象を持つ小さな候補treeがある
+    When consumer候補treeのコピーを実行する
+    Then 作業treeの2箇所だけが追加除外されその他の検査対象が保存される

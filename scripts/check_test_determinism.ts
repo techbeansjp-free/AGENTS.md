@@ -85,6 +85,12 @@ export const REPOSITORY_READ_EXCEPTIONS: readonly RepositoryReadException[] =
       reason: "製品自身のproject choiceを単体検証する",
     },
     {
+      file: "test/steps/default-test-switch.steps.ts",
+      target: "package.json",
+      reason:
+        "製品のnpm test scriptを隔離fixtureで実行して入口の接続を検証する。scriptを自作すると製品側の切替欠落を検出できない",
+    },
+    {
       file: "test/steps/consumer-acceptance.steps.ts",
       target: "package.json",
       reason:
