@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1508,
+  "observed": {
+    "baseSha": "f32371cf4848de14aefc18a86b677929998640db",
+    "implementationHeadSha": "c50c7378a259afdad307ee7171ee1091f95d04ad",
+    "diffDigest": "22f849e946843d24e3f96b3c514b5ab6804c6d4d48323d0cfa83afeb36427f00",
+    "session": {
+      "sessionId": "503c4a31e1d268c698dce7f1fe624e07f736fa8a81190378f4160b4e5ed83a07",
+      "latestRoundDigest": "fa5eee1d11f97a5401faf95c443db3f403ac79578d3da8a32bf67fbcb856314d",
+      "status": "converged",
+      "countedRounds": 6
+    },
+    "impact": {
+      "digest": "89296675dbbc517be8449727c758de84f14e0ed3442ec1a505f4147031156f75",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "c50c7378a259afdad307ee7171ee1091f95d04ad",
+        "impactDigest": "89296675dbbc517be8449727c758de84f14e0ed3442ec1a505f4147031156f75",
+        "finishedAt": "2026-09-27T14:18:31.857Z",
+        "recordDigest": "0bcac24fecf65557d6b7a05daea10535943b9684daeffc026809d744600d9757"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "R1-001",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "scripts/run_cucumber_shards.ts",
+      "contractId": "INV-01"
+    },
+    {
+      "id": "R1-002",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "scripts/run_cucumber_shards.ts",
+      "contractId": "INV-01"
+    },
+    {
+      "id": "R1-003",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "scripts/run_cucumber_shards.ts",
+      "contractId": "AC-04"
+    },
+    {
+      "id": "R1-004",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "scripts/run_cucumber_shards.ts",
+      "contractId": null
+    },
+    {
+      "id": "R1-005",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/cucumber-shards.steps.ts",
+      "contractId": null
+    },
+    {
+      "id": "R2-001",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "scripts/run_cucumber_shards.ts",
+      "contractId": null
+    },
+    {
+      "id": "R2-002",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "scripts/run_cucumber_shards.ts",
+      "contractId": null
+    },
+    {
+      "id": "R3-001",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "test/steps/cucumber-shards.steps.ts",
+      "contractId": null
+    },
+    {
+      "id": "R3-002",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/cucumber-shards.steps.ts",
+      "contractId": null
+    },
+    {
+      "id": "R4-001",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/cucumber-shards.steps.ts",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "claude-opus-independent-reviewer",
+    "implementer": "claude-opus-implementer-session-34e915d9",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "b3b35dc6e0eefdfefed5a3b0fbbe841603174eb143b639344807887497903bfe"
+}
