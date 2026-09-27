@@ -695,7 +695,11 @@ Given("未知の失格IDを含む実装中発見入力JSONがrepository内にあ
 
 Then("未知の失格IDをfail-closedで拒否する", function () {
   assert.ok(this.error instanceof Error);
-  assert.match(this.error.message, /未知id.*invented-risk/u);
+  assert.match(
+    this.error.message,
+    /modeDisqualifiers\[0\]\.idの未知idを拒否しました/u,
+  );
+  assert.ok(!this.error.message.includes("invented-risk"));
   assert.equal(this.value, undefined);
 });
 

@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1388,
+  "observed": {
+    "baseSha": "b7eae36699ea95ef40a4eb2cfb713df2cf8f6557",
+    "implementationHeadSha": "6a8bcec8915ce6353994e44fd8bd10c35fb32039",
+    "diffDigest": "5c923af608d7eb5d1dbf4801946c8fd1194fff2d3a93c3e239160762219645f4",
+    "session": {
+      "sessionId": "65b9fa6d7b59d167fbdb43ce56f126c35b08256d91e45874cfed69063b937da3",
+      "latestRoundDigest": "bc58f0cbe72421bcd106b601401661b412d60fba669a64dc7b8494f18ad9eb79",
+      "status": "converged",
+      "countedRounds": 5
+    },
+    "impact": {
+      "digest": "e99880ed92c11f204702e9769407433b23634cbbcd40953942bfe3e40a941532",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "6a8bcec8915ce6353994e44fd8bd10c35fb32039",
+        "impactDigest": "e99880ed92c11f204702e9769407433b23634cbbcd40953942bfe3e40a941532",
+        "finishedAt": "2026-09-27T01:36:40.418Z",
+        "recordDigest": "fb050ae417da7b6da6fd755fd08ef4d101bb0d4ba43d813da260d7bc9a220bd1"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "REV-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/agile-verification.ts",
+      "contractId": "AC-03"
+    },
+    {
+      "id": "REV-02",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "src/domain/review-convergence.ts",
+      "contractId": "INV-02"
+    },
+    {
+      "id": "REV-03",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/domain/review-convergence.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV-04",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/domain/input-contract.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV-05",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/domain/review-convergence.ts",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "codex",
+    "implementer": "claude",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "781206a0051cf45147acd1e57ab894dee93d8498756396f55afa6445bf9beb34"
+}

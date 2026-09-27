@@ -506,3 +506,41 @@ Given("領域名の直後に区切り文字を含む領域外pathにSCN定義が
 Then("検査はSCN配置違反を4件報告する", function () {
   assert.equal(this.errors.length, 4);
 });
+
+Given(
+  "宣言したstaging root直下のstagingと、root直下のfileと、近似rootにSCN定義がある",
+  function () {
+    this.root = this.temp();
+    write(
+      this.root,
+      ".agent-skill-chain/project-policy.json",
+      `${JSON.stringify({
+        policy: {
+          staging: { root: "docs/issues", tracked: true, issueBody: "pointer" },
+        },
+      })}\n`,
+    );
+    write(this.root, "docs/issues/20260927_x/00_要求定義.md", SCN_LINE);
+    write(this.root, "docs/issues/00_要求定義.md", SCN_LINE);
+    write(this.root, "docs/issues-old/20260927_x/00_要求定義.md", SCN_LINE);
+  },
+);
+
+Then(
+  "staging内の定義だけを除外しroot直下のfileと近似rootの定義を違反にする",
+  function () {
+    const placement = placementErrors(this.errors);
+    assert.equal(placement.length, 2, placement.join("\n"));
+    assert.ok(
+      placement.some((error) => error.includes("docs/issues/00_要求定義.md")),
+    );
+    assert.ok(placement.some((error) => error.includes("docs/issues-old/")));
+    assert.ok(
+      !placement.some(
+        (error) =>
+          error.includes("20260927_x/00_要求定義.md") &&
+          error.includes("docs/issues/20260927_x"),
+      ),
+    );
+  },
+);

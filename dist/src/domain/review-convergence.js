@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import { stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
-import { parseReviewProgressInventory, } from "./review-progress.js";
+import { acceptedValues, childFields, field, nestedFields, unknownAndMissingError, } from "./input-contract.js";
+import { PROGRESS_INVENTORY_FIELDS, parseReviewProgressInventory, } from "./review-progress.js";
 /**
  * 通常のreviewラウンド予算。round 1で全scopeを見て、2と3で未解決blockerを追う。
  */
@@ -47,12 +48,11 @@ export function unconvergedReviewSessionDiagnostic(status) {
 function exactObject(value, label, fields, optionalFields = []) {
     if (!isRecord(value))
         throw new Error(`${label}はobjectが必要です`);
-    const unknown = Object.keys(value).filter((field) => !fields.includes(field) && !optionalFields.includes(field));
-    const missing = fields.filter((field) => !Object.prototype.hasOwnProperty.call(value, field));
-    if (unknown.length > 0)
-        throw new Error(`${label}の未知fieldを拒否しました: ${unknown.join(", ")}`);
-    if (missing.length > 0)
-        throw new Error(`${label}の必須fieldがありません: ${missing.join(", ")}`);
+    const unknown = Object.keys(value).filter((name) => !fields.includes(name) && !optionalFields.includes(name));
+    const missing = fields.filter((name) => !Object.prototype.hasOwnProperty.call(value, name));
+    const error = unknownAndMissingError(label, unknown, missing);
+    if (error)
+        throw new Error(error);
     return value;
 }
 function stableStrings(value, label) {
@@ -90,28 +90,18 @@ function safePath(value, label) {
 }
 function oneOf(value, values, label) {
     if (typeof value !== "string" || !values.includes(value))
-        throw new Error(`${label}が不正です`);
+        throw new Error(`${label}が不正です${acceptedValues(values)}`);
     return value;
 }
 function parseAnchor(value) {
     if (!isRecord(value))
         throw new Error("review anchorはobjectが必要です");
-    const fields = [
-        "scopeIds",
-        "acceptanceCriteriaIds",
-        "invariantIds",
-        "diffBaseSha",
-        "initialHeadSha",
-        "initialDiffDigest",
-        "progressInventory",
-    ];
-    const required = fields.filter((field) => field !== "progressInventory");
-    const unknown = Object.keys(value).filter((field) => !fields.includes(field));
-    const missing = required.filter((field) => !(field in value));
-    if (unknown.length > 0)
-        throw new Error(`review anchorの未知fieldを拒否しました: ${unknown.join(", ")}`);
-    if (missing.length > 0)
-        throw new Error(`review anchorの必須fieldがありません: ${missing.join(", ")}`);
+    const { required, optional } = childFields(REVIEW_ROUND_INPUT_FIELDS, "anchor");
+    const unknown = Object.keys(value).filter((name) => !required.includes(name) && !optional.includes(name));
+    const missing = required.filter((name) => !(name in value));
+    const error = unknownAndMissingError("review anchor", unknown, missing);
+    if (error)
+        throw new Error(error);
     const anchor = value;
     const scopeIds = stableStrings(anchor.scopeIds, "review anchor.scopeIds");
     const acceptanceCriteriaIds = stableStrings(anchor.acceptanceCriteriaIds, "review anchor.acceptanceCriteriaIds");
@@ -139,7 +129,8 @@ function parseAnchor(value) {
     });
 }
 function parseFocus(value) {
-    const focus = exactObject(value, "review round.focus", ["previousBlocking", "fixedDiff", "adjacentScope"], ["adjacentScopeUnbounded"]);
+    const { required, optional } = childFields(REVIEW_ROUND_INPUT_FIELDS, "focus");
+    const focus = exactObject(value, "review round.focus", required, optional);
     if (focus.adjacentScopeUnbounded !== undefined &&
         focus.adjacentScopeUnbounded !== true)
         throw new Error("review round.focus.adjacentScopeUnboundedはtrueだけを指定できます（限定済みはfieldを省略する）");
@@ -150,7 +141,7 @@ function parseFocus(value) {
     if (!Array.isArray(focus.adjacentScope))
         throw new Error("review round.focus.adjacentScopeは配列が必要です");
     const adjacentScope = focus.adjacentScope.map((candidate, index) => {
-        const adjacent = exactObject(candidate, `review round.focus.adjacentScope[${index}]`, ["path", "graphEvidence"]);
+        const adjacent = exactObject(candidate, `review round.focus.adjacentScope[${index}]`, childFields(REVIEW_ROUND_INPUT_FIELDS, "focus.adjacentScope[]").required);
         return Object.freeze({
             path: safePath(adjacent.path, `review round.focus.adjacentScope[${index}].path`),
             graphEvidence: (() => {
@@ -188,19 +179,21 @@ function parseFocus(value) {
  * findingはこの関数の戻り値でも`decisionRef`キー自体を持たせない
  * （spread条件分岐）ことで、導入前と同じ直列化を保つ。
  */
+/**
+ * findingの診断labelへ添字とIDを添える。IDは安定ID形式を満たす場合だけ使い、
+ * 満たさない入力値は診断へ複写しない。
+ */
+function findingLabel(value, index) {
+    const base = `review round.findings[${index}]`;
+    const id = isRecord(value) ? value.id : undefined;
+    return typeof id === "string" && STABLE_ID.test(id)
+        ? `${base}（id=${id}）`
+        : base;
+}
 function parseFinding(value, index) {
-    const label = `review round.findings[${index}]`;
-    const finding = exactObject(value, label, [
-        "id",
-        "severity",
-        "status",
-        "source",
-        "relation",
-        "evidence",
-        "path",
-        "contractId",
-        "causedByFindingId",
-    ], ["decisionRef"]);
+    const label = findingLabel(value, index);
+    const { required, optional } = childFields(REVIEW_ROUND_INPUT_FIELDS, "findings[]");
+    const finding = exactObject(value, label, required, optional);
     const nullableId = (candidate, field) => {
         if (candidate === null)
             return null;
@@ -227,15 +220,44 @@ function parseFinding(value, index) {
             : {}),
     });
 }
+/** `review round --file`の項目定義。`--help`と検証が共有する。 */
+export const REVIEW_ROUND_INPUT_FIELDS = Object.freeze([
+    field("round", "integer（1以上）"),
+    field("previousRoundDigest", "sha256 | null"),
+    field("anchor", "object"),
+    field("anchor.scopeIds", "string[]（空でないNFC正規化済み文字列、重複なし昇順、1件以上）"),
+    field("anchor.acceptanceCriteriaIds", "string[]（空でないNFC正規化済み文字列、重複なし昇順、1件以上）"),
+    field("anchor.invariantIds", "string[]（空でないNFC正規化済み文字列、重複なし昇順）"),
+    field("anchor.diffBaseSha", "commit SHA"),
+    field("anchor.initialHeadSha", "commit SHA"),
+    field("anchor.initialDiffDigest", "sha256"),
+    field("anchor.progressInventory", "object", { required: false }),
+    ...nestedFields("anchor.progressInventory", PROGRESS_INVENTORY_FIELDS),
+    field("candidateHeadSha", "commit SHA"),
+    field("focus", "object"),
+    field("focus.previousBlocking", "string[]（空でないNFC正規化済み文字列、重複なし昇順）"),
+    field("focus.fixedDiff", "string[]（空でないNFC正規化済み文字列、重複なし昇順）"),
+    field("focus.adjacentScope", "object[]"),
+    field("focus.adjacentScope[].path", "repository相対path"),
+    field("focus.adjacentScope[].graphEvidence", "sha256"),
+    field("focus.adjacentScopeUnbounded", "true", { required: false }),
+    field("findings", "object[]（256件以下）"),
+    field("findings[].id", "stableId"),
+    field("findings[].severity", "string", { values: SEVERITIES }),
+    field("findings[].status", "string", { values: STATUSES }),
+    field("findings[].source", "string", { values: SOURCES }),
+    field("findings[].relation", "string", { values: RELATIONS }),
+    field("findings[].evidence", "string"),
+    field("findings[].path", "repository相対path"),
+    field("findings[].contractId", "stableId | null"),
+    field("findings[].causedByFindingId", "stableId | null"),
+    field("findings[].decisionRef", "DR-ID | null", { required: false }),
+    field("followOnly", "true", { required: false }),
+    field("recordLayerOnly", "true", { required: false }),
+]);
 export function parseReviewRoundInput(value) {
-    const round = exactObject(value, "review round", [
-        "round",
-        "previousRoundDigest",
-        "anchor",
-        "candidateHeadSha",
-        "focus",
-        "findings",
-    ], ["followOnly", "recordLayerOnly"]);
+    const { required, optional } = childFields(REVIEW_ROUND_INPUT_FIELDS, "");
+    const round = exactObject(value, "review round", required, optional);
     if (round.followOnly !== undefined && round.followOnly !== true)
         throw new Error("review round.followOnlyはtrueだけを受理します");
     if (round.recordLayerOnly !== undefined && round.recordLayerOnly !== true)

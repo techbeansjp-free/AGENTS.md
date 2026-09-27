@@ -1,0 +1,17 @@
+@unit
+Feature: CLIのJSON入力契約を--helpと診断で示す
+
+  Scenario: SCN-UNIT-CLIINPUT-001 helpの項目一覧は検証の受理集合と一致する
+    Given 3コマンドのusageと全階層を含む有効な入力がある
+    When inputContract.fieldsの各項目を欠く・未知fieldを足す・任意項目を足す・受理値外にした入力を検証する
+    Then 項目一覧は契約の期待表と一致し検証は全階層で同じ必須・任意項目と受理値を使う
+
+  Scenario: SCN-UNIT-CLIINPUT-002 未知と欠落を同時に含む入力は1回の診断で両方を示す
+    Given 未知fieldと欠落fieldを同時に含む3コマンドの入力がある
+    When それぞれを検証する
+    Then 1件のerrorが未知fieldと欠落fieldの名前を両方含む
+
+  Scenario: SCN-UNIT-CLIINPUT-003 enum違反は受理値を示しfindingはIDで名指し入力値を複写しない
+    Given enum違反とfindingの誤りを含む入力がある
+    When それぞれを検証する
+    Then 診断は受理値の集合とfinding IDを含み違反した入力値を含まない

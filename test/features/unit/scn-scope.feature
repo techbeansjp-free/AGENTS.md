@@ -75,3 +75,8 @@ Feature: SCN配置検査の走査範囲を規範側だけに限る
     Given 領域名の直後に区切り文字を含む領域外pathにSCN定義がある
     When SCN配置検査を実行する
     Then 検査はSCN配置違反を4件報告する
+
+  Scenario: SCN-UNIT-SCNSCOPE-016 project policyが宣言したstaging root直下のstagingのSCN定義を違反にしない
+    Given 宣言したstaging root直下のstagingと、root直下のfileと、近似rootにSCN定義がある
+    When SCN配置検査を実行する
+    Then staging内の定義だけを除外しroot直下のfileと近似rootの定義を違反にする

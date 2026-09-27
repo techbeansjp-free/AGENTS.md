@@ -1,3 +1,10 @@
+import {
+  IMPLEMENTATION_DISCOVERY_INPUT_FIELDS,
+  VERIFICATION_SET_INPUT_FIELDS,
+} from "./domain/agile-verification.js";
+import type { InputFieldSpec } from "./domain/input-contract.js";
+import { REVIEW_ROUND_INPUT_FIELDS } from "./domain/review-convergence.js";
+
 export interface UsageFlag {
   readonly name: string;
   readonly value: string;
@@ -28,6 +35,8 @@ export interface OptionalUsageFlag extends UsageFlag {
 export interface UsageInputContract {
   readonly description: string;
   readonly example: unknown;
+  /** 各fieldの必須/任意・型・受理値。入力検証と同じ定義を載せる（Issue #1388）。 */
+  readonly fields?: readonly InputFieldSpec[];
 }
 
 export interface CommandUsage {
@@ -559,6 +568,25 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     example:
       "npx agent-skill-chain workflow verification-set --input=.asc/verification-input.json --root=.",
     acceptsSpaceSeparatedFlags: true,
+    inputContract: {
+      description:
+        "--inputのJSON。fieldsの全項目が必須で、未知fieldは拒否する。valuesを持つ項目はその値だけを受理する",
+      fields: VERIFICATION_SET_INPUT_FIELDS,
+      example: {
+        changeType: "bug-fix",
+        risk: "medium",
+        affectedBoundaries: ["cli"],
+        requirementIds: ["REQ-WF-009"],
+        acceptanceCriteriaIds: ["AC-WF-009"],
+        impactAnalysis: {
+          securityRelevant: false,
+          dataLossPossible: false,
+          irreversibleOperation: false,
+          externalContractChanged: true,
+          concurrentBehaviorChanged: false,
+        },
+      },
+    },
   },
   {
     command: "workflow",
@@ -580,6 +608,22 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     example:
       "npx agent-skill-chain workflow assess-discovery --input=.asc/discovery.json --root=.",
     acceptsSpaceSeparatedFlags: true,
+    inputContract: {
+      description:
+        "--inputのJSON。fieldsの全項目が必須で、未知fieldは拒否する。valuesを持つ項目はその値だけを受理する。security境界の拡大、不可逆操作の追加、modeの失格条件に当たる発見だけを判定する",
+      fields: IMPLEMENTATION_DISCOVERY_INPUT_FIELDS,
+      example: {
+        discoveryId: "DISC-001",
+        workflowMode: "quick",
+        modeDisqualifiers: [],
+        changedContractKinds: [],
+        changesGoal: false,
+        changesScope: false,
+        changesAcceptanceCriteria: false,
+        expandsSecurityBoundary: true,
+        introducesIrreversibleOperation: false,
+      },
+    },
   },
   {
     command: "workflow",
@@ -1098,6 +1142,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     example:
       "npx agent-skill-chain review round --staging=.agent-skill-chain/tmp/issues/20260830_120000-change --file=./review-round.json --apply",
     inputContract: {
+      fields: REVIEW_ROUND_INPUT_FIELDS,
       description:
         '--fileのJSON。round 1はfocus.fixedDiff=[]で全scope review。round 2以降はpreviousRoundDigest=前roundのroundDigest、focus.previousBlocking=前roundのblocking（High/Critical）と完全一致、focus.fixedDiff=前round headから現HEADまでのgit差分path（git diff --name-only -z の順）。anchor.initialDiffDigest=sha256(git diff --binary --full-index --no-renames <diffBaseSha> <initialHeadSha>)。severity: Critical|High|Medium|Low、status: valid|resolved|duplicate|false-positive、source: review|consultation|audit、relation: acceptance-violation|invariant-violation|fix-regression|improvement|out-of-scope。blocking findingのcontractIdはanchorのACまたはINVに一致させる。decisionRefはfinding分類をDecision Skill（`agent-skill-chain decision invoke`、Issue #1485）のDCAND-006で行った場合の`decisionRecordId`（"DR-"接頭辞）、人・進行役が直接記入した場合はnull。null以外の場合、type・candidateHeadSha・inputDigest・provider versionのいずれかが不一致だとroundを拒否する。IDは大文字英数と._-で、anchorの各ID列は重複なし昇順。入力fileはstagingの外に置く。review round --init --out=<path> がfindings以外を埋めた256 KiB以下の正準reviewer input bundleを書き、digestとbyte数を返す。followOnly: trueは検証済み既定branch追随、recordLayerOnly: trueはformal artifactとsealed progress投影だけの検証済みrecord layerを表し、いずれもfindingsが無い場合だけ予算へ数えない',
       example: {
