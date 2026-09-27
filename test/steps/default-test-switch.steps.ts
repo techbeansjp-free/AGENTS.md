@@ -110,6 +110,38 @@ When(
   { timeout: 90_000 },
   function () {
     fs.writeFileSync(path.join(this.switchRoot, "compiled"), "yes");
+    fs.writeFileSync(path.join(this.switchRoot, "conformance-mode"), "yes");
+    for (const file of ["scripts/compile.ts", "src/lib/typescript-vendor.ts"]) {
+      const target = path.join(this.switchRoot, file);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(file, target);
+    }
+    fs.writeFileSync(
+      path.join(this.switchRoot, "tsconfig.build.json"),
+      JSON.stringify({
+        compilerOptions: {
+          target: "ES2022",
+          module: "NodeNext",
+          rootDir: "fixture-source",
+          outDir: "dist",
+          types: [],
+          skipLibCheck: true,
+        },
+        include: ["fixture-source/**/*.ts"],
+      }),
+    );
+    const sourceBin = path.join(
+      this.switchRoot,
+      "fixture-source/bin/agent-skill-chain.ts",
+    );
+    fs.mkdirSync(path.dirname(sourceBin), { recursive: true });
+    fs.writeFileSync(sourceBin, 'export const generation = "fresh-source";\n');
+    const outputBin = path.join(
+      this.switchRoot,
+      "dist/bin/agent-skill-chain.js",
+    );
+    fs.mkdirSync(path.dirname(outputBin), { recursive: true });
+    fs.writeFileSync(outputBin, 'export const generation = "stale-dist";\n');
     const report = path.join(this.switchRoot, "selected report.json");
     const argv = conformanceTestArgv(report, {
       bindings: [{ counterexampleScenarios: selectedIds }],
@@ -127,6 +159,16 @@ When(
       this.switchReports.push(features.flatMap((feature) => feature.elements));
       fs.unlinkSync(report);
     }
+    fs.unlinkSync(path.join(this.switchRoot, "cucumber-started"));
+    fs.writeFileSync(sourceBin, "const broken: = ;\n");
+    const rejected = runNpm(this.switchRoot, argv);
+    assert.notEqual(rejected.status, 0, rejected.stderr);
+    assert.match(rejected.stdout, /error TS/u);
+    assert.equal(
+      fs.existsSync(path.join(this.switchRoot, "cucumber-started")),
+      false,
+    );
+    assert.equal(fs.existsSync(report), false);
   },
 );
 Then(

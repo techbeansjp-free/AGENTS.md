@@ -1476,6 +1476,8 @@ export function conformanceTestArgv(
     "node",
     "--import",
     "tsx",
+    "--import",
+    "./scripts/compile.ts",
     "./node_modules/@cucumber/cucumber/bin/cucumber.js",
     "--config",
     "cucumber.mjs",

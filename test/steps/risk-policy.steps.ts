@@ -4154,6 +4154,8 @@ Then("完全ID一致だけが真になり空bindingはundefinedになる", funct
     "node",
     "--import",
     "tsx",
+    "--import",
+    "./scripts/compile.ts",
     "./node_modules/@cucumber/cucumber/bin/cucumber.js",
     "--config",
     "cucumber.mjs",
