@@ -4148,14 +4148,20 @@ Then("完全ID一致だけが真になり空bindingはundefinedになる", funct
     );
   const argv = conformanceTestArgv("/tmp/report.json", this.namePatternInput);
   assert.ok(argv !== undefined, "非空bindingでargvが組まれていません");
-  assert.deepEqual(argv.slice(0, 4), [
-    "test",
+  assert.deepEqual(argv, [
+    "exec",
     "--",
+    "node",
+    "--import",
+    "tsx",
+    "./node_modules/@cucumber/cucumber/bin/cucumber.js",
+    "--config",
+    "cucumber.mjs",
     "--format",
     "json:/tmp/report.json",
+    "--name",
+    this.namePattern,
   ]);
-  assert.equal(argv[4], "--name");
-  assert.equal(argv[5], this.namePattern);
 });
 Given("反例SCNを名指しするbindingと成功証拠が空のreportがある", function () {
   this.binding = JSON.parse(

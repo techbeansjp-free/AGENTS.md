@@ -1471,8 +1471,14 @@ export function conformanceTestArgv(
   const namePattern = counterexampleScenarioNamePattern(binding);
   if (namePattern === undefined) return undefined;
   return [
-    "test",
+    "exec",
     "--",
+    "node",
+    "--import",
+    "tsx",
+    "./node_modules/@cucumber/cucumber/bin/cucumber.js",
+    "--config",
+    "cucumber.mjs",
     "--format",
     `json:${reportPath}`,
     "--name",
