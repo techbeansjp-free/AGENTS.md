@@ -7,6 +7,7 @@ import {
   validateSemanticGraphSnapshot,
   type SemanticGraphSnapshot,
 } from "./semantic-graph.js";
+import { matchesStagingRoot } from "./staging-layout.js";
 
 /**
  * **影響集合（Impact Set、TERM-ASC-WR-04）。**
@@ -82,6 +83,12 @@ export interface ImpactDerivationInput {
   readonly featureBinding: FeatureStepBinding;
   /** package.jsonの`scripts`（名前→command） */
   readonly scripts: Readonly<Record<string, string>>;
+  /**
+   * project policyが解決したstaging root pattern（`readStagingLayout`の
+   * `rootPattern`）。取得できない場合はundefinedとし、staging計画成果物の
+   * 分類（REQ-WF-043）を行わない（安全側で通常の分類へ倒す）。
+   */
+  readonly stagingRootPattern?: string;
 }
 
 const ECMASCRIPT_EXTENSION = /\.(?:[cm]?[jt]s|[jt]sx)$/u;
@@ -227,14 +234,40 @@ type ChangedPathClass =
   | { readonly kind: "derived" }
   | { readonly kind: "fallback"; readonly reason: string };
 
+/**
+ * **project policyが宣言したstaging root直下のstaging1件の直下にあるfileか判定する**
+ * （Issue #1503、REQ-WF-043）。`issue create`が計画文書と共に生成する`.gitignore`は
+ * 実行時の振る舞いに影響しない計画成果物であり、他の種別に一致しないため
+ * 従来は`full`へ倒す`fallback`理由になっていた（Markdown文書は既存の`.md`分類で
+ * 対応済みだが`.gitignore`は対応がなかった）。
+ */
+function isStagingPlanningArtifact(
+  changedPath: string,
+  stagingRootPattern: string | undefined,
+): boolean {
+  if (stagingRootPattern === undefined) return false;
+  const patternSegments = stagingRootPattern.split("/");
+  const segments = changedPath.split("/");
+  return (
+    segments.length >= patternSegments.length + 2 &&
+    matchesStagingRoot(
+      stagingRootPattern,
+      segments.slice(0, patternSegments.length).join("/"),
+    )
+  );
+}
+
 function classifyChangedPath(
   changedPath: string,
   context: {
     readonly changed: ReadonlySet<string>;
     readonly index: GraphIndex | undefined;
     readonly stepDefinitionFiles: ReadonlySet<string>;
+    readonly stagingRootPattern: string | undefined;
   },
 ): ChangedPathClass {
+  if (isStagingPlanningArtifact(changedPath, context.stagingRootPattern))
+    return { kind: "document" };
   if (isInfrastructurePath(changedPath))
     return {
       kind: "fallback",
@@ -444,6 +477,7 @@ export function deriveImpactSet(input: ImpactDerivationInput): ImpactSet {
       changed,
       index,
       stepDefinitionFiles: new Set(stepDefinitionFiles.keys()),
+      stagingRootPattern: input.stagingRootPattern,
     });
     if (classified.kind === "fallback") reasons.push(classified.reason);
     if (classified.kind === "source") sources.push(changedPath);

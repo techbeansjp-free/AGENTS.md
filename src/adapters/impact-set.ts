@@ -12,6 +12,7 @@ import {
 } from "../domain/impact-set.js";
 import type { ReviewAdjacentScope } from "../domain/review-convergence.js";
 import { semanticGraphContentHash } from "../domain/semantic-graph.js";
+import { readStagingLayout } from "../domain/staging-layout.js";
 import { isRecord } from "../types.js";
 import {
   loadTypeScriptCompiler,
@@ -275,6 +276,12 @@ export function computeImpactSet(input: {
   const features = [...sources]
     .filter(([file]) => file.endsWith(".feature"))
     .map(([file, text]) => ({ path: file, text }));
+  let stagingRootPattern: string | undefined;
+  try {
+    stagingRootPattern = readStagingLayout(input.root).rootPattern;
+  } catch {
+    stagingRootPattern = undefined;
+  }
   return deriveImpactSet({
     baseSha: input.baseSha,
     headSha: input.headSha,
@@ -289,6 +296,7 @@ export function computeImpactSet(input: {
     })),
     featureBinding: bindFeaturesToStepDefinitions({ features, definitions }),
     scripts: packageScripts(sources),
+    stagingRootPattern,
   });
 }
 

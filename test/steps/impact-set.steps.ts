@@ -234,6 +234,40 @@ When("docs\\/specs\\/guide.mdだけを変更した影響集合を導出する", 
 });
 
 When(
+  "宣言済みstaging root直下の00_要求定義.mdと.gitignoreだけを変更した影響集合を導出する",
+  function () {
+    this.impact = derive(
+      this,
+      [
+        "docs/issues/20260927_x/00_要求定義.md",
+        "docs/issues/20260927_x/.gitignore",
+      ],
+      { stagingRootPattern: "docs/issues" },
+    );
+  },
+);
+
+When(
+  "宣言済みstaging root直下の.gitignoreとsrc\\/b.tsを変更した影響集合を導出する",
+  function () {
+    this.impact = derive(
+      this,
+      ["docs/issues/20260927_x/.gitignore", "src/b.ts"],
+      { stagingRootPattern: "docs/issues" },
+    );
+  },
+);
+
+When(
+  "staging root宣言が無いまま.gitignoreだけを変更した影響集合を導出する",
+  function () {
+    this.impact = derive(this, ["docs/issues/20260927_x/.gitignore"], {
+      stagingRootPattern: undefined,
+    });
+  },
+);
+
+When(
   "step定義が字面で読むdocs\\/read.mdだけを変更した影響集合を導出する",
   function () {
     this.impact = derive(this, ["docs/read.md"]);
@@ -326,6 +360,11 @@ Then(
 Then("影響featureは空で検査はdocs:formatとtrace:checkである", function () {
   assert.deepEqual(this.impact.features, []);
   assert.deepEqual(this.impact.checks, ["docs:format", "trace:check"]);
+});
+
+Then("影響featureは空で検査はdocs:formatだけである", function () {
+  assert.deepEqual(this.impact.features, []);
+  assert.deepEqual(this.impact.checks, ["docs:format"]);
 });
 
 Then("影響featureはtest\\/features\\/a.featureだけである", function () {
