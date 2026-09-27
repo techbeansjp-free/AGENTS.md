@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -546,15 +547,30 @@ Then(
   },
 );
 
+/** staging rootを宣言したcommitと、宣言を取り消したcommitを持つrepositoryを作る。 */
+function repositoryWithRevokedStaging(world: { initRepo(): string }): string {
+  const root = world.initRepo();
+  const commitPolicy = (policy: Record<string, unknown>, message: string) => {
+    write(
+      root,
+      ".agent-skill-chain/project-policy.json",
+      `${JSON.stringify({ policy })}\n`,
+    );
+    execFileSync("git", ["add", "-A"], { cwd: root });
+    execFileSync("git", ["commit", "-q", "-m", message], { cwd: root });
+  };
+  commitPolicy(
+    { staging: { root: "docs/issues", tracked: true, issueBody: "pointer" } },
+    "chore: declare tracked staging",
+  );
+  commitPolicy({}, "chore: revoke tracked staging");
+  return root;
+}
+
 Given(
   "staging宣言を持たないpolicyと、tracked staging記録を残したstagingと、通常の.gitignoreを持つ無関係directoryにSCN定義がある",
   function () {
-    this.root = this.temp();
-    write(
-      this.root,
-      ".agent-skill-chain/project-policy.json",
-      `${JSON.stringify({ policy: {} })}\n`,
-    );
+    this.root = repositoryWithRevokedStaging(this);
     write(
       this.root,
       "docs/issues/20260927_x/.gitignore",
@@ -583,12 +599,10 @@ Then(
 Given(
   "staging宣言を持たないpolicyと、tracked staging記録と同じ.gitignoreを持つdocs配下のspecと、00_要求定義.mdの無いdirectoryにSCN定義がある",
   function () {
-    this.root = this.temp();
-    write(
-      this.root,
-      ".agent-skill-chain/project-policy.json",
-      `${JSON.stringify({ policy: {} })}\n`,
-    );
+    this.root = repositoryWithRevokedStaging(this);
+    // 旧root外にstagingの形（固定.gitignoreと00_要求定義.md）を置いても除外しない
+    write(this.root, "docs/specs/.gitignore", TRACKED_STAGING_GITIGNORE);
+    write(this.root, "docs/specs/00_要求定義.md", SCN_LINE);
     write(this.root, "docs/.gitignore", TRACKED_STAGING_GITIGNORE);
     write(this.root, "docs/specs/00_概要.md", SCN_LINE);
     write(this.root, "notes/.gitignore", TRACKED_STAGING_GITIGNORE);
@@ -600,9 +614,12 @@ Then(
   "祖先の.gitignoreでもstaging文書の無いdirectoryでも定義を違反にする",
   function () {
     const placement = placementErrors(this.errors);
-    assert.equal(placement.length, 2, placement.join("\n"));
+    assert.equal(placement.length, 3, placement.join("\n"));
     assert.ok(
       placement.some((error) => error.includes("docs/specs/00_概要.md")),
+    );
+    assert.ok(
+      placement.some((error) => error.includes("docs/specs/00_要求定義.md")),
     );
     assert.ok(placement.some((error) => error.includes("notes/memo.md")));
   },

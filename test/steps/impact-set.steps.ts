@@ -687,6 +687,44 @@ When(
   },
 );
 
+const STAGED_POLICY = `${JSON.stringify({ policy: { staging: { root: "docs/issues", tracked: true, issueBody: "pointer" } } })}\n`;
+
+When(
+  "staging宣言の無いcommitでstaging配下の.gitignoreを変更し作業treeにだけstaging宣言を置く",
+  function () {
+    this.head = commit(
+      this.root,
+      { "docs/issues/20260927_x/.gitignore": "journal/\n" },
+      "docs: staging gitignore",
+    );
+    writeFiles(this.root, {
+      ".agent-skill-chain/project-policy.json": STAGED_POLICY,
+    });
+    // commitしないがindexへは載せる（indexから読む実装も誤りとして検出する）
+    execFileSync("git", ["add", ".agent-skill-chain/project-policy.json"], {
+      cwd: this.root,
+    });
+  },
+);
+
+When(
+  "staging宣言をcommitしたうえでstaging配下の.gitignoreを再び変更する",
+  function () {
+    this.base = commit(
+      this.root,
+      { ".agent-skill-chain/project-policy.json": STAGED_POLICY },
+      "chore: declare staging",
+    );
+    this.head = commit(
+      this.root,
+      {
+        "docs/issues/20260927_x/.gitignore": "journal/\nreview-session.json\n",
+      },
+      "docs: staging gitignore again",
+    );
+  },
+);
+
 When("2 commit間の影響集合をGitから導出する", function () {
   this.impact = computeImpactSet({
     root: this.root,

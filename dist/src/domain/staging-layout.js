@@ -104,7 +104,11 @@ export function readStagingLayout(repositoryRoot) {
     const manifest = path.join(repositoryRoot, ".agent-skill-chain", "project-policy.json");
     if (!fs.existsSync(manifest))
         return DEFAULT_STAGING_LAYOUT;
-    const parsed = parseJsonStrict(fs.readFileSync(manifest, "utf8"), "project policy manifest");
+    return stagingLayoutFromManifestText(fs.readFileSync(manifest, "utf8"));
+}
+/** manifestの本文から配置契約を読む。commit上の版を読む呼び出し側と共有する。 */
+export function stagingLayoutFromManifestText(text) {
+    const parsed = parseJsonStrict(text, "project policy manifest");
     if (!isRecord(parsed))
         return DEFAULT_STAGING_LAYOUT;
     // manifest形（policy.staging）と旧monolith形（staging）の両方を読む

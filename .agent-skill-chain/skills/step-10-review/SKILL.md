@@ -49,7 +49,7 @@ Makefileは`make -n <target>`で展開した実commandへ当てる。**ただし
 
 ## PR作成後の指摘
 
-`pr create`より後に届いた外部reviewerの指摘は、条件を満たす場合に同じPRへ取り込む。条件と手順の正本は[01_開発ワークフロー.md](../../docs/01_開発ワークフロー.md#レビュー配置と前向きな変更処理)であり、ここへ複写しない。Step 11前の`pr-bound`中は`workflow record --step=10 --post-pr-intake`、Step 11記録後は`--post-terminal-intake`を使う。取り直しroundは収束後にHEADが動いたとき同sessionの次roundとして開き、round数では拒否しない。受け入れ条件の不充足、安全境界・authority・不可逆操作へ及ぶ指摘はfollow-up Issueとする。指摘を無記録で通過させない。
+`pr create`より後に届いた外部reviewerの指摘は、条件を満たす場合に同じPRへ取り込む。条件と手順の正本は[01_開発ワークフロー.md](../../docs/01_開発ワークフロー.md#レビュー配置と前向きな変更処理)であり、ここへ複写しない。Step 11前の`pr-bound`中は`workflow record --step=10 --post-pr-intake`、Step 11記録後は`--post-terminal-intake`を使う。取り直しroundは収束後にHEADが動いたとき同sessionの次roundとして開き、round数では拒否しない。分離6条件のいずれかに該当する指摘だけをfollow-up Issueとする。指摘を無記録で通過させない。
 
 review中またはPR review中に見つけた欠陥は[派生した欠陥の是正原則](../../docs/01_開発ワークフロー.md#派生した欠陥の是正原則)に従い、分離6条件のいずれかに該当しない限り同じIssue・同じPRで直すfindingにする。round数が多いことは分離の理由にしない。目的にASC本体の保守を含まないIssueで、その欠陥がASC本体側にある場合は[ASC本体の是正を作業scopeへ入れない](../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない)に従う。
 

@@ -8,9 +8,11 @@ import { isStagingLifecycleScanPath } from "../src/domain/staging.js";
 import {
   matchesStagingRoot,
   readStagingLayout,
+  stagingLayoutFromManifestText,
   TRACKED_STAGING_GITIGNORE,
 } from "../src/domain/staging-layout.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
+import { git } from "../src/lib/process.js";
 
 function walkFiles(
   directory: string,
@@ -799,13 +801,40 @@ export function checkSpecNormalization(
    * として再浮上する。tracked staging生成時に置く固定content（機械記録だけを除外する
    * `.gitignore`）を祖先directoryに持つpathを、現在の宣言と無関係に除外する。
    */
+  /**
+   * かつて`tracked=true`で宣言したstaging rootをproject policyのGit履歴から集める。
+   * **除外はこのrootの直下にあるstagingだけに限る。** 固定内容の`.gitignore`と
+   * `00_要求定義.md`を置くだけで任意のdirectoryを検査から外せないようにする。
+   * 履歴を読めない場合は除外しない（違反を報告する側へ倒す）。
+   */
+  const formerlyTrackedRoots = new Set<string>();
+  const policyFile = ".agent-skill-chain/project-policy.json";
+  const history = git(["log", "--format=%H", "--", policyFile], root, {
+    allowFailure: true,
+  });
+  if (history.status === 0)
+    for (const commit of history.stdout.split("\n").filter(Boolean)) {
+      const shown = git(["show", `${commit}:${policyFile}`], root, {
+        allowFailure: true,
+      });
+      if (shown.status !== 0) continue;
+      try {
+        const layout = stagingLayoutFromManifestText(shown.stdout);
+        if (layout.tracked) formerlyTrackedRoots.add(layout.rootPattern);
+      } catch {
+        continue;
+      }
+    }
   const isFormerlyTrackedStagingPath = (relative: string): boolean => {
-    /**
-     * stagingは平坦なdirectoryであり、固定`.gitignore`と`00_要求定義.md`を同じ
-     * directoryに持つ。**直接の親だけを見る。** 祖先を遡ると、固定内容の
-     * `.gitignore`を1つ置くだけで配下全体を検査から外せる。
-     */
-    const directory = path.join(root, path.dirname(relative));
+    const stagingDirectory = path.dirname(relative);
+    const parent = path.dirname(stagingDirectory);
+    if (
+      ![...formerlyTrackedRoots].some((pattern) =>
+        matchesStagingRoot(pattern, parent),
+      )
+    )
+      return false;
+    const directory = path.join(root, stagingDirectory);
     try {
       return (
         fs.readFileSync(path.join(directory, ".gitignore"), "utf8") ===
