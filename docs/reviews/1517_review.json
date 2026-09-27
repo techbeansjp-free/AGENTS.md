@@ -2,17 +2,17 @@
   "schemaVersion": "agent-skill-chain/review-evidence/v2",
   "issue": 1517,
   "observed": {
-    "baseSha": "4560c844bf4acb94f7ec37810371f4c2df8f7a41",
-    "implementationHeadSha": "fbbea46e7acd7b12a4d4c044d36646918ed4621a",
-    "diffDigest": "56fc85096e8ad56751a00a0a6deaf38de0d48f03c0ea8b054c7304585946490b",
+    "baseSha": "b6c31a7ed4bd6c47b6d430f4e34f36ff4427d961",
+    "implementationHeadSha": "f509cdb2de7cfe7b9696a79376de83e29d653e83",
+    "diffDigest": "9ac894b05ea8ac8e8df8fe43d90fbabadb4ef86b299d08748b487fa324338be1",
     "session": {
       "sessionId": "9ed40958af944e53d0d900a84238918039e01af553327052f75771e52ca89699",
-      "latestRoundDigest": "aabb677b735094deff7aca3e2abaa9d1fee16e18d5f8fcd9c615dabcaddbeec4",
+      "latestRoundDigest": "b01060126a743e445ee873dafc6cad5dde6f44490770868bcfb38bc05420d391",
       "status": "converged",
-      "countedRounds": 6
+      "countedRounds": 7
     },
     "impact": {
-      "digest": "449d71b3143098333b63718b7ce20ac2e6cb02811c0b46f6633cc55b296b2911",
+      "digest": "f291a17c365faff24ace860bbfbb72d18cd353b081c74c64055a9e857fe7d5b8",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "fbbea46e7acd7b12a4d4c044d36646918ed4621a",
-        "impactDigest": "449d71b3143098333b63718b7ce20ac2e6cb02811c0b46f6633cc55b296b2911",
-        "finishedAt": "2026-09-27T22:29:02.710Z",
-        "recordDigest": "aed9e3a4a8afd7ae1bbeecbb187d51e7406bf5f14d47b9eb7c4727ea08f24630"
+        "headSha": "f509cdb2de7cfe7b9696a79376de83e29d653e83",
+        "impactDigest": "f291a17c365faff24ace860bbfbb72d18cd353b081c74c64055a9e857fe7d5b8",
+        "finishedAt": "2026-09-27T22:41:38.042Z",
+        "recordDigest": "8ebd362679bbe825b60afa8a753fdf0a8d3ba1c5434e26a32d8bfdc2dc0fb0b5"
       }
     ]
   },
@@ -238,6 +238,14 @@
       "relation": "improvement",
       "path": "src/cli.ts",
       "contractId": "INV-02"
+    },
+    {
+      "id": "F-1517-R9-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "docs/specs/15_要件追跡/01_変更履歴.md",
+      "contractId": "INV-04"
     }
   ],
   "unresolvedCriticalHigh": [],
@@ -248,5 +256,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "a84fd568d103995d93d1e83f06e51d7505aa07b6f14add548c7257068780697e"
+  "evidenceDigest": "173f397562b9198bd0cf41359abfe0ec17fe90699fff3b3c43e6db0b84dd5d7c"
 }
