@@ -11,7 +11,8 @@
       "0.3.0"
     ],
     "deprecatedPolicySchemaAliases": {
-      "0.3": "0.3.0"
+      "0.3": "0.3.0",
+      "0.3.1": "0.4.4"
     }
   },
   "engines": {

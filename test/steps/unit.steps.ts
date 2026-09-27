@@ -2509,6 +2509,7 @@ Then(
     assert.deepEqual(DEPRECATED_POLICY_SCHEMA_ALIASES, {
       "agent-skill-chain/project-policy/v0.3":
         "agent-skill-chain/project-policy/v0.3.0",
+      "agent-skill-chain/project-policy/v0.3.1": CURRENT_POLICY_SCHEMA_VERSION,
     });
     assert.deepEqual(
       this.policySchema.properties.schemaVersion.enum,

@@ -19,6 +19,7 @@ import type { ConformanceDeclaration } from "./conformance.js";
 import {
   COMPATIBLE_POLICY_SCHEMA_VERSIONS,
   CURRENT_POLICY_SCHEMA_VERSION,
+  isCurrentPolicySchemaVersion,
   DEPRECATED_POLICY_SCHEMA_ALIASES,
   SUPPORTED_POLICY_SCHEMA_VERSIONS,
 } from "../lib/version.js";
@@ -981,7 +982,7 @@ export function validatePolicy(policy: unknown) {
   for (const key of forbidden)
     if (merge[key] === true)
       errors.push(`マージ権限へ${key}を含めてはいけません`);
-  if (schemaVersion === CURRENT_POLICY_SCHEMA_VERSION) {
+  if (isCurrentPolicySchemaVersion(schemaVersion)) {
     rejectUnknownKeys(
       candidate.budgets,
       ["localFeedbackMs", "prGateMs"],
@@ -1261,7 +1262,7 @@ export function validateProjectPolicyManifest(manifest: unknown) {
     "manifest.policy.budgets",
     errors,
   );
-  if (policy.schemaVersion !== CURRENT_POLICY_SCHEMA_VERSION)
+  if (!isCurrentPolicySchemaVersion(policy.schemaVersion))
     errors.push("manifest.policy.schemaVersionが不正です");
   if (delivery.stopAt !== "pull_request")
     errors.push("manifest.policy.delivery.stopAtが不正です");
@@ -1778,10 +1779,9 @@ export function loadEffectiveTrustedPolicySetAtCommit(
     parseJsonStrict(trustedFloor.stdout, `${ref}:default policy`),
     "trusted commitのdefault policy",
   );
-  const floorResult =
-    committedFloor.schemaVersion === CURRENT_POLICY_SCHEMA_VERSION
-      ? resolveEffectivePolicy(packageFloor, committedFloor, { trusted: true })
-      : { valid: true, policy: packageFloor };
+  const floorResult = isCurrentPolicySchemaVersion(committedFloor.schemaVersion)
+    ? resolveEffectivePolicy(packageFloor, committedFloor, { trusted: true })
+    : { valid: true, policy: packageFloor };
   if (!floorResult.valid)
     throw new Error(
       `trusted defaultをpackage safety floorへ合成できません: ${"diagnostic" in floorResult ? floorResult.diagnostic?.reasons.join("; ") : "不明な構成error"}`,

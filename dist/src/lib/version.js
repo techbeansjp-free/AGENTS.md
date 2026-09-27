@@ -45,9 +45,14 @@ if (!packageMetadata.agentSkillChain?.deprecatedPolicySchemaAliases ||
     Array.isArray(packageMetadata.agentSkillChain.deprecatedPolicySchemaAliases))
     throw new Error("package.jsonのdeprecatedPolicySchemaAliasesが不正です");
 for (const [alias, canonical] of Object.entries(packageMetadata.agentSkillChain.deprecatedPolicySchemaAliases))
-    if (!/^0\.3$/u.test(alias) ||
+    /**
+     * `0.3.1`は`0.4.4`へ番号だけを進めた同一schemaである（Issue #1503）。移行期間中の
+     * 既定branchはまだ`0.3.1`を宣言するため、現行版への別名として読む。
+     */
+    if (!/^0\.3(?:\.1)?$/u.test(alias) ||
         typeof canonical !== "string" ||
-        !packageMetadata.agentSkillChain.compatiblePolicySchemaVersions.includes(canonical))
+        (!packageMetadata.agentSkillChain.compatiblePolicySchemaVersions.includes(canonical) &&
+            canonical !== packageMetadata.agentSkillChain.policySchemaVersion))
         throw new Error("package.jsonのdeprecated policy schema aliasが不正です");
 export const PACKAGE_VERSION = packageMetadata.version;
 export const CURRENT_POLICY_SCHEMA_VERSION = `${policyNamespace}${packageMetadata.agentSkillChain.policySchemaVersion}`;
@@ -60,4 +65,11 @@ export const DEPRECATED_POLICY_SCHEMA_ALIASES = Object.fromEntries(Object.entrie
     `${policyNamespace}${alias}`,
     `${policyNamespace}${canonical}`,
 ]));
+/** 現行schemaそのもの、または現行schemaへの別名（`0.3.1`）であるか。 */
+export function isCurrentPolicySchemaVersion(value) {
+    return (value === CURRENT_POLICY_SCHEMA_VERSION ||
+        (typeof value === "string" &&
+            Object.prototype.hasOwnProperty.call(DEPRECATED_POLICY_SCHEMA_ALIASES, value) &&
+            DEPRECATED_POLICY_SCHEMA_ALIASES[value] === CURRENT_POLICY_SCHEMA_VERSION));
+}
 //# sourceMappingURL=version.js.map
