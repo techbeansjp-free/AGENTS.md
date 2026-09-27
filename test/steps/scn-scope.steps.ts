@@ -579,3 +579,31 @@ Then(
     );
   },
 );
+
+Given(
+  "staging宣言を持たないpolicyと、tracked staging記録と同じ.gitignoreを持つdocs配下のspecと、00_要求定義.mdの無いdirectoryにSCN定義がある",
+  function () {
+    this.root = this.temp();
+    write(
+      this.root,
+      ".agent-skill-chain/project-policy.json",
+      `${JSON.stringify({ policy: {} })}\n`,
+    );
+    write(this.root, "docs/.gitignore", TRACKED_STAGING_GITIGNORE);
+    write(this.root, "docs/specs/00_概要.md", SCN_LINE);
+    write(this.root, "notes/.gitignore", TRACKED_STAGING_GITIGNORE);
+    write(this.root, "notes/memo.md", SCN_LINE);
+  },
+);
+
+Then(
+  "祖先の.gitignoreでもstaging文書の無いdirectoryでも定義を違反にする",
+  function () {
+    const placement = placementErrors(this.errors);
+    assert.equal(placement.length, 2, placement.join("\n"));
+    assert.ok(
+      placement.some((error) => error.includes("docs/specs/00_概要.md")),
+    );
+    assert.ok(placement.some((error) => error.includes("notes/memo.md")));
+  },
+);

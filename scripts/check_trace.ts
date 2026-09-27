@@ -800,22 +800,21 @@ export function checkSpecNormalization(
    * `.gitignore`）を祖先directoryに持つpathを、現在の宣言と無関係に除外する。
    */
   const isFormerlyTrackedStagingPath = (relative: string): boolean => {
-    const segments = relative.split("/");
-    for (let depth = 1; depth < segments.length; depth += 1) {
-      const candidate = path.join(
-        root,
-        ...segments.slice(0, depth),
-        ".gitignore",
+    /**
+     * stagingは平坦なdirectoryであり、固定`.gitignore`と`00_要求定義.md`を同じ
+     * directoryに持つ。**直接の親だけを見る。** 祖先を遡ると、固定内容の
+     * `.gitignore`を1つ置くだけで配下全体を検査から外せる。
+     */
+    const directory = path.join(root, path.dirname(relative));
+    try {
+      return (
+        fs.readFileSync(path.join(directory, ".gitignore"), "utf8") ===
+          TRACKED_STAGING_GITIGNORE &&
+        fs.statSync(path.join(directory, "00_要求定義.md")).isFile()
       );
-      let content: string;
-      try {
-        content = fs.readFileSync(candidate, "utf8");
-      } catch {
-        continue;
-      }
-      if (content === TRACKED_STAGING_GITIGNORE) return true;
+    } catch {
+      return false;
     }
-    return false;
   };
   const scenarioDefinitionFiles = walkRepositoryFiles(
     root,

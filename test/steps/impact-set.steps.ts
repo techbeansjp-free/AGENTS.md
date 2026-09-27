@@ -259,6 +259,24 @@ When(
 );
 
 When(
+  "staging rootをtestと宣言してtest\\/steps\\/a.steps.tsだけを変更した影響集合を導出する",
+  function () {
+    this.impact = derive(this, ["test/steps/a.steps.ts"], {
+      stagingRootPattern: "test",
+    });
+  },
+);
+
+When(
+  "宣言済みstaging rootのstaging directoryより深い.gitignoreだけを変更した影響集合を導出する",
+  function () {
+    this.impact = derive(this, ["docs/issues/20260927_x/sub/.gitignore"], {
+      stagingRootPattern: "docs/issues",
+    });
+  },
+);
+
+When(
   "staging root宣言が無いまま.gitignoreだけを変更した影響集合を導出する",
   function () {
     this.impact = derive(this, ["docs/issues/20260927_x/.gitignore"], {
