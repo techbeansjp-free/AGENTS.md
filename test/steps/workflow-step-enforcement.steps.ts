@@ -2348,6 +2348,9 @@ interface DeliveryProviderControl {
    * `"cross-repo-same-number"`は番号だけcanonicalと同じ`other/repo#877`を足す。
    * `"url-canonical-only"`は canonical Issueの参照をURL形へ置き換え、
    * `"url-canonical-duplicate"`は`#877`を残したままURL形の877を足す。
+   * GFMのcode境界（R6-01）: `"indented-fence-other"`は4スペース字下げの疑似fence
+   * （GFMではfenceでない）の後に`Fixes other/repo#9`を足し、`"fenced-code-other"`は
+   * 字下げなしの正規fence内に`Closes other/repo#9`を足す。
    */
   closingBodyEdit:
     | "none"
@@ -2358,7 +2361,9 @@ interface DeliveryProviderControl {
     | "cross-repo"
     | "cross-repo-same-number"
     | "url-canonical-only"
-    | "url-canonical-duplicate";
+    | "url-canonical-duplicate"
+    | "indented-fence-other"
+    | "fenced-code-other";
   /**
    * merge後に固定run IDで直読みしたrunの`conclusion`（Issue #1280）。
    * **不一致側を作るための唯一の入口である。** 既定は`"success"`で挙動を変えない。
@@ -3372,6 +3377,10 @@ const body = () => {
     return canonical + "\\n\\nCloses other/repo#877";
   if (control.closingBodyEdit === "url-canonical-only")
     return canonical.split("Closes #877").join("Closes https://github.com/O/R/issues/877");
+  if (control.closingBodyEdit === "indented-fence-other")
+    return canonical + "\\n\\n    \`\`\`\\n\\nFixes other/repo#9";
+  if (control.closingBodyEdit === "fenced-code-other")
+    return canonical + "\\n\\n\`\`\`\\nCloses other/repo#9\\n\`\`\`";
   if (control.closingBodyEdit === "url-canonical-duplicate")
     return canonical + "\\n\\nCloses https://github.com/o/r/issues/877";
   return control.contentChanged ? canonical + "\\n\\nprovider content changed" : canonical;
@@ -6103,6 +6112,7 @@ if (exact(["auth", "status"])) {
        */
       for (const edit of [
         "url-canonical-only",
+        "fenced-code-other",
         "url-canonical-duplicate",
       ] as const) {
         const prepared = prepareDeliveryCli(this);
@@ -6128,6 +6138,7 @@ if (exact(["auth", "status"])) {
         "url-other",
         "cross-repo",
         "cross-repo-same-number",
+        "indented-fence-other",
       ] as const) {
         const prepared = prepareDeliveryCli(this);
         createDeliveryPullRequest(prepared);
