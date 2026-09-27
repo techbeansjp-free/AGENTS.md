@@ -22,3 +22,8 @@ Feature: verify runで検証をshellを通さず実行し観測だけを記録�
     Given verify run用のIssue stagingを持つrepositoryがある
     When PR停止のStep 11記録後とmerge準備後にverify runを実行する
     Then Step 11後は記録してもstaging digestを再固定せずmerge段階では拒否する
+
+  Scenario: SCN-INT-VERIFYRUN-005 review session作成前でも固定比較基点で検証を観測する
+    Given verify run用のIssue stagingを持つrepositoryがある
+    When review sessionを作成せず固定比較基点を明示してverify runを実行する
+    Then review sessionなしで同じ比較基点とHEADと影響集合の合格観測を記録する
