@@ -217,16 +217,10 @@ Then(
       assert.match(text, /Step 0〜11/u);
       assert.match(text, /PR.*review/u);
       assert.match(text, /既定branch追随.*Step 9/u);
-      assert.match(text, /有限review予算/u);
-      assert.match(text, /同一scope最大6回/u);
-      assert.match(text, /取り直し2回/u);
-      assert.match(text, /通算8回/u);
       assert.doesNotMatch(text, /45分(?:を)?超(?:える)?見込みなら.*分割/u);
+      assert.doesNotMatch(text, /有限review予算|通算8回/u);
     }
     const [workflow, full, quick, poc, help] = this.contractDocuments;
-    assert.match(workflow!, /同一scope最大6回/u);
-    assert.match(workflow!, /取り直し2回/u);
-    assert.match(workflow!, /通算8回/u);
     assert.match(
       workflow!,
       /fullの00 §2\.1にあるtop-level bullet.*非停止warning.*quick\/pocの集約形式はmarker warningの判定対象外/u,

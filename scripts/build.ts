@@ -102,13 +102,6 @@ if (
 )
   throw new Error("package.jsonとpackage-lock.jsonの製品versionが一致しません");
 if (
-  CURRENT_POLICY_SCHEMA_VERSION !==
-  `agent-skill-chain/project-policy/v${releaseVersion}`
-)
-  throw new Error(
-    "製品versionと現行project policy schema versionが一致しません",
-  );
-if (
   JSON.stringify(policySchema.properties?.schemaVersion?.enum) !==
   JSON.stringify(SUPPORTED_POLICY_SCHEMA_VERSIONS)
 )

@@ -27,10 +27,10 @@ Feature: main mergeの自動release計画と配布digest
     When 自動release計画を作成する
     Then 自動release計画は次のprerelease tagでreleaseする
 
-  Scenario: SCN-UNIT-AUTORELEASE-006 prereleaseとpatchのbump規則が0.3.xの範囲を出ない
+  Scenario: SCN-UNIT-AUTORELEASE-006 prereleaseとpatchのbump規則が0.4.xの範囲を出ない
     Given prereleaseと通常versionと解決不能versionの衝突入力がある
     When 衝突した自動release計画を作成する
-    Then 解決可能なversionは0.3.x内で次tagへ進み解決不能なversionは停止する
+    Then 解決可能なversionは0.4.x内で次tagへ進み解決不能なversionは停止する
 
   Scenario: SCN-UNIT-AUTORELEASE-007 bump_version jobを持つworkflowを拒否する
     Given bump_version jobを持つworkflow本文がある
@@ -96,11 +96,6 @@ Feature: main mergeの自動release計画と配布digest
     Given 現在tagが存在して配布digestが一致する自動release入力がある
     When 自動release計画を作成する
     Then 自動release計画は前回tagを含む配布物同一理由で停止する
-
-  Scenario: SCN-UNIT-AUTOREL-D03 currentTag存在かつdigest相違でbump後にreleaseする
-    Given 現在tagが存在して配布digestが異なる自動release入力がある
-    When 自動release計画を作成する
-    Then 自動release計画は次のprerelease tagでreleaseする
 
   Scenario: SCN-UNIT-AUTOREL-D04 前回digestが空ならfail-openする
     Given 現在tagが存在して前回配布digestが空の入力がある

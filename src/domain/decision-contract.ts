@@ -37,11 +37,12 @@ interface DecisionCandidateEntryBase {
   readonly label: string;
   /** 判断（または判断の代替となる heuristic）が行われる場所。 */
   readonly decisionSiteFile: string;
-  /** `decisionSiteFile`内の行番号または行範囲。 */
-  readonly decisionSiteLine: string;
   /**
-   * `decisionSiteFile`の`decisionSiteLine`近傍に実在するべき文字列。
-   * SCN-UNIT-DC-002がfile存在だけでなく行内容の実在も検査する（Step 10独立review Highで追加）。
+   * `decisionSiteFile`内で一意な同定文字列（Issue #1503、REQ-WF-044）。
+   * 判断箇所の同一性はこのanchorだけで表し、行番号は持たない。行番号が必要な
+   * 表示はanchorの出現位置から都度導出する。`decisionSiteFile`の import行追加
+   * などで実際の行がずれても、anchor文字列自体が消えたり複製されたりしない限り
+   * 同一性は壊れない。SCN-UNIT-DCANCHOR-001・002がfile内の一意な実在を検査する。
    */
   readonly decisionSiteAnchor: string;
   /** fail-closed方向かfail-open方向か。 */
@@ -49,8 +50,8 @@ interface DecisionCandidateEntryBase {
 }
 
 /**
- * 呼び出し元をfile:lineで名指しできた候補（disposition="adopted"）。
- * callerFile・callerLineを型として必須にし、呼び出し元不明のまま採用できないようにする（INV-02、BR-01）。
+ * 呼び出し元をanchorで名指しできた候補（disposition="adopted"）。
+ * callerFile・callerAnchorを型として必須にし、呼び出し元不明のまま採用できないようにする（INV-02、BR-01）。
  */
 export interface AdoptedDecisionCandidateEntry extends DecisionCandidateEntryBase {
   readonly disposition: "adopted";
@@ -58,9 +59,7 @@ export interface AdoptedDecisionCandidateEntry extends DecisionCandidateEntryBas
   readonly direction: "fail-closed";
   /** 判断結果を消費する呼び出し元file。 */
   readonly callerFile: string;
-  /** `callerFile`内の行番号または行範囲。 */
-  readonly callerLine: string;
-  /** `callerFile`の`callerLine`近傍に実在するべき文字列。 */
+  /** `callerFile`内で一意な同定文字列。行番号は持たない（REQ-WF-044）。 */
   readonly callerAnchor: string;
 }
 
@@ -97,12 +96,10 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label:
         "quick失格分類の検出（detectQuickDisqualifiers。変更fileのpathからdependency/public-api/data-migration/security-boundary/infrastructureを正規表現で推定する）",
       decisionSiteFile: "src/domain/mode.ts",
-      decisionSiteLine: "484",
       decisionSiteAnchor: "export function detectQuickDisqualifiers",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/domain/issue.ts",
-      callerLine: "1693",
       callerAnchor: "detectQuickDisqualifiers(options.changedFiles",
     }),
     Object.freeze({
@@ -110,12 +107,10 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label:
         "CI run配信状態の3値判定（inspectCiDelivery/nextActionFor。固定30分の猶予閾値でdelivered/pending/undeliveredを判定し人間呼び出しの要否を返す）",
       decisionSiteFile: "src/domain/ci-delivery.ts",
-      decisionSiteLine: "81",
       decisionSiteAnchor: "export function inspectCiDelivery",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "1781",
       callerAnchor: "inspectCiDelivery({",
     }),
     Object.freeze({
@@ -123,12 +118,10 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label:
         "仕様更新要否の判定（requiresSpecUpdate。変更file pathの正規表現一致でdocs/specs/更新の要否を推定する）",
       decisionSiteFile: "src/domain/spec.ts",
-      decisionSiteLine: "265",
       decisionSiteAnchor: "export function requiresSpecUpdate",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/cli.ts",
-      callerLine: "7396",
       callerAnchor: "validateSpecs(root",
     }),
     Object.freeze({
@@ -136,12 +129,10 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label:
         "開発考慮事項の決定文言が具体的かの判定（hasConcreteDecisionText。長さ閾値＋定型文除外の正規表現でplaceholderを検出する）",
       decisionSiteFile: "src/domain/policy.ts",
-      decisionSiteLine: "382",
       decisionSiteAnchor: "function hasConcreteDecisionText",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/domain/policy.ts",
-      callerLine: "407",
       callerAnchor: "hasConcreteDecisionText(record[field], minimum)",
     }),
     Object.freeze({
@@ -149,20 +140,17 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label:
         "review findingの検証記録に含める分類・理由の記入（進行役がfindingの分類と理由を記録する手順）",
       decisionSiteFile: ".agent-skill-chain/skills/step-10-review/SKILL.md",
-      decisionSiteLine: "34",
       decisionSiteAnchor: "分類（severity等）と理由の記入（DCAND-006）は",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/adapters/decision-invoke.ts",
-      callerLine: "271",
       callerAnchor: 'if (type.id === "DCAND-006") {',
     }),
     Object.freeze({
       id: "DCAND-007",
       label: "finding relationの分類（acceptance-violation等5種）",
       decisionSiteFile: "src/domain/review-convergence.ts",
-      decisionSiteLine: "48-54",
-      decisionSiteAnchor: "acceptance-violation",
+      decisionSiteAnchor: "const RELATIONS = [",
       direction: "fail-open",
       disposition: "excluded",
       exclusionReason:
@@ -172,43 +160,36 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       id: "DCAND-008",
       label: "CodeRabbit利用枠制限の判定",
       decisionSiteFile: ".agent-skill-chain/docs/01_開発ワークフロー.md",
-      decisionSiteLine: "219",
       decisionSiteAnchor: "CodeRabbitの利用枠制限の判定（DCAND-008）は",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/adapters/decision-invoke.ts",
-      callerLine: "178",
       callerAnchor: 'case "DCAND-008": {',
     }),
     Object.freeze({
       id: "DCAND-009",
       label: "reviewer選定（Codex Sol/Opus）の判断",
       decisionSiteFile: ".agent-skill-chain/skills/step-10-review/SKILL.md",
-      decisionSiteLine: "35",
       decisionSiteAnchor: "reviewer選定（DCAND-009）は",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/adapters/decision-invoke.ts",
-      callerLine: "288",
       callerAnchor: 'if (authorityMode === "constrained-choice") {',
     }),
     Object.freeze({
       id: "DCAND-010",
       label: "「軽微な矛盾」3条件判定",
       decisionSiteFile: ".agent-skill-chain/docs/01_開発ワークフロー.md",
-      decisionSiteLine: "271-277",
       decisionSiteAnchor: "軽微かどうかは判断ではなく次の3条件で決める",
       direction: "fail-closed",
       disposition: "adopted",
       callerFile: "src/adapters/decision-invoke.ts",
-      callerLine: "322",
       callerAnchor: 'type.id === "DCAND-010" ? DCAND_010_SAFE_VALUE',
     }),
     Object.freeze({
       id: "DCAND-011",
       label: "Q-01〜Q-08モード判定質問への回答行為そのもの",
       decisionSiteFile: ".agent-skill-chain/docs/01_開発ワークフロー.md",
-      decisionSiteLine: "27-32",
       decisionSiteAnchor: "を選べるかは次の8問で決める",
       direction: "fail-closed",
       disposition: "excluded",
@@ -220,7 +201,6 @@ export const DECISION_CANDIDATES: readonly DecisionCandidateEntry[] =
       label:
         "classifyPackageAssets/validatePackageManifest（secret/credentialのfilename・content heuristic分類）",
       decisionSiteFile: "src/domain/enforcement.ts",
-      decisionSiteLine: "1478-1481",
       decisionSiteAnchor: "export function classifyPackageAssets",
       direction: "fail-closed",
       disposition: "excluded",

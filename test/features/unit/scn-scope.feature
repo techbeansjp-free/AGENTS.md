@@ -80,3 +80,18 @@ Feature: SCN配置検査の走査範囲を規範側だけに限る
     Given 宣言したstaging root直下のstagingと、root直下のfileと、近似rootにSCN定義がある
     When SCN配置検査を実行する
     Then staging内の定義だけを除外しroot直下のfileと近似rootの定義を違反にする
+
+  Scenario: SCN-UNIT-SCNSCOPE-017 宣言を取り消した後もtracked staging記録のあるSCN定義を違反にしない
+    Given staging宣言を持たないpolicyと、tracked staging記録を残したstagingと、通常の.gitignoreを持つ無関係directoryにSCN定義がある
+    When SCN配置検査を実行する
+    Then tracked staging記録のあるstaging内の定義だけを除外し無関係directoryの定義を違反にする
+
+  Scenario: SCN-UNIT-SCNSCOPE-018 tracked staging記録と同じ.gitignoreを置いただけの祖先directory配下を除外しない
+    Given staging宣言を持たないpolicyと、tracked staging記録と同じ.gitignoreを持つdocs配下のspecと、00_要求定義.mdの無いdirectoryにSCN定義がある
+    When SCN配置検査を実行する
+    Then 祖先の.gitignoreでもstaging文書の無いdirectoryでも定義を違反にする
+
+  Scenario: SCN-UNIT-SCNSCOPE-019 Git履歴を読めなければ旧staging除外を適用しない
+    Given Git履歴を持たないrootで、docs/issues配下にtracked staging記録と同じ形のSCN定義がある
+    When SCN配置検査を実行する
+    Then 履歴を読めないため除外せず定義を違反にする

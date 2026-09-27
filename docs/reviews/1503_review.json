@@ -1,0 +1,316 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1503,
+  "observed": {
+    "baseSha": "bd54af712ab16380d3c3c74aedffa5e05c622f72",
+    "implementationHeadSha": "37f0787ed3e8816d9e1e68bd5d06ecf6a0655383",
+    "diffDigest": "c4f4761a16b6a4a1e24ffbd4f0274cee21f5e9a61f9d0d129211492aabf4e4dc",
+    "session": {
+      "sessionId": "c470340b3aa3fd7735a109c7fb0310d6f4608dda081f6ae182158cb34c9a85ed",
+      "latestRoundDigest": "d21c8d5772b589756ff806bd87b990b53a635cf99463d4132806c794f7531875",
+      "status": "converged",
+      "countedRounds": 16
+    },
+    "impact": {
+      "digest": "5413de88600bc6db3ce86a32f80fc3c0a51fc8029b2f0b9918db11806e57a100",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "37f0787ed3e8816d9e1e68bd5d06ecf6a0655383",
+        "impactDigest": "5413de88600bc6db3ce86a32f80fc3c0a51fc8029b2f0b9918db11806e57a100",
+        "finishedAt": "2026-09-27T09:11:05.059Z",
+        "recordDigest": "37acb0344fcb981a7d8856e7b439070670eb8757267accecfacde7a16e7aaba8"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "CR2-001",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/docs/01_開発ワークフロー.md",
+      "contractId": null
+    },
+    {
+      "id": "CR2-002",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/docs/02_品質基準.md",
+      "contractId": null
+    },
+    {
+      "id": "CR2-003",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/11_非機能/01_品質要件.md",
+      "contractId": null
+    },
+    {
+      "id": "R1-001",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "scripts/plan_release.ts",
+      "contractId": "AC-15"
+    },
+    {
+      "id": "R1-002",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "package.json",
+      "contractId": "AC-14"
+    },
+    {
+      "id": "R1-003",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/impact-set.ts",
+      "contractId": "AC-05"
+    },
+    {
+      "id": "R1-004",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "scripts/check_file_audit.ts",
+      "contractId": null
+    },
+    {
+      "id": "R1-005",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": ".agent-skill-chain/metrics/1503/scope-e-test-suite.md",
+      "contractId": "AC-11"
+    },
+    {
+      "id": "R1-006",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "test/features/unit/plan-artifact-revert.feature",
+      "contractId": "AC-06"
+    },
+    {
+      "id": "R1-007",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "scripts/check_trace.ts",
+      "contractId": null
+    },
+    {
+      "id": "R1-008",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/02_要件/01_ワークフロー要件.md",
+      "contractId": null
+    },
+    {
+      "id": "R1-009",
+      "severity": "Low",
+      "status": "false-positive",
+      "relation": "improvement",
+      "path": "src/domain/decision-contract.ts",
+      "contractId": "INV-03"
+    },
+    {
+      "id": "R10-001",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/skills/step-03-requirements-review/SKILL.md",
+      "contractId": null
+    },
+    {
+      "id": "R10-002",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/templates/issue/11_プルリクエスト事前確認.md",
+      "contractId": null
+    },
+    {
+      "id": "R10-003",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/docs/02_品質基準.md",
+      "contractId": null
+    },
+    {
+      "id": "R10-004",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/15_要件追跡/01_変更履歴.md",
+      "contractId": null
+    },
+    {
+      "id": "R12-001",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/docs/01_開発ワークフロー.md",
+      "contractId": null
+    },
+    {
+      "id": "R13-001",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/docs/02_品質基準.md",
+      "contractId": null
+    },
+    {
+      "id": "R13-002",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/docs/01_開発ワークフロー.md",
+      "contractId": null
+    },
+    {
+      "id": "R13-003",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "src/domain/review-convergence.ts",
+      "contractId": null
+    },
+    {
+      "id": "R14-001",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md",
+      "contractId": null
+    },
+    {
+      "id": "R15-001",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/15_要件追跡/01_変更履歴.md",
+      "contractId": null
+    },
+    {
+      "id": "R2-001",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "docs/specs/02_要件/03_外部連携要件.md",
+      "contractId": "AC-14"
+    },
+    {
+      "id": "R3-001",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "docs/specs/12_運用保守/00_運用設計.md",
+      "contractId": "AC-14"
+    },
+    {
+      "id": "R3-002",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/13_移行・廃止/01_移行方針.md",
+      "contractId": null
+    },
+    {
+      "id": "R4-001",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "out-of-scope",
+      "path": "docs/specs/11_非機能/01_品質要件.md",
+      "contractId": null
+    },
+    {
+      "id": "R5-001",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "docs/specs/02_要件/01_ワークフロー要件.md",
+      "contractId": null
+    },
+    {
+      "id": "R5-002",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "scripts/check_trace.ts",
+      "contractId": null
+    },
+    {
+      "id": "R5-003",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/scn-scope.steps.ts",
+      "contractId": null
+    },
+    {
+      "id": "R5-004",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/docs/01_開発ワークフロー.md",
+      "contractId": null
+    },
+    {
+      "id": "R5-005",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/01_システム概要/02_用語・略語.md",
+      "contractId": null
+    },
+    {
+      "id": "R6-001",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": ".agent-skill-chain/docs/01_開発ワークフロー.md",
+      "contractId": null
+    },
+    {
+      "id": "R8-001",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "src/cli-usage.ts",
+      "contractId": null
+    },
+    {
+      "id": "R9-001",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/03_アーキテクチャ/00_全体構成.md",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "claude-opus-independent-reviewer",
+    "implementer": "claude-opus-implementer-session-34e915d9",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "f3591fc96f76b523b2473e1ecdcb7f5e1f190f0b0648446de3dbfbd2c1df2d96"
+}

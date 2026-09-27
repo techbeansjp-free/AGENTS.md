@@ -1,6 +1,8 @@
 import { bindFeaturesToStepDefinitions, } from "../domain/cucumber-binding.js";
 import { deriveImpactSet, referenceNames, reviewAdjacentScope, } from "../domain/impact-set.js";
 import { semanticGraphContentHash } from "../domain/semantic-graph.js";
+import { DEFAULT_STAGING_LAYOUT, stagingLayoutFromManifestText, } from "../domain/staging-layout.js";
+import { git } from "../lib/process.js";
 import { isRecord } from "../types.js";
 import { loadTypeScriptCompiler, } from "../lib/typescript-vendor.js";
 import { buildCommitSemanticGraph } from "./repository-graph.js";
@@ -214,6 +216,20 @@ export function computeImpactSet(input) {
     const features = [...sources]
         .filter(([file]) => file.endsWith(".feature"))
         .map(([file, text]) => ({ path: file, text }));
+    /**
+     * **staging rootは差分と同じ`headSha`の版から読む。** 作業treeのpolicyを読むと、
+     * 同じcommit差分でも作業treeの状態で分類が変わり、`full`が`targeted`へ狭まりうる。
+     */
+    let stagingRootPattern;
+    try {
+        const manifest = git(["show", `${input.headSha}:.agent-skill-chain/project-policy.json`], input.root, { allowFailure: true });
+        stagingRootPattern = (manifest.status === 0
+            ? stagingLayoutFromManifestText(manifest.stdout)
+            : DEFAULT_STAGING_LAYOUT).rootPattern;
+    }
+    catch {
+        stagingRootPattern = undefined;
+    }
     return deriveImpactSet({
         baseSha: input.baseSha,
         headSha: input.headSha,
@@ -228,6 +244,7 @@ export function computeImpactSet(input) {
         })),
         featureBinding: bindFeaturesToStepDefinitions({ features, definitions }),
         scripts: packageScripts(sources),
+        stagingRootPattern,
     });
 }
 /**

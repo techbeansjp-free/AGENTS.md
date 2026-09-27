@@ -16,3 +16,9 @@ Feature: 収束済みreview sessionだけをStep 10へ記録する
     When 新しいHEADをround 2で再reviewしStep 10を再記録する
     And 新しいbindingでPR previewする
     Then PR previewは成功する
+
+  Scenario: SCN-INT-ROUNDBUDGET-001 収束後に届いた指摘を旧上限を超えてCLIで取り込み再収束する
+    Given findingなしでround 1が収束したreview sessionがある
+    When 収束後に届いた指摘の記録と是正をCLIで旧上限を超えるまで繰り返す
+    Then CLIはどのroundも件数で拒否せず記録する
+    And CLI出力は発散warningを返し最後に再収束する

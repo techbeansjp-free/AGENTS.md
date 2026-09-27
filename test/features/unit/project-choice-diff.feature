@@ -72,11 +72,6 @@ Feature: project choice差分をfield単位で分類する
     When 提案と一致する縮小を判定する
     Then 拒否診断は提案の登録先と次の操作を含む
 
-  Scenario: SCN-UNIT-CHOICE-015 提案が無い場合の分類結果が変更前と一致する
-    Given test層を削除したproject choice差分がある
-    When project choice差分をfield単位で分類する
-    Then test層の縮小は検証弱化として分類される
-
   Scenario: SCN-UNIT-CHOICE-016 対象3 field以外の弱化分類が変更前と一致する
     Given 対象3 field以外を弱化した入力の一覧がある
     When 一覧の各入力をfield単位で分類する
@@ -87,11 +82,6 @@ Feature: project choice差分をfield単位で分類する
     When 不正な提案で縮小を判定する
     Then 縮小はASC-TRUST-001で拒否される
     And 正当な提案でもraw byte列が無ければ受理されない
-
-  Scenario: SCN-UNIT-CHOICE-018 3 fieldの単調性検知が維持されている
-    Given test層を削除したproject choice差分がある
-    When project choice差分をfield単位で分類する
-    Then test層の縮小は検証弱化として分類される
 
   Scenario: SCN-UNIT-CHOICE-019 対象3 field以外を対象とする提案では受理されない
     Given 既定branch側に対象外fieldを指す縮小提案が登録されている

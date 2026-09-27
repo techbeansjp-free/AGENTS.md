@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   advanceReviewSession,
   parseReviewRoundInput,
-  REVIEW_RECOVERY_ROUND,
+  REVIEW_ROUND_RECORD_LIMIT,
   type ReviewSessionState,
 } from "../../src/domain/review-convergence.js";
 import {
@@ -425,7 +425,7 @@ Then(
   },
 );
 
-When("countedRoundsが上限を超える証跡を読む", function () {
+When("countedRoundsが記録上限を超える証跡を読む", function () {
   const evidence = reviewEvidenceFromSession(this.session);
   const tooMany = {
     ...evidence,
@@ -433,7 +433,7 @@ When("countedRoundsが上限を超える証跡を読む", function () {
       ...evidence.observed,
       session: {
         ...evidence.observed.session,
-        countedRounds: REVIEW_RECOVERY_ROUND + 1,
+        countedRounds: REVIEW_ROUND_RECORD_LIMIT + 1,
       },
     },
   };
@@ -443,8 +443,8 @@ When("countedRoundsが上限を超える証跡を読む", function () {
   ];
 });
 
-Then("round上限超過として拒否する", function () {
-  assert.match(this.errors[0]!, /countedRounds.*上限/u);
+Then("記録上限超過として拒否する", function () {
+  assert.match(this.errors[0]!, /countedRoundsが記録上限64を超えています: 65/u);
 });
 
 When("schemaVersionがv1の証跡を読む", function () {

@@ -60,11 +60,6 @@ Feature: project固有rule台帳のrepository結合契約
     When 正規floorでも提案なしとsourceなしの削除を実行する
     Then 正規floorの無承認削除はprovider呼出し前に拒否される
 
-  Scenario: SCN-INT-LEDGER-013 正規loaderのfloorと先行提案で二段階廃止を受理する
-    Given trusted fragmentとproject rule廃止提案がある
-    When 隔離Gitの固定commitからrule廃止を検証する
-    Then trustedで先行登録した廃止だけが受理されcandidate自己承認は拒否される
-
   Scenario: SCN-INT-LEDGER-014 非trusted previewとtrusted正常入力とpackage保護を維持する
     Given deliveryの正規floorと未承認削除candidateがある
     When 非trusted previewとtrusted正常入力とpackage rule弱化を実行する

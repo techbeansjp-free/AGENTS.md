@@ -234,6 +234,58 @@ When("docs\\/specs\\/guide.mdだけを変更した影響集合を導出する", 
 });
 
 When(
+  "宣言済みstaging root直下の00_要求定義.mdと.gitignoreだけを変更した影響集合を導出する",
+  function () {
+    this.impact = derive(
+      this,
+      [
+        "docs/issues/20260927_x/00_要求定義.md",
+        "docs/issues/20260927_x/.gitignore",
+      ],
+      { stagingRootPattern: "docs/issues" },
+    );
+  },
+);
+
+When(
+  "宣言済みstaging root直下の.gitignoreとsrc\\/b.tsを変更した影響集合を導出する",
+  function () {
+    this.impact = derive(
+      this,
+      ["docs/issues/20260927_x/.gitignore", "src/b.ts"],
+      { stagingRootPattern: "docs/issues" },
+    );
+  },
+);
+
+When(
+  "staging rootをtestと宣言してtest\\/steps\\/a.steps.tsだけを変更した影響集合を導出する",
+  function () {
+    this.impact = derive(this, ["test/steps/a.steps.ts"], {
+      stagingRootPattern: "test",
+    });
+  },
+);
+
+When(
+  "宣言済みstaging rootのstaging directoryより深い.gitignoreだけを変更した影響集合を導出する",
+  function () {
+    this.impact = derive(this, ["docs/issues/20260927_x/sub/.gitignore"], {
+      stagingRootPattern: "docs/issues",
+    });
+  },
+);
+
+When(
+  "staging root宣言が無いまま.gitignoreだけを変更した影響集合を導出する",
+  function () {
+    this.impact = derive(this, ["docs/issues/20260927_x/.gitignore"], {
+      stagingRootPattern: undefined,
+    });
+  },
+);
+
+When(
   "step定義が字面で読むdocs\\/read.mdだけを変更した影響集合を導出する",
   function () {
     this.impact = derive(this, ["docs/read.md"]);
@@ -326,6 +378,11 @@ Then(
 Then("影響featureは空で検査はdocs:formatとtrace:checkである", function () {
   assert.deepEqual(this.impact.features, []);
   assert.deepEqual(this.impact.checks, ["docs:format", "trace:check"]);
+});
+
+Then("影響featureは空で検査はdocs:formatだけである", function () {
+  assert.deepEqual(this.impact.features, []);
+  assert.deepEqual(this.impact.checks, ["docs:format"]);
 });
 
 Then("影響featureはtest\\/features\\/a.featureだけである", function () {
@@ -627,6 +684,44 @@ When(
     writeFiles(this.root, {
       "src/util.ts": "export const util = (): number => {\n",
     });
+  },
+);
+
+const STAGED_POLICY = `${JSON.stringify({ policy: { staging: { root: "docs/issues", tracked: true, issueBody: "pointer" } } })}\n`;
+
+When(
+  "staging宣言の無いcommitでstaging配下の.gitignoreを変更し作業treeにだけstaging宣言を置く",
+  function () {
+    this.head = commit(
+      this.root,
+      { "docs/issues/20260927_x/.gitignore": "journal/\n" },
+      "docs: staging gitignore",
+    );
+    writeFiles(this.root, {
+      ".agent-skill-chain/project-policy.json": STAGED_POLICY,
+    });
+    // commitしないがindexへは載せる（indexから読む実装も誤りとして検出する）
+    execFileSync("git", ["add", ".agent-skill-chain/project-policy.json"], {
+      cwd: this.root,
+    });
+  },
+);
+
+When(
+  "staging宣言をcommitしたうえでstaging配下の.gitignoreを再び変更する",
+  function () {
+    this.base = commit(
+      this.root,
+      { ".agent-skill-chain/project-policy.json": STAGED_POLICY },
+      "chore: declare staging",
+    );
+    this.head = commit(
+      this.root,
+      {
+        "docs/issues/20260927_x/.gitignore": "journal/\nreview-session.json\n",
+      },
+      "docs: staging gitignore again",
+    );
   },
 );
 

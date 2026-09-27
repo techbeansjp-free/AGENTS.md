@@ -23,8 +23,8 @@ function releaseInput(
   overrides: Partial<ReleasePlanInput> = {},
 ): ReleasePlanInput {
   return {
-    currentVersion: "0.3.1-beta.1",
-    requestedVersion: "0.3.1",
+    currentVersion: "0.4.1-beta.1",
+    requestedVersion: "0.4.1",
     dryRun: false,
     actor: "release-operator",
     ref: "main",
@@ -82,13 +82,13 @@ Then("検証以外のstageはdry-runを理由に無効になる", function () {
 
 Given("現在以下または同じ優先順位のversionを指定する", function () {
   this.planInputs = [
-    releaseInput({ requestedVersion: "0.3.1-beta.1" }),
-    releaseInput({ requestedVersion: "0.3.1-alpha.10" }),
+    releaseInput({ requestedVersion: "0.4.1-beta.1" }),
+    releaseInput({ requestedVersion: "0.4.1-alpha.10" }),
     releaseInput({
-      currentVersion: "0.3.1-alpha.10",
-      requestedVersion: "0.3.1-alpha.2",
+      currentVersion: "0.4.1-alpha.10",
+      requestedVersion: "0.4.1-alpha.2",
     }),
-    releaseInput({ requestedVersion: "0.3.1-beta.1+build.2" }),
+    releaseInput({ requestedVersion: "0.4.1-beta.1+build.2" }),
   ];
 });
 
@@ -105,7 +105,7 @@ Then("すべてのrelease計画はversionを根拠に拒否される", function 
 });
 
 Given("作成予定tagが既に存在する", function () {
-  this.planInput = releaseInput({ existingTags: ["v0.3.1"] });
+  this.planInput = releaseInput({ existingTags: ["v0.4.1"] });
 });
 
 Then("release計画はtag重複を根拠に拒否される", function () {
@@ -149,13 +149,13 @@ Then("すべてのrelease計画はgateを根拠に拒否される", function () 
 Given("dry-run有無のrelease入力を用意する", function () {
   this.planInputs = [
     releaseInput({
-      currentVersion: "0.3.1-alpha.2",
-      requestedVersion: "0.3.1-alpha.10",
+      currentVersion: "0.4.1-alpha.2",
+      requestedVersion: "0.4.1-alpha.10",
       dryRun: false,
     }),
     releaseInput({
-      currentVersion: "0.3.1-alpha.2",
-      requestedVersion: "0.3.1-alpha.10",
+      currentVersion: "0.4.1-alpha.2",
+      requestedVersion: "0.4.1-alpha.10",
       dryRun: true,
     }),
   ];
@@ -233,7 +233,7 @@ Then("外部更新済み状態ごとの日本語復旧手順を返す", function
 
 Given("不正なversion形式と不正なSHAの入力を用意する", function () {
   this.planInputs = [
-    releaseInput({ requestedVersion: "0.3.01" }),
+    releaseInput({ requestedVersion: "0.4.01" }),
     releaseInput({ refSha: "abc123" }),
   ];
 });

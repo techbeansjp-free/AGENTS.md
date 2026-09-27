@@ -47,6 +47,7 @@ import {
   DEPRECATED_POLICY_SCHEMA_ALIASES,
   PACKAGE_VERSION,
   SUPPORTED_POLICY_SCHEMA_VERSIONS,
+  isLegacyPackageVersion,
   isPackageVersion,
   isPolicySchemaPatchVersion,
   packageReleaseVersion,
@@ -2484,18 +2485,22 @@ Then(
     /**
      * **release番号を焼き込まない。** package.jsonのversionはreleaseに追随しない
      * sentinelであり（Issue #1184）、正本はGit tagである。ここで検証する契約は
-     * 「coreがpolicy schemaのpatch lineと一致すること」と「release番号を含まないこと」
-     * の2つである。`-beta.N`を要求すると、release追随をやめた事実とtestが矛盾する。
+     * 「coreが宣言済みのpackage release line（0.4.x）であること」と「release番号を
+     * 含まないこと」の2つである。`-beta.N`を要求すると、release追随をやめた事実と
+     * testが矛盾する。
+     *
+     * **package release lineとpolicy schema versionは別の量である**（Issue #1503）。
+     * package releaseだけを0.4.xへ進め、policy schemaは0.3.1のまま変えない。
      */
-    assert.equal(this.releaseVersion, "0.3.1");
+    assert.equal(this.releaseVersion, "0.4.4");
     /**
      * **sentinelの字面まで要求する。** `-beta.N`でないことだけを見ると、
-     * `0.3.1`のような実release versionでもscenarioが通ってしまう。
+     * `0.4.4`のような実release versionでもscenarioが通ってしまう。
      */
     assert.equal(PACKAGE_VERSION, `${this.releaseVersion}-managed-by-tag`);
     assert.equal(
       CURRENT_POLICY_SCHEMA_VERSION,
-      `agent-skill-chain/project-policy/v${this.releaseVersion}`,
+      "agent-skill-chain/project-policy/v0.3.1",
     );
     assert.deepEqual(COMPATIBLE_POLICY_SCHEMA_VERSIONS, [
       "agent-skill-chain/project-policy/v0.3.0",
@@ -2530,19 +2535,28 @@ Then(
       canonical: "agent-skill-chain/project-policy/v0.3.0",
     });
     for (const version of [
-      "0.3.0",
-      "0.3.1-beta.1",
-      "0.3.1+build.7",
-      "0.3.1-beta.1+build.7",
+      "0.4.0",
+      "0.4.1-beta.1",
+      "0.4.1+build.7",
+      "0.4.1-beta.1+build.7",
     ])
       assert.equal(isPackageVersion(version), true, version);
-    for (const version of ["0.3.01", "0.3.1-01", "0.3.1-beta..1", "0.3.1+"])
+    for (const version of ["0.4.01", "0.4.1-01", "0.4.1-beta..1", "0.4.1+"])
       assert.equal(isPackageVersion(version), false, version);
+    // 新しいpackage release versionは0.4.xだけを受理する（Issue #1503）。
+    // 0.3.xは旧releaseとしてだけ識別する。
+    for (const version of ["0.3.0", "0.3.1", "0.3.1-beta.300"]) {
+      assert.equal(isPackageVersion(version), false, version);
+      assert.equal(isLegacyPackageVersion(version), true, version);
+    }
+    for (const version of ["0.4.1", "0.3.01", "0.3.1-beta..1"])
+      assert.equal(isLegacyPackageVersion(version), false, version);
+    // policy schema versionは0.3.xのままであり、0.4.xを受理しない。
     for (const version of ["0.3.0", "0.3.1"])
       assert.equal(isPolicySchemaPatchVersion(version), true, version);
-    for (const version of ["0.3.01", "0.3.1-beta.1", "0.3"])
+    for (const version of ["0.3.01", "0.3.1-beta.1", "0.3", "0.4.4"])
       assert.equal(isPolicySchemaPatchVersion(version), false, version);
-    assert.equal(packageReleaseVersion("0.3.1+build.7"), "0.3.1");
+    assert.equal(packageReleaseVersion("0.4.1+build.7"), "0.4.1");
   },
 );
 
@@ -2641,7 +2655,7 @@ const POST_PR_INTAKE_MARKERS = [
   "同じPRへ取り込む",
   "01_開発ワークフロー.md",
   "--post-terminal-intake",
-  "budget-exhausted",
+  "round数を分離・停止の理由にしない",
 ] as const;
 
 /** 規範文書と正反対になる表現。 */

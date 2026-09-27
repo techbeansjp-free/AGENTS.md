@@ -131,16 +131,6 @@ Feature: Issue stagingとsystem specificationを安全に統合する
     When 変更履歴の用語ID列と台帳の突合を検証する
     Then 未登録の名指しと範囲記法だけが拒否され逆方向は要求されない
 
-  Scenario: SCN-INT-SPEC-014 用語ID列の範囲記法を拒否する
-    Given 必須specを持つCLI projectがある
-    When 変更履歴の用語ID列と台帳の突合を検証する
-    Then 未登録の名指しと範囲記法だけが拒否され逆方向は要求されない
-
-  Scenario: SCN-INT-SPEC-015 台帳にあり変更履歴に無い用語を拒否しない
-    Given 必須specを持つCLI projectがある
-    When 変更履歴の用語ID列と台帳の突合を検証する
-    Then 未登録の名指しと範囲記法だけが拒否され逆方向は要求されない
-
   Scenario Outline: SCN-INT-SPEC-016 生成した仕様は業務単位の設計契約の記入欄を保持する
     Given 空の新規project directoryがある
     When <種別> project bootstrapをapplyする

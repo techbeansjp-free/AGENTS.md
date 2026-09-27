@@ -25,6 +25,33 @@ Feature: 実Git差分から影響集合を一度だけ導出し影響を証明�
     Then 影響集合はtargetedで理由を持たない
     And 影響featureは空で検査はdocs:formatとtrace:checkである
 
+  Scenario: SCN-UNIT-IMPACT-016 宣言済みstaging root直下の計画文書と.gitignoreだけの差分はtargetedになる
+    Given import鎖と追跡表とstep定義を持つ意味Graphがある
+    When 宣言済みstaging root直下の00_要求定義.mdと.gitignoreだけを変更した影響集合を導出する
+    Then 影響集合はtargetedで理由を持たない
+    And 影響featureは空で検査はdocs:formatだけである
+
+  Scenario: SCN-UNIT-IMPACT-017 staging root直下でも製品codeを含む差分は通常どおり分類する
+    Given import鎖と追跡表とstep定義を持つ意味Graphがある
+    When 宣言済みstaging root直下の.gitignoreとsrc/b.tsを変更した影響集合を導出する
+    Then 影響集合はtargetedで理由を持たない
+    And 影響featureはstep定義経由と追跡表経由のfeatureを含み無関係featureを含まない
+
+  Scenario: SCN-UNIT-IMPACT-018 staging root宣言が無ければ.gitignoreは従来どおり全体検証へ倒れる
+    Given import鎖と追跡表とstep定義を持つ意味Graphがある
+    When staging root宣言が無いまま.gitignoreだけを変更した影響集合を導出する
+    Then 影響集合はfullで理由に"影響を導出できない種別のfile"を含む
+
+  Scenario: SCN-UNIT-IMPACT-019 staging root配下でも計画文書と.gitignore以外は計画成果物に分類しない
+    Given import鎖と追跡表とstep定義を持つ意味Graphがある
+    When staging rootをtestと宣言してtest/steps/a.steps.tsだけを変更した影響集合を導出する
+    Then 影響集合はfullで理由に"全体に効く設定・基盤が変更されました"を含む
+
+  Scenario: SCN-UNIT-IMPACT-020 staging directoryより深い.gitignoreは計画成果物に分類しない
+    Given import鎖と追跡表とstep定義を持つ意味Graphがある
+    When 宣言済みstaging rootのstaging directoryより深い.gitignoreだけを変更した影響集合を導出する
+    Then 影響集合はfullで理由に"影響を導出できない種別のfile"を含む
+
   Scenario: SCN-UNIT-IMPACT-005 step定義が字面で読む文書の変更はそのstep定義を使うfeatureを選ぶ
     Given import鎖と追跡表とstep定義を持つ意味Graphがある
     When step定義が字面で読むdocs/read.mdだけを変更した影響集合を導出する

@@ -584,23 +584,18 @@ Then("空差分の診断はsession確認を案内する", function () {
 });
 
 Given("非収束statusごとの診断がある", function () {
-  this.reasonSets = [
-    [unconvergedReviewSessionDiagnostic("active")],
-    [unconvergedReviewSessionDiagnostic("budget-exhausted")],
-  ];
+  this.reasonSets = [[unconvergedReviewSessionDiagnostic("active")]];
 });
 
 When("status別の診断を比較する", function () {
-  assert.equal(this.reasonSets.length, 2);
+  assert.equal(this.reasonSets.length, 1);
 });
 
-Then("activeとbudget-exhaustedでownerの確認対象が異なる", function () {
+Then("非収束の診断はHEAD対応の確認を案内する", function () {
   const active = this.reasonSets[0]?.[0] ?? "";
-  const exhausted = this.reasonSets[1]?.[0] ?? "";
+  assert.match(active, /status=active/u);
   assert.match(active, /candidateHeadSha/u);
   assert.match(active, /risk受容へ進まず/u);
-  assert.match(exhausted, /既知の未解決finding/u);
-  assert.notEqual(active, exhausted);
 });
 
 When("--headを基点SHAにしてreview round --initを実行する", async function () {
@@ -1078,81 +1073,94 @@ Then("Darwinではsignalと未sanitizeを診断する", function () {
   assert.equal(fs.readFileSync(this.outFile, "utf8"), "");
 });
 
-Given("budget-exhaustedのsessionを持つstagingがある", function () {
-  createFixture(this);
-  const observed = observeReviewDiff(this.root, this.base, this.head);
-  const anchor = {
-    scopeIds: ["SCOPE-001"],
-    acceptanceCriteriaIds: ["AC-001"],
-    invariantIds: [],
-    diffBaseSha: this.base,
-    initialHeadSha: this.head,
-    initialDiffDigest: observed.digest,
-  };
-  const blocker = (status: string) => ({
-    id: "H-001",
-    severity: "High",
-    status,
-    source: "review",
-    relation: "acceptance-violation",
-    evidence: "未解決のまま6 roundを使い切る",
-    path: reviewedPath,
-    contractId: "AC-001",
-    causedByFindingId: null,
-    decisionRef: null,
-  });
-  this.session = recordReviewRound({
-    staging: this.staging,
-    round: parseReviewRoundInput({
-      round: 1,
-      previousRoundDigest: null,
-      anchor,
-      candidateHeadSha: this.head,
-      focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
-      findings: [blocker("valid")],
-    }),
-  });
-  for (const round of [2, 3, 4, 5, 6]) {
-    this.head = commitFile(
-      this.root,
-      reviewedPath,
-      `export const reviewed = ${round};\n`,
-      `fix: attempt ${round}`,
-    );
+Given(
+  "旧形式のbudget-exhaustedを保存したsessionを持つstagingがある",
+  function () {
+    createFixture(this);
+    const observed = observeReviewDiff(this.root, this.base, this.head);
+    const anchor = {
+      scopeIds: ["SCOPE-001"],
+      acceptanceCriteriaIds: ["AC-001"],
+      invariantIds: [],
+      diffBaseSha: this.base,
+      initialHeadSha: this.head,
+      initialDiffDigest: observed.digest,
+    };
+    const blocker = (status: string) => ({
+      id: "H-001",
+      severity: "High",
+      status,
+      source: "review",
+      relation: "acceptance-violation",
+      evidence: "未解決のまま6 roundを使い切る",
+      path: reviewedPath,
+      contractId: "AC-001",
+      causedByFindingId: null,
+      decisionRef: null,
+    });
     this.session = recordReviewRound({
       staging: this.staging,
       round: parseReviewRoundInput({
-        round,
-        previousRoundDigest: this.session.latestRoundDigest,
+        round: 1,
+        previousRoundDigest: null,
         anchor,
         candidateHeadSha: this.head,
-        focus: {
-          previousBlocking: ["H-001"],
-          fixedDiff: [reviewedPath],
-          adjacentScope: [],
-        },
+        focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
         findings: [blocker("valid")],
       }),
     });
-  }
-  assert.equal(this.session.status, "budget-exhausted");
-  this.head = commitFile(
-    this.root,
-    reviewedPath,
-    "export const reviewed = 9;\n",
-    "fix: late",
+    for (const round of [2, 3, 4, 5, 6]) {
+      this.head = commitFile(
+        this.root,
+        reviewedPath,
+        `export const reviewed = ${round};\n`,
+        `fix: attempt ${round}`,
+      );
+      this.session = recordReviewRound({
+        staging: this.staging,
+        round: parseReviewRoundInput({
+          round,
+          previousRoundDigest: this.session.latestRoundDigest,
+          anchor,
+          candidateHeadSha: this.head,
+          focus: {
+            previousBlocking: ["H-001"],
+            fixedDiff: [reviewedPath],
+            adjacentScope: [],
+          },
+          findings: [blocker("valid")],
+        }),
+      });
+    }
+    assert.equal(this.session.status, "active");
+    // Issue #1503より前の上限到達sessionを再現する
+    const sessionFile = path.join(this.staging, "review-session.json");
+    const stored = JSON.parse(fs.readFileSync(sessionFile, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    fs.writeFileSync(
+      sessionFile,
+      `${JSON.stringify({ ...stored, status: "budget-exhausted" })}\n`,
+    );
+    refreshStoredStagingDigest(this.staging);
+    this.head = commitFile(
+      this.root,
+      reviewedPath,
+      "export const reviewed = 9;\n",
+      "fix: late",
+    );
+  },
+);
+
+Then("旧形式sessionの次roundの雛形が書かれる", function () {
+  assert.equal(this.cliError, undefined, this.cliOutput);
+  const draft = parseReviewRoundInput(
+    JSON.parse(fs.readFileSync(this.outFile, "utf8")),
   );
-});
-
-Given("HEADをbudget-exhausted sessionのcandidateへ戻す", function () {
-  this.head = this.session.latestCandidateHeadSha;
-  execFileSync("git", ["reset", "--hard", this.head], { cwd: this.root });
-});
-
-Then("budget-exhaustedのerrorで拒否し雛形を書かない", function () {
-  assert.ok(this.cliError, this.cliOutput);
-  assert.match(this.cliError.message, /budget-exhausted/u);
-  assert.equal(fs.existsSync(this.outFile), false);
+  assert.equal(draft.round, 7);
+  assert.equal(draft.candidateHeadSha, this.head);
+  assert.deepEqual(draft.focus.previousBlocking, ["H-001"]);
 });
 
 When(

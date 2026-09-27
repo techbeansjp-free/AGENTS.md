@@ -34,3 +34,12 @@ Feature: 影響集合をreview焦点とreviewer文脈と検証選択で共有す
     When src/lib.tsを変更したcommitを作りworktreeへ未commit変更を残す
     And 補助reviewの差分文脈を収集する
     Then 補助reviewの関連fileは影響集合の隣接範囲と一致する
+
+  Scenario: SCN-INT-IMPACT-006 staging rootは作業treeではなくhead commitのproject policyから読む
+    Given importし合うTypeScriptとstep定義とfeatureと追跡表を持つGit repositoryがある
+    When staging宣言の無いcommitでstaging配下の.gitignoreを変更し作業treeにだけstaging宣言を置く
+    And 2 commit間の影響集合をGitから導出する
+    Then 影響集合はfullで理由に"影響を導出できない種別のfile"を含む
+    When staging宣言をcommitしたうえでstaging配下の.gitignoreを再び変更する
+    And 2 commit間の影響集合をGitから導出する
+    Then 影響集合はtargetedで理由を持たない

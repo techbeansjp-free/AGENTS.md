@@ -333,11 +333,6 @@ export function buildReviewRoundDraft(input: {
       "round 1は固定initial HEADの全scope reviewである。findingsへreviewの指摘を書く",
     );
   } else {
-    /** budget枯渇はHEAD差分の有無より先に固有の停止理由を返す。 */
-    if (previous.status === "budget-exhausted")
-      throw new Error(
-        "review round --init: sessionはbudget-exhaustedです。取り直しroundは開けません。follow-up Issueの新しいstagingで工程を通してください",
-      );
     if (
       input.baseSha !== undefined ||
       input.scopeIds ||
@@ -471,16 +466,16 @@ export function buildReviewRoundDraft(input: {
  *
  * 1. `candidate`がmerge commitであり、**第1親が前roundのcandidate**である
  * 2. **第2親がremote既定branch tipのancestor**である。任意branchの取り込みで
- *    予算を回避させない
+ *    数えるroundを回避させない
  * 3. `git merge-tree --write-tree <第1親> <第2親>`が返すtreeが、**merge commitの
  *    tree自身と一致する**
  *
  * 条件3が成り立つとき、merge commitのtreeは両親から完全に決まる。**除外された
  * roundを通して実装を1 byteも持ち込めない。** 衝突解決はこの条件を満たさないため
- * 予算へ数える側に落ちる。衝突解決は実装者が書いた内容であり独立reviewの対象である。
+ * 数えるroundに含める側に落ちる。衝突解決は実装者が書いた内容であり独立reviewの対象である。
  *
  * **観測できない場合はfail-closedで偽を返す。** remoteを読めない、`merge-tree`が
- * 使えない（git 2.38未満）などは「追随だと確認できなかった」であり、予算へ数える。
+ * 使えない（git 2.38未満）などは「追随だと確認できなかった」であり、数えるroundに含める。
  */
 /**
  * **round記録の前にstaging digestを再固定する。**
@@ -723,7 +718,7 @@ export function previewReviewRound(input: {
     /**
      * **`followOnly`は申告ではなくGit観測から導出する**（Issue #1287）。
      *
-     * 呼び出し側が旗を立てるだけで予算を回避できてはならない。観測が条件を
+     * 呼び出し側が旗を立てるだけで数えるroundを回避できてはならない。観測が条件を
      * 満たさない申告は、理由を名指しして拒否する。
      */
     if (

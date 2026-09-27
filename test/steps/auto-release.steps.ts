@@ -27,7 +27,7 @@ function autoReleaseInput(
   overrides: Partial<AutoReleaseInput> = {},
 ): AutoReleaseInput {
   return {
-    currentVersion: "0.3.1-beta.1",
+    currentVersion: "0.4.1-beta.1",
     existingTags: [],
     distributionDigest: DIGEST_A,
     previousDistributionDigest: DIGEST_B,
@@ -170,7 +170,7 @@ Given(
   "現在tagが存在して配布digestが一致する自動release入力がある",
   function () {
     this.autoInput = autoReleaseInput({
-      existingTags: ["v0.3.1-beta.1"],
+      existingTags: ["v0.4.1-beta.1"],
       previousDistributionDigest: DIGEST_A,
     });
   },
@@ -178,7 +178,7 @@ Given(
 
 Given("skip ciを含む自動release入力がある", function () {
   this.autoInput = autoReleaseInput({
-    existingTags: ["v0.3.1-beta.1"],
+    existingTags: ["v0.4.1-beta.1"],
     headCommitMessage: "chore: bump version [skip ci]",
   });
 });
@@ -188,22 +188,22 @@ Given("既定branch以外の自動release入力がある", function () {
 });
 
 Given("現在tagが存在して配布digestが異なる自動release入力がある", function () {
-  this.autoInput = autoReleaseInput({ existingTags: ["v0.3.1-beta.1"] });
+  this.autoInput = autoReleaseInput({ existingTags: ["v0.4.1-beta.1"] });
 });
 
 Given("prereleaseと通常versionと解決不能versionの衝突入力がある", function () {
   this.autoInputs = [
     autoReleaseInput({
-      currentVersion: "0.3.1-beta.9",
-      existingTags: ["v0.3.1-beta.9"],
+      currentVersion: "0.4.1-beta.9",
+      existingTags: ["v0.4.1-beta.9"],
     }),
     autoReleaseInput({
-      currentVersion: "0.3.9",
-      existingTags: ["v0.3.9"],
+      currentVersion: "0.4.9",
+      existingTags: ["v0.4.9"],
     }),
     autoReleaseInput({
-      currentVersion: "0.3.1-beta",
-      existingTags: ["v0.3.1-beta"],
+      currentVersion: "0.4.1-beta",
+      existingTags: ["v0.4.1-beta"],
     }),
   ];
 });
@@ -218,8 +218,8 @@ When("衝突した自動release計画を作成する", function () {
 
 Then("自動release計画は現在versionのreleaseへ進む", function () {
   assert.equal(this.autoPlan?.state, "release");
-  assert.equal(this.autoPlan.version, "0.3.1-beta.1");
-  assert.equal(this.autoPlan.tag, "v0.3.1-beta.1");
+  assert.equal(this.autoPlan.version, "0.4.1-beta.1");
+  assert.equal(this.autoPlan.tag, "v0.4.1-beta.1");
   assert.equal(this.autoPlan.needsVersionBump, false);
 });
 
@@ -240,8 +240,8 @@ Then("自動release計画はbranch不一致を理由に停止する", function (
 
 Then("自動release計画は次のprerelease tagでreleaseする", function () {
   assert.equal(this.autoPlan?.state, "release");
-  assert.equal(this.autoPlan.version, "0.3.1-beta.2");
-  assert.equal(this.autoPlan.tag, "v0.3.1-beta.2");
+  assert.equal(this.autoPlan.version, "0.4.1-beta.2");
+  assert.equal(this.autoPlan.tag, "v0.4.1-beta.2");
   assert.equal(this.autoPlan.needsVersionBump, false);
 });
 
@@ -251,14 +251,14 @@ Given(
     this.entrypointInputs = [
       autoReleaseInput(),
       autoReleaseInput({
-        existingTags: ["v0.3.1-beta.1"],
+        existingTags: ["v0.4.1-beta.1"],
         previousDistributionDigest: DIGEST_A,
       }),
       autoReleaseInput({
-        existingTags: ["v0.3.1-beta.1"],
+        existingTags: ["v0.4.1-beta.1"],
         headCommitMessage: "version bump [skip ci]",
       }),
-      autoReleaseInput({ existingTags: ["v0.3.1-beta.1"] }),
+      autoReleaseInput({ existingTags: ["v0.4.1-beta.1"] }),
     ];
   },
 );
@@ -295,11 +295,15 @@ Then("entrypointはreleaseと停止を外部更新なしで返す", function () 
   );
   assert.match(this.entrypointPlans[1]?.reasons.join(" ") ?? "", /配布物/u);
   assert.match(this.entrypointPlans[2]?.reasons.join(" ") ?? "", /再帰/u);
-  assert.equal(this.entrypointPlans[3]?.version, "0.3.1-beta.2");
+  assert.equal(this.entrypointPlans[3]?.version, "0.4.1-beta.2");
 });
 
 Given("現在versionを省略した自動release entrypoint入力がある", function () {
-  this.autoInput = autoReleaseInput({ currentVersion: PACKAGE_VERSION });
+  // 0.4.xを切る前の実repositoryと同じく、旧系列のtagだけがある
+  this.autoInput = autoReleaseInput({
+    currentVersion: PACKAGE_VERSION,
+    existingTags: ["v0.3.1-beta.300", "v0.3.1-beta.301"],
+  });
 });
 
 When("現在versionを省略して自動release entrypointを実行する", function () {
@@ -328,18 +332,16 @@ When("現在versionを省略して自動release entrypointを実行する", func
 Then("entrypointは既存tagから現在versionを導く", function () {
   /**
    * **package.jsonのversionを使わない。** sentinelになったため、正本は既存tagである
-   * （Issue #1184）。tagが1件も無い入力では初期値の`0.3.0-0`から次のtagを導く。
+   * （Issue #1184）。0.4.xのtagが無い入力ではrelease済みとみなすv0.4.3の次を
+   * 導く（Issue #1503、FR-18）。
    */
   assert.equal(this.fallbackEntrypointPlan?.state, "release");
-  assert.notEqual(this.fallbackEntrypointPlan.version, PACKAGE_VERSION);
-  assert.equal(
-    this.fallbackEntrypointPlan.tag,
-    `v${this.fallbackEntrypointPlan.version}`,
-  );
+  assert.equal(this.fallbackEntrypointPlan.version, "0.4.4");
+  assert.equal(this.fallbackEntrypointPlan.tag, "v0.4.4");
 });
 
 Given("現在tagが存在する自動release entrypoint入力がある", function () {
-  this.autoInput = autoReleaseInput({ existingTags: ["v0.3.1-beta.1"] });
+  this.autoInput = autoReleaseInput({ existingTags: ["v0.4.1-beta.1"] });
 });
 
 When(
@@ -385,16 +387,16 @@ Then("欠落した現在digestは停止し壊れた前回digestはfail-openす�
 });
 
 Then(
-  "解決可能なversionは0.3.x内で次tagへ進み解決不能なversionは停止する",
+  "解決可能なversionは0.4.x内で次tagへ進み解決不能なversionは停止する",
   function () {
     assert.equal(this.autoPlans.length, 3);
-    assert.equal(this.autoPlans[0]?.version, "0.3.1-beta.10");
-    assert.equal(this.autoPlans[1]?.version, "0.3.10");
+    assert.equal(this.autoPlans[0]?.version, "0.4.1-beta.10");
+    assert.equal(this.autoPlans[1]?.version, "0.4.10");
     for (const plan of this.autoPlans.slice(0, 2)) {
       assert.equal(plan.state, "release");
       assert.equal(plan.needsVersionBump, false);
       assert.equal(isPackageVersion(plan.version), true);
-      assert.match(plan.version, /^0\.3\./u);
+      assert.match(plan.version, /^0\.4\./u);
     }
     assert.equal(this.autoPlans[2]?.state, "skipped");
     assert.match(this.autoPlans[2]?.reasons.join(" ") ?? "", /bump/u);
@@ -547,28 +549,28 @@ Given("currentTagが未存在で現在の配布digestが空の入力がある", 
 
 Given("現在tagが存在して前回配布digestが空の入力がある", function () {
   this.autoInput = autoReleaseInput({
-    existingTags: ["v0.3.1-beta.1"],
+    existingTags: ["v0.4.1-beta.1"],
     previousDistributionDigest: "",
   });
 });
 
 Given("現在tagが存在して現在の配布digestが空の入力がある", function () {
   this.autoInput = autoReleaseInput({
-    existingTags: ["v0.3.1-beta.1"],
+    existingTags: ["v0.4.1-beta.1"],
     distributionDigest: "",
   });
 });
 
 Given("現在tagが存在して現在の配布digest形式が不正な入力がある", function () {
   this.autoInput = autoReleaseInput({
-    existingTags: ["v0.3.1-beta.1"],
+    existingTags: ["v0.4.1-beta.1"],
     distributionDigest: "not-a-digest",
   });
 });
 
 Given("skip ciと不正な現在配布digestを含む自動release入力がある", function () {
   this.autoInput = autoReleaseInput({
-    existingTags: ["v0.3.1-beta.1"],
+    existingTags: ["v0.4.1-beta.1"],
     distributionDigest: "not-a-digest",
     headCommitMessage: "chore: bump [skip ci]",
   });
@@ -582,7 +584,7 @@ Then("自動release計画は前回tagを含む配布物同一理由で停止す�
   assert.equal(this.autoPlan?.state, "skipped");
   assert.match(
     this.autoPlan.reasons.join(" "),
-    /配布物.*v0\.3\.1-beta\.1.*同一/u,
+    /配布物.*v0\.4\.1-beta\.1.*同一/u,
   );
 });
 
@@ -1029,9 +1031,9 @@ interface BumpFixture {
   racePath?: string;
 }
 
-/** `isPackageVersion`は`0.3.x`系だけを受理するため、fixtureも同じ体系で採番する。 */
-const FIXTURE_BASE_VERSION = "0.3.1-beta.1";
-const FIXTURE_TARGET_VERSION = "0.3.1-beta.2";
+/** `isPackageVersion`は`0.4.x`系だけを受理するため、fixtureも同じ体系で採番する。 */
+const FIXTURE_BASE_VERSION = "0.4.1-beta.1";
+const FIXTURE_TARGET_VERSION = "0.4.1-beta.2";
 
 function fixtureGit(args: string[], cwd: string): string {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" });
@@ -1420,17 +1422,17 @@ Then(
     assert.equal(
       canonicalBumpDiff(
         {
-          manifest: JSON.stringify({ name: "bump-fixture", version: "0.3.1" }),
-          lockfile: canonicalLock("0.3.1"),
+          manifest: JSON.stringify({ name: "bump-fixture", version: "0.4.1" }),
+          lockfile: canonicalLock("0.4.1"),
         },
         {
-          manifest: JSON.stringify({ name: "bump-fixture", version: "0.3.2" }),
+          manifest: JSON.stringify({ name: "bump-fixture", version: "0.4.2" }),
           lockfile: canonicalLock("9.9.9").replace(
             '"version": "9.9.9",\n  "lockfileVersion"',
             '"version": "9.9.9",\n  "lockfileVersion"',
           ),
         },
-        "0.3.2",
+        "0.4.2",
       ),
       false,
       "変更後の3 fieldが目標versionでない候補を通しました",
@@ -1443,14 +1445,14 @@ Then(
     assert.equal(
       canonicalBumpDiff(
         {
-          manifest: JSON.stringify({ name: "bump-fixture", version: "0.3.1" }),
-          lockfile: canonicalLock("0.3.1"),
+          manifest: JSON.stringify({ name: "bump-fixture", version: "0.4.1" }),
+          lockfile: canonicalLock("0.4.1"),
         },
         {
-          manifest: `{"name":"bump-fixture","__\\u0070roto__":{"x":1},"version":"0.3.2"}`,
-          lockfile: canonicalLock("0.3.2"),
+          manifest: `{"name":"bump-fixture","__\\u0070roto__":{"x":1},"version":"0.4.2"}`,
+          lockfile: canonicalLock("0.4.2"),
         },
-        "0.3.2",
+        "0.4.2",
       ),
       false,
       "escape表記の__proto__ keyを通しました",
@@ -1461,19 +1463,19 @@ Then(
           manifest: JSON.stringify({
             name: "bump-fixture",
             description: '"__proto__": はここでは値である',
-            version: "0.3.1",
+            version: "0.4.1",
           }),
-          lockfile: canonicalLock("0.3.1"),
+          lockfile: canonicalLock("0.4.1"),
         },
         {
           manifest: JSON.stringify({
             name: "bump-fixture",
             description: '"__proto__": はここでは値である',
-            version: "0.3.2",
+            version: "0.4.2",
           }),
-          lockfile: canonicalLock("0.3.2"),
+          lockfile: canonicalLock("0.4.2"),
         },
-        "0.3.2",
+        "0.4.2",
       ),
       true,
       "値の中の断片をkeyと誤認しました",

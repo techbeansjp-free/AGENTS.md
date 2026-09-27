@@ -8,8 +8,11 @@ import { isStagingLifecycleScanPath } from "../src/domain/staging.js";
 import {
   matchesStagingRoot,
   readStagingLayout,
+  stagingLayoutFromManifestText,
+  TRACKED_STAGING_GITIGNORE,
 } from "../src/domain/staging-layout.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
+import { git } from "../src/lib/process.js";
 
 function walkFiles(
   directory: string,
@@ -790,6 +793,53 @@ export function checkSpecNormalization(
       )
     );
   };
+
+  /**
+   * **宣言を取り消した後も、かつての版管理下stagingを除外し続ける**（Issue #1503）。
+   * 現在のpolicyだけを見ると、merge済みのstaging文書が所定location外として再浮上する。
+   * かつて`tracked=true`で宣言したstaging rootをproject policyのGit履歴から集める。
+   * **除外はこのrootの直下にあるstagingだけに限る。** 固定内容の`.gitignore`と
+   * `00_要求定義.md`を置くだけで任意のdirectoryを検査から外せないようにする。
+   * 履歴を読めない場合は除外しない（違反を報告する側へ倒す）。
+   */
+  const formerlyTrackedRoots = new Set<string>();
+  const policyFile = ".agent-skill-chain/project-policy.json";
+  const history = git(["log", "--format=%H", "--", policyFile], root, {
+    allowFailure: true,
+  });
+  if (history.status === 0)
+    for (const commit of history.stdout.split("\n").filter(Boolean)) {
+      const shown = git(["show", `${commit}:${policyFile}`], root, {
+        allowFailure: true,
+      });
+      if (shown.status !== 0) continue;
+      try {
+        const layout = stagingLayoutFromManifestText(shown.stdout);
+        if (layout.tracked) formerlyTrackedRoots.add(layout.rootPattern);
+      } catch {
+        continue;
+      }
+    }
+  const isFormerlyTrackedStagingPath = (relative: string): boolean => {
+    const stagingDirectory = path.dirname(relative);
+    const parent = path.dirname(stagingDirectory);
+    if (
+      ![...formerlyTrackedRoots].some((pattern) =>
+        matchesStagingRoot(pattern, parent),
+      )
+    )
+      return false;
+    const directory = path.join(root, stagingDirectory);
+    try {
+      return (
+        fs.readFileSync(path.join(directory, ".gitignore"), "utf8") ===
+          TRACKED_STAGING_GITIGNORE &&
+        fs.statSync(path.join(directory, "00_要求定義.md")).isFile()
+      );
+    } catch {
+      return false;
+    }
+  };
   const scenarioDefinitionFiles = walkRepositoryFiles(
     root,
     (file) => file.endsWith(".md") || file.endsWith(".feature"),
@@ -807,6 +857,7 @@ export function checkSpecNormalization(
      */
     if (isStagingLifecycleScanPath(relative)) continue;
     if (isDeclaredStagingPath(relative)) continue;
+    if (isFormerlyTrackedStagingPath(relative)) continue;
     if (relative.startsWith("test/features/") && file.endsWith(".feature"))
       continue;
     const lines = fs.readFileSync(file, "utf8").split(/\r?\n/u);

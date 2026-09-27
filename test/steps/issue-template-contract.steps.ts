@@ -16,7 +16,11 @@ import {
   validatePullRequestBody,
   type IssueValidationStage,
 } from "../../src/domain/issue.js";
-import { buildReviewProgressInventory } from "../../src/domain/review-progress.js";
+import {
+  buildReviewProgressInventory,
+  PROGRESS_START,
+  PROGRESS_END,
+} from "../../src/domain/review-progress.js";
 import {
   buildReviewRoundDraft,
   previewReviewRound,
@@ -291,6 +295,8 @@ Given(/^validなquick Issueの本文に(.+)がある$/u, function (kind: string)
       "\nScenario Outline: SCN-FIXTURE-ISSUE-002 入力を検証する\n  Given <parameter>を受け取る\n  Then 正常に扱う\n\n  Examples:\n    | parameter |\n    | value |\n",
     テンプレート由来のplaceholder:
       "\n件名は（人が識別できる件名）のままである。\n",
+    "対象・変更・理由を含む説明文":
+      "\n他の文書では、変更点を（対象・変更・理由）の3項目で説明している。\n",
     placeholder6件: "\n未解決は<a>と<b>と<e>と{c}と{d}と{f}である。\n",
     placeholder5件: "\n未解決は<a>と<b>と<e>と{c}と{d}である。\n",
     templateのラベル行:
@@ -374,18 +380,12 @@ Then(
 );
 
 Given("出荷03のprogress markerを保持した記入済みfull Issueがある", function () {
+  // 03 templateは#1503（scope A3）で既定のprogress表を除いた。record layer
+  // （TERM-ASC-126）自体は存続する任意機能であり、projectがmarkerを自分で
+  // 追記すれば従来どおり成立する。ここではその「project追加marker」を、
+  // 出荷値のPROGRESS_START/PROGRESS_ENDから直接組み立てて検証する。
   this.issuePath = createIssue(this, "full");
-  const template = fs.readFileSync(
-    path.join(templateDirectory, "03_実装計画.md"),
-    "utf8",
-  );
-  const markers = template
-    .split("\n")
-    .filter((line) => line.startsWith("<!-- asc:parallel-progress:"));
-  assert.deepEqual(markers, [
-    "<!-- asc:parallel-progress:start -->",
-    "<!-- asc:parallel-progress:end -->",
-  ]);
+  const markers = [PROGRESS_START, PROGRESS_END];
   this.planBeforeValidation = `# 記入済み実装計画\n\n開発考慮事項の適用判定は00_要求定義.md §6.1と同じ\n\n${markers[0]}\n| task | 状態 |\n|---|---|\n| T01 | 完了 |\n${markers[1]}\n`;
   fs.writeFileSync(
     path.join(this.issuePath, "03_実装計画.md"),

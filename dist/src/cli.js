@@ -11,7 +11,7 @@ import { createIssueStaging, buildIssueSyncBody, assertStagingSyncTarget, issueB
 import { parsePocDeclaration } from "./domain/workflow.js";
 import { bootstrapProject, validateSpecs, } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
-import { parseReviewRoundInput } from "./domain/review-convergence.js";
+import { parseReviewRoundInput, reviewDivergence, } from "./domain/review-convergence.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
 import { parseReviewEvidence, } from "./domain/review-evidence.js";
 import { exportReviewEvidence, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
@@ -5677,7 +5677,7 @@ export async function main(argv, dependencies = {}) {
         const state = apply
             ? recordReviewRound({ staging, round })
             : previewReviewRound({ staging, round });
-        print({ applied: apply, ...state });
+        print({ applied: apply, ...state, divergence: reviewDivergence(state) });
         return 0;
     }
     if (command === "review" && subcommand === "progress") {

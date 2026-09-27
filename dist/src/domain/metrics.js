@@ -207,7 +207,7 @@ export function computeStepDurationsMs(entries) {
 }
 /**
  * FR-1482-02。`countedRounds`（`src/domain/review-convergence.ts`）をそのまま再利用する。
- * `followOnly`・`recordLayerOnly`のroundは予算に数えないという既存契約と同じ定義を使う。
+ * `followOnly`・`recordLayerOnly`のroundは数えるroundに含めないという既存契約と同じ定義を使う。
  */
 export function computeReviewRounds(state) {
     return countedRounds(state);
