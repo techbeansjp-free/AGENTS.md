@@ -2348,8 +2348,8 @@ interface DeliveryProviderControl {
    * `"cross-repo-same-number"`は番号だけcanonicalと同じ`other/repo#877`を足す。
    * `"url-canonical-only"`は canonical Issueの参照をURL形へ置き換え、
    * `"url-canonical-duplicate"`は`#877`を残したままURL形の877を足す。
-   * code境界（R6）: 編集後の本文はcode領域を除かずに走査するため、code内・code判定の
-   * 境界にある外部closing参照はすべて拒否する。`"indented-fence-other"`は4スペース字下げの
+   * code境界（AMD-003）: canonical以外への終端keyword参照はcode領域を除かずに拒否するため、
+   * code内・code判定の境界にある外部closing参照はすべて拒否する。`"indented-fence-other"`は4スペース字下げの
    * 疑似fenceの後、`"fenced-code-other"`は正規fence内、`"info-backtick-fence-other"`は
    * info stringにbacktickを含む疑似fenceの後、`"list-unclosed-fence-other"`はlist内の
    * 閉じないfenceの後に外部参照を足す。
@@ -6164,8 +6164,8 @@ if (exact(["auth", "status"])) {
       }
 
       /**
-       * **編集後の本文はcode領域を除かずに走査する**（R6）。code判定の誤り・境界を
-       * 突く形も、正規のcode内も、canonical以外への終端keyword参照は拒否する。
+       * **canonical以外への終端keyword参照はcode領域を除かずに拒否する**（AMD-003）。
+       * code判定の誤り・境界を突く形も、正規のcode内も拒否する。
        */
       for (const edit of [
         "indented-fence-other",
@@ -6180,7 +6180,7 @@ if (exact(["auth", "status"])) {
         assert.notEqual(rejected.status, 0, `${edit}: mergeを受理しました`);
         assert.match(
           rejected.stdout + rejected.stderr,
-          /PR作成後に編集した本文は、code内を含めcanonical Issue以外への終端keyword参照を持てません/u,
+          /PR本文は、code内を含めcanonical Issue以外への終端keyword参照を持てません: other\/repo#9/u,
           `${edit}: ${rejected.stdout}${rejected.stderr}`,
         );
         assert.equal(
@@ -6191,8 +6191,8 @@ if (exact(["auth", "status"])) {
       }
 
       /**
-       * **未編集の本文は従来どおり**（R6）。作成時にcode内だけへ置いた外部参照は
-       * 作成時検査（SCN-INT-PRBODY-009）が終端参照としないため、未編集ならmergeできる。
+       * **作成時の本文も同じ規則で検査する**（AMD-003）。code内だけへ置いた外部参照も
+       * `pr create`がprovider副作用より前に拒否し、固定後の照合と判定を揃える。
        */
       {
         const prepared = prepareDeliveryCli(this);
@@ -6201,12 +6201,19 @@ if (exact(["auth", "status"])) {
           "\n```\nCloses other/repo#9\n```\n",
         );
         writeDeliveryProviderControl(prepared, {});
-        createDeliveryPullRequest(prepared);
-        const accepted = executeDeliveryMerge(prepared);
-        assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+        const refused = executeCli(
+          [...prepared.args, "--apply", "--authorize=approved"],
+          prepared.root,
+          prepared.env,
+        );
+        assert.notEqual(refused.status, 0, refused.stdout + refused.stderr);
+        assert.match(
+          refused.stdout + refused.stderr,
+          /code内を含めcanonical Issue以外への終端keyword参照を置けません: other\/repo#9/u,
+        );
         assert.equal(
           deliveryProviderCalls(prepared).filter(isMergeCall).length,
-          1,
+          0,
         );
       }
       break;

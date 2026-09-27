@@ -36,13 +36,18 @@ const RELATIONS = [
 export function unconvergedReviewSessionDiagnostic(status) {
     return `review sessionが収束していません: status=${status}。reviewが未完了か、実際に検分したHEADとcandidateHeadShaの対応が誤っている可能性があります。ownerのrisk受容へ進まず、review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください`;
 }
-/** findingの`causedByFindingId`を辿った連鎖（根から末端の順）。循環は打ち切る。 */
+/**
+ * findingの`causedByFindingId`を辿った連鎖（根から末端の順）。IDごとに最新の記録を採り、
+ * `null`への訂正で連鎖を切る。循環は起点によらず1件として返す。
+ */
 function fixRegressionChains(findings) {
     const causedBy = new Map();
     for (const finding of findings)
-        if (finding.causedByFindingId !== null)
+        if (finding.causedByFindingId === null)
+            causedBy.delete(finding.id);
+        else
             causedBy.set(finding.id, finding.causedByFindingId);
-    const chains = [];
+    const chains = new Map();
     for (const id of causedBy.keys()) {
         const chain = [id];
         const seen = new Set(chain);
@@ -52,9 +57,11 @@ function fixRegressionChains(findings) {
             seen.add(cursor);
             cursor = causedBy.get(cursor);
         }
-        chains.push(chain);
+        const key = cursor !== undefined ? [...chain].sort().join("\0") : chain.join("\0");
+        if (!chains.has(key))
+            chains.set(key, chain);
     }
-    return chains;
+    return [...chains.values()];
 }
 /**
  * 発散の兆候を保存済みroundから導出する。**判定・記録・merge可否を変えない。**

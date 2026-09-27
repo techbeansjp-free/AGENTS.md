@@ -175,15 +175,18 @@ export interface ReviewDivergence {
   warnings: readonly string[];
 }
 
-/** findingの`causedByFindingId`を辿った連鎖（根から末端の順）。循環は打ち切る。 */
+/**
+ * findingの`causedByFindingId`を辿った連鎖（根から末端の順）。IDごとに最新の記録を採り、
+ * `null`への訂正で連鎖を切る。循環は起点によらず1件として返す。
+ */
 function fixRegressionChains(
   findings: readonly ReviewRoundFinding[],
 ): string[][] {
   const causedBy = new Map<string, string>();
   for (const finding of findings)
-    if (finding.causedByFindingId !== null)
-      causedBy.set(finding.id, finding.causedByFindingId);
-  const chains: string[][] = [];
+    if (finding.causedByFindingId === null) causedBy.delete(finding.id);
+    else causedBy.set(finding.id, finding.causedByFindingId);
+  const chains = new Map<string, string[]>();
   for (const id of causedBy.keys()) {
     const chain = [id];
     const seen = new Set(chain);
@@ -193,9 +196,11 @@ function fixRegressionChains(
       seen.add(cursor);
       cursor = causedBy.get(cursor);
     }
-    chains.push(chain);
+    const key =
+      cursor !== undefined ? [...chain].sort().join("\0") : chain.join("\0");
+    if (!chains.has(key)) chains.set(key, chain);
   }
-  return chains;
+  return [...chains.values()];
 }
 
 /**

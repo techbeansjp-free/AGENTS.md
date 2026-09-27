@@ -7,7 +7,10 @@ import {
   conformingPullRequestBody,
   stepDefinitions,
 } from "../support/world.js";
-import { pullRequestRequiredHeadings } from "../../src/domain/issue.js";
+import {
+  pullRequestRequiredHeadings,
+  withoutMarkdownCode,
+} from "../../src/domain/issue.js";
 import {
   assertPullRequestTrackerBinding,
   createPullRequest,
@@ -436,6 +439,58 @@ Then("PR previewのbodyは必須見出しをすべて含む", function () {
     [0, 0],
   );
   assert.deepEqual(extractIssueClosingNumbers("Closes o/r#824"), [0]);
+  /**
+   * **canonical以外への終端keyword参照はcode領域を除かずに拒否する**（Issue #1517 AMD-003）。
+   * code判定の誤り（字下げした疑似fence、info stringにbacktickを含むfence、list内の閉じない
+   * fence）も、正規のcode内も、強調記号で挟んだ形も拒否する。canonical参照の例示は妨げない。
+   */
+  for (const hidden of [
+    "    ```\n\nFixes other/repo#9",
+    "```a`b\n\nFixes other/repo#9",
+    "- a\n  ```\nFixes other/repo#9",
+    "```\nCloses other/repo#9\n```",
+    "_Fixes other/repo#9_",
+  ]) {
+    const body = `Closes #824\n\n${hidden}`;
+    const result = validateIssueClosingReferences(withoutMarkdownCode(body), {
+      canonicalIssue: 824,
+      relatedIssues: [],
+      repository: "o/r",
+      rawBody: body,
+    });
+    assert.equal(result.valid, false, hidden);
+    assert.ok(
+      result.errors.some((error) =>
+        /^(code内を含めcanonical Issue以外への終端keyword参照を置けません|他repositoryのIssueを自動closeできません): other\/repo#9$/u.test(
+          error,
+        ),
+      ),
+      `${hidden}: ${result.errors.join("; ")}`,
+    );
+  }
+  /** code内の、番号だけcanonicalと同じ他repository参照も拒否する。 */
+  const sameNumberForeign = "Closes #824\n\n```\nCloses other/repo#824\n```";
+  assert.deepEqual(
+    validateIssueClosingReferences(withoutMarkdownCode(sameNumberForeign), {
+      canonicalIssue: 824,
+      relatedIssues: [],
+      repository: "o/r",
+      rawBody: sameNumberForeign,
+    }).errors,
+    [
+      "code内を含めcanonical Issue以外への終端keyword参照を置けません: other/repo#824",
+    ],
+  );
+  const exampleOnly = "Closes #824\n\n```\nCloses #824\n```";
+  assert.equal(
+    validateIssueClosingReferences(withoutMarkdownCode(exampleOnly), {
+      canonicalIssue: 824,
+      relatedIssues: [],
+      repository: "o/r",
+      rawBody: exampleOnly,
+    }).valid,
+    true,
+  );
   const foreign = validateIssueClosingReferences(
     "Closes #824\nCloses other/repo#9",
     { canonicalIssue: 824, relatedIssues: [], repository: "o/r" },

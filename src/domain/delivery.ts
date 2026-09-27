@@ -338,6 +338,12 @@ export function validateIssueClosingReferences(
      * すべて他repositoryとして拒否する。
      */
     repository?: string;
+    /**
+     * **code領域を除かない本文**（Issue #1517 AMD-003）。canonical以外への終端keyword参照は
+     * code内でも拒否する。code領域の判定はGFMの部分近似であり、その誤りで外部参照を隠す
+     * fail-openを避けるため、この判定だけは本文全体に当てる。
+     */
+    rawBody?: string;
   },
 ): {
   valid: boolean;
@@ -374,6 +380,24 @@ export function validateIssueClosingReferences(
     errors.push(
       `canonical Issue以外を自動closeできません: ${unexpectedCloses.map((issue) => `#${issue}`).join(", ")}`,
     );
+  if (input.rawBody !== undefined) {
+    const hidden = nonCanonicalClosingReferences(
+      input.rawBody,
+      input.canonicalIssue,
+      input.repository,
+    ).filter(
+      (label) =>
+        !nonCanonicalClosingReferences(
+          body,
+          input.canonicalIssue,
+          input.repository,
+        ).includes(label),
+    );
+    if (hidden.length > 0)
+      errors.push(
+        `code内を含めcanonical Issue以外への終端keyword参照を置けません: ${hidden.join(", ")}`,
+      );
+  }
   for (const issue of [...new Set(input.relatedIssues)]) {
     if (!relates.includes(issue))
       errors.push(`後続Issue #${issue}はRelates toで参照してください`);
@@ -390,7 +414,7 @@ export function validateIssueClosingReferences(
  * 照合を素通りし、非同期に更新されるprovider索引だけが残る。
  */
 const ISSUE_CLOSING_REFERENCE =
-  /\b(?:close(?:s|d)?|fix(?:es|ed)?|resolve(?:s|d)?)(?:\s+|\s*:\s*)(?:#(\d+)|([\w.-]+\/[\w.-]+)#(\d+)|https?:\/\/(?:www\.)?github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+))\b/giu;
+  /(?<![A-Za-z0-9])(?:close(?:s|d)?|fix(?:es|ed)?|resolve(?:s|d)?)(?:\s+|\s*:\s*)(?:#(\d+)|([\w.-]+\/[\w.-]+)#(\d+)|https?:\/\/(?:www\.)?github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+))(?![0-9])/giu;
 
 /** closing参照1件。`repository`は修飾の無い`#N`で`null`、修飾付きで小文字の`owner/name`。 */
 export type IssueClosingReference = {
@@ -418,6 +442,30 @@ function isSameRepository(
     repository !== undefined &&
     reference.repository === repository.trim().toLowerCase()
   );
+}
+
+/**
+ * canonical Issue以外を指す終端keyword参照を、重複なく`owner/name#N`または`#N`で返す
+ * （Issue #1517 AMD-003）。code領域を除くかは呼び出し側が決める。
+ */
+export function nonCanonicalClosingReferences(
+  body: string,
+  canonicalIssue: number,
+  repository: string | undefined,
+): string[] {
+  return [
+    ...new Set(
+      extractIssueClosingReferences(body)
+        .filter(
+          (reference) =>
+            !(
+              isSameRepository(reference, repository) &&
+              reference.issue === canonicalIssue
+            ),
+        )
+        .map((reference) => `${reference.repository ?? ""}#${reference.issue}`),
+    ),
+  ].sort();
 }
 
 /**
@@ -710,6 +758,7 @@ export function createPullRequest(
     canonicalIssue,
     relatedIssues,
     repository: input.repository,
+    rawBody: body,
   });
   if (!references.valid)
     throw new Error(

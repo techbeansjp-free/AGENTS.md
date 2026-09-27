@@ -129,6 +129,11 @@ export function validateIssueClosingReferences(body, input) {
     ];
     if (unexpectedCloses.length > 0)
         errors.push(`canonical Issue以外を自動closeできません: ${unexpectedCloses.map((issue) => `#${issue}`).join(", ")}`);
+    if (input.rawBody !== undefined) {
+        const hidden = nonCanonicalClosingReferences(input.rawBody, input.canonicalIssue, input.repository).filter((label) => !nonCanonicalClosingReferences(body, input.canonicalIssue, input.repository).includes(label));
+        if (hidden.length > 0)
+            errors.push(`code内を含めcanonical Issue以外への終端keyword参照を置けません: ${hidden.join(", ")}`);
+    }
     for (const issue of [...new Set(input.relatedIssues)]) {
         if (!relates.includes(issue))
             errors.push(`後続Issue #${issue}はRelates toで参照してください`);
@@ -143,7 +148,7 @@ export function validateIssueClosingReferences(body, input) {
  * `#N`だけを数えると、`owner/repo#N`やIssue URLで別Issueを終端する本文がclosing契約の
  * 照合を素通りし、非同期に更新されるprovider索引だけが残る。
  */
-const ISSUE_CLOSING_REFERENCE = /\b(?:close(?:s|d)?|fix(?:es|ed)?|resolve(?:s|d)?)(?:\s+|\s*:\s*)(?:#(\d+)|([\w.-]+\/[\w.-]+)#(\d+)|https?:\/\/(?:www\.)?github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+))\b/giu;
+const ISSUE_CLOSING_REFERENCE = /(?<![A-Za-z0-9])(?:close(?:s|d)?|fix(?:es|ed)?|resolve(?:s|d)?)(?:\s+|\s*:\s*)(?:#(\d+)|([\w.-]+\/[\w.-]+)#(\d+)|https?:\/\/(?:www\.)?github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+))(?![0-9])/giu;
 export function extractIssueClosingReferences(body) {
     return [...body.matchAll(ISSUE_CLOSING_REFERENCE)].map((match) => {
         if (match[1] !== undefined)
@@ -157,6 +162,18 @@ function isSameRepository(reference, repository) {
         return true;
     return (repository !== undefined &&
         reference.repository === repository.trim().toLowerCase());
+}
+/**
+ * canonical Issue以外を指す終端keyword参照を、重複なく`owner/name#N`または`#N`で返す
+ * （Issue #1517 AMD-003）。code領域を除くかは呼び出し側が決める。
+ */
+export function nonCanonicalClosingReferences(body, canonicalIssue, repository) {
+    return [
+        ...new Set(extractIssueClosingReferences(body)
+            .filter((reference) => !(isSameRepository(reference, repository) &&
+            reference.issue === canonicalIssue))
+            .map((reference) => `${reference.repository ?? ""}#${reference.issue}`)),
+    ].sort();
 }
 /**
  * **他repositoryへのclosing参照は0へ写す。** Issue番号は1以上なので、0はどのcanonical
@@ -345,6 +362,7 @@ export function createPullRequest(input, external) {
         canonicalIssue,
         relatedIssues,
         repository: input.repository,
+        rawBody: body,
     });
     if (!references.valid)
         throw new Error(`PR本文のIssue参照が不正です: ${references.errors.join("; ")}`);

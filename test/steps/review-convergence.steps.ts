@@ -1491,6 +1491,17 @@ const CHAIN_FIXTURES = {
     ["C-01", "C-02"],
     ["C-02", "C-01"],
   ],
+  corrected: [
+    ["A-01", null],
+    ["B-01", "A-01"],
+    ["D-01", "B-01"],
+    ["B-01", null],
+  ],
+  cycle3: [
+    ["X-01", "Z-01"],
+    ["Y-01", "X-01"],
+    ["Z-01", "Y-01"],
+  ],
 } as const;
 let chainDivergence: Record<
   keyof typeof CHAIN_FIXTURES,
@@ -1536,5 +1547,13 @@ Then(
     ]);
     /** 循環は打ち切り、無限loopにしない。 */
     assert.equal(chainDivergence.cyclic.fixRegressionDepth, 1);
+    /** 後のroundで原因をnullへ訂正したら、その連鎖を数えない。 */
+    assert.equal(chainDivergence.corrected.fixRegressionDepth, 1);
+    assert.deepEqual(chainWarnings(chainDivergence.corrected), []);
+    /** 3件の循環は起点によらず1件として名指しする。 */
+    assert.equal(chainDivergence.cycle3.fixRegressionDepth, 2);
+    assert.deepEqual(chainWarnings(chainDivergence.cycle3), [
+      "修正回帰が2段以上連鎖しています: Y-01 → Z-01 → X-01",
+    ]);
   },
 );

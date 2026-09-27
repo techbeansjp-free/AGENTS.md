@@ -55,6 +55,7 @@ import {
   authorizeContextIsolatedAdminMerge,
   diagnoseBranchFollowCost,
   extractIssueClosingNumbers,
+  nonCanonicalClosingReferences,
   type BranchDeliveryPolicyObservation,
 } from "./domain/delivery.js";
 import {
@@ -838,7 +839,7 @@ function assertCreatableReviewHead(
  * （Issue #1517 AMD-001）。作成直後は作成したPRを同定するために全文を使う。
  * `pr-bound`以後の再観測では本文が担う安全上の契約はclosing契約だけであり、
  * `closingContractDigest`が独立に照合するため、それ以外の本文・タイトルの訂正を拒否しない。
- * 編集後の本文はcode領域を除かずに走査し、canonical以外への終端keyword参照を拒否する。
+ * canonical以外への終端keyword参照は、作成時と同じくcode領域を除かずに拒否する。
  */
 function assertObservedClosingContract(input: {
   state: DeliveryState;
@@ -859,12 +860,13 @@ function assertObservedClosingContract(input: {
     typeof input.observed.body !== "string"
   )
     throw new Error("PRタイトル・本文をtrusted providerから再観測できません");
-  const contentChanged =
+  if (
+    input.requireCreatedContent &&
     pullRequestContentDigest({
       title: input.observed.title,
       body: input.observed.body,
-    }) !== input.state.create.pullRequestDigest;
-  if (input.requireCreatedContent && contentChanged)
+    }) !== input.state.create.pullRequestDigest
+  )
     throw new Error("PRタイトル・本文がPR作成時の固定contentから変化しました");
   const binding = assertPullRequestTrackerBinding({
     repository: input.state.create.repository,
@@ -894,20 +896,18 @@ function assertObservedClosingContract(input: {
   if (bodyClosingDigest !== input.state.create.bodyClosingDigest)
     throw new Error("PR本文のclosing契約がPR作成時の固定値から変化しました");
   /**
-   * **作成後に編集された本文は、code領域を除かずに全体を走査する**（Issue #1517 R6）。
-   * code領域の判定をGFMへ部分的に近似すると、判定の誤りで外部closing参照を隠す
-   * fail-openが境界ごとに生じる。安全上の判定をcode解析に依存させず、編集後の本文では
-   * code内を含めcanonical Issue以外への終端keyword参照を拒否する。未編集の本文は従来どおり。
+   * **canonical以外への終端keyword参照はcode領域を除かずに拒否する**（Issue #1517 AMD-003）。
+   * code領域の判定はGFMの部分近似であり、その誤りで外部参照を隠すfail-openが境界ごとに
+   * 生じる。作成時の`pr create`と同じ判定を、本文の編集有無によらず当てる。
    */
-  if (
-    contentChanged &&
-    extractIssueClosingNumbers(
-      input.observed.body,
-      input.state.create.repository,
-    ).some((issue) => issue !== binding.issue)
-  )
+  const hidden = nonCanonicalClosingReferences(
+    input.observed.body,
+    binding.issue,
+    input.state.create.repository,
+  );
+  if (hidden.length > 0)
     throw new Error(
-      "PR作成後に編集した本文は、code内を含めcanonical Issue以外への終端keyword参照を持てません",
+      `PR本文は、code内を含めcanonical Issue以外への終端keyword参照を持てません: ${hidden.join(", ")}`,
     );
   return { ...binding, bodyClosingDigest };
 }
