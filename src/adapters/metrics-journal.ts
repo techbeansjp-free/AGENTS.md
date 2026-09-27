@@ -1,3 +1,8 @@
+import {
+  buildShadowEvaluation,
+  unavailableShadowEvaluation,
+} from "./shadow-evaluation.js";
+import type { ShadowEvaluationReport } from "../domain/shadow-evaluation.js";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -167,6 +172,7 @@ export interface MetricsReport {
   review_rounds: number | null;
   /** role=implementerの区間が現在open、またはmetrics event logが無い場合はnull
    * （独立reviewのM1指摘）。 */
+  shadow: ShadowEvaluationReport;
   support_ms: number | null;
   artifact_build_ms: number | null;
   warnings: string[];
@@ -253,7 +259,17 @@ export function buildMetricsReport(input: {
         roleOpen: eventDurations.openKinds.includes("role"),
       });
 
+  let shadow: ShadowEvaluationReport;
+  try {
+    shadow = buildShadowEvaluation({
+      root: stagingRepositoryRoot(input.staging),
+      stagings: [input.staging],
+    });
+  } catch {
+    shadow = unavailableShadowEvaluation(input.staging);
+  }
   return {
+    shadow,
     step_ms: stepDurations,
     role_ms: eventLogUnavailable ? null : (eventDurations.totals.role ?? 0),
     model_ms: eventLogUnavailable ? null : (eventDurations.totals.model ?? 0),

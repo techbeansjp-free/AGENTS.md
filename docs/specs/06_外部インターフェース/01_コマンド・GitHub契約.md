@@ -229,3 +229,9 @@ PR CIで`origin/HEAD`がない場合も、workflowはevent値をquoted environme
 公式観測は`codex app-server`の`config/read`と`model/list`を10秒上限で取得し、別catalogの`model_catalog_json`指定を拒否する。認証・安全設定を保持し、選択に関するOpenAI provider・high・service tier defaultだけを固定する。現在環境のpicker-visibleな一意推奨を具体slugへ解決し、trusted selector採用tierが不足する場合は起動しない。
 
 実行は`codex exec --json --ephemeral --model`へ観測slugを渡し、high・default、指定sandbox/root、stdin入力を固定する。既定timeoutは30分、stdout/stderr合計の上限は8MiB。`turn.completed`が1件、失敗eventなし、完全なJSONL、終了値0をそろえて成功とする。異常終了はfailed、timeout・容量超過・不正/不足eventなど完了を確定できない場合はunknownとし、自動再送しない。結果は選択条件と`modelEvidence=dispatch_arguments`を保持し、promptとraw process出力を返さない。
+
+## Shadow評価の読取契約
+
+`decision evaluate --staging=ID --staging=ID [--root=path]`は明示対象だけを評価し、JSONをstdoutへ返す。stagingはIDまたは同repositoryのpolicy内pathを受理し、重複対象を一度だけ集計する。全root走査、外部推論、入力への書込み、`--apply`・`--out`はない。正常・記録不足は終了0、不正引数・pathは非0。primaryRootの既存Decision/shadow/labelを読み、計算・欠測の意味はREQ-WF-046、出力構造は管理データの「Shadow評価集計」を参照する。
+
+`workflow metrics`は既存単一staging出力の`shadow`に同じ評価を返す。shadow読取失敗でも既存metricsを維持し、shadow側へ安全なunavailable診断を返す。自由文の例外や証拠本文は公開出力へ含めない。既存`--out`以外に保存操作を増やさない。
