@@ -2348,9 +2348,11 @@ interface DeliveryProviderControl {
    * `"cross-repo-same-number"`は番号だけcanonicalと同じ`other/repo#877`を足す。
    * `"url-canonical-only"`は canonical Issueの参照をURL形へ置き換え、
    * `"url-canonical-duplicate"`は`#877`を残したままURL形の877を足す。
-   * GFMのcode境界（R6-01）: `"indented-fence-other"`は4スペース字下げの疑似fence
-   * （GFMではfenceでない）の後に`Fixes other/repo#9`を足し、`"fenced-code-other"`は
-   * 字下げなしの正規fence内に`Closes other/repo#9`を足す。
+   * code境界（R6）: 編集後の本文はcode領域を除かずに走査するため、code内・code判定の
+   * 境界にある外部closing参照はすべて拒否する。`"indented-fence-other"`は4スペース字下げの
+   * 疑似fenceの後、`"fenced-code-other"`は正規fence内、`"info-backtick-fence-other"`は
+   * info stringにbacktickを含む疑似fenceの後、`"list-unclosed-fence-other"`はlist内の
+   * 閉じないfenceの後に外部参照を足す。
    */
   closingBodyEdit:
     | "none"
@@ -2363,7 +2365,9 @@ interface DeliveryProviderControl {
     | "url-canonical-only"
     | "url-canonical-duplicate"
     | "indented-fence-other"
-    | "fenced-code-other";
+    | "fenced-code-other"
+    | "info-backtick-fence-other"
+    | "list-unclosed-fence-other";
   /**
    * merge後に固定run IDで直読みしたrunの`conclusion`（Issue #1280）。
    * **不一致側を作るための唯一の入口である。** 既定は`"success"`で挙動を変えない。
@@ -3381,6 +3385,10 @@ const body = () => {
     return canonical + "\\n\\n    \`\`\`\\n\\nFixes other/repo#9";
   if (control.closingBodyEdit === "fenced-code-other")
     return canonical + "\\n\\n\`\`\`\\nCloses other/repo#9\\n\`\`\`";
+  if (control.closingBodyEdit === "info-backtick-fence-other")
+    return canonical + "\\n\\n\`\`\`a\`b\\n\\nFixes other/repo#9";
+  if (control.closingBodyEdit === "list-unclosed-fence-other")
+    return canonical + "\\n\\n- a\\n  \`\`\`\\nFixes other/repo#9";
   if (control.closingBodyEdit === "url-canonical-duplicate")
     return canonical + "\\n\\nCloses https://github.com/o/r/issues/877";
   return control.contentChanged ? canonical + "\\n\\nprovider content changed" : canonical;
@@ -6112,7 +6120,6 @@ if (exact(["auth", "status"])) {
        */
       for (const edit of [
         "url-canonical-only",
-        "fenced-code-other",
         "url-canonical-duplicate",
       ] as const) {
         const prepared = prepareDeliveryCli(this);
@@ -6138,7 +6145,6 @@ if (exact(["auth", "status"])) {
         "url-other",
         "cross-repo",
         "cross-repo-same-number",
-        "indented-fence-other",
       ] as const) {
         const prepared = prepareDeliveryCli(this);
         createDeliveryPullRequest(prepared);
@@ -6154,6 +6160,53 @@ if (exact(["auth", "status"])) {
           deliveryProviderCalls(prepared).filter(isMergeCall).length,
           0,
           edit,
+        );
+      }
+
+      /**
+       * **編集後の本文はcode領域を除かずに走査する**（R6）。code判定の誤り・境界を
+       * 突く形も、正規のcode内も、canonical以外への終端keyword参照は拒否する。
+       */
+      for (const edit of [
+        "indented-fence-other",
+        "fenced-code-other",
+        "info-backtick-fence-other",
+        "list-unclosed-fence-other",
+      ] as const) {
+        const prepared = prepareDeliveryCli(this);
+        createDeliveryPullRequest(prepared);
+        writeDeliveryProviderControl(prepared, { closingBodyEdit: edit });
+        const rejected = executeDeliveryMerge(prepared);
+        assert.notEqual(rejected.status, 0, `${edit}: mergeを受理しました`);
+        assert.match(
+          rejected.stdout + rejected.stderr,
+          /PR作成後に編集した本文は、code内を含めcanonical Issue以外への終端keyword参照を持てません/u,
+          `${edit}: ${rejected.stdout}${rejected.stderr}`,
+        );
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          0,
+          edit,
+        );
+      }
+
+      /**
+       * **未編集の本文は従来どおり**（R6）。作成時にcode内だけへ置いた外部参照は
+       * 作成時検査（SCN-INT-PRBODY-009）が終端参照としないため、未編集ならmergeできる。
+       */
+      {
+        const prepared = prepareDeliveryCli(this);
+        fs.appendFileSync(
+          prepared.bodyFile,
+          "\n```\nCloses other/repo#9\n```\n",
+        );
+        writeDeliveryProviderControl(prepared, {});
+        createDeliveryPullRequest(prepared);
+        const accepted = executeDeliveryMerge(prepared);
+        assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          1,
         );
       }
       break;

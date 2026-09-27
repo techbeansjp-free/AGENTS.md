@@ -488,12 +488,11 @@ function withoutCode(text: string): string {
   const visible: string[] = [];
   let fence: { marker: "`" | "~"; length: number } | undefined;
   for (const line of text.split("\n")) {
-    /** GFMのfenceは字下げ0〜3スペースだけが開始・終了になる。4スペース以上はfenceではない。 */
-    const opening = /^ {0,3}(`{3,}|~{3,})/u.exec(line)?.[1];
+    const opening = /^\s*(`{3,}|~{3,})/u.exec(line)?.[1];
     if (fence) {
       if (
         new RegExp(
-          `^ {0,3}${escapeRegExp(fence.marker)}{${fence.length},}\\s*$`,
+          `^\\s*${escapeRegExp(fence.marker)}{${fence.length},}\\s*$`,
           "u",
         ).test(line)
       )
@@ -698,7 +697,7 @@ function withoutPlaceholderCodeAndComments(text: string): string {
       if (fence) {
         if (
           new RegExp(
-            `^ {0,3}${escapeRegExp(fence.marker)}{${fence.length},}\\s*$`,
+            `^\\s*${escapeRegExp(fence.marker)}{${fence.length},}\\s*$`,
             "u",
           ).test(line)
         )
@@ -1270,12 +1269,11 @@ export function escapeFoldBoundary(text: string): string {
   return text
     .split("\n")
     .map((line) => {
-      /** GFMのfenceは字下げ0〜3スペースだけが開始・終了になる。4スペース以上はfenceではない。 */
-      const opening = /^ {0,3}(`{3,}|~{3,})/u.exec(line)?.[1];
+      const opening = /^\s*(`{3,}|~{3,})/u.exec(line)?.[1];
       if (fence) {
         if (
           new RegExp(
-            `^ {0,3}${escapeRegExp(fence.marker)}{${fence.length},}\\s*$`,
+            `^\\s*${escapeRegExp(fence.marker)}{${fence.length},}\\s*$`,
             "u",
           ).test(line)
         )
