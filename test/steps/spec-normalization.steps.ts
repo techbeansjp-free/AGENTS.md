@@ -377,3 +377,96 @@ Then("trace gateは必須仕様欠落で失敗する", function () {
     /必須仕様.*04_機能\/00_機能一覧\.md/u,
   );
 });
+
+/**
+ * **正本外のSCN表記を置く場所を、旧SCN配置検査が例外を持っていた場所と
+ * 持っていなかった場所の両方から選ぶ**（Issue #1506）。どれか1つでも違反や
+ * 実行可能Scenarioとして数えられれば、置き場ごとの例外へ戻ったことになる。
+ */
+const NON_CANONICAL_SCENARIOS: ReadonlyArray<readonly [string, string]> = [
+  ["docs/issues/20260927_000000_例/00_要求定義.md", "SCN-UNIT-DOC-001"],
+  [
+    ".agent-skill-chain/tmp/issues/20260927_000000_例/01_要件定義.md",
+    "SCN-UNIT-DOC-002",
+  ],
+  [".agent-skill-chain/role-log/draft.feature", "SCN-UNIT-DOC-003"],
+  [".agent-skill-chain/tmp-old/near.md", "SCN-UNIT-DOC-004"],
+  ["test/features-old/misplaced.feature", "SCN-UNIT-DOC-005"],
+  ["test/steps/misplaced.feature", "SCN-UNIT-DOC-006"],
+  ["docs/specs/04_機能/例示.md", "SCN-UNIT-DOC-007"],
+  ["README.md", "SCN-UNIT-DOC-008"],
+];
+
+function scenarioText(id: string) {
+  return `Feature: 例示\n  Scenario: ${id} 例示\n    Given 前提がある\n    When 操作する\n    Then 成功する\n`;
+}
+
+Given("正本外の文書と一時領域とstagingと近似pathにSCN定義がある", function () {
+  createNormalizationFixture(this);
+  for (const [relative, id] of NON_CANONICAL_SCENARIOS)
+    write(this.root, relative, scenarioText(id));
+  // 正本と同じIDを文書へ書いても、重複にも追加の定義にもならない。
+  write(this.root, "docs/例示/同じID.md", scenarioText("SCN-UNIT-FIXTURE-001"));
+  // 日本語dialectの行頭keywordも同じ扱いである。
+  write(this.root, "docs/例示/日本語.md", "シナリオ: SCN-UNIT-DOC-009 例示\n");
+  /**
+   * **要件本文検査のwalkerはsymlinkを辿らない。** 辿れば同じ要件定義を
+   * 2回数え、要件IDの重複と所定location外の要件本文を報告する。file・directory
+   * の両方を置き、どちらか一方だけを辿る変異も捕まえる。
+   */
+  fs.symlinkSync(
+    path.join(this.root, "docs/specs/02_要件/01_ワークフロー要件.md"),
+    path.join(this.root, "docs/link.md"),
+  );
+  fs.symlinkSync(
+    path.join(this.root, "docs/specs/02_要件"),
+    path.join(this.root, "docs/linkdir"),
+  );
+});
+
+Then(
+  "配置由来のerrorを返さず実行可能Scenarioは正本のものだけである",
+  function () {
+    assert.deepEqual(this.normalization?.errors, []);
+    assert.equal(this.normalization?.valid, true);
+    assert.deepEqual(this.normalization?.scenarios, ["SCN-UNIT-FIXTURE-001"]);
+    assert.deepEqual(this.normalization?.orphanScenarios, []);
+  },
+);
+
+Given("追跡表が正本外の文書とfeatureにしか無いSCNを参照する", function () {
+  createNormalizationFixture(this);
+  write(
+    this.root,
+    "docs/issues/20260927_000000_例/00_要求定義.md",
+    scenarioText("SCN-UNIT-DOC-001"),
+  );
+  write(
+    this.root,
+    "test/steps/misplaced.feature",
+    scenarioText("SCN-UNIT-DOC-006"),
+  );
+  write(
+    this.root,
+    "docs/specs/15_要件追跡/00_追跡表.md",
+    traceTable([
+      "| REQ-WF-001 | AC-WF-001 | SCN-UNIT-FIXTURE-001 | unit | `test/features/unit/fixture.feature` | `src/domain/example.ts` | 合格 |",
+      "| REQ-WF-001 | AC-WF-001 | SCN-UNIT-DOC-001 | unit | `docs/issues/20260927_000000_例/00_要求定義.md` | `src/domain/example.ts` | 合格 |",
+      "| REQ-WF-001 | AC-WF-001 | SCN-UNIT-DOC-006 | unit | `test/steps/misplaced.feature` | `src/domain/example.ts` | 合格 |",
+    ]),
+  );
+});
+
+Then("完全path解決のerrorを参照ごとに返す", function () {
+  assert.equal(this.normalization?.valid, false);
+  assert.deepEqual(
+    this.normalization?.errors.filter((error) =>
+      error.startsWith("SCN参照のFeatureを完全pathで解決できません"),
+    ),
+    [
+      "SCN参照のFeatureを完全pathで解決できません: SCN-UNIT-DOC-001 -> docs/issues/20260927_000000_例/00_要求定義.md (docs/specs/15_要件追跡/00_追跡表.md:6)",
+      "SCN参照のFeatureを完全pathで解決できません: SCN-UNIT-DOC-006 -> test/steps/misplaced.feature (docs/specs/15_要件追跡/00_追跡表.md:7)",
+    ],
+  );
+  assert.deepEqual(this.normalization?.scenarios, ["SCN-UNIT-FIXTURE-001"]);
+});

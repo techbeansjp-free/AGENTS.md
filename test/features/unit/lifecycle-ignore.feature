@@ -51,3 +51,8 @@ Feature: 一時ライフサイクル領域の分類正本
     Given 配布物検査moduleへのsymlinkを用意する
     When symlink経由で子processを実行する
     Then 出力にパッケージ内容検査の結果が現れる
+
+  Scenario: SCN-UNIT-LIFEIGNORE-013 区切り文字を名前に含む一時領域の合法なpathを領域内と判定する
+    Given 区切り文字を名前に含む合法な一時領域pathがある
+    When 追跡混入検査が使う領域判定を適用する
+    Then すべて領域内と判定される
