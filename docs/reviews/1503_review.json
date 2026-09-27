@@ -1,0 +1,148 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1503,
+  "observed": {
+    "baseSha": "bd54af712ab16380d3c3c74aedffa5e05c622f72",
+    "implementationHeadSha": "a906a7eae2a00a32104b7aa19a374e0fe5163aea",
+    "diffDigest": "4b82050f9fcf379bbe35be96e253802844fc777561fc44a456b2a21d5c354dcf",
+    "session": {
+      "sessionId": "c470340b3aa3fd7735a109c7fb0310d6f4608dda081f6ae182158cb34c9a85ed",
+      "latestRoundDigest": "f3f223262754a7f1ee1f8347c20138499a1fdb65594fae7bdfc9ccfac26fb80f",
+      "status": "converged",
+      "countedRounds": 4
+    },
+    "impact": {
+      "digest": "64e3ca390249f60b0d2aa401879548bdbd8851aa9af1d729f8be0a7b887655d9",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "a906a7eae2a00a32104b7aa19a374e0fe5163aea",
+        "impactDigest": "64e3ca390249f60b0d2aa401879548bdbd8851aa9af1d729f8be0a7b887655d9",
+        "finishedAt": "2026-09-27T07:24:30.189Z",
+        "recordDigest": "e0bc9961d36ea6b68623148424bb889fcebc940359dc42a741a5002520179ba3"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "R1-001",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "scripts/plan_release.ts",
+      "contractId": "AC-15"
+    },
+    {
+      "id": "R1-002",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "package.json",
+      "contractId": "AC-14"
+    },
+    {
+      "id": "R1-003",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "src/domain/impact-set.ts",
+      "contractId": "AC-05"
+    },
+    {
+      "id": "R1-004",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "fix-regression",
+      "path": "scripts/check_file_audit.ts",
+      "contractId": null
+    },
+    {
+      "id": "R1-005",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": ".agent-skill-chain/metrics/1503/scope-e-test-suite.md",
+      "contractId": "AC-11"
+    },
+    {
+      "id": "R1-006",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "test/features/unit/issue-template-contract.feature",
+      "contractId": "AC-06"
+    },
+    {
+      "id": "R1-007",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "scripts/check_trace.ts",
+      "contractId": null
+    },
+    {
+      "id": "R1-008",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "docs/specs/02_要件/01_ワークフロー要件.md",
+      "contractId": null
+    },
+    {
+      "id": "R1-009",
+      "severity": "Low",
+      "status": "false-positive",
+      "relation": "improvement",
+      "path": "src/domain/decision-contract.ts",
+      "contractId": "INV-03"
+    },
+    {
+      "id": "R2-001",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "docs/specs/02_要件/03_外部連携要件.md",
+      "contractId": "AC-14"
+    },
+    {
+      "id": "R3-001",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "docs/specs/12_運用保守/00_運用設計.md",
+      "contractId": "AC-14"
+    },
+    {
+      "id": "R3-002",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/13_移行・廃止/01_移行方針.md",
+      "contractId": null
+    },
+    {
+      "id": "R4-001",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "out-of-scope",
+      "path": "docs/specs/11_非機能/01_品質要件.md",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "claude-opus-independent-reviewer",
+    "implementer": "claude-opus-implementer-session-34e915d9",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "da8ed822e1459b667ab113656735bab3f173adbac46a5d6be0c4077770177fdc"
+}
