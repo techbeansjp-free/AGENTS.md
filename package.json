@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "agentSkillChain": {
-    "qualityContractVersion": 13,
+    "qualityContractVersion": 14,
     "policySchemaVersion": "0.3.1",
     "compatiblePolicySchemaVersions": [
       "0.3.0"

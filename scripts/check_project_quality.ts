@@ -44,6 +44,7 @@ const PROTECTED_FILES = [
   "package-lock.json",
   "scripts/check_project_quality.ts",
   "scripts/check_source_quality.ts",
+  "scripts/run_cucumber_shards.ts",
   "src/domain/staging.ts",
   "src/lib/entrypoint.ts",
   "src/lib/security.ts",
@@ -89,6 +90,18 @@ const EXPECTED_SCRIPTS: Record<string, string> = {
   "conformance:check": "node --import tsx scripts/check_conformance.ts",
   quality:
     "npm run lint && npm run format:check && npm run typecheck && npm run source:check && npm test",
+};
+
+/**
+ * `EXPECTED_SCRIPTS`の値に加えて受理する形（Issue #1508）。
+ *
+ * **両方を受理するのは前方互換のためである。** 必須checkのbase validatorは、候補の
+ * `package.json` scriptsをbase側のこの表で照合する。新しい形だけを受理する版と`test`の
+ * 切り替えを同じPRにすると、base側の旧い表が切り替えを拒否する。この版を既定branchへ
+ * 入れた後の別PRで`test`を切り替える。直列の形は全scenarioを実行するため緩和ではない。
+ */
+const ACCEPTED_ALTERNATIVE_SCRIPTS: Readonly<Record<string, string>> = {
+  test: "npm run compile --silent && node --import tsx scripts/run_cucumber_shards.ts",
 };
 
 /**
@@ -661,9 +674,14 @@ export function checkProjectQualityContract(
     if (scripts[script] !== EXPECTED_SCRIPTS[script])
       errors.push(`${script} scriptがtrusted project契約と一致していません`);
   }
-  for (const [script, expected] of Object.entries(EXPECTED_SCRIPTS))
-    if (scripts[script] !== expected)
+  for (const [script, expected] of Object.entries(EXPECTED_SCRIPTS)) {
+    const alternative = ACCEPTED_ALTERNATIVE_SCRIPTS[script];
+    if (
+      scripts[script] !== expected &&
+      (alternative === undefined || scripts[script] !== alternative)
+    )
       errors.push(`${script} scriptを自己緩和できません`);
+  }
   const expectedQuality =
     "npm run lint && npm run format:check && npm run typecheck && npm run source:check && npm test";
   if (scripts.quality !== expectedQuality)
