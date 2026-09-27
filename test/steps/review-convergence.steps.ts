@@ -16,6 +16,7 @@ import { stableJson } from "../../src/lib/security.js";
 import { QUESTIONS, type ModeAnswer } from "../../src/domain/mode.js";
 import {
   REVIEW_DIVERGENCE_RECURRENCE,
+  REVIEW_FIX_REGRESSION_CHAIN,
   advanceReviewSession,
   countedRounds,
   reviewDivergence,
@@ -1434,3 +1435,106 @@ Then("実装commitを挟んでからのmergeは拒否される", function () {
     /treeが両親の自動merge結果と一致するmerge commitだけです/u,
   );
 });
+
+/** 修正回帰の連鎖（Issue #1517 AMD-002）を検査するための最小round列。 */
+function chainedRounds(
+  links: readonly (readonly [string, string | null])[],
+): ReviewSessionState {
+  const findings = links.map(([id, causedByFindingId]) => ({
+    id,
+    severity: "High" as const,
+    status: "valid" as const,
+    source: "review" as const,
+    relation: "fix-regression" as const,
+    evidence: "fixture",
+    path: "src/a.ts",
+    contractId: "AC-01",
+    causedByFindingId,
+  }));
+  return {
+    rounds: findings.map((finding, index) => ({
+      round: index + 1,
+      previousRoundDigest: null,
+      candidateHeadSha: "a".repeat(40),
+      focus: {
+        previousBlocking: [],
+        fixedDiff: ["src/a.ts"],
+        adjacentScope: [],
+      },
+      findings: [
+        { ...finding, admission: "block-current", admissionReason: "fixture" },
+      ],
+      blocking: [finding.id],
+      recordOnly: [],
+    })),
+  } as unknown as ReviewSessionState;
+}
+
+const CHAIN_FIXTURES = {
+  single: [
+    ["R1-01", null],
+    ["R2-01", "R1-01"],
+  ],
+  branched: [
+    ["R1-01", null],
+    ["R2-01", "R1-01"],
+    ["R3-01", "R2-01"],
+    ["R3-02", "R2-01"],
+  ],
+  deep: [
+    ["R1-01", null],
+    ["R2-01", "R1-01"],
+    ["R3-01", "R2-01"],
+    ["R4-01", "R3-01"],
+  ],
+  cyclic: [
+    ["C-01", "C-02"],
+    ["C-02", "C-01"],
+  ],
+} as const;
+let chainDivergence: Record<
+  keyof typeof CHAIN_FIXTURES,
+  ReturnType<typeof reviewDivergence>
+>;
+const chainWarnings = (divergence: ReturnType<typeof reviewDivergence>) =>
+  divergence.warnings
+    .filter((warning) => warning.startsWith("修正回帰"))
+    .map((warning) => warning.split("。")[0]);
+
+Given(
+  "是正起因のfindingがcausedByFindingIdで連鎖したreview roundがある",
+  function () {
+    assert.equal(REVIEW_FIX_REGRESSION_CHAIN, 2);
+  },
+);
+
+When("発散の兆候を算出する", function () {
+  chainDivergence = Object.fromEntries(
+    Object.entries(CHAIN_FIXTURES).map(([name, links]) => [
+      name,
+      reviewDivergence(chainedRounds(links)),
+    ]),
+  ) as typeof chainDivergence;
+});
+
+Then(
+  "1段の連鎖ではwarningを出さず2段以上の連鎖を根から名指しする",
+  function () {
+    assert.equal(chainDivergence.single.fixRegressionDepth, 1);
+    assert.deepEqual(chainWarnings(chainDivergence.single), []);
+    assert.equal(chainDivergence.branched.fixRegressionDepth, 2);
+    assert.deepEqual(
+      chainDivergence.branched.warnings.filter((w) => w.startsWith("修正回帰")),
+      [
+        "修正回帰が2段以上連鎖しています: R1-01 → R2-01 → R3-01, R1-01 → R2-01 → R3-02。同じ機構へ条件を足して塞がず、判定をその機構に依存させない縮小案（許可list化、入力全体の走査、fail-closed、機能の撤回）を先に評価してください",
+      ],
+    );
+    /** 長い連鎖の途中までの連鎖を重ねて名指ししない。 */
+    assert.equal(chainDivergence.deep.fixRegressionDepth, 3);
+    assert.deepEqual(chainWarnings(chainDivergence.deep), [
+      "修正回帰が2段以上連鎖しています: R1-01 → R2-01 → R3-01 → R4-01",
+    ]);
+    /** 循環は打ち切り、無限loopにしない。 */
+    assert.equal(chainDivergence.cyclic.fixRegressionDepth, 1);
+  },
+);

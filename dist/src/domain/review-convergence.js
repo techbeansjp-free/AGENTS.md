@@ -13,6 +13,12 @@ import { PROGRESS_INVENTORY_FIELDS, parseReviewProgressInventory, } from "./revi
 export const REVIEW_ROUND_RECORD_LIMIT = 64;
 /** 同じfindingがこの回数以上blockerとして残ったら発散の兆候として報告する。 */
 export const REVIEW_DIVERGENCE_RECURRENCE = 3;
+/**
+ * 修正回帰の連鎖（`causedByFindingId`の辿り）がこの段数以上ならwarningを返す（Issue #1517 AMD-002）。
+ * 2段は「是正が生んだ回帰を是正したら、また回帰が出た」状態であり、同じ機構へ条件を足し続ける
+ * 増殖loopの兆候である。
+ */
+export const REVIEW_FIX_REGRESSION_CHAIN = 2;
 const OID = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const STABLE_ID = /^[A-Z][A-Z0-9._-]{1,127}$/u;
@@ -29,6 +35,26 @@ const RELATIONS = [
 /** 非収束の原因と、ownerが受容する対象を混同させない診断を返す。 */
 export function unconvergedReviewSessionDiagnostic(status) {
     return `review sessionが収束していません: status=${status}。reviewが未完了か、実際に検分したHEADとcandidateHeadShaの対応が誤っている可能性があります。ownerのrisk受容へ進まず、review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください`;
+}
+/** findingの`causedByFindingId`を辿った連鎖（根から末端の順）。循環は打ち切る。 */
+function fixRegressionChains(findings) {
+    const causedBy = new Map();
+    for (const finding of findings)
+        if (finding.causedByFindingId !== null)
+            causedBy.set(finding.id, finding.causedByFindingId);
+    const chains = [];
+    for (const id of causedBy.keys()) {
+        const chain = [id];
+        const seen = new Set(chain);
+        let cursor = causedBy.get(id);
+        while (cursor !== undefined && !seen.has(cursor)) {
+            chain.unshift(cursor);
+            seen.add(cursor);
+            cursor = causedBy.get(cursor);
+        }
+        chains.push(chain);
+    }
+    return chains;
 }
 /**
  * 発散の兆候を保存済みroundから導出する。**判定・記録・merge可否を変えない。**
@@ -64,12 +90,23 @@ export function reviewDivergence(state) {
         warnings.push(`同じfindingが${REVIEW_DIVERGENCE_RECURRENCE} round以上blockerとして残っています: ${recurring.join(", ")}`);
     if (previous && newBlockers.length > 0)
         warnings.push(`直前roundに無かったblockerが新たに出ています: ${[...newBlockers].sort().join(", ")}`);
+    const chains = fixRegressionChains(counted.flatMap(({ findings }) => findings));
+    const fixRegressionDepth = Math.max(0, ...chains.map((chain) => chain.length - 1));
+    const longest = chains
+        .filter((chain) => chain.length - 1 >= REVIEW_FIX_REGRESSION_CHAIN)
+        .filter((chain) => !chains.some((other) => other.length > chain.length &&
+        other.slice(0, chain.length).join("\0") === chain.join("\0")))
+        .map((chain) => chain.join(" → "))
+        .sort();
+    if (longest.length > 0)
+        warnings.push(`修正回帰が${REVIEW_FIX_REGRESSION_CHAIN}段以上連鎖しています: ${longest.join(", ")}。同じ機構へ条件を足して塞がず、判定をその機構に依存させない縮小案（許可list化、入力全体の走査、fail-closed、機能の撤回）を先に評価してください`);
     return {
         countedRounds: counted.length,
         maxFindingRecurrence,
         newBlockerRate,
         repeatedFindingRate,
         fixedPathCount: latest?.focus.fixedDiff.length ?? 0,
+        fixRegressionDepth,
         warnings,
     };
 }
