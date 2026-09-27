@@ -16,6 +16,7 @@ import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verify
 import { parseReviewEvidence, } from "./domain/review-evidence.js";
 import { exportReviewEvidence, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
 import { runVerification } from "./adapters/verification-run.js";
+import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
 import { isPlanFrozenCheckStep, latestPlanSeal } from "./domain/plan-seal.js";
@@ -4140,7 +4141,10 @@ export async function main(argv, dependencies = {}) {
             };
         }
         if (!apply || plan.state !== "preview") {
-            print(syncPreview === undefined ? plan : { ...plan, sync: syncPreview });
+            const resume = observeWorkflowResume(staging);
+            print(syncPreview === undefined
+                ? { ...plan, resume }
+                : { ...plan, sync: syncPreview, resume });
             return plan.state === "blocked" ? 1 : 0;
         }
         return withStagingMutationLock(staging, () => {

@@ -1456,6 +1456,76 @@ function createQuickStaging(root: string): string {
   }).path;
 }
 
+/** 再開状態（REQ-WF-046）のpreview出力。 */
+interface ResumePreview {
+  status: number;
+  output: {
+    state: string;
+    operation: string;
+    targetStep: number;
+    reasons: string[];
+    resume: {
+      authority: string;
+      staging: string;
+      headSha: string | null;
+      baseSha: string | null;
+      planning: {
+        sealed: boolean;
+        sealDigest: string | null;
+        amendmentCount: number;
+      } | null;
+      implementation: { headSha: string | null; matchesHead: boolean | null };
+      verification: Record<string, unknown> | null;
+      review: Record<string, unknown> | null;
+      delivery: Record<string, unknown> | null;
+      errors: string[];
+    };
+  };
+}
+
+async function previewResume(staging: string): Promise<ResumePreview> {
+  const checked = await executeMain([
+    "workflow",
+    "advance",
+    `--staging=${staging}`,
+  ]);
+  return {
+    status: checked.status,
+    output: JSON.parse(checked.stdout) as ResumePreview["output"],
+  };
+}
+
+function gitHeadOf(root: string): string {
+  return spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+  }).stdout.trim();
+}
+
+/** Step 9をimplementation HEADで記録し、初回review前のquick staging。 */
+function implementedResumeStaging(world: WorkflowStepWorld): {
+  root: string;
+  staging: string;
+  implementationHeadSha: string;
+} {
+  const root = fs.realpathSync(world.initRepo());
+  const staging = createIssueStaging(root, {
+    title: "resume-test",
+    answers: answers(),
+    now: new Date(instant),
+    requestedMode: "quick",
+  }).path;
+  for (const step of [1, 4])
+    appendWorkflowJournalEntry({ staging, entry: entry(step) });
+  const implementationHeadSha = gitHeadOf(root);
+  appendWorkflowJournalEntry({
+    staging,
+    entry: { ...entry(9), implementationHeadSha },
+    headSha: implementationHeadSha,
+  });
+  return { root, staging, implementationHeadSha };
+}
+
 function completeAdvanceRequirement(staging: string): void {
   const requirementFile = path.join(staging, "00_要求定義.md");
   const completed = fs
@@ -8302,6 +8372,181 @@ if (exact(["auth", "status"])) {
         fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
       );
       assert.equal(journal.entries.at(-1)?.step, 4);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-014": {
+      const root = fs.realpathSync(this.initRepo());
+      const staging = createIssueStaging(root, {
+        title: "resume-test",
+        answers: answers(),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      const { status, output } = await previewResume(staging);
+      assert.equal(status, 0, JSON.stringify(output));
+      assert.equal(output.targetStep, 1);
+      assert.deepEqual(output.resume, {
+        authority: "advisory",
+        staging,
+        headSha: gitHeadOf(root),
+        baseSha: null,
+        planning: { sealed: false, sealDigest: null, amendmentCount: 0 },
+        implementation: { headSha: null, matchesHead: null },
+        verification: null,
+        review: null,
+        delivery: null,
+        errors: [],
+      });
+      break;
+    }
+    case "SCN-E2E-ADVANCE-015": {
+      const { root, staging, implementationHeadSha } =
+        implementedResumeStaging(this);
+      const atImplementation = await previewResume(staging);
+      assert.deepEqual(atImplementation.output.resume.implementation, {
+        headSha: implementationHeadSha,
+        matchesHead: true,
+      });
+      fs.writeFileSync(path.join(root, "later.txt"), "after Step 9\n");
+      spawnSync("git", ["add", "later.txt"], { cwd: root });
+      spawnSync("git", ["commit", "-q", "-m", "after Step 9"], { cwd: root });
+      const movedHeadSha = gitHeadOf(root);
+      assert.notEqual(movedHeadSha, implementationHeadSha);
+      const moved = await previewResume(staging);
+      assert.equal(moved.output.resume.headSha, movedHeadSha);
+      assert.deepEqual(moved.output.resume.implementation, {
+        headSha: implementationHeadSha,
+        matchesHead: false,
+      });
+      assert.equal(moved.output.resume.review, null);
+      const roundFile = path.join(this.temp("asc-resume-round-"), "round.json");
+      fs.writeFileSync(
+        roundFile,
+        JSON.stringify(
+          reviewRoundFixture(root, implementationHeadSha, movedHeadSha),
+        ),
+      );
+      await assert.rejects(
+        () =>
+          executeMain([
+            "review",
+            "round",
+            `--staging=${staging}`,
+            `--file=${roundFile}`,
+          ]),
+        /review round candidate HEADがStep 9 implementation HEADと一致しません/u,
+      );
+      break;
+    }
+    case "SCN-E2E-ADVANCE-016": {
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      fs.writeFileSync(
+        path.join(prepared.staging, "05_計画変更.md"),
+        "# 05 計画変更\n\n## AMD-001 範囲\n\n- 対象: T01\n- 変更: 再開状態\n- 理由: 検査\n",
+      );
+      const checked = executeCli(
+        ["workflow", "advance", `--staging=${prepared.staging}`],
+        prepared.root,
+        prepared.env,
+      );
+      const resume = (JSON.parse(checked.stdout) as ResumePreview["output"])
+        .resume;
+      const session = JSON.parse(
+        fs.readFileSync(
+          path.join(prepared.staging, "review-session.json"),
+          "utf8",
+        ),
+      ) as {
+        anchor: { diffBaseSha: string };
+        latestRoundDigest: string;
+        latestCandidateHeadSha: string;
+        status: string;
+        rounds: unknown[];
+      };
+      const runs = fs
+        .readFileSync(
+          path.join(prepared.staging, "journal", "verification-runs.jsonl"),
+          "utf8",
+        )
+        .trim()
+        .split("\n")
+        .map(
+          (line) =>
+            JSON.parse(line) as {
+              headSha: string;
+              scope: string;
+              exitCode: number | null;
+              signal: string | null;
+              recordDigest: string;
+            },
+        );
+      const latestRun = runs.at(-1)!;
+      const delivery = JSON.parse(
+        fs.readFileSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+          "utf8",
+        ),
+      ) as { state: string; pr: { number: number } };
+      assert.equal(delivery.state, "pr-bound");
+      assert.equal(resume.headSha, prepared.headSha);
+      assert.equal(resume.baseSha, session.anchor.diffBaseSha);
+      assert.equal(resume.planning?.amendmentCount, 1);
+      assert.equal(
+        resume.implementation.headSha,
+        prepared.implementationCommitSha,
+      );
+      assert.deepEqual(resume.verification, {
+        headSha: latestRun.headSha,
+        scope: latestRun.scope,
+        passed: latestRun.exitCode === 0 && latestRun.signal === null,
+        recordDigest: latestRun.recordDigest,
+        matchesImplementationHead:
+          latestRun.headSha === prepared.implementationCommitSha,
+      });
+      assert.equal(resume.verification?.passed, true);
+      assert.deepEqual(resume.review, {
+        status: session.status,
+        latestRoundDigest: session.latestRoundDigest,
+        candidateHeadSha: session.latestCandidateHeadSha,
+        rounds: session.rounds.length,
+        matchesImplementationHead:
+          session.latestCandidateHeadSha === prepared.implementationCommitSha,
+      });
+      assert.deepEqual(resume.delivery, {
+        state: "pr-bound",
+        pr: delivery.pr.number,
+      });
+      assert.deepEqual(resume.errors, []);
+      const serialized = JSON.stringify(resume);
+      for (const body of ["step 9の証拠", "artifact-9", "findings", "範囲"])
+        assert.equal(serialized.includes(body), false, body);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-017": {
+      const { staging } = implementedResumeStaging(this);
+      const before = await previewResume(staging);
+      fs.writeFileSync(path.join(staging, "review-session.json"), "{broken");
+      const after = await previewResume(staging);
+      assert.equal(after.status, before.status);
+      assert.deepEqual(
+        [
+          after.output.state,
+          after.output.operation,
+          after.output.targetStep,
+          after.output.reasons,
+        ],
+        [
+          before.output.state,
+          before.output.operation,
+          before.output.targetStep,
+          before.output.reasons,
+        ],
+      );
+      assert.equal(after.output.resume.review, null);
+      assert.equal(after.output.resume.errors.length, 1);
+      assert.match(after.output.resume.errors[0] ?? "", /^review session: /u);
+      assert.deepEqual(before.output.resume.errors, []);
       break;
     }
     case "SCN-INT-ISSUESYNC-024": {

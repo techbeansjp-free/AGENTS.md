@@ -439,6 +439,26 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-ADVANCE-013"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  Scenario: SCN-E2E-ADVANCE-014 Step 0直後のpreviewは空の再開状態を返す
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-014"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-015 Step 9後にHEADが動くと再開状態は不一致を示しgateは拒否を保つ
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-015"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-016 保存記録のdigestと状態を本文なしで返す
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-016"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-017 壊れた記録でも既存判定を変えない
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-017"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   @issue-1396
   Scenario: SCN-INT-ISSUESYNC-024 workflow advanceのpreviewと送信本文は末尾改行を含む同じdigestを使う
     Given ワークフローStep公開CLIの隔離環境がある

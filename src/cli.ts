@@ -47,6 +47,7 @@ import {
   verifyReviewEvidenceWithStaging,
 } from "./adapters/review-evidence.js";
 import { runVerification } from "./adapters/verification-run.js";
+import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import {
   assertPullRequestTrackerBinding,
   createPullRequest,
@@ -5824,7 +5825,12 @@ export async function main(
       };
     }
     if (!apply || plan.state !== "preview") {
-      print(syncPreview === undefined ? plan : { ...plan, sync: syncPreview });
+      const resume = observeWorkflowResume(staging);
+      print(
+        syncPreview === undefined
+          ? { ...plan, resume }
+          : { ...plan, sync: syncPreview, resume },
+      );
       return plan.state === "blocked" ? 1 : 0;
     }
     return withStagingMutationLock(staging, () => {
