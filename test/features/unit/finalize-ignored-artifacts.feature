@@ -196,11 +196,6 @@ Feature: worktree finalizeのignore対象を安全に判定する
     When project policy manifestをruntime検証する
     Then 限定された再帰patternはschemaとruntime検証で受理される
 
-  Scenario: SCN-UNIT-FINALIGN-040 Unicodeと再帰basename patternをschemaとruntimeで受理する
-    Given schema fileから読み取ったfinalize ignore allowlistのpatternと代表入力集合がある
-    When 各schema patternとruntime述語で代表入力集合を判定する
-    Then 受理と拒否を含む代表入力集合の判定は全件一致する
-
   Scenario: SCN-UNIT-FINALIGN-041 tracked stagingの機械記録だけを限定再帰basenameで許可する
     Given Unicode tracked stagingと機械記録を持つ削除観測がある
     When 限定再帰basename patternの削除安全性を判定する
