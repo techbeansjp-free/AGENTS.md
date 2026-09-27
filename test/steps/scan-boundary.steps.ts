@@ -46,7 +46,7 @@ const TRACKED_PATHS: readonly string[] = Object.freeze([
 
 const STAGING_PREDICATE: ExclusionPredicateSource = {
   id: "issue-staging",
-  owner: "trace:check",
+  owner: "scan-boundary観測",
   appliesTo: "走査境界の観測の走査範囲のみ",
   reasonCode: "issue-staging",
   reason: "Issue一時ステージングを走査境界の観測の対象から除く",
@@ -252,7 +252,7 @@ Then(
       (candidate) => candidate.predicate === "issue-staging",
     );
     assert.ok(entry, "登録済み述語の観測がありません");
-    assert.equal(entry.owner, "trace:check");
+    assert.equal(entry.owner, "scan-boundary観測");
     /**
      * **適用範囲まで返すことを見る。** gate名だけを返すと「gate全体の除外」と
      * 読める。述語はgate内の一部にしか適用されない（Issue #960 F-01）。
@@ -545,7 +545,7 @@ Given(
     this.sources = [
       {
         id: "recording",
-        owner: "trace:check",
+        owner: "scan-boundary観測",
         appliesTo: "走査境界の観測の走査範囲のみ",
         reasonCode: "recording",
         reason: "述語が受け取った引数を記録する",
