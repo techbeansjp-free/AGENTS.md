@@ -182,6 +182,7 @@ When("記録の組み合わせごとに検証欄を導出する", function () {
   };
   this.errors = [
     rejectionOf(() => select([])),
+    rejectionOf(() => select([this.record], { headSha: "e".repeat(40) })),
     rejectionOf(() => select([this.record], { impactDigest: "d".repeat(64) })),
     rejectionOf(() => select([this.record, failed])),
     rejectionOf(() => select([targetedOnly])),
@@ -205,9 +206,10 @@ When("記録の組み合わせごとに検証欄を導出する", function () {
 });
 
 Then(
-  "記録なし・影響集合不一致・最新の不合格・scope=full欠落・targetedのfeature欠落を拒否し合格記録だけを導く",
+  "記録なし・HEAD不一致・影響集合不一致・最新の不合格・scope=full欠落・targetedのfeature欠落を拒否し合格記録だけを導く",
   function () {
     const expected = [
+      /検証記録がありません.*verify run/u,
       /検証記録がありません.*verify run/u,
       /現在の影響集合.*一致しません/u,
       /最新の実行が不合格/u,
