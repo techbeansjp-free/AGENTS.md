@@ -2337,6 +2337,14 @@ interface DeliveryProviderControl {
   contentChanged: boolean;
   titleChanged: boolean;
   /**
+   * **closing索引を変えずに本文のclosing参照だけを変える**（Issue #1517 AMD-001）。
+   *
+   * `"added"`は対象外Issueの`Closes`を本文へ足し、`"removed"`は canonical Issueの
+   * `Closes`を`Relates to`へ置き換える。索引が一致したままなので、本文のclosing契約
+   * digestの照合だけが拒否の根拠になる。既定の`"none"`は既存scenarioの挙動を変えない。
+   */
+  closingBodyEdit: "none" | "added" | "removed";
+  /**
    * merge後に固定run IDで直読みしたrunの`conclusion`（Issue #1280）。
    * **不一致側を作るための唯一の入口である。** 既定は`"success"`で挙動を変えない。
    */
@@ -3288,6 +3296,7 @@ function prepareDeliveryCli(
     isCrossRepository: false,
     contentChanged: false,
     titleChanged: false,
+    closingBodyEdit: "none",
     fixedRunConclusion: "success",
     preMergeRunPullRequests: "target",
     postMergeReviewShift: "none",
@@ -3335,6 +3344,9 @@ const body = () => {
     ? fs.readFileSync(observedBody, "utf8").trimEnd()
     : canonicalBody;
   if (control.closingChanged) return canonical + "\\n\\nCloses #878";
+  if (control.closingBodyEdit === "added") return canonical + "\\n\\nCloses #878";
+  if (control.closingBodyEdit === "removed")
+    return canonical.split("Closes #877").join("Relates to #877");
   return control.contentChanged ? canonical + "\\n\\nprovider content changed" : canonical;
 };
 const observation = () => ({
@@ -6030,6 +6042,51 @@ if (exact(["auth", "status"])) {
         "pr-bound",
         `再開可能な待機ではない状態になっています: ${bound.state}`,
       );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-071": {
+      /**
+       * **`pr-bound`以後の本文・タイトル訂正はmergeを妨げない**（Issue #1517 AMD-001）。
+       * 作成直後のread-backとは別に、merge前後の再観測はclosing契約とidentityだけを照合する。
+       */
+      const edited = prepareDeliveryCli(this);
+      createDeliveryPullRequest(edited);
+      writeDeliveryProviderControl(edited, {
+        contentChanged: true,
+        titleChanged: true,
+      });
+      const requested = executeDeliveryMerge(edited);
+      assert.equal(requested.status, 0, requested.stdout + requested.stderr);
+      assert.match(requested.stdout, /merge_pending/u);
+      assert.equal(deliveryProviderCalls(edited).filter(isMergeCall).length, 1);
+      writeDeliveryProviderControl(edited, {
+        phase: "merged",
+        mergedAt: fixtureInstant({ minutesAhead: 5 }),
+      });
+      const completed = executeDeliveryMerge(edited);
+      assert.equal(completed.status, 0, completed.stdout + completed.stderr);
+      assert.equal(
+        (JSON.parse(completed.stdout) as { state?: string }).state,
+        "merged",
+      );
+
+      for (const edit of ["added", "removed"] as const) {
+        const prepared = prepareDeliveryCli(this);
+        createDeliveryPullRequest(prepared);
+        writeDeliveryProviderControl(prepared, { closingBodyEdit: edit });
+        const rejected = executeDeliveryMerge(prepared);
+        assert.notEqual(rejected.status, 0, `${edit}: mergeを受理しました`);
+        assert.match(
+          rejected.stdout + rejected.stderr,
+          /closing Issueはcanonical Issue 1件だけが必要です/u,
+          `${edit}: ${rejected.stdout}${rejected.stderr}`,
+        );
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          0,
+          edit,
+        );
+      }
       break;
     }
     case "SCN-E2E-WFSTEP-070": {

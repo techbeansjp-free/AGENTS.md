@@ -831,10 +831,19 @@ function assertCreatableReviewHead(
     );
 }
 
+/**
+ * PR観測をrepository identityとclosing契約へ照合する。
+ *
+ * **タイトル・本文全体のdigest一致は作成直後のread-backだけで要求する**
+ * （Issue #1517 AMD-001）。作成直後は作成したPRを同定するために全文を使う。
+ * `pr-bound`以後の再観測では本文が担う安全上の契約はclosing契約だけであり、
+ * `closingContractDigest`が独立に照合するため、それ以外の本文・タイトルの訂正を拒否しない。
+ */
 function assertObservedClosingContract(input: {
   state: DeliveryState;
   observed: PullRequestInspection;
   tracker: string | null;
+  requireCreatedContent: boolean;
 }): { issue: number; issueUrl: string; bodyClosingDigest: string } {
   if (
     input.observed.headRepository?.nameWithOwner?.toLowerCase() !==
@@ -850,6 +859,7 @@ function assertObservedClosingContract(input: {
   )
     throw new Error("PRタイトル・本文をtrusted providerから再観測できません");
   if (
+    input.requireCreatedContent &&
     pullRequestContentDigest({
       title: input.observed.title,
       body: input.observed.body,
@@ -905,7 +915,12 @@ function bindingFromCreatedPullRequest(input: {
     throw new Error(
       "PR作成後のbase ref/head identityが準備済み値と一致しません",
     );
-  assertObservedClosingContract({ state, observed, tracker: input.tracker });
+  assertObservedClosingContract({
+    state,
+    observed,
+    tracker: input.tracker,
+    requireCreatedContent: true,
+  });
   return { number: observed.number, url: observed.url, boundAt: input.boundAt };
 }
 
@@ -950,7 +965,12 @@ export function assertBoundPullRequestObservation(input: {
     prUrl: state.pr.url,
     headSha: state.create.headSha,
   });
-  return assertObservedClosingContract(input);
+  return assertObservedClosingContract({
+    state: input.state,
+    observed: input.observed,
+    tracker: input.tracker,
+    requireCreatedContent: false,
+  });
 }
 
 function mergeObservationFromProvider(input: {

@@ -143,6 +143,11 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-054"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  Scenario: SCN-E2E-WFSTEP-071 PR固定後の本文・タイトル訂正はmergeを妨げずclosing契約の変更は拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-071"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-070 actor-independentのpr mergeもreview証跡の検証欄を観測記録から再導出する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-070"のE2E検査を実行する

@@ -402,6 +402,14 @@ function assertCreatableReviewHead(staging, headSha, mode, mergeMode) {
         reviewBinding.implementationHeadSha === headSha)
         throw new Error("H_implとH_finalが同一のためPRを作成できません。H_implで`review export`を実行し、生成したreview証跡（docs/reviews/<Issue番号>_review.json）1 fileだけを実装commitの後にcommitしてから再実行してください");
 }
+/**
+ * PR観測をrepository identityとclosing契約へ照合する。
+ *
+ * **タイトル・本文全体のdigest一致は作成直後のread-backだけで要求する**
+ * （Issue #1517 AMD-001）。作成直後は作成したPRを同定するために全文を使う。
+ * `pr-bound`以後の再観測では本文が担う安全上の契約はclosing契約だけであり、
+ * `closingContractDigest`が独立に照合するため、それ以外の本文・タイトルの訂正を拒否しない。
+ */
 function assertObservedClosingContract(input) {
     if (input.observed.headRepository?.nameWithOwner?.toLowerCase() !==
         input.state.create.repository.toLowerCase() ||
@@ -410,10 +418,11 @@ function assertObservedClosingContract(input) {
     if (typeof input.observed.title !== "string" ||
         typeof input.observed.body !== "string")
         throw new Error("PRタイトル・本文をtrusted providerから再観測できません");
-    if (pullRequestContentDigest({
-        title: input.observed.title,
-        body: input.observed.body,
-    }) !== input.state.create.pullRequestDigest)
+    if (input.requireCreatedContent &&
+        pullRequestContentDigest({
+            title: input.observed.title,
+            body: input.observed.body,
+        }) !== input.state.create.pullRequestDigest)
         throw new Error("PRタイトル・本文がPR作成時の固定contentから変化しました");
     const binding = assertPullRequestTrackerBinding({
         repository: input.state.create.repository,
@@ -446,7 +455,12 @@ function bindingFromCreatedPullRequest(input) {
         observed.headRefOid !== state.create.headSha ||
         observed.baseRefName !== state.create.baseRef)
         throw new Error("PR作成後のbase ref/head identityが準備済み値と一致しません");
-    assertObservedClosingContract({ state, observed, tracker: input.tracker });
+    assertObservedClosingContract({
+        state,
+        observed,
+        tracker: input.tracker,
+        requireCreatedContent: true,
+    });
     return { number: observed.number, url: observed.url, boundAt: input.boundAt };
 }
 /**
@@ -482,7 +496,12 @@ export function assertBoundPullRequestObservation(input) {
         prUrl: state.pr.url,
         headSha: state.create.headSha,
     });
-    return assertObservedClosingContract(input);
+    return assertObservedClosingContract({
+        state: input.state,
+        observed: input.observed,
+        tracker: input.tracker,
+        requireCreatedContent: false,
+    });
 }
 function mergeObservationFromProvider(input) {
     if (!input.state.pr)
