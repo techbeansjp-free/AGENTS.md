@@ -143,6 +143,11 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-054"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  Scenario: SCN-E2E-WFSTEP-071 PR固定後の本文・タイトル訂正はmergeを妨げずclosing契約の変更は拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-WFSTEP-071"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-070 actor-independentのpr mergeもreview証跡の検証欄を観測記録から再導出する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-070"のE2E検査を実行する
@@ -437,6 +442,26 @@ Feature: 公開CLIでワークフローStepを強制する
   Scenario: SCN-E2E-ADVANCE-013 workflow advanceは公開済みIssue同期を重複せずjournalを復旧する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-ADVANCE-013"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-014 Step 0直後のpreviewは空の再開状態を返す
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-014"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-015 Step 9後にHEADが動くと再開状態は不一致を示しgateは拒否を保つ
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-015"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-016 保存記録のdigestと状態を本文なしで返す
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-016"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-017 壊れた記録でも既存判定を変えない
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-017"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
   @issue-1396

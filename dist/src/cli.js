@@ -17,7 +17,8 @@ import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verify
 import { parseReviewEvidence, } from "./domain/review-evidence.js";
 import { exportReviewEvidence, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
 import { runVerification } from "./adapters/verification-run.js";
-import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, } from "./domain/delivery.js";
+import { observeWorkflowResume } from "./adapters/workflow-resume.js";
+import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, nonCanonicalClosingReferences, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
 import { isPlanFrozenCheckStep, latestPlanSeal } from "./domain/plan-seal.js";
 import { buildWorktreePath, createWorktree, canonicalWorktreePath, DEFAULT_WORKTREE_PLACEMENT, enforceTrustedWorktreeBoundary, inspectFinalizeState, inspectRecoveryState, validateWorktreePlacement, } from "./domain/worktree.js";
@@ -402,6 +403,15 @@ function assertCreatableReviewHead(staging, headSha, mode, mergeMode) {
         reviewBinding.implementationHeadSha === headSha)
         throw new Error("H_implとH_finalが同一のためPRを作成できません。H_implで`review export`を実行し、生成したreview証跡（docs/reviews/<Issue番号>_review.json）1 fileだけを実装commitの後にcommitしてから再実行してください");
 }
+/**
+ * PR観測をrepository identityとclosing契約へ照合する。
+ *
+ * **タイトル・本文全体のdigest一致は作成直後のread-backだけで要求する**
+ * （Issue #1517 AMD-001）。作成直後は作成したPRを同定するために全文を使う。
+ * `pr-bound`以後の再観測では本文が担う安全上の契約はclosing契約だけであり、
+ * `closingContractDigest`が独立に照合するため、それ以外の本文・タイトルの訂正を拒否しない。
+ * canonical以外への終端keyword参照は、作成時と同じくcode領域を除かずに拒否する。
+ */
 function assertObservedClosingContract(input) {
     if (input.observed.headRepository?.nameWithOwner?.toLowerCase() !==
         input.state.create.repository.toLowerCase() ||
@@ -410,10 +420,11 @@ function assertObservedClosingContract(input) {
     if (typeof input.observed.title !== "string" ||
         typeof input.observed.body !== "string")
         throw new Error("PRタイトル・本文をtrusted providerから再観測できません");
-    if (pullRequestContentDigest({
-        title: input.observed.title,
-        body: input.observed.body,
-    }) !== input.state.create.pullRequestDigest)
+    if (input.requireCreatedContent &&
+        pullRequestContentDigest({
+            title: input.observed.title,
+            body: input.observed.body,
+        }) !== input.state.create.pullRequestDigest)
         throw new Error("PRタイトル・本文がPR作成時の固定contentから変化しました");
     const binding = assertPullRequestTrackerBinding({
         repository: input.state.create.repository,
@@ -424,7 +435,7 @@ function assertObservedClosingContract(input) {
         binding.issueUrl.toLowerCase() !== input.state.create.issueUrl.toLowerCase())
         throw new Error("PRのclosing Issueが準備済みdelivery identityと一致しません");
     const closes = [
-        ...new Set(extractIssueClosingNumbers(withoutMarkdownCode(input.observed.body))),
+        ...new Set(extractIssueClosingNumbers(withoutMarkdownCode(input.observed.body), input.state.create.repository)),
     ];
     const bodyClosingDigest = closingContractDigest({
         canonicalIssue: binding.issue,
@@ -433,6 +444,14 @@ function assertObservedClosingContract(input) {
     });
     if (bodyClosingDigest !== input.state.create.bodyClosingDigest)
         throw new Error("PR本文のclosing契約がPR作成時の固定値から変化しました");
+    /**
+     * **canonical以外への終端keyword参照はcode領域を除かずに拒否する**（Issue #1517 AMD-003）。
+     * code領域の判定はGFMの部分近似であり、その誤りで外部参照を隠すfail-openが境界ごとに
+     * 生じる。作成時の`pr create`と同じ判定を、本文の編集有無によらず当てる。
+     */
+    const hidden = nonCanonicalClosingReferences(input.observed.body, binding.issue, input.state.create.repository);
+    if (hidden.length > 0)
+        throw new Error(`PR本文は、code内を含めcanonical Issue以外への終端keyword参照を持てません: ${hidden.join(", ")}`);
     return { ...binding, bodyClosingDigest };
 }
 function bindingFromCreatedPullRequest(input) {
@@ -446,7 +465,12 @@ function bindingFromCreatedPullRequest(input) {
         observed.headRefOid !== state.create.headSha ||
         observed.baseRefName !== state.create.baseRef)
         throw new Error("PR作成後のbase ref/head identityが準備済み値と一致しません");
-    assertObservedClosingContract({ state, observed, tracker: input.tracker });
+    assertObservedClosingContract({
+        state,
+        observed,
+        tracker: input.tracker,
+        requireCreatedContent: true,
+    });
     return { number: observed.number, url: observed.url, boundAt: input.boundAt };
 }
 /**
@@ -482,7 +506,12 @@ export function assertBoundPullRequestObservation(input) {
         prUrl: state.pr.url,
         headSha: state.create.headSha,
     });
-    return assertObservedClosingContract(input);
+    return assertObservedClosingContract({
+        state: input.state,
+        observed: input.observed,
+        tracker: input.tracker,
+        requireCreatedContent: false,
+    });
 }
 function mergeObservationFromProvider(input) {
     if (!input.state.pr)
@@ -4160,7 +4189,10 @@ export async function main(argv, dependencies = {}) {
             };
         }
         if (!apply || plan.state !== "preview") {
-            print(syncPreview === undefined ? plan : { ...plan, sync: syncPreview });
+            const resume = observeWorkflowResume(staging);
+            print(syncPreview === undefined
+                ? { ...plan, resume }
+                : { ...plan, sync: syncPreview, resume });
             return plan.state === "blocked" ? 1 : 0;
         }
         return withStagingMutationLock(staging, () => {

@@ -7,7 +7,10 @@ import {
   conformingPullRequestBody,
   stepDefinitions,
 } from "../support/world.js";
-import { pullRequestRequiredHeadings } from "../../src/domain/issue.js";
+import {
+  pullRequestRequiredHeadings,
+  withoutMarkdownCode,
+} from "../../src/domain/issue.js";
 import {
   assertPullRequestTrackerBinding,
   createPullRequest,
@@ -417,6 +420,106 @@ Then("PR previewのbodyは必須見出しをすべて含む", function () {
   ])
     assert.deepEqual(extractIssueClosingNumbers(`${keyword}: #824`), [824]);
   assert.deepEqual(extractIssueClosingNumbers("FIXES #824"), [824]);
+  /**
+   * **修飾付きclosing参照もGitHubと同じく数える**（Issue #1517 R5-01）。
+   * 同一repository（大小文字を問わない）だけが番号へ解決し、他repositoryは0へ写る。
+   */
+  assert.deepEqual(
+    extractIssueClosingNumbers(
+      "Closes O/R#824\nFixes: https://github.com/o/r/issues/825",
+      "o/r",
+    ),
+    [824, 825],
+  );
+  assert.deepEqual(
+    extractIssueClosingNumbers(
+      "Closes other/repo#824\nResolved https://github.com/o/other/issues/824",
+      "o/r",
+    ),
+    [0, 0],
+  );
+  assert.deepEqual(extractIssueClosingNumbers("Closes o/r#824"), [0]);
+  /**
+   * **canonical以外への終端keyword参照はcode領域を除かずに拒否する**（Issue #1517 AMD-003）。
+   * code判定の誤り（字下げした疑似fence、info stringにbacktickを含むfence、list内の閉じない
+   * fence）も、正規のcode内も、強調記号で挟んだ形も拒否する。canonical参照の例示は妨げない。
+   */
+  for (const hidden of [
+    "    ```\n\nFixes other/repo#9",
+    "```a`b\n\nFixes other/repo#9",
+    "- a\n  ```\nFixes other/repo#9",
+    "```\nCloses other/repo#9\n```",
+    "_Fixes other/repo#9_",
+  ]) {
+    const body = `Closes #824\n\n${hidden}`;
+    const result = validateIssueClosingReferences(withoutMarkdownCode(body), {
+      canonicalIssue: 824,
+      relatedIssues: [],
+      repository: "o/r",
+      rawBody: body,
+    });
+    assert.equal(result.valid, false, hidden);
+    assert.ok(
+      result.errors.some((error) =>
+        /^(code内を含めcanonical Issue以外への終端keyword参照を置けません|他repositoryのIssueを自動closeできません): other\/repo#9$/u.test(
+          error,
+        ),
+      ),
+      `${hidden}: ${result.errors.join("; ")}`,
+    );
+  }
+  /** code内の、番号だけcanonicalと同じ他repository参照も拒否する。 */
+  const sameNumberForeign = "Closes #824\n\n```\nCloses other/repo#824\n```";
+  assert.deepEqual(
+    validateIssueClosingReferences(withoutMarkdownCode(sameNumberForeign), {
+      canonicalIssue: 824,
+      relatedIssues: [],
+      repository: "o/r",
+      rawBody: sameNumberForeign,
+    }).errors,
+    [
+      "code内を含めcanonical Issue以外への終端keyword参照を置けません: other/repo#824",
+    ],
+  );
+  const exampleOnly = "Closes #824\n\n```\nCloses #824\n```";
+  assert.equal(
+    validateIssueClosingReferences(withoutMarkdownCode(exampleOnly), {
+      canonicalIssue: 824,
+      relatedIssues: [],
+      repository: "o/r",
+      rawBody: exampleOnly,
+    }).valid,
+    true,
+  );
+  const foreign = validateIssueClosingReferences(
+    "Closes #824\nCloses other/repo#9",
+    { canonicalIssue: 824, relatedIssues: [], repository: "o/r" },
+  );
+  assert.equal(foreign.valid, false);
+  assert.ok(
+    foreign.errors.includes(
+      "他repositoryのIssueを自動closeできません: other/repo#9",
+    ),
+    foreign.errors.join("; "),
+  );
+  const sameRepositoryOther = validateIssueClosingReferences(
+    "Closes #824\nFixes https://github.com/O/R/issues/878",
+    { canonicalIssue: 824, relatedIssues: [], repository: "o/r" },
+  );
+  assert.ok(
+    sameRepositoryOther.errors.includes(
+      "canonical Issue以外を自動closeできません: #878",
+    ),
+    sameRepositoryOther.errors.join("; "),
+  );
+  assert.equal(
+    validateIssueClosingReferences("Closes https://github.com/o/r/issues/824", {
+      canonicalIssue: 824,
+      relatedIssues: [],
+      repository: "o/r",
+    }).valid,
+    true,
+  );
   assert.equal(
     validateIssueClosingReferences("Fixes #824\nResolved: #824", {
       canonicalIssue: 824,

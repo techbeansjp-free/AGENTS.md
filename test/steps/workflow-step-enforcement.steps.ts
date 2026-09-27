@@ -1453,6 +1453,117 @@ function createQuickStaging(root: string): string {
   }).path;
 }
 
+/** 再開状態（REQ-WF-047）のpreview出力。 */
+interface ResumePreview {
+  status: number;
+  output: {
+    state: string;
+    operation: string;
+    targetStep: number;
+    reasons: string[];
+    resume: {
+      authority: string;
+      staging: string;
+      headSha: string | null;
+      baseSha: string | null;
+      planning: {
+        sealed: boolean;
+        sealDigest: string | null;
+        amendmentCount: number;
+      } | null;
+      implementation: { headSha: string | null; matchesHead: boolean | null };
+      verification: Record<string, unknown> | null;
+      review: Record<string, unknown> | null;
+      delivery: Record<string, unknown> | null;
+      errors: string[];
+    };
+  };
+}
+
+async function previewResume(staging: string): Promise<ResumePreview> {
+  const checked = await executeMain([
+    "workflow",
+    "advance",
+    `--staging=${staging}`,
+  ]);
+  return {
+    status: checked.status,
+    output: JSON.parse(checked.stdout) as ResumePreview["output"],
+  };
+}
+
+/**
+ * previewが書き込まないことの観測点（INV-01）。stagingの全fileのpathとSHA-256、
+ * `git count-objects -v`、`.git`直下のlock file。
+ */
+function resumeWriteSnapshot(root: string, staging: string): unknown {
+  const files: [string, string][] = [];
+  const walk = (directory: string) => {
+    for (const name of fs.readdirSync(directory).sort()) {
+      const file = path.join(directory, name);
+      const stat = fs.lstatSync(file);
+      if (stat.isDirectory()) walk(file);
+      else
+        files.push([
+          path.relative(staging, file),
+          crypto
+            .createHash("sha256")
+            .update(fs.readFileSync(file))
+            .digest("hex"),
+        ]);
+    }
+  };
+  walk(staging);
+  const objects = spawnSync("git", ["count-objects", "-v"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  assert.equal(objects.status, 0, objects.stderr);
+  const gitDirectory = spawnSync("git", ["rev-parse", "--absolute-git-dir"], {
+    cwd: root,
+    encoding: "utf8",
+  }).stdout.trim();
+  return {
+    files,
+    objects: objects.stdout,
+    locks: fs
+      .readdirSync(gitDirectory)
+      .filter((name) => name.endsWith(".lock"))
+      .sort(),
+  };
+}
+
+function gitHeadOf(root: string): string {
+  return spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+  }).stdout.trim();
+}
+
+/** Step 9をimplementation HEADで記録し、初回review前のquick staging。 */
+function implementedResumeStaging(world: WorkflowStepWorld): {
+  root: string;
+  staging: string;
+  implementationHeadSha: string;
+} {
+  const root = fs.realpathSync(world.initRepo());
+  const staging = createIssueStaging(root, {
+    title: "resume-test",
+    answers: answers(),
+    now: new Date(instant),
+    requestedMode: "quick",
+  }).path;
+  for (const step of [1, 4])
+    appendWorkflowJournalEntry({ staging, entry: entry(step) });
+  const implementationHeadSha = gitHeadOf(root);
+  appendWorkflowJournalEntry({
+    staging,
+    entry: { ...entry(9), implementationHeadSha },
+    headSha: implementationHeadSha,
+  });
+  return { root, staging, implementationHeadSha };
+}
+
 function completeAdvanceRequirement(staging: string): void {
   const requirementFile = path.join(staging, "00_要求定義.md");
   const completed = fs
@@ -2225,6 +2336,38 @@ interface DeliveryProviderControl {
   isCrossRepository: boolean;
   contentChanged: boolean;
   titleChanged: boolean;
+  /**
+   * **closing索引を変えずに本文のclosing参照だけを変える**（Issue #1517 AMD-001）。
+   *
+   * `"added"`は対象外Issueの`Closes`を本文へ足し、`"removed"`は canonical Issueの
+   * `Closes`を`Relates to`へ置き換える。索引が一致したままなので、本文のclosing契約
+   * digestの照合だけが拒否の根拠になる。既定の`"none"`は既存scenarioの挙動を変えない。
+   *
+   * 修飾付きの形（R5-01）: `"qualified-other"`は同一repositoryの`o/r#878`、
+   * `"url-other"`は同一repositoryのIssue URLで878、`"cross-repo"`は`other/repo#9`を、
+   * `"cross-repo-same-number"`は番号だけcanonicalと同じ`other/repo#877`を足す。
+   * `"url-canonical-only"`は canonical Issueの参照をURL形へ置き換え、
+   * `"url-canonical-duplicate"`は`#877`を残したままURL形の877を足す。
+   * code境界（AMD-003）: canonical以外への終端keyword参照はcode領域を除かずに拒否するため、
+   * code内・code判定の境界にある外部closing参照はすべて拒否する。`"indented-fence-other"`は4スペース字下げの
+   * 疑似fenceの後、`"fenced-code-other"`は正規fence内、`"info-backtick-fence-other"`は
+   * info stringにbacktickを含む疑似fenceの後、`"list-unclosed-fence-other"`はlist内の
+   * 閉じないfenceの後に外部参照を足す。
+   */
+  closingBodyEdit:
+    | "none"
+    | "added"
+    | "removed"
+    | "qualified-other"
+    | "url-other"
+    | "cross-repo"
+    | "cross-repo-same-number"
+    | "url-canonical-only"
+    | "url-canonical-duplicate"
+    | "indented-fence-other"
+    | "fenced-code-other"
+    | "info-backtick-fence-other"
+    | "list-unclosed-fence-other";
   /**
    * merge後に固定run IDで直読みしたrunの`conclusion`（Issue #1280）。
    * **不一致側を作るための唯一の入口である。** 既定は`"success"`で挙動を変えない。
@@ -3177,6 +3320,7 @@ function prepareDeliveryCli(
     isCrossRepository: false,
     contentChanged: false,
     titleChanged: false,
+    closingBodyEdit: "none",
     fixedRunConclusion: "success",
     preMergeRunPullRequests: "target",
     postMergeReviewShift: "none",
@@ -3224,6 +3368,29 @@ const body = () => {
     ? fs.readFileSync(observedBody, "utf8").trimEnd()
     : canonicalBody;
   if (control.closingChanged) return canonical + "\\n\\nCloses #878";
+  if (control.closingBodyEdit === "added") return canonical + "\\n\\nCloses #878";
+  if (control.closingBodyEdit === "removed")
+    return canonical.split("Closes #877").join("Relates to #877");
+  if (control.closingBodyEdit === "qualified-other")
+    return canonical + "\\n\\nCloses o/r#878";
+  if (control.closingBodyEdit === "url-other")
+    return canonical + "\\n\\nFixes https://github.com/o/r/issues/878";
+  if (control.closingBodyEdit === "cross-repo")
+    return canonical + "\\n\\nCloses other/repo#9";
+  if (control.closingBodyEdit === "cross-repo-same-number")
+    return canonical + "\\n\\nCloses other/repo#877";
+  if (control.closingBodyEdit === "url-canonical-only")
+    return canonical.split("Closes #877").join("Closes https://github.com/O/R/issues/877");
+  if (control.closingBodyEdit === "indented-fence-other")
+    return canonical + "\\n\\n    \`\`\`\\n\\nFixes other/repo#9";
+  if (control.closingBodyEdit === "fenced-code-other")
+    return canonical + "\\n\\n\`\`\`\\nCloses other/repo#9\\n\`\`\`";
+  if (control.closingBodyEdit === "info-backtick-fence-other")
+    return canonical + "\\n\\n\`\`\`a\`b\\n\\nFixes other/repo#9";
+  if (control.closingBodyEdit === "list-unclosed-fence-other")
+    return canonical + "\\n\\n- a\\n  \`\`\`\\nFixes other/repo#9";
+  if (control.closingBodyEdit === "url-canonical-duplicate")
+    return canonical + "\\n\\nCloses https://github.com/o/r/issues/877";
   return control.contentChanged ? canonical + "\\n\\nprovider content changed" : canonical;
 };
 const observation = () => ({
@@ -5921,6 +6088,136 @@ if (exact(["auth", "status"])) {
       );
       break;
     }
+    case "SCN-E2E-WFSTEP-071": {
+      /**
+       * **`pr-bound`以後の本文・タイトル訂正はmergeを妨げない**（Issue #1517 AMD-001）。
+       * 作成直後のread-backとは別に、merge前後の再観測はclosing契約とidentityだけを照合する。
+       */
+      const edited = prepareDeliveryCli(this);
+      createDeliveryPullRequest(edited);
+      writeDeliveryProviderControl(edited, {
+        contentChanged: true,
+        titleChanged: true,
+      });
+      const requested = executeDeliveryMerge(edited);
+      assert.equal(requested.status, 0, requested.stdout + requested.stderr);
+      assert.match(requested.stdout, /merge_pending/u);
+      assert.equal(deliveryProviderCalls(edited).filter(isMergeCall).length, 1);
+      writeDeliveryProviderControl(edited, {
+        phase: "merged",
+        mergedAt: fixtureInstant({ minutesAhead: 5 }),
+      });
+      const completed = executeDeliveryMerge(edited);
+      assert.equal(completed.status, 0, completed.stdout + completed.stderr);
+      assert.equal(
+        (JSON.parse(completed.stdout) as { state?: string }).state,
+        "merged",
+      );
+
+      /**
+       * **修飾付きの同一repository参照がcanonical Issueを指すときだけ受理する**（R5-01）。
+       * `#877`と同じIssueのURL形が並んでも、解決後のidentityは1件である。
+       */
+      for (const edit of [
+        "url-canonical-only",
+        "url-canonical-duplicate",
+      ] as const) {
+        const prepared = prepareDeliveryCli(this);
+        createDeliveryPullRequest(prepared);
+        writeDeliveryProviderControl(prepared, { closingBodyEdit: edit });
+        const accepted = executeDeliveryMerge(prepared);
+        assert.equal(
+          accepted.status,
+          0,
+          `${edit}: ${accepted.stdout}${accepted.stderr}`,
+        );
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          1,
+          edit,
+        );
+      }
+
+      for (const edit of [
+        "added",
+        "removed",
+        "qualified-other",
+        "url-other",
+        "cross-repo",
+        "cross-repo-same-number",
+      ] as const) {
+        const prepared = prepareDeliveryCli(this);
+        createDeliveryPullRequest(prepared);
+        writeDeliveryProviderControl(prepared, { closingBodyEdit: edit });
+        const rejected = executeDeliveryMerge(prepared);
+        assert.notEqual(rejected.status, 0, `${edit}: mergeを受理しました`);
+        assert.match(
+          rejected.stdout + rejected.stderr,
+          /closing Issueはcanonical Issue 1件だけが必要です/u,
+          `${edit}: ${rejected.stdout}${rejected.stderr}`,
+        );
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          0,
+          edit,
+        );
+      }
+
+      /**
+       * **canonical以外への終端keyword参照はcode領域を除かずに拒否する**（AMD-003）。
+       * code判定の誤り・境界を突く形も、正規のcode内も拒否する。
+       */
+      for (const edit of [
+        "indented-fence-other",
+        "fenced-code-other",
+        "info-backtick-fence-other",
+        "list-unclosed-fence-other",
+      ] as const) {
+        const prepared = prepareDeliveryCli(this);
+        createDeliveryPullRequest(prepared);
+        writeDeliveryProviderControl(prepared, { closingBodyEdit: edit });
+        const rejected = executeDeliveryMerge(prepared);
+        assert.notEqual(rejected.status, 0, `${edit}: mergeを受理しました`);
+        assert.match(
+          rejected.stdout + rejected.stderr,
+          /PR本文は、code内を含めcanonical Issue以外への終端keyword参照を持てません: other\/repo#9/u,
+          `${edit}: ${rejected.stdout}${rejected.stderr}`,
+        );
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          0,
+          edit,
+        );
+      }
+
+      /**
+       * **作成時の本文も同じ規則で検査する**（AMD-003）。code内だけへ置いた外部参照も
+       * `pr create`がprovider副作用より前に拒否し、固定後の照合と判定を揃える。
+       */
+      {
+        const prepared = prepareDeliveryCli(this);
+        fs.appendFileSync(
+          prepared.bodyFile,
+          "\n```\nCloses other/repo#9\n```\n",
+        );
+        writeDeliveryProviderControl(prepared, {});
+        const refused = executeCli(
+          [...prepared.args, "--apply", "--authorize=approved"],
+          prepared.root,
+          prepared.env,
+        );
+        assert.notEqual(refused.status, 0, refused.stdout + refused.stderr);
+        assert.match(
+          refused.stdout + refused.stderr,
+          /code内を含めcanonical Issue以外への終端keyword参照を置けません: other\/repo#9/u,
+        );
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          0,
+        );
+      }
+      break;
+    }
     case "SCN-E2E-WFSTEP-070": {
       /**
        * **actor-independentでもreview証跡の観測値を再導出する**（REQ-WF-038）。
@@ -8315,6 +8612,329 @@ if (exact(["auth", "status"])) {
         fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
       );
       assert.equal(journal.entries.at(-1)?.step, 4);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-014": {
+      const root = fs.realpathSync(this.initRepo());
+      const staging = createIssueStaging(root, {
+        title: "resume-test",
+        answers: answers(),
+        now: new Date(instant),
+        requestedMode: "full",
+      }).path;
+      const { status, output } = await previewResume(staging);
+      assert.equal(status, 0, JSON.stringify(output));
+      assert.equal(output.targetStep, 1);
+      assert.deepEqual(output.resume, {
+        authority: "advisory",
+        staging,
+        headSha: gitHeadOf(root),
+        baseSha: null,
+        planning: { sealed: false, sealDigest: null, amendmentCount: 0 },
+        implementation: { headSha: null, matchesHead: null },
+        verification: null,
+        review: null,
+        delivery: null,
+        errors: [],
+      });
+      break;
+    }
+    case "SCN-E2E-ADVANCE-015": {
+      const { root, staging, implementationHeadSha } =
+        implementedResumeStaging(this);
+      const atImplementation = await previewResume(staging);
+      assert.deepEqual(atImplementation.output.resume.implementation, {
+        headSha: implementationHeadSha,
+        matchesHead: true,
+      });
+      fs.writeFileSync(path.join(root, "later.txt"), "after Step 9\n");
+      spawnSync("git", ["add", "later.txt"], { cwd: root });
+      spawnSync("git", ["commit", "-q", "-m", "after Step 9"], { cwd: root });
+      const movedHeadSha = gitHeadOf(root);
+      assert.notEqual(movedHeadSha, implementationHeadSha);
+      const moved = await previewResume(staging);
+      assert.equal(moved.output.resume.headSha, movedHeadSha);
+      assert.deepEqual(moved.output.resume.implementation, {
+        headSha: implementationHeadSha,
+        matchesHead: false,
+      });
+      assert.equal(moved.output.resume.review, null);
+      const roundFile = path.join(this.temp("asc-resume-round-"), "round.json");
+      fs.writeFileSync(
+        roundFile,
+        JSON.stringify(
+          reviewRoundFixture(root, implementationHeadSha, movedHeadSha),
+        ),
+      );
+      await assert.rejects(
+        () =>
+          executeMain([
+            "review",
+            "round",
+            `--staging=${staging}`,
+            `--file=${roundFile}`,
+          ]),
+        /review round candidate HEADがStep 9 implementation HEADと一致しません/u,
+      );
+      /** 再開状態は最新のStep 9を指す。current HEADで再記録すると一致へ戻る。 */
+      appendWorkflowJournalEntry({
+        staging,
+        entry: { ...entry(9), implementationHeadSha: movedHeadSha },
+        headSha: movedHeadSha,
+      });
+      const rerecorded = await previewResume(staging);
+      assert.deepEqual(rerecorded.output.resume.implementation, {
+        headSha: movedHeadSha,
+        matchesHead: true,
+      });
+      break;
+    }
+    case "SCN-E2E-ADVANCE-016": {
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      /** 最新の検証記録を指すことを、内容の異なる2件目の記録で確かめる。 */
+      appendFixtureVerificationRecords(
+        prepared.staging,
+        observeFixtureVerification(prepared.root, {
+          baseSha: prepared.baseSha,
+          implementationHeadSha: prepared.implementationCommitSha,
+          finishedAt: "2026-09-26T00:00:30.000Z",
+        }).records,
+      );
+      fs.writeFileSync(
+        path.join(prepared.staging, "05_計画変更.md"),
+        "# 05 計画変更\n\n## AMD-001 範囲\n\n- 対象: T01\n- 変更: 再開状態\n- 理由: 検査\n",
+      );
+      const beforePreview = resumeWriteSnapshot(
+        prepared.root,
+        prepared.staging,
+      );
+      const checked = executeCli(
+        ["workflow", "advance", `--staging=${prepared.staging}`],
+        prepared.root,
+        prepared.env,
+      );
+      /** previewはstagingのfileもGitのobject・lockも変えない。 */
+      assert.deepEqual(
+        resumeWriteSnapshot(prepared.root, prepared.staging),
+        beforePreview,
+      );
+      const resume = (JSON.parse(checked.stdout) as ResumePreview["output"])
+        .resume;
+      const session = JSON.parse(
+        fs.readFileSync(
+          path.join(prepared.staging, "review-session.json"),
+          "utf8",
+        ),
+      ) as {
+        anchor: { diffBaseSha: string };
+        latestRoundDigest: string;
+        latestCandidateHeadSha: string;
+        status: string;
+        rounds: unknown[];
+      };
+      const runs = fs
+        .readFileSync(
+          path.join(prepared.staging, "journal", "verification-runs.jsonl"),
+          "utf8",
+        )
+        .trim()
+        .split("\n")
+        .map(
+          (line) =>
+            JSON.parse(line) as {
+              headSha: string;
+              scope: string;
+              exitCode: number | null;
+              signal: string | null;
+              recordDigest: string;
+            },
+        );
+      assert.ok(runs.length >= 2);
+      assert.notEqual(runs[0]?.recordDigest, runs.at(-1)?.recordDigest);
+      const latestRun = runs.at(-1)!;
+      const delivery = JSON.parse(
+        fs.readFileSync(
+          path.join(prepared.staging, ...DELIVERY_STATE_FILE.split("/")),
+          "utf8",
+        ),
+      ) as { state: string; pr: { number: number } };
+      assert.equal(delivery.state, "pr-bound");
+      assert.equal(resume.headSha, prepared.headSha);
+      assert.equal(resume.baseSha, session.anchor.diffBaseSha);
+      const sha256 = (value: string | Buffer) =>
+        crypto.createHash("sha256").update(value).digest("hex");
+      /** quickの封印は00要求定義だけのSHA-256であり、Step 4記録後に00は変えていない。 */
+      const requirementDigest = sha256(
+        fs.readFileSync(path.join(prepared.staging, "00_要求定義.md")),
+      );
+      assert.deepEqual(resume.planning, {
+        sealed: true,
+        sealDigest: sha256(
+          JSON.stringify({ "00_要求定義.md": requirementDigest }),
+        ),
+        amendmentCount: 1,
+      });
+      assert.equal(
+        resume.implementation.headSha,
+        prepared.implementationCommitSha,
+      );
+      /** 期待値は実装と同じ式から導出せず、fixtureの既知値をliteralで書く。 */
+      assert.deepEqual(
+        [latestRun.headSha, latestRun.exitCode, latestRun.signal],
+        [prepared.implementationCommitSha, 0, null],
+      );
+      assert.deepEqual(resume.verification, {
+        headSha: prepared.implementationCommitSha,
+        scope: "full",
+        passed: true,
+        recordDigest: latestRun.recordDigest,
+        matchesImplementationHead: true,
+      });
+      assert.equal(
+        session.latestCandidateHeadSha,
+        prepared.implementationCommitSha,
+      );
+      assert.deepEqual(resume.review, {
+        status: "converged",
+        latestRoundDigest: session.latestRoundDigest,
+        candidateHeadSha: prepared.implementationCommitSha,
+        rounds: 1,
+        matchesImplementationHead: true,
+      });
+      assert.deepEqual(resume.delivery, {
+        state: "pr-bound",
+        pr: delivery.pr.number,
+      });
+      assert.deepEqual(resume.errors, []);
+      const serialized = JSON.stringify(resume);
+      for (const body of ["step 9の証拠", "artifact-9", "findings", "範囲"])
+        assert.equal(serialized.includes(body), false, body);
+      /** 最新の検証記録がH_implと異なるHEADを指せば、一致をliteralのfalseで返す。 */
+      assert.notEqual(prepared.headSha, prepared.implementationCommitSha);
+      appendFixtureVerificationRecords(
+        prepared.staging,
+        observeFixtureVerification(prepared.root, {
+          baseSha: prepared.baseSha,
+          implementationHeadSha: prepared.headSha,
+          finishedAt: "2026-09-26T00:01:00.000Z",
+        }).records,
+      );
+      const stale = executeCli(
+        ["workflow", "advance", `--staging=${prepared.staging}`],
+        prepared.root,
+        prepared.env,
+      );
+      const staleResume = (JSON.parse(stale.stdout) as ResumePreview["output"])
+        .resume;
+      assert.equal(staleResume.verification?.headSha, prepared.headSha);
+      assert.equal(staleResume.verification?.passed, true);
+      assert.equal(staleResume.verification?.matchesImplementationHead, false);
+      /** Step 9が無いstagingのreview sessionは、H_impl不明のため一致をnullで返す。 */
+      const withoutStep9 = createQuickStaging(
+        this.temp("asc-resume-no-step9-"),
+      );
+      for (const step of [1, 4])
+        appendWorkflowJournalEntry({
+          staging: withoutStep9,
+          entry: entry(step),
+        });
+      fs.copyFileSync(
+        path.join(prepared.staging, "review-session.json"),
+        path.join(withoutStep9, "review-session.json"),
+      );
+      const unanchored = (await previewResume(withoutStep9)).output.resume;
+      assert.deepEqual(unanchored.implementation, {
+        headSha: null,
+        matchesHead: null,
+      });
+      assert.equal(
+        unanchored.review?.candidateHeadSha,
+        prepared.implementationCommitSha,
+      );
+      assert.equal(unanchored.review?.matchesImplementationHead, null);
+      break;
+    }
+    case "SCN-E2E-ADVANCE-017": {
+      const { staging } = implementedResumeStaging(this);
+      const before = await previewResume(staging);
+      fs.writeFileSync(path.join(staging, "review-session.json"), "{broken");
+      const after = await previewResume(staging);
+      assert.equal(after.status, before.status);
+      assert.deepEqual(
+        [
+          after.output.state,
+          after.output.operation,
+          after.output.targetStep,
+          after.output.reasons,
+        ],
+        [
+          before.output.state,
+          before.output.operation,
+          before.output.targetStep,
+          before.output.reasons,
+        ],
+      );
+      assert.equal(after.output.resume.review, null);
+      assert.equal(after.output.resume.errors.length, 1);
+      assert.match(after.output.resume.errors[0] ?? "", /^review session: /u);
+      assert.deepEqual(before.output.resume.errors, []);
+      /** HEADを観測できないrepositoryでも判定は変わらず、一致を表示しない。 */
+      const detached = createQuickStaging(this.temp("asc-resume-no-git-"));
+      for (const step of [1, 4])
+        appendWorkflowJournalEntry({ staging: detached, entry: entry(step) });
+      appendWorkflowJournalEntry({
+        staging: detached,
+        entry: { ...entry(9), implementationHeadSha: "a".repeat(40) },
+      });
+      const unobserved = await previewResume(detached);
+      assert.equal(unobserved.status, 0);
+      assert.equal(unobserved.output.state, "delegated");
+      assert.equal(unobserved.output.resume.headSha, null);
+      assert.deepEqual(unobserved.output.resume.implementation, {
+        headSha: "a".repeat(40),
+        matchesHead: null,
+      });
+      assert.equal(unobserved.output.resume.errors.length, 1);
+      assert.match(unobserved.output.resume.errors[0] ?? "", /^HEAD: /u);
+      /** hash chainが壊れたjournalは信用せず、journal由来の項目を不明にする。 */
+      const chained = implementedResumeStaging(this);
+      const intact = await previewResume(chained.staging);
+      assert.deepEqual(intact.output.resume.implementation, {
+        headSha: chained.implementationHeadSha,
+        matchesHead: true,
+      });
+      assert.deepEqual(intact.output.resume.errors, []);
+      const journalFile = path.join(chained.staging, "journal", "steps.jsonl");
+      const lines = fs.readFileSync(journalFile, "utf8").trimEnd().split("\n");
+      const last = lines.length - 1;
+      const tampered = JSON.parse(lines[last]!) as {
+        previousEntryDigest: string;
+      };
+      assert.match(tampered.previousEntryDigest, /^[a-f0-9]{64}$/u);
+      tampered.previousEntryDigest = "0".repeat(64);
+      lines[last] = JSON.stringify(tampered);
+      fs.writeFileSync(journalFile, `${lines.join("\n")}\n`);
+      const broken = await previewResume(chained.staging);
+      /** 既存のpreview判定はjournalの破損を独自に拒否する。再開状態はそれを変えない。 */
+      const chainError =
+        "journal 4行目.previousEntryDigestが先行するjournal本文と一致しません。記録済み行の編集・削除・挿入・並べ替えを拒否します";
+      assert.deepEqual(
+        [
+          broken.status,
+          broken.output.state,
+          broken.output.operation,
+          broken.output.targetStep,
+          broken.output.reasons,
+        ],
+        [1, "blocked", "blocked", 10, [chainError]],
+      );
+      assert.equal(broken.output.resume.planning, null);
+      assert.deepEqual(broken.output.resume.implementation, {
+        headSha: null,
+        matchesHead: null,
+      });
+      assert.deepEqual(broken.output.resume.errors, [`journal: ${chainError}`]);
       break;
     }
     case "SCN-INT-ISSUESYNC-024": {

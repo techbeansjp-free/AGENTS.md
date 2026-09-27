@@ -53,6 +53,11 @@ Feature: Review sessionを固定契約へ収束させる
     When 次roundで新しいHigh blockerを修正差分に記録する
     Then 発散warningが新規blockerを名指しする
 
+  Scenario: SCN-UNIT-ROUNDBUDGET-005 修正回帰の連鎖をwarningとして報告し判定を変えない
+    Given 是正起因のfindingがcausedByFindingIdで連鎖したreview roundがある
+    When 発散の兆候を算出する
+    Then 1段の連鎖ではwarningを出さず2段以上の連鎖を根から名指しする
+
   Scenario: SCN-UNIT-ROUNDBUDGET-004 round上限廃止後もadmission規則で拒否する
     Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
     When 同じHigh findingを旧上限を超えるroundまで未解決にする
