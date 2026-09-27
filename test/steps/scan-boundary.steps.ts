@@ -46,10 +46,10 @@ const TRACKED_PATHS: readonly string[] = Object.freeze([
 
 const STAGING_PREDICATE: ExclusionPredicateSource = {
   id: "issue-staging",
-  owner: "trace:check",
-  appliesTo: "SCN配置検査の走査範囲のみ",
+  owner: "scan-boundary観測",
+  appliesTo: "走査境界の観測の走査範囲のみ",
   reasonCode: "issue-staging",
-  reason: "Issue一時ステージングをSCN配置検査の走査範囲から除く",
+  reason: "Issue一時ステージングを走査境界の観測の対象から除く",
   excludes: isIssueStagingPath,
 };
 
@@ -70,10 +70,10 @@ const LIFECYCLE_PREDICATE: ExclusionPredicateSource = {
 
 const LIFECYCLE_SCAN_PREDICATE: ExclusionPredicateSource = {
   id: "staging-lifecycle-scan",
-  owner: "check_trace.ts、check_source_quality.ts",
-  appliesTo: "SCN配置検査とsource品質検査のdirectory列挙",
+  owner: "check_source_quality.ts",
+  appliesTo: "source品質検査のdirectory列挙",
   reasonCode: "staging-lifecycle-scan",
-  reason: "一時ステージング領域をSCN配置検査とsource品質検査の走査範囲から除く",
+  reason: "一時ステージング領域をsource品質検査の走査範囲から除く",
   excludes: isStagingLifecycleScanPath,
 };
 
@@ -252,12 +252,12 @@ Then(
       (candidate) => candidate.predicate === "issue-staging",
     );
     assert.ok(entry, "登録済み述語の観測がありません");
-    assert.equal(entry.owner, "trace:check");
+    assert.equal(entry.owner, "scan-boundary観測");
     /**
      * **適用範囲まで返すことを見る。** gate名だけを返すと「gate全体の除外」と
      * 読める。述語はgate内の一部にしか適用されない（Issue #960 F-01）。
      */
-    assert.ok(entry.appliesTo.includes("SCN配置検査"), entry.appliesTo);
+    assert.ok(entry.appliesTo.includes("走査境界の観測"), entry.appliesTo);
     assert.equal(entry.excludedCount, entry.excluded.length);
     assert.equal(entry.excludedCount, COVERED_ARTIFACTS.length);
     for (const exclusion of entry.excluded) {
@@ -545,8 +545,8 @@ Given(
     this.sources = [
       {
         id: "recording",
-        owner: "trace:check",
-        appliesTo: "SCN配置検査の走査範囲のみ",
+        owner: "scan-boundary観測",
+        appliesTo: "走査境界の観測の走査範囲のみ",
         reasonCode: "recording",
         reason: "述語が受け取った引数を記録する",
         excludes: (candidate: string) => {

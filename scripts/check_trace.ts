@@ -4,15 +4,7 @@ import path from "node:path";
 import { validateScenarioTrace } from "../src/domain/trace.js";
 import { loadProjectPolicySet } from "../src/domain/policy.js";
 import { validateSpecs } from "../src/domain/spec.js";
-import { isStagingLifecycleScanPath } from "../src/domain/staging.js";
-import {
-  matchesStagingRoot,
-  readStagingLayout,
-  stagingLayoutFromManifestText,
-  TRACKED_STAGING_GITIGNORE,
-} from "../src/domain/staging-layout.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
-import { git } from "../src/lib/process.js";
 
 function walkFiles(
   directory: string,
@@ -495,6 +487,11 @@ function collectTraceRows(traceFile: string): TraceRow[] {
   return rows;
 }
 
+/**
+ * 実行可能Scenarioの正本は`test/features/`配下の`.feature`だけである。
+ * 追跡・孤立・帰属文の判定はこの集合の上で行い、文書中のSCN表記は収集も
+ * 禁止もしない（Issue #1506）。
+ */
 function collectScenarios(
   root: string,
   dialect: Dialect,
@@ -766,112 +763,6 @@ export function checkSpecNormalization(
     errors.push(
       `孤立実装です。要件からtestを経由して到達できません: ${orphanImplementations.join(", ")}`,
     );
-
-  /**
-   * **project policyが宣言したstaging root直下のstagingも計画文書として除外する**
-   * （Issue #1501）。`issue validate`は00・01にGherkinを要求するため、版管理下の
-   * rootを除外しないと2つの検査が同じ文書へ逆の要求をする。policyを読めない場合は
-   * 除外しない（違反を報告する側へ倒す）。
-   */
-  let stagingRootSegments: number | undefined;
-  let stagingRootPattern: string | undefined;
-  try {
-    stagingRootPattern = readStagingLayout(root).rootPattern;
-    stagingRootSegments = stagingRootPattern.split("/").length;
-  } catch {
-    stagingRootPattern = undefined;
-  }
-  const isDeclaredStagingPath = (relative: string): boolean => {
-    if (stagingRootPattern === undefined || stagingRootSegments === undefined)
-      return false;
-    const segments = relative.split("/");
-    return (
-      segments.length >= stagingRootSegments + 2 &&
-      matchesStagingRoot(
-        stagingRootPattern,
-        segments.slice(0, stagingRootSegments).join("/"),
-      )
-    );
-  };
-
-  /**
-   * **宣言を取り消した後も、かつての版管理下stagingを除外し続ける**（Issue #1503）。
-   * 現在のpolicyだけを見ると、merge済みのstaging文書が所定location外として再浮上する。
-   * かつて`tracked=true`で宣言したstaging rootをproject policyのGit履歴から集める。
-   * **除外はこのrootの直下にあるstagingだけに限る。** 固定内容の`.gitignore`と
-   * `00_要求定義.md`を置くだけで任意のdirectoryを検査から外せないようにする。
-   * 履歴を読めない場合は除外しない（違反を報告する側へ倒す）。
-   */
-  const formerlyTrackedRoots = new Set<string>();
-  const policyFile = ".agent-skill-chain/project-policy.json";
-  const history = git(["log", "--format=%H", "--", policyFile], root, {
-    allowFailure: true,
-  });
-  if (history.status === 0)
-    for (const commit of history.stdout.split("\n").filter(Boolean)) {
-      const shown = git(["show", `${commit}:${policyFile}`], root, {
-        allowFailure: true,
-      });
-      if (shown.status !== 0) continue;
-      try {
-        const layout = stagingLayoutFromManifestText(shown.stdout);
-        if (layout.tracked) formerlyTrackedRoots.add(layout.rootPattern);
-      } catch {
-        continue;
-      }
-    }
-  const isFormerlyTrackedStagingPath = (relative: string): boolean => {
-    const stagingDirectory = path.dirname(relative);
-    const parent = path.dirname(stagingDirectory);
-    if (
-      ![...formerlyTrackedRoots].some((pattern) =>
-        matchesStagingRoot(pattern, parent),
-      )
-    )
-      return false;
-    const directory = path.join(root, stagingDirectory);
-    try {
-      return (
-        fs.readFileSync(path.join(directory, ".gitignore"), "utf8") ===
-          TRACKED_STAGING_GITIGNORE &&
-        fs.statSync(path.join(directory, "00_要求定義.md")).isFile()
-      );
-    } catch {
-      return false;
-    }
-  };
-  const scenarioDefinitionFiles = walkRepositoryFiles(
-    root,
-    (file) => file.endsWith(".md") || file.endsWith(".feature"),
-  );
-  for (const file of scenarioDefinitionFiles) {
-    const relative = relativePath(root, file);
-    /**
-     * 一時ライフサイクル領域のGherkinは受け入れ例や引き継ぎの下書きであり
-     * test定義ではない。**除外範囲は`STAGING_LIFECYCLE_AREAS`から導出し、
-     * この検査が独自のprefixを持たない**（Issue #1273）。
-     *
-     * 除外はこの検査の内側だけに置き、共有walkerの列挙結果は変更しない。
-     * **`isStagingLifecyclePath`は使わない。** あちらは追跡混入検査が使い、
-     * 真偽の安全側の向きが逆である。
-     */
-    if (isStagingLifecycleScanPath(relative)) continue;
-    if (isDeclaredStagingPath(relative)) continue;
-    if (isFormerlyTrackedStagingPath(relative)) continue;
-    if (relative.startsWith("test/features/") && file.endsWith(".feature"))
-      continue;
-    const lines = fs.readFileSync(file, "utf8").split(/\r?\n/u);
-    for (let index = 0; index < lines.length; index += 1) {
-      if (
-        /^\s*(?:Scenario(?: Outline)?|シナリオ(?:アウトライン)?):\s+SCN-/u.test(
-          lines[index] ?? "",
-        )
-      )
-        errors.push(
-          `所定location外にSCN定義があります: ${relative}:${index + 1}`,
-        );
-    }
-  }
 
   /**
    * 要件本文の帰属文と追跡表の登録を突合する。

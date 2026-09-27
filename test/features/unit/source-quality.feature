@@ -117,3 +117,8 @@ Feature: project固有の型品質と汎用開発考慮事項
     Given 一時ライフサイクル領域にPythonとshell sourceを置き領域外にTypeScriptを置いたprojectがある
     When repositoryのsource品質を検証する
     Then 一時ライフサイクル領域のsourceは検査対象に数えられない
+
+  Scenario: SCN-UNIT-QUALITY-021 走査除外の判定は判定不能なpathと領域外の近似pathを除外しない
+    Given source品質検査の除外判定へ渡す生のpath一覧がある
+    When 除外判定を1件ずつ適用する
+    Then 領域内のpathだけを除外し判定不能なpathと近似pathは除外しない
