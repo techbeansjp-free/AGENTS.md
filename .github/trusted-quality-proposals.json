@@ -386,6 +386,29 @@
           "afterSha256": "3fdba35f04dc8c462986c992bcf875546257113072a909c162f7e470e581e278"
         }
       ]
+    },
+    {
+      "proposalId": "TQP-TEST-SHARDS-001",
+      "status": "staged",
+      "fromVersion": 13,
+      "toVersion": 14,
+      "owner": "repository maintainer",
+      "rationale": "全Cucumberをscenario単位で複数processへ分配して並列実行するscripts/run_cucumber_shards.tsを、test scriptとして直列形に加えて受理し、保護対象へ加える。CI品質jobの所要時間が15分上限に迫るため（Issue #1508）。直列形も引き続き受理し、base validatorの照合を通る順で切り替えられるようにする。全scenarioを実行し実行集合を割当と照合するため検出強度は下がらない",
+      "rollback": "登録済みproposalは削除できず、qualityContractVersionの減少も受理されない。したがってrollbackは取り消しではなく前進で行う。test scriptを直列形へ戻すだけなら保護差分なしで行える。shard形の受理と保護追加を外す場合は新規proposalを次版として登録し2段階で適用する。validatorを経由しない緊急手順が必要な場合は、repository ownerがprotected設定を一時的に外して直接revertし、その事実と復旧を記録する",
+      "targets": [
+        {
+          "kind": "file",
+          "name": "scripts/check_project_quality.ts",
+          "beforeSha256": "581cc9052f69e38adb8c55df2a94922d91ef29ab1b81000546aa2da95e0e7d25",
+          "afterSha256": "21fa07b9ff78d0ba1da7f163ce213b24331dacbdea6e51f0cc088f4411b6404f"
+        },
+        {
+          "kind": "packageField",
+          "name": "agentSkillChain.qualityContractVersion",
+          "beforeSha256": "3fdba35f04dc8c462986c992bcf875546257113072a909c162f7e470e581e278",
+          "afterSha256": "8527a891e224136950ff32ca212b45bc93f69fbb801c3b1ebedac52775f99e61"
+        }
+      ]
     }
   ]
 }
