@@ -563,6 +563,10 @@ function repositoryWithRevokedStaging(world: { initRepo(): string }): string {
     { staging: { root: "docs/issues", tracked: true, issueBody: "pointer" } },
     "chore: declare tracked staging",
   );
+  commitPolicy(
+    { staging: { root: "docs/drafts", tracked: false, issueBody: "full" } },
+    "chore: declare untracked staging",
+  );
   commitPolicy({}, "chore: revoke tracked staging");
   return root;
 }
@@ -603,6 +607,13 @@ Given(
     // 旧root外にstagingの形（固定.gitignoreと00_要求定義.md）を置いても除外しない
     write(this.root, "docs/specs/.gitignore", TRACKED_STAGING_GITIGNORE);
     write(this.root, "docs/specs/00_要求定義.md", SCN_LINE);
+    // tracked=falseで宣言したことのあるroot配下は版管理下stagingではない
+    write(
+      this.root,
+      "docs/drafts/20260927_y/.gitignore",
+      TRACKED_STAGING_GITIGNORE,
+    );
+    write(this.root, "docs/drafts/20260927_y/00_要求定義.md", SCN_LINE);
     write(this.root, "docs/.gitignore", TRACKED_STAGING_GITIGNORE);
     write(this.root, "docs/specs/00_概要.md", SCN_LINE);
     write(this.root, "notes/.gitignore", TRACKED_STAGING_GITIGNORE);
@@ -614,7 +625,12 @@ Then(
   "祖先の.gitignoreでもstaging文書の無いdirectoryでも定義を違反にする",
   function () {
     const placement = placementErrors(this.errors);
-    assert.equal(placement.length, 3, placement.join("\n"));
+    assert.equal(placement.length, 4, placement.join("\n"));
+    assert.ok(
+      placement.some((error) =>
+        error.includes("docs/drafts/20260927_y/00_要求定義.md"),
+      ),
+    );
     assert.ok(
       placement.some((error) => error.includes("docs/specs/00_概要.md")),
     );
@@ -624,3 +640,27 @@ Then(
     assert.ok(placement.some((error) => error.includes("notes/memo.md")));
   },
 );
+
+Given(
+  "Git履歴を持たないrootで、docs\\/issues配下にtracked staging記録と同じ形のSCN定義がある",
+  function () {
+    this.root = this.temp();
+    write(
+      this.root,
+      ".agent-skill-chain/project-policy.json",
+      `${JSON.stringify({ policy: {} })}\n`,
+    );
+    write(
+      this.root,
+      "docs/issues/20260927_x/.gitignore",
+      TRACKED_STAGING_GITIGNORE,
+    );
+    write(this.root, "docs/issues/20260927_x/00_要求定義.md", SCN_LINE);
+  },
+);
+
+Then("履歴を読めないため除外せず定義を違反にする", function () {
+  const placement = placementErrors(this.errors);
+  assert.equal(placement.length, 1, placement.join("\n"));
+  assert.ok(placement[0]?.includes("docs/issues/20260927_x/00_要求定義.md"));
+});

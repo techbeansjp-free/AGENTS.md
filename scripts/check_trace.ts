@@ -795,13 +795,8 @@ export function checkSpecNormalization(
   };
 
   /**
-   * **かつて宣言していたstaging rootの直下も、宣言を取り消した後まで除外し続ける**
-   * （Issue #1503）。`isDeclaredStagingPath`は現在のproject policyだけを見るため、
-   * 版管理下stagingを既定配置へ戻すと、既にmerge済みのstaging文書が「所定location外」
-   * として再浮上する。tracked staging生成時に置く固定content（機械記録だけを除外する
-   * `.gitignore`）を祖先directoryに持つpathを、現在の宣言と無関係に除外する。
-   */
-  /**
+   * **宣言を取り消した後も、かつての版管理下stagingを除外し続ける**（Issue #1503）。
+   * 現在のpolicyだけを見ると、merge済みのstaging文書が所定location外として再浮上する。
    * かつて`tracked=true`で宣言したstaging rootをproject policyのGit履歴から集める。
    * **除外はこのrootの直下にあるstagingだけに限る。** 固定内容の`.gitignore`と
    * `00_要求定義.md`を置くだけで任意のdirectoryを検査から外せないようにする。

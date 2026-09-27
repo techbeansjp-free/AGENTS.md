@@ -90,3 +90,8 @@ Feature: SCN配置検査の走査範囲を規範側だけに限る
     Given staging宣言を持たないpolicyと、tracked staging記録と同じ.gitignoreを持つdocs配下のspecと、00_要求定義.mdの無いdirectoryにSCN定義がある
     When SCN配置検査を実行する
     Then 祖先の.gitignoreでもstaging文書の無いdirectoryでも定義を違反にする
+
+  Scenario: SCN-UNIT-SCNSCOPE-019 Git履歴を読めなければ旧staging除外を適用しない
+    Given Git履歴を持たないrootで、docs/issues配下にtracked staging記録と同じ形のSCN定義がある
+    When SCN配置検査を実行する
+    Then 履歴を読めないため除外せず定義を違反にする
