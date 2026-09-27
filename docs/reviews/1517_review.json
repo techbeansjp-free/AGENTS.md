@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1517,
+  "observed": {
+    "baseSha": "4560c844bf4acb94f7ec37810371f4c2df8f7a41",
+    "implementationHeadSha": "3e436a568fcd5de4b00036ad9a27a99c717687de",
+    "diffDigest": "985b687501f47892154b427700d82e48caab4759709d5932c5def0494448ced1",
+    "session": {
+      "sessionId": "9ed40958af944e53d0d900a84238918039e01af553327052f75771e52ca89699",
+      "latestRoundDigest": "83dc525659e570ee2898c6bfb2c3628d08c66b702d067699d09749828b558539",
+      "status": "converged",
+      "countedRounds": 4
+    },
+    "impact": {
+      "digest": "176aa5308c39cfaee411109e949356b7b82d2beb46eb5820bc3554f08867c621",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "3e436a568fcd5de4b00036ad9a27a99c717687de",
+        "impactDigest": "176aa5308c39cfaee411109e949356b7b82d2beb46eb5820bc3554f08867c621",
+        "finishedAt": "2026-09-27T19:46:19.848Z",
+        "recordDigest": "cea72938b7872e99c94cac95f4f66ffd960197aaf378cba042b7e1080bd5098a"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "F-1517-R1-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "scripts/report_session_tokens.ts",
+      "contractId": "AC-06"
+    },
+    {
+      "id": "F-1517-R1-02",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "invariant-violation",
+      "path": "src/adapters/workflow-resume.ts",
+      "contractId": "INV-02"
+    },
+    {
+      "id": "F-1517-R1-03",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "scripts/report_session_tokens.ts",
+      "contractId": "AC-06"
+    },
+    {
+      "id": "F-1517-R1-04",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "scripts/report_session_tokens.ts",
+      "contractId": "AC-06"
+    },
+    {
+      "id": "F-1517-R1-05",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "test/steps/workflow-step-enforcement.steps.ts",
+      "contractId": "AC-03"
+    },
+    {
+      "id": "F-1517-R1-06",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/workflow-step-enforcement.steps.ts",
+      "contractId": "INV-01"
+    },
+    {
+      "id": "F-1517-R2-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "scripts/report_session_tokens.ts",
+      "contractId": "AC-06"
+    },
+    {
+      "id": "F-1517-R2-02",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "scripts/report_session_tokens.ts",
+      "contractId": "AC-06"
+    },
+    {
+      "id": "F-1517-R3-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "scripts/report_session_tokens.ts",
+      "contractId": "AC-06"
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "codex-sol",
+    "implementer": "claude-subagent-implementer",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "88a8a95645e40f328b479404316bedbef8b3ad4314d517d4a30fd2ae040aa2c9"
+}
