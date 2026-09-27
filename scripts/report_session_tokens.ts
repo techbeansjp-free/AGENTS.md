@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -107,68 +108,64 @@ export function distribution(values: readonly number[]): Distribution {
 }
 
 /**
- * 区切り（`-`・`_`・`.`）を挟まない24文字以上の英数字列で、英字と数字の両方を含むものを
- * token様とみなす（拡張子・接頭辞を伴う場合も）。単語を区切った長いfile名は保持する。
+ * 出力してよいpathはrepository rootのGitが追跡するfileだけとする。追跡済みpathは
+ * repositoryに既に公開された名前であり、promptやcommand引数の文字列（URL・token・
+ * 秘密を含むfile名）を名前の形で見分ける必要がない。Gitを読めなければ空集合にし、
+ * pathを1件も出さない側へ倒す。
  */
-const TOKEN_LIKE_RUN = /[A-Za-z0-9]{24,}/gu;
-function isTokenLikeSegment(segment: string): boolean {
-  return (segment.match(TOKEN_LIKE_RUN) ?? []).some(
-    (run) => /[0-9]/u.test(run) && /[A-Za-z]/u.test(run),
-  );
+export function trackedPaths(root: string): ReadonlySet<string> {
+  const listed = spawnSync("git", ["-C", root, "ls-files", "-z"], {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (listed.status !== 0 || typeof listed.stdout !== "string")
+    return new Set();
+  return new Set(listed.stdout.split("\0").filter((entry) => entry !== ""));
 }
 
-/** repository root配下の相対pathへ正規化できたものだけを返す。 */
+/** repository root配下の追跡済みfileへ正規化できたものだけを返す。 */
 export function normalizeReadPath(
   candidate: string,
   cwd: string,
   root: string,
+  tracked: ReadonlySet<string>,
 ): string | undefined {
   if (candidate === "" || candidate.startsWith("-")) return undefined;
   if (/^[a-z][a-z0-9+.-]*:/iu.test(candidate)) return undefined;
-  const resolved = path.resolve(cwd, candidate);
-  const relative = path.relative(root, resolved);
-  if (
-    relative === "" ||
-    relative.startsWith("..") ||
-    path.isAbsolute(relative) ||
-    relative.split(path.sep).some(isTokenLikeSegment)
-  )
+  const relative = path.relative(root, path.resolve(cwd, candidate));
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative))
     return undefined;
-  return relative.split(path.sep).join("/");
-}
-
-/** 引数の断片はfile名として不正なことがある（長すぎる等）。読めなければfileではない。 */
-function isFile(file: string): boolean {
-  try {
-    return fs.statSync(file, { throwIfNoEntry: false })?.isFile() ?? false;
-  } catch {
-    return false;
-  }
+  const normalized = relative.split(path.sep).join("/");
+  return tracked.has(normalized) ? normalized : undefined;
 }
 
 function readPaths(
   block: Record<string, unknown>,
   cwd: string,
   root: string,
+  tracked: ReadonlySet<string>,
 ): string[] {
   const input = record(block.input);
   if (input === undefined) return [];
   if (block.name === "Read" && typeof input.file_path === "string") {
-    const normalized = normalizeReadPath(input.file_path, cwd, root);
+    const normalized = normalizeReadPath(input.file_path, cwd, root, tracked);
     return normalized === undefined ? [] : [normalized];
   }
   if (block.name !== "Bash" || typeof input.command !== "string") return [];
   const found: string[] = [];
   for (const raw of input.command.split(/[\s;|&<>()]+/u)) {
     const token = raw.replace(/^['"]+|['"]+$/gu, "");
-    const normalized = normalizeReadPath(token, cwd, root);
-    if (normalized === undefined) continue;
-    if (isFile(path.join(root, normalized))) found.push(normalized);
+    const normalized = normalizeReadPath(token, cwd, root, tracked);
+    if (normalized !== undefined) found.push(normalized);
   }
   return found;
 }
 
-function parseLog(file: string, root: string): ParsedLog {
+function parseLog(
+  file: string,
+  root: string,
+  tracked: ReadonlySet<string>,
+): ParsedLog {
   const byId = new Map<string, Call>();
   const reads: string[] = [];
   let skippedLines = 0;
@@ -217,7 +214,8 @@ function parseLog(file: string, root: string): ParsedLog {
     const content = Array.isArray(message?.content) ? message.content : [];
     for (const block of content) {
       const item = record(block);
-      if (item?.type === "tool_use") reads.push(...readPaths(item, cwd, root));
+      if (item?.type === "tool_use")
+        reads.push(...readPaths(item, cwd, root, tracked));
     }
   }
   return {
@@ -387,10 +385,11 @@ export function reportSessionTokens(input: {
   staging?: string;
   root: string;
 }): SessionTokenReport {
+  const tracked = trackedPaths(input.root);
   const parsed = expandLogs(input.logs).map((log) => ({
     ...log,
     id: path.basename(log.file, ".jsonl"),
-    ...parseLog(log.file, input.root),
+    ...parseLog(log.file, input.root, tracked),
   }));
   const sessions: SessionReport[] = parsed.map((log) => ({
     id: log.id,

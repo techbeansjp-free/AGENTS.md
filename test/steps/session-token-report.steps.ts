@@ -59,6 +59,12 @@ Given("本体とsubagentのfixture logとjournalがある", function () {
   fs.mkdirSync(path.join(root, "docs"));
   fs.writeFileSync(path.join(root, "docs", "a.md"), "# a\n");
   fs.writeFileSync(path.join(root, "docs", TOKEN_LIKE_NAME), "token\n");
+  /** 出力してよいのは追跡済みfileだけである。token様の名前のfileは追跡しない。 */
+  for (const args of [
+    ["init", "-q"],
+    ["add", "docs/a.md"],
+  ])
+    assert.equal(spawnSync("git", ["-C", root, ...args]).status, 0);
   const logs = this.temp("asc-token-logs-");
   const main = path.join(logs, "main-session.jsonl");
   const read = (file: string) => ({
@@ -455,22 +461,40 @@ Then(
   },
 );
 
-Then("token様の名前は除外し単語で区切った長いfile名は保持する", function () {
-  const root = "/repo";
-  assert.deepEqual(
-    [
+Then(
+  "追跡済みfileだけを出力しtoken様の名前や未追跡のpathを出さない",
+  function () {
+    const root = "/repo";
+    const tracked = new Set([
       "test/steps/issue-development-considerations.steps.ts",
-      "docs/0123456789abcdef0123456789abcdef.md",
-      `docs/${TOKEN_LIKE_NAME}`,
-      "docs/ghp_abcdefghijklmnopqrstuvwxyz0123456789",
-      "docs/abcdefghijklmnopqrstuvwxyzabcdefgh.md",
-    ].map((candidate) => normalizeReadPath(candidate, root, root) ?? null),
-    [
-      "test/steps/issue-development-considerations.steps.ts",
-      null,
-      null,
-      null,
-      "docs/abcdefghijklmnopqrstuvwxyzabcdefgh.md",
-    ],
-  );
-});
+      "docs/a.md",
+    ]);
+    assert.deepEqual(
+      [
+        "test/steps/issue-development-considerations.steps.ts",
+        "/repo/docs/a.md",
+        `docs/${TOKEN_LIKE_NAME}`,
+        "docs/ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij.txt",
+        "docs/abcdefghijklmnopqrstuvwxyzabcdefgh.md",
+        "docs/aB3dE5fG7hJ9_kL2mN4pQ6rS8-tU1vW3xY5zA7.txt",
+        "docs/b.md",
+        "../outside/docs/a.md",
+        "https://example.com/docs/a.md",
+      ].map(
+        (candidate) =>
+          normalizeReadPath(candidate, root, root, tracked) ?? null,
+      ),
+      [
+        "test/steps/issue-development-considerations.steps.ts",
+        "docs/a.md",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+      ],
+    );
+  },
+);
