@@ -329,7 +329,16 @@ export function resolveMergeMethod(input: {
 
 export function validateIssueClosingReferences(
   body: string,
-  input: { canonicalIssue: number; relatedIssues: number[] },
+  input: {
+    canonicalIssue: number;
+    relatedIssues: number[];
+    /**
+     * **PRのrepository（`owner/name`）。** 修飾付きclosing参照（`owner/repo#N`・Issue URL）は
+     * これと一致するときだけ同一repositoryの参照として数える。省略時は修飾付き参照を
+     * すべて他repositoryとして拒否する。
+     */
+    repository?: string;
+  },
 ): {
   valid: boolean;
   errors: string[];
@@ -338,9 +347,19 @@ export function validateIssueClosingReferences(
 } {
   const extract = (pattern: RegExp): number[] =>
     [...body.matchAll(pattern)].map((match) => Number(match[1]));
-  const closes = extractIssueClosingNumbers(body);
+  const references = extractIssueClosingReferences(body);
+  const closes = references
+    .filter((reference) => isSameRepository(reference, input.repository))
+    .map((reference) => reference.issue);
+  const foreign = references.filter(
+    (reference) => !isSameRepository(reference, input.repository),
+  );
   const relates = extract(/\brelates\s+to\s+#(\d+)\b/giu);
   const errors: string[] = [];
+  if (foreign.length > 0)
+    errors.push(
+      `他repositoryのIssueを自動closeできません: ${[...new Set(foreign.map((reference) => `${reference.repository ?? ""}#${reference.issue}`))].join(", ")}`,
+    );
   const canonicalCount = closes.filter(
     (issue) => issue === input.canonicalIssue,
   ).length;
@@ -364,12 +383,53 @@ export function validateIssueClosingReferences(
   return { valid: errors.length === 0, errors, closes, relates };
 }
 
+/**
+ * **GitHubがclosing参照として解釈する3形をすべて拾う**（Issue #1517 R5-01）。
+ *
+ * `#N`だけを数えると、`owner/repo#N`やIssue URLで別Issueを終端する本文がclosing契約の
+ * 照合を素通りし、非同期に更新されるprovider索引だけが残る。
+ */
 const ISSUE_CLOSING_REFERENCE =
-  /\b(?:close(?:s|d)?|fix(?:es|ed)?|resolve(?:s|d)?)(?:\s+|\s*:\s*)#(\d+)\b/giu;
+  /\b(?:close(?:s|d)?|fix(?:es|ed)?|resolve(?:s|d)?)(?:\s+|\s*:\s*)(?:#(\d+)|([\w.-]+\/[\w.-]+)#(\d+)|https?:\/\/(?:www\.)?github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+))\b/giu;
 
-export function extractIssueClosingNumbers(body: string): number[] {
-  return [...body.matchAll(ISSUE_CLOSING_REFERENCE)].map((match) =>
-    Number(match[1]),
+/** closing参照1件。`repository`は修飾の無い`#N`で`null`、修飾付きで小文字の`owner/name`。 */
+export type IssueClosingReference = {
+  repository: string | null;
+  issue: number;
+};
+
+export function extractIssueClosingReferences(
+  body: string,
+): IssueClosingReference[] {
+  return [...body.matchAll(ISSUE_CLOSING_REFERENCE)].map((match) => {
+    if (match[1] !== undefined)
+      return { repository: null, issue: Number(match[1]) };
+    const repository = (match[2] ?? match[4] ?? "").toLowerCase();
+    return { repository, issue: Number(match[3] ?? match[5]) };
+  });
+}
+
+function isSameRepository(
+  reference: IssueClosingReference,
+  repository: string | undefined,
+): boolean {
+  if (reference.repository === null) return true;
+  return (
+    repository !== undefined &&
+    reference.repository === repository.trim().toLowerCase()
+  );
+}
+
+/**
+ * **他repositoryへのclosing参照は0へ写す。** Issue番号は1以上なので、0はどのcanonical
+ * Issueとも一致せず、closing契約の照合を必ず失敗させる。
+ */
+export function extractIssueClosingNumbers(
+  body: string,
+  repository?: string,
+): number[] {
+  return extractIssueClosingReferences(body).map((reference) =>
+    isSameRepository(reference, repository) ? reference.issue : 0,
   );
 }
 
@@ -649,6 +709,7 @@ export function createPullRequest(
   const references = validateIssueClosingReferences(withoutMarkdownCode(body), {
     canonicalIssue,
     relatedIssues,
+    repository: input.repository,
   });
   if (!references.valid)
     throw new Error(

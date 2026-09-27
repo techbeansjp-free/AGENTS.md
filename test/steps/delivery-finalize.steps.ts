@@ -417,6 +417,54 @@ Then("PR previewのbodyは必須見出しをすべて含む", function () {
   ])
     assert.deepEqual(extractIssueClosingNumbers(`${keyword}: #824`), [824]);
   assert.deepEqual(extractIssueClosingNumbers("FIXES #824"), [824]);
+  /**
+   * **修飾付きclosing参照もGitHubと同じく数える**（Issue #1517 R5-01）。
+   * 同一repository（大小文字を問わない）だけが番号へ解決し、他repositoryは0へ写る。
+   */
+  assert.deepEqual(
+    extractIssueClosingNumbers(
+      "Closes O/R#824\nFixes: https://github.com/o/r/issues/825",
+      "o/r",
+    ),
+    [824, 825],
+  );
+  assert.deepEqual(
+    extractIssueClosingNumbers(
+      "Closes other/repo#824\nResolved https://github.com/o/other/issues/824",
+      "o/r",
+    ),
+    [0, 0],
+  );
+  assert.deepEqual(extractIssueClosingNumbers("Closes o/r#824"), [0]);
+  const foreign = validateIssueClosingReferences(
+    "Closes #824\nCloses other/repo#9",
+    { canonicalIssue: 824, relatedIssues: [], repository: "o/r" },
+  );
+  assert.equal(foreign.valid, false);
+  assert.ok(
+    foreign.errors.includes(
+      "他repositoryのIssueを自動closeできません: other/repo#9",
+    ),
+    foreign.errors.join("; "),
+  );
+  const sameRepositoryOther = validateIssueClosingReferences(
+    "Closes #824\nFixes https://github.com/O/R/issues/878",
+    { canonicalIssue: 824, relatedIssues: [], repository: "o/r" },
+  );
+  assert.ok(
+    sameRepositoryOther.errors.includes(
+      "canonical Issue以外を自動closeできません: #878",
+    ),
+    sameRepositoryOther.errors.join("; "),
+  );
+  assert.equal(
+    validateIssueClosingReferences("Closes https://github.com/o/r/issues/824", {
+      canonicalIssue: 824,
+      relatedIssues: [],
+      repository: "o/r",
+    }).valid,
+    true,
+  );
   assert.equal(
     validateIssueClosingReferences("Fixes #824\nResolved: #824", {
       canonicalIssue: 824,

@@ -880,7 +880,10 @@ function assertObservedClosingContract(input: {
     );
   const closes = [
     ...new Set(
-      extractIssueClosingNumbers(withoutMarkdownCode(input.observed.body)),
+      extractIssueClosingNumbers(
+        withoutMarkdownCode(input.observed.body),
+        input.state.create.repository,
+      ),
     ),
   ];
   const bodyClosingDigest = closingContractDigest({

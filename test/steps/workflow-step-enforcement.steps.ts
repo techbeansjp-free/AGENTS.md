@@ -2342,8 +2342,23 @@ interface DeliveryProviderControl {
    * `"added"`は対象外Issueの`Closes`を本文へ足し、`"removed"`は canonical Issueの
    * `Closes`を`Relates to`へ置き換える。索引が一致したままなので、本文のclosing契約
    * digestの照合だけが拒否の根拠になる。既定の`"none"`は既存scenarioの挙動を変えない。
+   *
+   * 修飾付きの形（R5-01）: `"qualified-other"`は同一repositoryの`o/r#878`、
+   * `"url-other"`は同一repositoryのIssue URLで878、`"cross-repo"`は`other/repo#9`を、
+   * `"cross-repo-same-number"`は番号だけcanonicalと同じ`other/repo#877`を足す。
+   * `"url-canonical-only"`は canonical Issueの参照をURL形へ置き換え、
+   * `"url-canonical-duplicate"`は`#877`を残したままURL形の877を足す。
    */
-  closingBodyEdit: "none" | "added" | "removed";
+  closingBodyEdit:
+    | "none"
+    | "added"
+    | "removed"
+    | "qualified-other"
+    | "url-other"
+    | "cross-repo"
+    | "cross-repo-same-number"
+    | "url-canonical-only"
+    | "url-canonical-duplicate";
   /**
    * merge後に固定run IDで直読みしたrunの`conclusion`（Issue #1280）。
    * **不一致側を作るための唯一の入口である。** 既定は`"success"`で挙動を変えない。
@@ -3347,6 +3362,18 @@ const body = () => {
   if (control.closingBodyEdit === "added") return canonical + "\\n\\nCloses #878";
   if (control.closingBodyEdit === "removed")
     return canonical.split("Closes #877").join("Relates to #877");
+  if (control.closingBodyEdit === "qualified-other")
+    return canonical + "\\n\\nCloses o/r#878";
+  if (control.closingBodyEdit === "url-other")
+    return canonical + "\\n\\nFixes https://github.com/o/r/issues/878";
+  if (control.closingBodyEdit === "cross-repo")
+    return canonical + "\\n\\nCloses other/repo#9";
+  if (control.closingBodyEdit === "cross-repo-same-number")
+    return canonical + "\\n\\nCloses other/repo#877";
+  if (control.closingBodyEdit === "url-canonical-only")
+    return canonical.split("Closes #877").join("Closes https://github.com/O/R/issues/877");
+  if (control.closingBodyEdit === "url-canonical-duplicate")
+    return canonical + "\\n\\nCloses https://github.com/o/r/issues/877";
   return control.contentChanged ? canonical + "\\n\\nprovider content changed" : canonical;
 };
 const observation = () => ({
@@ -6070,7 +6097,38 @@ if (exact(["auth", "status"])) {
         "merged",
       );
 
-      for (const edit of ["added", "removed"] as const) {
+      /**
+       * **修飾付きの同一repository参照がcanonical Issueを指すときだけ受理する**（R5-01）。
+       * `#877`と同じIssueのURL形が並んでも、解決後のidentityは1件である。
+       */
+      for (const edit of [
+        "url-canonical-only",
+        "url-canonical-duplicate",
+      ] as const) {
+        const prepared = prepareDeliveryCli(this);
+        createDeliveryPullRequest(prepared);
+        writeDeliveryProviderControl(prepared, { closingBodyEdit: edit });
+        const accepted = executeDeliveryMerge(prepared);
+        assert.equal(
+          accepted.status,
+          0,
+          `${edit}: ${accepted.stdout}${accepted.stderr}`,
+        );
+        assert.equal(
+          deliveryProviderCalls(prepared).filter(isMergeCall).length,
+          1,
+          edit,
+        );
+      }
+
+      for (const edit of [
+        "added",
+        "removed",
+        "qualified-other",
+        "url-other",
+        "cross-repo",
+        "cross-repo-same-number",
+      ] as const) {
         const prepared = prepareDeliveryCli(this);
         createDeliveryPullRequest(prepared);
         writeDeliveryProviderControl(prepared, { closingBodyEdit: edit });

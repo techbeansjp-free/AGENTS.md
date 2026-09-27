@@ -433,7 +433,7 @@ function assertObservedClosingContract(input) {
         binding.issueUrl.toLowerCase() !== input.state.create.issueUrl.toLowerCase())
         throw new Error("PRのclosing Issueが準備済みdelivery identityと一致しません");
     const closes = [
-        ...new Set(extractIssueClosingNumbers(withoutMarkdownCode(input.observed.body))),
+        ...new Set(extractIssueClosingNumbers(withoutMarkdownCode(input.observed.body), input.state.create.repository)),
     ];
     const bodyClosingDigest = closingContractDigest({
         canonicalIssue: binding.issue,
