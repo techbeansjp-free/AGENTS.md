@@ -1303,6 +1303,12 @@ nb.Given("配布CLIのissue create出力がある", async function () {
     process.umask(previous);
   }
   this.target = path.join(this.staging, "03_実装計画.md");
+  // 03 templateは#1503（scope A3）で既定のprogress表を除いた。record layerは
+  // projectがmarkerを追記したときだけ成立する任意機能なので、その追記を再現する。
+  fs.appendFileSync(
+    this.target,
+    `\n${PROGRESS_START}\n| タスク | 状態 |\n|---|---|\n| T01 | 未着手 |\n${PROGRESS_END}\n`,
+  );
   appendLegacyJournal(
     path.join(this.staging, STEP_JOURNAL_FILE),
     `${JSON.stringify({
