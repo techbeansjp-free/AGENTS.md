@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1506,
+  "observed": {
+    "baseSha": "c70579fff0c835feb65e85a82620bfd2010d92c5",
+    "implementationHeadSha": "d1fe53347510bbaecffbb91b9e74402ca8361059",
+    "diffDigest": "4a8a7cee6b08c4896eff87010652ea6d3e077a0278e638adf9eb947d4a1bfad8",
+    "session": {
+      "sessionId": "4487ed7682f55e2a085e447cf0588e86af994c120255615bf926fc0a4f0b63cf",
+      "latestRoundDigest": "0c12ddecc0c585ba9f97ee4359ca8b540e92293a7a3d8833dde17589fe67fb56",
+      "status": "converged",
+      "countedRounds": 2
+    },
+    "impact": {
+      "digest": "1568f519b21ad9ec6ba0f550b5dc9167b7fc40955957255ff3bf45c93bd19545",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "d1fe53347510bbaecffbb91b9e74402ca8361059",
+        "impactDigest": "1568f519b21ad9ec6ba0f550b5dc9167b7fc40955957255ff3bf45c93bd19545",
+        "finishedAt": "2026-09-27T11:05:56.501Z",
+        "recordDigest": "a4deb5bfc0693997c20c2bceaff3dee1edd3c723133a394cc19f142e69a21cfe"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "REV-01",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/scan-boundary.steps.ts",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "claude-opus-subagent-context-isolated",
+    "implementer": "claude-opus-5.5-coordinator",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "1b4bbdac95006a527e372f7fda7ff55955cdb4798c255461e37bd42620f05c44"
+}
