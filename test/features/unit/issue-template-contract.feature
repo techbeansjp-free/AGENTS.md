@@ -92,6 +92,11 @@ Feature: Issue templateと段階別検証の契約
     When quick Issueのplaceholderを検証する
     Then placeholder errorなしでIssue検証は合格する
 
+  Scenario: SCN-UNIT-ISSUEPLC-009 対象・変更・理由を示す説明文はplaceholderとしない
+    Given validなquick Issueの本文に対象・変更・理由を含む説明文がある
+    When quick Issueのplaceholderを検証する
+    Then placeholder errorなしでIssue検証は合格する
+
   Scenario Outline: SCN-UNIT-ISSUETPL-010 要求定義templateが仕様の所有箇所を宣言する
     Given 出荷Issue templateと検証器の見出し契約がある
     When "<mode>"の要求定義templateを読む

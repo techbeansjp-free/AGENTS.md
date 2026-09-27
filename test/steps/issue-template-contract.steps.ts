@@ -291,6 +291,8 @@ Given(/^validなquick Issueの本文に(.+)がある$/u, function (kind: string)
       "\nScenario Outline: SCN-FIXTURE-ISSUE-002 入力を検証する\n  Given <parameter>を受け取る\n  Then 正常に扱う\n\n  Examples:\n    | parameter |\n    | value |\n",
     テンプレート由来のplaceholder:
       "\n件名は（人が識別できる件名）のままである。\n",
+    "対象・変更・理由を含む説明文":
+      "\n他の文書では、変更点を（対象・変更・理由）の3項目で説明している。\n",
     placeholder6件: "\n未解決は<a>と<b>と<e>と{c}と{d}と{f}である。\n",
     placeholder5件: "\n未解決は<a>と<b>と<e>と{c}と{d}である。\n",
     templateのラベル行:
