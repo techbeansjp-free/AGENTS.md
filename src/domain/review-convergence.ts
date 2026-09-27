@@ -2,6 +2,12 @@ import crypto from "node:crypto";
 import { stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import {
+  acceptedValues,
+  field,
+  unknownAndMissingError,
+  type InputFieldSpec,
+} from "./input-contract.js";
+import {
   parseReviewProgressInventory,
   type ReviewProgressInventory,
 } from "./review-progress.js";
@@ -173,15 +179,13 @@ function exactObject(
 ): Record<string, unknown> {
   if (!isRecord(value)) throw new Error(`${label}はobjectが必要です`);
   const unknown = Object.keys(value).filter(
-    (field) => !fields.includes(field) && !optionalFields.includes(field),
+    (name) => !fields.includes(name) && !optionalFields.includes(name),
   );
   const missing = fields.filter(
-    (field) => !Object.prototype.hasOwnProperty.call(value, field),
+    (name) => !Object.prototype.hasOwnProperty.call(value, name),
   );
-  if (unknown.length > 0)
-    throw new Error(`${label}の未知fieldを拒否しました: ${unknown.join(", ")}`);
-  if (missing.length > 0)
-    throw new Error(`${label}の必須fieldがありません: ${missing.join(", ")}`);
+  const error = unknownAndMissingError(label, unknown, missing);
+  if (error) throw new Error(error);
   return value;
 }
 
@@ -239,7 +243,7 @@ function oneOf<const Values extends readonly string[]>(
   label: string,
 ): Values[number] {
   if (typeof value !== "string" || !values.includes(value))
-    throw new Error(`${label}が不正です`);
+    throw new Error(`${label}が不正です${acceptedValues(values)}`);
   return value as Values[number];
 }
 
@@ -255,16 +259,10 @@ function parseAnchor(value: unknown): ReviewSessionAnchor {
     "progressInventory",
   ];
   const required = fields.filter((field) => field !== "progressInventory");
-  const unknown = Object.keys(value).filter((field) => !fields.includes(field));
-  const missing = required.filter((field) => !(field in value));
-  if (unknown.length > 0)
-    throw new Error(
-      `review anchorの未知fieldを拒否しました: ${unknown.join(", ")}`,
-    );
-  if (missing.length > 0)
-    throw new Error(
-      `review anchorの必須fieldがありません: ${missing.join(", ")}`,
-    );
+  const unknown = Object.keys(value).filter((name) => !fields.includes(name));
+  const missing = required.filter((name) => !(name in value));
+  const error = unknownAndMissingError("review anchor", unknown, missing);
+  if (error) throw new Error(error);
   const anchor = value;
   const scopeIds = stableStrings(anchor.scopeIds, "review anchor.scopeIds");
   const acceptanceCriteriaIds = stableStrings(
@@ -379,8 +377,20 @@ function parseFocus(value: unknown): ReviewRoundFocus {
  * findingはこの関数の戻り値でも`decisionRef`キー自体を持たせない
  * （spread条件分岐）ことで、導入前と同じ直列化を保つ。
  */
+/**
+ * findingの診断labelへ添字とIDを添える。IDは安定ID形式を満たす場合だけ使い、
+ * 満たさない入力値は診断へ複写しない。
+ */
+function findingLabel(value: unknown, index: number): string {
+  const base = `review round.findings[${index}]`;
+  const id = isRecord(value) ? value.id : undefined;
+  return typeof id === "string" && STABLE_ID.test(id)
+    ? `${base}（id=${id}）`
+    : base;
+}
+
 function parseFinding(value: unknown, index: number): ReviewRoundFinding {
-  const label = `review round.findings[${index}]`;
+  const label = findingLabel(value, index);
   const finding = exactObject(
     value,
     label,
@@ -432,6 +442,43 @@ function parseFinding(value: unknown, index: number): ReviewRoundFinding {
       : {}),
   });
 }
+
+/** `review round --file`の項目定義。`--help`と検証が共有する。 */
+export const REVIEW_ROUND_INPUT_FIELDS: readonly InputFieldSpec[] =
+  Object.freeze([
+    field("round", "integer（1以上）"),
+    field("previousRoundDigest", "sha256 | null"),
+    field("anchor", "object"),
+    field("anchor.scopeIds", "stableId[]（1件以上、重複なし昇順）"),
+    field(
+      "anchor.acceptanceCriteriaIds",
+      "stableId[]（1件以上、重複なし昇順）",
+    ),
+    field("anchor.invariantIds", "stableId[]（重複なし昇順）"),
+    field("anchor.diffBaseSha", "commit SHA"),
+    field("anchor.initialHeadSha", "commit SHA"),
+    field("anchor.initialDiffDigest", "sha256"),
+    field("anchor.progressInventory", "object", { required: false }),
+    field("candidateHeadSha", "commit SHA"),
+    field("focus", "object"),
+    field("focus.previousBlocking", "stableId[]"),
+    field("focus.fixedDiff", "path[]"),
+    field("focus.adjacentScope", "{path, graphEvidence}[]"),
+    field("focus.adjacentScopeUnbounded", "true", { required: false }),
+    field("findings", "object[]（256件以下）"),
+    field("findings[].id", "stableId"),
+    field("findings[].severity", "string", { values: SEVERITIES }),
+    field("findings[].status", "string", { values: STATUSES }),
+    field("findings[].source", "string", { values: SOURCES }),
+    field("findings[].relation", "string", { values: RELATIONS }),
+    field("findings[].evidence", "string"),
+    field("findings[].path", "repository相対path"),
+    field("findings[].contractId", "stableId | null"),
+    field("findings[].causedByFindingId", "stableId | null"),
+    field("findings[].decisionRef", "DR-ID | null", { required: false }),
+    field("followOnly", "true", { required: false }),
+    field("recordLayerOnly", "true", { required: false }),
+  ]);
 
 export function parseReviewRoundInput(value: unknown): ReviewRoundInput {
   const round = exactObject(

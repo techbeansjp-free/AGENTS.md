@@ -1,4 +1,5 @@
 import { isRecord } from "../types.js";
+import { acceptedValues, field, unknownAndMissingError, } from "./input-contract.js";
 import { POC_HIGH_RISK_IDS, QUICK_DISQUALIFIER_IDS } from "./mode.js";
 import { PLAN_AMENDMENT_FILE } from "./plan-seal.js";
 const methods = (...values) => Object.freeze(values);
@@ -35,12 +36,11 @@ const CHANGE_RISKS = Object.freeze([
 function exactInputObject(value, label, fields) {
     if (!isRecord(value))
         throw new Error(`${label}はobjectが必要です`);
-    const unknown = Object.keys(value).filter((field) => !fields.includes(field));
-    if (unknown.length > 0)
-        throw new Error(`${label}の未知fieldを拒否しました: ${unknown.join(", ")}`);
-    const missing = fields.filter((field) => !Object.prototype.hasOwnProperty.call(value, field));
-    if (missing.length > 0)
-        throw new Error(`${label}の必須fieldがありません: ${missing.join(", ")}`);
+    const unknown = Object.keys(value).filter((name) => !fields.includes(name));
+    const missing = fields.filter((name) => !Object.prototype.hasOwnProperty.call(value, name));
+    const error = unknownAndMissingError(label, unknown, missing);
+    if (error)
+        throw new Error(error);
     return value;
 }
 function nonEmptyStringArray(value, label) {
@@ -59,6 +59,20 @@ function requiredBoolean(value, field, label) {
         throw new Error(`${label}.${field}はbooleanが必要です`);
     return value[field];
 }
+/** `workflow verification-set --input`の項目定義。`--help`と検証が共有する。 */
+export const VERIFICATION_SET_INPUT_FIELDS = Object.freeze([
+    field("changeType", "string", { values: CHANGE_TYPES }),
+    field("risk", "string", { values: CHANGE_RISKS }),
+    field("affectedBoundaries", "string[]（1件以上）"),
+    field("requirementIds", "string[]（1件以上）"),
+    field("acceptanceCriteriaIds", "string[]（1件以上）"),
+    field("impactAnalysis", "object"),
+    field("impactAnalysis.securityRelevant", "boolean"),
+    field("impactAnalysis.dataLossPossible", "boolean"),
+    field("impactAnalysis.irreversibleOperation", "boolean"),
+    field("impactAnalysis.externalContractChanged", "boolean"),
+    field("impactAnalysis.concurrentBehaviorChanged", "boolean"),
+]);
 export function parseVerificationSelectionInput(value) {
     const input = exactInputObject(value, "Verification Set入力", [
         "changeType",
@@ -69,9 +83,9 @@ export function parseVerificationSelectionInput(value) {
         "impactAnalysis",
     ]);
     if (!CHANGE_TYPES.some((changeType) => changeType === input.changeType))
-        throw new Error("Verification Set入力.changeTypeが不正です");
+        throw new Error(`Verification Set入力.changeTypeが不正です${acceptedValues(CHANGE_TYPES)}`);
     if (!CHANGE_RISKS.some((risk) => risk === input.risk))
-        throw new Error("Verification Set入力.riskが不正です");
+        throw new Error(`Verification Set入力.riskが不正です${acceptedValues(CHANGE_RISKS)}`);
     const impact = exactInputObject(input.impactAnalysis, "Verification Set入力.impactAnalysis", [
         "securityRelevant",
         "dataLossPossible",
@@ -177,7 +191,7 @@ function parseModeDisqualifiers(value) {
             throw new Error(`${label}.evidenceは空でない文字列が必要です`);
         const normalizedId = id.trim();
         if (!CANONICAL_MODE_DISQUALIFIER_IDS.has(normalizedId))
-            throw new Error(`実装中発見入力.modeDisqualifiersの未知idを拒否しました: ${normalizedId}`);
+            throw new Error(`実装中発見入力.modeDisqualifiersの未知idを拒否しました: ${normalizedId}${acceptedValues([...CANONICAL_MODE_DISQUALIFIER_IDS])}`);
         if (ids.has(normalizedId))
             throw new Error(`実装中発見入力.modeDisqualifiersの重複idを拒否しました: ${normalizedId}`);
         ids.add(normalizedId);
@@ -192,7 +206,7 @@ function parseChangedContractKinds(value) {
     for (const candidate of value) {
         if (typeof candidate !== "string" ||
             !CHANGED_CONTRACT_KINDS.some((kind) => kind === candidate))
-            throw new Error(`実装中発見入力.changedContractKindsの未知値を拒否しました: ${String(candidate)}`);
+            throw new Error(`実装中発見入力.changedContractKindsの未知値を拒否しました: ${String(candidate)}${acceptedValues(CHANGED_CONTRACT_KINDS)}`);
         const kind = candidate;
         if (seen.has(kind))
             throw new Error(`実装中発見入力.changedContractKindsの重複値を拒否しました: ${kind}`);
@@ -201,6 +215,25 @@ function parseChangedContractKinds(value) {
     }
     return Object.freeze(kinds);
 }
+const WORKFLOW_MODES = Object.freeze(["full", "quick", "poc"]);
+/** `workflow assess-discovery --input`の項目定義。`--help`と検証が共有する。 */
+export const IMPLEMENTATION_DISCOVERY_INPUT_FIELDS = Object.freeze([
+    field("discoveryId", "string（DISC-で始まる安定ID）"),
+    field("workflowMode", "string", { values: WORKFLOW_MODES }),
+    field("modeDisqualifiers", "object[]（空配列可）"),
+    field("modeDisqualifiers[].id", "string", {
+        values: [...CANONICAL_MODE_DISQUALIFIER_IDS],
+    }),
+    field("modeDisqualifiers[].evidence", "string"),
+    field("changedContractKinds", "string[]（空配列可、重複不可）", {
+        values: CHANGED_CONTRACT_KINDS,
+    }),
+    field("changesGoal", "boolean"),
+    field("changesScope", "boolean"),
+    field("changesAcceptanceCriteria", "boolean"),
+    field("expandsSecurityBoundary", "boolean"),
+    field("introducesIrreversibleOperation", "boolean"),
+]);
 export function parseImplementationDiscoveryInput(value) {
     const input = exactInputObject(value, "実装中発見入力", [
         "discoveryId",
@@ -213,10 +246,8 @@ export function parseImplementationDiscoveryInput(value) {
         "expandsSecurityBoundary",
         "introducesIrreversibleOperation",
     ]);
-    if (input.workflowMode !== "full" &&
-        input.workflowMode !== "quick" &&
-        input.workflowMode !== "poc")
-        throw new Error("実装中発見入力.workflowModeが不正です");
+    if (!WORKFLOW_MODES.some((mode) => mode === input.workflowMode))
+        throw new Error(`実装中発見入力.workflowModeが不正です${acceptedValues(WORKFLOW_MODES)}`);
     if (typeof input.discoveryId !== "string" ||
         !/^DISC-[A-Z0-9][A-Z0-9._-]{0,122}$/u.test(input.discoveryId))
         throw new Error("実装中発見入力.discoveryIdはDISC-で始まる安定IDが必要です");
