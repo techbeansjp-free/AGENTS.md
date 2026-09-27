@@ -8707,15 +8707,15 @@ if (exact(["auth", "status"])) {
       });
       assert.deepEqual(intact.output.resume.errors, []);
       const journalFile = path.join(chained.staging, "journal", "steps.jsonl");
-      const lines = fs.readFileSync(journalFile, "utf8").split("\n");
-      const last = lines.findLastIndex((line) => line.trim() !== "");
+      const lines = fs.readFileSync(journalFile, "utf8").trimEnd().split("\n");
+      const last = lines.length - 1;
       const tampered = JSON.parse(lines[last]!) as {
         previousEntryDigest: string;
       };
       assert.match(tampered.previousEntryDigest, /^[a-f0-9]{64}$/u);
       tampered.previousEntryDigest = "0".repeat(64);
       lines[last] = JSON.stringify(tampered);
-      fs.writeFileSync(journalFile, lines.join("\n"));
+      fs.writeFileSync(journalFile, `${lines.join("\n")}\n`);
       const broken = await previewResume(chained.staging);
       /** 既存のpreview判定はjournalの破損を独自に拒否する。再開状態はそれを変えない。 */
       const chainError =
