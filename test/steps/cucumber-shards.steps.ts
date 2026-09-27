@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   aggregateShardResults,
   executedLocations,
@@ -17,6 +20,7 @@ class CucumberShardsWorld extends WorkflowWorld {
   shardResults: ShardResult[] = [];
   shardAggregate: ShardAggregate | undefined = undefined;
   shardListConfig = "";
+  shardTemporaryRoot = "";
   shardRun:
     { status: number | null; stdout: string; stderr: string } | undefined =
     undefined;
@@ -362,3 +366,73 @@ Then("終了値は非0で診断は構文errorのfeatureを名指しする", func
   );
   assert.doesNotMatch(this.shardRun?.stdout ?? "", /shardで実行します/u);
 });
+
+Given(
+  "1件がすぐ終わり1件が中断されるまで終わらないfixture設定がある",
+  function () {
+    this.shardListConfig = "test/fixtures/cucumber-shards/list-slow.mjs";
+  },
+);
+
+When(
+  "shard数{int}でshard実行scriptを起動し実行中にSIGTERMを送る",
+  { timeout: 60_000 },
+  async function (shardCount: number) {
+    this.shardTemporaryRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "asc-shard-signal-"),
+    );
+    this.temporaryDirectories.push(this.shardTemporaryRoot);
+    const child = spawn(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "scripts/run_cucumber_shards.ts",
+        `--config=${this.shardListConfig}`,
+      ],
+      {
+        env: {
+          ...process.env,
+          ASC_TEST_SHARDS: String(shardCount),
+          TMPDIR: this.shardTemporaryRoot,
+        },
+      },
+    );
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+    child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+    const closed = new Promise<number | null>((resolve) =>
+      child.on("close", (code) => resolve(code)),
+    );
+    /** shardの子processが起動し待機stepへ入るまで待ってから送る。 */
+    for (
+      let attempt = 0;
+      attempt < 300 && !stdout.includes("shardで実行します");
+      attempt += 1
+    )
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    child.kill("SIGTERM");
+    this.shardRun = { status: await closed, stdout, stderr };
+  },
+);
+
+Then(
+  "終了値は非0で実行中のshardの中断だけが出力され一時directoryが残らない",
+  function () {
+    assert.equal(this.shardRun?.status, 1, this.shardRun?.stderr);
+    const stdout = this.shardRun?.stdout ?? "";
+    /** shard 1は終了済みで1回だけ出力され、実行中のshard 2だけが中断として出力される。 */
+    assert.equal(stdout.split("===== shard 1/2 =====").length - 1, 1);
+    assert.doesNotMatch(stdout, /shard 1（SIGTERMで中断）/u);
+    assert.match(stdout, /===== shard 2（SIGTERMで中断） =====/u);
+    assert.match(stdout, /SIGTERMを受けて中断しました\n$/u);
+    assert.deepEqual(
+      fs
+        .readdirSync(this.shardTemporaryRoot)
+        .filter((entry) => entry.startsWith("asc-cucumber-shards-")),
+      [],
+    );
+  },
+);

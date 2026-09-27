@@ -304,8 +304,10 @@ async function prepareRun(
 }
 
 interface RunningShard {
+  index: number;
   child: ReturnType<typeof spawn>;
   output: () => string;
+  finished: () => boolean;
 }
 
 function runShard(
@@ -334,7 +336,12 @@ function runShard(
       ],
       { stdio: ["ignore", "pipe", "pipe"] },
     );
-    running.push({ child, output: () => output });
+    running.push({
+      index,
+      child,
+      output: () => output,
+      finished: () => settled,
+    });
     child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
     child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
     const finish = (exitCode: number | null, signal: string | null): void => {
@@ -375,14 +382,18 @@ function stopOnSignal(
   workDirectory: string,
 ): () => void {
   const handler = (signal: NodeJS.Signals): void => {
-    for (const [index, shard] of running.entries()) {
+    /** 終了済みのshardは`main`が出力済みなので、実行中のshardだけを書き出す。 */
+    let text = "";
+    for (const shard of running) {
+      if (shard.finished()) continue;
       shard.child.kill(signal);
-      process.stdout.write(
-        `\n===== shard ${index + 1}（${signal}で中断） =====\n${shard.output()}`,
-      );
+      text += `\n===== shard ${shard.index + 1}（${signal}で中断） =====\n${shard.output()}`;
     }
     fs.rmSync(workDirectory, { recursive: true, force: true });
-    process.exit(1);
+    /** pipeへの書き込みが終わる前に終了すると末尾が欠けるため、書き込み完了後に終える。 */
+    process.stdout.write(`${text}\n${signal}を受けて中断しました\n`, () =>
+      process.exit(1),
+    );
   };
   process.once("SIGINT", handler);
   process.once("SIGTERM", handler);
