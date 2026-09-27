@@ -1,3 +1,4 @@
+import { buildShadowEvaluation } from "./adapters/shadow-evaluation.js";
 import { launchCodex } from "./adapters/codex-launch.js";
 import { launchReview } from "./adapters/review-launch.js";
 import { launchDelegatedReview } from "./adapters/delegated-review-launch.js";
@@ -3431,6 +3432,25 @@ export async function main(argv, dependencies = {}) {
         enforceUsage(usage, usageArgs);
     }
     assertCommandRuntime(command, dependencies.nodeVersion ?? process.versions.node);
+    if (command === "decision" && subcommand === "evaluate") {
+        const { flags } = parse(rest.filter((arg) => arg.startsWith("--staging=")).slice(0, 1));
+        required(flags, "staging");
+        const stagings = [];
+        let root = process.cwd();
+        let rootSeen = false;
+        for (const arg of rest) {
+            if (arg.startsWith("--staging="))
+                stagings.push(arg.slice(10));
+            else if (arg.startsWith("--root=") && !rootSeen) {
+                root = arg.slice(7);
+                rootSeen = true;
+            }
+            else
+                throw new Error("decision evaluateの引数が不正です");
+        }
+        print(buildShadowEvaluation({ root, stagings }));
+        return 0;
+    }
     if (command === "decision" && subcommand === "invoke") {
         const { flags } = parse(rest);
         const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
