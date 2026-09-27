@@ -16,7 +16,10 @@ import {
 } from "../../src/lib/security.js";
 import { evaluateReview } from "../../src/domain/review.js";
 import { inspectHookRegistration } from "../../src/domain/lifecycle.js";
-import { STAGING_LIFECYCLE_AREAS } from "../../src/domain/staging.js";
+import {
+  isStagingLifecycleScanPath,
+  STAGING_LIFECYCLE_AREAS,
+} from "../../src/domain/staging.js";
 import {
   loadOperationPolicy,
   validatePolicy,
@@ -288,6 +291,7 @@ interface UnitWorld extends WorkflowWorld {
   modeResult: ReturnType<typeof classifyMode>;
   reviewResult: ReturnType<typeof evaluateReview>;
   traceResult: ReturnType<typeof validateScenarioTrace>;
+  scanJudged: Array<{ input: string; excluded: boolean }>;
 }
 
 interface MutablePolicyFixture {
@@ -4093,3 +4097,73 @@ Then("契約本文から変異を作る指示と充足の記録欄が存在す�
     `配布物に変異試験の判断材料または充足の記録欄がありません: ${missing.join(" / ")}`,
   );
 });
+
+/**
+ * **`source:check`の走査除外に使う`isStagingLifecycleScanPath`の入力契約。**
+ *
+ * 除外判定が緩むと、領域外のsourceを`source:check`から隠せる。旧SCN配置検査の
+ * test（SCN-UNIT-SCNSCOPE-011・012・015）が、この述語を経由して検査していた入力を、
+ * 述語へ直接与える形で移した（Issue #1506）。filesystemを経由すると`path.join`が
+ * 親参照を解決してしまい悪用入力そのものを検証できないため、生の文字列を渡す。
+ */
+const SCAN_EXCLUSION_ORACLE: ReadonlyArray<readonly [string, boolean]> = [
+  // 領域内（除外する）
+  [".agent-skill-chain/tmp/handoffs/draft.md", true],
+  [".agent-skill-chain/tmp/issues-old/draft.feature", true],
+  [".agent-skill-chain/role-log/draft.feature", true],
+  [".agent-skill-chain/metrics/draft.md", true],
+  [".agent-skill-chain/runtime/draft.feature", true],
+  [".agent-skill-chain/local/draft.feature", true],
+  // 境界区切りまで一致しない近似path（除外しない）
+  [".agent-skill-chain/tmp-old/near.md", false],
+  [".agent-skill-chain/role-log-old/near.feature", false],
+  [".agent-skill-chain/metrics-old/near.md", false],
+  [".agent-skill-chain/runtime-old/near.feature", false],
+  [".agent-skill-chain/local-old/near.feature", false],
+  // **POSIXの`\\`は区切りではない。** 親directoryは`.agent-skill-chain`である
+  [".agent-skill-chain/role-log\\evil.feature", false],
+  [".agent-skill-chain/metrics\\evil.feature", false],
+  [".agent-skill-chain/runtime\\evil.feature", false],
+  [".agent-skill-chain/tmp\\handoffs\\evil.feature", false],
+];
+
+Given("source品質検査の除外判定へ渡す生のpath一覧がある", function () {
+  const area = STAGING_LIFECYCLE_AREAS[0]!;
+  this.scanJudged = [
+    `${area}/handoffs/01_要件定義.md`,
+    ".agent-skill-chain\\tmp\\handoffs\\01_要件定義.md",
+    `${area}/../../../docs/例.md`,
+    `${area}/./handoffs/01_要件定義.md`,
+    `${area}//handoffs/01_要件定義.md`,
+    ...STAGING_LIFECYCLE_AREAS,
+    `${area}-old/例.md`,
+    "docs/例.md",
+    "",
+    ...SCAN_EXCLUSION_ORACLE.map(([input]) => input),
+  ].map((input) => ({ input, excluded: isStagingLifecycleScanPath(input) }));
+});
+
+When("除外判定を1件ずつ適用する", function () {
+  assert.notEqual(this.scanJudged.length, 0, "判定対象がありません");
+});
+
+Then(
+  "領域内のpathだけを除外し判定不能なpathと近似pathは除外しない",
+  function () {
+    assert.deepEqual(
+      this.scanJudged.map(({ excluded }) => excluded),
+      [
+        true,
+        false,
+        false,
+        false,
+        false,
+        ...STAGING_LIFECYCLE_AREAS.map(() => true),
+        false,
+        false,
+        false,
+        ...SCAN_EXCLUSION_ORACLE.map(([, expected]) => expected),
+      ],
+    );
+  },
+);

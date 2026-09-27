@@ -22,6 +22,7 @@ class LifecycleIgnoreWorld extends WorkflowWorld {
   areas: string[] = [];
   prefixes: string[] = [];
   judgements: Array<{ path: string; expected: boolean }> = [];
+  judged: Array<{ input: string; excluded: boolean }> = [];
   output = "";
   environment: Record<string, string | undefined> = {};
 }
@@ -508,4 +509,36 @@ When("symlink経由で子processを実行する", function () {
 
 Then("出力にパッケージ内容検査の結果が現れる", function () {
   assert.match(this.output, /パッケージ内容検査/u);
+});
+
+/**
+ * **`isStagingLifecyclePath`の契約が変わっていないことを固定する。**
+ *
+ * `\\`はPOSIXでは通常文字であり、これらは一時領域配下に実在しうる合法なfile名
+ * である。厳格化すると`checkLifecycleIgnore`の追跡混入拒否がすり抜ける
+ * （Issue #1273で12件中12件の見逃しを実測）。旧SCN-UNIT-SCNSCOPE-014から移した
+ * （Issue #1506）。
+ */
+Given("区切り文字を名前に含む合法な一時領域pathがある", function () {
+  this.judged = [
+    // **領域そのものも契約の一部である。** 配下だけを見ると
+    // `normalized === area` を落とす変異が生存する。
+    ...STAGING_LIFECYCLE_AREAS,
+    ...STAGING_LIFECYCLE_AREAS.flatMap((area) =>
+      ["..\\draft.md", ".\\draft.md", "\\draft.md", "draft.md"].map(
+        (name) => `${area}/${name}`,
+      ),
+    ),
+  ].map((input) => ({ input, excluded: isStagingLifecyclePath(input) }));
+});
+
+When("追跡混入検査が使う領域判定を適用する", function () {
+  assert.equal(this.judged.length, STAGING_LIFECYCLE_AREAS.length * 5);
+});
+
+Then("すべて領域内と判定される", function () {
+  assert.deepEqual(
+    this.judged.filter(({ excluded }) => !excluded).map(({ input }) => input),
+    [],
+  );
 });

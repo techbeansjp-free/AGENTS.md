@@ -56,3 +56,13 @@ Feature: 製品仕様の要件と追跡を正規化する
     Given 2000件の要件と追跡を持つ入力がある
     When 仕様正規化検査を実行する
     Then 走査操作数は入力件数に対して線形である
+
+  Scenario: SCN-UNIT-SPECNORM-012 正本外のSCN定義を実行可能Scenarioとして扱わず違反にもしない
+    Given 正本外の文書と一時領域とstagingと近似pathにSCN定義がある
+    When 仕様正規化検査を実行する
+    Then 配置由来のerrorを返さず実行可能Scenarioは正本のものだけである
+
+  Scenario: SCN-UNIT-SPECNORM-013 正本外にしか無いSCNを追跡表から参照すると拒否する
+    Given 追跡表が正本外の文書とfeatureにしか無いSCNを参照する
+    When 仕様正規化検査を実行する
+    Then 完全path解決のerrorを参照ごとに返す

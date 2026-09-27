@@ -40,26 +40,25 @@ export const EXCLUSION_PREDICATE_SOURCES: readonly ExclusionPredicateSource[] =
       id: "issue-staging",
       owner: "src/domain/staging.ts",
       appliesTo:
-        "Issue一時ステージング判定の公開API。**SCN配置検査はこれを使わない**（Issue #1273以降）。利用側はtestとscan boundary観測である",
+        "Issue一時ステージング判定の公開API。利用側はscan boundary観測である",
       reasonCode: "issue-staging",
-      reason: "Issue一時ステージング配下かを判定する（REQ-SQ-017）",
+      reason: "Issue一時ステージング配下かを判定する",
       excludes: isIssueStagingPath,
     },
     {
       id: "staging-lifecycle-scan",
-      owner: "trace:check、source:check",
-      appliesTo:
-        "SCN配置検査とsource品質検査のdirectory列挙。trace gateの要件本文検査へは同じMarkdownが届く",
+      owner: "source:check",
+      appliesTo: "source品質検査のdirectory列挙",
       reasonCode: "staging-lifecycle",
       reason:
-        "一時ライフサイクル領域をSCN配置検査とsource品質検査の走査範囲から除く（REQ-SQ-017、REQ-SQ-035）",
+        "一時ライフサイクル領域をsource品質検査の走査範囲から除く（REQ-SQ-035）",
       excludes: isStagingLifecycleScanPath,
     },
     {
       id: "staging-lifecycle",
       owner: "directories:check、package:check、conformance:check、hygiene",
       appliesTo:
-        "`.agent-skill-chain`配下のdirectory案内検査、`npm pack`が返した配布file集合の混入禁止prefix判定、追跡混入検査、workspace hygieneの削除保護。**真が安全側であるためSCN配置検査とは入力契約を共有しない**",
+        "`.agent-skill-chain`配下のdirectory案内検査、`npm pack`が返した配布file集合の混入禁止prefix判定、追跡混入検査、workspace hygieneの削除保護。**真が安全側であるためsource品質検査の走査除外とは入力契約を共有しない**",
       reasonCode: "staging-lifecycle",
       reason: "一時ライフサイクル領域を対象から除く（REQ-SQ-019）",
       excludes: isStagingLifecyclePath,
