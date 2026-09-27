@@ -5,26 +5,26 @@ const packageRoot = findPackageRoot(import.meta.url);
 const packageMetadata = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
 const policyNamespace = "agent-skill-chain/project-policy/v";
 /**
- * **package release versionのcoreとcurrent policy schema versionは常に同一
- * 数値である**（`scripts/build.ts`が強制する既存不変条件。Issue #1503で
- * 0.3.xから0.4.xへ両方まとめて進めた）。`packageVersionCore`はpackage
- * releaseの受理範囲（新しいcandidate versionの検証）に使い、0.4.xだけを
- * 受理する。過去のgit tag（`v0.3.1-beta.NNN`等）は比較時に読み捨てるだけで
- * 良く、`isPackageVersion`が0.3.x側を受理し続ける必要はない。
- *
- * `policyVersionCore`は`policySchemaVersion`（現行値）と
- * `compatiblePolicySchemaVersions`（過去の互換値）の両方を検証する。
- * 現行は0.4.xへ進んだが、互換として残す過去値（0.3.0・0.3.1）は0.3.xの
- * ままである。**移行期間中は両系列を受理する必要がある**ため、
- * package release versionの受理範囲とは別に、0.3.xと0.4.xの両方を含む。
+ * **package release lineとpolicy schema versionは別の量である**（Issue #1503）。
+ * package releaseは0.4.xだけを新しいversionとして受理する。policy schemaは
+ * 利用projectのpolicyが宣言する契約番号であり、0.3.xのまま変えない。
+ * 0.4.xへ進める前の旧release（`0.3.1-beta.N`）は`isLegacyPackageVersion`で
+ * 別に識別する。
  */
 const packageVersionCore = String.raw `0\.4\.(?:0|[1-9]\d*)`;
-const policyVersionCore = String.raw `(?:0\.3\.(?:0|[1-9]\d*)|0\.4\.(?:0|[1-9]\d*))`;
+const legacyPackageVersionCore = String.raw `0\.3\.(?:0|[1-9]\d*)`;
+const policyVersionCore = legacyPackageVersionCore;
 const prereleaseIdentifier = String.raw `(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)`;
-const packageVersionPattern = new RegExp(String.raw `^${packageVersionCore}(?:-${prereleaseIdentifier}(?:\.${prereleaseIdentifier})*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`, "u");
+const versionSuffix = String.raw `(?:-${prereleaseIdentifier}(?:\.${prereleaseIdentifier})*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?`;
+const packageVersionPattern = new RegExp(String.raw `^${packageVersionCore}${versionSuffix}$`, "u");
+const legacyPackageVersionPattern = new RegExp(String.raw `^${legacyPackageVersionCore}${versionSuffix}$`, "u");
 const policyVersionPattern = new RegExp(String.raw `^${policyVersionCore}$`, "u");
 export function isPackageVersion(value) {
     return typeof value === "string" && packageVersionPattern.test(value);
+}
+/** 0.4.xへ進める前に切った旧package version（例: `0.3.1-beta.300`）。 */
+export function isLegacyPackageVersion(value) {
+    return typeof value === "string" && legacyPackageVersionPattern.test(value);
 }
 export function isPolicySchemaPatchVersion(value) {
     return typeof value === "string" && policyVersionPattern.test(value);
@@ -45,14 +45,9 @@ if (!packageMetadata.agentSkillChain?.deprecatedPolicySchemaAliases ||
     Array.isArray(packageMetadata.agentSkillChain.deprecatedPolicySchemaAliases))
     throw new Error("package.jsonのdeprecatedPolicySchemaAliasesが不正です");
 for (const [alias, canonical] of Object.entries(packageMetadata.agentSkillChain.deprecatedPolicySchemaAliases))
-    /**
-     * `0.3.1`は`0.4.4`へ番号だけを進めた同一schemaである（Issue #1503）。移行期間中の
-     * 既定branchはまだ`0.3.1`を宣言するため、現行版への別名として読む。
-     */
-    if (!/^0\.3(?:\.1)?$/u.test(alias) ||
+    if (!/^0\.3$/u.test(alias) ||
         typeof canonical !== "string" ||
-        (!packageMetadata.agentSkillChain.compatiblePolicySchemaVersions.includes(canonical) &&
-            canonical !== packageMetadata.agentSkillChain.policySchemaVersion))
+        !packageMetadata.agentSkillChain.compatiblePolicySchemaVersions.includes(canonical))
         throw new Error("package.jsonのdeprecated policy schema aliasが不正です");
 export const PACKAGE_VERSION = packageMetadata.version;
 export const CURRENT_POLICY_SCHEMA_VERSION = `${policyNamespace}${packageMetadata.agentSkillChain.policySchemaVersion}`;
@@ -65,11 +60,4 @@ export const DEPRECATED_POLICY_SCHEMA_ALIASES = Object.fromEntries(Object.entrie
     `${policyNamespace}${alias}`,
     `${policyNamespace}${canonical}`,
 ]));
-/** 現行schemaそのもの、または現行schemaへの別名（`0.3.1`）であるか。 */
-export function isCurrentPolicySchemaVersion(value) {
-    return (value === CURRENT_POLICY_SCHEMA_VERSION ||
-        (typeof value === "string" &&
-            Object.prototype.hasOwnProperty.call(DEPRECATED_POLICY_SCHEMA_ALIASES, value) &&
-            DEPRECATED_POLICY_SCHEMA_ALIASES[value] === CURRENT_POLICY_SCHEMA_VERSION));
-}
 //# sourceMappingURL=version.js.map

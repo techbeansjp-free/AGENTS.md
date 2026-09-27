@@ -163,7 +163,7 @@ const { Given, When, Then } = stepDefinitions<ProjectRuleLedgerWorld>();
 
 function retirementPolicy(rules: Rule[]): Policy {
   return {
-    schemaVersion: "agent-skill-chain/project-policy/v0.4.4",
+    schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
     delivery: { stopAt: "pull_request" },
     merge: {
       mode: "disabled",
@@ -1119,7 +1119,7 @@ Given(
     // 提案なしの削除は拒否し、二段階の廃止経路を診断する。
     const trustedRule = ruleFixture();
     const policy = (rules: unknown[]) => ({
-      schemaVersion: "agent-skill-chain/project-policy/v0.4.4",
+      schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
       delivery: { stopAt: "pull_request" as const },
       merge: {
         mode: "disabled" as const,
@@ -1171,7 +1171,7 @@ When("runtimeでrule metadataとtrusted policy比較を検証する", function (
     changeAuthority: "project policy owner",
   });
   const policy = (rule: unknown) => ({
-    schemaVersion: "agent-skill-chain/project-policy/v0.4.4",
+    schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
     delivery: { stopAt: "pull_request" as const },
     merge: {
       mode: "disabled" as const,

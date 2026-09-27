@@ -180,7 +180,7 @@ const safeDeliveryEvidence = () => {
 };
 
 const trustedDeliveryPolicy = (): Policy => ({
-  schemaVersion: "agent-skill-chain/project-policy/v0.4.4",
+  schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
   delivery: { stopAt: "pull_request" },
   merge: {
     mode: "disabled",

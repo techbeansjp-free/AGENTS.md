@@ -299,7 +299,11 @@ Then("entrypointはreleaseと停止を外部更新なしで返す", function () 
 });
 
 Given("現在versionを省略した自動release entrypoint入力がある", function () {
-  this.autoInput = autoReleaseInput({ currentVersion: PACKAGE_VERSION });
+  // 0.4.xを切る前の実repositoryと同じく、旧系列のtagだけがある
+  this.autoInput = autoReleaseInput({
+    currentVersion: PACKAGE_VERSION,
+    existingTags: ["v0.3.1-beta.300", "v0.3.1-beta.301"],
+  });
 });
 
 When("現在versionを省略して自動release entrypointを実行する", function () {
@@ -328,15 +332,12 @@ When("現在versionを省略して自動release entrypointを実行する", func
 Then("entrypointは既存tagから現在versionを導く", function () {
   /**
    * **package.jsonのversionを使わない。** sentinelになったため、正本は既存tagである
-   * （Issue #1184）。tagが1件も無い入力では初期値の`0.4.3`から次のtagを導く
-   * （Issue #1503。用語台帳の現在値v0.4.3を起点にする）。
+   * （Issue #1184）。0.4.xのtagが無い入力ではrelease済みとみなすv0.4.3の次を
+   * 導く（Issue #1503、FR-18）。
    */
   assert.equal(this.fallbackEntrypointPlan?.state, "release");
-  assert.notEqual(this.fallbackEntrypointPlan.version, PACKAGE_VERSION);
-  assert.equal(
-    this.fallbackEntrypointPlan.tag,
-    `v${this.fallbackEntrypointPlan.version}`,
-  );
+  assert.equal(this.fallbackEntrypointPlan.version, "0.4.4");
+  assert.equal(this.fallbackEntrypointPlan.tag, "v0.4.4");
 });
 
 Given("現在tagが存在する自動release entrypoint入力がある", function () {

@@ -150,7 +150,7 @@ function choices(): ProjectChoices {
 
 function policy(projectChoices: ProjectChoices): Policy {
   return {
-    schemaVersion: "agent-skill-chain/project-policy/v0.4.4",
+    schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
     delivery: { stopAt: "pull_request" },
     merge: {
       mode: "disabled",

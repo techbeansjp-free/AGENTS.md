@@ -530,7 +530,7 @@ Given("worktree policyありとなしのmanifestおよび不正値がある", fu
   const manifest = {
     schemaVersion: "agent-skill-chain/project-policy-manifest/v1",
     policy: {
-      schemaVersion: "agent-skill-chain/project-policy/v0.4.4",
+      schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
       delivery: { stopAt: "pull_request" },
       merge: {
         mode: "disabled",

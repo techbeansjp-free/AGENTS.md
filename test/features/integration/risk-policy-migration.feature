@@ -2,7 +2,7 @@
 Feature: policy拡張を段階移行して失敗から再実行する
 
   Scenario: SCN-INT-RISK-001 policy、schema、runtime、CI、templateを同一migrationで拡張する
-    Given v0.3.0のtrusted policyとv0.4.4のcandidate policyがある
+    Given v0.3.0のtrusted policyとv0.3.1のcandidate policyがある
     When migrationをdry-runする
     Then staged planにschema、runtime、CI、templateの変更がある
     And 書き込みは行われない
@@ -36,7 +36,7 @@ Feature: policy拡張を段階移行して失敗から再実行する
     Then immutable fingerprintとhash不一致をstructured拒否する
 
   Scenario: SCN-INT-RISK-007 schemaとruntimeは未知fieldを拒否し空project rulesを許容する
-    Given 未知fieldを持つv0.3.0 policyと空rulesのv0.4.4 policyがある
+    Given 未知fieldを持つv0.3.0 policyと空rulesのv0.3.1 policyがある
     When schema契約とruntime契約を検証する
     Then 未知fieldはmigration診断で拒否し空project rulesは受理する
 

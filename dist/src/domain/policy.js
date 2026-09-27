@@ -6,7 +6,7 @@ import crypto from "node:crypto";
 import { parseJsonStrict, resolveContained, stableJson, } from "../lib/security.js";
 import { findPackageRoot } from "../lib/package-root.js";
 import { validateProjectConformanceBinding } from "./conformance.js";
-import { COMPATIBLE_POLICY_SCHEMA_VERSIONS, CURRENT_POLICY_SCHEMA_VERSION, isCurrentPolicySchemaVersion, DEPRECATED_POLICY_SCHEMA_ALIASES, SUPPORTED_POLICY_SCHEMA_VERSIONS, } from "../lib/version.js";
+import { COMPATIBLE_POLICY_SCHEMA_VERSIONS, CURRENT_POLICY_SCHEMA_VERSION, DEPRECATED_POLICY_SCHEMA_ALIASES, SUPPORTED_POLICY_SCHEMA_VERSIONS, } from "../lib/version.js";
 import { isRecord, } from "../types.js";
 import { validateProviderCapabilityMapping } from "./provider-capability.js";
 import { validateRoleConfigurationIndependence } from "./routing-independence.js";
@@ -649,7 +649,7 @@ export function validatePolicy(policy) {
     for (const key of forbidden)
         if (merge[key] === true)
             errors.push(`マージ権限へ${key}を含めてはいけません`);
-    if (isCurrentPolicySchemaVersion(schemaVersion)) {
+    if (schemaVersion === CURRENT_POLICY_SCHEMA_VERSION) {
         rejectUnknownKeys(candidate.budgets, ["localFeedbackMs", "prGateMs"], "budgets", errors);
         for (const key of ["localFeedbackMs", "prGateMs"])
             if (typeof budgets[key] !== "number" ||
@@ -820,7 +820,7 @@ export function validateProjectPolicyManifest(manifest) {
         "reviewIndependence",
     ], "manifest.policy.merge", errors);
     rejectUnknownKeys(policy.budgets, ["localFeedbackMs", "prGateMs"], "manifest.policy.budgets", errors);
-    if (!isCurrentPolicySchemaVersion(policy.schemaVersion))
+    if (policy.schemaVersion !== CURRENT_POLICY_SCHEMA_VERSION)
         errors.push("manifest.policy.schemaVersionが不正です");
     if (delivery.stopAt !== "pull_request")
         errors.push("manifest.policy.delivery.stopAtが不正です");
@@ -1169,7 +1169,7 @@ export function loadEffectiveTrustedPolicySetAtCommit(root, ref) {
     if (trustedFloor.status !== 0)
         throw new Error(`${ref}にpackage default safety floorがありません`);
     const committedFloor = requirePolicy(parseJsonStrict(trustedFloor.stdout, `${ref}:default policy`), "trusted commitのdefault policy");
-    const floorResult = isCurrentPolicySchemaVersion(committedFloor.schemaVersion)
+    const floorResult = committedFloor.schemaVersion === CURRENT_POLICY_SCHEMA_VERSION
         ? resolveEffectivePolicy(packageFloor, committedFloor, { trusted: true })
         : { valid: true, policy: packageFloor };
     if (!floorResult.valid)

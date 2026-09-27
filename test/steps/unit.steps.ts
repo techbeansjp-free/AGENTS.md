@@ -47,6 +47,7 @@ import {
   DEPRECATED_POLICY_SCHEMA_ALIASES,
   PACKAGE_VERSION,
   SUPPORTED_POLICY_SCHEMA_VERSIONS,
+  isLegacyPackageVersion,
   isPackageVersion,
   isPolicySchemaPatchVersion,
   packageReleaseVersion,
@@ -2478,7 +2479,7 @@ When("version正本との一致を検証する", function () {
   this.releaseVersion = packageReleaseVersion(this.packageMetadata.version);
 });
 Then(
-  "製品versionはrelease追随のsentinelでpolicyはv0.3.0からv0.4.4へ移行する",
+  "製品versionはrelease追随のsentinelでpolicyはv0.3.0からv0.3.1へ移行する",
   function () {
     assert.equal(PACKAGE_VERSION, this.packageMetadata.version);
     /**
@@ -2488,10 +2489,8 @@ Then(
      * 含まないこと」の2つである。`-beta.N`を要求すると、release追随をやめた事実と
      * testが矛盾する。
      *
-     * **package release versionのcoreとcurrent policy schema versionは常に
-     * 同一数値である**（`scripts/build.ts`が強制する既存不変条件）。Issue #1503で
-     * 両方まとめて0.3.xから0.4.xへ進めた。過去の互換値（0.3.0・0.3.1）は
-     * policy schema側にだけ残り、package release versionのcoreにはならない。
+     * **package release lineとpolicy schema versionは別の量である**（Issue #1503）。
+     * package releaseだけを0.4.xへ進め、policy schemaは0.3.1のまま変えない。
      */
     assert.equal(this.releaseVersion, "0.4.4");
     /**
@@ -2501,7 +2500,7 @@ Then(
     assert.equal(PACKAGE_VERSION, `${this.releaseVersion}-managed-by-tag`);
     assert.equal(
       CURRENT_POLICY_SCHEMA_VERSION,
-      `agent-skill-chain/project-policy/v${this.releaseVersion}`,
+      "agent-skill-chain/project-policy/v0.3.1",
     );
     assert.deepEqual(COMPATIBLE_POLICY_SCHEMA_VERSIONS, [
       "agent-skill-chain/project-policy/v0.3.0",
@@ -2509,7 +2508,6 @@ Then(
     assert.deepEqual(DEPRECATED_POLICY_SCHEMA_ALIASES, {
       "agent-skill-chain/project-policy/v0.3":
         "agent-skill-chain/project-policy/v0.3.0",
-      "agent-skill-chain/project-policy/v0.3.1": CURRENT_POLICY_SCHEMA_VERSION,
     });
     assert.deepEqual(
       this.policySchema.properties.schemaVersion.enum,
@@ -2545,14 +2543,18 @@ Then(
       assert.equal(isPackageVersion(version), true, version);
     for (const version of ["0.4.01", "0.4.1-01", "0.4.1-beta..1", "0.4.1+"])
       assert.equal(isPackageVersion(version), false, version);
-    // package release versionのcoreは0.4.xだけを受理する。0.3.x（policy schemaの
-    // 互換値の範囲）はpackage release versionとしては受理しない（Issue #1503）。
-    for (const version of ["0.3.0", "0.3.1"])
+    // 新しいpackage release versionは0.4.xだけを受理する（Issue #1503）。
+    // 0.3.xは旧releaseとしてだけ識別する。
+    for (const version of ["0.3.0", "0.3.1", "0.3.1-beta.300"]) {
       assert.equal(isPackageVersion(version), false, version);
-    // policy schema versionは移行期間中の両系列（0.3.x・0.4.x）を受理する。
-    for (const version of ["0.3.0", "0.3.1", "0.4.4"])
+      assert.equal(isLegacyPackageVersion(version), true, version);
+    }
+    for (const version of ["0.4.1", "0.3.01", "0.3.1-beta..1"])
+      assert.equal(isLegacyPackageVersion(version), false, version);
+    // policy schema versionは0.3.xのままであり、0.4.xを受理しない。
+    for (const version of ["0.3.0", "0.3.1"])
       assert.equal(isPolicySchemaPatchVersion(version), true, version);
-    for (const version of ["0.3.01", "0.3.1-beta.1", "0.3", "0.4.01"])
+    for (const version of ["0.3.01", "0.3.1-beta.1", "0.3", "0.4.4"])
       assert.equal(isPolicySchemaPatchVersion(version), false, version);
     assert.equal(packageReleaseVersion("0.4.1+build.7"), "0.4.1");
   },

@@ -9,7 +9,7 @@
     "schemaVersion": {
       "enum": [
         "agent-skill-chain/project-policy/v0.3.0",
-        "agent-skill-chain/project-policy/v0.4.4"
+        "agent-skill-chain/project-policy/v0.3.1"
       ]
     },
     "delivery": {
@@ -200,7 +200,7 @@
       "if": {
         "properties": {
           "schemaVersion": {
-            "const": "agent-skill-chain/project-policy/v0.4.4"
+            "const": "agent-skill-chain/project-policy/v0.3.1"
           }
         }
       },

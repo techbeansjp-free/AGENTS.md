@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { isCurrentPolicySchemaVersion } from "../lib/version.js";
+import { CURRENT_POLICY_SCHEMA_VERSION } from "../lib/version.js";
 import { redactSecrets, stableJson } from "../lib/security.js";
 import { classifyProjectChoiceDiff } from "./project-choice-diff.js";
 import { acceptApprovedShrinks } from "./project-choice-shrink.js";
@@ -893,10 +893,10 @@ function conceptualMigrationReasons(state, trusted, candidate, revision, authori
     });
     if (expected !== state.planFingerprint)
         reasons.push("immutable plan fingerprintが一致しません");
-    if (isCurrentPolicySchemaVersion(trusted?.schemaVersion) &&
+    if (trusted?.schemaVersion === CURRENT_POLICY_SCHEMA_VERSION &&
         !validateEnforcementPolicy(trusted).valid)
         reasons.push("trusted policyのrule検証に失敗しました");
-    if (isCurrentPolicySchemaVersion(candidate?.schemaVersion) &&
+    if (candidate?.schemaVersion === CURRENT_POLICY_SCHEMA_VERSION &&
         !validateEnforcementPolicy(candidate).valid)
         reasons.push("candidate policyのrule検証に失敗しました");
     return reasons;

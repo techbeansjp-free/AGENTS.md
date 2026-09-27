@@ -58,14 +58,15 @@ function digestFromFile(file: string | undefined): string {
 }
 
 /**
- * **0.4.0を起点にする**（Issue #1503、REQ-WF-045）。用語台帳は#1482・#1483・
- * #1485・review evidence v2（REQ-WF-038）に対しv0.4.0〜v0.4.3を既に記録して
- * いたが、実際のrelease tagは一度も0.4.xを切らず`v0.3.1-beta.NNN`のまま
- * 進み続けていた。用語台帳の現在値（v0.4.3）を実際のversionの起点にし、
- * 次の自動releaseがv0.4.4になるようにする。
+ * **0.4.xの起点はrelease済みとみなすv0.4.3である**（Issue #1503、FR-18）。
+ * 用語台帳は#1482〜REQ-WF-038へv0.4.0〜v0.4.3を記録していたが、実際のtagは
+ * `v0.3.1-beta.NNN`のままだった。0.4.xのtagが無い間も、次の自動releaseは
+ * v0.4.3そのものではなくv0.4.4になる。
  */
+const RELEASE_BASELINE_VERSION = "0.4.3";
+
 function latestReleasedVersion(existingTags: string[]): string {
-  let currentVersion = "0.4.3";
+  let currentVersion = RELEASE_BASELINE_VERSION;
   for (const tag of existingTags) {
     const version = tag.startsWith("v") ? tag.slice(1) : "";
     if (!isPackageVersion(version)) continue;
@@ -105,11 +106,14 @@ export function planAutoReleaseFromEnvironment(
   const existingTags = linesFromFile(
     requiredEnvironment(environment, "RELEASE_EXISTING_TAGS_FILE"),
   );
+  const baselineTag = `v${RELEASE_BASELINE_VERSION}`;
   return planAutoRelease({
     currentVersion:
       environment.RELEASE_CURRENT_VERSION ??
       latestReleasedVersion(existingTags),
-    existingTags,
+    existingTags: existingTags.includes(baselineTag)
+      ? existingTags
+      : [...existingTags, baselineTag],
     distributionDigest: digestFromFile(
       environment.RELEASE_DISTRIBUTION_DIGEST_FILE,
     ),

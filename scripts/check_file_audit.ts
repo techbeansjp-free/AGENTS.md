@@ -21,7 +21,10 @@ import {
   stableJson,
   type JsonValue,
 } from "../src/lib/security.js";
-import { isPackageVersion } from "../src/lib/version.js";
+import {
+  isLegacyPackageVersion,
+  isPackageVersion,
+} from "../src/lib/version.js";
 import { REVIEW_ROUND_RECORD_LIMIT } from "../src/domain/review-convergence.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
@@ -326,7 +329,9 @@ export function collectMergeObservations(
 function releaseVersionFromSubject(subject: string): string | undefined {
   if (!subject.startsWith(RELEASE_BUMP_PREFIX)) return undefined;
   const [version] = subject.slice(RELEASE_BUMP_PREFIX.length).split(/\s+/u);
-  return isPackageVersion(version) ? version : undefined;
+  return isPackageVersion(version) || isLegacyPackageVersion(version)
+    ? version
+    : undefined;
 }
 
 function objectWithoutVersion(value: JsonValue): JsonValue | undefined {

@@ -349,7 +349,7 @@ Given(
   "review artifact後に正規のrelease bumpがある監査選択repository",
   function () {
     const fixture = createImplementation(this);
-    writePackage(fixture.root, "0.4.1-beta.1");
+    writePackage(fixture.root, "0.3.1-beta.1");
     commitPaths(fixture.root, "chore: package fixtureを作る", [
       "package.json",
       "package-lock.json",
@@ -373,10 +373,10 @@ Given(
       },
       "docs/reviews/892_review.json",
     );
-    writePackage(fixture.root, "0.4.1-beta.2");
+    writePackage(fixture.root, "0.3.1-beta.2");
     commitPaths(
       fixture.root,
-      "chore(release): bump version to 0.4.1-beta.2 [skip ci]",
+      "chore(release): bump version to 0.3.1-beta.2 [skip ci]",
       ["package.json", "package-lock.json"],
     );
   },
