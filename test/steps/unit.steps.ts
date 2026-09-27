@@ -2655,7 +2655,7 @@ const POST_PR_INTAKE_MARKERS = [
   "同じPRへ取り込む",
   "01_開発ワークフロー.md",
   "--post-terminal-intake",
-  "round数では拒否しない",
+  "round数を分離・停止の理由にしない",
 ] as const;
 
 /** 規範文書と正反対になる表現。 */
