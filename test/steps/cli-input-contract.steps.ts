@@ -58,26 +58,27 @@ function finding(overrides: Record<string, unknown> = {}): unknown {
   };
 }
 
+function example(subcommand: string): Record<string, unknown> {
+  return structuredClone(
+    findCommandUsage("workflow", subcommand)!.inputContract!.example as Record<
+      string,
+      unknown
+    >,
+  );
+}
+
 const TARGETS: readonly Target[] = [
   {
     command: "workflow",
     subcommand: "verification-set",
     parse: parseVerificationSelectionInput,
-    valid: () =>
-      structuredClone(
-        findCommandUsage("workflow", "verification-set")!.inputContract!
-          .example as Record<string, unknown>,
-      ),
+    valid: () => example("verification-set"),
   },
   {
     command: "workflow",
     subcommand: "assess-discovery",
     parse: parseImplementationDiscoveryInput,
-    valid: () =>
-      structuredClone(
-        findCommandUsage("workflow", "assess-discovery")!.inputContract!
-          .example as Record<string, unknown>,
-      ),
+    valid: () => example("assess-discovery"),
   },
   {
     command: "review",
@@ -87,11 +88,111 @@ const TARGETS: readonly Target[] = [
   },
 ];
 
+/** 配列の要素を1件以上持ち、全階層の項目を含む有効な入力。 */
+function deepValid(target: Target): Record<string, unknown> {
+  const input = target.valid();
+  if (target.subcommand === "assess-discovery") {
+    input.modeDisqualifiers = [{ id: "public-api", evidence: "根拠" }];
+    input.changedContractKinds = ["requirement"];
+  }
+  if (target.subcommand === "round")
+    (input.focus as Record<string, unknown>).adjacentScope = [
+      { path: "src/cli-usage.ts", graphEvidence: SHA256 },
+    ];
+  return input;
+}
+
+/**
+ * 契約の期待表。helpと検証の両方から独立に固定する（`?`は任意項目）。
+ * 定義から項目が消えると、helpと検証が同じ向きにずれてもここで落ちる。
+ */
+const EXPECTED_PATHS: Readonly<Record<string, readonly string[]>> = {
+  "verification-set": [
+    "changeType",
+    "risk",
+    "affectedBoundaries",
+    "requirementIds",
+    "acceptanceCriteriaIds",
+    "impactAnalysis",
+    "impactAnalysis.securityRelevant",
+    "impactAnalysis.dataLossPossible",
+    "impactAnalysis.irreversibleOperation",
+    "impactAnalysis.externalContractChanged",
+    "impactAnalysis.concurrentBehaviorChanged",
+  ],
+  "assess-discovery": [
+    "discoveryId",
+    "workflowMode",
+    "modeDisqualifiers",
+    "modeDisqualifiers[].id",
+    "modeDisqualifiers[].evidence",
+    "changedContractKinds",
+    "changesGoal",
+    "changesScope",
+    "changesAcceptanceCriteria",
+    "expandsSecurityBoundary",
+    "introducesIrreversibleOperation",
+  ],
+  round: [
+    "round",
+    "previousRoundDigest",
+    "anchor",
+    "anchor.scopeIds",
+    "anchor.acceptanceCriteriaIds",
+    "anchor.invariantIds",
+    "anchor.diffBaseSha",
+    "anchor.initialHeadSha",
+    "anchor.initialDiffDigest",
+    "anchor.progressInventory?",
+    "candidateHeadSha",
+    "focus",
+    "focus.previousBlocking",
+    "focus.fixedDiff",
+    "focus.adjacentScope",
+    "focus.adjacentScope[].path",
+    "focus.adjacentScope[].graphEvidence",
+    "focus.adjacentScopeUnbounded?",
+    "findings",
+    "findings[].id",
+    "findings[].severity",
+    "findings[].status",
+    "findings[].source",
+    "findings[].relation",
+    "findings[].evidence",
+    "findings[].path",
+    "findings[].contractId",
+    "findings[].causedByFindingId",
+    "findings[].decisionRef?",
+    "followOnly?",
+    "recordLayerOnly?",
+  ],
+};
+
 function fieldsOf(target: Target): readonly InputFieldSpec[] {
   const fields = findCommandUsage(target.command, target.subcommand)
     ?.inputContract?.fields;
   assert.ok(fields && fields.length > 0, `${target.subcommand}にfieldsが無い`);
   return fields;
+}
+
+/** `a[].b`の親object（配列は先頭要素）と末尾の名前を返す。 */
+function locate(
+  input: Record<string, unknown>,
+  path: string,
+): { parent: Record<string, unknown> | undefined; name: string } {
+  const segments = path.split(".");
+  const name = segments.pop()!;
+  let current: unknown = input;
+  for (const segment of segments) {
+    const key = segment.replace(/\[\]$/u, "");
+    current = (current as Record<string, unknown> | undefined)?.[key];
+    if (segment.endsWith("[]"))
+      current = (current as unknown[] | undefined)?.[0];
+  }
+  return {
+    parent: current as Record<string, unknown> | undefined,
+    name: name.replace(/\[\]$/u, ""),
+  };
 }
 
 function errorOf(action: () => unknown): string {
@@ -103,55 +204,136 @@ function errorOf(action: () => unknown): string {
   assert.fail("拒否されるべき入力が受理された");
 }
 
-Given("3コマンドのusageと有効な入力例がある", function () {
+const UNSAFE = "SECRET\u0007値";
+
+Given("3コマンドのusageと全階層を含む有効な入力がある", function () {
   this.cliInputTargets = TARGETS;
-  for (const target of TARGETS) target.parse(target.valid());
+  for (const target of TARGETS) target.parse(deepValid(target));
 });
 
 When(
-  "inputContract.fieldsの最上位の必須項目を1つずつ欠いた入力を検証する",
+  "inputContract.fieldsの各項目を欠く・未知fieldを足す・任意項目を足す・受理値外にした入力を検証する",
   function () {
     this.cliInputErrors = {};
-    for (const target of this.cliInputTargets)
-      for (const spec of fieldsOf(target).filter(
-        ({ path, required }) => required && !/[.[]/u.test(path),
-      )) {
-        const input = target.valid();
-        delete input[spec.path];
-        this.cliInputErrors[`${target.subcommand}:${spec.path}`] = errorOf(() =>
-          target.parse(input),
+    for (const target of this.cliInputTargets) {
+      const fields = fieldsOf(target);
+      const record = (kind: string, path: string, message: string): void => {
+        this.cliInputErrors[`${target.subcommand}|${kind}|${path}`] = message;
+      };
+      for (const spec of fields) {
+        if (spec.required) {
+          const input = deepValid(target);
+          const { parent, name } = locate(input, spec.path);
+          assert.ok(parent && name in parent, `${spec.path}が有効入力に無い`);
+          delete parent[name];
+          record(
+            "missing",
+            spec.path,
+            errorOf(() => target.parse(input)),
+          );
+        } else {
+          const input = deepValid(target);
+          const { parent, name } = locate(input, spec.path);
+          assert.ok(parent, `${spec.path}の親が有効入力に無い`);
+          parent[name] =
+            spec.type === "true"
+              ? true
+              : spec.type.includes("null")
+                ? null
+                : {};
+          try {
+            target.parse(input);
+            record("optional", spec.path, "");
+          } catch (error) {
+            record("optional", spec.path, (error as Error).message);
+          }
+        }
+        if (spec.values) {
+          const input = deepValid(target);
+          const { parent, name } = locate(input, spec.path);
+          parent![name] = spec.type.includes("[]") ? [UNSAFE] : UNSAFE;
+          record(
+            "values",
+            spec.path,
+            errorOf(() => target.parse(input)),
+          );
+        }
+      }
+      const objects = [
+        "",
+        ...fields
+          .filter(({ type }) => type.startsWith("object"))
+          .map(({ path, type }) => (type.includes("[]") ? `${path}[]` : path)),
+      ];
+      for (const object of objects) {
+        const input = deepValid(target);
+        const { parent, name } = locate(
+          input,
+          object === "" ? "extraField" : `${object}.extraField`,
+        );
+        if (!parent) continue;
+        parent[name] = true;
+        record(
+          "unknown",
+          object,
+          errorOf(() => target.parse(input)),
         );
       }
+    }
   },
 );
 
 Then(
-  "欠いた項目だけが必須fieldとして名指され受理値の一覧は検証の列挙と一致する",
+  "項目一覧は契約の期待表と一致し検証は全階層で同じ必須・任意項目と受理値を使う",
   function () {
-    for (const [key, message] of Object.entries(this.cliInputErrors)) {
-      const name = key.split(":")[1]!;
-      assert.match(message, new RegExp(`必須fieldがありません: ${name}$`, "u"));
-    }
-    // 最上位の実入力keyとfieldsの最上位項目が一致する（helpにだけ・検証にだけある項目が無い）
-    for (const target of this.cliInputTargets) {
-      const topLevel = fieldsOf(target)
-        .filter(({ path }) => !/[.[]/u.test(path))
-        .map(({ path }) => path);
-      for (const key of Object.keys(target.valid()))
-        assert.ok(topLevel.includes(key), `${target.subcommand}.${key}`);
-      const unknown = { ...target.valid(), extraField: true };
-      assert.match(
-        errorOf(() => target.parse(unknown)),
-        /未知fieldを拒否しました: extraField/u,
+    for (const target of this.cliInputTargets)
+      assert.deepEqual(
+        fieldsOf(target).map(({ path, required }) =>
+          required ? path : `${path}?`,
+        ),
+        EXPECTED_PATHS[target.subcommand],
+        target.subcommand,
       );
+    const kinds = new Set<string>();
+    for (const [key, message] of Object.entries(this.cliInputErrors)) {
+      const [subcommand, kind, path] = key.split("|") as [
+        string,
+        string,
+        string,
+      ];
+      kinds.add(kind);
+      const spec = fieldsOf(
+        TARGETS.find((target) => target.subcommand === subcommand)!,
+      ).find((candidate) => candidate.path === path);
+      if (kind === "missing") {
+        const name = path.split(".").pop()!.replace(/\[\]$/u, "");
+        assert.ok(
+          message.endsWith(`必須fieldがありません: ${name}`) &&
+            !message.includes("未知field"),
+          `${key}: ${message}`,
+        );
+      }
+      if (kind === "optional")
+        assert.ok(!message.includes("未知field"), `${key}: ${message}`);
+      if (kind === "values") {
+        assert.ok(
+          message.includes(`受理値: ${spec!.values!.join("|")}`),
+          `${key}: ${message}`,
+        );
+        assert.ok(!message.includes("SECRET"), `${key}: ${message}`);
+      }
+      if (kind === "unknown")
+        assert.ok(
+          message.includes("未知fieldを拒否しました: extraField"),
+          `${key}: ${message}`,
+        );
     }
-    const relation = fieldsOf(TARGETS[2]!).find(
-      ({ path }) => path === "findings[].relation",
-    )!;
-    const message = errorOf(() =>
-      parseReviewRoundInput(reviewRound([finding({ relation: "x" })])),
-    );
-    assert.ok(message.includes(`受理値: ${relation.values!.join("|")}`));
+    assert.deepEqual([...kinds].sort(), [
+      "missing",
+      "optional",
+      "unknown",
+      "values",
+    ]);
   },
 );
 
@@ -185,6 +367,18 @@ When("それぞれを検証する", function () {
         reviewRound([finding(), finding({ id: "REV-02", severity: "urgent" })]),
       ),
     ),
+    disqualifier: errorOf(() =>
+      parseImplementationDiscoveryInput({
+        ...TARGETS[1]!.valid(),
+        modeDisqualifiers: [{ id: "SECRET\u0007id", evidence: "根拠" }],
+      }),
+    ),
+    contractKind: errorOf(() =>
+      parseImplementationDiscoveryInput({
+        ...TARGETS[1]!.valid(),
+        changedContractKinds: ["requirement", "SECRET\u0007kind"],
+      }),
+    ),
     unsafeId: errorOf(() =>
       parseReviewRoundInput(
         reviewRound([finding({ id: "bad id\nSECRET", severity: "urgent" })]),
@@ -215,8 +409,20 @@ Then(
     const {
       enum: enumError,
       finding: findingError,
+      disqualifier,
+      contractKind,
       unsafeId,
     } = this.cliInputErrors;
+    assert.match(
+      disqualifier!,
+      /modeDisqualifiers\[0\]\.idの未知idを拒否しました（受理値: [^）]*public-api/u,
+    );
+    assert.match(
+      contractKind!,
+      /changedContractKinds\[1\]の未知値を拒否しました（受理値: [^）]*requirement/u,
+    );
+    for (const message of [disqualifier!, contractKind!])
+      assert.ok(!message.includes("SECRET"), message);
     assert.match(
       enumError!,
       /riskが不正です（受理値: low\|medium\|high\|critical）/u,

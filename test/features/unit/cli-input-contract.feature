@@ -2,9 +2,9 @@
 Feature: CLIのJSON入力契約を--helpと診断で示す
 
   Scenario: SCN-UNIT-CLIINPUT-001 helpの項目一覧は検証の受理集合と一致する
-    Given 3コマンドのusageと有効な入力例がある
-    When inputContract.fieldsの最上位の必須項目を1つずつ欠いた入力を検証する
-    Then 欠いた項目だけが必須fieldとして名指され受理値の一覧は検証の列挙と一致する
+    Given 3コマンドのusageと全階層を含む有効な入力がある
+    When inputContract.fieldsの各項目を欠く・未知fieldを足す・任意項目を足す・受理値外にした入力を検証する
+    Then 項目一覧は契約の期待表と一致し検証は全階層で同じ必須・任意項目と受理値を使う
 
   Scenario: SCN-UNIT-CLIINPUT-002 未知と欠落を同時に含む入力は1回の診断で両方を示す
     Given 未知fieldと欠落fieldを同時に含む3コマンドの入力がある

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
-import { acceptedValues, field, unknownAndMissingError, } from "./input-contract.js";
+import { acceptedValues, childFields, field, unknownAndMissingError, } from "./input-contract.js";
 import { parseReviewProgressInventory, } from "./review-progress.js";
 /**
  * 通常のreviewラウンド予算。round 1で全scopeを見て、2と3で未解決blockerを追う。
@@ -96,17 +96,8 @@ function oneOf(value, values, label) {
 function parseAnchor(value) {
     if (!isRecord(value))
         throw new Error("review anchorはobjectが必要です");
-    const fields = [
-        "scopeIds",
-        "acceptanceCriteriaIds",
-        "invariantIds",
-        "diffBaseSha",
-        "initialHeadSha",
-        "initialDiffDigest",
-        "progressInventory",
-    ];
-    const required = fields.filter((field) => field !== "progressInventory");
-    const unknown = Object.keys(value).filter((name) => !fields.includes(name));
+    const { required, optional } = childFields(REVIEW_ROUND_INPUT_FIELDS, "anchor");
+    const unknown = Object.keys(value).filter((name) => !required.includes(name) && !optional.includes(name));
     const missing = required.filter((name) => !(name in value));
     const error = unknownAndMissingError("review anchor", unknown, missing);
     if (error)
@@ -138,7 +129,8 @@ function parseAnchor(value) {
     });
 }
 function parseFocus(value) {
-    const focus = exactObject(value, "review round.focus", ["previousBlocking", "fixedDiff", "adjacentScope"], ["adjacentScopeUnbounded"]);
+    const { required, optional } = childFields(REVIEW_ROUND_INPUT_FIELDS, "focus");
+    const focus = exactObject(value, "review round.focus", required, optional);
     if (focus.adjacentScopeUnbounded !== undefined &&
         focus.adjacentScopeUnbounded !== true)
         throw new Error("review round.focus.adjacentScopeUnboundedはtrueだけを指定できます（限定済みはfieldを省略する）");
@@ -149,7 +141,7 @@ function parseFocus(value) {
     if (!Array.isArray(focus.adjacentScope))
         throw new Error("review round.focus.adjacentScopeは配列が必要です");
     const adjacentScope = focus.adjacentScope.map((candidate, index) => {
-        const adjacent = exactObject(candidate, `review round.focus.adjacentScope[${index}]`, ["path", "graphEvidence"]);
+        const adjacent = exactObject(candidate, `review round.focus.adjacentScope[${index}]`, childFields(REVIEW_ROUND_INPUT_FIELDS, "focus.adjacentScope[]").required);
         return Object.freeze({
             path: safePath(adjacent.path, `review round.focus.adjacentScope[${index}].path`),
             graphEvidence: (() => {
@@ -200,17 +192,8 @@ function findingLabel(value, index) {
 }
 function parseFinding(value, index) {
     const label = findingLabel(value, index);
-    const finding = exactObject(value, label, [
-        "id",
-        "severity",
-        "status",
-        "source",
-        "relation",
-        "evidence",
-        "path",
-        "contractId",
-        "causedByFindingId",
-    ], ["decisionRef"]);
+    const { required, optional } = childFields(REVIEW_ROUND_INPUT_FIELDS, "findings[]");
+    const finding = exactObject(value, label, required, optional);
     const nullableId = (candidate, field) => {
         if (candidate === null)
             return null;
@@ -253,7 +236,9 @@ export const REVIEW_ROUND_INPUT_FIELDS = Object.freeze([
     field("focus", "object"),
     field("focus.previousBlocking", "stableId[]"),
     field("focus.fixedDiff", "path[]"),
-    field("focus.adjacentScope", "{path, graphEvidence}[]"),
+    field("focus.adjacentScope", "object[]"),
+    field("focus.adjacentScope[].path", "repository相対path"),
+    field("focus.adjacentScope[].graphEvidence", "sha256"),
     field("focus.adjacentScopeUnbounded", "true", { required: false }),
     field("findings", "object[]（256件以下）"),
     field("findings[].id", "stableId"),
@@ -270,14 +255,8 @@ export const REVIEW_ROUND_INPUT_FIELDS = Object.freeze([
     field("recordLayerOnly", "true", { required: false }),
 ]);
 export function parseReviewRoundInput(value) {
-    const round = exactObject(value, "review round", [
-        "round",
-        "previousRoundDigest",
-        "anchor",
-        "candidateHeadSha",
-        "focus",
-        "findings",
-    ], ["followOnly", "recordLayerOnly"]);
+    const { required, optional } = childFields(REVIEW_ROUND_INPUT_FIELDS, "");
+    const round = exactObject(value, "review round", required, optional);
     if (round.followOnly !== undefined && round.followOnly !== true)
         throw new Error("review round.followOnlyはtrueだけを受理します");
     if (round.recordLayerOnly !== undefined && round.recordLayerOnly !== true)

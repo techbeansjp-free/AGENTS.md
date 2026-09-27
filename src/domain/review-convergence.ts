@@ -3,6 +3,7 @@ import { stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import {
   acceptedValues,
+  childFields,
   field,
   unknownAndMissingError,
   type InputFieldSpec,
@@ -249,17 +250,13 @@ function oneOf<const Values extends readonly string[]>(
 
 function parseAnchor(value: unknown): ReviewSessionAnchor {
   if (!isRecord(value)) throw new Error("review anchorはobjectが必要です");
-  const fields = [
-    "scopeIds",
-    "acceptanceCriteriaIds",
-    "invariantIds",
-    "diffBaseSha",
-    "initialHeadSha",
-    "initialDiffDigest",
-    "progressInventory",
-  ];
-  const required = fields.filter((field) => field !== "progressInventory");
-  const unknown = Object.keys(value).filter((name) => !fields.includes(name));
+  const { required, optional } = childFields(
+    REVIEW_ROUND_INPUT_FIELDS,
+    "anchor",
+  );
+  const unknown = Object.keys(value).filter(
+    (name) => !required.includes(name) && !optional.includes(name),
+  );
   const missing = required.filter((name) => !(name in value));
   const error = unknownAndMissingError("review anchor", unknown, missing);
   if (error) throw new Error(error);
@@ -299,12 +296,11 @@ function parseAnchor(value: unknown): ReviewSessionAnchor {
 }
 
 function parseFocus(value: unknown): ReviewRoundFocus {
-  const focus = exactObject(
-    value,
-    "review round.focus",
-    ["previousBlocking", "fixedDiff", "adjacentScope"],
-    ["adjacentScopeUnbounded"],
+  const { required, optional } = childFields(
+    REVIEW_ROUND_INPUT_FIELDS,
+    "focus",
   );
+  const focus = exactObject(value, "review round.focus", required, optional);
   if (
     focus.adjacentScopeUnbounded !== undefined &&
     focus.adjacentScopeUnbounded !== true
@@ -326,7 +322,7 @@ function parseFocus(value: unknown): ReviewRoundFocus {
     const adjacent = exactObject(
       candidate,
       `review round.focus.adjacentScope[${index}]`,
-      ["path", "graphEvidence"],
+      childFields(REVIEW_ROUND_INPUT_FIELDS, "focus.adjacentScope[]").required,
     );
     return Object.freeze({
       path: safePath(
@@ -391,22 +387,11 @@ function findingLabel(value: unknown, index: number): string {
 
 function parseFinding(value: unknown, index: number): ReviewRoundFinding {
   const label = findingLabel(value, index);
-  const finding = exactObject(
-    value,
-    label,
-    [
-      "id",
-      "severity",
-      "status",
-      "source",
-      "relation",
-      "evidence",
-      "path",
-      "contractId",
-      "causedByFindingId",
-    ],
-    ["decisionRef"],
+  const { required, optional } = childFields(
+    REVIEW_ROUND_INPUT_FIELDS,
+    "findings[]",
   );
+  const finding = exactObject(value, label, required, optional);
   const nullableId = (candidate: unknown, field: string): string | null => {
     if (candidate === null) return null;
     return requiredStableId(candidate, `${label}.${field}`);
@@ -463,7 +448,9 @@ export const REVIEW_ROUND_INPUT_FIELDS: readonly InputFieldSpec[] =
     field("focus", "object"),
     field("focus.previousBlocking", "stableId[]"),
     field("focus.fixedDiff", "path[]"),
-    field("focus.adjacentScope", "{path, graphEvidence}[]"),
+    field("focus.adjacentScope", "object[]"),
+    field("focus.adjacentScope[].path", "repository相対path"),
+    field("focus.adjacentScope[].graphEvidence", "sha256"),
     field("focus.adjacentScopeUnbounded", "true", { required: false }),
     field("findings", "object[]（256件以下）"),
     field("findings[].id", "stableId"),
@@ -481,19 +468,8 @@ export const REVIEW_ROUND_INPUT_FIELDS: readonly InputFieldSpec[] =
   ]);
 
 export function parseReviewRoundInput(value: unknown): ReviewRoundInput {
-  const round = exactObject(
-    value,
-    "review round",
-    [
-      "round",
-      "previousRoundDigest",
-      "anchor",
-      "candidateHeadSha",
-      "focus",
-      "findings",
-    ],
-    ["followOnly", "recordLayerOnly"],
-  );
+  const { required, optional } = childFields(REVIEW_ROUND_INPUT_FIELDS, "");
+  const round = exactObject(value, "review round", required, optional);
   if (round.followOnly !== undefined && round.followOnly !== true)
     throw new Error("review round.followOnlyはtrueだけを受理します");
   if (round.recordLayerOnly !== undefined && round.recordLayerOnly !== true)

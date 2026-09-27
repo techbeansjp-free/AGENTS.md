@@ -1,7 +1,9 @@
 import { isRecord } from "../types.js";
 import {
   acceptedValues,
+  childFields,
   field,
+  type ChildFields,
   unknownAndMissingError,
   type InputFieldSpec,
 } from "./input-contract.js";
@@ -132,11 +134,13 @@ const CHANGE_RISKS: readonly ChangeRisk[] = Object.freeze([
 function exactInputObject(
   value: unknown,
   label: string,
-  fields: readonly string[],
+  { required, optional }: ChildFields,
 ): Record<string, unknown> {
   if (!isRecord(value)) throw new Error(`${label}はobjectが必要です`);
-  const unknown = Object.keys(value).filter((name) => !fields.includes(name));
-  const missing = fields.filter(
+  const unknown = Object.keys(value).filter(
+    (name) => !required.includes(name) && !optional.includes(name),
+  );
+  const missing = required.filter(
     (name) => !Object.prototype.hasOwnProperty.call(value, name),
   );
   const error = unknownAndMissingError(label, unknown, missing);
@@ -185,14 +189,11 @@ export const VERIFICATION_SET_INPUT_FIELDS: readonly InputFieldSpec[] =
 export function parseVerificationSelectionInput(
   value: unknown,
 ): VerificationSelectionInput {
-  const input = exactInputObject(value, "Verification Set入力", [
-    "changeType",
-    "risk",
-    "affectedBoundaries",
-    "requirementIds",
-    "acceptanceCriteriaIds",
-    "impactAnalysis",
-  ]);
+  const input = exactInputObject(
+    value,
+    "Verification Set入力",
+    childFields(VERIFICATION_SET_INPUT_FIELDS, ""),
+  );
   if (!CHANGE_TYPES.some((changeType) => changeType === input.changeType))
     throw new Error(
       `Verification Set入力.changeTypeが不正です${acceptedValues(CHANGE_TYPES)}`,
@@ -204,13 +205,7 @@ export function parseVerificationSelectionInput(
   const impact = exactInputObject(
     input.impactAnalysis,
     "Verification Set入力.impactAnalysis",
-    [
-      "securityRelevant",
-      "dataLossPossible",
-      "irreversibleOperation",
-      "externalContractChanged",
-      "concurrentBehaviorChanged",
-    ],
+    childFields(VERIFICATION_SET_INPUT_FIELDS, "impactAnalysis"),
   );
   return {
     changeType: input.changeType as ChangeType,
@@ -372,7 +367,14 @@ function parseModeDisqualifiers(
   return Object.freeze(
     value.map((candidate, index) => {
       const label = `実装中発見入力.modeDisqualifiers[${index}]`;
-      const item = exactInputObject(candidate, label, ["id", "evidence"]);
+      const item = exactInputObject(
+        candidate,
+        label,
+        childFields(
+          IMPLEMENTATION_DISCOVERY_INPUT_FIELDS,
+          "modeDisqualifiers[]",
+        ),
+      );
       const id = item.id;
       const evidence = item.evidence;
       if (typeof id !== "string" || id.trim() === "")
@@ -382,7 +384,7 @@ function parseModeDisqualifiers(
       const normalizedId = id.trim();
       if (!CANONICAL_MODE_DISQUALIFIER_IDS.has(normalizedId))
         throw new Error(
-          `実装中発見入力.modeDisqualifiersの未知idを拒否しました: ${normalizedId}${acceptedValues([...CANONICAL_MODE_DISQUALIFIER_IDS])}`,
+          `${label}.idの未知idを拒否しました${acceptedValues([...CANONICAL_MODE_DISQUALIFIER_IDS])}`,
         );
       if (ids.has(normalizedId))
         throw new Error(
@@ -401,13 +403,13 @@ function parseChangedContractKinds(
     throw new Error("実装中発見入力.changedContractKindsは配列が必要です");
   const seen = new Set<ChangedContractKind>();
   const kinds: ChangedContractKind[] = [];
-  for (const candidate of value as unknown[]) {
+  for (const [index, candidate] of (value as unknown[]).entries()) {
     if (
       typeof candidate !== "string" ||
       !CHANGED_CONTRACT_KINDS.some((kind) => kind === candidate)
     )
       throw new Error(
-        `実装中発見入力.changedContractKindsの未知値を拒否しました: ${String(candidate)}${acceptedValues(CHANGED_CONTRACT_KINDS)}`,
+        `実装中発見入力.changedContractKinds[${index}]の未知値を拒否しました${acceptedValues(CHANGED_CONTRACT_KINDS)}`,
       );
     const kind = candidate as ChangedContractKind;
     if (seen.has(kind))
@@ -445,17 +447,11 @@ export const IMPLEMENTATION_DISCOVERY_INPUT_FIELDS: readonly InputFieldSpec[] =
 export function parseImplementationDiscoveryInput(
   value: unknown,
 ): ImplementationDiscovery {
-  const input = exactInputObject(value, "実装中発見入力", [
-    "discoveryId",
-    "workflowMode",
-    "modeDisqualifiers",
-    "changedContractKinds",
-    "changesGoal",
-    "changesScope",
-    "changesAcceptanceCriteria",
-    "expandsSecurityBoundary",
-    "introducesIrreversibleOperation",
-  ]);
+  const input = exactInputObject(
+    value,
+    "実装中発見入力",
+    childFields(IMPLEMENTATION_DISCOVERY_INPUT_FIELDS, ""),
+  );
   if (!WORKFLOW_MODES.some((mode) => mode === input.workflowMode))
     throw new Error(
       `実装中発見入力.workflowModeが不正です${acceptedValues(WORKFLOW_MODES)}`,
