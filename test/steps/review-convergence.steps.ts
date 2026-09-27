@@ -1438,12 +1438,19 @@ Then("実装commitを挟んでからのmergeは拒否される", function () {
 
 /** 修正回帰の連鎖（Issue #1517 AMD-002）を検査するための最小round列。 */
 function chainedRounds(
-  links: readonly (readonly [string, string | null])[],
+  links: readonly (
+    | readonly [string, string | null]
+    | readonly [
+        string,
+        string | null,
+        "valid" | "resolved" | "false-positive" | "duplicate",
+      ]
+  )[],
 ): ReviewSessionState {
-  const findings = links.map(([id, causedByFindingId]) => ({
+  const findings = links.map(([id, causedByFindingId, status = "valid"]) => ({
     id,
     severity: "High" as const,
-    status: "valid" as const,
+    status,
     source: "review" as const,
     relation: "fix-regression" as const,
     evidence: "fixture",
@@ -1502,6 +1509,16 @@ const CHAIN_FIXTURES = {
     ["Y-01", "X-01"],
     ["Z-01", "Y-01"],
   ],
+  resolvedChain: [
+    ["P-01", null, "resolved"],
+    ["Q-01", "P-01", "resolved"],
+    ["R-01", "Q-01", "resolved"],
+  ],
+  notRegression: [
+    ["P-01", null],
+    ["Q-01", "P-01", "false-positive"],
+    ["R-01", "Q-01", "duplicate"],
+  ],
 } as const;
 let chainDivergence: Record<
   keyof typeof CHAIN_FIXTURES,
@@ -1550,6 +1567,14 @@ Then(
     /** 後のroundで原因をnullへ訂正したら、その連鎖を数えない。 */
     assert.equal(chainDivergence.corrected.fixRegressionDepth, 1);
     assert.deepEqual(chainWarnings(chainDivergence.corrected), []);
+    /** 是正済みの回帰も連鎖の履歴として数える。 */
+    assert.equal(chainDivergence.resolvedChain.fixRegressionDepth, 2);
+    assert.deepEqual(chainWarnings(chainDivergence.resolvedChain), [
+      "修正回帰が2段以上連鎖しています: P-01 → Q-01 → R-01",
+    ]);
+    /** 回帰ではなかったと判定したfindingは連鎖に数えない。 */
+    assert.equal(chainDivergence.notRegression.fixRegressionDepth, 0);
+    assert.deepEqual(chainWarnings(chainDivergence.notRegression), []);
     /** 3件の循環は起点によらず1件として名指しする。 */
     assert.equal(chainDivergence.cycle3.fixRegressionDepth, 2);
     assert.deepEqual(chainWarnings(chainDivergence.cycle3), [

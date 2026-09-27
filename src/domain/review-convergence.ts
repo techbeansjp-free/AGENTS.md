@@ -248,8 +248,16 @@ export function reviewDivergence(state: ReviewSessionState): ReviewDivergence {
     warnings.push(
       `直前roundに無かったblockerが新たに出ています: ${[...newBlockers].sort().join(", ")}`,
     );
+  /**
+   * 回帰ではなかったと判定したfinding（`false-positive`・`duplicate`）は連鎖に数えない。
+   * 是正済み（`resolved`）の回帰は連鎖の履歴なので数える（PR #1520 CodeRabbit指摘）。
+   */
   const chains = fixRegressionChains(
-    counted.flatMap(({ findings }) => findings),
+    counted.flatMap(({ findings }) =>
+      findings.filter(
+        ({ status }) => status !== "false-positive" && status !== "duplicate",
+      ),
+    ),
   );
   const fixRegressionDepth = Math.max(
     0,
