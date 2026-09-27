@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1521,
+  "observed": {
+    "baseSha": "4560c844bf4acb94f7ec37810371f4c2df8f7a41",
+    "implementationHeadSha": "e37ae2a4e825e9e1010bc801120eaea9a3475303",
+    "diffDigest": "94c211ec16bfaf834101749ce5a8f5a940117bdcdff16f4f1166fc8693eca9cf",
+    "session": {
+      "sessionId": "727a8f6ae172f5a51b7bb81199ea6f98a5326483acac0c5289cb70dc87fe116f",
+      "latestRoundDigest": "a9009bfb204e34685dc1156590fa9b7c5d7a41d0476319da7f9db9693e799e6a",
+      "status": "converged",
+      "countedRounds": 1
+    },
+    "impact": {
+      "digest": "449fe02663dcb37d497f11b9ad7c9b7e84193d13d3a1a2816bb7e1be9bdf8647",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "e37ae2a4e825e9e1010bc801120eaea9a3475303",
+        "impactDigest": "449fe02663dcb37d497f11b9ad7c9b7e84193d13d3a1a2816bb7e1be9bdf8647",
+        "finishedAt": "2026-09-27T21:25:52.186Z",
+        "recordDigest": "e99a2de7c6d5485e7e2b460d35e0f50248cff0bf24a7b538ed76e63d2640bb5e"
+      }
+    ]
+  },
+  "findings": [],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "agent:/root/shadow_validation_plan",
+    "implementer": "agent:/root/execution_design",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "6a68a0de67feae29026ac81dd8ddaa4ed8191a7142211122db28a262dd66febd"
+}

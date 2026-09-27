@@ -1675,6 +1675,22 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "decision",
+    subcommand: "evaluate",
+    summary: "明示したstagingのshadow評価をread-onlyで集計する",
+    requiredFlags: [
+      flag(
+        "staging",
+        "ID|path",
+        "対象staging。複数回指定可能、重複は一度だけ集計する",
+      ),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG],
+    example:
+      "npx agent-skill-chain decision evaluate --staging=sample-a --staging=sample-b --root=.",
+  },
+  {
+    command: "decision",
     subcommand: "invoke",
     summary:
       "有限選択判断（Decision Type）を1件実行する。deterministic resolverを先に試し、無ければ設定済みprovider（既定lightweight-tier）へ委譲する（Issue #1485）",
