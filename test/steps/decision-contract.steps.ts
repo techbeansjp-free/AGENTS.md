@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import ts from "typescript";
 import {
   DECISION_CANDIDATES,
@@ -18,16 +19,11 @@ interface DecisionContractWorld extends WorkflowWorld {
   collidingFieldNames?: readonly string[];
   compileDiagnostics?: readonly ts.Diagnostic[];
   rejectedCallableTargetLiteral?: string;
+  anchorFixturePath?: string;
+  anchorFound?: boolean;
 }
 
 const { Given, When, Then } = stepDefinitions<DecisionContractWorld>();
-
-// Issue #1485でDCAND-008/010が採用（adopted）へ変わり、decisionSiteFileとして
-// `.agent-skill-chain/docs/01_開発ワークフロー.md`（Unicode文字を含む正本文書名）を
-// 初めてこの形式検査へ通す。`\w`はASCIIだけを含むため、`\p{L}`・`\p{N}`を追加して
-// 既存repositoryのUnicodeファイル名を実在するpathとして受理できるようにする
-// （検査対象は固定文字列であり外部入力ではないため、緩和は安全側）。
-const FILE_LINE_PATTERN = /^[\w./\p{L}\p{N}-]+:\d+(?:-\d+)?$/u;
 
 const JOURNAL_SCHEMA_PATHS = [
   ".agent-skill-chain/schemas/workflow-step-journal.schema.json",
@@ -50,26 +46,28 @@ function collectSchemaPropertyNames(schema: unknown, names: Set<string>): void {
 }
 
 /**
- * `lineSpec`（"484"または"39-45"）が指す行の前後2行を含む窓を`filePath`から読む。
+ * `filePath`内で`anchor`が出現する回数を数える。
  *
- * **file存在だけでなく行内容の実在も検査する。** Step 10独立reviewで、file:line形式と
- * fileの存在しか確認しておらず行番号が実際に主張する内容を指しているかを検査していない
- * 点をHighとして指摘され追加した。
+ * **行番号ではなくfile内の一意な出現をidentityにする**（Issue #1503、REQ-WF-044）。
+ * 旧方式（宣言済み行番号の前後2行だけを見る`anchorPresent`）は、import行の追加等で
+ * 実際の行がずれると一致しなくなり、全件検証とroundを消費する原因になっていた
+ * （#1388のDCAND-007）。file全体から数えることで行ずれの影響を受けず、0件（消失）と
+ * 2件以上（重複）の両方を区別して検出できる（INV-03）。
  */
-function anchorPresent(
-  filePath: string,
-  lineSpec: string,
-  anchor: string,
-): boolean {
-  const lines = fs.readFileSync(filePath, "utf8").split("\n");
-  const match = /^(\d+)(?:-(\d+))?$/u.exec(lineSpec);
-  if (!match) return false;
-  const start = Number(match[1]);
-  const end = match[2] ? Number(match[2]) : start;
-  const windowStart = Math.max(0, start - 1 - 2);
-  const windowEnd = Math.min(lines.length, end + 2);
-  const window = lines.slice(windowStart, windowEnd).join("\n");
-  return window.includes(anchor);
+function anchorOccurrences(filePath: string, anchor: string): number {
+  if (anchor === "") return 0;
+  const text = fs.readFileSync(filePath, "utf8");
+  let count = 0;
+  let index = text.indexOf(anchor);
+  while (index !== -1) {
+    count += 1;
+    index = text.indexOf(anchor, index + anchor.length);
+  }
+  return count;
+}
+
+function anchorUniquelyPresent(filePath: string, anchor: string): boolean {
+  return anchorOccurrences(filePath, anchor) === 1;
 }
 
 // --- SCN-UNIT-DC-001 -------------------------------------------------------
@@ -122,17 +120,14 @@ Given(
   },
 );
 
-When(
-  "採用された候補の件数とfile:line形式を確認する",
-  function (this: DecisionContractWorld) {
-    this.adopted = (this.candidates ?? []).filter(
-      (candidate) => candidate.disposition === "adopted",
-    );
-  },
-);
+When("採用された候補の件数を確認する", function (this: DecisionContractWorld) {
+  this.adopted = (this.candidates ?? []).filter(
+    (candidate) => candidate.disposition === "adopted",
+  );
+});
 
 Then(
-  "5件以上でありそれぞれ実在するfile:line形式の判断箇所を持つ",
+  "5件以上でありそれぞれ実在しfile内で一意なanchorを持つ判断箇所を持つ",
   function (this: DecisionContractWorld) {
     const adopted = this.adopted ?? [];
     assert.ok(
@@ -140,19 +135,7 @@ Then(
       `採用candidateは5件以上必要ですが${adopted.length}件でした`,
     );
     for (const candidate of adopted) {
-      const decisionSite = `${candidate.decisionSiteFile}:${candidate.decisionSiteLine}`;
-      assert.match(
-        decisionSite,
-        FILE_LINE_PATTERN,
-        `${candidate.id}のdecisionSiteがfile:line形式ではありません: ${decisionSite}`,
-      );
       assert.equal(candidate.disposition, "adopted");
-      const callerSite = `${candidate.callerFile}:${candidate.callerLine}`;
-      assert.match(
-        callerSite,
-        FILE_LINE_PATTERN,
-        `${candidate.id}のcallerがfile:line形式ではありません: ${callerSite}`,
-      );
       // decisionSiteFileが相対pathとして実在することを確認する（P-07 Zero Trust）。
       // decisionSiteFileはrepository root相対で記述している前提。
       assert.equal(
@@ -165,25 +148,20 @@ Then(
         true,
         `${candidate.id}のcallerFileが存在しません: ${candidate.callerFile}`,
       );
-      // file存在だけでなく、主張する行の近傍に実際にその内容があることを検査する
-      // （Step 10独立reviewのHigh指摘で追加。形式と存在だけでは偽陽性を防げない）。
+      // file存在だけでなく、anchor文字列がfile内で一意に実在することを検査する
+      // （INV-03）。0件（消失）・2件以上（重複）のどちらも同一性を壊すため拒否する。
       assert.equal(
-        anchorPresent(
+        anchorUniquelyPresent(
           candidate.decisionSiteFile,
-          candidate.decisionSiteLine,
           candidate.decisionSiteAnchor,
         ),
         true,
-        `${candidate.id}のdecisionSiteAnchor"${candidate.decisionSiteAnchor}"が${decisionSite}近傍に見つかりません`,
+        `${candidate.id}のdecisionSiteAnchor"${candidate.decisionSiteAnchor}"が${candidate.decisionSiteFile}内で一意に見つかりません（${anchorOccurrences(candidate.decisionSiteFile, candidate.decisionSiteAnchor)}件）`,
       );
       assert.equal(
-        anchorPresent(
-          candidate.callerFile,
-          candidate.callerLine,
-          candidate.callerAnchor,
-        ),
+        anchorUniquelyPresent(candidate.callerFile, candidate.callerAnchor),
         true,
-        `${candidate.id}のcallerAnchor"${candidate.callerAnchor}"が${callerSite}近傍に見つかりません`,
+        `${candidate.id}のcallerAnchor"${candidate.callerAnchor}"が${candidate.callerFile}内で一意に見つかりません（${anchorOccurrences(candidate.callerFile, candidate.callerAnchor)}件）`,
       );
     }
   },
@@ -209,7 +187,7 @@ Then("除外理由が空でない", function (this: DecisionContractWorld) {
   assert.ok(excluded.length > 0, "除外candidateが1件も無い");
   for (const candidate of excluded) {
     assert.equal(candidate.disposition, "excluded");
-    // 除外候補も判断箇所の実在（file存在＋行近傍の内容）を検査する。
+    // 除外候補も判断箇所の実在（file存在＋file内で一意なanchor）を検査する。
     // 除外理由の正しさは引用元の実在に依存するため（Step 10独立reviewのHigh指摘）。
     assert.equal(
       fs.existsSync(candidate.decisionSiteFile),
@@ -217,13 +195,12 @@ Then("除外理由が空でない", function (this: DecisionContractWorld) {
       `${candidate.id}のdecisionSiteFileが存在しません: ${candidate.decisionSiteFile}`,
     );
     assert.equal(
-      anchorPresent(
+      anchorUniquelyPresent(
         candidate.decisionSiteFile,
-        candidate.decisionSiteLine,
         candidate.decisionSiteAnchor,
       ),
       true,
-      `${candidate.id}のdecisionSiteAnchor"${candidate.decisionSiteAnchor}"が${candidate.decisionSiteFile}:${candidate.decisionSiteLine}近傍に見つかりません`,
+      `${candidate.id}のdecisionSiteAnchor"${candidate.decisionSiteAnchor}"が${candidate.decisionSiteFile}内で一意に見つかりません（${anchorOccurrences(candidate.decisionSiteFile, candidate.decisionSiteAnchor)}件）`,
     );
     assert.ok(
       candidate.exclusionReason.trim().length > 0,
@@ -348,3 +325,68 @@ Then(
     );
   },
 );
+
+// --- SCN-UNIT-DCANCHOR-001〜003 ---------------------------------------------
+
+const ANCHOR_FIXTURE = "TARGET_ANCHOR_STRING";
+
+Given(
+  "anchor文字列の前後に無関係な行を追加したfixtureがある",
+  function (this: DecisionContractWorld) {
+    const directory = this.temp();
+    this.anchorFixturePath = path.join(directory, "fixture.ts");
+    fs.writeFileSync(
+      this.anchorFixturePath,
+      [
+        'import { unrelated } from "./unrelated.js";',
+        "// 無関係な行1",
+        "// 無関係な行2",
+        `const site = "${ANCHOR_FIXTURE}";`,
+        "// 無関係な行3",
+        "void unrelated;",
+        "",
+      ].join("\n"),
+    );
+  },
+);
+
+Given(
+  "anchor文字列を2箇所に持つfixtureがある",
+  function (this: DecisionContractWorld) {
+    const directory = this.temp();
+    this.anchorFixturePath = path.join(directory, "fixture.ts");
+    fs.writeFileSync(
+      this.anchorFixturePath,
+      [
+        `const first = "${ANCHOR_FIXTURE}";`,
+        `const second = "${ANCHOR_FIXTURE}";`,
+        "",
+      ].join("\n"),
+    );
+  },
+);
+
+Given(
+  "anchor文字列を持たないfixtureがある",
+  function (this: DecisionContractWorld) {
+    const directory = this.temp();
+    this.anchorFixturePath = path.join(directory, "fixture.ts");
+    fs.writeFileSync(this.anchorFixturePath, 'const other = "unrelated";\n');
+  },
+);
+
+When("anchorの一意な実在を確認する", function (this: DecisionContractWorld) {
+  assert.ok(this.anchorFixturePath, "fixtureが用意されていません");
+  this.anchorFound = anchorUniquelyPresent(
+    this.anchorFixturePath,
+    ANCHOR_FIXTURE,
+  );
+});
+
+Then("一意に見つかる", function (this: DecisionContractWorld) {
+  assert.equal(this.anchorFound, true);
+});
+
+Then("一意には見つからない", function (this: DecisionContractWorld) {
+  assert.equal(this.anchorFound, false);
+});
