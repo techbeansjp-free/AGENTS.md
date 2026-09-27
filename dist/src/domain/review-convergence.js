@@ -4,7 +4,7 @@ import { isRecord } from "../types.js";
 import { acceptedValues, childFields, field, nestedFields, unknownAndMissingError, } from "./input-contract.js";
 import { PROGRESS_INVENTORY_FIELDS, parseReviewProgressInventory, } from "./review-progress.js";
 /**
- * 保存できるround記録の総数上限。reviewを止める予算ではなく保存領域の上限である。
+ * 保存できるround記録の総数上限。reviewを止める上限ではなく保存領域の上限である。
  *
  * round数ではreviewを止めない。発散はadmission規則が抑え、兆候は
  * `reviewDivergence`がwarningとして報告する（Issue #1503）。

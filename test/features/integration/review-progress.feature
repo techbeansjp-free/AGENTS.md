@@ -61,7 +61,7 @@ Feature: parallel progress evidenceのadapter境界
     When review round --initを実行する
     Then roundが開きanchorにprogress inventoryが無い
 
-  Scenario: SCN-INT-PROGRESS-027 構築可否がroundと予算とdigestを変えない
+  Scenario: SCN-INT-PROGRESS-027 構築可否がroundと数えるround数とdigestを変えない
     Given mode 0664の03を持つreview前stagingがある
     When review round --initを実行する
     Then round recordの差はprogress inventory keyの有無だけである

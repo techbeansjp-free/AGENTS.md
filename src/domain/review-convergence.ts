@@ -16,7 +16,7 @@ import {
 } from "./review-progress.js";
 
 /**
- * 保存できるround記録の総数上限。reviewを止める予算ではなく保存領域の上限である。
+ * 保存できるround記録の総数上限。reviewを止める上限ではなく保存領域の上限である。
  *
  * round数ではreviewを止めない。発散はadmission規則が抑え、兆候は
  * `reviewDivergence`がwarningとして報告する（Issue #1503）。
@@ -114,8 +114,8 @@ export interface ReviewRoundInput {
    * （`src/adapters/review-session.ts`が観測する）。
    *
    * この条件が成り立つとき、merge commitのtreeは両親から完全に決まる。**除外された
-   * roundを通して実装を1 byteも持ち込めないため、追随を装った予算回避が成立しない。**
-   * 衝突解決は実装者が書いた内容なので、この条件を満たさず予算へ数える。
+   * roundを通して実装を1 byteも持ち込めないため、追随を装って数えるroundを回避できない。**
+   * 衝突解決は実装者が書いた内容なので、この条件を満たさず数えるroundに含める。
    */
   followOnly?: true;
   /** Gitで検証済みのrecord layerだけを記録する非消費round。 */
@@ -135,7 +135,7 @@ export interface ReviewRoundRecord {
   findings: readonly AdmittedReviewFinding[];
   blocking: readonly string[];
   recordOnly: readonly string[];
-  /** 既定branch追随だけのroundは予算へ数えない。**記録は残す。** */
+  /** 既定branch追随だけのroundは数えるroundに含めない。**記録は残す。** */
   followOnly?: true;
   recordLayerOnly?: true;
   roundDigest: string;

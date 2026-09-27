@@ -172,7 +172,7 @@ export function describeReviewProgressUnbuildable(input) {
         target: input.targetPath,
         observed,
         expected: "100644",
-        effect: "このroundではparallel progressを利用できません。reviewは通常どおり継続し、round番号と予算は変わりません",
+        effect: "このroundではparallel progressを利用できません。reviewは通常どおり継続し、round番号と数えるround数は変わりません",
         requiredAuthority: REQUIRED_AUTHORITY[input.reason],
         rollback: "review sessionを変更していません。対象fileを元の状態へ戻せます",
     };

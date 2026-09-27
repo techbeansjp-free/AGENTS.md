@@ -62,7 +62,7 @@ Feature: Review sessionを固定契約へ収束させる
   Scenario: SCN-UNIT-REVIEWCONV-008 既定branch追随だけのroundは数えるroundに含めない
     Given findingなしでround 1が収束したreview sessionがある
     When 既定branchを取り込む自動mergeだけでHEADを進めroundを3回記録する
-    Then どのroundも記録されるが予算へは数えない
+    Then どのroundも記録されるが数えるroundには含めない
     And 通常roundを続けて記録でき記録総数は数えるround数を超える
 
   Scenario: SCN-UNIT-REVIEWCONV-009 追随として受理しない形を名指しして拒否する
@@ -76,7 +76,7 @@ Feature: Review sessionを固定契約へ収束させる
   Scenario: SCN-UNIT-REVIEWCONV-010 未解決blockerを持つ追随roundを記録し保存時もGit証拠を再検証する
     Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
     When 未解決blockerを持ったまま既定branchの自動mergeだけを記録する
-    Then 追随roundはblockerと予算を維持したactive状態になる
+    Then 追随roundはblockerと数えるround数を維持したactive状態になる
     When Git条件を満たさないfollow-only sessionを保存して読み直す
     Then 保存済みfollow-only roundはGit再検証で拒否される
 
@@ -85,12 +85,12 @@ Feature: Review sessionを固定契約へ収束させる
     When reanchor後の実効HEADから既定branchの自動mergeだけを記録する
     Then 追随roundは保存後read-backでも受理される
 
-  Scenario: SCN-UNIT-RECORDLAYER-004 検証済みrecord layer roundを記録して予算へ数えない
+  Scenario: SCN-UNIT-RECORDLAYER-004 検証済みrecord layer roundを記録して数えるroundに含めない
     Given findingなしでround 1が収束したreview sessionがある
     When 検証済みrecord layerとしてround 2をdomainへ記録する
-    Then record layer roundは保存され予算へ数えない
+    Then record layer roundは保存され数えるroundに含めない
 
-  Scenario: SCN-UNIT-RECORDLAYER-005 findingありroundを予算へ数える
+  Scenario: SCN-UNIT-RECORDLAYER-005 findingありroundを数えるroundに含める
     Given findingなしでround 1が収束したreview sessionがある
     When findingありの通常round 2をdomainへ記録する
-    Then findingありroundは予算へ数える
+    Then findingありroundは数えるroundに含める

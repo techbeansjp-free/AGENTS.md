@@ -150,7 +150,7 @@ When("検証済みrecord layerとしてround 2をdomainへ記録する", functio
   );
 });
 
-Then("record layer roundは保存され予算へ数えない", function () {
+Then("record layer roundは保存され数えるroundに含めない", function () {
   assert.equal(this.session.rounds.length, 2);
   assert.equal(this.session.rounds.at(-1)?.recordLayerOnly, true);
   assert.equal(countedRounds(this.session), 1);
@@ -181,7 +181,7 @@ When("findingありの通常round 2をdomainへ記録する", function () {
   });
 });
 
-Then("findingありroundは予算へ数える", function () {
+Then("findingありroundは数えるroundに含める", function () {
   assert.equal(countedRounds(this.session), 2);
   assert.deepEqual(this.session.rounds.at(-1)?.blocking, ["H-RECORD"]);
 });
@@ -1103,7 +1103,7 @@ When(
   },
 );
 
-Then("どのroundも記録されるが予算へは数えない", function () {
+Then("どのroundも記録されるが数えるroundには含めない", function () {
   assert.equal(this.session.rounds.length, 4);
   for (const record of this.session.rounds.slice(1))
     assert.equal(record.followOnly, true);
@@ -1136,11 +1136,14 @@ When(
   },
 );
 
-Then("追随roundはblockerと予算を維持したactive状態になる", function () {
-  assert.equal(this.session.status, "active");
-  assert.deepEqual(this.session.rounds.at(-1)?.blocking, ["H-001"]);
-  assert.equal(countedRounds(this.session), 1);
-});
+Then(
+  "追随roundはblockerと数えるround数を維持したactive状態になる",
+  function () {
+    assert.equal(this.session.status, "active");
+    assert.deepEqual(this.session.rounds.at(-1)?.blocking, ["H-001"]);
+    assert.equal(countedRounds(this.session), 1);
+  },
+);
 
 When("Git条件を満たさないfollow-only sessionを保存して読み直す", function () {
   const candidate = commitFile(
@@ -1403,7 +1406,7 @@ Then(
  *
  * 前roundのcandidateの上に実装commitを1つ積み、そこへ既定branchを取り込むと、
  * 第2親は既定branchのancestorで、treeも自動merge結果と一致する。それでも
- * **そのroundには実装者が書いたcommitが含まれる**ため、予算へ数えなければならない。
+ * **そのroundには実装者が書いたcommitが含まれる**ため、数えるroundに含めなければならない。
  * 第1親が前roundのcandidateであることが、この区別を担っている（Issue #1287）。
  */
 Then("実装commitを挟んでからのmergeは拒否される", function () {

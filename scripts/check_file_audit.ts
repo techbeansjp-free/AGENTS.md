@@ -580,8 +580,8 @@ function releaseBumpParent(
  *
  * **`H_impl`を`HEAD^`に固定すると、artifactの帳簿合わせのたびに`H_impl`が動く。**
  * 記載した`H_impl`と個別監査表を追随させる必要が生じ、その追随commitがまた
- * `H_impl`を動かす。**有限レビュー予算がreviewの実質でなく帳簿合わせで消える**
- * （Issue #1074）。2026-09-06の#980では予算3のうち2ラウンドがこれに費やされた。
+ * `H_impl`を動かす。**review roundがreviewの実質でなく帳簿合わせで消える**
+ * （Issue #1074）。2026-09-06の#980では当時の予算3のうち2ラウンドがこれに費やされた。
  *
  * **suffixの各commitは、artifact 1 fileだけを変えるものに限る。** 他pathを含む
  * commit、merge commit、rename、複数artifactの同時変更で遡りを止める。
