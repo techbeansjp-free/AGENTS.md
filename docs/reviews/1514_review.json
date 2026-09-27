@@ -3,16 +3,16 @@
   "issue": 1514,
   "observed": {
     "baseSha": "c3d3805e568962ec975ad21690b9cc1f6e0dde46",
-    "implementationHeadSha": "ba8d074b715a3948618e2c7606eeeaf4b20fc768",
-    "diffDigest": "d01bd9f2a5ed42fe5f0cb7ad6793a15703655128f279598057108d64e5aeb465",
+    "implementationHeadSha": "a8a346e7d146aada19292f5cefef7f5bf7c1b548",
+    "diffDigest": "b86888085748933a1d7eb2a42ebcc23bc7964897fb387a7136235bf0ad46bb9d",
     "session": {
       "sessionId": "87128cd94ac1a0e75a28509967ae2f061401fcda13b9c513520165889be34c82",
-      "latestRoundDigest": "5ec0d1f6622fd7f0c6ad54e2c095768cde90cea5dd6bb64e4e5235e4c283b1bc",
+      "latestRoundDigest": "97515c51db35b7e49e358b052aa348a6a03ce582899bb27dc902d2065985fcb4",
       "status": "converged",
-      "countedRounds": 2
+      "countedRounds": 3
     },
     "impact": {
-      "digest": "fd654381da4e21e67cdc2c538ae33eee8dde04661d5c79d1acfd4e816160a2df",
+      "digest": "d635b200014bea2f7a6586ae884867c7b15da692b0b128fdccab26d075540618",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "ba8d074b715a3948618e2c7606eeeaf4b20fc768",
-        "impactDigest": "fd654381da4e21e67cdc2c538ae33eee8dde04661d5c79d1acfd4e816160a2df",
-        "finishedAt": "2026-09-27T18:04:05.554Z",
-        "recordDigest": "e9458709b852ef9ebdde677f8f433119bd2745898fcdae2589cf1a454ac69fd9"
+        "headSha": "a8a346e7d146aada19292f5cefef7f5bf7c1b548",
+        "impactDigest": "d635b200014bea2f7a6586ae884867c7b15da692b0b128fdccab26d075540618",
+        "finishedAt": "2026-09-27T18:34:30.193Z",
+        "recordDigest": "3817287872de5cd2fddd6ff18888870125ad9e7aaa13fe1b877bd15cab4fc442"
       }
     ]
   },
@@ -38,6 +38,14 @@
       "relation": "acceptance-violation",
       "path": "src/domain/conformance.ts",
       "contractId": "AC-SWITCH-02"
+    },
+    {
+      "id": "R1514-P01",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "package.json",
+      "contractId": "AC-SWITCH-05"
     }
   ],
   "unresolvedCriticalHigh": [],
@@ -48,5 +56,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "f6d9412d441e066aefe55a062d7d6b696056bca236fbfb42385955aa63c2b1b9"
+  "evidenceDigest": "03484690cd85418aa18498211bd889844a02f6ac8ef1a3175ee11ebc62f53c8e"
 }
