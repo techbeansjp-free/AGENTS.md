@@ -16,8 +16,8 @@ description: exact-headの実装をGitから直接reviewし、finding状態と�
 
 1. `review round --init --staging=<staging> --head=<H_impl>`（round 1は`--base`・`--scope`・`--ac`を加える）で骨子を生成し、reviewの指摘だけを`findings`へ書いて`review round --apply`で記録する。入力JSON fileはstagingの外に置く。blocking findingの`contractId`はanchorのAcceptance Criteria IDまたはInvariant IDに一致させる。
 2. **findingは状態として扱う。** 前round blockerは同じIDのまま骨子へ写されるので、是正済みなら`status`を`resolved`へ変え、`evidence`へ確認した事実を1行で書く。新しい文章として作り直さない。`adjacentScope`は手で書き換えない。記録時にGitから導出し直し、一致しなければ拒否される。
-3. 評価基準（`02_品質基準.md`の有限レビュー契約が定める肯定・敵対）は全roundで確認するが、`pass`の項目を文章で残さない。残すのはfindingと判定だけである。
-4. 修正は前進commitで行い、次roundは修正差分と影響集合だけを見る。予算と取り直しの規則は`02_品質基準.md`の有限レビュー契約が所有する。
+3. 評価基準（`02_品質基準.md`のレビュー収束契約が定める肯定・敵対）は全roundで確認するが、`pass`の項目を文章で残さない。残すのはfindingと判定だけである。
+4. 修正は前進commitで行い、次roundは修正差分と影響集合だけを見る。admission規則、発散warning、取り直しの規則は`02_品質基準.md`のレビュー収束契約が所有する。
 5. 収束したら`H_impl`をcheckoutした変更のないworktreeで`verify run --staging=<staging> --scope=targeted|full -- <検証commandのargv>`を実行する。argvは既定branchのproject policyが`verification`で宣言したcommandだけを受理する（`full`は`fullCommand`そのもの、`targeted`は`targetedRunner`の後ろに影響集合のfeatureを並べたもの）。commandはshellを通さず実行され、HEAD・影響集合digest・終了値がstagingの観測記録へ追記される。影響集合が`full`なら`--scope=full`の実行が必要である。**検証の合格は申告ではなく観測である。** 「実行した」と書いても証跡にはならない。
 6. `review export --staging=<staging> --issue=<番号> --reviewer=<reviewer ID> --implementer=<implementer ID>`でreview証跡（`<Issue番号>_review.json`）を生成し、実装commitの後にその1 fileだけをcommitして`H_final`にする。証跡の検証欄は`H_impl`と影響集合に一致する合格した観測記録から導出され、無ければ生成しない。reviewer・implementer・独立性は`declared`（申告）として記録され、hard gateの根拠にならない。`workflow record --step=10`は`H_final`で実行でき、bindingはsessionのcandidate HEAD（`H_impl`）のまま記録される。
 
@@ -49,7 +49,7 @@ Makefileは`make -n <target>`で展開した実commandへ当てる。**ただし
 
 ## PR作成後の指摘
 
-`pr create`より後に届いた外部reviewerの指摘は、条件を満たす場合に同じPRへ取り込む。条件と手順の正本は[01_開発ワークフロー.md](../../docs/01_開発ワークフロー.md#レビュー配置と前向きな変更処理)であり、ここへ複写しない。Step 11前の`pr-bound`中は`workflow record --step=10 --post-pr-intake`、Step 11記録後は`--post-terminal-intake`を使う。取り直しroundは収束後にだけ開き、未解決blockerを抱えたまま予算を使い切った`budget-exhausted`からは開かない。予算超過、受け入れ条件の不充足、安全境界・authority・不可逆操作へ及ぶ指摘はfollow-up Issueとする。指摘を無記録で通過させない。
+`pr create`より後に届いた外部reviewerの指摘は、条件を満たす場合に同じPRへ取り込む。条件と手順の正本は[01_開発ワークフロー.md](../../docs/01_開発ワークフロー.md#レビュー配置と前向きな変更処理)であり、ここへ複写しない。Step 11前の`pr-bound`中は`workflow record --step=10 --post-pr-intake`、Step 11記録後は`--post-terminal-intake`を使う。取り直しroundは収束後にHEADが動いたとき同sessionの次roundとして開き、round数では拒否しない。受け入れ条件の不充足、安全境界・authority・不可逆操作へ及ぶ指摘はfollow-up Issueとする。指摘を無記録で通過させない。
 
 review中またはPR review中に見つけた欠陥は[派生した欠陥の是正原則](../../docs/01_開発ワークフロー.md#派生した欠陥の是正原則)に従い、分離6条件のいずれかに該当しない限り同じIssue・同じPRで直すfindingにする。round数が多いことは分離の理由にしない。目的にASC本体の保守を含まないIssueで、その欠陥がASC本体側にある場合は[ASC本体の是正を作業scopeへ入れない](../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない)に従う。
 

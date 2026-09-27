@@ -12,12 +12,13 @@ import {
   recordStagingSync,
 } from "../../src/domain/issue.js";
 import { refreshStoredStagingDigest } from "../../src/domain/staging.js";
+import { stableJson } from "../../src/lib/security.js";
 import { QUESTIONS, type ModeAnswer } from "../../src/domain/mode.js";
 import {
-  REVIEW_RECOVERY_ROUND,
-  REVIEW_ROUND_BUDGET,
+  REVIEW_DIVERGENCE_RECURRENCE,
   advanceReviewSession,
   countedRounds,
+  reviewDivergence,
   parseReviewRoundInput,
   type ReviewRoundInput,
   type ReviewSessionAnchor,
@@ -52,6 +53,7 @@ interface ReviewConvergenceWorld extends WorkflowWorld {
   evidenceFile: string;
   providerMarker: string;
   conflictCandidate: string;
+  cliOutputs: Array<Record<string, unknown>>;
 }
 
 const { Given, When, Then } = stepDefinitions<ReviewConvergenceWorld>();
@@ -388,86 +390,172 @@ Then("修正起因Highはcurrent blockerになる", function () {
   assert.equal(this.session.status, "active");
 });
 
-When("同じHigh findingを予算上限まで未解決にする", function () {
-  for (let round = 2; round <= REVIEW_ROUND_BUDGET; round += 1) {
-    const candidate = commitFile(
-      this.root,
-      `export const reviewed = ${round};\n`,
-      `fix: review round ${round}`,
+/** Issue #1503より前の上限（通算8 round）を超える件数。 */
+const BEYOND_FORMER_LIMIT = 9;
+
+function recordCountedRound(
+  world: ReviewConvergenceWorld,
+  findings: Array<Record<string, unknown>>,
+): void {
+  const round = world.session.rounds.length + 1;
+  const candidate = commitFile(
+    world.root,
+    `export const reviewed = ${round};\n`,
+    `fix: review round ${round}`,
+  );
+  world.session = recordReviewRound({
+    staging: world.staging,
+    round: roundInput({
+      world,
+      round,
+      candidateHeadSha: candidate,
+      previousRoundDigest: world.session.latestRoundDigest,
+      fixedDiff: [reviewedPath],
+      findings,
+    }),
+  });
+}
+
+When("同じHigh findingを旧上限を超えるroundまで未解決にする", function () {
+  while (this.session.rounds.length < BEYOND_FORMER_LIMIT)
+    recordCountedRound(this, [finding()]);
+});
+
+Then("round数を理由に拒否されずactiveのままである", function () {
+  assert.equal(this.session.rounds.length, BEYOND_FORMER_LIMIT);
+  assert.equal(countedRounds(this.session), BEYOND_FORMER_LIMIT);
+  assert.equal(this.session.status, "active");
+});
+
+When("次roundで前round blockerを解消する", function () {
+  recordCountedRound(this, [finding({ status: "resolved" })]);
+});
+
+Then("review sessionは旧上限を超えたroundで収束する", function () {
+  assert.equal(this.session.status, "converged");
+  assert.equal(this.session.rounds.length, BEYOND_FORMER_LIMIT + 1);
+});
+
+When("収束後にHEADを進めて再reviewを繰り返す", function () {
+  for (let count = 0; count < 2; count += 1) recordCountedRound(this, []);
+});
+
+Then("収束後の再reviewも件数で拒否されない", function () {
+  assert.equal(this.session.status, "converged");
+  assert.equal(this.session.rounds.length, BEYOND_FORMER_LIMIT + 3);
+});
+
+When(
+  "保存済みsessionのstatusを旧形式のbudget-exhaustedへ書き換える",
+  function () {
+    const file = path.join(this.staging, REVIEW_SESSION_FILE);
+    const stored = JSON.parse(fs.readFileSync(file, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    assert.equal(stored.status, "active");
+    fs.writeFileSync(
+      file,
+      `${JSON.stringify({ ...stored, status: "budget-exhausted" })}\n`,
     );
-    this.session = recordReviewRound({
-      staging: this.staging,
-      round: roundInput({
-        world: this,
-        round,
-        candidateHeadSha: candidate,
-        previousRoundDigest: this.session.latestRoundDigest,
-        fixedDiff: [reviewedPath],
-        findings: [finding()],
-      }),
-    });
-  }
+    refreshStoredStagingDigest(this.staging);
+  },
+);
+
+Then("旧形式のsessionをactiveとして読み取れる", function () {
+  const reread = readStoredReviewSession(this.staging);
+  assert.equal(reread?.status, "active");
+  assert.equal(reread?.latestRoundDigest, this.session.latestRoundDigest);
 });
 
-Then("review sessionはbudget-exhaustedになる", function () {
-  assert.equal(this.session.status, "budget-exhausted");
-  assert.equal(this.session.rounds.length, REVIEW_ROUND_BUDGET);
+Then("旧形式のsessionへ次roundを記録できる", function () {
+  recordCountedRound(this, [finding({ status: "resolved" })]);
+  assert.equal(this.session.status, "converged");
 });
 
-Then("取り直しroundへの自動継続を拒否する", function () {
-  // **budget-exhaustedからの取り直しを拒否する。** 上限4への引き上げは収束後の
-  // HEAD移動に限る。未解決blockerを抱えたまま新品の予算をもらえてはならない
+Then("旧形式でもstatus以外の改竄は拒否する", function () {
+  const file = path.join(this.staging, REVIEW_SESSION_FILE);
+  const original = fs.readFileSync(file, "utf8");
+  const stored = JSON.parse(original) as Record<string, unknown>;
+  assert.equal(stored.status, "budget-exhausted");
+  fs.writeFileSync(
+    file,
+    `${JSON.stringify({
+      ...stored,
+      latestCandidateHeadSha: this.anchor.initialHeadSha,
+    })}\n`,
+  );
+  refreshStoredStagingDigest(this.staging);
   assert.throws(
-    () =>
-      recordReviewRound({
-        staging: this.staging,
-        round: roundInput({
-          world: this,
-          round: REVIEW_ROUND_BUDGET + 1,
-          candidateHeadSha: head(this.root),
-          previousRoundDigest: this.session.latestRoundDigest,
-          findings: [finding()],
-        }),
-      }),
-    /budget終了済み/u,
+    () => readStoredReviewSession(this.staging),
+    /再導出値と一致しません/u,
+  );
+  fs.writeFileSync(file, original);
+  refreshStoredStagingDigest(this.staging);
+});
+
+Then("発散warningが再発findingを名指しする", function () {
+  const divergence = reviewDivergence(this.session);
+  assert.equal(divergence.countedRounds, BEYOND_FORMER_LIMIT);
+  assert.equal(divergence.maxFindingRecurrence, BEYOND_FORMER_LIMIT);
+  assert.equal(divergence.repeatedFindingRate, 1);
+  assert.equal(divergence.newBlockerRate, 0);
+  assert.equal(divergence.fixedPathCount, 1);
+  assert.deepEqual(divergence.warnings, [
+    `同じfindingが${REVIEW_DIVERGENCE_RECURRENCE} round以上blockerとして残っています: H-001`,
+  ]);
+});
+
+Then("再発が閾値未満ならwarningを出さない", function () {
+  const first = this.session.rounds.slice(0, REVIEW_DIVERGENCE_RECURRENCE - 1);
+  const partial = { ...this.session, rounds: first };
+  assert.deepEqual(reviewDivergence(partial).warnings, []);
+  const atThreshold = {
+    ...this.session,
+    rounds: this.session.rounds.slice(0, REVIEW_DIVERGENCE_RECURRENCE),
+  };
+  assert.equal(reviewDivergence(atThreshold).warnings.length, 1);
+});
+
+When("次roundで新しいHigh blockerを修正差分に記録する", function () {
+  recordCountedRound(this, [
+    finding(),
+    finding({
+      id: "H-009",
+      relation: "fix-regression",
+      causedByFindingId: "H-001",
+    }),
+  ]);
+});
+
+Then("発散warningが新規blockerを名指しする", function () {
+  const divergence = reviewDivergence(this.session);
+  assert.equal(divergence.newBlockerRate, 0.5);
+  assert.equal(divergence.repeatedFindingRate, 0.5);
+  assert.ok(
+    divergence.warnings.includes(
+      "直前roundに無かったblockerが新たに出ています: H-009",
+    ),
+    divergence.warnings.join("\n"),
   );
 });
 
-When("収束後にHEADを進めて取り直しroundを使い切る", function () {
-  for (
-    let round = REVIEW_ROUND_BUDGET + 1;
-    round <= REVIEW_RECOVERY_ROUND;
-    round += 1
-  ) {
-    const candidate = commitFile(
-      this.root,
-      `export const reviewed = ${round};\n`,
-      `fix: post-convergence recovery ${round}`,
-    );
-    this.session = recordReviewRound({
-      staging: this.staging,
-      round: roundInput({
-        world: this,
-        round,
-        candidateHeadSha: candidate,
-        previousRoundDigest: this.session.latestRoundDigest,
-        fixedDiff: [reviewedPath],
-        findings: [],
-      }),
-    });
-  }
+Then("warningは記録済みstatusとdigestを変えない", function () {
+  const before = stableJson(this.session);
+  reviewDivergence(this.session);
+  assert.equal(stableJson(this.session), before);
+  assert.equal(
+    stableJson(readStoredReviewSession(this.staging)),
+    stableJson(this.session),
+  );
 });
 
-Then("review sessionは取り直しroundで再収束する", function () {
-  assert.equal(this.session.status, "converged");
-  assert.equal(this.session.rounds.length, REVIEW_RECOVERY_ROUND);
-});
-
-Then("取り直し上限を超える自動継続を拒否する", function () {
+Then("旧上限を超えたroundでもadmission違反を拒否する", function () {
+  assert.ok(this.session.rounds.length >= BEYOND_FORMER_LIMIT);
   const candidate = commitFile(
     this.root,
-    "export const reviewed = beyond;\n",
-    "fix: beyond recovery",
+    "export const reviewed = admission;\n",
+    "fix: admission violation",
   );
   assert.throws(
     () =>
@@ -475,80 +563,38 @@ Then("取り直し上限を超える自動継続を拒否する", function () {
         staging: this.staging,
         round: roundInput({
           world: this,
-          round: REVIEW_RECOVERY_ROUND + 1,
+          round: this.session.rounds.length + 1,
           candidateHeadSha: candidate,
           previousRoundDigest: this.session.latestRoundDigest,
           fixedDiff: [reviewedPath],
           findings: [],
         }),
       }),
-    new RegExp(`${REVIEW_RECOVERY_ROUND} roundを超えて`, "u"),
+    /前round blockerの再評価結果をfindingから脱落できません/u,
   );
 });
 
-When("収束後にHEADを進めて取り直しroundで未解決を残す", function () {
-  const candidate = commitFile(
-    this.root,
-    "export const reviewed = 4;\n",
-    "fix: post-convergence recovery with finding",
-  );
-  this.session = recordReviewRound({
-    staging: this.staging,
-    round: roundInput({
-      world: this,
-      round: REVIEW_ROUND_BUDGET + 1,
-      candidateHeadSha: candidate,
-      previousRoundDigest: this.session.latestRoundDigest,
-      fixedDiff: [reviewedPath],
-      findings: [finding()],
-    }),
-  });
-});
-
-Then("review sessionは取り直しroundでbudget-exhaustedになる", function () {
-  // **取り直しラウンドの終端をactiveにしない。** activeのままだと、上限を超えた
-  // 次roundを要求できる状態が残る
-  assert.equal(this.session.status, "budget-exhausted");
-  assert.equal(this.session.rounds.length, REVIEW_ROUND_BUDGET + 1);
-});
-
-Then("budget終了後の追記を拒否する", function () {
-  assert.throws(
-    () =>
-      recordReviewRound({
-        staging: this.staging,
-        round: roundInput({
-          world: this,
-          round: REVIEW_ROUND_BUDGET + 2,
-          candidateHeadSha: head(this.root),
-          previousRoundDigest: this.session.latestRoundDigest,
-          findings: [finding()],
-        }),
+Then(
+  "旧上限を超えたroundでも固定ACへ結び付かないHighはrecord-onlyである",
+  function () {
+    recordCountedRound(this, [
+      finding(),
+      finding({
+        id: "H-010",
+        contractId: "AC-999",
       }),
-    /budget終了済み/u,
-  );
-});
-
-When("収束させずに予算上限まで進める", function () {
-  for (let round = 2; round <= REVIEW_ROUND_BUDGET; round += 1) {
-    const candidate = commitFile(
-      this.root,
-      `export const reviewed = ${round};\n`,
-      `fix: review round ${round}`,
+    ]);
+    const outside = this.session.rounds
+      .at(-1)
+      ?.findings.find(({ id }) => id === "H-010");
+    assert.equal(outside?.admission, "record-only");
+    assert.equal(
+      outside?.admissionReason,
+      "固定済みAcceptance Criteriaへ結び付かない",
     );
-    this.session = recordReviewRound({
-      staging: this.staging,
-      round: roundInput({
-        world: this,
-        round,
-        candidateHeadSha: candidate,
-        previousRoundDigest: this.session.latestRoundDigest,
-        fixedDiff: [reviewedPath],
-        findings: [],
-      }),
-    });
-  }
-});
+    assert.deepEqual(this.session.rounds.at(-1)?.blocking, ["H-001"]);
+  },
+);
 
 Given("findingなしでround 1が収束したreview sessionがある", function () {
   createFixture(this, false);
@@ -634,6 +680,86 @@ async function captureMain(args: string[]): Promise<number> {
     process.stdout.write = original;
   }
 }
+
+async function recordRoundByCli(
+  world: ReviewConvergenceWorld,
+  findings: Array<Record<string, unknown>>,
+): Promise<Record<string, unknown>> {
+  const round = world.session.rounds.length + 1;
+  const candidate = commitFile(
+    world.root,
+    `export const reviewed = ${round};\n`,
+    `fix: intake round ${round}`,
+  );
+  const file = path.join(path.dirname(world.root), `round-${round}.json`);
+  fs.writeFileSync(
+    file,
+    `${stableJson(
+      roundInput({
+        world,
+        round,
+        candidateHeadSha: candidate,
+        previousRoundDigest: world.session.latestRoundDigest,
+        fixedDiff: [reviewedPath],
+        findings,
+      }),
+    )}\n`,
+  );
+  const chunks: string[] = [];
+  const original = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    chunks.push(String(chunk));
+    return true;
+  }) as typeof process.stdout.write;
+  let status: number;
+  try {
+    status = await main([
+      "review",
+      "round",
+      `--staging=${world.staging}`,
+      `--file=${file}`,
+      "--apply",
+    ]);
+  } finally {
+    process.stdout.write = original;
+  }
+  assert.equal(status, 0, chunks.join(""));
+  const output = JSON.parse(chunks.join("")) as Record<string, unknown>;
+  const stored = readStoredReviewSession(world.staging);
+  assert.ok(stored);
+  world.session = stored;
+  return output;
+}
+
+When(
+  "収束後に届いた指摘の記録と是正をCLIで旧上限を超えるまで繰り返す",
+  async function () {
+    const outputs: Array<Record<string, unknown>> = [];
+    while (this.session.rounds.length < BEYOND_FORMER_LIMIT - 1)
+      outputs.push(await recordRoundByCli(this, [finding()]));
+    outputs.push(
+      await recordRoundByCli(this, [finding({ status: "resolved" })]),
+    );
+    this.cliOutputs = outputs;
+  },
+);
+
+Then("CLIはどのroundも件数で拒否せず記録する", function () {
+  assert.equal(this.session.rounds.length, BEYOND_FORMER_LIMIT);
+  assert.equal(this.cliOutputs.length, BEYOND_FORMER_LIMIT - 1);
+  for (const output of this.cliOutputs) assert.equal(output.applied, true);
+});
+
+Then("CLI出力は発散warningを返し最後に再収束する", function () {
+  const beforeLast = this.cliOutputs.at(-2)?.divergence as
+    { warnings: string[] } | undefined;
+  assert.deepEqual(beforeLast?.warnings, [
+    `同じfindingが${REVIEW_DIVERGENCE_RECURRENCE} round以上blockerとして残っています: H-001`,
+  ]);
+  const last = this.cliOutputs.at(-1);
+  assert.equal(last?.status, "converged");
+  assert.equal(this.session.status, "converged");
+});
 
 Given(
   "Step 9まで進んだquick stagingと収束済みreview sessionがある",
@@ -1106,34 +1232,12 @@ Then("追随roundは保存後read-backでも受理される", function () {
   assert.equal(reread?.rounds.at(-1)?.followOnly, true);
 });
 
-Then(
-  "予算上限までの通常roundを続けて記録でき記録総数は予算上限を超える",
-  function () {
-    for (let counted = 2; counted <= REVIEW_ROUND_BUDGET; counted += 1) {
-      const candidate = commitFile(
-        this.root,
-        `export const reviewed = ${counted};\n`,
-        `fix: counted round ${counted}`,
-      );
-      this.session = recordReviewRound({
-        staging: this.staging,
-        round: roundInput({
-          world: this,
-          round: this.session.rounds.length + 1,
-          candidateHeadSha: candidate,
-          previousRoundDigest: this.session.latestRoundDigest,
-          fixedDiff: [reviewedPath],
-          findings: [],
-        }),
-      });
-    }
-    assert.equal(countedRounds(this.session), REVIEW_ROUND_BUDGET);
-    // **記録総数が取り直し上限を超えることがこのassertionの要点である。**
-    // 追随roundを予算へ数える実装では、ここへ到達する前に拒否される
-    assert.equal(this.session.rounds.length, REVIEW_ROUND_BUDGET + 3);
-    assert.ok(this.session.rounds.length > REVIEW_RECOVERY_ROUND);
-  },
-);
+Then("通常roundを続けて記録でき記録総数は数えるround数を超える", function () {
+  for (let count = 0; count < 2; count += 1) recordCountedRound(this, []);
+  assert.equal(countedRounds(this.session), 3);
+  // 追随roundを数える実装では記録総数と数えるround数が一致する
+  assert.equal(this.session.rounds.length, 6);
+});
 
 function rejectsFollowOnly(
   world: ReviewConvergenceWorld,
@@ -1271,7 +1375,7 @@ Then("第1親が前roundのcandidateでないmergeは拒否される", function 
 });
 
 Then(
-  "追随roundへfindingを載せると予算へ数える旨を名指しして拒否される",
+  "追随roundへfindingを載せると数えるroundとして記録する旨を名指しして拒否される",
   function () {
     const upstream = upstreamCommit(
       this.root,
@@ -1289,7 +1393,7 @@ Then(
       candidate,
       [...fixed],
       [finding()],
-      /指摘があるroundは予算へ数えます/u,
+      /指摘があるroundは数えるroundとして記録します/u,
     );
   },
 );

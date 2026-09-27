@@ -4,27 +4,14 @@ import { isRecord } from "../types.js";
 import { acceptedValues, childFields, field, nestedFields, unknownAndMissingError, } from "./input-contract.js";
 import { PROGRESS_INVENTORY_FIELDS, parseReviewProgressInventory, } from "./review-progress.js";
 /**
- * 通常のreviewラウンド予算。round 1で全scopeを見て、2と3で未解決blockerを追う。
- */
-export const REVIEW_ROUND_BUDGET = 6;
-/**
- * 収束後にHEADが動いたときの取り直しへ、予算とは別枠で1 roundだけ許す上限。
+ * 保存できるround記録の総数上限。reviewを止める予算ではなく保存領域の上限である。
  *
- * **外部reviewerが何回reviewするかを利用側は制御できない。** 3 roundで収束した後に
- * 指摘が届いてHEADが進むと、`round > REVIEW_ROUND_BUDGET`だけを見る実装では
- * 是正を記録する経路が1つも残らない（Issue #1140）。
- *
- * **増分は収束後の取り直しに限る。** 未解決blockerを抱えたまま予算を使い切った
- * `budget-exhausted`からは開かない。開くと、任意の1 pushで新品の予算をもらえる。
- */
-export const REVIEW_RECOVERY_ROUND = REVIEW_ROUND_BUDGET + 2;
-/**
- * 保存できるround記録の総数上限。**予算とは別の量である。**
- *
- * 既定branch追随だけのroundは予算へ数えないため、記録の総数は予算を超えうる。
- * それでも無限には増やさない。**記録は残すが、際限なく増える保存領域は作らない。**
+ * round数ではreviewを止めない。発散はadmission規則が抑え、兆候は
+ * `reviewDivergence`がwarningとして報告する（Issue #1503）。
  */
 export const REVIEW_ROUND_RECORD_LIMIT = 64;
+/** 同じfindingがこの回数以上blockerとして残ったら発散の兆候として報告する。 */
+export const REVIEW_DIVERGENCE_RECURRENCE = 3;
 const OID = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const STABLE_ID = /^[A-Z][A-Z0-9._-]{1,127}$/u;
@@ -40,9 +27,50 @@ const RELATIONS = [
 ];
 /** 非収束の原因と、ownerが受容する対象を混同させない診断を返す。 */
 export function unconvergedReviewSessionDiagnostic(status) {
-    if (status === "budget-exhausted")
-        return "review sessionが収束していません: status=budget-exhausted。有限review予算内で未解決blockerが残っています。ownerが受容する対象は既知の未解決findingです";
-    return "review sessionが収束していません: status=active。reviewが未完了か、実際に検分したHEADとcandidateHeadShaの対応が誤っている可能性があります。ownerのrisk受容へ進まず、review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください";
+    return `review sessionが収束していません: status=${status}。reviewが未完了か、実際に検分したHEADとcandidateHeadShaの対応が誤っている可能性があります。ownerのrisk受容へ進まず、review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください`;
+}
+/**
+ * 発散の兆候を保存済みroundから導出する。**判定・記録・merge可否を変えない。**
+ * sessionへは保存しない（digest chainと旧sessionの読取りを変えないため）。
+ */
+export function reviewDivergence(state) {
+    const counted = state.rounds.filter((record) => !record.followOnly && !record.recordLayerOnly);
+    const recurrence = new Map();
+    for (const record of counted)
+        for (const id of record.blocking)
+            recurrence.set(id, (recurrence.get(id) ?? 0) + 1);
+    const maxFindingRecurrence = Math.max(0, ...recurrence.values());
+    const latest = counted.at(-1);
+    const previous = counted.at(-2);
+    const earlierIds = new Set(counted
+        .slice(0, -1)
+        .flatMap((record) => record.findings.map(({ id }) => id)));
+    const priorBlocking = new Set(previous?.blocking ?? []);
+    const newBlockers = latest?.blocking.filter((id) => !priorBlocking.has(id)) ?? [];
+    const newBlockerRate = latest && latest.blocking.length > 0
+        ? newBlockers.length / latest.blocking.length
+        : 0;
+    const repeatedFindingRate = latest && latest.findings.length > 0
+        ? latest.findings.filter(({ id }) => earlierIds.has(id)).length /
+            latest.findings.length
+        : 0;
+    const warnings = [];
+    const recurring = [...recurrence]
+        .filter(([, count]) => count >= REVIEW_DIVERGENCE_RECURRENCE)
+        .map(([id]) => id)
+        .sort();
+    if (recurring.length > 0)
+        warnings.push(`同じfindingが${REVIEW_DIVERGENCE_RECURRENCE} round以上blockerとして残っています: ${recurring.join(", ")}`);
+    if (previous && newBlockers.length > 0)
+        warnings.push(`直前roundに無かったblockerが新たに出ています: ${[...newBlockers].sort().join(", ")}`);
+    return {
+        countedRounds: counted.length,
+        maxFindingRecurrence,
+        newBlockerRate,
+        repeatedFindingRate,
+        fixedPathCount: latest?.focus.fixedDiff.length ?? 0,
+        warnings,
+    };
 }
 /** `optionalFields`は必須にはせず、未知fieldとしても拒否しない。 */
 function exactObject(value, label, fields, optionalFields = []) {
@@ -384,10 +412,8 @@ function findingAdmission(input) {
     };
 }
 /**
- * 予算へ数えるroundの件数。検証済みfollow/record layerだけは数えない。
- *
- * 予算の目的は「同型のblockingで発散するreviewを打ち切る」ことであり、外部要因に
- * よる追随を数えることではない（Issue #1287）。
+ * 数えるroundの件数。検証済みfollow/record layerだけは数えない（Issue #1287）。
+ * 外部要因による追随は発散の指標にならない。
  */
 export function countedRounds(state) {
     if (state === null)
@@ -401,21 +427,11 @@ export function advanceReviewSession(previous, round) {
         throw new Error(`review round resetまたは飛び越しを拒否しました: expected=${expectedRound} actual=${round.round}`);
     if (round.round > REVIEW_ROUND_RECORD_LIMIT)
         throw new Error(`同一review sessionへ${REVIEW_ROUND_RECORD_LIMIT}件を超えるroundを記録できません`);
-    /**
-     * **予算は「数えるround」に対して効かせる**（Issue #1287）。
-     *
-     * 既定branch追随だけのroundは実装者が1 byteも書いていないため、発散の指標に
-     * ならない。実装者は他PRのmerge時刻を制御できず、在庫期間の長いPRほど予算が
-     * 外部要因で削られる。**記録は残し、数えるroundだけを予算へ当てる。**
-     */
     const nonCounting = round.followOnly || round.recordLayerOnly;
-    const countedRound = countedRounds(previous) + (nonCounting ? 0 : 1);
-    if (!nonCounting && countedRound > REVIEW_RECOVERY_ROUND)
-        throw new Error(`同一review sessionは${REVIEW_RECOVERY_ROUND} roundを超えて自動拡大できません`);
     if (round.followOnly && round.findings.length > 0)
-        throw new Error("既定branch追随だけのroundへfindingを記録できません。指摘があるroundは予算へ数えます");
+        throw new Error("既定branch追随だけのroundへfindingを記録できません。指摘があるroundは数えるroundとして記録します");
     if (round.recordLayerOnly && round.findings.length > 0)
-        throw new Error("record layerだけのroundへfindingを記録できません。指摘があるroundは予算へ数えます");
+        throw new Error("record layerだけのroundへfindingを記録できません。指摘があるroundは数えるroundとして記録します");
     if (previous === null) {
         if (nonCounting)
             throw new Error("round 1を非消費roundとして記録できません");
@@ -429,17 +445,6 @@ export function advanceReviewSession(previous, round) {
             throw new Error("round 1は固定initial HEADの全scope reviewで開始します");
     }
     else {
-        /**
-         * **取り直しの1 roundが収束後だけに開くことは、この1行が担っている。**
-         *
-         * `REVIEW_ROUND_BUDGET`到達後の非収束状態は`budget-exhausted`しか取り得ない
-         * （status導出を参照）。したがって`round === REVIEW_RECOVERY_ROUND`かつ
-         * `status !== "converged"`を別に判定しても到達しない。**到達しない条件を置くと、
-         * それを外す変異が生存する死んだ分岐になる。** status導出の`>=`が
-         * この含意を保証しており、`SCN-UNIT-REVIEWCONV-007`が固定する。
-         */
-        if (previous.status === "budget-exhausted")
-            throw new Error("budget終了済みreview sessionは更新できません");
         if (previous.sessionId !== sessionId)
             throw new Error("review sessionのscope・AC・invariant・diff anchor変更を拒否しました");
         if (round.previousRoundDigest !== previous.latestRoundDigest)
@@ -511,17 +516,18 @@ export function advanceReviewSession(previous, round) {
         latestCandidateHeadSha: round.recordLayerOnly
             ? previous.latestCandidateHeadSha
             : round.candidateHeadSha,
-        /**
-         * **取り直しのroundで未解決が残ればそこで終端にする。** `round === 3`だけを
-         * 見ると`REVIEW_RECOVERY_ROUND`が`active`になり、上限を超えた次roundを
-         * 要求できる状態が残る。
-         */
-        status: blocking.length === 0
-            ? "converged"
-            : countedRound >= REVIEW_ROUND_BUDGET
-                ? "budget-exhausted"
-                : "active",
+        status: blocking.length === 0 ? "converged" : "active",
     });
+}
+/**
+ * Issue #1503より前はround数の上限で`budget-exhausted`を保存していた。上限は廃止し、
+ * 再導出では同じ内容が`active`になる。**旧statusは読取り時に無視する。**
+ * それ以外のfieldは従来どおり再導出値とbyte一致を要求する。
+ */
+function withoutLegacyStatus(value) {
+    if (isRecord(value) && value.status === "budget-exhausted")
+        return { ...value, status: "active" };
+    return value;
 }
 /**
  * 保存済みstateは各roundを先頭から再評価して検証する。保存側のadmissionやdigestを
@@ -592,7 +598,8 @@ export function parseReviewSessionState(value) {
         if (!rebuiltRecord || stableJson(rebuiltRecord) !== stableJson(candidate))
             throw new Error(`review session round ${index + 1}のadmissionまたはdigestが不正です`);
     }
-    if (rebuilt === null || stableJson(rebuilt) !== stableJson(value))
+    if (rebuilt === null ||
+        stableJson(rebuilt) !== stableJson(withoutLegacyStatus(value)))
         throw new Error("review sessionのanchor、latestまたはstatusが再導出値と一致しません");
     return rebuilt;
 }

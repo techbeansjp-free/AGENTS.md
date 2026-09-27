@@ -20,12 +20,6 @@ Feature: Review sessionを固定契約へ収束させる
     When round 2の修正差分で前round finding起因のHigh回帰を記録する
     Then 修正起因Highはcurrent blockerになる
 
-  Scenario: SCN-UNIT-REVIEWCONV-004 予算上限まで未解決なら自動scope拡大せず終了する
-    Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
-    When 同じHigh findingを予算上限まで未解決にする
-    Then review sessionはbudget-exhaustedになる
-    And 取り直しroundへの自動継続を拒否する
-
   Scenario: SCN-UNIT-REVIEWCONV-005 収束後の実commitだけを同digest chainで再reviewする
     Given findingなしでround 1が収束したreview sessionがある
     When 収束HEAD後に実commitを追加しround 2で再reviewする
@@ -33,32 +27,50 @@ Feature: Review sessionを固定契約へ収束させる
     When 同じHEADをround 3として追記する
     Then review session更新は同じHEADと空fixedDiffで拒否される
 
-  Scenario: SCN-UNIT-REVIEWCONV-006 収束後のHEAD移動へ取り直しを別枠で許す
-    Given findingなしでround 1が収束したreview sessionがある
-    When 収束させずに予算上限まで進める
-    And 収束後にHEADを進めて取り直しroundを使い切る
-    Then review sessionは取り直しroundで再収束する
-    And 取り直し上限を超える自動継続を拒否する
+  Scenario: SCN-UNIT-ROUNDBUDGET-001 round数の上限による拒否が無い
+    Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
+    When 同じHigh findingを旧上限を超えるroundまで未解決にする
+    Then round数を理由に拒否されずactiveのままである
+    When 次roundで前round blockerを解消する
+    Then review sessionは旧上限を超えたroundで収束する
+    When 収束後にHEADを進めて再reviewを繰り返す
+    Then 収束後の再reviewも件数で拒否されない
 
-  Scenario: SCN-UNIT-REVIEWCONV-007 取り直しラウンドで未解決が残ればbudget-exhaustedにする
-    Given findingなしでround 1が収束したreview sessionがある
-    When 収束させずに予算上限まで進める
-    And 収束後にHEADを進めて取り直しroundで未解決を残す
-    Then review sessionは取り直しroundでbudget-exhaustedになる
-    And budget終了後の追記を拒否する
+  Scenario: SCN-UNIT-ROUNDBUDGET-002 保存済みbudget-exhausted sessionを読み取り継続できる
+    Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
+    When 同じHigh findingを旧上限を超えるroundまで未解決にする
+    And 保存済みsessionのstatusを旧形式のbudget-exhaustedへ書き換える
+    Then 旧形式のsessionをactiveとして読み取れる
+    And 旧形式でもstatus以外の改竄は拒否する
+    And 旧形式のsessionへ次roundを記録できる
 
-  Scenario: SCN-UNIT-REVIEWCONV-008 既定branch追随だけのroundは予算へ数えない
+  Scenario: SCN-UNIT-ROUNDBUDGET-003 発散の兆候をwarningとして報告し判定を変えない
+    Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
+    When 同じHigh findingを旧上限を超えるroundまで未解決にする
+    Then 発散warningが再発findingを名指しする
+    And 再発が閾値未満ならwarningを出さない
+    And warningは記録済みstatusとdigestを変えない
+    When 次roundで新しいHigh blockerを修正差分に記録する
+    Then 発散warningが新規blockerを名指しする
+
+  Scenario: SCN-UNIT-ROUNDBUDGET-004 round上限廃止後もadmission規則で拒否する
+    Given 固定scopeとAcceptance Criteriaでround 1のHigh findingを永続化したreview sessionがある
+    When 同じHigh findingを旧上限を超えるroundまで未解決にする
+    Then 旧上限を超えたroundでもadmission違反を拒否する
+    And 旧上限を超えたroundでも固定ACへ結び付かないHighはrecord-onlyである
+
+  Scenario: SCN-UNIT-REVIEWCONV-008 既定branch追随だけのroundは数えるroundに含めない
     Given findingなしでround 1が収束したreview sessionがある
     When 既定branchを取り込む自動mergeだけでHEADを進めroundを3回記録する
     Then どのroundも記録されるが予算へは数えない
-    And 予算上限までの通常roundを続けて記録でき記録総数は予算上限を超える
+    And 通常roundを続けて記録でき記録総数は数えるround数を超える
 
   Scenario: SCN-UNIT-REVIEWCONV-009 追随として受理しない形を名指しして拒否する
     Given findingなしでround 1が収束したreview sessionがある
     When 衝突を解決したmergeは自動merge結果と一致しないとして拒否される
     Then 既定branchのancestorでない第2親を持つmergeは拒否される
     And 第1親が前roundのcandidateでないmergeは拒否される
-    And 追随roundへfindingを載せると予算へ数える旨を名指しして拒否される
+    And 追随roundへfindingを載せると数えるroundとして記録する旨を名指しして拒否される
     And 実装commitを挟んでからのmergeは拒否される
 
   Scenario: SCN-UNIT-REVIEWCONV-010 未解決blockerを持つ追随roundを記録し保存時もGit証拠を再検証する

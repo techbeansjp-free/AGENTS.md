@@ -58,10 +58,10 @@ Feature: review round雛形と契約の露出
     Then 実Git差分が空であるerrorで拒否し雛形を書かない
     And 空差分の診断はsession確認を案内する
 
-  Scenario: SCN-UNIT-DIAGHINT-005 非収束理由をstatus別に案内する
+  Scenario: SCN-UNIT-DIAGHINT-005 非収束の診断はowner受容へ進ませずHEAD対応の確認を案内する
     Given 非収束statusごとの診断がある
     When status別の診断を比較する
-    Then activeとbudget-exhaustedでownerの確認対象が異なる
+    Then 非収束の診断はHEAD対応の確認を案内する
 
   Scenario: SCN-UNIT-REVINIT-009 current HEADと異なる--headの--initを拒否する
     Given 初回candidateを持つstagingがある
@@ -153,16 +153,10 @@ Feature: review round雛形と契約の露出
     When macOS helperを作成直後に強制終了する
     Then Darwinではsignalと未sanitizeを診断する
 
-  Scenario: SCN-UNIT-REVINIT-013 budget-exhaustedのsessionへの--initを拒否する
-    Given budget-exhaustedのsessionを持つstagingがある
+  Scenario: SCN-UNIT-REVINIT-013 旧形式のbudget-exhausted sessionへも--initで次roundの雛形を書ける
+    Given 旧形式のbudget-exhaustedを保存したsessionを持つstagingがある
     When review round --initで次roundの雛形を書こうとする
-    Then budget-exhaustedのerrorで拒否し雛形を書かない
-
-  Scenario: SCN-UNIT-REVINIT-016 HEADが同じbudget-exhausted sessionも固有errorで拒否する
-    Given budget-exhaustedのsessionを持つstagingがある
-    And HEADをbudget-exhausted sessionのcandidateへ戻す
-    When review round --initで次roundの雛形を書こうとする
-    Then budget-exhaustedのerrorで拒否し雛形を書かない
+    Then 旧形式sessionの次roundの雛形が書かれる
 
   Scenario: SCN-UNIT-REVINIT-014 session有りで--invariantだけを渡すと無視を通知する
     Given round 1をblocker付きで記録し是正commitを積んだstagingがある

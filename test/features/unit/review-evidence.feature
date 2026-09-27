@@ -38,10 +38,10 @@ Feature: Step 10のreview証跡を収束済みsessionから生成し厳密に読
     When 比較基点と検証記録をそれぞれ変えた証跡を比較する
     Then rebaseは比較基点とH_implだけを、前進修正は検証記録だけを許す
 
-  Scenario: SCN-UNIT-REVEVID-008 round上限を超える証跡を拒否する
+  Scenario: SCN-UNIT-REVEVID-008 記録上限を超えるround数の証跡を拒否する
     Given 2 roundで収束したreview sessionがある
-    When countedRoundsが上限を超える証跡を読む
-    Then round上限超過として拒否する
+    When countedRoundsが記録上限を超える証跡を読む
+    Then 記録上限超過として拒否する
 
   Scenario: SCN-UNIT-REVEVID-009 申告文字列の検証欄を持つv1証跡を移行先つきで拒否する
     Given 2 roundで収束したreview sessionがある

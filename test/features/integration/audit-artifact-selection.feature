@@ -22,13 +22,13 @@ Feature: fixture repositoryでのreview証跡差分選択
     When 監査選択repositoryのfile監査を実行する
     Then 41件目のreview artifactが選ばれてfile監査は合格する
 
-  Scenario: SCN-INT-STEPCHAIN-001 上限を超えたreviewラウンドを拒否する
-    Given ラウンド数が"9"のreview artifactを持つ統合監査repository
+  Scenario: SCN-INT-STEPCHAIN-001 記録上限を超えたreviewラウンドを拒否する
+    Given ラウンド数が"65"のreview artifactを持つ統合監査repository
     When 監査選択repositoryのfile監査を実行する
     Then file監査はラウンド上限超過を報告する
 
-  Scenario: SCN-INT-STEPCHAIN-010 取り直しを含む8ラウンドを受理する
-    Given ラウンド数が"8"のreview artifactを持つ統合監査repository
+  Scenario: SCN-INT-STEPCHAIN-010 旧上限を超える9ラウンドを受理する
+    Given ラウンド数が"9"のreview artifactを持つ統合監査repository
     When 監査選択repositoryのfile監査を実行する
     Then 監査選択のfile監査は合格する
 

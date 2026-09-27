@@ -27,7 +27,10 @@ import {
   type ProjectKind,
 } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
-import { parseReviewRoundInput } from "./domain/review-convergence.js";
+import {
+  parseReviewRoundInput,
+  reviewDivergence,
+} from "./domain/review-convergence.js";
 import {
   appendReviewProgress,
   projectReviewProgress,
@@ -7742,7 +7745,7 @@ export async function main(
     const state = apply
       ? recordReviewRound({ staging, round })
       : previewReviewRound({ staging, round });
-    print({ applied: apply, ...state });
+    print({ applied: apply, ...state, divergence: reviewDivergence(state) });
     return 0;
   }
   if (command === "review" && subcommand === "progress") {

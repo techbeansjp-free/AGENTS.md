@@ -3,7 +3,7 @@ import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import {
   countedRounds,
-  REVIEW_RECOVERY_ROUND,
+  REVIEW_ROUND_RECORD_LIMIT,
   type ReviewFindingRelation,
   type ReviewFindingSeverity,
   type ReviewFindingStatus,
@@ -297,9 +297,9 @@ function parseObserved(value: unknown): ReviewEvidenceObserved {
     session.countedRounds,
     "review evidence.observed.session.countedRounds",
   );
-  if (counted > REVIEW_RECOVERY_ROUND)
+  if (counted > REVIEW_ROUND_RECORD_LIMIT)
     throw new Error(
-      `review evidence.observed.session.countedRoundsが上限${REVIEW_RECOVERY_ROUND}を超えています: ${counted}`,
+      `review evidence.observed.session.countedRoundsが記録上限${REVIEW_ROUND_RECORD_LIMIT}を超えています: ${counted}`,
     );
   const impact = exactObject(
     observed.impact,

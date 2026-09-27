@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
-import { countedRounds, REVIEW_RECOVERY_ROUND, } from "./review-convergence.js";
+import { countedRounds, REVIEW_ROUND_RECORD_LIMIT, } from "./review-convergence.js";
 import { validateVerificationArgv, VERIFICATION_SCOPES, } from "./verification-run.js";
 /**
  * Step 10の構造化review証跡（REQ-WF-038、TERM-ASC-WR-03）。
@@ -170,8 +170,8 @@ function parseObserved(value) {
     if (session.status !== "converged")
         throw new Error("review evidence.observed.session.statusはconvergedだけを受理します");
     const counted = positiveInteger(session.countedRounds, "review evidence.observed.session.countedRounds");
-    if (counted > REVIEW_RECOVERY_ROUND)
-        throw new Error(`review evidence.observed.session.countedRoundsが上限${REVIEW_RECOVERY_ROUND}を超えています: ${counted}`);
+    if (counted > REVIEW_ROUND_RECORD_LIMIT)
+        throw new Error(`review evidence.observed.session.countedRoundsが記録上限${REVIEW_ROUND_RECORD_LIMIT}を超えています: ${counted}`);
     const impact = exactObject(observed.impact, "review evidence.observed.impact", ["digest", "mode"]);
     const baseSha = oid(observed.baseSha, "review evidence.observed.baseSha");
     const implementationHeadSha = oid(observed.implementationHeadSha, "review evidence.observed.implementationHeadSha");

@@ -22,7 +22,7 @@ import {
   type JsonValue,
 } from "../src/lib/security.js";
 import { isPackageVersion } from "../src/lib/version.js";
-import { REVIEW_RECOVERY_ROUND } from "../src/domain/review-convergence.js";
+import { REVIEW_ROUND_RECORD_LIMIT } from "../src/domain/review-convergence.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const AUDIT_DIRECTORIES = [
@@ -790,14 +790,11 @@ function packageDistributionFiles(root: string): string[] | undefined {
 }
 
 /**
- * 上限は`.agent-skill-chain/docs/02_品質基準.md`が所有する。ここは同じ値を強制するだけ。
- *
- * **同じ値を2箇所で持たない。** 以前はここへ`3`を直書きしており、
- * PR #1150 が上限を4へ引き上げたときに追随しなかった。`review round`が受理する
- * ラウンドを`audit:check`が拒否し、取り直し1ラウンドが使えなかった（Issue #1159）。
- * 判定の正本である`review-convergence.ts`からimportして乖離を構造的に断つ。
+ * round数でreviewを止める上限は無い（Issue #1503）。証跡のround数は保存できる記録数を
+ * 超えられないため、同じ正本の`REVIEW_ROUND_RECORD_LIMIT`をimportして検査する。
+ * **同じ値を2箇所で持たない**（Issue #1159）。
  */
-const MAX_REVIEW_ROUNDS = REVIEW_RECOVERY_ROUND;
+const MAX_REVIEW_ROUNDS = REVIEW_ROUND_RECORD_LIMIT;
 
 /**
  * @param legacyReleaseBumpCutoff 旧release bump除外を認める境界commit。
@@ -947,7 +944,7 @@ export function checkFileAudit(
     errors.push("H_implがcurrent HEADのancestorではありません");
   if (evidence.observed.session.countedRounds > MAX_REVIEW_ROUNDS)
     errors.push(
-      `reviewラウンドが上限を超えています: ${evidence.observed.session.countedRounds}（上限${MAX_REVIEW_ROUNDS}）。同じ範囲の予算は自動更新しません`,
+      `reviewラウンドが記録上限を超えています: ${evidence.observed.session.countedRounds}（記録上限${MAX_REVIEW_ROUNDS}）`,
     );
   /**
    * **配布物影響はGitとpackage filesから導出して報告する。** 散文の記述は要求しない。

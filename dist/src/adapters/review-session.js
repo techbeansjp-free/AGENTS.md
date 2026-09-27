@@ -236,9 +236,6 @@ export function buildReviewRoundDraft(input) {
         notes.push("round 1は固定initial HEADの全scope reviewである。findingsへreviewの指摘を書く");
     }
     else {
-        /** budget枯渇はHEAD差分の有無より先に固有の停止理由を返す。 */
-        if (previous.status === "budget-exhausted")
-            throw new Error("review round --init: sessionはbudget-exhaustedです。取り直しroundは開けません。follow-up Issueの新しいstagingで工程を通してください");
         if (input.baseSha !== undefined ||
             input.scopeIds ||
             input.acceptanceCriteriaIds ||

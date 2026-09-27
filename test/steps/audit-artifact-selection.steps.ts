@@ -953,7 +953,7 @@ function assertReported(world: AuditSelectionWorld, fragment: string): void {
 }
 
 Then("file監査はラウンド上限超過を報告する", function () {
-  assertReported(this, "countedRoundsが上限8を超えています");
+  assertReported(this, "countedRoundsが記録上限64を超えています");
 });
 
 Given("review artifactを最終commitにした統合監査repository", function () {

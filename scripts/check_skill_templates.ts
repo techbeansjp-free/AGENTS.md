@@ -158,7 +158,7 @@ const POST_PR_INTAKE_MARKERS = [
   "同じPRへ取り込む",
   "01_開発ワークフロー.md",
   "--post-terminal-intake",
-  "budget-exhausted",
+  "round数では拒否しない",
 ] as const;
 
 /** 規範文書と正反対になる表現。混入を拒否する。 */
