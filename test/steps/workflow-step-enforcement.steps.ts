@@ -8436,11 +8436,31 @@ if (exact(["auth", "status"])) {
           ]),
         /review round candidate HEADがStep 9 implementation HEADと一致しません/u,
       );
+      /** 再開状態は最新のStep 9を指す。current HEADで再記録すると一致へ戻る。 */
+      appendWorkflowJournalEntry({
+        staging,
+        entry: { ...entry(9), implementationHeadSha: movedHeadSha },
+        headSha: movedHeadSha,
+      });
+      const rerecorded = await previewResume(staging);
+      assert.deepEqual(rerecorded.output.resume.implementation, {
+        headSha: movedHeadSha,
+        matchesHead: true,
+      });
       break;
     }
     case "SCN-E2E-ADVANCE-016": {
       const prepared = prepareDeliveryCli(this);
       createDeliveryPullRequest(prepared);
+      /** 最新の検証記録を指すことを、内容の異なる2件目の記録で確かめる。 */
+      appendFixtureVerificationRecords(
+        prepared.staging,
+        observeFixtureVerification(prepared.root, {
+          baseSha: prepared.baseSha,
+          implementationHeadSha: prepared.implementationCommitSha,
+          finishedAt: "2026-09-26T00:00:30.000Z",
+        }).records,
+      );
       fs.writeFileSync(
         path.join(prepared.staging, "05_計画変更.md"),
         "# 05 計画変更\n\n## AMD-001 範囲\n\n- 対象: T01\n- 変更: 再開状態\n- 理由: 検査\n",
@@ -8481,6 +8501,8 @@ if (exact(["auth", "status"])) {
               recordDigest: string;
             },
         );
+      assert.ok(runs.length >= 2);
+      assert.notEqual(runs[0]?.recordDigest, runs.at(-1)?.recordDigest);
       const latestRun = runs.at(-1)!;
       const delivery = JSON.parse(
         fs.readFileSync(
@@ -8491,7 +8513,19 @@ if (exact(["auth", "status"])) {
       assert.equal(delivery.state, "pr-bound");
       assert.equal(resume.headSha, prepared.headSha);
       assert.equal(resume.baseSha, session.anchor.diffBaseSha);
-      assert.equal(resume.planning?.amendmentCount, 1);
+      const sha256 = (value: string | Buffer) =>
+        crypto.createHash("sha256").update(value).digest("hex");
+      /** quickの封印は00要求定義だけのSHA-256であり、Step 4記録後に00は変えていない。 */
+      const requirementDigest = sha256(
+        fs.readFileSync(path.join(prepared.staging, "00_要求定義.md")),
+      );
+      assert.deepEqual(resume.planning, {
+        sealed: true,
+        sealDigest: sha256(
+          JSON.stringify({ "00_要求定義.md": requirementDigest }),
+        ),
+        amendmentCount: 1,
+      });
       assert.equal(
         resume.implementation.headSha,
         prepared.implementationCommitSha,
@@ -8547,6 +8581,24 @@ if (exact(["auth", "status"])) {
       assert.equal(after.output.resume.errors.length, 1);
       assert.match(after.output.resume.errors[0] ?? "", /^review session: /u);
       assert.deepEqual(before.output.resume.errors, []);
+      /** HEADを観測できないrepositoryでも判定は変わらず、一致を表示しない。 */
+      const detached = createQuickStaging(this.temp("asc-resume-no-git-"));
+      for (const step of [1, 4])
+        appendWorkflowJournalEntry({ staging: detached, entry: entry(step) });
+      appendWorkflowJournalEntry({
+        staging: detached,
+        entry: { ...entry(9), implementationHeadSha: "a".repeat(40) },
+      });
+      const unobserved = await previewResume(detached);
+      assert.equal(unobserved.status, 0);
+      assert.equal(unobserved.output.state, "delegated");
+      assert.equal(unobserved.output.resume.headSha, null);
+      assert.deepEqual(unobserved.output.resume.implementation, {
+        headSha: "a".repeat(40),
+        matchesHead: null,
+      });
+      assert.equal(unobserved.output.resume.errors.length, 1);
+      assert.match(unobserved.output.resume.errors[0] ?? "", /^HEAD: /u);
       break;
     }
     case "SCN-INT-ISSUESYNC-024": {

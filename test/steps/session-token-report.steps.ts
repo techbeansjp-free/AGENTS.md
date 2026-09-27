@@ -102,6 +102,7 @@ Given("本体とsubagentのfixture logとjournalがある", function () {
         content: [
           { type: "text", text: "SECRET-TEXT" },
           read("https://example.com/x"),
+          read("https://example.com/x"),
         ],
         cwd: root,
       }),
@@ -115,7 +116,7 @@ Given("本体とsubagentのfixture logとjournalがある", function () {
         id: "msg_c",
         at: "2026-09-01T10:20:00.000Z",
         usage: [1, 0, 3000, 10],
-        content: [read("/etc/passwd")],
+        content: [read("/etc/passwd"), read("/etc/passwd")],
         cwd: root,
       }),
       "",
@@ -128,14 +129,14 @@ Given("本体とsubagentのfixture logとjournalがある", function () {
     [
       assistant({
         id: "msg_d",
-        at: "2026-09-01T10:05:00.000Z",
+        at: "2026-09-01T10:03:00.000Z",
         usage: [2, 300, 400, 30],
         content: [],
         cwd: root,
       }),
       assistant({
         id: "msg_e",
-        at: "2026-09-01T10:06:00.000Z",
+        at: "2026-09-01T10:08:00.000Z",
         usage: [3, 0, 600, 40],
         content: [],
         cwd: root,
@@ -148,7 +149,7 @@ Given("本体とsubagentのfixture logとjournalがある", function () {
   fs.writeFileSync(
     path.join(staging, "journal", "steps.jsonl"),
     [
-      JSON.stringify({ step: 0, recordedAt: "2026-09-01T10:01:00.000Z" }),
+      JSON.stringify({ step: 0, recordedAt: "2026-09-01T10:02:00.000Z" }),
       JSON.stringify({ step: 1, recordedAt: "2026-09-01T10:10:00.000Z" }),
       "",
     ].join("\n"),
@@ -218,9 +219,9 @@ Then(
         fresh: 375,
         cacheReadPerCall: { median: 500, p95: 600, max: 600 },
         firstCallContext: 702,
-        startedAt: "2026-09-01T10:05:00.000Z",
-        endedAt: "2026-09-01T10:06:00.000Z",
-        activeMs: 60000,
+        startedAt: "2026-09-01T10:03:00.000Z",
+        endedAt: "2026-09-01T10:08:00.000Z",
+        activeMs: 300000,
         repeatedReads: [],
         skippedLines: 0,
       },
@@ -237,10 +238,10 @@ Then(
         step.output,
       ]),
       [
-        ["pre", null, "2026-09-01T10:01:00.000Z", 1, 10, 1000, 0, 50],
+        ["pre", null, "2026-09-01T10:02:00.000Z", 1, 10, 1000, 0, 50],
         [
           0,
-          "2026-09-01T10:01:00.000Z",
+          "2026-09-01T10:02:00.000Z",
           "2026-09-01T10:10:00.000Z",
           3,
           10,
@@ -276,7 +277,7 @@ Then(
         1671,
         { median: 600, p95: 3000, max: 3000 },
         2,
-        180000,
+        420000,
         1200000,
         2,
       ],
