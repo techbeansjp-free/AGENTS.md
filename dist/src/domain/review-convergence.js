@@ -4,10 +4,11 @@ import { isRecord } from "../types.js";
 import { acceptedValues, childFields, field, nestedFields, unknownAndMissingError, } from "./input-contract.js";
 import { PROGRESS_INVENTORY_FIELDS, parseReviewProgressInventory, } from "./review-progress.js";
 /**
- * 保存できるround記録の総数上限。reviewを止める上限ではなく保存領域の上限である。
+ * 1 sessionに記録できるroundの総数（数えないroundを含む）。記録番号はround番号と
+ * 同じなので、65 round目は記録できない。
  *
- * round数ではreviewを止めない。発散はadmission規則が抑え、兆候は
- * `reviewDivergence`がwarningとして報告する（Issue #1503）。
+ * 数えるround数の上限は廃止した（Issue #1503）。round数を分離・停止の理由にせず、
+ * 発散はadmission規則が抑え、兆候は`reviewDivergence`がwarningとして報告する。
  */
 export const REVIEW_ROUND_RECORD_LIMIT = 64;
 /** 同じfindingがこの回数以上blockerとして残ったら発散の兆候として報告する。 */
