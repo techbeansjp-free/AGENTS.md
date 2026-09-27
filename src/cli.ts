@@ -4913,7 +4913,9 @@ export async function main(
     dependencies.nodeVersion ?? process.versions.node,
   );
   if (command === "decision" && subcommand === "evaluate") {
-    const { flags } = parse(rest);
+    const { flags } = parse(
+      rest.filter((arg) => arg.startsWith("--staging=")).slice(0, 1),
+    );
     required(flags, "staging");
     const stagings: string[] = [];
     let root = process.cwd();
