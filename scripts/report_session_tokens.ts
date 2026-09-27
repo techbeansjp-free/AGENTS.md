@@ -6,7 +6,7 @@ import { STEP_JOURNAL_FILE } from "../src/domain/workflow.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 /**
- * Claude Code session logのtoken指標を集計する開発script（REQ-WF-048）。
+ * Claude Code session logのtoken指標を集計する開発script（REQ-WF-049）。
  *
  * **本文・prompt・tool入出力の文字列を出力しない。** 出力は数値・session ID・時刻・
  * repository root配下の相対pathだけである。pathはRead/Bashのfile引数から抽出し、

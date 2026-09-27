@@ -9,7 +9,7 @@ import type { ReviewSessionState } from "./review-convergence.js";
 import type { VerificationRunRecord } from "./verification-run.js";
 
 /**
- * 再開状態（TERM-1517-01、REQ-WF-046）。
+ * 再開状態（TERM-1517-01、REQ-WF-047）。
  *
  * `workflow advance`のpreviewが保存済み記録とGitから都度導出するpointer集合である。
  * **保存せず、gateの判定根拠にしない（`authority`は常に`advisory`）。** 本文・証拠の

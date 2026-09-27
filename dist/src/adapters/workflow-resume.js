@@ -35,7 +35,7 @@ function readRegularFile(file) {
     return fs.readFileSync(file, "utf8");
 }
 /**
- * previewへ加える再開状態を観測する（REQ-WF-046）。
+ * previewへ加える再開状態を観測する（REQ-WF-047）。
  *
  * **書込・lock・recoveryを伴うreaderを呼ばない。** review sessionは
  * `readStoredReviewSession`がGitの再検証を伴うため使わず、fileの読取とJSONの

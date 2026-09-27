@@ -1453,7 +1453,7 @@ function createQuickStaging(root: string): string {
   }).path;
 }
 
-/** 再開状態（REQ-WF-046）のpreview出力。 */
+/** 再開状態（REQ-WF-047）のpreview出力。 */
 interface ResumePreview {
   status: number;
   output: {
