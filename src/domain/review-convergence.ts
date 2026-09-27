@@ -183,8 +183,17 @@ function fixRegressionChains(
   findings: readonly ReviewRoundFinding[],
 ): string[][] {
   const causedBy = new Map<string, string>();
+  /**
+   * 最新の記録で判定する。原因の`null`訂正と、回帰ではなかったという判定
+   * （`false-positive`・`duplicate`。是正済みの`resolved`は履歴として残す）は連鎖を切る。
+   */
   for (const finding of findings)
-    if (finding.causedByFindingId === null) causedBy.delete(finding.id);
+    if (
+      finding.causedByFindingId === null ||
+      finding.status === "false-positive" ||
+      finding.status === "duplicate"
+    )
+      causedBy.delete(finding.id);
     else causedBy.set(finding.id, finding.causedByFindingId);
   const chains = new Map<string, string[]>();
   for (const id of causedBy.keys()) {
@@ -248,16 +257,8 @@ export function reviewDivergence(state: ReviewSessionState): ReviewDivergence {
     warnings.push(
       `直前roundに無かったblockerが新たに出ています: ${[...newBlockers].sort().join(", ")}`,
     );
-  /**
-   * 回帰ではなかったと判定したfinding（`false-positive`・`duplicate`）は連鎖に数えない。
-   * 是正済み（`resolved`）の回帰は連鎖の履歴なので数える（PR #1520 CodeRabbit指摘）。
-   */
   const chains = fixRegressionChains(
-    counted.flatMap(({ findings }) =>
-      findings.filter(
-        ({ status }) => status !== "false-positive" && status !== "duplicate",
-      ),
-    ),
+    counted.flatMap(({ findings }) => findings),
   );
   const fixRegressionDepth = Math.max(
     0,

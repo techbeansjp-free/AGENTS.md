@@ -1519,6 +1519,12 @@ const CHAIN_FIXTURES = {
     ["Q-01", "P-01", "false-positive"],
     ["R-01", "Q-01", "duplicate"],
   ],
+  reclassified: [
+    ["P-01", null],
+    ["Q-01", "P-01"],
+    ["R-01", "Q-01"],
+    ["Q-01", "P-01", "false-positive"],
+  ],
 } as const;
 let chainDivergence: Record<
   keyof typeof CHAIN_FIXTURES,
@@ -1575,6 +1581,9 @@ Then(
     /** 回帰ではなかったと判定したfindingは連鎖に数えない。 */
     assert.equal(chainDivergence.notRegression.fixRegressionDepth, 0);
     assert.deepEqual(chainWarnings(chainDivergence.notRegression), []);
+    /** validで記録した後にfalse-positiveへ判定し直したら、最新の判定で連鎖を切る。 */
+    assert.equal(chainDivergence.reclassified.fixRegressionDepth, 1);
+    assert.deepEqual(chainWarnings(chainDivergence.reclassified), []);
     /** 3件の循環は起点によらず1件として名指しする。 */
     assert.equal(chainDivergence.cycle3.fixRegressionDepth, 2);
     assert.deepEqual(chainWarnings(chainDivergence.cycle3), [
