@@ -8,6 +8,7 @@ import { isStagingLifecycleScanPath } from "../src/domain/staging.js";
 import {
   matchesStagingRoot,
   readStagingLayout,
+  TRACKED_STAGING_GITIGNORE,
 } from "../src/domain/staging-layout.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
@@ -790,6 +791,32 @@ export function checkSpecNormalization(
       )
     );
   };
+
+  /**
+   * **かつて宣言していたstaging rootの直下も、宣言を取り消した後まで除外し続ける**
+   * （Issue #1503）。`isDeclaredStagingPath`は現在のproject policyだけを見るため、
+   * 版管理下stagingを既定配置へ戻すと、既にmerge済みのstaging文書が「所定location外」
+   * として再浮上する。tracked staging生成時に置く固定content（機械記録だけを除外する
+   * `.gitignore`）を祖先directoryに持つpathを、現在の宣言と無関係に除外する。
+   */
+  const isFormerlyTrackedStagingPath = (relative: string): boolean => {
+    const segments = relative.split("/");
+    for (let depth = 1; depth < segments.length; depth += 1) {
+      const candidate = path.join(
+        root,
+        ...segments.slice(0, depth),
+        ".gitignore",
+      );
+      let content: string;
+      try {
+        content = fs.readFileSync(candidate, "utf8");
+      } catch {
+        continue;
+      }
+      if (content === TRACKED_STAGING_GITIGNORE) return true;
+    }
+    return false;
+  };
   const scenarioDefinitionFiles = walkRepositoryFiles(
     root,
     (file) => file.endsWith(".md") || file.endsWith(".feature"),
@@ -807,6 +834,7 @@ export function checkSpecNormalization(
      */
     if (isStagingLifecycleScanPath(relative)) continue;
     if (isDeclaredStagingPath(relative)) continue;
+    if (isFormerlyTrackedStagingPath(relative)) continue;
     if (relative.startsWith("test/features/") && file.endsWith(".feature"))
       continue;
     const lines = fs.readFileSync(file, "utf8").split(/\r?\n/u);

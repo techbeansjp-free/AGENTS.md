@@ -10,6 +10,7 @@ import {
   isStagingLifecycleScanPath,
   STAGING_LIFECYCLE_AREAS,
 } from "../../src/domain/staging.js";
+import { TRACKED_STAGING_GITIGNORE } from "../../src/domain/staging-layout.js";
 import { visibleMarkdownLines } from "../support/markdown.js";
 
 const ISSUE_STAGING_PREFIX = ".agent-skill-chain/tmp/issues";
@@ -541,6 +542,40 @@ Then(
           error.includes("20260927_x/00_要求定義.md") &&
           error.includes("docs/issues/20260927_x"),
       ),
+    );
+  },
+);
+
+Given(
+  "staging宣言を持たないpolicyと、tracked staging記録を残したstagingと、通常の.gitignoreを持つ無関係directoryにSCN定義がある",
+  function () {
+    this.root = this.temp();
+    write(
+      this.root,
+      ".agent-skill-chain/project-policy.json",
+      `${JSON.stringify({ policy: {} })}\n`,
+    );
+    write(
+      this.root,
+      "docs/issues/20260927_x/.gitignore",
+      TRACKED_STAGING_GITIGNORE,
+    );
+    write(this.root, "docs/issues/20260927_x/00_要求定義.md", SCN_LINE);
+    write(this.root, "docs/例/.gitignore", "*.tmp\n");
+    write(this.root, "docs/例/00_要求定義.md", SCN_LINE);
+  },
+);
+
+Then(
+  "tracked staging記録のあるstaging内の定義だけを除外し無関係directoryの定義を違反にする",
+  function () {
+    const placement = placementErrors(this.errors);
+    assert.equal(placement.length, 1, placement.join("\n"));
+    assert.ok(
+      placement.some((error) => error.includes("docs/例/00_要求定義.md")),
+    );
+    assert.ok(
+      !placement.some((error) => error.includes("docs/issues/20260927_x")),
     );
   },
 );
