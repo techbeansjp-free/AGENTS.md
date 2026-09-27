@@ -17,7 +17,9 @@ class CucumberShardsWorld extends WorkflowWorld {
   shardResults: ShardResult[] = [];
   shardAggregate: ShardAggregate | undefined = undefined;
   shardListConfig = "";
-  shardRun: { status: number | null; stdout: string } | undefined = undefined;
+  shardRun:
+    { status: number | null; stdout: string; stderr: string } | undefined =
+    undefined;
 }
 
 const { Given, When, Then } = stepDefinitions<CucumberShardsWorld>();
@@ -50,10 +52,14 @@ function successfulShard(index: number, assigned: string[]): ShardResult {
 }
 
 /**
- * 1 featureのmessage記録を組み立てる。Scenario 2件（3行・6行）とScenario Outline 1件
- * （9行、Examples行13行）を持ち、`executedPickles`に挙げたpickleだけを開始・完了させる。
+ * 1 featureのmessage記録を組み立てる。Scenario 2件（3行・6行）、Scenario Outline 1件
+ * （9行、Examples行13行）、Rule配下のScenario 1件（17行）を持ち、`executedPickles`に
+ * 挙げたpickleだけを開始・完了させる。`retriedPickles`は再試行される途中の完了だけを持つ。
  */
-function messageRecord(executedPickles: string[]): string {
+function messageRecord(
+  executedPickles: string[],
+  retriedPickles: string[] = [],
+): string {
   const uri = "test/features/sample.feature";
   const envelopes: unknown[] = [
     {
@@ -72,6 +78,19 @@ function messageRecord(executedPickles: string[]): string {
                 ],
               },
             },
+            {
+              rule: {
+                children: [
+                  {
+                    scenario: {
+                      id: "s4",
+                      location: { line: 17 },
+                      examples: [],
+                    },
+                  },
+                ],
+              },
+            },
           ],
         },
       },
@@ -79,7 +98,19 @@ function messageRecord(executedPickles: string[]): string {
     { pickle: { id: "p1", uri, astNodeIds: ["s1"] } },
     { pickle: { id: "p2", uri, astNodeIds: ["s2"] } },
     { pickle: { id: "p3", uri, astNodeIds: ["s3", "r1"] } },
+    { pickle: { id: "p4", uri, astNodeIds: ["s4"] } },
   ];
+  for (const pickle of retriedPickles)
+    envelopes.push(
+      { testCase: { id: `t-${pickle}`, pickleId: pickle } },
+      { testCaseStarted: { id: `c-${pickle}`, testCaseId: `t-${pickle}` } },
+      {
+        testCaseFinished: {
+          testCaseStartedId: `c-${pickle}`,
+          willBeRetried: true,
+        },
+      },
+    );
   for (const pickle of executedPickles)
     envelopes.push(
       { testCase: { id: `t-${pickle}`, pickleId: pickle } },
@@ -203,15 +234,17 @@ Given("1つのshardのmessage記録が存在しない", function () {
   ];
 });
 
-Given("1つのshardが終了値0で割当3件のうち2件だけを実行した", function () {
+Given("1つのshardが終了値0で割当4件のうち3件だけを実行した", function () {
   const assigned = [
     "test/features/sample.feature:3",
     "test/features/sample.feature:6",
     "test/features/sample.feature:13",
+    "test/features/sample.feature:17",
   ];
-  const executed = executedLocations(messageRecord(["p1", "p3"]));
+  const executed = executedLocations(messageRecord(["p1", "p3", "p4"], ["p2"]));
   assert.deepEqual(executed, [
     "test/features/sample.feature:13",
+    "test/features/sample.feature:17",
     "test/features/sample.feature:3",
   ]);
   this.shardResults = [{ ...successfulShard(0, assigned), executed }];
@@ -251,7 +284,7 @@ Then("全体は失敗で要約は未実行の位置を名指しする", function
   assert.equal(this.shardAggregate?.passed, false);
   assert.match(
     this.shardAggregate?.lines[0] ?? "",
-    /^shard 1\/1: 割当3件 実行2件 .*失敗（未実行のscenario位置: test\/features\/sample\.feature:6）$/u,
+    /^shard 1\/1: 割当4件 実行3件 .*失敗（未実行のscenario位置: test\/features\/sample\.feature:6）$/u,
   );
   const extra = aggregateShardResults([
     {
@@ -285,14 +318,17 @@ When("shard数{int}でshard実行scriptを実行する", function (shardCount: n
       "tsx",
       "scripts/run_cucumber_shards.ts",
       `--config=${this.shardListConfig}`,
-      "--run-config=test/fixtures/cucumber-shards/run.mjs",
     ],
     {
       encoding: "utf8",
       env: { ...process.env, ASC_TEST_SHARDS: String(shardCount) },
     },
   );
-  this.shardRun = { status: run.status, stdout: run.stdout };
+  this.shardRun = {
+    status: run.status,
+    stdout: run.stdout,
+    stderr: run.stderr,
+  };
 });
 
 Then("終了値は0で全体の実行件数は{int}件になる", function (executed: number) {
@@ -312,4 +348,17 @@ Then("終了値は非0で要約は失敗したshardを名指しする", function
   assert.match(stdout, /^shard 2\/2: 割当2件 実行2件 .*失敗（終了値1）$/mu);
   assert.match(stdout, /^shard 1\/2: 割当2件 実行2件 .*成功$/mu);
   assert.match(stdout, /全体: 2 shard、割当4件、実行4件、失敗/u);
+});
+
+Given("構文errorのfeatureを含むfixture設定がある", function () {
+  this.shardListConfig = "test/fixtures/cucumber-shards/list-broken.mjs";
+});
+
+Then("終了値は非0で診断は構文errorのfeatureを名指しする", function () {
+  assert.equal(this.shardRun?.status, 1, this.shardRun?.stdout);
+  assert.match(
+    this.shardRun?.stderr ?? "",
+    /featureを読み込めません: test\/fixtures\/cucumber-shards\/broken\/broken\.feature:\d+ /u,
+  );
+  assert.doesNotMatch(this.shardRun?.stdout ?? "", /shardで実行します/u);
 });

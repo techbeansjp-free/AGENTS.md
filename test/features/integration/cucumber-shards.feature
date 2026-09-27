@@ -10,3 +10,8 @@ Feature: shard実行scriptの合成経路
     Given 成功3件と失敗1件を持つfixture設定がある
     When shard数2でshard実行scriptを実行する
     Then 終了値は非0で要約は失敗したshardを名指しする
+
+  Scenario: SCN-INT-SHARD-003 構文errorのfeatureを列挙から落とさず実行前に失敗する
+    Given 構文errorのfeatureを含むfixture設定がある
+    When shard数2でshard実行scriptを実行する
+    Then 終了値は非0で診断は構文errorのfeatureを名指しする

@@ -38,6 +38,6 @@ Feature: 全Cucumberのscenario単位shard分配と集約
     Then 全体は失敗で要約はそのshardの記録欠落を名指しする
 
   Scenario: SCN-UNIT-SHARD-008 終了値0でも実行集合が割当と異なれば失敗とする
-    Given 1つのshardが終了値0で割当3件のうち2件だけを実行した
+    Given 1つのshardが終了値0で割当4件のうち3件だけを実行した
     When 結果を集約する
     Then 全体は失敗で要約は未実行の位置を名指しする

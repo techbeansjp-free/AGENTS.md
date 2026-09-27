@@ -265,10 +265,47 @@ function optionValue(
   return found?.slice(prefix.length);
 }
 
-async function listScenarioLocations(configFile: string): Promise<string[]> {
-  const { runConfiguration } = await loadConfiguration({ file: configFile });
-  const { plan } = await loadSources(runConfiguration.sources);
-  return plan.map((item) => `${item.uri}:${item.location.line}`);
+/**
+ * 列挙に使った設定から、shardの実行設定を導く。
+ *
+ * **shardの実行設定を別fileから読まない。** 保護されていない設定を読むと、候補がそこへ
+ * `dryRun`などを加えて全scenarioを実行したことにできる。保護対象の列挙設定から`paths`だけを
+ * 空にした設定を一時directoryへ書き、位置引数と合算されないようにする。
+ */
+async function prepareRun(
+  configFile: string,
+  workDirectory: string,
+): Promise<{ locations: string[]; runConfig: string }> {
+  const { useConfiguration, runConfiguration } = await loadConfiguration({
+    file: configFile,
+  });
+  const { plan, errors } = await loadSources(runConfiguration.sources);
+  /**
+   * **構文errorのfeatureを落として続行しない。** 直列実行ではparse errorで失敗するfeatureが、
+   * 列挙の結果から消えるだけで成功へ変わる。
+   */
+  if (errors.length > 0)
+    throw new Error(
+      `featureを読み込めません: ${errors
+        .map((error) => `${error.uri}:${error.location.line} ${error.message}`)
+        .join("; ")}`,
+    );
+  /** JSON設定は最上位keyをprofile名として読むため、既定profile`default`へ置く。 */
+  const runConfig = path.join(workDirectory, "run-config.json");
+  fs.writeFileSync(
+    runConfig,
+    `${JSON.stringify({ default: { ...useConfiguration, paths: [] } })}\n`,
+  );
+  return {
+    locations: plan.map((item) => `${item.uri}:${item.location.line}`),
+    /** cucumberは`--config`の絶対pathもcwdへ連結して読むため、cwdからの相対pathで渡す。 */
+    runConfig: path.relative(process.cwd(), runConfig),
+  };
+}
+
+interface RunningShard {
+  child: ReturnType<typeof spawn>;
+  output: () => string;
 }
 
 function runShard(
@@ -276,11 +313,13 @@ function runShard(
   assigned: readonly string[],
   runConfig: string,
   workDirectory: string,
+  running: RunningShard[],
 ): Promise<{ result: ShardResult; output: string }> {
   const messageFile = path.join(workDirectory, `shard-${index}.ndjson`);
   const started = Date.now();
   return new Promise((resolve) => {
     let output = "";
+    let settled = false;
     const child = spawn(
       process.execPath,
       [
@@ -295,9 +334,12 @@ function runShard(
       ],
       { stdio: ["ignore", "pipe", "pipe"] },
     );
-    child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
-    child.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    running.push({ child, output: () => output });
+    child.stdout?.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (output += chunk.toString()));
     const finish = (exitCode: number | null, signal: string | null): void => {
+      if (settled) return;
+      settled = true;
       let executed: string[] | null;
       try {
         executed = executedLocations(fs.readFileSync(messageFile, "utf8"));
@@ -324,37 +366,70 @@ function runShard(
   });
 }
 
+/**
+ * 停止signalを受けたら、子processへ転送し、それまでの出力を書き出し、一時directoryを消して
+ * 失敗で終える。CI jobの時間切れでも、どのshardが何を実行していたかを残すためである。
+ */
+function stopOnSignal(
+  running: readonly RunningShard[],
+  workDirectory: string,
+): () => void {
+  const handler = (signal: NodeJS.Signals): void => {
+    for (const [index, shard] of running.entries()) {
+      shard.child.kill(signal);
+      process.stdout.write(
+        `\n===== shard ${index + 1}（${signal}で中断） =====\n${shard.output()}`,
+      );
+    }
+    fs.rmSync(workDirectory, { recursive: true, force: true });
+    process.exit(1);
+  };
+  process.once("SIGINT", handler);
+  process.once("SIGTERM", handler);
+  return () => {
+    process.off("SIGINT", handler);
+    process.off("SIGTERM", handler);
+  };
+}
+
 async function main(args: readonly string[]): Promise<number> {
   const configFile = optionValue(args, "config") ?? "cucumber.mjs";
-  const runConfig = optionValue(args, "run-config") ?? "cucumber.targeted.mjs";
-  const locations = await listScenarioLocations(configFile);
-  const shardCount = resolveShardCount(
-    process.env[SHARD_COUNT_ENV],
-    os.availableParallelism(),
-    locations.length,
-  );
-  const shards = partitionScenarios(locations, shardCount);
   const workDirectory = fs.mkdtempSync(
     path.join(os.tmpdir(), "asc-cucumber-shards-"),
   );
+  const running: RunningShard[] = [];
+  const release = stopOnSignal(running, workDirectory);
   try {
+    const { locations, runConfig } = await prepareRun(
+      configFile,
+      workDirectory,
+    );
+    const shardCount = resolveShardCount(
+      process.env[SHARD_COUNT_ENV],
+      os.availableParallelism(),
+      locations.length,
+    );
+    const shards = partitionScenarios(locations, shardCount);
     process.stdout.write(
       `${locations.length}件のscenarioを${shards.length} shardで実行します\n`,
     );
     const runs = await Promise.all(
       shards.map((assigned, index) =>
-        runShard(index, assigned, runConfig, workDirectory).then((run) => {
-          process.stdout.write(
-            `\n===== shard ${index + 1}/${shards.length} =====\n${run.output}`,
-          );
-          return run;
-        }),
+        runShard(index, assigned, runConfig, workDirectory, running).then(
+          (run) => {
+            process.stdout.write(
+              `\n===== shard ${index + 1}/${shards.length} =====\n${run.output}`,
+            );
+            return run;
+          },
+        ),
       ),
     );
     const aggregate = aggregateShardResults(runs.map((run) => run.result));
     process.stdout.write(`\n${aggregate.lines.join("\n")}\n`);
     return aggregate.passed ? 0 : 1;
   } finally {
+    release();
     fs.rmSync(workDirectory, { recursive: true, force: true });
   }
 }
