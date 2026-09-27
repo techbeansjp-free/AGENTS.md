@@ -94,14 +94,11 @@ import {
   advanceReviewSession,
   parseReviewRoundInput,
 } from "../../src/domain/review-convergence.js";
-import {
-  renderReviewEvidence,
-  type ReviewEvidence,
-} from "../../src/domain/review-evidence.js";
+import { renderReviewEvidence } from "../../src/domain/review-evidence.js";
 import {
   appendFixtureVerificationRecords,
   observeFixtureVerification,
-  observedReviewEvidenceFromSession,
+  reviewEvidenceFromSession,
   resealObservedEvidence,
 } from "../support/review-evidence-fixture.js";
 import {
@@ -2324,15 +2321,27 @@ function contextIsolatedReviewEvidence(
   baseSha: string,
   implementationSha: string,
   independenceMode: "context-isolated" | "actor-independent",
-): ReviewEvidence {
+) {
   const session = advanceReviewSession(
     null,
     reviewRoundFixture(root, baseSha, implementationSha),
   );
-  return observedReviewEvidenceFromSession(root, session, {
-    issue: 877,
-    independenceMode,
+  const observed = observeFixtureVerification(root, {
+    baseSha,
+    implementationHeadSha: implementationSha,
   });
+  return {
+    evidence: reviewEvidenceFromSession(session, {
+      issue: 877,
+      independenceMode,
+      baseSha,
+      implementationHeadSha: implementationSha,
+      diffDigest: observed.diffDigest,
+      impact: observed.impact,
+      observedVerification: observed.verification,
+    }),
+    records: observed.records,
+  };
 }
 
 function convergedReviewBinding(
@@ -2488,18 +2497,21 @@ function preparePullRequest(
         poc: pocDeclaration,
       }).path
     : undefined;
+  let reviewFixture:
+    ReturnType<typeof contextIsolatedReviewEvidence> | undefined;
   if (pocDeclaration) {
     materializeValidPocFixture(root, pocDeclaration);
     spawnSync("git", ["add", pocDeclaration.fixture.root], { cwd: root });
     spawnSync("git", ["commit", "-q", "-m", "poc fixture"], { cwd: root });
   } else {
     fs.mkdirSync(path.join(root, "docs", "reviews"), { recursive: true });
-    const reviewEvidence = contextIsolatedReviewEvidence(
+    reviewFixture = contextIsolatedReviewEvidence(
       root,
       baseSha,
       implementationCommitSha,
       reviewIndependence ?? "context-isolated",
     );
+    const reviewEvidence = reviewFixture.evidence;
     const reviewArtifact = renderReviewEvidence(reviewEvidence);
     if (artifactDisposition !== "untracked")
       fs.writeFileSync(
@@ -2673,14 +2685,12 @@ function preparePullRequest(
     });
   }
   if (branchRef) spawnSync("git", ["checkout", "-q", branchRef], { cwd: root });
-  /** 証跡の検証欄と同じ観測記録をstagingへ置く（verify runの記録に相当）。 */
-  appendFixtureVerificationRecords(
-    staging,
-    observeFixtureVerification(root, {
-      baseSha,
-      implementationHeadSha: implementationCommitSha,
-    }).records,
-  );
+  /**
+   * artifact生成で観測した同一root/base/H_implの記録をそのまま置く。
+   * prepare呼出し内だけで共有し、別fixture・HEAD・時刻の観測は再利用しない。
+   */
+  assert.ok(reviewFixture);
+  appendFixtureVerificationRecords(staging, reviewFixture.records);
   /**
    * `stale-verification`は証跡の生成後に同じcommandを再実行した記録を足す。
    * 証跡の検証欄の記録は存在し合格だが、stagingから再導出した検証欄（最新の実行）とは
@@ -2705,14 +2715,7 @@ function preparePullRequest(
   if (artifactDisposition === "untracked")
     fs.writeFileSync(
       path.join(root, "docs", "reviews", "877_review.json"),
-      renderReviewEvidence(
-        contextIsolatedReviewEvidence(
-          root,
-          baseSha,
-          implementationCommitSha,
-          reviewIndependence ?? "context-isolated",
-        ),
-      ),
+      renderReviewEvidence(reviewFixture.evidence),
     );
   return finalizePreparedPullRequest({
     world,
@@ -3734,6 +3737,13 @@ if (exact(["--version"])) {
       PATH: `${stubDirectory}${path.delimiter}${process.env.PATH ?? ""}`,
     },
   };
+}
+
+/** 拒否後のfixture共有は永続stateとjournalがbyte不変の場合だけ成立する。 */
+function deliveryPersistence(prepared: PreparedDeliveryCli): readonly string[] {
+  return [DELIVERY_STATE_FILE, STEP_JOURNAL_FILE].map((relative) =>
+    fs.readFileSync(path.join(prepared.staging, relative), "utf8"),
+  );
 }
 
 function createDeliveryPullRequest(prepared: PreparedDeliveryCli) {
@@ -4776,20 +4786,30 @@ if (exact(["auth", "status"])) {
         { viewerPermission: "WRITE" },
         { statusCheckConclusion: "FAILURE" },
       ];
+      const prepared = prepareDeliveryCli(this, {
+        reviewDisposition: "none",
+        mergeStateStatus: "BLOCKED",
+        mergeable: "MERGEABLE",
+        viewerPermission: "ADMIN",
+        rulesetOnly: true,
+      });
+      createDeliveryPullRequest(prepared);
+      const persistence = deliveryPersistence(prepared);
       for (const variant of variants) {
-        const prepared = prepareDeliveryCli(this, {
-          reviewDisposition: "none",
-          mergeStateStatus: "BLOCKED",
-          mergeable: "MERGEABLE",
+        writeDeliveryProviderControl(prepared, {
+          unknownBranchRule: false,
+          unknownRuleParameter: false,
+          omitPullRequestRule: false,
+          unresolvedReviewThreads: 0,
           viewerPermission: "ADMIN",
-          rulesetOnly: true,
+          statusCheckConclusion: "SUCCESS",
           ...variant,
         });
-        createDeliveryPullRequest(prepared);
         const before =
           deliveryProviderCalls(prepared).filter(isMergeCall).length;
         const rejected = executeDeliveryMerge(prepared);
         assert.notEqual(rejected.status, 0, "不完全なadmin条件を受理しました");
+        assert.deepEqual(deliveryPersistence(prepared), persistence);
         assert.equal(
           deliveryProviderCalls(prepared).filter(isMergeCall).length,
           before,
@@ -6556,13 +6576,6 @@ if (exact(["auth", "status"])) {
        * `replaced`はidentity照合を、`revoked`は独立approvalの再確認を殺す変異を
        * 捕まえる。**Step 11を記録しないことまで測る。**
        */
-      const prepared = prepareDeliveryCli(
-        this,
-        {},
-        "automatic",
-        "merge",
-        "actor-independent",
-      );
       for (const [shift, pattern] of [
         ["replaced", /固定済みmerge review identityと一致しません/u],
         /**
@@ -6601,7 +6614,6 @@ if (exact(["auth", "status"])) {
           `${shift}でStep 11が記録されています`,
         );
       }
-      void prepared;
       break;
     }
     case "SCN-E2E-WFSTEP-043": {
@@ -7010,17 +7022,18 @@ if (exact(["auth", "status"])) {
       break;
     }
     case "SCN-E2E-WFSTEP-031": {
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      const persistence = deliveryPersistence(prepared);
       for (const missing of ["pr", "implementation"] as const) {
-        const prepared = prepareDeliveryCli(this);
-        createDeliveryPullRequest(prepared);
-        writeDeliveryProviderControl(
-          prepared,
-          missing === "pr"
-            ? { prAuthorId: null }
-            : { implementationAuthorId: null },
-        );
+        writeDeliveryProviderControl(prepared, {
+          prAuthorId: missing === "pr" ? null : "pr-author",
+          implementationAuthorId:
+            missing === "implementation" ? null : "implementation-author",
+        });
         const rejected = executeDeliveryMerge(prepared);
         assert.notEqual(rejected.status, 0);
+        assert.deepEqual(deliveryPersistence(prepared), persistence);
         assert.match(
           rejected.stdout + rejected.stderr,
           /stable ID|author|review/u,

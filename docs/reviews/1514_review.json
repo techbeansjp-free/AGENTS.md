@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1514,
+  "observed": {
+    "baseSha": "c3d3805e568962ec975ad21690b9cc1f6e0dde46",
+    "implementationHeadSha": "a8a346e7d146aada19292f5cefef7f5bf7c1b548",
+    "diffDigest": "b86888085748933a1d7eb2a42ebcc23bc7964897fb387a7136235bf0ad46bb9d",
+    "session": {
+      "sessionId": "87128cd94ac1a0e75a28509967ae2f061401fcda13b9c513520165889be34c82",
+      "latestRoundDigest": "97515c51db35b7e49e358b052aa348a6a03ce582899bb27dc902d2065985fcb4",
+      "status": "converged",
+      "countedRounds": 3
+    },
+    "impact": {
+      "digest": "d635b200014bea2f7a6586ae884867c7b15da692b0b128fdccab26d075540618",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "a8a346e7d146aada19292f5cefef7f5bf7c1b548",
+        "impactDigest": "d635b200014bea2f7a6586ae884867c7b15da692b0b128fdccab26d075540618",
+        "finishedAt": "2026-09-27T18:34:30.193Z",
+        "recordDigest": "3817287872de5cd2fddd6ff18888870125ad9e7aaa13fe1b877bd15cab4fc442"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "R1514-M01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/conformance.ts",
+      "contractId": "AC-SWITCH-02"
+    },
+    {
+      "id": "R1514-P01",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "package.json",
+      "contractId": "AC-SWITCH-05"
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "agent:/root/shadow_validation_plan",
+    "implementer": "agent:/root/test_analysis",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "03484690cd85418aa18498211bd889844a02f6ac8ef1a3175ee11ebc62f53c8e"
+}

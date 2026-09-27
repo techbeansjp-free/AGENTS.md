@@ -75,6 +75,8 @@ interface EvidenceBindingObservation {
 }
 
 class ConsumerAcceptanceWorld extends WorkflowWorld {
+  copySource = "";
+  copyDestination = "";
   bindingObservation: EvidenceBindingObservation | undefined = undefined;
   isolationInput: IsolationInput | undefined = undefined;
   isolationAssessment: IsolationAssessment | undefined = undefined;
@@ -125,7 +127,7 @@ class ConsumerAcceptanceWorld extends WorkflowWorld {
 const { Given, When, Then } = stepDefinitions<ConsumerAcceptanceWorld>();
 
 function copyCandidateTree(source: string, destination: string): void {
-  const excluded = new Set([".git", "node_modules"]);
+  const excluded = new Set([".git", "node_modules", ".worktrees"]);
   fs.cpSync(source, destination, {
     recursive: true,
     filter: (current) => {
@@ -133,6 +135,8 @@ function copyCandidateTree(source: string, destination: string): void {
       if (relative === "") return true;
       const segments = relative.split(path.sep);
       if (excluded.has(segments[0]!)) return false;
+      if (segments[0] === ".claude" && segments[1] === "worktrees")
+        return false;
       return !(segments[0] === ".agent-skill-chain" && segments[1] === "tmp");
     },
   });
@@ -1980,5 +1984,68 @@ Then(
   "validateで作ったtarballにgit-dependencyの検査が結び付き公開経路は存在しない",
   function () {
     assert.deepEqual(this.releaseWorkflowErrors, []);
+  },
+);
+
+const copyPreservedPaths = [
+  "src/marker",
+  "dist/marker",
+  "intentional-contamination/marker",
+  "src/.worktrees/marker",
+  ".worktrees-neighbor/marker",
+  ".claude/skills/marker",
+  ".claude/worktrees-neighbor/marker",
+  "src/.claude/worktrees/marker",
+  ".agent-skill-chain/project/marker",
+];
+const copyExcludedPaths = [
+  ".worktrees/marker",
+  ".claude/worktrees/marker",
+  ".git/marker",
+  ".agent-skill-chain/tmp/marker",
+];
+Given("保存対象と除外対象を持つ小さな候補treeがある", function () {
+  this.copySource = this.temp("asc-copy-source-");
+  this.copyDestination = path.join(
+    this.temp("asc-copy-destination-"),
+    "candidate",
+  );
+  for (const relative of [
+    ...copyPreservedPaths,
+    ...copyExcludedPaths,
+    "node_modules/marker",
+  ]) {
+    const file = path.join(this.copySource, relative);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, relative);
+  }
+});
+When("consumer候補treeのコピーを実行する", function () {
+  copyCandidateTree(this.copySource, this.copyDestination);
+});
+Then(
+  "作業treeの2箇所だけが追加除外されその他の検査対象が保存される",
+  function () {
+    for (const relative of copyPreservedPaths)
+      assert.equal(
+        fs.readFileSync(path.join(this.copyDestination, relative), "utf8"),
+        relative,
+      );
+    for (const relative of copyExcludedPaths)
+      assert.equal(
+        fs.existsSync(path.join(this.copyDestination, relative)),
+        false,
+        relative,
+      );
+    assert.equal(
+      fs
+        .lstatSync(path.join(this.copyDestination, "node_modules"))
+        .isSymbolicLink(),
+      true,
+    );
+    assert.equal(
+      fs.realpathSync(path.join(this.copyDestination, "node_modules")),
+      path.join(this.copySource, "node_modules"),
+    );
   },
 );
