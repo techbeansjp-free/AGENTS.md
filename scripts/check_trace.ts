@@ -5,6 +5,10 @@ import { validateScenarioTrace } from "../src/domain/trace.js";
 import { loadProjectPolicySet } from "../src/domain/policy.js";
 import { validateSpecs } from "../src/domain/spec.js";
 import { isStagingLifecycleScanPath } from "../src/domain/staging.js";
+import {
+  matchesStagingRoot,
+  readStagingLayout,
+} from "../src/domain/staging-layout.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 function walkFiles(
@@ -760,6 +764,32 @@ export function checkSpecNormalization(
       `孤立実装です。要件からtestを経由して到達できません: ${orphanImplementations.join(", ")}`,
     );
 
+  /**
+   * **project policyが宣言したstaging root直下のstagingも計画文書として除外する**
+   * （Issue #1501）。`issue validate`は00・01にGherkinを要求するため、版管理下の
+   * rootを除外しないと2つの検査が同じ文書へ逆の要求をする。policyを読めない場合は
+   * 除外しない（違反を報告する側へ倒す）。
+   */
+  let stagingRootSegments: number | undefined;
+  let stagingRootPattern: string | undefined;
+  try {
+    stagingRootPattern = readStagingLayout(root).rootPattern;
+    stagingRootSegments = stagingRootPattern.split("/").length;
+  } catch {
+    stagingRootPattern = undefined;
+  }
+  const isDeclaredStagingPath = (relative: string): boolean => {
+    if (stagingRootPattern === undefined || stagingRootSegments === undefined)
+      return false;
+    const segments = relative.split("/");
+    return (
+      segments.length >= stagingRootSegments + 2 &&
+      matchesStagingRoot(
+        stagingRootPattern,
+        segments.slice(0, stagingRootSegments).join("/"),
+      )
+    );
+  };
   const scenarioDefinitionFiles = walkRepositoryFiles(
     root,
     (file) => file.endsWith(".md") || file.endsWith(".feature"),
@@ -776,6 +806,7 @@ export function checkSpecNormalization(
      * 真偽の安全側の向きが逆である。
      */
     if (isStagingLifecycleScanPath(relative)) continue;
+    if (isDeclaredStagingPath(relative)) continue;
     if (relative.startsWith("test/features/") && file.endsWith(".feature"))
       continue;
     const lines = fs.readFileSync(file, "utf8").split(/\r?\n/u);
