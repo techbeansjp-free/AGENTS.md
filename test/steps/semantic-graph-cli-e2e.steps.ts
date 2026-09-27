@@ -252,7 +252,7 @@ function prepareBuiltCliCopy(world: SemanticGraphCliE2eWorld): void {
     path.join(bundleRoot, "package.json"),
     `${JSON.stringify({
       name: "agent-skill-chain-graph-cli-e2e-fixture",
-      version: "0.3.0",
+      version: "0.4.0",
       type: "module",
       agentSkillChain: {
         qualityContractVersion: 8,

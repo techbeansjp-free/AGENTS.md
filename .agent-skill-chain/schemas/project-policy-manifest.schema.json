@@ -20,7 +20,7 @@
       "additionalProperties": false,
       "required": ["schemaVersion", "delivery", "merge", "budgets"],
       "properties": {
-        "schemaVersion": { "const": "agent-skill-chain/project-policy/v0.3.1" },
+        "schemaVersion": { "const": "agent-skill-chain/project-policy/v0.4.4" },
         "delivery": {
           "type": "object",
           "additionalProperties": false,

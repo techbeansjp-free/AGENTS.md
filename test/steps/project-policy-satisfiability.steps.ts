@@ -128,7 +128,7 @@ function choices(): ProjectChoices {
 
 function policy(projectChoices = choices()): Policy {
   return {
-    schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
+    schemaVersion: "agent-skill-chain/project-policy/v0.4.4",
     delivery: { stopAt: "pull_request" },
     merge: {
       mode: "disabled",
@@ -147,7 +147,7 @@ function manifest(scope?: "repository-bound" | "package-attested") {
   return {
     schemaVersion: "agent-skill-chain/project-policy-manifest/v1",
     policy: {
-      schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
+      schemaVersion: "agent-skill-chain/project-policy/v0.4.4",
       delivery: { stopAt: "pull_request" },
       merge: {
         mode: "disabled",

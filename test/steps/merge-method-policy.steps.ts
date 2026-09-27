@@ -40,7 +40,7 @@ const { Given, When, Then } = stepDefinitions<MergeMethodWorld>();
 
 function mergePolicy(overrides: Partial<Policy["merge"]> = {}): Policy {
   return {
-    schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
+    schemaVersion: "agent-skill-chain/project-policy/v0.4.4",
     delivery: { stopAt: "pull_request" },
     merge: {
       mode: "automatic",

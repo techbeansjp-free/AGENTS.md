@@ -597,7 +597,7 @@ const baseRule = (changes: Partial<Rule> = {}): Rule => ({
   ...changes,
 });
 const basePolicy = (rules: Rule[] = [baseRule()]): Policy => ({
-  schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
+  schemaVersion: "agent-skill-chain/project-policy/v0.4.4",
   delivery: { stopAt: "pull_request" },
   merge: {
     mode: "disabled",
@@ -1064,7 +1064,7 @@ Then("metricsに秘密値は含まれない", function () {
   );
 });
 
-Given("v0.3.0のtrusted policyとv0.3.1のcandidate policyがある", function () {
+Given("v0.3.0のtrusted policyとv0.4.4のcandidate policyがある", function () {
   this.trusted = {
     schemaVersion: "agent-skill-chain/project-policy/v0.3.0",
     delivery: { stopAt: "pull_request" },
@@ -2150,7 +2150,7 @@ Then("immutable fingerprintとhash不一致をstructured拒否する", function 
 });
 
 Given(
-  /^未知fieldを持つv0\.3\.0 policyと空rulesのv0\.3\.1 policyがある$/,
+  /^未知fieldを持つv0\.3\.0 policyと空rulesのv0\.4\.4 policyがある$/,
   function () {
     this.v030Unknown = {
       schemaVersion: "agent-skill-chain/project-policy/v0.3.0",
@@ -4399,7 +4399,7 @@ Given(/^GitHub review providerの(.+)観測がある$/u, function (variant: stri
 Given("project policyが壊れていて読めない", function () {
   fs.writeFileSync(
     path.join(this.root, ".agent-skill-chain", "project-policy.json"),
-    '{"schemaVersion": "agent-skill-chain/project-policy/v0.3.1", "merge":\n',
+    '{"schemaVersion": "agent-skill-chain/project-policy/v0.4.4", "merge":\n',
   );
 });
 Given("project policyがreviewIndependenceへ未知の値を宣言する", function () {

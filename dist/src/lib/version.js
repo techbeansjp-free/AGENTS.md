@@ -4,10 +4,25 @@ import { findPackageRoot } from "./package-root.js";
 const packageRoot = findPackageRoot(import.meta.url);
 const packageMetadata = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
 const policyNamespace = "agent-skill-chain/project-policy/v";
-const core03 = String.raw `0\.3\.(?:0|[1-9]\d*)`;
+/**
+ * **package release versionのcoreとcurrent policy schema versionは常に同一
+ * 数値である**（`scripts/build.ts`が強制する既存不変条件。Issue #1503で
+ * 0.3.xから0.4.xへ両方まとめて進めた）。`packageVersionCore`はpackage
+ * releaseの受理範囲（新しいcandidate versionの検証）に使い、0.4.xだけを
+ * 受理する。過去のgit tag（`v0.3.1-beta.NNN`等）は比較時に読み捨てるだけで
+ * 良く、`isPackageVersion`が0.3.x側を受理し続ける必要はない。
+ *
+ * `policyVersionCore`は`policySchemaVersion`（現行値）と
+ * `compatiblePolicySchemaVersions`（過去の互換値）の両方を検証する。
+ * 現行は0.4.xへ進んだが、互換として残す過去値（0.3.0・0.3.1）は0.3.xの
+ * ままである。**移行期間中は両系列を受理する必要がある**ため、
+ * package release versionの受理範囲とは別に、0.3.xと0.4.xの両方を含む。
+ */
+const packageVersionCore = String.raw `0\.4\.(?:0|[1-9]\d*)`;
+const policyVersionCore = String.raw `(?:0\.3\.(?:0|[1-9]\d*)|0\.4\.(?:0|[1-9]\d*))`;
 const prereleaseIdentifier = String.raw `(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)`;
-const packageVersionPattern = new RegExp(String.raw `^${core03}(?:-${prereleaseIdentifier}(?:\.${prereleaseIdentifier})*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`, "u");
-const policyVersionPattern = new RegExp(String.raw `^${core03}$`, "u");
+const packageVersionPattern = new RegExp(String.raw `^${packageVersionCore}(?:-${prereleaseIdentifier}(?:\.${prereleaseIdentifier})*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`, "u");
+const policyVersionPattern = new RegExp(String.raw `^${policyVersionCore}$`, "u");
 export function isPackageVersion(value) {
     return typeof value === "string" && packageVersionPattern.test(value);
 }
@@ -18,7 +33,7 @@ export function packageReleaseVersion(value) {
     return value.split(/[+-]/u, 1)[0] ?? value;
 }
 if (!isPackageVersion(packageMetadata.version))
-    throw new Error("package.json.versionは0.3.x SemVerでなければなりません");
+    throw new Error("package.json.versionは0.4.x SemVerでなければなりません");
 if (!isPolicySchemaPatchVersion(packageMetadata.agentSkillChain?.policySchemaVersion))
     throw new Error("package.jsonのpolicySchemaVersionが不正です");
 if (!Array.isArray(packageMetadata.agentSkillChain?.compatiblePolicySchemaVersions) ||

@@ -1,6 +1,7 @@
 import { bindFeaturesToStepDefinitions, } from "../domain/cucumber-binding.js";
 import { deriveImpactSet, referenceNames, reviewAdjacentScope, } from "../domain/impact-set.js";
 import { semanticGraphContentHash } from "../domain/semantic-graph.js";
+import { readStagingLayout } from "../domain/staging-layout.js";
 import { isRecord } from "../types.js";
 import { loadTypeScriptCompiler, } from "../lib/typescript-vendor.js";
 import { buildCommitSemanticGraph } from "./repository-graph.js";
@@ -214,6 +215,13 @@ export function computeImpactSet(input) {
     const features = [...sources]
         .filter(([file]) => file.endsWith(".feature"))
         .map(([file, text]) => ({ path: file, text }));
+    let stagingRootPattern;
+    try {
+        stagingRootPattern = readStagingLayout(input.root).rootPattern;
+    }
+    catch {
+        stagingRootPattern = undefined;
+    }
     return deriveImpactSet({
         baseSha: input.baseSha,
         headSha: input.headSha,
@@ -228,6 +236,7 @@ export function computeImpactSet(input) {
         })),
         featureBinding: bindFeaturesToStepDefinitions({ features, definitions }),
         scripts: packageScripts(sources),
+        stagingRootPattern,
     });
 }
 /**

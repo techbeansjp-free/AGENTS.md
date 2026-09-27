@@ -57,8 +57,15 @@ function digestFromFile(file: string | undefined): string {
   return "";
 }
 
+/**
+ * **0.4.0を起点にする**（Issue #1503、REQ-WF-045）。用語台帳は#1482・#1483・
+ * #1485・review evidence v2（REQ-WF-038）に対しv0.4.0〜v0.4.3を既に記録して
+ * いたが、実際のrelease tagは一度も0.4.xを切らず`v0.3.1-beta.NNN`のまま
+ * 進み続けていた。用語台帳の現在値（v0.4.3）を実際のversionの起点にし、
+ * 次の自動releaseがv0.4.4になるようにする。
+ */
 function latestReleasedVersion(existingTags: string[]): string {
-  let currentVersion = "0.3.0-0";
+  let currentVersion = "0.4.3";
   for (const tag of existingTags) {
     const version = tag.startsWith("v") ? tag.slice(1) : "";
     if (!isPackageVersion(version)) continue;

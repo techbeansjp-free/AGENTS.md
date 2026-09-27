@@ -223,7 +223,7 @@ export function planAutoRelease(value) {
     const input = validated.input;
     if (!isPackageVersion(input.currentVersion))
         return skippedAutoRelease(input.currentVersion, [
-            `currentVersion「${input.currentVersion}」は0.3.xの正しいversion形式ではありません`,
+            `currentVersion「${input.currentVersion}」は0.4.xの正しいversion形式ではありません`,
         ]);
     if (input.ref !== input.defaultBranch)
         return skippedAutoRelease(input.currentVersion, [
@@ -256,7 +256,7 @@ export function planAutoRelease(value) {
     const nextVersion = nextAutoReleaseVersion(input.currentVersion);
     if (!nextVersion)
         return skippedAutoRelease(input.currentVersion, [
-            `version「${input.currentVersion}」を0.3.x内で安全にbumpできないため停止します`,
+            `version「${input.currentVersion}」を0.4.x内で安全にbumpできないため停止します`,
         ]);
     return {
         state: "release",
@@ -383,9 +383,9 @@ export function planRelease(value) {
     const input = validated.input;
     const reasons = [];
     if (!isPackageVersion(input.requestedVersion))
-        reasons.push(`requestedVersion「${input.requestedVersion}」は0.3.xの正しいversion形式ではありません`);
+        reasons.push(`requestedVersion「${input.requestedVersion}」は0.4.xの正しいversion形式ではありません`);
     if (!isPackageVersion(input.currentVersion))
-        reasons.push(`currentVersion「${input.currentVersion}」は0.3.xの正しいversion形式ではありません`);
+        reasons.push(`currentVersion「${input.currentVersion}」は0.4.xの正しいversion形式ではありません`);
     if (isPackageVersion(input.requestedVersion) &&
         isPackageVersion(input.currentVersion) &&
         comparePackageVersions(input.requestedVersion, input.currentVersion) <= 0)

@@ -35,7 +35,7 @@ interface IssueProjectWorld extends WorkflowWorld {
 const { Given, When, Then } = stepDefinitions<IssueProjectWorld>();
 
 const policy = (configured: boolean) => ({
-  schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
+  schemaVersion: "agent-skill-chain/project-policy/v0.4.4",
   delivery: { stopAt: "pull_request" },
   ...(configured
     ? {

@@ -63,14 +63,14 @@ function createAuditedRepository(
   const root = world.initRepo();
   writeJson(root, "package.json", {
     name: "audit-fixture",
-    version: "0.3.1-beta.1",
+    version: "0.4.1-beta.1",
     description: "fixture",
   });
   writeJson(root, "package-lock.json", {
     name: "audit-fixture",
-    version: "0.3.1-beta.1",
+    version: "0.4.1-beta.1",
     lockfileVersion: 3,
-    packages: { "": { name: "audit-fixture", version: "0.3.1-beta.1" } },
+    packages: { "": { name: "audit-fixture", version: "0.4.1-beta.1" } },
   });
   fs.writeFileSync(path.join(root, "implementation.txt"), "base\n");
   const base = commitAll(root, "test: 監査fixtureの基点を作る");
@@ -85,7 +85,7 @@ function createAuditedRepository(
 function bumpPackage(
   root: string,
   includeMetadata = false,
-  version = "0.3.1-beta.2",
+  version = "0.4.1-beta.2",
 ): void {
   writeJson(root, "package.json", {
     name: "audit-fixture",
@@ -105,7 +105,7 @@ function mergePackageChange(
   commitMessage: string,
 ): void {
   const root = createAuditedRepository(world);
-  git(root, ["checkout", "-q", "-b", "release/bump-v0.3.1-beta.2"]);
+  git(root, ["checkout", "-q", "-b", "release/bump-v0.4.1-beta.2"]);
   bumpPackage(root);
   commitAll(root, commitMessage);
   git(root, ["checkout", "-q", "main"]);
@@ -113,9 +113,9 @@ function mergePackageChange(
     "merge",
     "--no-ff",
     "-q",
-    "release/bump-v0.3.1-beta.2",
+    "release/bump-v0.4.1-beta.2",
     "-m",
-    "Merge pull request #873 from example/release/bump-v0.3.1-beta.2",
+    "Merge pull request #873 from example/release/bump-v0.4.1-beta.2",
   ]);
 }
 
@@ -123,14 +123,14 @@ Given("生成物distを実装commitへ含む隔離repository", function () {
   const root = this.initRepo();
   writeJson(root, "package.json", {
     name: "audit-fixture",
-    version: "0.3.1-beta.1",
+    version: "0.4.1-beta.1",
     description: "fixture",
   });
   writeJson(root, "package-lock.json", {
     name: "audit-fixture",
-    version: "0.3.1-beta.1",
+    version: "0.4.1-beta.1",
     lockfileVersion: 3,
-    packages: { "": { name: "audit-fixture", version: "0.3.1-beta.1" } },
+    packages: { "": { name: "audit-fixture", version: "0.4.1-beta.1" } },
   });
   fs.writeFileSync(path.join(root, "implementation.txt"), "base\n");
   const base = commitAll(root, "test: 監査fixtureの基点を作る");
@@ -158,7 +158,7 @@ Given(
   function () {
     const root = createAuditedRepository(this);
     bumpPackage(root);
-    commitAll(root, "chore(release): bump version to 0.3.1-beta.2 [skip ci]");
+    commitAll(root, "chore(release): bump version to 0.4.1-beta.2 [skip ci]");
   },
 );
 
@@ -168,7 +168,7 @@ Given(
     const root = createAuditedRepository(this);
     bumpPackage(root);
     fs.writeFileSync(path.join(root, "unexpected.txt"), "unexpected\n");
-    commitAll(root, "chore(release): bump version to 0.3.1-beta.2 [skip ci]");
+    commitAll(root, "chore(release): bump version to 0.4.1-beta.2 [skip ci]");
   },
 );
 
@@ -177,7 +177,7 @@ Given(
   function () {
     const root = createAuditedRepository(this);
     bumpPackage(root, true);
-    commitAll(root, "chore(release): bump version to 0.3.1-beta.2");
+    commitAll(root, "chore(release): bump version to 0.4.1-beta.2");
   },
 );
 
@@ -202,7 +202,7 @@ Given("release bump commitを持たない隔離repository", function () {
 Given("正規のrelease bumpをmergeした隔離repository", function () {
   mergePackageChange(
     this,
-    "chore(release): bump version to 0.3.1-beta.2 [skip ci]",
+    "chore(release): bump version to 0.4.1-beta.2 [skip ci]",
   );
 });
 
@@ -220,14 +220,14 @@ function createFollowUpBumpRepository(
   const root = world.initRepo();
   writeJson(root, "package.json", {
     name: "audit-fixture",
-    version: "0.3.1-beta.1",
+    version: "0.4.1-beta.1",
     description: "fixture",
   });
   writeJson(root, "package-lock.json", {
     name: "audit-fixture",
-    version: "0.3.1-beta.1",
+    version: "0.4.1-beta.1",
     lockfileVersion: 3,
-    packages: { "": { name: "audit-fixture", version: "0.3.1-beta.1" } },
+    packages: { "": { name: "audit-fixture", version: "0.4.1-beta.1" } },
   });
   fs.writeFileSync(path.join(root, "implementation.txt"), "base\n");
   commitAll(root, "test: 監査fixtureの基点を作る");
@@ -249,7 +249,7 @@ function createFollowUpBumpRepository(
   writeAuditArtifact(root, mainline, git(root, ["rev-parse", "HEAD"]));
   commitAll(root, "docs: 課題873実装レビューを記録する");
   git(root, ["checkout", "-q", "main"]);
-  git(root, ["checkout", "-q", "-b", "release/bump-v0.3.1-beta.2"]);
+  git(root, ["checkout", "-q", "-b", "release/bump-v0.4.1-beta.2"]);
   if (sideNoise) {
     // 混入fileは次のbump commitで消す。**mergeの導入差分をbumpだけに保つため**であり、
     // 残すと`hasReleaseBumpChanges`が先に弾いて側の判定へ到達しない。
@@ -258,15 +258,15 @@ function createFollowUpBumpRepository(
     fs.rmSync(path.join(root, "sneaky.txt"));
   }
   bumpPackage(root);
-  commitAll(root, "chore(release): bump version to 0.3.1-beta.2 [skip ci]");
+  commitAll(root, "chore(release): bump version to 0.4.1-beta.2 [skip ci]");
   git(root, ["checkout", "-q", "main"]);
   git(root, [
     "merge",
     "--no-ff",
     "-q",
-    "release/bump-v0.3.1-beta.2",
+    "release/bump-v0.4.1-beta.2",
     "-m",
-    "Merge pull request #874 from example/release/bump-v0.3.1-beta.2",
+    "Merge pull request #874 from example/release/bump-v0.4.1-beta.2",
   ]);
   git(root, ["checkout", "-q", "bugfix/975-follow"]);
   git(root, [
@@ -296,19 +296,19 @@ Given(
 
 Given("bump以外のpackage変更をmergeした隔離repository", function () {
   const root = createAuditedRepository(this);
-  git(root, ["checkout", "-q", "-b", "release/bump-v0.3.1-beta.3"]);
+  git(root, ["checkout", "-q", "-b", "release/bump-v0.4.1-beta.3"]);
   bumpPackage(root);
   commitAll(root, "chore: package metadataを更新する");
-  bumpPackage(root, false, "0.3.1-beta.3");
-  commitAll(root, "chore(release): bump version to 0.3.1-beta.3 [skip ci]");
+  bumpPackage(root, false, "0.4.1-beta.3");
+  commitAll(root, "chore(release): bump version to 0.4.1-beta.3 [skip ci]");
   git(root, ["checkout", "-q", "main"]);
   git(root, [
     "merge",
     "--no-ff",
     "-q",
-    "release/bump-v0.3.1-beta.3",
+    "release/bump-v0.4.1-beta.3",
     "-m",
-    "Merge pull request #873 from example/release/bump-v0.3.1-beta.3",
+    "Merge pull request #873 from example/release/bump-v0.4.1-beta.3",
   ]);
 });
 
