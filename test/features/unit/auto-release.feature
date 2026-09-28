@@ -52,6 +52,21 @@ Feature: main mergeの自動release計画と配布digest
     When 自動release workflow契約を検証する
     Then 自動release workflow検証は追加jobの依存導入step欠落を理由に拒否する
 
+  Scenario: SCN-UNIT-AUTORELEASE-011 依存導入stepの順序が逆の場合に拒否する
+    Given github_release jobでnpm ciをsetup-nodeより前へ入れ替えたrelease workflow本文がある
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証はgithub_release jobの依存導入step欠落を理由に拒否する
+
+  Scenario: SCN-UNIT-AUTORELEASE-012 --import=tsx形式でも検出する
+    Given tsx実行stepを--import=tsx形式で持ち依存導入を欠く検証用jobを追加したrelease workflow本文がある
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証は追加jobの依存導入step欠落を理由に拒否する
+
+  Scenario: SCN-UNIT-AUTORELEASE-013 npm ciを名乗るだけのechoでは充足しない
+    Given github_release jobのnpm ci stepをechoへ差し替えたrelease workflow本文がある
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証はgithub_release jobの依存導入step欠落を理由に拒否する
+
   Scenario: SCN-UNIT-DIGEST-001 配布entryをpath昇順に正準化して同一digestを返す
     Given 入力順だけが異なる同じ配布entry集合がある
     When 配布digestをそれぞれ算出する

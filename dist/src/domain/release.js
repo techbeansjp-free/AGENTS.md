@@ -799,9 +799,26 @@ function jobStepRunBlocks(lines, job) {
  * 欠いたまま`node --import tsx scripts/check_consumer_acceptance.ts`を呼び、
  * `Cannot find package 'tsx'`でcrashした（release run 36492222087、Issue #1533）。
  */
-const TSX_IMPORT_PATTERN = /\bnode\b[^\n]*--import\s+tsx\b/u;
-const SETUP_NODE_USES_PATTERN = /^\s*uses:\s*actions\/setup-node@/u;
-const NPM_CI_PATTERN = /\bnpm\s+ci\b/u;
+/**
+ * **`--import tsx`と`--import=tsx`の両方に一致させる。** Nodeはどちらの形も
+ * 同じ意味で受理するため、`=`形だけを受け付けない実装は同じ欠陥を別の書き方で
+ * 再現できてしまう（round 1独立review REV-02指摘）。
+ */
+const TSX_IMPORT_PATTERN = /\bnode\b[^\n]*--import[=\s]+tsx\b/u;
+/**
+ * **step headerと同じ行に書いた`- uses: actions/setup-node@…`形も許容する。**
+ * `jobStepRunBlocks`が`run:`検出で行う`- `正規化と同じ理由で、複数行の
+ * `- name:` … `uses:`形だけを前提にすると、単一行形を持つ正しいworkflowを
+ * 誤ってvalidが不成立と判定する（round 1独立review REV-03指摘）。
+ */
+const SETUP_NODE_USES_PATTERN = /^\s*-?\s*uses:\s*actions\/setup-node@/u;
+/**
+ * **`npm ci`はcommand行の先頭（`run:`接頭辞を除く）にある場合だけ一致させる。**
+ * `\bnpm\s+ci\b`は`run: echo skip npm ci`のような、実際には実行しない
+ * 文字列内の出現でも一致してしまう（round 1独立review REV-03指摘）。単一行形
+ * （`run: npm ci …`）と複数行形（`run: |`の後の継続行）の両方を許容する。
+ */
+const NPM_CI_PATTERN = /^\s*(?:run:\s*)?npm\s+ci\b/mu;
 /**
  * 指定jobについて依存導入の充足状態を返す。
  *
