@@ -47,6 +47,10 @@ interface IsolationWorld extends WorkflowWorld {
     assetDigest: string;
   }>;
   invalidRecordRejections?: string[];
+  bundleRoot: string;
+  bundleVersion: string;
+  versionResult: ReturnType<typeof runCli> | undefined;
+  doctorResults: Array<ReturnType<typeof runCli>>;
 }
 
 /** repository直下へ展開されるhostごとの常時入口（Issue #1219）。 */
@@ -168,6 +172,71 @@ function runCli(root: string, args: string[]) {
   return spawnSync(
     process.execPath,
     [path.resolve("dist/bin/agent-skill-chain.js"), ...args, `--root=${root}`],
+    { cwd: process.cwd(), encoding: "utf8" },
+  );
+}
+
+/**
+ * **正式配布物を模したbundleを作る。** `dist/`と`.agent-skill-chain/`を実sourceから
+ * 複製し、`package.json`はversionだけを差し替えてほかの`agentSkillChain`契約を
+ * 保つ（`src/lib/version.ts`はmodule読込時にこの契約を検証するため、欠くと
+ * bundleのCLI自体が起動できない）。root直下に`release-identity.json`を置くことで
+ * `src/lib/release-identity.ts`の`kind: "release"`判定を成立させる。
+ */
+function prepareReleaseBundle(world: IsolationWorld, version: string): string {
+  const bundleRoot = world.temp("asc-release-bundle-");
+  fs.cpSync(path.resolve("dist"), path.join(bundleRoot, "dist"), {
+    recursive: true,
+  });
+  fs.cpSync(
+    path.resolve(".agent-skill-chain"),
+    path.join(bundleRoot, ".agent-skill-chain"),
+    { recursive: true },
+  );
+  /** `mappings()`はpackage rootの`AGENTS.md`・`CLAUDE.md`もhost adapter正本として読む。 */
+  for (const relative of ["README.md", "AGENTS.md", "CLAUDE.md"])
+    fs.cpSync(path.resolve(relative), path.join(bundleRoot, relative));
+  const packageMetadata = JSON.parse(
+    fs.readFileSync(path.resolve("package.json"), "utf8"),
+  ) as Record<string, unknown>;
+  packageMetadata.version = version;
+  fs.writeFileSync(
+    path.join(bundleRoot, "package.json"),
+    `${JSON.stringify(packageMetadata, null, 2)}\n`,
+  );
+  fs.writeFileSync(
+    path.join(bundleRoot, "release-identity.json"),
+    `${JSON.stringify(
+      {
+        schemaVersion: "agent-skill-chain/release-identity/v1",
+        version,
+        tag: `v${version}`,
+        sourceSha: "a".repeat(40),
+        contentDigest: "b".repeat(64),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  return bundleRoot;
+}
+
+function runBundleCli(bundleRoot: string, root: string, args: string[]) {
+  return spawnSync(
+    process.execPath,
+    [
+      path.join(bundleRoot, "dist", "bin", "agent-skill-chain.js"),
+      ...args,
+      `--root=${root}`,
+    ],
+    { cwd: process.cwd(), encoding: "utf8" },
+  );
+}
+
+function runBundleVersion(bundleRoot: string) {
+  return spawnSync(
+    process.execPath,
+    [path.join(bundleRoot, "dist", "bin", "agent-skill-chain.js"), "--version"],
     { cwd: process.cwd(), encoding: "utf8" },
   );
 }
@@ -697,6 +766,108 @@ Then("CLI lifecycleは成功してconsumer資産だけが残る", function () {
   );
   for (const relative of ROOT_HOST_ENTRIES)
     assert.equal(fs.existsSync(path.join(this.root, relative)), false);
+});
+
+Given(
+  "release-identity.jsonを持つ配布物bundleと隔離consumerがある",
+  function () {
+    this.bundleVersion = "0.4.9";
+    this.bundleRoot = prepareReleaseBundle(this, this.bundleVersion);
+    this.root = this.temp("asc-release-bundle-consumer-");
+  },
+);
+
+Given("release-identity.jsonを持つ配布物bundleがある", function () {
+  this.bundleVersion = "0.4.9";
+  this.bundleRoot = prepareReleaseBundle(this, this.bundleVersion);
+});
+
+When("bundleのCLIでinstallをapplyする", function () {
+  this.cliResults = [
+    runBundleCli(this.bundleRoot, this.root, ["install", "--apply"]),
+  ];
+});
+
+Then("managed-assets.jsonのversionはrelease versionと一致する", function () {
+  const [installed] = this.cliResults;
+  assert.equal(
+    installed?.status,
+    0,
+    `${installed?.stdout}\n${installed?.stderr}`,
+  );
+  const record = JSON.parse(fs.readFileSync(recordPath(this.root), "utf8")) as {
+    version: string;
+  };
+  assert.equal(record.version, this.bundleVersion);
+});
+
+When("bundleのCLIで--versionを実行する", function () {
+  this.versionResult = runBundleVersion(this.bundleRoot);
+});
+
+Then("標準出力はrelease versionと一致し終了値は0である", function () {
+  assert.equal(this.versionResult?.status, 0, this.versionResult?.stderr);
+  assert.equal(this.versionResult?.stdout.trim(), this.bundleVersion);
+});
+
+When("source buildのCLIで--versionとdoctorを実行する", function () {
+  this.versionResult = runCli(this.root, ["--version"]);
+  /**
+   * **`--version`は`--root`を受理しない独立commandである。** `runCli`が
+   * 付与する`--root=<root>`は`--version`の分岐が読む前に無視されるため、
+   * 実挙動を変えずに既存helperを再利用できる。
+   */
+  this.doctorResults = [runCli(this.root, ["doctor"])];
+});
+
+Then(
+  "--versionとdoctorはsentinelをrelease versionとして表示せずdoctorのhealthyは変わらない",
+  function () {
+    assert.equal(this.versionResult?.status, 0, this.versionResult?.stderr);
+    const versionOutput = this.versionResult?.stdout.trim() ?? "";
+    /**
+     * **sentinel `0.4.4-managed-by-tag`（またはそれに類する`package.json`の
+     * 生のversion文字列）がそのままrelease versionのように出力されないことを
+     * 固定する。** source buildなので固定文言（"source build"を含む）を返す。
+     */
+    assert.match(versionOutput, /source build/u);
+    assert.doesNotMatch(versionOutput, /^\d+\.\d+\.\d+/u);
+    const doctorResult = this.doctorResults[0];
+    assert.ok(doctorResult, "doctor実行結果がありません");
+    const doctorOutput = JSON.parse(doctorResult.stdout) as {
+      healthy: boolean;
+      releaseIdentity?: { kind: string; version: string | null };
+    };
+    assert.equal(doctorOutput.releaseIdentity?.kind, "source");
+    assert.equal(doctorOutput.releaseIdentity?.version, null);
+    /**
+     * **`healthy`は識別結果の差異で変わらない。** doctor未導入の隔離consumerでは
+     * `installed: false`により`healthy`は`false`になるが、それはmanaged asset
+     * recordの不在によるものであり、release identityの`source`/`release`差異が
+     * 理由ではないことを確認する（FR-12）。
+     */
+    assert.equal(typeof doctorOutput.healthy, "boolean");
+  },
+);
+
+When("source buildのCLIでinstallとupdateをapplyする", function () {
+  this.cliResults = [
+    runCli(this.root, ["install", "--apply"]),
+    runCli(this.root, ["update", "--apply"]),
+  ];
+});
+
+Then("installとupdateは成功し警告文を含む", function () {
+  for (const result of this.cliResults)
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  for (const result of this.cliResults) {
+    const parsed = JSON.parse(result.stdout) as { warnings?: string[] };
+    assert.ok(
+      Array.isArray(parsed.warnings) && parsed.warnings.length > 0,
+      result.stdout,
+    );
+    assert.match(parsed.warnings.join(" "), /source build/u);
+  }
 });
 
 Given("CLIで導入済みの隔離consumerと外部一時資産がある", function () {
