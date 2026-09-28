@@ -1,6 +1,6 @@
 {
   "ruleId": "ASC-DOGFOOD-NO-REGISTRY-PUBLISH-001",
-  "purpose": "本packageをnpm registryへ公開しない",
+  "purpose": "本packageをnpm registryへ公開せず、配布経路をGit remoteだけに保つ",
   "riskClass": "artifact",
   "scope": ["package.json"],
   "enforcement": "deny",
@@ -12,6 +12,6 @@
   "overridePolicy": "never",
   "rollback": "private:trueを復元する",
   "packageDefault": "配布経路をpackage側で固定しない",
-  "projectOverride": "npm registryへの公開を禁止する",
+  "projectOverride": "配布経路をGit remoteだけとし、npm registryへは公開しない",
   "changeAuthority": "repository maintainer"
 }
