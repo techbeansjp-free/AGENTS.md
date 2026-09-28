@@ -3,7 +3,7 @@
  *
  * 解決順序はdeterministic resolverを先に試し、無ければ設定済みprovider
  * （既定=lightweight-tier）へ委譲する（設計正本「最終確定仕様」§2）。
- * Jevは本Issueではdispatchできない（#1486以降）。lightweight-tierは
+ * lightweight-tierは
  * 「別serviceを呼ばず、この呼び出し自身（進行役）が提案するproposedValueを
  * 受け取り、authorityModeに従って有効値へ反映するかを判定する」という
  * 自己申告providerとして実装する。**Providerの自己申告だけでは
@@ -15,7 +15,6 @@ import { GIT_ENV } from "./review-diff.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
 import { resolveGitWorkspace } from "./review-workspace.js";
-import { resolveJevProviderConfig } from "./local-config-workspace.js";
 import { appendDecisionJournalRecord, findDecisionJournalRecord, } from "./decision-journal-store.js";
 import { computeDecisionInputDigest, computeDecisionRecordId, computeFindingClassificationInputDigest, } from "../domain/decision-journal.js";
 import { DECISION_TYPES, DCAND_010_SAFE_VALUE, findDecisionType, } from "../domain/decision-types.js";
@@ -113,8 +112,6 @@ export function invokeDecision(input) {
     if (input.root !== activeRoot)
         throw new Error("decision invokeの--rootは--stagingが属するrepository rootと一致する必要があります");
     const workspace = resolveGitWorkspace(activeRoot);
-    const jevResolution = resolveJevProviderConfig(activeRoot);
-    const jevSummary = jevSummaryFor(jevResolution);
     if (!isRecord(input.input))
         throw new Error("decision invokeの--input fileはobjectが必要です");
     const raw = input.input;
@@ -256,24 +253,11 @@ export function invokeDecision(input) {
             activeRoot: workspace.activeRoot,
             primaryRoot: workspace.primaryRoot,
         },
-        jevProviderConfig: jevSummary,
         providerNote: executor.kind === "provider"
-            ? "lightweight-tier（自己申告provider）で処理した。有効なJev provider設定があればcontinuous shadow（jevShadow参照）として追加でJevへも問い合わせるが、この判断自体のexecutor・effectiveValueには一切影響しない（Issue #1486）"
+            ? "lightweight-tier（自己申告provider）で処理した"
             : null,
         applied,
         decisionRecordId: appliedDecisionRecordId,
     };
-}
-/** 診断出力用。API key値そのものは含めない（`JevProviderConfig`自体が既に含まない）。 */
-function jevSummaryFor(resolution) {
-    if (resolution.state === "enabled")
-        return {
-            state: "enabled",
-            source: resolution.source,
-            endpoint: resolution.config.endpoint,
-            model: resolution.config.model,
-            apiKeyEnvVar: resolution.config.apiKeyEnvVar,
-        };
-    return resolution;
 }
 //# sourceMappingURL=decision-invoke.js.map

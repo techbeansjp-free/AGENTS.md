@@ -3,7 +3,7 @@
  *
  * 解決順序はdeterministic resolverを先に試し、無ければ設定済みprovider
  * （既定=lightweight-tier）へ委譲する（設計正本「最終確定仕様」§2）。
- * Jevは本Issueではdispatchできない（#1486以降）。lightweight-tierは
+ * lightweight-tierは
  * 「別serviceを呼ばず、この呼び出し自身（進行役）が提案するproposedValueを
  * 受け取り、authorityModeに従って有効値へ反映するかを判定する」という
  * 自己申告providerとして実装する。**Providerの自己申告だけでは
@@ -15,7 +15,6 @@ import { GIT_ENV } from "./review-diff.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
 import { resolveGitWorkspace } from "./review-workspace.js";
-import { resolveJevProviderConfig } from "./local-config-workspace.js";
 import {
   appendDecisionJournalRecord,
   findDecisionJournalRecord,
@@ -92,9 +91,8 @@ export interface DecisionInvokeResult {
   readonly subjectRef: string;
   /**
    * `constrained-choice`（DCAND-009）のときだけ、Policy Allowedとの積集合で
-   * 絞り込んだ実効候補集合。他のauthorityModeでは`undefined`（Issue #1486、
-   * T-02のcontinuous shadowがDCAND-009のJev choice optionsを組み立てる際に
-   * 使う。積集合を`decision invoke`の外で再計算させない）。
+   * 絞り込んだ実効候補集合。他のauthorityModeでは`undefined`（積集合を
+   * `decision invoke`の外で再計算させない）。
    */
   readonly candidateSet?: readonly string[];
   readonly proposedValue: string;
@@ -107,12 +105,6 @@ export interface DecisionInvokeResult {
     readonly activeRoot: string;
     readonly primaryRoot: string;
   };
-  /**
-   * Jev provider configの解決結果（構造fieldのみ。API key値は含まない）。
-   * `decision invoke`はJevをdispatchしない（#1486以降）が、「なぜJevが
-   * 使われなかったか」を消費側が自分で確認できるようにするため常に含める。
-   */
-  readonly jevProviderConfig: unknown;
   readonly providerNote: string | null;
   readonly applied: boolean;
   readonly decisionRecordId: string | null;
@@ -208,8 +200,6 @@ export function invokeDecision(
       "decision invokeの--rootは--stagingが属するrepository rootと一致する必要があります",
     );
   const workspace = resolveGitWorkspace(activeRoot);
-  const jevResolution = resolveJevProviderConfig(activeRoot);
-  const jevSummary = jevSummaryFor(jevResolution);
 
   if (!isRecord(input.input))
     throw new Error("decision invokeの--input fileはobjectが必要です");
@@ -384,27 +374,11 @@ export function invokeDecision(
       activeRoot: workspace.activeRoot,
       primaryRoot: workspace.primaryRoot,
     },
-    jevProviderConfig: jevSummary,
     providerNote:
       executor.kind === "provider"
-        ? "lightweight-tier（自己申告provider）で処理した。有効なJev provider設定があればcontinuous shadow（jevShadow参照）として追加でJevへも問い合わせるが、この判断自体のexecutor・effectiveValueには一切影響しない（Issue #1486）"
+        ? "lightweight-tier（自己申告provider）で処理した"
         : null,
     applied,
     decisionRecordId: appliedDecisionRecordId,
   };
-}
-
-/** 診断出力用。API key値そのものは含めない（`JevProviderConfig`自体が既に含まない）。 */
-function jevSummaryFor(
-  resolution: ReturnType<typeof resolveJevProviderConfig>,
-): unknown {
-  if (resolution.state === "enabled")
-    return {
-      state: "enabled",
-      source: resolution.source,
-      endpoint: resolution.config.endpoint,
-      model: resolution.config.model,
-      apiKeyEnvVar: resolution.config.apiKeyEnvVar,
-    };
-  return resolution;
 }
