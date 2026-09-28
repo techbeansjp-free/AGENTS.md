@@ -3,16 +3,16 @@
   "issue": 1527,
   "observed": {
     "baseSha": "c436c8cb23bec91b582912045e3903e52694614f",
-    "implementationHeadSha": "bc34b10b0f7e2148fcbd049dcd39d957c7e3ebcf",
-    "diffDigest": "077b8c2cd1744d7a6f7f885bf513441ab6f76bcf14a3d838f8716bf2f125baac",
+    "implementationHeadSha": "1b2df9ef54f52f4e4f002723ff329adc467d0d3a",
+    "diffDigest": "33d7afca971825422cc1cb26bd01e84b58aefafda7e9b1a5b9e8ced4491a9be8",
     "session": {
       "sessionId": "31fbf11e9d1a4db7b032b323db3ae5e96f477f89da9aa7e8497233ab9afa4940",
-      "latestRoundDigest": "597057d8e81ed4a0e42aedfa6c710f1390a10ad1d40c06ea0f6e876b2ba92268",
+      "latestRoundDigest": "86fa1907f1befa4acb5d8e42b3f7c60be1eb5480ce318a674fb8e51955bb7105",
       "status": "converged",
-      "countedRounds": 2
+      "countedRounds": 3
     },
     "impact": {
-      "digest": "38656f1ebb6c33d0c3c45e290668bb932f44b0fc3803704d97085ae0dd9965cd",
+      "digest": "0923ed4bc2c415e5a0b607bb5eacb555cd4cac467c9873f4ee8ee1955b598330",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "bc34b10b0f7e2148fcbd049dcd39d957c7e3ebcf",
-        "impactDigest": "38656f1ebb6c33d0c3c45e290668bb932f44b0fc3803704d97085ae0dd9965cd",
-        "finishedAt": "2026-09-28T20:39:03.094Z",
-        "recordDigest": "c70480e2cf6933369afec6a977d720dc223f2030d5dc855a9f8c82b0cdbaffeb"
+        "headSha": "1b2df9ef54f52f4e4f002723ff329adc467d0d3a",
+        "impactDigest": "0923ed4bc2c415e5a0b607bb5eacb555cd4cac467c9873f4ee8ee1955b598330",
+        "finishedAt": "2026-09-28T21:28:03.930Z",
+        "recordDigest": "83eb6212a306b019976669447f8159e4343ea3fee0ec254ae855e75d80acf7ea"
       }
     ]
   },
@@ -230,6 +230,14 @@
       "relation": "improvement",
       "path": "src/domain/lifecycle.ts",
       "contractId": "AC-12"
+    },
+    {
+      "id": "SCOPE-AC14-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "out-of-scope",
+      "path": "docs/specs/02_要件/03_外部連携要件.md",
+      "contractId": "AC-14"
     }
   ],
   "unresolvedCriticalHigh": [],
@@ -240,5 +248,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "304134a8861678180ff23726396222c48f181b7732c17fea8ca5ec9d3c6954a0"
+  "evidenceDigest": "4259764772a624933ad577ab31c4277f7731961808091e8e1a2cf18761d28108"
 }
