@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { main } from "../../src/cli.js";
-import { findCommandUsage } from "../../src/cli-usage.js";
+import { findCommandUsage, missingRequiredFlags } from "../../src/cli-usage.js";
 import {
   assessImplementationDiscovery,
   assertWorkflowMergeAllowed,
@@ -545,10 +545,8 @@ Then("production CLIがVerification Setを機械可読に返す", function () {
   assert.equal(output.methods.includes("contract-test"), true);
   const usage = findCommandUsage("workflow", "verification-set");
   assert.ok(usage);
-  assert.deepEqual(
-    usage.requiredFlags.map(({ name }) => name),
-    ["input"],
-  );
+  assert.deepEqual(missingRequiredFlags(usage, {}), ["input"]);
+  assert.deepEqual(missingRequiredFlags(usage, { init: true }), []);
 });
 
 Given("有効な実装中発見入力JSONがrepository内にある", function () {

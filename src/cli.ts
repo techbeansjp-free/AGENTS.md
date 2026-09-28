@@ -66,6 +66,7 @@ import {
   parseImplementationDiscoveryInput,
   parseVerificationSelectionInput,
   selectVerificationSet,
+  VERIFICATION_SET_INPUT_EXAMPLE,
 } from "./domain/agile-verification.js";
 import { isPlanFrozenCheckStep, latestPlanSeal } from "./domain/plan-seal.js";
 import {
@@ -374,6 +375,7 @@ function workflowArguments(args: string[]): {
   const flags: Record<string, string> = {};
   const artifacts: string[] = [];
   const booleanFlags = new Set([
+    "init",
     "apply",
     "dry-run",
     "post-terminal-intake",
@@ -5593,12 +5595,20 @@ export async function main(
     if (artifacts.length > 0)
       throw new Error("workflow verification-setで--artifactは使用できません");
     const unknown = Object.keys(flags).filter(
-      (flag) => !["input", "root"].includes(flag),
+      (flag) => !["input", "root", "init"].includes(flag),
     );
     if (unknown.length > 0)
       throw new Error(
         `workflow verification-setの未知optionです: --${unknown.join(", --")}`,
       );
+    if (flags.init !== undefined) {
+      if (rest.some((argument) => argument.startsWith("--init=")))
+        throw new Error("--initは値を付けずに指定してください");
+      if (flags.input !== undefined)
+        throw new Error("--initと--inputは併用できません");
+      print(parseVerificationSelectionInput(VERIFICATION_SET_INPUT_EXAMPLE));
+      return 0;
+    }
     const root = path.resolve(flags.root ?? process.cwd());
     const input = readJsonInput(resolveContained(root, flags.input ?? ""));
     print(selectVerificationSet(parseVerificationSelectionInput(input)));

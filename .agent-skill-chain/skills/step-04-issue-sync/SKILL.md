@@ -13,7 +13,7 @@ description: 検証済み要求・要件を事前確認後に同じ耐久トラ�
 
 **同期は本文を全面置換する。** 既存Issueにチェックリストや進捗記録がある場合は、`agent-skill-chain issue read --issue=<番号> --repo=<owner/name>`で更新前本文と`bodySha256`を取得し、**保全すべき内容を新しい本文へ取り込むか、別の場所へ退避してから同期する。** `issue read`は読み取り専用で`--apply`も`--authorize`も要らず、`repository read`だけで成立する。**この経路があるため、本skillから`gh`を呼ばずに既存本文を保全できる。**
 
-同期前の構造検証には`agent-skill-chain issue validate --path=<directory> --stage=requirements`を使う。fullではStep 4時点の`00_要求定義.md`と`01_要件定義.md`だけを要求し、quickとpocでは00へ集約した全内容を従来どおり検証する。段階にかかわらずGherkin scenario IDを必須とする。
+構造検証は`issue sync --generate-body`の本文生成内でstage `requirements`として実行し、fullの00・01とGherkin scenario IDを検査する。不正Planningは本文生成・provider call前に拒否する。通常経路で別processの事前`issue validate`は要求しない。修復時の診断には`agent-skill-chain issue validate --path=<directory> --stage=requirements`を使える。sync applyのwriter lock内再生成・digest比較、`workflow advance`のlock内検証、dispatch前freshness・read-back・sealを維持し、以前の検証成功を操作時の検証へ代用しない。
 
 同期確認後、trusted project policyに`issueProject`が設定されている場合は、同じcanonical Issueとstagingを指定して`issue start --dry-run`を確認し、書き込み承認を得た`--apply --authorize=approved`でProject追加と着手Status更新を行う。`started`のread-backまでをIssue着手とし、未設定時の`not-configured`はprovider callなしで従来運用を維持する。候補branchの設定を当該操作のauthorityにせず、このskillから`gh`を直接呼ばない。
 

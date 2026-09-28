@@ -19,7 +19,7 @@ import { exportReviewEvidence, verifyReviewEvidenceWithStaging, } from "./adapte
 import { runVerification } from "./adapters/verification-run.js";
 import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, nonCanonicalClosingReferences, } from "./domain/delivery.js";
-import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, } from "./domain/agile-verification.js";
+import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, VERIFICATION_SET_INPUT_EXAMPLE, } from "./domain/agile-verification.js";
 import { isPlanFrozenCheckStep, latestPlanSeal } from "./domain/plan-seal.js";
 import { buildWorktreePath, createWorktree, canonicalWorktreePath, DEFAULT_WORKTREE_PLACEMENT, enforceTrustedWorktreeBoundary, inspectFinalizeState, inspectRecoveryState, validateWorktreePlacement, } from "./domain/worktree.js";
 import { applyWorkspaceHygiene, previewWorkspaceHygiene, } from "./domain/hygiene.js";
@@ -75,6 +75,7 @@ function workflowArguments(args) {
     const flags = {};
     const artifacts = [];
     const booleanFlags = new Set([
+        "init",
         "apply",
         "dry-run",
         "post-terminal-intake",
@@ -3984,9 +3985,17 @@ export async function main(argv, dependencies = {}) {
         const { flags, artifacts } = workflowArguments(rest);
         if (artifacts.length > 0)
             throw new Error("workflow verification-setで--artifactは使用できません");
-        const unknown = Object.keys(flags).filter((flag) => !["input", "root"].includes(flag));
+        const unknown = Object.keys(flags).filter((flag) => !["input", "root", "init"].includes(flag));
         if (unknown.length > 0)
             throw new Error(`workflow verification-setの未知optionです: --${unknown.join(", --")}`);
+        if (flags.init !== undefined) {
+            if (rest.some((argument) => argument.startsWith("--init=")))
+                throw new Error("--initは値を付けずに指定してください");
+            if (flags.input !== undefined)
+                throw new Error("--initと--inputは併用できません");
+            print(parseVerificationSelectionInput(VERIFICATION_SET_INPUT_EXAMPLE));
+            return 0;
+        }
         const root = path.resolve(flags.root ?? process.cwd());
         const input = readJsonInput(resolveContained(root, flags.input ?? ""));
         print(selectVerificationSet(parseVerificationSelectionInput(input)));

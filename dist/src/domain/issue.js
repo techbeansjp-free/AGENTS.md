@@ -30,6 +30,56 @@ const LOW_RISK_SHORT_FORM_FILE = "verification-input.json";
 const LOW_RISK_SHORT_FORM = /^対象外:\s*(.*?)\s*\/\s*検証証拠:\s*(.*)$/u;
 const LOW_RISK_SHORT_FORM_LIKE = /^\s*(?:(?:[-*+>])\s*)*対象外(?:$|(?=\s|[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}A-Za-z0-9_]))/u;
 const MAX_VERIFICATION_INPUT_BYTES = 1024 * 1024;
+const PLANNING_REFERENCES = [
+    {
+        file: "01_要件定義.md",
+        heading: "1. システム・変更概要",
+        marker: "概要は00_要求定義.md §1・§2を参照",
+        sources: ["1. 目的と背景", "2. 対象範囲"],
+    },
+    {
+        file: "02_設計.md",
+        heading: "1.2 設計対象外",
+        marker: "設計対象外は00_要求定義.md §2.2を参照",
+        sources: ["2.2 対象外（必須）"],
+    },
+    {
+        file: "02_設計.md",
+        heading: "2.1 境界づけられたコンテキスト",
+        marker: "コンテキストは00_要求定義.md §4.1を参照",
+        sources: ["4.1 境界づけられたコンテキスト"],
+    },
+];
+/** raw本文の完全一致だけに固定sourceの構造検査を加える。意味判断はreadinessが所有する。 */
+function validatePlanningReferences(issuePath, files, source) {
+    const errors = [];
+    for (const reference of PLANNING_REFERENCES) {
+        if (!files.includes(reference.file))
+            continue;
+        const target = path.join(issuePath, reference.file);
+        if (!fs.existsSync(target))
+            continue;
+        const bodies = markdownSectionBodies(fs.readFileSync(target, "utf8"), reference.heading, true);
+        if (!bodies.some((body) => body.trim() === reference.marker))
+            continue;
+        if (bodies.length !== 1)
+            errors.push(`${reference.file}: 上流参照の対象見出しは一意でなければなりません`);
+        if (!fs.lstatSync(path.join(issuePath, "00_要求定義.md")).isFile()) {
+            errors.push(`${reference.file}: 上流参照元は同stagingの通常fileが必要です`);
+            continue;
+        }
+        for (const heading of reference.sources) {
+            const sourceBodies = markdownSectionBodies(source, heading, true);
+            if (sourceBodies.length !== 1 ||
+                unresolvedPlaceholders(sourceBodies[0] ?? "").length > 0 ||
+                !withoutPlaceholderCodeAndComments(sourceBodies[0] ?? "", true)
+                    .split("\n")
+                    .some((line) => line.trim() !== "" && !/^#{2,6}\s/u.test(line)))
+                errors.push(`${reference.file}: 上流参照元00_要求定義.md §${heading}は一意で空でない本文が必要です`);
+        }
+    }
+    return errors;
+}
 const LOW_RISK_SHORT_FORM_TARGETS = Object.freeze([
     Object.freeze({
         file: "02_設計.md",
@@ -40,8 +90,10 @@ const LOW_RISK_SHORT_FORM_TARGETS = Object.freeze([
     Object.freeze({ file: "03_実装計画.md", heading: "5.2 安全性の必須観点" }),
 ]);
 /** exact Markdown heading配下を、同じか上位levelの次headingまでに閉じる。 */
-function markdownSectionBodies(text, heading) {
-    const visible = withoutMarkdownCode(text);
+function markdownSectionBodies(text, heading, rawBody = false) {
+    const visible = rawBody
+        ? withoutPlaceholderCodeAndComments(text, true)
+        : withoutMarkdownCode(text);
     const lines = visible.split("\n");
     const bodies = [];
     for (let start = 0; start < lines.length; start += 1) {
@@ -57,7 +109,7 @@ function markdownSectionBodies(text, heading) {
                 break;
             }
         }
-        bodies.push(lines.slice(start + 1, end).join("\n"));
+        bodies.push((rawBody ? text.split("\n") : lines).slice(start + 1, end).join("\n"));
     }
     return Object.freeze(bodies);
 }
@@ -516,8 +568,8 @@ function withoutGherkin(text, dialect = DEFAULT_GHERKIN_DIALECT) {
         .join("\n");
 }
 const UNRESOLVED_PLACEHOLDER_SAMPLE_LIMIT = 5;
-/** placeholder専用。code内ではcommentを開始せず、実comment内ではcodeを解釈しない。 */
-function withoutPlaceholderCodeAndComments(text) {
+/** 既定はplaceholder検査。D1では行位置を保ち、結合防止印を本文に数えない。 */
+function withoutPlaceholderCodeAndComments(text, preserveLines = false) {
     const visible = [];
     let cursor = 0;
     let fence;
@@ -553,9 +605,13 @@ function withoutPlaceholderCodeAndComments(text) {
                         if (text[index] === "\n")
                             newlines += 1;
                     // 空commentでも前後の断片を新しいplaceholderへ結合しない。
-                    visible.push("\n".repeat(Math.max(1, newlines)));
+                    visible.push(preserveLines
+                        ? " " + "\n".repeat(newlines)
+                        : "\n".repeat(Math.max(1, newlines)));
                     // comment終端後の同一行は、原文ではGherkinの行頭ではない。
-                    if (closing + 3 < text.length && text[closing + 3] !== "\n")
+                    if (!preserveLines &&
+                        closing + 3 < text.length &&
+                        text[closing + 3] !== "\n")
                         visible.push("_");
                     cursor = closing + 3;
                     if (cursor > lineEnd)
@@ -563,6 +619,8 @@ function withoutPlaceholderCodeAndComments(text) {
                     continue;
                 }
                 // 後続のopenerも未終端。繰り返し末尾まで検索しない。
+                if (preserveLines)
+                    return visible.join("") + text.slice(cursor).replace(/[^\n]/gu, " ");
                 unclosedComment = true;
             }
             if (!unclosedComment && inlineAllowed && text[cursor] === "`") {
@@ -571,6 +629,8 @@ function withoutPlaceholderCodeAndComments(text) {
                     length += 1;
                 const closing = line.indexOf("`".repeat(length), cursor - lineStart + length);
                 if (closing >= 0) {
+                    if (preserveLines)
+                        visible.push(" ");
                     cursor = lineStart + closing + length;
                     continue;
                 }
@@ -1227,6 +1287,8 @@ export function validateIssue(issuePath, options = {}) {
             .filter((name) => fs.existsSync(path.join(issuePath, name)))
             .map((name) => fs.readFileSync(path.join(issuePath, name), "utf8")),
     ].join("\n");
+    if (declared === "full")
+        errors.push(...validatePlanningReferences(issuePath, validatedFullFiles, text));
     const documentPlaceholders = unresolvedPlaceholders(allText, gherkinDialect);
     if (documentPlaceholders.length > 0)
         errors.push(unresolvedPlaceholderError("", documentPlaceholders));

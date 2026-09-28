@@ -9,7 +9,7 @@ description: 承認済み02設計・03実装計画を同じ耐久トラッカー
 
 入力は承認済み02/03、正確な既存トラッカー、事前表示、承認。成果物は追記済みの規範的な設計・計画と成功した書き込み後読み取り検証。本文は`issue sync --generate-body --staging-path=<同じstaging> --checkpoint=8`で00〜03から生成する。full stagingのmode別成果物一覧とcontent digestを更新し、一致したbody digest、tracker、同期時刻、checkpoint 8をstaging記録へ原子的に保存して再読取した場合だけ`sync-verified`とする。後継Issueを作らず、一時ローカルパスを参照しない。検証成功までステップ9を停止する。`workflow record --step=8`は00〜03のSHA-256を`planSeal`として記録し、承認済み計画を封印する。以後00〜03は編集せず、計画の変更は`05_計画変更.md`へ追記する。
 
-同期前の構造検証には`agent-skill-chain issue validate --path=<directory> --stage=design`を使い、fullの`00_要求定義.md`、`01_要件定義.md`、`02_設計.md`、`03_実装計画.md`をすべて要求する。段階にかかわらずGherkin scenario IDを必須とする。
+構造検証は`issue sync --generate-body`の本文生成内でstage `design`として実行し、fullの00〜03とGherkin scenario IDを検査する。不正Planningは本文生成・provider call前に拒否する。通常経路で別processの事前`issue validate`は要求しない。修復時の診断には`agent-skill-chain issue validate --path=<directory> --stage=design`を使える。sync applyのwriter lock内再生成・digest比較、`workflow advance`のlock内検証、dispatch前freshness・read-back・sealを維持し、以前の検証成功を操作時の検証へ代用しない。
 
 ## テンプレート契約
 

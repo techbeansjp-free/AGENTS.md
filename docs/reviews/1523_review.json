@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1523,
+  "observed": {
+    "baseSha": "21bbc7cd10f082b3ee0db900067cd7b7d6bd4ddb",
+    "implementationHeadSha": "fd16f1794c728b6f2736d502eb49194e27037c18",
+    "diffDigest": "d62fb2c1b381c7a909fc2a1a53c6a7973db858ec1f77e5a899c1ff49c0b284b7",
+    "session": {
+      "sessionId": "93cb216386f20691f28ef8003a47869348f7d69bff33948c7883ee4970d579d3",
+      "latestRoundDigest": "29a2d1aa2d4e544ea32ada4e61afcb4f78f01e968523e5d0b6614643170a7a11",
+      "status": "converged",
+      "countedRounds": 8
+    },
+    "impact": {
+      "digest": "c5137030eda37a17f4446bf8f32ae28147598f3b042a28b17f0a0b29ac97168d",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "fd16f1794c728b6f2736d502eb49194e27037c18",
+        "impactDigest": "c5137030eda37a17f4446bf8f32ae28147598f3b042a28b17f0a0b29ac97168d",
+        "finishedAt": "2026-09-28T03:44:37.332Z",
+        "recordDigest": "6c7077d63fb86a7c2dbc579e045691c290a854e87cba881275dcf865f036d7db"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "F-1523-CR-001",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/cli-usage.ts",
+      "contractId": "AC-PRAT-05"
+    },
+    {
+      "id": "F-1523-CR-002",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-001",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-002",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-003",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-004",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-005",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-006",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-007",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-008",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "src/domain/issue.ts",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "asc-1523-formal-reviewer",
+    "implementer": "asc-1523-implementer",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "8e6a4331ba46d2870292d2774f50b3bddf5f1220523ce4b396163e6d396b5855"
+}
