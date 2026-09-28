@@ -3,16 +3,16 @@
   "issue": 1523,
   "observed": {
     "baseSha": "21bbc7cd10f082b3ee0db900067cd7b7d6bd4ddb",
-    "implementationHeadSha": "c9c9241e27af81754787e993e95c29ec914a6297",
-    "diffDigest": "b16e3fa98d8745df26a8cf22914dadcf7a90b444aa5f759ebdcb017673ddf227",
+    "implementationHeadSha": "fd16f1794c728b6f2736d502eb49194e27037c18",
+    "diffDigest": "d62fb2c1b381c7a909fc2a1a53c6a7973db858ec1f77e5a899c1ff49c0b284b7",
     "session": {
       "sessionId": "93cb216386f20691f28ef8003a47869348f7d69bff33948c7883ee4970d579d3",
-      "latestRoundDigest": "6496657625a788d409d803f78c218e57bbec846c2c3436d8a88afff1b11a336e",
+      "latestRoundDigest": "29a2d1aa2d4e544ea32ada4e61afcb4f78f01e968523e5d0b6614643170a7a11",
       "status": "converged",
-      "countedRounds": 7
+      "countedRounds": 8
     },
     "impact": {
-      "digest": "22551938d34e00abea91482b6bea70db9146fdc9d3ce035adf5e205be17d307b",
+      "digest": "c5137030eda37a17f4446bf8f32ae28147598f3b042a28b17f0a0b29ac97168d",
       "mode": "full"
     },
     "verification": [
@@ -23,14 +23,30 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "c9c9241e27af81754787e993e95c29ec914a6297",
-        "impactDigest": "22551938d34e00abea91482b6bea70db9146fdc9d3ce035adf5e205be17d307b",
-        "finishedAt": "2026-09-28T02:52:42.917Z",
-        "recordDigest": "aac8678be4e3ce7a5279c5fab202564c699364e9b5adfb4a9aeb4a2911427c67"
+        "headSha": "fd16f1794c728b6f2736d502eb49194e27037c18",
+        "impactDigest": "c5137030eda37a17f4446bf8f32ae28147598f3b042a28b17f0a0b29ac97168d",
+        "finishedAt": "2026-09-28T03:44:37.332Z",
+        "recordDigest": "6c7077d63fb86a7c2dbc579e045691c290a854e87cba881275dcf865f036d7db"
       }
     ]
   },
   "findings": [
+    {
+      "id": "F-1523-CR-001",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/cli-usage.ts",
+      "contractId": "AC-PRAT-05"
+    },
+    {
+      "id": "F-1523-CR-002",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
     {
       "id": "F-1523-D1-001",
       "severity": "High",
@@ -104,5 +120,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "559eb90c73385aa067c34ebe60c9e837d9ce3bad6b30c8e70b724634f8d5a2b1"
+  "evidenceDigest": "8e6a4331ba46d2870292d2774f50b3bddf5f1220523ce4b396163e6d396b5855"
 }
