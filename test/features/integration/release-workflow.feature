@@ -17,9 +17,9 @@ Feature: release workflowの安全契約
     When release workflow契約を検証する
     Then Immutable Releases状態報告stepの存在とjob非停止を確認する
 
-  Scenario: SCN-INT-RELID-008 固定version文字列が対象5fileに存在しない
-    Given 固定version文字列検査の対象5fileを読み込む
-    When 対象5fileのrelease version形文字列を検査する
+  Scenario: SCN-INT-RELID-008 固定version文字列が対象4fileに存在しない
+    Given 固定version文字列検査の対象4fileを読み込む
+    When 対象4fileのrelease version形文字列を検査する
     Then release version形の文字列は0件である
 
   Scenario: SCN-INT-RELID-009 正式取得元がasset URLとnpx github経路で区別される

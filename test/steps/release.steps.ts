@@ -321,12 +321,20 @@ Then("Immutable Releases状態報告stepの存在とjob非停止を確認する"
   );
 });
 
+/**
+ * **`ci.yml`は対象から除く。** `.github/workflows/ci.yml`は
+ * `scripts/check_project_quality.ts`のPROTECTED_FILESであり、workflow名の
+ * ような意味変更はtrusted品質契約のversioned staged proposal
+ * （`.github/trusted-quality-proposals.json`）を既定branchへ先に登録する
+ * 二段階承認を要求する。本Issueの実装はrepository maintainer権限を持たず
+ * 単一PRでこの二段階を完了できないため、`ci.yml`のworkflow名変更は本PRから
+ * 除外する（05_計画変更.md AMD-002）。
+ */
 const FIXED_VERSION_STRING_TARGETS = [
   "README.md",
   "AGENTS.md",
   "CLAUDE.md",
   path.join(".agent-skill-chain", "00_利用案内.md"),
-  path.join(".github", "workflows", "ci.yml"),
 ] as const;
 
 /**
@@ -337,7 +345,7 @@ const FIXED_VERSION_STRING_TARGETS = [
  */
 const FIXED_RELEASE_VERSION_PATTERN = /\bv\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?\b/u;
 
-Given("固定version文字列検査の対象5fileを読み込む", function () {
+Given("固定version文字列検査の対象4fileを読み込む", function () {
   this.fixedVersionStringFiles = Object.fromEntries(
     FIXED_VERSION_STRING_TARGETS.map((relative) => [
       relative,
@@ -346,7 +354,7 @@ Given("固定version文字列検査の対象5fileを読み込む", function () {
   );
 });
 
-When("対象5fileのrelease version形文字列を検査する", function () {
+When("対象4fileのrelease version形文字列を検査する", function () {
   this.fixedVersionStringMatches = Object.entries(
     this.fixedVersionStringFiles,
   ).flatMap(([file, content]) =>
