@@ -95,6 +95,7 @@ import {
   parseReviewRoundInput,
 } from "../../src/domain/review-convergence.js";
 import { renderReviewEvidence } from "../../src/domain/review-evidence.js";
+import { PLAN_AMENDMENT_FILE } from "../../src/domain/plan-seal.js";
 import {
   appendFixtureVerificationRecords,
   observeFixtureVerification,
@@ -2514,6 +2515,55 @@ function convergedReviewBinding(
  */
 type FixtureMergeMode = "disabled" | "assisted" | "automatic";
 
+/** 版管理下full stagingのroot（Issue #1531）。 */
+const TRACKED_FULL_STAGING_ROOT = "docs/issues";
+
+/** 実装commitで初めてcommitする計画変更記録。 */
+const TRACKED_FULL_AMENDMENT = [
+  "# 05 計画変更",
+  "",
+  "## AMD-001 変更",
+  "",
+  "- 対象: 対象の計画変更の記述",
+  "- 変更: 変更の計画変更の記述",
+  "- 理由: 理由の計画変更の記述",
+  "",
+].join("\n");
+
+/**
+ * trusted policyのstaging節を版管理下rootへ差し替え、Step 8で封印したfull stagingを
+ * 作る（Issue #1531）。**呼出し側はこのstagingをtrusted commitへ含める。**
+ */
+function prepareTrackedFullStaging(root: string): string {
+  const manifestFile = path.join(
+    root,
+    ".agent-skill-chain",
+    "project-policy.json",
+  );
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8")) as {
+    policy: Record<string, unknown>;
+  };
+  manifest.policy.staging = { root: TRACKED_FULL_STAGING_ROOT, tracked: true };
+  fs.writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
+  fs.mkdirSync(path.join(root, ...TRACKED_FULL_STAGING_ROOT.split("/")), {
+    recursive: true,
+  });
+  const staging = createIssueStaging(root, {
+    title: "workflow-test",
+    answers: answers(),
+    now: new Date(fixtureInstantMs()),
+    requestedMode: "full",
+    stagingRoot: TRACKED_FULL_STAGING_ROOT,
+  }).path;
+  writeFullStagingArtifacts(staging);
+  for (const step of [1, 2, 3, 4, 5, 6, 7, 8])
+    appendWorkflowJournalEntry({
+      staging,
+      entry: entry(step, "full", fixtureInstant({ hoursAgo: 1 })),
+    });
+  return staging;
+}
+
 function preparePullRequest(
   world: WorkflowStepWorld,
   missingStep4: boolean,
@@ -2531,8 +2581,13 @@ function preparePullRequest(
    * review artifactの代わりにPoC隔離fixtureをHEAD commitにする。PoCの
    * `pr create`は**baselineからHEADまでの差分がfixture root内だけである**ことを
    * 再計測するため、review artifactを載せると成立しない。
+   *
+   * `"full"`は版管理下root（`docs/issues`）のfull stagingを作る（Issue #1531）。
+   * Step 8で封印した00〜03はtrusted commit（`baseSha`）に載せ、
+   * `05_計画変更.md`のAMD-001は実装commit（`H_impl`）で初めてcommitする。
+   * 計画変更記録がcommit上に現れるheadを`baseSha`より後に置くためである。
    */
-  workflowMode: "quick" | "poc" = "quick",
+  workflowMode: "quick" | "poc" | "full" = "quick",
   requiredReviews = 0,
   artifactDisposition:
     | "valid"
@@ -2590,9 +2645,20 @@ function preparePullRequest(
    * manifestの`policy`は上で書いた既定policyと同じ値にし、merge条件を動かさない。
    */
   writeTrustedPolicySet(root);
-  spawnSync("git", ["add", "--", ...TRUSTED_POLICY_PATHS], {
-    cwd: root,
-  });
+  const fullStaging =
+    workflowMode === "full" ? prepareTrackedFullStaging(root) : undefined;
+  spawnSync(
+    "git",
+    [
+      "add",
+      "--",
+      ...TRUSTED_POLICY_PATHS,
+      ...(fullStaging ? [TRACKED_FULL_STAGING_ROOT] : []),
+    ],
+    {
+      cwd: root,
+    },
+  );
   spawnSync("git", ["commit", "-q", "-m", "trusted policy"], {
     cwd: root,
   });
@@ -2616,6 +2682,13 @@ function preparePullRequest(
   ) {
     fs.writeFileSync(path.join(root, "implementation.txt"), "product change\n");
     spawnSync("git", ["add", "implementation.txt"], { cwd: root });
+    if (fullStaging) {
+      fs.writeFileSync(
+        path.join(fullStaging, PLAN_AMENDMENT_FILE),
+        TRACKED_FULL_AMENDMENT,
+      );
+      spawnSync("git", ["add", TRACKED_FULL_STAGING_ROOT], { cwd: root });
+    }
     spawnSync("git", ["commit", "-q", "-m", "implementation"], {
       cwd: root,
     });
@@ -2726,6 +2799,7 @@ function preparePullRequest(
     });
   const staging =
     pocStaging ??
+    fullStaging ??
     createIssueStaging(root, {
       title: "workflow-test",
       answers: answers(),
@@ -2807,10 +2881,11 @@ function preparePullRequest(
     );
     refreshStoredStagingDigest(staging);
   } else {
-    for (const step of [1, 4, 9])
+    const journalMode = fullStaging ? "full" : "quick";
+    for (const step of fullStaging ? [9] : [1, 4, 9])
       appendWorkflowJournalEntry({
         staging,
-        entry: entry(step, "quick", fixturePast),
+        entry: entry(step, journalMode, fixturePast),
         ...(step === 9 ? { headSha: reviewCandidateHeadSha } : {}),
       });
     const reviewSession = convergedReviewBinding(
@@ -2822,7 +2897,7 @@ function preparePullRequest(
     appendWorkflowJournalEntry({
       staging,
       entry: {
-        ...entry(10, "quick", fixturePast),
+        ...entry(10, journalMode, fixturePast),
         reviewSession,
       },
     });
@@ -2850,7 +2925,7 @@ function preparePullRequest(
     );
   recordStagingSync(staging, {
     tracker: "https://github.com/o/r/issues/877",
-    checkpoint: 4,
+    checkpoint: fullStaging ? 8 : 4,
     syncedAt: fixtureNow,
     bodyDigest: "a".repeat(64),
     readBackDigest: "a".repeat(64),
@@ -3243,7 +3318,7 @@ function prepareDeliveryCli(
   mergeMode: FixtureMergeMode = "automatic",
   mergeMethod: "merge" | "squash" | "rebase" = "merge",
   reviewIndependence?: "context-isolated" | "actor-independent",
-  workflowMode: "quick" | "poc" = "quick",
+  workflowMode: "quick" | "poc" | "full" = "quick",
   requiredReviews = 0,
   artifactDisposition:
     | "valid"
@@ -5027,6 +5102,89 @@ if (exact(["auth", "status"])) {
         mergeCalls[0]![headIndex + 1],
         prepared.headSha,
         "pr mergeが固定create HEADではなく再固定後の実効HEADを送っていません",
+      );
+      break;
+    }
+    case "SCN-E2E-WFSTEP-072": {
+      /**
+       * **Step 8で封印した版管理下full stagingでも、再固定後の`pr merge`は計画凍結を
+       * 実効HEAD上で検査する**（Issue #1531）。`05_計画変更.md`のAMD-001は
+       * 実装commitで初めてcommitされ、固定済み`create.headSha`（ここではAMDを
+       * 持たない`baseSha`）上には無い。固定値のまま検査すると、commit上とworktreeの
+       * 計画変更記録の不一致としてmerge前に拒否される。
+       */
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        undefined,
+        "full",
+      );
+      createDeliveryPullRequest(prepared);
+      const amendmentPath = path
+        .relative(
+          prepared.root,
+          path.join(prepared.staging, PLAN_AMENDMENT_FILE),
+        )
+        .split(path.sep)
+        .join("/");
+      for (const [commit, present] of [
+        [prepared.baseSha, false],
+        [prepared.headSha, true],
+      ] as const)
+        assert.equal(
+          spawnSync("git", ["cat-file", "-e", `${commit}:${amendmentPath}`], {
+            cwd: prepared.root,
+          }).status === 0,
+          present,
+          `${commit}上の${amendmentPath}の有無がfixtureの前提と異なります`,
+        );
+      const deliveryFile = path.join(
+        prepared.staging,
+        ...DELIVERY_STATE_FILE.split("/"),
+      );
+      const delivery = JSON.parse(fs.readFileSync(deliveryFile, "utf8")) as {
+        create: { headSha: string };
+      };
+      delivery.create.headSha = prepared.baseSha;
+      fs.writeFileSync(deliveryFile, `${JSON.stringify(delivery, null, 2)}\n`);
+      fs.writeFileSync(
+        path.join(prepared.staging, "journal", "reanchor.jsonl"),
+        `${JSON.stringify({
+          oldHeadSha: prepared.baseSha,
+          newHeadSha: prepared.headSha,
+          oldBaseSha: prepared.baseSha,
+          newBaseSha: prepared.baseSha,
+          diffDigest: "a".repeat(64),
+          method: "reviewed-forward",
+          reason: "計画変更をcommitしたexact headへ再固定した",
+          recordedAt: fixtureInstant(),
+          reviewedForward: {
+            sessionId: "b".repeat(64),
+            roundDigest: "c".repeat(64),
+            implementationSha: prepared.implementationCommitSha,
+            artifactPath: "docs/reviews/fixture.md",
+            artifactDigest: "d".repeat(64),
+          },
+        })}\n`,
+      );
+      refreshStoredStagingDigest(prepared.staging);
+      const previewed = executeCli(
+        deliveryMergeArgs(prepared).map((argument) =>
+          argument === "--apply" ? "--dry-run" : argument,
+        ),
+        prepared.root,
+        prepared.env,
+      );
+      const output = previewed.stdout + previewed.stderr;
+      assert.equal(previewed.status, 0, output);
+      assert.doesNotMatch(output, /05_計画変更\.mdがworktreeと一致しません/u);
+      assert.doesNotMatch(output, /計画文書が封印と一致しません/u);
+      assert.equal(
+        deliveryProviderCalls(prepared).filter(isMergeCall).length,
+        0,
+        "dry-runがmerge要求をproviderへ送っています",
       );
       break;
     }
