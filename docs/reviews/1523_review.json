@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1523,
+  "observed": {
+    "baseSha": "21bbc7cd10f082b3ee0db900067cd7b7d6bd4ddb",
+    "implementationHeadSha": "c9c9241e27af81754787e993e95c29ec914a6297",
+    "diffDigest": "b16e3fa98d8745df26a8cf22914dadcf7a90b444aa5f759ebdcb017673ddf227",
+    "session": {
+      "sessionId": "93cb216386f20691f28ef8003a47869348f7d69bff33948c7883ee4970d579d3",
+      "latestRoundDigest": "6496657625a788d409d803f78c218e57bbec846c2c3436d8a88afff1b11a336e",
+      "status": "converged",
+      "countedRounds": 7
+    },
+    "impact": {
+      "digest": "22551938d34e00abea91482b6bea70db9146fdc9d3ce035adf5e205be17d307b",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "c9c9241e27af81754787e993e95c29ec914a6297",
+        "impactDigest": "22551938d34e00abea91482b6bea70db9146fdc9d3ce035adf5e205be17d307b",
+        "finishedAt": "2026-09-28T02:52:42.917Z",
+        "recordDigest": "aac8678be4e3ce7a5279c5fab202564c699364e9b5adfb4a9aeb4a2911427c67"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "F-1523-D1-001",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-002",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-003",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-004",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-005",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-006",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-007",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/issue.ts",
+      "contractId": "AC-PRAT-02"
+    },
+    {
+      "id": "F-1523-D1-008",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "src/domain/issue.ts",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "asc-1523-formal-reviewer",
+    "implementer": "asc-1523-implementer",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "559eb90c73385aa067c34ebe60c9e837d9ce3bad6b30c8e70b724634f8d5a2b1"
+}
