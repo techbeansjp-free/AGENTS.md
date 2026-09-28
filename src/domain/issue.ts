@@ -147,20 +147,29 @@ const PLANNING_LIST_PREFIX =
 
 /** 対の内側ごとに値包装を除き、隣のspanの具体文をラベルへ巻き込まない。 */
 function planningUnwrappedValue(value: string): string {
-  let previous: string;
-  do {
-    previous = value;
-    value = value
-      .trim()
-      .replace(PLANNING_LIST_PREFIX, "")
-      .replace(/^[^:：。！？、,;；`|<>]+[:：]\s*/u, "")
-      .trim();
-  } while (value !== previous);
-  return value;
+  return value
+    .split(/([。！？、,;；])/u)
+    .map((clause) => {
+      let previous: string;
+      do {
+        previous = clause;
+        clause = clause
+          .replace(/^[^\S\n]+/gmu, "")
+          .replace(new RegExp(PLANNING_LIST_PREFIX.source, "gmu"), "")
+          // labelとcolonの間の改行は許すが、前の行の具体文は巻き込まない。
+          .replace(
+            /^[^\n:：。！？、,;；`|<>]+(?:\n[^\S\n]*)*[:：][^\S\n]*/gmu,
+            "",
+          )
+          .trim();
+      } while (clause !== previous);
+      return clause;
+    })
+    .join("");
 }
 
-/** 有限な強調包装だけを処理する。Markdownの意味・任意構文は解決しない。 */
-function planningEmphasisValue(line: string): string {
+/** 同じ内容ownerの強調を対にしてから包装を除く。先に物理行・句を壊さない。 */
+function planningValue(line: string): string {
   const stack = [{ delimiter: "", value: "" }];
   let offset = 0;
   for (const match of line.matchAll(/\*+|_+/gu)) {
@@ -201,21 +210,16 @@ function planningEmphasisValue(line: string): string {
   return planningUnwrappedValue(stack[0]!.value);
 }
 
-/** 行頭のlist/quote/番号、強調、colonラベルは内容には数えない。 */
-function planningValue(text: string): string {
-  return text
-    .split("\n")
-    .map((line) => planningEmphasisValue(line.trim()))
-    .join("\n");
-}
-
 /** 有限な可視値検査。自然言語の判断の妥当性はreadinessが所有する。 */
 function hasPlanningContent(body: string): boolean {
-  const lines = withoutCodeAndComments(body, "content").split("\n");
+  const hiddenSpans: Array<readonly [number, number]> = [];
+  const lines = withoutCodeAndComments(body, "content", hiddenSpans).split(
+    "\n",
+  );
+  const rawLines = body.split("\n");
   const concrete = (value: string): boolean =>
     planningValue(value)
       .split(/[。！？、,;；]/u)
-      .map(planningValue)
       .some(
         (clause) =>
           clause.trim() !== "" &&
@@ -224,11 +228,48 @@ function hasPlanningContent(body: string): boolean {
       );
   const prose: string[] = [];
   const values: string[] = [];
+  let rawOffset = 0;
+  let hiddenIndex = 0;
+  let previousQuoteDepth = 0;
+  const flush = (): void => {
+    values.push(prose.join("\n"));
+    prose.length = 0;
+  };
   for (const [index, line] of lines.entries()) {
-    const value = line.trim();
+    const rawEnd = rawOffset + (rawLines[index]?.length ?? 0);
+    while (
+      hiddenSpans[hiddenIndex] &&
+      hiddenSpans[hiddenIndex]![1] <= rawOffset
+    )
+      hiddenIndex++;
+    const hiddenLine = (hiddenSpans[hiddenIndex]?.[0] ?? Infinity) <= rawEnd;
+    rawOffset = rawEnd + 1;
+    // comment/inline codeを空白化して生じた空行は段落境界ではない。
+    if (!line.trim() && hiddenLine) {
+      prose.push("");
+      continue;
+    }
+    let value = line.trim();
+    let quoteDepth = 0;
+    while (/^>(?:\s+|$)/u.test(value)) {
+      value = value.replace(/^>(?:\s+|$)/u, "");
+      quoteDepth++;
+    }
+    if (quoteDepth !== previousQuoteDepth) flush();
+    previousQuoteDepth = quoteDepth;
+    if (!value && hiddenLine) {
+      prose.push("");
+      continue;
+    }
     if (/^\|/u.test(value)) {
+      flush();
       if (/^\|[\s:|-]+\|$/u.test(value)) continue;
-      if (/^\|[\s:|-]+\|$/u.test(lines[index + 1]?.trim() ?? "")) continue;
+      if (
+        /^\|[\s:|-]+\|$/u.test(
+          (lines[index + 1]?.trim() ?? "").replace(/^(?:>(?:\s+|$))+/u, ""),
+        )
+      )
+        continue;
       // 先頭cellはrowの項目名。内容の成立はそれ以降の値だけで判定する。
       values.push(
         ...value
@@ -238,11 +279,25 @@ function hasPlanningContent(body: string): boolean {
       );
       continue;
     }
-    const content = planningValue(value);
-    if (!/^#{1,6}(?:\s|$)/u.test(content)) prose.push(content);
+    // 見出し・段落・table/cell・別list項目を越えて値や強調を結合しない。
+    // headingのcolonや強調を先に除くと見出し自体が具体文になってしまう。
+    let unlisted = value;
+    while (PLANNING_LIST_PREFIX.test(unlisted))
+      unlisted = unlisted.replace(PLANNING_LIST_PREFIX, "").trim();
+    if (!value || /^#{1,6}(?:\s|$)/u.test(unlisted)) {
+      flush();
+      continue;
+    }
+    if (
+      PLANNING_LIST_PREFIX.test(value) &&
+      value.replace(PLANNING_LIST_PREFIX, "").trim()
+    )
+      flush();
+    prose.push(value);
   }
   // 改行で分断されたfile名と節指定も1つの参照句として評価する。
-  return [...values, prose.join("\n")].some(concrete);
+  flush();
+  return values.some(concrete);
 }
 
 function contentlessPlanningSections(file: string, text: string): string[] {
@@ -257,7 +312,6 @@ function contentlessPlanningSections(file: string, text: string): string[] {
   );
   return [...headings].filter((heading) =>
     markdownSectionBodies(text, heading, true).some((body) => {
-      const content = withoutPlanningLiterals(body);
       // 裸の正規固定文は後段で位置・sourceを検証する。
       if (
         PLANNING_REFERENCES.some(
@@ -268,7 +322,7 @@ function contentlessPlanningSections(file: string, text: string): string[] {
         )
       )
         return false;
-      return !hasPlanningContent(content);
+      return !hasPlanningContent(body);
     }),
   );
 }
@@ -329,11 +383,12 @@ function validatePlanningReferences(
         const sourceHeadings = source
           .split("\n")
           .filter((line) => /^#{2,6}\s+(.+?)\s*$/u.exec(line)?.[1] === heading);
+        const rawSourceBodies = markdownSectionBodies(source, heading, true);
         if (
           sourceBodies.length !== 1 ||
           sourceHeadings.length !== 1 ||
-          !hasPlanningContent(sourceBodies[0] ?? "") ||
-          markdownSectionBodies(source, heading, true).some(
+          !hasPlanningContent(rawSourceBodies[0] ?? "") ||
+          rawSourceBodies.some(
             (body) => unresolvedPlaceholders(body).length > 0,
           )
         )
@@ -949,6 +1004,7 @@ const UNRESOLVED_PLACEHOLDER_SAMPLE_LIMIT = 5;
 function withoutCodeAndComments(
   text: string,
   purpose: "placeholder" | "content",
+  hiddenSpans?: Array<readonly [number, number]>,
 ): string {
   const visible: string[] = [];
   let cursor = 0;
@@ -985,6 +1041,7 @@ function withoutCodeAndComments(
       if (!unclosedComment && text.startsWith("<!--", cursor)) {
         const closing = text.indexOf("-->", cursor + 4);
         if (closing >= 0) {
+          hiddenSpans?.push([cursor, closing + 3]);
           let newlines = 0;
           for (let index = cursor; index < closing + 3; index += 1)
             if (text[index] === "\n") newlines += 1;
@@ -1017,6 +1074,7 @@ function withoutCodeAndComments(
           cursor - lineStart + length,
         );
         if (closing >= 0) {
+          hiddenSpans?.push([cursor, lineStart + closing + length]);
           if (purpose === "content") visible.push(" ");
           cursor = lineStart + closing + length;
           continue;

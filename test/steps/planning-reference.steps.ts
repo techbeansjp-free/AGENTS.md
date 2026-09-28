@@ -18,6 +18,7 @@ interface PlanningReferenceWorld extends WorkflowWorld {
   validation: ReturnType<typeof validateIssue>;
   sourceSymlink: boolean;
   contentFailures: string[];
+  contentChecks: number;
 }
 const { Given, When, Then } = stepDefinitions<PlanningReferenceWorld>();
 const REQUEST = "00_要求定義.md";
@@ -33,6 +34,7 @@ When(
   "Planningの{string}の{string}で次の有限内容境界を検査する",
   function (side: string, shape: string, cases: DataTable) {
     this.contentFailures = [];
+    this.contentChecks = 0;
     checkPlanningValues(
       this,
       side,
@@ -49,6 +51,188 @@ When(
     checkPlanningValues(this, side, shape, composedPlanningValues());
   },
 );
+
+When(
+  "Planningの{string}の{string}で改行を含む有限文法と構造境界を合成して検査する",
+  { timeout: 120_000 },
+  function (side: string, shape: string) {
+    if (shape !== "prose") return;
+    // 複数の導出が同じ本文になる例は一度だけ検証する。
+    const cases = new Map<string, boolean>();
+    for (const [text, valid] of multilinePlanningValues()) {
+      if (cases.has(text)) assert.equal(cases.get(text), valid, text);
+      cases.set(text, valid);
+    }
+    checkPlanningValues(this, side, shape, cases);
+  },
+);
+
+/** token内部は変更せず、文法の境界へ空白を挿入する独立oracle。 */
+function* multilinePlanningValues(): Generator<[string, boolean]> {
+  const styles = ["*", "**", "***", "_", "__", "___"];
+  const reference = "01_要件定義.mdを参照";
+  const concrete = "Planning_ownerが判断を保持する";
+  const wrap = (style: string, text: string): string => style + text + style;
+  // 強調delimiterは囲むtokenに結び付ける。token間へ改行を入れても
+  // opener/closerの直内側を空白に変えた不正な入れ子構文は生成しない。
+  const styled = (style: string, tokens: readonly string[]): string[] =>
+    tokens.length
+      ? tokens.map(
+          (token, index) =>
+            (index === 0 ? style : "") +
+            token +
+            (index === tokens.length - 1 ? style : ""),
+        )
+      : [style + style];
+  for (const outer of styles)
+    for (const inner of ["", ...styles])
+      for (const colon of [":", "："])
+        for (const [payload, valid] of [
+          [[], false],
+          [["01_要件定義.md", "を", "参照"], false],
+          [["01_要件定義.md", "§1", "と", "同じ"], false],
+          [[concrete], true],
+        ] as const) {
+          for (const tokens of [
+            styled(outer, ["参照先", colon, ...styled(inner, payload)]),
+            styled(outer, styled(inner, ["参照先", colon, ...payload])),
+            [wrap(outer, "参照先"), colon, ...styled(inner, payload)],
+          ]) {
+            const parts = tokens.filter(Boolean);
+            for (const whitespace of [" ", "\t", "\n"])
+              for (let boundary = 0; boundary <= parts.length; boundary++) {
+                const text =
+                  parts.slice(0, boundary).join("") +
+                  whitespace +
+                  parts.slice(boundary).join("");
+                yield [text, valid];
+                // 1つのlist項目の継続行。別項目へ強調を跨がせない。
+                if (whitespace === "\n")
+                  yield ["- " + text.replaceAll("\n", "\n  "), valid];
+                // Markdown表は同一物理行のcellだけを生成する。
+                else
+                  yield [
+                    `| 項目 | 内容 |\n|---|---|\n| 判断 | ${text} |`,
+                    valid,
+                  ];
+              }
+            yield [parts.join("\n"), valid];
+          }
+        }
+  for (const style of styles)
+    for (const separator of [
+      " ",
+      "\t",
+      "\n",
+      "\n\n",
+      "、",
+      ",",
+      ";",
+      "；",
+      "。",
+      "！",
+      "？",
+    ])
+      for (const [first, second, valid] of [
+        [reference, reference, false],
+        [concrete, reference, true],
+        [reference, concrete, true],
+        ["", "", false],
+      ] as const) {
+        yield [
+          wrap(style, `判断:\n${first}`) +
+            separator +
+            wrap(style, `参照先：\n${second}`),
+          valid,
+        ];
+        // 裸の同一行ではcolonまで全体がlabelになり得る。別の具体句と
+        // 断定できる文/行境界だけを使い、意味を推測するoracleにしない。
+        if (separator !== " " && separator !== "\t")
+          yield [first + separator + `参照先：${second}`, valid];
+        yield [
+          `- ${wrap(style, `判断:\n  ${first}`)}\n- ${wrap(style, `参照先：\n  ${second}`)}`,
+          valid,
+        ];
+      }
+  // 見出し・table・別list項目は前後の値を連結しない。見出し自体は内容にならない。
+  for (const heading of [
+    "#### Planningが所有する",
+    "#### 判断: Planningが所有する",
+    "#### **Planningが所有する**",
+    "- #### 判断: Planningが所有する",
+  ])
+    yield [`${reference}\n${heading}\n${reference}`, false];
+  for (const boundary of [
+    "\n\n",
+    "\n#### 補足\n",
+    "\n| 項目 | 内容 |\n|---|---|\n| 判断 | - |\n",
+    "\n```text\n隠れた本文\n```\n",
+  ])
+    yield [`${concrete}${boundary}参照先: ${reference}`, true];
+  for (const mask of [
+    "<!--説明-->",
+    "<!--説明\n別行-->",
+    "<!--説明\n\n別行-->",
+    "`説明`",
+    "\n`説明`",
+    "既知引用",
+    "\n既知引用",
+  ])
+    for (const style of styles) {
+      for (const [text, valid] of [
+        [wrap(style, `参照先:${mask}\n${reference}`), false],
+        [wrap(style, `判断:${mask}\n${concrete}`), true],
+        [wrap(style, `参照先:${mask}\n`), false],
+      ] as const) {
+        yield [text, valid];
+        yield [
+          text
+            .split("\n")
+            .map((line) => "> " + line)
+            .join("\n"),
+          valid,
+        ];
+      }
+    }
+  for (const style of styles)
+    for (const [value, valid] of [
+      [reference, false],
+      [concrete, true],
+      ["", false],
+    ] as const)
+      yield [
+        `> | 項目 | 内容 |\n> |---|---|\n> | 判断 | ${wrap(style, `判断: ${value}`)} |`,
+        valid,
+      ];
+  for (const style of styles)
+    for (const prefix of [
+      "- ",
+      "* ",
+      "+ ",
+      "1. ",
+      "1) ",
+      "(1) ",
+      "[1] ",
+      "（1） ",
+      "- [ ] ",
+      "> ",
+      "> - ",
+    ])
+      for (const [value, valid] of [
+        ["01_要件定義.md\nを\n参照", false],
+        [concrete, true],
+      ] as const) {
+        const continuation = prefix.startsWith(">") ? ">   " : "    ";
+        yield [
+          prefix +
+            wrap(style, `参照先:\n${value}`).replaceAll(
+              "\n",
+              "\n" + continuation,
+            ),
+          valid,
+        ];
+      }
+}
 
 /** oracleは参照だけ/具体文ありという入力文法から決め、製品の正規化を使わない。 */
 function* composedPlanningValues(): Generator<[string, boolean]> {
@@ -186,6 +370,7 @@ function checkPlanningValues(
       replacePlanningBody(originals[file!]!, heading!, body),
     );
     const result = validateIssue(world.staging);
+    world.contentChecks++;
     if (result.valid !== expected)
       world.contentFailures.push(
         `${side}/${shape}/${JSON.stringify(value)}: ${result.valid}; ${result.errors.join("; ")}`,
@@ -195,6 +380,13 @@ function checkPlanningValues(
 }
 
 Then("有限内容境界の全例が期待した判定になる", function () {
+  this.attach(
+    JSON.stringify({
+      assertions: this.contentChecks,
+      mismatches: this.contentFailures.length,
+      failures: this.contentFailures,
+    }),
+  );
   assert.deepEqual(
     this.contentFailures.slice(0, 20),
     [],
