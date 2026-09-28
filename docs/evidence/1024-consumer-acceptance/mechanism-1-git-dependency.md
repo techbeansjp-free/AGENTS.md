@@ -4,7 +4,7 @@
 
 | path | SHA-256 |
 |---|---|
-| `scripts/check_consumer_acceptance.ts` | `08cbde239552af94f97485a09e3173fb6e72855e7f4cffbc80629122f5bff5fc` |
+| `scripts/check_consumer_acceptance.ts` | `391c3a35826ee476e645fbf92efc7388ea4c71659f93fde769421e6b10b811ab` |
 | `src/lib/process.ts` | `1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2` |
 
 この2件を記録するのは、consumer acceptanceの判定とprocess出力上限という、この証跡が主張する振る舞いの実体だからである。**`scripts/check_package_contents.ts`は含めない。** 同fileは`checkConsumerAcceptance`を`mechanisms: ["packed-bin", "scale-output"]`で呼んでおり、**この機構は接続経路に存在しない**（Issue #1221）。`package.json`はmainの自動releaseでversionが変わり、主張する振る舞いが同じでもhashが変わるため対象に含めない。
@@ -98,3 +98,7 @@ PR #1263の補正で`JsonlSessionOptions`と`runJsonlSession`だけを変更し�
 2026-09-07、旧束縛`06013f66a9aaf57b2cb9efc261b812730beccfd65366431b4b71faf0d35caf85`に一致するcommit `2931acc5acf4164b25c5e59f2ef431ec081eff9f`の`src/lib/process.ts`と修正後sourceを実読した。変更は`runJsonlSession`のstdin errorを既存の失敗処理へ接続する部分だけである。前節と同じTypeScript ASTの2宣言除外手順で残余の元byte列を比較し、完全一致とSHA-256 `fa1b2ec07ff06c7ab0f89d854c9231d2dfbdf4c178e540a89717f9ac1582748d`を再計測した。同期`run`・`git`、定数、import、module初期化は未変更であり、consumerの接続先は同期`run`と型だけである。`check_consumer_acceptance.ts`の全体SHA-256 `08cbde239552af94f97485a09e3173fb6e72855e7f4cffbc80629122f5bff5fc`も未変更だった。
 
 上表は修正後file全体のSHA-256 `1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2`へ再拘束する。これは非同期session変更から独立した同期consumer経路のbyte同一性による再拘束であり、既存の#1024時点の実npm・pnpm故障注入を再実行したという主張ではない。旧注入結果、artifact、distribution digest、束縛集合、検証器、SHA節からartifact節への解析境界を保持する。統合後sourceのconsumer全31 scenarioは別途coordinatorが検証し、その結果をIssue #1265のレビュー証拠へ記録する。
+
+## Issue #1527のrelease-identity機構追加への再拘束
+
+2026-09-29、Issue #1527で`scripts/check_consumer_acceptance.ts`へ第4機構`release-identity`（`observeReleaseIdentity`関数、`CONSUMER_ACCEPTANCE_MECHANISMS`への追加、`checkConsumerAcceptance`のdispatch分岐追加、CLI `--expected-version`・`--verify-artifact-identity`の追加）を実装した。これらは`observeGitDependency`・`observePackedArtifact`・`observeScaleDependentOutput`・`observeInstalledArtifact`・`assertIsolation`・`createIsolatedEnvironment`・`evaluateAtomicObservation`のいずれも変更せず、既存3機構（git-dependency、packed-bin、scale-output）の判定分岐へも変更を加えていない（`git diff`で確認、既存関数の内部は書き換えず新規関数・新規分岐の追加のみ）。同fileの全体SHA-256は`391c3a35826ee476e645fbf92efc7388ea4c71659f93fde769421e6b10b811ab`へ変化した。上表はこの値へ再拘束する。`src/lib/process.ts`・`scripts/check_package_contents.ts`（該当機構のみ）は未変更であり、上表のSHA-256を保持する。これは新規機構追加による全体hashの再拘束であり、本機構の故障注入・artifact_sha256・distribution_digest・注入前後の終了値・復元確認を再実行したという主張ではない。
