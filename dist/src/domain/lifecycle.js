@@ -1185,11 +1185,13 @@ export function doctor(target, worktreeObservations) {
              * **source buildの場合もinstall/update（`sourceBuildWarnings`）と同じ回復文を
              * 含める。** 回復手段を欠くと、doctorだけを見た利用者がrelease
              * distributionからのupdateで回復できることを知る手段が無い
-             * （FR-11、round 2独立review REV2-09指摘）。
+             * （FR-11、round 2独立review REV2-09指摘）。**文字列は複製せず
+             * `sourceBuildWarnings()`から取得する。** 別々の文字列を維持すると
+             * 片方だけ変更した際に無言でずれる（round 3独立review REV3-09指摘）。
              */
             note: DISTRIBUTION_IDENTITY.kind === "release"
                 ? "実行中のCLIは正式release distributionです"
-                : "実行中のCLIはsource buildです。package.jsonのversionはrelease追随をやめたsentinelであり、release versionではありません。release distributionから update --apply を実行すると回復できます",
+                : `実行中のCLIはsource buildです。package.jsonのversionはrelease追随をやめたsentinelであり、release versionではありません。${sourceBuildWarnings()[1] ?? "release distributionから update --apply を実行すると回復できます"}`,
         },
         unmanagedAssets: {
             observed: unmanagedAssets.observed,
