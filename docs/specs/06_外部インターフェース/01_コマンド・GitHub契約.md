@@ -2,7 +2,7 @@
 
 CLIは引数を構造化入力として受け、適用を伴う操作は既定でdry-runとする。外部プロセスは引数配列で呼び、`gh`操作は`src/adapters/github.ts`、providerのread-only観測は`src/adapters/provider.ts`だけに閉じ込める。
 
-`issue validate`のPlanning固定参照はREQ-WF-050に従う。既知3固定文の単一backtick完全一致字句（前後に連続backtickなし）は説明用として許容し、実参照にはしない。引用だけのsource/target、未知path・節や不正な引用、許可外位置の裸markerは拒否する。検証結果のfield・終了値、同期操作内の同じ検証契約は維持する。
+`issue validate`のPlanning固定参照はREQ-WF-050に従う。fullの3対象節の生の本文全体をtrimして正規固定文と完全一致した場合だけ、同stagingの00通常file・sourceの存在・一意性・最小非空と対象見出しの一意性を検証する。既存placeholder・必須構造検査は全経路で維持する。不一致（引用、追加comment、未知path/節、別位置を含む）とquick/pocは従来検証へ渡し、D1の参照解決も専用拒否も行わない。本文の意味的十分性は既存readinessで扱う。結果field・終了値、同期操作内の同じ検証契約は維持する。
 
 mergeのquality approval sourceはtrusted policyの`reviewIndependence`で切り替える。両modeでPR authorとH_impl authorのstable IDを必須とし、paginationしたprovider review全履歴のactorごとの最新の承認状態変更eventだけを有効状態とする。`context-isolated`では保存済みreview session・Step 10 binding・tracked H_final artifactのH_impl/path/digest/別context/非変更/最終`approved`を再照合し、formal review round digestを`reviewId`へ固定する。このformal approvalは必須であり、有効な同じHEADへのprovider approvalを実効`requiredReviews`の追加証拠として数える。`assisted`の操作authorityは別契約とし、`pr merge --authorize=approved`とrepository write authorityを要求してから`merge-prepared`を作る。candidate申告だけのapprovalはどちらのmodeでも受理しない。
 

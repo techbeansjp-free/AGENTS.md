@@ -106,303 +106,46 @@ const PLANNING_REFERENCES = [
   },
 ] as const;
 
-/** 既知の単一backtick完全一致字句だけを説明用とし、Markdown領域は除外しない。 */
-function withoutPlanningLiterals(text: string): string {
-  for (const { marker } of PLANNING_REFERENCES)
-    text = text.replace(
-      new RegExp("(?<!`)`" + escapeRegExp(marker) + "`(?!`)", "gu"),
-      "",
-    );
-  return text;
-}
-
-// 文・cell・引用の境界を越えない参照先token。空白は各token間だけ許す。
-// pathを解決せず、未知path・節も拒否候補として拾うための有限な字句契約。
-const PLANNING_REFERENCE_ATOM = "[^\\s。！？、,;；`|<>]+";
-const PLANNING_REFERENCE_DESTINATION = `(?:${PLANNING_REFERENCE_ATOM}\\.md(?:\\s*§${PLANNING_REFERENCE_ATOM})?|§${PLANNING_REFERENCE_ATOM})`;
-const PLANNING_REFERENCE_DIRECTIVE = `${PLANNING_REFERENCE_ATOM}\\s*(?:を\\s*参照|と\\s*同じ)(?=$|[\\s。！？、,;；\x60|<>])`;
-
-/** 対象名の直後が参照先である候補だけを、code・commentを含む全文で数える。 */
-function planningMarkerCount(text: string): number {
-  return [
-    ...withoutPlanningLiterals(text).matchAll(
-      new RegExp(
-        `(?:概要|設計対象外|コンテキスト)\\s*[はを]\\s*(?:${PLANNING_REFERENCE_DESTINATION}|${PLANNING_REFERENCE_DIRECTIVE})`,
-        "gu",
-      ),
-    ),
-  ].length;
-}
-
-/** 単独のfile/節参照と「〜を参照/と同じ」の句。普通の文中の「参照」は消さない。 */
-function isPlanningReferenceOnly(value: string): boolean {
-  const reference = `(?:(?:${PLANNING_REFERENCE_ATOM}[はを]\\s*)?${PLANNING_REFERENCE_DESTINATION}(?:\\s*(?:を\\s*参照|と\\s*同じ))?|${PLANNING_REFERENCE_DIRECTIVE})`;
-  return new RegExp(`^${reference}(?:\\s+${reference})*$`, "u").test(
-    value.trim(),
-  );
-}
-
-const PLANNING_LIST_PREFIX =
-  /^(?:[-*+>]|[0-9]+[.)]|\([0-9]+\)|\[[0-9]+\]|（[0-9]+）|\[[ xX]\])(?:\s+|$)/u;
-
-/** 対の内側ごとに値包装を除き、隣のspanの具体文をラベルへ巻き込まない。 */
-function planningUnwrappedValue(value: string): string {
-  return value
-    .split(/([。！？、,;；])/u)
-    .map((clause) => {
-      let previous: string;
-      do {
-        previous = clause;
-        clause = clause
-          .replace(/^[^\S\n]+/gmu, "")
-          .replace(new RegExp(PLANNING_LIST_PREFIX.source, "gmu"), "")
-          // labelとcolonの間の改行は許すが、前の行の具体文は巻き込まない。
-          .replace(
-            /^[^\n:：。！？、,;；`|<>]+(?:\n[^\S\n]*)*[:：][^\S\n]*/gmu,
-            "",
-          )
-          .trim();
-      } while (clause !== previous);
-      return clause;
-    })
-    .join("");
-}
-
-/** 同じ内容ownerの強調を対にしてから包装を除く。先に物理行・句を壊さない。 */
-function planningValue(line: string): string {
-  const stack = [{ delimiter: "", value: "" }];
-  let offset = 0;
-  for (const match of line.matchAll(/\*+|_+/gu)) {
-    const run = match[0];
-    const start = match.index;
-    const end = start + run.length;
-    stack.at(-1)!.value += line.slice(offset, start);
-    offset = end;
-    // 強調の内側の値がまだ空なら、空白で隔てた単一*はlist包装として残す。
-    const listMarker =
-      run === "*" &&
-      /\s/u.test(line[start - 1] ?? "") &&
-      /\s/u.test(line[end] ?? "") &&
-      stack.length > 1 &&
-      planningUnwrappedValue(stack.at(-1)!.value) === "";
-    // run全体が直近の同種openを閉じる場合だけ消費する。***を**だけで閉じない。
-    // 1文字を1層として扱うのでsingle/strongの合成と分割されたcloseも同じ規則。
-    const closes =
-      !listMarker &&
-      !/^[\p{L}\p{N}]/u.test(line.slice(end)) &&
-      stack.length > run.length &&
-      stack.slice(-run.length).every((frame) => frame.delimiter === run[0]);
-    if (closes) {
-      for (let count = 0; count < run.length; count++) {
-        const frame = stack.pop()!;
-        stack.at(-1)!.value += planningUnwrappedValue(frame.value);
-      }
-    } else if (!/[\p{L}\p{N}]$/u.test(line.slice(0, start)) && !listMarker) {
-      for (const delimiter of run) stack.push({ delimiter, value: "" });
-    } else stack.at(-1)!.value += run;
-  }
-  stack.at(-1)!.value += line.slice(offset);
-  // 不対のopenは消さない。再帰せず、入力長以下のstackを必ず減らして終了する。
-  while (stack.length > 1) {
-    const frame = stack.pop()!;
-    stack.at(-1)!.value += frame.delimiter + frame.value;
-  }
-  return planningUnwrappedValue(stack[0]!.value);
-}
-
-/** 有限な可視値検査。自然言語の判断の妥当性はreadinessが所有する。 */
-function hasPlanningContent(body: string): boolean {
-  const hiddenSpans: Array<readonly [number, number]> = [];
-  const lines = withoutCodeAndComments(body, "content", hiddenSpans).split(
-    "\n",
-  );
-  const rawLines = body.split("\n");
-  const concrete = (value: string): boolean =>
-    planningValue(value)
-      .split(/[。！？、,;；]/u)
-      .some(
-        (clause) =>
-          clause.trim() !== "" &&
-          !/^[-:：*_\s]+$/u.test(clause) &&
-          !isPlanningReferenceOnly(clause),
-      );
-  const prose: string[] = [];
-  const values: string[] = [];
-  let rawOffset = 0;
-  let hiddenIndex = 0;
-  let previousQuoteDepth = 0;
-  const flush = (): void => {
-    values.push(prose.join("\n"));
-    prose.length = 0;
-  };
-  for (const [index, line] of lines.entries()) {
-    const rawEnd = rawOffset + (rawLines[index]?.length ?? 0);
-    while (
-      hiddenSpans[hiddenIndex] &&
-      hiddenSpans[hiddenIndex]![1] <= rawOffset
-    )
-      hiddenIndex++;
-    const hiddenLine = (hiddenSpans[hiddenIndex]?.[0] ?? Infinity) <= rawEnd;
-    rawOffset = rawEnd + 1;
-    // comment/inline codeを空白化して生じた空行は段落境界ではない。
-    if (!line.trim() && hiddenLine) {
-      prose.push("");
-      continue;
-    }
-    let value = line.trim();
-    let quoteDepth = 0;
-    while (/^>(?:\s+|$)/u.test(value)) {
-      value = value.replace(/^>(?:\s+|$)/u, "");
-      quoteDepth++;
-    }
-    if (quoteDepth !== previousQuoteDepth) flush();
-    previousQuoteDepth = quoteDepth;
-    if (!value && hiddenLine) {
-      prose.push("");
-      continue;
-    }
-    if (/^\|/u.test(value)) {
-      flush();
-      if (/^\|[\s:|-]+\|$/u.test(value)) continue;
-      if (
-        /^\|[\s:|-]+\|$/u.test(
-          (lines[index + 1]?.trim() ?? "").replace(/^(?:>(?:\s+|$))+/u, ""),
-        )
-      )
-        continue;
-      // 先頭cellはrowの項目名。内容の成立はそれ以降の値だけで判定する。
-      values.push(
-        ...value
-          .replace(/^\||\|$/gu, "")
-          .split("|")
-          .slice(1),
-      );
-      continue;
-    }
-    // 見出し・段落・table/cell・別list項目を越えて値や強調を結合しない。
-    // headingのcolonや強調を先に除くと見出し自体が具体文になってしまう。
-    let unlisted = value;
-    while (PLANNING_LIST_PREFIX.test(unlisted))
-      unlisted = unlisted.replace(PLANNING_LIST_PREFIX, "").trim();
-    if (!value || /^#{1,6}(?:\s|$)/u.test(unlisted)) {
-      flush();
-      continue;
-    }
-    if (
-      PLANNING_LIST_PREFIX.test(value) &&
-      value.replace(PLANNING_LIST_PREFIX, "").trim()
-    )
-      flush();
-    prose.push(value);
-  }
-  // 改行で分断されたfile名と節指定も1つの参照句として評価する。
-  flush();
-  return values.some(concrete);
-}
-
-function contentlessPlanningSections(file: string, text: string): string[] {
-  const headings = new Set(
-    PLANNING_REFERENCES.flatMap((reference) =>
-      file === "00_要求定義.md"
-        ? [...reference.sources]
-        : file === reference.file
-          ? [reference.heading]
-          : [],
-    ),
-  );
-  return [...headings].filter((heading) =>
-    markdownSectionBodies(text, heading, true).some((body) => {
-      // 裸の正規固定文は後段で位置・sourceを検証する。
-      if (
-        PLANNING_REFERENCES.some(
-          (reference) =>
-            reference.file === file &&
-            reference.heading === heading &&
-            body.trim() === reference.marker,
-        )
-      )
-        return false;
-      return !hasPlanningContent(body);
-    }),
-  );
-}
-
+/** raw本文の完全一致だけに固定sourceの構造検査を加える。意味判断はreadinessが所有する。 */
 function validatePlanningReferences(
   issuePath: string,
   files: readonly string[],
-  full: boolean,
+  source: string,
 ): string[] {
   const errors: string[] = [];
-  const source = fs.readFileSync(
-    path.join(issuePath, "00_要求定義.md"),
-    "utf8",
-  );
-  for (const file of files) {
-    const target = path.join(issuePath, file);
+  for (const reference of PLANNING_REFERENCES) {
+    if (!files.includes(reference.file)) continue;
+    const target = path.join(issuePath, reference.file);
     if (!fs.existsSync(target)) continue;
-    const text = fs.readFileSync(target, "utf8");
-    if (full)
-      for (const heading of contentlessPlanningSections(file, text))
-        errors.push(
-          `${file}: §${heading}は参照や説明用リテラルだけでは成立しません`,
-        );
-    const count = planningMarkerCount(text);
-    if (count === 0) continue;
-    let accepted = 0;
-    for (const reference of PLANNING_REFERENCES) {
-      if (!full || file !== reference.file) continue;
-      const bodies = markdownSectionBodies(
-        withoutCodeAndComments(text, "placeholder"),
-        reference.heading,
-      );
-      const rawBodies = markdownSectionBodies(text, reference.heading, true);
-      // raw headingも一意に要求し、不可視領域の同形見出しを許可根拠にしない。
-      const rawHeadings = text
-        .split("\n")
-        .filter(
-          (line) =>
-            /^#{2,6}\s+(.+?)\s*$/u.exec(line)?.[1] === reference.heading,
-        );
-      if (
-        bodies.length !== 1 ||
-        rawHeadings.length !== 1 ||
-        rawBodies.length !== 1
-      )
-        continue;
-      if (bodies[0]!.trim() !== reference.marker) continue;
-      // 実際の本文を照合し、code/comment/inline codeを消して単独markerを作らない。
-      if (rawBodies[0]!.trim() !== reference.marker) continue;
-      // inline code等を取り除いた結果だけがmarkerになる形式も拒否する。
-      if (!text.split("\n").some((line) => line === reference.marker)) continue;
-      accepted += 1;
-      for (const heading of reference.sources) {
-        const sourceBodies = markdownSectionBodies(
-          withoutCodeAndComments(source, "content"),
-          heading,
-        );
-        const sourceHeadings = source
-          .split("\n")
-          .filter((line) => /^#{2,6}\s+(.+?)\s*$/u.exec(line)?.[1] === heading);
-        const rawSourceBodies = markdownSectionBodies(source, heading, true);
-        if (
-          sourceBodies.length !== 1 ||
-          sourceHeadings.length !== 1 ||
-          !hasPlanningContent(rawSourceBodies[0] ?? "") ||
-          rawSourceBodies.some(
-            (body) => unresolvedPlaceholders(body).length > 0,
-          )
-        )
-          errors.push(
-            `${file}: 上流参照元00_要求定義.md §${heading}は一意で具体的な本文が必要です`,
-          );
-      }
-      if (fs.lstatSync(path.join(issuePath, "00_要求定義.md")).isSymbolicLink())
-        errors.push(`${file}: 上流参照元は同stagingの通常fileが必要です`);
-    }
-    if (accepted !== count)
+    const bodies = markdownSectionBodies(
+      fs.readFileSync(target, "utf8"),
+      reference.heading,
+      true,
+    );
+    if (!bodies.some((body) => body.trim() === reference.marker)) continue;
+    if (bodies.length !== 1)
       errors.push(
-        `${file}: 上流参照markerは許可した節の唯一の本文として固定文で指定してください`,
+        `${reference.file}: 上流参照の対象見出しは一意でなければなりません`,
       );
+    if (!fs.lstatSync(path.join(issuePath, "00_要求定義.md")).isFile()) {
+      errors.push(
+        `${reference.file}: 上流参照元は同stagingの通常fileが必要です`,
+      );
+      continue;
+    }
+    for (const heading of reference.sources) {
+      const sourceBodies = markdownSectionBodies(source, heading, true);
+      if (
+        sourceBodies.length !== 1 ||
+        unresolvedPlaceholders(sourceBodies[0] ?? "").length > 0 ||
+        !withoutPlaceholderCodeAndComments(sourceBodies[0] ?? "", true)
+          .split("\n")
+          .some((line) => line.trim() !== "" && !/^#{2,6}\s/u.test(line))
+      )
+        errors.push(
+          `${reference.file}: 上流参照元00_要求定義.md §${heading}は一意で空でない本文が必要です`,
+        );
+    }
   }
   return errors;
 }
@@ -421,9 +164,11 @@ const LOW_RISK_SHORT_FORM_TARGETS = Object.freeze([
 function markdownSectionBodies(
   text: string,
   heading: string,
-  preserveCode = false,
+  rawBody = false,
 ): readonly string[] {
-  const visible = preserveCode ? text : withoutMarkdownCode(text);
+  const visible = rawBody
+    ? withoutPlaceholderCodeAndComments(text, true)
+    : withoutMarkdownCode(text);
   const lines = visible.split("\n");
   const bodies: string[] = [];
   for (let start = 0; start < lines.length; start += 1) {
@@ -438,7 +183,9 @@ function markdownSectionBodies(
         break;
       }
     }
-    bodies.push(lines.slice(start + 1, end).join("\n"));
+    bodies.push(
+      (rawBody ? text.split("\n") : lines).slice(start + 1, end).join("\n"),
+    );
   }
   return Object.freeze(bodies);
 }
@@ -1000,11 +747,10 @@ function withoutGherkin(
 
 const UNRESOLVED_PLACEHOLDER_SAMPLE_LIMIT = 5;
 
-/** code/commentの字句抽出。placeholder用の結合防止印は可視内容へ渡さない。 */
-function withoutCodeAndComments(
+/** 既定はplaceholder検査。D1では行位置を保ち、結合防止印を本文に数えない。 */
+function withoutPlaceholderCodeAndComments(
   text: string,
-  purpose: "placeholder" | "content",
-  hiddenSpans?: Array<readonly [number, number]>,
+  preserveLines = false,
 ): string {
   const visible: string[] = [];
   let cursor = 0;
@@ -1041,19 +787,18 @@ function withoutCodeAndComments(
       if (!unclosedComment && text.startsWith("<!--", cursor)) {
         const closing = text.indexOf("-->", cursor + 4);
         if (closing >= 0) {
-          hiddenSpans?.push([cursor, closing + 3]);
           let newlines = 0;
           for (let index = cursor; index < closing + 3; index += 1)
             if (text[index] === "\n") newlines += 1;
           // 空commentでも前後の断片を新しいplaceholderへ結合しない。
           visible.push(
-            purpose === "content"
+            preserveLines
               ? " " + "\n".repeat(newlines)
               : "\n".repeat(Math.max(1, newlines)),
           );
           // comment終端後の同一行は、原文ではGherkinの行頭ではない。
           if (
-            purpose === "placeholder" &&
+            !preserveLines &&
             closing + 3 < text.length &&
             text[closing + 3] !== "\n"
           )
@@ -1063,7 +808,8 @@ function withoutCodeAndComments(
           continue;
         }
         // 後続のopenerも未終端。繰り返し末尾まで検索しない。
-        if (purpose === "content") return visible.join("");
+        if (preserveLines)
+          return visible.join("") + text.slice(cursor).replace(/[^\n]/gu, " ");
         unclosedComment = true;
       }
       if (!unclosedComment && inlineAllowed && text[cursor] === "`") {
@@ -1074,8 +820,7 @@ function withoutCodeAndComments(
           cursor - lineStart + length,
         );
         if (closing >= 0) {
-          hiddenSpans?.push([cursor, lineStart + closing + length]);
-          if (purpose === "content") visible.push(" ");
+          if (preserveLines) visible.push(" ");
           cursor = lineStart + closing + length;
           continue;
         }
@@ -1098,7 +843,7 @@ function unresolvedPlaceholders(
   dialect: string = DEFAULT_GHERKIN_DIALECT,
 ): string[] {
   const prose = withoutGherkin(
-    withoutCodeAndComments(text, "placeholder"),
+    withoutPlaceholderCodeAndComments(text),
     dialect,
   );
   const found = new Set<string>();
@@ -2017,13 +1762,10 @@ export function validateIssue(
       .filter((name) => fs.existsSync(path.join(issuePath, name)))
       .map((name) => fs.readFileSync(path.join(issuePath, name), "utf8")),
   ].join("\n");
-  errors.push(
-    ...validatePlanningReferences(
-      issuePath,
-      ["00_要求定義.md", ...validatedFullFiles],
-      declared === "full",
-    ),
-  );
+  if (declared === "full")
+    errors.push(
+      ...validatePlanningReferences(issuePath, validatedFullFiles, text),
+    );
   const documentPlaceholders = unresolvedPlaceholders(allText, gherkinDialect);
   if (documentPlaceholders.length > 0)
     errors.push(unresolvedPlaceholderError("", documentPlaceholders));

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import type { DataTable } from "@cucumber/cucumber";
 import {
   buildIssueSyncBody,
   createIssueStaging,
@@ -17,8 +16,6 @@ interface PlanningReferenceWorld extends WorkflowWorld {
   documents: Record<string, string>;
   validation: ReturnType<typeof validateIssue>;
   sourceSymlink: boolean;
-  contentFailures: string[];
-  contentChecks: number;
 }
 const { Given, When, Then } = stepDefinitions<PlanningReferenceWorld>();
 const REQUEST = "00_要求定義.md";
@@ -28,372 +25,6 @@ const OVERVIEW = "概要は00_要求定義.md §1・§2を参照";
 const EXCLUSION = "設計対象外は00_要求定義.md §2.2を参照";
 const CONTEXT = "コンテキストは00_要求定義.md §4.1を参照";
 const DC = "開発考慮事項の適用判定は00_要求定義.md §6.1と同じ";
-const MARKERS = { 概要: OVERVIEW, 対象外: EXCLUSION, コンテキスト: CONTEXT };
-
-When(
-  "Planningの{string}の{string}で次の有限内容境界を検査する",
-  function (side: string, shape: string, cases: DataTable) {
-    this.contentFailures = [];
-    this.contentChecks = 0;
-    checkPlanningValues(
-      this,
-      side,
-      shape,
-      cases.hashes().map((row) => [row["値"]!, row["判定"] === "合格"]),
-    );
-  },
-);
-
-When(
-  "Planningの{string}の{string}で強調と値包装の文法を合成して検査する",
-  { timeout: 60_000 },
-  function (side: string, shape: string) {
-    checkPlanningValues(this, side, shape, composedPlanningValues());
-  },
-);
-
-When(
-  "Planningの{string}の{string}で改行を含む有限文法と構造境界を合成して検査する",
-  { timeout: 120_000 },
-  function (side: string, shape: string) {
-    if (shape !== "prose") return;
-    // 複数の導出が同じ本文になる例は一度だけ検証する。
-    const cases = new Map<string, boolean>();
-    for (const [text, valid] of multilinePlanningValues()) {
-      if (cases.has(text)) assert.equal(cases.get(text), valid, text);
-      cases.set(text, valid);
-    }
-    checkPlanningValues(this, side, shape, cases);
-  },
-);
-
-/** token内部は変更せず、文法の境界へ空白を挿入する独立oracle。 */
-function* multilinePlanningValues(): Generator<[string, boolean]> {
-  const styles = ["*", "**", "***", "_", "__", "___"];
-  const reference = "01_要件定義.mdを参照";
-  const concrete = "Planning_ownerが判断を保持する";
-  const wrap = (style: string, text: string): string => style + text + style;
-  // 強調delimiterは囲むtokenに結び付ける。token間へ改行を入れても
-  // opener/closerの直内側を空白に変えた不正な入れ子構文は生成しない。
-  const styled = (style: string, tokens: readonly string[]): string[] =>
-    tokens.length
-      ? tokens.map(
-          (token, index) =>
-            (index === 0 ? style : "") +
-            token +
-            (index === tokens.length - 1 ? style : ""),
-        )
-      : [style + style];
-  for (const outer of styles)
-    for (const inner of ["", ...styles])
-      for (const colon of [":", "："])
-        for (const [payload, valid] of [
-          [[], false],
-          [["01_要件定義.md", "を", "参照"], false],
-          [["01_要件定義.md", "§1", "と", "同じ"], false],
-          [[concrete], true],
-        ] as const) {
-          for (const tokens of [
-            styled(outer, ["参照先", colon, ...styled(inner, payload)]),
-            styled(outer, styled(inner, ["参照先", colon, ...payload])),
-            [wrap(outer, "参照先"), colon, ...styled(inner, payload)],
-          ]) {
-            const parts = tokens.filter(Boolean);
-            for (const whitespace of [" ", "\t", "\n"])
-              for (let boundary = 0; boundary <= parts.length; boundary++) {
-                const text =
-                  parts.slice(0, boundary).join("") +
-                  whitespace +
-                  parts.slice(boundary).join("");
-                yield [text, valid];
-                // 1つのlist項目の継続行。別項目へ強調を跨がせない。
-                if (whitespace === "\n")
-                  yield ["- " + text.replaceAll("\n", "\n  "), valid];
-                // Markdown表は同一物理行のcellだけを生成する。
-                else
-                  yield [
-                    `| 項目 | 内容 |\n|---|---|\n| 判断 | ${text} |`,
-                    valid,
-                  ];
-              }
-            yield [parts.join("\n"), valid];
-          }
-        }
-  for (const style of styles)
-    for (const separator of [
-      " ",
-      "\t",
-      "\n",
-      "\n\n",
-      "、",
-      ",",
-      ";",
-      "；",
-      "。",
-      "！",
-      "？",
-    ])
-      for (const [first, second, valid] of [
-        [reference, reference, false],
-        [concrete, reference, true],
-        [reference, concrete, true],
-        ["", "", false],
-      ] as const) {
-        yield [
-          wrap(style, `判断:\n${first}`) +
-            separator +
-            wrap(style, `参照先：\n${second}`),
-          valid,
-        ];
-        // 裸の同一行ではcolonまで全体がlabelになり得る。別の具体句と
-        // 断定できる文/行境界だけを使い、意味を推測するoracleにしない。
-        if (separator !== " " && separator !== "\t")
-          yield [first + separator + `参照先：${second}`, valid];
-        yield [
-          `- ${wrap(style, `判断:\n  ${first}`)}\n- ${wrap(style, `参照先：\n  ${second}`)}`,
-          valid,
-        ];
-      }
-  // 見出し・table・別list項目は前後の値を連結しない。見出し自体は内容にならない。
-  for (const heading of [
-    "#### Planningが所有する",
-    "#### 判断: Planningが所有する",
-    "#### **Planningが所有する**",
-    "- #### 判断: Planningが所有する",
-  ])
-    yield [`${reference}\n${heading}\n${reference}`, false];
-  for (const boundary of [
-    "\n\n",
-    "\n#### 補足\n",
-    "\n| 項目 | 内容 |\n|---|---|\n| 判断 | - |\n",
-    "\n```text\n隠れた本文\n```\n",
-  ])
-    yield [`${concrete}${boundary}参照先: ${reference}`, true];
-  for (const mask of [
-    "<!--説明-->",
-    "<!--説明\n別行-->",
-    "<!--説明\n\n別行-->",
-    "`説明`",
-    "\n`説明`",
-    "既知引用",
-    "\n既知引用",
-  ])
-    for (const style of styles) {
-      for (const [text, valid] of [
-        [wrap(style, `参照先:${mask}\n${reference}`), false],
-        [wrap(style, `判断:${mask}\n${concrete}`), true],
-        [wrap(style, `参照先:${mask}\n`), false],
-      ] as const) {
-        yield [text, valid];
-        yield [
-          text
-            .split("\n")
-            .map((line) => "> " + line)
-            .join("\n"),
-          valid,
-        ];
-      }
-    }
-  for (const style of styles)
-    for (const [value, valid] of [
-      [reference, false],
-      [concrete, true],
-      ["", false],
-    ] as const)
-      yield [
-        `> | 項目 | 内容 |\n> |---|---|\n> | 判断 | ${wrap(style, `判断: ${value}`)} |`,
-        valid,
-      ];
-  for (const style of styles)
-    for (const prefix of [
-      "- ",
-      "* ",
-      "+ ",
-      "1. ",
-      "1) ",
-      "(1) ",
-      "[1] ",
-      "（1） ",
-      "- [ ] ",
-      "> ",
-      "> - ",
-    ])
-      for (const [value, valid] of [
-        ["01_要件定義.md\nを\n参照", false],
-        [concrete, true],
-      ] as const) {
-        const continuation = prefix.startsWith(">") ? ">   " : "    ";
-        yield [
-          prefix +
-            wrap(style, `参照先:\n${value}`).replaceAll(
-              "\n",
-              "\n" + continuation,
-            ),
-          valid,
-        ];
-      }
-}
-
-/** oracleは参照だけ/具体文ありという入力文法から決め、製品の正規化を使わない。 */
-function* composedPlanningValues(): Generator<[string, boolean]> {
-  const styles = ["*", "**", "***", "_", "__", "___"];
-  const reference = "01_reference_name_要件定義.mdを参照";
-  const otherReference = "03_実装計画.mdを参照";
-  const concrete = "Planning_ownerが参照の判断を保持する";
-  const wrap = (style: string, text: string): string => style + text + style;
-  for (const outer of styles)
-    for (const inner of ["", ...styles])
-      for (const colon of [": ", "："])
-        for (const [value, valid] of [
-          [reference, false],
-          [concrete, true],
-        ] as const) {
-          const label = `判断${colon}`;
-          const nested = wrap(outer, wrap(inner, value));
-          for (const text of [
-            nested,
-            label + nested,
-            wrap(outer, label + wrap(inner, value)),
-            wrap(outer, wrap(inner, label + value)),
-            wrap(outer, wrap(inner, "判断") + colon + value),
-            wrap(outer, "判断") + colon + wrap(inner, value),
-            wrap(outer, label) + " " + wrap(inner, value),
-            wrap(outer, label + wrap(inner, value) + " " + otherReference),
-          ])
-            yield [text, valid];
-        }
-  // 隣り合う独立spanのstyleと区切り、具体文の左右位置を直積にする。
-  for (const left of styles)
-    for (const right of styles)
-      for (const separator of [
-        " ",
-        "\t",
-        "\n",
-        "、",
-        ", ",
-        ";",
-        "；",
-        "。",
-        "！",
-        "？",
-      ])
-        for (const [first, second, valid] of [
-          [reference, otherReference, false],
-          [concrete, otherReference, true],
-          [reference, concrete, true],
-        ] as const)
-          yield [
-            wrap(left, `参照先: ${first}`) +
-              separator +
-              wrap(right, `判断：${second}`),
-            valid,
-          ];
-  for (const style of styles)
-    for (const prefix of [
-      "- ",
-      "* ",
-      "+ ",
-      "> ",
-      "1. ",
-      "1) ",
-      "(1) ",
-      "[1] ",
-      "（1） ",
-      "- [ ] ",
-      "- [x] ",
-      "- [X] ",
-      "> 1. - [ ] ",
-    ])
-      for (const [value, valid] of [
-        [reference, false],
-        [concrete, true],
-      ] as const) {
-        yield [prefix + wrap(style, `判断: ${value}`), valid];
-        yield [wrap(style, " " + prefix + `判断：${value} `), valid];
-      }
-  // 深い入れ子と長い独立span列も同じ有限文法で作り、再帰深度に依存させない。
-  for (const depth of [16, 128])
-    for (const [value, valid] of [
-      [reference, false],
-      [concrete, true],
-    ] as const) {
-      let nested: string = value;
-      for (let index = 0; index < depth; index++)
-        nested = wrap(styles[index % styles.length]!, `判断: ${nested}`);
-      yield [nested, valid];
-      yield [
-        Array.from({ length: depth }, (_, index) =>
-          wrap(
-            styles[index % styles.length]!,
-            `判断：${index === 0 ? value : reference}`,
-          ),
-        ).join(" "),
-        valid,
-      ];
-    }
-}
-
-function checkPlanningValues(
-  world: PlanningReferenceWorld,
-  side: string,
-  shape: string,
-  cases: Iterable<readonly [string, boolean]>,
-): void {
-  const originals = { ...world.documents };
-  const [file, heading, marker] =
-    side === "source"
-      ? [REQUEST, "4.1 境界づけられたコンテキスト", CONTEXT]
-      : [REQUIREMENTS, "1. システム・変更概要", OVERVIEW];
-  for (const [name, text] of Object.entries(originals))
-    fs.writeFileSync(path.join(world.staging, name), text);
-  for (const [input, expected] of cases) {
-    const value = input
-      .replaceAll("\\n", "\n")
-      .replaceAll("\\t", "\t")
-      .replaceAll("\\s", " ")
-      .replaceAll("既知引用", `\`${marker}\``);
-    const body =
-      shape === "table"
-        ? "| 項目 | 内容 |\n|---|---|\n" +
-          value
-            .split("\n")
-            .map((line) => `| 判断 | ${line} |`)
-            .join("\n")
-        : shape === "list"
-          ? value
-              .split("\n")
-              .map((line) => `- 判断: ${line}`)
-              .join("\n")
-          : value;
-    fs.writeFileSync(
-      path.join(world.staging, file!),
-      replacePlanningBody(originals[file!]!, heading!, body),
-    );
-    const result = validateIssue(world.staging);
-    world.contentChecks++;
-    if (result.valid !== expected)
-      world.contentFailures.push(
-        `${side}/${shape}/${JSON.stringify(value)}: ${result.valid}; ${result.errors.join("; ")}`,
-      );
-  }
-  fs.writeFileSync(path.join(world.staging, file!), originals[file!]!);
-}
-
-Then("有限内容境界の全例が期待した判定になる", function () {
-  this.attach(
-    JSON.stringify({
-      assertions: this.contentChecks,
-      mismatches: this.contentFailures.length,
-      failures: this.contentFailures,
-    }),
-  );
-  assert.deepEqual(
-    this.contentFailures.slice(0, 20),
-    [],
-    `${this.contentFailures.length} content mismatches (first 20 shown)`,
-  );
-});
-
 function replacePlanningBody(
   text: string,
   heading: string,
@@ -436,39 +67,6 @@ When("Planningの3対象節だけを正規の固定参照に置き換える", fu
     );
 });
 
-When(
-  "Planningの{string}本文を{string}にする",
-  function (section: string, body: string) {
-    const targets: Record<string, readonly [string, string]> = {
-      概要: [REQUIREMENTS, "1. システム・変更概要"],
-      コンテキスト: [DESIGN, "2.1 境界づけられたコンテキスト"],
-      source: [REQUEST, "4.1 境界づけられたコンテキスト"],
-    };
-    const [file, heading] = targets[section]!;
-    this.documents[file] = replacePlanningBody(
-      this.documents[file]!,
-      heading,
-      body.replaceAll("\\n", "\n").replaceAll("\\t", "\t"),
-    );
-  },
-);
-
-When("Planningのsource表の値を{string}にする", function (value: string) {
-  this.documents[REQUEST] = replacePlanningBody(
-    this.documents[REQUEST]!,
-    "4.1 境界づけられたコンテキスト",
-    `| 項目 | 内容 |\n|---|---|\n| コンテキスト | ${value.replaceAll("\\t", "\t")} |`,
-  );
-});
-
-When("Planningの概要markerに{string}を付け足す", function (extra: string) {
-  this.documents[REQUIREMENTS] = replacePlanningBody(
-    this.documents[REQUIREMENTS]!,
-    "1. システム・変更概要",
-    OVERVIEW + extra.replaceAll("\\n", "\n"),
-  );
-});
-
 Given("同stagingの00に具体的な内容を持つ3つのPlanning参照がある", function () {
   this.staging = this.temp("asc-planning-reference-");
   this.sourceSymlink = false;
@@ -501,194 +99,60 @@ When("Planning参照に{string}の変更を加える", function (change: string)
   switch (change) {
     case "参照形式":
       break;
-    case "詳細本文内で引用":
-      replace(
-        REQUIREMENTS,
-        OVERVIEW,
-        `共有の判断は別資料を参照する。\n\`${OVERVIEW}\``,
-      );
-      replace(
-        DESIGN,
-        EXCLUSION,
-        `共有の判断は別資料を参照する。\n\`${EXCLUSION}\``,
-      );
-      replace(
-        DESIGN,
-        CONTEXT,
-        `共有の判断は別資料を参照する。\n\`${CONTEXT}\``,
-      );
-      break;
-    case "引用をfence化":
-    case "引用をcomment化":
-      for (const file of Object.keys(this.documents))
-        for (const marker of Object.values(MARKERS)) {
-          const quoted = `\`${marker}\``;
-          this.documents[file] = this.documents[file]!.replaceAll(
-            quoted,
-            change === "引用をfence化"
-              ? `\`\`\`\n${quoted}\n\`\`\``
-              : `<!-- ${quoted} -->`,
-          );
-        }
-      break;
-    case "実参照と同じ節に引用":
-      replace(REQUIREMENTS, OVERVIEW, `${OVERVIEW}\n\`${OVERVIEW}\``);
+    case "外側空白":
+      replace(REQUIREMENTS, OVERVIEW, ` \t${OVERVIEW}\t `);
+      replace(DESIGN, EXCLUSION, ` \t${EXCLUSION}\t `);
+      replace(DESIGN, CONTEXT, ` \t${CONTEXT}\t `);
       break;
     case "詳細形式":
+    case "詳細形式の補足参照":
       replace(REQUIREMENTS, OVERVIEW, "利用者が重複せず目的を伝えられる。");
       replace(DESIGN, EXCLUSION, "同期権限は変更しない。");
-      replace(
-        DESIGN,
-        CONTEXT,
-        "コンテキストはPlanningでありownerはprojectである。",
-      );
-      break;
-    case "詳細形式の補足参照":
-      replace(
-        REQUIREMENTS,
-        OVERVIEW,
-        "概要を利用者に提示し、変更の目的と価値を伝える。実装手順は03_実装計画.md §9を参照。",
-      );
-      replace(
-        DESIGN,
-        EXCLUSION,
-        "設計対象外を同期権限の変更とし、既存の権限を保持する。\n共有の判断は00_要求定義.md §2.2を参照。",
-      );
-      replace(
-        DESIGN,
-        CONTEXT,
-        "コンテキストをPlanningに限定し、projectが判断を所有する。\n境界の詳細は00_要求定義.md §4.1を参照。",
-      );
+      replace(DESIGN, CONTEXT, "Planningの判断をprojectが所有する。");
+      if (change === "詳細形式の補足参照")
+        this.documents[REQUIREMENTS] +=
+          "\n実装手順は03_実装計画.md §9を参照。\n";
       break;
     case "source symlink":
       this.sourceSymlink = true;
       break;
+    case "source file欠落":
+      delete this.documents[REQUEST];
+      break;
     case "source欠落":
       replace(REQUEST, "### 2.2 対象外（必須）", "### 2.5 別節");
       break;
-    case "source空":
-      replace(REQUEST, "- 外部同期の権限変更は行わない。", "");
-      break;
-    case "sourceラベルのみ":
-      replace(REQUEST, "- 外部同期の権限変更は行わない。", "- 対象外:");
-      break;
-    case "source表の値だけ空":
-      replace(REQUEST, "| Planning | project owner |", "| | |");
-      break;
-    case "source表が参照のみ":
-      replace(
-        REQUEST,
-        "| Planning | project owner |",
-        "| 01_要件定義.mdを参照 | - |",
+    case "概要source空":
+      this.documents[REQUEST] = replacePlanningBody(
+        this.documents[REQUEST]!,
+        "1. 目的と背景",
+        "",
       );
       break;
-    case "sourceplaceholder":
-      replace(REQUEST, "- 外部同期の権限変更は行わない。", "- {対象外}");
+    case "コンテキストsource欠落":
+      replace(REQUEST, "### 4.1 境界づけられたコンテキスト", "### 4.9 別節");
       break;
-    case "source参照のみ":
+    case "source空":
+    case "source見出しのみ":
+    case "source code/commentのみ":
+    case "sourceplaceholder":
       replace(
         REQUEST,
         "- 外部同期の権限変更は行わない。",
-        "01_要件定義.mdを参照",
+        change === "source空"
+          ? ""
+          : change === "source見出しのみ"
+            ? "#### 下位の見出し\n##### 詳細"
+            : change === "sourceplaceholder"
+              ? "{対象外}"
+              : "<!--説明-->\n```text\n説明\n```\n`説明`",
       );
       break;
     case "source重複":
       this.documents[REQUEST] += "\n### 2.2 対象外（必須）\n対象外はない。\n";
       break;
     case "target重複":
-      this.documents[REQUIREMENTS] +=
-        `\n## 1. システム・変更概要\n${OVERVIEW}\n`;
-      break;
-    case "target欠落":
-      replace(REQUIREMENTS, "1. システム・変更概要", "1. 別節");
-      break;
-    case "自己参照":
-      replace(REQUIREMENTS, "00_要求定義.md §1・§2", "01_要件定義.md §1");
-      break;
-    case "後方参照":
-      replace(REQUIREMENTS, "00_要求定義.md §1・§2", "03_実装計画.md §1");
-      break;
-    case "を使う後方参照":
-      replace(REQUIREMENTS, OVERVIEW, "概要を03_実装計画.md §9を参照");
-      break;
-    case "を使う自己参照":
-      replace(REQUIREMENTS, OVERVIEW, "概要を01_要件定義.md §1を参照");
-      break;
-    case "を使う既知参照先":
-      replace(REQUIREMENTS, OVERVIEW, OVERVIEW.replace("概要は", "概要を"));
-      break;
-    case "を使う対象外参照":
-      replace(DESIGN, EXCLUSION, "設計対象外を03_実装計画.md §9を参照");
-      break;
-    case "を使うコンテキスト参照":
-      replace(DESIGN, CONTEXT, "コンテキストを03_実装計画.md §9を参照");
-      break;
-    case "を使う連鎖":
-      replace(
-        REQUEST,
-        "- 外部同期の権限変更は行わない。",
-        "設計対象外を03_実装計画.md §9を参照",
-      );
-      break;
-    case "未知path":
-      replace(
-        REQUIREMENTS,
-        "00_要求定義.md §1・§2",
-        "../00_要求定義.md §1・§2",
-      );
-      break;
-    case "未知節":
-      replace(DESIGN, "§2.2", "§2.3");
-      break;
-    case "Unicode類似":
-      replace(DESIGN, "§2.2", "§２.２");
-      break;
-    case "連鎖":
-      replace(REQUEST, "- 外部同期の権限変更は行わない。", EXCLUSION);
-      break;
-    case "余分な本文":
-      replace(
-        REQUIREMENTS,
-        OVERVIEW,
-        `${OVERVIEW}\n変更後は別の価値を提供する。`,
-      );
-      break;
-    case "許可節外":
-      replace(REQUIREMENTS, OVERVIEW, "詳細を記述する。");
-      this.documents[REQUIREMENTS] += `\n## 8. 権限\n${OVERVIEW}\n`;
-      break;
-    case "code内":
-      this.documents[DESIGN] += `\n\`\`\`\n${EXCLUSION}\n\`\`\`\n`;
-      break;
-    case "comment内":
-      this.documents[DESIGN] += `\n<!-- ${EXCLUSION} -->\n`;
-      break;
-    case "comment内の偽見出し":
-      replace(
-        REQUIREMENTS,
-        "## 1. システム・変更概要",
-        "<!--\n## 1. システム・変更概要",
-      );
-      replace(
-        REQUIREMENTS,
-        "## 7. 非機能要件",
-        "## 終端\n-->\n## 7. 非機能要件",
-      );
-      break;
-    case "code内の偽見出し":
-      replace(
-        REQUIREMENTS,
-        "## 1. システム・変更概要",
-        "```\n## 1. システム・変更概要",
-      );
-      replace(
-        REQUIREMENTS,
-        "## 7. 非機能要件",
-        "## 終端\n```\n## 7. 非機能要件",
-      );
-      break;
-    case "引用内":
-      this.documents[DESIGN] += `\n> ${CONTEXT}\n`;
+      this.documents[REQUIREMENTS] += "\n## 1. システム・変更概要\n詳細本文\n";
       break;
     case "DC空":
       replace(
@@ -708,59 +172,104 @@ When("Planning参照に{string}の変更を加える", function (change: string)
   }
 });
 
-When("Planningに{string}の説明用引用を加える", function (kind: string) {
-  const marker = MARKERS[kind as keyof typeof MARKERS];
-  assert.ok(marker);
-  this.documents[DESIGN] +=
-    `\n## 3. 設計判断\n| 判断 | 記法の説明 |\n|---|---|\n| 上流で判断する | \`${marker}\` を固定文として使える。 |\n`;
+When("Planningのsource最小本文を{string}にする", function (body: string) {
+  this.documents[REQUEST] = this.documents[REQUEST]!.replace(
+    "- 外部同期の権限変更は行わない。",
+    body.replaceAll("\\n", "\n"),
+  );
 });
 
 When(
-  "Planningの{string}を{string}の引用だけにする",
-  function (side: string, kind: string) {
-    const marker = MARKERS[kind as keyof typeof MARKERS];
-    assert.ok(marker);
-    const file =
-      side === "source" ? REQUEST : kind === "概要" ? REQUIREMENTS : DESIGN;
-    const before =
-      side !== "source"
-        ? marker
-        : kind === "概要"
-          ? "利用者が重複せずに目的を伝えられる。"
-          : kind === "対象外"
-            ? "- 外部同期の権限変更は行わない。"
-            : "| Planning | project owner |";
-    const after =
-      side === "source" && kind === "コンテキスト"
-        ? `| \`${marker}\` | \`${marker}\` |`
-        : `\`${marker}\``;
-    assert.ok(this.documents[file]!.includes(before));
-    this.documents[file] = this.documents[file]!.replace(before, after);
+  "Planningの非正規形{string}はsourceを解決せずlegacy判定を保つ",
+  function (shape: string) {
+    // 非必須source節を欠落させる。正規形ならD1だけが拒否する対照。
+    this.documents[REQUEST] = this.documents[REQUEST]!.replace(
+      "### 2.2 対象外（必須）",
+      "### 2.5 別節",
+    );
+    const original = this.documents[DESIGN]!;
+    const neutral = replacePlanningBody(
+      original,
+      "1.2 設計対象外",
+      "同期権限は変更しない。",
+    );
+    const bodies: Record<string, string> = {
+      引用: `\`${EXCLUSION}\``,
+      fence: `\`\`\`text\n${EXCLUSION}\n\`\`\``,
+      comment: `<!-- ${EXCLUSION} -->`,
+      強調: `**${EXCLUSION}**`,
+      list: `- ${EXCLUSION}`,
+      表: `| 項目 | 内容 |\n|---|---|\n| 説明 | ${EXCLUSION} |`,
+      blockquote: `> ${EXCLUSION}`,
+      未知path: EXCLUSION.replace("00_要求定義.md", "../unknown.md"),
+      未知節: EXCLUSION.replace("§2.2", "§9"),
+      内部改行: EXCLUSION.replace("は", "は\n"),
+      comment追記: `${EXCLUSION}\n<!-- 注記 -->`,
+      本文追記: `${EXCLUSION}\n追加の判断`,
+      子見出し: `${EXCLUSION}\n#### 注記`,
+      自然言語: "設計対象外を別資料と同じにする。",
+    };
+    let candidate =
+      bodies[shape] === undefined
+        ? neutral
+        : replacePlanningBody(original, "1.2 設計対象外", bodies[shape]!);
+    if (shape === "別節") candidate += `\n## 別節\n${EXCLUSION}\n`;
+    else if (shape === "別file")
+      this.documents[REQUIREMENTS] += `\n## 別節\n${EXCLUSION}\n`;
+    else if (shape === "target欠落")
+      candidate = original.replace("1.2 設計対象外", "1.9 別節");
+    else if (shape === "fence内見出し" || shape === "comment内見出し") {
+      const section = `### 1.2 設計対象外\n${EXCLUSION}\n### 終端`;
+      candidate =
+        neutral.replace("### 1.2 設計対象外", "### 1.9 別節") +
+        (shape === "fence内見出し"
+          ? `\n\`\`\`\n${section}\n\`\`\``
+          : `\n<!--\n${section}\n-->`);
+    } else
+      assert.ok(
+        shape in bodies ||
+          shape === "別節" ||
+          shape === "別file" ||
+          shape === "target欠落",
+      );
+    for (const [name, text] of Object.entries(this.documents))
+      fs.writeFileSync(path.join(this.staging, name), text);
+    fs.writeFileSync(path.join(this.staging, DESIGN), original);
+    assert.ok(
+      validateIssue(this.staging).errors.some((error) =>
+        error.includes("上流参照元"),
+      ),
+    );
+    for (const broken of [false, true]) {
+      const request = this.documents[REQUEST]!.replace(
+        "## 7. 受け入れ条件と成功基準",
+        broken ? "## 7. 別名" : "## 7. 受け入れ条件と成功基準",
+      );
+      fs.writeFileSync(path.join(this.staging, REQUEST), request);
+      fs.writeFileSync(path.join(this.staging, DESIGN), neutral);
+      const legacy = validateIssue(this.staging);
+      assert.equal(legacy.valid, !broken);
+      fs.writeFileSync(path.join(this.staging, DESIGN), candidate);
+      assert.deepEqual(validateIssue(this.staging), legacy);
+    }
   },
 );
 
-When("Planningの説明に{string}の不正markerを加える", function (kind: string) {
-  const forms: Record<string, string> = {
-    未知path引用: `\`${OVERVIEW.replace("00_", "../00_")}\``,
-    未知節引用: `\`${EXCLUSION.replace("§2.2", "§2.3")}\``,
-    二重backtick: `\`\`${CONTEXT}\`\``,
-    開始二重backtick: `\`\`${OVERVIEW}\``,
-    終了二重backtick: `\`${EXCLUSION}\`\``,
-    閉じ引用なし: `\`${OVERVIEW}`,
-    余分な引用本文: `\`例: ${EXCLUSION}\``,
-    引用内改行: `\`${CONTEXT.replace("§4.1", "\n§4.1")}\``,
-    裸marker: OVERVIEW,
-    fence内の裸marker: `\`\`\`\n${EXCLUSION}\n\`\`\``,
-    comment内の裸marker: `<!-- ${CONTEXT} -->`,
-    blockquote内の裸marker: `> ${OVERVIEW}`,
-    を使う後方参照の引用: "`概要を03_実装計画.md §9を参照`",
-    を使う未知pathの引用: "`概要を../00_要求定義.md §1・§2を参照`",
-    を使う後方参照のfence: "```\n概要を03_実装計画.md §9を参照\n```",
-    を使う後方参照のcomment: "<!-- 概要を03_実装計画.md §9を参照 -->",
-    を使う後方参照のblockquote: "> 概要を03_実装計画.md §9を参照",
-  };
-  assert.ok(forms[kind]);
-  this.documents[DESIGN] += `\n## 3. 設計判断\n${forms[kind]}\n`;
+When("Planningの{string}判定を詳細形式と比較する", function (mode: string) {
+  const source = this.documents[REQUEST]!.replace(
+    "| モード | full |",
+    `| モード | ${mode} |`,
+  ).replace("### 2.2 対象外（必須）", "### 2.5 別節");
+  for (const [name, text] of Object.entries(this.documents))
+    fs.writeFileSync(path.join(this.staging, name), text);
+  fs.writeFileSync(path.join(this.staging, REQUEST), source);
+  const canonical = validateIssue(this.staging);
+  assert.ok(canonical.errors.every((error) => !error.includes("上流参照")));
+  fs.writeFileSync(
+    path.join(this.staging, DESIGN),
+    this.documents[DESIGN]!.replace(EXCLUSION, "同期権限は変更しない。"),
+  );
+  assert.deepEqual(validateIssue(this.staging), canonical);
 });
 
 When("Planning参照を検証する", function () {
@@ -846,4 +355,8 @@ When("不正Planningの同期previewを隔離providerで検査する", async fun
 
 Then("同期previewのprovider呼出しは0件である", function () {
   assert.deepEqual(this.calls, []);
+});
+
+Then("Planningの比較検証が完了する", function () {
+  assert.ok(this.staging);
 });
