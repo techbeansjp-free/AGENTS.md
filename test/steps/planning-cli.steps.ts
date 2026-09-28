@@ -96,6 +96,15 @@ When("Verification Set雛形を実CLIで出力して選定入力へ渡す", asyn
 
 Then("CLIのstageと成果物とSCN案内が現行契約に一致する", async function () {
   const usage = findCommandUsage("issue", "validate")!;
+  assert.match(usage.positional!, /Issue staging directory/u);
+  assert.match(
+    usage.requiredFlags.find((flag) => flag.name === "path")!.description,
+    /Issue staging directory/u,
+  );
+  assert.equal(
+    usage.example,
+    "npx agent-skill-chain issue validate --path=./issue-staging --stage=requirements",
+  );
   assert.equal(
     usage.optionalFlags.find((flag) => flag.name === "stage")!.value,
     "requirements|design",

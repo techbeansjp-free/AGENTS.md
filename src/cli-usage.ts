@@ -853,8 +853,9 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     command: "issue",
     subcommand: "validate",
     summary: "Issue本文が契約を満たすか検証する",
-    positional: "[path] 検証するIssue本文。--pathの代わりに使える",
-    requiredFlags: [flag("path", "path", "検証するIssue本文")],
+    positional:
+      "[path] 検証するIssue staging directory。--pathの代わりに使える",
+    requiredFlags: [flag("path", "path", "検証するIssue staging directory")],
     conditionalFlags: [],
     optionalFlags: [
       optional(
@@ -865,7 +866,8 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       ),
       optional("changed", "path,path", "変更path", "観測なし"),
     ],
-    example: "npx agent-skill-chain issue validate --path=./ISSUE.md",
+    example:
+      "npx agent-skill-chain issue validate --path=./issue-staging --stage=requirements",
     inputContract: {
       description:
         "--pathは同stagingのdirectory。stage省略はdesign。全stageでprojectのGherkin方言に従うSCN IDが必要。例はenの最小実行可能SCNであり、実案件の受け入れ条件へ書き換える",
