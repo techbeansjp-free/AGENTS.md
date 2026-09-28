@@ -175,10 +175,20 @@ squash/rebaseの終端検証は、固定base..headからsource commit数を1〜2
 
 | コマンド            | 追加出力                                                                            | 契約                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `doctor`            | `projectPolicyStatus`、`projectPolicyMessage`、`tooling`、`workflow`、`worktrees`   | project policyを`missing / valid / invalid / unsupported-version`のいずれかで報告する。`tooling`はGit 2.38.0以上とGitHub CLI 2.13.0以上の観測version・最低version・適否・diagnosticを返す。各Issue stagingのモード判定成果物、journal、実施済みStep、現在Step、次Step、妥当性を追加する。CLIが注入した走査結果のcleanup-ready、retain、in-progress件数とcleanup-ready pathの日本語diagnosticも報告し、走査失敗もdiagnosticへ保持する。`healthy`は従来どおりinstall健全性だけを表し、外部tool適否は`tooling.healthy`へ分離する |
+| `doctor`            | `projectPolicyStatus`、`projectPolicyMessage`、`tooling`、`workflow`、`worktrees`、`releaseIdentity`   | project policyを`missing / valid / invalid / unsupported-version`のいずれかで報告する。`tooling`はGit 2.38.0以上とGitHub CLI 2.13.0以上の観測version・最低version・適否・diagnosticを返す。各Issue stagingのモード判定成果物、journal、実施済みStep、現在Step、次Step、妥当性を追加する。CLIが注入した走査結果のcleanup-ready、retain、in-progress件数とcleanup-ready pathの日本語diagnosticも報告し、走査失敗もdiagnosticへ保持する。`releaseIdentity`は実行中配布物の識別結果（`kind: "release" \| "source"`、`kind`が`release`のときだけ`version`を持つ）とmanaged記録の`managedVersion`を並記する（FR-12）。`healthy`は従来どおりinstall健全性だけを表し、外部tool適否は`tooling.healthy`へ、識別結果は`releaseIdentity`へそれぞれ分離する |
 | `project bootstrap` | `generatedScope`、`projectPolicyStatus`、`projectPolicyNotice`、`nextSafeOperation` | `docs/specs/`だけを生成し、project policyは生成も検証もしない。利用project ownerがmanifestと列挙資産を作成し、`policy validate`と`conformance validate`を行う次操作を日本語で返す                                                                                                                                                                                                                                                                                                                                             |
 
-`doctor`の`unsupported-version`は入力を保持したstaged migrationを案内する。`missing`と`invalid`はinstall成功に隠さず明示するが、package資産の導入状態とconsumer所有policyの妥当性を同じhealth判定へ混在させない。
+`doctor`の`unsupported-version`は入力を保持したstaged migrationを案内する。`missing`と`invalid`はinstall成功に隠さず明示するが、package資産の導入状態とconsumer所有policyの妥当性を同じhealth判定へ混在させない。`releaseIdentity`の`kind`差異も同様に`healthy`を変えない（FR-12、REQ-LC-011と同じ「報告するが`healthy`を変えない」前例）。
+
+`install`・`update`は既存の戻り値へ`warnings`（文字列配列）を追加する。実行中配布物がsource build（`release-identity.json`が無いか不正）のときだけ、release versionが不明である旨と、release distributionからの`update`で回復できる旨の警告文を含む。拒否はしない（FR-11）。
+
+## versionコマンド
+
+| コマンド    | 入力 | 出力・終了code                                                                                                                         |
+| ----------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `--version` | なし | 実行中配布物が`release`ならrelease versionを標準出力へ返す。`source`ならrelease versionとして誤表示せず、source buildである旨の固定文を返す。終了値は常に0 |
+
+`--version`は`.git`・tag ref・GitHub APIを読まず、`release-identity.json`の有無・形式だけから判定する（FR-08、FR-09）。既存commandのdispatch構造とは独立し、`--help`と同様にcommand単体で完結する。
 
 ## Routingサブコマンド
 

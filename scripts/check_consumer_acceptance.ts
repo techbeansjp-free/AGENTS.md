@@ -14,6 +14,7 @@ export const CONSUMER_ACCEPTANCE_MECHANISMS = [
   "git-dependency",
   "packed-bin",
   "scale-output",
+  "release-identity",
 ] as const;
 
 export type ConsumerAcceptanceMechanism =
@@ -119,6 +120,8 @@ export interface ConsumerAcceptanceCheckInput extends PackedArtifactInput {
     GitDependencyInput,
     "dependency" | "packageName" | "executableName"
   >;
+  /** `release-identity`機構だけが使う。expected release version。 */
+  expectedVersion?: string;
 }
 
 export type ProcessRunner = (
@@ -660,6 +663,59 @@ export function observePackedArtifact(
   );
 }
 
+const MANAGED_ASSETS_RECORD = path.join(
+  ".agent-skill-chain",
+  "managed-assets.json",
+);
+
+/**
+ * 正式tgzを実際に`install`し、`managed-assets.json`のversionがrelease versionと
+ * 一致するまでを検査する第4機構（FR-06）。`packed-bin`と同じ隔離導入・起動骨格を
+ * 再利用し、機構固有の分岐は`invokeEntrypoint`の中身だけへ限定する。
+ */
+export function observeReleaseIdentity(
+  input: PackedArtifactInput & { expectedVersion: string },
+  runProcess: ProcessRunner = run,
+): AtomicConsumerAcceptanceObservation {
+  return observeInstalledArtifact(
+    input,
+    "release-identity",
+    ({ executable, workingDirectory, env }, execute) => {
+      const installed = execute(
+        executable,
+        ["install", "--apply", `--root=${workingDirectory}`],
+        workingDirectory,
+        { allowFailure: true, env },
+      );
+      if (installed.status !== 0) return installed;
+      let observedVersion: string | undefined;
+      try {
+        const parsed = JSON.parse(
+          fs.readFileSync(
+            path.join(workingDirectory, MANAGED_ASSETS_RECORD),
+            "utf8",
+          ),
+        ) as unknown;
+        observedVersion =
+          isRecord(parsed) && typeof parsed.version === "string"
+            ? parsed.version
+            : undefined;
+      } catch {
+        observedVersion = undefined;
+      }
+      const matched = observedVersion === input.expectedVersion;
+      return {
+        status: matched ? 0 : 1,
+        stdout: installed.stdout,
+        stderr: matched
+          ? installed.stderr
+          : `${MANAGED_ASSETS_RECORD}のversion「${observedVersion ?? "不明"}」がexpectedVersion「${input.expectedVersion}」と一致しません`,
+      };
+    },
+    runProcess,
+  );
+}
+
 const PNPM_VERSION = "11.24.0";
 
 type GitDependencyResolution =
@@ -1176,6 +1232,18 @@ export function checkConsumerAcceptance(
         : failedObservation("git-dependency", gitDependency.reason);
     } else if (mechanism === "packed-bin")
       observation = observePackedArtifact(input, runProcess);
+    else if (mechanism === "release-identity")
+      observation =
+        typeof input.expectedVersion === "string" &&
+        input.expectedVersion.length > 0
+          ? observeReleaseIdentity(
+              { ...input, expectedVersion: input.expectedVersion },
+              runProcess,
+            )
+          : failedObservation(
+              "release-identity",
+              "--expected-versionを指定してください",
+            );
     else observation = observeScaleDependentOutput(input, runProcess);
     observations.push(observation);
     const status = evaluateConsumerAcceptance([observation], [mechanism])
@@ -1247,6 +1315,7 @@ function commandLineInput(
 ): ConsumerAcceptanceCheckInput {
   let tarballPath = "";
   let mechanisms: string[] = [];
+  let expectedVersion: string | undefined;
   for (const argument of arguments_) {
     if (argument.startsWith("--tarball=")) {
       tarballPath = argument.slice("--tarball=".length);
@@ -1259,22 +1328,69 @@ function commandLineInput(
         .filter((value) => value !== "");
       continue;
     }
+    if (argument.startsWith("--expected-version=")) {
+      expectedVersion = argument.slice("--expected-version=".length);
+      continue;
+    }
     throw new Error(`未知のoptionです: ${argument}`);
   }
   if (tarballPath === "") throw new Error("--tarballを指定してください");
   return {
     tarballPath,
     mechanisms,
+    expectedVersion,
     sourceRepositoryRoot: process.cwd(),
     temporaryStagingRoot: path.join(process.cwd(), ".agent-skill-chain", "tmp"),
   };
 }
 
+/**
+ * `evaluateArtifactIdentity`を`build_distribution`・`github_release`両jobから
+ * CLI経由で呼べるようにする薄い配線。既存の判定関数自体は変更しない（02 §2.2）。
+ */
+function artifactIdentityCommandLineInput(
+  arguments_: readonly string[],
+): ArtifactIdentityInput {
+  let packedArtifactSha256: string | undefined;
+  let acceptedArtifactSha256: string | undefined;
+  let publicationArtifactSha256: string | undefined;
+  for (const argument of arguments_) {
+    if (argument === "--verify-artifact-identity") continue;
+    if (argument.startsWith("--packed-sha256=")) {
+      packedArtifactSha256 = argument.slice("--packed-sha256=".length);
+      continue;
+    }
+    if (argument.startsWith("--accepted-sha256=")) {
+      acceptedArtifactSha256 = argument.slice("--accepted-sha256=".length);
+      continue;
+    }
+    if (argument.startsWith("--publication-sha256=")) {
+      publicationArtifactSha256 = argument.slice(
+        "--publication-sha256=".length,
+      );
+      continue;
+    }
+    throw new Error(`未知のoptionです: ${argument}`);
+  }
+  return {
+    packedArtifactSha256,
+    acceptedArtifactSha256,
+    publicationArtifactSha256,
+  };
+}
+
 function main(): void {
   try {
-    const result = checkConsumerAcceptance(
-      commandLineInput(process.argv.slice(2)),
-    );
+    const arguments_ = process.argv.slice(2);
+    if (arguments_.includes("--verify-artifact-identity")) {
+      const result = evaluateArtifactIdentity(
+        artifactIdentityCommandLineInput(arguments_),
+      );
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      if (!result.accepted) process.exitCode = 1;
+      return;
+    }
+    const result = checkConsumerAcceptance(commandLineInput(arguments_));
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     if (!result.accepted) process.exitCode = 1;
   } catch (error) {

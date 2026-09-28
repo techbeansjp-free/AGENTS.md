@@ -15,6 +15,7 @@ import {
   isConsumerAcceptanceMechanism,
   observeGitDependency,
   observePackedArtifact,
+  observeReleaseIdentity,
   observeScaleDependentOutput,
   type AtomicConsumerAcceptanceObservation,
   type ArtifactIdentityResult,
@@ -26,6 +27,7 @@ import {
   type ProcessRunner,
 } from "../../scripts/check_consumer_acceptance.js";
 import { run, type ProcessResult } from "../../src/lib/process.js";
+import { PACKAGE_VERSION } from "../../src/lib/version.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 function observed<T>(value: T): { state: "observed"; value: T } {
@@ -831,6 +833,7 @@ Given("consumer acceptanceの対象機構候補がある", function () {
     "git-dependency",
     "packed-bin",
     "scale-output",
+    "release-identity",
     "registry",
   ];
 });
@@ -989,14 +992,18 @@ When("対象機構を検証する", function () {
   );
 });
 
-Then("git-dependencyとpacked-binとscale-outputだけを受理する", function () {
-  assert.deepEqual(CONSUMER_ACCEPTANCE_MECHANISMS, [
-    "git-dependency",
-    "packed-bin",
-    "scale-output",
-  ]);
-  assert.deepEqual(this.mechanismValidity, [true, true, true, false]);
-});
+Then(
+  "git-dependencyとpacked-binとscale-outputとrelease-identityだけを受理する",
+  function () {
+    assert.deepEqual(CONSUMER_ACCEPTANCE_MECHANISMS, [
+      "git-dependency",
+      "packed-bin",
+      "scale-output",
+      "release-identity",
+    ]);
+    assert.deepEqual(this.mechanismValidity, [true, true, true, true, false]);
+  },
+);
 
 Given("一致と不一致と算出不能のartifact digestがある", function () {
   const digest = "a".repeat(64);
@@ -1729,6 +1736,49 @@ Given("agent-skill-chainの候補tarballがある", function () {
   this.fixtureTarball = path.join(artifact, report[0]!.filename);
 });
 
+When(
+  "release-identityのconsumer acceptanceをexpectedVersion一致と不一致でそれぞれ観測する",
+  function () {
+    const input = {
+      tarballPath: this.fixtureTarball,
+      sourceRepositoryRoot: process.cwd(),
+      temporaryStagingRoot: path.join(
+        process.cwd(),
+        ".agent-skill-chain",
+        "tmp",
+      ),
+    };
+    this.acceptanceResults = [
+      evaluateConsumerAcceptance(
+        [
+          observeReleaseIdentity({
+            ...input,
+            expectedVersion: PACKAGE_VERSION,
+          }),
+        ],
+        ["release-identity"],
+      ),
+      evaluateConsumerAcceptance(
+        [
+          observeReleaseIdentity({
+            ...input,
+            expectedVersion: "9.9.9",
+          }),
+        ],
+        ["release-identity"],
+      ),
+    ];
+  },
+);
+
+Then("version一致はacceptedでversion不一致はrejectedになる", function () {
+  assert.equal(this.acceptanceResults.length, 2);
+  assert.equal(this.acceptanceResults[0]?.accepted, true);
+  assert.equal(this.acceptanceResults[0]?.mechanisms[0]?.status, "accepted");
+  assert.equal(this.acceptanceResults[1]?.accepted, false);
+  assert.equal(this.acceptanceResults[1]?.mechanisms[0]?.status, "rejected");
+});
+
 Given("install成功時に公開binを作る制御npm seamがある", function () {
   this.packageManagerSeamDirectory = this.temp("asc-consumer-pm-seam-");
   this.packageManagerSeamInjection = path.join(
@@ -1944,36 +1994,84 @@ Given("release workflowの公開artifact経路がある", function () {
   );
 });
 
+/**
+ * job blockだけを取り出す。**file全体の行数を数えると、`validate`と
+ * `build_distribution`が別々に持つ同名step id（`pack_release_artifact`）の
+ * 参照を合算してしまい、どちらのtarballがどちらの目的に使われているかを
+ * 区別できない（T06、build_distribution job新設）。
+ */
+function jobBlockText(yaml: string, job: string): string {
+  const lines = yaml.split("\n");
+  const start = lines.findIndex((line) =>
+    new RegExp(`^ {2}${job}:\\s*$`, "u").test(line),
+  );
+  if (start < 0) return "";
+  let end = start + 1;
+  while (
+    end < lines.length &&
+    !/^ {2}[A-Za-z_][\w-]*:\s*$/u.test(lines[end] ?? "")
+  )
+    end += 1;
+  return lines.slice(start, end).join("\n");
+}
+
 When(
   "pack artifactからconsumer acceptanceとpublishへの参照を検査する",
   function () {
-    const lines = this.releaseWorkflow.split("\n");
-    const packCount = lines.filter((line) =>
-      line.includes('TARBALL_PATH="$(npm pack --pack-destination'),
-    ).length;
-    const referenceCount = lines.filter(
-      (line) =>
-        line.trim() ===
-        "TARBALL_PATH: ${{ steps.pack_release_artifact.outputs.tarball_path }}",
-    ).length;
+    const workflow = this.releaseWorkflow;
+    const validateBlock = jobBlockText(workflow, "validate");
+    const buildDistributionBlock = jobBlockText(workflow, "build_distribution");
+    const githubReleaseBlock = jobBlockText(workflow, "github_release");
     this.releaseWorkflowErrors = [];
-    if (packCount !== 1)
+
+    const packMarker = 'TARBALL_PATH="$(npm pack --pack-destination';
+    const referenceMarker =
+      "TARBALL_PATH: ${{ steps.pack_release_artifact.outputs.tarball_path }}";
+    const validatePackCount = validateBlock
+      .split("\n")
+      .filter((line) => line.includes(packMarker)).length;
+    const validateReferenceCount = validateBlock
+      .split("\n")
+      .filter((line) => line.trim() === referenceMarker).length;
+    if (validatePackCount !== 1)
       this.releaseWorkflowErrors.push(
-        `release対象tarballの作成回数が1件ではありません: ${packCount}`,
+        `validate jobのgit-dependency検証用tarball作成回数が1件ではありません: ${validatePackCount}`,
       );
     /**
-     * **参照は検査の1件だけである。** 公開経路が無いため、同一性再検証も公開も
-     * tarballを参照しない（Issue #1216）。
+     * **validate内の参照は検査の1件だけである。** git-dependency検証用tarballは
+     * publishへ再利用しない（Issue #1216）。公式配布物は別途`build_distribution`が
+     * 生成しActions artifact経由でのみ`github_release`へ渡る。
      */
-    if (referenceCount !== 1)
+    if (validateReferenceCount !== 1)
       this.releaseWorkflowErrors.push(
-        `pack_release_artifactのtarball参照が検査の1件ではありません: ${referenceCount}`,
+        `validate jobのtarball参照が検査の1件ではありません: ${validateReferenceCount}`,
       );
-    if (!this.releaseWorkflow.includes("--mechanisms=git-dependency"))
+    if (!validateBlock.includes("--mechanisms=git-dependency"))
       this.releaseWorkflowErrors.push(
-        "consumer acceptanceがgit-dependencyを指定していません",
+        "validate jobのconsumer acceptanceがgit-dependencyを指定していません",
       );
-    if (/\bnpm\s+publish\b/u.test(this.releaseWorkflow))
+    /** **validateのstep idをgithub_releaseが直接参照しない。** job境界を越えない。 */
+    if (githubReleaseBlock.includes("steps.pack_release_artifact"))
+      this.releaseWorkflowErrors.push(
+        "github_release jobがvalidateのpack_release_artifact stepを直接参照しています",
+      );
+    if (!buildDistributionBlock.includes("--mechanisms=release-identity"))
+      this.releaseWorkflowErrors.push(
+        "build_distribution jobのconsumer acceptanceがrelease-identityを指定していません",
+      );
+    if (!buildDistributionBlock.includes("actions/upload-artifact"))
+      this.releaseWorkflowErrors.push(
+        "build_distribution jobが公式配布物をActions artifactとしてuploadしていません",
+      );
+    if (!githubReleaseBlock.includes("actions/download-artifact"))
+      this.releaseWorkflowErrors.push(
+        "github_release jobがbuild_distributionのActions artifactをdownloadしていません",
+      );
+    if (!githubReleaseBlock.includes("gh release upload"))
+      this.releaseWorkflowErrors.push(
+        "github_release jobがdownloadした配布物をasset添付していません",
+      );
+    if (/\bnpm\s+publish\b/u.test(workflow))
       this.releaseWorkflowErrors.push(
         "npm公開stepが存在します。公開経路は削除済みです",
       );
@@ -1981,7 +2079,7 @@ When(
 );
 
 Then(
-  "validateで作ったtarballにgit-dependencyの検査が結び付き公開経路は存在しない",
+  "validateのtarballはgit-dependency検査だけに使われbuild_distributionのtarballだけが公開経路を持つ",
   function () {
     assert.deepEqual(this.releaseWorkflowErrors, []);
   },

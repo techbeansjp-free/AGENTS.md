@@ -25,6 +25,7 @@ import { applyWorkspaceHygiene, previewWorkspaceHygiene, } from "./domain/hygien
 import { applyStagingCleanup, calculateStagingDigest, listStagingArtifacts, migrateLegacyStagingTrackerLocked, planStagingCleanup, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "./domain/staging.js";
 import { buildFinalizeReport, applyFinalize, planCompletion, planRootUpdate, planWorktreeCleanup, summarizeCompletion, } from "./domain/finalize.js";
 import { init, upgrade, uninstall, doctor } from "./domain/lifecycle.js";
+import { DISTRIBUTION_IDENTITY } from "./lib/release-identity.js";
 import { loadConsumerChoicesFragmentAtCommit, loadConsumerPolicyAtCommit, conformanceDeclarationFromPolicySet, loadEffectiveTrustedPolicySet, loadEffectiveTrustedPolicySetAtCommit, choicesFragmentSource, ruleFragmentSources, loadOperationPolicy, loadProjectPolicySet, loadProjectPolicySetAtCommit, mergeMethodPolicyWarnings, resolveReviewIndependence, trustedVerificationPolicy, validatePolicy, } from "./domain/policy.js";
 import { applyMigration, compareTrustedPolicy, enforceOperation, planMigration, resolveEffectivePolicy, retryMigration, rollbackMigration, sanitizeOutput, serializeDiagnostic, } from "./domain/enforcement.js";
 import { applyFileMigration, planFileMigration, recoverFileMigration, retryFileMigration, rollbackFileMigration, } from "./domain/migration.js";
@@ -3435,13 +3436,31 @@ function enforceUsage(usage, args) {
 function isHelpToken(value) {
     return value === "--help" || value === "-h";
 }
+/**
+ * `--version`の表示文言を決める（FR-09）。
+ *
+ * **sourceの場合、`package.json`のsentinel versionをrelease versionとして
+ * 出力しない（FR-08、FR-12）。** `DISTRIBUTION_IDENTITY`は実行中の配布物自身の
+ * `release-identity.json`有無・形式だけから判定した結果であり、`.git`・tag ref・
+ * GitHub APIを読まない。
+ */
+function releaseVersionDisplay() {
+    return DISTRIBUTION_IDENTITY.kind === "release"
+        ? DISTRIBUTION_IDENTITY.version
+        : "source build（release versionは不明です。npx github:techbeansjp-free/AGENTS.md#<tag>のsource経路として実行中です）";
+}
 export async function main(argv, dependencies = {}) {
     const [command, subcommand, ...rest] = argv;
     if (!command || command === "--help" || command === "-h") {
         print({
             usage: CLI_USAGE,
             lifecycle: PUBLIC_LIFECYCLE_COMMANDS.map((name) => `npx agent-skill-chain ${name}`),
+            version: "npx agent-skill-chain --version",
         });
+        return 0;
+    }
+    if (command === "--version") {
+        process.stdout.write(`${releaseVersionDisplay()}\n`);
         return 0;
     }
     const usage = findCommandUsage(command, subcommand);

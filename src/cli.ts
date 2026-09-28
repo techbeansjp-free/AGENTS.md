@@ -104,6 +104,7 @@ import {
   type RootUpdateObservation,
 } from "./domain/finalize.js";
 import { init, upgrade, uninstall, doctor } from "./domain/lifecycle.js";
+import { DISTRIBUTION_IDENTITY } from "./lib/release-identity.js";
 import {
   loadConsumerChoicesFragmentAtCommit,
   loadConsumerPolicyAtCommit,
@@ -4902,6 +4903,20 @@ function isHelpToken(value: string | undefined): boolean {
   return value === "--help" || value === "-h";
 }
 
+/**
+ * `--version`の表示文言を決める（FR-09）。
+ *
+ * **sourceの場合、`package.json`のsentinel versionをrelease versionとして
+ * 出力しない（FR-08、FR-12）。** `DISTRIBUTION_IDENTITY`は実行中の配布物自身の
+ * `release-identity.json`有無・形式だけから判定した結果であり、`.git`・tag ref・
+ * GitHub APIを読まない。
+ */
+function releaseVersionDisplay(): string {
+  return DISTRIBUTION_IDENTITY.kind === "release"
+    ? DISTRIBUTION_IDENTITY.version
+    : "source build（release versionは不明です。npx github:techbeansjp-free/AGENTS.md#<tag>のsource経路として実行中です）";
+}
+
 export async function main(
   argv: string[],
   dependencies: {
@@ -4917,7 +4932,12 @@ export async function main(
       lifecycle: PUBLIC_LIFECYCLE_COMMANDS.map(
         (name) => `npx agent-skill-chain ${name}`,
       ),
+      version: "npx agent-skill-chain --version",
     });
+    return 0;
+  }
+  if (command === "--version") {
+    process.stdout.write(`${releaseVersionDisplay()}\n`);
     return 0;
   }
   const usage = findCommandUsage(command, subcommand);

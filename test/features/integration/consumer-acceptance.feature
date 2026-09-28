@@ -41,10 +41,10 @@ Feature: packed artifactを隔離環境で利用者と同じ入口から観測�
     When ignored出力が1MiBを超えるscratch repositoryで公開入口を観測する
     Then scale-outputの公開入口は終了値0を返す
 
-  Scenario: SCN-INT-CONSUMER-009 release対象のtarballをvalidateで作りgit-dependencyを検査する
+  Scenario: SCN-INT-CONSUMER-009 validateのtarballはgit-dependency検査専用でbuild_distributionのtarballだけが公開経路を持つ
     Given release workflowの公開artifact経路がある
     When pack artifactからconsumer acceptanceとpublishへの参照を検査する
-    Then validateで作ったtarballにgit-dependencyの検査が結び付き公開経路は存在しない
+    Then validateのtarballはgit-dependency検査だけに使われbuild_distributionのtarballだけが公開経路を持つ
 
   Scenario: SCN-INT-CONSUMER-010 前提はHEADとの一致だけを要求する
     Given 保護fileがmerge-baseと異なりHEADと一致する候補treeがある
@@ -80,3 +80,8 @@ Feature: packed artifactを隔離環境で利用者と同じ入口から観測�
     Given 保存対象と除外対象を持つ小さな候補treeがある
     When consumer候補treeのコピーを実行する
     Then 作業treeの2箇所だけが追加除外されその他の検査対象が保存される
+
+  Scenario: SCN-INT-RELID-006 release-identity consumer acceptance機構を検証する
+    Given agent-skill-chainの候補tarballがある
+    When release-identityのconsumer acceptanceをexpectedVersion一致と不一致でそれぞれ観測する
+    Then version一致はacceptedでversion不一致はrejectedになる

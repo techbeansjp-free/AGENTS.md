@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import { isPackageVersion, packageReleaseVersion } from "../lib/version.js";
 
-export type ReleaseStage = "validate" | "tag" | "github_release";
+export type ReleaseStage =
+  "validate" | "build_distribution" | "tag" | "github_release";
 
 export interface ReleasePlanInput {
   currentVersion: string;
@@ -80,6 +81,7 @@ export interface AutoReleasePlan {
  */
 const RELEASE_STAGES: readonly ReleaseStage[] = [
   "validate",
+  "build_distribution",
   "tag",
   "github_release",
 ];
@@ -576,6 +578,11 @@ export function planRelease(value: unknown): ReleasePlan {
     stages: [
       { stage: "validate", enabled: true, reason: "release前検証に合格した" },
       {
+        stage: "build_distribution",
+        enabled: true,
+        reason: "検証済み計画から配布物を1度だけ生成する",
+      },
+      {
         stage: "tag",
         enabled: true,
         reason: "明示されたversion tagを作成する",
@@ -905,6 +912,89 @@ function validateAcceptanceStep(lines: readonly string[]): string[] {
   return missing;
 }
 
+/**
+ * 指定jobの各stepについて、`run:` blockを持つものだけを開始行位置とcommand文字列で
+ * 返す。**`name:`やcomment内の文字列一致をmarkerと数えない**
+ * （validateAcceptanceStepと同型、独立review REV-05是正）。
+ *
+ * **commandの終端は次stepの開始行ではなく、`run:`自身のindentより深い行が
+ * 続く範囲で決める。** 次step開始行を境界にすると、step間に置いた
+ * YAML comment（例: このfile自身が持つ実装意図の説明comment）が直前stepの
+ * commandへ混入し、削除したstepのmarkerがcomment経由で「まだある」ように
+ * 誤判定される（round 1独立review、REV-05是正時に実測）。
+ */
+function jobStepRunBlocks(
+  lines: readonly string[],
+  job: string,
+): Array<{ stepStart: number; command: string; attributes: string }> {
+  const range = jobRange(lines, job);
+  if (range === undefined) return [];
+  const stepStarts: number[] = [];
+  /**
+   * **step開始の判定は`- name:`固定ではなく、6 spaces + `- `の任意のlist itemを
+   * 対象にする。** `- name:`だけを見ると、`name:`を持たないstep（`- run: …`や
+   * `- id: …`を直接先頭に書いたstep）が境界として認識されず、直前stepのcommandへ
+   * 誤って吸収されるか、境界の谷間へ落ちてまったく走査されない
+   * （round 2独立review REV2-01 d/e是正）。
+   */
+  for (let cursor = range.start; cursor < range.end; cursor += 1)
+    if (/^ {6}-\s/u.test(lines[cursor] ?? "")) stepStarts.push(cursor);
+  const blocks: Array<{
+    stepStart: number;
+    command: string;
+    attributes: string;
+  }> = [];
+  for (const [order, stepStart] of stepStarts.entries()) {
+    const stepEnd = stepStarts[order + 1] ?? range.end;
+    const rawBody = lines.slice(stepStart, stepEnd);
+    /**
+     * **header行（`      - key: …`）の`- `を、同じ幅の空白へ正規化してから走査する。**
+     * `run:`・`continue-on-error:`・`if:`を`- `の直後（step先頭の唯一のkey）へ
+     * 直接書いた単一行形（例: `      - run: npm pack …`）は、`^ {8}key:`前提の
+     * 既存正規表現ではkeyの手前が`-`であり空白8個ではないため一致しない。
+     * headerの`- `を空白2個へ置換すれば、以後のkeyは常に8 spaces起点になり、
+     * `- key: …`と`\n        key: …`のどちらで書かれても同じ扱いになる
+     * （round 3独立review REV3-01指摘）。
+     */
+    const body = [
+      (rawBody[0] ?? "").replace(/^( {6})-( ?)/u, "$1  "),
+      ...rawBody.slice(1),
+    ];
+    const runIndex = body.findIndex((line) => /^ {8}run:/u.test(line));
+    if (runIndex < 0) continue;
+    const runIndent = indentation(body[runIndex] ?? "");
+    const commandLines = [body[runIndex] ?? ""];
+    let bodyEnd = body.length;
+    for (let cursor = runIndex + 1; cursor < body.length; cursor += 1) {
+      const line = body[cursor] ?? "";
+      if (line.trim().length > 0 && indentation(line) <= runIndent) {
+        bodyEnd = cursor;
+        break;
+      }
+      commandLines.push(line);
+    }
+    blocks.push({
+      stepStart,
+      /**
+       * **`command`は行全体がshell/JS commentの行を除外してから結合する。**
+       * markerを丸ごとcomment化する（`# gh release download …`や、
+       * `node --input-type=module`のheredoc内`// repos/…/immutable-releases`）
+       * だけで`command.includes(...)`系の検査を素通りできてしまう
+       * （round 3独立review REV3-04 f3・REV3-07 i4指摘）。行の一部だけが
+       * comment化された場合は判別できない（文字列内の`#`・`//`と区別する
+       * 一般的手段が無い）ため、行頭が`#`または`//`の行だけを除外する。
+       */
+      command: commandLines
+        .filter((line) => !/^\s*(?:#|\/\/)/u.test(line))
+        .join("\n"),
+      // **stepの属性行（if:・continue-on-errorなど）はbodyEndまでに限定する。**
+      // run: block内へ迷い込んだ次step以降の内容を属性判定へ混ぜない。
+      attributes: body.slice(0, bodyEnd).join("\n"),
+    });
+  }
+  return blocks;
+}
+
 export function validateReleaseWorkflow(yaml: string): {
   valid: boolean;
   errors: string[];
@@ -1118,11 +1208,27 @@ export function validateReleaseWorkflow(yaml: string): {
   else checks.push("publish_npm入力が存在しないことを確認した");
   errors.push(...validateAcceptanceStep(lines));
   /**
+   * **`build_distribution` jobの実在を要求する。**
+   *
+   * validateとtagの間で配布物を1度だけ生成・検査するjobが無いと、tag以降が
+   * 未検査のartifactを対象にしてしまう（FR-01〜FR-05）。
+   */
+  if (jobRange(lines, "build_distribution") === undefined)
+    errors.push(
+      "build_distribution jobを追加してください。validate成功後・tagより前に配布物を1度だけ生成・検査します",
+    );
+  else checks.push("build_distribution jobの存在を確認した");
+  /**
    * **後続jobは先行jobの結果そのものを要求する。** `always()`と保存済みoutputだけでは、
    * acceptanceが落ちて`validate`がfailureになってもtagが作られる（Issue #1216 F-01）。
+   * `tag`は`validate`と`build_distribution`の両方の成功結果を要求する
+   * （git-dependency acceptanceとrelease-identity acceptanceの両方をtag前に成立させる、
+   * owner確定入力2）。
    */
   for (const [job, required] of [
+    ["build_distribution", "needs.validate.result == 'success'"],
     ["tag", "needs.validate.result == 'success'"],
+    ["tag", "needs.build_distribution.result == 'success'"],
     ["github_release", "needs.tag.result == 'success'"],
   ] as const) {
     const range = jobRange(lines, job);
@@ -1134,6 +1240,363 @@ export function validateReleaseWorkflow(yaml: string): {
     if (/\balways\(\)/u.test(condition))
       errors.push(
         `${job} jobの条件からalways()を外してください。先行jobの失敗後も起動します`,
+      );
+  }
+  /**
+   * **`github_release` jobがartifact digestの3者一致を検証してから公開することを
+   * 要求する。** `evaluateArtifactIdentity`（既存、無変更）を`--verify-artifact-identity`
+   * で呼び出す配線がpublish（`--draft=false`）より前にあることをYAML構造から確認する
+   * （FR-05、TOCTOU排除）。**markerは`github_release` jobのrun: block内に限定する。**
+   * file全体の`indexOf`は、commentへ置いたmarkerや別jobの記述でも通ってしまう
+   * （独立review REV-05指摘）。
+   */
+  const githubReleaseRunBlocks = jobStepRunBlocks(lines, "github_release");
+  /**
+   * **verify・publishはどちらも`find`ではなく`filter`で全件検査する。**
+   * 最初の1件だけを見ると、正規のstepの後にstatus functionを持つ2件目の
+   * verify・publish stepを追加する迂回を見逃す（round 3独立review REV3-02指摘）。
+   */
+  const verifyIdentitySteps = githubReleaseRunBlocks.filter(({ command }) =>
+    command.includes("--verify-artifact-identity"),
+  );
+  /**
+   * **publishの検出を`--draft=false`の字面だけに限定しない。** `gh api -X PATCH
+   * …/releases/<id> -F draft=false`のような別経路のdraft解除もpublish行為として
+   * 検出しないと、検査対象から漏れたまま実行される（round 3独立review
+   * REV3-03 e3指摘）。
+   */
+  const PUBLISHES_RELEASE_PATTERN =
+    /(?:--draft=false|-{1,2}[fF]\s+["']?draft=false["']?|"draft"\s*:\s*false)/u;
+  const publishSteps = githubReleaseRunBlocks.filter(({ command }) =>
+    PUBLISHES_RELEASE_PATTERN.test(command),
+  );
+  /** stepの属性block（headerからrun:直前まで）に含まれる`if:`行の式部分を返す。 */
+  const stepIfExpression = (attributes: string): string | undefined =>
+    /^\s*if:\s*(.+)$/mu.exec(attributes)?.[1]?.trim();
+  /**
+   * **`always()`・`cancelled()`・`success()`・`failure()`のようなstatus functionを
+   * phase判定step群のif:へ持ち込ませない。** これらはjob失敗後もstepを実行させる
+   * 迂回になる（round 2独立review REV2-01 a指摘）。GitHub Actionsの式言語で
+   * 関数名は大小文字を区別しないため、大小文字を無視して照合する
+   * （round 3独立review REV3-07 `Always()`指摘）。
+   */
+  const STATUS_FUNCTION_PATTERN =
+    /\b(?:always|cancelled|success|failure)\s*\(/iu;
+  if (verifyIdentitySteps.length === 0)
+    errors.push(
+      "github_release jobのrun: block内でartifact digestの3者一致（evaluateArtifactIdentity）を検証してください",
+    );
+  else {
+    checks.push("artifact digestの3者一致検証の実行を確認した");
+    /**
+     * **検証stepへのcontinue-on-error・ifを拒否する。全件を検査する。**
+     * git-dependency acceptance（validateAcceptanceStep）と同じ迂回を許さない
+     * （独立review REV-05指摘）。**continue-on-errorは`true`の字面だけでなく、
+     * `false`以外の値をすべて拒否する。** `${{ true }}`のような式形は旧regexを
+     * すり抜ける（round 2独立review REV2-01 c指摘）。
+     */
+    const badContinueOnError = verifyIdentitySteps.some((step) => {
+      const value = /^ {8}continue-on-error:\s*(\S.*)$/mu
+        .exec(step.attributes)?.[1]
+        ?.trim();
+      return value !== undefined && value !== "false";
+    });
+    if (badContinueOnError)
+      errors.push(
+        "artifact digest検証stepへcontinue-on-error: false以外を付けないでください",
+      );
+    else
+      checks.push(
+        "artifact digest検証stepにcontinue-on-errorが無いことを確認した",
+      );
+    /**
+     * **検証stepのif:がrelease_phaseの判定から外れていないことを、全件について
+     * 要求する。** `${{ false }}`へ差し替えると検証step自体が実行されなくなるが、
+     * 旧実装はcontinue-on-errorしか見ておらずこの迂回を検知できなかった
+     * （round 2独立review REV2-01 b指摘）。
+     */
+    const badVerifyIf = verifyIdentitySteps.some((step) => {
+      const expression = stepIfExpression(step.attributes);
+      return (
+        expression === undefined ||
+        !expression.includes("steps.release_phase.outputs.phase") ||
+        STATUS_FUNCTION_PATTERN.test(expression)
+      );
+    });
+    if (badVerifyIf)
+      errors.push(
+        "artifact digest検証stepのif:をrelease_phaseの判定から外さないでください",
+      );
+    else checks.push("artifact digest検証stepのif:を確認した");
+    /**
+     * **検証commandの失敗握り潰しを拒否する。** git-dependency acceptance
+     * （validateAcceptanceStep）と同型の迂回（round 3独立review REV3-03 c5指摘）。
+     */
+    const swallowsVerifyFailure = verifyIdentitySteps.some(({ command }) =>
+      /\|\|\s*true|true\s*\|\||;\s*exit\s+0/u.test(command),
+    );
+    if (swallowsVerifyFailure)
+      errors.push(
+        "artifact digest検証の失敗を握り潰さないでください: verifyのcommand",
+      );
+    else checks.push("artifact digest検証の失敗を握り潰さないことを確認した");
+    /**
+     * **`--verify-artifact-identity`というflag文字列だけでなく、実際に
+     * `check_consumer_acceptance.ts`を`node`で起動していることを要求する。**
+     * flagだけ残してcommand本体を`echo`等へ差し替える迂回を許さない
+     * （round 3独立review REV3-03 c6指摘）。
+     */
+    const invokesRealScript = verifyIdentitySteps.every(({ command }) =>
+      /\bnode\b[^\n]*check_consumer_acceptance\.ts/su.test(command),
+    );
+    if (!invokesRealScript)
+      errors.push(
+        "artifact digest検証stepはnodeでscripts/check_consumer_acceptance.tsを実行してください",
+      );
+    else
+      checks.push("artifact digest検証が実際のscriptを起動することを確認した");
+    /**
+     * **3者一致の入力元を固定する。** `PACKED_SHA256`・`ACCEPTED_SHA256`は
+     * `build_distribution`のoutputsから、`PUBLICATION_SHA256`は
+     * `hash_publication`のoutputsから来ることを要求する。envの値を別stepの
+     * outputへ差し替えると3者一致が1者一致へ縮退する（round 3独立review
+     * REV3-03 c7指摘）。
+     */
+    const sourcesCanonicalDigests = verifyIdentitySteps.every(
+      ({ attributes }) =>
+        /PACKED_SHA256:\s*\$\{\{\s*needs\.build_distribution\.outputs\.packed_artifact_sha256\s*\}\}/u.test(
+          attributes,
+        ) &&
+        /ACCEPTED_SHA256:\s*\$\{\{\s*needs\.build_distribution\.outputs\.accepted_artifact_sha256\s*\}\}/u.test(
+          attributes,
+        ) &&
+        /PUBLICATION_SHA256:\s*\$\{\{\s*steps\.hash_publication\.outputs\.sha256\s*\}\}/u.test(
+          attributes,
+        ),
+    );
+    if (!sourcesCanonicalDigests)
+      errors.push(
+        "artifact digest検証の入力envは、packed/accepted digestをneeds.build_distributionのoutputsから、publication digestをsteps.hash_publicationのoutputsから取得してください",
+      );
+    else checks.push("artifact digest検証の入力envの取得元を確認した");
+  }
+  if (verifyIdentitySteps.length > 0 && publishSteps.length > 0) {
+    const verifyIfExpressions = verifyIdentitySteps.map((step) =>
+      stepIfExpression(step.attributes),
+    );
+    const canonicalVerifyIf = verifyIfExpressions[0];
+    /**
+     * **複数のverify stepが異なるif:を持つ場合も不一致として拒否する。**
+     * publishのif:と比較する基準が定まらない状態を安全側（拒否）へ倒す。
+     */
+    const inconsistentVerifyIf = verifyIfExpressions.some(
+      (expression) => expression !== canonicalVerifyIf,
+    );
+    /**
+     * **publishする全stepについて、いずれかのverify stepより前に無いことを
+     * 要求する。** 1件目だけを見ると、正規publishの後に追加した2件目の
+     * publishが検査から漏れる（round 3独立review REV3-02 e2指摘）。
+     */
+    const publishBeforeVerify = publishSteps.some((publish) =>
+      verifyIdentitySteps.some(
+        (verify) => publish.stepStart < verify.stepStart,
+      ),
+    );
+    if (publishBeforeVerify)
+      errors.push(
+        "artifact digestの3者一致を検証する前にGitHub Releaseをpublishしないでください",
+      );
+    else checks.push("publishが3者一致検証より後であることを確認した");
+    /**
+     * **publishする全stepのif:が検証stepのif:と同一であることを要求する。**
+     * `always()`や`!cancelled()`へ差し替えると、検証が失敗またはskipされた後も
+     * publishが走る（round 2独立review REV2-01 a指摘、round 3独立review
+     * REV3-02 e2指摘で複数publish stepへ拡張）。
+     */
+    const badPublishIf = publishSteps.some((publish) => {
+      const publishIfExpression = stepIfExpression(publish.attributes);
+      return (
+        publishIfExpression === undefined ||
+        inconsistentVerifyIf ||
+        publishIfExpression !== canonicalVerifyIf ||
+        STATUS_FUNCTION_PATTERN.test(publishIfExpression)
+      );
+    });
+    if (badPublishIf)
+      errors.push(
+        "publishのif:はartifact digest検証stepのif:と同一にしてください（always()等のstatus functionを使わないでください）",
+      );
+    else checks.push("publishのif:が検証stepと同一であることを確認した");
+  }
+  /**
+   * **`github_release` jobがartifactを再生成しないことを要求する。** `npm pack`を
+   * このjobで再実行すると、`build_distribution`が検査したbyte列と公開するbyte列が
+   * 一致する保証が無くなる（FR-05、AC-07の観測方法「npm packを実行しないことを
+   * 照合する」）。
+   */
+  if (
+    githubReleaseRunBlocks.some(({ command }) =>
+      /\bnpm\s+pack\b/u.test(command),
+    )
+  )
+    errors.push(
+      "github_release jobでnpm packを実行しないでください。build_distributionが生成したartifactだけを使ってください",
+    );
+  else checks.push("github_release jobがartifactを再生成しないことを確認した");
+  /**
+   * **公開先から取得し直したbyte列をhashしていることを要求する。** ローカルの
+   * 添付元fileを再hashするだけの旧実装（TOCTOU）へ戻すと、公開が壊れていても
+   * 検査を通過してしまう（round 2独立review REV2-01 f指摘）。
+   */
+  const hashPublicationStep = githubReleaseRunBlocks.find(({ attributes }) =>
+    /\bid:\s*hash_publication\b/u.test(attributes),
+  );
+  if (!hashPublicationStep) {
+    errors.push(
+      "公開先から取得し直したasset digestを記録するstep（id: hash_publication）が必要です",
+    );
+  } else {
+    /**
+     * **hashの対象が公開先から取得し直したcopyであることを、download有無だけ
+     * でなくhash対象pathでも確認する。** `gh release download`を残したまま
+     * `sha256sum`の対象をuploadに使ったローカルcopy（`release-artifact/…`）へ
+     * 戻すと、3者一致がTOCTOUへ逆行する（round 3独立review REV3-04 f2指摘）。
+     */
+    const downloadsPublishedCopy = /gh\s+release\s+download\b/u.test(
+      hashPublicationStep.command,
+    );
+    const hashesDownloadedCopy = /sha256sum\s+publication-check\//u.test(
+      hashPublicationStep.command,
+    );
+    const hashesLocalCopy = /sha256sum\s+release-artifact\//u.test(
+      hashPublicationStep.command,
+    );
+    /**
+     * **downloadの失敗を`||`で握り潰してローカルcopyへ差し替える迂回を拒否する。**
+     * download行自体・hash対象pathの文字列はどちらも変えずに、download失敗時
+     * だけlocal copyへfallbackすると、上の3判定をすべて素通りする
+     * （round 3独立review REV3-04 f4指摘）。
+     */
+    const swallowsDownloadFailure = /\|\|/u.test(hashPublicationStep.command);
+    if (
+      !downloadsPublishedCopy ||
+      !hashesDownloadedCopy ||
+      hashesLocalCopy ||
+      swallowsDownloadFailure
+    )
+      errors.push(
+        "asset digestはgh release downloadで取得し直したpublication-check配下のfileをfallbackなしでsha256sumしてください",
+      );
+    else checks.push("公開先から取得し直したasset digestの算出を確認した");
+  }
+  /**
+   * **`gh release create`は`--draft`で作成することを要求する。** `--draft`を外すと
+   * 3者一致検証の前にReleaseが公開状態になり得る（round 2独立review REV2-01 g指摘）。
+   */
+  const releaseCreateStep = githubReleaseRunBlocks.find(({ command }) =>
+    /\bgh\s+release\s+create\b/u.test(command),
+  );
+  if (!releaseCreateStep || !/--draft\b/u.test(releaseCreateStep.command))
+    errors.push("gh release createは--draftで作成してください");
+  else checks.push("gh release createがdraftで作成されることを確認した");
+  /**
+   * **publish済みでasset digestが不一致または確認不能な場合に停止するstepを要求
+   * する。** このstepを削除すると、既存の公開済みReleaseへ気づかず上書きしうる
+   * （round 2独立review REV2-01 g指摘）。
+   */
+  const publishedMismatchStop = githubReleaseRunBlocks.find(
+    ({ attributes, command }) =>
+      /published-mismatch/u.test(attributes) && /\bexit\s+1\b/u.test(command),
+  );
+  if (!publishedMismatchStop)
+    errors.push(
+      "publish済みでasset digestが不一致または確認不能な場合に停止するstepが必要です",
+    );
+  else {
+    /**
+     * **停止stepにcontinue-on-errorやstatus functionを持つif:を付けないことを
+     * 要求する。** `exit 1`を残したまま`continue-on-error: true`や
+     * `if: ${{ false }}`を足すと、停止が実際には効かなくなる
+     * （round 3独立review REV3-07 g5・g6指摘）。
+     */
+    const stopContinueOnError = /^ {8}continue-on-error:\s*(\S.*)$/mu
+      .exec(publishedMismatchStop.attributes)?.[1]
+      ?.trim();
+    const stopIfExpression = stepIfExpression(publishedMismatchStop.attributes);
+    if (
+      (stopContinueOnError !== undefined && stopContinueOnError !== "false") ||
+      stopIfExpression === undefined ||
+      !stopIfExpression.includes("published-mismatch") ||
+      STATUS_FUNCTION_PATTERN.test(stopIfExpression)
+    )
+      errors.push(
+        "publish済み不一致時の停止stepにcontinue-on-errorや、published-mismatch判定を外すif:を付けないでください",
+      );
+    else checks.push("publish済み不一致時の停止stepを確認した");
+  }
+  /**
+   * **Immutable Releasesの状態報告stepを要求するが、取得不能をjob失敗にしない。**
+   * 取得可否はGitHubの機能提供状況に依存するため、`unknown`として報告してjobは
+   * 続行する（FR-13、R2）。**step全体（次のstep開始行の手前まで）だけを読む。**
+   * job全体を読むと、他stepの無関係な`if:`を誤検出する。
+   * **markerはstep自身の`- name:`行に限定し、github_release job内だけを探す。**
+   * file全体の文字列一致は、step本体を削って別stepのcomment行へ同じ文言を
+   * 書くだけで素通りしてしまう（round 2独立review REV2-02指摘）。
+   */
+  const githubReleaseJobRange = jobRange(lines, "github_release");
+  const immutableReleasesIndex = githubReleaseJobRange
+    ? lines.findIndex(
+        (line, index) =>
+          index >= githubReleaseJobRange.start &&
+          index < githubReleaseJobRange.end &&
+          /^ {6}- name:.*Immutable Releases/u.test(line),
+      )
+    : -1;
+  if (immutableReleasesIndex < 0)
+    errors.push("Immutable Releasesの状態報告stepが必要です");
+  else {
+    checks.push("Immutable Releases状態報告stepの存在を確認した");
+    const searchEnd = githubReleaseJobRange?.end ?? lines.length;
+    const offsetToNextStep = lines
+      .slice(immutableReleasesIndex + 1, searchEnd)
+      .findIndex((line) => /^ {6}-\s/u.test(line));
+    const nextStepIndex =
+      offsetToNextStep < 0
+        ? searchEnd
+        : immutableReleasesIndex + 1 + offsetToNextStep;
+    const stepBody = lines.slice(immutableReleasesIndex, nextStepIndex);
+    const hasContinueOnError = stepBody.some((line) =>
+      /^\s*continue-on-error:\s*true\s*$/u.test(line),
+    );
+    const gatesLaterSteps = stepBody.some((line) =>
+      /^\s*if:\s*(?!.*always\(\))/u.test(line),
+    );
+    if (!hasContinueOnError || gatesLaterSteps)
+      errors.push(
+        "Immutable Releases状態報告stepの結果でjobを失敗させないでください（continue-on-error: trueとifなし、またはalways()を使ってください）",
+      );
+    else
+      checks.push(
+        "Immutable Releases状態報告がjobを失敗させないことを確認した",
+      );
+    /**
+     * **stepが実際にImmutable Releasesのendpointを問い合わせていることを要求
+     * する。** step名だけ残してcommand本体を無害化しても、旧実装は検知できな
+     * かった（round 2独立review REV2-02「何をしているか未確認」指摘）。
+     */
+    const immutableReleasesStep = githubReleaseRunBlocks.find(
+      ({ stepStart }) => stepStart === immutableReleasesIndex,
+    );
+    if (
+      !immutableReleasesStep ||
+      !/immutable-releases/u.test(immutableReleasesStep.command)
+    )
+      errors.push(
+        "Immutable Releasesの状態報告stepはrepos/<owner>/<repo>/immutable-releases endpointを問い合わせてください",
+      );
+    else
+      checks.push(
+        "Immutable Releases状態報告が正しいendpointを参照することを確認した",
       );
   }
   if (
