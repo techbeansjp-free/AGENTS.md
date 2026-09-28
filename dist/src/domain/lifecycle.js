@@ -5,6 +5,7 @@ import { writeFileNoReplace } from "../lib/atomic.js";
 import { parseJsonStrict, resolveContained } from "../lib/security.js";
 import { findPackageRoot } from "../lib/package-root.js";
 import { PACKAGE_VERSION } from "../lib/version.js";
+import { DISTRIBUTION_IDENTITY } from "../lib/release-identity.js";
 import { isRecord } from "../types.js";
 import { inspectExecutableVersion, MINIMUM_GH_VERSION, MINIMUM_GIT_VERSION, } from "../lib/executable-version.js";
 import { loadProjectPolicySet } from "./policy.js";
@@ -468,6 +469,19 @@ function recoveryDiagnostic(target) {
     }
     return "復旧するには update に --recover-record が必要です。手順は配布される利用案内を参照してください";
 }
+/**
+ * source buildからの`install`・`update`を**拒否せず**警告する（FR-11）。
+ *
+ * `DISTRIBUTION_IDENTITY`は実行中のこのcode自身の識別結果であり、`target`
+ * （利用者のinstall先）とは独立に決まる。
+ */
+function sourceBuildWarnings() {
+    return DISTRIBUTION_IDENTITY.kind === "source"
+        ? [
+            "source buildから実行しています。正式release distributionであることを保証できません",
+        ]
+        : [];
+}
 export function init(target, options) {
     return options.apply
         ? withManagedMutationLock(target, (markDirty) => initUnlocked(target, options, markDirty))
@@ -487,7 +501,11 @@ function initUnlocked(target, options, markDirty = () => { }) {
          */
         `初期導入先が競合しています。ファイルは書き込んでいません: ${conflicts.join(", ")}`);
     if (!options.apply)
-        return { applied: false, assets: assets.map(({ dest }) => dest) };
+        return {
+            applied: false,
+            assets: assets.map(({ dest }) => dest),
+            warnings: sourceBuildWarnings(),
+        };
     const recordPresent = hasManagedAssetRecord(target);
     assertSnapshotPublicationSupported(target, recordPresent);
     const expectedParent = recordPresent
@@ -507,7 +525,11 @@ function initUnlocked(target, options, markDirty = () => { }) {
     }
     markDirty();
     publishManagedAssetRecord(target, record, recordPresent, expectedParent);
-    return { applied: true, assets: Object.keys(record.files) };
+    return {
+        applied: true,
+        assets: Object.keys(record.files),
+        warnings: sourceBuildWarnings(),
+    };
 }
 export function classifyManagedAsset(input) {
     if (!input.exists)
@@ -692,6 +714,7 @@ function upgradeUnlocked(target, options, markDirty = () => { }) {
             planned: planned.map((item) => item.key),
             adopted: adoptable,
             retained,
+            warnings: sourceBuildWarnings(),
         };
     assertSnapshotPublicationSupported(target, recordPresent);
     const next = {
@@ -724,7 +747,7 @@ function upgradeUnlocked(target, options, markDirty = () => { }) {
     }
     markDirty();
     publishManagedAssetRecord(target, next, recordPresent, expectedParent);
-    return { applied: true, adopted, retained };
+    return { applied: true, adopted, retained, warnings: sourceBuildWarnings() };
 }
 export function uninstall(target, options) {
     return options.apply
@@ -898,6 +921,7 @@ export function doctor(target, worktreeObservations) {
      */
     let recordRead = false;
     let recordFailure;
+    let managedRecordVersion;
     if (!installed)
         diagnostics.push(`${MANAGED_RECORD}: managed recordがありません`);
     else {
@@ -905,6 +929,10 @@ export function doctor(target, worktreeObservations) {
             const managed = readManagedAssetRecord(target);
             files = managed.record.files;
             managedAssets = managed.assets;
+            managedRecordVersion =
+                typeof managed.record.version === "string"
+                    ? managed.record.version
+                    : undefined;
             recordRead = true;
         }
         catch (error) {
@@ -1136,6 +1164,21 @@ export function doctor(target, worktreeObservations) {
     return {
         healthy: installed && diagnostics.length === 0,
         installed,
+        /**
+         * **報告するが`healthy`を変えない**（FR-12、REQ-LC-011の前例）。
+         * `version`はkindが`release`の場合だけ入る。`source`のsentinel version
+         * （`packageVersion`）をrelease versionとして表示しない（FR-08）。
+         */
+        releaseIdentity: {
+            kind: DISTRIBUTION_IDENTITY.kind,
+            version: DISTRIBUTION_IDENTITY.kind === "release"
+                ? DISTRIBUTION_IDENTITY.version
+                : null,
+            managedVersion: managedRecordVersion ?? null,
+            note: DISTRIBUTION_IDENTITY.kind === "release"
+                ? "実行中のCLIは正式release distributionです"
+                : "実行中のCLIはsource buildです。package.jsonのversionはrelease追随をやめたsentinelであり、release versionではありません",
+        },
         unmanagedAssets: {
             observed: unmanagedAssets.observed,
             paths: unmanagedAssets.paths,
