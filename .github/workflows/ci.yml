@@ -1,4 +1,4 @@
-name: v0.3 品質検証
+name: 品質検証
 
 on:
   pull_request:
