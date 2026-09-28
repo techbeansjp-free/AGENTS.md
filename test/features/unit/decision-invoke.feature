@@ -45,3 +45,16 @@ Feature: decision invoke（Decision Type Registryの実行、Issue #1485）
     Given Policy Allowed外の値を混入させたcandidateSetとそれに一致するproposedValueを持つDCAND-009入力がある
     When invokeDecisionを実行する
     Then rejectedである
+
+  Scenario: SCN-UNIT-DECINV-010 Jev設定とenv varがあってもdecision invokeはJevへ送信せずJev fieldを出力しない
+    Given Jevを有効にした設定fileとenv varを持つfixtureでDCAND-009入力がある
+    When CLIからdecision invokeをapplyつきで実行する
+    Then fetchは呼ばれずJev fieldとjev-shadow記録が無く終了値は0である
+    When Jev設定fileを不正なJSONへ置き換えてCLIからdecision invokeをapplyつきで再実行する
+    Then fetchは呼ばれずJev fieldとjev-shadow記録が無く終了値は0である
+
+  Scenario: SCN-UNIT-DECINV-011 撤去したdecision configure・label・evaluateは不明なコマンドとして拒否され利用者fileを書かない
+    Given 一時HOMEと一時shell起動fileとJev env varを持つfixtureがある
+    When 撤去したdecision subcommandを旧flag付きでCLIから実行する
+    Then 各subcommandは終了値1で不明なコマンドとして拒否される
+    And 一時shell起動fileは変更されずjev-provider.json・jev.env・evaluation-labels.jsonlは作られない

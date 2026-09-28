@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1486,
+  "observed": {
+    "baseSha": "828c3857441afc05a606d822cc25fce3e0d7c52a",
+    "implementationHeadSha": "1f2fa6ff4ea0d23a8cee979efc102095d798fbe0",
+    "diffDigest": "e3986a7d047ff063c174453b6ef4814ed7d2e8d87870085605e0744431fa1cb5",
+    "session": {
+      "sessionId": "6423c780be762e30cc2ddc2e5a728aa66697e2e26212546327a608b1ecaff97a",
+      "latestRoundDigest": "ac3f20da43c38528d454e29d142a4777b2a70e2224bc8303f453a343574669eb",
+      "status": "converged",
+      "countedRounds": 3
+    },
+    "impact": {
+      "digest": "a113cf0d0576ca57f8558bb5da64197d64345bed43832341f6f744f5fcae34f8",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "1f2fa6ff4ea0d23a8cee979efc102095d798fbe0",
+        "impactDigest": "a113cf0d0576ca57f8558bb5da64197d64345bed43832341f6f744f5fcae34f8",
+        "finishedAt": "2026-09-28T15:24:39.357Z",
+        "recordDigest": "6d04f44e84b6b48c3ca32ba3ba1cabc68fd1c6e1e8fb794e73b46336eb920c0f"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "EXT-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": ".agent-skill-chain/00_利用案内.md",
+      "contractId": "AC-08"
+    },
+    {
+      "id": "EXT-02",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": ".agent-skill-chain/00_利用案内.md",
+      "contractId": "AC-08"
+    },
+    {
+      "id": "EXT-03",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/00_利用案内.md",
+      "contractId": "AC-08"
+    },
+    {
+      "id": "F1",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/15_要件追跡/01_変更履歴.md",
+      "contractId": null
+    },
+    {
+      "id": "F2",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/02_要件/01_ワークフロー要件.md",
+      "contractId": "AC-06"
+    },
+    {
+      "id": "F3",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/00_利用案内.md",
+      "contractId": null
+    },
+    {
+      "id": "F4",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/metrics-cli.steps.ts",
+      "contractId": "AC-05"
+    },
+    {
+      "id": "F5",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/decision-invoke.steps.ts",
+      "contractId": null
+    },
+    {
+      "id": "F6",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/tmp/issues/20260928_142127_Jev-shadow評価の完了条件正規化と実測/00_要求定義.md",
+      "contractId": null
+    },
+    {
+      "id": "F7",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/decision-invoke.steps.ts",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "asc-1486-formal-reviewer",
+    "implementer": "asc-1486-implementer",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "345d66aea8f43e08623a0c00d7b5dbe8d1353a9e12517af52f14618c03dd7e2a"
+}

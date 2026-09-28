@@ -1,4 +1,3 @@
-import { buildShadowEvaluation, unavailableShadowEvaluation, } from "./shadow-evaluation.js";
 import fs from "node:fs";
 import path from "node:path";
 import { assertWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
@@ -168,18 +167,7 @@ export function buildMetricsReport(input) {
             roleByLabel: eventDurations.byLabel,
             roleOpen: eventDurations.openKinds.includes("role"),
         });
-    let shadow;
-    try {
-        shadow = buildShadowEvaluation({
-            root: stagingRepositoryRoot(input.staging),
-            stagings: [input.staging],
-        });
-    }
-    catch {
-        shadow = unavailableShadowEvaluation(input.staging);
-    }
     return {
-        shadow,
         step_ms: stepDurations,
         role_ms: eventLogUnavailable ? null : (eventDurations.totals.role ?? 0),
         model_ms: eventLogUnavailable ? null : (eventDurations.totals.model ?? 0),

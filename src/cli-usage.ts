@@ -1705,22 +1705,6 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "decision",
-    subcommand: "evaluate",
-    summary: "明示したstagingのshadow評価をread-onlyで集計する",
-    requiredFlags: [
-      flag(
-        "staging",
-        "ID|path",
-        "対象staging。複数回指定可能、重複は一度だけ集計する",
-      ),
-    ],
-    conditionalFlags: [],
-    optionalFlags: [ROOT_FLAG],
-    example:
-      "npx agent-skill-chain decision evaluate --staging=sample-a --staging=sample-b --root=.",
-  },
-  {
-    command: "decision",
     subcommand: "invoke",
     summary:
       "有限選択判断（Decision Type）を1件実行する。deterministic resolverを先に試し、無ければ設定済みprovider（既定lightweight-tier）へ委譲する（Issue #1485）",
@@ -1743,40 +1727,11 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       "npx agent-skill-chain decision invoke --type=DCAND-002 --input=./ci-delivery-input.json --staging=.agent-skill-chain/tmp/issues/example --apply",
     inputContract: {
       description:
-        "共通envelope: {candidateHeadSha（40桁16進数、実HEADと一致必須）, subjectRef（判断対象を指す文字列）, payload?（deterministic resolverへ渡す型別入力）, proposedValue?（provider実行時の提案。lightweight-tierは呼び出し側の提案をそのまま受ける自己申告provider）, confirmedBy?（advisory/one-way-escalationの緩和方向を確認した進行役識別子）}。constrained-choice（DCAND-009）は payload.candidateSet（文字列配列）が必須で、decision invoke自身がPolicy Allowed（role.tsのPROVIDER_AUTONOMOUS_CEILINGS。codex/claude）との積集合へ絞り込んだ上で判定する（Configured/Dispatchable・Independence Eligibleの絞り込みは未実装のdisclosed residual gap）。出力の state/resolution系field（jevProviderConfig、workspace、authorityMode、requiresConfirmation、rejected）を読めば、なぜProviderが使われた/使われなかったかを別途スクリプトなしで確認できる",
+        "共通envelope: {candidateHeadSha（40桁16進数、実HEADと一致必須）, subjectRef（判断対象を指す文字列）, payload?（deterministic resolverへ渡す型別入力）, proposedValue?（provider実行時の提案。lightweight-tierは呼び出し側の提案をそのまま受ける自己申告provider）, confirmedBy?（advisory/one-way-escalationの緩和方向を確認した進行役識別子）}。constrained-choice（DCAND-009）は payload.candidateSet（文字列配列）が必須で、decision invoke自身がPolicy Allowed（role.tsのPROVIDER_AUTONOMOUS_CEILINGS。codex/claude）との積集合へ絞り込んだ上で判定する（Configured/Dispatchable・Independence Eligibleの絞り込みは未実装のdisclosed residual gap）。出力の state/resolution系field（workspace、authorityMode、requiresConfirmation、rejected）を読めば、なぜProviderが使われた/使われなかったかを別途スクリプトなしで確認できる",
       example: {
         candidateHeadSha: "0123456789abcdef0123456789abcdef01234567",
         subjectRef: "PR#1485 finding F-01",
         payload: { changedFiles: ["src/cli.ts"] },
-      },
-    },
-  },
-  {
-    command: "decision",
-    subcommand: "label",
-    summary:
-      "EvaluationLabel（Issue #1486 T-03）を1件記録する。referenceValue（事後に確定した正解）をdecisionRecordIdへ紐付ける。対象decisionRecordIdはdecision journalに実在する必要がある",
-    requiredFlags: [
-      flag("input", "path", "root相対の入力JSON file"),
-      flag(
-        "staging",
-        "path",
-        "対象staging directory。primaryRootの導出に使う（decision invokeと同じ）",
-      ),
-    ],
-    conditionalFlags: [],
-    optionalFlags: [ROOT_FLAG, ...APPLY_MODE],
-    example:
-      "npx agent-skill-chain decision label --input=./label.json --staging=.agent-skill-chain/tmp/issues/example --apply",
-    inputContract: {
-      description:
-        "{decisionRecordId（既存decision journalのDR-...）, referenceValue（事後に確定した正解）, labelSource（deterministic-oracle/evidence-adjudicated/independent-review/owner-adjudicatedのいずれか）, evidenceRefs（1件以上の文字列配列。owner-adjudicatedだけ省略可）, labeledAt（ISO 8601）}",
-      example: {
-        decisionRecordId: "DR-0123456789abcdef",
-        referenceValue: "not-minor",
-        labelSource: "evidence-adjudicated",
-        evidenceRefs: ["test/features/unit/example.feature:10"],
-        labeledAt: "2026-09-26T00:00:00.000Z",
       },
     },
   },
@@ -1789,60 +1744,6 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     conditionalFlags: [],
     optionalFlags: [],
     example: "npx agent-skill-chain decision types",
-  },
-  {
-    command: "decision",
-    subcommand: "configure",
-    summary:
-      "Jev provider設定のguided setup（Issue #1486）。既定は.agent-skill-chain/local/jev-provider.jsonの生成。--shell-rc-appendを付けると、代わりに export <apiKeyEnvVar>='...' をmode 0600の専用file（~/.config/agent-skill-chain/jev.env）へ確認付きで書き、検出した shell起動file（~/.bashrc等）へはそのfileを読み込む値を含まない行だけを追記する。改行・制御文字を含む値は書き込まない。値そのものはこのcommandの引数として渡さない——--shell-rc-appendは常にprocess.env[apiKeyEnvVar]（呼び出し時点でそのshellに既にexport済みの値）を読むだけで、AIエージェントが代行実行してもコマンド履歴・出力へ値が現れない",
-    requiredFlags: [
-      flag("provider", "jev", "対応providerはjevのみ"),
-      flag(
-        "api-key-env-var",
-        "ENV_VAR_NAME",
-        "APIキーを保持するenv var名（JEV_で始まる英大文字・数字・_。値そのものは渡さない）",
-      ),
-    ],
-    conditionalFlags: [
-      conditional(
-        "endpoint",
-        "url",
-        "Jev APIのendpoint（https://で始まる必要がある）",
-        "--shell-rc-appendを指定しない場合",
-        (provided) => provided["shell-rc-append"] !== true,
-      ),
-      conditional(
-        "model",
-        "name",
-        "利用するJev model名（vendor側のドキュメント・アカウントから得る）",
-        "--shell-rc-appendを指定しない場合",
-        (provided) => provided["shell-rc-append"] !== true,
-      ),
-    ],
-    optionalFlags: [
-      ROOT_FLAG,
-      optional(
-        "shell-rc-append",
-        "",
-        "jev-provider.json生成の代わりに、APIキー値を0600の専用fileへ書きshell起動fileへはその読み込み行だけを追記するモードへ切り替える",
-        "指定なし（jev-provider.json生成モード）",
-      ),
-      optional(
-        "rc-path",
-        "path",
-        "shell-rc-append時、読み込み行の追記先fileを明示指定する",
-        "$SHELLから検出（bash→~/.bashrc、zsh→~/.zshrc）",
-      ),
-      optional(
-        "confirm",
-        "APPEND",
-        "shell-rc-append かつ --apply のとき、値の書き込みに同意する明示確認token。一致しなければ書き込まない",
-        "未指定（--applyのみでは書き込まない）",
-      ),
-      ...APPLY_MODE,
-    ],
-    example:
-      "npx agent-skill-chain decision configure --provider=jev --endpoint=https://api.typesafe.ai/v1/systemone --model=jev-latest --api-key-env-var=JEV_API_KEY --dry-run",
   },
   {
     command: "delete",

@@ -146,6 +146,12 @@ Then(
     assert.equal(report.model_breakdown.codex, 4000);
     assert.equal(report.artifact_build_ms, 5000);
     assert.equal(report.support_ms, 10 * 60 * 1000 - 5000);
+    // Issue #1486でshadow評価集計を撤去した。出力へshadowを戻さない（AC-05）。
+    assert.equal(
+      Object.hasOwn(this.report, "shadow"),
+      false,
+      "workflow metricsの出力にshadowが含まれています",
+    );
   },
 );
 
