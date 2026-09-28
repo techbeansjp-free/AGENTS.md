@@ -243,7 +243,7 @@ Feature: main mergeの自動release計画と配布digest
     When 自動release workflow契約を検証する
     Then artifact digest検証が実行されpublishより前にあることを確認する
 
-  Scenario: SCN-INT-RELID-005b 検証よりpublishを先に置く悪用を拒否する
+  Scenario: SCN-INT-RELID-010 検証よりpublishを先に置く悪用を拒否する
     Given publishがartifact digest検証より前にあるworkflow本文がある
     When 自動release workflow契約を検証する
     Then 検証よりpublishを先に置くと拒否される
