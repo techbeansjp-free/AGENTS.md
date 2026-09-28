@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1531,
+  "observed": {
+    "baseSha": "c436c8cb23bec91b582912045e3903e52694614f",
+    "implementationHeadSha": "1407b1858854e3d801e240a8ffccfeb59bb138b0",
+    "diffDigest": "aa7d97e567b52666d10883b1e3ae84d052756f098474b0b39a36ac94cdf3e5a0",
+    "session": {
+      "sessionId": "5cebe7b3afae05f593ea02e528086b8f4bd5d205c020847cd555b71cd969c0be",
+      "latestRoundDigest": "152a13d6c8b8820e46a51029ef6004a9c8ac0d8d17eb59eb736eddaf37618543",
+      "status": "converged",
+      "countedRounds": 1
+    },
+    "impact": {
+      "digest": "ccb1f33b0694938cfd4a7685706966ed4cef10febf0ea2e42373577c8d65ebf2",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "1407b1858854e3d801e240a8ffccfeb59bb138b0",
+        "impactDigest": "ccb1f33b0694938cfd4a7685706966ed4cef10febf0ea2e42373577c8d65ebf2",
+        "finishedAt": "2026-09-28T22:55:38.315Z",
+        "recordDigest": "28c78af94ca86a16e86495e034c2e3cd0586e90ca095c7fbf76a81ecd407079f"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "REV-01",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/tmp/issues/20260929_065432_pr-mergeがreanchor後の実効headを解決しない/00_要求定義.md",
+      "contractId": null
+    },
+    {
+      "id": "REV-02",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "docs/specs/02_要件/01_ワークフロー要件.md",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "claude-subagent-a9302592",
+    "implementer": "claude-subagent-a1f0e170",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "6c85fe01804ce7169d58b933a4ab0a7523fc25d4a1e17dcc8c6c3e1eb601cf2e"
+}
