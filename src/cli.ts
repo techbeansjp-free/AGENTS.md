@@ -688,7 +688,11 @@ export function assertWorkflowReadyForDelivery(
   staging: string,
   deliveredHeadSha = "HEAD",
 ): ReturnType<typeof inspectWorkflowStaging> {
-  assertPlanFrozen(staging, deliveredHeadSha, { delivery: true });
+  const effectiveHeadSha = deriveEffectiveHead({
+    records: readEvidenceReanchorChain(staging),
+    anchoredHeadSha: deliveredHeadSha,
+  }).effectiveHeadSha;
+  assertPlanFrozen(staging, effectiveHeadSha, { delivery: true });
   const stored = readStoredStagingRecord(staging);
   const currentArtifacts = listStagingArtifacts(staging);
   const currentDigest = calculateStagingDigest(staging, currentArtifacts);
@@ -721,11 +725,15 @@ export function assertWorkflowReadyForDelivery(
   return inspection;
 }
 
-function assertWorkflowReadyForTerminalRedelivery(
+export function assertWorkflowReadyForTerminalRedelivery(
   staging: string,
   deliveredHeadSha = "HEAD",
 ): ReturnType<typeof inspectWorkflowStaging> {
-  assertPlanFrozen(staging, deliveredHeadSha, { delivery: true });
+  const effectiveHeadSha = deriveEffectiveHead({
+    records: readEvidenceReanchorChain(staging),
+    anchoredHeadSha: deliveredHeadSha,
+  }).effectiveHeadSha;
+  assertPlanFrozen(staging, effectiveHeadSha, { delivery: true });
   const stored = readStoredStagingRecord(staging);
   const currentArtifacts = listStagingArtifacts(staging);
   const currentDigest = calculateStagingDigest(staging, currentArtifacts);
