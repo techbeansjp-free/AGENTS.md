@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1486,
+  "observed": {
+    "baseSha": "828c3857441afc05a606d822cc25fce3e0d7c52a",
+    "implementationHeadSha": "ab34bf8a585f32f0bf698b425683ea5b0dc03e96",
+    "diffDigest": "a71cf22a7d26f6773f9c6bc8dfd38764c5b9b26428a90f4e02224b0484c50988",
+    "session": {
+      "sessionId": "6423c780be762e30cc2ddc2e5a728aa66697e2e26212546327a608b1ecaff97a",
+      "latestRoundDigest": "460df9cfb3b7ffe5c7082b01c17033c5eca16ba81642617ca8e1c56242b9eda1",
+      "status": "converged",
+      "countedRounds": 2
+    },
+    "impact": {
+      "digest": "1840a38094a8b3fccba4e618ba0867603f20431a74c8d52c60281b55ade91914",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "ab34bf8a585f32f0bf698b425683ea5b0dc03e96",
+        "impactDigest": "1840a38094a8b3fccba4e618ba0867603f20431a74c8d52c60281b55ade91914",
+        "finishedAt": "2026-09-28T10:43:01.776Z",
+        "recordDigest": "e89e89f844a9e4b55e749e4a4ce7b23f085e28b612ac7fa22fcda367e25920e0"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/15_要件追跡/01_変更履歴.md",
+      "contractId": null
+    },
+    {
+      "id": "F2",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/02_要件/01_ワークフロー要件.md",
+      "contractId": "AC-06"
+    },
+    {
+      "id": "F3",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/00_利用案内.md",
+      "contractId": null
+    },
+    {
+      "id": "F4",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/metrics-cli.steps.ts",
+      "contractId": "AC-05"
+    },
+    {
+      "id": "F5",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/decision-invoke.steps.ts",
+      "contractId": null
+    },
+    {
+      "id": "F6",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/tmp/issues/20260928_142127_Jev-shadow評価の完了条件正規化と実測/00_要求定義.md",
+      "contractId": null
+    },
+    {
+      "id": "F7",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/decision-invoke.steps.ts",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "asc-1486-formal-reviewer",
+    "implementer": "asc-1486-implementer",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "e69215c4cdbc46eb11a238398ea59b578ae784fcdec98cc79fba0aa7c95bd640"
+}
