@@ -118,9 +118,9 @@ function withoutPlanningLiterals(text: string): string {
 
 // 文・cell・引用の境界を越えない参照先token。空白は各token間だけ許す。
 // pathを解決せず、未知path・節も拒否候補として拾うための有限な字句契約。
-const PLANNING_REFERENCE_TOKEN = "[^\\s。！？、,;；`|<>]+";
-const PLANNING_REFERENCE_DESTINATION = `(?:${PLANNING_REFERENCE_TOKEN}\\.md(?:\\s*§${PLANNING_REFERENCE_TOKEN})?|§${PLANNING_REFERENCE_TOKEN})`;
-const PLANNING_REFERENCE_DIRECTIVE = `${PLANNING_REFERENCE_TOKEN}(?:を\\s*参照|と\\s*同じ)(?=$|[\\s。！？;；\x60|<>])`;
+const PLANNING_REFERENCE_ATOM = "[^\\s。！？、,;；`|<>]+";
+const PLANNING_REFERENCE_DESTINATION = `(?:${PLANNING_REFERENCE_ATOM}\\.md(?:\\s*§${PLANNING_REFERENCE_ATOM})?|§${PLANNING_REFERENCE_ATOM})`;
+const PLANNING_REFERENCE_DIRECTIVE = `${PLANNING_REFERENCE_ATOM}\\s*(?:を\\s*参照|と\\s*同じ)(?=$|[\\s。！？、,;；\x60|<>])`;
 
 /** 対象名の直後が参照先である候補だけを、code・commentを含む全文で数える。 */
 function planningMarkerCount(text: string): number {
@@ -136,18 +136,43 @@ function planningMarkerCount(text: string): number {
 
 /** 単独のfile/節参照と「〜を参照/と同じ」の句。普通の文中の「参照」は消さない。 */
 function isPlanningReferenceOnly(value: string): boolean {
-  const reference = `(?:(?:${PLANNING_REFERENCE_TOKEN}[はを]\\s*)?${PLANNING_REFERENCE_DESTINATION}(?:\\s*(?:を\\s*参照|と\\s*同じ))?|${PLANNING_REFERENCE_DIRECTIVE})`;
+  const reference = `(?:(?:${PLANNING_REFERENCE_ATOM}[はを]\\s*)?${PLANNING_REFERENCE_DESTINATION}(?:\\s*(?:を\\s*参照|と\\s*同じ))?|${PLANNING_REFERENCE_DIRECTIVE})`;
   return new RegExp(`^${reference}(?:\\s+${reference})*$`, "u").test(
     value.trim(),
   );
 }
 
-/** 見出し・空欄ラベル・table headerだけでは参照元の内容にならない。 */
+/** 行頭のlist/quote/番号とcolonラベルは値の包装であり、内容には数えない。 */
+function planningValue(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => {
+      let value = line.trim();
+      let previous: string;
+      do {
+        previous = value;
+        value = value
+          .replace(
+            /^(?:[-*+>]|[0-9]+[.)]|\([0-9]+\)|\[[0-9]+\]|（[0-9]+）|\[[ xX]\])(?:\s+|$)/u,
+            "",
+          )
+          .replace(/^(\*{1,2}|_{1,2})(.*)\1$/u, "$2")
+          .replace(/^(\*{1,2}|_{1,2})[^:：。！？、,;；`|<>]+[:：]\1\s*/u, "")
+          .replace(/^[^:：。！？、,;；`|<>]+[:：]\s*/u, "")
+          .trim();
+      } while (value !== previous);
+      return value;
+    })
+    .join("\n");
+}
+
+/** 有限な可視値検査。自然言語の判断の妥当性はreadinessが所有する。 */
 function hasPlanningContent(body: string): boolean {
-  const lines = withoutPlaceholderCodeAndComments(body).split("\n");
+  const lines = withoutCodeAndComments(body, "content").split("\n");
   const concrete = (value: string): boolean =>
-    value
-      .split(/[。！？;；]/u)
+    planningValue(value)
+      .split(/[。！？、,;；]/u)
+      .map(planningValue)
       .some(
         (clause) =>
           clause.trim() !== "" &&
@@ -170,9 +195,8 @@ function hasPlanningContent(body: string): boolean {
       );
       continue;
     }
-    const content = value.replace(/^[-*+>]\s*/u, "").trim();
-    if (!/^#{1,6}(?:\s|$)/u.test(content) && !/[:：]$/u.test(content))
-      prose.push(content);
+    const content = planningValue(value);
+    if (!/^#{1,6}(?:\s|$)/u.test(content)) prose.push(content);
   }
   // 改行で分断されたfile名と節指定も1つの参照句として評価する。
   return [...values, prose.join("\n")].some(concrete);
@@ -201,16 +225,7 @@ function contentlessPlanningSections(file: string, text: string): string[] {
         )
       )
         return false;
-      const referenceOnlyTarget =
-        file !== "00_要求定義.md" &&
-        new RegExp(
-          `${PLANNING_REFERENCE_DESTINATION}|${PLANNING_REFERENCE_DIRECTIVE}`,
-          "u",
-        ).test(body);
-      return (
-        (body !== content || referenceOnlyTarget) &&
-        !hasPlanningContent(content)
-      );
+      return !hasPlanningContent(content);
     }),
   );
 }
@@ -240,7 +255,7 @@ function validatePlanningReferences(
     for (const reference of PLANNING_REFERENCES) {
       if (!full || file !== reference.file) continue;
       const bodies = markdownSectionBodies(
-        withoutPlaceholderCodeAndComments(text),
+        withoutCodeAndComments(text, "placeholder"),
         reference.heading,
       );
       const rawBodies = markdownSectionBodies(text, reference.heading, true);
@@ -265,7 +280,7 @@ function validatePlanningReferences(
       accepted += 1;
       for (const heading of reference.sources) {
         const sourceBodies = markdownSectionBodies(
-          withoutPlaceholderCodeAndComments(source),
+          withoutCodeAndComments(source, "content"),
           heading,
         );
         const sourceHeadings = source
@@ -275,7 +290,9 @@ function validatePlanningReferences(
           sourceBodies.length !== 1 ||
           sourceHeadings.length !== 1 ||
           !hasPlanningContent(sourceBodies[0] ?? "") ||
-          unresolvedPlaceholders(sourceBodies[0] ?? "").length > 0
+          markdownSectionBodies(source, heading, true).some(
+            (body) => unresolvedPlaceholders(body).length > 0,
+          )
         )
           errors.push(
             `${file}: 上流参照元00_要求定義.md §${heading}は一意で具体的な本文が必要です`,
@@ -885,8 +902,11 @@ function withoutGherkin(
 
 const UNRESOLVED_PLACEHOLDER_SAMPLE_LIMIT = 5;
 
-/** placeholder専用。code内ではcommentを開始せず、実comment内ではcodeを解釈しない。 */
-function withoutPlaceholderCodeAndComments(text: string): string {
+/** code/commentの字句抽出。placeholder用の結合防止印は可視内容へ渡さない。 */
+function withoutCodeAndComments(
+  text: string,
+  purpose: "placeholder" | "content",
+): string {
   const visible: string[] = [];
   let cursor = 0;
   let fence: { marker: string; length: number } | undefined;
@@ -926,15 +946,24 @@ function withoutPlaceholderCodeAndComments(text: string): string {
           for (let index = cursor; index < closing + 3; index += 1)
             if (text[index] === "\n") newlines += 1;
           // 空commentでも前後の断片を新しいplaceholderへ結合しない。
-          visible.push("\n".repeat(Math.max(1, newlines)));
+          visible.push(
+            purpose === "content"
+              ? " " + "\n".repeat(newlines)
+              : "\n".repeat(Math.max(1, newlines)),
+          );
           // comment終端後の同一行は、原文ではGherkinの行頭ではない。
-          if (closing + 3 < text.length && text[closing + 3] !== "\n")
+          if (
+            purpose === "placeholder" &&
+            closing + 3 < text.length &&
+            text[closing + 3] !== "\n"
+          )
             visible.push("_");
           cursor = closing + 3;
           if (cursor > lineEnd) break;
           continue;
         }
         // 後続のopenerも未終端。繰り返し末尾まで検索しない。
+        if (purpose === "content") return visible.join("");
         unclosedComment = true;
       }
       if (!unclosedComment && inlineAllowed && text[cursor] === "`") {
@@ -945,6 +974,7 @@ function withoutPlaceholderCodeAndComments(text: string): string {
           cursor - lineStart + length,
         );
         if (closing >= 0) {
+          if (purpose === "content") visible.push(" ");
           cursor = lineStart + closing + length;
           continue;
         }
@@ -967,7 +997,7 @@ function unresolvedPlaceholders(
   dialect: string = DEFAULT_GHERKIN_DIALECT,
 ): string[] {
   const prose = withoutGherkin(
-    withoutPlaceholderCodeAndComments(text),
+    withoutCodeAndComments(text, "placeholder"),
     dialect,
   );
   const found = new Set<string>();

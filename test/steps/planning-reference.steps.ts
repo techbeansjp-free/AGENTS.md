@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import type { DataTable } from "@cucumber/cucumber";
 import {
   buildIssueSyncBody,
   createIssueStaging,
@@ -16,6 +17,7 @@ interface PlanningReferenceWorld extends WorkflowWorld {
   documents: Record<string, string>;
   validation: ReturnType<typeof validateIssue>;
   sourceSymlink: boolean;
+  contentFailures: string[];
 }
 const { Given, When, Then } = stepDefinitions<PlanningReferenceWorld>();
 const REQUEST = "00_要求定義.md";
@@ -26,6 +28,52 @@ const EXCLUSION = "設計対象外は00_要求定義.md §2.2を参照";
 const CONTEXT = "コンテキストは00_要求定義.md §4.1を参照";
 const DC = "開発考慮事項の適用判定は00_要求定義.md §6.1と同じ";
 const MARKERS = { 概要: OVERVIEW, 対象外: EXCLUSION, コンテキスト: CONTEXT };
+
+When(
+  "Planningの{string}の{string}で次の有限内容境界を検査する",
+  function (side: string, shape: string, cases: DataTable) {
+    const originals = { ...this.documents };
+    const [file, heading, marker] =
+      side === "source"
+        ? [REQUEST, "4.1 境界づけられたコンテキスト", CONTEXT]
+        : [REQUIREMENTS, "1. システム・変更概要", OVERVIEW];
+    this.contentFailures = [];
+    for (const row of cases.hashes()) {
+      const value = row["値"]!.replaceAll("\\n", "\n")
+        .replaceAll("\\t", "\t")
+        .replaceAll("\\s", " ")
+        .replaceAll("既知引用", `\`${marker}\``);
+      const body =
+        shape === "table"
+          ? "| 項目 | 内容 |\n|---|---|\n" +
+            value
+              .split("\n")
+              .map((line) => `| 判断 | ${line} |`)
+              .join("\n")
+          : shape === "list"
+            ? value
+                .split("\n")
+                .map((line) => `- 判断: ${line}`)
+                .join("\n")
+            : value;
+      this.documents = {
+        ...originals,
+        [file!]: replacePlanningBody(originals[file!]!, heading!, body),
+      };
+      for (const [name, text] of Object.entries(this.documents))
+        fs.writeFileSync(path.join(this.staging, name), text);
+      const result = validateIssue(this.staging);
+      if (result.valid !== (row["判定"] === "合格"))
+        this.contentFailures.push(
+          `${side}/${shape}/${JSON.stringify(value)}: ${result.valid}; ${result.errors.join("; ")}`,
+        );
+    }
+  },
+);
+
+Then("有限内容境界の全例が期待した判定になる", function () {
+  assert.deepEqual(this.contentFailures, []);
+});
 
 function replacePlanningBody(
   text: string,
