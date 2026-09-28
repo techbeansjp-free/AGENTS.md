@@ -142,32 +142,70 @@ function isPlanningReferenceOnly(value: string): boolean {
   );
 }
 
-/** 行頭のlist/quote/番号とcolonラベルは値の包装であり、内容には数えない。 */
+const PLANNING_LIST_PREFIX =
+  /^(?:[-*+>]|[0-9]+[.)]|\([0-9]+\)|\[[0-9]+\]|（[0-9]+）|\[[ xX]\])(?:\s+|$)/u;
+
+/** 対の内側ごとに値包装を除き、隣のspanの具体文をラベルへ巻き込まない。 */
+function planningUnwrappedValue(value: string): string {
+  let previous: string;
+  do {
+    previous = value;
+    value = value
+      .trim()
+      .replace(PLANNING_LIST_PREFIX, "")
+      .replace(/^[^:：。！？、,;；`|<>]+[:：]\s*/u, "")
+      .trim();
+  } while (value !== previous);
+  return value;
+}
+
+/** 有限な強調包装だけを処理する。Markdownの意味・任意構文は解決しない。 */
+function planningEmphasisValue(line: string): string {
+  const stack = [{ delimiter: "", value: "" }];
+  let offset = 0;
+  for (const match of line.matchAll(/\*+|_+/gu)) {
+    const run = match[0];
+    const start = match.index;
+    const end = start + run.length;
+    stack.at(-1)!.value += line.slice(offset, start);
+    offset = end;
+    // 強調の内側の値がまだ空なら、空白で隔てた単一*はlist包装として残す。
+    const listMarker =
+      run === "*" &&
+      /\s/u.test(line[start - 1] ?? "") &&
+      /\s/u.test(line[end] ?? "") &&
+      stack.length > 1 &&
+      planningUnwrappedValue(stack.at(-1)!.value) === "";
+    // run全体が直近の同種openを閉じる場合だけ消費する。***を**だけで閉じない。
+    // 1文字を1層として扱うのでsingle/strongの合成と分割されたcloseも同じ規則。
+    const closes =
+      !listMarker &&
+      !/^[\p{L}\p{N}]/u.test(line.slice(end)) &&
+      stack.length > run.length &&
+      stack.slice(-run.length).every((frame) => frame.delimiter === run[0]);
+    if (closes) {
+      for (let count = 0; count < run.length; count++) {
+        const frame = stack.pop()!;
+        stack.at(-1)!.value += planningUnwrappedValue(frame.value);
+      }
+    } else if (!/[\p{L}\p{N}]$/u.test(line.slice(0, start)) && !listMarker) {
+      for (const delimiter of run) stack.push({ delimiter, value: "" });
+    } else stack.at(-1)!.value += run;
+  }
+  stack.at(-1)!.value += line.slice(offset);
+  // 不対のopenは消さない。再帰せず、入力長以下のstackを必ず減らして終了する。
+  while (stack.length > 1) {
+    const frame = stack.pop()!;
+    stack.at(-1)!.value += frame.delimiter + frame.value;
+  }
+  return planningUnwrappedValue(stack[0]!.value);
+}
+
+/** 行頭のlist/quote/番号、強調、colonラベルは内容には数えない。 */
 function planningValue(text: string): string {
   return text
     .split("\n")
-    .map((line) => {
-      let value = line.trim();
-      let previous: string;
-      do {
-        previous = value;
-        value = value
-          .replace(
-            /^(?:[-*+>]|[0-9]+[.)]|\([0-9]+\)|\[[0-9]+\]|（[0-9]+）|\[[ xX]\])(?:\s+|$)/u,
-            "",
-          )
-          // 各強調対の内側を先に正規化し、隣の値へ番号・ラベルを持ち越さない。
-          // file名内のunderscoreは対にせず、再帰ごとに対の分だけ短くなる。
-          .replace(
-            /(?<![\p{L}\p{N}])(\*{1,2}|_{1,2})(.*?)\1(?![\p{L}\p{N}])/gu,
-            (_match: string, _delimiter: string, content: string) =>
-              planningValue(content),
-          )
-          .replace(/^[^:：。！？、,;；`|<>]+[:：]\s*/u, "")
-          .trim();
-      } while (value !== previous);
-      return value;
-    })
+    .map((line) => planningEmphasisValue(line.trim()))
     .join("\n");
 }
 
@@ -181,7 +219,7 @@ function hasPlanningContent(body: string): boolean {
       .some(
         (clause) =>
           clause.trim() !== "" &&
-          !/^[-:：\s]+$/u.test(clause) &&
+          !/^[-:：*_\s]+$/u.test(clause) &&
           !isPlanningReferenceOnly(clause),
       );
   const prose: string[] = [];

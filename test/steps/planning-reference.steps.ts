@@ -32,47 +32,174 @@ const MARKERS = { 概要: OVERVIEW, 対象外: EXCLUSION, コンテキスト: CO
 When(
   "Planningの{string}の{string}で次の有限内容境界を検査する",
   function (side: string, shape: string, cases: DataTable) {
-    const originals = { ...this.documents };
-    const [file, heading, marker] =
-      side === "source"
-        ? [REQUEST, "4.1 境界づけられたコンテキスト", CONTEXT]
-        : [REQUIREMENTS, "1. システム・変更概要", OVERVIEW];
     this.contentFailures = [];
-    for (const row of cases.hashes()) {
-      const value = row["値"]!.replaceAll("\\n", "\n")
-        .replaceAll("\\t", "\t")
-        .replaceAll("\\s", " ")
-        .replaceAll("既知引用", `\`${marker}\``);
-      const body =
-        shape === "table"
-          ? "| 項目 | 内容 |\n|---|---|\n" +
-            value
-              .split("\n")
-              .map((line) => `| 判断 | ${line} |`)
-              .join("\n")
-          : shape === "list"
-            ? value
-                .split("\n")
-                .map((line) => `- 判断: ${line}`)
-                .join("\n")
-            : value;
-      this.documents = {
-        ...originals,
-        [file!]: replacePlanningBody(originals[file!]!, heading!, body),
-      };
-      for (const [name, text] of Object.entries(this.documents))
-        fs.writeFileSync(path.join(this.staging, name), text);
-      const result = validateIssue(this.staging);
-      if (result.valid !== (row["判定"] === "合格"))
-        this.contentFailures.push(
-          `${side}/${shape}/${JSON.stringify(value)}: ${result.valid}; ${result.errors.join("; ")}`,
-        );
-    }
+    checkPlanningValues(
+      this,
+      side,
+      shape,
+      cases.hashes().map((row) => [row["値"]!, row["判定"] === "合格"]),
+    );
   },
 );
 
+When(
+  "Planningの{string}の{string}で強調と値包装の文法を合成して検査する",
+  { timeout: 60_000 },
+  function (side: string, shape: string) {
+    checkPlanningValues(this, side, shape, composedPlanningValues());
+  },
+);
+
+/** oracleは参照だけ/具体文ありという入力文法から決め、製品の正規化を使わない。 */
+function* composedPlanningValues(): Generator<[string, boolean]> {
+  const styles = ["*", "**", "***", "_", "__", "___"];
+  const reference = "01_reference_name_要件定義.mdを参照";
+  const otherReference = "03_実装計画.mdを参照";
+  const concrete = "Planning_ownerが参照の判断を保持する";
+  const wrap = (style: string, text: string): string => style + text + style;
+  for (const outer of styles)
+    for (const inner of ["", ...styles])
+      for (const colon of [": ", "："])
+        for (const [value, valid] of [
+          [reference, false],
+          [concrete, true],
+        ] as const) {
+          const label = `判断${colon}`;
+          const nested = wrap(outer, wrap(inner, value));
+          for (const text of [
+            nested,
+            label + nested,
+            wrap(outer, label + wrap(inner, value)),
+            wrap(outer, wrap(inner, label + value)),
+            wrap(outer, wrap(inner, "判断") + colon + value),
+            wrap(outer, "判断") + colon + wrap(inner, value),
+            wrap(outer, label) + " " + wrap(inner, value),
+            wrap(outer, label + wrap(inner, value) + " " + otherReference),
+          ])
+            yield [text, valid];
+        }
+  // 隣り合う独立spanのstyleと区切り、具体文の左右位置を直積にする。
+  for (const left of styles)
+    for (const right of styles)
+      for (const separator of [
+        " ",
+        "\t",
+        "\n",
+        "、",
+        ", ",
+        ";",
+        "；",
+        "。",
+        "！",
+        "？",
+      ])
+        for (const [first, second, valid] of [
+          [reference, otherReference, false],
+          [concrete, otherReference, true],
+          [reference, concrete, true],
+        ] as const)
+          yield [
+            wrap(left, `参照先: ${first}`) +
+              separator +
+              wrap(right, `判断：${second}`),
+            valid,
+          ];
+  for (const style of styles)
+    for (const prefix of [
+      "- ",
+      "* ",
+      "+ ",
+      "> ",
+      "1. ",
+      "1) ",
+      "(1) ",
+      "[1] ",
+      "（1） ",
+      "- [ ] ",
+      "- [x] ",
+      "- [X] ",
+      "> 1. - [ ] ",
+    ])
+      for (const [value, valid] of [
+        [reference, false],
+        [concrete, true],
+      ] as const) {
+        yield [prefix + wrap(style, `判断: ${value}`), valid];
+        yield [wrap(style, " " + prefix + `判断：${value} `), valid];
+      }
+  // 深い入れ子と長い独立span列も同じ有限文法で作り、再帰深度に依存させない。
+  for (const depth of [16, 128])
+    for (const [value, valid] of [
+      [reference, false],
+      [concrete, true],
+    ] as const) {
+      let nested: string = value;
+      for (let index = 0; index < depth; index++)
+        nested = wrap(styles[index % styles.length]!, `判断: ${nested}`);
+      yield [nested, valid];
+      yield [
+        Array.from({ length: depth }, (_, index) =>
+          wrap(
+            styles[index % styles.length]!,
+            `判断：${index === 0 ? value : reference}`,
+          ),
+        ).join(" "),
+        valid,
+      ];
+    }
+}
+
+function checkPlanningValues(
+  world: PlanningReferenceWorld,
+  side: string,
+  shape: string,
+  cases: Iterable<readonly [string, boolean]>,
+): void {
+  const originals = { ...world.documents };
+  const [file, heading, marker] =
+    side === "source"
+      ? [REQUEST, "4.1 境界づけられたコンテキスト", CONTEXT]
+      : [REQUIREMENTS, "1. システム・変更概要", OVERVIEW];
+  for (const [name, text] of Object.entries(originals))
+    fs.writeFileSync(path.join(world.staging, name), text);
+  for (const [input, expected] of cases) {
+    const value = input
+      .replaceAll("\\n", "\n")
+      .replaceAll("\\t", "\t")
+      .replaceAll("\\s", " ")
+      .replaceAll("既知引用", `\`${marker}\``);
+    const body =
+      shape === "table"
+        ? "| 項目 | 内容 |\n|---|---|\n" +
+          value
+            .split("\n")
+            .map((line) => `| 判断 | ${line} |`)
+            .join("\n")
+        : shape === "list"
+          ? value
+              .split("\n")
+              .map((line) => `- 判断: ${line}`)
+              .join("\n")
+          : value;
+    fs.writeFileSync(
+      path.join(world.staging, file!),
+      replacePlanningBody(originals[file!]!, heading!, body),
+    );
+    const result = validateIssue(world.staging);
+    if (result.valid !== expected)
+      world.contentFailures.push(
+        `${side}/${shape}/${JSON.stringify(value)}: ${result.valid}; ${result.errors.join("; ")}`,
+      );
+  }
+  fs.writeFileSync(path.join(world.staging, file!), originals[file!]!);
+}
+
 Then("有限内容境界の全例が期待した判定になる", function () {
-  assert.deepEqual(this.contentFailures, []);
+  assert.deepEqual(
+    this.contentFailures.slice(0, 20),
+    [],
+    `${this.contentFailures.length} content mismatches (first 20 shown)`,
+  );
 });
 
 function replacePlanningBody(
