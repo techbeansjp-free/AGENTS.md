@@ -15,16 +15,25 @@ Semantic Graphの`graph` subcommandだけは、組み込み`node:sqlite`でGraph
 
 ## 導入と利用
 
-**本packageはnpm registryへ公開していません。** 入口はGit remoteの指定です。`npx`は**本package自体をregistryから解決せず**、GitHubから直接取得して実行します。
+**正式な配布物はGitHub Releaseのasset `agent-skill-chain.tgz`です。** npm registryへは公開していません。
+
+| 用途 | 取得元 |
+| ---- | ------ |
+| 最新のrelease | `https://github.com/techbeansjp-free/AGENTS.md/releases/latest/download/agent-skill-chain.tgz` |
+| 版を固定したrelease | `https://github.com/techbeansjp-free/AGENTS.md/releases/download/v<X.Y.Z>/agent-skill-chain.tgz` |
+
+`<X.Y.Z>`にはreleaseのversion（導入済みCLIの`agent-skill-chain --version`が返す値、またはGitHub Releaseのtag名`v<X.Y.Z>`から`v`を除いた値）を指定します。**GitHubが各Releaseへ自動生成する「Source code (zip)」「Source code (tar.gz)」は正式配布物ではありません。** これらはGitのsource treeそのものであり、`agent-skill-chain.tgz`とは別物です。
+
+**Git remoteから直接実行するsource経路も利用できます。** `npx`は**本package自体をregistryから解決せず**、GitHubから直接取得して実行します。
 
 **ただしregistryを完全に使わないわけではありません。** Git取得時は`prepare`が`npm run build`を実行するため、その過程でdevDependenciesをregistryから取得します。
 
 | 用途 | command |
 | ---- | ------- |
-| 最新を使う | `npx github:techbeansjp-free/AGENTS.md doctor --root=.` |
-| 版を固定する | `npx github:techbeansjp-free/AGENTS.md#<tag> doctor --root=.` |
+| 最新のsourceを使う | `npx github:techbeansjp-free/AGENTS.md doctor --root=.` |
+| 版を固定したsourceを使う | `npx github:techbeansjp-free/AGENTS.md#<tag> doctor --root=.` |
 
-`<tag>`にはreleaseのtag（`v0.3.1-beta.83`のような形）を指定します。**以降の例に現れる`npx agent-skill-chain <command>`は、この`npx github:techbeansjp-free/AGENTS.md <command>`の短縮表記です。**
+`<tag>`にはreleaseのtag（`v<X.Y.Z>`の形）を指定します。**この経路はsource buildであり、`agent-skill-chain --version`はrelease versionを返しません。** **以降の例に現れる`npx agent-skill-chain <command>`は、この`npx github:techbeansjp-free/AGENTS.md <command>`の短縮表記です。**
 
 対象directoryを省略した場合は現在directoryを使います。対象を明示するときは`--root=.`を指定します。
 

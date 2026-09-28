@@ -46,10 +46,10 @@ Feature: 配布artifactのconsumer acceptanceを安全側に判定する
     When consumer acceptanceを判定する
     Then packed-binは判定不能として全体を不合格にする
 
-  Scenario: SCN-UNIT-CONSUMER-010 対象機構を既知の3件に固定する
+  Scenario: SCN-UNIT-CONSUMER-010 対象機構を既知の4件に固定する
     Given consumer acceptanceの対象機構候補がある
     When 対象機構を検証する
-    Then git-dependencyとpacked-binとscale-outputだけを受理する
+    Then git-dependencyとpacked-binとscale-outputとrelease-identityだけを受理する
 
   Scenario: SCN-UNIT-CONSUMER-011 artifactの3者一致だけを受理する
     Given 一致と不一致と算出不能のartifact digestがある

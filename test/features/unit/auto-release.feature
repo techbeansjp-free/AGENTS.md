@@ -177,15 +177,15 @@ Feature: main mergeの自動release計画と配布digest
     When release jobと権限境界表の一致を検証する
     Then validateだけを載せていないことを理由に拒否する
 
-  Scenario: SCN-UNIT-AUTOREL-020 git-dependency acceptanceの欠落を拒否する
+  Scenario: SCN-UNIT-AUTOREL-020 Git remote互換経路のacceptance欠落を拒否する
     Given 自動release用の実workflow本文を読み込む
     When 自動release workflow契約を検証する
     Then git-dependency acceptanceの行を消すと拒否される
 
-  Scenario: SCN-UNIT-AUTOREL-021 acceptanceはtag jobより前に置かれる
+  Scenario: SCN-UNIT-AUTOREL-021 git-dependency acceptanceとrelease-identity acceptanceの両方がtag前に成立する
     Given 自動release用の実workflow本文を読み込む
     When 自動release workflow契約を検証する
-    Then acceptance stepはtag jobの定義より前にある
+    Then git-dependency acceptanceとrelease-identity acceptanceはどちらもtag jobの定義より前にある
 
   Scenario: SCN-UNIT-AUTOREL-022 npm公開経路の混入を拒否する
     Given 自動release用の実workflow本文を読み込む
@@ -195,7 +195,7 @@ Feature: main mergeの自動release計画と配布digest
   Scenario: SCN-UNIT-AUTOREL-023 release workflowはnpm公開jobを持たない
     Given 自動release用の実workflow本文を読み込む
     When 自動release workflow契約を検証する
-    Then job一覧はvalidateとtagとgithub_releaseだけである
+    Then job一覧はvalidateとbuild_distributionとtagとgithub_releaseの4件である
 
   Scenario: SCN-UNIT-AUTOREL-024 後続jobは先行jobの結果成功を要求する
     Given 自動release用の実workflow本文を読み込む
@@ -216,4 +216,46 @@ Feature: main mergeの自動release計画と配布digest
     Given 自動release用の実workflow本文を読み込む
     When 自動release workflow契約を検証する
     Then markerの退避と属性の後置と条件の退避を拒否する
+
+  Scenario: SCN-INT-RELID-001 build_distribution導入後のjob結果要求を検証する
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証は有効になる
+    And job結果の要求を外すかalwaysを足すと拒否される
+
+  Scenario: SCN-INT-RELID-002 tag jobが4 job構成の条件を要求する
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then job一覧はvalidateとbuild_distributionとtagとgithub_releaseの4件である
+    And job結果の要求を外すかalwaysを足すと拒否される
+
+  Scenario: SCN-INT-RELID-003 materialize_releaseがversionとrelease identityを1度だけ付与する
+    Given 正常な一時treeと許可外fileが既に存在する一時treeがある
+    When それぞれへrelease計画を適用する
+    Then 正常treeは計画と一致するpackage.jsonとrelease-identity.jsonを持ち許可外treeは非0終了で書き込まれない
+
+  Scenario: SCN-INT-RELID-004 release-identity.json追加後も配布digestが不変である
+    Given release-identity.jsonをfilesへ宣言したfixture packageがある
+    When release-identity.jsonの有無を切り替えて前後の配布digestを算出する
+    Then release-identity.json追加後も配布digestは同じになる
+
+  Scenario: SCN-INT-RELID-005 github_releaseのartifact digest 3者一致検証を確認する
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then artifact digest検証が実行されpublishより前にあることを確認する
+
+  Scenario: SCN-INT-RELID-010 検証よりpublishを先に置く悪用を拒否する
+    Given publishがartifact digest検証より前にあるworkflow本文がある
+    When 自動release workflow契約を検証する
+    Then 検証よりpublishを先に置くと拒否される
+
+  Scenario: SCN-INT-RELID-011 許可外pathの変化はtree全体のsnapshotで検出される
+    Given materialize_releaseの許可path内外を混ぜた前後snapshotがある
+    When snapshot間の変化pathを算出する
+    Then 許可path外の変化だけが名指しされる
+
+  Scenario: SCN-INT-RELID-012 release-identity.jsonの有無と形式でrelease・sourceを判定する
+    Given release識別・source識別・不正内容・version不一致の4種類のpackage rootがある
+    When それぞれのdistribution identityを解決する
+    Then release-identity.jsonが正しい場合だけreleaseと判定されそれ以外はsourceになる
 

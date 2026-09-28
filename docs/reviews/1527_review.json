@@ -1,0 +1,252 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1527,
+  "observed": {
+    "baseSha": "c436c8cb23bec91b582912045e3903e52694614f",
+    "implementationHeadSha": "1b2df9ef54f52f4e4f002723ff329adc467d0d3a",
+    "diffDigest": "33d7afca971825422cc1cb26bd01e84b58aefafda7e9b1a5b9e8ced4491a9be8",
+    "session": {
+      "sessionId": "31fbf11e9d1a4db7b032b323db3ae5e96f477f89da9aa7e8497233ab9afa4940",
+      "latestRoundDigest": "86fa1907f1befa4acb5d8e42b3f7c60be1eb5480ce318a674fb8e51955bb7105",
+      "status": "converged",
+      "countedRounds": 3
+    },
+    "impact": {
+      "digest": "0923ed4bc2c415e5a0b607bb5eacb555cd4cac467c9873f4ee8ee1955b598330",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "1b2df9ef54f52f4e4f002723ff329adc467d0d3a",
+        "impactDigest": "0923ed4bc2c415e5a0b607bb5eacb555cd4cac467c9873f4ee8ee1955b598330",
+        "finishedAt": "2026-09-28T21:28:03.930Z",
+        "recordDigest": "83eb6212a306b019976669447f8159e4343ea3fee0ec254ae855e75d80acf7ea"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "REV1-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "AGENTS.md",
+      "contractId": null
+    },
+    {
+      "id": "REV1-04",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": ".github/workflows/release.yml",
+      "contractId": null
+    },
+    {
+      "id": "REV1-07",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/lifecycle.ts",
+      "contractId": "AC-12"
+    },
+    {
+      "id": "REV1-09",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/lifecycle.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV1-10",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "test/steps/lifecycle-isolation.steps.ts",
+      "contractId": "AC-10"
+    },
+    {
+      "id": "REV1-15",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/lib/release-identity.ts",
+      "contractId": "AC-04"
+    },
+    {
+      "id": "REV1-17",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": ".github/workflows/release.yml",
+      "contractId": "AC-07"
+    },
+    {
+      "id": "REV2-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-07"
+    },
+    {
+      "id": "REV2-02",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-13"
+    },
+    {
+      "id": "REV2-03",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": ".github/workflows/release.yml",
+      "contractId": "AC-13"
+    },
+    {
+      "id": "REV2-04",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/tmp/issues/20260929_001119_Release-Version-Identityを配布物と利用側記録で一致させる/05_計画変更.md",
+      "contractId": null
+    },
+    {
+      "id": "REV2-05",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "scripts/materialize_release.ts",
+      "contractId": "AC-06"
+    },
+    {
+      "id": "REV2-06",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "test/features/integration/consumer-acceptance.feature",
+      "contractId": "AC-08"
+    },
+    {
+      "id": "REV2-07",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "test/features/unit/auto-release.feature",
+      "contractId": "AC-03"
+    },
+    {
+      "id": "REV2-08",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-08"
+    },
+    {
+      "id": "REV2-09",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/lifecycle.ts",
+      "contractId": "AC-12"
+    },
+    {
+      "id": "REV3-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-07"
+    },
+    {
+      "id": "REV3-02",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-07"
+    },
+    {
+      "id": "REV3-03",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-07"
+    },
+    {
+      "id": "REV3-04",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-07"
+    },
+    {
+      "id": "REV3-05",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/auto-release.steps.ts",
+      "contractId": "AC-07"
+    },
+    {
+      "id": "REV3-06",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-07"
+    },
+    {
+      "id": "REV3-07",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-07"
+    },
+    {
+      "id": "REV3-08",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": ".github/workflows/release.yml",
+      "contractId": "AC-13"
+    },
+    {
+      "id": "REV3-09",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "src/domain/lifecycle.ts",
+      "contractId": "AC-12"
+    },
+    {
+      "id": "SCOPE-AC14-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "out-of-scope",
+      "path": "docs/specs/02_要件/03_外部連携要件.md",
+      "contractId": "AC-14"
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "independent-review-round3-a04fce823c99dff5a",
+    "implementer": "implementer-session-ad82f3df5e04a418c",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "4259764772a624933ad577ab31c4277f7731961808091e8e1a2cf18761d28108"
+}

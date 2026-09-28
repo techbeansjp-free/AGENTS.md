@@ -1,4 +1,4 @@
-# agent-skill-chain v0.3 利用案内（Claude Code）
+# agent-skill-chain 利用案内（Claude Code）
 
 **このファイルは規約を定義しない。** 実行規約の入口は[AGENTS.md](AGENTS.md)であり、hostによらず同一である。**まずそれを読む。**
 

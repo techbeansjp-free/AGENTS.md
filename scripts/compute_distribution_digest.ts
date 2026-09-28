@@ -11,6 +11,7 @@ import {
 } from "../src/domain/release.js";
 import { resolveContained } from "../src/lib/security.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
+import { RELEASE_IDENTITY_FILE } from "../src/lib/release-identity.js";
 
 function targetDirectory(arguments_: string[]): string {
   let target = process.cwd();
@@ -76,10 +77,21 @@ export function computeDistributionDigestAt(cwd: string): DistributionDigest {
       entryCount: listed.paths.length,
       errors: listed.errors,
     };
+  /**
+   * **`release-identity.json`は配布digestから完全除外する（正規化ではない）。**
+   *
+   * このfile自体がversion・tag・sourceShaというrelease固有情報とcontentDigest
+   * 自身を記録するため、digest計算へ含めると循環する（owner確定入力、INV-REL-08）。
+   * 通常buildではこのfileは存在しないため、除外は`build_distribution`後の
+   * 再計算時にだけ効く。
+   */
+  const filteredPaths = listed.paths.filter(
+    (filePath) => filePath !== RELEASE_IDENTITY_FILE,
+  );
 
   const entries: DistributionEntry[] = [];
   const errors: string[] = [];
-  for (const filePath of listed.paths) {
+  for (const filePath of filteredPaths) {
     try {
       const absolutePath = resolveContained(cwd, filePath);
       const content = fs.readFileSync(absolutePath, "utf8");
@@ -98,7 +110,7 @@ export function computeDistributionDigestAt(cwd: string): DistributionDigest {
     }
   }
   if (errors.length > 0)
-    return { digest: "", entryCount: listed.paths.length, errors };
+    return { digest: "", entryCount: filteredPaths.length, errors };
   return computeDistributionDigest(entries);
 }
 
