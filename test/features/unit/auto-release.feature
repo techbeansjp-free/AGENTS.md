@@ -227,6 +227,7 @@ Feature: main mergeの自動release計画と配布digest
     Given 自動release用の実workflow本文を読み込む
     When 自動release workflow契約を検証する
     Then job一覧はvalidateとbuild_distributionとtagとgithub_releaseの4件である
+    And job結果の要求を外すかalwaysを足すと拒否される
 
   Scenario: SCN-INT-RELID-003 materialize_releaseがversionとrelease identityを1度だけ付与する
     Given 正常な一時treeと許可外fileが既に存在する一時treeがある

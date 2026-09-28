@@ -46,7 +46,8 @@ function snapshotTree(root: string): Map<string, string> {
   const stack: string[] = [""];
   while (stack.length > 0) {
     const relativeDir = stack.pop() ?? "";
-    const absoluteDir = relativeDir === "" ? root : path.join(root, relativeDir);
+    const absoluteDir =
+      relativeDir === "" ? root : path.join(root, relativeDir);
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(absoluteDir, { withFileTypes: true });
@@ -78,8 +79,10 @@ export function changedPaths(
   after: ReadonlyMap<string, string>,
 ): string[] {
   const changed = new Set<string>();
-  for (const [key, hash] of before) if (after.get(key) !== hash) changed.add(key);
-  for (const [key, hash] of after) if (before.get(key) !== hash) changed.add(key);
+  for (const [key, hash] of before)
+    if (after.get(key) !== hash) changed.add(key);
+  for (const [key, hash] of after)
+    if (before.get(key) !== hash) changed.add(key);
   return [...changed].sort();
 }
 
@@ -241,11 +244,29 @@ export function materializeRelease(
   const disallowed = changedPaths(before, after).filter(
     (changedPath) => !ALLOWED_CHANGED_PATHS.has(changedPath),
   );
-  if (disallowed.length > 0)
+  if (disallowed.length > 0) {
+    /**
+     * **検出後、既知の3 pathを書き込み前の内容へ復元してから非0終了する。**
+     * 検出は書き込み後にしか行えないが（この関数自身への変異を検知する仕組み
+     * のため）、復元まで行わないと呼び出し側が観測する終了状態は「書き込み前の
+     * 状態を保ったまま」（02 §4.3）にならない（round 2独立review REV2-05指摘）。
+     * `disallowed`に含まれうる3 path以外の未知pathは内容backupを持たないため
+     * 復元対象にしない。このscriptが書くのはこの3 pathだけであり、それ以外への
+     * 変化はこの関数自身への変異または並行外部変更のときだけ生じる。
+     */
+    fs.writeFileSync(packageJsonPath, originalPackageJson);
+    fs.writeFileSync(packageLockPath, originalPackageLock);
+    try {
+      fs.unlinkSync(identityPath);
+    } catch {
+      // 復元は最善努力。identityPathは書き込み前は存在しなかった
+      // （既に存在する場合はこの関数の先頭で書き込み前にreasonsへ積んで停止する）。
+    }
     return {
       applied: false,
       reasons: [`許可外file変化を検出しました: ${disallowed.join(", ")}`],
     };
+  }
   return { applied: true, reasons: [] };
 }
 

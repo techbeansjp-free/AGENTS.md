@@ -728,8 +728,15 @@ function jobStepRunBlocks(lines, job) {
     if (range === undefined)
         return [];
     const stepStarts = [];
+    /**
+     * **step開始の判定は`- name:`固定ではなく、6 spaces + `- `の任意のlist itemを
+     * 対象にする。** `- name:`だけを見ると、`name:`を持たないstep（`- run: …`や
+     * `- id: …`を直接先頭に書いたstep）が境界として認識されず、直前stepのcommandへ
+     * 誤って吸収されるか、境界の谷間へ落ちてまったく走査されない
+     * （round 2独立review REV2-01 d/e是正）。
+     */
     for (let cursor = range.start; cursor < range.end; cursor += 1)
-        if (/^ {6}- name:/u.test(lines[cursor] ?? ""))
+        if (/^ {6}-\s/u.test(lines[cursor] ?? ""))
             stepStarts.push(cursor);
     const blocks = [];
     for (const [order, stepStart] of stepStarts.entries()) {
@@ -961,6 +968,14 @@ export function validateReleaseWorkflow(yaml) {
     const githubReleaseRunBlocks = jobStepRunBlocks(lines, "github_release");
     const verifyIdentityStep = githubReleaseRunBlocks.find(({ command }) => command.includes("--verify-artifact-identity"));
     const publishStep = githubReleaseRunBlocks.find(({ command }) => command.includes("--draft=false"));
+    /** stepの属性block（headerからrun:直前まで）に含まれる`if:`行の式部分を返す。 */
+    const stepIfExpression = (attributes) => /^\s*if:\s*(.+)$/mu.exec(attributes)?.[1]?.trim();
+    /**
+     * **`always()`・`cancelled()`・`success()`・`failure()`のようなstatus functionを
+     * phase判定step群のif:へ持ち込ませない。** これらはjob失敗後もstepを実行させる
+     * 迂回になる（round 2独立review REV2-01 a指摘）。
+     */
+    const STATUS_FUNCTION_PATTERN = /\b(?:always|cancelled|success|failure)\s*\(/u;
     if (!verifyIdentityStep)
         errors.push("github_release jobのrun: block内でartifact digestの3者一致（evaluateArtifactIdentity）を検証してください");
     else {
@@ -968,17 +983,48 @@ export function validateReleaseWorkflow(yaml) {
         /**
          * **検証stepへのcontinue-on-error・ifを拒否する。** git-dependency acceptance
          * （validateAcceptanceStep）と同じ迂回を許さない（独立review REV-05指摘）。
+         * **continue-on-errorは`true`の字面だけでなく、`false`以外の値をすべて拒否する。**
+         * `${{ true }}`のような式形は旧regexをすり抜ける（round 2独立review REV2-01 c指摘）。
          */
-        if (/^ {8}continue-on-error:\s*true/mu.test(verifyIdentityStep.attributes))
-            errors.push("artifact digest検証stepへcontinue-on-error: trueを付けないでください");
+        const continueOnErrorValue = /^ {8}continue-on-error:\s*(\S.*)$/mu
+            .exec(verifyIdentityStep.attributes)?.[1]
+            ?.trim();
+        if (continueOnErrorValue !== undefined && continueOnErrorValue !== "false")
+            errors.push("artifact digest検証stepへcontinue-on-error: false以外を付けないでください");
         else
             checks.push("artifact digest検証stepにcontinue-on-errorが無いことを確認した");
+        /**
+         * **検証stepのif:がrelease_phaseの判定から外れていないことを要求する。**
+         * `${{ false }}`へ差し替えると検証step自体が実行されなくなるが、旧実装は
+         * continue-on-errorしか見ておらずこの迂回を検知できなかった
+         * （round 2独立review REV2-01 b指摘）。
+         */
+        const verifyIfExpression = stepIfExpression(verifyIdentityStep.attributes);
+        if (verifyIfExpression === undefined ||
+            !verifyIfExpression.includes("steps.release_phase.outputs.phase") ||
+            STATUS_FUNCTION_PATTERN.test(verifyIfExpression))
+            errors.push("artifact digest検証stepのif:をrelease_phaseの判定から外さないでください");
+        else
+            checks.push("artifact digest検証stepのif:を確認した");
     }
     if (verifyIdentityStep && publishStep) {
         if (publishStep.stepStart < verifyIdentityStep.stepStart)
             errors.push("artifact digestの3者一致を検証する前にGitHub Releaseをpublishしないでください");
         else
             checks.push("publishが3者一致検証より後であることを確認した");
+        /**
+         * **publishのif:は検証stepのif:と同一でなければならない。** `always()`や
+         * `!cancelled()`へ差し替えると、検証が失敗またはskipされた後もpublishが走る
+         * （round 2独立review REV2-01 a指摘）。
+         */
+        const verifyIfExpression = stepIfExpression(verifyIdentityStep.attributes);
+        const publishIfExpression = stepIfExpression(publishStep.attributes);
+        if (publishIfExpression === undefined ||
+            publishIfExpression !== verifyIfExpression ||
+            STATUS_FUNCTION_PATTERN.test(publishIfExpression))
+            errors.push("publishのif:はartifact digest検証stepのif:と同一にしてください（always()等のstatus functionを使わないでください）");
+        else
+            checks.push("publishのif:が検証stepと同一であることを確認した");
     }
     /**
      * **`github_release` jobがartifactを再生成しないことを要求する。** `npm pack`を
@@ -991,21 +1037,62 @@ export function validateReleaseWorkflow(yaml) {
     else
         checks.push("github_release jobがartifactを再生成しないことを確認した");
     /**
+     * **公開先から取得し直したbyte列をhashしていることを要求する。** ローカルの
+     * 添付元fileを再hashするだけの旧実装（TOCTOU）へ戻すと、公開が壊れていても
+     * 検査を通過してしまう（round 2独立review REV2-01 f指摘）。
+     */
+    const hashPublicationStep = githubReleaseRunBlocks.find(({ attributes }) => /\bid:\s*hash_publication\b/u.test(attributes));
+    if (!hashPublicationStep) {
+        errors.push("公開先から取得し直したasset digestを記録するstep（id: hash_publication）が必要です");
+    }
+    else if (!/gh\s+release\s+download\b/u.test(hashPublicationStep.command)) {
+        errors.push("asset digestはgh release downloadで公開先から取得し直してから算出してください");
+    }
+    else {
+        checks.push("公開先から取得し直したasset digestの算出を確認した");
+    }
+    /**
+     * **`gh release create`は`--draft`で作成することを要求する。** `--draft`を外すと
+     * 3者一致検証の前にReleaseが公開状態になり得る（round 2独立review REV2-01 g指摘）。
+     */
+    const releaseCreateStep = githubReleaseRunBlocks.find(({ command }) => /\bgh\s+release\s+create\b/u.test(command));
+    if (!releaseCreateStep || !/--draft\b/u.test(releaseCreateStep.command))
+        errors.push("gh release createは--draftで作成してください");
+    else
+        checks.push("gh release createがdraftで作成されることを確認した");
+    /**
+     * **publish済みでasset digestが不一致または確認不能な場合に停止するstepを要求
+     * する。** このstepを削除すると、既存の公開済みReleaseへ気づかず上書きしうる
+     * （round 2独立review REV2-01 g指摘）。
+     */
+    const publishedMismatchStop = githubReleaseRunBlocks.find(({ attributes, command }) => /published-mismatch/u.test(attributes) && /\bexit\s+1\b/u.test(command));
+    if (!publishedMismatchStop)
+        errors.push("publish済みでasset digestが不一致または確認不能な場合に停止するstepが必要です");
+    else
+        checks.push("publish済み不一致時の停止stepを確認した");
+    /**
      * **Immutable Releasesの状態報告stepを要求するが、取得不能をjob失敗にしない。**
      * 取得可否はGitHubの機能提供状況に依存するため、`unknown`として報告してjobは
      * 続行する（FR-13、R2）。**step全体（次のstep開始行の手前まで）だけを読む。**
      * job全体を読むと、他stepの無関係な`if:`を誤検出する。
+     * **markerはstep自身の`- name:`行に限定し、github_release job内だけを探す。**
+     * file全体の文字列一致は、step本体を削って別stepのcomment行へ同じ文言を
+     * 書くだけで素通りしてしまう（round 2独立review REV2-02指摘）。
      */
-    const immutableReleasesIndex = lines.findIndex((line) => /Immutable Releases/u.test(line));
+    const githubReleaseJobRange = jobRange(lines, "github_release");
+    const immutableReleasesIndex = githubReleaseJobRange
+        ? lines.findIndex((line, index) => index >= githubReleaseJobRange.start &&
+            index < githubReleaseJobRange.end &&
+            /^ {6}- name:.*Immutable Releases/u.test(line))
+        : -1;
     if (immutableReleasesIndex < 0)
         errors.push("Immutable Releasesの状態報告stepが必要です");
     else {
         checks.push("Immutable Releases状態報告stepの存在を確認した");
-        const githubReleaseJob = jobRange(lines, "github_release");
-        const searchEnd = githubReleaseJob?.end ?? lines.length;
+        const searchEnd = githubReleaseJobRange?.end ?? lines.length;
         const offsetToNextStep = lines
             .slice(immutableReleasesIndex + 1, searchEnd)
-            .findIndex((line) => /^ {6}- name:/u.test(line));
+            .findIndex((line) => /^ {6}-\s/u.test(line));
         const nextStepIndex = offsetToNextStep < 0
             ? searchEnd
             : immutableReleasesIndex + 1 + offsetToNextStep;
@@ -1016,6 +1103,17 @@ export function validateReleaseWorkflow(yaml) {
             errors.push("Immutable Releases状態報告stepの結果でjobを失敗させないでください（continue-on-error: trueとifなし、またはalways()を使ってください）");
         else
             checks.push("Immutable Releases状態報告がjobを失敗させないことを確認した");
+        /**
+         * **stepが実際にImmutable Releasesのendpointを問い合わせていることを要求
+         * する。** step名だけ残してcommand本体を無害化しても、旧実装は検知できな
+         * かった（round 2独立review REV2-02「何をしているか未確認」指摘）。
+         */
+        const immutableReleasesStep = githubReleaseRunBlocks.find(({ stepStart }) => stepStart === immutableReleasesIndex);
+        if (!immutableReleasesStep ||
+            !/immutable-releases/u.test(immutableReleasesStep.command))
+            errors.push("Immutable Releasesの状態報告stepはrepos/<owner>/<repo>/immutable-releases endpointを問い合わせてください");
+        else
+            checks.push("Immutable Releases状態報告が正しいendpointを参照することを確認した");
     }
     if (errors.length === 0 ||
         !errors.some((error) => error.includes("acceptance")))

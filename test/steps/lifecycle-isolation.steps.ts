@@ -871,7 +871,9 @@ When("source buildのCLIで--versionとdoctorを実行する", function () {
   this.bundleRoot = prepareReleaseBundle(this, this.bundleVersion);
   const releaseConsumer = this.temp("asc-release-bundle-doctor-");
   runBundleCli(this.bundleRoot, releaseConsumer, ["install", "--apply"]);
-  this.doctorResults.push(runBundleCli(this.bundleRoot, releaseConsumer, ["doctor"]));
+  this.doctorResults.push(
+    runBundleCli(this.bundleRoot, releaseConsumer, ["doctor"]),
+  );
 });
 
 Then(
@@ -900,7 +902,10 @@ Then(
     assert.equal(sourceDoctorOutput.releaseIdentity?.kind, "source");
     assert.equal(sourceDoctorOutput.releaseIdentity?.version, null);
     assert.equal(releaseDoctorOutput.releaseIdentity?.kind, "release");
-    assert.equal(releaseDoctorOutput.releaseIdentity?.version, this.bundleVersion);
+    assert.equal(
+      releaseDoctorOutput.releaseIdentity?.version,
+      this.bundleVersion,
+    );
     /**
      * **`healthy`は識別結果の差異で変わらないことを、両方installed済みの状態で
      * 比較して確認する。** どちらも正常にinstallした直後であり、`healthy`は

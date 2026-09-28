@@ -746,9 +746,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: gh release edit "$RELEASE_TAG" --draft=false
-      # **実際にrepository設定APIを読みに行く。** 取得不能はunknownとして報告し
-      # jobを止めないが（R2、停止条件ではない）、試みずに常にunknownと決め打つと
-      # 運用者が実際のenabled/disabledを知る手段が無くなる（独立review REV-06指摘）。
+      # **実際に`repos/<owner>/<repo>/immutable-releases`を読みに行く。**
+      # `repos/<owner>/<repo>`のtop-levelには存在しないfield名を読んでいたため、
+      # 常にunknownになっていた（round 2独立review REV2-03指摘、gh 2.97.0で実測）。
+      # 取得不能はunknownとして報告しjobを止めないが（R2、停止条件ではない）、
+      # 試みずに常にunknownと決め打つと運用者が実際のenabled/disabledを知る手段が
+      # 無くなる（独立review REV-06指摘）。
       - name: Immutable Releasesの設定状態を報告する
         id: immutable_releases_state
         if: always()
@@ -764,15 +767,9 @@ jobs:
           if (!summary) process.exit(0);
           let state = "unknown";
           try {
-            const raw = execFileSync("gh", ["api", `repos/${process.env.REPO}`], { encoding: "utf8" });
-            const repo = JSON.parse(raw);
-            const candidate =
-              typeof repo?.immutable_releases_enabled === "boolean"
-                ? repo.immutable_releases_enabled
-                : typeof repo?.immutable_releases?.enabled === "boolean"
-                  ? repo.immutable_releases.enabled
-                  : undefined;
-            if (typeof candidate === "boolean") state = candidate ? "enabled" : "disabled";
+            const raw = execFileSync("gh", ["api", `repos/${process.env.REPO}/immutable-releases`], { encoding: "utf8" });
+            const info = JSON.parse(raw);
+            if (typeof info?.enabled === "boolean") state = info.enabled ? "enabled" : "disabled";
           } catch {
             state = "unknown";
           }
