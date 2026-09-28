@@ -50,6 +50,10 @@ class ReleaseWorld extends WorkflowWorld {
   publishedSummary: ReleaseSummary | undefined = undefined;
   workflowYaml = "";
   workflowValidation: WorkflowValidation | undefined = undefined;
+  fixedVersionStringFiles: Record<string, string> = {};
+  fixedVersionStringMatches: string[] = [];
+  officialDistributionDocuments: Record<string, string> = {};
+  officialDistributionErrors: string[] = [];
 }
 
 const { Given, When, Then } = stepDefinitions<ReleaseWorld>();
@@ -179,7 +183,7 @@ Then("どの計画にもnpm公開stageが現れない", function () {
     );
     assert.deepEqual(
       plan?.stages.map(({ stage }) => stage),
-      ["validate", "tag", "github_release"],
+      ["validate", "build_distribution", "tag", "github_release"],
     );
   }
 });
@@ -187,6 +191,11 @@ Then("どの計画にもnpm公開stageが現れない", function () {
 Given("tag成功後にGitHub Releaseが失敗した操作結果がある", function () {
   const outcomes: ReleaseOutcome[] = [
     { stage: "validate", state: "succeeded", detail: "品質gate合格" },
+    {
+      stage: "build_distribution",
+      state: "succeeded",
+      detail: "配布物生成・release-identity acceptance合格",
+    },
     { stage: "tag", state: "succeeded", detail: "tag作成済み" },
     {
       stage: "github_release",
@@ -201,6 +210,11 @@ Given("tag成功後にGitHub Releaseが失敗した操作結果がある", funct
    */
   this.publishedOutcomes = [
     { stage: "validate", state: "succeeded", detail: "品質gate合格" },
+    {
+      stage: "build_distribution",
+      state: "succeeded",
+      detail: "配布物生成・release-identity acceptance合格",
+    },
     { stage: "tag", state: "succeeded", detail: "tag作成済み" },
     {
       stage: "github_release",
@@ -217,7 +231,11 @@ When("release操作結果を集約する", function () {
 
 Then("結果は部分成功として完了stageと未完了stageを分離する", function () {
   assert.equal(this.summary?.state, "partial");
-  assert.deepEqual(this.summary?.completed, ["validate", "tag"]);
+  assert.deepEqual(this.summary?.completed, [
+    "validate",
+    "build_distribution",
+    "tag",
+  ]);
   assert.deepEqual(this.summary?.pending, ["github_release"]);
 });
 
@@ -288,3 +306,94 @@ Then(
     assert.match(this.workflowValidation?.errors.join(" ") ?? "", /秘密/u);
   },
 );
+
+Then("Immutable Releases状態報告stepの存在とjob非停止を確認する", function () {
+  assert.equal(this.workflowValidation?.valid, true);
+  assert.ok(
+    this.workflowValidation?.checks.includes(
+      "Immutable Releases状態報告stepの存在を確認した",
+    ),
+  );
+  assert.ok(
+    this.workflowValidation?.checks.includes(
+      "Immutable Releases状態報告がjobを失敗させないことを確認した",
+    ),
+  );
+});
+
+const FIXED_VERSION_STRING_TARGETS = [
+  "README.md",
+  "AGENTS.md",
+  "CLAUDE.md",
+  path.join(".agent-skill-chain", "00_利用案内.md"),
+  path.join(".github", "workflows", "ci.yml"),
+] as const;
+
+/**
+ * **release versionを名指しする形だけを検出する。** SemVer範囲一般
+ * （`0\.4\.x`のような表現やengines宣言）まで拒否すると、無関係な文書が
+ * 誤検出で落ちる。ここで拒否したいのはFR-14が名指しする「固定のrelease
+ * version」、すなわち`v`接頭辞または3点区切りの具体的な数値tagの形である。
+ */
+const FIXED_RELEASE_VERSION_PATTERN = /\bv\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?\b/u;
+
+Given("固定version文字列検査の対象5fileを読み込む", function () {
+  this.fixedVersionStringFiles = Object.fromEntries(
+    FIXED_VERSION_STRING_TARGETS.map((relative) => [
+      relative,
+      fs.readFileSync(path.resolve(relative), "utf8"),
+    ]),
+  );
+});
+
+When("対象5fileのrelease version形文字列を検査する", function () {
+  this.fixedVersionStringMatches = Object.entries(
+    this.fixedVersionStringFiles,
+  ).flatMap(([file, content]) =>
+    (content.match(new RegExp(FIXED_RELEASE_VERSION_PATTERN, "gu")) ?? []).map(
+      (match) => `${file}: ${match}`,
+    ),
+  );
+});
+
+Then("release version形の文字列は0件である", function () {
+  assert.deepEqual(this.fixedVersionStringMatches, []);
+});
+
+Given("README.mdと利用案内の正式取得元記述を読み込む", function () {
+  this.officialDistributionDocuments = {
+    "README.md": fs.readFileSync(path.resolve("README.md"), "utf8"),
+    "00_利用案内.md": fs.readFileSync(
+      path.resolve(".agent-skill-chain", "00_利用案内.md"),
+      "utf8",
+    ),
+  };
+});
+
+When("正式取得元の記述を検査する", function () {
+  this.officialDistributionErrors = [];
+  for (const [file, content] of Object.entries(
+    this.officialDistributionDocuments,
+  )) {
+    if (!content.includes("releases/download/v"))
+      this.officialDistributionErrors.push(
+        `${file}に版固定asset URLの記述がありません`,
+      );
+    if (!content.includes("releases/latest/download/"))
+      this.officialDistributionErrors.push(
+        `${file}にlatest asset URLの記述がありません`,
+      );
+    if (!content.includes("npx github:"))
+      this.officialDistributionErrors.push(
+        `${file}にnpx github: source経路の記述がありません`,
+      );
+    if (!content.includes("Source code"))
+      this.officialDistributionErrors.push(
+        `${file}にGitHub自動生成source archiveを区別する記述がありません`,
+      );
+  }
+});
+
+Then("asset URLとnpx github経路が区別して記載される", function () {
+  assert.deepEqual(this.officialDistributionErrors, []);
+});

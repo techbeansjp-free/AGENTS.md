@@ -33,7 +33,8 @@
     ".agent-skill-chain/docs/",
     "README.md",
     "AGENTS.md",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "release-identity.json"
   ],
   "scripts": {
     "clean": "node --import tsx scripts/clean.ts",

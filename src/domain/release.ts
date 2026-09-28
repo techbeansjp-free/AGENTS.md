@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import { isPackageVersion, packageReleaseVersion } from "../lib/version.js";
 
-export type ReleaseStage = "validate" | "tag" | "github_release";
+export type ReleaseStage =
+  "validate" | "build_distribution" | "tag" | "github_release";
 
 export interface ReleasePlanInput {
   currentVersion: string;
@@ -80,6 +81,7 @@ export interface AutoReleasePlan {
  */
 const RELEASE_STAGES: readonly ReleaseStage[] = [
   "validate",
+  "build_distribution",
   "tag",
   "github_release",
 ];
@@ -575,6 +577,11 @@ export function planRelease(value: unknown): ReleasePlan {
     tag,
     stages: [
       { stage: "validate", enabled: true, reason: "release前検証に合格した" },
+      {
+        stage: "build_distribution",
+        enabled: true,
+        reason: "検証済み計画から配布物を1度だけ生成する",
+      },
       {
         stage: "tag",
         enabled: true,
@@ -1118,11 +1125,27 @@ export function validateReleaseWorkflow(yaml: string): {
   else checks.push("publish_npm入力が存在しないことを確認した");
   errors.push(...validateAcceptanceStep(lines));
   /**
+   * **`build_distribution` jobの実在を要求する。**
+   *
+   * validateとtagの間で配布物を1度だけ生成・検査するjobが無いと、tag以降が
+   * 未検査のartifactを対象にしてしまう（FR-01〜FR-05）。
+   */
+  if (jobRange(lines, "build_distribution") === undefined)
+    errors.push(
+      "build_distribution jobを追加してください。validate成功後・tagより前に配布物を1度だけ生成・検査します",
+    );
+  else checks.push("build_distribution jobの存在を確認した");
+  /**
    * **後続jobは先行jobの結果そのものを要求する。** `always()`と保存済みoutputだけでは、
    * acceptanceが落ちて`validate`がfailureになってもtagが作られる（Issue #1216 F-01）。
+   * `tag`は`validate`と`build_distribution`の両方の成功結果を要求する
+   * （git-dependency acceptanceとrelease-identity acceptanceの両方をtag前に成立させる、
+   * owner確定入力2）。
    */
   for (const [job, required] of [
+    ["build_distribution", "needs.validate.result == 'success'"],
     ["tag", "needs.validate.result == 'success'"],
+    ["tag", "needs.build_distribution.result == 'success'"],
     ["github_release", "needs.tag.result == 'success'"],
   ] as const) {
     const range = jobRange(lines, job);
@@ -1134,6 +1157,64 @@ export function validateReleaseWorkflow(yaml: string): {
     if (/\balways\(\)/u.test(condition))
       errors.push(
         `${job} jobの条件からalways()を外してください。先行jobの失敗後も起動します`,
+      );
+  }
+  /**
+   * **`github_release` jobがartifact digestの3者一致を検証してから公開することを
+   * 要求する。** `evaluateArtifactIdentity`（既存、無変更）を`--verify-artifact-identity`
+   * で呼び出す配線がpublish（`--draft=false`）より前にあることをYAML構造から確認する
+   * （FR-05、TOCTOU排除）。
+   */
+  const verifyIdentityIndex = yaml.indexOf("--verify-artifact-identity");
+  const publishIndex = yaml.indexOf("--draft=false");
+  if (verifyIdentityIndex < 0)
+    errors.push(
+      "github_release jobでartifact digestの3者一致（evaluateArtifactIdentity）を検証してください",
+    );
+  else checks.push("artifact digestの3者一致検証の実行を確認した");
+  if (verifyIdentityIndex >= 0 && publishIndex >= 0) {
+    if (publishIndex < verifyIdentityIndex)
+      errors.push(
+        "artifact digestの3者一致を検証する前にGitHub Releaseをpublishしないでください",
+      );
+    else checks.push("publishが3者一致検証より後であることを確認した");
+  }
+  /**
+   * **Immutable Releasesの状態報告stepを要求するが、取得不能をjob失敗にしない。**
+   * 取得可否はGitHubの機能提供状況に依存するため、`unknown`として報告してjobは
+   * 続行する（FR-13、R2）。**step全体（次のstep開始行の手前まで）だけを読む。**
+   * job全体を読むと、他stepの無関係な`if:`を誤検出する。
+   */
+  const immutableReleasesIndex = lines.findIndex((line) =>
+    /Immutable Releases/u.test(line),
+  );
+  if (immutableReleasesIndex < 0)
+    errors.push("Immutable Releasesの状態報告stepが必要です");
+  else {
+    checks.push("Immutable Releases状態報告stepの存在を確認した");
+    const githubReleaseJob = jobRange(lines, "github_release");
+    const searchEnd = githubReleaseJob?.end ?? lines.length;
+    const offsetToNextStep = lines
+      .slice(immutableReleasesIndex + 1, searchEnd)
+      .findIndex((line) => /^ {6}- name:/u.test(line));
+    const nextStepIndex =
+      offsetToNextStep < 0
+        ? searchEnd
+        : immutableReleasesIndex + 1 + offsetToNextStep;
+    const stepBody = lines.slice(immutableReleasesIndex, nextStepIndex);
+    const hasContinueOnError = stepBody.some((line) =>
+      /^\s*continue-on-error:\s*true\s*$/u.test(line),
+    );
+    const gatesLaterSteps = stepBody.some((line) =>
+      /^\s*if:\s*(?!.*always\(\))/u.test(line),
+    );
+    if (!hasContinueOnError || gatesLaterSteps)
+      errors.push(
+        "Immutable Releases状態報告stepの結果でjobを失敗させないでください（continue-on-error: trueとifなし、またはalways()を使ってください）",
+      );
+    else
+      checks.push(
+        "Immutable Releases状態報告がjobを失敗させないことを確認した",
       );
   }
   if (

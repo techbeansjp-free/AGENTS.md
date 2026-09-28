@@ -17,11 +17,55 @@ import {
 import { isPackageVersion, PACKAGE_VERSION } from "../../src/lib/version.js";
 import { planAutoReleaseFromEnvironment } from "../../scripts/plan_release.js";
 import { canonicalBumpDiff } from "../../scripts/prepare_release_bump.js";
+import {
+  materializeRelease,
+  validateMaterializationPlan,
+  type MaterializationResult,
+} from "../../scripts/materialize_release.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 const DIGEST_A = "a".repeat(64);
 const DIGEST_B = "b".repeat(64);
 const DIGEST_C = "c".repeat(64);
+
+/**
+ * 指定jobのYAML blockの中だけへ変異を注入する。
+ *
+ * **file全体の`.replace`は使わない。** `build_distribution`と`tag`の両方が
+ * `needs.validate.result == 'success'`を持つため、file全体の文字列置換は
+ * 意図しない方（最初に現れるjob）を変異させ、検査対象を取り違える。
+ */
+function replaceWithinJob(
+  yaml: string,
+  job: string,
+  from: string | RegExp,
+  to: string,
+): string {
+  const lines = yaml.split(/\r?\n/u);
+  const startLine = lines.findIndex((line) =>
+    new RegExp(`^ {2}${job}:\\s*$`, "u").test(line),
+  );
+  assert.ok(startLine >= 0, `${job} jobが見つかりません`);
+  let endLine = startLine + 1;
+  while (
+    endLine < lines.length &&
+    !/^ {2}[A-Za-z_][\w-]*:\s*$/u.test(lines[endLine] ?? "")
+  )
+    endLine += 1;
+  const block = lines.slice(startLine, endLine).join("\n");
+  const matched =
+    typeof from === "string" ? block.includes(from) : from.test(block);
+  assert.ok(matched, `${job} job blockに対象文字列が見つかりません: ${from}`);
+  const mutatedBlock =
+    typeof from === "string"
+      ? block.replace(from, to)
+      : block.replace(from, to);
+  return [
+    ...lines.slice(0, startLine),
+    ...mutatedBlock.split("\n"),
+    ...lines.slice(endLine),
+  ].join("\n");
+}
 
 function autoReleaseInput(
   overrides: Partial<AutoReleaseInput> = {},
@@ -47,12 +91,18 @@ function writeDigestFile(file: string, digest: string): void {
 
 function fixturePackage(
   directory: string,
-  options: { dist?: boolean; readme?: boolean; extra?: boolean } = {},
+  options: {
+    dist?: boolean;
+    readme?: boolean;
+    extra?: boolean;
+    releaseIdentity?: boolean;
+  } = {},
 ): void {
   const includeDist = options.dist !== false;
   const includeReadme = options.readme !== false;
   const files = ["dist/"];
   if (includeReadme) files.push("README.md");
+  if (options.releaseIdentity) files.push("release-identity.json");
   fs.writeFileSync(
     path.join(directory, "package.json"),
     `${JSON.stringify({ name: "distribution-digest-fixture", version: "1.0.0", files }, null, 2)}\n`,
@@ -65,6 +115,17 @@ function fixturePackage(
     fs.writeFileSync(path.join(directory, "README.md"), "# fixture\n");
   if (options.extra)
     fs.writeFileSync(path.join(directory, "extra.txt"), "extra\n");
+  if (options.releaseIdentity)
+    fs.writeFileSync(
+      path.join(directory, "release-identity.json"),
+      `${JSON.stringify({
+        schemaVersion: "agent-skill-chain/release-identity/v1",
+        version: "1.0.0",
+        tag: "v1.0.0",
+        sourceSha: "a".repeat(40),
+        contentDigest: "b".repeat(64),
+      })}\n`,
+    );
 }
 
 function runDigestCli(
@@ -124,6 +185,9 @@ class AutoReleaseWorld extends WorkflowWorld {
     undefined;
   beforeDigest: DistributionDigest | undefined = undefined;
   afterDigest: DistributionDigest | undefined = undefined;
+  materializationPlan: unknown = undefined;
+  materializationTargets: string[] = [];
+  materializationResults: MaterializationResult[] = [];
   bumpJobSteps: WorkflowStep[] = [];
   workflowDefaultsShell = false;
   bumpJobDefaultsShell = false;
@@ -981,6 +1045,181 @@ Then("追加fileが配布entryへ増えてdigestは異なる", function () {
   assert.notEqual(this.beforeDigest?.digest, this.afterDigest?.digest);
 });
 
+Given(
+  "release-identity.jsonをfilesへ宣言したfixture packageがある",
+  function () {
+    this.fixtureDirectory = this.temp("asc-distribution-release-identity-");
+    fixturePackage(this.fixtureDirectory, { releaseIdentity: true });
+  },
+);
+
+When(
+  "release-identity.jsonの有無を切り替えて前後の配布digestを算出する",
+  function () {
+    /**
+     * **package.jsonの`files`は前後で変えない。** `files`配列を変えると
+     * package.json自身のcontentHashが動き、release-identity.json除外の効果を
+     * 検証できなくなる。実運用でも`files`は最初から`release-identity.json`を
+     * 宣言済みであり、通常buildでは単にfileが存在しないだけである。
+     */
+    const identityPath = path.join(
+      this.fixtureDirectory,
+      "release-identity.json",
+    );
+    const identityContent = fs.readFileSync(identityPath, "utf8");
+    fs.rmSync(identityPath);
+    this.beforeDigest = successfulDigest(this.fixtureDirectory);
+    fs.writeFileSync(identityPath, identityContent);
+    this.afterDigest = successfulDigest(this.fixtureDirectory);
+  },
+);
+
+Then("release-identity.json追加後も配布digestは同じになる", function () {
+  /**
+   * **`entryCount`も一致することを確認する。** `release-identity.json`は
+   * contentDigestから完全除外されるため（INV-REL-08）、entry件数もdigestも
+   * 付与前後で不変でなければならない。
+   */
+  assert.equal(this.beforeDigest?.digest, this.afterDigest?.digest);
+  assert.equal(this.beforeDigest?.entryCount, this.afterDigest?.entryCount);
+});
+
+Given("正常な一時treeと許可外fileが既に存在する一時treeがある", function () {
+  this.materializationPlan = {
+    version: "0.4.9",
+    tag: "v0.4.9",
+    sourceSha: "c".repeat(40),
+    contentDigest: "d".repeat(64),
+  };
+  const seed = (target: string): void => {
+    fs.writeFileSync(
+      path.join(target, "package.json"),
+      `${JSON.stringify({ name: "x", version: "0.0.0-sentinel" }, null, 2)}\n`,
+    );
+    fs.writeFileSync(
+      path.join(target, "package-lock.json"),
+      `${JSON.stringify(
+        {
+          name: "x",
+          version: "0.0.0-sentinel",
+          packages: { "": { name: "x", version: "0.0.0-sentinel" } },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  };
+  const normal = this.temp("asc-materialize-normal-");
+  seed(normal);
+  const disallowed = this.temp("asc-materialize-disallowed-");
+  seed(disallowed);
+  fs.writeFileSync(path.join(disallowed, "release-identity.json"), "stale\n");
+  this.materializationTargets = [normal, disallowed];
+});
+
+When("それぞれへrelease計画を適用する", function () {
+  const validated = validateMaterializationPlan(this.materializationPlan);
+  assert.ok(validated.plan, validated.reasons.join(" / "));
+  const plan = validated.plan;
+  this.materializationResults = this.materializationTargets.map((target) =>
+    materializeRelease(target, plan),
+  );
+});
+
+Then(
+  "正常treeは計画と一致するpackage.jsonとrelease-identity.jsonを持ち許可外treeは非0終了で書き込まれない",
+  function () {
+    const [normalResult, disallowedResult] = this.materializationResults;
+    const [normalTarget, disallowedTarget] = this.materializationTargets;
+    assert.equal(
+      normalResult?.applied,
+      true,
+      normalResult?.reasons.join(" / "),
+    );
+    const packageJson = JSON.parse(
+      fs.readFileSync(path.join(normalTarget!, "package.json"), "utf8"),
+    ) as { version: string };
+    assert.equal(packageJson.version, "0.4.9");
+    const identity = JSON.parse(
+      fs.readFileSync(
+        path.join(normalTarget!, "release-identity.json"),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    assert.equal(
+      identity.schemaVersion,
+      "agent-skill-chain/release-identity/v1",
+    );
+    assert.equal(identity.version, "0.4.9");
+    assert.equal(identity.tag, "v0.4.9");
+    assert.equal(identity.sourceSha, "c".repeat(40));
+    assert.equal(identity.contentDigest, "d".repeat(64));
+
+    assert.equal(disallowedResult?.applied, false);
+    assert.ok(
+      disallowedResult?.reasons.some((reason) => reason.includes("許可外")),
+      disallowedResult?.reasons.join(" / "),
+    );
+    /** **書き込まれていないことを確認する。** 拒否だけでなく無変更まで固定する。 */
+    assert.equal(
+      fs.readFileSync(
+        path.join(disallowedTarget!, "release-identity.json"),
+        "utf8",
+      ),
+      "stale\n",
+    );
+    const disallowedPackageJson = JSON.parse(
+      fs.readFileSync(path.join(disallowedTarget!, "package.json"), "utf8"),
+    ) as { version: string };
+    assert.equal(disallowedPackageJson.version, "0.0.0-sentinel");
+  },
+);
+
+Given(
+  "publishがartifact digest検証より前にあるworkflow本文がある",
+  function () {
+    this.autoWorkflowYaml = [
+      "name: 危険なrelease",
+      "",
+      "jobs:",
+      "  github_release:",
+      "    steps:",
+      "      - name: publishする",
+      '        run: gh release edit "$TAG" --draft=false',
+      "      - name: artifact digestを検証する",
+      "        run: node scripts/check_consumer_acceptance.ts --verify-artifact-identity",
+      "",
+    ].join("\n");
+  },
+);
+
+Then(
+  "artifact digest検証が実行されpublishより前にあることを確認する",
+  function () {
+    assert.equal(this.autoWorkflowValidation?.valid, true);
+    assert.ok(
+      this.autoWorkflowValidation?.checks.includes(
+        "artifact digestの3者一致検証の実行を確認した",
+      ),
+    );
+    assert.ok(
+      this.autoWorkflowValidation?.checks.includes(
+        "publishが3者一致検証より後であることを確認した",
+      ),
+    );
+  },
+);
+
+Then("検証よりpublishを先に置くと拒否される", function () {
+  assert.equal(this.autoWorkflowValidation?.valid, false);
+  assert.ok(
+    this.autoWorkflowValidation?.errors.includes(
+      "artifact digestの3者一致を検証する前にGitHub Releaseをpublishしないでください",
+    ),
+    this.autoWorkflowValidation?.errors.join(" / "),
+  );
+});
+
 Then(
   "自動release workflow検証は配布前品質検証の欠落を理由に拒否する",
   function () {
@@ -1012,6 +1251,7 @@ Then("npm公開jobもpublish_npm入力もnpm publish stepも存在しない", fu
    */
   assert.deepEqual(releaseWorkflowJobNames(yaml), [
     "validate",
+    "build_distribution",
     "tag",
     "github_release",
   ]);
@@ -1711,18 +1951,42 @@ Then("git-dependency acceptanceの行を消すと拒否される", function () {
   );
 });
 
-Then("acceptance stepはtag jobの定義より前にある", function () {
-  const workflow = this.autoWorkflowYaml;
-  const acceptance = workflow.indexOf("--mechanisms=git-dependency");
-  const tagJob = /^ {2}tag:$/mu.exec(workflow)?.index ?? -1;
-  assert.ok(acceptance >= 0, "acceptance行が見つかりません");
-  assert.ok(tagJob >= 0, "tag jobが見つかりません");
-  /**
-   * **tag自体が`npx github:...#<tag>`の配布アドレスになる。** GitHub Release作成
-   * より前で止めるだけでは遅い。
-   */
-  assert.ok(acceptance < tagJob, `${acceptance} !< ${tagJob}`);
-});
+Then(
+  "git-dependency acceptanceとrelease-identity acceptanceはどちらもtag jobの定義より前にある",
+  function () {
+    const workflow = this.autoWorkflowYaml;
+    const gitDependencyAcceptance = workflow.indexOf(
+      "--mechanisms=git-dependency",
+    );
+    const releaseIdentityAcceptance = workflow.indexOf(
+      "--mechanisms=release-identity",
+    );
+    const tagJob = /^ {2}tag:$/mu.exec(workflow)?.index ?? -1;
+    assert.ok(
+      gitDependencyAcceptance >= 0,
+      "git-dependency acceptance行が見つかりません",
+    );
+    assert.ok(
+      releaseIdentityAcceptance >= 0,
+      "release-identity acceptance行が見つかりません",
+    );
+    assert.ok(tagJob >= 0, "tag jobが見つかりません");
+    /**
+     * **tag自体が`npx github:...#<tag>`の配布アドレスになる。** GitHub Release作成
+     * より前で止めるだけでは遅い。git-dependency acceptance（Git remote互換経路）と
+     * release-identity acceptance（正式tgz配布）の両方をtagより前に要求する
+     * （owner確定入力2）。
+     */
+    assert.ok(
+      gitDependencyAcceptance < tagJob,
+      `${gitDependencyAcceptance} !< ${tagJob}`,
+    );
+    assert.ok(
+      releaseIdentityAcceptance < tagJob,
+      `${releaseIdentityAcceptance} !< ${tagJob}`,
+    );
+  },
+);
 
 Then("npm公開stepとpublish_npm入力のどちらを足しても拒否される", function () {
   const workflow = this.autoWorkflowYaml;
@@ -1748,33 +2012,52 @@ Then("npm公開stepとpublish_npm入力のどちらを足しても拒否され�
   );
 });
 
-Then("job一覧はvalidateとtagとgithub_releaseだけである", function () {
-  /**
-   * **job名の集合そのものを検査する。** `includes`だけでは、npm公開jobを
-   * 足し戻す変異を素通しする。
-   */
-  assert.deepEqual(releaseWorkflowJobNames(this.autoWorkflowYaml), [
-    "validate",
-    "tag",
-    "github_release",
-  ]);
-});
+Then(
+  "job一覧はvalidateとbuild_distributionとtagとgithub_releaseの4件である",
+  function () {
+    /**
+     * **job名の集合そのものを検査する。** `includes`だけでは、npm公開jobを
+     * 足し戻す変異を素通しする。
+     */
+    assert.deepEqual(releaseWorkflowJobNames(this.autoWorkflowYaml), [
+      "validate",
+      "build_distribution",
+      "tag",
+      "github_release",
+    ]);
+  },
+);
 
 Then("job結果の要求を外すかalwaysを足すと拒否される", function () {
   const workflow = this.autoWorkflowYaml;
-  for (const [from, expected] of [
+  for (const [job, condition, expected] of [
     [
-      "needs.validate.result == 'success' &&\n          (needs.validate.outputs.state",
+      "build_distribution",
+      "needs.validate.result == 'success'",
+      "build_distribution jobはneeds.validate.result == 'success'を条件へ含めてください",
+    ],
+    [
+      "tag",
+      "needs.validate.result == 'success'",
       "tag jobはneeds.validate.result == 'success'を条件へ含めてください",
     ],
     [
-      "needs.tag.result == 'success' &&",
+      "tag",
+      "needs.build_distribution.result == 'success'",
+      "tag jobはneeds.build_distribution.result == 'success'を条件へ含めてください",
+    ],
+    [
+      "github_release",
+      "needs.tag.result == 'success'",
       "github_release jobはneeds.tag.result == 'success'を条件へ含めてください",
     ],
   ] as const) {
-    const removed = workflow.replace(
-      from,
-      from.replace(/needs\.[a-z_]+\.result == 'success' &&\n?\s*/u, ""),
+    const escaped = condition.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    const removed = replaceWithinJob(
+      workflow,
+      job,
+      new RegExp(`${escaped} &&\\n?\\s*`, "u"),
+      "",
     );
     assert.notEqual(removed, workflow, expected);
     assert.ok(
@@ -1784,9 +2067,12 @@ Then("job結果の要求を外すかalwaysを足すと拒否される", function
   }
   /**
    * **`always()`の混入も拒否する。** 条件を満たしていても`always()`があれば
-   * 先行jobの失敗後に起動する。
+   * 先行jobの失敗後に起動する。tag jobの条件で確認する
+   * （`build_distribution`も同じ形の条件を持つため、job scopeを固定する）。
    */
-  const withAlways = workflow.replace(
+  const withAlways = replaceWithinJob(
+    workflow,
+    "tag",
     "      ${{ needs.validate.result == 'success' &&",
     "      ${{ always() && needs.validate.result == 'success' &&",
   );
@@ -1894,13 +2180,22 @@ Then("markerの退避と属性の後置と条件の退避を拒否する", funct
     ),
     validateReleaseWorkflow(trailing).errors.join(" / "),
   );
-  /** **job-levelの`if:`式だけを読む。** `name:`へ必要文字列を置く迂回を許さない。 */
-  const disguised = workflow
-    .replace(
-      "    name: 検証済みcommitへGit tagを冪等に作成する",
-      "    name: needs.validate.result == 'success' のtag",
-    )
-    .replace("      ${{ needs.validate.result == 'success' &&", "      ${{ (");
+  /**
+   * **job-levelの`if:`式だけを読む。** `name:`へ必要文字列を置く迂回を許さない。
+   * `build_distribution`も同じ形の条件文字列を持つため、job scopeを`tag`へ固定する。
+   */
+  const renamed = replaceWithinJob(
+    workflow,
+    "tag",
+    "    name: 検証済みcommitへGit tagを冪等に作成する",
+    "    name: needs.validate.result == 'success' のtag",
+  );
+  const disguised = replaceWithinJob(
+    renamed,
+    "tag",
+    /needs\.validate\.result == 'success' &&\n?\s*/u,
+    "",
+  );
   assert.ok(
     validateReleaseWorkflow(disguised).errors.includes(
       "tag jobはneeds.validate.result == 'success'を条件へ含めてください",

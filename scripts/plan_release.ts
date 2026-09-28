@@ -6,11 +6,7 @@ import {
   type AutoReleasePlan,
   type ReleasePlan,
 } from "../src/domain/release.js";
-import {
-  isPackageVersion,
-  PACKAGE_VERSION,
-  packageReleaseVersion,
-} from "../src/lib/version.js";
+import { isPackageVersion } from "../src/lib/version.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 function requiredEnvironment(
@@ -129,6 +125,14 @@ export function planAutoReleaseFromEnvironment(
   });
 }
 
+/**
+ * **`package.json`との一致gateは持たない（FR-07）。**
+ *
+ * `package.json`のversionはreleaseに追随しないsentinelであり（Issue #1184）、
+ * release identityとしては使わない（正本は`build_distribution`が生成する
+ * `release-identity.json`、FR-08）。安全性は`planRelease`自身が検査する
+ * 「既存tagからSemVer順で単調増加していること」で維持する。
+ */
 function planManualReleaseFromEnvironment(
   environment: NodeJS.ProcessEnv,
 ): ReleasePlan {
@@ -138,7 +142,7 @@ function planManualReleaseFromEnvironment(
   const gates = JSON.parse(
     requiredEnvironment(environment, "RELEASE_GATES_JSON"),
   ) as unknown;
-  const plan = planRelease({
+  return planRelease({
     currentVersion:
       environment.RELEASE_CURRENT_VERSION ??
       latestReleasedVersion(existingTags),
@@ -154,37 +158,6 @@ function planManualReleaseFromEnvironment(
     existingTags,
     gates,
   });
-
-  /**
-   * **完全一致ではなくcore一致を要求する。**
-   *
-   * `package.json`のversionはreleaseに追随しないsentinelになった（Issue #1184）。
-   * 完全一致を要求すると、tagが正本である以上どの手動releaseも通らなくなる。
-   * 残す安全性は「宣言済みのpatch lineの外側へ手動releaseできないこと」であり、
-   * これはprereleaseを剥いだcoreの一致で表現できる。
-   */
-  if (
-    packageReleaseVersion(plan.version) !==
-    packageReleaseVersion(PACKAGE_VERSION)
-  ) {
-    const reason = `指定version「${plan.version}」はpackage.jsonが宣言するrelease line「${packageReleaseVersion(PACKAGE_VERSION)}」の外です`;
-    plan.state = "rejected";
-    plan.reasons.push(reason);
-    plan.diagnostic = {
-      ruleId: "ASC-RELEASE-PLAN",
-      reasons: [...plan.reasons],
-    };
-    plan.stages = plan.stages.map(({ stage }) => ({
-      stage,
-      enabled: false,
-      reason:
-        stage === "validate"
-          ? "release lineの検証に失敗した"
-          : "計画が拒否されたため外部更新しない",
-    }));
-  }
-
-  return plan;
 }
 
 if (isExecutionEntry(import.meta.url)) {

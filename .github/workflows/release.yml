@@ -6,7 +6,7 @@ name: 自動・手動release
   workflow_dispatch:
     inputs:
       version:
-        description: package.jsonと一致させるrelease version
+        description: 作成するrelease version（package.jsonのversionはrelease追随をやめたsentinelであり、一致は要求しない）
         required: true
         type: string
       dry_run:
@@ -302,14 +302,181 @@ jobs:
           node --import tsx scripts/check_consumer_acceptance.ts \
             --tarball="$TARBALL_PATH" --mechanisms=git-dependency
 
-  tag:
-    name: 検証済みcommitへGit tagを冪等に作成する
+  build_distribution:
+    name: 検証済み計画から配布物を1度だけ生成する
     needs: validate
-    # validateのstate出力はconsumer acceptanceより前に書かれる。always()と保存済みstateだけ
-    # では、acceptanceが落ちてvalidateがfailureになってもtagが作られる（Issue #1216 F-01）。
-    # job結果そのものを要求する。
     if: >-
       ${{ needs.validate.result == 'success' &&
+          (needs.validate.outputs.state == 'ready' ||
+           needs.validate.outputs.state == 'release') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # 既存validateと同じ権限levelを維持する。配布物を生成するだけであり、
+    # tagやGitHub Releaseへの書き込み権限は持たせない（02 §2.3）。
+    permissions:
+      contents: read
+    outputs:
+      state: ${{ steps.distribution_status.outputs.state }}
+      packed_artifact_sha256: ${{ steps.hash_after_pack.outputs.sha256 }}
+      accepted_artifact_sha256: ${{ steps.hash_after_acceptance.outputs.sha256 }}
+    steps:
+      - name: release対象commitを取得する
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.validate.outputs.release_sha }}
+          persist-credentials: false
+      - name: Node.js実行環境を準備する
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: release対象commitのための一時treeを追加する
+        run: git worktree add --detach ../release-distribution HEAD
+      - name: release計画を一時fileへ書き出す
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_SHA: ${{ needs.validate.outputs.release_sha }}
+          CONTENT_DIGEST: ${{ needs.validate.outputs.distribution_digest }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          fs.writeFileSync(
+            "release-plan-for-materialize.json",
+            `${JSON.stringify({
+              version: process.env.RELEASE_VERSION,
+              tag: process.env.RELEASE_TAG,
+              sourceSha: process.env.RELEASE_SHA,
+              contentDigest: process.env.CONTENT_DIGEST,
+            })}\n`,
+          );
+          NODE
+      - name: 固定ファイルどおりに依存を導入する
+        run: npm ci
+      - name: 一時treeへversionとrelease identityを書き込む
+        run: |
+          node --import tsx scripts/materialize_release.ts \
+            --plan=release-plan-for-materialize.json \
+            --target=../release-distribution
+      - name: 一時treeで依存を導入しbuildする
+        working-directory: ../release-distribution
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+      - name: version付与前後で配布digestが不変であることを確認する
+        working-directory: ../release-distribution
+        env:
+          EXPECTED_DIGEST: ${{ needs.validate.outputs.distribution_digest }}
+        run: |
+          node --import tsx scripts/compute_distribution_digest.ts > distribution-digest-after.json
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const after = JSON.parse(fs.readFileSync("distribution-digest-after.json", "utf8"));
+          const expected = process.env.EXPECTED_DIGEST ?? "";
+          if (!after.digest || after.digest !== expected) {
+            console.error(`配布digestがversion付与前後で変化しました: before=${expected} after=${after.digest ?? ""}`);
+            process.exit(1);
+          }
+          NODE
+      - name: release artifactを固定名でpackする
+        id: pack_release_artifact
+        working-directory: ../release-distribution
+        run: |
+          set -euo pipefail
+          TARBALL_PATH="$(npm pack --pack-destination "$RUNNER_TEMP" --silent | tail -n 1)"
+          test -n "$TARBALL_PATH"
+          mv "$RUNNER_TEMP/$TARBALL_PATH" "$RUNNER_TEMP/agent-skill-chain.tgz"
+          printf 'tarball_path=%s\n' "$RUNNER_TEMP/agent-skill-chain.tgz" >> "$GITHUB_OUTPUT"
+      - name: pack直後のartifact digestを記録する
+        id: hash_after_pack
+        env:
+          TARBALL_PATH: ${{ steps.pack_release_artifact.outputs.tarball_path }}
+        run: |
+          set -euo pipefail
+          digest="$(sha256sum "$TARBALL_PATH" | cut -d ' ' -f1)"
+          printf 'sha256=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+      - name: release-identity consumer acceptanceを検証する
+        env:
+          TARBALL_PATH: ${{ steps.pack_release_artifact.outputs.tarball_path }}
+          EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          node --import tsx scripts/check_consumer_acceptance.ts \
+            --tarball="$TARBALL_PATH" --mechanisms=release-identity \
+            --expected-version="$EXPECTED_VERSION"
+      - name: acceptance直後のartifact digestを記録する
+        id: hash_after_acceptance
+        if: always()
+        env:
+          TARBALL_PATH: ${{ steps.pack_release_artifact.outputs.tarball_path }}
+        run: |
+          set -euo pipefail
+          digest="$(sha256sum "$TARBALL_PATH" | cut -d ' ' -f1)"
+          printf 'sha256=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+      - name: Actions artifactとしてrelease tgzをuploadする
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-skill-chain-release-tgz
+          path: ${{ steps.pack_release_artifact.outputs.tarball_path }}
+          retention-days: 14
+          if-no-files-found: error
+      - name: 配布物生成状態を確定する
+        id: distribution_status
+        if: always()
+        env:
+          PACKED_SHA: ${{ steps.hash_after_pack.outputs.sha256 }}
+          ACCEPTED_SHA: ${{ steps.hash_after_acceptance.outputs.sha256 }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const output = process.env.GITHUB_OUTPUT;
+          if (!output) process.exit(1);
+          const packed = process.env.PACKED_SHA ?? "";
+          const accepted = process.env.ACCEPTED_SHA ?? "";
+          const succeeded = /^[a-f0-9]{64}$/.test(packed) && packed === accepted;
+          fs.appendFileSync(output, `state=${succeeded ? "succeeded" : "failed"}\n`);
+          NODE
+      - name: 配布物生成結果を記録する
+        if: always()
+        env:
+          DISTRIBUTION_STATE: ${{ steps.distribution_status.outputs.state }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const summary = process.env.GITHUB_STEP_SUMMARY;
+          if (!summary) process.exit(1);
+          const succeeded = process.env.DISTRIBUTION_STATE === "succeeded";
+          fs.appendFileSync(summary, [
+            "# 配布物生成結果",
+            "",
+            `- 状態: ${succeeded ? "succeeded" : "failed"}`,
+            succeeded
+              ? "- 完了: 配布物生成、release-identity consumer acceptance"
+              : "- 未完了: 配布物生成またはrelease-identity consumer acceptance",
+            "",
+          ].join("\n"));
+          NODE
+      - name: 配布物生成未確認時に成功報告を拒否する
+        if: always()
+        env:
+          DISTRIBUTION_STATE: ${{ steps.distribution_status.outputs.state }}
+        run: |
+          node --input-type=module <<'NODE'
+          if (process.env.DISTRIBUTION_STATE !== "succeeded") process.exit(1);
+          NODE
+
+  tag:
+    name: 検証済みcommitへGit tagを冪等に作成する
+    needs: [validate, build_distribution]
+    # validateのstate出力はconsumer acceptanceより前に書かれる。always()と保存済みstateだけ
+    # では、acceptanceが落ちてvalidateがfailureになってもtagが作られる（Issue #1216 F-01）。
+    # job結果そのものを要求する。build_distributionの成功（配布物生成とrelease-identity
+    # acceptanceの両方）も同様にtagより前へ要求する（owner確定入力2）。
+    if: >-
+      ${{ needs.validate.result == 'success' &&
+          needs.build_distribution.result == 'success' &&
           (needs.validate.outputs.state == 'ready' ||
            needs.validate.outputs.state == 'release') }}
     runs-on: ubuntu-latest
@@ -423,11 +590,12 @@ jobs:
           NODE
 
   github_release:
-    name: GitHub Releaseを冪等に作成する
-    needs: [validate, tag]
+    name: GitHub Releaseをdraft経由で冪等に公開する
+    needs: [validate, tag, build_distribution]
     if: >-
       ${{ needs.validate.result == 'success' &&
           needs.tag.result == 'success' &&
+          needs.build_distribution.result == 'success' &&
           needs.tag.outputs.state == 'succeeded' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -442,6 +610,11 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.tag.outputs.release_sha }}
           persist-credentials: false
+      - name: build_distributionが生成したtgzを取得する
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-skill-chain-release-tgz
+          path: release-artifact
       - name: 公開用release noteを生成する
         env:
           RELEASE_SHA: ${{ needs.tag.outputs.release_sha }}
@@ -459,16 +632,113 @@ jobs:
             printf -- '- digest: %s\n' "${DISTRIBUTION_DIGEST:-算出なし}"
             printf -- '- 判定の正本は対象tagの配布物から再計算したdigestであり、GitHub Release本文ではありません。\n'
           } > release-notes.md
-      - name: GitHub Releaseを必要な場合だけ作成する
+      # 3分岐の冪等化（02 §6）: (1)Releaseなし→draft作成、(2)draftのまま存在→
+      # 添付・照合・publishから再開、(3)publish済みでasset digest一致→既存資産を
+      # 成功として扱う。publish済みでasset digestが不一致の場合だけ後続で停止する。
+      - name: GitHub Releaseの現在状態を確認する
+        id: release_before
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: gh release view "$RELEASE_TAG" --json tagName,name,url,isDraft,assets > release-before.json
+      - name: draft releaseを必要な場合だけ作成する
         id: release_operation
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: |
-          if ! gh release view "$RELEASE_TAG" --json tagName,name,url > release-before.json 2>/dev/null; then
-            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --notes-file release-notes.md
+          if [ ! -s release-before.json ]; then
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "$RELEASE_TAG" --notes-file release-notes.md
           fi
+      - name: publish済みasset digestとの一致で早期成功を判定する
+        id: already_published
+        if: always()
+        env:
+          TARBALL_PATH: release-artifact/agent-skill-chain.tgz
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import crypto from "node:crypto";
+          const output = process.env.GITHUB_OUTPUT;
+          if (!output) process.exit(1);
+          let before;
+          try {
+            before = JSON.parse(fs.readFileSync("release-before.json", "utf8"));
+          } catch {
+            fs.appendFileSync(output, "already_published=false\n");
+            process.exit(0);
+          }
+          if (before.isDraft !== false) {
+            fs.appendFileSync(output, "already_published=false\n");
+            process.exit(0);
+          }
+          const publishedAsset = (before.assets ?? []).find((asset) => asset.name === "agent-skill-chain.tgz");
+          if (!publishedAsset) {
+            fs.appendFileSync(output, "already_published=false\n");
+            process.exit(0);
+          }
+          const tarball = process.env.TARBALL_PATH;
+          const localSha256 = crypto.createHash("sha256").update(fs.readFileSync(tarball)).digest("hex");
+          fs.appendFileSync(output, `already_published=${localSha256 === publishedAsset.digest?.replace("sha256:", "") ? "true" : "false"}\n`);
+          NODE
+      - name: assetを未添付ならdraft releaseへ添付する
+        id: attach_asset
+        if: ${{ steps.already_published.outputs.already_published != 'true' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          TARBALL_PATH: release-artifact/agent-skill-chain.tgz
+        run: gh release upload "$RELEASE_TAG" "$TARBALL_PATH" --clobber
+      - name: 添付後のasset digestを記録する
+        id: hash_publication
+        if: ${{ steps.already_published.outputs.already_published != 'true' }}
+        env:
+          TARBALL_PATH: release-artifact/agent-skill-chain.tgz
+        run: |
+          set -euo pipefail
+          digest="$(sha256sum "$TARBALL_PATH" | cut -d ' ' -f1)"
+          printf 'sha256=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+      # TOCTOU排除の要（FR-05）: pack直後・acceptance直後・publish直前添付後の3者が
+      # 一致した場合だけpublishする。既存evaluateArtifactIdentity（無変更）を
+      # --verify-artifact-identityで呼び出す。
+      - name: pack・acceptance・publish添付の3者artifact digest一致を検証する
+        id: verify_identity
+        if: ${{ steps.already_published.outputs.already_published != 'true' }}
+        run: |
+          node --import tsx scripts/check_consumer_acceptance.ts \
+            --verify-artifact-identity \
+            --packed-sha256="${{ needs.build_distribution.outputs.packed_artifact_sha256 }}" \
+            --accepted-sha256="${{ needs.build_distribution.outputs.accepted_artifact_sha256 }}" \
+            --publication-sha256="${{ steps.hash_publication.outputs.sha256 }}"
+      - name: 3者一致後にdraftをpublishする
+        id: publish_release
+        if: ${{ steps.already_published.outputs.already_published != 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: gh release edit "$RELEASE_TAG" --draft=false
+      - name: Immutable Releasesの設定状態を報告する
+        id: immutable_releases_state
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const summary = process.env.GITHUB_STEP_SUMMARY;
+          if (!summary) process.exit(0);
+          fs.appendFileSync(summary, [
+            "",
+            "## Immutable Releasesの設定状態",
+            "",
+            "- 状態: unknown（repository設定APIから未取得。owner管理のrepository設定を別途確認してください）",
+            "",
+          ].join("\n"));
+          NODE
       - name: GitHub Releaseを読み直す
         id: release_observation
         if: always()
@@ -476,7 +746,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-        run: gh release view "$RELEASE_TAG" --json tagName,name,url > release-after.json
+        run: gh release view "$RELEASE_TAG" --json tagName,name,url,isDraft > release-after.json
       - name: GitHub Releaseの状態を確定する
         id: release_status
         if: always()
@@ -490,7 +760,7 @@ jobs:
           let state = "failed";
           try {
             const observed = JSON.parse(fs.readFileSync("release-after.json", "utf8"));
-            state = observed.tagName === process.env.RELEASE_TAG && observed.name === process.env.RELEASE_TAG ? "succeeded" : "failed";
+            state = observed.tagName === process.env.RELEASE_TAG && observed.name === process.env.RELEASE_TAG && observed.isDraft === false ? "succeeded" : "failed";
           } catch {
             state = "failed";
           }
@@ -513,9 +783,9 @@ jobs:
             "",
             `- tag・Release名: ${process.env.RELEASE_TAG ?? "不明"}`,
             `- 状態: ${succeeded ? "succeeded" : "failed"}`,
-            succeeded ? "- 完了: validate、必要なversion bump、Git tag、GitHub Release" : "- 完了: validate、必要なversion bump、Git tag",
-            succeeded ? "- npm公開: 経路そのものが存在しません" : "- 未完了: GitHub Release",
-            succeeded ? "- 復旧: 同名Releaseは再作成せず成功として扱う" : "- 復旧: Releaseの有無を確認し、存在しなければ新しいrunで再実行する",
+            succeeded ? "- 完了: validate、必要なversion bump、Git tag、配布物生成、GitHub Release publish" : "- 完了: validate、必要なversion bump、Git tag",
+            succeeded ? "- npm公開: 経路そのものが存在しません" : "- 未完了: GitHub Release（draftのまま残る場合があります）",
+            succeeded ? "- 復旧: 同名Releaseは再作成せず成功として扱う" : "- 復旧: draft releaseのasset digest一致を確認し、新しいrunで添付・照合・publishを再試行する",
             "",
           ].join("\n"));
           NODE
