@@ -5,7 +5,7 @@ description: 承認対象の設計を、risk比例のVerification Setから最�
 
 # ステップ6: 実装計画
 
-入力は設計、Requirement ID、Acceptance Criteria ID、変更種別、risk、影響境界、Impact Analysisである。Impact Analysisはsecurity関連、data loss可能性、不可逆操作、外部契約変更、並行振る舞変更を明示する。これらの構造化JSONを`workflow verification-set --input=<JSON>`へ渡し、決定論的に選択されたVerification Setと入力の対応を記録する。
+入力は設計、Requirement ID、Acceptance Criteria ID、変更種別、risk、影響境界、Impact Analysisである。Impact Analysisはsecurity関連、data loss可能性、不可逆操作、外部契約変更、並行振る舞変更を明示する。`workflow verification-set --init`で編集用JSONをstdoutへ取得できる。risk・AC・影響を実案件に合わせて判断して編集する。雛形は成功証拠やreadinessではなく、fileやjournalを変更しない。`--init`と`--input`は併用しない。これらの構造化JSONを`workflow verification-set --input=<JSON>`へ渡し、決定論的に選択されたVerification Setと入力の対応を記録する。
 
 成果物はBDD例と受け入れ条件、上記入力に応じたVerification Set、最小実装、仕様更新、独立review、delivery policy終端の順にした`03_実装計画.md`。受け入れ条件をproject policyが選択した検証方法と結果へ対応させ、project所有のコマンドだけを使う。TDDは有効な変更で選べる技法とし、全taskへ強制しない。
 

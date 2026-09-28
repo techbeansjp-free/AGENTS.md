@@ -30,6 +30,119 @@ const LOW_RISK_SHORT_FORM_FILE = "verification-input.json";
 const LOW_RISK_SHORT_FORM = /^対象外:\s*(.*?)\s*\/\s*検証証拠:\s*(.*)$/u;
 const LOW_RISK_SHORT_FORM_LIKE = /^\s*(?:(?:[-*+>])\s*)*対象外(?:$|(?=\s|[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}A-Za-z0-9_]))/u;
 const MAX_VERIFICATION_INPUT_BYTES = 1024 * 1024;
+const PLANNING_REFERENCES = [
+    {
+        file: "01_要件定義.md",
+        heading: "1. システム・変更概要",
+        marker: "概要は00_要求定義.md §1・§2を参照",
+        sources: ["1. 目的と背景", "2. 対象範囲"],
+    },
+    {
+        file: "02_設計.md",
+        heading: "1.2 設計対象外",
+        marker: "設計対象外は00_要求定義.md §2.2を参照",
+        sources: ["2.2 対象外（必須）"],
+    },
+    {
+        file: "02_設計.md",
+        heading: "2.1 境界づけられたコンテキスト",
+        marker: "コンテキストは00_要求定義.md §4.1を参照",
+        sources: ["4.1 境界づけられたコンテキスト"],
+    },
+];
+/** 既知の単一backtick完全一致字句だけを説明用とし、Markdown領域は除外しない。 */
+function withoutPlanningLiterals(text) {
+    for (const { marker } of PLANNING_REFERENCES)
+        text = text.replace(new RegExp("(?<!`)`" + escapeRegExp(marker) + "`(?!`)", "gu"), "");
+    return text;
+}
+/** 説明用字句以外はcode・commentを含む全文で数え、単独本文と照合する。 */
+function planningMarkerCount(text) {
+    return [
+        ...withoutPlanningLiterals(text).matchAll(/(?:概要|設計対象外|コンテキスト)は[^\n]*(?:\.md|§|参照)/gu),
+    ].length;
+}
+/** 見出し・空欄ラベル・table headerだけでは参照元の内容にならない。 */
+function hasPlanningContent(body, allowReferences = false) {
+    const lines = withoutPlaceholderCodeAndComments(body).split("\n");
+    const concrete = (value) => value.trim() !== "" &&
+        !/^[-:：\s]+$/u.test(value) &&
+        (allowReferences || !/参照|と同じ|\.md(?:\s|[#)]|$)/u.test(value));
+    return lines.some((line, index) => {
+        const value = line.trim();
+        if (/^\|/u.test(value)) {
+            if (/^\|[\s:|-]+\|$/u.test(value))
+                return false;
+            if (/^\|[\s:|-]+\|$/u.test(lines[index + 1]?.trim() ?? ""))
+                return false;
+            return value.split("|").some(concrete);
+        }
+        const content = value.replace(/^[-*+>]\s*/u, "").trim();
+        return (concrete(content) && !/^#/u.test(content) && !/[:：]$/u.test(content));
+    });
+}
+function quotedOnlyPlanningSections(file, text) {
+    const headings = new Set(PLANNING_REFERENCES.flatMap((reference) => file === "00_要求定義.md"
+        ? [...reference.sources]
+        : file === reference.file
+            ? [reference.heading]
+            : []));
+    return [...headings].filter((heading) => markdownSectionBodies(text, heading, true).some((body) => body !== withoutPlanningLiterals(body) &&
+        !hasPlanningContent(withoutPlanningLiterals(body), file !== "00_要求定義.md")));
+}
+function validatePlanningReferences(issuePath, files, full) {
+    const errors = [];
+    const source = fs.readFileSync(path.join(issuePath, "00_要求定義.md"), "utf8");
+    for (const file of files) {
+        const target = path.join(issuePath, file);
+        if (!fs.existsSync(target))
+            continue;
+        const text = fs.readFileSync(target, "utf8");
+        if (full)
+            for (const heading of quotedOnlyPlanningSections(file, text))
+                errors.push(`${file}: §${heading}は説明用リテラルだけでは成立しません`);
+        const count = planningMarkerCount(text);
+        if (count === 0)
+            continue;
+        let accepted = 0;
+        for (const reference of PLANNING_REFERENCES) {
+            if (!full || file !== reference.file)
+                continue;
+            const bodies = markdownSectionBodies(withoutPlaceholderCodeAndComments(text), reference.heading);
+            // raw headingも一意に要求し、不可視領域の同形見出しを許可根拠にしない。
+            const rawHeadings = text
+                .split("\n")
+                .filter((line) => /^#{2,6}\s+(.+?)\s*$/u.exec(line)?.[1] === reference.heading);
+            if (bodies.length !== 1 || rawHeadings.length !== 1)
+                continue;
+            if (bodies[0].trim() !== reference.marker)
+                continue;
+            // 同じtarget節の引用を消して単独markerを作らない。
+            if (markdownSectionBodies(text, reference.heading, true).some((body) => body !== withoutPlanningLiterals(body)))
+                continue;
+            // inline code等を取り除いた結果だけがmarkerになる形式も拒否する。
+            if (!text.split("\n").some((line) => line === reference.marker))
+                continue;
+            accepted += 1;
+            for (const heading of reference.sources) {
+                const sourceBodies = markdownSectionBodies(withoutPlaceholderCodeAndComments(source), heading);
+                const sourceHeadings = source
+                    .split("\n")
+                    .filter((line) => /^#{2,6}\s+(.+?)\s*$/u.exec(line)?.[1] === heading);
+                if (sourceBodies.length !== 1 ||
+                    sourceHeadings.length !== 1 ||
+                    !hasPlanningContent(sourceBodies[0] ?? "") ||
+                    unresolvedPlaceholders(sourceBodies[0] ?? "").length > 0)
+                    errors.push(`${file}: 上流参照元00_要求定義.md §${heading}は一意で具体的な本文が必要です`);
+            }
+            if (fs.lstatSync(path.join(issuePath, "00_要求定義.md")).isSymbolicLink())
+                errors.push(`${file}: 上流参照元は同stagingの通常fileが必要です`);
+        }
+        if (accepted !== count)
+            errors.push(`${file}: 上流参照markerは許可した節の唯一の本文として固定文で指定してください`);
+    }
+    return errors;
+}
 const LOW_RISK_SHORT_FORM_TARGETS = Object.freeze([
     Object.freeze({
         file: "02_設計.md",
@@ -40,8 +153,8 @@ const LOW_RISK_SHORT_FORM_TARGETS = Object.freeze([
     Object.freeze({ file: "03_実装計画.md", heading: "5.2 安全性の必須観点" }),
 ]);
 /** exact Markdown heading配下を、同じか上位levelの次headingまでに閉じる。 */
-function markdownSectionBodies(text, heading) {
-    const visible = withoutMarkdownCode(text);
+function markdownSectionBodies(text, heading, preserveCode = false) {
+    const visible = preserveCode ? text : withoutMarkdownCode(text);
     const lines = visible.split("\n");
     const bodies = [];
     for (let start = 0; start < lines.length; start += 1) {
@@ -1227,6 +1340,7 @@ export function validateIssue(issuePath, options = {}) {
             .filter((name) => fs.existsSync(path.join(issuePath, name)))
             .map((name) => fs.readFileSync(path.join(issuePath, name), "utf8")),
     ].join("\n");
+    errors.push(...validatePlanningReferences(issuePath, ["00_要求定義.md", ...validatedFullFiles], declared === "full"));
     const documentPlaceholders = unresolvedPlaceholders(allText, gherkinDialect);
     if (documentPlaceholders.length > 0)
         errors.push(unresolvedPlaceholderError("", documentPlaceholders));

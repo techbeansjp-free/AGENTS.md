@@ -1,4 +1,4 @@
-import { IMPLEMENTATION_DISCOVERY_INPUT_FIELDS, VERIFICATION_SET_INPUT_FIELDS, } from "./domain/agile-verification.js";
+import { IMPLEMENTATION_DISCOVERY_INPUT_FIELDS, VERIFICATION_SET_INPUT_FIELDS, VERIFICATION_SET_INPUT_EXAMPLE, } from "./domain/agile-verification.js";
 import { REVIEW_ROUND_INPUT_FIELDS } from "./domain/review-convergence.js";
 function flag(name, value, description) {
     return { name, value, description };
@@ -347,30 +347,20 @@ export const COMMAND_USAGE = Object.freeze([
         command: "workflow",
         subcommand: "verification-set",
         summary: "Requirement・受入条件・影響分析からrisk比例のVerification Setを選ぶ",
-        requiredFlags: [
-            flag("input", "path", "repository root内のVerification Set入力JSON file"),
+        requiredFlags: [],
+        conditionalFlags: [
+            conditional("input", "path", "repository root内のVerification Set入力JSON file", "--initを指定しないとき", (provided) => provided.init === undefined),
         ],
-        conditionalFlags: [],
-        optionalFlags: [ROOT_FLAG],
+        optionalFlags: [
+            ROOT_FLAG,
+            optional("init", "", "編集用JSONをstdoutへ出力する。--inputと併用不可。risk・AC・影響は実案件に合わせて判断し編集する。成功証拠やreadinessは生成しない", "入力JSONから検証方法を選定"),
+        ],
         example: "npx agent-skill-chain workflow verification-set --input=.asc/verification-input.json --root=.",
         acceptsSpaceSeparatedFlags: true,
         inputContract: {
             description: "--inputのJSON。fieldsの全項目が必須で、未知fieldは拒否する。valuesを持つ項目はその値だけを受理する",
             fields: VERIFICATION_SET_INPUT_FIELDS,
-            example: {
-                changeType: "bug-fix",
-                risk: "medium",
-                affectedBoundaries: ["cli"],
-                requirementIds: ["REQ-WF-009"],
-                acceptanceCriteriaIds: ["AC-WF-009"],
-                impactAnalysis: {
-                    securityRelevant: false,
-                    dataLossPossible: false,
-                    irreversibleOperation: false,
-                    externalContractChanged: true,
-                    concurrentBehaviorChanged: false,
-                },
-            },
+            example: VERIFICATION_SET_INPUT_EXAMPLE,
         },
     },
     {
@@ -541,10 +531,29 @@ export const COMMAND_USAGE = Object.freeze([
         requiredFlags: [flag("path", "path", "検証するIssue本文")],
         conditionalFlags: [],
         optionalFlags: [
-            optional("stage", "text", "検証するstage", "既定stage"),
+            optional("stage", "requirements|design", "検証するstage。fullのrequiredArtifactsはrequirementsで00・01、designで00〜03。quick/pocは00の集約内容を検証する", "design"),
             optional("changed", "path,path", "変更path", "観測なし"),
         ],
         example: "npx agent-skill-chain issue validate --path=./ISSUE.md",
+        inputContract: {
+            description: "--pathは同stagingのdirectory。stage省略はdesign。全stageでprojectのGherkin方言に従うSCN IDが必要。例はenの最小実行可能SCNであり、実案件の受け入れ条件へ書き換える",
+            example: {
+                requiredArtifacts: {
+                    full: {
+                        requirements: ["00_要求定義.md", "01_要件定義.md"],
+                        design: [
+                            "00_要求定義.md",
+                            "01_要件定義.md",
+                            "02_設計.md",
+                            "03_実装計画.md",
+                        ],
+                    },
+                    quick: ["00_要求定義.md"],
+                    poc: ["00_要求定義.md", "00_モード判定.json"],
+                },
+                scenario: "Scenario: SCN-EXAMPLE-001 不正入力を拒否する\n  Given 必須入力が欠けている\n  When 操作を実行する\n  Then 拒否され状態は変わらない",
+            },
+        },
         note: "1 Issueの境界は所要時間ではなく、独立に完成・review・merge・rollbackできるかという成果物の結合度で決めます。独立した切り戻し、異なるreview担当・観点、先行merge、失敗影響の分離が必要なら分割候補です。45分は再確認の補助指標であり、長いだけでは分割しません。00〜03を個別管理するfullは集約00のquick/pocより固定費が大きく、分割はmodeごとのStep 0〜11、PR review、既定branch追随時のStep 9再記録とreview roundの固定費を分割数だけ要するため、一体として扱うべきなら分割しない判断も正当です。fullの00 §2.1直下に置く[成果物:adr|contract|feature|documentation|migration] markerが2件以上ならwarningsへ分割候補を返します。quick/poc集約形式はmarker warningの判定対象外です。warningはvalid、errors、mode、blockedOperations、終了値を変更しません",
     },
     {

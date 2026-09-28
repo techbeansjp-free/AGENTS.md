@@ -73,6 +73,21 @@ export const VERIFICATION_SET_INPUT_FIELDS = Object.freeze([
     field("impactAnalysis.externalContractChanged", "boolean"),
     field("impactAnalysis.concurrentBehaviorChanged", "boolean"),
 ]);
+/** 利用者がrisk・AC・影響を編集する例。検証結果やreadinessではない。 */
+export const VERIFICATION_SET_INPUT_EXAMPLE = {
+    changeType: "bug-fix",
+    risk: "medium",
+    affectedBoundaries: ["cli"],
+    requirementIds: ["REQ-WF-009"],
+    acceptanceCriteriaIds: ["AC-WF-009"],
+    impactAnalysis: {
+        securityRelevant: false,
+        dataLossPossible: false,
+        irreversibleOperation: false,
+        externalContractChanged: true,
+        concurrentBehaviorChanged: false,
+    },
+};
 export function parseVerificationSelectionInput(value) {
     const input = exactInputObject(value, "Verification Set入力", childFields(VERIFICATION_SET_INPUT_FIELDS, ""));
     if (!CHANGE_TYPES.some((changeType) => changeType === input.changeType))
