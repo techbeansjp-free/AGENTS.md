@@ -27,6 +27,81 @@ const CONTEXT = "コンテキストは00_要求定義.md §4.1を参照";
 const DC = "開発考慮事項の適用判定は00_要求定義.md §6.1と同じ";
 const MARKERS = { 概要: OVERVIEW, 対象外: EXCLUSION, コンテキスト: CONTEXT };
 
+function replacePlanningBody(
+  text: string,
+  heading: string,
+  body: string,
+): string {
+  const lines = text.split("\n");
+  const start = lines.findIndex(
+    (line) => /^#{2,6} /u.test(line) && line.replace(/^#+ /u, "") === heading,
+  );
+  assert.ok(start >= 0, heading);
+  const level = lines[start]!.match(/^#+/u)![0].length;
+  let end = start + 1;
+  while (
+    end < lines.length &&
+    !new RegExp(`^#{2,${level}} `, "u").test(lines[end]!)
+  )
+    end += 1;
+  lines.splice(start + 1, end - start - 1, "", body, "");
+  return lines.join("\n");
+}
+
+Given("Issue1523の封印済みPlanningの固定snapshotがある", function () {
+  this.staging = this.temp("asc-planning-sealed-");
+  this.sourceSymlink = false;
+  this.documents = JSON.parse(
+    fs.readFileSync("test/fixtures/planning-sealed-1523.json", "utf8"),
+  ) as Record<string, string>;
+});
+
+When("Planningの3対象節だけを正規の固定参照に置き換える", function () {
+  for (const [file, heading, marker] of [
+    [REQUIREMENTS, "1. システム・変更概要", OVERVIEW],
+    [DESIGN, "1.2 設計対象外", EXCLUSION],
+    [DESIGN, "2.1 境界づけられたコンテキスト", CONTEXT],
+  ] as const)
+    this.documents[file] = replacePlanningBody(
+      this.documents[file]!,
+      heading,
+      marker,
+    );
+});
+
+When(
+  "Planningの{string}本文を{string}にする",
+  function (section: string, body: string) {
+    const targets: Record<string, readonly [string, string]> = {
+      概要: [REQUIREMENTS, "1. システム・変更概要"],
+      コンテキスト: [DESIGN, "2.1 境界づけられたコンテキスト"],
+      source: [REQUEST, "4.1 境界づけられたコンテキスト"],
+    };
+    const [file, heading] = targets[section]!;
+    this.documents[file] = replacePlanningBody(
+      this.documents[file]!,
+      heading,
+      body.replaceAll("\\n", "\n").replaceAll("\\t", "\t"),
+    );
+  },
+);
+
+When("Planningのsource表の値を{string}にする", function (value: string) {
+  this.documents[REQUEST] = replacePlanningBody(
+    this.documents[REQUEST]!,
+    "4.1 境界づけられたコンテキスト",
+    `| 項目 | 内容 |\n|---|---|\n| コンテキスト | ${value.replaceAll("\\t", "\t")} |`,
+  );
+});
+
+When("Planningの概要markerに{string}を付け足す", function (extra: string) {
+  this.documents[REQUIREMENTS] = replacePlanningBody(
+    this.documents[REQUIREMENTS]!,
+    "1. システム・変更概要",
+    OVERVIEW + extra.replaceAll("\\n", "\n"),
+  );
+});
+
 Given("同stagingの00に具体的な内容を持つ3つのPlanning参照がある", function () {
   this.staging = this.temp("asc-planning-reference-");
   this.sourceSymlink = false;

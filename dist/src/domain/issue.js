@@ -56,40 +56,71 @@ function withoutPlanningLiterals(text) {
         text = text.replace(new RegExp("(?<!`)`" + escapeRegExp(marker) + "`(?!`)", "gu"), "");
     return text;
 }
-/** 説明用字句以外はcode・commentを含む全文で数え、単独本文と照合する。 */
+// 文・cell・引用の境界を越えない参照先token。空白は各token間だけ許す。
+// pathを解決せず、未知path・節も拒否候補として拾うための有限な字句契約。
+const PLANNING_REFERENCE_TOKEN = "[^\\s。！？、,;；`|<>]+";
+const PLANNING_REFERENCE_DESTINATION = `(?:${PLANNING_REFERENCE_TOKEN}\\.md(?:\\s*§${PLANNING_REFERENCE_TOKEN})?|§${PLANNING_REFERENCE_TOKEN})`;
+const PLANNING_REFERENCE_DIRECTIVE = `${PLANNING_REFERENCE_TOKEN}(?:を\\s*参照|と\\s*同じ)(?=$|[\\s。！？;；\x60|<>])`;
+/** 対象名の直後が参照先である候補だけを、code・commentを含む全文で数える。 */
 function planningMarkerCount(text) {
-    // 「を」の直後がfile・節への参照である字句も候補にする。詳細本文中の補足参照は含めない。
     return [
-        ...withoutPlanningLiterals(text).matchAll(/(?:概要|設計対象外|コンテキスト)(?:は[^\n]*(?:\.md|§|参照)|を[ \t]*[^\s。]+\.md[ \t]+§[^\n]*を参照)/gu),
+        ...withoutPlanningLiterals(text).matchAll(new RegExp(`(?:概要|設計対象外|コンテキスト)\\s*[はを]\\s*(?:${PLANNING_REFERENCE_DESTINATION}|${PLANNING_REFERENCE_DIRECTIVE})`, "gu")),
     ].length;
 }
+/** 単独のfile/節参照と「〜を参照/と同じ」の句。普通の文中の「参照」は消さない。 */
+function isPlanningReferenceOnly(value) {
+    const reference = `(?:(?:${PLANNING_REFERENCE_TOKEN}[はを]\\s*)?${PLANNING_REFERENCE_DESTINATION}(?:\\s*(?:を\\s*参照|と\\s*同じ))?|${PLANNING_REFERENCE_DIRECTIVE})`;
+    return new RegExp(`^${reference}(?:\\s+${reference})*$`, "u").test(value.trim());
+}
 /** 見出し・空欄ラベル・table headerだけでは参照元の内容にならない。 */
-function hasPlanningContent(body, allowReferences = false) {
+function hasPlanningContent(body) {
     const lines = withoutPlaceholderCodeAndComments(body).split("\n");
-    const concrete = (value) => value.trim() !== "" &&
-        !/^[-:：\s]+$/u.test(value) &&
-        (allowReferences || !/参照|と同じ|\.md(?:\s|[#)]|$)/u.test(value));
-    return lines.some((line, index) => {
+    const concrete = (value) => value
+        .split(/[。！？;；]/u)
+        .some((clause) => clause.trim() !== "" &&
+        !/^[-:：\s]+$/u.test(clause) &&
+        !isPlanningReferenceOnly(clause));
+    const prose = [];
+    const values = [];
+    for (const [index, line] of lines.entries()) {
         const value = line.trim();
         if (/^\|/u.test(value)) {
             if (/^\|[\s:|-]+\|$/u.test(value))
-                return false;
+                continue;
             if (/^\|[\s:|-]+\|$/u.test(lines[index + 1]?.trim() ?? ""))
-                return false;
-            return value.split("|").some(concrete);
+                continue;
+            // 先頭cellはrowの項目名。内容の成立はそれ以降の値だけで判定する。
+            values.push(...value
+                .replace(/^\||\|$/gu, "")
+                .split("|")
+                .slice(1));
+            continue;
         }
         const content = value.replace(/^[-*+>]\s*/u, "").trim();
-        return (concrete(content) && !/^#/u.test(content) && !/[:：]$/u.test(content));
-    });
+        if (!/^#{1,6}(?:\s|$)/u.test(content) && !/[:：]$/u.test(content))
+            prose.push(content);
+    }
+    // 改行で分断されたfile名と節指定も1つの参照句として評価する。
+    return [...values, prose.join("\n")].some(concrete);
 }
-function quotedOnlyPlanningSections(file, text) {
+function contentlessPlanningSections(file, text) {
     const headings = new Set(PLANNING_REFERENCES.flatMap((reference) => file === "00_要求定義.md"
         ? [...reference.sources]
         : file === reference.file
             ? [reference.heading]
             : []));
-    return [...headings].filter((heading) => markdownSectionBodies(text, heading, true).some((body) => body !== withoutPlanningLiterals(body) &&
-        !hasPlanningContent(withoutPlanningLiterals(body), file !== "00_要求定義.md")));
+    return [...headings].filter((heading) => markdownSectionBodies(text, heading, true).some((body) => {
+        const content = withoutPlanningLiterals(body);
+        // 裸の正規固定文は後段で位置・sourceを検証する。
+        if (PLANNING_REFERENCES.some((reference) => reference.file === file &&
+            reference.heading === heading &&
+            body.trim() === reference.marker))
+            return false;
+        const referenceOnlyTarget = file !== "00_要求定義.md" &&
+            new RegExp(`${PLANNING_REFERENCE_DESTINATION}|${PLANNING_REFERENCE_DIRECTIVE}`, "u").test(body);
+        return ((body !== content || referenceOnlyTarget) &&
+            !hasPlanningContent(content));
+    }));
 }
 function validatePlanningReferences(issuePath, files, full) {
     const errors = [];
@@ -100,8 +131,8 @@ function validatePlanningReferences(issuePath, files, full) {
             continue;
         const text = fs.readFileSync(target, "utf8");
         if (full)
-            for (const heading of quotedOnlyPlanningSections(file, text))
-                errors.push(`${file}: §${heading}は説明用リテラルだけでは成立しません`);
+            for (const heading of contentlessPlanningSections(file, text))
+                errors.push(`${file}: §${heading}は参照や説明用リテラルだけでは成立しません`);
         const count = planningMarkerCount(text);
         if (count === 0)
             continue;
@@ -110,16 +141,19 @@ function validatePlanningReferences(issuePath, files, full) {
             if (!full || file !== reference.file)
                 continue;
             const bodies = markdownSectionBodies(withoutPlaceholderCodeAndComments(text), reference.heading);
+            const rawBodies = markdownSectionBodies(text, reference.heading, true);
             // raw headingも一意に要求し、不可視領域の同形見出しを許可根拠にしない。
             const rawHeadings = text
                 .split("\n")
                 .filter((line) => /^#{2,6}\s+(.+?)\s*$/u.exec(line)?.[1] === reference.heading);
-            if (bodies.length !== 1 || rawHeadings.length !== 1)
+            if (bodies.length !== 1 ||
+                rawHeadings.length !== 1 ||
+                rawBodies.length !== 1)
                 continue;
             if (bodies[0].trim() !== reference.marker)
                 continue;
-            // 同じtarget節の引用を消して単独markerを作らない。
-            if (markdownSectionBodies(text, reference.heading, true).some((body) => body !== withoutPlanningLiterals(body)))
+            // 実際の本文を照合し、code/comment/inline codeを消して単独markerを作らない。
+            if (rawBodies[0].trim() !== reference.marker)
                 continue;
             // inline code等を取り除いた結果だけがmarkerになる形式も拒否する。
             if (!text.split("\n").some((line) => line === reference.marker))

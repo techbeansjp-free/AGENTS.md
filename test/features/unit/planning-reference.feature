@@ -1,6 +1,108 @@
 @unit
 Feature: Planningの固定上流参照
 
+  Scenario Outline: SCN-PRAT-015 参照候補の空白改行と引用で不正参照を通さない: <本文>
+    Given 同stagingの00に具体的な内容を持つ3つのPlanning参照がある
+    When Planningの"概要"本文を"<本文>"にする
+    And Planning参照を検証する
+    Then Planning参照は"拒否"になる
+
+    Examples:
+      | 本文 |
+      | 概要を03_実装計画.md §9を参照 |
+      | 概要を03_実装計画.md§9を参照 |
+      | 概要を03_実装計画.md\n§9を参照 |
+      | 概要を03_実装計画.md\t§9を参照 |
+      | 概要\nを\n03_実装計画.md\n§9を参照 |
+      | `概要を03_実装計画.md§9を参照` |
+      | `概要を../未知.md\n§9を参照` |
+      | 概要は00_要求定義.md§99を参照 |
+      | 概要は00_要求定義.md\n§1・§2を参照 |
+      | 概要を03_実装計画.mdを参照 |
+      | 概要は§99を参照 |
+      | 概要を03_実装計画.md\n§9を\n参照 |
+      | 概要は未知資料を参照 |
+      | 03_実装計画.md§9を参照 |
+      | `03_実装計画.md§9を参照` |
+
+  Scenario Outline: SCN-PRAT-016 source表の項目名を判断内容に数えない: <値>
+    Given 同stagingの00に具体的な内容を持つ3つのPlanning参照がある
+    When Planningのsource表の値を"<値>"にする
+    And Planning参照を検証する
+    Then Planning参照は"<判定>"になる
+
+    Examples:
+      | 値 | 判定 |
+      | | 拒否 |
+      | - | 拒否 |
+      | 01_要件定義.mdを参照 | 拒否 |
+      | 01_要件定義.md§1を参照 | 拒否 |
+      | 01_要件定義.md\t§1を参照 | 拒否 |
+      | `コンテキストは00_要求定義.md §4.1を参照` | 拒否 |
+      | `Planning` | 拒否 |
+      | Planning | 合格 |
+      | Planning参照の構造検査を対象とする。 | 合格 |
+      | #1514 shardingは対象外。 | 合格 |
+      | Planningが所有する。詳細は01_要件定義.mdを参照。 | 合格 |
+
+  Scenario Outline: SCN-PRAT-017 生のtarget本文から余分な内容を消して参照を成立させない: <追記>
+    Given 同stagingの00に具体的な内容を持つ3つのPlanning参照がある
+    When Planningの概要markerに"<追記>"を付け足す
+    And Planning参照を検証する
+    Then Planning参照は"拒否"になる
+
+    Examples:
+      | 追記 |
+      | \n\n```text\n同期権限を変更する。\n``` |
+      | \n`同期権限を変更する。` |
+      | \n<!-- 同期権限を変更する。 --> |
+      | <!-- 同期権限を変更する。 --> |
+      | `同期権限を変更する。` |
+      | \n> 同期権限を変更する。 |
+      | \n### 1.1 補足\n同期権限を変更する。 |
+
+  Scenario Outline: SCN-PRAT-018 詳細本文の補足参照を改行の有無でmarkerにしない: <本文>
+    Given 同stagingの00に具体的な内容を持つ3つのPlanning参照がある
+    When Planningの"コンテキスト"本文を"<本文>"にする
+    And Planning参照を検証する
+    Then Planning参照は"合格"になる
+
+    Examples:
+      | 本文 |
+      | コンテキストはPlanningでありownerはprojectである。詳細は00_要求定義.md §4.1を参照。 |
+      | コンテキストはPlanningでありownerはprojectである。\n詳細は00_要求定義.md §4.1を参照。 |
+      | コンテキストはPlanningでありownerはprojectである。詳細は00_要求定義.md\n§4.1を参照。 |
+      | コンテキストはPlanning参照の構造を検証する。 |
+
+  Scenario Outline: SCN-PRAT-019 sourceの具体文と参照だけの文を区別する: <本文>
+    Given 同stagingの00に具体的な内容を持つ3つのPlanning参照がある
+    When Planningの"source"本文を"<本文>"にする
+    And Planning参照を検証する
+    Then Planning参照は"<判定>"になる
+
+    Examples:
+      | 本文 | 判定 |
+      | Planning参照の構造検査を対象とする。 | 合格 |
+      | Planningの構造検査を対象とする。 | 合格 |
+      | #1514 shardingは対象外。 | 合格 |
+      | Issue #1514 shardingは対象外。 | 合格 |
+      | Planningが所有する。詳細は01_要件定義.mdを参照。 | 合格 |
+      | Planningが所有する。\n詳細は01_要件定義.mdを参照。 | 合格 |
+      | 01_要件定義.md\n§1を参照 | 拒否 |
+      | 01_要件定義.md§1を参照 | 拒否 |
+      | 01_要件定義.mdを参照。 | 拒否 |
+      | 詳細は01_要件定義.md §1を参照。 | 拒否 |
+      | 01_要件定義.md\n§1を\n参照 | 拒否 |
+      | 01_要件定義.md§1を参照\n03_実装計画.md§9を参照 | 拒否 |
+      | 01_要件定義.md§1を参照\nPlanningを対象とする。 | 合格 |
+      | ### 内容 | 拒否 |
+
+  Scenario: SCN-PRAT-020 実際の封印済みPlanningの3対象節だけを短縮しても互換性を保つ
+    Given Issue1523の封印済みPlanningの固定snapshotがある
+    When Planningの3対象節だけを正規の固定参照に置き換える
+    And Planning参照を検証する
+    Then Planning参照は"合格"になる
+
   Scenario: SCN-PRAT-001 同stagingの具体的な00へ3つの固定参照を使う
     Given 同stagingの00に具体的な内容を持つ3つのPlanning参照がある
     When Planning参照を検証する
