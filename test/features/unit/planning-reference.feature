@@ -6,11 +6,16 @@ Feature: Planningの固定上流参照
     When Planning参照を検証する
     Then Planning参照は"合格"になる
 
-  Scenario: SCN-PRAT-008 旧詳細形式とDC参照を維持する
+  Scenario Outline: SCN-PRAT-008 旧詳細形式とDC参照を維持する: <形式>
     Given 同stagingの00に具体的な内容を持つ3つのPlanning参照がある
-    When Planning参照に"詳細形式"の変更を加える
+    When Planning参照に"<形式>"の変更を加える
     And Planning参照を検証する
     Then Planning参照は"合格"になる
+
+    Examples:
+      | 形式               |
+      | 詳細形式           |
+      | 詳細形式の補足参照 |
 
   Scenario Outline: SCN-PRAT-009 上流参照の不正と既存必須検証の欠落を拒否する: <変更>
     Given 同stagingの00に具体的な内容を持つ3つのPlanning参照がある
@@ -33,6 +38,12 @@ Feature: Planningの固定上流参照
       | target欠落          |
       | 自己参照            |
       | 後方参照            |
+      | を使う後方参照      |
+      | を使う自己参照      |
+      | を使う既知参照先    |
+      | を使う対象外参照    |
+      | を使うコンテキスト参照 |
+      | を使う連鎖          |
       | 未知path            |
       | 未知節              |
       | Unicode類似         |
@@ -122,3 +133,8 @@ Feature: Planningの固定上流参照
       | fence内の裸marker     |
       | comment内の裸marker   |
       | blockquote内の裸marker |
+      | を使う後方参照の引用 |
+      | を使う未知pathの引用 |
+      | を使う後方参照のfence |
+      | を使う後方参照のcomment |
+      | を使う後方参照のblockquote |

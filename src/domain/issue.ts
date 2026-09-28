@@ -118,9 +118,10 @@ function withoutPlanningLiterals(text: string): string {
 
 /** 説明用字句以外はcode・commentを含む全文で数え、単独本文と照合する。 */
 function planningMarkerCount(text: string): number {
+  // 「を」の直後がfile・節への参照である字句も候補にする。詳細本文中の補足参照は含めない。
   return [
     ...withoutPlanningLiterals(text).matchAll(
-      /(?:概要|設計対象外|コンテキスト)は[^\n]*(?:\.md|§|参照)/gu,
+      /(?:概要|設計対象外|コンテキスト)(?:は[^\n]*(?:\.md|§|参照)|を[ \t]*[^\s。]+\.md[ \t]+§[^\n]*を参照)/gu,
     ),
   ].length;
 }

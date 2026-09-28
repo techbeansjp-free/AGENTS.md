@@ -101,6 +101,23 @@ When("Planning参照に{string}の変更を加える", function (change: string)
         "コンテキストはPlanningでありownerはprojectである。",
       );
       break;
+    case "詳細形式の補足参照":
+      replace(
+        REQUIREMENTS,
+        OVERVIEW,
+        "概要を利用者に提示し、変更の目的と価値を伝える。実装手順は03_実装計画.md §9を参照。",
+      );
+      replace(
+        DESIGN,
+        EXCLUSION,
+        "設計対象外を同期権限の変更とし、既存の権限を保持する。\n共有の判断は00_要求定義.md §2.2を参照。",
+      );
+      replace(
+        DESIGN,
+        CONTEXT,
+        "コンテキストをPlanningに限定し、projectが判断を所有する。\n境界の詳細は00_要求定義.md §4.1を参照。",
+      );
+      break;
     case "source symlink":
       this.sourceSymlink = true;
       break;
@@ -148,6 +165,28 @@ When("Planning参照に{string}の変更を加える", function (change: string)
       break;
     case "後方参照":
       replace(REQUIREMENTS, "00_要求定義.md §1・§2", "03_実装計画.md §1");
+      break;
+    case "を使う後方参照":
+      replace(REQUIREMENTS, OVERVIEW, "概要を03_実装計画.md §9を参照");
+      break;
+    case "を使う自己参照":
+      replace(REQUIREMENTS, OVERVIEW, "概要を01_要件定義.md §1を参照");
+      break;
+    case "を使う既知参照先":
+      replace(REQUIREMENTS, OVERVIEW, OVERVIEW.replace("概要は", "概要を"));
+      break;
+    case "を使う対象外参照":
+      replace(DESIGN, EXCLUSION, "設計対象外を03_実装計画.md §9を参照");
+      break;
+    case "を使うコンテキスト参照":
+      replace(DESIGN, CONTEXT, "コンテキストを03_実装計画.md §9を参照");
+      break;
+    case "を使う連鎖":
+      replace(
+        REQUEST,
+        "- 外部同期の権限変更は行わない。",
+        "設計対象外を03_実装計画.md §9を参照",
+      );
       break;
     case "未知path":
       replace(
@@ -272,6 +311,11 @@ When("Planningの説明に{string}の不正markerを加える", function (kind: 
     fence内の裸marker: `\`\`\`\n${EXCLUSION}\n\`\`\``,
     comment内の裸marker: `<!-- ${CONTEXT} -->`,
     blockquote内の裸marker: `> ${OVERVIEW}`,
+    を使う後方参照の引用: "`概要を03_実装計画.md §9を参照`",
+    を使う未知pathの引用: "`概要を../00_要求定義.md §1・§2を参照`",
+    を使う後方参照のfence: "```\n概要を03_実装計画.md §9を参照\n```",
+    を使う後方参照のcomment: "<!-- 概要を03_実装計画.md §9を参照 -->",
+    を使う後方参照のblockquote: "> 概要を03_実装計画.md §9を参照",
   };
   assert.ok(forms[kind]);
   this.documents[DESIGN] += `\n## 3. 設計判断\n${forms[kind]}\n`;
