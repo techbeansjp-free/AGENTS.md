@@ -3,16 +3,16 @@
   "issue": 1527,
   "observed": {
     "baseSha": "c436c8cb23bec91b582912045e3903e52694614f",
-    "implementationHeadSha": "1b2df9ef54f52f4e4f002723ff329adc467d0d3a",
-    "diffDigest": "33d7afca971825422cc1cb26bd01e84b58aefafda7e9b1a5b9e8ced4491a9be8",
+    "implementationHeadSha": "beb5c3cd04a8472696899e9893681d80d91833cb",
+    "diffDigest": "37eab6475ba5bc4400b0273e0b58d86fd59cbf9f2db3d0ecb78fd902d0fd28cc",
     "session": {
       "sessionId": "31fbf11e9d1a4db7b032b323db3ae5e96f477f89da9aa7e8497233ab9afa4940",
-      "latestRoundDigest": "86fa1907f1befa4acb5d8e42b3f7c60be1eb5480ce318a674fb8e51955bb7105",
+      "latestRoundDigest": "e83955abb6ac0ae88bea282d8aa62af4a62f3d392eaa8cccf0e16a5e7096bf75",
       "status": "converged",
-      "countedRounds": 3
+      "countedRounds": 4
     },
     "impact": {
-      "digest": "0923ed4bc2c415e5a0b607bb5eacb555cd4cac467c9873f4ee8ee1955b598330",
+      "digest": "ece2abd5e13f3c4e5f6e1616a93ef7c99cfe12497854fa59f282dcb236420db8",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "1b2df9ef54f52f4e4f002723ff329adc467d0d3a",
-        "impactDigest": "0923ed4bc2c415e5a0b607bb5eacb555cd4cac467c9873f4ee8ee1955b598330",
-        "finishedAt": "2026-09-28T21:28:03.930Z",
-        "recordDigest": "83eb6212a306b019976669447f8159e4343ea3fee0ec254ae855e75d80acf7ea"
+        "headSha": "beb5c3cd04a8472696899e9893681d80d91833cb",
+        "impactDigest": "ece2abd5e13f3c4e5f6e1616a93ef7c99cfe12497854fa59f282dcb236420db8",
+        "finishedAt": "2026-09-28T21:34:19.514Z",
+        "recordDigest": "8ab675f73fb97ea549efd2cab906671120e93ffb235a5d7c2d384a62d1d32b9d"
       }
     ]
   },
@@ -248,5 +248,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "4259764772a624933ad577ab31c4277f7731961808091e8e1a2cf18761d28108"
+  "evidenceDigest": "0352138b88a16dda48cf69c9eaeb11a22333f78b6d25138e13d9be75bd46677b"
 }
