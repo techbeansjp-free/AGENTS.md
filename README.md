@@ -24,7 +24,7 @@ Semantic Graphの`graph` subcommandだけは、組み込み`node:sqlite`でGraph
 | 最新を使う | `npx github:techbeansjp-free/AGENTS.md doctor --root=.` |
 | 版を固定する | `npx github:techbeansjp-free/AGENTS.md#<tag> doctor --root=.` |
 
-`<tag>`にはreleaseのtag（`v0.3.1-beta.83`のような形）を指定します。**以降の例に現れる`npx agent-skill-chain <command>`は、この`npx github:techbeansjp-free/AGENTS.md <command>`の短縮表記です。**
+`<tag>`にはreleaseのtag（`v0.4.12`のような形）を指定します。**以降の例に現れる`npx agent-skill-chain <command>`は、この`npx github:techbeansjp-free/AGENTS.md <command>`の短縮表記です。**
 
 対象directoryを省略した場合は現在directoryを使います。対象を明示するときは`--root=.`を指定します。
 
