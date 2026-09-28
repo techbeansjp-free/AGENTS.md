@@ -37,6 +37,21 @@ Feature: main mergeの自動release計画と配布digest
     When 自動release workflow契約を検証する
     Then 自動release workflow検証はbump_version jobの存在を根拠に拒否する
 
+  Scenario: SCN-UNIT-AUTORELEASE-008 github_release jobが依存導入stepを持つ
+    Given 自動release用の実workflow本文を読み込む
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証はgithub_release jobの依存導入stepの存在を確認した
+
+  Scenario: SCN-UNIT-AUTORELEASE-009 依存導入stepを欠くnode実行jobを拒否する
+    Given github_release jobから依存導入stepを削除したrelease workflow本文がある
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証はgithub_release jobの依存導入step欠落を理由に拒否する
+
+  Scenario: SCN-UNIT-AUTORELEASE-010 job名に依存しない汎用検出を確認する
+    Given tsx実行stepだけを持ち依存導入を欠く検証用jobを追加したrelease workflow本文がある
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証は追加jobの依存導入step欠落を理由に拒否する
+
   Scenario: SCN-UNIT-DIGEST-001 配布entryをpath昇順に正準化して同一digestを返す
     Given 入力順だけが異なる同じ配布entry集合がある
     When 配布digestをそれぞれ算出する

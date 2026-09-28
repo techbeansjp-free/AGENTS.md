@@ -692,6 +692,47 @@ Given("bump_version jobを持つworkflow本文がある", function () {
   this.autoWorkflowYaml = `${workflow.slice(0, tagStart)}\n  bump_version:\n    name: versionをmainへ反映する\n    runs-on: ubuntu-latest\n    steps:\n      - name: 何もしない\n        run: "true"\n${workflow.slice(tagStart)}`;
 });
 
+Given(
+  "github_release jobから依存導入stepを削除したrelease workflow本文がある",
+  function () {
+    /**
+     * **`github_release` job内だけから依存導入stepを消す。** job名の文字列一致で
+     * 探すため、`build_distribution`が持つ同名step（「Node.js実行環境を準備する」）を
+     * 誤って消さないよう、`github_release:`以降だけを対象にする（Issue #1533）。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const jobStart = workflow.indexOf("\n  github_release:");
+    assert.ok(jobStart >= 0);
+    const githubReleaseJob = workflow.slice(jobStart);
+    const dependencyInstallSteps =
+      "      - name: Node.js実行環境を準備する\n        uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: npm\n      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        run: npm ci --ignore-scripts\n";
+    assert.ok(githubReleaseJob.includes(dependencyInstallSteps));
+    const removedJob = githubReleaseJob.replace(dependencyInstallSteps, "");
+    assert.notEqual(removedJob, githubReleaseJob);
+    this.autoWorkflowYaml = `${workflow.slice(0, jobStart)}${removedJob}`;
+  },
+);
+
+Given(
+  "tsx実行stepだけを持ち依存導入を欠く検証用jobを追加したrelease workflow本文がある",
+  function () {
+    /**
+     * **job名を`github_release`以外にする。** 依存導入検査がjob名の固定文字列へ
+     * 限定された実装で通ってしまわないことを固定する（Step 3独立reviewのMedium指摘）。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const tagStart = workflow.indexOf("\n  tag:");
+    assert.ok(tagStart >= 0);
+    this.autoWorkflowYaml = `${workflow.slice(0, tagStart)}\n  probe_job:\n    name: 検証用probe jobを実行する\n    runs-on: ubuntu-latest\n    steps:\n      - name: tsxでscriptを実行する\n        run: node --import tsx scripts/check_consumer_acceptance.ts --help\n${workflow.slice(tagStart)}`;
+  },
+);
+
 Given("無条件main pushと自動npm公開を含むworkflow本文がある", function () {
   this.autoWorkflowYaml = `name: 危険な自動release\n\n"on":\n  push:\n    branches: [main]\n  workflow_dispatch:\n    inputs:\n      dry_run:\n        default: true\n      publish_npm:\n        default: false\n\npermissions:\n  contents: read\n\njobs:\n  release:\n    steps:\n      - name: 品質検証\n        run: npm run prepack\n      - name: npmを自動公開する\n        run: npm publish\n`;
 });
@@ -825,6 +866,46 @@ Then("自動release workflow検証は有効になる", function () {
   ])
     assert.ok(this.autoWorkflowValidation?.checks.includes(check), check);
 });
+
+Then(
+  "自動release workflow検証はgithub_release jobの依存導入stepの存在を確認した",
+  function () {
+    assert.deepEqual(this.autoWorkflowValidation?.errors, []);
+    for (const job of ["validate", "build_distribution", "github_release"])
+      assert.ok(
+        this.autoWorkflowValidation?.checks.includes(
+          `${job} jobの依存導入stepの存在を確認した`,
+        ),
+        this.autoWorkflowValidation?.checks.join(" / "),
+      );
+  },
+);
+
+Then(
+  "自動release workflow検証はgithub_release jobの依存導入step欠落を理由に拒否する",
+  function () {
+    assert.equal(this.autoWorkflowValidation?.valid, false);
+    assert.ok(
+      this.autoWorkflowValidation?.errors.includes(
+        "github_release jobは、node --import tsxでscriptを実行するstepより前に、actions/setup-nodeとnpm ciをこの順で実行してください",
+      ),
+      this.autoWorkflowValidation?.errors.join(" / "),
+    );
+  },
+);
+
+Then(
+  "自動release workflow検証は追加jobの依存導入step欠落を理由に拒否する",
+  function () {
+    assert.equal(this.autoWorkflowValidation?.valid, false);
+    assert.ok(
+      this.autoWorkflowValidation?.errors.includes(
+        "probe_job jobは、node --import tsxでscriptを実行するstepより前に、actions/setup-nodeとnpm ciをこの順で実行してください",
+      ),
+      this.autoWorkflowValidation?.errors.join(" / "),
+    );
+  },
+);
 
 Then(
   "自動release workflow検証はdigest stepとnpm条件を根拠に拒否する",

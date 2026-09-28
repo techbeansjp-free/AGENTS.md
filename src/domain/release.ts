@@ -995,6 +995,56 @@ function jobStepRunBlocks(
   return blocks;
 }
 
+/**
+ * **`node --import tsx`で`.ts` scriptを実行するstepを持つjobは、そのstepより前に
+ * `actions/setup-node`・`npm ci`をこの順で完了していることを要求する。**
+ *
+ * `node:`builtinだけを使う`node`実行（`--import tsx`を伴わないもの、例: `tag` jobの
+ * `node --input-type=module`）は対象外とする。`github_release` jobがこの依存導入を
+ * 欠いたまま`node --import tsx scripts/check_consumer_acceptance.ts`を呼び、
+ * `Cannot find package 'tsx'`でcrashした（release run 36492222087、Issue #1533）。
+ */
+const TSX_IMPORT_PATTERN = /\bnode\b[^\n]*--import\s+tsx\b/u;
+const SETUP_NODE_USES_PATTERN = /^\s*uses:\s*actions\/setup-node@/u;
+const NPM_CI_PATTERN = /\bnpm\s+ci\b/u;
+
+/**
+ * 指定jobについて依存導入の充足状態を返す。
+ *
+ * **job名を固定文字列へハードコードしない。** `releaseWorkflowJobNames`が返す
+ * 任意のjob名へ適用できるよう、job名を引数として受け取るだけにする
+ * （Step 3独立reviewのMedium指摘、job名限定への迂回を防ぐ）。
+ */
+function jobDependencyInstallGap(
+  lines: readonly string[],
+  job: string,
+): "not-applicable" | "satisfied" | "violated" {
+  const range = jobRange(lines, job);
+  if (range === undefined) return "not-applicable";
+  const runBlocks = jobStepRunBlocks(lines, job);
+  const tsxStep = runBlocks.find(({ command }) =>
+    TSX_IMPORT_PATTERN.test(command),
+  );
+  if (tsxStep === undefined) return "not-applicable";
+  const setupNodeLineIndex = lines.findIndex(
+    (line, index) =>
+      index >= range.start &&
+      index < tsxStep.stepStart &&
+      SETUP_NODE_USES_PATTERN.test(line),
+  );
+  const npmCiStep = runBlocks.find(
+    ({ command, stepStart }) =>
+      stepStart < tsxStep.stepStart && NPM_CI_PATTERN.test(command),
+  );
+  if (
+    setupNodeLineIndex < 0 ||
+    npmCiStep === undefined ||
+    setupNodeLineIndex >= npmCiStep.stepStart
+  )
+    return "violated";
+  return "satisfied";
+}
+
 export function validateReleaseWorkflow(yaml: string): {
   valid: boolean;
   errors: string[];
@@ -1218,6 +1268,21 @@ export function validateReleaseWorkflow(yaml: string): {
       "build_distribution jobを追加してください。validate成功後・tagより前に配布物を1度だけ生成・検査します",
     );
   else checks.push("build_distribution jobの存在を確認した");
+  /**
+   * **`node --import tsx`を実行する全jobへ依存導入の順序を要求する。**
+   *
+   * job名を`releaseWorkflowJobNames`から取得し固定文字列へ限定しない。
+   * `--import tsx`を伴わないjob（例: `tag`）は対象外として黙って通す。
+   */
+  for (const job of releaseWorkflowJobNames(yaml)) {
+    const gap = jobDependencyInstallGap(lines, job);
+    if (gap === "violated")
+      errors.push(
+        `${job} jobは、node --import tsxでscriptを実行するstepより前に、actions/setup-nodeとnpm ciをこの順で実行してください`,
+      );
+    else if (gap === "satisfied")
+      checks.push(`${job} jobの依存導入stepの存在を確認した`);
+  }
   /**
    * **後続jobは先行jobの結果そのものを要求する。** `always()`と保存済みoutputだけでは、
    * acceptanceが落ちて`validate`がfailureになってもtagが作られる（Issue #1216 F-01）。
