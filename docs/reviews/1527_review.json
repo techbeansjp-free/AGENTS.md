@@ -3,16 +3,16 @@
   "issue": 1527,
   "observed": {
     "baseSha": "c436c8cb23bec91b582912045e3903e52694614f",
-    "implementationHeadSha": "adfb1516cb5880e9d79a239fdb79eee9146c4c81",
-    "diffDigest": "98aa1db926f2b3ba807b1ea2b15b719db4132990bdfc74621b608b2577f4c3ed",
+    "implementationHeadSha": "bc34b10b0f7e2148fcbd049dcd39d957c7e3ebcf",
+    "diffDigest": "077b8c2cd1744d7a6f7f885bf513441ab6f76bcf14a3d838f8716bf2f125baac",
     "session": {
       "sessionId": "31fbf11e9d1a4db7b032b323db3ae5e96f477f89da9aa7e8497233ab9afa4940",
-      "latestRoundDigest": "e38b50fb4ffdc844b7ce9b1480fccaabfe8d709b6d3a1a5539710a5385099f69",
+      "latestRoundDigest": "597057d8e81ed4a0e42aedfa6c710f1390a10ad1d40c06ea0f6e876b2ba92268",
       "status": "converged",
-      "countedRounds": 1
+      "countedRounds": 2
     },
     "impact": {
-      "digest": "2915d807b190ff75564b377d86d3f3ae4f26984431ce5b6f8f75292da2ca504b",
+      "digest": "38656f1ebb6c33d0c3c45e290668bb932f44b0fc3803704d97085ae0dd9965cd",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "adfb1516cb5880e9d79a239fdb79eee9146c4c81",
-        "impactDigest": "2915d807b190ff75564b377d86d3f3ae4f26984431ce5b6f8f75292da2ca504b",
-        "finishedAt": "2026-09-28T20:23:02.111Z",
-        "recordDigest": "bcc894722351386ab6155bac27fdff12ba954a1c1dd52f778ef948f2851d78cc"
+        "headSha": "bc34b10b0f7e2148fcbd049dcd39d957c7e3ebcf",
+        "impactDigest": "38656f1ebb6c33d0c3c45e290668bb932f44b0fc3803704d97085ae0dd9965cd",
+        "finishedAt": "2026-09-28T20:39:03.094Z",
+        "recordDigest": "c70480e2cf6933369afec6a977d720dc223f2030d5dc855a9f8c82b0cdbaffeb"
       }
     ]
   },
@@ -240,5 +240,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "0b60ebb9076e70b93c49e2fa6cb14518f79c9ff7ef525fee40bcdb27c4b12def"
+  "evidenceDigest": "304134a8861678180ff23726396222c48f181b7732c17fea8ca5ec9d3c6954a0"
 }
