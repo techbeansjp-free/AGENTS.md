@@ -83,8 +83,9 @@ function planningValue(text) {
             previous = value;
             value = value
                 .replace(/^(?:[-*+>]|[0-9]+[.)]|\([0-9]+\)|\[[0-9]+\]|（[0-9]+）|\[[ xX]\])(?:\s+|$)/u, "")
-                .replace(/^(\*{1,2}|_{1,2})(.*)\1$/u, "$2")
-                .replace(/^(\*{1,2}|_{1,2})[^:：。！？、,;；`|<>]+[:：]\1\s*/u, "")
+                // 各強調対の内側を先に正規化し、隣の値へ番号・ラベルを持ち越さない。
+                // file名内のunderscoreは対にせず、再帰ごとに対の分だけ短くなる。
+                .replace(/(?<![\p{L}\p{N}])(\*{1,2}|_{1,2})(.*?)\1(?![\p{L}\p{N}])/gu, (_match, _delimiter, content) => planningValue(content))
                 .replace(/^[^:：。！？、,;；`|<>]+[:：]\s*/u, "")
                 .trim();
         } while (value !== previous);
