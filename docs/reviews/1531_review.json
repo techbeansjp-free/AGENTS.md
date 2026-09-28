@@ -2,17 +2,17 @@
   "schemaVersion": "agent-skill-chain/review-evidence/v2",
   "issue": 1531,
   "observed": {
-    "baseSha": "c436c8cb23bec91b582912045e3903e52694614f",
-    "implementationHeadSha": "1407b1858854e3d801e240a8ffccfeb59bb138b0",
-    "diffDigest": "aa7d97e567b52666d10883b1e3ae84d052756f098474b0b39a36ac94cdf3e5a0",
+    "baseSha": "15b951eede21a8ecab8d28d81604f5d73870a876",
+    "implementationHeadSha": "3b1388bec39767730bf5ccaef8fd4e0406028791",
+    "diffDigest": "37fb11e832851796c0d9d11a87b2484dad31e07e4ba33b443f515641b066595a",
     "session": {
       "sessionId": "5cebe7b3afae05f593ea02e528086b8f4bd5d205c020847cd555b71cd969c0be",
-      "latestRoundDigest": "152a13d6c8b8820e46a51029ef6004a9c8ac0d8d17eb59eb736eddaf37618543",
+      "latestRoundDigest": "fc6c6646bf98a1850e1ca129ded21d298cd5d2c0e89c3caedadfd06c0b91384f",
       "status": "converged",
-      "countedRounds": 1
+      "countedRounds": 2
     },
     "impact": {
-      "digest": "ccb1f33b0694938cfd4a7685706966ed4cef10febf0ea2e42373577c8d65ebf2",
+      "digest": "072afd594ded4d54fa4a1f12b3a2ab15057011b1022aa038168e00e6e10e6ea2",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "1407b1858854e3d801e240a8ffccfeb59bb138b0",
-        "impactDigest": "ccb1f33b0694938cfd4a7685706966ed4cef10febf0ea2e42373577c8d65ebf2",
-        "finishedAt": "2026-09-28T22:55:38.315Z",
-        "recordDigest": "28c78af94ca86a16e86495e034c2e3cd0586e90ca095c7fbf76a81ecd407079f"
+        "headSha": "3b1388bec39767730bf5ccaef8fd4e0406028791",
+        "impactDigest": "072afd594ded4d54fa4a1f12b3a2ab15057011b1022aa038168e00e6e10e6ea2",
+        "finishedAt": "2026-09-28T23:07:29.273Z",
+        "recordDigest": "2c723eed3d12259bcafa50b0c52442c3b9e7e365a8077e6b987d040a7e16dc4c"
       }
     ]
   },
@@ -56,5 +56,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "6c85fe01804ce7169d58b933a4ab0a7523fc25d4a1e17dcc8c6c3e1eb601cf2e"
+  "evidenceDigest": "deacb165e2ebeb2d0bdcf81e62c518c1a8b812209f18a1497b2a6475dc286a0e"
 }
