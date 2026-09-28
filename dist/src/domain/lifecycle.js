@@ -475,10 +475,16 @@ function recoveryDiagnostic(target) {
  * `DISTRIBUTION_IDENTITY`は実行中のこのcode自身の識別結果であり、`target`
  * （利用者のinstall先）とは独立に決まる。
  */
+/**
+ * **release version不明であることと回復手段を1文ずつ示す**（FR-11）。
+ * 1文へ圧縮すると「release version不明」の事実自体を書き漏らせる
+ * （独立review REV-07指摘）。
+ */
 function sourceBuildWarnings() {
     return DISTRIBUTION_IDENTITY.kind === "source"
         ? [
-            "source buildから実行しています。正式release distributionであることを保証できません",
+            "source buildから実行しています。release versionは不明です",
+            "release distributionから update --apply を実行すると回復できます",
         ]
         : [];
 }

@@ -18,10 +18,15 @@ import { isPackageVersion, PACKAGE_VERSION } from "../../src/lib/version.js";
 import { planAutoReleaseFromEnvironment } from "../../scripts/plan_release.js";
 import { canonicalBumpDiff } from "../../scripts/prepare_release_bump.js";
 import {
+  changedPaths,
   materializeRelease,
   validateMaterializationPlan,
   type MaterializationResult,
 } from "../../scripts/materialize_release.js";
+import {
+  resolveDistributionIdentity,
+  type DistributionIdentity,
+} from "../../src/lib/release-identity.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 const DIGEST_A = "a".repeat(64);
@@ -188,6 +193,10 @@ class AutoReleaseWorld extends WorkflowWorld {
   materializationPlan: unknown = undefined;
   materializationTargets: string[] = [];
   materializationResults: MaterializationResult[] = [];
+  treeSnapshotChanges: string[] = [];
+  snapshotBefore: Map<string, string> = new Map();
+  snapshotAfter: Map<string, string> = new Map();
+  distributionIdentityResults: DistributionIdentity[] = [];
   bumpJobSteps: WorkflowStep[] = [];
   workflowDefaultsShell = false;
   bumpJobDefaultsShell = false;
@@ -1172,6 +1181,114 @@ Then(
       fs.readFileSync(path.join(disallowedTarget!, "package.json"), "utf8"),
     ) as { version: string };
     assert.equal(disallowedPackageJson.version, "0.0.0-sentinel");
+  },
+);
+
+Given(
+  "materialize_releaseの許可path内外を混ぜた前後snapshotがある",
+  function () {
+    this.snapshotBefore = new Map<string, string>([
+      ["package.json", "hash-package-before"],
+      ["package-lock.json", "hash-lock-before"],
+      ["dist/index.js", "hash-dist-unchanged"],
+      ["docs/removed.md", "hash-removed-before"],
+    ]);
+    this.snapshotAfter = new Map<string, string>([
+      ["package.json", "hash-package-after"],
+      ["package-lock.json", "hash-lock-after"],
+      ["release-identity.json", "hash-identity-new"],
+      ["dist/index.js", "hash-dist-unchanged"],
+      ["dist/mutated.js", "hash-dist-mutated-new"],
+    ]);
+  },
+);
+
+When("snapshot間の変化pathを算出する", function () {
+  const allowed = new Set([
+    "package.json",
+    "package-lock.json",
+    "release-identity.json",
+  ]);
+  this.treeSnapshotChanges = changedPaths(
+    this.snapshotBefore,
+    this.snapshotAfter,
+  ).filter((changedPath) => !allowed.has(changedPath));
+});
+
+Then("許可path外の変化だけが名指しされる", function () {
+  /**
+   * **追加(`dist/mutated.js`)・削除(`docs/removed.md`)の両方を検出し、
+   * 許可path内の変化(`package.json`等)と不変(`dist/index.js`)は含めない。**
+   * これが`materializeRelease`本体の書き込み前後snapshotで使う判定と同じ関数
+   * であり、機構全体の検出力を直接固定する（独立review REV-08是正）。
+   */
+  assert.deepEqual(this.treeSnapshotChanges, [
+    "dist/mutated.js",
+    "docs/removed.md",
+  ]);
+});
+
+Given(
+  "release識別・source識別・不正内容・version不一致の4種類のpackage rootがある",
+  function () {
+    const write = (
+      dirPrefix: string,
+      identity: Record<string, unknown> | string | undefined,
+    ): string => {
+      const root = this.temp(dirPrefix);
+      if (identity !== undefined)
+        fs.writeFileSync(
+          path.join(root, "release-identity.json"),
+          typeof identity === "string"
+            ? identity
+            : `${JSON.stringify(identity)}\n`,
+        );
+      return root;
+    };
+    const validIdentity = {
+      schemaVersion: "agent-skill-chain/release-identity/v1",
+      version: "0.4.9",
+      tag: "v0.4.9",
+      sourceSha: "a".repeat(40),
+      contentDigest: "b".repeat(64),
+    };
+    this.materializationTargets = [
+      write("asc-identity-release-", validIdentity),
+      write("asc-identity-source-", undefined),
+      write("asc-identity-malformed-", "{not json"),
+      write("asc-identity-mismatch-", validIdentity),
+    ];
+  },
+);
+
+When("それぞれのdistribution identityを解決する", function () {
+  const packageVersions = [
+    "0.4.9",
+    "0.4.4-managed-by-tag",
+    "0.4.4-managed-by-tag",
+    // **4件目だけpackage.jsonのversionをrelease-identity.jsonと不一致にする。**
+    "0.4.10",
+  ];
+  this.distributionIdentityResults = this.materializationTargets.map(
+    (root, index) => resolveDistributionIdentity(root, packageVersions[index]!),
+  );
+});
+
+Then(
+  "release-identity.jsonが正しい場合だけreleaseと判定されそれ以外はsourceになる",
+  function () {
+    const [releaseCase, sourceCase, malformedCase, mismatchCase] =
+      this.distributionIdentityResults;
+    assert.equal(releaseCase?.kind, "release");
+    if (releaseCase?.kind === "release")
+      assert.equal(releaseCase.version, "0.4.9");
+    assert.equal(sourceCase?.kind, "source");
+    assert.equal(malformedCase?.kind, "source");
+    /**
+     * **release-identity.jsonの内容は正しいが`package.json`のversionと
+     * 不一致な場合もsourceとして扱う**（INV-REL-07、独立review REV-15是正）。
+     */
+    assert.equal(mismatchCase?.kind, "source");
   },
 );
 

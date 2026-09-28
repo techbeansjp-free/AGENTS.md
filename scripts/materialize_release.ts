@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -27,6 +28,59 @@ export interface MaterializationResult {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const ALLOWED_CHANGED_PATHS = new Set([
+  "package.json",
+  "package-lock.json",
+  RELEASE_IDENTITY_FILE,
+]);
+
+/**
+ * 対象treeの全通常fileをrelative posix pathとSHA-256で記録する。**`.git`は
+ * 除外する。** `build_distribution`は`git worktree add --detach`が作った
+ * 一時treeを渡すため、`.git`はworktree pointer fileであり配布内容ではない。
+ */
+function snapshotTree(root: string): Map<string, string> {
+  const digests = new Map<string, string>();
+  const stack: string[] = [""];
+  while (stack.length > 0) {
+    const relativeDir = stack.pop() ?? "";
+    const absoluteDir = relativeDir === "" ? root : path.join(root, relativeDir);
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(absoluteDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.name === ".git") continue;
+      const relativePath =
+        relativeDir === "" ? entry.name : `${relativeDir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        stack.push(relativePath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const content = fs.readFileSync(path.join(absoluteDir, entry.name));
+      digests.set(
+        relativePath,
+        crypto.createHash("sha256").update(content).digest("hex"),
+      );
+    }
+  }
+  return digests;
+}
+
+/** 2つのtree snapshot間で、追加・削除・内容変化のあったrelative pathを返す。 */
+export function changedPaths(
+  before: ReadonlyMap<string, string>,
+  after: ReadonlyMap<string, string>,
+): string[] {
+  const changed = new Set<string>();
+  for (const [key, hash] of before) if (after.get(key) !== hash) changed.add(key);
+  for (const [key, hash] of after) if (before.get(key) !== hash) changed.add(key);
+  return [...changed].sort();
 }
 
 /**
@@ -169,10 +223,29 @@ export function materializeRelease(
     2,
   )}\n`;
 
-  // 検証をすべて終えてから書き込む。途中状態を残さない（02 §4.3）。
+  /**
+   * **書き込み前に対象tree全体のsnapshotを取る。** package.json・
+   * package-lock.jsonの内容検査だけでは、この関数自身に加わる将来の変異
+   * （例: 別fileへも書き込む変更）を捕まえられない（独立review REV-08指摘）。
+   * 書き込み後に再snapshotし、許可した3 path以外へ変化があれば
+   * `applied: false`で名指しする。このscriptが書くのは3 pathだけなので、
+   * 通常経路では許可外差分は生じない。差分が出るのは変異または並行外部変更の
+   * 場合だけであり、その場合もrelease対象treeは`build_distribution` job内の
+   * 使い捨てcopyであるため、以後のtag・publishへ進まなければ外部への影響は無い。
+   */
+  const before = snapshotTree(target);
   fs.writeFileSync(packageJsonPath, nextPackageJson);
   fs.writeFileSync(packageLockPath, nextPackageLock);
   fs.writeFileSync(identityPath, identityContent);
+  const after = snapshotTree(target);
+  const disallowed = changedPaths(before, after).filter(
+    (changedPath) => !ALLOWED_CHANGED_PATHS.has(changedPath),
+  );
+  if (disallowed.length > 0)
+    return {
+      applied: false,
+      reasons: [`許可外file変化を検出しました: ${disallowed.join(", ")}`],
+    };
   return { applied: true, reasons: [] };
 }
 

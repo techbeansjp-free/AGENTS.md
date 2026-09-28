@@ -51,6 +51,9 @@ interface IsolationWorld extends WorkflowWorld {
   bundleVersion: string;
   versionResult: ReturnType<typeof runCli> | undefined;
   doctorResults: Array<ReturnType<typeof runCli>>;
+  recoveryConsumer: string;
+  recoveryResults: Array<ReturnType<typeof runCli>>;
+  recoverySentinelVersion: string;
 }
 
 /** repository直下へ展開されるhostごとの常時入口（Issue #1219）。 */
@@ -786,6 +789,22 @@ When("bundleのCLIでinstallをapplyする", function () {
   this.cliResults = [
     runBundleCli(this.bundleRoot, this.root, ["install", "--apply"]),
   ];
+  /**
+   * **sentinelからの回復も同scenarioで観測する**（AC-09の観測方法の指定）。
+   * source buildでinstallしてsentinel記録を作った後、正式配布物bundleから
+   * `update --apply`し、managed-assets.json.versionがsentinelからrelease
+   * versionへ回復することを確認する（独立review REV-10指摘）。
+   */
+  this.recoveryConsumer = this.temp("asc-release-bundle-recovery-");
+  const sourceInstalled = runCli(this.recoveryConsumer, ["install", "--apply"]);
+  this.recoveryResults = [sourceInstalled];
+  const beforeRecord = JSON.parse(
+    fs.readFileSync(recordPath(this.recoveryConsumer), "utf8"),
+  ) as { version: string };
+  this.recoverySentinelVersion = beforeRecord.version;
+  this.recoveryResults.push(
+    runBundleCli(this.bundleRoot, this.recoveryConsumer, ["update", "--apply"]),
+  );
 });
 
 Then("managed-assets.jsonのversionはrelease versionと一致する", function () {
@@ -799,6 +818,29 @@ Then("managed-assets.jsonのversionはrelease versionと一致する", function 
     version: string;
   };
   assert.equal(record.version, this.bundleVersion);
+
+  for (const result of this.recoveryResults)
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.notEqual(this.recoverySentinelVersion, this.bundleVersion);
+  /**
+   * **managed-assets.jsonを直接readまない。** 同fileは初回installのanchorで
+   * あり、更新は`managed-assets-records/`への追記snapshotとして連鎖する
+   * （`docs/specs/07_データ/01_管理データ.md`）。anchorを直接readむと常に
+   * install時のversionを観測し、updateの効果を検出できない
+   * （回帰、Step 10 round 1自己検証で発見）。`doctor`のchain解決済み
+   * `managedVersion`を使う。
+   */
+  const recoveredDoctor = runBundleCli(this.bundleRoot, this.recoveryConsumer, [
+    "doctor",
+  ]);
+  assert.equal(recoveredDoctor.status, 0, recoveredDoctor.stderr);
+  const recoveredDoctorOutput = JSON.parse(recoveredDoctor.stdout) as {
+    releaseIdentity?: { managedVersion: string | null };
+  };
+  assert.equal(
+    recoveredDoctorOutput.releaseIdentity?.managedVersion,
+    this.bundleVersion,
+  );
 });
 
 When("bundleのCLIで--versionを実行する", function () {
@@ -817,7 +859,19 @@ When("source buildのCLIで--versionとdoctorを実行する", function () {
    * 付与する`--root=<root>`は`--version`の分岐が読む前に無視されるため、
    * 実挙動を変えずに既存helperを再利用できる。
    */
+  runCli(this.root, ["install", "--apply"]);
   this.doctorResults = [runCli(this.root, ["doctor"])];
+  /**
+   * **同じ`installed`状態でrelease側のdoctorも取り、`healthy`を比較する。**
+   * `installed`状態を揃えずに`typeof healthy === "boolean"`だけを見ると、
+   * `healthy`が実際に`releaseIdentity.kind`へ依存する実装でも検出できない
+   * （独立review REV-09指摘、FR-12）。
+   */
+  this.bundleVersion = "0.4.9";
+  this.bundleRoot = prepareReleaseBundle(this, this.bundleVersion);
+  const releaseConsumer = this.temp("asc-release-bundle-doctor-");
+  runBundleCli(this.bundleRoot, releaseConsumer, ["install", "--apply"]);
+  this.doctorResults.push(runBundleCli(this.bundleRoot, releaseConsumer, ["doctor"]));
 });
 
 Then(
@@ -832,21 +886,29 @@ Then(
      */
     assert.match(versionOutput, /source build/u);
     assert.doesNotMatch(versionOutput, /^\d+\.\d+\.\d+/u);
-    const doctorResult = this.doctorResults[0];
-    assert.ok(doctorResult, "doctor実行結果がありません");
-    const doctorOutput = JSON.parse(doctorResult.stdout) as {
+    const [sourceDoctorResult, releaseDoctorResult] = this.doctorResults;
+    assert.ok(sourceDoctorResult, "source doctor実行結果がありません");
+    assert.ok(releaseDoctorResult, "release doctor実行結果がありません");
+    const sourceDoctorOutput = JSON.parse(sourceDoctorResult.stdout) as {
       healthy: boolean;
       releaseIdentity?: { kind: string; version: string | null };
     };
-    assert.equal(doctorOutput.releaseIdentity?.kind, "source");
-    assert.equal(doctorOutput.releaseIdentity?.version, null);
+    const releaseDoctorOutput = JSON.parse(releaseDoctorResult.stdout) as {
+      healthy: boolean;
+      releaseIdentity?: { kind: string; version: string | null };
+    };
+    assert.equal(sourceDoctorOutput.releaseIdentity?.kind, "source");
+    assert.equal(sourceDoctorOutput.releaseIdentity?.version, null);
+    assert.equal(releaseDoctorOutput.releaseIdentity?.kind, "release");
+    assert.equal(releaseDoctorOutput.releaseIdentity?.version, this.bundleVersion);
     /**
-     * **`healthy`は識別結果の差異で変わらない。** doctor未導入の隔離consumerでは
-     * `installed: false`により`healthy`は`false`になるが、それはmanaged asset
-     * recordの不在によるものであり、release identityの`source`/`release`差異が
-     * 理由ではないことを確認する（FR-12）。
+     * **`healthy`は識別結果の差異で変わらないことを、両方installed済みの状態で
+     * 比較して確認する。** どちらも正常にinstallした直後であり、`healthy`は
+     * 両方とも`true`になるはずである。
      */
-    assert.equal(typeof doctorOutput.healthy, "boolean");
+    assert.equal(sourceDoctorOutput.healthy, true, sourceDoctorResult.stdout);
+    assert.equal(releaseDoctorOutput.healthy, true, releaseDoctorResult.stdout);
+    assert.equal(sourceDoctorOutput.healthy, releaseDoctorOutput.healthy);
   },
 );
 
@@ -866,7 +928,14 @@ Then("installとupdateは成功し警告文を含む", function () {
       Array.isArray(parsed.warnings) && parsed.warnings.length > 0,
       result.stdout,
     );
-    assert.match(parsed.warnings.join(" "), /source build/u);
+    /**
+     * **release version不明であることと回復手段の両方を検査する。** 片方だけの
+     * 検査では、どちらかの文を書き漏らした実装でも通ってしまう（FR-11、
+     * 独立review REV-07指摘）。
+     */
+    const warningText = parsed.warnings.join(" ");
+    assert.match(warningText, /release version.*不明/u);
+    assert.match(warningText, /update --apply.*回復/u);
   }
 });
 

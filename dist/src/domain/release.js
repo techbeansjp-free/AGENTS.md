@@ -712,6 +712,53 @@ function validateAcceptanceStep(lines) {
     }
     return missing;
 }
+/**
+ * 指定jobの各stepについて、`run:` blockを持つものだけを開始行位置とcommand文字列で
+ * 返す。**`name:`やcomment内の文字列一致をmarkerと数えない**
+ * （validateAcceptanceStepと同型、独立review REV-05是正）。
+ *
+ * **commandの終端は次stepの開始行ではなく、`run:`自身のindentより深い行が
+ * 続く範囲で決める。** 次step開始行を境界にすると、step間に置いた
+ * YAML comment（例: このfile自身が持つ実装意図の説明comment）が直前stepの
+ * commandへ混入し、削除したstepのmarkerがcomment経由で「まだある」ように
+ * 誤判定される（round 1独立review、REV-05是正時に実測）。
+ */
+function jobStepRunBlocks(lines, job) {
+    const range = jobRange(lines, job);
+    if (range === undefined)
+        return [];
+    const stepStarts = [];
+    for (let cursor = range.start; cursor < range.end; cursor += 1)
+        if (/^ {6}- name:/u.test(lines[cursor] ?? ""))
+            stepStarts.push(cursor);
+    const blocks = [];
+    for (const [order, stepStart] of stepStarts.entries()) {
+        const stepEnd = stepStarts[order + 1] ?? range.end;
+        const body = lines.slice(stepStart, stepEnd);
+        const runIndex = body.findIndex((line) => /^ {8}run:/u.test(line));
+        if (runIndex < 0)
+            continue;
+        const runIndent = indentation(body[runIndex] ?? "");
+        const commandLines = [body[runIndex] ?? ""];
+        let bodyEnd = body.length;
+        for (let cursor = runIndex + 1; cursor < body.length; cursor += 1) {
+            const line = body[cursor] ?? "";
+            if (line.trim().length > 0 && indentation(line) <= runIndent) {
+                bodyEnd = cursor;
+                break;
+            }
+            commandLines.push(line);
+        }
+        blocks.push({
+            stepStart,
+            command: commandLines.join("\n"),
+            // **stepの属性行（if:・continue-on-errorなど）はbodyEndまでに限定する。**
+            // run: block内へ迷い込んだ次step以降の内容を属性判定へ混ぜない。
+            attributes: body.slice(0, bodyEnd).join("\n"),
+        });
+    }
+    return blocks;
+}
 export function validateReleaseWorkflow(yaml) {
     if (typeof yaml !== "string")
         return {
@@ -907,20 +954,42 @@ export function validateReleaseWorkflow(yaml) {
      * **`github_release` jobがartifact digestの3者一致を検証してから公開することを
      * 要求する。** `evaluateArtifactIdentity`（既存、無変更）を`--verify-artifact-identity`
      * で呼び出す配線がpublish（`--draft=false`）より前にあることをYAML構造から確認する
-     * （FR-05、TOCTOU排除）。
+     * （FR-05、TOCTOU排除）。**markerは`github_release` jobのrun: block内に限定する。**
+     * file全体の`indexOf`は、commentへ置いたmarkerや別jobの記述でも通ってしまう
+     * （独立review REV-05指摘）。
      */
-    const verifyIdentityIndex = yaml.indexOf("--verify-artifact-identity");
-    const publishIndex = yaml.indexOf("--draft=false");
-    if (verifyIdentityIndex < 0)
-        errors.push("github_release jobでartifact digestの3者一致（evaluateArtifactIdentity）を検証してください");
-    else
+    const githubReleaseRunBlocks = jobStepRunBlocks(lines, "github_release");
+    const verifyIdentityStep = githubReleaseRunBlocks.find(({ command }) => command.includes("--verify-artifact-identity"));
+    const publishStep = githubReleaseRunBlocks.find(({ command }) => command.includes("--draft=false"));
+    if (!verifyIdentityStep)
+        errors.push("github_release jobのrun: block内でartifact digestの3者一致（evaluateArtifactIdentity）を検証してください");
+    else {
         checks.push("artifact digestの3者一致検証の実行を確認した");
-    if (verifyIdentityIndex >= 0 && publishIndex >= 0) {
-        if (publishIndex < verifyIdentityIndex)
+        /**
+         * **検証stepへのcontinue-on-error・ifを拒否する。** git-dependency acceptance
+         * （validateAcceptanceStep）と同じ迂回を許さない（独立review REV-05指摘）。
+         */
+        if (/^ {8}continue-on-error:\s*true/mu.test(verifyIdentityStep.attributes))
+            errors.push("artifact digest検証stepへcontinue-on-error: trueを付けないでください");
+        else
+            checks.push("artifact digest検証stepにcontinue-on-errorが無いことを確認した");
+    }
+    if (verifyIdentityStep && publishStep) {
+        if (publishStep.stepStart < verifyIdentityStep.stepStart)
             errors.push("artifact digestの3者一致を検証する前にGitHub Releaseをpublishしないでください");
         else
             checks.push("publishが3者一致検証より後であることを確認した");
     }
+    /**
+     * **`github_release` jobがartifactを再生成しないことを要求する。** `npm pack`を
+     * このjobで再実行すると、`build_distribution`が検査したbyte列と公開するbyte列が
+     * 一致する保証が無くなる（FR-05、AC-07の観測方法「npm packを実行しないことを
+     * 照合する」）。
+     */
+    if (githubReleaseRunBlocks.some(({ command }) => /\bnpm\s+pack\b/u.test(command)))
+        errors.push("github_release jobでnpm packを実行しないでください。build_distributionが生成したartifactだけを使ってください");
+    else
+        checks.push("github_release jobがartifactを再生成しないことを確認した");
     /**
      * **Immutable Releasesの状態報告stepを要求するが、取得不能をjob失敗にしない。**
      * 取得可否はGitHubの機能提供状況に依存するため、`unknown`として報告してjobは

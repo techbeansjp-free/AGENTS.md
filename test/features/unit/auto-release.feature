@@ -248,3 +248,13 @@ Feature: main mergeの自動release計画と配布digest
     When 自動release workflow契約を検証する
     Then 検証よりpublishを先に置くと拒否される
 
+  Scenario: SCN-INT-RELID-011 許可外pathの変化はtree全体のsnapshotで検出される
+    Given materialize_releaseの許可path内外を混ぜた前後snapshotがある
+    When snapshot間の変化pathを算出する
+    Then 許可path外の変化だけが名指しされる
+
+  Scenario: SCN-INT-RELID-012 release-identity.jsonの有無と形式でrelease・sourceを判定する
+    Given release識別・source識別・不正内容・version不一致の4種類のpackage rootがある
+    When それぞれのdistribution identityを解決する
+    Then release-identity.jsonが正しい場合だけreleaseと判定されそれ以外はsourceになる
+

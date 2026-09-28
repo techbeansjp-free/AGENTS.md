@@ -51,6 +51,16 @@ export function resolveDistributionIdentity(packageRoot, packageVersion) {
     if (typeof contentDigest !== "string" ||
         !CONTENT_DIGEST_PATTERN.test(contentDigest))
         return source;
+    /**
+     * **`release-identity.json`のversionと`package.json`のversionが一致しない
+     * 場合はsourceとして扱う（fail-closed、INV-REL-07）。** `materialize_release.ts`
+     * は両fileへ同じ`plan.version`を書くため、正しく生成された配布物では常に
+     * 一致する。stale・混入した`release-identity.json`だけがrelease扱いになり
+     * managed記録（`package.json`のversionを正本とする）と食い違う経路を閉じる
+     * （独立review REV-15指摘）。
+     */
+    if (version !== packageVersion)
+        return source;
     return { kind: "release", version, tag, sourceSha, contentDigest };
 }
 const packageRoot = findPackageRoot(import.meta.url);
