@@ -27,7 +27,11 @@ import {
   type VerificationPolicy,
 } from "../domain/verification-run.js";
 import { computeImpactSet } from "./impact-set.js";
-import { GIT_ENV, observeReviewDiff } from "./review-diff.js";
+import {
+  GIT_ENV,
+  observeReviewDiff,
+  resolveImplementationHead,
+} from "./review-diff.js";
 import { readStoredReviewSession } from "./review-session-store.js";
 import { readVerificationRuns } from "./verification-run.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
@@ -56,8 +60,14 @@ function resolveCommit(root: string, label: string, value: string): string {
  *
  * 受理する形は2つだけである。
  *
- * 1. `H_impl`が保存済みsessionのcandidate HEADそのもの。基点はsessionの`diffBaseSha`か、
- *    その前進（既定branch追随、Issue #1493）で`H_impl`のancestorであるもの
+ * 1. `H_impl`が、保存済みsessionのcandidate HEADをcanonical resolver
+ *    （`resolveImplementationHead`、Issue #1532）へ通した値と一致する。基点は
+ *    sessionの`diffBaseSha`か、その前進（既定branch追随、Issue #1493）で
+ *    `H_impl`のancestorであるもの。**session側もresolverへ通すことで、
+ *    candidate HEADがevidence-only commitで汚染されていても（round初期化時の
+ *    誤った束縛等）真のH_implへ自己修復して受理する。** resolverはallowlist・
+ *    mode・単一pathの条件を満たさない値には無変化（0 step）を返すため、
+ *    汚染されていない通常の値はこの経路で従来と同じ結果になる。
  * 2. rebase後の`H_impl`。`基点..H_impl`の完全diffがsessionの
  *    `diffBaseSha..candidate HEAD`と内容等価であるもの
  *
@@ -72,7 +82,10 @@ export function reviewEvidenceBindingErrors(
   if (baseSha === implementationHeadSha)
     return ["review証跡の比較基点とH_implは異なるcommitでなければなりません"];
   try {
-    if (implementationHeadSha === session.latestCandidateHeadSha) {
+    if (
+      implementationHeadSha ===
+      resolveImplementationHead(root, session.latestCandidateHeadSha)
+    ) {
       if (baseSha === session.anchor.diffBaseSha) return [];
       if (
         isAncestor(root, session.anchor.diffBaseSha, baseSha) &&
@@ -210,8 +223,12 @@ function issueFromTracker(tracker: string | null | undefined) {
 /**
  * 収束済みreview sessionから証跡fileを生成する（`review export`）。
  *
- * **生成はcurrent HEAD（`H_impl`）で行う。** 実装commitの後に証跡1 fileだけを
- * commitして`H_final`にする。書込みはatomicで、書込み後に読み戻して厳密に再検証する。
+ * **生成はcurrent HEADをcanonical resolver（`resolveImplementationHead`、
+ * Issue #1532）へ通した値（`H_impl`）で行う。** current HEAD自身がevidence-only
+ * trailing commit（前回のexportで加えた証跡commit、収束後の是正commit等）の
+ * 上にある場合も、resolverが遡って真の実装commitへ解決する。実装commitの後に
+ * 証跡1 fileだけをcommitして`H_final`にする。書込みはatomicで、書込み後に
+ * 読み戻して厳密に再検証する。
  */
 export function exportReviewEvidence(input: {
   root: string;
@@ -248,7 +265,11 @@ export function exportReviewEvidence(input: {
     throw new Error("review exportには永続review sessionが必要です");
   if (session.status !== "converged")
     throw new Error(unconvergedReviewSessionDiagnostic(session.status));
-  const implementationHeadSha = resolveCommit(gitRoot, "current HEAD", "HEAD");
+  const currentHeadSha = resolveCommit(gitRoot, "current HEAD", "HEAD");
+  const implementationHeadSha = resolveImplementationHead(
+    gitRoot,
+    currentHeadSha,
+  );
   const baseSha =
     input.baseSha === undefined
       ? session.anchor.diffBaseSha
@@ -259,7 +280,7 @@ export function exportReviewEvidence(input: {
   });
   if (bindingErrors.length > 0)
     throw new Error(
-      `${bindingErrors.join("; ")}。current HEADがreview済みの実装commit（H_impl）であることを確認してください。証跡commitの後（H_final）では実行できません`,
+      `${bindingErrors.join("; ")}。current HEADから遡って解決したH_impl（${implementationHeadSha}）が、review済みsessionのcandidate HEAD（をcanonical resolverで解決した値）と一致しません。review済みの実装commit以降でreview exportを実行してください`,
     );
   /**
    * **検証欄は申告ではなく観測から導出する。** `比較基点..H_impl`の影響集合を
