@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1309,
+  "observed": {
+    "baseSha": "59799f063e7efd6d535f16c0f070446d3387175e",
+    "implementationHeadSha": "fc3d45d06be67c3f934cbb8cde0a8526114e737c",
+    "diffDigest": "1ac8a425b1fd639e54eff8fe4be9bebea68025b152e714b8c4757bd096458afa",
+    "session": {
+      "sessionId": "dd779e5cca69e96ae6cb730ed9a24a02d57ed22c72de25a50761588cfaa5b860",
+      "latestRoundDigest": "31ab203affb4e39f70715e20dbd97099a1c42e5590b6515f0805c0f593966a19",
+      "status": "converged",
+      "countedRounds": 3
+    },
+    "impact": {
+      "digest": "c34d3b3490d6a8f1bc6e105e206bd5a2b6484c9f8b3802493b1067434d4a45b5",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "fc3d45d06be67c3f934cbb8cde0a8526114e737c",
+        "impactDigest": "c34d3b3490d6a8f1bc6e105e206bd5a2b6484c9f8b3802493b1067434d4a45b5",
+        "finishedAt": "2026-09-29T11:26:51.037Z",
+        "recordDigest": "c749d68a1cd26693ffaaafefa7820e1395e5f45ac7cac3492b5f5aa50212a94e"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "REV-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "test/steps/lifecycle-isolation.steps.ts",
+      "contractId": "AC-02"
+    },
+    {
+      "id": "REV-02",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "test/steps/lifecycle-isolation.steps.ts",
+      "contractId": "AC-06"
+    },
+    {
+      "id": "REV-03",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "src/domain/lifecycle.ts",
+      "contractId": "INV-01"
+    },
+    {
+      "id": "REV-04",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/lifecycle-isolation.steps.ts",
+      "contractId": "AC-04"
+    },
+    {
+      "id": "REV-05",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/lib/atomic.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV-06",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/domain/lifecycle.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV-07",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/lib/atomic.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV-08",
+      "severity": "Critical",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "src/lib/atomic.ts",
+      "contractId": "INV-03"
+    },
+    {
+      "id": "REV-09",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/lifecycle-isolation.steps.ts",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "opus-subagent-independent-review-1309",
+    "implementer": "claude-code-worktree-implementer-1309",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "22c40b52280ec32abd12d75a9ee5e3befe6c8eacc5140090c93ec9a98c339d22"
+}
