@@ -313,6 +313,17 @@ export function writeFileExclusivePinned(
       process.platform === "darwin" &&
       Object.keys(hooks).every((hook) => darwinOpenAtHooks.has(hook))
     ) {
+      /**
+       * **Darwinのopenat helperは常に0o600で作成する**（`DARWIN_OPENAT_HELPER`の
+       * `os.open`呼び出しを参照）。`fileMode`を無視して黙って通すと、呼び出し側が
+       * 指定したmodeが再現されたと誤認する（独立review Step 10 finding 5）。
+       * 対応する拡張はこのIssueの対象外（00 §6.2、01 BR-02）。既定の0o600以外を
+       * 要求された場合はfail-closedで拒否する。
+       */
+      if (fileMode !== 0o600)
+        throw new Error(
+          "macOSのexclusive file作成は既定のfile mode（0o600）だけに対応しています",
+        );
       const written = writeFileExclusiveDarwinOpenAt(
         pinned,
         leaf,

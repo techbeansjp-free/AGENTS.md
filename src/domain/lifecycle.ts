@@ -530,6 +530,61 @@ function mappings(target: string): Array<{ src: string; dest: string }> {
 }
 
 /**
+ * 祖先directoryが最初からsymlinkとして構成されている場合を計画時に拒否する
+ * （Issue #1309、独立review Step 10 finding）。
+ *
+ * **previewとapplyの整合を保つ。** この検査が無いと、例えば`.claude`が境界内
+ * （`resolveContained`は許容する）を指す恒常的なsymlinkとして構成されている
+ * 環境で、previewは素通りしapplyだけが資産copyの途中（`.agent-skill-chain`
+ * 配下を書き終えてhost展開先に到達した時点）で失敗し、部分適用のまま
+ * managed mutation lockが残る（実機確認: 111 file書込み後に例外、lock残存）。
+ * 書き込み前に一度だけ検査し、副作用が起きる前に拒否する。
+ *
+ * **新しい保護機構ではない。** `writeFileExclusivePinned`/`writeFileAtomic`
+ * が書込み直前に行う`pinDirectory`の判定（祖先がsymlinkであること自体を
+ * 許容しない）を、副作用なしで計画時にも適用するだけである。
+ * `resolveContained`（境界内へ収まるsymlinkを許容する、別の判定基準）は
+ * 変更しない。
+ *
+ * **mid-loopの差し替え（TOCTOU本体）はここでは検出しない。** この関数は
+ * 呼び出し時点の1回の観測であり、計画からこの検査までの間、またはこの検査
+ * から実際の書き込みまでの間の差し替えは、既存どおり書き込み直前の
+ * `pinDirectory`が捕まえる。
+ */
+function assertAncestorsNotSymlinked(
+  target: string,
+  assets: ReadonlyArray<{ dest: string }>,
+): void {
+  const targetResolved = path.resolve(target);
+  const checked = new Set<string>();
+  for (const { dest } of assets) {
+    let current = path.dirname(path.resolve(dest));
+    while (
+      current !== targetResolved &&
+      current.startsWith(`${targetResolved}${path.sep}`)
+    ) {
+      if (checked.has(current)) break;
+      checked.add(current);
+      let stat: fs.Stats;
+      try {
+        stat = fs.lstatSync(current);
+      } catch (error) {
+        if (isRecord(error) && error.code === "ENOENT") {
+          current = path.dirname(current);
+          continue;
+        }
+        throw error;
+      }
+      if (stat.isSymbolicLink())
+        throw new Error(
+          `祖先directoryがsymlinkです。書き込みを中止しました: ${current}`,
+        );
+      current = path.dirname(current);
+    }
+  }
+}
+
+/**
  * 案内する復旧手段を、実際に成功する手段だけに限る（Issue #1305、R2-H03）。
  *
  * **成功しない手段を名指ししない。** 以前は`update`を無条件に名指ししていたが、
@@ -676,6 +731,7 @@ function initUnlocked(
   markDirty: () => void = () => {},
 ) {
   const assets = mappings(target);
+  assertAncestorsNotSymlinked(target, assets);
   const conflicts = assets
     .filter(
       ({ src, dest }) =>
@@ -933,6 +989,7 @@ function upgradeUnlocked(
   const old = observed?.record ?? readManagedAssetRecordAt(target, false);
   const expectedParent = observed?.parent ?? null;
   const current = mappings(target);
+  assertAncestorsNotSymlinked(target, current);
   /**
    * **record不在は「導入済み」の代わりにならない**（Issue #1305）。
    *

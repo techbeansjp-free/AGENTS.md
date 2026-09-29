@@ -238,7 +238,7 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     When installを適用してからupdateも適用する
     Then hook資産の実行bitを含めmode bitsがpackageRootのsourceと一致する
 
-  Scenario: SCN-INT-LIFECYCLE-061 境界内を指す恒常的symlink祖先も書き込み直前の検証で拒否する
+  Scenario: SCN-INT-LIFECYCLE-061 境界内を指す恒常的symlink祖先はpreviewとapplyの両方を副作用なく拒否する
     Given lifecycle検証用の隔離directoryがある
-    When install実行前に.agent-skill-chainを境界内symlinkとして用意してから適用する
+    When install実行前に.claudeを境界内symlinkとして用意してから適用する
     Then installは既存のresolveContainedではなく書き込み直前のpinned-directory検証で拒否する

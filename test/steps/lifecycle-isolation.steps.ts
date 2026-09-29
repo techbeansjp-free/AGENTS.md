@@ -61,6 +61,10 @@ interface IsolationWorld extends WorkflowWorld {
   ancestorSwapped?: boolean;
   /** 祖先directory差し替え中に`init`/`upgrade`が投げた例外（Issue #1309）。 */
   ancestorSwapError?: unknown;
+  /** 恒常的symlink祖先反例のpreview結果（Issue #1309）。 */
+  previewErrorForPersistentSymlink?: unknown;
+  /** mirror直後の境界外directory内容digest（Issue #1309）。 */
+  mirrorDigestAfterSwap?: string;
   /** install直後・update後のmode bits計測（Issue #1309）。 */
   modesAfterInstall?: Record<string, number>;
   modesAfterUpdate?: Record<string, number>;
@@ -1157,14 +1161,57 @@ const ASSET_COPY_SUBDIRECTORIES = [
  * 検出した時点でancestorをsymlinkへ差し替えてから元の`mkdirSync`を呼ぶ。
  * lock・record機構のdirectory作成では発火しない。
  *
+ * **`mirrorContent: true`は差し替え前にancestorの内容を境界外directoryへ
+ * byte-exactで複写する**（Issue #1309、独立review Step 10 finding）。
+ * updateの`overwrite`分類を検証する場合に必須。理由: 単純な削除→symlink化
+ * では、差し替え後にdestが「存在しない」ように見え、`classifyManagedAsset`
+ * が`place`へ再分類してしまい、`writeFileAtomic`（overwrite経路）を一度も
+ * 通らないまま反例が「成功」する（実測: `copyManagedAsset`のoverwrite呼び
+ * 出しをrevertしても4 scenarioとも通過してしまっていた）。内容を複写して
+ * destが「存在し内容が一致する」ように見せることで、分類を`overwrite`の
+ * ままにし、`writeFileAtomic`側のpinDirectory検証を実際に通す。
+ *
  * **製品APIへ新しい注入口を追加しない**（`test/steps/lifecycle-isolation.steps.ts`
  * 既存の規約、`apply中に展開先の内容を変えてupdateを適用する`step参照）。
  * `node:fs`のmethodをtest内で一時的に差し替え、`finally`で必ず戻す。
  */
+/**
+ * directory全体の状態（相対path＋byte内容＋mtime）を1つのdigestへ束ねる
+ * （Issue #1309）。
+ *
+ * **byte内容だけでは足りない。** `copyFileSync`・`writeFileAtomic`は、
+ * source（packageRootの正本）と既存destが偶然byte一致する通常のupdateでも
+ * 中身を書き直す。攻撃者が用意したmirrorがsourceと同一byte列であれば、
+ * 拒否されるべき書き込みが実際に発生していてもbyte内容だけの比較では
+ * 検出できない（実測: overwrite保護をrevertしても内容digestだけの比較では
+ * 反例が「成功」して見えた）。`fs.statSync`の`mtimeMs`を束ねることで、
+ * 内容が同じでも書き込み自体（truncate＋rewrite）が起きたことを検出する。
+ */
+function directoryContentDigest(directory: string): string {
+  const hash = crypto.createHash("sha256");
+  const walk = (dir: string, prefix: string): void => {
+    for (const entry of [...fs.readdirSync(dir, { withFileTypes: true })].sort(
+      (a, b) => a.name.localeCompare(b.name),
+    )) {
+      const resolved = path.join(dir, entry.name);
+      const relative = `${prefix}/${entry.name}`;
+      if (entry.isDirectory()) walk(resolved, relative);
+      else if (entry.isFile()) {
+        hash.update(relative);
+        hash.update(fs.readFileSync(resolved));
+        hash.update(String(fs.statSync(resolved).mtimeMs));
+      }
+    }
+  };
+  if (fs.existsSync(directory)) walk(directory, "");
+  return hash.digest("hex");
+}
+
 function withAncestorSymlinkSwap<T>(
   ancestor: string,
   outsideDirectory: string,
   action: () => T,
+  options: { mirrorContent?: boolean; onSwapped?: () => void } = {},
 ): { result?: T; error?: unknown; swapped: boolean } {
   const original = fs.mkdirSync;
   let swapped = false;
@@ -1176,7 +1223,7 @@ function withAncestorSymlinkSwap<T>(
   try {
     (fs as { mkdirSync: typeof fs.mkdirSync }).mkdirSync = ((
       directory: Parameters<typeof fs.mkdirSync>[0],
-      options?: Parameters<typeof fs.mkdirSync>[1],
+      options2?: Parameters<typeof fs.mkdirSync>[1],
     ) => {
       if (
         !swapped &&
@@ -1190,10 +1237,16 @@ function withAncestorSymlinkSwap<T>(
         !fs.lstatSync(ancestor).isSymbolicLink()
       ) {
         swapped = true;
+        if (options.mirrorContent === true)
+          fs.cpSync(ancestor, outsideDirectory, {
+            recursive: true,
+            preserveTimestamps: true,
+          });
         fs.rmSync(ancestor, { recursive: true, force: true });
         fs.symlinkSync(outsideDirectory, ancestor);
+        options.onSwapped?.();
       }
-      return original(directory, options);
+      return original(directory, options2);
     }) as typeof fs.mkdirSync;
     try {
       result = action();
@@ -1299,14 +1352,32 @@ When(
   },
 );
 
+/**
+ * **`mirrorContent: true`を使う（独立review Step 10 finding 1の是正）。**
+ * `installedIsolation`直後は全資産のrecord digestがdestと一致するため、
+ * `upgrade`は全項目を`overwrite`分類する。単純な削除→symlink化では、
+ * 差し替え直後にdestが「存在しない」ように見え`place`へ再分類され、
+ * `writeFileAtomic`（overwrite経路）を一度も通らないまま反例が「成功」
+ * してしまう（実測: overwrite呼び出しをrevertしても本反例は失敗しなかった）。
+ * 内容を境界外directoryへ複写してから差し替えることで、分類を`overwrite`
+ * のまま保ち、`writeFileAtomic`側のpinDirectory検証を実際に通す。
+ */
 When(
   "updateの資産copy中に.agent-skill-chainを境界外symlinkへ差し替える",
   function () {
     const outsideDirectory = this.temp("asc-lifecycle-ancestor-outside-");
     this.ancestorOutsideDirectory = outsideDirectory;
     const ancestor = path.join(this.root, ".agent-skill-chain");
-    const outcome = withAncestorSymlinkSwap(ancestor, outsideDirectory, () =>
-      upgrade(this.root, { apply: true }),
+    const outcome = withAncestorSymlinkSwap(
+      ancestor,
+      outsideDirectory,
+      () => upgrade(this.root, { apply: true }),
+      {
+        mirrorContent: true,
+        onSwapped: () => {
+          this.mirrorDigestAfterSwap = directoryContentDigest(outsideDirectory);
+        },
+      },
     );
     this.ancestorSwapped = outcome.swapped;
     this.ancestorSwapError = outcome.error;
@@ -1333,13 +1404,13 @@ Then(
 );
 
 /**
- * **「recordも変更しない」は境界外へrecordが公開されないことで確認する。**
- * 差し替えは`.agent-skill-chain`自体（record格納先を含む祖先）を対象にするため、
- * 差し替え後は元のrecordへ`this.root`側のpathから到達できなくなる（symlinkが
- * 外部directoryを指すため）。これは攻撃が実際に及ぼす影響そのものであり、製品の
- * 欠陥ではない。したがって「元のpathでrecordが読めること」ではなく「境界外へ
- * 新しいrecordが公開されていないこと」を確認する（`countRegularFiles`が
- * record publish先の新規fileも数える）。
+ * **「recordも変更しない」はmirror済み境界外directoryの内容不変で確認する。**
+ * 差し替えは`.agent-skill-chain`自体（record格納先を含む祖先）を対象にし、
+ * `mirrorContent`で内容を境界外directoryへ複写するため、差し替え直後の
+ * 内容digest（`mirrorDigestAfterSwap`）と、`upgrade`が失敗した後の内容
+ * digestを比較する。**regular file数だけでは、既存fileの中身が書き換わる
+ * 改変（拒否されるべきoverwriteが実際に発生した場合）を見逃す**ため、
+ * `directoryContentDigest`で内容全体を束ねて比較する。
  */
 Then(
   "updateは例外を投げ境界外directoryへ1個のregular fileも作成せずrecordも変更しない",
@@ -1352,10 +1423,12 @@ Then(
     assert.ok(this.ancestorSwapError, "updateが例外を投げていません");
     const outsideDirectory = this.ancestorOutsideDirectory;
     assert.ok(outsideDirectory, "境界外directoryがありません");
+    const digestAfterSwap = this.mirrorDigestAfterSwap;
+    assert.ok(digestAfterSwap, "差し替え直後のdigestを記録できていません");
     assert.equal(
-      countRegularFiles(outsideDirectory),
-      0,
-      "境界外directoryへregular fileが作成されました（recordの誤公開を含む）",
+      directoryContentDigest(outsideDirectory),
+      digestAfterSwap,
+      "境界外directoryの内容が差し替え直後から変化しました（拒否されるべきoverwriteが発生した可能性）",
     );
   },
 );
@@ -1435,12 +1508,37 @@ Then(
   },
 );
 
+/**
+ * **祖先には`.claude`を使う（`.agent-skill-chain`ではない）。**
+ * 独立review Step 10で、`.agent-skill-chain`をsymlinkにする反例は
+ * `assertSnapshotPublicationSupported`（既存、record公開のhardlink probe。
+ * record不在時に`.agent-skill-chain`直下を直接probeする）が最初に拒否して
+ * しまい、本Issueの新設部分（`assertAncestorsNotSymlinked`・
+ * `copyManagedAsset`）を経由しないため、fixをrevertしても反例が失敗し
+ * 続けず、mutation-discriminatingでないことが実測で判明した。
+ * `.claude`はrecord公開probeの対象外であり、`assertAncestorsNotSymlinked`
+ * （本Issueの新設部分）が拒否する唯一の経路になる。
+ *
+ * **実機確認済みの回帰（独立review Step 10 finding）。** 当初の実装では、
+ * この反例（`.claude`が境界内realdirectoryを指す恒常的symlink）に対し
+ * previewは素通りし、applyだけが資産copyの中盤（`.agent-skill-chain`配下
+ * 111 fileを書き終えてhost展開先へ到達した時点）で失敗し、部分適用のまま
+ * managed mutation lockが残っていた。`assertAncestorsNotSymlinked`を
+ * `mappings()`直後（preview・apply共通の経路）へ追加し、副作用の前に
+ * 拒否するよう是正した。
+ */
 When(
-  "install実行前に.agent-skill-chainを境界内symlinkとして用意してから適用する",
+  "install実行前に.claudeを境界内symlinkとして用意してから適用する",
   function () {
-    const real = path.join(this.root, ".agent-skill-chain-real");
+    const real = path.join(this.root, ".claude-real");
     fs.mkdirSync(real, { recursive: true });
-    fs.symlinkSync(real, path.join(this.root, ".agent-skill-chain"));
+    fs.symlinkSync(real, path.join(this.root, ".claude"));
+    try {
+      init(this.root, { apply: false });
+      this.previewErrorForPersistentSymlink = undefined;
+    } catch (error) {
+      this.previewErrorForPersistentSymlink = error;
+    }
     try {
       init(this.root, { apply: true });
       this.ancestorSwapError = undefined;
@@ -1450,22 +1548,14 @@ When(
   },
 );
 
-/**
- * **実測: この反例は`assertSnapshotPublicationSupported`（既存、record公開の
- * hardlink probe）が最初に拒否する。** `copyManagedAsset`（本Issueの新設部分）
- * まで到達する前に、record不在時の probe が`.agent-skill-chain`直下へ
- * `writeFileNoReplace`（既存、pinDirectory経由）を試み、symlinkの最終component
- * がO_NOFOLLOWに触れて拒否される（実機確認: `ENOTDIR: not a directory, open
- * '.../.agent-skill-chain'`）。**AC-06が求めるのは「asset copyが同じ検証で
- * 拒否される」という観測可能な結果であり、拒否に至る内部経路まで固定しない。**
- * したがってここでは「計画時のresolveContainedでは拒否されていない」ことだけを
- * 固定し、拒否theselfが書き込み直前のpinned-directory系検証（`copyManagedAsset`
- * 経由か、既存のrecord公開probe経由か）によることを確認する。
- */
 Then(
   "installは既存のresolveContainedではなく書き込み直前のpinned-directory検証で拒否する",
   function () {
-    assert.ok(this.ancestorSwapError, "installが拒否していません");
+    assert.ok(
+      this.previewErrorForPersistentSymlink,
+      "previewが拒否していません（apply時だけの部分失敗を許すとlockが残る回帰）",
+    );
+    assert.ok(this.ancestorSwapError, "applyが拒否していません");
     const message =
       this.ancestorSwapError instanceof Error
         ? this.ancestorSwapError.message
@@ -1477,8 +1567,23 @@ Then(
     );
     assert.match(
       message,
-      /ENOTDIR|ELOOP|atomic write directoryが不正です|管理資産の書き込みに失敗しました|公開先/u,
-      `pinned-directory系の検証による拒否だと確認できません: ${message}`,
+      /祖先directoryがsymlinkです/u,
+      `assertAncestorsNotSymlinkedによる拒否だと確認できません: ${message}`,
+    );
+    /** 副作用が起きる前に拒否したことを、書込み0件とlock不在で確認する。 */
+    const entries = fs
+      .readdirSync(this.root)
+      .filter((entry) => entry !== ".git")
+      .sort();
+    assert.deepEqual(
+      entries,
+      [".claude", ".claude-real", "README.md"],
+      `applyが部分的に書き込みました: ${entries.join(", ")}`,
+    );
+    assert.equal(
+      fs.existsSync(path.join(this.root, ".agent-skill-chain")),
+      false,
+      ".agent-skill-chainが作成されました（副作用が起きています）",
     );
   },
 );
@@ -2766,10 +2871,13 @@ Then("CLIは非0で終了し明示指定を名指しし1 fileも書かない", f
  * `upgrade`側のSCN-033だけでは`init`の呼び出し行を消す変異が生存する。
  */
 /**
- * **注入点はIssue #1309でfs.copyFileSyncから移した。** 新規installでは
- * どの資産が最初に処理されるか（`ROOT_ASSETS`の`AGENTS.md`）を固定せず、
- * `withExclusiveCreateCloseInjection(null, ...)`で最初のO_CREAT|O_EXCL作成を
- * 捕捉する。
+ * **注入点はIssue #1309でfs.copyFileSyncから移した。** `leaf=null`（最初の
+ * O_CREAT|O_EXCL作成を無条件に捕捉）は使わない。**実測: 新設した
+ * `assertSnapshotPublicationSupported`のrecord-link-probe（`writeFileNoReplace`
+ * 経由、資産copyより前に走る）が最初のO_CREAT|O_EXCL作成であり、`leaf=null`
+ * だとprobeのtemp fileで発火してしまい「資産copy直後」という本scenarioの
+ * 意図と異なるtimingになる（独立review Step 10 finding 4）。** `ROOT_ASSETS`の
+ * 先頭`AGENTS.md`を明示指定し、実際に資産copyが起きた直後に発火させる。
  */
 When(
   "installの資産copy直後にrecord公開先へsymlinkを挿入して適用する",
@@ -2779,7 +2887,7 @@ When(
     this.outsideTarget = { file: missing, contents: "" };
     this.recoveryRejections = [];
     const outcome = withExclusiveCreateCloseInjection(
-      null,
+      "AGENTS.md",
       () => {
         fs.mkdirSync(path.dirname(recordPath(this.root)), {
           recursive: true,
