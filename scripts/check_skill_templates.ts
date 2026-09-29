@@ -493,6 +493,63 @@ export function checkIssueTemplateHeadings(
 const PLACEMENT_DEPENDENT_LINK =
   /(?:\]\(|\]:\s*|<a\s[^>]*href=["'])\s*<?\s*(?:\.\/)?(?:\.\.\/)+/gu;
 
+/**
+ * fenced code blockの開始・終了delimiterをCommonMarkの3条件で判定する
+ * （同じ文字、開始以上の長さ、info stringを持たない閉鎖行）。
+ *
+ * **単純な`` /```[\s\S]*?```/ ``では足りない。** `~~~`のtilde fenceを除外せず、
+ * 4個以上のbacktick fenceも3個で閉じたと誤認し、内側の3個backtickで早期終了して
+ * 後続の旧形式linkや配置非依存参照が検査対象へ漏れ出す（CodeRabbit実指摘、PR #1543）。
+ * `test/support/markdown.ts`の`fenceDelimiter`・`closesFence`と同じCommonMark規則を
+ * scripts側でも持つ（test支援codeを配布物経路の検査へ依存させない）。
+ */
+type FenceDelimiter = {
+  readonly character: string;
+  readonly length: number;
+  readonly infoString: string;
+};
+
+function fenceDelimiter(line: string): FenceDelimiter | undefined {
+  const match = /^\s{0,3}(`{3,}|~{3,})(.*)$/u.exec(line);
+  const run = match?.[1];
+  if (!run) return undefined;
+  return {
+    character: run[0]!,
+    length: run.length,
+    infoString: (match[2] ?? "").trim(),
+  };
+}
+
+function closesFence(open: FenceDelimiter, candidate: FenceDelimiter): boolean {
+  return (
+    candidate.character === open.character &&
+    candidate.length >= open.length &&
+    candidate.infoString.length === 0
+  );
+}
+
+/**
+ * fenced code block内の行を取り除く。単一backtickのinline codeは対象外にする
+ * （配置非依存参照自体がその記法を使うため）。
+ */
+function maskFencedCodeBlocks(markdown: string): string {
+  const lines: string[] = [];
+  let openFence: FenceDelimiter | undefined;
+  for (const line of markdown.split(/\r?\n/u)) {
+    const delimiter = fenceDelimiter(line);
+    if (openFence !== undefined) {
+      if (delimiter && closesFence(openFence, delimiter)) openFence = undefined;
+      continue;
+    }
+    if (delimiter !== undefined) {
+      openFence = delimiter;
+      continue;
+    }
+    lines.push(line);
+  }
+  return lines.join("\n");
+}
+
 const GENERATED_ISSUE_TEMPLATE_FILES = [
   "00_要求定義_full.md",
   "00_要求定義_quick.md",
@@ -523,12 +580,13 @@ function checkGeneratedTemplateReferences(root: string): string[] {
     }
     const markdown = fs.readFileSync(file, "utf8");
     /**
-     * **fenced code block（```…```）内は対象外にする。** 案BのAC-03（code fence
-     * を誤変換しない）を、この検査自身にも適用する。旧形式のlinkを説明目的で
-     * 例示するcode fenceが将来追加されても誤検出しない。単一backtickの
-     * inline codeは対象外にしない（配置非依存参照自体がその記法を使うため）。
+     * **fenced code block（backtickまたはtilde、CommonMark閉鎖規則）内は
+     * 対象外にする。** 案BのAC-03（code fenceを誤変換しない）を、この検査自身にも
+     * 適用する。旧形式のlinkを説明目的で例示するcode fenceが将来追加されても
+     * 誤検出しない。単一backtickのinline codeは対象外にしない
+     * （配置非依存参照自体がその記法を使うため）。
      */
-    const withoutFencedCode = markdown.replace(/```[\s\S]*?```/gu, "");
+    const withoutFencedCode = maskFencedCodeBlocks(markdown);
     if (PLACEMENT_DEPENDENT_LINK.test(withoutFencedCode))
       errors.push(
         `issue/${relative}: 配置非依存参照へ書き換えていない相対linkが残っています`,
