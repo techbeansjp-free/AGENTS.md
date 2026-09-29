@@ -1016,7 +1016,7 @@ const TSX_IMPORT_PATTERN = /\bnode\b[^\n]*--import[=\s]+tsx\b/u;
  * `- name:` … `uses:`形だけを前提にすると、単一行形を持つ正しいworkflowを
  * 誤ってvalidが不成立と判定する（round 1独立review REV-03指摘）。
  */
-const SETUP_NODE_USES_PATTERN = /^\s*-?\s*uses:\s*actions\/setup-node@/u;
+const SETUP_NODE_USES_PATTERN = /^\s*-?\s*uses:\s*actions\/setup-node@/mu;
 /**
  * **`npm ci`はcommand行の先頭（`run:`接頭辞を除く）にある場合だけ一致させる。**
  * `\bnpm\s+ci\b`は`run: echo skip npm ci`のような、実際には実行しない
@@ -1024,6 +1024,49 @@ const SETUP_NODE_USES_PATTERN = /^\s*-?\s*uses:\s*actions\/setup-node@/u;
  * （`run: npm ci …`）と複数行形（`run: |`の後の継続行）の両方を許容する。
  */
 const NPM_CI_PATTERN = /^\s*(?:run:\s*)?npm\s+ci\b/mu;
+
+/**
+ * job内の全stepについて、header正規化済みのbody（次stepの直前まで）を返す。
+ * **`jobStepRunBlocks`と違い`run:`を持たないstep（`uses:`だけのstep等）も含む。**
+ * `setup-node`のstepは`run:`を持たないため`jobStepRunBlocks`の対象外になり、
+ * その`if:`・`continue-on-error:`を検査できない（CodeRabbit round 1指摘）。
+ */
+function jobStepBodies(
+  lines: readonly string[],
+  job: string,
+): Array<{ stepStart: number; body: string }> {
+  const range = jobRange(lines, job);
+  if (range === undefined) return [];
+  const stepStarts: number[] = [];
+  for (let cursor = range.start; cursor < range.end; cursor += 1)
+    if (/^ {6}-\s/u.test(lines[cursor] ?? "")) stepStarts.push(cursor);
+  return stepStarts.map((stepStart, order) => {
+    const stepEnd = stepStarts[order + 1] ?? range.end;
+    const rawBody = lines.slice(stepStart, stepEnd);
+    /** `jobStepRunBlocks`と同じheader正規化（`- `を2 spacesへ）。 */
+    const body = [
+      (rawBody[0] ?? "").replace(/^( {6})-( ?)/u, "$1  "),
+      ...rawBody.slice(1),
+    ];
+    return { stepStart, body: body.join("\n") };
+  });
+}
+
+/**
+ * stepのattributes文字列（`jobStepRunBlocks`・`jobStepBodies`のheader正規化を
+ * 前提に8 spaces起点で判定する。既存の`validateAcceptanceStep`・
+ * `verifyIdentitySteps`判定と同じ規約）に、実行を省略・失敗握り潰しの宣言が
+ * 無いことを確認する。**`if: ${{ false }}`や`continue-on-error: true`を
+ * 付けても、既存の実装は"step本文にcommandが存在する"としか見ておらず
+ * `satisfied`を返してしまう（CodeRabbit round 1指摘）。**
+ */
+function stepAlwaysRuns(attributes: string): boolean {
+  if (/^ {8}if:/mu.test(attributes)) return false;
+  const continueOnError = /^ {8}continue-on-error:\s*(\S.*)$/mu
+    .exec(attributes)?.[1]
+    ?.trim();
+  return continueOnError === undefined || continueOnError === "false";
+}
 
 /**
  * 指定jobについて依存導入の充足状態を返す。
@@ -1043,22 +1086,33 @@ function jobDependencyInstallGap(
     TSX_IMPORT_PATTERN.test(command),
   );
   if (tsxStep === undefined) return "not-applicable";
-  const setupNodeLineIndex = lines.findIndex(
-    (line, index) =>
-      index >= range.start &&
-      index < tsxStep.stepStart &&
-      SETUP_NODE_USES_PATTERN.test(line),
+  /**
+   * **最初に見つかったcandidateを無条件で採用しない。** setup-nodeを名乗る
+   * stepが複数あるか、先頭のものが`if:`等で無効化されている場合、パターンと
+   * `stepAlwaysRuns`の両方を満たす候補まで探索を続ける。
+   */
+  const setupNodeStep = jobStepBodies(lines, job).find(
+    ({ stepStart, body }) =>
+      stepStart < tsxStep.stepStart &&
+      SETUP_NODE_USES_PATTERN.test(body) &&
+      stepAlwaysRuns(body),
   );
+  if (setupNodeStep === undefined) return "violated";
+  /**
+   * **`npm ci`はsetup-nodeより後・tsx実行stepより前にある候補だけを探す。**
+   * 順序に関係なく最初に見つかった`npm ci`を採用すると、setup-nodeより前にある
+   * 無関係な`npm ci`（例: 別処理の下準備）を誤って選び、その後方に実在する
+   * 正しい順序の`npm ci`を見落として誤ってvalidを拒否する
+   * （CodeRabbit round 1指摘）。`stepAlwaysRuns`で無効化されたstepも候補から除く。
+   */
   const npmCiStep = runBlocks.find(
-    ({ command, stepStart }) =>
-      stepStart < tsxStep.stepStart && NPM_CI_PATTERN.test(command),
+    ({ command, stepStart, attributes }) =>
+      stepStart > setupNodeStep.stepStart &&
+      stepStart < tsxStep.stepStart &&
+      NPM_CI_PATTERN.test(command) &&
+      stepAlwaysRuns(attributes),
   );
-  if (
-    setupNodeLineIndex < 0 ||
-    npmCiStep === undefined ||
-    setupNodeLineIndex >= npmCiStep.stepStart
-  )
-    return "violated";
+  if (npmCiStep === undefined) return "violated";
   return "satisfied";
 }
 
