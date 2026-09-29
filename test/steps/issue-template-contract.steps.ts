@@ -41,6 +41,7 @@ interface IssueTemplateContractWorld extends WorkflowWorld {
   issuePath: string;
   mode: "full" | "quick" | "poc";
   packageRoot: string;
+  root: string;
   requirementTemplate: string;
   results: Validation[];
   validation: Validation;
@@ -620,3 +621,457 @@ Then("fullの不足見出しを示してskills checkが失敗する", function (
   assert.equal(this.check.valid, false);
   assert.match(this.check.errors.join(" "), /full.*必須見出し/u);
 });
+
+/**
+ * Issue #1419: `issue create`が生成先stagingへ複製・生成するtemplate（00〜03）が、
+ * 配置に依存する相対linkを持たないことをbuild時に検査する`checkGeneratedTemplateReferences`
+ * （`checkSkillTemplateContracts`へ合成済み）のfail-closed観測。
+ */
+Given(
+  "配置非依存参照を相対linkへ戻したfull要求定義templateを持つpackage資産がある",
+  function () {
+    this.packageRoot = copyPackageAssets(this);
+    const file = path.join(
+      this.packageRoot,
+      ".agent-skill-chain/templates/issue/00_要求定義_full.md",
+    );
+    const markdown = fs.readFileSync(file, "utf8");
+    const placementIndependent =
+      "`.agent-skill-chain/docs/01_開発ワークフロー.md`の「モード判定質問」節";
+    assert.ok(
+      markdown.includes(placementIndependent),
+      "書き戻す対象の配置非依存参照が見つかりません",
+    );
+    fs.writeFileSync(
+      file,
+      markdown.replace(
+        placementIndependent,
+        "[モード判定質問](../../docs/01_開発ワークフロー.md#モード判定質問)",
+      ),
+    );
+  },
+);
+
+Given(
+  "配置非依存参照の参照先を存在しないpathへ書き換えた実装計画templateを持つpackage資産がある",
+  function () {
+    this.packageRoot = copyPackageAssets(this);
+    const file = path.join(
+      this.packageRoot,
+      ".agent-skill-chain/templates/issue/03_実装計画.md",
+    );
+    const markdown = fs.readFileSync(file, "utf8");
+    const reference =
+      "`.agent-skill-chain/docs/01_開発ワークフロー.md`（開発ワークフロー）";
+    assert.ok(
+      markdown.includes(reference),
+      "書き換える対象の配置非依存参照が見つかりません",
+    );
+    fs.writeFileSync(
+      file,
+      markdown.replace(
+        reference,
+        "`.agent-skill-chain/docs/00_存在しない.md`（開発ワークフロー）",
+      ),
+    );
+  },
+);
+
+Then(
+  "配置非依存参照へ書き換えていない相対linkを示してskills checkが失敗する",
+  function () {
+    assert.equal(this.check.valid, false, this.check.errors.join("; "));
+    assert.ok(
+      this.check.errors.some((error) =>
+        error.includes(
+          "配置非依存参照へ書き換えていない相対linkが残っています",
+        ),
+      ),
+      this.check.errors.join("; "),
+    );
+  },
+);
+
+Then(
+  "配置非依存参照の参照先がないことを示してskills checkが失敗する",
+  function () {
+    assert.equal(this.check.valid, false, this.check.errors.join("; "));
+    assert.ok(
+      this.check.errors.some(
+        (error) =>
+          error.includes("配置非依存参照の参照先がありません") &&
+          error.includes("00_存在しない.md"),
+      ),
+      this.check.errors.join("; "),
+    );
+  },
+);
+
+Then("skills checkは合格する", function () {
+  assert.equal(this.check.valid, true, this.check.errors.join("; "));
+});
+
+/**
+ * Issue #1419 Step 10独立review（REV-02）: AC-04が要求する4分岐
+ * （repository外・symlink境界・非file・存在しないtarget）のうち、
+ * repository外・symlink境界・非fileがどのSCNからも到達しておらず、
+ * 削除しても検査全体が合格することを指摘された。3分岐それぞれの
+ * fail-closed観測を追加する。
+ */
+Given(
+  "配置非依存参照がrepositoryの外を指すよう書き換えた実装計画templateを持つpackage資産がある",
+  function () {
+    this.packageRoot = copyPackageAssets(this);
+    const file = path.join(
+      this.packageRoot,
+      ".agent-skill-chain/templates/issue/03_実装計画.md",
+    );
+    const markdown = fs.readFileSync(file, "utf8");
+    const reference =
+      "`.agent-skill-chain/docs/01_開発ワークフロー.md`（開発ワークフロー）";
+    assert.ok(
+      markdown.includes(reference),
+      "書き換える対象の配置非依存参照が見つかりません",
+    );
+    fs.writeFileSync(
+      file,
+      markdown.replace(
+        reference,
+        "`.agent-skill-chain/../../外部脱出.md`（開発ワークフロー）",
+      ),
+    );
+  },
+);
+
+Given(
+  "配置非依存参照の参照先がdirectoryである実装計画templateを持つpackage資産がある",
+  function () {
+    this.packageRoot = copyPackageAssets(this);
+    const file = path.join(
+      this.packageRoot,
+      ".agent-skill-chain/templates/issue/03_実装計画.md",
+    );
+    const markdown = fs.readFileSync(file, "utf8");
+    const reference =
+      "`.agent-skill-chain/docs/01_開発ワークフロー.md`（開発ワークフロー）";
+    assert.ok(
+      markdown.includes(reference),
+      "書き換える対象の配置非依存参照が見つかりません",
+    );
+    const directoryTarget = path.join(
+      this.packageRoot,
+      ".agent-skill-chain/docs/ディレクトリ参照.md",
+    );
+    fs.mkdirSync(directoryTarget);
+    fs.writeFileSync(
+      file,
+      markdown.replace(
+        reference,
+        "`.agent-skill-chain/docs/ディレクトリ参照.md`（開発ワークフロー）",
+      ),
+    );
+  },
+);
+
+Given(
+  "配置非依存参照の参照先がrepository境界外へのsymlinkである実装計画templateを持つpackage資産がある",
+  function () {
+    this.packageRoot = copyPackageAssets(this);
+    const file = path.join(
+      this.packageRoot,
+      ".agent-skill-chain/templates/issue/03_実装計画.md",
+    );
+    const markdown = fs.readFileSync(file, "utf8");
+    const reference =
+      "`.agent-skill-chain/docs/01_開発ワークフロー.md`（開発ワークフロー）";
+    assert.ok(
+      markdown.includes(reference),
+      "書き換える対象の配置非依存参照が見つかりません",
+    );
+    const outside = this.temp("asc-issuetpl-outside-");
+    const outsideFile = path.join(outside, "外部の文書.md");
+    fs.writeFileSync(outsideFile, "# 外部\n");
+    const symlinkTarget = path.join(
+      this.packageRoot,
+      ".agent-skill-chain/docs/symlink参照.md",
+    );
+    fs.symlinkSync(outsideFile, symlinkTarget);
+    fs.writeFileSync(
+      file,
+      markdown.replace(
+        reference,
+        "`.agent-skill-chain/docs/symlink参照.md`（開発ワークフロー）",
+      ),
+    );
+  },
+);
+
+Then(
+  "配置非依存参照がrepository外であることを示してskills checkが失敗する",
+  function () {
+    assert.equal(this.check.valid, false, this.check.errors.join("; "));
+    assert.ok(
+      this.check.errors.some((error) =>
+        error.includes("配置非依存参照がrepository外です"),
+      ),
+      this.check.errors.join("; "),
+    );
+  },
+);
+
+Then(
+  "配置非依存参照の参照先がfileではないことを示してskills checkが失敗する",
+  function () {
+    assert.equal(this.check.valid, false, this.check.errors.join("; "));
+    assert.ok(
+      this.check.errors.some((error) =>
+        error.includes("配置非依存参照の参照先がfileではありません"),
+      ),
+      this.check.errors.join("; "),
+    );
+  },
+);
+
+Then(
+  "配置非依存参照の参照先がsymlinkでrepository境界外であることを示してskills checkが失敗する",
+  function () {
+    assert.equal(this.check.valid, false, this.check.errors.join("; "));
+    assert.ok(
+      this.check.errors.some((error) =>
+        error.includes("配置非依存参照の参照先がsymlinkでrepository境界外です"),
+      ),
+      this.check.errors.join("; "),
+    );
+  },
+);
+
+/**
+ * Issue #1419: `issue create`が生成する00〜03の配置非依存参照が、staging配置
+ * （既定・custom・wildcard・深いtracked）によらず生成先repository rootから
+ * 実際に解決できることを実機で確認する。
+ */
+
+/** 全問trueまたはfalseで揃えたmode判定回答。fullを強制するときはrequestedMode="full"と併用する。 */
+function placementAnswers(
+  value: boolean,
+): Record<string, { answer: boolean; evidence: string }> {
+  return Object.fromEntries(
+    QUESTIONS.map((id) => [
+      id,
+      { answer: value, evidence: "fixture evidence" },
+    ]),
+  );
+}
+
+function deployDocsNamespace(root: string): void {
+  fs.mkdirSync(path.join(root, ".agent-skill-chain"), { recursive: true });
+  fs.cpSync(
+    path.join(repositoryRoot, ".agent-skill-chain/docs"),
+    path.join(root, ".agent-skill-chain/docs"),
+    { recursive: true },
+  );
+}
+
+function writePlacementPolicy(
+  root: string,
+  staging: { root: string; tracked: boolean },
+): void {
+  fs.mkdirSync(path.join(root, ".agent-skill-chain"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, ".agent-skill-chain", "project-policy.json"),
+    `${JSON.stringify(
+      {
+        schemaVersion: "agent-skill-chain/project-policy-manifest/v1",
+        policy: {
+          schemaVersion: "agent-skill-chain/project-policy/v0.3.1",
+          delivery: { stopAt: "pull_request" },
+          merge: {
+            mode: "disabled",
+            branches: [],
+            methods: [],
+            requiredChecks: [],
+            requiredReviews: 1,
+          },
+          budgets: { localFeedbackMs: 120000, prGateMs: 900000 },
+          staging,
+        },
+        choiceFiles: [],
+        ruleFiles: [],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+const GENERATED_ISSUE_STAGING_FILES = [
+  "00_要求定義.md",
+  "01_要件定義.md",
+  "02_設計.md",
+  "03_実装計画.md",
+] as const;
+
+const SOURCE_TEMPLATE_FOR: Record<
+  (typeof GENERATED_ISSUE_STAGING_FILES)[number],
+  string
+> = {
+  "00_要求定義.md": "00_要求定義_full.md",
+  "01_要件定義.md": "01_要件定義.md",
+  "02_設計.md": "02_設計.md",
+  "03_実装計画.md": "03_実装計画.md",
+};
+
+const PLACEMENT_INDEPENDENT_REFERENCE =
+  /`(\.agent-skill-chain\/docs\/[^`]+\.md)`/gu;
+
+/**
+ * 生成されたstaging（00〜03）内の配置非依存参照を、出荷templateの参照件数と
+ * 突き合わせながら、実際にfixture root（`issue create`の`root`引数、
+ * INV-03がいう「repository」）から解決できることを検証する。
+ *
+ * **解決基点はfixture rootである。** package自身（このworktree）から解決すると
+ * どの配置でも同じ結果になりAC-01を空虚に満たしてしまうため（Step 7指摘）。
+ */
+function assertPlacementIndependentReferencesResolve(
+  root: string,
+  issuePath: string,
+): void {
+  for (const generated of GENERATED_ISSUE_STAGING_FILES) {
+    const sourceTemplate = fs.readFileSync(
+      path.join(
+        repositoryRoot,
+        ".agent-skill-chain/templates/issue",
+        SOURCE_TEMPLATE_FOR[generated],
+      ),
+      "utf8",
+    );
+    const expectedCount = [
+      ...sourceTemplate.matchAll(PLACEMENT_INDEPENDENT_REFERENCE),
+    ].length;
+    const generatedMarkdown = fs.readFileSync(
+      path.join(issuePath, generated),
+      "utf8",
+    );
+    assert.equal(
+      /\]\(\.\.\/\.\.\/docs\//u.test(generatedMarkdown),
+      false,
+      `${generated}に配置依存の相対linkが残っています`,
+    );
+    const references = [
+      ...generatedMarkdown.matchAll(PLACEMENT_INDEPENDENT_REFERENCE),
+    ].map((match) => match[1]!);
+    assert.equal(
+      references.length,
+      expectedCount,
+      `${generated}の配置非依存参照件数が出荷templateと一致しません: ${references.join(",")}`,
+    );
+    for (const reference of references) {
+      const resolved = path.join(root, reference);
+      assert.equal(
+        fs.existsSync(resolved) && fs.statSync(resolved).isFile(),
+        true,
+        `${generated}の配置非依存参照がfixture rootから解決できません: ${reference}`,
+      );
+    }
+  }
+}
+
+Given("ASC docsを展開した一時repositoryがある", function () {
+  this.root = this.initRepo();
+  deployDocsNamespace(this.root);
+});
+
+Given(
+  "ASC docsを展開しwildcardのcustom staging-rootを宣言した一時repositoryがある",
+  function () {
+    this.root = this.initRepo();
+    deployDocsNamespace(this.root);
+    writePlacementPolicy(this.root, { root: "docs/*/tasks", tracked: true });
+  },
+);
+
+Given(
+  "ASC docsを展開し深いtracked staging-rootを宣言した一時repositoryがある",
+  function () {
+    this.root = this.initRepo();
+    deployDocsNamespace(this.root);
+    writePlacementPolicy(this.root, {
+      root: "docs/a/b/c/d/tasks",
+      tracked: true,
+    });
+  },
+);
+
+When("既定staging配置でfull issueを作成する", function () {
+  this.issuePath = createIssueStaging(this.root, {
+    title: "配置検証・既定",
+    answers: placementAnswers(false),
+    requestedMode: "full",
+    now: new Date("2026-09-30T00:00:00.000Z"),
+  }).path;
+});
+
+When("wildcard custom staging-rootでfull issueを作成する", function () {
+  this.issuePath = createIssueStaging(this.root, {
+    title: "配置検証・wildcard",
+    answers: placementAnswers(false),
+    requestedMode: "full",
+    now: new Date("2026-09-30T00:00:01.000Z"),
+    stagingRoot: "docs/sprint01/tasks",
+    name: "S1-T09_配置検証",
+  }).path;
+});
+
+When("深いtracked staging-rootでfull issueを作成する", function () {
+  this.issuePath = createIssueStaging(this.root, {
+    title: "配置検証・深い",
+    answers: placementAnswers(false),
+    requestedMode: "full",
+    now: new Date("2026-09-30T00:00:02.000Z"),
+    name: "S1-T09_配置検証",
+  }).path;
+});
+
+Then(
+  "生成された00から03の配置非依存参照はfixture rootから解決できる",
+  function () {
+    assertPlacementIndependentReferencesResolve(this.root, this.issuePath);
+  },
+);
+
+/**
+ * AC-03（code fence・外部URL・anchor・画像・意図的な非link文字列を誤変換しない）を、
+ * 実templateに存在しない独立の敵対的fixtureで検証する。**対象から導出しないfixture**
+ * （00_要求定義_poc.mdの内容全体をこのシナリオ専用の合成文書で置き換える。他5
+ * templateには触れない）。
+ */
+Given(
+  "旧形式linkの説明例をcode fence内に持ち外部URL・anchor・画像・directory参照も含むtemplateを持つpackage資産がある",
+  function () {
+    this.packageRoot = copyPackageAssets(this);
+    const file = path.join(
+      this.packageRoot,
+      ".agent-skill-chain/templates/issue/00_要求定義_poc.md",
+    );
+    const fence = "```";
+    const adversarial = [
+      "",
+      "<!-- Issue #1419 SCN-INT-ISSUETPL-009: 敵対的fixture、既存必須構造の末尾へ追記する -->",
+      "",
+      "旧形式の例（説明目的、実際のlinkではない）:",
+      fence,
+      "[旧例](../../docs/01_開発ワークフロー.md#旧)",
+      fence,
+      "",
+      "外部URLの例: https://example.com/docs/01_開発ワークフロー.md",
+      "",
+      "anchor単独参照の例: [本節](#issue-1419-scn-int-issuetpl-009)",
+      "",
+      "画像の例: ![diagram](https://example.com/diagram.png)",
+      "",
+      "意図的な非link文字列（directory参照、`.md`で終わらない）: `.agent-skill-chain/templates/common/`",
+      "",
+    ].join("\n");
+    fs.appendFileSync(file, adversarial);
+  },
+);

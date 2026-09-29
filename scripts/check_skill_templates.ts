@@ -466,8 +466,183 @@ export function checkIssueTemplateHeadings(
   return { valid: errors.length === 0, errors };
 }
 
+/**
+ * `issue create`が生成先stagingへ複製・生成するIssue template（00〜03）を対象に、
+ * 配置に依存する相対linkが残っていないこと、配置非依存参照（backtick表記の
+ * repository相対path）の参照先が実在することをbuild時に検査する（Issue #1419）。
+ *
+ * **配置に依存する相対linkを、綴りの変種を含めて禁止する。** `templateRoot`相対の
+ * repository内linkは、`src/domain/issue.ts`の`copyFileSync`・
+ * `requirementDocument()`がtemplateをそのまま複製するだけでlink書換えを
+ * 行わないため、生成先staging配置の深さによって解決結果が変わり、既定配置を
+ * 含む全配置で壊れうる。**`](../../docs/`という1つの綴りだけを禁止しても
+ * 検査をすり抜ける（Step 10独立reviewのREV-01が実測）。** `](../docs/`（1階層）、
+ * `](../../../docs/`（3階層以上）、`docs/`以外の相対path（例:
+ * `](../../skills/...)`）、`](./../../docs/`のような`./`混在、
+ * `` [x](<../../docs/...>) ``のような山括弧destination、reference-style
+ * link定義（`` [label]: ../../docs/... ``）、生のHTML `<a href="../...">`
+ * のいずれも同じ配置依存の欠陥を持つため、destinationが相対path上昇を含む
+ * 形をまとめて検出する。
+ *
+ * **配置非依存参照は実在をrepository root基準で検証する。** `` `.agent-skill-chain/…md` ``
+ * 形式の参照だけを対象にし、`` `.agent-skill-chain/templates/common/` ``のような
+ * directory参照（`.md`で終わらない）は対象にしない。任意のbacktick文字列を
+ * 汎用走査すると、既存のdirectory参照を誤検出するため（Step 7 readiness checkの
+ * 指摘）。
+ */
+const PLACEMENT_DEPENDENT_LINK =
+  /(?:\]\(|\]:\s*|<a\s[^>]*href=["'])\s*<?\s*(?:\.\/)?(?:\.\.\/)+/gu;
+
+/**
+ * fenced code blockの開始・終了delimiterをCommonMarkの3条件で判定する
+ * （同じ文字、開始以上の長さ、info stringを持たない閉鎖行）。
+ *
+ * **単純な`` /```[\s\S]*?```/ ``では足りない。** `~~~`のtilde fenceを除外せず、
+ * 4個以上のbacktick fenceも3個で閉じたと誤認し、内側の3個backtickで早期終了して
+ * 後続の旧形式linkや配置非依存参照が検査対象へ漏れ出す（CodeRabbit実指摘、PR #1543）。
+ * `test/support/markdown.ts`の`fenceDelimiter`・`closesFence`と同じCommonMark規則を
+ * scripts側でも持つ（test支援codeを配布物経路の検査へ依存させない）。
+ */
+type FenceDelimiter = {
+  readonly character: string;
+  readonly length: number;
+  readonly infoString: string;
+};
+
+function fenceDelimiter(line: string): FenceDelimiter | undefined {
+  const match = /^\s{0,3}(`{3,}|~{3,})(.*)$/u.exec(line);
+  const run = match?.[1];
+  if (!run) return undefined;
+  return {
+    character: run[0]!,
+    length: run.length,
+    infoString: (match[2] ?? "").trim(),
+  };
+}
+
+function closesFence(open: FenceDelimiter, candidate: FenceDelimiter): boolean {
+  return (
+    candidate.character === open.character &&
+    candidate.length >= open.length &&
+    candidate.infoString.length === 0
+  );
+}
+
+/**
+ * fenced code block内の行を取り除く。単一backtickのinline codeは対象外にする
+ * （配置非依存参照自体がその記法を使うため）。
+ */
+function maskFencedCodeBlocks(markdown: string): string {
+  const lines: string[] = [];
+  let openFence: FenceDelimiter | undefined;
+  for (const line of markdown.split(/\r?\n/u)) {
+    const delimiter = fenceDelimiter(line);
+    if (openFence !== undefined) {
+      if (delimiter && closesFence(openFence, delimiter)) openFence = undefined;
+      continue;
+    }
+    if (delimiter !== undefined) {
+      openFence = delimiter;
+      continue;
+    }
+    lines.push(line);
+  }
+  return lines.join("\n");
+}
+
+const GENERATED_ISSUE_TEMPLATE_FILES = [
+  "00_要求定義_full.md",
+  "00_要求定義_quick.md",
+  "00_要求定義_poc.md",
+  "01_要件定義.md",
+  "02_設計.md",
+  "03_実装計画.md",
+] as const;
+
+function checkGeneratedTemplateReferences(root: string): string[] {
+  const errors: string[] = [];
+  const templatesRoot = path.resolve(
+    root,
+    ".agent-skill-chain/templates/issue",
+  );
+  const repositoryRoot = path.resolve(root);
+  let repositoryRootReal: string;
+  try {
+    repositoryRootReal = fs.realpathSync(repositoryRoot);
+  } catch {
+    return [`生成対象templateのrepository rootを解決できません: ${root}`];
+  }
+  for (const relative of GENERATED_ISSUE_TEMPLATE_FILES) {
+    const file = path.join(templatesRoot, relative);
+    if (!fs.existsSync(file)) {
+      errors.push(`生成対象templateがありません: issue/${relative}`);
+      continue;
+    }
+    const markdown = fs.readFileSync(file, "utf8");
+    /**
+     * **fenced code block（backtickまたはtilde、CommonMark閉鎖規則）内は
+     * 対象外にする。** 案BのAC-03（code fenceを誤変換しない）を、この検査自身にも
+     * 適用する。旧形式のlinkを説明目的で例示するcode fenceが将来追加されても
+     * 誤検出しない。単一backtickのinline codeは対象外にしない
+     * （配置非依存参照自体がその記法を使うため）。
+     */
+    const withoutFencedCode = maskFencedCodeBlocks(markdown);
+    if (PLACEMENT_DEPENDENT_LINK.test(withoutFencedCode))
+      errors.push(
+        `issue/${relative}: 配置非依存参照へ書き換えていない相対linkが残っています`,
+      );
+    PLACEMENT_DEPENDENT_LINK.lastIndex = 0;
+    const references = uniqueSorted(
+      [
+        ...withoutFencedCode.matchAll(/`(\.agent-skill-chain\/[^`]+\.md)`/gu),
+      ].map((match) => match[1]!),
+    );
+    for (const reference of references) {
+      const resolved = path.resolve(repositoryRoot, reference);
+      if (!resolved.startsWith(`${repositoryRoot}${path.sep}`)) {
+        errors.push(
+          `issue/${relative}: 配置非依存参照がrepository外です: ${reference}`,
+        );
+        continue;
+      }
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(resolved);
+      } catch {
+        errors.push(
+          `issue/${relative}: 配置非依存参照の参照先がありません: ${reference}`,
+        );
+        continue;
+      }
+      if (!stat.isFile()) {
+        errors.push(
+          `issue/${relative}: 配置非依存参照の参照先がfileではありません: ${reference}`,
+        );
+        continue;
+      }
+      let real: string;
+      try {
+        real = fs.realpathSync(resolved);
+      } catch {
+        errors.push(
+          `issue/${relative}: 配置非依存参照の参照先を解決できません: ${reference}`,
+        );
+        continue;
+      }
+      if (!real.startsWith(`${repositoryRootReal}${path.sep}`))
+        errors.push(
+          `issue/${relative}: 配置非依存参照の参照先がsymlinkでrepository境界外です: ${reference}`,
+        );
+    }
+  }
+  return errors;
+}
+
 export function checkSkillTemplateContracts(root = process.cwd()) {
-  const errors: string[] = [...checkIssueTemplateHeadings(root).errors];
+  const errors: string[] = [
+    ...checkIssueTemplateHeadings(root).errors,
+    ...checkGeneratedTemplateReferences(root),
+  ];
   const skillsRoot = path.resolve(root, ".agent-skill-chain/skills");
   const templatesRoot = path.resolve(root, ".agent-skill-chain/templates");
   const namespaceRoot = path.resolve(root, ".agent-skill-chain");
