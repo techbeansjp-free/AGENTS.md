@@ -43,6 +43,12 @@ interface EvidenceOnlyHeadWorld extends WorkflowWorld {
   resolvedImplementation?: string;
   /** 9 commit fixtureで、8個遡った時点に相当する境界commit（1個目のartifact commit）。 */
   capBoundary?: string;
+  /**
+   * `resolveImplementationHead`のtest呼び出しが固定するartifact path（Issue #1532
+   * round 1指摘、HIGH-1）。既定は`artifactPath`定数（`convergedFixture`が設定）。
+   * pathの分岐そのものをtestするscenario（023）だけ上書きする。
+   */
+  lockedArtifactPath?: string;
 }
 
 const { Given, When, Then } = stepDefinitions<EvidenceOnlyHeadWorld>();
@@ -151,6 +157,7 @@ function convergedFixture(
     }),
   });
   assert.equal(world.session.status, "converged");
+  world.lockedArtifactPath = artifactPath;
 }
 
 function assertSession(world: EvidenceOnlyHeadWorld): void {
@@ -411,11 +418,14 @@ Given(
       { [artifactPath]: "# 04 レビュー\n" },
       "docs: first artifact",
     );
+    const secondPath = ".agent-skill-chain/reviews/1272_second.md";
     this.finalHead = commitFiles(
       this.root,
-      { ".agent-skill-chain/reviews/1272_second.md": "# 追加レビュー\n" },
+      { [secondPath]: "# 追加レビュー\n" },
       "docs: second artifact path",
     );
+    /** finalHead自身の実際のpathを遡り対象に固定する（HIGH-1）。 */
+    this.lockedArtifactPath = secondPath;
   },
 );
 
@@ -441,6 +451,7 @@ When("resolveImplementationHeadでH_implを導出する", function () {
     this.resolvedImplementation = resolveImplementationHead(
       this.root,
       this.finalHead,
+      this.lockedArtifactPath ?? artifactPath,
     );
   } catch (error) {
     this.error = error;
@@ -454,6 +465,7 @@ When("解決不能なheadでresolveImplementationHeadを呼ぶ", function () {
     this.resolvedImplementation = resolveImplementationHead(
       this.root,
       "0000000000000000000000000000000000000000",
+      this.lockedArtifactPath ?? artifactPath,
     );
   } catch (error) {
     this.error = error;

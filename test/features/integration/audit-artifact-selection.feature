@@ -62,3 +62,8 @@ Feature: fixture repositoryでのreview証跡差分選択
     When H_implでreview exportを実行する
     And evidence-only是正commitを2回積んでreview exportを再実行する
     Then 再exportしたH_implは最初と同じ実装commitでありexit 0で証跡を再生成する
+
+  Scenario: SCN-INT-REVEVID-013 過去のreview記録だけを編集する実装commitがH_implのまま収束する
+    Given review証跡用に過去のreview記録だけを編集する実装commitを持つrepositoryがある
+    When H_implでreview exportを実行する
+    Then 過去のreview記録編集commitがH_implのまま証跡が生成されaudit:checkも合意する
