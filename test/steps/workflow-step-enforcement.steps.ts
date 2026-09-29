@@ -96,9 +96,11 @@ import {
 } from "../../src/domain/review-convergence.js";
 import { renderReviewEvidence } from "../../src/domain/review-evidence.js";
 import { PLAN_AMENDMENT_FILE } from "../../src/domain/plan-seal.js";
+import { readStoredReviewSession } from "../../src/adapters/review-session-store.js";
 import {
   appendFixtureVerificationRecords,
   observeFixtureVerification,
+  reviewEvidenceContentFromStaging,
   reviewEvidenceFromSession,
   resealObservedEvidence,
 } from "../support/review-evidence-fixture.js";
@@ -2261,6 +2263,14 @@ interface PreparedPullRequest {
 
 interface DeliveryProviderControl {
   /**
+   * providerが観測させるPR head（`H_final`）と`H_impl`（Issue #1531）。
+   *
+   * **未指定なら`preparePullRequest`の固定値を使う。** `pr create`後に前進commitを
+   * pushした状態を再現するscenarioだけが、再固定先の新headへ進める。
+   */
+  headSha?: string;
+  implementationSha?: string;
+  /**
    * `pr.create`内のremote HEAD再検証を失敗させる（Issue #1157）。
    *
    * **この照会は`pr.create`の中でだけ起きる。** dispatch gateより前で落ちるため、
@@ -2518,7 +2528,7 @@ type FixtureMergeMode = "disabled" | "assisted" | "automatic";
 /** 版管理下full stagingのroot（Issue #1531）。 */
 const TRACKED_FULL_STAGING_ROOT = "docs/issues";
 
-/** 実装commitで初めてcommitする計画変更記録。 */
+/** `pr create`後の前進commitで初めてcommitする計画変更記録。 */
 const TRACKED_FULL_AMENDMENT = [
   "# 05 計画変更",
   "",
@@ -2583,9 +2593,9 @@ function preparePullRequest(
    * 再計測するため、review artifactを載せると成立しない。
    *
    * `"full"`は版管理下root（`docs/issues`）のfull stagingを作る（Issue #1531）。
-   * Step 8で封印した00〜03はtrusted commit（`baseSha`）に載せ、
-   * `05_計画変更.md`のAMD-001は実装commit（`H_impl`）で初めてcommitする。
-   * 計画変更記録がcommit上に現れるheadを`baseSha`より後に置くためである。
+   * Step 8で封印した00〜03はtrusted commit（`baseSha`）に載せる。
+   * `05_計画変更.md`はここでは作らない。呼出し側が`pr create`後の前進commitで
+   * AMDを追加し、実CLIの`pr reanchor --apply`で実効HEADを移す。
    */
   workflowMode: "quick" | "poc" | "full" = "quick",
   requiredReviews = 0,
@@ -2682,13 +2692,6 @@ function preparePullRequest(
   ) {
     fs.writeFileSync(path.join(root, "implementation.txt"), "product change\n");
     spawnSync("git", ["add", "implementation.txt"], { cwd: root });
-    if (fullStaging) {
-      fs.writeFileSync(
-        path.join(fullStaging, PLAN_AMENDMENT_FILE),
-        TRACKED_FULL_AMENDMENT,
-      );
-      spawnSync("git", ["add", TRACKED_FULL_STAGING_ROOT], { cwd: root });
-    }
     spawnSync("git", ["commit", "-q", "-m", "implementation"], {
       cwd: root,
     });
@@ -3410,8 +3413,10 @@ function prepareDeliveryCli(
     `#!/usr/bin/env node
 const fs = require("node:fs");
 const args = process.argv.slice(2);
-const sha = ${JSON.stringify(prepared.headSha)};
-const implementationSha = ${JSON.stringify(prepared.implementationCommitSha)};
+const initialControl = JSON.parse(fs.readFileSync(${JSON.stringify(controlFile)}, "utf8"));
+const sha = initialControl.headSha ?? ${JSON.stringify(prepared.headSha)};
+const implementationSha =
+  initialControl.implementationSha ?? ${JSON.stringify(prepared.implementationCommitSha)};
 const mergeSha = ${JSON.stringify("b".repeat(40))};
 const rebasedImplementationSha = ${JSON.stringify("c".repeat(40))};
 const prUrl = "https://github.com/o/r/pull/1";
@@ -5108,10 +5113,19 @@ if (exact(["auth", "status"])) {
     case "SCN-E2E-WFSTEP-072": {
       /**
        * **Step 8で封印した版管理下full stagingでも、再固定後の`pr merge`は計画凍結を
-       * 実効HEAD上で検査する**（Issue #1531）。`05_計画変更.md`のAMD-001は
-       * 実装commitで初めてcommitされ、固定済み`create.headSha`（ここではAMDを
-       * 持たない`baseSha`）上には無い。固定値のまま検査すると、commit上とworktreeの
-       * 計画変更記録の不一致としてmerge前に拒否される。
+       * 実効HEAD上で検査する**（Issue #1531、OUTCOME-01）。
+       *
+       * **再固定は実CLIの`pr reanchor --apply`で作る。** 手書きのreanchor recordでは
+       * `pr merge`が記録を消費することしか示せず、OUTCOME-01が名指しする
+       * 「AMD追記→`pr reanchor --apply`→`pr merge --dry-run`」の合成経路を通らない
+       * （外部review指摘）。
+       *
+       * 手順: `pr create`で`pr-bound`（AMDを持たない`H_final0`）→前進commitで
+       * `05_計画変更.md`のAMD-001を追加（`H_impl1`）→同sessionのround 2→証跡commit
+       * （`H_final1`）→実CLIの`workflow record --step=10 --post-pr-intake`→
+       * 実CLIの`pr reanchor`（dry-run、apply）→実CLIの`pr merge --dry-run`。
+       * 固定済み`create.headSha`（`H_final0`）にはAMDが無いため、固定値のまま
+       * 検査すると計画変更記録の不一致としてmerge前に拒否される。
        */
       const prepared = prepareDeliveryCli(
         this,
@@ -5122,6 +5136,21 @@ if (exact(["auth", "status"])) {
         "full",
       );
       createDeliveryPullRequest(prepared);
+      const deliveryFile = path.join(
+        prepared.staging,
+        ...DELIVERY_STATE_FILE.split("/"),
+      );
+      const bound = parseDeliveryState(fs.readFileSync(deliveryFile, "utf8"));
+      assert.equal(bound.state, "pr-bound");
+      assert.equal(bound.create?.headSha, prepared.headSha);
+      const git = (args: string[]): string => {
+        const result = spawnSync("git", args, {
+          cwd: prepared.root,
+          encoding: "utf8",
+        });
+        assert.equal(result.status, 0, result.stderr);
+        return result.stdout.trim();
+      };
       const amendmentPath = path
         .relative(
           prepared.root,
@@ -5129,9 +5158,48 @@ if (exact(["auth", "status"])) {
         )
         .split(path.sep)
         .join("/");
+      const reviewArtifactPath = "docs/reviews/877_review.json";
+      // pr create後の前進commit: AMD-001を初めてcommitする。
+      fs.writeFileSync(
+        path.join(prepared.staging, PLAN_AMENDMENT_FILE),
+        TRACKED_FULL_AMENDMENT,
+      );
+      git(["add", "--", amendmentPath]);
+      git(["commit", "-q", "-m", "plan amendment after pr intake"]);
+      const forwardImplementation = git(["rev-parse", "HEAD"]);
+      // 同sessionのround 2を前進`H_impl`で収束させる。
+      const previous = readStoredReviewSession(prepared.staging);
+      assert.ok(previous, "round 1のreview sessionがありません");
+      recordReviewRound({
+        staging: prepared.staging,
+        round: parseReviewRoundInput({
+          round: 2,
+          previousRoundDigest: previous.latestRoundDigest,
+          anchor: previous.anchor,
+          candidateHeadSha: forwardImplementation,
+          focus: {
+            previousBlocking: [],
+            fixedDiff: [amendmentPath, reviewArtifactPath].sort(),
+            adjacentScope: [],
+          },
+          findings: [],
+        }),
+      });
+      const session = readStoredReviewSession(prepared.staging);
+      assert.ok(session);
+      assert.equal(session.latestCandidateHeadSha, forwardImplementation);
+      // 前進`H_impl`に対する証跡だけを加えた`H_final1`。
+      fs.writeFileSync(
+        path.join(prepared.root, ...reviewArtifactPath.split("/")),
+        reviewEvidenceContentFromStaging(prepared.staging, { issue: 877 }),
+      );
+      git(["add", "--", reviewArtifactPath]);
+      git(["commit", "-q", "-m", "review evidence after pr intake"]);
+      const forwardHead = git(["rev-parse", "HEAD"]);
       for (const [commit, present] of [
         [prepared.baseSha, false],
-        [prepared.headSha, true],
+        [prepared.headSha, false],
+        [forwardHead, true],
       ] as const)
         assert.equal(
           spawnSync("git", ["cat-file", "-e", `${commit}:${amendmentPath}`], {
@@ -5140,36 +5208,103 @@ if (exact(["auth", "status"])) {
           present,
           `${commit}上の${amendmentPath}の有無がfixtureの前提と異なります`,
         );
-      const deliveryFile = path.join(
+      const intake = executeCli(
+        [
+          "workflow",
+          "record",
+          `--staging=${prepared.staging}`,
+          "--step=10",
+          "--post-pr-intake",
+          `--artifact=${reviewArtifactPath}`,
+          "--evidence=pr-bound後の計画変更をround 2で再reviewした",
+          `--review-session-digest=${session.latestRoundDigest}`,
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(intake.status, 0, intake.stdout + intake.stderr);
+      // providerは前進pushしたheadをPR headとして返す。
+      writeDeliveryProviderControl(prepared, {
+        headSha: forwardHead,
+        implementationSha: forwardImplementation,
+        mergeTreeSha: git([
+          "merge-tree",
+          "--write-tree",
+          prepared.baseSha,
+          forwardHead,
+        ]),
+      });
+      const reanchorArgs = [
+        "pr",
+        "reanchor",
+        `--staging=${prepared.staging}`,
+        `--root=${prepared.root}`,
+        `--new-head=${forwardHead}`,
+        `--new-base=${prepared.baseSha}`,
+        "--reason=pr-bound後に05_計画変更.mdへAMD-001を追記した前進commitへ再固定する",
+      ];
+      const chainFile = path.join(
         prepared.staging,
-        ...DELIVERY_STATE_FILE.split("/"),
+        "journal",
+        "reanchor.jsonl",
       );
-      const delivery = JSON.parse(fs.readFileSync(deliveryFile, "utf8")) as {
-        create: { headSha: string };
+      const reanchor = (mode: "--dry-run" | "--apply") => {
+        const result = executeCli(
+          [...reanchorArgs, mode],
+          prepared.root,
+          prepared.env,
+        );
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        return JSON.parse(result.stdout) as Record<string, unknown>;
       };
-      delivery.create.headSha = prepared.baseSha;
-      fs.writeFileSync(deliveryFile, `${JSON.stringify(delivery, null, 2)}\n`);
-      fs.writeFileSync(
-        path.join(prepared.staging, "journal", "reanchor.jsonl"),
-        `${JSON.stringify({
-          oldHeadSha: prepared.baseSha,
-          newHeadSha: prepared.headSha,
-          oldBaseSha: prepared.baseSha,
-          newBaseSha: prepared.baseSha,
-          diffDigest: "a".repeat(64),
-          method: "reviewed-forward",
-          reason: "計画変更をcommitしたexact headへ再固定した",
-          recordedAt: fixtureInstant(),
-          reviewedForward: {
-            sessionId: "b".repeat(64),
-            roundDigest: "c".repeat(64),
-            implementationSha: prepared.implementationCommitSha,
-            artifactPath: "docs/reviews/fixture.md",
-            artifactDigest: "d".repeat(64),
-          },
-        })}\n`,
+      const preview = reanchor("--dry-run");
+      assert.deepEqual(
+        [
+          preview.state,
+          preview.layer,
+          preview.chainLength,
+          preview.willAppend,
+          preview.effectiveHeadSha,
+        ],
+        ["preview", "delivery", 0, true, forwardHead],
+        JSON.stringify(preview),
       );
-      refreshStoredStagingDigest(prepared.staging);
+      assert.equal(
+        fs.existsSync(chainFile),
+        false,
+        "dry-runが再固定chainを書いています",
+      );
+      const applied = reanchor("--apply");
+      assert.deepEqual(
+        [
+          applied.state,
+          applied.layer,
+          applied.chainLength,
+          applied.effectiveHeadSha,
+        ],
+        ["reanchored", "delivery", 1, forwardHead],
+        JSON.stringify(applied),
+      );
+      const chain = fs
+        .readFileSync(chainFile, "utf8")
+        .trimEnd()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      assert.equal(chain.length, 1);
+      assert.equal(chain[0]!.oldHeadSha, prepared.headSha);
+      assert.equal(chain[0]!.newHeadSha, forwardHead);
+      assert.equal(chain[0]!.method, "reviewed-forward");
+      assert.deepEqual(
+        (chain[0]!.reviewedForward as Record<string, unknown>)
+          .implementationSha,
+        forwardImplementation,
+      );
+      assert.equal(
+        parseDeliveryState(fs.readFileSync(deliveryFile, "utf8")).create
+          ?.headSha,
+        prepared.headSha,
+        "pr reanchorが固定済みcreate.headShaを書き換えています",
+      );
       const previewed = executeCli(
         deliveryMergeArgs(prepared).map((argument) =>
           argument === "--apply" ? "--dry-run" : argument,
