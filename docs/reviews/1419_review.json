@@ -3,16 +3,16 @@
   "issue": 1419,
   "observed": {
     "baseSha": "7a12d94fae249678b7f46e13794298386501ea02",
-    "implementationHeadSha": "bc59679e141f27e8e82ea06cdfbeb67635f0dedd",
-    "diffDigest": "9a823a9d77e0fdc33c32c968d52570e701143e626f9b15934653ddf632b64189",
+    "implementationHeadSha": "82ed5a2b07583763c41ae4f4d92d874117ac9358",
+    "diffDigest": "1a2f4a498285105f377ab0c834622772f5f1361f16e766d7850936b6b9b8b4a9",
     "session": {
       "sessionId": "99d2736805e7e81c65ea4eebfdb1006968b2a21330defb8807e883d529d0210e",
-      "latestRoundDigest": "3b109d27439ea2fd8a61e91550100cb6b8c2defbde49280ca47153838cbba2e0",
+      "latestRoundDigest": "f07ed9f1a5c984b6508fe64dbf949b735d5b996d5cf26e6fe9c41b52e2fd416b",
       "status": "converged",
-      "countedRounds": 2
+      "countedRounds": 3
     },
     "impact": {
-      "digest": "0ec6f800dd8d090eb4d45dd2214d9b042ef37ce06989c255fe5f39f29eb98f10",
+      "digest": "702c6ce8d6471f13891ca9dfea75bfbc4ed4df86694cbe1aae70c98685dee964",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "bc59679e141f27e8e82ea06cdfbeb67635f0dedd",
-        "impactDigest": "0ec6f800dd8d090eb4d45dd2214d9b042ef37ce06989c255fe5f39f29eb98f10",
-        "finishedAt": "2026-09-29T18:32:47.070Z",
-        "recordDigest": "0560d9a07d3d7fdad2b6c8ee0e48efb40324de80096d51542ae52eefedbfbaae"
+        "headSha": "82ed5a2b07583763c41ae4f4d92d874117ac9358",
+        "impactDigest": "702c6ce8d6471f13891ca9dfea75bfbc4ed4df86694cbe1aae70c98685dee964",
+        "finishedAt": "2026-09-29T18:57:55.773Z",
+        "recordDigest": "1da7a00540685fe33a50d65b90e69e296e2f6508531e5fbf3b69d209919cc22c"
       }
     ]
   },
@@ -78,6 +78,14 @@
       "relation": "improvement",
       "path": "docs/specs/02_要件/01_ワークフロー要件.md",
       "contractId": null
+    },
+    {
+      "id": "REV-07",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "scripts/check_skill_templates.ts",
+      "contractId": "AC-03"
     }
   ],
   "unresolvedCriticalHigh": [],
@@ -88,5 +96,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "4a5c9c3d360f5ce176c372049be852ed1c9d8593f92190e2be2b19b6ec28b062"
+  "evidenceDigest": "f859387a41c5b6b451f4f02ff4b5130e002ade220df6e85a56fc3bbb2c16f7d5"
 }
