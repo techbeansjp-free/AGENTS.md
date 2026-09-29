@@ -87,6 +87,21 @@ Feature: main mergeの自動release計画と配布digest
     When 自動release workflow契約を検証する
     Then 自動release workflow検証はgithub_release jobの依存導入stepの存在を確認した
 
+  Scenario: SCN-UNIT-AUTORELEASE-018 npm ci stepのifがrun:より後に書かれていても充足しない
+    Given github_release jobのnpm ci stepへrun:より後にifを付けたrelease workflow本文がある
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証はgithub_release jobの依存導入step欠落を理由に拒否する
+
+  Scenario: SCN-UNIT-AUTORELEASE-019 npm ci stepのcontinue-on-errorがrun:より後に書かれていても充足しない
+    Given github_release jobのnpm ci stepへrun:より後にcontinue-on-error: trueを付けたrelease workflow本文がある
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証はgithub_release jobの依存導入step欠落を理由に拒否する
+
+  Scenario: SCN-UNIT-AUTORELEASE-020 continue-on-errorの式形trueでも充足しない
+    Given github_release jobのnpm ci stepへcontinue-on-error: ${{ true }}を付けたrelease workflow本文がある
+    When 自動release workflow契約を検証する
+    Then 自動release workflow検証はgithub_release jobの依存導入step欠落を理由に拒否する
+
   Scenario: SCN-UNIT-DIGEST-001 配布entryをpath昇順に正準化して同一digestを返す
     Given 入力順だけが異なる同じ配布entry集合がある
     When 配布digestをそれぞれ算出する

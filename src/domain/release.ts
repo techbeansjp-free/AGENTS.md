@@ -1086,12 +1086,23 @@ function jobDependencyInstallGap(
     TSX_IMPORT_PATTERN.test(command),
   );
   if (tsxStep === undefined) return "not-applicable";
+  const stepBodies = jobStepBodies(lines, job);
+  /**
+   * **`stepAlwaysRuns`はstep全体（`jobStepBodies`の`body`）へ適用する。**
+   * `jobStepRunBlocks`の`attributes`は`run:`より前で打ち切られるため、
+   * `if:`・`continue-on-error:`を`run:`の後（YAMLのmapping順序は本来無意味）へ
+   * 書いた場合に見逃す（round 2独立review REV-R2-01指摘）。stepStartをkeyに
+   * `jobStepBodies`の全文bodyを引く。
+   */
+  const bodyByStepStart = new Map(
+    stepBodies.map(({ stepStart, body }) => [stepStart, body]),
+  );
   /**
    * **最初に見つかったcandidateを無条件で採用しない。** setup-nodeを名乗る
    * stepが複数あるか、先頭のものが`if:`等で無効化されている場合、パターンと
    * `stepAlwaysRuns`の両方を満たす候補まで探索を続ける。
    */
-  const setupNodeStep = jobStepBodies(lines, job).find(
+  const setupNodeStep = stepBodies.find(
     ({ stepStart, body }) =>
       stepStart < tsxStep.stepStart &&
       SETUP_NODE_USES_PATTERN.test(body) &&
@@ -1106,11 +1117,11 @@ function jobDependencyInstallGap(
    * （CodeRabbit round 1指摘）。`stepAlwaysRuns`で無効化されたstepも候補から除く。
    */
   const npmCiStep = runBlocks.find(
-    ({ command, stepStart, attributes }) =>
+    ({ command, stepStart }) =>
       stepStart > setupNodeStep.stepStart &&
       stepStart < tsxStep.stepStart &&
       NPM_CI_PATTERN.test(command) &&
-      stepAlwaysRuns(attributes),
+      stepAlwaysRuns(bodyByStepStart.get(stepStart) ?? ""),
   );
   if (npmCiStep === undefined) return "violated";
   return "satisfied";
