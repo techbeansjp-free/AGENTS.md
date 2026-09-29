@@ -746,6 +746,38 @@ Given(
 );
 
 Given(
+  "github_release jobでnpm ciをtsx実行stepより後へ移動したrelease workflow本文がある",
+  function () {
+    /**
+     * **setup-nodeは元の位置に残し、npm ciだけをtsx実行stepの後へ動かす。**
+     * `npmCiStep`探索の`stepStart < tsxStep.stepStart`条件（tsx実行stepより
+     * 前にある候補だけを探す）を消す変異は、この形が無いと生存していた
+     * （round 1独立review 2回目、REV-R1-01指摘）。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const jobStart = workflow.indexOf("\n  github_release:");
+    assert.ok(jobStart >= 0);
+    const githubReleaseJob = workflow.slice(jobStart);
+    const npmCiStep =
+      "      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        run: npm ci --ignore-scripts\n";
+    assert.ok(githubReleaseJob.includes(npmCiStep));
+    const withoutNpmCi = githubReleaseJob.replace(npmCiStep, "");
+    assert.notEqual(withoutNpmCi, githubReleaseJob);
+    const insertionMarker = "      - name: 3者一致後にdraftをpublishする";
+    assert.ok(withoutNpmCi.includes(insertionMarker));
+    const movedJob = withoutNpmCi.replace(
+      insertionMarker,
+      `${npmCiStep}${insertionMarker}`,
+    );
+    assert.notEqual(movedJob, withoutNpmCi);
+    this.autoWorkflowYaml = `${workflow.slice(0, jobStart)}${movedJob}`;
+  },
+);
+
+Given(
   "tsx実行stepだけを持ち依存導入を欠く検証用jobを追加したrelease workflow本文がある",
   function () {
     /**
