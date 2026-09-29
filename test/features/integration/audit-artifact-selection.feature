@@ -56,3 +56,9 @@ Feature: fixture repositoryでのreview証跡差分選択
     Given 手で書き直したreview証跡を持つ統合監査repository
     When 監査選択repositoryのfile監査を実行する
     Then file監査は正規直列化の不一致を報告する
+
+  Scenario: SCN-INT-REVEVID-012 evidence-only是正commitを重ねてもH_implが収束し再exportが成功する
+    Given review証跡用に収束済みsessionを持つrepositoryがある
+    When H_implでreview exportを実行する
+    And evidence-only是正commitを2回積んでreview exportを再実行する
+    Then 再exportしたH_implは最初と同じ実装commitでありexit 0で証跡を再生成する

@@ -20,6 +20,7 @@ import {
   observeReviewDiff,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
+import { resolveImplementationHead } from "../../src/adapters/review-diff.js";
 import {
   appendWorkflowJournalEntry,
   readWorkflowJournal,
@@ -39,6 +40,9 @@ interface EvidenceOnlyHeadWorld extends WorkflowWorld {
   error: unknown;
   cliStatus: number;
   mergeImplementationSha?: string;
+  resolvedImplementation?: string;
+  /** 9 commit fixtureで、8個遡った時点に相当する境界commit（1個目のartifact commit）。 */
+  capBoundary?: string;
 }
 
 const { Given, When, Then } = stepDefinitions<EvidenceOnlyHeadWorld>();
@@ -378,12 +382,110 @@ Given(
   function (countText: string) {
     convergedFixture(this);
     const count = Number(countText);
-    for (let index = 1; index <= count; index++)
+    for (let index = 1; index <= count; index++) {
       this.finalHead = commitFiles(
         this.root,
         { [artifactPath]: `# 04 レビュー\n\n追記${index}\n` },
         `docs: artifact ${index}`,
       );
+      /** 1個目のartifact commitは、9個積んだ場合に8個遡った境界と一致する。 */
+      if (index === 1) this.capBoundary = this.finalHead;
+    }
+  },
+);
+
+Given(
+  "収束したsessionのH_implそのものがfinalHeadであるstagingがある",
+  function () {
+    convergedFixture(this);
+    this.finalHead = this.implementationHead;
+  },
+);
+
+Given(
+  "収束したsessionの後に異なる2つのartifact pathを順にcommitしたstagingがある",
+  function () {
+    convergedFixture(this);
+    this.capBoundary = commitFiles(
+      this.root,
+      { [artifactPath]: "# 04 レビュー\n" },
+      "docs: first artifact",
+    );
+    this.finalHead = commitFiles(
+      this.root,
+      { ".agent-skill-chain/reviews/1272_second.md": "# 追加レビュー\n" },
+      "docs: second artifact path",
+    );
+  },
+);
+
+Given(
+  "収束したsessionの後にartifactを削除したcommitがあるstagingがある",
+  function () {
+    convergedFixture(this);
+    commitFiles(
+      this.root,
+      { [artifactPath]: "# 04 レビュー\n" },
+      "docs: artifact",
+    );
+    git(this.root, ["rm", artifactPath]);
+    git(this.root, ["commit", "-q", "-m", "docs: remove artifact"]);
+    this.finalHead = git(this.root, ["rev-parse", "HEAD"]);
+  },
+);
+
+When("resolveImplementationHeadでH_implを導出する", function () {
+  this.error = undefined;
+  this.resolvedImplementation = undefined;
+  try {
+    this.resolvedImplementation = resolveImplementationHead(
+      this.root,
+      this.finalHead,
+    );
+  } catch (error) {
+    this.error = error;
+  }
+});
+
+When("解決不能なheadでresolveImplementationHeadを呼ぶ", function () {
+  this.error = undefined;
+  this.resolvedImplementation = undefined;
+  try {
+    this.resolvedImplementation = resolveImplementationHead(
+      this.root,
+      "0000000000000000000000000000000000000000",
+    );
+  } catch (error) {
+    this.error = error;
+  }
+});
+
+Then("導出したH_implは9個目の手前で止まった中間commitである", function () {
+  assert.equal(this.error, undefined, String(this.error));
+  assert.ok(this.capBoundary);
+  assert.equal(this.resolvedImplementation, this.capBoundary);
+  assert.notEqual(this.resolvedImplementation, this.implementationHead);
+  assert.notEqual(this.resolvedImplementation, this.finalHead);
+});
+
+Then("導出したH_implはfinalHeadそのものである", function () {
+  assert.equal(this.error, undefined, String(this.error));
+  assert.equal(this.resolvedImplementation, this.finalHead);
+});
+
+Then("導出したH_implはpathが変わる直前のcommitである", function () {
+  assert.equal(this.error, undefined, String(this.error));
+  assert.equal(this.resolvedImplementation, this.capBoundary);
+});
+
+Then(
+  "H_impl解決対象のheadをexact commitへ解決できないerrorで拒否する",
+  function () {
+    assert.ok(this.error instanceof Error, "拒否を期待した");
+    assert.match(
+      this.error.message,
+      /H_impl解決対象のheadをexact commitへ解決できません/u,
+    );
   },
 );
 

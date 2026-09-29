@@ -100,3 +100,43 @@ Feature: artifact-onlyのHEAD移動の受理
     Given 規範文書01とstep-10 skillがある
     When 規範文書01とstep-10 skillを読む
     Then artifact 1 fileのcommitに取り直しroundは要らない旨がある
+
+  Scenario: SCN-UNIT-EVIDHEAD-021 resolveImplementationHeadは9 commitのうち8個までしか遡らない
+    Given 収束したsessionの後にartifact commitを9本積んだstagingがある
+    When resolveImplementationHeadでH_implを導出する
+    Then 導出したH_implは9個目の手前で止まった中間commitである
+
+  Scenario: SCN-UNIT-EVIDHEAD-022 resolveImplementationHeadはtrailing evidence commitが0個ならheadをそのまま返す
+    Given 収束したsessionのH_implそのものがfinalHeadであるstagingがある
+    When resolveImplementationHeadでH_implを導出する
+    Then 導出したH_implはfinalHeadそのものである
+
+  Scenario: SCN-UNIT-EVIDHEAD-023 resolveImplementationHeadは異なるevidence-only pathで遡りを止める
+    Given 収束したsessionの後に異なる2つのartifact pathを順にcommitしたstagingがある
+    When resolveImplementationHeadでH_implを導出する
+    Then 導出したH_implはpathが変わる直前のcommitである
+
+  Scenario: SCN-UNIT-EVIDHEAD-024 resolveImplementationHeadは中間commitのmode変更で遡りを止める
+    Given 収束したsessionの後にartifactの中間commitだけを実行権限付きにしたstagingがある
+    When resolveImplementationHeadでH_implを導出する
+    Then 導出したH_implはfinalHeadそのものである
+
+  Scenario: SCN-UNIT-EVIDHEAD-025 resolveImplementationHeadは削除commitで遡りを止める
+    Given 収束したsessionの後にartifactを削除したcommitがあるstagingがある
+    When resolveImplementationHeadでH_implを導出する
+    Then 導出したH_implはfinalHeadそのものである
+
+  Scenario: SCN-UNIT-EVIDHEAD-026 resolveImplementationHeadはmerge commitで遡りを止める
+    Given 収束したsessionの後にmerge commitでartifactを加えたstagingがある
+    When resolveImplementationHeadでH_implを導出する
+    Then 導出したH_implはfinalHeadそのものである
+
+  Scenario: SCN-UNIT-EVIDHEAD-027 resolveImplementationHeadは2 path以上のcommitで遡りを止める
+    Given 収束したsessionの後にartifactとsrcをcommitしたstagingがある
+    When resolveImplementationHeadでH_implを導出する
+    Then 導出したH_implはfinalHeadそのものである
+
+  Scenario: SCN-UNIT-EVIDHEAD-028 resolveImplementationHeadは解決不能なheadを例外で拒否する
+    Given 収束したsessionのH_implそのものがfinalHeadであるstagingがある
+    When 解決不能なheadでresolveImplementationHeadを呼ぶ
+    Then H_impl解決対象のheadをexact commitへ解決できないerrorで拒否する

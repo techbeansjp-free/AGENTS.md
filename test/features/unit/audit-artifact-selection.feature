@@ -97,3 +97,8 @@ Feature: review artifactの差分選択
     Given local origin HEADより新しいremote default branchを持つ監査repository
     When remoteの現在default tipを解決する
     Then remoteの現在default tipがtrust anchorとして返る
+
+  Scenario: SCN-UNIT-AUDITSEL-020 review artifactだけを直す前進commitが9本ならH_impl不一致を報告する
+    Given review artifactだけを直す前進commitを9本積んだ監査選択repository
+    When 監査選択repositoryのfile監査を実行する
+    Then H_implとcommit構造の不一致を示して失敗する

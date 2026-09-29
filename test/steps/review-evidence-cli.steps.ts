@@ -25,7 +25,10 @@ import {
   WORKFLOW_STEPS,
   type StepJournalEntry,
 } from "../../src/domain/workflow.js";
-import { resealObservedEvidence } from "../support/review-evidence-fixture.js";
+import {
+  resealObservedEvidence,
+  withAddedObservedVerification,
+} from "../support/review-evidence-fixture.js";
 import { installTrustedVerificationPolicy } from "../support/trusted-verification-policy.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
@@ -36,6 +39,7 @@ interface ReviewEvidenceCliWorld extends WorkflowWorld {
   implementationHead: string;
   session: ReviewSessionState;
   exported?: CliResult;
+  reexported?: CliResult;
   failures: CliResult[];
   validations: Record<string, CliResult>;
   rebasedBase?: string;
@@ -313,6 +317,61 @@ Then(
   },
 );
 
+/**
+ * 実履歴パターン（PR #1528/#1537）の回帰再現（Issue #1532、SCN-INT-REVEVID-012）。
+ *
+ * 最初のexportをH_finalとしてcommitし、review roundの是正でありがちな
+ * evidence-only commit（証跡fileだけを書き換えるcommit）を2回積んでから
+ * `review export`を再実行する。canonical resolver適用後は、H_final上での
+ * 再実行が拒否ではなく成功し、書き込む`implementationHeadSha`は積まれた
+ * evidence-only commitに関わらず最初と同じ実装commitのままである。
+ */
+When(
+  "evidence-only是正commitを2回積んでreview exportを再実行する",
+  async function () {
+    assert.equal(this.exported?.error, undefined, String(this.exported?.error));
+    const evidencePath = path.join(this.root, EVIDENCE);
+    const exportedContent = fs.readFileSync(evidencePath, "utf8");
+    // H_final: 実装commitの後にreview evidenceを1件だけcommitする
+    commitFile(this.root, EVIDENCE, exportedContent);
+    const first = parseReviewEvidence(exportedContent);
+    const correction1 = resealObservedEvidence(first, {
+      verification: withAddedObservedVerification(first, "npm run lint"),
+    });
+    // round収束後の是正commit（1回目）: 証跡fileだけを書き換える
+    commitFile(this.root, EVIDENCE, correction1);
+    const second = parseReviewEvidence(correction1);
+    const correction2 = resealObservedEvidence(second, {
+      verification: withAddedObservedVerification(
+        second,
+        "npm run format:check",
+      ),
+    });
+    // round収束後の是正commit（2回目）: 証跡fileだけを書き換える
+    commitFile(this.root, EVIDENCE, correction2);
+    this.reexported = await captureCli(exportArgs(this));
+  },
+);
+
+Then(
+  "再exportしたH_implは最初と同じ実装commitでありexit 0で証跡を再生成する",
+  function () {
+    assert.equal(
+      this.reexported?.error,
+      undefined,
+      String(this.reexported?.error),
+    );
+    assert.equal(this.reexported?.exitCode, 0);
+    const regenerated = parseReviewEvidence(
+      fs.readFileSync(path.join(this.root, EVIDENCE), "utf8"),
+    );
+    assert.equal(
+      regenerated.observed.implementationHeadSha,
+      this.implementationHead,
+    );
+  },
+);
+
 When("不正な条件でreview exportを実行する", async function () {
   /** 観測記録が無い拒否と区別するため、各条件は合格記録を持つ状態で測る */
   await verifyPassing(this);
@@ -347,10 +406,14 @@ When("不正な条件でreview exportを実行する", async function () {
   );
   this.failures.push(await captureCli(exportArgs(this)));
   fs.unlinkSync(path.join(this.root, "docs", "reviews"));
-  commitFile(this.root, "docs/reviews/1500_review.json", "{}\n");
-  this.failures.push(await captureCli(exportArgs(this)));
 });
 
+/**
+ * H_final（H_impl直後にevidence-only commitを積んだ状態）での`review export`再実行は、
+ * canonical resolver適用後は拒否ではなく成功する（Issue #1532、B-1）。その正のcaseは
+ * `SCN-INT-REVEVID-012`（`test/features/integration/audit-artifact-selection.feature`）
+ * が担う。本scenarioは残り6件の拒否条件だけを検査する。
+ */
 Then("各条件を理由つきで拒否し証跡を書かない", function () {
   const expected = [
     /reviewerと--implementerは異なるidentity/u,
@@ -359,7 +422,6 @@ Then("各条件を理由つきで拒否し証跡を書かない", function () {
     /1500_review\.json/u,
     /symlinkを含まない親directory/u,
     /symlinkを含まない親directory/u,
-    /review済みcandidate HEAD.*H_final/u,
   ];
   assert.equal(this.failures.length, expected.length);
   for (const [index, pattern] of expected.entries()) {
@@ -367,9 +429,9 @@ Then("各条件を理由つきで拒否し証跡を書かない", function () {
     assert.match(this.failures[index]!.error!.message, pattern);
   }
   assert.equal(
-    fs.readFileSync(path.join(this.root, EVIDENCE), "utf8"),
-    "{}\n",
-    "既存の証跡pathを拒否時に書き換えない",
+    fs.existsSync(path.join(this.root, EVIDENCE)),
+    false,
+    "残り6件のいずれも証跡を書かない",
   );
   assert.equal(
     fs.readdirSync(path.join(this.root, "outside")).length,
