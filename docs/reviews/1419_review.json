@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1419,
+  "observed": {
+    "baseSha": "7a12d94fae249678b7f46e13794298386501ea02",
+    "implementationHeadSha": "bc59679e141f27e8e82ea06cdfbeb67635f0dedd",
+    "diffDigest": "9a823a9d77e0fdc33c32c968d52570e701143e626f9b15934653ddf632b64189",
+    "session": {
+      "sessionId": "99d2736805e7e81c65ea4eebfdb1006968b2a21330defb8807e883d529d0210e",
+      "latestRoundDigest": "3b109d27439ea2fd8a61e91550100cb6b8c2defbde49280ca47153838cbba2e0",
+      "status": "converged",
+      "countedRounds": 2
+    },
+    "impact": {
+      "digest": "0ec6f800dd8d090eb4d45dd2214d9b042ef37ce06989c255fe5f39f29eb98f10",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "bc59679e141f27e8e82ea06cdfbeb67635f0dedd",
+        "impactDigest": "0ec6f800dd8d090eb4d45dd2214d9b042ef37ce06989c255fe5f39f29eb98f10",
+        "finishedAt": "2026-09-29T18:32:47.070Z",
+        "recordDigest": "0560d9a07d3d7fdad2b6c8ee0e48efb40324de80096d51542ae52eefedbfbaae"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "REV-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "scripts/check_skill_templates.ts",
+      "contractId": "INV-01"
+    },
+    {
+      "id": "REV-02",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "test/features/unit/issue-template-contract.feature",
+      "contractId": "AC-04"
+    },
+    {
+      "id": "REV-03",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "scripts/check_skill_templates.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV-04",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "scripts/check_skill_templates.ts",
+      "contractId": "AC-02"
+    },
+    {
+      "id": "REV-05",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/issue-template-contract.steps.ts",
+      "contractId": "AC-01"
+    },
+    {
+      "id": "REV-06",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "docs/specs/02_要件/01_ワークフロー要件.md",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "opus-independent-review-1419",
+    "implementer": "coordinator-session-1419",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "4a5c9c3d360f5ce176c372049be852ed1c9d8593f92190e2be2b19b6ec28b062"
+}
