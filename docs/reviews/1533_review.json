@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1533,
+  "observed": {
+    "baseSha": "15b951eede21a8ecab8d28d81604f5d73870a876",
+    "implementationHeadSha": "58ca56cd505a49116c0a2c9ae9dc5b31faa1b755",
+    "diffDigest": "1f5557caa2c586b5f563bdfc9b4fa041a874e2656991d4b215c2377e0b5f9a35",
+    "session": {
+      "sessionId": "8896cf7d977f62ada873e906b66eb75aac74a940d34eb41ea41051eabe9563f3",
+      "latestRoundDigest": "1ae7b8987399b77968bc8e36fa4439aa0ade03df8c6828cf3f6ead413a26254a",
+      "status": "converged",
+      "countedRounds": 1
+    },
+    "impact": {
+      "digest": "19b4ba9e26d4eee1d95778f1add12cae2bb22dda770ed8815d096386a6d595c2",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "58ca56cd505a49116c0a2c9ae9dc5b31faa1b755",
+        "impactDigest": "19b4ba9e26d4eee1d95778f1add12cae2bb22dda770ed8815d096386a6d595c2",
+        "finishedAt": "2026-09-29T00:12:43.004Z",
+        "recordDigest": "037f0e0249f0622cc4150f6966a1fab5d6bee299413e82fcd78c977e7ce2dae3"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "REV-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-02"
+    },
+    {
+      "id": "REV-02",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-02"
+    },
+    {
+      "id": "REV-03",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "test/features/unit/auto-release.feature",
+      "contractId": "AC-02"
+    },
+    {
+      "id": "REV-04",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "test/features/unit/auto-release.feature",
+      "contractId": "AC-02"
+    },
+    {
+      "id": "REV-05",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/domain/release.ts",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "opus-step10-reviewer",
+    "implementer": "claude-coordinator-implementer",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "9d03e036ab15591a9763c8b10384fa66a7f6419782dcf7435a49c6a70a1f22d0"
+}
