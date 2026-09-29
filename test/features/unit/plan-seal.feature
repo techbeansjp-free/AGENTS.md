@@ -142,3 +142,20 @@ Feature: 承認済み計画の封印と計画変更記録
     When 旧journalへCLIでStep 9を追記する
     Then 旧journalは構造検査を通りStep 9行だけがchainを持つ
     And Step 9より前の旧行を編集するとchainの不一致として拒否される
+
+  Scenario: SCN-UNIT-PLANSEAL-026 再固定後のdelivery直前検査は作成時headではなく実効HEAD上の計画変更を検証する
+    Given Step 8で封印しPR作成後に計画変更をcommitして再固定した版管理下full stagingがある
+    When 作成時のheadでdelivery直前検査を実行する
+    Then 検査は再固定chainの実効HEAD上の計画変更を読みsync-verifiedを返す
+    And 再固定記録を除くと同じheadの検査は作成時head上の計画変更の不一致で拒否する
+
+  Scenario: SCN-UNIT-PLANSEAL-027 再固定後の再配送直前検査も作成時headではなく実効HEAD上の計画変更を検証する
+    Given Step 11まで記録しPR作成後に計画変更をcommitして再固定した版管理下full stagingがある
+    When 作成時のheadで再配送直前検査を実行する
+    Then 検査は再固定chainの実効HEAD上の計画変更を読みsync-verifiedを返す
+    And 再固定記録を除くと同じheadの検査は作成時head上の計画変更の不一致で拒否する
+
+  Scenario: SCN-UNIT-PLANSEAL-028 連鎖しない再固定記録はdelivery直前検査の検証対象commitを動かさない
+    Given Step 8で封印し計画変更をcommitした版管理下full stagingと連鎖しない再固定記録がある
+    When 入力headごとにdelivery直前検査を実行する
+    Then 連鎖しない再固定記録を辿らず入力headだけで判定する

@@ -304,7 +304,11 @@ function workflowDiagnostic(staging, mode, result, extra = []) {
  * 「計画は05_計画変更.mdへ」という次の行動を返す。
  */
 export function assertWorkflowReadyForDelivery(staging, deliveredHeadSha = "HEAD") {
-    assertPlanFrozen(staging, deliveredHeadSha, { delivery: true });
+    const effectiveHeadSha = deriveEffectiveHead({
+        records: readEvidenceReanchorChain(staging),
+        anchoredHeadSha: deliveredHeadSha,
+    }).effectiveHeadSha;
+    assertPlanFrozen(staging, effectiveHeadSha, { delivery: true });
     const stored = readStoredStagingRecord(staging);
     const currentArtifacts = listStagingArtifacts(staging);
     const currentDigest = calculateStagingDigest(staging, currentArtifacts);
@@ -328,8 +332,12 @@ export function assertWorkflowReadyForDelivery(staging, deliveredHeadSha = "HEAD
         ].join("; ")}`);
     return inspection;
 }
-function assertWorkflowReadyForTerminalRedelivery(staging, deliveredHeadSha = "HEAD") {
-    assertPlanFrozen(staging, deliveredHeadSha, { delivery: true });
+export function assertWorkflowReadyForTerminalRedelivery(staging, deliveredHeadSha = "HEAD") {
+    const effectiveHeadSha = deriveEffectiveHead({
+        records: readEvidenceReanchorChain(staging),
+        anchoredHeadSha: deliveredHeadSha,
+    }).effectiveHeadSha;
+    assertPlanFrozen(staging, effectiveHeadSha, { delivery: true });
     const stored = readStoredStagingRecord(staging);
     const currentArtifacts = listStagingArtifacts(staging);
     const currentDigest = calculateStagingDigest(staging, currentArtifacts);

@@ -5,7 +5,11 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
-import { assertWorkflowReadyForDelivery, main } from "../../src/cli.js";
+import {
+  assertWorkflowReadyForDelivery,
+  assertWorkflowReadyForTerminalRedelivery,
+  main,
+} from "../../src/cli.js";
 import {
   assertStoredStagingDigestForTest,
   previewReviewRound,
@@ -13,6 +17,7 @@ import {
 import { assertPlanFrozenForEntries } from "../../src/adapters/plan-seal.js";
 import type { ReviewRoundInput } from "../../src/domain/review-convergence.js";
 import {
+  appendDeliveryTerminalJournalEntry,
   appendWorkflowJournalEntry,
   assertPlanFrozen,
   promoteWorkflowStagingToFull,
@@ -75,6 +80,9 @@ interface PlanSealWorld extends WorkflowWorld {
   discoveryInput: string;
   assessments: Record<string, Record<string, unknown>>;
   drifts: Record<string, string>;
+  createHeadSha: string;
+  amendedHeadSha: string;
+  readiness: Array<{ label: string; state?: string; diagnostic: string }>;
 }
 
 const { Given, When, Then } = stepDefinitions<PlanSealWorld>();
@@ -1762,3 +1770,238 @@ Then(
     );
   },
 );
+
+// ---- 再固定後のdelivery直前検査の実効HEAD（SCN-UNIT-PLANSEAL-026〜028、Issue #1531） ----
+
+/**
+ * PR作成時のhead（`create.headSha`）から、05へAMDを追記したcommitへ再固定した
+ * 版管理下full stagingを作る。
+ *
+ * **05は作成時のhead上に無く、追記commit上にだけある。** 検証対象commitを作成時の
+ * headのまま読むと、commit上とworktreeの計画変更記録が一致せず拒否される。
+ * 再固定chainの`chain`が`"linked"`なら作成時head→追記commitを連鎖させ、
+ * `"unlinked"`なら先頭の`oldHeadSha`をどのheadとも一致させず、`newHeadSha`は
+ * 作成時headにする（辿ると誤って拒否側へ動く向き）。
+ */
+async function reanchoredAmendedFull(
+  world: PlanSealWorld,
+  options: { terminal: boolean; chain: "linked" | "unlinked" },
+): Promise<void> {
+  world.root = world.initRepo();
+  writeTrackedPolicySet(world.root);
+  fs.mkdirSync(path.join(world.root, ...TRACKED_ROOT.split("/")), {
+    recursive: true,
+  });
+  world.staging = createIssueStaging(world.root, {
+    title: "plan-seal-reanchor",
+    answers: answers(),
+    now: new Date("2026-09-26T00:00:00Z"),
+    requestedMode: "full",
+    stagingRoot: TRACKED_ROOT,
+  }).path;
+  for (const name of FULL_PLAN.slice(1))
+    fs.writeFileSync(path.join(world.staging, name), `# ${name}\n本文\n`);
+  await recordAll(world.staging, [1, 2, 3, 4, 5, 6, 7, 8]);
+  gitIn(world.root, ["add", "-A"]);
+  gitIn(world.root, ["commit", "-q", "-m", "sealed full plan"]);
+  for (const step of [9, 10])
+    appendWorkflowJournalEntry({
+      staging: world.staging,
+      entry: quickEntry(step, { mode: "full" }),
+    });
+  fs.writeFileSync(path.join(world.root, "implementation.txt"), "change\n");
+  gitIn(world.root, ["add", "-A"]);
+  gitIn(world.root, ["commit", "-q", "-m", "implementation and review"]);
+  world.createHeadSha = gitIn(world.root, ["rev-parse", "HEAD"]);
+  writeAmendments(world.staging, [amendmentEntry("AMD-001")]);
+  gitIn(world.root, ["add", "-A"]);
+  gitIn(world.root, ["commit", "-q", "-m", "post-PR planning amendment"]);
+  world.amendedHeadSha = gitIn(world.root, ["rev-parse", "HEAD"]);
+  appendWorkflowJournalEntry({
+    staging: world.staging,
+    entry: quickEntry(10, { mode: "full" }),
+  });
+  assert.equal(lastEntry(world.staging).planGeneration?.generation, 2);
+  if (options.terminal)
+    appendDeliveryTerminalJournalEntry({
+      staging: world.staging,
+      entry: quickEntry(11, { mode: "full" }),
+    });
+  const linked = options.chain === "linked";
+  fs.writeFileSync(
+    path.join(world.staging, "journal", "reanchor.jsonl"),
+    `${JSON.stringify({
+      oldHeadSha: linked ? world.createHeadSha : "e".repeat(40),
+      newHeadSha: linked ? world.amendedHeadSha : world.createHeadSha,
+      oldBaseSha: "0".repeat(40),
+      newBaseSha: "0".repeat(40),
+      diffDigest: "a".repeat(64),
+      method: "reviewed-forward",
+      reason: "post-PR intakeの計画変更commitへ再固定した",
+      recordedAt: "2026-09-26T04:00:00.000Z",
+      reviewedForward: {
+        sessionId: "b".repeat(64),
+        roundDigest: "c".repeat(64),
+        implementationSha: world.amendedHeadSha,
+        artifactPath: "docs/reviews/fixture.json",
+        artifactDigest: "d".repeat(64),
+      },
+    })}\n`,
+  );
+  recordStagingSync(world.staging, {
+    tracker: "https://github.com/o/r/issues/1531",
+    checkpoint: 8,
+    syncedAt: "2026-09-26T05:00:00.000Z",
+    bodyDigest: "a".repeat(64),
+    readBackDigest: "a".repeat(64),
+  });
+}
+
+function readiness(
+  check: typeof assertWorkflowReadyForDelivery,
+  staging: string,
+  headSha: string,
+  label: string,
+): { label: string; state?: string; diagnostic: string } {
+  try {
+    return { label, state: check(staging, headSha).state, diagnostic: "" };
+  } catch (error) {
+    return {
+      label,
+      diagnostic: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/** 作成時head上に05が無いことによる拒否。修正前の`pr merge`が返していた診断である。 */
+function staleAmendmentPattern(headSha: string): RegExp {
+  return new RegExp(
+    `版管理下stagingのcommit ${headSha}上の05_計画変更\\.mdがworktreeと一致しません`,
+    "u",
+  );
+}
+
+Given(
+  "Step 8で封印しPR作成後に計画変更をcommitして再固定した版管理下full stagingがある",
+  async function () {
+    await reanchoredAmendedFull(this, { terminal: false, chain: "linked" });
+  },
+);
+
+Given(
+  "Step 11まで記録しPR作成後に計画変更をcommitして再固定した版管理下full stagingがある",
+  async function () {
+    await reanchoredAmendedFull(this, { terminal: true, chain: "linked" });
+  },
+);
+
+Given(
+  "Step 8で封印し計画変更をcommitした版管理下full stagingと連鎖しない再固定記録がある",
+  async function () {
+    await reanchoredAmendedFull(this, { terminal: false, chain: "unlinked" });
+  },
+);
+
+When("作成時のheadでdelivery直前検査を実行する", function () {
+  this.readiness = [
+    readiness(
+      assertWorkflowReadyForDelivery,
+      this.staging,
+      this.createHeadSha,
+      "delivery",
+    ),
+  ];
+});
+
+When("作成時のheadで再配送直前検査を実行する", function () {
+  this.readiness = [
+    readiness(
+      assertWorkflowReadyForTerminalRedelivery,
+      this.staging,
+      this.createHeadSha,
+      "terminal-redelivery",
+    ),
+  ];
+});
+
+Then(
+  "検査は再固定chainの実効HEAD上の計画変更を読みsync-verifiedを返す",
+  function () {
+    const [result] = this.readiness;
+    assert.ok(result);
+    assert.equal(result.diagnostic, "", result.label);
+    assert.equal(result.state, "sync-verified", result.label);
+  },
+);
+
+Then(
+  "再固定記録を除くと同じheadの検査は作成時head上の計画変更の不一致で拒否する",
+  function () {
+    const [result] = this.readiness;
+    assert.ok(result);
+    fs.rmSync(path.join(this.staging, "journal", "reanchor.jsonl"));
+    refreshStoredStagingDigest(this.staging);
+    const check =
+      result.label === "terminal-redelivery"
+        ? assertWorkflowReadyForTerminalRedelivery
+        : assertWorkflowReadyForDelivery;
+    const withoutChain = readiness(
+      check,
+      this.staging,
+      this.createHeadSha,
+      result.label,
+    );
+    assert.equal(withoutChain.state, undefined, result.label);
+    assert.match(
+      withoutChain.diagnostic,
+      staleAmendmentPattern(this.createHeadSha),
+    );
+  },
+);
+
+When("入力headごとにdelivery直前検査を実行する", function () {
+  const observe = (label: string) => [
+    readiness(
+      assertWorkflowReadyForDelivery,
+      this.staging,
+      this.createHeadSha,
+      `${label}:create`,
+    ),
+    readiness(
+      assertWorkflowReadyForDelivery,
+      this.staging,
+      this.amendedHeadSha,
+      `${label}:amended`,
+    ),
+  ];
+  const withChain = observe("unlinked");
+  fs.rmSync(path.join(this.staging, "journal", "reanchor.jsonl"));
+  refreshStoredStagingDigest(this.staging);
+  this.readiness = [...withChain, ...observe("empty")];
+});
+
+Then("連鎖しない再固定記録を辿らず入力headだけで判定する", function () {
+  const [unlinkedCreate, unlinkedAmended, emptyCreate, emptyAmended] =
+    this.readiness;
+  assert.ok(unlinkedCreate && unlinkedAmended && emptyCreate && emptyAmended);
+  /** 入力headが追記commitなら、作成時headへ向かう連鎖しない記録を辿らず受理する */
+  assert.equal(unlinkedAmended.diagnostic, "");
+  assert.equal(unlinkedAmended.state, "sync-verified");
+  /** 入力headが作成時headなら、連鎖しない記録で追記commitへ移らず拒否する */
+  assert.equal(unlinkedCreate.state, undefined);
+  assert.match(
+    unlinkedCreate.diagnostic,
+    staleAmendmentPattern(this.createHeadSha),
+  );
+  /** 判定はchainが空の場合と完全に同じである */
+  assert.deepEqual(
+    [unlinkedCreate, unlinkedAmended].map(({ state, diagnostic }) => ({
+      state,
+      diagnostic,
+    })),
+    [emptyCreate, emptyAmended].map(({ state, diagnostic }) => ({
+      state,
+      diagnostic,
+    })),
+  );
+});
