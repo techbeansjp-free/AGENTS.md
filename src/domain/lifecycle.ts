@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { writeFileNoReplace } from "../lib/atomic.js";
+import {
+  writeFileNoReplace,
+  writeFileExclusivePinned,
+  writeFileAtomic,
+} from "../lib/atomic.js";
 import { parseJsonStrict, resolveContained } from "../lib/security.js";
 import { findPackageRoot } from "../lib/package-root.js";
 import { PACKAGE_VERSION } from "../lib/version.js";
@@ -607,6 +611,57 @@ function sourceBuildWarnings(): string[] {
     : [];
 }
 
+/**
+ * **asset copyを書き込み直前のpinned-directory検証へ接続する**（Issue #1309）。
+ *
+ * `mappings()`が`resolveContained`（`src/lib/security.ts`）で計画時に1回だけ
+ * 検証した`dest`文字列に対し、以前は`fs.copyFileSync`が生のpath文字列へ
+ * O_NOFOLLOWもrealpath再検証も無く直接書き込んでいた。計画から書き込みまでの
+ * 間に祖先directory（例: `.agent-skill-chain`自体）がsymlinkへ差し替えられると、
+ * `fs.mkdirSync`・`fs.copyFileSync`双方がそのsymlinkを辿り、境界外へ書き込む
+ * （実機再現: 約115 fileが境界外へ作成された）。
+ *
+ * `publishManagedAssetRecord`は既に`writeFileNoReplace`経由で`pinDirectory`
+ * （O_DIRECTORY|O_NOFOLLOWオープン＋dev/ino/realpath再検証）を書込み直前に
+ * 通るためTOCTOU-safeである。**ここではrecord公開と同じprimitiveを資産copyへ
+ * 接続する。新しい保護機構は作らない。**
+ *
+ * `place`（新規配置、COPYFILE_EXCL相当）は`writeFileExclusivePinned`、
+ * `overwrite`（既存置換）は`writeFileAtomic`を使う。いずれもpinned directory
+ * 経由でdev/ino/realpathを書込み直前に再検証し、祖先directoryが差し替えられて
+ * いれば例外を投げ境界外へは何も書き込まない。
+ *
+ * **元fileのmodeを保つ。** `fs.copyFileSync`はsource file modeをそのまま
+ * 複製する（実機確認済み）。既定0600へ固定すると、shebang経由で直接実行される
+ * `asc-contract-citation.mjs`（mode 775）のような資産で実行bitを落とす退行に
+ * なるため、明示的にsource modeを読み取って両primitiveへ渡す。
+ */
+function copyManagedAsset(
+  src: string,
+  dest: string,
+  classification: "place" | "overwrite",
+): void {
+  const mode = fs.statSync(src).mode & 0o777;
+  const contents = fs.readFileSync(src);
+  try {
+    if (classification === "place")
+      writeFileExclusivePinned(
+        path.dirname(dest),
+        path.basename(dest),
+        contents,
+        {},
+        mode,
+      );
+    else writeFileAtomic(dest, contents, { fileMode: mode });
+  } catch (error) {
+    /** **対象を名指しして投げ直す**（Issue #1305、fable H-2と同じ慣習）。 */
+    const cause = error instanceof Error ? error.message : String(error);
+    throw new Error(`管理資産の書き込みに失敗しました: ${cause}: ${dest}`, {
+      cause: error,
+    });
+  }
+}
+
 export function init(target: string, options: { apply: boolean }) {
   return options.apply
     ? withManagedMutationLock(target, (markDirty) =>
@@ -655,7 +710,7 @@ function initUnlocked(
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     if (!pathEntryExists(dest)) {
       markDirty();
-      fs.copyFileSync(src, dest, fs.constants.COPYFILE_EXCL);
+      copyManagedAsset(src, dest, "place");
     }
     record.files[relativeKey(target, dest)] = digest(dest);
   }
@@ -940,10 +995,10 @@ function upgradeUnlocked(
     }
     if (classification === "place") {
       markDirty();
-      fs.copyFileSync(item.src, item.dest, fs.constants.COPYFILE_EXCL);
+      copyManagedAsset(item.src, item.dest, "place");
     } else if (classification === "overwrite") {
       markDirty();
-      fs.copyFileSync(item.src, item.dest);
+      copyManagedAsset(item.src, item.dest, "overwrite");
     } else adopted.push(item.key);
     next.files[item.key] = digest(item.dest);
   }

@@ -10,6 +10,7 @@ import {
   upgrade,
 } from "../../src/domain/lifecycle.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
+import { findPackageRoot } from "../../src/lib/package-root.js";
 
 interface IsolationWorld extends WorkflowWorld {
   doctorResult?: ReturnType<typeof doctor>;
@@ -54,6 +55,15 @@ interface IsolationWorld extends WorkflowWorld {
   recoveryConsumer: string;
   recoveryResults: Array<ReturnType<typeof runCli>>;
   recoverySentinelVersion: string;
+  /** 祖先directory差し替え反例で使う境界外directory（Issue #1309）。 */
+  ancestorOutsideDirectory?: string;
+  /** `fs.mkdirSync`差し替えが実際に発火したか（Issue #1309）。 */
+  ancestorSwapped?: boolean;
+  /** 祖先directory差し替え中に`init`/`upgrade`が投げた例外（Issue #1309）。 */
+  ancestorSwapError?: unknown;
+  /** install直後・update後のmode bits計測（Issue #1309）。 */
+  modesAfterInstall?: Record<string, number>;
+  modesAfterUpdate?: Record<string, number>;
 }
 
 /** repository直下へ展開されるhostごとの常時入口（Issue #1219）。 */
@@ -1091,6 +1101,388 @@ function dropRecord(root: string): void {
   assert.equal(fs.existsSync(recordPath(root)), false);
 }
 
+/**
+ * 境界外へのregular file数を数える（Issue #1309）。
+ *
+ * **directoryの存在自体は問わない。** `fs.mkdirSync(path.dirname(dest), {
+ * recursive: true })`はpinned-directory検証より前に実行されるraw path操作
+ * であり、祖先symlinkを辿ってdirectoryを作成しうる（`publishManagedAssetRecord`
+ * が使う`writeFileNoReplace`・`writeFileAtomic`も同じ「mkdirSync（raw path）→
+ * pinDirectory（descriptor経由）」構造を持ち、これは本Issueが是正する対象の
+ * 外側にある既存許容構造である）。ここで検査するのは、境界外へ資産の**内容**が
+ * 書き込まれたかどうかであり、空directoryの有無ではない。
+ */
+function countRegularFiles(directory: string): number {
+  if (!fs.existsSync(directory)) return 0;
+  let count = 0;
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const resolved = path.join(directory, entry.name);
+    if (entry.isDirectory()) count += countRegularFiles(resolved);
+    else if (entry.isFile()) count += 1;
+  }
+  return count;
+}
+
+/**
+ * asset copyの配置先directory名（Issue #1309）。
+ *
+ * **製品の`NAMESPACE_ASSETS`定数から導出しない。** ここはfault injectionの
+ * 発火位置を選ぶためだけの値であり、期待値の計算には使わない
+ * （`asc-fixture-derived-from-target-hides-mutation`）。`.agent-skill-chain`
+ * 直下には他に`managed-assets-mutation.lock`（mutation lock directory）・
+ * `managed-assets-records`（snapshot directory）があり、これらは資産copy
+ * ではなくlock・record機構の一部である。asset copyより前にmkdirSyncされる
+ * ため、単純な「`.agent-skill-chain`配下」判定だと誤って早期発火する
+ * （実機確認: `managed-assets-mutation.lock`のmkdirSyncで発火し、その後の
+ * `resolveContained`計画時検証に先に捕まって本Issueの対象経路を通らない）。
+ */
+const ASSET_COPY_SUBDIRECTORIES = [
+  "docs",
+  "skills",
+  "templates",
+  "schemas",
+  "policy",
+  "hooks",
+] as const;
+
+/**
+ * `fs.mkdirSync`を一時的に差し替え、指定ancestor配下のasset copy専用
+ * subdirectory（`ASSET_COPY_SUBDIRECTORIES`）へ最初に到達した時点でancestor
+ * 自体を境界外directoryへのsymlinkへ差し替える（Issue #1309）。
+ *
+ * **`mappings()`計画時から書き込み時までの実際のrace windowを模す。**
+ * `ancestor`（例: `.agent-skill-chain`）はこの時点で既に実directoryとして
+ * 存在している（mutation lockのmkdirSyncで作られる）。asset copyの配置先
+ * directory（`.agent-skill-chain/docs`等）への最初の`mkdirSync`呼び出しを
+ * 検出した時点でancestorをsymlinkへ差し替えてから元の`mkdirSync`を呼ぶ。
+ * lock・record機構のdirectory作成では発火しない。
+ *
+ * **製品APIへ新しい注入口を追加しない**（`test/steps/lifecycle-isolation.steps.ts`
+ * 既存の規約、`apply中に展開先の内容を変えてupdateを適用する`step参照）。
+ * `node:fs`のmethodをtest内で一時的に差し替え、`finally`で必ず戻す。
+ */
+function withAncestorSymlinkSwap<T>(
+  ancestor: string,
+  outsideDirectory: string,
+  action: () => T,
+): { result?: T; error?: unknown; swapped: boolean } {
+  const original = fs.mkdirSync;
+  let swapped = false;
+  let result: T | undefined;
+  let error: unknown;
+  const triggers = ASSET_COPY_SUBDIRECTORIES.map((name) =>
+    path.join(ancestor, name),
+  );
+  try {
+    (fs as { mkdirSync: typeof fs.mkdirSync }).mkdirSync = ((
+      directory: Parameters<typeof fs.mkdirSync>[0],
+      options?: Parameters<typeof fs.mkdirSync>[1],
+    ) => {
+      if (
+        !swapped &&
+        typeof directory === "string" &&
+        triggers.some(
+          (trigger) =>
+            directory === trigger ||
+            directory.startsWith(`${trigger}${path.sep}`),
+        ) &&
+        fs.existsSync(ancestor) &&
+        !fs.lstatSync(ancestor).isSymbolicLink()
+      ) {
+        swapped = true;
+        fs.rmSync(ancestor, { recursive: true, force: true });
+        fs.symlinkSync(outsideDirectory, ancestor);
+      }
+      return original(directory, options);
+    }) as typeof fs.mkdirSync;
+    try {
+      result = action();
+    } catch (caught) {
+      error = caught;
+    }
+  } finally {
+    (fs as { mkdirSync: typeof fs.mkdirSync }).mkdirSync = original;
+  }
+  return { result, error, swapped };
+}
+
+/**
+ * `writeFileExclusivePinned`が呼ぶ`fs.openSync`（対象leafをO_CREAT|O_EXCLで
+ * 作成する呼び出し）を捕捉し、対応する`fs.closeSync`が呼ばれた直後（＝内容が
+ * 完全にdurableになった直後）へ注入処理を差し替える（Issue #1309）。
+ *
+ * **既存4 scenario（SCN-025/031/033/035相当）が使っていた`fs.copyFileSync`
+ * monkeypatchの置き換え。** 本Issueの是正で`lifecycle.ts`が`fs.copyFileSync`
+ * を呼ばなくなるため、既存の注入点は発火しなくなる。`writeFileExclusivePinned`
+ * のLinux経路は対象leaf名をpinned directory descriptor相対pathの末尾へ含む
+ * ため、leaf名一致と`O_CREAT|O_EXCL`flagの組み合わせで対象descriptorだけを
+ * 捕捉できる。捕捉後は発火まで毎回同じdescriptorのcloseを待ち、発火後は
+ * 捕捉状態をclearしてfd番号の再利用による誤発火を防ぐ。
+ *
+ * この方式はDarwin・win32の代替書込み経路では発火しない
+ * （`writeFileExclusivePinned`のDarwin openat経路はJSの`fs.openSync`を
+ * 経由しない）。CI/開発環境がLinuxであるため許容する（02 §10.1）。
+ *
+ * `leaf`に`null`を渡すと、対象leaf名を問わず最初のO_CREAT|O_EXCL作成を捕捉する
+ * （新規installのように、どの資産が最初に処理されるかを固定しない既存test互換）。
+ */
+function withExclusiveCreateCloseInjection(
+  leaf: string | null,
+  onClosed: () => void,
+  action: () => void,
+): { injected: boolean; error?: unknown } {
+  const originalOpen = fs.openSync;
+  const originalClose = fs.closeSync;
+  let capturedFd: number | undefined;
+  let injected = false;
+  let error: unknown;
+  try {
+    (fs as { openSync: typeof fs.openSync }).openSync = ((
+      ...args: Parameters<typeof fs.openSync>
+    ) => {
+      const fd = originalOpen(...args);
+      const [target, flags] = args;
+      const flagsValue = typeof flags === "number" ? flags : 0;
+      if (
+        capturedFd === undefined &&
+        typeof target === "string" &&
+        (leaf === null || target.endsWith(`/${leaf}`)) &&
+        (flagsValue & fs.constants.O_CREAT) !== 0 &&
+        (flagsValue & fs.constants.O_EXCL) !== 0
+      )
+        capturedFd = fd;
+      return fd;
+    }) as typeof fs.openSync;
+    (fs as { closeSync: typeof fs.closeSync }).closeSync = ((fd: number) => {
+      originalClose(fd);
+      if (!injected && fd === capturedFd) {
+        injected = true;
+        capturedFd = undefined;
+        onClosed();
+      }
+    }) as typeof fs.closeSync;
+    try {
+      action();
+    } catch (caught) {
+      error = caught;
+    }
+  } finally {
+    (fs as { openSync: typeof fs.openSync }).openSync = originalOpen;
+    (fs as { closeSync: typeof fs.closeSync }).closeSync = originalClose;
+  }
+  return { injected, error };
+}
+
+/**
+ * SCN-INT-LIFECYCLE-058〜061（Issue #1309。01/03では045〜048として計画したが、既存のmanaged-record-snapshots.featureが同じ番号を既に使用していたため、実装時に058〜061へ採番し直した。AC-01〜AC-06の内容・対応関係は変わらない）。
+ *
+ * lifecycleのasset copy経路が、書き込み直前のpinned-directory再検証を通る
+ * ことを固定する。045・046は「計画時検証から書き込みまでの間にsymlink差し替え」
+ * というTOCTOUの中心を、047は退行（mode保持）を、048は既知のnarrowing
+ * （境界内を指す恒常的symlink祖先も拒否される）を検証する。
+ */
+Given("導入済み隔離先がある", function () {
+  installedIsolation(this, "asc-lifecycle-ancestor-overwrite-");
+});
+
+When(
+  "installの資産copy中に.agent-skill-chainを境界外symlinkへ差し替える",
+  function () {
+    const outsideDirectory = this.temp("asc-lifecycle-ancestor-outside-");
+    this.ancestorOutsideDirectory = outsideDirectory;
+    const ancestor = path.join(this.root, ".agent-skill-chain");
+    const outcome = withAncestorSymlinkSwap(ancestor, outsideDirectory, () =>
+      init(this.root, { apply: true }),
+    );
+    this.ancestorSwapped = outcome.swapped;
+    this.ancestorSwapError = outcome.error;
+  },
+);
+
+When(
+  "updateの資産copy中に.agent-skill-chainを境界外symlinkへ差し替える",
+  function () {
+    const outsideDirectory = this.temp("asc-lifecycle-ancestor-outside-");
+    this.ancestorOutsideDirectory = outsideDirectory;
+    const ancestor = path.join(this.root, ".agent-skill-chain");
+    const outcome = withAncestorSymlinkSwap(ancestor, outsideDirectory, () =>
+      upgrade(this.root, { apply: true }),
+    );
+    this.ancestorSwapped = outcome.swapped;
+    this.ancestorSwapError = outcome.error;
+  },
+);
+
+Then(
+  "installは例外を投げ境界外directoryへ1個のregular fileも作成しない",
+  function () {
+    assert.equal(
+      this.ancestorSwapped,
+      true,
+      "祖先directoryの差し替えを注入できていません",
+    );
+    assert.ok(this.ancestorSwapError, "installが例外を投げていません");
+    const outsideDirectory = this.ancestorOutsideDirectory;
+    assert.ok(outsideDirectory, "境界外directoryがありません");
+    assert.equal(
+      countRegularFiles(outsideDirectory),
+      0,
+      "境界外directoryへregular fileが作成されました",
+    );
+  },
+);
+
+/**
+ * **「recordも変更しない」は境界外へrecordが公開されないことで確認する。**
+ * 差し替えは`.agent-skill-chain`自体（record格納先を含む祖先）を対象にするため、
+ * 差し替え後は元のrecordへ`this.root`側のpathから到達できなくなる（symlinkが
+ * 外部directoryを指すため）。これは攻撃が実際に及ぼす影響そのものであり、製品の
+ * 欠陥ではない。したがって「元のpathでrecordが読めること」ではなく「境界外へ
+ * 新しいrecordが公開されていないこと」を確認する（`countRegularFiles`が
+ * record publish先の新規fileも数える）。
+ */
+Then(
+  "updateは例外を投げ境界外directoryへ1個のregular fileも作成せずrecordも変更しない",
+  function () {
+    assert.equal(
+      this.ancestorSwapped,
+      true,
+      "祖先directoryの差し替えを注入できていません",
+    );
+    assert.ok(this.ancestorSwapError, "updateが例外を投げていません");
+    const outsideDirectory = this.ancestorOutsideDirectory;
+    assert.ok(outsideDirectory, "境界外directoryがありません");
+    assert.equal(
+      countRegularFiles(outsideDirectory),
+      0,
+      "境界外directoryへregular fileが作成されました（recordの誤公開を含む）",
+    );
+  },
+);
+
+/**
+ * **modeはinstall直後（`place`分類）とupdate後（`overwrite`分類）の両方で
+ * 測る。** update（`writeFileAtomic`）は毎回既存fileを再書込みするため、
+ * `writeFileExclusivePinned`（`place`）だけがmodeを誤って書き込んでいても、
+ * その直後のupdateが再fchmodして覆い隠してしまう。install直後の時点を
+ * 別途記録することで、`place`分類自体の退行を見逃さない
+ * （独立review Step 7 H-1と同種の見落としを実機確認で発見・是正）。
+ */
+const MODE_CHECK_RELATIVE_PATHS = [
+  HOOK_CANONICAL,
+  ...HOOK_HOST_COPIES,
+  ".agent-skill-chain/00_利用案内.md",
+] as const;
+
+function measureModes(root: string): Record<string, number> {
+  const measured: Record<string, number> = {};
+  for (const relative of MODE_CHECK_RELATIVE_PATHS)
+    measured[relative] = fs.statSync(path.join(root, relative)).mode & 0o777;
+  return measured;
+}
+
+/**
+ * **restrictiveなumask（0o077）を明示設定する。** `open`のmode引数だけに
+ * 頼る実装は、umaskの下ではsourceのmode bitsを再現できない（独立review
+ * Step 7 H-1）。umaskの影響を受けない`fchmod`実装だけがこのtestを通る。
+ * process全体のumaskを変えるため、必ず`finally`で元へ戻す。
+ */
+When("installを適用してからupdateも適用する", function () {
+  const originalUmask = process.umask(0o077);
+  try {
+    init(this.root, { apply: true });
+    this.modesAfterInstall = measureModes(this.root);
+    const updated = upgrade(this.root, { apply: true });
+    assert.equal(updated.applied, true);
+    this.modesAfterUpdate = measureModes(this.root);
+  } finally {
+    process.umask(originalUmask);
+  }
+});
+
+Then(
+  "hook資産の実行bitを含めmode bitsがpackageRootのsourceと一致する",
+  function () {
+    const packageRootForTest = findPackageRoot(import.meta.url);
+    /**
+     * **host展開先（`HOOK_HOST_COPIES`）の正本はHOOK_CANONICALである。**
+     * packageRootには`.claude/hooks/...`等のhost path自体は存在しないため、
+     * source側は常にHOOK_CANONICAL、dest側だけがhost展開先ごとに変わる。
+     */
+    const sourceFor = (relative: string): string =>
+      HOOK_HOST_COPIES.includes(relative as (typeof HOOK_HOST_COPIES)[number])
+        ? HOOK_CANONICAL
+        : relative;
+    const afterInstall = this.modesAfterInstall;
+    const afterUpdate = this.modesAfterUpdate;
+    assert.ok(afterInstall, "install直後のmode計測がありません");
+    assert.ok(afterUpdate, "update後のmode計測がありません");
+    for (const relative of MODE_CHECK_RELATIVE_PATHS) {
+      const sourceMode =
+        fs.statSync(path.join(packageRootForTest, sourceFor(relative))).mode &
+        0o777;
+      assert.equal(
+        afterInstall[relative],
+        sourceMode,
+        `${relative}のmode bitsがinstall直後にsourceと一致しません（source=${sourceMode.toString(8)}, install後=${afterInstall[relative]?.toString(8)}）`,
+      );
+      assert.equal(
+        afterUpdate[relative],
+        sourceMode,
+        `${relative}のmode bitsがupdate後にsourceと一致しません（source=${sourceMode.toString(8)}, update後=${afterUpdate[relative]?.toString(8)}）`,
+      );
+    }
+  },
+);
+
+When(
+  "install実行前に.agent-skill-chainを境界内symlinkとして用意してから適用する",
+  function () {
+    const real = path.join(this.root, ".agent-skill-chain-real");
+    fs.mkdirSync(real, { recursive: true });
+    fs.symlinkSync(real, path.join(this.root, ".agent-skill-chain"));
+    try {
+      init(this.root, { apply: true });
+      this.ancestorSwapError = undefined;
+    } catch (error) {
+      this.ancestorSwapError = error;
+    }
+  },
+);
+
+/**
+ * **実測: この反例は`assertSnapshotPublicationSupported`（既存、record公開の
+ * hardlink probe）が最初に拒否する。** `copyManagedAsset`（本Issueの新設部分）
+ * まで到達する前に、record不在時の probe が`.agent-skill-chain`直下へ
+ * `writeFileNoReplace`（既存、pinDirectory経由）を試み、symlinkの最終component
+ * がO_NOFOLLOWに触れて拒否される（実機確認: `ENOTDIR: not a directory, open
+ * '.../.agent-skill-chain'`）。**AC-06が求めるのは「asset copyが同じ検証で
+ * 拒否される」という観測可能な結果であり、拒否に至る内部経路まで固定しない。**
+ * したがってここでは「計画時のresolveContainedでは拒否されていない」ことだけを
+ * 固定し、拒否theselfが書き込み直前のpinned-directory系検証（`copyManagedAsset`
+ * 経由か、既存のrecord公開probe経由か）によることを確認する。
+ */
+Then(
+  "installは既存のresolveContainedではなく書き込み直前のpinned-directory検証で拒否する",
+  function () {
+    assert.ok(this.ancestorSwapError, "installが拒否していません");
+    const message =
+      this.ancestorSwapError instanceof Error
+        ? this.ancestorSwapError.message
+        : String(this.ancestorSwapError);
+    assert.doesNotMatch(
+      message,
+      /シンボリックリンクによる境界外移動を拒否しました/u,
+      `既存のresolveContained（計画時検証）で拒否されています。境界内を指すsymlinkはこの検証を通過するはずです: ${message}`,
+    );
+    assert.match(
+      message,
+      /ENOTDIR|ELOOP|atomic write directoryが不正です|管理資産の書き込みに失敗しました|公開先/u,
+      `pinned-directory系の検証による拒否だと確認できません: ${message}`,
+    );
+  },
+);
+
 Given("導入後にmanaged asset recordだけを失った隔離先がある", function () {
   installedIsolation(this, "asc-lifecycle-record-lost-");
   dropRecord(this.root);
@@ -1730,33 +2122,30 @@ Given("導入後にrecordと展開済み資産1件を失った隔離先がある
 /**
  * 実測digest登録を強制する（R1305-04）。
  *
- * `copyFileSync`直後にdestへ追記すると、`digest(item.src)`を登録する実装では
+ * `place`分類のcopy直後にdestへ追記すると、`digest(item.src)`を登録する実装では
  * record値がdestの実測値と食い違う。**INV-04をここで名指しで固定する。**
+ *
+ * **注入点はIssue #1309でfs.copyFileSyncから移した。** `lifecycle.ts`が
+ * `fs.copyFileSync`を呼ばなくなったため、`writeFileExclusivePinned`が
+ * 呼ぶ`fs.openSync`（対象leaf・O_CREAT|O_EXCL）→`fs.closeSync`のfd相関で
+ * 「内容が完全にdurableになった直後」を捕捉する（`withExclusiveCreateCloseInjection`
+ * 参照）。追記のタイミングはcopyFileSync完了直後と同じ意味論である。
  */
 When("copy直後に配置先へ追記してupdateを適用する", function () {
   const target = path.join(this.root, DIVERGENT_ASSET);
-  const original = fs.copyFileSync;
-  let appended = false;
-  try {
-    (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = ((
-      source: Parameters<typeof fs.copyFileSync>[0],
-      destination: Parameters<typeof fs.copyFileSync>[1],
-      mode?: Parameters<typeof fs.copyFileSync>[2],
-    ) => {
-      original(source, destination, mode);
-      if (!appended && String(destination) === target) {
-        appended = true;
-        fs.appendFileSync(target, "\ncopy直後の追記\n");
-      }
-    }) as typeof fs.copyFileSync;
-    this.recoveryResult = upgrade(this.root, {
-      apply: true,
-      recoverRecord: true,
-    });
-  } finally {
-    (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = original;
-  }
-  assert.equal(appended, true, "copy直後の追記を注入できていません");
+  const leaf = path.basename(DIVERGENT_ASSET);
+  const outcome = withExclusiveCreateCloseInjection(
+    leaf,
+    () => fs.appendFileSync(target, "\ncopy直後の追記\n"),
+    () => {
+      this.recoveryResult = upgrade(this.root, {
+        apply: true,
+        recoverRecord: true,
+      });
+    },
+  );
+  if (outcome.error) throw outcome.error;
+  assert.equal(outcome.injected, true, "copy直後の追記を注入できていません");
 });
 
 Then("recordの登録digestは追記後の展開先の実測値と一致する", function () {
@@ -2136,7 +2525,12 @@ Then("updateは1 fileも書かず明示指定を要求して拒否する", funct
  * record公開直前のentry差し替えを検出する（Issue #1305、R2-H02）。
  *
  * 静止状態のsymlinkはSCN-022が測る。**こちらは実行開始後に現れる場合である。**
- * `copyFileSync`のseamで、分類の後・record公開の前にsymlinkを挿入する。
+ * 分類の後・record公開の前にsymlinkを挿入する。
+ *
+ * **注入点はIssue #1309でfs.copyFileSyncから移した。** Given「導入後にrecordと
+ * 展開済み資産1件を失った隔離先がある」ではDIVERGENT_ASSET（`place`分類）だけが
+ * copyされるため、`withExclusiveCreateCloseInjection`で対象leafのcopy完了直後に
+ * 注入する。
  */
 When(
   "資産のcopy直後にrecord公開先へsymlinkを挿入してupdateを試みる",
@@ -2144,31 +2538,27 @@ When(
     const outsideDirectory = this.temp("asc-lifecycle-publish-target-");
     const missing = path.join(outsideDirectory, "存在しない.json");
     this.outsideTarget = { file: missing, contents: "" };
-    const original = fs.copyFileSync;
-    let injected = false;
+    const leaf = path.basename(DIVERGENT_ASSET);
     this.recoveryRejections = [];
-    try {
-      (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = ((
-        source: Parameters<typeof fs.copyFileSync>[0],
-        destination: Parameters<typeof fs.copyFileSync>[1],
-        mode?: Parameters<typeof fs.copyFileSync>[2],
-      ) => {
-        original(source, destination, mode);
-        if (!injected) {
-          injected = true;
-          fs.symlinkSync(missing, recordPath(this.root));
-        }
-      }) as typeof fs.copyFileSync;
-      upgrade(this.root, { apply: true, recoverRecord: true });
-      this.recoveryRejections.push("");
-    } catch (error) {
+    const outcome = withExclusiveCreateCloseInjection(
+      leaf,
+      () => fs.symlinkSync(missing, recordPath(this.root)),
+      () => {
+        upgrade(this.root, { apply: true, recoverRecord: true });
+        this.recoveryRejections?.push("");
+      },
+    );
+    if (outcome.error)
       this.recoveryRejections.push(
-        error instanceof Error ? error.message : String(error),
+        outcome.error instanceof Error
+          ? outcome.error.message
+          : String(outcome.error),
       );
-    } finally {
-      (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = original;
-    }
-    assert.equal(injected, true, "公開直前のsymlinkを注入できていません");
+    assert.equal(
+      outcome.injected,
+      true,
+      "公開直前のsymlinkを注入できていません",
+    );
   },
 );
 
@@ -2250,38 +2640,43 @@ Given("導入済みで展開済み資産1件を失った隔離先がある", fun
   fs.rmSync(path.join(this.root, DIVERGENT_ASSET));
 });
 
+/**
+ * **注入点はIssue #1309でfs.copyFileSyncから移した。** この隔離先は他の全資産が
+ * `overwrite`分類（`writeFileAtomic`、一時fileは別名`.{leaf}.tmp-*`）になるが、
+ * DIVERGENT_ASSETだけがfile不在のため`place`分類（`writeFileExclusivePinned`）
+ * のままである。対象leafのO_CREAT|O_EXCL作成だけを捕捉するため、他資産の
+ * `writeFileAtomic`書き込みとは衝突しない。
+ */
 When(
   "資産のcopy直後に既存recordをsymlinkへ差し替えてupdateを試みる",
   function () {
     const outsideDirectory = this.temp("asc-lifecycle-existing-target-");
     const missing = path.join(outsideDirectory, "存在しない.json");
     this.outsideTarget = { file: missing, contents: "" };
-    const original = fs.copyFileSync;
-    let injected = false;
+    const leaf = path.basename(DIVERGENT_ASSET);
     this.recoveryRejections = [];
-    try {
-      (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = ((
-        source: Parameters<typeof fs.copyFileSync>[0],
-        destination: Parameters<typeof fs.copyFileSync>[1],
-        mode?: Parameters<typeof fs.copyFileSync>[2],
-      ) => {
-        original(source, destination, mode);
-        if (!injected) {
-          injected = true;
-          fs.rmSync(recordPath(this.root));
-          fs.symlinkSync(missing, recordPath(this.root));
-        }
-      }) as typeof fs.copyFileSync;
-      upgrade(this.root, { apply: true });
-      this.recoveryRejections.push("");
-    } catch (error) {
+    const outcome = withExclusiveCreateCloseInjection(
+      leaf,
+      () => {
+        fs.rmSync(recordPath(this.root));
+        fs.symlinkSync(missing, recordPath(this.root));
+      },
+      () => {
+        upgrade(this.root, { apply: true });
+        this.recoveryRejections?.push("");
+      },
+    );
+    if (outcome.error)
       this.recoveryRejections.push(
-        error instanceof Error ? error.message : String(error),
+        outcome.error instanceof Error
+          ? outcome.error.message
+          : String(outcome.error),
       );
-    } finally {
-      (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = original;
-    }
-    assert.equal(injected, true, "公開直前の差し替えを注入できていません");
+    assert.equal(
+      outcome.injected,
+      true,
+      "公開直前の差し替えを注入できていません",
+    );
   },
 );
 
@@ -2370,40 +2765,39 @@ Then("CLIは非0で終了し明示指定を名指しし1 fileも書かない", f
  * `assertRecordPublishTarget`は本差分で`init`へも入れた新設の防護である。
  * `upgrade`側のSCN-033だけでは`init`の呼び出し行を消す変異が生存する。
  */
+/**
+ * **注入点はIssue #1309でfs.copyFileSyncから移した。** 新規installでは
+ * どの資産が最初に処理されるか（`ROOT_ASSETS`の`AGENTS.md`）を固定せず、
+ * `withExclusiveCreateCloseInjection(null, ...)`で最初のO_CREAT|O_EXCL作成を
+ * 捕捉する。
+ */
 When(
   "installの資産copy直後にrecord公開先へsymlinkを挿入して適用する",
   function () {
     const outsideDirectory = this.temp("asc-lifecycle-init-publish-");
     const missing = path.join(outsideDirectory, "存在しない.json");
     this.outsideTarget = { file: missing, contents: "" };
-    const original = fs.copyFileSync;
-    let injected = false;
     this.recoveryRejections = [];
-    try {
-      (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = ((
-        source: Parameters<typeof fs.copyFileSync>[0],
-        destination: Parameters<typeof fs.copyFileSync>[1],
-        mode?: Parameters<typeof fs.copyFileSync>[2],
-      ) => {
-        original(source, destination, mode);
-        if (!injected) {
-          injected = true;
-          fs.mkdirSync(path.dirname(recordPath(this.root)), {
-            recursive: true,
-          });
-          fs.symlinkSync(missing, recordPath(this.root));
-        }
-      }) as typeof fs.copyFileSync;
-      init(this.root, { apply: true });
-      this.recoveryRejections.push("");
-    } catch (error) {
+    const outcome = withExclusiveCreateCloseInjection(
+      null,
+      () => {
+        fs.mkdirSync(path.dirname(recordPath(this.root)), {
+          recursive: true,
+        });
+        fs.symlinkSync(missing, recordPath(this.root));
+      },
+      () => {
+        init(this.root, { apply: true });
+        this.recoveryRejections?.push("");
+      },
+    );
+    if (outcome.error)
       this.recoveryRejections.push(
-        error instanceof Error ? error.message : String(error),
+        outcome.error instanceof Error
+          ? outcome.error.message
+          : String(outcome.error),
       );
-    } finally {
-      (fs as { copyFileSync: typeof fs.copyFileSync }).copyFileSync = original;
-    }
-    assert.equal(injected, true, "公開直前の挿入を注入できていません");
+    assert.equal(outcome.injected, true, "公開直前の挿入を注入できていません");
   },
 );
 

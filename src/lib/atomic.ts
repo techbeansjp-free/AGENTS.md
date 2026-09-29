@@ -23,6 +23,21 @@ interface AtomicWriteOptions {
   onDurableCommit?: () => void;
 }
 
+/**
+ * Normalize the two accepted content shapes to a Buffer without a lossy
+ * UTF-8 round trip when the caller already holds exact bytes (Issue #1309).
+ * A `Buffer` input is used as-is; a `string` is encoded once as UTF-8.
+ */
+function toBuffer(contents: string | Buffer): Buffer {
+  return Buffer.isBuffer(contents) ? contents : Buffer.from(contents, "utf8");
+}
+
+/** Reject a file mode outside the representable permission bit range. */
+function assertFileMode(fileMode: number): void {
+  if (!Number.isInteger(fileMode) || fileMode < 0 || fileMode > 0o777)
+    throw new Error("atomic writeのfile modeが不正です");
+}
+
 interface ExclusivePinnedWriteHooks {
   /** Test-only fault injection immediately after the directory is pinned. */
   beforeWrite?: () => void;
@@ -119,7 +134,7 @@ except BaseException as error:
 function writeFileExclusiveDarwinOpenAt(
   directory: PinnedDirectory,
   leaf: string,
-  contents: string,
+  contents: string | Buffer,
   fault?: ExclusivePinnedWriteHooks["darwinHelperFault"],
 ): string {
   assertPinnedDirectory(directory);
@@ -127,7 +142,7 @@ function writeFileExclusiveDarwinOpenAt(
     "/usr/bin/python3",
     ["-I", "-S", "-c", DARWIN_OPENAT_HELPER, leaf, fault ?? ""],
     {
-      input: contents,
+      input: toBuffer(contents),
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe", directory.descriptor],
     },
@@ -276,11 +291,13 @@ function descriptorDirectoryPath(directory: PinnedDirectory): string {
 export function writeFileExclusivePinned(
   directory: string,
   leaf: string,
-  contents: string,
+  contents: string | Buffer,
   hooks: ExclusivePinnedWriteHooks = {},
+  fileMode: number = 0o600,
 ): string {
   if (leaf !== path.basename(leaf) || leaf === "." || leaf === "..")
     throw new Error("exclusive file作成のleafが不正です");
+  assertFileMode(fileMode);
   const pinned = pinDirectory(directory);
   let descriptor: number | undefined;
   let created = false;
@@ -318,16 +335,23 @@ export function writeFileExclusivePinned(
         fs.constants.O_CREAT |
         fs.constants.O_EXCL |
         fs.constants.O_NOFOLLOW,
-      0o600,
+      fileMode,
     );
     created = true;
+    /**
+     * **`open`のmode引数はprocess umaskの影響を受ける**（Issue #1309、独立review
+     * Step 7 H-1）。意図したbitをumaskに関わらず強制するため、作成直後に
+     * `fchmod`を明示実行する。`writeFileAtomic`は既に同じ理由で
+     * `fs.fchmodSync`を呼んでおり、そのpatternへ揃える。
+     */
+    fs.fchmodSync(descriptor, fileMode);
     hooks.afterCreateBeforeIdentity?.(descriptor);
     const createdIdentity = fs.fstatSync(descriptor);
     if (!createdIdentity.isFile())
       throw new Error("exclusive file作成先が通常fileではありません");
     hooks.afterCreateBeforeWrite?.(descriptor);
     assertPinnedDirectory(pinned);
-    writeFully(descriptor, Buffer.from(contents));
+    writeFully(descriptor, toBuffer(contents));
     fs.fsyncSync(descriptor);
     hooks.afterWriteBeforeVerify?.();
     assertPinnedDirectory(pinned);
@@ -425,12 +449,11 @@ export function publishDirectoryAtomic(
 
 export function writeFileAtomic(
   destination: string,
-  contents: string,
+  contents: string | Buffer,
   options: AtomicWriteOptions = {},
 ): void {
   const fileMode = options.fileMode ?? 0o600;
-  if (!Number.isInteger(fileMode) || fileMode < 0 || fileMode > 0o777)
-    throw new Error("atomic writeのfile modeが不正です");
+  assertFileMode(fileMode);
   const resolvedDestination = path.resolve(destination);
   const destinationDirectory = path.dirname(resolvedDestination);
   fs.mkdirSync(destinationDirectory, { recursive: true });
@@ -456,7 +479,7 @@ export function writeFileAtomic(
   const temporaryLeaf = `.${destinationLeaf}.tmp-${process.pid}-${crypto.randomBytes(12).toString("hex")}`;
   const temporary = descriptorPath(source, temporaryLeaf);
   const publishTarget = descriptorPath(target, destinationLeaf);
-  const expected = Buffer.from(contents);
+  const expected = toBuffer(contents);
   let temporaryDescriptor: number | undefined;
   let failure: unknown;
   try {

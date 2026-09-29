@@ -222,3 +222,23 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     Given 導入後にrecordを失い展開済み資産が正本と異なる隔離先がある
     When 明示指定つきで復旧してからdoctorを実行する
     Then doctorはhealthyを変えず管理対象外の資産を件数と対処つきで報告する
+
+  Scenario: SCN-INT-LIFECYCLE-058 installの資産copy中に祖先directoryが境界外symlinkへ差し替わっても書き込まない
+    Given lifecycle検証用の隔離directoryがある
+    When installの資産copy中に.agent-skill-chainを境界外symlinkへ差し替える
+    Then installは例外を投げ境界外directoryへ1個のregular fileも作成しない
+
+  Scenario: SCN-INT-LIFECYCLE-059 updateの資産copy中に祖先directoryが境界外symlinkへ差し替わっても書き込まない
+    Given 導入済み隔離先がある
+    When updateの資産copy中に.agent-skill-chainを境界外symlinkへ差し替える
+    Then updateは例外を投げ境界外directoryへ1個のregular fileも作成せずrecordも変更しない
+
+  Scenario: SCN-INT-LIFECYCLE-060 copyした資産のmode bitsはsourceと一致する
+    Given lifecycle検証用の隔離directoryがある
+    When installを適用してからupdateも適用する
+    Then hook資産の実行bitを含めmode bitsがpackageRootのsourceと一致する
+
+  Scenario: SCN-INT-LIFECYCLE-061 境界内を指す恒常的symlink祖先も書き込み直前の検証で拒否する
+    Given lifecycle検証用の隔離directoryがある
+    When install実行前に.agent-skill-chainを境界内symlinkとして用意してから適用する
+    Then installは既存のresolveContainedではなく書き込み直前のpinned-directory検証で拒否する
