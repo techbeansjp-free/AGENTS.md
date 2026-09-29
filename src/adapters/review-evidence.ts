@@ -60,18 +60,27 @@ function resolveCommit(root: string, label: string, value: string): string {
  *
  * 受理する形は2つだけである。
  *
- * 1. `H_impl`が、保存済みsessionのcandidate HEADをcanonical resolver
- *    （`resolveImplementationHead`、Issue #1532）へ通した値と一致する。基点は
- *    sessionの`diffBaseSha`か、その前進（既定branch追随、Issue #1493）で
- *    `H_impl`のancestorであるもの。**session側もresolverへ通すことで、
- *    candidate HEADがevidence-only commitで汚染されていても（round初期化時の
- *    誤った束縛等）真のH_implへ自己修復して受理する。** resolverはallowlist・
- *    mode・単一pathの条件を満たさない値には無変化（0 step）を返すため、
- *    汚染されていない通常の値はこの経路で従来と同じ結果になる。
+ * 1. `H_impl`が保存済みsessionのcandidate HEADそのもの。基点はsessionの`diffBaseSha`か、
+ *    その前進（既定branch追随、Issue #1493）で`H_impl`のancestorであるもの
  * 2. rebase後の`H_impl`。`基点..H_impl`の完全diffがsessionの
  *    `diffBaseSha..candidate HEAD`と内容等価であるもの
  *
  * **どちらでもない値は、reviewしていない内容を指すため拒否する。**
+ *
+ * **`session.latestCandidateHeadSha`はcanonical resolverへ通さず、厳密な一致を
+ * 要求する（Issue #1532 round 1指摘、MEDIUM-1）。** 検討時は「session側の値も
+ * resolverへ通せば汚染されたcandidate HEADから自己修復できる」という設計を試みたが、
+ * (a) 実インシデント（PR #1528/#1537）はexport側の解決だけで直り、この変更は不要
+ * だった、(b) `baseSha === session.anchor.diffBaseSha`の分岐にresolver後の値との
+ * ancestry再検証が無く、resolverが比較基点より下流へ歩いた場合を検知できない、
+ * (c) `H_impl === candidate`かつcandidate自身がevidence-path commitである既存の
+ * 受理形が、resolver適用後は分岐2（内容等価性、baseの前進を許容しない）へ落ちて
+ * 失われる（Issue #1493と同型の回帰）、(d) `pr merge`側の`resolveImplementationCommitForMerge`
+ * （`src/cli.ts`）は本Issueで統合しておらず、汚染されたcandidate HEADに対して
+ * export/validateは通ってもpr mergeだけ拒否するという未カバーの穴が残る、という
+ * 4点が判明したため、より安全な厳密比較へ戻した。汚染されたsession候補の救済は
+ * 本Issueのscope外とし、必要なら`resolveImplementationCommitForMerge`も含めた
+ * 別Issueで扱う。
  */
 export function reviewEvidenceBindingErrors(
   root: string,
@@ -82,10 +91,7 @@ export function reviewEvidenceBindingErrors(
   if (baseSha === implementationHeadSha)
     return ["review証跡の比較基点とH_implは異なるcommitでなければなりません"];
   try {
-    if (
-      implementationHeadSha ===
-      resolveImplementationHead(root, session.latestCandidateHeadSha)
-    ) {
+    if (implementationHeadSha === session.latestCandidateHeadSha) {
       if (baseSha === session.anchor.diffBaseSha) return [];
       if (
         isAncestor(root, session.anchor.diffBaseSha, baseSha) &&
@@ -229,6 +235,11 @@ function issueFromTracker(tracker: string | null | undefined) {
  * 上にある場合も、resolverが遡って真の実装commitへ解決する。実装commitの後に
  * 証跡1 fileだけをcommitして`H_final`にする。書込みはatomicで、書込み後に
  * 読み戻して厳密に再検証する。
+ *
+ * **resolverには、このexportが書こうとしているartifact path自身を渡す**
+ * （Issue #1532 round 1指摘、HIGH-1）。current HEAD自身が、今回のexportとは
+ * 無関係な別pathのreview記録を編集する正当な実装commitであっても、遡りは
+ * このexportのartifact pathだけに固定され、その別commit自身を遡り越さない。
  */
 export function exportReviewEvidence(input: {
   root: string;
@@ -260,6 +271,30 @@ export function exportReviewEvidence(input: {
     throw new Error(
       "review exportの--reviewerと--implementerは異なるidentityが必要です。reviewerはimplementerと別のsession/contextでなければなりません",
     );
+  /**
+   * **出力先pathを、H_impl解決より先に確定する。** canonical resolver
+   * （`resolveImplementationHead`）は「どのpathを遡り対象とするか」を明示引数で
+   * 要求する（Issue #1532 round 1指摘、HIGH-1）。ここで確定する`relative`が
+   * その値であり、「このexportが書こうとしているartifact path」を表す。
+   * `head`自身がこのpath以外のreview記録を編集する正当な実装commitであっても、
+   * その別pathを誤って遡り越さない。
+   */
+  const out = path.resolve(
+    root,
+    input.out ?? path.join("docs", "reviews", `${input.issue}_review.json`),
+  );
+  const relative = path.relative(root, out).split(path.sep).join("/");
+  if (relative.startsWith("..") || path.isAbsolute(relative))
+    throw new Error("review exportの--outはrepository内が必要です");
+  if (!isEvidenceOnlyPath(relative))
+    throw new Error(
+      "review exportの--outはdocs/reviews/または.agent-skill-chain/reviews/配下が必要です",
+    );
+  const name = REVIEW_EVIDENCE_NAME_PATTERN.exec(path.basename(out));
+  if (name === null || Number(name[1]) !== input.issue)
+    throw new Error(
+      `review exportの--outのfile名は${input.issue}_review.jsonが必要です`,
+    );
   const session = readStoredReviewSession(staging);
   if (session === null)
     throw new Error("review exportには永続review sessionが必要です");
@@ -269,6 +304,7 @@ export function exportReviewEvidence(input: {
   const implementationHeadSha = resolveImplementationHead(
     gitRoot,
     currentHeadSha,
+    relative,
   );
   const baseSha =
     input.baseSha === undefined
@@ -280,7 +316,7 @@ export function exportReviewEvidence(input: {
   });
   if (bindingErrors.length > 0)
     throw new Error(
-      `${bindingErrors.join("; ")}。current HEADから遡って解決したH_impl（${implementationHeadSha}）が、review済みsessionのcandidate HEAD（をcanonical resolverで解決した値）と一致しません。review済みの実装commit以降でreview exportを実行してください`,
+      `${bindingErrors.join("; ")}。current HEADから遡って解決したH_impl（${implementationHeadSha}）が、review済みsessionのcandidate HEADと一致しません。review済みの実装commit以降でreview exportを実行してください`,
     );
   /**
    * **検証欄は申告ではなく観測から導出する。** `比較基点..H_impl`の影響集合を
@@ -316,22 +352,6 @@ export function exportReviewEvidence(input: {
     reviewer: input.reviewer,
     implementer: input.implementer,
   });
-  const out = path.resolve(
-    root,
-    input.out ?? path.join("docs", "reviews", `${input.issue}_review.json`),
-  );
-  const relative = path.relative(root, out).split(path.sep).join("/");
-  if (relative.startsWith("..") || path.isAbsolute(relative))
-    throw new Error("review exportの--outはrepository内が必要です");
-  if (!isEvidenceOnlyPath(relative))
-    throw new Error(
-      "review exportの--outはdocs/reviews/または.agent-skill-chain/reviews/配下が必要です",
-    );
-  const name = REVIEW_EVIDENCE_NAME_PATTERN.exec(path.basename(out));
-  if (name === null || Number(name[1]) !== input.issue)
-    throw new Error(
-      `review exportの--outのfile名は${input.issue}_review.jsonが必要です`,
-    );
   const parent = path.dirname(out);
   /**
    * **directoryを作る前に既存の祖先を全部検査する。** 先に`mkdirSync`すると、
