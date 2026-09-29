@@ -692,6 +692,306 @@ Given("bump_version jobを持つworkflow本文がある", function () {
   this.autoWorkflowYaml = `${workflow.slice(0, tagStart)}\n  bump_version:\n    name: versionをmainへ反映する\n    runs-on: ubuntu-latest\n    steps:\n      - name: 何もしない\n        run: "true"\n${workflow.slice(tagStart)}`;
 });
 
+Given(
+  "github_release jobから依存導入stepを削除したrelease workflow本文がある",
+  function () {
+    /**
+     * **`github_release` job内だけから依存導入stepを消す。** job名の文字列一致で
+     * 探すため、`build_distribution`が持つ同名step（「Node.js実行環境を準備する」）を
+     * 誤って消さないよう、`github_release:`以降だけを対象にする（Issue #1533）。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const jobStart = workflow.indexOf("\n  github_release:");
+    assert.ok(jobStart >= 0);
+    const githubReleaseJob = workflow.slice(jobStart);
+    const dependencyInstallSteps =
+      "      - name: Node.js実行環境を準備する\n        uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: npm\n      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        run: npm ci --ignore-scripts\n";
+    assert.ok(githubReleaseJob.includes(dependencyInstallSteps));
+    const removedJob = githubReleaseJob.replace(dependencyInstallSteps, "");
+    assert.notEqual(removedJob, githubReleaseJob);
+    this.autoWorkflowYaml = `${workflow.slice(0, jobStart)}${removedJob}`;
+  },
+);
+
+Given(
+  "github_release jobでnpm ciをsetup-nodeより前へ入れ替えたrelease workflow本文がある",
+  function () {
+    /**
+     * **両stepとも残したまま順序だけを入れ替える。** 「欠落」ではなく
+     * `setupNodeLineIndex >= npmCiStep.stepStart`という順序判定自体を、
+     * 削除ではなく反転させる変異として固定する（round 1独立review REV-01指摘、
+     * この判定を消す変異が旧test群では生存していた）。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const jobStart = workflow.indexOf("\n  github_release:");
+    assert.ok(jobStart >= 0);
+    const githubReleaseJob = workflow.slice(jobStart);
+    const setupNodeStep =
+      "      - name: Node.js実行環境を準備する\n        uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: npm\n";
+    const npmCiStep =
+      "      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        run: npm ci --ignore-scripts\n";
+    const original = `${setupNodeStep}${npmCiStep}`;
+    assert.ok(githubReleaseJob.includes(original));
+    const swapped = `${npmCiStep}${setupNodeStep}`;
+    const swappedJob = githubReleaseJob.replace(original, swapped);
+    assert.notEqual(swappedJob, githubReleaseJob);
+    this.autoWorkflowYaml = `${workflow.slice(0, jobStart)}${swappedJob}`;
+  },
+);
+
+Given(
+  "github_release jobでnpm ciをtsx実行stepより後へ移動したrelease workflow本文がある",
+  function () {
+    /**
+     * **setup-nodeは元の位置に残し、npm ciだけをtsx実行stepの後へ動かす。**
+     * `npmCiStep`探索の`stepStart < tsxStep.stepStart`条件（tsx実行stepより
+     * 前にある候補だけを探す）を消す変異は、この形が無いと生存していた
+     * （round 1独立review 2回目、REV-R1-01指摘）。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const jobStart = workflow.indexOf("\n  github_release:");
+    assert.ok(jobStart >= 0);
+    const githubReleaseJob = workflow.slice(jobStart);
+    const npmCiStep =
+      "      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        run: npm ci --ignore-scripts\n";
+    assert.ok(githubReleaseJob.includes(npmCiStep));
+    const withoutNpmCi = githubReleaseJob.replace(npmCiStep, "");
+    assert.notEqual(withoutNpmCi, githubReleaseJob);
+    const insertionMarker = "      - name: 3者一致後にdraftをpublishする";
+    assert.ok(withoutNpmCi.includes(insertionMarker));
+    const movedJob = withoutNpmCi.replace(
+      insertionMarker,
+      `${npmCiStep}${insertionMarker}`,
+    );
+    assert.notEqual(movedJob, withoutNpmCi);
+    this.autoWorkflowYaml = `${workflow.slice(0, jobStart)}${movedJob}`;
+  },
+);
+
+Given(
+  "github_release jobのnpm ci stepへifを付けたrelease workflow本文がある",
+  function () {
+    /**
+     * **commandはそのまま残し、`if:`だけを付ける。** GitHub Actionsは`if:`が
+     * falseに評価される場合そのstepを実行しないため、command文字列の存在
+     * だけを見る実装はこの迂回を検出できない（CodeRabbit round 1指摘）。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const jobStart = workflow.indexOf("\n  github_release:");
+    assert.ok(jobStart >= 0);
+    const githubReleaseJob = workflow.slice(jobStart);
+    const original =
+      "      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        run: npm ci --ignore-scripts\n";
+    assert.ok(githubReleaseJob.includes(original));
+    const withIf =
+      "      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        if: ${{ false }}\n        run: npm ci --ignore-scripts\n";
+    const mutatedJob = githubReleaseJob.replace(original, withIf);
+    assert.notEqual(mutatedJob, githubReleaseJob);
+    this.autoWorkflowYaml = `${workflow.slice(0, jobStart)}${mutatedJob}`;
+  },
+);
+
+Given(
+  "github_release jobのsetup-node stepへcontinue-on-error: trueを付けたrelease workflow本文がある",
+  function () {
+    /**
+     * **`uses:`だけのstepにも失敗握り潰しの迂回が成立する。** `setup-node`は
+     * `run:`を持たないため`jobStepRunBlocks`の対象外になり、旧実装は
+     * `continue-on-error`を検査していなかった（CodeRabbit round 1指摘）。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const jobStart = workflow.indexOf("\n  github_release:");
+    assert.ok(jobStart >= 0);
+    const githubReleaseJob = workflow.slice(jobStart);
+    const original =
+      "      - name: Node.js実行環境を準備する\n        uses: actions/setup-node@v4\n";
+    assert.ok(githubReleaseJob.includes(original));
+    const withContinueOnError =
+      "      - name: Node.js実行環境を準備する\n        continue-on-error: true\n        uses: actions/setup-node@v4\n";
+    const mutatedJob = githubReleaseJob.replace(original, withContinueOnError);
+    assert.notEqual(mutatedJob, githubReleaseJob);
+    this.autoWorkflowYaml = `${workflow.slice(0, jobStart)}${mutatedJob}`;
+  },
+);
+
+Given(
+  "github_release jobのsetup-nodeより前に無関係なnpm ci stepを追加したrelease workflow本文がある",
+  function () {
+    /**
+     * **setup-nodeより前にも`npm ci`を含むstepを置く。** 最初に見つかった
+     * 候補を無条件で採用する実装は、この無関係な先行stepを誤って選び、
+     * その後方にある正しい順序のnpm ci stepを見落として誤って拒否する
+     * （CodeRabbit round 1指摘）。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const jobStart = workflow.indexOf("\n  github_release:");
+    assert.ok(jobStart >= 0);
+    const githubReleaseJob = workflow.slice(jobStart);
+    const marker = "      - name: Node.js実行環境を準備する";
+    assert.ok(githubReleaseJob.includes(marker));
+    const unrelatedStep =
+      "      - name: 無関係な前処理\n        run: npm ci --prefix ./unrelated\n";
+    const mutatedJob = githubReleaseJob.replace(
+      marker,
+      `${unrelatedStep}${marker}`,
+    );
+    assert.notEqual(mutatedJob, githubReleaseJob);
+    this.autoWorkflowYaml = `${workflow.slice(0, jobStart)}${mutatedJob}`;
+  },
+);
+
+Given(
+  "github_release jobのnpm ci stepへrun:より後にifを付けたrelease workflow本文がある",
+  function () {
+    /**
+     * **`if:`を`run:`より後（YAML mapping順序は本来無意味）へ書く。**
+     * `jobStepRunBlocks`の`attributes`は`run:`より前で打ち切られるため、
+     * ここに書いた`if:`は見逃されうる（round 2独立review REV-R2-01指摘）。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const jobStart = workflow.indexOf("\n  github_release:");
+    assert.ok(jobStart >= 0);
+    const githubReleaseJob = workflow.slice(jobStart);
+    const original =
+      "      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        run: npm ci --ignore-scripts\n";
+    assert.ok(githubReleaseJob.includes(original));
+    const ifAfterRun =
+      "      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        run: npm ci --ignore-scripts\n        if: ${{ false }}\n";
+    const mutatedJob = githubReleaseJob.replace(original, ifAfterRun);
+    assert.notEqual(mutatedJob, githubReleaseJob);
+    this.autoWorkflowYaml = `${workflow.slice(0, jobStart)}${mutatedJob}`;
+  },
+);
+
+Given(
+  "github_release jobのnpm ci stepへrun:より後にcontinue-on-error: trueを付けたrelease workflow本文がある",
+  function () {
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const jobStart = workflow.indexOf("\n  github_release:");
+    assert.ok(jobStart >= 0);
+    const githubReleaseJob = workflow.slice(jobStart);
+    const original =
+      "      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        run: npm ci --ignore-scripts\n";
+    assert.ok(githubReleaseJob.includes(original));
+    const coeAfterRun =
+      "      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        run: npm ci --ignore-scripts\n        continue-on-error: true\n";
+    const mutatedJob = githubReleaseJob.replace(original, coeAfterRun);
+    assert.notEqual(mutatedJob, githubReleaseJob);
+    this.autoWorkflowYaml = `${workflow.slice(0, jobStart)}${mutatedJob}`;
+  },
+);
+
+Given(
+  /^github_release jobのnpm ci stepへcontinue-on-error: \$\{\{ true \}\}を付けたrelease workflow本文がある$/u,
+  function () {
+    /**
+     * **`continue-on-error`の式形`${{ true }}`を固定する。** 文字列`"true"`
+     * ではなく式として書いても、既定値である`"false"`以外はすべて拒否する
+     * 既存規約（`verifyIdentitySteps`と同型）で正しく拒否されることを確認する。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const jobStart = workflow.indexOf("\n  github_release:");
+    assert.ok(jobStart >= 0);
+    const githubReleaseJob = workflow.slice(jobStart);
+    const original =
+      "      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        run: npm ci --ignore-scripts\n";
+    assert.ok(githubReleaseJob.includes(original));
+    const withExpressionCoe =
+      "      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        continue-on-error: ${{ true }}\n        run: npm ci --ignore-scripts\n";
+    const mutatedJob = githubReleaseJob.replace(original, withExpressionCoe);
+    assert.notEqual(mutatedJob, githubReleaseJob);
+    this.autoWorkflowYaml = `${workflow.slice(0, jobStart)}${mutatedJob}`;
+  },
+);
+
+Given(
+  "tsx実行stepだけを持ち依存導入を欠く検証用jobを追加したrelease workflow本文がある",
+  function () {
+    /**
+     * **job名を`github_release`以外にする。** 依存導入検査がjob名の固定文字列へ
+     * 限定された実装で通ってしまわないことを固定する（Step 3独立reviewのMedium指摘）。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const tagStart = workflow.indexOf("\n  tag:");
+    assert.ok(tagStart >= 0);
+    this.autoWorkflowYaml = `${workflow.slice(0, tagStart)}\n  probe_job:\n    name: 検証用probe jobを実行する\n    runs-on: ubuntu-latest\n    steps:\n      - name: tsxでscriptを実行する\n        run: node --import tsx scripts/check_consumer_acceptance.ts --help\n${workflow.slice(tagStart)}`;
+  },
+);
+
+Given(
+  "tsx実行stepを--import=tsx形式で持ち依存導入を欠く検証用jobを追加したrelease workflow本文がある",
+  function () {
+    /**
+     * **`--import`と`tsx`の区切りを`=`にする。** Nodeは`--import tsx`と
+     * `--import=tsx`を同じ意味で受理するため、空白形だけを検出する実装は
+     * `=`形で同じ欠陥を再現できてしまう（round 1独立review REV-02指摘）。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const tagStart = workflow.indexOf("\n  tag:");
+    assert.ok(tagStart >= 0);
+    this.autoWorkflowYaml = `${workflow.slice(0, tagStart)}\n  probe_job:\n    name: 検証用probe jobを実行する\n    runs-on: ubuntu-latest\n    steps:\n      - name: tsxでscriptを実行する\n        run: node --import=tsx scripts/check_consumer_acceptance.ts --help\n${workflow.slice(tagStart)}`;
+  },
+);
+
+Given(
+  "github_release jobのnpm ci stepをechoへ差し替えたrelease workflow本文がある",
+  function () {
+    /**
+     * **`npm ci`という文字列だけをechoする実行へ差し替える。** 実際には
+     * 依存を導入していないのに、command文字列に`npm ci`が含まれるだけで
+     * 充足したと誤判定しないことを固定する（round 1独立review REV-03指摘）。
+     */
+    const workflow = fs.readFileSync(
+      path.resolve(".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const jobStart = workflow.indexOf("\n  github_release:");
+    assert.ok(jobStart >= 0);
+    const githubReleaseJob = workflow.slice(jobStart);
+    const realStep =
+      "      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        run: npm ci --ignore-scripts\n";
+    assert.ok(githubReleaseJob.includes(realStep));
+    const fakedStep =
+      "      - name: 固定ファイルどおりに依存をscript実行なしで導入する\n        run: echo skip npm ci\n";
+    const fakedJob = githubReleaseJob.replace(realStep, fakedStep);
+    assert.notEqual(fakedJob, githubReleaseJob);
+    this.autoWorkflowYaml = `${workflow.slice(0, jobStart)}${fakedJob}`;
+  },
+);
+
 Given("無条件main pushと自動npm公開を含むworkflow本文がある", function () {
   this.autoWorkflowYaml = `name: 危険な自動release\n\n"on":\n  push:\n    branches: [main]\n  workflow_dispatch:\n    inputs:\n      dry_run:\n        default: true\n      publish_npm:\n        default: false\n\npermissions:\n  contents: read\n\njobs:\n  release:\n    steps:\n      - name: 品質検証\n        run: npm run prepack\n      - name: npmを自動公開する\n        run: npm publish\n`;
 });
@@ -825,6 +1125,46 @@ Then("自動release workflow検証は有効になる", function () {
   ])
     assert.ok(this.autoWorkflowValidation?.checks.includes(check), check);
 });
+
+Then(
+  "自動release workflow検証はgithub_release jobの依存導入stepの存在を確認した",
+  function () {
+    assert.deepEqual(this.autoWorkflowValidation?.errors, []);
+    for (const job of ["validate", "build_distribution", "github_release"])
+      assert.ok(
+        this.autoWorkflowValidation?.checks.includes(
+          `${job} jobの依存導入stepの存在を確認した`,
+        ),
+        this.autoWorkflowValidation?.checks.join(" / "),
+      );
+  },
+);
+
+Then(
+  "自動release workflow検証はgithub_release jobの依存導入step欠落を理由に拒否する",
+  function () {
+    assert.equal(this.autoWorkflowValidation?.valid, false);
+    assert.ok(
+      this.autoWorkflowValidation?.errors.includes(
+        "github_release jobは、node --import tsxでscriptを実行するstepより前に、actions/setup-nodeとnpm ciをこの順で実行してください",
+      ),
+      this.autoWorkflowValidation?.errors.join(" / "),
+    );
+  },
+);
+
+Then(
+  "自動release workflow検証は追加jobの依存導入step欠落を理由に拒否する",
+  function () {
+    assert.equal(this.autoWorkflowValidation?.valid, false);
+    assert.ok(
+      this.autoWorkflowValidation?.errors.includes(
+        "probe_job jobは、node --import tsxでscriptを実行するstepより前に、actions/setup-nodeとnpm ciをこの順で実行してください",
+      ),
+      this.autoWorkflowValidation?.errors.join(" / "),
+    );
+  },
+);
 
 Then(
   "自動release workflow検証はdigest stepとnpm条件を根拠に拒否する",

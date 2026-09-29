@@ -620,6 +620,13 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.tag.outputs.release_sha }}
           persist-credentials: false
+      - name: Node.js実行環境を準備する
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: 固定ファイルどおりに依存をscript実行なしで導入する
+        run: npm ci --ignore-scripts
       - name: build_distributionが生成したtgzを取得する
         uses: actions/download-artifact@v4
         with:

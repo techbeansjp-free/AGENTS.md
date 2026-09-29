@@ -790,6 +790,125 @@ function jobStepRunBlocks(lines, job) {
     }
     return blocks;
 }
+/**
+ * **`node --import tsx`で`.ts` scriptを実行するstepを持つjobは、そのstepより前に
+ * `actions/setup-node`・`npm ci`をこの順で完了していることを要求する。**
+ *
+ * `node:`builtinだけを使う`node`実行（`--import tsx`を伴わないもの、例: `tag` jobの
+ * `node --input-type=module`）は対象外とする。`github_release` jobがこの依存導入を
+ * 欠いたまま`node --import tsx scripts/check_consumer_acceptance.ts`を呼び、
+ * `Cannot find package 'tsx'`でcrashした（release run 36492222087、Issue #1533）。
+ */
+/**
+ * **`--import tsx`と`--import=tsx`の両方に一致させる。** Nodeはどちらの形も
+ * 同じ意味で受理するため、`=`形だけを受け付けない実装は同じ欠陥を別の書き方で
+ * 再現できてしまう（round 1独立review REV-02指摘）。
+ */
+const TSX_IMPORT_PATTERN = /\bnode\b[^\n]*--import[=\s]+tsx\b/u;
+/**
+ * **step headerと同じ行に書いた`- uses: actions/setup-node@…`形も許容する。**
+ * `jobStepRunBlocks`が`run:`検出で行う`- `正規化と同じ理由で、複数行の
+ * `- name:` … `uses:`形だけを前提にすると、単一行形を持つ正しいworkflowを
+ * 誤ってvalidが不成立と判定する（round 1独立review REV-03指摘）。
+ */
+const SETUP_NODE_USES_PATTERN = /^\s*-?\s*uses:\s*actions\/setup-node@/mu;
+/**
+ * **`npm ci`はcommand行の先頭（`run:`接頭辞を除く）にある場合だけ一致させる。**
+ * `\bnpm\s+ci\b`は`run: echo skip npm ci`のような、実際には実行しない
+ * 文字列内の出現でも一致してしまう（round 1独立review REV-03指摘）。単一行形
+ * （`run: npm ci …`）と複数行形（`run: |`の後の継続行）の両方を許容する。
+ */
+const NPM_CI_PATTERN = /^\s*(?:run:\s*)?npm\s+ci\b/mu;
+/**
+ * job内の全stepについて、header正規化済みのbody（次stepの直前まで）を返す。
+ * **`jobStepRunBlocks`と違い`run:`を持たないstep（`uses:`だけのstep等）も含む。**
+ * `setup-node`のstepは`run:`を持たないため`jobStepRunBlocks`の対象外になり、
+ * その`if:`・`continue-on-error:`を検査できない（CodeRabbit round 1指摘）。
+ */
+function jobStepBodies(lines, job) {
+    const range = jobRange(lines, job);
+    if (range === undefined)
+        return [];
+    const stepStarts = [];
+    for (let cursor = range.start; cursor < range.end; cursor += 1)
+        if (/^ {6}-\s/u.test(lines[cursor] ?? ""))
+            stepStarts.push(cursor);
+    return stepStarts.map((stepStart, order) => {
+        const stepEnd = stepStarts[order + 1] ?? range.end;
+        const rawBody = lines.slice(stepStart, stepEnd);
+        /** `jobStepRunBlocks`と同じheader正規化（`- `を2 spacesへ）。 */
+        const body = [
+            (rawBody[0] ?? "").replace(/^( {6})-( ?)/u, "$1  "),
+            ...rawBody.slice(1),
+        ];
+        return { stepStart, body: body.join("\n") };
+    });
+}
+/**
+ * stepのattributes文字列（`jobStepRunBlocks`・`jobStepBodies`のheader正規化を
+ * 前提に8 spaces起点で判定する。既存の`validateAcceptanceStep`・
+ * `verifyIdentitySteps`判定と同じ規約）に、実行を省略・失敗握り潰しの宣言が
+ * 無いことを確認する。**`if: ${{ false }}`や`continue-on-error: true`を
+ * 付けても、既存の実装は"step本文にcommandが存在する"としか見ておらず
+ * `satisfied`を返してしまう（CodeRabbit round 1指摘）。**
+ */
+function stepAlwaysRuns(attributes) {
+    if (/^ {8}if:/mu.test(attributes))
+        return false;
+    const continueOnError = /^ {8}continue-on-error:\s*(\S.*)$/mu
+        .exec(attributes)?.[1]
+        ?.trim();
+    return continueOnError === undefined || continueOnError === "false";
+}
+/**
+ * 指定jobについて依存導入の充足状態を返す。
+ *
+ * **job名を固定文字列へハードコードしない。** `releaseWorkflowJobNames`が返す
+ * 任意のjob名へ適用できるよう、job名を引数として受け取るだけにする
+ * （Step 3独立reviewのMedium指摘、job名限定への迂回を防ぐ）。
+ */
+function jobDependencyInstallGap(lines, job) {
+    const range = jobRange(lines, job);
+    if (range === undefined)
+        return "not-applicable";
+    const runBlocks = jobStepRunBlocks(lines, job);
+    const tsxStep = runBlocks.find(({ command }) => TSX_IMPORT_PATTERN.test(command));
+    if (tsxStep === undefined)
+        return "not-applicable";
+    const stepBodies = jobStepBodies(lines, job);
+    /**
+     * **`stepAlwaysRuns`はstep全体（`jobStepBodies`の`body`）へ適用する。**
+     * `jobStepRunBlocks`の`attributes`は`run:`より前で打ち切られるため、
+     * `if:`・`continue-on-error:`を`run:`の後（YAMLのmapping順序は本来無意味）へ
+     * 書いた場合に見逃す（round 2独立review REV-R2-01指摘）。stepStartをkeyに
+     * `jobStepBodies`の全文bodyを引く。
+     */
+    const bodyByStepStart = new Map(stepBodies.map(({ stepStart, body }) => [stepStart, body]));
+    /**
+     * **最初に見つかったcandidateを無条件で採用しない。** setup-nodeを名乗る
+     * stepが複数あるか、先頭のものが`if:`等で無効化されている場合、パターンと
+     * `stepAlwaysRuns`の両方を満たす候補まで探索を続ける。
+     */
+    const setupNodeStep = stepBodies.find(({ stepStart, body }) => stepStart < tsxStep.stepStart &&
+        SETUP_NODE_USES_PATTERN.test(body) &&
+        stepAlwaysRuns(body));
+    if (setupNodeStep === undefined)
+        return "violated";
+    /**
+     * **`npm ci`はsetup-nodeより後・tsx実行stepより前にある候補だけを探す。**
+     * 順序に関係なく最初に見つかった`npm ci`を採用すると、setup-nodeより前にある
+     * 無関係な`npm ci`（例: 別処理の下準備）を誤って選び、その後方に実在する
+     * 正しい順序の`npm ci`を見落として誤ってvalidを拒否する
+     * （CodeRabbit round 1指摘）。`stepAlwaysRuns`で無効化されたstepも候補から除く。
+     */
+    const npmCiStep = runBlocks.find(({ command, stepStart }) => stepStart > setupNodeStep.stepStart &&
+        stepStart < tsxStep.stepStart &&
+        NPM_CI_PATTERN.test(command) &&
+        stepAlwaysRuns(bodyByStepStart.get(stepStart) ?? ""));
+    if (npmCiStep === undefined)
+        return "violated";
+    return "satisfied";
+}
 export function validateReleaseWorkflow(yaml) {
     if (typeof yaml !== "string")
         return {
@@ -958,6 +1077,19 @@ export function validateReleaseWorkflow(yaml) {
         errors.push("build_distribution jobを追加してください。validate成功後・tagより前に配布物を1度だけ生成・検査します");
     else
         checks.push("build_distribution jobの存在を確認した");
+    /**
+     * **`node --import tsx`を実行する全jobへ依存導入の順序を要求する。**
+     *
+     * job名を`releaseWorkflowJobNames`から取得し固定文字列へ限定しない。
+     * `--import tsx`を伴わないjob（例: `tag`）は対象外として黙って通す。
+     */
+    for (const job of releaseWorkflowJobNames(yaml)) {
+        const gap = jobDependencyInstallGap(lines, job);
+        if (gap === "violated")
+            errors.push(`${job} jobは、node --import tsxでscriptを実行するstepより前に、actions/setup-nodeとnpm ciをこの順で実行してください`);
+        else if (gap === "satisfied")
+            checks.push(`${job} jobの依存導入stepの存在を確認した`);
+    }
     /**
      * **後続jobは先行jobの結果そのものを要求する。** `always()`と保存済みoutputだけでは、
      * acceptanceが落ちて`validate`がfailureになってもtagが作られる（Issue #1216 F-01）。
