@@ -16,6 +16,7 @@ import {
 } from "../src/domain/merge-integrity.js";
 
 import { git } from "../src/lib/process.js";
+import { resolveImplementationHead } from "../src/adapters/review-diff.js";
 import {
   parseJsonStrict,
   stableJson,
@@ -578,50 +579,31 @@ function releaseBumpParent(
 /**
  * `H_final`で終わる、review artifactだけを変える第1親suffixを遡って`H_impl`を返す。
  *
+ * **H_implの定義はcanonical resolver（`src/adapters/review-diff.ts`の
+ * `resolveImplementationHead`）1箇所に置く（Issue #1532）。** ここは`reviewHead`
+ * （＝`head`）自身をresolverへ渡すだけの薄い委譲であり、evidence-only trailing
+ * commitの遡り条件（allowlist・mode `100644`・A/M限定・単一親・同一path・最大8個）
+ * 自体はresolver側の実装を単一の正本とする。
+ *
  * **`H_impl`を`HEAD^`に固定すると、artifactの帳簿合わせのたびに`H_impl`が動く。**
  * 記載した`H_impl`と個別監査表を追随させる必要が生じ、その追随commitがまた
  * `H_impl`を動かす。**review roundがreviewの実質でなく帳簿合わせで消える**
  * （Issue #1074）。2026-09-06の#980では当時の予算3のうち2ラウンドがこれに費やされた。
  *
- * **suffixの各commitは、artifact 1 fileだけを変えるものに限る。** 他pathを含む
- * commit、merge commit、rename、複数artifactの同時変更で遡りを止める。
- * **止められない場合は`HEAD^`と同じ結果へ戻る**ため、判定が緩む方向へは動かない。
+ * **resolverが0 step（`head`自身を返す、＝`head`の直前stepがevidence-only commit
+ * ではない）の場合だけ`HEAD^`へfallbackする。** これは`audit:check`固有の安全側
+ * 方針であり、resolverの一般定義には含めない。`reviewHead`は本関数の呼び出し時点で
+ * 常に「実装commitの後に少なくとも1件のevidence-only commitがある」という前提を
+ * 持つため、resolverが1歩も進めなかった場合はその前提が崩れている（＝直前commitが
+ * evidence commitではない）ことを意味し、そのまま`head`自身をH_implとして採用すると
+ * `H_impl..current`が空になり「artifact以外のfileが含まれています」という別の検査を
+ * 素通りさせてしまう。**`HEAD^`へ戻すことで、その違反を非空の差分として確実に
+ * 検出できる状態を維持する。** 判定が緩む方向へは動かさない（Issue #1074）。
  */
 function withoutTrailingAuditCommits(root: string, head: string): string {
-  /**
-   * **起点は従来どおり`HEAD^`である。** ここを`HEAD`にすると、review headが
-   * artifact以外を含む場合に`H_impl..current`が空になり、
-   * 「artifact以外のfileが含まれています」を検出できなくなる。
-   */
   const [start = head] = commitParents(root, head);
-  let cursor = start;
-  const visited = new Set<string>();
-  while (!visited.has(cursor)) {
-    visited.add(cursor);
-    const parents = commitParents(root, cursor);
-    /** **merge commitで止める。** 親が1個でなければ第1親suffixとして扱えない。 */
-    if (parents.length !== 1) break;
-    const parent = parents[0]!;
-    const changed = changedPathsWithoutRenames(root, parent, cursor);
-    /**
-     * **artifact 1 fileだけを変えるcommitだけを遡る。** 0件や2件以上、
-     * 許可されたreview directory配下でないpathを含む場合は実装commitであり境界になる。
-     */
-    if (changed.length !== 1 || !isAuditPath(changed[0]!)) break;
-    cursor = parent;
-  }
-  /**
-   * **遡った結果が緩む入力では`HEAD^`へ戻す。**
-   *
-   * 遡りは`H_impl..current`を広げる。広げた結果がreview artifact 1件でなくなるなら、
-   * 遡らなかった場合に検出できた違反を見逃す。実測で、cutoffより後のrelease bump
-   * commitが`finalAuditPaths`のrelease遷移として吸収され、**本来落ちる入力が
-   * 通るようになった**（`SCN-UNIT-AUDITBUMP-005`）。
-   * **判定が緩む方向へは動かさない**（Issue #1074）。
-   */
-  const widened = new Set(changedPathsWithoutRenames(root, cursor, head));
-  if (widened.size !== 1 || !isAuditPath([...widened][0]!)) return start;
-  return cursor;
+  const resolved = resolveImplementationHead(root, head);
+  return resolved === head ? start : resolved;
 }
 
 function withoutFinalReleaseBumps(
