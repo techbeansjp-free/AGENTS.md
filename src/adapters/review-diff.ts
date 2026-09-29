@@ -105,6 +105,61 @@ export function readBlobAtCommit(
 }
 
 /**
+ * evidence-only suffixとcanonical H_impl resolverが共有する遡り上限（Issue #1532）。
+ * `evidenceOnlySuffix`は既知の境界（`fromSha`）へ到達できるかを検証し、
+ * `resolveImplementationHead`は境界未知のまま同じ条件でどこまで遡れるかを探索する。
+ * 上限は両者で同じ値でなければならない（二重規範を作らない）。
+ */
+const MAX_EVIDENCE_ONLY_SUFFIX_COMMITS = 8;
+
+/**
+ * `commit`とその唯一の親の間が、evidence-only allowlist配下のmode `100644`の
+ * 通常file 1件を追加（元mode `000000`）または変更（元mode `100644`）するだけの
+ * 1 stepかを判定する。該当すれば`{parent, path}`、非該当（親が複数・0個、raw diffが
+ * 複数path・削除・rename・type変更・実行権限・allowlist外を含む）は`undefined`。
+ *
+ * `evidenceOnlySuffix`（既知の境界までの検証）と`resolveImplementationHead`
+ * （境界未知の探索）はこの1 step判定だけを共有し、raw diff解析を重複させない。
+ */
+function evidenceOnlyStep(
+  root: string,
+  commit: string,
+): { parent: string; path: string } | undefined {
+  const parents = git(["rev-list", "--parents", "-n", "1", commit], root, {
+    env: GIT_ENV,
+    allowFailure: true,
+  });
+  const parts = parents.stdout.trim().split(/\s+/u);
+  if (parents.status !== 0 || parts.length !== 2 || parts[0] !== commit)
+    return undefined;
+  const parent = parts[1]!;
+  // 各commit単位でraw change type・mode・pathを検査する。net diffだけでは
+  // 中間commitの削除・rename・製品変更を見逃す。
+  const raw = git(
+    ["diff", "--raw", "--no-renames", "--no-abbrev", "-z", parent, commit],
+    root,
+    { env: GIT_ENV, allowFailure: true },
+  );
+  if (raw.status !== 0) return undefined;
+  const fields = raw.stdout.split("\0").filter((item) => item.length > 0);
+  if (fields.length !== 2) return undefined;
+  const [meta, only] = fields;
+  const matched =
+    /^:(?<srcMode>[0-7]{6}) (?<dstMode>[0-7]{6}) [0-9a-f]+ [0-9a-f]+ (?<status>[AM])$/u.exec(
+      meta ?? "",
+    );
+  if (!matched?.groups || !only || !isEvidenceOnlyPath(only)) return undefined;
+  const { srcMode, dstMode, status } = matched.groups;
+  if (
+    dstMode !== "100644" ||
+    (status === "A" && srcMode !== "000000") ||
+    (status === "M" && srcMode !== "100644")
+  )
+    return undefined;
+  return { parent, path: only };
+}
+
+/**
  * **evidence-only suffix**: `fromSha`から`toSha`までの第1親chainの各commitが
  * 同じreview artifact 1 fileだけを追加・変更する場合にそのpathを返す。
  *
@@ -124,42 +179,55 @@ export function evidenceOnlySuffix(
   let cursor = toSha;
   let artifactPath: string | undefined;
   // 初回artifactと前進是正を有限個だけ受理する。途中の製品変更は通さない。
-  for (let count = 0; count < 8 && cursor !== fromSha; count++) {
-    const parents = git(["rev-list", "--parents", "-n", "1", cursor], root, {
-      env: GIT_ENV,
-      allowFailure: true,
-    });
-    const parts = parents.stdout.trim().split(/\s+/u);
-    if (parents.status !== 0 || parts.length !== 2 || parts[0] !== cursor)
+  for (
+    let count = 0;
+    count < MAX_EVIDENCE_ONLY_SUFFIX_COMMITS && cursor !== fromSha;
+    count++
+  ) {
+    const step = evidenceOnlyStep(root, cursor);
+    if (!step || (artifactPath !== undefined && artifactPath !== step.path))
       return undefined;
-    const parent = parts[1]!;
-    // 各commit単位でraw change type・mode・pathを検査する。net diffだけでは
-    // 中間commitの削除・rename・製品変更を見逃す。
-    const raw = git(
-      ["diff", "--raw", "--no-renames", "--no-abbrev", "-z", parent, cursor],
-      root,
-      { env: GIT_ENV, allowFailure: true },
-    );
-    if (raw.status !== 0) return undefined;
-    const fields = raw.stdout.split("\0").filter((item) => item.length > 0);
-    if (fields.length !== 2) return undefined;
-    const [meta, only] = fields;
-    const matched =
-      /^:(?<srcMode>[0-7]{6}) (?<dstMode>[0-7]{6}) [0-9a-f]+ [0-9a-f]+ (?<status>[AM])$/u.exec(
-        meta ?? "",
-      );
-    if (!matched?.groups || !only || !isEvidenceOnlyPath(only))
-      return undefined;
-    const { srcMode, dstMode, status } = matched.groups;
-    if (
-      dstMode !== "100644" ||
-      (status === "A" && srcMode !== "000000") ||
-      (status === "M" && srcMode !== "100644") ||
-      (artifactPath !== undefined && artifactPath !== only)
-    )
-      return undefined;
-    artifactPath = only;
-    cursor = parent;
+    artifactPath = step.path;
+    cursor = step.parent;
   }
   return cursor === fromSha ? artifactPath : undefined;
+}
+
+/**
+ * **canonical H_impl resolver**（Issue #1532）: `head`から第1親chainを遡り、
+ * evidence-only trailing commit（同一allowlist path・mode `100644`・A/M限定の
+ * 単一file変更、最大`MAX_EVIDENCE_ONLY_SUFFIX_COMMITS`個）を除いた実装commitを返す。
+ *
+ * **H_implの定義はこの関数1箇所に置く。** `audit:check`
+ * （`scripts/check_file_audit.ts`の`withoutTrailingAuditCommits`）・`review export`
+ * （`exportReviewEvidence`）・`review validate`とpr mergeが共有する
+ * `reviewEvidenceBindingErrors`は、いずれもこの関数の戻り値を経由してH_implを
+ * 決める。個別に実装を一致させる場当たり的な修正を行わない。
+ *
+ * `evidenceOnlySuffix`と同じ`evidenceOnlyStep`判定を使うが、`fromSha`という既知の
+ * 境界を要求しない探索である点が異なる。trailing evidence-only commitが0個なら
+ * `head`をそのまま返す（この関数は「境界の直前が必ずevidence commitである」と
+ * 仮定しない）。上限に達した場合は、そこまで遡れた分だけを返し（全体を拒否しない）、
+ * 直前stepと異なるpath・mode変更・削除・rename・merge commit・2 path以上に
+ * 当たった時点で、それ以上遡らずその手前を返す。
+ */
+export function resolveImplementationHead(root: string, head: string): string {
+  const resolved = git(["rev-parse", "--verify", `${head}^{commit}`], root, {
+    env: GIT_ENV,
+    allowFailure: true,
+  });
+  if (resolved.status !== 0 || resolved.stdout.trim() !== head)
+    throw new Error(
+      `H_impl解決対象のheadをexact commitへ解決できません: ${head}`,
+    );
+  let cursor = head;
+  let artifactPath: string | undefined;
+  for (let count = 0; count < MAX_EVIDENCE_ONLY_SUFFIX_COMMITS; count++) {
+    const step = evidenceOnlyStep(root, cursor);
+    if (!step || (artifactPath !== undefined && artifactPath !== step.path))
+      break;
+    artifactPath = step.path;
+    cursor = step.parent;
+  }
+  return cursor;
 }
