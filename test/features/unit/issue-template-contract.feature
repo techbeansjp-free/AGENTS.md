@@ -210,3 +210,18 @@ Feature: Issue templateと段階別検証の契約
     Given 出荷Issue templateと検証器の見出し契約がある
     When 配布するIssue templateを全件読む
     Then 全templateは冒頭に読者3区分の読者表を持つ
+
+  Scenario: SCN-UNIT-ISSUETPL-015 配置非依存参照を書き換えていない相対linkが残ると生成対象template検査が失敗する
+    Given 配置非依存参照を相対linkへ戻したfull要求定義templateを持つpackage資産がある
+    When package資産のskills checkを実行する
+    Then 配置非依存参照へ書き換えていない相対linkを示してskills checkが失敗する
+
+  Scenario: SCN-UNIT-ISSUETPL-016 配置非依存参照の参照先が存在しないと生成対象template検査が失敗する
+    Given 配置非依存参照の参照先を存在しないpathへ書き換えた実装計画templateを持つpackage資産がある
+    When package資産のskills checkを実行する
+    Then 配置非依存参照の参照先がないことを示してskills checkが失敗する
+
+  Scenario: SCN-UNIT-ISSUETPL-017 出荷Issue templateの配置非依存参照は生成対象template検査に合格する
+    Given 出荷Issue templateと検証器の見出し契約がある
+    When package資産のskills checkを実行する
+    Then skills checkは合格する

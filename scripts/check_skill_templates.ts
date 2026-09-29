@@ -466,8 +466,114 @@ export function checkIssueTemplateHeadings(
   return { valid: errors.length === 0, errors };
 }
 
+/**
+ * `issue create`が生成先stagingへ複製・生成するIssue template（00〜03）を対象に、
+ * 配置に依存する相対linkが残っていないこと、配置非依存参照（backtick表記の
+ * repository相対path）の参照先が実在することをbuild時に検査する（Issue #1419）。
+ *
+ * **配置に依存する相対linkを禁止する。** `](../docs/`等のtemplateRoot相対の
+ * repository内linkは、`src/domain/issue.ts`の`copyFileSync`・
+ * `requirementDocument()`がtemplateをそのまま複製するだけでlink書換えを
+ * 行わないため、生成先staging配置の深さによって解決結果が変わり、既定配置を
+ * 含む全配置で壊れうる。
+ *
+ * **配置非依存参照は実在をrepository root基準で検証する。** `` `.agent-skill-chain/…md` ``
+ * 形式の参照だけを対象にし、`` `.agent-skill-chain/templates/common/` ``のような
+ * directory参照（`.md`で終わらない）は対象にしない。任意のbacktick文字列を
+ * 汎用走査すると、既存のdirectory参照を誤検出するため（Step 7 readiness checkの
+ * 指摘）。
+ */
+const GENERATED_ISSUE_TEMPLATE_FILES = [
+  "00_要求定義_full.md",
+  "00_要求定義_quick.md",
+  "00_要求定義_poc.md",
+  "01_要件定義.md",
+  "02_設計.md",
+  "03_実装計画.md",
+] as const;
+
+function checkGeneratedTemplateReferences(root: string): string[] {
+  const errors: string[] = [];
+  const templatesRoot = path.resolve(
+    root,
+    ".agent-skill-chain/templates/issue",
+  );
+  const repositoryRoot = path.resolve(root);
+  let repositoryRootReal: string;
+  try {
+    repositoryRootReal = fs.realpathSync(repositoryRoot);
+  } catch {
+    return [`生成対象templateのrepository rootを解決できません: ${root}`];
+  }
+  for (const relative of GENERATED_ISSUE_TEMPLATE_FILES) {
+    const file = path.join(templatesRoot, relative);
+    if (!fs.existsSync(file)) {
+      errors.push(`生成対象templateがありません: issue/${relative}`);
+      continue;
+    }
+    const markdown = fs.readFileSync(file, "utf8");
+    /**
+     * **fenced code block（```…```）内は対象外にする。** 案BのAC-03（code fence
+     * を誤変換しない）を、この検査自身にも適用する。旧形式のlinkを説明目的で
+     * 例示するcode fenceが将来追加されても誤検出しない。単一backtickの
+     * inline codeは対象外にしない（配置非依存参照自体がその記法を使うため）。
+     */
+    const withoutFencedCode = markdown.replace(/```[\s\S]*?```/gu, "");
+    if (/\]\(\.\.\/\.\.\/docs\//u.test(withoutFencedCode))
+      errors.push(
+        `issue/${relative}: 配置非依存参照へ書き換えていない相対linkが残っています`,
+      );
+    const references = uniqueSorted(
+      [
+        ...withoutFencedCode.matchAll(/`(\.agent-skill-chain\/[^`]+\.md)`/gu),
+      ].map((match) => match[1]!),
+    );
+    for (const reference of references) {
+      const resolved = path.resolve(repositoryRoot, reference);
+      if (!resolved.startsWith(`${repositoryRoot}${path.sep}`)) {
+        errors.push(
+          `issue/${relative}: 配置非依存参照がrepository外です: ${reference}`,
+        );
+        continue;
+      }
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(resolved);
+      } catch {
+        errors.push(
+          `issue/${relative}: 配置非依存参照の参照先がありません: ${reference}`,
+        );
+        continue;
+      }
+      if (!stat.isFile()) {
+        errors.push(
+          `issue/${relative}: 配置非依存参照の参照先がfileではありません: ${reference}`,
+        );
+        continue;
+      }
+      let real: string;
+      try {
+        real = fs.realpathSync(resolved);
+      } catch {
+        errors.push(
+          `issue/${relative}: 配置非依存参照の参照先を解決できません: ${reference}`,
+        );
+        continue;
+      }
+      if (!real.startsWith(`${repositoryRootReal}${path.sep}`))
+        errors.push(
+          `issue/${relative}: 配置非依存参照の参照先がsymlinkでrepository境界外です: ${reference}`,
+        );
+    }
+  }
+  return errors;
+}
+
 export function checkSkillTemplateContracts(root = process.cwd()) {
-  const errors: string[] = [...checkIssueTemplateHeadings(root).errors];
+  const errors: string[] = [
+    ...checkIssueTemplateHeadings(root).errors,
+    ...checkGeneratedTemplateReferences(root),
+  ];
   const skillsRoot = path.resolve(root, ".agent-skill-chain/skills");
   const templatesRoot = path.resolve(root, ".agent-skill-chain/templates");
   const namespaceRoot = path.resolve(root, ".agent-skill-chain");

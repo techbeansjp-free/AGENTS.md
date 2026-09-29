@@ -27,3 +27,28 @@ Feature: 出荷Issue templateとCLI・品質gateの統合契約
     Given full templateの必須見出しを改変したpackage資産がある
     When package資産のskills checkを実行する
     Then fullの不足見出しを示してskills checkが失敗する
+
+  Scenario: SCN-INT-ISSUETPL-005 出荷Issue templateの配置非依存参照は生成対象template検査に合格する
+    Given 出荷Issue templateと検証器の見出し契約がある
+    When package資産のskills checkを実行する
+    Then skills checkは合格する
+
+  Scenario: SCN-INT-ISSUETPL-006 既定staging配置でも配置非依存参照が解決できる
+    Given ASC docsを展開した一時repositoryがある
+    When 既定staging配置でfull issueを作成する
+    Then 生成された00から03の配置非依存参照はfixture rootから解決できる
+
+  Scenario: SCN-INT-ISSUETPL-007 wildcard custom staging-rootでも配置非依存参照が解決できる
+    Given ASC docsを展開しwildcardのcustom staging-rootを宣言した一時repositoryがある
+    When wildcard custom staging-rootでfull issueを作成する
+    Then 生成された00から03の配置非依存参照はfixture rootから解決できる
+
+  Scenario: SCN-INT-ISSUETPL-008 深いtracked staging-rootでも配置非依存参照が解決できる（#1516再現相当）
+    Given ASC docsを展開し深いtracked staging-rootを宣言した一時repositoryがある
+    When 深いtracked staging-rootでfull issueを作成する
+    Then 生成された00から03の配置非依存参照はfixture rootから解決できる
+
+  Scenario: SCN-INT-ISSUETPL-009 code fence内の旧形式link例・外部URL・anchor・画像・意図的な非link文字列は生成対象template検査を誤って失敗させない
+    Given 旧形式linkの説明例をcode fence内に持ち外部URL・anchor・画像・directory参照も含むtemplateを持つpackage資産がある
+    When package資産のskills checkを実行する
+    Then skills checkは合格する
