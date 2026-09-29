@@ -374,6 +374,72 @@ Feature: 公開CLIでワークフローStepを強制する
     When "SCN-E2E-WFSTEP-069"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  @issue-1495
+  Scenario: SCN-MERGE-BASE-AUDIT-001 pr mergeは既定branchをmergeして即revertする攻撃を実際のmerge-baseで拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-MERGE-BASE-AUDIT-001"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  @issue-1495
+  Scenario: SCN-MERGE-BASE-AUDIT-002 pr mergeは既定branchが動いていなければ従来どおり許可する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-MERGE-BASE-AUDIT-002"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  @issue-1495
+  Scenario: SCN-MERGE-BASE-AUDIT-003 pr mergeは正当なreviewed-forward follow-mainであっても暫定guard下では比較基点不一致で拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-MERGE-BASE-AUDIT-003"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  @issue-1495
+  Scenario: SCN-MERGE-BASE-AUDIT-004 pr mergeはrebase経路のmergeして即revertする攻撃をpr-bound method制限で拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-MERGE-BASE-AUDIT-004"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  @issue-1495
+  Scenario: SCN-MERGE-BASE-AUDIT-005 pr mergeはartifact-replacement風にH_implを変える攻撃を内容等価性の不一致で拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-MERGE-BASE-AUDIT-005"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  @issue-1495
+  Scenario: SCN-MERGE-BASE-AUDIT-006 pr mergeはartifact-supersession風にH_implを変える攻撃をpr-bound method制限で拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-MERGE-BASE-AUDIT-006"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  @issue-1495
+  Scenario: SCN-MERGE-BASE-AUDIT-008 pr mergeはreviewed-forwardで旧ancestor検査だけ通過するbase宣言を実際のmerge-baseで拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-MERGE-BASE-AUDIT-008"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  @issue-1495
+  Scenario: SCN-MERGE-BASE-AUDIT-009 pr mergeは無関係なtrivial round 2で得た正当なreviewed-forward reanchorごしの攻撃を実際のmerge-baseで拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-MERGE-BASE-AUDIT-009"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  @issue-1495
+  Scenario: SCN-MERGE-BASE-AUDIT-010 pr mergeは同一round内の部分的hunk revert攻撃を再計算diff digestの不一致で拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-MERGE-BASE-AUDIT-010"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  @issue-1495
+  Scenario: SCN-MERGE-BASE-AUDIT-011 review round --initは観測済み既定branch tipと一致しない自己申告baseを拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-MERGE-BASE-AUDIT-011"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  @issue-1495
+  Scenario: SCN-MERGE-BASE-AUDIT-012 pr mergeは既定branch前進後に作り直した新しいreview sessionなら許可する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-MERGE-BASE-AUDIT-012"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-WFSTEP-048 索引の反映待ちを経て1回のpr createでbindする
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-WFSTEP-048"のE2E検査を実行する

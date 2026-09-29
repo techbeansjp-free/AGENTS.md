@@ -59,6 +59,25 @@ export class WorkflowWorld extends World<WorkflowParameters> {
     fs.writeFileSync(path.join(directory, "README.md"), "# fixture\n");
     execFileSync("git", ["add", "README.md"], { cwd: directory });
     execFileSync("git", ["commit", "-q", "-m", "fixture"], { cwd: directory });
+    /**
+     * **`refs/remotes/origin/HEAD`をfixtureの初回commitへ向ける
+     * （Issue #1495 REV-02是正）。** `review round --init`（round 1）は、
+     * ローカルGitが観測可能な既定branch tip（`refs/remotes/origin/HEAD`）と
+     * 一致しない`--base`を拒否するようになった。実remoteを持たないscratch
+     * fixtureでもこの観測点を成立させるため、`git fetch`を経由せず直接refを
+     * 作る（実networkもbare remoteも不要。既存test群の大半は`initRepo()`直後の
+     * HEADをそのまま比較基点として使うため、ここで既定branch tipを固定すれば
+     * その用法はそのまま通る。それ以外の比較基点を使うtestは個別に
+     * `refs/remotes/origin/HEAD`を再設定する）。
+     */
+    execFileSync("git", ["update-ref", "refs/remotes/origin/main", "HEAD"], {
+      cwd: directory,
+    });
+    execFileSync(
+      "git",
+      ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+      { cwd: directory },
+    );
     return directory;
   }
 }

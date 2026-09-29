@@ -8,7 +8,7 @@ import { git } from "../lib/process.js";
 import { stableJson } from "../lib/security.js";
 import { buildReviewProgressInventories, describeReviewProgressUnbuildable, tryBuildReviewProgressInventories, PROGRESS_END, PROGRESS_START, reviewProgressTargets, } from "../domain/review-progress.js";
 import { assertWorkflowStaging, describeStagingDigestDrift, readWorkflowJournal, } from "./workflow-journal.js";
-import { evidenceOnlySuffix, observeReviewDiff } from "./review-diff.js";
+import { evidenceOnlySuffix, observeReviewDiff, resolveUniqueMergeBase, } from "./review-diff.js";
 import { isDefaultBranchFollowMerge, REVIEW_SESSION_FILE, readStoredReviewSession, } from "./review-session-store.js";
 import { resolveGitWorkspace } from "./review-workspace.js";
 import { findDecisionJournalRecord } from "./decision-journal-store.js";
@@ -126,6 +126,32 @@ export function buildReviewRoundDraft(input) {
         if (!input.scopeIds?.length || !input.acceptanceCriteriaIds?.length)
             throw new Error("review round --initはsessionが無いとき--scope=<ID,...>と--ac=<ID,...>が必要です");
         const baseSha = resolveCommit(root, "--base", input.baseSha);
+        /**
+         * **round 1の比較基点を、利用者の自己申告のままsessionのauthorityにしない
+         * （Issue #1495 REV-02是正）。** `.agent-skill-chain/docs/02_品質基準.md`の
+         * 既存規範（「比較基点を前へ進めれば監査範囲を縮められるため、片側だけを
+         * 申告値のままにしない」）を実装へ戻す。ローカルで観測可能な既定branch tip
+         * （`refs/remotes/origin/HEAD`、`isDefaultBranchFollowMerge`が同じ手段で
+         * 既に信頼している値）そのもの、または`headSha`とその既定branch tipから
+         * Git objectだけで独立に計算した実際の`merge-base`のいずれかと厳密一致
+         * しない`--base`は拒否する。**任意の過去commitを比較基点として宣言できると、
+         * `pr merge`側（`inspectAuthorizedPullRequestMerge`）の`actualAuditBase`との
+         * 完全一致判定が、宣言側を実際のmerge-baseへ合わせるだけで通ってしまう
+         * （Step 10 round 3独立reviewの指摘）。** `pr create`より前（session作成時点）
+         * はPR番号を持たずprovider認可API（`policy.authority`）を呼べないため、
+         * ここではlocal Gitが観測可能な既定branch tip（fetch済みのremote-tracking
+         * ref）を信頼の基点にする。`pr merge`は別途この値をprovider観測と
+         * trusted policy provenanceへ照合する（既存の`authority.defaultBranchTipOid`
+         * 検証）。
+         */
+        const defaultBranchTip = git(["rev-parse", "--verify", "refs/remotes/origin/HEAD^{commit}"], root, { env: GIT_ENV, allowFailure: true });
+        if (defaultBranchTip.status !== 0)
+            throw new Error("review round --initは既定branch tip（refs/remotes/origin/HEAD）をローカルGitから観測できません。`git fetch`だけではこの参照は作られないことがあります。`git remote set-head origin -a`（またはclone直後の既定状態）でrefs/remotes/origin/HEADを既定branchへ向けてから再実行してください");
+        const observedDefaultBranchTip = defaultBranchTip.stdout.trim();
+        const uniqueMergeBaseWithDefault = resolveUniqueMergeBase(root, headSha, observedDefaultBranchTip);
+        if (baseSha !== observedDefaultBranchTip &&
+            baseSha !== uniqueMergeBaseWithDefault)
+            throw new Error(`review round --initの--base(${baseSha})が、観測済みの既定branch tip(${observedDefaultBranchTip})とも、headとそのtipから計算した実際のmerge-base(${uniqueMergeBaseWithDefault})とも一致しません。比較基点は自己申告できません（Issue #1495 REV-02是正）`);
         const observed = observeReviewDiff(root, baseSha, headSha);
         /**
          * **宣言済みtargetを1件ずつ分類してから一体で構築する。**

@@ -66,6 +66,36 @@ export function observeReviewDiff(
   };
 }
 
+/**
+ * 2つのcommitから実際の`merge-base`を一意に解決する（Issue #1495、
+ * TERM-ASC-1495）。
+ *
+ * **audit baseを利用者入力・申告値から決めない。** `git merge-base --all`を
+ * Git objectへ直接問い合わせ、結果が0件・複数件・非0終了のいずれかなら
+ * fail-closedで拒否する（INV-03）。`pr merge`（`inspectAuthorizedPullRequestMerge`）と
+ * review round 1作成時の`--base`検証（`buildReviewRoundDraft`）の両方が使う
+ * 共通実装であり、どちらも同じfail-closed規約を共有する。
+ */
+export function resolveUniqueMergeBase(
+  root: string,
+  a: string,
+  b: string,
+): string {
+  const result = git(["merge-base", "--all", a, b], root, {
+    env: GIT_ENV,
+    allowFailure: true,
+  });
+  const bases = result.stdout
+    .trim()
+    .split(/\r?\n/u)
+    .filter((value) => /^[a-f0-9]{40}$/u.test(value));
+  if (result.status !== 0 || bases.length !== 1)
+    throw new Error(
+      `実際のmerge-baseを一意に解決できません（exit ${result.status}、候補${bases.length}件、対象: ${a}, ${b}）`,
+    );
+  return bases[0]!.toLowerCase();
+}
+
 /** exact commitが持つ唯一の親をworktreeへ触れずに観測する。 */
 export function observeSingleCommitParent(
   root: string,

@@ -3626,6 +3626,19 @@ Given(
   "project denyを持つtrusted commitと解決不能なorigin HEADがある",
   function () {
     this.root = this.initRepo();
+    /**
+     * **このscenarioの前提は「origin HEADが解決不能」であることそのものである
+     * （Issue #1495、`initRepo()`が既定でorigin HEADを立てるようになった副作用
+     * への対処）。** `initRepo()`はIssue #1495 REV-02是正のため既定で
+     * `refs/remotes/origin/HEAD`（symbolic ref）を立てるようになった。放置すると
+     * 以後の`update-ref refs/remotes/origin/main`が指す先を素直に解決できてしまい、
+     * 「symbolic origin/HEADが無いために既定branchを特定できずfail closedになる」
+     * というこのscenarioの検査対象に到達しない。symbolic HEADだけを削除して
+     * 前提を復元する。
+     */
+    spawnSync("git", ["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"], {
+      cwd: this.root,
+    });
     fs.mkdirSync(path.join(this.root, ".agent-skill-chain"), {
       recursive: true,
     });
@@ -3736,6 +3749,20 @@ Given(
   "origin HEADのないPR checkoutとtrusted base commitとcandidate policy setがある",
   function () {
     this.root = this.initRepo();
+    /**
+     * **このscenarioの前提そのものが「origin HEADが無い」ことである
+     * （Issue #1495、`initRepo()`が既定でorigin HEADを立てるようになった
+     * 副作用への対処）。** `initRepo()`はIssue #1495 REV-02是正
+     * （`review round --init`のround 1 `--base`検証）が既定branch tipを
+     * 観測できるよう`refs/remotes/origin/HEAD`を既定で立てるように変わった。
+     * 本scenarioは「origin HEADが無くても`--trusted-commit`等の明示flagだけで
+     * 認可できる」ことを検証する対照実験であり、`refs/remotes/origin/main`自体は
+     * 直後で`this.baseSha`へ明示的に設定し直すため残すが、symbolic HEADだけを
+     * 削除して前提を復元する。
+     */
+    spawnSync("git", ["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"], {
+      cwd: this.root,
+    });
     fs.mkdirSync(path.join(this.root, ".agent-skill-chain"), {
       recursive: true,
     });
@@ -4327,6 +4354,27 @@ Given(
   "H_impl後にPhase A review artifactだけをcommitした隔離repositoryがある",
   function () {
     this.root = this.initRepo();
+    /**
+     * **このfixtureはremote-trackingを持たないlocal専用repositoryである前提で、
+     * `resolveTrustedReviewIndependence`（`src/cli.ts`）の「remote-tracking ref
+     * を持たない場合は候補側manifestを読む」fallback経路を検査する
+     * （Issue #1495、`initRepo()`が既定でorigin HEADを立てるようになった副作用
+     * への対処）。** `initRepo()`はIssue #1495 REV-02是正のため既定で
+     * `refs/remotes/origin/{HEAD,main}`を立てるようになったが、この
+     * fixtureはそのどちらも設定し直さないため、放置すると
+     * `origin/main`がこのscenario自身の後続commit（project policy等）を
+     * 一切含まない`initRepo()`直後のcommitを指したままになり、
+     * `loadEffectiveTrustedPolicySet`が「package default safety floorが
+     * ありません」という別のerrorで落ちる（このscenarioが検査したい
+     * 「読めないproject policyを既定の要求水準へ倒さない」経路に到達しない）。
+     * remote-tracking refを完全に削除し、local専用repositoryという前提を復元する。
+     */
+    spawnSync("git", ["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"], {
+      cwd: this.root,
+    });
+    spawnSync("git", ["update-ref", "-d", "refs/remotes/origin/main"], {
+      cwd: this.root,
+    });
     /**
      * **actor単位の独立性を要求するprojectとして構成する。**
      *
