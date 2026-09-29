@@ -1588,6 +1588,71 @@ Then(
   },
 );
 
+/**
+ * update側の`assertAncestorsNotSymlinked`呼び出しを固定する
+ * （独立review Step 10 round 2 finding NEW-02）。
+ *
+ * **install側だけの回帰試験では、`upgradeUnlocked`側の呼び出しを消す変異が
+ * 生存する。** 実測: `upgradeUnlocked`から`assertAncestorsNotSymlinked`
+ * 呼び出しを消しても、この反例が無いと既存4 scenarioは全て通過したまま
+ * だった。install側（`initUnlocked`）とupdate側（`upgradeUnlocked`）は
+ * 別関数・別呼び出し箇所であり、片方の削除変異はもう片方の試験では
+ * 検出できない。
+ */
+Given("導入済みで.claudeが境界内symlinkの隔離先がある", function () {
+  installedIsolation(this, "asc-lifecycle-update-persistent-symlink-");
+  const real = path.join(this.root, ".claude-real");
+  fs.rmSync(path.join(this.root, ".claude"), { recursive: true, force: true });
+  fs.mkdirSync(real, { recursive: true });
+  fs.symlinkSync(real, path.join(this.root, ".claude"));
+});
+
+When("この状態でupdateのpreviewとapplyを順に試みる", function () {
+  try {
+    upgrade(this.root, { apply: false });
+    this.previewErrorForPersistentSymlink = undefined;
+  } catch (error) {
+    this.previewErrorForPersistentSymlink = error;
+  }
+  try {
+    upgrade(this.root, { apply: true });
+    this.ancestorSwapError = undefined;
+  } catch (error) {
+    this.ancestorSwapError = error;
+  }
+});
+
+Then(
+  "updateは既存のresolveContainedではなく書き込み直前のpinned-directory検証で拒否し副作用もlockも残さない",
+  function () {
+    assert.ok(
+      this.previewErrorForPersistentSymlink,
+      "previewが拒否していません",
+    );
+    assert.ok(this.ancestorSwapError, "applyが拒否していません");
+    const message =
+      this.ancestorSwapError instanceof Error
+        ? this.ancestorSwapError.message
+        : String(this.ancestorSwapError);
+    assert.match(
+      message,
+      /祖先directoryがsymlinkです/u,
+      `assertAncestorsNotSymlinkedによる拒否だと確認できません: ${message}`,
+    );
+    assert.equal(
+      fs.existsSync(
+        path.join(
+          this.root,
+          ".agent-skill-chain",
+          "managed-assets-mutation.lock",
+        ),
+      ),
+      false,
+      "managed mutation lockが残存しています",
+    );
+  },
+);
+
 Given("導入後にmanaged asset recordだけを失った隔離先がある", function () {
   installedIsolation(this, "asc-lifecycle-record-lost-");
   dropRecord(this.root);

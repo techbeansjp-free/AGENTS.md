@@ -226,16 +226,20 @@ export function writeFileExclusivePinned(directory, leaf, contents, hooks = {}, 
         ]);
         if (process.platform === "darwin" &&
             Object.keys(hooks).every((hook) => darwinOpenAtHooks.has(hook))) {
+            const written = writeFileExclusiveDarwinOpenAt(pinned, leaf, contents, hooks.darwinHelperFault);
             /**
              * **Darwinのopenat helperは常に0o600で作成する**（`DARWIN_OPENAT_HELPER`の
              * `os.open`呼び出しを参照）。`fileMode`を無視して黙って通すと、呼び出し側が
-             * 指定したmodeが再現されたと誤認する（独立review Step 10 finding 5）。
-             * 対応する拡張はこのIssueの対象外（00 §6.2、01 BR-02）。既定の0o600以外を
-             * 要求された場合はfail-closedで拒否する。
+             * 指定したmodeが再現されたと誤認する（独立review Step 10 round 1
+             * finding 5）。**呼び出し側を0o600固定で拒否すると、資産のmodeは常に
+             * source（多くは0o644・0o664・0o775）であり呼び出し側の全requestが失敗する
+             * という重大な回帰になる**（round 2独立review NEW-01で実機確認）。
+             * pathname経由の`fs.chmodSync`で作成直後に明示的へ揃える。openat自体は
+             * 既にpinned directory descriptor相対で排他作成・fsync済みであり、この
+             * chmodはcontentのある窓を広げない（contentは既にcommit済み）。
              */
             if (fileMode !== 0o600)
-                throw new Error("macOSのexclusive file作成は既定のfile mode（0o600）だけに対応しています");
-            const written = writeFileExclusiveDarwinOpenAt(pinned, leaf, contents, hooks.darwinHelperFault);
+                fs.chmodSync(written, fileMode);
             try {
                 (hooks.closePinnedDirectory ?? fs.closeSync)(pinned.descriptor);
             }

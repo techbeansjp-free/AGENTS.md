@@ -242,3 +242,8 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     Given lifecycle検証用の隔離directoryがある
     When install実行前に.claudeを境界内symlinkとして用意してから適用する
     Then installは既存のresolveContainedではなく書き込み直前のpinned-directory検証で拒否する
+
+  Scenario: SCN-INT-LIFECYCLE-062 境界内を指す恒常的symlink祖先はupdateのpreviewとapplyも副作用なく拒否する
+    Given 導入済みで.claudeが境界内symlinkの隔離先がある
+    When この状態でupdateのpreviewとapplyを順に試みる
+    Then updateは既存のresolveContainedではなく書き込み直前のpinned-directory検証で拒否し副作用もlockも残さない
