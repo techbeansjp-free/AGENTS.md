@@ -120,8 +120,12 @@ const MAX_EVIDENCE_ONLY_SUFFIX_COMMITS = 8;
  *
  * `evidenceOnlySuffix`（既知の境界までの検証）と`resolveImplementationHead`
  * （境界未知の探索）はこの1 step判定だけを共有し、raw diff解析を重複させない。
+ *
+ * exportする。呼び出し元（`scripts/check_file_audit.ts`）が、遡りを固定する
+ * pathを`resolveImplementationHead`へ渡す前に`head`自身の1 stepを覗くために使う
+ * （Issue #1532 round 1指摘、HIGH-1）。
  */
-function evidenceOnlyStep(
+export function evidenceOnlyStep(
   root: string,
   commit: string,
 ): { parent: string; path: string } | undefined {
@@ -195,23 +199,37 @@ export function evidenceOnlySuffix(
 
 /**
  * **canonical H_impl resolver**（Issue #1532）: `head`から第1親chainを遡り、
- * evidence-only trailing commit（同一allowlist path・mode `100644`・A/M限定の
- * 単一file変更、最大`MAX_EVIDENCE_ONLY_SUFFIX_COMMITS`個）を除いた実装commitを返す。
+ * `artifactPath`だけを追加・変更するevidence-only trailing commit（mode `100644`・
+ * A/M限定、最大`MAX_EVIDENCE_ONLY_SUFFIX_COMMITS`個）を除いた実装commitを返す。
+ *
+ * **`artifactPath`は呼び出し元が明示する必須引数である。** 遡る対象pathを
+ * 「最初に見つかったevidence-only path」に暗黙で固定すると、`head`自身が
+ * （このresolver呼び出しとは無関係な）別のreview記録を編集する正当な実装commit
+ * だった場合に、そのcommit自身を誤ってevidence-only commitとして遡り越してしまう
+ * （Issue #1532 round 1指摘、HIGH-1。実repository履歴のIssue #1165・#1254で
+ * 実際に発生する形）。呼び出し元は「この呼び出しが関心を持つ証跡pathはこれである」
+ * を明示し、それ以外のpathを変えるcommitは（allowlist配下であっても）1歩目から
+ * 遡りの対象にしない。
  *
  * **H_implの定義はこの関数1箇所に置く。** `audit:check`
- * （`scripts/check_file_audit.ts`の`withoutTrailingAuditCommits`）・`review export`
- * （`exportReviewEvidence`）・`review validate`とpr mergeが共有する
- * `reviewEvidenceBindingErrors`は、いずれもこの関数の戻り値を経由してH_implを
- * 決める。個別に実装を一致させる場当たり的な修正を行わない。
+ * （`scripts/check_file_audit.ts`の`withoutTrailingAuditCommits`。`head`自身の
+ * 1 stepを`evidenceOnlyStep`で覗いてそのpathを渡す）・`review export`
+ * （`exportReviewEvidence`。自身が書き込むartifact pathを渡す）が、いずれも
+ * この関数の戻り値を経由してH_implを決める。個別に実装を一致させる場当たり的な
+ * 修正を行わない。
  *
  * `evidenceOnlySuffix`と同じ`evidenceOnlyStep`判定を使うが、`fromSha`という既知の
  * 境界を要求しない探索である点が異なる。trailing evidence-only commitが0個なら
  * `head`をそのまま返す（この関数は「境界の直前が必ずevidence commitである」と
  * 仮定しない）。上限に達した場合は、そこまで遡れた分だけを返し（全体を拒否しない）、
- * 直前stepと異なるpath・mode変更・削除・rename・merge commit・2 path以上に
+ * `artifactPath`と異なるpath・mode変更・削除・rename・merge commit・2 path以上に
  * 当たった時点で、それ以上遡らずその手前を返す。
  */
-export function resolveImplementationHead(root: string, head: string): string {
+export function resolveImplementationHead(
+  root: string,
+  head: string,
+  artifactPath: string,
+): string {
   const resolved = git(["rev-parse", "--verify", `${head}^{commit}`], root, {
     env: GIT_ENV,
     allowFailure: true,
@@ -221,12 +239,9 @@ export function resolveImplementationHead(root: string, head: string): string {
       `H_impl解決対象のheadをexact commitへ解決できません: ${head}`,
     );
   let cursor = head;
-  let artifactPath: string | undefined;
   for (let count = 0; count < MAX_EVIDENCE_ONLY_SUFFIX_COMMITS; count++) {
     const step = evidenceOnlyStep(root, cursor);
-    if (!step || (artifactPath !== undefined && artifactPath !== step.path))
-      break;
-    artifactPath = step.path;
+    if (!step || step.path !== artifactPath) break;
     cursor = step.parent;
   }
   return cursor;

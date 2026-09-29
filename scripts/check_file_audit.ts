@@ -16,7 +16,10 @@ import {
 } from "../src/domain/merge-integrity.js";
 
 import { git } from "../src/lib/process.js";
-import { resolveImplementationHead } from "../src/adapters/review-diff.js";
+import {
+  evidenceOnlyStep,
+  resolveImplementationHead,
+} from "../src/adapters/review-diff.js";
 import {
   parseJsonStrict,
   stableJson,
@@ -590,6 +593,14 @@ function releaseBumpParent(
  * `H_impl`を動かす。**review roundがreviewの実質でなく帳簿合わせで消える**
  * （Issue #1074）。2026-09-06の#980では当時の予算3のうち2ラウンドがこれに費やされた。
  *
+ * **`head`自身の1 stepを覗いて遡る対象pathを固定してからresolverへ渡す**
+ * （Issue #1532 round 1指摘、HIGH-1）。resolverの`artifactPath`引数を省略できる
+ * 形にすると、`head`自身が（今回の遡りとは無関係な）別のreview記録を編集する
+ * 正当な実装commitだった場合に、そのcommit自身をevidence-only commitとして
+ * 遡り越してしまう。`head`の直前stepが指すpathだけを遡り対象に固定することで、
+ * 「reviewHead自身が実際にevidence-only commitである場合に限り、そのpathの
+ * 履歴だけを遡る」という従来の意図を明示する。
+ *
  * **resolverが0 step（`head`自身を返す、＝`head`の直前stepがevidence-only commit
  * ではない）の場合だけ`HEAD^`へfallbackする。** これは`audit:check`固有の安全側
  * 方針であり、resolverの一般定義には含めない。`reviewHead`は本関数の呼び出し時点で
@@ -602,8 +613,9 @@ function releaseBumpParent(
  */
 function withoutTrailingAuditCommits(root: string, head: string): string {
   const [start = head] = commitParents(root, head);
-  const resolved = resolveImplementationHead(root, head);
-  return resolved === head ? start : resolved;
+  const first = evidenceOnlyStep(root, head);
+  if (!first) return start;
+  return resolveImplementationHead(root, head, first.path);
 }
 
 function withoutFinalReleaseBumps(
