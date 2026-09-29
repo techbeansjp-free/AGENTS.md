@@ -712,6 +712,140 @@ Then("skills checkは合格する", function () {
 });
 
 /**
+ * Issue #1419 Step 10独立review（REV-02）: AC-04が要求する4分岐
+ * （repository外・symlink境界・非file・存在しないtarget）のうち、
+ * repository外・symlink境界・非fileがどのSCNからも到達しておらず、
+ * 削除しても検査全体が合格することを指摘された。3分岐それぞれの
+ * fail-closed観測を追加する。
+ */
+Given(
+  "配置非依存参照がrepositoryの外を指すよう書き換えた実装計画templateを持つpackage資産がある",
+  function () {
+    this.packageRoot = copyPackageAssets(this);
+    const file = path.join(
+      this.packageRoot,
+      ".agent-skill-chain/templates/issue/03_実装計画.md",
+    );
+    const markdown = fs.readFileSync(file, "utf8");
+    const reference =
+      "`.agent-skill-chain/docs/01_開発ワークフロー.md`（開発ワークフロー）";
+    assert.ok(
+      markdown.includes(reference),
+      "書き換える対象の配置非依存参照が見つかりません",
+    );
+    fs.writeFileSync(
+      file,
+      markdown.replace(
+        reference,
+        "`.agent-skill-chain/../../外部脱出.md`（開発ワークフロー）",
+      ),
+    );
+  },
+);
+
+Given(
+  "配置非依存参照の参照先がdirectoryである実装計画templateを持つpackage資産がある",
+  function () {
+    this.packageRoot = copyPackageAssets(this);
+    const file = path.join(
+      this.packageRoot,
+      ".agent-skill-chain/templates/issue/03_実装計画.md",
+    );
+    const markdown = fs.readFileSync(file, "utf8");
+    const reference =
+      "`.agent-skill-chain/docs/01_開発ワークフロー.md`（開発ワークフロー）";
+    assert.ok(
+      markdown.includes(reference),
+      "書き換える対象の配置非依存参照が見つかりません",
+    );
+    const directoryTarget = path.join(
+      this.packageRoot,
+      ".agent-skill-chain/docs/ディレクトリ参照.md",
+    );
+    fs.mkdirSync(directoryTarget);
+    fs.writeFileSync(
+      file,
+      markdown.replace(
+        reference,
+        "`.agent-skill-chain/docs/ディレクトリ参照.md`（開発ワークフロー）",
+      ),
+    );
+  },
+);
+
+Given(
+  "配置非依存参照の参照先がrepository境界外へのsymlinkである実装計画templateを持つpackage資産がある",
+  function () {
+    this.packageRoot = copyPackageAssets(this);
+    const file = path.join(
+      this.packageRoot,
+      ".agent-skill-chain/templates/issue/03_実装計画.md",
+    );
+    const markdown = fs.readFileSync(file, "utf8");
+    const reference =
+      "`.agent-skill-chain/docs/01_開発ワークフロー.md`（開発ワークフロー）";
+    assert.ok(
+      markdown.includes(reference),
+      "書き換える対象の配置非依存参照が見つかりません",
+    );
+    const outside = this.temp("asc-issuetpl-outside-");
+    const outsideFile = path.join(outside, "外部の文書.md");
+    fs.writeFileSync(outsideFile, "# 外部\n");
+    const symlinkTarget = path.join(
+      this.packageRoot,
+      ".agent-skill-chain/docs/symlink参照.md",
+    );
+    fs.symlinkSync(outsideFile, symlinkTarget);
+    fs.writeFileSync(
+      file,
+      markdown.replace(
+        reference,
+        "`.agent-skill-chain/docs/symlink参照.md`（開発ワークフロー）",
+      ),
+    );
+  },
+);
+
+Then(
+  "配置非依存参照がrepository外であることを示してskills checkが失敗する",
+  function () {
+    assert.equal(this.check.valid, false, this.check.errors.join("; "));
+    assert.ok(
+      this.check.errors.some((error) =>
+        error.includes("配置非依存参照がrepository外です"),
+      ),
+      this.check.errors.join("; "),
+    );
+  },
+);
+
+Then(
+  "配置非依存参照の参照先がfileではないことを示してskills checkが失敗する",
+  function () {
+    assert.equal(this.check.valid, false, this.check.errors.join("; "));
+    assert.ok(
+      this.check.errors.some((error) =>
+        error.includes("配置非依存参照の参照先がfileではありません"),
+      ),
+      this.check.errors.join("; "),
+    );
+  },
+);
+
+Then(
+  "配置非依存参照の参照先がsymlinkでrepository境界外であることを示してskills checkが失敗する",
+  function () {
+    assert.equal(this.check.valid, false, this.check.errors.join("; "));
+    assert.ok(
+      this.check.errors.some((error) =>
+        error.includes("配置非依存参照の参照先がsymlinkでrepository境界外です"),
+      ),
+      this.check.errors.join("; "),
+    );
+  },
+);
+
+/**
  * Issue #1419: `issue create`が生成する00〜03の配置非依存参照が、staging配置
  * （既定・custom・wildcard・深いtracked）によらず生成先repository rootから
  * 実際に解決できることを実機で確認する。

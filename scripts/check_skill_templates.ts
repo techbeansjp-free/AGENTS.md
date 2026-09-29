@@ -471,11 +471,18 @@ export function checkIssueTemplateHeadings(
  * 配置に依存する相対linkが残っていないこと、配置非依存参照（backtick表記の
  * repository相対path）の参照先が実在することをbuild時に検査する（Issue #1419）。
  *
- * **配置に依存する相対linkを禁止する。** `](../docs/`等のtemplateRoot相対の
+ * **配置に依存する相対linkを、綴りの変種を含めて禁止する。** `templateRoot`相対の
  * repository内linkは、`src/domain/issue.ts`の`copyFileSync`・
  * `requirementDocument()`がtemplateをそのまま複製するだけでlink書換えを
  * 行わないため、生成先staging配置の深さによって解決結果が変わり、既定配置を
- * 含む全配置で壊れうる。
+ * 含む全配置で壊れうる。**`](../../docs/`という1つの綴りだけを禁止しても
+ * 検査をすり抜ける（Step 10独立reviewのREV-01が実測）。** `](../docs/`（1階層）、
+ * `](../../../docs/`（3階層以上）、`docs/`以外の相対path（例:
+ * `](../../skills/...)`）、`](./../../docs/`のような`./`混在、
+ * `` [x](<../../docs/...>) ``のような山括弧destination、reference-style
+ * link定義（`` [label]: ../../docs/... ``）、生のHTML `<a href="../...">`
+ * のいずれも同じ配置依存の欠陥を持つため、destinationが相対path上昇を含む
+ * 形をまとめて検出する。
  *
  * **配置非依存参照は実在をrepository root基準で検証する。** `` `.agent-skill-chain/…md` ``
  * 形式の参照だけを対象にし、`` `.agent-skill-chain/templates/common/` ``のような
@@ -483,6 +490,9 @@ export function checkIssueTemplateHeadings(
  * 汎用走査すると、既存のdirectory参照を誤検出するため（Step 7 readiness checkの
  * 指摘）。
  */
+const PLACEMENT_DEPENDENT_LINK =
+  /(?:\]\(|\]:\s*|<a\s[^>]*href=["'])\s*<?\s*(?:\.\/)?(?:\.\.\/)+/gu;
+
 const GENERATED_ISSUE_TEMPLATE_FILES = [
   "00_要求定義_full.md",
   "00_要求定義_quick.md",
@@ -519,10 +529,11 @@ function checkGeneratedTemplateReferences(root: string): string[] {
      * inline codeは対象外にしない（配置非依存参照自体がその記法を使うため）。
      */
     const withoutFencedCode = markdown.replace(/```[\s\S]*?```/gu, "");
-    if (/\]\(\.\.\/\.\.\/docs\//u.test(withoutFencedCode))
+    if (PLACEMENT_DEPENDENT_LINK.test(withoutFencedCode))
       errors.push(
         `issue/${relative}: 配置非依存参照へ書き換えていない相対linkが残っています`,
       );
+    PLACEMENT_DEPENDENT_LINK.lastIndex = 0;
     const references = uniqueSorted(
       [
         ...withoutFencedCode.matchAll(/`(\.agent-skill-chain\/[^`]+\.md)`/gu),
