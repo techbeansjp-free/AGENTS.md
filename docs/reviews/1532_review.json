@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1532,
+  "observed": {
+    "baseSha": "dcdb84b00f086f09577dd531e96fee1de29f5ae5",
+    "implementationHeadSha": "a0cd09985638f41415a553335ca85aaef9e6e6ee",
+    "diffDigest": "ba47558faf3a12627b9685e0d46dfe9f1bed301359042a117a3b6e65f5880ceb",
+    "session": {
+      "sessionId": "3c5f6db6d85cd28d266e362eeb319e0f4311a9092fbbabd0869754ed12fab6a4",
+      "latestRoundDigest": "851b719a359aafffae8b287e60347298830b80dee9c644413210b992767bdc9b",
+      "status": "converged",
+      "countedRounds": 2
+    },
+    "impact": {
+      "digest": "547cec90c2601ad49d11155c746fcf020d7a66fb7e42491874aaa305ce356865",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "a0cd09985638f41415a553335ca85aaef9e6e6ee",
+        "impactDigest": "547cec90c2601ad49d11155c746fcf020d7a66fb7e42491874aaa305ce356865",
+        "finishedAt": "2026-09-29T06:55:53.240Z",
+        "recordDigest": "2cb13b18c11d5bb1e2c67bb53bdc6fd584d944aa042de76b8c465022e3a60bee"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "REV-1532-G1",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/15_要件追跡/01_変更履歴.md",
+      "contractId": null
+    },
+    {
+      "id": "REV-1532-G2",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/02_要件/03_外部連携要件.md",
+      "contractId": null
+    },
+    {
+      "id": "REV-1532-H1",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/adapters/review-diff.ts",
+      "contractId": "AC-03"
+    },
+    {
+      "id": "REV-1532-L1",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/review-evidence-cli.steps.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV-1532-L2",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "scripts/check_file_audit.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV-1532-L3",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/adapters/review-diff.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV-1532-M1",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "src/adapters/review-evidence.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV-1532-M2",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "test/steps/review-evidence-cli.steps.ts",
+      "contractId": "AC-03"
+    },
+    {
+      "id": "REV-1532-R2-NONBLOCKING",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/adapters/review-evidence.ts",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "claude-opus-independent-reviewer-1532",
+    "implementer": "claude-sonnet-5-implementer-session-1532",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "48cf366b93db5866d00b16e31041e4890756f2e528465349b624fa521a2e6a8d"
+}

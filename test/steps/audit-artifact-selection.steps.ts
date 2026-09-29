@@ -183,6 +183,24 @@ Given(
 );
 
 Given(
+  "review artifactだけを直す前進commitを9本積んだ監査選択repository",
+  function () {
+    const fixture = createImplementation(this);
+    const auditPath = "docs/reviews/1074_review.json";
+    commitArtifact(this, fixture, auditPath);
+    /**
+     * **canonical resolverの遡り上限（8 commit、Issue #1532）を超える。**
+     * artifactだけを直すcommitが合計9本（この1本＋以下の8本）になり、8個までしか
+     * 遡らないresolverは`fixture.implementation`へ到達できない。記載した
+     * `H_impl`（`fixture.implementation`）と実際に導出できるH_implが食い違うため、
+     * file監査は不一致として不合格になる（`SCN-UNIT-EVIDHEAD-021`と対になる、
+     * audit:check側の同じ上限の確認）。
+     */
+    appendAuditOnlyCommits(fixture, auditPath, 8, fixture.implementation);
+  },
+);
+
+Given(
   "review artifactの直後に実装を変える前進commitを積んだ監査選択repository",
   function () {
     const fixture = createImplementation(this);

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { main } from "../../src/cli.js";
+import { checkFileAudit } from "../../scripts/check_file_audit.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
 import { QUESTIONS, type ModeAnswer } from "../../src/domain/mode.js";
 import {
@@ -25,7 +26,10 @@ import {
   WORKFLOW_STEPS,
   type StepJournalEntry,
 } from "../../src/domain/workflow.js";
-import { resealObservedEvidence } from "../support/review-evidence-fixture.js";
+import {
+  resealObservedEvidence,
+  withAddedObservedVerification,
+} from "../support/review-evidence-fixture.js";
 import { installTrustedVerificationPolicy } from "../support/trusted-verification-policy.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
@@ -36,6 +40,7 @@ interface ReviewEvidenceCliWorld extends WorkflowWorld {
   implementationHead: string;
   session: ReviewSessionState;
   exported?: CliResult;
+  reexported?: CliResult;
   failures: CliResult[];
   validations: Record<string, CliResult>;
   rebasedBase?: string;
@@ -266,6 +271,112 @@ Given(
   },
 );
 
+/**
+ * HIGH-1回帰（Issue #1532 round 1指摘）: H_impl自身が、このexportとは無関係な
+ * 「過去のreview記録だけを編集する」commitである場合（実repository履歴の
+ * Issue #1165・#1254と同型）。`resolveImplementationHead`が遡り対象pathを
+ * 明示引数で固定せず「最初に見つかったevidence-only path」へ暗黙に合わせていた
+ * 旧実装では、H_impl自身をevidence-only commitと誤認して歩き越し、
+ * `audit:check`が独立に導出するH_implと食い違っていた。
+ */
+Given(
+  "review証跡用に過去のreview記録だけを編集する実装commitを持つrepositoryがある",
+  function () {
+    this.root = this.initRepo();
+    this.marker = path.join(this.temp("asc-verify-marker-"), "fail");
+    this.fullCommand = markerArgv(this.marker);
+    this.base = installTrustedVerificationPolicy(this.root, {
+      fullCommand: this.fullCommand,
+      targetedRunner: [process.execPath, "-e", "process.exit(0)"],
+    });
+    /**
+     * **H_impl自身が、今回のIssue（1500）とは別のIssue（900）のreview記録だけを
+     * 編集するcommitである。** 製品fileには一切触れない。
+     */
+    this.implementationHead = commitFile(
+      this.root,
+      "docs/reviews/900_review.json",
+      '{"note":"historical correction"}\n',
+    );
+    this.staging = createIssueStaging(this.root, {
+      title: "review-evidence-legacy-path",
+      answers: Object.fromEntries(
+        QUESTIONS.map((id) => [
+          id,
+          { answer: true, evidence: `${id}の固定証拠` } satisfies ModeAnswer,
+        ]),
+      ),
+      now: instant,
+      requestedMode: "quick",
+    }).path;
+    for (const step of [1, 4, 9])
+      appendWorkflowJournalEntry({
+        staging: this.staging,
+        entry: entry(step, this.implementationHead),
+      });
+    this.session = recordReviewRound({
+      staging: this.staging,
+      round: parseReviewRoundInput({
+        round: 1,
+        previousRoundDigest: null,
+        anchor: {
+          scopeIds: ["SCOPE-001"],
+          acceptanceCriteriaIds: ["AC-001"],
+          invariantIds: [],
+          diffBaseSha: this.base,
+          initialHeadSha: this.implementationHead,
+          initialDiffDigest: observeReviewDiff(
+            this.root,
+            this.base,
+            this.implementationHead,
+          ).digest,
+        },
+        candidateHeadSha: this.implementationHead,
+        focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
+        findings: [
+          {
+            id: "F-001",
+            severity: "Low",
+            status: "valid",
+            source: "review",
+            relation: "improvement",
+            evidence: "記録の是正内容を確認した",
+            path: "docs/reviews/900_review.json",
+            contractId: null,
+            causedByFindingId: null,
+          },
+        ],
+      }),
+    });
+    this.failures = [];
+    this.validations = {};
+  },
+);
+
+Then(
+  "過去のreview記録編集commitがH_implのまま証跡が生成されaudit:checkも合意する",
+  function () {
+    assert.equal(this.exported?.error, undefined, String(this.exported?.error));
+    const file = path.join(this.root, EVIDENCE);
+    const evidence = parseReviewEvidence(fs.readFileSync(file, "utf8"));
+    assert.equal(
+      evidence.observed.implementationHeadSha,
+      this.implementationHead,
+      "exportはH_impl自身（過去のreview記録編集commit）を歩き越してはならない",
+    );
+    // H_final化してaudit:check自身にも独立にH_implを導出させ、一致を確認する
+    commitFile(this.root, EVIDENCE, fs.readFileSync(file, "utf8"));
+    const cutoff = git(this.root, ["rev-parse", "HEAD"]);
+    const auditResult = checkFileAudit(this.root, cutoff, {});
+    assert.equal(
+      auditResult.valid,
+      true,
+      `audit:checkが不合格でした: ${JSON.stringify(auditResult.errors)}`,
+    );
+    assert.equal(auditResult.implementation, this.implementationHead);
+  },
+);
+
 When("H_implでreview exportを実行する", async function () {
   await verifyPassing(this);
   this.exported = await captureCli(exportArgs(this));
@@ -313,23 +424,86 @@ Then(
   },
 );
 
+/**
+ * 実履歴パターン（PR #1528/#1537）の回帰再現（Issue #1532、SCN-INT-REVEVID-012）。
+ *
+ * 最初のexportをH_finalとしてcommitし、review roundの是正でありがちな
+ * evidence-only commit（証跡fileだけを書き換えるcommit）を2回積んでから
+ * `review export`を再実行する。canonical resolver適用後は、H_final上での
+ * 再実行が拒否ではなく成功し、書き込む`implementationHeadSha`は積まれた
+ * evidence-only commitに関わらず最初と同じ実装commitのままである。
+ */
+When(
+  "evidence-only是正commitを2回積んでreview exportを再実行する",
+  async function () {
+    assert.equal(this.exported?.error, undefined, String(this.exported?.error));
+    const evidencePath = path.join(this.root, EVIDENCE);
+    const exportedContent = fs.readFileSync(evidencePath, "utf8");
+    // H_final: 実装commitの後にreview evidenceを1件だけcommitする
+    commitFile(this.root, EVIDENCE, exportedContent);
+    const first = parseReviewEvidence(exportedContent);
+    const correction1 = resealObservedEvidence(first, {
+      verification: withAddedObservedVerification(first, "npm run lint"),
+    });
+    // round収束後の是正commit（1回目）: 証跡fileだけを書き換える
+    commitFile(this.root, EVIDENCE, correction1);
+    const second = parseReviewEvidence(correction1);
+    const correction2 = resealObservedEvidence(second, {
+      verification: withAddedObservedVerification(
+        second,
+        "npm run format:check",
+      ),
+    });
+    // round収束後の是正commit（2回目）: 証跡fileだけを書き換える
+    commitFile(this.root, EVIDENCE, correction2);
+    this.reexported = await captureCli(exportArgs(this));
+  },
+);
+
+Then(
+  "再exportしたH_implは最初と同じ実装commitでありexit 0で証跡を再生成する",
+  function () {
+    assert.equal(
+      this.reexported?.error,
+      undefined,
+      String(this.reexported?.error),
+    );
+    assert.equal(this.reexported?.exitCode, 0);
+    const regeneratedContent = fs.readFileSync(
+      path.join(this.root, EVIDENCE),
+      "utf8",
+    );
+    const regenerated = parseReviewEvidence(regeneratedContent);
+    assert.equal(
+      regenerated.observed.implementationHeadSha,
+      this.implementationHead,
+    );
+    /**
+     * MEDIUM-2（Issue #1532 round 1指摘）: #1532の本題は「exportが書くH_implと
+     * audit:checkが独立に導出するH_implが一致すること」である。再生成した証跡を
+     * H_finalとしてcommitし、audit:check自身にも同じ実履歴パターン上でH_implを
+     * 導出させて一致を確認する。
+     */
+    commitFile(this.root, EVIDENCE, regeneratedContent);
+    const cutoff = git(this.root, ["rev-parse", "HEAD"]);
+    const auditResult = checkFileAudit(this.root, cutoff, {});
+    assert.equal(
+      auditResult.valid,
+      true,
+      `audit:checkが不合格でした: ${JSON.stringify(auditResult.errors)}`,
+    );
+    assert.equal(auditResult.implementation, this.implementationHead);
+  },
+);
+
 When("不正な条件でreview exportを実行する", async function () {
   /** 観測記録が無い拒否と区別するため、各条件は合格記録を持つ状態で測る */
   await verifyPassing(this);
-  this.failures.push(
-    await captureCli(exportArgs(this, { implementer: "reviewer-context" })),
-  );
-  this.failures.push(
-    await captureCli([...exportArgs(this), "--verified=npm test"]),
-  );
-  this.failures.push(
-    await captureCli(exportArgs(this, { out: "docs/other/1500_review.json" })),
-  );
-  this.failures.push(
-    await captureCli(
-      exportArgs(this, { out: "docs/reviews/1501_review.json" }),
-    ),
-  );
+  /**
+   * **symlink caseを先に置く。** これらは`docs`が存在しないことを前提にした
+   * 検査であり、後段のsentinel設置（`docs/reviews`を実directoryにする）より
+   * 前に済ませる必要がある（Issue #1532 round 1指摘、LOW-1）。
+   */
   /** 祖先`docs`がsymlinkでも、拒否より前にsymlink先へdirectoryを作らない */
   assert.equal(fs.existsSync(path.join(this.root, "docs")), false);
   fs.mkdirSync(path.join(this.root, "outside-docs"), { recursive: true });
@@ -347,19 +521,44 @@ When("不正な条件でreview exportを実行する", async function () {
   );
   this.failures.push(await captureCli(exportArgs(this)));
   fs.unlinkSync(path.join(this.root, "docs", "reviews"));
-  commitFile(this.root, "docs/reviews/1500_review.json", "{}\n");
-  this.failures.push(await captureCli(exportArgs(this)));
+  /**
+   * **既存の証跡pathへsentinel内容を置く（uncommitted）。** git commitはしない
+   * ため現在HEADは動かない。以降の拒否がこの内容を書き換えないことを確かめる
+   * （Issue #1532 round 1指摘、LOW-1: 従来はsymlink cleanup後に`docs/reviews`が
+   * 実在しないままassertionへ到達し、常に真となる空虚な検査だった）。
+   */
+  fs.mkdirSync(path.join(this.root, "docs", "reviews"), { recursive: true });
+  fs.writeFileSync(path.join(this.root, EVIDENCE), "既存の証跡\n");
+  this.failures.push(
+    await captureCli(exportArgs(this, { implementer: "reviewer-context" })),
+  );
+  this.failures.push(
+    await captureCli([...exportArgs(this), "--verified=npm test"]),
+  );
+  this.failures.push(
+    await captureCli(exportArgs(this, { out: "docs/other/1500_review.json" })),
+  );
+  this.failures.push(
+    await captureCli(
+      exportArgs(this, { out: "docs/reviews/1501_review.json" }),
+    ),
+  );
 });
 
+/**
+ * H_final（H_impl直後にevidence-only commitを積んだ状態）での`review export`再実行は、
+ * canonical resolver適用後は拒否ではなく成功する（Issue #1532、B-1）。その正のcaseは
+ * `SCN-INT-REVEVID-012`（`test/features/integration/audit-artifact-selection.feature`）
+ * が担う。本scenarioは残り6件の拒否条件だけを検査する。
+ */
 Then("各条件を理由つきで拒否し証跡を書かない", function () {
   const expected = [
+    /symlinkを含まない親directory/u,
+    /symlinkを含まない親directory/u,
     /reviewerと--implementerは異なるidentity/u,
     /--verifiedは廃止/u,
     /docs\/reviews\/または\.agent-skill-chain\/reviews\/配下/u,
     /1500_review\.json/u,
-    /symlinkを含まない親directory/u,
-    /symlinkを含まない親directory/u,
-    /review済みcandidate HEAD.*H_final/u,
   ];
   assert.equal(this.failures.length, expected.length);
   for (const [index, pattern] of expected.entries()) {
@@ -368,8 +567,8 @@ Then("各条件を理由つきで拒否し証跡を書かない", function () {
   }
   assert.equal(
     fs.readFileSync(path.join(this.root, EVIDENCE), "utf8"),
-    "{}\n",
-    "既存の証跡pathを拒否時に書き換えない",
+    "既存の証跡\n",
+    "残り4件のいずれも既存の証跡pathを書き換えない",
   );
   assert.equal(
     fs.readdirSync(path.join(this.root, "outside")).length,

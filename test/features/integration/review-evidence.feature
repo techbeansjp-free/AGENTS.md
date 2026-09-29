@@ -7,7 +7,7 @@ Feature: review exportとreview validateでreview証跡を生成・照合する
     When H_implでreview exportを実行する
     Then docs/reviewsへIssue番号の証跡が生成されsessionとGitに照合できる
 
-  Scenario: SCN-INT-REVEVID-002 自己review・検証なし・H_final・許可外の出力先を拒否する
+  Scenario: SCN-INT-REVEVID-002 自己review・検証なし・許可外の出力先を拒否する
     Given review証跡用に収束済みsessionを持つrepositoryがある
     When 不正な条件でreview exportを実行する
     Then 各条件を理由つきで拒否し証跡を書かない
