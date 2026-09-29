@@ -3,16 +3,16 @@
   "issue": 1533,
   "observed": {
     "baseSha": "15b951eede21a8ecab8d28d81604f5d73870a876",
-    "implementationHeadSha": "58ca56cd505a49116c0a2c9ae9dc5b31faa1b755",
-    "diffDigest": "1f5557caa2c586b5f563bdfc9b4fa041a874e2656991d4b215c2377e0b5f9a35",
+    "implementationHeadSha": "8cda6be9384b7f225f45e3c7c922b86b94784184",
+    "diffDigest": "6389503ee18236cf19bb7f6bf41e1cc72eaee52428858c163bf7ab0d5d1548be",
     "session": {
       "sessionId": "8896cf7d977f62ada873e906b66eb75aac74a940d34eb41ea41051eabe9563f3",
-      "latestRoundDigest": "1ae7b8987399b77968bc8e36fa4439aa0ade03df8c6828cf3f6ead413a26254a",
+      "latestRoundDigest": "3b1281a4fe99736a14014c944b7f7048ff777b7f8d2abddfb95e18f9d67fbe37",
       "status": "converged",
-      "countedRounds": 1
+      "countedRounds": 2
     },
     "impact": {
-      "digest": "19b4ba9e26d4eee1d95778f1add12cae2bb22dda770ed8815d096386a6d595c2",
+      "digest": "bd640155c334c998e9821669d55b2006a3e8672dda91d067753dc152b6b5b1df",
       "mode": "full"
     },
     "verification": [
@@ -23,14 +23,30 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "58ca56cd505a49116c0a2c9ae9dc5b31faa1b755",
-        "impactDigest": "19b4ba9e26d4eee1d95778f1add12cae2bb22dda770ed8815d096386a6d595c2",
-        "finishedAt": "2026-09-29T00:12:43.004Z",
-        "recordDigest": "037f0e0249f0622cc4150f6966a1fab5d6bee299413e82fcd78c977e7ce2dae3"
+        "headSha": "8cda6be9384b7f225f45e3c7c922b86b94784184",
+        "impactDigest": "bd640155c334c998e9821669d55b2006a3e8672dda91d067753dc152b6b5b1df",
+        "finishedAt": "2026-09-29T01:01:15.092Z",
+        "recordDigest": "40bf70345a982eaffcad173670fff029356cda883d9220bcd8997861f5ccdc67"
       }
     ]
   },
   "findings": [
+    {
+      "id": "CR-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-02"
+    },
+    {
+      "id": "CR-02",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-02"
+    },
     {
       "id": "REV-01",
       "severity": "Medium",
@@ -70,6 +86,22 @@
       "relation": "improvement",
       "path": "src/domain/release.ts",
       "contractId": null
+    },
+    {
+      "id": "REV-R2-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/release.ts",
+      "contractId": "AC-02"
+    },
+    {
+      "id": "REV-R2-02",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/features/unit/auto-release.feature",
+      "contractId": null
     }
   ],
   "unresolvedCriticalHigh": [],
@@ -80,5 +112,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "9d03e036ab15591a9763c8b10384fa66a7f6419782dcf7435a49c6a70a1f22d0"
+  "evidenceDigest": "006b88acf23d6c2cce034fe4d5fdc554dc10c6c32a44d2f20841419e1c9ccc24"
 }
