@@ -49,6 +49,8 @@ export interface TokenMetrics {
   fresh: number;
   cacheReadPerCall: Distribution;
   firstCallContext: number;
+  contextPerCall: Distribution;
+  observedLifetimeMs: number;
   startedAt: string | null;
   endedAt: string | null;
   activeMs: number;
@@ -264,6 +266,10 @@ function metrics(calls: readonly Call[]): TokenMetrics {
     total: input + cacheCreation + cacheRead + output,
     fresh: input + cacheCreation + output,
     cacheReadPerCall: distribution(calls.map((call) => call.cacheRead)),
+    contextPerCall: distribution(
+      calls.map((call) => call.input + call.cacheCreation + call.cacheRead),
+    ),
+    observedLifetimeMs: first === undefined ? 0 : calls.at(-1)!.at - first.at,
     firstCallContext:
       first === undefined
         ? 0
