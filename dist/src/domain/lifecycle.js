@@ -62,6 +62,7 @@ const HOST_HOOK_SOURCE = ".agent-skill-chain/hooks/asc-contract-citation.mjs";
 const HOST_HOOK_TARGETS = [
     ".claude/hooks/asc-contract-citation.mjs",
     ".codex/hooks/asc-contract-citation.mjs",
+    ".claude/hooks/asc-agent-lifecycle.mjs",
 ];
 /**
  * hookの登録を観測するproject-localの設定file（Issue #1105）。
@@ -109,6 +110,42 @@ export function inspectHookRegistration(input) {
             registered: false,
             reason: `${HOST_HOOK_SETTINGS}に期待entryがありません。global・managed・plugin経由の有効化状態は未確認です`,
         };
+}
+/** 設定の存在だけを観測する。実hostでの発火を保証しない。 */
+export function inspectAgentLifecycleRegistration(settings) {
+    const required = [
+        "SessionStart",
+        "SessionEnd",
+        "SubagentStart",
+        "SubagentStop",
+        "PreToolUse",
+    ];
+    let hooks = {};
+    try {
+        const parsed = JSON.parse(settings ?? "{}");
+        if (isRecord(parsed) && isRecord(parsed.hooks))
+            hooks = parsed.hooks;
+    }
+    catch {
+        hooks = {};
+    }
+    const configuredEvents = required.filter((event) => {
+        const entries = hooks[event];
+        return (Array.isArray(entries) &&
+            entries.some((entry) => isRecord(entry) &&
+                [undefined, "", "*"].includes(entry.matcher) &&
+                Array.isArray(entry.hooks) &&
+                entry.hooks.some((hook) => isRecord(hook) &&
+                    hook.type === "command" &&
+                    hook.async !== true &&
+                    typeof hook.command === "string" &&
+                    hook.command.includes(".claude/hooks/asc-agent-lifecycle.mjs"))));
+    });
+    return {
+        configuredEvents,
+        missingEvents: required.filter((event) => !configuredEvents.includes(event)),
+        runtimeVerified: false,
+    };
 }
 const SHA256 = /^[a-f0-9]{64}$/u;
 function sha256Bytes(contents) {
@@ -402,7 +439,7 @@ function mappings(target) {
         });
     for (const relative of HOST_HOOK_TARGETS)
         result.push({
-            src: path.join(packageRoot, HOST_HOOK_SOURCE),
+            src: path.join(packageRoot, ".agent-skill-chain/hooks", path.basename(relative)),
             dest: destination(relative),
         });
     return result;
@@ -1297,7 +1334,16 @@ export function doctor(target, worktreeObservations) {
         },
         hooks: {
             canonical: HOST_HOOK_SOURCE,
-            expected: [...HOST_HOOK_TARGETS],
+            expected: HOST_HOOK_TARGETS.filter((target) => path.basename(target) === path.basename(HOST_HOOK_SOURCE)),
+            agentLifecycle: {
+                canonical: ".agent-skill-chain/hooks/asc-agent-lifecycle.mjs",
+                expected: ".claude/hooks/asc-agent-lifecycle.mjs",
+                ...inspectAgentLifecycleRegistration(hookSettingsFile !== undefined &&
+                    fs.existsSync(hookSettingsFile) &&
+                    isRegularFile(hookSettingsFile)
+                    ? fs.readFileSync(hookSettingsFile, "utf8")
+                    : undefined),
+            },
             registered: hookRegistration.registered,
             diagnostics: hookRegistration.registered ? [] : [hookRegistration.reason],
         },
