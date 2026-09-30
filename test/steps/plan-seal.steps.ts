@@ -34,6 +34,7 @@ import {
 } from "../../src/domain/mode.js";
 import {
   PLAN_AMENDMENT_FILE,
+  planSealAnchorViolation,
   type PlanGeneration,
   stagingDriftDiagnostic,
   validatePlanAmendment,
@@ -1769,5 +1770,433 @@ Then(
       deliveryError(this.staging),
       /計画凍結検査のworkflow journalが不正です/u,
     );
+  },
+);
+
+// ---- 版管理下stagingの封印Git anchor（SCN-UNIT-PLANSEAL-026〜030、SCN-INT-PLANSEAL-006） ----
+
+const PLAN_SEAL_JSON = "plan-seal.json";
+
+/** stagingのrepository相対path。 */
+function repositoryRelative(
+  root: string,
+  staging: string,
+  name: string,
+): string {
+  return path
+    .relative(root, path.join(staging, name))
+    .split(path.sep)
+    .join("/");
+}
+
+/**
+ * `plan-seal.json`の期待本文。**実装の正準化関数を使わず、key順を手で並べて組み立てる。**
+ * 実装の関数を使うと、書式やfield集合の変異が両側で同じ向きにずれて生存する。
+ */
+function expectedQuickPlanSealFile(staging: string): string {
+  const seal = `{"${REQUEST}":"${sha256File(path.join(staging, REQUEST))}"}`;
+  return `{"mode":"quick","planSeal":${seal},"schemaVersion":"agent-skill-chain/plan-seal/v1","sealDigest":"${sha256Text(seal)}","sealStep":4}\n`;
+}
+
+/** 記録者によるjournalの格下げ。全行のchain・封印・計画世代を除き集合digestも再固定する。 */
+function downgradeJournal(staging: string): void {
+  const file = path.join(staging, STEP_JOURNAL_FILE);
+  const text = fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .map((line) => {
+      if (line.trim() === "") return line;
+      const value = JSON.parse(line) as Record<string, unknown>;
+      delete value.previousEntryDigest;
+      delete value.planSeal;
+      delete value.planGeneration;
+      return JSON.stringify(value);
+    })
+    .join("\n");
+  fs.writeFileSync(file, text);
+  const parsed = parseStepJournal(journalOf(staging));
+  assert.deepEqual(
+    parsed.errors,
+    [],
+    "格下げしたjournalは旧journalとして読めます",
+  );
+  assert.equal(
+    parsed.entries.some(
+      (entry) =>
+        entry.planSeal !== undefined || entry.previousEntryDigest !== undefined,
+    ),
+    false,
+  );
+  refreshStoredStagingDigest(staging);
+}
+
+const SEAL_REMOVED = /journalに計画封印がありません/u;
+
+Then(
+  "plan-seal.jsonはjournalの封印から決まる正準本文を持ち版管理対象としてcommitに入る",
+  function () {
+    const expected = expectedQuickPlanSealFile(this.staging);
+    assert.equal(
+      fs.readFileSync(path.join(this.staging, PLAN_SEAL_JSON), "utf8"),
+      expected,
+    );
+    assert.deepEqual(sealOf(this.staging), {
+      [REQUEST]: sha256File(path.join(this.staging, REQUEST)),
+    });
+    const relative = repositoryRelative(
+      this.root,
+      this.staging,
+      PLAN_SEAL_JSON,
+    );
+    assert.throws(
+      () => gitIn(this.root, ["check-ignore", "-q", "--", relative]),
+      "plan-seal.jsonは版管理対象でなければなりません",
+    );
+    assert.equal(
+      execFileSync("git", ["cat-file", "blob", `HEAD:${relative}`], {
+        cwd: this.root,
+        encoding: "utf8",
+      }),
+      expected,
+    );
+    assert.ok(
+      readStoredStagingRecord(this.staging).artifacts.includes(PLAN_SEAL_JSON),
+      "plan-seal.jsonはstaging digestの対象です",
+    );
+  },
+);
+
+Then(
+  "版管理外stagingの封印Step記録はplan-seal.jsonを書かない",
+  async function () {
+    const staging = stage(this, "quick", this.initRepo());
+    await recordAll(staging, [1, 4]);
+    assert.ok(sealOf(staging)[REQUEST]);
+    assert.equal(fs.existsSync(path.join(staging, PLAN_SEAL_JSON)), false);
+  },
+);
+
+Given(
+  "Step 9まで記録しcommitした版管理下quick stagingがある",
+  async function () {
+    this.root = this.initRepo();
+    writeTrackedPolicySet(this.root);
+    fs.mkdirSync(path.join(this.root, ...TRACKED_ROOT.split("/")), {
+      recursive: true,
+    });
+    this.staging = createIssueStaging(this.root, {
+      title: "plan-seal-anchor",
+      answers: answers(),
+      now: new Date("2026-09-26T00:00:00Z"),
+      requestedMode: "quick",
+      stagingRoot: TRACKED_ROOT,
+    }).path;
+    await recordAll(this.staging, [1, 4]);
+    gitIn(this.root, ["add", "-A"]);
+    gitIn(this.root, ["commit", "-q", "-m", "sealed plan"]);
+    await recordAll(this.staging, [9]);
+    assert.equal(gitIn(this.root, ["status", "--porcelain"]), "");
+    this.journalBefore = journalOf(this.staging);
+  },
+);
+
+When(
+  "journalの全行からchainと封印と計画世代を除きstaging digestを再固定する",
+  function () {
+    downgradeJournal(this.staging);
+    this.journalBefore = journalOf(this.staging);
+  },
+);
+
+When(
+  "版管理外stagingのjournalの全行からchainと封印と計画世代を除く",
+  function () {
+    downgradeJournal(this.staging);
+    this.journalBefore = journalOf(this.staging);
+  },
+);
+
+Then(
+  "Step 10記録と配送headのdelivery直前検査とreview roundは封印の除去を名指しして拒否しjournalは変わらない",
+  function () {
+    assert.match(appendError(this.staging, quickEntry(10)), SEAL_REMOVED);
+    const head = gitIn(this.root, ["rev-parse", "HEAD"]);
+    assert.match(deliveryDiagnostic(this.staging, head), SEAL_REMOVED);
+    const round = reviewRoundError(this.staging);
+    assert.match(
+      round,
+      /計画封印のGit anchorが不正なためreview roundのstaging digest再固定を拒否しました/u,
+    );
+    assert.match(round, SEAL_REMOVED);
+    assert.equal(journalOf(this.staging), this.journalBefore);
+  },
+);
+
+Then(
+  "worktreeのplan-seal.jsonも削除するとcommit履歴上の封印anchorにより同じく拒否する",
+  function () {
+    fs.unlinkSync(path.join(this.staging, PLAN_SEAL_JSON));
+    refreshStoredStagingDigest(this.staging);
+    assert.match(appendError(this.staging, quickEntry(10)), SEAL_REMOVED);
+    const head = gitIn(this.root, ["rev-parse", "HEAD"]);
+    assert.match(deliveryDiagnostic(this.staging, head), SEAL_REMOVED);
+    /** commitからも除くと履歴にだけ残る。履歴から到達できる限り旧journal扱いしない */
+    const relative = repositoryRelative(
+      this.root,
+      this.staging,
+      PLAN_SEAL_JSON,
+    );
+    gitIn(this.root, ["rm", "-q", "--cached", "--", relative]);
+    gitIn(this.root, ["commit", "-q", "-m", "drop plan seal"]);
+    const dropped = gitIn(this.root, ["rev-parse", "HEAD"]);
+    assert.match(appendError(this.staging, quickEntry(10)), SEAL_REMOVED);
+    assert.match(deliveryDiagnostic(this.staging, dropped), SEAL_REMOVED);
+    assert.equal(journalOf(this.staging), this.journalBefore);
+  },
+);
+
+When(
+  "commit上のplan-seal.jsonを削除・編集・履歴上で書き換えた各状態でStep 9を記録し配送直前検査を実行する",
+  async function () {
+    const file = path.join(this.staging, PLAN_SEAL_JSON);
+    const relative = repositoryRelative(
+      this.root,
+      this.staging,
+      PLAN_SEAL_JSON,
+    );
+    const original = fs.readFileSync(file, "utf8");
+    const sealedCommit = gitIn(this.root, ["rev-parse", "HEAD"]);
+    const observe = async (): Promise<string> => {
+      const result = await record(this.staging, 9);
+      assert.equal(result.status, 1, result.stdout);
+      const head = gitIn(this.root, ["rev-parse", "HEAD"]);
+      const delivery = deliveryDiagnostic(this.staging, head);
+      assert.equal(journalOf(this.staging), this.journalBefore);
+      return `${result.stdout}\n${delivery.replaceAll(head, "<head>")}`;
+    };
+    this.drifts = {};
+    /** commitから除きworktreeには残す */
+    gitIn(this.root, ["rm", "-q", "--cached", "--", relative]);
+    gitIn(this.root, ["commit", "-q", "-m", "drop plan seal"]);
+    this.drifts.removed = await observe();
+    /** 削除後に同じ本文を戻しても履歴上の削除は残る */
+    gitIn(this.root, ["add", "--", relative]);
+    gitIn(this.root, ["commit", "-q", "-m", "restore plan seal"]);
+    this.drifts.deletedInHistory = await observe();
+    gitIn(this.root, ["reset", "-q", "--hard", sealedCommit]);
+    assert.equal(fs.readFileSync(file, "utf8"), original);
+    /** 編集をcommitしworktreeだけ戻す */
+    fs.writeFileSync(file, original.replace('"sealStep":4', '"sealStep":8'));
+    assert.notEqual(
+      fs.readFileSync(file, "utf8"),
+      original,
+      "編集の置換が空振りしています",
+    );
+    gitIn(this.root, ["commit", "-q", "-am", "edit plan seal"]);
+    fs.writeFileSync(file, original);
+    this.drifts.edited = await observe();
+    /** 編集版をcommitした後に元へ戻すcommit。先端は一致するが履歴に書き換えが残る */
+    gitIn(this.root, ["commit", "-q", "-am", "revert plan seal"]);
+    this.drifts.rewrittenInHistory = await observe();
+  },
+);
+
+Then(
+  "各状態はcommit上のplan-seal.jsonの欠落・不一致・履歴上の削除・書き換えを名指しして拒否しjournalは変わらない",
+  function () {
+    const expectations: Record<string, RegExp> = {
+      removed:
+        /plan-seal\.jsonがcommit HEADにありません[\s\S]*plan-seal\.jsonがcommit <head>にありません/u,
+      deletedInHistory:
+        /plan-seal\.jsonがcommit HEADの履歴上で削除されています[\s\S]*commit <head>の履歴上で削除されています/u,
+      edited:
+        /commit HEAD上のplan-seal\.jsonがjournalの封印（Step 4）と一致しません[\s\S]*commit <head>上のplan-seal\.jsonがjournalの封印（Step 4）と一致しません/u,
+      rewrittenInHistory:
+        /commit HEADの履歴上でjournalに無い封印へ書き換えられています[\s\S]*commit <head>の履歴上でjournalに無い封印へ書き換えられています/u,
+    };
+    for (const [label, pattern] of Object.entries(expectations))
+      assert.match(this.drifts[label] ?? "", pattern, label);
+  },
+);
+
+When(
+  "worktreeのplan-seal.jsonを編集または削除してStep 9を記録し配送直前検査を実行する",
+  async function () {
+    const file = path.join(this.staging, PLAN_SEAL_JSON);
+    const original = fs.readFileSync(file, "utf8");
+    this.original = original;
+    const head = gitIn(this.root, ["rev-parse", "HEAD"]);
+    const edited = original.replace(
+      /"sealDigest":"[a-f0-9]{64}"/u,
+      `"sealDigest":"${"0".repeat(64)}"`,
+    );
+    assert.notEqual(edited, original, "編集の置換が空振りしています");
+    this.drifts = {};
+    const cases: Array<[string, () => void]> = [
+      ["edited", () => fs.writeFileSync(file, edited)],
+      ["removed", () => fs.unlinkSync(file)],
+    ];
+    for (const [label, mutate] of cases) {
+      mutate();
+      const result = await record(this.staging, 9);
+      assert.equal(result.status, 1, result.stdout);
+      this.drifts[label] =
+        `${result.stdout}\n${deliveryDiagnostic(this.staging, head)}`;
+      assert.equal(journalOf(this.staging), this.journalBefore);
+    }
+  },
+);
+
+Then(
+  "worktreeのplan-seal.jsonの不一致または欠落を名指しして拒否しjournalは変わらない",
+  function () {
+    assert.match(
+      this.drifts.edited ?? "",
+      /worktreeのplan-seal\.jsonがjournalの封印（Step 4）と一致しません[\s\S]*worktreeのplan-seal\.jsonがjournalの封印（Step 4）と一致しません/u,
+    );
+    assert.match(
+      this.drifts.removed ?? "",
+      /plan-seal\.jsonがworktreeにありません[\s\S]*plan-seal\.jsonがworktreeにありません/u,
+    );
+  },
+);
+
+Then("worktreeのplan-seal.jsonを戻すとStep 9を記録できる", async function () {
+  fs.writeFileSync(path.join(this.staging, PLAN_SEAL_JSON), this.original);
+  const result = await record(this.staging, 9);
+  assert.equal(result.status, 0, result.stdout);
+  assert.equal(lastEntry(this.staging).step, 9);
+});
+
+Then(
+  "版管理外stagingの配送直前検査とStep 10記録は従来どおり封印anchorで拒否しない",
+  function () {
+    assert.equal(fs.existsSync(path.join(this.staging, PLAN_SEAL_JSON)), false);
+    assert.doesNotThrow(() => assertPlanFrozen(this.staging));
+    assert.doesNotMatch(
+      deliveryError(this.staging),
+      /plan-seal\.json|計画封印がありません/u,
+    );
+    assert.equal(appendError(this.staging, quickEntry(10)), "");
+  },
+);
+
+Then(
+  "chainもplan-seal.jsonも持たない版管理下の旧journalは封印anchorで拒否しない",
+  function () {
+    const root = this.initRepo();
+    writeTrackedPolicySet(root);
+    fs.mkdirSync(path.join(root, ...TRACKED_ROOT.split("/")), {
+      recursive: true,
+    });
+    const staging = createIssueStaging(root, {
+      title: "plan-seal-legacy-tracked",
+      answers: answers(),
+      now: new Date("2026-09-26T00:00:00Z"),
+      requestedMode: "quick",
+      stagingRoot: TRACKED_ROOT,
+    }).path;
+    for (const [step, skillId] of [
+      [1, "step-01-request"],
+      [4, "step-04-issue-sync"],
+    ] as const)
+      appendLegacyJournal(
+        path.join(staging, STEP_JOURNAL_FILE),
+        `${JSON.stringify({
+          step,
+          skillId,
+          mode: "quick",
+          recordedAt: "2026-09-26T00:00:00.000Z",
+          artifacts: [REQUEST],
+          evidence: `sync digest ${SYNC_DIGEST}`,
+        })}\n`,
+      );
+    refreshStoredStagingDigest(staging);
+    gitIn(root, ["add", "-A"]);
+    gitIn(root, ["commit", "-q", "-m", "legacy staging"]);
+    assert.doesNotThrow(() => assertPlanFrozen(staging));
+    assert.equal(appendError(staging, quickEntry(9)), "");
+    /**
+     * **CLIの追記でchainが始まると旧journal互換は終わる。** 以後は同期checkpointの封印と
+     * plan-seal.jsonを要求し、旧形式の同期記録をchain付きjournalで使い続けない。
+     */
+    assert.match(appendError(staging, quickEntry(10)), SEAL_REMOVED);
+  },
+);
+
+Given(
+  "同期checkpointをHumanOverrideで記録したchain付きjournalと通常記録のjournalがある",
+  function () {
+    const override = {
+      issue: 1,
+      scope: "workflow.pr.create" as const,
+      instructedBy: "project owner",
+      instructedAt: "2026-09-26T00:00:00.000Z",
+      expiresAt: "2026-09-27T00:00:00.000Z",
+      reason: "同期checkpointの欠落を明示承認した",
+    };
+    const chained = (step: number, extra: Partial<StepJournalEntry> = {}) =>
+      quickEntry(step, { previousEntryDigest: "e".repeat(64), ...extra });
+    this.parsedEntries = [
+      chained(0, { previousEntryDigest: null }),
+      chained(1),
+      chained(4, { humanOverride: override }),
+    ];
+    this.journalBefore = JSON.stringify([
+      chained(0, { previousEntryDigest: null }),
+      chained(1),
+      chained(4),
+    ]);
+  },
+);
+
+When("封印anchorの判定をplan-seal.jsonの有無ごとに実行する", function () {
+  const normal = JSON.parse(this.journalBefore) as StepJournalEntry[];
+  const judge = (
+    entries: readonly StepJournalEntry[],
+    worktree: string | undefined,
+    history: readonly (string | undefined)[],
+  ): string =>
+    planSealAnchorViolation({
+      entries,
+      worktree,
+      committed: history[0],
+      history,
+      commit: "HEAD",
+    }) ?? "";
+  this.drifts = {
+    overrideAbsent: judge(this.parsedEntries, undefined, []),
+    overrideWorktree: judge(this.parsedEntries, "{}\n", []),
+    overrideHistory: judge(this.parsedEntries, undefined, ["{}\n"]),
+    normalAbsent: judge(normal, undefined, []),
+  };
+});
+
+Then(
+  "HumanOverrideだけの同期checkpointはplan-seal.jsonが無ければ受理し通常記録とplan-seal.jsonの残存は拒否する",
+  function () {
+    assert.equal(this.drifts.overrideAbsent, "");
+    assert.match(
+      this.drifts.overrideWorktree ?? "",
+      /plan-seal\.jsonがありますがjournalに計画封印がありません/u,
+    );
+    assert.match(
+      this.drifts.overrideHistory ?? "",
+      /plan-seal\.jsonがありますがjournalに計画封印がありません/u,
+    );
+    assert.match(
+      this.drifts.normalAbsent ?? "",
+      /同期checkpointが記録済みですがjournalに計画封印がありません/u,
+    );
+  },
+);
+
+Then(
+  "CLIのworkflow record Step 9は封印の除去を名指しして拒否しjournalは変わらない",
+  async function () {
+    const result = await record(this.staging, 9);
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stdout, SEAL_REMOVED);
+    assert.equal(journalOf(this.staging), this.journalBefore);
   },
 );

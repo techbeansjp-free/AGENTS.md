@@ -154,6 +154,111 @@ export function planSealDigest(seal: PlanSeal): string {
   return sha256Text(stableJson(seal));
 }
 
+// ---- 版管理下stagingの封印anchor（REQ-WF-036） ----
+
+/**
+ * 版管理下staging（`staging.tracked=true`）で封印をGitへ固定するfile。
+ * **`TRACKED_STAGING_GITIGNORE`へ入れない。** 機械記録（journal等）は版管理しないため、
+ * journalだけの封印は記録者が書き換えられる。封印をcommitへ載せ、独立reviewが読む
+ * Gitの差分と履歴をanchorにする。
+ */
+export const PLAN_SEAL_FILE = "plan-seal.json";
+export const PLAN_SEAL_FILE_SCHEMA = "agent-skill-chain/plan-seal/v1";
+
+/**
+ * `plan-seal.json`の正準本文。**journalの封印entryから一意に決まる。** 検査は本文を
+ * parseせずbyte列で比べるため、非正準な書式・未知field・値の食い違いは全て不一致になる。
+ */
+export function renderPlanSealFile(input: {
+  mode: Mode;
+  sealStep: number;
+  seal: PlanSeal;
+}): string {
+  return `${stableJson({
+    schemaVersion: PLAN_SEAL_FILE_SCHEMA,
+    mode: input.mode,
+    sealStep: input.sealStep,
+    planSeal: input.seal,
+    sealDigest: planSealDigest(input.seal),
+  })}\n`;
+}
+
+/**
+ * 版管理下stagingの封印anchorの判定（純関数）。返すのは拒否理由であり、成立すれば
+ * `undefined`を返す。
+ *
+ * - **旧journal互換**はjournalがhash chainを1行も持たず、`plan-seal.json`がworktreeにも
+ *   `commit`から到達できる履歴にも無いときだけ成立する。
+ * - 同期checkpoint（HumanOverride以外）が記録済みなら封印が必要である。CLIは同期
+ *   checkpointで必ず封印するため、封印の欠落は記録後の除去として扱う。
+ * - 封印があれば、worktreeと`commit`上の`plan-seal.json`はjournalの最新封印の正準本文と
+ *   byte一致し、`commit`から到達できる履歴上の各版はjournalに記録した封印のいずれかで
+ *   なければならない（削除した版を含めない）。quick/pocからfullへの昇格前の封印だけが
+ *   最新封印と異なる正当な版である。
+ */
+export function planSealAnchorViolation(input: {
+  entries: readonly {
+    step: number;
+    mode: Mode;
+    planSeal?: PlanSeal;
+    humanOverride?: unknown;
+    previousEntryDigest?: string | null;
+  }[];
+  worktree: string | undefined;
+  committed: string | undefined;
+  history: readonly (string | undefined)[];
+  commit: string;
+}): string | undefined {
+  const chained = input.entries.some(
+    (entry) => entry.previousEntryDigest !== undefined,
+  );
+  const anchored = input.worktree !== undefined || input.history.length > 0;
+  if (!chained && !anchored) return undefined;
+  const sealStepRecorded = input.entries.some(
+    (entry) =>
+      entry.step === planSealStep(entry.mode) &&
+      entry.humanOverride === undefined,
+  );
+  const latest = latestPlanSeal(input.entries);
+  if (latest === undefined) {
+    if (sealStepRecorded)
+      return `版管理下stagingの同期checkpointが記録済みですがjournalに計画封印がありません。CLIは同期checkpointで必ず封印するため、封印の除去として拒否します（${PLAN_SEAL_FILE}をGit上の封印anchorとして照合できません）`;
+    if (anchored)
+      return `版管理下stagingに${PLAN_SEAL_FILE}がありますがjournalに計画封印がありません。封印の除去として拒否します`;
+    return undefined;
+  }
+  const renderings = input.entries.flatMap((entry) =>
+    entry.planSeal
+      ? [
+          renderPlanSealFile({
+            mode: entry.mode,
+            sealStep: entry.step,
+            seal: entry.planSeal,
+          }),
+        ]
+      : [],
+  );
+  const latestEntry = input.entries[latest.index];
+  const expected = renderPlanSealFile({
+    mode: latestEntry?.mode ?? "full",
+    sealStep: latest.step,
+    seal: latest.seal,
+  });
+  if (input.worktree === undefined)
+    return `版管理下stagingの${PLAN_SEAL_FILE}がworktreeにありません。封印（Step ${latest.step}）のGit anchorが必要です`;
+  if (input.worktree !== expected)
+    return `版管理下stagingのworktreeの${PLAN_SEAL_FILE}がjournalの封印（Step ${latest.step}）と一致しません`;
+  if (input.committed === undefined)
+    return `版管理下stagingの${PLAN_SEAL_FILE}がcommit ${input.commit}にありません。封印（Step ${latest.step}）の${PLAN_SEAL_FILE}をcommitしてreviewの差分へ含めてから記録・配送してください`;
+  if (input.committed !== expected)
+    return `版管理下stagingのcommit ${input.commit}上の${PLAN_SEAL_FILE}がjournalの封印（Step ${latest.step}）と一致しません`;
+  if (input.history.some((version) => version === undefined))
+    return `版管理下stagingの${PLAN_SEAL_FILE}がcommit ${input.commit}の履歴上で削除されています。封印のGit anchorは削除できません`;
+  if (input.history.some((version) => !renderings.includes(version ?? "")))
+    return `版管理下stagingの${PLAN_SEAL_FILE}がcommit ${input.commit}の履歴上でjournalに無い封印へ書き換えられています。封印のGit anchorは書き換えできません`;
+  return undefined;
+}
+
 export function planGenerationDigest(
   previousDigest: string,
   amendments: readonly PlanAmendmentDigest[],

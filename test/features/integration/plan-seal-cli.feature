@@ -27,3 +27,8 @@ Feature: CLI経路でのstaging digest不一致の診断
     When AMD-001をcommitせずにStep 9を記録する
     Then commit上の05_計画変更.mdの不一致を名指しして拒否しjournalは変わらない
     And AMD-001をcommitするとStep 9は世代2を記録する
+
+  Scenario: SCN-INT-PLANSEAL-006 CLIのStep 9記録は版管理下stagingの封印格下げを拒否する
+    Given Step 4で封印した版管理下quick stagingとcommit済みrepositoryがある
+    When journalの全行からchainと封印と計画世代を除きstaging digestを再固定する
+    Then CLIのworkflow record Step 9は封印の除去を名指しして拒否しjournalは変わらない

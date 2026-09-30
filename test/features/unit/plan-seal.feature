@@ -142,3 +142,36 @@ Feature: 承認済み計画の封印と計画変更記録
     When 旧journalへCLIでStep 9を追記する
     Then 旧journalは構造検査を通りStep 9行だけがchainを持つ
     And Step 9より前の旧行を編集するとchainの不一致として拒否される
+
+  Scenario: SCN-UNIT-PLANSEAL-026 版管理下stagingの封印Step記録は封印をGitへ固定するplan-seal.jsonを書く
+    Given Step 4で封印した版管理下quick stagingとcommit済みrepositoryがある
+    Then plan-seal.jsonはjournalの封印から決まる正準本文を持ち版管理対象としてcommitに入る
+    And 版管理外stagingの封印Step記録はplan-seal.jsonを書かない
+
+  Scenario: SCN-UNIT-PLANSEAL-027 版管理下stagingでjournalのchainと封印を除く格下げはStep 10記録と配送とreview roundが拒否する
+    Given Step 9まで記録しcommitした版管理下quick stagingがある
+    When journalの全行からchainと封印と計画世代を除きstaging digestを再固定する
+    Then Step 10記録と配送headのdelivery直前検査とreview roundは封印の除去を名指しして拒否しjournalは変わらない
+    And worktreeのplan-seal.jsonも削除するとcommit履歴上の封印anchorにより同じく拒否する
+
+  Scenario: SCN-UNIT-PLANSEAL-028 commit上のplan-seal.jsonの削除・編集・履歴上の書き換えを拒否する
+    Given Step 4で封印した版管理下quick stagingとcommit済みrepositoryがある
+    When commit上のplan-seal.jsonを削除・編集・履歴上で書き換えた各状態でStep 9を記録し配送直前検査を実行する
+    Then 各状態はcommit上のplan-seal.jsonの欠落・不一致・履歴上の削除・書き換えを名指しして拒否しjournalは変わらない
+
+  Scenario: SCN-UNIT-PLANSEAL-029 worktreeのplan-seal.jsonがcommitと食い違うと拒否する
+    Given Step 4で封印した版管理下quick stagingとcommit済みrepositoryがある
+    When worktreeのplan-seal.jsonを編集または削除してStep 9を記録し配送直前検査を実行する
+    Then worktreeのplan-seal.jsonの不一致または欠落を名指しして拒否しjournalは変わらない
+    And worktreeのplan-seal.jsonを戻すとStep 9を記録できる
+
+  Scenario: SCN-UNIT-PLANSEAL-030 版管理外stagingと版管理下の旧journalは封印anchorを要求しない
+    Given Step 9まで記録したchain付きquick stagingがある
+    When 版管理外stagingのjournalの全行からchainと封印と計画世代を除く
+    Then 版管理外stagingの配送直前検査とStep 10記録は従来どおり封印anchorで拒否しない
+    And chainもplan-seal.jsonも持たない版管理下の旧journalは封印anchorで拒否しない
+
+  Scenario: SCN-UNIT-PLANSEAL-031 HumanOverrideの同期checkpointは封印を作らないため封印anchorを要求しない
+    Given 同期checkpointをHumanOverrideで記録したchain付きjournalと通常記録のjournalがある
+    When 封印anchorの判定をplan-seal.jsonの有無ごとに実行する
+    Then HumanOverrideだけの同期checkpointはplan-seal.jsonが無ければ受理し通常記録とplan-seal.jsonの残存は拒否する

@@ -2,9 +2,10 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { assertIssueStagingLocation } from "../domain/staging-layout.js";
+import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
 import { GIT_ENV } from "./review-diff.js";
-import { changedSealedArtifacts, deliveredAmendmentViolation, latestPlanGeneration, latestPlanSeal, nextPlanGeneration, PLAN_AMENDMENT_FILE, PLAN_SEAL_ARTIFACTS, planAmendmentDigests, planFrozenMessage, validatePlanAmendment, } from "../domain/plan-seal.js";
+import { changedSealedArtifacts, deliveredAmendmentViolation, latestPlanGeneration, latestPlanSeal, nextPlanGeneration, PLAN_AMENDMENT_FILE, PLAN_SEAL_ARTIFACTS, PLAN_SEAL_FILE, planAmendmentDigests, planFrozenMessage, planSealAnchorViolation, renderPlanSealFile, validatePlanAmendment, } from "../domain/plan-seal.js";
 /**
  * 計画封印の成果物I/O（REQ-WF-036）。封印値は**成果物fileからだけ**計算し、
  * 利用者入力を受け取る引数を持たない。
@@ -84,11 +85,80 @@ function readCommittedAmendment(staging, commit) {
     ], location.repositoryRoot, { env: GIT_ENV, allowFailure: true });
     return result.status === 0 ? result.stdout : undefined;
 }
+/** 版管理下stagingなら封印anchorのrepository相対pathを返す。版管理外は`undefined`。 */
+function trackedPlanSealPath(staging) {
+    const location = assertIssueStagingLocation(staging);
+    if (!location.layout.tracked)
+        return undefined;
+    return {
+        repositoryRoot: location.repositoryRoot,
+        relative: `${location.relative}/${PLAN_SEAL_FILE}`,
+    };
+}
+function committedBlob(repositoryRoot, commit, relative) {
+    const result = git(["cat-file", "blob", `${commit}:./${relative}`], repositoryRoot, {
+        env: GIT_ENV,
+        allowFailure: true,
+    });
+    return result.status === 0 ? result.stdout : undefined;
+}
+/**
+ * 版管理下stagingの封印を`plan-seal.json`へ書く（REQ-WF-036）。封印Stepのjournal追記が
+ * publish直前に呼ぶ。版管理外stagingでは書かず`undefined`を返す。戻り値は失敗時に
+ * 元へ戻す関数である（既存fileは元の本文へ、無かったfileは削除へ戻す）。
+ */
+export function writeTrackedPlanSealFile(staging, input) {
+    if (trackedPlanSealPath(staging) === undefined)
+        return undefined;
+    const previous = readPlanningFile(staging, PLAN_SEAL_FILE);
+    const destination = path.join(staging, PLAN_SEAL_FILE);
+    const options = {
+        temporaryDirectory: path.dirname(staging),
+        fileMode: 0o644,
+    };
+    writeFileAtomic(destination, renderPlanSealFile(input), options);
+    return () => {
+        if (previous === undefined)
+            fs.rmSync(destination, { force: true });
+        else
+            writeFileAtomic(destination, previous.toString("utf8"), options);
+    };
+}
+/**
+ * 版管理下stagingの封印anchorを検査する（REQ-WF-036）。**journal（版管理外の機械記録）
+ * だけの封印は記録者がchainごと除去できる**ため、worktreeと`commit`上の
+ * `plan-seal.json`、`commit`から到達できるその履歴をjournalの封印と照合する。
+ * 版管理外stagingでは検査しない（機械記録だけがanchorである）。
+ */
+export function assertPlanSealAnchor(staging, entries, commit = "HEAD") {
+    const tracked = trackedPlanSealPath(staging);
+    if (tracked === undefined)
+        return;
+    const { repositoryRoot, relative } = tracked;
+    const listed = git(["rev-list", commit, "--", relative], repositoryRoot, { env: GIT_ENV, allowFailure: true });
+    if (listed.status !== 0)
+        throw new Error(`版管理下stagingの${PLAN_SEAL_FILE}の履歴をcommit ${commit}から読めません。封印のGit anchorを確認できないため拒否します`);
+    const history = listed.stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((sha) => committedBlob(repositoryRoot, sha, relative));
+    const violation = planSealAnchorViolation({
+        entries,
+        worktree: readPlanningFile(staging, PLAN_SEAL_FILE)?.toString("utf8"),
+        committed: committedBlob(repositoryRoot, commit, relative),
+        history,
+        commit,
+    });
+    if (violation)
+        throw new Error(violation);
+}
 /**
  * 封印後の計画凍結と計画変更記録を検査し、記録すべき計画世代を返す（REQ-WF-036）。
  * **封印が無いjournal（本機構以前のstaging）では検査せず`undefined`を返す。**
  * hash chain付きjournalでは封印Stepの`planSeal`欠落をparserが拒否するため、この互換は
- * chainを持たない旧journalにだけ成立する。
+ * chainを持たない旧journalにだけ成立する。版管理下stagingでは先に封印anchor
+ * （`plan-seal.json`）を検査し、旧journal互換はchainも`plan-seal.json`も無い場合に限る。
  *
  * 1. 封印済み計画文書はworktreeと、版管理下stagingでは`commit`（既定はHEAD。配送時は
  *    配送するhead SHA）上の内容の両方で封印と一致しなければならない。
@@ -99,6 +169,7 @@ function readCommittedAmendment(staging, commit) {
  *    Step 10記録後に追記した未reviewのAMDを配送へ乗せない。
  */
 export function assertPlanFrozenForEntries(staging, entries, commit = "HEAD", options = {}) {
+    assertPlanSealAnchor(staging, entries, commit);
     const latest = latestPlanSeal(entries);
     if (latest === undefined)
         return undefined;

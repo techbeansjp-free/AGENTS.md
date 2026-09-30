@@ -15,7 +15,7 @@ import { DELIVERY_STATE_FILE, parseDeliveryState, } from "../domain/delivery-sta
 import { POC_OBSERVATION_DIRECTORY, pocObservationArtifact, validatePocObservationEvidence, } from "../domain/poc-observation.js";
 import { assertPocHeadChangeScope, executePocSandboxObservation, } from "./poc-execution.js";
 import { isPlanFrozenCheckStep, planResealRejection, planSealStep, stagingDriftDiagnostic, } from "../domain/plan-seal.js";
-import { assertPlanFrozenForEntries, changedPlanningSince, computePlanSeal, } from "./plan-seal.js";
+import { assertPlanFrozenForEntries, changedPlanningSince, computePlanSeal, writeTrackedPlanSealFile, } from "./plan-seal.js";
 export { calculatePocFixtureDigest } from "./poc-execution.js";
 const packageRoot = findPackageRoot(import.meta.url);
 const issueTemplateRoot = path.join(packageRoot, ".agent-skill-chain", "templates", "issue");
@@ -541,7 +541,28 @@ function appendWorkflowJournalEntryLocked(staging, entry, headSha, expectedStagi
             currentPath.mtimeMs !== before.mtimeMs ||
             fs.readFileSync(journal, "utf8") !== pinnedSource)
             throw new Error("workflow journalがatomic publish前に変更されました");
-        fs.renameSync(temporary, journal);
+        /**
+         * **版管理下stagingでは封印をGitへ固定するfileも書く**（REQ-WF-036）。journalは
+         * 版管理しない機械記録であり、記録者がchainごと封印を除去できるためである。
+         * journalのpublishより前に書き、publishに失敗したら元へ戻す。publish前に停止して
+         * fileだけが残った場合は、封印の無いjournalとの不一致として検査が拒否し、
+         * 封印Stepの再記録が上書きする。
+         */
+        const sealed = entryToWrite.planSeal;
+        const restorePlanSealFile = sealed === undefined
+            ? undefined
+            : writeTrackedPlanSealFile(staging, {
+                mode: entryToWrite.mode,
+                sealStep: entryToWrite.step,
+                seal: sealed,
+            });
+        try {
+            fs.renameSync(temporary, journal);
+        }
+        catch (error) {
+            restorePlanSealFile?.();
+            throw error;
+        }
         fsyncDirectory(path.dirname(journal));
         fsyncDirectory(path.dirname(staging));
     }

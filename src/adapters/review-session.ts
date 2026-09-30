@@ -33,6 +33,7 @@ import {
   describeStagingDigestDrift,
   readWorkflowJournal,
 } from "./workflow-journal.js";
+import { assertPlanSealAnchor } from "./plan-seal.js";
 import { evidenceOnlySuffix, observeReviewDiff } from "./review-diff.js";
 import {
   isDefaultBranchFollowMerge,
@@ -504,6 +505,18 @@ function refixStagingDigestForRound(staging: string): void {
     throw new Error(
       `workflow journalが不正なためreview roundのstaging digest再固定を拒否しました: ${journal.errors.join("; ")}`,
     );
+  /**
+   * **版管理下stagingでは封印のGit anchorも照合してから再固定する**（REQ-WF-036）。
+   * chainと封印をjournalから除去した改変を、現在の内容として固定しない。
+   */
+  try {
+    assertPlanSealAnchor(staging, journal.entries, "HEAD");
+  } catch (error) {
+    throw new Error(
+      `計画封印のGit anchorが不正なためreview roundのstaging digest再固定を拒否しました: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
   const stored = readStoredStagingRecord(staging);
   const artifacts = listStagingArtifacts(staging);
   if (
