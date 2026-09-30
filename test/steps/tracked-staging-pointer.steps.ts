@@ -586,6 +586,35 @@ Given(
   "版管理下のdocs issuesへpointer本文で同期するproject policyを持つrepositoryがある",
   function () {
     this.root = this.initRepo();
+    /**
+     * **このscenarioは「fixtureにoriginが無いため既定branchの解決で止まる」
+     * ことを検証する（後段の`stagingの配置は受理され次の既定branch解決へ
+     * 進む`）。** `initRepo()`はIssue #1495是正（review round --initの
+     * `--base`検証）のため`refs/remotes/origin/HEAD`を既定で設定するように
+     * なったが、このscenarioの前提（既定branch未解決）とは相容れない。
+     * 前提を保つため明示的に削除する。
+     */
+    /**
+     * **`refs/remotes/origin/HEAD`はsymbolic refであり`update-ref -d
+     * refs/remotes/origin/HEAD`では消えない。** 実測（Step 10 round 4独立
+     * reviewが訂正）: `update-ref -d`はsymbolic refをそのまま消すのではなく
+     * **symrefをたどった先（`refs/remotes/origin/main`）を削除する**。
+     * `HEAD`自身のfile（`ref: refs/remotes/origin/main`という中身のsymbolic
+     * ref）は残り、参照先を失ってdanglingになるだけで、`git symbolic-ref
+     * --short refs/remotes/origin/HEAD`は`main`という文字列を返し続ける
+     * （`rev-parse`で解決しようとして初めて失敗する）。symref自体を消すには
+     * `symbolic-ref --delete`を明示的に呼ぶ必要がある。
+     */
+    execFileSync(
+      "git",
+      ["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"],
+      {
+        cwd: this.root,
+      },
+    );
+    execFileSync("git", ["update-ref", "-d", "refs/remotes/origin/main"], {
+      cwd: this.root,
+    });
     writeCompletePolicySet(this.root, TRACKED_POINTER_STAGING);
     execFileSync("git", ["add", "-A"], { cwd: this.root });
     execFileSync("git", ["commit", "-q", "-m", "policy"], { cwd: this.root });

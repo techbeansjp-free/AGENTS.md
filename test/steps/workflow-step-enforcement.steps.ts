@@ -87,6 +87,7 @@ import { checkWorkflowStepDocument } from "../../scripts/check_conformance.js";
 import { checkWorkflowSteps } from "../../scripts/check_workflow_steps.js";
 import { composeWorkflowAdvanceIssueBody, main } from "../../src/cli.js";
 import {
+  buildReviewRoundDraft,
   observeReviewDiff,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
@@ -94,7 +95,11 @@ import {
   advanceReviewSession,
   parseReviewRoundInput,
 } from "../../src/domain/review-convergence.js";
-import { renderReviewEvidence } from "../../src/domain/review-evidence.js";
+import {
+  parseReviewEvidence,
+  renderReviewEvidence,
+  type ReviewEvidence,
+} from "../../src/domain/review-evidence.js";
 import { PLAN_AMENDMENT_FILE } from "../../src/domain/plan-seal.js";
 import { readStoredReviewSession } from "../../src/adapters/review-session-store.js";
 import {
@@ -2612,6 +2617,17 @@ function preparePullRequest(
    * scenarioは、review sessionと一致する証跡を`H_final`に持つ必要がある。
    */
   separateArtifact = false,
+  /**
+   * **`implementation.txt`の既定commitを置き換える差し込み点（Issue #1495）。**
+   *
+   * merge-base-audit E2E fixtureは、実装commit自体をT→M(既定branch前進)→merge→
+   * revertという特定のgraph形状で作る必要がある。このhookはHEADがbaseSha上に
+   * checkoutされた時点で呼ばれ、戻り値なしでrepositoryへ直接commitする。
+   * hookが返った後のHEADが新しい実装commitとして扱われる。**未指定時は
+   * 既存の`implementation.txt`単一commitのまま**であり、他の900件超の既存
+   * scenarioの観測値は1byteも変わらない。
+   */
+  customImplementationCommit?: (root: string, baseSha: string) => void,
 ): PreparedPullRequest {
   const fixturePast = fixtureInstant({ hoursAgo: 1 });
   const fixtureNow = fixtureInstant();
@@ -2690,11 +2706,17 @@ function preparePullRequest(
     (mergeMode !== "disabled" || separateArtifact) &&
     workflowMode !== "poc"
   ) {
-    fs.writeFileSync(path.join(root, "implementation.txt"), "product change\n");
-    spawnSync("git", ["add", "implementation.txt"], { cwd: root });
-    spawnSync("git", ["commit", "-q", "-m", "implementation"], {
-      cwd: root,
-    });
+    if (customImplementationCommit) customImplementationCommit(root, baseSha);
+    else {
+      fs.writeFileSync(
+        path.join(root, "implementation.txt"),
+        "product change\n",
+      );
+      spawnSync("git", ["add", "implementation.txt"], { cwd: root });
+      spawnSync("git", ["commit", "-q", "-m", "implementation"], {
+        cwd: root,
+      });
+    }
   }
   const implementationCommitSha = spawnSync("git", ["rev-parse", "HEAD"], {
     cwd: root,
@@ -2784,12 +2806,22 @@ function preparePullRequest(
   const reviewCandidateHeadSha = separatedReviewArtifact
     ? implementationCommitSha
     : headSha;
-  const reviewBaseSha = separatedReviewArtifact
-    ? spawnSync("git", ["rev-parse", `${implementationCommitSha}^`], {
-        cwd: root,
-        encoding: "utf8",
-      }).stdout.trim()
-    : baseSha;
+  /**
+   * **通常は`implementationCommitSha^`（直接の親）を使う。** 通常のfixtureは
+   * `implementationCommitSha`が常に`baseSha`の直接の子（単一親）であり、
+   * これは`baseSha`と同値になる。**`customImplementationCommit`を渡した
+   * fixture（Issue #1495）はこの前提を壊す。** 実装commitがmerge commitを
+   * 経由する複数親graphになりうるため、`implementationCommitSha^`は
+   * `baseSha`と一致しない。宣言済み`baseSha`をそのまま使う。
+   */
+  const reviewBaseSha = customImplementationCommit
+    ? baseSha
+    : separatedReviewArtifact
+      ? spawnSync("git", ["rev-parse", `${implementationCommitSha}^`], {
+          cwd: root,
+          encoding: "utf8",
+        }).stdout.trim()
+      : baseSha;
   const branchRef = separatedReviewArtifact
     ? spawnSync("git", ["symbolic-ref", "--short", "HEAD"], {
         cwd: root,
@@ -3332,6 +3364,8 @@ function prepareDeliveryCli(
     | "extra-file"
     | "stale-verification" = "valid",
   separateArtifact = false,
+  /** `preparePullRequest`の同名引数への素通し（Issue #1495）。 */
+  customImplementationCommit?: (root: string, baseSha: string) => void,
 ): PreparedDeliveryCli {
   const prepared = preparePullRequest(
     world,
@@ -3343,6 +3377,7 @@ function prepareDeliveryCli(
     requiredReviews,
     artifactDisposition,
     separateArtifact,
+    customImplementationCommit,
   );
   const stubDirectory = world.temp("asc-delivery-cli-gh-");
   const stub = path.join(stubDirectory, "gh");
@@ -4001,6 +4036,327 @@ function createDeliveryPullRequest(prepared: PreparedDeliveryCli) {
   );
   assert.equal(result.status, 0, result.stdout + result.stderr);
   return result;
+}
+
+/**
+ * merge-base-audit攻撃fixtureの実装commitを作る（Issue #1495）。
+ *
+ * `baseSha`(T)を検分中に既定branchが`advancedBaseSha`(M)へ前進し、candidateが
+ * Mをmergeしてから即座に同じ変更を打ち消す、という実際のgraph形状を作る。
+ *
+ * 1. `baseSha`から独立したbranchでMを作る（`advanceFile`を追加した1 commit）
+ * 2. 元のbranchへ戻り、通常の`implementation.txt`commit（=C）を積む
+ * 3. Mを`--no-ff`でmergeする（2親、tree = Cのtree + advanceFile）
+ * 4. `advanceFile`を取り除くcommitを積む（treeがCのtreeへ厳密に戻る）
+ *
+ * 結果として最終commitのbaseSha(T)からの差分はCと1byteも変わらない
+ * （review evidenceの`diffDigest`は不変のまま）が、`git merge-base`はM自身に
+ * 前進する。`refs/remotes/origin/main`もMへ更新するので、呼び出し側は
+ * `advancedBaseSha`を`prepareDeliveryCli`のcontrol（`remoteBaseSha`）へ
+ * 反映させるだけでよい。
+ */
+function buildDefaultBranchMergeRevertAttack(
+  root: string,
+  baseSha: string,
+  options: { advanceFile?: string; advanceBranch?: string } = {},
+): { advancedBaseSha: string; implementationCommitSha: string } {
+  const advanceFile = options.advanceFile ?? "downstream-guard.txt";
+  const advanceBranch = options.advanceBranch ?? "asc-1495-advance";
+  const run = (args: string[]): string => {
+    const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+    assert.equal(result.status, 0, `git ${args.join(" ")}\n${result.stderr}`);
+    return result.stdout.trim();
+  };
+  const originalBranch = run(["symbolic-ref", "--short", "HEAD"]);
+  run(["checkout", "-q", "-b", advanceBranch, baseSha]);
+  fs.writeFileSync(
+    path.join(root, advanceFile),
+    "default branch advance (Issue #1495 attack fixture)\n",
+  );
+  run(["add", "--", advanceFile]);
+  run([
+    "commit",
+    "-q",
+    "-m",
+    "default branch advance (Issue #1495 attack fixture)",
+  ]);
+  const advancedBaseSha = run(["rev-parse", "HEAD"]);
+  run(["update-ref", "refs/remotes/origin/main", advancedBaseSha]);
+  run(["checkout", "-q", originalBranch]);
+  fs.writeFileSync(path.join(root, "implementation.txt"), "product change\n");
+  run(["add", "implementation.txt"]);
+  run(["commit", "-q", "-m", "implementation"]);
+  run([
+    "merge",
+    "--no-ff",
+    "-q",
+    advanceBranch,
+    "-m",
+    "merge default branch advance (Issue #1495 attack fixture)",
+  ]);
+  run(["rm", "-q", "--", advanceFile]);
+  run([
+    "commit",
+    "-q",
+    "-m",
+    "revert default branch file (Issue #1495 attack fixture)",
+  ]);
+  const implementationCommitSha = run(["rev-parse", "HEAD"]);
+  run(["branch", "-D", advanceBranch]);
+  return { advancedBaseSha, implementationCommitSha };
+}
+
+/**
+ * PR create後、既存の`parentSha`（H_impl）へ同型のmerge-revert攻撃を積み、rebase
+ * 経路の再固定用に新しいH_final（review evidence 1件だけを加えた単一親commit）
+ * まで作る（Issue #1495、AC-004）。branchのcurrent HEADは動かさず、最後に
+ * `originalRef`を新H_finalへ強制的に進める（`resolveImplementationCommitForMerge`が
+ * current HEADと申告headの一致を要求するため）。
+ *
+ * `oldEvidence`は書き換え前のreview evidenceオブジェクトであり、新評価は
+ * `resealObservedEvidence(oldEvidence, {implementationHeadSha})`で作る。
+ * 比較基点・reviewer・implementer・session・diffDigestは変えないため、
+ * `evaluateEvidenceReanchor`の`rebase`等価性判定（`comparableReviewEvidence`）が
+ * 素通りする。
+ */
+function buildRebaseMergeRevertAttack(
+  root: string,
+  input: {
+    parentSha: string;
+    baseSha: string;
+    oldEvidence: ReviewEvidence;
+    artifactPath: string;
+  },
+  options: { advanceFile?: string; advanceBranch?: string } = {},
+): {
+  advancedBaseSha: string;
+  implementationCommitSha: string;
+  finalHeadSha: string;
+} {
+  const advanceFile = options.advanceFile ?? "downstream-guard.txt";
+  const advanceBranch = options.advanceBranch ?? "asc-1495-rebase-advance";
+  const run = (args: string[]): string => {
+    const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+    assert.equal(result.status, 0, `git ${args.join(" ")}\n${result.stderr}`);
+    return result.stdout.trim();
+  };
+  const originalRef = run(["symbolic-ref", "--short", "HEAD"]);
+  run(["checkout", "-q", "-b", advanceBranch, input.baseSha]);
+  fs.writeFileSync(
+    path.join(root, advanceFile),
+    "default branch advance (Issue #1495 attack fixture)\n",
+  );
+  run(["add", "--", advanceFile]);
+  run([
+    "commit",
+    "-q",
+    "-m",
+    "default branch advance (Issue #1495 attack fixture)",
+  ]);
+  const advancedBaseSha = run(["rev-parse", "HEAD"]);
+  run(["update-ref", "refs/remotes/origin/main", advancedBaseSha]);
+  run(["checkout", "-q", "--detach", input.parentSha]);
+  run([
+    "merge",
+    "--no-ff",
+    "-q",
+    advanceBranch,
+    "-m",
+    "merge default branch advance (Issue #1495 attack fixture)",
+  ]);
+  run(["rm", "-q", "--", advanceFile]);
+  run([
+    "commit",
+    "-q",
+    "-m",
+    "revert default branch file (Issue #1495 attack fixture)",
+  ]);
+  const implementationCommitSha = run(["rev-parse", "HEAD"]);
+  const newContent = resealObservedEvidence(input.oldEvidence, {
+    implementationHeadSha: implementationCommitSha,
+  });
+  const artifactFile = path.join(root, input.artifactPath);
+  fs.mkdirSync(path.dirname(artifactFile), { recursive: true });
+  fs.writeFileSync(artifactFile, newContent);
+  run(["add", "--", input.artifactPath]);
+  run(["commit", "-q", "-m", "review evidence (Issue #1495 attack fixture)"]);
+  const finalHeadSha = run(["rev-parse", "HEAD"]);
+  run(["checkout", "-q", "-B", originalRef, finalHeadSha]);
+  run(["branch", "-D", advanceBranch]);
+  return { advancedBaseSha, implementationCommitSha, finalHeadSha };
+}
+
+/**
+ * **同一round内の部分的hunk revert攻撃（Issue #1495、round 3独立reviewの
+ * High指摘。SCN-MERGE-BASE-AUDIT-010専用、`buildDefaultBranchMergeRevertAttack`
+ * とは意図的に異なる形状）。**
+ *
+ * `buildDefaultBranchMergeRevertAttack`は既定branchが**新しいfile丸ごと**を
+ * 追加し、candidateがその**file全体**を取り除いて打ち消す。この場合、
+ * `T..H_impl`のchanged-path集合にも`M..H_impl`のchanged-path集合にも
+ * `downstream-guard.txt`という同じpathが現れるため、path集合の突合だけでも
+ * 検出できてしまう——**このpathが「一度も現れない」ことを検出する旧設計が
+ * 通っていた理由そのものである。**
+ *
+ * この関数はそれとは異なる、より狭い形状を作る。**既定branchの前進もcandidate
+ * 自身の正当な変更も、同じ既存file `shared.txt`の別々の行（別々のhunk）を
+ * 変更する。** candidateはMをmergeしたのち、M由来のhunkだけを厳密に
+ * revertし、自分のhunkはそのまま残す。結果として:
+ *
+ * - `T..H_impl`（round 1が実際にreviewした範囲）には、candidate自身のhunkの
+ *   変更**だけ**が現れる（Mのhunkは merge→revert でnetが0になり、この範囲では
+ *   一度も変化していないように見える）。
+ * - しかし`M..H_impl`（実際の`merge-base`から見た範囲）には**両方の**hunkの
+ *   変更が現れる——`shared.txt`というpath自体は両方の範囲に共通して現れるため
+ *   （path集合はどちらも`{shared.txt}`で完全に一致する）、changed-path部分集合
+ *   検査は素通りする。**content（diff digest）を実際に再計算して比較する
+ *   gateだけがこの非対称性を検出できる。**
+ */
+function buildPartialHunkRevertAttack(
+  root: string,
+  baseSha: string,
+  options: { advanceBranch?: string } = {},
+): { advancedBaseSha: string; implementationCommitSha: string } {
+  const sharedFile = "shared.txt";
+  const advanceBranch = options.advanceBranch ?? "asc-1495-hunk-advance";
+  const run = (args: string[]): string => {
+    const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+    assert.equal(result.status, 0, `git ${args.join(" ")}\n${result.stderr}`);
+    return result.stdout.trim();
+  };
+  const sharedFilePath = path.join(root, sharedFile);
+  const originalLines = [
+    "line1 original",
+    "line2 original",
+    "line3 original",
+    "line4 original",
+    "line5 original",
+  ];
+  const originalBranch = run(["symbolic-ref", "--short", "HEAD"]);
+  // T2: baseSha（T）の直接の子として、両側が分岐する前にsharedFileを置く。
+  // T2自体はT..H_implの正当なreviewed diffの一部（fileの新規追加）になる。
+  run(["checkout", "-q", "-B", originalBranch, baseSha]);
+  fs.writeFileSync(sharedFilePath, `${originalLines.join("\n")}\n`);
+  run(["add", "--", sharedFile]);
+  run(["commit", "-q", "-m", "shared.txt baseline (Issue #1495 fixture)"]);
+  const sharedBaseline = run(["rev-parse", "HEAD"]);
+  // 既定branchの前進（M）: line2だけを書き換える（downstream由来のhunk）。
+  run(["checkout", "-q", "-b", advanceBranch, sharedBaseline]);
+  const advancedLines = [...originalLines];
+  advancedLines[1] = "line2 changed-by-default-branch-advance";
+  fs.writeFileSync(sharedFilePath, `${advancedLines.join("\n")}\n`);
+  run(["add", "--", sharedFile]);
+  run([
+    "commit",
+    "-q",
+    "-m",
+    "default branch advance: hunk on line2 (Issue #1495 fixture)",
+  ]);
+  const advancedBaseSha = run(["rev-parse", "HEAD"]);
+  run(["update-ref", "refs/remotes/origin/main", advancedBaseSha]);
+  // candidate自身の正当な変更: line4だけを書き換える（Mのhunkとは別のhunk）。
+  run(["checkout", "-q", originalBranch]);
+  const candidateLines = [...originalLines];
+  candidateLines[3] = "line4 changed-by-candidate (legitimate)";
+  fs.writeFileSync(sharedFilePath, `${candidateLines.join("\n")}\n`);
+  run(["add", "--", sharedFile]);
+  run([
+    "commit",
+    "-q",
+    "-m",
+    "candidate change: hunk on line4 (Issue #1495 fixture)",
+  ]);
+  // Mを取り込む（--no-ff）。この時点でline2・line4の両方の変更が同居する。
+  run([
+    "merge",
+    "--no-ff",
+    "-q",
+    advanceBranch,
+    "-m",
+    "merge default branch advance (Issue #1495 fixture)",
+  ]);
+  const merged = fs.readFileSync(sharedFilePath, "utf8");
+  const expectedMerged = [...originalLines];
+  expectedMerged[1] = advancedLines[1]!;
+  expectedMerged[3] = candidateLines[3]!;
+  assert.equal(
+    merged,
+    `${expectedMerged.join("\n")}\n`,
+    "mergeがline2・line4の両方の変更を素直に取り込んでいません",
+  );
+  // Mが導入したhunk（line2）だけを厳密にrevertする。line4は残す。
+  const revertedLines = [...candidateLines];
+  revertedLines[1] = originalLines[1]!;
+  fs.writeFileSync(sharedFilePath, `${revertedLines.join("\n")}\n`);
+  run(["add", "--", sharedFile]);
+  run([
+    "commit",
+    "-q",
+    "-m",
+    "revert only the M-introduced hunk on line2 (Issue #1495 attack fixture)",
+  ]);
+  const implementationCommitSha = run(["rev-parse", "HEAD"]);
+  run(["branch", "-D", advanceBranch]);
+  // fixtureの前提を実Gitで検算する: T..H_implのpath集合とM..H_implのpath集合が
+  // 完全に一致すること（どちらも{shared.txt}）——これが「path集合の突合だけでは
+  // 検出できない」ことの直接証拠であり、そうでなければこのfixtureは
+  // SCN-MERGE-BASE-AUDIT-001と同じ「新規path」型に戻ってしまっている。
+  const pathsFromReviewedBase = run([
+    "diff",
+    "--name-only",
+    baseSha,
+    implementationCommitSha,
+  ])
+    .split("\n")
+    .filter(Boolean)
+    .sort();
+  const pathsFromActualBase = run([
+    "diff",
+    "--name-only",
+    advancedBaseSha,
+    implementationCommitSha,
+  ])
+    .split("\n")
+    .filter(Boolean)
+    .sort();
+  assert.deepEqual(
+    pathsFromReviewedBase,
+    [sharedFile],
+    "fixtureの前提: T..H_implのchanged pathはshared.txtだけのはず",
+  );
+  assert.deepEqual(
+    pathsFromActualBase,
+    [sharedFile],
+    "fixtureの前提: M..H_implのchanged pathもshared.txtだけのはず（path集合は" +
+      "T..H_implと完全に一致し、path集合突合だけでは区別できないはず）",
+  );
+  // T2（shared.txtが最初に存在する共通祖先）..H_implのnet diffに、Mが導入した
+  // 変更値（"changed-by-default-branch-advance"）が一度も現れないこと（round 1が
+  // honestに見て「line4だけが変わった」と結論づけられる、この攻撃の核心）を
+  // 検算する。T..H_implの範囲全体で見るとshared.txt自体が新規fileとして丸ごと
+  // 現れるため（Tにはfileが無い）、この検算はより狭いT2..H_implの範囲で行う
+  // 必要がある——round 1のreviewerが実際に目にする最終行はT..H_implの範囲でも
+  // 変わらないが、「Mのhunkが一度も見えない」という主張自体はT2..H_implの範囲で
+  // しか意味を持たない。
+  const reviewedDiff = run([
+    "diff",
+    sharedBaseline,
+    implementationCommitSha,
+    "--",
+    sharedFile,
+  ]);
+  assert.doesNotMatch(
+    reviewedDiff,
+    /changed-by-default-branch-advance/u,
+    "fixtureの前提: T2..H_implの差分にMが導入した変更値が一度も現れないはず" +
+      "（Mのhunkがnetで0になっていない）",
+  );
+  assert.match(
+    reviewedDiff,
+    /line4/u,
+    "fixtureの前提: T..H_implの差分にcandidate自身のline4変更が現れるはず",
+  );
+  return { advancedBaseSha, implementationCommitSha };
 }
 
 /** provider既定branchをHEADと親子関係のないexact commitへ進める。 */
@@ -5126,6 +5482,21 @@ if (exact(["auth", "status"])) {
        * 実CLIの`pr reanchor`（dry-run、apply）→実CLIの`pr merge --dry-run`。
        * 固定済み`create.headSha`（`H_final0`）にはAMDが無いため、固定値のまま
        * 検査すると計画変更記録の不一致としてmerge前に拒否される。
+       *
+       * **Issue #1495暫定guard（Issue #1544解決まで）により、`pr merge --dry-run`の
+       * 最終結果は拒否へ変わる。** `assertWorkflowReadyForDelivery`
+       * （`inspectAuthorizedPullRequestMerge`より前に呼ばれる）は`deriveEffectiveHead`が
+       * 導出した実効HEAD（reanchor後の`H_final1`／`H_impl1`）で計画凍結を検査するため、
+       * ここまでは今までどおり成功し続ける——固定済み`H_final0`基準の古い計画凍結
+       * 不一致（`05_計画変更\.mdがworktreeと一致しません`・`計画文書が封印と一致しません`）は
+       * 出ない。これが#1531の保証（本scenarioの本来の目的）であり、このscenarioは
+       * それを弱めずに検証し続ける。**その後**、`inspectAuthorizedPullRequestMerge`の
+       * 暫定guardが`H_impl1 !== session.anchor.initialHeadSha`（round 1の元々の
+       * `H_impl0`）を検出して拒否する——`reviewed-forward`はsessionの`H_impl`を
+       * 前進させる経路である以上、暫定guard下では常にこの条件に触れる。この
+       * scenarioが検証する#1531の保証そのものは無傷だが、「reanchorされたHEADが
+       * mergeまで到達する」full end-to-end成功は、#1544が`reviewed-forward`の
+       * 健全性を回復するまで一時的に失われる（本file、Issue #1544参照）。
        */
       const prepared = prepareDeliveryCli(
         this,
@@ -5313,9 +5684,38 @@ if (exact(["auth", "status"])) {
         prepared.env,
       );
       const output = previewed.stdout + previewed.stderr;
-      assert.equal(previewed.status, 0, output);
+      /**
+       * **#1531の保証は無傷: 計画凍結は実効HEAD（reanchor後）で評価され、
+       * 固定済み`H_final0`基準の古い不一致は出ない。** `assertWorkflowReadyForDelivery`は
+       * `inspectAuthorizedPullRequestMerge`より前に呼ばれるため、ここまで到達した
+       * 時点でこの2つの回帰検出文言が出ていないことが#1531の保証そのものの証拠になる。
+       */
       assert.doesNotMatch(output, /05_計画変更\.mdがworktreeと一致しません/u);
       assert.doesNotMatch(output, /計画文書が封印と一致しません/u);
+      /**
+       * **Issue #1495暫定guardにより、#1531の保証を通過した後でmergeそのものは
+       * 拒否される。** `reviewed-forward`はH_implを前進させる経路であり、暫定guard
+       * （Issue #1544解決まで）は`session.anchor.initialHeadSha`（round 1の元々の
+       * H_impl）からの1byteの変化も拒否する。ここでは新gateのH_impl不一致条件が
+       * 実際に発火したことを、診断文言そのものを名指しして確認する——round-count・
+       * 比較基点・digestの条件と取り違えていないことの証拠。
+       */
+      assert.notEqual(previewed.status, 0, output);
+      assert.match(
+        output,
+        /実効H_impl\(.*\)がreview sessionの初回H_impl\(.*\)と一致しません/u,
+        "Issue #1495暫定guardのH_impl不一致診断が出ていません",
+      );
+      assert.doesNotMatch(
+        output,
+        /比較基点/u,
+        "H_impl不一致ではなく比較基点(base)不一致で拒否されています",
+      );
+      assert.doesNotMatch(
+        output,
+        /counted round数/u,
+        "H_impl不一致ではなくround数不一致で拒否されています",
+      );
       assert.equal(
         deliveryProviderCalls(prepared).filter(isMergeCall).length,
         0,
@@ -5508,6 +5908,1305 @@ if (exact(["auth", "status"])) {
         mergeCalls.length,
         0,
         "拒否前にmerge要求をproviderへ送っています",
+      );
+      break;
+    }
+    case "SCN-MERGE-BASE-AUDIT-001": {
+      /**
+       * **base攻撃そのもの（Issue #1495、reanchor無し）。** PR base T; 既定branchが
+       * T→M（file `downstream-guard.txt`を追加）へ前進; candidateはTから分岐した
+       * 実装commitでMをmergeしてから即座に`downstream-guard.txt`を取り除く。
+       * `T..H_impl`のnet diffは（Mの変更が打ち消されているため）Mを一度も
+       * mergeしなかった場合と1byteも変わらない。review evidenceは
+       * `contextIsolatedReviewEvidence`により素直にT（宣言済み比較基点）と
+       * H_impl（攻撃後の実装commit）を検分したものとして生成される
+       * （`preparePullRequest`のhookで実装commit自体をこの形にするため、
+       * Step 9/10・review sessionは最初からこのH_implだけを対象に作られ、
+       * 追加の整合作業は不要）。
+       *
+       * **旧`#1493` ancestor検査は必ず通過する。** reanchor chainが空
+       * （`validCount===0`）なので、そもそも実効base検査は走らない
+       * （`inspectAuthorizedPullRequestMerge`のcoverage comment参照）。
+       * 新gateだけがこの攻撃を検出する。
+       *
+       * **実測（このscenarioのfixtureで確認済み）: 発火するのは比較基点不一致
+       * 検査である。** `actualAuditBase = merge-base(H_impl, M) = M`
+       * （Mはcandidateの`--no-ff` mergeでH_implの祖先になっている）に対し、
+       * `session.anchor.diffBaseSha = T`（round 1で固定、reanchor無しなので不変）。
+       * `M !== T`のため、5条件のうち最初の比較基点検査がH_impl不一致・round数・
+       * digestのいずれよりも先に発火する。
+       */
+      let advancedBaseSha: string | undefined;
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        undefined,
+        "quick",
+        0,
+        "valid",
+        false,
+        (root, baseSha) => {
+          advancedBaseSha = buildDefaultBranchMergeRevertAttack(
+            root,
+            baseSha,
+          ).advancedBaseSha;
+        },
+      );
+      assert.ok(advancedBaseSha, "default branch advanceが構築されていません");
+      const mergeTree = spawnSync(
+        "git",
+        ["merge-tree", "--write-tree", advancedBaseSha!, prepared.headSha],
+        { cwd: prepared.root, encoding: "utf8" },
+      );
+      assert.equal(mergeTree.status, 0, mergeTree.stderr);
+      writeDeliveryProviderControl(prepared, {
+        remoteBaseSha: advancedBaseSha!,
+        mergeTreeSha: mergeTree.stdout.trim(),
+      });
+      createDeliveryPullRequest(prepared);
+      const requested = executeDeliveryMerge(prepared);
+      assert.notEqual(
+        requested.status,
+        0,
+        "既定branchをmergeして即revertした攻撃が新gateを通過しました",
+      );
+      const output = requested.stdout + requested.stderr;
+      assert.match(output, /merge-base/u);
+      assert.match(
+        output,
+        /実際のmerge-base\(.*\)がreview sessionの比較基点\(.*\)と一致しません/u,
+        "Issue #1495暫定guardの比較基点不一致診断が出ていません",
+      );
+      assert.doesNotMatch(
+        output,
+        /実効H_impl\(.*\)がreview sessionの初回H_impl/u,
+        "比較基点不一致ではなくH_impl不一致で拒否されています",
+      );
+      assert.doesNotMatch(
+        output,
+        /counted round数/u,
+        "比較基点不一致ではなくround数不一致で拒否されています",
+      );
+      assert.match(output, new RegExp(advancedBaseSha!, "u"));
+      assert.match(output, new RegExp(prepared.baseSha, "u"));
+      const mergeCalls = deliveryProviderCalls(prepared).filter(isMergeCall);
+      assert.equal(
+        mergeCalls.length,
+        0,
+        "拒否前にmerge要求をproviderへ送っています",
+      );
+      break;
+    }
+    case "SCN-MERGE-BASE-AUDIT-002": {
+      /**
+       * **既定branchが動いていない場合の回帰確認（Issue #1495）。** 通常fixtureは
+       * 何も手を加えなければ`reviewEvidence.baseSha === actualAuditBase`が
+       * 自明に成り立つ（Cは1回もmergeを経ないTの直接の子孫であり、
+       * `merge-base(C,T)=T`）。新gateがこの最も基本的な経路を壊していないことを
+       * 確認する。
+       */
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      const requested = executeDeliveryMerge(prepared);
+      assert.equal(requested.status, 0, requested.stdout + requested.stderr);
+      const mergeCalls = deliveryProviderCalls(prepared).filter(isMergeCall);
+      assert.equal(mergeCalls.length, 1);
+      break;
+    }
+    case "SCN-MERGE-BASE-AUDIT-003": {
+      /**
+       * **正当に見えるreviewed-forward follow-mainが、暫定guard下では拒否される
+       * ことのドキュメント化（Issue #1495、Issue #1544が解決するまでの既知の
+       * 使い勝手上のcost。バグではない）。** 既定branchが本当にT→M
+       * （`downstream-note.txt`を追加）へ前進し、boundしたH_final(H0)へMを実際に
+       * mergeする（SCN-E2E-WFSTEP-072と同型: H0の直接の子として前進commitを作る）。
+       * round 2をGitから実測して記録し、新review evidenceは`baseSha=M`・
+       * `implementationHeadSha=forwardHead`を正しく宣言する。
+       * `workflow record --step=10 --post-pr-intake`でStep 10 bindingを更新した後、
+       * 実CLIの`pr reanchor --apply`（`--new-base=M`）は`reviewed-forward`として
+       * 受理される——旧`#1493` ancestor検査（`observeReviewedForward`）は
+       * `merge-base(forwardHead,M)=M`が宣言済みbaseSha(M)と一致するため、これ自体は
+       * 引き続き通過する。
+       *
+       * **しかしIssue #1495暫定guardは`pr merge`で別に拒否する。** `session.anchor`は
+       * round 1で固定された不変値（`diffBaseSha=T`・`initialHeadSha=H_impl0`）であり、
+       * round 2やreanchorでは変わらない（`advanceReviewSession`が
+       * `previous.sessionId !== sessionId`でanchor変更そのものを拒否する）。暫定guardは
+       * `actualAuditBase`（実際のmerge-base）を`session.anchor.diffBaseSha`と、
+       * `effectiveImplementationHeadSha`を`session.anchor.initialHeadSha`と、それぞれ
+       * 厳密一致で要求する——round 2を経た時点でどちらも原理的に成立しなくなる
+       * （実測: `actualAuditBase=merge-base(forwardHead,M)=M`だが
+       * `anchor.diffBaseSha=T`であり、比較基点不一致が最初に発火する。base側の検査が
+       * H_impl不一致より先に評価されるため、ここで拒否理由は比較基点不一致になる。
+       * これはSCN-E2E-WFSTEP-072——既定branchが動かない、H_implだけが前進する
+       * ケース——でH_impl不一致が先に発火するのと対照的である）。
+       *
+       * **この暫定guardが取引するusability costを、成功ではなく拒否として記録する。**
+       * 置き換えとなる正当な経路（既定branch前進後は新しいreview sessionを作り
+       * 直す）はSCN-MERGE-BASE-AUDIT-012が証明する。
+       */
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      const run = (args: string[]): string => {
+        const result = spawnSync("git", args, {
+          cwd: prepared.root,
+          encoding: "utf8",
+        });
+        assert.equal(
+          result.status,
+          0,
+          `git ${args.join(" ")}\n${result.stderr}`,
+        );
+        return result.stdout.trim();
+      };
+      // 既定branchを実際に前進させる（M）。
+      const originalRef = run(["symbolic-ref", "--short", "HEAD"]);
+      run([
+        "checkout",
+        "-q",
+        "-b",
+        "asc-1495-follow-advance",
+        prepared.baseSha,
+      ]);
+      fs.writeFileSync(
+        path.join(prepared.root, "downstream-note.txt"),
+        "legitimate default branch advance (Issue #1495 fixture)\n",
+      );
+      run(["add", "--", "downstream-note.txt"]);
+      run(["commit", "-q", "-m", "default branch advance (legitimate)"]);
+      const advancedBaseSha = run(["rev-parse", "HEAD"]);
+      run(["update-ref", "refs/remotes/origin/main", advancedBaseSha]);
+      // H0（bound済みH_final）の直接の子としてMをmergeする。
+      run(["checkout", "-q", originalRef]);
+      run([
+        "merge",
+        "-q",
+        "asc-1495-follow-advance",
+        "-m",
+        "merge default branch advance (follow-main)",
+      ]);
+      const forwardHead = run(["rev-parse", "HEAD"]);
+      run(["branch", "-D", "asc-1495-follow-advance"]);
+      const draft = buildReviewRoundDraft({
+        staging: prepared.staging,
+        headSha: forwardHead,
+      }).round;
+      recordReviewRound({ staging: prepared.staging, round: draft });
+      const session = readStoredReviewSession(prepared.staging);
+      assert.ok(session, "round 2を記録できていません");
+      assert.equal(session!.latestCandidateHeadSha, forwardHead);
+      const newContent = reviewEvidenceContentFromStaging(prepared.staging, {
+        issue: 877,
+        baseSha: advancedBaseSha,
+        implementationHeadSha: forwardHead,
+      });
+      fs.writeFileSync(
+        path.join(prepared.root, "docs", "reviews", "877_review.json"),
+        newContent,
+      );
+      run(["add", "--", "docs/reviews/877_review.json"]);
+      run(["commit", "-q", "-m", "review evidence (follow-main)"]);
+      const newFinalHead = run(["rev-parse", "HEAD"]);
+      const intake = executeCli(
+        [
+          "workflow",
+          "record",
+          `--staging=${prepared.staging}`,
+          "--step=10",
+          "--post-pr-intake",
+          "--artifact=docs/reviews/877_review.json",
+          "--evidence=既定branch追随をfollow-mainでmergeし比較基点をMへ正しく更新した",
+          `--review-session-digest=${session!.latestRoundDigest}`,
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(intake.status, 0, intake.stdout + intake.stderr);
+      const mergeTree = spawnSync(
+        "git",
+        ["merge-tree", "--write-tree", advancedBaseSha, newFinalHead],
+        { cwd: prepared.root, encoding: "utf8" },
+      );
+      assert.equal(mergeTree.status, 0, mergeTree.stderr);
+      writeDeliveryProviderControl(prepared, {
+        remoteBaseSha: advancedBaseSha,
+        headSha: newFinalHead,
+        implementationSha: forwardHead,
+        mergeTreeSha: mergeTree.stdout.trim(),
+      });
+      const reanchorArgs = [
+        "pr",
+        "reanchor",
+        `--staging=${prepared.staging}`,
+        `--root=${prepared.root}`,
+        `--new-head=${newFinalHead}`,
+        `--new-base=${advancedBaseSha}`,
+        "--reason=既定branch追随をfollow-mainでmergeし比較基点を正しく更新した",
+      ];
+      const applied = executeCli(
+        [...reanchorArgs, "--apply"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(applied.status, 0, applied.stdout + applied.stderr);
+      const appliedOutput = JSON.parse(applied.stdout) as Record<
+        string,
+        unknown
+      >;
+      assert.equal(appliedOutput.state, "reanchored");
+      assert.equal(appliedOutput.effectiveHeadSha, newFinalHead);
+      const chain = fs
+        .readFileSync(
+          path.join(prepared.staging, "journal", "reanchor.jsonl"),
+          "utf8",
+        )
+        .trimEnd()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      assert.equal(chain.length, 1);
+      assert.equal(
+        chain[0]!.method,
+        "reviewed-forward",
+        "fixtureがreviewed-forward経路として分類されていません",
+      );
+      /**
+       * **Issue #1495暫定guardは、この正当なfollow-mainを拒否する。** 実測
+       * （このscenarioのfixtureで確認済み）: `actualAuditBase`
+       * （`merge-base(forwardHead, M)=M`）が`session.anchor.diffBaseSha`（round 1で
+       * 固定されたT）と一致しないため、比較基点不一致が最初に発火する——H_impl
+       * 不一致・round数不一致・digest不一致のいずれでもない。
+       */
+      const requested = executeDeliveryMerge(prepared);
+      assert.notEqual(
+        requested.status,
+        0,
+        "暫定guard下でreviewed-forward follow-mainがmergeを通過しました（Issue #1544解決までは意図的に拒否されるはず）",
+      );
+      const output = requested.stdout + requested.stderr;
+      assert.match(
+        output,
+        /実際のmerge-base\(.*\)がreview sessionの比較基点\(.*\)と一致しません/u,
+        "Issue #1495暫定guardの比較基点不一致診断が出ていません",
+      );
+      assert.doesNotMatch(
+        output,
+        /実効H_impl\(.*\)がreview sessionの初回H_impl/u,
+        "比較基点不一致ではなくH_impl不一致で拒否されています",
+      );
+      assert.doesNotMatch(
+        output,
+        /counted round数/u,
+        "比較基点不一致ではなくround数不一致で拒否されています",
+      );
+      const mergeCalls = deliveryProviderCalls(prepared).filter(isMergeCall);
+      assert.equal(
+        mergeCalls.length,
+        0,
+        "拒否前にmerge要求をproviderへ送っています",
+      );
+      break;
+    }
+    case "SCN-MERGE-BASE-AUDIT-008": {
+      /**
+       * **`reviewed-forward`のreanchor記録が残っていても、宣言はnewBaseShaが
+       * 検証済み既定branch tip自身と一致する（Issue #1495）。** 旧`#1493`
+       * ancestor検査（`newBaseSha`が既定branch tipのancestorか）は
+       * `is-ancestor(M,M)`で自明に通過する。しかし実際に監査すべき範囲の基点は
+       * review evidenceが宣言する比較基点（T、攻撃時点のまま）であり、
+       * `merge-base(H_impl,M)=M`と食い違う。reanchor記録の`newBaseSha`宣言は
+       * 新gateの入力に一切現れないことを、SCN-MERGE-BASE-AUDIT-001と同一の
+       * 攻撃fixtureへ記録を1件足すだけで示す。
+       *
+       * **実測（このscenarioのfixtureで確認済み）: SCN-MERGE-BASE-AUDIT-001と
+       * 同じく比較基点不一致検査が発火する。** reanchor記録は手書きで
+       * `journal/reanchor.jsonl`へ足しているだけで、`session.anchor`（round 1で
+       * 固定）にも`delivery.create.headSha`が指す実際のH_impl（round1攻撃commitの
+       * まま）にも影響しない。新gateの5条件はreanchor記録を一切参照しないため
+       * （`readEvidenceReanchorChain`ではなく`readStoredReviewSession`の
+       * `anchor`だけを見る）、この記録の存在自体が無意味であることも同時に
+       * 示している。
+       */
+      let advancedBaseSha: string | undefined;
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        undefined,
+        "quick",
+        0,
+        "valid",
+        false,
+        (root, baseSha) => {
+          advancedBaseSha = buildDefaultBranchMergeRevertAttack(
+            root,
+            baseSha,
+          ).advancedBaseSha;
+        },
+      );
+      assert.ok(advancedBaseSha, "default branch advanceが構築されていません");
+      const mergeTree = spawnSync(
+        "git",
+        ["merge-tree", "--write-tree", advancedBaseSha!, prepared.headSha],
+        { cwd: prepared.root, encoding: "utf8" },
+      );
+      assert.equal(mergeTree.status, 0, mergeTree.stderr);
+      writeDeliveryProviderControl(prepared, {
+        remoteBaseSha: advancedBaseSha!,
+        mergeTreeSha: mergeTree.stdout.trim(),
+      });
+      createDeliveryPullRequest(prepared);
+      const deliveryFile = path.join(
+        prepared.staging,
+        ...DELIVERY_STATE_FILE.split("/"),
+      );
+      const delivery = JSON.parse(fs.readFileSync(deliveryFile, "utf8")) as {
+        create: { headSha: string };
+      };
+      delivery.create.headSha = prepared.implementationCommitSha;
+      fs.writeFileSync(deliveryFile, `${JSON.stringify(delivery, null, 2)}\n`);
+      fs.writeFileSync(
+        path.join(prepared.staging, "journal", "reanchor.jsonl"),
+        `${JSON.stringify({
+          oldHeadSha: prepared.implementationCommitSha,
+          newHeadSha: prepared.headSha,
+          oldBaseSha: prepared.baseSha,
+          newBaseSha: advancedBaseSha,
+          diffDigest: "a".repeat(64),
+          method: "reviewed-forward",
+          reason:
+            "既定branch tip自身を宣言したreanchor（旧#1493 ancestor検査は自明に通過する、Issue #1495攻撃反例）",
+          recordedAt: fixtureInstant(),
+          reviewedForward: {
+            sessionId: "b".repeat(64),
+            roundDigest: "c".repeat(64),
+            implementationSha: prepared.implementationCommitSha,
+            artifactPath: "docs/reviews/877_review.json",
+            artifactDigest: "d".repeat(64),
+          },
+        })}\n`,
+      );
+      refreshStoredStagingDigest(prepared.staging);
+      const requested = executeDeliveryMerge(prepared);
+      assert.notEqual(
+        requested.status,
+        0,
+        "旧ancestor検査を通過するreanchor宣言を足した攻撃が新gateを通過しました",
+      );
+      const output = requested.stdout + requested.stderr;
+      assert.match(output, /merge-base/u);
+      assert.match(
+        output,
+        /実際のmerge-base\(.*\)がreview sessionの比較基点\(.*\)と一致しません/u,
+        "Issue #1495暫定guardの比較基点不一致診断が出ていません",
+      );
+      assert.doesNotMatch(
+        output,
+        /実効base.*ancestor/u,
+        "新gateではなく旧#1493 ancestor検査で拒否されています",
+      );
+      assert.doesNotMatch(
+        output,
+        /実効H_impl\(.*\)がreview sessionの初回H_impl/u,
+        "比較基点不一致ではなくH_impl不一致で拒否されています",
+      );
+      assert.doesNotMatch(
+        output,
+        /counted round数/u,
+        "比較基点不一致ではなくround数不一致で拒否されています",
+      );
+      const mergeCalls = deliveryProviderCalls(prepared).filter(isMergeCall);
+      assert.equal(
+        mergeCalls.length,
+        0,
+        "拒否前にmerge要求をproviderへ送っています",
+      );
+      break;
+    }
+    case "SCN-MERGE-BASE-AUDIT-009": {
+      /**
+       * **「trivial round 2 + reanchor」攻撃の再現（Issue #1495、Step 10 round 2
+       * 独立reviewのHigh指摘、中間fixを破った実際の反例）。**
+       *
+       * round 1のH_implはSCN-MERGE-BASE-AUDIT-001と完全に同一の攻撃形
+       * （T; 既定branchがT→M（`downstream-guard.txt`追加）へ前進; candidateは
+       * Tから分岐した実装commitでMを`--no-ff`でmergeしてから即座に
+       * `downstream-guard.txt`を取り除く）。honestにT..H_implで検分され、
+       * round 1として収束する。
+       *
+       * **中間fix（`reviewEvidenceBindingErrors`をsessionの比較基点との厳密一致へ
+       * 強化）はSCN-MERGE-BASE-AUDIT-001/008型の「reanchorを経ない裸のbase
+       * 宣言」だけを塞いでいた。** round 2独立reviewは、round 1のH_impl
+       * （攻撃commit）へ内容的に無関係なtrivial commit（`trivial-round2.txt`）を
+       * 1件積むだけで、真の・content差分のある「新しいreview round」として
+       * 合法的に収束させられることを発見した。round収束のmechanics自体は
+       * 「前roundHEADから新HEADへの実差分が空でない」ことしか要求せず、
+       * 宣言するbaseとの内容的関連は一切問わない。この2件目のroundで
+       * `workflow record --step=10 --post-pr-intake`の正当なjournal bindingを
+       * 取得し、真の既定branch tip`M`（round 1の攻撃で既にH_implへ`--no-ff`で
+       * mergeされ、ancestorとして残っているcommit）を`--new-base`に宣言する
+       * 実`pr reanchor --apply`を実行すると、`observeReviewedForward`の構造的
+       * 検査（H0がforwardHeadのancestorであること・artifactが単一parentの
+       * evidence-only suffixであること・`acceptedSessionEvidence`のpostPrIntake
+       * binding）はすべて満たされ、`reviewed-forward`として受理される
+       * （中間fixのsession比較基点厳密一致要求も、`baseSha=M`・
+       * `implementationHeadSha=trivialImplHead`が新round収束後の
+       * `session.latestCandidateHeadSha`と一致するため、H_impl不変分岐にすら
+       * 入らず素通りする）。
+       *
+       * `downstream-guard.txt`の巻き戻しは、round 1の`T..H_impl`のnet diffにも、
+       * round 2の`fixedDiff`（前roundHEAD→trivialImplHead、
+       * `trivial-round2.txt`の追加だけ）にも一度も現れない。旧（round 2独立review
+       * 当時の）中間fixが検査していたのはreview evidenceが宣言する比較基点と
+       * changed-pathの部分集合関係だけであり、この非対称性を見逃していた。
+       *
+       * **現行の新gate（Issue #1495暫定guard）は、この攻撃を2つの独立した理由で
+       * 拒否できる状態にある。** (1) `session.anchor`はround 1で固定される不変値
+       * （`advanceReviewSession`が`previous.sessionId !== sessionId`でanchor変更
+       * そのものを拒否するため、round 2を足しても`anchor.diffBaseSha=T`は動かない）
+       * ため`actualAuditBase=merge-base(trivialImplHead, M)=M`（Mはround 1の
+       * `--no-ff` mergeでtrivialImplHeadの祖先になっている）との比較基点不一致が
+       * 成立し、(2) `countedRounds=2`（round 1 + round 2）でも暫定guardの
+       * 「counted round数は1でなければならない」条件に反する。**実測
+       * （このscenarioのfixtureで確認済み）: 5条件は比較基点検査から順に評価
+       * されるため、(1)の比較基点不一致が(2)のround数不一致より先に発火する。**
+       * `M..H_impl`にだけ`downstream-guard.txt`が現れるという、この攻撃固有の
+       * digest-level非対称性そのもの（round 3が実際に発見したhunk-revert型の
+       * 中心的な弱点）を専門に検出する回帰確認はSCN-MERGE-BASE-AUDIT-010が担う。
+       */
+      let advancedBaseSha: string | undefined;
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        undefined,
+        "quick",
+        0,
+        "valid",
+        false,
+        (root, baseSha) => {
+          advancedBaseSha = buildDefaultBranchMergeRevertAttack(
+            root,
+            baseSha,
+          ).advancedBaseSha;
+        },
+      );
+      assert.ok(advancedBaseSha, "default branch advanceが構築されていません");
+      const mergeTreeRound1 = spawnSync(
+        "git",
+        ["merge-tree", "--write-tree", advancedBaseSha!, prepared.headSha],
+        { cwd: prepared.root, encoding: "utf8" },
+      );
+      assert.equal(mergeTreeRound1.status, 0, mergeTreeRound1.stderr);
+      writeDeliveryProviderControl(prepared, {
+        remoteBaseSha: advancedBaseSha!,
+        mergeTreeSha: mergeTreeRound1.stdout.trim(),
+      });
+      createDeliveryPullRequest(prepared);
+      const run = (args: string[]): string => {
+        const result = spawnSync("git", args, {
+          cwd: prepared.root,
+          encoding: "utf8",
+        });
+        assert.equal(
+          result.status,
+          0,
+          `git ${args.join(" ")}\n${result.stderr}`,
+        );
+        return result.stdout.trim();
+      };
+      // round 2: bound H_final（H0）の直接の子として、内容的に無関係なtrivial
+      // commitを1件積むだけ（Mの再mergeは行わない——round 1で既にH_implへ
+      // 入っている）。
+      fs.writeFileSync(
+        path.join(prepared.root, "trivial-round2.txt"),
+        "content-unrelated trivial round 2 (Issue #1495 round 2 repro)\n",
+      );
+      run(["add", "--", "trivial-round2.txt"]);
+      run(["commit", "-q", "-m", "trivial round 2 (content-unrelated)"]);
+      const trivialImplHead = run(["rev-parse", "HEAD"]);
+      const draft = buildReviewRoundDraft({
+        staging: prepared.staging,
+        headSha: trivialImplHead,
+      }).round;
+      recordReviewRound({ staging: prepared.staging, round: draft });
+      const session = readStoredReviewSession(prepared.staging);
+      assert.ok(session, "round 2を記録できていません");
+      assert.equal(session!.latestCandidateHeadSha, trivialImplHead);
+      const newContent = reviewEvidenceContentFromStaging(prepared.staging, {
+        issue: 877,
+        baseSha: advancedBaseSha!,
+        implementationHeadSha: trivialImplHead,
+      });
+      fs.writeFileSync(
+        path.join(prepared.root, "docs", "reviews", "877_review.json"),
+        newContent,
+      );
+      run(["add", "--", "docs/reviews/877_review.json"]);
+      run(["commit", "-q", "-m", "review evidence (trivial round 2)"]);
+      const newFinalHead = run(["rev-parse", "HEAD"]);
+      const intake = executeCli(
+        [
+          "workflow",
+          "record",
+          `--staging=${prepared.staging}`,
+          "--step=10",
+          "--post-pr-intake",
+          "--artifact=docs/reviews/877_review.json",
+          "--evidence=無関係なtrivial round 2を記録し比較基点をMへ宣言した",
+          `--review-session-digest=${session!.latestRoundDigest}`,
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(intake.status, 0, intake.stdout + intake.stderr);
+      const mergeTreeRound2 = spawnSync(
+        "git",
+        ["merge-tree", "--write-tree", advancedBaseSha!, newFinalHead],
+        { cwd: prepared.root, encoding: "utf8" },
+      );
+      assert.equal(mergeTreeRound2.status, 0, mergeTreeRound2.stderr);
+      writeDeliveryProviderControl(prepared, {
+        remoteBaseSha: advancedBaseSha!,
+        headSha: newFinalHead,
+        implementationSha: trivialImplHead,
+        mergeTreeSha: mergeTreeRound2.stdout.trim(),
+      });
+      const reanchorArgs = [
+        "pr",
+        "reanchor",
+        `--staging=${prepared.staging}`,
+        `--root=${prepared.root}`,
+        `--new-head=${newFinalHead}`,
+        `--new-base=${advancedBaseSha}`,
+        "--reason=無関係なtrivial round 2で得た正当なbindingで真の既定branch tipへreanchorする",
+      ];
+      const applied = executeCli(
+        [...reanchorArgs, "--apply"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.equal(applied.status, 0, applied.stdout + applied.stderr);
+      const appliedOutput = JSON.parse(applied.stdout) as Record<
+        string,
+        unknown
+      >;
+      assert.equal(appliedOutput.state, "reanchored");
+      assert.equal(appliedOutput.effectiveHeadSha, newFinalHead);
+      const chain = fs
+        .readFileSync(
+          path.join(prepared.staging, "journal", "reanchor.jsonl"),
+          "utf8",
+        )
+        .trimEnd()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      assert.equal(chain.length, 1);
+      assert.equal(
+        chain[0]!.method,
+        "reviewed-forward",
+        "trivial round 2独立reviewが破ったreviewed-forward経路として分類されていません",
+      );
+      /**
+       * **旧#1493 ancestor検査（実効base検査）はここまでで一度もこの宣言を
+       * 拒否していない。** `M`は検証済み既定branch tip自身であり、
+       * `is-ancestor(M,M)`は自明に成立する（SCN-MERGE-BASE-AUDIT-008と同型の
+       * 非対称性）。新gateだけが`pr merge`側で検出する。
+       */
+      const requested = executeDeliveryMerge(prepared);
+      assert.notEqual(
+        requested.status,
+        0,
+        "無関係なtrivial round 2 + reviewed-forward reanchorを経た攻撃が新gateを通過しました",
+      );
+      const output = requested.stdout + requested.stderr;
+      assert.match(output, /merge-base/u);
+      /**
+       * **実測（このscenarioのfixtureで確認済み）: 比較基点不一致検査が
+       * round数不一致検査より先に発火する。** 両方とも本来この攻撃を拒否できる
+       * 条件だが、`inspectAuthorizedPullRequestMerge`は比較基点検査を
+       * round数検査より前に評価するため、拒否理由は比較基点不一致になる
+       * （`counted round数`という文言は出ない）。
+       */
+      assert.match(
+        output,
+        /実際のmerge-base\(.*\)がreview sessionの比較基点\(.*\)と一致しません/u,
+        "Issue #1495暫定guardの比較基点不一致診断が出ていません",
+      );
+      assert.doesNotMatch(
+        output,
+        /counted round数/u,
+        "比較基点不一致ではなくround数不一致で拒否されています",
+      );
+      assert.doesNotMatch(
+        output,
+        /実効H_impl\(.*\)がreview sessionの初回H_impl/u,
+        "比較基点不一致ではなくH_impl不一致で拒否されています",
+      );
+      assert.doesNotMatch(
+        output,
+        /実効base.*ancestor/u,
+        "新gateではなく旧#1493 ancestor検査（reanchor chain実効base検査）で" +
+          "拒否されています——reanchorが`M`を宣言している以上この旧検査は" +
+          "is-ancestor(M,M)で自明に通過するはずであり、新gate以外で拒否されて" +
+          "いるなら攻撃の再現が意図どおりでない",
+      );
+      assert.match(output, new RegExp(advancedBaseSha!, "u"));
+      assert.match(output, new RegExp(prepared.baseSha, "u"));
+      const mergeCalls009 = deliveryProviderCalls(prepared).filter(isMergeCall);
+      assert.equal(
+        mergeCalls009.length,
+        0,
+        "拒否前にmerge要求をproviderへ送っています",
+      );
+      break;
+    }
+    case "SCN-MERGE-BASE-AUDIT-010": {
+      /**
+       * **同一round内の部分的hunk revert攻撃（Issue #1495、round 3独立reviewの
+       * High指摘の核心形。`buildPartialHunkRevertAttack`参照）。** reanchor無し・
+       * round 1件だけ。default branchの前進と、candidate自身の正当な変更が、
+       * **同じ既存file`shared.txt`の別々の行**を触る。旧（この設計より前の）
+       * changed-path部分集合検査は、`T..H_impl`と`M..H_impl`のchanged-path集合が
+       * どちらも`{shared.txt}`で完全に一致するため、これを見逃していた
+       * （`buildPartialHunkRevertAttack`のdoc comment参照）。
+       *
+       * **実測で確認した、重要な発見（このtaskの分析文書の想定と異なる）:**
+       * この攻撃を拒否するのは digest不一致検査ではなく、SCN-MERGE-BASE-AUDIT-001
+       * と同じ**比較基点不一致検査**である。理由は数学的に必然:
+       * `pr merge`の暫定guardは (1) `actualAuditBase === anchor.diffBaseSha`
+       * と (2) `effectiveImplementationHeadSha === anchor.initialHeadSha` を
+       * **digest再計算より先に**厳密一致で要求する。この攻撃が成立する
+       * （=最終的にmergeされる内容から本当にMの変更が消える）ためには、
+       * candidateが実際に`--no-ff`でMをmergeし、Mを自分のancestorにする必要が
+       * ある——そうしなければ、GitHubの実merge処理（3-way merge）が
+       * base(T)から見て変化していない側（candidate側）を「Mの変更を受け取る側」
+       * として扱い、Mの変更を自動的に復元してしまう（=攻撃が成立しない）。
+       * しかしMが実際にancestorになった時点で、`merge-base(H_impl,M)=M`が
+       * 常に成立し、`M !== anchor.diffBaseSha(=T)`により比較基点不一致が
+       * digest検査へ到達する前に必ず発火する。**つまりhunk単位であれ
+       * whole-file単位であれ、「mergeしてから打ち消す」型の攻撃はすべて
+       * 比較基点不一致検査だけで閉じる——digest再計算検査は、この攻撃族に
+       * 対しては（base・H_impl両方が厳密一致した後にしか評価されないため）
+       * 数学的に到達不能な防御線になっている。** base・H_implが両方とも
+       * anchorと一致した時点で、そこから計算するdiffはanchor作成時に
+       * 計算したdiffと同じ2つのcommit SHA間のdiffであり、Git diffは
+       * commit SHAの組に対して決定的なため、digestは必ず一致する
+       * （これは実装のbugではなく、2つの厳密一致検査の論理的帰結）。
+       *
+       * **この発見は分析文書のitem 5の想定（「digest検査がhunk-revertを
+       * 検出する」）と食い違う。** 実際にhunk-revert攻撃を閉じているのは
+       * 比較基点不一致検査（item 3のREV-02是正そのもの）であり、これは
+       * whole-file攻撃（SCN-MERGE-BASE-AUDIT-001）を閉じているのと**同じ
+       * 検査**である。digest再計算検査はcodeとして存在し続けるが、この攻撃族に
+       * 対しては到達不能なdefense-in-depthである（session-store fileの直接
+       * 改ざんのような、Git commit graphを経由しない別種の攻撃に対しては
+       * 依然として意味を持ちうる）。owner・parent sessionへ報告する。
+       */
+      let advancedBaseSha: string | undefined;
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        undefined,
+        "quick",
+        0,
+        "valid",
+        false,
+        (root, baseSha) => {
+          advancedBaseSha = buildPartialHunkRevertAttack(
+            root,
+            baseSha,
+          ).advancedBaseSha;
+        },
+      );
+      assert.ok(advancedBaseSha, "default branch advanceが構築されていません");
+      const mergeTree = spawnSync(
+        "git",
+        ["merge-tree", "--write-tree", advancedBaseSha!, prepared.headSha],
+        { cwd: prepared.root, encoding: "utf8" },
+      );
+      assert.equal(mergeTree.status, 0, mergeTree.stderr);
+      writeDeliveryProviderControl(prepared, {
+        remoteBaseSha: advancedBaseSha!,
+        mergeTreeSha: mergeTree.stdout.trim(),
+      });
+      createDeliveryPullRequest(prepared);
+      const requested = executeDeliveryMerge(prepared);
+      assert.notEqual(
+        requested.status,
+        0,
+        "同一round内の部分的hunk revert攻撃が新gateを通過しました",
+      );
+      const output = requested.stdout + requested.stderr;
+      assert.match(output, /merge-base/u);
+      assert.match(
+        output,
+        /実際のmerge-base\(.*\)がreview sessionの比較基点\(.*\)と一致しません/u,
+        "Issue #1495暫定guardの比較基点不一致診断が出ていません",
+      );
+      assert.doesNotMatch(
+        output,
+        /実効H_impl\(.*\)がreview sessionの初回H_impl/u,
+        "比較基点不一致ではなくH_impl不一致で拒否されています",
+      );
+      assert.doesNotMatch(
+        output,
+        /counted round数/u,
+        "比較基点不一致ではなくround数不一致で拒否されています",
+      );
+      assert.match(output, new RegExp(advancedBaseSha!, "u"));
+      assert.match(output, new RegExp(prepared.baseSha, "u"));
+      const mergeCalls = deliveryProviderCalls(prepared).filter(isMergeCall);
+      assert.equal(
+        mergeCalls.length,
+        0,
+        "拒否前にmerge要求をproviderへ送っています",
+      );
+      break;
+    }
+    case "SCN-MERGE-BASE-AUDIT-011": {
+      /**
+       * **round 1の`--base`自己申告そのものを拒否する回帰確認（Issue #1495、
+       * REV-02是正の発生点そのもの。`buildReviewRoundDraft`、item 3）。**
+       * round 3独立reviewの4件目の反例: `session.anchor.diffBaseSha`自体を
+       * 任意の無関係な古いcommitへ宣言できてしまえば、`pr merge`側の比較基点
+       * 一致検査は宣言側を実際のmerge-baseへ合わせるだけで通ってしまう
+       * （report宣言と実測を両方攻撃者が制御できるため）。この検査は
+       * `pr merge`側ではなく`review round --init`側（round 1作成時点、
+       * まだPR番号が無くprovider認可APIを呼べない地点）に置く必要がある——
+       * それがREV-02是正の設計そのものである。
+       *
+       * ここでは実CLIの`review round --init`を、観測済み既定branch tip
+       * （`refs/remotes/origin/HEAD`が指す`prepared.baseSha`）とも、
+       * headとそのtipから計算した実際のmerge-base（この通常fixtureでは
+       * `prepared.baseSha`自身と一致する）とも異なる、無関係な祖先
+       * （repositoryのroot commit）を`--base`に宣言して呼び、拒否されることを
+       * 確認する。
+       *
+       * **既存のreview sessionを破棄してから呼ぶ。** 通常の`prepareDeliveryCli`は
+       * 既にround 1（`previous!==null`）を構築済みであり、`buildReviewRoundDraft`は
+       * `previous!==null`のときround 1の`--base`検証（このscenarioが検査したい
+       * 分岐）を経由しない。`review-session.json`を削除して`previous===null`の
+       * round 1経路を強制する。
+       */
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      fs.rmSync(path.join(prepared.staging, "review-session.json"), {
+        force: true,
+      });
+      // Step 9 bindingが指すexact commit（review evidence commitより前）へ
+      // current HEADを合わせる（`buildReviewRoundDraft`はcurrent HEADと`--head`の
+      // 厳密一致を要求する）。
+      const checkout = spawnSync(
+        "git",
+        ["checkout", "-q", "--detach", prepared.implementationCommitSha],
+        { cwd: prepared.root, encoding: "utf8" },
+      );
+      assert.equal(checkout.status, 0, checkout.stderr);
+      const rootCommit = spawnSync(
+        "git",
+        ["rev-list", "--max-parents=0", prepared.baseSha],
+        { cwd: prepared.root, encoding: "utf8" },
+      );
+      assert.equal(rootCommit.status, 0, rootCommit.stderr);
+      const unrelatedBaseSha = rootCommit.stdout.trim().split("\n")[0]!;
+      assert.match(unrelatedBaseSha, /^[a-f0-9]{40}$/u);
+      assert.notEqual(unrelatedBaseSha, prepared.baseSha);
+      const outPath = path.join(
+        this.temp("asc-1495-round-draft-"),
+        "round-draft.json",
+      );
+      const attempted = executeCli(
+        [
+          "review",
+          "round",
+          `--staging=${prepared.staging}`,
+          "--init",
+          `--out=${outPath}`,
+          `--head=${prepared.implementationCommitSha}`,
+          `--base=${unrelatedBaseSha}`,
+          "--scope=SCOPE-WORKFLOW",
+          "--ac=AC-WF-005",
+        ],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(
+        attempted.status,
+        0,
+        "無関係な祖先を--baseに自己申告したreview round --initが通過しました",
+      );
+      const output = attempted.stdout + attempted.stderr;
+      assert.match(
+        output,
+        /review round --initの--base\(.*\)が.*一致しません/u,
+        "Issue #1495 REV-02是正のround 1 --base検証診断が出ていません",
+      );
+      assert.match(output, new RegExp(unrelatedBaseSha, "u"));
+      assert.equal(
+        fs.existsSync(outPath),
+        false,
+        "拒否前にround draftを書き出しています",
+      );
+      assert.equal(
+        readStoredReviewSession(prepared.staging),
+        null,
+        "拒否されたはずのround --initがreview sessionを永続化しています",
+      );
+      break;
+    }
+    case "SCN-MERGE-BASE-AUDIT-012": {
+      /**
+       * **暫定guardが指し示す置き換え経路そのものの回帰確認（Issue #1495、
+       * AC-003の裏面）。** SCN-MERGE-BASE-AUDIT-003は「既定branch前進後に
+       * `reviewed-forward`で追随する」正当に見える経路が暫定guardにより
+       * 拒否されることを示した。このscenarioは、暫定guardの拒否診断が案内する
+       * 「実際のmerge-baseを起点とする**新しいreview session**のfull-scope
+       * review」を実際に実行すると`pr merge`が許可されることを示す——暫定guardが
+       * follow-mainを完全に不可能にしているわけではなく、より重い「作り直し」
+       * 経路だけを要求していることの証拠。
+       *
+       * 手順: 通常fixture（T、round 1がT..H_impl0を検分、`pr-bound`）を作った後、
+       * 既定branchを実際にT→Mへ前進させる（`downstream-note.txt`を追加）。
+       * **`reviewed-forward`のreanchorは一切使わない。** 代わりに:
+       * (1) 既存のreview sessionを破棄する（`review-session.json`を削除——
+       *     本番では新しいIssue/PRを起票することに相当する簡略化）。
+       * (2) Mの直接の子として、まったく新しい実装commit（`implementation-v2.txt`）を
+       *     作る。
+       * (3) 実CLIの`buildReviewRoundDraft`（`review round --init`の本体）を
+       *     `--base=M`で呼ぶ——item 3のREV-02是正（round 1の`--base`は観測済み
+       *     既定branch tipかそのmerge-baseと厳密一致しなければならない）を
+       *     **肯定的に**検査する。Mは観測済みtip自身なので受理されるはずである。
+       * (4) round 1を収束させ、新しいreview evidence（`baseSha=M`・
+       *     `implementationHeadSha=`新しい実装commit）を積む。
+       * (5) 固定済みPRのheadを新しい内容へ差し替える（`delivery.create.headSha`を
+       *     直接更新——SCN-MERGE-BASE-AUDIT-008/009で既に使っている手法と同じ）。
+       *
+       * この結果、`actualAuditBase = merge-base(newImpl, M) = M`
+       * （newImplはMの直接の子）であり、新sessionの`anchor.diffBaseSha`も
+       * 同じくM——比較基点が一致する。`effectiveImplementationHeadSha`も
+       * `anchor.initialHeadSha`も同じ新実装commit。countedRoundsは1。digestも
+       * 同一SHAの組から計算されるため一致する。5条件すべてが通過し、`pr merge`は
+       * 許可される。
+       */
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      const run = (args: string[]): string => {
+        const result = spawnSync("git", args, {
+          cwd: prepared.root,
+          encoding: "utf8",
+        });
+        assert.equal(
+          result.status,
+          0,
+          `git ${args.join(" ")}\n${result.stderr}`,
+        );
+        return result.stdout.trim();
+      };
+      // 既定branchを実際に前進させる（M）。
+      const originalRef = run(["symbolic-ref", "--short", "HEAD"]);
+      run([
+        "checkout",
+        "-q",
+        "-b",
+        "asc-1495-fresh-session-advance",
+        prepared.baseSha,
+      ]);
+      fs.writeFileSync(
+        path.join(prepared.root, "downstream-note.txt"),
+        "legitimate default branch advance (Issue #1495 fixture, fresh session)\n",
+      );
+      run(["add", "--", "downstream-note.txt"]);
+      run(["commit", "-q", "-m", "default branch advance (legitimate)"]);
+      const advancedBaseSha = run(["rev-parse", "HEAD"]);
+      run(["update-ref", "refs/remotes/origin/main", advancedBaseSha]);
+      // Mの直接の子として、まったく新しい実装を作る（reanchorではない）。
+      run(["checkout", "-q", "-B", originalRef, advancedBaseSha]);
+      fs.writeFileSync(
+        path.join(prepared.root, "implementation-v2.txt"),
+        "brand new implementation built directly on the advanced default branch tip\n",
+      );
+      run(["add", "--", "implementation-v2.txt"]);
+      run([
+        "commit",
+        "-q",
+        "-m",
+        "fresh implementation on top of advanced base",
+      ]);
+      const newImplementationSha = run(["rev-parse", "HEAD"]);
+      // 既存のreview sessionを破棄する（新しいIssue/PRを起票する簡略化）。
+      fs.rmSync(path.join(prepared.staging, "review-session.json"), {
+        force: true,
+      });
+      /**
+       * **Step 9 journal bindingを新しい実装commitへ差し替える。**
+       * `appendWorkflowJournalEntry`は既にStep 10が記録済みのstagingへStep 9を
+       * 追記することを（正当なstep順序として）拒否する
+       * （`postPrIntake`以外はStep 11後のStep 10しか例外を認めない）。**これは
+       * 「同じIssueの中でStepを遡って書き換える」ことを防ぐ正しい拒否であり、
+       * このscenarioが表現したいのは「別のIssue/PRとして起票し直す」ことなので、
+       * journal全体を新しいIssueの内容で置き換える——`preparePullRequest`自身が
+       * `missingStep4`分岐で使っている「hash chain無しの手書きjournal」と
+       * 同じ手法（`test/support/legacy-journal.ts`）を使う。**
+       */
+      const journalPath = path.join(prepared.staging, STEP_JOURNAL_FILE);
+      const existingEntries = fs
+        .readFileSync(journalPath, "utf8")
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      const rewrittenEntries = existingEntries.map((item) => {
+        const { previousEntryDigest: _drop, ...rest } = item;
+        if (rest.step === 9)
+          return { ...rest, implementationHeadSha: newImplementationSha };
+        return rest;
+      });
+      fs.writeFileSync(
+        journalPath,
+        `${rewrittenEntries.map((item) => JSON.stringify(item)).join("\n")}\n`,
+      );
+      refreshStoredStagingDigest(prepared.staging);
+      // round 1（新session）を実CLIのbuildReviewRoundDraftで作る。current HEADが
+      // newImplementationShaであることが要件であり、evidence commitはまだ積まない。
+      const draft = buildReviewRoundDraft({
+        staging: prepared.staging,
+        headSha: newImplementationSha,
+        baseSha: advancedBaseSha,
+        scopeIds: ["SCOPE-WORKFLOW"],
+        acceptanceCriteriaIds: ["AC-WF-005"],
+      }).round;
+      recordReviewRound({ staging: prepared.staging, round: draft });
+      const session = readStoredReviewSession(prepared.staging);
+      assert.ok(session, "新しいround 1を記録できていません");
+      assert.equal(session!.status, "converged");
+      assert.equal(session!.anchor.diffBaseSha, advancedBaseSha);
+      assert.equal(session!.anchor.initialHeadSha, newImplementationSha);
+      // Step 10 journal bindingも新sessionへ差し替える（同じ手書きjournal手法）。
+      const postSessionEntries = fs
+        .readFileSync(journalPath, "utf8")
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .map((item) => {
+          const { previousEntryDigest: _drop, ...rest } = item;
+          if (rest.step === 10)
+            return {
+              ...rest,
+              reviewSession: {
+                sessionId: session!.sessionId,
+                roundDigest: session!.latestRoundDigest,
+                headSha: session!.latestCandidateHeadSha,
+              },
+            };
+          return rest;
+        });
+      fs.writeFileSync(
+        journalPath,
+        `${postSessionEntries.map((item) => JSON.stringify(item)).join("\n")}\n`,
+      );
+      refreshStoredStagingDigest(prepared.staging);
+      // 新しいreview evidenceを積む（H_final）。
+      const newContent = reviewEvidenceContentFromStaging(prepared.staging, {
+        issue: 877,
+        baseSha: advancedBaseSha,
+        implementationHeadSha: newImplementationSha,
+      });
+      fs.mkdirSync(path.join(prepared.root, "docs", "reviews"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(prepared.root, "docs", "reviews", "877_review.json"),
+        newContent,
+      );
+      run(["add", "--", "docs/reviews/877_review.json"]);
+      run(["commit", "-q", "-m", "review evidence (fresh session)"]);
+      const newFinalHead = run(["rev-parse", "HEAD"]);
+      // 固定済みPRのheadを新しい内容へ差し替える（SCN-MERGE-BASE-AUDIT-008/009と
+      // 同じ手法: 新しいpr createの代わりに固定済みbindingを直接更新する）。
+      const deliveryFile = path.join(
+        prepared.staging,
+        ...DELIVERY_STATE_FILE.split("/"),
+      );
+      const delivery = JSON.parse(fs.readFileSync(deliveryFile, "utf8")) as {
+        create: { headSha: string };
+      };
+      delivery.create.headSha = newFinalHead;
+      fs.writeFileSync(deliveryFile, `${JSON.stringify(delivery, null, 2)}\n`);
+      refreshStoredStagingDigest(prepared.staging);
+      const mergeTree = spawnSync(
+        "git",
+        ["merge-tree", "--write-tree", advancedBaseSha, newFinalHead],
+        { cwd: prepared.root, encoding: "utf8" },
+      );
+      assert.equal(mergeTree.status, 0, mergeTree.stderr);
+      writeDeliveryProviderControl(prepared, {
+        remoteBaseSha: advancedBaseSha,
+        headSha: newFinalHead,
+        implementationSha: newImplementationSha,
+        mergeTreeSha: mergeTree.stdout.trim(),
+      });
+      const requested = executeDeliveryMerge(prepared);
+      assert.equal(requested.status, 0, requested.stdout + requested.stderr);
+      const mergeCalls = deliveryProviderCalls(prepared).filter(isMergeCall);
+      assert.equal(mergeCalls.length, 1);
+      break;
+    }
+    case "SCN-MERGE-BASE-AUDIT-004": {
+      /**
+       * rebase経路での同一攻撃の試み(Issue #1495)。実測の結論: pr-bound後は
+       * rebase分類そのものがevaluateEvidenceReanchor自身によって拒否され、
+       * 新gateへ到達する前に止まる。通常fixture(T,C,H0)をPR createで固定した後、
+       * pr reanchor --apply(比較基点T不変)でH_implをC->merge(M)->revertへ
+       * 差し替える。差し替え後のT..H_impl diffはCと1byteも変わらないため、
+       * evaluateEvidenceReanchorの内容等価性判定(isRebaseEquivalent)自体は
+       * rebase(reason: "ok")を返す(comparableReviewEvidence("rebase")が
+       * baseSha・implementationHeadSha・impactを比較対象から除くため)。
+       *
+       * しかしevaluateEvidenceReanchorはここでもう1段、method自体を検査する。
+       * src/adapters/evidence-reanchor.tsのevaluateEvidenceReanchor終盤:
+       *   if (anchor.prBound && method !== "artifact-replacement" &&
+       *       method !== "artifact-supersession" && method !== "reviewed-forward")
+       *     throw new Error("pr reanchorのpr-bound再固定は監査合格済みartifact改名、
+       *       または明示したpost-PR intakeとexact review bindingを持つ前進commitだけを
+       *       受理します");
+       * pr createで固定した後(anchor.prBound===true)はrebase分類そのものが
+       * 許可method集合に無いため、内容等価性が成立していてもpr reanchor --apply
+       * 自体がここで拒否される。rebaseはreview層(review reanchor、PR binding前)
+       * 専用の分類であり、pr-bound後にmerge-base監査attackへ到達する経路として
+       * 使えない。新gate(resolveUniqueMergeBase突合)より手前、reanchor自体の
+       * 受理判定で止まることを確認する。
+       */
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      const oldContent = spawnSync(
+        "git",
+        ["show", `${prepared.headSha}:docs/reviews/877_review.json`],
+        { cwd: prepared.root, encoding: "utf8" },
+      );
+      assert.equal(oldContent.status, 0, oldContent.stderr);
+      const oldEvidence = parseReviewEvidence(oldContent.stdout);
+      const attack = buildRebaseMergeRevertAttack(prepared.root, {
+        parentSha: prepared.implementationCommitSha,
+        baseSha: prepared.baseSha,
+        oldEvidence,
+        artifactPath: "docs/reviews/877_review.json",
+      });
+      const reanchorArgs = [
+        "pr",
+        "reanchor",
+        `--staging=${prepared.staging}`,
+        `--root=${prepared.root}`,
+        `--new-head=${attack.finalHeadSha}`,
+        `--new-base=${prepared.baseSha}`,
+        "--reason=既定branch追随をmergeしてから同じ変更をrevertした(Issue #1495 fixture)",
+      ];
+      const applied = executeCli(
+        [...reanchorArgs, "--apply"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(
+        applied.status,
+        0,
+        "pr-bound後のrebase分類が受理されてしまいました(pr-bound method制限が壊れています)",
+      );
+      const output = applied.stdout + applied.stderr;
+      assert.match(
+        output,
+        /pr-bound再固定は監査合格済みartifact改名、または明示したpost-PR intake/u,
+        "想定と異なる理由で拒否されています(evaluateEvidenceReanchorのpr-bound method制限以外)",
+      );
+      assert.doesNotMatch(
+        output,
+        /merge-base/u,
+        "新gateまで到達してから拒否されています(reanchor自体で止まる想定と異なります)",
+      );
+      const chainFile = path.join(
+        prepared.staging,
+        "journal",
+        "reanchor.jsonl",
+      );
+      assert.equal(
+        fs.existsSync(chainFile),
+        false,
+        "拒否されたreanchorがchainへ書き込まれています",
+      );
+      break;
+    }
+    case "SCN-MERGE-BASE-AUDIT-005": {
+      /**
+       * artifact-replacement経路での同一攻撃の試み（Issue #1495）。実測の結論:
+       * observeArtifactReplacementは新旧artifactのbyte完全一致（同一base・同一
+       * H_impl、pathだけが違う）を要求するため、H_implを変える攻撃はこの経路を
+       * 構造的に使えない。
+       *
+       * artifact-replacementの本来の形（同一base・同一H_impl、artifact pathだけを
+       * 変える）を装うには、新evidenceのimplementationHeadShaを変えないまま新path
+       * へ書く必要がある。しかしそれではH_implが変わらず、merge-base攻撃（Mを
+       * mergeしてから即revertし、真のmerge-baseをMへ動かす）を一切表現できない。
+       * そこで実際に試すのは「H_implを変えつつpathも変える」構成である。これは
+       * evaluateEvidenceReanchorの以下の経路をすべて落ちる。
+       *   1. isContentEquivalent（浅い判定、H_final全体のdiff）: artifactの内容も
+       *      path混みで変わるためfalse
+       *   2. observeRebaseEquivalence: beforeArtifactPath !== afterArtifactPathで
+       *      "artifact-path-changed"（"ok"ではない）
+       *   3. observeArtifactReplacement: oldArtifact !== newArtifact（H_implの
+       *      宣言値が違うためbyteが一致しない）でundefined
+       *   4. observeArtifactSupersession: 新H_finalの親が旧H_finalではない
+       *      （新H_implの直後commitである）ためundefined
+       *   5. observeReviewedForward: 旧H_finalが新H_implのancestorではない
+       *      （branchが分岐しているため）observeReviewDiffが失敗しundefined
+       * 結果、evaluateEvidenceReanchorは「再固定前後の内容が等価ではありません
+       * （artifact-path-changed）」で拒否する。新gate（resolveUniqueMergeBase突合）
+       * より手前、reanchor自体の等価性判定で止まる。
+       */
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      const oldContent = spawnSync(
+        "git",
+        ["show", `${prepared.headSha}:docs/reviews/877_review.json`],
+        { cwd: prepared.root, encoding: "utf8" },
+      );
+      assert.equal(oldContent.status, 0, oldContent.stderr);
+      const oldEvidence = parseReviewEvidence(oldContent.stdout);
+      const attack = buildRebaseMergeRevertAttack(
+        prepared.root,
+        {
+          parentSha: prepared.implementationCommitSha,
+          baseSha: prepared.baseSha,
+          oldEvidence,
+          artifactPath: "docs/reviews/877_review_v2.json",
+        },
+        { advanceFile: "downstream-guard-005.txt" },
+      );
+      const reanchorArgs = [
+        "pr",
+        "reanchor",
+        `--staging=${prepared.staging}`,
+        `--root=${prepared.root}`,
+        `--new-head=${attack.finalHeadSha}`,
+        `--new-base=${prepared.baseSha}`,
+        "--reason=artifact pathを変えつつH_implも変えた（Issue #1495 fixture）",
+      ];
+      const applied = executeCli(
+        [...reanchorArgs, "--apply"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(
+        applied.status,
+        0,
+        "H_implを変えたartifact-replacement風の攻撃が受理されてしまいました",
+      );
+      const output = applied.stdout + applied.stderr;
+      assert.match(
+        output,
+        /再固定前後の内容が等価ではありません/u,
+        "想定と異なる理由で拒否されています",
+      );
+      assert.match(output, /artifact-path-changed/u);
+      assert.doesNotMatch(
+        output,
+        /merge-base/u,
+        "新gateまで到達してから拒否されています(reanchor自体で止まる想定と異なります)",
+      );
+      const chainFile = path.join(
+        prepared.staging,
+        "journal",
+        "reanchor.jsonl",
+      );
+      assert.equal(
+        fs.existsSync(chainFile),
+        false,
+        "拒否されたreanchorがchainへ書き込まれています",
+      );
+      break;
+    }
+    case "SCN-MERGE-BASE-AUDIT-006": {
+      /**
+       * artifact-supersession経路での同一攻撃の試み（Issue #1495）。実測の結論:
+       * observeArtifactSupersessionはoldEvidence.implementationHeadSha ===
+       * newEvidence.implementationHeadShaを明示的に要求するため（src/adapters/
+       * evidence-reanchor.tsのobserveArtifactSupersession）、H_implを変える攻撃は
+       * この経路も構造的に使えない。
+       *
+       * さらに、artifact pathとH_impl直前diffの形をartifact-supersession向け
+       * （新H_finalの親を旧H_finalそのものにし、artifact pathも変えない）に
+       * 揃えると、evaluateEvidenceReanchorの分類はobserveArtifactSupersessionへ
+       * すら到達しない。isContentEquivalent（浅い判定）は証跡byteが違うためfalseに
+       * なるが、observeRebaseEquivalenceは同一path・同一H_impl-diffなら
+       * "ok"（method="rebase"）を返してしまい、SCN-MERGE-BASE-AUDIT-004と全く同じ
+       * pr-bound method制限（"rebase"は許可method集合に無い）で拒否される。
+       * つまりartifact-supersession固有の拒否理由（H_impl不変の要求）へ実際に
+       * 到達する前に、rebase分類の優先順位そのものが経路を閉じる。
+       *
+       * ここでは「同じmerge-revert攻撃構造をartifact-supersession向けの形
+       * （旧H_finalへ直接1 commitだけ載せる）で試す」構成を実行し、実際に発火する
+       * 拒否理由（SCN-004と同じpr-bound method制限）を確認する。
+       */
+      const prepared = prepareDeliveryCli(this);
+      createDeliveryPullRequest(prepared);
+      const oldContent = spawnSync(
+        "git",
+        ["show", `${prepared.headSha}:docs/reviews/877_review.json`],
+        { cwd: prepared.root, encoding: "utf8" },
+      );
+      assert.equal(oldContent.status, 0, oldContent.stderr);
+      const oldEvidence = parseReviewEvidence(oldContent.stdout);
+      const attack = buildRebaseMergeRevertAttack(
+        prepared.root,
+        {
+          parentSha: prepared.implementationCommitSha,
+          baseSha: prepared.baseSha,
+          oldEvidence,
+          artifactPath: "docs/reviews/877_review.json",
+        },
+        { advanceFile: "downstream-guard-006.txt" },
+      );
+      const reanchorArgs = [
+        "pr",
+        "reanchor",
+        `--staging=${prepared.staging}`,
+        `--root=${prepared.root}`,
+        `--new-head=${attack.finalHeadSha}`,
+        `--new-base=${prepared.baseSha}`,
+        "--reason=artifact-supersession向けの形でH_implを変えた（Issue #1495 fixture）",
+      ];
+      const applied = executeCli(
+        [...reanchorArgs, "--apply"],
+        prepared.root,
+        prepared.env,
+      );
+      assert.notEqual(
+        applied.status,
+        0,
+        "H_implを変えたartifact-supersession風の攻撃が受理されてしまいました",
+      );
+      const output = applied.stdout + applied.stderr;
+      assert.match(
+        output,
+        /pr-bound再固定は監査合格済みartifact改名、または明示したpost-PR intake/u,
+        "想定と異なる理由で拒否されています（SCN-004と同じrebase優先分類のpr-bound制限のはず）",
+      );
+      assert.doesNotMatch(
+        output,
+        /merge-base/u,
+        "新gateまで到達してから拒否されています(reanchor自体で止まる想定と異なります)",
+      );
+      const chainFile = path.join(
+        prepared.staging,
+        "journal",
+        "reanchor.jsonl",
+      );
+      assert.equal(
+        fs.existsSync(chainFile),
+        false,
+        "拒否されたreanchorがchainへ書き込まれています",
       );
       break;
     }

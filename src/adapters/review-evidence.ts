@@ -67,6 +67,27 @@ function resolveCommit(root: string, label: string, value: string): string {
  *
  * **どちらでもない値は、reviewしていない内容を指すため拒否する。**
  *
+ * **この関数はaudit範囲の完全性そのものは検証しない（Issue #1495）。** 宣言された
+ * `baseSha`がsessionの比較基点の前進としてancestor範囲内でありさえすれば受理する
+ * ため、宣言済みbaseと実際の`merge-base`が乖離するケース自体はここでは防げない。
+ * それは`pr merge`側（`inspectAuthorizedPullRequestMerge`）が、実際に再計算した
+ * `merge-base`（`actualAuditBase`）と`session.anchor.diffBaseSha`の**完全一致**を
+ * 別途Gitから直接要求する形で担保する。`session.anchor.diffBaseSha`自体は
+ * round 1作成時（`buildReviewRoundDraft`、`src/adapters/review-session.ts`）に
+ * ローカル観測済みの既定branch tipまたはそれとの実際のmerge-baseへ拘束済みで
+ * あり（REV-02是正）、この関数（`reviewEvidenceBindingErrors`）が受理する
+ * ancestor範囲内の`baseSha`はその拘束済みsession比較基点を前進の起点にする
+ * だけであって、`pr merge`側の完全一致判定を弱めない。検討の過程では、この
+ * 関数自体を`baseSha`とsession比較基点の厳密一致のみへ狭める設計
+ * （`trustedAdvancedBaseSha`）や、`pr merge`側を変更path集合の被覆関係
+ * （部分集合）で判定する設計を試みたが、前者はlegitimateなreviewed-forward
+ * follow-mainの`review export`を壊す回帰を起こし（Step 10 round 2独立review
+ * High指摘）、後者は同一round内のhunk単位の部分revertを見逃す欠陥が
+ * あることが判明した（Step 10 round 3独立review High指摘）。最終的に
+ * この関数は#1495是正前の挙動へ完全に戻し、audit範囲の完全性はもっぱら
+ * `pr merge`側の完全一致判定（と、Issue #1544解決までの暫定guard）が担う
+ * 設計へ収束した。
+ *
  * **`session.latestCandidateHeadSha`はcanonical resolverへ通さず、厳密な一致を
  * 要求する（Issue #1532 round 1指摘、MEDIUM-1）。** 検討時は「session側の値も
  * resolverへ通せば汚染されたcandidate HEADから自己修復できる」という設計を試みたが、
