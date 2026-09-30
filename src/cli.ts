@@ -2054,11 +2054,9 @@ function inspectAuthorizedPullRequestMerge(input: {
     assistedAuthorityVerified: input.assistedAuthorityVerified,
   });
   /**
-   * **実際のmerge-baseを再計算し、実際に監査すべき範囲
-   * （`merge-base(H_impl, 検証済みdefaultBranchTipOid)..H_impl`）の変更pathが、
-   * review sessionが実際にreview済みの範囲（`session.anchor.diffBaseSha..H_impl`）の
-   * 変更path集合に完全に含まれることをGitから直接検証する（Issue #1495、
-   * TERM-ASC-1495、INV-01〜INV-05）。**
+   * **実際のmerge-base（`merge-base(H_impl, 検証済みdefaultBranchTipOid)`）を
+   * 再計算し、review sessionの比較基点`session.anchor.diffBaseSha`との完全一致を
+   * Gitから直接検証する（Issue #1495、TERM-ASC-1495、INV-01〜INV-05）。**
    *
    * 上のreanchor chain実効base検査（#1493 round 3対応）は「宣言されたnewBaseSha
    * が検証済み既定branch tipの祖先であるか」しか確認しない。既定branchが前進した
@@ -2109,9 +2107,13 @@ function inspectAuthorizedPullRequestMerge(input: {
    * （`followOnly`・`recordLayerOnly`は含まない）、`session.status==="converged"`、
    * かつ`actualAuditBase..H_impl`の再計算diff digestが`anchor.initialDiffDigest`
    * と完全一致することを要求する。この制約下では、round 2・round 3型の
-   * 「複数roundを経由した回避」はcounted round数の不一致で構造的に成立せず、
-   * round 3型の「hunk単位の巻き戻し」もdiff digest（`--binary --full-index`の
-   * バイト単位のdiff全体のSHA-256）の不一致で検出される。既定branchが前進した
+   * 「複数roundを経由した回避」はcounted round数の不一致で構造的に成立しない。
+   * round 3型の「hunk単位の巻き戻し」を実際に閉じているのは、上のdigest再計算
+   * （条件(5)）ではなく`actualAuditBase`の完全一致（条件(1)）そのものである。
+   * `M`（既定branchの前進commit）を実際にH_implへ組み込まない限り攻撃は
+   * 成立せず、組み込んだ時点で`merge-base(H_impl,M)=M`が`session.anchor.diffBaseSha`
+   * と一致しないため、条件(5)より先に条件(1)が発火する（REQ-WF-005の実測、
+   * `SCN-MERGE-BASE-AUDIT-010`）。既定branchが前進した
    * 場合は、この制約下ではreviewed-forwardでの追随を許可せず、新しいcurrent
    * H_implを起点に新しいreview sessionを作り直すことを要求する（usabilityを
    * 犠牲にしてでも健全性を優先する、Issue #1544解決までの暫定運用）。

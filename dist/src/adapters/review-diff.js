@@ -66,10 +66,10 @@ export function resolveUniqueMergeBase(root, a, b) {
     const bases = result.stdout
         .trim()
         .split(/\r?\n/u)
-        .filter((value) => /^[a-f0-9]{40}$/u.test(value));
+        .filter((value) => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(value));
     if (result.status !== 0 || bases.length !== 1)
         throw new Error(`実際のmerge-baseを一意に解決できません（exit ${result.status}、候補${bases.length}件、対象: ${a}, ${b}）`);
-    return bases[0].toLowerCase();
+    return bases[0];
 }
 /** exact commitが持つ唯一の親をworktreeへ触れずに観測する。 */
 export function observeSingleCommitParent(root, headSha) {

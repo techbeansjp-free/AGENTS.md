@@ -423,7 +423,7 @@ Feature: 公開CLIでワークフローStepを強制する
     Then ワークフローStep公開CLI検査は期待結果になる
 
   @issue-1495
-  Scenario: SCN-MERGE-BASE-AUDIT-010 pr mergeは同一round内の部分的hunk revert攻撃を再計算diff digestの不一致で拒否する
+  Scenario: SCN-MERGE-BASE-AUDIT-010 pr mergeは同一round内の部分的hunk revert攻撃を実際のmerge-baseとの比較基点不一致で拒否する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-MERGE-BASE-AUDIT-010"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
