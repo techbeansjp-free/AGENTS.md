@@ -3,16 +3,16 @@
   "issue": 1495,
   "observed": {
     "baseSha": "68d25f7a69c18145ec09dc03dabbe262637e95a9",
-    "implementationHeadSha": "9cdda5b0cfba232aef3909e3d9ffcdefb945724a",
-    "diffDigest": "5bb21fcaa4b5ed065f6e423e1b0a41665b35b7428ca33df2c86dfa9f14151f5c",
+    "implementationHeadSha": "116c9afe488204d28092adbeff7142b30f08431d",
+    "diffDigest": "592aaa0a422b765b9f0a6e0e0ded83781246697c021c40fba9ffa8df25837e53",
     "session": {
       "sessionId": "c4d734c3b8847b9ee44b385c69d0ebabeafcf1d0494bfcac9200faead39ba282",
-      "latestRoundDigest": "50e7735a229bcd19661ca451f41a06994a18d9d83acf6b94b17141e949b7e10b",
+      "latestRoundDigest": "916661224ed4b3177d271819247e9200ac2864684eaf58e57628b117653854c3",
       "status": "converged",
-      "countedRounds": 2
+      "countedRounds": 3
     },
     "impact": {
-      "digest": "9ce517144ab75c1f21aae801750f23d14a8cf2b859230317e196fd5887979aa1",
+      "digest": "3994452334493803ed4da7b6a28e3cd7b053fc6aaf54d4896e4c748d8f96164c",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "9cdda5b0cfba232aef3909e3d9ffcdefb945724a",
-        "impactDigest": "9ce517144ab75c1f21aae801750f23d14a8cf2b859230317e196fd5887979aa1",
-        "finishedAt": "2026-09-30T01:29:45.344Z",
-        "recordDigest": "3b8a3425addc69b9b370fb8881ef31db744698f39f5cee358ec0905354b31541"
+        "headSha": "116c9afe488204d28092adbeff7142b30f08431d",
+        "impactDigest": "3994452334493803ed4da7b6a28e3cd7b053fc6aaf54d4896e4c748d8f96164c",
+        "finishedAt": "2026-09-30T01:54:59.196Z",
+        "recordDigest": "9e054b1d72d8ad28ba4aac7d0f7730d3e3472e90d5e7954c2a044542448182b0"
       }
     ]
   },
@@ -86,6 +86,30 @@
       "relation": "out-of-scope",
       "path": "docs/specs/15_要件追跡/01_変更履歴.md",
       "contractId": null
+    },
+    {
+      "id": "REV-CR-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "src/adapters/review-diff.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV-CR-02",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "src/cli.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV-CR-03",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/features/e2e/workflow-step-enforcement-cli.feature",
+      "contractId": null
     }
   ],
   "unresolvedCriticalHigh": [],
@@ -96,5 +120,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "b8313d0c715f61287571dd6c4c6b966d8c8a7584a8aeee9c351fd2b843749e89"
+  "evidenceDigest": "cfdf3d850feefc2bc98436a8685dd378d701a0950fc781ff5ca9d7fdb8c25d4f"
 }
