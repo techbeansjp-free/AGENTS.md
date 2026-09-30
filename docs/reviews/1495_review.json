@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1495,
+  "observed": {
+    "baseSha": "7a12d94fae249678b7f46e13794298386501ea02",
+    "implementationHeadSha": "1b1ab2412abdeac810a8d6e7c5bfa0e6eef9e743",
+    "diffDigest": "fa464a7429f3db072bf893f94b22d293186593528c60167c184f2d6c130b0d56",
+    "session": {
+      "sessionId": "c4d734c3b8847b9ee44b385c69d0ebabeafcf1d0494bfcac9200faead39ba282",
+      "latestRoundDigest": "fefe8074fb1e1fc9f416a76df7979182c87b667bbfeeb4ba4ce6d99710d8d4a0",
+      "status": "converged",
+      "countedRounds": 1
+    },
+    "impact": {
+      "digest": "aa135324e2c5e3f570b0150659b6bcc2c10774784d05157e289e2b0923c11784",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "1b1ab2412abdeac810a8d6e7c5bfa0e6eef9e743",
+        "impactDigest": "aa135324e2c5e3f570b0150659b6bcc2c10774784d05157e289e2b0923c11784",
+        "finishedAt": "2026-09-30T00:41:52.664Z",
+        "recordDigest": "f54ccd989378f2da6668e6c4847b92a17033deab3876854863c90791f47f9787"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "REV-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "src/cli.ts",
+      "contractId": "INV-04"
+    },
+    {
+      "id": "REV-02",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "src/cli.ts",
+      "contractId": "INV-05"
+    },
+    {
+      "id": "REV-03",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "src/cli.ts",
+      "contractId": "INV-04"
+    },
+    {
+      "id": "REV-04",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "src/adapters/review-session.ts",
+      "contractId": "INV-01"
+    },
+    {
+      "id": "REV-05",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/adapters/review-session.ts",
+      "contractId": null
+    },
+    {
+      "id": "REV-06",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/skills/step-10-review/SKILL.md",
+      "contractId": null
+    },
+    {
+      "id": "REV-07",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "out-of-scope",
+      "path": "docs/specs/15_要件追跡/01_変更履歴.md",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "independent-reviewer-opus-step10",
+    "implementer": "implementer-claude-sonnet5",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "9ebecb108e0e440e165c879179d6e0c60e17b5456277c5d162460f5a131454f6"
+}
