@@ -210,3 +210,33 @@ Feature: Issue templateと段階別検証の契約
     Given 出荷Issue templateと検証器の見出し契約がある
     When 配布するIssue templateを全件読む
     Then 全templateは冒頭に読者3区分の読者表を持つ
+
+  Scenario: SCN-UNIT-ISSUETPL-015 配置非依存参照を書き換えていない相対linkが残ると生成対象template検査が失敗する
+    Given 配置非依存参照を相対linkへ戻したfull要求定義templateを持つpackage資産がある
+    When package資産のskills checkを実行する
+    Then 配置非依存参照へ書き換えていない相対linkを示してskills checkが失敗する
+
+  Scenario: SCN-UNIT-ISSUETPL-016 配置非依存参照の参照先が存在しないと生成対象template検査が失敗する
+    Given 配置非依存参照の参照先を存在しないpathへ書き換えた実装計画templateを持つpackage資産がある
+    When package資産のskills checkを実行する
+    Then 配置非依存参照の参照先がないことを示してskills checkが失敗する
+
+  Scenario: SCN-UNIT-ISSUETPL-017 出荷Issue templateの配置非依存参照は生成対象template検査に合格する
+    Given 出荷Issue templateと検証器の見出し契約がある
+    When package資産のskills checkを実行する
+    Then skills checkは合格する
+
+  Scenario: SCN-UNIT-ISSUETPL-018 配置非依存参照がrepository外を指すと生成対象template検査が失敗する
+    Given 配置非依存参照がrepositoryの外を指すよう書き換えた実装計画templateを持つpackage資産がある
+    When package資産のskills checkを実行する
+    Then 配置非依存参照がrepository外であることを示してskills checkが失敗する
+
+  Scenario: SCN-UNIT-ISSUETPL-019 配置非依存参照の参照先がdirectoryだと生成対象template検査が失敗する
+    Given 配置非依存参照の参照先がdirectoryである実装計画templateを持つpackage資産がある
+    When package資産のskills checkを実行する
+    Then 配置非依存参照の参照先がfileではないことを示してskills checkが失敗する
+
+  Scenario: SCN-UNIT-ISSUETPL-020 配置非依存参照の参照先がrepository境界外へのsymlinkだと生成対象template検査が失敗する
+    Given 配置非依存参照の参照先がrepository境界外へのsymlinkである実装計画templateを持つpackage資産がある
+    When package資産のskills checkを実行する
+    Then 配置非依存参照の参照先がsymlinkでrepository境界外であることを示してskills checkが失敗する
