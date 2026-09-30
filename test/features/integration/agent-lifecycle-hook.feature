@@ -24,13 +24,14 @@ Feature: agent lifecycleをhost hookで制限する
       | 上限後の結果返却 | allow |
       | 未登録agent | deny |
       | identityのない終了event | allow |
-      | 終了session再開 | deny |
+      | 終了session再開 | allow |
       | 破損記録 | deny |
 
   Scenario: SCN-INT-AGENTLIFE-002 本文を保存せず寿命を観測する
     Given lifecycle hookを登録した新規sessionがある
     When lifecycleの"session再開"を実行する
     Then lifecycle計測は本文を含まず終了と再利用試行を区別する
+    And main再開は計測を保持しsubagentを復活させない
 
   Scenario: SCN-INT-AGENTLIFE-003 hookを配布し設定を保持する
     Given lifecycle hookを登録した新規sessionがある

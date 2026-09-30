@@ -384,3 +384,83 @@ Then("lifecycleの既定とmode別budgetはmainを停止しない", function () 
     );
   }
 });
+
+Then("main再開は計測を保持しsubagentを復活させない", function () {
+  const root = this.lifecycleRoot;
+  const report = () => {
+    const result = spawnSync(process.execPath, [hook, "--report"], {
+      env: { ...process.env, CLAUDE_PROJECT_DIR: root },
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr);
+    return (
+      JSON.parse(result.stdout) as Array<{
+        resumeAttempts: number;
+        agents: Array<{
+          id: string;
+          status: string;
+          starts: number;
+          tools: number;
+          startedAt: string;
+          endedAt: string | null;
+        }>;
+      }>
+    )[0];
+  };
+  event(root, "SubagentStart", { agent_id: "resume-child" });
+  for (let i = 0; i < 12; i += 1) invoke(root);
+  const before = report();
+  event(root, "SessionEnd");
+  const paused = report();
+  assert.equal(paused.agents[0].status, "paused");
+  assert.ok(paused.agents[0].endedAt);
+  assert.equal(
+    paused.agents.find((a) => a.id === "resume-child")?.status,
+    "closed",
+  );
+  for (let i = 0; i < 2; i += 1) {
+    event(root, "SessionStart", { source: "resume" });
+    const resumed = report();
+    assert.equal(resumed.agents[0].status, "active");
+    assert.equal(resumed.agents[0].endedAt, null);
+    assert.equal(resumed.agents[0].startedAt, before.agents[0].startedAt);
+    assert.equal(resumed.agents[0].tools, before.agents[0].tools + i);
+    assert.equal(resumed.agents[0].starts, before.agents[0].starts + i + 1);
+    assert.equal(resumed.resumeAttempts, before.resumeAttempts + i + 1);
+    assert.doesNotMatch(invoke(root), /"deny"|"continue":false/u);
+    event(root, "SessionEnd");
+  }
+  event(root, "SessionStart", { source: "resume" });
+  assert.match(
+    invoke(root, {
+      tool_name: "SendMessage",
+      tool_input: { to: "resume-child" },
+    }),
+    /"deny"/u,
+  );
+  event(root, "SubagentStart", { agent_id: "resume-child" });
+  assert.match(invoke(root, { agent_id: "resume-child" }), /"deny"/u);
+  event(root, "SubagentStart", { agent_id: "fresh-after-resume" });
+  assert.doesNotMatch(
+    invoke(root, { agent_id: "fresh-after-resume" }),
+    /"deny"/u,
+  );
+  // Upgrade compatibility: only main may recover old closed/exhausted records.
+  const directory = path.join(
+    root,
+    ".agent-skill-chain/runtime/agent-lifecycle",
+  );
+  const file = path.join(
+    directory,
+    fs.readdirSync(directory).find((name) => name.endsWith(".json"))!,
+  );
+  for (const status of ["closed", "exhausted"]) {
+    const state = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      agents: Array<{ status: string }>;
+    };
+    state.agents[0].status = status;
+    fs.writeFileSync(file, JSON.stringify(state));
+    event(root, "SessionStart", { source: "resume" });
+    assert.doesNotMatch(invoke(root), /"deny"|"continue":false/u);
+  }
+});

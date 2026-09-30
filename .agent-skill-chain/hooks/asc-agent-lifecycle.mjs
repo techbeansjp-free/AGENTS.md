@@ -13,7 +13,7 @@ const EVENTS = new Set([
   "PreToolUse",
 ]);
 const HANDOFF =
-  "作業状態をGit / staging / trackerへ固定し、Issue・worktree・stagingのpointerからfresh agentを起動してください。workflow advanceのresumeはadvisoryです。会話を継承せず、必要なreview・検証を続けてください。";
+  "作業状態はGit / staging / trackerを正本とし、Issue・worktree・stagingのpointerから復旧できます。mainは継続・resume可能でfresh contextは推奨です。完了subagentの追加作業はfresh agentへ渡してください。workflow advanceのresumeはadvisoryです。必要なreview・検証を続けてください。";
 const validId = (value) =>
   typeof value === "string" && value.length > 0 && value.length <= 256;
 const natural = (value) => Number.isSafeInteger(value) && value >= 0;
@@ -67,7 +67,8 @@ function readState(file) {
         !validId(agent.id) ||
         ids.has(agent.id) ||
         !["main", "subagent"].includes(agent.kind) ||
-        !["active", "closed", "exhausted"].includes(agent.status) ||
+        !["active", "paused", "closed", "exhausted"].includes(agent.status) ||
+        (agent.status === "paused" && agent.kind !== "main") ||
         !natural(agent.tools) ||
         !natural(agent.starts) ||
         !natural(agent.deniedTools) ||
@@ -161,10 +162,15 @@ function transition(state, input, now) {
     if (input.source === "resume") {
       main.starts += 1;
       state.resumeAttempts += 1;
+      // Also accepts main records closed/exhausted by earlier hook versions.
+      main.status = "active";
+      main.endedAt = null;
+      main.reason = null;
+      main.lastSeenAt = now;
     }
     return context(
       event,
-      `ASC lifecycle: ${main.status}, tools=${main.tools}/${state.maxTools}。compactやsession再開で寿命はリセットしません。${HANDOFF}`,
+      `ASC lifecycle: ${main.status}, tools=${main.tools}/${state.maxTools}。compactやsession再開で計測はリセットしません。長寿命sessionではfresh contextも利用できます。${HANDOFF}`,
     );
   }
   if (!agent) {
@@ -180,7 +186,12 @@ function transition(state, input, now) {
     // SessionEnd is terminal for every child too; no automatic resurrection.
     const closing = event === "SessionEnd" ? state.agents : [agent];
     for (const entry of closing) {
-      entry.status = entry.status === "exhausted" ? "exhausted" : "closed";
+      entry.status =
+        entry.kind === "main"
+          ? "paused"
+          : entry.status === "exhausted"
+            ? "exhausted"
+            : "closed";
       entry.endedAt ??= now;
       entry.reason ??= event === "SessionEnd" ? "session-ended" : "returned";
     }
