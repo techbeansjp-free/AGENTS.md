@@ -17,8 +17,8 @@ Feature: agent lifecycleをhost hookで制限する
       | 同じIDの再起動 | deny |
       | fresh agent | allow |
       | fresh clear | allow |
-      | 同じIDのclear | deny |
-      | main上限とcompact | deny |
+      | 同じIDのclear | allow |
+      | main上限とcompact | allow |
       | subagent上限 | deny |
       | handoff警告 | warning |
       | 上限後の結果返却 | allow |
@@ -47,6 +47,7 @@ Feature: agent lifecycleをhost hookで制限する
     When lifecycleの"session再開"を実行する
     Then lifecycleの並行toolは上限を超えて許可されない
     And lifecycle上限はmodel loopの継続も停止する
+    And lifecycleの既定とmode別budgetはmainを停止しない
 
   Scenario: SCN-INT-AGENTLIFE-006 設定だけを実機動作保証にしない
     Given lifecycle hookを登録した新規sessionがある

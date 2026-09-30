@@ -20,12 +20,14 @@ function event(
   root: string,
   name: string,
   extra: Record<string, unknown> = {},
+  budgetMode = "enforce",
 ) {
   return spawnSync(process.execPath, [hook], {
     env: {
       ...process.env,
       CLAUDE_PROJECT_DIR: root,
       ASC_AGENT_MAX_TOOLS: "10",
+      ASC_AGENT_BUDGET_MODE: budgetMode,
     },
     input: JSON.stringify({
       session_id: "session-1",
@@ -168,9 +170,12 @@ Then("lifecycle判定は{string}である", function (expected: string) {
   const output = this.lifecycleOutput;
   if (expected === "deny") assert.match(output, /"permissionDecision":"deny"/u);
   else if (expected === "warning") {
-    assert.match(output, /残りtool呼出2回/u);
+    assert.match(output, /tool試行8\/10/u);
     assert.doesNotMatch(output, /"deny"/u);
-  } else assert.doesNotMatch(output, /"deny"/u);
+  } else {
+    assert.doesNotMatch(output, /"deny"/u);
+    assert.doesNotMatch(output, /"continue":false/u);
+  }
 });
 Then("lifecycle計測は本文を含まず終了と再利用試行を区別する", function () {
   const root = this.lifecycleRoot;
@@ -219,11 +224,17 @@ Then("lifecycle記録のsymlinkは境界外を書き換えない", function () {
 });
 
 Then("lifecycle上限はmodel loopの継続も停止する", function () {
-  for (let index = 0; index < 10; index += 1) invoke(this.lifecycleRoot);
-  assert.match(invoke(this.lifecycleRoot), /"continue":false/u);
+  event(this.lifecycleRoot, "SubagentStart", { agent_id: "budget-agent" });
+  for (let index = 0; index < 10; index += 1)
+    invoke(this.lifecycleRoot, { agent_id: "budget-agent" });
+  assert.match(
+    invoke(this.lifecycleRoot, { agent_id: "budget-agent" }),
+    /"continue":false/u,
+  );
 });
 Then("lifecycleの並行toolは上限を超えて許可されない", async function () {
   const root = this.lifecycleRoot;
+  event(root, "SubagentStart", { agent_id: "parallel-agent" });
   const calls = Array.from(
     { length: 14 },
     () =>
@@ -249,6 +260,7 @@ Then("lifecycleの並行toolは上限を超えて許可されない", async func
         child.stdin.end(
           JSON.stringify({
             session_id: "session-1",
+            agent_id: "parallel-agent",
             hook_event_name: "PreToolUse",
             tool_name: "Read",
             tool_input: {},
@@ -300,4 +312,75 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
     5,
   );
   assert.equal(inspectAgentLifecycleRegistration("{}").runtimeVerified, false);
+});
+
+Then("lifecycleの既定とmode別budgetはmainを停止しない", function () {
+  for (const mode of ["", "observe", "warn", "enforce"]) {
+    const root = this.temp("asc-agent-mode-");
+    // Empty mode means genuinely absent env var, including the caller's env.
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      CLAUDE_PROJECT_DIR: root,
+      ASC_AGENT_MAX_TOOLS: "10",
+    };
+    delete env.ASC_AGENT_BUDGET_MODE;
+    if (mode) env.ASC_AGENT_BUDGET_MODE = mode;
+    else delete env.ASC_AGENT_MAX_TOOLS;
+    const limit = mode ? 10 : 120;
+    const call = (name: string, extra: Record<string, unknown> = {}) => {
+      const result = spawnSync(process.execPath, [hook], {
+        env,
+        encoding: "utf8",
+        input: JSON.stringify({
+          session_id: "mode-session",
+          hook_event_name: name,
+          ...extra,
+        }),
+      });
+      assert.equal(result.status, 0, result.stderr);
+      return JSON.parse(result.stdout) as {
+        continue?: boolean;
+        hookSpecificOutput?: {
+          permissionDecision?: string;
+          additionalContext?: string;
+        };
+      };
+    };
+    call("SessionStart", { source: "startup" });
+    call("SubagentStart", { agent_id: "mode-child" });
+    // Changing the environment must not escalate an existing warn session.
+    env.ASC_AGENT_BUDGET_MODE = mode === "enforce" ? "warn" : "enforce";
+    for (let i = 0; i < limit + 2; i += 1) {
+      const main = call("PreToolUse", { tool_name: "Read" });
+      assert.notEqual(main.continue, false);
+      assert.notEqual(main.hookSpecificOutput?.permissionDecision, "deny");
+      const child = call("PreToolUse", {
+        agent_id: "mode-child",
+        tool_name: "Read",
+      });
+      assert.equal(child.continue === false, mode === "enforce" && i >= limit);
+      if (mode === "observe") assert.deepEqual(child, {});
+      else if (mode !== "enforce" && i >= limit - Math.min(20, limit / 5) - 1)
+        assert.match(
+          child.hookSpecificOutput?.additionalContext ?? "",
+          /警告のみ/u,
+        );
+    }
+    const send = call("PreToolUse", {
+      tool_name: "SendMessage",
+      tool_input: { to: "mode-child" },
+    });
+    assert.equal(
+      send.hookSpecificOutput?.permissionDecision === "deny",
+      mode === "enforce",
+    );
+    call("SubagentStop", { agent_id: "mode-child" });
+    assert.equal(
+      call("PreToolUse", {
+        tool_name: "SendMessage",
+        tool_input: { to: "mode-child" },
+      }).hookSpecificOutput?.permissionDecision,
+      "deny",
+    );
+  }
 });

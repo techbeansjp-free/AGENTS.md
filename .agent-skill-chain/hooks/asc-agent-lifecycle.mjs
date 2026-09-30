@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 
+const MODES = ["observe", "warn", "enforce"];
 const EVENTS = new Set([
   "SessionStart",
   "SessionEnd",
@@ -51,6 +52,7 @@ function readState(file) {
       state.version !== 1 ||
       !validId(state.sessionId) ||
       !Array.isArray(state.agents) ||
+      !(state.budgetMode === undefined || MODES.includes(state.budgetMode)) ||
       !natural(state.maxTools) ||
       state.maxTools < 10 ||
       state.maxTools > 1000 ||
@@ -82,6 +84,8 @@ function readState(file) {
       )
     )
       throw new Error("main記録がありません");
+    // Older records never implicitly opt in to hard budget enforcement.
+    state.budgetMode ??= "warn";
     return state;
   } finally {
     fs.closeSync(fd);
@@ -120,6 +124,10 @@ function context(event, message) {
   };
 }
 
+function budgetEnforced(state, agent) {
+  return state.budgetMode === "enforce" && agent.kind === "subagent";
+}
+
 function transition(state, input, now) {
   const event = input.hook_event_name;
   if (
@@ -145,7 +153,7 @@ function transition(state, input, now) {
     }
     return context(
       event,
-      `ASC: one agent = one bounded work unit。tool上限${state.maxTools}。${HANDOFF}`,
+      `ASC: one agent = one bounded work unit。tool目安${state.maxTools}、budget mode=${state.budgetMode}。${HANDOFF}`,
     );
   }
   if (event === "SessionStart") {
@@ -179,7 +187,10 @@ function transition(state, input, now) {
     return {};
   }
   if (event !== "PreToolUse") return {};
-  if (agent.status !== "active" || agent.tools >= state.maxTools) {
+  if (
+    agent.status !== "active" ||
+    (budgetEnforced(state, agent) && agent.tools >= state.maxTools)
+  ) {
     if (agent.status === "active") {
       agent.status = "exhausted";
       agent.reason = "tool-limit";
@@ -208,7 +219,7 @@ function transition(state, input, now) {
       legacyResume ||
       !recipient ||
       recipient.status !== "active" ||
-      recipient.tools >= state.maxTools
+      (budgetEnforced(state, recipient) && recipient.tools >= state.maxTools)
     ) {
       state.resumeAttempts += 1;
       state.deniedDispatches += 1;
@@ -218,10 +229,13 @@ function transition(state, input, now) {
     }
   }
   const reserve = Math.min(20, Math.floor(state.maxTools / 5));
-  if (agent.tools >= state.maxTools - reserve) {
+  if (
+    state.budgetMode !== "observe" &&
+    agent.tools >= state.maxTools - reserve
+  ) {
     return context(
       event,
-      `ASC: 残りtool呼出${state.maxTools - agent.tools}回。新しい作業を始めず、現在の変更と未完了状態を固定してください。上限後はtool実行を拒否します。${HANDOFF}`,
+      `ASC: tool試行${agent.tools}/${state.maxTools}（API call/context量ではありません）。${budgetEnforced(state, agent) ? "実験的強制停止まで残り" + Math.max(0, state.maxTools - agent.tools) + "回。状態保存は保証されません。" : "警告のみ。tool実行は継続可能です。"} 現在の変更と未完了状態を固定してください。${HANDOFF}`,
     );
   }
   return {};
@@ -265,8 +279,14 @@ function run(input) {
         throw new Error("ASC_AGENT_MAX_TOOLSは10〜1000の整数です", {
           cause: error,
         });
+      const budgetMode = process.env.ASC_AGENT_BUDGET_MODE ?? "warn";
+      if (!MODES.includes(budgetMode))
+        throw new Error("ASC_AGENT_BUDGET_MODEはobserve / warn / enforceです", {
+          cause: error,
+        });
       state = {
         version: 1,
+        budgetMode,
         sessionId: input.session_id,
         maxTools,
         resumeAttempts: 0,
