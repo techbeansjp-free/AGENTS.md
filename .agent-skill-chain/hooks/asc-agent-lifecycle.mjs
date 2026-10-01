@@ -272,10 +272,19 @@ function checkHandoff(h, exactHead) {
     );
   if (
     h.role === "reviewer" &&
-    repositoryGit(root, ["status", "--porcelain", "--untracked-files=no"]) !==
-      ""
+    repositoryGit(root, [
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--untracked-files=all",
+      "--",
+      ".",
+      `:(top,exclude,literal)${path.relative(root, path.dirname(h.staging)).split(path.sep).join("/")}`,
+    ]) !== ""
   )
-    throw new Error("review candidateに未commit変更があります");
+    throw new Error(
+      "review candidateに追跡または未追跡の未commit変更があります",
+    );
 }
 const shellQuote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
 function verifyDispatch(h) {

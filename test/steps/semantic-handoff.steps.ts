@@ -39,7 +39,10 @@ When(
       assert.equal(result.status, 0, result.stderr);
       return result.stdout.trim();
     };
-    fs.writeFileSync(path.join(root, ".gitignore"), ".agent-skill-chain/\n");
+    fs.writeFileSync(
+      path.join(root, ".gitignore"),
+      ".agent-skill-chain/runtime/\n",
+    );
     git("add", ".gitignore");
     git("commit", "-qm", "ignore fixture state");
     const call = (name: string, extra: Record<string, unknown> = {}) => {
@@ -199,8 +202,15 @@ When(
       const h = pointer(10);
       assert.equal(h.role, "reviewer");
       assert.equal(h.reviewRound, round);
+      const ghost = path.join(root, "ghost-fix.ts");
+      fs.writeFileSync(ghost, "export const fixed = true;\n");
+      denied(dispatch(h, `untracked-r${round}`));
+      fs.unlinkSync(ghost);
       allowed(dispatch(h, `dispatch-r${round}`));
       start(`r${round}`);
+      fs.writeFileSync(ghost, "export const fixed = true;\n");
+      denied(tool(`r${round}`));
+      fs.unlinkSync(ghost);
       allowed(tool(`r${round}`));
       allowed(
         call("PreToolUse", {
