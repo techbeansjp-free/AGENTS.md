@@ -319,7 +319,7 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
   );
   fs.mkdirSync(path.join(this.lifecycleRoot, ".claude"), { recursive: true });
   fs.writeFileSync(
-    path.join(this.lifecycleRoot, ".claude/settings.json"),
+    path.join(this.lifecycleRoot, ".claude/settings.local.json"),
     JSON.stringify({
       hooks,
       env: { ASC_EXECUTION_CONTEXT_MODE: "short-lived" },
