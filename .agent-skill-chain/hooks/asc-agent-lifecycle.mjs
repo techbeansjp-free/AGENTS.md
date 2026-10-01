@@ -295,9 +295,12 @@ function verifyDispatch(h) {
       maxBuffer: 2 * 1024 * 1024,
     },
   );
+  const preview = result.status === 0 ? JSON.parse(result.stdout) : null;
   if (
-    result.status !== 0 ||
-    JSON.stringify(JSON.parse(result.stdout).handoff) !== JSON.stringify(h)
+    !preview ||
+    ![preview.handoff, ...(preview.handoffAlternatives ?? [])].some(
+      (candidate) => JSON.stringify(candidate) === JSON.stringify(h),
+    )
   )
     throw new Error(
       "handoffがrepositoryから再取得したworkflow advanceと一致しません",

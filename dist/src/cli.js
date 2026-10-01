@@ -4221,7 +4221,22 @@ export async function main(argv, dependencies = {}) {
         if (!apply || plan.state !== "preview") {
             const resume = observeWorkflowResume(staging);
             const handoff = observeWorkflowHandoff(staging, inspected.nextStep, resume);
-            const execution = handoff === undefined ? {} : { handoff };
+            const execution = handoff === undefined
+                ? {}
+                : {
+                    handoff,
+                    ...("kind" in handoff && handoff.role === "correction"
+                        ? {
+                            handoffAlternatives: [
+                                {
+                                    ...handoff,
+                                    role: "reviewer",
+                                    reviewRound: (handoff.reviewRound ?? 0) + 1,
+                                },
+                            ],
+                        }
+                        : {}),
+                };
             print(syncPreview === undefined
                 ? { ...plan, resume, ...execution }
                 : { ...plan, sync: syncPreview, resume, ...execution });

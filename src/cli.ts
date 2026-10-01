@@ -5948,7 +5948,23 @@ export async function main(
         inspected.nextStep,
         resume,
       );
-      const execution = handoff === undefined ? {} : { handoff };
+      const execution =
+        handoff === undefined
+          ? {}
+          : {
+              handoff,
+              ...("kind" in handoff && handoff.role === "correction"
+                ? {
+                    handoffAlternatives: [
+                      {
+                        ...handoff,
+                        role: "reviewer",
+                        reviewRound: (handoff.reviewRound ?? 0) + 1,
+                      },
+                    ],
+                  }
+                : {}),
+            };
       print(
         syncPreview === undefined
           ? { ...plan, resume, ...execution }

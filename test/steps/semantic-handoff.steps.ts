@@ -63,7 +63,11 @@ When(
     const allowed = (result: string) =>
       assert.doesNotMatch(result, /"deny"|"continue":false/u);
     const denied = (result: string) => assert.match(result, /"deny"/u);
-    const pointer = (step: number, targetStaging = staging) => {
+    const pointer = (
+      step: number,
+      targetStaging = staging,
+      rereview = false,
+    ) => {
       const result = spawnSync(
         process.execPath,
         [
@@ -79,11 +83,11 @@ When(
         },
       );
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      const h = (
-        JSON.parse(result.stdout) as {
-          handoff: ReturnType<typeof observeWorkflowHandoff>;
-        }
-      ).handoff;
+      const preview = JSON.parse(result.stdout) as {
+        handoff: ReturnType<typeof observeWorkflowHandoff>;
+        handoffAlternatives?: ReturnType<typeof observeWorkflowHandoff>[];
+      };
+      const h = rereview ? preview.handoffAlternatives?.[0] : preview.handoff;
       assert.ok(h && "kind" in h, JSON.stringify(h));
       assert.equal(h.step, step);
       return h;
@@ -239,7 +243,7 @@ When(
           {
             id: "F-001",
             severity: "High",
-            status: round === 3 ? "resolved" : "valid",
+            status: "valid",
             source: "review",
             relation: "acceptance-violation",
             evidence: "fixture",
@@ -274,8 +278,52 @@ When(
       stop(`c${round}`);
       recordStep(9);
     }
-    assert.equal(session?.status, "converged");
-    assert.equal(session.rounds.length, 3);
+    assert.equal(session?.status, "active");
+    const unchangedCorrection = pointer(10);
+    allowed(dispatch(unchangedCorrection, "dispatch-unchanged"));
+    start("unchanged");
+    const rereview = pointer(10, staging, true);
+    assert.equal(rereview.role, "reviewer");
+    assert.equal(rereview.reviewRound, 4);
+    assert.equal(rereview.headSha, unchangedCorrection.headSha);
+    denied(dispatch(rereview, "premature-rereview"));
+    stop("unchanged");
+    allowed(dispatch(rereview, "dispatch-r4"));
+    start("r4");
+    allowed(tool("r4"));
+    denied(tool("r4", "Write"));
+    stop("r4");
+    session = advanceReviewSession(session, {
+      round: 4,
+      previousRoundDigest: session.latestRoundDigest,
+      anchor,
+      candidateHeadSha: git("rev-parse", "HEAD"),
+      focus: {
+        previousBlocking: ["F-001"],
+        fixedDiff: [],
+        adjacentScope: [],
+      },
+      findings: [
+        {
+          id: "F-001",
+          severity: "High",
+          status: "false-positive",
+          source: "review",
+          relation: "acceptance-violation",
+          evidence:
+            "Independent reviewer confirmed existing code meets AC-TEST",
+          path: "code.txt",
+          contractId: "AC-TEST",
+          causedByFindingId: null,
+        },
+      ],
+    });
+    fs.writeFileSync(
+      path.join(staging, "review-session.json"),
+      JSON.stringify(session),
+    );
+    assert.equal(session.status, "converged");
+    assert.equal(session.rounds.length, 4);
     assert.equal(pointer(10).role, "coordinator");
     denied(dispatch({ ...impl, headSha: "f".repeat(40) }, "stale-head"));
     denied(
