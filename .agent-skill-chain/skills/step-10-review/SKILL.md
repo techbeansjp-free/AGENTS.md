@@ -57,6 +57,10 @@ review中またはPR review中に見つけた欠陥は[派生した欠陥の是�
 
 **review証跡のテンプレートはない。** 証跡は`review export`が収束済みreview sessionから生成する`docs/reviews/<Issue番号>_review.json`であり、人もAIも手で書かない。`staging.tracked=false`のstagingは版管理外である。`staging.tracked=true`ではstagingの計画文書を版管理するが、どちらの場合もstaging内のfileをreview証跡として扱わない。証跡は`docs/reviews/`または`.agent-skill-chain/reviews/`配下へ置き、実装commitの後にその1 fileだけをcommitして`H_final`にする。この証跡commitに対する取り直しroundは要らない。H_final後は証跡を更新しない。是正が必要なら前進commitで次roundを収束させ、`review export`で生成し直す。
 
+## execution context境界
+
+実験的`short-lived`方式では、[開発ワークフローのexecution context境界](../../docs/01_開発ワークフロー.md#実験的なexecution-context境界)に従い、この担当work unitへfresh contextを割り当てる。repository/stagingから復元し、完了後に別工程・別review round・finding是正を同じcontextへ追加しない。workerの成果物・検証・必要なcommit・返却・終了の後でcoordinatorがStep/roundを記録する。`compatible`の既存動作と品質gateは維持する。
+
 ## テンプレート契約
 
 差分が触れた範囲の追跡先を確認するときは[Semantic Graphの利用](../../docs/01_開発ワークフロー.md#semantic-graphの利用)を読み、影響集合は`impact`で導出する。

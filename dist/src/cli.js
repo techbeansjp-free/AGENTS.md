@@ -16,6 +16,7 @@ import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verify
 import { parseReviewEvidence, } from "./domain/review-evidence.js";
 import { exportReviewEvidence, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
 import { runVerification } from "./adapters/verification-run.js";
+import { observeWorkflowHandoff } from "./adapters/workflow-handoff.js";
 import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, nonCanonicalClosingReferences, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, VERIFICATION_SET_INPUT_EXAMPLE, } from "./domain/agile-verification.js";
@@ -4219,9 +4220,26 @@ export async function main(argv, dependencies = {}) {
         }
         if (!apply || plan.state !== "preview") {
             const resume = observeWorkflowResume(staging);
+            const handoff = observeWorkflowHandoff(staging, inspected.nextStep, resume);
+            const execution = handoff === undefined
+                ? {}
+                : {
+                    handoff,
+                    ...("kind" in handoff && handoff.role === "correction"
+                        ? {
+                            handoffAlternatives: [
+                                {
+                                    ...handoff,
+                                    role: "reviewer",
+                                    reviewRound: (handoff.reviewRound ?? 0) + 1,
+                                },
+                            ],
+                        }
+                        : {}),
+                };
             print(syncPreview === undefined
-                ? { ...plan, resume }
-                : { ...plan, sync: syncPreview, resume });
+                ? { ...plan, resume, ...execution }
+                : { ...plan, sync: syncPreview, resume, ...execution });
             return plan.state === "blocked" ? 1 : 0;
         }
         return withStagingMutationLock(staging, () => {

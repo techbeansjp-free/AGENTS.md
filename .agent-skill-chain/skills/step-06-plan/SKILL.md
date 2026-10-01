@@ -17,6 +17,10 @@ Codex実装taskは起動ごとに`routing launch`へ渡す計画にする。最�
 
 初回導入ではproject ownerが`.agent-skill-chain/project-policy.json`の`choiceFiles`に列挙したchoice JSONの`modelMapping.tierMapping`へ、`codex:provider_recommended_default:high:default`をkey、採用する能力tierを値として一度だけ設定し、既定branchへ反映する。このkeyは公式推奨・high・標準速度に対するprojectの採用方針であり、具体model名でも公式の性能保証でもない。未設定または必要tier未満ではlaunchを開始せず、candidate自身の設定をtrusted基準へ代用しない。以降の公式推奨model変更でkeyやmodel名を手動更新する必要はない。
 
+## execution context境界
+
+実験的`short-lived`方式では、[開発ワークフローのexecution context境界](../../docs/01_開発ワークフロー.md#実験的なexecution-context境界)に従い、この担当work unitへfresh contextを割り当てる。repository/stagingから復元し、完了後に別工程・別review round・finding是正を同じcontextへ追加しない。workerの成果物・検証・必要なcommit・返却・終了の後でcoordinatorがStep/roundを記録する。`compatible`の既存動作と品質gateは維持する。
+
 ## テンプレート契約
 
 作業開始前に[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)を全文読み、実装計画へ新しい要求・要件・設計判断を暗黙追加しない。03はStep 8の記録時に計画封印され、以後は編集しない。封印後の計画変更は`05_計画変更.md`へ追記する。

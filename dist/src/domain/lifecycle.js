@@ -112,7 +112,7 @@ export function inspectHookRegistration(input) {
         };
 }
 /** 設定の存在だけを観測する。実hostでの発火を保証しない。 */
-export function inspectAgentLifecycleRegistration(settings) {
+export function inspectAgentLifecycleRegistration(settings, executionContextMode = process.env.ASC_EXECUTION_CONTEXT_MODE) {
     const required = [
         "SessionStart",
         "SessionEnd",
@@ -121,14 +121,22 @@ export function inspectAgentLifecycleRegistration(settings) {
         "PreToolUse",
     ];
     let hooks = {};
+    let shortLived = executionContextMode === "short-lived";
     try {
         const parsed = JSON.parse(settings ?? "{}");
-        if (isRecord(parsed) && isRecord(parsed.hooks))
-            hooks = parsed.hooks;
+        if (isRecord(parsed)) {
+            if (isRecord(parsed.hooks))
+                hooks = parsed.hooks;
+            if (isRecord(parsed.env) &&
+                parsed.env.ASC_EXECUTION_CONTEXT_MODE === "short-lived")
+                shortLived = true;
+        }
     }
     catch {
         hooks = {};
     }
+    if (shortLived)
+        required.push("PostToolUse", "PostToolUseFailure");
     const configuredEvents = required.filter((event) => {
         const entries = hooks[event];
         return (Array.isArray(entries) &&

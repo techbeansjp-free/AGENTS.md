@@ -2,17 +2,17 @@
   "schemaVersion": "agent-skill-chain/review-evidence/v2",
   "issue": 1546,
   "observed": {
-    "baseSha": "dc91364fafd8a507fe63c1138512c2eefc7636d7",
-    "implementationHeadSha": "e10df47b4496f202048b88c2fda6b0f80e27296b",
-    "diffDigest": "30a700b9b38537c1aa546a21e3830c88d5a7d717e6171559b11f121bbd425200",
+    "baseSha": "e6836534821c6a0d109f7404de6eb2bd49c2c3ba",
+    "implementationHeadSha": "c382f13c819f736820e50b916cd0619c471c91da",
+    "diffDigest": "8b925ac635a75c62d7c0fdc48a790ea8d98bc087d43e3df0a943c5aa91317e33",
     "session": {
-      "sessionId": "4b2a5772bffffbbad08c39677952bba40beb73bc7b8c74819ccf320a0357639e",
-      "latestRoundDigest": "cee3259864906c163daf11211aa8228ae0229c5120f9b794e80e9768a96b8a61",
+      "sessionId": "8764a96ab5b61350a2ab5b470b49f0c0b68c3a4f0dcbebdcf89e29db650b569c",
+      "latestRoundDigest": "f036a1806febb4ecdc2f342f16febef805821ec765e838611348f4dcf02aafa8",
       "status": "converged",
-      "countedRounds": 2
+      "countedRounds": 3
     },
     "impact": {
-      "digest": "10eeee8ed8637a1373bf760a1df0bbeb8471e162c4d623054531dad710f7443e",
+      "digest": "a37917b6923737c302a38c5ab64c59dafcc9650fb529b3df93f014c1bc771d9a",
       "mode": "full"
     },
     "verification": [
@@ -23,21 +23,30 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "e10df47b4496f202048b88c2fda6b0f80e27296b",
-        "impactDigest": "10eeee8ed8637a1373bf760a1df0bbeb8471e162c4d623054531dad710f7443e",
-        "finishedAt": "2026-09-30T19:08:14.244Z",
-        "recordDigest": "658818547cfe2b04cdfd1ae3ccfcdc2035d2eaa973ec164bc9a01ea94ad2c944"
+        "headSha": "c382f13c819f736820e50b916cd0619c471c91da",
+        "impactDigest": "a37917b6923737c302a38c5ab64c59dafcc9650fb529b3df93f014c1bc771d9a",
+        "finishedAt": "2026-10-01T07:53:02.643Z",
+        "recordDigest": "614080a3642902b7e8b82b4ad9089521cdfe2dbbf2f7b4fa511c17ef375cfbf1"
       }
     ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "SCOPE-01",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/hooks/asc-agent-lifecycle.mjs",
+      "contractId": null
+    }
+  ],
   "unresolvedCriticalHigh": [],
   "verdict": "approved",
   "declared": {
-    "reviewer": "codex:/root/review_main_resume_1546",
+    "reviewer": "codex:/root/review_untracked_1549",
     "implementer": "codex:/root",
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "5f2a093af3c1ee1198c1df00f23fcda825c10fac1fde206d3fd8809b24e4e78b"
+  "evidenceDigest": "8e908953a7b740066990fb84ae5e65b233713990b1d5060253b6e1511116a64d"
 }

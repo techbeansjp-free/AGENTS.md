@@ -54,3 +54,8 @@ Feature: agent lifecycleをhost hookで制限する
     Given lifecycle hookを登録した新規sessionがある
     When lifecycleの"session再開"を実行する
     Then lifecycle登録診断はevent不足と非同期登録を報告する
+
+  Scenario: SCN-INT-AGENTLIFE-007 semantic boundaryでfresh contextへhandoffする
+    Given semantic handoff検査用の隔離環境を用意する
+    When fresh contextで実装と複数review roundを完走し反例を拒否する
+    Then semantic handoffの正常系と拒否系が成立する

@@ -302,6 +302,46 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
     inspectAgentLifecycleRegistration(JSON.stringify({ hooks })).missingEvents,
     [],
   );
+  assert.deepEqual(
+    inspectAgentLifecycleRegistration(JSON.stringify({ hooks }), "short-lived")
+      .missingEvents,
+    ["PostToolUse", "PostToolUseFailure"],
+  );
+  assert.deepEqual(
+    inspectAgentLifecycleRegistration(
+      JSON.stringify({
+        hooks,
+        env: { ASC_EXECUTION_CONTEXT_MODE: "short-lived" },
+      }),
+      "compatible",
+    ).missingEvents,
+    ["PostToolUse", "PostToolUseFailure"],
+  );
+  fs.mkdirSync(path.join(this.lifecycleRoot, ".claude"), { recursive: true });
+  fs.writeFileSync(
+    path.join(this.lifecycleRoot, ".claude/settings.local.json"),
+    JSON.stringify({
+      hooks,
+      env: { ASC_EXECUTION_CONTEXT_MODE: "short-lived" },
+    }),
+  );
+  assert.deepEqual(
+    doctor(this.lifecycleRoot).hooks.agentLifecycle.missingEvents,
+    ["PostToolUse", "PostToolUseFailure"],
+  );
+  hooks.PostToolUse = [entry];
+  hooks.PostToolUseFailure = [{ hooks: [{ ...entry.hooks[0], async: true }] }];
+  assert.deepEqual(
+    inspectAgentLifecycleRegistration(JSON.stringify({ hooks }), "short-lived")
+      .missingEvents,
+    ["PostToolUseFailure"],
+  );
+  hooks.PostToolUseFailure = [entry];
+  assert.deepEqual(
+    inspectAgentLifecycleRegistration(JSON.stringify({ hooks }), "short-lived")
+      .missingEvents,
+    [],
+  );
   hooks.PreToolUse = [{ hooks: [{ ...entry.hooks[0], async: true }] }];
   assert.deepEqual(
     inspectAgentLifecycleRegistration(JSON.stringify({ hooks })).missingEvents,

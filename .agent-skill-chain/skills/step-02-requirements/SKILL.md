@@ -7,6 +7,10 @@ description: fullモードの要求を、ドメイン規則と実行可能な受
 
 入力は`full`モードの要求。成果物はユーザーストーリー、ユビキタス言語、ドメインモデル・不変条件、機能・非機能要件、受け入れ条件、Gherkin IDを含む`01_要件定義.md`。要件を観測可能にし、権限境界を明示する。`poc`ではこのStepを独立実行せず00へquick相当で集約し、正式開発へ移す場合は昇格根拠と不足成果物を列挙して`full`へ単調昇格してから実行する。ステップ3へ合成する。
 
+## execution context境界
+
+実験的`short-lived`方式では、[開発ワークフローのexecution context境界](../../docs/01_開発ワークフロー.md#実験的なexecution-context境界)に従い、この担当work unitへfresh contextを割り当てる。repository/stagingから復元し、完了後に別工程・別review round・finding是正を同じcontextへ追加しない。workerの成果物・検証・必要なcommit・返却・終了の後でcoordinatorがStep/roundを記録する。`compatible`の既存動作と品質gateは維持する。
+
 ## テンプレート契約
 
 作業開始前に[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)を全文読み、要求を増減せず、要件と受け入れ条件を分離して追跡する。

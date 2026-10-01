@@ -11,6 +11,10 @@ description: fullモードの要求・要件が設計開始可能かを一度確
 
 進行役はローカルLLMの結果に加え、利用可能ならCodex SolまたはOpusなど別reviewerの独立したreadiness checkも確認する。ローカル設定がない場合はCodex Solを基本候補とし、利用不能ならOpusなどを選ぶ。PRのCodeRabbit利用枠制限に応じた二者レビューはStep 10で判定する。採否は進行役が出典と反証を確認して決め、追加reviewerを呼べない場合は理由をjournal evidenceへ記録する。
 
+## execution context境界
+
+実験的`short-lived`方式では、[開発ワークフローのexecution context境界](../../docs/01_開発ワークフロー.md#実験的なexecution-context境界)に従い、この担当work unitへfresh contextを割り当てる。repository/stagingから復元し、完了後に別工程・別review round・finding是正を同じcontextへ追加しない。workerの成果物・検証・必要なcommit・返却・終了の後でcoordinatorがStep/roundを記録する。`compatible`の既存動作と品質gateは維持する。
+
 ## テンプレート契約
 
 直接使用するテンプレートはない。このステップは00/01の既存構造を保ったまま開始可能性だけを記録し、最終review成果物を生成しない。
