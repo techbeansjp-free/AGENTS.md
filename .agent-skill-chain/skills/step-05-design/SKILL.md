@@ -7,6 +7,10 @@ description: 同期済みfull要件から、依存方向・信頼境界・失敗
 
 入力は耐久トラッカーへ同期済みの`full`要件。成果物は境界づけられたコンテキスト、依存方向、明示的なコマンドの入力・出力、信頼境界、承認、原子性、失敗、復旧、ロールバック、仕様影響、テスト接合部を記載した`02_設計.md`。`poc`ではこのStepを独立実行せず最小設計を00へ集約し、正式開発への昇格時に不足する02を`full`成果物として補完する。Mermaid・UUIDは必要時だけ設計し、ADRリンクは任意の拡張メタデータだけとする。
 
+## execution context境界
+
+実験的`short-lived`方式では、[開発ワークフローのexecution context境界](../../docs/01_開発ワークフロー.md#実験的なexecution-context境界)に従い、この担当work unitへfresh contextを割り当てる。repository/stagingから復元し、完了後に別工程・別review round・finding是正を同じcontextへ追加しない。workerの成果物・検証・必要なcommit・返却・終了の後でcoordinatorがStep/roundを記録する。`compatible`の既存動作と品質gateは維持する。
+
 ## テンプレート契約
 
 作業開始前に[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)を全文読み、設計を要件から責務・境界・契約への写像として記述し、上流を再定義しない。

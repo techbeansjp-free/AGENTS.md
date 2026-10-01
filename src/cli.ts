@@ -49,6 +49,7 @@ import {
   verifyReviewEvidenceWithStaging,
 } from "./adapters/review-evidence.js";
 import { runVerification } from "./adapters/verification-run.js";
+import { observeWorkflowHandoff } from "./adapters/workflow-handoff.js";
 import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import {
   assertPullRequestTrackerBinding,
@@ -5942,10 +5943,16 @@ export async function main(
     }
     if (!apply || plan.state !== "preview") {
       const resume = observeWorkflowResume(staging);
+      const handoff = observeWorkflowHandoff(
+        staging,
+        inspected.nextStep,
+        resume,
+      );
+      const execution = handoff === undefined ? {} : { handoff };
       print(
         syncPreview === undefined
-          ? { ...plan, resume }
-          : { ...plan, sync: syncPreview, resume },
+          ? { ...plan, resume, ...execution }
+          : { ...plan, sync: syncPreview, resume, ...execution },
       );
       return plan.state === "blocked" ? 1 : 0;
     }

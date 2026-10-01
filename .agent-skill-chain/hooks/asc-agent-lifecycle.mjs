@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 
 const MODES = ["observe", "warn", "enforce"];
 const EVENTS = new Set([
@@ -11,6 +12,9 @@ const EVENTS = new Set([
   "SubagentStart",
   "SubagentStop",
   "PreToolUse",
+  "PostToolBatch",
+  "PostToolUse",
+  "PostToolUseFailure",
 ]);
 const HANDOFF =
   "作業状態はGit / staging / trackerを正本とし、Issue・worktree・stagingのpointerから復旧できます。mainは継続・resume可能でfresh contextは推奨です。完了subagentの追加作業はfresh agentへ渡してください。workflow advanceのresumeはadvisoryです。必要なreview・検証を続けてください。";
@@ -53,6 +57,9 @@ function readState(file) {
       !validId(state.sessionId) ||
       !Array.isArray(state.agents) ||
       !(state.budgetMode === undefined || MODES.includes(state.budgetMode)) ||
+      ![undefined, "compatible", "short-lived"].includes(
+        state.executionContextMode,
+      ) ||
       !natural(state.maxTools) ||
       state.maxTools < 10 ||
       state.maxTools > 1000 ||
@@ -72,6 +79,7 @@ function readState(file) {
         !natural(agent.tools) ||
         !natural(agent.starts) ||
         !natural(agent.deniedTools) ||
+        !(agent.toolBatches === undefined || natural(agent.toolBatches)) ||
         !Number.isFinite(Date.parse(agent.startedAt)) ||
         !Number.isFinite(Date.parse(agent.lastSeenAt)) ||
         !(agent.endedAt === null || Number.isFinite(Date.parse(agent.endedAt)))
@@ -87,6 +95,7 @@ function readState(file) {
       throw new Error("main記録がありません");
     // Older records never implicitly opt in to hard budget enforcement.
     state.budgetMode ??= "warn";
+    state.executionContextMode ??= "compatible";
     return state;
   } finally {
     fs.closeSync(fd);
@@ -129,6 +138,270 @@ function budgetEnforced(state, agent) {
   return state.budgetMode === "enforce" && agent.kind === "subagent";
 }
 
+// Pointer contracts constrain dispatch, not workflow approval. Every gate still reads
+// repository state independently. No prompt, finding body, or tool result is stored.
+const HANDOFF_KEYS = [
+  "kind",
+  "authority",
+  "issue",
+  "branch",
+  "worktree",
+  "staging",
+  "headSha",
+  "step",
+  "role",
+  "reviewSessionId",
+  "reviewRound",
+  "findingIds",
+  "boundary",
+  "resume",
+];
+const ROLES = {
+  1: ["request"],
+  2: ["requirements"],
+  3: ["readiness-reviewer"],
+  5: ["design"],
+  6: ["planning"],
+  7: ["readiness-reviewer"],
+  9: ["implementation"],
+  10: ["reviewer", "correction"],
+};
+const hashPattern = /^[a-f0-9]{64}$/u;
+function repositoryGit(root, args) {
+  const result = spawnSync("git", ["-C", root, ...args], {
+    encoding: "utf8",
+    timeout: 10000,
+    maxBuffer: 1024 * 1024,
+    env: {
+      PATH: process.env.PATH,
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_NO_REPLACE_OBJECTS: "1",
+      GIT_OPTIONAL_LOCKS: "0",
+    },
+  });
+  if (result.status !== 0) throw new Error("handoff Gitを観測できません");
+  return result.stdout.trim();
+}
+function boundaryHash(staging, relative) {
+  const file = path.join(staging, relative);
+  try {
+    if (fs.realpathSync(file) !== file) throw new Error("handoff symlink境界");
+    const fd = fs.openSync(
+      file,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+    );
+    try {
+      const stat = fs.fstatSync(fd);
+      if (!stat.isFile() || stat.nlink !== 1 || stat.size > 2 * 1024 * 1024)
+        throw new Error("handoff file境界");
+      return digest(fs.readFileSync(fd));
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      // Dangling links are not absent records.
+      if (fs.lstatSync(file, { throwIfNoEntry: false })) throw error;
+      return null;
+    }
+    throw error;
+  }
+}
+function parseHandoff(source) {
+  if (typeof source !== "string" || Buffer.byteLength(source) > 16384)
+    throw new Error("handoffは16KiB以下のpointer JSONが必要です");
+  const h = JSON.parse(source);
+  if (
+    !h ||
+    Object.keys(h).sort().join() !== [...HANDOFF_KEYS].sort().join() ||
+    h.kind !== "asc-handoff/v1" ||
+    h.authority !== "advisory" ||
+    !ROLES[h.step]?.includes(h.role) ||
+    ![h.worktree, h.staging, h.branch].every(validId) ||
+    !/^[a-f0-9]{40,64}$/u.test(h.headSha) ||
+    !(
+      h.issue === null ||
+      /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/[1-9]\d*$/u.test(
+        h.issue,
+      )
+    ) ||
+    !(h.reviewSessionId === null || validId(h.reviewSessionId)) ||
+    !(
+      h.reviewRound === null ||
+      (natural(h.reviewRound) && h.reviewRound > 0)
+    ) ||
+    !Array.isArray(h.findingIds) ||
+    h.findingIds.length > 256 ||
+    !h.findingIds.every(
+      (id) => typeof id === "string" && /^[A-Z][A-Z0-9._-]{1,127}$/u.test(id),
+    ) ||
+    !h.boundary ||
+    Object.keys(h.boundary).sort().join() !== "reviewSha256,stepsSha256" ||
+    !hashPattern.test(h.boundary.stepsSha256) ||
+    !(
+      h.boundary.reviewSha256 === null ||
+      hashPattern.test(h.boundary.reviewSha256)
+    ) ||
+    !h.resume ||
+    Object.keys(h.resume).sort().join() !== "command,staging" ||
+    h.resume.command !== "workflow advance" ||
+    h.resume.staging !== h.staging
+  )
+    throw new Error("workflow advanceのhandoff JSONが必要です");
+  return h;
+}
+function checkHandoff(h, exactHead) {
+  const root = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR);
+  if (
+    h.worktree !== root ||
+    fs.realpathSync(h.staging) !== h.staging ||
+    !h.staging.startsWith(root + path.sep) ||
+    repositoryGit(root, ["rev-parse", "--show-toplevel"]) !== root ||
+    repositoryGit(root, ["symbolic-ref", "--short", "HEAD"]) !== h.branch
+  )
+    throw new Error("handoff worktree/branch/staging不一致");
+  if (exactHead && repositoryGit(root, ["rev-parse", "HEAD"]) !== h.headSha)
+    throw new Error("handoff HEAD不一致");
+  if (
+    boundaryHash(h.staging, "journal/steps.jsonl") !== h.boundary.stepsSha256 ||
+    boundaryHash(h.staging, "review-session.json") !== h.boundary.reviewSha256
+  )
+    throw new Error(
+      "handoff境界が変更されました。状態を返却しfresh contextから再開してください",
+    );
+  if (
+    h.role === "reviewer" &&
+    repositoryGit(root, ["status", "--porcelain", "--untracked-files=no"]) !==
+      ""
+  )
+    throw new Error("review candidateに未commit変更があります");
+}
+const shellQuote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
+function verifyDispatch(h) {
+  const cli = process.env.ASC_WORKFLOW_CLI;
+  if (!cli || !path.isAbsolute(cli) || !fs.statSync(cli).isFile())
+    throw new Error(
+      "fresh dispatchには信頼済みASC_WORKFLOW_CLIの絶対path設定が必要です",
+    );
+  const result = spawnSync(
+    process.execPath,
+    [cli, "workflow", "advance", `--staging=${h.staging}`],
+    {
+      cwd: h.worktree,
+      env: { ...process.env, ASC_EXECUTION_CONTEXT_MODE: "short-lived" },
+      encoding: "utf8",
+      timeout: 15000,
+      maxBuffer: 2 * 1024 * 1024,
+    },
+  );
+  if (
+    result.status !== 0 ||
+    JSON.stringify(JSON.parse(result.stdout).handoff) !== JSON.stringify(h)
+  )
+    throw new Error(
+      "handoffがrepositoryから再取得したworkflow advanceと一致しません",
+    );
+}
+function reviewerCommands(h) {
+  const cli = process.env.ASC_WORKFLOW_CLI;
+  if (!cli || !path.isAbsolute(cli) || !fs.statSync(cli).isFile())
+    throw new Error(
+      "Reviewerの読取CLIにはASC_WORKFLOW_CLIの絶対path設定が必要です",
+    );
+  return {
+    resume: `node ${shellQuote(cli)} workflow advance ${shellQuote("--staging=" + h.staging)}`,
+    gitPrefix: `git -C ${shellQuote(h.worktree)} --no-pager `,
+  };
+}
+function reviewerReadAllowed(h, input) {
+  if (["Read", "Glob", "Grep"].includes(input.tool_name)) return true;
+  if (input.tool_name !== "Bash") return false;
+  const command = input.tool_input?.command;
+  const allowed = reviewerCommands(h);
+  if (command === allowed.resume) return true;
+  if (typeof command !== "string" || !command.startsWith(allowed.gitPrefix))
+    return false;
+  const tail = command.slice(allowed.gitPrefix.length);
+  // Literal commit IDs only; no shell syntax, pathspecs, external diff or textconv.
+  return /^(?:diff --no-ext-diff --no-textconv '[a-f0-9]{40}(?:[a-f0-9]{24})?' '[a-f0-9]{40}(?:[a-f0-9]{24})?'|show --no-ext-diff --no-textconv '[a-f0-9]{40}(?:[a-f0-9]{24})?'|log --format=oneline -n 20 '[a-f0-9]{40}(?:[a-f0-9]{24})?') --$/u.test(
+    tail,
+  );
+}
+
+function executionGuard(state, agent, input) {
+  if (state.executionContextMode !== "short-lived") return undefined;
+  const tool = input.tool_input ?? {};
+  if (input.tool_name === "SubagentHandback") return {};
+  if (agent.kind === "subagent") {
+    try {
+      const h = parseHandoff(JSON.stringify(agent.handoff));
+      checkHandoff(h, h.role === "reviewer");
+      if (h.role === "reviewer" && !reviewerReadAllowed(h, input))
+        return deny(
+          "ReviewerはRead / Glob / Grep、指定した読取CLI/Git commandと結果返却だけを実行できます",
+        );
+    } catch (error) {
+      return deny(error.message);
+    }
+  }
+  if (
+    ["Agent", "Task"].includes(input.tool_name) &&
+    tool.resume === undefined
+  ) {
+    if (agent.kind !== "main")
+      return deny("fresh dispatchはcoordinatorが行います");
+    if (state.pendingHandoff)
+      return deny("前のfresh dispatchの開始/失敗観測を待ってください");
+    try {
+      const h = parseHandoff(tool.prompt);
+      checkHandoff(h, true);
+      verifyDispatch(h);
+      if (h.role === "reviewer") reviewerCommands(h);
+      if (
+        state.agents.some(
+          (entry) =>
+            entry.kind === "subagent" &&
+            entry.status === "active" &&
+            entry.handoff?.staging === h.staging,
+        )
+      )
+        throw new Error(
+          "同じstagingのworker終了を待ってからfresh dispatchしてください",
+        );
+      if (!validId(tool.subagent_type) || !validId(input.tool_use_id))
+        throw new Error("dispatch type/tool_use_idが必要です");
+      state.pendingHandoff = {
+        handoff: h,
+        agentType: tool.subagent_type,
+        toolUseId: input.tool_use_id,
+        parentId: agent.id,
+      };
+    } catch (error) {
+      return deny(error.message);
+    }
+  }
+  if (input.tool_name === "SendMessage") {
+    const recipient = state.agents.find(
+      (entry) => entry.id === (tool.to ?? tool.recipient),
+    );
+    // Communication may only repeat the assigned pointer contract. A new unit
+    // always needs a new Agent call, even if the previous child is still active.
+    try {
+      const h = parseHandoff(tool.message ?? tool.content);
+      if (
+        !recipient?.handoff ||
+        JSON.stringify(h) !== JSON.stringify(recipient.handoff)
+      )
+        throw new Error("active contextへ別work unitを追加できません");
+      checkHandoff(h, true);
+    } catch (error) {
+      return deny(error.message);
+    }
+  }
+  return undefined;
+}
+
 function transition(state, input, now) {
   const event = input.hook_event_name;
   if (
@@ -143,6 +416,7 @@ function transition(state, input, now) {
       throw new Error("subagent identityが不正です");
     if (agent) {
       agent.starts += 1;
+      agent.resumeAttempts = (agent.resumeAttempts ?? 0) + 1;
       state.resumeAttempts += 1;
       // Start cannot block. PreToolUse below refuses the reused identity.
       agent.status = "closed";
@@ -151,16 +425,44 @@ function transition(state, input, now) {
     } else {
       agent = newAgent(id, "subagent", now);
       state.agents.push(agent);
+      if (state.executionContextMode === "short-lived") {
+        const pending = state.pendingHandoff;
+        if (pending && pending.agentType === input.agent_type) {
+          try {
+            checkHandoff(parseHandoff(JSON.stringify(pending.handoff)), true);
+          } catch {
+            state.pendingHandoff = null;
+            return context(
+              event,
+              "ASC handoffがstaleです。実作業をせずcoordinatorへ返却してください。",
+            );
+          }
+          agent.handoff = pending.handoff;
+          agent.parentId = pending.parentId;
+          agent.generation = 1;
+          agent.handoffFrom =
+            state.agents
+              .filter(
+                (entry) =>
+                  entry.kind === "subagent" &&
+                  entry.id !== id &&
+                  entry.handoff?.staging === pending.handoff.staging,
+              )
+              .at(-1)?.id ?? null;
+          state.pendingHandoff = null;
+        }
+      }
     }
     return context(
       event,
-      `ASC: one agent = one bounded work unit。tool目安${state.maxTools}、budget mode=${state.budgetMode}。${HANDOFF}`,
+      `ASC: one agent = one bounded work unit。${agent.handoff ? "担当pointer: " + JSON.stringify(agent.handoff) + "。repositoryからresumeを再取得し担当だけを実施。検証・commit・返却後に終了し、Step/round記録はcoordinatorが行う。" : ""}tool目安${state.maxTools}、budget mode=${state.budgetMode}。${HANDOFF}${agent.handoff?.role === "reviewer" ? " 読取command: " + JSON.stringify(reviewerCommands(agent.handoff)) + "。Gitはdiff --no-ext-diff --no-textconv '<baseSHA>' '<headSHA>' -- / show --no-ext-diff --no-textconv '<SHA>' -- / log --format=oneline -n 20 '<SHA>' --だけをgitPrefixへ続けて実行可能。" : ""}`,
     );
   }
   if (event === "SessionStart") {
     const main = state.agents.find((entry) => entry.kind === "main");
     if (input.source === "resume") {
       main.starts += 1;
+      main.resumeAttempts = (main.resumeAttempts ?? 0) + 1;
       state.resumeAttempts += 1;
       // Also accepts main records closed/exhausted by earlier hook versions.
       main.status = "active";
@@ -172,6 +474,18 @@ function transition(state, input, now) {
       event,
       `ASC lifecycle: ${main.status}, tools=${main.tools}/${state.maxTools}。compactやsession再開で計測はリセットしません。長寿命sessionではfresh contextも利用できます。${HANDOFF}`,
     );
+  }
+  if (["PostToolUse", "PostToolUseFailure"].includes(event)) {
+    if (state.pendingHandoff?.toolUseId === input.tool_use_id)
+      state.pendingHandoff = null;
+    return {};
+  }
+  if (event === "PostToolBatch") {
+    if (agent) {
+      agent.toolBatches = (agent.toolBatches ?? 0) + 1;
+      agent.lastSeenAt = now;
+    }
+    return {};
   }
   if (!agent) {
     if (event === "PreToolUse")
@@ -239,6 +553,8 @@ function transition(state, input, now) {
       );
     }
   }
+  const guarded = executionGuard(state, agent, input);
+  if (guarded !== undefined) return guarded;
   const reserve = Math.min(20, Math.floor(state.maxTools / 5));
   if (
     state.budgetMode !== "observe" &&
@@ -295,8 +611,16 @@ function run(input) {
         throw new Error("ASC_AGENT_BUDGET_MODEはobserve / warn / enforceです", {
           cause: error,
         });
+      const executionContextMode =
+        process.env.ASC_EXECUTION_CONTEXT_MODE ?? "compatible";
+      if (!["compatible", "short-lived"].includes(executionContextMode))
+        throw new Error(
+          "ASC_EXECUTION_CONTEXT_MODEはcompatible / short-livedです",
+          { cause: error },
+        );
       state = {
         version: 1,
+        executionContextMode,
         budgetMode,
         sessionId: input.session_id,
         maxTools,
@@ -333,8 +657,18 @@ function report() {
         ...state,
         agents: state.agents.map((agent) => ({
           ...agent,
-          parent: agent.kind === "subagent" ? state.sessionId : null,
-          generation: 1,
+          parent: agent.parentId ?? null,
+          generation: agent.kind === "main" ? 0 : (agent.generation ?? null),
+          role: agent.handoff?.role ?? null,
+          workflowStep: agent.handoff?.step ?? null,
+          reviewSessionId: agent.handoff?.reviewSessionId ?? null,
+          reviewRound: agent.handoff?.reviewRound ?? null,
+          modelCycleProxy: agent.toolBatches ?? null,
+          modelCycleProxyKind:
+            agent.toolBatches === undefined ? null : "PostToolBatch",
+          freshHandoffTo:
+            state.agents.find((next) => next.handoffFrom === agent.id)?.id ??
+            null,
           observedLifetimeMs:
             Date.parse(agent.endedAt ?? agent.lastSeenAt) -
             Date.parse(agent.startedAt),

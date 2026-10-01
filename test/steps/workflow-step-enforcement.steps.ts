@@ -10617,6 +10617,29 @@ if (exact(["auth", "status"])) {
       const { status, output } = await previewResume(staging);
       assert.equal(status, 0, JSON.stringify(output));
       assert.equal(output.targetStep, 1);
+      const short = executeCli(
+        ["workflow", "advance", `--staging=${staging}`],
+        root,
+        {
+          ...process.env,
+          ASC_EXECUTION_CONTEXT_MODE: "short-lived",
+        },
+      );
+      assert.equal(short.status, 0, short.stdout + short.stderr);
+      const handoff = (
+        JSON.parse(short.stdout) as {
+          handoff: {
+            role: string;
+            headSha: string;
+            staging: string;
+            boundary: { stepsSha256: string };
+          };
+        }
+      ).handoff;
+      assert.equal(handoff.role, "request");
+      assert.equal(handoff.headSha, gitHeadOf(root));
+      assert.equal(handoff.staging, staging);
+      assert.match(handoff.boundary.stepsSha256, /^[a-f0-9]{64}$/u);
       assert.deepEqual(output.resume, {
         authority: "advisory",
         staging,
