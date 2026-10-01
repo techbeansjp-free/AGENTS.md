@@ -338,6 +338,10 @@ function executionGuard(state, agent, input) {
   if (input.tool_name === "SubagentHandback") return {};
   if (agent.kind === "subagent") {
     try {
+      if (agent.contextIsolation !== "fresh")
+        throw new Error(
+          "short-lived workerのcontext分離が未確認または継承です。fresh agentへ返却してください",
+        );
       const h = parseHandoff(JSON.stringify(agent.handoff));
       checkHandoff(h, h.role === "reviewer");
       if (h.role === "reviewer" && !reviewerReadAllowed(h, input))
@@ -354,6 +358,10 @@ function executionGuard(state, agent, input) {
   ) {
     if (agent.kind !== "main")
       return deny("fresh dispatchはcoordinatorが行います");
+    if (tool.subagent_type === "fork")
+      return deny(
+        "short-livedではmainのconversationを継承するforkを使用できません",
+      );
     if (state.pendingHandoff)
       return deny("前のfresh dispatchの開始/失敗観測を待ってください");
     try {
@@ -427,7 +435,25 @@ function transition(state, input, now) {
       agent.endedAt ??= now;
     } else {
       agent = newAgent(id, "subagent", now);
+      agent.contextIsolation =
+        input.agent_type === "fork"
+          ? "inherited"
+          : validId(input.agent_type)
+            ? "fresh"
+            : "unknown";
       state.agents.push(agent);
+      if (
+        state.executionContextMode === "short-lived" &&
+        agent.contextIsolation === "inherited"
+      ) {
+        agent.status = "closed";
+        agent.reason = "inherited-context";
+        agent.endedAt = now;
+        return context(
+          event,
+          "short-livedではforkを実行できません。作業せず返却してください。",
+        );
+      }
       if (state.executionContextMode === "short-lived") {
         const pending = state.pendingHandoff;
         if (pending && pending.agentType === input.agent_type) {
@@ -662,6 +688,7 @@ function report() {
           ...agent,
           parent: agent.parentId ?? null,
           generation: agent.kind === "main" ? 0 : (agent.generation ?? null),
+          contextIsolation: agent.contextIsolation ?? "unknown",
           role: agent.handoff?.role ?? null,
           workflowStep: agent.handoff?.step ?? null,
           reviewSessionId: agent.handoff?.reviewSessionId ?? null,

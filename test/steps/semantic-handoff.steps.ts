@@ -109,12 +109,12 @@ When(
         },
         ...(step === 9 ? { headSha: git("rev-parse", "HEAD") } : {}),
       });
-    const dispatch = (h: unknown, id: string) =>
+    const dispatch = (h: unknown, id: string, agentType = "general-purpose") =>
       call("PreToolUse", {
         tool_name: "Agent",
         tool_use_id: id,
         tool_input: {
-          subagent_type: "general-purpose",
+          subagent_type: agentType,
           prompt: JSON.stringify(h),
         },
       });
@@ -128,6 +128,14 @@ When(
       call("PreToolUse", { agent_id: id, tool_name: name, tool_input: {} });
     allowed(call("SessionStart", { source: "startup" }));
     const request = pointer(1);
+    denied(dispatch(request, "fork-dispatch", "fork"));
+    allowed(
+      call("SubagentStart", {
+        agent_id: "unexpected-fork",
+        agent_type: "fork",
+      }),
+    );
+    denied(tool("unexpected-fork"));
     allowed(dispatch(request, "dispatch-request"));
     start("request");
     allowed(tool("request"));
@@ -295,7 +303,7 @@ When(
     denied(tool("r4", "Write"));
     stop("r4");
     const roundFile = path.join(this.temp("asc-same-head-"), "round.json");
-    const reviewCli = (...args: string[]) => {
+    const reviewCli = (mode: string, ...args: string[]) => {
       const result = spawnSync(
         process.execPath,
         [
@@ -304,11 +312,27 @@ When(
           "round",
           ...args,
         ],
-        { cwd: root, encoding: "utf8" },
+        {
+          cwd: root,
+          encoding: "utf8",
+          env: { ...process.env, ASC_EXECUTION_CONTEXT_MODE: mode },
+        },
       );
-      assert.equal(result.status, 0, result.stdout + result.stderr);
+      if (mode === "compatible") {
+        assert.notEqual(result.status, 0);
+        assert.match(result.stdout + result.stderr, /実Git差分が空/u);
+        assert.equal(fs.existsSync(roundFile), false);
+      } else assert.equal(result.status, 0, result.stdout + result.stderr);
     };
     reviewCli(
+      "compatible",
+      "--init",
+      `--staging=${staging}`,
+      `--head=${rereview.headSha}`,
+      `--out=${roundFile}`,
+    );
+    reviewCli(
+      "short-lived",
       "--init",
       `--staging=${staging}`,
       `--head=${rereview.headSha}`,
@@ -333,7 +357,12 @@ When(
         })),
       }),
     );
-    reviewCli(`--staging=${staging}`, `--file=${roundFile}`, "--apply");
+    reviewCli(
+      "short-lived",
+      `--staging=${staging}`,
+      `--file=${roundFile}`,
+      "--apply",
+    );
     session = JSON.parse(
       fs.readFileSync(path.join(staging, "review-session.json"), "utf8"),
     ) as ReviewSessionState;
@@ -371,6 +400,22 @@ When(
       encoding: "utf8",
     });
     assert.equal(report.status, 0, report.stderr);
+    const reports = JSON.parse(report.stdout) as {
+      agents: { id: string; contextIsolation: string }[];
+    }[];
+    const agents = reports[0]!.agents;
+    assert.equal(
+      agents.find((agent) => agent.id === "unexpected-fork")?.contextIsolation,
+      "inherited",
+    );
+    assert.equal(
+      agents.find((agent) => agent.id === "r1")?.contextIsolation,
+      "fresh",
+    );
+    assert.equal(
+      agents.find((agent) => agent.id === "semantic-session")?.contextIsolation,
+      "unknown",
+    );
     assert.match(report.stdout, /"modelCycleProxy": 1/u);
     assert.match(report.stdout, /"modelCycleProxy": null/u);
     assert.match(report.stdout, /"freshHandoffTo": "r1"/u);

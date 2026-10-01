@@ -137,6 +137,7 @@ export function inspectHookRegistration(input: {
 /** 設定の存在だけを観測する。実hostでの発火を保証しない。 */
 export function inspectAgentLifecycleRegistration(
   settings: string | undefined,
+  executionContextMode = process.env.ASC_EXECUTION_CONTEXT_MODE,
 ) {
   const required = [
     "SessionStart",
@@ -146,12 +147,21 @@ export function inspectAgentLifecycleRegistration(
     "PreToolUse",
   ];
   let hooks: Record<string, unknown> = {};
+  let shortLived = executionContextMode === "short-lived";
   try {
     const parsed: unknown = JSON.parse(settings ?? "{}");
-    if (isRecord(parsed) && isRecord(parsed.hooks)) hooks = parsed.hooks;
+    if (isRecord(parsed)) {
+      if (isRecord(parsed.hooks)) hooks = parsed.hooks;
+      if (
+        isRecord(parsed.env) &&
+        parsed.env.ASC_EXECUTION_CONTEXT_MODE === "short-lived"
+      )
+        shortLived = true;
+    }
   } catch {
     hooks = {};
   }
+  if (shortLived) required.push("PostToolUse", "PostToolUseFailure");
   const configuredEvents = required.filter((event) => {
     const entries = hooks[event];
     return (
