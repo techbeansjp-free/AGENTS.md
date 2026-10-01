@@ -10,6 +10,7 @@ import { WORKFLOW_STEPS } from "../../src/domain/workflow.js";
 import {
   advanceReviewSession,
   type ReviewSessionState,
+  type ReviewRoundInput,
 } from "../../src/domain/review-convergence.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
@@ -293,35 +294,49 @@ When(
     allowed(tool("r4"));
     denied(tool("r4", "Write"));
     stop("r4");
-    session = advanceReviewSession(session, {
-      round: 4,
-      previousRoundDigest: session.latestRoundDigest,
-      anchor,
-      candidateHeadSha: git("rev-parse", "HEAD"),
-      focus: {
-        previousBlocking: ["F-001"],
-        fixedDiff: [],
-        adjacentScope: [],
-      },
-      findings: [
-        {
-          id: "F-001",
-          severity: "High",
+    const roundFile = path.join(this.temp("asc-same-head-"), "round.json");
+    const reviewCli = (...args: string[]) => {
+      const result = spawnSync(
+        process.execPath,
+        [
+          path.resolve("dist/bin/agent-skill-chain.js"),
+          "review",
+          "round",
+          ...args,
+        ],
+        { cwd: root, encoding: "utf8" },
+      );
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    };
+    reviewCli(
+      "--init",
+      `--staging=${staging}`,
+      `--head=${rereview.headSha}`,
+      `--out=${roundFile}`,
+    );
+    const draft = JSON.parse(
+      fs.readFileSync(roundFile, "utf8"),
+    ) as ReviewRoundInput;
+    assert.equal(draft.round, 4);
+    assert.deepEqual(draft.focus.fixedDiff, []);
+    assert.deepEqual(draft.focus.previousBlocking, ["F-001"]);
+    assert.equal(draft.candidateHeadSha, unchangedCorrection.headSha);
+    fs.writeFileSync(
+      roundFile,
+      JSON.stringify({
+        ...draft,
+        findings: draft.findings.map((finding) => ({
+          ...finding,
           status: "false-positive",
-          source: "review",
-          relation: "acceptance-violation",
           evidence:
             "Independent reviewer confirmed existing code meets AC-TEST",
-          path: "code.txt",
-          contractId: "AC-TEST",
-          causedByFindingId: null,
-        },
-      ],
-    });
-    fs.writeFileSync(
-      path.join(staging, "review-session.json"),
-      JSON.stringify(session),
+        })),
+      }),
     );
+    reviewCli(`--staging=${staging}`, `--file=${roundFile}`, "--apply");
+    session = JSON.parse(
+      fs.readFileSync(path.join(staging, "review-session.json"), "utf8"),
+    ) as ReviewSessionState;
     assert.equal(session.status, "converged");
     assert.equal(session.rounds.length, 4);
     assert.equal(pointer(10).role, "coordinator");

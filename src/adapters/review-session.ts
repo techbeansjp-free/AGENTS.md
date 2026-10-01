@@ -437,8 +437,8 @@ export function buildReviewRoundDraft(input: {
         "前round blockerが持っていたdecisionRefはnullへ戻した。前roundのcandidateHeadShaに束縛されており新HEADでは検証できないため。是正済みならevidenceに確認内容を書く。Decision Journalの記録を再利用したい場合は新HEADでdecisionを再invokeしてからdecisionRefへ記入する",
       );
     /**
-     * **隣接範囲は影響集合から導出する**（REQ-WF-039）。差分が空のときは下で
-     * 拒否するため導出しない。記録時は`previewReviewRound`が同じ関数で再導出し照合する。
+     * **隣接範囲は影響集合から導出する**（REQ-WF-039）。差分が空の再評価では
+     * 隣接範囲を追加しない。記録時は`previewReviewRound`が同じ関数で再導出し照合する。
      */
     let adjacentScope: readonly ReviewAdjacentScope[] = [];
     let adjacentScopeUnbounded = false;
@@ -475,7 +475,7 @@ export function buildReviewRoundDraft(input: {
       notes.push(
         `前round blocker ${previousBlocking.join("、")} をfindingsへ写した。是正済みならstatusをresolvedへ変え、evidenceに確認内容を書く。未解決はvalidのまま残す。脱落は拒否される`,
       );
-    if (fixed.length === 0)
+    if (fixed.length === 0 && previous.status !== "active")
       throw new Error(
         "review round --init: 前round headからの実Git差分が空です。前roundのcandidate HEADが現在のHEADと同じです。多くの場合、前roundの--headに「そのroundを検分したHEAD」ではなく「そのroundの指摘を是正した後のHEAD」を渡しています。その場合、HEADを進めても取り違えが重なるだけです。review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください",
       );
