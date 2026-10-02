@@ -422,14 +422,23 @@ function executionGuard(state, agent, input, verifiedHandoff) {
     try {
       const contract = dispatchContract(tool.prompt);
       const h = contract.handoff;
-      if (!validId(tool.subagent_type) || !validId(input.tool_use_id))
+      if (
+        ((h || tool.subagent_type !== undefined) &&
+          !validId(tool.subagent_type)) ||
+        !validId(input.tool_use_id)
+      )
         throw new Error("dispatch type/tool_use_idが必要です");
       if (
         (h && state.pendingHandoff) ||
-        (!h && state.pendingHandoff?.agentType === tool.subagent_type) ||
+        (!h &&
+          state.pendingHandoff &&
+          (tool.subagent_type === undefined ||
+            state.pendingHandoff.agentType === tool.subagent_type)) ||
         (h &&
           state.pendingTasks?.some(
-            (entry) => entry.agentType === tool.subagent_type,
+            (entry) =>
+              entry.agentType === undefined ||
+              entry.agentType === tool.subagent_type,
           ))
       )
         throw new Error(
@@ -474,7 +483,9 @@ function executionGuard(state, agent, input, verifiedHandoff) {
         state.pendingTasks.push(pending);
       }
     } catch (error) {
-      return deny(error.message);
+      return deny(
+        `${error.message} 通常の単発taskは自然言語で委譲できます。ASC工程担当はworkflow advance --staging=<path>のagentDispatchをAgent引数へ渡してください。旧形式ではhandoffをJSON.stringifyしてpromptへ渡してください。`,
+      );
     }
   }
   if (input.tool_name === "SendMessage") {
@@ -551,12 +562,15 @@ function transition(state, input, now, verifiedHandoff) {
         // Task starts have no tool_use_id. Same-type task dispatches carry the
         // same lifecycle-only contract, so no per-prompt identity is claimed.
         const pending =
-          state.pendingHandoff?.agentType === input.agent_type
+          state.pendingHandoff &&
+          state.pendingHandoff.agentType === input.agent_type
             ? state.pendingHandoff
             : state.pendingTasks?.find(
-                (entry) => entry.agentType === input.agent_type,
+                (entry) =>
+                  entry.agentType === undefined ||
+                  entry.agentType === input.agent_type,
               );
-        if (pending && pending.agentType === input.agent_type) {
+        if (pending && validId(input.agent_type)) {
           try {
             if (pending.task) checkTask(pending.task);
             else
@@ -606,7 +620,7 @@ function transition(state, input, now, verifiedHandoff) {
     }
     return context(
       event,
-      `ASC lifecycle: ${main.status}, tools=${main.tools}/${state.maxTools}。compactやsession再開で計測はリセットしません。長寿命sessionではfresh contextも利用できます。${HANDOFF}${state.executionContextMode === "short-lived" ? " 通常の単発taskは自然言語でfresh Agentへ委譲できます。ASCの工程担当はworkflow advance --staging=<path>のagentDispatchをAgent引数へそのまま渡してください（handoff JSONの手組みは不要）。工程担当を通常taskへ格下げせず、起動拒否時もmainが実装・是正を代行しないでください。拒否理由を修正して再委譲し、復旧不能なら理由を利用者へ返してください。" : ""}`,
+      `ASC lifecycle: ${main.status}, tools=${main.tools}/${state.maxTools}。compactやsession再開で計測はリセットしません。長寿命sessionではfresh contextも利用できます。${HANDOFF}${state.executionContextMode === "short-lived" ? " 通常の単発taskは自然言語でfresh Agentへ委譲できます。ASCの工程担当はworkflow advance --staging=<path>のagentDispatchをAgent引数へそのまま渡してください（handoff JSONの手組みは不要。旧形式ではhandoffをJSON.stringifyしてpromptへ渡します）。工程担当を通常taskへ格下げせず、起動拒否時もmainが実装・是正を代行しないでください。拒否理由を修正して再委譲し、復旧不能なら理由を利用者へ返してください。" : ""}`,
     );
   }
   if (["PostToolUse", "PostToolUseFailure"].includes(event)) {

@@ -160,7 +160,28 @@ When(
         tool_input: { subagent_type: agentType, prompt },
       });
     denied(plain("plain-fork", "ok", "fork"));
-    denied(plain("broken-pointer", '{"kind":"asc-handoff/v1"'));
+    const broken = plain("broken-pointer", '{"kind":"asc-handoff/v1"');
+    denied(broken);
+    assert.doesNotMatch(broken, /Unexpected token/u);
+    assert.match(broken, /workflow advance --staging=<path>/u);
+    assert.match(broken, /JSON.stringify/u);
+    allowed(
+      call("PreToolUse", {
+        tool_name: "Agent",
+        tool_use_id: "omitted-type",
+        tool_input: { prompt: "何も調べず「ok」とだけ返してください。" },
+      }),
+    );
+    denied(dispatch(pointer(1), "ambiguous-omitted-type"));
+    allowed(
+      call("SubagentStart", {
+        agent_id: "default-task",
+        agent_type: "Explore",
+      }),
+    );
+    allowed(tool("default-task"));
+    stop("default-task");
+    allowed(call("PostToolUse", { tool_use_id: "omitted-type" }));
     denied(plain("empty", ""));
     allowed(plain("markdown-prompt", "[#377] 調査してください"));
     start("markdown-task");
