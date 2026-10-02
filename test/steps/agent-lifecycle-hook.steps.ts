@@ -351,7 +351,72 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
       .missingEvents,
     [],
   );
+  for (const invalid of [{ timeout: 15 }, { async: true, timeout: 30 }]) {
+    const duplicate = {
+      ...fragment,
+      hooks: {
+        ...fragment.hooks,
+        PreToolUse: [
+          ...fragment.hooks.PreToolUse,
+          { matcher: "Agent", hooks: [{ ...entry.hooks[0], ...invalid }] },
+        ],
+      },
+    };
+    assert.equal(
+      inspectAgentLifecycleRegistration(
+        JSON.stringify(duplicate),
+        "compatible",
+        "",
+      ).healthy,
+      false,
+    );
+  }
   assert.equal(Object.keys(fragment.hooks).length, 7);
+  const diagnose = (cli: string | null, timeout = 30) =>
+    inspectAgentLifecycleRegistration(
+      JSON.stringify({
+        env: {
+          ASC_EXECUTION_CONTEXT_MODE: "short-lived",
+          ASC_WORKFLOW_CLI: cli,
+        },
+        hooks: Object.fromEntries(
+          Object.keys(fragment.hooks).map((event) => [
+            event,
+            [{ hooks: [{ ...entry.hooks[0], timeout }] }],
+          ]),
+        ),
+      }),
+      "compatible",
+      "",
+    );
+  assert.equal(diagnose(null).healthy, false);
+  assert.match(diagnose(null).diagnostics.join(), /ASC_WORKFLOW_CLIが未設定/u);
+  assert.equal(
+    diagnose("relative/cli.js").configurationDiagnostics.cliAbsolute,
+    false,
+  );
+  assert.equal(diagnose("relative/cli.js").healthy, false);
+  assert.equal(
+    diagnose(path.join(this.lifecycleRoot, "missing-cli.js")).healthy,
+    false,
+  );
+  assert.equal(diagnose(this.lifecycleRoot).healthy, false);
+  assert.equal(diagnose(fragment.env.ASC_WORKFLOW_CLI, 15).healthy, false);
+  assert.equal(diagnose(fragment.env.ASC_WORKFLOW_CLI, 30).healthy, true);
+  assert.equal(
+    diagnose(fragment.env.ASC_WORKFLOW_CLI, 30).configurationDiagnostics
+      .cliExists,
+    true,
+  );
+  assert.equal(
+    inspectAgentLifecycleRegistration(
+      JSON.stringify({ hooks }),
+      "compatible",
+      "",
+    ).healthy,
+    true,
+  );
+
   assert.equal(
     fs.readFileSync(
       path.join(this.lifecycleRoot, ".claude/settings.local.json"),

@@ -143,6 +143,7 @@ export function inspectHookRegistration(input: {
 export function inspectAgentLifecycleRegistration(
   settings: string | undefined,
   executionContextMode = process.env.ASC_EXECUTION_CONTEXT_MODE,
+  workflowCli = process.env.ASC_WORKFLOW_CLI,
 ) {
   const required = [
     "SessionStart",
@@ -152,11 +153,13 @@ export function inspectAgentLifecycleRegistration(
     "PreToolUse",
   ];
   let hooks: Record<string, unknown> = {};
+  let environment: Record<string, unknown> = {};
   let shortLived = executionContextMode === "short-lived";
   try {
     const parsed: unknown = JSON.parse(settings ?? "{}");
     if (isRecord(parsed)) {
       if (isRecord(parsed.hooks)) hooks = parsed.hooks;
+      if (isRecord(parsed.env)) environment = parsed.env;
       if (
         isRecord(parsed.env) &&
         parsed.env.ASC_EXECUTION_CONTEXT_MODE === "short-lived"
@@ -167,31 +170,101 @@ export function inspectAgentLifecycleRegistration(
     hooks = {};
   }
   if (shortLived) required.push("PostToolUse", "PostToolUseFailure");
-  const configuredEvents = required.filter((event) => {
+  const registrations = required.map((event) => {
     const entries = hooks[event];
-    return (
-      Array.isArray(entries) &&
-      entries.some(
-        (entry: unknown) =>
-          isRecord(entry) &&
-          [undefined, "", "*"].includes(entry.matcher as string | undefined) &&
-          Array.isArray(entry.hooks) &&
-          entry.hooks.some(
-            (hook: unknown) =>
-              isRecord(hook) &&
-              hook.type === "command" &&
-              hook.async !== true &&
-              typeof hook.command === "string" &&
-              hook.command.includes(".claude/hooks/asc-agent-lifecycle.mjs"),
-          ),
-      )
-    );
+    const commands = Array.isArray(entries)
+      ? entries.flatMap((entry: unknown) =>
+          isRecord(entry) && Array.isArray(entry.hooks)
+            ? entry.hooks
+                .filter(
+                  (hook: unknown) =>
+                    isRecord(hook) &&
+                    hook.type === "command" &&
+                    typeof hook.command === "string" &&
+                    hook.command.includes(
+                      ".claude/hooks/asc-agent-lifecycle.mjs",
+                    ),
+                )
+                .filter(isRecord)
+                .map((hook) => ({
+                  async: hook.async,
+                  timeout: hook.timeout,
+                  coversAll: [undefined, "", "*"].includes(
+                    entry.matcher as string | undefined,
+                  ),
+                }))
+            : [],
+        )
+      : [];
+    return { event, commands };
   });
+  const configuredEvents = registrations
+    .filter(({ commands }) =>
+      commands.some((hook) => hook.coversAll && hook.async !== true),
+    )
+    .map(({ event }) => event);
+  const missingEvents = required.filter(
+    (event) => !configuredEvents.includes(event),
+  );
+  const cli = environment.ASC_WORKFLOW_CLI ?? workflowCli;
+  const cliConfigured = typeof cli === "string" && cli.trim() !== "";
+  const cliAbsolute = cliConfigured && path.isAbsolute(cli);
+  let cliExists = false;
+  if (cliAbsolute) {
+    try {
+      cliExists = fs.statSync(cli).isFile();
+    } catch {
+      /* Diagnostic only. */
+    }
+  }
+  const invalidTimeoutEvents = registrations
+    .filter(
+      ({ commands }) =>
+        commands.length === 0 ||
+        commands.some(
+          (hook) =>
+            typeof hook.timeout !== "number" ||
+            !Number.isFinite(hook.timeout) ||
+            hook.timeout < 30,
+        ),
+    )
+    .map(({ event }) => event);
+  const mode = environment.ASC_EXECUTION_CONTEXT_MODE ?? executionContextMode;
+  const modeConfigured = mode === "compatible" || mode === "short-lived";
+  const diagnostics = missingEvents.map(
+    (event) => `${event}の同期・全対象hook登録がありません`,
+  );
+  if (mode !== undefined && !modeConfigured)
+    diagnostics.push(
+      "ASC_EXECUTION_CONTEXT_MODEはcompatible / short-livedを指定してください",
+    );
+  if (shortLived) {
+    if (!cliConfigured) diagnostics.push("ASC_WORKFLOW_CLIが未設定です");
+    else if (!cliAbsolute)
+      diagnostics.push("ASC_WORKFLOW_CLIは絶対pathが必要です");
+    else if (!cliExists)
+      diagnostics.push("ASC_WORKFLOW_CLIに実在するfileを指定してください");
+    for (const event of invalidTimeoutEvents)
+      diagnostics.push(`${event}のtimeoutは30秒以上を明示してください`);
+    if (
+      registrations.some(({ commands }) =>
+        commands.some((hook) => hook.async === true),
+      )
+    )
+      diagnostics.push("short-livedのlifecycle hookはすべて同期登録が必要です");
+  }
   return {
     configuredEvents,
-    missingEvents: required.filter(
-      (event) => !configuredEvents.includes(event),
-    ),
+    missingEvents,
+    healthy: diagnostics.length === 0,
+    diagnostics,
+    configurationDiagnostics: {
+      cliConfigured,
+      cliAbsolute,
+      cliExists,
+      timeoutValid: invalidTimeoutEvents.length === 0,
+      modeConfigured,
+    },
     runtimeVerified: false,
     configuration: {
       target: HOST_HOOK_SETTINGS,
