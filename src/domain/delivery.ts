@@ -1,6 +1,7 @@
 import {
   compareTrustedPolicy,
   enforceTrustedBoundary,
+  unsupportedPullRequestRules,
   resolveEffectivePolicy,
   validateEnforcementPolicy,
 } from "./enforcement.js";
@@ -691,6 +692,15 @@ export function createPullRequest(
           trustedRuleSources: input.trustedRuleSources,
         })
       : { allowed: false, rejected: [effective.diagnostic] };
+    const unsupported = unsupportedPullRequestRules(input.trustedPolicy).filter(
+      (rule) => rule.blocking,
+    );
+    if (unsupported.length > 0)
+      throw new Error(
+        unsupported
+          .map((rule) => `${rule.ruleId}: ${rule.reason}。${rule.next}`)
+          .join("; "),
+      );
     const ownership = input.evidence?.ownership;
     const observations = input.trustedPolicy.rules
       .filter((rule) => rule.scope.includes("pull_request"))

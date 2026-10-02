@@ -16,7 +16,12 @@ import {
   MINIMUM_GH_VERSION,
   MINIMUM_GIT_VERSION,
 } from "../lib/executable-version.js";
-import { loadProjectPolicySet } from "./policy.js";
+import {
+  loadProjectPolicySet,
+  loadOperationPolicy,
+  trustedVerificationPolicy,
+} from "./policy.js";
+import { unsupportedPullRequestRules } from "./enforcement.js";
 import {
   DEPRECATED_POLICY_SCHEMA_ALIASES,
   SUPPORTED_POLICY_SCHEMA_VERSIONS,
@@ -233,6 +238,48 @@ export function inspectAgentLifecycleRegistration(
     },
   };
 }
+/** Operation readiness is separate from installation health; never grants approval. */
+export function inspectWorkflowReadiness(target: string) {
+  let trustedCommit: string | null = null;
+  let verification;
+  let unsupportedRules: ReturnType<typeof unsupportedPullRequestRules> = [];
+  const errors: string[] = [];
+  try {
+    const trusted = loadOperationPolicy(target);
+    trustedCommit = trusted.provenance.commitSha ?? null;
+    unsupportedRules = unsupportedPullRequestRules(trusted.policy);
+    try {
+      verification = trustedVerificationPolicy(trusted);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
+  return {
+    ready:
+      errors.length === 0 && !unsupportedRules.some((rule) => rule.blocking),
+    authority: "advisory",
+    trustedCommit,
+    errors,
+    unsupportedPullRequestRules: unsupportedRules,
+    verification: {
+      configured: verification !== undefined,
+      declaration: verification ?? null,
+      target: ".agent-skill-chain/project-policy.json",
+      requiredFields: [
+        "verification.fullCommand",
+        "verification.targetedRunner",
+      ],
+      next: verification
+        ? "同じHEADでverify run --staging=<path> --base=<SHA> --scope=full -- <fullCommandのargv>を実行し、収束したreview sessionからreview exportを実行してください"
+        : "利用projectの実際の全体検証commandとtargeted runnerをargv配列としてmanifestのverificationへ宣言し、owner確認のうえ既定branchへ先行導入してください。candidate側への追記だけでは有効になりません。未実施の検証を合格として記録しないでください",
+    },
+    fallback:
+      "04_レビュー.mdは補助記録であり、review exportの正式証跡を代替しません。pr createがblockedのままghへ自動迂回せず、診断された設定・実装不足を解消してください",
+  };
+}
+
 const SHA256 = /^[a-f0-9]{64}$/u;
 
 interface ManagedAssetRecord {
@@ -1713,6 +1760,7 @@ export function doctor(target: string, worktreeObservations?: unknown) {
     legacyRuntimeEnabled: false,
     projectPolicyStatus,
     projectPolicyMessage,
+    workflowReadiness: inspectWorkflowReadiness(target),
     tooling: {
       healthy: toolingDiagnostics.length === 0,
       diagnostics: toolingDiagnostics,
