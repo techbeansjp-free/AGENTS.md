@@ -251,6 +251,50 @@ function parseHandoff(source) {
     throw new Error("workflow advanceのhandoff JSONが必要です");
   return h;
 }
+// Natural-language tasks are lifecycle-managed, not ASC workflow evidence.
+// Structured requests remain strict: a broken pointer must never fall back to a task.
+function dispatchContract(prompt) {
+  if (typeof prompt !== "string" || prompt.trim() === "")
+    throw new Error("Agentには空でないpromptが必要です");
+  if (/^\s*\{/u.test(prompt)) {
+    let value;
+    try {
+      value = JSON.parse(prompt);
+    } catch {
+      if (/"(?:kind|handoff)"\s*:/u.test(prompt))
+        throw new Error(
+          "構造化promptが不正です。handoff JSONを再取得してください",
+        );
+    }
+    if (value && Object.hasOwn(value, "handoff")) {
+      if (
+        Object.keys(value).sort().join() !== "handoff,prompt" ||
+        typeof value.prompt !== "string" ||
+        value.prompt.trim() === ""
+      )
+        throw new Error(
+          "handoff envelopeにはhandoffと空でないpromptだけが必要です",
+        );
+      return { handoff: parseHandoff(JSON.stringify(value.handoff)) };
+    }
+    if (value && Object.hasOwn(value, "kind"))
+      return { handoff: parseHandoff(prompt) };
+  }
+  return {
+    task: {
+      worktree: fs.realpathSync(process.env.CLAUDE_PROJECT_DIR),
+    },
+  };
+}
+function checkTask(task) {
+  if (
+    !task ||
+    task.worktree !== fs.realpathSync(process.env.CLAUDE_PROJECT_DIR)
+  )
+    throw new Error(
+      "taskの起動記録がありません。fresh agentへ再委譲してください",
+    );
+}
 function checkHandoff(h, exactHead) {
   const root = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR);
   if (
@@ -341,7 +385,7 @@ function reviewerReadAllowed(h, input) {
   );
 }
 
-function executionGuard(state, agent, input) {
+function executionGuard(state, agent, input, verifiedHandoff) {
   if (state.executionContextMode !== "short-lived") return undefined;
   const tool = input.tool_input ?? {};
   if (input.tool_name === "SubagentHandback") return {};
@@ -351,12 +395,16 @@ function executionGuard(state, agent, input) {
         throw new Error(
           "short-lived workerのcontext分離が未確認または継承です。fresh agentへ返却してください",
         );
-      const h = parseHandoff(JSON.stringify(agent.handoff));
-      checkHandoff(h, h.role === "reviewer");
-      if (h.role === "reviewer" && !reviewerReadAllowed(h, input))
-        return deny(
-          "ReviewerはRead / Glob / Grep、指定した読取CLI/Git commandと結果返却だけを実行できます",
-        );
+      if (agent.dispatchScope === "task") {
+        checkTask(agent.task);
+      } else {
+        const h = parseHandoff(JSON.stringify(agent.handoff));
+        checkHandoff(h, h.role === "reviewer");
+        if (h.role === "reviewer" && !reviewerReadAllowed(h, input))
+          return deny(
+            "ReviewerはRead / Glob / Grep、指定した読取CLI/Git commandと結果返却だけを実行できます",
+          );
+      }
     } catch (error) {
       return deny(error.message);
     }
@@ -371,32 +419,60 @@ function executionGuard(state, agent, input) {
       return deny(
         "short-livedではmainのconversationを継承するforkを使用できません",
       );
-    if (state.pendingHandoff)
-      return deny("前のfresh dispatchの開始/失敗観測を待ってください");
     try {
-      const h = parseHandoff(tool.prompt);
-      checkHandoff(h, true);
-      verifyDispatch(h);
-      if (h.role === "reviewer") reviewerCommands(h);
+      const contract = dispatchContract(tool.prompt);
+      const h = contract.handoff;
+      if (!validId(tool.subagent_type) || !validId(input.tool_use_id))
+        throw new Error("dispatch type/tool_use_idが必要です");
+      if (
+        (h && state.pendingHandoff) ||
+        (!h && state.pendingHandoff?.agentType === tool.subagent_type) ||
+        (h &&
+          state.pendingTasks?.some(
+            (entry) => entry.agentType === tool.subagent_type,
+          ))
+      )
+        throw new Error(
+          "同じtypeの通常taskとASC workerの開始を識別できません。先行dispatchの開始/完了観測を待つか、別typeを使用してください",
+        );
+      if (h) {
+        checkHandoff(h, true);
+        if (verifiedHandoff !== JSON.stringify(h))
+          throw new Error(
+            verifiedHandoff?.error ??
+              "handoffの事前検証がありません。fresh previewから再委譲してください",
+          );
+        if (h.role === "reviewer") reviewerCommands(h);
+      }
       if (
         state.agents.some(
           (entry) =>
             entry.kind === "subagent" &&
             entry.status === "active" &&
+            h &&
             entry.handoff?.staging === h.staging,
         )
       )
         throw new Error(
           "同じstagingのworker終了を待ってからfresh dispatchしてください",
         );
-      if (!validId(tool.subagent_type) || !validId(input.tool_use_id))
-        throw new Error("dispatch type/tool_use_idが必要です");
-      state.pendingHandoff = {
-        handoff: h,
+      const pending = {
+        ...contract,
         agentType: tool.subagent_type,
         toolUseId: input.tool_use_id,
         parentId: agent.id,
       };
+      if (h) state.pendingHandoff = pending;
+      else {
+        state.pendingTasks ??= [];
+        if (
+          state.pendingTasks.some(
+            (entry) => entry.toolUseId === input.tool_use_id,
+          )
+        )
+          throw new Error("重複したtask dispatch IDです");
+        state.pendingTasks.push(pending);
+      }
     } catch (error) {
       return deny(error.message);
     }
@@ -405,6 +481,14 @@ function executionGuard(state, agent, input) {
     const recipient = state.agents.find(
       (entry) => entry.id === (tool.to ?? tool.recipient),
     );
+    if (recipient?.dispatchScope === "task") {
+      try {
+        checkTask(recipient.task);
+        return undefined;
+      } catch (error) {
+        return deny(error.message);
+      }
+    }
     // Communication may only repeat the assigned pointer contract. A new unit
     // always needs a new Agent call, even if the previous child is still active.
     try {
@@ -422,7 +506,7 @@ function executionGuard(state, agent, input) {
   return undefined;
 }
 
-function transition(state, input, now) {
+function transition(state, input, now, verifiedHandoff) {
   const event = input.hook_event_name;
   if (
     event === "SubagentStop" &&
@@ -464,10 +548,19 @@ function transition(state, input, now) {
         );
       }
       if (state.executionContextMode === "short-lived") {
-        const pending = state.pendingHandoff;
+        // Task starts have no tool_use_id. Same-type task dispatches carry the
+        // same lifecycle-only contract, so no per-prompt identity is claimed.
+        const pending =
+          state.pendingHandoff?.agentType === input.agent_type
+            ? state.pendingHandoff
+            : state.pendingTasks?.find(
+                (entry) => entry.agentType === input.agent_type,
+              );
         if (pending && pending.agentType === input.agent_type) {
           try {
-            checkHandoff(parseHandoff(JSON.stringify(pending.handoff)), true);
+            if (pending.task) checkTask(pending.task);
+            else
+              checkHandoff(parseHandoff(JSON.stringify(pending.handoff)), true);
           } catch {
             state.pendingHandoff = null;
             return context(
@@ -475,25 +568,28 @@ function transition(state, input, now) {
               "ASC handoffがstaleです。実作業をせずcoordinatorへ返却してください。",
             );
           }
-          agent.handoff = pending.handoff;
+          agent.dispatchScope = pending.task ? "task" : "workflow";
+          if (pending.task) agent.task = pending.task;
+          else agent.handoff = pending.handoff;
           agent.parentId = pending.parentId;
           agent.generation = 1;
-          agent.handoffFrom =
-            state.agents
-              .filter(
-                (entry) =>
-                  entry.kind === "subagent" &&
-                  entry.id !== id &&
-                  entry.handoff?.staging === pending.handoff.staging,
-              )
-              .at(-1)?.id ?? null;
-          state.pendingHandoff = null;
+          agent.handoffFrom = pending.handoff
+            ? (state.agents
+                .filter(
+                  (entry) =>
+                    entry.kind === "subagent" &&
+                    entry.id !== id &&
+                    entry.handoff?.staging === pending.handoff.staging,
+                )
+                .at(-1)?.id ?? null)
+            : null;
+          if (pending.handoff) state.pendingHandoff = null;
         }
       }
     }
     return context(
       event,
-      `ASC: one agent = one bounded work unit。${agent.handoff ? "担当pointer: " + JSON.stringify(agent.handoff) + "。repositoryからresumeを再取得し担当だけを実施。検証・commit・返却後に終了し、Step/round記録はcoordinatorが行う。" : ""}tool目安${state.maxTools}、budget mode=${state.budgetMode}。${HANDOFF}${agent.handoff?.role === "reviewer" ? " 読取command: " + JSON.stringify(reviewerCommands(agent.handoff)) + "。Gitはdiff --no-ext-diff --no-textconv '<baseSHA>' '<headSHA>' -- / show --no-ext-diff --no-textconv '<SHA>' -- / log --format=oneline -n 20 '<SHA>' --だけをgitPrefixへ続けて実行可能。" : ""}`,
+      `ASC: one agent = one bounded work unit。${agent.dispatchScope === "task" ? "通常taskです。依頼された単位を完了して返却してください。ASCのStep/role/HEAD検証済みworkerではなく、結果はreview承認証跡になりません。実装後の是正・別Issueはfresh agentへ渡してください。" : ""}${agent.handoff ? "担当pointer: " + JSON.stringify(agent.handoff) + "。repositoryからresumeを再取得し担当だけを実施。検証・commit・返却後に終了し、Step/round記録はcoordinatorが行う。" : ""}tool目安${state.maxTools}、budget mode=${state.budgetMode}。${HANDOFF}${agent.handoff?.role === "reviewer" ? " 読取command: " + JSON.stringify(reviewerCommands(agent.handoff)) + "。Gitはdiff --no-ext-diff --no-textconv '<baseSHA>' '<headSHA>' -- / show --no-ext-diff --no-textconv '<SHA>' -- / log --format=oneline -n 20 '<SHA>' --だけをgitPrefixへ続けて実行可能。" : ""}`,
     );
   }
   if (event === "SessionStart") {
@@ -510,12 +606,16 @@ function transition(state, input, now) {
     }
     return context(
       event,
-      `ASC lifecycle: ${main.status}, tools=${main.tools}/${state.maxTools}。compactやsession再開で計測はリセットしません。長寿命sessionではfresh contextも利用できます。${HANDOFF}`,
+      `ASC lifecycle: ${main.status}, tools=${main.tools}/${state.maxTools}。compactやsession再開で計測はリセットしません。長寿命sessionではfresh contextも利用できます。${HANDOFF}${state.executionContextMode === "short-lived" ? " 通常の単発taskは自然言語でfresh Agentへ委譲できます。ASCの工程担当はworkflow advance --staging=<path>のagentDispatchをAgent引数へそのまま渡してください（handoff JSONの手組みは不要）。工程担当を通常taskへ格下げせず、起動拒否時もmainが実装・是正を代行しないでください。拒否理由を修正して再委譲し、復旧不能なら理由を利用者へ返してください。" : ""}`,
     );
   }
   if (["PostToolUse", "PostToolUseFailure"].includes(event)) {
     if (state.pendingHandoff?.toolUseId === input.tool_use_id)
       state.pendingHandoff = null;
+    if (state.pendingTasks)
+      state.pendingTasks = state.pendingTasks.filter(
+        (entry) => entry.toolUseId !== input.tool_use_id,
+      );
     return {};
   }
   if (event === "PostToolBatch") {
@@ -591,7 +691,7 @@ function transition(state, input, now) {
       );
     }
   }
-  const guarded = executionGuard(state, agent, input);
+  const guarded = executionGuard(state, agent, input, verifiedHandoff);
   if (guarded !== undefined) return guarded;
   const reserve = Math.min(20, Math.floor(state.maxTools / 5));
   if (
@@ -616,6 +716,30 @@ function run(input) {
     throw new Error("session/agent identityがありません");
   const root = stateRoot();
   const key = digest(input.session_id);
+  const file = path.join(root, `${key}.json`);
+  let verifiedHandoff;
+  // The trusted CLI can be slow. Never hold the session lock while it runs:
+  // unrelated tasks must still be able to start, report tools and finish.
+  if (
+    event === "PreToolUse" &&
+    ["Agent", "Task"].includes(input.tool_name) &&
+    input.tool_input?.resume === undefined &&
+    (!input.agent_id || input.agent_id === input.session_id)
+  ) {
+    const snapshot = readState(file);
+    if (snapshot.executionContextMode === "short-lived") {
+      try {
+        const { handoff } = dispatchContract(input.tool_input?.prompt);
+        if (handoff) {
+          checkHandoff(handoff, true);
+          verifyDispatch(handoff);
+          verifiedHandoff = JSON.stringify(handoff);
+        }
+      } catch (error) {
+        verifiedHandoff = { error: error.message };
+      }
+    }
+  }
   const lock = path.join(root, `${key}.lock`);
   // A contended or stale lock refuses this call; never remove another process's lock.
   for (let attempt = 0; ; attempt += 1) {
@@ -628,7 +752,6 @@ function run(input) {
     }
   }
   try {
-    const file = path.join(root, `${key}.json`);
     let state;
     try {
       state = readState(file);
@@ -670,7 +793,12 @@ function run(input) {
     }
     if (state.sessionId !== input.session_id)
       throw new Error("session identityが一致しません");
-    const result = transition(state, input, new Date().toISOString());
+    const result = transition(
+      state,
+      input,
+      new Date().toISOString(),
+      verifiedHandoff,
+    );
     const temporary = path.join(lock, "state.json");
     fs.writeFileSync(temporary, `${JSON.stringify(state)}\n`, {
       flag: "wx",
@@ -698,6 +826,12 @@ function report() {
           parent: agent.parentId ?? null,
           generation: agent.kind === "main" ? 0 : (agent.generation ?? null),
           contextIsolation: agent.contextIsolation ?? "unknown",
+          dispatchScope:
+            agent.kind === "main"
+              ? "coordinator"
+              : agent.handoff
+                ? "workflow"
+                : (agent.dispatchScope ?? "unbound"),
           role: agent.handoff?.role ?? null,
           workflowStep: agent.handoff?.step ?? null,
           reviewSessionId: agent.handoff?.reviewSessionId ?? null,

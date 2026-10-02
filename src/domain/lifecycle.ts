@@ -188,6 +188,49 @@ export function inspectAgentLifecycleRegistration(
       (event) => !configuredEvents.includes(event),
     ),
     runtimeVerified: false,
+    configuration: {
+      target: HOST_HOOK_SETTINGS,
+      apply: false,
+      restart: "new-session",
+      settingsFragment: {
+        env: {
+          ASC_EXECUTION_CONTEXT_MODE: shortLived ? "short-lived" : "compatible",
+          ASC_AGENT_BUDGET_MODE: "warn",
+          ...(shortLived
+            ? {
+                ASC_WORKFLOW_CLI: path.join(
+                  packageRoot,
+                  "dist/bin/agent-skill-chain.js",
+                ),
+              }
+            : {}),
+        },
+        hooks: Object.fromEntries(
+          required.map((event) => [
+            event,
+            [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command:
+                      'node "$CLAUDE_PROJECT_DIR/.claude/hooks/asc-agent-lifecycle.mjs"',
+                    timeout: 30,
+                  },
+                ],
+              },
+            ],
+          ]),
+        ),
+      },
+      instructions: [
+        "既存settings.local.jsonを保持し、envのASC設定とhooksの不足entryだけを併合する。同じcommandを重複登録せず、他のhook・permissionsを削除しない",
+        "fragmentは設定例であり自動適用しない。hook本体はinstall/update --applyで配置・更新する",
+        "ASC_WORKFLOW_CLIはこのdoctorを提供するpackageの絶対path。継続利用する導入先のCLIでdoctorを実行し、一時的なnpx cacheのpathを固定しない",
+        "登録・mode変更後は新規sessionを開始する。resumeだけでは保存済みmodeは変わらない",
+        "登録済みは動作確認済みではない。新sessionで自然言語の単発Agentと、ASC担当ならworkflow advanceのagentDispatchを確認する",
+      ],
+    },
   };
 }
 const SHA256 = /^[a-f0-9]{64}$/u;

@@ -329,6 +329,41 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
     doctor(this.lifecycleRoot).hooks.agentLifecycle.missingEvents,
     ["PostToolUse", "PostToolUseFailure"],
   );
+  const beforeSettings = fs.readFileSync(
+    path.join(this.lifecycleRoot, ".claude/settings.local.json"),
+    "utf8",
+  );
+  const configured = doctor(this.lifecycleRoot).hooks.agentLifecycle
+    .configuration;
+  assert.equal(configured.target, ".claude/settings.local.json");
+  assert.equal(configured.apply, false);
+  assert.equal(configured.restart, "new-session");
+  const fragment = configured.settingsFragment;
+  assert.equal(fragment.env.ASC_EXECUTION_CONTEXT_MODE, "short-lived");
+  assert.equal(fragment.env.ASC_AGENT_BUDGET_MODE, "warn");
+  assert.ok(
+    fragment.env.ASC_WORKFLOW_CLI &&
+      path.isAbsolute(fragment.env.ASC_WORKFLOW_CLI),
+  );
+  assert.ok(fs.statSync(fragment.env.ASC_WORKFLOW_CLI).isFile());
+  assert.deepEqual(
+    inspectAgentLifecycleRegistration(JSON.stringify(fragment), "compatible")
+      .missingEvents,
+    [],
+  );
+  assert.equal(Object.keys(fragment.hooks).length, 7);
+  assert.equal(
+    fs.readFileSync(
+      path.join(this.lifecycleRoot, ".claude/settings.local.json"),
+      "utf8",
+    ),
+    beforeSettings,
+  );
+  const compatible = inspectAgentLifecycleRegistration(undefined, "compatible")
+    .configuration.settingsFragment;
+  assert.equal(compatible.env.ASC_EXECUTION_CONTEXT_MODE, "compatible");
+  assert.equal(compatible.env.ASC_WORKFLOW_CLI, undefined);
+  assert.equal(Object.keys(compatible.hooks).length, 5);
   hooks.PostToolUse = [entry];
   hooks.PostToolUseFailure = [{ hooks: [{ ...entry.hooks[0], async: true }] }];
   assert.deepEqual(
