@@ -49,7 +49,10 @@ import {
   verifyReviewEvidenceWithStaging,
 } from "./adapters/review-evidence.js";
 import { runVerification } from "./adapters/verification-run.js";
-import { observeWorkflowHandoff } from "./adapters/workflow-handoff.js";
+import {
+  observeWorkflowHandoff,
+  workflowAgentDispatch,
+} from "./adapters/workflow-handoff.js";
 import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import {
   assertPullRequestTrackerBinding,
@@ -5953,8 +5956,16 @@ export async function main(
           ? {}
           : {
               handoff,
+              agentDispatch: workflowAgentDispatch(handoff),
               ...("kind" in handoff && handoff.role === "correction"
                 ? {
+                    agentDispatchAlternatives: [
+                      workflowAgentDispatch({
+                        ...handoff,
+                        role: "reviewer",
+                        reviewRound: (handoff.reviewRound ?? 0) + 1,
+                      }),
+                    ],
                     handoffAlternatives: [
                       {
                         ...handoff,

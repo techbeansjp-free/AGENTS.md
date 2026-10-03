@@ -8,7 +8,8 @@ import { PACKAGE_VERSION } from "../lib/version.js";
 import { DISTRIBUTION_IDENTITY } from "../lib/release-identity.js";
 import { isRecord } from "../types.js";
 import { inspectExecutableVersion, MINIMUM_GH_VERSION, MINIMUM_GIT_VERSION, } from "../lib/executable-version.js";
-import { loadProjectPolicySet } from "./policy.js";
+import { loadProjectPolicySet, loadOperationPolicy, trustedVerificationPolicy, } from "./policy.js";
+import { unsupportedPullRequestRules } from "./enforcement.js";
 import { DEPRECATED_POLICY_SCHEMA_ALIASES, SUPPORTED_POLICY_SCHEMA_VERSIONS, } from "../lib/version.js";
 import { readStoredStagingRecord, STAGING_RECORD_FILE } from "./staging.js";
 import { DEFAULT_ISSUE_STAGING_ROOT, listStagingRoots, readStagingLayout, } from "./staging-layout.js";
@@ -71,6 +72,7 @@ const HOST_HOOK_TARGETS = [
  * 「以後のtool callごとに自動実行されるcodeを登録する」まで広がる。
  */
 const HOST_HOOK_SETTINGS = ".claude/settings.local.json";
+const AGENT_LIFECYCLE_COMMAND = 'node "$CLAUDE_PROJECT_DIR/.claude/hooks/asc-agent-lifecycle.mjs"';
 /**
  * project-localの設定にhookのentryがあるかを返す純関数（Issue #1105）。
  *
@@ -112,21 +114,26 @@ export function inspectHookRegistration(input) {
         };
 }
 /** 設定の存在だけを観測する。実hostでの発火を保証しない。 */
-export function inspectAgentLifecycleRegistration(settings, executionContextMode = process.env.ASC_EXECUTION_CONTEXT_MODE) {
+export function inspectAgentLifecycleRegistration(settings, executionContextMode = process.env.ASC_EXECUTION_CONTEXT_MODE, workflowCli = process.env.ASC_WORKFLOW_CLI) {
     const required = [
         "SessionStart",
         "SessionEnd",
         "SubagentStart",
         "SubagentStop",
         "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
     ];
     let hooks = {};
+    let environment = {};
     let shortLived = executionContextMode === "short-lived";
     try {
         const parsed = JSON.parse(settings ?? "{}");
         if (isRecord(parsed)) {
             if (isRecord(parsed.hooks))
                 hooks = parsed.hooks;
+            if (isRecord(parsed.env))
+                environment = parsed.env;
             if (isRecord(parsed.env) &&
                 parsed.env.ASC_EXECUTION_CONTEXT_MODE === "short-lived")
                 shortLived = true;
@@ -135,24 +142,167 @@ export function inspectAgentLifecycleRegistration(settings, executionContextMode
     catch {
         hooks = {};
     }
-    if (shortLived)
-        required.push("PostToolUse", "PostToolUseFailure");
-    const configuredEvents = required.filter((event) => {
+    const registrations = required.map((event) => {
         const entries = hooks[event];
-        return (Array.isArray(entries) &&
-            entries.some((entry) => isRecord(entry) &&
-                [undefined, "", "*"].includes(entry.matcher) &&
-                Array.isArray(entry.hooks) &&
-                entry.hooks.some((hook) => isRecord(hook) &&
+        const commands = Array.isArray(entries)
+            ? entries.flatMap((entry) => isRecord(entry) && Array.isArray(entry.hooks)
+                ? entry.hooks
+                    .filter((hook) => isRecord(hook) &&
                     hook.type === "command" &&
-                    hook.async !== true &&
                     typeof hook.command === "string" &&
-                    hook.command.includes(".claude/hooks/asc-agent-lifecycle.mjs"))));
+                    hook.command.includes(".claude/hooks/asc-agent-lifecycle.mjs"))
+                    .filter(isRecord)
+                    .map((hook) => ({
+                    canonical: hook.command === AGENT_LIFECYCLE_COMMAND,
+                    async: hook.async,
+                    timeout: hook.timeout,
+                    coversAll: [undefined, "", "*"].includes(entry.matcher),
+                }))
+                : [])
+            : [];
+        return { event, commands };
     });
+    const configuredEvents = registrations
+        .filter(({ commands }) => commands.some((hook) => hook.canonical && hook.coversAll && hook.async !== true))
+        .map(({ event }) => event);
+    const missingEvents = required.filter((event) => !configuredEvents.includes(event));
+    const cli = environment.ASC_WORKFLOW_CLI ?? workflowCli;
+    const cliConfigured = typeof cli === "string" && cli.trim() !== "";
+    const cliAbsolute = cliConfigured && path.isAbsolute(cli);
+    let cliExists = false;
+    if (cliAbsolute) {
+        try {
+            cliExists = fs.statSync(cli).isFile();
+        }
+        catch {
+            /* Diagnostic only. */
+        }
+    }
+    const invalidTimeoutEvents = registrations
+        .filter(({ commands }) => commands.some((hook) => typeof hook.timeout !== "number" ||
+        !Number.isFinite(hook.timeout) ||
+        hook.timeout < 30))
+        .map(({ event }) => event);
+    const mode = environment.ASC_EXECUTION_CONTEXT_MODE ?? executionContextMode;
+    const modeConfigured = mode === "compatible" || mode === "short-lived";
+    const noncanonicalEvents = registrations
+        .filter(({ commands }) => commands.some((hook) => !hook.canonical))
+        .map(({ event }) => event);
+    const duplicateEvents = registrations
+        .filter(({ commands }) => commands.length > 1)
+        .map(({ event }) => event);
+    const diagnostics = missingEvents.map((event) => `${event}のcanonical commandによる同期・全対象hook登録がありません: ${AGENT_LIFECYCLE_COMMAND}`);
+    for (const event of noncanonicalEvents)
+        diagnostics.push(`${event}に非canonical lifecycle commandがあります。次の直接実行1件へ統合してください: ${AGENT_LIFECYCLE_COMMAND}`);
+    for (const event of duplicateEvents)
+        diagnostics.push(`${event}にlifecycle hookが複数登録されています。全対象の同期登録1件へ統合してください`);
+    if (mode !== undefined && !modeConfigured)
+        diagnostics.push("ASC_EXECUTION_CONTEXT_MODEはcompatible / short-livedを指定してください");
+    if (shortLived) {
+        if (!cliConfigured)
+            diagnostics.push("ASC_WORKFLOW_CLIが未設定です");
+        else if (!cliAbsolute)
+            diagnostics.push("ASC_WORKFLOW_CLIは絶対pathが必要です");
+        else if (!cliExists)
+            diagnostics.push("ASC_WORKFLOW_CLIに実在するfileを指定してください");
+        for (const event of invalidTimeoutEvents)
+            diagnostics.push(`${event}のtimeoutは30秒以上を明示してください`);
+        if (registrations.some(({ commands }) => commands.some((hook) => hook.async === true)))
+            diagnostics.push("short-livedのlifecycle hookはすべて同期登録が必要です");
+    }
     return {
         configuredEvents,
-        missingEvents: required.filter((event) => !configuredEvents.includes(event)),
+        missingEvents,
+        healthy: diagnostics.length === 0,
+        diagnostics,
+        configurationDiagnostics: {
+            noncanonicalEvents,
+            duplicateEvents,
+            cliConfigured,
+            cliAbsolute,
+            cliExists,
+            timeoutValid: invalidTimeoutEvents.length === 0,
+            modeConfigured,
+        },
         runtimeVerified: false,
+        configuration: {
+            target: HOST_HOOK_SETTINGS,
+            apply: false,
+            restart: "new-session",
+            settingsFragment: {
+                env: {
+                    ASC_EXECUTION_CONTEXT_MODE: shortLived ? "short-lived" : "compatible",
+                    ASC_AGENT_BUDGET_MODE: "warn",
+                    ...(shortLived
+                        ? {
+                            ASC_WORKFLOW_CLI: path.join(packageRoot, "dist/bin/agent-skill-chain.js"),
+                        }
+                        : {}),
+                },
+                hooks: Object.fromEntries(required.map((event) => [
+                    event,
+                    [
+                        {
+                            hooks: [
+                                {
+                                    type: "command",
+                                    command: AGENT_LIFECYCLE_COMMAND,
+                                    timeout: 30,
+                                },
+                            ],
+                        },
+                    ],
+                ])),
+            },
+            instructions: [
+                "既存settings.local.jsonを保持し、envのASC設定とhooksの不足entryだけを併合する。同じcommandを重複登録せず、他のhook・permissionsを削除しない",
+                "fragmentは設定例であり自動適用しない。hook本体はinstall/update --applyで配置・更新する",
+                "ASC_WORKFLOW_CLIはこのdoctorを提供するpackageの絶対path。継続利用する導入先のCLIでdoctorを実行し、一時的なnpx cacheのpathを固定しない",
+                "登録・mode変更後は新規sessionを開始する。resumeだけでは保存済みmodeは変わらない",
+                "登録済みは動作確認済みではない。新sessionで自然言語の単発Agentと、ASC担当ならworkflow advanceのagentDispatchを確認する",
+            ],
+        },
+    };
+}
+/** Operation readiness is separate from installation health; never grants approval. */
+export function inspectWorkflowReadiness(target) {
+    let trustedCommit = null;
+    let verification;
+    let unsupportedRules = [];
+    const errors = [];
+    try {
+        const trusted = loadOperationPolicy(target);
+        trustedCommit = trusted.provenance.commitSha ?? null;
+        unsupportedRules = unsupportedPullRequestRules(trusted.policy);
+        try {
+            verification = trustedVerificationPolicy(trusted);
+        }
+        catch (error) {
+            errors.push(error instanceof Error ? error.message : String(error));
+        }
+    }
+    catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error));
+    }
+    return {
+        ready: errors.length === 0 && !unsupportedRules.some((rule) => rule.blocking),
+        authority: "advisory",
+        trustedCommit,
+        errors,
+        unsupportedPullRequestRules: unsupportedRules,
+        verification: {
+            configured: verification !== undefined,
+            declaration: verification ?? null,
+            target: ".agent-skill-chain/project-policy.json",
+            requiredFields: [
+                "verification.fullCommand",
+                "verification.targetedRunner",
+            ],
+            next: verification
+                ? "同じHEADでverify run --staging=<path> --base=<SHA> --scope=full -- <fullCommandのargv>を実行し、収束したreview sessionからreview exportを実行してください"
+                : "利用projectの実際の全体検証commandとtargeted runnerをargv配列としてmanifestのverificationへ宣言し、owner確認のうえ既定branchへ先行導入してください。candidate側への追記だけでは有効になりません。未実施の検証を合格として記録しないでください",
+        },
+        fallback: "04_レビュー.mdは補助記録であり、review exportの正式証跡を代替しません。pr createがblockedのままghへ自動迂回せず、診断された設定・実装不足を解消してください",
     };
 }
 const SHA256 = /^[a-f0-9]{64}$/u;
@@ -1364,6 +1514,7 @@ export function doctor(target, worktreeObservations) {
         legacyRuntimeEnabled: false,
         projectPolicyStatus,
         projectPolicyMessage,
+        workflowReadiness: inspectWorkflowReadiness(target),
         tooling: {
             healthy: toolingDiagnostics.length === 0,
             diagnostics: toolingDiagnostics,

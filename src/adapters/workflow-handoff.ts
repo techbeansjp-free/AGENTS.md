@@ -101,3 +101,20 @@ export function observeWorkflowHandoff(
     };
   }
 }
+
+/** Ready-to-use Agent arguments; the hook still independently verifies the pointer. */
+export function workflowAgentDispatch(
+  handoff: ReturnType<typeof observeWorkflowHandoff>,
+) {
+  if (!handoff || !("kind" in handoff) || handoff.role === "coordinator")
+    return undefined;
+  return {
+    subagent_type: "general-purpose",
+    description: `ASC Step ${handoff.step} ${handoff.role}`,
+    prompt: JSON.stringify({
+      handoff,
+      prompt:
+        "担当handoffをrepositoryから照合し、担当Step skillに従ってこのwork unitだけを実施してください。成果物・検証・必要なcommitを完了して返却し終了してください。別工程・是正・別roundは引き受けず、Step/round記録はcoordinatorへ返してください。",
+    }),
+  };
+}

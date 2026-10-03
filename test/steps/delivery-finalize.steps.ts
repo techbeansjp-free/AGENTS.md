@@ -618,6 +618,36 @@ When("PR createをdry-runして失敗を確認する", function () {
 });
 Then("delivery stateはpreviewである", function () {
   assert.equal(this.deliveryResult.state, "preview");
+  const trusted = trustedDeliveryPolicy();
+  trusted.rules.push({
+    ...trusted.rules[0]!,
+    ruleId: "ASC-ARTIFACT-TEST",
+    riskClass: "artifact",
+  });
+  assert.throws(
+    () =>
+      createPullRequest(
+        {
+          apply: false,
+          evidence: this.evidence,
+          headSha: this.evidence.headSha,
+          issue: 824,
+          head: "feature",
+          base: "main",
+          repository: "o/r",
+          body: conformingPullRequestBody({
+            title: "bugfix: 824を是正する",
+            canonicalIssue: 824,
+          }),
+          trustedPolicy: trusted,
+          packageFloor: trusted,
+        },
+        () => {
+          throw new Error("外部操作は実行しない");
+        },
+      ),
+    /ASC-ARTIFACT-TEST:.*実観測adapter.*手書きでは解消できません/u,
+  );
   assert.equal(
     this.deliveryResult.preview?.authorityStatus,
     "unverified-preview",

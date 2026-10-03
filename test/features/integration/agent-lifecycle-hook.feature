@@ -26,6 +26,7 @@ Feature: agent lifecycleをhost hookで制限する
       | identityのない終了event | allow |
       | 終了session再開 | allow |
       | 破損記録 | deny |
+      | lock所有者書込み失敗後の再試行 | allow |
 
   Scenario: SCN-INT-AGENTLIFE-002 本文を保存せず寿命を観測する
     Given lifecycle hookを登録した新規sessionがある

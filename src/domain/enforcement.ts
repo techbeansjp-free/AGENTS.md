@@ -1165,6 +1165,27 @@ export function enforceOperation(input: {
   };
 }
 
+/** PR adapters currently observe policy authority and HEAD-bound ownership only. */
+export function unsupportedPullRequestRules(policy: Policy) {
+  return policy.rules
+    .filter(
+      (rule) =>
+        rule.scope.includes("pull_request") &&
+        !["authority", "quality"].includes(rule.riskClass) &&
+        rule.activation !== "disabled",
+    )
+    .map((rule) => ({
+      ruleId: rule.ruleId,
+      riskClass: rule.riskClass,
+      blocking:
+        rule.activation === "active" &&
+        ["deny", "require"].includes(rule.enforcement),
+      reason: `pr createにはriskClass=${rule.riskClass}の実観測adapterがありません。観測JSONの手書きでは解消できません`,
+      remediation: rule.remediation,
+      next: "project policy ownerがruleの目的と適用境界を確認し、実観測adapterを実装するか、観測可能な境界へのpolicy migrationを先行してください。riskClassの付替えや未観測の合格扱いで通過させないでください",
+    }));
+}
+
 /** Operation adapters must bind each independently derived observation to one exact trusted rule ID; cross-rule reuse would cross an authority boundary and make a missing observation fail open. */
 export function enforceTrustedBoundary(input: {
   policy: Policy;

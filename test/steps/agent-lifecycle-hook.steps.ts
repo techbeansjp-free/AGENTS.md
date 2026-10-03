@@ -63,6 +63,46 @@ When("lifecycleの{string}を実行する", function (operation: string) {
       tool_input: { to, message: "SECRET-PROMPT" },
     });
   switch (operation) {
+    case "lock所有者書込み失敗後の再試行": {
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--input-type=module",
+          "-e",
+          `import fs from 'node:fs';
+          const write = fs.writeFileSync;
+          fs.writeFileSync = (file, ...args) => {
+            if (String(file).endsWith('/worktree.lock/owner.json'))
+              throw Object.assign(new Error('fixture disk full'), { code: 'ENOSPC' });
+            return write(file, ...args);
+          };
+          await import(${JSON.stringify(hook)});`,
+        ],
+        {
+          env: { ...process.env, CLAUDE_PROJECT_DIR: root },
+          input: JSON.stringify({
+            session_id: "session-1",
+            hook_event_name: "PreToolUse",
+            tool_name: "Read",
+          }),
+          encoding: "utf8",
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /ENOSPC/u);
+      assert.match(result.stdout, /"deny"/u);
+      assert.equal(
+        fs.existsSync(
+          path.join(
+            root,
+            ".agent-skill-chain/runtime/agent-lifecycle/worktree.lock",
+          ),
+        ),
+        false,
+      );
+      this.lifecycleOutput = invoke(root);
+      break;
+    }
     case "fresh clear":
       event(root, "SessionStart", { source: "clear", session_id: "session-2" });
       this.lifecycleOutput = invoke(root, { session_id: "session-2" });
@@ -279,6 +319,13 @@ Then("lifecycleの並行toolは上限を超えて許可されない", async func
   );
 });
 Then("lifecycle登録診断はevent不足と非同期登録を報告する", function () {
+  const absent = inspectAgentLifecycleRegistration("{}", "short-lived");
+  assert.equal(absent.missingEvents.length, 7);
+  assert.equal(absent.healthy, false);
+  assert.equal(absent.configurationDiagnostics.timeoutValid, true);
+  assert.ok(
+    absent.diagnostics.every((message) => !message.includes("timeout")),
+  );
   const entry = {
     hooks: [
       {
@@ -300,7 +347,7 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
   );
   assert.deepEqual(
     inspectAgentLifecycleRegistration(JSON.stringify({ hooks })).missingEvents,
-    [],
+    ["PostToolUse", "PostToolUseFailure"],
   );
   assert.deepEqual(
     inspectAgentLifecycleRegistration(JSON.stringify({ hooks }), "short-lived")
@@ -329,6 +376,212 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
     doctor(this.lifecycleRoot).hooks.agentLifecycle.missingEvents,
     ["PostToolUse", "PostToolUseFailure"],
   );
+  const beforeSettings = fs.readFileSync(
+    path.join(this.lifecycleRoot, ".claude/settings.local.json"),
+    "utf8",
+  );
+  const configured = doctor(this.lifecycleRoot).hooks.agentLifecycle
+    .configuration;
+  assert.equal(configured.target, ".claude/settings.local.json");
+  assert.equal(configured.apply, false);
+  assert.equal(configured.restart, "new-session");
+  const fragment = configured.settingsFragment;
+  assert.equal(fragment.env.ASC_EXECUTION_CONTEXT_MODE, "short-lived");
+  assert.equal(fragment.env.ASC_AGENT_BUDGET_MODE, "warn");
+  assert.ok(
+    fragment.env.ASC_WORKFLOW_CLI &&
+      path.isAbsolute(fragment.env.ASC_WORKFLOW_CLI),
+  );
+  assert.ok(fs.statSync(fragment.env.ASC_WORKFLOW_CLI).isFile());
+  assert.deepEqual(
+    inspectAgentLifecycleRegistration(JSON.stringify(fragment), "compatible")
+      .missingEvents,
+    [],
+  );
+  for (const invalid of [{ timeout: 15 }, { async: true, timeout: 30 }]) {
+    const duplicate = {
+      ...fragment,
+      hooks: {
+        ...fragment.hooks,
+        PreToolUse: [
+          ...fragment.hooks.PreToolUse,
+          { matcher: "Agent", hooks: [{ ...entry.hooks[0], ...invalid }] },
+        ],
+      },
+    };
+    assert.equal(
+      inspectAgentLifecycleRegistration(
+        JSON.stringify(duplicate),
+        "compatible",
+        "",
+      ).healthy,
+      false,
+    );
+  }
+  for (const event of ["PreToolUse", "SubagentStart"]) {
+    for (const matcher of [undefined, "Agent"]) {
+      const duplicate = {
+        ...fragment,
+        hooks: {
+          ...fragment.hooks,
+          [event]: [
+            ...fragment.hooks[event],
+            { matcher, hooks: [{ ...entry.hooks[0], timeout: 30 }] },
+          ],
+        },
+      };
+      const result = inspectAgentLifecycleRegistration(
+        JSON.stringify(duplicate),
+        "compatible",
+        "",
+      );
+      assert.deepEqual(result.missingEvents, []);
+      assert.equal(result.healthy, false);
+      assert.deepEqual(result.configurationDiagnostics.duplicateEvents, [
+        event,
+      ]);
+      assert.match(result.diagnostics.join(), /複数登録/u);
+    }
+  }
+  const unrelated = {
+    ...fragment,
+    hooks: {
+      ...fragment.hooks,
+      PreToolUse: [
+        ...fragment.hooks.PreToolUse,
+        {
+          hooks: [
+            {
+              type: "command",
+              command: "node unrelated-hook.mjs",
+              timeout: 30,
+            },
+          ],
+        },
+      ],
+    },
+  };
+  assert.equal(
+    inspectAgentLifecycleRegistration(
+      JSON.stringify(unrelated),
+      "compatible",
+      "",
+    ).healthy,
+    true,
+  );
+  for (const command of [
+    'echo "$CLAUDE_PROJECT_DIR/.claude/hooks/asc-agent-lifecycle.mjs"',
+    "true # .claude/hooks/asc-agent-lifecycle.mjs",
+    'echo node "$CLAUDE_PROJECT_DIR/.claude/hooks/asc-agent-lifecycle.mjs"',
+    'node "$CLAUDE_PROJECT_DIR/.claude/hooks/asc-agent-lifecycle.mjs.backup"',
+  ]) {
+    const nonExecuting = {
+      ...fragment,
+      hooks: Object.fromEntries(
+        Object.keys(fragment.hooks).map((event) => [
+          event,
+          [{ hooks: [{ type: "command", command, timeout: 30 }] }],
+        ]),
+      ),
+    };
+    const result = inspectAgentLifecycleRegistration(
+      JSON.stringify(nonExecuting),
+      "compatible",
+      "",
+    );
+    assert.equal(result.healthy, false);
+    assert.deepEqual(result.configuredEvents, []);
+    assert.equal(result.missingEvents.length, 7);
+    assert.match(result.diagnostics.join(), /canonical command/u);
+  }
+  const canonical = fragment.hooks.SubagentStart[0].hooks[0].command;
+  for (const command of [
+    ` ${canonical}`,
+    `echo ${canonical}`,
+    `true && ${canonical}`,
+  ]) {
+    const ambiguous = {
+      ...fragment,
+      hooks: {
+        ...fragment.hooks,
+        SubagentStart: [
+          ...fragment.hooks.SubagentStart,
+          { hooks: [{ type: "command", command, timeout: 30 }] },
+        ],
+      },
+    };
+    const result = inspectAgentLifecycleRegistration(
+      JSON.stringify(ambiguous),
+      "compatible",
+      "",
+    );
+    assert.equal(result.healthy, false);
+    assert.deepEqual(result.missingEvents, []);
+    assert.deepEqual(result.configurationDiagnostics.noncanonicalEvents, [
+      "SubagentStart",
+    ]);
+    assert.deepEqual(result.configurationDiagnostics.duplicateEvents, [
+      "SubagentStart",
+    ]);
+  }
+  assert.equal(Object.keys(fragment.hooks).length, 7);
+  const diagnose = (cli: string | null, timeout = 30) =>
+    inspectAgentLifecycleRegistration(
+      JSON.stringify({
+        env: {
+          ASC_EXECUTION_CONTEXT_MODE: "short-lived",
+          ASC_WORKFLOW_CLI: cli,
+        },
+        hooks: Object.fromEntries(
+          Object.keys(fragment.hooks).map((event) => [
+            event,
+            [{ hooks: [{ ...entry.hooks[0], timeout }] }],
+          ]),
+        ),
+      }),
+      "compatible",
+      "",
+    );
+  assert.equal(diagnose(null).healthy, false);
+  assert.match(diagnose(null).diagnostics.join(), /ASC_WORKFLOW_CLIが未設定/u);
+  assert.equal(
+    diagnose("relative/cli.js").configurationDiagnostics.cliAbsolute,
+    false,
+  );
+  assert.equal(diagnose("relative/cli.js").healthy, false);
+  assert.equal(
+    diagnose(path.join(this.lifecycleRoot, "missing-cli.js")).healthy,
+    false,
+  );
+  assert.equal(diagnose(this.lifecycleRoot).healthy, false);
+  assert.equal(diagnose(fragment.env.ASC_WORKFLOW_CLI, 15).healthy, false);
+  assert.equal(diagnose(fragment.env.ASC_WORKFLOW_CLI, 30).healthy, true);
+  assert.equal(
+    diagnose(fragment.env.ASC_WORKFLOW_CLI, 30).configurationDiagnostics
+      .cliExists,
+    true,
+  );
+  assert.equal(
+    inspectAgentLifecycleRegistration(
+      JSON.stringify({ hooks: fragment.hooks }),
+      "compatible",
+      "",
+    ).healthy,
+    true,
+  );
+
+  assert.equal(
+    fs.readFileSync(
+      path.join(this.lifecycleRoot, ".claude/settings.local.json"),
+      "utf8",
+    ),
+    beforeSettings,
+  );
+  const compatible = inspectAgentLifecycleRegistration(undefined, "compatible")
+    .configuration.settingsFragment;
+  assert.equal(compatible.env.ASC_EXECUTION_CONTEXT_MODE, "compatible");
+  assert.equal(compatible.env.ASC_WORKFLOW_CLI, undefined);
+  assert.equal(Object.keys(compatible.hooks).length, 7);
   hooks.PostToolUse = [entry];
   hooks.PostToolUseFailure = [{ hooks: [{ ...entry.hooks[0], async: true }] }];
   assert.deepEqual(
@@ -349,7 +602,7 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
   );
   assert.equal(
     inspectAgentLifecycleRegistration(undefined).missingEvents.length,
-    5,
+    7,
   );
   assert.equal(inspectAgentLifecycleRegistration("{}").runtimeVerified, false);
 });

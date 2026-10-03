@@ -1,3 +1,4 @@
+import { inspectWorkflowReadiness } from "../../src/domain/lifecycle.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
@@ -164,6 +165,9 @@ function retargetTrustedPolicy(
 Given("verify run用のIssue stagingを持つrepositoryがある", function () {
   this.root = this.initRepo();
   this.base = installTrustedVerificationPolicy(this.root, POLICY);
+  const readiness = inspectWorkflowReadiness(this.root);
+  assert.equal(readiness.ready, true);
+  assert.deepEqual(readiness.verification.declaration, POLICY);
   fs.mkdirSync(path.join(this.root, "src"), { recursive: true });
   fs.writeFileSync(
     path.join(this.root, "src", "verified.ts"),
@@ -343,6 +347,12 @@ When(
     );
     /** trusted commitが宣言を持たなければ、宣言どおりのargvでも実行前に拒否する */
     retargetTrustedPolicy(this, null);
+    const readiness = inspectWorkflowReadiness(this.root);
+    assert.equal(readiness.ready, false);
+    assert.equal(readiness.verification.configured, false);
+    assert.match(readiness.errors.join("; "), /検証command宣言/u);
+    assert.match(readiness.verification.next, /既定branchへ先行導入/u);
+    assert.match(readiness.fallback, /04_レビュー.md.*代替しません/u);
     this.results.undeclared = await captureCli(
       verifyArgs(this, [base, "--scope=full"], FULL_COMMAND),
     );

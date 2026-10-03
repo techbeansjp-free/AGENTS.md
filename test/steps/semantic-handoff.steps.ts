@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createIssueStaging } from "../../src/domain/issue.js";
 import { QUESTIONS } from "../../src/domain/mode.js";
 import type { observeWorkflowHandoff } from "../../src/adapters/workflow-handoff.js";
@@ -24,7 +24,7 @@ Then("semantic handoffの正常系と拒否系が成立する", function () {
 const hook = path.resolve(".agent-skill-chain/hooks/asc-agent-lifecycle.mjs");
 When(
   "fresh contextで実装と複数review roundを完走し反例を拒否する",
-  function () {
+  async function () {
     const root = this.initRepo();
     const staging = createIssueStaging(root, {
       title: "semantic-handoff",
@@ -45,7 +45,20 @@ When(
     );
     git("add", ".gitignore");
     git("commit", "-qm", "ignore fixture state");
-    const call = (name: string, extra: Record<string, unknown> = {}) => {
+    // Track artifacts in both issue directories, including ignored layouts.
+    const currentArtifact = path.join(staging, "tracked-note.md");
+    const sibling = path.join(path.dirname(staging), "sibling-issue");
+    const siblingArtifact = path.join(sibling, "tracked-note.md");
+    fs.mkdirSync(sibling, { recursive: true });
+    fs.writeFileSync(currentArtifact, "baseline\n");
+    fs.writeFileSync(siblingArtifact, "baseline\n");
+    git("add", "-f", currentArtifact, siblingArtifact);
+    git("commit", "-qm", "track current and sibling staging artifacts");
+    const call = (
+      name: string,
+      extra: Record<string, unknown> = {},
+      environment: Record<string, string> = {},
+    ) => {
       const result = spawnSync(process.execPath, [hook], {
         env: {
           ...process.env,
@@ -53,6 +66,7 @@ When(
           ASC_EXECUTION_CONTEXT_MODE: "short-lived",
           ASC_WORKFLOW_CLI: path.resolve("dist/bin/agent-skill-chain.js"),
           ASC_AGENT_BUDGET_MODE: "warn",
+          ...environment,
         },
         input: JSON.stringify({
           session_id: "semantic-session",
@@ -67,6 +81,7 @@ When(
     const allowed = (result: string) =>
       assert.doesNotMatch(result, /"deny"|"continue":false/u);
     const denied = (result: string) => assert.match(result, /"deny"/u);
+    const dispatchPrompts = new Map<string, string>();
     const pointer = (
       step: number,
       targetStaging = staging,
@@ -90,10 +105,26 @@ When(
       const preview = JSON.parse(result.stdout) as {
         handoff: ReturnType<typeof observeWorkflowHandoff>;
         handoffAlternatives?: ReturnType<typeof observeWorkflowHandoff>[];
+        agentDispatch?: { subagent_type: string; prompt: string };
+        agentDispatchAlternatives?: { subagent_type: string; prompt: string }[];
       };
       const h = rereview ? preview.handoffAlternatives?.[0] : preview.handoff;
       assert.ok(h && "kind" in h, JSON.stringify(h));
       assert.equal(h.step, step);
+      const args = rereview
+        ? preview.agentDispatchAlternatives?.[0]
+        : preview.agentDispatch;
+      if (h.role === "coordinator") assert.equal(args, undefined);
+      else {
+        assert.equal(args?.subagent_type, "general-purpose");
+        const envelope = JSON.parse(args!.prompt) as {
+          handoff: unknown;
+          prompt: string;
+        };
+        assert.deepEqual(envelope.handoff, h);
+        assert.match(envelope.prompt, /Step skill/u);
+        dispatchPrompts.set(JSON.stringify(h), args!.prompt);
+      }
       return h;
     };
     const recordStep = (step: number) =>
@@ -118,7 +149,7 @@ When(
         tool_use_id: id,
         tool_input: {
           subagent_type: agentType,
-          prompt: JSON.stringify(h),
+          prompt: dispatchPrompts.get(JSON.stringify(h)) ?? JSON.stringify(h),
         },
       });
     const start = (id: string) =>
@@ -129,8 +160,333 @@ When(
       allowed(call("SubagentStop", { agent_id: id }));
     const tool = (id: string, name = "Read") =>
       call("PreToolUse", { agent_id: id, tool_name: name, tool_input: {} });
-    allowed(call("SessionStart", { source: "startup" }));
+    const startup = call("SessionStart", { source: "startup" });
+    allowed(startup);
+    assert.match(startup, /mainが実装・是正を代行しない/u);
+    const plain = (
+      id: string,
+      prompt = "ok とだけ返す SECRET-task",
+      agentType = "general-purpose",
+    ) =>
+      call("PreToolUse", {
+        tool_name: "Agent",
+        tool_use_id: id,
+        tool_input: { subagent_type: agentType, prompt },
+      });
+    const assertWriterIsolation = (id: string) => {
+      allowed(plain(`dispatch-${id}`, "並行調査", "Explore"));
+      allowed(call("SubagentStart", { agent_id: id, agent_type: "Explore" }));
+      allowed(tool(id, "Read"));
+      denied(tool(id, "Write"));
+      denied(tool(id, "Bash"));
+      stop(id);
+      allowed(call("PostToolUse", { tool_use_id: `dispatch-${id}` }));
+    };
+    denied(plain("plain-fork", "ok", "fork"));
+    const broken = plain("broken-pointer", '{"kind":"asc-handoff/v1"');
+    denied(broken);
+    assert.doesNotMatch(broken, /Unexpected token/u);
+    assert.match(broken, /workflow advance --staging=<path>/u);
+    assert.match(broken, /JSON.stringify/u);
+    allowed(
+      call("PreToolUse", {
+        tool_name: "Agent",
+        tool_use_id: "omitted-type",
+        tool_input: { prompt: "何も調べず「ok」とだけ返してください。" },
+      }),
+    );
+    denied(dispatch(pointer(1), "ambiguous-omitted-type"));
+    allowed(
+      call("SubagentStart", {
+        agent_id: "default-task",
+        agent_type: "Explore",
+      }),
+    );
+    allowed(tool("default-task"));
+    stop("default-task");
+    allowed(call("PostToolUse", { tool_use_id: "omitted-type" }));
+    denied(plain("empty", ""));
+    allowed(plain("markdown-prompt", "[#377] 調査してください"));
+    start("markdown-task");
+    allowed(tool("markdown-task"));
+    stop("markdown-task");
+    allowed(call("PostToolUse", { tool_use_id: "markdown-prompt" }));
+    allowed(plain("plain-one"));
+    allowed(plain("plain-two", "別Issueを調査する SECRET-two"));
     const request = pointer(1);
+    denied(dispatch(request, "ambiguous-workflow"));
+    start("task-two");
+    start("task-one");
+    allowed(tool("task-one", "Edit"));
+    allowed(tool("task-two", "Bash"));
+    allowed(
+      call("PreToolUse", {
+        tool_name: "SendMessage",
+        tool_input: {
+          to: "task-one",
+          message: "進捗を返してください SECRET-message",
+        },
+      }),
+    );
+    stop("task-one");
+    denied(tool("task-one", "Edit"));
+    denied(
+      call("PreToolUse", {
+        tool_name: "SendMessage",
+        tool_input: { to: "task-one", message: "次のIssueを実装" },
+      }),
+    );
+    start("task-one");
+    denied(tool("task-one"));
+    stop("task-two");
+    allowed(call("PostToolUse", { tool_use_id: "plain-one" }));
+    allowed(call("PostToolUse", { tool_use_id: "plain-two" }));
+    allowed(plain("plain-failure"));
+    allowed(call("PostToolUseFailure", { tool_use_id: "plain-failure" }));
+    // A slow trusted CLI must not hold the lock and reject unrelated hook calls.
+    const slowCli = path.join(root, ".agent-skill-chain/runtime/slow-cli.mjs");
+    const ready = `${slowCli}.ready`;
+    const release = `${slowCli}.release`;
+    fs.writeFileSync(
+      slowCli,
+      `
+      import fs from 'node:fs';
+      import { spawnSync } from 'node:child_process';
+      const result = spawnSync(process.execPath, [${JSON.stringify(path.resolve("dist/bin/agent-skill-chain.js"))}, ...process.argv.slice(2)], { encoding: 'utf8' });
+      fs.writeFileSync(${JSON.stringify(ready)}, 'ready');
+      for (let attempt = 0; attempt < 1000 && !fs.existsSync(${JSON.stringify(release)}); attempt += 1)
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      process.stdout.write(result.stdout);
+      process.exit(result.status ?? 1);
+    `,
+    );
+    const slow = spawn(process.execPath, [hook], {
+      env: {
+        ...process.env,
+        CLAUDE_PROJECT_DIR: root,
+        ASC_EXECUTION_CONTEXT_MODE: "short-lived",
+        ASC_WORKFLOW_CLI: slowCli,
+      },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let slowOutput = "";
+    slow.stdout.on("data", (chunk: Buffer) => {
+      slowOutput += chunk.toString();
+    });
+    const slowDone = new Promise<number | null>((resolve, reject) => {
+      slow.once("error", reject);
+      slow.once("close", resolve);
+    });
+    slow.stdin.end(
+      JSON.stringify({
+        session_id: "semantic-session",
+        hook_event_name: "PreToolUse",
+        tool_name: "Agent",
+        tool_use_id: "slow-dispatch",
+        tool_input: {
+          subagent_type: "general-purpose",
+          prompt: JSON.stringify(request),
+        },
+      }),
+    );
+    try {
+      for (
+        let attempt = 0;
+        attempt < 1000 && !fs.existsSync(ready);
+        attempt += 1
+      )
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.ok(fs.existsSync(ready));
+      allowed(plain("during-cli", "並行調査", "Explore"));
+      allowed(
+        call("SubagentStart", {
+          agent_id: "during-cli-agent",
+          agent_type: "Explore",
+        }),
+      );
+      allowed(tool("during-cli-agent"));
+      stop("during-cli-agent");
+      allowed(call("PostToolUse", { tool_use_id: "during-cli" }));
+      allowed(
+        call("SessionStart", { session_id: "dirty-peer", source: "startup" }),
+      );
+      allowed(
+        call("PreToolUse", {
+          session_id: "dirty-peer",
+          tool_name: "Edit",
+          tool_use_id: "dirty-during-cli",
+        }),
+      );
+      fs.writeFileSync(
+        path.join(root, "ghost-fix.ts"),
+        "export const ghost = true;\n",
+      );
+      allowed(
+        call("PostToolUse", {
+          session_id: "dirty-peer",
+          tool_use_id: "dirty-during-cli",
+        }),
+      );
+    } finally {
+      fs.writeFileSync(release, "release");
+      assert.equal(await slowDone, 0);
+    }
+    denied(slowOutput);
+    assert.match(slowOutput, /未commit変更/u);
+    denied(dispatch(request, "completed-peer-write"));
+    fs.unlinkSync(path.join(root, "ghost-fix.ts"));
+    const ignoreBefore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
+    fs.appendFileSync(path.join(root, ".gitignore"), "# peer change\n");
+    denied(dispatch(request, "tracked-peer-write"));
+    git("add", ".gitignore");
+    denied(dispatch(request, "staged-peer-write"));
+    git("reset", "--quiet", "HEAD", "--", ".gitignore");
+    fs.writeFileSync(path.join(root, ".gitignore"), ignoreBefore);
+    allowed(dispatch(request, "clean-after-peer"));
+    allowed(call("PostToolUseFailure", { tool_use_id: "clean-after-peer" }));
+    fs.appendFileSync(currentArtifact, "current issue preparation\n");
+    allowed(dispatch(request, "current-staging-dirty"));
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "current-staging-dirty" }),
+    );
+    fs.appendFileSync(siblingArtifact, "other issue work\n");
+    denied(dispatch(request, "both-stagings-dirty"));
+    fs.writeFileSync(currentArtifact, "baseline\n");
+    denied(dispatch(request, "sibling-staging-dirty"));
+    git("add", siblingArtifact);
+    denied(dispatch(request, "sibling-staging-staged"));
+    git("reset", "--quiet", "HEAD", "--", siblingArtifact);
+    fs.writeFileSync(siblingArtifact, "baseline\n");
+    const siblingUntracked = path.join(sibling, "untracked-note.md");
+    fs.writeFileSync(siblingUntracked, "uncommitted sibling artifact\n");
+    denied(dispatch(request, "sibling-staging-untracked"));
+    fs.unlinkSync(siblingUntracked);
+    allowed(dispatch(request, "sibling-staging-clean"));
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "sibling-staging-clean" }),
+    );
+    allowed(call("SessionEnd", { session_id: "dirty-peer" }));
+    allowed(call("PostToolUseFailure", { tool_use_id: "slow-dispatch" }));
+
+    allowed(plain("writer-blocking-task", "調査", "Explore"));
+    denied(dispatch(request, "pending-task-blocks-writer"));
+    allowed(
+      call("SubagentStart", {
+        agent_id: "writer-blocking-agent",
+        agent_type: "Explore",
+      }),
+    );
+    allowed(call("PostToolUse", { tool_use_id: "writer-blocking-task" }));
+    const activeTaskDenial = dispatch(request, "active-task-blocks-writer");
+    denied(activeTaskDenial);
+    assert.match(activeTaskDenial, /完了を待つか別worktree/u);
+    stop("writer-blocking-agent");
+
+    const peer = (event: string, input: Record<string, unknown> = {}) =>
+      call(
+        event,
+        { ...input, session_id: "peer-session" },
+        { ASC_EXECUTION_CONTEXT_MODE: "compatible" },
+      );
+    allowed(peer("SessionStart", { source: "startup" }));
+    allowed(
+      peer("PreToolUse", {
+        tool_name: "Bash",
+        tool_use_id: "peer-shell",
+        tool_input: { command: "true" },
+      }),
+    );
+    denied(dispatch(request, "peer-shell-blocks-writer"));
+    allowed(peer("PostToolUse", { tool_use_id: "peer-shell" }));
+    allowed(
+      peer("PreToolUse", {
+        tool_name: "Agent",
+        tool_use_id: "peer-agent",
+        tool_input: { prompt: "調査" },
+      }),
+    );
+    denied(dispatch(request, "peer-pending-blocks-writer"));
+    allowed(
+      peer("SubagentStart", { agent_id: "peer-child", agent_type: "Explore" }),
+    );
+    allowed(peer("PostToolUse", { tool_use_id: "peer-agent" }));
+    denied(dispatch(request, "peer-active-blocks-writer"));
+    allowed(peer("SubagentStop", { agent_id: "peer-child" }));
+
+    const exhausted = (event: string, input: Record<string, unknown> = {}) =>
+      call(
+        event,
+        { ...input, session_id: "exhaustion-isolation" },
+        {
+          ASC_AGENT_BUDGET_MODE: "enforce",
+          ASC_AGENT_MAX_TOOLS: "10",
+        },
+      );
+    const exhaustedDispatch = () =>
+      exhausted("PreToolUse", {
+        tool_name: "Agent",
+        tool_use_id: "exhaustion-workflow",
+        tool_input: {
+          subagent_type: "general-purpose",
+          prompt: JSON.stringify(request),
+        },
+      });
+    allowed(exhausted("SessionStart", { source: "startup" }));
+    allowed(
+      exhausted("PreToolUse", {
+        tool_name: "Agent",
+        tool_use_id: "exhaustion-task",
+        tool_input: { subagent_type: "Explore", prompt: "調査" },
+      }),
+    );
+    allowed(
+      exhausted("SubagentStart", {
+        agent_id: "exhausted-task",
+        agent_type: "Explore",
+      }),
+    );
+    allowed(exhausted("PostToolUse", { tool_use_id: "exhaustion-task" }));
+    for (let attempt = 0; attempt < 11; attempt += 1)
+      exhausted("PreToolUse", {
+        agent_id: "exhausted-task",
+        tool_name: "Read",
+      });
+    denied(exhaustedDispatch());
+    allowed(exhausted("SubagentStop", { agent_id: "exhausted-task" }));
+    allowed(exhaustedDispatch());
+    allowed(
+      exhausted("SubagentStart", {
+        agent_id: "exhausted-writer",
+        agent_type: "general-purpose",
+      }),
+    );
+    for (let attempt = 0; attempt < 11; attempt += 1)
+      exhausted("PreToolUse", {
+        agent_id: "exhausted-writer",
+        tool_name: "Read",
+      });
+    allowed(
+      exhausted("PreToolUse", {
+        tool_name: "Agent",
+        tool_use_id: "after-writer",
+        tool_input: { subagent_type: "Explore", prompt: "調査" },
+      }),
+    );
+    allowed(
+      exhausted("SubagentStart", {
+        agent_id: "after-writer",
+        agent_type: "Explore",
+      }),
+    );
+    denied(
+      exhausted("PreToolUse", { agent_id: "after-writer", tool_name: "Edit" }),
+    );
+    allowed(exhausted("SubagentStop", { agent_id: "exhausted-writer" }));
+    allowed(
+      exhausted("PreToolUse", { agent_id: "after-writer", tool_name: "Edit" }),
+    );
+    allowed(exhausted("SessionEnd"));
+
     denied(dispatch(request, "fork-dispatch", "fork"));
     allowed(
       call("SubagentStart", {
@@ -139,8 +495,49 @@ When(
       }),
     );
     denied(tool("unexpected-fork"));
-    allowed(dispatch(request, "dispatch-request"));
+    allowed(
+      dispatch(
+        { handoff: request, prompt: "担当Stepを実施 SECRET-envelope" },
+        "dispatch-request",
+      ),
+    );
+    denied(plain("ambiguous-task"));
+    allowed(plain("parallel-explore", "並行調査 SECRET-explore", "Explore"));
+    allowed(
+      call("SubagentStart", { agent_id: "explore", agent_type: "Explore" }),
+    );
+    allowed(tool("explore"));
+    denied(tool("explore", "Bash")); // Pending writer already reserves the boundary.
     start("request");
+    for (const name of ["Read", "Glob", "Grep", "WebSearch", "WebFetch"])
+      allowed(tool("explore", name));
+    for (const name of [
+      "Edit",
+      "Write",
+      "NotebookEdit",
+      "Bash",
+      "mcp__filesystem__write_file",
+    ])
+      denied(tool("explore", name));
+    for (const tool_name of [
+      "Edit",
+      "Write",
+      "Bash",
+      "mcp__filesystem__write_file",
+    ]) {
+      denied(
+        call("PreToolUse", { tool_name, tool_use_id: `main-${tool_name}` }),
+      );
+      denied(
+        peer("PreToolUse", { tool_name, tool_use_id: `peer-${tool_name}` }),
+      );
+    }
+    allowed(peer("PreToolUse", { tool_name: "Read" }));
+    allowed(call("PreToolUse", { tool_name: "Read" }));
+    denied(
+      call("PreToolUse", { session_id: "second-writer", tool_name: "Edit" }),
+    );
+    allowed(tool("request", "Edit"));
     allowed(tool("request"));
     denied(
       dispatch(
@@ -169,7 +566,43 @@ When(
     assert.doesNotMatch(stale, /"continue":false/u);
     allowed(tool("request", "SubagentHandback"));
     stop("request");
+    allowed(tool("explore", "Bash"));
+    allowed(tool("explore", "Edit"));
+    stop("explore");
+    allowed(call("PostToolUse", { tool_use_id: "parallel-explore" }));
     fs.writeFileSync(journal, original);
+    allowed(
+      peer("PreToolUse", {
+        tool_name: "Bash",
+        tool_use_id: "stale-peer-write",
+      }),
+    );
+    denied(dispatch(request, "stale-peer-blocks-writer"));
+    const peerReport = spawnSync(process.execPath, [hook, "--report"], {
+      env: { ...process.env, CLAUDE_PROJECT_DIR: root },
+      encoding: "utf8",
+    });
+    const recoverable = (
+      JSON.parse(peerReport.stdout) as {
+        sessionId: string;
+        recoveryDigest: string;
+      }[]
+    ).find((entry) => entry.sessionId === "peer-session")!;
+    const recover = (expected: string, confirmed: boolean) =>
+      spawnSync(
+        process.execPath,
+        [
+          hook,
+          "--recover-session=peer-session",
+          `--expected-digest=${expected}`,
+          ...(confirmed ? ["--owner-stopped"] : []),
+        ],
+        { env: { ...process.env, CLAUDE_PROJECT_DIR: root }, encoding: "utf8" },
+      );
+    assert.notEqual(recover(recoverable.recoveryDigest, false).status, 0);
+    assert.notEqual(recover("f".repeat(64), true).status, 0);
+    assert.equal(recover(recoverable.recoveryDigest, true).status, 0);
+    denied(peer("PreToolUse", { tool_name: "Edit" }));
     recordStep(1);
     allowed(dispatch(pointer(2), "dispatch-requirements"));
     start("requirements");
@@ -179,6 +612,14 @@ When(
     const impl = pointer(9);
     allowed(dispatch(impl, "dispatch-impl"));
     start("impl");
+    fs.writeFileSync(
+      path.join(root, "owned-implementation.ts"),
+      "export const owned = true;\n",
+    );
+    allowed(tool("impl", "Edit"));
+    allowed(tool("impl", "Bash"));
+    fs.unlinkSync(path.join(root, "owned-implementation.ts"));
+    assertWriterIsolation("during-implementation");
     allowed(tool("impl", "Bash"));
     stop("impl");
     recordStep(9);
@@ -206,6 +647,9 @@ When(
       fs.writeFileSync(ghost, "export const fixed = true;\n");
       denied(dispatch(h, `untracked-r${round}`));
       fs.unlinkSync(ghost);
+      fs.appendFileSync(siblingArtifact, "unreviewed sibling change\n");
+      denied(dispatch(h, `sibling-dirty-r${round}`));
+      fs.writeFileSync(siblingArtifact, "baseline\n");
       allowed(dispatch(h, `dispatch-r${round}`));
       start(`r${round}`);
       fs.writeFileSync(ghost, "export const fixed = true;\n");
@@ -289,6 +733,7 @@ When(
       );
       allowed(dispatch(correction, `dispatch-c${round}`));
       start(`c${round}`);
+      assertWriterIsolation(`during-correction-${round}`);
       allowed(tool(`c${round}`, "Bash"));
       fs.writeFileSync(path.join(root, "code.txt"), `fix ${round}\n`);
       git("add", "code.txt");
@@ -383,6 +828,9 @@ When(
     denied(
       dispatch({ ...pointer(10), extra: "SECRET-PROMPT" }, "text-injection"),
     );
+    // Finish the previous issue before acquiring a writer for its sibling.
+    git("add", "-f", staging);
+    git("commit", "-qm", "finish previous issue staging");
     const recoveryStaging = createIssueStaging(root, {
       title: "recovery-fixture",
       requestedMode: "full",
@@ -411,9 +859,17 @@ When(
     });
     assert.equal(report.status, 0, report.stderr);
     const reports = JSON.parse(report.stdout) as {
-      agents: { id: string; contextIsolation: string }[];
+      sessionId: string;
+      agents: {
+        id: string;
+        contextIsolation: string;
+        dispatchScope: string;
+        workflowStep: number | null;
+      }[];
     }[];
-    const agents = reports[0]!.agents;
+    const agents = reports.find(
+      (entry) => entry.sessionId === "semantic-session",
+    )!.agents;
     assert.equal(
       agents.find((agent) => agent.id === "unexpected-fork")?.contextIsolation,
       "inherited",
@@ -425,6 +881,22 @@ When(
     assert.equal(
       agents.find((agent) => agent.id === "semantic-session")?.contextIsolation,
       "unknown",
+    );
+    assert.equal(
+      agents.find((agent) => agent.id === "task-two")?.dispatchScope,
+      "task",
+    );
+    assert.equal(
+      agents.find((agent) => agent.id === "task-two")?.workflowStep,
+      null,
+    );
+    assert.equal(
+      agents.find((agent) => agent.id === "r1")?.dispatchScope,
+      "workflow",
+    );
+    assert.equal(
+      agents.find((agent) => agent.id === "unbound")?.dispatchScope,
+      "unbound",
     );
     assert.match(report.stdout, /"modelCycleProxy": 1/u);
     assert.match(report.stdout, /"modelCycleProxy": null/u);
