@@ -243,10 +243,10 @@ When(
       `
       import fs from 'node:fs';
       import { spawnSync } from 'node:child_process';
+      const result = spawnSync(process.execPath, [${JSON.stringify(path.resolve("dist/bin/agent-skill-chain.js"))}, ...process.argv.slice(2)], { encoding: 'utf8' });
       fs.writeFileSync(${JSON.stringify(ready)}, 'ready');
       for (let attempt = 0; attempt < 1000 && !fs.existsSync(${JSON.stringify(release)}); attempt += 1)
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-      const result = spawnSync(process.execPath, [${JSON.stringify(path.resolve("dist/bin/agent-skill-chain.js"))}, ...process.argv.slice(2)], { encoding: 'utf8' });
       process.stdout.write(result.stdout);
       process.exit(result.status ?? 1);
     `,
@@ -298,11 +298,44 @@ When(
       allowed(tool("during-cli-agent"));
       stop("during-cli-agent");
       allowed(call("PostToolUse", { tool_use_id: "during-cli" }));
+      allowed(
+        call("SessionStart", { session_id: "dirty-peer", source: "startup" }),
+      );
+      allowed(
+        call("PreToolUse", {
+          session_id: "dirty-peer",
+          tool_name: "Edit",
+          tool_use_id: "dirty-during-cli",
+        }),
+      );
+      fs.writeFileSync(
+        path.join(root, "ghost-fix.ts"),
+        "export const ghost = true;\n",
+      );
+      allowed(
+        call("PostToolUse", {
+          session_id: "dirty-peer",
+          tool_use_id: "dirty-during-cli",
+        }),
+      );
     } finally {
       fs.writeFileSync(release, "release");
       assert.equal(await slowDone, 0);
     }
-    allowed(slowOutput);
+    denied(slowOutput);
+    assert.match(slowOutput, /未commit変更/u);
+    denied(dispatch(request, "completed-peer-write"));
+    fs.unlinkSync(path.join(root, "ghost-fix.ts"));
+    const ignoreBefore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
+    fs.appendFileSync(path.join(root, ".gitignore"), "# peer change\n");
+    denied(dispatch(request, "tracked-peer-write"));
+    git("add", ".gitignore");
+    denied(dispatch(request, "staged-peer-write"));
+    git("reset", "--quiet", "HEAD", "--", ".gitignore");
+    fs.writeFileSync(path.join(root, ".gitignore"), ignoreBefore);
+    allowed(dispatch(request, "clean-after-peer"));
+    allowed(call("PostToolUseFailure", { tool_use_id: "clean-after-peer" }));
+    allowed(call("SessionEnd", { session_id: "dirty-peer" }));
     allowed(call("PostToolUseFailure", { tool_use_id: "slow-dispatch" }));
 
     allowed(plain("writer-blocking-task", "調査", "Explore"));
@@ -549,6 +582,13 @@ When(
     const impl = pointer(9);
     allowed(dispatch(impl, "dispatch-impl"));
     start("impl");
+    fs.writeFileSync(
+      path.join(root, "owned-implementation.ts"),
+      "export const owned = true;\n",
+    );
+    allowed(tool("impl", "Edit"));
+    allowed(tool("impl", "Bash"));
+    fs.unlinkSync(path.join(root, "owned-implementation.ts"));
     assertWriterIsolation("during-implementation");
     allowed(tool("impl", "Bash"));
     stop("impl");

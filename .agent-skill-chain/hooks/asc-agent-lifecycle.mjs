@@ -296,7 +296,7 @@ function checkTask(task) {
       "taskの起動記録がありません。fresh agentへ再委譲してください",
     );
 }
-function checkHandoff(h, exactHead) {
+function checkHandoff(h, exactHead, acquireWriter = false) {
   const root = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR);
   if (
     h.worktree !== root ||
@@ -316,7 +316,7 @@ function checkHandoff(h, exactHead) {
       "handoff境界が変更されました。状態を返却しfresh contextから再開してください",
     );
   if (
-    h.role === "reviewer" &&
+    (h.role === "reviewer" || (acquireWriter && workflowWriter(h, root))) &&
     repositoryGit(root, [
       "status",
       "--porcelain=v1",
@@ -328,7 +328,7 @@ function checkHandoff(h, exactHead) {
     ]) !== ""
   )
     throw new Error(
-      "review candidateに追跡または未追跡の未commit変更があります",
+      "candidateに追跡または未追跡の未commit変更があります。変更を解消またはcommitし、handoffを再取得してください",
     );
 }
 const shellQuote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
@@ -541,7 +541,7 @@ function executionGuard(state, agent, input, verifiedHandoff) {
           "同一worktreeにwriter・未終了task・実行中の書込みがあります。完了を待つか別worktreeを使用してください。event欠落は--reportでownerを確認してください",
         );
       if (h) {
-        checkHandoff(h, true);
+        checkHandoff(h, true, true);
         if (verifiedHandoff !== JSON.stringify(h))
           throw new Error(
             verifiedHandoff?.error ??
@@ -670,7 +670,11 @@ function transition(state, input, now, verifiedHandoff) {
           try {
             if (pending.task) checkTask(pending.task);
             else
-              checkHandoff(parseHandoff(JSON.stringify(pending.handoff)), true);
+              checkHandoff(
+                parseHandoff(JSON.stringify(pending.handoff)),
+                true,
+                true,
+              );
           } catch {
             state.pendingHandoff = null;
             return context(
@@ -914,7 +918,7 @@ function run(input) {
       try {
         const { handoff } = dispatchContract(input.tool_input?.prompt);
         if (handoff) {
-          checkHandoff(handoff, true);
+          checkHandoff(handoff, true, true);
           verifyDispatch(handoff);
           verifiedHandoff = JSON.stringify(handoff);
         }
