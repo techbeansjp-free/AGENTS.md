@@ -153,6 +153,8 @@ export function inspectAgentLifecycleRegistration(
     "SubagentStart",
     "SubagentStop",
     "PreToolUse",
+    "PostToolUse",
+    "PostToolUseFailure",
   ];
   let hooks: Record<string, unknown> = {};
   let environment: Record<string, unknown> = {};
@@ -171,7 +173,6 @@ export function inspectAgentLifecycleRegistration(
   } catch {
     hooks = {};
   }
-  if (shortLived) required.push("PostToolUse", "PostToolUseFailure");
   const registrations = required.map((event) => {
     const entries = hooks[event];
     const commands = Array.isArray(entries)

@@ -300,7 +300,7 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
   );
   assert.deepEqual(
     inspectAgentLifecycleRegistration(JSON.stringify({ hooks })).missingEvents,
-    [],
+    ["PostToolUse", "PostToolUseFailure"],
   );
   assert.deepEqual(
     inspectAgentLifecycleRegistration(JSON.stringify({ hooks }), "short-lived")
@@ -516,7 +516,7 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
   );
   assert.equal(
     inspectAgentLifecycleRegistration(
-      JSON.stringify({ hooks }),
+      JSON.stringify({ hooks: fragment.hooks }),
       "compatible",
       "",
     ).healthy,
@@ -534,7 +534,7 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
     .configuration.settingsFragment;
   assert.equal(compatible.env.ASC_EXECUTION_CONTEXT_MODE, "compatible");
   assert.equal(compatible.env.ASC_WORKFLOW_CLI, undefined);
-  assert.equal(Object.keys(compatible.hooks).length, 5);
+  assert.equal(Object.keys(compatible.hooks).length, 7);
   hooks.PostToolUse = [entry];
   hooks.PostToolUseFailure = [{ hooks: [{ ...entry.hooks[0], async: true }] }];
   assert.deepEqual(
@@ -555,7 +555,7 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
   );
   assert.equal(
     inspectAgentLifecycleRegistration(undefined).missingEvents.length,
-    5,
+    7,
   );
   assert.equal(inspectAgentLifecycleRegistration("{}").runtimeVerified, false);
 });

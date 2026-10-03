@@ -45,13 +45,14 @@ function stateRoot() {
   return root;
 }
 
-function readState(file) {
+function readState(file, snapshot = false) {
   const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
   try {
     const stat = fs.fstatSync(fd);
     if (!stat.isFile() || stat.nlink !== 1 || stat.size > 8 * 1024 * 1024)
       throw new Error("lifecycle stateのfile境界が不正です");
-    const state = JSON.parse(fs.readFileSync(fd, "utf8"));
+    const source = fs.readFileSync(fd, "utf8");
+    const state = JSON.parse(source);
     if (
       state.version !== 1 ||
       !validId(state.sessionId) ||
@@ -96,7 +97,7 @@ function readState(file) {
     // Older records never implicitly opt in to hard budget enforcement.
     state.budgetMode ??= "warn";
     state.executionContextMode ??= "compatible";
-    return state;
+    return snapshot ? { state, recoveryDigest: digest(source) } : state;
   } finally {
     fs.closeSync(fd);
   }
@@ -396,14 +397,35 @@ function workflowWriter(handoff, worktree) {
 function unfinishedWorker(agent) {
   return ["active", "exhausted"].includes(agent.status) && !agent.stoppedAt;
 }
+let peerStates = [];
+const sessionStates = (state) => [state, ...peerStates];
+function writerReservations(state, worktree) {
+  return sessionStates(state).flatMap((session) => [
+    ...(workflowWriter(session.pendingHandoff?.handoff, worktree)
+      ? [
+          {
+            sessionId: session.sessionId,
+            agentId: null,
+            state: "pending",
+            handoff: session.pendingHandoff.handoff,
+          },
+        ]
+      : []),
+    ...session.agents
+      .filter(
+        (agent) =>
+          unfinishedWorker(agent) && workflowWriter(agent.handoff, worktree),
+      )
+      .map((agent) => ({
+        sessionId: session.sessionId,
+        agentId: agent.id,
+        state: "active",
+        handoff: agent.handoff,
+      })),
+  ]);
+}
 function workflowWriteReserved(state, worktree) {
-  return (
-    workflowWriter(state.pendingHandoff?.handoff, worktree) ||
-    state.agents.some(
-      (entry) =>
-        unfinishedWorker(entry) && workflowWriter(entry.handoff, worktree),
-    )
-  );
+  return writerReservations(state, worktree).length > 0;
 }
 const TASK_READ_TOOLS = new Set([
   "Read",
@@ -416,6 +438,22 @@ const TASK_READ_TOOLS = new Set([
 ]);
 
 function executionGuard(state, agent, input, verifiedHandoff) {
+  const worktree = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR);
+  const reservations = writerReservations(state, worktree);
+  const owner = reservations.some(
+    (reservation) =>
+      reservation.sessionId === state.sessionId &&
+      reservation.agentId === agent.id,
+  );
+  if (
+    reservations.length &&
+    !owner &&
+    !TASK_READ_TOOLS.has(input.tool_name) &&
+    !(agent.kind === "main" && ["Agent", "Task"].includes(input.tool_name))
+  )
+    return deny(
+      "このworktreeはASC writerが占有しています。main・別sessionも読取と連絡のみ可能です。書込み・Bashはwriterの終了を待つか別worktreeを使用してください",
+    );
   if (state.executionContextMode !== "short-lived") return undefined;
   const tool = input.tool_input ?? {};
   if (input.tool_name === "SubagentHandback") return {};
@@ -483,18 +521,24 @@ function executionGuard(state, agent, input, verifiedHandoff) {
         );
       if (
         workflowWriter(h, h?.worktree) &&
-        (state.pendingTasks?.some(
-          (entry) => entry.task?.worktree === h.worktree,
-        ) ||
-          state.agents.some(
-            (entry) =>
-              entry.dispatchScope === "task" &&
-              unfinishedWorker(entry) &&
-              entry.task?.worktree === h.worktree,
+        (workflowWriteReserved(state, h.worktree) ||
+          sessionStates(state).some(
+            (session) =>
+              (session.inFlightWrites?.length ?? 0) > 0 ||
+              (session.pendingDispatches?.length ?? 0) > 0 ||
+              session.pendingTasks?.some(
+                (entry) => entry.task?.worktree === h.worktree,
+              ) ||
+              session.agents.some(
+                (entry) =>
+                  entry.kind === "subagent" &&
+                  !entry.handoff &&
+                  unfinishedWorker(entry),
+              ),
           ))
       )
         throw new Error(
-          "同一worktreeに開始待ち・稼働中の通常taskがあります。ASC writerの起動はtaskの完了を待つか別worktreeを使用してください",
+          "同一worktreeにwriter・未終了task・実行中の書込みがあります。完了を待つか別worktreeを使用してください。event欠落は--reportでownerを確認してください",
         );
       if (h) {
         checkHandoff(h, true);
@@ -773,6 +817,78 @@ function transition(state, input, now, verifiedHandoff) {
   return {};
 }
 
+function acquireWorktreeLock(root) {
+  const lock = path.join(root, "worktree.lock");
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      fs.mkdirSync(lock, { mode: 0o700 });
+      break;
+    } catch (error) {
+      if (error.code !== "EEXIST" || attempt >= 50) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    }
+  }
+  fs.writeFileSync(
+    path.join(lock, "owner.json"),
+    JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }),
+    { flag: "wx", mode: 0o600 },
+  );
+  return lock;
+}
+function recoverSession() {
+  const flag = (name) =>
+    process.argv
+      .find((arg) => arg.startsWith(name + "="))
+      ?.slice(name.length + 1);
+  const sessionId = flag("--recover-session");
+  const expected = flag("--expected-digest");
+  if (
+    !validId(sessionId) ||
+    !/^[a-f0-9]{64}$/u.test(expected ?? "") ||
+    !process.argv.includes("--owner-stopped")
+  )
+    throw new Error(
+      "owner停止の明示確認とsession ID・reportのdigestが必要です",
+    );
+  const root = stateRoot();
+  const lock = acquireWorktreeLock(root);
+  try {
+    const file = path.join(root, `${digest(sessionId)}.json`);
+    const state = readState(file);
+    if (
+      state.sessionId !== sessionId ||
+      digest(fs.readFileSync(file)) !== expected
+    )
+      throw new Error("復旧対象がreport後に変わりました。再確認してください");
+    const now = new Date().toISOString();
+    for (const agent of state.agents) {
+      agent.status = "closed";
+      agent.stoppedAt = now;
+      agent.endedAt ??= now;
+      agent.reason = "explicit-owner-stopped-recovery";
+    }
+    state.pendingHandoff = null;
+    state.pendingTasks = [];
+    state.pendingDispatches = [];
+    state.inFlightWrites = [];
+    state.recoveredAt = now;
+    const temporary = path.join(lock, "state.json");
+    fs.writeFileSync(temporary, JSON.stringify(state) + "\n", {
+      flag: "wx",
+      mode: 0o600,
+    });
+    fs.renameSync(temporary, file);
+    return {
+      recovered: true,
+      sessionId,
+      previousDigest: expected,
+      next: "旧sessionは再開せず新sessionを使用してください",
+    };
+  } finally {
+    fs.rmSync(lock, { recursive: true });
+  }
+}
+
 function run(input) {
   const event = input.hook_event_name;
   if (!EVENTS.has(event)) return {};
@@ -807,17 +923,7 @@ function run(input) {
       }
     }
   }
-  const lock = path.join(root, `${key}.lock`);
-  // A contended or stale lock refuses this call; never remove another process's lock.
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      fs.mkdirSync(lock, { mode: 0o700 });
-      break;
-    } catch (error) {
-      if (error.code !== "EEXIST" || attempt >= 50) throw error;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-    }
-  }
+  const lock = acquireWorktreeLock(root);
   try {
     let state;
     try {
@@ -858,14 +964,53 @@ function run(input) {
         agents: [newAgent(input.session_id, "main", new Date().toISOString())],
       };
     }
+    if (state.recoveredAt)
+      throw new Error("明示復旧で閉鎖済みのsessionです。新sessionが必要です");
     if (state.sessionId !== input.session_id)
       throw new Error("session identityが一致しません");
+    peerStates = fs
+      .readdirSync(root)
+      .filter(
+        (name) => /^[a-f0-9]{64}\.json$/u.test(name) && name !== `${key}.json`,
+      )
+      .map((name) => readState(path.join(root, name)));
     const result = transition(
       state,
       input,
       new Date().toISOString(),
       verifiedHandoff,
     );
+    const actorId = input.agent_id ?? state.sessionId;
+    const actor = state.agents.find((entry) => entry.id === actorId);
+    if (
+      event === "PreToolUse" &&
+      actor?.kind === "main" &&
+      result.hookSpecificOutput?.permissionDecision !== "deny" &&
+      result.continue !== false
+    ) {
+      const id = input.tool_use_id ?? `unobserved:${actorId}`;
+      if (["Agent", "Task"].includes(input.tool_name)) {
+        if (!state.pendingHandoff) {
+          state.pendingDispatches ??= [];
+          if (!state.pendingDispatches.includes(id))
+            state.pendingDispatches.push(id);
+        }
+      } else if (!TASK_READ_TOOLS.has(input.tool_name)) {
+        state.inFlightWrites ??= [];
+        if (!state.inFlightWrites.includes(id)) state.inFlightWrites.push(id);
+      }
+    }
+    if (["PostToolUse", "PostToolUseFailure"].includes(event)) {
+      for (const field of ["inFlightWrites", "pendingDispatches"])
+        if (state[field])
+          state[field] = state[field].filter((id) => id !== input.tool_use_id);
+    }
+    if (event === "SessionEnd") {
+      state.inFlightWrites = [];
+      state.pendingDispatches = [];
+      state.pendingTasks = [];
+      state.pendingHandoff = null;
+    }
     const temporary = path.join(lock, "state.json");
     fs.writeFileSync(temporary, `${JSON.stringify(state)}\n`, {
       flag: "wx",
@@ -885,9 +1030,22 @@ function report() {
     .filter((name) => /^[a-f0-9]{64}\.json$/u.test(name))
     .sort()
     .map((name) => {
-      const state = readState(path.join(root, name));
+      const { state, recoveryDigest } = readState(path.join(root, name), true);
       return {
         ...state,
+        worktreeLock: fs.existsSync(path.join(root, "worktree.lock"))
+          ? {
+              path: path.join(root, "worktree.lock"),
+              next: "owner.jsonのPIDと全host停止を確認するまで削除しない。TTL解除なし",
+            }
+          : null,
+        recoveryDigest,
+        writerReservations: writerReservations(
+          state,
+          fs.realpathSync(process.env.CLAUDE_PROJECT_DIR),
+        ),
+        recovery:
+          "TTLでは解除しません。owner sessionと子processの終了を確認し、--recover-session=<sessionId> --expected-digest=<recoveryDigest> --owner-stoppedで明示復旧してください",
         agents: state.agents.map((agent) => ({
           ...agent,
           parent: agent.parentId ?? null,
@@ -922,14 +1080,16 @@ function report() {
 
 let input;
 try {
-  if (process.argv.includes("--report"))
+  if (process.argv.some((arg) => arg.startsWith("--recover-session=")))
+    process.stdout.write(`${JSON.stringify(recoverSession())}\n`);
+  else if (process.argv.includes("--report"))
     process.stdout.write(`${JSON.stringify(report(), null, 2)}\n`);
   else {
     input = JSON.parse(fs.readFileSync(0, "utf8"));
     process.stdout.write(`${JSON.stringify(run(input))}\n`);
   }
 } catch (error) {
-  const reason = `ASC lifecycle記録を確認できません（${error.code ?? "invalid-state"}）。hook設定・記録・実行中processを確認し、新contextで再開してください。`;
+  const reason = `ASC lifecycle記録を確認できません（${error.code ?? "invalid-state"}）。hook設定・--report・実行中processを確認してください。残存予約はowner停止確認と明示復旧が必要で、新sessionだけでは解除されません。`;
   if (input?.hook_event_name === "PreToolUse")
     process.stdout.write(`${JSON.stringify(deny(reason, true))}\n`);
   else {

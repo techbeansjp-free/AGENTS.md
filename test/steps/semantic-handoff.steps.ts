@@ -319,6 +319,37 @@ When(
     assert.match(activeTaskDenial, /完了を待つか別worktree/u);
     stop("writer-blocking-agent");
 
+    const peer = (event: string, input: Record<string, unknown> = {}) =>
+      call(
+        event,
+        { ...input, session_id: "peer-session" },
+        { ASC_EXECUTION_CONTEXT_MODE: "compatible" },
+      );
+    allowed(peer("SessionStart", { source: "startup" }));
+    allowed(
+      peer("PreToolUse", {
+        tool_name: "Bash",
+        tool_use_id: "peer-shell",
+        tool_input: { command: "true" },
+      }),
+    );
+    denied(dispatch(request, "peer-shell-blocks-writer"));
+    allowed(peer("PostToolUse", { tool_use_id: "peer-shell" }));
+    allowed(
+      peer("PreToolUse", {
+        tool_name: "Agent",
+        tool_use_id: "peer-agent",
+        tool_input: { prompt: "調査" },
+      }),
+    );
+    denied(dispatch(request, "peer-pending-blocks-writer"));
+    allowed(
+      peer("SubagentStart", { agent_id: "peer-child", agent_type: "Explore" }),
+    );
+    allowed(peer("PostToolUse", { tool_use_id: "peer-agent" }));
+    denied(dispatch(request, "peer-active-blocks-writer"));
+    allowed(peer("SubagentStop", { agent_id: "peer-child" }));
+
     const exhausted = (event: string, input: Record<string, unknown> = {}) =>
       call(
         event,
@@ -425,6 +456,24 @@ When(
       "mcp__filesystem__write_file",
     ])
       denied(tool("explore", name));
+    for (const tool_name of [
+      "Edit",
+      "Write",
+      "Bash",
+      "mcp__filesystem__write_file",
+    ]) {
+      denied(
+        call("PreToolUse", { tool_name, tool_use_id: `main-${tool_name}` }),
+      );
+      denied(
+        peer("PreToolUse", { tool_name, tool_use_id: `peer-${tool_name}` }),
+      );
+    }
+    allowed(peer("PreToolUse", { tool_name: "Read" }));
+    allowed(call("PreToolUse", { tool_name: "Read" }));
+    denied(
+      call("PreToolUse", { session_id: "second-writer", tool_name: "Edit" }),
+    );
     allowed(tool("request", "Edit"));
     allowed(tool("request"));
     denied(
@@ -459,6 +508,38 @@ When(
     stop("explore");
     allowed(call("PostToolUse", { tool_use_id: "parallel-explore" }));
     fs.writeFileSync(journal, original);
+    allowed(
+      peer("PreToolUse", {
+        tool_name: "Bash",
+        tool_use_id: "stale-peer-write",
+      }),
+    );
+    denied(dispatch(request, "stale-peer-blocks-writer"));
+    const peerReport = spawnSync(process.execPath, [hook, "--report"], {
+      env: { ...process.env, CLAUDE_PROJECT_DIR: root },
+      encoding: "utf8",
+    });
+    const recoverable = (
+      JSON.parse(peerReport.stdout) as {
+        sessionId: string;
+        recoveryDigest: string;
+      }[]
+    ).find((entry) => entry.sessionId === "peer-session")!;
+    const recover = (expected: string, confirmed: boolean) =>
+      spawnSync(
+        process.execPath,
+        [
+          hook,
+          "--recover-session=peer-session",
+          `--expected-digest=${expected}`,
+          ...(confirmed ? ["--owner-stopped"] : []),
+        ],
+        { env: { ...process.env, CLAUDE_PROJECT_DIR: root }, encoding: "utf8" },
+      );
+    assert.notEqual(recover(recoverable.recoveryDigest, false).status, 0);
+    assert.notEqual(recover("f".repeat(64), true).status, 0);
+    assert.equal(recover(recoverable.recoveryDigest, true).status, 0);
+    denied(peer("PreToolUse", { tool_name: "Edit" }));
     recordStep(1);
     allowed(dispatch(pointer(2), "dispatch-requirements"));
     start("requirements");
