@@ -224,15 +224,13 @@ export function inspectAgentLifecycleRegistration(
     }
   }
   const invalidTimeoutEvents = registrations
-    .filter(
-      ({ commands }) =>
-        commands.length === 0 ||
-        commands.some(
-          (hook) =>
-            typeof hook.timeout !== "number" ||
-            !Number.isFinite(hook.timeout) ||
-            hook.timeout < 30,
-        ),
+    .filter(({ commands }) =>
+      commands.some(
+        (hook) =>
+          typeof hook.timeout !== "number" ||
+          !Number.isFinite(hook.timeout) ||
+          hook.timeout < 30,
+      ),
     )
     .map(({ event }) => event);
   const mode = environment.ASC_EXECUTION_CONTEXT_MODE ?? executionContextMode;

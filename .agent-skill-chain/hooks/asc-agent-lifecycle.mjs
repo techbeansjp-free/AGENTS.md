@@ -832,11 +832,20 @@ function acquireWorktreeLock(root) {
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
     }
   }
-  fs.writeFileSync(
-    path.join(lock, "owner.json"),
-    JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }),
-    { flag: "wx", mode: 0o600 },
-  );
+  try {
+    fs.writeFileSync(
+      path.join(lock, "owner.json"),
+      JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }),
+      { flag: "wx", mode: 0o600 },
+    );
+  } catch (error) {
+    try {
+      fs.rmSync(lock, { recursive: true, force: true });
+    } catch {
+      // Preserve the acquisition failure if cleanup also fails.
+    }
+    throw error;
+  }
   return lock;
 }
 function recoverSession() {
