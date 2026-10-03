@@ -3,16 +3,16 @@
   "issue": 1546,
   "observed": {
     "baseSha": "3d378c2bbd43fefc25e10befbc73734f7523ff2e",
-    "implementationHeadSha": "718d095ef3b7161644d8a94b44a47208e0e8979f",
-    "diffDigest": "b3da8ac9773bc102da95abdd4741a74fcaf730c457ac3856ae3f7a4c09d7a914",
+    "implementationHeadSha": "44dfff96c2c4c82240af8b73505e1fe9998179f7",
+    "diffDigest": "7c83ff03781050ab31deaf3e802967ae7ca52271005dce00d2573ecc9bee8cf7",
     "session": {
-      "sessionId": "00f193148d741693609dc443343a48b5a9d5a10187fa6cfccd7ffad11c60b3fc",
-      "latestRoundDigest": "560387dfd18bff95226048b0d43e006e87308f95fd269abbbe4d4d58381a8b2d",
+      "sessionId": "1772d75e477a04f5cb0cad93f5cc519aae58848dd55a0bd31fd1e4d2abbe372a",
+      "latestRoundDigest": "2b6cd238719bb678389a0f22736829fd33294d0146a19be75301aa9128e22544",
       "status": "converged",
       "countedRounds": 1
     },
     "impact": {
-      "digest": "b9c4cb0a5e4716aaca964b2fbba27037d5f0aa4d9070c146a9a77b9a2cbab016",
+      "digest": "e2c9056362aad229f69c92e4f4b6c97ea1ce00b04e914987583a61b63ae0d2e3",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "718d095ef3b7161644d8a94b44a47208e0e8979f",
-        "impactDigest": "b9c4cb0a5e4716aaca964b2fbba27037d5f0aa4d9070c146a9a77b9a2cbab016",
-        "finishedAt": "2026-10-03T07:52:17.354Z",
-        "recordDigest": "6441f82d8f775575b01b1c8c7f4d0ff4a6f387812d34b1585c758d78ad1fafad"
+        "headSha": "44dfff96c2c4c82240af8b73505e1fe9998179f7",
+        "impactDigest": "e2c9056362aad229f69c92e4f4b6c97ea1ce00b04e914987583a61b63ae0d2e3",
+        "finishedAt": "2026-10-03T08:34:32.516Z",
+        "recordDigest": "77f1c39951f9147f1706f6f25e69a87e9267703ed7254aa41b5f403c0db987d2"
       }
     ]
   },
@@ -39,5 +39,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "9cd06407da27aa927e45fa2c8b459c6a475a9fd539c745fb0d7a3f84fbdca26c"
+  "evidenceDigest": "c49914081d373fc1658a4707dfbe3f4913635b303c00b218ffd516320d45dc94"
 }
