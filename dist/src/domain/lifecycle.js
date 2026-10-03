@@ -184,7 +184,12 @@ export function inspectAgentLifecycleRegistration(settings, executionContextMode
         .map(({ event }) => event);
     const mode = environment.ASC_EXECUTION_CONTEXT_MODE ?? executionContextMode;
     const modeConfigured = mode === "compatible" || mode === "short-lived";
+    const duplicateEvents = registrations
+        .filter(({ commands }) => commands.length > 1)
+        .map(({ event }) => event);
     const diagnostics = missingEvents.map((event) => `${event}の同期・全対象hook登録がありません`);
+    for (const event of duplicateEvents)
+        diagnostics.push(`${event}にlifecycle hookが複数登録されています。全対象の同期登録1件へ統合してください`);
     if (mode !== undefined && !modeConfigured)
         diagnostics.push("ASC_EXECUTION_CONTEXT_MODEはcompatible / short-livedを指定してください");
     if (shortLived) {
@@ -205,6 +210,7 @@ export function inspectAgentLifecycleRegistration(settings, executionContextMode
         healthy: diagnostics.length === 0,
         diagnostics,
         configurationDiagnostics: {
+            duplicateEvents,
             cliConfigured,
             cliAbsolute,
             cliExists,

@@ -371,6 +371,57 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
       false,
     );
   }
+  for (const event of ["PreToolUse", "SubagentStart"]) {
+    for (const matcher of [undefined, "Agent"]) {
+      const duplicate = {
+        ...fragment,
+        hooks: {
+          ...fragment.hooks,
+          [event]: [
+            ...fragment.hooks[event],
+            { matcher, hooks: [{ ...entry.hooks[0], timeout: 30 }] },
+          ],
+        },
+      };
+      const result = inspectAgentLifecycleRegistration(
+        JSON.stringify(duplicate),
+        "compatible",
+        "",
+      );
+      assert.deepEqual(result.missingEvents, []);
+      assert.equal(result.healthy, false);
+      assert.deepEqual(result.configurationDiagnostics.duplicateEvents, [
+        event,
+      ]);
+      assert.match(result.diagnostics.join(), /複数登録/u);
+    }
+  }
+  const unrelated = {
+    ...fragment,
+    hooks: {
+      ...fragment.hooks,
+      PreToolUse: [
+        ...fragment.hooks.PreToolUse,
+        {
+          hooks: [
+            {
+              type: "command",
+              command: "node unrelated-hook.mjs",
+              timeout: 30,
+            },
+          ],
+        },
+      ],
+    },
+  };
+  assert.equal(
+    inspectAgentLifecycleRegistration(
+      JSON.stringify(unrelated),
+      "compatible",
+      "",
+    ).healthy,
+    true,
+  );
   assert.equal(Object.keys(fragment.hooks).length, 7);
   const diagnose = (cli: string | null, timeout = 30) =>
     inspectAgentLifecycleRegistration(
