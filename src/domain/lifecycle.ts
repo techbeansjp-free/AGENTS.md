@@ -96,6 +96,8 @@ const HOST_HOOK_TARGETS = [
  * 「以後のtool callごとに自動実行されるcodeを登録する」まで広がる。
  */
 const HOST_HOOK_SETTINGS = ".claude/settings.local.json";
+const AGENT_LIFECYCLE_COMMAND =
+  'node "$CLAUDE_PROJECT_DIR/.claude/hooks/asc-agent-lifecycle.mjs"';
 
 /**
  * project-localの設定にhookのentryがあるかを返す純関数（Issue #1105）。
@@ -187,6 +189,7 @@ export function inspectAgentLifecycleRegistration(
                 )
                 .filter(isRecord)
                 .map((hook) => ({
+                  canonical: hook.command === AGENT_LIFECYCLE_COMMAND,
                   async: hook.async,
                   timeout: hook.timeout,
                   coversAll: [undefined, "", "*"].includes(
@@ -200,7 +203,9 @@ export function inspectAgentLifecycleRegistration(
   });
   const configuredEvents = registrations
     .filter(({ commands }) =>
-      commands.some((hook) => hook.coversAll && hook.async !== true),
+      commands.some(
+        (hook) => hook.canonical && hook.coversAll && hook.async !== true,
+      ),
     )
     .map(({ event }) => event);
   const missingEvents = required.filter(
@@ -231,12 +236,20 @@ export function inspectAgentLifecycleRegistration(
     .map(({ event }) => event);
   const mode = environment.ASC_EXECUTION_CONTEXT_MODE ?? executionContextMode;
   const modeConfigured = mode === "compatible" || mode === "short-lived";
+  const noncanonicalEvents = registrations
+    .filter(({ commands }) => commands.some((hook) => !hook.canonical))
+    .map(({ event }) => event);
   const duplicateEvents = registrations
     .filter(({ commands }) => commands.length > 1)
     .map(({ event }) => event);
   const diagnostics = missingEvents.map(
-    (event) => `${event}の同期・全対象hook登録がありません`,
+    (event) =>
+      `${event}のcanonical commandによる同期・全対象hook登録がありません: ${AGENT_LIFECYCLE_COMMAND}`,
   );
+  for (const event of noncanonicalEvents)
+    diagnostics.push(
+      `${event}に非canonical lifecycle commandがあります。次の直接実行1件へ統合してください: ${AGENT_LIFECYCLE_COMMAND}`,
+    );
   for (const event of duplicateEvents)
     diagnostics.push(
       `${event}にlifecycle hookが複数登録されています。全対象の同期登録1件へ統合してください`,
@@ -266,6 +279,7 @@ export function inspectAgentLifecycleRegistration(
     healthy: diagnostics.length === 0,
     diagnostics,
     configurationDiagnostics: {
+      noncanonicalEvents,
       duplicateEvents,
       cliConfigured,
       cliAbsolute,
@@ -299,8 +313,7 @@ export function inspectAgentLifecycleRegistration(
                 hooks: [
                   {
                     type: "command",
-                    command:
-                      'node "$CLAUDE_PROJECT_DIR/.claude/hooks/asc-agent-lifecycle.mjs"',
+                    command: AGENT_LIFECYCLE_COMMAND,
                     timeout: 30,
                   },
                 ],

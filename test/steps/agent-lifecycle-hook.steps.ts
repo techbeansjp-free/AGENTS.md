@@ -422,6 +422,61 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
     ).healthy,
     true,
   );
+  for (const command of [
+    'echo "$CLAUDE_PROJECT_DIR/.claude/hooks/asc-agent-lifecycle.mjs"',
+    "true # .claude/hooks/asc-agent-lifecycle.mjs",
+    'echo node "$CLAUDE_PROJECT_DIR/.claude/hooks/asc-agent-lifecycle.mjs"',
+    'node "$CLAUDE_PROJECT_DIR/.claude/hooks/asc-agent-lifecycle.mjs.backup"',
+  ]) {
+    const nonExecuting = {
+      ...fragment,
+      hooks: Object.fromEntries(
+        Object.keys(fragment.hooks).map((event) => [
+          event,
+          [{ hooks: [{ type: "command", command, timeout: 30 }] }],
+        ]),
+      ),
+    };
+    const result = inspectAgentLifecycleRegistration(
+      JSON.stringify(nonExecuting),
+      "compatible",
+      "",
+    );
+    assert.equal(result.healthy, false);
+    assert.deepEqual(result.configuredEvents, []);
+    assert.equal(result.missingEvents.length, 7);
+    assert.match(result.diagnostics.join(), /canonical command/u);
+  }
+  const canonical = fragment.hooks.SubagentStart[0].hooks[0].command;
+  for (const command of [
+    ` ${canonical}`,
+    `echo ${canonical}`,
+    `true && ${canonical}`,
+  ]) {
+    const ambiguous = {
+      ...fragment,
+      hooks: {
+        ...fragment.hooks,
+        SubagentStart: [
+          ...fragment.hooks.SubagentStart,
+          { hooks: [{ type: "command", command, timeout: 30 }] },
+        ],
+      },
+    };
+    const result = inspectAgentLifecycleRegistration(
+      JSON.stringify(ambiguous),
+      "compatible",
+      "",
+    );
+    assert.equal(result.healthy, false);
+    assert.deepEqual(result.missingEvents, []);
+    assert.deepEqual(result.configurationDiagnostics.noncanonicalEvents, [
+      "SubagentStart",
+    ]);
+    assert.deepEqual(result.configurationDiagnostics.duplicateEvents, [
+      "SubagentStart",
+    ]);
+  }
   assert.equal(Object.keys(fragment.hooks).length, 7);
   const diagnose = (cli: string | null, timeout = 30) =>
     inspectAgentLifecycleRegistration(
