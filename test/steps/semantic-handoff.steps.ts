@@ -45,7 +45,11 @@ When(
     );
     git("add", ".gitignore");
     git("commit", "-qm", "ignore fixture state");
-    const call = (name: string, extra: Record<string, unknown> = {}) => {
+    const call = (
+      name: string,
+      extra: Record<string, unknown> = {},
+      environment: Record<string, string> = {},
+    ) => {
       const result = spawnSync(process.execPath, [hook], {
         env: {
           ...process.env,
@@ -53,6 +57,7 @@ When(
           ASC_EXECUTION_CONTEXT_MODE: "short-lived",
           ASC_WORKFLOW_CLI: path.resolve("dist/bin/agent-skill-chain.js"),
           ASC_AGENT_BUDGET_MODE: "warn",
+          ...environment,
         },
         input: JSON.stringify({
           session_id: "semantic-session",
@@ -159,6 +164,15 @@ When(
         tool_use_id: id,
         tool_input: { subagent_type: agentType, prompt },
       });
+    const assertWriterIsolation = (id: string) => {
+      allowed(plain(`dispatch-${id}`, "並行調査", "Explore"));
+      allowed(call("SubagentStart", { agent_id: id, agent_type: "Explore" }));
+      allowed(tool(id, "Read"));
+      denied(tool(id, "Write"));
+      denied(tool(id, "Bash"));
+      stop(id);
+      allowed(call("PostToolUse", { tool_use_id: `dispatch-${id}` }));
+    };
     denied(plain("plain-fork", "ok", "fork"));
     const broken = plain("broken-pointer", '{"kind":"asc-handoff/v1"');
     denied(broken);
@@ -291,6 +305,94 @@ When(
     allowed(slowOutput);
     allowed(call("PostToolUseFailure", { tool_use_id: "slow-dispatch" }));
 
+    allowed(plain("writer-blocking-task", "調査", "Explore"));
+    denied(dispatch(request, "pending-task-blocks-writer"));
+    allowed(
+      call("SubagentStart", {
+        agent_id: "writer-blocking-agent",
+        agent_type: "Explore",
+      }),
+    );
+    allowed(call("PostToolUse", { tool_use_id: "writer-blocking-task" }));
+    const activeTaskDenial = dispatch(request, "active-task-blocks-writer");
+    denied(activeTaskDenial);
+    assert.match(activeTaskDenial, /完了を待つか別worktree/u);
+    stop("writer-blocking-agent");
+
+    const exhausted = (event: string, input: Record<string, unknown> = {}) =>
+      call(
+        event,
+        { ...input, session_id: "exhaustion-isolation" },
+        {
+          ASC_AGENT_BUDGET_MODE: "enforce",
+          ASC_AGENT_MAX_TOOLS: "10",
+        },
+      );
+    const exhaustedDispatch = () =>
+      exhausted("PreToolUse", {
+        tool_name: "Agent",
+        tool_use_id: "exhaustion-workflow",
+        tool_input: {
+          subagent_type: "general-purpose",
+          prompt: JSON.stringify(request),
+        },
+      });
+    allowed(exhausted("SessionStart", { source: "startup" }));
+    allowed(
+      exhausted("PreToolUse", {
+        tool_name: "Agent",
+        tool_use_id: "exhaustion-task",
+        tool_input: { subagent_type: "Explore", prompt: "調査" },
+      }),
+    );
+    allowed(
+      exhausted("SubagentStart", {
+        agent_id: "exhausted-task",
+        agent_type: "Explore",
+      }),
+    );
+    allowed(exhausted("PostToolUse", { tool_use_id: "exhaustion-task" }));
+    for (let attempt = 0; attempt < 11; attempt += 1)
+      exhausted("PreToolUse", {
+        agent_id: "exhausted-task",
+        tool_name: "Read",
+      });
+    denied(exhaustedDispatch());
+    allowed(exhausted("SubagentStop", { agent_id: "exhausted-task" }));
+    allowed(exhaustedDispatch());
+    allowed(
+      exhausted("SubagentStart", {
+        agent_id: "exhausted-writer",
+        agent_type: "general-purpose",
+      }),
+    );
+    for (let attempt = 0; attempt < 11; attempt += 1)
+      exhausted("PreToolUse", {
+        agent_id: "exhausted-writer",
+        tool_name: "Read",
+      });
+    allowed(
+      exhausted("PreToolUse", {
+        tool_name: "Agent",
+        tool_use_id: "after-writer",
+        tool_input: { subagent_type: "Explore", prompt: "調査" },
+      }),
+    );
+    allowed(
+      exhausted("SubagentStart", {
+        agent_id: "after-writer",
+        agent_type: "Explore",
+      }),
+    );
+    denied(
+      exhausted("PreToolUse", { agent_id: "after-writer", tool_name: "Edit" }),
+    );
+    allowed(exhausted("SubagentStop", { agent_id: "exhausted-writer" }));
+    allowed(
+      exhausted("PreToolUse", { agent_id: "after-writer", tool_name: "Edit" }),
+    );
+    allowed(exhausted("SessionEnd"));
+
     denied(dispatch(request, "fork-dispatch", "fork"));
     allowed(
       call("SubagentStart", {
@@ -311,10 +413,19 @@ When(
       call("SubagentStart", { agent_id: "explore", agent_type: "Explore" }),
     );
     allowed(tool("explore"));
+    denied(tool("explore", "Bash")); // Pending writer already reserves the boundary.
     start("request");
-    allowed(tool("explore"));
-    stop("explore");
-    allowed(call("PostToolUse", { tool_use_id: "parallel-explore" }));
+    for (const name of ["Read", "Glob", "Grep", "WebSearch", "WebFetch"])
+      allowed(tool("explore", name));
+    for (const name of [
+      "Edit",
+      "Write",
+      "NotebookEdit",
+      "Bash",
+      "mcp__filesystem__write_file",
+    ])
+      denied(tool("explore", name));
+    allowed(tool("request", "Edit"));
     allowed(tool("request"));
     denied(
       dispatch(
@@ -343,6 +454,10 @@ When(
     assert.doesNotMatch(stale, /"continue":false/u);
     allowed(tool("request", "SubagentHandback"));
     stop("request");
+    allowed(tool("explore", "Bash"));
+    allowed(tool("explore", "Edit"));
+    stop("explore");
+    allowed(call("PostToolUse", { tool_use_id: "parallel-explore" }));
     fs.writeFileSync(journal, original);
     recordStep(1);
     allowed(dispatch(pointer(2), "dispatch-requirements"));
@@ -353,6 +468,7 @@ When(
     const impl = pointer(9);
     allowed(dispatch(impl, "dispatch-impl"));
     start("impl");
+    assertWriterIsolation("during-implementation");
     allowed(tool("impl", "Bash"));
     stop("impl");
     recordStep(9);
@@ -463,6 +579,7 @@ When(
       );
       allowed(dispatch(correction, `dispatch-c${round}`));
       start(`c${round}`);
+      assertWriterIsolation(`during-correction-${round}`);
       allowed(tool(`c${round}`, "Bash"));
       fs.writeFileSync(path.join(root, "code.txt"), `fix ${round}\n`);
       git("add", "code.txt");
@@ -585,6 +702,7 @@ When(
     });
     assert.equal(report.status, 0, report.stderr);
     const reports = JSON.parse(report.stdout) as {
+      sessionId: string;
       agents: {
         id: string;
         contextIsolation: string;
@@ -592,7 +710,9 @@ When(
         workflowStep: number | null;
       }[];
     }[];
-    const agents = reports[0]!.agents;
+    const agents = reports.find(
+      (entry) => entry.sessionId === "semantic-session",
+    )!.agents;
     assert.equal(
       agents.find((agent) => agent.id === "unexpected-fork")?.contextIsolation,
       "inherited",

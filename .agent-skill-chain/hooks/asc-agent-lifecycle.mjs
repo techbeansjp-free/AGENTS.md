@@ -385,6 +385,36 @@ function reviewerReadAllowed(h, input) {
   );
 }
 
+// Planning roles also write repository artifacts. Reviewer/coordinator do not.
+function workflowWriter(handoff, worktree) {
+  return (
+    !!handoff &&
+    handoff.worktree === worktree &&
+    !["reviewer", "coordinator"].includes(handoff.role)
+  );
+}
+function unfinishedWorker(agent) {
+  return ["active", "exhausted"].includes(agent.status) && !agent.stoppedAt;
+}
+function workflowWriteReserved(state, worktree) {
+  return (
+    workflowWriter(state.pendingHandoff?.handoff, worktree) ||
+    state.agents.some(
+      (entry) =>
+        unfinishedWorker(entry) && workflowWriter(entry.handoff, worktree),
+    )
+  );
+}
+const TASK_READ_TOOLS = new Set([
+  "Read",
+  "Glob",
+  "Grep",
+  "WebSearch",
+  "WebFetch",
+  "SendMessage",
+  "SubagentHandback",
+]);
+
 function executionGuard(state, agent, input, verifiedHandoff) {
   if (state.executionContextMode !== "short-lived") return undefined;
   const tool = input.tool_input ?? {};
@@ -397,6 +427,13 @@ function executionGuard(state, agent, input, verifiedHandoff) {
         );
       if (agent.dispatchScope === "task") {
         checkTask(agent.task);
+        if (
+          workflowWriteReserved(state, agent.task.worktree) &&
+          !TASK_READ_TOOLS.has(input.tool_name)
+        )
+          return deny(
+            "同一worktreeのASC writerが開始待ちまたは稼働中です。通常taskはRead / Glob / Grep / WebSearch / WebFetchと連絡・返却だけ実行できます。書込み・Bashは完了を待つか別worktreeを使用してください",
+          );
       } else {
         const h = parseHandoff(JSON.stringify(agent.handoff));
         checkHandoff(h, h.role === "reviewer");
@@ -443,6 +480,21 @@ function executionGuard(state, agent, input, verifiedHandoff) {
       )
         throw new Error(
           "同じtypeの通常taskとASC workerの開始を識別できません。先行dispatchの開始/完了観測を待つか、別typeを使用してください",
+        );
+      if (
+        workflowWriter(h, h?.worktree) &&
+        (state.pendingTasks?.some(
+          (entry) => entry.task?.worktree === h.worktree,
+        ) ||
+          state.agents.some(
+            (entry) =>
+              entry.dispatchScope === "task" &&
+              unfinishedWorker(entry) &&
+              entry.task?.worktree === h.worktree,
+          ))
+      )
+        throw new Error(
+          "同一worktreeに開始待ち・稼働中の通常taskがあります。ASC writerの起動はtaskの完了を待つか別worktreeを使用してください",
         );
       if (h) {
         checkHandoff(h, true);
@@ -652,6 +704,7 @@ function transition(state, input, now, verifiedHandoff) {
     // SessionEnd is terminal for every child too; no automatic resurrection.
     const closing = event === "SessionEnd" ? state.agents : [agent];
     for (const entry of closing) {
+      if (entry.kind === "subagent") entry.stoppedAt = now;
       entry.status =
         entry.kind === "main"
           ? "paused"
