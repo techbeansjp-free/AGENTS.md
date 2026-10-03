@@ -45,6 +45,15 @@ When(
     );
     git("add", ".gitignore");
     git("commit", "-qm", "ignore fixture state");
+    // Track artifacts in both issue directories, including ignored layouts.
+    const currentArtifact = path.join(staging, "tracked-note.md");
+    const sibling = path.join(path.dirname(staging), "sibling-issue");
+    const siblingArtifact = path.join(sibling, "tracked-note.md");
+    fs.mkdirSync(sibling, { recursive: true });
+    fs.writeFileSync(currentArtifact, "baseline\n");
+    fs.writeFileSync(siblingArtifact, "baseline\n");
+    git("add", "-f", currentArtifact, siblingArtifact);
+    git("commit", "-qm", "track current and sibling staging artifacts");
     const call = (
       name: string,
       extra: Record<string, unknown> = {},
@@ -335,6 +344,27 @@ When(
     fs.writeFileSync(path.join(root, ".gitignore"), ignoreBefore);
     allowed(dispatch(request, "clean-after-peer"));
     allowed(call("PostToolUseFailure", { tool_use_id: "clean-after-peer" }));
+    fs.appendFileSync(currentArtifact, "current issue preparation\n");
+    allowed(dispatch(request, "current-staging-dirty"));
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "current-staging-dirty" }),
+    );
+    fs.appendFileSync(siblingArtifact, "other issue work\n");
+    denied(dispatch(request, "both-stagings-dirty"));
+    fs.writeFileSync(currentArtifact, "baseline\n");
+    denied(dispatch(request, "sibling-staging-dirty"));
+    git("add", siblingArtifact);
+    denied(dispatch(request, "sibling-staging-staged"));
+    git("reset", "--quiet", "HEAD", "--", siblingArtifact);
+    fs.writeFileSync(siblingArtifact, "baseline\n");
+    const siblingUntracked = path.join(sibling, "untracked-note.md");
+    fs.writeFileSync(siblingUntracked, "uncommitted sibling artifact\n");
+    denied(dispatch(request, "sibling-staging-untracked"));
+    fs.unlinkSync(siblingUntracked);
+    allowed(dispatch(request, "sibling-staging-clean"));
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "sibling-staging-clean" }),
+    );
     allowed(call("SessionEnd", { session_id: "dirty-peer" }));
     allowed(call("PostToolUseFailure", { tool_use_id: "slow-dispatch" }));
 
@@ -617,6 +647,9 @@ When(
       fs.writeFileSync(ghost, "export const fixed = true;\n");
       denied(dispatch(h, `untracked-r${round}`));
       fs.unlinkSync(ghost);
+      fs.appendFileSync(siblingArtifact, "unreviewed sibling change\n");
+      denied(dispatch(h, `sibling-dirty-r${round}`));
+      fs.writeFileSync(siblingArtifact, "baseline\n");
       allowed(dispatch(h, `dispatch-r${round}`));
       start(`r${round}`);
       fs.writeFileSync(ghost, "export const fixed = true;\n");
@@ -795,6 +828,9 @@ When(
     denied(
       dispatch({ ...pointer(10), extra: "SECRET-PROMPT" }, "text-injection"),
     );
+    // Finish the previous issue before acquiring a writer for its sibling.
+    git("add", "-f", staging);
+    git("commit", "-qm", "finish previous issue staging");
     const recoveryStaging = createIssueStaging(root, {
       title: "recovery-fixture",
       requestedMode: "full",

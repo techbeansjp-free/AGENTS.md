@@ -324,7 +324,7 @@ function checkHandoff(h, exactHead, acquireWriter = false) {
       "--untracked-files=all",
       "--",
       ".",
-      `:(top,exclude,literal)${path.relative(root, path.dirname(h.staging)).split(path.sep).join("/")}`,
+      `:(top,exclude,literal)${path.relative(root, h.staging).split(path.sep).join("/")}`,
     ]) !== ""
   )
     throw new Error(
