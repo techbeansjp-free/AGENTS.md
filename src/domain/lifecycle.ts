@@ -593,6 +593,7 @@ interface ManagedAsset {
 
 interface UninstallResult {
   applied: boolean;
+  configuration: ReturnType<typeof planLifecycleSettings>["report"];
   removable: string[];
   retained: string[];
   removed: string[];
@@ -1290,10 +1291,33 @@ function upgradeUnlocked(
     planned.push({ ...item, key, expected });
     if (classification === "adopt") adoptable.push(key);
   }
+  const currentKeys = new Set(
+    current.map(({ dest }) => relativeKey(target, dest)),
+  );
+  const obsoleteRuntime = Object.entries(old.files)
+    .filter(
+      ([key]) => key.startsWith(`${MANAGED_RUNTIME}/`) && !currentKeys.has(key),
+    )
+    .map(([key, expected]) => ({
+      key,
+      expected,
+      dest: resolveManagedAsset(target, key),
+    }));
+  assertAncestorsNotSymlinked(target, obsoleteRuntime);
+  const removable = obsoleteRuntime
+    .filter(({ dest, expected, key }) => {
+      if (!pathEntryExists(dest)) return false;
+      if (isRegularFile(dest) && digest(dest) === expected) return true;
+      retained.push(key);
+      return false;
+    })
+    .map(({ key }) => key);
   if (!options.apply)
     return {
       applied: false,
       configuration: configuration.report,
+      obsoleteRuntime: obsoleteRuntime.map(({ key }) => key),
+      removable,
       planned: planned.map((item) => item.key),
       adopted: adoptable,
       retained,
@@ -1327,12 +1351,34 @@ function upgradeUnlocked(
     } else adopted.push(item.key);
     next.files[item.key] = digest(item.dest);
   }
+  const removed: string[] = [];
+  for (const item of obsoleteRuntime) {
+    // Retire trust even when user-modified bytes must remain. An unrecorded
+    // executable makes both doctor and the launcher fail closed.
+    delete next.files[item.key];
+    const file = resolveManagedAsset(target, item.key);
+    assertAncestorsNotSymlinked(target, [{ dest: file }]);
+    if (!pathEntryExists(file)) continue;
+    if (
+      !removable.includes(item.key) ||
+      !isRegularFile(file) ||
+      digest(file) !== item.expected
+    ) {
+      if (!retained.includes(item.key)) retained.push(item.key);
+      continue;
+    }
+    markDirty();
+    fs.unlinkSync(file);
+    removed.push(item.key);
+  }
   markDirty();
   applyLifecycleSettings(configuration);
   publishManagedAssetRecord(target, next, recordPresent, expectedParent);
   return {
     applied: true,
     configuration: configuration.report,
+    obsoleteRuntime: obsoleteRuntime.map(({ key }) => key),
+    removed,
     adopted,
     retained,
     warnings: sourceBuildWarnings(),
@@ -1374,6 +1420,7 @@ function uninstallUnlocked(
   if (!options.apply)
     return {
       applied: false,
+      configuration: configuration.report,
       removable,
       retained,
       removed: [],
@@ -1450,6 +1497,7 @@ function uninstallUnlocked(
   const applied = pending.length === 0;
   return {
     applied,
+    configuration: configuration.report,
     removable,
     retained,
     removed,
@@ -1836,7 +1884,18 @@ export function doctor(target: string, worktreeObservations?: unknown) {
   );
   const lifecycleDiagnostics: string[] = [];
   try {
-    for (const { src, dest } of mappings(target)) {
+    const currentMappings = mappings(target);
+    const currentRuntime = new Set(
+      currentMappings
+        .map(({ dest }) => relativeKey(target, dest))
+        .filter((key) => key.startsWith(`${MANAGED_RUNTIME}/`)),
+    );
+    for (const key of Object.keys(files))
+      if (key.startsWith(`${MANAGED_RUNTIME}/`) && !currentRuntime.has(key))
+        lifecycleDiagnostics.push(
+          `${key}: current packageにないruntime fileが記録されています`,
+        );
+    for (const { src, dest } of currentMappings) {
       const key = relativeKey(target, dest);
       if (
         (key.startsWith(`${MANAGED_RUNTIME}/`) ||

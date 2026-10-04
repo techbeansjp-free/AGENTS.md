@@ -36,3 +36,18 @@ Feature: Agent Lifecycleを手設定なしで導入する
     Given zero-config検証用の隔離filesystemを準備する
     When ReviewerのCLI利用中はupdateを排他し終了後に解放する
     Then zero-configの受入条件を満たす
+
+  Scenario: SCN-INT-ZEROCONFIG-008 deleteは共有設定の変更を予告して参照も除去する
+    Given zero-config検証用の隔離filesystemを準備する
+    When deleteのpreviewとapplyはcustomized ASC登録だけを除去する
+    Then zero-configの受入条件を満たす
+
+  Scenario: SCN-INT-ZEROCONFIG-009 廃止runtimeの信頼を取り消す
+    Given zero-config検証用の隔離filesystemを準備する
+    When updateは廃止runtimeを整理し変更済み残存fileを信頼しない
+    Then zero-configの受入条件を満たす
+
+  Scenario: SCN-INT-ZEROCONFIG-010 旧CLIのpath構文を区別する
+    Given zero-config検証用の隔離filesystemを準備する
+    When 旧CLIの移行はPOSIXとWindowsの絶対pathだけを認識する
+    Then zero-configの受入条件を満たす

@@ -49,6 +49,20 @@ function readSettings(target) {
         throw error;
     }
 }
+function isLegacyWorkflowCli(value) {
+    if (typeof value !== "string")
+        return false;
+    const syntax = path.posix.isAbsolute(value) ? path.posix : path.win32;
+    if (!syntax.isAbsolute(value))
+        return false;
+    const segments = syntax.normalize(value).split(syntax.sep).slice(-5);
+    return (segments.length === 5 &&
+        segments[0] === "agent-skill-chain" &&
+        /^v\d+\.\d+\.\d+$/u.test(segments[1]) &&
+        segments[2] === "dist" &&
+        segments[3] === "bin" &&
+        segments[4] === "agent-skill-chain.js");
+}
 /** Reserved canonical command identifies ASC entries, never a path substring. */
 export function planLifecycleSettings(target, operation) {
     const observed = readSettings(target);
@@ -65,15 +79,9 @@ export function planLifecycleSettings(target, operation) {
         hooks[event] = entries.flatMap((entry) => {
             if (!isRecord(entry) || !Array.isArray(entry.hooks))
                 throw new Error(`${SETTINGS}: hooks.${event}のentryが不正です`);
-            const remaining = entry.hooks.filter((hook) => {
-                if (!ownedHook(hook))
-                    return true;
-                // Delete only unchanged canonical entries; customized entries survive.
-                return (operation === "delete" &&
-                    (Object.keys(hook).length !== 3 ||
-                        hook.timeout !== 30 ||
-                        Object.keys(entry).some((key) => key !== "hooks")));
-            });
+            // The exact canonical command is reserved in both directions. Matcher,
+            // timeout and extra fields do not transfer ownership of that command.
+            const remaining = entry.hooks.filter((hook) => !ownedHook(hook));
             if (remaining.length === entry.hooks.length)
                 return [entry];
             return remaining.length ? [{ ...entry, hooks: remaining }] : [];
@@ -93,9 +101,7 @@ export function planLifecycleSettings(target, operation) {
         const cli = environment.ASC_WORKFLOW_CLI;
         // Migrate the documented versioned installation only. Arbitrary development
         // or emergency overrides are intentional and remain visible to doctor.
-        if (typeof cli === "string" &&
-            path.isAbsolute(cli) &&
-            /\/agent-skill-chain\/v\d+\.\d+\.\d+\/dist\/bin\/agent-skill-chain\.js$/u.test(cli))
+        if (isLegacyWorkflowCli(cli))
             delete environment.ASC_WORKFLOW_CLI;
         if (Object.keys(environment).length)
             parsed.env = environment;
