@@ -3,16 +3,16 @@
   "issue": 1546,
   "observed": {
     "baseSha": "d6a1909cbb6261607e502383d7f08ac83f74f4b9",
-    "implementationHeadSha": "5f21cfe420536eb6528c4d98ebca11340688a000",
-    "diffDigest": "e1f38dd15903166d444e84d4cc646c07c5aba4ca65370f1c45eaf245b3a72eb7",
+    "implementationHeadSha": "224d944c0d1f94ae0be054225027c68777a067a8",
+    "diffDigest": "0c6987461bb2096544932a6e8c2b7b54f0d404997b284d54a5cad5868c7fdd5a",
     "session": {
       "sessionId": "fab087fdc895a33b859dcb4d505ffb186c6cceb0f1d0abb1a7cb3be40db4be2f",
-      "latestRoundDigest": "4a1e3f537544de1fa8669c5f41ea12a30ac7d1448c79d8e8ccd7eef84aef1a3d",
+      "latestRoundDigest": "b5d712e3482a1df8895c3597aefd9dd6addfa55a16a86ee7e26851f701bdbac5",
       "status": "converged",
-      "countedRounds": 5
+      "countedRounds": 6
     },
     "impact": {
-      "digest": "d7258b2b1afeba6a9b96b75229551aaf478abf4f06ee675484f6d41abf9ad2c0",
+      "digest": "ff8010d1285b7c292e81da6c2925b2fa51107c9f338de27a649a946f8d679709",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "5f21cfe420536eb6528c4d98ebca11340688a000",
-        "impactDigest": "d7258b2b1afeba6a9b96b75229551aaf478abf4f06ee675484f6d41abf9ad2c0",
-        "finishedAt": "2026-10-04T16:34:12.573Z",
-        "recordDigest": "70999b480f07c26e9a5b149a71b997367d0050f67f6e21b086603a20f2dc10d2"
+        "headSha": "224d944c0d1f94ae0be054225027c68777a067a8",
+        "impactDigest": "ff8010d1285b7c292e81da6c2925b2fa51107c9f338de27a649a946f8d679709",
+        "finishedAt": "2026-10-04T17:33:02.062Z",
+        "recordDigest": "8eb026a0b78a1ca43d6d87f2dec8c93773bd46d3cd271bf6b9e260386d12c0c9"
       }
     ]
   },
@@ -39,5 +39,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "7f299816f0640a7452182fa878c00fd704e57b0bb787d43e411225dc2fc16674"
+  "evidenceDigest": "9351a4c0437db1c4d0b065dc0fcf1aaa0ad694a12f585047d1c60e3d1beb3325"
 }
