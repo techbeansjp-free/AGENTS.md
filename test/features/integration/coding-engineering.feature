@@ -20,3 +20,8 @@ Feature: Coding Engineeringを工程を増やさず配布する
     Given Coding Engineeringを含む隔離package資産がある
     When Lensにpackage境界外参照を追加して配布参照を検証する
     Then Lensの不正な参照先を報告する
+
+  Scenario: SCN-INT-CODING-1552-005 タイトル付きLens参照も境界外なら拒否する
+    Given Coding Engineeringを含む隔離package資産がある
+    When Lensにタイトル付き境界外参照を追加して配布参照を検証する
+    Then Lensの不正な参照先を報告する

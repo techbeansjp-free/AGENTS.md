@@ -83,3 +83,11 @@ Then("Lensの不正な参照先を報告する", function () {
     /参照先が不正.*outside\.md/u,
   );
 });
+
+When("Lensにタイトル付き境界外参照を追加して配布参照を検証する", function () {
+  fs.appendFileSync(
+    path.join(this.codingRoot, skillPath, "lenses/unix-ddd.md"),
+    '\n[不正な参照](../../../../outside.md "説明")\n',
+  );
+  this.codingResult = checkSkillTemplateContracts(this.codingRoot);
+});
