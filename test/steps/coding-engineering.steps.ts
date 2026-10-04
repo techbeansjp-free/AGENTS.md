@@ -97,14 +97,19 @@ When("Lensにタイトル付き境界外参照を追加して配布参照を検�
 });
 
 When(
-  "Step 9のCoding Engineering参照を{string}にして配布参照を検証する",
-  function (state: string) {
+  "Step 9のCoding Engineering{string}参照を{string}にして配布参照を検証する",
+  function (entry: string, state: string) {
     const file = path.join(
       this.codingRoot,
       ".agent-skill-chain/skills/step-09-implement/SKILL.md",
     );
     const markdown = fs.readFileSync(file, "utf8");
-    const link = "[Coding Engineering Skill](../coding-engineering/SKILL.md)";
+    const links: Record<string, string> = {
+      本文: "[Coding Engineering Skill](../coding-engineering/SKILL.md)",
+      索引: "[Coding Engineering索引](../coding-engineering/index.md)",
+    };
+    const link = links[entry];
+    assert.ok(link);
     assert.ok(markdown.includes(link), "変更前にはStep 9からの接続が存在する");
     const replacements: Record<string, string> = {
       削除: "Coding Engineering Skill",

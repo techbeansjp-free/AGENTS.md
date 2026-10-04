@@ -1,9 +1,11 @@
 ---
 name: coding-engineering
-description: Step 9 implementerが必要な情報と品質観点だけを選び、既存実装の再利用、実装中の検証、自律修正を行うために使う。独立reviewや工程管理は担当しない。
+description: Step 9のrisky・cross-boundaryな実装、または境界・riskが不明な変更で、探索・Lens選択・自律修正を支援する。local・明白・low-risk変更では本文を読まず、risky・cross-boundaryに該当しないbounded変更は索引だけを使う。
 ---
 
 # Step 9内部のCoding Engineering
+
+毎task読む追加マニュアルではない。[Step 9の軽量routing](../step-09-implement/SKILL.md#実装時のcoding-engineering)で必要になった場合だけ本文を展開する。local・明白・low-risk変更は本文・索引・Lensの読取ゼロ、risky・cross-boundaryに該当しないbounded変更は[短い索引](index.md)だけで開始する。
 
 入力は既存Step 9の計画・AC・仕様・Verification Set・project policy。出力は要求を満たす最小変更と既存Step 9が要求するEvidenceであり、専用の報告書は作らない。開始条件、停止条件、authority、工程遷移、review収束、PR・merge、project modeを変更しない。既存契約と判断が衝突したら[Step 9正本](../step-09-implement/SKILL.md)に従う。新しいASC Step、Fast Path、staging、workflow state、severity体系を追加しない。
 
@@ -11,23 +13,11 @@ description: Step 9 implementerが必要な情報と品質観点だけを選び�
 
 Step 9入力 → Issue・AC → 対象file → 直接依存 → 関連test → 関連仕様 → 選択Lensの順で不足分だけ取得する。既知で変化のない情報を読み直さず、全repository・全docs・全historyを読まない。上流計画を再設計せず、責務と境界、成立させる契約、副作用・失敗・data risk、既存設計を保つ最小変更の4点を確認する。
 
-**Search Before Createを行う。** component、validator、helper、model、test utility、token等を作る前に、対象と直接依存の範囲で既存実装を検索する。独立した検索・読取はまとめ、有力候補を数件読む。類似実装、局所pattern、直接依存のいずれかを十分に把握できたら終了する。追加探索で判断が変わらないときも終了し、「存在しない証明」のため全体へ広げない。
+**Search Before Createを行う。** component、validator、helper、model、test utility、token等を作る前に、対象と直接依存の範囲で既存実装を検索する。独立した検索・読取はまとめる。探索のsoft budget（symbol/既存pattern検索、候補の絞込、直接読取）は[Step 9の既定値](../step-09-implement/SKILL.md#実装時のcoding-engineering)に従う。高riskや具体的な未解決事項があれば必要な範囲へ広げ、数値だけで停止しない。類似実装、局所pattern、直接依存のいずれかを十分に把握できたら終了する。追加探索で判断が変わらないときも終了し、「存在しない証明」のため全体へ広げない。
 
 ## 必要なLensだけ選ぶ
 
-次表は読取の索引でありchecklistやGateではない。通常は変更に必要な1〜3件程度だけ読む。全Lensの一括読込と1 Lens 1 subagentは禁止する。Lensを多数要するように見えても該当論点から絞る。既存routing・role・独立性契約は維持する。
-
-| 変更の特徴 | 読むLens |
-|---|---|
-| domain・business rule・責務境界 | [UNIX・DDD](lenses/unix-ddd.md) |
-| AC・business behavior・重要回帰のtest | [BDD・Testing](lenses/bdd-testing.md) |
-| API・event・CLI・data・schema・migration | [Contract・Data](lenses/contract-data.md) |
-| write・retry・queue・webhook・二重操作 | [冪等性・Concurrency](lenses/idempotency-concurrency.md) |
-| auth・permission・PII・secret・file/path・process・dependency/build/release | [Security・Privacy](lenses/security-privacy.md) |
-| shared・common・refactor・共通化 | [保守性・再利用](lenses/maintainability-reuse.md) |
-| UI・component・操作状態 | [UI・UX・Accessibility](lenses/ui-ux-accessibility.md) |
-| style・意味を共有するdesign decision | [Design・Layout Token](lenses/design-layout-token.md) |
-| hot path・batch・query・log・telemetry・外部障害 | [観測性・性能・耐障害性](lenses/observability-performance-resilience.md) |
+通常は0〜2 Lensとし、low-risk/local変更では0 Lensを優先する。[短い索引](index.md)から未解決の論点に対応するものだけを選ぶ。boundedは0〜1件、risky/cross-boundaryは1〜3件が目安であり、数を埋めるために読まない。全Lensの一括読込と1 Lens 1 subagentは禁止する。既存routing・role・独立性契約は維持する。
 
 project固有のarchitecture、Gherkin、accessibility、token、security、performance、migrationの規約があれば判断に使う。共通部から特定framework、checker、方式、新しいhard gateを強制しない。
 

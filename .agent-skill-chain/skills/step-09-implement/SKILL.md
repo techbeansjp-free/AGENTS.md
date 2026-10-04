@@ -32,7 +32,17 @@ Codexを新しく起動するときは必ず`routing launch --help`で入力を�
 
 ## 実装時のCoding Engineering
 
-[Coding Engineering Skill](../coding-engineering/SKILL.md)を使い、必要最小限のcontextでSearch Before Createを行い、変更に必要なLensだけを読む。scope内の通常問題は自律修正し、実装中はtargeted feedbackを優先する。最終完了条件は既存Verification Set・project policyに従う。このskillは既存Step 9の停止条件を変更しない。
+既知のAC・変更対象・riskを再調査せず、読む量だけを次のように選ぶ。risky・cross-boundary・境界/risk不明の経路を優先し、影響が小さくても省略経路へ入れない。新しいmode・Step・Gateではなく、既存の開始・停止条件は変えない。
+
+| 変更の分類 | 読むもの |
+|---|---|
+| local・明白・low-riskで、既存patternの内側に収まり境界・副作用の変更がない | 近傍実装と関連testだけ。Coding Engineering本文・索引・Lensは読まず、0 Lensを優先する |
+| risky・cross-boundaryに該当せず、影響がboundedで境界とriskが既知 | [Coding Engineering索引](../coding-engineering/index.md)から必要ならLens 0〜1件。本文は読まない |
+| risky・cross-boundary、または境界・riskが不明 | [Coding Engineering Skill](../coding-engineering/SKILL.md)を読み、該当Lens 1〜3件を目安に選ぶ |
+
+Search Before Createの探索既定値は、symbol/既存patternを検索 → 有力候補は最大3件程度へ絞る → 直接読むのは通常1〜2件とする。判断が変わらない、または局所pattern・直接依存を十分把握できたら終了する。これはsoft budgetでありhard limitや停止条件ではない。高riskや未解決の具体的な疑問があれば必要な範囲へ広げる。探索中に境界・riskの前提が崩れたら読取の分類を見直す。
+
+scope内の通常問題は自律修正し、実装中はtargeted feedbackを優先する。最終完了条件は既存Verification Set・project policyに従い、読取の省略を検証やsecurity境界確認の省略に使わない。
 
 ## execution context境界
 

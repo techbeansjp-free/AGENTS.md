@@ -641,6 +641,7 @@ function checkGeneratedTemplateReferences(root: string): string[] {
 /** Step 9内部skillの配布資産。工程の正規集合には加えない。 */
 export const CODING_ENGINEERING_ASSETS = [
   "SKILL.md",
+  "index.md",
   "evaluation.md",
   "lenses/unix-ddd.md",
   "lenses/bdd-testing.md",
@@ -664,12 +665,15 @@ function checkCodingEngineeringAssets(root: string): string[] {
         fs.readFileSync(stepNine, "utf8").replace(/<!--[\s\S]*?-->/gu, ""),
       ).replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/gu, "")
     : "";
-  if (
-    !/\]\(\.\.\/coding-engineering\/SKILL\.md(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/u.test(
-      stepNineInstructions,
-    )
-  )
-    errors.push("Step 9からCoding Engineeringへの参照がありません");
+  const stepNineLinks = [
+    ...stepNineInstructions.matchAll(
+      /\]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/gu,
+    ),
+  ].map((match) => match[1]);
+  for (const entry of ["SKILL.md", "index.md"]) {
+    if (!stepNineLinks.includes(`../coding-engineering/${entry}`))
+      errors.push(`Step 9からCoding Engineeringへの参照がありません: ${entry}`);
+  }
   for (const relative of CODING_ENGINEERING_ASSETS) {
     const file = path.resolve(root, relative);
     if (!fs.existsSync(file) || !fs.lstatSync(file).isFile()) {
