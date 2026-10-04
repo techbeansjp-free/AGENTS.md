@@ -3,16 +3,16 @@
   "issue": 1546,
   "observed": {
     "baseSha": "d6a1909cbb6261607e502383d7f08ac83f74f4b9",
-    "implementationHeadSha": "5937a9433ddb296c5cafc1122bf2e4b1c574a04c",
-    "diffDigest": "9f4ef0227cd5555ce17efaadbecfdbd7ace04b1f21abc819d6696f3fbf65b641",
+    "implementationHeadSha": "ee21d0c7710a5a3c741b26845f99a6ecfa67339a",
+    "diffDigest": "09a3c641ac86ec41621669f87de0c2baab24fa11c395435a78495195942d154a",
     "session": {
       "sessionId": "fab087fdc895a33b859dcb4d505ffb186c6cceb0f1d0abb1a7cb3be40db4be2f",
-      "latestRoundDigest": "f1f98031508382f2dea82a6c5ae2017ab46dc3b81ffaa124f006f13471db6a71",
+      "latestRoundDigest": "64d7a3e9827c73d47f7d523b1c93c2a453367005c989b000e5e6defdeab231cf",
       "status": "converged",
-      "countedRounds": 1
+      "countedRounds": 2
     },
     "impact": {
-      "digest": "59a0d8443278b0b0746c9463b7cf37d7484d1e71325d96ae2fa5ffff62374ff9",
+      "digest": "f6899c23115ca34e9dd4b9e8bc032132b56d248475b901c378ab0502ded32f2f",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "5937a9433ddb296c5cafc1122bf2e4b1c574a04c",
-        "impactDigest": "59a0d8443278b0b0746c9463b7cf37d7484d1e71325d96ae2fa5ffff62374ff9",
-        "finishedAt": "2026-10-04T01:55:00.146Z",
-        "recordDigest": "17f9b1e1cf58b46cfeafa22d5cf819b62450e28a92279c3cdab379477d4ac9d3"
+        "headSha": "ee21d0c7710a5a3c741b26845f99a6ecfa67339a",
+        "impactDigest": "f6899c23115ca34e9dd4b9e8bc032132b56d248475b901c378ab0502ded32f2f",
+        "finishedAt": "2026-10-04T02:12:01.516Z",
+        "recordDigest": "8a2f6f5d1c655b600a390e7fb8fbc6e15be63b0d6483d72efdac89aa93fe1b43"
       }
     ]
   },
@@ -39,5 +39,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "625f1141ff1d5e68a29f34bd00832c595dad906320b0674e4bfaba0e5fded16d"
+  "evidenceDigest": "fbc673b71481564b441349e7ec87e5677e009cb87f508ca48dda0ec56f50990c"
 }
