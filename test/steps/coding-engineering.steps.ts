@@ -95,3 +95,34 @@ When("Lensにタイトル付き境界外参照を追加して配布参照を検�
   );
   this.codingResult = checkSkillTemplateContracts(this.codingRoot);
 });
+
+When(
+  "Step 9のCoding Engineering参照を{string}にして配布参照を検証する",
+  function (state: string) {
+    const file = path.join(
+      this.codingRoot,
+      ".agent-skill-chain/skills/step-09-implement/SKILL.md",
+    );
+    const markdown = fs.readFileSync(file, "utf8");
+    const link = "[Coding Engineering Skill](../coding-engineering/SKILL.md)";
+    assert.ok(markdown.includes(link), "変更前にはStep 9からの接続が存在する");
+    const replacements: Record<string, string> = {
+      削除: "Coding Engineering Skill",
+      コメント: `<!-- ${link} -->`,
+      インラインコード: "`" + link + "`",
+      コード例: `\n\`\`\`markdown\n${link}\n\`\`\`\n`,
+    };
+    const replacement = replacements[state];
+    assert.notEqual(replacement, undefined);
+    fs.writeFileSync(file, markdown.replace(link, replacement!));
+    assert.ok(fs.existsSync(path.join(this.codingRoot, skillPath, "SKILL.md")));
+    this.codingResult = checkSkillTemplateContracts(this.codingRoot);
+  },
+);
+Then("Step 9からCoding Engineeringへの接続欠落を報告する", function () {
+  assert.equal(this.codingResult.valid, false);
+  assert.match(
+    this.codingResult.errors.join("; "),
+    /Step 9からCoding Engineeringへの参照がありません/u,
+  );
+});

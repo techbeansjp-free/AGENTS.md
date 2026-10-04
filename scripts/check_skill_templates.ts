@@ -657,6 +657,19 @@ export const CODING_ENGINEERING_ASSETS = [
 function checkCodingEngineeringAssets(root: string): string[] {
   const errors: string[] = [];
   const namespace = path.resolve(root, ".agent-skill-chain");
+  const stepNine = path.join(namespace, "skills/step-09-implement/SKILL.md");
+  // 配布だけでは利用されない。実行入口の参照を、説明用の例やコメントと区別する。
+  const stepNineInstructions = fs.existsSync(stepNine)
+    ? maskFencedCodeBlocks(
+        fs.readFileSync(stepNine, "utf8").replace(/<!--[\s\S]*?-->/gu, ""),
+      ).replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/gu, "")
+    : "";
+  if (
+    !/\]\(\.\.\/coding-engineering\/SKILL\.md(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/u.test(
+      stepNineInstructions,
+    )
+  )
+    errors.push("Step 9からCoding Engineeringへの参照がありません");
   for (const relative of CODING_ENGINEERING_ASSETS) {
     const file = path.resolve(root, relative);
     if (!fs.existsSync(file) || !fs.lstatSync(file).isFile()) {

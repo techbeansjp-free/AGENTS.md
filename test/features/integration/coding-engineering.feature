@@ -25,3 +25,15 @@ Feature: Coding Engineeringを工程を増やさず配布する
     Given Coding Engineeringを含む隔離package資産がある
     When Lensにタイトル付き境界外参照を追加して配布参照を検証する
     Then Lensの不正な参照先を報告する
+
+  Scenario Outline: SCN-INT-CODING-1552-006 Step 9から実装skillへの有効な接続が欠落すると拒否する
+    Given Coding Engineeringを含む隔離package資産がある
+    When Step 9のCoding Engineering参照を"<状態>"にして配布参照を検証する
+    Then Step 9からCoding Engineeringへの接続欠落を報告する
+
+    Examples:
+      | 状態 |
+      | 削除 |
+      | コメント |
+      | コード例 |
+      | インラインコード |
