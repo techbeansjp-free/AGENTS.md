@@ -15,10 +15,10 @@ import {
   planLifecycleSettings,
   applyLifecycleSettings,
 } from "../../src/domain/lifecycle-settings.js";
-import { stepDefinitions } from "../support/world.js";
+import { type WorkflowWorld, stepDefinitions } from "../support/world.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
 import { QUESTIONS } from "../../src/domain/mode.js";
-const { Given, When, Then } = stepDefinitions();
+const { Given, When, Then } = stepDefinitions<WorkflowWorld>();
 Given("zero-config検証用の隔離filesystemを準備する", function () {
   this.value = false;
 });
