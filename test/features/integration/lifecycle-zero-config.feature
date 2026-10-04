@@ -31,3 +31,8 @@ Feature: Agent Lifecycleを手設定なしで導入する
     Given zero-config検証用の隔離filesystemを準備する
     When version更新は古いCLI pathなしでruntimeを更新する
     Then zero-configの受入条件を満たす
+
+  Scenario: SCN-INT-ZEROCONFIG-007 ReviewerのCLI実行とupdateを排他する
+    Given zero-config検証用の隔離filesystemを準備する
+    When ReviewerのCLI利用中はupdateを排他し終了後に解放する
+    Then zero-configの受入条件を満たす

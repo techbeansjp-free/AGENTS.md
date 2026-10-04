@@ -398,28 +398,29 @@ function trustedWorkflowCli(ownsLock = false) {
   }
   return path.join(project, cli);
 }
-function verifyDispatch(h) {
-  if (process.env.ASC_WORKFLOW_CLI !== undefined) return verifyDispatchLocked(h, false);
+function withTrustedWorkflowCli(run) {
   const lock = path.join(fs.realpathSync(process.env.CLAUDE_PROJECT_DIR), ".agent-skill-chain/managed-assets-mutation.lock");
   // Share the install/update lock so imports cannot observe a mixed runtime.
   try { fs.mkdirSync(lock); }
   catch (error) { throw new Error("ASC更新中または中断状態です。managed asset復旧後に再試行してください", { cause: error }); }
-  try { return verifyDispatchLocked(h, true); }
+  try { return run(trustedWorkflowCli(true)); }
   finally { fs.rmdirSync(lock); }
 }
-function verifyDispatchLocked(h, ownsLock) {
-  const cli = trustedWorkflowCli(ownsLock);
-  const result = spawnSync(
+function workflowPreview(cli, worktree, staging) {
+  return spawnSync(
     process.execPath,
-    [cli, "workflow", "advance", `--staging=${h.staging}`],
+    [cli, "workflow", "advance", `--staging=${staging}`],
     {
-      cwd: h.worktree,
+      cwd: worktree,
       env: { ...process.env, ASC_EXECUTION_CONTEXT_MODE: "short-lived" },
       encoding: "utf8",
       timeout: 15000,
       maxBuffer: 2 * 1024 * 1024,
     },
   );
+}
+function verifyDispatch(h) {
+  const result = withTrustedWorkflowCli((cli) => workflowPreview(cli, h.worktree, h.staging));
   const preview = result.status === 0 ? JSON.parse(result.stdout) : null;
   if (
     !preview ||
@@ -431,10 +432,27 @@ function verifyDispatchLocked(h, ownsLock) {
       "handoffがrepositoryから再取得したworkflow advanceと一致しません",
     );
 }
+function trustedWorkflowRead() {
+  const [mode, worktreeArg, stagingArg, ...extra] = process.argv.slice(2);
+  if (mode !== "--trusted-workflow-read" || extra.length ||
+      !worktreeArg?.startsWith("--worktree=") || !stagingArg?.startsWith("--staging="))
+    throw new Error("trusted workflow readの引数が不正です");
+  const worktree = worktreeArg.slice("--worktree=".length);
+  const staging = stagingArg.slice("--staging=".length);
+  if (!path.isAbsolute(worktree) || !path.isAbsolute(staging))
+    throw new Error("trusted workflow readには絶対pathが必要です");
+  // Validation and the child process share one lock lifetime. PreToolUse's
+  // observation alone cannot protect a later host Bash invocation from update.
+  const result = withTrustedWorkflowCli((cli) => workflowPreview(cli, worktree, staging));
+  if (result.stdout) process.stdout.write(result.stdout);
+  if (result.stderr) process.stderr.write(result.stderr);
+  process.exitCode = result.status ?? 1;
+}
 function reviewerCommands(h) {
-  const cli = trustedWorkflowCli();
+  trustedWorkflowCli();
+  const launcher = path.join(fs.realpathSync(process.env.CLAUDE_PROJECT_DIR), ".claude/hooks/asc-agent-lifecycle.mjs");
   return {
-    resume: `node ${shellQuote(cli)} workflow advance ${shellQuote("--staging=" + h.staging)}`,
+    resume: `node ${shellQuote(launcher)} --trusted-workflow-read ${shellQuote("--worktree=" + h.worktree)} ${shellQuote("--staging=" + h.staging)}`,
     gitPrefix: `git -C ${shellQuote(h.worktree)} --no-pager `,
   };
 }
@@ -1160,7 +1178,8 @@ function report() {
 
 let input;
 try {
-  if (process.argv.some((arg) => arg.startsWith("--recover-session=")))
+  if (process.argv.includes("--trusted-workflow-read")) trustedWorkflowRead();
+  else if (process.argv.some((arg) => arg.startsWith("--recover-session=")))
     process.stdout.write(`${JSON.stringify(recoverSession())}\n`);
   else if (process.argv.includes("--report"))
     process.stdout.write(`${JSON.stringify(report(), null, 2)}\n`);
