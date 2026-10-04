@@ -152,6 +152,21 @@ When("旧lifecycle設定のupdateとdeleteは利用者設定を保持する", fu
         .filter((hook) => hook.command === AGENT_LIFECYCLE_COMMAND).length,
       1,
     );
+  fs.writeFileSync(file, JSON.stringify({ ...updated, disableAllHooks: true }));
+  upgrade(root, { apply: true });
+  const disabled = doctor(root);
+  assert.equal(disabled.healthy, false);
+  assert.equal(
+    disabled.hooks.agentLifecycle.configurationDiagnostics
+      .disabledByLocalSettings,
+    true,
+  );
+  assert.equal(
+    (JSON.parse(fs.readFileSync(file, "utf8")) as { disableAllHooks: boolean })
+      .disableAllHooks,
+    true,
+  );
+  fs.writeFileSync(file, JSON.stringify(updated, null, 2) + "\n");
   const canonical = fs.readFileSync(file, "utf8");
   upgrade(root, { apply: true });
   assert.equal(fs.readFileSync(file, "utf8"), canonical);

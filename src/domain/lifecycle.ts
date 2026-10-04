@@ -152,12 +152,14 @@ export function inspectAgentLifecycleRegistration(
   target?: string,
 ) {
   const required = AGENT_LIFECYCLE_EVENTS;
+  let disabledByLocalSettings = false;
   let hooks: Record<string, unknown> = {};
   let environment: Record<string, unknown> = {};
   let shortLived = executionContextMode !== "compatible";
   try {
     const parsed: unknown = JSON.parse(settings ?? "{}");
     if (isRecord(parsed)) {
+      disabledByLocalSettings = parsed.disableAllHooks === true;
       if (isRecord(parsed.hooks)) hooks = parsed.hooks;
       if (isRecord(parsed.env)) environment = parsed.env;
       if (
@@ -246,6 +248,10 @@ export function inspectAgentLifecycleRegistration(
     (event) =>
       `${event}のcanonical commandによる同期・全対象hook登録がありません: ${AGENT_LIFECYCLE_COMMAND}`,
   );
+  if (disabledByLocalSettings)
+    diagnostics.push(
+      "disableAllHooks=trueによりlocal hookが明示的に無効化されています。利用者overrideは保持します",
+    );
   for (const event of noncanonicalEvents)
     diagnostics.push(
       `${event}に非canonical lifecycle commandがあります。次の直接実行1件へ統合してください: ${AGENT_LIFECYCLE_COMMAND}`,
@@ -282,6 +288,7 @@ export function inspectAgentLifecycleRegistration(
     healthy: diagnostics.length === 0,
     diagnostics,
     configurationDiagnostics: {
+      disabledByLocalSettings,
       noncanonicalEvents,
       duplicateEvents,
       cliConfigured,

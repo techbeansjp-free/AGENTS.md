@@ -113,12 +113,14 @@ export function inspectHookRegistration(input) {
 /** 設定の存在だけを観測する。実hostでの発火を保証しない。 */
 export function inspectAgentLifecycleRegistration(settings, executionContextMode = process.env.ASC_EXECUTION_CONTEXT_MODE, workflowCli = process.env.ASC_WORKFLOW_CLI, target) {
     const required = AGENT_LIFECYCLE_EVENTS;
+    let disabledByLocalSettings = false;
     let hooks = {};
     let environment = {};
     let shortLived = executionContextMode !== "compatible";
     try {
         const parsed = JSON.parse(settings ?? "{}");
         if (isRecord(parsed)) {
+            disabledByLocalSettings = parsed.disableAllHooks === true;
             if (isRecord(parsed.hooks))
                 hooks = parsed.hooks;
             if (isRecord(parsed.env))
@@ -185,6 +187,8 @@ export function inspectAgentLifecycleRegistration(settings, executionContextMode
         .filter(({ commands }) => commands.length > 1)
         .map(({ event }) => event);
     const diagnostics = missingEvents.map((event) => `${event}のcanonical commandによる同期・全対象hook登録がありません: ${AGENT_LIFECYCLE_COMMAND}`);
+    if (disabledByLocalSettings)
+        diagnostics.push("disableAllHooks=trueによりlocal hookが明示的に無効化されています。利用者overrideは保持します");
     for (const event of noncanonicalEvents)
         diagnostics.push(`${event}に非canonical lifecycle commandがあります。次の直接実行1件へ統合してください: ${AGENT_LIFECYCLE_COMMAND}`);
     for (const event of duplicateEvents)
@@ -209,6 +213,7 @@ export function inspectAgentLifecycleRegistration(settings, executionContextMode
         healthy: diagnostics.length === 0,
         diagnostics,
         configurationDiagnostics: {
+            disabledByLocalSettings,
             noncanonicalEvents,
             duplicateEvents,
             cliConfigured,
