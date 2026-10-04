@@ -84,3 +84,31 @@ Feature: Coding Engineeringを工程を増やさず配布する
     Given Coding Engineeringを含む隔離package資産がある
     When Step 9のroutingを空白とCRLFだけ変更する
     Then 内部skillの参照とdirectory入口は有効でStepは12件である
+
+  Scenario Outline: SCN-INT-CODING-1552-012 routing節外のCoding Engineering読取指示を拒否する
+    Given Coding Engineeringを含む隔離package資産がある
+    When routing節の"<位置>"に"<形式>"の"<入口>"読取指示を追加する
+    Then routing節を維持していても読取指示の所有権違反を報告する
+
+    Examples:
+      | 位置 | 形式 | 入口 |
+      | 前 | link | 本文 |
+      | 前 | link | 索引 |
+      | 後 | link | 本文 |
+      | 後 | link | 索引 |
+      | 前 | 平文 | 本文 |
+      | 後 | 平文 | 索引 |
+      | 前 | タイトル付きlink | 本文 |
+      | 後 | 参照link | 索引 |
+      | 前 | inline path | 本文 |
+      | 後 | link | Lens |
+
+  Scenario Outline: SCN-INT-CODING-1552-013 routing節外の非実行例は読取指示と扱わない
+    Given Coding Engineeringを含む隔離package資産がある
+    When routing節の"後"に"<形式>"の"本文"読取指示を追加する
+    Then 内部skillの参照とdirectory入口は有効でStepは12件である
+
+    Examples:
+      | 形式 |
+      | コメント |
+      | fenced例 |

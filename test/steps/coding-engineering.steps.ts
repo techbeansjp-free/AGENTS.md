@@ -212,3 +212,64 @@ When("Step 9のroutingを空白とCRLFだけ変更する", function () {
   );
   this.codingResult = checkSkillTemplateContracts(this.codingRoot);
 });
+
+When(
+  "routing節の{string}に{string}の{string}読取指示を追加する",
+  function (position: string, form: string, entry: string) {
+    const file = path.join(
+      this.codingRoot,
+      ".agent-skill-chain/skills/step-09-implement/SKILL.md",
+    );
+    const markdown = fs.readFileSync(file, "utf8");
+    const targets: Record<string, string> = {
+      本文: "SKILL.md",
+      索引: "index.md",
+      Lens: "lenses/bdd-testing.md",
+    };
+    assert.ok(targets[entry]);
+    const target = `../coding-engineering/${targets[entry]}`;
+    const link = `[追加資料](${target})`;
+    const forms: Record<string, string> = {
+      link: `${link}を変更種別に関係なく必ず読む。`,
+      平文: `Coding Engineering${entry}を変更種別に関係なく必ず読む。`,
+      タイトル付きlink: `[追加資料](${target} "説明")を必ず読む。`,
+      参照link: `[追加資料][extra]を必ず読む。\n\n[extra]: ${target}`,
+      "inline path": "`" + target + "`を必ず読む。",
+      コメント: `<!-- ${link}を必ず読む。 -->`,
+      fenced例: `\`\`\`markdown\n${link}を必ず読む。\n\`\`\``,
+    };
+    const instruction = forms[form];
+    assert.ok(instruction);
+    const heading =
+      position === "前" ? "## routing入力契約" : "## execution context境界";
+    assert.ok(markdown.includes(heading));
+    const changed = markdown.replace(heading, `${heading}\n\n${instruction}`);
+    const routing = (text: string) =>
+      text.match(/## 実装時のCoding Engineering\n[\s\S]*?(?=\n## )/u)?.[0];
+    assert.ok(routing(markdown));
+    assert.equal(
+      routing(changed),
+      routing(markdown),
+      "routing節自体は変更しない",
+    );
+    fs.writeFileSync(file, changed);
+    this.codingResult = checkSkillTemplateContracts(this.codingRoot);
+  },
+);
+Then("routing節を維持していても読取指示の所有権違反を報告する", function () {
+  assert.equal(this.codingResult.valid, false);
+  assert.ok(
+    this.codingResult.errors.some((error) =>
+      error.includes(
+        "Coding Engineeringへの指示はrouting節だけに置いてください",
+      ),
+    ),
+  );
+  assert.ok(
+    !this.codingResult.errors.some(
+      (error) =>
+        error.includes("routing契約が変更されています") ||
+        error.includes("Coding Engineeringへの参照がありません"),
+    ),
+  );
+});

@@ -32,6 +32,8 @@ Codexを新しく起動するときは必ず`routing launch --help`で入力を�
 
 ## 実装時のCoding Engineering
 
+Coding Engineeringの読取routingを定義する場所はこの節だけとする。他の節に名称・資産pathを用いた読取指示や別routingを追加しない。
+
 既知のAC・変更対象・riskを再調査せず、読む量だけを次のように選ぶ。risky・cross-boundary・境界/risk不明の経路を優先し、影響が小さくても省略経路へ入れない。新しいmode・Step・Gateではなく、既存の開始・停止条件は変えない。
 
 | 変更の分類 | 読むもの |

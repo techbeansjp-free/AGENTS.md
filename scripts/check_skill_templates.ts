@@ -659,7 +659,9 @@ export const CODING_ENGINEERING_ASSETS = [
  * 部分句の存在だけでは矛盾する必読指示の追加を見逃すため、routing節全体を比較する。
  * 改行・空白・tableのpaddingは無視する。意味の変更時はmutation回帰と共に見直す。
  */
-const CODING_ENGINEERING_ROUTING_CONTRACT = `既知のAC・変更対象・riskを再調査せず、読む量だけを次のように選ぶ。risky・cross-boundary・境界/risk不明の経路を優先し、影響が小さくても省略経路へ入れない。新しいmode・Step・Gateではなく、既存の開始・停止条件は変えない。
+const CODING_ENGINEERING_ROUTING_CONTRACT = `Coding Engineeringの読取routingを定義する場所はこの節だけとする。他の節に名称・資産pathを用いた読取指示や別routingを追加しない。
+
+既知のAC・変更対象・riskを再調査せず、読む量だけを次のように選ぶ。risky・cross-boundary・境界/risk不明の経路を優先し、影響が小さくても省略経路へ入れない。新しいmode・Step・Gateではなく、既存の開始・停止条件は変えない。
 
 | 変更の分類 | 読むもの |
 |---|---|
@@ -684,17 +686,31 @@ function checkCodingEngineeringAssets(root: string): string[] {
   const namespace = path.resolve(root, ".agent-skill-chain");
   const stepNine = path.join(namespace, "skills/step-09-implement/SKILL.md");
   // 配布だけでは利用されない。実行入口の参照を、説明用の例やコメントと区別する。
-  const stepNineInstructions = fs.existsSync(stepNine)
+  const stepNineProse = fs.existsSync(stepNine)
     ? maskFencedCodeBlocks(
         fs
           .readFileSync(stepNine, "utf8")
           .replace(/\r\n/gu, "\n")
           .replace(/<!--[\s\S]*?-->/gu, ""),
-      ).replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/gu, "")
+      )
     : "";
+  // inline pathも読取指示になり得るため、節外検査ではinline codeを除かない。
+  const isRoutingSection = (section: string) =>
+    /^実装時のCoding Engineering[ \t]*\n/u.test(section);
+  const outsideRouting = stepNineProse
+    .split(/^## /mu)
+    .filter((section) => !isRoutingSection(section))
+    .join("\n");
+  // 名前やpathを使う別入口を禁止する。任意の言い換えの意味判定は行わない。
+  if (/coding(?:\s+|-)engineering/iu.test(outsideRouting))
+    errors.push("Coding Engineeringへの指示はrouting節だけに置いてください");
+  const stepNineInstructions = stepNineProse.replace(
+    /(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/gu,
+    "",
+  );
   const routingSections = stepNineInstructions
     .split(/^## /mu)
-    .filter((section) => /^実装時のCoding Engineering[ \t]*\n/u.test(section));
+    .filter(isRoutingSection);
   if (
     routingSections.length !== 1 ||
     normalizeRoutingContract(routingSections[0]!.replace(/^[^\n]*\n/u, "")) !==
