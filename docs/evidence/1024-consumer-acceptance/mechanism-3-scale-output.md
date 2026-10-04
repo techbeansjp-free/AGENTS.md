@@ -5,7 +5,7 @@
 | path | SHA-256 |
 |---|---|
 | `scripts/check_consumer_acceptance.ts` | `391c3a35826ee476e645fbf92efc7388ea4c71659f93fde769421e6b10b811ab` |
-| `scripts/check_package_contents.ts` | `798027a8cfb21f8fe22540919fae0e35d1226634d42bb10b625f115785d553d6` |
+| `scripts/check_package_contents.ts` | `aa5d743318cd9e93a35ef3da7b93027dcc7c67096f332c716edd10883acbd6e4` |
 | `src/lib/process.ts` | `1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2` |
 
 この3件を記録するのは、consumer acceptanceの判定、package検査への接続、process出力上限という、この証跡が主張する振る舞いの実体だからである。**束縛対象は機構別に宣言する。** 本機構は`scripts/check_package_contents.ts`が`checkConsumerAcceptance`へ渡す`mechanisms`に含まれるため接続経路上にあり、同fileを含める（Issue #1221）。`package.json`はmainの自動releaseでversionが変わり、主張する振る舞いが同じでもhashが変わるため対象に含めない。
@@ -79,3 +79,7 @@ PR #1263の補正で`JsonlSessionOptions`と`runJsonlSession`だけを変更し�
 ## Issue #1527のrelease-identity機構追加への再拘束
 
 2026-09-29、Issue #1527で`scripts/check_consumer_acceptance.ts`へ第4機構`release-identity`（`observeReleaseIdentity`関数、`CONSUMER_ACCEPTANCE_MECHANISMS`への追加、`checkConsumerAcceptance`のdispatch分岐追加、CLI `--expected-version`・`--verify-artifact-identity`の追加）を実装した。これらは`observeGitDependency`・`observePackedArtifact`・`observeScaleDependentOutput`・`observeInstalledArtifact`・`assertIsolation`・`createIsolatedEnvironment`・`evaluateAtomicObservation`のいずれも変更せず、既存3機構（git-dependency、packed-bin、scale-output）の判定分岐へも変更を加えていない（`git diff`で確認、既存関数の内部は書き換えず新規関数・新規分岐の追加のみ）。同fileの全体SHA-256は`391c3a35826ee476e645fbf92efc7388ea4c71659f93fde769421e6b10b811ab`へ変化した。上表はこの値へ再拘束する。`src/lib/process.ts`・`scripts/check_package_contents.ts`（該当機構のみ）は未変更であり、上表のSHA-256を保持する。これは新規機構追加による全体hashの再拘束であり、本機構の故障注入・artifact_sha256・distribution_digest・注入前後の終了値・復元確認を再実行したという主張ではない。
+
+## Issue #1552の配布資産追加による再束縛
+
+2026-10-05、Coding Engineeringの11資産を必須配布集合へ追加した。`scripts/check_package_contents.ts`の変更は資産一覧のimportと集合への追加だけであり、consumer acceptanceへの接続・引数・判定は変更していない。配布物検査は合格したため、上表をSHA-256 `aa5d743318cd9e93a35ef3da7b93027dcc7c67096f332c716edd10883acbd6e4`へ再束縛する。既存の故障注入、artifact digest、注入前後の終了値を今回再観測したという主張ではない。
