@@ -661,6 +661,15 @@ When(
           agent_id: `r${round}`,
           tool_name: "Bash",
           tool_input: {
+            command: `node '${path.join(root, ".claude/hooks/asc-agent-lifecycle.mjs")}' --trusted-workflow-read '--worktree=${root}' '--staging=${staging}'`,
+          },
+        }),
+      );
+      denied(
+        call("PreToolUse", {
+          agent_id: `r${round}`,
+          tool_name: "Bash",
+          tool_input: {
             command: `node '${path.resolve("dist/bin/agent-skill-chain.js")}' workflow advance '--staging=${staging}'`,
           },
         }),

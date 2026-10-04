@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { STAGING_LIFECYCLE_AREAS } from "../src/domain/staging.js";
+import { MANAGED_RUNTIME } from "../src/domain/lifecycle-settings.js";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
 const INDEX = ".agent-skill-chain/00_利用案内.md";
@@ -11,6 +12,7 @@ const STEP_PREFIXES = Array.from(
 );
 const ENTRY_DOCUMENTS = new Map([
   [".agent-skill-chain", INDEX],
+  [MANAGED_RUNTIME, INDEX],
   [".agent-skill-chain/docs", ".agent-skill-chain/docs/00_運用ポリシー.md"],
   /** 強制点hookの正本directory（Issue #1105）。 */
   [".agent-skill-chain/hooks", ".agent-skill-chain/hooks/00_利用案内.md"],
@@ -115,7 +117,11 @@ function actualDirectories(root: string): string[] {
   if (!fs.existsSync(namespace)) return [];
   const visit = (directory: string): string[] => {
     const relative = path.relative(root, directory).replaceAll(path.sep, "/");
-    if (STAGING_LIFECYCLE_AREAS.includes(relative)) return [directory];
+    if (
+      relative === MANAGED_RUNTIME ||
+      STAGING_LIFECYCLE_AREAS.includes(relative)
+    )
+      return [directory];
     return [
       directory,
       ...fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

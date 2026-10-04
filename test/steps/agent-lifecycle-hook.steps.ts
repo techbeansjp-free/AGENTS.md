@@ -26,6 +26,7 @@ function event(
     env: {
       ...process.env,
       CLAUDE_PROJECT_DIR: root,
+      ASC_EXECUTION_CONTEXT_MODE: "compatible",
       ASC_AGENT_MAX_TOOLS: "10",
       ASC_AGENT_BUDGET_MODE: budgetMode,
     },
@@ -250,7 +251,9 @@ Then("lifecycle hookの配布と削除は設定を変更しない", function () 
   assert.equal(doctor(root).healthy, true);
   uninstall(root, { apply: true });
   assert.equal(fs.existsSync(deployed), false);
-  assert.equal(fs.readFileSync(settings, "utf8"), '{"keep":true}\n');
+  assert.deepEqual(JSON.parse(fs.readFileSync(settings, "utf8")), {
+    keep: true,
+  });
 });
 Then("lifecycle記録のsymlinkは境界外を書き換えない", function () {
   const root = this.temp("asc-agent-lifecycle-link-");
@@ -385,14 +388,27 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
   assert.equal(configured.target, ".claude/settings.local.json");
   assert.equal(configured.apply, false);
   assert.equal(configured.restart, "new-session");
-  const fragment = configured.settingsFragment;
-  assert.equal(fragment.env.ASC_EXECUTION_CONTEXT_MODE, "short-lived");
-  assert.equal(fragment.env.ASC_AGENT_BUDGET_MODE, "warn");
-  assert.ok(
-    fragment.env.ASC_WORKFLOW_CLI &&
-      path.isAbsolute(fragment.env.ASC_WORKFLOW_CLI),
-  );
-  assert.ok(fs.statSync(fragment.env.ASC_WORKFLOW_CLI).isFile());
+  assert.equal(configured.repair, "install/update --root=. --apply");
+  const fragment = {
+    env: {
+      ASC_EXECUTION_CONTEXT_MODE: "short-lived",
+      ASC_WORKFLOW_CLI: path.resolve("dist/bin/agent-skill-chain.js"),
+    },
+    hooks: Object.fromEntries(
+      [
+        "SessionStart",
+        "SessionEnd",
+        "SubagentStart",
+        "SubagentStop",
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
+      ].map((name) => [
+        name,
+        [{ hooks: [{ ...entry.hooks[0], timeout: 30 }] }],
+      ]),
+    ),
+  };
   assert.deepEqual(
     inspectAgentLifecycleRegistration(JSON.stringify(fragment), "compatible")
       .missingEvents,
@@ -543,7 +559,10 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
       "",
     );
   assert.equal(diagnose(null).healthy, false);
-  assert.match(diagnose(null).diagnostics.join(), /ASC_WORKFLOW_CLIが未設定/u);
+  assert.match(
+    diagnose(null).diagnostics.join(),
+    /managed workflow CLIがありません/u,
+  );
   assert.equal(
     diagnose("relative/cli.js").configurationDiagnostics.cliAbsolute,
     false,
@@ -577,11 +596,6 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
     ),
     beforeSettings,
   );
-  const compatible = inspectAgentLifecycleRegistration(undefined, "compatible")
-    .configuration.settingsFragment;
-  assert.equal(compatible.env.ASC_EXECUTION_CONTEXT_MODE, "compatible");
-  assert.equal(compatible.env.ASC_WORKFLOW_CLI, undefined);
-  assert.equal(Object.keys(compatible.hooks).length, 7);
   hooks.PostToolUse = [entry];
   hooks.PostToolUseFailure = [{ hooks: [{ ...entry.hooks[0], async: true }] }];
   assert.deepEqual(
@@ -614,6 +628,7 @@ Then("lifecycleの既定とmode別budgetはmainを停止しない", function () 
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       CLAUDE_PROJECT_DIR: root,
+      ASC_EXECUTION_CONTEXT_MODE: "compatible",
       ASC_AGENT_MAX_TOOLS: "10",
     };
     delete env.ASC_AGENT_BUDGET_MODE;

@@ -66,10 +66,10 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     When setupを適用してからhook展開先を書き換えてdeleteを適用する
     Then 書き換えたhookは残る
 
-  Scenario: SCN-INT-LIFECYCLE-014 installは利用者とhostの設定fileへ書き込まない
+  Scenario: SCN-INT-LIFECYCLE-014 installは利用者設定を保持しASC登録を追加する
     Given hook登録済みのhost設定を持つ隔離directoryがある
     When setupを適用する
-    Then host設定fileは1 byteも変わらない
+    Then host設定の利用者entryを保持しASC登録だけ追加する
 
   Scenario: SCN-INT-LIFECYCLE-015 hookの登録の有無はdoctorのhealthyを変えない
     Given lifecycle検証用の隔離directoryがある
@@ -96,10 +96,10 @@ Feature: 隔離ディレクトリでpackage lifecycleの所有権境界を検証
     When record不在の隔離先へinstallとdeleteを試みる
     Then 拒否理由は最小診断だけを返す
 
-  Scenario: SCN-INT-LIFECYCLE-020 record喪失後の復旧でhost設定fileが変わらない
+  Scenario: SCN-INT-LIFECYCLE-020 record喪失後の復旧でも利用者のhost設定を保持する
     Given 導入後にrecordを失いhook登録済みhost設定を持つ隔離先がある
     When record不在の隔離先へupdateを適用する
-    Then host設定fileは1 byteも変わらない
+    Then host設定の利用者entryを保持しASC登録だけ追加する
 
   Scenario: SCN-INT-LIFECYCLE-021 record不在でも非通常fileと境界外symlinkの展開先へ書き込まない
     Given 導入後にrecordを失い展開先がdirectoryの隔離先がある

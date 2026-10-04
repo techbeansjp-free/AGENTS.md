@@ -123,10 +123,17 @@ function writeRecord(root: string, record: Record<string, unknown>): void {
   fs.writeFileSync(recordPath(root), `${JSON.stringify(record, null, 2)}\n`);
 }
 
-function gitStatus(root: string): string {
+function gitStatus(root: string, excludeSharedSettings = false): string {
   return execFileSync(
     "git",
-    ["status", "--porcelain=v1", "--untracked-files=all"],
+    [
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all",
+      ...(excludeSharedSettings
+        ? ["--", ".", ":(exclude,literal).claude/settings.local.json"]
+        : []),
+    ],
     { cwd: root, encoding: "utf8" },
   );
 }
@@ -449,9 +456,19 @@ Then("書き換えたhookは残る", function (this: IsolationWorld) {
   assert.match(fs.readFileSync(file, "utf8"), /利用者の変更/u);
 });
 
-Then("host設定fileは1 byteも変わらない", function (this: IsolationWorld) {
-  assertCapturedFiles(this.root, this.consumerFiles);
-});
+Then(
+  "host設定の利用者entryを保持しASC登録だけ追加する",
+  function (this: IsolationWorld) {
+    const parsed = JSON.parse(
+      fs.readFileSync(path.join(this.root, HOST_HOOK_SETTINGS), "utf8"),
+    ) as { hooks: Record<string, unknown[]> };
+    const original = JSON.parse(this.consumerFiles[HOST_HOOK_SETTINGS]) as {
+      hooks: Record<string, unknown[]>;
+    };
+    assert.deepEqual(parsed.hooks.PreToolUse[0], original.hooks.PreToolUse[0]);
+    assert.equal(doctor(this.root).hooks.agentLifecycle.healthy, true);
+  },
+);
 
 Given("lifecycle隔離先に他skillと利用者文書と他ツール設定がある", function () {
   this.root = this.temp("asc-lifecycle-assets-");
@@ -534,7 +551,10 @@ When("dirty状態のままsetupとupdateとdeleteを適用する", function () {
 Then("consumer所有資産とdirty状態は保持される", function () {
   assert.equal(this.applyResult.applied, true);
   assertCapturedFiles(this.root, this.consumerFiles);
-  assert.equal(gitStatus(this.root), this.statusBefore);
+  // Shared configuration is not a package-owned file: delete removes its ASC
+  // entries but preserves the file. Assert that exact residue independently.
+  assert.deepEqual(readObject(path.join(this.root, HOST_HOOK_SETTINGS)), {});
+  assert.equal(gitStatus(this.root, true), this.statusBefore);
 });
 
 Given("導入済み隔離先と改ざんrecordの反例がある", function () {
@@ -1008,25 +1028,19 @@ When(
   function (this: IsolationWorld) {
     init(this.root, { apply: true });
     const unregistered = doctor(this.root);
-    write(
-      this.root,
-      HOST_HOOK_SETTINGS,
-      `${JSON.stringify({
-        hooks: {
-          PreToolUse: [
-            {
-              matcher: "Bash",
-              hooks: [
-                {
-                  type: "command",
-                  command: `"$CLAUDE_PROJECT_DIR/${HOOK_HOST_COPIES[0]}"`,
-                },
-              ],
-            },
-          ],
+    const settings = JSON.parse(
+      fs.readFileSync(path.join(this.root, HOST_HOOK_SETTINGS), "utf8"),
+    ) as { hooks: Record<string, unknown[]> };
+    settings.hooks.PreToolUse.push({
+      matcher: "Bash",
+      hooks: [
+        {
+          type: "command",
+          command: `"$CLAUDE_PROJECT_DIR/${HOOK_HOST_COPIES[0]}"`,
         },
-      })}\n`,
-    );
+      ],
+    });
+    write(this.root, HOST_HOOK_SETTINGS, JSON.stringify(settings));
     this.hookDoctorStates = [unregistered, doctor(this.root)];
   },
 );
