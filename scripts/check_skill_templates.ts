@@ -654,7 +654,31 @@ export const CODING_ENGINEERING_ASSETS = [
   "lenses/observability-performance-resilience.md",
 ].map((file) => `.agent-skill-chain/skills/coding-engineering/${file}`);
 
-/** 文面ではなく配布先でのfrontmatter・参照到達性を検査する。 */
+/**
+ * Step 9正本のinstruction契約を固定する。自然言語の意味を推論する検査ではない。
+ * 部分句の存在だけでは矛盾する必読指示の追加を見逃すため、routing節全体を比較する。
+ * 改行・空白・tableのpaddingは無視する。意味の変更時はmutation回帰と共に見直す。
+ */
+const CODING_ENGINEERING_ROUTING_CONTRACT = `既知のAC・変更対象・riskを再調査せず、読む量だけを次のように選ぶ。risky・cross-boundary・境界/risk不明の経路を優先し、影響が小さくても省略経路へ入れない。新しいmode・Step・Gateではなく、既存の開始・停止条件は変えない。
+
+| 変更の分類 | 読むもの |
+|---|---|
+| local・明白・low-riskで、既存patternの内側に収まり境界・副作用の変更がない | 近傍実装と関連testだけ。Coding Engineering本文・索引・Lensは読まず、0 Lensを優先する |
+| risky・cross-boundaryに該当せず、影響がboundedで境界とriskが既知 | [Coding Engineering索引](../coding-engineering/index.md)から必要ならLens 0〜1件。本文は読まない |
+| risky・cross-boundary、または境界・riskが不明 | [Coding Engineering Skill](../coding-engineering/SKILL.md)を読み、該当Lens 1〜3件を目安に選ぶ |
+
+Search Before Createの探索既定値は、symbol/既存patternを検索 → 有力候補は最大3件程度へ絞る → 直接読むのは通常1〜2件とする。判断が変わらない、または局所pattern・直接依存を十分把握できたら終了する。これはsoft budgetでありhard limitや停止条件ではない。高riskや未解決の具体的な疑問があれば必要な範囲へ広げる。探索中に境界・riskの前提が崩れたら読取の分類を見直す。
+
+scope内の通常問題は自律修正し、実装中はtargeted feedbackを優先する。最終完了条件は既存Verification Set・project policyに従い、読取の省略を検証やsecurity境界確認の省略に使わない。`;
+
+function normalizeRoutingContract(markdown: string): string {
+  return markdown
+    .replace(/\s*\|\s*/gu, "|")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+/** 配布資産・参照到達性とStep 9の読取戦略を検査する。 */
 function checkCodingEngineeringAssets(root: string): string[] {
   const errors: string[] = [];
   const namespace = path.resolve(root, ".agent-skill-chain");
@@ -662,9 +686,23 @@ function checkCodingEngineeringAssets(root: string): string[] {
   // 配布だけでは利用されない。実行入口の参照を、説明用の例やコメントと区別する。
   const stepNineInstructions = fs.existsSync(stepNine)
     ? maskFencedCodeBlocks(
-        fs.readFileSync(stepNine, "utf8").replace(/<!--[\s\S]*?-->/gu, ""),
+        fs
+          .readFileSync(stepNine, "utf8")
+          .replace(/\r\n/gu, "\n")
+          .replace(/<!--[\s\S]*?-->/gu, ""),
       ).replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/gu, "")
     : "";
+  const routingSections = stepNineInstructions
+    .split(/^## /mu)
+    .filter((section) => /^実装時のCoding Engineering[ \t]*\n/u.test(section));
+  if (
+    routingSections.length !== 1 ||
+    normalizeRoutingContract(routingSections[0]!.replace(/^[^\n]*\n/u, "")) !==
+      normalizeRoutingContract(CODING_ENGINEERING_ROUTING_CONTRACT)
+  )
+    errors.push(
+      "Coding Engineering routing契約が変更されています: zero-read・bounded・risk優先・soft budgetを確認してください",
+    );
   const stepNineLinks = [
     ...stepNineInstructions.matchAll(
       /\]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/gu,

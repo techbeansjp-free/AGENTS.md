@@ -41,3 +41,46 @@ Feature: Coding Engineeringを工程を増やさず配布する
       | 索引 | コメント |
       | 索引 | コード例 |
       | 索引 | インラインコード |
+
+  Scenario Outline: SCN-INT-CODING-1552-007 low-risk localではCoding Engineering追加読取を要求しない
+    Given Coding Engineeringを含む隔離package資産がある
+    When Step 9のrouting契約を"<変更>"に変更する
+    Then 入口を維持していてもrouting契約違反を報告する
+
+    Examples:
+      | 変更 |
+      | local本文必読 |
+      | local索引必読 |
+      | localLens必読 |
+      | 全変更で本文必読 |
+
+  Scenario: SCN-INT-CODING-1552-008 boundedでは本文を要求しない
+    Given Coding Engineeringを含む隔離package資産がある
+    When Step 9のrouting契約を"bounded本文必読"に変更する
+    Then 入口を維持していてもrouting契約違反を報告する
+
+  Scenario Outline: SCN-INT-CODING-1552-009 risk不明ではlow-risk経路へ入れない
+    Given Coding Engineeringを含む隔離package資産がある
+    When Step 9のrouting契約を"<変更>"に変更する
+    Then 入口を維持していてもrouting契約違反を報告する
+
+    Examples:
+      | 変更 |
+      | risk不明を軽量経路へ |
+      | risky優先を削除 |
+
+  Scenario Outline: SCN-INT-CODING-1552-010 soft budget超過だけを停止条件にしない
+    Given Coding Engineeringを含む隔離package資産がある
+    When Step 9のrouting契約を"<変更>"に変更する
+    Then 入口を維持していてもrouting契約違反を報告する
+
+    Examples:
+      | 変更 |
+      | hard limit化 |
+      | soft budgetをコメント化 |
+      | soft budgetをコード例化 |
+
+  Scenario: SCN-INT-CODING-1552-011 routingの空白と改行だけの変更は許容する
+    Given Coding Engineeringを含む隔離package資産がある
+    When Step 9のroutingを空白とCRLFだけ変更する
+    Then 内部skillの参照とdirectory入口は有効でStepは12件である
