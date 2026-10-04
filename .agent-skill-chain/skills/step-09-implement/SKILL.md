@@ -30,6 +30,10 @@ role欄の担当roleが`implementer`であること、許可path・操作、必�
 
 Codexを新しく起動するときは必ず`routing launch --help`で入力を確認し、当該taskのfile、root、独立identity/context、risk、modeを渡して実行する。編集taskだけ`--sandbox=workspace-write`を明示する。launch自身が毎回公式config/readとmodel/listを観測し、trusted selector採用tier、具体model、high、標準速度を検証してCodexを起動する。手書きmodel名、以前のresolve結果、旧Evidenceを新しい起動の選択元にしない。launchが起動したimplementer自身は同じtaskを再launchせず、このStepの実装を続ける。取得不能・採用不足は起動前に停止し、旧modelや別providerで暗黙に実行しない。
 
+## 実装時のCoding Engineering
+
+[Coding Engineering Skill](../coding-engineering/SKILL.md)を使い、必要最小限のcontextでSearch Before Createを行い、変更に必要なLensだけを読む。scope内の通常問題は自律修正し、実装中はtargeted feedbackを優先する。最終完了条件は既存Verification Set・project policyに従う。このskillは既存Step 9の停止条件を変更しない。
+
 ## execution context境界
 
 標準の`short-lived`方式では、[開発ワークフローのexecution context境界](../../docs/01_開発ワークフロー.md#execution-context境界)に従い、この担当work unitへfresh contextを割り当てる。repository/stagingから復元し、完了後に別工程・別review round・finding是正を同じcontextへ追加しない。workerの成果物・検証・必要なcommit・返却・終了の後でcoordinatorがStep/roundを記録する。`compatible`の既存動作と品質gateは維持する。

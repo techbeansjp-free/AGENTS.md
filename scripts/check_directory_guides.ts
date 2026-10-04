@@ -29,6 +29,14 @@ const ENTRY_DOCUMENTS = new Map([
     ".agent-skill-chain/skills/asc-step/SKILL.md",
   ],
   [
+    ".agent-skill-chain/skills/coding-engineering",
+    ".agent-skill-chain/skills/coding-engineering/SKILL.md",
+  ],
+  [
+    ".agent-skill-chain/skills/coding-engineering/lenses",
+    ".agent-skill-chain/skills/coding-engineering/SKILL.md",
+  ],
+  [
     ".agent-skill-chain/templates",
     ".agent-skill-chain/templates/00_利用案内.md",
   ],

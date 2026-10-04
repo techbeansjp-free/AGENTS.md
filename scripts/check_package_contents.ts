@@ -1,3 +1,4 @@
+import { CODING_ENGINEERING_ASSETS } from "./check_skill_templates.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -216,6 +217,7 @@ export function checkPackageContents(): {
       ".agent-skill-chain/schemas/00_利用案内.md",
       ".agent-skill-chain/skills/00_利用案内.md",
       ".agent-skill-chain/skills/asc-step/SKILL.md",
+      ...CODING_ENGINEERING_ASSETS,
       ".agent-skill-chain/templates/00_利用案内.md",
       ".agent-skill-chain/templates/common/02_利用案内.md",
       ".agent-skill-chain/templates/issue/12_利用案内.md",

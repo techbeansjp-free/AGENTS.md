@@ -638,8 +638,64 @@ function checkGeneratedTemplateReferences(root: string): string[] {
   return errors;
 }
 
+/** Step 9内部skillの配布資産。工程の正規集合には加えない。 */
+export const CODING_ENGINEERING_ASSETS = [
+  "SKILL.md",
+  "evaluation.md",
+  "lenses/unix-ddd.md",
+  "lenses/bdd-testing.md",
+  "lenses/contract-data.md",
+  "lenses/idempotency-concurrency.md",
+  "lenses/security-privacy.md",
+  "lenses/maintainability-reuse.md",
+  "lenses/ui-ux-accessibility.md",
+  "lenses/design-layout-token.md",
+  "lenses/observability-performance-resilience.md",
+].map((file) => `.agent-skill-chain/skills/coding-engineering/${file}`);
+
+/** 文面ではなく配布先でのfrontmatter・参照到達性を検査する。 */
+function checkCodingEngineeringAssets(root: string): string[] {
+  const errors: string[] = [];
+  const namespace = path.resolve(root, ".agent-skill-chain");
+  for (const relative of CODING_ENGINEERING_ASSETS) {
+    const file = path.resolve(root, relative);
+    if (!fs.existsSync(file) || !fs.lstatSync(file).isFile()) {
+      errors.push(`Coding Engineering資産がありません: ${relative}`);
+      continue;
+    }
+    const markdown = fs.readFileSync(file, "utf8");
+    if (relative.endsWith("/SKILL.md")) {
+      const frontmatter =
+        /^---\r?\n([\s\S]*?)\r?\n---\r?\n/u.exec(markdown)?.[1] ?? "";
+      if (
+        !/^name: coding-engineering$/mu.test(frontmatter) ||
+        !/^description: [^>|\r\n].+$/mu.test(frontmatter)
+      )
+        errors.push(`Coding Engineeringのfrontmatterが不正です: ${relative}`);
+    }
+    for (const match of markdown.matchAll(/\]\(([^)\s]+)\)/gu)) {
+      const link = match[1]!;
+      if (/^(?:https?:|mailto:|#)/u.test(link)) continue;
+      const target = path.resolve(path.dirname(file), link.split("#")[0]!);
+      if (
+        !target.startsWith(`${namespace}${path.sep}`) ||
+        !fs.existsSync(target) ||
+        !fs.lstatSync(target).isFile() ||
+        !fs
+          .realpathSync(target)
+          .startsWith(`${fs.realpathSync(namespace)}${path.sep}`)
+      )
+        errors.push(
+          `Coding Engineering参照先が不正です: ${relative} -> ${link}`,
+        );
+    }
+  }
+  return errors;
+}
+
 export function checkSkillTemplateContracts(root = process.cwd()) {
   const errors: string[] = [
+    ...checkCodingEngineeringAssets(root),
     ...checkIssueTemplateHeadings(root).errors,
     ...checkGeneratedTemplateReferences(root),
   ];
@@ -660,13 +716,14 @@ export function checkSkillTemplateContracts(root = process.cwd()) {
   const expectedSkillDirectories = [
     ...expectedSkills,
     HOST_ADAPTER_SKILL,
+    "coding-engineering",
   ].sort();
   if (
     JSON.stringify(actualSkillDirectories) !==
     JSON.stringify(expectedSkillDirectories)
   )
     errors.push(
-      `skill集合がStep 0〜11とhost adapterの正規集合に一致しません: ${actualSkillDirectories.join(",")}`,
+      `skill集合がStep 0〜11・host adapter・coding-engineeringの正規集合に一致しません: ${actualSkillDirectories.join(",")}`,
     );
   if (JSON.stringify(actualSkills) !== JSON.stringify(expectedSkills))
     errors.push(
