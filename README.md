@@ -66,6 +66,81 @@ npx agent-skill-chain worktree create --help
 
 `install`と`update`は、Claude Code用の`.claude/skills/asc-step/SKILL.md`とCodex用の`.agents/skills/asc-step/SKILL.md`を管理します。各hostはこの登録アダプターから、開発ワークフローと現在のStep契約へ到達できます。配置や内容は`doctor`で診断できます。
 
+## Agent Lifecycle
+
+### short-livedとは
+
+ASCの`short-lived`は、**作業単位ごとに、前の会話履歴を引き継がない新しいsubagentへ担当を渡す実行方式**です。要求整理、設計、実装、レビュー、是正を一つのAgent会話で続けず、担当を終えたsubagentは終了します。Step 10ではreview roundごとに新しいReviewerを使い、是正は別のCorrection Agentへ渡します。Reviewer自身は実装を修正しません。
+
+引き継ぐ状態の正本は、GitのHEAD・差分、Issue、worktree、stagingの計画や成果物、review sessionとfindingです。これを指す情報が**repository-state handoff**です。次のAgentはrepositoryから必要な状態を読み直します。前の会話や自然言語summaryを新しい承認根拠にはせず、既存のHEAD・digest・検証・review gateを通します。
+
+```text
+main / coordinator（進行役。継続・resume可能）
+  │
+  ├─ 要求整理のfresh Agent → 成果物を保存して終了
+  ├─ 設計のfresh Agent     → 成果物を保存して終了
+  ├─ 実装のfresh Agent     → 検証・commit・返却して終了
+  ├─ fresh Reviewer       → findingを返却して終了
+  ├─ fresh Correction     → 是正・検証・commit・返却して終了
+  └─ 次roundのfresh Reviewer
+          ↑ 各担当はrepository stateから再開
+          Git / Issue / staging / HEAD / review session
+```
+
+これは担当交代の概念図で、全Stepが必ず1 Agentになるという意味ではありません。次の担当と入力は`workflow advance --staging=<path>`が導出します。進行役は出力の`agentDispatch`をAgentツールの引数へ渡します。hook自身が次のAgentを自動起動するわけではなく、handoff JSONを利用者が手組みする必要もありません。
+
+目的は、実装から是正まで同じ会話を使い続けることによるcontextの肥大化を抑え、現在のrepositoryに基づく判断と役割分離を保つことです。token・cache readの削減率はまだ実測で確定していません。新しいAgentの初期化・再読コストも含むBefore/After計測はIssue #1546の残件です。
+
+### 何が短命になり、何が継続するか
+
+| 対象 | 挙動 |
+| ---- | ---- |
+| ASC工程担当のsubagent | 担当Step・role・HEADへ結び付け、完了後は同じIDを再利用しません。別担当・是正・次review roundはfresh Agentへ渡します |
+| main / coordinator | 工程の進行、担当の起動、記録を行います。会話の継続・resumeは可能で、hookがmainの会話を自動交換することはありません |
+| 通常の調査・資料作成task | 自然言語promptでfresh Agentを起動できます。複数taskの並走も可能ですが、その結果だけではASC工程のreview承認証跡になりません |
+| repositoryの成果物・review session | Agentが終了しても残ります。review sessionは複数roundにまたがり、各回のReviewerのagent IDとは別に管理します |
+| 会話履歴 | ASCは履歴全体の次Agentへの継承を引継ぎ手段にしません。履歴の保存・削除自体はhostが管理します |
+
+工程のwriterが同一worktreeを使用している間、main・通常task・別sessionからの書込みをhookで拒否します。通常taskは読取・検索・連絡を続けられますが、Bashは読取目的でも拒否されます。先行する通常taskが開始待ち・実行中ならworkflow writerの開始を待ちます。書込みを並走させる場合は別worktreeを使います。工程担当の起動が拒否されたときは、mainによる実装代行へ切り替えず、拒否理由を解消して再委譲します。
+
+この機械強制は対応するClaude Code hookを通る操作が対象です。CodexにはStep skillの登録口を配布しますが、Agent Lifecycle hookによる強制は未対応です。人間のTerminal操作やhookを通らない外部processまで隔離する機能ではありません。
+
+### 既定値とcompatibleの違い
+
+**通常利用ではenvを追加する必要はありません。** この機能を含む版の`install/update --apply`がhook本体・登録・timeout・project-local CLI runtimeを管理します。内部ではhookを使うため、生成されたASCのhook登録は削除せず、そのまま使ってください。適用後は新規Claude Code sessionを開始します。
+
+| 観点 | `short-lived`（未設定の新規sessionの既定） | `compatible`（明示override） |
+| ---- | ---- | ---- |
+| ASC工程担当の起動 | repositoryから再導出したhandoffでStep・role・HEADを検証 | short-lived固有のhandoff起動制約を適用しない従来互換経路 |
+| contextの継承 | `fork`を拒否し、fresh Agentを使う | short-lived固有のfresh-context制約は適用しない |
+| 完了したsubagent | 再利用禁止 | 再利用禁止は継続 |
+| mainの会話 | 継続・resume可能 | 継続・resume可能 |
+| 同一worktreeのwriter保護 | 有効 | short-livedのworkflow writerが占有中ならcompatible sessionも保護対象 |
+| 通常の用途 | 標準利用 | 互換性確認・障害切り分けなど、理由がある場合の切替 |
+
+`compatible`はhookや品質gateを無効化する設定ではありません。既存sessionに保存されたmodeは更新で反転しません。また、以前の回避策として明示した`compatible`はupdateでも保持されます。標準方式へ戻す場合はそのoverrideを取り除き、新規sessionを開始してください。
+
+### 必要な場合だけ変更する設定
+
+以下はClaude Codeの起動環境や`.claude/settings.local.json`の`env`で明示するoverrideです。通常は未設定のまま利用してください。modeとtool数の目安は新規session開始時に固定され、途中の環境変更やcompactではリセットされません。
+
+| 環境変数 | 未設定時 | 許容値・用途 | 通常変更するか |
+| -------- | -------- | ----------- | ------------ |
+| `ASC_EXECUTION_CONTEXT_MODE` | `short-lived` | `short-lived` / `compatible`。工程担当の実行方式 | 不要。互換動作が必要な場合だけ`compatible` |
+| `ASC_WORKFLOW_CLI` | project-local managed runtime | 開発・緊急用のCLI override。実在する絶対path | 不要。版付きpathを手設定しない |
+| `ASC_AGENT_BUDGET_MODE` | `warn` | `observe`は計測のみ、`warn`は警告、`enforce`はsubagent上限を強制する実験用設定 | 不要。`enforce`は標準運用に使わない |
+| `ASC_AGENT_MAX_TOOLS` | `120` | `10`〜`1000`の整数。tool試行数の目安 | 不要。この値だけでは強制停止しない |
+
+tool試行数はAPI call数やcontextのtoken数ではありません。**既定の`warn`では120回でAgentを強制終了しません。** mainはどのbudget modeでもtool数によって停止しません。実験用`enforce`は状態保存完了を待ってから停止する保証がないため、short-livedの標準動作と混同しないでください。
+
+### 診断と復旧の入口
+
+導入・更新後は`doctor --root=.`で登録とruntimeを確認してください。`runtimeVerified: false`は実hostでhookが発火したことまでは確認していないという意味です。
+
+更新で廃止されたruntime fileが変更済みの場合、ASCは内容を消さず保持し、信頼対象から外します。この未登録fileが残る間はdoctorとtrusted CLIが拒否します。**再度`update --apply`するだけでは除去されません。** 報告されたpathの内容を確認し、必要ならruntime外へ退避してから当該fileを除去し、doctorを再実行してください。runtime全体や管理記録をまとめて削除しないでください。
+
+hookの停止記録やwriter予約が残った場合も、時刻だけで自動解放しません。詳細な設定所有境界、拒否理由、owner停止確認とdigestを使う復旧手順は[hook利用案内](.agent-skill-chain/hooks/00_利用案内.md#agent-lifecycle--handoffissue-1546)を参照してください。
+
 ## 正本と仕様
 
 - リポジトリでの入口: [AGENTS.md](AGENTS.md)
