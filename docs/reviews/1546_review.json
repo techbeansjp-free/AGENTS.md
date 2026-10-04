@@ -3,16 +3,16 @@
   "issue": 1546,
   "observed": {
     "baseSha": "d6a1909cbb6261607e502383d7f08ac83f74f4b9",
-    "implementationHeadSha": "702055185610db141c69a2b5b45e45277616be7a",
-    "diffDigest": "bf0857d85a4f0f540720a2e7c5a80c8b185364de4225a15a81dc59fd24c0cb37",
+    "implementationHeadSha": "8617f346c2f09d60d33e273a361328e44c1d6984",
+    "diffDigest": "9b97c0b84ea4aa158f3315724f329fae7dc356feb76de6c929603e7a7af62a41",
     "session": {
       "sessionId": "fab087fdc895a33b859dcb4d505ffb186c6cceb0f1d0abb1a7cb3be40db4be2f",
-      "latestRoundDigest": "2c5f2ef72e0d45e3b4056f7ca024f90f4302fb2f8bf296769e28d3502f3c4c79",
+      "latestRoundDigest": "56fcccaded55f7d5e36d13bda93bcdfe84440cc49fe83f03e4e9c56f4701fe50",
       "status": "converged",
-      "countedRounds": 3
+      "countedRounds": 4
     },
     "impact": {
-      "digest": "b01c9aa85e9f41472bfc8ea8a7a2017172c8d662b9df452e09ac304546172d4a",
+      "digest": "53a1362916979a180d6d0c8fcc79783215b1119ae4b098239a0536fd1f686cb5",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "702055185610db141c69a2b5b45e45277616be7a",
-        "impactDigest": "b01c9aa85e9f41472bfc8ea8a7a2017172c8d662b9df452e09ac304546172d4a",
-        "finishedAt": "2026-10-04T05:04:12.218Z",
-        "recordDigest": "5c3beab360e17e6a900440f1225a802fa54234cf1d6c535e7990919576e24c33"
+        "headSha": "8617f346c2f09d60d33e273a361328e44c1d6984",
+        "impactDigest": "53a1362916979a180d6d0c8fcc79783215b1119ae4b098239a0536fd1f686cb5",
+        "finishedAt": "2026-10-04T09:28:18.666Z",
+        "recordDigest": "04a1db2f4c1aab60018ff0274908f41f5da6fb0466a19c37cb1ece8a579ddd4c"
       }
     ]
   },
@@ -39,5 +39,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "ce28b8e5663917a94af1f7f8713e76aa2f7bedd826967a6e37d057fb916ddf9a"
+  "evidenceDigest": "73d3c5d66b7a4e0b453d2650dff81f254ef117152e3274318cf65c409482a84c"
 }
