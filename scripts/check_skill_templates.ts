@@ -744,10 +744,19 @@ function checkCodingEngineeringAssets(root: string): string[] {
       )
         errors.push(`Coding Engineeringのfrontmatterが不正です: ${relative}`);
     }
-    for (const match of markdown.matchAll(
-      /\]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/gu,
-    )) {
-      const link = match[1]!;
+    const destinations = [
+      ...[
+        ...markdown.matchAll(
+          /\]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/gu,
+        ),
+      ].map((match) => match[1]!),
+      ...[
+        ...markdown.matchAll(
+          /^[ \t]{0,3}\[[^\]\r\n]+\]:[ \t]*(?:\r?\n[ \t]*)?(?:<([^<>\r\n]+)>|([^\s<>]+))/gmu,
+        ),
+      ].map((match) => match[1] ?? match[2]!),
+    ];
+    for (const link of destinations) {
       if (/^(?:https?:|mailto:|#)/u.test(link)) continue;
       const target = path.resolve(path.dirname(file), link.split("#")[0]!);
       if (

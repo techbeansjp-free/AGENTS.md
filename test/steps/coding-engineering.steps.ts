@@ -273,3 +273,24 @@ Then("routing節を維持していても読取指示の所有権違反を報告�
     ),
   );
 });
+
+When("Lensに{string}の境界外参照定義を追加する", function (form: string) {
+  const destination =
+    form === "通常"
+      ? "../../../../outside.md"
+      : form === "destination改行"
+        ? "\n  ../../../../outside.md"
+        : '<../../../../outside.md> "説明"';
+  fs.appendFileSync(
+    path.join(this.codingRoot, skillPath, "lenses/unix-ddd.md"),
+    `\n[境界外][outside]\n\n[outside]: ${destination}\n`,
+  );
+  this.codingResult = checkSkillTemplateContracts(this.codingRoot);
+});
+When("Lensにpackage内参照定義を追加する", function () {
+  fs.appendFileSync(
+    path.join(this.codingRoot, skillPath, "lenses/unix-ddd.md"),
+    '\n[本文][main]\n\n[main]: <../SKILL.md> "説明"\n',
+  );
+  this.codingResult = checkSkillTemplateContracts(this.codingRoot);
+});

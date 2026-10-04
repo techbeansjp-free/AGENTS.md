@@ -112,3 +112,19 @@ Feature: Coding Engineeringを工程を増やさず配布する
       | 形式 |
       | コメント |
       | fenced例 |
+
+  Scenario Outline: SCN-INT-CODING-1552-014 Lensの参照形式linkも境界外なら拒否する
+    Given Coding Engineeringを含む隔離package資産がある
+    When Lensに"<形式>"の境界外参照定義を追加する
+    Then Lensの不正な参照先を報告する
+
+    Examples:
+      | 形式 |
+      | 通常 |
+      | 山括弧とtitle |
+      | destination改行 |
+
+  Scenario: SCN-INT-CODING-1552-015 Lensのpackage内参照定義は許可する
+    Given Coding Engineeringを含む隔離package資産がある
+    When Lensにpackage内参照定義を追加する
+    Then 内部skillの参照とdirectory入口は有効でStepは12件である
