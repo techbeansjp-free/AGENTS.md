@@ -461,6 +461,7 @@ if (process.argv[1] === ${JSON.stringify(cli)} && process.argv[2] === 'workflow'
   };
   delete env.ASC_EXECUTION_CONTEXT_MODE;
   delete env.ASC_WORKFLOW_CLI;
+  delete env.CLAUDE_PROJECT_DIR;
   const args = [
     hook,
     "--trusted-workflow-read",
@@ -516,6 +517,38 @@ if (process.argv[1] === ${JSON.stringify(cli)} && process.argv[2] === 'workflow'
   assert.doesNotThrow(() => JSON.parse(output));
   assert.equal(fs.existsSync(lock), false);
   upgrade(root, { apply: true });
+
+  // Host Bash may lack the hook-only environment, or carry an unrelated root.
+  const otherRoot = this.temp("asc-reviewer-other-root-");
+  const staleEnvironment = spawnSync(process.execPath, args, {
+    cwd: otherRoot,
+    env: { ...env, CLAUDE_PROJECT_DIR: otherRoot },
+    encoding: "utf8",
+  });
+  assert.equal(staleEnvironment.status, 0, staleEnvironment.stderr);
+  assert.equal(
+    fs.existsSync(path.join(otherRoot, ".agent-skill-chain")),
+    false,
+  );
+  const wrongRoot = spawnSync(
+    process.execPath,
+    [
+      hook,
+      "--trusted-workflow-read",
+      `--worktree=${otherRoot}`,
+      `--staging=${staging}`,
+    ],
+    { cwd: root, env: { ...env, ASC_WORKFLOW_CLI: cli }, encoding: "utf8" },
+  );
+  assert.notEqual(
+    wrongRoot.status,
+    0,
+    "別rootのlauncherはoverrideでも拒否する",
+  );
+  assert.equal(
+    fs.existsSync(path.join(otherRoot, ".agent-skill-chain")),
+    false,
+  );
 
   // The reverse order refuses execution without removing another owner's lock.
   fs.unlinkSync(ready);

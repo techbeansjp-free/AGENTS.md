@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const MODES = ["observe", "warn", "enforce"];
 const EVENTS = new Set([
@@ -332,14 +333,14 @@ function checkHandoff(h, exactHead, acquireWriter = false) {
     );
 }
 const shellQuote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
-function trustedWorkflowCli(ownsLock = false) {
+function trustedWorkflowCli(ownsLock = false, projectRoot = process.env.CLAUDE_PROJECT_DIR) {
   const override = process.env.ASC_WORKFLOW_CLI;
   if (override !== undefined) {
     if (!path.isAbsolute(override) || !fs.statSync(override).isFile())
       throw new Error("ASC_WORKFLOW_CLI overrideには実在する絶対pathが必要です");
     return override;
   }
-  const project = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR);
+  const project = fs.realpathSync(projectRoot);
   const namespace = path.join(project, ".agent-skill-chain");
   if (!ownsLock && fs.existsSync(path.join(namespace, "managed-assets-mutation.lock")))
     throw new Error("ASC更新中または中断状態です。managed asset復旧後に新sessionを開始してください");
@@ -398,12 +399,13 @@ function trustedWorkflowCli(ownsLock = false) {
   }
   return path.join(project, cli);
 }
-function withTrustedWorkflowCli(run) {
-  const lock = path.join(fs.realpathSync(process.env.CLAUDE_PROJECT_DIR), ".agent-skill-chain/managed-assets-mutation.lock");
+function withTrustedWorkflowCli(run, projectRoot = process.env.CLAUDE_PROJECT_DIR) {
+  const root = fs.realpathSync(projectRoot);
+  const lock = path.join(root, ".agent-skill-chain/managed-assets-mutation.lock");
   // Share the install/update lock so imports cannot observe a mixed runtime.
   try { fs.mkdirSync(lock); }
   catch (error) { throw new Error("ASC更新中または中断状態です。managed asset復旧後に再試行してください", { cause: error }); }
-  try { return run(trustedWorkflowCli(true)); }
+  try { return run(trustedWorkflowCli(true, root)); }
   finally { fs.rmdirSync(lock); }
 }
 function workflowPreview(cli, worktree, staging) {
@@ -443,7 +445,11 @@ function trustedWorkflowRead() {
     throw new Error("trusted workflow readには絶対pathが必要です");
   // Validation and the child process share one lock lifetime. PreToolUse's
   // observation alone cannot protect a later host Bash invocation from update.
-  const result = withTrustedWorkflowCli((cli) => workflowPreview(cli, worktree, staging));
+  const root = fs.realpathSync(worktree);
+  if (fs.realpathSync(fileURLToPath(import.meta.url)) !==
+      path.join(root, ".claude/hooks/asc-agent-lifecycle.mjs"))
+    throw new Error("trusted workflow readのworktreeとlauncherが一致しません");
+  const result = withTrustedWorkflowCli((cli) => workflowPreview(cli, root, staging), root);
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
   process.exitCode = result.status ?? 1;
