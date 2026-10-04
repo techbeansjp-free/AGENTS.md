@@ -14,7 +14,10 @@ const skillPath = ".agent-skill-chain/skills/coding-engineering";
 
 Given("Coding Engineeringを含む隔離package資産がある", function () {
   this.codingRoot = this.temp("asc-coding-engineering-");
-  fs.writeFileSync(path.join(this.codingRoot, "outside.md"), "境界外の参照先\n");
+  fs.writeFileSync(
+    path.join(this.codingRoot, "outside.md"),
+    "境界外の参照先\n",
+  );
   for (const directory of [
     "skills",
     "templates",
