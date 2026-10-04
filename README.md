@@ -122,7 +122,13 @@ main / coordinator（進行役。継続・resume可能）
 
 ### 必要な場合だけ変更する設定
 
-以下はClaude Codeの起動環境や`.claude/settings.local.json`の`env`で明示するoverrideです。通常は未設定のまま利用してください。modeとtool数の目安は新規session開始時に固定され、途中の環境変更やcompactではリセットされません。
+ここでは、ASC runtimeの環境変数と、Claude Code側でhook実行に影響する設定を分けて説明します。通常は追加設定なしで利用してください。
+
+hookの必須event集合、canonical command、timeout（30秒）、managed runtimeの配置先はASC管理値であり、通常は編集対象ではありません。install/updateはASC所有の登録を標準状態へ揃えます。任意のcommandへ書き換えたラッパーはASC所有と推測せず保持・診断するため、手動変更のすべてを自動修復するわけではありません。利用者のpermissionsや無関係なhookは保持します。
+
+#### ASC runtimeのoverride
+
+次の環境変数はClaude Codeの起動環境や`.claude/settings.local.json`の`env`で明示できます。modeとtool数の目安は新規session開始時に固定され、途中の環境変更やcompactではリセットされません。
 
 | 環境変数 | 未設定時 | 許容値・用途 | 通常変更するか |
 | -------- | -------- | ----------- | ------------ |
@@ -131,7 +137,17 @@ main / coordinator（進行役。継続・resume可能）
 | `ASC_AGENT_BUDGET_MODE` | `warn` | `observe`は計測のみ、`warn`は警告、`enforce`はsubagent上限を強制する実験用設定 | 不要。`enforce`は標準運用に使わない |
 | `ASC_AGENT_MAX_TOOLS` | `120` | `10`〜`1000`の整数。tool試行数の目安 | 不要。この値だけでは強制停止しない |
 
+`compatible`はupdateでも保持する明示overrideです。`short-lived`の明示指定もruntimeでは受理しますが、既定値と同じため、`.claude/settings.local.json`の`env`にある指定はinstall/update時に冗長設定として除去します。起動元shellの環境変数は書き換えません。
+
 tool試行数はAPI call数やcontextのtoken数ではありません。**既定の`warn`では120回でAgentを強制終了しません。** mainはどのbudget modeでもtool数によって停止しません。実験用`enforce`は状態保存完了を待ってから停止する保証がないため、short-livedの標準動作と混同しないでください。
+
+#### Claude Code側のhook設定
+
+| 設定 | 意味 | ASCの扱い・通常の利用 |
+| ---- | ---- | ------------------- |
+| `disableAllHooks: true` | Claude Codeのhook実行全体を無効化し、ASC Agent Lifecycleのhookも動作しなくなる | 通常は使用しません。install/updateは明示的な無効化の意図を保持し、doctorはproject-local設定を不健全として報告します |
+
+`disableAllHooks`は`env`内の文字列ではなく、Claude Code settingsのトップレベルに置くbooleanです。ASCの`compatible`とは異なり、ASC以外のhookにも影響します。通常運用へ戻す場合は有効な設定元を確認して無効化を解除し、doctorで再確認して新規sessionを開始してください。global・managed・plugin側の設定までproject-localのdoctorが観測できるわけではありません。この表はASC連携に関わる項目の説明であり、Claude Code全設定の一覧ではありません。
 
 ### 診断と復旧の入口
 
