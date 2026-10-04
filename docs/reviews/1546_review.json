@@ -3,16 +3,16 @@
   "issue": 1546,
   "observed": {
     "baseSha": "d6a1909cbb6261607e502383d7f08ac83f74f4b9",
-    "implementationHeadSha": "ee21d0c7710a5a3c741b26845f99a6ecfa67339a",
-    "diffDigest": "09a3c641ac86ec41621669f87de0c2baab24fa11c395435a78495195942d154a",
+    "implementationHeadSha": "702055185610db141c69a2b5b45e45277616be7a",
+    "diffDigest": "bf0857d85a4f0f540720a2e7c5a80c8b185364de4225a15a81dc59fd24c0cb37",
     "session": {
       "sessionId": "fab087fdc895a33b859dcb4d505ffb186c6cceb0f1d0abb1a7cb3be40db4be2f",
-      "latestRoundDigest": "64d7a3e9827c73d47f7d523b1c93c2a453367005c989b000e5e6defdeab231cf",
+      "latestRoundDigest": "2c5f2ef72e0d45e3b4056f7ca024f90f4302fb2f8bf296769e28d3502f3c4c79",
       "status": "converged",
-      "countedRounds": 2
+      "countedRounds": 3
     },
     "impact": {
-      "digest": "f6899c23115ca34e9dd4b9e8bc032132b56d248475b901c378ab0502ded32f2f",
+      "digest": "b01c9aa85e9f41472bfc8ea8a7a2017172c8d662b9df452e09ac304546172d4a",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "ee21d0c7710a5a3c741b26845f99a6ecfa67339a",
-        "impactDigest": "f6899c23115ca34e9dd4b9e8bc032132b56d248475b901c378ab0502ded32f2f",
-        "finishedAt": "2026-10-04T02:12:01.516Z",
-        "recordDigest": "8a2f6f5d1c655b600a390e7fb8fbc6e15be63b0d6483d72efdac89aa93fe1b43"
+        "headSha": "702055185610db141c69a2b5b45e45277616be7a",
+        "impactDigest": "b01c9aa85e9f41472bfc8ea8a7a2017172c8d662b9df452e09ac304546172d4a",
+        "finishedAt": "2026-10-04T05:04:12.218Z",
+        "recordDigest": "5c3beab360e17e6a900440f1225a802fa54234cf1d6c535e7990919576e24c33"
       }
     ]
   },
@@ -39,5 +39,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "fbc673b71481564b441349e7ec87e5677e009cb87f508ca48dda0ec56f50990c"
+  "evidenceDigest": "ce28b8e5663917a94af1f7f8713e76aa2f7bedd826967a6e37d057fb916ddf9a"
 }
