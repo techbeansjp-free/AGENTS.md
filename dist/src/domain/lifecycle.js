@@ -15,6 +15,7 @@ import { readStoredStagingRecord, STAGING_RECORD_FILE } from "./staging.js";
 import { DEFAULT_ISSUE_STAGING_ROOT, listStagingRoots, readStagingLayout, } from "./staging-layout.js";
 import { MODE_DECISION_FILE, STEP_JOURNAL_FILE, inspectWorkflowStagingArtifacts, } from "./workflow.js";
 import { surveyWorktrees } from "./worktree-survey.js";
+import { AGENT_LIFECYCLE_COMMAND, AGENT_LIFECYCLE_EVENTS, MANAGED_RUNTIME, planLifecycleSettings, applyLifecycleSettings, } from "./lifecycle-settings.js";
 const packageRoot = findPackageRoot(import.meta.url);
 /**
  * repository直下へ展開するhost入口。
@@ -54,10 +55,8 @@ const HOST_SKILL_TARGETS = [
  * **共通のloopへまとめない。** まとめると、展開先の一覧を消す変異がskillと
  * hookの両方を同時に消し、片方だけを壊す変異を検出できなくなる。
  *
- * **配るのは本体だけである。** hostの設定fileへ登録を書き込まない。登録は
- * 利用者・hostが所有する共有設定への書き込みであり、`install`の権限を
- * 「packageの資産を置く」から「以後のtool callごとに自動実行されるcodeを
- * 登録する」へ広げる。登録状態は`doctor`が報告するだけにとどめる。
+ * 2026-10-04のユーザー判断により、Agent Lifecycleだけは共有設定の
+ * canonical entryもinstall/updateが管理する。他のhookは従来の所有境界を保つ。
  */
 const HOST_HOOK_SOURCE = ".agent-skill-chain/hooks/asc-contract-citation.mjs";
 const HOST_HOOK_TARGETS = [
@@ -68,11 +67,9 @@ const HOST_HOOK_TARGETS = [
 /**
  * hookの登録を観測するproject-localの設定file（Issue #1105）。
  *
- * **読むだけで書かない。** ここへ`install`が書き込むと、`install`の権限が
- * 「以後のtool callごとに自動実行されるcodeを登録する」まで広がる。
+ * file全体は利用者所有。Agent Lifecycleの予約entryのみ構造的に管理する。
  */
 const HOST_HOOK_SETTINGS = ".claude/settings.local.json";
-const AGENT_LIFECYCLE_COMMAND = 'node "$CLAUDE_PROJECT_DIR/.claude/hooks/asc-agent-lifecycle.mjs"';
 /**
  * project-localの設定にhookのentryがあるかを返す純関数（Issue #1105）。
  *
@@ -114,19 +111,11 @@ export function inspectHookRegistration(input) {
         };
 }
 /** 設定の存在だけを観測する。実hostでの発火を保証しない。 */
-export function inspectAgentLifecycleRegistration(settings, executionContextMode = process.env.ASC_EXECUTION_CONTEXT_MODE, workflowCli = process.env.ASC_WORKFLOW_CLI) {
-    const required = [
-        "SessionStart",
-        "SessionEnd",
-        "SubagentStart",
-        "SubagentStop",
-        "PreToolUse",
-        "PostToolUse",
-        "PostToolUseFailure",
-    ];
+export function inspectAgentLifecycleRegistration(settings, executionContextMode = process.env.ASC_EXECUTION_CONTEXT_MODE, workflowCli = process.env.ASC_WORKFLOW_CLI, target) {
+    const required = AGENT_LIFECYCLE_EVENTS;
     let hooks = {};
     let environment = {};
-    let shortLived = executionContextMode === "short-lived";
+    let shortLived = executionContextMode !== "compatible";
     try {
         const parsed = JSON.parse(settings ?? "{}");
         if (isRecord(parsed)) {
@@ -135,8 +124,8 @@ export function inspectAgentLifecycleRegistration(settings, executionContextMode
             if (isRecord(parsed.env))
                 environment = parsed.env;
             if (isRecord(parsed.env) &&
-                parsed.env.ASC_EXECUTION_CONTEXT_MODE === "short-lived")
-                shortLived = true;
+                typeof parsed.env.ASC_EXECUTION_CONTEXT_MODE === "string")
+                shortLived = parsed.env.ASC_EXECUTION_CONTEXT_MODE !== "compatible";
         }
     }
     catch {
@@ -166,7 +155,11 @@ export function inspectAgentLifecycleRegistration(settings, executionContextMode
         .filter(({ commands }) => commands.some((hook) => hook.canonical && hook.coversAll && hook.async !== true))
         .map(({ event }) => event);
     const missingEvents = required.filter((event) => !configuredEvents.includes(event));
-    const cli = environment.ASC_WORKFLOW_CLI ?? workflowCli;
+    const cli = environment.ASC_WORKFLOW_CLI ??
+        workflowCli ??
+        (target
+            ? path.join(target, MANAGED_RUNTIME, "dist/bin/agent-skill-chain.js")
+            : undefined);
     const cliConfigured = typeof cli === "string" && cli.trim() !== "";
     const cliAbsolute = cliConfigured && path.isAbsolute(cli);
     let cliExists = false;
@@ -200,7 +193,7 @@ export function inspectAgentLifecycleRegistration(settings, executionContextMode
         diagnostics.push("ASC_EXECUTION_CONTEXT_MODEはcompatible / short-livedを指定してください");
     if (shortLived) {
         if (!cliConfigured)
-            diagnostics.push("ASC_WORKFLOW_CLIが未設定です");
+            diagnostics.push("managed workflow CLIがありません。install/update --applyで復旧してください");
         else if (!cliAbsolute)
             diagnostics.push("ASC_WORKFLOW_CLIは絶対pathが必要です");
         else if (!cliExists)
@@ -224,42 +217,20 @@ export function inspectAgentLifecycleRegistration(settings, executionContextMode
             timeoutValid: invalidTimeoutEvents.length === 0,
             modeConfigured,
         },
+        effectiveMode: mode ?? "short-lived",
+        cliSource: environment.ASC_WORKFLOW_CLI !== undefined || workflowCli !== undefined
+            ? "override"
+            : "managed-runtime",
         runtimeVerified: false,
         configuration: {
             target: HOST_HOOK_SETTINGS,
             apply: false,
             restart: "new-session",
-            settingsFragment: {
-                env: {
-                    ASC_EXECUTION_CONTEXT_MODE: shortLived ? "short-lived" : "compatible",
-                    ASC_AGENT_BUDGET_MODE: "warn",
-                    ...(shortLived
-                        ? {
-                            ASC_WORKFLOW_CLI: path.join(packageRoot, "dist/bin/agent-skill-chain.js"),
-                        }
-                        : {}),
-                },
-                hooks: Object.fromEntries(required.map((event) => [
-                    event,
-                    [
-                        {
-                            hooks: [
-                                {
-                                    type: "command",
-                                    command: AGENT_LIFECYCLE_COMMAND,
-                                    timeout: 30,
-                                },
-                            ],
-                        },
-                    ],
-                ])),
-            },
+            repair: "install/update --root=. --apply",
             instructions: [
-                "既存settings.local.jsonを保持し、envのASC設定とhooksの不足entryだけを併合する。同じcommandを重複登録せず、他のhook・permissionsを削除しない",
-                "fragmentは設定例であり自動適用しない。hook本体はinstall/update --applyで配置・更新する",
-                "ASC_WORKFLOW_CLIはこのdoctorを提供するpackageの絶対path。継続利用する導入先のCLIでdoctorを実行し、一時的なnpx cacheのpathを固定しない",
-                "登録・mode変更後は新規sessionを開始する。resumeだけでは保存済みmodeは変わらない",
-                "登録済みは動作確認済みではない。新sessionで自然言語の単発Agentと、ASC担当ならworkflow advanceのagentDispatchを確認する",
+                "install/update --applyがASC所有登録とruntimeを管理します。手動設定は不要です",
+                "更新後は新規sessionを開始してください。既存sessionのmodeは保持します",
+                "runtimeVerified=falseはhost実発火を未観測であることを示します",
             ],
         },
     };
@@ -477,7 +448,8 @@ function isPackageOwnedPath(relative) {
      * **`ROOT_ASSETS`を正本にする。** file名を直接書くと、host入口を足したときに
      * 展開はされるがrecord検証で拒否される（Issue #1219で`CLAUDE.md`を足して観測した）。
      */
-    ROOT_ASSETS.includes(normalized) ||
+    normalized.startsWith(`${MANAGED_RUNTIME}/`) ||
+        ROOT_ASSETS.includes(normalized) ||
         HOST_SKILL_TARGETS.includes(normalized) ||
         /**
          * **hookの展開先も同じ扱いにする**（Issue #1105）。ここへ足さないと、
@@ -600,6 +572,35 @@ function mappings(target) {
             src: path.join(packageRoot, ".agent-skill-chain/hooks", path.basename(relative)),
             dest: destination(relative),
         });
+    // Stable project-local package: no npx cache or external absolute binding.
+    const namespaceSources = result
+        .filter(({ dest }) => relativeKey(target, dest).startsWith(".agent-skill-chain/"))
+        .map(({ src }) => src);
+    const runtimeSources = [
+        "package.json",
+        "release-identity.json",
+        "dist/bin",
+        "dist/src",
+        "dist/vendor",
+        "AGENTS.md",
+        "CLAUDE.md",
+        ".agent-skill-chain",
+    ];
+    for (const relative of runtimeSources) {
+        const source = path.join(packageRoot, relative);
+        if (!fs.existsSync(source))
+            continue;
+        const files = fs.statSync(source).isDirectory()
+            ? relative === ".agent-skill-chain"
+                ? namespaceSources
+                : walkFiles(source)
+            : [source];
+        for (const file of files)
+            result.push({
+                src: file,
+                dest: destination(`${MANAGED_RUNTIME}/${path.relative(packageRoot, file)}`),
+            });
+    }
     return result;
 }
 /**
@@ -782,6 +783,7 @@ export function init(target, options) {
 function initUnlocked(target, options, markDirty = () => { }) {
     const assets = mappings(target);
     assertAncestorsNotSymlinked(target, assets);
+    const configuration = planLifecycleSettings(target, "install");
     const conflicts = assets
         .filter(({ src, dest }) => pathEntryExists(dest) &&
         (!isRegularFile(dest) || digest(src) !== digest(dest)))
@@ -796,6 +798,7 @@ function initUnlocked(target, options, markDirty = () => { }) {
     if (!options.apply)
         return {
             applied: false,
+            configuration: configuration.report,
             assets: assets.map(({ dest }) => dest),
             warnings: sourceBuildWarnings(),
         };
@@ -817,9 +820,11 @@ function initUnlocked(target, options, markDirty = () => { }) {
         record.files[relativeKey(target, dest)] = digest(dest);
     }
     markDirty();
+    applyLifecycleSettings(configuration);
     publishManagedAssetRecord(target, record, recordPresent, expectedParent);
     return {
         applied: true,
+        configuration: configuration.report,
         assets: Object.keys(record.files),
         warnings: sourceBuildWarnings(),
     };
@@ -975,6 +980,7 @@ function upgradeUnlocked(target, options, markDirty = () => { }) {
     const expectedParent = observed?.parent ?? null;
     const current = mappings(target);
     assertAncestorsNotSymlinked(target, current);
+    const configuration = planLifecycleSettings(target, "install");
     /**
      * **record不在は「導入済み」の代わりにならない**（Issue #1305）。
      *
@@ -1005,6 +1011,7 @@ function upgradeUnlocked(target, options, markDirty = () => { }) {
     if (!options.apply)
         return {
             applied: false,
+            configuration: configuration.report,
             planned: planned.map((item) => item.key),
             adopted: adoptable,
             retained,
@@ -1040,8 +1047,15 @@ function upgradeUnlocked(target, options, markDirty = () => { }) {
         next.files[item.key] = digest(item.dest);
     }
     markDirty();
+    applyLifecycleSettings(configuration);
     publishManagedAssetRecord(target, next, recordPresent, expectedParent);
-    return { applied: true, adopted, retained, warnings: sourceBuildWarnings() };
+    return {
+        applied: true,
+        configuration: configuration.report,
+        adopted,
+        retained,
+        warnings: sourceBuildWarnings(),
+    };
 }
 export function uninstall(target, options) {
     return options.apply
@@ -1053,6 +1067,7 @@ function uninstallUnlocked(target, options, markDirty = () => { }) {
     if (!hasManagedAssetRecord(target))
         throw new Error(`managed asset recordがありません。撤去対象を確定できません。${recoveryDiagnostic(target)}`);
     const managed = readManagedAssetRecord(target);
+    const configuration = planLifecycleSettings(target, "delete");
     const removable = [];
     const retained = [];
     for (const { relative, file, expected } of managed.assets) {
@@ -1072,6 +1087,10 @@ function uninstallUnlocked(target, options, markDirty = () => { }) {
             pending: [],
             recovery: "previewのため変更はありません",
         };
+    if (configuration.changed) {
+        markDirty();
+        applyLifecycleSettings(configuration);
+    }
     const candidates = [];
     for (const asset of managed.assets) {
         if (!removable.includes(asset.file))
@@ -1455,6 +1474,54 @@ export function doctor(target, worktreeObservations) {
         : installed && !recordRead
             ? recoveryDiagnostic(target)
             : "managed recordの状態を確認してください";
+    const agentLifecycle = inspectAgentLifecycleRegistration(hookSettingsFile &&
+        fs.existsSync(hookSettingsFile) &&
+        isRegularFile(hookSettingsFile)
+        ? fs.readFileSync(hookSettingsFile, "utf8")
+        : undefined, process.env.ASC_EXECUTION_CONTEXT_MODE, process.env.ASC_WORKFLOW_CLI, target);
+    const lifecycleDiagnostics = [];
+    try {
+        for (const { src, dest } of mappings(target)) {
+            const key = relativeKey(target, dest);
+            if ((key.startsWith(`${MANAGED_RUNTIME}/`) ||
+                key === ".claude/hooks/asc-agent-lifecycle.mjs") &&
+                (files[key] !== digest(src) ||
+                    !pathEntryExists(dest) ||
+                    !isRegularFile(dest) ||
+                    digest(dest) !== digest(src)))
+                lifecycleDiagnostics.push(`${key}: current packageとmanaged runtimeが一致しません`);
+        }
+    }
+    catch (error) {
+        lifecycleDiagnostics.push(error instanceof Error ? error.message : "runtime診断失敗");
+    }
+    const inspectRuntimeInventory = (directory) => {
+        if (!pathEntryExists(directory))
+            return;
+        const stat = fs.lstatSync(directory);
+        if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) {
+            lifecycleDiagnostics.push(`${relativeKey(target, directory)}: runtimeの非通常entryです`);
+            return;
+        }
+        if (stat.isDirectory()) {
+            for (const name of fs.readdirSync(directory))
+                inspectRuntimeInventory(path.join(directory, name));
+        }
+        else if (!files[relativeKey(target, directory)]) {
+            lifecycleDiagnostics.push(`${relativeKey(target, directory)}: runtimeの未登録fileです`);
+        }
+    };
+    try {
+        inspectRuntimeInventory(path.join(target, MANAGED_RUNTIME));
+    }
+    catch (error) {
+        lifecycleDiagnostics.push(error instanceof Error ? error.message : "runtime inventory診断失敗");
+    }
+    agentLifecycle.diagnostics.push(...lifecycleDiagnostics);
+    agentLifecycle.healthy =
+        agentLifecycle.diagnostics.length === 0 &&
+            !pathEntryExists(path.join(target, MANAGED_MUTATION_LOCK));
+    diagnostics.push(...agentLifecycle.diagnostics);
     return {
         healthy: installed && diagnostics.length === 0,
         installed,
@@ -1496,11 +1563,7 @@ export function doctor(target, worktreeObservations) {
             agentLifecycle: {
                 canonical: ".agent-skill-chain/hooks/asc-agent-lifecycle.mjs",
                 expected: ".claude/hooks/asc-agent-lifecycle.mjs",
-                ...inspectAgentLifecycleRegistration(hookSettingsFile !== undefined &&
-                    fs.existsSync(hookSettingsFile) &&
-                    isRegularFile(hookSettingsFile)
-                    ? fs.readFileSync(hookSettingsFile, "utf8")
-                    : undefined),
+                ...agentLifecycle,
             },
             registered: hookRegistration.registered,
             diagnostics: hookRegistration.registered ? [] : [hookRegistration.reason],

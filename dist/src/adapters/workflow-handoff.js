@@ -18,7 +18,7 @@ const ROLES = {
 };
 /** Optional execution advice; never an approval or a substitute for workflow gates. */
 export function observeWorkflowHandoff(staging, step, resume) {
-    if (process.env.ASC_EXECUTION_CONTEXT_MODE !== "short-lived")
+    if ((process.env.ASC_EXECUTION_CONTEXT_MODE ?? "short-lived") !== "short-lived")
         return undefined;
     if (resume.errors.length > 0 || resume.headSha === null)
         return { state: "blocked", errors: resume.errors };

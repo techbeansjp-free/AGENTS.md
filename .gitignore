@@ -40,3 +40,6 @@ dist/**/*.js.map
 # ローカルツール設定と実行ログ
 test-execution.log
 *.log
+
+# install/updateが配布するproject-local CLI
+.agent-skill-chain/managed-runtime/

@@ -478,7 +478,8 @@ export function buildReviewRoundDraft(input: {
     if (
       fixed.length === 0 &&
       (previous.status !== "active" ||
-        process.env.ASC_EXECUTION_CONTEXT_MODE !== "short-lived")
+        (process.env.ASC_EXECUTION_CONTEXT_MODE ?? "short-lived") !==
+          "short-lived")
     )
       throw new Error(
         "review round --init: 前round headからの実Git差分が空です。前roundのcandidate HEADが現在のHEADと同じです。多くの場合、前roundの--headに「そのroundを検分したHEAD」ではなく「そのroundの指摘を是正した後のHEAD」を渡しています。その場合、HEADを進めても取り違えが重なるだけです。review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください",

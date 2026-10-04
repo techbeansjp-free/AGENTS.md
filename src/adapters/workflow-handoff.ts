@@ -28,7 +28,9 @@ export function observeWorkflowHandoff(
   step: number | undefined,
   resume: WorkflowResume,
 ) {
-  if (process.env.ASC_EXECUTION_CONTEXT_MODE !== "short-lived")
+  if (
+    (process.env.ASC_EXECUTION_CONTEXT_MODE ?? "short-lived") !== "short-lived"
+  )
     return undefined;
   if (resume.errors.length > 0 || resume.headSha === null)
     return { state: "blocked", errors: resume.errors };

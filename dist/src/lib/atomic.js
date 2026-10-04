@@ -391,6 +391,7 @@ export function writeFileAtomic(destination, contents, options = {}) {
         temporaryDescriptor = undefined;
         assertPinnedDirectory(source);
         assertPinnedDirectory(target);
+        options.beforePublish?.();
         fs.renameSync(temporary, publishTarget);
         options.onPublished?.();
         fsyncDirectory(target);

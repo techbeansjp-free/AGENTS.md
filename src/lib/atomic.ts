@@ -4,6 +4,8 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 
 interface AtomicWriteOptions {
+  /** Revalidate shared state immediately before publication. */
+  beforePublish?: () => void;
   /** Exact permission bits for the published regular file. Defaults to 0600. */
   fileMode?: number;
   /**
@@ -510,6 +512,7 @@ export function writeFileAtomic(
     temporaryDescriptor = undefined;
     assertPinnedDirectory(source);
     assertPinnedDirectory(target);
+    options.beforePublish?.();
     fs.renameSync(temporary, publishTarget);
     options.onPublished?.();
     fsyncDirectory(target);

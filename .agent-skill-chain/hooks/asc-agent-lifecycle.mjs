@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Opt-in Claude Code lifecycle guard. State is operational, never workflow authority. */
+/** Managed Claude Code lifecycle guard. State is operational, never workflow authority. */
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -332,12 +332,83 @@ function checkHandoff(h, exactHead, acquireWriter = false) {
     );
 }
 const shellQuote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
+function trustedWorkflowCli(ownsLock = false) {
+  const override = process.env.ASC_WORKFLOW_CLI;
+  if (override !== undefined) {
+    if (!path.isAbsolute(override) || !fs.statSync(override).isFile())
+      throw new Error("ASC_WORKFLOW_CLI overrideには実在する絶対pathが必要です");
+    return override;
+  }
+  const project = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR);
+  const namespace = path.join(project, ".agent-skill-chain");
+  if (!ownsLock && fs.existsSync(path.join(namespace, "managed-assets-mutation.lock")))
+    throw new Error("ASC更新中または中断状態です。managed asset復旧後に新sessionを開始してください");
+  const read = (relative) => {
+    let file = project;
+    for (const part of relative.split("/")) {
+      if (!part || part === "." || part === "..") throw new Error("managed pathが不正です");
+      file = path.join(file, part);
+      if (fs.lstatSync(file).isSymbolicLink()) throw new Error("managed runtimeのsymlinkを拒否しました");
+    }
+    if (!fs.lstatSync(file).isFile()) throw new Error("managed runtimeが通常fileではありません");
+    return fs.readFileSync(file);
+  };
+  const anchor = read(".agent-skill-chain/managed-assets.json");
+  let record = JSON.parse(anchor);
+  let parent = `legacy-${digest(anchor)}`;
+  const snapshots = path.join(namespace, "managed-assets-records");
+  if (fs.existsSync(snapshots) && !fs.lstatSync(snapshots).isDirectory())
+    throw new Error("managed snapshot directoryが通常directoryではありません");
+  const remaining = new Set(fs.existsSync(snapshots) ? fs.readdirSync(snapshots).filter((name) =>
+    !/^\.(?:(?:legacy|snapshot)-[a-f0-9]{64}|record-link-probe(?:-target)?)\.json\.tmp-[0-9]+-[a-f0-9]{24}$/u.test(name) &&
+    !/^\.record-link-probe-[0-9]+-[a-f0-9]{24}\.tmp$/u.test(name) &&
+    !/^\.\.record-link-probe-[0-9]+-[a-f0-9]{24}\.tmp\.tmp-[0-9]+-[a-f0-9]{24}$/u.test(name)) : []);
+  while (remaining.has(`${parent}.json`)) {
+    const name = `${parent}.json`;
+    const next = JSON.parse(read(`.agent-skill-chain/managed-assets-records/${name}`));
+    if (next.schemaVersion !== 1 || next.parent !== parent ||
+        digest(JSON.stringify({ schemaVersion: 1, parent, record: next.record })) !== next.payloadDigest)
+      throw new Error("managed snapshotのdigestが不一致です");
+    record = next.record;
+    parent = `snapshot-${next.payloadDigest}`;
+    remaining.delete(name);
+  }
+  if (remaining.size) throw new Error("managed snapshotの連鎖が不正です");
+  const prefix = ".agent-skill-chain/managed-runtime/";
+  const cli = `${prefix}dist/bin/agent-skill-chain.js`;
+  if (!record.files?.[cli]) throw new Error("managed workflow CLIがありません。install/update --applyが必要です");
+  const inventory = (relative) => {
+    const file = path.join(project, relative);
+    const stat = fs.lstatSync(file);
+    if (stat.isSymbolicLink()) throw new Error("managed runtimeのsymlinkを拒否しました");
+    if (stat.isDirectory()) return fs.readdirSync(file).flatMap((name) => inventory(`${relative}/${name}`));
+    if (!stat.isFile()) throw new Error("managed runtimeが通常fileではありません");
+    return [relative];
+  };
+  const actualFiles = inventory(prefix.slice(0, -1)).sort();
+  const recordedFiles = Object.keys(record.files).filter((key) => key.startsWith(prefix)).sort();
+  if (JSON.stringify(actualFiles) !== JSON.stringify(recordedFiles))
+    throw new Error("managed runtimeに未登録または欠落したfileがあります");
+  if (!record.files[".claude/hooks/asc-agent-lifecycle.mjs"] ||
+      record.files[".claude/hooks/asc-agent-lifecycle.mjs"] !== record.files[`${prefix}.agent-skill-chain/hooks/asc-agent-lifecycle.mjs`])
+    throw new Error("hookとmanaged runtimeの版が一致しません");
+  for (const [relative, expected] of Object.entries(record.files)) {
+    if ((relative.startsWith(prefix) || relative === ".claude/hooks/asc-agent-lifecycle.mjs") && digest(read(relative)) !== expected)
+      throw new Error(`managed runtimeのhashが不一致です: ${relative}`);
+  }
+  return path.join(project, cli);
+}
 function verifyDispatch(h) {
-  const cli = process.env.ASC_WORKFLOW_CLI;
-  if (!cli || !path.isAbsolute(cli) || !fs.statSync(cli).isFile())
-    throw new Error(
-      "fresh dispatchには信頼済みASC_WORKFLOW_CLIの絶対path設定が必要です",
-    );
+  if (process.env.ASC_WORKFLOW_CLI !== undefined) return verifyDispatchLocked(h, false);
+  const lock = path.join(fs.realpathSync(process.env.CLAUDE_PROJECT_DIR), ".agent-skill-chain/managed-assets-mutation.lock");
+  // Share the install/update lock so imports cannot observe a mixed runtime.
+  try { fs.mkdirSync(lock); }
+  catch (error) { throw new Error("ASC更新中または中断状態です。managed asset復旧後に再試行してください", { cause: error }); }
+  try { return verifyDispatchLocked(h, true); }
+  finally { fs.rmdirSync(lock); }
+}
+function verifyDispatchLocked(h, ownsLock) {
+  const cli = trustedWorkflowCli(ownsLock);
   const result = spawnSync(
     process.execPath,
     [cli, "workflow", "advance", `--staging=${h.staging}`],
@@ -361,11 +432,7 @@ function verifyDispatch(h) {
     );
 }
 function reviewerCommands(h) {
-  const cli = process.env.ASC_WORKFLOW_CLI;
-  if (!cli || !path.isAbsolute(cli) || !fs.statSync(cli).isFile())
-    throw new Error(
-      "Reviewerの読取CLIにはASC_WORKFLOW_CLIの絶対path設定が必要です",
-    );
+  const cli = trustedWorkflowCli();
   return {
     resume: `node ${shellQuote(cli)} workflow advance ${shellQuote("--staging=" + h.staging)}`,
     gitPrefix: `git -C ${shellQuote(h.worktree)} --no-pager `,
@@ -959,7 +1026,7 @@ function run(input) {
           cause: error,
         });
       const executionContextMode =
-        process.env.ASC_EXECUTION_CONTEXT_MODE ?? "compatible";
+        process.env.ASC_EXECUTION_CONTEXT_MODE ?? "short-lived";
       if (!["compatible", "short-lived"].includes(executionContextMode))
         throw new Error(
           "ASC_EXECUTION_CONTEXT_MODEはcompatible / short-livedです",

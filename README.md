@@ -4,6 +4,8 @@ agent-skill-chainは、人とAI agentが同じ手順で使える、安全側に�
 
 このREADMEは初めて利用する人のための非規範的な公開入口です。規則や製品仕様はここで再定義せず、後述する正本を参照してください。
 
+Claude CodeのAgent Lifecycleは、既存の`install/update --apply`でhook登録と対応CLIまで構成します。追加のenv・hook・版付きCLI path・timeoutの手設定は不要です。更新後は新規sessionを開始してください。設定の所有境界と互換overrideは[hook利用案内](.agent-skill-chain/hooks/00_利用案内.md)を参照してください。
+
 ## 前提条件
 
 - Node.js 20以上
