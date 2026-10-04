@@ -145,9 +145,9 @@ tool試行数はAPI call数やcontextのtoken数ではありません。**既定
 
 | 設定 | 意味 | ASCの扱い・通常の利用 |
 | ---- | ---- | ------------------- |
-| `disableAllHooks: true` | Claude Codeのhook実行全体を無効化し、ASC Agent Lifecycleのhookも動作しなくなる | 通常は使用しません。install/updateは明示的な無効化の意図を保持し、doctorはproject-local設定を不健全として報告します |
+| `disableAllHooks: true` | Claude Code側でhookを無効化する設定。project-localのASC Agent Lifecycle hookも停止する | 通常は使用しません。install/updateは明示的な無効化の意図を保持し、doctorはproject-local設定を不健全として報告します |
 
-`disableAllHooks`は`env`内の文字列ではなく、Claude Code settingsのトップレベルに置くbooleanです。ASCの`compatible`とは異なり、ASC以外のhookにも影響します。通常運用へ戻す場合は有効な設定元を確認して無効化を解除し、doctorで再確認して新規sessionを開始してください。global・managed・plugin側の設定までproject-localのdoctorが観測できるわけではありません。この表はASC連携に関わる項目の説明であり、Claude Code全設定の一覧ではありません。
+`disableAllHooks`は`env`内の文字列ではなく、Claude Code settingsのトップレベルに置くbooleanです。ASCの`compatible`とは異なり、ASC以外のhookにも影響します。通常運用へ戻す場合は有効な設定元を確認して無効化を解除し、doctorで再確認して新規sessionを開始してください。global・managed・plugin側の設定までproject-localのdoctorが観測できるわけではありません。local設定ではmanaged policyのhookを無効化できません。設定階層による適用範囲は[Claude Code公式仕様](https://code.claude.com/docs/en/hooks#disable-or-remove-hooks)を参照してください。この表はASC連携に関わる項目の説明であり、Claude Code全設定の一覧ではありません。
 
 ### 診断と復旧の入口
 
