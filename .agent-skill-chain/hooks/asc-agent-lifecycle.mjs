@@ -1330,9 +1330,9 @@ try {
 } catch (error) {
   const reason = `ASC lifecycle記録を確認できません（${error.code ?? "invalid-state"}）。hook設定・--report・実行中processを確認してください。残存予約はowner停止確認と明示復旧が必要で、新sessionだけでは解除されません。`;
   if (input?.hook_event_name === "PreToolUse") {
-    const readOnly = ["Read", "Glob", "Grep", "WebSearch", "WebFetch"].includes(input.tool_name);
-    process.stdout.write(`${JSON.stringify(readOnly
-      ? context("PreToolUse", `ASC Warn: ${reason} 読取だけを継続できます。計測の保存は未完了です。`)
+    const nonMutating = TASK_READ_TOOLS.has(input.tool_name);
+    process.stdout.write(`${JSON.stringify(nonMutating
+      ? context("PreToolUse", `ASC Warn: ${reason} 読取・連絡・結果返却は継続できます。計測の保存は未完了です。`)
       : deny(reason))}\n`);
   }
   else {

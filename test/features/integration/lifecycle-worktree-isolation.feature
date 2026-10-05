@@ -50,3 +50,8 @@ Feature: lifecycleの競合を担当worktreeへ隔離する
     Given lifecycle隔離用の2つのGit worktreeとsessionがある
     When 未pruneのworktreeと一覧取得失敗に対する変更先判定を検査する
     Then lifecycle隔離判定は"allow"になる
+
+  Scenario: SCN-INT-LIFEISO-008 state異常時もworkerは結果を返却できる
+    Given lifecycle隔離用の2つのGit worktreeとsessionがある
+    When active workerのstate破損とlock競合で連絡と結果返却を検査する
+    Then lifecycle隔離判定は"allow"になる

@@ -604,3 +604,95 @@ When(
     f.result = write("restored-own", path.join(f.root, "src/auth.ts"));
   },
 );
+
+When(
+  "active workerのstate破損とlock競合で連絡と結果返却を検査する",
+  function () {
+    const f = this.value as Fixture;
+    allow(
+      call(f, "A", "PreToolUse", {
+        tool_name: "Agent",
+        tool_use_id: "reporting-worker",
+        tool_input: { prompt: "調査", subagent_type: "Explore" },
+      }),
+    );
+    allow(
+      call(f, "A", "SubagentStart", {
+        agent_id: "reporter",
+        agent_type: "Explore",
+      }),
+    );
+    allow(call(f, "A", "PostToolUse", { tool_use_id: "reporting-worker" }));
+    const directory = path.join(
+      f.root,
+      ".agent-skill-chain/runtime/agent-lifecycle",
+    );
+    const filename = fs
+      .readdirSync(directory)
+      .find(
+        (name) =>
+          name.endsWith(".json") &&
+          JSON.parse(fs.readFileSync(path.join(directory, name), "utf8"))
+            .sessionId === "A",
+      );
+    assert.ok(filename);
+    const file = path.join(directory, filename);
+    const original = fs.readFileSync(file, "utf8");
+    assert.ok(
+      JSON.parse(original).agents.some(
+        (agent: { id: string; status: string }) =>
+          agent.id === "reporter" && agent.status === "active",
+      ),
+    );
+    const lock = path.join(directory, "worktree.lock");
+    for (const failure of ["corrupt", "locked"]) {
+      if (failure === "corrupt") fs.writeFileSync(file, "{}");
+      else {
+        fs.mkdirSync(lock);
+        fs.writeFileSync(
+          path.join(lock, "owner.json"),
+          JSON.stringify({
+            pid: process.pid,
+            createdAt: new Date().toISOString(),
+          }),
+        );
+      }
+      const before = fs.readFileSync(file, "utf8");
+      try {
+        for (const tool of ["SubagentHandback", "SendMessage", "Read"]) {
+          const result = call(f, "A", "PreToolUse", {
+            agent_id: "reporter",
+            tool_name: tool,
+            tool_use_id: failure + tool,
+            tool_input: { recipient: "A", content: "作業結果" },
+          });
+          allow(result);
+          assert.match(result, /ASC Warn/);
+          assert.match(result, /計測の保存は未完了/);
+          f.result = result;
+        }
+        for (const tool of ["Write", "Bash", "Agent"]) {
+          deny(
+            call(f, "A", "PreToolUse", {
+              agent_id: "reporter",
+              tool_name: tool,
+              tool_use_id: failure + tool,
+              tool_input: {
+                file_path: path.join(f.root, "src/auth.ts"),
+                command: "git add src/auth.ts",
+                prompt: "実装",
+                subagent_type: "general-purpose",
+              },
+            }),
+          );
+        }
+        assert.equal(fs.readFileSync(file, "utf8"), before);
+        if (failure === "locked")
+          assert.equal(fs.existsSync(path.join(lock, "owner.json")), true);
+      } finally {
+        if (failure === "corrupt") fs.writeFileSync(file, original);
+        else fs.rmSync(lock, { recursive: true });
+      }
+    }
+  },
+);
