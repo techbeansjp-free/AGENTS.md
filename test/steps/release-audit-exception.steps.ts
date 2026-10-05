@@ -1,3 +1,9 @@
+import { execFileSync } from "node:child_process";
+import {
+  checkFileAudit,
+  assertReleaseAuditExceptionEligible,
+} from "../../scripts/check_file_audit.js";
+import { syntheticReviewEvidenceContent } from "../support/review-evidence-fixture.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -9,6 +15,11 @@ import {
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class AuditExceptionWorld extends WorkflowWorld {
+  auditRoot = "";
+  auditKind = "";
+  auditHead = "";
+  cutoff = "";
+  auditAllowed = false;
   exceptionEnvironment: NodeJS.ProcessEnv = {};
   exception: ReturnType<typeof releaseAuditException>;
 }
@@ -86,6 +97,10 @@ Then(
       assert.throws(() =>
         recordReleaseAuditException(exception, audit, "summary.md"),
       );
+      fs.unlinkSync("release-audit-exception.json");
+      assert.throws(() =>
+        recordReleaseAuditException(exception, audit, "missing/summary.md"),
+      );
     } finally {
       process.chdir(previous);
       fs.rmSync(directory, { recursive: true, force: true });
@@ -119,4 +134,69 @@ Then("releaseの品質gateは維持され工程監査だけに例外入力が渡
   );
   const entry = fs.readFileSync("scripts/check_file_audit.ts", "utf8");
   assert.match(entry, /else if \(!result.valid\) process.exitCode = 1/u);
+});
+
+Given(
+  "工程監査例外の実Git境界fixture {string} がある",
+  function (kind: string) {
+    this.auditRoot = this.initRepo();
+    this.auditKind = kind;
+    const run = (...args: string[]) =>
+      execFileSync("git", args, {
+        cwd: this.auditRoot,
+        encoding: "utf8",
+      }).trim();
+    this.cutoff = run("rev-parse", "HEAD");
+    run("checkout", "-q", "-b", "candidate");
+    fs.writeFileSync(path.join(this.auditRoot, "change.md"), "REQ-KEEP-001\n");
+    run("add", "change.md");
+    run("commit", "-qm", "implementation");
+    if (kind === "corrupt" || kind === "binding") {
+      fs.mkdirSync(path.join(this.auditRoot, "docs/reviews"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(this.auditRoot, "docs/reviews/1_review.json"),
+        kind === "corrupt"
+          ? "{broken"
+          : syntheticReviewEvidenceContent({
+              issue: 1,
+              baseSha: this.cutoff,
+              implementationHeadSha: this.cutoff,
+            }),
+      );
+      run("add", "docs/reviews/1_review.json");
+      run("commit", "-qm", "review");
+    }
+    if (kind !== "single-parent") {
+      run("checkout", "-q", "main");
+      run("merge", "--no-ff", "--no-commit", "candidate");
+      if (kind === "loss") {
+        fs.writeFileSync(path.join(this.auditRoot, "change.md"), "lost\n");
+        run("add", "change.md");
+      }
+      run("commit", "-qm", "release merge");
+    }
+    this.auditHead = run("rev-parse", "HEAD");
+  },
+);
+
+When("工程監査の実結果にrelease例外を適用する", function () {
+  const result = checkFileAudit(this.auditRoot, this.cutoff);
+  assert.equal(result.valid, false);
+  this.auditAllowed = false;
+  try {
+    assertReleaseAuditExceptionEligible(
+      this.auditRoot,
+      this.auditKind === "unobserved" ? undefined : this.auditHead,
+      result,
+    );
+    this.auditAllowed = true;
+  } catch (error) {
+    assert.ok(error instanceof Error);
+  }
+});
+
+Then("工程監査例外の適用可否は {string} になる", function (expected: string) {
+  assert.equal(this.auditAllowed, expected === "allow");
 });

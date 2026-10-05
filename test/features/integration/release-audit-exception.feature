@@ -16,3 +16,17 @@ Feature: 手動releaseの工程証跡監査例外
     Given 対象SHAと理由を指定した手動release環境がある
     When 手動releaseの工程監査例外を評価する
     Then releaseの品質gateは維持され工程監査だけに例外入力が渡る
+
+  Scenario Outline: SCN-INT-RELEASE-EXCEPTION-004 実Gitの監査で証跡欠落だけを例外化する
+    Given 工程監査例外の実Git境界fixture "<kind>" がある
+    When 工程監査の実結果にrelease例外を適用する
+    Then 工程監査例外の適用可否は "<result>" になる
+
+    Examples:
+      | kind          | result |
+      | missing       | allow  |
+      | corrupt       | deny   |
+      | binding       | deny   |
+      | loss          | deny   |
+      | unobserved    | deny   |
+      | single-parent | deny   |
