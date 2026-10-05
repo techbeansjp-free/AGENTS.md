@@ -703,7 +703,6 @@ function inputHasDefault(
 const DISTRIBUTION_VERIFICATION_SCRIPTS = [
   "prepack",
   "verify:distribution",
-  "verify:release",
 ] as const;
 
 function blockHasDistributionVerification(block: string[]): boolean {

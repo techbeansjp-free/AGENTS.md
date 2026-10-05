@@ -65,8 +65,7 @@
     "quality": "npm run lint && npm run format:check && npm run typecheck && npm run source:check && npm test",
     "verify:distribution": "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run audit:check && npm run package:check",
     "prepare": "npm run build",
-    "prepack": "npm run build",
-    "verify:release": "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && node --import tsx scripts/check_release_integrity.ts && npm run package:check"
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",

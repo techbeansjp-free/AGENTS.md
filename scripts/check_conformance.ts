@@ -1250,22 +1250,10 @@ export function checkDistributionGateReachability(root: string): string[] {
     return errors;
   }
   const steps = releaseRunSteps(fs.readFileSync(workflowFile, "utf8"));
-  const releaseCommand =
-    "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && node --import tsx scripts/check_release_integrity.ts && npm run package:check";
-  if (
-    steps.some((step) =>
-      /\bnpm\s+run\s+verify:release(?![A-Za-z0-9:._-])/u.test(step.command),
-    ) &&
-    scripts["verify:release"] !== releaseCommand
-  )
-    errors.push(
-      "verify:releaseはPR証跡以外の品質gateとmerge integrityを順序どおり完全一致で実行する必要があります",
-    );
-
   const patternOf = (kind: "prepack" | "verify"): RegExp =>
     kind === "prepack"
       ? /^npm\s+run\s+prepack(?![A-Za-z0-9:._-])/u
-      : /^npm\s+run\s+verify:(?:distribution|release)(?![A-Za-z0-9:._-])/u;
+      : /^npm\s+run\s+verify:distribution(?![A-Za-z0-9:._-])/u;
   const commandMatches = (kind: "prepack" | "verify", step: ReleaseRunStep) =>
     reliableSegments(step.command).some((entry) => patternOf(kind).test(entry));
   const invocationIndex = (kind: "prepack" | "verify"): number =>

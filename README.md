@@ -172,6 +172,8 @@ hookの停止記録やwriter予約が残った場合も、時刻だけで自動�
 
 ## 手動releaseの工程監査例外
 
-mainへのpushによる自動releaseは維持します。releaseは`verify:release`で品質・全test・build・conformance・配布物を検査します。PR用のレビュー証跡差分監査（`audit:check`）はreleaseでは実行しません。代わりにremote既定branch tipとの一致、親が2つのmerge commit、一意な比較基点とmerge integrityを必須とし、観測不能・変更消失は公開を止めます。
+mainへのpushによる自動releaseは維持します。releaseは`verify:distribution`で品質・全test・build・conformance・配布物を検査します。PR用のレビュー証跡差分監査（`audit:check`）はreleaseでは実行しません。代わりにremote既定branch tipとの一致、親が2つのmerge commit、一意な比較基点とmerge integrityを必須とし、観測不能・変更消失は公開を止めます。
 
-PRのCIと`verify:distribution`は従来のレビュー証跡監査を維持します。手動releaseでは`version`と`dry_run`を指定できます。工程監査例外のSHA・理由はreleaseの入力として不要です。
+PRのCIと通常の`verify:distribution`は従来のレビュー証跡監査を維持します。手動releaseでは`version`と`dry_run`を指定できます。工程監査例外のSHA・理由はreleaseの入力として不要です。
+
+release workflowの検証stepだけが`ASC_RELEASE_INTEGRITY_ONLY=true`を設定する。既定branchのpushまたは手動Actionsで、実HEADと実行SHAが一致するときだけ切り替える。PR event・別branch・不完全な実行情報では切り替えを拒否する。
