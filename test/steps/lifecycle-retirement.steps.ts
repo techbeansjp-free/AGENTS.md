@@ -102,6 +102,31 @@ When("廃止hookと旧登録の移行を状態異常込みで検証する", func
       "stale.json",
       "worktree.lock",
     ]);
+    const large = spawnSync(
+      process.execPath,
+      [path.join(root, ".agent-skill-chain/hooks/asc-agent-lifecycle.mjs")],
+      {
+        env: { ...process.env, CLAUDE_PROJECT_DIR: fixture },
+        input: JSON.stringify({
+          hook_event_name: "PreToolUse",
+          tool_name: "Write",
+          tool_input: { content: "x".repeat(8 * 1024 * 1024) },
+        }),
+        encoding: "utf8",
+        timeout: 10000,
+      },
+    );
+    assert.equal(large.error, undefined);
+    assert.equal(large.status, 0, large.stderr);
+    assert.deepEqual(JSON.parse(large.stdout), {});
+    assert.equal(
+      fs.readFileSync(path.join(state, "stale.json"), "utf8"),
+      before,
+    );
+    assert.deepEqual(fs.readdirSync(state).sort(), [
+      "stale.json",
+      "worktree.lock",
+    ]);
     assert.equal(cases, 36);
     this.value = true;
   } finally {
