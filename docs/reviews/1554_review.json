@@ -2,17 +2,17 @@
   "schemaVersion": "agent-skill-chain/review-evidence/v2",
   "issue": 1554,
   "observed": {
-    "baseSha": "ea01a07f77afe14ef5a3f8085c9f9b45bdc02862",
-    "implementationHeadSha": "7573aa9ce713b83fbed59b3eb19b421da35de018",
-    "diffDigest": "0d71c5041d686897a21520425b5bbb86e9b2b982c64a595e147d0188995add2c",
+    "baseSha": "b263b07325c197b6a2204826143adfe32edf796c",
+    "implementationHeadSha": "1a95d7f41c35ea1771e586662bd3503770d6d140",
+    "diffDigest": "826ff413345bb4d37101dd998b019658d23a09de7ff317968382b6d1d297da99",
     "session": {
-      "sessionId": "b3d4625aca6ff508d286406df1d4aada084b61b4c3682e3d72fcbfe166fa3293",
-      "latestRoundDigest": "fb1e756a64723a1b1245ca18ce9e377f4880d8ba839c7318fad661da2a2b6958",
+      "sessionId": "4f12366de52286bcd29d35317e379cbc32d22c0ef98b412a540a50d538c5576c",
+      "latestRoundDigest": "1b3caee35a8fa4cefa5210c0b6b3349585b165de67d61971911033c057fdbf21",
       "status": "converged",
-      "countedRounds": 3
+      "countedRounds": 2
     },
     "impact": {
-      "digest": "42189204687f52c7dce4723ae5508f85ff1597510a0569c0eac465ef2c170f4f",
+      "digest": "1b0e5437510e1885fefa8676fb4000cadc6c91e3b47f84c93f5c4eb033400fd3",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "7573aa9ce713b83fbed59b3eb19b421da35de018",
-        "impactDigest": "42189204687f52c7dce4723ae5508f85ff1597510a0569c0eac465ef2c170f4f",
-        "finishedAt": "2026-10-05T21:19:37.375Z",
-        "recordDigest": "41189db3885176c80608852bb1a3a7c18664e1acd5ad9f3a6a98a6e3e5f2434c"
+        "headSha": "1a95d7f41c35ea1771e586662bd3503770d6d140",
+        "impactDigest": "1b0e5437510e1885fefa8676fb4000cadc6c91e3b47f84c93f5c4eb033400fd3",
+        "finishedAt": "2026-10-05T23:41:19.649Z",
+        "recordDigest": "d9d3d87bf75ddbb297037b0194ccf9022bea7fac2cbe75e64d129d297c040166"
       }
     ]
   },
@@ -34,10 +34,10 @@
   "unresolvedCriticalHigh": [],
   "verdict": "approved",
   "declared": {
-    "reviewer": "codex-release-split-review",
+    "reviewer": "retirement-review",
     "implementer": "codex-root",
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "e3bc73095d78c417cb77e182f42de42ecf4f1c2a070db1539f358958c3734a56"
+  "evidenceDigest": "e51eec86155c526ebcfe1dde37c9f318116e166e88b538165a04cf607e8fa101"
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import {
   init,
   upgrade,
@@ -53,13 +53,10 @@ When("空projectのinstallは設定とtrusted runtimeを自動構成する", fun
     { encoding: "utf8" },
   );
   assert.equal(applied.status, 0, applied.stdout + applied.stderr);
-  const settings = read(root);
-  assert.equal(settings.env, undefined);
-  assert.equal(Object.keys(settings.hooks).length, 9);
-  for (const event of AGENT_LIFECYCLE_EVENTS) {
-    assert.equal(settings.hooks[event].length, 1);
-    assert.equal(settings.hooks[event][0].hooks[0].timeout, 30);
-  }
+  assert.equal(
+    fs.existsSync(path.join(root, ".claude/settings.local.json")),
+    false,
+  );
   const env: NodeJS.ProcessEnv = { ...process.env, CLAUDE_PROJECT_DIR: root };
   delete env.ASC_WORKFLOW_CLI;
   delete env.ASC_EXECUTION_CONTEXT_MODE;
@@ -81,16 +78,7 @@ When("空projectのinstallは設定とtrusted runtimeを自動構成する", fun
     root,
     ".agent-skill-chain/runtime/agent-lifecycle",
   );
-  const state = fs.readdirSync(stateDir).find((name) => name.endsWith(".json"));
-  assert.ok(state);
-  assert.equal(
-    (
-      JSON.parse(fs.readFileSync(path.join(stateDir, state), "utf8")) as {
-        executionContextMode: string;
-      }
-    ).executionContextMode,
-    "short-lived",
-  );
+  assert.equal(fs.existsSync(stateDir), false);
   const localCli = path.join(
     root,
     MANAGED_RUNTIME,
@@ -147,19 +135,19 @@ When("旧lifecycle設定のupdateとdeleteは利用者設定を保持する", fu
   assert.deepEqual(updated.hooks.PreToolUse[0], userHook);
   for (const event of AGENT_LIFECYCLE_EVENTS)
     assert.equal(
-      updated.hooks[event]
+      (updated.hooks[event] ?? [])
         .flatMap((entry) => entry.hooks)
         .filter((hook) => hook.command === AGENT_LIFECYCLE_COMMAND).length,
-      1,
+      0,
     );
   fs.writeFileSync(file, JSON.stringify({ ...updated, disableAllHooks: true }));
   upgrade(root, { apply: true });
   const disabled = doctor(root);
-  assert.equal(disabled.healthy, false);
+  assert.equal(disabled.healthy, true);
   assert.equal(
     disabled.hooks.agentLifecycle.configurationDiagnostics
       .disabledByLocalSettings,
-    true,
+    false,
   );
   assert.equal(
     (JSON.parse(fs.readFileSync(file, "utf8")) as { disableAllHooks: boolean })
@@ -191,7 +179,14 @@ When("shared設定の公開失敗と競合は利用者のbytesを保持する", 
   const root = this.temp("asc-zero-failure-");
   fs.mkdirSync(path.join(root, ".claude"));
   const file = path.join(root, ".claude/settings.local.json");
-  const before = '{"permissions":{"allow":["Read(*)"]}}\n';
+  const before = JSON.stringify({
+    permissions: { allow: ["Read(*)"] },
+    hooks: {
+      PreToolUse: [
+        { hooks: [{ type: "command", command: AGENT_LIFECYCLE_COMMAND }] },
+      ],
+    },
+  });
   fs.writeFileSync(file, before);
   const plan = planLifecycleSettings(root, "install");
   const original = fs.fsyncSync;
@@ -205,7 +200,14 @@ When("shared設定の公開失敗と競合は利用者のbytesを保持する", 
   }
   assert.equal(fs.readFileSync(file, "utf8"), before);
   let changed = false;
-  const peer = '{"permissions":{"allow":["Grep(*)"]}}\n';
+  const peer = JSON.stringify({
+    permissions: { allow: ["Grep(*)"] },
+    hooks: {
+      PreToolUse: [
+        { hooks: [{ type: "command", command: AGENT_LIFECYCLE_COMMAND }] },
+      ],
+    },
+  });
   try {
     fs.fsyncSync = (fd) => {
       if (!changed) {
@@ -251,7 +253,7 @@ When("runtimeの改変と更新中はhealthyにならない", function () {
 });
 
 When(
-  "envなしのworkflow dispatchはmanaged runtimeを使い改変と更新競合を拒否する",
+  "envなしのworkflow dispatchはmanaged runtimeを使いhook観測に依存しない",
   function () {
     const root = this.initRepo();
     init(root, { apply: true });
@@ -314,14 +316,14 @@ When(
     };
     const original = fs.readFileSync(cli);
     fs.appendFileSync(cli, "\n// tamper\n");
-    assert.match(call("PreToolUse", input), /deny/u);
+    assert.deepEqual(JSON.parse(call("PreToolUse", input)), {});
     fs.writeFileSync(cli, original);
     const lock = path.join(
       root,
       ".agent-skill-chain/managed-assets-mutation.lock",
     );
     fs.mkdirSync(lock);
-    assert.match(call("PreToolUse", input), /deny/u);
+    assert.deepEqual(JSON.parse(call("PreToolUse", input)), {});
     assert.equal(fs.existsSync(lock), true);
     fs.rmdirSync(lock);
     const imported = path.join(root, MANAGED_RUNTIME, "dist/src/cli.js");
@@ -336,7 +338,7 @@ When(
     assert.ok(
       recovered.retained.includes(`${MANAGED_RUNTIME}/dist/src/cli.js`),
     );
-    assert.match(call("PreToolUse", input), /未登録|deny/u);
+    assert.deepEqual(JSON.parse(call("PreToolUse", input)), {});
     fs.writeFileSync(imported, originalImport);
     upgrade(root, { apply: true });
     const accepted = call("PreToolUse", input);
@@ -412,179 +414,11 @@ When("version更新は古いCLI pathなしでruntimeを更新する", function (
     ).version,
     "0.4.23",
   );
-  assert.equal(read(root).env, undefined);
+  assert.equal(
+    fs.existsSync(path.join(root, ".claude/settings.local.json")),
+    false,
+  );
   assert.equal(doctor(root).hooks.agentLifecycle.healthy, true);
-  this.value = true;
-});
-
-When("ReviewerのCLI利用中はupdateを排他し終了後に解放する", async function () {
-  const root = this.initRepo();
-  init(root, { apply: true });
-  const staging = createIssueStaging(root, {
-    title: "reviewer-lock",
-    requestedMode: "full",
-    now: new Date("2026-10-04T00:00:00Z"),
-    answers: Object.fromEntries(
-      QUESTIONS.map((id) => [id, { answer: true, evidence: "fixture" }]),
-    ),
-  }).path;
-  const hook = path.join(root, ".claude/hooks/asc-agent-lifecycle.mjs");
-  const cli = path.join(root, MANAGED_RUNTIME, "dist/bin/agent-skill-chain.js");
-  const lock = path.join(
-    root,
-    ".agent-skill-chain/managed-assets-mutation.lock",
-  );
-  const barrier = this.temp("asc-reviewer-barrier-");
-  const ready = path.join(barrier, "ready");
-  const release = path.join(barrier, "release");
-  const preload = path.join(barrier, "barrier.cjs");
-  // Pause the actual CLI child after launcher validation, before its module
-  // imports. Neither runtime files nor the production launcher have test seams.
-  fs.writeFileSync(
-    preload,
-    `
-const fs = require('node:fs');
-if (process.argv[1] === ${JSON.stringify(cli)} && process.argv[2] === 'workflow') {
-  fs.writeFileSync(${JSON.stringify(ready)}, 'ready');
-  const deadline = Date.now() + 12000;
-  while (!fs.existsSync(${JSON.stringify(release)})) {
-    if (Date.now() > deadline) process.exit(77);
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-  }
-}
-`,
-  );
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    CLAUDE_PROJECT_DIR: root,
-    NODE_OPTIONS: `--require=${preload}`,
-  };
-  delete env.ASC_EXECUTION_CONTEXT_MODE;
-  delete env.ASC_WORKFLOW_CLI;
-  delete env.CLAUDE_PROJECT_DIR;
-  const args = [
-    hook,
-    "--trusted-workflow-read",
-    `--worktree=${root}`,
-    `--staging=${staging}`,
-  ];
-  const child = spawn(process.execPath, args, {
-    cwd: root,
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  let output = "";
-  let error = "";
-  child.stdout.on("data", (chunk: Buffer) => {
-    output += chunk.toString();
-  });
-  child.stderr.on("data", (chunk: Buffer) => {
-    error += chunk.toString();
-  });
-  const done = new Promise<number | null>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", resolve);
-  });
-  try {
-    for (let attempt = 0; !fs.existsSync(ready); attempt += 1) {
-      assert.equal(child.exitCode, null, error);
-      assert.ok(attempt < 1000, "CLI barrierに到達しません");
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    assert.equal(fs.existsSync(lock), true, "runtime利用中にlockが必要です");
-    const blocked = spawnSync(
-      process.execPath,
-      [
-        path.resolve("dist/bin/agent-skill-chain.js"),
-        "update",
-        `--root=${root}`,
-        "--apply",
-      ],
-      { cwd: root, env, encoding: "utf8" },
-    );
-    assert.notEqual(blocked.status, 0, blocked.stdout + blocked.stderr);
-    assert.match(blocked.stdout + blocked.stderr, /lock|mutation|排他/u);
-    assert.equal(
-      fs.existsSync(lock),
-      true,
-      "updateはreaderのlockを解除できません",
-    );
-  } finally {
-    fs.writeFileSync(release, "release");
-    await done;
-  }
-  assert.equal(child.exitCode, 0, output + error);
-  assert.doesNotThrow(() => JSON.parse(output));
-  assert.equal(fs.existsSync(lock), false);
-  upgrade(root, { apply: true });
-
-  // Host Bash may lack the hook-only environment, or carry an unrelated root.
-  const otherRoot = this.temp("asc-reviewer-other-root-");
-  const staleEnvironment = spawnSync(process.execPath, args, {
-    cwd: otherRoot,
-    env: { ...env, CLAUDE_PROJECT_DIR: otherRoot },
-    encoding: "utf8",
-  });
-  assert.equal(staleEnvironment.status, 0, staleEnvironment.stderr);
-  assert.equal(
-    fs.existsSync(path.join(otherRoot, ".agent-skill-chain")),
-    false,
-  );
-  const wrongRoot = spawnSync(
-    process.execPath,
-    [
-      hook,
-      "--trusted-workflow-read",
-      `--worktree=${otherRoot}`,
-      `--staging=${staging}`,
-    ],
-    { cwd: root, env: { ...env, ASC_WORKFLOW_CLI: cli }, encoding: "utf8" },
-  );
-  assert.notEqual(
-    wrongRoot.status,
-    0,
-    "別rootのlauncherはoverrideでも拒否する",
-  );
-  assert.equal(
-    fs.existsSync(path.join(otherRoot, ".agent-skill-chain")),
-    false,
-  );
-
-  // The reverse order refuses execution without removing another owner's lock.
-  fs.unlinkSync(ready);
-  fs.mkdirSync(lock);
-  for (const readEnv of [env, { ...env, ASC_WORKFLOW_CLI: cli }]) {
-    const blockedRead = spawnSync(process.execPath, args, {
-      cwd: root,
-      env: readEnv,
-      encoding: "utf8",
-    });
-    assert.notEqual(blockedRead.status, 0);
-    assert.equal(fs.existsSync(ready), false, "lock中にCLIを開始できません");
-    assert.equal(fs.existsSync(lock), true);
-  }
-  fs.rmdirSync(lock);
-
-  const originalCli = fs.readFileSync(cli);
-  fs.appendFileSync(cli, "\n// changed after host preflight\n");
-  const tamperedRead = spawnSync(process.execPath, args, {
-    cwd: root,
-    env,
-    encoding: "utf8",
-  });
-  assert.notEqual(tamperedRead.status, 0);
-  assert.equal(fs.existsSync(ready), false);
-  assert.equal(fs.existsSync(lock), false);
-  fs.writeFileSync(cli, originalCli);
-
-  // CLI failure also releases the launcher-owned lock and propagates failure.
-  const failedRead = spawnSync(
-    process.execPath,
-    [...args.slice(0, -1), `--staging=${path.join(root, "missing-staging")}`],
-    { cwd: root, env, encoding: "utf8" },
-  );
-  assert.notEqual(failedRead.status, 0);
-  assert.equal(fs.existsSync(lock), false);
   this.value = true;
 });
 
@@ -762,8 +596,8 @@ When("updateは廃止runtimeを整理し変更済み残存fileを信頼しない
       assert.notEqual(run.status, 0, run.stdout + run.stderr);
       fs.unlinkSync(obsolete);
       assert.equal(doctor(root).hooks.agentLifecycle.healthy, true);
-      assert.equal(execute().status, 0);
-    } else assert.equal(run.status, 0, run.stdout + run.stderr);
+      assert.equal(execute().status, 1);
+    } else assert.equal(run.status, 1, run.stdout + run.stderr);
   }
   this.value = true;
 });

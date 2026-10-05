@@ -15,7 +15,7 @@ import { readStoredStagingRecord, STAGING_RECORD_FILE } from "./staging.js";
 import { DEFAULT_ISSUE_STAGING_ROOT, listStagingRoots, readStagingLayout, } from "./staging-layout.js";
 import { MODE_DECISION_FILE, STEP_JOURNAL_FILE, inspectWorkflowStagingArtifacts, } from "./workflow.js";
 import { surveyWorktrees } from "./worktree-survey.js";
-import { AGENT_LIFECYCLE_COMMAND, AGENT_LIFECYCLE_EVENTS, MANAGED_RUNTIME, planLifecycleSettings, applyLifecycleSettings, } from "./lifecycle-settings.js";
+import { MANAGED_RUNTIME, planLifecycleSettings, applyLifecycleSettings, } from "./lifecycle-settings.js";
 const packageRoot = findPackageRoot(import.meta.url);
 /**
  * repository直下へ展開するhost入口。
@@ -110,122 +110,23 @@ export function inspectHookRegistration(input) {
             reason: `${HOST_HOOK_SETTINGS}に期待entryがありません。global・managed・plugin経由の有効化状態は未確認です`,
         };
 }
-/** 設定の存在だけを観測する。実hostでの発火を保証しない。 */
-export function inspectAgentLifecycleRegistration(settings, executionContextMode = process.env.ASC_EXECUTION_CONTEXT_MODE, workflowCli = process.env.ASC_WORKFLOW_CLI, target) {
-    const required = AGENT_LIFECYCLE_EVENTS;
-    let disabledByLocalSettings = false;
-    let hooks = {};
-    let environment = {};
-    let shortLived = executionContextMode !== "compatible";
-    try {
-        const parsed = JSON.parse(settings ?? "{}");
-        if (isRecord(parsed)) {
-            disabledByLocalSettings = parsed.disableAllHooks === true;
-            if (isRecord(parsed.hooks))
-                hooks = parsed.hooks;
-            if (isRecord(parsed.env))
-                environment = parsed.env;
-            if (isRecord(parsed.env) &&
-                typeof parsed.env.ASC_EXECUTION_CONTEXT_MODE === "string")
-                shortLived = parsed.env.ASC_EXECUTION_CONTEXT_MODE !== "compatible";
-        }
-    }
-    catch {
-        hooks = {};
-    }
-    const registrations = required.map((event) => {
-        const entries = hooks[event];
-        const commands = Array.isArray(entries)
-            ? entries.flatMap((entry) => isRecord(entry) && Array.isArray(entry.hooks)
-                ? entry.hooks
-                    .filter((hook) => isRecord(hook) &&
-                    hook.type === "command" &&
-                    typeof hook.command === "string" &&
-                    hook.command.includes(".claude/hooks/asc-agent-lifecycle.mjs"))
-                    .filter(isRecord)
-                    .map((hook) => ({
-                    canonical: hook.command === AGENT_LIFECYCLE_COMMAND,
-                    async: hook.async,
-                    timeout: hook.timeout,
-                    coversAll: [undefined, "", "*"].includes(entry.matcher),
-                }))
-                : [])
-            : [];
-        return { event, commands };
-    });
-    const configuredEvents = registrations
-        .filter(({ commands }) => commands.some((hook) => hook.canonical && hook.coversAll && hook.async !== true))
-        .map(({ event }) => event);
-    const missingEvents = required.filter((event) => !configuredEvents.includes(event));
-    const cli = environment.ASC_WORKFLOW_CLI ??
-        workflowCli ??
-        (target
-            ? path.join(target, MANAGED_RUNTIME, "dist/bin/agent-skill-chain.js")
-            : undefined);
-    const cliConfigured = typeof cli === "string" && cli.trim() !== "";
-    const cliAbsolute = cliConfigured && path.isAbsolute(cli);
-    let cliExists = false;
-    if (cliAbsolute) {
-        try {
-            cliExists = fs.statSync(cli).isFile();
-        }
-        catch {
-            /* Diagnostic only. */
-        }
-    }
-    const invalidTimeoutEvents = registrations
-        .filter(({ commands }) => commands.some((hook) => typeof hook.timeout !== "number" ||
-        !Number.isFinite(hook.timeout) ||
-        hook.timeout < 30))
-        .map(({ event }) => event);
-    const mode = environment.ASC_EXECUTION_CONTEXT_MODE ?? executionContextMode;
-    const modeConfigured = mode === "compatible" || mode === "short-lived";
-    const noncanonicalEvents = registrations
-        .filter(({ commands }) => commands.some((hook) => !hook.canonical))
-        .map(({ event }) => event);
-    const duplicateEvents = registrations
-        .filter(({ commands }) => commands.length > 1)
-        .map(({ event }) => event);
-    const diagnostics = missingEvents.map((event) => `${event}のcanonical commandによる同期・全対象hook登録がありません: ${AGENT_LIFECYCLE_COMMAND}`);
-    if (disabledByLocalSettings)
-        diagnostics.push("disableAllHooks=trueによりlocal hookが明示的に無効化されています。利用者overrideは保持します");
-    for (const event of noncanonicalEvents)
-        diagnostics.push(`${event}に非canonical lifecycle commandがあります。次の直接実行1件へ統合してください: ${AGENT_LIFECYCLE_COMMAND}`);
-    for (const event of duplicateEvents)
-        diagnostics.push(`${event}にlifecycle hookが複数登録されています。全対象の同期登録1件へ統合してください`);
-    if (mode !== undefined && !modeConfigured)
-        diagnostics.push("ASC_EXECUTION_CONTEXT_MODEはcompatible / short-livedを指定してください");
-    if (shortLived) {
-        if (!cliConfigured)
-            diagnostics.push("managed workflow CLIがありません。install/update --applyで復旧してください");
-        else if (!cliAbsolute)
-            diagnostics.push("ASC_WORKFLOW_CLIは絶対pathが必要です");
-        else if (!cliExists)
-            diagnostics.push("ASC_WORKFLOW_CLIに実在するfileを指定してください");
-        for (const event of invalidTimeoutEvents)
-            diagnostics.push(`${event}のtimeoutは30秒以上を明示してください`);
-        if (registrations.some(({ commands }) => commands.some((hook) => hook.async === true)))
-            diagnostics.push("short-livedのlifecycle hookはすべて同期登録が必要です");
-    }
+/** Lifecycle observation is retired; missing hook registration is healthy. */
+export function inspectAgentLifecycleRegistration(_settings, _executionContextMode = process.env.ASC_EXECUTION_CONTEXT_MODE, _workflowCli = process.env.ASC_WORKFLOW_CLI, _target) {
     return {
-        configuredEvents,
-        missingEvents,
-        healthy: diagnostics.length === 0,
-        diagnostics,
+        enabled: false,
+        configuredEvents: [],
+        missingEvents: [],
+        healthy: true,
+        diagnostics: [],
         configurationDiagnostics: {
-            disabledByLocalSettings,
-            noncanonicalEvents,
-            duplicateEvents,
-            cliConfigured,
-            cliAbsolute,
-            cliExists,
-            timeoutValid: invalidTimeoutEvents.length === 0,
-            modeConfigured,
+            disabledByLocalSettings: false,
+            noncanonicalEvents: [],
+            duplicateEvents: [],
+            cliConfigured: false,
+            cliAbsolute: false,
+            cliExists: false,
+            timeoutValid: true,
         },
-        effectiveMode: mode ?? "short-lived",
-        cliSource: environment.ASC_WORKFLOW_CLI !== undefined || workflowCli !== undefined
-            ? "override"
-            : "managed-runtime",
         runtimeVerified: false,
         configuration: {
             target: HOST_HOOK_SETTINGS,
@@ -233,9 +134,8 @@ export function inspectAgentLifecycleRegistration(settings, executionContextMode
             restart: "new-session",
             repair: "install/update --root=. --apply",
             instructions: [
-                "install/update --applyがASC所有登録とruntimeを管理します。手動設定は不要です",
-                "更新後は新規sessionを開始してください。既存sessionのmodeは保持します",
-                "runtimeVerified=falseはhost実発火を未観測であることを示します",
+                "常時観測は廃止しました。install/update --applyが旧ASC所有hook登録を削除します",
+                "既存sessionが旧登録を保持していても互換hookは記録・予約・拒否を行いません",
             ],
         },
     };
