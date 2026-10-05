@@ -6,9 +6,6 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const launchProjectRoot = process.env.CLAUDE_PROJECT_DIR ??
-  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-
 const MODES = ["observe", "warn", "enforce"];
 const EVENTS = new Set([
   "SessionStart",
@@ -41,10 +38,10 @@ function directory(parent, name) {
   return target;
 }
 
-function stateRoot(projectRoot = process.env.CLAUDE_PROJECT_DIR) {
-  if (!projectRoot)
+function stateRoot() {
+  if (!process.env.CLAUDE_PROJECT_DIR)
     throw new Error("CLAUDE_PROJECT_DIRが必要です");
-  let root = fs.realpathSync(projectRoot);
+  let root = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR);
   for (const name of [".agent-skill-chain", "runtime", "agent-lifecycle"])
     root = directory(root, name);
   return root;
@@ -350,7 +347,7 @@ function checkHandoff(h, exactHead, acquireWriter = false) {
     );
 }
 const shellQuote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
-function trustedWorkflowCli(ownsLock = false, projectRoot = launchProjectRoot) {
+function trustedWorkflowCli(ownsLock = false, projectRoot = process.env.CLAUDE_PROJECT_DIR) {
   const override = process.env.ASC_WORKFLOW_CLI;
   if (override !== undefined) {
     if (!path.isAbsolute(override) || !fs.statSync(override).isFile())
@@ -416,7 +413,7 @@ function trustedWorkflowCli(ownsLock = false, projectRoot = launchProjectRoot) {
   }
   return path.join(project, cli);
 }
-function withTrustedWorkflowCli(run, projectRoot = launchProjectRoot) {
+function withTrustedWorkflowCli(run, projectRoot = process.env.CLAUDE_PROJECT_DIR) {
   const root = fs.realpathSync(projectRoot);
   const lock = path.join(root, ".agent-skill-chain/managed-assets-mutation.lock");
   // Share the install/update lock so imports cannot observe a mixed runtime.
@@ -463,19 +460,17 @@ function trustedWorkflowRead() {
   // Validation and the child process share one lock lifetime. PreToolUse's
   // observation alone cannot protect a later host Bash invocation from update.
   const root = fs.realpathSync(worktree);
-  const launcherRoot = fs.realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."));
-  registeredWorktree(root, launcherRoot);
   if (fs.realpathSync(fileURLToPath(import.meta.url)) !==
-      path.join(launcherRoot, ".claude/hooks/asc-agent-lifecycle.mjs"))
+      path.join(root, ".claude/hooks/asc-agent-lifecycle.mjs"))
     throw new Error("trusted workflow readのworktreeとlauncherが一致しません");
-  const result = withTrustedWorkflowCli((cli) => workflowPreview(cli, root, staging), launcherRoot);
+  const result = withTrustedWorkflowCli((cli) => workflowPreview(cli, root, staging), root);
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
   process.exitCode = result.status ?? 1;
 }
 function reviewerCommands(h) {
   trustedWorkflowCli();
-  const launcher = path.join(fs.realpathSync(launchProjectRoot), ".claude/hooks/asc-agent-lifecycle.mjs");
+  const launcher = path.join(fs.realpathSync(process.env.CLAUDE_PROJECT_DIR), ".claude/hooks/asc-agent-lifecycle.mjs");
   return {
     resume: `node ${shellQuote(launcher)} --trusted-workflow-read ${shellQuote("--worktree=" + h.worktree)} ${shellQuote("--staging=" + h.staging)}`,
     gitPrefix: `git -C ${shellQuote(h.worktree)} --no-pager `,
@@ -982,8 +977,6 @@ function recoverSession() {
   try {
     const file = path.join(root, `${digest(sessionId)}.json`);
     const state = readState(file);
-    if (state.redirectWorktree)
-      throw new Error(`sessionは${state.redirectWorktree}へ移動済みです。移動先のreportとdigestを使用してください`);
     if (
       state.sessionId !== sessionId ||
       digest(fs.readFileSync(file)) !== expected
@@ -1016,107 +1009,6 @@ function recoverSession() {
   } finally {
     fs.rmSync(lock, { recursive: true });
   }
-}
-
-// A session may start in the primary tree before its task worktree exists.
-// Move only that idle session; peer reservations stay in their own worktrees.
-function registeredWorktree(target, launchRoot = launchProjectRoot) {
-  const launch = fs.realpathSync(launchRoot);
-  if (typeof target !== "string" || !path.isAbsolute(target) ||
-      fs.realpathSync(target) !== target)
-    throw new Error("担当worktreeにはcanonicalな絶対pathが必要です");
-  const common = (root) => repositoryGit(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-  const entries = repositoryGit(launch, ["worktree", "list", "--porcelain", "-z"]).split("\0");
-  if (!entries.includes(`worktree ${target}`) || common(target) !== common(launch) ||
-      repositoryGit(target, ["rev-parse", "--show-toplevel"]) !== target)
-    throw new Error("担当worktreeは起動元と同じGit repositoryの登録済みworktreeである必要があります");
-  return target;
-}
-function atomicState(file, state, lock) {
-  const temporary = path.join(lock, "routed-state.json");
-  fs.writeFileSync(temporary, JSON.stringify(state) + "\n", { flag: "wx", mode: 0o600 });
-  fs.renameSync(temporary, file);
-}
-function routeSession(input) {
-  if (!EVENTS.has(input.hook_event_name) || !validId(input.session_id)) return;
-  const name = `${digest(input.session_id)}.json`;
-  const visited = new Set();
-  let snapshot;
-  let file;
-  for (;;) {
-    const project = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR);
-    if (visited.has(project) || visited.size >= 8)
-      throw new Error("sessionのworktree移動記録が循環しています");
-    visited.add(project);
-    file = path.join(stateRoot(), name);
-    try { snapshot = readState(file, true); }
-    catch (error) {
-      if (error.code === "ENOENT" && visited.size === 1) return;
-      throw error;
-    }
-    if (snapshot.state.sessionId !== input.session_id)
-      throw new Error("session identityが一致しません");
-    if (!snapshot.state.redirectWorktree) break;
-    process.env.CLAUDE_PROJECT_DIR = registeredWorktree(snapshot.state.redirectWorktree);
-  }
-  const state = snapshot.state;
-  if (state.recoveredAt || state.executionContextMode !== "short-lived" ||
-      input.hook_event_name !== "PreToolUse" ||
-      !["Agent", "Task"].includes(input.tool_name) ||
-      input.tool_input?.resume !== undefined ||
-      (input.agent_id && input.agent_id !== input.session_id)) return;
-  let handoff;
-  try { ({ handoff } = dispatchContract(input.tool_input?.prompt)); }
-  catch { return; } // The ordinary dispatch guard supplies the malformed-input diagnostic.
-  if (!handoff || handoff.worktree === fs.realpathSync(process.env.CLAUDE_PROJECT_DIR)) return;
-  const target = registeredWorktree(handoff.worktree);
-  if (visited.has(target)) throw new Error("移動元worktreeへの再移動には新sessionを使用してください");
-  if (state.pendingHandoff || state.pendingTasks?.length || state.pendingDispatches?.length ||
-      state.inFlightWrites?.length || state.agents.some((agent) => agent.kind === "subagent" && unfinishedWorker(agent)))
-    throw new Error("このsession自身に未完了操作があります。完了後に担当worktreeへ再委譲してください。他sessionの復旧は不要です");
-  const previousProject = process.env.CLAUDE_PROJECT_DIR;
-  process.env.CLAUDE_PROJECT_DIR = target;
-  try {
-    checkHandoff(handoff, true, true);
-    verifyDispatch(handoff);
-  } catch (error) {
-    process.env.CLAUDE_PROJECT_DIR = previousProject;
-    throw error;
-  }
-  const sourceRoot = path.dirname(file);
-  const targetRoot = stateRoot();
-  const targetFile = path.join(targetRoot, name);
-  const targetState = { ...state, worktree: target };
-  const locks = new Map();
-  try {
-    // Stable ordering prevents opposite migrations from holding each other's lock.
-    // CLI verification above is deliberately outside these short file transactions.
-    for (const root of [sourceRoot, targetRoot].sort()) locks.set(root, acquireWorktreeLock(root));
-    const current = readState(file, true);
-    if (current.recoveryDigest !== snapshot.recoveryDigest)
-      throw new Error("sessionが移動準備中に更新されました。再委譲してください");
-    try {
-      const existing = readState(targetFile, true);
-      // A crash after the destination write but before the redirect is retryable
-      // only while the destination is still the exact untouched copy.
-      if (existing.recoveryDigest !== digest(JSON.stringify(targetState) + "\n"))
-        throw new Error("移動先に異なるsession記録があります");
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
-      atomicState(targetFile, targetState, locks.get(targetRoot));
-    }
-    atomicState(file, { ...state, redirectWorktree: target }, locks.get(sourceRoot));
-  } finally {
-    for (const lock of [...locks.values()].reverse()) fs.rmSync(lock, { recursive: true });
-  }
-}
-function runRouted(input) {
-  try { routeSession(input); }
-  catch (error) {
-    if (input.hook_event_name === "PreToolUse") return deny(`担当worktreeへのsession割当を確認できません。${error.message}`);
-    throw error;
-  }
-  return run(input);
 }
 
 function run(input) {
@@ -1195,8 +1087,6 @@ function run(input) {
         agents: [newAgent(input.session_id, "main", new Date().toISOString())],
       };
     }
-    if (state.redirectWorktree)
-      throw new Error("sessionは別worktreeへ移動しました。再試行してください");
     if (state.recoveredAt)
       throw new Error("明示復旧で閉鎖済みのsessionです。新sessionが必要です");
     if (state.sessionId !== input.session_id)
@@ -1318,7 +1208,7 @@ try {
     process.stdout.write(`${JSON.stringify(report(), null, 2)}\n`);
   else {
     input = JSON.parse(fs.readFileSync(0, "utf8"));
-    process.stdout.write(`${JSON.stringify(runRouted(input))}\n`);
+    process.stdout.write(`${JSON.stringify(run(input))}\n`);
   }
 } catch (error) {
   const reason = `ASC lifecycle記録を確認できません（${error.code ?? "invalid-state"}）。hook設定・--report・実行中processを確認してください。残存予約はowner停止確認と明示復旧が必要で、新sessionだけでは解除されません。`;

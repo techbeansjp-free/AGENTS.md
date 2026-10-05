@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -398,8 +399,8 @@ When(
       }),
     );
     denied(dispatch(request, "peer-shell-blocks-writer"));
-    // A host launched in the primary tree routes its idle session to the
-    // assigned worktree without recovering or waiting for unrelated peers.
+    // A host launched in another tree must restart in the assigned worktree.
+    // Its state and the destination state must never be migrated by the hook.
     const linkedRoot = path.join(
       this.temp("asc-linked-lifecycle-"),
       "worktree",
@@ -430,33 +431,44 @@ When(
               prompt: dispatchPrompts.get(JSON.stringify(linkedRequest)),
             },
           });
-        allowed(
-          moving("PreToolUse", {
-            tool_name: "Bash",
-            tool_use_id: "own-write",
-          }),
+        const result = launch();
+        denied(result);
+        assert.match(result, /handoff worktreeとCLAUDE_PROJECT_DIRが不一致/u);
+        assert.match(
+          result,
+          /担当worktreeをproject directoryとしてhostの新session/u,
         );
-        const ownWrite = launch();
-        denied(ownWrite);
-        assert.match(ownWrite, /このsession自身に未完了操作/u);
-        allowed(moving("PostToolUse", { tool_use_id: "own-write" }));
-        allowed(launch());
-        allowed(
-          moving("SubagentStart", {
-            agent_id: `moved-child-${id}`,
-            agent_type: "general-purpose",
-          }),
+        const sourceState = JSON.parse(
+          fs.readFileSync(
+            path.join(
+              root,
+              ".agent-skill-chain/runtime/agent-lifecycle",
+              createHash("sha256")
+                .update(`moving-session-${id}`)
+                .digest("hex") + ".json",
+            ),
+            "utf8",
+          ),
+        ) as {
+          worktree: string;
+          redirectWorktree?: string;
+          pendingHandoff?: unknown;
+        };
+        assert.equal(sourceState.worktree, root);
+        assert.equal(sourceState.redirectWorktree, undefined);
+        assert.ok(!sourceState.pendingHandoff);
+        assert.equal(
+          fs.existsSync(
+            path.join(
+              linkedRoot,
+              ".agent-skill-chain/runtime/agent-lifecycle",
+              createHash("sha256")
+                .update(`moving-session-${id}`)
+                .digest("hex") + ".json",
+            ),
+          ),
+          false,
         );
-        allowed(
-          moving("PreToolUse", {
-            agent_id: `moved-child-${id}`,
-            tool_name: "Edit",
-          }),
-        );
-        // A session launched directly in the destination sees the moved writer.
-        denied(linked("PreToolUse", { tool_name: "Edit" }));
-        allowed(moving("SubagentStop", { agent_id: `moved-child-${id}` }));
-        allowed(moving("PostToolUse", { tool_use_id: `moved-${id}` }));
         allowed(moving("SessionEnd"));
       }
       allowed(

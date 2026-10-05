@@ -21,11 +21,12 @@ function call(
   session: string,
   event: string,
   extra: Record<string, unknown> = {},
+  projectRoot = f.root,
 ) {
   const result = spawnSync(process.execPath, [hook], {
     env: {
       ...process.env,
-      CLAUDE_PROJECT_DIR: f.root,
+      CLAUDE_PROJECT_DIR: projectRoot,
       ASC_WORKFLOW_CLI: cli,
       ASC_EXECUTION_CONTEXT_MODE: "short-lived",
     },
@@ -46,11 +47,17 @@ function deny(result: string) {
   assert.match(result, /"deny"/u);
 }
 function dispatch(f: Fixture, session = "B", local = false) {
-  return call(f, session, "PreToolUse", {
-    tool_name: "Agent",
-    tool_use_id: "writer",
-    tool_input: local ? f.localDispatch : f.dispatch,
-  });
+  return call(
+    f,
+    session,
+    "PreToolUse",
+    {
+      tool_name: "Agent",
+      tool_use_id: "writer",
+      tool_input: local ? f.localDispatch : f.dispatch,
+    },
+    local ? f.root : f.linked,
+  );
 }
 Given("lifecycle隔離用の2つのGit worktreeとsessionがある", function () {
   const root = this.initRepo();
@@ -153,6 +160,8 @@ When(
       fs.writeFileSync(source, JSON.stringify(state) + "\n");
     }
     const before = fs.readFileSync(source, "utf8");
+    if (target !== "同じ")
+      allow(call(f, "B", "SessionStart", { source: "startup" }, f.linked));
     f.result = dispatch(f, "B", target === "同じ");
     assert.equal(fs.readFileSync(source, "utf8"), before);
   },
@@ -179,13 +188,13 @@ When("{string}で拒否されたツールの予約を回収する", function (ev
         : { tool_use_id: id, tool_name: "Bash", reason: "denied SECRET" },
     );
   allow(notify("unknown"));
-  deny(dispatch(f));
+  deny(dispatch(f, "B", true));
   allow(notify("refused"));
-  deny(dispatch(f)); // An unrelated running tool must still protect this session.
+  deny(dispatch(f, "B", true)); // An unrelated running tool must still protect this session.
   allow(notify("still-running"));
-  f.result = dispatch(f);
+  f.result = dispatch(f, "B", true);
   const report = spawnSync(process.execPath, [hook, "--report"], {
-    env: { ...process.env, CLAUDE_PROJECT_DIR: f.linked },
+    env: { ...process.env, CLAUDE_PROJECT_DIR: f.root },
     encoding: "utf8",
   });
   assert.equal(report.status, 0, report.stderr);
