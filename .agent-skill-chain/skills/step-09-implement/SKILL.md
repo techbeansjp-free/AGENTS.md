@@ -30,6 +30,22 @@ role欄の担当roleが`implementer`であること、許可path・操作、必�
 
 Codexを新しく起動するときは必ず`routing launch --help`で入力を確認し、当該taskのfile、root、独立identity/context、risk、modeを渡して実行する。編集taskだけ`--sandbox=workspace-write`を明示する。launch自身が毎回公式config/readとmodel/listを観測し、trusted selector採用tier、具体model、high、標準速度を検証してCodexを起動する。手書きmodel名、以前のresolve結果、旧Evidenceを新しい起動の選択元にしない。launchが起動したimplementer自身は同じtaskを再launchせず、このStepの実装を続ける。取得不能・採用不足は起動前に停止し、旧modelや別providerで暗黙に実行しない。
 
+## 実装時のCoding Engineering
+
+Coding Engineeringの読取routingを定義する場所はこの節だけとする。他の節に名称・資産pathを用いた読取指示や別routingを追加しない。
+
+既知のAC・変更対象・riskを再調査せず、読む量だけを次のように選ぶ。risky・cross-boundary・境界/risk不明の経路を優先し、影響が小さくても省略経路へ入れない。新しいmode・Step・Gateではなく、既存の開始・停止条件は変えない。
+
+| 変更の分類 | 読むもの |
+|---|---|
+| local・明白・low-riskで、既存patternの内側に収まり境界・副作用の変更がない | 近傍実装と関連testだけ。Coding Engineering本文・索引・Lensは読まず、0 Lensを優先する |
+| risky・cross-boundaryに該当せず、影響がboundedで境界とriskが既知 | [Coding Engineering索引](../coding-engineering/index.md)から必要ならLens 0〜1件。本文は読まない |
+| risky・cross-boundary、または境界・riskが不明 | [Coding Engineering Skill](../coding-engineering/SKILL.md)を読み、該当Lens 1〜3件を目安に選ぶ |
+
+Search Before Createの探索既定値は、symbol/既存patternを検索 → 有力候補は最大3件程度へ絞る → 直接読むのは通常1〜2件とする。判断が変わらない、または局所pattern・直接依存を十分把握できたら終了する。これはsoft budgetでありhard limitや停止条件ではない。高riskや未解決の具体的な疑問があれば必要な範囲へ広げる。探索中に境界・riskの前提が崩れたら読取の分類を見直す。
+
+scope内の通常問題は自律修正し、実装中はtargeted feedbackを優先する。最終完了条件は既存Verification Set・project policyに従い、読取の省略を検証やsecurity境界確認の省略に使わない。
+
 ## execution context境界
 
 標準の`short-lived`方式では、[開発ワークフローのexecution context境界](../../docs/01_開発ワークフロー.md#execution-context境界)に従い、この担当work unitへfresh contextを割り当てる。repository/stagingから復元し、完了後に別工程・別review round・finding是正を同じcontextへ追加しない。workerの成果物・検証・必要なcommit・返却・終了の後でcoordinatorがStep/roundを記録する。`compatible`の既存動作と品質gateは維持する。
