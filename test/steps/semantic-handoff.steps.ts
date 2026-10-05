@@ -160,8 +160,21 @@ When(
       );
     const stop = (id: string) =>
       allowed(call("SubagentStop", { agent_id: id }));
-    const tool = (id: string, name = "Read") =>
-      call("PreToolUse", { agent_id: id, tool_name: name, tool_input: {} });
+    let toolSequence = 0;
+    const tool = (id: string, name = "Read") => {
+      const toolUseId = `fixture-tool-${++toolSequence}`;
+      const result = call("PreToolUse", {
+        agent_id: id,
+        tool_name: name,
+        tool_use_id: toolUseId,
+        tool_input: {},
+      });
+      // These calls model completed synchronous tools. Pending-tool fixtures
+      // below use call directly and supply their completion event explicitly.
+      if (!result.includes('"deny"'))
+        allowed(call("PostToolUse", { agent_id: id, tool_use_id: toolUseId }));
+      return result;
+    };
     const startup = call("SessionStart", { source: "startup" });
     allowed(startup);
     assert.match(startup, /mainが実装・是正を代行しない/u);
@@ -179,6 +192,22 @@ When(
       allowed(plain(`dispatch-${id}`, "並行調査", "Explore"));
       allowed(call("SubagentStart", { agent_id: id, agent_type: "Explore" }));
       allowed(tool(id, "Read"));
+      allowed(
+        call("PreToolUse", {
+          agent_id: id,
+          tool_name: "Edit",
+          tool_use_id: `source-${id}`,
+          tool_input: { file_path: path.join(root, "src/parallel.ts") },
+        }),
+      );
+      denied(
+        call("PreToolUse", {
+          agent_id: id,
+          tool_name: "Write",
+          tool_use_id: `journal-${id}`,
+          tool_input: { file_path: path.join(staging, "journal/steps.jsonl") },
+        }),
+      );
       denied(tool(id, "Write"));
       denied(tool(id, "Bash"));
       stop(id);
@@ -219,7 +248,13 @@ When(
     denied(dispatch(request, "ambiguous-workflow"));
     start("task-two");
     start("task-one");
-    allowed(tool("task-one", "Edit"));
+    allowed(
+      call("PreToolUse", {
+        agent_id: "task-one",
+        tool_name: "Edit",
+        tool_input: { file_path: path.join(root, "src/auth.ts") },
+      }),
+    );
     allowed(tool("task-two", "Bash"));
     allowed(
       call("PreToolUse", {
@@ -371,7 +406,10 @@ When(
     allowed(call("PostToolUseFailure", { tool_use_id: "slow-dispatch" }));
 
     allowed(plain("writer-blocking-task", "調査", "Explore"));
-    denied(dispatch(request, "pending-task-blocks-writer"));
+    allowed(dispatch(request, "pending-task-blocks-writer"));
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "pending-task-blocks-writer" }),
+    );
     allowed(
       call("SubagentStart", {
         agent_id: "writer-blocking-agent",
@@ -380,8 +418,10 @@ When(
     );
     allowed(call("PostToolUse", { tool_use_id: "writer-blocking-task" }));
     const activeTaskDenial = dispatch(request, "active-task-blocks-writer");
-    denied(activeTaskDenial);
-    assert.match(activeTaskDenial, /完了を待つか別worktree/u);
+    allowed(activeTaskDenial);
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "active-task-blocks-writer" }),
+    );
     stop("writer-blocking-agent");
 
     const peer = (event: string, input: Record<string, unknown> = {}) =>
@@ -398,7 +438,10 @@ When(
         tool_input: { command: "true" },
       }),
     );
-    denied(dispatch(request, "peer-shell-blocks-writer"));
+    allowed(dispatch(request, "peer-shell-blocks-writer"));
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "peer-shell-blocks-writer" }),
+    );
     // A host launched in another tree must restart in the assigned worktree.
     // Its state and the destination state must never be migrated by the hook.
     const linkedRoot = path.join(
@@ -433,11 +476,8 @@ When(
           });
         const result = launch();
         denied(result);
-        assert.match(result, /handoff worktreeとCLAUDE_PROJECT_DIRが不一致/u);
-        assert.match(
-          result,
-          /担当worktreeをproject directoryとしてhostの新session/u,
-        );
+        assert.match(result, /execution-root-unavailable/u);
+        assert.match(result, /handoffは無効ではありません/u);
         const sourceState = JSON.parse(
           fs.readFileSync(
             path.join(
@@ -492,13 +532,19 @@ When(
         tool_input: { prompt: "調査" },
       }),
     );
-    denied(dispatch(request, "peer-pending-blocks-writer"));
+    allowed(dispatch(request, "peer-pending-blocks-writer"));
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "peer-pending-blocks-writer" }),
+    );
     assertLinkedIsolation("peer-pending");
     allowed(
       peer("SubagentStart", { agent_id: "peer-child", agent_type: "Explore" }),
     );
     allowed(peer("PostToolUse", { tool_use_id: "peer-agent" }));
-    denied(dispatch(request, "peer-active-blocks-writer"));
+    allowed(dispatch(request, "peer-active-blocks-writer"));
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "peer-active-blocks-writer" }),
+    );
     assertLinkedIsolation("peer-active");
     const sourceStateRoot = path.join(
       root,
@@ -516,8 +562,11 @@ When(
       allowed(abandoned("SessionStart", { source: "startup" }));
       allowed(
         abandoned("PreToolUse", {
-          tool_name: "Bash",
+          tool_name: "Write",
           tool_use_id: `abandoned-write-${index}`,
+          tool_input: {
+            file_path: path.join(staging, `abandoned-${index}.json`),
+          },
         }),
       );
       allowed(
@@ -611,7 +660,10 @@ When(
         agent_id: "exhausted-task",
         tool_name: "Read",
       });
-    denied(exhaustedDispatch());
+    allowed(exhaustedDispatch());
+    allowed(
+      exhausted("PostToolUseFailure", { tool_use_id: "exhaustion-workflow" }),
+    );
     allowed(exhausted("SubagentStop", { agent_id: "exhausted-task" }));
     allowed(exhaustedDispatch());
     allowed(

@@ -1,6 +1,6 @@
 @integration
 Feature: lifecycleの競合を担当worktreeへ隔離する
-  他のworktreeの停止確認を要求せず、同じworktreeの書込みだけを排他する。
+  他のworktreeの停止確認を要求せず、競合する制御資源への書込みだけを排他する。
 
   Scenario Outline: SCN-INT-LIFEISO-001 他worktreeの状態を担当起動のblockerにしない
     Given lifecycle隔離用の2つのGit worktreeとsessionがある
@@ -14,7 +14,7 @@ Feature: lifecycleの競合を担当worktreeへ隔離する
       | subagent実行中 | 別 | allow |
       | 古い未完了記録 | 別 | allow |
       | 書込み中 | 同じ | deny |
-      | subagent実行中 | 同じ | deny |
+      | subagent実行中 | 同じ | allow |
 
   Scenario Outline: SCN-INT-LIFEISO-002 hostの完了証拠で予約を回収する
     Given lifecycle隔離用の2つのGit worktreeとsessionがある
@@ -25,3 +25,18 @@ Feature: lifecycleの競合を担当worktreeへ隔離する
       | 通知 |
       | PermissionDenied |
       | PostToolBatch |
+
+  Scenario: SCN-INT-LIFEISO-003 競合資源だけを保留し無関係な編集を継続する
+    Given lifecycle隔離用の2つのGit worktreeとsessionがある
+    When 制御資源の競合と安全な並行操作を検査する
+    Then lifecycle隔離判定は"allow"になる
+
+  Scenario: SCN-INT-LIFEISO-004 不明なpeer状態の影響を制御状態更新へ限定する
+    Given lifecycle隔離用の2つのGit worktreeとsessionがある
+    When peerの状態を壊して読取と編集の継続範囲を検査する
+    Then lifecycle隔離判定は"allow"になる
+
+  Scenario: SCN-INT-LIFEISO-005 foreign handoffを無効とせず実行contextの確立を求める
+    Given lifecycle隔離用の2つのGit worktreeとsessionがある
+    When foreign handoffの妥当性とhost実行能力を分けて検査する
+    Then lifecycle隔離判定は"allow"になる

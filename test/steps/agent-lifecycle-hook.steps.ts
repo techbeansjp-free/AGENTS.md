@@ -91,7 +91,8 @@ When("lifecycleの{string}を実行する", function (operation: string) {
       );
       assert.equal(result.status, 0, result.stderr);
       assert.match(result.stdout, /ENOSPC/u);
-      assert.match(result.stdout, /"deny"/u);
+      assert.match(result.stdout, /ASC Warn/u);
+      assert.doesNotMatch(result.stdout, /"deny"/u);
       assert.equal(
         fs.existsSync(
           path.join(
@@ -200,7 +201,7 @@ When("lifecycleの{string}を実行する", function (operation: string) {
         .find((name) => name.endsWith(".json"));
       assert.ok(file);
       fs.writeFileSync(path.join(directory, file), "{}");
-      this.lifecycleOutput = invoke(root);
+      this.lifecycleOutput = invoke(root, { tool_name: "Write" });
       break;
     }
     default:
@@ -263,7 +264,12 @@ Then("lifecycle記録のsymlinkは境界外を書き換えない", function () {
   const result = event(root, "SessionStart", { source: "startup" });
   assert.equal(result.status, 1);
   assert.deepEqual(fs.readdirSync(outside), []);
-  assert.match(invoke(root), /"permissionDecision":"deny"/u);
+  assert.match(
+    invoke(root, { tool_name: "Write" }),
+    /"permissionDecision":"deny"/u,
+  );
+  assert.match(invoke(root), /ASC Warn/u);
+  assert.deepEqual(fs.readdirSync(outside), []);
 });
 
 Then("lifecycle上限はmodel loopの継続も停止する", function () {

@@ -14,6 +14,7 @@ interface Fixture {
   linked: string;
   dispatch: Record<string, unknown>;
   localDispatch: Record<string, unknown>;
+  staging: string;
   result?: string;
 }
 function call(
@@ -70,6 +71,7 @@ Given("lifecycle隔離用の2つのGit worktreeとsessionがある", function ()
   git("commit", "-qm", "isolation fixture");
   const linked = path.join(this.temp("asc-worktree-isolation-"), "linked");
   git("worktree", "add", "-b", "isolated", linked);
+  const stagings: Record<string, string> = {};
   const preview = (worktree: string) => {
     const staging = createIssueStaging(worktree, {
       title: "lifecycle-isolation",
@@ -79,6 +81,7 @@ Given("lifecycle隔離用の2つのGit worktreeとsessionがある", function ()
         QUESTIONS.map((id) => [id, { answer: true, evidence: "fixture" }]),
       ),
     }).path;
+    stagings[worktree] = staging;
     const r = spawnSync(
       process.execPath,
       [cli, "workflow", "advance", `--staging=${staging}`],
@@ -100,6 +103,7 @@ Given("lifecycle隔離用の2つのGit worktreeとsessionがある", function ()
     linked,
     dispatch: preview(linked),
     localDispatch: preview(root),
+    staging: stagings[root]!,
   };
   this.value = fixture;
   for (const session of ["A", "B"])
@@ -153,23 +157,45 @@ When(
       const state = JSON.parse(fs.readFileSync(source, "utf8")) as {
         agents: { startedAt: string; lastSeenAt: string }[];
         worktree?: string;
+        resourceOperations?: unknown[];
+        inFlightWrites?: string[];
       };
       for (const agent of state.agents)
         agent.startedAt = agent.lastSeenAt = "2020-01-01T00:00:00Z";
       delete state.worktree; // Legacy records must remain scoped without recovery.
+      delete state.resourceOperations;
+      state.inFlightWrites = ["unfinished"];
       fs.writeFileSync(source, JSON.stringify(state) + "\n");
     }
     const before = fs.readFileSync(source, "utf8");
     if (target !== "同じ")
       allow(call(f, "B", "SessionStart", { source: "startup" }, f.linked));
     f.result = dispatch(f, "B", target === "同じ");
+    if (activity === "古い未完了記録") {
+      deny(dispatch(f, "B", true));
+      allow(
+        call(f, "B", "PreToolUse", {
+          tool_name: "Write",
+          tool_use_id: "legacy-source",
+          tool_input: {
+            file_path: path.join(f.root, "src/legacy-parallel.ts"),
+          },
+        }),
+      );
+    }
     assert.equal(fs.readFileSync(source, "utf8"), before);
   },
 );
 When("{string}で拒否されたツールの予約を回収する", function (event: string) {
   const f = this.value as Fixture;
   for (const id of ["refused", "still-running"])
-    allow(call(f, "B", "PreToolUse", { tool_name: "Bash", tool_use_id: id }));
+    allow(
+      call(f, "B", "PreToolUse", {
+        tool_name: "Write",
+        tool_use_id: id,
+        tool_input: { file_path: path.join(f.staging, id + ".json") },
+      }),
+    );
   const notify = (id: string) =>
     call(
       f,
@@ -205,4 +231,173 @@ Then("lifecycle隔離判定は{string}になる", function (expected: string) {
   assert.ok(result);
   if (expected === "allow") allow(result);
   else deny(result);
+});
+
+When("制御資源の競合と安全な並行操作を検査する", function () {
+  const f = this.value as Fixture;
+  const write = (session: string, id: string, file: string) =>
+    call(f, session, "PreToolUse", {
+      tool_name: "Write",
+      tool_use_id: id,
+      tool_input: { file_path: file, content: "SECRET" },
+    });
+  const journalA = path.join(
+    f.root,
+    ".agent-skill-chain/tmp/issues/a/journal/steps.jsonl",
+  );
+  const journalB = path.join(
+    f.root,
+    ".agent-skill-chain/tmp/issues/b/journal/steps.jsonl",
+  );
+  fs.mkdirSync(path.dirname(journalA), { recursive: true });
+  const alias = path.join(f.root, "source-looking-alias");
+  fs.symlinkSync(path.dirname(journalA), alias);
+  allow(write("A", "journal-a", journalA));
+  deny(write("B", "symlink-conflict", path.join(alias, "steps.jsonl")));
+  const dangling = path.join(f.root, "dangling-source-alias");
+  fs.symlinkSync(journalA, dangling);
+  deny(write("B", "dangling-conflict", dangling));
+  const backing = path.join(path.dirname(journalA), "hardlinked.json");
+  fs.writeFileSync(backing, "{}");
+  const hardlink = path.join(f.root, "source-hardlink.json");
+  fs.linkSync(backing, hardlink);
+  deny(write("B", "hardlink-conflict", hardlink));
+  deny(write("A", "journal-a", path.join(f.root, "src/reused-id.ts")));
+  const conflict = write("B", "same-journal", journalA);
+  deny(conflict);
+  assert.match(conflict, /ASC Isolate/u);
+  assert.ok(conflict.includes(journalA));
+  allow(write("B", "journal-b", journalB));
+  allow(write("B", "foreign-source", path.join(f.linked, "src/auth.ts")));
+  const foreignControl = write(
+    "B",
+    "foreign-control",
+    path.join(f.linked, ".agent-skill-chain/journal.json"),
+  );
+  deny(foreignControl);
+  assert.match(foreignControl, /resource-context-unavailable/u);
+  allow(write("A", "source-a", path.join(f.root, "src/auth.ts")));
+  allow(write("B", "source-b", path.join(f.root, "src/auth.ts")));
+  allow(call(f, "B", "PreToolUse", { tool_name: "Read", tool_use_id: "read" }));
+  allow(call(f, "B", "PostToolUse", { tool_use_id: "journal-b" }));
+  allow(call(f, "A", "PermissionDenied", { tool_use_id: "journal-a" }));
+  allow(write("B", "after-settle", journalA));
+  allow(call(f, "B", "PostToolUse", { tool_use_id: "after-settle" }));
+  const opaque = call(f, "A", "PreToolUse", {
+    tool_name: "Bash",
+    tool_use_id: "opaque",
+    tool_input: { command: "custom-command" },
+  });
+  allow(opaque);
+  assert.match(opaque, /ASC Warn/u);
+  allow(write("B", "parallel-source", path.join(f.root, "src/another.ts")));
+  deny(write("B", "opaque-conflict", journalB));
+  allow(
+    call(f, "A", "PostToolBatch", { tool_calls: [{ tool_use_id: "opaque" }] }),
+  );
+  const git = (session: string, id: string) =>
+    call(f, session, "PreToolUse", {
+      tool_name: "Bash",
+      tool_use_id: id,
+      cwd: f.root,
+      tool_input: { command: "git add src/auth.ts" },
+    });
+  allow(git("A", "git-a"));
+  deny(git("B", "git-b"));
+  allow(write("B", "git-unrelated-journal", journalB));
+  allow(call(f, "B", "PostToolUse", { tool_use_id: "git-unrelated-journal" }));
+  allow(call(f, "A", "PostToolUse", { tool_use_id: "git-a" }));
+  f.result = git("B", "git-retry");
+});
+
+When("peerの状態を壊して読取と編集の継続範囲を検査する", function () {
+  const f = this.value as Fixture;
+  const directory = path.join(
+    f.root,
+    ".agent-skill-chain/runtime/agent-lifecycle",
+  );
+  const peer = fs.readdirSync(directory).find(
+    (name) =>
+      name.endsWith(".json") &&
+      (
+        JSON.parse(fs.readFileSync(path.join(directory, name), "utf8")) as {
+          sessionId: string;
+        }
+      ).sessionId === "A",
+  );
+  assert.ok(peer);
+  fs.writeFileSync(path.join(directory, peer), "{}");
+  const read = call(f, "B", "PreToolUse", {
+    tool_name: "Read",
+    tool_use_id: "read-with-unknown",
+  });
+  allow(read);
+  assert.match(read, /ASC Warn/u);
+  const edit = call(f, "B", "PreToolUse", {
+    tool_name: "Edit",
+    tool_use_id: "source-with-unknown",
+    tool_input: { file_path: path.join(f.root, "src/auth.ts") },
+  });
+  allow(edit);
+  assert.match(edit, /ASC Warn/u);
+  deny(
+    call(f, "B", "PreToolUse", {
+      tool_name: "Write",
+      tool_use_id: "control-with-unknown",
+      tool_input: {
+        file_path: path.join(f.root, ".agent-skill-chain/journal.json"),
+      },
+    }),
+  );
+  deny(
+    call(f, "A", "PreToolUse", {
+      tool_name: "Write",
+      tool_input: { file_path: path.join(f.root, "src/auth.ts") },
+    }),
+  );
+  f.result = call(f, "A", "PreToolUse", { tool_name: "Read" });
+  assert.match(f.result, /ASC Warn/u);
+  assert.equal(fs.readFileSync(path.join(directory, peer), "utf8"), "{}");
+});
+
+When("foreign handoffの妥当性とhost実行能力を分けて検査する", function () {
+  const f = this.value as Fixture;
+  const result = call(f, "B", "PreToolUse", {
+    tool_name: "Agent",
+    tool_use_id: "foreign",
+    tool_input: f.dispatch,
+  });
+  deny(result); // Native hook protocol holds only this unbound dispatch.
+  assert.match(result, /ASC Degrade \[execution-root-unavailable\]/u);
+  assert.match(result, /handoffは無効ではありません/u);
+  const report = spawnSync(process.execPath, [hook, "--report"], {
+    env: { ...process.env, CLAUDE_PROJECT_DIR: f.root },
+    encoding: "utf8",
+  });
+  assert.equal(report.status, 0, report.stderr);
+  const states = JSON.parse(report.stdout) as {
+    sessionId: string;
+    pendingHandoff?: unknown;
+    blockedResources: string[];
+  }[];
+  const state = states.find((entry) => entry.sessionId === "B")!;
+  assert.ok(!state.pendingHandoff);
+  assert.deepEqual(state.blockedResources, []);
+  allow(
+    call(f, "B", "PreToolUse", {
+      tool_name: "Agent",
+      tool_use_id: "normal-task",
+      tool_input: { subagent_type: "Explore", prompt: "別の調査を続ける" },
+    }),
+  );
+  allow(
+    call(
+      f,
+      "fresh-worker-host",
+      "SessionStart",
+      { source: "startup" },
+      f.linked,
+    ),
+  );
+  f.result = dispatch(f, "fresh-worker-host");
 });
