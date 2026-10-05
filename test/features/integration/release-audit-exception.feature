@@ -23,10 +23,13 @@ Feature: 手動releaseの工程証跡監査例外
     Then 工程監査例外の適用可否は "<result>" になる
 
     Examples:
-      | kind          | result |
-      | missing       | allow  |
-      | corrupt       | deny   |
-      | binding       | deny   |
-      | loss          | deny   |
-      | unobserved    | deny   |
-      | single-parent | deny   |
+      | kind             | result |
+      | missing          | allow  |
+      | missing-multiple | allow  |
+      | missing-empty    | allow  |
+      | valid            | allow  |
+      | corrupt          | deny   |
+      | binding          | deny   |
+      | loss             | deny   |
+      | unobserved       | deny   |
+      | single-parent    | deny   |

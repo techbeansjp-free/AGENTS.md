@@ -98,6 +98,17 @@ Then(
         recordReleaseAuditException(exception, audit, "summary.md"),
       );
       fs.unlinkSync("release-audit-exception.json");
+      recordReleaseAuditException(exception, { valid: true }, "summary.md");
+      const passed = JSON.parse(
+        fs.readFileSync("release-audit-exception.json", "utf8"),
+      ) as Record<string, unknown>;
+      assert.equal(passed.state, "audit-passed");
+      assert.equal(passed.exceptionApplied, false);
+      assert.match(
+        fs.readFileSync("summary.md", "utf8"),
+        /監査に合格（例外未適用）/u,
+      );
+      fs.unlinkSync("release-audit-exception.json");
       assert.throws(() =>
         recordReleaseAuditException(exception, audit, "missing/summary.md"),
       );
@@ -150,8 +161,17 @@ Given(
     run("checkout", "-q", "-b", "candidate");
     fs.writeFileSync(path.join(this.auditRoot, "change.md"), "REQ-KEEP-001\n");
     run("add", "change.md");
+    if (kind === "missing-multiple") {
+      fs.writeFileSync(
+        path.join(this.auditRoot, "second.md"),
+        "REQ-KEEP-002\n",
+      );
+      run("add", "second.md");
+    }
     run("commit", "-qm", "implementation");
-    if (kind === "corrupt" || kind === "binding") {
+    if (kind === "missing-empty")
+      run("commit", "--allow-empty", "-qm", "empty");
+    if (kind === "corrupt" || kind === "binding" || kind === "valid") {
       fs.mkdirSync(path.join(this.auditRoot, "docs/reviews"), {
         recursive: true,
       });
@@ -162,7 +182,8 @@ Given(
           : syntheticReviewEvidenceContent({
               issue: 1,
               baseSha: this.cutoff,
-              implementationHeadSha: this.cutoff,
+              implementationHeadSha:
+                kind === "valid" ? run("rev-parse", "HEAD") : this.cutoff,
             }),
       );
       run("add", "docs/reviews/1_review.json");
@@ -183,7 +204,17 @@ Given(
 
 When("工程監査の実結果にrelease例外を適用する", function () {
   const result = checkFileAudit(this.auditRoot, this.cutoff);
-  assert.equal(result.valid, false);
+  assert.equal(result.valid, this.auditKind === "valid");
+  if (this.auditKind === "missing") {
+    assert.match(result.errors.join("\n"), /change\.md/u);
+    assert.match(result.errors.join("\n"), /配下ではありません/u);
+  }
+  if (this.auditKind === "missing-multiple") {
+    assert.match(result.errors.join("\n"), /change\.md/u);
+    assert.match(result.errors.join("\n"), /second\.md/u);
+  }
+  if (this.auditKind === "missing-empty")
+    assert.match(result.errors.join("\n"), /review証跡のcommitがありません/u);
   this.auditAllowed = false;
   try {
     assertReleaseAuditExceptionEligible(

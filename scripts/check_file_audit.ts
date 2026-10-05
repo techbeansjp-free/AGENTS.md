@@ -823,6 +823,10 @@ export function checkFileAudit(
     inferred.implementation,
     inferred.reviewHead,
   );
+  // 証跡専用commitが無い場合、withoutTrailingAuditCommitsはreviewHeadの親へ
+  // fallbackする。この差分は実装の最終commitそのものであり、非review pathが
+  // あることだけで「review後の追加変更」とは判定できない。単一・複数pathの
+  // 欠落も分類するが、review pathを含む不正な着地は例外対象にしない。
   if (finalPaths.length === 0)
     return {
       valid: false,

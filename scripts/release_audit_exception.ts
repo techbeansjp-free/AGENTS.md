@@ -31,20 +31,26 @@ export function releaseAuditException(
   };
 }
 
-/** 元の監査結果は不合格のまま保存し、品質検査の成功に置き換えない。 */
+/** 元の監査結果を保持し、例外を適用したかどうかを区別して保存する。 */
 export function recordReleaseAuditException(
   exception: NonNullable<ReturnType<typeof releaseAuditException>>,
-  result: unknown,
+  result: { valid: boolean },
   summary: string,
 ): void {
-  const record = { state: "audit-exception", ...exception, audit: result };
+  const applied = !result.valid;
+  const record = {
+    state: applied ? "audit-exception" : "audit-passed",
+    exceptionApplied: applied,
+    ...exception,
+    audit: result,
+  };
   const serialized = JSON.stringify(record, null, 2);
   fs.writeFileSync("release-audit-exception.json", `${serialized}\n`, {
     flag: "wx",
   });
   fs.appendFileSync(
     summary,
-    `\n## 工程証跡監査の明示例外\n\n${serialized
+    `\n## ${applied ? "工程証跡監査の明示例外" : "工程証跡監査に合格（例外未適用）"}\n\n${serialized
       .split("\n")
       .map((line) => `    ${line}`)
       .join("\n")}\n`,
