@@ -1,3 +1,7 @@
+import {
+  releaseAuditException,
+  recordReleaseAuditException,
+} from "./release_audit_exception.js";
 import fs from "node:fs";
 import path from "node:path";
 import { deriveDistributionImpact } from "../src/domain/conformance.js";
@@ -819,9 +823,16 @@ export function checkFileAudit(
     inferred.implementation,
     inferred.reviewHead,
   );
+  // 証跡専用commitが無い場合、withoutTrailingAuditCommitsはreviewHeadの親へ
+  // fallbackする。この差分は実装の最終commitそのものであり、非review pathが
+  // あることだけで「review後の追加変更」とは判定できない。単一・複数pathの
+  // 欠落も分類するが、review pathを含む不正な着地は例外対象にしない。
   if (finalPaths.length === 0)
     return {
       valid: false,
+      exceptionKind: finalPaths.some(isAuditPath)
+        ? undefined
+        : "missing-review-evidence",
       errors: [
         [
           "review証跡のcommitがありません。実装commitの後に`review export`で生成したreview証跡だけをcommitしてください",
@@ -832,6 +843,9 @@ export function checkFileAudit(
   if (finalPaths.length > 1)
     return {
       valid: false,
+      exceptionKind: finalPaths.some(isAuditPath)
+        ? undefined
+        : "missing-review-evidence",
       errors: [
         [
           invalidFinalPathsError(finalPaths),
@@ -843,6 +857,9 @@ export function checkFileAudit(
   if (!isAuditPath(auditPath))
     return {
       valid: false,
+      exceptionKind: finalPaths.some(isAuditPath)
+        ? undefined
+        : "missing-review-evidence",
       errors: [
         [
           `H_impl..currentの差分path ${auditPath} は${AUDIT_DIRECTORIES.map((directory) => `${directory}/`).join(" または ")}配下ではありません。実装commitの後にreview証跡だけをcommitしてください`,
@@ -978,6 +995,37 @@ export function checkFileAudit(
   };
 }
 
+/** 工程証跡の欠落だけを免除し、Git観測・mergeの損失検知は独立に必須とする。 */
+export function assertReleaseAuditExceptionEligible(
+  root: string,
+  trustedDefaultTip: string | undefined,
+  result: { valid: boolean; exceptionKind?: string },
+): void {
+  const current = git(["rev-parse", "HEAD"], root).stdout.trim();
+  if (trustedDefaultTip !== current)
+    throw new Error(
+      "工程監査例外は観測済みの現在のremote既定branch tipだけに適用できます",
+    );
+  if (result.valid) return;
+  if (result.exceptionKind !== "missing-review-evidence")
+    throw new Error(
+      "証跡の破損・binding不一致・監査異常は工程監査例外の対象外です",
+    );
+  const parents = commitParents(root, current);
+  if (parents.length !== 2)
+    throw new Error("工程監査例外には親が2つのrelease merge commitが必要です");
+  const base = uniqueMergeBase(root, parents[0]!, parents[1]!);
+  if (base === undefined)
+    throw new Error("工程監査例外の比較基点を一意に観測できません");
+  const integrity = evaluateMergeIntegrity(
+    collectMergeObservations(root, base, current),
+  );
+  if (!integrity.valid)
+    throw new Error(
+      `工程監査例外でもmerge integrity違反は拒否します: ${integrity.errors.join("; ")}`,
+    );
+}
+
 /**
  * candidate内のstaleな`refs/remotes/origin/HEAD`をauthorityにせず、remoteが現在
  * 公開するHEADを直接固定する。通信失敗、対話認証要求、曖昧な応答はfail-closedにする。
@@ -1007,10 +1055,22 @@ export function remoteDefaultTip(root: string): string | undefined {
 
 if (isExecutionEntry(import.meta.url)) {
   const root = process.cwd();
+  const exception = releaseAuditException(
+    process.env,
+    git(["rev-parse", "HEAD"], root).stdout.trim(),
+  );
+  const trustedDefaultTip = remoteDefaultTip(root);
   const result = checkFileAudit(root, LEGACY_RELEASE_BUMP_CUTOFF, {
-    trustedDefaultTip: remoteDefaultTip(root),
+    trustedDefaultTip,
     requireSingleParentBase: true,
   });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  if (!result.valid) process.exitCode = 1;
+  if (exception) {
+    assertReleaseAuditExceptionEligible(root, trustedDefaultTip, result);
+    recordReleaseAuditException(
+      exception,
+      result,
+      process.env.GITHUB_STEP_SUMMARY!,
+    );
+  } else if (!result.valid) process.exitCode = 1;
 }
