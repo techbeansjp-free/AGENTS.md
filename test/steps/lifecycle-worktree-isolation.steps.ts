@@ -534,3 +534,73 @@ When("各workerの編集とforeign worktreeへの直接変更を区別する", f
     tool_input: { file_path: path.join(f.root, "src/auth.ts") },
   });
 });
+
+When(
+  "未pruneのworktreeと一覧取得失敗に対する変更先判定を検査する",
+  function () {
+    const f = this.value as Fixture;
+    const nested = path.join(f.root, ".worktrees/live-nested");
+    const stale = path.join(f.root, ".worktrees/stale");
+    const git = (...args: string[]) => {
+      const result = spawnSync("git", args, { cwd: f.root, encoding: "utf8" });
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout;
+    };
+    git("worktree", "add", "-b", "live-nested", nested);
+    git("worktree", "add", "-b", "stale", stale);
+    fs.rmSync(stale, { recursive: true, force: true });
+    const listing = git("worktree", "list", "--porcelain");
+    assert.ok(listing.includes(stale));
+    assert.match(listing, /prunable/);
+    const write = (id: string, file: string) =>
+      call(f, "A", "PreToolUse", {
+        tool_name: "Write",
+        tool_use_id: id,
+        tool_input: { file_path: file },
+      });
+    deny(write("nested-stale", path.join(nested, "src/auth.ts")));
+    deny(
+      call(f, "A", "PreToolUse", {
+        tool_name: "Bash",
+        tool_use_id: "nested-stale-git",
+        cwd: nested,
+        tool_input: { command: "git add src/auth.ts" },
+      }),
+    );
+    allow(write("own-stale", path.join(f.root, "src/auth.ts")));
+    allow(
+      call(f, "A", "PreToolUse", {
+        tool_name: "Read",
+        tool_use_id: "stale-read",
+        tool_input: { file_path: path.join(nested, "src/auth.ts") },
+      }),
+    );
+    // Hide Git metadata to make the ownership query fail without altering the
+    // hook executable or mocking its decision. Restore before fixture cleanup.
+    const metadata = path.join(f.root, ".git");
+    const hidden = path.join(f.root, ".git-unavailable");
+    fs.renameSync(metadata, hidden);
+    try {
+      deny(write("unknown-own", path.join(f.root, "src/auth.ts")));
+      deny(write("unknown-nested", path.join(nested, "src/auth.ts")));
+      deny(
+        call(f, "A", "PreToolUse", {
+          tool_name: "Bash",
+          tool_use_id: "unknown-git",
+          cwd: f.root,
+          tool_input: { command: "git add src/auth.ts" },
+        }),
+      );
+      allow(
+        call(f, "A", "PreToolUse", {
+          tool_name: "Read",
+          tool_use_id: "unknown-read",
+          tool_input: { file_path: path.join(nested, "src/auth.ts") },
+        }),
+      );
+    } finally {
+      fs.renameSync(hidden, metadata);
+    }
+    f.result = write("restored-own", path.join(f.root, "src/auth.ts"));
+  },
+);

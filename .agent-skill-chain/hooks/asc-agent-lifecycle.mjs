@@ -573,7 +573,16 @@ function targetWorktree(target, root) {
   try {
     return repositoryGit(root, ["worktree", "list", "--porcelain", "-z"])
       .split("\0").filter((entry) => entry.startsWith("worktree "))
-      .map((entry) => fs.realpathSync(entry.slice(9))).sort((a, b) => b.length - a.length)
+      .flatMap((entry) => {
+        try { return [fs.realpathSync(entry.slice(9))]; }
+        catch (error) {
+          // Git retains prunable entries after their directories disappear.
+          // Only that missing entry is irrelevant; other resolution failures
+          // leave ownership unknown instead of guessing the root worktree.
+          if (error.code === "ENOENT" || error.code === "ENOTDIR") return [];
+          throw error;
+        }
+      }).sort((a, b) => b.length - a.length)
       .find((candidate) => within(target, candidate));
   } catch { return undefined; }
 }
@@ -595,7 +604,7 @@ function operationScope(input, root, agent) {
         if (!control) return { kind: "source", resources: [] };
         return { kind: "control", resources: [within(target, path.join(root, ".git")) ? path.join(root, ".git") : target] };
       }
-      if (!within(target, root)) return { kind: "foreign-mutation", resources: [], resource: target, worktree: path.dirname(target) };
+      return { kind: "foreign-mutation", resources: [], resource: target, worktree: "ownership未確認" };
     }
   }
 
@@ -608,7 +617,7 @@ function operationScope(input, root, agent) {
     for (const directory of [input.cwd, input.tool_input?.cwd, input.tool_input?.workdir]) {
       if (directory === undefined) continue;
       const target = canonicalTarget(directory, root);
-      if (!target || !within(target, root) || (targetWorktree(target, root) ?? root) !== root) return { kind: "foreign-mutation", resources: [], resource: target, worktree: target };
+      if (!target || !within(target, root) || targetWorktree(target, root) !== root) return { kind: "foreign-mutation", resources: [], resource: target, worktree: target };
     }
   }
 

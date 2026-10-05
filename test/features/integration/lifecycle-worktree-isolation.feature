@@ -45,3 +45,8 @@ Feature: lifecycleの競合を担当worktreeへ隔離する
     Given lifecycle隔離用の2つのGit worktreeとsessionがある
     When 各workerの編集とforeign worktreeへの直接変更を区別する
     Then lifecycle隔離判定は"allow"になる
+
+  Scenario: SCN-INT-LIFEISO-007 stale worktreeが変更先の隔離判定を壊さない
+    Given lifecycle隔離用の2つのGit worktreeとsessionがある
+    When 未pruneのworktreeと一覧取得失敗に対する変更先判定を検査する
+    Then lifecycle隔離判定は"allow"になる

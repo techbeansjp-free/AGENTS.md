@@ -59,7 +59,13 @@ function executeRelease(asset: string, args: string[]): Execution {
         "agent-skill-chain",
         ...args,
       ],
-      { cwd, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
+      {
+        cwd,
+        encoding: "utf8",
+        maxBuffer: 16 * 1024 * 1024,
+        timeout: 10 * 60_000,
+        killSignal: "SIGKILL",
+      },
     );
     return {
       status: result.status,
