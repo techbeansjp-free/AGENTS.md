@@ -1,7 +1,3 @@
-import {
-  releaseAuditException,
-  recordReleaseAuditException,
-} from "./release_audit_exception.js";
 import fs from "node:fs";
 import path from "node:path";
 import { deriveDistributionImpact } from "../src/domain/conformance.js";
@@ -1011,20 +1007,10 @@ export function remoteDefaultTip(root: string): string | undefined {
 
 if (isExecutionEntry(import.meta.url)) {
   const root = process.cwd();
-  const exception = releaseAuditException(
-    process.env,
-    git(["rev-parse", "HEAD"], root).stdout.trim(),
-  );
   const result = checkFileAudit(root, LEGACY_RELEASE_BUMP_CUTOFF, {
     trustedDefaultTip: remoteDefaultTip(root),
     requireSingleParentBase: true,
   });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  if (exception) {
-    recordReleaseAuditException(
-      exception,
-      result,
-      process.env.GITHUB_STEP_SUMMARY!,
-    );
-  } else if (!result.valid) process.exitCode = 1;
+  if (!result.valid) process.exitCode = 1;
 }

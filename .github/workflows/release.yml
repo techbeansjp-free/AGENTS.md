@@ -14,14 +14,6 @@ name: 自動・手動release
         required: true
         type: boolean
         default: true
-      audit_exception_sha:
-        description: 工程証跡監査だけを例外にする対象commitの完全SHA（通常は空欄）
-        required: false
-        type: string
-      audit_exception_reason:
-        description: 工程証跡監査の例外理由（対象SHAと同時指定。品質検査は省略しない）
-        required: false
-        type: string
 
 concurrency:
   group: main-mutator
@@ -113,17 +105,7 @@ jobs:
       - name: 固定ファイルどおりに依存を導入する
         run: npm ci
       - name: 全Gherkin・型・build・package contentsを必須gateで検証する
-        env:
-          RELEASE_AUDIT_EXCEPTION_SHA: ${{ inputs.audit_exception_sha }}
-          RELEASE_AUDIT_EXCEPTION_REASON: ${{ inputs.audit_exception_reason }}
         run: npm run verify:distribution
-      - name: 工程証跡監査の例外記録を保存する
-        if: ${{ always() && inputs.audit_exception_sha != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-audit-exception
-          path: release-audit-exception.json
-          if-no-files-found: error
       - name: 既存tagをrelease計画用に取得する
         run: git tag --list > existing-tags.txt
       # 手動releaseでもbuild_distributionのcontentDigestとして必要になったため、
