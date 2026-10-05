@@ -551,9 +551,8 @@ When("dirty状態のままsetupとupdateとdeleteを適用する", function () {
 Then("consumer所有資産とdirty状態は保持される", function () {
   assert.equal(this.applyResult.applied, true);
   assertCapturedFiles(this.root, this.consumerFiles);
-  // Shared configuration is not a package-owned file: delete removes its ASC
-  // entries but preserves the file. Assert that exact residue independently.
-  assert.deepEqual(readObject(path.join(this.root, HOST_HOOK_SETTINGS)), {});
+  // Retired observation does not create settings in an unconfigured project.
+  assert.equal(fs.existsSync(path.join(this.root, HOST_HOOK_SETTINGS)), false);
   assert.equal(gitStatus(this.root, true), this.statusBefore);
 });
 
@@ -1028,9 +1027,9 @@ When(
   function (this: IsolationWorld) {
     init(this.root, { apply: true });
     const unregistered = doctor(this.root);
-    const settings = JSON.parse(
-      fs.readFileSync(path.join(this.root, HOST_HOOK_SETTINGS), "utf8"),
-    ) as { hooks: Record<string, unknown[]> };
+    const settings: { hooks: Record<string, unknown[]> } = {
+      hooks: { PreToolUse: [] },
+    };
     settings.hooks.PreToolUse.push({
       matcher: "Bash",
       hooks: [

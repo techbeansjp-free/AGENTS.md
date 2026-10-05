@@ -19,11 +19,6 @@ export const AGENT_LIFECYCLE_EVENTS = [
   "PostToolBatch",
 ];
 const SETTINGS = ".claude/settings.local.json";
-const canonicalHook = () => ({
-  type: "command",
-  command: AGENT_LIFECYCLE_COMMAND,
-  timeout: 30,
-});
 const ownedHook = (hook: unknown): hook is Record<string, unknown> =>
   isRecord(hook) &&
   hook.type === "command" &&
@@ -98,11 +93,7 @@ export function planLifecycleSettings(
     if ((hooks[event] as unknown[]).length === 0) delete hooks[event];
   }
   if (operation === "install") {
-    for (const event of AGENT_LIFECYCLE_EVENTS)
-      hooks[event] = [
-        ...(Array.isArray(hooks[event]) ? (hooks[event] as unknown[]) : []),
-        { hooks: [canonicalHook()] },
-      ];
+    // Retired observer: installation also removes old owned registrations.
     const environment = isRecord(parsed.env) ? parsed.env : {};
     if (environment.ASC_EXECUTION_CONTEXT_MODE === "short-lived")
       delete environment.ASC_EXECUTION_CONTEXT_MODE;

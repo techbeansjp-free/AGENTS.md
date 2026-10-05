@@ -22,19 +22,14 @@ Feature: Agent Lifecycleを手設定なしで導入する
     When runtimeの改変と更新中はhealthyにならない
     Then zero-configの受入条件を満たす
 
-  Scenario: SCN-INT-ZEROCONFIG-005 managed runtimeからhandoffを検証する
+  Scenario: SCN-INT-ZEROCONFIG-005 workflow previewを維持しhookによる再検証を廃止する
     Given zero-config検証用の隔離filesystemを準備する
-    When envなしのworkflow dispatchはmanaged runtimeを使い改変と更新競合を拒否する
+    When envなしのworkflow dispatchはmanaged runtimeを使いhook観測に依存しない
     Then zero-configの受入条件を満たす
 
   Scenario: SCN-INT-ZEROCONFIG-006 配布元を失っても更新できる
     Given zero-config検証用の隔離filesystemを準備する
     When version更新は古いCLI pathなしでruntimeを更新する
-    Then zero-configの受入条件を満たす
-
-  Scenario: SCN-INT-ZEROCONFIG-007 ReviewerのCLI実行とupdateを排他する
-    Given zero-config検証用の隔離filesystemを準備する
-    When ReviewerのCLI利用中はupdateを排他し終了後に解放する
     Then zero-configの受入条件を満たす
 
   Scenario: SCN-INT-ZEROCONFIG-008 deleteは共有設定の変更を予告して参照も除去する
