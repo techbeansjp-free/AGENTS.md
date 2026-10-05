@@ -268,7 +268,7 @@ When("制御資源の競合と安全な並行操作を検査する", function ()
   assert.match(conflict, /ASC Isolate/u);
   assert.ok(conflict.includes(journalA));
   allow(write("B", "journal-b", journalB));
-  allow(write("B", "foreign-source", path.join(f.linked, "src/auth.ts")));
+  deny(write("B", "foreign-source", path.join(f.linked, "src/auth.ts")));
   const foreignControl = write(
     "B",
     "foreign-control",
@@ -400,4 +400,137 @@ When("foreign handoffの妥当性とhost実行能力を分けて検査する", f
     ),
   );
   f.result = dispatch(f, "fresh-worker-host");
+});
+
+When("各workerの編集とforeign worktreeへの直接変更を区別する", function () {
+  const f = this.value as Fixture;
+  for (const root of [f.root, f.linked]) {
+    fs.mkdirSync(path.join(root, "src"), { recursive: true });
+    fs.writeFileSync(path.join(root, "src/auth.ts"), "original");
+  }
+  for (const [session, root] of [
+    ["local-worker", f.root],
+    ["linked-worker", f.linked],
+  ]) {
+    allow(call(f, session, "SessionStart", { source: "startup" }, root));
+    allow(
+      call(
+        f,
+        session,
+        "PreToolUse",
+        {
+          tool_name: "Edit",
+          tool_use_id: "own-source",
+          tool_input: { file_path: path.join(root, "src/auth.ts") },
+        },
+        root,
+      ),
+    );
+  }
+  const runtime = path.join(
+    f.linked,
+    ".agent-skill-chain/runtime/agent-lifecycle",
+  );
+  const snapshot = () =>
+    fs
+      .readdirSync(runtime)
+      .sort()
+      .map((name) => [name, fs.readFileSync(path.join(runtime, name), "utf8")]);
+  const before = snapshot();
+  deny(
+    call(f, "local-worker", "PreToolUse", {
+      tool_name: "NotebookEdit",
+      tool_use_id: "notebook-field-conflict",
+      tool_input: {
+        file_path: path.join(f.root, "src/auth.ts"),
+        notebook_path: path.join(f.linked, "src/auth.ts"),
+      },
+    }),
+  );
+  allow(
+    call(f, "local-worker", "PreToolUse", {
+      tool_name: "NotebookEdit",
+      tool_use_id: "notebook-local-field",
+      tool_input: {
+        file_path: path.join(f.linked, "src/auth.ts"),
+        notebook_path: path.join(f.root, "src/auth.ts"),
+      },
+    }),
+  );
+
+  const nested = path.join(f.root, ".worktrees/nested");
+  const added = spawnSync(
+    "git",
+    ["worktree", "add", "-b", "nested-isolation", nested],
+    { cwd: f.root, encoding: "utf8" },
+  );
+  assert.equal(added.status, 0, added.stderr);
+  deny(
+    call(f, "local-worker", "PreToolUse", {
+      tool_name: "Write",
+      tool_use_id: "nested",
+      tool_input: { file_path: path.join(nested, "src/auth.ts") },
+    }),
+  );
+  deny(
+    call(f, "local-worker", "PreToolUse", {
+      tool_name: "Bash",
+      tool_use_id: "nested-git",
+      cwd: nested,
+      tool_input: { command: "git add src/auth.ts" },
+    }),
+  );
+  const linkedFile = path.join(f.root, "foreign-hardlink.ts");
+  fs.linkSync(path.join(f.linked, "src/auth.ts"), linkedFile);
+  deny(
+    call(f, "local-worker", "PreToolUse", {
+      tool_name: "Write",
+      tool_use_id: "hardlink-escape",
+      tool_input: { file_path: linkedFile },
+    }),
+  );
+  fs.unlinkSync(linkedFile);
+
+  const alias = path.join(f.root, "linked-source-alias");
+  fs.symlinkSync(path.join(f.linked, "src"), alias);
+  for (const tool of ["Write", "Edit", "NotebookEdit"]) {
+    for (const file of [
+      path.join(f.linked, "src/auth.ts"),
+      path.join(alias, "auth.ts"),
+      path.join(f.linked, "src/new.ts"),
+    ]) {
+      const result = call(f, "local-worker", "PreToolUse", {
+        tool_name: tool,
+        tool_use_id: tool + file,
+        tool_input: { file_path: file, notebook_path: file },
+      });
+      deny(result);
+      assert.match(result, /resource-context-unavailable/);
+    }
+  }
+  allow(
+    call(f, "local-worker", "PreToolUse", {
+      tool_name: "Read",
+      tool_use_id: "foreign-read",
+      tool_input: { file_path: path.join(f.linked, "src/auth.ts") },
+    }),
+  );
+  deny(
+    call(f, "local-worker", "PreToolUse", {
+      tool_name: "Bash",
+      tool_use_id: "foreign-git",
+      cwd: f.linked,
+      tool_input: { command: "git add src/auth.ts" },
+    }),
+  );
+  assert.deepEqual(snapshot(), before);
+  assert.equal(
+    fs.readFileSync(path.join(f.linked, "src/auth.ts"), "utf8"),
+    "original",
+  );
+  f.result = call(f, "local-worker", "PreToolUse", {
+    tool_name: "Edit",
+    tool_use_id: "after-denial",
+    tool_input: { file_path: path.join(f.root, "src/auth.ts") },
+  });
 });

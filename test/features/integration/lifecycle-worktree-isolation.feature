@@ -40,3 +40,8 @@ Feature: lifecycleの競合を担当worktreeへ隔離する
     Given lifecycle隔離用の2つのGit worktreeとsessionがある
     When foreign handoffの妥当性とhost実行能力を分けて検査する
     Then lifecycle隔離判定は"allow"になる
+
+  Scenario: SCN-INT-LIFEISO-006 各worktreeの並行編集とforeign mutationを区別する
+    Given lifecycle隔離用の2つのGit worktreeとsessionがある
+    When 各workerの編集とforeign worktreeへの直接変更を区別する
+    Then lifecycle隔離判定は"allow"になる

@@ -569,35 +569,51 @@ function canonicalTarget(value, root) {
   }
 }
 const within = (file, directory) => file === directory || file.startsWith(directory + path.sep);
+function targetWorktree(target, root) {
+  try {
+    return repositoryGit(root, ["worktree", "list", "--porcelain", "-z"])
+      .split("\0").filter((entry) => entry.startsWith("worktree "))
+      .map((entry) => fs.realpathSync(entry.slice(9))).sort((a, b) => b.length - a.length)
+      .find((candidate) => within(target, candidate));
+  } catch { return undefined; }
+}
 function operationScope(input, root, agent) {
   if (agent?.handoff?.role === "reviewer" && input.tool_name === "Bash" && reviewerReadAllowed(agent.handoff, input))
     return { kind: "read", resources: [] };
   if (TASK_READ_TOOLS.has(input.tool_name)) return { kind: "read", resources: [] };
   if (["Agent", "Task"].includes(input.tool_name)) return { kind: "dispatch", resources: [] };
   if (["Edit", "Write", "NotebookEdit"].includes(input.tool_name)) {
-    const target = canonicalTarget(input.tool_input?.file_path ?? input.tool_input?.notebook_path, root);
+    const requested = input.tool_name === "NotebookEdit" ? input.tool_input?.notebook_path : input.tool_input?.file_path;
+    const target = canonicalTarget(requested, root);
+    if (requested !== undefined && !target) return { kind: "foreign-mutation", resources: [], resource: requested, worktree: "canonical target未確認" };
     if (target) {
-      let targetRoot;
-      try {
-        targetRoot = repositoryGit(root, ["worktree", "list", "--porcelain", "-z"])
-          .split("\0").filter((entry) => entry.startsWith("worktree "))
-          .map((entry) => entry.slice(9)).sort((a, b) => b.length - a.length)
-          .find((candidate) => within(target, candidate));
-      } catch { /* Missing Git context cannot establish resource ownership. */ }
+      const targetRoot = targetWorktree(target, root);
       if (targetRoot) {
+        if (targetRoot !== root) return { kind: "foreign-mutation", resources: [], resource: target, worktree: targetRoot };
         const control = [".agent-skill-chain", ".claude", ".codex", ".agents", ".git"]
           .some((name) => within(target, path.join(targetRoot, name)));
         if (!control) return { kind: "source", resources: [] };
-        if (targetRoot !== root) return { kind: "foreign-control", resources: [], resource: target, worktree: targetRoot };
         return { kind: "control", resources: [within(target, path.join(root, ".git")) ? path.join(root, ".git") : target] };
       }
+      if (!within(target, root)) return { kind: "foreign-mutation", resources: [], resource: target, worktree: path.dirname(target) };
+    }
+  }
+
+  if (input.tool_name === "Bash" && /^(?:true|pwd|git status|git diff --no-ext-diff --no-textconv)$/u.test(input.tool_input?.command ?? ""))
+    return { kind: "read", resources: [] };
+
+  // Explicit host/tool execution directories cannot redirect a mutation into
+  // another worktree. Opaque shell programs still require host sandboxing.
+  if (input.tool_name === "Bash") {
+    for (const directory of [input.cwd, input.tool_input?.cwd, input.tool_input?.workdir]) {
+      if (directory === undefined) continue;
+      const target = canonicalTarget(directory, root);
+      if (!target || !within(target, root) || (targetWorktree(target, root) ?? root) !== root) return { kind: "foreign-mutation", resources: [], resource: target, worktree: target };
     }
   }
 
   // A closed list of literal commands is treated as read-only here. Shell
   // syntax, aliases, redirection and arbitrary CLI flags are not inferred safe.
-  if (input.tool_name === "Bash" && /^(?:true|pwd|git status|git diff --no-ext-diff --no-textconv)$/u.test(input.tool_input?.command ?? ""))
-    return { kind: "read", resources: [] };
   if (input.tool_name === "Bash" && input.cwd === root &&
       input.tool_input?.cwd === undefined && input.tool_input?.workdir === undefined &&
       /^git (?:add|update-index)(?: [a-zA-Z0-9_./ =:@,+-]+)?$/u.test(input.tool_input?.command ?? ""))
@@ -668,8 +684,8 @@ const TASK_READ_TOOLS = new Set([
 function executionGuard(state, agent, input, verifiedHandoff) {
   const worktree = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR);
   const scope = operationScope(input, worktree, agent);
-  if (scope.kind === "foreign-control")
-    return deny(`ASC Degrade [resource-context-unavailable]: 制御資源=${JSON.stringify(scope.resource)}の更新は、${JSON.stringify(scope.worktree)}のworker/sessionで実行してください。起動元のlockでは別worktreeの制御状態を保護できません。絶対pathが確定した通常ソース編集と読取は継続できます。`);
+  if (scope.kind === "foreign-mutation")
+    return deny(`ASC Degrade [resource-context-unavailable]: 変更先=${JSON.stringify(scope.resource)}の更新は、${JSON.stringify(scope.worktree)}のworker/sessionで実行してください。実行元worktreeを越える直接変更は許可しません。実行元worktreeのソース編集と別worktreeの読取は継続できます。`);
   if (validId(input.tool_use_id) && operationReservations(state).some((entry) => entry.toolUseId === input.tool_use_id))
     return deny("実行中toolのIDを別操作に再利用できません。元操作の完了eventを確認してください。");
   const conflict = resourceConflict(state, scope.resources, agent.id);
