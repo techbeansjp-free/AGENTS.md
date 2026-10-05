@@ -701,3 +701,72 @@ When(
     }
   },
 );
+
+When(
+  "read分類のGit commandを{string}worktreeの明示実行先で検査する",
+  function (destination: string) {
+    const f = this.value as Fixture;
+    allow(
+      call(
+        f,
+        "foreign-observer",
+        "SessionStart",
+        { source: "startup" },
+        f.linked,
+      ),
+    );
+    const directory = path.join(
+      f.linked,
+      ".agent-skill-chain/runtime/agent-lifecycle",
+    );
+    const snapshot = () =>
+      fs
+        .readdirSync(directory)
+        .sort()
+        .map((name) => [
+          name,
+          fs.readFileSync(path.join(directory, name), "utf8"),
+        ]);
+    const before = snapshot();
+    const target = destination === "別" ? f.linked : f.root;
+    for (const command of [
+      "git status",
+      "git diff --no-ext-diff --no-textconv",
+    ]) {
+      for (const field of ["cwd", "tool.cwd", "tool.workdir"]) {
+        const extra: Record<string, unknown> = {
+          tool_name: "Bash",
+          tool_use_id: command + field,
+          tool_input: { command },
+        };
+        if (field === "cwd") extra.cwd = target;
+        else {
+          extra.cwd = f.root;
+          extra.tool_input = { command, [field.slice(5)]: target };
+        }
+        const result = call(f, "A", "PreToolUse", extra);
+        if (destination === "別") {
+          deny(result);
+          assert.match(result, /resource-context-unavailable/);
+        } else {
+          allow(result);
+          assert.doesNotMatch(result, /ASC Warn/);
+        }
+        f.result = result;
+      }
+    }
+    assert.deepEqual(snapshot(), before);
+    const local = path.join(
+      f.root,
+      ".agent-skill-chain/runtime/agent-lifecycle",
+    );
+    for (const name of fs
+      .readdirSync(local)
+      .filter((name) => name.endsWith(".json"))) {
+      const state = JSON.parse(
+        fs.readFileSync(path.join(local, name), "utf8"),
+      ) as { resourceOperations?: unknown[] };
+      assert.deepEqual(state.resourceOperations ?? [], []);
+    }
+  },
+);

@@ -55,3 +55,13 @@ Feature: lifecycleの競合を担当worktreeへ隔離する
     Given lifecycle隔離用の2つのGit worktreeとsessionがある
     When active workerのstate破損とlock競合で連絡と結果返却を検査する
     Then lifecycle隔離判定は"allow"になる
+
+  Scenario: SCN-INT-LIFEISO-009 foreign cwdではread分類のGit commandも拒否する
+    Given lifecycle隔離用の2つのGit worktreeとsessionがある
+    When read分類のGit commandを"別"worktreeの明示実行先で検査する
+    Then lifecycle隔離判定は"deny"になる
+
+  Scenario: SCN-INT-LIFEISO-010 自worktreeではread分類のGit commandを継続できる
+    Given lifecycle隔離用の2つのGit worktreeとsessionがある
+    When read分類のGit commandを"同じ"worktreeの明示実行先で検査する
+    Then lifecycle隔離判定は"allow"になる

@@ -587,6 +587,17 @@ function targetWorktree(target, root) {
   } catch { return undefined; }
 }
 function operationScope(input, root, agent) {
+  // Validate explicit execution directories before any Bash read shortcut,
+  // including reviewer commands. Opaque programs still require host sandboxing.
+  if (input.tool_name === "Bash") {
+    for (const directory of [input.cwd, input.tool_input?.cwd, input.tool_input?.workdir]) {
+      if (directory === undefined) continue;
+      const target = canonicalTarget(directory, root);
+      if (!target || !within(target, root) || targetWorktree(target, root) !== root) return { kind: "foreign-mutation", resources: [], resource: target, worktree: target };
+    }
+  }
+
+
   if (agent?.handoff?.role === "reviewer" && input.tool_name === "Bash" && reviewerReadAllowed(agent.handoff, input))
     return { kind: "read", resources: [] };
   if (TASK_READ_TOOLS.has(input.tool_name)) return { kind: "read", resources: [] };
@@ -611,15 +622,6 @@ function operationScope(input, root, agent) {
   if (input.tool_name === "Bash" && /^(?:true|pwd|git status|git diff --no-ext-diff --no-textconv)$/u.test(input.tool_input?.command ?? ""))
     return { kind: "read", resources: [] };
 
-  // Explicit host/tool execution directories cannot redirect a mutation into
-  // another worktree. Opaque shell programs still require host sandboxing.
-  if (input.tool_name === "Bash") {
-    for (const directory of [input.cwd, input.tool_input?.cwd, input.tool_input?.workdir]) {
-      if (directory === undefined) continue;
-      const target = canonicalTarget(directory, root);
-      if (!target || !within(target, root) || targetWorktree(target, root) !== root) return { kind: "foreign-mutation", resources: [], resource: target, worktree: target };
-    }
-  }
 
   // A closed list of literal commands is treated as read-only here. Shell
   // syntax, aliases, redirection and arbitrary CLI flags are not inferred safe.
