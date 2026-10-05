@@ -18,6 +18,7 @@ export type LatestUpdateResult = {
   doctor?: Json;
   activation?: unknown;
   diagnostic?: string;
+  warnings?: string[];
 };
 export type LatestUpdateDependencies = {
   release?: () => Promise<unknown>;
@@ -87,10 +88,18 @@ export async function updateLatest(
   dependencies: LatestUpdateDependencies = {},
 ): Promise<LatestUpdateResult> {
   root = path.resolve(root);
-  const currentVersion = (
-    dependencies.installed ??
-    ((target) => doctor(target).releaseIdentity.managedVersion)
-  )(root);
+  let currentVersion: string | null = null;
+  const warnings: string[] = [];
+  try {
+    currentVersion = (
+      dependencies.installed ??
+      ((target) => doctor(target).releaseIdentity?.managedVersion ?? null)
+    )(root);
+  } catch (error) {
+    warnings.push(
+      `現在versionの診断に失敗しました。現在版を不明として正式版更新を続行します: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   const release = object(await (dependencies.release ?? latestRelease)());
   const tag = release.tag_name;
   if (
@@ -113,7 +122,12 @@ export async function updateLatest(
     })
   )
     throw new Error(`${tag}に正式配布asset agent-skill-chain.tgzがありません`);
-  const resolved = { currentVersion, latestVersion: tag.slice(1), asset };
+  const resolved = {
+    currentVersion,
+    latestVersion: tag.slice(1),
+    asset,
+    ...(warnings.length ? { warnings } : {}),
+  };
   if (!options.apply) return { ...resolved, applied: false, verified: false };
   const execute = dependencies.execute ?? executeRelease;
   const update = execute(asset, [

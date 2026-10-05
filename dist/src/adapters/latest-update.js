@@ -53,8 +53,15 @@ function parseResult(result, stage) {
 /** Resolve once, then use the same pinned official asset for update and doctor. */
 export async function updateLatest(root, options, dependencies = {}) {
     root = path.resolve(root);
-    const currentVersion = (dependencies.installed ??
-        ((target) => doctor(target).releaseIdentity.managedVersion))(root);
+    let currentVersion = null;
+    const warnings = [];
+    try {
+        currentVersion = (dependencies.installed ??
+            ((target) => doctor(target).releaseIdentity?.managedVersion ?? null))(root);
+    }
+    catch (error) {
+        warnings.push(`現在versionの診断に失敗しました。現在版を不明として正式版更新を続行します: ${error instanceof Error ? error.message : String(error)}`);
+    }
     const release = object(await (dependencies.release ?? latestRelease)());
     const tag = release.tag_name;
     if (typeof tag !== "string" ||
@@ -71,7 +78,12 @@ export async function updateLatest(root, options, dependencies = {}) {
                 candidate.browser_download_url === asset);
         }))
         throw new Error(`${tag}に正式配布asset agent-skill-chain.tgzがありません`);
-    const resolved = { currentVersion, latestVersion: tag.slice(1), asset };
+    const resolved = {
+        currentVersion,
+        latestVersion: tag.slice(1),
+        asset,
+        ...(warnings.length ? { warnings } : {}),
+    };
     if (!options.apply)
         return { ...resolved, applied: false, verified: false };
     const execute = dependencies.execute ?? executeRelease;

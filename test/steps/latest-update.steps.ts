@@ -164,3 +164,41 @@ When("最新版更新後のdoctorと更新コマンドの失敗を検査する",
 Then("最新版更新の境界検査が成功する", function () {
   assert.equal(state(this).checked, true);
 });
+
+When("現在version診断の失敗と更新時の安全確認を検査する", async function () {
+  const s = state(this);
+  const deps = {
+    ...dependencies(s),
+    installed: () => {
+      throw new Error("current doctor unavailable");
+    },
+  };
+  const preview = await updateLatest(s.root, { apply: false }, deps);
+  assert.equal(preview.currentVersion, null);
+  assert.match(preview.warnings?.[0] ?? "", /current doctor unavailable/);
+  assert.equal(s.calls.length, 0);
+  const result = await updateLatest(s.root, { apply: true }, deps);
+  assert.equal(result.currentVersion, null);
+  assert.equal(result.latestVersion, "1.2.3");
+  assert.equal(result.applied, true);
+  assert.equal(result.verified, true);
+  assert.match(result.warnings?.[0] ?? "", /current doctor unavailable/);
+  assert.deepEqual(
+    s.calls.map((c) => c[0]),
+    ["update", "doctor"],
+  );
+  s.calls.length = 0;
+  fs.mkdirSync(
+    path.join(s.root, ".agent-skill-chain/managed-assets-mutation.lock"),
+  );
+  await assert.rejects(
+    updateLatest(s.root, { apply: true }, deps),
+    /lock|更新中/,
+  );
+  assert.deepEqual(
+    s.calls.map((c) => c[0]),
+    ["update"],
+  );
+  assert.equal(s.calls[0].includes("--recover-record"), false);
+  s.checked = true;
+});

@@ -21,3 +21,8 @@ Feature: 最新正式版への復旧導線を自動化する
     Given 最新版更新用の導入済みprojectがある
     When 最新版更新後のdoctorと更新コマンドの失敗を検査する
     Then 最新版更新の境界検査が成功する
+
+  Scenario: SCN-INT-LATEST-005 現在versionの診断失敗は更新の試行を妨げない
+    Given 最新版更新用の導入済みprojectがある
+    When 現在version診断の失敗と更新時の安全確認を検査する
+    Then 最新版更新の境界検査が成功する
