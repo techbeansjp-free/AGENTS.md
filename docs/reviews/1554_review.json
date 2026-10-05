@@ -3,16 +3,16 @@
   "issue": 1554,
   "observed": {
     "baseSha": "b263b07325c197b6a2204826143adfe32edf796c",
-    "implementationHeadSha": "ad4f6efeb668f04e673c28a9e19eecb103de2a06",
-    "diffDigest": "fb173e9c55837732af2c3a33e90799ef5e4d1f94d2980d09a030a0d5bc887177",
+    "implementationHeadSha": "1a95d7f41c35ea1771e586662bd3503770d6d140",
+    "diffDigest": "826ff413345bb4d37101dd998b019658d23a09de7ff317968382b6d1d297da99",
     "session": {
       "sessionId": "4f12366de52286bcd29d35317e379cbc32d22c0ef98b412a540a50d538c5576c",
-      "latestRoundDigest": "a7b6f24947aa1c29af12fee5c37004d849c4eac68f08394efd5d43833d3d4ead",
+      "latestRoundDigest": "1b3caee35a8fa4cefa5210c0b6b3349585b165de67d61971911033c057fdbf21",
       "status": "converged",
-      "countedRounds": 1
+      "countedRounds": 2
     },
     "impact": {
-      "digest": "bb7c9b1447cc2f6c7a9fafda70d8d70abe848dfaa84717416369a73d70405a74",
+      "digest": "1b0e5437510e1885fefa8676fb4000cadc6c91e3b47f84c93f5c4eb033400fd3",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "ad4f6efeb668f04e673c28a9e19eecb103de2a06",
-        "impactDigest": "bb7c9b1447cc2f6c7a9fafda70d8d70abe848dfaa84717416369a73d70405a74",
-        "finishedAt": "2026-10-05T23:14:24.602Z",
-        "recordDigest": "00223cdbbb3865c09df6c32d9262308e1aa775476a707c26ddfeda0f4255d4d2"
+        "headSha": "1a95d7f41c35ea1771e586662bd3503770d6d140",
+        "impactDigest": "1b0e5437510e1885fefa8676fb4000cadc6c91e3b47f84c93f5c4eb033400fd3",
+        "finishedAt": "2026-10-05T23:41:19.649Z",
+        "recordDigest": "d9d3d87bf75ddbb297037b0194ccf9022bea7fac2cbe75e64d129d297c040166"
       }
     ]
   },
@@ -39,5 +39,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "4fb033bcb3d2ab85d750fbe570d88d1e9db264048413e39b538758071dd510ff"
+  "evidenceDigest": "e51eec86155c526ebcfe1dde37c9f318116e166e88b538165a04cf607e8fa101"
 }
