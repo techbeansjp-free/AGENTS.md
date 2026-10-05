@@ -2,7 +2,9 @@ import { execFileSync } from "node:child_process";
 import {
   checkFileAudit,
   assertReleaseAuditExceptionEligible,
+  assertReleaseIntegrity,
 } from "../../scripts/check_file_audit.js";
+import { checkDistributionGateReachability } from "../../scripts/check_conformance.js";
 import { syntheticReviewEvidenceContent } from "../support/review-evidence-fixture.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -119,33 +121,67 @@ Then(
   },
 );
 
-Then("releaseの品質gateは維持され工程監査だけに例外入力が渡る", function () {
-  const workflow = fs.readFileSync(".github/workflows/release.yml", "utf8");
-  const scripts = (
-    JSON.parse(fs.readFileSync("package.json", "utf8")) as {
-      scripts: Record<string, string>;
+Then(
+  "releaseは品質gateを維持しPR証跡監査を配布整合性検査へ分離する",
+  function () {
+    const workflow = fs.readFileSync(".github/workflows/release.yml", "utf8");
+    const scripts = (
+      JSON.parse(fs.readFileSync("package.json", "utf8")) as {
+        scripts: Record<string, string>;
+      }
+    ).scripts;
+    assert.match(workflow, /run: npm run verify:release/u);
+    assert.doesNotMatch(
+      workflow,
+      /audit_exception_sha|audit_exception_reason/u,
+    );
+    assert.equal(
+      scripts["verify:release"],
+      scripts["verify:distribution"]!.replace(
+        "npm run audit:check",
+        "node --import tsx scripts/check_release_integrity.ts",
+      ),
+    );
+    assert.equal(
+      scripts["verify:distribution"],
+      "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run audit:check && npm run package:check",
+    );
+    const fixture = fs.mkdtempSync(
+      path.join(os.tmpdir(), "asc-release-gates-"),
+    );
+    try {
+      fs.mkdirSync(path.join(fixture, ".github/workflows"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(fixture, ".github/workflows/release.yml"),
+        workflow,
+      );
+      for (const command of [
+        scripts["verify:release"]!,
+        "echo skipped",
+        scripts["verify:release"]!.replace("npm run quality && ", ""),
+      ]) {
+        fs.writeFileSync(
+          path.join(fixture, "package.json"),
+          JSON.stringify({
+            scripts: { ...scripts, "verify:release": command },
+          }),
+        );
+        const errors = checkDistributionGateReachability(fixture);
+        assert.equal(
+          errors.length === 0,
+          command === scripts["verify:release"],
+          errors.join(" / "),
+        );
+      }
+    } finally {
+      fs.rmSync(fixture, { recursive: true, force: true });
     }
-  ).scripts;
-  assert.match(
-    workflow,
-    /RELEASE_AUDIT_EXCEPTION_SHA: \$\{\{ inputs.audit_exception_sha \}\}/u,
-  );
-  assert.match(
-    workflow,
-    /RELEASE_AUDIT_EXCEPTION_REASON: \$\{\{ inputs.audit_exception_reason \}\}/u,
-  );
-  assert.match(workflow, /run: npm run verify:distribution/u);
-  assert.match(
-    workflow,
-    /path: release-audit-exception.json\n\s+if-no-files-found: error/u,
-  );
-  assert.equal(
-    scripts["verify:distribution"],
-    "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run audit:check && npm run package:check",
-  );
-  const entry = fs.readFileSync("scripts/check_file_audit.ts", "utf8");
-  assert.match(entry, /else if \(!result.valid\) process.exitCode = 1/u);
-});
+    const entry = fs.readFileSync("scripts/check_file_audit.ts", "utf8");
+    assert.match(entry, /else if \(!result.valid\) process.exitCode = 1/u);
+  },
+);
 
 Given(
   "工程監査例外の実Git境界fixture {string} がある",
@@ -230,4 +266,17 @@ When("工程監査の実結果にrelease例外を適用する", function () {
 
 Then("工程監査例外の適用可否は {string} になる", function (expected: string) {
   assert.equal(this.auditAllowed, expected === "allow");
+});
+
+When("PR証跡と独立した配布整合性検査を実行する", function () {
+  this.auditAllowed = false;
+  try {
+    assertReleaseIntegrity(
+      this.auditRoot,
+      this.auditKind === "unobserved" ? undefined : this.auditHead,
+    );
+    this.auditAllowed = true;
+  } catch (error) {
+    assert.ok(error instanceof Error);
+  }
 });

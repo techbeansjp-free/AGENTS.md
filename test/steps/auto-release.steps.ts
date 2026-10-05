@@ -1014,6 +1014,7 @@ Given(
         "npm run verify:distribution",
         "npm run verify:distribution-extra",
       )
+      .replaceAll("npm run verify:release", "npm run verify:release-extra")
       .replaceAll("npm run prepack", "npm run prepack-extra")
       .replaceAll("npm run quality", "npm run quality-extra");
   },
@@ -1281,7 +1282,10 @@ Then("実workflowは既定branchへ書き込まない", function () {
     workflow.indexOf("\n  validate:"),
     workflow.indexOf("\n  tag:"),
   );
-  assert.match(validateJob, /npm run (?:prepack|verify:distribution)\b/u);
+  assert.match(
+    validateJob,
+    /npm run (?:prepack|verify:distribution|verify:release)\b/u,
+  );
 });
 
 Given("distと配布fileを持つfixture packageがある", function () {

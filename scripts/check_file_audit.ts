@@ -1011,6 +1011,19 @@ export function assertReleaseAuditExceptionEligible(
     throw new Error(
       "証跡の破損・binding不一致・監査異常は工程監査例外の対象外です",
     );
+  assertReleaseIntegrity(root, trustedDefaultTip);
+}
+
+/** 配布時はPR証跡の形を要求せず、既定branchとmergeの損失を検査する。 */
+export function assertReleaseIntegrity(
+  root: string,
+  trustedDefaultTip: string | undefined,
+): void {
+  const current = git(["rev-parse", "HEAD"], root).stdout.trim();
+  if (trustedDefaultTip !== current)
+    throw new Error(
+      "release対象は観測済みのremote既定branch tipでなければなりません",
+    );
   const parents = commitParents(root, current);
   if (parents.length !== 2)
     throw new Error("工程監査例外には親が2つのrelease merge commitが必要です");

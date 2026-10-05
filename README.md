@@ -172,6 +172,6 @@ hookの停止記録やwriter予約が残った場合も、時刻だけで自動�
 
 ## 手動releaseの工程監査例外
 
-通常のreleaseは全検査を必須とします。工程省略を明示承認した緊急修正だけは、GitHub Actionsの「自動・手動release」を既定branchから手動実行し、`version`、`audit_exception_sha`（対象commitの完全SHA）、`audit_exception_reason`（承認の経緯と理由）を指定できます。まず`dry_run=true`で確認し、公開時に`false`へ変更します。自動releaseでは例外を適用しません。
+mainへのpushによる自動releaseは維持します。releaseは`verify:release`で品質・全test・build・conformance・配布物を検査します。PR用のレビュー証跡差分監査（`audit:check`）はreleaseでは実行しません。代わりにremote既定branch tipとの一致、親が2つのmerge commit、一意な比較基点とmerge integrityを必須とし、観測不能・変更消失は公開を止めます。
 
-この例外はレビュー証跡commitの欠落だけに適用します。remote既定branch tipとの一致とmerge integrityを必須とし、証跡破損・binding不一致・観測不能・変更消失には適用しません。元の監査結果・対象SHA・理由・実行者・run IDをActions summaryと`release-audit-exception` artifactに保存し、監査合格とは表示しません。テスト、型検査、build、conformance、配布物・consumer検証は引き続き必須です。SHAの不一致や記録失敗では公開しません。
+PRのCIと`verify:distribution`は従来のレビュー証跡監査を維持します。手動releaseでは`version`と`dry_run`を指定できます。工程監査例外のSHA・理由はreleaseの入力として不要です。

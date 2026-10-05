@@ -15,7 +15,7 @@ Feature: 手動releaseの工程証跡監査例外
   Scenario: SCN-INT-RELEASE-EXCEPTION-003 品質検査と配布物検査を省略しない
     Given 対象SHAと理由を指定した手動release環境がある
     When 手動releaseの工程監査例外を評価する
-    Then releaseの品質gateは維持され工程監査だけに例外入力が渡る
+    Then releaseは品質gateを維持しPR証跡監査を配布整合性検査へ分離する
 
   Scenario Outline: SCN-INT-RELEASE-EXCEPTION-004 実Gitの監査で証跡欠落だけを例外化する
     Given 工程監査例外の実Git境界fixture "<kind>" がある
@@ -30,6 +30,21 @@ Feature: 手動releaseの工程証跡監査例外
       | valid            | allow  |
       | corrupt          | deny   |
       | binding          | deny   |
+      | loss             | deny   |
+      | unobserved       | deny   |
+      | single-parent    | deny   |
+
+  Scenario Outline: SCN-INT-RELEASE-EXCEPTION-005 配布は証跡の着地形に依存せずmerge損失を拒否する
+    Given 工程監査例外の実Git境界fixture "<kind>" がある
+    When PR証跡と独立した配布整合性検査を実行する
+    Then 工程監査例外の適用可否は "<result>" になる
+
+    Examples:
+      | kind             | result |
+      | missing          | allow  |
+      | missing-multiple | allow  |
+      | missing-empty    | allow  |
+      | valid            | allow  |
       | loss             | deny   |
       | unobserved       | deny   |
       | single-parent    | deny   |
