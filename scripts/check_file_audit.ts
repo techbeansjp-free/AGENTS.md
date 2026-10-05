@@ -1011,6 +1011,19 @@ export function assertReleaseAuditExceptionEligible(
     throw new Error(
       "証跡の破損・binding不一致・監査異常は工程監査例外の対象外です",
     );
+  assertReleaseIntegrity(root, trustedDefaultTip);
+}
+
+/** 配布時はPR証跡の形を要求せず、既定branchとmergeの損失を検査する。 */
+export function assertReleaseIntegrity(
+  root: string,
+  trustedDefaultTip: string | undefined,
+): void {
+  const current = git(["rev-parse", "HEAD"], root).stdout.trim();
+  if (trustedDefaultTip !== current)
+    throw new Error(
+      "release対象は観測済みのremote既定branch tipでなければなりません",
+    );
   const parents = commitParents(root, current);
   if (parents.length !== 2)
     throw new Error("工程監査例外には親が2つのrelease merge commitが必要です");
@@ -1053,24 +1066,53 @@ export function remoteDefaultTip(root: string): string | undefined {
     : undefined;
 }
 
+/** release workflowだけがPR証跡監査と配布整合性検査を切り替えられる。 */
+export function releaseIntegrityOnly(
+  environment: NodeJS.ProcessEnv,
+  head: string,
+): boolean {
+  if (environment.ASC_RELEASE_INTEGRITY_ONLY === undefined) return false;
+  if (
+    environment.ASC_RELEASE_INTEGRITY_ONLY !== "true" ||
+    environment.GITHUB_ACTIONS !== "true" ||
+    !["push", "workflow_dispatch"].includes(
+      environment.GITHUB_EVENT_NAME ?? "",
+    ) ||
+    environment.GITHUB_SHA !== head ||
+    !environment.RELEASE_DEFAULT_BRANCH ||
+    environment.GITHUB_REF !==
+      `refs/heads/${environment.RELEASE_DEFAULT_BRANCH}`
+  )
+    throw new Error(
+      "配布整合性検査への切替は既定branchのrelease Actionsだけで使用できます",
+    );
+  return true;
+}
+
 if (isExecutionEntry(import.meta.url)) {
   const root = process.cwd();
-  const exception = releaseAuditException(
-    process.env,
-    git(["rev-parse", "HEAD"], root).stdout.trim(),
-  );
-  const trustedDefaultTip = remoteDefaultTip(root);
-  const result = checkFileAudit(root, LEGACY_RELEASE_BUMP_CUTOFF, {
-    trustedDefaultTip,
-    requireSingleParentBase: true,
-  });
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  if (exception) {
-    assertReleaseAuditExceptionEligible(root, trustedDefaultTip, result);
-    recordReleaseAuditException(
-      exception,
-      result,
-      process.env.GITHUB_STEP_SUMMARY!,
+  const head = git(["rev-parse", "HEAD"], root).stdout.trim();
+  if (releaseIntegrityOnly(process.env, head)) {
+    assertReleaseIntegrity(root, remoteDefaultTip(root));
+    process.stdout.write("release merge integrity: passed\n");
+  } else {
+    const exception = releaseAuditException(
+      process.env,
+      git(["rev-parse", "HEAD"], root).stdout.trim(),
     );
-  } else if (!result.valid) process.exitCode = 1;
+    const trustedDefaultTip = remoteDefaultTip(root);
+    const result = checkFileAudit(root, LEGACY_RELEASE_BUMP_CUTOFF, {
+      trustedDefaultTip,
+      requireSingleParentBase: true,
+    });
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (exception) {
+      assertReleaseAuditExceptionEligible(root, trustedDefaultTip, result);
+      recordReleaseAuditException(
+        exception,
+        result,
+        process.env.GITHUB_STEP_SUMMARY!,
+      );
+    } else if (!result.valid) process.exitCode = 1;
+  }
 }

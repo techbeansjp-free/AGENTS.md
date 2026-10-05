@@ -2,6 +2,8 @@ import { execFileSync } from "node:child_process";
 import {
   checkFileAudit,
   assertReleaseAuditExceptionEligible,
+  assertReleaseIntegrity,
+  releaseIntegrityOnly,
 } from "../../scripts/check_file_audit.js";
 import { syntheticReviewEvidenceContent } from "../support/review-evidence-fixture.js";
 import assert from "node:assert/strict";
@@ -119,33 +121,65 @@ Then(
   },
 );
 
-Then("releaseの品質gateは維持され工程監査だけに例外入力が渡る", function () {
-  const workflow = fs.readFileSync(".github/workflows/release.yml", "utf8");
-  const scripts = (
-    JSON.parse(fs.readFileSync("package.json", "utf8")) as {
-      scripts: Record<string, string>;
+Then(
+  "releaseは品質gateを維持しPR証跡監査を配布整合性検査へ分離する",
+  function () {
+    const workflow = fs.readFileSync(".github/workflows/release.yml", "utf8");
+    const scripts = (
+      JSON.parse(fs.readFileSync("package.json", "utf8")) as {
+        scripts: Record<string, string>;
+      }
+    ).scripts;
+    assert.match(workflow, /run: npm run verify:distribution/u);
+    assert.match(workflow, /ASC_RELEASE_INTEGRITY_ONLY: "true"/u);
+    assert.doesNotMatch(
+      workflow,
+      /audit_exception_sha|audit_exception_reason/u,
+    );
+    assert.equal(
+      scripts["verify:distribution"],
+      "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run audit:check && npm run package:check",
+    );
+    const environment: NodeJS.ProcessEnv = {
+      ASC_RELEASE_INTEGRITY_ONLY: "true",
+      GITHUB_ACTIONS: "true",
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_SHA: head,
+      GITHUB_REF: "refs/heads/main",
+      RELEASE_DEFAULT_BRANCH: "main",
+    };
+    assert.equal(releaseIntegrityOnly({}, head), false);
+    assert.equal(releaseIntegrityOnly(environment, head), true);
+    assert.equal(
+      releaseIntegrityOnly(
+        { ...environment, GITHUB_EVENT_NAME: "workflow_dispatch" },
+        head,
+      ),
+      true,
+    );
+    for (const key of Object.keys(environment)) {
+      assert.throws(() =>
+        releaseIntegrityOnly({ ...environment, [key]: "" }, head),
+      );
     }
-  ).scripts;
-  assert.match(
-    workflow,
-    /RELEASE_AUDIT_EXCEPTION_SHA: \$\{\{ inputs.audit_exception_sha \}\}/u,
-  );
-  assert.match(
-    workflow,
-    /RELEASE_AUDIT_EXCEPTION_REASON: \$\{\{ inputs.audit_exception_reason \}\}/u,
-  );
-  assert.match(workflow, /run: npm run verify:distribution/u);
-  assert.match(
-    workflow,
-    /path: release-audit-exception.json\n\s+if-no-files-found: error/u,
-  );
-  assert.equal(
-    scripts["verify:distribution"],
-    "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run audit:check && npm run package:check",
-  );
-  const entry = fs.readFileSync("scripts/check_file_audit.ts", "utf8");
-  assert.match(entry, /else if \(!result.valid\) process.exitCode = 1/u);
-});
+    for (const event of ["pull_request", "pull_request_target"]) {
+      assert.throws(() =>
+        releaseIntegrityOnly(
+          { ...environment, GITHUB_EVENT_NAME: event },
+          head,
+        ),
+      );
+    }
+    assert.throws(() =>
+      releaseIntegrityOnly(
+        { ...environment, GITHUB_REF: "refs/heads/feature" },
+        head,
+      ),
+    );
+    const entry = fs.readFileSync("scripts/check_file_audit.ts", "utf8");
+    assert.match(entry, /else if \(!result.valid\) process.exitCode = 1/u);
+  },
+);
 
 Given(
   "工程監査例外の実Git境界fixture {string} がある",
@@ -230,4 +264,17 @@ When("工程監査の実結果にrelease例外を適用する", function () {
 
 Then("工程監査例外の適用可否は {string} になる", function (expected: string) {
   assert.equal(this.auditAllowed, expected === "allow");
+});
+
+When("PR証跡と独立した配布整合性検査を実行する", function () {
+  this.auditAllowed = false;
+  try {
+    assertReleaseIntegrity(
+      this.auditRoot,
+      this.auditKind === "unobserved" ? undefined : this.auditHead,
+    );
+    this.auditAllowed = true;
+  } catch (error) {
+    assert.ok(error instanceof Error);
+  }
 });
