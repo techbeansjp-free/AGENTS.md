@@ -627,19 +627,24 @@ When(
       f.root,
       ".agent-skill-chain/runtime/agent-lifecycle",
     );
-    const filename = fs
-      .readdirSync(directory)
-      .find(
-        (name) =>
-          name.endsWith(".json") &&
-          JSON.parse(fs.readFileSync(path.join(directory, name), "utf8"))
-            .sessionId === "A",
-      );
+    const filename = fs.readdirSync(directory).find(
+      (name) =>
+        name.endsWith(".json") &&
+        (
+          JSON.parse(fs.readFileSync(path.join(directory, name), "utf8")) as {
+            sessionId: string;
+          }
+        ).sessionId === "A",
+    );
     assert.ok(filename);
     const file = path.join(directory, filename);
     const original = fs.readFileSync(file, "utf8");
     assert.ok(
-      JSON.parse(original).agents.some(
+      (
+        JSON.parse(original) as {
+          agents: Array<{ id: string; status: string }>;
+        }
+      ).agents.some(
         (agent: { id: string; status: string }) =>
           agent.id === "reporter" && agent.status === "active",
       ),
