@@ -658,7 +658,7 @@ When(
           path.join(lock, "owner.json"),
           JSON.stringify({
             pid: process.pid,
-            createdAt: new Date().toISOString(),
+            createdAt: "2026-10-06T00:00:00Z",
           }),
         );
       }
