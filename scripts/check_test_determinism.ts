@@ -16,12 +16,6 @@ interface RepositoryReadException {
 export const REPOSITORY_READ_EXCEPTIONS: readonly RepositoryReadException[] =
   Object.freeze([
     {
-      file: "test/steps/release-audit-exception.steps.ts",
-      target: "package.json",
-      reason:
-        "手動releaseの工程監査例外を追加しても実配布scriptの品質gate列を省略しないことを検証する。fixtureでは実workflowとの乖離を検出できない",
-    },
-    {
       file: "test/steps/lifecycle-isolation.steps.ts",
       target: "package.json",
       reason:

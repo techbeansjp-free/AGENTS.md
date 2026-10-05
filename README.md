@@ -169,9 +169,3 @@ hookの停止記録やwriter予約が残った場合も、時刻だけで自動�
 困ったときや不具合を見つけたときは、[GitHub Issues](https://github.com/techbeansjp-free/AGENTS.md/issues)で相談・報告してください。
 
 最新版への更新依頼は[更新の入口](.agent-skill-chain/00_利用案内.md#ascを最新版にしてと依頼された場合)に従う。`update --latest --root=. --apply`で正式版の解決・更新・doctorを続けて実行し、必要な場合だけ新sessionへの切替を案内する。
-
-## 手動releaseの工程監査例外
-
-通常のreleaseは全検査を必須とします。工程省略を明示承認した緊急修正だけは、GitHub Actionsの「自動・手動release」を既定branchから手動実行し、`version`、`audit_exception_sha`（対象commitの完全SHA）、`audit_exception_reason`（承認の経緯と理由）を指定できます。まず`dry_run=true`で確認し、公開時に`false`へ変更します。自動releaseでは例外を適用しません。
-
-この例外は工程証跡監査だけに適用します。元の監査結果・対象SHA・理由・実行者・run IDをActions summaryと`release-audit-exception` artifactに保存し、監査合格とは表示しません。テスト、型検査、build、conformance、配布物・consumer検証は引き続き必須です。SHAの不一致や記録失敗では公開しません。
