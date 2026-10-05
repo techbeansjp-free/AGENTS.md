@@ -86,6 +86,7 @@ When(
       step: number,
       targetStaging = staging,
       rereview = false,
+      targetRoot = root,
     ) => {
       const result = spawnSync(
         process.execPath,
@@ -96,7 +97,7 @@ When(
           `--staging=${targetStaging}`,
         ],
         {
-          cwd: root,
+          cwd: targetRoot,
           env: { ...process.env, ASC_EXECUTION_CONTEXT_MODE: "short-lived" },
           encoding: "utf8",
         },
@@ -397,6 +398,80 @@ When(
       }),
     );
     denied(dispatch(request, "peer-shell-blocks-writer"));
+    // A host launched in the primary tree routes its idle session to the
+    // assigned worktree without recovering or waiting for unrelated peers.
+    const linkedRoot = path.join(
+      this.temp("asc-linked-lifecycle-"),
+      "worktree",
+    );
+    git("worktree", "add", "-b", "linked-lifecycle", linkedRoot);
+    const linkedStaging = path.join(linkedRoot, path.relative(root, staging));
+    fs.cpSync(staging, linkedStaging, { recursive: true });
+    const linkedRequest = pointer(1, linkedStaging, false, linkedRoot);
+    let linkedSessionId = "semantic-session";
+    const linked = (event: string, input: Record<string, unknown> = {}) =>
+      call(
+        event,
+        { ...input, session_id: linkedSessionId },
+        { CLAUDE_PROJECT_DIR: linkedRoot },
+      );
+    allowed(linked("SessionStart", { source: "startup" }));
+    const assertLinkedIsolation = (id: string, checkWrongHost = true) => {
+      if (checkWrongHost) {
+        const moving = (event: string, input: Record<string, unknown> = {}) =>
+          call(event, { ...input, session_id: `moving-session-${id}` });
+        allowed(moving("SessionStart", { source: "startup" }));
+        const launch = () =>
+          moving("PreToolUse", {
+            tool_name: "Agent",
+            tool_use_id: `moved-${id}`,
+            tool_input: {
+              subagent_type: "general-purpose",
+              prompt: dispatchPrompts.get(JSON.stringify(linkedRequest)),
+            },
+          });
+        allowed(
+          moving("PreToolUse", {
+            tool_name: "Bash",
+            tool_use_id: "own-write",
+          }),
+        );
+        const ownWrite = launch();
+        denied(ownWrite);
+        assert.match(ownWrite, /このsession自身に未完了操作/u);
+        allowed(moving("PostToolUse", { tool_use_id: "own-write" }));
+        allowed(launch());
+        allowed(
+          moving("SubagentStart", {
+            agent_id: `moved-child-${id}`,
+            agent_type: "general-purpose",
+          }),
+        );
+        allowed(
+          moving("PreToolUse", {
+            agent_id: `moved-child-${id}`,
+            tool_name: "Edit",
+          }),
+        );
+        // A session launched directly in the destination sees the moved writer.
+        denied(linked("PreToolUse", { tool_name: "Edit" }));
+        allowed(moving("SubagentStop", { agent_id: `moved-child-${id}` }));
+        allowed(moving("PostToolUse", { tool_use_id: `moved-${id}` }));
+        allowed(moving("SessionEnd"));
+      }
+      allowed(
+        linked("PreToolUse", {
+          tool_name: "Agent",
+          tool_use_id: `linked-${id}`,
+          tool_input: {
+            subagent_type: "general-purpose",
+            prompt: dispatchPrompts.get(JSON.stringify(linkedRequest)),
+          },
+        }),
+      );
+      allowed(linked("PostToolUseFailure", { tool_use_id: `linked-${id}` }));
+    };
+    assertLinkedIsolation("peer-write");
     allowed(peer("PostToolUse", { tool_use_id: "peer-shell" }));
     allowed(
       peer("PreToolUse", {
@@ -406,11 +481,84 @@ When(
       }),
     );
     denied(dispatch(request, "peer-pending-blocks-writer"));
+    assertLinkedIsolation("peer-pending");
     allowed(
       peer("SubagentStart", { agent_id: "peer-child", agent_type: "Explore" }),
     );
     allowed(peer("PostToolUse", { tool_use_id: "peer-agent" }));
     denied(dispatch(request, "peer-active-blocks-writer"));
+    assertLinkedIsolation("peer-active");
+    const sourceStateRoot = path.join(
+      root,
+      ".agent-skill-chain/runtime/agent-lifecycle",
+    );
+    const staleFiles: [string, string][] = [];
+    for (let index = 0; index < 5; index += 1) {
+      const sessionId = `abandoned-session-${index}`;
+      const abandoned = (event: string, input: Record<string, unknown> = {}) =>
+        call(
+          event,
+          { ...input, session_id: sessionId },
+          { ASC_EXECUTION_CONTEXT_MODE: "compatible" },
+        );
+      allowed(abandoned("SessionStart", { source: "startup" }));
+      allowed(
+        abandoned("PreToolUse", {
+          tool_name: "Bash",
+          tool_use_id: `abandoned-write-${index}`,
+        }),
+      );
+      allowed(
+        abandoned("SubagentStart", {
+          agent_id: `abandoned-child-${index}`,
+          agent_type: "Explore",
+        }),
+      );
+      const file = fs.readdirSync(sourceStateRoot).find((name) => {
+        if (!name.endsWith(".json")) return false;
+        return (
+          (
+            JSON.parse(
+              fs.readFileSync(path.join(sourceStateRoot, name), "utf8"),
+            ) as {
+              sessionId: string;
+            }
+          ).sessionId === sessionId
+        );
+      });
+      assert.ok(file);
+      const filename = path.join(sourceStateRoot, file);
+      const state = JSON.parse(fs.readFileSync(filename, "utf8")) as {
+        agents: { startedAt: string; lastSeenAt: string }[];
+      };
+      for (const agent of state.agents) {
+        agent.startedAt = "2020-01-01T00:00:00.000Z";
+        agent.lastSeenAt = "2020-01-01T00:00:00.000Z";
+      }
+      const bytes = JSON.stringify(state) + "\n";
+      fs.writeFileSync(filename, bytes);
+      staleFiles.push([filename, bytes]);
+    }
+    // No SessionEnd/PostToolUse: simulate a host crash without fabricating
+    // owner-stopped evidence or deleting abandoned state.
+    allowed(linked("SessionEnd"));
+    linkedSessionId = "fresh-after-crash";
+    allowed(linked("SessionStart", { source: "startup" }));
+    assertLinkedIsolation("five-abandoned-sessions");
+    denied(dispatch(request, "abandoned-sessions-still-protect-source"));
+    const sourceLock = path.join(sourceStateRoot, "worktree.lock");
+    fs.mkdirSync(sourceLock);
+    try {
+      assertLinkedIsolation("other-worktree-locked", false);
+      assert.ok(fs.existsSync(sourceLock));
+    } finally {
+      fs.rmdirSync(sourceLock);
+    }
+    for (const [filename, bytes] of staleFiles) {
+      assert.equal(fs.readFileSync(filename, "utf8"), bytes);
+      fs.unlinkSync(filename); // Test fixture cleanup only.
+    }
+    allowed(linked("SessionEnd"));
     allowed(peer("SubagentStop", { agent_id: "peer-child" }));
 
     const exhausted = (event: string, input: Record<string, unknown> = {}) =>
@@ -586,8 +734,10 @@ When(
       JSON.parse(peerReport.stdout) as {
         sessionId: string;
         recoveryDigest: string;
+        worktree: string;
       }[]
     ).find((entry) => entry.sessionId === "peer-session")!;
+    assert.equal(recoverable.worktree, root);
     const recover = (expected: string, confirmed: boolean) =>
       spawnSync(
         process.execPath,

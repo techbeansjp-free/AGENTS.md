@@ -55,7 +55,7 @@ When("空projectのinstallは設定とtrusted runtimeを自動構成する", fun
   assert.equal(applied.status, 0, applied.stdout + applied.stderr);
   const settings = read(root);
   assert.equal(settings.env, undefined);
-  assert.equal(Object.keys(settings.hooks).length, 7);
+  assert.equal(Object.keys(settings.hooks).length, 9);
   for (const event of AGENT_LIFECYCLE_EVENTS) {
     assert.equal(settings.hooks[event].length, 1);
     assert.equal(settings.hooks[event][0].hooks[0].timeout, 30);
