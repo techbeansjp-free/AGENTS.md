@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -86,6 +87,7 @@ When(
       step: number,
       targetStaging = staging,
       rereview = false,
+      targetRoot = root,
     ) => {
       const result = spawnSync(
         process.execPath,
@@ -96,7 +98,7 @@ When(
           `--staging=${targetStaging}`,
         ],
         {
-          cwd: root,
+          cwd: targetRoot,
           env: { ...process.env, ASC_EXECUTION_CONTEXT_MODE: "short-lived" },
           encoding: "utf8",
         },
@@ -158,8 +160,21 @@ When(
       );
     const stop = (id: string) =>
       allowed(call("SubagentStop", { agent_id: id }));
-    const tool = (id: string, name = "Read") =>
-      call("PreToolUse", { agent_id: id, tool_name: name, tool_input: {} });
+    let toolSequence = 0;
+    const tool = (id: string, name = "Read") => {
+      const toolUseId = `fixture-tool-${++toolSequence}`;
+      const result = call("PreToolUse", {
+        agent_id: id,
+        tool_name: name,
+        tool_use_id: toolUseId,
+        tool_input: {},
+      });
+      // These calls model completed synchronous tools. Pending-tool fixtures
+      // below use call directly and supply their completion event explicitly.
+      if (!result.includes('"deny"'))
+        allowed(call("PostToolUse", { agent_id: id, tool_use_id: toolUseId }));
+      return result;
+    };
     const startup = call("SessionStart", { source: "startup" });
     allowed(startup);
     assert.match(startup, /mainが実装・是正を代行しない/u);
@@ -177,6 +192,22 @@ When(
       allowed(plain(`dispatch-${id}`, "並行調査", "Explore"));
       allowed(call("SubagentStart", { agent_id: id, agent_type: "Explore" }));
       allowed(tool(id, "Read"));
+      allowed(
+        call("PreToolUse", {
+          agent_id: id,
+          tool_name: "Edit",
+          tool_use_id: `source-${id}`,
+          tool_input: { file_path: path.join(root, "src/parallel.ts") },
+        }),
+      );
+      denied(
+        call("PreToolUse", {
+          agent_id: id,
+          tool_name: "Write",
+          tool_use_id: `journal-${id}`,
+          tool_input: { file_path: path.join(staging, "journal/steps.jsonl") },
+        }),
+      );
       denied(tool(id, "Write"));
       denied(tool(id, "Bash"));
       stop(id);
@@ -217,7 +248,13 @@ When(
     denied(dispatch(request, "ambiguous-workflow"));
     start("task-two");
     start("task-one");
-    allowed(tool("task-one", "Edit"));
+    allowed(
+      call("PreToolUse", {
+        agent_id: "task-one",
+        tool_name: "Edit",
+        tool_input: { file_path: path.join(root, "src/auth.ts") },
+      }),
+    );
     allowed(tool("task-two", "Bash"));
     allowed(
       call("PreToolUse", {
@@ -369,7 +406,10 @@ When(
     allowed(call("PostToolUseFailure", { tool_use_id: "slow-dispatch" }));
 
     allowed(plain("writer-blocking-task", "調査", "Explore"));
-    denied(dispatch(request, "pending-task-blocks-writer"));
+    allowed(dispatch(request, "pending-task-blocks-writer"));
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "pending-task-blocks-writer" }),
+    );
     allowed(
       call("SubagentStart", {
         agent_id: "writer-blocking-agent",
@@ -378,8 +418,10 @@ When(
     );
     allowed(call("PostToolUse", { tool_use_id: "writer-blocking-task" }));
     const activeTaskDenial = dispatch(request, "active-task-blocks-writer");
-    denied(activeTaskDenial);
-    assert.match(activeTaskDenial, /完了を待つか別worktree/u);
+    allowed(activeTaskDenial);
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "active-task-blocks-writer" }),
+    );
     stop("writer-blocking-agent");
 
     const peer = (event: string, input: Record<string, unknown> = {}) =>
@@ -396,7 +438,92 @@ When(
         tool_input: { command: "true" },
       }),
     );
-    denied(dispatch(request, "peer-shell-blocks-writer"));
+    allowed(dispatch(request, "peer-shell-blocks-writer"));
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "peer-shell-blocks-writer" }),
+    );
+    // A host launched in another tree must restart in the assigned worktree.
+    // Its state and the destination state must never be migrated by the hook.
+    const linkedRoot = path.join(
+      this.temp("asc-linked-lifecycle-"),
+      "worktree",
+    );
+    git("worktree", "add", "-b", "linked-lifecycle", linkedRoot);
+    const linkedStaging = path.join(linkedRoot, path.relative(root, staging));
+    fs.cpSync(staging, linkedStaging, { recursive: true });
+    const linkedRequest = pointer(1, linkedStaging, false, linkedRoot);
+    let linkedSessionId = "semantic-session";
+    const linked = (event: string, input: Record<string, unknown> = {}) =>
+      call(
+        event,
+        { ...input, session_id: linkedSessionId },
+        { CLAUDE_PROJECT_DIR: linkedRoot },
+      );
+    allowed(linked("SessionStart", { source: "startup" }));
+    const assertLinkedIsolation = (id: string, checkWrongHost = true) => {
+      if (checkWrongHost) {
+        const moving = (event: string, input: Record<string, unknown> = {}) =>
+          call(event, { ...input, session_id: `moving-session-${id}` });
+        allowed(moving("SessionStart", { source: "startup" }));
+        const launch = () =>
+          moving("PreToolUse", {
+            tool_name: "Agent",
+            tool_use_id: `moved-${id}`,
+            tool_input: {
+              subagent_type: "general-purpose",
+              prompt: dispatchPrompts.get(JSON.stringify(linkedRequest)),
+            },
+          });
+        const result = launch();
+        denied(result);
+        assert.match(result, /execution-root-unavailable/u);
+        assert.match(result, /handoffは無効ではありません/u);
+        const sourceState = JSON.parse(
+          fs.readFileSync(
+            path.join(
+              root,
+              ".agent-skill-chain/runtime/agent-lifecycle",
+              createHash("sha256")
+                .update(`moving-session-${id}`)
+                .digest("hex") + ".json",
+            ),
+            "utf8",
+          ),
+        ) as {
+          worktree: string;
+          redirectWorktree?: string;
+          pendingHandoff?: unknown;
+        };
+        assert.equal(sourceState.worktree, root);
+        assert.equal(sourceState.redirectWorktree, undefined);
+        assert.ok(!sourceState.pendingHandoff);
+        assert.equal(
+          fs.existsSync(
+            path.join(
+              linkedRoot,
+              ".agent-skill-chain/runtime/agent-lifecycle",
+              createHash("sha256")
+                .update(`moving-session-${id}`)
+                .digest("hex") + ".json",
+            ),
+          ),
+          false,
+        );
+        allowed(moving("SessionEnd"));
+      }
+      allowed(
+        linked("PreToolUse", {
+          tool_name: "Agent",
+          tool_use_id: `linked-${id}`,
+          tool_input: {
+            subagent_type: "general-purpose",
+            prompt: dispatchPrompts.get(JSON.stringify(linkedRequest)),
+          },
+        }),
+      );
+      allowed(linked("PostToolUseFailure", { tool_use_id: `linked-${id}` }));
+    };
+    assertLinkedIsolation("peer-write");
     allowed(peer("PostToolUse", { tool_use_id: "peer-shell" }));
     allowed(
       peer("PreToolUse", {
@@ -405,12 +532,94 @@ When(
         tool_input: { prompt: "調査" },
       }),
     );
-    denied(dispatch(request, "peer-pending-blocks-writer"));
+    allowed(dispatch(request, "peer-pending-blocks-writer"));
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "peer-pending-blocks-writer" }),
+    );
+    assertLinkedIsolation("peer-pending");
     allowed(
       peer("SubagentStart", { agent_id: "peer-child", agent_type: "Explore" }),
     );
     allowed(peer("PostToolUse", { tool_use_id: "peer-agent" }));
-    denied(dispatch(request, "peer-active-blocks-writer"));
+    allowed(dispatch(request, "peer-active-blocks-writer"));
+    allowed(
+      call("PostToolUseFailure", { tool_use_id: "peer-active-blocks-writer" }),
+    );
+    assertLinkedIsolation("peer-active");
+    const sourceStateRoot = path.join(
+      root,
+      ".agent-skill-chain/runtime/agent-lifecycle",
+    );
+    const staleFiles: [string, string][] = [];
+    for (let index = 0; index < 5; index += 1) {
+      const sessionId = `abandoned-session-${index}`;
+      const abandoned = (event: string, input: Record<string, unknown> = {}) =>
+        call(
+          event,
+          { ...input, session_id: sessionId },
+          { ASC_EXECUTION_CONTEXT_MODE: "compatible" },
+        );
+      allowed(abandoned("SessionStart", { source: "startup" }));
+      allowed(
+        abandoned("PreToolUse", {
+          tool_name: "Write",
+          tool_use_id: `abandoned-write-${index}`,
+          tool_input: {
+            file_path: path.join(staging, `abandoned-${index}.json`),
+          },
+        }),
+      );
+      allowed(
+        abandoned("SubagentStart", {
+          agent_id: `abandoned-child-${index}`,
+          agent_type: "Explore",
+        }),
+      );
+      const file = fs.readdirSync(sourceStateRoot).find((name) => {
+        if (!name.endsWith(".json")) return false;
+        return (
+          (
+            JSON.parse(
+              fs.readFileSync(path.join(sourceStateRoot, name), "utf8"),
+            ) as {
+              sessionId: string;
+            }
+          ).sessionId === sessionId
+        );
+      });
+      assert.ok(file);
+      const filename = path.join(sourceStateRoot, file);
+      const state = JSON.parse(fs.readFileSync(filename, "utf8")) as {
+        agents: { startedAt: string; lastSeenAt: string }[];
+      };
+      for (const agent of state.agents) {
+        agent.startedAt = "2020-01-01T00:00:00.000Z";
+        agent.lastSeenAt = "2020-01-01T00:00:00.000Z";
+      }
+      const bytes = JSON.stringify(state) + "\n";
+      fs.writeFileSync(filename, bytes);
+      staleFiles.push([filename, bytes]);
+    }
+    // No SessionEnd/PostToolUse: simulate a host crash without fabricating
+    // owner-stopped evidence or deleting abandoned state.
+    allowed(linked("SessionEnd"));
+    linkedSessionId = "fresh-after-crash";
+    allowed(linked("SessionStart", { source: "startup" }));
+    assertLinkedIsolation("five-abandoned-sessions");
+    denied(dispatch(request, "abandoned-sessions-still-protect-source"));
+    const sourceLock = path.join(sourceStateRoot, "worktree.lock");
+    fs.mkdirSync(sourceLock);
+    try {
+      assertLinkedIsolation("other-worktree-locked", false);
+      assert.ok(fs.existsSync(sourceLock));
+    } finally {
+      fs.rmdirSync(sourceLock);
+    }
+    for (const [filename, bytes] of staleFiles) {
+      assert.equal(fs.readFileSync(filename, "utf8"), bytes);
+      fs.unlinkSync(filename); // Test fixture cleanup only.
+    }
+    allowed(linked("SessionEnd"));
     allowed(peer("SubagentStop", { agent_id: "peer-child" }));
 
     const exhausted = (event: string, input: Record<string, unknown> = {}) =>
@@ -451,7 +660,10 @@ When(
         agent_id: "exhausted-task",
         tool_name: "Read",
       });
-    denied(exhaustedDispatch());
+    allowed(exhaustedDispatch());
+    allowed(
+      exhausted("PostToolUseFailure", { tool_use_id: "exhaustion-workflow" }),
+    );
     allowed(exhausted("SubagentStop", { agent_id: "exhausted-task" }));
     allowed(exhaustedDispatch());
     allowed(
@@ -586,8 +798,10 @@ When(
       JSON.parse(peerReport.stdout) as {
         sessionId: string;
         recoveryDigest: string;
+        worktree: string;
       }[]
     ).find((entry) => entry.sessionId === "peer-session")!;
+    assert.equal(recoverable.worktree, root);
     const recover = (expected: string, confirmed: boolean) =>
       spawnSync(
         process.execPath,

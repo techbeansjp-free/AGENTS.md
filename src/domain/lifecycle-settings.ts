@@ -15,6 +15,8 @@ export const AGENT_LIFECYCLE_EVENTS = [
   "PreToolUse",
   "PostToolUse",
   "PostToolUseFailure",
+  "PermissionDenied",
+  "PostToolBatch",
 ];
 const SETTINGS = ".claude/settings.local.json";
 const canonicalHook = () => ({

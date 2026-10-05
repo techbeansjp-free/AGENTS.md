@@ -1329,15 +1329,15 @@ function upgradeUnlocked(
     files: { ...old.files },
   };
   const adopted: string[] = [];
+  const changed: string[] = [];
   for (const item of planned) {
     fs.mkdirSync(path.dirname(item.dest), { recursive: true });
     /**
      * **preview後の状態変化をここで取り直す。** TOCTOUの再検証であり、
      * previewの判定を再利用しない。
      */
-    const classification = classifyManagedAsset(
-      observeManagedAsset(item, item.expected),
-    );
+    const observation = observeManagedAsset(item, item.expected);
+    const classification = classifyManagedAsset(observation);
     if (classification === "retain") {
       retained.push(item.key);
       continue;
@@ -1345,9 +1345,12 @@ function upgradeUnlocked(
     if (classification === "place") {
       markDirty();
       copyManagedAsset(item.src, item.dest, "place");
+      changed.push(item.key);
     } else if (classification === "overwrite") {
       markDirty();
       copyManagedAsset(item.src, item.dest, "overwrite");
+      if (observation.destDigest !== observation.sourceDigest)
+        changed.push(item.key);
     } else adopted.push(item.key);
     next.files[item.key] = digest(item.dest);
   }
@@ -1376,6 +1379,17 @@ function upgradeUnlocked(
   publishManagedAssetRecord(target, next, recordPresent, expectedParent);
   return {
     applied: true,
+    changed,
+    activation: {
+      restart:
+        configuration.report.changed || changed.length > 0 || removed.length > 0
+          ? "new-session"
+          : "none",
+      message:
+        configuration.report.changed || changed.length > 0 || removed.length > 0
+          ? "更新完了。managed資産またはhost設定が変わったため、新しいsessionを開始してください。現在のsessionは自動再起動しません。"
+          : "更新完了。managed資産とhost設定に変更はありません。",
+    },
     configuration: configuration.report,
     obsoleteRuntime: obsoleteRuntime.map(({ key }) => key),
     removed,

@@ -110,6 +110,7 @@ import {
   type RootUpdateObservation,
 } from "./domain/finalize.js";
 import { init, upgrade, uninstall, doctor } from "./domain/lifecycle.js";
+import { updateLatest } from "./adapters/latest-update.js";
 import { DISTRIBUTION_IDENTITY } from "./lib/release-identity.js";
 import {
   loadConsumerChoicesFragmentAtCommit,
@@ -9737,6 +9738,14 @@ export async function main(
       positionals[0] ??
         (typeof flags.root === "string" ? flags.root : process.cwd()),
     );
+    if (lifecycleCommand === "update" && flags.latest === true) {
+      const result = await updateLatest(root, {
+        apply,
+        recoverRecord: flags["recover-record"] === true,
+      });
+      print(result);
+      return result.applied && !result.verified ? 1 : 0;
+    }
     print(
       lifecycleCommand === "install"
         ? init(root, { apply })

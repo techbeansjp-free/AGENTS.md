@@ -91,7 +91,8 @@ When("lifecycleの{string}を実行する", function (operation: string) {
       );
       assert.equal(result.status, 0, result.stderr);
       assert.match(result.stdout, /ENOSPC/u);
-      assert.match(result.stdout, /"deny"/u);
+      assert.match(result.stdout, /ASC Warn/u);
+      assert.doesNotMatch(result.stdout, /"deny"/u);
       assert.equal(
         fs.existsSync(
           path.join(
@@ -200,7 +201,7 @@ When("lifecycleの{string}を実行する", function (operation: string) {
         .find((name) => name.endsWith(".json"));
       assert.ok(file);
       fs.writeFileSync(path.join(directory, file), "{}");
-      this.lifecycleOutput = invoke(root);
+      this.lifecycleOutput = invoke(root, { tool_name: "Write" });
       break;
     }
     default:
@@ -263,7 +264,12 @@ Then("lifecycle記録のsymlinkは境界外を書き換えない", function () {
   const result = event(root, "SessionStart", { source: "startup" });
   assert.equal(result.status, 1);
   assert.deepEqual(fs.readdirSync(outside), []);
-  assert.match(invoke(root), /"permissionDecision":"deny"/u);
+  assert.match(
+    invoke(root, { tool_name: "Write" }),
+    /"permissionDecision":"deny"/u,
+  );
+  assert.match(invoke(root), /ASC Warn/u);
+  assert.deepEqual(fs.readdirSync(outside), []);
 });
 
 Then("lifecycle上限はmodel loopの継続も停止する", function () {
@@ -323,7 +329,7 @@ Then("lifecycleの並行toolは上限を超えて許可されない", async func
 });
 Then("lifecycle登録診断はevent不足と非同期登録を報告する", function () {
   const absent = inspectAgentLifecycleRegistration("{}", "short-lived");
-  assert.equal(absent.missingEvents.length, 7);
+  assert.equal(absent.missingEvents.length, 9);
   assert.equal(absent.healthy, false);
   assert.equal(absent.configurationDiagnostics.timeoutValid, true);
   assert.ok(
@@ -350,12 +356,12 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
   );
   assert.deepEqual(
     inspectAgentLifecycleRegistration(JSON.stringify({ hooks })).missingEvents,
-    ["PostToolUse", "PostToolUseFailure"],
+    ["PostToolUse", "PostToolUseFailure", "PermissionDenied", "PostToolBatch"],
   );
   assert.deepEqual(
     inspectAgentLifecycleRegistration(JSON.stringify({ hooks }), "short-lived")
       .missingEvents,
-    ["PostToolUse", "PostToolUseFailure"],
+    ["PostToolUse", "PostToolUseFailure", "PermissionDenied", "PostToolBatch"],
   );
   assert.deepEqual(
     inspectAgentLifecycleRegistration(
@@ -365,7 +371,7 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
       }),
       "compatible",
     ).missingEvents,
-    ["PostToolUse", "PostToolUseFailure"],
+    ["PostToolUse", "PostToolUseFailure", "PermissionDenied", "PostToolBatch"],
   );
   fs.mkdirSync(path.join(this.lifecycleRoot, ".claude"), { recursive: true });
   fs.writeFileSync(
@@ -377,7 +383,7 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
   );
   assert.deepEqual(
     doctor(this.lifecycleRoot).hooks.agentLifecycle.missingEvents,
-    ["PostToolUse", "PostToolUseFailure"],
+    ["PostToolUse", "PostToolUseFailure", "PermissionDenied", "PostToolBatch"],
   );
   const beforeSettings = fs.readFileSync(
     path.join(this.lifecycleRoot, ".claude/settings.local.json"),
@@ -403,6 +409,8 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
         "PreToolUse",
         "PostToolUse",
         "PostToolUseFailure",
+        "PermissionDenied",
+        "PostToolBatch",
       ].map((name) => [
         name,
         [{ hooks: [{ ...entry.hooks[0], timeout: 30 }] }],
@@ -507,7 +515,7 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
     );
     assert.equal(result.healthy, false);
     assert.deepEqual(result.configuredEvents, []);
-    assert.equal(result.missingEvents.length, 7);
+    assert.equal(result.missingEvents.length, 9);
     assert.match(result.diagnostics.join(), /canonical command/u);
   }
   const canonical = fragment.hooks.SubagentStart[0].hooks[0].command;
@@ -540,7 +548,7 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
       "SubagentStart",
     ]);
   }
-  assert.equal(Object.keys(fragment.hooks).length, 7);
+  assert.equal(Object.keys(fragment.hooks).length, 9);
   const diagnose = (cli: string | null, timeout = 30) =>
     inspectAgentLifecycleRegistration(
       JSON.stringify({
@@ -596,6 +604,8 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
     ),
     beforeSettings,
   );
+  hooks.PermissionDenied = [entry];
+  hooks.PostToolBatch = [entry];
   hooks.PostToolUse = [entry];
   hooks.PostToolUseFailure = [{ hooks: [{ ...entry.hooks[0], async: true }] }];
   assert.deepEqual(
@@ -616,7 +626,7 @@ Then("lifecycle登録診断はevent不足と非同期登録を報告する", fun
   );
   assert.equal(
     inspectAgentLifecycleRegistration(undefined).missingEvents.length,
-    7,
+    9,
   );
   assert.equal(inspectAgentLifecycleRegistration("{}").runtimeVerified, false);
 });

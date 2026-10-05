@@ -16,6 +16,7 @@ const EVENTS = new Set([
   "PostToolBatch",
   "PostToolUse",
   "PostToolUseFailure",
+  "PermissionDenied",
 ]);
 const HANDOFF =
   "作業状態はGit / staging / trackerを正本とし、Issue・worktree・stagingのpointerから復旧できます。mainは継続・resume可能でfresh contextは推奨です。完了subagentの追加作業はfresh agentへ渡してください。workflow advanceのresumeはadvisoryです。必要なreview・検証を続けてください。";
@@ -95,6 +96,20 @@ function readState(file, snapshot = false) {
       )
     )
       throw new Error("main記録がありません");
+    // Legacy records belong to the physical worktree where they were stored.
+    // Never infer owner death or move a peer's reservation from its timestamp.
+    const worktree = fs.realpathSync(path.resolve(path.dirname(file), "../../.."));
+    if (state.worktree !== undefined && state.worktree !== worktree)
+      throw new Error("sessionのworktreeと状態保存先が一致しません");
+    state.worktree = worktree;
+    for (const field of ["inFlightWrites", "pendingDispatches"])
+      if (state[field] !== undefined && (!Array.isArray(state[field]) || state[field].some((id) => typeof id !== "string")))
+        throw new Error("tool予約記録が不正です");
+    if (state.resourceOperations !== undefined && (!Array.isArray(state.resourceOperations) ||
+        state.resourceOperations.some((entry) => !entry || typeof entry.toolUseId !== "string" ||
+          typeof entry.agentId !== "string" || !Array.isArray(entry.resources) ||
+          entry.resources.some((resource) => typeof resource !== "string" || !path.isAbsolute(resource) || path.normalize(resource) !== resource || !within(resource, worktree)))))
+      throw new Error("resource operation記録が不正です");
     // Older records never implicitly opt in to hard budget enforcement.
     state.budgetMode ??= "warn";
     state.executionContextMode ??= "compatible";
@@ -297,10 +312,21 @@ function checkTask(task) {
       "taskの起動記録がありません。fresh agentへ再委譲してください",
     );
 }
+function checkHandoffWorktree(h) {
+  const project = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR);
+  const root = fs.realpathSync(h.worktree);
+  const common = (directory) => repositoryGit(directory, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+  if (root !== h.worktree || common(root) !== common(project) ||
+      !repositoryGit(project, ["worktree", "list", "--porcelain", "-z"]).split("\0").includes(`worktree ${root}`))
+    throw new Error("handoffには同じrepositoryの登録済みcanonical worktreeが必要です");
+  return root;
+}
+function executionContextUnavailable(h) {
+  return deny(`ASC Degrade [execution-root-unavailable]: handoffは検証済みですが、このhostのAgent呼出しではworkerの実行先=${JSON.stringify(h.worktree)}を確立できません。handoffは無効ではありません。担当worktreeをproject directoryとするfresh worker/sessionへ同じCLI生成handoffを渡してください。coordinatorは継続でき、読取・他の担当起動も可能です。実行先が確立するまでwriter予約は作りません。`);
+}
 function checkHandoff(h, exactHead, acquireWriter = false) {
-  const root = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR);
+  const root = checkHandoffWorktree(h);
   if (
-    h.worktree !== root ||
     fs.realpathSync(h.staging) !== h.staging ||
     !h.staging.startsWith(root + path.sep) ||
     repositoryGit(root, ["rev-parse", "--show-toplevel"]) !== root ||
@@ -489,6 +515,7 @@ function unfinishedWorker(agent) {
   return ["active", "exhausted"].includes(agent.status) && !agent.stoppedAt;
 }
 let peerStates = [];
+let uncertainPeers = [];
 const sessionStates = (state) => [state, ...peerStates];
 function writerReservations(state, worktree) {
   return sessionStates(state).flatMap((session) => [
@@ -515,8 +542,145 @@ function writerReservations(state, worktree) {
       })),
   ]);
 }
-function workflowWriteReserved(state, worktree) {
-  return writerReservations(state, worktree).length > 0;
+// Resources describe mutable control state, never Issue/session identity or a
+// repository-global source filename. Unknown operations reserve control state
+// conservatively for their tool lifetime, not for their agent lifetime.
+function canonicalTarget(value, root) {
+  if (typeof value !== "string" || !path.isAbsolute(value) || value.includes("\0")) return null;
+  const target = path.resolve(root, value);
+  let parent = target;
+  const suffix = [];
+  for (;;) {
+    try {
+      const resolved = fs.realpathSync(parent);
+      if (!suffix.length && fs.statSync(resolved).isFile() && fs.statSync(resolved).nlink > 1) return null;
+      return path.join(resolved, ...suffix.reverse());
+    }
+    catch (error) {
+      if (error.code !== "ENOENT") return null;
+      // A dangling symlink is not a new file under its lexical parent.
+      try { if (fs.lstatSync(parent).isSymbolicLink()) return null; }
+      catch (statError) { if (statError.code !== "ENOENT") return null; }
+      const next = path.dirname(parent);
+      if (next === parent) return null;
+      suffix.push(path.basename(parent));
+      parent = next;
+    }
+  }
+}
+const within = (file, directory) => file === directory || file.startsWith(directory + path.sep);
+function targetWorktree(target, root) {
+  try {
+    return repositoryGit(root, ["worktree", "list", "--porcelain", "-z"])
+      .split("\0").filter((entry) => entry.startsWith("worktree "))
+      .flatMap((entry) => {
+        try { return [fs.realpathSync(entry.slice(9))]; }
+        catch (error) {
+          // Git retains prunable entries after their directories disappear.
+          // Only that missing entry is irrelevant; other resolution failures
+          // leave ownership unknown instead of guessing the root worktree.
+          if (error.code === "ENOENT" || error.code === "ENOTDIR") return [];
+          throw error;
+        }
+      }).sort((a, b) => b.length - a.length)
+      .find((candidate) => within(target, candidate));
+  } catch { return undefined; }
+}
+function operationScope(input, root, agent) {
+  // Validate explicit execution directories before any Bash read shortcut,
+  // including reviewer commands. Opaque programs still require host sandboxing.
+  if (input.tool_name === "Bash") {
+    for (const directory of [input.cwd, input.tool_input?.cwd, input.tool_input?.workdir]) {
+      if (directory === undefined) continue;
+      const target = canonicalTarget(directory, root);
+      if (!target || !within(target, root) || targetWorktree(target, root) !== root) return { kind: "foreign-mutation", resources: [], resource: target, worktree: target };
+    }
+  }
+
+
+  if (agent?.handoff?.role === "reviewer" && input.tool_name === "Bash" && reviewerReadAllowed(agent.handoff, input))
+    return { kind: "read", resources: [] };
+  if (TASK_READ_TOOLS.has(input.tool_name)) return { kind: "read", resources: [] };
+  if (["Agent", "Task"].includes(input.tool_name)) return { kind: "dispatch", resources: [] };
+  if (["Edit", "Write", "NotebookEdit"].includes(input.tool_name)) {
+    const requested = input.tool_name === "NotebookEdit" ? input.tool_input?.notebook_path : input.tool_input?.file_path;
+    const target = canonicalTarget(requested, root);
+    if (requested !== undefined && !target) return { kind: "foreign-mutation", resources: [], resource: requested, worktree: "canonical target未確認" };
+    if (target) {
+      const targetRoot = targetWorktree(target, root);
+      if (targetRoot) {
+        if (targetRoot !== root) return { kind: "foreign-mutation", resources: [], resource: target, worktree: targetRoot };
+        const control = [".agent-skill-chain", ".claude", ".codex", ".agents", ".git"]
+          .some((name) => within(target, path.join(targetRoot, name)));
+        if (!control) return { kind: "source", resources: [] };
+        return { kind: "control", resources: [within(target, path.join(root, ".git")) ? path.join(root, ".git") : target] };
+      }
+      return { kind: "foreign-mutation", resources: [], resource: target, worktree: "ownership未確認" };
+    }
+  }
+
+  if (input.tool_name === "Bash" && /^(?:true|pwd|git status|git diff --no-ext-diff --no-textconv)$/u.test(input.tool_input?.command ?? ""))
+    return { kind: "read", resources: [] };
+
+
+  // A closed list of literal commands is treated as read-only here. Shell
+  // syntax, aliases, redirection and arbitrary CLI flags are not inferred safe.
+  if (input.tool_name === "Bash" && input.cwd === root &&
+      input.tool_input?.cwd === undefined && input.tool_input?.workdir === undefined &&
+      /^git (?:add|update-index)(?: [a-zA-Z0-9_./ =:@,+-]+)?$/u.test(input.tool_input?.command ?? ""))
+    return { kind: "control", resources: [path.join(root, ".git")] };
+  return { kind: "unknown", resources: [root] };
+}
+function overlaps(left, right) {
+  return within(left, right) || within(right, left);
+}
+function operationReservations(session) {
+  const known = session.resourceOperations ?? [];
+  const ids = new Set(known.map((entry) => entry.toolUseId));
+  return [...known, ...(session.inFlightWrites ?? []).filter((id) => !ids.has(id)).map((id) => ({
+    toolUseId: id, agentId: session.sessionId, resources: [session.worktree], legacy: true,
+  }))];
+}
+function resourceConflict(state, resources, actorId) {
+  const worktree = state.worktree;
+  if (resources.length && uncertainPeers.length)
+    return { resource: resources[0], sessionId: "unreadable-peer-state", invariant: "control-state-ownership-unverified" };
+  for (const session of sessionStates(state)) {
+    if (session.worktree !== worktree) continue;
+    for (const operation of operationReservations(session)) {
+      const resource = resources.find((requested) => operation.resources.some((held) => overlaps(requested, held)));
+      if (resource) return { resource, sessionId: session.sessionId, toolUseId: operation.toolUseId };
+    }
+  }
+  for (const reservation of writerReservations(state, worktree)) {
+    if (reservation.sessionId === state.sessionId && reservation.agentId === actorId) continue;
+    const resource = resources.find((requested) => overlaps(requested, reservation.handoff.staging));
+    if (resource) return { resource: reservation.handoff.staging, sessionId: reservation.sessionId };
+  }
+  return null;
+}
+function conflictsWithWorktree(session, worktree) {
+  return session.worktree === worktree && (
+    operationReservations(session).some((entry) => entry.resources.length) ||
+    workflowWriter(session.pendingHandoff?.handoff, worktree) ||
+    session.agents.some((entry) => unfinishedWorker(entry) && workflowWriter(entry.handoff, worktree))
+  );
+}
+function isolate(conflict) {
+  return deny(`ASC Isolate: 競合資源=${JSON.stringify(conflict.resource)}、owner session=${JSON.stringify(conflict.sessionId)}。制御状態の同時更新を防ぐため、この操作だけを保留します。読取・競合しないソース編集・別stagingの作業は継続できます。該当toolの完了を待ち、event欠落時は--reportで対象予約を確認してください`);
+}
+function settleToolReservations(state, input) {
+  const ids = new Set(
+    input.hook_event_name === "PostToolBatch"
+      ? (Array.isArray(input.tool_calls) ? input.tool_calls : []).map((entry) => entry?.tool_use_id).filter(validId)
+      : ["PostToolUse", "PostToolUseFailure", "PermissionDenied"].includes(input.hook_event_name) && validId(input.tool_use_id)
+        ? [input.tool_use_id] : [],
+  );
+  if (state.resourceOperations) state.resourceOperations = state.resourceOperations.filter((entry) => !ids.has(entry.toolUseId));
+  if (state.pendingHandoff && ids.has(state.pendingHandoff.toolUseId)) state.pendingHandoff = null;
+  if (state.pendingTasks) state.pendingTasks = state.pendingTasks.filter((entry) => !ids.has(entry.toolUseId));
+  for (const field of ["inFlightWrites", "pendingDispatches"])
+    if (state[field]) state[field] = state[field].filter((id) => !ids.has(id));
 }
 const TASK_READ_TOOLS = new Set([
   "Read",
@@ -530,22 +694,18 @@ const TASK_READ_TOOLS = new Set([
 
 function executionGuard(state, agent, input, verifiedHandoff) {
   const worktree = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR);
-  const reservations = writerReservations(state, worktree);
-  const owner = reservations.some(
-    (reservation) =>
-      reservation.sessionId === state.sessionId &&
-      reservation.agentId === agent.id,
-  );
-  if (
-    reservations.length &&
-    !owner &&
-    !TASK_READ_TOOLS.has(input.tool_name) &&
-    !(agent.kind === "main" && ["Agent", "Task"].includes(input.tool_name))
-  )
-    return deny(
-      "このworktreeはASC writerが占有しています。main・別sessionも読取と連絡のみ可能です。書込み・Bashはwriterの終了を待つか別worktreeを使用してください",
-    );
-  if (state.executionContextMode !== "short-lived") return undefined;
+  const scope = operationScope(input, worktree, agent);
+  if (scope.kind === "foreign-mutation")
+    return deny(`ASC Degrade [resource-context-unavailable]: 変更先=${JSON.stringify(scope.resource)}の更新は、${JSON.stringify(scope.worktree)}のworker/sessionで実行してください。実行元worktreeを越える直接変更は許可しません。実行元worktreeのソース編集と別worktreeの読取は継続できます。`);
+  if (validId(input.tool_use_id) && operationReservations(state).some((entry) => entry.toolUseId === input.tool_use_id))
+    return deny("実行中toolのIDを別操作に再利用できません。元操作の完了eventを確認してください。");
+  const conflict = resourceConflict(state, scope.resources, agent.id);
+  if (conflict) return isolate(conflict);
+  const warning = () => uncertainPeers.length && !scope.resources.length
+    ? context("PreToolUse", "ASC Warn: 同じworktreeの一部状態を読めません。制御状態への変更だけを保留し、読取・ソース編集・通常taskは継続できます。--reportで状態を確認してください。")
+    : scope.kind === "unknown"
+    ? context("PreToolUse", "ASC Warn: 変更先を特定できないtoolです。制御状態を変更し得る操作として実行中だけ予約します。読取toolや変更先が明示されたEdit/Writeを使うと影響範囲を限定できます。") : undefined;
+  if (state.executionContextMode !== "short-lived") return warning();
   const tool = input.tool_input ?? {};
   if (input.tool_name === "SubagentHandback") return {};
   if (agent.kind === "subagent") {
@@ -556,13 +716,6 @@ function executionGuard(state, agent, input, verifiedHandoff) {
         );
       if (agent.dispatchScope === "task") {
         checkTask(agent.task);
-        if (
-          workflowWriteReserved(state, agent.task.worktree) &&
-          !TASK_READ_TOOLS.has(input.tool_name)
-        )
-          return deny(
-            "同一worktreeのASC writerが開始待ちまたは稼働中です。通常taskはRead / Glob / Grep / WebSearch / WebFetchと連絡・返却だけ実行できます。書込み・Bashは完了を待つか別worktreeを使用してください",
-          );
       } else {
         const h = parseHandoff(JSON.stringify(agent.handoff));
         checkHandoff(h, h.role === "reviewer");
@@ -594,6 +747,12 @@ function executionGuard(state, agent, input, verifiedHandoff) {
         !validId(input.tool_use_id)
       )
         throw new Error("dispatch type/tool_use_idが必要です");
+      if (h) {
+        checkHandoff(h, true, true);
+        if (verifiedHandoff !== JSON.stringify(h))
+          throw new Error(verifiedHandoff?.error ?? "handoffの事前検証がありません");
+        if (h.worktree !== worktree) return executionContextUnavailable(h);
+      }
       if (
         (h && state.pendingHandoff) ||
         (!h &&
@@ -610,36 +769,11 @@ function executionGuard(state, agent, input, verifiedHandoff) {
         throw new Error(
           "同じtypeの通常taskとASC workerの開始を識別できません。先行dispatchの開始/完了観測を待つか、別typeを使用してください",
         );
-      if (
-        workflowWriter(h, h?.worktree) &&
-        (workflowWriteReserved(state, h.worktree) ||
-          sessionStates(state).some(
-            (session) =>
-              (session.inFlightWrites?.length ?? 0) > 0 ||
-              (session.pendingDispatches?.length ?? 0) > 0 ||
-              session.pendingTasks?.some(
-                (entry) => entry.task?.worktree === h.worktree,
-              ) ||
-              session.agents.some(
-                (entry) =>
-                  entry.kind === "subagent" &&
-                  !entry.handoff &&
-                  unfinishedWorker(entry),
-              ),
-          ))
-      )
-        throw new Error(
-          "同一worktreeにwriter・未終了task・実行中の書込みがあります。完了を待つか別worktreeを使用してください。event欠落は--reportでownerを確認してください",
-        );
-      if (h) {
-        checkHandoff(h, true, true);
-        if (verifiedHandoff !== JSON.stringify(h))
-          throw new Error(
-            verifiedHandoff?.error ??
-              "handoffの事前検証がありません。fresh previewから再委譲してください",
-          );
-        if (h.role === "reviewer") reviewerCommands(h);
+      if (workflowWriter(h, h?.worktree)) {
+        const conflict = resourceConflict(state, [h.staging], agent.id);
+        if (conflict) return isolate(conflict);
       }
+      if (h?.role === "reviewer") reviewerCommands(h);
       if (
         state.agents.some(
           (entry) =>
@@ -701,7 +835,7 @@ function executionGuard(state, agent, input, verifiedHandoff) {
       return deny(error.message);
     }
   }
-  return undefined;
+  return warning();
 }
 
 function transition(state, input, now, verifiedHandoff) {
@@ -814,15 +948,7 @@ function transition(state, input, now, verifiedHandoff) {
       `ASC lifecycle: ${main.status}, tools=${main.tools}/${state.maxTools}。compactやsession再開で計測はリセットしません。長寿命sessionではfresh contextも利用できます。${HANDOFF}${state.executionContextMode === "short-lived" ? " 通常の単発taskは自然言語でfresh Agentへ委譲できます。ASCの工程担当はworkflow advance --staging=<path>のagentDispatchをAgent引数へそのまま渡してください（handoff JSONの手組みは不要。旧形式ではhandoffをJSON.stringifyしてpromptへ渡します）。工程担当を通常taskへ格下げせず、起動拒否時もmainが実装・是正を代行しないでください。拒否理由を修正して再委譲し、復旧不能なら理由を利用者へ返してください。" : ""}`,
     );
   }
-  if (["PostToolUse", "PostToolUseFailure"].includes(event)) {
-    if (state.pendingHandoff?.toolUseId === input.tool_use_id)
-      state.pendingHandoff = null;
-    if (state.pendingTasks)
-      state.pendingTasks = state.pendingTasks.filter(
-        (entry) => entry.toolUseId !== input.tool_use_id,
-      );
-    return {};
-  }
+  if (["PostToolUse", "PostToolUseFailure", "PermissionDenied"].includes(event)) return {};
   if (event === "PostToolBatch") {
     if (agent) {
       agent.toolBatches = (agent.toolBatches ?? 0) + 1;
@@ -974,6 +1100,7 @@ function recoverSession() {
     state.pendingHandoff = null;
     state.pendingTasks = [];
     state.pendingDispatches = [];
+    state.resourceOperations = [];
     state.inFlightWrites = [];
     state.recoveredAt = now;
     const temporary = path.join(lock, "state.json");
@@ -1061,6 +1188,7 @@ function run(input) {
         executionContextMode,
         budgetMode,
         sessionId: input.session_id,
+        worktree: fs.realpathSync(process.env.CLAUDE_PROJECT_DIR),
         maxTools,
         resumeAttempts: 0,
         dispatchAttempts: 0,
@@ -1072,12 +1200,17 @@ function run(input) {
       throw new Error("明示復旧で閉鎖済みのsessionです。新sessionが必要です");
     if (state.sessionId !== input.session_id)
       throw new Error("session identityが一致しません");
+    uncertainPeers = [];
     peerStates = fs
       .readdirSync(root)
       .filter(
         (name) => /^[a-f0-9]{64}\.json$/u.test(name) && name !== `${key}.json`,
       )
-      .map((name) => readState(path.join(root, name)));
+      .flatMap((name) => {
+        try { return [readState(path.join(root, name))]; }
+        catch { uncertainPeers.push(name); return []; }
+      });
+    settleToolReservations(state, input);
     const result = transition(
       state,
       input,
@@ -1086,30 +1219,20 @@ function run(input) {
     );
     const actorId = input.agent_id ?? state.sessionId;
     const actor = state.agents.find((entry) => entry.id === actorId);
-    if (
-      event === "PreToolUse" &&
-      actor?.kind === "main" &&
-      result.hookSpecificOutput?.permissionDecision !== "deny" &&
-      result.continue !== false
-    ) {
+    if (event === "PreToolUse" && actor &&
+        result.hookSpecificOutput?.permissionDecision !== "deny" && result.continue !== false) {
       const id = input.tool_use_id ?? `unobserved:${actorId}`;
-      if (["Agent", "Task"].includes(input.tool_name)) {
-        if (!state.pendingHandoff) {
-          state.pendingDispatches ??= [];
-          if (!state.pendingDispatches.includes(id))
-            state.pendingDispatches.push(id);
-        }
-      } else if (!TASK_READ_TOOLS.has(input.tool_name)) {
-        state.inFlightWrites ??= [];
-        if (!state.inFlightWrites.includes(id)) state.inFlightWrites.push(id);
+      const scope = operationScope(input, state.worktree, actor);
+      if (scope.resources.length) {
+        state.resourceOperations ??= [];
+        if (!state.resourceOperations.some((entry) => entry.toolUseId === id))
+          state.resourceOperations.push({ toolUseId: id, agentId: actorId, resources: scope.resources });
       }
     }
-    if (["PostToolUse", "PostToolUseFailure"].includes(event)) {
-      for (const field of ["inFlightWrites", "pendingDispatches"])
-        if (state[field])
-          state[field] = state[field].filter((id) => id !== input.tool_use_id);
-    }
+    if (event === "SubagentStop")
+      state.resourceOperations = (state.resourceOperations ?? []).filter((entry) => entry.agentId !== input.agent_id);
     if (event === "SessionEnd") {
+      state.resourceOperations = [];
       state.inFlightWrites = [];
       state.pendingDispatches = [];
       state.pendingTasks = [];
@@ -1134,9 +1257,17 @@ function report() {
     .filter((name) => /^[a-f0-9]{64}\.json$/u.test(name))
     .sort()
     .map((name) => {
-      const { state, recoveryDigest } = readState(path.join(root, name), true);
+      let snapshot;
+      try { snapshot = readState(path.join(root, name), true); }
+      catch {
+        return { stateFile: name, status: "unreadable", worktree: fs.realpathSync(process.env.CLAUDE_PROJECT_DIR),
+          affectedOperations: "control-state mutations only", availableOperations: ["read", "source-edit", "normal-task"],
+          recovery: "状態とownerを確認してください。破損記録から復旧digestを推定しません。" };
+      }
+      const { state, recoveryDigest } = snapshot;
       return {
         ...state,
+        worktree: fs.realpathSync(process.env.CLAUDE_PROJECT_DIR),
         worktreeLock: fs.existsSync(path.join(root, "worktree.lock"))
           ? {
               path: path.join(root, "worktree.lock"),
@@ -1144,6 +1275,11 @@ function report() {
             }
           : null,
         recoveryDigest,
+        blocksWorktree: conflictsWithWorktree(state, state.worktree),
+        blockedResources: [...new Set([
+          ...operationReservations(state).flatMap((entry) => entry.resources),
+          ...writerReservations(state, state.worktree).map((entry) => entry.handoff.staging),
+        ])],
         writerReservations: writerReservations(
           state,
           fs.realpathSync(process.env.CLAUDE_PROJECT_DIR),
@@ -1195,8 +1331,12 @@ try {
   }
 } catch (error) {
   const reason = `ASC lifecycle記録を確認できません（${error.code ?? "invalid-state"}）。hook設定・--report・実行中processを確認してください。残存予約はowner停止確認と明示復旧が必要で、新sessionだけでは解除されません。`;
-  if (input?.hook_event_name === "PreToolUse")
-    process.stdout.write(`${JSON.stringify(deny(reason, true))}\n`);
+  if (input?.hook_event_name === "PreToolUse") {
+    const nonMutating = TASK_READ_TOOLS.has(input.tool_name);
+    process.stdout.write(`${JSON.stringify(nonMutating
+      ? context("PreToolUse", `ASC Warn: ${reason} 読取・連絡・結果返却は継続できます。計測の保存は未完了です。`)
+      : deny(reason))}\n`);
+  }
   else {
     process.stderr.write(`${reason}\n`);
     // Nonblocking on Stop: exit 2 would keep the old agent alive.
