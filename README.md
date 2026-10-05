@@ -167,3 +167,5 @@ hookの停止記録やwriter予約が残った場合も、時刻だけで自動�
 - 現在の製品仕様: [製品仕様利用案内](docs/specs/00_利用案内.md)
 
 困ったときや不具合を見つけたときは、[GitHub Issues](https://github.com/techbeansjp-free/AGENTS.md/issues)で相談・報告してください。
+
+最新版への更新依頼は[更新の入口](.agent-skill-chain/00_利用案内.md#ascを最新版にしてと依頼された場合)に従う。`update --latest --root=. --apply`で正式版の解決・更新・doctorを続けて実行し、必要な場合だけ新sessionへの切替を案内する。

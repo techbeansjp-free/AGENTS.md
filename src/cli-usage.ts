@@ -1695,6 +1695,12 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       ROOT_FLAG,
       ...APPLY_MODE,
       optional(
+        "latest",
+        "",
+        "最新正式releaseを解決して更新後にdoctorを実行する",
+        "実行中の配布物で更新する",
+      ),
+      optional(
         "recover-record",
         "",
         "managed asset recordが無い状態での書き込みを明示的に許可する。未導入directoryでは展開対象を配置する",

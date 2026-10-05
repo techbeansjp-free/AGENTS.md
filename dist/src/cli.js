@@ -26,6 +26,7 @@ import { applyWorkspaceHygiene, previewWorkspaceHygiene, } from "./domain/hygien
 import { applyStagingCleanup, calculateStagingDigest, listStagingArtifacts, migrateLegacyStagingTrackerLocked, planStagingCleanup, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "./domain/staging.js";
 import { buildFinalizeReport, applyFinalize, planCompletion, planRootUpdate, planWorktreeCleanup, summarizeCompletion, } from "./domain/finalize.js";
 import { init, upgrade, uninstall, doctor } from "./domain/lifecycle.js";
+import { updateLatest } from "./adapters/latest-update.js";
 import { DISTRIBUTION_IDENTITY } from "./lib/release-identity.js";
 import { loadConsumerChoicesFragmentAtCommit, loadConsumerPolicyAtCommit, conformanceDeclarationFromPolicySet, loadEffectiveTrustedPolicySet, loadEffectiveTrustedPolicySetAtCommit, choicesFragmentSource, ruleFragmentSources, loadOperationPolicy, loadProjectPolicySet, loadProjectPolicySetAtCommit, mergeMethodPolicyWarnings, resolveReviewIndependence, trustedVerificationPolicy, validatePolicy, } from "./domain/policy.js";
 import { applyMigration, compareTrustedPolicy, enforceOperation, planMigration, resolveEffectivePolicy, retryMigration, rollbackMigration, sanitizeOutput, serializeDiagnostic, } from "./domain/enforcement.js";
@@ -7249,6 +7250,14 @@ export async function main(argv, dependencies = {}) {
         const apply = lifecycleApplyMode(flags);
         const root = path.resolve(positionals[0] ??
             (typeof flags.root === "string" ? flags.root : process.cwd()));
+        if (lifecycleCommand === "update" && flags.latest === true) {
+            const result = await updateLatest(root, {
+                apply,
+                recoverRecord: flags["recover-record"] === true,
+            });
+            print(result);
+            return result.applied && !result.verified ? 1 : 0;
+        }
         print(lifecycleCommand === "install"
             ? init(root, { apply })
             : lifecycleCommand === "update"
