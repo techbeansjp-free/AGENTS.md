@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1566,
+  "observed": {
+    "baseSha": "6d08da409eaad05321ee71c62d57a1e576bbdbc8",
+    "implementationHeadSha": "ecebb2db0429fefcda8b8307c60ee9cfea8b84af",
+    "diffDigest": "1acec8ea2180af31e9476e9296335fa5f75520751165c853becf2392692b820b",
+    "session": {
+      "sessionId": "849c7305c93ab2473754d3aa0089de7f57f8fa0742e9c12434c83d170bc7f635",
+      "latestRoundDigest": "798d81e93c81220ad13c9b953b3d2f64f803cccb2d9825983166d04b63725f2c",
+      "status": "converged",
+      "countedRounds": 4
+    },
+    "impact": {
+      "digest": "8cfe41b7c5369284c1e6666722492f189dbb6f3dd48e1f06c92f02e5b6a753e9",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "ecebb2db0429fefcda8b8307c60ee9cfea8b84af",
+        "impactDigest": "8cfe41b7c5369284c1e6666722492f189dbb6f3dd48e1f06c92f02e5b6a753e9",
+        "finishedAt": "2026-10-06T23:06:31.105Z",
+        "recordDigest": "ab5f9c7993ee90849285f4e443b3a120f29f29f88850647001e85b0ef85e26d0"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "R1-A-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/host-observer.steps.ts",
+      "contractId": "AC-23"
+    },
+    {
+      "id": "R1-A-02",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/hooks/asc-host-observer.mjs",
+      "contractId": null
+    },
+    {
+      "id": "R1-A-03",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/hooks/asc-host-observer.mjs",
+      "contractId": null
+    },
+    {
+      "id": "R1-A-04",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/06_外部インターフェース/02_ホスト観測契約.md",
+      "contractId": "AC-07"
+    },
+    {
+      "id": "R1-P-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "src/domain/lifecycle.ts",
+      "contractId": "INV-03"
+    },
+    {
+      "id": "R1-P-02",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/hooks/asc-host-observer.mjs",
+      "contractId": null
+    },
+    {
+      "id": "R2-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "test/host-observer/portable.test.mjs",
+      "contractId": null
+    },
+    {
+      "id": "R3-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/host-observer.steps.ts",
+      "contractId": null
+    },
+    {
+      "id": "R4-01",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/host-observer.steps.ts",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "claude-code:subagent/reviewer-workunits-588ff471-3d21b34b-b44d74a8-9b01c860",
+    "implementer": "claude-code:subagent/implementation-workunit-d962b3cd",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "4ffb13638c33bd1468d37d7680e0532bf6c7378533f14d2ab9de7682b1b9986b"
+}
