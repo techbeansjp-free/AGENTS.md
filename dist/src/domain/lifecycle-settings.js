@@ -20,6 +20,78 @@ const SETTINGS = ".claude/settings.local.json";
 const ownedHook = (hook) => isRecord(hook) &&
     hook.type === "command" &&
     hook.command === AGENT_LIFECYCLE_COMMAND;
+/**
+ * host observerのASC-owned entry（Issue #1566）。
+ *
+ * **shellを介さない形で登録する。** `args`があるとClaude Codeは`command`を
+ * PATH上の実行fileとして直接起動し、`${CLAUDE_PROJECT_DIR}`を各要素へ置換する。
+ * Windowsでも`.cmd`のshimを経由せず`node`を起動できる。
+ */
+export const HOST_OBSERVER_ARG = "${CLAUDE_PROJECT_DIR}/.claude/hooks/asc-host-observer.mjs";
+const HOST_OBSERVER_EVENT = "PreToolUse";
+const HOST_OBSERVER_MATCHER = "SendMessage";
+const canonicalObserverHook = () => ({
+    type: "command",
+    command: "node",
+    args: [HOST_OBSERVER_ARG],
+    timeout: 10,
+});
+/**
+ * 所有判定は完全一致だけで行う。`timeout`・matcher・追加fieldは所有を移さない。
+ * path部分一致やwrapperの推測で利用者のhookを奪わない。
+ */
+const ownedObserverHook = (hook) => isRecord(hook) &&
+    hook.type === "command" &&
+    hook.command === "node" &&
+    Array.isArray(hook.args) &&
+    hook.args.length === 1 &&
+    hook.args[0] === HOST_OBSERVER_ARG;
+function isCanonicalObserverGroup(entry) {
+    if (entry.matcher !== HOST_OBSERVER_MATCHER)
+        return false;
+    if (!Array.isArray(entry.hooks) || entry.hooks.length !== 1)
+        return false;
+    const [hook] = entry.hooks;
+    return (isRecord(hook) &&
+        JSON.stringify(Object.keys(hook).sort()) ===
+            JSON.stringify(["args", "command", "timeout", "type"]) &&
+        ownedObserverHook(hook) &&
+        hook.timeout === 10);
+}
+/**
+ * 設定本文からhost observerの登録状態を返す純関数（Issue #1566）。
+ *
+ * **filesystemを読まない。** 読取は呼び出し側（doctor）が行う。返すのは観測であり、
+ * `doctor`全体の`healthy`へは入れない。
+ */
+export function inspectHostObserverRegistration(settings) {
+    const unregistered = `host observerが${SETTINGS}の${HOST_OBSERVER_EVENT}（matcher ${HOST_OBSERVER_MATCHER}）に登録されていません。update --root=. --applyで登録できます`;
+    if (settings === undefined)
+        return { registered: false, diagnostics: [unregistered] };
+    let parsed;
+    try {
+        parsed = JSON.parse(settings);
+    }
+    catch {
+        return {
+            registered: false,
+            diagnostics: [
+                `${SETTINGS}をJSONとして解釈できないため、host observerの登録を確認できません`,
+            ],
+        };
+    }
+    const groups = isRecord(parsed) && isRecord(parsed.hooks)
+        ? parsed.hooks[HOST_OBSERVER_EVENT]
+        : undefined;
+    const registered = Array.isArray(groups) &&
+        groups.some((entry) => isRecord(entry) &&
+            entry.matcher === HOST_OBSERVER_MATCHER &&
+            Array.isArray(entry.hooks) &&
+            entry.hooks.some(ownedObserverHook));
+    return registered
+        ? { registered: true, diagnostics: [] }
+        : { registered: false, diagnostics: [unregistered] };
+}
 function readSettings(target) {
     // Shared configuration must never follow a symlink, even inside the project.
     let cursor = target;
@@ -70,22 +142,43 @@ export function planLifecycleSettings(target, operation) {
         if (parsed[key] !== undefined && !isRecord(parsed[key]))
             throw new Error(`${SETTINGS}: ${key}はobjectが必要です`);
     const hooks = isRecord(parsed.hooks) ? parsed.hooks : {};
+    // Validate every entry and locate host observer hooks before any rewrite.
+    const observers = [];
     for (const [event, entries] of Object.entries(hooks)) {
         if (!Array.isArray(entries))
             throw new Error(`${SETTINGS}: hooks.${event}はarrayが必要です`);
-        hooks[event] = entries.flatMap((entry) => {
+        for (const entry of entries) {
             if (!isRecord(entry) || !Array.isArray(entry.hooks))
                 throw new Error(`${SETTINGS}: hooks.${event}のentryが不正です`);
+            for (const hook of entry.hooks)
+                if (ownedObserverHook(hook))
+                    observers.push({ event, entry });
+        }
+    }
+    // Convergence (a): exactly one owned observer hook already in canonical form.
+    const keepObserver = operation === "install" &&
+        observers.length === 1 &&
+        observers[0].event === HOST_OBSERVER_EVENT &&
+        isCanonicalObserverGroup(observers[0].entry);
+    for (const [event, entries] of Object.entries(hooks)) {
+        hooks[event] = entries.flatMap((entry) => {
+            const current = entry.hooks;
             // The exact canonical command is reserved in both directions. Matcher,
             // timeout and extra fields do not transfer ownership of that command.
-            const remaining = entry.hooks.filter((hook) => !ownedHook(hook));
-            if (remaining.length === entry.hooks.length)
+            const remaining = current.filter((hook) => !ownedHook(hook) && (keepObserver || !ownedObserverHook(hook)));
+            if (remaining.length === current.length)
                 return [entry];
             return remaining.length ? [{ ...entry, hooks: remaining }] : [];
         });
         if (hooks[event].length === 0)
             delete hooks[event];
     }
+    // Convergence (b): remove every owned copy, then append one canonical group.
+    if (operation === "install" && !keepObserver)
+        hooks[HOST_OBSERVER_EVENT] = [
+            ...(hooks[HOST_OBSERVER_EVENT] ?? []),
+            { matcher: HOST_OBSERVER_MATCHER, hooks: [canonicalObserverHook()] },
+        ];
     if (operation === "install") {
         // Retired observer: installation also removes old owned registrations.
         const environment = isRecord(parsed.env) ? parsed.env : {};

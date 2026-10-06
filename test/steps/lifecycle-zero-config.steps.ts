@@ -37,6 +37,25 @@ const read = (root: string) =>
     permissions?: unknown;
   };
 
+/** installが登録するhost observerの正規形entryだけの設定（Issue #1566）。 */
+const OBSERVER_ONLY_SETTINGS = {
+  hooks: {
+    PreToolUse: [
+      {
+        matcher: "SendMessage",
+        hooks: [
+          {
+            type: "command",
+            command: "node",
+            args: ["${CLAUDE_PROJECT_DIR}/.claude/hooks/asc-host-observer.mjs"],
+            timeout: 10,
+          },
+        ],
+      },
+    ],
+  },
+};
+
 When("空projectのinstallは設定とtrusted runtimeを自動構成する", function () {
   const root = this.temp("asc-zero-fresh-");
   const cli = path.resolve("dist/bin/agent-skill-chain.js");
@@ -53,10 +72,7 @@ When("空projectのinstallは設定とtrusted runtimeを自動構成する", fun
     { encoding: "utf8" },
   );
   assert.equal(applied.status, 0, applied.stdout + applied.stderr);
-  assert.equal(
-    fs.existsSync(path.join(root, ".claude/settings.local.json")),
-    false,
-  );
+  assert.deepEqual(read(root), OBSERVER_ONLY_SETTINGS);
   const env: NodeJS.ProcessEnv = { ...process.env, CLAUDE_PROJECT_DIR: root };
   delete env.ASC_WORKFLOW_CLI;
   delete env.ASC_EXECUTION_CONTEXT_MODE;
@@ -414,10 +430,7 @@ When("version更新は古いCLI pathなしでruntimeを更新する", function (
     ).version,
     "0.4.23",
   );
-  assert.equal(
-    fs.existsSync(path.join(root, ".claude/settings.local.json")),
-    false,
-  );
+  assert.deepEqual(read(root), OBSERVER_ONLY_SETTINGS);
   assert.equal(doctor(root).hooks.agentLifecycle.healthy, true);
   this.value = true;
 });
