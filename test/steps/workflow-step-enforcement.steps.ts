@@ -10734,6 +10734,29 @@ if (exact(["auth", "status"])) {
       assert.match(output.handoff.workUnit.workUnitId, /^[a-f0-9]{64}$/u);
       assert.notEqual(output.handoff.workUnit.workUnitId, initialWorkUnitId);
       assert.match(output.agentDispatch.prompt, /ASC_REDISPATCH_REQUIRED/u);
+      const realGit = spawnSync("which", ["git"], { encoding: "utf8" });
+      assert.equal(realGit.status, 0);
+      const realGitPath = realGit.stdout.trim();
+      assert.match(realGitPath, /^\/[a-zA-Z0-9_./-]+$/u);
+      const shimDir = fs.mkdtempSync(path.join(os.tmpdir(), "asc-git-diff-"));
+      try {
+        fs.writeFileSync(
+          path.join(shimDir, "git"),
+          `#!/bin/sh\nif [ "$1" = "diff" ] && [ "$2" = "--quiet" ]; then\n  echo "simulated execution failure" >&2\n  exit 1\nfi\nexec "${realGitPath}" "$@"\n`,
+          { mode: 0o755 },
+        );
+        const failedDiff = executeCli(args, root, {
+          ...process.env,
+          PATH: `${shimDir}${path.delimiter}${process.env.PATH ?? ""}`,
+        });
+        assert.notEqual(failedDiff.status, 0);
+        assert.match(
+          failedDiff.stdout + failedDiff.stderr,
+          /checkpoint差分判定に失敗しました: simulated execution failure/u,
+        );
+      } finally {
+        fs.rmSync(shimDir, { recursive: true, force: true });
+      }
       const repeated = executeCli(args, root);
       assert.equal(repeated.status, 0, repeated.stdout + repeated.stderr);
       assert.equal(

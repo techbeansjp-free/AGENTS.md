@@ -4194,7 +4194,7 @@ export async function main(argv, dependencies = {}) {
             const checkpointDiff = git(["diff", "--quiet", continuationFromHead, currentHead], root, { env: GIT_ENV, allowFailure: true });
             if (checkpointDiff.status === 0)
                 throw new Error("continuationにはtracked変更のcheckpoint commitが必要です");
-            if (checkpointDiff.status !== 1)
+            if (checkpointDiff.status !== 1 || checkpointDiff.stderr.trim() !== "")
                 throw new Error(`continuationのcheckpoint差分判定に失敗しました: ${checkpointDiff.stderr.trim()}`);
             if (git(["status", "--porcelain", "--untracked-files=no"], root, {
                 env: GIT_ENV,

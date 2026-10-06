@@ -5905,7 +5905,7 @@ export async function main(
         throw new Error(
           "continuationにはtracked変更のcheckpoint commitが必要です",
         );
-      if (checkpointDiff.status !== 1)
+      if (checkpointDiff.status !== 1 || checkpointDiff.stderr.trim() !== "")
         throw new Error(
           `continuationのcheckpoint差分判定に失敗しました: ${checkpointDiff.stderr.trim()}`,
         );
