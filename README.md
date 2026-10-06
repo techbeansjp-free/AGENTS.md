@@ -87,7 +87,7 @@ main / coordinator（進行役。継続・resume可能）
           Git / Issue / staging / HEAD / review session
 ```
 
-これは担当交代の概念図で、全Stepが必ず1 Agentになるという意味ではありません。次の担当と入力は`workflow advance --staging=<path>`が導出します。進行役は出力の`agentDispatch`をAgentツールの引数へ渡します。hook自身が次のAgentを自動起動するわけではなく、handoff JSONを利用者が手組みする必要もありません。
+これは担当交代の概念図で、全Stepが必ず1 Agentになるという意味ではありません。次の担当と入力は`workflow advance --staging=<path>`が導出します。進行役は出力の`agentDispatch`をAgentツールの引数へ渡します。 `handoff.workUnit.workUnitId`が担当の識別子で、返却後はそのAgentを再利用しません。Step 9の途中でfresh Agentへ移るときはcheckpoint commit後に`workflow advance --staging=<path> --continue-from=<前のHEAD>`を実行し、新しい`agentDispatch`を渡します。hook自身が次のAgentを自動起動するわけではなく、handoff JSONを利用者が手組みする必要もありません。
 
 目的は、実装から是正まで同じ会話を使い続けることによるcontextの肥大化を抑え、現在のrepositoryに基づく判断と役割分離を保つことです。token・cache readの削減率はまだ実測で確定していません。新しいAgentの初期化・再読コストも含むBefore/After計測はIssue #1546の残件です。
 

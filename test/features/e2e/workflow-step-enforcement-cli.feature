@@ -559,3 +559,8 @@ Feature: 公開CLIでワークフローStepを強制する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-INT-ISSUESYNC-028"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario: SCN-E2E-ADVANCE-018 Step 9の継続はcheckpoint commit後にfresh Work Unitを発行する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-ADVANCE-018"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる

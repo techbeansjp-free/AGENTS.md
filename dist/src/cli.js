@@ -4158,6 +4158,7 @@ export async function main(argv, dependencies = {}) {
             "expected-body-sha256",
             "apply",
             "dry-run",
+            "continue-from",
         ].includes(flag));
         if (unknown.length > 0)
             throw new Error(`workflow advanceの未知optionです: --${unknown.join(", --")}`);
@@ -4171,6 +4172,35 @@ export async function main(argv, dependencies = {}) {
             .createHash("sha256")
             .update(initialJournal.source)
             .digest("hex");
+        const continuationFromHead = flags["continue-from"];
+        if (continuationFromHead !== undefined) {
+            if (apply || artifacts.length > 0 || flags.evidence !== undefined)
+                throw new Error("same-step continuationはpreview専用です");
+            if (inspected.nextStep !== 9 || !inspected.valid)
+                throw new Error("same-step continuationは未完了のStep 9でだけ使用できます");
+            if (!/^[a-f0-9]{40}$/u.test(continuationFromHead))
+                throw new Error("--continue-fromには前Work UnitのHEAD SHAが必要です");
+            const root = stagingRepositoryRoot(staging);
+            const currentHead = git(["rev-parse", "HEAD"], root, {
+                env: GIT_ENV,
+            }).stdout.trim();
+            const commit = git(["rev-list", "--parents", "-n", "1", currentHead], root, {
+                env: GIT_ENV,
+            })
+                .stdout.trim()
+                .split(" ");
+            if (commit.length !== 2 || commit[1] !== continuationFromHead)
+                throw new Error("continuationには前Work UnitのHEADを直前親とするcheckpoint commitが必要です");
+            const checkpointDiff = git(["diff", "--quiet", continuationFromHead, currentHead], root, { env: GIT_ENV, allowFailure: true });
+            if (checkpointDiff.status === 0)
+                throw new Error("continuationにはtracked変更のcheckpoint commitが必要です");
+            if (checkpointDiff.status !== 1 || checkpointDiff.stderr.trim() !== "")
+                throw new Error(`continuationのcheckpoint差分判定に失敗しました: ${checkpointDiff.stderr.trim()}`);
+            if (git(["status", "--porcelain", "--untracked-files=no"], root, {
+                env: GIT_ENV,
+            }).stdout.trim() !== "")
+                throw new Error("continuationにはtracked変更のcommitが必要です");
+        }
         const plan = planWorkflowAdvance({
             mode: inspected.mode,
             currentStep: inspected.currentStep,
@@ -4221,30 +4251,41 @@ export async function main(argv, dependencies = {}) {
         }
         if (!apply || plan.state !== "preview") {
             const resume = observeWorkflowResume(staging);
-            const handoff = observeWorkflowHandoff(staging, inspected.nextStep, resume);
+            const handoff = observeWorkflowHandoff(staging, inspected.nextStep, resume, continuationFromHead);
+            const reviewerHandoff = handoff &&
+                "kind" in handoff &&
+                handoff.role === "correction" &&
+                handoff.workUnit
+                ? {
+                    ...handoff,
+                    role: "reviewer",
+                    reviewRound: (handoff.reviewRound ?? 0) + 1,
+                    workUnit: {
+                        ...handoff.workUnit,
+                        workUnitId: crypto
+                            .createHash("sha256")
+                            .update(JSON.stringify({
+                            from: handoff.workUnit.workUnitId,
+                            role: "reviewer",
+                            reviewRound: (handoff.reviewRound ?? 0) + 1,
+                        }))
+                            .digest("hex"),
+                    },
+                }
+                : undefined;
             const execution = handoff === undefined
                 ? {}
                 : {
                     handoff,
                     agentDispatch: workflowAgentDispatch(handoff),
-                    ...("kind" in handoff && handoff.role === "correction"
-                        ? {
+                    ...(reviewerHandoff === undefined
+                        ? {}
+                        : {
                             agentDispatchAlternatives: [
-                                workflowAgentDispatch({
-                                    ...handoff,
-                                    role: "reviewer",
-                                    reviewRound: (handoff.reviewRound ?? 0) + 1,
-                                }),
+                                workflowAgentDispatch(reviewerHandoff),
                             ],
-                            handoffAlternatives: [
-                                {
-                                    ...handoff,
-                                    role: "reviewer",
-                                    reviewRound: (handoff.reviewRound ?? 0) + 1,
-                                },
-                            ],
-                        }
-                        : {}),
+                            handoffAlternatives: [reviewerHandoff],
+                        }),
                 };
             print(syncPreview === undefined
                 ? { ...plan, resume, ...execution }
