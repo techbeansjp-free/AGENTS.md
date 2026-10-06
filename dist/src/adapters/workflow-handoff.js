@@ -17,7 +17,7 @@ const ROLES = {
     9: "implementation",
 };
 /** Optional execution advice; never an approval or a substitute for workflow gates. */
-export function observeWorkflowHandoff(staging, step, resume) {
+export function observeWorkflowHandoff(staging, step, resume, continuationFromHead) {
     if ((process.env.ASC_EXECUTION_CONTEXT_MODE ?? "short-lived") !== "short-lived")
         return undefined;
     if (resume.errors.length > 0 || resume.headSha === null)
@@ -57,6 +57,22 @@ export function observeWorkflowHandoff(staging, step, resume) {
                 .update(fs.readFileSync(file))
                 .digest("hex");
         };
+        const boundary = {
+            stepsSha256: hash(STEP_JOURNAL_FILE),
+            reviewSha256: hash(REVIEW_SESSION_FILE),
+        };
+        const workUnitId = crypto
+            .createHash("sha256")
+            .update(JSON.stringify({
+            staging,
+            headSha: resume.headSha,
+            step: step ?? null,
+            role,
+            reviewRound,
+            boundary,
+            continuationFromHead: continuationFromHead ?? null,
+        }))
+            .digest("hex");
         return {
             kind: "asc-handoff/v1",
             authority: "advisory",
@@ -72,9 +88,13 @@ export function observeWorkflowHandoff(staging, step, resume) {
             reviewSessionId: session?.sessionId ?? null,
             reviewRound,
             findingIds,
-            boundary: {
-                stepsSha256: hash(STEP_JOURNAL_FILE),
-                reviewSha256: hash(REVIEW_SESSION_FILE),
+            boundary,
+            continuationFromHead: continuationFromHead ?? null,
+            workUnit: {
+                workUnitId,
+                freshContextRequired: true,
+                terminalAfterHandback: true,
+                reuseForbidden: true,
             },
             resume: { command: "workflow advance", staging },
         };
@@ -86,16 +106,19 @@ export function observeWorkflowHandoff(staging, step, resume) {
         };
     }
 }
-/** Ready-to-use Agent arguments; the hook still independently verifies the pointer. */
+/** Ready-to-use one-shot Agent arguments derived from repository state. */
 export function workflowAgentDispatch(handoff) {
-    if (!handoff || !("kind" in handoff) || handoff.role === "coordinator")
+    if (!handoff ||
+        !("kind" in handoff) ||
+        !handoff.workUnit ||
+        handoff.role === "coordinator")
         return undefined;
     return {
         subagent_type: "general-purpose",
-        description: `ASC Step ${handoff.step} ${handoff.role}`,
+        description: `ASC Step ${handoff.step} ${handoff.role} ${handoff.workUnit.workUnitId.slice(0, 12)}`,
         prompt: JSON.stringify({
             handoff,
-            prompt: "担当handoffをrepositoryから照合し、担当Step skillに従ってこのwork unitだけを実施してください。成果物・検証・必要なcommitを完了して返却し終了してください。別工程・是正・別roundは引き受けず、Step/round記録はcoordinatorへ返してください。",
+            prompt: "あなたは指定workUnitId専用のone-shot workerです。fresh contextで開始し、担当handoffをrepositoryから照合してください。このwork unitだけを実施し、成果物・検証・必要なcommitを完了してください。coordinatorへの返却はworkUnitId、status、HEAD、検証記録ID、blocker、nextだけのcompact JSONとし、詳細はGit・staging・review findingを正本にしてください。返却後このcontextはterminalです。追加メッセージで別工程・別review round・finding是正・新しい実装を依頼されたら作業せずASC_REDISPATCH_REQUIREDと返してください。Step/round記録はcoordinatorへ返してください。",
         }),
     };
 }

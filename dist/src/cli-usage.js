@@ -428,6 +428,7 @@ export const COMMAND_USAGE = Object.freeze([
             optional("recorded-at", "ISO8601", "journal記録時刻", "実行時刻"),
             optional("synced-at", "ISO8601", "Issue同期時刻", "実行時刻"),
             optional("dry-run", "", "書き込まず計画だけを出力", "省略時もpreview"),
+            optional("continue-from", "40hex", "Step 9のcheckpoint前HEADからfresh continuationを発行", "通常の次Step preview"),
             optional("apply", "", "次の1 Stepだけを適用", "preview"),
         ],
         example: "npx agent-skill-chain workflow advance --staging=.agent-skill-chain/tmp/issues/20260912_change --artifact=01_要件定義.md --evidence='requirements validated' --apply",

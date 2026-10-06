@@ -5849,6 +5849,7 @@ export async function main(
           "expected-body-sha256",
           "apply",
           "dry-run",
+          "continue-from",
         ].includes(flag),
     );
     if (unknown.length > 0)
@@ -5868,6 +5869,41 @@ export async function main(
       .createHash("sha256")
       .update(initialJournal.source)
       .digest("hex");
+    const continuationFromHead = flags["continue-from"];
+    if (continuationFromHead !== undefined) {
+      if (apply || artifacts.length > 0 || flags.evidence !== undefined)
+        throw new Error("same-step continuationはpreview専用です");
+      if (inspected.nextStep !== 9 || !inspected.valid)
+        throw new Error(
+          "same-step continuationは未完了のStep 9でだけ使用できます",
+        );
+      if (!/^[a-f0-9]{40}$/u.test(continuationFromHead))
+        throw new Error("--continue-fromには前Work UnitのHEAD SHAが必要です");
+      const root = stagingRepositoryRoot(staging);
+      const currentHead = git(["rev-parse", "HEAD"], root, {
+        env: GIT_ENV,
+      }).stdout.trim();
+      if (
+        currentHead === continuationFromHead ||
+        git(
+          ["merge-base", "--is-ancestor", continuationFromHead, currentHead],
+          root,
+          {
+            env: GIT_ENV,
+            allowFailure: true,
+          },
+        ).status !== 0
+      )
+        throw new Error(
+          "continuationには前Work Unit以降のcheckpoint commitが必要です",
+        );
+      if (
+        git(["status", "--porcelain", "--untracked-files=no"], root, {
+          env: GIT_ENV,
+        }).stdout.trim() !== ""
+      )
+        throw new Error("continuationにはtracked変更のcommitが必要です");
+    }
     const plan = planWorkflowAdvance({
       mode: inspected.mode,
       currentStep: inspected.currentStep,
@@ -5951,31 +5987,46 @@ export async function main(
         staging,
         inspected.nextStep,
         resume,
+        continuationFromHead,
       );
+      const reviewerHandoff =
+        handoff &&
+        "kind" in handoff &&
+        handoff.role === "correction" &&
+        handoff.workUnit
+          ? {
+              ...handoff,
+              role: "reviewer",
+              reviewRound: (handoff.reviewRound ?? 0) + 1,
+              workUnit: {
+                ...handoff.workUnit,
+                workUnitId: crypto
+                  .createHash("sha256")
+                  .update(
+                    JSON.stringify({
+                      from: handoff.workUnit.workUnitId,
+                      role: "reviewer",
+                      reviewRound: (handoff.reviewRound ?? 0) + 1,
+                    }),
+                  )
+                  .digest("hex"),
+              },
+            }
+          : undefined;
       const execution =
         handoff === undefined
           ? {}
           : {
               handoff,
               agentDispatch: workflowAgentDispatch(handoff),
-              ...("kind" in handoff && handoff.role === "correction"
-                ? {
+              ...(reviewerHandoff === undefined
+                ? {}
+                : {
                     agentDispatchAlternatives: [
-                      workflowAgentDispatch({
-                        ...handoff,
-                        role: "reviewer",
-                        reviewRound: (handoff.reviewRound ?? 0) + 1,
-                      }),
+                      workflowAgentDispatch(reviewerHandoff),
                     ],
-                    handoffAlternatives: [
-                      {
-                        ...handoff,
-                        role: "reviewer",
-                        reviewRound: (handoff.reviewRound ?? 0) + 1,
-                      },
-                    ],
-                  }
-                : {}),
+                    handoffAlternatives: [reviewerHandoff],
+                  }),
             };
       print(
         syncPreview === undefined
