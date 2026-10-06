@@ -5883,25 +5883,31 @@ export async function main(
       const currentHead = git(["rev-parse", "HEAD"], root, {
         env: GIT_ENV,
       }).stdout.trim();
-      if (currentHead === continuationFromHead)
-        throw new Error(
-          "continuationには前Work Unit以降のcheckpoint commitが必要です",
-        );
-      const ancestor = git(
-        ["merge-base", "--is-ancestor", continuationFromHead, currentHead],
+      const commit = git(
+        ["rev-list", "--parents", "-n", "1", currentHead],
         root,
         {
           env: GIT_ENV,
-          allowFailure: true,
         },
-      );
-      if (ancestor.status > 1)
+      )
+        .stdout.trim()
+        .split(" ");
+      if (commit.length !== 2 || commit[1] !== continuationFromHead)
         throw new Error(
-          `continuationの祖先判定に失敗しました: ${ancestor.stderr.trim()}`,
+          "continuationには前Work UnitのHEADを直前親とするcheckpoint commitが必要です",
         );
-      if (ancestor.status === 1)
+      const checkpointDiff = git(
+        ["diff", "--quiet", continuationFromHead, currentHead],
+        root,
+        { env: GIT_ENV, allowFailure: true },
+      );
+      if (checkpointDiff.status === 0)
         throw new Error(
-          "continuationには前Work Unit以降のcheckpoint commitが必要です",
+          "continuationにはtracked変更のcheckpoint commitが必要です",
+        );
+      if (checkpointDiff.status !== 1)
+        throw new Error(
+          `continuationのcheckpoint差分判定に失敗しました: ${checkpointDiff.stderr.trim()}`,
         );
       if (
         git(["status", "--porcelain", "--untracked-files=no"], root, {

@@ -10676,6 +10676,16 @@ if (exact(["auth", "status"])) {
       for (const step of [1, 4])
         appendWorkflowJournalEntry({ staging, entry: entry(step) });
       const previousHead = gitHeadOf(root);
+      const initial = executeCli(
+        ["workflow", "advance", `--staging=${staging}`],
+        root,
+      );
+      assert.equal(initial.status, 0, initial.stdout + initial.stderr);
+      const initialWorkUnitId = (
+        JSON.parse(initial.stdout) as {
+          handoff: { workUnit: { workUnitId: string } };
+        }
+      ).handoff.workUnit.workUnitId;
       const args = [
         "workflow",
         "advance",
@@ -10701,8 +10711,7 @@ if (exact(["auth", "status"])) {
         root,
       );
       assert.notEqual(missingCommit.status, 0);
-      assert.match(missingCommit.stdout + missingCommit.stderr, /fatal:/u);
-      assert.doesNotMatch(
+      assert.match(
         missingCommit.stdout + missingCommit.stderr,
         /checkpoint commit/u,
       );
@@ -10723,10 +10732,66 @@ if (exact(["auth", "status"])) {
       assert.equal(output.handoff.step, 9);
       assert.equal(output.handoff.continuationFromHead, previousHead);
       assert.match(output.handoff.workUnit.workUnitId, /^[a-f0-9]{64}$/u);
+      assert.notEqual(output.handoff.workUnit.workUnitId, initialWorkUnitId);
       assert.match(output.agentDispatch.prompt, /ASC_REDISPATCH_REQUIRED/u);
+      const repeated = executeCli(args, root);
+      assert.equal(repeated.status, 0, repeated.stdout + repeated.stderr);
+      assert.equal(
+        (JSON.parse(repeated.stdout) as typeof output).handoff.workUnit
+          .workUnitId,
+        output.handoff.workUnit.workUnitId,
+      );
       const apply = executeCli([...args, "--apply"], root);
       assert.notEqual(apply.status, 0);
       assert.match(apply.stdout + apply.stderr, /preview専用/u);
+      const firstCheckpointHead = gitHeadOf(root);
+      fs.writeFileSync(
+        path.join(root, "checkpoint.txt"),
+        "second checkpoint\n",
+      );
+      spawnSync("git", ["add", "checkpoint.txt"], { cwd: root });
+      spawnSync("git", ["commit", "-q", "-m", "second checkpoint"], {
+        cwd: root,
+      });
+      const olderAncestor = executeCli(args, root);
+      assert.notEqual(olderAncestor.status, 0);
+      assert.match(olderAncestor.stdout + olderAncestor.stderr, /直前親/u);
+      const secondHead = gitHeadOf(root);
+      const next = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          `--continue-from=${firstCheckpointHead}`,
+        ],
+        root,
+      );
+      assert.equal(next.status, 0, next.stdout + next.stderr);
+      assert.notEqual(
+        (JSON.parse(next.stdout) as typeof output).handoff.workUnit.workUnitId,
+        output.handoff.workUnit.workUnitId,
+      );
+      spawnSync(
+        "git",
+        ["commit", "-q", "--allow-empty", "-m", "empty checkpoint"],
+        {
+          cwd: root,
+        },
+      );
+      const emptyCheckpoint = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          `--continue-from=${secondHead}`,
+        ],
+        root,
+      );
+      assert.notEqual(emptyCheckpoint.status, 0);
+      assert.match(
+        emptyCheckpoint.stdout + emptyCheckpoint.stderr,
+        /tracked変更/u,
+      );
       break;
     }
     case "SCN-E2E-ADVANCE-015": {
