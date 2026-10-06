@@ -4184,11 +4184,15 @@ export async function main(argv, dependencies = {}) {
             const currentHead = git(["rev-parse", "HEAD"], root, {
                 env: GIT_ENV,
             }).stdout.trim();
-            if (currentHead === continuationFromHead ||
-                git(["merge-base", "--is-ancestor", continuationFromHead, currentHead], root, {
-                    env: GIT_ENV,
-                    allowFailure: true,
-                }).status !== 0)
+            if (currentHead === continuationFromHead)
+                throw new Error("continuationには前Work Unit以降のcheckpoint commitが必要です");
+            const ancestor = git(["merge-base", "--is-ancestor", continuationFromHead, currentHead], root, {
+                env: GIT_ENV,
+                allowFailure: true,
+            });
+            if (ancestor.status > 1)
+                throw new Error(`continuationの祖先判定に失敗しました: ${ancestor.stderr.trim()}`);
+            if (ancestor.status === 1)
                 throw new Error("continuationには前Work Unit以降のcheckpoint commitが必要です");
             if (git(["status", "--porcelain", "--untracked-files=no"], root, {
                 env: GIT_ENV,

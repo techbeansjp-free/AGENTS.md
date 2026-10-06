@@ -10691,6 +10691,21 @@ if (exact(["auth", "status"])) {
       fs.writeFileSync(path.join(root, "checkpoint.txt"), "checkpoint\n");
       spawnSync("git", ["add", "checkpoint.txt"], { cwd: root });
       spawnSync("git", ["commit", "-q", "-m", "checkpoint"], { cwd: root });
+      const missingCommit = executeCli(
+        [
+          "workflow",
+          "advance",
+          `--staging=${staging}`,
+          `--continue-from=${"f".repeat(40)}`,
+        ],
+        root,
+      );
+      assert.notEqual(missingCommit.status, 0);
+      assert.match(missingCommit.stdout + missingCommit.stderr, /fatal:/u);
+      assert.doesNotMatch(
+        missingCommit.stdout + missingCommit.stderr,
+        /checkpoint commit/u,
+      );
       const continuation = executeCli(args, root);
       assert.equal(
         continuation.status,
