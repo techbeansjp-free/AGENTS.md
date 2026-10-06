@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1563,
+  "observed": {
+    "baseSha": "5d44d2b135a855273583a1a91a5ee58837d0c3f2",
+    "implementationHeadSha": "ae971536eea25510d05a958bed69a90ea3cfe899",
+    "diffDigest": "99b752592447a180cad60e56a832bf67473a839082fba8ee37d4e11c881ffdd3",
+    "session": {
+      "sessionId": "e164350942d5a87becc95916de79790cb5d9688fe03c542b2bf1b113d30281ea",
+      "latestRoundDigest": "ee9ea77374f3986a0cd464069374eb9646461f02fafb109950d60757c8846e9f",
+      "status": "converged",
+      "countedRounds": 1
+    },
+    "impact": {
+      "digest": "aae19bd1d1628dc0b20a3f760db97707c4eba93f008f7238ca898110ee4e2956",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "ae971536eea25510d05a958bed69a90ea3cfe899",
+        "impactDigest": "aae19bd1d1628dc0b20a3f760db97707c4eba93f008f7238ca898110ee4e2956",
+        "finishedAt": "2026-10-06T05:34:26.652Z",
+        "recordDigest": "a1bdd7fdd3036d6fbf3b5012e11d7b0d33c94a54fbad6fa6f2a1d0d5eacf9082"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "FR1-FOCUSED-PROMPT-NO-CONTRACT-IDS",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/adapters/delegated-review-launch.ts",
+      "contractId": null
+    },
+    {
+      "id": "FR1-LEGACY-REOBSERVED-ESCAPE",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "src/domain/review-convergence.ts",
+      "contractId": "AC-08"
+    },
+    {
+      "id": "FR1-PENDING-GUIDANCE-MERGE-DEADEND",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/domain/review-convergence.ts",
+      "contractId": null
+    },
+    {
+      "id": "FR1-TRACE-DRIFT",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "docs/specs/15_要件追跡/01_変更履歴.md",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "claude-session-81d581b1-e630-4307-b60a-315b54462422",
+    "implementer": "codex-review-fastpath-workers",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "a1243376b1f3c17ff37396d30065bc24b301bf17db5aa94dcef8e01f32bb546d"
+}
