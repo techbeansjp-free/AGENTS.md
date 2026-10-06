@@ -133,7 +133,7 @@ function isLegacyWorkflowCli(value) {
         segments[4] === "agent-skill-chain.js");
 }
 /** Reserved canonical command identifies ASC entries, never a path substring. */
-export function planLifecycleSettings(target, operation) {
+export function planLifecycleSettings(target, operation, options = {}) {
     const observed = readSettings(target);
     const parsed = parseJsonStrict(observed.before ?? "{}", SETTINGS);
     if (!isRecord(parsed))
@@ -155,11 +155,15 @@ export function planLifecycleSettings(target, operation) {
                     observers.push({ event, entry });
         }
     }
+    // Record recovery leaves observer registration exactly as observed: neither
+    // added, removed nor converged. The next ordinary update registers it.
+    const preserveObserver = operation === "install" && options.preserveObserver === true;
     // Convergence (a): exactly one owned observer hook already in canonical form.
-    const keepObserver = operation === "install" &&
-        observers.length === 1 &&
-        observers[0].event === HOST_OBSERVER_EVENT &&
-        isCanonicalObserverGroup(observers[0].entry);
+    const keepObserver = preserveObserver ||
+        (operation === "install" &&
+            observers.length === 1 &&
+            observers[0].event === HOST_OBSERVER_EVENT &&
+            isCanonicalObserverGroup(observers[0].entry));
     for (const [event, entries] of Object.entries(hooks)) {
         hooks[event] = entries.flatMap((entry) => {
             const current = entry.hooks;

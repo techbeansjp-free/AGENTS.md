@@ -32,3 +32,9 @@ Feature: install・update・delete・doctorがhost observerをASC-owned entryと
     Given observer資産が異常終了する内容に置き換えられた状態と欠落した状態がある
     When workflow advanceのpreviewを実行する
     Then targetStep、state、agentDispatchは正常な状態と同一である
+
+  Scenario: SCN-INT-HOSTOBS-006 record復旧はobserver登録を変更せず次の通常updateで登録する
+    Given install後にrecordを失いobserver未登録の設定とobserver非正規形の設定を持つ2つのprojectがある
+    When それぞれでupdate --recover-record --applyを実行し続けて通常のupdate --applyを実行する
+    Then record復旧の前後で設定fileはbyte一致しconfiguration.changedはfalseである
+    And 続く通常updateで利用者entryを保持したまま正規形entryが1件だけ登録される

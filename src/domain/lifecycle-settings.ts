@@ -155,6 +155,7 @@ function isLegacyWorkflowCli(value: unknown): boolean {
 export function planLifecycleSettings(
   target: string,
   operation: "install" | "delete",
+  options: { preserveObserver?: boolean } = {},
 ) {
   const observed = readSettings(target);
   const parsed: unknown = parseJsonStrict(observed.before ?? "{}", SETTINGS);
@@ -176,12 +177,17 @@ export function planLifecycleSettings(
         if (ownedObserverHook(hook)) observers.push({ event, entry });
     }
   }
+  // Record recovery leaves observer registration exactly as observed: neither
+  // added, removed nor converged. The next ordinary update registers it.
+  const preserveObserver =
+    operation === "install" && options.preserveObserver === true;
   // Convergence (a): exactly one owned observer hook already in canonical form.
   const keepObserver =
-    operation === "install" &&
-    observers.length === 1 &&
-    observers[0]!.event === HOST_OBSERVER_EVENT &&
-    isCanonicalObserverGroup(observers[0]!.entry);
+    preserveObserver ||
+    (operation === "install" &&
+      observers.length === 1 &&
+      observers[0]!.event === HOST_OBSERVER_EVENT &&
+      isCanonicalObserverGroup(observers[0]!.entry));
   for (const [event, entries] of Object.entries(hooks)) {
     hooks[event] = (entries as Array<Record<string, unknown>>).flatMap(
       (entry) => {

@@ -1140,7 +1140,13 @@ function upgradeUnlocked(
   const expectedParent = observed?.parent ?? null;
   const current = mappings(target);
   assertAncestorsNotSymlinked(target, current);
-  const configuration = planLifecycleSettings(target, "install");
+  /**
+   * **record復旧はhost observerの登録を変更しない**（Issue #1566、REQ-LC-001）。
+   * 復旧でhost設定fileへ新しい書き込みを足さない。登録は次の通常updateで行う。
+   */
+  const configuration = planLifecycleSettings(target, "install", {
+    preserveObserver: !recordPresent,
+  });
   /**
    * **record不在は「導入済み」の代わりにならない**（Issue #1305）。
    *

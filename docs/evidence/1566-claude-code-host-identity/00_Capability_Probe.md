@@ -5,7 +5,7 @@
 - host: Claude Code `2.1.282`（`claude --version`、hook環境変数`AI_AGENT=claude-code_2-1-282_harness`、subagent transcriptの`version`の3点で一致）
 - OS: Ubuntu（Linux 7.2.8）、Node.js 24
 - 方法: 隔離したscratch Git projectの`.claude/settings.json`へ、観測専用のtemporary probe hookを19 event（2.1.282 binaryに存在するevent名から、hostの動作を置き換える`WorktreeCreate`・`WorktreeRemove`等を除外）へ登録し、`claude -p`をheadlessで起動した。実験2・3・1（再取得）は`env -i HOME PATH TERM`の最小環境で起動し、進行役sessionの環境変数を継承させていない
-- probeの性質: stdinを読み、stdoutへ何も書かず、常にexit 0。prompt・tool入力本文・tool応答本文は保存せず、key名と長さ、識別子field、`subagent_type`・`description`・`to`等の短い安全fieldだけを残した
+- probeの性質: stdinを読み、stdoutへ何も書かず、常にexit 0。prompt本文・tool応答本文は保存せず、key名と長さ、識別子field、`subagent_type`・`description`・`to`等の短い安全fieldを残した。**ただし生probe出力（scratch project内の`events.jsonl`）は、これに加えてBash commandの先頭60文字（`bashCommandHead`）と、名前が`CLAUDE`・`AGENT`・`SESSION`に一致する環境変数（`KEY`・`TOKEN`・`SECRET`・`AUTH`を含む名前を除く）の値（先頭160文字）と`ppid`を含んでいた**（`probe.mjs.txt`は実際に使ったprobeをそのまま記録している）。生probe出力はrepositoryへ置かず、下記のfixture化でこれらのfieldを除去した
 - 保存したfixture: `test/fixtures/host-observer/claude-code-2.1.282/*.jsonl`（3実験・106 event）。絶対pathは`<PROJECT>`・`<CLAUDE_PROJECT_STORE>`・`<HOME>`へ置換し、環境変数とPIDは除去した
 
 公式hook reference（https://code.claude.com/docs/en/hooks.md）も確認したが、`SendMessage`の意味論と`agent_id`のresume安定性は文書に記載がなく、以下は実payloadだけを根拠にする。

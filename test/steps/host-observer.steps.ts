@@ -2707,3 +2707,128 @@ Then(
     assert.deepEqual(pick(l.advance.missing!), pick(l.advance.normal!));
   },
 );
+
+/**
+ * record復旧の対象となる旧projectの設定（Issue #1566、REQ-LC-001）。
+ *
+ * `unregistered`は#1566以前のproject（observer未登録）。`noncanonical`は所有hookが
+ * 非正規形で残る状態であり、復旧が「追加しない」だけでなく「除去・収束もしない」
+ * ことを測る。
+ */
+const RECOVERY_SETTINGS = {
+  unregistered: { hooks: { PreToolUse: [USER_WRITE_GROUP] } },
+  noncanonical: {
+    hooks: {
+      PreToolUse: [USER_WRITE_GROUP],
+      PostToolUse: [
+        { matcher: "*", hooks: [{ ...CANONICAL_HOOK, timeout: 30 }] },
+      ],
+    },
+  },
+} as const;
+
+Given(
+  exact(
+    "install後にrecordを失いobserver未登録の設定とobserver非正規形の設定を持つ2つのprojectがある",
+  ),
+  function () {
+    const l = lifecycle(this);
+    for (const [name, settings] of Object.entries(RECOVERY_SETTINGS)) {
+      const root = this.temp("asc-hostobs-recover-");
+      cliJson(["install", `--root=${root}`, "--apply"]);
+      writeSettings(root, settings);
+      const record = path.join(root, ".agent-skill-chain/managed-assets.json");
+      fs.rmSync(record);
+      assert.equal(fs.existsSync(record), false);
+      l.roots[name] = root;
+    }
+  },
+);
+
+When(
+  exact(
+    "それぞれでupdate --recover-record --applyを実行し続けて通常のupdate --applyを実行する",
+  ),
+  function () {
+    const l = lifecycle(this);
+    for (const name of Object.keys(RECOVERY_SETTINGS)) {
+      const root = l.roots[name]!;
+      const file = path.join(root, SETTINGS);
+      const before = fs.readFileSync(file, "utf8");
+      const preview = cliJson(["update", `--root=${root}`, "--recover-record"]);
+      const recovered = cliJson([
+        "update",
+        `--root=${root}`,
+        "--recover-record",
+        "--apply",
+      ]);
+      const afterRecovery = fs.readFileSync(file, "utf8");
+      assert.equal(
+        fs.existsSync(
+          path.join(root, ".agent-skill-chain/managed-assets.json"),
+        ),
+        true,
+      );
+      const updated = cliJson(["update", `--root=${root}`, "--apply"]);
+      l.outputs[`recover:${name}`] = {
+        before,
+        afterRecovery,
+        preview,
+        recovered,
+        updated,
+        afterUpdate: readSettings(root),
+      };
+    }
+  },
+);
+
+Then(
+  exact(
+    "record復旧の前後で設定fileはbyte一致しconfiguration.changedはfalseである",
+  ),
+  function () {
+    const l = lifecycle(this);
+    for (const name of Object.keys(RECOVERY_SETTINGS)) {
+      const o = l.outputs[`recover:${name}`]!;
+      assert.equal(o.afterRecovery, o.before, name);
+      for (const key of ["preview", "recovered"])
+        assert.equal(
+          (
+            (o[key] as Record<string, unknown>).configuration as Record<
+              string,
+              unknown
+            >
+          ).changed,
+          false,
+          `${name}:${key}`,
+        );
+    }
+  },
+);
+
+Then(
+  exact(
+    "続く通常updateで利用者entryを保持したまま正規形entryが1件だけ登録される",
+  ),
+  function () {
+    const l = lifecycle(this);
+    for (const name of Object.keys(RECOVERY_SETTINGS)) {
+      const o = l.outputs[`recover:${name}`]!;
+      assert.equal(
+        (
+          (o.updated as Record<string, unknown>).configuration as Record<
+            string,
+            unknown
+          >
+        ).changed,
+        true,
+        name,
+      );
+      assert.deepEqual(
+        o.afterUpdate,
+        { hooks: { PreToolUse: [USER_WRITE_GROUP, CANONICAL_GROUP] } },
+        name,
+      );
+    }
+  },
+);
