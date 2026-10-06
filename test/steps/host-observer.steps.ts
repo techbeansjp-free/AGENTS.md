@@ -901,10 +901,29 @@ Given(
       "candidate-budget",
       sendMessage(s, "s-003-budget", "abudgetcands0001", nested),
     );
+    // 走査文字数の上限は入れ子の全段で共有する（R1-A-02・R3-01）。外側の62個の未閉鎖`{`が
+    // 上限の大半を使い、残りは外側のJSON objectの`}`までは届くが内側の文字列のhandoffまでは
+    // 届かない。文字列ごとに上限を数え直す実装では内側が新しい上限で走査されfresh警告を返す。
+    // padは実装の定数から導出せず実測で決めた。16520以下は共有の残りで内側まで届き原本も
+    // 警告を返す。16521〜16525が原本`{}`・文字列ごとの実装で警告になる区間で、その中央を使う。
+    // 16526以上は外側のJSON objectが閉じる前に尽き、どちらの実装も`{}`になる。
+    // handoffの形が変わると区間がずれるため、message長を固定してずれを検出する。
+    const shared = `asc-handoff/v1 ${"{".repeat(62)}${"a".repeat(16523)}${JSON.stringify({ a: `asc-handoff/v1 ${body}` })}`;
+    assert.equal(shared.length, 16950);
+    add(
+      s,
+      "shared-scan-budget",
+      sendMessage(s, "s-003-budget", "abudgetshare0001", shared),
+    );
   },
 );
 
-/** 文字列ごと・入れ子の段ごとに上限を数える実装では、走査が段数分だけ累積する（R1-A-02）。 */
+/**
+ * stdin上限に近い入れ子の未閉鎖`{`でも`{}`を返すことを観測する（R1-A-02）。
+ *
+ * 各段の文字列は先頭262144文字で切られ、内側のJSONが閉じないため内側の段は走査
+ * されない。段ごとの走査の累積はこの入力では観測しない（共有上限は`shared-scan-budget`が観測する）。
+ */
 function unclosedNesting(level: number, pad: number): string {
   const head = `asc-handoff/v1 ${"{".repeat(63)}`;
   if (level === 0) return `${head}${"a".repeat(pad)}`;
