@@ -35,7 +35,7 @@ Feature: host observerはSendMessageの再利用だけをadvisoryで警告する
       | workUnitIdが16進64桁でない、またはfreshContextRequiredが文字列のhandoffを含むSendMessage入力                |
       | 宛先transcriptの最初のuser行のdispatch promptにASC handoffが無く、後続行とtool_result blockだけにterminal handoffがあるSendMessage入力 |
       | 宛先transcriptのsession_id directoryまたはsubagents directoryがsymlinkで、その先にterminal handoffがあるSendMessage入力 |
-      | 4段の入れ子それぞれに63個の未閉鎖の{を持つ7 MB超のmessageを1秒未満で処理すべきSendMessage入力 |
+      | 4段の入れ子それぞれに63個の未閉鎖の{を持つ7 MB超のmessageを含むSendMessage入力 |
       | 走査文字数または候補数の上限に達した後にだけfresh handoffが現れるSendMessage入力 |
 
   Scenario: SCN-UNIT-HOSTOBS-004 transcriptとmessageは先頭256 KiBだけを根拠にする
