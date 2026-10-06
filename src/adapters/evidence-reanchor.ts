@@ -20,7 +20,10 @@ import {
   type ReviewEvidence,
 } from "../domain/review-evidence.js";
 import { isEvidenceOnlyPath } from "../domain/review.js";
-import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
+import {
+  unconvergedReviewSessionDiagnostic,
+  isReviewSessionConverged,
+} from "../domain/review-convergence.js";
 import {
   calculateStagingDigest,
   listStagingArtifacts,
@@ -457,7 +460,7 @@ function acceptedSessionEvidence(
     )?.reviewSession;
   return (
     session !== null &&
-    session.status === "converged" &&
+    isReviewSessionConverged(session) &&
     session.latestCandidateHeadSha ===
       evidence.observed.implementationHeadSha &&
     validateReviewEvidenceAgainstSession(evidence, session).length === 0 &&
@@ -772,8 +775,8 @@ function resolveAnchor(
   const session = readStoredReviewSession(staging);
   if (session === null)
     throw new Error("review reanchorには永続review sessionが必要です");
-  if (session.status !== "converged")
-    throw new Error(unconvergedReviewSessionDiagnostic(session.status));
+  if (!isReviewSessionConverged(session))
+    throw new Error(unconvergedReviewSessionDiagnostic(session));
   return {
     anchoredHeadSha: session.latestCandidateHeadSha,
     anchoredBaseSha: session.anchor.diffBaseSha,

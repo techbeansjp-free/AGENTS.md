@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "agent-skill-chain/review-session/v1",
+  "sessionId": "75bac4b7ffc955b64f4b71c6a57e1d1a309070cfa508f0e403969ae0593385b0",
+  "anchor": {
+    "scopeIds": ["SCOPE-01"],
+    "acceptanceCriteriaIds": ["AC-01"],
+    "invariantIds": ["INV-01"],
+    "diffBaseSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "initialHeadSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "initialDiffDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "previousRoundDigest": null,
+      "candidateHeadSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "focus": {
+        "previousBlocking": [],
+        "fixedDiff": [],
+        "adjacentScope": []
+      },
+      "findings": [
+        {
+          "id": "F-LEGACY-01",
+          "severity": "Medium",
+          "status": "valid",
+          "source": "review",
+          "relation": "acceptance-violation",
+          "evidence": "AC-01の期待結果と実測結果が不一致",
+          "path": "src/example.ts",
+          "contractId": "AC-01",
+          "causedByFindingId": null,
+          "admission": "record-only",
+          "admissionReason": "Medium/Lowはcurrent scopeを拡大せず記録だけにする"
+        }
+      ],
+      "blocking": [],
+      "recordOnly": ["F-LEGACY-01"],
+      "roundDigest": "233612f940e37f050ebe8b4f4a0df2e249dd19ed718e8d93df8e908fc54facd3"
+    },
+    {
+      "round": 2,
+      "previousRoundDigest": "233612f940e37f050ebe8b4f4a0df2e249dd19ed718e8d93df8e908fc54facd3",
+      "candidateHeadSha": "dddddddddddddddddddddddddddddddddddddddd",
+      "focus": {
+        "previousBlocking": [],
+        "fixedDiff": ["src/other.ts"],
+        "adjacentScope": []
+      },
+      "findings": [],
+      "blocking": [],
+      "recordOnly": [],
+      "roundDigest": "3a8989ece3f10815fd5f84b0e97f50fda938d0e67f8aafaf5ee4d74fa465369e"
+    }
+  ],
+  "latestRoundDigest": "3a8989ece3f10815fd5f84b0e97f50fda938d0e67f8aafaf5ee4d74fa465369e",
+  "latestCandidateHeadSha": "dddddddddddddddddddddddddddddddddddddddd",
+  "status": "converged"
+}

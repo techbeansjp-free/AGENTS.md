@@ -7,6 +7,7 @@ import { readStoredStagingRecord } from "../domain/staging.js";
 import { STEP_JOURNAL_FILE } from "../domain/workflow.js";
 import { readStoredReviewSession, REVIEW_SESSION_FILE, } from "./review-session-store.js";
 import { GIT_ENV, evidenceOnlySuffix } from "./review-diff.js";
+import { effectiveReviewBlocking, pendingReviewFindingIds, isReviewSessionConverged, } from "../domain/review-convergence.js";
 const ROLES = {
     1: "request",
     2: "requirements",
@@ -31,16 +32,19 @@ export function observeWorkflowHandoff(staging, step, resume) {
         if (step === 10) {
             const sameHead = session?.latestCandidateHeadSha === resume.headSha;
             role =
-                session?.status === "converged" &&
+                session !== null &&
+                    isReviewSessionConverged(session) &&
                     (sameHead ||
                         evidenceOnlySuffix(worktree, session.latestCandidateHeadSha, resume.headSha) !== undefined)
                     ? "coordinator"
-                    : sameHead && session?.status === "active"
+                    : sameHead &&
+                        session?.status === "active" &&
+                        pendingReviewFindingIds(session).length === 0
                         ? "correction"
                         : "reviewer";
             reviewRound =
                 (session?.rounds.length ?? 0) + (role === "reviewer" ? 1 : 0);
-            findingIds = session?.rounds.at(-1)?.blocking ?? [];
+            findingIds = session ? effectiveReviewBlocking(session) : [];
         }
         const hash = (relative) => {
             const file = path.join(staging, relative);

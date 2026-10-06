@@ -5,6 +5,10 @@ import {
   advanceReviewSession,
   parseReviewRoundInput,
   unconvergedReviewSessionDiagnostic,
+  effectiveReviewBlocking,
+  pendingReviewFindingIds,
+  latestReviewFindingObservations,
+  isReviewSessionConverged,
   type ReviewRoundInput,
   type ReviewSessionState,
 } from "../domain/review-convergence.js";
@@ -395,8 +399,8 @@ export function buildReviewRoundDraft(input: {
       previousHeadSha,
       headSha,
     ).changedPaths;
-    const last = previous.rounds.at(-1);
-    const previousBlocking = [...(last?.blocking ?? [])];
+    const pending = pendingReviewFindingIds(previous);
+    const previousBlocking = [...effectiveReviewBlocking(previous)];
     /**
      * **前round blockerの再評価行を雛形へ写す。** 判定はreviewerが`status`を
      * `resolved`へ変えるか`valid`のまま残すだけでよく、ID・contractId・relation・
@@ -414,7 +418,8 @@ export function buildReviewRoundDraft(input: {
      * 事前にnullへ戻し、新HEADで再invokeしてから記入するようnotesへ書く。
      */
     let carriedDecisionRefCleared = false;
-    const carried = (last?.findings ?? [])
+    const carried = latestReviewFindingObservations(previous)
+      .map(({ finding }) => finding)
       .filter(({ id }) => previousBlocking.includes(id))
       .map((finding) => {
         if (finding.decisionRef !== null && finding.decisionRef !== undefined)
@@ -466,7 +471,7 @@ export function buildReviewRoundDraft(input: {
           : {}),
       },
       findings: carried,
-      ...(previous.status === "converged" &&
+      ...(isReviewSessionConverged(previous) &&
       recordLayerSuffix(staging, root, previousHeadSha, headSha, previous)
         ? { recordLayerOnly: true }
         : {}),
@@ -477,6 +482,7 @@ export function buildReviewRoundDraft(input: {
       );
     if (
       fixed.length === 0 &&
+      pending.length === 0 &&
       (previous.status !== "active" ||
         (process.env.ASC_EXECUTION_CONTEXT_MODE ?? "short-lived") !==
           "short-lived")
@@ -484,7 +490,11 @@ export function buildReviewRoundDraft(input: {
       throw new Error(
         "review round --init: 前round headからの実Git差分が空です。前roundのcandidate HEADが現在のHEADと同じです。多くの場合、前roundの--headに「そのroundを検分したHEAD」ではなく「そのroundの指摘を是正した後のHEAD」を渡しています。その場合、HEADを進めても取り違えが重なるだけです。review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください",
       );
-    if (previous.status === "converged")
+    if (pending.length > 0)
+      notes.push(
+        `旧policyの固定契約違反 ${pending.join("、")} を同HEADで再評価する。全IDの明示分類が必要で、非消費roundは使用できない`,
+      );
+    else if (previous.status === "converged")
       notes.push(
         "sessionはconvergedである。取り直しroundは収束後のHEAD移動に対して1回だけ許される",
       );
@@ -829,8 +839,8 @@ export function assertConvergedReviewSession(input: {
   const session = readStoredReviewSession(staging);
   if (session === null)
     throw new Error("Step 10には永続review sessionが必要です");
-  if (session.status !== "converged")
-    throw new Error(unconvergedReviewSessionDiagnostic(session.status));
+  if (!isReviewSessionConverged(session))
+    throw new Error(unconvergedReviewSessionDiagnostic(session));
   if (session.latestRoundDigest !== input.expectedDigest)
     throw new Error(
       "Step 10のreview session digestが保存済みlatest roundと一致しません",

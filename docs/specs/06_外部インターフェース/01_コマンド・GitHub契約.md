@@ -23,6 +23,8 @@ GitHubエラーの機械diagnosticは表示言語に依存せず、秘密情報�
 
 ## usageと必須入力の提示
 
+`review round`のadmissionは[品質基準のレビュー収束契約](../../../.agent-skill-chain/docs/02_品質基準.md#レビュー収束契約)をruntimeが導出する。旧sessionの未評価契約違反が残る場合の限定同HEAD再評価と配送拒否は[管理データ](../07_データ/01_管理データ.md#モード判定成果物とstep-journal)に従う。保存round内部のpolicy versionを公開入力へ指定するflagは設けない。
+
 `review round --init`はround 1で任意の`--progress-target=<staging相対path,...>`を受理する。省略時は従来どおり`03_実装計画.md`を自動検出する。明示時は1〜16件すべての存在、mode、marker、path正規形を要求する。出力round JSONはstable key順のreviewer input bundleであり、256 KiB超過を拒否し、CLI結果へ`bundleDigest`と`bundleBytes`を返す。
 
 `src/cli-usage.ts`がsubcommandごとの要約、必須flag、条件付きflag、任意flagと既定値、位置引数、実行例を保持する単一正本である。CLIはcommandとsubcommandを解決した直後にこの定義を引き、次の順で評価する。

@@ -135,6 +135,8 @@ export interface AdmittedReviewFinding extends ReviewRoundFinding {
 }
 
 export interface ReviewRoundRecord {
+  /** Runtime output only; absence replays the original admission policy. */
+  admissionPolicyVersion?: 2;
   round: number;
   previousRoundDigest: string | null;
   candidateHeadSha: string;
@@ -160,8 +162,14 @@ export interface ReviewSessionState {
 
 /** 非収束の原因と、ownerが受容する対象を混同させない診断を返す。 */
 export function unconvergedReviewSessionDiagnostic(
-  status: ReviewSessionState["status"],
+  session: ReviewSessionState | ReviewSessionState["status"],
 ): string {
+  if (typeof session !== "string") {
+    const pending = pendingReviewFindingIds(session);
+    if (pending.length > 0)
+      return `review sessionが実効収束していません。旧policyの固定契約違反が再評価待ちです: ${pending.join(", ")}。保存status=${session.status}とdigestは保持し、review round --initで全pendingを明示分類してください。同HEADの再評価を許可します`;
+  }
+  const status = typeof session === "string" ? session : session.status;
   return `review sessionが収束していません: status=${status}。reviewが未完了か、実際に検分したHEADとcandidateHeadShaの対応が誤っている可能性があります。ownerのrisk受容へ進まず、review-session.jsonのroundごとのcandidateHeadShaを実際のレビュー順と突き合わせてください`;
 }
 
@@ -657,6 +665,7 @@ function findingAdmission(input: {
   anchor: ReviewSessionAnchor;
   focus: ReviewRoundFocus;
   priorBlocking: ReadonlySet<string>;
+  policyVersion: 1 | 2;
 }): Pick<AdmittedReviewFinding, "admission" | "admissionReason"> {
   const { finding, round, anchor, focus, priorBlocking } = input;
   if (finding.status !== "valid")
@@ -664,7 +673,11 @@ function findingAdmission(input: {
       admission: "record-only",
       admissionReason: "resolvedまたは非有効findingは履歴だけに保持する",
     };
-  if (finding.severity !== "Critical" && finding.severity !== "High")
+  if (
+    finding.severity !== "Critical" &&
+    finding.severity !== "High" &&
+    (input.policyVersion === 1 || !isFixedContractFinding(finding, anchor))
+  )
     return {
       admission: "record-only",
       admissionReason: "Medium/Lowはcurrent scopeを拡大せず記録だけにする",
@@ -754,6 +767,73 @@ function findingAdmission(input: {
   };
 }
 
+function isFixedContractFinding(
+  finding: ReviewRoundFinding,
+  anchor: ReviewSessionAnchor,
+): boolean {
+  return (
+    finding.contractId !== null &&
+    ((finding.relation === "acceptance-violation" &&
+      anchor.acceptanceCriteriaIds.includes(finding.contractId)) ||
+      (finding.relation === "invariant-violation" &&
+        anchor.invariantIds.includes(finding.contractId)))
+  );
+}
+
+/** IDごとの最後の観測を採る。空のfollow/record roundで過去findingを失わない。 */
+export function latestReviewFindingObservations(state: ReviewSessionState) {
+  const latest = new Map<
+    string,
+    { finding: AdmittedReviewFinding; round: ReviewRoundRecord }
+  >();
+  for (const round of state.rounds)
+    for (const finding of round.findings)
+      latest.set(finding.id, { finding, round });
+  return [...latest.values()];
+}
+
+/** 旧policyがrecord-onlyとした未評価の固定契約違反だけを再評価待ちとする。 */
+export function pendingReviewFindingIds(
+  state: ReviewSessionState,
+): readonly string[] {
+  return latestReviewFindingObservations(state)
+    .filter(
+      ({ finding, round }) =>
+        round.admissionPolicyVersion === undefined &&
+        finding.admission === "record-only" &&
+        isFixedContractFinding(finding, state.anchor) &&
+        findingAdmission({
+          finding,
+          round: round.round,
+          anchor: state.anchor,
+          focus: round.focus,
+          priorBlocking: new Set(round.focus.previousBlocking),
+          policyVersion: 2,
+        }).admission === "block-current",
+    )
+    .map(({ finding }) => finding.id)
+    .sort();
+}
+
+export function effectiveReviewBlocking(
+  state: ReviewSessionState,
+): readonly string[] {
+  return Object.freeze(
+    [
+      ...new Set([
+        ...(state.rounds.at(-1)?.blocking ?? []),
+        ...pendingReviewFindingIds(state),
+      ]),
+    ].sort(),
+  );
+}
+
+export function isReviewSessionConverged(state: ReviewSessionState): boolean {
+  return (
+    state.status === "converged" && effectiveReviewBlocking(state).length === 0
+  );
+}
+
 /**
  * 数えるroundの件数。検証済みfollow/record layerだけは数えない（Issue #1287）。
  * 外部要因による追随は発散の指標にならない。
@@ -769,6 +849,22 @@ export function advanceReviewSession(
   previous: ReviewSessionState | null,
   round: ReviewRoundInput,
 ): ReviewSessionState {
+  return advanceReviewSessionWithPolicy(previous, round, 2);
+}
+
+/** Historical replay is private: callers cannot choose the legacy policy. */
+function advanceReviewSessionWithPolicy(
+  previous: ReviewSessionState | null,
+  round: ReviewRoundInput,
+  policyVersion: 1 | 2,
+): ReviewSessionState {
+  const pending =
+    previous && policyVersion === 2 ? pendingReviewFindingIds(previous) : [];
+  const priorIds = previous
+    ? policyVersion === 2
+      ? effectiveReviewBlocking(previous)
+      : previous.rounds.at(-1)!.blocking
+    : [];
   const sessionId = reviewSessionId(round.anchor);
   const expectedRound = previous === null ? 1 : previous.rounds.length + 1;
   if (round.round !== expectedRound)
@@ -780,6 +876,10 @@ export function advanceReviewSession(
       `同一review sessionへ${REVIEW_ROUND_RECORD_LIMIT}件を超えるroundを記録できません`,
     );
   const nonCounting = round.followOnly || round.recordLayerOnly;
+  if (nonCounting && pending.length > 0)
+    throw new Error(
+      `旧policyの固定契約違反の再評価が必要です。非消費roundでは解消できません: ${pending.join(", ")}`,
+    );
   if (round.followOnly && round.findings.length > 0)
     throw new Error(
       "既定branch追随だけのroundへfindingを記録できません。指摘があるroundは数えるroundとして記録します",
@@ -812,20 +912,19 @@ export function advanceReviewSession(
       );
     if (
       previous.status === "converged" &&
+      pending.length === 0 &&
       (round.candidateHeadSha === previous.latestCandidateHeadSha ||
         round.focus.fixedDiff.length === 0)
     )
       throw new Error(
         "収束後の追加reviewは前roundと異なるcandidate HEADと空でない実Git fixedDiffが必要です",
       );
-    const prior = previous.rounds.at(-1)?.blocking ?? [];
+    const prior = priorIds;
     if (!sameStrings(round.focus.previousBlocking, [...prior].sort()))
       throw new Error("前round blockerをfocusから脱落または追加できません");
   }
 
-  const priorBlocking = new Set(
-    previous?.rounds.at(-1)?.blocking ?? ([] as readonly string[]),
-  );
+  const priorBlocking = new Set(priorIds);
   const admittedFindings = round.findings.map((finding) =>
     Object.freeze({
       ...finding,
@@ -835,6 +934,7 @@ export function advanceReviewSession(
         anchor: round.anchor,
         focus: round.focus,
         priorBlocking,
+        policyVersion,
       }),
     }),
   );
@@ -863,6 +963,7 @@ export function advanceReviewSession(
     .map(({ id }) => id)
     .sort();
   const roundWithoutDigest = {
+    ...(policyVersion === 2 ? { admissionPolicyVersion: 2 as const } : {}),
     round: round.round,
     previousRoundDigest: round.previousRoundDigest,
     candidateHeadSha: round.candidateHeadSha,
@@ -942,8 +1043,18 @@ export function parseReviewSessionState(value: unknown): ReviewSessionState {
         "recordOnly",
         "roundDigest",
       ],
-      ["followOnly", "recordLayerOnly"],
+      ["followOnly", "recordLayerOnly", "admissionPolicyVersion"],
     );
+    if (
+      record.admissionPolicyVersion !== undefined &&
+      record.admissionPolicyVersion !== 2
+    )
+      throw new Error("review round.admissionPolicyVersionは2だけを受理します");
+    if (
+      record.admissionPolicyVersion === undefined &&
+      rebuilt?.rounds.at(-1)?.admissionPolicyVersion === 2
+    )
+      throw new Error("review admission policyの旧版への逆戻りを拒否しました");
     if (record.followOnly !== undefined && record.followOnly !== true)
       throw new Error(
         `review session.rounds[${index}].followOnlyはtrueだけを受理します`,
@@ -991,7 +1102,11 @@ export function parseReviewSessionState(value: unknown): ReviewSessionState {
       ...(record.followOnly === true ? { followOnly: true } : {}),
       ...(record.recordLayerOnly === true ? { recordLayerOnly: true } : {}),
     });
-    rebuilt = advanceReviewSession(rebuilt, round);
+    rebuilt = advanceReviewSessionWithPolicy(
+      rebuilt,
+      round,
+      record.admissionPolicyVersion === 2 ? 2 : 1,
+    );
     const rebuiltRecord = rebuilt.rounds.at(-1);
     if (!rebuiltRecord || stableJson(rebuiltRecord) !== stableJson(candidate))
       throw new Error(

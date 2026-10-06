@@ -3,6 +3,18 @@ import path from "node:path";
 import { git } from "../lib/process.js";
 import { resolveContained } from "../lib/security.js";
 import { computeImpactSet } from "./impact-set.js";
+import type { ImpactSet } from "../domain/impact-set.js";
+import { GIT_ENV, observeReviewDiff } from "./review-diff.js";
+import {
+  readStoredReviewSession,
+  REVIEW_SESSION_FILE,
+} from "./review-session-store.js";
+import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
+import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
+import {
+  effectiveReviewBlocking,
+  latestReviewFindingObservations,
+} from "../domain/review-convergence.js";
 
 export const RELATED_FILE_LIMIT = 20;
 export const RELATED_STEM_MATCH_LIMIT = 10;
@@ -102,16 +114,37 @@ export function collectSupplementalReviewDiff(
   headSha: string,
   limit: number = RELATED_FILE_LIMIT,
 ): SupplementalReviewDiffCollection {
-  const changed = git(
-    ["diff", "--name-only", "-z", `${baseSha}..${headSha}`],
+  return collectDiff(root, baseSha, headSha, limit);
+}
+
+function collectDiff(
+  root: string,
+  baseSha: string,
+  headSha: string,
+  limit: number,
+  impact?: ImpactSet,
+): SupplementalReviewDiffCollection {
+  const changed = impact
+    ? [...impact.changedPaths]
+    : git(["diff", "--name-only", "-z", `${baseSha}..${headSha}`], root, {
+        maxBufferBytes: REVIEW_COLLECTION_BYTE_LIMIT,
+      })
+        .stdout.split("\0")
+        .filter((value) => value !== "");
+  const diffText = git(
+    [
+      "diff",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--no-renames",
+      `${baseSha}..${headSha}`,
+      "--",
+    ],
     root,
-    { maxBufferBytes: REVIEW_COLLECTION_BYTE_LIMIT },
-  )
-    .stdout.split("\0")
-    .filter((value) => value !== "");
-  const diffText = git(["diff", `${baseSha}..${headSha}`], root, {
-    maxBufferBytes: REVIEW_COLLECTION_BYTE_LIMIT,
-  }).stdout;
+    {
+      maxBufferBytes: REVIEW_COLLECTION_BYTE_LIMIT,
+    },
+  ).stdout;
   if (Buffer.byteLength(diffText, "utf8") > REVIEW_COLLECTION_BYTE_LIMIT)
     throw new Error("review差分が1MiBを超えました");
 
@@ -123,7 +156,11 @@ export function collectSupplementalReviewDiff(
    * 字面一致より根拠が強い。fullのとき（影響を証明できないとき）と、SHAを
    * exact commitへ解決できない等で導出自体ができないときは従来の探索へ戻る。
    */
-  const impactRelated = targetedImpactRelated(root, baseSha, headSha);
+  const impactRelated = impact
+    ? impact.mode === "targeted"
+      ? impact.adjacent.map(({ path: adjacentPath }) => adjacentPath)
+      : undefined
+    : targetedImpactRelated(root, baseSha, headSha);
   if (impactRelated !== undefined) {
     related.push(...impactRelated.slice(0, limit));
     truncated = impactRelated.length > limit;
@@ -197,7 +234,7 @@ export function collectSupplementalReviewDiff(
         allowFailure: true,
       }).status !== 0
     )
-      continue;
+      throw new Error("関連fileを収集できません");
     const body = git(["show", `${headSha}:${relatedPath}`], root, {
       maxBufferBytes: REVIEW_COLLECTION_BYTE_LIMIT,
     }).stdout;
@@ -214,6 +251,147 @@ export function collectSupplementalReviewDiff(
     `## 関連ファイル（未変更、上限${limit}件、呼び出し元・呼び出し先の文脈として提供）\n${relatedText}`;
 
   return { target: "diff", changed, related, truncated, promptBody };
+}
+
+/** Build round 2+ input only from a validated stored session and exact Git objects. */
+export function collectDelegatedReviewDiff(
+  root: string,
+  baseSha: string,
+  headSha: string,
+  stagingPath: string,
+): SupplementalReviewDiffCollection & {
+  focused: boolean;
+  instruction: string;
+  assertCurrent: () => void;
+} {
+  const staging = resolveContained(root, stagingPath);
+  const stagingIdentity = fs.statSync(staging);
+  const sessionFile = path.join(staging, REVIEW_SESSION_FILE);
+  // lstat also notices dangling symlinks; those must not turn into round 1.
+  let hasSession = true;
+  try {
+    fs.lstatSync(sessionFile);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    hasSession = false;
+  }
+  const session = hasSession ? readStoredReviewSession(staging) : null;
+  const reanchors = session ? readEvidenceReanchorChain(staging) : [];
+  const assertCurrent = () => {
+    const current = fs.lstatSync(staging);
+    if (
+      !current.isDirectory() ||
+      fs.realpathSync(staging) !== staging ||
+      current.dev !== stagingIdentity.dev ||
+      current.ino !== stagingIdentity.ino
+    )
+      throw new Error("review staging identityが変わりました");
+    if (session) {
+      if (
+        JSON.stringify(readStoredReviewSession(staging)) !==
+          JSON.stringify(session) ||
+        JSON.stringify(readEvidenceReanchorChain(staging)) !==
+          JSON.stringify(reanchors)
+      )
+        throw new Error("review sessionまたは再固定記録が変わりました");
+    } else {
+      try {
+        fs.lstatSync(sessionFile);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+        throw error;
+      }
+      throw new Error("review sessionが作成されました");
+    }
+  };
+  if (!session) {
+    const impact = computeImpactSet({ root, baseSha, headSha });
+    return {
+      ...collectDiff(root, baseSha, headSha, RELATED_FILE_LIMIT, impact),
+      focused: false,
+      instruction: "Round 1 complete review。",
+      assertCurrent,
+    };
+  }
+  if (session.anchor.diffBaseSha !== baseSha)
+    throw new Error("review sessionの比較基点と一致しません");
+  if (
+    git(["merge-base", "--is-ancestor", baseSha, headSha], root, {
+      env: GIT_ENV,
+      allowFailure: true,
+    }).status !== 0
+  )
+    throw new Error("review比較基点が対象HEADのancestorではありません");
+  if (
+    observeReviewDiff(root, baseSha, session.anchor.initialHeadSha).digest !==
+    session.anchor.initialDiffDigest
+  )
+    throw new Error("review sessionの初回差分と一致しません");
+  const previousHeadSha = deriveEffectiveHead({
+    records: reanchors,
+    anchoredHeadSha: session.latestCandidateHeadSha,
+  }).effectiveHeadSha;
+  const impact = computeImpactSet({ root, baseSha: previousHeadSha, headSha });
+  const previousBlocking = effectiveReviewBlocking(session);
+  const blockers = latestReviewFindingObservations(session)
+    .map(({ finding }) => finding)
+    .filter(({ id }) => previousBlocking.includes(id))
+    .map(
+      ({ admission: _admission, admissionReason: _reason, ...finding }) =>
+        finding,
+    );
+  const focused = impact.mode === "targeted";
+  // A full fallback uses the anchor interval, never the repair interval's impact.
+  const collectionImpact =
+    focused || previousHeadSha === baseSha
+      ? impact
+      : computeImpactSet({ root, baseSha, headSha });
+  const collected = collectDiff(
+    root,
+    focused ? previousHeadSha : baseSha,
+    headSha,
+    RELATED_FILE_LIMIT,
+    collectionImpact,
+  );
+  const targetFiles = [
+    ...new Set([
+      ...collected.changed,
+      ...collected.related,
+      ...blockers.map(({ path: file }) => file),
+    ]),
+  ].sort();
+  let promptBody = `## previousBlocking\n${JSON.stringify(blockers)}\n\n## adjacentScope\n${JSON.stringify(impact.adjacent)}\n\n${collected.promptBody}`;
+  // Blocker paths remain in scope even when this repair did not touch them.
+  for (const file of targetFiles.filter(
+    (file) => !collected.related.includes(file),
+  )) {
+    const exists = git(["cat-file", "-e", `${headSha}:${file}`], root, {
+      allowFailure: true,
+    });
+    if (exists.status !== 0) {
+      if (!collected.changed.includes(file))
+        throw new Error("前blockerのfileを収集できません");
+      continue; // A deletion is represented by the exact diff.
+    }
+    const body = git(["show", `${headSha}:${file}`], root, {
+      maxBufferBytes: REVIEW_COLLECTION_BYTE_LIMIT,
+    }).stdout;
+    promptBody += `\n\n### ${file}\n${body}`;
+    if (Buffer.byteLength(promptBody, "utf8") > REVIEW_COLLECTION_BYTE_LIMIT)
+      throw new Error("review入力が1MiBを超えました");
+  }
+  if (Buffer.byteLength(promptBody, "utf8") > REVIEW_COLLECTION_BYTE_LIMIT)
+    throw new Error("review入力が1MiBを超えました");
+  return {
+    ...collected,
+    changed: targetFiles,
+    promptBody,
+    focused,
+    assertCurrent,
+    instruction: focused
+      ? `Round ${session.rounds.length + 1} focused review: previousBlocking・fixedDiff (${previousHeadSha}..${headSha})・adjacentScopeへ肯定・敵対の両rubricを適用してください。既承認の全計画・全仕様の再reviewや無関係な改善によるscope拡張は行いません。`
+      : `Round ${session.rounds.length + 1} complete reviewへfallback: ${impact.reasons.join("; ")}`,
+  };
 }
 
 /**
