@@ -29,6 +29,7 @@ import {
   reviewSessionId,
   type ReviewRoundFinding,
   type ReviewRoundInput,
+  type ReviewRoundRecord,
   type ReviewSessionState,
 } from "../../src/domain/review-convergence.js";
 import {
@@ -483,10 +484,183 @@ When("旧historyへresolvedと未知契約とscope外の最新観測を再生す
   }
   this.legacy = variants;
 });
-Then("旧historyのresolvedと未知契約とscope外をpendingへ加えない", function () {
-  for (const parsed of this.legacy) {
-    assert.deepEqual(pendingReviewFindingIds(parsed), []);
-    assert.equal(isReviewSessionConverged(parsed), true);
+Then(
+  "旧historyのresolvedと未知契約は解除しscope外の継続違反はpendingに残す",
+  function () {
+    for (const [index, parsed] of this.legacy.entries()) {
+      assert.deepEqual(
+        pendingReviewFindingIds(parsed),
+        index === 2 ? ["F-LEGACY-01"] : [],
+      );
+      assert.equal(isReviewSessionConverged(parsed), index !== 2);
+    }
+  },
+);
+
+Given(
+  "旧policyでMedium契約違反を再掲しHighだけを解決したsessionがある",
+  function () {
+    const omitted = readLegacy("omitted");
+    const medium = omitted.rounds[0]!.findings[0]!;
+    const high = {
+      ...readLegacy("high").rounds[0]!.findings[0]!,
+      id: "F-HIGH",
+      path: "src/other.ts",
+    };
+    const historical = reseal({
+      ...omitted,
+      rounds: [
+        {
+          ...omitted.rounds[0]!,
+          findings: [medium, high],
+          blocking: [high.id],
+        },
+        {
+          ...omitted.rounds[1]!,
+          focus: { ...omitted.rounds[1]!.focus, previousBlocking: [high.id] },
+          findings: [
+            medium,
+            {
+              ...high,
+              status: "resolved",
+              admission: "record-only",
+              admissionReason:
+                "resolvedまたは非有効findingは履歴だけに保持する",
+            },
+          ],
+          recordOnly: [high.id, medium.id].sort(),
+        },
+      ],
+    });
+    this.session = parseReviewSessionState(historical);
+    this.legacy = [this.session];
+    this.legacySnapshot = stableJson(historical);
+  },
+);
+When("旧sessionの履歴を現policyのsessionと比較する", function () {
+  let current: ReviewSessionState | null = null;
+  for (const record of this.session.rounds) {
+    current = advanceReviewSession(
+      current,
+      parseReviewRoundInput({
+        round: record.round,
+        previousRoundDigest: current?.latestRoundDigest ?? null,
+        anchor: this.session.anchor,
+        candidateHeadSha: record.candidateHeadSha,
+        focus: {
+          ...record.focus,
+          previousBlocking: current ? effectiveReviewBlocking(current) : [],
+        },
+        findings: record.findings.map(
+          ({ admission: _a, admissionReason: _r, ...f }) => f,
+        ),
+      }),
+    );
+  }
+  assert.ok(current);
+  assert.deepEqual(current.rounds.at(-1)!.blocking, ["F-LEGACY-01"]);
+  assert.deepEqual(
+    effectiveReviewBlocking(this.session),
+    effectiveReviewBlocking(current),
+  );
+});
+Then(
+  "旧digestとstatusを保持して同じ未解決契約違反をblockerにする",
+  function () {
+    assert.equal(stableJson(this.session), this.legacySnapshot);
+    assert.equal(this.session.status, "converged");
+    assert.deepEqual(pendingReviewFindingIds(this.session), ["F-LEGACY-01"]);
+    assert.equal(isReviewSessionConverged(this.session), false);
+    assert.throws(
+      () =>
+        createReviewEvidence({
+          session: this.session,
+          issue: 1,
+          implementationHeadSha: this.session.latestCandidateHeadSha,
+          baseSha: this.session.anchor.diffBaseSha,
+          diffDigest: "c".repeat(64),
+          impact: { digest: "c".repeat(64), mode: "full" },
+          verification: [],
+          reviewer: "reviewer",
+          implementer: "implementer",
+          independenceMode: "context-isolated",
+        }),
+      /再評価待ち.*F-LEGACY-01/,
+    );
+  },
+);
+When(
+  "途中の旧roundで非blockingに分類した後にscope外でvalidを再掲する",
+  function () {
+    const old = this.session;
+    const last = old.rounds[1]!;
+    const medium = last.findings[0]!;
+    const classifications: Partial<typeof medium>[] = [
+      ...(["resolved", "false-positive", "duplicate"] as const).map(
+        (status) => ({
+          status,
+          admissionReason: "resolvedまたは非有効findingは履歴だけに保持する",
+        }),
+      ),
+      { relation: "out-of-scope" },
+      { relation: "improvement", contractId: null },
+      { contractId: "AC-UNKNOWN" },
+    ];
+    this.legacy = classifications.map((classification) => {
+      const again: ReviewRoundRecord = {
+        ...last,
+        round: 3,
+        candidateHeadSha: "f".repeat(40),
+        focus: { ...last.focus, previousBlocking: [] },
+        findings: [medium],
+        recordOnly: [medium.id],
+      };
+      return parseReviewSessionState(
+        reseal({
+          ...old,
+          rounds: [
+            old.rounds[0]!,
+            {
+              ...last,
+              findings: [{ ...medium, ...classification }, last.findings[1]!],
+            },
+            again,
+          ],
+          latestCandidateHeadSha: again.candidateHeadSha,
+        }),
+      );
+    });
+  },
+);
+When("契約findingの初観測をfocused範囲外にする", function () {
+  const old = this.session;
+  const first = old.rounds[0]!;
+  this.legacy = [
+    parseReviewSessionState(
+      reseal({
+        ...old,
+        rounds: [
+          { ...first, findings: [first.findings[1]!], recordOnly: [] },
+          old.rounds[1]!,
+          {
+            ...old.rounds[1]!,
+            round: 3,
+            candidateHeadSha: "f".repeat(40),
+            focus: { ...old.rounds[1]!.focus, previousBlocking: [] },
+            findings: [old.rounds[1]!.findings[0]!],
+            recordOnly: ["F-LEGACY-01"],
+          },
+        ],
+        latestCandidateHeadSha: "f".repeat(40),
+      }),
+    ),
+  ];
+});
+Then("解除済みのfindingはpendingへ復活しない", function () {
+  for (const session of this.legacy) {
+    assert.deepEqual(pendingReviewFindingIds(session), []);
+    assert.deepEqual(effectiveReviewBlocking(session), []);
+    assert.equal(isReviewSessionConverged(session), true);
   }
 });
 

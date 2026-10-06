@@ -14,6 +14,7 @@ import {
   type ReviewRoundFinding,
 } from "../../src/domain/review-convergence.js";
 import { observeReviewDiff } from "../../src/adapters/review-diff.js";
+import { computeImpactSet } from "../../src/adapters/impact-set.js";
 
 interface FocusedWorld extends WorkflowWorld {
   root: string;
@@ -85,8 +86,12 @@ Given("focused委譲用の2つのblockerと大きな承認済み計画がある"
     "src/caller.ts":
       'import { lib } from "./lib.js";\nexport const caller = () => lib();\n',
     "src/unrelated.ts": "export const unrelated = () => 0;\n",
+    "test/support/world.ts": fs.readFileSync(
+      new URL("../fixtures/delegated-review-focused/world.ts", import.meta.url),
+      "utf8",
+    ),
     "test/steps/app.steps.ts":
-      'import { Given } from "@cucumber/cucumber";\nimport { caller } from "../../src/caller.js";\nGiven("app runs", () => caller());\n',
+      'import { AppWorld, stepDefinitions } from "../support/world.js";\nimport { caller } from "../../src/caller.js";\nconst { Given } = stepDefinitions<AppWorld>();\nGiven("app runs", () => caller());\n',
     "test/features/app.feature":
       "Feature: app\n  Scenario: SCN-FIXTURE-001 app\n    Given app runs\n",
   });
@@ -309,6 +314,13 @@ Then(
   function () {
     assert.equal(this.result.state, "needs_coordinator_review");
     assert.equal(this.prompts.length, 1);
+    const impact = computeImpactSet({
+      root: this.root,
+      baseSha: this.previous,
+      headSha: this.head,
+    });
+    assert.equal(impact.mode, "targeted");
+    assert.deepEqual(impact.features, ["test/features/app.feature"]);
     const prompt = this.prompts[0]!;
     for (const text of [
       "focused review",

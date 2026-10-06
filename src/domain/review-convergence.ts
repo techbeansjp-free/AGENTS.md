@@ -796,20 +796,32 @@ export function latestReviewFindingObservations(state: ReviewSessionState) {
 export function pendingReviewFindingIds(
   state: ReviewSessionState,
 ): readonly string[] {
+  // 保存値は変えず、現policyでのblocker継続を時系列に再生する。
+  // 未観測IDは保持し、明示的な非blocking観測だけが継続を解除する。
+  let blocking = new Set<string>();
+  for (const round of state.rounds) {
+    const priorBlocking = blocking;
+    blocking = new Set(priorBlocking);
+    for (const finding of round.findings) {
+      const { admission } = findingAdmission({
+        finding,
+        round: round.round,
+        anchor: state.anchor,
+        focus: round.focus,
+        priorBlocking,
+        policyVersion: 2,
+      });
+      if (admission === "block-current") blocking.add(finding.id);
+      else blocking.delete(finding.id);
+    }
+  }
   return latestReviewFindingObservations(state)
     .filter(
       ({ finding, round }) =>
         round.admissionPolicyVersion === undefined &&
         finding.admission === "record-only" &&
         isFixedContractFinding(finding, state.anchor) &&
-        findingAdmission({
-          finding,
-          round: round.round,
-          anchor: state.anchor,
-          focus: round.focus,
-          priorBlocking: new Set(round.focus.previousBlocking),
-          policyVersion: 2,
-        }).admission === "block-current",
+        blocking.has(finding.id),
     )
     .map(({ finding }) => finding.id)
     .sort();

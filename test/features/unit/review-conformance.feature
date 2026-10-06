@@ -36,12 +36,29 @@ Feature: 固定契約のadmissionと旧policyの再評価
     When 同HEADで全pendingを明示的に解決する
     Then pendingは復活せず通常の収束済み同HEAD禁止へ戻る
 
-  Scenario: SCN-UNIT-REVIEWPOLICY-002 最新観測のstatusとfocusでlegacy適格性を判定する
+  Scenario: SCN-UNIT-REVIEWPOLICY-002 最新観測の分類と履歴のscopeでlegacy適格性を判定する
     Given 旧mainが生成したMediumとLowの契約違反sessionと履歴省略sessionがある
     When 旧historyへresolvedと未知契約とscope外の最新観測を再生する
-    Then 旧historyのresolvedと未知契約とscope外をpendingへ加えない
+    Then 旧historyのresolvedと未知契約は解除しscope外の継続違反はpendingに残す
 
   Scenario: SCN-UNIT-REVIEWPOLICY-003 旧CriticalとHighのblockerは非消費roundで保持する
     Given 旧mainが生成したHigh契約blockerがある
     When 旧blockerを保持してfollowとrecordLayerの非消費roundを進める
     Then 旧CriticalとHighはpendingではなくactive blockerのままである
+
+  Scenario: SCN-UNIT-REVIEWPOLICY-004 旧roundのHighだけを修正しても再掲したMedium契約違反は配送できない
+    Given 旧policyでMedium契約違反を再掲しHighだけを解決したsessionがある
+    When 旧sessionの履歴を現policyのsessionと比較する
+    Then 旧digestとstatusを保持して同じ未解決契約違反をblockerにする
+    When 同HEADで全pendingを明示的に解決する
+    Then pendingは復活せず通常の収束済み同HEAD禁止へ戻る
+
+  Scenario: SCN-UNIT-REVIEWPOLICY-005 途中で解除した旧findingを無関係scopeで再掲しても再ブロックしない
+    Given 旧policyでMedium契約違反を再掲しHighだけを解決したsessionがある
+    When 途中の旧roundで非blockingに分類した後にscope外でvalidを再掲する
+    Then 解除済みのfindingはpendingへ復活しない
+
+  Scenario: SCN-UNIT-REVIEWPOLICY-006 初観測からscope外の旧契約findingは再掲してもpendingにならない
+    Given 旧policyでMedium契約違反を再掲しHighだけを解決したsessionがある
+    When 契約findingの初観測をfocused範囲外にする
+    Then 解除済みのfindingはpendingへ復活しない
