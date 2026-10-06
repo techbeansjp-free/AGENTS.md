@@ -9,12 +9,14 @@ Feature: host observerはSendMessageの再利用だけをadvisoryで警告する
     And systemMessageはfresh mismatchのowner指定文言と完全一致する
     And additionalContextはworkUnitIdと宛先agent_idを含む
     And 出力はpermissionDecision・decision・continueを含まない
+    And AI_AGENTが未検証のhost versionを示す環境でも同じ警告を返す
 
   Scenario: SCN-UNIT-HOSTOBS-002 terminal済みWork Unitを担当したagentへの送信でterminal reuse警告を返し、両方に該当すればfresh mismatchの1件だけを返す
     Given 宛先agentのsubagent transcript先頭にterminalAfterHandbackがtrueのASC handoffがある
     When messageにASC handoffを含まないSendMessage入力でobserverを実行する
     Then systemMessageはterminal reuseのowner指定文言と完全一致する
     And exit codeは0である
+    And AI_AGENTが未検証のhost versionを示す環境でも同じ警告を返す
     When messageにfresh handoffを含むSendMessage入力でobserverを実行する
     Then 警告はfresh mismatchの1件だけである
 
@@ -31,12 +33,17 @@ Feature: host observerはSendMessageの再利用だけをadvisoryで警告する
       | tool_input.to・session_id・transcript_pathのいずれかが欠けhandoffを含まないSendMessage入力                  |
       | 判定中に例外が起きる型のworkUnitを持つ入力                                                                  |
       | workUnitIdが16進64桁でない、またはfreshContextRequiredが文字列のhandoffを含むSendMessage入力                |
-      | AI_AGENTが未検証のhost versionを示しhandoffを含まないSendMessage入力                                        |
+      | 宛先transcriptの最初のuser行のdispatch promptにASC handoffが無く、後続行とtool_result blockだけにterminal handoffがあるSendMessage入力 |
+      | 宛先transcriptのsession_id directoryまたはsubagents directoryがsymlinkで、その先にterminal handoffがあるSendMessage入力 |
+      | 4段の入れ子それぞれに63個の未閉鎖の{を持つ7 MB超のmessageを1秒未満で処理すべきSendMessage入力 |
+      | 走査文字数または候補数の上限に達した後にだけfresh handoffが現れるSendMessage入力 |
 
-  Scenario: SCN-UNIT-HOSTOBS-004 transcriptは先頭256 KiBだけを根拠にする
+  Scenario: SCN-UNIT-HOSTOBS-004 transcriptとmessageは先頭256 KiBだけを根拠にする
     Given terminal handoffが先頭256 KiB以内にあるtranscriptと256 KiBより後ろだけにあるtranscriptがある
     When それぞれを宛先としてobserverを実行する
     Then 前者だけがterminal reuse警告を返し後者は{}を返す
+    When fresh handoffが先頭262144文字以内で終わるmessageと262144文字より後ろで終わるmessageでobserverを実行する
+    Then 前者だけがfresh mismatch警告を返し後者は{}を返す
 
   Scenario: SCN-UNIT-HOSTOBS-005 malformedな入力でもexit 0で何も返さない
     Given 入力が不正JSON、空、JSON配列、数値、1 MiBの不正文字列のいずれかである
@@ -101,11 +108,11 @@ Feature: host observerはSendMessageの再利用だけをadvisoryで警告する
     And 出力はmessage本文とtranscript本文の文字列を含まない
 
   Scenario: SCN-UNIT-HOSTOBS-016 observer本体はOS非依存でworkflowから独立し3 OSのCIで実行される
-    Given observer本体、workflow・review・deliveryのsource、.github/workflowsの新規workflowとci.ymlがある
+    Given observer本体、workflow・review・deliveryのsource、.github/workflowsの新規workflowがある
     When importとAPI利用とworkflow定義を静的に検査する
     Then observerのimportはnode:fs、node:path、node:process、node:cryptoに限られchild_processと固定temp pathを含まない
     And workflow・review・deliveryのsourceはobserverを参照しない
-    And 新規CI workflowはubuntu-latest、macos-latest、windows-latestとNode.js 24でobserverのportable testを実行し、ci.ymlは変更されていない
+    And 新規CI workflowはubuntu-latest、macos-latest、windows-latestでshellを介さずobserverのportable testを実行し、読取権限だけを持つ
 
   Scenario: SCN-UNIT-HOSTOBS-017 Probe fixtureとCapability Matrixが秘密を含まず再確認できる
     Given test/fixtures/host-observer/claude-code-2.1.282/の3 fileとdocs/specsのCapability Matrixがある

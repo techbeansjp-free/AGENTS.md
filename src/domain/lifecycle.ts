@@ -104,6 +104,18 @@ const HOST_OBSERVER_TARGET = ".claude/hooks/asc-host-observer.mjs";
 /** 実payloadで判定条件を確かめたClaude Codeのversion（Probe、Issue #1566）。 */
 const HOST_OBSERVER_VERIFIED_VERSION = "2.1.282";
 /**
+ * observer資産（正本・展開先・managed runtimeの複写）か。**欠落はadvisory診断だけにする**（Issue #1566）。
+ *
+ * 欠落はobserverが動かないだけであり、hostはnon-blocking hook errorを出してtoolを続ける。
+ * 欠落を全体の`healthy`へ入れると、observerの存在が`doctor`の門になる（REQ-LC-1566）。
+ * **在るが内容が一致しない場合は対象外である。** 自動実行されるcodeの改ざん検出を弱めない。
+ */
+function isHostObserverAsset(relative: string): boolean {
+  return (
+    path.posix.basename(relative) === path.posix.basename(HOST_OBSERVER_TARGET)
+  );
+}
+/**
  * hookの登録を観測するproject-localの設定file（Issue #1105）。
  *
  * file全体は利用者所有。Agent Lifecycleの予約entryのみ構造的に管理する。
@@ -1491,7 +1503,13 @@ export function doctor(target: string, worktreeObservations?: unknown) {
     }
   }
 
+  /** record記載済みで欠落したobserver資産。`hooks.hostObserver`だけへ報告する。 */
+  const missingObserverAssets: string[] = [];
   for (const asset of managedAssets) {
+    if (isHostObserverAsset(asset.relative) && !pathEntryExists(asset.file)) {
+      missingObserverAssets.push(asset.relative);
+      continue;
+    }
     if (!pathEntryExists(asset.file) || !isRegularFile(asset.file)) {
       diagnostics.push(`${asset.relative}: managed通常fileがありません`);
       continue;
@@ -1691,7 +1709,8 @@ export function doctor(target: string, worktreeObservations?: unknown) {
    *
    * observerはadvisoryであり、workflowの判定に入らない。**全体の`diagnostics`へ
    * 足さない。** 足すと未登録のprojectが不健全と判定され、観測器が門になる。
-   * 資産の改変・record記載済みの欠落は従来どおりmanaged assetの診断が扱う。
+   * **資産の欠落はrecord記載の有無を問わずこの欄だけへ報告する。** 在るが
+   * managed hashと一致しない改変は従来どおりmanaged assetの診断が全体へ入れる。
    */
   const hostObserver = ((): {
     registered: boolean;
@@ -1735,6 +1754,11 @@ export function doctor(target: string, worktreeObservations?: unknown) {
       observerDiagnostics.push(
         `host observer資産${HOST_OBSERVER_TARGET}がありません。update --root=. --applyで配置できます`,
       );
+    for (const relative of missingObserverAssets)
+      if (relative !== HOST_OBSERVER_TARGET)
+        observerDiagnostics.push(
+          `host observer資産${relative}がありません。update --root=. --applyで配置できます`,
+        );
     return {
       registered,
       assetPresent,
@@ -1841,6 +1865,8 @@ export function doctor(target: string, worktreeObservations?: unknown) {
         );
     for (const { src, dest } of currentMappings) {
       const key = relativeKey(target, dest);
+      // observer資産の欠落は`hooks.hostObserver`が報告する（Issue #1566）。
+      if (isHostObserverAsset(key) && !pathEntryExists(dest)) continue;
       if (
         (key.startsWith(`${MANAGED_RUNTIME}/`) ||
           key === ".claude/hooks/asc-agent-lifecycle.mjs") &&

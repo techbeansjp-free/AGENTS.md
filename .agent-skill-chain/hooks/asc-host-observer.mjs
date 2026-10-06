@@ -9,6 +9,10 @@
  * transcriptの先頭262144 bytesだけである。fileを書かず、状態を持たず、
  * 外部processを起動しない。判別できない入力はすべて`{}`へ倒す（fail-open）。
  *
+ * **仕事量は1回の起動全体で有界である。** 文字列は先頭262144文字だけを走査し、
+ * 候補の切り出し回数と括弧対応の走査文字数は入れ子の全段で共有する上限を持つ。
+ * 上限に達したら判別不能として`{}`を返す。
+ *
  * 判定条件の根拠はClaude Code 2.1.282の実payload
  * （`test/fixtures/host-observer/claude-code-2.1.282/`）だけである。
  */
@@ -25,7 +29,9 @@ const STDIN_LIMIT = 8 * 1024 * 1024;
 const TRANSCRIPT_LIMIT = 262144;
 const IDENTIFIER = /^[A-Za-z0-9_-]{1,128}$/u;
 const WORK_UNIT_ID = /^[0-9a-f]{64}$/u;
+const SCAN_LIMIT = 262144;
 const MAX_CANDIDATES = 64;
+const MAX_SCAN_STEPS = 4 * SCAN_LIMIT;
 const MAX_STRING_DEPTH = 4;
 const MAX_OBJECT_DEPTH = 16;
 const MAX_NODES = 10000;
@@ -57,12 +63,18 @@ function recognizedHandoff(value) {
   };
 }
 
-/** 引用符とescapeを考慮して`start`の`{`に対応する`}`の位置を返す。 */
-function matchingBrace(text, start) {
+/**
+ * 引用符とescapeを考慮して`start`の`{`に対応する`}`の位置を返す。
+ *
+ * 走査した文字数を全段共有の`budget.steps`から引き、尽きたら`-1`を返す。
+ */
+function matchingBrace(text, start, budget) {
   let depth = 0;
   let quoted = false;
   let escaped = false;
   for (let index = start; index < text.length; index += 1) {
+    if (budget.steps >= MAX_SCAN_STEPS) return -1;
+    budget.steps += 1;
     const character = text[index];
     if (quoted) {
       if (escaped) escaped = false;
@@ -84,16 +96,17 @@ function matchingBrace(text, start) {
  * 文字列へ埋め込まれたJSON objectを候補として切り出して走査する。
  *
  * hostのtranscriptではdispatch promptがJSON文字列として1段escapeされるため、
- * 行のtop-levelだけを見るとhandoffを確定できない。候補数と入れ子の段数に上限を置く。
+ * 行のtop-levelだけを見るとhandoffを確定できない。走査は先頭`SCAN_LIMIT`文字に限り、
+ * 候補数と走査文字数は入れ子の全段で共有する上限、入れ子の段数にも上限を置く。
  */
-function searchString(text, strings, budget, accept) {
-  if (strings >= MAX_STRING_DEPTH || !text.includes(HANDOFF_KIND))
-    return undefined;
-  let attempts = 0;
+function searchString(value, strings, budget, accept) {
+  if (strings >= MAX_STRING_DEPTH) return undefined;
+  const text = value.length > SCAN_LIMIT ? value.slice(0, SCAN_LIMIT) : value;
+  if (!text.includes(HANDOFF_KIND)) return undefined;
   let start = text.indexOf("{");
-  while (start !== -1 && attempts < MAX_CANDIDATES) {
-    attempts += 1;
-    const end = matchingBrace(text, start);
+  while (start !== -1 && budget.candidates < MAX_CANDIDATES) {
+    budget.candidates += 1;
+    const end = matchingBrace(text, start, budget);
     if (end === -1) {
       start = text.indexOf("{", start + 1);
       continue;
@@ -140,23 +153,33 @@ function search(value, depth, strings, budget, accept) {
 }
 
 function findHandoff(value, accept) {
-  return search(value, 0, 0, { nodes: 0 }, accept);
+  return search(value, 0, 0, { nodes: 0, candidates: 0, steps: 0 }, accept);
 }
 
 /**
  * 宛先transcriptの先頭だけを読取専用で読む。
  *
- * symlinkは`lstat`で拒否し、open後の`fstat`で同じ通常fileであることを確かめる。
+ * `directory`（`transcript_path`のdirectory部分、hostのproject store）より下の
+ * `<session_id>`・`subagents`・`agent-<to>.jsonl`の各要素を順に`lstat`し、symlinkを
+ * 辿らない。中間要素は実directory、末端は通常fileだけを認める。open後の`fstat`で
+ * 末端が同じ通常fileであることを確かめる。`lstat`とopenの間の差し替えは防げないが、
+ * それにはhost storeへの書込みが要り、結果はadvisory警告1件に留まる。
  * FIFOへ差し替えられてもopenで待たないよう、定義されるOSでは`O_NONBLOCK`を加える。
  */
-function readHead(file) {
+function readHead(directory, segments) {
+  let file = directory;
   let observed;
   try {
-    observed = fs.lstatSync(file);
+    for (let index = 0; index < segments.length; index += 1) {
+      file = path.join(file, segments[index]);
+      observed = fs.lstatSync(file);
+      const last = index === segments.length - 1;
+      if (last ? !observed.isFile() : !observed.isDirectory()) return undefined;
+    }
   } catch {
     return undefined;
   }
-  if (!observed.isFile()) return undefined;
+  if (observed === undefined) return undefined;
   const nonblocking =
     typeof fs.constants.O_NONBLOCK === "number" ? fs.constants.O_NONBLOCK : 0;
   let descriptor;
@@ -199,9 +222,13 @@ function readHead(file) {
 }
 
 /**
- * transcript先頭の各行からterminal handoffを探す。
+ * 最初の`type: "user"`行の`message.content`（dispatch prompt）だけからterminal handoffを探す。
  *
- * 上限で切れた末尾の不完全行はJSONとして解釈できないため、行ごとの解析で捨てられる。
+ * 後続行（tool_result・assistant等）は宛先が担当したWork Unitを表さない。例えば
+ * `workflow advance`の出力を読んだだけのagentはtool_resultにhandoffを持つが、
+ * そのWork Unitを担当していない（TERM-ASC-1566-05の反例）。contentが配列なら
+ * `type: "text"`の要素の`text`だけを見る。上限で切れた末尾の不完全行はJSONとして
+ * 解釈できないため、行ごとの解析で捨てられる。
  */
 function terminalHandoff(head) {
   for (const raw of head.split("\n")) {
@@ -213,8 +240,25 @@ function terminalHandoff(head) {
     } catch {
       continue;
     }
-    const found = findHandoff(parsed, (handoff) => handoff.terminal === true);
-    if (found) return found;
+    if (!isRecord(parsed) || parsed.type !== "user") continue;
+    const message = parsed.message;
+    if (!isRecord(message)) return undefined;
+    const content = message.content;
+    const prompt =
+      typeof content === "string"
+        ? content
+        : Array.isArray(content)
+          ? content
+              .filter(
+                (block) =>
+                  isRecord(block) &&
+                  block.type === "text" &&
+                  typeof block.text === "string",
+              )
+              .map((block) => block.text)
+          : undefined;
+    if (prompt === undefined) return undefined;
+    return findHandoff(prompt, (handoff) => handoff.terminal === true);
   }
   return undefined;
 }
@@ -248,14 +292,11 @@ function decide(input, read) {
     !path.isAbsolute(transcriptPath)
   )
     return NONE;
-  const head = read(
-    path.join(
-      path.dirname(transcriptPath),
-      sessionId,
-      "subagents",
-      `agent-${to}.jsonl`,
-    ),
-  );
+  const head = read(path.dirname(transcriptPath), [
+    sessionId,
+    "subagents",
+    `agent-${to}.jsonl`,
+  ]);
   if (head === undefined) return NONE;
   const terminal = terminalHandoff(head);
   if (terminal)

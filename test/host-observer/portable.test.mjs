@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import test from "node:test";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
@@ -154,6 +155,49 @@ test("真偽値でないfreshContextRequiredのhandoffは認めない", (t) => {
     ),
     {},
   );
+});
+
+test("最初のuser行以外にだけあるterminal handoffは認めない", (t) => {
+  const store = temporaryStore(t);
+  const directory = path.join(store, "portable-session", "subagents");
+  fs.mkdirSync(directory, { recursive: true });
+  // workflow advanceの出力をtool_resultとして読んだだけのagent。
+  const lines = [
+    { type: "user", message: { role: "user", content: "通常task" } },
+    { type: "assistant", message: { role: "assistant", content: [] } },
+    {
+      type: "user",
+      message: {
+        role: "user",
+        content: [{ type: "tool_result", content: dispatch(TERMINAL_ID) }],
+      },
+    },
+  ];
+  fs.writeFileSync(
+    path.join(directory, "agent-agentF.jsonl"),
+    `${lines.map((line) => JSON.stringify(line)).join("\r\n")}\r\n`,
+  );
+  assert.deepEqual(
+    observe(sendMessage(store, { to: "agentF", message: "続けてください" })),
+    {},
+  );
+});
+
+test("入れ子の未閉鎖括弧を含む大きなmessageでも1秒未満で{}を返す", (t) => {
+  const store = temporaryStore(t);
+  const nest = (level) => {
+    const head = `asc-handoff/v1 ${"{".repeat(63)}`;
+    const tail = "a".repeat(1_900_000);
+    return level === 0
+      ? `${head}${tail}`
+      : `${head}${JSON.stringify({ a: nest(level - 1) })}${tail}`;
+  };
+  const started = performance.now();
+  assert.deepEqual(
+    observe(sendMessage(store, { to: "agentG", message: nest(3) })),
+    {},
+  );
+  assert.ok(performance.now() - started < 1000);
 });
 
 test("malformedな入力は{}を返す", () => {

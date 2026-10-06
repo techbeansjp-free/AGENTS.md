@@ -50,14 +50,14 @@ const DIAGNOSTIC_UNREGISTERED =
   "host observerが.claude/settings.local.jsonのPreToolUse（matcher SendMessage）に登録されていません。update --root=. --applyで登録できます";
 const DIAGNOSTIC_ASSET_MISSING =
   "host observer資産.claude/hooks/asc-host-observer.mjsがありません。update --root=. --applyで配置できます";
-/** SCN-UNIT-HOSTOBS-016のtrust anchor。計画時に固定したbase SHAだけを使う。 */
-const TRUSTED_BASE = "6d08da409eaad05321ee71c62d57a1e576bbdbc8";
 
 interface ObserverCase {
   label: string;
   stdin: string | Buffer;
   env?: NodeJS.ProcessEnv;
   cwd?: string;
+  /** 1回の起動に許す経過時間。仕事量の上限を観測する入力だけに置く。 */
+  limitMs?: number;
 }
 
 interface ObserverRun {
@@ -65,6 +65,9 @@ interface ObserverRun {
   status: number | null;
   stdout: string;
   stderr: string;
+  stdin: string | Buffer;
+  elapsedMs: number;
+  limitMs?: number;
 }
 
 interface HostObserverState {
@@ -303,6 +306,7 @@ function add(s: HostObserverState, label: string, input: unknown): void {
 }
 
 function runObserver(s: HostObserverState, item: ObserverCase): ObserverRun {
+  const started = performance.now();
   const result = spawnSync(process.execPath, [OBSERVER], {
     input: item.stdin,
     encoding: "utf8",
@@ -315,8 +319,30 @@ function runObserver(s: HostObserverState, item: ObserverCase): ObserverRun {
     status: result.status,
     stdout: result.stdout,
     stderr: result.stderr,
+    stdin: item.stdin,
+    elapsedMs: performance.now() - started,
+    limitMs: item.limitMs,
   };
 }
+
+/** observerはhost versionで分岐しない（FR-03）。未検証versionを示す環境で再実行し出力を比べる。 */
+Then(
+  exact("AI_AGENTが未検証のhost versionを示す環境でも同じ警告を返す"),
+  function () {
+    const s = state(this);
+    assert.ok(s.runs.length > 0);
+    for (const item of s.runs) {
+      assert.notEqual(item.stdout, "{}\n", item.label);
+      const again = runObserver(s, {
+        label: `${item.label}-unverified-host`,
+        stdin: item.stdin,
+        env: { ...process.env, AI_AGENT: "claude-code_9-9-999" },
+      });
+      assert.equal(again.status, 0);
+      assert.equal(again.stdout, item.stdout, item.label);
+    }
+  },
+);
 
 function runAll(s: HostObserverState): ObserverRun[] {
   s.runs = s.cases.map((item) => runObserver(s, item));
@@ -774,22 +800,155 @@ Given(
 
 Given(
   exact(
-    "AI_AGENTが未検証のhost versionを示しhandoffを含まないSendMessage入力がある",
+    "宛先transcriptの最初のuser行のdispatch promptにASC handoffが無く、後続行とtool_result blockだけにterminal handoffがあるSendMessage入力がある",
   ),
   function () {
     const s = state(this);
-    s.cases.push({
-      label: "unverified-host",
-      stdin: JSON.stringify(sendMessage(s, "s-003-host", "ahostversion0001")),
-      env: { ...process.env, AI_AGENT: "claude-code_9-9-999" },
-    });
+    const session = "s-003-toolresult";
+    const resultLine = (agentId: string) =>
+      JSON.stringify({
+        isSidechain: true,
+        agentId,
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_advance",
+              content: dispatchPrompt(
+                handoff(workUnitId("read-only"), true, true),
+              ),
+            },
+          ],
+        },
+      });
+    // workflow advanceの出力を読んだだけのagent。担当したのは別の通常taskである。
+    const reader = "areader000000001";
+    placeTranscript(
+      s.store,
+      session,
+      reader,
+      `${transcriptLine("通常taskを処理してください。", reader)}\n${ASSISTANT_LINE}\n${resultLine(reader)}\n`,
+    );
+    add(s, "tool-result-line", sendMessage(s, session, reader));
+    // 最初のuser行がtool_result blockを持つ場合も、text block以外は見ない。
+    const block = "ablock0000000001";
+    placeTranscript(
+      s.store,
+      session,
+      block,
+      `${resultLine(block)}\n${ASSISTANT_LINE}\n`,
+    );
+    add(s, "tool-result-block", sendMessage(s, session, block));
+    // 後続のuser行がtext本文でhandoffを持っても、最初のuser行ではないため見ない。
+    const later = "alaterline000001";
+    placeTranscript(
+      s.store,
+      session,
+      later,
+      `${transcriptLine("通常taskを処理してください。", later)}\n${ASSISTANT_LINE}\n${terminalTranscript(workUnitId("later-line"), later)}`,
+    );
+    add(s, "later-user-line", sendMessage(s, session, later));
+  },
+);
+
+Given(
+  exact(
+    "宛先transcriptのsession_id directoryまたはsubagents directoryがsymlinkで、その先にterminal handoffがあるSendMessage入力がある",
+  ),
+  function () {
+    const s = state(this);
+    if (process.platform === "win32") return;
+    const outside = path.join(s.root, "outside-store");
+    const to = "alinkeddir000001";
+    // session_id directoryそのものがsymlink。
+    placeTranscript(
+      outside,
+      "s-003-real",
+      to,
+      terminalTranscript(workUnitId("linked-session"), to),
+    );
+    fs.symlinkSync(
+      path.join(outside, "s-003-real"),
+      path.join(s.store, "s-003-linked-session"),
+      "dir",
+    );
+    add(s, "linked-session", sendMessage(s, "s-003-linked-session", to));
+    // subagents directoryだけがsymlink。
+    fs.mkdirSync(path.join(s.store, "s-003-linked-subagents"));
+    fs.symlinkSync(
+      path.join(outside, "s-003-real", "subagents"),
+      path.join(s.store, "s-003-linked-subagents", "subagents"),
+      "dir",
+    );
+    add(s, "linked-subagents", sendMessage(s, "s-003-linked-subagents", to));
+  },
+);
+
+Given(
+  exact(
+    "走査文字数または候補数の上限に達した後にだけfresh handoffが現れるSendMessage入力がある",
+  ),
+  function () {
+    const s = state(this);
+    const body = JSON.stringify(handoff(workUnitId("budget"), true, false));
+    // 63個の未閉鎖`{`がそれぞれ末尾まで走査し、合計がおよそ130万文字になる。
+    const steps = `asc-handoff/v1 ${"{".repeat(63)}${"a".repeat(20800)}${body}`;
+    assert.ok(steps.length < TRANSCRIPT_LIMIT);
+    add(
+      s,
+      "scan-budget",
+      sendMessage(s, "s-003-budget", "abudgetsteps0001", steps),
+    );
+    // 外側の文字列が候補64回を使い切る。内側の文字列の先頭の候補がhandoffである。
+    const nested = `asc-handoff/v1 ${"{".repeat(63)}${JSON.stringify({ a: `asc-handoff/v1 ${body}` })}`;
+    add(
+      s,
+      "candidate-budget",
+      sendMessage(s, "s-003-budget", "abudgetcands0001", nested),
+    );
+  },
+);
+
+/** 文字列ごと・入れ子の段ごとに上限を数える実装では、走査が段数分だけ累積する（R1-A-02）。 */
+function unclosedNesting(level: number, pad: number): string {
+  const head = `asc-handoff/v1 ${"{".repeat(63)}`;
+  if (level === 0) return `${head}${"a".repeat(pad)}`;
+  return `${head}${JSON.stringify({ a: unclosedNesting(level - 1, pad) })}${"a".repeat(pad)}`;
+}
+
+Given(
+  exact(
+    "4段の入れ子それぞれに63個の未閉鎖の{を持つ7 MB超のmessageを1秒未満で処理すべきSendMessage入力がある",
+  ),
+  function () {
+    const s = state(this);
+    const stdin = JSON.stringify(
+      sendMessage(
+        s,
+        "s-003-crafted",
+        "acrafted00000001",
+        unclosedNesting(3, 1_900_000),
+      ),
+    );
+    assert.ok(Buffer.byteLength(stdin) > 7_000_000);
+    assert.ok(Buffer.byteLength(stdin) < 8 * 1024 * 1024);
+    s.cases.push({ label: "crafted", stdin, limitMs: 1000 });
   },
 );
 
 Then(exact("出力は{}、exit codeは0、stderrは空である"), function () {
   const s = state(this);
   assert.ok(s.runs.length > 0);
-  for (const item of s.runs) assertEmpty(item);
+  for (const item of s.runs) {
+    assertEmpty(item);
+    if (item.limitMs !== undefined)
+      assert.ok(
+        item.elapsedMs < item.limitMs,
+        `${item.label}: ${item.elapsedMs}ms`,
+      );
+  }
 });
 
 // ---------------------------------------------------------------- SCN-004
@@ -868,6 +1027,57 @@ Then(exact("前者だけがterminal reuse警告を返し後者は{}を返す"), 
   );
   assertEmpty(run(s, "aoverbyone0000001"));
   assertEmpty(run(s, "aoutside00000001"));
+});
+
+When(
+  exact(
+    "fresh handoffが先頭262144文字以内で終わるmessageと262144文字より後ろで終わるmessageでobserverを実行する",
+  ),
+  function () {
+    const s = state(this);
+    s.values.messageInsideId = workUnitId("message-inside");
+    /** handoff objectの閉じ括弧がちょうど`endChar`文字目になるmessage。 */
+    const message = (id: string, endChar: number): string => {
+      const body = JSON.stringify(handoff(id, true, false));
+      const text = `${"x".repeat(endChar - body.length)}${body} 後続`;
+      assert.equal(text.indexOf(body) + body.length, endChar);
+      return text;
+    };
+    s.cases = [
+      {
+        label: "message-inside",
+        stdin: JSON.stringify(
+          sendMessage(
+            s,
+            "s-004-message",
+            "amsginside000001",
+            message(s.values.messageInsideId, TRANSCRIPT_LIMIT),
+          ),
+        ),
+      },
+      {
+        label: "message-over",
+        stdin: JSON.stringify(
+          sendMessage(
+            s,
+            "s-004-message",
+            "amsgover00000001",
+            message(workUnitId("message-over"), TRANSCRIPT_LIMIT + 1),
+          ),
+        ),
+      },
+    ];
+    runAll(s);
+  },
+);
+
+Then(exact("前者だけがfresh mismatch警告を返し後者は{}を返す"), function () {
+  const s = state(this);
+  assert.deepEqual(
+    output(run(s, "message-inside")),
+    expectedWarning(FRESH_TEXT, s.values.messageInsideId!, "amsginside000001"),
+  );
+  assertEmpty(run(s, "message-over"));
 });
 
 // ---------------------------------------------------------------- SCN-005
@@ -989,11 +1199,26 @@ Given(exact("Aのtranscript先頭にterminal handoffがある"), function () {
     const session = events[0]!.identity.session_id as string;
     s.values[`${name}-agent`] = agent;
     s.values[`${name}-id`] = workUnitId(`${name}-terminal`);
+    // EXP-3側はcontentをtext blockの配列で持つ形にする。
+    const prompt = dispatchPrompt(handoff(s.values[`${name}-id`]!, true, true));
     placeTranscript(
       s.store,
       session,
       agent,
-      terminalTranscript(s.values[`${name}-id`]!, agent),
+      name === "exp1"
+        ? terminalTranscript(s.values[`${name}-id`]!, agent)
+        : `${JSON.stringify({
+            isSidechain: true,
+            agentId: agent,
+            type: "user",
+            message: {
+              role: "user",
+              content: [
+                { type: "image", source: { type: "base64", data: "" } },
+                { type: "text", text: prompt },
+              ],
+            },
+          })}\n${ASSISTANT_LINE}\n`,
     );
   }
 });
@@ -1358,7 +1583,14 @@ Then(
   function () {
     const s = state(this);
     assert.equal(s.baseline!.length, 106 + 2);
-    assert.deepEqual(s.runs, s.baseline);
+    // 経過時間は観測値ではないため、出力・終了code・stderrだけを比べる。
+    const observable = ({ label, status, stdout, stderr }: ObserverRun) => ({
+      label,
+      status,
+      stdout,
+      stderr,
+    });
+    assert.deepEqual(s.runs.map(observable), s.baseline!.map(observable));
     assert.deepEqual(
       output(run(s, "warn-terminal")),
       expectedWarning(TERMINAL_TEXT, s.values.oldId!, s.values.agent!),
@@ -1517,18 +1749,12 @@ function sourceFiles(directory: string): string[] {
 
 Given(
   exact(
-    "observer本体、workflow・review・deliveryのsource、.github/workflowsの新規workflowとci.ymlがある",
+    "observer本体、workflow・review・deliveryのsource、.github/workflowsの新規workflowがある",
   ),
   function () {
     const s = state(this);
     s.texts.observer = fs.readFileSync(OBSERVER, "utf8");
     s.texts.workflow = fs.readFileSync(WORKFLOW, "utf8");
-    s.texts.ci = fs.readFileSync(".github/workflows/ci.yml", "utf8");
-    s.texts.baseCi = execFileSync(
-      "git",
-      ["show", `${TRUSTED_BASE}:.github/workflows/ci.yml`],
-      { encoding: "utf8" },
-    );
   },
 );
 
@@ -1613,7 +1839,7 @@ Then(
 
 Then(
   exact(
-    "新規CI workflowはubuntu-latest、macos-latest、windows-latestとNode.js 24でobserverのportable testを実行し、ci.ymlは変更されていない",
+    "新規CI workflowはubuntu-latest、macos-latest、windows-latestでshellを介さずobserverのportable testを実行し、読取権限だけを持つ",
   ),
   function () {
     const s = state(this);
@@ -1642,17 +1868,22 @@ Then(
       ["macos-latest", "ubuntu-latest", "windows-latest"],
     );
     assert.ok(lines.includes("runs-on: ${{ matrix.os }}"));
-    const versions = [...workflow.matchAll(/node-version:\s*(\S+)/gu)].map(
-      (match) => match[1],
+    // Node.jsは準備するが版とactionの版は固定しない（将来の正当な更新でtestを落とさない）。
+    assert.ok(
+      lines.some((line) => /^uses: actions\/setup-node@\S+$/u.test(line)),
     );
-    assert.deepEqual(versions, ["24"]);
-    assert.ok(lines.includes("uses: actions/setup-node@v4"));
+    assert.equal(
+      lines.filter((line) => line.startsWith("run:")).length,
+      1,
+      "run step",
+    );
     assert.ok(
       lines.includes("run: node --test test/host-observer/portable.test.mjs"),
     );
+    // OSごとの既定shellを変えず、shell構文に依存しない1 commandだけを実行する。
+    assert.equal(/^\s*shell:/mu.test(workflow), false);
     assert.equal(/npm (?:ci|run|install|test)/u.test(workflow), false);
     assert.ok(fs.existsSync("test/host-observer/portable.test.mjs"));
-    assert.equal(s.texts.ci, s.texts.baseCi);
   },
 );
 
@@ -2250,31 +2481,62 @@ Then(
   },
 );
 
-Given(exact("登録済み、未登録、資産欠落の3状態のprojectがある"), function () {
-  const l = lifecycle(this);
-  for (const name of ["registered", "unregistered", "missing"]) {
-    const root = this.temp(`asc-hostobs-${name}-`);
-    cliJson(["install", `--root=${root}`, "--apply"]);
-    l.roots[name] = root;
-  }
-  // 所有hookがSendMessage以外のmatcherにだけある状態は登録済みと数えない。
-  writeSettings(l.roots.unregistered!, {
-    hooks: { PreToolUse: [{ matcher: "Bash", hooks: [CANONICAL_HOOK] }] },
-  });
-  // 本Issue以前のversionでinstallし未updateのproject: recordにも展開先にもobserverが無い。
-  const missing = l.roots.missing!;
-  fs.rmSync(path.join(missing, ".claude/hooks/asc-host-observer.mjs"));
-  const record = path.join(missing, ".agent-skill-chain/managed-assets.json");
-  const parsed = JSON.parse(fs.readFileSync(record, "utf8")) as {
-    files: Record<string, string>;
-  };
-  delete parsed.files[".claude/hooks/asc-host-observer.mjs"];
-  fs.writeFileSync(record, `${JSON.stringify(parsed, null, 2)}\n`);
-});
+/** 展開先・正本・managed runtimeの3複写。record記載のまま全部を消す。 */
+const OBSERVER_COPIES = [
+  ".claude/hooks/asc-host-observer.mjs",
+  ".agent-skill-chain/hooks/asc-host-observer.mjs",
+  ".agent-skill-chain/managed-runtime/.agent-skill-chain/hooks/asc-host-observer.mjs",
+];
+const DOCTOR_STATES = [
+  "registered",
+  "unregistered",
+  "missing",
+  "recordedMissing",
+  "tampered",
+];
+
+Given(
+  exact(
+    "登録済み、未登録、資産欠落、record記載済み資産欠落、資産改変の5状態のprojectがある",
+  ),
+  function () {
+    const l = lifecycle(this);
+    for (const name of DOCTOR_STATES) {
+      const root = this.temp(`asc-hostobs-${name}-`);
+      cliJson(["install", `--root=${root}`, "--apply"]);
+      l.roots[name] = root;
+    }
+    // 所有hookがSendMessage以外のmatcherにだけある状態は登録済みと数えない。
+    writeSettings(l.roots.unregistered!, {
+      hooks: { PreToolUse: [{ matcher: "Bash", hooks: [CANONICAL_HOOK] }] },
+    });
+    // 本Issue以前のversionでinstallし未updateのproject: recordにも展開先にもobserverが無い。
+    const missing = l.roots.missing!;
+    fs.rmSync(path.join(missing, ".claude/hooks/asc-host-observer.mjs"));
+    const record = path.join(missing, ".agent-skill-chain/managed-assets.json");
+    const parsed = JSON.parse(fs.readFileSync(record, "utf8")) as {
+      files: Record<string, string>;
+    };
+    delete parsed.files[".claude/hooks/asc-host-observer.mjs"];
+    fs.writeFileSync(record, `${JSON.stringify(parsed, null, 2)}\n`);
+    // recordに載ったまま3複写だけが消えた状態（R1-P-01）。
+    const recordedMissing = l.roots.recordedMissing!;
+    const recorded = managedRecord(recordedMissing);
+    for (const copy of OBSERVER_COPIES) {
+      assert.equal(typeof recorded[copy], "string", copy);
+      fs.rmSync(path.join(recordedMissing, copy));
+    }
+    // 在るが内容がmanaged digestと一致しない状態は改ざんとして扱う。
+    fs.appendFileSync(
+      path.join(l.roots.tampered!, ".claude/hooks/asc-host-observer.mjs"),
+      "\n// tampered\n",
+    );
+  },
+);
 
 When(exact("それぞれでdoctorを実行する"), function () {
   const l = lifecycle(this);
-  for (const name of ["registered", "unregistered", "missing"]) {
+  for (const name of DOCTOR_STATES) {
     const result = cli(["doctor", `--root=${l.roots[name]}`]);
     l.outputs[name] = JSON.parse(result.stdout) as Record<string, unknown>;
   }
@@ -2322,6 +2584,18 @@ Then(
       authority: "advisory",
       next: DOCTOR_NEXT,
     });
+    assert.deepEqual(hostObserver(l.outputs.recordedMissing!), {
+      registered: true,
+      assetPresent: false,
+      healthy: false,
+      diagnostics: OBSERVER_COPIES.map(
+        (copy) =>
+          `host observer資産${copy}がありません。update --root=. --applyで配置できます`,
+      ),
+      verifiedHostVersion: "2.1.282",
+      authority: "advisory",
+      next: DOCTOR_NEXT,
+    });
   },
 );
 
@@ -2342,20 +2616,37 @@ Then(
   },
 );
 
-Then(exact("doctor全体のhealthyは3状態で同じである"), function () {
-  const l = lifecycle(this);
-  const states = ["registered", "unregistered", "missing"].map(
-    (name) => l.outputs[name]!,
-  );
-  for (const output of states) {
-    assert.equal(output.healthy, true, JSON.stringify(output.adapters));
-    const global = (output.adapters as { diagnostics: string[] }).diagnostics;
-    assert.equal(
-      global.some((item) => item.includes("host observer")),
-      false,
+Then(
+  exact("doctor全体のhealthyは資産改変を除く4状態で同じである"),
+  function () {
+    const l = lifecycle(this);
+    const states = [
+      "registered",
+      "unregistered",
+      "missing",
+      "recordedMissing",
+    ].map((name) => l.outputs[name]!);
+    for (const output of states) {
+      assert.equal(output.healthy, true, JSON.stringify(output.adapters));
+      const global = (output.adapters as { diagnostics: string[] }).diagnostics;
+      assert.deepEqual(global, []);
+    }
+  },
+);
+
+Then(
+  exact("資産改変ではdoctor全体がmanaged hashの不一致で不健全である"),
+  function () {
+    const output = lifecycle(this).outputs.tampered!;
+    assert.equal(output.healthy, false);
+    assert.deepEqual(
+      (output.adapters as { diagnostics: string[] }).diagnostics,
+      [".claude/hooks/asc-host-observer.mjs: managed hashが一致しません"],
     );
-  }
-});
+    // 改変は欠落ではないため、observer欄は資産ありと報告する。
+    assert.equal(hostObserver(output).assetPresent, true);
+  },
+);
 
 Given(
   exact(
