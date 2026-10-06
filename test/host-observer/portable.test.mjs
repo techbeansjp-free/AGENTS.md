@@ -127,6 +127,35 @@ test("宛先transcript先頭のterminal handoffはterminal reuseを返す", (t) 
   );
 });
 
+test("送信本文のfresh handoffは宛先transcriptのterminal handoffより優先する", (t) => {
+  const store = temporaryStore(t);
+  const directory = path.join(store, "portable-session", "subagents");
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(
+    path.join(directory, "agent-agentD.jsonl"),
+    `${JSON.stringify({ type: "user", message: { role: "user", content: dispatch(TERMINAL_ID) } })}\n`,
+  );
+  assert.deepEqual(
+    observe(sendMessage(store, { to: "agentD", message: dispatch(FRESH_ID) })),
+    warning(FRESH_TEXT, FRESH_ID, "agentD"),
+  );
+});
+
+test("真偽値でないfreshContextRequiredのhandoffは認めない", (t) => {
+  const store = temporaryStore(t);
+  const value = handoff(FRESH_ID);
+  value.workUnit.freshContextRequired = "true";
+  assert.deepEqual(
+    observe(
+      sendMessage(store, {
+        to: "agentE",
+        message: JSON.stringify({ handoff: value, prompt: "p" }),
+      }),
+    ),
+    {},
+  );
+});
+
 test("malformedな入力は{}を返す", () => {
   for (const input of ["{bad", "", "[1]", "42"])
     assert.deepEqual(observe(input), {});

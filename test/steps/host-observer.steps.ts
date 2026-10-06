@@ -2155,6 +2155,11 @@ When(exact("install --applyとupdate --applyを実行する"), function () {
   // 2回目のupdateは正規形を保ち、何も変えない（収束の冪等性）。
   l.outputs.again = cliJson(["update", `--root=${root}`, "--apply"]);
   assert.equal(fs.readFileSync(path.join(root, SETTINGS), "utf8"), bytes);
+  // 正規形と同じgroupでもPreToolUse以外に置かれていれば収束対象である。
+  const moved = this.temp("asc-hostobs-int-");
+  writeSettings(moved, { hooks: { PostToolUse: [CANONICAL_GROUP] } });
+  cliJson(["install", `--root=${moved}`, "--apply"]);
+  l.outputs.moved = readSettings(moved);
 });
 
 Then(exact("利用者の項目は意味的に不変である"), function () {
@@ -2198,6 +2203,9 @@ Then(
       JSON.stringify(settings).includes("asc-agent-lifecycle"),
       false,
     );
+    assert.deepEqual(l.outputs.moved, {
+      hooks: { PreToolUse: [CANONICAL_GROUP] },
+    });
   },
 );
 
@@ -2249,7 +2257,10 @@ Given(exact("登録済み、未登録、資産欠落の3状態のprojectがあ�
     cliJson(["install", `--root=${root}`, "--apply"]);
     l.roots[name] = root;
   }
-  writeSettings(l.roots.unregistered!, {});
+  // 所有hookがSendMessage以外のmatcherにだけある状態は登録済みと数えない。
+  writeSettings(l.roots.unregistered!, {
+    hooks: { PreToolUse: [{ matcher: "Bash", hooks: [CANONICAL_HOOK] }] },
+  });
   // 本Issue以前のversionでinstallし未updateのproject: recordにも展開先にもobserverが無い。
   const missing = l.roots.missing!;
   fs.rmSync(path.join(missing, ".claude/hooks/asc-host-observer.mjs"));
