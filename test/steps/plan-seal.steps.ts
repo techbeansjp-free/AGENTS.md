@@ -5,6 +5,8 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
+import { ensureImplementationCommit } from "../support/implementation-commit.js";
+import { stagingRepositoryRoot } from "../../src/domain/staging-layout.js";
 import {
   assertWorkflowReadyForDelivery,
   assertWorkflowReadyForTerminalRedelivery,
@@ -132,6 +134,7 @@ async function record(
   step: number,
   extra: string[] = [],
 ): Promise<{ status: number; stdout: string }> {
+  if (step === 9) ensureImplementationCommit(stagingRepositoryRoot(staging));
   return run([
     "workflow",
     "record",
