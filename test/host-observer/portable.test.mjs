@@ -29,7 +29,7 @@ const FIXTURES = path.join(
 const FRESH_TEXT =
   "ASC WARN: This Work Unit requires a fresh execution context. The observed Claude Code agent identity is being reused. Redispatch a fresh worker.";
 const TERMINAL_TEXT =
-  "ASC WARN: This agent completed a terminal ASC Work Unit. Do not continue ASC work in this context. Run workflow advance and dispatch a fresh worker.";
+  "ASC WARN: This agent belongs to a terminal ASC Work Unit. Continue here only if this message is part of the still-active Work Unit; after handback, run workflow advance and dispatch a fresh worker.";
 const FRESH_ID = "1".repeat(64);
 const TERMINAL_ID = "2".repeat(64);
 
@@ -51,8 +51,22 @@ function handoff(id) {
   };
 }
 
-function dispatch(id) {
-  return `前置き{注記} ${JSON.stringify({ handoff: handoff(id), prompt: "p" })} 後続`;
+function dispatch(id, value = handoff(id)) {
+  return `前置き{注記} ${JSON.stringify({ handoff: value, prompt: "p" })} 後続`;
+}
+
+/** 宛先transcriptを置く。先頭行はdispatch prompt、以降は`rest`の各行である。 */
+function placeTranscript(store, agentId, prompt, rest = []) {
+  const directory = path.join(store, "portable-session", "subagents");
+  fs.mkdirSync(directory, { recursive: true });
+  const lines = [
+    { type: "user", message: { role: "user", content: prompt } },
+    ...rest,
+  ];
+  fs.writeFileSync(
+    path.join(directory, `agent-${agentId}.jsonl`),
+    `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`,
+  );
 }
 
 function sendMessage(store, toolInput) {
@@ -153,6 +167,71 @@ test("真偽値でないfreshContextRequiredのhandoffは認めない", (t) => {
       }),
     ),
     {},
+  );
+});
+
+test("reuseForbiddenがtrueでないterminal handoffはterminal reuseを返さない", (t) => {
+  const store = temporaryStore(t);
+  const variants = [
+    ["false", false],
+    ["missing", undefined],
+    ["string", "true"],
+  ];
+  for (const [name, reuseForbidden] of variants) {
+    const value = handoff(TERMINAL_ID);
+    if (reuseForbidden === undefined) delete value.workUnit.reuseForbidden;
+    else value.workUnit.reuseForbidden = reuseForbidden;
+    const agentId = `agentR${name}`;
+    placeTranscript(store, agentId, dispatch(TERMINAL_ID, value));
+    assert.deepEqual(
+      observe(sendMessage(store, { to: agentId, message: "続けてください" })),
+      {},
+      name,
+    );
+  }
+});
+
+test("reuseForbiddenがfalseでもfresh handoffはfresh mismatchを返す", (t) => {
+  const store = temporaryStore(t);
+  const value = handoff(FRESH_ID);
+  value.workUnit.reuseForbidden = false;
+  assert.deepEqual(
+    observe(
+      sendMessage(store, { to: "agentH", message: dispatch(FRESH_ID, value) }),
+    ),
+    warning(FRESH_TEXT, FRESH_ID, "agentH"),
+  );
+});
+
+test("handback前の実行中workerとhandback後のworkerへ同じterminal警告を返す", (t) => {
+  const store = temporaryStore(t);
+  // 実行中: dispatch promptの後にtool_useだけがあり、返却の応答はまだ無い。
+  placeTranscript(store, "agentRunning", dispatch(TERMINAL_ID), [
+    {
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_use", name: "Bash", input: {} }],
+      },
+    },
+  ]);
+  // handback後: 最終の応答まで書かれている。
+  placeTranscript(store, "agentReturned", dispatch(TERMINAL_ID), [
+    {
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "handback report" }],
+      },
+    },
+  ]);
+  assert.deepEqual(
+    observe(sendMessage(store, { to: "agentRunning", message: "途中の指示" })),
+    warning(TERMINAL_TEXT, TERMINAL_ID, "agentRunning"),
+  );
+  assert.deepEqual(
+    observe(sendMessage(store, { to: "agentReturned", message: "是正依頼" })),
+    warning(TERMINAL_TEXT, TERMINAL_ID, "agentReturned"),
   );
 });
 

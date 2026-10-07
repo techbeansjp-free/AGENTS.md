@@ -28,7 +28,7 @@ const FIXTURES = {
 const FRESH_TEXT =
   "ASC WARN: This Work Unit requires a fresh execution context. The observed Claude Code agent identity is being reused. Redispatch a fresh worker.";
 const TERMINAL_TEXT =
-  "ASC WARN: This agent completed a terminal ASC Work Unit. Do not continue ASC work in this context. Run workflow advance and dispatch a fresh worker.";
+  "ASC WARN: This agent belongs to a terminal ASC Work Unit. Continue here only if this message is part of the still-active Work Unit; after handback, run workflow advance and dispatch a fresh worker.";
 const PERMISSION_KEYS = [
   "permissionDecision",
   "decision",
@@ -479,7 +479,7 @@ Then(
 
 Given(
   exact(
-    "宛先agentのsubagent transcript先頭にterminalAfterHandbackがtrueのASC handoffがある",
+    "宛先agentのsubagent transcript先頭にterminalAfterHandbackとreuseForbiddenがtrueのASC handoffがある",
   ),
   function () {
     const s = state(this);
@@ -539,6 +539,142 @@ When(
         ),
       }),
     ];
+  },
+);
+
+/** handoffの`workUnit`の1 fieldだけを差し替える。`undefined`はkeyを削除する。 */
+function withWorkUnitField(
+  value: Record<string, unknown>,
+  key: string,
+  field: unknown,
+): Record<string, unknown> {
+  const unit = { ...(value.workUnit as Record<string, unknown>) };
+  if (field === undefined) delete unit[key];
+  else unit[key] = field;
+  return { ...value, workUnit: unit };
+}
+
+When(
+  exact(
+    "handback前の実行中の宛先とhandback後の宛先へそれぞれSendMessage入力でobserverを実行する",
+  ),
+  function () {
+    const s = state(this);
+    const session = "s-002-progress";
+    s.values.progressId = workUnitId("scn-002-progress");
+    const prompt = dispatchPrompt(handoff(s.values.progressId, true, true));
+    // 実行中: dispatch promptの後にtool_useだけがあり、返却の応答はまだ無い。
+    const running = JSON.stringify({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_use", name: "Bash", input: {} }],
+      },
+    });
+    placeTranscript(
+      s.store,
+      session,
+      "arunning00000001",
+      `${transcriptLine(prompt, "arunning00000001")}\n${running}\n`,
+    );
+    // handback後: 最終の応答まで書かれている。
+    placeTranscript(
+      s.store,
+      session,
+      "areturned0000001",
+      `${transcriptLine(prompt, "areturned0000001")}\n${ASSISTANT_LINE}\n`,
+    );
+    s.runs = [
+      runObserver(s, {
+        label: "running",
+        stdin: JSON.stringify(
+          sendMessage(s, session, "arunning00000001", "途中の指示です。"),
+        ),
+      }),
+      runObserver(s, {
+        label: "returned",
+        stdin: JSON.stringify(
+          sendMessage(s, session, "areturned0000001", "是正を依頼します。"),
+        ),
+      }),
+    ];
+  },
+);
+
+Then(exact("両方の出力は同じterminal reuse警告である"), function () {
+  const s = state(this);
+  assert.deepEqual(
+    output(run(s, "running")),
+    expectedWarning(TERMINAL_TEXT, s.values.progressId!, "arunning00000001"),
+  );
+  assert.deepEqual(
+    output(run(s, "returned")),
+    expectedWarning(TERMINAL_TEXT, s.values.progressId!, "areturned0000001"),
+  );
+});
+
+When(
+  exact(
+    "宛先transcript先頭のhandoffのreuseForbiddenまたはterminalAfterHandbackがfalseの入力と、送信本文のfresh handoffのreuseForbiddenがfalseの入力でobserverを実行する",
+  ),
+  function () {
+    const s = state(this);
+    const session = "s-002-reusable";
+    const id = workUnitId("scn-002-reusable");
+    // terminal側: reuseForbiddenがfalse（再利用可）と、terminalAfterHandbackがfalse（非terminal）。
+    const transcripts: Array<[string, Record<string, unknown>]> = [
+      [
+        "areusable0000001",
+        withWorkUnitField(handoff(id, true, true), "reuseForbidden", false),
+      ],
+      ["anonterminal0001", handoff(id, true, false)],
+    ];
+    s.runs = transcripts.map(([to, value]) => {
+      placeTranscript(
+        s.store,
+        session,
+        to,
+        `${transcriptLine(dispatchPrompt(value), to)}\n${ASSISTANT_LINE}\n`,
+      );
+      return runObserver(s, {
+        label: `terminal-${to}`,
+        stdin: JSON.stringify(sendMessage(s, session, to)),
+      });
+    });
+    // fresh側: reuseForbiddenがfalseでも真偽値なのでschemaを満たし、fresh条件だけで判定する。
+    s.values.reusableFreshId = workUnitId("scn-002-reusable-fresh");
+    const fresh = withWorkUnitField(
+      handoff(s.values.reusableFreshId, true, true),
+      "reuseForbidden",
+      false,
+    );
+    s.runs.push(
+      runObserver(s, {
+        label: "fresh-reusable",
+        stdin: JSON.stringify(
+          sendMessage(s, session, "afreshreusable01", dispatchPrompt(fresh)),
+        ),
+      }),
+    );
+  },
+);
+
+Then(
+  exact(
+    "前者はterminal reuse警告を返さず{}であり、後者はfresh mismatch警告を返す",
+  ),
+  function () {
+    const s = state(this);
+    assertEmpty(run(s, "terminal-areusable0000001"));
+    assertEmpty(run(s, "terminal-anonterminal0001"));
+    assert.deepEqual(
+      output(run(s, "fresh-reusable")),
+      expectedWarning(
+        FRESH_TEXT,
+        s.values.reusableFreshId!,
+        "afreshreusable01",
+      ),
+    );
   },
 );
 
@@ -758,7 +894,7 @@ Given(exact("判定中に例外が起きる型のworkUnitを持つ入力があ�
 
 Given(
   exact(
-    "workUnitIdが16進64桁でない、またはfreshContextRequiredが文字列のhandoffを含むSendMessage入力がある",
+    "workUnitIdが16進64桁でない、freshContextRequiredが文字列、またはreuseForbiddenが欠落・文字列のhandoffを含むSendMessage入力がある",
   ),
   function () {
     const s = state(this);
@@ -772,6 +908,14 @@ Given(
       ["terminal-string", handoff(id, true, "true")],
       ["kind-suffix", handoff(id, true, true, { kind: "asc-handoff/v1x" })],
       ["kind-missing", handoff(id, true, true, { kind: undefined })],
+      [
+        "reuse-missing",
+        withWorkUnitField(handoff(id, true, true), "reuseForbidden", undefined),
+      ],
+      [
+        "reuse-string",
+        withWorkUnitField(handoff(id, true, true), "reuseForbidden", "true"),
+      ],
     ];
     for (const [name, value] of bad) {
       const to = `ainvalid${name.replaceAll("-", "")}`;

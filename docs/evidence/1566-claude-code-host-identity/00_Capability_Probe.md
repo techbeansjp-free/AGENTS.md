@@ -49,7 +49,7 @@
 ## 結論
 
 - **fresh AとBは`agent_id`で識別できる。**
-- **停止後のAの再利用は、coordinatorの`PreToolUse(SendMessage)`の`tool_input.to`で、再利用が起きる前に、過去の状態を保存せずに識別できる。** 宛先が既存agentであることはtoolの意味から確定するため、ASC側でagent台帳を持つ必要がない。
+- **既存agentへの送信（本Probeでは停止後のAの再利用）は、coordinatorの`PreToolUse(SendMessage)`の`tool_input.to`で、再利用が起きる前に、過去の状態を保存せずに識別できる。** 宛先が既存agentであることはtoolの意味から確定するため、ASC側でagent台帳を持つ必要がない。ただしこのeventは宛先が停止済みか実行中かを示さない。
 - 宛先がASC Work Unitを担当したかは、(a) 送信本文に含まれるASC handoff（`asc-handoff/v1`・`workUnit`）、または (b) hostが既に保存している宛先のsubagent transcriptの先頭に含まれるASC handoff、から判別できる。(b)は文書化されていない配置（観測12）に依存するため、欠落時は判別不能として何も警告しない。
-- **completion evidenceは不要である。** 再利用の事実はpayloadが運び、担当Work Unitの事実はpayloadかhost自身の記録が運ぶ。ASCが書く状態は存在しない。
+- **completion evidenceは持たない。** 既存agentへの送信の事実はpayloadが運び、宛先がどのWork Unitの担当としてdispatchされたかはpayloadかhost自身の記録が運ぶ。ASCが書く状態は存在しない。その代わり、terminal Work Unit担当のagentがhandback済みか実行中かはstatelessには区別できない（区別には完了記録が要る）。observerの警告はこの区別をしない前提で書く。
 - `SubagentStart`・`SubagentStop`・`PermissionDenied`に依存する設計は、順序不安定・欠落・未発火（観測6〜8）により成立しない。

@@ -11,12 +11,16 @@ Feature: host observerはSendMessageの再利用だけをadvisoryで警告する
     And 出力はpermissionDecision・decision・continueを含まない
     And AI_AGENTが未検証のhost versionを示す環境でも同じ警告を返す
 
-  Scenario: SCN-UNIT-HOSTOBS-002 terminal済みWork Unitを担当したagentへの送信でterminal reuse警告を返し、両方に該当すればfresh mismatchの1件だけを返す
-    Given 宛先agentのsubagent transcript先頭にterminalAfterHandbackがtrueのASC handoffがある
+  Scenario: SCN-UNIT-HOSTOBS-002 terminal Work Unitの担当としてdispatchされたagentへの送信でterminal reuse警告を返し、handback前か後かを区別せず、両方に該当すればfresh mismatchの1件だけを返す
+    Given 宛先agentのsubagent transcript先頭にterminalAfterHandbackとreuseForbiddenがtrueのASC handoffがある
     When messageにASC handoffを含まないSendMessage入力でobserverを実行する
     Then systemMessageはterminal reuseのowner指定文言と完全一致する
     And exit codeは0である
     And AI_AGENTが未検証のhost versionを示す環境でも同じ警告を返す
+    When handback前の実行中の宛先とhandback後の宛先へそれぞれSendMessage入力でobserverを実行する
+    Then 両方の出力は同じterminal reuse警告である
+    When 宛先transcript先頭のhandoffのreuseForbiddenまたはterminalAfterHandbackがfalseの入力と、送信本文のfresh handoffのreuseForbiddenがfalseの入力でobserverを実行する
+    Then 前者はterminal reuse警告を返さず{}であり、後者はfresh mismatch警告を返す
     When messageにfresh handoffを含むSendMessage入力でobserverを実行する
     Then 警告はfresh mismatchの1件だけである
 
@@ -32,7 +36,7 @@ Feature: host observerはSendMessageの再利用だけをadvisoryで警告する
       | SessionStart・SubagentStart・SubagentStop・PostToolUse・PostToolUseFailure・PreToolUse(Bash)・PreToolUse(Edit)・PreToolUse(Agent)の入力 |
       | tool_input.to・session_id・transcript_pathのいずれかが欠けhandoffを含まないSendMessage入力                  |
       | 判定中に例外が起きる型のworkUnitを持つ入力                                                                  |
-      | workUnitIdが16進64桁でない、またはfreshContextRequiredが文字列のhandoffを含むSendMessage入力                |
+      | workUnitIdが16進64桁でない、freshContextRequiredが文字列、またはreuseForbiddenが欠落・文字列のhandoffを含むSendMessage入力 |
       | 宛先transcriptの最初のuser行のdispatch promptにASC handoffが無く、後続行とtool_result blockだけにterminal handoffがあるSendMessage入力 |
       | 宛先transcriptのsession_id directoryまたはsubagents directoryがsymlinkで、その先にterminal handoffがあるSendMessage入力 |
       | 4段の入れ子それぞれに63個の未閉鎖の{を持つ7 MB超のmessageを含むSendMessage入力 |

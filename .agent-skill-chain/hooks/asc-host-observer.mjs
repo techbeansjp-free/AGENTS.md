@@ -23,7 +23,7 @@ import process from "node:process";
 const FRESH_WARNING =
   "ASC WARN: This Work Unit requires a fresh execution context. The observed Claude Code agent identity is being reused. Redispatch a fresh worker.";
 const TERMINAL_WARNING =
-  "ASC WARN: This agent completed a terminal ASC Work Unit. Do not continue ASC work in this context. Run workflow advance and dispatch a fresh worker.";
+  "ASC WARN: This agent belongs to a terminal ASC Work Unit. Continue here only if this message is part of the still-active Work Unit; after handback, run workflow advance and dispatch a fresh worker.";
 const HANDOFF_KIND = "asc-handoff/v1";
 const STDIN_LIMIT = 8 * 1024 * 1024;
 const TRANSCRIPT_LIMIT = 262144;
@@ -41,7 +41,10 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** handoffの4条件をすべて満たすobjectだけを認める。 */
+/**
+ * handoffの5条件（`kind`、`workUnitId`の形式、`freshContextRequired`・
+ * `terminalAfterHandback`・`reuseForbidden`が真偽値）をすべて満たすobjectだけを認める。
+ */
 function recognizedHandoff(value) {
   if (!isRecord(value) || value.kind !== HANDOFF_KIND) return undefined;
   const unit = value.workUnit;
@@ -53,13 +56,15 @@ function recognizedHandoff(value) {
     return undefined;
   if (
     typeof unit.freshContextRequired !== "boolean" ||
-    typeof unit.terminalAfterHandback !== "boolean"
+    typeof unit.terminalAfterHandback !== "boolean" ||
+    typeof unit.reuseForbidden !== "boolean"
   )
     return undefined;
   return {
     workUnitId: unit.workUnitId,
     fresh: unit.freshContextRequired,
     terminal: unit.terminalAfterHandback,
+    reuseForbidden: unit.reuseForbidden,
   };
 }
 
@@ -222,7 +227,11 @@ function readHead(directory, segments) {
 }
 
 /**
- * 最初の`type: "user"`行の`message.content`（dispatch prompt）だけからterminal handoffを探す。
+ * 最初の`type: "user"`行の`message.content`（dispatch prompt）だけからterminal handoff
+ * （`terminalAfterHandback`と`reuseForbidden`が共に`true`）を探す。
+ *
+ * 分かるのは宛先がterminal Work Unitの担当としてdispatchされたことまでであり、
+ * handback済みか実行中かは区別しない。区別には完了記録が要り、observerはそれを持たない。
  *
  * 後続行（tool_result・assistant等）は宛先が担当したWork Unitを表さない。例えば
  * `workflow advance`の出力を読んだだけのagentはtool_resultにhandoffを持つが、
@@ -258,7 +267,10 @@ function terminalHandoff(head) {
               .map((block) => block.text)
           : undefined;
     if (prompt === undefined) return undefined;
-    return findHandoff(prompt, (handoff) => handoff.terminal === true);
+    return findHandoff(
+      prompt,
+      (handoff) => handoff.terminal === true && handoff.reuseForbidden === true,
+    );
   }
   return undefined;
 }
