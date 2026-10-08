@@ -2,7 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   countedRounds,
+  isReviewSessionConverged,
   parseReviewSessionState,
+  unconvergedReviewSessionDiagnostic,
   type ReviewSessionState,
 } from "../domain/review-convergence.js";
 import type { DeliveryState } from "../domain/delivery-state.js";
@@ -59,6 +61,13 @@ export function replacementPreconditionErrors(input: {
   if (input.session === null) errors.push("review sessionが存在しません");
   else if (input.session.status !== "converged")
     errors.push("review sessionがconvergedではありません");
+  /**
+   * 保存statusが`converged`でも旧policyの未評価契約違反が残るsessionは実効収束していない
+   * （Issue #1563、REQ-WF-005）。置換すると再評価待ちのfindingが新sessionへ引き継がれず
+   * 消えるため、置換の前提も実効収束で判定する。
+   */
+  else if (!isReviewSessionConverged(input.session))
+    errors.push(unconvergedReviewSessionDiagnostic(input.session));
   else if (!input.candidateIsCurrentImplementation)
     errors.push(
       "latest roundのcandidate HEADがcurrent H_impl（PR実効head、またはその証跡だけのsuffixの起点）と一致しません",

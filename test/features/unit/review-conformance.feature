@@ -27,6 +27,7 @@ Feature: 固定契約のadmissionと旧policyの再評価
     When 旧sessionを現行validatorで再生する
     Then 元のdigestと保存statusを保ち全historyからpendingを復元する
     And pendingのある証跡生成と証跡照合は拒否する
+    And pendingのあるsessionはreview session置換の前提を満たさない
     And markerとadmissionの改竄と新版から旧版への逆戻りは拒否する
 
   Scenario: SCN-UNIT-REVIEWPOLICY-001 pendingを非消費roundやhistory省略で消さない

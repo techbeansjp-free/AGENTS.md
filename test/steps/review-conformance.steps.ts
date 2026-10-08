@@ -10,6 +10,7 @@ import { deriveWorkflowResume } from "../../src/domain/workflow-resume.js";
 import { observeWorkflowHandoff } from "../../src/adapters/workflow-handoff.js";
 import { evaluateEvidenceReanchor } from "../../src/adapters/evidence-reanchor.js";
 import { exportReviewEvidence } from "../../src/adapters/review-evidence.js";
+import { replacementPreconditionErrors } from "../../src/adapters/review-session-replacement.js";
 import {
   assertConvergedReviewSession,
   buildReviewRoundDraft,
@@ -347,6 +348,19 @@ Then("pendingのある証跡生成と証跡照合は拒否する", function () {
       validateReviewEvidenceAgainstSession(fake, session).join(";"),
       /収束/,
     );
+  }
+});
+Then("pendingのあるsessionはreview session置換の前提を満たさない", function () {
+  for (const session of this.legacy) {
+    const errors = replacementPreconditionErrors({
+      session,
+      delivery: { state: "pr-bound" } as never,
+      journalHasStep11: false,
+      candidateIsCurrentImplementation: true,
+    });
+    assert.equal(errors.length, 1);
+    assert.match(errors[0]!, /実効収束していません/);
+    assert.match(errors[0]!, /F-LEGACY-01/);
   }
 });
 Then("markerとadmissionの改竄と新版から旧版への逆戻りは拒否する", function () {
