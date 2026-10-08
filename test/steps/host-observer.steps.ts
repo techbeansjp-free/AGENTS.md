@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { AGENT_LIFECYCLE_COMMAND } from "../../src/domain/lifecycle-settings.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
 import { QUESTIONS } from "../../src/domain/mode.js";
+import { inspectHostObserverSource } from "../support/host-observer-conformance.js";
 import { type WorkflowWorld, stepDefinitions } from "../support/world.js";
 
 /**
@@ -1898,67 +1899,21 @@ function sourceFiles(directory: string): string[] {
 
 Given(
   exact(
-    "observer本体、workflow・review・deliveryのsource、.github/workflowsの新規workflowがある",
+    "workflow・review・deliveryのsourceと.github/workflowsの新規workflowがある",
   ),
   function () {
     const s = state(this);
-    s.texts.observer = fs.readFileSync(OBSERVER, "utf8");
     s.texts.workflow = fs.readFileSync(WORKFLOW, "utf8");
   },
 );
 
-When(exact("importとAPI利用とworkflow定義を静的に検査する"), function () {
-  const s = state(this);
-  const observer = s.texts.observer!;
-  const imports = [
-    ...observer.matchAll(
-      /\bimport\s+(?:[^"';]*?\s+from\s+)?["']([^"']+)["']/gu,
-    ),
-    ...observer.matchAll(/\bimport\s*\(\s*["']([^"']+)["']/gu),
-    ...observer.matchAll(/\brequire\s*\(\s*["']([^"']+)["']/gu),
-  ].map((match) => match[1]!);
-  s.values.imports = JSON.stringify(imports.sort());
-  const forbidden: Array<[string, RegExp]> = [
-    ["child_process", /child_process/u],
-    ["/tmp", /\/tmp\b/u],
-    ["os.tmpdir", /\btmpdir\b/u],
-    ["/bin/sh", /\/bin\/sh|cmd\.exe|powershell/iu],
-    [
-      "exec",
-      /\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync|fork)\s*\(/u,
-    ],
-    ["timer", /\b(?:setTimeout|setInterval|setImmediate)\b|Atomics\.wait/u],
-    ["process.exit", /\bprocess\.exit\s*\(/u],
-    [
-      "fs write",
-      /\.(?:writeFile|writeFileSync|appendFile|appendFileSync|mkdir|mkdirSync|rename|renameSync|unlink|unlinkSync|rm|rmSync|createWriteStream)\s*\(/u,
-    ],
-  ];
-  s.values.violations = JSON.stringify(
-    forbidden
-      .filter(([, pattern]) => pattern.test(observer))
-      .map(([name]) => name),
-  );
+/**
+ * observerのimportとAPI利用はSCN-UNIT-HOSTOBS-020の構文検査が担う
+ * （OWN-04）。ここで字面の正規表現による重複検査を持たない。
+ */
+When(exact("workflow定義を静的に検査する"), function () {
+  assert.ok(state(this).texts.workflow);
 });
-
-Then(
-  exact(
-    "observerのimportはnode:fs、node:path、node:process、node:cryptoに限られchild_processと固定temp pathを含まない",
-  ),
-  function () {
-    const s = state(this);
-    const imports = JSON.parse(s.values.imports!) as string[];
-    assert.ok(imports.length > 0);
-    for (const specifier of imports)
-      assert.ok(
-        ["node:fs", "node:path", "node:process", "node:crypto"].includes(
-          specifier,
-        ),
-        specifier,
-      );
-    assert.deepEqual(JSON.parse(s.values.violations!), []);
-  },
-);
 
 Then(
   exact("workflow・review・deliveryのsourceはobserverを参照しない"),
@@ -2324,6 +2279,293 @@ Then(
     );
   },
 );
+
+// ---------------------------------------------------------------- SCN-020
+
+/**
+ * observerの複写へ加える禁止構文（OWN-04）。`expected`は検査器が返す違反の字面であり、
+ * 検査器の定数から導出しない。`after`の直後へ`insert`を1回だけ差し込む。
+ */
+const EXIT_ANCHOR = "process.exitCode = 0;\n";
+const FS_IMPORT = 'import fs from "node:fs";\n';
+const WARNING_ANCHOR = "    systemMessage: text,\n";
+const EVENT_ANCHOR =
+  '  if (input.hook_event_name !== "PreToolUse") return NONE;\n';
+const RENDER_EMPTY = "  return {};\n}";
+const FORBIDDEN_SYNTAX: ReadonlyArray<{
+  label: string;
+  edits: ReadonlyArray<[string, string]>;
+  expected: string;
+}> = [
+  {
+    label: "appendFileSync",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}fs.appendFileSync("o.log", "x");\n`]],
+    expected: "module-member: fs.appendFileSync",
+  },
+  {
+    label: "createWriteStream",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}fs.createWriteStream("o.log");\n`]],
+    expected: "module-member: fs.createWriteStream",
+  },
+  {
+    label: "別名import",
+    edits: [
+      [FS_IMPORT, 'import fs, { writeFileSync as w } from "node:fs";\n'],
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}w("o.log", "x");\n`],
+    ],
+    expected: "module-member: node:fs writeFileSync",
+  },
+  {
+    label: "fs.promises",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}fs.promises.writeFile("o.log", "x");\n`],
+    ],
+    expected: "module-member: fs.promises",
+  },
+  {
+    label: "dynamic import",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}import("node:child_process");\n`]],
+    expected: "import: dynamic import()",
+  },
+  {
+    label: "require",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}require("child_process");\n`]],
+    expected: "forbidden-global: require",
+  },
+  {
+    label: "permissionDecision",
+    edits: [
+      [WARNING_ANCHOR, `${WARNING_ANCHOR}    permissionDecision: "deny",\n`],
+    ],
+    expected: "control-key: permissionDecision",
+  },
+  {
+    label: "computed key",
+    edits: [
+      [
+        WARNING_ANCHOR,
+        `${WARNING_ANCHOR}    ["permission" + "Decision"]: "deny",\n`,
+      ],
+    ],
+    expected: 'dynamic-key: ["permission" + "Decision"]',
+  },
+  {
+    label: "Object.assign",
+    edits: [
+      [RENDER_EMPTY, '  return Object.assign({}, { decision: "block" });\n}'],
+    ],
+    expected: "module-member: Object.assign",
+  },
+  {
+    label: "sessionRegistry",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}const sessionRegistry = new Map();\n`],
+    ],
+    expected: "state-symbol: sessionRegistry",
+  },
+  {
+    label: "setTimeout",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}setTimeout(() => emit({}), 0);\n`]],
+    expected: "forbidden-global: setTimeout",
+  },
+  {
+    label: "SubagentStop分岐",
+    edits: [
+      [
+        EVENT_ANCHOR,
+        `  if (input.hook_event_name === "SubagentStop") return NONE;\n${EVENT_ANCHOR}`,
+      ],
+    ],
+    expected: "hook-event: SubagentStop",
+  },
+  {
+    label: "process.cwd",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}process.cwd();\n`]],
+    expected: "module-member: process.cwd",
+  },
+  // 以下は上の13件の迂回形である。
+  {
+    label: "destructuring",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}const { writeFileSync } = fs;\n`]],
+    expected: "module-member: fsを値として参照",
+  },
+  {
+    label: "element access",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}fs["writeFileSync"]("o.log", "x");\n`],
+    ],
+    expected: "module-member: fsを値として参照",
+  },
+  {
+    label: "property代入",
+    edits: [
+      [
+        RENDER_EMPTY,
+        '  const out = {};\n  out.decision = "block";\n  return out;\n}',
+      ],
+    ],
+    expected: "dynamic-key: out.decisionへの代入",
+  },
+  {
+    label: "element代入",
+    edits: [
+      [
+        RENDER_EMPTY,
+        '  const out = {};\n  out["dec" + "ision"] = "block";\n  return out;\n}',
+      ],
+    ],
+    expected: 'dynamic-key: out["dec" + "ision"]への代入',
+  },
+  {
+    label: "Reflect.set",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}Reflect.set({}, "x", "block");\n`]],
+    expected: "forbidden-global: Reflect",
+  },
+  {
+    label: "Object.defineProperty",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}Object.defineProperty({}, "x", {});\n`],
+    ],
+    expected: "module-member: Object.defineProperty",
+  },
+  {
+    label: "globalThis",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}globalThis.process.exitCode = 1;\n`]],
+    expected: "forbidden-global: globalThis",
+  },
+  {
+    label: "fs/promises namespace import",
+    edits: [
+      [FS_IMPORT, `${FS_IMPORT}import * as fsp from "node:fs/promises";\n`],
+    ],
+    expected: "import: node:fs/promises",
+  },
+  {
+    label: "fsのnamespace import",
+    edits: [
+      [FS_IMPORT, `${FS_IMPORT}import * as nfs from "node:fs";\n`],
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}nfs.rmSync("o.log");\n`],
+    ],
+    expected: "module-member: nfs.rmSync",
+  },
+  {
+    label: "event名を含む文字列",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}const events = "PreToolUse,SessionEnd";\n`],
+    ],
+    expected: "hook-event: SessionEnd",
+  },
+  {
+    label: "node:os",
+    edits: [[FS_IMPORT, `${FS_IMPORT}import os from "node:os";\n`]],
+    expected: "import: node:os",
+  },
+  {
+    label: "process.env",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}process.env.HOME;\n`]],
+    expected: "module-member: process.env",
+  },
+  {
+    label: "path.resolve",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}path.resolve("x");\n`]],
+    expected: "module-member: path.resolve",
+  },
+  {
+    label: "import.meta",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}import.meta.url;\n`]],
+    expected: "forbidden-global: import.meta",
+  },
+  {
+    label: "new Function",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}new Function("return 1");\n`]],
+    expected: "forbidden-global: Function",
+  },
+  {
+    label: "小文字の状態語",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}let lockfile = "";\n`]],
+    expected: "state-symbol: lockfile",
+  },
+  {
+    label: "PermissionDenied",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}const event = "PermissionDenied";\n`]],
+    expected: "hook-event: PermissionDenied",
+  },
+  {
+    label: "他worktree path",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}const other = "../.worktrees";\n`]],
+    expected: 'foreign-reference: ".worktrees"',
+  },
+  {
+    label: "CLAUDE_PROJECT_DIR",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}const root = "\${CLAUDE_PROJECT_DIR}";\n`],
+    ],
+    expected: 'foreign-reference: "CLAUDE_PROJECT_DIR"',
+  },
+  {
+    label: "object spread",
+    edits: [[WARNING_ANCHOR, `${WARNING_ANCHOR}    ...result,\n`]],
+    expected: "dynamic-key: object spread",
+  },
+  {
+    label: "許可list外の出力key",
+    edits: [[WARNING_ANCHOR, `${WARNING_ANCHOR}    hookVerdict: "x",\n`]],
+    expected: "output-key: hookVerdict",
+  },
+];
+
+Given(exact("observer本体のsourceがある"), function () {
+  state(this).texts.observer = fs.readFileSync(OBSERVER, "utf8");
+});
+
+When(
+  exact("TypeScript compiler APIで構文木を走査して禁止事項を検査する"),
+  function () {
+    const s = state(this);
+    s.values.violations = JSON.stringify(
+      inspectHostObserverSource(s.texts.observer!),
+    );
+  },
+);
+
+Then(exact("違反は0件である"), function () {
+  assert.deepEqual(JSON.parse(state(this).values.violations!), []);
+});
+
+When(
+  exact("observerの複写へ禁止された構文を1つずつ加えて検査する"),
+  function () {
+    const s = state(this);
+    const results = FORBIDDEN_SYNTAX.map(({ label, edits, expected }) => {
+      let mutated = s.texts.observer!;
+      for (const [anchor, replacement] of edits) {
+        // 置換の空振りは「検出されない」に見えるため、anchorが1回だけ在ることを先に確かめる。
+        assert.equal(mutated.split(anchor).length, 2, `${label}: ${anchor}`);
+        mutated = mutated.replace(anchor, () => replacement);
+      }
+      return {
+        label,
+        expected,
+        violations: inspectHostObserverSource(mutated),
+      };
+    });
+    s.values.mutations = JSON.stringify(results);
+  },
+);
+
+Then(exact("各複写はその構文を名指しした違反で不合格になる"), function () {
+  const results = JSON.parse(state(this).values.mutations!) as Array<{
+    label: string;
+    expected: string;
+    violations: string[];
+  }>;
+  assert.equal(results.length, FORBIDDEN_SYNTAX.length);
+  for (const { label, expected, violations } of results)
+    assert.ok(
+      violations.includes(expected),
+      `${label}: ${expected}が無い ${JSON.stringify(violations)}`,
+    );
+});
 
 // ============================================================ integration
 
@@ -2823,18 +3065,71 @@ Given(
   },
 );
 
-When(exact("workflow advanceのpreviewを実行する"), function () {
-  const l = lifecycle(this);
-  const root = l.roots.main!;
-  const observer = path.join(root, ".claude/hooks/asc-host-observer.mjs");
-  const preview = () =>
-    cliJson(["workflow", "advance", `--staging=${l.roots.staging}`], root);
-  l.advance.normal = preview();
-  fs.writeFileSync(observer, "process.exit(1);\n");
-  l.advance.broken = preview();
-  fs.rmSync(observer);
-  l.advance.missing = preview();
-});
+When(
+  exact("workflow advanceのpreviewとStep 1のworkflow recordを実行する"),
+  function () {
+    const l = lifecycle(this);
+    const root = l.roots.main!;
+    const staging = l.roots.staging!;
+    const observer = path.join(root, ".claude/hooks/asc-host-observer.mjs");
+    const backup = path.join(this.temp("asc-hostobs-staging-"), "staging");
+    fs.cpSync(staging, backup, { recursive: true });
+    /**
+     * 記録時刻と、それを束縛するdigestだけを伏せる。CLIは時計を注入できず、
+     * 3回の記録で必ず異なる。他の差（entry・artifact・state）はそのまま比べる。
+     */
+    const masked = (text: string) =>
+      text
+        .replace(/("recordedAt":\s*)"[^"]+"/gu, '$1"<recordedAt>"')
+        .replace(
+          /("(?:journalDigest|stagingDigest|digest)":\s*)"[0-9a-f]{64}"/gu,
+          '$1"<digest>"',
+        );
+    /** 同じstagingへ3状態で1回ずつ記録するため、記録のたびに記録前の複写へ戻す。 */
+    const run = (name: string) => {
+      l.advance[name] = cliJson(
+        ["workflow", "advance", `--staging=${staging}`],
+        root,
+      );
+      const recorded = cli(
+        [
+          "workflow",
+          "record",
+          `--staging=${staging}`,
+          "--step=1",
+          "--artifact=00_要求定義.md",
+          "--evidence=Step 1の証跡",
+        ],
+        root,
+      );
+      l.outputs[`record:${name}`] = {
+        status: recorded.status,
+        stdout: masked(recorded.stdout),
+        stderr: recorded.stderr,
+        files: Object.fromEntries(
+          fs
+            .readdirSync(staging, { recursive: true, withFileTypes: true })
+            .filter((entry) => entry.isFile())
+            .map((entry) => {
+              const file = path.join(entry.parentPath, entry.name);
+              return [
+                path.relative(staging, file),
+                masked(fs.readFileSync(file, "utf8")),
+              ];
+            })
+            .sort(([a], [b]) => (a! < b! ? -1 : 1)),
+        ),
+      };
+      fs.rmSync(staging, { recursive: true, force: true });
+      fs.cpSync(backup, staging, { recursive: true });
+    };
+    run("normal");
+    fs.writeFileSync(observer, "process.exit(1);\n");
+    run("broken");
+    fs.rmSync(observer);
+    run("missing");
+  },
+);
 
 Then(
   exact("targetStep、state、agentDispatchは正常な状態と同一である"),
@@ -2849,6 +3144,28 @@ Then(
     assert.notEqual(l.advance.normal!.targetStep, undefined);
     assert.deepEqual(pick(l.advance.broken!), pick(l.advance.normal!));
     assert.deepEqual(pick(l.advance.missing!), pick(l.advance.normal!));
+  },
+);
+
+Then(
+  exact(
+    "workflow recordの終了code・出力・stagingの記録内容は正常な状態と同一である",
+  ),
+  function () {
+    const l = lifecycle(this);
+    const normal = l.outputs["record:normal"]!;
+    assert.equal(
+      normal.status,
+      0,
+      String(normal.stdout) + String(normal.stderr),
+    );
+    assert.ok(
+      Object.keys(normal.files as Record<string, string>).length > 0,
+      "staging file",
+    );
+    assert.match(String(normal.stdout), /"skillId": "step-01-request"/u);
+    assert.deepEqual(l.outputs["record:broken"], normal);
+    assert.deepEqual(l.outputs["record:missing"], normal);
   },
 );
 

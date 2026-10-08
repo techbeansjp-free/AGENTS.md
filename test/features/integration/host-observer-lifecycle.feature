@@ -30,8 +30,9 @@ Feature: install・update・delete・doctorがhost observerをASC-owned entryと
 
   Scenario: SCN-INT-HOSTOBS-005 observerが壊れてもworkflowは前進する
     Given observer資産が異常終了する内容に置き換えられた状態と欠落した状態がある
-    When workflow advanceのpreviewを実行する
+    When workflow advanceのpreviewとStep 1のworkflow recordを実行する
     Then targetStep、state、agentDispatchは正常な状態と同一である
+    And workflow recordの終了code・出力・stagingの記録内容は正常な状態と同一である
 
   Scenario: SCN-INT-HOSTOBS-006 record復旧はobserver登録を変更せず次の通常updateで登録する
     Given install後にrecordを失いobserver未登録の設定とobserver非正規形の設定を持つ2つのprojectがある

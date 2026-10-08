@@ -111,11 +111,10 @@ Feature: host observerはSendMessageの再利用だけをadvisoryで警告する
     Then 内容は同一である
     And 出力はmessage本文とtranscript本文の文字列を含まない
 
-  Scenario: SCN-UNIT-HOSTOBS-016 observer本体はOS非依存でworkflowから独立し3 OSのCIで実行される
-    Given observer本体、workflow・review・deliveryのsource、.github/workflowsの新規workflowがある
-    When importとAPI利用とworkflow定義を静的に検査する
-    Then observerのimportはnode:fs、node:path、node:process、node:cryptoに限られchild_processと固定temp pathを含まない
-    And workflow・review・deliveryのsourceはobserverを参照しない
+  Scenario: SCN-UNIT-HOSTOBS-016 observer本体はworkflowから独立し3 OSのCIで実行される
+    Given workflow・review・deliveryのsourceと.github/workflowsの新規workflowがある
+    When workflow定義を静的に検査する
+    Then workflow・review・deliveryのsourceはobserverを参照しない
     And 新規CI workflowはubuntu-latest、macos-latest、windows-latestでshellを介さずobserverのportable testを実行し、読取権限だけを持つ
 
   Scenario: SCN-UNIT-HOSTOBS-017 Probe fixtureとCapability Matrixが秘密を含まず再確認できる
@@ -134,3 +133,10 @@ Feature: host observerはSendMessageの再利用だけをadvisoryで警告する
     Given docs/specs/02_要件のREQ-WF-1546節と要件一覧の同行がある
     When 引用されたSCN IDを抽出する
     Then すべてtest/featuresに実在しSCN-INT-AGENTLIFE-を含まない
+
+  Scenario: SCN-UNIT-HOSTOBS-020 observer sourceの構文木はadvisory・statelessの禁止事項に違反しない
+    Given observer本体のsourceがある
+    When TypeScript compiler APIで構文木を走査して禁止事項を検査する
+    Then 違反は0件である
+    When observerの複写へ禁止された構文を1つずつ加えて検査する
+    Then 各複写はその構文を名指しした違反で不合格になる
