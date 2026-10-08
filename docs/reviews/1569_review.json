@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1569,
+  "observed": {
+    "baseSha": "c6f1dc31da2cd6e1c4b617f21d1457e805d7158e",
+    "implementationHeadSha": "d2278e8ff46bd5c0447fc9effc7fac07decd4c1b",
+    "diffDigest": "53cabe4654314b8c8b2bca7c556c098cdd310c071b0331f771d287a7bc689035",
+    "session": {
+      "sessionId": "6551e94f5b69c7549e02cd939c175927c4e1ca7b8181bbc7223ed9d923f807fd",
+      "latestRoundDigest": "cb2cd9b0d1b5bc04a34a1005281f86006f45515f0bab539d5559d82decda1c80",
+      "status": "converged",
+      "countedRounds": 1
+    },
+    "impact": {
+      "digest": "7c9b7b314efe952a817a5723fde9c8ca3dfdfd18b4966420ef7f112e4af0cdaf",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "d2278e8ff46bd5c0447fc9effc7fac07decd4c1b",
+        "impactDigest": "7c9b7b314efe952a817a5723fde9c8ca3dfdfd18b4966420ef7f112e4af0cdaf",
+        "finishedAt": "2026-10-08T14:56:41.316Z",
+        "recordDigest": "dde535a647807620734c4f13af38beeae63972864220b7b35fb06fe9d84b51db"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "R1-1",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "test/steps/workflow-step-enforcement.steps.ts",
+      "contractId": "AC-05"
+    },
+    {
+      "id": "R1-2",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "src/cli.ts",
+      "contractId": "AC-07"
+    },
+    {
+      "id": "R1-3",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "invariant-violation",
+      "path": "src/cli.ts",
+      "contractId": "INV-08"
+    },
+    {
+      "id": "R1-4",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "test/steps/workflow-step-enforcement.steps.ts",
+      "contractId": "AC-07"
+    },
+    {
+      "id": "R1-5",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "src/cli.ts",
+      "contractId": "AC-07"
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "claude-code:subagent/reviewer-workunit-ed09ea9d",
+    "implementer": "claude-code:subagent/implementation-workunit-85960ed8",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "fdc349f03a3ce9717f2686ae40a8e64ca840796cb3109538eb449ee848beacee"
+}
