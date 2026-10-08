@@ -294,6 +294,45 @@ function interruptedRecordErrors(
   return errors;
 }
 
+/**
+ * 中断した置換の最終記録の`savedProgressPath`とreview progress journalの配置を、applyの段の
+ * 順序から到達できる組合せ（BR-02の許可表）へ照合する（Issue #1571）。pathは定数と連番から
+ * 導出し、記録の文字列を使わない。不一致なら組合せと復旧手段を名指しした理由1件を返す。
+ */
+function interruptedProgressErrors(
+  staging: string,
+  record: ReviewSessionReplacementRecord,
+): string[] {
+  const renamed = !fs.existsSync(path.join(staging, REVIEW_SESSION_FILE));
+  const original = reviewProgressJournalPresent(staging);
+  const saved = fs.existsSync(
+    path.join(staging, ...replacedProgressPath(record.sequence).split("/")),
+  );
+  const declared = record.savedProgressPath !== null;
+  if (
+    declared
+      ? renamed
+        ? original !== saved
+        : original && !saved
+      : !original && !saved
+  )
+    return [];
+  const recovery =
+    declared && !original && !saved
+      ? "置換記録が宣言するreview progress journalが失われています。退避元があれば元名へ戻してから再applyしてください。復元できない場合は置換記録を書き換えず人手で調査してください"
+      : original && (!declared || renamed)
+        ? "元名のreview progress journalは置換の中断中に作られた旧sessionの進捗です（`review progress append`等）。内容を確認してstaging外へ退避してから再applyしてください"
+        : declared && original
+          ? "sessionのrenameより前にprogress journalが保存名へ移っていますが、元名にもreview progress journalがあります。元名の内容は置換の中断中に追記された旧sessionの進捗の可能性があるため上書きしないでください。2つのfileの内容を比較してどちらを残すかを判断し、不要な方をstaging外へ退避して、残す方を元名に置いてから再applyしてください"
+          : declared
+            ? "sessionのrenameより前にprogress journalが保存名へ移っています。保存名のfileを元名へ戻してから再applyしてください"
+            : "置換記録はprogress journalを宣言していません。保存名のfileを確認してstaging外へ退避してから再applyしてください";
+  const state = (present: boolean): string => (present ? "あり" : "なし");
+  return [
+    `中断した置換記録${record.sequence}件目（savedProgressPath=${record.savedProgressPath ?? "null"}）とreview progress journalの配置（review session=${renamed ? "rename済み" : "未rename"}、元名=${state(original)}、保存名=${state(saved)}）がapplyの段の順序から到達できません。${recovery}`,
+  ];
+}
+
 function moveReplacedFiles(
   staging: string,
   record: ReviewSessionReplacementRecord,
@@ -320,7 +359,7 @@ export interface ReviewSessionReplacementResult {
 }
 
 function nextStep(record: ReviewSessionReplacementRecord): string {
-  return `git switch --detach ${record.implementationHeadSha}でH_implへdetachし、review round --init --head=${record.implementationHeadSha} --base=<既定branch tipまたはmerge-base>でround 1（full-scope）を収束させてください。その後branchへ戻り、workflow record --step=10 --post-pr-intake、review export、push、pr reanchorの順に進めます`;
+  return `git switch --detach ${record.implementationHeadSha}でH_implへdetachし、review round --init --head=${record.implementationHeadSha} --base=<git merge-base ${record.implementationHeadSha} refs/remotes/origin/HEADの値>でround 1（full-scope）を収束させてください。その後branchへ戻り、workflow record --step=10 --post-pr-intake、review export、push、pr reanchorの順に進めます`;
 }
 
 /**
@@ -352,11 +391,14 @@ export function replaceReviewSession(input: {
     if (!stagingDigestMatches(staging)) {
       const interrupted = interruptedReplacement(staging);
       if (interrupted) {
-        const errors = interruptedRecordErrors(
-          staging,
-          interrupted.record,
-          interrupted.sessionSource,
-        );
+        const errors = [
+          ...interruptedRecordErrors(
+            staging,
+            interrupted.record,
+            interrupted.sessionSource,
+          ),
+          ...interruptedProgressErrors(staging, interrupted.record),
+        ];
         if (errors.length > 0) throw new ReviewSessionReplacementError(errors);
         moveReplacedFiles(staging, interrupted.record);
         const stagingDigest = refreshStoredStagingDigest(staging).digest;

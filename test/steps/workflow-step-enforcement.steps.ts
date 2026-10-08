@@ -84,6 +84,7 @@ import {
   claimStoredPullRequestCreationDispatch,
   prepareStoredMergeIntent,
   prepareStoredPullRequestCreation,
+  recordStoredStep11,
 } from "../../src/adapters/delivery-state.js";
 import { doctor } from "../../src/domain/lifecycle.js";
 import { checkWorkflowStepDocument } from "../../scripts/check_conformance.js";
@@ -5375,6 +5376,7 @@ interface ReplacedOutput {
   state: string;
   recovered?: boolean;
   reasons?: string[];
+  next?: string;
   record?: {
     sequence: number;
     previousRecordDigest: string | null;
@@ -5488,8 +5490,20 @@ function runReviewReplaceAcceptance(world: WorkflowStepWorld): void {
   const beforePreview = stagingBytes(staging);
   const preview = executeReviewReplace(prepared, "--dry-run");
   assert.equal(preview.status, 0, preview.stdout + preview.stderr);
-  assert.equal((JSON.parse(preview.stdout) as ReplacedOutput).state, "preview");
+  const previewed = JSON.parse(preview.stdout) as ReplacedOutput;
+  assert.equal(previewed.state, "preview");
   assert.equal(stagingBytes(staging), beforePreview);
+  /** round 1の`--base`はH_implと既定branch tipのmerge-baseだけを名指しする（AC-07）。 */
+  const assertMergeBaseNext = (next: string | undefined): void => {
+    assert.ok(
+      next?.includes(
+        `review round --init --head=${fixture.implementationSha} --base=<git merge-base ${fixture.implementationSha} refs/remotes/origin/HEADの値>`,
+      ),
+      next,
+    );
+    assert.doesNotMatch(next ?? "", /既定branch tip/u);
+  };
+  assertMergeBaseNext(previewed.next);
 
   /**
    * 中断復旧（02 §6）: 段1後（記録だけ追記）と段2後（rename済み・digest未再固定）を
@@ -5498,6 +5512,7 @@ function runReviewReplaceAcceptance(world: WorkflowStepWorld): void {
   const recordFile = path.join(staging, "staging-record.json");
   const storedRecord = fs.readFileSync(recordFile);
   const first = applyReviewReplace(fixture);
+  assertMergeBaseNext(first.next);
   const savedFile = path.join(staging, first.record!.savedPath);
   fs.writeFileSync(recordFile, storedRecord);
   // 置換以外の成果物も変わっていれば中断復旧として扱わない。
@@ -5537,7 +5552,9 @@ function runReviewReplaceAcceptance(world: WorkflowStepWorld): void {
   );
   assert.equal(fs.existsSync(progressFile), false);
   assert.equal(sha256File(savedProgressFile), progressDigest);
+  // 記録追記後・session rename前（BR-02許可表）: progress journalも元名にある。
   fs.renameSync(savedFile, sessionFile);
+  fs.renameSync(savedProgressFile, progressFile);
   fs.writeFileSync(recordFile, storedRecord);
   const afterStageOne = executeReviewReplace(prepared, "--apply");
   assert.equal(
@@ -5903,7 +5920,8 @@ function runReviewReplaceRejection(
 
 /**
  * SCN-E2E-REVREPLACE-003: 置換後もH_implが動けば暫定guardが拒否し、
- * `session-replacement`はR1〜R7のどれか1つでも破れば受理しない。
+ * `session-replacement`はR1〜R6のどれか1つでも破れば受理せず、入口を通らない状態は
+ * 入口で拒否する。
  */
 function runReviewReplaceAbuse(world: WorkflowStepWorld): void {
   const fixture = boundReplacementFixture(world);
@@ -5914,13 +5932,14 @@ function runReviewReplaceAbuse(world: WorkflowStepWorld): void {
     fs.existsSync(chainFile) ? fs.readFileSync(chainFile, "utf8") : "";
   applyReviewReplace(fixture);
   const session = convergeReplacementRoundOne(fixture);
-  const reject = (head: string, base: string, condition: RegExp): void => {
+  const reject = (head: string, base: string, condition: RegExp): string => {
     const before = chainBytes();
     const rejected = executeReanchor(prepared, head, base, "--dry-run");
     assert.notEqual(rejected.status, 0, rejected.stdout);
     assert.match(rejected.stdout + rejected.stderr, condition);
     assert.equal(chainBytes(), before);
     fixtureGit(root, ["reset", "-q", "--hard", fixture.pullRequestHeadSha]);
+    return rejected.stdout + rejected.stderr;
   };
   // R3: post-PR intakeのStep 10を記録せずに証跡を作る。
   reject(
@@ -6012,7 +6031,10 @@ function runReviewReplaceAbuse(world: WorkflowStepWorld): void {
     fixture.baseSha,
     /R2: current review sessionの初回H_implが最新置換記録のH_implと一致しません/u,
   );
-  // R7: delivery stateがpr-boundでない。
+  /**
+   * 入口拒否（R7の検査ではない）: `merge-prepared`は`resolveAnchor`の入口で拒否され
+   * `session-replacement`の評価に到達しない。R7はSCN-E2E-REVREPLACE-004が検査する。
+   */
   const bound = readFixtureDeliveryState(prepared.staging);
   prepareStoredMergeIntent(prepared.staging, {
     method: "merge",
@@ -6024,10 +6046,13 @@ function runReviewReplaceAbuse(world: WorkflowStepWorld): void {
     intentId: "4".repeat(32),
     preparedAt: bound.pr?.boundAt ?? fixtureInstant(),
   });
-  reject(
-    replacedEvidence,
-    fixture.baseSha,
-    /pr-boundまたはstep11-recordedだけがpr reanchorを受理します/u,
+  assert.doesNotMatch(
+    reject(
+      replacedEvidence,
+      fixture.baseSha,
+      /pr-boundまたはstep11-recordedだけがpr reanchorを受理します/u,
+    ),
+    /R7: /u,
   );
 }
 
@@ -6218,6 +6243,461 @@ function runReviewReplaceSameHeadRoundTwo(world: WorkflowStepWorld): void {
   assert.match(output, REVIEW_REPLACE_GUIDE);
 }
 
+/**
+ * SCN-E2E-REVREPLACE-004: 置換後round 1で収束した証跡でも、delivery stateが
+ * `step11-recorded`（`pr reanchor`の入口を通る非`pr-bound`状態）なら、
+ * `session-replacement`はR7だけを名指しして拒否する（Issue #1571、AC-01・AC-02）。
+ */
+function runReviewReplaceStep11Rejection(world: WorkflowStepWorld): void {
+  const fixture = boundReplacementFixture(world);
+  const { prepared } = fixture;
+  applyReviewReplace(fixture);
+  const session = convergeReplacementRoundOne(fixture);
+  recordPostPrIntake(prepared, session.latestRoundDigest);
+  const finalHead = commitReviewEvidence(
+    prepared,
+    fixture.baseSha,
+    fixture.implementationSha,
+  );
+  // 同じfixtureで`pr-bound`のままならR1〜R6が成立し、session-replacementで受理される。
+  const accepted = executeReanchor(
+    prepared,
+    finalHead,
+    fixture.baseSha,
+    "--dry-run",
+  );
+  assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+  assert.match(accepted.stdout, /"willAppend": true/u);
+  recordStoredStep11(prepared.staging, {
+    outcome: "pull-request",
+    recordedAt: fixtureInstant({ minutesAhead: 5 }),
+    journalDigest: sha256File(path.join(prepared.staging, STEP_JOURNAL_FILE)),
+  });
+  assert.equal(
+    readFixtureDeliveryState(prepared.staging).state,
+    "step11-recorded",
+  );
+  const before = stagingBytes(prepared.staging);
+  const rejected = executeReanchor(
+    prepared,
+    finalHead,
+    fixture.baseSha,
+    "--apply",
+  );
+  assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+  const output = rejected.stdout + rejected.stderr;
+  assert.match(
+    output,
+    /session-replacementの条件が不成立です: R7: delivery stateがpr-boundではありません（step11-recorded）/u,
+  );
+  assert.doesNotMatch(output, /R[1-6]: /u);
+  assert.equal(stagingBytes(prepared.staging), before);
+}
+
+interface InterruptedProgressExample {
+  /** apply前に元名progressを作る（置換記録の`savedProgressPath`が非null）。 */
+  progress: boolean;
+  /** 中断状態でsessionがrename済みか（falseなら保存名sessionを元名へ戻す）。 */
+  sessionRenamed: boolean;
+  original: boolean;
+  saved: boolean;
+  /** 許可表の行は`recovered`、既存のstore診断は`store`、反例は復旧手段の文面。 */
+  expected: "recovered" | "store" | RegExp;
+}
+
+const EXTRA_ORIGINAL_PROGRESS =
+  /元名のreview progress journalは置換の中断中に作られた旧sessionの進捗です（`review progress append`等）。内容を確認してstaging外へ退避してから再applyしてください/u;
+const MISSING_PROGRESS =
+  /置換記録が宣言するreview progress journalが失われています。退避元があれば元名へ戻してから再applyしてください。復元できない場合は置換記録を書き換えず人手で調査してください/u;
+const SAVED_PROGRESS_BEFORE_RENAME =
+  /sessionのrenameより前にprogress journalが保存名へ移っています。保存名のfileを元名へ戻してから再applyしてください/u;
+const BOTH_PROGRESS_BEFORE_RENAME =
+  /sessionのrenameより前にprogress journalが保存名へ移っていますが、元名にもreview progress journalがあります。元名の内容は置換の中断中に追記された旧sessionの進捗の可能性があるため上書きしないでください。2つのfileの内容を比較してどちらを残すかを判断し、不要な方をstaging外へ退避して、残す方を元名に置いてから再applyしてください/u;
+
+const INTERRUPTED_PROGRESS_EXAMPLES: Record<
+  string,
+  InterruptedProgressExample
+> = {
+  "許可: 記録追記後・session rename前・savedProgressPath=null": {
+    progress: false,
+    sessionRenamed: false,
+    original: false,
+    saved: false,
+    expected: "recovered",
+  },
+  "許可: 記録追記後・session rename前・savedProgressPath非null・元名あり": {
+    progress: true,
+    sessionRenamed: false,
+    original: true,
+    saved: false,
+    expected: "recovered",
+  },
+  "許可: session rename後・savedProgressPath=null": {
+    progress: false,
+    sessionRenamed: true,
+    original: false,
+    saved: false,
+    expected: "recovered",
+  },
+  "許可: session rename後・progress rename前": {
+    progress: true,
+    sessionRenamed: true,
+    original: true,
+    saved: false,
+    expected: "recovered",
+  },
+  "許可: progress rename後・digest再固定前": {
+    progress: true,
+    sessionRenamed: true,
+    original: false,
+    saved: true,
+    expected: "recovered",
+  },
+  "拒否: session rename前・savedProgressPath=null・元名あり": {
+    progress: false,
+    sessionRenamed: false,
+    original: true,
+    saved: false,
+    expected: EXTRA_ORIGINAL_PROGRESS,
+  },
+  "拒否: session rename後・savedProgressPath=null・元名あり": {
+    progress: false,
+    sessionRenamed: true,
+    original: true,
+    saved: false,
+    expected: EXTRA_ORIGINAL_PROGRESS,
+  },
+  "拒否: session rename前・savedProgressPath非null・元名も保存名もなし": {
+    progress: true,
+    sessionRenamed: false,
+    original: false,
+    saved: false,
+    expected: MISSING_PROGRESS,
+  },
+  "拒否: session rename前・savedProgressPath非null・元名と保存名の両方あり": {
+    progress: true,
+    sessionRenamed: false,
+    original: true,
+    saved: true,
+    expected: BOTH_PROGRESS_BEFORE_RENAME,
+  },
+  "拒否: session rename後・savedProgressPath非null・元名と保存名の両方あり": {
+    progress: true,
+    sessionRenamed: true,
+    original: true,
+    saved: true,
+    expected: EXTRA_ORIGINAL_PROGRESS,
+  },
+  "拒否: session rename前・savedProgressPath非null・保存名だけ": {
+    progress: true,
+    sessionRenamed: false,
+    original: false,
+    saved: true,
+    expected: SAVED_PROGRESS_BEFORE_RENAME,
+  },
+  "既存診断: session rename後・savedProgressPath非null・元名も保存名もなし": {
+    progress: true,
+    sessionRenamed: true,
+    original: false,
+    saved: false,
+    expected: "store",
+  },
+};
+
+/** store readerの素のError（ASC-CLI-VALIDATION-001）であり、置換の`rejected`でないこと。 */
+function assertReplacementStoreDiagnostic(
+  result: { status: number | null; stdout: string; stderr: string },
+  diagnostic: RegExp,
+): void {
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /"ASC-CLI-VALIDATION-001"/u);
+  assert.doesNotMatch(result.stdout, /"state": ?"rejected"/u);
+  assert.doesNotMatch(result.stdout, /content digestが保存値と一致しません/u);
+  assert.match(result.stdout, diagnostic);
+}
+
+/**
+ * SCN-E2E-REVREPLACE-005: 中断した置換の再applyは、最終置換記録の`savedProgressPath`と
+ * progress journalの配置をBR-02の許可表へ照合する（Issue #1571、AC-03・AC-04）。
+ * 実applyの結果からfile配置と`staging-record.json`を戻して中断状態を作る。
+ */
+function runInterruptedProgressRecovery(
+  world: WorkflowStepWorld,
+  example: string,
+): void {
+  const shape = INTERRUPTED_PROGRESS_EXAMPLES[example];
+  if (!shape) throw new Error(`未対応のExamples行です: ${example}`);
+  const fixture = boundReplacementFixture(world);
+  const { prepared } = fixture;
+  const staging = prepared.staging;
+  const sessionFile = path.join(staging, "review-session.json");
+  const savedFile = path.join(staging, "review-session-replaced-001.json");
+  const progressFile = path.join(staging, "journal", "review-progress.jsonl");
+  const savedProgressFile = path.join(
+    staging,
+    "journal",
+    "review-progress-replaced-001.jsonl",
+  );
+  assert.equal(fs.existsSync(progressFile), false);
+  if (shape.progress)
+    fs.writeFileSync(progressFile, '{"progress":1571}\n', { mode: 0o600 });
+  const progressBytes = shape.progress
+    ? fs.readFileSync(progressFile)
+    : Buffer.from('{"progress":"interrupted"}\n');
+  const sessionDigest = sha256File(sessionFile);
+  const recordFile = path.join(staging, "staging-record.json");
+  const storedRecord = fs.readFileSync(recordFile);
+  applyReviewReplace(fixture);
+  if (!shape.sessionRenamed) fs.renameSync(savedFile, sessionFile);
+  if (shape.progress && !shape.saved) fs.rmSync(savedProgressFile);
+  if (!shape.progress && shape.saved)
+    fs.writeFileSync(savedProgressFile, progressBytes, { mode: 0o600 });
+  if (shape.original)
+    fs.writeFileSync(progressFile, progressBytes, { mode: 0o600 });
+  fs.writeFileSync(recordFile, storedRecord);
+  const before = stagingBytes(staging);
+  const result = executeReviewReplace(prepared, "--apply");
+  if (shape.expected === "recovered") {
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const output = JSON.parse(result.stdout) as ReplacedOutput;
+    assert.equal(output.state, "replaced");
+    assert.equal(output.recovered, true);
+    assert.equal(fs.existsSync(sessionFile), false);
+    assert.equal(sha256File(savedFile), sessionDigest);
+    assert.equal(fs.existsSync(progressFile), false);
+    assert.equal(fs.existsSync(savedProgressFile), shape.progress);
+    if (shape.progress)
+      assert.deepEqual(fs.readFileSync(savedProgressFile), progressBytes);
+    // 完了後の再applyは従来どおりsessionが無いことで拒否する（NFR-03）。
+    const again = executeReviewReplace(prepared, "--apply");
+    assert.equal(again.status, 1, again.stdout + again.stderr);
+    assert.match(
+      ((JSON.parse(again.stdout) as ReplacedOutput).reasons ?? []).join("\n"),
+      /review sessionが存在しません/u,
+    );
+    return;
+  }
+  if (shape.expected === "store")
+    assertReplacementStoreDiagnostic(
+      result,
+      /置換済みreview progressの保存file journal\/review-progress-replaced-001\.jsonl がありません/u,
+    );
+  else {
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    const output = JSON.parse(result.stdout) as ReplacedOutput;
+    assert.equal(output.state, "rejected");
+    assert.equal(output.reasons?.length, 1, result.stdout);
+    const reason = output.reasons![0]!;
+    const placement = `中断した置換記録1件目（savedProgressPath=${
+      shape.progress ? "journal/review-progress-replaced-001.jsonl" : "null"
+    }）とreview progress journalの配置（review session=${
+      shape.sessionRenamed ? "rename済み" : "未rename"
+    }、元名=${shape.original ? "あり" : "なし"}、保存名=${
+      shape.saved ? "あり" : "なし"
+    }）がapplyの段の順序から到達できません。`;
+    assert.ok(reason.startsWith(placement), reason);
+    assert.match(reason, shape.expected);
+    // 元名と保存名の両方がある状態では、元名を上書きする案内を出さない。
+    if (shape.original && shape.saved)
+      assert.doesNotMatch(reason, /元名へ戻して/u);
+  }
+  assert.equal(stagingBytes(staging), before);
+}
+
+/**
+ * SCN-E2E-REVREPLACE-006: `pendingLast`が許す崩れは中断復旧の最終記録の2形だけであり、
+ * 最終以外の記録と`pendingLast`を使わない読取り（round 1・`pr reanchor`）は同じ崩れを
+ * 既存の保存file診断で拒否する（Issue #1571、AC-05）。
+ */
+function runReplacementPendingLastScope(world: WorkflowStepWorld): void {
+  const fixture = boundReplacementFixture(world);
+  const { prepared } = fixture;
+  const staging = prepared.staging;
+  const sessionFile = path.join(staging, "review-session.json");
+  const progressFile = path.join(staging, "journal", "review-progress.jsonl");
+  const savedFile = path.join(staging, "review-session-replaced-002.json");
+  const savedProgressFile = path.join(
+    staging,
+    "journal",
+    "review-progress-replaced-002.jsonl",
+  );
+  fs.writeFileSync(progressFile, '{"replacement":1}\n', { mode: 0o600 });
+  applyReviewReplace(fixture);
+  convergeReplacementRoundOne(fixture);
+  // `pr reanchor`の拒否側に使う証跡commitは、sessionがある間に作っておく。
+  const evidenceHead = commitReviewEvidence(
+    prepared,
+    fixture.baseSha,
+    fixture.implementationSha,
+  );
+  fixtureGit(prepared.root, [
+    "reset",
+    "-q",
+    "--hard",
+    fixture.pullRequestHeadSha,
+  ]);
+  fs.writeFileSync(progressFile, '{"replacement":2}\n', { mode: 0o600 });
+  const recordFile = path.join(staging, "staging-record.json");
+  const storedRecord = fs.readFileSync(recordFile);
+  assert.equal(applyReviewReplace(fixture).record?.sequence, 2);
+  const interrupt = (sessionRenamed: boolean): void => {
+    if (!sessionRenamed) fs.renameSync(savedFile, sessionFile);
+    fs.renameSync(savedProgressFile, progressFile);
+    fs.writeFileSync(recordFile, storedRecord);
+  };
+  const recover = (): void => {
+    const recovered = executeReviewReplace(prepared, "--apply");
+    assert.equal(recovered.status, 0, recovered.stdout + recovered.stderr);
+    assert.equal(
+      (JSON.parse(recovered.stdout) as ReplacedOutput).recovered,
+      true,
+    );
+  };
+  // 許可側: 最終記録の保存名sessionが未作成（元名progressも残る）。
+  interrupt(false);
+  recover();
+  // 許可側: 最終記録で元名progressが残る（session rename後・progress rename前）。
+  interrupt(true);
+  recover();
+  // 拒否側: 最終以外の記録で同じ崩れ（保存名session・保存名progressの不在）。
+  interrupt(true);
+  const withoutFile = (relative: string, run: () => void): void => {
+    const file = path.join(staging, ...relative.split("/"));
+    const bytes = fs.readFileSync(file);
+    const mode = fs.statSync(file).mode & 0o777;
+    fs.rmSync(file);
+    run();
+    fs.writeFileSync(file, bytes, { mode });
+    fs.chmodSync(file, mode);
+  };
+  const rejectReplay = (diagnostic: RegExp): void => {
+    const before = stagingBytes(staging);
+    assertReplacementStoreDiagnostic(
+      executeReviewReplace(prepared, "--apply"),
+      diagnostic,
+    );
+    assert.equal(stagingBytes(staging), before);
+  };
+  withoutFile("review-session-replaced-001.json", () =>
+    rejectReplay(
+      /置換済みreview sessionの保存file review-session-replaced-001\.json が置換記録のdigestと一致しません/u,
+    ),
+  );
+  withoutFile("journal/review-progress-replaced-001.jsonl", () =>
+    rejectReplay(
+      /置換済みreview progressの保存file journal\/review-progress-replaced-001\.jsonl がありません/u,
+    ),
+  );
+  // 拒否側: pendingLastを使わない読取りは、最終記録の同じ崩れ（元名progress残存）も拒否する。
+  const lastProgressMissing =
+    /置換済みreview progressの保存file journal\/review-progress-replaced-002\.jsonl がありません/u;
+  fixtureGit(prepared.root, [
+    "checkout",
+    "-q",
+    "--detach",
+    fixture.implementationSha,
+  ]);
+  const beforeRound = stagingBytes(staging);
+  assertReplacementStoreDiagnostic(
+    executeCli(
+      [
+        "review",
+        "round",
+        "--init",
+        `--staging=${staging}`,
+        `--head=${fixture.implementationSha}`,
+        `--base=${fixture.baseSha}`,
+        "--scope=SCOPE-WORKFLOW",
+        "--ac=AC-WF-005",
+        `--out=${path.join(os.tmpdir(), `asc-1571-round-${process.pid}.json`)}`,
+      ],
+      prepared.root,
+      prepared.env,
+    ),
+    lastProgressMissing,
+  );
+  assert.equal(stagingBytes(staging), beforeRound);
+  fixtureGit(prepared.root, ["checkout", "-q", fixture.branch]);
+  const beforeReanchor = stagingBytes(staging);
+  assertReplacementStoreDiagnostic(
+    executeReanchor(prepared, evidenceHead, fixture.baseSha, "--dry-run"),
+    lastProgressMissing,
+  );
+  assert.equal(stagingBytes(staging), beforeReanchor);
+}
+
+/**
+ * 外部merge取り込みがproviderへ発行してよい読取り操作の許可集合（Issue #1571、AC-06）。
+ * GitHubへ書き込みうる形（REST: GET以外のmethod・field・`--input`、graphql: mutation・
+ * `--input`）は1件も許さない。
+ */
+function isReadOnlyProviderCall(args: readonly string[]): boolean {
+  const [command, subcommand] = args;
+  if (command === "auth") return subcommand === "status";
+  if (command === "repo" || command === "pr") return subcommand === "view";
+  if (command !== "api" || subcommand === undefined) return false;
+  const rest = args.slice(2);
+  if (rest.some((item) => item === "--input" || item.startsWith("--input=")))
+    return false;
+  const fieldFlags = new Set(["-f", "-F", "--field", "--raw-field"]);
+  const fields: string[] = [];
+  let method: string | undefined;
+  for (let index = 0; index < rest.length; index += 1) {
+    const item = rest[index]!;
+    if (fieldFlags.has(item)) fields.push(rest[(index += 1)] ?? "");
+    else if (item.startsWith("--field=") || item.startsWith("--raw-field="))
+      fields.push(item.slice(item.indexOf("=") + 1));
+    else if (/^-[fF]./u.test(item)) fields.push(item.slice(2));
+    else if (item === "-X" || item === "--method")
+      method = rest[(index += 1)] ?? "";
+    else if (item.startsWith("--method=")) method = item.slice(9);
+    else if (/^-X./u.test(item)) method = item.slice(2);
+  }
+  if (method !== undefined && method.toUpperCase() !== "GET") return false;
+  if (subcommand !== "graphql") return fields.length === 0;
+  const queries = fields
+    .filter((field) => field.startsWith("query="))
+    .map((field) => field.slice(6).trimStart());
+  return (
+    queries.length > 0 &&
+    queries.every(
+      (query) => query.startsWith("query") && !query.includes("mutation"),
+    )
+  );
+}
+
+/**
+ * SCN-E2E-EXTMERGE-004: `pr record-external-merge`はdry-run・apply・記録済みへの
+ * 再applyのどれでもproviderへ読取り操作だけを発行する（Issue #1571、AC-06）。
+ */
+function runExternalMergeReadOnly(world: WorkflowStepWorld): void {
+  const prepared = prepareExternallyMergedPullRequest(world);
+  markExternallyMerged(prepared);
+  const observe = (
+    mode: "--dry-run" | "--apply",
+    state: string,
+    issuesCalls: boolean,
+  ): void => {
+    const start = deliveryProviderCalls(prepared).length;
+    const result = executeExternalMergeImport(prepared, mode);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(
+      (JSON.parse(result.stdout) as ExternalMergeOutput).state,
+      state,
+    );
+    const issued = deliveryProviderCalls(prepared).slice(start);
+    if (issuesCalls) assert.ok(issued.length > 0, `${mode}: ${state}`);
+    else assert.deepEqual(issued, []);
+    assert.deepEqual(
+      issued.filter((call) => !isReadOnlyProviderCall(call)),
+      [],
+    );
+  };
+  observe("--dry-run", "preview", true);
+  observe("--apply", "recorded", true);
+  observe("--apply", "already-recorded", false);
+}
+
 When(
   "{string}の{string}のE2E検査を実行する",
   function (this: WorkflowStepWorld, scenarioId: string, example: string) {
@@ -6227,6 +6707,8 @@ When(
       runReviewReplaceRejection(this, example);
     else if (scenarioId === "SCN-E2E-EXTMERGE-003")
       runExternalMergeTrustedPolicy(this, example);
+    else if (scenarioId === "SCN-E2E-REVREPLACE-005")
+      runInterruptedProgressRecovery(this, example);
     else throw new Error(`未対応のe2e scenarioです: ${scenarioId}`);
     this.workflowCheckPassed = true;
   },
@@ -13008,8 +13490,20 @@ if (exact(["auth", "status"])) {
       runReviewReplaceAbuse(this);
       break;
     }
+    case "SCN-E2E-REVREPLACE-004": {
+      runReviewReplaceStep11Rejection(this);
+      break;
+    }
+    case "SCN-E2E-REVREPLACE-006": {
+      runReplacementPendingLastScope(this);
+      break;
+    }
     case "SCN-E2E-EXTMERGE-001": {
       runExternalMergeAcceptance(this);
+      break;
+    }
+    case "SCN-E2E-EXTMERGE-004": {
+      runExternalMergeReadOnly(this);
       break;
     }
     default:
