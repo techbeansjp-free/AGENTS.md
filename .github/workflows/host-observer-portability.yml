@@ -1,0 +1,29 @@
+name: host observer移植性検証
+
+on:
+  pull_request:
+
+# 検証だけを行い、リポジトリへの書き込み権限は与えない。
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    name: host observerのportable fixture test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - name: ソースコードを取得する
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js実行環境を準備する
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: 依存なしでobserverのportable testを実行する
+        run: node --test test/host-observer/portable.test.mjs

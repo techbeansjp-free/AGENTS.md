@@ -3,6 +3,7 @@ import {
   appendLegacyJournal,
   unchainedJournalText,
 } from "../support/legacy-journal.js";
+import { ensureImplementationCommit } from "../support/implementation-commit.js";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -1563,7 +1564,7 @@ function implementedResumeStaging(world: WorkflowStepWorld): {
   }).path;
   for (const step of [1, 4])
     appendWorkflowJournalEntry({ staging, entry: entry(step) });
-  const implementationHeadSha = gitHeadOf(root);
+  const implementationHeadSha = ensureImplementationCommit(root);
   appendWorkflowJournalEntry({
     staging,
     entry: { ...entry(9), implementationHeadSha },

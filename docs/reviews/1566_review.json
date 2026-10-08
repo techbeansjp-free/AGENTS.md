@@ -1,0 +1,316 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1566,
+  "observed": {
+    "baseSha": "6d08da409eaad05321ee71c62d57a1e576bbdbc8",
+    "implementationHeadSha": "71f58b535ecd41a35b35d7a5cd52621d5ea9cc6d",
+    "diffDigest": "ad0d30e6e65128216f3ba1f3aa71be956feabebf4e4b6519efe63c9681f6a6d7",
+    "session": {
+      "sessionId": "849c7305c93ab2473754d3aa0089de7f57f8fa0742e9c12434c83d170bc7f635",
+      "latestRoundDigest": "1ed3ec7edecaa7f5bb3dcbf5538f72027453fb2bc280ad271926357c6b983cf3",
+      "status": "converged",
+      "countedRounds": 11
+    },
+    "impact": {
+      "digest": "fd2e34921e171365991e49d12ec033002a9dd7edcd7eacaab93117400d45894e",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "71f58b535ecd41a35b35d7a5cd52621d5ea9cc6d",
+        "impactDigest": "fd2e34921e171365991e49d12ec033002a9dd7edcd7eacaab93117400d45894e",
+        "finishedAt": "2026-10-08T06:09:15.894Z",
+        "recordDigest": "ba3da5c1d92d17a752b4560456559387a6e78679bad2a4c63783b5997ba8395c"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "CR-01",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/evidence/1566-claude-code-host-identity/00_Capability_Probe.md",
+      "contractId": null
+    },
+    {
+      "id": "CR-02",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "src/domain/lifecycle.ts",
+      "contractId": null
+    },
+    {
+      "id": "CR-03",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/evidence/1566-claude-code-host-identity/00_Capability_Probe.md",
+      "contractId": null
+    },
+    {
+      "id": "OWN-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/hooks/asc-host-observer.mjs",
+      "contractId": "AC-02"
+    },
+    {
+      "id": "OWN-02",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/hooks/asc-host-observer.mjs",
+      "contractId": null
+    },
+    {
+      "id": "OWN-03",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "src/adapters/workflow-journal.ts",
+      "contractId": null
+    },
+    {
+      "id": "OWN-04",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/support/host-observer-conformance.ts",
+      "contractId": "AC-01"
+    },
+    {
+      "id": "OWN-05",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "test/support/host-observer-conformance.ts",
+      "contractId": "AC-01"
+    },
+    {
+      "id": "R1-A-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/host-observer.steps.ts",
+      "contractId": "AC-23"
+    },
+    {
+      "id": "R1-A-02",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/hooks/asc-host-observer.mjs",
+      "contractId": null
+    },
+    {
+      "id": "R1-A-03",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/hooks/asc-host-observer.mjs",
+      "contractId": null
+    },
+    {
+      "id": "R1-A-04",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "docs/specs/06_外部インターフェース/02_ホスト観測契約.md",
+      "contractId": "AC-07"
+    },
+    {
+      "id": "R1-P-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "src/domain/lifecycle.ts",
+      "contractId": "INV-03"
+    },
+    {
+      "id": "R1-P-02",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/hooks/asc-host-observer.mjs",
+      "contractId": null
+    },
+    {
+      "id": "R10-01",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/host-observer.steps.ts",
+      "contractId": null
+    },
+    {
+      "id": "R10-02",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/support/host-observer-conformance.ts",
+      "contractId": null
+    },
+    {
+      "id": "R10-03",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "docs/specs/15_要件追跡/01_変更履歴.md",
+      "contractId": null
+    },
+    {
+      "id": "R11-01",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/host-observer.steps.ts",
+      "contractId": null
+    },
+    {
+      "id": "R2-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "fix-regression",
+      "path": "test/host-observer/portable.test.mjs",
+      "contractId": null
+    },
+    {
+      "id": "R3-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/host-observer.steps.ts",
+      "contractId": null
+    },
+    {
+      "id": "R4-01",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/host-observer.steps.ts",
+      "contractId": null
+    },
+    {
+      "id": "R5-01",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/hooks/00_利用案内.md",
+      "contractId": null
+    },
+    {
+      "id": "R6-01",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/hooks/asc-host-observer.mjs",
+      "contractId": null
+    },
+    {
+      "id": "R6-02",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": ".agent-skill-chain/hooks/asc-host-observer.mjs",
+      "contractId": null
+    },
+    {
+      "id": "R7-01",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "docs/specs/02_要件/01_ワークフロー要件.md",
+      "contractId": null
+    },
+    {
+      "id": "R8-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "test/support/host-observer-conformance.ts",
+      "contractId": "AC-01"
+    },
+    {
+      "id": "R8-02",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "test/support/host-observer-conformance.ts",
+      "contractId": "AC-01"
+    },
+    {
+      "id": "R8-03",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/support/host-observer-conformance.ts",
+      "contractId": null
+    },
+    {
+      "id": "R8-04",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/support/host-observer-conformance.ts",
+      "contractId": null
+    },
+    {
+      "id": "R8-05",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/support/host-observer-conformance.ts",
+      "contractId": null
+    },
+    {
+      "id": "R9-01",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
+      "path": "test/support/host-observer-conformance.ts",
+      "contractId": "AC-01"
+    },
+    {
+      "id": "R9-02",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/support/host-observer-conformance.ts",
+      "contractId": null
+    },
+    {
+      "id": "R9-03",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/support/host-observer-conformance.ts",
+      "contractId": null
+    },
+    {
+      "id": "R9-04",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "test/steps/host-observer.steps.ts",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "claude-code:subagent/reviewer-workunits-round1-11",
+    "implementer": "claude-code:subagent/implementation-workunit-d962b3cd",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "46144793418fc053846841fe0f96d7eabf06073517ef5902a0bb00fe590cb4c1"
+}

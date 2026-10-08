@@ -551,8 +551,14 @@ When("dirty状態のままsetupとupdateとdeleteを適用する", function () {
 Then("consumer所有資産とdirty状態は保持される", function () {
   assert.equal(this.applyResult.applied, true);
   assertCapturedFiles(this.root, this.consumerFiles);
-  // Retired observation does not create settings in an unconfigured project.
-  assert.equal(fs.existsSync(path.join(this.root, HOST_HOOK_SETTINGS)), false);
+  // Install registers the host observer (Issue #1566). Delete removes only the
+  // ASC-owned entry and leaves the user-owned file as an empty configuration.
+  assert.deepEqual(
+    JSON.parse(
+      fs.readFileSync(path.join(this.root, HOST_HOOK_SETTINGS), "utf8"),
+    ),
+    {},
+  );
   assert.equal(gitStatus(this.root, true), this.statusBefore);
 });
 

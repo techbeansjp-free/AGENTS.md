@@ -46,6 +46,20 @@ When("廃止hookと旧登録の移行を状態異常込みで検証する", func
       hooks: {
         PreToolUse: [
           { hooks: [{ type: "command", command: "echo user-hook" }] },
+          // install registers the host observer canonical group (Issue #1566).
+          {
+            matcher: "SendMessage",
+            hooks: [
+              {
+                type: "command",
+                command: "node",
+                args: [
+                  "${CLAUDE_PROJECT_DIR}/.claude/hooks/asc-host-observer.mjs",
+                ],
+                timeout: 10,
+              },
+            ],
+          },
         ],
       },
     });
