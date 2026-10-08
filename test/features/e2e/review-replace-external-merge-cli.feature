@@ -22,6 +22,7 @@ Feature: 同一PRでのreview session置換と外部merge取り込み
       | 置換記録のsequenceが連番である |
       | 置換記録のhash chainが一致する |
       | 置換済みsessionの保存fileが置換記録のdigestと一致する |
+      | 置換記録の末尾が完全な行である |
 
   Scenario: SCN-E2E-REVREPLACE-003 置換を組み合わせても暫定guardの攻撃面を開かない
     Given ワークフローStep公開CLIの隔離環境がある

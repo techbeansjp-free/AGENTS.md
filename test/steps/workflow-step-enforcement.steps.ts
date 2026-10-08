@@ -5422,6 +5422,7 @@ function runReviewReplaceRejection(
       /置換記録のhash chainが直前の記録と一致しません/u,
     置換済みsessionの保存fileが置換記録のdigestと一致する:
       /保存file review-session-replaced-001\.json が置換記録のdigestと一致しません/u,
+    置換記録の末尾が完全な行である: /置換記録の末尾が完全な行ではありません/u,
   };
   const diagnostic = expected[example];
   if (!diagnostic) throw new Error(`未対応のExamples行です: ${example}`);
@@ -5504,6 +5505,9 @@ function runReviewReplaceRejection(
         recordsFile,
         `${JSON.stringify({ ...record, previousRecordDigest: "0".repeat(64) })}\n`,
       );
+    else if (example === "置換記録の末尾が完全な行である")
+      // 改行を欠く末尾は、JSONとして読める記録でも完全な行として扱わない。
+      fs.writeFileSync(recordsFile, JSON.stringify(record));
     else
       fs.appendFileSync(
         path.join(prepared.staging, "review-session-replaced-001.json"),
@@ -5673,11 +5677,64 @@ function runReviewReplaceAbuse(world: WorkflowStepWorld): void {
   );
 }
 
+/**
+ * SCN-E2E-REVREPLACE-003: 保存済み`session-replacement`記録のreview bindingの形
+ * （sessionId・H_impl）と置換連番（1以上）が崩れていれば、既存chainとして受理しない。
+ * 同じ入力の再実行（冪等な受理）でなく再固定記録readerの形式診断で拒否されることを確かめる。
+ */
+function rejectMalformedSessionReplacementRecord(
+  fixture: ReplacementFixture,
+  finalHead: string,
+): void {
+  const { prepared } = fixture;
+  const chainFile = path.join(prepared.staging, "journal", "reanchor.jsonl");
+  const original = fs.readFileSync(chainFile, "utf8");
+  const lines = original.trimEnd().split("\n");
+  const index = lines.length - 1;
+  const last = JSON.parse(lines[index]!) as {
+    method: string;
+    sessionReplacement: Record<string, unknown>;
+  };
+  assert.equal(last.method, "session-replacement");
+  assert.equal(last.sessionReplacement.replacementSequence, 1);
+  for (const malformed of [
+    { sessionId: "not-a-session-digest" },
+    { implementationSha: "z".repeat(40) },
+    { replacementSequence: 0 },
+  ]) {
+    fs.writeFileSync(
+      chainFile,
+      `${[
+        ...lines.slice(0, index),
+        JSON.stringify({
+          ...last,
+          sessionReplacement: { ...last.sessionReplacement, ...malformed },
+        }),
+      ].join("\n")}\n`,
+    );
+    refreshStoredStagingDigest(prepared.staging);
+    const rejected = executeReanchor(
+      prepared,
+      finalHead,
+      fixture.baseSha,
+      "--dry-run",
+    );
+    assert.notEqual(rejected.status, 0, JSON.stringify(malformed));
+    assert.match(
+      rejected.stdout + rejected.stderr,
+      /再固定記録の形式が不正です/u,
+    );
+  }
+  fs.writeFileSync(chainFile, original);
+  refreshStoredStagingDigest(prepared.staging);
+}
+
 /** SCN-E2E-REVREPLACE-003前半: 置換後sessionのround 2（部分的revert）は暫定guardが拒否する。 */
 function runReviewReplaceRoundTwo(world: WorkflowStepWorld): void {
   const fixture = boundReplacementFixture(world);
   const { prepared } = fixture;
   const finalHead = replaceAndReconverge(fixture);
+  rejectMalformedSessionReplacementRecord(fixture, finalHead);
   fs.writeFileSync(
     path.join(prepared.root, "implementation.txt"),
     "partially reverted\n",
