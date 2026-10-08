@@ -64,6 +64,7 @@ import { computeImpactSet } from "./adapters/impact-set.js";
 import { recordLayerSuffix } from "./adapters/review-record-layer.js";
 import { appendEvidenceReanchor, evaluateEvidenceReanchor, readEvidenceReanchorChain, } from "./adapters/evidence-reanchor.js";
 import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
+import { replaceReviewSession, ReviewSessionReplacementError, } from "./adapters/review-session-replacement.js";
 import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, completeStoredTerminalRedelivery, observeStoredMerge, observeStoredDeliveryState, prepareStoredMergeIntent, recordStoredExternalMergeStep11, prepareStoredTerminalRedeliveryMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
 import { DELIVERY_STATE_FILE, assertImmutablePullRequestBinding, canonicalDigest, closingContractDigest, externalMergeObservationId, pullRequestContentDigest, pullRequestTerminalEvidenceId, } from "./domain/delivery-state.js";
 import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, } from "./domain/workflow.js";
@@ -1725,12 +1726,12 @@ function inspectAuthorizedPullRequestMerge(input) {
         throw new Error(unconvergedReviewSessionDiagnostic(auditReviewSession.status));
     const effectiveImplementationHeadSha = reviewed.reviewEvidence.implementationCommitSha;
     if (actualAuditBase !== auditReviewSession.anchor.diffBaseSha)
-        throw new Error(`実際のmerge-base(${actualAuditBase})がreview sessionの比較基点(${auditReviewSession.anchor.diffBaseSha})と一致しません。既定branchへの追随はreviewed-forwardではなく、実際のmerge-baseを起点とする新しいreview sessionのfull-scope reviewで行ってください（Issue #1495暫定guard、REV-01是正はIssue #1544で別途扱う）`);
+        throw new Error(`実際のmerge-base(${actualAuditBase})がreview sessionの比較基点(${auditReviewSession.anchor.diffBaseSha})と一致しません。既定branchへの追随はreviewed-forwardではなく、実際のmerge-baseを起点とする新しいreview sessionのfull-scope reviewで行ってください（Issue #1495暫定guard、REV-01是正はIssue #1544で別途扱う）。current H_implで収束済みなら\`review replace --staging=<staging> --apply\`でreview sessionを置換し、round 1からやり直してください`);
     if (effectiveImplementationHeadSha !== auditReviewSession.anchor.initialHeadSha)
-        throw new Error(`実効H_impl(${effectiveImplementationHeadSha})がreview sessionの初回H_impl(${auditReviewSession.anchor.initialHeadSha})と一致しません。最初にfull reviewした実装から1byteでも変わった場合、このsessionではmergeできません。新しいcurrent H_implを起点にfull review sessionを作り直してください（Issue #1495暫定guard）`);
+        throw new Error(`実効H_impl(${effectiveImplementationHeadSha})がreview sessionの初回H_impl(${auditReviewSession.anchor.initialHeadSha})と一致しません。最初にfull reviewした実装から1byteでも変わった場合、このsessionではmergeできません。新しいcurrent H_implを起点にfull review sessionを作り直してください（Issue #1495暫定guard）。current H_implで収束済みなら\`review replace --staging=<staging> --apply\`でreview sessionを置換し、round 1からやり直してください`);
     const auditCountedRounds = countedRounds(auditReviewSession);
     if (auditCountedRounds !== 1)
-        throw new Error(`review sessionのcounted round数(${auditCountedRounds})が1ではありません。暫定guardは単一のfull-scope round（round 1）だけで収束したsessionだけを受理します（Issue #1495暫定guard、Issue #1544解決まで）`);
+        throw new Error(`review sessionのcounted round数(${auditCountedRounds})が1ではありません。暫定guardは単一のfull-scope round（round 1）だけで収束したsessionだけを受理します（Issue #1495暫定guard、Issue #1544解決まで）。current H_implで収束済みなら\`review replace --staging=<staging> --apply\`でreview sessionを置換し、round 1からやり直してください`);
     const singleCountedRound = auditReviewSession.rounds.find((record) => !record.followOnly && !record.recordLayerOnly);
     if (singleCountedRound === undefined ||
         singleCountedRound.candidateHeadSha !== effectiveImplementationHeadSha)
@@ -7665,6 +7666,35 @@ export async function main(argv, dependencies = {}) {
             reason: required(flags, "reason"),
             layer: "delivery",
         }, dependencies);
+    }
+    if (command === "review" && subcommand === "replace") {
+        const { flags } = parse(rest);
+        const unknown = Object.keys(flags).filter((flag) => !["staging", "root", "apply", "dry-run"].includes(flag));
+        if (unknown.length > 0)
+            throw new Error(`review replaceの未知optionです: --${unknown.join(", --")}`);
+        const apply = applyMode(flags);
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const staging = resolveContained(root, required(flags, "staging"));
+        try {
+            assertIssueStagingLocation(staging, root);
+        }
+        catch {
+            throw new Error(`review replaceのstagingは対象rootの${readStagingLayout(root).rootPattern}/直下が必要です`);
+        }
+        try {
+            print(replaceReviewSession({ staging, apply }));
+            return 0;
+        }
+        catch (error) {
+            if (!(error instanceof ReviewSessionReplacementError))
+                throw error;
+            print({
+                state: "rejected",
+                reasons: error.reasons,
+                next: "前提を満たしてから再実行してください。stagingは変更していません",
+            });
+            return 1;
+        }
     }
     if (command === "review" && subcommand === "reanchor") {
         const { flags } = parse(rest);

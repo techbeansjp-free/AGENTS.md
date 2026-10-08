@@ -1684,6 +1684,17 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "review",
+    subcommand: "replace",
+    summary:
+      "pr-boundの収束済みreview sessionを保存して置換記録を追記し、同じPRでround 1からやり直せるようにする",
+    requiredFlags: [flag("staging", "path", "pr-boundの対象Issue staging")],
+    conditionalFlags: [],
+    optionalFlags: [ROOT_FLAG, ...APPLY_MODE],
+    example:
+      "npx agent-skill-chain review replace --staging=.agent-skill-chain/tmp/issues/20260901_120000_example --dry-run",
+  },
+  {
+    command: "review",
     subcommand: "reanchor",
     summary: "PR作成前のreview証跡を内容等価性つきで新headへ再固定する",
     requiredFlags: [

@@ -49,6 +49,8 @@ Makefileは`make -n <target>`で展開した実commandへ当てる。**ただし
 
 ## PR作成後の指摘
 
+`pr merge`の暫定guardが比較基点・実効H_impl・counted round数でcurrent sessionを拒否した`pr-bound`のPRは、current H_implで収束済みなら同じPR・同じstagingのまま`review replace --staging=<staging> --dry-run`で前提を確かめてから`--apply`で置換する。続けて置換記録のH_implへdetachしてround 1（full-scope）を収束させ、必要なら`verify run`し、branchへ戻って`workflow record --step=10 --post-pr-intake`、`review export`、push、`pr reanchor`の順に進める。`review-session.json`を削除・編集しない。未収束のsessionは置換できないので、先にpost-PR intakeで収束させる。
+
 `pr create`より後に届いた外部reviewerの指摘は、条件を満たす場合に同じPRへ取り込む。条件と手順の正本は[01_開発ワークフロー.md](../../docs/01_開発ワークフロー.md#レビュー配置と前向きな変更処理)であり、ここへ複写しない。Step 11前の`pr-bound`中は`workflow record --step=10 --post-pr-intake`、Step 11記録後は`--post-terminal-intake`を使う。取り直しroundは収束後にHEADが動いたとき同sessionの次roundとして開き、round数を分離・停止の理由にしない（記録できるroundは数えないroundを含め64件まで）。分離6条件のいずれかに該当する指摘だけをfollow-up Issueとする。指摘を無記録で通過させない。
 
 review中またはPR review中に見つけた欠陥は[派生した欠陥の是正原則](../../docs/01_開発ワークフロー.md#派生した欠陥の是正原則)に従い、分離6条件のいずれかに該当しない限り同じIssue・同じPRで直すfindingにする。round数が多いことは分離の理由にしない。目的にASC本体の保守を含まないIssueで、その欠陥がASC本体側にある場合は[ASC本体の是正を作業scopeへ入れない](../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない)に従う。

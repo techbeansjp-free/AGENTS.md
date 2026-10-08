@@ -42,6 +42,7 @@ import {
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { observedEvidenceErrors } from "./review-evidence.js";
 import { readStoredReviewSession } from "./review-session-store.js";
+import { readReviewSessionReplacements } from "./review-session-replacement-store.js";
 import {
   assertWorkflowStaging,
   readWorkflowJournal,
@@ -740,6 +741,109 @@ function observeReviewedForward(
   };
 }
 
+interface SessionReplacementEvidence {
+  replacementSequence: number;
+  sessionId: string;
+  roundDigest: string;
+  implementationSha: string;
+  artifactPath: string;
+  artifactDigest: string;
+}
+
+/**
+ * review session置換後の新sessionの証跡だけを足した前進を受理する（Issue #1569）。
+ *
+ * `reviewed-forward`は旧PR head（H_impl＋旧証跡）が新H_implのstrict ancestorである
+ * ことを要求し、`artifact-supersession`はsessionの一致を要求するため、置換後の証跡を
+ * 受理できない。**このmethodは置換記録が固定したH_implから一歩も動かない前進だけを
+ * 通す。** 条件R1〜R7をすべて評価し、不成立の条件をすべて名指しで返す。
+ */
+function observeSessionReplacement(
+  staging: string,
+  root: string,
+  input: ReanchorComparison,
+): { evidence?: SessionReplacementEvidence; failures: string[] } {
+  const replacement = readReviewSessionReplacements(staging).at(-1);
+  if (!replacement) return { failures: [] };
+  const implementation = replacement.implementationHeadSha;
+  const failures: string[] = [];
+  let artifactPath: string | undefined;
+  let artifact: string | undefined;
+  try {
+    const finalParent = observeSingleCommitParent(root, input.newHeadSha);
+    artifactPath = terminalArtifactPath(
+      observeReviewDiff(root, finalParent, input.newHeadSha).changedPaths,
+    );
+    artifact =
+      artifactPath === undefined
+        ? undefined
+        : readBlobAtCommit(root, input.newHeadSha, artifactPath);
+  } catch {
+    artifact = undefined;
+  }
+  const parsed =
+    artifact === undefined ? undefined : tryParseReviewEvidence(artifact);
+  const evidence = parsed && "evidence" in parsed ? parsed.evidence : undefined;
+  if (evidence === undefined)
+    failures.push("新headの末尾commitからreview証跡を1件に同定できません");
+  if (evidence?.observed.implementationHeadSha !== implementation)
+    failures.push(
+      `R1: 新証跡のH_implが最新置換記録のH_impl ${implementation} と一致しません`,
+    );
+  const session = readStoredReviewSession(staging);
+  if (session === null || session.anchor.initialHeadSha !== implementation)
+    failures.push(
+      "R2: current review sessionの初回H_implが最新置換記録のH_implと一致しません（置換後のround 1で収束したsessionがありません）",
+    );
+  if (
+    evidence === undefined ||
+    !acceptedSessionEvidence(staging, evidence, { postPrIntake: true })
+  )
+    failures.push(
+      "R3: 新証跡が置換後sessionとpost-PR intakeのStep 10 bindingに一致しません",
+    );
+  if (
+    artifactPath === undefined ||
+    evidenceOnlySuffix(root, implementation, input.newHeadSha) !== artifactPath
+  )
+    failures.push(
+      "R4: 新headが置換記録のH_implへ証跡pathだけを足したevidence-only suffixではありません",
+    );
+  if (
+    input.oldHeadSha !== implementation &&
+    (artifactPath === undefined ||
+      evidenceOnlySuffix(root, implementation, input.oldHeadSha) !==
+        artifactPath)
+  )
+    failures.push(
+      "R5: 旧PR headが置換記録のH_implまたはその同じ証跡pathだけのsuffixではありません",
+    );
+  /**
+   * 置換後sessionのround 1は旧chainの実効baseと同じ既定branch地点を比較基点にする
+   * （base追随は置換前のpost-PR intakeとreviewed-forwardが行う）。baseを動かす前進は受理しない。
+   */
+  if (
+    input.oldBaseSha !== input.newBaseSha ||
+    evidence?.observed.baseSha !== input.newBaseSha
+  )
+    failures.push(
+      "R6: 新baseが旧baseと同一でないか、新証跡の比較基点が新baseと一致しません",
+    );
+  if (failures.length > 0 || !evidence || !artifactPath || !artifact)
+    return { failures };
+  return {
+    failures,
+    evidence: {
+      replacementSequence: replacement.sequence,
+      sessionId: evidence.observed.session.sessionId,
+      roundDigest: evidence.observed.session.latestRoundDigest,
+      implementationSha: implementation,
+      artifactPath,
+      artifactDigest: digestOf(artifact),
+    },
+  };
+}
+
 function resolveAnchor(
   staging: string,
   layer: EvidenceReanchorLayer,
@@ -796,10 +900,12 @@ export interface EvidenceReanchorEvaluation extends EvidenceReanchorResult {
     | "artifact-replacement"
     | "artifact-supersession"
     | "reviewed-forward"
+    | "session-replacement"
     | undefined;
   artifactReplacement: ArtifactReplacementEvidence | undefined;
   artifactSupersession: ArtifactSupersessionEvidence | undefined;
   reviewedForward: ReviewedForwardEvidence | undefined;
+  sessionReplacement: SessionReplacementEvidence | undefined;
 }
 
 function validateEvidenceReanchorInput(input: {
@@ -856,6 +962,7 @@ export function evaluateEvidenceReanchor(input: {
       artifactReplacement: undefined,
       artifactSupersession: undefined,
       reviewedForward: undefined,
+      sessionReplacement: undefined,
     };
   if (oldHeadSha === input.newHeadSha)
     throw new Error("再固定は移動していないheadに対して行えません");
@@ -883,10 +990,13 @@ export function evaluateEvidenceReanchor(input: {
     | "rebase"
     | "artifact-replacement"
     | "artifact-supersession"
-    | "reviewed-forward" = "rebase";
+    | "reviewed-forward"
+    | "session-replacement" = "rebase";
   let artifactReplacement: ArtifactReplacementEvidence | undefined;
   let artifactSupersession: ArtifactSupersessionEvidence | undefined;
   let reviewedForward: ReviewedForwardEvidence | undefined;
+  let sessionReplacement: SessionReplacementEvidence | undefined;
+  let sessionReplacementFailures: string[] = [];
   if (!isContentEquivalent(before, after)) {
     const rebase = observeRebaseEquivalence(input.root, comparison);
     /**
@@ -918,16 +1028,28 @@ export function evaluateEvidenceReanchor(input: {
             comparison,
           );
           if (reviewedForward !== undefined) method = "reviewed-forward";
+          else {
+            const observed = observeSessionReplacement(
+              staging,
+              input.root,
+              comparison,
+            );
+            sessionReplacement = observed.evidence;
+            sessionReplacementFailures = observed.failures;
+            if (sessionReplacement !== undefined)
+              method = "session-replacement";
+          }
         }
       }
       if (
         rebase.reason !== "ok" &&
         artifactReplacement === undefined &&
         artifactSupersession === undefined &&
-        reviewedForward === undefined
+        reviewedForward === undefined &&
+        sessionReplacement === undefined
       )
         throw new Error(
-          `再固定前後の内容が等価ではありません（${rebase.reason}）: before=${before.digest} after=${after.digest}${rebase.gitFailure === undefined ? "" : `; ${rebase.gitFailure}`}`,
+          `再固定前後の内容が等価ではありません（${rebase.reason}）: before=${before.digest} after=${after.digest}${rebase.gitFailure === undefined ? "" : `; ${rebase.gitFailure}`}${sessionReplacementDiagnostic(sessionReplacementFailures)}`,
         );
     }
   }
@@ -935,10 +1057,11 @@ export function evaluateEvidenceReanchor(input: {
     anchor.prBound &&
     method !== "artifact-replacement" &&
     method !== "artifact-supersession" &&
-    method !== "reviewed-forward"
+    method !== "reviewed-forward" &&
+    method !== "session-replacement"
   )
     throw new Error(
-      "pr reanchorのpr-bound再固定は監査合格済みartifact改名、または明示したpost-PR intakeとexact review bindingを持つ前進commitだけを受理します",
+      `pr reanchorのpr-bound再固定は監査合格済みartifact改名、または明示したpost-PR intakeとexact review bindingを持つ前進commitだけを受理します${sessionReplacementDiagnostic(sessionReplacementFailures)}`,
     );
   return {
     chain: existing,
@@ -951,7 +1074,14 @@ export function evaluateEvidenceReanchor(input: {
     artifactReplacement,
     artifactSupersession,
     reviewedForward,
+    sessionReplacement,
   };
+}
+
+function sessionReplacementDiagnostic(failures: readonly string[]): string {
+  return failures.length === 0
+    ? ""
+    : `。session-replacementの条件が不成立です: ${failures.join("; ")}`;
 }
 
 /**
@@ -994,7 +1124,8 @@ export function appendEvidenceReanchor(input: {
         | "rebase"
         | "artifact-replacement"
         | "artifact-supersession"
-        | "reviewed-forward",
+        | "reviewed-forward"
+        | "session-replacement",
       reason: input.reason,
       recordedAt: input.recordedAt,
       ...(evaluation.artifactReplacement === undefined
@@ -1006,6 +1137,9 @@ export function appendEvidenceReanchor(input: {
       ...(evaluation.reviewedForward === undefined
         ? {}
         : { reviewedForward: evaluation.reviewedForward }),
+      ...(evaluation.sessionReplacement === undefined
+        ? {}
+        : { sessionReplacement: evaluation.sessionReplacement }),
     };
     const file = path.join(staging, EVIDENCE_REANCHOR_FILE);
     const next = [...evaluation.chain, record];

@@ -14,6 +14,7 @@ const METHODS = [
     "artifact-replacement",
     "artifact-supersession",
     "reviewed-forward",
+    "session-replacement",
 ];
 export function isEvidenceReanchorRecord(value) {
     const replacement = isRecord(value) ? value.artifactReplacement : undefined;
@@ -48,6 +49,22 @@ export function isEvidenceReanchorRecord(value) {
         reviewedForward.artifactPath.length > 0 &&
         typeof reviewedForward.artifactDigest === "string" &&
         SHA256.test(reviewedForward.artifactDigest);
+    const sessionReplacement = isRecord(value)
+        ? value.sessionReplacement
+        : undefined;
+    const validSessionReplacement = isRecord(sessionReplacement) &&
+        Number.isSafeInteger(sessionReplacement.replacementSequence) &&
+        sessionReplacement.replacementSequence >= 1 &&
+        typeof sessionReplacement.sessionId === "string" &&
+        SHA256.test(sessionReplacement.sessionId) &&
+        typeof sessionReplacement.roundDigest === "string" &&
+        SHA256.test(sessionReplacement.roundDigest) &&
+        typeof sessionReplacement.implementationSha === "string" &&
+        OID.test(sessionReplacement.implementationSha) &&
+        typeof sessionReplacement.artifactPath === "string" &&
+        sessionReplacement.artifactPath.length > 0 &&
+        typeof sessionReplacement.artifactDigest === "string" &&
+        SHA256.test(sessionReplacement.artifactDigest);
     return (isRecord(value) &&
         typeof value.oldHeadSha === "string" &&
         OID.test(value.oldHeadSha) &&
@@ -73,7 +90,10 @@ export function isEvidenceReanchorRecord(value) {
         (value.method !== "artifact-supersession" || supersession !== undefined) &&
         (reviewedForward === undefined ||
             (value.method === "reviewed-forward" && validReviewedForward)) &&
-        (value.method !== "reviewed-forward" || reviewedForward !== undefined));
+        (value.method !== "reviewed-forward" || reviewedForward !== undefined) &&
+        (sessionReplacement === undefined ||
+            (value.method === "session-replacement" && validSessionReplacement)) &&
+        (value.method !== "session-replacement" || sessionReplacement !== undefined));
 }
 /**
  * 2つの差分観測が内容として等価かを決める。

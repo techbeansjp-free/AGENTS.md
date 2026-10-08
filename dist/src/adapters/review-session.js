@@ -20,6 +20,7 @@ import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { recordLayerSuffix } from "./review-record-layer.js";
+import { readReviewSessionReplacements } from "./review-session-replacement-store.js";
 const GIT_ENV = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     LANG: "C",
@@ -69,6 +70,27 @@ function latestImplementationEntry(staging) {
         .reverse()
         .find((entry) => entry.step === 9 && !entry.postTerminalIntake);
 }
+/**
+ * round 1が照合するimplementation HEADの出所（FR-02、REQ-WF-052）。
+ *
+ * **review session置換の後は最新置換記録のH_implを使い、無ければ最新Step 9を使う。**
+ * `pr-bound`中はStep 10記録済みjournalへStep 9を追記できないため、置換後のround 1は
+ * 置換記録（Step 9 entryと同じstaging digestで保護される）へ束縛する。candidate＝
+ * current HEAD、`--base`の厳密一致、initial diff digestの規則は変えない。
+ * 置換記録の連番・hash chain・保存fileが崩れていればreaderが拒否する。
+ */
+function roundOneImplementationBinding(staging) {
+    const replacement = readReviewSessionReplacements(staging).at(-1);
+    if (replacement)
+        return {
+            headSha: replacement.implementationHeadSha,
+            source: `review session置換記録${replacement.sequence}件目のimplementation HEAD`,
+        };
+    return {
+        headSha: latestImplementationEntry(staging)?.implementationHeadSha,
+        source: "Step 9 implementation HEAD",
+    };
+}
 function resolveCommit(root, label, sha) {
     const observed = git(["rev-parse", "--verify", `${sha}^{commit}`], root, {
         env: GIT_ENV,
@@ -116,11 +138,11 @@ export function buildReviewRoundDraft(input) {
         throw new Error(`review round --initの--head ${headSha.slice(0, 8)} はrepositoryのcurrent HEAD ${currentHeadSha.slice(0, 8)} と一致しません。review roundはcurrent HEADだけを受理します`);
     let round;
     if (previous === null) {
-        const implementation = latestImplementationEntry(staging);
-        if (!implementation?.implementationHeadSha)
+        const implementation = roundOneImplementationBinding(staging);
+        if (!implementation.headSha)
             throw new Error("初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください");
-        if (implementation.implementationHeadSha !== headSha)
-            throw new Error(`review round --initの--headはStep 9 implementation HEAD ${implementation.implementationHeadSha} と一致する必要があります`);
+        if (implementation.headSha !== headSha)
+            throw new Error(`review round --initの--headは${implementation.source} ${implementation.headSha} と一致する必要があります`);
         if (typeof input.baseSha !== "string")
             throw new Error("review round --initはsessionが無いとき--base=<sha>が必要です");
         if (!input.scopeIds?.length || !input.acceptanceCriteriaIds?.length)
@@ -485,11 +507,11 @@ export function previewReviewRound(input) {
         throw new Error("review round candidate HEADがrepositoryのcurrent HEADと一致しません");
     verifyReviewRoundDecisionRefs(root, staging, input.round.candidateHeadSha, input.round.findings);
     if (previous === null) {
-        const implementation = latestImplementationEntry(staging);
-        if (!implementation?.implementationHeadSha)
+        const implementation = roundOneImplementationBinding(staging);
+        if (!implementation.headSha)
             throw new Error("初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください");
-        if (implementation.implementationHeadSha !== input.round.candidateHeadSha)
-            throw new Error("review round candidate HEADがStep 9 implementation HEADと一致しません");
+        if (implementation.headSha !== input.round.candidateHeadSha)
+            throw new Error(`review round candidate HEADが${implementation.source}と一致しません`);
         const observed = observeReviewDiff(root, input.round.anchor.diffBaseSha, input.round.anchor.initialHeadSha);
         if (observed.digest !== input.round.anchor.initialDiffDigest)
             throw new Error("review roundのinitial diff digestがGit観測値と一致しません");
