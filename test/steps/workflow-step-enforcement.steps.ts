@@ -6306,7 +6306,7 @@ interface InterruptedProgressExample {
 }
 
 const EXTRA_ORIGINAL_PROGRESS =
-  /元名`journal\/review-progress\.jsonl`は置換の中断中に作られた旧sessionの進捗です（`review progress append`等）。内容を確認してstaging外へ退避してから再applyしてください/u;
+  /元名のreview progress journalは置換の中断中に作られた旧sessionの進捗です（`review progress append`等）。内容を確認してstaging外へ退避してから再applyしてください/u;
 const MISSING_PROGRESS =
   /置換記録が宣言するreview progress journalが失われています。退避元があれば元名へ戻してから再applyしてください。復元できない場合は置換記録を書き換えず人手で調査してください/u;
 const SAVED_PROGRESS_BEFORE_RENAME =

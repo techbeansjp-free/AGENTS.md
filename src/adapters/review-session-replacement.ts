@@ -321,7 +321,7 @@ function interruptedProgressErrors(
     declared && !original && !saved
       ? "置換記録が宣言するreview progress journalが失われています。退避元があれば元名へ戻してから再applyしてください。復元できない場合は置換記録を書き換えず人手で調査してください"
       : original && (!declared || renamed)
-        ? "元名`journal/review-progress.jsonl`は置換の中断中に作られた旧sessionの進捗です（`review progress append`等）。内容を確認してstaging外へ退避してから再applyしてください"
+        ? "元名のreview progress journalは置換の中断中に作られた旧sessionの進捗です（`review progress append`等）。内容を確認してstaging外へ退避してから再applyしてください"
         : declared
           ? "sessionのrenameより前にprogress journalが保存名へ移っています。保存名のfileを元名へ戻してから再applyしてください"
           : "置換記録はprogress journalを宣言していません。保存名のfileを確認してstaging外へ退避してから再applyしてください";
