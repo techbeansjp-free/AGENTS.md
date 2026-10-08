@@ -9,10 +9,19 @@ import ts from "typescript";
  * 参照位置と構文種別で判定する。**許可list方式である。** 列挙したもの以外は違反とし、
  * 新しいAPIを使うには本fileの許可listを根拠付きで広げる変更が要る。
  *
+ * 禁止事項を1件ずつ列挙して塞ぐ方式は、列挙外の迂回（`this`経由の受信者、連結keyの
+ * 要素参照、JSON escape等）を残し続ける。そのため構文の形も許可list方式に縮める。
+ * `this`は書けない。関数はarrow関数と`function`宣言だけであり、`function`式・method・
+ * accessor・classは書けない。要素参照（`a[b]`）はobserverが実際に使う2形（`<`で
+ * `.length`を上限とするfor文のcounter、`Object.keys(R)`のfor-of変数で`R`自身を引く形）
+ * だけを書ける。importも宣言もされない識別子はglobal許可list（`ALLOWED_GLOBALS`）の
+ * ものだけを参照できる。文字列は`\u`・`\x`・八進のescapeを書けず、backslashを含む
+ * 文字列は`=== "\\"`・`!== "\\"`の比較の右辺の1文字だけを書ける。
+ *
  * 違反は`観点: 詳細`の文字列で返す。観点は`syntax`・`import`・`module-member`・
  * `forbidden-global`・`output-key`・`dynamic-key`・`control-key`・`state-symbol`・
- * `hook-event`・`foreign-reference`・`open-flag`・`exit-code`・`reflective-member`の
- * 13種である。
+ * `hook-event`・`foreign-reference`・`open-flag`・`exit-code`・`reflective-member`・
+ * `this`・`function-form`・`element-access`・`escape`の17種である。
  */
 
 /**
@@ -52,6 +61,20 @@ const GLOBAL_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   Object: ["freeze", "keys"],
   process: MODULE_MEMBERS["node:process"]!,
 };
+
+/**
+ * importも宣言もされずに参照してよい識別子（observerの実使用）。これ以外のglobal
+ * （`String`・`Symbol`・`Proxy`・`RegExp`・`arguments`等）は`forbidden-global`である。
+ * member参照の制約は`GLOBAL_MEMBERS`が別に課す。
+ */
+const ALLOWED_GLOBALS = new Set([
+  "Array",
+  "Buffer",
+  "JSON",
+  "Object",
+  "process",
+  "undefined",
+]);
 
 /** 参照そのものを禁じる識別子（module loader・動的評価・timer・待機・時計・global object）。 */
 const FORBIDDEN_GLOBALS = new Set([
@@ -352,6 +375,179 @@ function isNonblockFlag(
   return false;
 }
 
+/** `node`の部分木に、`name`を宣言する識別子（変数・引数・分割代入・関数）があるか。 */
+function declaresWithin(node: ts.Node, name: string): boolean {
+  let found = false;
+  const walk = (child: ts.Node): void => {
+    if (found) return;
+    if (
+      (ts.isVariableDeclaration(child) ||
+        ts.isBindingElement(child) ||
+        ts.isParameter(child) ||
+        ts.isFunctionDeclaration(child)) &&
+      child.name !== undefined &&
+      ts.isIdentifier(child.name) &&
+      child.name.text === name
+    )
+      found = true;
+    else ts.forEachChild(child, walk);
+  };
+  ts.forEachChild(node, walk);
+  return found;
+}
+
+/** `node`の部分木で、`name`という識別子が代入・増減の対象になる位置を返す。 */
+function assignmentsWithin(node: ts.Node, name: string): ts.Identifier[] {
+  const found: ts.Identifier[] = [];
+  const walk = (child: ts.Node): void => {
+    if (
+      ts.isIdentifier(child) &&
+      child.text === name &&
+      isAssignmentTarget(child)
+    )
+      found.push(child);
+    ts.forEachChild(child, walk);
+  };
+  walk(node);
+  return found;
+}
+
+/** `node`がfor文・for-of文の本体の内側にあるか。 */
+function isInside(node: ts.Node, ancestor: ts.Node): boolean {
+  for (
+    let current = node.parent;
+    current !== undefined;
+    current = current.parent
+  )
+    if (current === ancestor) return true;
+  return false;
+}
+
+/**
+ * 要素参照`R[I]`がobserverの実使用の2形のどちらかであるか。
+ *
+ * 1. `for (let I = …; I < X.length; I += 1)`（増分は`I += 1`・`I++`・`++I`）の本体での
+ *    参照。`<`は数値と数値文字列でしか真にならないため、本体の`I`は配列添字にしかならない。
+ *    loopの内側で`I`を再宣言・代入していないことを要る。
+ * 2. `for (const I of Object.keys(R))`の本体での`R[I]`。`R`自身のown keyで`R`自身を引くため、
+ *    `constructor`等のkeyでも返るのはdataである。loopの内側で`I`・`R`を再宣言しておらず、
+ *    file内のどこでも`R`へ代入していないことを要る。
+ *
+ * 文字列literal・template・連結・その他の式のkeyは`constructor`・`call`等へ届くため不可。
+ */
+function isAllowedElementAccess(
+  access: ts.ElementAccessExpression,
+  file: ts.SourceFile,
+): boolean {
+  const key = access.argumentExpression;
+  if (!ts.isIdentifier(key)) return false;
+  const name = key.text;
+  for (
+    let current: ts.Node | undefined = access.parent;
+    current !== undefined;
+    current = current.parent
+  ) {
+    if (
+      ts.isForStatement(current) &&
+      current.initializer !== undefined &&
+      ts.isVariableDeclarationList(current.initializer) &&
+      current.initializer.declarations.some(
+        (declaration) =>
+          ts.isIdentifier(declaration.name) && declaration.name.text === name,
+      )
+    ) {
+      const loop = current;
+      if (!isInside(access, loop.statement)) return false;
+      const condition = loop.condition;
+      const guarded =
+        condition !== undefined &&
+        ts.isBinaryExpression(condition) &&
+        condition.operatorToken.kind === ts.SyntaxKind.LessThanToken &&
+        ts.isIdentifier(condition.left) &&
+        condition.left.text === name &&
+        ts.isPropertyAccessExpression(condition.right) &&
+        condition.right.name.text === "length";
+      const step = loop.incrementor;
+      const stepped =
+        step !== undefined &&
+        ((ts.isBinaryExpression(step) &&
+          step.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken &&
+          ts.isIdentifier(step.left) &&
+          step.left.text === name &&
+          ts.isNumericLiteral(step.right) &&
+          step.right.text === "1") ||
+          ((ts.isPrefixUnaryExpression(step) ||
+            ts.isPostfixUnaryExpression(step)) &&
+            step.operator === ts.SyntaxKind.PlusPlusToken &&
+            ts.isIdentifier(step.operand) &&
+            step.operand.text === name));
+      const assigned = assignmentsWithin(loop.statement, name);
+      if (condition !== undefined)
+        assigned.push(...assignmentsWithin(condition, name));
+      return (
+        guarded &&
+        stepped &&
+        assigned.length === 0 &&
+        !declaresWithin(loop.statement, name)
+      );
+    }
+    if (
+      ts.isForOfStatement(current) &&
+      ts.isVariableDeclarationList(current.initializer) &&
+      current.initializer.declarations.length === 1 &&
+      ts.isIdentifier(current.initializer.declarations[0]!.name) &&
+      current.initializer.declarations[0]!.name.text === name
+    ) {
+      const loop = current;
+      const keys = loop.expression;
+      if (
+        !isInside(access, loop.statement) ||
+        !ts.isCallExpression(keys) ||
+        keys.arguments.length !== 1 ||
+        !ts.isPropertyAccessExpression(keys.expression) ||
+        !ts.isIdentifier(keys.expression.expression) ||
+        keys.expression.expression.text !== "Object" ||
+        keys.expression.name.text !== "keys"
+      )
+        return false;
+      const receiver = keys.arguments[0]!;
+      return (
+        ts.isIdentifier(receiver) &&
+        ts.isIdentifier(access.expression) &&
+        access.expression.text === receiver.text &&
+        !declaresWithin(loop.statement, name) &&
+        !declaresWithin(loop.statement, receiver.text) &&
+        assignmentsWithin(file, receiver.text).length === 0
+      );
+    }
+  }
+  return false;
+}
+
+/**
+ * 文字列literal・template片の書き方が許されないなら理由を返す。
+ *
+ * `\u`・`\x`・八進のescapeは制御keyの字面を隠す（`\u0064ecision`）。backslashを値に含む
+ * 文字列は、JSONとして解釈されると`\u`escapeで制御keyを作れるため、observerの実使用である
+ * `=== "\\"`・`!== "\\"`の比較の右辺の1文字だけを許す。
+ */
+function escapeFinding(node: ts.Node, text: string): string | undefined {
+  const raw = node.getText();
+  if (/\\(?:u|x|[1-9]|0[0-9])/u.test(raw)) return `escape: ${raw}`;
+  if (!text.includes("\\")) return undefined;
+  const parent = node.parent;
+  if (
+    text === "\\" &&
+    ts.isStringLiteral(node) &&
+    ts.isBinaryExpression(parent) &&
+    parent.right === node &&
+    (parent.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+      parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken)
+  )
+    return undefined;
+  return `escape: ${raw}`;
+}
+
 /**
  * `fs.openSync`の呼出しを検査する。flag（第2引数）は`fs.constants.O_RDONLY`単独か
  * `fs.constants.O_RDONLY | <isNonblockFlag>`だけを許す。文字列flagは書込・作成・追記の
@@ -399,8 +595,6 @@ export function inspectHostObserverSource(source: string): string[] {
   );
   /** node:fsのdefault・namespace binding名。 */
   const fsNames = new Set<string>();
-  /** `process`（globalとnode:processのbinding）の名前。 */
-  const processNames = new Set<string>(["process"]);
 
   for (const statement of file.statements) {
     if (ts.isImportEqualsDeclaration(statement))
@@ -432,7 +626,6 @@ export function inspectHostObserverSource(source: string): string[] {
       if (local === undefined) continue;
       bindings.set(local.text, members);
       if (specifier === "node:fs") fsNames.add(local.text);
-      if (specifier === "node:process") processNames.add(local.text);
     }
     if (named && ts.isNamedImports(named))
       for (const element of named.elements) {
@@ -468,6 +661,8 @@ export function inspectHostObserverSource(source: string): string[] {
     ts.forEachChild(node, collect);
   };
   collect(file);
+  /** file内で宣言された名前（import binding・変数・引数・関数）。globalの参照判定に使う。 */
+  const declared = new Set<string>([...constants.keys(), ...bindings.keys()]);
 
   const visit = (node: ts.Node): void => {
     if (
@@ -481,7 +676,11 @@ export function inspectHostObserverSource(source: string): string[] {
     if (ts.isIdentifier(node)) {
       const name = node.text;
       const lower = normalized(name);
-      if (isReference(node) && FORBIDDEN_GLOBALS.has(name))
+      if (
+        isReference(node) &&
+        (FORBIDDEN_GLOBALS.has(name) ||
+          (!declared.has(name) && !ALLOWED_GLOBALS.has(name)))
+      )
         violations.push(`forbidden-global: ${name}`);
       const members = bindings.get(name);
       if (isReference(node) && members !== undefined) {
@@ -508,8 +707,40 @@ export function inspectHostObserverSource(source: string): string[] {
         violations.push(`foreign-reference: ${name}`);
     }
 
+    // `this`は書けない。非arrow関数の`this`は呼出し側が決め、`process.on`のlistenerでは`process`になる。
+    if (node.kind === ts.SyntaxKind.ThisKeyword) {
+      const parent = node.parent;
+      violations.push(
+        `this: ${ts.isPropertyAccessExpression(parent) && parent.expression === node ? parent.getText() : "this"}`,
+      );
+    }
+    // 関数はarrow関数と`function`宣言だけを書ける（`this`を束縛する形を持たない）。
+    if (ts.isFunctionExpression(node))
+      violations.push("function-form: function式");
+    if (
+      ts.isMethodDeclaration(node) ||
+      ts.isGetAccessorDeclaration(node) ||
+      ts.isSetAccessorDeclaration(node) ||
+      ts.isClassDeclaration(node) ||
+      ts.isClassExpression(node)
+    )
+      violations.push(
+        `function-form: ${ts.isClassLike(node) ? "class" : "method・accessor"}`,
+      );
+    // 要素参照はobserverの実使用の2形だけを書ける。
+    if (
+      ts.isElementAccessExpression(node) &&
+      !isAllowedElementAccess(node, file)
+    )
+      violations.push(`element-access: ${node.getText()}`);
+    // computed keyはobject literalにも分割代入にも書けない。
+    if (ts.isComputedPropertyName(node))
+      violations.push(`dynamic-key: [${node.expression.getText()}]`);
+
     const text = literalText(node);
     if (text !== undefined) {
+      const escape = escapeFinding(node, text);
+      if (escape !== undefined) violations.push(escape);
       if (CONTROL_KEYS.has(text.toLowerCase()))
         violations.push(`control-key: "${text}"`);
       for (const key of controlKeysInText(text))
@@ -578,13 +809,8 @@ export function inspectHostObserverSource(source: string): string[] {
           : `open-flag: ${node.getText()}を値として参照`;
       if (finding !== undefined) violations.push(finding);
     }
-    // `process.exitCode`は`= 0`の代入の左辺としてだけ現れてよい。
-    if (
-      ts.isPropertyAccessExpression(node) &&
-      node.name.text === "exitCode" &&
-      ts.isIdentifier(node.expression) &&
-      processNames.has(node.expression.text)
-    ) {
+    // `.exitCode`は受信者を問わず（`process`・別名・`this`・任意の式）`= 0`の代入の左辺としてだけ現れてよい。
+    if (ts.isPropertyAccessExpression(node) && node.name.text === "exitCode") {
       const parent = node.parent;
       if (
         !ts.isBinaryExpression(parent) ||

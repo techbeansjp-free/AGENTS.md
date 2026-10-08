@@ -2288,6 +2288,7 @@ Then(
  */
 const EXIT_ANCHOR = "process.exitCode = 0;\n";
 const FS_IMPORT = 'import fs from "node:fs";\n';
+const PROCESS_IMPORT = 'import process from "node:process";\n';
 const WARNING_ANCHOR = "    systemMessage: text,\n";
 const EVENT_ANCHOR =
   '  if (input.hook_event_name !== "PreToolUse") return NONE;\n';
@@ -2624,6 +2625,226 @@ const FORBIDDEN_SYNTAX: ReadonlyArray<{
       [EXIT_ANCHOR, `${EXIT_ANCHOR}process.on.call(null, "exit", () => 0);\n`],
     ],
     expected: "reflective-member: call",
+  },
+  // 以下はPR #1568 round 9（R9-01〜R9-04）の迂回形と、許可list方式へ縮めた構文形である。
+  {
+    label: "listenerのthis.exitCode",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}process.on("exit", function () { this.exitCode = 2; });\n`,
+      ],
+    ],
+    expected: "exit-code: this.exitCode = 2",
+  },
+  {
+    label: "listenerのthis.exit",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}process.on("exit", function () { this.exit(2); });\n`,
+      ],
+    ],
+    expected: "this: this.exit",
+  },
+  {
+    label: "listenerのthis.env",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}process.on("exit", function () { this.env; });\n`,
+      ],
+    ],
+    expected: "this: this.env",
+  },
+  {
+    label: "任意受信者のexitCode",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}const foo = {};\nfoo.exitCode = 2;\n`],
+    ],
+    expected: "exit-code: foo.exitCode = 2",
+  },
+  {
+    label: "function式",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}process.on("exit", function () { return 0; });\n`,
+      ],
+    ],
+    expected: "function-form: function式",
+  },
+  {
+    label: "method",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}const holder = { kind() { return 0; } };\n`],
+    ],
+    expected: "function-form: method・accessor",
+  },
+  {
+    label: "連結keyのconstructor",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}Array.isArray["constr" + "uctor"]("process.exitCode = 2")();\n`,
+      ],
+    ],
+    expected: 'element-access: Array.isArray["constr" + "uctor"]',
+  },
+  {
+    label: "template keyのconstructor",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        EXIT_ANCHOR + 'Array.isArray[`constr${"uctor"}`]("return 1")();\n',
+      ],
+    ],
+    expected: 'element-access: Array.isArray[`constr${"uctor"}`]',
+  },
+  {
+    label: "連結keyのcall",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}process.on["ca" + "ll"](null, "exit", () => 0);\n`,
+      ],
+    ],
+    expected: 'element-access: process.on["ca" + "ll"]',
+  },
+  {
+    label: "文字列literal key",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}Array.isArray["constructor"]("return 1")();\n`,
+      ],
+    ],
+    expected: 'element-access: Array.isArray["constructor"]',
+  },
+  {
+    label: "識別子key",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}const k = "constr" + "uctor";\nArray.isArray[k]("return 1")();\n`,
+      ],
+    ],
+    expected: "element-access: Array.isArray[k]",
+  },
+  {
+    label: "lengthで上限を置かないcounter",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}for (let k = "constructor"; k < "z"; k += 1) Array.isArray[k]("return 1")();\n`,
+      ],
+    ],
+    expected: "element-access: Array.isArray[k]",
+  },
+  {
+    label: "Object.keysと別の受信者",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}const o = JSON.parse('{"constructor":1}');\nconst f = Array.isArray;\nfor (const k of Object.keys(o)) f[k]("return 1")();\n`,
+      ],
+    ],
+    expected: "element-access: f[k]",
+  },
+  {
+    label: "分割代入のcomputed key",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}const { ["constr" + "uctor"]: C } = Array.isArray;\n`,
+      ],
+    ],
+    expected: 'dynamic-key: ["constr" + "uctor"]',
+  },
+  {
+    label: "JSONの\\u escape",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}process.stdout.write('{"\\\\u0064ecision":"block"}');\n`,
+      ],
+    ],
+    expected: `escape: '{"\\\\u0064ecision":"block"}'`,
+  },
+  {
+    label: "\\x escape",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}process.stdout.write('{"\\x64ecision":"block"}');\n`,
+      ],
+    ],
+    expected: `escape: '{"\\x64ecision":"block"}'`,
+  },
+  {
+    label: "backslashの別変数束縛",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}const slash = "\\\\";\nprocess.stdout.write('{"' + slash + 'u0064ecision":"block"}');\n`,
+      ],
+    ],
+    expected: 'escape: "\\\\"',
+  },
+  {
+    label: "許可list外のglobal",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}process.stdout.write(String.fromCharCode(100));\n`,
+      ],
+    ],
+    expected: "forbidden-global: String",
+  },
+  {
+    label: "片側だけ書込flagの三項",
+    edits: [
+      [
+        OPEN_CALL,
+        "fs.openSync(file, fs.constants.O_RDONLY | (nonblocking ? 0 : 1))",
+      ],
+    ],
+    expected: "open-flag: fs.constants.O_RDONLY | (nonblocking ? 0 : 1)",
+  },
+  {
+    label: "内側のshadowing const",
+    edits: [
+      [
+        `descriptor = ${OPEN_CALL}`,
+        `const nonblocking = 1;\n    descriptor = ${OPEN_CALL}`,
+      ],
+    ],
+    expected: "open-flag: fs.constants.O_RDONLY | nonblocking",
+  },
+  {
+    label: "先行するshadowing const",
+    edits: [
+      [
+        PROCESS_IMPORT,
+        `${PROCESS_IMPORT}const nonblocking = 1;\nfs.openSync("x", fs.constants.O_RDONLY | nonblocking);\n`,
+      ],
+    ],
+    expected: "open-flag: fs.constants.O_RDONLY | nonblocking",
+  },
+  {
+    label: "openSyncの値参照",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}const o = fs.openSync;\n`]],
+    expected: "open-flag: fs.openSyncを値として参照",
+  },
+  {
+    label: "分割代入の文字列key constructor",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}const { "constructor": C } = Array.isArray;\n`,
+      ],
+    ],
+    expected: "reflective-member: constructor",
   },
 ];
 
