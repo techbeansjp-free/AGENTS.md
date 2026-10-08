@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   countedRounds,
+  parseReviewSessionState,
   type ReviewSessionState,
 } from "../domain/review-convergence.js";
 import type { DeliveryState } from "../domain/delivery-state.js";
@@ -15,7 +16,7 @@ import {
 } from "../domain/staging.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { writeFileAtomic } from "../lib/atomic.js";
-import { stableJson } from "../lib/security.js";
+import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { observeStoredDeliveryState } from "./delivery-state.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
 import {
@@ -84,6 +85,40 @@ function stagingDigestMatches(staging: string): boolean {
   );
 }
 
+/** 置換前提（BR-01）を現在のdelivery stateと固定済みPRの実効headに対して判定する。 */
+function observedPreconditions(
+  staging: string,
+  session: ReviewSessionState | null,
+  journalHasStep11: boolean,
+): { errors: string[]; pullRequestHeadSha?: string } {
+  const delivery = observeStoredDeliveryState(staging);
+  const pullRequestHeadSha = delivery
+    ? deriveEffectiveHead({
+        records: readEvidenceReanchorChain(staging),
+        anchoredHeadSha: delivery.create.headSha,
+      }).effectiveHeadSha
+    : undefined;
+  const candidate = session?.latestCandidateHeadSha;
+  const candidateIsCurrentImplementation =
+    candidate !== undefined &&
+    pullRequestHeadSha !== undefined &&
+    (candidate === pullRequestHeadSha ||
+      evidenceOnlySuffix(
+        stagingRepositoryRoot(staging),
+        candidate,
+        pullRequestHeadSha,
+      ) !== undefined);
+  return {
+    errors: replacementPreconditionErrors({
+      session,
+      delivery,
+      journalHasStep11,
+      candidateIsCurrentImplementation,
+    }),
+    pullRequestHeadSha,
+  };
+}
+
 function plan(
   staging: string,
   replacedAt: string,
@@ -104,31 +139,13 @@ function plan(
     errors.push(error instanceof Error ? error.message : String(error));
   }
   const session = readStoredReviewSession(staging);
-  const delivery = observeStoredDeliveryState(staging);
-  const pullRequestHeadSha = delivery
-    ? deriveEffectiveHead({
-        records: readEvidenceReanchorChain(staging),
-        anchoredHeadSha: delivery.create.headSha,
-      }).effectiveHeadSha
-    : undefined;
-  const candidate = session?.latestCandidateHeadSha;
-  const candidateIsCurrentImplementation =
-    candidate !== undefined &&
-    pullRequestHeadSha !== undefined &&
-    (candidate === pullRequestHeadSha ||
-      evidenceOnlySuffix(
-        stagingRepositoryRoot(staging),
-        candidate,
-        pullRequestHeadSha,
-      ) !== undefined);
-  errors.push(
-    ...replacementPreconditionErrors({
-      session,
-      delivery,
-      journalHasStep11: journal.entries.some((entry) => entry.step === 11),
-      candidateIsCurrentImplementation,
-    }),
+  const observed = observedPreconditions(
+    staging,
+    session,
+    journal.entries.some((entry) => entry.step === 11),
   );
+  errors.push(...observed.errors);
+  const { pullRequestHeadSha } = observed;
   if (errors.length > 0 || !session || !pullRequestHeadSha) return { errors };
   const sequence = records.length + 1;
   const file = path.join(staging, REVIEW_SESSION_FILE);
@@ -172,7 +189,9 @@ function plan(
  */
 function interruptedReplacement(
   staging: string,
-): ReviewSessionReplacementRecord | undefined {
+):
+  | { record: ReviewSessionReplacementRecord; sessionSource: Buffer }
+  | undefined {
   const records = readReviewSessionReplacements(staging, { pendingLast: true });
   const last = records.at(-1);
   if (!last) return undefined;
@@ -224,8 +243,55 @@ function interruptedReplacement(
   );
   return stableJson(stored.artifacts) === stableJson(artifacts) &&
     stored.digest === digest
-    ? last
+    ? { record: last, sessionSource }
     : undefined;
+}
+
+/**
+ * 中断した置換の最終記録を、置換前のsession内容と現在のdelivery stateに対して
+ * 再検証する（BR-01）。staging digestの再構成が一致しても、記録は手で追記できるため
+ * 通常の置換と同じ前提と、記録の値が旧sessionから導出した値と一致することを求める。
+ */
+function interruptedRecordErrors(
+  staging: string,
+  record: ReviewSessionReplacementRecord,
+  sessionSource: Buffer,
+): string[] {
+  let session: ReviewSessionState;
+  try {
+    session = parseReviewSessionState(
+      parseJsonStrict(sessionSource.toString("utf8"), "review session"),
+    );
+  } catch (error) {
+    return [error instanceof Error ? error.message : String(error)];
+  }
+  const journal = readWorkflowJournal(staging);
+  const errors =
+    journal.errors.length > 0
+      ? [`workflow journalが不正です: ${journal.errors.join("; ")}`]
+      : [];
+  const observed = observedPreconditions(
+    staging,
+    session,
+    journal.entries.some((entry) => entry.step === 11),
+  );
+  errors.push(...observed.errors);
+  const expected = {
+    sessionId: session.sessionId,
+    digest: sha256(sessionSource),
+    status: "converged",
+    rounds: session.rounds.length,
+    countedRounds: countedRounds(session),
+    initialHeadSha: session.anchor.initialHeadSha,
+    latestCandidateHeadSha: session.latestCandidateHeadSha,
+  };
+  if (
+    stableJson(record.previousSession) !== stableJson(expected) ||
+    record.implementationHeadSha !== session.latestCandidateHeadSha ||
+    record.pullRequestHeadSha !== observed.pullRequestHeadSha
+  )
+    errors.push("中断した置換記録の値が置換前のreview sessionと一致しません");
+  return errors;
 }
 
 function moveReplacedFiles(
@@ -286,15 +352,21 @@ export function replaceReviewSession(input: {
     if (!stagingDigestMatches(staging)) {
       const interrupted = interruptedReplacement(staging);
       if (interrupted) {
-        moveReplacedFiles(staging, interrupted);
+        const errors = interruptedRecordErrors(
+          staging,
+          interrupted.record,
+          interrupted.sessionSource,
+        );
+        if (errors.length > 0) throw new ReviewSessionReplacementError(errors);
+        moveReplacedFiles(staging, interrupted.record);
         const stagingDigest = refreshStoredStagingDigest(staging).digest;
         readReviewSessionReplacements(staging);
         return {
           state: "replaced",
-          record: interrupted,
+          record: interrupted.record,
           recovered: true,
           stagingDigest,
-          next: nextStep(interrupted),
+          next: nextStep(interrupted.record),
         };
       }
     }

@@ -2286,6 +2286,11 @@ interface DeliveryProviderControl {
   /** 2親merge commitの親の順序を入れ替える（Issue #1569、方式判定不能の再現）。 */
   mergeParentsSwapped?: boolean;
   /**
+   * gh呼出しのたびにfileを書く（絶対path→base64）。外部merge取り込みのGitHub観測中に
+   * 並行する`pr merge`がdelivery stateを進めた状態を再現する（Issue #1569）。
+   */
+  writeFilesOnInvoke?: Record<string, string>;
+  /**
    * `pr.create`内のremote HEAD再検証を失敗させる（Issue #1157）。
    *
    * **この照会は`pr.create`の中でだけ起きる。** dispatch gateより前で落ちるため、
@@ -3490,6 +3495,8 @@ const issueBodyFile = ${JSON.stringify(issueBodyFile)};
 const issueViewCountFile = ${JSON.stringify(issueViewCountFile)};
 fs.appendFileSync(logFile, JSON.stringify(args) + "\\n");
 const control = JSON.parse(fs.readFileSync(controlFile, "utf8"));
+for (const [file, contents] of Object.entries(control.writeFilesOnInvoke ?? {}))
+  fs.writeFileSync(file, Buffer.from(contents, "base64"));
 const baseSha = control.remoteBaseSha;
 const exact = (expected) =>
   args.length === expected.length &&
@@ -4558,12 +4565,13 @@ function executeExternalMergeImport(
   prepared: PreparedDeliveryCli,
   mode: "--dry-run" | "--apply",
   pr = 1,
+  repo = "o/r",
 ) {
   return executeCli(
     [
       "pr",
       "record-external-merge",
-      "--repo=o/r",
+      `--repo=${repo}`,
       `--pr=${pr}`,
       `--root=${prepared.root}`,
       `--staging=${path.relative(prepared.root, prepared.staging)}`,
@@ -4621,9 +4629,10 @@ function assertExternalMergeRejected(
   checkId: string,
   reason: RegExp | undefined,
   pr = 1,
+  repo = "o/r",
 ): void {
   const before = stagingBytes(prepared.staging);
-  const rejected = executeExternalMergeImport(prepared, "--apply", pr);
+  const rejected = executeExternalMergeImport(prepared, "--apply", pr, repo);
   assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
   const output = JSON.parse(rejected.stdout) as ExternalMergeOutput;
   assert.equal(output.state, "rejected");
@@ -4803,6 +4812,10 @@ function runExternalMergeMismatch(
   world: WorkflowStepWorld,
   example: string,
 ): void {
+  if (example === "delivery stateがpr-boundである（観測中にmerge-prepared）") {
+    runExternalMergeConcurrentDeliveryAdvance(world);
+    return;
+  }
   if (example === "Step 11が記録されていない") {
     const terminal = prepareExternallyMergedPullRequest(world, "disabled");
     assert.equal(
@@ -4836,6 +4849,7 @@ function runExternalMergeMismatch(
       check: string;
       reason?: RegExp;
       pr?: number;
+      repo?: string;
     }
   > = {
     "PRがMERGEDである（OPEN）": { patch: { phase: "ready" }, check: "merged" },
@@ -4851,6 +4865,11 @@ function runExternalMergeMismatch(
       patch: {},
       check: "binding",
       pr: 2,
+    },
+    repositoryが固定値と一致する: {
+      patch: {},
+      check: "binding",
+      repo: "o/x",
     },
     "base refが既定branchである": {
       patch: { providerDefaultBranch: "develop" },
@@ -4906,7 +4925,86 @@ function runExternalMergeMismatch(
     selected.check,
     selected.reason,
     selected.pr,
+    selected.repo,
   );
+  if (example === "repositoryが固定値と一致する") {
+    // 取り込み済み（already-recorded）の分岐も--repo・--prを固定済みPR bindingと照合する。
+    const applied = executeExternalMergeImport(prepared, "--apply");
+    assert.equal(applied.status, 0, applied.stdout + applied.stderr);
+    const recorded = stagingBytes(prepared.staging);
+    for (const [pr, repo] of [
+      [1, "o/x"],
+      [2, "o/r"],
+    ] as const) {
+      const repeated = executeExternalMergeImport(
+        prepared,
+        "--apply",
+        pr,
+        repo,
+      );
+      assert.equal(repeated.status, 1, repeated.stdout + repeated.stderr);
+      assert.match(
+        repeated.stdout + repeated.stderr,
+        /--repo・--prが固定済みPR bindingと一致しません/u,
+      );
+      assert.equal(stagingBytes(prepared.staging), recorded);
+    }
+  }
+}
+
+/**
+ * SCN-E2E-EXTMERGE-002の1行: GitHub観測中に並行する`pr merge`がdelivery stateを
+ * merge-preparedへ進めたら、lock内の再読取りで拒否してjournalへ何も追記しない（INV-03）。
+ */
+function runExternalMergeConcurrentDeliveryAdvance(
+  world: WorkflowStepWorld,
+): void {
+  const prepared = prepareExternallyMergedPullRequest(world);
+  const listFiles = (): Map<string, string> => {
+    const files = new Map<string, string>();
+    const walk = (directory: string): void => {
+      for (const name of fs.readdirSync(directory)) {
+        const file = path.join(directory, name);
+        if (fs.lstatSync(file).isDirectory()) walk(file);
+        else files.set(file, fs.readFileSync(file).toString("base64"));
+      }
+    };
+    walk(prepared.staging);
+    return files;
+  };
+  const bound = listFiles();
+  const boundState = readFixtureDeliveryState(prepared.staging);
+  prepareStoredMergeIntent(prepared.staging, {
+    method: "merge",
+    authorizedHeadSha: prepared.headSha,
+    authorizedBaseRef: "main",
+    authorizedBaseSha: prepared.baseSha,
+    trustedPolicyCommitSha: prepared.baseSha,
+    ...preparedMergeReviewEvidence(prepared),
+    intentId: "7".repeat(32),
+    preparedAt: boundState.pr?.boundAt ?? fixtureInstant(),
+  });
+  const advanced = listFiles();
+  const changed = Object.fromEntries(
+    [...advanced].filter(([file, contents]) => bound.get(file) !== contents),
+  );
+  assert.ok(Object.keys(changed).length > 0);
+  for (const file of advanced.keys()) if (!bound.has(file)) fs.rmSync(file);
+  for (const [file, contents] of bound)
+    fs.writeFileSync(file, Buffer.from(contents, "base64"));
+  assert.equal(readFixtureDeliveryState(prepared.staging).state, "pr-bound");
+  markExternallyMerged(prepared, { writeFilesOnInvoke: changed });
+  const rejected = executeExternalMergeImport(prepared, "--apply");
+  assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+  assert.match(
+    rejected.stdout + rejected.stderr,
+    /lock内で再読取りしたdelivery stateがpr-boundでない/u,
+  );
+  assert.equal(
+    readFixtureDeliveryState(prepared.staging).state,
+    "merge-prepared",
+  );
+  assert.equal(journalStep11Entries(prepared.staging).length, 0);
 }
 
 /**
@@ -5423,6 +5521,10 @@ function runReviewReplaceRejection(
     置換済みsessionの保存fileが置換記録のdigestと一致する:
       /保存file review-session-replaced-001\.json が置換記録のdigestと一致しません/u,
     置換記録の末尾が完全な行である: /置換記録の末尾が完全な行ではありません/u,
+    中断した置換の旧sessionがconvergedである:
+      /review sessionがconvergedではありません/u,
+    中断した置換記録の値が旧sessionと一致する:
+      /中断した置換記録の値が置換前のreview sessionと一致しません/u,
   };
   const diagnostic = expected[example];
   if (!diagnostic) throw new Error(`未対応のExamples行です: ${example}`);
@@ -5435,8 +5537,96 @@ function runReviewReplaceRejection(
     fixtureGit(prepared.root, ["commit", "-q", "-m", "change after review"]);
     return fixtureGit(prepared.root, ["rev-parse", "HEAD"]);
   };
+  /**
+   * 中断復旧（段1後）の形だけを手で作る: 置換記録1行を追記し、staging digestは
+   * 再固定しない。previewが返す記録を起点に、1fieldだけを偽る。
+   */
+  const forgedSessionFile = path.join(prepared.staging, "review-session.json");
+  const forgedRecordsFile = path.join(
+    prepared.staging,
+    "journal",
+    "review-session-replacements.jsonl",
+  );
+  const previewRecord = (): Record<string, unknown> => {
+    const preview = executeReviewReplace(prepared, "--dry-run");
+    assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+    return (JSON.parse(preview.stdout) as { record: Record<string, unknown> })
+      .record;
+  };
+  const appendForgedRecord = (record: Record<string, unknown>): void => {
+    const previous = record.previousSession as Record<string, unknown>;
+    fs.mkdirSync(path.dirname(forgedRecordsFile), { recursive: true });
+    fs.writeFileSync(
+      forgedRecordsFile,
+      `${stableJson({
+        ...record,
+        previousSession: { ...previous, digest: sha256File(forgedSessionFile) },
+      })}\n`,
+    );
+  };
+  const forgedRecordRejected = (
+    record: Record<string, unknown>,
+    pattern: RegExp,
+  ): void => {
+    const stagingBefore = stagingBytes(prepared.staging);
+    appendForgedRecord(record);
+    const forgedBefore = stagingBytes(prepared.staging);
+    const forged = executeReviewReplace(prepared, "--apply");
+    assert.equal(forged.status, 1, forged.stdout + forged.stderr);
+    assert.match(
+      ((JSON.parse(forged.stdout) as ReplacedOutput).reasons ?? []).join("\n"),
+      pattern,
+    );
+    assert.equal(stagingBytes(prepared.staging), forgedBefore);
+    fs.rmSync(forgedRecordsFile);
+    assert.equal(stagingBytes(prepared.staging), stagingBefore);
+  };
   if (example === "review sessionが存在する") applyReviewReplace(fixture);
-  else if (
+  else if (example === "中断した置換の旧sessionがconvergedである") {
+    const genuine = previewRecord();
+    const head = productCommit();
+    const draft = buildReviewRoundDraft({
+      staging: prepared.staging,
+      headSha: head,
+    }).round;
+    recordReviewRound({
+      staging: prepared.staging,
+      round: parseReviewRoundInput({
+        ...draft,
+        findings: [
+          {
+            id: "H-1569",
+            severity: "High",
+            status: "valid",
+            source: "review",
+            relation: "acceptance-violation",
+            evidence: "中断復旧を偽る未収束fixture",
+            path: "implementation.txt",
+            contractId: "AC-WF-005",
+            causedByFindingId: null,
+            decisionRef: null,
+          },
+        ],
+      }),
+    });
+    appendForgedRecord(genuine);
+  } else if (example === "中断した置換記録の値が旧sessionと一致する") {
+    const genuine = previewRecord();
+    const previous = genuine.previousSession as Record<string, unknown>;
+    // 記録の値のうちround 1が束縛するH_implと、旧sessionの要約値を1つずつ偽る。
+    forgedRecordRejected(
+      { ...genuine, pullRequestHeadSha: fixture.baseSha },
+      diagnostic,
+    );
+    forgedRecordRejected(
+      {
+        ...genuine,
+        previousSession: { ...previous, rounds: Number(previous.rounds) + 1 },
+      },
+      diagnostic,
+    );
+    appendForgedRecord({ ...genuine, implementationHeadSha: fixture.baseSha });
+  } else if (
     example === "review sessionがconvergedである" ||
     example === "latest roundのcandidate HEADがcurrent H_implと一致する"
   ) {
@@ -5525,6 +5715,14 @@ function runReviewReplaceRejection(
   if (example === "Step 11が無い") {
     // journalにだけStep 11がある`pr-bound`（PR停止終端の中断状態）も拒否する。
     const interrupted = boundReplacementFixture(world);
+    const genuinePreview = executeReviewReplace(
+      interrupted.prepared,
+      "--dry-run",
+    );
+    assert.equal(genuinePreview.status, 0, genuinePreview.stdout);
+    const genuineRecord = (
+      JSON.parse(genuinePreview.stdout) as { record: Record<string, unknown> }
+    ).record;
     appendDeliveryTerminalJournalEntry({
       staging: interrupted.prepared.staging,
       entry: {
@@ -5544,6 +5742,22 @@ function runReviewReplaceRejection(
       (JSON.parse(journalOnly.stdout) as ReplacedOutput).reasons ?? [];
     assert.deepEqual(reasons, ["Step 11が記録されています"]);
     assert.equal(stagingBytes(interrupted.prepared.staging), journalOnlyBefore);
+    // 中断復旧（段1後）を値の一致する記録で装っても、journalのStep 11で拒否する。
+    fs.writeFileSync(
+      path.join(
+        interrupted.prepared.staging,
+        "journal",
+        "review-session-replacements.jsonl",
+      ),
+      `${stableJson(genuineRecord)}\n`,
+    );
+    const forgedBefore = stagingBytes(interrupted.prepared.staging);
+    const forged = executeReviewReplace(interrupted.prepared, "--apply");
+    assert.equal(forged.status, 1, forged.stdout + forged.stderr);
+    assert.deepEqual((JSON.parse(forged.stdout) as ReplacedOutput).reasons, [
+      "Step 11が記録されています",
+    ]);
+    assert.equal(stagingBytes(interrupted.prepared.staging), forgedBefore);
   }
 }
 

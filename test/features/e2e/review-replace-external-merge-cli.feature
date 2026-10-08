@@ -23,6 +23,8 @@ Feature: 同一PRでのreview session置換と外部merge取り込み
       | 置換記録のhash chainが一致する |
       | 置換済みsessionの保存fileが置換記録のdigestと一致する |
       | 置換記録の末尾が完全な行である |
+      | 中断した置換の旧sessionがconvergedである |
+      | 中断した置換記録の値が旧sessionと一致する |
 
   Scenario: SCN-E2E-REVREPLACE-003 置換を組み合わせても暫定guardの攻撃面を開かない
     Given ワークフローStep公開CLIの隔離環境がある
@@ -45,12 +47,14 @@ Feature: 同一PRでのreview session置換と外部merge取り込み
       | PRがMERGEDである（CLOSEDで未merge） |
       | merge時headが実効headと一致する |
       | repositoryとPR番号が固定値と一致する |
+      | repositoryが固定値と一致する |
       | base refが既定branchである |
       | merge commitが既定branch tipから到達可能である |
       | merge方式を判定できる |
       | merge方式を判定できる（1親でtrusted policyがsquashも許可） |
       | merge時baseのtrusted policyを解決できる |
       | delivery stateがpr-boundである（merge-prepared） |
+      | delivery stateがpr-boundである（観測中にmerge-prepared） |
       | Step 11が記録されていない |
 
   Scenario Outline: SCN-E2E-EXTMERGE-003 merge方式の許可は既定branchのtrusted policyから解決する

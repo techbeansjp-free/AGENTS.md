@@ -1145,6 +1145,13 @@ function handlePullRequestRecordExternalMerge(flags) {
         return 0;
     }
     const result = withStagingMutationLock(staging, () => {
+        /**
+         * 初回読取りは観測前digestより前にあるため、lock内で再読取りして`delivery`前提を
+         * 再検査する。`pr-bound`はmerge intent・Step 11・redeliveryを持てない（delivery state
+         * のschema検査）ため、state名の一致がそのまま3条件の成立になる。
+         */
+        if (observeStoredDeliveryState(staging)?.state !== "pr-bound")
+            throw new Error("lock内で再読取りしたdelivery stateがpr-boundでないか、merge intentまたはStep 11があるため外部merge取り込みを記録しません");
         if (deliveryPersistenceDigest(staging) !== before)
             throw new Error("GitHub観測中にdelivery stateまたはjournalが変更されたため外部merge取り込みを記録しません");
         const mode = inspectWorkflowStaging(staging).mode;
