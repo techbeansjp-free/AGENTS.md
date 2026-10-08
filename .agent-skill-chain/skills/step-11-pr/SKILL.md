@@ -23,6 +23,8 @@ PR停止またはmerged終端ではjournalを先にfsyncし、そのdigestと`ou
 
 `pr merge`適用後にauto-mergeまたはqueue entryだけが観測できる場合は`merge-observed`と再開条件を返し、Step 11へ進めない。再実行はprovider read-backだけを行い、merged終端Evidenceへ単調更新する。GitHubがHEAD以外のPR metadata CASを提供しない最終窓は、二重read、HEAD CAS、保護規則、事後read-backで検出する残余競合として明示し、完全予防と報告しない。
 
+固定済みPRがASCの`pr merge`を経由せずmerge済みになった`pr-bound`のstagingは、`pr record-external-merge --repo=<o/r> --pr=<n> --staging=<staging> --dry-run`で7項目の`checks`を確認してから、同じ入力の`--apply`で外部merge取り込みのStep 11を追記する。取り込みはGitHubへ書き込まず、Step 11は`external-merge observation`の区別子付きで配送gateを経由していないことを残す。記録後はStep 11の封印が適用され元に戻せない。1項目でも不一致なら何も書かれないので、不一致の項目を解消してから再実行する。`merge-prepared`以後のstagingは`pr merge`の再実行（provider read-back）で終端させる。
+
 `merge.mode=disabled`で既に`outcome=pull-request`へ終端化したfull/quickのopen PRは、後からtrusted policyが変わっても通常の`pr merge`では再開しない。repository ownerが同じPRへの新しいdelivery判断を行う場合だけ`--reopen-terminal=approved`を明示し、旧Step 11 evidence、現在のtrusted policy commit、同一PR identity、exact HEADを固定した`redelivery`として通常のmerge認可とone-shot dispatchを通す。旧Step 11 journalは変更・重複追記せず、merged再観測後は`redelivery`だけを完了へ進める。PoC、現在もdisabled、closed/merged PR、identity不一致、flag欠落・未知値を迂回しない。
 
 terminal redeliveryのauthority recordには、明示flagのsourceと`repository.assert-write`で観測したactor、repository、write Evidence IDを保存する。authority Evidenceが欠けるrecordをowner判断として受理しない。

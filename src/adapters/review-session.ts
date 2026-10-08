@@ -62,6 +62,7 @@ import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { recordLayerSuffix } from "./review-record-layer.js";
+import { readReviewSessionReplacements } from "./review-session-replacement-store.js";
 
 const GIT_ENV: NodeJS.ProcessEnv = {
   PATH: process.env.PATH ?? "/usr/bin:/bin",
@@ -130,6 +131,31 @@ function latestImplementationEntry(staging: string) {
     .find((entry) => entry.step === 9 && !entry.postTerminalIntake);
 }
 
+/**
+ * round 1が照合するimplementation HEADの出所（FR-02、REQ-WF-052）。
+ *
+ * **review session置換の後は最新置換記録のH_implを使い、無ければ最新Step 9を使う。**
+ * `pr-bound`中はStep 10記録済みjournalへStep 9を追記できないため、置換後のround 1は
+ * 置換記録（Step 9 entryと同じstaging digestで保護される）へ束縛する。candidate＝
+ * current HEAD、`--base`の厳密一致、initial diff digestの規則は変えない。
+ * 置換記録の連番・hash chain・保存fileが崩れていればreaderが拒否する。
+ */
+function roundOneImplementationBinding(staging: string): {
+  headSha: string | undefined;
+  source: string;
+} {
+  const replacement = readReviewSessionReplacements(staging).at(-1);
+  if (replacement)
+    return {
+      headSha: replacement.implementationHeadSha,
+      source: `review session置換記録${replacement.sequence}件目のimplementation HEAD`,
+    };
+  return {
+    headSha: latestImplementationEntry(staging)?.implementationHeadSha,
+    source: "Step 9 implementation HEAD",
+  };
+}
+
 function resolveCommit(root: string, label: string, sha: string): string {
   const observed = git(["rev-parse", "--verify", `${sha}^{commit}`], root, {
     env: GIT_ENV,
@@ -196,14 +222,14 @@ export function buildReviewRoundDraft(input: {
     );
   let round: unknown;
   if (previous === null) {
-    const implementation = latestImplementationEntry(staging);
-    if (!implementation?.implementationHeadSha)
+    const implementation = roundOneImplementationBinding(staging);
+    if (!implementation.headSha)
       throw new Error(
         "初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください",
       );
-    if (implementation.implementationHeadSha !== headSha)
+    if (implementation.headSha !== headSha)
       throw new Error(
-        `review round --initの--headはStep 9 implementation HEAD ${implementation.implementationHeadSha} と一致する必要があります`,
+        `review round --initの--headは${implementation.source} ${implementation.headSha} と一致する必要があります`,
       );
     if (typeof input.baseSha !== "string")
       throw new Error(
@@ -655,14 +681,14 @@ export function previewReviewRound(input: {
     input.round.findings,
   );
   if (previous === null) {
-    const implementation = latestImplementationEntry(staging);
-    if (!implementation?.implementationHeadSha)
+    const implementation = roundOneImplementationBinding(staging);
+    if (!implementation.headSha)
       throw new Error(
         "初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください",
       );
-    if (implementation.implementationHeadSha !== input.round.candidateHeadSha)
+    if (implementation.headSha !== input.round.candidateHeadSha)
       throw new Error(
-        "review round candidate HEADがStep 9 implementation HEADと一致しません",
+        `review round candidate HEADが${implementation.source}と一致しません`,
       );
     const observed = observeReviewDiff(
       root,

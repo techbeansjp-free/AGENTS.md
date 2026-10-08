@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1569,
+  "observed": {
+    "baseSha": "c6f1dc31da2cd6e1c4b617f21d1457e805d7158e",
+    "implementationHeadSha": "5fb2530b56259eaed76a7fc1a599529fd787c387",
+    "diffDigest": "a1d0355121229ed222bc8b65cf94adf9c4ae6065c43a7c211a2cc2306c5f9d73",
+    "session": {
+      "sessionId": "88813083b81970a51a3ad8021fc4825a59520f90dea1138f83d5b995edf428c2",
+      "latestRoundDigest": "4b698929c3987491d6c7ef16c3798dd30e7a312522c23eaebf675d714b7c25bb",
+      "status": "converged",
+      "countedRounds": 1
+    },
+    "impact": {
+      "digest": "c43c9b0f230700e9c74b56692ca342348393e577134a06e69f564964055179ef",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "5fb2530b56259eaed76a7fc1a599529fd787c387",
+        "impactDigest": "c43c9b0f230700e9c74b56692ca342348393e577134a06e69f564964055179ef",
+        "finishedAt": "2026-10-08T15:54:46.918Z",
+        "recordDigest": "c2f0a915a930d260f28d140f320c5f318a9231d0bf7bda8ce18d765a35754c96"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "R1-1",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "acceptance-violation",
+      "path": "src/adapters/evidence-reanchor.ts",
+      "contractId": "INV-03"
+    },
+    {
+      "id": "R1-2",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/adapters/review-session-replacement.ts",
+      "contractId": "INV-08"
+    },
+    {
+      "id": "R1-3",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/workflow-step-enforcement.steps.ts",
+      "contractId": "INV-04"
+    },
+    {
+      "id": "R1-4",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/adapters/review-session-replacement.ts",
+      "contractId": "AC-01"
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "claude-code:subagent/reviewer-replaced-session-round1",
+    "implementer": "claude-code:subagent/implementation-workunit-85960ed8",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "6ba93de1ce9591aa7ccbb278bb739461caca7e1abc3edac8c3f15162395cd966"
+}

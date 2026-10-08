@@ -19,6 +19,7 @@ const METHODS = [
   "artifact-replacement",
   "artifact-supersession",
   "reviewed-forward",
+  "session-replacement",
 ] as const;
 
 export type EvidenceReanchorMethod = (typeof METHODS)[number];
@@ -44,6 +45,18 @@ export interface EvidenceReanchorRecord {
     newDigest: string;
   };
   reviewedForward?: {
+    sessionId: string;
+    roundDigest: string;
+    implementationSha: string;
+    artifactPath: string;
+    artifactDigest: string;
+  };
+  /**
+   * review session置換後の新sessionの証跡だけを足したevidence-only前進（Issue #1569）。
+   * `replacementSequence`は前進を許した置換記録の連番である。
+   */
+  sessionReplacement?: {
+    replacementSequence: number;
     sessionId: string;
     roundDigest: string;
     implementationSha: string;
@@ -85,18 +98,28 @@ export function isEvidenceReanchorRecord(
     typeof supersession.newDigest === "string" &&
     SHA256.test(supersession.newDigest) &&
     supersession.oldDigest !== supersession.newDigest;
-  const validReviewedForward =
-    isRecord(reviewedForward) &&
-    typeof reviewedForward.sessionId === "string" &&
-    SHA256.test(reviewedForward.sessionId) &&
-    typeof reviewedForward.roundDigest === "string" &&
-    SHA256.test(reviewedForward.roundDigest) &&
-    typeof reviewedForward.implementationSha === "string" &&
-    OID.test(reviewedForward.implementationSha) &&
-    typeof reviewedForward.artifactPath === "string" &&
-    reviewedForward.artifactPath.length > 0 &&
-    typeof reviewedForward.artifactDigest === "string" &&
-    SHA256.test(reviewedForward.artifactDigest);
+  /** reviewed-forwardとsession-replacementが共有する、受理したreview証跡のbinding。 */
+  const validReviewBinding = (binding: unknown): boolean =>
+    isRecord(binding) &&
+    typeof binding.sessionId === "string" &&
+    SHA256.test(binding.sessionId) &&
+    typeof binding.roundDigest === "string" &&
+    SHA256.test(binding.roundDigest) &&
+    typeof binding.implementationSha === "string" &&
+    OID.test(binding.implementationSha) &&
+    typeof binding.artifactPath === "string" &&
+    binding.artifactPath.length > 0 &&
+    typeof binding.artifactDigest === "string" &&
+    SHA256.test(binding.artifactDigest);
+  const validReviewedForward = validReviewBinding(reviewedForward);
+  const sessionReplacement = isRecord(value)
+    ? value.sessionReplacement
+    : undefined;
+  const validSessionReplacement =
+    validReviewBinding(sessionReplacement) &&
+    isRecord(sessionReplacement) &&
+    Number.isSafeInteger(sessionReplacement.replacementSequence) &&
+    (sessionReplacement.replacementSequence as number) >= 1;
   return (
     isRecord(value) &&
     typeof value.oldHeadSha === "string" &&
@@ -123,7 +146,10 @@ export function isEvidenceReanchorRecord(
     (value.method !== "artifact-supersession" || supersession !== undefined) &&
     (reviewedForward === undefined ||
       (value.method === "reviewed-forward" && validReviewedForward)) &&
-    (value.method !== "reviewed-forward" || reviewedForward !== undefined)
+    (value.method !== "reviewed-forward" || reviewedForward !== undefined) &&
+    (sessionReplacement === undefined ||
+      (value.method === "session-replacement" && validSessionReplacement)) &&
+    (value.method !== "session-replacement" || sessionReplacement !== undefined)
   );
 }
 

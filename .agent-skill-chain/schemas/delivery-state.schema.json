@@ -44,6 +44,7 @@
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/step11" }]
     },
     "redelivery": { "$ref": "#/$defs/redelivery" },
+    "externalMerge": { "$ref": "#/$defs/externalMerge" },
     "reconciliation": {
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/reconciliation" }]
     }
@@ -380,6 +381,43 @@
         }
       }
     },
+    "externalMerge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "prNumber",
+        "prUrl",
+        "headSha",
+        "baseRef",
+        "baseSha",
+        "mergeCommitSha",
+        "providerMergedAt",
+        "defaultBranchTipSha",
+        "method",
+        "trustedPolicyCommitSha",
+        "observedAt",
+        "observationId"
+      ],
+      "properties": {
+        "repository": { "$ref": "#/$defs/repository" },
+        "prNumber": { "type": "integer", "minimum": 1 },
+        "prUrl": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[^/\\s]+/[^/\\s]+/pull/[1-9][0-9]*$"
+        },
+        "headSha": { "$ref": "#/$defs/oid" },
+        "baseRef": { "type": "string", "minLength": 1 },
+        "baseSha": { "$ref": "#/$defs/oid" },
+        "mergeCommitSha": { "$ref": "#/$defs/oid" },
+        "providerMergedAt": { "$ref": "#/$defs/instant" },
+        "defaultBranchTipSha": { "$ref": "#/$defs/oid" },
+        "method": { "const": "merge" },
+        "trustedPolicyCommitSha": { "$ref": "#/$defs/oid" },
+        "observedAt": { "$ref": "#/$defs/instant" },
+        "observationId": { "$ref": "#/$defs/digest" }
+      }
+    },
     "reconciliation": {
       "type": "object",
       "additionalProperties": false,
@@ -554,8 +592,32 @@
                 ]
               }
             }
+          },
+          {
+            "required": ["externalMerge"],
+            "properties": {
+              "merge": { "type": "null" },
+              "redelivery": false,
+              "externalMerge": { "$ref": "#/$defs/externalMerge" },
+              "step11": {
+                "allOf": [
+                  { "$ref": "#/$defs/step11" },
+                  { "properties": { "outcome": { "const": "merged" } } }
+                ]
+              }
+            }
           }
         ]
+      }
+    },
+    {
+      "if": { "required": ["externalMerge"] },
+      "then": {
+        "properties": {
+          "state": { "const": "step11-recorded" },
+          "merge": { "type": "null" },
+          "redelivery": false
+        }
       }
     },
     {

@@ -14,6 +14,7 @@ const METHODS = [
     "artifact-replacement",
     "artifact-supersession",
     "reviewed-forward",
+    "session-replacement",
 ];
 export function isEvidenceReanchorRecord(value) {
     const replacement = isRecord(value) ? value.artifactReplacement : undefined;
@@ -37,17 +38,26 @@ export function isEvidenceReanchorRecord(value) {
         typeof supersession.newDigest === "string" &&
         SHA256.test(supersession.newDigest) &&
         supersession.oldDigest !== supersession.newDigest;
-    const validReviewedForward = isRecord(reviewedForward) &&
-        typeof reviewedForward.sessionId === "string" &&
-        SHA256.test(reviewedForward.sessionId) &&
-        typeof reviewedForward.roundDigest === "string" &&
-        SHA256.test(reviewedForward.roundDigest) &&
-        typeof reviewedForward.implementationSha === "string" &&
-        OID.test(reviewedForward.implementationSha) &&
-        typeof reviewedForward.artifactPath === "string" &&
-        reviewedForward.artifactPath.length > 0 &&
-        typeof reviewedForward.artifactDigest === "string" &&
-        SHA256.test(reviewedForward.artifactDigest);
+    /** reviewed-forwardとsession-replacementが共有する、受理したreview証跡のbinding。 */
+    const validReviewBinding = (binding) => isRecord(binding) &&
+        typeof binding.sessionId === "string" &&
+        SHA256.test(binding.sessionId) &&
+        typeof binding.roundDigest === "string" &&
+        SHA256.test(binding.roundDigest) &&
+        typeof binding.implementationSha === "string" &&
+        OID.test(binding.implementationSha) &&
+        typeof binding.artifactPath === "string" &&
+        binding.artifactPath.length > 0 &&
+        typeof binding.artifactDigest === "string" &&
+        SHA256.test(binding.artifactDigest);
+    const validReviewedForward = validReviewBinding(reviewedForward);
+    const sessionReplacement = isRecord(value)
+        ? value.sessionReplacement
+        : undefined;
+    const validSessionReplacement = validReviewBinding(sessionReplacement) &&
+        isRecord(sessionReplacement) &&
+        Number.isSafeInteger(sessionReplacement.replacementSequence) &&
+        sessionReplacement.replacementSequence >= 1;
     return (isRecord(value) &&
         typeof value.oldHeadSha === "string" &&
         OID.test(value.oldHeadSha) &&
@@ -73,7 +83,10 @@ export function isEvidenceReanchorRecord(value) {
         (value.method !== "artifact-supersession" || supersession !== undefined) &&
         (reviewedForward === undefined ||
             (value.method === "reviewed-forward" && validReviewedForward)) &&
-        (value.method !== "reviewed-forward" || reviewedForward !== undefined));
+        (value.method !== "reviewed-forward" || reviewedForward !== undefined) &&
+        (sessionReplacement === undefined ||
+            (value.method === "session-replacement" && validSessionReplacement)) &&
+        (value.method !== "session-replacement" || sessionReplacement !== undefined));
 }
 /**
  * 2つの差分観測が内容として等価かを決める。
