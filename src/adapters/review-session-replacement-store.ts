@@ -122,17 +122,8 @@ function parseRecord(line: string): ReviewSessionReplacementRecord {
   return value as unknown as ReviewSessionReplacementRecord;
 }
 
-/**
- * 置換記録を読み、連番・hash chain・保存fileを検査する。
- *
- * `pendingLast`は`review replace --apply`の中断復旧だけが使う。最終記録の保存fileが
- * まだ無い状態（記録の追記後・renameの前）を許し、それ以外の崩れは常に拒否する。
- */
-export function readReviewSessionReplacements(
-  stagingInput: string,
-  options: { pendingLast?: boolean } = {},
-): ReviewSessionReplacementRecord[] {
-  const staging = assertWorkflowStaging(stagingInput);
+/** 置換記録fileの完全な行を返す（fileが無ければ空）。末尾が欠けた記録は拒否する。 */
+export function readReplacementLines(staging: string): string[] {
   const file = path.join(
     staging,
     ...REVIEW_SESSION_REPLACEMENTS_FILE.split("/"),
@@ -144,7 +135,21 @@ export function readReviewSessionReplacements(
   const source = fs.readFileSync(file, "utf8");
   if (source === "" || !source.endsWith("\n"))
     throw new Error("置換記録の末尾が完全な行ではありません");
-  const lines = source.slice(0, -1).split("\n");
+  return source.slice(0, -1).split("\n");
+}
+
+/**
+ * 置換記録を読み、連番・hash chain・保存fileを検査する。
+ *
+ * `pendingLast`は`review replace --apply`の中断復旧だけが使う。最終記録の保存fileが
+ * まだ無い状態（記録の追記後・renameの前）を許し、それ以外の崩れは常に拒否する。
+ */
+export function readReviewSessionReplacements(
+  stagingInput: string,
+  options: { pendingLast?: boolean } = {},
+): ReviewSessionReplacementRecord[] {
+  const staging = assertWorkflowStaging(stagingInput);
+  const lines = readReplacementLines(staging);
   return lines.map((line, index) => {
     const record = parseRecord(line);
     if (record.sequence !== index + 1)

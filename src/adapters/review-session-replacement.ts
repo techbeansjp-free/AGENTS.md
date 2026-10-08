@@ -7,6 +7,7 @@ import {
 import type { DeliveryState } from "../domain/delivery-state.js";
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
 import {
+  REVIEW_PROGRESS_JOURNAL_FILE,
   calculateStagingDigest,
   listStagingArtifacts,
   readStoredStagingRecord,
@@ -18,10 +19,6 @@ import { writeFileAtomic } from "../lib/atomic.js";
 import { stableJson } from "../lib/security.js";
 import { observeStoredDeliveryState } from "./delivery-state.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
-import {
-  preserveReviewProgressJournal,
-  reviewProgressJournalPresent,
-} from "./review-progress.js";
 import { evidenceOnlySuffix } from "./review-diff.js";
 import {
   REVIEW_SESSION_FILE,
@@ -29,6 +26,7 @@ import {
 } from "./review-session-store.js";
 import {
   REVIEW_SESSION_REPLACEMENTS_FILE,
+  readReplacementLines,
   readReviewSessionReplacements,
   replacedProgressPath,
   replacedSessionPath,
@@ -131,18 +129,7 @@ function plan(
   if (errors.length > 0 || !session || !pullRequestHeadSha) return { errors };
   const sequence = records.length + 1;
   const file = path.join(staging, REVIEW_SESSION_FILE);
-  const previousLine = fs.existsSync(
-    path.join(staging, ...REVIEW_SESSION_REPLACEMENTS_FILE.split("/")),
-  )
-    ? fs
-        .readFileSync(
-          path.join(staging, ...REVIEW_SESSION_REPLACEMENTS_FILE.split("/")),
-          "utf8",
-        )
-        .slice(0, -1)
-        .split("\n")
-        .at(-1)
-    : undefined;
+  const previousLine = readReplacementLines(staging).at(-1);
   const record: ReviewSessionReplacementRecord = {
     schemaVersion: "agent-skill-chain/review-session-replacement/v1",
     sequence,
@@ -160,7 +147,9 @@ function plan(
     implementationHeadSha: session.latestCandidateHeadSha,
     pullRequestHeadSha,
     savedPath: replacedSessionPath(sequence),
-    savedProgressPath: reviewProgressJournalPresent(staging)
+    savedProgressPath: fs.existsSync(
+      path.join(staging, ...REVIEW_PROGRESS_JOURNAL_FILE.split("/")),
+    )
       ? replacedProgressPath(sequence)
       : null,
     replacedAt,
@@ -199,12 +188,7 @@ function interruptedReplacement(
     (fs.existsSync(sessionFile) && fs.existsSync(savedFile))
   )
     return undefined;
-  const replacementsSource = fs.readFileSync(
-    path.join(staging, ...REVIEW_SESSION_REPLACEMENTS_FILE.split("/")),
-    "utf8",
-  );
-  const lines = replacementsSource.slice(0, -1).split("\n");
-  const earlier = lines.slice(0, -1);
+  const earlier = readReplacementLines(staging).slice(0, -1);
   const excluded = new Set([
     last.savedPath,
     ...(last.savedProgressPath ? [last.savedProgressPath] : []),
@@ -243,21 +227,43 @@ function interruptedReplacement(
     : undefined;
 }
 
+/** sourceがあれば保存名へrenameする。既存の保存先は上書きしない（中断復旧の再実行を含む）。 */
+function renameToSaved(
+  staging: string,
+  source: string,
+  target: string,
+  label: string,
+): void {
+  const from = path.join(staging, ...source.split("/"));
+  if (!fs.existsSync(from)) return;
+  if (fs.existsSync(path.join(staging, ...target.split("/"))))
+    throw new Error(`${label}の保存先 ${target} が既に存在します`);
+  fs.renameSync(from, path.join(staging, ...target.split("/")));
+}
+
+/**
+ * 旧sessionと、旧sessionに束縛されたreview progress journalを保存名へ移す。
+ *
+ * **progressを新sessionの進捗と混ぜない。** 同じanchorで作り直した新sessionは旧sessionと
+ * 同じsession IDになりうるため、残すと旧進捗が新sessionの進捗として読まれる（AMD-004）。
+ */
 function moveReplacedFiles(
   staging: string,
   record: ReviewSessionReplacementRecord,
 ): void {
-  const source = path.join(staging, REVIEW_SESSION_FILE);
-  const target = path.join(staging, record.savedPath);
-  if (fs.existsSync(source)) {
-    if (fs.existsSync(target))
-      throw new Error(
-        `置換済みsessionの保存先 ${record.savedPath} が既に存在します`,
-      );
-    fs.renameSync(source, target);
-  }
+  renameToSaved(
+    staging,
+    REVIEW_SESSION_FILE,
+    record.savedPath,
+    "置換済みsession",
+  );
   if (record.savedProgressPath)
-    preserveReviewProgressJournal(staging, record.savedProgressPath);
+    renameToSaved(
+      staging,
+      REVIEW_PROGRESS_JOURNAL_FILE,
+      record.savedProgressPath,
+      "置換済みreview progress",
+    );
 }
 
 export interface ReviewSessionReplacementResult {
@@ -316,14 +322,11 @@ export function replaceReviewSession(input: {
     const observed = plan(staging, replacedAt);
     if (!observed.plan)
       throw new ReviewSessionReplacementError(observed.errors);
-    const file = path.join(
-      staging,
-      ...REVIEW_SESSION_REPLACEMENTS_FILE.split("/"),
+    writeFileAtomic(
+      path.join(staging, ...REVIEW_SESSION_REPLACEMENTS_FILE.split("/")),
+      `${[...readReplacementLines(staging), observed.plan.line].join("\n")}\n`,
+      { temporaryDirectory: path.dirname(staging) },
     );
-    const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-    writeFileAtomic(file, `${existing}${observed.plan.line}\n`, {
-      temporaryDirectory: path.dirname(staging),
-    });
     moveReplacedFiles(staging, observed.plan.record);
     const stagingDigest = refreshStoredStagingDigest(staging).digest;
     const reread = readReviewSessionReplacements(staging).at(-1);

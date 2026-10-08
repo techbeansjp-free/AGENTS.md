@@ -249,31 +249,3 @@ export function verifyStoredReviewProgress(staging: string) {
     projected: targets[0]!.projected,
   };
 }
-
-/** progress journalがあるかだけを返す（review session置換、Issue #1569）。内容は読まない。 */
-export function reviewProgressJournalPresent(stagingInput: string): boolean {
-  const staging = assertWorkflowStaging(stagingInput);
-  return fs.existsSync(path.join(staging, REVIEW_PROGRESS_JOURNAL_FILE));
-}
-
-/**
- * review session置換で、旧sessionに束縛されたprogress journalを保存名へrenameする。
- *
- * **新sessionの進捗と混ぜない。** 同じanchorで作り直した新sessionは旧sessionと同じ
- * session IDになりうるため、残すと旧進捗が新sessionの進捗として読まれる。内容は読まず、
- * 既存の保存先を上書きしない。journalが無ければ何もしない（中断復旧の再実行を含む）。
- */
-export function preserveReviewProgressJournal(
-  stagingInput: string,
-  targetRelative: string,
-): void {
-  const staging = assertWorkflowStaging(stagingInput);
-  const source = path.join(staging, REVIEW_PROGRESS_JOURNAL_FILE);
-  if (!fs.existsSync(source)) return;
-  const target = path.join(staging, ...targetRelative.split("/"));
-  if (fs.existsSync(target))
-    throw new Error(
-      `置換済みreview progressの保存先 ${targetRelative} が既に存在します`,
-    );
-  fs.renameSync(source, target);
-}

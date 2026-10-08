@@ -10317,17 +10317,8 @@ export async function main(
         `review replaceの未知optionです: --${unknown.join(", --")}`,
       );
     const apply = applyMode(flags);
-    const root = path.resolve(
-      typeof flags.root === "string" ? flags.root : process.cwd(),
-    );
-    const staging = resolveContained(root, required(flags, "staging"));
-    try {
-      assertIssueStagingLocation(staging, root);
-    } catch {
-      throw new Error(
-        `review replaceのstagingは対象rootの${readStagingLayout(root).rootPattern}/直下が必要です`,
-      );
-    }
+    required(flags, "staging");
+    const { staging } = resolveIssueStagingFlag(flags, "review replace");
     try {
       print(replaceReviewSession({ staging, apply }));
       return 0;

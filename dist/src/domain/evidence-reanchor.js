@@ -38,33 +38,26 @@ export function isEvidenceReanchorRecord(value) {
         typeof supersession.newDigest === "string" &&
         SHA256.test(supersession.newDigest) &&
         supersession.oldDigest !== supersession.newDigest;
-    const validReviewedForward = isRecord(reviewedForward) &&
-        typeof reviewedForward.sessionId === "string" &&
-        SHA256.test(reviewedForward.sessionId) &&
-        typeof reviewedForward.roundDigest === "string" &&
-        SHA256.test(reviewedForward.roundDigest) &&
-        typeof reviewedForward.implementationSha === "string" &&
-        OID.test(reviewedForward.implementationSha) &&
-        typeof reviewedForward.artifactPath === "string" &&
-        reviewedForward.artifactPath.length > 0 &&
-        typeof reviewedForward.artifactDigest === "string" &&
-        SHA256.test(reviewedForward.artifactDigest);
+    /** reviewed-forwardとsession-replacementが共有する、受理したreview証跡のbinding。 */
+    const validReviewBinding = (binding) => isRecord(binding) &&
+        typeof binding.sessionId === "string" &&
+        SHA256.test(binding.sessionId) &&
+        typeof binding.roundDigest === "string" &&
+        SHA256.test(binding.roundDigest) &&
+        typeof binding.implementationSha === "string" &&
+        OID.test(binding.implementationSha) &&
+        typeof binding.artifactPath === "string" &&
+        binding.artifactPath.length > 0 &&
+        typeof binding.artifactDigest === "string" &&
+        SHA256.test(binding.artifactDigest);
+    const validReviewedForward = validReviewBinding(reviewedForward);
     const sessionReplacement = isRecord(value)
         ? value.sessionReplacement
         : undefined;
-    const validSessionReplacement = isRecord(sessionReplacement) &&
+    const validSessionReplacement = validReviewBinding(sessionReplacement) &&
+        isRecord(sessionReplacement) &&
         Number.isSafeInteger(sessionReplacement.replacementSequence) &&
-        sessionReplacement.replacementSequence >= 1 &&
-        typeof sessionReplacement.sessionId === "string" &&
-        SHA256.test(sessionReplacement.sessionId) &&
-        typeof sessionReplacement.roundDigest === "string" &&
-        SHA256.test(sessionReplacement.roundDigest) &&
-        typeof sessionReplacement.implementationSha === "string" &&
-        OID.test(sessionReplacement.implementationSha) &&
-        typeof sessionReplacement.artifactPath === "string" &&
-        sessionReplacement.artifactPath.length > 0 &&
-        typeof sessionReplacement.artifactDigest === "string" &&
-        SHA256.test(sessionReplacement.artifactDigest);
+        sessionReplacement.replacementSequence >= 1;
     return (isRecord(value) &&
         typeof value.oldHeadSha === "string" &&
         OID.test(value.oldHeadSha) &&

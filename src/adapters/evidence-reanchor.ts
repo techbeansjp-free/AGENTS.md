@@ -11,6 +11,7 @@ import {
   isRebaseEquivalent,
   type RebaseEquivalenceReason,
   isEvidenceReanchorRecord,
+  type EvidenceReanchorMethod,
   type EvidenceReanchorRecord,
 } from "../domain/evidence-reanchor.js";
 import {
@@ -741,14 +742,9 @@ function observeReviewedForward(
   };
 }
 
-interface SessionReplacementEvidence {
-  replacementSequence: number;
-  sessionId: string;
-  roundDigest: string;
-  implementationSha: string;
-  artifactPath: string;
-  artifactDigest: string;
-}
+type SessionReplacementEvidence = NonNullable<
+  EvidenceReanchorRecord["sessionReplacement"]
+>;
 
 /**
  * review session置換後の新sessionの証跡だけを足した前進を受理する（Issue #1569）。
@@ -895,13 +891,7 @@ export interface EvidenceReanchorEvaluation extends EvidenceReanchorResult {
   oldHeadSha: string;
   oldBaseSha: string;
   diffDigest: string | undefined;
-  method:
-    | "rebase"
-    | "artifact-replacement"
-    | "artifact-supersession"
-    | "reviewed-forward"
-    | "session-replacement"
-    | undefined;
+  method: EvidenceReanchorMethod | undefined;
   artifactReplacement: ArtifactReplacementEvidence | undefined;
   artifactSupersession: ArtifactSupersessionEvidence | undefined;
   reviewedForward: ReviewedForwardEvidence | undefined;
@@ -986,12 +976,7 @@ export function evaluateEvidenceReanchor(input: {
     input.newBaseSha,
     input.newHeadSha,
   );
-  let method:
-    | "rebase"
-    | "artifact-replacement"
-    | "artifact-supersession"
-    | "reviewed-forward"
-    | "session-replacement" = "rebase";
+  let method: EvidenceReanchorMethod = "rebase";
   let artifactReplacement: ArtifactReplacementEvidence | undefined;
   let artifactSupersession: ArtifactSupersessionEvidence | undefined;
   let reviewedForward: ReviewedForwardEvidence | undefined;
@@ -1120,12 +1105,7 @@ export function appendEvidenceReanchor(input: {
       oldBaseSha: evaluation.oldBaseSha,
       newBaseSha: input.newBaseSha,
       diffDigest: evaluation.diffDigest as string,
-      method: evaluation.method as
-        | "rebase"
-        | "artifact-replacement"
-        | "artifact-supersession"
-        | "reviewed-forward"
-        | "session-replacement",
+      method: evaluation.method as EvidenceReanchorMethod,
       reason: input.reason,
       recordedAt: input.recordedAt,
       ...(evaluation.artifactReplacement === undefined
