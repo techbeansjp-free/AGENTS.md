@@ -819,16 +819,6 @@ function postPrIntakeDeliveryErrors(staging) {
         return [error instanceof Error ? error.message : String(error)];
     }
 }
-/** 外部merge取り込みが判定する項目（02 §3.2）。順序と集合は出力契約である。 */
-export const EXTERNAL_MERGE_CHECK_IDS = [
-    "binding",
-    "merged",
-    "default-branch",
-    "trusted-policy",
-    "reachable",
-    "method",
-    "delivery",
-];
 /**
  * 外部merge取り込みの判定（TERM-1569-02、BR-03〜05）。GitHub・Gitの観測値だけを受け取り、
  * 全項目を評価して返す純関数である。1項目でも`ok:false`なら呼出し側は何も書かない。
@@ -1105,20 +1095,10 @@ function handlePullRequestRecordExternalMerge(flags) {
     if (unknown.length > 0)
         throw new Error(`pr record-external-mergeの未知optionです: --${unknown.join(", --")}`);
     const apply = applyMode(flags);
-    const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
-    const requestedStaging = resolveContained(root, required(flags, "staging"));
-    try {
-        assertIssueStagingLocation(requestedStaging, root);
-    }
-    catch {
-        throw new Error(`pr record-external-mergeのstagingは対象rootの${readStagingLayout(root).rootPattern}/直下が必要です`);
-    }
+    const { root, staging: requestedStaging } = resolveIssueStagingFlag(flags, "pr record-external-merge");
     const staging = assertWorkflowStaging(requestedStaging);
     const repository = required(flags, "repo");
-    const prRaw = required(flags, "pr");
-    if (!/^[1-9]\d*$/u.test(prRaw))
-        throw new Error("--prは正の整数で指定してください");
-    const requested = { repository, pr: Number(prRaw) };
+    const requested = { repository, pr: requiredPullRequestNumber(flags) };
     const initial = observeStoredDeliveryState(staging);
     if (!initial?.pr)
         throw new Error("外部merge取り込みにはpr createで永続化した固定済みdelivery stateが必要です");
@@ -2316,22 +2296,12 @@ function handlePullRequestMerge(flags) {
     if (flags["reopen-terminal"] !== undefined &&
         flags["reopen-terminal"] !== "approved")
         throw new Error("--reopen-terminalはapprovedだけを受理します");
-    const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
-    const requestedStaging = resolveContained(root, required(flags, "staging"));
-    try {
-        assertIssueStagingLocation(requestedStaging, root);
-    }
-    catch {
-        throw new Error(`pr mergeのstagingは対象rootの${readStagingLayout(root).rootPattern}/直下が必要です`);
-    }
+    const { root, staging: requestedStaging } = resolveIssueStagingFlag(flags, "pr merge");
     const candidate = assertWorkflowStaging(requestedStaging);
     const earlyInspection = inspectWorkflowStaging(candidate);
     assertWorkflowMergeAllowed(earlyInspection.mode);
     const repository = required(flags, "repo");
-    const prRaw = required(flags, "pr");
-    if (!/^[1-9]\d*$/u.test(prRaw))
-        throw new Error("--prは正の整数で指定してください");
-    const pr = Number(prRaw);
+    const pr = requiredPullRequestNumber(flags);
     const rawMethod = required(flags, "method");
     if (rawMethod !== "merge" && rawMethod !== "squash" && rawMethod !== "rebase")
         throw new Error("--methodが不正です");
@@ -2878,6 +2848,24 @@ function dispatchEvidenceReanchor(input, dependencies) {
         effectiveHeadSha: result.effectiveHeadSha,
     });
     return 0;
+}
+/** `--root`と`--staging`を解決し、stagingが対象rootのIssue staging直下にあることを確かめる。 */
+function resolveIssueStagingFlag(flags, command) {
+    const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+    const staging = resolveContained(root, required(flags, "staging"));
+    try {
+        assertIssueStagingLocation(staging, root);
+    }
+    catch {
+        throw new Error(`${command}のstagingは対象rootの${readStagingLayout(root).rootPattern}/直下が必要です`);
+    }
+    return { root, staging };
+}
+function requiredPullRequestNumber(flags) {
+    const raw = required(flags, "pr");
+    if (!/^[1-9]\d*$/u.test(raw))
+        throw new Error("--prは正の整数で指定してください");
+    return Number(raw);
 }
 function applyMode(flags) {
     if (flags.apply === true && flags["dry-run"] === true)
