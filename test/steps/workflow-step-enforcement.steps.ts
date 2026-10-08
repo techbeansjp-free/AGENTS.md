@@ -6311,6 +6311,8 @@ const MISSING_PROGRESS =
   /置換記録が宣言するreview progress journalが失われています。退避元があれば元名へ戻してから再applyしてください。復元できない場合は置換記録を書き換えず人手で調査してください/u;
 const SAVED_PROGRESS_BEFORE_RENAME =
   /sessionのrenameより前にprogress journalが保存名へ移っています。保存名のfileを元名へ戻してから再applyしてください/u;
+const BOTH_PROGRESS_BEFORE_RENAME =
+  /sessionのrenameより前にprogress journalが保存名へ移っていますが、元名にもreview progress journalがあります。元名の内容は置換の中断中に追記された旧sessionの進捗の可能性があるため上書きしないでください。2つのfileの内容を比較してどちらを残すかを判断し、不要な方をstaging外へ退避して、残す方を元名に置いてから再applyしてください/u;
 
 const INTERRUPTED_PROGRESS_EXAMPLES: Record<
   string,
@@ -6377,7 +6379,7 @@ const INTERRUPTED_PROGRESS_EXAMPLES: Record<
     sessionRenamed: false,
     original: true,
     saved: true,
-    expected: SAVED_PROGRESS_BEFORE_RENAME,
+    expected: BOTH_PROGRESS_BEFORE_RENAME,
   },
   "拒否: session rename後・savedProgressPath非null・元名と保存名の両方あり": {
     progress: true,
@@ -6495,6 +6497,9 @@ function runInterruptedProgressRecovery(
     }）がapplyの段の順序から到達できません。`;
     assert.ok(reason.startsWith(placement), reason);
     assert.match(reason, shape.expected);
+    // 元名と保存名の両方がある状態では、元名を上書きする案内を出さない。
+    if (shape.original && shape.saved)
+      assert.doesNotMatch(reason, /元名へ戻して/u);
   }
   assert.equal(stagingBytes(staging), before);
 }

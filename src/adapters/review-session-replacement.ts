@@ -322,9 +322,11 @@ function interruptedProgressErrors(
       ? "置換記録が宣言するreview progress journalが失われています。退避元があれば元名へ戻してから再applyしてください。復元できない場合は置換記録を書き換えず人手で調査してください"
       : original && (!declared || renamed)
         ? "元名のreview progress journalは置換の中断中に作られた旧sessionの進捗です（`review progress append`等）。内容を確認してstaging外へ退避してから再applyしてください"
-        : declared
-          ? "sessionのrenameより前にprogress journalが保存名へ移っています。保存名のfileを元名へ戻してから再applyしてください"
-          : "置換記録はprogress journalを宣言していません。保存名のfileを確認してstaging外へ退避してから再applyしてください";
+        : declared && original
+          ? "sessionのrenameより前にprogress journalが保存名へ移っていますが、元名にもreview progress journalがあります。元名の内容は置換の中断中に追記された旧sessionの進捗の可能性があるため上書きしないでください。2つのfileの内容を比較してどちらを残すかを判断し、不要な方をstaging外へ退避して、残す方を元名に置いてから再applyしてください"
+          : declared
+            ? "sessionのrenameより前にprogress journalが保存名へ移っています。保存名のfileを元名へ戻してから再applyしてください"
+            : "置換記録はprogress journalを宣言していません。保存名のfileを確認してstaging外へ退避してから再applyしてください";
   const state = (present: boolean): string => (present ? "あり" : "なし");
   return [
     `中断した置換記録${record.sequence}件目（savedProgressPath=${record.savedProgressPath ?? "null"}）とreview progress journalの配置（review session=${renamed ? "rename済み" : "未rename"}、元名=${state(original)}、保存名=${state(saved)}）がapplyの段の順序から到達できません。${recovery}`,
