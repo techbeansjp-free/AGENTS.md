@@ -6,10 +6,10 @@
     "implementationHeadSha": "5fb2530b56259eaed76a7fc1a599529fd787c387",
     "diffDigest": "a1d0355121229ed222bc8b65cf94adf9c4ae6065c43a7c211a2cc2306c5f9d73",
     "session": {
-      "sessionId": "6551e94f5b69c7549e02cd939c175927c4e1ca7b8181bbc7223ed9d923f807fd",
-      "latestRoundDigest": "22c3332582fa0c90fbca6868d2d236d603ad11c00ffb079ba7f3e5844b45a1bf",
+      "sessionId": "88813083b81970a51a3ad8021fc4825a59520f90dea1138f83d5b995edf428c2",
+      "latestRoundDigest": "4b698929c3987491d6c7ef16c3798dd30e7a312522c23eaebf675d714b7c25bb",
       "status": "converged",
-      "countedRounds": 2
+      "countedRounds": 1
     },
     "impact": {
       "digest": "c43c9b0f230700e9c74b56692ca342348393e577134a06e69f564964055179ef",
@@ -36,65 +36,41 @@
       "severity": "Medium",
       "status": "valid",
       "relation": "acceptance-violation",
-      "path": "test/steps/workflow-step-enforcement.steps.ts",
-      "contractId": "AC-05"
+      "path": "src/adapters/evidence-reanchor.ts",
+      "contractId": "INV-03"
     },
     {
       "id": "R1-2",
       "severity": "Low",
       "status": "valid",
-      "relation": "acceptance-violation",
-      "path": "src/cli.ts",
-      "contractId": "AC-07"
+      "relation": "improvement",
+      "path": "src/adapters/review-session-replacement.ts",
+      "contractId": "INV-08"
     },
     {
       "id": "R1-3",
       "severity": "Low",
       "status": "valid",
-      "relation": "invariant-violation",
-      "path": "src/cli.ts",
-      "contractId": "INV-08"
+      "relation": "improvement",
+      "path": "test/steps/workflow-step-enforcement.steps.ts",
+      "contractId": "INV-04"
     },
     {
       "id": "R1-4",
       "severity": "Low",
       "status": "valid",
-      "relation": "acceptance-violation",
-      "path": "test/steps/workflow-step-enforcement.steps.ts",
-      "contractId": "AC-07"
-    },
-    {
-      "id": "R1-5",
-      "severity": "Low",
-      "status": "valid",
-      "relation": "acceptance-violation",
-      "path": "src/cli.ts",
-      "contractId": "AC-07"
-    },
-    {
-      "id": "R2-1",
-      "severity": "Low",
-      "status": "valid",
       "relation": "improvement",
       "path": "src/adapters/review-session-replacement.ts",
-      "contractId": "INV-07"
-    },
-    {
-      "id": "R2-2",
-      "severity": "Low",
-      "status": "valid",
-      "relation": "improvement",
-      "path": "test/steps/workflow-step-enforcement.steps.ts",
-      "contractId": "AC-05"
+      "contractId": "AC-01"
     }
   ],
   "unresolvedCriticalHigh": [],
   "verdict": "approved",
   "declared": {
-    "reviewer": "claude-code:subagent/reviewer-round1-ed09ea9d-round2-postpr",
+    "reviewer": "claude-code:subagent/reviewer-replaced-session-round1",
     "implementer": "claude-code:subagent/implementation-workunit-85960ed8",
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "a1848f3030df12c776de453829b1b63bcc74f9e3edfbaabf68ed568089aaae85"
+  "evidenceDigest": "6ba93de1ce9591aa7ccbb278bb739461caca7e1abc3edac8c3f15162395cd966"
 }
