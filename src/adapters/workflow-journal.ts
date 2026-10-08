@@ -641,6 +641,7 @@ function appendWorkflowJournalEntryLocked(
       throw new Error("Step 9の候補worktreeがjournal確定前に変更されました");
   };
   if (entry.step === 9 && headSha !== undefined) {
+    assertStep9HeadContainsImplementation({ repositoryRoot, headSha });
     assertCandidateWorktreeClean();
     const currentHeadSha = git(
       ["rev-parse", "--verify", "HEAD^{commit}"],
@@ -827,6 +828,52 @@ function appendWorkflowJournalEntryLocked(
   fsyncDirectory(staging);
   clearJournalTransaction(staging);
   return { entry: entryToWrite, journalDigest, stagingDigest: stored.digest };
+}
+
+/**
+ * **Step 9の検証対象HEADは、計画の基点から1件以上の実装commitを含まなければならない**
+ * （REQ-WF-025、Issue #1566 OWN-03）。
+ *
+ * CLIはstaging pathからrepository rootを導出し、そのHEADを`implementationHeadSha`へ
+ * 束縛する。stagingが実装worktreeの外（基点のままの主作業directory）にあると、
+ * 実装commit 0件の基点がStep 9の証跡として記録される。**cwdからは推測しない。**
+ *
+ * 基点は`worktree.base`（remote-default-branch）が解決する`refs/remotes/origin/HEAD`の
+ * tipであり、full・quick・pocと再記録に同じ条件を適用する。HEADが基点と同一または
+ * 基点の祖先（`基点..HEAD`が0件）なら拒否する。`origin/HEAD`を解決できない
+ * repositoryでは基点を観測できないため判定しない。**拒否するのは記録だけで、
+ * stagingの移動・修復や他worktreeの検査はしない。**
+ */
+function assertStep9HeadContainsImplementation(input: {
+  repositoryRoot: string;
+  headSha: string;
+}): void {
+  const symbolic = git(
+    ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
+    input.repositoryRoot,
+    { allowFailure: true },
+  );
+  if (symbolic.status !== 0) return;
+  const ref = symbolic.stdout.trim();
+  const resolved = git(
+    ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+    input.repositoryRoot,
+    { allowFailure: true },
+  );
+  if (resolved.status !== 0) return;
+  const baseSha = resolved.stdout.trim();
+  const implementationCommits = Number(
+    git(
+      ["rev-list", "--count", `${baseSha}..${input.headSha}`, "--"],
+      input.repositoryRoot,
+    ).stdout.trim(),
+  );
+  if (implementationCommits > 0) return;
+  throw new Error(
+    `Step 9の検証対象HEAD(${input.headSha})は計画の基点（既定branch ${ref.replace(/^refs\/remotes\//u, "")} ${baseSha}）から実装commitを1件も含みません。` +
+      `stagingから導出したrepository(${input.repositoryRoot})が実装worktreeではない可能性があります（stagingが実装worktreeの外にある）。` +
+      "記録は行いません。step-09 skillに従い、stagingを実装worktree内の同じpolicy解決済みpathへ移してから、そのstagingでworkflow record --step=9を再実行してください（自動では移しません）",
+  );
 }
 
 function pocContextAtStaging(staging: string): {

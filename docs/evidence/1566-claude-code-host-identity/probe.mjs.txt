@@ -1,0 +1,69 @@
+#!/usr/bin/env node
+// Temporary Claude Code hook probe (Issue #1566 Phase 1).
+// Observe only: never writes to stdout, never denies, always exits 0.
+// Stores only identity-relevant fields; prompt/tool content is reduced to key names and lengths.
+import { appendFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+
+const OUT = process.env.ASC_PROBE_OUT;
+const IDENTITY_KEY = /(^|_)(id|ids|type|source|reason|cwd|mode|name|version|model|path|matcher|trigger|status)$|parent|agent|session|transcript/i;
+const SAFE_TOOL_INPUT = new Set(["subagent_type", "name", "to", "run_in_background", "description", "resume", "isolation", "team_name", "mode"]);
+
+function shape(value, depth = 0) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return depth > 1 ? "array" : ["array", value.length];
+  if (typeof value === "object") {
+    if (depth > 1) return "object";
+    return Object.fromEntries(Object.keys(value).sort().map((k) => [k, shape(value[k], depth + 1)]));
+  }
+  if (typeof value === "string") return `string(${value.length})`;
+  return typeof value;
+}
+
+function pickIdentity(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj ?? {})) {
+    if (!IDENTITY_KEY.test(k)) continue;
+    if (typeof v === "string" && v.length <= 300) out[k] = v;
+    else if (typeof v === "number" || typeof v === "boolean" || v === null) out[k] = v;
+  }
+  return out;
+}
+
+function deepIds(value, prefix = "", out = {}, depth = 0) {
+  if (depth > 4 || value === null || typeof value !== "object") return out;
+  for (const [k, v] of Object.entries(value)) {
+    const p = prefix ? `${prefix}.${k}` : k;
+    if (/agent.?id|session.?id|^id$|parent|tool_use_id|task.?id/i.test(k) && (typeof v === "string" || typeof v === "number")) out[p] = String(v).slice(0, 120);
+    else if (typeof v === "object") deepIds(v, p, out, depth + 1);
+  }
+  return out;
+}
+
+let raw = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (c) => { raw += c; });
+process.stdin.on("end", () => {
+  try {
+    if (!OUT) return;
+    mkdirSync(OUT, { recursive: true });
+    let payload;
+    try { payload = JSON.parse(raw); } catch { payload = { __malformed: true, length: raw.length }; }
+    const toolInput = payload.tool_input && typeof payload.tool_input === "object" ? payload.tool_input : null;
+    const record = {
+      observedAt: new Date().toISOString(),
+      ppid: process.ppid,
+      event: payload.hook_event_name ?? null,
+      identity: pickIdentity(payload),
+      toolInputSafe: toolInput ? Object.fromEntries(Object.entries(toolInput).filter(([k, v]) => SAFE_TOOL_INPUT.has(k) && (typeof v !== "string" || v.length <= 120))) : null,
+      bashCommandHead: toolInput && typeof toolInput.command === "string" ? toolInput.command.slice(0, 60) : null,
+      toolResponseIds: payload.tool_response ? deepIds(payload.tool_response) : null,
+      shape: shape(payload),
+      env: Object.fromEntries(Object.entries(process.env).filter(([k]) => /^CLAUDE|AGENT|SESSION/i.test(k) && !/KEY|TOKEN|SECRET|AUTH/i.test(k)).map(([k, v]) => [k, (v ?? "").slice(0, 160)])),
+    };
+    appendFileSync(join(OUT, "events.jsonl"), `${JSON.stringify(record)}\n`);
+  } catch {
+    // fail-open: probe errors never affect the host
+  }
+  process.exit(0);
+});

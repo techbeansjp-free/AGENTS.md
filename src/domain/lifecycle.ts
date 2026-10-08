@@ -43,6 +43,7 @@ import {
   MANAGED_RUNTIME,
   planLifecycleSettings,
   applyLifecycleSettings,
+  inspectHostObserverRegistration,
 } from "./lifecycle-settings.js";
 
 const packageRoot = findPackageRoot(import.meta.url);
@@ -92,7 +93,28 @@ const HOST_HOOK_TARGETS = [
   ".claude/hooks/asc-contract-citation.mjs",
   ".codex/hooks/asc-contract-citation.mjs",
   ".claude/hooks/asc-agent-lifecycle.mjs",
+  /**
+   * stateless host observer（Issue #1566）。**末尾へ置く。** doctorの契約引用hook
+   * 登録観測が先頭要素を使うため、先頭へ入れると観測対象がずれる。
+   */
+  ".claude/hooks/asc-host-observer.mjs",
 ] as const;
+/** host observerの展開先。登録entryの`args`が指す実行対象である（Issue #1566）。 */
+const HOST_OBSERVER_TARGET = ".claude/hooks/asc-host-observer.mjs";
+/** 実payloadで判定条件を確かめたClaude Codeのversion（Probe、Issue #1566）。 */
+const HOST_OBSERVER_VERIFIED_VERSION = "2.1.282";
+/**
+ * observer資産（正本・展開先・managed runtimeの複写）か。**欠落はadvisory診断だけにする**（Issue #1566）。
+ *
+ * 欠落はobserverが動かないだけであり、hostはnon-blocking hook errorを出してtoolを続ける。
+ * 欠落を全体の`healthy`へ入れると、observerの存在が`doctor`の門になる（REQ-LC-1566）。
+ * **在るが内容が一致しない場合は対象外である。** 自動実行されるcodeの改ざん検出を弱めない。
+ */
+function isHostObserverAsset(relative: string): boolean {
+  return (
+    path.posix.basename(relative) === path.posix.basename(HOST_OBSERVER_TARGET)
+  );
+}
 /**
  * hookの登録を観測するproject-localの設定file（Issue #1105）。
  *
@@ -1118,7 +1140,13 @@ function upgradeUnlocked(
   const expectedParent = observed?.parent ?? null;
   const current = mappings(target);
   assertAncestorsNotSymlinked(target, current);
-  const configuration = planLifecycleSettings(target, "install");
+  /**
+   * **record復旧はhost observerの登録を変更しない**（Issue #1566、REQ-LC-001）。
+   * 復旧でhost設定fileへ新しい書き込みを足さない。登録は次の通常updateで行う。
+   */
+  const configuration = planLifecycleSettings(target, "install", {
+    preserveObserver: !recordPresent,
+  });
   /**
    * **record不在は「導入済み」の代わりにならない**（Issue #1305）。
    *
@@ -1481,7 +1509,13 @@ export function doctor(target: string, worktreeObservations?: unknown) {
     }
   }
 
+  /** record記載済みで欠落したobserver資産。`hooks.hostObserver`だけへ報告する。 */
+  const missingObserverAssets: string[] = [];
   for (const asset of managedAssets) {
+    if (isHostObserverAsset(asset.relative) && !pathEntryExists(asset.file)) {
+      missingObserverAssets.push(asset.relative);
+      continue;
+    }
     if (!pathEntryExists(asset.file) || !isRegularFile(asset.file)) {
       diagnostics.push(`${asset.relative}: managed通常fileがありません`);
       continue;
@@ -1677,6 +1711,71 @@ export function doctor(target: string, worktreeObservations?: unknown) {
     expectedCommandFragment: HOST_HOOK_TARGETS[0],
   });
   /**
+   * **host observerの状態は報告するが`healthy`を変えない**（Issue #1566、FR-08）。
+   *
+   * observerはadvisoryであり、workflowの判定に入らない。**全体の`diagnostics`へ
+   * 足さない。** 足すと未登録のprojectが不健全と判定され、観測器が門になる。
+   * **資産の欠落はrecord記載の有無を問わずこの欄だけへ報告する。** 在るが
+   * managed hashと一致しない改変は従来どおりmanaged assetの診断が全体へ入れる。
+   */
+  const hostObserver = ((): {
+    registered: boolean;
+    assetPresent: boolean;
+    healthy: boolean;
+    diagnostics: string[];
+    verifiedHostVersion: string;
+    authority: "advisory";
+    next: string;
+  } => {
+    const observerDiagnostics: string[] = [];
+    let registered = false;
+    if (hookSettingsFile === undefined)
+      observerDiagnostics.push(
+        `${HOST_HOOK_SETTINGS}を境界内で解決できないため、host observerの登録を確認できません`,
+      );
+    else
+      try {
+        const observed = inspectHostObserverRegistration(
+          fs.existsSync(hookSettingsFile) && isRegularFile(hookSettingsFile)
+            ? fs.readFileSync(hookSettingsFile, "utf8")
+            : undefined,
+        );
+        registered = observed.registered;
+        observerDiagnostics.push(...observed.diagnostics);
+      } catch (error) {
+        observerDiagnostics.push(
+          `${HOST_HOOK_SETTINGS}を読めないため、host observerの登録を確認できません: ${error instanceof Error ? error.message : "不明な失敗"}`,
+        );
+      }
+    let assetPresent: boolean;
+    try {
+      const file = resolveContained(target, HOST_OBSERVER_TARGET, {
+        allowMissingLeaf: true,
+      });
+      assetPresent = pathEntryExists(file) && isRegularFile(file);
+    } catch {
+      assetPresent = false;
+    }
+    if (!assetPresent)
+      observerDiagnostics.push(
+        `host observer資産${HOST_OBSERVER_TARGET}がありません。update --root=. --applyで配置できます`,
+      );
+    for (const relative of missingObserverAssets)
+      if (relative !== HOST_OBSERVER_TARGET)
+        observerDiagnostics.push(
+          `host observer資産${relative}がありません。update --root=. --applyで配置できます`,
+        );
+    return {
+      registered,
+      assetPresent,
+      healthy: registered && assetPresent && observerDiagnostics.length === 0,
+      diagnostics: observerDiagnostics,
+      verifiedHostVersion: HOST_OBSERVER_VERIFIED_VERSION,
+      authority: "advisory",
+      next: `登録は新しいClaude Code sessionから有効になります。検証済みversion（${HOST_OBSERVER_VERIFIED_VERSION}）以外でhook errorが表示される場合は、delete --applyまたは${HOST_HOOK_SETTINGS}のASC所有entryの削除で無効化できます`,
+    };
+  })();
+  /**
    * **展開先に在るがrecordに無い管理対象を報告する。`healthy`は変えない**（Issue #1314）。
    *
    * `--recover-record`での復旧は、正本と相違する資産を`retained`として保持し
@@ -1772,6 +1871,8 @@ export function doctor(target: string, worktreeObservations?: unknown) {
         );
     for (const { src, dest } of currentMappings) {
       const key = relativeKey(target, dest);
+      // observer資産の欠落は`hooks.hostObserver`が報告する（Issue #1566）。
+      if (isHostObserverAsset(key) && !pathEntryExists(dest)) continue;
       if (
         (key.startsWith(`${MANAGED_RUNTIME}/`) ||
           key === ".claude/hooks/asc-agent-lifecycle.mjs") &&
@@ -1868,6 +1969,7 @@ export function doctor(target: string, worktreeObservations?: unknown) {
       },
       registered: hookRegistration.registered,
       diagnostics: hookRegistration.registered ? [] : [hookRegistration.reason],
+      hostObserver,
     },
     adapters: {
       expected: [...HOST_SKILL_TARGETS],

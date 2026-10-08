@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
-import { DELIVERY_STATE_FILE, bindPullRequest, claimMergeDispatch, claimPullRequestCreationDispatch, completeTerminalRedelivery, deliveryStateDigest, observeMerge, parseDeliveryState, prepareMergeIntent, prepareTerminalRedeliveryMergeIntent, preparePullRequestCreation, recordStep11, renderDeliveryState, requireDeliveryReconciliation, resumePullRequestCreationAfterConfirmedAbsence, } from "../domain/delivery-state.js";
+import { DELIVERY_STATE_FILE, bindPullRequest, claimMergeDispatch, claimPullRequestCreationDispatch, completeTerminalRedelivery, deliveryStateDigest, externalMergeObservationId, observeMerge, parseDeliveryState, prepareMergeIntent, prepareTerminalRedeliveryMergeIntent, preparePullRequestCreation, recordExternalMergeStep11, recordStep11, renderDeliveryState, requireDeliveryReconciliation, resumePullRequestCreationAfterConfirmedAbsence, } from "../domain/delivery-state.js";
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, STAGING_RECORD_FILE, withStagingMutationLock, } from "../domain/staging.js";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
@@ -560,6 +560,26 @@ export function recordStoredStep11(directory, input) {
             return current;
         }
         return persistLocked(staging, recordStep11(current, input));
+    });
+}
+/**
+ * 外部merge取り込みのStep 11をlock内で永続化する（TERM-1569-02）。
+ *
+ * 同じobservationIdで記録済みなら何も書かずに返す。別の終端が記録済みなら拒否する。
+ */
+export function recordStoredExternalMergeStep11(directory, input) {
+    const staging = assertWorkflowStaging(directory);
+    return withStagingMutationLock(staging, () => {
+        const current = recoverAndReadLocked(staging);
+        if (!current)
+            throw new Error("外部merge取り込みより前のdelivery stateがありません");
+        if (current.state === "step11-recorded") {
+            if (current.externalMerge?.observationId !==
+                externalMergeObservationId(input.observation))
+                throw new Error("記録済みStep 11 evidenceを変更できません");
+            return current;
+        }
+        return persistLocked(staging, recordExternalMergeStep11(current, input));
     });
 }
 export function requireStoredDeliveryReconciliation(directory, input) {
