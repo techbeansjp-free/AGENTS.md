@@ -752,7 +752,8 @@ type SessionReplacementEvidence = NonNullable<
  * `reviewed-forward`は旧PR head（H_impl＋旧証跡）が新H_implのstrict ancestorである
  * ことを要求し、`artifact-supersession`はsessionの一致を要求するため、置換後の証跡を
  * 受理できない。**このmethodは置換記録が固定したH_implから一歩も動かない前進だけを
- * 通す。** 条件R1〜R7をすべて評価し、不成立の条件をすべて名指しで返す。
+ * 通す。** 条件R1〜R7をすべて評価し、不成立の条件をすべて名指しで返す。R7は呼出し側の
+ * 分岐でなく保存済みdelivery stateから判定する（Issue #1571、BR-01）。
  */
 function observeSessionReplacement(
   staging: string,
@@ -824,6 +825,11 @@ function observeSessionReplacement(
   )
     failures.push(
       "R6: 新baseが旧baseと同一でないか、新証跡の比較基点が新baseと一致しません",
+    );
+  const deliveryState = observeStoredDeliveryState(staging)?.state;
+  if (deliveryState !== "pr-bound")
+    failures.push(
+      `R7: delivery stateがpr-boundではありません（${deliveryState ?? "なし"}）`,
     );
   if (failures.length > 0 || !evidence || !artifactPath || !artifact)
     return { failures };
@@ -1025,7 +1031,12 @@ export function evaluateEvidenceReanchor(input: {
               method = "session-replacement";
           }
         }
-      }
+      } else
+        sessionReplacementFailures = observeSessionReplacement(
+          staging,
+          input.root,
+          comparison,
+        ).failures;
       if (
         rebase.reason !== "ok" &&
         artifactReplacement === undefined &&

@@ -31,6 +31,36 @@ Feature: 同一PRでのreview session置換と外部merge取り込み
     When "SCN-E2E-REVREPLACE-003"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
 
+  Scenario: SCN-E2E-REVREPLACE-004 Step 11記録後の置換後証跡はsession-replacementのR7だけを名指しして拒否する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-REVREPLACE-004"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+  Scenario Outline: SCN-E2E-REVREPLACE-005 中断した置換の再applyはprogress journalの配置をapplyの段の順序へ照合する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-REVREPLACE-005"の"<中断状態>"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
+    Examples:
+      | 中断状態 |
+      | 許可: 記録追記後・session rename前・savedProgressPath=null |
+      | 許可: 記録追記後・session rename前・savedProgressPath非null・元名あり |
+      | 許可: session rename後・savedProgressPath=null |
+      | 許可: session rename後・progress rename前 |
+      | 許可: progress rename後・digest再固定前 |
+      | 拒否: session rename前・savedProgressPath=null・元名あり |
+      | 拒否: session rename後・savedProgressPath=null・元名あり |
+      | 拒否: session rename前・savedProgressPath非null・元名も保存名もなし |
+      | 拒否: session rename前・savedProgressPath非null・元名と保存名の両方あり |
+      | 拒否: session rename後・savedProgressPath非null・元名と保存名の両方あり |
+      | 拒否: session rename前・savedProgressPath非null・保存名だけ |
+      | 既存診断: session rename後・savedProgressPath非null・元名も保存名もなし |
+
+  Scenario: SCN-E2E-REVREPLACE-006 置換記録の崩れはpendingLastの最終記録2形だけを中断復旧で許す
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-REVREPLACE-006"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
+
   Scenario: SCN-E2E-EXTMERGE-001 ASC外でmergeされたPRの結果を検証してStep 11へ追記する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-EXTMERGE-001"のE2E検査を実行する
@@ -68,3 +98,8 @@ Feature: 同一PRでのreview session置換と外部merge取り込み
       | 観測したmerge方式 |
       | squash |
       | merge |
+
+  Scenario: SCN-E2E-EXTMERGE-004 外部merge取り込みはproviderへ読取り操作だけを発行する
+    Given ワークフローStep公開CLIの隔離環境がある
+    When "SCN-E2E-EXTMERGE-004"のE2E検査を実行する
+    Then ワークフローStep公開CLI検査は期待結果になる
