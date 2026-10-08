@@ -46,6 +46,8 @@ Feature: 同一PRでのreview session置換と外部merge取り込み
       | PRがMERGEDである（OPEN） |
       | PRがMERGEDである（CLOSEDで未merge） |
       | merge時headが実効headと一致する |
+      | merge時headが実効headと一致する（pr reanchor後） |
+      | merge時headが実効headと一致する（観測中にpr reanchor） |
       | repositoryとPR番号が固定値と一致する |
       | repositoryが固定値と一致する |
       | base refが既定branchである |

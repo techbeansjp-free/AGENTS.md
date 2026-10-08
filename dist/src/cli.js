@@ -1154,6 +1154,16 @@ function handlePullRequestRecordExternalMerge(flags) {
             throw new Error("lock内で再読取りしたdelivery stateがpr-boundでないか、merge intentまたはStep 11があるため外部merge取り込みを記録しません");
         if (deliveryPersistenceDigest(staging) !== before)
             throw new Error("GitHub観測中にdelivery stateまたはjournalが変更されたため外部merge取り込みを記録しません");
+        /**
+         * lock外の検査からlock取得までにstaging成果物が変わっていないこと、並行する
+         * `pr reanchor`が実効headを動かしていないことをlock内で再確認する（01 §8）。
+         */
+        assertStoredStagingContentDigest(staging, "外部merge取り込みのlock内");
+        if (deriveEffectiveHead({
+            records: readEvidenceReanchorChain(staging),
+            anchoredHeadSha: initial.create.headSha,
+        }).effectiveHeadSha !== observation.headSha)
+            throw new Error("lock内で再導出した実効headが観測時の実効headと一致しないため外部merge取り込みを記録しません");
         const mode = inspectWorkflowStaging(staging).mode;
         let workflow;
         if (judged.resumeJournal) {
@@ -1207,6 +1217,15 @@ function handlePullRequestRecordExternalMerge(flags) {
         next: "外部merge取り込みをStep 11として記録しました。ASCの配送gateは経由していません",
     });
     return 0;
+}
+/**
+ * 外部merge取り込みで記録したStep 11を`pr merge`が読んだときの案内（US-05、BR-06）。
+ * ASC経由のmerge observationと区別し、配送gateを通過したとは示さない。
+ */
+function externalMergeRecordedNext(state) {
+    return state.externalMerge
+        ? `外部merge取り込み（external-merge observation ${state.externalMerge.observationId}）で記録したStep 11を再検証しました。このmergeはASCの配送gateを経由していません`
+        : undefined;
 }
 function exactMergeDispatchHead(input) {
     if (input.observedHeadSha !== input.authorizedHeadSha)
@@ -2346,7 +2365,8 @@ function handlePullRequestMerge(flags) {
                 deliveryState: initial,
                 next: pullRequestTerminal
                     ? "このworkflowはPR停止点で完了済みです。新しいowner判断で再開する場合だけ--reopen-terminal=approvedを指定してください"
-                    : "固定済みmerge observationによる配送完了を再検証しました",
+                    : (externalMergeRecordedNext(initial) ??
+                        "固定済みmerge observationによる配送完了を再検証しました"),
             });
             return pullRequestTerminal ? 1 : 0;
         }
@@ -2451,7 +2471,8 @@ function handlePullRequestMerge(flags) {
                         state: "merged",
                         url: current.pr.url,
                         deliveryState: current,
-                        next: "固定済みmerge observationによるStep 11記録は完了しています",
+                        next: externalMergeRecordedNext(current) ??
+                            "固定済みmerge observationによるStep 11記録は完了しています",
                     },
                 };
         }

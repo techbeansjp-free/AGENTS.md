@@ -2291,6 +2291,11 @@ interface DeliveryProviderControl {
    */
   writeFilesOnInvoke?: Record<string, string>;
   /**
+   * merge commitの読取り（外部merge取り込みの最後のGitHub観測）でだけfileを書く。
+   * PR再観測の後、lock取得の前に並行する`pr reanchor`を再現する（Issue #1569）。
+   */
+  writeFilesOnMergeCommitRead?: Record<string, string>;
+  /**
    * `pr.create`内のremote HEAD再検証を失敗させる（Issue #1157）。
    *
    * **この照会は`pr.create`の中でだけ起きる。** dispatch gateより前で落ちるため、
@@ -3955,6 +3960,8 @@ if (exact(["--version"])) {
     }),
   );
 } else if (exact(["api", "repos/o/r/commits/" + mergeSha])) {
+  for (const [file, contents] of Object.entries(control.writeFilesOnMergeCommitRead ?? {}))
+    fs.writeFileSync(file, Buffer.from(contents, "base64"));
   const parents = control.autoMergeMethod === "MERGE"
     ? (control.mergeParentsSwapped ? [{ sha }, { sha: baseSha }] : [{ sha: baseSha }, { sha }])
     : [{ sha: control.autoMergeMethod === "REBASE"
@@ -4791,6 +4798,44 @@ function runExternalMergeAcceptance(world: WorkflowStepWorld): void {
   assert.equal(deliveryProviderCalls(prepared).length, callsBefore);
   assert.equal(stagingBytes(prepared.staging), beforeRepeat);
   assert.equal(journalStep11Entries(prepared.staging).length, 1);
+  // `pr merge`も外部merge取り込みを区別して報告し、配送gateの通過を示さない（BR-06）。
+  const mergeReadBack = executeDeliveryMerge(prepared);
+  assert.equal(
+    mergeReadBack.status,
+    0,
+    mergeReadBack.stdout + mergeReadBack.stderr,
+  );
+  const mergeNext = (JSON.parse(mergeReadBack.stdout) as { next: string }).next;
+  assert.equal(
+    mergeNext,
+    `外部merge取り込み（external-merge observation ${observationId}）で記録したStep 11を再検証しました。このmergeはASCの配送gateを経由していません`,
+  );
+  assert.equal(stagingBytes(prepared.staging), beforeRepeat);
+  /**
+   * observationIdを残したまま外部mergeの区別marker（`external-merge observation`）を
+   * 落としたStep 11は、固定済みStep 11の再検証で拒否する（FR-08、US-05）。
+   */
+  const journalFile = path.join(prepared.staging, STEP_JOURNAL_FILE);
+  const stagingRecordFile = path.join(prepared.staging, "staging-record.json");
+  const journalBytes = fs.readFileSync(journalFile);
+  const stagingRecordBytes = fs.readFileSync(stagingRecordFile);
+  const marker = `external-merge observation ${observationId}`;
+  assert.ok(journalBytes.toString("utf8").includes(marker));
+  fs.writeFileSync(
+    journalFile,
+    journalBytes
+      .toString("utf8")
+      .replace(marker, `merge observation ${observationId}`),
+  );
+  refreshStoredStagingDigest(prepared.staging);
+  const unmarked = executeExternalMergeImport(prepared, "--apply");
+  assert.equal(unmarked.status, 1, unmarked.stdout + unmarked.stderr);
+  assert.match(
+    unmarked.stdout + unmarked.stderr,
+    /固定済みStep 11のoutcomeとdelivery stateが一致しません/u,
+  );
+  fs.writeFileSync(journalFile, journalBytes);
+  fs.writeFileSync(stagingRecordFile, stagingRecordBytes);
   const forged = executeCli(
     [
       "workflow",
@@ -4814,6 +4859,14 @@ function runExternalMergeMismatch(
 ): void {
   if (example === "delivery stateがpr-boundである（観測中にmerge-prepared）") {
     runExternalMergeConcurrentDeliveryAdvance(world);
+    return;
+  }
+  if (example === "merge時headが実効headと一致する（pr reanchor後）") {
+    runExternalMergeAfterReanchor(world);
+    return;
+  }
+  if (example === "merge時headが実効headと一致する（観測中にpr reanchor）") {
+    runExternalMergeConcurrentReanchor(world);
     return;
   }
   if (example === "Step 11が記録されていない") {
@@ -5004,6 +5057,73 @@ function runExternalMergeConcurrentDeliveryAdvance(
     readFixtureDeliveryState(prepared.staging).state,
     "merge-prepared",
   );
+  assert.equal(journalStep11Entries(prepared.staging).length, 0);
+}
+
+/**
+ * SCN-E2E-EXTMERGE-002の1行: 再固定chainがあるPRでは、merge時headを`pr create`時の
+ * headでなくchain由来の実効headと照合する（TERM-1569-02、BR-03(3)）。
+ */
+function runExternalMergeAfterReanchor(world: WorkflowStepWorld): void {
+  const fixture = followedMainReplacementFixture(world);
+  const { prepared } = fixture;
+  assert.notEqual(fixture.pullRequestHeadSha, prepared.headSha);
+  markExternallyMerged(prepared);
+  const preview = executeExternalMergeImport(prepared, "--dry-run");
+  assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+  const previewed = JSON.parse(preview.stdout) as ExternalMergeOutput & {
+    observation: { headSha: string };
+  };
+  assert.equal(previewed.state, "preview");
+  assert.equal(previewed.observation.headSha, fixture.pullRequestHeadSha);
+  // `pr create`時のheadでmergeされたPRは、実効headと一致しないため取り込まない。
+  pointProviderAt(
+    prepared,
+    fixture.baseSha,
+    prepared.headSha,
+    prepared.implementationCommitSha,
+  );
+  markExternallyMerged(prepared);
+  assertExternalMergeRejected(prepared, "binding", undefined);
+}
+
+/**
+ * SCN-E2E-EXTMERGE-002の1行: PR再観測の後に並行する`pr reanchor`が実効headを動かしたら、
+ * lock内の再導出で拒否してjournalへ何も追記しない（01 §8）。
+ */
+function runExternalMergeConcurrentReanchor(world: WorkflowStepWorld): void {
+  const fixture = followedMainReplacementFixture(world);
+  const { prepared } = fixture;
+  const chainFile = path.join(prepared.staging, "journal", "reanchor.jsonl");
+  const recordFile = path.join(prepared.staging, "staging-record.json");
+  const reanchored = Object.fromEntries(
+    [chainFile, recordFile].map((file) => [
+      file,
+      fs.readFileSync(file).toString("base64"),
+    ]),
+  );
+  fs.rmSync(chainFile);
+  refreshStoredStagingDigest(prepared.staging);
+  pointProviderAt(
+    prepared,
+    prepared.baseSha,
+    prepared.headSha,
+    prepared.implementationCommitSha,
+  );
+  markExternallyMerged(prepared, {
+    writeFilesOnMergeCommitRead: reanchored,
+  });
+  const rejected = executeExternalMergeImport(prepared, "--apply");
+  assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+  assert.match(
+    rejected.stdout + rejected.stderr,
+    /lock内で再導出した実効headが観測時の実効headと一致しない/u,
+  );
+  assert.equal(
+    fs.readFileSync(chainFile).toString("base64"),
+    reanchored[chainFile],
+  );
+  assert.equal(readFixtureDeliveryState(prepared.staging).state, "pr-bound");
   assert.equal(journalStep11Entries(prepared.staging).length, 0);
 }
 
@@ -5397,6 +5517,26 @@ function runReviewReplaceAcceptance(world: WorkflowStepWorld): void {
     (JSON.parse(afterStageTwo.stdout) as ReplacedOutput).recovered,
     true,
   );
+  // sessionのrename後・progress journalのrename前に止まった状態も、再applyで完了する。
+  const savedProgressFile = path.join(
+    staging,
+    "journal",
+    "review-progress-replaced-001.jsonl",
+  );
+  fs.renameSync(savedProgressFile, progressFile);
+  fs.writeFileSync(recordFile, storedRecord);
+  const betweenRenames = executeReviewReplace(prepared, "--apply");
+  assert.equal(
+    betweenRenames.status,
+    0,
+    betweenRenames.stdout + betweenRenames.stderr,
+  );
+  assert.equal(
+    (JSON.parse(betweenRenames.stdout) as ReplacedOutput).recovered,
+    true,
+  );
+  assert.equal(fs.existsSync(progressFile), false);
+  assert.equal(sha256File(savedProgressFile), progressDigest);
   fs.renameSync(savedFile, sessionFile);
   fs.writeFileSync(recordFile, storedRecord);
   const afterStageOne = executeReviewReplace(prepared, "--apply");
@@ -5992,6 +6132,88 @@ function runReviewReplaceRoundTwo(world: WorkflowStepWorld): void {
   assert.match(
     output,
     /実効H_impl\(.*\)がreview sessionの初回H_impl\(.*\)と一致しません/u,
+  );
+  assert.match(output, REVIEW_REPLACE_GUIDE);
+}
+
+/**
+ * SCN-E2E-REVREPLACE-003: 置換後sessionが同じH_implのままround 2で収束しても、
+ * 暫定guardはcounted round数で拒否し、置換手順を名指しする（INV-02）。
+ */
+function runReviewReplaceSameHeadRoundTwo(world: WorkflowStepWorld): void {
+  const fixture = boundReplacementFixture(world);
+  const { prepared } = fixture;
+  applyReviewReplace(fixture);
+  fixtureGit(prepared.root, [
+    "checkout",
+    "-q",
+    "--detach",
+    fixture.implementationSha,
+  ]);
+  const roundDraft = () =>
+    buildReviewRoundDraft({
+      staging: prepared.staging,
+      headSha: fixture.implementationSha,
+      baseSha: fixture.baseSha,
+      scopeIds: ["SCOPE-WORKFLOW"],
+      acceptanceCriteriaIds: ["AC-WF-005"],
+    }).round;
+  const finding = (status: "valid" | "resolved") => ({
+    id: "H-1569",
+    severity: "High",
+    status,
+    source: "review",
+    relation: "acceptance-violation",
+    evidence: "同じH_implのround 2で収束させるfixture",
+    path: "implementation.txt",
+    contractId: "AC-WF-005",
+    causedByFindingId: null,
+    decisionRef: null,
+  });
+  const blocked = recordReviewRound({
+    staging: prepared.staging,
+    round: parseReviewRoundInput({
+      ...roundDraft(),
+      findings: [finding("valid")],
+    }),
+  });
+  assert.notEqual(blocked.status, "converged");
+  const session = recordReviewRound({
+    staging: prepared.staging,
+    round: parseReviewRoundInput({
+      ...roundDraft(),
+      findings: [finding("resolved")],
+    }),
+  });
+  fixtureGit(prepared.root, ["checkout", "-q", fixture.branch]);
+  assert.equal(session.status, "converged");
+  assert.equal(session.rounds.length, 2);
+  assert.equal(session.anchor.initialHeadSha, fixture.implementationSha);
+  recordPostPrIntake(prepared, session.latestRoundDigest);
+  const finalHead = commitReviewEvidence(
+    prepared,
+    fixture.baseSha,
+    fixture.implementationSha,
+  );
+  pointProviderAt(
+    prepared,
+    fixture.baseSha,
+    finalHead,
+    fixture.implementationSha,
+  );
+  const reanchored = executeReanchor(
+    prepared,
+    finalHead,
+    fixture.baseSha,
+    "--apply",
+  );
+  assert.equal(reanchored.status, 0, reanchored.stdout + reanchored.stderr);
+  const rejected = executeDeliveryMergePreview(prepared);
+  assert.notEqual(rejected.status, 0);
+  const output = rejected.stdout + rejected.stderr;
+  assert.match(
+    output,
+    /review sessionのcounted round数\(2\)が1ではありません/u,
   );
   assert.match(output, REVIEW_REPLACE_GUIDE);
 }
@@ -12782,6 +13004,7 @@ if (exact(["auth", "status"])) {
     }
     case "SCN-E2E-REVREPLACE-003": {
       runReviewReplaceRoundTwo(this);
+      runReviewReplaceSameHeadRoundTwo(this);
       runReviewReplaceAbuse(this);
       break;
     }

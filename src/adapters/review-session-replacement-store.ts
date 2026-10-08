@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseJsonStrict } from "../lib/security.js";
 import { isRecord } from "../types.js";
+import { reviewProgressJournalPresent } from "./review-progress.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
 
 /**
@@ -142,7 +143,8 @@ export function readReplacementLines(staging: string): string[] {
  * 置換記録を読み、連番・hash chain・保存fileを検査する。
  *
  * `pendingLast`は`review replace --apply`の中断復旧だけが使う。最終記録の保存fileが
- * まだ無い状態（記録の追記後・renameの前）を許し、それ以外の崩れは常に拒否する。
+ * まだ無い状態（記録の追記後・renameの前）と、sessionのrename後・progress journalの
+ * renameの前（元名のprogress journalが残る状態）を許し、それ以外の崩れは常に拒否する。
  */
 export function readReviewSessionReplacements(
   stagingInput: string,
@@ -168,10 +170,9 @@ export function readReviewSessionReplacements(
         "置換記録の保存先pathが連番から導出した名前と一致しません",
       );
     const saved = path.join(staging, record.savedPath);
-    const pending =
-      options.pendingLast === true &&
-      index === lines.length - 1 &&
-      !fs.existsSync(saved);
+    const pendingRecord =
+      options.pendingLast === true && index === lines.length - 1;
+    const pending = pendingRecord && !fs.existsSync(saved);
     if (!pending) {
       if (
         !fs.existsSync(saved) ||
@@ -183,6 +184,7 @@ export function readReviewSessionReplacements(
         );
       if (
         record.savedProgressPath !== null &&
+        !(pendingRecord && reviewProgressJournalPresent(staging)) &&
         !fs.existsSync(
           path.join(staging, ...record.savedProgressPath.split("/")),
         )
