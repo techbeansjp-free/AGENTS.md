@@ -6,10 +6,10 @@
     "implementationHeadSha": "2ba0be52f86e79065967ac785276209186e2242f",
     "diffDigest": "917ff4d7991a7e160f6f421c67e0225ba064c11d9e9d6ea634f421b77d8d7c9d",
     "session": {
-      "sessionId": "0e5e05331243dcbd7632ca120307681c9325613562e58df7df0c980496dbd4b9",
-      "latestRoundDigest": "ea495757fac23dd6e8acf5fb76b3a02ce8cc5c240297149dbeff40d015d92c65",
+      "sessionId": "14f89812b6945c02006b716e71968a780beda497d8e86d46bdce112e1a15d17d",
+      "latestRoundDigest": "9ebec1ec49bd4456f777519199642223bb6b4d44db7b9401e5847c62f3263a0f",
       "status": "converged",
-      "countedRounds": 2
+      "countedRounds": 1
     },
     "impact": {
       "digest": "e29292f92105644bd7ba9fa007a444bb332689da19fcf6474e0cdc19eefbd511",
@@ -37,24 +37,16 @@
       "status": "valid",
       "relation": "improvement",
       "path": "docs/specs/06_外部インターフェース/01_コマンド・GitHub契約.md",
-      "contractId": "AC-08"
-    },
-    {
-      "id": "R1-2",
-      "severity": "Low",
-      "status": "valid",
-      "relation": "improvement",
-      "path": "test/steps/workflow-step-enforcement.steps.ts",
-      "contractId": "INV-04"
+      "contractId": "AC-04"
     }
   ],
   "unresolvedCriticalHigh": [],
   "verdict": "approved",
   "declared": {
-    "reviewer": "claude-code:subagent/reviewer-round1-c5ba9111-round2-postpr",
+    "reviewer": "claude-code:subagent/reviewer-replaced-session-round1",
     "implementer": "claude-code:subagent/implementation-workunit-aad52bf5",
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "10c7356988d1b5b7deafeae756e9a6e350d75f5bbcaf05e4ac1457c2e0c77fda"
+  "evidenceDigest": "4c1f6f6c2cf22f1fc034bfea48bfe59f5c7dfa0f73a21db1cacd9b3e23223e93"
 }
