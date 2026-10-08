@@ -11,14 +11,17 @@ import ts from "typescript";
  *
  * 違反は`観点: 詳細`の文字列で返す。観点は`syntax`・`import`・`module-member`・
  * `forbidden-global`・`output-key`・`dynamic-key`・`control-key`・`state-symbol`・
- * `hook-event`・`foreign-reference`の10種である。
+ * `hook-event`・`foreign-reference`・`open-flag`・`exit-code`・`reflective-member`の
+ * 13種である。
  */
 
 /**
  * 使ってよいNode標準moduleと、そのbindingから参照してよいmember。
  *
- * observerの実使用から決めた。`node:fs`は読取系だけである（`constants`は`O_RDONLY`・
- * `O_NONBLOCK`のopen flag）。`node:path`へ`resolve`を含めないのは、相対pathを
+ * observerの実使用から決めた。`node:fs`は読取系だけである。`openSync`と`constants`は
+ * 書込にも使えるため、member名の許可に加えて使い方を`inspectOpenFlag`等で限る
+ * （`constants`は`O_RDONLY`・`O_NONBLOCK`の参照だけ、`openSync`は読取専用flagの
+ * 2引数呼出しだけ）。`node:path`へ`resolve`を含めないのは、相対pathを
  * cwd基準で解決し他worktreeを参照する経路になるためである。`node:process`は
  * stdin・stdout・`exitCode`・`on`（未捕捉例外の`{}`化）だけであり、`cwd`・`env`・
  * `exit`・`binding`・`dlopen`・`chdir`・`nextTick`等は許可list外である。
@@ -90,7 +93,10 @@ const OBJECT_KEYS = new Set([
   "workUnitId",
 ]);
 
-/** 代入・増減してよいproperty。仕事量budgetの3欄、`process.exitCode`、配列の`length`だけである。 */
+/**
+ * 代入・増減してよいproperty。仕事量budgetの3欄、`process.exitCode`、配列の`length`だけである。
+ * `process.exitCode`は更に`= 0`の形だけに限る（`exit-code`）。
+ */
 const ASSIGNABLE_MEMBERS = new Set([
   "candidates",
   "exitCode",
@@ -143,6 +149,28 @@ const STATE_WORDS = [
  */
 const STATE_WORD_EXCEPTIONS = new Set(["block", "nonblocking", "O_NONBLOCK"]);
 
+/** `fs.constants`から参照してよいmember。読取専用openのflagだけである。 */
+const FS_CONSTANTS = new Set(["O_NONBLOCK", "O_RDONLY"]);
+
+/**
+ * named importでは取り込めないmember。`constants`・`openSync`・`exitCode`は使い方を
+ * `fs.`・`process.`経由の構文で検査するため、裸の識別子として取り込むと検査を迂回する。
+ */
+const NAMED_IMPORT_FORBIDDEN = new Set(["constants", "exitCode", "openSync"]);
+
+/**
+ * どの深さでも参照してはならないproperty名。許可したmemberからでも`.constructor`連鎖で
+ * `Function`へ、`call`・`apply`・`bind`で`this`の差し替えへ到達できるためである。
+ */
+const REFLECTIVE_MEMBERS = new Set([
+  "__proto__",
+  "apply",
+  "bind",
+  "call",
+  "constructor",
+  "prototype",
+]);
+
 /** `PreToolUse`以外のClaude Code hook event名。observerは分岐条件にも文字列にも持たない。 */
 const OTHER_EVENTS = [
   "Notification",
@@ -169,6 +197,43 @@ const FOREIGN_TEXTS = [
   "cmd.exe",
   "powershell",
 ];
+
+/**
+ * 文字列の内部にJSON key形（`"<key>"`）またはobject key形（`<key>:`）で現れる制御keyを返す。
+ * 大文字小文字を区別しない（template分割の後半piece`Decision":`も捕える）。
+ */
+function controlKeysInText(text: string): string[] {
+  const found: string[] = [];
+  for (const key of CONTROL_KEYS) {
+    const quoted = new RegExp(`"${key}"`, "iu");
+    const colon = new RegExp(`(?:^|[^A-Za-z0-9_$])${key}"?\\s*:`, "iu");
+    if (quoted.test(text) || colon.test(text)) found.push(key);
+  }
+  return found;
+}
+
+/**
+ * 文字列literal・template・`+`連結を、非literalの部分を区切り文字に置き換えて連結した
+ * 字面を返す。literal片へ分割した制御keyを連結後の字面で捕えるためである。
+ */
+function staticText(node: ts.Expression): string {
+  if (ts.isParenthesizedExpression(node)) return staticText(node.expression);
+  const text = literalText(node);
+  if (text !== undefined) return text;
+  if (ts.isTemplateExpression(node))
+    return (
+      node.head.text +
+      node.templateSpans
+        .map((span) => staticText(span.expression) + span.literal.text)
+        .join("")
+    );
+  if (
+    ts.isBinaryExpression(node) &&
+    node.operatorToken.kind === ts.SyntaxKind.PlusToken
+  )
+    return staticText(node.left) + staticText(node.right);
+  return "\u0000";
+}
 
 function normalized(name: string): string {
   return name.toLowerCase().replace(/[_$-]/gu, "");
@@ -239,6 +304,80 @@ function isAssignmentTarget(node: ts.Expression): boolean {
   return ts.isDeleteExpression(parent);
 }
 
+/** `fs.constants.<member>`の形か。`fsNames`はnode:fsのdefault・namespace bindingである。 */
+function isFsConstant(
+  node: ts.Expression,
+  fsNames: ReadonlySet<string>,
+  member: string,
+): boolean {
+  return (
+    ts.isPropertyAccessExpression(node) &&
+    node.name.text === member &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    node.expression.name.text === "constants" &&
+    ts.isIdentifier(node.expression.expression) &&
+    fsNames.has(node.expression.expression.text)
+  );
+}
+
+/**
+ * `O_RDONLY`へ加えてよいflag式か。`fs.constants.O_NONBLOCK`、数値`0`、両枝がそれである
+ * 条件式、初期値がそれである`const`（file内で同名宣言が1つだけ）に限る。observerは
+ * `O_NONBLOCK`が無いOSで`0`へ倒す`const nonblocking`を`O_RDONLY | nonblocking`で使う。
+ */
+function isNonblockFlag(
+  node: ts.Expression,
+  fsNames: ReadonlySet<string>,
+  constants: ReadonlyMap<string, ts.Expression | null>,
+  depth = 0,
+): boolean {
+  if (depth > 8) return false;
+  if (ts.isParenthesizedExpression(node))
+    return isNonblockFlag(node.expression, fsNames, constants, depth + 1);
+  if (isFsConstant(node, fsNames, "O_NONBLOCK")) return true;
+  if (ts.isNumericLiteral(node)) return node.text === "0";
+  if (ts.isConditionalExpression(node))
+    return (
+      isNonblockFlag(node.whenTrue, fsNames, constants, depth + 1) &&
+      isNonblockFlag(node.whenFalse, fsNames, constants, depth + 1)
+    );
+  if (ts.isIdentifier(node)) {
+    const initializer = constants.get(node.text);
+    return (
+      initializer !== undefined &&
+      initializer !== null &&
+      isNonblockFlag(initializer, fsNames, constants, depth + 1)
+    );
+  }
+  return false;
+}
+
+/**
+ * `fs.openSync`の呼出しを検査する。flag（第2引数）は`fs.constants.O_RDONLY`単独か
+ * `fs.constants.O_RDONLY | <isNonblockFlag>`だけを許す。文字列flagは書込・作成・追記の
+ * 字面（`"w"`・`"wx"`・`"a+"`等）を許可listで判別する利点が無いため一律に不可とし、
+ * 省略（既定`"r"`）も不可とする（observerは明示しており、明示を要求すれば形の検査だけで済む）。
+ * mode（第3引数）は作成時にしか意味が無いため不可とする。
+ */
+function inspectOpenFlag(
+  call: ts.CallExpression,
+  fsNames: ReadonlySet<string>,
+  constants: ReadonlyMap<string, ts.Expression | null>,
+): string | undefined {
+  if (call.arguments.length !== 2)
+    return `open-flag: openSyncの引数が${call.arguments.length}個（pathとflagの2個だけを許す）`;
+  const flag = call.arguments[1]!;
+  if (isFsConstant(flag, fsNames, "O_RDONLY")) return undefined;
+  if (
+    ts.isBinaryExpression(flag) &&
+    flag.operatorToken.kind === ts.SyntaxKind.BarToken &&
+    isFsConstant(flag.left, fsNames, "O_RDONLY") &&
+    isNonblockFlag(flag.right, fsNames, constants)
+  )
+    return undefined;
+  return `open-flag: ${flag.getText()}`;
+}
+
 /** observer sourceの禁止事項違反を返す。空配列なら合格である。 */
 export function inspectHostObserverSource(source: string): string[] {
   const violations: string[] = [];
@@ -258,6 +397,10 @@ export function inspectHostObserverSource(source: string): string[] {
   const bindings = new Map<string, readonly string[]>(
     Object.entries(GLOBAL_MEMBERS),
   );
+  /** node:fsのdefault・namespace binding名。 */
+  const fsNames = new Set<string>();
+  /** `process`（globalとnode:processのbinding）の名前。 */
+  const processNames = new Set<string>(["process"]);
 
   for (const statement of file.statements) {
     if (ts.isImportEqualsDeclaration(statement))
@@ -280,17 +423,51 @@ export function inspectHostObserverSource(source: string): string[] {
     }
     const clause = statement.importClause;
     if (clause === undefined) continue;
-    if (clause.name) bindings.set(clause.name.text, members);
     const named = clause.namedBindings;
-    if (named && ts.isNamespaceImport(named))
-      bindings.set(named.name.text, members);
+    const locals = [
+      clause.name,
+      named && ts.isNamespaceImport(named) ? named.name : undefined,
+    ];
+    for (const local of locals) {
+      if (local === undefined) continue;
+      bindings.set(local.text, members);
+      if (specifier === "node:fs") fsNames.add(local.text);
+      if (specifier === "node:process") processNames.add(local.text);
+    }
     if (named && ts.isNamedImports(named))
       for (const element of named.elements) {
         const imported = (element.propertyName ?? element.name).text;
-        if (!members.includes(imported))
+        if (!members.includes(imported) || NAMED_IMPORT_FORBIDDEN.has(imported))
           violations.push(`module-member: ${specifier} ${imported}`);
       }
   }
+
+  /** `const`宣言の名前 → 初期値。同名宣言が複数あれば`null`（解決しない）。 */
+  const constants = new Map<string, ts.Expression | null>();
+  const collect = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      ts.isVariableDeclarationList(node.parent) &&
+      (node.parent.flags & ts.NodeFlags.Const) !== 0 &&
+      node.initializer !== undefined
+    )
+      constants.set(
+        node.name.text,
+        constants.has(node.name.text) ? null : node.initializer,
+      );
+    else if (
+      (ts.isVariableDeclaration(node) ||
+        ts.isBindingElement(node) ||
+        ts.isParameter(node) ||
+        ts.isFunctionDeclaration(node)) &&
+      node.name !== undefined &&
+      ts.isIdentifier(node.name)
+    )
+      constants.set(node.name.text, null);
+    ts.forEachChild(node, collect);
+  };
+  collect(file);
 
   const visit = (node: ts.Node): void => {
     if (
@@ -320,6 +497,8 @@ export function inspectHostObserverSource(source: string): string[] {
       }
       if (CONTROL_KEYS.has(name.toLowerCase()))
         violations.push(`control-key: ${name}`);
+      if (REFLECTIVE_MEMBERS.has(name))
+        violations.push(`reflective-member: ${name}`);
       if (
         !STATE_WORD_EXCEPTIONS.has(name) &&
         STATE_WORDS.some((word) => lower.includes(word))
@@ -333,6 +512,15 @@ export function inspectHostObserverSource(source: string): string[] {
     if (text !== undefined) {
       if (CONTROL_KEYS.has(text.toLowerCase()))
         violations.push(`control-key: "${text}"`);
+      for (const key of controlKeysInText(text))
+        violations.push(`control-key: 文字列内の${key}`);
+      if (
+        REFLECTIVE_MEMBERS.has(text) &&
+        ((ts.isElementAccessExpression(node.parent) &&
+          node.parent.argumentExpression === node) ||
+          ts.isBindingElement(node.parent))
+      )
+        violations.push(`reflective-member: ${text}`);
       for (const event of OTHER_EVENTS)
         if (
           new RegExp(`(?:^|[^A-Za-z])${event}(?:[^A-Za-z]|$)`, "u").test(text)
@@ -343,6 +531,71 @@ export function inspectHostObserverSource(source: string): string[] {
           violations.push(`foreign-reference: "${foreign}"`);
       if (/(?:^|[^a-z])git(?:[^a-z]|$)/iu.test(text))
         violations.push(`foreign-reference: "${text}"`);
+    }
+
+    // literal片へ分割した制御keyを、連結後の字面で捕える（template・`+`連鎖の最上位）。
+    if (
+      (ts.isTemplateExpression(node) ||
+        (ts.isBinaryExpression(node) &&
+          node.operatorToken.kind === ts.SyntaxKind.PlusToken &&
+          !(
+            ts.isBinaryExpression(node.parent) &&
+            node.parent.operatorToken.kind === ts.SyntaxKind.PlusToken
+          ))) &&
+      !ts.isTemplateSpan(node.parent)
+    )
+      for (const key of controlKeysInText(staticText(node)))
+        violations.push(`control-key: 文字列内の${key}`);
+
+    // `fs.constants`は`O_RDONLY`・`O_NONBLOCK`の参照だけを許す（別変数への束縛・分割代入も不可）。
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      node.name.text === "constants" &&
+      ts.isIdentifier(node.expression) &&
+      fsNames.has(node.expression.text)
+    ) {
+      const parent = node.parent;
+      if (
+        !ts.isPropertyAccessExpression(parent) ||
+        parent.expression !== node ||
+        !FS_CONSTANTS.has(parent.name.text)
+      )
+        violations.push(
+          `open-flag: ${ts.isPropertyAccessExpression(parent) && parent.expression === node ? parent.getText() : `${node.getText()}を値として参照`}`,
+        );
+    }
+    // `fs.openSync`は呼出しの形でだけ参照でき、flagとmodeを検査する。
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      node.name.text === "openSync" &&
+      ts.isIdentifier(node.expression) &&
+      fsNames.has(node.expression.text)
+    ) {
+      const parent = node.parent;
+      const finding =
+        ts.isCallExpression(parent) && parent.expression === node
+          ? inspectOpenFlag(parent, fsNames, constants)
+          : `open-flag: ${node.getText()}を値として参照`;
+      if (finding !== undefined) violations.push(finding);
+    }
+    // `process.exitCode`は`= 0`の代入の左辺としてだけ現れてよい。
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      node.name.text === "exitCode" &&
+      ts.isIdentifier(node.expression) &&
+      processNames.has(node.expression.text)
+    ) {
+      const parent = node.parent;
+      if (
+        !ts.isBinaryExpression(parent) ||
+        parent.left !== node ||
+        parent.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+        !ts.isNumericLiteral(parent.right) ||
+        parent.right.text !== "0"
+      )
+        violations.push(
+          `exit-code: ${ts.isBinaryExpression(parent) && parent.left === node ? parent.getText() : node.getText()}`,
+        );
     }
 
     if (ts.isObjectLiteralExpression(node))

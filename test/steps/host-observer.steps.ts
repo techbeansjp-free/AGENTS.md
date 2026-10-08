@@ -2292,6 +2292,7 @@ const WARNING_ANCHOR = "    systemMessage: text,\n";
 const EVENT_ANCHOR =
   '  if (input.hook_event_name !== "PreToolUse") return NONE;\n';
 const RENDER_EMPTY = "  return {};\n}";
+const OPEN_CALL = "fs.openSync(file, fs.constants.O_RDONLY | nonblocking)";
 const FORBIDDEN_SYNTAX: ReadonlyArray<{
   label: string;
   edits: ReadonlyArray<[string, string]>;
@@ -2511,6 +2512,118 @@ const FORBIDDEN_SYNTAX: ReadonlyArray<{
     label: "許可list外の出力key",
     edits: [[WARNING_ANCHOR, `${WARNING_ANCHOR}    hookVerdict: "x",\n`]],
     expected: "output-key: hookVerdict",
+  },
+  // 以下はPR #1568 round 8（R8-01〜R8-04）で検出した迂回形である。
+  {
+    label: "openSync w",
+    edits: [[OPEN_CALL, 'fs.openSync(file, "w")']],
+    expected: 'open-flag: "w"',
+  },
+  {
+    label: "openSync wx",
+    edits: [[OPEN_CALL, 'fs.openSync(file, "wx")']],
+    expected: 'open-flag: "wx"',
+  },
+  {
+    label: "openSync a+",
+    edits: [[OPEN_CALL, 'fs.openSync(file, "a+")']],
+    expected: 'open-flag: "a+"',
+  },
+  {
+    label: "O_WRONLY|O_CREAT|O_TRUNC",
+    edits: [
+      [
+        OPEN_CALL,
+        "fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC)",
+      ],
+    ],
+    expected: "open-flag: fs.constants.O_CREAT",
+  },
+  {
+    label: "O_RDONLY | 1",
+    edits: [[OPEN_CALL, "fs.openSync(file, fs.constants.O_RDONLY | 1)"]],
+    expected: "open-flag: fs.constants.O_RDONLY | 1",
+  },
+  {
+    label: "openSyncのmode",
+    edits: [[OPEN_CALL, "fs.openSync(file, fs.constants.O_RDONLY, 0o666)"]],
+    expected: "open-flag: openSyncの引数が3個（pathとflagの2個だけを許す）",
+  },
+  {
+    label: "constantsの別変数束縛",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}const c = fs.constants;\nc.O_CREAT;\n`],
+    ],
+    expected: "open-flag: fs.constantsを値として参照",
+  },
+  {
+    label: "exitCode = 2",
+    edits: [[EXIT_ANCHOR, "process.exitCode = 2;\n"]],
+    expected: "exit-code: process.exitCode = 2",
+  },
+  {
+    label: "exitCode += 1",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}process.exitCode += 1;\n`]],
+    expected: "exit-code: process.exitCode += 1",
+  },
+  {
+    label: "exitCode **= 0",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}process.exitCode **= 0;\n`]],
+    expected: "exit-code: process.exitCode **= 0",
+  },
+  {
+    label: "constantsのnamed import",
+    edits: [[FS_IMPORT, 'import fs, { constants } from "node:fs";\n']],
+    expected: "module-member: node:fs constants",
+  },
+  {
+    label: "引用符で囲んだ制御key",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}const key = '"permissionDecision"';\n`],
+    ],
+    expected: "control-key: 文字列内のpermissiondecision",
+  },
+  {
+    label: "JSON.parseの文字列内制御key",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}JSON.parse('{"decision":"block"}');\n`],
+    ],
+    expected: "control-key: 文字列内のdecision",
+  },
+  {
+    label: "stdout.writeの文字列内制御key",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}process.stdout.write('{"permissionDecision":"deny"}');\n`,
+      ],
+    ],
+    expected: "control-key: 文字列内のpermissiondecision",
+  },
+  {
+    label: "templateで組み立てた制御key",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        EXIT_ANCHOR +
+          'process.stdout.write(`{"permissionDec${"ision"}":"deny"}`);\n',
+      ],
+    ],
+    expected: "control-key: 文字列内のpermissiondecision",
+  },
+  {
+    label: "constructor連鎖",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}Array.isArray.constructor("return 1")();\n`],
+    ],
+    expected: "reflective-member: constructor",
+  },
+  {
+    label: "process.on.call",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}process.on.call(null, "exit", () => 0);\n`],
+    ],
+    expected: "reflective-member: call",
   },
 ];
 
