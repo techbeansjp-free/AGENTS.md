@@ -3,16 +3,16 @@
   "issue": 1569,
   "observed": {
     "baseSha": "c6f1dc31da2cd6e1c4b617f21d1457e805d7158e",
-    "implementationHeadSha": "d2278e8ff46bd5c0447fc9effc7fac07decd4c1b",
-    "diffDigest": "53cabe4654314b8c8b2bca7c556c098cdd310c071b0331f771d287a7bc689035",
+    "implementationHeadSha": "5fb2530b56259eaed76a7fc1a599529fd787c387",
+    "diffDigest": "a1d0355121229ed222bc8b65cf94adf9c4ae6065c43a7c211a2cc2306c5f9d73",
     "session": {
       "sessionId": "6551e94f5b69c7549e02cd939c175927c4e1ca7b8181bbc7223ed9d923f807fd",
-      "latestRoundDigest": "cb2cd9b0d1b5bc04a34a1005281f86006f45515f0bab539d5559d82decda1c80",
+      "latestRoundDigest": "22c3332582fa0c90fbca6868d2d236d603ad11c00ffb079ba7f3e5844b45a1bf",
       "status": "converged",
-      "countedRounds": 1
+      "countedRounds": 2
     },
     "impact": {
-      "digest": "7c9b7b314efe952a817a5723fde9c8ca3dfdfd18b4966420ef7f112e4af0cdaf",
+      "digest": "c43c9b0f230700e9c74b56692ca342348393e577134a06e69f564964055179ef",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "d2278e8ff46bd5c0447fc9effc7fac07decd4c1b",
-        "impactDigest": "7c9b7b314efe952a817a5723fde9c8ca3dfdfd18b4966420ef7f112e4af0cdaf",
-        "finishedAt": "2026-10-08T14:56:41.316Z",
-        "recordDigest": "dde535a647807620734c4f13af38beeae63972864220b7b35fb06fe9d84b51db"
+        "headSha": "5fb2530b56259eaed76a7fc1a599529fd787c387",
+        "impactDigest": "c43c9b0f230700e9c74b56692ca342348393e577134a06e69f564964055179ef",
+        "finishedAt": "2026-10-08T15:54:46.918Z",
+        "recordDigest": "c2f0a915a930d260f28d140f320c5f318a9231d0bf7bda8ce18d765a35754c96"
       }
     ]
   },
@@ -70,15 +70,31 @@
       "relation": "acceptance-violation",
       "path": "src/cli.ts",
       "contractId": "AC-07"
+    },
+    {
+      "id": "R2-1",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/adapters/review-session-replacement.ts",
+      "contractId": "INV-07"
+    },
+    {
+      "id": "R2-2",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/workflow-step-enforcement.steps.ts",
+      "contractId": "AC-05"
     }
   ],
   "unresolvedCriticalHigh": [],
   "verdict": "approved",
   "declared": {
-    "reviewer": "claude-code:subagent/reviewer-workunit-ed09ea9d",
+    "reviewer": "claude-code:subagent/reviewer-round1-ed09ea9d-round2-postpr",
     "implementer": "claude-code:subagent/implementation-workunit-85960ed8",
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "fdc349f03a3ce9717f2686ae40a8e64ca840796cb3109538eb449ee848beacee"
+  "evidenceDigest": "a1848f3030df12c776de453829b1b63bcc74f9e3edfbaabf68ed568089aaae85"
 }
