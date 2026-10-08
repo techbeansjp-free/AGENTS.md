@@ -2283,7 +2283,7 @@ Then(
 // ---------------------------------------------------------------- SCN-020
 
 /**
- * observerの複写へ加える禁止構文（OWN-04）。`expected`は検査器が返す違反の字面であり、
+ * observerの複写へ加える禁止構文（OWN-04、stream memberはOWN-05）。`expected`は検査器が返す違反の字面であり、
  * 検査器の定数から導出しない。`after`の直後へ`insert`を1回だけ差し込む。
  */
 const EXIT_ANCHOR = "process.exitCode = 0;\n";
@@ -2845,6 +2845,101 @@ const FORBIDDEN_SYNTAX: ReadonlyArray<{
       ],
     ],
     expected: "reflective-member: constructor",
+  },
+  {
+    label: "stdin.pipe(stdout)",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}process.stdin.pipe(process.stdout);\n`],
+    ],
+    expected: "stream-member: process.stdin.pipe",
+  },
+  {
+    label: "stdin.pause",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}process.stdin.pause();\n`]],
+    expected: "stream-member: process.stdin.pause",
+  },
+  {
+    label: "stdout.end",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}process.stdout.end();\n`]],
+    expected: "stream-member: process.stdout.end",
+  },
+  {
+    label: "stdout.destroy",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}process.stdout.destroy();\n`]],
+    expected: "stream-member: process.stdout.destroy",
+  },
+  {
+    label: "stdin.read",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}process.stdin.read();\n`]],
+    expected: "stream-member: process.stdin.read",
+  },
+  {
+    label: "stdout.writeの値としての受け渡し",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}const w = process.stdout.write;\nw("x");\n`],
+    ],
+    expected: "stream-member: process.stdout.writeを値として参照",
+  },
+  {
+    label: "stdout.write.call",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}process.stdout.write.call(process.stdout, "x");\n`,
+      ],
+    ],
+    expected: "reflective-member: call",
+  },
+  {
+    label: "stdout._handle",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}process.stdout._handle;\n`]],
+    expected: "stream-member: process.stdout._handle",
+  },
+  {
+    label: "stdout.writeの3段目",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}process.stdout.write.name;\n`]],
+    expected: "stream-member: process.stdout.writeの先を参照",
+  },
+  {
+    label: "stdin.onの戻り値",
+    edits: [
+      [
+        EXIT_ANCHOR,
+        `${EXIT_ANCHOR}process.stdin.on("data", () => 0).pipe(process.stdout);\n`,
+      ],
+    ],
+    expected: "stream-member: process.stdin.on(…)の戻り値を参照",
+  },
+  {
+    label: "stdoutの値としての受け渡し",
+    edits: [
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}const o = process.stdout;\no.write("x");\n`],
+    ],
+    expected: "stream-member: process.stdoutを値として参照",
+  },
+  {
+    label: "stderr",
+    edits: [[EXIT_ANCHOR, `${EXIT_ANCHOR}process.stderr.write("x");\n`]],
+    expected: "module-member: process.stderr",
+  },
+  {
+    label: "namespace importのstdin.pipe",
+    edits: [
+      [PROCESS_IMPORT, `${PROCESS_IMPORT}import * as p from "node:process";\n`],
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}p.stdin.pipe(p.stdout);\n`],
+    ],
+    expected: "stream-member: p.stdin.pipe",
+  },
+  {
+    label: "stdoutのnamed import",
+    edits: [
+      [
+        PROCESS_IMPORT,
+        'import process, { stdout as o } from "node:process";\n',
+      ],
+      [EXIT_ANCHOR, `${EXIT_ANCHOR}o.write("x");\n`],
+    ],
+    expected: "module-member: node:process stdout",
   },
 ];
 

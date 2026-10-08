@@ -21,7 +21,7 @@ import ts from "typescript";
  * 違反は`観点: 詳細`の文字列で返す。観点は`syntax`・`import`・`module-member`・
  * `forbidden-global`・`output-key`・`dynamic-key`・`control-key`・`state-symbol`・
  * `hook-event`・`foreign-reference`・`open-flag`・`exit-code`・`reflective-member`・
- * `this`・`function-form`・`element-access`・`escape`の17種である。
+ * `this`・`function-form`・`element-access`・`escape`・`stream-member`の18種である。
  */
 
 /**
@@ -46,6 +46,21 @@ const MODULE_MEMBERS: Readonly<Record<string, readonly string[]>> = {
   ],
   "node:path": ["dirname", "isAbsolute", "join"],
   "node:process": ["exitCode", "on", "stdin", "stdout"],
+};
+
+/**
+ * `process.stdin`・`process.stdout`から呼んでよいmember（PR #1568 OWN-05）。
+ *
+ * observerの実使用は`process.stdin.on("data"|"end"|"error", …)`・`process.stdout.on("error", …)`・
+ * `process.stdout.write(…)`の文としての呼出しだけである。stream自体は`process.stdin.pipe(process.stdout)`
+ * の1行で入力本文を無加工でstdoutへ流せるため、`pipe`・`pause`・`resume`・`destroy`・`end`・
+ * `unpipe`・`read`・`fd`・`_handle`等はmember名で許可list外とする。許可したmemberも
+ * 呼出しの形（`<process>.<stream>.<member>(…);`の文）でだけ書け、stream・memberの値としての
+ * 受け渡し、3段目以降の参照、呼出しの戻り値（`on`はstream自身を返す）の参照は不可である。
+ */
+const STREAM_MEMBERS: Readonly<Record<string, readonly string[]>> = {
+  stdin: ["on"],
+  stdout: ["on", "write"],
 };
 
 /**
@@ -176,10 +191,16 @@ const STATE_WORD_EXCEPTIONS = new Set(["block", "nonblocking", "O_NONBLOCK"]);
 const FS_CONSTANTS = new Set(["O_NONBLOCK", "O_RDONLY"]);
 
 /**
- * named importでは取り込めないmember。`constants`・`openSync`・`exitCode`は使い方を
- * `fs.`・`process.`経由の構文で検査するため、裸の識別子として取り込むと検査を迂回する。
+ * named importでは取り込めないmember。`constants`・`openSync`・`exitCode`・`stdin`・`stdout`は
+ * 使い方を`fs.`・`process.`経由の構文で検査するため、裸の識別子として取り込むと検査を迂回する。
  */
-const NAMED_IMPORT_FORBIDDEN = new Set(["constants", "exitCode", "openSync"]);
+const NAMED_IMPORT_FORBIDDEN = new Set([
+  "constants",
+  "exitCode",
+  "openSync",
+  "stdin",
+  "stdout",
+]);
 
 /**
  * どの深さでも参照してはならないproperty名。許可したmemberからでも`.constructor`連鎖で
@@ -808,6 +829,34 @@ export function inspectHostObserverSource(source: string): string[] {
           ? inspectOpenFlag(parent, fsNames, constants)
           : `open-flag: ${node.getText()}を値として参照`;
       if (finding !== undefined) violations.push(finding);
+    }
+    // `process.stdin`・`process.stdout`は許可memberの文としての呼出しだけを書ける（OWN-05）。
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      Object.hasOwn(STREAM_MEMBERS, node.name.text) &&
+      ts.isIdentifier(node.expression) &&
+      bindings.get(node.expression.text) === MODULE_MEMBERS["node:process"]
+    ) {
+      const stream = node.getText();
+      const access = node.parent;
+      if (!ts.isPropertyAccessExpression(access) || access.expression !== node)
+        violations.push(`stream-member: ${stream}を値として参照`);
+      else {
+        const member = `${stream}.${access.name.text}`;
+        if (!STREAM_MEMBERS[node.name.text]!.includes(access.name.text))
+          violations.push(`stream-member: ${member}`);
+        const call = access.parent;
+        if (
+          (ts.isPropertyAccessExpression(call) ||
+            ts.isElementAccessExpression(call)) &&
+          call.expression === access
+        )
+          violations.push(`stream-member: ${member}の先を参照`);
+        else if (!ts.isCallExpression(call) || call.expression !== access)
+          violations.push(`stream-member: ${member}を値として参照`);
+        else if (!ts.isExpressionStatement(call.parent))
+          violations.push(`stream-member: ${member}(…)の戻り値を参照`);
+      }
     }
     // `.exitCode`は受信者を問わず（`process`・別名・`this`・任意の式）`= 0`の代入の左辺としてだけ現れてよい。
     if (ts.isPropertyAccessExpression(node) && node.name.text === "exitCode") {
