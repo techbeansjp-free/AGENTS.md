@@ -62,6 +62,7 @@ import {
   diagnoseBranchFollowCost,
   extractIssueClosingNumbers,
   nonCanonicalClosingReferences,
+  resolveMergeMethod,
   type BranchDeliveryPolicyObservation,
 } from "./domain/delivery.js";
 import {
@@ -177,6 +178,7 @@ import {
   type PolicyAuthorityObservation,
   type PullRequestInspection,
   type PullRequestQueueObservation,
+  type RepositoryAuthorityObservation,
 } from "./adapters/github.js";
 import { planIssueStart } from "./domain/issue-start.js";
 import {
@@ -331,6 +333,7 @@ import {
   observeStoredMerge,
   observeStoredDeliveryState,
   prepareStoredMergeIntent,
+  recordStoredExternalMergeStep11,
   prepareStoredTerminalRedeliveryMergeIntent,
   prepareStoredPullRequestCreation,
   readStoredDeliveryState,
@@ -343,9 +346,11 @@ import {
   assertImmutablePullRequestBinding,
   canonicalDigest,
   closingContractDigest,
+  externalMergeObservationId,
   pullRequestContentDigest,
   pullRequestTerminalEvidenceId,
   type DeliveryState,
+  type ExternalMergeObservationInput,
   type MergeProviderRequest,
   type MergeObservation,
 } from "./domain/delivery-state.js";
@@ -1322,7 +1327,12 @@ function assertRecordedStep11Evidence(
   if (
     (current.step11.outcome === "merged" &&
       current.step11.evidenceId !==
-        current.merge?.observation?.observationId) ||
+        (current.externalMerge?.observationId ??
+          current.merge?.observation?.observationId)) ||
+    (current.externalMerge !== undefined &&
+      !entry.evidence.includes(
+        `external-merge observation ${current.externalMerge.observationId}`,
+      )) ||
     (current.step11.outcome === "pull-request" &&
       ((!current.redelivery && current.merge !== null) ||
         current.step11.evidenceId !==
@@ -1365,6 +1375,530 @@ function postPrIntakeDeliveryErrors(staging: string): string[] {
   } catch (error) {
     return [error instanceof Error ? error.message : String(error)];
   }
+}
+
+/** 外部merge取り込みが判定する項目（02 §3.2）。順序と集合は出力契約である。 */
+export const EXTERNAL_MERGE_CHECK_IDS = [
+  "binding",
+  "merged",
+  "default-branch",
+  "trusted-policy",
+  "reachable",
+  "method",
+  "delivery",
+] as const;
+
+export interface ExternalMergeCheck {
+  id: (typeof EXTERNAL_MERGE_CHECK_IDS)[number];
+  observed: unknown;
+  expected: unknown;
+  ok: boolean;
+  reason?: string;
+}
+
+/**
+ * 外部merge取り込みの判定（TERM-1569-02、BR-03〜05）。GitHub・Gitの観測値だけを受け取り、
+ * 全項目を評価して返す純関数である。1項目でも`ok:false`なら呼出し側は何も書かない。
+ *
+ * **merge方式は自己申告から取らない（BR-04）。** merge commitの親が「第1親＝merge時base、
+ * 第2親＝固定済みPRの実効head」の2親なら`merge`、1親なら`squash`/`rebase`の候補とし、
+ * merge時base（第1親）のtrusted policyが許可する方式との積がちょうど`merge`のときだけ受理する。
+ */
+export function externalMergeChecks(input: {
+  requested: { repository: string; pr: number };
+  state: DeliveryState;
+  effectiveHeadSha: string;
+  observed?: PullRequestInspection;
+  bindingError?: string;
+  authority?: RepositoryAuthorityObservation;
+  policy?: { commitSha: string; allowedMethods: readonly string[] };
+  ancestry?: CommitAncestryObservation;
+  topology?: CommitTopologyObservation;
+  errors: Partial<Record<ExternalMergeCheck["id"], string>>;
+  journalStep11Evidence: readonly string[];
+  stagingError?: string;
+  observedAt: string;
+}): {
+  checks: ExternalMergeCheck[];
+  observation?: ExternalMergeObservationInput;
+  observationId?: string;
+  resumeJournal: boolean;
+} {
+  const { state, observed } = input;
+  const OID = /^[a-f0-9]{40}$/u;
+  const checks: ExternalMergeCheck[] = [];
+  const add = (
+    id: ExternalMergeCheck["id"],
+    observedValue: unknown,
+    expected: unknown,
+    ok: boolean,
+    reason?: string,
+  ): boolean => {
+    const error = input.errors[id];
+    checks.push({
+      id,
+      observed: observedValue,
+      expected,
+      ok: ok && error === undefined,
+      ...(error !== undefined || !ok
+        ? { reason: error ?? reason ?? `${id}が一致しません` }
+        : {}),
+    });
+    return ok && error === undefined;
+  };
+  const prUrl = state.pr?.url ?? "";
+  const bindingOk = add(
+    "binding",
+    {
+      repository: input.requested.repository.toLowerCase(),
+      pr: input.requested.pr,
+      headRefOid: observed?.headRefOid ?? null,
+      baseRefName: observed?.baseRefName ?? null,
+    },
+    {
+      repository: state.create.repository,
+      pr: state.pr?.number ?? null,
+      headRefOid: input.effectiveHeadSha,
+      baseRefName: state.create.baseRef,
+    },
+    observed !== undefined &&
+      input.bindingError === undefined &&
+      input.requested.repository.toLowerCase() === state.create.repository &&
+      input.requested.pr === state.pr?.number,
+    input.bindingError ??
+      "--repo・--prまたはPR再観測が固定済みPR bindingと一致しません",
+  );
+  const mergeCommitSha = observed?.mergeCommit?.oid;
+  let providerMergedAt: string | undefined;
+  try {
+    providerMergedAt =
+      observed?.mergedAt === undefined || observed.mergedAt === null
+        ? undefined
+        : canonicalProviderInstant(observed.mergedAt, "merged PRのmergedAt");
+  } catch {
+    providerMergedAt = undefined;
+  }
+  const mergedOk = add(
+    "merged",
+    {
+      state: observed?.state ?? null,
+      mergedAt: observed?.mergedAt ?? null,
+      mergeCommit: mergeCommitSha ?? null,
+    },
+    { state: "MERGED", mergedAt: "ISO 8601", mergeCommit: "40桁SHA" },
+    String(observed?.state ?? "") === "MERGED" &&
+      providerMergedAt !== undefined &&
+      typeof mergeCommitSha === "string" &&
+      OID.test(mergeCommitSha),
+    "PRがMERGEDでないかmerge時刻・merge commitを観測できません",
+  );
+  const defaultBranchOk = add(
+    "default-branch",
+    {
+      repository: input.authority?.repository ?? null,
+      defaultBranch: input.authority?.defaultBranch ?? null,
+      baseRefName: observed?.baseRefName ?? null,
+    },
+    {
+      repository: state.create.repository,
+      defaultBranch: state.create.baseRef,
+      baseRefName: state.create.baseRef,
+    },
+    input.authority !== undefined &&
+      input.authority.repository.toLowerCase() === state.create.repository &&
+      input.authority.defaultBranch === state.create.baseRef &&
+      observed?.baseRefName === state.create.baseRef,
+    "PRのbase refが観測した既定branchではありません",
+  );
+  const baseSha = observed?.baseRefOid;
+  const policyOk = add(
+    "trusted-policy",
+    {
+      commitSha: input.policy?.commitSha ?? null,
+      allowedMethods: input.policy?.allowedMethods ?? null,
+    },
+    { commitSha: baseSha ?? null },
+    input.policy !== undefined &&
+      typeof baseSha === "string" &&
+      OID.test(baseSha) &&
+      input.policy.commitSha === baseSha,
+    "merge時base（第1親）のtrusted policyを解決できません",
+  );
+  const reachableOk = add(
+    "reachable",
+    {
+      ancestorSha: input.ancestry?.ancestorSha ?? null,
+      descendantSha: input.ancestry?.descendantSha ?? null,
+      isAncestor: input.ancestry?.isAncestor ?? null,
+    },
+    {
+      ancestorSha: mergeCommitSha ?? null,
+      descendantSha: input.authority?.defaultBranchTipOid ?? null,
+      isAncestor: true,
+    },
+    input.ancestry !== undefined &&
+      input.authority !== undefined &&
+      input.ancestry.repository.toLowerCase() === state.create.repository &&
+      input.ancestry.ancestorSha === mergeCommitSha &&
+      input.ancestry.descendantSha === input.authority.defaultBranchTipOid &&
+      input.ancestry.isAncestor,
+    "merge commitが既定branch tipから到達可能であることを確認できません",
+  );
+  const parents = input.topology?.parentShas ?? [];
+  const topologyMatches =
+    input.topology !== undefined &&
+    input.topology.repository.toLowerCase() === state.create.repository &&
+    input.topology.sha === mergeCommitSha;
+  const candidates: string[] = !topologyMatches
+    ? []
+    : parents.length === 2 &&
+        parents[0] === baseSha &&
+        parents[1] === input.effectiveHeadSha
+      ? ["merge"]
+      : parents.length === 1
+        ? ["squash", "rebase"]
+        : [];
+  const allowed = input.policy?.allowedMethods ?? [];
+  const accepted = candidates.filter((method) => allowed.includes(method));
+  const methodOk = add(
+    "method",
+    { parentShas: parents, candidates, allowed },
+    {
+      parentShas: [baseSha ?? null, input.effectiveHeadSha],
+      method: "merge",
+    },
+    accepted.length === 1 && accepted[0] === "merge",
+    accepted.length === 0 && candidates.length > 0
+      ? "trusted policyが許可するmerge方式と観測したmerge commitの形が一致しません"
+      : "merge方式を判定できません",
+  );
+  const facts =
+    bindingOk &&
+    mergedOk &&
+    defaultBranchOk &&
+    policyOk &&
+    reachableOk &&
+    methodOk &&
+    state.pr &&
+    typeof mergeCommitSha === "string" &&
+    typeof baseSha === "string" &&
+    providerMergedAt !== undefined &&
+    input.policy &&
+    input.authority
+      ? ({
+          repository: state.create.repository,
+          prNumber: state.pr.number,
+          prUrl,
+          headSha: input.effectiveHeadSha,
+          baseRef: state.create.baseRef,
+          baseSha,
+          mergeCommitSha,
+          providerMergedAt,
+          defaultBranchTipSha: input.authority.defaultBranchTipOid,
+          method: "merge",
+          trustedPolicyCommitSha: input.policy.commitSha,
+          observedAt: input.observedAt,
+        } satisfies ExternalMergeObservationInput)
+      : undefined;
+  const observationId = facts ? externalMergeObservationId(facts) : undefined;
+  const pending = input.journalStep11Evidence;
+  const resumeJournal =
+    pending.length === 1 &&
+    observationId !== undefined &&
+    pending[0]!.includes(`external-merge observation ${observationId}`);
+  add(
+    "delivery",
+    {
+      state: state.state,
+      merge: state.merge !== null,
+      step11: state.step11 !== null,
+      journalStep11: pending.length,
+    },
+    { state: "pr-bound", merge: false, step11: false, journalStep11: 0 },
+    input.stagingError === undefined &&
+      state.state === "pr-bound" &&
+      state.merge === null &&
+      state.step11 === null &&
+      state.redelivery === undefined &&
+      (pending.length === 0 || resumeJournal),
+    input.stagingError ??
+      "delivery stateがpr-boundでないか、Step 11が記録済みです。merge-prepared以後はpr mergeのread-backを使ってください",
+  );
+  return {
+    checks,
+    ...(facts && observationId ? { observation: facts, observationId } : {}),
+    resumeJournal,
+  };
+}
+
+function observeExternalMerge(input: {
+  root: string;
+  staging: string;
+  state: DeliveryState;
+  requested: { repository: string; pr: number };
+}): ReturnType<typeof externalMergeChecks> {
+  const { root, staging, state } = input;
+  if (!state.pr)
+    throw new Error("外部merge取り込みには固定済みPR bindingが必要です");
+  const repository = state.create.repository;
+  const errors: Partial<Record<ExternalMergeCheck["id"], string>> = {};
+  const attempt = <Value>(
+    id: ExternalMergeCheck["id"],
+    read: () => Value,
+  ): Value | undefined => {
+    try {
+      return read();
+    } catch (error) {
+      errors[id] = error instanceof Error ? error.message : String(error);
+      return undefined;
+    }
+  };
+  const effectiveHeadSha = deriveEffectiveHead({
+    records: readEvidenceReanchorChain(staging),
+    anchoredHeadSha: state.create.headSha,
+  }).effectiveHeadSha;
+  const observed = attempt("binding", () =>
+    github("pr.inspect", { repository, pr: state.pr!.number }, root),
+  );
+  let bindingError: string | undefined;
+  if (observed)
+    try {
+      assertBoundPullRequestObservation({
+        staging,
+        state,
+        observed,
+        tracker: state.create.issueUrl,
+      });
+    } catch (error) {
+      bindingError = error instanceof Error ? error.message : String(error);
+    }
+  const authority = attempt("default-branch", () =>
+    github("repository.authority", { repository }, root),
+  );
+  const baseSha = observed?.baseRefOid;
+  const policy =
+    typeof baseSha === "string" && /^[a-f0-9]{40}$/u.test(baseSha)
+      ? attempt("trusted-policy", () => {
+          const trustedSet = loadEffectiveTrustedPolicySetAtCommit(
+            root,
+            baseSha,
+          );
+          return {
+            commitSha: String(trustedSet.provenance?.commitSha ?? ""),
+            allowedMethods: resolveMergeMethod({
+              baseRef: state.create.baseRef,
+              headRef: state.create.headRef,
+              method: "merge",
+              policy: trustedSet.policy,
+            }).resolvedMethods,
+          };
+        })
+      : undefined;
+  if (errors["trusted-policy"])
+    errors["trusted-policy"] =
+      `merge時base ${baseSha}のtrusted policyを解決できません。git fetchでmerge時baseを取得してから再実行してください: ${errors["trusted-policy"]}`;
+  const mergeCommitSha = observed?.mergeCommit?.oid;
+  const merged =
+    String(observed?.state ?? "") === "MERGED" &&
+    typeof mergeCommitSha === "string" &&
+    /^[a-f0-9]{40}$/u.test(mergeCommitSha);
+  const ancestry =
+    merged && authority
+      ? attempt("reachable", () =>
+          github(
+            "commit.ancestry",
+            {
+              repository,
+              sha: mergeCommitSha,
+              descendantSha: authority.defaultBranchTipOid,
+            },
+            root,
+          ),
+        )
+      : undefined;
+  const topology = merged
+    ? attempt("method", () =>
+        github("commit.topology", { repository, sha: mergeCommitSha }, root),
+      )
+    : undefined;
+  const journal = readWorkflowJournal(staging);
+  let stagingError: string | undefined;
+  try {
+    if (journal.errors.length > 0)
+      throw new Error(`journalが不正です: ${journal.errors.join("; ")}`);
+    assertStoredStagingContentDigest(staging, "外部merge取り込み前");
+  } catch (error) {
+    stagingError = error instanceof Error ? error.message : String(error);
+  }
+  return externalMergeChecks({
+    requested: input.requested,
+    state,
+    effectiveHeadSha,
+    ...(observed ? { observed } : {}),
+    ...(bindingError ? { bindingError } : {}),
+    ...(authority ? { authority } : {}),
+    ...(policy ? { policy } : {}),
+    ...(ancestry ? { ancestry } : {}),
+    ...(topology ? { topology } : {}),
+    errors,
+    journalStep11Evidence: journal.entries
+      .filter((entry) => entry.step === 11)
+      .map((entry) => entry.evidence),
+    ...(stagingError ? { stagingError } : {}),
+    observedAt: deliveryEventTime(),
+  });
+}
+
+function deliveryPersistenceDigest(staging: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(
+      stableJson(
+        [DELIVERY_STATE_FILE, "journal/steps.jsonl"].map((relative) => {
+          const file = path.join(staging, ...relative.split("/"));
+          return fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+        }),
+      ),
+    )
+    .digest("hex");
+}
+
+/**
+ * `pr record-external-merge`（外部merge取り込み、REQ-WF-053）。GitHubへは書き込まない。
+ */
+function handlePullRequestRecordExternalMerge(flags: Flags): number {
+  const unknown = Object.keys(flags).filter(
+    (flag) =>
+      !["repo", "pr", "staging", "root", "apply", "dry-run"].includes(flag),
+  );
+  if (unknown.length > 0)
+    throw new Error(
+      `pr record-external-mergeの未知optionです: --${unknown.join(", --")}`,
+    );
+  const apply = applyMode(flags);
+  const root = path.resolve(
+    typeof flags.root === "string" ? flags.root : process.cwd(),
+  );
+  const requestedStaging = resolveContained(root, required(flags, "staging"));
+  try {
+    assertIssueStagingLocation(requestedStaging, root);
+  } catch {
+    throw new Error(
+      `pr record-external-mergeのstagingは対象rootの${readStagingLayout(root).rootPattern}/直下が必要です`,
+    );
+  }
+  const staging = assertWorkflowStaging(requestedStaging);
+  const repository = required(flags, "repo");
+  const prRaw = required(flags, "pr");
+  if (!/^[1-9]\d*$/u.test(prRaw))
+    throw new Error("--prは正の整数で指定してください");
+  const requested = { repository, pr: Number(prRaw) };
+  const initial = observeStoredDeliveryState(staging);
+  if (!initial?.pr)
+    throw new Error(
+      "外部merge取り込みにはpr createで永続化した固定済みdelivery stateが必要です",
+    );
+  if (initial.state === "step11-recorded" && initial.externalMerge) {
+    assertRecordedStep11Evidence(staging, initial);
+    if (
+      repository.toLowerCase() !== initial.create.repository ||
+      requested.pr !== initial.pr.number
+    )
+      throw new Error("--repo・--prが固定済みPR bindingと一致しません");
+    print({
+      state: "already-recorded",
+      observation: initial.externalMerge,
+      deliveryState: initial,
+      next: "外部merge取り込みは記録済みです。journalとdelivery stateは変更していません",
+    });
+    return 0;
+  }
+  const before = deliveryPersistenceDigest(staging);
+  const judged = observeExternalMerge({
+    root,
+    staging,
+    state: initial,
+    requested,
+  });
+  const failed = judged.checks.filter((check) => !check.ok);
+  if (failed.length > 0 || !judged.observation || !judged.observationId) {
+    print({
+      state: "rejected",
+      checks: judged.checks,
+      reasons: failed.map((check) => `${check.id}: ${check.reason ?? ""}`),
+      next: "不一致の項目を解消してから再実行してください。stagingは変更していません",
+    });
+    return 1;
+  }
+  const observation = judged.observation;
+  if (!apply) {
+    print({
+      state: "preview",
+      checks: judged.checks,
+      method: observation.method,
+      mergeCommitSha: observation.mergeCommitSha,
+      observation: { ...observation, observationId: judged.observationId },
+      next: "checksを確認してから--applyでStep 11（outcome=merged、外部merge取り込み）を記録してください。記録後はStep 11の封印が適用されます",
+    });
+    return 0;
+  }
+  const result = withStagingMutationLock(staging, () => {
+    if (deliveryPersistenceDigest(staging) !== before)
+      throw new Error(
+        "GitHub観測中にdelivery stateまたはjournalが変更されたため外部merge取り込みを記録しません",
+      );
+    const mode = inspectWorkflowStaging(staging).mode;
+    let workflow: { entry: StepJournalEntry; journalDigest: string };
+    if (judged.resumeJournal) {
+      const journal = readWorkflowJournal(staging);
+      const existing = journal.entries.find((entry) => entry.step === 11);
+      if (!existing)
+        throw new Error("中断時のStep 11 journal entryがありません");
+      workflow = {
+        entry: existing,
+        journalDigest: crypto
+          .createHash("sha256")
+          .update(journal.source)
+          .digest("hex"),
+      };
+    } else {
+      const definition = workflowStep(11);
+      if (!definition) throw new Error("step 11の定義がありません");
+      const lowerBound =
+        observation.providerMergedAt > initial.pr!.boundAt
+          ? observation.providerMergedAt
+          : initial.pr!.boundAt;
+      workflow = appendDeliveryTerminalJournalEntry({
+        staging,
+        headSha: observation.headSha,
+        entry: {
+          step: 11,
+          skillId: definition.skillId,
+          mode,
+          recordedAt: deliveryEventTime(lowerBound),
+          artifacts: [observation.prUrl, DELIVERY_STATE_FILE],
+          evidence: `outcome=merged external-merge observation ${judged.observationId}でrepository=${observation.repository} PR #${observation.prNumber} HEAD=${observation.headSha} mergeCommit=${observation.mergeCommitSha} method=${observation.method}を観測した。ASCの配送gateを経由していない`,
+        },
+      });
+    }
+    return {
+      workflow,
+      deliveryState: recordStoredExternalMergeStep11(staging, {
+        observation,
+        recordedAt: workflow.entry.recordedAt,
+        journalDigest: workflow.journalDigest,
+      }),
+    };
+  });
+  print({
+    state: "recorded",
+    checks: judged.checks,
+    observation: result.deliveryState.externalMerge,
+    workflow: result.workflow,
+    deliveryState: result.deliveryState,
+    next: "外部merge取り込みをStep 11として記録しました。ASCの配送gateは経由していません",
+  });
+  return 0;
 }
 
 function exactMergeDispatchHead(input: {
@@ -9780,6 +10314,13 @@ export async function main(
       },
       dependencies,
     );
+  }
+  if (command === "pr" && subcommand === "record-external-merge") {
+    const { flags } = parse(rest);
+    required(flags, "repo");
+    required(flags, "pr");
+    required(flags, "staging");
+    return handlePullRequestRecordExternalMerge(flags);
   }
   if (command === "pr" && subcommand === "merge") {
     const { flags } = parse(rest);

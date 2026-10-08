@@ -12,7 +12,23 @@ const ROOT_FIELDS = new Set([
     "merge",
     "step11",
     "redelivery",
+    "externalMerge",
     "reconciliation",
+]);
+const EXTERNAL_MERGE_FIELDS = new Set([
+    "repository",
+    "prNumber",
+    "prUrl",
+    "headSha",
+    "baseRef",
+    "baseSha",
+    "mergeCommitSha",
+    "providerMergedAt",
+    "defaultBranchTipSha",
+    "method",
+    "trustedPolicyCommitSha",
+    "observedAt",
+    "observationId",
 ]);
 const CREATE_FIELDS = new Set([
     "repository",
@@ -461,7 +477,57 @@ function parseMerge(value, create, pr) {
     }
     return parsed;
 }
-function parseStep11(value, create, pr, merge) {
+/** merge後に不変な事実だけから外部merge観測のidentityを導出する。 */
+export function externalMergeObservationId(value) {
+    return canonicalDigest({
+        domain: "agent-skill-chain/external-merge-observation/v1",
+        repository: value.repository,
+        prNumber: value.prNumber,
+        prUrl: value.prUrl,
+        headSha: value.headSha,
+        baseRef: value.baseRef,
+        baseSha: value.baseSha,
+        mergeCommitSha: value.mergeCommitSha,
+        providerMergedAt: value.providerMergedAt,
+        method: value.method,
+    });
+}
+function parseExternalMerge(value, create, pr) {
+    if (value === undefined)
+        return undefined;
+    if (!isRecord(value))
+        throw new Error("externalMergeはobjectが必要です");
+    unknownFields(value, EXTERNAL_MERGE_FIELDS, "externalMerge");
+    if (!pr)
+        throw new Error("externalMergeには固定済みPR bindingが必要です");
+    if (value.method !== "merge")
+        throw new Error("externalMerge.methodはmergeだけを記録できます");
+    const withoutId = {
+        repository: repository(value.repository),
+        prNumber: positiveInteger(value.prNumber, "externalMerge.prNumber"),
+        prUrl: exactUrl(value.prUrl, expectedPullRequestUrl(create.repository, pr.number), "externalMerge.prUrl"),
+        headSha: oid(value.headSha, "externalMerge.headSha"),
+        baseRef: ref(value.baseRef, "externalMerge.baseRef"),
+        baseSha: oid(value.baseSha, "externalMerge.baseSha"),
+        mergeCommitSha: oid(value.mergeCommitSha, "externalMerge.mergeCommitSha"),
+        providerMergedAt: instant(value.providerMergedAt, "externalMerge.providerMergedAt"),
+        defaultBranchTipSha: oid(value.defaultBranchTipSha, "externalMerge.defaultBranchTipSha"),
+        method: value.method,
+        trustedPolicyCommitSha: oid(value.trustedPolicyCommitSha, "externalMerge.trustedPolicyCommitSha"),
+        observedAt: instant(value.observedAt, "externalMerge.observedAt"),
+    };
+    if (withoutId.repository !== create.repository ||
+        withoutId.prNumber !== pr.number ||
+        withoutId.baseRef !== create.baseRef)
+        throw new Error("externalMergeのrepository・PR番号・base refが固定済みPR bindingと一致しません");
+    if (withoutId.trustedPolicyCommitSha !== withoutId.baseSha)
+        throw new Error("externalMerge.trustedPolicyCommitShaがmerge時base SHAと一致しません");
+    const observationId = digest(value.observationId, "externalMerge.observationId");
+    if (observationId !== externalMergeObservationId(withoutId))
+        throw new Error("externalMerge.observationIdが観測内容と一致しません");
+    return { ...withoutId, observationId };
+}
+function parseStep11(value, create, pr, merge, externalMerge) {
     if (value === null)
         return null;
     if (!isRecord(value))
@@ -472,8 +538,10 @@ function parseStep11(value, create, pr, merge) {
     if (!pr)
         throw new Error("step11には固定済みPR bindingが必要です");
     const evidenceId = digest(value.evidenceId, "step11.evidenceId");
+    if (value.outcome === "merged" && merge?.observation && externalMerge)
+        throw new Error("merged終端はmerge observationとexternalMergeの一方だけを根拠にできます");
     const expectedEvidenceId = value.outcome === "merged"
-        ? merge?.observation?.observationId
+        ? (merge?.observation?.observationId ?? externalMerge?.observationId)
         : pullRequestTerminalEvidenceId(create, pr);
     if (!expectedEvidenceId || evidenceId !== expectedEvidenceId)
         throw new Error("step11.evidenceIdが終端Evidenceと一致しません");
@@ -483,6 +551,11 @@ function parseStep11(value, create, pr, merge) {
         journalDigest: digest(value.journalDigest, "step11.journalDigest"),
         evidenceId,
     };
+    if (value.outcome === "merged" && externalMerge) {
+        notBefore(parsed.recordedAt, externalMerge.providerMergedAt, "step11.recordedAt");
+        notBefore(parsed.recordedAt, pr.boundAt, "step11.recordedAt");
+        return parsed;
+    }
     notBefore(parsed.recordedAt, value.outcome === "merged"
         ? (merge?.observation?.observedAt ?? pr.boundAt)
         : pr.boundAt, "step11.recordedAt");
@@ -578,6 +651,12 @@ function validateShape(state) {
     const fail = (message) => {
         throw new Error(`delivery state ${state.state}が不正です: ${message}`);
     };
+    if (state.externalMerge &&
+        (state.state !== "step11-recorded" ||
+            state.step11?.outcome !== "merged" ||
+            state.merge !== null ||
+            state.redelivery !== undefined))
+        fail("externalMergeはmerge intentもredeliveryも無いmerged終端だけが持てます");
     if (state.state === "create-prepared") {
         if (state.pr ||
             state.merge ||
@@ -627,8 +706,9 @@ function validateShape(state) {
                     state.merge?.observation?.providerState !== "merged"))
                 fail("再配送完了にはproviderのmerged observationが必要です");
         }
-        else if (!state.merge?.observation ||
-            state.merge.observation.providerState !== "merged") {
+        else if (!state.externalMerge &&
+            (!state.merge?.observation ||
+                state.merge.observation.providerState !== "merged")) {
             fail("merged終端ではproviderのmerged observationが必要です");
         }
         return;
@@ -657,6 +737,8 @@ export function parseDeliveryState(source) {
     const value = { ...raw };
     if (!("redelivery" in value))
         value.redelivery = undefined;
+    if (!("externalMerge" in value))
+        value.externalMerge = undefined;
     unknownFields(value, ROOT_FIELDS, "delivery state");
     if (value.schemaVersion !== DELIVERY_STATE_SCHEMA_VERSION)
         throw new Error("delivery state schemaVersionが不正です");
@@ -671,7 +753,8 @@ export function parseDeliveryState(source) {
     const create = parseCreate(value.create);
     const pr = parsePullRequest(value.pr, create);
     const merge = parseMerge(value.merge, create, pr);
-    const step11 = parseStep11(value.step11, create, pr, merge);
+    const externalMerge = parseExternalMerge(value.externalMerge, create, pr);
+    const step11 = parseStep11(value.step11, create, pr, merge, externalMerge);
     const state = {
         schemaVersion: DELIVERY_STATE_SCHEMA_VERSION,
         revision,
@@ -680,6 +763,7 @@ export function parseDeliveryState(source) {
         pr,
         merge,
         step11,
+        ...(externalMerge === undefined ? {} : { externalMerge }),
         ...(value.redelivery === undefined
             ? {}
             : {
@@ -927,6 +1011,35 @@ export function recordStep11(current, input) {
                 ? current.merge.observation.observationId
                 : pullRequestTerminalEvidenceId(current.create, current.pr),
         },
+    };
+    return parseDeliveryState(stableJson(candidate));
+}
+/**
+ * 外部merge取り込みの終端遷移（`pr-bound` → `step11-recorded`）。
+ *
+ * **merge intentを作らない。** `MergeIntent`は配送gate由来のfield（CI run・review ID等）を
+ * 必須にするため、埋めると配送gateの通過を装うことになる（BR-06）。
+ */
+export function recordExternalMergeStep11(current, input) {
+    if (current.state !== "pr-bound" ||
+        current.merge ||
+        current.step11 ||
+        current.redelivery)
+        throw new Error(`${current.state}から外部merge取り込みを記録できません`);
+    if (!current.pr)
+        throw new Error("外部merge取り込みには固定済みPRが必要です");
+    const observationId = externalMergeObservationId(input.observation);
+    const candidate = {
+        ...current,
+        revision: current.revision + 1,
+        state: "step11-recorded",
+        step11: {
+            outcome: "merged",
+            recordedAt: input.recordedAt,
+            journalDigest: input.journalDigest,
+            evidenceId: observationId,
+        },
+        externalMerge: { ...input.observation, observationId },
     };
     return parseDeliveryState(stableJson(candidate));
 }

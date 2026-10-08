@@ -8,11 +8,13 @@ import {
   claimPullRequestCreationDispatch,
   completeTerminalRedelivery,
   deliveryStateDigest,
+  externalMergeObservationId,
   observeMerge,
   parseDeliveryState,
   prepareMergeIntent,
   prepareTerminalRedeliveryMergeIntent,
   preparePullRequestCreation,
+  recordExternalMergeStep11,
   recordStep11,
   renderDeliveryState,
   requireDeliveryReconciliation,
@@ -20,6 +22,7 @@ import {
   type DeliveryCreateIntent,
   type DeliveryCreateIntentInput,
   type DeliveryState,
+  type ExternalMergeObservationInput,
   type MergeIntentInput,
   type MergeObservation,
   type PullRequestBinding,
@@ -853,6 +856,36 @@ export function recordStoredStep11(
       return current;
     }
     return persistLocked(staging, recordStep11(current, input));
+  });
+}
+
+/**
+ * 外部merge取り込みのStep 11をlock内で永続化する（TERM-1569-02）。
+ *
+ * 同じobservationIdで記録済みなら何も書かずに返す。別の終端が記録済みなら拒否する。
+ */
+export function recordStoredExternalMergeStep11(
+  directory: string,
+  input: {
+    observation: ExternalMergeObservationInput;
+    recordedAt: string;
+    journalDigest: string;
+  },
+): DeliveryState {
+  const staging = assertWorkflowStaging(directory);
+  return withStagingMutationLock(staging, () => {
+    const current = recoverAndReadLocked(staging);
+    if (!current)
+      throw new Error("外部merge取り込みより前のdelivery stateがありません");
+    if (current.state === "step11-recorded") {
+      if (
+        current.externalMerge?.observationId !==
+        externalMergeObservationId(input.observation)
+      )
+        throw new Error("記録済みStep 11 evidenceを変更できません");
+      return current;
+    }
+    return persistLocked(staging, recordExternalMergeStep11(current, input));
   });
 }
 

@@ -71,9 +71,11 @@ import {
   DELIVERY_STATE_FILE,
   canonicalDigest,
   closingContractDigest,
+  externalMergeObservationId,
   parseDeliveryState,
   pullRequestContentDigest,
   renderDeliveryState,
+  type DeliveryState,
 } from "../../src/domain/delivery-state.js";
 import { splitPullRequestDocument } from "../../src/domain/delivery.js";
 import {
@@ -2277,6 +2279,13 @@ interface DeliveryProviderControl {
   headSha?: string;
   implementationSha?: string;
   /**
+   * merge後の既定branch tipをmerge commitより先へ進める（Issue #1569）。
+   * 未指定ならmerge commit自体がtipであり、既存scenarioの挙動を変えない。
+   */
+  postMergeTipSha?: string;
+  /** 2親merge commitの親の順序を入れ替える（Issue #1569、方式判定不能の再現）。 */
+  mergeParentsSwapped?: boolean;
+  /**
    * `pr.create`内のremote HEAD再検証を失敗させる（Issue #1157）。
    *
    * **この照会は`pr.create`の中でだけ起きる。** dispatch gateより前で落ちるため、
@@ -3082,6 +3091,11 @@ function writeDeliveryProviderControl(
 function advanceDeliveryTrustedMergeMode(
   prepared: PreparedDeliveryCli,
   mode: FixtureMergeMode,
+  /**
+   * 許可するmerge方式と、providerが観測させるbaseまで進めるか（Issue #1569）。
+   * 既定は従来どおり`merge`だけを許可し、provider baseも進める。
+   */
+  options: { methods?: string[]; updateProviderBase?: boolean } = {},
 ): string {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "asc-policy-index-"));
   const indexFile = path.join(scratch, "index");
@@ -3098,7 +3112,7 @@ function advanceDeliveryTrustedMergeMode(
   const merge = {
     mode,
     branches: ["feature/x"],
-    methods: ["merge"],
+    methods: options.methods ?? ["merge"],
     requiredChecks: [],
     requiredReviews: 0,
   };
@@ -3176,6 +3190,7 @@ function advanceDeliveryTrustedMergeMode(
     { cwd: prepared.root, encoding: "utf8" },
   );
   assert.equal(updateRef.status, 0, updateRef.stderr);
+  if (options.updateProviderBase === false) return advanced;
   const mergeTree = spawnSync(
     "git",
     ["merge-tree", "--write-tree", advanced, prepared.headSha],
@@ -3585,7 +3600,7 @@ if (exact(["--version"])) {
 } else if (exact(["api", "repos/o/r/commits/main", "--jq", ".sha"])) {
   process.stdout.write(
     (control.phase === "merged"
-      ? (control.mergeOnDefaultBranch ? mergeSha : "d".repeat(40))
+      ? (control.postMergeTipSha ?? (control.mergeOnDefaultBranch ? mergeSha : "d".repeat(40)))
       : baseSha) + "\\n",
   );
 } else if (exact(["api", "repos/o/r/commits/develop", "--jq", ".sha"])) {
@@ -3934,7 +3949,7 @@ if (exact(["--version"])) {
   );
 } else if (exact(["api", "repos/o/r/commits/" + mergeSha])) {
   const parents = control.autoMergeMethod === "MERGE"
-    ? [{ sha: baseSha }, { sha }]
+    ? (control.mergeParentsSwapped ? [{ sha }, { sha: baseSha }] : [{ sha: baseSha }, { sha }])
     : [{ sha: control.autoMergeMethod === "REBASE"
       ? rebasedImplementationSha
       : control.terminalParentTampered
@@ -4511,6 +4526,432 @@ function rewriteStep11Journal(
   fs.writeFileSync(journalFile, `${rewritten.join("\n")}\n`);
   refreshStoredStagingDigest(prepared.staging);
 }
+
+/**
+ * ASC外でmergeされたPRのfixture（Issue #1569、SCN-E2E-EXTMERGE-*）。
+ *
+ * `pr create`でpr-boundにしてから、providerだけをmerged（2親merge commit）へ進める。
+ * mergedAtはfixture clockより先に置き、Step 11記録時刻の下限がprovider mergedAtになる
+ * 経路を通す。
+ */
+function prepareExternallyMergedPullRequest(
+  world: WorkflowStepWorld,
+  mergeMode: FixtureMergeMode = "automatic",
+): PreparedDeliveryCli {
+  const prepared = prepareDeliveryCli(world, {}, mergeMode);
+  createDeliveryPullRequest(prepared);
+  return prepared;
+}
+
+function markExternallyMerged(
+  prepared: PreparedDeliveryCli,
+  patch: Partial<DeliveryProviderControl> = {},
+): void {
+  writeDeliveryProviderControl(prepared, {
+    phase: "merged",
+    mergedAt: fixtureInstant({ minutesAhead: 5 }),
+    ...patch,
+  });
+}
+
+function executeExternalMergeImport(
+  prepared: PreparedDeliveryCli,
+  mode: "--dry-run" | "--apply",
+  pr = 1,
+) {
+  return executeCli(
+    [
+      "pr",
+      "record-external-merge",
+      "--repo=o/r",
+      `--pr=${pr}`,
+      `--root=${prepared.root}`,
+      `--staging=${path.relative(prepared.root, prepared.staging)}`,
+      mode,
+    ],
+    prepared.root,
+    prepared.env,
+  );
+}
+
+interface ExternalMergeOutput {
+  state: string;
+  checks?: Array<{ id: string; ok: boolean; reason?: string }>;
+  observation?: { observationId: string; defaultBranchTipSha: string };
+  deliveryState?: DeliveryState;
+}
+
+function stagingBytes(staging: string): string {
+  const files: string[] = [];
+  const walk = (directory: string): void => {
+    for (const name of fs.readdirSync(directory).sort()) {
+      const file = path.join(directory, name);
+      if (fs.lstatSync(file).isDirectory()) walk(file);
+      else
+        files.push(
+          `${path.relative(staging, file)}:${crypto
+            .createHash("sha256")
+            .update(fs.readFileSync(file))
+            .digest("hex")}`,
+        );
+    }
+  };
+  walk(staging);
+  return files.join("\n");
+}
+
+function journalStep11Entries(staging: string): StepJournalEntry[] {
+  return parseStepJournal(
+    fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+  ).entries.filter((item) => item.step === 11);
+}
+
+function readFixtureDeliveryState(staging: string): DeliveryState {
+  return parseDeliveryState(
+    fs.readFileSync(
+      path.join(staging, ...DELIVERY_STATE_FILE.split("/")),
+      "utf8",
+    ),
+  );
+}
+
+/** 1項目だけ壊したfixtureで取り込みを拒否させ、名指しとbyte不変を確かめる。 */
+function assertExternalMergeRejected(
+  prepared: PreparedDeliveryCli,
+  checkId: string,
+  reason: RegExp | undefined,
+  pr = 1,
+): void {
+  const before = stagingBytes(prepared.staging);
+  const rejected = executeExternalMergeImport(prepared, "--apply", pr);
+  assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+  const output = JSON.parse(rejected.stdout) as ExternalMergeOutput;
+  assert.equal(output.state, "rejected");
+  assert.deepEqual(
+    output.checks?.map((check) => check.id),
+    [
+      "binding",
+      "merged",
+      "default-branch",
+      "trusted-policy",
+      "reachable",
+      "method",
+      "delivery",
+    ],
+  );
+  const named = output.checks?.find((check) => check.id === checkId);
+  assert.equal(named?.ok, false, rejected.stdout);
+  if (reason) assert.match(named?.reason ?? "", reason);
+  assert.equal(stagingBytes(prepared.staging), before);
+}
+
+function runExternalMergeAcceptance(world: WorkflowStepWorld): void {
+  const prepared = prepareExternallyMergedPullRequest(world);
+  markExternallyMerged(prepared);
+  const beforePreview = stagingBytes(prepared.staging);
+  const preview = executeExternalMergeImport(prepared, "--dry-run");
+  assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+  const previewed = JSON.parse(preview.stdout) as ExternalMergeOutput;
+  assert.equal(previewed.state, "preview");
+  assert.equal(
+    previewed.checks?.every((check) => check.ok),
+    true,
+    preview.stdout,
+  );
+  assert.equal(stagingBytes(prepared.staging), beforePreview);
+  const deliveryFile = path.join(
+    prepared.staging,
+    ...DELIVERY_STATE_FILE.split("/"),
+  );
+  const boundSource = fs.readFileSync(deliveryFile);
+
+  const applied = executeExternalMergeImport(prepared, "--apply");
+  assert.equal(applied.status, 0, applied.stdout + applied.stderr);
+  const recorded = JSON.parse(applied.stdout) as ExternalMergeOutput;
+  assert.equal(recorded.state, "recorded");
+  const observationId = recorded.observation?.observationId ?? "";
+  assert.match(observationId, /^[a-f0-9]{64}$/u);
+  const [step11] = journalStep11Entries(prepared.staging);
+  assert.equal(journalStep11Entries(prepared.staging).length, 1);
+  for (const fragment of [
+    "outcome=merged",
+    `external-merge observation ${observationId}`,
+    `mergeCommit=${"b".repeat(40)}`,
+    `HEAD=${prepared.headSha}`,
+    "method=merge",
+  ])
+    assert.ok(step11?.evidence.includes(fragment), step11?.evidence);
+  const delivered = readFixtureDeliveryState(prepared.staging);
+  assert.equal(delivered.state, "step11-recorded");
+  assert.equal(delivered.merge, null);
+  assert.equal(delivered.step11?.outcome, "merged");
+  assert.equal(delivered.step11?.evidenceId, observationId);
+  assert.equal(delivered.externalMerge?.observationId, observationId);
+  assert.equal(delivered.externalMerge?.mergeCommitSha, "b".repeat(40));
+  /**
+   * 外部merge観測の形状検査: 終端以外へ`externalMerge`を持たせた状態と、Step 11時刻が
+   * provider mergedAt・PR bind時刻より前の状態をparseが拒否する（02 §4.1）。
+   */
+  const recordedExternal = delivered.externalMerge!;
+  const earlierMergedAt = new Date(
+    Date.parse(delivered.pr!.boundAt) - 2000,
+  ).toISOString();
+  const earlierExternal = {
+    ...recordedExternal,
+    providerMergedAt: earlierMergedAt,
+    observationId: externalMergeObservationId({
+      ...recordedExternal,
+      providerMergedAt: earlierMergedAt,
+    }),
+  };
+  for (const [tampered, diagnostic] of [
+    [
+      { ...delivered, state: "pr-bound", step11: null },
+      /externalMergeはmerge intentもredeliveryも無いmerged終端だけが持てます/u,
+    ],
+    [
+      {
+        ...delivered,
+        step11: {
+          ...delivered.step11!,
+          recordedAt: new Date(
+            Date.parse(recordedExternal.providerMergedAt) - 1,
+          ).toISOString(),
+        },
+      },
+      /step11\.recordedAtは先行event/u,
+    ],
+    [
+      {
+        ...delivered,
+        externalMerge: earlierExternal,
+        step11: {
+          ...delivered.step11!,
+          evidenceId: earlierExternal.observationId,
+          recordedAt: new Date(
+            Date.parse(delivered.pr!.boundAt) - 1000,
+          ).toISOString(),
+        },
+      },
+      /step11\.recordedAtは先行event/u,
+    ],
+  ] as const)
+    assert.throws(
+      () => parseDeliveryState(JSON.stringify(tampered)),
+      diagnostic,
+    );
+
+  /**
+   * 中断復旧（02 §10 (4)）: journal追記後・delivery書込前の状態へ戻し、既定branch tipを
+   * 1 commit前進させてから再applyしてもStep 11は1件のままobservationIdが変わらない。
+   */
+  fs.writeFileSync(deliveryFile, boundSource);
+  refreshStoredStagingDigest(prepared.staging);
+  writeDeliveryProviderControl(prepared, { postMergeTipSha: "a".repeat(40) });
+  const resumed = executeExternalMergeImport(prepared, "--apply");
+  assert.equal(resumed.status, 0, resumed.stdout + resumed.stderr);
+  const resumedOutput = JSON.parse(resumed.stdout) as ExternalMergeOutput;
+  assert.equal(resumedOutput.state, "recorded");
+  assert.equal(resumedOutput.observation?.observationId, observationId);
+  assert.equal(resumedOutput.observation?.defaultBranchTipSha, "a".repeat(40));
+  assert.equal(journalStep11Entries(prepared.staging).length, 1);
+
+  const advanced = executeCli(
+    ["workflow", "advance", `--staging=${prepared.staging}`],
+    prepared.root,
+    prepared.env,
+  );
+  assert.equal(advanced.status, 0, advanced.stdout + advanced.stderr);
+  assert.match(advanced.stdout, /"state": "complete"/u);
+  const verified = executeCli(
+    ["workflow", "verify", `--staging=${prepared.staging}`],
+    prepared.root,
+    prepared.env,
+  );
+  assert.equal(verified.status, 0, verified.stdout + verified.stderr);
+  assert.match(verified.stdout, /"valid": true/u);
+
+  const callsBefore = deliveryProviderCalls(prepared).length;
+  const beforeRepeat = stagingBytes(prepared.staging);
+  const repeated = executeExternalMergeImport(prepared, "--apply");
+  assert.equal(repeated.status, 0, repeated.stdout + repeated.stderr);
+  assert.equal(
+    (JSON.parse(repeated.stdout) as ExternalMergeOutput).state,
+    "already-recorded",
+  );
+  assert.equal(deliveryProviderCalls(prepared).length, callsBefore);
+  assert.equal(stagingBytes(prepared.staging), beforeRepeat);
+  assert.equal(journalStep11Entries(prepared.staging).length, 1);
+  const forged = executeCli(
+    [
+      "workflow",
+      "record",
+      `--staging=${prepared.staging}`,
+      "--step=11",
+      "--artifact=https://github.com/o/r/pull/1",
+      "--evidence=forged terminal",
+    ],
+    prepared.root,
+    prepared.env,
+  );
+  assert.notEqual(forged.status, 0);
+  assert.match(forged.stdout + forged.stderr, /delivery終端専用/u);
+}
+
+/** SCN-E2E-EXTMERGE-002の例ごとに1項目だけを壊す（02 §10の支援層縮小）。 */
+function runExternalMergeMismatch(
+  world: WorkflowStepWorld,
+  example: string,
+): void {
+  if (example === "Step 11が記録されていない") {
+    const terminal = prepareExternallyMergedPullRequest(world, "disabled");
+    assert.equal(
+      readFixtureDeliveryState(terminal.staging).step11?.outcome,
+      "pull-request",
+    );
+    markExternallyMerged(terminal);
+    assertExternalMergeRejected(terminal, "delivery", /Step 11が記録済み/u);
+    /**
+     * journalにだけ別経路のStep 11がある`pr-bound`（PR停止終端の中断状態）も、
+     * 外部merge取り込みの中断復旧と取り違えずに拒否する。他の6項目は一致させる。
+     */
+    const interrupted = prepareExternallyMergedPullRequest(world);
+    appendDeliveryTerminalJournalEntry({
+      staging: interrupted.staging,
+      entry: {
+        ...entry(11),
+        artifacts: ["https://github.com/o/r/pull/1", DELIVERY_STATE_FILE],
+        evidence: "outcome=pull-request evidence=別経路の停止終端",
+      },
+    });
+    markExternallyMerged(interrupted);
+    assertExternalMergeRejected(interrupted, "delivery", /Step 11が記録済み/u);
+    return;
+  }
+  const prepared = prepareExternallyMergedPullRequest(world);
+  const cases: Record<
+    string,
+    {
+      patch: Partial<DeliveryProviderControl>;
+      check: string;
+      reason?: RegExp;
+      pr?: number;
+    }
+  > = {
+    "PRがMERGEDである（OPEN）": { patch: { phase: "ready" }, check: "merged" },
+    "PRがMERGEDである（CLOSEDで未merge）": {
+      patch: { phase: "ready", existingPr: "closed" },
+      check: "merged",
+    },
+    merge時headが実効headと一致する: {
+      patch: { headSha: "e".repeat(40) },
+      check: "binding",
+    },
+    repositoryとPR番号が固定値と一致する: {
+      patch: {},
+      check: "binding",
+      pr: 2,
+    },
+    "base refが既定branchである": {
+      patch: { providerDefaultBranch: "develop" },
+      check: "default-branch",
+    },
+    "merge commitが既定branch tipから到達可能である": {
+      patch: { mergeOnDefaultBranch: false },
+      check: "reachable",
+    },
+    merge方式を判定できる: {
+      patch: { mergeParentsSwapped: true },
+      check: "method",
+      reason: /merge方式を判定できません/u,
+    },
+    "merge時baseのtrusted policyを解決できる": {
+      patch: { remoteBaseSha: "f".repeat(40) },
+      check: "trusted-policy",
+      reason: /git fetch/u,
+    },
+    "merge方式を判定できる（1親でtrusted policyがsquashも許可）": {
+      patch: { autoMergeMethod: "SQUASH" },
+      check: "method",
+      reason: /merge方式を判定できません/u,
+    },
+    "delivery stateがpr-boundである（merge-prepared）": {
+      patch: {},
+      check: "delivery",
+      reason: /merge-prepared以後/u,
+    },
+  };
+  const selected = cases[example];
+  if (!selected) throw new Error(`未対応のExamples行です: ${example}`);
+  if (example.endsWith("squashも許可）"))
+    advanceDeliveryTrustedMergeMode(prepared, "automatic", {
+      methods: ["merge", "squash"],
+    });
+  if (example.endsWith("（merge-prepared）")) {
+    const bound = readFixtureDeliveryState(prepared.staging);
+    prepareStoredMergeIntent(prepared.staging, {
+      method: "merge",
+      authorizedHeadSha: prepared.headSha,
+      authorizedBaseRef: "main",
+      authorizedBaseSha: prepared.baseSha,
+      trustedPolicyCommitSha: prepared.baseSha,
+      ...preparedMergeReviewEvidence(prepared),
+      intentId: "6".repeat(32),
+      preparedAt: bound.pr?.boundAt ?? fixtureInstant(),
+    });
+  }
+  markExternallyMerged(prepared, selected.patch);
+  assertExternalMergeRejected(
+    prepared,
+    selected.check,
+    selected.reason,
+    selected.pr,
+  );
+}
+
+/**
+ * SCN-E2E-EXTMERGE-003: merge方式の許可はmerge時base（第1親）のtrusted policyから解決し、
+ * merge後の既定branch tip（PR自身のpolicy変更を含みうる）を使わない。
+ */
+function runExternalMergeTrustedPolicy(
+  world: WorkflowStepWorld,
+  example: string,
+): void {
+  const prepared = prepareExternallyMergedPullRequest(world);
+  if (example === "squash") {
+    advanceDeliveryTrustedMergeMode(prepared, "automatic", {
+      methods: ["merge", "squash"],
+      updateProviderBase: false,
+    });
+    markExternallyMerged(prepared, { autoMergeMethod: "SQUASH" });
+  } else if (example === "merge") {
+    advanceDeliveryTrustedMergeMode(prepared, "automatic", {
+      methods: ["squash"],
+    });
+    advanceDeliveryTrustedMergeMode(prepared, "automatic", {
+      methods: ["merge"],
+      updateProviderBase: false,
+    });
+    markExternallyMerged(prepared);
+  } else throw new Error(`未対応のExamples行です: ${example}`);
+  assertExternalMergeRejected(
+    prepared,
+    "method",
+    /trusted policyが許可するmerge方式と観測したmerge commitの形が一致しません/u,
+  );
+}
+
+When(
+  "{string}の{string}のE2E検査を実行する",
+  function (this: WorkflowStepWorld, scenarioId: string, example: string) {
+    if (scenarioId === "SCN-E2E-EXTMERGE-002")
+      runExternalMergeMismatch(this, example);
+    else if (scenarioId === "SCN-E2E-EXTMERGE-003")
+      runExternalMergeTrustedPolicy(this, example);
+    else throw new Error(`未対応のe2e scenarioです: ${scenarioId}`);
+    this.workflowCheckPassed = true;
+  },
+);
 
 Given("ワークフローStep公開CLIの隔離環境がある", function () {
   this.workflowCheckPassed = false;
@@ -11439,6 +11880,10 @@ if (exact(["auth", "status"])) {
       const record = readStoredStagingRecord(staging);
       assert.equal(record.syncDigest, exactDigest);
       assert.equal(record.readBackDigest, exactDigest);
+      break;
+    }
+    case "SCN-E2E-EXTMERGE-001": {
+      runExternalMergeAcceptance(this);
       break;
     }
     default:

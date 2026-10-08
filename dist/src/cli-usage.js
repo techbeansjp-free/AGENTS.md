@@ -1024,6 +1024,19 @@ export const COMMAND_USAGE = Object.freeze([
     },
     {
         command: "pr",
+        subcommand: "record-external-merge",
+        summary: "ASC外でmergeされたPRをGitHub観測で検証し、外部merge取り込みのStep 11を追記する",
+        requiredFlags: [
+            flag("repo", "owner/name", "固定済みPRのrepository"),
+            flag("pr", "整数", "固定済みPR番号"),
+            flag("staging", "path", "pr-boundの対象Issue staging"),
+        ],
+        conditionalFlags: [],
+        optionalFlags: [ROOT_FLAG, ...APPLY_MODE],
+        example: "npx agent-skill-chain pr record-external-merge --repo=owner/name --pr=909 --staging=.agent-skill-chain/tmp/issues/20260830_120000_909-example --dry-run",
+    },
+    {
+        command: "pr",
         subcommand: "reanchor",
         summary: "PR証跡を内容等価性または厳密なartifact置換で新headへ再固定する",
         requiredFlags: [
