@@ -3,16 +3,16 @@
   "issue": 1566,
   "observed": {
     "baseSha": "6d08da409eaad05321ee71c62d57a1e576bbdbc8",
-    "implementationHeadSha": "3abb521cab63b8b696b903db7b599e9857c321c5",
-    "diffDigest": "1e4caa8d256cd99dec20152b25a794b310ef2090fc2c9467e301ad1247ffc836",
+    "implementationHeadSha": "71f58b535ecd41a35b35d7a5cd52621d5ea9cc6d",
+    "diffDigest": "ad0d30e6e65128216f3ba1f3aa71be956feabebf4e4b6519efe63c9681f6a6d7",
     "session": {
       "sessionId": "849c7305c93ab2473754d3aa0089de7f57f8fa0742e9c12434c83d170bc7f635",
-      "latestRoundDigest": "f2bd01a98fd998e9e95b596a406d5db367316962af813226626c649e61cf83b9",
+      "latestRoundDigest": "1ed3ec7edecaa7f5bb3dcbf5538f72027453fb2bc280ad271926357c6b983cf3",
       "status": "converged",
-      "countedRounds": 10
+      "countedRounds": 11
     },
     "impact": {
-      "digest": "bb5a469f0ad365c9f7338d4189864e68147a7425c3513aa12065237e7cf5f04e",
+      "digest": "fd2e34921e171365991e49d12ec033002a9dd7edcd7eacaab93117400d45894e",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "3abb521cab63b8b696b903db7b599e9857c321c5",
-        "impactDigest": "bb5a469f0ad365c9f7338d4189864e68147a7425c3513aa12065237e7cf5f04e",
-        "finishedAt": "2026-10-08T01:57:29.326Z",
-        "recordDigest": "1cca74b84ac3c0bc6bba2ffc64b05e2a71766c863bdfff1a16712cd05352629e"
+        "headSha": "71f58b535ecd41a35b35d7a5cd52621d5ea9cc6d",
+        "impactDigest": "fd2e34921e171365991e49d12ec033002a9dd7edcd7eacaab93117400d45894e",
+        "finishedAt": "2026-10-08T06:09:15.894Z",
+        "recordDigest": "ba3da5c1d92d17a752b4560456559387a6e78679bad2a4c63783b5997ba8395c"
       }
     ]
   },
@@ -84,6 +84,14 @@
       "severity": "Medium",
       "status": "valid",
       "relation": "improvement",
+      "path": "test/support/host-observer-conformance.ts",
+      "contractId": "AC-01"
+    },
+    {
+      "id": "OWN-05",
+      "severity": "High",
+      "status": "resolved",
+      "relation": "acceptance-violation",
       "path": "test/support/host-observer-conformance.ts",
       "contractId": "AC-01"
     },
@@ -157,6 +165,14 @@
       "status": "valid",
       "relation": "improvement",
       "path": "docs/specs/15_要件追跡/01_変更履歴.md",
+      "contractId": null
+    },
+    {
+      "id": "R11-01",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/steps/host-observer.steps.ts",
       "contractId": null
     },
     {
@@ -291,10 +307,10 @@
   "unresolvedCriticalHigh": [],
   "verdict": "approved",
   "declared": {
-    "reviewer": "claude-code:subagent/reviewer-workunits-round1-10",
+    "reviewer": "claude-code:subagent/reviewer-workunits-round1-11",
     "implementer": "claude-code:subagent/implementation-workunit-d962b3cd",
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "ffd23c082966ee1905e8d8429c5afa55b2882dd85ad0713b6fd339cf0d50be80"
+  "evidenceDigest": "46144793418fc053846841fe0f96d7eabf06073517ef5902a0bb00fe590cb4c1"
 }
