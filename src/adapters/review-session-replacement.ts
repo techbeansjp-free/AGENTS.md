@@ -7,7 +7,6 @@ import {
 import type { DeliveryState } from "../domain/delivery-state.js";
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
 import {
-  REVIEW_PROGRESS_JOURNAL_FILE,
   calculateStagingDigest,
   listStagingArtifacts,
   readStoredStagingRecord,
@@ -19,6 +18,10 @@ import { writeFileAtomic } from "../lib/atomic.js";
 import { stableJson } from "../lib/security.js";
 import { observeStoredDeliveryState } from "./delivery-state.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
+import {
+  preserveReviewProgressJournal,
+  reviewProgressJournalPresent,
+} from "./review-progress.js";
 import { evidenceOnlySuffix } from "./review-diff.js";
 import {
   REVIEW_SESSION_FILE,
@@ -147,9 +150,7 @@ function plan(
     implementationHeadSha: session.latestCandidateHeadSha,
     pullRequestHeadSha,
     savedPath: replacedSessionPath(sequence),
-    savedProgressPath: fs.existsSync(
-      path.join(staging, ...REVIEW_PROGRESS_JOURNAL_FILE.split("/")),
-    )
+    savedProgressPath: reviewProgressJournalPresent(staging)
       ? replacedProgressPath(sequence)
       : null,
     replacedAt,
@@ -227,43 +228,21 @@ function interruptedReplacement(
     : undefined;
 }
 
-/** sourceがあれば保存名へrenameする。既存の保存先は上書きしない（中断復旧の再実行を含む）。 */
-function renameToSaved(
-  staging: string,
-  source: string,
-  target: string,
-  label: string,
-): void {
-  const from = path.join(staging, ...source.split("/"));
-  if (!fs.existsSync(from)) return;
-  if (fs.existsSync(path.join(staging, ...target.split("/"))))
-    throw new Error(`${label}の保存先 ${target} が既に存在します`);
-  fs.renameSync(from, path.join(staging, ...target.split("/")));
-}
-
-/**
- * 旧sessionと、旧sessionに束縛されたreview progress journalを保存名へ移す。
- *
- * **progressを新sessionの進捗と混ぜない。** 同じanchorで作り直した新sessionは旧sessionと
- * 同じsession IDになりうるため、残すと旧進捗が新sessionの進捗として読まれる（AMD-004）。
- */
 function moveReplacedFiles(
   staging: string,
   record: ReviewSessionReplacementRecord,
 ): void {
-  renameToSaved(
-    staging,
-    REVIEW_SESSION_FILE,
-    record.savedPath,
-    "置換済みsession",
-  );
+  const source = path.join(staging, REVIEW_SESSION_FILE);
+  const target = path.join(staging, record.savedPath);
+  if (fs.existsSync(source)) {
+    if (fs.existsSync(target))
+      throw new Error(
+        `置換済みsessionの保存先 ${record.savedPath} が既に存在します`,
+      );
+    fs.renameSync(source, target);
+  }
   if (record.savedProgressPath)
-    renameToSaved(
-      staging,
-      REVIEW_PROGRESS_JOURNAL_FILE,
-      record.savedProgressPath,
-      "置換済みreview progress",
-    );
+    preserveReviewProgressJournal(staging, record.savedProgressPath);
 }
 
 export interface ReviewSessionReplacementResult {
