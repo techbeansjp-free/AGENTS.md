@@ -9921,7 +9921,9 @@
           ]
         }
       }
-    ]
+    ],
+    "status": "pre-preview-fix-and-pre-require-wrapper-fix-microbenchmark",
+    "limitsAfterMeasurement": "This benchmark describes the recorded source hashes, not the final integration HEAD; preview snapshots and dynamic require wrappers were corrected later. No end-to-end acceptance is inferred."
   },
   "methodology": {
     "repeats": 5,
@@ -9959,8 +9961,8 @@
       "reason": "Current implementation already avoids copying full conversations; no measured case justifies another compression mechanism."
     },
     {
-      "decision": "Remove duplicate AST parsing for graph dependencies",
-      "reason": "Reuse AST information gathered during graph construction rather than parse the same committed TypeScript again."
+      "decision": "Reuse the latest in-process projection and impact result after Git reobservation",
+      "reason": "Cold analysis still has separate AST passes in graph projection and impact extraction; no shared cold AST is implemented or claimed. Warm reuse avoids repeating matching derivation."
     },
     {
       "decision": "Retain only the latest graph analysis in process",
@@ -10226,5 +10228,1347 @@
         ]
       }
     ]
+  },
+  "workflowObservations": {
+    "issue": 1576,
+    "scope": "GraphDB-free normal workflow advance; no user session content or secrets inspected.",
+    "beforeHead": "c486cfeed39edbb8de2c6c38304454ac32a887ee",
+    "afterSourceSha256": "813218860405627b483b33badb451264664c571b3ee79ecf22146ba469ead06a",
+    "fixtureReuse": true,
+    "before": {
+      "root": "/tmp/asc-workflow-probe-tccIL0",
+      "staging": "/tmp/asc-workflow-probe-tccIL0/.agent-skill-chain/tmp/issues/20260825_210000_workflow-observation",
+      "importMs": 259.35517000000004,
+      "observations": [
+        {
+          "mode": "short-lived",
+          "iteration": 0,
+          "status": 0,
+          "ms": 19.824437999999986,
+          "outputBytes": 3585,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume",
+            "handoff",
+            "agentDispatch"
+          ],
+          "handoffBytes": 832,
+          "dispatchPromptBytes": 1561,
+          "dispatchDuplicatesTopLevelHandoff": true,
+          "workUnitId": "8076712038072be1fe41ae26e4a8c5f4b3fbd89d7af0cbefa48166aa03b1cd43",
+          "targetStep": 1,
+          "readCalls": 23,
+          "readBytes": 82115,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 6,
+              "bytes": 3318
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 3,
+              "bytes": 1587
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 6,
+              "bytes": 1434
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_要求定義.md": {
+              "count": 2,
+              "bytes": 17432
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/01_要件定義.md": {
+              "count": 2,
+              "bytes": 15482
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/02_設計.md": {
+              "count": 2,
+              "bytes": 21000
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/03_実装計画.md": {
+              "count": 2,
+              "bytes": 21862
+            }
+          },
+          "processCalls": 2,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.5721840000000498
+            },
+            {
+              "command": "git",
+              "args": [
+                "symbolic-ref",
+                "--short",
+                "HEAD"
+              ],
+              "ms": 2.550375000000031
+            }
+          ]
+        },
+        {
+          "mode": "short-lived",
+          "iteration": 1,
+          "status": 0,
+          "ms": 8.919696999999985,
+          "outputBytes": 3585,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume",
+            "handoff",
+            "agentDispatch"
+          ],
+          "handoffBytes": 832,
+          "dispatchPromptBytes": 1561,
+          "dispatchDuplicatesTopLevelHandoff": true,
+          "workUnitId": "8076712038072be1fe41ae26e4a8c5f4b3fbd89d7af0cbefa48166aa03b1cd43",
+          "targetStep": 1,
+          "readCalls": 23,
+          "readBytes": 82115,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 6,
+              "bytes": 3318
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 3,
+              "bytes": 1587
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 6,
+              "bytes": 1434
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_要求定義.md": {
+              "count": 2,
+              "bytes": 17432
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/01_要件定義.md": {
+              "count": 2,
+              "bytes": 15482
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/02_設計.md": {
+              "count": 2,
+              "bytes": 21000
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/03_実装計画.md": {
+              "count": 2,
+              "bytes": 21862
+            }
+          },
+          "processCalls": 2,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.397654999999986
+            },
+            {
+              "command": "git",
+              "args": [
+                "symbolic-ref",
+                "--short",
+                "HEAD"
+              ],
+              "ms": 2.5023309999999697
+            }
+          ]
+        },
+        {
+          "mode": "short-lived",
+          "iteration": 2,
+          "status": 0,
+          "ms": 8.831560000000025,
+          "outputBytes": 3585,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume",
+            "handoff",
+            "agentDispatch"
+          ],
+          "handoffBytes": 832,
+          "dispatchPromptBytes": 1561,
+          "dispatchDuplicatesTopLevelHandoff": true,
+          "workUnitId": "8076712038072be1fe41ae26e4a8c5f4b3fbd89d7af0cbefa48166aa03b1cd43",
+          "targetStep": 1,
+          "readCalls": 23,
+          "readBytes": 82115,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 6,
+              "bytes": 3318
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 3,
+              "bytes": 1587
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 6,
+              "bytes": 1434
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_要求定義.md": {
+              "count": 2,
+              "bytes": 17432
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/01_要件定義.md": {
+              "count": 2,
+              "bytes": 15482
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/02_設計.md": {
+              "count": 2,
+              "bytes": 21000
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/03_実装計画.md": {
+              "count": 2,
+              "bytes": 21862
+            }
+          },
+          "processCalls": 2,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.6992740000000026
+            },
+            {
+              "command": "git",
+              "args": [
+                "symbolic-ref",
+                "--short",
+                "HEAD"
+              ],
+              "ms": 2.363716000000011
+            }
+          ]
+        },
+        {
+          "mode": "compatible",
+          "iteration": 0,
+          "status": 0,
+          "ms": 5.594239000000016,
+          "outputBytes": 786,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume"
+          ],
+          "handoffBytes": 0,
+          "dispatchPromptBytes": 0,
+          "dispatchDuplicatesTopLevelHandoff": null,
+          "workUnitId": null,
+          "targetStep": 1,
+          "readCalls": 21,
+          "readBytes": 81323,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 5,
+              "bytes": 2765
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 3,
+              "bytes": 1587
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 5,
+              "bytes": 1195
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_要求定義.md": {
+              "count": 2,
+              "bytes": 17432
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/01_要件定義.md": {
+              "count": 2,
+              "bytes": 15482
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/02_設計.md": {
+              "count": 2,
+              "bytes": 21000
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/03_実装計画.md": {
+              "count": 2,
+              "bytes": 21862
+            }
+          },
+          "processCalls": 1,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.403819999999996
+            }
+          ]
+        },
+        {
+          "mode": "compatible",
+          "iteration": 1,
+          "status": 0,
+          "ms": 5.948507999999947,
+          "outputBytes": 786,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume"
+          ],
+          "handoffBytes": 0,
+          "dispatchPromptBytes": 0,
+          "dispatchDuplicatesTopLevelHandoff": null,
+          "workUnitId": null,
+          "targetStep": 1,
+          "readCalls": 21,
+          "readBytes": 81323,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 5,
+              "bytes": 2765
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 3,
+              "bytes": 1587
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 5,
+              "bytes": 1195
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_要求定義.md": {
+              "count": 2,
+              "bytes": 17432
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/01_要件定義.md": {
+              "count": 2,
+              "bytes": 15482
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/02_設計.md": {
+              "count": 2,
+              "bytes": 21000
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/03_実装計画.md": {
+              "count": 2,
+              "bytes": 21862
+            }
+          },
+          "processCalls": 1,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.59203100000002
+            }
+          ]
+        },
+        {
+          "mode": "compatible",
+          "iteration": 2,
+          "status": 0,
+          "ms": 6.76353800000004,
+          "outputBytes": 786,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume"
+          ],
+          "handoffBytes": 0,
+          "dispatchPromptBytes": 0,
+          "dispatchDuplicatesTopLevelHandoff": null,
+          "workUnitId": null,
+          "targetStep": 1,
+          "readCalls": 21,
+          "readBytes": 81323,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 5,
+              "bytes": 2765
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 3,
+              "bytes": 1587
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 5,
+              "bytes": 1195
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_要求定義.md": {
+              "count": 2,
+              "bytes": 17432
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/01_要件定義.md": {
+              "count": 2,
+              "bytes": 15482
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/02_設計.md": {
+              "count": 2,
+              "bytes": 21000
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/03_実装計画.md": {
+              "count": 2,
+              "bytes": 21862
+            }
+          },
+          "processCalls": 1,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.536330000000021
+            }
+          ]
+        }
+      ]
+    },
+    "after": {
+      "root": "/tmp/asc-workflow-probe-tccIL0",
+      "staging": "/tmp/asc-workflow-probe-tccIL0/.agent-skill-chain/tmp/issues/20260825_210000_workflow-observation",
+      "importMs": 229.95555800000002,
+      "observations": [
+        {
+          "mode": "short-lived",
+          "iteration": 0,
+          "status": 0,
+          "ms": 30.655147,
+          "outputBytes": 3585,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume",
+            "handoff",
+            "agentDispatch"
+          ],
+          "handoffBytes": 832,
+          "dispatchPromptBytes": 1561,
+          "dispatchDuplicatesTopLevelHandoff": true,
+          "workUnitId": "8076712038072be1fe41ae26e4a8c5f4b3fbd89d7af0cbefa48166aa03b1cd43",
+          "targetStep": 1,
+          "readCalls": 9,
+          "readBytes": 3697,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 4,
+              "bytes": 2212
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 1,
+              "bytes": 529
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 4,
+              "bytes": 956
+            }
+          },
+          "processCalls": 2,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 3.590190000000007
+            },
+            {
+              "command": "git",
+              "args": [
+                "symbolic-ref",
+                "--short",
+                "HEAD"
+              ],
+              "ms": 2.667129999999986
+            }
+          ]
+        },
+        {
+          "mode": "short-lived",
+          "iteration": 1,
+          "status": 0,
+          "ms": 7.304438000000005,
+          "outputBytes": 3585,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume",
+            "handoff",
+            "agentDispatch"
+          ],
+          "handoffBytes": 832,
+          "dispatchPromptBytes": 1561,
+          "dispatchDuplicatesTopLevelHandoff": true,
+          "workUnitId": "8076712038072be1fe41ae26e4a8c5f4b3fbd89d7af0cbefa48166aa03b1cd43",
+          "targetStep": 1,
+          "readCalls": 9,
+          "readBytes": 3697,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 4,
+              "bytes": 2212
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 1,
+              "bytes": 529
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 4,
+              "bytes": 956
+            }
+          },
+          "processCalls": 2,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.6646939999999972
+            },
+            {
+              "command": "git",
+              "args": [
+                "symbolic-ref",
+                "--short",
+                "HEAD"
+              ],
+              "ms": 2.4467859999999746
+            }
+          ]
+        },
+        {
+          "mode": "short-lived",
+          "iteration": 2,
+          "status": 0,
+          "ms": 6.66566499999999,
+          "outputBytes": 3585,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume",
+            "handoff",
+            "agentDispatch"
+          ],
+          "handoffBytes": 832,
+          "dispatchPromptBytes": 1561,
+          "dispatchDuplicatesTopLevelHandoff": true,
+          "workUnitId": "8076712038072be1fe41ae26e4a8c5f4b3fbd89d7af0cbefa48166aa03b1cd43",
+          "targetStep": 1,
+          "readCalls": 9,
+          "readBytes": 3697,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 4,
+              "bytes": 2212
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 1,
+              "bytes": 529
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 4,
+              "bytes": 956
+            }
+          },
+          "processCalls": 2,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.5520119999999906
+            },
+            {
+              "command": "git",
+              "args": [
+                "symbolic-ref",
+                "--short",
+                "HEAD"
+              ],
+              "ms": 2.1366560000000163
+            }
+          ]
+        },
+        {
+          "mode": "compatible",
+          "iteration": 0,
+          "status": 0,
+          "ms": 3.6464219999999727,
+          "outputBytes": 786,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume"
+          ],
+          "handoffBytes": 0,
+          "dispatchPromptBytes": 0,
+          "dispatchDuplicatesTopLevelHandoff": null,
+          "workUnitId": null,
+          "targetStep": 1,
+          "readCalls": 7,
+          "readBytes": 2905,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 3,
+              "bytes": 1659
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 1,
+              "bytes": 529
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 3,
+              "bytes": 717
+            }
+          },
+          "processCalls": 1,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.195324000000028
+            }
+          ]
+        },
+        {
+          "mode": "compatible",
+          "iteration": 1,
+          "status": 0,
+          "ms": 4.2098850000000425,
+          "outputBytes": 786,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume"
+          ],
+          "handoffBytes": 0,
+          "dispatchPromptBytes": 0,
+          "dispatchDuplicatesTopLevelHandoff": null,
+          "workUnitId": null,
+          "targetStep": 1,
+          "readCalls": 7,
+          "readBytes": 2905,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 3,
+              "bytes": 1659
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 1,
+              "bytes": 529
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 3,
+              "bytes": 717
+            }
+          },
+          "processCalls": 1,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.769288999999958
+            }
+          ]
+        },
+        {
+          "mode": "compatible",
+          "iteration": 2,
+          "status": 0,
+          "ms": 3.886788000000024,
+          "outputBytes": 786,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume"
+          ],
+          "handoffBytes": 0,
+          "dispatchPromptBytes": 0,
+          "dispatchDuplicatesTopLevelHandoff": null,
+          "workUnitId": null,
+          "targetStep": 1,
+          "readCalls": 7,
+          "readBytes": 2905,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 3,
+              "bytes": 1659
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 1,
+              "bytes": 529
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 3,
+              "bytes": 717
+            }
+          },
+          "processCalls": 1,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.5760160000000383
+            }
+          ]
+        }
+      ]
+    },
+    "coldDistributionCliBefore": [
+      {
+        "iteration": 0,
+        "ms": 205.050377,
+        "status": 0,
+        "outputBytes": 3585,
+        "stderr": ""
+      },
+      {
+        "iteration": 1,
+        "ms": 232.28324600000002,
+        "status": 0,
+        "outputBytes": 3585,
+        "stderr": ""
+      },
+      {
+        "iteration": 2,
+        "ms": 190.62915700000002,
+        "status": 0,
+        "outputBytes": 3585,
+        "stderr": ""
+      },
+      {
+        "iteration": 3,
+        "ms": 226.812544,
+        "status": 0,
+        "outputBytes": 3585,
+        "stderr": ""
+      },
+      {
+        "iteration": 4,
+        "ms": 224.734192,
+        "status": 0,
+        "outputBytes": 3585,
+        "stderr": ""
+      }
+    ],
+    "largeDocumentBefore": {
+      "root": "/tmp/asc-workflow-probe-wVJtxU",
+      "staging": "/tmp/asc-workflow-probe-wVJtxU/.agent-skill-chain/tmp/issues/20260825_210000_workflow-observation",
+      "importMs": 221.365336,
+      "observations": [
+        {
+          "mode": "short-lived",
+          "iteration": 0,
+          "status": 0,
+          "ms": 23.088799999999992,
+          "outputBytes": 3585,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume",
+            "handoff",
+            "agentDispatch"
+          ],
+          "handoffBytes": 832,
+          "dispatchPromptBytes": 1561,
+          "dispatchDuplicatesTopLevelHandoff": true,
+          "workUnitId": "ea7fa4a837db41c101416cee8f59612230c3f0b34f6a0f8294282e29d26fe61d",
+          "targetStep": 1,
+          "readCalls": 23,
+          "readBytes": 2179269,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 6,
+              "bytes": 3318
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 3,
+              "bytes": 1587
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 6,
+              "bytes": 1434
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_要求定義.md": {
+              "count": 2,
+              "bytes": 17432
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/01_要件定義.md": {
+              "count": 2,
+              "bytes": 15482
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/02_設計.md": {
+              "count": 2,
+              "bytes": 2118154
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/03_実装計画.md": {
+              "count": 2,
+              "bytes": 21862
+            }
+          },
+          "processCalls": 2,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.5815830000000233
+            },
+            {
+              "command": "git",
+              "args": [
+                "symbolic-ref",
+                "--short",
+                "HEAD"
+              ],
+              "ms": 2.4211349999999925
+            }
+          ]
+        },
+        {
+          "mode": "short-lived",
+          "iteration": 1,
+          "status": 0,
+          "ms": 13.598404000000016,
+          "outputBytes": 3585,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume",
+            "handoff",
+            "agentDispatch"
+          ],
+          "handoffBytes": 832,
+          "dispatchPromptBytes": 1561,
+          "dispatchDuplicatesTopLevelHandoff": true,
+          "workUnitId": "ea7fa4a837db41c101416cee8f59612230c3f0b34f6a0f8294282e29d26fe61d",
+          "targetStep": 1,
+          "readCalls": 23,
+          "readBytes": 2179269,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 6,
+              "bytes": 3318
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 3,
+              "bytes": 1587
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 6,
+              "bytes": 1434
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_要求定義.md": {
+              "count": 2,
+              "bytes": 17432
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/01_要件定義.md": {
+              "count": 2,
+              "bytes": 15482
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/02_設計.md": {
+              "count": 2,
+              "bytes": 2118154
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/03_実装計画.md": {
+              "count": 2,
+              "bytes": 21862
+            }
+          },
+          "processCalls": 2,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.642983000000015
+            },
+            {
+              "command": "git",
+              "args": [
+                "symbolic-ref",
+                "--short",
+                "HEAD"
+              ],
+              "ms": 2.154149000000018
+            }
+          ]
+        },
+        {
+          "mode": "short-lived",
+          "iteration": 2,
+          "status": 0,
+          "ms": 13.885841000000028,
+          "outputBytes": 3585,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume",
+            "handoff",
+            "agentDispatch"
+          ],
+          "handoffBytes": 832,
+          "dispatchPromptBytes": 1561,
+          "dispatchDuplicatesTopLevelHandoff": true,
+          "workUnitId": "ea7fa4a837db41c101416cee8f59612230c3f0b34f6a0f8294282e29d26fe61d",
+          "targetStep": 1,
+          "readCalls": 23,
+          "readBytes": 2179269,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 6,
+              "bytes": 3318
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 3,
+              "bytes": 1587
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 6,
+              "bytes": 1434
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_要求定義.md": {
+              "count": 2,
+              "bytes": 17432
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/01_要件定義.md": {
+              "count": 2,
+              "bytes": 15482
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/02_設計.md": {
+              "count": 2,
+              "bytes": 2118154
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/03_実装計画.md": {
+              "count": 2,
+              "bytes": 21862
+            }
+          },
+          "processCalls": 2,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.935647000000017
+            },
+            {
+              "command": "git",
+              "args": [
+                "symbolic-ref",
+                "--short",
+                "HEAD"
+              ],
+              "ms": 2.2205230000000142
+            }
+          ]
+        },
+        {
+          "mode": "compatible",
+          "iteration": 0,
+          "status": 0,
+          "ms": 11.070088999999996,
+          "outputBytes": 786,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume"
+          ],
+          "handoffBytes": 0,
+          "dispatchPromptBytes": 0,
+          "dispatchDuplicatesTopLevelHandoff": null,
+          "workUnitId": null,
+          "targetStep": 1,
+          "readCalls": 21,
+          "readBytes": 2178477,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 5,
+              "bytes": 2765
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 3,
+              "bytes": 1587
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 5,
+              "bytes": 1195
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_要求定義.md": {
+              "count": 2,
+              "bytes": 17432
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/01_要件定義.md": {
+              "count": 2,
+              "bytes": 15482
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/02_設計.md": {
+              "count": 2,
+              "bytes": 2118154
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/03_実装計画.md": {
+              "count": 2,
+              "bytes": 21862
+            }
+          },
+          "processCalls": 1,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 2.979003999999975
+            }
+          ]
+        },
+        {
+          "mode": "compatible",
+          "iteration": 1,
+          "status": 0,
+          "ms": 11.04171100000002,
+          "outputBytes": 786,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume"
+          ],
+          "handoffBytes": 0,
+          "dispatchPromptBytes": 0,
+          "dispatchDuplicatesTopLevelHandoff": null,
+          "workUnitId": null,
+          "targetStep": 1,
+          "readCalls": 21,
+          "readBytes": 2178477,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 5,
+              "bytes": 2765
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 3,
+              "bytes": 1587
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 5,
+              "bytes": 1195
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_要求定義.md": {
+              "count": 2,
+              "bytes": 17432
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/01_要件定義.md": {
+              "count": 2,
+              "bytes": 15482
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/02_設計.md": {
+              "count": 2,
+              "bytes": 2118154
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/03_実装計画.md": {
+              "count": 2,
+              "bytes": 21862
+            }
+          },
+          "processCalls": 1,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 3.0880010000000198
+            }
+          ]
+        },
+        {
+          "mode": "compatible",
+          "iteration": 2,
+          "status": 0,
+          "ms": 11.38790899999998,
+          "outputBytes": 786,
+          "topLevel": [
+            "mode",
+            "currentStep",
+            "targetStep",
+            "state",
+            "operation",
+            "validationStage",
+            "required",
+            "next",
+            "reasons",
+            "resume"
+          ],
+          "handoffBytes": 0,
+          "dispatchPromptBytes": 0,
+          "dispatchDuplicatesTopLevelHandoff": null,
+          "workUnitId": null,
+          "targetStep": 1,
+          "readCalls": 21,
+          "readBytes": 2178477,
+          "reads": {
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/staging-record.json": {
+              "count": 5,
+              "bytes": 2765
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_モード判定.json": {
+              "count": 3,
+              "bytes": 1587
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/journal/steps.jsonl": {
+              "count": 5,
+              "bytes": 1195
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/00_要求定義.md": {
+              "count": 2,
+              "bytes": 17432
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/01_要件定義.md": {
+              "count": 2,
+              "bytes": 15482
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/02_設計.md": {
+              "count": 2,
+              "bytes": 2118154
+            },
+            ".agent-skill-chain/tmp/issues/20260825_210000_workflow-observation/03_実装計画.md": {
+              "count": 2,
+              "bytes": 21862
+            }
+          },
+          "processCalls": 1,
+          "processes": [
+            {
+              "command": "git",
+              "args": [
+                "rev-parse",
+                "--verify",
+                "HEAD^{commit}"
+              ],
+              "ms": 3.019317000000001
+            }
+          ]
+        }
+      ]
+    },
+    "findings": [
+      {
+        "kind": "fixed",
+        "where": "src/cli.ts workflow advance before planWorkflowAdvance; src/domain/staging.ts inventory/calculateStagingDigest",
+        "observation": "Preview built apply-only snapshot. inventory read/hash and calculateStagingDigest re-read the same four planning documents twice.",
+        "change": "Create initialSnapshot only for apply; keep initialJournal and inspectWorkflowStaging; preserve apply pre-lock and post-validation comparisons.",
+        "measurement": "short-lived fixture 23 reads/82115 bytes -> 9 reads/3697 bytes; each of four planning documents 2 -> 0 reads. Output remains 3585 bytes, targetStep and workUnitId unchanged."
+      },
+      {
+        "kind": "retained-opportunity",
+        "where": "src/cli.ts execution payload; src/adapters/workflow-handoff.ts workflowAgentDispatch",
+        "observation": "Same 832-byte handoff appears both at top level and inside 1561-byte dispatch prompt; total printed output 3585 bytes. Three unchanged previews regenerate same workUnitId and dispatch.",
+        "proposal": "An optional compact dispatch-only output may avoid coordinator context duplication. Preserve existing JSON compatibility and all resume/handoff identity fields; do not add session registry or infer worker completion."
+      },
+      {
+        "kind": "boundary",
+        "where": "workflowAgentDispatch",
+        "observation": "Preview itself starts no worker/LLM and reads no Skill body. It starts two Git commands in short-lived and one in compatible. Agent invocation is a host action outside this CLI.",
+        "proposal": "Measure actual host launch/model usage with explicit opt-in fixtures before deciding to omit an independent worker or claiming token savings."
+      },
+      {
+        "kind": "retained-opportunity",
+        "where": "CLI process/module initialization",
+        "observation": "Existing distribution CLI cold process elapsed 190.6–232.3ms in five runs; in-process warm preview around 9ms before fix. Source module import measured 259ms separately, not part of the production CLI number.",
+        "proposal": "Explore lazy command imports or reducing unnecessary separate CLI invocations only after profiling. Avoid a resident daemon."
+      },
+      {
+        "kind": "unmeasured",
+        "where": "review/verification/Delivery later-stage sessions",
+        "observation": "No live worker/reviewer, provider polling, exact-head long review session or Delivery E2E was measured here. This Step1 fixture cannot establish their dominant cost.",
+        "proposal": "Use explicit isolated host/provider fixtures for those stages; preserve independent review and trusted gate behavior."
+      }
+    ],
+    "skillFileBytes": {
+      "asc-step": 4174,
+      "step-01-request": 3926,
+      "step-10-review": 16800
+    },
+    "limits": [
+      "Filesystem bytes are not provider tokens or LLM input bytes.",
+      "Three warm samples per mode and one cold-process series are diagnostic, not robust Issue E2E acceptance.",
+      "First in-process call after fix was slower (30.7ms vs 19.8ms); no universal time saving is claimed.",
+      "Measurements were on shared host; no build/compile was performed by this probe.",
+      "Artifact snapshot safety validation remains at apply, not a preview promise that every artifact body is valid.",
+      "Graph microbenchmark predates this preview fix and subsequent dynamic require wrapper corrections."
+    ],
+    "reproduction": {
+      "beforeProbe": "import fs from 'node:fs';\nimport cp from 'node:child_process';\nimport path from 'node:path';\nimport {syncBuiltinESMExports} from 'node:module';\nimport {performance} from 'node:perf_hooks';\nimport {pathToFileURL} from 'node:url';\nconst source=process.argv[2];\nconst beginImport=performance.now();\nconst {main}=await import(pathToFileURL(path.join(source,'src/cli.ts')));\nconst {createIssueStaging}=await import(pathToFileURL(path.join(source,'src/domain/issue.ts')));\nconst {QUESTIONS}=await import(pathToFileURL(path.join(source,'src/domain/mode.ts')));\nconst importMs=performance.now()-beginImport;\nconst root=fs.mkdtempSync('/tmp/asc-workflow-probe-');\nprocess.env.HOME=root;process.env.GIT_CONFIG_NOSYSTEM='1';process.env.GIT_CONFIG_GLOBAL='/dev/null';\nconst git=args=>cp.execFileSync('git',args,{cwd:root,encoding:'utf8'}).trim();\ngit(['init','-q','-b','main','--object-format=sha1']);git(['config','user.name','Fixture']);git(['config','user.email','fixture@example.invalid']);\nfs.writeFileSync(path.join(root,'README.md'),'# fixture\\n');git(['add','.']);git(['commit','-qm','fixture']);git(['update-ref','refs/remotes/origin/main','HEAD']);git(['symbolic-ref','refs/remotes/origin/HEAD','refs/remotes/origin/main']);\nconst staging=createIssueStaging(root,{title:'workflow-observation',answers:Object.fromEntries(QUESTIONS.map(id=>[id,{answer:true,evidence:'fixture'}])),requestedMode:'full',now:new Date('2026-08-25T12:00:00Z')}).path;\nprocess.chdir(root);\nlet active=false,reads=[],processes=[],stdout='';\nconst originalRead=fs.readFileSync, originalSpawn=cp.spawnSync, originalExec=cp.execFileSync, originalOut=process.stdout.write.bind(process.stdout);\nfs.readFileSync=function(file,...args){const start=performance.now();const r=originalRead.call(this,file,...args);if(active && typeof file==='string' && file.startsWith(root))reads.push({path:path.relative(root,file),bytes:Buffer.byteLength(r),ms:performance.now()-start});return r;};\ncp.spawnSync=function(command,args,...options){const start=performance.now();const r=originalSpawn.call(this,command,args,...options);if(active)processes.push({command,args,ms:performance.now()-start});return r;};\ncp.execFileSync=function(command,args,...options){const start=performance.now();const r=originalExec.call(this,command,args,...options);if(active)processes.push({command,args,ms:performance.now()-start,via:'execFileSync'});return r;};\nprocess.stdout.write=function(chunk,...args){if(active){stdout+=String(chunk);return true;}return originalOut(chunk,...args);};\nsyncBuiltinESMExports();\nconst observations=[];\ntry {\nfor(const mode of ['short-lived','compatible'])for(let iteration=0;iteration<3;iteration++){\n process.env.ASC_EXECUTION_CONTEXT_MODE=mode;reads=[];processes=[];stdout='';active=true;const start=performance.now();let status;\n try{status=await main(['workflow','advance',`--staging=${staging}`]);}finally{active=false;}\n const result=JSON.parse(stdout),dispatch=result.agentDispatch,embedded=dispatch?JSON.parse(dispatch.prompt).handoff:null;\n const counts={};for(const r of reads){const v=counts[r.path]??={count:0,bytes:0};v.count++;v.bytes+=r.bytes;}\n observations.push({mode,iteration,status,ms:performance.now()-start,outputBytes:Buffer.byteLength(stdout),topLevel:Object.keys(result),handoffBytes:result.handoff?Buffer.byteLength(JSON.stringify(result.handoff)):0,dispatchPromptBytes:dispatch?Buffer.byteLength(dispatch.prompt):0,dispatchDuplicatesTopLevelHandoff:embedded?JSON.stringify(embedded)===JSON.stringify(result.handoff):null,workUnitId:result.handoff?.workUnit?.workUnitId??null,targetStep:result.targetStep,readCalls:reads.length,readBytes:reads.reduce((a,r)=>a+r.bytes,0),reads:counts,processCalls:processes.length,processes});\n}\n} finally { active=false; fs.readFileSync=originalRead;cp.spawnSync=originalSpawn;cp.execFileSync=originalExec;process.stdout.write=originalOut;syncBuiltinESMExports(); }\nfs.writeFileSync('/tmp/asc-1576-workflow-probe-result.json',JSON.stringify({root,staging,importMs,observations},null,2)+'\\n');\n",
+      "afterProbe": "import fs from 'node:fs';\nimport cp from 'node:child_process';\nimport path from 'node:path';\nimport {syncBuiltinESMExports} from 'node:module';\nimport {performance} from 'node:perf_hooks';\nimport {pathToFileURL} from 'node:url';\nconst source=process.argv[2];\nconst beginImport=performance.now();\nconst {main}=await import(pathToFileURL(path.join(source,'src/cli.ts')));\nconst {createIssueStaging}=await import(pathToFileURL(path.join(source,'src/domain/issue.ts')));\nconst {QUESTIONS}=await import(pathToFileURL(path.join(source,'src/domain/mode.ts')));\nconst importMs=performance.now()-beginImport;\nconst fixture=JSON.parse(fs.readFileSync('/tmp/asc-1576-workflow-before.json'));\nconst {root,staging}=fixture;\nprocess.env.HOME=root;process.env.GIT_CONFIG_NOSYSTEM='1';process.env.GIT_CONFIG_GLOBAL='/dev/null';\nprocess.chdir(root);\nlet active=false,reads=[],processes=[],stdout='';\nconst originalRead=fs.readFileSync, originalSpawn=cp.spawnSync, originalExec=cp.execFileSync, originalOut=process.stdout.write.bind(process.stdout);\nfs.readFileSync=function(file,...args){const start=performance.now();const r=originalRead.call(this,file,...args);if(active && typeof file==='string' && file.startsWith(root))reads.push({path:path.relative(root,file),bytes:Buffer.byteLength(r),ms:performance.now()-start});return r;};\ncp.spawnSync=function(command,args,...options){const start=performance.now();const r=originalSpawn.call(this,command,args,...options);if(active)processes.push({command,args,ms:performance.now()-start});return r;};\ncp.execFileSync=function(command,args,...options){const start=performance.now();const r=originalExec.call(this,command,args,...options);if(active)processes.push({command,args,ms:performance.now()-start,via:'execFileSync'});return r;};\nprocess.stdout.write=function(chunk,...args){if(active){stdout+=String(chunk);return true;}return originalOut(chunk,...args);};\nsyncBuiltinESMExports();\nconst observations=[];\ntry {\nfor(const mode of ['short-lived','compatible'])for(let iteration=0;iteration<3;iteration++){\n process.env.ASC_EXECUTION_CONTEXT_MODE=mode;reads=[];processes=[];stdout='';active=true;const start=performance.now();let status;\n try{status=await main(['workflow','advance',`--staging=${staging}`]);}finally{active=false;}\n const result=JSON.parse(stdout),dispatch=result.agentDispatch,embedded=dispatch?JSON.parse(dispatch.prompt).handoff:null;\n const counts={};for(const r of reads){const v=counts[r.path]??={count:0,bytes:0};v.count++;v.bytes+=r.bytes;}\n observations.push({mode,iteration,status,ms:performance.now()-start,outputBytes:Buffer.byteLength(stdout),topLevel:Object.keys(result),handoffBytes:result.handoff?Buffer.byteLength(JSON.stringify(result.handoff)):0,dispatchPromptBytes:dispatch?Buffer.byteLength(dispatch.prompt):0,dispatchDuplicatesTopLevelHandoff:embedded?JSON.stringify(embedded)===JSON.stringify(result.handoff):null,workUnitId:result.handoff?.workUnit?.workUnitId??null,targetStep:result.targetStep,readCalls:reads.length,readBytes:reads.reduce((a,r)=>a+r.bytes,0),reads:counts,processCalls:processes.length,processes});\n}\n} finally { active=false; fs.readFileSync=originalRead;cp.spawnSync=originalSpawn;cp.execFileSync=originalExec;process.stdout.write=originalOut;syncBuiltinESMExports(); }\nfs.writeFileSync('/tmp/asc-1576-workflow-after.json',JSON.stringify({root,staging,importMs,observations},null,2)+'\\n');\n"
+    }
   }
 }

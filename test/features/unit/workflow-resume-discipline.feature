@@ -6,3 +6,4 @@ Feature: 再開状態を起点にする読取規律
     Given 配布する正本・asc-step adapter・Step 1/2 skillがある
     When 本文を検査する
     Then context境界・再開順・拡大条件があり、adapterは全文読みを指示しない
+    And advanceのpreviewは計画本文を読まずapplyはlock前後の変更を拒否する

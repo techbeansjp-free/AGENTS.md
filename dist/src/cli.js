@@ -4601,14 +4601,23 @@ export async function main(argv, dependencies = {}) {
             throw new Error(`workflow advanceの未知optionです: --${unknown.join(", --")}`);
         const staging = path.resolve(required(flags, "staging"));
         const inspected = inspectWorkflowStaging(staging);
-        const initialRecord = readStoredStagingRecord(staging);
-        const initialArtifacts = listStagingArtifacts(staging);
-        const initialContentDigest = calculateStagingDigest(staging, initialArtifacts);
+        // Only apply compares a pre-lock snapshot; advisory preview needs no
+        // full artifact inventory or content hashing.
+        const initialSnapshot = apply
+            ? (() => {
+                const record = readStoredStagingRecord(staging);
+                const artifacts = listStagingArtifacts(staging);
+                return {
+                    record,
+                    artifacts,
+                    contentDigest: calculateStagingDigest(staging, artifacts),
+                };
+            })()
+            : undefined;
         const initialJournal = readWorkflowJournal(staging);
-        const initialJournalDigest = crypto
-            .createHash("sha256")
-            .update(initialJournal.source)
-            .digest("hex");
+        const initialJournalDigest = apply
+            ? crypto.createHash("sha256").update(initialJournal.source).digest("hex")
+            : undefined;
         const continuationFromHead = flags["continue-from"];
         if (continuationFromHead !== undefined) {
             if (apply || artifacts.length > 0 || flags.evidence !== undefined)
@@ -4729,6 +4738,9 @@ export async function main(argv, dependencies = {}) {
                 : { ...plan, sync: syncPreview, resume, ...execution });
             return plan.state === "blocked" ? 1 : 0;
         }
+        if (initialSnapshot === undefined || initialJournalDigest === undefined)
+            throw new Error("workflow advanceのapply snapshotがありません");
+        const { record: initialRecord, artifacts: initialArtifacts, contentDigest: initialContentDigest, } = initialSnapshot;
         return withStagingMutationLock(staging, () => {
             const lockedStoredRecord = readStoredStagingRecord(staging);
             const lockedArtifacts = listStagingArtifacts(staging);

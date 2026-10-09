@@ -447,6 +447,17 @@ function collectEcmaScriptScopes(compiler, sourceFile, sourcePath) {
 function requireIsShadowed(scope) {
     return scope.effectiveRequireShadow || scope.effectiveRequireAmbiguity;
 }
+/** 括弧・型表現は呼出し先を変えないため、依存不明の判定で同じcalleeへ戻す。 */
+function unwrappedCallTarget(compiler, target) {
+    let current = target;
+    while (compiler.isParenthesizedExpression(current) ||
+        compiler.isAsExpression(current) ||
+        compiler.isTypeAssertionExpression(current) ||
+        compiler.isNonNullExpression(current) ||
+        compiler.isSatisfiesExpression(current))
+        current = current.expression;
+    return current;
+}
 function ecmaScriptImportSpecifiers(source, sourcePath, onUnresolvedImport) {
     const compiler = loadTypeScriptCompiler();
     const sourceFile = parseEcmaScriptSource(compiler, source, sourcePath);
@@ -463,13 +474,14 @@ function ecmaScriptImportSpecifiers(source, sourcePath, onUnresolvedImport) {
         const value = literalImportSpecifier(compiler, node, requireIsShadowed(current));
         if (value !== undefined)
             located.push({ position: node.pos, value });
-        if (value === undefined &&
-            compiler.isCallExpression(node) &&
-            (node.expression.kind === compiler.SyntaxKind.ImportKeyword ||
-                (compiler.isIdentifier(node.expression) &&
-                    node.expression.text === "require" &&
-                    !current.effectiveRequireShadow)))
-            onUnresolvedImport?.(sourcePath);
+        if (value === undefined && compiler.isCallExpression(node)) {
+            const callee = unwrappedCallTarget(compiler, node.expression);
+            if (callee.kind === compiler.SyntaxKind.ImportKeyword ||
+                (compiler.isIdentifier(callee) &&
+                    callee.text === "require" &&
+                    !current.effectiveRequireShadow))
+                onUnresolvedImport?.(sourcePath);
+        }
         const children = [];
         compiler.forEachChild(node, (child) => {
             children.push(child);

@@ -70,6 +70,11 @@ Feature: 影響集合をreview焦点とreviewer文脈と検証選択で共有す
     Then 初回も再利用時も動的依存を名指ししてfull検証を要求する
 
     Examples:
-      | 式            |
-      | import(name)  |
-      | require(name) |
+      | 式                                            |
+      | import(name)                                  |
+      | require(name)                                 |
+      | (require)(name)                               |
+      | (require as typeof require)(name)             |
+      | (require!)(name)                              |
+      | (<typeof require>require)(name)               |
+      | (require satisfies typeof require)(name)      |
