@@ -7,6 +7,8 @@ description: 判定済みモードに対応する要求定義テンプレート�
 
 入力はステップ0のステージングと利用者の意図。成果物は`00_要求定義.md`。`full`は目的、範囲、ドメイン影響、制約、受け入れ条件と成功基準、P-01〜P-07計画を記録し、FR/NFR/ACはステップ2へ分離する。`quick`は要件工程を物理的に集約するため、境界づけられたコンテキスト・不変条件、完全な受け入れ条件、最小Gherkin、確認方法、全Q根拠、再開地点も記録する。`poc`はquick相当の集約に加え、PoC目的、隔離fixture、runner ID・path、固定argv、use case、BDD scenario、機械observable、成功・中止条件、非対象、データ・security制約、責任者、full昇格または廃止の判断条件とhigh risk確認を記録する。観測期間や未実装fixtureのdigestを要求しない。ステップ4前に構造を検証する。
 
+調査・baseline確認は[読取と書込の量](../../docs/01_開発ワークフロー.md#読取と書込の量)に従い、要求を確定するための必要範囲から始める。
+
 ## execution context境界
 
 標準の`short-lived`方式では、[開発ワークフローのexecution context境界](../../docs/01_開発ワークフロー.md#execution-context境界)に従い、この担当work unitへfresh contextを割り当てる。repository/stagingから復元し、完了後に別工程・別review round・finding是正を同じcontextへ追加しない。workerの成果物・検証・必要なcommit・返却・終了の後でcoordinatorがStep/roundを記録する。`compatible`の既存動作と品質gateは維持する。

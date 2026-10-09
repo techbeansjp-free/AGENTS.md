@@ -9,7 +9,7 @@ import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, 
 import { readStagingLayout, stagingExcludePathspec, stagingRepositoryRoot, } from "../domain/staging-layout.js";
 import { DELIVERY_STATE_FILE, parseDeliveryState, } from "../domain/delivery-state.js";
 import { loadTrustedVerificationPolicy } from "../domain/policy.js";
-import { parseVerificationRuns, renderVerificationRuns, sealVerificationRun, validateVerificationArgv, verificationCommandViolation, VERIFICATION_RUN_FILE, VERIFICATION_RUN_SCHEMA_VERSION, } from "../domain/verification-run.js";
+import { parseVerificationRuns, renderVerificationRuns, sealVerificationRun, selectObservedVerification, validateVerificationArgv, verificationCommandViolation, VERIFICATION_RUN_FILE, VERIFICATION_RUN_SCHEMA_VERSION, } from "../domain/verification-run.js";
 import { computeImpactSet } from "./impact-set.js";
 import { GIT_ENV } from "./review-diff.js";
 import { readStoredReviewSession } from "./review-session-store.js";
@@ -166,6 +166,80 @@ export function resolveVerificationTarget(input) {
     return {
         baseSha,
         impact: computeImpactSet({ root, baseSha, headSha: input.headSha }),
+    };
+}
+/** Read-only advice using the same observations consumed by review export. */
+export function planVerification(input) {
+    const staging = assertWorkflowStaging(input.staging);
+    const root = stagingRepositoryRoot(staging);
+    verificationDeliveryPhase(staging);
+    const policy = loadTrustedVerificationPolicy(root);
+    if (worktreeDifferences(root) !== "")
+        throw new Error("verify planは現在HEADと完全一致するworktreeが必要です");
+    const headSha = resolveCommit(root, "current HEAD", "HEAD");
+    const { baseSha, impact } = resolveVerificationTarget({ ...input, headSha });
+    // Parse errors are not a missing observation: corrupted records stay fatal.
+    const records = readVerificationRuns(staging);
+    let observed = [];
+    let reason = null;
+    try {
+        observed = selectObservedVerification(records, {
+            headSha,
+            impactDigest: impact.digest,
+            impactMode: impact.mode,
+            impactFeatures: impact.features,
+            policy,
+        });
+    }
+    catch (error) {
+        reason = error instanceof Error ? error.message : String(error);
+    }
+    if (resolveCommit(root, "current HEAD", "HEAD") !== headSha ||
+        worktreeDifferences(root) !== "")
+        throw new Error("verify planの観測中にHEADまたはworktreeが変わりました");
+    const latest = new Map();
+    for (const item of records)
+        if (item.headSha === headSha && item.impactDigest === impact.digest)
+            latest.set(JSON.stringify(item.command), item);
+    const violations = [...latest.values()]
+        .map((item) => verificationCommandViolation(item.command, item.scope, policy, impact.features))
+        .filter((value) => value !== undefined);
+    const blocked = violations.length > 0;
+    if (blocked)
+        reason = `trusted policy不一致: ${violations.join("; ")}`;
+    const required = [];
+    if (observed.length === 0 && !blocked) {
+        for (const item of latest.values())
+            if (item.exitCode !== 0 || item.signal !== null)
+                required.push({ scope: item.scope, command: item.command });
+        if (required.length === 0 ||
+            (impact.mode === "full" &&
+                !required.some((item) => item.scope === "full"))) {
+            const scope = impact.mode === "targeted" && impact.features.length > 0
+                ? "targeted"
+                : "full";
+            required.push({
+                scope,
+                command: scope === "full"
+                    ? policy.fullCommand
+                    : [...policy.targetedRunner, ...impact.features],
+            });
+        }
+    }
+    return {
+        authority: "advisory",
+        headSha,
+        baseSha,
+        impactDigest: impact.digest,
+        impactMode: impact.mode,
+        status: blocked
+            ? "blocked"
+            : observed.length > 0
+                ? "observed"
+                : "required",
+        observed,
+        reason,
+        required,
     };
 }
 /**

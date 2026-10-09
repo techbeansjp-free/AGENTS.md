@@ -10,7 +10,17 @@ description: exact-headの実装をGitから直接reviewし、finding状態と�
 ## 入力
 
 - round 1: 承認済み計画（封印済み00〜03と`05_計画変更.md`）、`docs/specs/`、比較基点SHA、候補HEAD（Step 9の`implementationHeadSha`）。reviewerは`git diff <base>..<head>`、`git log`、`git show`でcode・test・仕様の変更を自分で読む。
-- round 2以降: `review round --init`が生成する骨子の`focus`（前round未解決blocker、前回review済みHEADからの`fixedDiff`、影響集合から導出した`adjacentScope`）と、`impact --base=<前回HEAD> --head=<現在HEAD>`の結果だけ。計画全文、過去roundの記録全文、仕様全体を再投入しない。`impact`が`full`を返したら全体を見る。
+- round 2以降: `review round --init`が生成する骨子の`focus`（前round未解決blocker、前回review済みHEADからの`fixedDiff`、影響集合から導出した`adjacentScope`）と、骨子の`inspection`・必要時の`cumulative`。計画全文、過去roundの記録全文、仕様全体を再投入しない。Verificationの`full`だけを全体再reviewの理由にしない。骨子が隣接範囲を限定できない、または`inspection`/`cumulative`が全体検分を要求する場合は、その割当どおり広げる。
+
+## 調査の入口と終了
+
+coordinatorは生成済み`agentDispatch`と正式round骨子のpointerを渡し、実装説明を再生成しない。reviewerは以下をGit・骨子・関連契約から確認する。新しい探索表や報告書は作らない。
+
+- 対象と契約: `inspection`/`cumulative`の比較基点・HEAD・pathとanchorのAC/Invariant。契約IDで該当節を検索し、既知の要求全体を再起草しない。
+- 失敗経路と反例: 変更の入力境界・error path・security・data整合性、既存testの見落とす反例。round 2以降は`previousBlocking`、修正差分、失効した契約から始める。
+- 必要な既存code: `focus.adjacentScope`の根拠を起点に直接依存・consumerを読む。範囲外の根拠は生成された割当に求め、到達不能だけで安全と判断しない。
+- 拡張: 契約矛盾、未知のconsumer、security/trust境界、反例、隣接範囲の証明不能があれば該当依存へ広げる。割当済みの全体/累積検分を狭めない。
+- 終了: 割当scopeの契約・失敗経路を検分し、前blockerを再評価し、新しい具体的疑問が残らなければfindingを記録して返す。必要な反例探索や独立性を時間上限で打ち切らない。
 
 ## 手順
 
@@ -18,7 +28,9 @@ description: exact-headの実装をGitから直接reviewし、finding状態と�
 2. **findingは状態として扱う。** 前round blockerは同じIDのまま骨子へ写されるので、是正済みなら`status`を`resolved`へ変え、`evidence`へ確認した事実を1行で書く。新しい文章として作り直さない。`adjacentScope`は手で書き換えない。記録時にGitから導出し直し、一致しなければ拒否される。
 3. 評価基準（`02_品質基準.md`のレビュー収束契約が定める肯定・敵対）は全roundで確認するが、`pass`の項目を文章で残さない。残すのはfindingと判定だけである。
 4. 修正可否は派生欠陥一般則よりreview admissionを優先する。正本のbatch規則に従い、安全にまとめられる全blockerを1 batchの前進修正とし、次roundは`previousBlocking`・修正差分・Git由来の隣接範囲を見る。admission規則、発散warning、取り直しの規則は`02_品質基準.md`のレビュー収束契約が所有する。
-5. Step 9の`H_impl`・比較基点・影響集合を固定した変更のないworktreeで、手順1〜4の独立reviewと並行して`verify run --staging=<staging> --base=<同じ比較基点SHA> --scope=targeted|full -- <検証commandのargv>`を開始できる。session作成前・未収束でも`--base`を明示すれば開始できる。reviewerは読み取り専用で確認し、検証中はHEADとworktreeを変更しない。journalへの書込みは進行役が直列化する。修正は独立reviewと検証の両方の終了または明示中止後に行い、新HEADでは必要な検証と独立reviewを再実施する。同HEAD・同argv等の束縛条件を満たす既存成功記録は正本の再利用条件で参照し、重複実行しない。argvは既定branchのproject policyが`verification`で宣言したcommandだけを受理する（`full`は`fullCommand`そのもの、`targeted`は`targetedRunner`の後ろに影響集合のfeatureを並べたもの）。commandはshellを通さず実行され、HEAD・影響集合digest・終了値がstagingの観測記録へ追記される。影響集合が`full`なら`--scope=full`の実行が必要である。**検証の合格は申告ではなく観測である。** 「実行した」と書いても証跡にはならない。
+5. 検証前に`verify plan --staging=<staging> --base=<同じ比較基点SHA>`を一度実行する。`status=observed`なら束縛が一致した`observed`の記録IDを再利用し、同じcommandを再実行しない。`status=required`なら`required`配列の各`scope`と`command`で`verify run`を実行する。`status=blocked`なら理由を解消し、同じ不成立commandを繰り返さない。planはread-onlyのadvisoryであり、後続gateはHEAD・trusted policy等を再照合する。HEADや入力が変わった場合は再観測する。
+
+   Step 9の`H_impl`・比較基点・影響集合を固定した変更のないworktreeで、手順1〜4の独立reviewと並行して`verify run --staging=<staging> --base=<同じ比較基点SHA> --scope=targeted|full -- <検証commandのargv>`を開始できる。session作成前・未収束でも`--base`を明示すれば開始できる。reviewerは読み取り専用で確認し、検証中はHEADとworktreeを変更しない。journalへの書込みは進行役が直列化する。修正は独立reviewと検証の両方の終了または明示中止後に行い、新HEADでは必要な検証と独立reviewを再実施する。同HEAD・同argv等の束縛条件を満たす既存成功記録は正本の再利用条件で参照し、重複実行しない。argvは既定branchのproject policyが`verification`で宣言したcommandだけを受理する（`full`は`fullCommand`そのもの、`targeted`は`targetedRunner`の後ろに影響集合のfeatureを並べたもの）。commandはshellを通さず実行され、HEAD・影響集合digest・終了値がstagingの観測記録へ追記される。影響集合が`full`なら`--scope=full`の実行が必要である。**検証の合格は申告ではなく観測である。** 「実行した」と書いても証跡にはならない。
 6. 同じ`H_impl`・比較基点・影響集合について独立reviewが収束し、必要な検証が成功したことを確認してから、`review export --staging=<staging> --issue=<番号> --reviewer=<reviewer ID> --implementer=<implementer ID>`でreview証跡（`<Issue番号>_review.json`）を生成し、実装commitの後にその1 fileだけをcommitして`H_final`にする。証跡の検証欄は`H_impl`と影響集合に一致する合格した観測記録から導出され、無ければ生成しない。reviewer・implementer・独立性は`declared`（申告）として記録され、hard gateの根拠にならない。`workflow record --step=10`は`H_final`で実行でき、bindingはsessionのcandidate HEAD（`H_impl`）のまま記録される。
 
 ## reviewerと判定
@@ -69,6 +81,6 @@ review中またはPR review中に見つけた欠陥の修正可否は[品質基�
 
 作業開始前に[成果物用語と責務境界](../../docs/01_開発ワークフロー.md#成果物用語と責務境界)と[ドメイン用語台帳](../../docs/01_開発ワークフロー.md#ドメイン用語台帳)を読み、成果物間の責務越境、封印済み計画の書き換え、対象版とシステム仕様書の不一致、未定義語・重複定義・根拠なしの意味変更をfindingにする。
 
-project choicesと対象成果物のDC行を読み、**DC判定が`applicable`の領域と、対象差分が実際に触れた領域だけ**、作業開始前に対応するtemplateの全文を読む。[脅威・対策・監査](../../templates/specs/10_セキュリティ/02_脅威・対策・監査.md)はDC-PRIVACYが`applicable`のとき、[利用性・互換性・保守性](../../templates/specs/11_非機能/02_利用性・互換性・保守性.md)と[監視・障害対応](../../templates/specs/12_運用保守/01_監視・障害対応.md)はDC-OBSERVABILITYが`applicable`のとき、[コーディング標準](../../templates/specs/14_開発・品質/01_コーディング標準.md)と[テスト標準](../../templates/specs/14_開発・品質/02_テスト標準.md)は差分がsourceまたはtestを含むとき、[デザイントークン](../../templates/specs/17_デザイン/00_デザイントークン.md)と[レイアウトトークン](../../templates/specs/18_レイアウト/00_レイアウトトークン.md)はUIまたはtoken capabilityが`not-applicable`でないときに読む。`not-applicable`と判定した領域のtemplateを読む固定費を課さない。
+project choicesと対象成果物のDC行を読み、**DC判定が`applicable`の領域と、対象差分が実際に触れた領域だけ**、作業開始前に対応するtemplateの全文を読む。同じcontextで既読かつ変更のないtemplateを再読せず、担当外のtemplateへ読取を広げない。[脅威・対策・監査](../../templates/specs/10_セキュリティ/02_脅威・対策・監査.md)はDC-PRIVACYが`applicable`のとき、[利用性・互換性・保守性](../../templates/specs/11_非機能/02_利用性・互換性・保守性.md)と[監視・障害対応](../../templates/specs/12_運用保守/01_監視・障害対応.md)はDC-OBSERVABILITYが`applicable`のとき、[コーディング標準](../../templates/specs/14_開発・品質/01_コーディング標準.md)と[テスト標準](../../templates/specs/14_開発・品質/02_テスト標準.md)は差分がsourceまたはtestを含むとき、[デザイントークン](../../templates/specs/17_デザイン/00_デザイントークン.md)と[レイアウトトークン](../../templates/specs/18_レイアウト/00_レイアウトトークン.md)はUIまたはtoken capabilityが`not-applicable`でないときに読む。`not-applicable`と判定した領域のtemplateを読む固定費を課さない。
 
 `verify run`または`review export`が検証command未宣言で停止した場合は、`doctor`の`workflowReadiness.verification`を確認する。利用projectの実検証argvをmanifestの`verification.fullCommand`・`targetedRunner`へ宣言し、既定branchへの先行導入後に実検証をやり直す。candidate側だけの追記や手書きのレビューMarkdownを正式証跡として代用しない。実DBでの並行性など未実施の検証は未実施のまま残し、単体test成功で実環境の観測を主張しない。

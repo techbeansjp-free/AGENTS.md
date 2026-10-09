@@ -631,6 +631,23 @@ function unwrappedCallTarget(
   return current;
 }
 
+/** Every branch must be a literal; unknown branches never acquire a guessed boundary. */
+function finiteImportSpecifiers(
+  compiler: TypeScriptApi,
+  expression: TypeScriptNode,
+  depth = 0,
+): string[] | undefined {
+  if (depth > 32) return undefined;
+  const value = unwrappedCallTarget(compiler, expression);
+  if (compiler.isStringLiteralLike(value)) return [value.text];
+  if (!compiler.isConditionalExpression(value)) return undefined;
+  const yes = finiteImportSpecifiers(compiler, value.whenTrue, depth + 1);
+  const no = finiteImportSpecifiers(compiler, value.whenFalse, depth + 1);
+  if (yes === undefined || no === undefined) return undefined;
+  const candidates = [...new Set([...yes, ...no])];
+  return candidates.length <= 32 ? candidates : undefined;
+}
+
 function ecmaScriptImportSpecifiers(
   source: string,
   sourcePath: string,
@@ -661,13 +678,26 @@ function ecmaScriptImportSpecifiers(
     if (value !== undefined) located.push({ position: node.pos, value });
     if (value === undefined && compiler.isCallExpression(node)) {
       const callee = unwrappedCallTarget(compiler, node.expression);
-      if (
-        callee.kind === compiler.SyntaxKind.ImportKeyword ||
-        (compiler.isIdentifier(callee) &&
-          callee.text === "require" &&
-          !current.effectiveRequireShadow)
-      )
-        onUnresolvedImport?.(sourcePath);
+      const isImport = callee.kind === compiler.SyntaxKind.ImportKeyword;
+      const isRequire =
+        compiler.isIdentifier(callee) &&
+        callee.text === "require" &&
+        !current.effectiveRequireShadow;
+      if (isImport || isRequire) {
+        const validArity = isImport
+          ? node.arguments.length === 1 || node.arguments.length === 2
+          : node.arguments.length === 1;
+        const candidates =
+          validArity &&
+          (isImport || !requireIsShadowed(current)) &&
+          node.arguments[0] !== undefined
+            ? finiteImportSpecifiers(compiler, node.arguments[0])
+            : undefined;
+        if (candidates === undefined) onUnresolvedImport?.(sourcePath);
+        else
+          for (const candidate of candidates)
+            located.push({ position: node.pos, value: candidate });
+      }
     }
     const children: TypeScriptNode[] = [];
     compiler.forEachChild(node, (child) => {
@@ -1256,6 +1286,8 @@ function projectRepositorySemanticGraph(input: {
         input.onUnresolvedImport,
       )) {
         const target = resolveImport(file.path, specifier, knownFiles);
+        if (target === undefined && specifier.startsWith("."))
+          input.onUnresolvedImport?.(file.path);
         if (target !== undefined)
           addEdge(
             fileNode,
@@ -1530,19 +1562,6 @@ export interface CommitSemanticGraphBuild extends RepositorySemanticGraphBuild {
 }
 
 /**
- * 直近1件の投影だけをprocess内で保持する。Git sourceは毎回読み直し、本文hash・
- * repository/worktree・HEAD/tree・除外集合が一致した場合だけASTとedge構築を省く。
- * disk cacheやruntime Graphをauthorityにせず、失敗と可変な返却値を共有しない。
- */
-let lastCommitProjection:
-  | {
-      identity: string;
-      snapshot: SemanticGraphSnapshot;
-      unresolvedImportPaths: readonly string[];
-    }
-  | undefined;
-
-/**
  * **commitのtreeから意味Graphを構築する。** worktreeの状態（dirty・checkout位置）に
  * 依存しないため、任意の2 commit間の影響集合を同じ入力から同じ結果で導出できる。
  * `source.dirty`は常に`false`、`source.headSha`は指定commitである。
@@ -1597,28 +1616,14 @@ export function buildCommitSemanticGraph(
     ),
     dirty: false,
   };
-  const identity = stableJson({ source, oversized, oversizedRegularFiles });
-  const unresolvedImportPaths = new Set<string>(
-    lastCommitProjection?.identity === identity
-      ? lastCommitProjection.unresolvedImportPaths
-      : [],
-  );
-  const snapshot =
-    lastCommitProjection?.identity === identity
-      ? structuredClone(lastCommitProjection.snapshot)
-      : projectRepositorySemanticGraph({
-          files,
-          oversized,
-          oversizedRegularFiles,
-          source,
-          onUnresolvedImport: (file) => unresolvedImportPaths.add(file),
-        });
-  if (lastCommitProjection?.identity !== identity)
-    lastCommitProjection = {
-      identity,
-      snapshot: structuredClone(snapshot),
-      unresolvedImportPaths: [...unresolvedImportPaths].sort(compareText),
-    };
+  const unresolvedImportPaths = new Set<string>();
+  const snapshot = projectRepositorySemanticGraph({
+    files,
+    oversized,
+    oversizedRegularFiles,
+    source,
+    onUnresolvedImport: (file) => unresolvedImportPaths.add(file),
+  });
   return {
     snapshot,
     oversizedPaths: oversized,

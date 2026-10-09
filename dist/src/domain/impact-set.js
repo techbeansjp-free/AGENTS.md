@@ -293,6 +293,12 @@ export function deriveImpactSet(input) {
     const changedPaths = sortedUnique(input.changedPaths);
     const changed = new Set(changedPaths);
     const reasons = [];
+    const verificationOnlyReasons = new Set();
+    const unresolvedImportPaths = input.graph.status === "built"
+        ? sortedUnique(input.graph.unresolvedImportPaths ?? [])
+        : [];
+    if (unresolvedImportPaths.length > 0)
+        reasons.push(`影響境界を証明できない動的import/require: ${unresolvedImportPaths.slice(0, 8).join(", ")}${unresolvedImportPaths.length > 8 ? `（ほか${unresolvedImportPaths.length - 8}件）` : ""}`);
     let index;
     let graphContentHash = null;
     if (input.graph.status === "unavailable")
@@ -357,8 +363,11 @@ export function deriveImpactSet(input) {
             const closure = affectedClosure([source], index, input.literalReferences);
             const selection = selectFromClosure(closure, index, input, stepDefinitionFiles);
             reasons.push(...selection.reasons);
-            if (selection.features.size === 0)
-                reasons.push(`変更sourceから検証featureへ到達できません: ${source}`);
+            if (selection.features.size === 0) {
+                const reason = `変更sourceから検証featureへ到達できません: ${source}`;
+                reasons.push(reason);
+                verificationOnlyReasons.add(reason);
+            }
             for (const feature of selection.features)
                 features.add(feature);
             for (const scenario of selection.scenarios)
@@ -396,6 +405,12 @@ export function deriveImpactSet(input) {
     const securityPaths = sortedUnique([...changedPaths, ...adjacentPaths].filter(isSecuritySensitivePath));
     const finalReasons = sortedUnique(reasons);
     const mode = finalReasons.length === 0 ? "targeted" : "full";
+    // A missing test mapping cannot erase known source dependencies. Unknown graph,
+    // dynamic loading, infrastructure and security keep the conservative review scope.
+    const reviewReasons = securityPaths.length > 0
+        ? finalReasons
+        : finalReasons.filter((reason) => !verificationOnlyReasons.has(reason));
+    const reviewMode = reviewReasons.length === 0 ? "targeted" : "full";
     return withDigest({
         schemaVersion: IMPACT_SET_SCHEMA_VERSION,
         baseSha: input.baseSha,
@@ -411,13 +426,17 @@ export function deriveImpactSet(input) {
         checks: mode === "targeted" ? sortedUnique(checks) : [],
         mode,
         reasons: finalReasons,
+        ...(reviewMode !== mode ? { reviewMode, reviewReasons } : {}),
+        ...(unresolvedImportPaths.length > 0 ? { unresolvedImportPaths } : {}),
     });
 }
 /**
- * **review roundへ渡す隣接範囲。** targetedのときだけ影響集合の隣接範囲を返し、
- * fullのときは空にする（全体reviewが適用される）。
+ * **review roundへ渡す隣接範囲。** review判定がtargetedなら既知の隣接範囲を返す。
+ * 旧結果はverificationのmodeへ保守的に戻す。fullなら全体reviewが適用される。
  */
 export function reviewAdjacentScope(impact) {
-    return impact.mode === "targeted" ? impact.adjacent : [];
+    return (impact.reviewMode ?? impact.mode) === "targeted"
+        ? impact.adjacent
+        : [];
 }
 //# sourceMappingURL=impact-set.js.map

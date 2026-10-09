@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createReuseObserver } from "../../src/adapters/review-reuse.js";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -11,6 +12,7 @@ import {
 } from "../../src/domain/cucumber-binding.js";
 import {
   deriveImpactSet,
+  reviewAdjacentScope,
   type ImpactDerivationInput,
   type ImpactSet,
   type StepDefinitionFileSummary,
@@ -1130,11 +1132,14 @@ When(
   },
 );
 
-Then("同一Git観測の再利用は返却値の改変から隔離される", function () {
+Then("反復Git観測は返却値の改変から隔離される", function () {
   const input = { root: this.root, baseSha: this.base, headSha: this.head };
   const expected = structuredClone(computeImpactSet(input));
   const exposed = computeImpactSet(input);
-  Object.assign(exposed, { mode: "full", digest: "corrupted" });
+  assert.throws(
+    () => Object.assign(exposed, { mode: "full", digest: "corrupted" }),
+    TypeError,
+  );
   assert.deepEqual(computeImpactSet(input), expected);
   const built = buildCommitSemanticGraph(this.root, this.head);
   const expectedGraph = structuredClone(built.snapshot);
@@ -1164,7 +1169,7 @@ Then("基点とHEADとpolicyの変更は以前の影響集合を再利用しな�
   );
 });
 
-Then("Git sourceの欠落と観測上限は温まった投影でも拒否する", function () {
+Then("Git sourceの欠落と観測上限は反復投影でも拒否する", function () {
   buildCommitSemanticGraph(this.root, this.head);
   assert.throws(
     () =>
@@ -1219,11 +1224,14 @@ Then("Git replacementのsource変更を同じSHAの古い投影で隠さない",
 });
 
 When(
-  "動的な依存読込{string}をcommitして影響集合を2回導出する",
-  function (expression: string) {
+  "動的な依存読込{string}を{string}へcommitして影響集合を2回導出する",
+  function (expression: string, location: string) {
     this.head = commit(
       this.root,
-      { "src/lib.ts": `export const lib = (name: string) => ${expression};\n` },
+      {
+        "src/lib.ts": `${REPOSITORY_FILES["src/lib.ts"]}\n// changed\n`,
+        [location]: `${REPOSITORY_FILES[location] ?? ""}\nexport const load = (name: string) => ${expression};\n`,
+      },
       "dynamic dependency",
     );
     this.impacts = [0, 1].map(() =>
@@ -1236,16 +1244,122 @@ When(
   },
 );
 
-Then("初回も再利用時も動的依存を名指ししてfull検証を要求する", function () {
+Then("初回も反復時も動的依存を名指ししてfull検証を要求する", function () {
   for (const impact of this.impacts) {
     assert.equal(impact.mode, "full");
+    assert.equal(impact.reviewMode ?? impact.mode, "full");
+    assert.ok(impact.graphContentHash);
+    assert.ok(impact.adjacent.some(({ path }) => path === "src/app.ts"));
+    assert.equal(impact.unresolvedImportPaths?.length, 1);
     assert.deepEqual(impact.features, []);
     assert(
       impact.reasons.some(
         (reason) =>
           reason.includes("動的import/require") &&
-          reason.includes("src/lib.ts"),
+          impact.unresolvedImportPaths?.some((file) => reason.includes(file)),
       ),
     );
   }
 });
+
+Then("検証はfullのままレビューの未知範囲を拡大しない", function () {
+  assert.equal(this.impact.mode, "full");
+  assert.equal(this.impact.reviewMode, "targeted");
+  assert.deepEqual(this.impact.reviewReasons, []);
+  assert.deepEqual(reviewAdjacentScope(this.impact), this.impact.adjacent);
+  const { reviewMode: _mode, reviewReasons: _reasons, ...legacy } = this.impact;
+  assert.deepEqual(reviewAdjacentScope(legacy), []);
+  const graph = this.graphInput.graph;
+  assert.equal(graph.status, "built");
+  if (graph.status !== "built") throw new Error("fixture graph missing");
+  const withoutTests = {
+    ...graph,
+    snapshot: {
+      ...graph.snapshot,
+      edges: graph.snapshot.edges.filter(({ kind }) => kind !== "verified-by"),
+    },
+  };
+  const security = derive(this, ["src/adapters/merge-gate.ts"], {
+    graph: withoutTests,
+    stepDefinitionFiles: [],
+    featureBinding: {
+      byFeature: {},
+      unmatchedFeatures: [],
+      unparsedFeatures: [],
+    },
+  });
+  assert.equal(security.mode, "full");
+  assert.equal(security.reviewMode ?? security.mode, "full");
+  for (const unsafeGraph of [
+    { ...graph, unresolvedImportPaths: ["src/unrelated-loader.ts"] },
+    { ...graph, snapshot: { ...graph.snapshot, nodes: [] } },
+  ]) {
+    const unsafe = derive(this, ["src/orphan.ts"], { graph: unsafeGraph });
+    assert.equal(unsafe.mode, "full");
+    assert.equal(unsafe.reviewMode ?? unsafe.mode, "full");
+    assert.deepEqual(reviewAdjacentScope(unsafe), []);
+  }
+});
+
+When(
+  "有限候補の依存読込{string}を{string}へ配置して影響集合を導出する",
+  function (expression: string, location: string) {
+    this.base = commit(
+      this.root,
+      {
+        [location]: `export const load = (flag: boolean) => ${expression};\n`,
+        "src/isolated-a.ts": "export const a = 1;\n",
+        "src/isolated-b.ts": "export const b = 1;\n",
+      },
+      "finite dependencies",
+    );
+    this.head = commit(
+      this.root,
+      {
+        "src/util.ts": "export const util = (): number => 2;\n",
+      },
+      "change utility",
+    );
+    this.impacts = [0, 1].map(() =>
+      computeImpactSet({
+        root: this.root,
+        baseSha: this.base,
+        headSha: this.head,
+      }),
+    );
+  },
+);
+
+Then("有限候補の全依存を保持して初回も反復時もtargetedになる", function () {
+  const built = buildCommitSemanticGraph(this.root, this.head);
+  assert.deepEqual(built.unresolvedImportPaths, []);
+  for (const impact of this.impacts) {
+    assert.equal(impact.mode, "targeted", impact.reasons.join("; "));
+    assert.ok(impact.graphContentHash);
+    assert.ok(impact.features.includes("test/features/app.feature"));
+  }
+  assert.deepEqual(this.impacts[0], this.impacts[1]);
+});
+
+Then(
+  "reviewの同一操作はfocusとinspectionのImpactを一度だけ導出する",
+  function () {
+    const counter = { contentDiffs: 0, impactDerivations: 0 };
+    const records = {
+      issue: undefined,
+      session: { sessionId: "fixture", rounds: [] },
+    };
+    const observer = createReuseObserver(this.root, records, counter);
+    const derived = observer.deriveImpact(this.base, this.head);
+    const transition = observer.transition(this.base, this.head);
+    assert.equal(counter.impactDerivations, 1);
+    assert.equal(transition.digest, derived.impact.changeDigest);
+    assert.deepEqual(transition.adjacentScope, derived.adjacentScope);
+    assert.equal(transition.unbounded, derived.adjacentScopeUnbounded);
+    createReuseObserver(this.root, records, counter).transition(
+      this.base,
+      this.head,
+    );
+    assert.equal(counter.impactDerivations, 2);
+  },
+);

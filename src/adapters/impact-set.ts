@@ -21,7 +21,6 @@ import {
   stagingLayoutFromManifestText,
 } from "../domain/staging-layout.js";
 import { git } from "../lib/process.js";
-import { stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import {
   loadTypeScriptCompiler,
@@ -235,9 +234,6 @@ function packageScripts(
   }
 }
 
-/** Gitを毎回再観測した後だけ使う、直近1件の導出結果。失敗結果は保存しない。 */
-let lastImpact: { identity: string; impact: ImpactSet } | undefined;
-
 /**
  * **2 commit間の影響集合をGitから導出する**（REQ-WF-039、REQ-WF-040）。
  *
@@ -257,22 +253,18 @@ export function computeImpactSet(input: {
         status: "built";
         snapshot: ReturnType<typeof buildCommitSemanticGraph>["snapshot"];
         contentHash: string;
+        unresolvedImportPaths: readonly string[];
       }
     | { status: "unavailable"; reason: string };
   let sources: ReadonlyMap<string, string> = new Map();
   try {
     const built = buildCommitSemanticGraph(input.root, input.headSha);
-    graph =
-      built.unresolvedImportPaths.length > 0
-        ? {
-            status: "unavailable",
-            reason: `依存先を固定できない動的import/require: ${built.unresolvedImportPaths.slice(0, 8).join(", ")}${built.unresolvedImportPaths.length > 8 ? `（ほか${built.unresolvedImportPaths.length - 8}件）` : ""}`,
-          }
-        : {
-            status: "built",
-            snapshot: built.snapshot,
-            contentHash: semanticGraphContentHash(built.snapshot),
-          };
+    graph = {
+      status: "built",
+      snapshot: built.snapshot,
+      contentHash: semanticGraphContentHash(built.snapshot),
+      unresolvedImportPaths: built.unresolvedImportPaths,
+    };
     sources = built.sources;
   } catch (error) {
     graph = {
@@ -299,20 +291,6 @@ export function computeImpactSet(input: {
   } catch {
     stagingRootPattern = undefined;
   }
-  const identity =
-    graph.status === "built"
-      ? stableJson({
-          baseSha: input.baseSha,
-          headSha: input.headSha,
-          changeDigest: observed.digest,
-          changedPaths: observed.changedPaths,
-          source: graph.snapshot.source,
-          graphContentHash: graph.contentHash,
-          stagingRootPattern,
-        })
-      : undefined;
-  if (identity !== undefined && lastImpact?.identity === identity)
-    return structuredClone(lastImpact.impact);
   const graphFiles =
     graph.status === "built"
       ? graph.snapshot.nodes
@@ -347,8 +325,6 @@ export function computeImpactSet(input: {
     scripts: packageScripts(sources),
     stagingRootPattern,
   });
-  if (identity !== undefined)
-    lastImpact = { identity, impact: structuredClone(impact) };
   return impact;
 }
 
@@ -406,7 +382,8 @@ export function deriveReviewRoundImpact(input: {
         }
       : derived,
     adjacentScope: changed ? reviewAdjacentScope(derived) : [],
-    adjacentScopeUnbounded: changed && derived.mode === "full",
+    adjacentScopeUnbounded:
+      changed && (derived.reviewMode ?? derived.mode) === "full",
   };
 }
 

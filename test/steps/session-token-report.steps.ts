@@ -6,11 +6,13 @@ import path from "node:path";
 import {
   type SessionTokenReport,
   normalizeReadPath,
+  normalizeProviderUsage,
 } from "../../scripts/report_session_tokens.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class SessionTokenWorld extends WorkflowWorld {
   tokenRoot = "";
+  providerUsages: ReturnType<typeof normalizeProviderUsage>[] = [];
   tokenLog = "";
   tokenStaging = "";
   tokenStdout = "";
@@ -586,3 +588,42 @@ Then(
     );
   },
 );
+
+Given("異なるcache包含方式と欠測のprovider usageがある", function () {
+  this.providerUsages = [];
+});
+When("CodexとClaudeの観測済みusageを正規化する", function () {
+  this.providerUsages = [
+    normalizeProviderUsage("codex", {
+      input_tokens: 100,
+      cached_input_tokens: 80,
+      output_tokens: 10,
+    }),
+    normalizeProviderUsage(
+      "claude",
+      {
+        input_tokens: 20,
+        cache_read_input_tokens: 80,
+        cache_creation_input_tokens: 5,
+        output_tokens: 10,
+      },
+      0.02,
+    ),
+    normalizeProviderUsage("claude", { input_tokens: 20, output_tokens: 10 }),
+    normalizeProviderUsage(
+      "codex",
+      { input_tokens: -1, output_tokens: 10 },
+      Number.NaN,
+    ),
+  ];
+});
+Then("provider別のcache包含関係を守り欠測値を補わずに集計する", function () {
+  const [codex, claude, missing, invalid] = this.providerUsages;
+  assert.equal(codex?.totalProcessed, 110);
+  assert.equal(codex?.cacheWrite, null);
+  assert.equal(codex?.costUsd, null);
+  assert.equal(claude?.totalProcessed, 115);
+  assert.equal(claude?.costUsd, 0.02);
+  assert.equal(missing?.totalProcessed, null);
+  assert.equal(invalid?.totalProcessed, null);
+});

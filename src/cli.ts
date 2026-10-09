@@ -54,7 +54,10 @@ import {
   stagingTrackerIssue,
   verifyReviewEvidenceWithStaging,
 } from "./adapters/review-evidence.js";
-import { runVerification } from "./adapters/verification-run.js";
+import {
+  planVerification,
+  runVerification,
+} from "./adapters/verification-run.js";
 import {
   observeWorkflowHandoff,
   workflowAgentDispatch,
@@ -6615,6 +6618,10 @@ export async function main(
           ? {
               ...handoff,
               role: "reviewer",
+              read: {
+                skill: ".agent-skill-chain/skills/step-10-review/SKILL.md",
+                staging: ["review-session.json"],
+              },
               reviewRound: (handoff.reviewRound ?? 0) + 1,
               workUnit: {
                 ...handoff.workUnit,
@@ -8410,6 +8417,34 @@ export async function main(
       evidenceDigest: exported.evidence.evidenceDigest,
       next: "この1 fileだけを実装commitの後にcommitしてH_finalにする",
     });
+    return 0;
+  }
+  if (command === "verify" && subcommand === "plan") {
+    const { flags, positionals } = parse(rest);
+    const unknown = Object.keys(flags).filter(
+      (flag) => !["staging", "base", "root"].includes(flag),
+    );
+    if (unknown.length > 0 || positionals.length > 0)
+      throw new Error("verify planは--staging、--base、--rootだけを受理します");
+    if (flags.base !== undefined && typeof flags.base !== "string")
+      throw new Error("verify planの--baseにはcommitが必要です");
+    const root = path.resolve(
+      typeof flags.root === "string" ? flags.root : process.cwd(),
+    );
+    const staging = path.resolve(root, required(flags, "staging"));
+    if (
+      flags.root !== undefined &&
+      fs.realpathSync(stagingRepositoryRoot(staging)) !== fs.realpathSync(root)
+    )
+      throw new Error(
+        "verify planの--rootはstagingのrepositoryと一致する必要があります",
+      );
+    print(
+      planVerification({
+        staging,
+        ...(typeof flags.base === "string" ? { base: flags.base } : {}),
+      }),
+    );
     return 0;
   }
   if (command === "verify" && subcommand === "run") {

@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
+import {
+  observeWorkflowHandoff,
+  workflowAgentDispatch,
+} from "../../src/adapters/workflow-handoff.js";
+import type { WorkflowResume } from "../../src/domain/workflow-resume.js";
 import { main } from "../../src/cli.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
 import { QUESTIONS } from "../../src/domain/mode.js";
@@ -188,6 +193,80 @@ Then(
         (JSON.parse(output) as { targetStep: number }).targetStep,
         1,
       );
+      const preview = JSON.parse(output) as { resume: WorkflowResume };
+      const previousMode = process.env.ASC_EXECUTION_CONTEXT_MODE;
+      process.env.ASC_EXECUTION_CONTEXT_MODE = "short-lived";
+      try {
+        const requirements = observeWorkflowHandoff(staging, 2, preview.resume);
+        const implementation = observeWorkflowHandoff(
+          staging,
+          9,
+          preview.resume,
+        );
+        assert.ok(requirements && "kind" in requirements);
+        assert.ok(implementation && "kind" in implementation);
+        assert.deepEqual(requirements.read?.staging, ["00_要求定義.md"]);
+        assert.deepEqual(implementation.read?.staging, [
+          "00_要求定義.md",
+          "01_要件定義.md",
+          "02_設計.md",
+          "03_実装計画.md",
+          "05_計画変更.md",
+        ]);
+        assert.match(
+          implementation.read!.skill,
+          /step-09-implement\/SKILL.md$/u,
+        );
+        const quickStaging = createIssueStaging(root, {
+          title: "quick-read-boundary",
+          answers: Object.fromEntries(
+            QUESTIONS.map((id) => [id, { answer: true, evidence: "fixture" }]),
+          ),
+          requestedMode: "quick",
+          now: new Date("2026-08-25T12:01:00Z"),
+        }).path;
+        const quick = observeWorkflowHandoff(quickStaging, 9, {
+          ...preview.resume,
+          staging: quickStaging,
+        });
+        assert.ok(quick && "kind" in quick);
+        assert.deepEqual(quick.read?.staging, [
+          "00_要求定義.md",
+          "05_計画変更.md",
+        ]);
+        assert.equal(quick.read?.skill, implementation.read?.skill);
+        assert.ok(fs.existsSync(path.resolve(implementation.read!.skill)));
+        assert.equal(implementation.authority, "advisory");
+        const dispatch = workflowAgentDispatch(implementation);
+        assert.ok(dispatch);
+        assert.deepEqual(
+          (JSON.parse(dispatch.prompt) as { handoff: unknown }).handoff,
+          implementation,
+        );
+        assert.notEqual(
+          requirements.workUnit!.workUnitId,
+          implementation.workUnit.workUnitId,
+        );
+        assert.equal(implementation.workUnit.freshContextRequired, true);
+        const otherHead = observeWorkflowHandoff(staging, 9, {
+          ...preview.resume,
+          headSha: "a".repeat(40),
+        });
+        assert.ok(otherHead && "kind" in otherHead);
+        assert.notEqual(
+          otherHead.workUnit!.workUnitId,
+          implementation.workUnit.workUnitId,
+        );
+        const blocked = observeWorkflowHandoff(staging, 9, {
+          ...preview.resume,
+          errors: ["journal mismatch"],
+        });
+        assert.equal(workflowAgentDispatch(blocked), undefined);
+      } finally {
+        if (previousMode === undefined)
+          delete process.env.ASC_EXECUTION_CONTEXT_MODE;
+        else process.env.ASC_EXECUTION_CONTEXT_MODE = previousMode;
+      }
       assert.equal(reads.length, 0);
       fs.linkSync = (existingPath, newPath) => {
         originalLink(existingPath, newPath);

@@ -14,6 +14,50 @@ import { isExecutionEntry } from "../src/lib/entrypoint.js";
  * （Claude Codeは1 messageのcontent blockごとに行を書き、usageを重複して載せる）。
  */
 
+/** Provider counters have different inclusion rules; missing data stays null. */
+export function normalizeProviderUsage(
+  provider: "codex" | "claude",
+  raw: unknown,
+  actualCostUsd?: unknown,
+) {
+  const usage = record(raw);
+  const input = count(usage?.input_tokens) ?? null;
+  const output = count(usage?.output_tokens) ?? null;
+  const cacheRead =
+    count(
+      provider === "codex"
+        ? usage?.cached_input_tokens
+        : usage?.cache_read_input_tokens,
+    ) ?? null;
+  const cacheWrite =
+    count(
+      provider === "codex"
+        ? usage?.cache_write_input_tokens
+        : usage?.cache_creation_input_tokens,
+    ) ?? null;
+  const complete =
+    input !== null &&
+    output !== null &&
+    (provider === "codex" || (cacheRead !== null && cacheWrite !== null));
+  return {
+    provider,
+    input,
+    output,
+    cacheRead,
+    cacheWrite,
+    inputIncludesCache: provider === "codex",
+    totalProcessed: complete
+      ? input + output + (provider === "claude" ? cacheRead! + cacheWrite! : 0)
+      : null,
+    costUsd:
+      typeof actualCostUsd === "number" &&
+      Number.isFinite(actualCostUsd) &&
+      actualCostUsd >= 0
+        ? actualCostUsd
+        : null,
+  };
+}
+
 /** call間隔がこれ以下の区間だけを稼働時間へ数える。 */
 const ACTIVE_GAP_MS = 5 * 60 * 1000;
 const REPEATED_READ_LIMIT = 10;
