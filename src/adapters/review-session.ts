@@ -9,6 +9,7 @@ import {
   pendingReviewFindingIds,
   latestReviewFindingObservations,
   isReviewSessionConverged,
+  isLegacyReviewSession,
   type ReviewRoundInput,
   type ReviewSessionState,
 } from "../domain/review-convergence.js";
@@ -60,6 +61,8 @@ import type {
 } from "../domain/review-convergence.js";
 import type { ImpactSet } from "../domain/impact-set.js";
 import { deriveReviewRoundImpact } from "./impact-set.js";
+import { assignReviewInspection } from "./review-reuse.js";
+import type { InspectionAssignment } from "../domain/review-reuse.js";
 
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
@@ -116,6 +119,38 @@ function impactNotes(impact: ImpactSet): string[] {
   if (impact.securitySensitive)
     notes.push(
       `security上の注意を要するpathが変更または隣接範囲にある。縮小せず確認する: ${impact.securityPaths.join(", ")}`,
+    );
+  return notes;
+}
+
+/** 検分割当の案内（表示専用）。割当の`git diff`範囲・path・digestと追随後の`--base`を示す。 */
+function assignmentNotes(
+  assignment: InspectionAssignment,
+  input: { fromSha: string; headSha: string; anchorBaseSha: string },
+): string[] {
+  const notes: string[] = [];
+  if ("followOnly" in assignment)
+    notes.push(
+      "既定branch追随のclean mergeで、既定branch側の変更がPRの変更pathと隣接範囲に交差しないためfollowOnlyとして記録する",
+    );
+  else {
+    const { inspection } = assignment;
+    notes.push(
+      `検分割当: git diff ${input.fromSha}..${input.headSha}（digest ${inspection.diffDigest}）をこのroundのtransitionとして検分する`,
+    );
+    const cumulative = inspection.cumulative;
+    if (cumulative?.scope === "all")
+      notes.push(
+        `全体検分の割当: git diff ${cumulative.baseSha}..${input.headSha}（digest ${cumulative.diffDigest}）の全体を検分する（${[...new Set(assignment.reviewRequired.map(({ kind }) => kind))].join("・") || "影響集合full"}）`,
+      );
+    else if (cumulative?.scope === "paths")
+      notes.push(
+        `累積検分の割当: git diff ${cumulative.baseSha}..${input.headSha} -- ${cumulative.paths.map(({ path }) => path).join(" ")} を検分する`,
+      );
+  }
+  if (assignment.derivedBaseSha !== input.anchorBaseSha)
+    notes.push(
+      `既定branch追随で導出基点が${assignment.derivedBaseSha}へ前進した。verify runとreview exportへ--base=${assignment.derivedBaseSha}を渡す`,
     );
   return notes;
 }
@@ -402,9 +437,11 @@ export function buildReviewRoundDraft(input: {
       candidateHeadSha: headSha,
       focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
       findings: [],
+      inspection: { fromSha: baseSha, diffDigest: observed.digest },
     };
     notes.push(
       "round 1は固定initial HEADの全scope reviewである。findingsへreviewの指摘を書く",
+      `検分割当: git diff ${baseSha}..${headSha}（digest ${observed.digest}）の全体を検分する`,
     );
   } else {
     if (
@@ -483,23 +520,52 @@ export function buildReviewRoundDraft(input: {
       adjacentScopeUnbounded = derived.adjacentScopeUnbounded;
       notes.push(...impactNotes(derived.impact));
     }
+    const focus = {
+      previousBlocking,
+      fixedDiff: fixed,
+      adjacentScope,
+      ...(adjacentScopeUnbounded
+        ? { adjacentScopeUnbounded: true as const }
+        : {}),
+    };
+    const recordLayer =
+      isReviewSessionConverged(previous) &&
+      recordLayerSuffix(staging, root, previousHeadSha, headSha, previous) !==
+        undefined;
+    /**
+     * **検分割当は`pr merge`と同じ判定関数から導出する**（Issue #1544 C5）。旧形式sessionと
+     * record layerは割り当てない。clean追随で該当が無ければ`followOnly`にする。
+     */
+    const assignment =
+      recordLayer || isLegacyReviewSession(previous)
+        ? undefined
+        : assignReviewInspection({
+            root,
+            session: previous,
+            fromSha: previousHeadSha,
+            toSha: headSha,
+            focus,
+            allowFollowOnly: pending.length === 0,
+          });
+    if (assignment)
+      notes.push(
+        ...assignmentNotes(assignment, {
+          fromSha: previousHeadSha,
+          headSha,
+          anchorBaseSha: previous.anchor.diffBaseSha,
+        }),
+      );
     round = {
       round: previous.rounds.length + 1,
       previousRoundDigest: previous.latestRoundDigest,
       anchor: previous.anchor,
       candidateHeadSha: headSha,
-      focus: {
-        previousBlocking,
-        fixedDiff: fixed,
-        adjacentScope,
-        ...(adjacentScopeUnbounded
-          ? { adjacentScopeUnbounded: true as const }
-          : {}),
-      },
-      findings: carried,
-      ...(isReviewSessionConverged(previous) &&
-      recordLayerSuffix(staging, root, previousHeadSha, headSha, previous)
-        ? { recordLayerOnly: true }
+      focus,
+      findings: assignment && "followOnly" in assignment ? [] : carried,
+      ...(recordLayer ? { recordLayerOnly: true } : {}),
+      ...(assignment && "followOnly" in assignment ? { followOnly: true } : {}),
+      ...(assignment && "inspection" in assignment
+        ? { inspection: assignment.inspection }
         : {}),
     };
     if (previousBlocking.length > 0)
@@ -509,6 +575,11 @@ export function buildReviewRoundDraft(input: {
     if (
       fixed.length === 0 &&
       pending.length === 0 &&
+      !(
+        assignment &&
+        "inspection" in assignment &&
+        assignment.inspection.cumulative
+      ) &&
       (previous.status !== "active" ||
         (process.env.ASC_EXECUTION_CONTEXT_MODE ?? "short-lived") !==
           "short-lived")
@@ -830,6 +901,34 @@ export function previewReviewRound(input: {
       throw new Error(
         "record layerとして記録できるのはformal artifactとsealed journalから一致を証明したprogress投影だけです",
       );
+    /**
+     * **検分identityは申告ではなくGitから導出する**（Issue #1544 TB-1544-01）。雛形と同じ
+     * 割当関数でlock内に再導出し、完全一致だけを受理する。欠落は導出値で補う。
+     */
+    if (
+      !round.followOnly &&
+      !round.recordLayerOnly &&
+      !isLegacyReviewSession(previous)
+    ) {
+      const assignment = assignReviewInspection({
+        root,
+        session: previous,
+        fromSha: previousHeadSha,
+        toSha: round.candidateHeadSha,
+        focus: round.focus,
+        allowFollowOnly: false,
+      });
+      if (!("inspection" in assignment))
+        throw new Error("review roundの検分identityを導出できません");
+      if (round.inspection === undefined)
+        round = { ...round, inspection: assignment.inspection };
+      else if (
+        stableJson(round.inspection) !== stableJson(assignment.inspection)
+      )
+        throw new Error(
+          "review roundのinspectionが実Gitから導出した検分identityと一致しません",
+        );
+    }
   }
   return advanceReviewSession(previous, round);
 }

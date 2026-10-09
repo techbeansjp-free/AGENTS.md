@@ -238,8 +238,16 @@ export function computeImpactSet(input: {
   root: string;
   baseSha: string;
   headSha: string;
+  /**
+   * 影響の導出から外すpath（Issue #1544、追随交差の判定でevidence-only pathを実装内容に
+   * 含めないため。INV-07）。`changeDigest`は除外前の全diffのままにする。
+   */
+  excludePath?: (path: string) => boolean;
 }): ImpactSet {
   const observed = observeReviewDiff(input.root, input.baseSha, input.headSha);
+  const changedPaths = input.excludePath
+    ? observed.changedPaths.filter((path) => !input.excludePath!(path))
+    : observed.changedPaths;
   let graph:
     | {
         status: "built";
@@ -303,7 +311,7 @@ export function computeImpactSet(input: {
     baseSha: input.baseSha,
     headSha: input.headSha,
     changeDigest: observed.digest,
-    changedPaths: observed.changedPaths,
+    changedPaths,
     graph,
     literalReferences: literalReferenceIndex(sources, graphFiles),
     stepDefinitionFiles: definitions.map(({ path, complete, global }) => ({

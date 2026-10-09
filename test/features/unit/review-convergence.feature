@@ -99,3 +99,23 @@ Feature: Review sessionを固定契約へ収束させる
     Given findingなしでround 1が収束したreview sessionがある
     When findingありの通常round 2をdomainへ記録する
     Then findingありroundは数えるroundに含める
+
+  Scenario: SCN-UNIT-REVIEWCONV-012 検分identityの形式とround 1のanchor一致を検証しround digestへ束縛する
+    Given review再利用unit検査の準備がある
+    When "SCN-UNIT-REVIEWCONV-012"のreview再利用unit検査を実行する
+    Then review再利用unit検査は期待結果になる
+
+  Scenario: SCN-UNIT-REVIEWCONV-013 counted roundが1件でも検分identityを欠くsessionは旧形式である
+    Given review再利用unit検査の準備がある
+    When "SCN-UNIT-REVIEWCONV-013"のreview再利用unit検査を実行する
+    Then review再利用unit検査は期待結果になる
+
+  Scenario: SCN-UNIT-REVIEWCONV-014 収束後の同head追加roundは累積検分を持つ場合だけ記録できる
+    Given review再利用unit検査の準備がある
+    When "SCN-UNIT-REVIEWCONV-014"のreview再利用unit検査を実行する
+    Then review再利用unit検査は期待結果になる
+
+  Scenario: SCN-UNIT-REVIEWCONV-015 追随mergeの第1親は前headの証跡だけのsuffixを受理し第2親は指定tipで判定する
+    Given review再利用unit検査の準備がある
+    When "SCN-UNIT-REVIEWCONV-015"のreview再利用unit検査を実行する
+    Then review再利用unit検査は期待結果になる

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { advanceReviewSession, parseReviewRoundInput, unconvergedReviewSessionDiagnostic, effectiveReviewBlocking, pendingReviewFindingIds, latestReviewFindingObservations, isReviewSessionConverged, } from "../domain/review-convergence.js";
+import { advanceReviewSession, parseReviewRoundInput, unconvergedReviewSessionDiagnostic, effectiveReviewBlocking, pendingReviewFindingIds, latestReviewFindingObservations, isReviewSessionConverged, isLegacyReviewSession, } from "../domain/review-convergence.js";
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
@@ -15,6 +15,7 @@ import { findDecisionJournalRecord } from "./decision-journal-store.js";
 import { LIGHTWEIGHT_TIER_PROVIDER_VERSION } from "./decision-invoke.js";
 import { computeFindingClassificationInputDigest, verifyDecisionRefBinding, } from "../domain/decision-journal.js";
 import { deriveReviewRoundImpact } from "./impact-set.js";
+import { assignReviewInspection } from "./review-reuse.js";
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
@@ -57,6 +58,24 @@ function impactNotes(impact) {
         notes.push(`影響集合を証明できないため全体reviewを適用する（focus.adjacentScopeUnbounded=true。全pathを隣接範囲として扱い、前round blocker起因のHigh回帰と固定契約違反は修正差分外でもcurrent blockerになる）: ${impact.reasons.slice(0, 3).join("; ")}${impact.reasons.length > 3 ? ` ほか${impact.reasons.length - 3}件` : ""}`);
     if (impact.securitySensitive)
         notes.push(`security上の注意を要するpathが変更または隣接範囲にある。縮小せず確認する: ${impact.securityPaths.join(", ")}`);
+    return notes;
+}
+/** 検分割当の案内（表示専用）。割当の`git diff`範囲・path・digestと追随後の`--base`を示す。 */
+function assignmentNotes(assignment, input) {
+    const notes = [];
+    if ("followOnly" in assignment)
+        notes.push("既定branch追随のclean mergeで、既定branch側の変更がPRの変更pathと隣接範囲に交差しないためfollowOnlyとして記録する");
+    else {
+        const { inspection } = assignment;
+        notes.push(`検分割当: git diff ${input.fromSha}..${input.headSha}（digest ${inspection.diffDigest}）をこのroundのtransitionとして検分する`);
+        const cumulative = inspection.cumulative;
+        if (cumulative?.scope === "all")
+            notes.push(`全体検分の割当: git diff ${cumulative.baseSha}..${input.headSha}（digest ${cumulative.diffDigest}）の全体を検分する（${[...new Set(assignment.reviewRequired.map(({ kind }) => kind))].join("・") || "影響集合full"}）`);
+        else if (cumulative?.scope === "paths")
+            notes.push(`累積検分の割当: git diff ${cumulative.baseSha}..${input.headSha} -- ${cumulative.paths.map(({ path }) => path).join(" ")} を検分する`);
+    }
+    if (assignment.derivedBaseSha !== input.anchorBaseSha)
+        notes.push(`既定branch追随で導出基点が${assignment.derivedBaseSha}へ前進した。verify runとreview exportへ--base=${assignment.derivedBaseSha}を渡す`);
     return notes;
 }
 function sortedUnique(values) {
@@ -280,8 +299,9 @@ export function buildReviewRoundDraft(input) {
             candidateHeadSha: headSha,
             focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
             findings: [],
+            inspection: { fromSha: baseSha, diffDigest: observed.digest },
         };
-        notes.push("round 1は固定initial HEADの全scope reviewである。findingsへreviewの指摘を書く");
+        notes.push("round 1は固定initial HEADの全scope reviewである。findingsへreviewの指摘を書く", `検分割当: git diff ${baseSha}..${headSha}（digest ${observed.digest}）の全体を検分する`);
     }
     else {
         if (input.baseSha !== undefined ||
@@ -350,29 +370,57 @@ export function buildReviewRoundDraft(input) {
             adjacentScopeUnbounded = derived.adjacentScopeUnbounded;
             notes.push(...impactNotes(derived.impact));
         }
+        const focus = {
+            previousBlocking,
+            fixedDiff: fixed,
+            adjacentScope,
+            ...(adjacentScopeUnbounded
+                ? { adjacentScopeUnbounded: true }
+                : {}),
+        };
+        const recordLayer = isReviewSessionConverged(previous) &&
+            recordLayerSuffix(staging, root, previousHeadSha, headSha, previous) !==
+                undefined;
+        /**
+         * **検分割当は`pr merge`と同じ判定関数から導出する**（Issue #1544 C5）。旧形式sessionと
+         * record layerは割り当てない。clean追随で該当が無ければ`followOnly`にする。
+         */
+        const assignment = recordLayer || isLegacyReviewSession(previous)
+            ? undefined
+            : assignReviewInspection({
+                root,
+                session: previous,
+                fromSha: previousHeadSha,
+                toSha: headSha,
+                focus,
+                allowFollowOnly: pending.length === 0,
+            });
+        if (assignment)
+            notes.push(...assignmentNotes(assignment, {
+                fromSha: previousHeadSha,
+                headSha,
+                anchorBaseSha: previous.anchor.diffBaseSha,
+            }));
         round = {
             round: previous.rounds.length + 1,
             previousRoundDigest: previous.latestRoundDigest,
             anchor: previous.anchor,
             candidateHeadSha: headSha,
-            focus: {
-                previousBlocking,
-                fixedDiff: fixed,
-                adjacentScope,
-                ...(adjacentScopeUnbounded
-                    ? { adjacentScopeUnbounded: true }
-                    : {}),
-            },
-            findings: carried,
-            ...(isReviewSessionConverged(previous) &&
-                recordLayerSuffix(staging, root, previousHeadSha, headSha, previous)
-                ? { recordLayerOnly: true }
+            focus,
+            findings: assignment && "followOnly" in assignment ? [] : carried,
+            ...(recordLayer ? { recordLayerOnly: true } : {}),
+            ...(assignment && "followOnly" in assignment ? { followOnly: true } : {}),
+            ...(assignment && "inspection" in assignment
+                ? { inspection: assignment.inspection }
                 : {}),
         };
         if (previousBlocking.length > 0)
             notes.push(`前round blocker ${previousBlocking.join("、")} をfindingsへ写した。是正済みならstatusをresolvedへ変え、evidenceに確認内容を書く。未解決はvalidのまま残す。脱落は拒否される`);
         if (fixed.length === 0 &&
             pending.length === 0 &&
+            !(assignment &&
+                "inspection" in assignment &&
+                assignment.inspection.cumulative) &&
             (previous.status !== "active" ||
                 (process.env.ASC_EXECUTION_CONTEXT_MODE ?? "short-lived") !==
                     "short-lived"))
@@ -602,6 +650,28 @@ export function previewReviewRound(input) {
         if (input.round.recordLayerOnly &&
             !recordLayerSuffix(staging, root, previousHeadSha, input.round.candidateHeadSha, previous))
             throw new Error("record layerとして記録できるのはformal artifactとsealed journalから一致を証明したprogress投影だけです");
+        /**
+         * **検分identityは申告ではなくGitから導出する**（Issue #1544 TB-1544-01）。雛形と同じ
+         * 割当関数でlock内に再導出し、完全一致だけを受理する。欠落は導出値で補う。
+         */
+        if (!round.followOnly &&
+            !round.recordLayerOnly &&
+            !isLegacyReviewSession(previous)) {
+            const assignment = assignReviewInspection({
+                root,
+                session: previous,
+                fromSha: previousHeadSha,
+                toSha: round.candidateHeadSha,
+                focus: round.focus,
+                allowFollowOnly: false,
+            });
+            if (!("inspection" in assignment))
+                throw new Error("review roundの検分identityを導出できません");
+            if (round.inspection === undefined)
+                round = { ...round, inspection: assignment.inspection };
+            else if (stableJson(round.inspection) !== stableJson(assignment.inspection))
+                throw new Error("review roundのinspectionが実Gitから導出した検分identityと一致しません");
+        }
     }
     return advanceReviewSession(previous, round);
 }

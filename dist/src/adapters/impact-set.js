@@ -180,6 +180,9 @@ function packageScripts(sources) {
  */
 export function computeImpactSet(input) {
     const observed = observeReviewDiff(input.root, input.baseSha, input.headSha);
+    const changedPaths = input.excludePath
+        ? observed.changedPaths.filter((path) => !input.excludePath(path))
+        : observed.changedPaths;
     let graph;
     let sources = new Map();
     try {
@@ -234,7 +237,7 @@ export function computeImpactSet(input) {
         baseSha: input.baseSha,
         headSha: input.headSha,
         changeDigest: observed.digest,
-        changedPaths: observed.changedPaths,
+        changedPaths,
         graph,
         literalReferences: literalReferenceIndex(sources, graphFiles),
         stepDefinitionFiles: definitions.map(({ path, complete, global }) => ({
