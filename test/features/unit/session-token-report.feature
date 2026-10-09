@@ -9,3 +9,4 @@ Feature: session logのtoken集計
     And subagent logの明示指定・同じlogの二重指定・別名pathでも同じcallを一度だけ数えsubagentの親を保つ
     And Step別の稼働時間は異なるsessionのcall間隔を数えずsession内の間隔をStep区間で分ける
     And 追跡済みfileだけを出力しtoken様の名前や未追跡のpathを出さない
+    And 重複tool記録を再読込と誤認せず孫workerのcacheを一度だけ集計する

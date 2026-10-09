@@ -447,7 +447,7 @@ function collectEcmaScriptScopes(compiler, sourceFile, sourcePath) {
 function requireIsShadowed(scope) {
     return scope.effectiveRequireShadow || scope.effectiveRequireAmbiguity;
 }
-function ecmaScriptImportSpecifiers(source, sourcePath) {
+function ecmaScriptImportSpecifiers(source, sourcePath, onUnresolvedImport) {
     const compiler = loadTypeScriptCompiler();
     const sourceFile = parseEcmaScriptSource(compiler, source, sourcePath);
     const scopes = collectEcmaScriptScopes(compiler, sourceFile, sourcePath);
@@ -463,6 +463,13 @@ function ecmaScriptImportSpecifiers(source, sourcePath) {
         const value = literalImportSpecifier(compiler, node, requireIsShadowed(current));
         if (value !== undefined)
             located.push({ position: node.pos, value });
+        if (value === undefined &&
+            compiler.isCallExpression(node) &&
+            (node.expression.kind === compiler.SyntaxKind.ImportKeyword ||
+                (compiler.isIdentifier(node.expression) &&
+                    node.expression.text === "require" &&
+                    !current.effectiveRequireShadow)))
+            onUnresolvedImport?.(sourcePath);
         const children = [];
         compiler.forEachChild(node, (child) => {
             children.push(child);
@@ -866,21 +873,16 @@ function projectRepositorySemanticGraph(input) {
             addNode(nodeId(kind, id), kind, occurrence.file, occurrence.line, {
                 externalId: id,
             });
+            // node作成で観測した位置を共有し、全sourceを同じpatternで再走査しない。
+            for (const value of values)
+                addEdge(nodeId(kind, id), nodeId("file", value.file), "supported-by", value.file, value.line);
         }
     for (const file of files) {
         if (file.text === undefined)
             continue;
         const fileNode = nodeId("file", file.path);
-        const groups = [
-            ["requirement", REQUIREMENT_ID],
-            ["acceptance-criteria", ACCEPTANCE_ID],
-            ["scenario", SCENARIO_ID],
-        ];
-        for (const [kind, pattern] of groups)
-            for (const [id, line] of lineOccurrences(file.text, pattern))
-                addEdge(nodeId(kind, id), fileNode, "supported-by", file.path, line);
         if (ECMASCRIPT_EXTENSIONS.has(path.posix.extname(file.path).toLowerCase())) {
-            for (const specifier of ecmaScriptImportSpecifiers(file.text, file.path)) {
+            for (const specifier of ecmaScriptImportSpecifiers(file.text, file.path, input.onUnresolvedImport)) {
                 const target = resolveImport(file.path, specifier, knownFiles);
                 if (target !== undefined)
                     addEdge(fileNode, nodeId("file", target), "imports", file.path, undefined, {
@@ -1057,6 +1059,12 @@ function readCommitBlobs(root, oids, totalBytes) {
     return blobs;
 }
 /**
+ * 直近1件の投影だけをprocess内で保持する。Git sourceは毎回読み直し、本文hash・
+ * repository/worktree・HEAD/tree・除外集合が一致した場合だけASTとedge構築を省く。
+ * disk cacheやruntime Graphをauthorityにせず、失敗と可変な返却値を共有しない。
+ */
+let lastCommitProjection;
+/**
  * **commitのtreeから意味Graphを構築する。** worktreeの状態（dirty・checkout位置）に
  * 依存しないため、任意の2 commit間の影響集合を同じ入力から同じ結果で導出できる。
  * `source.dirty`は常に`false`、`source.headSha`は指定commitである。
@@ -1089,15 +1097,29 @@ export function buildCommitSemanticGraph(root, commitSha, limits = DEFAULT_SOURC
         })))),
         dirty: false,
     };
-    const snapshot = projectRepositorySemanticGraph({
-        files,
-        oversized,
-        oversizedRegularFiles,
-        source,
-    });
+    const identity = stableJson({ source, oversized, oversizedRegularFiles });
+    const unresolvedImportPaths = new Set(lastCommitProjection?.identity === identity
+        ? lastCommitProjection.unresolvedImportPaths
+        : []);
+    const snapshot = lastCommitProjection?.identity === identity
+        ? structuredClone(lastCommitProjection.snapshot)
+        : projectRepositorySemanticGraph({
+            files,
+            oversized,
+            oversizedRegularFiles,
+            source,
+            onUnresolvedImport: (file) => unresolvedImportPaths.add(file),
+        });
+    if (lastCommitProjection?.identity !== identity)
+        lastCommitProjection = {
+            identity,
+            snapshot: structuredClone(snapshot),
+            unresolvedImportPaths: [...unresolvedImportPaths].sort(compareText),
+        };
     return {
         snapshot,
         oversizedPaths: oversized,
+        unresolvedImportPaths: [...unresolvedImportPaths].sort(compareText),
         sources: new Map(files.flatMap(({ path: file, text }) => text === undefined ? [] : [[file, text]])),
     };
 }

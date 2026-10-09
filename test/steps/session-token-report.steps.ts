@@ -3,7 +3,10 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { normalizeReadPath } from "../../scripts/report_session_tokens.js";
+import {
+  type SessionTokenReport,
+  normalizeReadPath,
+} from "../../scripts/report_session_tokens.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class SessionTokenWorld extends WorkflowWorld {
@@ -499,6 +502,87 @@ Then(
         null,
         null,
       ],
+    );
+  },
+);
+
+Then(
+  "重複tool記録を再読込と誤認せず孫workerのcacheを一度だけ集計する",
+  function () {
+    const directory = this.temp("asc-token-descendants-");
+    const main = path.join(directory, "parent.jsonl");
+    const childDirectory = path.join(directory, "parent", "subagents");
+    const grandchildDirectory = path.join(childDirectory, "child", "subagents");
+    fs.mkdirSync(grandchildDirectory, { recursive: true });
+    const read = (id: string) => ({
+      type: "tool_use",
+      id,
+      name: "Read",
+      input: { file_path: path.join(this.tokenRoot, "docs/a.md") },
+    });
+    const log = (id: string, content: unknown[]) =>
+      assistant({
+        id,
+        at: "2026-09-01T10:00:00.000Z",
+        usage: [1, 2, 3, 4],
+        content,
+        cwd: this.tokenRoot,
+      });
+    // Replayed content blocks are one read; two distinct tool IDs are two reads.
+    fs.writeFileSync(
+      main,
+      [
+        log("parent-call", [read("read-1")]),
+        log("parent-call", [read("read-1"), read("read-2")]),
+      ].join("\n"),
+    );
+    fs.writeFileSync(
+      path.join(childDirectory, "child.jsonl"),
+      log("child-call", []),
+    );
+    const grandchild = path.join(grandchildDirectory, "grandchild.jsonl");
+    fs.writeFileSync(grandchild, log("grandchild-call", []));
+    // A descendant alias back to its ancestor must neither loop nor double count.
+    fs.symlinkSync(main, path.join(grandchildDirectory, "parent-alias.jsonl"));
+    const report = JSON.parse(
+      runTokenScript([main], [`--root=${this.tokenRoot}`]),
+    ) as SessionTokenReport;
+    assert.deepEqual(
+      report.sessions.map((session: { id: string; parent: string | null }) => [
+        session.id,
+        session.parent,
+      ]),
+      [
+        ["parent", null],
+        ["child", "parent"],
+        ["grandchild", "child"],
+      ],
+    );
+    assert.deepEqual(report.sessions[0]!.repeatedReads, [
+      { path: "docs/a.md", count: 2 },
+    ]);
+    assert.deepEqual(
+      [
+        report.totals.calls,
+        report.totals.input,
+        report.totals.cacheCreation,
+        report.totals.cacheRead,
+        report.totals.output,
+        report.totals.total,
+      ],
+      [3, 3, 6, 9, 12, 30],
+    );
+    const automatic = JSON.parse(
+      runTokenScript([main, grandchild], [`--root=${this.tokenRoot}`]),
+    ) as SessionTokenReport;
+    assert.deepEqual(automatic.totals, report.totals);
+    assert.deepEqual(
+      [...automatic.sessions].sort((a: { id: string }, b: { id: string }) =>
+        a.id.localeCompare(b.id),
+      ),
+      [...report.sessions].sort((a: { id: string }, b: { id: string }) =>
+        a.id.localeCompare(b.id),
+      ),
     );
   },
 );

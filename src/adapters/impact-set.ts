@@ -21,6 +21,7 @@ import {
   stagingLayoutFromManifestText,
 } from "../domain/staging-layout.js";
 import { git } from "../lib/process.js";
+import { stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import {
   loadTypeScriptCompiler,
@@ -234,6 +235,9 @@ function packageScripts(
   }
 }
 
+/** Gitを毎回再観測した後だけ使う、直近1件の導出結果。失敗結果は保存しない。 */
+let lastImpact: { identity: string; impact: ImpactSet } | undefined;
+
 /**
  * **2 commit間の影響集合をGitから導出する**（REQ-WF-039、REQ-WF-040）。
  *
@@ -258,11 +262,17 @@ export function computeImpactSet(input: {
   let sources: ReadonlyMap<string, string> = new Map();
   try {
     const built = buildCommitSemanticGraph(input.root, input.headSha);
-    graph = {
-      status: "built",
-      snapshot: built.snapshot,
-      contentHash: semanticGraphContentHash(built.snapshot),
-    };
+    graph =
+      built.unresolvedImportPaths.length > 0
+        ? {
+            status: "unavailable",
+            reason: `依存先を固定できない動的import/require: ${built.unresolvedImportPaths.slice(0, 8).join(", ")}${built.unresolvedImportPaths.length > 8 ? `（ほか${built.unresolvedImportPaths.length - 8}件）` : ""}`,
+          }
+        : {
+            status: "built",
+            snapshot: built.snapshot,
+            contentHash: semanticGraphContentHash(built.snapshot),
+          };
     sources = built.sources;
   } catch (error) {
     graph = {
@@ -270,24 +280,6 @@ export function computeImpactSet(input: {
       reason: error instanceof Error ? error.message : String(error),
     };
   }
-  const graphFiles =
-    graph.status === "built"
-      ? graph.snapshot.nodes
-          .filter(({ kind }) => kind === "file")
-          .map(({ id }) => id.slice("file:".length))
-      : [];
-  const definitions: (StepDefinitionSource & StepDefinitionFileSummary)[] = [];
-  if (graph.status === "built") {
-    const compiler = loadTypeScriptCompiler();
-    for (const [file, text] of sources) {
-      if (!isScannedSource(file)) continue;
-      const summary = summarizeStepDefinitionFile(compiler, file, text);
-      if (summary !== undefined) definitions.push(summary);
-    }
-  }
-  const features = [...sources]
-    .filter(([file]) => file.endsWith(".feature"))
-    .map(([file, text]) => ({ path: file, text }));
   /**
    * **staging rootは差分と同じ`headSha`の版から読む。** 作業treeのpolicyを読むと、
    * 同じcommit差分でも作業treeの状態で分類が変わり、`full`が`targeted`へ狭まりうる。
@@ -307,7 +299,39 @@ export function computeImpactSet(input: {
   } catch {
     stagingRootPattern = undefined;
   }
-  return deriveImpactSet({
+  const identity =
+    graph.status === "built"
+      ? stableJson({
+          baseSha: input.baseSha,
+          headSha: input.headSha,
+          changeDigest: observed.digest,
+          changedPaths: observed.changedPaths,
+          source: graph.snapshot.source,
+          graphContentHash: graph.contentHash,
+          stagingRootPattern,
+        })
+      : undefined;
+  if (identity !== undefined && lastImpact?.identity === identity)
+    return structuredClone(lastImpact.impact);
+  const graphFiles =
+    graph.status === "built"
+      ? graph.snapshot.nodes
+          .filter(({ kind }) => kind === "file")
+          .map(({ id }) => id.slice("file:".length))
+      : [];
+  const definitions: (StepDefinitionSource & StepDefinitionFileSummary)[] = [];
+  if (graph.status === "built") {
+    const compiler = loadTypeScriptCompiler();
+    for (const [file, text] of sources) {
+      if (!isScannedSource(file)) continue;
+      const summary = summarizeStepDefinitionFile(compiler, file, text);
+      if (summary !== undefined) definitions.push(summary);
+    }
+  }
+  const features = [...sources]
+    .filter(([file]) => file.endsWith(".feature"))
+    .map(([file, text]) => ({ path: file, text }));
+  const impact = deriveImpactSet({
     baseSha: input.baseSha,
     headSha: input.headSha,
     changeDigest: observed.digest,
@@ -323,6 +347,9 @@ export function computeImpactSet(input: {
     scripts: packageScripts(sources),
     stagingRootPattern,
   });
+  if (identity !== undefined)
+    lastImpact = { identity, impact: structuredClone(impact) };
+  return impact;
 }
 
 /**

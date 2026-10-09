@@ -28,6 +28,10 @@ import {
   type ReviewSessionState,
 } from "../../src/domain/review-convergence.js";
 import { stableJson } from "../../src/lib/security.js";
+import {
+  buildCommitSemanticGraph,
+  DEFAULT_SOURCE_OBSERVATION_LIMITS,
+} from "../../src/adapters/repository-graph.js";
 import { computeImpactSet } from "../../src/adapters/impact-set.js";
 import {
   buildReviewRoundDraft,
@@ -1125,3 +1129,123 @@ When(
     });
   },
 );
+
+Then("同一Git観測の再利用は返却値の改変から隔離される", function () {
+  const input = { root: this.root, baseSha: this.base, headSha: this.head };
+  const expected = structuredClone(computeImpactSet(input));
+  const exposed = computeImpactSet(input);
+  Object.assign(exposed, { mode: "full", digest: "corrupted" });
+  assert.deepEqual(computeImpactSet(input), expected);
+  const built = buildCommitSemanticGraph(this.root, this.head);
+  const expectedGraph = structuredClone(built.snapshot);
+  Object.assign(built.snapshot, { nodes: [], edges: [] });
+  assert.deepEqual(
+    buildCommitSemanticGraph(this.root, this.head).snapshot,
+    expectedGraph,
+  );
+});
+
+Then("基点とHEADとpolicyの変更は以前の影響集合を再利用しない", function () {
+  const input = { root: this.root, baseSha: this.base, headSha: this.head };
+  const first = computeImpactSet(input);
+  const empty = computeImpactSet({ ...input, baseSha: this.head });
+  assert.deepEqual(empty.changedPaths, []);
+  assert.notEqual(empty.digest, first.digest);
+  this.head = commit(
+    this.root,
+    { ".agent-skill-chain/project-policy.json": STAGED_POLICY },
+    "policy: new identity",
+  );
+  const changed = computeImpactSet({ ...input, headSha: this.head });
+  assert.notEqual(changed.digest, first.digest);
+  assert.equal(changed.mode, "full");
+  assert(
+    changed.changedPaths.includes(".agent-skill-chain/project-policy.json"),
+  );
+});
+
+Then("Git sourceの欠落と観測上限は温まった投影でも拒否する", function () {
+  buildCommitSemanticGraph(this.root, this.head);
+  assert.throws(
+    () =>
+      buildCommitSemanticGraph(this.root, this.head, {
+        ...DEFAULT_SOURCE_OBSERVATION_LIMITS,
+        maxFiles: 1,
+      }),
+    /件数上限/u,
+  );
+  const blob = git(this.root, ["rev-parse", `${this.head}:src/lib.ts`]);
+  const object = path.join(
+    this.root,
+    ".git",
+    "objects",
+    blob.slice(0, 2),
+    blob.slice(2),
+  );
+  const bytes = fs.readFileSync(object);
+  try {
+    fs.unlinkSync(object);
+    assert.throws(
+      () => buildCommitSemanticGraph(this.root, this.head),
+      /blob/u,
+    );
+  } finally {
+    fs.writeFileSync(object, bytes);
+  }
+});
+
+Then("Git replacementのsource変更を同じSHAの古い投影で隠さない", function () {
+  const before = buildCommitSemanticGraph(this.root, this.head);
+  const blob = git(this.root, ["rev-parse", `${this.head}:src/lib.ts`]);
+  const replacement = execFileSync("git", ["hash-object", "-w", "--stdin"], {
+    cwd: this.root,
+    encoding: "utf8",
+    input: "export const replaced = 100;\n",
+  }).trim();
+  git(this.root, ["replace", blob, replacement]);
+  try {
+    const after = buildCommitSemanticGraph(this.root, this.head);
+    assert.notEqual(
+      after.snapshot.source.contentDigest,
+      before.snapshot.source.contentDigest,
+    );
+    assert.equal(
+      after.sources.get("src/lib.ts"),
+      "export const replaced = 100;\n",
+    );
+  } finally {
+    git(this.root, ["replace", "-d", blob]);
+  }
+});
+
+When(
+  "動的な依存読込{string}をcommitして影響集合を2回導出する",
+  function (expression: string) {
+    this.head = commit(
+      this.root,
+      { "src/lib.ts": `export const lib = (name: string) => ${expression};\n` },
+      "dynamic dependency",
+    );
+    this.impacts = [0, 1].map(() =>
+      computeImpactSet({
+        root: this.root,
+        baseSha: this.base,
+        headSha: this.head,
+      }),
+    );
+  },
+);
+
+Then("初回も再利用時も動的依存を名指ししてfull検証を要求する", function () {
+  for (const impact of this.impacts) {
+    assert.equal(impact.mode, "full");
+    assert.deepEqual(impact.features, []);
+    assert(
+      impact.reasons.some(
+        (reason) =>
+          reason.includes("動的import/require") &&
+          reason.includes("src/lib.ts"),
+      ),
+    );
+  }
+});
