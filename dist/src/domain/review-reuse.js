@@ -154,7 +154,7 @@ export function judgeReviewReuse(input) {
                 add(REUSE_KIND.break, position.linkFrom, position.toSha);
                 continue;
             }
-            const observed = attempt(position, () => observer.follow(bases[index - 1], parent, position.toSha));
+            const observed = attempt(position, () => observer.follow(bases[index - 1], parent, position.toSha, position.fromSha));
             if (observed === undefined)
                 continue;
             const crossing = followCrossing(observed);

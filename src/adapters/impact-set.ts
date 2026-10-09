@@ -11,7 +11,7 @@ import {
   type StepDefinitionFileSummary,
 } from "../domain/impact-set.js";
 import type { ReviewAdjacentScope } from "../domain/review-convergence.js";
-import { isReviewEvidenceArtifactPath } from "../domain/review-evidence.js";
+import { tryParseReviewEvidence } from "../domain/review-evidence.js";
 import { semanticGraphContentHash } from "../domain/semantic-graph.js";
 import {
   DEFAULT_STAGING_LAYOUT,
@@ -24,7 +24,11 @@ import {
   type TypeScriptApi,
 } from "../lib/typescript-vendor.js";
 import { buildCommitSemanticGraph } from "./repository-graph.js";
-import { observeReviewDiff } from "./review-diff.js";
+import {
+  GIT_ENV,
+  evidenceOnlySuffix,
+  observeReviewDiff,
+} from "./review-diff.js";
 
 const ECMASCRIPT_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/u;
 const STEP_FUNCTIONS = new Set([
@@ -209,26 +213,6 @@ function literalReferenceIndex(
   );
 }
 
-/**
- * **影響の導出から外せるreview証跡か**（Issue #1544 R1544-1-01）。証跡artifactの実在形
- * （`isReviewEvidenceArtifactPath`）で、かつ`src/`のsourceがfile名を字面で含まないpathだけを
- * 真にする。allowlist配下でも実在形でないpathや、製品が読む（importする）証跡形のfileは
- * 外さず、従来どおり導出する（導出できなければ`full`）。
- */
-function excludableReviewEvidence(
-  path: string,
-  sources: ReadonlyMap<string, string>,
-): boolean {
-  if (!isReviewEvidenceArtifactPath(path)) return false;
-  const name = path.slice(path.lastIndexOf("/") + 1);
-  for (const [file, text] of sources) {
-    if (!file.startsWith("src/") || !isScannedSource(file)) continue;
-    for (const match of text.matchAll(FILE_NAME_TOKEN))
-      if (match[0] === name) return false;
-  }
-  return true;
-}
-
 function packageScripts(
   sources: ReadonlyMap<string, string>,
 ): Record<string, string> {
@@ -260,13 +244,13 @@ export function computeImpactSet(input: {
   baseSha: string;
   headSha: string;
   /**
-   * review証跡artifactを影響の導出から外す（Issue #1544、追随交差とround transitionの判定で
-   * 証跡を実装内容に含めないため。INV-07）。`changeDigest`は除外前の全diffのままにする。
-   * 外すのは`excludableReviewEvidence`が真のpathだけである。
+   * 影響の導出から外すpath（Issue #1544、追随交差で`evidenceSuffixPaths`が返した前headの
+   * review記録だけの変更。INV-07）。`changeDigest`は除外前の全diffのままにする。
    */
-  excludeReviewEvidence?: boolean;
+  excludePaths?: readonly string[];
 }): ImpactSet {
   const observed = observeReviewDiff(input.root, input.baseSha, input.headSha);
+  const excluded = new Set(input.excludePaths ?? []);
   let graph:
     | {
         status: "built";
@@ -289,12 +273,6 @@ export function computeImpactSet(input: {
       reason: error instanceof Error ? error.message : String(error),
     };
   }
-  const changedPaths =
-    input.excludeReviewEvidence === true && graph.status === "built"
-      ? observed.changedPaths.filter(
-          (path) => !excludableReviewEvidence(path, sources),
-        )
-      : observed.changedPaths;
   const graphFiles =
     graph.status === "built"
       ? graph.snapshot.nodes
@@ -336,7 +314,7 @@ export function computeImpactSet(input: {
     baseSha: input.baseSha,
     headSha: input.headSha,
     changeDigest: observed.digest,
-    changedPaths,
+    changedPaths: observed.changedPaths.filter((path) => !excluded.has(path)),
     graph,
     literalReferences: literalReferenceIndex(sources, graphFiles),
     stepDefinitionFiles: definitions.map(({ path, complete, global }) => ({
@@ -359,10 +337,14 @@ export function computeImpactSet(input: {
  * 不一致を拒否する。**呼び出し側が任意のGraph Evidence digestを注入しても
  * 隣接範囲として受理されない。**
  *
- * **review証跡artifactは影響の導出から外す**（Issue #1544 INV-07）。review証跡は実装内容でも
- * 検分identityの対象でもないため、PR作成後の是正transitionが証跡commitを含むだけで
- * `full`へ倒さない。`impact.changeDigest`は除外前の全diffのままで、内容の束縛は弱めない。
- * 除外後に変更pathが残らないtransitionは隣接範囲を持たず、無制限にもしない。
+ * **影響は`previousHeadSha`に続く前headのreview記録（`reviewRecordSuffix`）の末端から導出する**
+ * （Issue #1544 INV-07、R1544-1-01・R1544-2-01）。PR作成後の是正transitionは前headの証跡commit
+ * （`H_final`）を含むが、その内容は前headを束縛した正規のreview証跡であり実装内容に数えない。
+ * path名・file名の字面や「証跡を誰も読まない」ことの走査では外さない（file名を組み立てて読む
+ * source、走査対象外・上限超過のfileを観測できないため）。suffixより後の変更は、証跡pathや
+ * allowlist配下のfileでも実装内容としてREQ-WF-039どおり導出する（できなければ`full`）。
+ * `impact.changeDigest`・`changedPaths`は`previousHeadSha`からの全diffのままで、内容の束縛は
+ * 弱めない。suffixより後に変更が無いtransitionは隣接範囲を持たず、無制限にもしない。
  */
 export function deriveReviewRoundImpact(input: {
   root: string;
@@ -373,16 +355,120 @@ export function deriveReviewRoundImpact(input: {
   adjacentScope: readonly ReviewAdjacentScope[];
   adjacentScopeUnbounded: boolean;
 } {
-  const impact = computeImpactSet({
+  const tip = evidenceSuffixTip(
+    input.root,
+    input.previousHeadSha,
+    input.headSha,
+  );
+  const derived = computeImpactSet({
     root: input.root,
-    baseSha: input.previousHeadSha,
+    baseSha: tip,
     headSha: input.headSha,
-    excludeReviewEvidence: true,
   });
-  const changed = impact.changedPaths.length > 0;
+  const changed = derived.changedPaths.length > 0;
+  const whole =
+    tip === input.previousHeadSha
+      ? undefined
+      : observeReviewDiff(input.root, input.previousHeadSha, input.headSha);
   return {
-    impact,
-    adjacentScope: changed ? reviewAdjacentScope(impact) : [],
-    adjacentScopeUnbounded: changed && impact.mode === "full",
+    impact: whole
+      ? {
+          ...derived,
+          baseSha: input.previousHeadSha,
+          changeDigest: whole.digest,
+          changedPaths: whole.changedPaths,
+        }
+      : derived,
+    adjacentScope: changed ? reviewAdjacentScope(derived) : [],
+    adjacentScopeUnbounded: changed && derived.mode === "full",
   };
+}
+
+/**
+ * **前headのreview記録だけを足したsuffixのpath**（Issue #1544 INV-07、R1544-2-01）。
+ * `fromSha`から`tipSha`までがevidence-only suffix（`evidenceOnlySuffix`）で、かつ`tipSha`の
+ * そのfileが`fromSha`を実装headとして束縛した正規のreview証跡（`parseReviewEvidence`が受理し
+ * `observed.implementationHeadSha === fromSha`）のときだけpathを返す。path名やfile名の字面、
+ * 「誰も読まない」ことの走査には依らない。証跡形でも前headの記録でない内容（実装が読むJSON等）は
+ * 外さない。
+ */
+function reviewRecordSuffix(
+  root: string,
+  fromSha: string,
+  tipSha: string,
+): string | undefined {
+  const path = evidenceOnlySuffix(root, fromSha, tipSha);
+  if (path === undefined) return undefined;
+  const shown = git(["show", `${tipSha}:${path}`], root, {
+    env: GIT_ENV,
+    allowFailure: true,
+  });
+  if (shown.status !== 0) return undefined;
+  const parsed = tryParseReviewEvidence(shown.stdout);
+  return "evidence" in parsed &&
+    parsed.evidence.observed.implementationHeadSha === fromSha
+    ? path
+    : undefined;
+}
+
+/** `sha`のtreeにある`path`のblob ID（無ければ空文字列）。 */
+function blobAt(root: string, sha: string, path: string): string {
+  return git(["rev-parse", "--verify", "--quiet", `${sha}:${path}`], root, {
+    env: GIT_ENV,
+    allowFailure: true,
+  }).stdout.trim();
+}
+
+/**
+ * `fromSha`の直後から第1親chainで続く、前headのreview記録だけのsuffix（`reviewRecordSuffix`）の
+ * 末端commit。無いとき、またはそのpathを`toSha`までに再び変えた（書き換え・削除）ときは
+ * `fromSha`を返し、`fromSha`からの全diffで導出させる。
+ */
+function evidenceSuffixTip(
+  root: string,
+  fromSha: string,
+  toSha: string,
+): string {
+  let tip = fromSha;
+  let path: string | undefined;
+  for (const commit of git(
+    ["rev-list", "--first-parent", "--reverse", `${fromSha}..${toSha}`],
+    root,
+    { env: GIT_ENV },
+  )
+    .stdout.split("\n")
+    .filter(Boolean)) {
+    if (evidenceOnlySuffix(root, fromSha, commit) === undefined) break;
+    const recorded = reviewRecordSuffix(root, fromSha, commit);
+    if (recorded === undefined) continue;
+    tip = commit;
+    path = recorded;
+  }
+  return path !== undefined &&
+    blobAt(root, tip, path) === blobAt(root, toSha, path)
+    ? tip
+    : fromSha;
+}
+
+/**
+ * **追随交差から外せるpath**（Issue #1544 INV-07、R1544-2-01）。追随mergeの第1親が前head
+ * `previousHeadSha`のreview記録だけのsuffix（`reviewRecordSuffix`）で、そのpathが前headと
+ * 既定branch側（第2親）で同一のとき、PRの変更として現れるそのpathの差はsuffixだけが作った
+ * ものなので返す（前headと第2親で同一のpathは、clean mergeの結果が第1親と一致する）。
+ * それ以外は空で、何も外さない。
+ */
+export function evidenceSuffixPaths(
+  root: string,
+  previousHeadSha: string,
+  secondParent: string,
+  mergeSha: string,
+): string[] {
+  const firstParent = git(["rev-parse", "--verify", `${mergeSha}^1`], root, {
+    env: GIT_ENV,
+  }).stdout.trim();
+  const path = reviewRecordSuffix(root, previousHeadSha, firstParent);
+  return path !== undefined &&
+    blobAt(root, previousHeadSha, path) === blobAt(root, secondParent, path)
+    ? [path]
+    : [];
 }

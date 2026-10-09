@@ -1,5 +1,5 @@
 import { git } from "../lib/process.js";
-import { computeImpactSet } from "./impact-set.js";
+import { computeImpactSet, evidenceSuffixPaths } from "./impact-set.js";
 import { GIT_ENV } from "./review-diff.js";
 import { isDefaultBranchFollowMerge } from "./review-session-store.js";
 /** `git diff --name-only -z --no-renames`のpath列（content再計算に数えない）。 */
@@ -31,7 +31,7 @@ export function createFollowObservations(root, tipSha, counter) {
                 ? second
                 : undefined;
         },
-        follow(baseSha, secondParent, mergeSha) {
+        follow(baseSha, secondParent, mergeSha, previousHeadSha) {
             const mainChanged = changedPathsBetween(root, baseSha, secondParent);
             if (counter) {
                 counter.contentDiffs += 1;
@@ -41,7 +41,7 @@ export function createFollowObservations(root, tipSha, counter) {
                 root,
                 baseSha: secondParent,
                 headSha: mergeSha,
-                excludeReviewEvidence: true,
+                excludePaths: evidenceSuffixPaths(root, previousHeadSha, secondParent, mergeSha),
             });
             return {
                 mainChanged,

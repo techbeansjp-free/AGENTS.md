@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
-import { isEvidenceOnlyPath } from "./review.js";
 import {
   countedRounds,
   effectiveReviewBlocking,
@@ -42,18 +41,6 @@ const LEGACY_REVIEW_EVIDENCE_SCHEMA_VERSION =
 
 /** review証跡のfile名。`docs/reviews/<Issue番号>_review.json`。 */
 export const REVIEW_EVIDENCE_NAME_PATTERN = /^([1-9]\d*)_review\.json$/u;
-
-/**
- * review証跡artifactの実在形か（Issue #1544 R1544-1-01）。evidence-only allowlist配下で、
- * file名が`review export`の生成する`<Issue番号>_review.json`のpathだけを真にする。
- * allowlist配下でもこの形でないpath（実装source等）は偽で、影響の導出から外さない。
- */
-export function isReviewEvidenceArtifactPath(value: string): boolean {
-  return (
-    isEvidenceOnlyPath(value) &&
-    REVIEW_EVIDENCE_NAME_PATTERN.test(value.slice(value.lastIndexOf("/") + 1))
-  );
-}
 
 export type ReviewIndependenceMode = "context-isolated" | "actor-independent";
 

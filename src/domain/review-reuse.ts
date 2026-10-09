@@ -99,10 +99,12 @@ export interface ReuseObserver {
     baseSha: string,
   ): string | undefined;
   transition(fromSha: string, toSha: string): TransitionObservation;
+  /** `previousHeadSha`は追随mergeの前head（evidence-only suffixの起点）。 */
   follow(
     baseSha: string,
     secondParent: string,
     mergeSha: string,
+    previousHeadSha: string,
   ): FollowObservation;
   wholeDigest(baseSha: string, toSha: string): string;
   changedPaths(fromSha: string, toSha: string): readonly string[];
@@ -276,7 +278,12 @@ export function judgeReviewReuse(input: ReuseJudgeInput): ReuseVerdict {
         continue;
       }
       const observed = attempt(position, () =>
-        observer.follow(bases[index - 1]!, parent, position.toSha),
+        observer.follow(
+          bases[index - 1]!,
+          parent,
+          position.toSha,
+          position.fromSha,
+        ),
       );
       if (observed === undefined) continue;
       const crossing = followCrossing(observed);

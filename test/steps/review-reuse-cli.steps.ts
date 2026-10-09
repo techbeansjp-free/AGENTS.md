@@ -21,8 +21,10 @@ import {
   type ReviewRoundInput,
   type ReviewSessionState,
 } from "../../src/domain/review-convergence.js";
+import { parseReviewEvidence } from "../../src/domain/review-evidence.js";
 import { refreshStoredStagingDigest } from "../../src/domain/staging.js";
 import { stableJson } from "../../src/lib/security.js";
+import { resealObservedEvidence } from "../support/review-evidence-fixture.js";
 import {
   applyReviewReplace,
   commitReviewEvidence,
@@ -165,7 +167,7 @@ function fixRetainingEvidence(
   assert.deepEqual(
     observeReviewDiff(prepared.root, prepared.implementationCommitSha, fixed)
       .changedPaths,
-    [EVIDENCE, ...Object.keys(files)].sort(),
+    [...new Set([EVIDENCE, ...Object.keys(files)])].sort(),
   );
   return fixed;
 }
@@ -382,8 +384,8 @@ const FIXED_B = { "src/b.ts": "export const b = (): number => 2;\n" };
 
 /**
  * SCN-REVIEW-REUSE-001: focused round 2（公開CLIの`review round --init`・`--apply`）。
- * `retainEvidence`は証跡fileを残した是正（transitionが証跡pathを含む）で、証跡pathを
- * 影響の導出から除くため同じtargetedの割当になる。
+ * `retainEvidence`は証跡fileを残した是正（transitionが証跡pathを含む）で、影響は前headの
+ * review記録（証跡commit）の後から導出するため同じtargetedの割当になる。
  */
 function focusedRoundTwo(
   world: WorkflowStepWorld,
@@ -516,48 +518,125 @@ function unreviewedAdjacent(world: WorkflowStepWorld): void {
   );
 }
 
+type EvidenceReaderShape =
+  | "source"
+  | "evidence-name"
+  | "other-json"
+  | "graph-unavailable"
+  | "lib-import"
+  | "script-read"
+  | "oversized-reader"
+  | "dynamic-read"
+  | "evidence-rewrite"
+  | "foreign-record";
+
+/** 4 MiB（意味Graphのfile上限）を超える行コメント。本文は観測から落ちる。 */
+const OVERSIZED_PADDING = `// ${"x".repeat(4 * 1024 * 1024)}\n`;
+
+const EVIDENCE_IMPORT_GATE =
+  'import data from "../docs/reviews/9_review.json" with { type: "json" };\n\nexport const gate = (n: number): boolean => n <= data.limit;\n';
+
+/** 証跡形のfileを読む実装（`helper`以外の足場）。 */
+function evidenceReaders(shape: EvidenceReaderShape): Record<string, string> {
+  switch (shape) {
+    case "source":
+      return {
+        "src/limit-gate.ts":
+          'import { LIMIT } from "../docs/reviews/helper.js";\n\nexport const gate = (n: number): boolean => n <= LIMIT;\n',
+      };
+    case "other-json":
+      return {
+        "src/limit-gate.ts":
+          "export const gate = (n: number): boolean => n <= 1;\n",
+      };
+    case "evidence-name":
+      return { "src/limit-gate.ts": EVIDENCE_IMPORT_GATE };
+    case "graph-unavailable":
+      return {
+        "src/limit-gate.ts": EVIDENCE_IMPORT_GATE,
+        "test/support/broken.ts": "export const = ;\n",
+      };
+    // R1544-2-01 (a): src/外のsourceがimportし、src/はre-exportするだけ。
+    case "lib-import":
+      return {
+        "lib/limit-gate.ts": EVIDENCE_IMPORT_GATE,
+        "src/limit-gate.ts": 'export { gate } from "../lib/limit-gate.js";\n',
+      };
+    // R1544-2-01 (b): scriptがfile pathで読み、終了値を決める。
+    case "script-read":
+      return {
+        "scripts/gate.ts":
+          'import fs from "node:fs";\n\nconst data = JSON.parse(fs.readFileSync("docs/reviews/9_review.json", "utf8"));\nprocess.exit(data.limit > 1 ? 1 : 0);\n',
+        "src/limit-gate.ts":
+          "export const gate = (n: number): boolean => n <= 1;\n",
+      };
+    // R1544-2-01 (c): importするsrc/のfileが4 MiBを超え、本文が観測されない。
+    case "oversized-reader":
+      return { "src/limit-gate.ts": EVIDENCE_IMPORT_GATE + OVERSIZED_PADDING };
+    // file名を組み立てて読む。全fileを字面で走査してもfile名は現れない。
+    case "dynamic-read":
+      return { "src/limit-gate.ts": dynamicEvidenceReader(9) };
+    // 証跡file自身をfile名の組み立てで読む。
+    case "evidence-rewrite":
+    case "foreign-record":
+      return { "src/limit-gate.ts": dynamicEvidenceReader(877) };
+  }
+}
+
+function dynamicEvidenceReader(issue: number): string {
+  return `import fs from "node:fs";\n\nconst issue = ${issue};\nconst data = JSON.parse(fs.readFileSync(\`docs/reviews/\${issue}_review.json\`, "utf8"));\n\nexport const gate = (n: number): boolean => n <= (data.limit ?? 1);\n`;
+}
+
 /**
- * SCN-REVIEW-REUSE-003（R1544-1-01）: evidence allowlist配下の証跡でないfileを、証跡fileを
- * 残したまま変える。`source`は`src/`がimportする実装（依存先の検分を割り当てる）、
- * `evidence-name`は証跡の実在形でも`src/`が字面で読むfile、`other-json`は実在形でない
- * JSON、`graph-unavailable`は意味Graphを構築できず`src/`の字面参照を観測できない状態で、
- * いずれも影響の導出から外さず全体検分を割り当てる。testが証跡pathを字面で持っても
- * 証跡は外れる（`src/`だけが製品の読み取り）。割当を外して証跡pathと同じく除いた形へ
+ * SCN-REVIEW-REUSE-003（R1544-1-01・R1544-2-01）: 前headのreview記録（証跡commit）の上で
+ * evidence allowlist配下のfileを変える。影響は証跡commitの後から導出し、path名・file名の字面や
+ * 「誰も読まない」ことの走査では何も外さない。`source`はallowlist配下の実装sourceで依存先の
+ * 検分を割り当てる。`other-json`は証跡形でないJSON、`evidence-name`・`graph-unavailable`・
+ * `lib-import`・`script-read`・`oversized-reader`・`dynamic-read`は証跡形のfileを`src/`・
+ * `lib/`・`scripts/`が読む形（字面import、上限超過で本文が観測されないimport、file名を組み立てる
+ * 読み取り）と意味Graphを構築できない状態、`evidence-rewrite`は証跡file自身を前headの記録で
+ * ない内容へ、`foreign-record`は別headを束縛した正規の証跡へ書き換えたもので、いずれも全体検分を
+ * 割り当てる。testが証跡pathを字面で持つfileも足場に含む。割当を外して証跡pathを除いた形へ
  * 書き換えたroundは`pr merge`が拒否する。
  */
 function evidencePrefixedImplementation(
   world: WorkflowStepWorld,
-  shape: "source" | "evidence-name" | "other-json" | "graph-unavailable",
+  shape: EvidenceReaderShape,
 ): void {
+  const ownEvidence =
+    shape === "evidence-rewrite" || shape === "foreign-record";
   const helper =
     shape === "source"
       ? "docs/reviews/helper.ts"
       : shape === "other-json"
         ? "docs/reviews/limits.json"
-        : "docs/reviews/9_review.json";
-  const gate =
-    shape === "source"
-      ? 'import { LIMIT } from "../docs/reviews/helper.js";\n\nexport const gate = (n: number): boolean => n <= LIMIT;\n'
-      : shape === "other-json"
-        ? "export const gate = (n: number): boolean => n <= 1;\n"
-        : 'import data from "../docs/reviews/9_review.json" with { type: "json" };\n\nexport const gate = (n: number): boolean => n <= data.limit;\n';
+        : ownEvidence
+          ? EVIDENCE
+          : "docs/reviews/9_review.json";
   const content = (limit: number): string =>
     shape === "source"
       ? `export const LIMIT = ${limit};\n`
       : `{ "limit": ${limit} }\n`;
   const prepared = prepare(world, [
     {
-      [helper]: content(1),
-      "src/limit-gate.ts": gate,
+      ...(ownEvidence ? {} : { [helper]: content(1) }),
+      ...evidenceReaders(shape),
       "test/support/evidence-path.ts": `export const EVIDENCE = "${EVIDENCE}";\n`,
-      ...(shape === "graph-unavailable"
-        ? { "test/support/broken.ts": "export const = ;\n" }
-        : {}),
       ...scaffold("src/limit-gate.ts", "import"),
     },
   ]);
   const first = prepared.implementationCommitSha;
-  const fixed = fixRetainingEvidence(prepared, { [helper]: content(100) });
+  const fixed = fixRetainingEvidence(prepared, {
+    [helper]:
+      shape === "foreign-record"
+        ? resealObservedEvidence(
+            parseReviewEvidence(
+              fs.readFileSync(path.join(prepared.root, EVIDENCE), "utf8"),
+            ),
+            { implementationHeadSha: prepared.baseSha },
+          )
+        : content(100),
+  });
   const out = path.join(world.temp("asc-1544-round-"), "round.json");
   const init = executeCli(
     [
@@ -573,7 +652,10 @@ function evidencePrefixedImplementation(
   );
   assert.equal(init.status, 0, init.stdout + init.stderr);
   const written = JSON.parse(fs.readFileSync(out, "utf8")) as ReviewRoundInput;
-  assert.deepEqual(written.focus.fixedDiff, [EVIDENCE, helper].sort());
+  assert.deepEqual(
+    written.focus.fixedDiff,
+    [...new Set([EVIDENCE, helper])].sort(),
+  );
   const transition = {
     fromSha: first,
     diffDigest: observeReviewDiff(prepared.root, first, fixed).digest,
@@ -882,6 +964,75 @@ function intersectingFollow(world: WorkflowStepWorld, reviewed: boolean): void {
   );
 }
 
+/**
+ * SCN-REVIEW-REUSE-009（R1544-2-01）: 証跡commit（`H_final`）の上へ既定branchを追随する。
+ * 追随交差は前headのreview記録だけを外し、それ以外は導出する。`reader`はPRが証跡形の
+ * `docs/reviews/9_review.json`を実装として足しfile名を組み立てて読む形、`preexisting`はPRが
+ * 証跡pathそのものを実装内容として持ち、証跡commitがそれを書き換えた形、`rewritten`は証跡commitの
+ * 後に証跡fileを前headの記録でない内容へ書き換えた（evidence-only suffixの形は保つ）形で、
+ * いずれも交差を判定できない（`full`）。雛形は`followOnly`を立てず全体検分を割り当て、`followOnly`と
+ * 記録したroundは`pr merge`が拒否する。
+ */
+function followOverEvidence(
+  world: WorkflowStepWorld,
+  shape: "reader" | "preexisting" | "rewritten",
+): void {
+  const prepared = prepare(world, [
+    shape === "reader"
+      ? {
+          ...evidenceReaders("dynamic-read"),
+          "docs/reviews/9_review.json": '{ "limit": 1 }\n',
+        }
+      : {
+          ...evidenceReaders("evidence-rewrite"),
+          ...(shape === "preexisting"
+            ? { [EVIDENCE]: '{ "limit": 1 }\n' }
+            : {}),
+        },
+  ]);
+  if (shape === "rewritten")
+    commit(prepared, { [EVIDENCE]: '{ "limit": 100 }\n' }, "rewrite evidence");
+  const finalHead = fixtureGit(prepared.root, ["rev-parse", "HEAD"]);
+  // 前提の自己確認: PRのheadは証跡commitで、証跡pathを含む。
+  assert.notEqual(finalHead, prepared.implementationCommitSha);
+  const advanced = advanceMain(prepared, prepared.baseSha, {
+    ...scaffold("src/limit-gate.ts", "literal"),
+    "docs/upstream-note.md": "default branch advance\n",
+  });
+  const followed = mergeMain(prepared, advanced);
+  assert.ok(
+    observeReviewDiff(prepared.root, advanced, followed).changedPaths.includes(
+      EVIDENCE,
+    ),
+  );
+  const built = draft(prepared, followed).round;
+  assert.equal(built.followOnly, undefined);
+  assert.deepEqual(built.inspection?.cumulative, {
+    baseSha: advanced,
+    scope: "all",
+    diffDigest: observeReviewDiff(prepared.root, advanced, followed).digest,
+  });
+  recordReviewRound({
+    staging: prepared.staging,
+    round: parseReviewRoundInput({
+      ...withoutInspection(built),
+      findings: [],
+      followOnly: true,
+    }),
+  });
+  deliver(prepared, {
+    evidenceBase: advanced,
+    implementation: followed,
+    tip: advanced,
+  });
+  assertNamed(
+    rejected(prepared),
+    "review再利用条件が成立しません",
+    "[判定不能]",
+    "全体検分round",
+  );
+}
+
 /** SCN-REVIEW-REUSE-009: 実装commitを挟んだmergeは追随として記録できない（C4）。 */
 function followAfterImplementation(world: WorkflowStepWorld): void {
   const prepared = prepare(world);
@@ -988,6 +1139,12 @@ When(
         evidencePrefixedImplementation(this, "evidence-name");
         evidencePrefixedImplementation(this, "other-json");
         evidencePrefixedImplementation(this, "graph-unavailable");
+        evidencePrefixedImplementation(this, "lib-import");
+        evidencePrefixedImplementation(this, "script-read");
+        evidencePrefixedImplementation(this, "oversized-reader");
+        evidencePrefixedImplementation(this, "dynamic-read");
+        evidencePrefixedImplementation(this, "evidence-rewrite");
+        evidencePrefixedImplementation(this, "foreign-record");
         break;
       case "SCN-REVIEW-REUSE-004":
         for (const tamper of [
@@ -1011,6 +1168,9 @@ When(
       case "SCN-REVIEW-REUSE-009":
         intersectingFollow(this, false);
         intersectingFollow(this, true);
+        followOverEvidence(this, "reader");
+        followOverEvidence(this, "preexisting");
+        followOverEvidence(this, "rewritten");
         followAfterImplementation(this);
         break;
       case "SCN-REVIEW-REUSE-010":

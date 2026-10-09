@@ -1,6 +1,6 @@
 import { git } from "../lib/process.js";
 import type { FollowObservation } from "../domain/review-reuse-follow.js";
-import { computeImpactSet } from "./impact-set.js";
+import { computeImpactSet, evidenceSuffixPaths } from "./impact-set.js";
 import { GIT_ENV } from "./review-diff.js";
 import { isDefaultBranchFollowMerge } from "./review-session-store.js";
 
@@ -62,6 +62,7 @@ export function createFollowObservations(
       baseSha: string,
       secondParent: string,
       mergeSha: string,
+      previousHeadSha: string,
     ): FollowObservation {
       const mainChanged = changedPathsBetween(root, baseSha, secondParent);
       if (counter) {
@@ -72,7 +73,12 @@ export function createFollowObservations(
         root,
         baseSha: secondParent,
         headSha: mergeSha,
-        excludeReviewEvidence: true,
+        excludePaths: evidenceSuffixPaths(
+          root,
+          previousHeadSha,
+          secondParent,
+          mergeSha,
+        ),
       });
       return {
         mainChanged,
