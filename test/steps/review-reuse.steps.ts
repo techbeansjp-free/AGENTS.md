@@ -370,6 +370,8 @@ function wholeInspection(): void {
   ]);
   const wrongBase = sessionOf([{ candidate: H2, inspection: whole(X) }]);
   const rebased = fixedObserver();
+  // 記録digestが別基点からの差分として正しくても、導出基点と異なれば全体検分にしない。
+  rebased.wholes.set(`${X}..${H2}`, digest("9"));
   assert.deepEqual(kinds(judge(wrongBase, rebased)), ["digest不一致||ee..22"]);
   assert.ok(rebased.calls.includes(`transition:${H1}..${H2}`));
   const tampered = sessionOf([{ candidate: H2, inspection: whole(T) }]);
@@ -597,6 +599,25 @@ function cumulativeCoverage(): void {
       crossing(),
       { actual: M },
     ),
+  );
+  // 追随で交差したpathを後続transitionが変えたら、そのtransition以降の累積検分が要る。
+  const changedAfter = sessionOf([
+    { candidate: HM, kind: "follow" },
+    {
+      candidate: HM,
+      inspection: pathsInspection(HM, "0", M, [["src/a.ts", digest("5")]]),
+    },
+    { candidate: H3, inspection: { fromSha: HM, diffDigest: digest("3") } },
+  ]);
+  const later = crossing();
+  later.transitions.set(
+    `${HM}..${H3}`,
+    observation("3", { changed: ["src/a.ts"] }),
+  );
+  later.sectionMap = new Map([["src/a.ts", digest("5")]]);
+  assert.deepEqual(
+    kinds(judge(changedAfter, later, { actual: M, effective: H3 })),
+    ["追随交差|src/a.ts|cc..33"],
   );
   assert.deepEqual(
     kinds(
