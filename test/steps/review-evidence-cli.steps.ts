@@ -16,6 +16,7 @@ import {
   observeReviewDiff,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
+import { GIT_ENV } from "../../src/adapters/review-diff.js";
 import { appendWorkflowJournalEntry } from "../../src/adapters/workflow-journal.js";
 import {
   appendVerificationRun,
@@ -48,6 +49,8 @@ interface ReviewEvidenceCliWorld extends WorkflowWorld {
   /** trusted policyの`verification.fullCommand`。marker fileがあれば同じargvで失敗する */
   fullCommand: string[];
   marker: string;
+  /** 操作ごとの`git diff --binary`呼出し（比較区間の完全差分導出）のargv */
+  derivations?: { export: string[][]; validate: string[][] };
 }
 
 interface CliResult {
@@ -421,6 +424,87 @@ Then(
     assert.equal(validation.output?.kind, "review-evidence");
     assert.equal(validation.output?.sessionChecked, true);
     assert.equal(validation.exitCode, 0);
+  },
+);
+
+/**
+ * AC-09（Issue #1563、SCN-REVIEW-FAST-109）: 同一操作の同じroot/base/headでは
+ * 比較区間の完全差分を1回だけ導出し、影響集合と`diffDigest`がそれを共有する。
+ *
+ * **完全差分の導出は`observeReviewDiff`だけが`git diff --binary`で行い、
+ * そのgit呼出しは`GIT_ENV.PATH`で解決する。** その先頭へ呼出しを記録するgit
+ * wrapperを置き、export・validateそれぞれの呼出しを数える。二重導出へ戻すと
+ * 同じ区間の呼出しが2回になり落ちる。
+ */
+When(
+  "Git差分の導出を数えながらH_implでreview exportとreview validateを実行する",
+  async function () {
+    await verifyPassing(this);
+    const realGit = execFileSync("sh", ["-c", "command -v git"], {
+      encoding: "utf8",
+      env: { PATH: GIT_ENV.PATH },
+    }).trim();
+    const dir = this.temp("asc-git-trace-");
+    const trace = path.join(dir, "trace.log");
+    fs.writeFileSync(
+      path.join(dir, "git"),
+      `#!/bin/sh\nprintf '%s ' "$@" >> ${JSON.stringify(trace)}\nprintf '\\n' >> ${JSON.stringify(trace)}\nexec ${JSON.stringify(realGit)} "$@"\n`,
+      { mode: 0o700 },
+    );
+    const env = GIT_ENV as { PATH: string };
+    const originalPath = env.PATH;
+    const observe = async (args: string[]) => {
+      fs.writeFileSync(trace, "");
+      env.PATH = `${dir}${path.delimiter}${originalPath}`;
+      try {
+        const result = await captureCli(args);
+        assert.equal(result.error, undefined, String(result.error));
+        assert.equal(result.exitCode, 0);
+        return result;
+      } finally {
+        env.PATH = originalPath;
+      }
+    };
+    const diffCalls = () =>
+      fs
+        .readFileSync(trace, "utf8")
+        .split("\n")
+        .map((line) => line.trim().split(" "))
+        .filter((argv) => argv[0] === "diff" && argv.includes("--binary"));
+    this.exported = await observe(exportArgs(this));
+    const exportCalls = diffCalls();
+    const validation = await observe([
+      "review",
+      "validate",
+      `--artifact=${EVIDENCE}`,
+      `--staging=${this.staging}`,
+      `--root=${this.root}`,
+    ]);
+    assert.equal(validation.output?.valid, true);
+    this.derivations = { export: exportCalls, validate: diffCalls() };
+  },
+);
+
+Then(
+  "exportとvalidateはそれぞれ比較基点..H_implの差分を1回だけ導出し同じdigestへ束縛する",
+  function () {
+    const interval = (argv: string[]) =>
+      argv.filter((arg) => /^[0-9a-f]{40}$/u.test(arg)).join("..");
+    const expected = `${this.base}..${this.implementationHead}`;
+    for (const [operation, calls] of Object.entries(this.derivations!)) {
+      assert.deepEqual(
+        calls.map(interval),
+        [expected],
+        `${operation}は比較基点..H_implの完全差分を1回だけ導出する必要があります`,
+      );
+    }
+    const evidence = parseReviewEvidence(
+      fs.readFileSync(path.join(this.root, EVIDENCE), "utf8"),
+    );
+    assert.equal(
+      evidence.observed.diffDigest,
+      observeReviewDiff(this.root, this.base, this.implementationHead).digest,
+    );
   },
 );
 

@@ -7,6 +7,11 @@ Feature: review exportとreview validateでreview証跡を生成・照合する
     When H_implでreview exportを実行する
     Then docs/reviewsへIssue番号の証跡が生成されsessionとGitに照合できる
 
+  Scenario: SCN-REVIEW-FAST-109 証明済み入力を再利用する
+    Given review証跡用に収束済みsessionを持つrepositoryがある
+    When Git差分の導出を数えながらH_implでreview exportとreview validateを実行する
+    Then exportとvalidateはそれぞれ比較基点..H_implの差分を1回だけ導出し同じdigestへ束縛する
+
   Scenario: SCN-INT-REVEVID-002 自己review・検証なし・許可外の出力先を拒否する
     Given review証跡用に収束済みsessionを持つrepositoryがある
     When 不正な条件でreview exportを実行する
