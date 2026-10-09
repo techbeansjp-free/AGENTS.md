@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { stepDefinitions } from "../support/world.js";
 import {
@@ -12,7 +14,6 @@ import {
   readStoredReviewSession,
 } from "../../src/adapters/review-session-store.js";
 import { REVIEW_SESSION_REPLACEMENTS_FILE } from "../../src/adapters/review-session-replacement-store.js";
-import { observeReviewDiffSections } from "../../src/adapters/review-diff.js";
 import {
   advanceReviewSession,
   isLegacyReviewSession,
@@ -49,9 +50,6 @@ const { Given, When, Then } = stepDefinitions<WorkflowStepWorld>();
 
 /** 診断へ環境値が混入しないことを確かめるための値（NFR-07）。 */
 const SECRET = "ghp_asc1544fixturesecretvalue";
-const EMPTY =
-  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-
 const FILE_LINES = Array.from({ length: 12 }, (_, index) => `line ${index}`);
 
 function lines(edits: Record<number, string>): string {
@@ -312,6 +310,44 @@ function withoutInspection(round: ReviewRoundInput): Record<string, unknown> {
   return copy;
 }
 
+/** 実装を通さない独立oracle: `git diff ... -- <path>`単独出力のsha256（無ければ空差分）。 */
+function pathDigest(
+  prepared: PreparedDeliveryCli,
+  baseSha: string,
+  headSha: string,
+  target: string,
+): string {
+  const output = execFileSync(
+    "git",
+    [
+      "diff",
+      "--binary",
+      "--full-index",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--no-renames",
+      baseSha,
+      headSha,
+      "--",
+      target,
+    ],
+    {
+      cwd: prepared.root,
+      env: {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_NOSYSTEM: "1",
+      },
+      encoding: "utf8",
+    },
+  );
+  return crypto.createHash("sha256").update(output).digest("hex");
+}
+
+function flipLast(value: string): string {
+  return `${value.slice(0, -1)}${value.endsWith("0") ? "1" : "0"}`;
+}
+
 function assertNamed(output: string, ...needles: string[]): void {
   for (const needle of needles) assert.ok(output.includes(needle), output);
 }
@@ -320,7 +356,9 @@ const ADJACENT_FILES = {
   "src/b.ts": "export const b = (): number => 1;\n",
   "src/c.ts":
     'import { b } from "./b.js";\n\nexport const c = (): number => b() + 1;\n',
-  ...scaffold("src/c.ts", "import"),
+  "src/d.ts":
+    'import { b } from "./b.js";\nimport "./c.js";\n\nexport const d = (): number => b() + 2;\n',
+  ...scaffold("src/d.ts", "import"),
 };
 const FIXED_B = { "src/b.ts": "export const b = (): number => 2;\n" };
 
@@ -351,7 +389,7 @@ function focusedRoundTwo(world: WorkflowStepWorld): void {
   assert.deepEqual(written.inspection, expected);
   assert.deepEqual(
     written.focus.adjacentScope.map(({ path: item }) => item),
-    ["src/c.ts"],
+    ["src/c.ts", "src/d.ts"],
   );
   const applied = executeCli(
     [
@@ -425,14 +463,23 @@ function unreviewedAdjacent(world: WorkflowStepWorld): void {
   const first = prepared.implementationCommitSha;
   const fixed = fixOnTopOfEvidence(prepared, FIXED_B);
   recordDraft(prepared, fixed);
-  rewriteRound(prepared, 2, (round) => ({
-    ...round,
-    focus: { ...round.focus, adjacentScope: [] },
-  }));
+  rewriteRound(prepared, 2, (round) => {
+    assert.deepEqual(
+      round.focus.adjacentScope.map(({ path: item }) => item),
+      ["src/c.ts", "src/d.ts"],
+    );
+    return {
+      ...round,
+      focus: {
+        ...round.focus,
+        adjacentScope: round.focus.adjacentScope.slice(0, 1),
+      },
+    };
+  });
   deliverAtBase(prepared, fixed);
   assertNamed(
     rejected(prepared),
-    `[依存先未検分] path=src/c.ts transition=${first}..${fixed}`,
+    `[依存先未検分] path=src/d.ts transition=${first}..${fixed}`,
     "次の操作:",
   );
 }
@@ -440,7 +487,12 @@ function unreviewedAdjacent(world: WorkflowStepWorld): void {
 /** SCN-REVIEW-REUSE-004: 改変の種類ごとに独立したfixtureで観測する。 */
 function tamperedInspection(
   world: WorkflowStepWorld,
-  tamper: "digest" | "break" | "unobservable" | "whole-review",
+  tamper:
+    | "digest"
+    | "break"
+    | "unobservable"
+    | "whole-review"
+    | "tampered-whole-review",
 ): void {
   const prepared = prepare(world, [ADJACENT_FILES]);
   const first = prepared.implementationCommitSha;
@@ -461,16 +513,40 @@ function tamperedInspection(
           }
         : tamper === "unobservable"
           ? { fromSha: "f".repeat(40), diffDigest: recomputed }
-          : { fromSha: first, diffDigest: "0".repeat(64) },
+          : { fromSha: first, diffDigest: flipLast(recomputed) },
   }));
-  if (tamper === "whole-review") {
+  if (tamper === "whole-review" || tamper === "tampered-whole-review") {
     // 改変より後ろに全体検分roundがあれば、全体検分が鎖を被覆する（FR-04）。
     const whole = recordDraft(prepared, fixed).rounds.at(-1)?.inspection
       ?.cumulative;
     assert.equal(whole?.scope, "all");
     assert.equal(whole?.baseSha, prepared.baseSha);
+    const wholeDigest = observeReviewDiff(
+      prepared.root,
+      prepared.baseSha,
+      fixed,
+    ).digest;
+    assert.equal(whole?.scope === "all" && whole.diffDigest, wholeDigest);
+    if (tamper === "whole-review") {
+      deliverAtBase(prepared, fixed);
+      return merged(prepared);
+    }
+    rewriteRound(prepared, 3, (round) => ({
+      ...round,
+      inspection: {
+        ...round.inspection!,
+        cumulative: {
+          baseSha: prepared.baseSha,
+          scope: "all",
+          diffDigest: flipLast(wholeDigest),
+        },
+      },
+    }));
     deliverAtBase(prepared, fixed);
-    return merged(prepared);
+    return assertNamed(
+      rejected(prepared),
+      `[digest不一致] path=なし transition=${prepared.baseSha}..${fixed} 再計算digest=${wholeDigest}`,
+    );
   }
   deliverAtBase(prepared, fixed);
   const output = rejected(prepared);
@@ -634,7 +710,7 @@ function intersectingFollow(world: WorkflowStepWorld, reviewed: boolean): void {
   const followed = mergeMain(prepared, advanced);
   const built = draft(prepared, followed).round;
   assert.equal(built.followOnly, undefined);
-  assert.notEqual(built.inspection, undefined);
+  assert.equal(built.inspection?.cumulative?.scope, "all");
   recordReviewRound({
     staging: prepared.staging,
     round: parseReviewRoundInput({
@@ -649,7 +725,12 @@ function intersectingFollow(world: WorkflowStepWorld, reviewed: boolean): void {
     assert.deepEqual(remedy, {
       baseSha: advanced,
       scope: "paths",
-      paths: [{ path: "src/a.ts", diffDigest: EMPTY }],
+      paths: [
+        {
+          path: "src/a.ts",
+          diffDigest: pathDigest(prepared, advanced, followed, "src/a.ts"),
+        },
+      ],
     });
   }
   deliver(prepared, {
@@ -662,6 +743,30 @@ function intersectingFollow(world: WorkflowStepWorld, reviewed: boolean): void {
     rejected(prepared),
     "[追随交差] path=src/a.ts 既定branch側path=src/a.ts,",
     `transition=${prepared.implementationCommitSha}..${followed}`,
+  );
+}
+
+/** SCN-REVIEW-REUSE-009: 実装commitを挟んだmergeは追随として記録できない（C4）。 */
+function followAfterImplementation(world: WorkflowStepWorld): void {
+  const prepared = prepare(world);
+  commit(prepared, { "implementation.txt": "unreviewed change\n" }, "impl");
+  const advanced = advanceMain(prepared, prepared.baseSha, {
+    "docs/upstream-note.md": "default branch advance\n",
+  });
+  const merged = mergeMain(prepared, advanced);
+  const built = draft(prepared, merged).round;
+  assert.equal(built.followOnly, undefined);
+  assert.throws(
+    () =>
+      recordReviewRound({
+        staging: prepared.staging,
+        round: parseReviewRoundInput({
+          ...withoutInspection(built),
+          findings: [],
+          followOnly: true,
+        }),
+      }),
+    /既定branch追随として記録できるのは/u,
   );
 }
 
@@ -695,11 +800,12 @@ function securityPathCumulative(
     paths: [
       {
         path: "src/merge-gate.ts",
-        diffDigest: observeReviewDiffSections(
-          prepared.root,
+        diffDigest: pathDigest(
+          prepared,
           prepared.baseSha,
           fixed,
-        ).get("src/merge-gate.ts"),
+          "src/merge-gate.ts",
+        ),
       },
     ],
   });
@@ -744,6 +850,7 @@ When(
           "break",
           "unobservable",
           "whole-review",
+          "tampered-whole-review",
         ] as const)
           tamperedInspection(this, tamper);
         break;
@@ -759,6 +866,7 @@ When(
       case "SCN-REVIEW-REUSE-009":
         intersectingFollow(this, false);
         intersectingFollow(this, true);
+        followAfterImplementation(this);
         break;
       case "SCN-REVIEW-REUSE-010":
         singleRoundFastPath(this);
