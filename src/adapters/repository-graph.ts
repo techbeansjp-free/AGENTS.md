@@ -703,6 +703,24 @@ function ecmaScriptImportSpecifiers(
             located.push({ position: node.pos, value: candidate });
       }
     }
+    // Property access does not resolve through the lexical require binding.
+    // Computed access on the CommonJS module object cannot prove that the
+    // selected capability excludes require, so it is also conservative.
+    if (!typeOnly) {
+      const propertyRequire =
+        compiler.isPropertyAccessExpression(node) &&
+        node.name.text === "require";
+      let computedRequire = false;
+      if (compiler.isElementAccessExpression(node)) {
+        const object = unwrappedCallTarget(compiler, node.expression);
+        computedRequire =
+          finiteImportSpecifiers(compiler, node.argumentExpression)?.includes(
+            "require",
+          ) === true ||
+          (compiler.isIdentifier(object) && object.text === "module");
+      }
+      if (propertyRequire || computedRequire) onUnresolvedImport?.(sourcePath);
+    }
     // A require value escaping the supported callee forms has no proven import
     // boundary (aliases, comma expressions, call/apply/bind, etc.). Do not infer
     // safety from the absence of a direct call. Property names may also

@@ -33,7 +33,7 @@
   ],
   "details": {
     "path": "docs/reviews/1576_performance.raw.json",
-    "sha256": "7d78afbbd7e30bf6093297286b21a16a3c651ad47d5d1826321277d50234863e",
+    "sha256": "3b6dcd2e9a2f87753fe987a9e57a1255febfc7be7b99d69eefe376be04b0f62c",
     "keys": [
       "benchmark",
       "methodology",
@@ -43,7 +43,9 @@
       "reproduction",
       "revisionCacheAdoption",
       "revisionLiveLifecycle",
-      "revisionIndependentReview"
+      "revisionIndependentReview",
+      "revisionLiveLifecycleV2",
+      "revisionSafetyMutations"
     ]
   },
   "limitations": [
@@ -67,7 +69,7 @@
       "decision": "process-global cacheを撤去し、既存の一操作内review observerを共有する"
     },
     "liveLifecycle": {
-      "candidateSha": "101bcb883e59c33ec8eead8bb9e2982635e8950d",
+      "candidateSha": "7189b0a300dd4054f740e6dfb6244cd3b353bcf0",
       "provider": "codex",
       "operations": [
         "update",
@@ -79,7 +81,17 @@
       "userSettingsPreserved": true,
       "unexpectedChangedPaths": 0,
       "scope": "隔離dummy内の実workerとlifecycle操作の競合。全工程E2E・provider timeoutの実証ではない。",
-      "isolation": "filesystem/PID/mountを隔離。API接続用networkは共有し宛先制限なし。"
+      "isolation": "filesystem/PID/mountを隔離。API接続用networkは共有し宛先制限なし。",
+      "reproducibleHarness": "revisionLiveLifecycleV2.harnessSources"
+    },
+    "safetyMutations": {
+      "mutations": 2,
+      "killed": 2,
+      "sourceSha": "7189b0a300dd4054f740e6dfb6244cd3b353bcf0",
+      "contracts": [
+        "escaping require remains unknown",
+        "every dynamic branch must be bounded"
+      ]
     }
   }
 }
