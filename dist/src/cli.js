@@ -11,7 +11,9 @@ import { createIssueStaging, buildIssueSyncBody, assertStagingSyncTarget, issueB
 import { parsePocDeclaration } from "./domain/workflow.js";
 import { bootstrapProject, validateSpecs, } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
-import { countedRounds, parseReviewRoundInput, reviewDivergence, unconvergedReviewSessionDiagnostic, isReviewSessionConverged, } from "./domain/review-convergence.js";
+import { countedRounds, parseReviewRoundInput, reviewDivergence, unconvergedReviewSessionDiagnostic, isReviewSessionConverged, isLegacyReviewSession, } from "./domain/review-convergence.js";
+import { formatReuseDiagnostic } from "./domain/review-reuse.js";
+import { judgeReviewReuseAtMerge } from "./adapters/review-reuse.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
 import { parseReviewEvidence, } from "./domain/review-evidence.js";
 import { exportReviewEvidence, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
@@ -1545,6 +1547,7 @@ function observeMergeReviewEvidence(input) {
             reviewId,
             reviewEvidenceId: canonicalDigest(identity),
         },
+        evidenceBaseSha: evidence.observed.baseSha,
         approvals,
         formalApprovalIds: formalApprovalId ? [formalApprovalId] : [],
         implementationAuthorActorId: implementation.authorActorId,
@@ -1561,6 +1564,28 @@ function assertFixedMergeReviewEvidence(state, evidence) {
         intent.reviewId !== evidence.reviewId ||
         intent.reviewEvidenceId !== evidence.reviewEvidenceId)
         throw new Error("current provider review Evidenceが固定済みmerge review identityと一致しません");
+}
+/**
+ * Issue #1495暫定guardの5条件。最初に成立しない条件の診断文（変更前と同一）を返し、
+ * すべて成立すれば`undefined`。旧形式sessionの判定と新形式の高速経路が共有する。
+ */
+function provisionalReviewGuardFailure(input) {
+    const { session: auditReviewSession, actualAuditBase, effectiveImplementationHeadSha, } = input;
+    if (actualAuditBase !== auditReviewSession.anchor.diffBaseSha)
+        return `実際のmerge-base(${actualAuditBase})がreview sessionの比較基点(${auditReviewSession.anchor.diffBaseSha})と一致しません。既定branchへの追随はreviewed-forwardではなく、実際のmerge-baseを起点とする新しいreview sessionのfull-scope reviewで行ってください（Issue #1495暫定guard、REV-01是正はIssue #1544で別途扱う）。current H_implで収束済みなら\`review replace --staging=<staging> --apply\`でreview sessionを置換し、round 1からやり直してください`;
+    if (effectiveImplementationHeadSha !== auditReviewSession.anchor.initialHeadSha)
+        return `実効H_impl(${effectiveImplementationHeadSha})がreview sessionの初回H_impl(${auditReviewSession.anchor.initialHeadSha})と一致しません。最初にfull reviewした実装から1byteでも変わった場合、このsessionではmergeできません。新しいcurrent H_implを起点にfull review sessionを作り直してください（Issue #1495暫定guard）。current H_implで収束済みなら\`review replace --staging=<staging> --apply\`でreview sessionを置換し、round 1からやり直してください`;
+    const auditCountedRounds = countedRounds(auditReviewSession);
+    if (auditCountedRounds !== 1)
+        return `review sessionのcounted round数(${auditCountedRounds})が1ではありません。暫定guardは単一のfull-scope round（round 1）だけで収束したsessionだけを受理します（Issue #1495暫定guard、Issue #1544解決まで）。current H_implで収束済みなら\`review replace --staging=<staging> --apply\`でreview sessionを置換し、round 1からやり直してください`;
+    const singleCountedRound = auditReviewSession.rounds.find((record) => !record.followOnly && !record.recordLayerOnly);
+    if (singleCountedRound === undefined ||
+        singleCountedRound.candidateHeadSha !== effectiveImplementationHeadSha)
+        return "review sessionの唯一のcounted roundのcandidateHeadShaが実効H_implと一致しません";
+    const recomputedAuditDiff = observeReviewDiff(input.root, actualAuditBase, effectiveImplementationHeadSha);
+    if (recomputedAuditDiff.digest !== auditReviewSession.anchor.initialDiffDigest)
+        return `実際の監査範囲(${actualAuditBase}..${effectiveImplementationHeadSha})から再計算したdiff digest(${recomputedAuditDiff.digest})がreview sessionの初回diff digest(${auditReviewSession.anchor.initialDiffDigest})と一致しません`;
+    return undefined;
 }
 function inspectAuthorizedPullRequestMerge(input) {
     const observed = github("pr.inspect", { repository: input.repository, pr: input.pr }, input.root);
@@ -1677,42 +1702,13 @@ function inspectAuthorizedPullRequestMerge(input) {
      * より一般的なreview session設計の欠陥としてIssue #1544へ分離、本Issueの
      * scopeはREV-02、すなわち比較基点自体の真正性に限定する）。
      *
-     * **したがって、本Issueで最終的に採用する設計は完全一致・単一roundへの限定
-     * である。** `.agent-skill-chain/docs/02_品質基準.md`の既存規範（「比較基点と
-     * H_implはいずれも申告値をそのまま使わず、commit構造から独立に導出した値との
-     * 完全一致を要求する。比較基点を前へ進めれば監査範囲を縮められるため、片側
-     * だけを申告値のままにしない」）を実装へ戻す。`actualAuditBase`
-     * （`resolveUniqueMergeBase`でGit objectから独立に計算した実際のmerge-base）
-     * と`session.anchor.diffBaseSha`（round 1作成時に`buildReviewRoundDraft`が
-     * ローカルGitが観測した既定branch tip（`refs/remotes/origin/HEAD`。round 1は
-     * PR作成前に行われることが多くprovider API呼び出しはできないため、provider
-     * 観測ではなくローカル観測を信頼点にする）へ拘束する値、REV-02是正）が
-     * **完全一致**することを要求する。この完全一致判定自体は`buildReviewRoundDraft`
-     * を経由したかどうかに関わらず、round 1のJSON入力を直接組み立てて
-     * `review round --file=... --apply`した場合でも、merge時点でここが独立に
-     * 再検証するため回避できない（Step 10 round 4独立reviewのMedium指摘、
-     * `buildReviewRoundDraft`側の早期拒否が唯一の強制点ではないことを確認済み）。
-     *
-     * **暫定guard（owner決裁、2026-09-30）**: REV-01（review sessionが最終H_implの
-     * exact diffを実際に検分したことを一般に保証できない問題）はIssue #1544で
-     * 別途扱う。それまでの間、本Issueでは「最初にfull reviewした実装から1byteも
-     * 変わっていないsessionだけがmergeできる」という強い制約を課すことで、
-     * round・reanchorの構造を経由するあらゆる迂回を一括して閉じる。具体的には
-     * `effective H_impl`が`anchor.initialHeadSha`・唯一のcounted roundの
-     * `candidateHeadSha`と完全一致し、`countedRounds(session)===1`
-     * （`followOnly`・`recordLayerOnly`は含まない）、`session.status==="converged"`、
-     * かつ`actualAuditBase..H_impl`の再計算diff digestが`anchor.initialDiffDigest`
-     * と完全一致することを要求する。この制約下では、round 2・round 3型の
-     * 「複数roundを経由した回避」はcounted round数の不一致で構造的に成立しない。
-     * round 3型の「hunk単位の巻き戻し」を実際に閉じているのは、上のdigest再計算
-     * （条件(5)）ではなく`actualAuditBase`の完全一致（条件(1)）そのものである。
-     * `M`（既定branchの前進commit）を実際にH_implへ組み込まない限り攻撃は
-     * 成立せず、組み込んだ時点で`merge-base(H_impl,M)=M`が`session.anchor.diffBaseSha`
-     * と一致しないため、条件(5)より先に条件(1)が発火する（REQ-WF-005の実測、
-     * `SCN-MERGE-BASE-AUDIT-010`）。既定branchが前進した
-     * 場合は、この制約下ではreviewed-forwardでの追随を許可せず、新しいcurrent
-     * H_implを起点に新しいreview sessionを作り直すことを要求する（usabilityを
-     * 犠牲にしてでも健全性を優先する、Issue #1544解決までの暫定運用）。
+     * **`actualAuditBase`（`resolveUniqueMergeBase`でGit objectから独立に計算した実際の
+     * merge-base）を、申告値ではなくsessionの判定へ渡す。** 旧形式session（検分identityを
+     * 持たないround）は暫定guardの5条件（owner決裁2026-09-30、`provisionalReviewGuardFailure`、
+     * 変更前の文言）で判定する。新形式sessionは5条件が成立すれば認可し、不成立ならround記録と
+     * Gitからtransition鎖（Issue #1544、TERM-1544-04）を再導出し、導出基点と`actualAuditBase`の
+     * 完全一致と、すべての内容変化の検分identityによる被覆を要求する。hunk単位の巻き戻し
+     * （`SCN-MERGE-BASE-AUDIT-010`）は、巻き戻しを含むtransitionの未被覆か基点不一致で拒否される。
      *
      * **設置位置はここに限る。** `implementationCommitSha`は`reviewed`取得後にしか
      * 存在しないため、これより前には置けない。`observeMergeReviewEvidence`関数の
@@ -1731,20 +1727,38 @@ function inspectAuthorizedPullRequestMerge(input) {
     if (!isReviewSessionConverged(auditReviewSession))
         throw new Error(unconvergedReviewSessionDiagnostic(auditReviewSession));
     const effectiveImplementationHeadSha = reviewed.reviewEvidence.implementationCommitSha;
-    if (actualAuditBase !== auditReviewSession.anchor.diffBaseSha)
-        throw new Error(`実際のmerge-base(${actualAuditBase})がreview sessionの比較基点(${auditReviewSession.anchor.diffBaseSha})と一致しません。既定branchへの追随はreviewed-forwardではなく、実際のmerge-baseを起点とする新しいreview sessionのfull-scope reviewで行ってください（Issue #1495暫定guard、REV-01是正はIssue #1544で別途扱う）。current H_implで収束済みなら\`review replace --staging=<staging> --apply\`でreview sessionを置換し、round 1からやり直してください`);
-    if (effectiveImplementationHeadSha !== auditReviewSession.anchor.initialHeadSha)
-        throw new Error(`実効H_impl(${effectiveImplementationHeadSha})がreview sessionの初回H_impl(${auditReviewSession.anchor.initialHeadSha})と一致しません。最初にfull reviewした実装から1byteでも変わった場合、このsessionではmergeできません。新しいcurrent H_implを起点にfull review sessionを作り直してください（Issue #1495暫定guard）。current H_implで収束済みなら\`review replace --staging=<staging> --apply\`でreview sessionを置換し、round 1からやり直してください`);
-    const auditCountedRounds = countedRounds(auditReviewSession);
-    if (auditCountedRounds !== 1)
-        throw new Error(`review sessionのcounted round数(${auditCountedRounds})が1ではありません。暫定guardは単一のfull-scope round（round 1）だけで収束したsessionだけを受理します（Issue #1495暫定guard、Issue #1544解決まで）。current H_implで収束済みなら\`review replace --staging=<staging> --apply\`でreview sessionを置換し、round 1からやり直してください`);
-    const singleCountedRound = auditReviewSession.rounds.find((record) => !record.followOnly && !record.recordLayerOnly);
-    if (singleCountedRound === undefined ||
-        singleCountedRound.candidateHeadSha !== effectiveImplementationHeadSha)
-        throw new Error("review sessionの唯一のcounted roundのcandidateHeadShaが実効H_implと一致しません");
-    const recomputedAuditDiff = observeReviewDiff(input.root, actualAuditBase, effectiveImplementationHeadSha);
-    if (recomputedAuditDiff.digest !== auditReviewSession.anchor.initialDiffDigest)
-        throw new Error(`実際の監査範囲(${actualAuditBase}..${effectiveImplementationHeadSha})から再計算したdiff digest(${recomputedAuditDiff.digest})がreview sessionの初回diff digest(${auditReviewSession.anchor.initialDiffDigest})と一致しません`);
+    const provisionalFailure = provisionalReviewGuardFailure({
+        root: input.root,
+        session: auditReviewSession,
+        actualAuditBase,
+        effectiveImplementationHeadSha,
+    });
+    /**
+     * **旧形式sessionは暫定guardの5条件を変更前の文言で評価する（FR-10）。** 新形式sessionは
+     * 5条件が成立すれば高速経路で認可し（FR-11）、不成立ならreview再利用判定（Issue #1544）を
+     * 検証済み`authority.defaultBranchTipOid`・`actualAuditBase`・実効`H_impl`で行い、
+     * 証跡の比較基点が`actualAuditBase`と一致することを要求する（FR-09、TB-1544-04）。
+     * 2回目の`rechecked`評価でも同じ判定をGitから再計算する。
+     */
+    if (provisionalFailure !== undefined) {
+        if (isLegacyReviewSession(auditReviewSession))
+            throw new Error(provisionalFailure);
+        const verdict = judgeReviewReuseAtMerge({
+            root: input.root,
+            session: auditReviewSession,
+            tipSha: authority.defaultBranchTipOid,
+            actualAuditBase,
+            effectiveHeadSha: effectiveImplementationHeadSha,
+        });
+        if (verdict.verdict !== "reusable")
+            throw new Error(formatReuseDiagnostic(verdict, {
+                sessionId: auditReviewSession.sessionId,
+                actualAuditBase,
+                effectiveHeadSha: effectiveImplementationHeadSha,
+            }));
+        if (reviewed.evidenceBaseSha !== actualAuditBase)
+            throw new Error(`review証跡の比較基点(${reviewed.evidenceBaseSha})がactualAuditBase(${actualAuditBase})と一致しません。実効H_impl ${effectiveImplementationHeadSha} でverify run --base=${actualAuditBase}を実行し、review export --base=${actualAuditBase}で証跡を作り直してpushし、pr reanchorで固定し直してください`);
+    }
     const independenceMode = resolveReviewIndependence(input.trustedSet.policy);
     const adminCandidate = input.allowMerged !== true &&
         independenceMode === "context-isolated" &&

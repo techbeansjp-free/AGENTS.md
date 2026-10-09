@@ -387,7 +387,7 @@ Feature: 公開CLIでワークフローStepを強制する
     Then ワークフローStep公開CLI検査は期待結果になる
 
   @issue-1495
-  Scenario: SCN-MERGE-BASE-AUDIT-003 pr mergeは正当なreviewed-forward follow-mainであっても暫定guard下では比較基点不一致で拒否する
+  Scenario: SCN-MERGE-BASE-AUDIT-003 pr mergeはPRの変更と交差しない正当なfollow-mainをreview再利用条件で許可する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-MERGE-BASE-AUDIT-003"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる

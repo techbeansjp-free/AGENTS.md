@@ -1,7 +1,7 @@
 @e2e
 Feature: 同一PRでのreview session置換と外部merge取り込み
 
-  Scenario: SCN-E2E-REVREPLACE-001 暫定guardに拒否された収束済みPRを同一PRのままreview session置換で配送する
+  Scenario: SCN-E2E-REVREPLACE-001 既定branch追随後の収束済みPRを同一PRのままreview session置換で配送する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-REVREPLACE-001"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる
@@ -26,7 +26,7 @@ Feature: 同一PRでのreview session置換と外部merge取り込み
       | 中断した置換の旧sessionがconvergedである |
       | 中断した置換記録の値が旧sessionと一致する |
 
-  Scenario: SCN-E2E-REVREPLACE-003 置換を組み合わせても暫定guardの攻撃面を開かない
+  Scenario: SCN-E2E-REVREPLACE-003 置換後sessionのround 2はreview再利用条件で判定する
     Given ワークフローStep公開CLIの隔離環境がある
     When "SCN-E2E-REVREPLACE-003"のE2E検査を実行する
     Then ワークフローStep公開CLI検査は期待結果になる

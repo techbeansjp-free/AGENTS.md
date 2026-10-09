@@ -118,7 +118,7 @@ import {
   writeTrustedPolicySet,
 } from "../support/trusted-verification-policy.js";
 
-interface WorkflowStepWorld extends WorkflowWorld {
+export interface WorkflowStepWorld extends WorkflowWorld {
   workflowCheckPassed: boolean;
 }
 
@@ -1595,7 +1595,11 @@ function completeAdvanceRequirement(staging: string): void {
   );
 }
 
-function executeCli(args: string[], cwd = process.cwd(), env = process.env) {
+export function executeCli(
+  args: string[],
+  cwd = process.cwd(),
+  env = process.env,
+) {
   return spawnSync(
     process.execPath,
     [path.resolve("dist/bin/agent-skill-chain.js"), ...args],
@@ -2256,7 +2260,7 @@ Then("ワークフローStep統合検査は期待結果になる", function () {
   assert.equal(this.workflowCheckPassed, true);
 });
 
-interface PreparedPullRequest {
+export interface PreparedPullRequest {
   root: string;
   staging: string;
   args: string[];
@@ -2431,7 +2435,7 @@ interface DeliveryProviderControl {
   mutateIssueBodyAfterEdit?: "drop-final-lf";
 }
 
-interface PreparedDeliveryCli extends PreparedPullRequest {
+export interface PreparedDeliveryCli extends PreparedPullRequest {
   controlFile: string;
   logFile: string;
   issueBodyFile: string;
@@ -3086,7 +3090,7 @@ function finalizePreparedPullRequest(input: {
   };
 }
 
-function writeDeliveryProviderControl(
+export function writeDeliveryProviderControl(
   prepared: PreparedDeliveryCli,
   patch: Partial<DeliveryProviderControl>,
 ): void {
@@ -3217,14 +3221,16 @@ function advanceDeliveryTrustedMergeMode(
   return advanced;
 }
 
-function deliveryProviderCalls(prepared: PreparedDeliveryCli): string[][] {
+export function deliveryProviderCalls(
+  prepared: PreparedDeliveryCli,
+): string[][] {
   if (!fs.existsSync(prepared.logFile)) return [];
   const source = fs.readFileSync(prepared.logFile, "utf8").trim();
   if (source === "") return [];
   return source.split("\n").map((line) => JSON.parse(line) as string[]);
 }
 
-function isMergeCall(args: readonly string[]): boolean {
+export function isMergeCall(args: readonly string[]): boolean {
   return args[0] === "pr" && args[1] === "merge";
 }
 
@@ -3374,7 +3380,7 @@ function writeFullStagingArtifacts(staging: string): void {
     );
 }
 
-function prepareDeliveryCli(
+export function prepareDeliveryCli(
   world: WorkflowStepWorld,
   initial: Partial<DeliveryProviderControl> = {},
   mergeMode: FixtureMergeMode = "automatic",
@@ -4059,7 +4065,7 @@ function deliveryPersistence(prepared: PreparedDeliveryCli): readonly string[] {
   );
 }
 
-function createDeliveryPullRequest(prepared: PreparedDeliveryCli) {
+export function createDeliveryPullRequest(prepared: PreparedDeliveryCli) {
   const result = executeCli(
     [...prepared.args, "--apply", "--authorize=approved"],
     prepared.root,
@@ -4489,7 +4495,7 @@ function deliveryMergeArgs(
   ];
 }
 
-function executeDeliveryMerge(
+export function executeDeliveryMerge(
   prepared: PreparedDeliveryCli,
   overrides: {
     pr?: number;
@@ -4597,7 +4603,7 @@ interface ExternalMergeOutput {
   deliveryState?: DeliveryState;
 }
 
-function stagingBytes(staging: string): string {
+export function stagingBytes(staging: string): string {
   const files: string[] = [];
   const walk = (directory: string): void => {
     for (const name of fs.readdirSync(directory).sort()) {
@@ -5161,7 +5167,7 @@ function runExternalMergeTrustedPolicy(
 }
 
 /** fixture repositoryでgitを実行し、失敗を名指しする（Issue #1569）。 */
-function fixtureGit(root: string, args: string[]): string {
+export function fixtureGit(root: string, args: string[]): string {
   const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
   assert.equal(result.status, 0, `git ${args.join(" ")}\n${result.stderr}`);
   return result.stdout.trim();
@@ -5174,7 +5180,7 @@ function sha256File(file: string): string {
     .digest("hex");
 }
 
-interface ReplacementFixture {
+export interface ReplacementFixture {
   prepared: PreparedDeliveryCli;
   branch: string;
   baseSha: string;
@@ -5197,7 +5203,7 @@ function boundReplacementFixture(world: WorkflowStepWorld): ReplacementFixture {
 
 /**
  * 既定branch前進をmergeで取り込み、旧sessionのround 2・post-PR intake・reviewed-forwardを
- * 経たPR（SCN-MERGE-BASE-AUDIT-003と同じ形）。暫定guardは比較基点不一致で拒否する。
+ * 経たPR（SCN-MERGE-BASE-AUDIT-003と同じ形）。追随は`followOnly` roundとして記録される。
  */
 function followedMainReplacementFixture(
   world: WorkflowStepWorld,
@@ -5262,7 +5268,7 @@ function followedMainReplacementFixture(
   };
 }
 
-function commitReviewEvidence(
+export function commitReviewEvidence(
   prepared: PreparedDeliveryCli,
   baseSha: string,
   implementationHeadSha: string,
@@ -5289,7 +5295,7 @@ function commitReviewEvidence(
   return fixtureGit(prepared.root, ["rev-parse", "HEAD"]);
 }
 
-function recordPostPrIntake(
+export function recordPostPrIntake(
   prepared: PreparedDeliveryCli,
   roundDigest: string,
 ): void {
@@ -5310,7 +5316,7 @@ function recordPostPrIntake(
   assert.equal(intake.status, 0, intake.stdout + intake.stderr);
 }
 
-function pointProviderAt(
+export function pointProviderAt(
   prepared: PreparedDeliveryCli,
   baseSha: string,
   headSha: string,
@@ -5333,7 +5339,7 @@ function pointProviderAt(
   });
 }
 
-function executeReanchor(
+export function executeReanchor(
   prepared: PreparedDeliveryCli,
   newHead: string,
   newBase: string,
@@ -5386,7 +5392,9 @@ interface ReplacedOutput {
   };
 }
 
-function applyReviewReplace(fixture: ReplacementFixture): ReplacedOutput {
+export function applyReviewReplace(
+  fixture: ReplacementFixture,
+): ReplacedOutput {
   const applied = executeReviewReplace(fixture.prepared, "--apply");
   assert.equal(applied.status, 0, applied.stdout + applied.stderr);
   const output = JSON.parse(applied.stdout) as ReplacedOutput;
@@ -5460,7 +5468,7 @@ function replaceAndReconverge(fixture: ReplacementFixture): string {
   return finalHead;
 }
 
-function executeDeliveryMergePreview(prepared: PreparedDeliveryCli) {
+export function executeDeliveryMergePreview(prepared: PreparedDeliveryCli) {
   return executeCli(
     deliveryMergeArgs(prepared).map((argument) =>
       argument === "--apply" ? "--dry-run" : argument,
@@ -5470,16 +5478,16 @@ function executeDeliveryMergePreview(prepared: PreparedDeliveryCli) {
   );
 }
 
-const REVIEW_REPLACE_GUIDE =
-  /`review replace --staging=<staging> --apply`でreview sessionを置換し、round 1からやり直してください/u;
-
 function runReviewReplaceAcceptance(world: WorkflowStepWorld): void {
   const fixture = followedMainReplacementFixture(world);
   const { prepared } = fixture;
   const staging = prepared.staging;
-  const rejected = executeDeliveryMergePreview(prepared);
-  assert.notEqual(rejected.status, 0);
-  assert.match(rejected.stdout + rejected.stderr, REVIEW_REPLACE_GUIDE);
+  const beforeReplace = executeDeliveryMergePreview(prepared);
+  assert.equal(
+    beforeReplace.status,
+    0,
+    beforeReplace.stdout + beforeReplace.stderr,
+  );
 
   const sessionFile = path.join(staging, "review-session.json");
   const sessionDigest = sha256File(sessionFile);
@@ -6108,7 +6116,7 @@ function rejectMalformedSessionReplacementRecord(
   refreshStoredStagingDigest(prepared.staging);
 }
 
-/** SCN-E2E-REVREPLACE-003前半: 置換後sessionのround 2（部分的revert）は暫定guardが拒否する。 */
+/** SCN-E2E-REVREPLACE-003前半: 置換後sessionのround 2（部分的revert）はそのtransitionの検分で認可される。 */
 function runReviewReplaceRoundTwo(world: WorkflowStepWorld): void {
   const fixture = boundReplacementFixture(world);
   const { prepared } = fixture;
@@ -6151,19 +6159,13 @@ function runReviewReplaceRoundTwo(world: WorkflowStepWorld): void {
   );
   assert.equal(forwarded.status, 0, forwarded.stdout + forwarded.stderr);
   assert.notEqual(revertFinal, finalHead);
-  const rejected = executeDeliveryMergePreview(prepared);
-  assert.notEqual(rejected.status, 0);
-  const output = rejected.stdout + rejected.stderr;
-  assert.match(
-    output,
-    /実効H_impl\(.*\)がreview sessionの初回H_impl\(.*\)と一致しません/u,
-  );
-  assert.match(output, REVIEW_REPLACE_GUIDE);
+  const previewed = executeDeliveryMergePreview(prepared);
+  assert.equal(previewed.status, 0, previewed.stdout + previewed.stderr);
 }
 
 /**
- * SCN-E2E-REVREPLACE-003: 置換後sessionが同じH_implのままround 2で収束しても、
- * 暫定guardはcounted round数で拒否し、置換手順を名指しする（INV-02）。
+ * SCN-E2E-REVREPLACE-003: 置換後sessionが同じH_implのままround 2で収束した場合、
+ * round 2の空transitionは鎖を連続させるだけでreview再利用条件を満たす（Issue #1544）。
  */
 function runReviewReplaceSameHeadRoundTwo(world: WorkflowStepWorld): void {
   const fixture = boundReplacementFixture(world);
@@ -6233,14 +6235,8 @@ function runReviewReplaceSameHeadRoundTwo(world: WorkflowStepWorld): void {
     "--apply",
   );
   assert.equal(reanchored.status, 0, reanchored.stdout + reanchored.stderr);
-  const rejected = executeDeliveryMergePreview(prepared);
-  assert.notEqual(rejected.status, 0);
-  const output = rejected.stdout + rejected.stderr;
-  assert.match(
-    output,
-    /review sessionのcounted round数\(2\)が1ではありません/u,
-  );
-  assert.match(output, REVIEW_REPLACE_GUIDE);
+  const previewed = executeDeliveryMergePreview(prepared);
+  assert.equal(previewed.status, 0, previewed.stdout + previewed.stderr);
 }
 
 /**
@@ -7686,20 +7682,15 @@ if (exact(["auth", "status"])) {
        * 固定済み`create.headSha`（`H_final0`）にはAMDが無いため、固定値のまま
        * 検査すると計画変更記録の不一致としてmerge前に拒否される。
        *
-       * **Issue #1495暫定guard（Issue #1544解決まで）により、`pr merge --dry-run`の
-       * 最終結果は拒否へ変わる。** `assertWorkflowReadyForDelivery`
+       * **`pr merge --dry-run`はreview再利用条件（Issue #1544）で認可される。**
+       * `assertWorkflowReadyForDelivery`
        * （`inspectAuthorizedPullRequestMerge`より前に呼ばれる）は`deriveEffectiveHead`が
        * 導出した実効HEAD（reanchor後の`H_final1`／`H_impl1`）で計画凍結を検査するため、
        * ここまでは今までどおり成功し続ける——固定済み`H_final0`基準の古い計画凍結
        * 不一致（`05_計画変更\.mdがworktreeと一致しません`・`計画文書が封印と一致しません`）は
        * 出ない。これが#1531の保証（本scenarioの本来の目的）であり、このscenarioは
-       * それを弱めずに検証し続ける。**その後**、`inspectAuthorizedPullRequestMerge`の
-       * 暫定guardが`H_impl1 !== session.anchor.initialHeadSha`（round 1の元々の
-       * `H_impl0`）を検出して拒否する——`reviewed-forward`はsessionの`H_impl`を
-       * 前進させる経路である以上、暫定guard下では常にこの条件に触れる。この
-       * scenarioが検証する#1531の保証そのものは無傷だが、「reanchorされたHEADが
-       * mergeまで到達する」full end-to-end成功は、#1544が`reviewed-forward`の
-       * 健全性を回復するまで一時的に失われる（本file、Issue #1544参照）。
+       * それを弱めずに検証し続ける。round 2がH_impl0→H_impl1のtransitionを検分して
+       * いるため、reanchorされたHEADはmerge認可まで到達する。
        */
       const prepared = prepareDeliveryCli(
         this,
@@ -7896,29 +7887,11 @@ if (exact(["auth", "status"])) {
       assert.doesNotMatch(output, /05_計画変更\.mdがworktreeと一致しません/u);
       assert.doesNotMatch(output, /計画文書が封印と一致しません/u);
       /**
-       * **Issue #1495暫定guardにより、#1531の保証を通過した後でmergeそのものは
-       * 拒否される。** `reviewed-forward`はH_implを前進させる経路であり、暫定guard
-       * （Issue #1544解決まで）は`session.anchor.initialHeadSha`（round 1の元々の
-       * H_impl）からの1byteの変化も拒否する。ここでは新gateのH_impl不一致条件が
-       * 実際に発火したことを、診断文言そのものを名指しして確認する——round-count・
-       * 比較基点・digestの条件と取り違えていないことの証拠。
+       * **round 2がH_impl0→H_impl1のtransitionを検分しているため、review再利用条件
+       * （Issue #1544）で認可される。** 暫定guardの「初回H_implから1byteでも変われば拒否」は
+       * 新形式sessionには適用しない。
        */
-      assert.notEqual(previewed.status, 0, output);
-      assert.match(
-        output,
-        /実効H_impl\(.*\)がreview sessionの初回H_impl\(.*\)と一致しません/u,
-        "Issue #1495暫定guardのH_impl不一致診断が出ていません",
-      );
-      assert.doesNotMatch(
-        output,
-        /比較基点/u,
-        "H_impl不一致ではなく比較基点(base)不一致で拒否されています",
-      );
-      assert.doesNotMatch(
-        output,
-        /counted round数/u,
-        "H_impl不一致ではなくround数不一致で拒否されています",
-      );
+      assert.equal(previewed.status, 0, output);
       assert.equal(
         deliveryProviderCalls(prepared).filter(isMergeCall).length,
         0,
@@ -8220,9 +8193,8 @@ if (exact(["auth", "status"])) {
     }
     case "SCN-MERGE-BASE-AUDIT-003": {
       /**
-       * **正当に見えるreviewed-forward follow-mainが、暫定guard下では拒否される
-       * ことのドキュメント化（Issue #1495、Issue #1544が解決するまでの既知の
-       * 使い勝手上のcost。バグではない）。** 既定branchが本当にT→M
+       * **PRの変更と交差しない正当なfollow-mainは、review再利用条件（Issue #1544）で
+       * 認可される。** 既定branchが本当にT→M
        * （`downstream-note.txt`を追加）へ前進し、boundしたH_final(H0)へMを実際に
        * mergeする（SCN-E2E-WFSTEP-072と同型: H0の直接の子として前進commitを作る）。
        * round 2をGitから実測して記録し、新review evidenceは`baseSha=M`・
@@ -8233,22 +8205,9 @@ if (exact(["auth", "status"])) {
        * `merge-base(forwardHead,M)=M`が宣言済みbaseSha(M)と一致するため、これ自体は
        * 引き続き通過する。
        *
-       * **しかしIssue #1495暫定guardは`pr merge`で別に拒否する。** `session.anchor`は
-       * round 1で固定された不変値（`diffBaseSha=T`・`initialHeadSha=H_impl0`）であり、
-       * round 2やreanchorでは変わらない（`advanceReviewSession`が
-       * `previous.sessionId !== sessionId`でanchor変更そのものを拒否する）。暫定guardは
-       * `actualAuditBase`（実際のmerge-base）を`session.anchor.diffBaseSha`と、
-       * `effectiveImplementationHeadSha`を`session.anchor.initialHeadSha`と、それぞれ
-       * 厳密一致で要求する——round 2を経た時点でどちらも原理的に成立しなくなる
-       * （実測: `actualAuditBase=merge-base(forwardHead,M)=M`だが
-       * `anchor.diffBaseSha=T`であり、比較基点不一致が最初に発火する。base側の検査が
-       * H_impl不一致より先に評価されるため、ここで拒否理由は比較基点不一致になる。
-       * これはSCN-E2E-WFSTEP-072——既定branchが動かない、H_implだけが前進する
-       * ケース——でH_impl不一致が先に発火するのと対照的である）。
-       *
-       * **この暫定guardが取引するusability costを、成功ではなく拒否として記録する。**
-       * 置き換えとなる正当な経路（既定branch前進後は新しいreview sessionを作り
-       * 直す）はSCN-MERGE-BASE-AUDIT-012が証明する。
+       * `pr merge`はtransition鎖（Issue #1544）を再導出し、clean追随で導出基点がMへ
+       * 前進したことと`actualAuditBase=M`の一致、追随の非交差を確かめて認可する。
+       * session置換を経る経路はSCN-MERGE-BASE-AUDIT-012が証明する。
        */
       const prepared = prepareDeliveryCli(this);
       createDeliveryPullRequest(prepared);
@@ -8375,40 +8334,18 @@ if (exact(["auth", "status"])) {
         "fixtureがreviewed-forward経路として分類されていません",
       );
       /**
-       * **Issue #1495暫定guardは、この正当なfollow-mainを拒否する。** 実測
-       * （このscenarioのfixtureで確認済み）: `actualAuditBase`
-       * （`merge-base(forwardHead, M)=M`）が`session.anchor.diffBaseSha`（round 1で
-       * 固定されたT）と一致しないため、比較基点不一致が最初に発火する——H_impl
-       * 不一致・round数不一致・digest不一致のいずれでもない。
+       * **追随mergeは`followOnly` roundとして記録され（第1親は証跡だけのsuffix）、
+       * 導出基点はMへ前進して`actualAuditBase`（`merge-base(forwardHead, M)=M`）と一致する。**
+       * 既定branch側の`downstream-note.txt`はPRの変更・隣接範囲と交差しない。
        */
       const requested = executeDeliveryMerge(prepared);
-      assert.notEqual(
+      assert.equal(
         requested.status,
         0,
-        "暫定guard下でreviewed-forward follow-mainがmergeを通過しました（Issue #1544解決までは意図的に拒否されるはず）",
-      );
-      const output = requested.stdout + requested.stderr;
-      assert.match(
-        output,
-        /実際のmerge-base\(.*\)がreview sessionの比較基点\(.*\)と一致しません/u,
-        "Issue #1495暫定guardの比較基点不一致診断が出ていません",
-      );
-      assert.doesNotMatch(
-        output,
-        /実効H_impl\(.*\)がreview sessionの初回H_impl/u,
-        "比較基点不一致ではなくH_impl不一致で拒否されています",
-      );
-      assert.doesNotMatch(
-        output,
-        /counted round数/u,
-        "比較基点不一致ではなくround数不一致で拒否されています",
+        `PRの変更と交差しない既定branch追随がreview再利用条件で認可されていません: ${requested.stdout + requested.stderr}`,
       );
       const mergeCalls = deliveryProviderCalls(prepared).filter(isMergeCall);
-      assert.equal(
-        mergeCalls.length,
-        0,
-        "拒否前にmerge要求をproviderへ送っています",
-      );
+      assert.equal(mergeCalls.length, 1);
       break;
     }
     case "SCN-MERGE-BASE-AUDIT-008": {
@@ -8965,10 +8902,10 @@ if (exact(["auth", "status"])) {
     }
     case "SCN-MERGE-BASE-AUDIT-012": {
       /**
-       * **暫定guardが指し示す置き換え経路そのものの回帰確認（Issue #1495、
+       * **review session置換経路そのものの回帰確認（Issue #1495、
        * AC-003の裏面）。** SCN-MERGE-BASE-AUDIT-003と同じく既定branchの前進を
-       * mergeで取り込み、旧sessionのround 2とreviewed-forwardを経たPRは
-       * 暫定guardで拒否される。暫定guardの診断が案内する同一PR・同一stagingでの
+       * mergeで取り込み、追随roundとreviewed-forwardを経たPRはreview再利用条件で
+       * 認可される（Issue #1544）。そのPRでも同一PR・同一stagingでの
        * review session置換（Issue #1569、TERM-1569-01）を公式経路で実行し、
        * 実際のmerge-baseを比較基点とするround 1で収束させると`pr merge`が許可される。
        *
@@ -8978,12 +8915,8 @@ if (exact(["auth", "status"])) {
        * `session-replacement`だけで行う。
        */
       const fixture = followedMainReplacementFixture(this);
-      const rejected = executeDeliveryMerge(fixture.prepared);
-      assert.notEqual(rejected.status, 0);
-      assert.match(
-        rejected.stdout + rejected.stderr,
-        /実際のmerge-base\(.*\)がreview sessionの比較基点\(.*\)と一致しません/u,
-      );
+      const previewed = executeDeliveryMergePreview(fixture.prepared);
+      assert.equal(previewed.status, 0, previewed.stdout + previewed.stderr);
       replaceAndReconverge(fixture);
       const session = readStoredReviewSession(fixture.prepared.staging);
       assert.equal(session?.anchor.diffBaseSha, fixture.baseSha);
