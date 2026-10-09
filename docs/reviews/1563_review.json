@@ -3,16 +3,16 @@
   "issue": 1563,
   "observed": {
     "baseSha": "4ef8036f6bb36ccc05eefcf68a2628a6e8a5ddc3",
-    "implementationHeadSha": "97085ed1a0a68c7a414e6c15f5909df03d224f01",
-    "diffDigest": "0843efbd5b4dc642e4f8536804b10007771a5af55c7a5b2a1e9e6d9c2f916ce8",
+    "implementationHeadSha": "c1d6d4a1916839eeb15ab9e61129769e7d66cd4a",
+    "diffDigest": "4da4ea15145b750fa825104f8cda7984836b43894e8ef8ab3e11c5a492d3d32d",
     "session": {
-      "sessionId": "e164350942d5a87becc95916de79790cb5d9688fe03c542b2bf1b113d30281ea",
-      "latestRoundDigest": "30e38ab4191e1c7be78d1dfc82fc4f8975c2b740f7ed9e75d9e4c6162238249f",
+      "sessionId": "c65f04fc0f3920692ef805f3454c4c4059bfdab82425664e3aea056461787549",
+      "latestRoundDigest": "e1e786fe4eaa9241516fe2b7aac63a97d08b7a988c4025d8f75fdff81cd9ddb9",
       "status": "converged",
       "countedRounds": 2
     },
     "impact": {
-      "digest": "8678f9b8fb732f1fc91f9db19411bb6b10b856b24a5f4f893b2627c3ebe0c162",
+      "digest": "f5d46387faab25aa1b88b1452e689fc825d231a69345e2f4d39491fafa68150f",
       "mode": "full"
     },
     "verification": [
@@ -23,62 +23,94 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "97085ed1a0a68c7a414e6c15f5909df03d224f01",
-        "impactDigest": "8678f9b8fb732f1fc91f9db19411bb6b10b856b24a5f4f893b2627c3ebe0c162",
-        "finishedAt": "2026-10-08T23:58:07.846Z",
-        "recordDigest": "5700c291785a929fffce6a3757051bdfdd9f4fb0e2030ced90f9040ca7a50f66"
+        "headSha": "c1d6d4a1916839eeb15ab9e61129769e7d66cd4a",
+        "impactDigest": "f5d46387faab25aa1b88b1452e689fc825d231a69345e2f4d39491fafa68150f",
+        "finishedAt": "2026-10-09T00:36:56.506Z",
+        "recordDigest": "ab2bfa66009ec47a5fcfbee7fa8ff26ba5470ceab52a8d4c6ff1550d9344d2fe"
       }
     ]
   },
   "findings": [
     {
-      "id": "FR1-FOCUSED-PROMPT-NO-CONTRACT-IDS",
-      "severity": "Medium",
-      "status": "valid",
-      "relation": "improvement",
-      "path": "src/adapters/delegated-review-launch.ts",
-      "contractId": null
-    },
-    {
-      "id": "FR1-LEGACY-REOBSERVED-ESCAPE",
+      "id": "R1-1",
       "severity": "Medium",
       "status": "resolved",
       "relation": "acceptance-violation",
-      "path": "src/domain/review-convergence.ts",
-      "contractId": "AC-08"
+      "path": "test/steps/delegated-review-focused.steps.ts",
+      "contractId": "AC-09"
     },
     {
-      "id": "FR1-PENDING-GUIDANCE-MERGE-DEADEND",
+      "id": "R1-2",
       "severity": "Medium",
       "status": "valid",
       "relation": "improvement",
-      "path": "src/domain/review-convergence.ts",
-      "contractId": null
+      "path": "src/adapters/supplemental-review-collect.ts",
+      "contractId": "AC-04"
     },
     {
-      "id": "FR1-TRACE-DRIFT",
+      "id": "R1-3",
       "severity": "Low",
       "status": "valid",
       "relation": "improvement",
-      "path": "docs/specs/15_要件追跡/01_変更履歴.md",
-      "contractId": null
+      "path": "test/steps/review-conformance.steps.ts",
+      "contractId": "AC-08"
+    },
+    {
+      "id": "R1-4",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/adapters/workflow-handoff.ts",
+      "contractId": "AC-08"
+    },
+    {
+      "id": "R1-5",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/cli-usage.ts",
+      "contractId": "AC-02"
+    },
+    {
+      "id": "R1-6",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/adapters/supplemental-review-collect.ts",
+      "contractId": "AC-05"
+    },
+    {
+      "id": "R1-7",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "test/features/integration/review-conformance.feature",
+      "contractId": "AC-08"
     },
     {
       "id": "R2-1",
       "severity": "Low",
       "status": "valid",
       "relation": "improvement",
-      "path": "docs/specs/02_要件/01_ワークフロー要件.md",
-      "contractId": "AC-08"
+      "path": "test/steps/review-evidence-cli.steps.ts",
+      "contractId": "AC-09"
+    },
+    {
+      "id": "R2-2",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/adapters/review-session.ts",
+      "contractId": "AC-09"
     }
   ],
   "unresolvedCriticalHigh": [],
   "verdict": "approved",
   "declared": {
-    "reviewer": "claude-code:subagent/reviewer-round2-postpr-1563",
+    "reviewer": "claude-code:subagent/reviewer-replaced-round2-1563",
     "implementer": "codex-review-fastpath-workers",
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "632c0d9bb900c463c579df7ce719f61cb4b16128042bd274138bbc3dbbe7903a"
+  "evidenceDigest": "785f4565a5406c1d76be9a6bf784b6dcb1eff4f912b29b1c5610f7cc005f36eb"
 }
