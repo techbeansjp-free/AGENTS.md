@@ -11,7 +11,7 @@ import {
   type StepDefinitionFileSummary,
 } from "../domain/impact-set.js";
 import type { ReviewAdjacentScope } from "../domain/review-convergence.js";
-import { isEvidenceOnlyPath } from "../domain/review.js";
+import { isReviewEvidenceArtifactPath } from "../domain/review-evidence.js";
 import { semanticGraphContentHash } from "../domain/semantic-graph.js";
 import {
   DEFAULT_STAGING_LAYOUT,
@@ -209,6 +209,26 @@ function literalReferenceIndex(
   );
 }
 
+/**
+ * **影響の導出から外せるreview証跡か**（Issue #1544 R1544-1-01）。証跡artifactの実在形
+ * （`isReviewEvidenceArtifactPath`）で、かつ`src/`のsourceがfile名を字面で含まないpathだけを
+ * 真にする。allowlist配下でも実在形でないpathや、製品が読む（importする）証跡形のfileは
+ * 外さず、従来どおり導出する（導出できなければ`full`）。
+ */
+function excludableReviewEvidence(
+  path: string,
+  sources: ReadonlyMap<string, string>,
+): boolean {
+  if (!isReviewEvidenceArtifactPath(path)) return false;
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  for (const [file, text] of sources) {
+    if (!file.startsWith("src/") || !isScannedSource(file)) continue;
+    for (const match of text.matchAll(FILE_NAME_TOKEN))
+      if (match[0] === name) return false;
+  }
+  return true;
+}
+
 function packageScripts(
   sources: ReadonlyMap<string, string>,
 ): Record<string, string> {
@@ -240,15 +260,13 @@ export function computeImpactSet(input: {
   baseSha: string;
   headSha: string;
   /**
-   * 影響の導出から外すpath（Issue #1544、追随交差とround transitionの判定でevidence-only pathを
-   * 実装内容に含めないため。INV-07）。`changeDigest`は除外前の全diffのままにする。
+   * review証跡artifactを影響の導出から外す（Issue #1544、追随交差とround transitionの判定で
+   * 証跡を実装内容に含めないため。INV-07）。`changeDigest`は除外前の全diffのままにする。
+   * 外すのは`excludableReviewEvidence`が真のpathだけである。
    */
-  excludePath?: (path: string) => boolean;
+  excludeReviewEvidence?: boolean;
 }): ImpactSet {
   const observed = observeReviewDiff(input.root, input.baseSha, input.headSha);
-  const changedPaths = input.excludePath
-    ? observed.changedPaths.filter((path) => !input.excludePath!(path))
-    : observed.changedPaths;
   let graph:
     | {
         status: "built";
@@ -271,6 +289,12 @@ export function computeImpactSet(input: {
       reason: error instanceof Error ? error.message : String(error),
     };
   }
+  const changedPaths =
+    input.excludeReviewEvidence === true && graph.status === "built"
+      ? observed.changedPaths.filter(
+          (path) => !excludableReviewEvidence(path, sources),
+        )
+      : observed.changedPaths;
   const graphFiles =
     graph.status === "built"
       ? graph.snapshot.nodes
@@ -335,7 +359,7 @@ export function computeImpactSet(input: {
  * 不一致を拒否する。**呼び出し側が任意のGraph Evidence digestを注入しても
  * 隣接範囲として受理されない。**
  *
- * **evidence-only pathは影響の導出から外す**（Issue #1544 INV-07）。review証跡は実装内容でも
+ * **review証跡artifactは影響の導出から外す**（Issue #1544 INV-07）。review証跡は実装内容でも
  * 検分identityの対象でもないため、PR作成後の是正transitionが証跡commitを含むだけで
  * `full`へ倒さない。`impact.changeDigest`は除外前の全diffのままで、内容の束縛は弱めない。
  * 除外後に変更pathが残らないtransitionは隣接範囲を持たず、無制限にもしない。
@@ -353,7 +377,7 @@ export function deriveReviewRoundImpact(input: {
     root: input.root,
     baseSha: input.previousHeadSha,
     headSha: input.headSha,
-    excludePath: isEvidenceOnlyPath,
+    excludeReviewEvidence: true,
   });
   const changed = impact.changedPaths.length > 0;
   return {

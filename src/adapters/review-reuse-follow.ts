@@ -1,6 +1,5 @@
 import { git } from "../lib/process.js";
 import type { FollowObservation } from "../domain/review-reuse-follow.js";
-import { isEvidenceOnlyPath } from "../domain/review.js";
 import { computeImpactSet } from "./impact-set.js";
 import { GIT_ENV } from "./review-diff.js";
 import { isDefaultBranchFollowMerge } from "./review-session-store.js";
@@ -73,7 +72,7 @@ export function createFollowObservations(
         root,
         baseSha: secondParent,
         headSha: mergeSha,
-        excludePath: isEvidenceOnlyPath,
+        excludeReviewEvidence: true,
       });
       return {
         mainChanged,

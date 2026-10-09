@@ -516,6 +516,110 @@ function unreviewedAdjacent(world: WorkflowStepWorld): void {
   );
 }
 
+/**
+ * SCN-REVIEW-REUSE-003（R1544-1-01）: evidence allowlist配下の証跡でないfileを、証跡fileを
+ * 残したまま変える。`source`は`src/`がimportする実装（依存先の検分を割り当てる）、
+ * `evidence-name`は証跡の実在形でも`src/`が字面で読むfile、`other-json`は実在形でない
+ * JSON、`graph-unavailable`は意味Graphを構築できず`src/`の字面参照を観測できない状態で、
+ * いずれも影響の導出から外さず全体検分を割り当てる。testが証跡pathを字面で持っても
+ * 証跡は外れる（`src/`だけが製品の読み取り）。割当を外して証跡pathと同じく除いた形へ
+ * 書き換えたroundは`pr merge`が拒否する。
+ */
+function evidencePrefixedImplementation(
+  world: WorkflowStepWorld,
+  shape: "source" | "evidence-name" | "other-json" | "graph-unavailable",
+): void {
+  const helper =
+    shape === "source"
+      ? "docs/reviews/helper.ts"
+      : shape === "other-json"
+        ? "docs/reviews/limits.json"
+        : "docs/reviews/9_review.json";
+  const gate =
+    shape === "source"
+      ? 'import { LIMIT } from "../docs/reviews/helper.js";\n\nexport const gate = (n: number): boolean => n <= LIMIT;\n'
+      : shape === "other-json"
+        ? "export const gate = (n: number): boolean => n <= 1;\n"
+        : 'import data from "../docs/reviews/9_review.json" with { type: "json" };\n\nexport const gate = (n: number): boolean => n <= data.limit;\n';
+  const content = (limit: number): string =>
+    shape === "source"
+      ? `export const LIMIT = ${limit};\n`
+      : `{ "limit": ${limit} }\n`;
+  const prepared = prepare(world, [
+    {
+      [helper]: content(1),
+      "src/limit-gate.ts": gate,
+      "test/support/evidence-path.ts": `export const EVIDENCE = "${EVIDENCE}";\n`,
+      ...(shape === "graph-unavailable"
+        ? { "test/support/broken.ts": "export const = ;\n" }
+        : {}),
+      ...scaffold("src/limit-gate.ts", "import"),
+    },
+  ]);
+  const first = prepared.implementationCommitSha;
+  const fixed = fixRetainingEvidence(prepared, { [helper]: content(100) });
+  const out = path.join(world.temp("asc-1544-round-"), "round.json");
+  const init = executeCli(
+    [
+      "review",
+      "round",
+      `--staging=${prepared.staging}`,
+      `--head=${fixed}`,
+      "--init",
+      `--out=${out}`,
+    ],
+    prepared.root,
+    prepared.env,
+  );
+  assert.equal(init.status, 0, init.stdout + init.stderr);
+  const written = JSON.parse(fs.readFileSync(out, "utf8")) as ReviewRoundInput;
+  assert.deepEqual(written.focus.fixedDiff, [EVIDENCE, helper].sort());
+  const transition = {
+    fromSha: first,
+    diffDigest: observeReviewDiff(prepared.root, first, fixed).digest,
+  };
+  if (shape === "source") {
+    assert.deepEqual(
+      written.focus.adjacentScope.map(({ path: item }) => item),
+      ["src/limit-gate.ts"],
+    );
+    assert.equal(written.focus.adjacentScopeUnbounded, undefined);
+    assert.deepEqual(written.inspection, transition);
+  } else {
+    assert.equal(written.focus.adjacentScopeUnbounded, true);
+    assert.deepEqual(written.inspection, {
+      ...transition,
+      cumulative: {
+        baseSha: prepared.baseSha,
+        scope: "all",
+        diffDigest: observeReviewDiff(prepared.root, prepared.baseSha, fixed)
+          .digest,
+      },
+    });
+  }
+  recordDraft(prepared, fixed);
+  // 証跡pathを除いて変更pathが残らない扱いにした記録（是正前の導出）へ書き換える。
+  rewriteRound(prepared, 2, (round) => {
+    const focus: Record<string, unknown> = {
+      ...round.focus,
+      adjacentScope: [],
+    };
+    delete focus.adjacentScopeUnbounded;
+    return {
+      ...round,
+      focus,
+      inspection: { fromSha: first, diffDigest: round.inspection!.diffDigest },
+    };
+  });
+  deliverAtBase(prepared, fixed);
+  assertNamed(
+    rejected(prepared),
+    "review再利用条件が成立しません",
+    `[依存先未検分] path=${shape === "source" ? "src/limit-gate.ts" : "なし"} transition=${first}..${fixed}`,
+    "全体検分round",
+  );
+}
+
 /** SCN-REVIEW-REUSE-004: 改変の種類ごとに独立したfixtureで観測する。 */
 function tamperedInspection(
   world: WorkflowStepWorld,
@@ -880,6 +984,10 @@ When(
         break;
       case "SCN-REVIEW-REUSE-003":
         unreviewedAdjacent(this);
+        evidencePrefixedImplementation(this, "source");
+        evidencePrefixedImplementation(this, "evidence-name");
+        evidencePrefixedImplementation(this, "other-json");
+        evidencePrefixedImplementation(this, "graph-unavailable");
         break;
       case "SCN-REVIEW-REUSE-004":
         for (const tamper of [

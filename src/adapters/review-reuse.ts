@@ -63,7 +63,7 @@ export function createReuseObserver(
           counter.contentDiffs += 1;
           counter.impactDerivations += 1;
         }
-        // 雛形・記録前照合と同じ導出（evidence-only pathの除外を含む）を使う（02 A-01）。
+        // 雛形・記録前照合と同じ導出（review証跡artifactの除外を含む）を使う（02 A-01）。
         const derived = deriveReviewRoundImpact({
           root,
           previousHeadSha: fromSha,
