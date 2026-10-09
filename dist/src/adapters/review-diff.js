@@ -49,6 +49,50 @@ export function observeReviewDiff(root, baseSha, headSha) {
     };
 }
 /**
+ * diff本文をpath別sectionへ分け、各sectionのsha256を返す（Issue #1544 C6）。sectionは
+ * `diff --git `行で切り、`--name-only -z`のpath列とbyte順の位置で対応付ける（quote対象
+ * pathも名前で照合しない）。件数不一致は例外にし、呼び出し側が`判定不能`へ倒す。
+ */
+export function diffSectionDigests(source, names) {
+    const starts = [];
+    for (let index = 0; index < source.length;) {
+        if (source.startsWith("diff --git ", index))
+            starts.push(index);
+        const next = source.indexOf("\n", index);
+        if (next < 0)
+            break;
+        index = next + 1;
+    }
+    if (starts.length !== names.length)
+        throw new Error(`review diffのsection数(${starts.length})とpath数(${names.length})が一致しません`);
+    return new Map(names.map((name, index) => [
+        name,
+        crypto
+            .createHash("sha256")
+            .update(source.slice(starts[index], starts[index + 1]))
+            .digest("hex"),
+    ]));
+}
+/**
+ * `observeReviewDiff`と同一flagのdiff本文のpath別section digest。各値は
+ * `git diff ... base head -- <path>`単独出力のsha256と一致する。
+ */
+export function observeReviewDiffSections(root, baseSha, headSha) {
+    const range = ["--no-renames", baseSha, headSha, "--"];
+    const source = git([
+        "diff",
+        "--binary",
+        "--full-index",
+        "--no-ext-diff",
+        "--no-textconv",
+        ...range,
+    ], root, { env: GIT_ENV }).stdout;
+    const names = git(["diff", "--name-only", "-z", ...range], root, {
+        env: GIT_ENV,
+    }).stdout.split("\0");
+    return diffSectionDigests(source, names.filter(Boolean));
+}
+/**
  * 2つのcommitから実際の`merge-base`を一意に解決する（Issue #1495、
  * TERM-ASC-1495）。
  *

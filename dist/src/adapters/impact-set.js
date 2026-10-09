@@ -1,12 +1,13 @@
 import { bindFeaturesToStepDefinitions, } from "../domain/cucumber-binding.js";
 import { deriveImpactSet, referenceNames, reviewAdjacentScope, } from "../domain/impact-set.js";
+import { tryParseReviewEvidence } from "../domain/review-evidence.js";
 import { semanticGraphContentHash } from "../domain/semantic-graph.js";
 import { DEFAULT_STAGING_LAYOUT, stagingLayoutFromManifestText, } from "../domain/staging-layout.js";
 import { git } from "../lib/process.js";
 import { isRecord } from "../types.js";
 import { loadTypeScriptCompiler, } from "../lib/typescript-vendor.js";
 import { buildCommitSemanticGraph } from "./repository-graph.js";
-import { observeReviewDiff } from "./review-diff.js";
+import { GIT_ENV, evidenceOnlySuffix, observeReviewDiff, } from "./review-diff.js";
 const ECMASCRIPT_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/u;
 const STEP_FUNCTIONS = new Set([
     "Given",
@@ -250,21 +251,108 @@ export function computeImpactSet(input) {
 /**
  * **review round 2以降の隣接範囲をGitから導出する**（REQ-WF-039）。
  *
- * 雛形作成（`buildReviewRoundDraft`）と記録前検証（`previewReviewRound`）が
+ * 雛形作成（`buildReviewRoundDraft`）と記録前検証（`previewReviewRound`）と、
+ * 再利用判定のtransition観測（`createReuseObserver`。`review round`の検分割当と`pr merge`）が
  * 同じ関数を呼ぶ。記録前検証は提出された`adjacentScope`をこの戻り値と照合し、
  * 不一致を拒否する。**呼び出し側が任意のGraph Evidence digestを注入しても
  * 隣接範囲として受理されない。**
+ *
+ * **影響は`previousHeadSha`に続く前headのreview記録（`reviewRecordSuffix`）の末端から導出する**
+ * （Issue #1544 INV-07、R1544-1-01・R1544-2-01）。PR作成後の是正transitionは前headの証跡commit
+ * （`H_final`）を含むが、その内容は前headを束縛した正規のreview証跡であり実装内容に数えない。
+ * path名・file名の字面や「証跡を誰も読まない」ことの走査では外さない（file名を組み立てて読む
+ * source、走査対象外・上限超過のfileを観測できないため）。suffixより後の変更は、証跡pathや
+ * allowlist配下のfileでも実装内容としてREQ-WF-039どおり導出する（できなければ`full`）。
+ * `impact.changeDigest`・`changedPaths`は`previousHeadSha`からの全diffのままで、内容の束縛は
+ * 弱めない。suffixより後に変更が無いtransitionは隣接範囲を持たず、無制限にもしない。
  */
 export function deriveReviewRoundImpact(input) {
-    const impact = computeImpactSet({
+    const tip = evidenceSuffixTip(input.root, input.previousHeadSha, input.headSha, input.records);
+    const derived = computeImpactSet({
         root: input.root,
-        baseSha: input.previousHeadSha,
+        baseSha: tip,
         headSha: input.headSha,
     });
+    const changed = derived.changedPaths.length > 0;
+    const whole = tip === input.previousHeadSha
+        ? undefined
+        : observeReviewDiff(input.root, input.previousHeadSha, input.headSha);
     return {
-        impact,
-        adjacentScope: reviewAdjacentScope(impact),
-        adjacentScopeUnbounded: impact.mode === "full",
+        impact: whole
+            ? {
+                ...derived,
+                baseSha: input.previousHeadSha,
+                changeDigest: whole.digest,
+                changedPaths: whole.changedPaths,
+            }
+            : derived,
+        adjacentScope: changed ? reviewAdjacentScope(derived) : [],
+        adjacentScopeUnbounded: changed && derived.mode === "full",
     };
+}
+/**
+ * **前headのreview記録だけを足したsuffixのpath**（Issue #1544 INV-07、R1544-2-01・R1544-3-01）。
+ * `fromSha`から`tipSha`までがevidence-only suffix（`evidenceOnlySuffix`）で、そのpathが対象Issue
+ * 自身の証跡path（`review export`の出力先規則の`docs/reviews/<Issue番号>_review.json`または
+ * `.agent-skill-chain/reviews/<Issue番号>_review.json`）であり、`tipSha`のそのfileが正規の
+ * review証跡（`parseReviewEvidence`が受理）として`fromSha`を実装headに束縛し、かつ証跡の
+ * `sessionId`と`latestRoundDigest`がreview sessionの`candidateHeadSha === fromSha`のroundと
+ * 一致するときだけpathを返す。正準形は公開関数で誰でも作れるため、形と申告値だけでは外さない。
+ * 照合できなければundefinedで、呼び出し側は従来どおり全diffから導出する（できなければ`full`）。
+ */
+function reviewRecordSuffix(root, fromSha, tipSha, records) {
+    const path = evidenceOnlySuffix(root, fromSha, tipSha);
+    if (path === undefined ||
+        records.issue === undefined ||
+        (path !== `docs/reviews/${records.issue}_review.json` &&
+            path !== `.agent-skill-chain/reviews/${records.issue}_review.json`))
+        return undefined;
+    const shown = git(["show", `${tipSha}:${path}`], root, {
+        env: GIT_ENV,
+        allowFailure: true,
+    });
+    if (shown.status !== 0)
+        return undefined;
+    const parsed = tryParseReviewEvidence(shown.stdout);
+    if (!("evidence" in parsed))
+        return undefined;
+    const { implementationHeadSha, session } = parsed.evidence.observed;
+    return implementationHeadSha === fromSha &&
+        session.sessionId === records.session.sessionId &&
+        records.session.rounds.some(({ candidateHeadSha, roundDigest }) => candidateHeadSha === fromSha &&
+            roundDigest === session.latestRoundDigest)
+        ? path
+        : undefined;
+}
+/** `sha`のtreeにある`path`のblob ID（無ければ空文字列）。 */
+function blobAt(root, sha, path) {
+    return git(["rev-parse", "--verify", "--quiet", `${sha}:${path}`], root, {
+        env: GIT_ENV,
+        allowFailure: true,
+    }).stdout.trim();
+}
+/**
+ * `fromSha`の直後から第1親chainで続く、前headのreview記録だけのsuffix（`reviewRecordSuffix`）の
+ * 末端commit。無いとき、またはそのpathを`toSha`までに再び変えた（書き換え・削除）ときは
+ * `fromSha`を返し、`fromSha`からの全diffで導出させる。
+ */
+function evidenceSuffixTip(root, fromSha, toSha, records) {
+    let tip = fromSha;
+    let path;
+    for (const commit of git(["rev-list", "--first-parent", "--reverse", `${fromSha}..${toSha}`], root, { env: GIT_ENV })
+        .stdout.split("\n")
+        .filter(Boolean)) {
+        if (evidenceOnlySuffix(root, fromSha, commit) === undefined)
+            break;
+        const recorded = reviewRecordSuffix(root, fromSha, commit, records);
+        if (recorded === undefined)
+            continue;
+        tip = commit;
+        path = recorded;
+    }
+    return path !== undefined &&
+        blobAt(root, tip, path) === blobAt(root, toSha, path)
+        ? tip
+        : fromSha;
 }
 //# sourceMappingURL=impact-set.js.map

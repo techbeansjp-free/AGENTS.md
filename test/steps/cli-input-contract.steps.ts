@@ -107,6 +107,15 @@ function deepValid(target: Target): Record<string, unknown> {
       fileMode: 0o644,
       allowedTaskIds: ["T01"],
     };
+    input.inspection = {
+      fromSha: SHA1,
+      diffDigest: SHA256,
+      cumulative: {
+        baseSha: SHA1,
+        scope: "paths",
+        paths: [{ path: "src/cli-usage.ts", diffDigest: SHA256 }],
+      },
+    };
   }
   return input;
 }
@@ -182,6 +191,16 @@ const EXPECTED_PATHS: Readonly<Record<string, readonly string[]>> = {
     "findings[].decisionRef?",
     "followOnly?",
     "recordLayerOnly?",
+    "inspection?",
+    "inspection.fromSha",
+    "inspection.diffDigest",
+    "inspection.cumulative?",
+    "inspection.cumulative.baseSha",
+    "inspection.cumulative.scope",
+    "inspection.cumulative.diffDigest?",
+    "inspection.cumulative.paths?",
+    "inspection.cumulative.paths[].path",
+    "inspection.cumulative.paths[].diffDigest",
   ],
 };
 

@@ -49,3 +49,8 @@ Feature: review exportとreview validateでreview証跡を生成・照合する
     When H_implでreview exportを実行する
     And 手で組んだ証跡で検証欄を差し替えてreview validateを実行する
     Then 記録に存在する合格だけを載せた証跡も再導出と一致しなければ拒否する
+
+  Scenario: SCN-INT-REVREUSE-001 review round雛形の検分割当は記録前に同じ導出値と照合される
+    Given review再利用unit検査の準備がある
+    When "SCN-INT-REVREUSE-001"のreview再利用unit検査を実行する
+    Then review再利用unit検査は期待結果になる
