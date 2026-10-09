@@ -519,6 +519,20 @@ function cumulativeCoverage(): void {
       ),
       [`累積差分未検分|${SECURITY}|11..22`],
     );
+  // 手順4を満たさないscope=allは累積検分要求pathの被覆に数えない（RC-03）。
+  assert.deepEqual(
+    kinds(
+      judge(
+        covered({
+          fromSha: H1,
+          diffDigest: digest("2"),
+          cumulative: { baseSha: X, scope: "all", diffDigest: digest("9") },
+        }),
+        securityObserver([[SECURITY, digest("5")]]),
+      ),
+    ),
+    ["digest不一致||ee..22", `累積差分未検分|${SECURITY}|11..22`],
+  );
   // sectionが無いpathは空差分のsha256と照合する（照合を省略しない）。
   assert.deepEqual(
     kinds(
