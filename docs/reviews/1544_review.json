@@ -3,16 +3,16 @@
   "issue": 1544,
   "observed": {
     "baseSha": "0a6d111ecc3196db5e26876868b27e5ab715e721",
-    "implementationHeadSha": "e70d790e1dcea7e6221827d80da9696a2ba936ab",
-    "diffDigest": "7a984b0156bd101f4031d8df0d59bd4d161f38bff62ae31f5549635bc6d735b4",
+    "implementationHeadSha": "440705d5e028204831c816f34c3dc3685f5b5b29",
+    "diffDigest": "62b6af507213b1648d1a9b16ea29fae9e63ebb90dd3d231c172d970f8fb476bc",
     "session": {
-      "sessionId": "66539c3acf9076a82f1b42bc74c772b5e56d83d896d5dd09888adab5e087d72c",
-      "latestRoundDigest": "a891368fec950d8faf107a856baa2bff010af9ac53fb60a4418b86bc062bad03",
+      "sessionId": "e4e2d92899bca88e8d56b9111d8be4433991396f6fff1f69c0ef592d4a1bb75a",
+      "latestRoundDigest": "399299b3f79c54c6fcda311820d37b0ece59d6eef996c064d089419b5d7ef97f",
       "status": "converged",
-      "countedRounds": 4
+      "countedRounds": 3
     },
     "impact": {
-      "digest": "c74d147fa2d02a8cb5bd645ff833e96e905549eb649ddb744e0b150fac843ad1",
+      "digest": "a8832fda188fd70b3ec2170862080dbe9a649d0749f08aab48e87b56562d9ba4",
       "mode": "full"
     },
     "verification": [
@@ -23,61 +23,37 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "e70d790e1dcea7e6221827d80da9696a2ba936ab",
-        "impactDigest": "c74d147fa2d02a8cb5bd645ff833e96e905549eb649ddb744e0b150fac843ad1",
-        "finishedAt": "2026-10-09T10:30:08.137Z",
-        "recordDigest": "a4ac0b80d1873a2cbc65ff2f1f3cfd5d8df4613eaad4ec3db475f98921d2b669"
+        "headSha": "440705d5e028204831c816f34c3dc3685f5b5b29",
+        "impactDigest": "a8832fda188fd70b3ec2170862080dbe9a649d0749f08aab48e87b56562d9ba4",
+        "finishedAt": "2026-10-09T20:29:58.901Z",
+        "recordDigest": "db2e2c8859552084073f7e37e1a8293832ddb95e19ad71b2e48187a2014895f0"
       }
     ]
   },
   "findings": [
     {
-      "id": "R1544-1-01",
+      "id": "R1544-N1-01",
       "severity": "Medium",
       "status": "resolved",
       "relation": "invariant-violation",
-      "path": "src/adapters/impact-set.ts",
-      "contractId": "INV-03"
+      "path": "src/adapters/review-session-store.ts",
+      "contractId": "INV-01"
     },
     {
-      "id": "R1544-1-02",
+      "id": "R1544-N1-02",
       "severity": "Low",
       "status": "valid",
       "relation": "improvement",
-      "path": "src/adapters/review-reuse-follow.ts",
+      "path": "src/domain/review-reuse.ts",
       "contractId": null
     },
     {
-      "id": "R1544-2-01",
-      "severity": "Low",
+      "id": "R1544-N2-01",
+      "severity": "Medium",
       "status": "resolved",
-      "relation": "invariant-violation",
-      "path": "src/adapters/impact-set.ts",
-      "contractId": "INV-03"
-    },
-    {
-      "id": "R1544-3-01",
-      "severity": "Low",
-      "status": "resolved",
-      "relation": "improvement",
-      "path": "src/adapters/impact-set.ts",
-      "contractId": null
-    },
-    {
-      "id": "R1544-4-01",
-      "severity": "Low",
-      "status": "valid",
-      "relation": "improvement",
-      "path": "src/adapters/impact-set.ts",
-      "contractId": null
-    },
-    {
-      "id": "R1544-4-02",
-      "severity": "Low",
-      "status": "valid",
-      "relation": "improvement",
-      "path": "src/cli.ts",
-      "contractId": null
+      "relation": "acceptance-violation",
+      "path": "docs/specs/02_要件/01_ワークフロー要件.md",
+      "contractId": "AC-12"
     }
   ],
   "unresolvedCriticalHigh": [],
@@ -88,5 +64,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "0547d19f6e08e3672d4768326f9a7f29a0e770d275141edad63105b06e717bad"
+  "evidenceDigest": "19ea7cd602b4f7383936b9869352adc66a378064ce7b64ceef35209d97b6a688"
 }
