@@ -81,6 +81,13 @@ Feature: 影響集合をreview焦点とreviewer文脈と検証選択で共有す
       | import(name)                                   | src/util.ts   |
       | import(name)                                   | src/loader.ts |
       | import(flag ? './app.js' : name)                | src/loader.ts |
+      | (0, require)(name)                             | src/loader.ts |
+      | require.call(null, name)                       | src/loader.ts |
+      | require.apply(null, [name])                    | src/lib.ts    |
+      | require.bind(null)(name)                       | src/loader.ts |
+      | ((load = require) => load(name))()             | src/loader.ts |
+      | ({ load: require }).load(name)                 | src/loader.ts |
+      | ({ require }).require(name)                   | src/loader.ts |
 
   Scenario Outline: SCN-INT-IMPACT-012 有限literal候補を全列挙できる動的依存は静的Graphへ保持する
     Given importし合うTypeScriptとstep定義とfeatureと追跡表を持つGit repositoryがある

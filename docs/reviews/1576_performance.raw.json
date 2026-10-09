@@ -12666,5 +12666,359 @@
         }
       }
     }
+  },
+  "revisionLiveLifecycle": {
+    "issue": 1576,
+    "pr": 1577,
+    "candidateCommit": "101bcb88",
+    "status": "passed",
+    "liveProvider": "codex",
+    "modelEffort": "high",
+    "runs": [
+      {
+        "case": "update",
+        "provider": "codex",
+        "isolation": "OS filesystem/PID/mount isolation; host HOME inaccessible; credential files read-only; network shared for provider API access, without destination filtering",
+        "fixture": "/tmp/asc-1576-live-races/update",
+        "readyObserved": true,
+        "operation": {
+          "exitCode": 0,
+          "finishedAt": "2026-10-09T22:48:14.405764+00:00"
+        },
+        "workerCompleted": true,
+        "hostTimeoutCanceledStalledHook": true,
+        "ready": {
+          "pid": 535,
+          "time": "2026-10-09T22:48:13.155Z"
+        },
+        "operationStartedAt": "2026-10-09T22:48:13.163778+00:00",
+        "workerAliveDuringOperation": true,
+        "measurement": {
+          "provider": "codex",
+          "stage": "race",
+          "startedAt": "2026-10-09T22:48:07.481284+00:00",
+          "exitCode": 0,
+          "timedOut": false,
+          "wallSeconds": 16.944067933014594,
+          "rawLog": "/tmp/asc-1576-live-races/update/logs/race.jsonl"
+        },
+        "userSettingsPreserved": true,
+        "dummySentinelPreserved": true,
+        "externalSentinelPreserved": true,
+        "staleStatePreserved": true,
+        "headPreserved": true,
+        "oldHookSafeAfter": true,
+        "status": "passed",
+        "wallSeconds": 17.0226109160576,
+        "transcriptValidated": true,
+        "workerCommandCount": 3,
+        "previewIdentityUnchanged": true,
+        "finalWorkerResult": {
+          "barrierReleased": true,
+          "sentinelText": "dummy content must remain unchanged\n",
+          "previewSucceeded": true,
+          "targetStep": 1,
+          "errors": []
+        },
+        "changedPathsCount": 382,
+        "unexpectedChangedPaths": [],
+        "isolationProof": {
+          "hostHomeVisible": false,
+          "distributionReadOnly": true,
+          "codexAuthReadOnly": true,
+          "claudeAuthReadOnly": true,
+          "outsideSentinelVisible": false
+        },
+        "providerUsage": [
+          {
+            "input_tokens": 75807,
+            "cached_input_tokens": 67840,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 245,
+            "reasoning_output_tokens": 0
+          }
+        ]
+      },
+      {
+        "case": "delete",
+        "provider": "codex",
+        "isolation": "OS filesystem/PID/mount isolation; host HOME inaccessible; credential files read-only; network shared for provider API access, without destination filtering",
+        "fixture": "/tmp/asc-1576-live-races/delete",
+        "readyObserved": true,
+        "operation": {
+          "exitCode": 0,
+          "finishedAt": "2026-10-09T22:48:37.848203+00:00"
+        },
+        "workerCompleted": true,
+        "hostTimeoutCanceledStalledHook": true,
+        "ready": {
+          "pid": 516,
+          "time": "2026-10-09T22:48:37.433Z"
+        },
+        "operationStartedAt": "2026-10-09T22:48:37.491636+00:00",
+        "workerAliveDuringOperation": true,
+        "measurement": {
+          "provider": "codex",
+          "stage": "race",
+          "startedAt": "2026-10-09T22:48:32.010048+00:00",
+          "exitCode": 0,
+          "timedOut": false,
+          "wallSeconds": 14.038800278911367,
+          "rawLog": "/tmp/asc-1576-live-races/delete/logs/race.jsonl"
+        },
+        "userSettingsPreserved": true,
+        "dummySentinelPreserved": true,
+        "externalSentinelPreserved": true,
+        "staleStatePreserved": true,
+        "headPreserved": true,
+        "oldHookSafeAfter": true,
+        "status": "passed",
+        "wallSeconds": 14.132295359042473,
+        "transcriptValidated": true,
+        "workerCommandCount": 3,
+        "previewIdentityUnchanged": true,
+        "finalWorkerResult": {
+          "barrierReleased": true,
+          "sentinelText": "dummy content must remain unchanged\n",
+          "previewSucceeded": true,
+          "targetStep": 1,
+          "errors": []
+        },
+        "changedPathsCount": 385,
+        "unexpectedChangedPaths": [],
+        "isolationProof": {
+          "hostHomeVisible": false,
+          "distributionReadOnly": true,
+          "codexAuthReadOnly": true,
+          "claudeAuthReadOnly": true,
+          "outsideSentinelVisible": false
+        },
+        "providerUsage": [
+          {
+            "input_tokens": 60736,
+            "cached_input_tokens": 53120,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 207,
+            "reasoning_output_tokens": 0
+          }
+        ]
+      }
+    ],
+    "reproduction": {
+      "prepare": [
+        "python3 /tmp/asc-1576-live-races/race.py prepare update",
+        "python3 /tmp/asc-1576-live-races/race.py prepare delete"
+      ],
+      "execute": [
+        "python3 /tmp/asc-1576-live-races/race.py execute update",
+        "python3 /tmp/asc-1576-live-races/race.py execute delete"
+      ],
+      "review": "python3 /tmp/asc-1576-live-races/finalize.py",
+      "note": "prepare refuses an existing run directory; retain original evidence and choose fresh ROOT for repeated trials",
+      "sources": {
+        "/tmp/asc-1576-live-races/race.py": "import pathlib,sys,subprocess,json,time,hashlib,os,shutil,datetime\nROOT=pathlib.Path('/tmp/asc-1576-live-races'); BENCH=pathlib.Path('/tmp/asc-1576-e2e')\nsys.path.insert(0,str(BENCH)); from isolation import command\nCLI=['/opt/node/bin/node','/distribution/dist/bin/agent-skill-chain.js']\ndef digest(p):return hashlib.sha256(p.read_bytes()).hexdigest()\ndef run_cmd(run,args,name,stdin=None,timeout=60):\n state=run/'driver-state';state.mkdir(exist_ok=True)\n for n in ['.codex','.claude']:(state/n).mkdir(exist_ok=True)\n p=subprocess.run(command(run,state)+args,input=stdin,text=True,capture_output=True,timeout=timeout)\n (run/'logs'/(name+'.stdout')).write_text(p.stdout);(run/'logs'/(name+'.stderr')).write_text(p.stderr)\n if p.returncode:raise RuntimeError(name+' failed, see dedicated log')\n return p.stdout\ndef prepare(case):\n run=ROOT/case\n if run.exists():raise RuntimeError('Refuse overwrite existing fixture')\n project=run/'project';project.mkdir(parents=True);(run/'logs').mkdir();(project/'.race').mkdir();(project/'.claude').mkdir()\n (run/'distribution.txt').write_text(str(BENCH/'distributions/baseline'))\n (project/'package.json').write_text('{\"name\":\"asc-isolated-live-race\",\"private\":true,\"type\":\"module\"}\\n')\n (project/'sentinel.txt').write_text('dummy content must remain unchanged\\n')\n (project/'.gitignore').write_text('.race/\\n.agent-skill-chain/runtime/\\n')\n settings={'env':{'ASC_USER_SENTINEL':'keep'},'permissions':{'allow':['Read']},'hooks':{'SessionStart':[{'hooks':[{'type':'command','command':'true','timeout':1}]}]}}\n (project/'.claude/settings.local.json').write_text(json.dumps(settings,indent=2)+'\\n')\n (run/'user-settings.json').write_text(json.dumps(settings,sort_keys=True))\n subprocess.run(['git','init','-q',str(project)],check=True)\n for name,value in [('user.name','Isolated Race Fixture'),('user.email','isolated-race@example.invalid')]:subprocess.run(['git','-C',str(project),'config',name,value],check=True)\n run_cmd(run,CLI+['install','--root=/project','--apply'],'install')\n stale=project/'.agent-skill-chain/runtime/agent-lifecycle';(stale/'worktree.lock').mkdir(parents=True);(stale/'stale.json').write_text('{invalid abandoned session')\n hook=project/'.agent-skill-chain/hooks/asc-agent-lifecycle.mjs';shutil.copyfile(hook,project/'.race/legacy-hook.mjs')\n (project/'.race/assessment.json').write_text(json.dumps({f'Q-{n:02}':{'answer':'unknown','evidence':'Isolated lifecycle race; full requested; no quick certification.'} for n in range(1,9)}))\n out=json.loads(run_cmd(run,CLI+['issue','create','--root=/project','--title=Isolated lifecycle race','--mode=full','--assessment=/project/.race/assessment.json'],'create'))\n staging=out.get('path') or out.get('staging')\n if not isinstance(staging,str):raise RuntimeError('Read create output to obtain staging path')\n (run/'staging.txt').write_text(staging)\n (project/'.race/barrier.mjs').write_text('''import fs from 'node:fs';\nconst dir='/project/.race';\nfs.writeFileSync(dir+'/ready',JSON.stringify({pid:process.pid,time:new Date().toISOString()}));\nconst started=Date.now();\nwhile(!fs.existsSync(dir+'/release')) {if(Date.now()-started>90000){console.error('BARRIER_TIMEOUT');process.exit(24);} await new Promise(r=>setTimeout(r,50));}\nconsole.log('BARRIER_RELEASED');\n''')\n subprocess.run(['git','-C',str(project),'add','.'],check=True);subprocess.run(['git','-C',str(project),'commit','-qm','isolated initial fixture'],check=True)\n (run/'distribution.txt').write_text(str(BENCH/'distributions/candidate'))\n run_cmd(run,CLI+['workflow','advance','--staging='+staging],'preview-before')\n manifest={'dummySentinel':digest(project/'sentinel.txt'),'settings':settings,'stale':digest(stale/'stale.json'),'head':subprocess.check_output(['git','-C',str(project),'rev-parse','HEAD'],text=True).strip()}\n (run/'before.json').write_text(json.dumps(manifest,indent=2))\n prompt=f'''This is a bounded isolated lifecycle concurrency verification, not an implementation task. Existing ASC stages must not be advanced or edited. Run exactly this Bash command first: node /project/.race/barrier.mjs . Do not create ready/release markers yourself, and do not bypass or replace that script. It will be released by an independent driver after an ASC {case} operation. After BARRIER_RELEASED, read /project/sentinel.txt, then run node /distribution/dist/bin/agent-skill-chain.js workflow advance --staging={staging} . Do not apply or write anything else. Return compact JSON with barrierReleased, sentinelText, previewSucceeded, targetStep, and any errors. The tested deletion may remove ASC runtime assets, so an explicit preview error after delete must be reported as an error, never hidden. Do not try repair/install or send messages. Finish this same context after reporting.'''\n (run/'prompt.txt').write_text(prompt)\n print(str(run))\ndef execute(case):\n run=ROOT/case;project=run/'project';stale=project/'.agent-skill-chain/runtime/agent-lifecycle/stale.json'\n before=json.loads((run/'before.json').read_text());outer=ROOT/'outside-sentinel.txt';outerHash=digest(outer)\n # The copied retired hook must terminate without trusting malformed state/input.\n old=json.loads(run_cmd(run,['node','/project/.race/legacy-hook.mjs'],'old-hook-invalid',stdin='{not JSON',timeout=3));assert old=={}\n state=run/'driver-state'\n stalled=subprocess.Popen(command(run,state)+['node','/project/.race/legacy-hook.mjs'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)\n try:\n  stalled.wait(timeout=.3); host_timeout=False\n except subprocess.TimeoutExpired:\n  stalled.kill();stalled.wait();host_timeout=True\n finally:\n  if stalled.stdin:stalled.stdin.close()\n  if stalled.stdout:stalled.stdout.close()\n  if stalled.stderr:stalled.stderr.close()\n p=subprocess.Popen([sys.executable,str(BENCH/'worker.py'),str(run),'codex','race',str(run/'prompt.txt')],stdout=open(run/'logs/driver-worker.log','w'),stderr=open(run/'logs/driver-worker.stderr','w'))\n started=time.monotonic();ready=project/'.race/ready';result={'case':case,'provider':'codex','isolation':'OS filesystem/PID/mount isolation, credentials read-only, host HOME inaccessible, network shared only for provider API','fixture':str(run),'readyObserved':False,'operation':None,'workerCompleted':False,'hostTimeoutCanceledStalledHook':host_timeout}\n try:\n  while not ready.exists():\n   if p.poll() is not None:raise RuntimeError('Worker exited before real barrier readiness')\n   if time.monotonic()-started>180:raise RuntimeError('Worker did not reach barrier within 180 seconds')\n   time.sleep(.1)\n  result['readyObserved']=True;result['ready']=json.loads(ready.read_text());result['operationStartedAt']=datetime.datetime.now(datetime.timezone.utc).isoformat()\n  op=json.loads(run_cmd(run,CLI+[case,'--root=/project','--apply'],'concurrent-'+case))\n  result['operation']={'exitCode':0,'finishedAt':datetime.datetime.now(datetime.timezone.utc).isoformat()}\n  result['workerAliveDuringOperation']=p.poll() is None\n  (project/'.race/release').write_text('driver completed isolated lifecycle operation\\n')\n  p.wait(timeout=180)\n  result['workerCompleted']=p.returncode==0;result['measurement']=json.loads((run/'logs/race.measurement.json').read_text())\n  settings=json.loads((project/'.claude/settings.local.json').read_text())\n  for key,value in before['settings'].items():\n   if key=='hooks':\n    for event,groups in value.items():\n     assert all(group in settings.get('hooks',{}).get(event,[]) for group in groups)\n   else:assert settings[key]==value\n  result['userSettingsPreserved']=True\n  result['dummySentinelPreserved']=digest(project/'sentinel.txt')==before['dummySentinel']\n  result['externalSentinelPreserved']=digest(outer)==outerHash\n  result['staleStatePreserved']=stale.exists() and digest(stale)==before['stale']\n  result['headPreserved']=subprocess.check_output(['git','-C',str(project),'rev-parse','HEAD'],text=True).strip()==before['head']\n  old=json.loads(run_cmd(run,['node','/project/.race/legacy-hook.mjs'],'old-hook-after',stdin='{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Write\"}',timeout=3));assert old=={}\n  result['oldHookSafeAfter']=True\n  result['status']='observed-needs-transcript-review'\n except Exception as e:\n  result['status']='failed';result['error']=str(e)\n  (project/'.race/release').write_text('driver aborted\\n')\n  if p.poll() is None:p.terminate()\n finally:\n  result['wallSeconds']=time.monotonic()-started;(run/'result.json').write_text(json.dumps(result,indent=2)+'\\n');print(json.dumps(result))\nif __name__=='__main__':\n ROOT.mkdir(exist_ok=True)\n if not (ROOT/'outside-sentinel.txt').exists():(ROOT/'outside-sentinel.txt').write_text('outside dummy immutable sentinel\\n')\n {'prepare':prepare,'execute':execute}[sys.argv[1]](sys.argv[2])\n",
+        "/tmp/asc-1576-live-races/finalize.py": "import pathlib,json,hashlib,subprocess\nimport race\nROOT=pathlib.Path('/tmp/asc-1576-live-races'); BENCH=pathlib.Path('/tmp/asc-1576-e2e')\ndef h(p):return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()\nresults=[]\nfor case in ['update','delete']:\n run=ROOT/case\n proofScript=\"const fs=require('node:fs');const rows=fs.readFileSync('/proc/self/mountinfo','utf8').trim().split('\\\\n').map(l=>l.split(' '));const ro=p=>rows.some(r=>r[4]===p&&r[5].split(',').includes('ro'));console.log(JSON.stringify({hostHomeVisible:fs.existsSync('/home/tatsuru'),distributionReadOnly:ro('/distribution'),codexAuthReadOnly:ro('/state/.codex/auth.json'),claudeAuthReadOnly:ro('/state/.claude/.credentials.json'),outsideSentinelVisible:fs.existsSync('/tmp/asc-1576-live-races/outside-sentinel.txt')}));\"\n proof=json.loads(race.run_cmd(run,['node','-e',proofScript],'isolation-proof'))\n assert proof=={'hostHomeVisible':False,'distributionReadOnly':True,'codexAuthReadOnly':True,'claudeAuthReadOnly':True,'outsideSentinelVisible':False}\n (run/'isolation-proof.json').write_text(json.dumps(proof,indent=2)+'\\n')\n result=json.loads((run/'result.json').read_text());records=[json.loads(l) for l in (run/'logs/race.jsonl').read_text().splitlines()]\n commands=[r['item'] for r in records if r.get('type')=='item.completed' and r.get('item',{}).get('type')=='command_execution']\n assert len(commands)==3\n assert 'node /project/.race/barrier.mjs' in commands[0]['command']\n assert commands[0]['exit_code']==0 and 'BARRIER_RELEASED' in commands[0]['aggregated_output']\n assert 'cat /project/sentinel.txt' in commands[1]['command'] and commands[1]['exit_code']==0\n assert 'workflow advance --staging=' in commands[2]['command'] and '--apply' not in commands[2]['command'] and commands[2]['exit_code']==0\n preview=json.loads(commands[2]['aggregated_output']);before=json.loads((run/'logs/preview-before.stdout').read_text())\n for key in ['headSha','boundary','workUnit']:\n  assert preview['handoff'][key]==before['handoff'][key],key\n messages=[r['item']['text'] for r in records if r.get('type')=='item.completed' and r.get('item',{}).get('type')=='agent_message']\n final=json.loads(messages[-1]); assert final=={'barrierReleased':True,'sentinelText':'dummy content must remain unchanged\\n','previewSucceeded':True,'targetStep':1,'errors':[]}\n status=subprocess.check_output(['git','-C',str(run/'project'),'status','--porcelain=v1','-z'],text=True).split('\\0')\n changed=[s[3:] for s in status if s]\n allowedPrefixes=('.agent-skill-chain/','.agents/','.claude/','.codex/')\n unexpected=[p for p in changed if not p.startswith(allowedPrefixes) and p not in ['AGENTS.md','CLAUDE.md','.gitignore']]\n assert not unexpected,unexpected\n result.update({'status':'passed','transcriptValidated':True,'workerCommandCount':3,'previewIdentityUnchanged':True,'finalWorkerResult':final,'changedPathsCount':len(changed),'unexpectedChangedPaths':unexpected,'isolationProof':json.loads((run/'isolation-proof.json').read_text()),'providerUsage':[r['usage'] for r in records if r.get('type')=='turn.completed' and 'usage' in r]})\n for key in ['readyObserved','workerCompleted','hostTimeoutCanceledStalledHook','workerAliveDuringOperation','userSettingsPreserved','dummySentinelPreserved','externalSentinelPreserved','staleStatePreserved','headPreserved','oldHookSafeAfter']:assert result[key],key\n (run/'result.json').write_text(json.dumps(result,indent=2)+'\\n');results.append(result)\nsummary={'issue':1576,'pr':1577,'candidateCommit':'101bcb88','status':'passed','liveProvider':'codex','modelEffort':'high','runs':results,'reproduction':{'prepare':['python3 /tmp/asc-1576-live-races/race.py prepare update','python3 /tmp/asc-1576-live-races/race.py prepare delete'],'execute':['python3 /tmp/asc-1576-live-races/race.py execute update','python3 /tmp/asc-1576-live-races/race.py execute delete'],'review':'python3 /tmp/asc-1576-live-races/finalize.py','note':'prepare refuses an existing run directory; retain original evidence and choose fresh ROOT for repeated trials'},'artifactsSha256':{str(p):h(p) for p in [ROOT/'race.py',ROOT/'finalize.py',BENCH/'worker.py',BENCH/'isolation.py',BENCH/'distributions/candidate/dist/bin/agent-skill-chain.js']},'limits':['One live Codex run per operation; not a throughput benchmark or all-host guarantee','Provider network shared for API access; filesystem/PID/mount isolation enforced, host HOME inaccessible and credential files read-only','Worker task is bounded lifecycle-concurrency verification with real shell tools and preview, not an entire Issue development run','Stalled retired hook was canceled by driver timeout; no claim of provider request timeout coverage','No repository build, commit, or production setting was changed']}\n(ROOT/'summary.json').write_text(json.dumps(summary,indent=2)+'\\n')\nprint(json.dumps({'status':summary['status'],'runs':len(results),'report':str(ROOT/'summary.json')}))\n"
+      }
+    },
+    "artifactsSha256": {
+      "/tmp/asc-1576-live-races/race.py": "c03b11654ccdd0f9d3329d65ba04be6175ae9a2012cccc26daf7c360df6a08aa",
+      "/tmp/asc-1576-live-races/finalize.py": "521821ad65cbb2203675a5ac1f3e72b7de289fb91cfc24c135fb3f294057b8cf",
+      "/tmp/asc-1576-e2e/worker.py": "68ad0ddf5e078eab3c101e1b4b9e635e798435f576154b70e159b63eb584d78d",
+      "/tmp/asc-1576-e2e/isolation.py": "5e9ae28ba3ab95f4303b450d45cb0808535a01b107fd14d3345dcdee397837fc",
+      "/tmp/asc-1576-e2e/distributions/candidate/dist/bin/agent-skill-chain.js": "b21dba7a3677cef62b56eb5572f3440e93e5da47952286397bb8db6752643541"
+    },
+    "limits": [
+      "One live Codex run per operation; not a throughput benchmark or all-host guarantee",
+      "Provider network shared for API access; filesystem/PID/mount isolation enforced, host HOME inaccessible and credential files read-only",
+      "Worker task is bounded lifecycle-concurrency verification with real shell tools and preview, not an entire Issue development run",
+      "Stalled retired hook was canceled by driver timeout; no claim of provider request timeout coverage",
+      "No repository build, commit, or production setting was changed"
+    ]
+  },
+  "revisionIndependentReview": {
+    "impact": {
+      "issue": 1576,
+      "pr": 1577,
+      "reviewer": "workflow_revision",
+      "reviewedHead": "101bcb88",
+      "base": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
+      "scope": [
+        "src/adapters/impact-set.ts",
+        "src/adapters/repository-graph.ts",
+        "src/adapters/review-reuse.ts",
+        "src/adapters/review-session.ts",
+        "src/domain/impact-set.ts"
+      ],
+      "excluded": "Reviewer-authored handoff, workflow docs and Skills",
+      "decision": "approved-within-reviewed-scope",
+      "findings": [
+        {
+          "id": "IR-1576-IMPACT-01",
+          "severity": "High",
+          "status": "resolved",
+          "path": "src/adapters/repository-graph.ts",
+          "line": 676,
+          "summary": "Unknown non-shadowed require invocation through comma/call wrappers is silently omitted",
+          "evidence": "With existing src/loader.ts containing (0, require)(name) or require.call(null,name), changing only a statically tested src/util.ts yields verification=targeted, review=targeted, unresolvedImportPaths=[]; plain require(name) correctly yields full/full. When loader itself changes, new reviewMode narrows it to targeted despite unknown runtime dependency.",
+          "reproduction": "node --import tsx /tmp/asc-1576-impact-adversarial-review.mjs",
+          "observations": "/tmp/asc-1576-impact-adversarial-review-101bcb88.json",
+          "required": "Conservatively retain unknown unshadowed require references beyond explicitly supported direct/transparent call shapes; preserve real shadowing and finite-literal dependency support.",
+          "resolution": "Recognized direct and transparent require callees are tracked; remaining unshadowed runtime require identifiers retain an unresolved boundary. Type-only syntax and lexical shadows remain excluded.",
+          "recheckEvidence": [
+            "/tmp/asc-1576-impact-adversarial-review-fixed.json",
+            "/tmp/asc-1576-impact-adversarial-extra-fixed.json"
+          ]
+        }
+      ],
+      "checked": [
+        "Finite ternary candidates resolve every branch; missing relative candidate sets unknown",
+        "Depth and candidate count guard return unknown rather than guess",
+        "Unknown direct import/require retains static graph while requiring full",
+        "Review narrowing only removes missing-feature-mapping reason; absent optional fields fall back to original full",
+        "Operation-scoped observer constructed separately for draft and apply; root/records captured and same from/to transition shares observation",
+        "No persistent/process-global Graph cache remains"
+      ],
+      "tests": [
+        {
+          "log": "/tmp/asc-1576-impact-independent-test.log",
+          "scenariosPassed": 60,
+          "stepsPassed": 575,
+          "failures": 0,
+          "note": "Passing existing regressions do not cover the reproduced unsupported require-reference escape."
+        }
+      ],
+      "limitations": [
+        "Scope-limited code and entrypoint review; excludes reviewer-authored handoff and Skill changes",
+        "Working-tree require fix is source-hash bound until root commits it",
+        "No build or product-file edit performed during review",
+        "Performance and all-agent token acceptance are not established by this review"
+      ],
+      "rereview": {
+        "at": "2026-10-09T22:57:26.069398+00:00",
+        "workingTreeHead": "4e8ff962ca7cdbb17654e37c73dae5def16de86c",
+        "candidate": "Uncommitted require fix identified by source hash; canonical doc entrypoint change reviewed at commit 4e8ff962ca7cdbb17654e37c73dae5def16de86c",
+        "sourceSha256": {
+          "src/adapters/impact-set.ts": "c36deb05fbddb3844e900478219f2e10a56fdef7617ce8768468b8f31373fee1",
+          "src/adapters/repository-graph.ts": "ec9a3dea4dc35aa3a0ef90640193fc281a3f89b2a8ade13f07b4f1ef7b1e05b9",
+          "src/adapters/review-reuse.ts": "949e1e2671d6c8aecbe1d0800334d0dd3056c7ed067cb3d2f413b88ebdc4ce26",
+          "src/adapters/review-session.ts": "a0716af4d2d01cc427aa045f3b7cac3daa2ed2cf8effaf56790b3c48fb36d9df",
+          "src/domain/impact-set.ts": "28e01a5db6fc143edccdd8a37c5c8cb72ace0ab6b793d767c0868eb0e5325dca"
+        },
+        "adversarialCases": 13,
+        "results": "Unknown direct/comma/call/apply/bind/alias/shorthand references and missing finite candidate remain full/full. Local shadow, type-only reference, and complete finite candidates remain targeted/targeted.",
+        "trackedEdits": false,
+        "buildOrCompile": false
+      },
+      "additionalScope": {
+        "commit": "4e8ff962ca7cdbb17654e37c73dae5def16de86c",
+        "files": [
+          "AGENTS.md",
+          ".agent-skill-chain/00_利用案内.md",
+          ".agent-skill-chain/docs/01_開発ワークフロー.md"
+        ],
+        "result": "No findings. Only non-normative index preloading is narrowed; all three canonical policy/quality references remain mandatory. Step selection delegates to existing workflow advance preview instead of manual journal parsing."
+      }
+    },
+    "workflow": {
+      "reviewer": "codex-impact-revision-independent-workflow-review",
+      "scope": "Other agent workflow handoff, read pointers, skills; own Impact implementation excluded",
+      "basis": "read-only working tree diff against 5e51700b2a36b54d710ce0cc0e0f38ff8fbd5aa2",
+      "files": [
+        {
+          "path": "src/adapters/workflow-handoff.ts",
+          "sha256": "acca01852e2971292e2fa603bbe58226d43743e1ac79ff40972a6fe3e90d2399"
+        },
+        {
+          "path": "src/cli.ts",
+          "sha256": "8dea70ebfecc7814dee4afa0708b84ffa1e363d51e645ee4e484822cfc05ae52"
+        },
+        {
+          "path": ".agent-skill-chain/docs/01_開発ワークフロー.md",
+          "sha256": "6a21ae2967ed5373168f31368d047819a0b7634d10a61f5789ca902703d98af4"
+        },
+        {
+          "path": ".agent-skill-chain/skills/asc-step/SKILL.md",
+          "sha256": "3ea892a0798921f2272d0b1fe7a90515ab648dabeaf957ec694241417301e054"
+        },
+        {
+          "path": ".agent-skill-chain/skills/step-00-stage/SKILL.md",
+          "sha256": "dedf093e0cec5ee9ff101cbe682857ddb95482b8b150d785063aa5e504011c19"
+        },
+        {
+          "path": ".agent-skill-chain/skills/step-01-request/SKILL.md",
+          "sha256": "13ec0896b6af20ad53d9afa4f86234f8d7a78b7fee56aa9c33bde6283b8abd0a"
+        },
+        {
+          "path": ".agent-skill-chain/skills/step-10-review/SKILL.md",
+          "sha256": "23ad27ec8d68ee0f8b37431ebe62f048cc6e055b10277b1ef213ebac14579bf4"
+        }
+      ],
+      "findings": [],
+      "decision": "approved within reviewed scope",
+      "observations": [
+        "All generated step Skill paths match repository files, mode-specific planning pointers derive from existing PLAN_SEAL_ARTIFACTS; correction uses Step9 and reviewer alternative Step10.",
+        "Pointer fields remain advisory; workUnit HEAD/boundary, freshContextRequired, terminalAfterHandback and reuseForbidden unchanged. Worker instructions retain fresh preview comparison, independent verification, no follow-up work.",
+        "Skills preserve required applicable-template full reading, planning artifacts, Q evidence/full fallback, exact HEAD verification and reviewer independence. Reuse only unchanged same-context observations; disagreement/new evidence expands investigation.",
+        "Review investigation bounded by generated focus/inspection/cumulative, unknown/security escalation preserved. Verification full is not misrepresented as universal rereview.",
+        "CLI reviewer alternative carries Step10 pointer rather than inherited correction Step9 pointer."
+      ],
+      "validation": {
+        "sourceOnlyCommand": "node --import tsx cucumber --config /tmp/asc-1576-cucumber-impact.mjs unit/workflow-resume-discipline + unit/review-conformance + integration/review-conformance",
+        "log": "/tmp/asc-1576-workflow-independent-review.log"
+      }
+    },
+    "verificationAndTokens": {
+      "issue": 1576,
+      "pr": 1577,
+      "reviewer": "workflow_revision",
+      "reviewedAt": "2026-10-09T22:39:06.274399+00:00",
+      "scope": "Independent review of root-authored verification plan and provider token normalization only; excludes reviewer-authored handoff and Skills",
+      "baseHead": "5e51700b2a36b54d710ce0cc0e0f38ff8fbd5aa2",
+      "candidate": "uncommitted working-tree source identified by SHA256 below; not final exact-HEAD approval",
+      "sources": {
+        "src/adapters/verification-run.ts": "4cbe516ff1602dfd42340b7c00cc2e52c9f5171b61586ed638f5299187e691d8",
+        "src/cli.ts": "8dea70ebfecc7814dee4afa0708b84ffa1e363d51e645ee4e484822cfc05ae52",
+        "src/cli-usage.ts": "6d49b5feb9544abfabcd52975a0588291a743dc1a51ec0be15785d2a8270ca92",
+        "scripts/report_session_tokens.ts": "0897f0554f4d789a2c3b3d33afac4281c9780c13966fa68d37048d08c27ea724",
+        "test/steps/verification-run-cli.steps.ts": "65ab174239db31df22e3eadecaef0046da886d7dd2af82d8bc668ac11ca08139",
+        "test/steps/session-token-report.steps.ts": "71ba45957b55b0b2f74aea1bd9eaa7dc96551f5eafb62e4c4f364d341fafc7ce"
+      },
+      "decision": "approved-within-reviewed-scope",
+      "activeFindings": [],
+      "resolvedFindings": [
+        {
+          "id": "IR-1576-VERIFY-01",
+          "severity": "Medium",
+          "summary": "Failed latest command plus changed trusted policy hid policy violation behind latest-failure diagnostic",
+          "resolution": "Collect command violations and prioritize trusted-policy mismatch reason when blocked; regression now observes failed record together with policy change",
+          "evidence": "SCN-INT-VERIFYRUN-006 independently passed 1 scenario/9 steps after change"
+        }
+      ],
+      "checks": [
+        "Existing selectObservedVerification semantics preserved: exact HEAD/impact digest, latest failure invalidates older success, current trusted argv enforced",
+        "Read-only plan does not execute commands or append records; downstream gates retain independent checks",
+        "blocked advice offers no impossible rerun command",
+        "Claude total includes separate cache read/write; Codex input includes cached tokens; missing breakdown/cost remain null"
+      ],
+      "tests": [
+        {
+          "log": "/tmp/asc-1576-independent-verify-token-review.log",
+          "scenariosPassed": 12,
+          "stepsPassed": 110,
+          "failures": 0
+        },
+        {
+          "log": "/tmp/asc-1576-independent-verify-token-rereview.log",
+          "scenariosPassed": 1,
+          "stepsPassed": 9,
+          "failures": 0
+        }
+      ],
+      "limitations": [
+        "No claim of Issue E2E time or total-agent token reduction",
+        "No live provider concurrency test performed in this review",
+        "No product files edited, no compile/build performed"
+      ]
+    }
   }
 }

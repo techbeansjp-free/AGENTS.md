@@ -5,6 +5,7 @@ export default tseslint.config(
   {
     ignores: [
       "dist/**",
+      ".agent-skill-chain/managed-runtime/**",
       "node_modules/**",
       ".worktrees/**",
       "issues/**",

@@ -479,24 +479,28 @@ function ecmaScriptImportSpecifiers(source, sourcePath, onUnresolvedImport) {
     const sourceFile = parseEcmaScriptSource(compiler, source, sourcePath);
     const scopes = collectEcmaScriptScopes(compiler, sourceFile, sourcePath);
     const located = [];
-    const stack = [{ node: sourceFile, scope: scopes.get(sourceFile) }];
+    const handledRequireCallees = new Set();
+    const stack = [{ node: sourceFile, scope: scopes.get(sourceFile), inType: false }];
     let nodeCount = 0;
     while (stack.length > 0) {
-        const { node, scope: inherited } = stack.pop();
+        const { node, scope: inherited, inType } = stack.pop();
         nodeCount += 1;
         if (nodeCount > MAX_ECMASCRIPT_IMPORT_SCAN_TOKENS)
             throw new Error(`ECMAScript import scanのAST node件数上限を超えました: ${sourcePath}`);
         const current = scopes.get(node) ?? inherited;
+        const typeOnly = inType || compiler.isTypeNode(node);
         const value = literalImportSpecifier(compiler, node, requireIsShadowed(current));
         if (value !== undefined)
             located.push({ position: node.pos, value });
-        if (value === undefined && compiler.isCallExpression(node)) {
+        if (compiler.isCallExpression(node)) {
             const callee = unwrappedCallTarget(compiler, node.expression);
             const isImport = callee.kind === compiler.SyntaxKind.ImportKeyword;
             const isRequire = compiler.isIdentifier(callee) &&
                 callee.text === "require" &&
                 !current.effectiveRequireShadow;
-            if (isImport || isRequire) {
+            if (isRequire)
+                handledRequireCallees.add(callee);
+            if (value === undefined && (isImport || isRequire)) {
                 const validArity = isImport
                     ? node.arguments.length === 1 || node.arguments.length === 2
                     : node.arguments.length === 1;
@@ -512,12 +516,22 @@ function ecmaScriptImportSpecifiers(source, sourcePath, onUnresolvedImport) {
                         located.push({ position: node.pos, value: candidate });
             }
         }
+        // A require value escaping the supported callee forms has no proven import
+        // boundary (aliases, comma expressions, call/apply/bind, etc.). Do not infer
+        // safety from the absence of a direct call. Property names may also
+        // conservatively expand the scope; lexical shadowing remains authoritative.
+        if (!typeOnly &&
+            compiler.isIdentifier(node) &&
+            node.text === "require" &&
+            !current.effectiveRequireShadow &&
+            !handledRequireCallees.has(node))
+            onUnresolvedImport?.(sourcePath);
         const children = [];
         compiler.forEachChild(node, (child) => {
             children.push(child);
         });
         for (let index = children.length - 1; index >= 0; index -= 1)
-            stack.push({ node: children[index], scope: current });
+            stack.push({ node: children[index], scope: current, inType: typeOnly });
     }
     return located
         .sort((left, right) => left.position - right.position || left.value.localeCompare(right.value))

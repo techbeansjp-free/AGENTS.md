@@ -33,7 +33,7 @@
   ],
   "details": {
     "path": "docs/reviews/1576_performance.raw.json",
-    "sha256": "900db2610eec60cf2a72208b735fa34f544b1e6f91bdb9c326f8252027f65105",
+    "sha256": "7d78afbbd7e30bf6093297286b21a16a3c651ad47d5d1826321277d50234863e",
     "keys": [
       "benchmark",
       "methodology",
@@ -41,7 +41,9 @@
       "regressionExecution",
       "workflowObservations",
       "reproduction",
-      "revisionCacheAdoption"
+      "revisionCacheAdoption",
+      "revisionLiveLifecycle",
+      "revisionIndependentReview"
     ]
   },
   "limitations": [
@@ -63,6 +65,21 @@
       "repeats": 3,
       "scope": "実CLI局所測定。Issue全体E2Eではない。",
       "decision": "process-global cacheを撤去し、既存の一操作内review observerを共有する"
+    },
+    "liveLifecycle": {
+      "candidateSha": "101bcb883e59c33ec8eead8bb9e2982635e8950d",
+      "provider": "codex",
+      "operations": [
+        "update",
+        "delete"
+      ],
+      "trialsPerOperation": 1,
+      "passed": 2,
+      "headAndHandoffPreserved": true,
+      "userSettingsPreserved": true,
+      "unexpectedChangedPaths": 0,
+      "scope": "隔離dummy内の実workerとlifecycle操作の競合。全工程E2E・provider timeoutの実証ではない。",
+      "isolation": "filesystem/PID/mountを隔離。API接続用networkは共有し宛先制限なし。"
     }
   }
 }
