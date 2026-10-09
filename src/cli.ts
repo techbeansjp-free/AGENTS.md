@@ -51,6 +51,7 @@ import {
 import type { VerificationPolicy } from "./domain/verification-run.js";
 import {
   exportReviewEvidence,
+  stagingTrackerIssue,
   verifyReviewEvidenceWithStaging,
 } from "./adapters/review-evidence.js";
 import { runVerification } from "./adapters/verification-run.js";
@@ -2747,6 +2748,7 @@ function inspectAuthorizedPullRequestMerge(input: {
     const verdict = judgeReviewReuseAtMerge({
       root: input.root,
       session: auditReviewSession,
+      issue: stagingTrackerIssue(input.staging),
       tipSha: authority.defaultBranchTipOid,
       actualAuditBase,
       effectiveHeadSha: effectiveImplementationHeadSha,

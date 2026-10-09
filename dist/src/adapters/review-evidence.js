@@ -176,9 +176,12 @@ export function verifyReviewEvidenceWithStaging(input) {
     }
     return errors;
 }
-function issueFromTracker(tracker) {
-    const matched = /\/issues\/(?<issue>[1-9]\d*)$/u.exec(tracker ?? "")?.groups
-        ?.issue;
+/**
+ * stagingのtracker Issue番号（無ければundefined）。`review export`の`--issue`照合と、前headの
+ * review記録の照合（`reviewRecordSuffix`、Issue #1544 R1544-3-01）が同じ正本から取る。
+ */
+export function stagingTrackerIssue(staging) {
+    const matched = /\/issues\/(?<issue>[1-9]\d*)$/u.exec(readStoredStagingRecord(staging).tracker ?? "")?.groups?.issue;
     return matched === undefined ? undefined : Number(matched);
 }
 /**
@@ -202,7 +205,7 @@ export function exportReviewEvidence(input) {
     const gitRoot = stagingRepositoryRoot(staging);
     if (!Number.isSafeInteger(input.issue) || input.issue < 1)
         throw new Error("review exportの--issueは1以上の整数が必要です");
-    const trackerIssue = issueFromTracker(readStoredStagingRecord(staging).tracker);
+    const trackerIssue = stagingTrackerIssue(staging);
     if (trackerIssue !== undefined && trackerIssue !== input.issue)
         throw new Error(`review exportの--issue=${input.issue} がstagingのtracker Issue #${trackerIssue} と一致しません`);
     if (!isReviewActorId(input.reviewer) || !isReviewActorId(input.implementer))

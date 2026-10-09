@@ -1,19 +1,19 @@
 import { git } from "../lib/process.js";
 import { EMPTY_DIFF_DIGEST, assignInspectionForRound, judgeReviewReuse, } from "../domain/review-reuse.js";
-import { deriveReviewRoundImpact } from "./impact-set.js";
+import { deriveReviewRoundImpact, } from "./impact-set.js";
 import { GIT_ENV, evidenceOnlySuffix, observeReviewDiff, observeReviewDiffSections, } from "./review-diff.js";
 import { changedPathsBetween, createFollowObservations, } from "./review-reuse-follow.js";
 /**
  * review再利用判定（C2）が要求するGit観測（Issue #1544 C3）。読み取りsubcommandだけを使い、
  * 例外はC2が該当positionの`判定不能`へ変換する。transitionの観測は同じ範囲を2回導出しない。
  */
-export function createReuseObserver(root, tipSha, counter) {
+export function createReuseObserver(root, tipSha, records, counter) {
     const transitions = new Map();
     const tree = (sha) => git(["rev-parse", "--verify", `${sha}^{tree}`], root, {
         env: GIT_ENV,
     }).stdout.trim();
     return {
-        ...createFollowObservations(root, tipSha, counter),
+        ...createFollowObservations(root, tipSha, records, counter),
         link(previousHeadSha, nextSha) {
             if (evidenceOnlySuffix(root, previousHeadSha, nextSha) !== undefined)
                 return "evidence-suffix";
@@ -40,6 +40,7 @@ export function createReuseObserver(root, tipSha, counter) {
                     root,
                     previousHeadSha: fromSha,
                     headSha: toSha,
+                    records,
                 });
                 observed = {
                     digest: derived.impact.changeDigest,
@@ -71,13 +72,16 @@ export function localDefaultBranchTip(root) {
     const observed = git(["rev-parse", "--verify", "refs/remotes/origin/HEAD^{commit}"], root, { env: GIT_ENV, allowFailure: true });
     return observed.status === 0 ? observed.stdout.trim() : undefined;
 }
-/** `pr merge`の再利用判定。tipは検証済み`authority.defaultBranchTipOid`だけを渡す。 */
+/**
+ * `pr merge`の再利用判定。tipは検証済み`authority.defaultBranchTipOid`だけを渡す。`issue`は
+ * stagingのtracker Issue番号（`stagingTrackerIssue`）で、前headのreview記録の照合に使う。
+ */
 export function judgeReviewReuseAtMerge(input) {
     return judgeReviewReuse({
         session: input.session,
         actualAuditBase: input.actualAuditBase,
         effectiveHeadSha: input.effectiveHeadSha,
-        observer: createReuseObserver(input.root, input.tipSha, input.counter),
+        observer: createReuseObserver(input.root, input.tipSha, { issue: input.issue, session: input.session }, input.counter),
     });
 }
 /** `review round --init`と`--apply`が共有する検分割当（local tipで評価する）。 */
@@ -88,7 +92,7 @@ export function assignReviewInspection(input) {
         toSha: input.toSha,
         focus: input.focus,
         allowFollowOnly: input.allowFollowOnly,
-        observer: createReuseObserver(input.root, localDefaultBranchTip(input.root)),
+        observer: createReuseObserver(input.root, localDefaultBranchTip(input.root), { issue: input.issue, session: input.session }),
     });
 }
 //# sourceMappingURL=review-reuse.js.map

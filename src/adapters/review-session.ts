@@ -62,6 +62,7 @@ import type {
 import type { ImpactSet } from "../domain/impact-set.js";
 import { deriveReviewRoundImpact } from "./impact-set.js";
 import { assignReviewInspection } from "./review-reuse.js";
+import { stagingTrackerIssue } from "./review-evidence.js";
 import type { InspectionAssignment } from "../domain/review-reuse.js";
 
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
@@ -515,6 +516,7 @@ export function buildReviewRoundDraft(input: {
         root,
         previousHeadSha,
         headSha,
+        records: { issue: stagingTrackerIssue(staging), session: previous },
       });
       adjacentScope = derived.adjacentScope;
       adjacentScopeUnbounded = derived.adjacentScopeUnbounded;
@@ -542,6 +544,7 @@ export function buildReviewRoundDraft(input: {
         : assignReviewInspection({
             root,
             session: previous,
+            issue: stagingTrackerIssue(staging),
             fromSha: previousHeadSha,
             toSha: headSha,
             focus,
@@ -842,6 +845,10 @@ export function previewReviewRound(input: {
             root,
             previousHeadSha,
             headSha: input.round.candidateHeadSha,
+            records: {
+              issue: stagingTrackerIssue(staging),
+              session: previous,
+            },
           });
     if (
       stableJson(expectedImpact.adjacentScope) !==
@@ -913,6 +920,7 @@ export function previewReviewRound(input: {
       const assignment = assignReviewInspection({
         root,
         session: previous,
+        issue: stagingTrackerIssue(staging),
         fromSha: previousHeadSha,
         toSha: round.candidateHeadSha,
         focus: round.focus,

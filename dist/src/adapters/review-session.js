@@ -16,6 +16,7 @@ import { LIGHTWEIGHT_TIER_PROVIDER_VERSION } from "./decision-invoke.js";
 import { computeFindingClassificationInputDigest, verifyDecisionRefBinding, } from "../domain/decision-journal.js";
 import { deriveReviewRoundImpact } from "./impact-set.js";
 import { assignReviewInspection } from "./review-reuse.js";
+import { stagingTrackerIssue } from "./review-evidence.js";
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
 import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
@@ -365,6 +366,7 @@ export function buildReviewRoundDraft(input) {
                 root,
                 previousHeadSha,
                 headSha,
+                records: { issue: stagingTrackerIssue(staging), session: previous },
             });
             adjacentScope = derived.adjacentScope;
             adjacentScopeUnbounded = derived.adjacentScopeUnbounded;
@@ -390,6 +392,7 @@ export function buildReviewRoundDraft(input) {
             : assignReviewInspection({
                 root,
                 session: previous,
+                issue: stagingTrackerIssue(staging),
                 fromSha: previousHeadSha,
                 toSha: headSha,
                 focus,
@@ -619,6 +622,10 @@ export function previewReviewRound(input) {
                 root,
                 previousHeadSha,
                 headSha: input.round.candidateHeadSha,
+                records: {
+                    issue: stagingTrackerIssue(staging),
+                    session: previous,
+                },
             });
         if (stableJson(expectedImpact.adjacentScope) !==
             stableJson(input.round.focus.adjacentScope))
@@ -660,6 +667,7 @@ export function previewReviewRound(input) {
             const assignment = assignReviewInspection({
                 root,
                 session: previous,
+                issue: stagingTrackerIssue(staging),
                 fromSha: previousHeadSha,
                 toSha: round.candidateHeadSha,
                 focus: round.focus,

@@ -24,7 +24,10 @@ import {
 import { parseReviewEvidence } from "../../src/domain/review-evidence.js";
 import { refreshStoredStagingDigest } from "../../src/domain/staging.js";
 import { stableJson } from "../../src/lib/security.js";
-import { resealObservedEvidence } from "../support/review-evidence-fixture.js";
+import {
+  resealObservedEvidence,
+  reviewEvidenceContentFromStaging,
+} from "../support/review-evidence-fixture.js";
 import {
   applyReviewReplace,
   commitReviewEvidence,
@@ -528,7 +531,8 @@ type EvidenceReaderShape =
   | "oversized-reader"
   | "dynamic-read"
   | "evidence-rewrite"
-  | "foreign-record";
+  | "foreign-record"
+  | "forged-digest";
 
 /** 4 MiB（意味Graphのfile上限）を超える行コメント。本文は観測から落ちる。 */
 const OVERSIZED_PADDING = `// ${"x".repeat(4 * 1024 * 1024)}\n`;
@@ -579,6 +583,7 @@ function evidenceReaders(shape: EvidenceReaderShape): Record<string, string> {
     // 証跡file自身をfile名の組み立てで読む。
     case "evidence-rewrite":
     case "foreign-record":
+    case "forged-digest":
       return { "src/limit-gate.ts": dynamicEvidenceReader(877) };
   }
 }
@@ -595,8 +600,9 @@ function dynamicEvidenceReader(issue: number): string {
  * `lib-import`・`script-read`・`oversized-reader`・`dynamic-read`は証跡形のfileを`src/`・
  * `lib/`・`scripts/`が読む形（字面import、上限超過で本文が観測されないimport、file名を組み立てる
  * 読み取り）と意味Graphを構築できない状態、`evidence-rewrite`は証跡file自身を前headの記録で
- * ない内容へ、`foreign-record`は別headを束縛した正規の証跡へ書き換えたもので、いずれも全体検分を
- * 割り当てる。testが証跡pathを字面で持つfileも足場に含む。割当を外して証跡pathを除いた形へ
+ * ない内容へ、`foreign-record`は別headを束縛した正規の証跡へ、`forged-digest`は前headを束縛した
+ * 正準形だがround digestがreview sessionと一致しない証跡（R1544-3-01）へ書き換えたもので、
+ * いずれも全体検分を割り当てる。testが証跡pathを字面で持つfileも足場に含む。割当を外して証跡pathを除いた形へ
  * 書き換えたroundは`pr merge`が拒否する。
  */
 function evidencePrefixedImplementation(
@@ -604,7 +610,9 @@ function evidencePrefixedImplementation(
   shape: EvidenceReaderShape,
 ): void {
   const ownEvidence =
-    shape === "evidence-rewrite" || shape === "foreign-record";
+    shape === "evidence-rewrite" ||
+    shape === "foreign-record" ||
+    shape === "forged-digest";
   const helper =
     shape === "source"
       ? "docs/reviews/helper.ts"
@@ -626,16 +634,26 @@ function evidencePrefixedImplementation(
     },
   ]);
   const first = prepared.implementationCommitSha;
+  const recorded = (): ReturnType<typeof parseReviewEvidence> =>
+    parseReviewEvidence(
+      fs.readFileSync(path.join(prepared.root, EVIDENCE), "utf8"),
+    );
   const fixed = fixRetainingEvidence(prepared, {
     [helper]:
       shape === "foreign-record"
-        ? resealObservedEvidence(
-            parseReviewEvidence(
-              fs.readFileSync(path.join(prepared.root, EVIDENCE), "utf8"),
-            ),
-            { implementationHeadSha: prepared.baseSha },
-          )
-        : content(100),
+        ? resealObservedEvidence(recorded(), {
+            implementationHeadSha: prepared.baseSha,
+          })
+        : shape === "forged-digest"
+          ? resealObservedEvidence(recorded(), {
+              session: {
+                ...recorded().observed.session,
+                latestRoundDigest: flipLast(
+                  recorded().observed.session.latestRoundDigest,
+                ),
+              },
+            })
+          : content(100),
   });
   const out = path.join(world.temp("asc-1544-round-"), "round.json");
   const init = executeCli(
@@ -698,6 +716,115 @@ function evidencePrefixedImplementation(
     rejected(prepared),
     "review再利用条件が成立しません",
     `[依存先未検分] path=${shape === "source" ? "src/limit-gate.ts" : "なし"} transition=${first}..${fixed}`,
+    "全体検分round",
+  );
+}
+
+/**
+ * SCN-REVIEW-REUSE-003（R1544-3-01）: 前head（round 2）の直後のevidence-only commitへ、実装が読む
+ * fileとして正準形の証跡を置く。`foreign-path`は対象Issue自身の証跡pathでない
+ * `docs/reviews/9_review.json`へ前headとreview sessionの該当roundを正しく束縛した証跡、
+ * `other-round`は対象Issueの証跡pathへ前headを束縛するがround digestが前headのroundでない
+ * （round 1の）証跡、`other-session`は同じくsession IDだけが異なる証跡である。前headの記録として
+ * 外せるのは、対象Issue（staging tracker #877）の証跡pathで、sessionの前headのroundと照合できる
+ * ものだけなので、そのfileを読む実装の変化を導出し全体検分を割り当てる。割当を外したroundは
+ * `pr merge`が拒否する。
+ */
+function forgedPreviousHeadRecord(
+  world: WorkflowStepWorld,
+  shape: "foreign-path" | "other-round" | "other-session",
+): void {
+  const recordPath =
+    shape === "foreign-path" ? "docs/reviews/9_review.json" : EVIDENCE;
+  const prepared = prepare(world, [
+    {
+      ...(shape === "foreign-path" ? { [recordPath]: '{ "limit": 1 }\n' } : {}),
+      "src/limit-gate.ts": dynamicEvidenceReader(
+        shape === "foreign-path" ? 9 : 877,
+      ),
+      "src/other.ts": "export const other = (): number => 1;\n",
+      "test/steps/app.steps.ts":
+        'import { defineStep } from "@cucumber/cucumber";\nimport "../../src/limit-gate.js";\nimport "../../src/other.js";\n\ndefineStep("アプリを起動する", () => undefined);\n',
+      "test/features/app.feature":
+        "Feature: アプリ\n  Scenario: SCN-FX-1544 起動する\n    Given アプリを起動する\n",
+    },
+  ]);
+  const roundTwo = fixOnTopOfEvidence(prepared, {
+    "src/other.ts": "export const other = (): number => 2;\n",
+  });
+  recordDraft(prepared, roundTwo);
+  const session = readStoredReviewSession(prepared.staging);
+  assert.ok(session);
+  const exported = reviewEvidenceContentFromStaging(prepared.staging, {
+    issue: shape === "foreign-path" ? 9 : 877,
+    baseSha: prepared.baseSha,
+    implementationHeadSha: roundTwo,
+  });
+  const bound = parseReviewEvidence(exported);
+  // 前提の自己確認: 改変前の証跡は正準形で、前headとsessionの該当roundを束縛する。
+  assert.equal(bound.observed.implementationHeadSha, roundTwo);
+  assert.equal(bound.observed.session.sessionId, session.sessionId);
+  assert.equal(
+    bound.observed.session.latestRoundDigest,
+    session.rounds.find(({ candidateHeadSha }) => candidateHeadSha === roundTwo)
+      ?.roundDigest,
+  );
+  const forged =
+    shape === "foreign-path"
+      ? exported
+      : resealObservedEvidence(bound, {
+          session: {
+            ...bound.observed.session,
+            ...(shape === "other-round"
+              ? { latestRoundDigest: session.rounds[0]!.roundDigest }
+              : { sessionId: flipLast(session.sessionId) }),
+          },
+        });
+  assert.equal(
+    parseReviewEvidence(forged).observed.implementationHeadSha,
+    roundTwo,
+  );
+  commit(prepared, { [recordPath]: forged }, "review evidence");
+  const fixed = commit(
+    prepared,
+    { "src/other.ts": "export const other = (): number => 3;\n" },
+    "fix: round 2 finding",
+  );
+  const built = draft(prepared, fixed).round;
+  assert.deepEqual(built.focus.fixedDiff, [recordPath, "src/other.ts"].sort());
+  assert.equal(built.focus.adjacentScopeUnbounded, true);
+  assert.deepEqual(built.inspection, {
+    fromSha: roundTwo,
+    diffDigest: observeReviewDiff(prepared.root, roundTwo, fixed).digest,
+    cumulative: {
+      baseSha: prepared.baseSha,
+      scope: "all",
+      diffDigest: observeReviewDiff(prepared.root, prepared.baseSha, fixed)
+        .digest,
+    },
+  });
+  recordReviewRound({ staging: prepared.staging, round: built });
+  // 偽造した記録を外した導出（是正前の規則）の割当へ書き換える。
+  rewriteRound(prepared, 3, (round) => {
+    const focus: Record<string, unknown> = {
+      ...round.focus,
+      adjacentScope: [],
+    };
+    delete focus.adjacentScopeUnbounded;
+    return {
+      ...round,
+      focus,
+      inspection: {
+        fromSha: roundTwo,
+        diffDigest: round.inspection!.diffDigest,
+      },
+    };
+  });
+  deliverAtBase(prepared, fixed);
+  assertNamed(
+    rejected(prepared),
+    "review再利用条件が成立しません",
+    `[依存先未検分] path=なし transition=${roundTwo}..${fixed}`,
     "全体検分round",
   );
 }
@@ -1145,6 +1272,10 @@ When(
         evidencePrefixedImplementation(this, "dynamic-read");
         evidencePrefixedImplementation(this, "evidence-rewrite");
         evidencePrefixedImplementation(this, "foreign-record");
+        evidencePrefixedImplementation(this, "forged-digest");
+        forgedPreviousHeadRecord(this, "foreign-path");
+        forgedPreviousHeadRecord(this, "other-round");
+        forgedPreviousHeadRecord(this, "other-session");
         break;
       case "SCN-REVIEW-REUSE-004":
         for (const tamper of [

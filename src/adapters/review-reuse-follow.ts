@@ -1,6 +1,10 @@
 import { git } from "../lib/process.js";
 import type { FollowObservation } from "../domain/review-reuse-follow.js";
-import { computeImpactSet, evidenceSuffixPaths } from "./impact-set.js";
+import {
+  computeImpactSet,
+  evidenceSuffixPaths,
+  type ReviewRecordAuthority,
+} from "./impact-set.js";
 import { GIT_ENV } from "./review-diff.js";
 import { isDefaultBranchFollowMerge } from "./review-session-store.js";
 
@@ -32,6 +36,7 @@ export function changedPathsBetween(
 export function createFollowObservations(
   root: string,
   tipSha: string | undefined,
+  records: ReviewRecordAuthority,
   counter?: ReuseObservationCounter,
 ) {
   return {
@@ -78,6 +83,7 @@ export function createFollowObservations(
           previousHeadSha,
           secondParent,
           mergeSha,
+          records,
         ),
       });
       return {

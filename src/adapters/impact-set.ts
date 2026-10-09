@@ -10,7 +10,10 @@ import {
   type ImpactSet,
   type StepDefinitionFileSummary,
 } from "../domain/impact-set.js";
-import type { ReviewAdjacentScope } from "../domain/review-convergence.js";
+import type {
+  ReviewAdjacentScope,
+  ReviewSessionState,
+} from "../domain/review-convergence.js";
 import { tryParseReviewEvidence } from "../domain/review-evidence.js";
 import { semanticGraphContentHash } from "../domain/semantic-graph.js";
 import {
@@ -350,6 +353,7 @@ export function deriveReviewRoundImpact(input: {
   root: string;
   previousHeadSha: string;
   headSha: string;
+  records: ReviewRecordAuthority;
 }): {
   impact: ImpactSet;
   adjacentScope: readonly ReviewAdjacentScope[];
@@ -359,6 +363,7 @@ export function deriveReviewRoundImpact(input: {
     input.root,
     input.previousHeadSha,
     input.headSha,
+    input.records,
   );
   const derived = computeImpactSet({
     root: input.root,
@@ -385,28 +390,54 @@ export function deriveReviewRoundImpact(input: {
 }
 
 /**
- * **前headのreview記録だけを足したsuffixのpath**（Issue #1544 INV-07、R1544-2-01）。
- * `fromSha`から`tipSha`までがevidence-only suffix（`evidenceOnlySuffix`）で、かつ`tipSha`の
- * そのfileが`fromSha`を実装headとして束縛した正規のreview証跡（`parseReviewEvidence`が受理し
- * `observed.implementationHeadSha === fromSha`）のときだけpathを返す。path名やfile名の字面、
- * 「誰も読まない」ことの走査には依らない。証跡形でも前headの記録でない内容（実装が読むJSON等）は
- * 外さない。
+ * 前headのreview記録を照合する正本（Issue #1544 INV-07、R1544-3-01）。`issue`はstagingの
+ * tracker Issue番号で、証跡fileの申告値から取らない（無ければ何も外さない）。`session`は
+ * append-onlyのstaging記録で、PRのcommitからは書き換えられない。
+ */
+export interface ReviewRecordAuthority {
+  issue: number | undefined;
+  session: Pick<ReviewSessionState, "sessionId" | "rounds">;
+}
+
+/**
+ * **前headのreview記録だけを足したsuffixのpath**（Issue #1544 INV-07、R1544-2-01・R1544-3-01）。
+ * `fromSha`から`tipSha`までがevidence-only suffix（`evidenceOnlySuffix`）で、そのpathが対象Issue
+ * 自身の証跡path（`review export`の出力先規則の`docs/reviews/<Issue番号>_review.json`または
+ * `.agent-skill-chain/reviews/<Issue番号>_review.json`）であり、`tipSha`のそのfileが正規の
+ * review証跡（`parseReviewEvidence`が受理）として`fromSha`を実装headに束縛し、かつ証跡の
+ * `sessionId`と`latestRoundDigest`がreview sessionの`candidateHeadSha === fromSha`のroundと
+ * 一致するときだけpathを返す。正準形は公開関数で誰でも作れるため、形と申告値だけでは外さない。
+ * 照合できなければundefinedで、呼び出し側は従来どおり全diffから導出する（できなければ`full`）。
  */
 function reviewRecordSuffix(
   root: string,
   fromSha: string,
   tipSha: string,
+  records: ReviewRecordAuthority,
 ): string | undefined {
   const path = evidenceOnlySuffix(root, fromSha, tipSha);
-  if (path === undefined) return undefined;
+  if (
+    path === undefined ||
+    records.issue === undefined ||
+    (path !== `docs/reviews/${records.issue}_review.json` &&
+      path !== `.agent-skill-chain/reviews/${records.issue}_review.json`)
+  )
+    return undefined;
   const shown = git(["show", `${tipSha}:${path}`], root, {
     env: GIT_ENV,
     allowFailure: true,
   });
   if (shown.status !== 0) return undefined;
   const parsed = tryParseReviewEvidence(shown.stdout);
-  return "evidence" in parsed &&
-    parsed.evidence.observed.implementationHeadSha === fromSha
+  if (!("evidence" in parsed)) return undefined;
+  const { implementationHeadSha, session } = parsed.evidence.observed;
+  return implementationHeadSha === fromSha &&
+    session.sessionId === records.session.sessionId &&
+    records.session.rounds.some(
+      ({ candidateHeadSha, roundDigest }) =>
+        candidateHeadSha === fromSha &&
+        roundDigest === session.latestRoundDigest,
+    )
     ? path
     : undefined;
 }
@@ -428,6 +459,7 @@ function evidenceSuffixTip(
   root: string,
   fromSha: string,
   toSha: string,
+  records: ReviewRecordAuthority,
 ): string {
   let tip = fromSha;
   let path: string | undefined;
@@ -439,7 +471,7 @@ function evidenceSuffixTip(
     .stdout.split("\n")
     .filter(Boolean)) {
     if (evidenceOnlySuffix(root, fromSha, commit) === undefined) break;
-    const recorded = reviewRecordSuffix(root, fromSha, commit);
+    const recorded = reviewRecordSuffix(root, fromSha, commit, records);
     if (recorded === undefined) continue;
     tip = commit;
     path = recorded;
@@ -462,11 +494,12 @@ export function evidenceSuffixPaths(
   previousHeadSha: string,
   secondParent: string,
   mergeSha: string,
+  records: ReviewRecordAuthority,
 ): string[] {
   const firstParent = git(["rev-parse", "--verify", `${mergeSha}^1`], root, {
     env: GIT_ENV,
   }).stdout.trim();
-  const path = reviewRecordSuffix(root, previousHeadSha, firstParent);
+  const path = reviewRecordSuffix(root, previousHeadSha, firstParent, records);
   return path !== undefined &&
     blobAt(root, previousHeadSha, path) === blobAt(root, secondParent, path)
     ? [path]

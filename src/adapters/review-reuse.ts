@@ -12,7 +12,10 @@ import {
   type ReuseVerdict,
   type TransitionObservation,
 } from "../domain/review-reuse.js";
-import { deriveReviewRoundImpact } from "./impact-set.js";
+import {
+  deriveReviewRoundImpact,
+  type ReviewRecordAuthority,
+} from "./impact-set.js";
 import {
   GIT_ENV,
   evidenceOnlySuffix,
@@ -34,6 +37,7 @@ export type { ReuseObservationCounter };
 export function createReuseObserver(
   root: string,
   tipSha: string | undefined,
+  records: ReviewRecordAuthority,
   counter?: ReuseObservationCounter,
 ): ReuseObserver {
   const transitions = new Map<string, TransitionObservation>();
@@ -42,7 +46,7 @@ export function createReuseObserver(
       env: GIT_ENV,
     }).stdout.trim();
   return {
-    ...createFollowObservations(root, tipSha, counter),
+    ...createFollowObservations(root, tipSha, records, counter),
     link(previousHeadSha, nextSha) {
       if (evidenceOnlySuffix(root, previousHeadSha, nextSha) !== undefined)
         return "evidence-suffix";
@@ -68,6 +72,7 @@ export function createReuseObserver(
           root,
           previousHeadSha: fromSha,
           headSha: toSha,
+          records,
         });
         observed = {
           digest: derived.impact.changeDigest,
@@ -103,10 +108,14 @@ export function localDefaultBranchTip(root: string): string | undefined {
   return observed.status === 0 ? observed.stdout.trim() : undefined;
 }
 
-/** `pr merge`の再利用判定。tipは検証済み`authority.defaultBranchTipOid`だけを渡す。 */
+/**
+ * `pr merge`の再利用判定。tipは検証済み`authority.defaultBranchTipOid`だけを渡す。`issue`は
+ * stagingのtracker Issue番号（`stagingTrackerIssue`）で、前headのreview記録の照合に使う。
+ */
 export function judgeReviewReuseAtMerge(input: {
   root: string;
   session: ReviewSessionState;
+  issue: number | undefined;
   tipSha: string;
   actualAuditBase: string;
   effectiveHeadSha: string;
@@ -116,7 +125,12 @@ export function judgeReviewReuseAtMerge(input: {
     session: input.session,
     actualAuditBase: input.actualAuditBase,
     effectiveHeadSha: input.effectiveHeadSha,
-    observer: createReuseObserver(input.root, input.tipSha, input.counter),
+    observer: createReuseObserver(
+      input.root,
+      input.tipSha,
+      { issue: input.issue, session: input.session },
+      input.counter,
+    ),
   });
 }
 
@@ -124,6 +138,7 @@ export function judgeReviewReuseAtMerge(input: {
 export function assignReviewInspection(input: {
   root: string;
   session: ReviewSessionState;
+  issue: number | undefined;
   fromSha: string;
   toSha: string;
   focus: ReviewRoundFocus;
@@ -138,6 +153,7 @@ export function assignReviewInspection(input: {
     observer: createReuseObserver(
       input.root,
       localDefaultBranchTip(input.root),
+      { issue: input.issue, session: input.session },
     ),
   });
 }

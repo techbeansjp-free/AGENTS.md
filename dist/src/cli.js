@@ -16,7 +16,7 @@ import { formatReuseDiagnostic } from "./domain/review-reuse.js";
 import { judgeReviewReuseAtMerge } from "./adapters/review-reuse.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
 import { parseReviewEvidence, } from "./domain/review-evidence.js";
-import { exportReviewEvidence, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
+import { exportReviewEvidence, stagingTrackerIssue, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
 import { runVerification } from "./adapters/verification-run.js";
 import { observeWorkflowHandoff, workflowAgentDispatch, } from "./adapters/workflow-handoff.js";
 import { observeWorkflowResume } from "./adapters/workflow-resume.js";
@@ -1746,6 +1746,7 @@ function inspectAuthorizedPullRequestMerge(input) {
         const verdict = judgeReviewReuseAtMerge({
             root: input.root,
             session: auditReviewSession,
+            issue: stagingTrackerIssue(input.staging),
             tipSha: authority.defaultBranchTipOid,
             actualAuditBase,
             effectiveHeadSha: effectiveImplementationHeadSha,

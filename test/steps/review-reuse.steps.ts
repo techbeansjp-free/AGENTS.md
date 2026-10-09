@@ -1019,6 +1019,7 @@ function adapterObservation(world: ReuseWorld): void {
   const verdict = judgeReviewReuseAtMerge({
     root,
     session,
+    issue: 1544,
     tipSha: secondMain,
     actualAuditBase: secondMain,
     effectiveHeadSha: secondFollow,
@@ -1041,6 +1042,7 @@ function adapterObservation(world: ReuseWorld): void {
   const failed = judgeReviewReuseAtMerge({
     root,
     session: unobservable,
+    issue: 1544,
     tipSha: base,
     actualAuditBase: base,
     effectiveHeadSha: fixed,

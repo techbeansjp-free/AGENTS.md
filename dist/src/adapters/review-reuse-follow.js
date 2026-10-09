@@ -1,5 +1,5 @@
 import { git } from "../lib/process.js";
-import { computeImpactSet, evidenceSuffixPaths } from "./impact-set.js";
+import { computeImpactSet, evidenceSuffixPaths, } from "./impact-set.js";
 import { GIT_ENV } from "./review-diff.js";
 import { isDefaultBranchFollowMerge } from "./review-session-store.js";
 /** `git diff --name-only -z --no-renames`のpath列（content再計算に数えない）。 */
@@ -12,7 +12,7 @@ export function changedPathsBetween(root, fromSha, toSha) {
  * 追随の観測だけを行う（Issue #1544 C3の追随部分）。既定branch tipは呼び出し側が注入し、
  * `pr merge`は検証済み`authority.defaultBranchTipOid`、雛形はlocal tipを渡す。
  */
-export function createFollowObservations(root, tipSha, counter) {
+export function createFollowObservations(root, tipSha, records, counter) {
     return {
         followParent(previousHeadSha, mergeSha, baseSha) {
             if (tipSha === undefined ||
@@ -41,7 +41,7 @@ export function createFollowObservations(root, tipSha, counter) {
                 root,
                 baseSha: secondParent,
                 headSha: mergeSha,
-                excludePaths: evidenceSuffixPaths(root, previousHeadSha, secondParent, mergeSha),
+                excludePaths: evidenceSuffixPaths(root, previousHeadSha, secondParent, mergeSha, records),
             });
             return {
                 mainChanged,
