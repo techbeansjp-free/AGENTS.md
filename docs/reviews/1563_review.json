@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1563,
+  "observed": {
+    "baseSha": "4ef8036f6bb36ccc05eefcf68a2628a6e8a5ddc3",
+    "implementationHeadSha": "c1d6d4a1916839eeb15ab9e61129769e7d66cd4a",
+    "diffDigest": "4da4ea15145b750fa825104f8cda7984836b43894e8ef8ab3e11c5a492d3d32d",
+    "session": {
+      "sessionId": "83da5bf276b38688233f4ce0d34c8975f51a6b263a8685d13d8b8bdeccbd39be",
+      "latestRoundDigest": "5da42fd35b599425d52d67defab1752970315070667b7719d4a96624b24fa577",
+      "status": "converged",
+      "countedRounds": 1
+    },
+    "impact": {
+      "digest": "f5d46387faab25aa1b88b1452e689fc825d231a69345e2f4d39491fafa68150f",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "c1d6d4a1916839eeb15ab9e61129769e7d66cd4a",
+        "impactDigest": "f5d46387faab25aa1b88b1452e689fc825d231a69345e2f4d39491fafa68150f",
+        "finishedAt": "2026-10-09T00:36:56.506Z",
+        "recordDigest": "ab2bfa66009ec47a5fcfbee7fa8ff26ba5470ceab52a8d4c6ff1550d9344d2fe"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "R1-1",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/domain/review-convergence.ts",
+      "contractId": "INV-03"
+    },
+    {
+      "id": "R1-2",
+      "severity": "Medium",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/adapters/delegated-review-launch.ts",
+      "contractId": "INV-02"
+    },
+    {
+      "id": "R1-3",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "docs/specs/15_要件追跡/00_追跡表.md",
+      "contractId": "AC-04"
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "claude-code:subagent/reviewer-replaced2-round1-1563",
+    "implementer": "codex-review-fastpath-workers",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "bd6de2c47629ab1173b1f2f316bc19f07e38d4b78e6610c5cc0f5a62ef047726"
+}

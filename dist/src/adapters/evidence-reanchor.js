@@ -7,7 +7,7 @@ import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { deriveEffectiveHead, isContentEquivalent, isRebaseEquivalent, isEvidenceReanchorRecord, } from "../domain/evidence-reanchor.js";
 import { comparableReviewEvidence, tryParseReviewEvidence, validateReviewEvidenceAgainstSession, } from "../domain/review-evidence.js";
 import { isEvidenceOnlyPath } from "../domain/review.js";
-import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
+import { unconvergedReviewSessionDiagnostic, isReviewSessionConverged, } from "../domain/review-convergence.js";
 import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, refreshStoredStagingDigest, withStagingMutationLock, } from "../domain/staging.js";
 import { observeStoredDeliveryState, readStoredDeliveryState, } from "./delivery-state.js";
 import { GIT_ENV, evidenceOnlySuffix, observeReviewDiff, observeSingleCommitParent, readBlobAtCommit, } from "./review-diff.js";
@@ -264,7 +264,7 @@ function acceptedSessionEvidence(staging, evidence, options) {
         .reverse()
         .find((entry) => entry.step === 10 && (!options.postPrIntake || entry.postPrIntake))?.reviewSession;
     return (session !== null &&
-        session.status === "converged" &&
+        isReviewSessionConverged(session) &&
         session.latestCandidateHeadSha ===
             evidence.observed.implementationHeadSha &&
         validateReviewEvidenceAgainstSession(evidence, session).length === 0 &&
@@ -530,8 +530,8 @@ function resolveAnchor(staging, layer) {
     const session = readStoredReviewSession(staging);
     if (session === null)
         throw new Error("review reanchorには永続review sessionが必要です");
-    if (session.status !== "converged")
-        throw new Error(unconvergedReviewSessionDiagnostic(session.status));
+    if (!isReviewSessionConverged(session))
+        throw new Error(unconvergedReviewSessionDiagnostic(session));
     return {
         anchoredHeadSha: session.latestCandidateHeadSha,
         anchoredBaseSha: session.anchor.diffBaseSha,

@@ -5,7 +5,10 @@ import {
   planSealDigest,
   type PlanSeal,
 } from "./plan-seal.js";
-import type { ReviewSessionState } from "./review-convergence.js";
+import {
+  isReviewSessionConverged,
+  type ReviewSessionState,
+} from "./review-convergence.js";
 import type { VerificationRunRecord } from "./verification-run.js";
 
 /**
@@ -149,7 +152,7 @@ export function deriveWorkflowResume(
       session === null
         ? null
         : {
-            status: session.status,
+            status: isReviewSessionConverged(session) ? "converged" : "active",
             latestRoundDigest: session.latestRoundDigest,
             candidateHeadSha: session.latestCandidateHeadSha,
             rounds: session.rounds.length,

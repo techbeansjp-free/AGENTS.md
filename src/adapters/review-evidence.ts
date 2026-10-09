@@ -5,7 +5,10 @@ import { writeFileAtomic } from "../lib/atomic.js";
 import { git } from "../lib/process.js";
 import { isContentEquivalent } from "../domain/evidence-reanchor.js";
 import { isEvidenceOnlyPath } from "../domain/review.js";
-import { unconvergedReviewSessionDiagnostic } from "../domain/review-convergence.js";
+import {
+  unconvergedReviewSessionDiagnostic,
+  isReviewSessionConverged,
+} from "../domain/review-convergence.js";
 import {
   createReviewEvidence,
   isReviewActorId,
@@ -158,16 +161,15 @@ export function observedEvidenceErrors(
   const errors: string[] = [];
   let impact: ReturnType<typeof computeImpactSet> | undefined;
   try {
-    const diff = observeReviewDiff(root, baseSha, implementationHeadSha);
-    if (diff.digest !== evidence.observed.diffDigest)
-      errors.push(
-        "review証跡のdiffDigestが比較基点..H_implのGit差分と一致しません",
-      );
     impact = computeImpactSet({
       root,
       baseSha,
       headSha: implementationHeadSha,
     });
+    if (impact.changeDigest !== evidence.observed.diffDigest)
+      errors.push(
+        "review証跡のdiffDigestが比較基点..H_implのGit差分と一致しません",
+      );
     if (impact.digest !== evidence.observed.impact.digest)
       errors.push(
         "review証跡の影響集合digestが比較基点..H_implから再計算した影響集合と一致しません",
@@ -319,8 +321,8 @@ export function exportReviewEvidence(input: {
   const session = readStoredReviewSession(staging);
   if (session === null)
     throw new Error("review exportには永続review sessionが必要です");
-  if (session.status !== "converged")
-    throw new Error(unconvergedReviewSessionDiagnostic(session.status));
+  if (!isReviewSessionConverged(session))
+    throw new Error(unconvergedReviewSessionDiagnostic(session));
   const currentHeadSha = resolveCommit(gitRoot, "current HEAD", "HEAD");
   const implementationHeadSha = resolveImplementationHead(
     gitRoot,
@@ -364,8 +366,7 @@ export function exportReviewEvidence(input: {
     issue: input.issue,
     baseSha,
     implementationHeadSha,
-    diffDigest: observeReviewDiff(gitRoot, baseSha, implementationHeadSha)
-      .digest,
+    diffDigest: impact.changeDigest,
     session,
     impact: { digest: impact.digest, mode: impact.mode },
     verification,

@@ -2920,9 +2920,10 @@ Given("Step skillから規範文書へのlinkを壊したpackageがある", func
       path.join(root, ".agent-skill-chain/templates"),
       { recursive: true },
     );
-    fs.copyFileSync(
-      ".agent-skill-chain/docs/01_開発ワークフロー.md",
-      path.join(root, ".agent-skill-chain/docs/01_開発ワークフロー.md"),
+    fs.cpSync(
+      ".agent-skill-chain/docs",
+      path.join(root, ".agent-skill-chain/docs"),
+      { recursive: true },
     );
     const skillFile = path.join(
       root,

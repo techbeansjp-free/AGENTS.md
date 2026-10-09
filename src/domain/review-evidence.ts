@@ -3,6 +3,9 @@ import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
 import {
   countedRounds,
+  effectiveReviewBlocking,
+  isReviewSessionConverged,
+  unconvergedReviewSessionDiagnostic,
   REVIEW_ROUND_RECORD_LIMIT,
   type ReviewFindingRelation,
   type ReviewFindingSeverity,
@@ -442,7 +445,7 @@ function parseEvidenceValue(value: unknown): ReviewEvidence {
     evidence.unresolvedCriticalHigh.length !== 0
   )
     throw new Error(
-      "review evidence.unresolvedCriticalHighは空配列だけを受理します。未解決Critical/Highが残るreviewは証跡にできません",
+      "review evidence.unresolvedCriticalHighは空配列だけを受理します。未解決blockerが残るreviewは証跡にできません",
     );
   if (evidence.verdict !== "approved")
     throw new Error("review evidence.verdictはapprovedだけを受理します");
@@ -594,11 +597,11 @@ export function finalReviewFindings(
   );
 }
 
-/** 最新roundのblocking。収束済みsessionでは空である。 */
+/** 名前は保存互換のため保持。全severityの実効blockerを返す。 */
 export function unresolvedCriticalHighFindings(
   session: ReviewSessionState,
 ): readonly string[] {
-  return Object.freeze([...(session.rounds.at(-1)?.blocking ?? [])].sort());
+  return effectiveReviewBlocking(session);
 }
 
 /**
@@ -618,14 +621,14 @@ export function createReviewEvidence(input: {
   readonly reviewer: string;
   readonly implementer: string;
 }): ReviewEvidence {
-  if (input.session.status !== "converged")
+  if (!isReviewSessionConverged(input.session))
     throw new Error(
-      `review sessionが収束していないため証跡を生成できません: status=${input.session.status}`,
+      `review sessionが収束していないため証跡を生成できません: status=${input.session.status}。${unconvergedReviewSessionDiagnostic(input.session)}`,
     );
   const unresolved = unresolvedCriticalHighFindings(input.session);
   if (unresolved.length > 0)
     throw new Error(
-      `未解決Critical/Highが残るため証跡を生成できません: ${unresolved.join(", ")}`,
+      `未解決blockerが残るため証跡を生成できません: ${unresolved.join(", ")}`,
     );
   return sealReviewEvidence({
     schemaVersion: REVIEW_EVIDENCE_SCHEMA_VERSION,
@@ -676,8 +679,8 @@ export function validateReviewEvidenceAgainstSession(
   if (session === null)
     return ["review証跡を照合する永続review sessionがありません"];
   const observed = evidence.observed;
-  if (session.status !== "converged")
-    errors.push(`review sessionが収束していません: status=${session.status}`);
+  if (!isReviewSessionConverged(session))
+    errors.push(unconvergedReviewSessionDiagnostic(session));
   if (observed.session.sessionId !== session.sessionId)
     errors.push("review証跡のsessionIdが保存済みsessionと一致しません");
   if (observed.session.latestRoundDigest !== session.latestRoundDigest)
@@ -696,9 +699,7 @@ export function validateReviewEvidenceAgainstSession(
     stableJson(evidence.unresolvedCriticalHigh) !==
     stableJson(unresolvedCriticalHighFindings(session))
   )
-    errors.push(
-      "review証跡の未解決Critical/Highが保存済みsessionと一致しません",
-    );
+    errors.push("review証跡の未解決blockerが保存済みsessionと一致しません");
   if (
     options.independenceMode !== undefined &&
     evidence.declared.independenceMode !== options.independenceMode

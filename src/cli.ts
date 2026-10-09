@@ -32,6 +32,7 @@ import {
   parseReviewRoundInput,
   reviewDivergence,
   unconvergedReviewSessionDiagnostic,
+  isReviewSessionConverged,
 } from "./domain/review-convergence.js";
 import {
   appendReviewProgress,
@@ -2701,10 +2702,8 @@ function inspectAuthorizedPullRequestMerge(input: {
     throw new Error(
       "review sessionが見つからないため実際の監査範囲を検証できません",
     );
-  if (auditReviewSession.status !== "converged")
-    throw new Error(
-      unconvergedReviewSessionDiagnostic(auditReviewSession.status),
-    );
+  if (!isReviewSessionConverged(auditReviewSession))
+    throw new Error(unconvergedReviewSessionDiagnostic(auditReviewSession));
   const effectiveImplementationHeadSha =
     reviewed.reviewEvidence.implementationCommitSha;
   if (actualAuditBase !== auditReviewSession.anchor.diffBaseSha)

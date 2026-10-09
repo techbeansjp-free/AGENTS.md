@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "agent-skill-chain/review-session/v1",
+  "sessionId": "75bac4b7ffc955b64f4b71c6a57e1d1a309070cfa508f0e403969ae0593385b0",
+  "anchor": {
+    "scopeIds": ["SCOPE-01"],
+    "acceptanceCriteriaIds": ["AC-01"],
+    "invariantIds": ["INV-01"],
+    "diffBaseSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "initialHeadSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "initialDiffDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "previousRoundDigest": null,
+      "candidateHeadSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "focus": {
+        "previousBlocking": [],
+        "fixedDiff": [],
+        "adjacentScope": []
+      },
+      "findings": [
+        {
+          "id": "F-LEGACY-01",
+          "severity": "High",
+          "status": "valid",
+          "source": "review",
+          "relation": "acceptance-violation",
+          "evidence": "AC-01の期待結果と実測結果が不一致",
+          "path": "src/example.ts",
+          "contractId": "AC-01",
+          "causedByFindingId": null,
+          "admission": "block-current",
+          "admissionReason": "固定済みAcceptance Criteriaへの違反を再現した"
+        }
+      ],
+      "blocking": ["F-LEGACY-01"],
+      "recordOnly": [],
+      "roundDigest": "1bc15a75887d563c45e8dc7597b3c4b6f3da1a40fe4f5a7285ebcaf668602e84"
+    }
+  ],
+  "latestRoundDigest": "1bc15a75887d563c45e8dc7597b3c4b6f3da1a40fe4f5a7285ebcaf668602e84",
+  "latestCandidateHeadSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "status": "active"
+}

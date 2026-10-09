@@ -1,4 +1,5 @@
 import { latestPlanSeal, planAmendmentDigests, planSealDigest, } from "./plan-seal.js";
+import { isReviewSessionConverged, } from "./review-convergence.js";
 /**
  * 両辺が既知のときだけ真偽を返す。**どちらかが不明なら`null`であり、一致と表示しない。**
  */
@@ -59,7 +60,7 @@ export function deriveWorkflowResume(input) {
         review: session === null
             ? null
             : {
-                status: session.status,
+                status: isReviewSessionConverged(session) ? "converged" : "active",
                 latestRoundDigest: session.latestRoundDigest,
                 candidateHeadSha: session.latestCandidateHeadSha,
                 rounds: session.rounds.length,

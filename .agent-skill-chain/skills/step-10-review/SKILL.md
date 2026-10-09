@@ -5,7 +5,7 @@ description: exact-headの実装をGitから直接reviewし、finding状態と�
 
 # ステップ10: 実装レビュー
 
-**reviewの目的は仕様適合（Conformance）、security、正しさ（Correctness）の確認であり、文章の審査ではない。** 入力はGitと仕様であり、実装者が変更内容を説明し直した文書ではない。成果物はreview sessionの構造化data（finding状態、round digest、固定HEAD）と、収束後に`review export`が生成するreview証跡1 fileである。人もAIもreview証跡の本文を書かない。影響不明または未解決Critical/Highは停止する。**Step 10はPR作成前に完了する。** PR番号・Actions run ID・GitHub review IDはこの時点で存在しないので要求しない。
+**reviewの目的は仕様適合（Conformance）、security、正しさ（Correctness）の確認であり、文章の審査ではない。** 入力はGitと仕様であり、実装者が変更内容を説明し直した文書ではない。成果物はreview sessionの構造化data（finding状態、round digest、固定HEAD）と、収束後に`review export`が生成するreview証跡1 fileである。人もAIもreview証跡の本文を書かない。影響不明時のfull確認と未解決blockerの扱いは[品質基準のレビュー収束契約](../../docs/02_品質基準.md#レビュー収束契約)に従う。**Step 10はPR作成前に完了する。** PR番号・Actions run ID・GitHub review IDはこの時点で存在しないので要求しない。
 
 ## 入力
 
@@ -17,8 +17,8 @@ description: exact-headの実装をGitから直接reviewし、finding状態と�
 1. `review round --init --staging=<staging> --head=<H_impl>`（round 1は`--base`・`--scope`・`--ac`を加える）で骨子を生成し、reviewの指摘だけを`findings`へ書いて`review round --apply`で記録する。入力JSON fileはstagingの外に置く。blocking findingの`contractId`はanchorのAcceptance Criteria IDまたはInvariant IDに一致させる。
 2. **findingは状態として扱う。** 前round blockerは同じIDのまま骨子へ写されるので、是正済みなら`status`を`resolved`へ変え、`evidence`へ確認した事実を1行で書く。新しい文章として作り直さない。`adjacentScope`は手で書き換えない。記録時にGitから導出し直し、一致しなければ拒否される。
 3. 評価基準（`02_品質基準.md`のレビュー収束契約が定める肯定・敵対）は全roundで確認するが、`pass`の項目を文章で残さない。残すのはfindingと判定だけである。
-4. 修正は前進commitで行い、次roundは修正差分と影響集合だけを見る。admission規則、発散warning、取り直しの規則は`02_品質基準.md`のレビュー収束契約が所有する。
-5. Step 9の`H_impl`・比較基点・影響集合を固定した変更のないworktreeで、手順1〜4の独立reviewと並行して`verify run --staging=<staging> --base=<同じ比較基点SHA> --scope=targeted|full -- <検証commandのargv>`を開始できる。session作成前・未収束でも`--base`を明示すれば開始できる。reviewerは読み取り専用で確認し、検証中はHEADとworktreeを変更しない。journalへの書込みは進行役が直列化する。修正は検証の終了または明示中止後に行い、新HEADでは検証と独立reviewを再実施する。argvは既定branchのproject policyが`verification`で宣言したcommandだけを受理する（`full`は`fullCommand`そのもの、`targeted`は`targetedRunner`の後ろに影響集合のfeatureを並べたもの）。commandはshellを通さず実行され、HEAD・影響集合digest・終了値がstagingの観測記録へ追記される。影響集合が`full`なら`--scope=full`の実行が必要である。**検証の合格は申告ではなく観測である。** 「実行した」と書いても証跡にはならない。
+4. 修正可否は派生欠陥一般則よりreview admissionを優先する。正本のbatch規則に従い、安全にまとめられる全blockerを1 batchの前進修正とし、次roundは`previousBlocking`・修正差分・Git由来の隣接範囲を見る。admission規則、発散warning、取り直しの規則は`02_品質基準.md`のレビュー収束契約が所有する。
+5. Step 9の`H_impl`・比較基点・影響集合を固定した変更のないworktreeで、手順1〜4の独立reviewと並行して`verify run --staging=<staging> --base=<同じ比較基点SHA> --scope=targeted|full -- <検証commandのargv>`を開始できる。session作成前・未収束でも`--base`を明示すれば開始できる。reviewerは読み取り専用で確認し、検証中はHEADとworktreeを変更しない。journalへの書込みは進行役が直列化する。修正は独立reviewと検証の両方の終了または明示中止後に行い、新HEADでは必要な検証と独立reviewを再実施する。同HEAD・同argv等の束縛条件を満たす既存成功記録は正本の再利用条件で参照し、重複実行しない。argvは既定branchのproject policyが`verification`で宣言したcommandだけを受理する（`full`は`fullCommand`そのもの、`targeted`は`targetedRunner`の後ろに影響集合のfeatureを並べたもの）。commandはshellを通さず実行され、HEAD・影響集合digest・終了値がstagingの観測記録へ追記される。影響集合が`full`なら`--scope=full`の実行が必要である。**検証の合格は申告ではなく観測である。** 「実行した」と書いても証跡にはならない。
 6. 同じ`H_impl`・比較基点・影響集合について独立reviewが収束し、必要な検証が成功したことを確認してから、`review export --staging=<staging> --issue=<番号> --reviewer=<reviewer ID> --implementer=<implementer ID>`でreview証跡（`<Issue番号>_review.json`）を生成し、実装commitの後にその1 fileだけをcommitして`H_final`にする。証跡の検証欄は`H_impl`と影響集合に一致する合格した観測記録から導出され、無ければ生成しない。reviewer・implementer・独立性は`declared`（申告）として記録され、hard gateの根拠にならない。`workflow record --step=10`は`H_final`で実行でき、bindingはsessionのcandidate HEAD（`H_impl`）のまま記録される。
 
 ## reviewerと判定
@@ -31,7 +31,7 @@ role欄の担当roleが`reviewer`であること、必要能力tier、provider�
 
 ローカルまたはユーザー共通のローカルLLM reviewer設定が有効なら、`routing delegated-review-diff --root=<root> --base=<比較基点SHA> --head=<H_impl> --staging=<staging>`で委譲し、返った候補を進行役がHEADのcode・仕様・test・失敗経路で確かめて採否を決める。ローカルLLMの判定を最終判定へ直結しない。利用可能な別reviewer（Codex SolまたはOpus）にも同じ固定HEADを独立にreviewさせる。
 
-- 分類（severity等）と理由の記入（DCAND-006）は`agent-skill-chain decision invoke --type=DCAND-006 --staging=<staging> --input=<file> --apply`で行う。advisoryなので進行役が確認して`confirmedBy`を付けて再実行し、`effectiveValue`確定後の`decisionRecordId`をfindingの`decisionRef`へ書く。人・進行役が直接分類した場合は`null`。
+- 分類（severity等）と理由の記入（DCAND-006）は人・進行役の直接分類（`decisionRef: null`）を標準とする。曖昧な分類を委譲して得た提案を記録する場合だけ、`agent-skill-chain decision invoke --type=DCAND-006 --staging=<staging> --input=<file> --apply`を使う。これは外部LLM呼出ではなくself-serveの提案記録であり、advisoryとして進行役が確認して`confirmedBy`を付け、`effectiveValue`確定後の`decisionRecordId`を`decisionRef`へ書く。提示した参照の機械検証は維持する。曖昧な分類への助言を活用しても、決定論的admissionはruntimeだけが導出する。
 - reviewer選定（DCAND-009）は`decision invoke --type=DCAND-009`で行う。`candidateSet`と`proposedValue`はprovider ID（`codex`・`claude`）。
 - CodeRabbitの利用枠制限の判定（DCAND-008）は`decision invoke --type=DCAND-008`で行う。`confirmed-limited`ならOpusとCodex Solの両方へ独立reviewを委譲し、片方を利用できなければ未実施として人間へ再開条件の判断を求める。
 
@@ -53,7 +53,7 @@ Makefileは`make -n <target>`で展開した実commandへ当てる。**ただし
 
 `pr create`より後に届いた外部reviewerの指摘は、条件を満たす場合に同じPRへ取り込む。条件と手順の正本は[01_開発ワークフロー.md](../../docs/01_開発ワークフロー.md#レビュー配置と前向きな変更処理)であり、ここへ複写しない。Step 11前の`pr-bound`中は`workflow record --step=10 --post-pr-intake`、Step 11記録後は`--post-terminal-intake`を使う。取り直しroundは収束後にHEADが動いたとき同sessionの次roundとして開き、round数を分離・停止の理由にしない（記録できるroundは数えないroundを含め64件まで）。分離6条件のいずれかに該当する指摘だけをfollow-up Issueとする。指摘を無記録で通過させない。
 
-review中またはPR review中に見つけた欠陥は[派生した欠陥の是正原則](../../docs/01_開発ワークフロー.md#派生した欠陥の是正原則)に従い、分離6条件のいずれかに該当しない限り同じIssue・同じPRで直すfindingにする。round数が多いことは分離の理由にしない。目的にASC本体の保守を含まないIssueで、その欠陥がASC本体側にある場合は[ASC本体の是正を作業scopeへ入れない](../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない)に従う。
+review中またはPR review中に見つけた欠陥の修正可否は[品質基準のレビュー収束契約](../../docs/02_品質基準.md#レビュー収束契約)に従う。修正対象のfindingは[派生した欠陥の是正原則](../../docs/01_開発ワークフロー.md#派生した欠陥の是正原則)に従い、分離6条件のいずれかに該当しない限り同じIssue・同じPRで直すfindingにする。round数が多いことは分離の理由にしない。目的にASC本体の保守を含まないIssueで、その欠陥がASC本体側にある場合は[ASC本体の是正を作業scopeへ入れない](../../docs/01_開発ワークフロー.md#asc本体の是正を作業scopeへ入れない)に従う。
 
 ## review証跡の配置
 

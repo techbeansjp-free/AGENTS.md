@@ -11,7 +11,7 @@ import { createIssueStaging, buildIssueSyncBody, assertStagingSyncTarget, issueB
 import { parsePocDeclaration } from "./domain/workflow.js";
 import { bootstrapProject, validateSpecs, } from "./domain/spec.js";
 import { buildReviewEvidence, evaluateReview } from "./domain/review.js";
-import { countedRounds, parseReviewRoundInput, reviewDivergence, unconvergedReviewSessionDiagnostic, } from "./domain/review-convergence.js";
+import { countedRounds, parseReviewRoundInput, reviewDivergence, unconvergedReviewSessionDiagnostic, isReviewSessionConverged, } from "./domain/review-convergence.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
 import { parseReviewEvidence, } from "./domain/review-evidence.js";
 import { exportReviewEvidence, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
@@ -1728,8 +1728,8 @@ function inspectAuthorizedPullRequestMerge(input) {
     const auditReviewSession = readStoredReviewSession(input.staging);
     if (auditReviewSession === null)
         throw new Error("review sessionが見つからないため実際の監査範囲を検証できません");
-    if (auditReviewSession.status !== "converged")
-        throw new Error(unconvergedReviewSessionDiagnostic(auditReviewSession.status));
+    if (!isReviewSessionConverged(auditReviewSession))
+        throw new Error(unconvergedReviewSessionDiagnostic(auditReviewSession));
     const effectiveImplementationHeadSha = reviewed.reviewEvidence.implementationCommitSha;
     if (actualAuditBase !== auditReviewSession.anchor.diffBaseSha)
         throw new Error(`実際のmerge-base(${actualAuditBase})がreview sessionの比較基点(${auditReviewSession.anchor.diffBaseSha})と一致しません。既定branchへの追随はreviewed-forwardではなく、実際のmerge-baseを起点とする新しいreview sessionのfull-scope reviewで行ってください（Issue #1495暫定guard、REV-01是正はIssue #1544で別途扱う）。current H_implで収束済みなら\`review replace --staging=<staging> --apply\`でreview sessionを置換し、round 1からやり直してください`);
