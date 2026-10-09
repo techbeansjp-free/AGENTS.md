@@ -181,7 +181,6 @@ function packageScripts(sources) {
  */
 export function computeImpactSet(input) {
     const observed = observeReviewDiff(input.root, input.baseSha, input.headSha);
-    const excluded = new Set(input.excludePaths ?? []);
     let graph;
     let sources = new Map();
     try {
@@ -236,7 +235,7 @@ export function computeImpactSet(input) {
         baseSha: input.baseSha,
         headSha: input.headSha,
         changeDigest: observed.digest,
-        changedPaths: observed.changedPaths.filter((path) => !excluded.has(path)),
+        changedPaths: observed.changedPaths,
         graph,
         literalReferences: literalReferenceIndex(sources, graphFiles),
         stepDefinitionFiles: definitions.map(({ path, complete, global }) => ({
@@ -355,22 +354,5 @@ function evidenceSuffixTip(root, fromSha, toSha, records) {
         blobAt(root, tip, path) === blobAt(root, toSha, path)
         ? tip
         : fromSha;
-}
-/**
- * **追随交差から外せるpath**（Issue #1544 INV-07、R1544-2-01）。追随mergeの第1親が前head
- * `previousHeadSha`のreview記録だけのsuffix（`reviewRecordSuffix`）で、そのpathが前headと
- * 既定branch側（第2親）で同一のとき、PRの変更として現れるそのpathの差はsuffixだけが作った
- * ものなので返す（前headと第2親で同一のpathは、clean mergeの結果が第1親と一致する）。
- * それ以外は空で、何も外さない。
- */
-export function evidenceSuffixPaths(root, previousHeadSha, secondParent, mergeSha, records) {
-    const firstParent = git(["rev-parse", "--verify", `${mergeSha}^1`], root, {
-        env: GIT_ENV,
-    }).stdout.trim();
-    const path = reviewRecordSuffix(root, previousHeadSha, firstParent, records);
-    return path !== undefined &&
-        blobAt(root, previousHeadSha, path) === blobAt(root, secondParent, path)
-        ? [path]
-        : [];
 }
 //# sourceMappingURL=impact-set.js.map

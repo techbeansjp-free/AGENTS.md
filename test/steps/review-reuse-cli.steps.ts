@@ -288,6 +288,32 @@ function mergeMain(
 }
 
 /**
+ * local Gitの既定branch tip（`refs/remotes/origin/main`）を一時的に`sha`へ戻して`run`を実行する。
+ * 追随を取り込む前に`review round`を記録した状態（追随mergeを全体検分なしのtransitionとして
+ * 記録したround）を作る。
+ */
+function withLocalTip<T>(
+  prepared: PreparedDeliveryCli,
+  sha: string,
+  run: () => T,
+): T {
+  const current = fixtureGit(prepared.root, [
+    "rev-parse",
+    "refs/remotes/origin/main",
+  ]);
+  fixtureGit(prepared.root, ["update-ref", "refs/remotes/origin/main", sha]);
+  try {
+    return run();
+  } finally {
+    fixtureGit(prepared.root, [
+      "update-ref",
+      "refs/remotes/origin/main",
+      current,
+    ]);
+  }
+}
+
+/**
  * 保存済みsessionのroundを直接書き換え、round digestを再計算して保存する
  * （THR-1544-02の攻撃形。digest chainは整合し、Gitとの照合だけが改変を検出する）。
  */
@@ -453,7 +479,10 @@ function focusedRoundTwo(
   );
 }
 
-/** SCN-REVIEW-REUSE-002: 追随後に既定branchのhunkだけを巻き戻す（REV-01）。 */
+/**
+ * SCN-REVIEW-REUSE-002: 追随後に既定branchのhunkだけを巻き戻す（REV-01）。巻き戻しを含む
+ * transitionは追随前のlocal tipで記録し（全体検分の割当なし）、基点の移動を被覆しない。
+ */
 function revertedDefaultBranchHunk(
   world: WorkflowStepWorld,
   conflictResolution: boolean,
@@ -479,7 +508,13 @@ function revertedDefaultBranchHunk(
       "revert default branch hunk only",
     );
   }
-  recordDraft(prepared, candidate);
+  const recorded = withLocalTip(prepared, prepared.baseSha, () =>
+    recordDraft(prepared, candidate),
+  );
+  assert.deepEqual(recorded.rounds.at(-1)?.inspection, {
+    fromSha: first,
+    diffDigest: observeReviewDiff(prepared.root, first, candidate).digest,
+  });
   deliver(prepared, {
     evidenceBase: advanced,
     implementation: candidate,
@@ -991,8 +1026,12 @@ function legacySession(world: WorkflowStepWorld): void {
   assert.doesNotMatch(output, /review再利用条件/u);
 }
 
-/** 既定branchだけが足場とnoteを追加し、PRはstep定義から字面で参照される`src/lib.ts`を足す。 */
-function disjointFollowFixture(world: WorkflowStepWorld) {
+/**
+ * 既定branchだけが足場とnoteを追加し、PRはstep定義から字面で参照される`src/lib.ts`を足す。
+ * `whole`は追随後のlocal tipで雛形を作り、actualAuditBaseからの全体検分roundを記録する。
+ * そうでなければ追随前のlocal tipで記録し、追随前の基点からの割当だけを持つroundにする。
+ */
+function disjointFollowFixture(world: WorkflowStepWorld, whole: boolean) {
   const prepared = prepare(world, [
     { "src/lib.ts": "export const lib = (): number => 1;\n" },
   ]);
@@ -1001,20 +1040,67 @@ function disjointFollowFixture(world: WorkflowStepWorld) {
     "docs/upstream-note.md": "default branch advance\n",
   });
   const followed = mergeMain(prepared, advanced);
-  const built = draft(prepared, followed);
-  assert.equal(built.round.followOnly, true);
-  assert.equal(built.round.inspection, undefined);
-  assert.ok(
-    built.notes.some((note) => note.includes(`--base=${advanced}`)),
-    built.notes.join("\n"),
-  );
-  recordReviewRound({ staging: prepared.staging, round: built.round });
+  recordFollow(prepared, { advanced, followed, whole });
   return { prepared, advanced, followed };
+}
+
+/**
+ * 追随mergeのroundを雛形どおりに記録する（AMD-001）。雛形は`followOnly`を立てず、比較基点が
+ * 動いていれば`actualAuditBase`からの全体検分を割り当て、`--base`を案内する。
+ */
+function recordFollow(
+  prepared: PreparedDeliveryCli,
+  input: { advanced: string; followed: string; whole: boolean },
+): void {
+  const previous = readStoredReviewSession(prepared.staging);
+  assert.ok(previous);
+  const fromSha = previous.latestCandidateHeadSha;
+  const built = input.whole
+    ? draft(prepared, input.followed)
+    : withLocalTip(prepared, prepared.baseSha, () =>
+        draft(prepared, input.followed),
+      );
+  assert.equal(built.round.followOnly, undefined);
+  const transition = {
+    fromSha,
+    diffDigest: observeReviewDiff(prepared.root, fromSha, input.followed)
+      .digest,
+  };
+  if (input.whole) {
+    assert.deepEqual(built.round.inspection, {
+      ...transition,
+      cumulative: {
+        baseSha: input.advanced,
+        scope: "all",
+        diffDigest: observeReviewDiff(
+          prepared.root,
+          input.advanced,
+          input.followed,
+        ).digest,
+      },
+    });
+    assert.ok(
+      built.notes.some((note) => note.includes(`--base=${input.advanced}`)),
+      built.notes.join("\n"),
+    );
+    recordReviewRound({ staging: prepared.staging, round: built.round });
+  } else {
+    // 追随前の基点からの割当（影響集合fullなら旧基点からの全体検分）は基点の移動を被覆しない。
+    assert.equal(built.round.inspection?.fromSha, transition.fromSha);
+    assert.equal(built.round.inspection?.diffDigest, transition.diffDigest);
+    assert.notEqual(
+      built.round.inspection?.cumulative?.baseSha,
+      input.advanced,
+    );
+    withLocalTip(prepared, prepared.baseSha, () =>
+      recordReviewRound({ staging: prepared.staging, round: built.round }),
+    );
+  }
 }
 
 /** SCN-REVIEW-REUSE-006: 追随後の証跡・検証を`--base`無し（旧基点）で取った。 */
 function staleEvidenceBase(world: WorkflowStepWorld): void {
-  const { prepared, advanced, followed } = disjointFollowFixture(world);
+  const { prepared, advanced, followed } = disjointFollowFixture(world, true);
   deliver(prepared, {
     evidenceBase: prepared.baseSha,
     implementation: followed,
@@ -1029,19 +1115,32 @@ function staleEvidenceBase(world: WorkflowStepWorld): void {
   );
 }
 
-/** SCN-REVIEW-REUSE-007 */
-function disjointFollow(world: WorkflowStepWorld): void {
-  const { prepared, advanced, followed } = disjointFollowFixture(world);
+/**
+ * SCN-REVIEW-REUSE-007（AMD-001）: PRの変更と交差しない既定branch追随でも、比較基点が動けば
+ * 同じsessionの全体検分roundが要る。無ければ`基点不一致`で拒否し、あればmergeできる。
+ */
+function disjointFollow(world: WorkflowStepWorld, whole: boolean): void {
+  const { prepared, advanced, followed } = disjointFollowFixture(world, whole);
   deliver(prepared, {
     evidenceBase: advanced,
     implementation: followed,
     tip: advanced,
   });
-  merged(prepared);
+  if (whole) return merged(prepared);
+  assertNamed(
+    rejected(prepared),
+    `実際のmerge-base(${advanced})がreview sessionの比較基点(${prepared.baseSha})と一致しません`,
+    "[基点不一致] path=docs/upstream-note.md,",
+    `transition=${prepared.implementationCommitSha}..${followed}`,
+    "actualAuditBaseからの全体検分round",
+  );
 }
 
-/** SCN-REVIEW-REUSE-009 */
-function intersectingFollow(world: WorkflowStepWorld, reviewed: boolean): void {
+/**
+ * SCN-REVIEW-REUSE-009（AMD-001）: 既定branch側の変更がPRの依存先と交差する追随も、追随の
+ * 交差を個別に判定せず、全体検分roundが無ければ`基点不一致`で拒否し、あればmergeできる。
+ */
+function intersectingFollow(world: WorkflowStepWorld, whole: boolean): void {
   const prepared = prepare(world, [
     {
       "src/b.ts":
@@ -1053,56 +1152,34 @@ function intersectingFollow(world: WorkflowStepWorld, reviewed: boolean): void {
     ...scaffold("src/b.ts", "literal"),
   });
   const followed = mergeMain(prepared, advanced);
-  const built = draft(prepared, followed).round;
-  assert.equal(built.followOnly, undefined);
-  assert.equal(built.inspection?.cumulative?.scope, "all");
-  recordReviewRound({
-    staging: prepared.staging,
-    round: parseReviewRoundInput({
-      ...withoutInspection(built),
-      findings: [],
-      followOnly: true,
-    }),
-  });
-  if (reviewed) {
-    const remedy = recordDraft(prepared, followed).rounds.at(-1)?.inspection
-      ?.cumulative;
-    assert.deepEqual(remedy, {
-      baseSha: advanced,
-      scope: "paths",
-      paths: [
-        {
-          path: "src/a.ts",
-          diffDigest: pathDigest(prepared, advanced, followed, "src/a.ts"),
-        },
-      ],
-    });
-  }
+  recordFollow(prepared, { advanced, followed, whole });
   deliver(prepared, {
     evidenceBase: advanced,
     implementation: followed,
     tip: advanced,
   });
-  if (reviewed) return merged(prepared);
+  if (whole) return merged(prepared);
   assertNamed(
     rejected(prepared),
-    "[追随交差] path=src/a.ts 既定branch側path=src/a.ts,",
+    "[基点不一致] path=src/a.ts,",
     `transition=${prepared.implementationCommitSha}..${followed}`,
   );
 }
 
 /**
- * SCN-REVIEW-REUSE-009（R1544-2-01）: 証跡commit（`H_final`）の上へ既定branchを追随する。
- * 追随交差は前headのreview記録だけを外し、それ以外は導出する。`reader`はPRが証跡形の
+ * SCN-REVIEW-REUSE-009（R1544-2-01・R1544-N1-01、AMD-001）: 証跡commit（`H_final`）、または前headの
+ * 後に証跡allowlist配下のfileだけを変えたcommitの上へ既定branchを追随する。`reader`はPRが証跡形の
  * `docs/reviews/9_review.json`を実装として足しfile名を組み立てて読む形、`preexisting`はPRが
  * 証跡pathそのものを実装内容として持ち、証跡commitがそれを書き換えた形、`rewritten`は証跡commitの
- * 後に証跡fileを前headの記録でない内容へ書き換えた（evidence-only suffixの形は保つ）形で、
- * いずれも交差を判定できない（`full`）。雛形は`followOnly`を立てず全体検分を割り当て、`followOnly`と
- * 記録したroundは`pr merge`が拒否する。
+ * 後に証跡fileを前headの記録でない内容へ書き換えた形、`helper`は実装`src/limit-gate.ts`がimportする
+ * `docs/reviews/helper.ts`のLIMITを1から100へ変えたcommitを第1親にした形（R1544-N1-01の反例）。
+ * 雛形は`followOnly`を立てずactualAuditBaseからの全体検分（suffixの変更を含む）を割り当てる。
+ * 第1親が前headでないmergeは`followOnly`として記録できず（C4、0a6d111eの受理条件）、保存済み
+ * sessionへ`followOnly`として書き込んでも`pr merge`が拒否する。
  */
 function followOverEvidence(
   world: WorkflowStepWorld,
-  shape: "reader" | "preexisting" | "rewritten",
+  shape: "reader" | "preexisting" | "rewritten" | "helper",
 ): void {
   const prepared = prepare(world, [
     shape === "reader"
@@ -1110,53 +1187,71 @@ function followOverEvidence(
           ...evidenceReaders("dynamic-read"),
           "docs/reviews/9_review.json": '{ "limit": 1 }\n',
         }
-      : {
-          ...evidenceReaders("evidence-rewrite"),
-          ...(shape === "preexisting"
-            ? { [EVIDENCE]: '{ "limit": 1 }\n' }
-            : {}),
-        },
+      : shape === "helper"
+        ? {
+            "docs/reviews/helper.ts": "export const LIMIT = 1;\n",
+            ...evidenceReaders("source"),
+            ...scaffold("src/limit-gate.ts", "import"),
+          }
+        : {
+            ...evidenceReaders("evidence-rewrite"),
+            ...(shape === "preexisting"
+              ? { [EVIDENCE]: '{ "limit": 1 }\n' }
+              : {}),
+          },
   ]);
   if (shape === "rewritten")
     commit(prepared, { [EVIDENCE]: '{ "limit": 100 }\n' }, "rewrite evidence");
+  if (shape === "helper")
+    commit(
+      prepared,
+      { "docs/reviews/helper.ts": "export const LIMIT = 100;\n" },
+      "evidence-shaped suffix",
+    );
   const finalHead = fixtureGit(prepared.root, ["rev-parse", "HEAD"]);
   // 前提の自己確認: PRのheadは証跡commitで、証跡pathを含む。
   assert.notEqual(finalHead, prepared.implementationCommitSha);
   const advanced = advanceMain(prepared, prepared.baseSha, {
-    ...scaffold("src/limit-gate.ts", "literal"),
+    ...(shape === "helper" ? {} : scaffold("src/limit-gate.ts", "literal")),
     "docs/upstream-note.md": "default branch advance\n",
   });
   const followed = mergeMain(prepared, advanced);
-  assert.ok(
-    observeReviewDiff(prepared.root, advanced, followed).changedPaths.includes(
-      EVIDENCE,
-    ),
-  );
+  const audited = observeReviewDiff(prepared.root, advanced, followed);
+  assert.ok(audited.changedPaths.includes(EVIDENCE));
+  if (shape === "helper")
+    assert.ok(audited.changedPaths.includes("docs/reviews/helper.ts"));
   const built = draft(prepared, followed).round;
   assert.equal(built.followOnly, undefined);
   assert.deepEqual(built.inspection?.cumulative, {
     baseSha: advanced,
     scope: "all",
-    diffDigest: observeReviewDiff(prepared.root, advanced, followed).digest,
+    diffDigest: audited.digest,
   });
-  recordReviewRound({
-    staging: prepared.staging,
-    round: parseReviewRoundInput({
-      ...withoutInspection(built),
+  const followOnly = (round: ReviewRoundInput) =>
+    parseReviewRoundInput({
+      ...withoutInspection(round),
       findings: [],
       followOnly: true,
-    }),
-  });
+    });
+  assert.throws(
+    () =>
+      recordReviewRound({
+        staging: prepared.staging,
+        round: followOnly(built),
+      }),
+    /既定branch追随として記録できるのは/u,
+  );
+  recordReviewRound({ staging: prepared.staging, round: built });
   deliver(prepared, {
     evidenceBase: advanced,
     implementation: followed,
     tip: advanced,
   });
+  // 保存済みsessionの追随roundを、記録時検査を経ずに`followOnly`へ書き換える。
+  rewriteRound(prepared, 2, followOnly);
   assertNamed(
     rejected(prepared),
-    "review再利用条件が成立しません",
-    "[判定不能]",
-    "全体検分round",
+    "保存済みreview sessionのfollow-only round 2を実Gitで再検証できません",
   );
 }
 
@@ -1294,7 +1389,8 @@ When(
         staleEvidenceBase(this);
         break;
       case "SCN-REVIEW-REUSE-007":
-        disjointFollow(this);
+        disjointFollow(this, false);
+        disjointFollow(this, true);
         break;
       case "SCN-REVIEW-REUSE-009":
         intersectingFollow(this, false);
@@ -1302,6 +1398,7 @@ When(
         followOverEvidence(this, "reader");
         followOverEvidence(this, "preexisting");
         followOverEvidence(this, "rewritten");
+        followOverEvidence(this, "helper");
         followAfterImplementation(this);
         break;
       case "SCN-REVIEW-REUSE-010":

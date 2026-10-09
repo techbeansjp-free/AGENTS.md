@@ -5203,7 +5203,8 @@ function boundReplacementFixture(world: WorkflowStepWorld): ReplacementFixture {
 
 /**
  * 既定branch前進をmergeで取り込み、旧sessionのround 2・post-PR intake・reviewed-forwardを
- * 経たPR（SCN-MERGE-BASE-AUDIT-003と同じ形）。追随は`followOnly` roundとして記録される。
+ * 経たPR（SCN-MERGE-BASE-AUDIT-003と同じ形）。追随mergeのroundは雛形どおり`actualAuditBase`からの
+ * 全体検分roundとして記録される（Issue #1544 AMD-001）。
  */
 function followedMainReplacementFixture(
   world: WorkflowStepWorld,
@@ -8193,8 +8194,8 @@ if (exact(["auth", "status"])) {
     }
     case "SCN-MERGE-BASE-AUDIT-003": {
       /**
-       * **PRの変更と交差しない正当なfollow-mainは、review再利用条件（Issue #1544）で
-       * 認可される。** 既定branchが本当にT→M
+       * **正当なfollow-mainは、同じsessionの全体検分roundがあればreview再利用条件
+       * （Issue #1544 AMD-001）で認可される。** 既定branchが本当にT→M
        * （`downstream-note.txt`を追加）へ前進し、boundしたH_final(H0)へMを実際に
        * mergeする（SCN-E2E-WFSTEP-072と同型: H0の直接の子として前進commitを作る）。
        * round 2をGitから実測して記録し、新review evidenceは`baseSha=M`・
@@ -8205,9 +8206,10 @@ if (exact(["auth", "status"])) {
        * `merge-base(forwardHead,M)=M`が宣言済みbaseSha(M)と一致するため、これ自体は
        * 引き続き通過する。
        *
-       * `pr merge`はtransition鎖（Issue #1544）を再導出し、clean追随で導出基点がMへ
-       * 前進したことと`actualAuditBase=M`の一致、追随の非交差を確かめて認可する。
-       * session置換を経る経路はSCN-MERGE-BASE-AUDIT-012が証明する。
+       * 追随で比較基点がMへ動いたため、round 2の雛形は`followOnly`を立てずMからの全体検分
+       * （`inspection.cumulative.scope="all"`、`baseSha=M`）を割り当てる。`pr merge`は
+       * transition鎖を再導出し、その全体検分のdigestと`actualAuditBase=M`の一致を確かめて
+       * 認可する。session置換を経る経路はSCN-MERGE-BASE-AUDIT-012が証明する。
        */
       const prepared = prepareDeliveryCli(this);
       createDeliveryPullRequest(prepared);
@@ -8255,6 +8257,16 @@ if (exact(["auth", "status"])) {
         staging: prepared.staging,
         headSha: forwardHead,
       }).round;
+      assert.equal(draft.followOnly, undefined);
+      assert.deepEqual(draft.inspection?.cumulative, {
+        baseSha: advancedBaseSha,
+        scope: "all",
+        diffDigest: observeReviewDiff(
+          prepared.root,
+          advancedBaseSha,
+          forwardHead,
+        ).digest,
+      });
       recordReviewRound({ staging: prepared.staging, round: draft });
       const session = readStoredReviewSession(prepared.staging);
       assert.ok(session, "round 2を記録できていません");
@@ -8334,15 +8346,14 @@ if (exact(["auth", "status"])) {
         "fixtureがreviewed-forward経路として分類されていません",
       );
       /**
-       * **追随mergeは`followOnly` roundとして記録され（第1親は証跡だけのsuffix）、
-       * 導出基点はMへ前進して`actualAuditBase`（`merge-base(forwardHead, M)=M`）と一致する。**
-       * 既定branch側の`downstream-note.txt`はPRの変更・隣接範囲と交差しない。
+       * **round 2の全体検分はM（`actualAuditBase`＝`merge-base(forwardHead, M)`）からの
+       * 監査範囲全体を被覆する。**
        */
       const requested = executeDeliveryMerge(prepared);
       assert.equal(
         requested.status,
         0,
-        `PRの変更と交差しない既定branch追随がreview再利用条件で認可されていません: ${requested.stdout + requested.stderr}`,
+        `全体検分roundを持つ既定branch追随がreview再利用条件で認可されていません: ${requested.stdout + requested.stderr}`,
       );
       const mergeCalls = deliveryProviderCalls(prepared).filter(isMergeCall);
       assert.equal(mergeCalls.length, 1);
@@ -8904,8 +8915,8 @@ if (exact(["auth", "status"])) {
       /**
        * **review session置換経路そのものの回帰確認（Issue #1495、
        * AC-003の裏面）。** SCN-MERGE-BASE-AUDIT-003と同じく既定branchの前進を
-       * mergeで取り込み、追随roundとreviewed-forwardを経たPRはreview再利用条件で
-       * 認可される（Issue #1544）。そのPRでも同一PR・同一stagingでの
+       * mergeで取り込み、全体検分roundとreviewed-forwardを経たPRはreview再利用条件で
+       * 認可される（Issue #1544 AMD-001）。そのPRでも同一PR・同一stagingでの
        * review session置換（Issue #1569、TERM-1569-01）を公式経路で実行し、
        * 実際のmerge-baseを比較基点とするround 1で収束させると`pr merge`が許可される。
        *

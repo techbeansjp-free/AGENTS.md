@@ -8,24 +8,22 @@ import {
   type ReviewRoundFocus,
   type ReviewSessionState,
 } from "./review-convergence.js";
-import {
-  advanceFollowBase,
-  followCrossing,
-  type FollowObservation,
-} from "./review-reuse-follow.js";
 
 /**
  * review再利用判定（Issue #1544、02 §4.1のC2）。session記録とGit観測値だけから
  * transition鎖（TERM-1544-04）を再導出し、再review必須条件（TERM-1544-03）を返す。
  * **Gitを呼ばない。** 観測は`ReuseObserver`が行い、観測の例外は`判定不能`へ倒す（INV-03）。
  * `review round --init`の割当と`pr merge`の判定は同じ`judgeReviewReuse`を通る。
+ * 既定branch追随による変化は再利用しない（05_計画変更 AMD-001）。round 1のheadより後の追随で
+ * 比較基点が動いたら、その基点からの全体検分（`inspection.cumulative.scope="all"`）を要求する。
+ * round 1のheadが既に`actualAuditBase`を含む（round 1の検分範囲と基点が食い違う）場合は、
+ * 全体検分でも基点を動かさない（`review replace`で作り直す）。
  */
 
 export const REUSE_KIND = {
   break: "断絶",
   digest: "digest不一致",
   adjacent: "依存先未検分",
-  follow: "追随交差",
   base: "基点不一致",
   legacy: "旧形式session",
   undecidable: "判定不能",
@@ -39,10 +37,8 @@ const NEXT_ACTION: Readonly<Record<ReuseKind, string>> = {
   断絶: `review round --init --head=<実効H_impl>でfocused roundを記録する。鎖を繋げない場合は${WHOLE}`,
   digest不一致: WHOLE,
   依存先未検分: WHOLE,
-  追随交差:
-    "review round --init --head=<実効H_impl>で割当どおりの累積検分round（inspection.cumulative.scope=paths）を記録する",
   基点不一致:
-    "既定branch追随mergeをreview round --initで単独roundとして記録するか、review replace --staging=<staging> --applyでsessionを置換する",
+    "round 1の後の既定branch追随で比較基点が動いた場合は、review round --init --head=<実効H_impl>が割り当てるactualAuditBaseからの全体検分round（inspection.cumulative.scope=all）を記録する。round 1のheadが既にactualAuditBaseを含む場合はreview replace --staging=<staging> --applyでsessionを置換する",
   旧形式session: WHOLE,
   判定不能: WHOLE,
   累積差分未検分:
@@ -52,6 +48,7 @@ const WHOLE_KINDS: ReadonlySet<ReuseKind> = new Set([
   REUSE_KIND.break,
   REUSE_KIND.digest,
   REUSE_KIND.adjacent,
+  REUSE_KIND.base,
   REUSE_KIND.legacy,
   REUSE_KIND.undecidable,
 ]);
@@ -63,8 +60,6 @@ export const EMPTY_DIFF_DIGEST =
 export interface ReviewRequiredItem {
   readonly kind: ReuseKind;
   readonly paths: readonly string[];
-  /** 追随交差だけ: 既定branch側の変更path。 */
-  readonly mainPaths?: readonly string[];
   readonly fromSha: string;
   readonly toSha: string;
   readonly recomputedDigest: string | null;
@@ -87,33 +82,21 @@ export interface TransitionObservation {
 
 /** C3が実装するGit観測。いずれも例外を投げうる。 */
 export interface ReuseObserver {
-  /** 内容非変化のlinkか。`follow`はここでは判定しない。 */
+  /** 内容非変化のlinkか。 */
   link(
     previousHeadSha: string,
     nextSha: string,
   ): "evidence-suffix" | "tree-equal" | "break";
-  /** C4が真で第2親が`baseSha`の子孫なら第2親、そうでなければ`undefined`。 */
-  followParent(
-    previousHeadSha: string,
-    mergeSha: string,
-    baseSha: string,
-  ): string | undefined;
   transition(fromSha: string, toSha: string): TransitionObservation;
-  /** `previousHeadSha`は追随mergeの前head（evidence-only suffixの起点）。 */
-  follow(
-    baseSha: string,
-    secondParent: string,
-    mergeSha: string,
-    previousHeadSha: string,
-  ): FollowObservation;
   wholeDigest(baseSha: string, toSha: string): string;
+  /** `ancestorSha`が`descendantSha`の祖先（同一を含む）か。 */
+  isAncestor(ancestorSha: string, descendantSha: string): boolean;
   changedPaths(fromSha: string, toSha: string): readonly string[];
   sections(baseSha: string, headSha: string): ReadonlyMap<string, string>;
 }
 
 /** 記録しようとするround（雛形の割当で仮の末尾positionにする）。 */
 export interface ProspectiveRound {
-  readonly kind: "counted" | "follow";
   readonly fromSha: string;
   readonly toSha: string;
   readonly focus: ReviewRoundFocus;
@@ -121,7 +104,10 @@ export interface ProspectiveRound {
 
 export interface ReuseJudgeInput {
   readonly session: ReviewSessionState;
-  /** `pr merge`の実際のmerge-base。省略（雛形）は導出基点を使う。 */
+  /**
+   * 実際のmerge-base（`pr merge`は検証済み既定branch tipから、雛形はlocal tipから求める）。
+   * 全体検分はこの基点からのものだけを起点にする。省略時は`anchor.diffBaseSha`を使う。
+   */
   readonly actualAuditBase?: string;
   readonly effectiveHeadSha: string;
   readonly observer: ReuseObserver;
@@ -136,12 +122,6 @@ interface Position {
   readonly inspection?: ReviewInspection;
   readonly focus: ReviewRoundFocus;
   readonly prospective: boolean;
-}
-
-interface Tag {
-  position: number;
-  origin: "security" | "follow";
-  mainPaths: readonly string[];
 }
 
 function byteSorted(values: Iterable<string>): string[] {
@@ -170,7 +150,14 @@ function chainPositions(
         prospective: false,
       })),
     ...(prospective
-      ? [{ ...prospective, inspection: undefined, prospective: true }]
+      ? [
+          {
+            ...prospective,
+            kind: "counted" as const,
+            inspection: undefined,
+            prospective: true,
+          },
+        ]
       : []),
   ];
   return rounds.map((round, index) => {
@@ -200,18 +187,15 @@ export function judgeReviewReuse(input: ReuseJudgeInput): ReuseVerdict {
     fromSha: string,
     toSha: string,
     paths: readonly string[] = [],
-    extra: { digest?: string; mainPaths?: readonly string[] } = {},
+    digest?: string,
   ): void => {
     items.push(
       Object.freeze({
         kind,
         paths: Object.freeze(byteSorted(paths)),
-        ...(extra.mainPaths
-          ? { mainPaths: Object.freeze(byteSorted(extra.mainPaths)) }
-          : {}),
         fromSha,
         toSha,
-        recomputedDigest: extra.digest ?? null,
+        recomputedDigest: digest ?? null,
         nextAction: NEXT_ACTION[kind],
       }),
     );
@@ -225,81 +209,43 @@ export function judgeReviewReuse(input: ReuseJudgeInput): ReuseVerdict {
     }
   };
   const positions = chainPositions(input.session, input.prospective);
-  // 手順3: 導出基点はclean追随（link・counted merge transitionともC4が真）でだけ前進する。
-  const bases: string[] = [];
-  const followParents: (string | undefined)[] = [];
-  let base = input.session.anchor.diffBaseSha;
-  positions.forEach((position, index) => {
-    if (position.kind !== "first" && position.fromSha !== position.toSha) {
-      const parent = attempt(position, () =>
-        observer.followParent(position.fromSha, position.toSha, base),
-      );
-      followParents[index] = parent;
-      base = advanceFollowBase(base, parent);
-    }
-    bases[index] = base;
-  });
-  // 手順4: 最も後ろの全体検分positionを`j*`にする。
+  // 手順4: 実際のmerge-baseからの全体検分のうち最も後ろを`j*`にし、基点はそこでだけ動く。
+  // 動かせるのは、round 1のheadが含まない基点（round 1より後の追随が持ち込んだ基点）だけである。
+  const { anchor } = input.session;
+  const target = input.actualAuditBase ?? anchor.diffBaseSha;
+  let base = anchor.diffBaseSha;
   let fullIndex = 0;
-  for (let index = positions.length - 1; index > 0; index -= 1) {
+  const rebasable =
+    target === base ||
+    attempt(positions[0]!, () =>
+      observer.isAncestor(target, anchor.initialHeadSha),
+    ) === false;
+  for (let index = positions.length - 1; rebasable && index > 0; index -= 1) {
     const position = positions[index]!;
     const cumulative = position.inspection?.cumulative;
-    if (position.kind !== "counted" || cumulative?.scope !== "all") continue;
-    if (cumulative.baseSha !== bases[index]) {
-      add(REUSE_KIND.digest, cumulative.baseSha, position.toSha);
+    if (
+      position.kind !== "counted" ||
+      cumulative?.scope !== "all" ||
+      cumulative.baseSha !== target
+    )
       continue;
-    }
     const digest = attempt(position, () =>
       observer.wholeDigest(cumulative.baseSha, position.toSha),
     );
     if (digest === cumulative.diffDigest) {
       fullIndex = index;
+      base = target;
       break;
     }
     if (digest !== undefined)
-      add(REUSE_KIND.digest, cumulative.baseSha, position.toSha, [], {
-        digest,
-      });
+      add(REUSE_KIND.digest, cumulative.baseSha, position.toSha, [], digest);
   }
-  // 手順5: `j*`より後のpositionだけを照合し、累積検分要求pathをtagする。
-  const tags = new Map<string, Tag>();
-  const retag = (paths: readonly string[], index: number): void => {
-    for (const path of paths) {
-      const previous = tags.get(path);
-      if (previous) tags.set(path, { ...previous, position: index });
-    }
-  };
+  // 手順5: `j*`より後のcounted transitionだけを照合し、security pathをtagする。
+  // 追随（`followOnly`）roundは何も被覆せず、基点も動かさない（AMD-001）。
+  const tags = new Map<string, number>();
   for (let index = fullIndex + 1; index < positions.length; index += 1) {
     const position = positions[index]!;
-    if (position.kind === "follow") {
-      const parent = followParents[index];
-      if (parent === undefined) {
-        add(REUSE_KIND.break, position.linkFrom, position.toSha);
-        continue;
-      }
-      const observed = attempt(position, () =>
-        observer.follow(
-          bases[index - 1]!,
-          parent,
-          position.toSha,
-          position.fromSha,
-        ),
-      );
-      if (observed === undefined) continue;
-      const crossing = followCrossing(observed);
-      if (crossing.undecidable) {
-        add(REUSE_KIND.undecidable, position.linkFrom, position.toSha);
-        continue;
-      }
-      retag(observed.mainChanged, index);
-      for (const path of crossing.crossing)
-        tags.set(path, {
-          position: index,
-          origin: "follow",
-          mainPaths: observed.mainChanged,
-        });
-      continue;
-    }
+    if (position.kind === "follow") continue;
     if (position.inspection === undefined && !position.prospective) {
       add(REUSE_KIND.legacy, position.fromSha, position.toSha);
       continue;
@@ -317,9 +263,13 @@ export function judgeReviewReuse(input: ReuseJudgeInput): ReuseVerdict {
     if (observed === undefined) continue;
     if (!position.prospective) {
       if (observed.digest !== position.inspection!.diffDigest)
-        add(REUSE_KIND.digest, position.fromSha, position.toSha, [], {
-          digest: observed.digest,
-        });
+        add(
+          REUSE_KIND.digest,
+          position.fromSha,
+          position.toSha,
+          [],
+          observed.digest,
+        );
       if (
         stableJson(observed.adjacentScope) !==
           stableJson(position.focus.adjacentScope) ||
@@ -335,21 +285,16 @@ export function judgeReviewReuse(input: ReuseJudgeInput): ReuseVerdict {
           position.fromSha,
           position.toSha,
           missing.length > 0 ? missing : derived,
-          { digest: observed.digest },
+          observed.digest,
         );
       }
     }
-    retag(observed.changedPaths, index);
     for (const path of observed.changedPaths)
-      if (isSecuritySensitivePath(path))
-        tags.set(path, { position: index, origin: "security", mainPaths: [] });
+      if (isSecuritySensitivePath(path)) tags.set(path, index);
   }
   const last = positions.at(-1)!;
-  const auditBase = input.actualAuditBase ?? base;
-  if (input.actualAuditBase !== undefined && base !== input.actualAuditBase) {
-    const paths = attempt(last, () =>
-      observer.changedPaths(base, input.actualAuditBase!),
-    );
+  if (base !== target) {
+    const paths = attempt(last, () => observer.changedPaths(base, target));
     add(REUSE_KIND.base, last.fromSha, last.toSha, paths ?? []);
   }
   if (last.toSha !== input.effectiveHeadSha)
@@ -357,56 +302,30 @@ export function judgeReviewReuse(input: ReuseJudgeInput): ReuseVerdict {
   // 手順6: tag済みpathは最後のtag以降の累積検分で、監査diffのsection digestと照合する。
   if (tags.size > 0) {
     const sections = attempt(last, () =>
-      observer.sections(auditBase, input.effectiveHeadSha),
+      observer.sections(target, input.effectiveHeadSha),
     );
-    const uncovered = new Map<
-      number,
-      { security: string[]; follow: string[]; mainPaths: string[] }
-    >();
-    for (const [path, tag] of sections ? tags : []) {
+    const uncovered = new Map<number, string[]>();
+    for (const [path, tagged] of sections ? tags : []) {
       const expected = sections!.get(path) ?? EMPTY_DIFF_DIGEST;
       const covered = positions.some((position, index) => {
         const cumulative = position.inspection?.cumulative;
         return (
-          index >= tag.position &&
+          index >= tagged &&
           index > fullIndex &&
           position.kind === "counted" &&
           cumulative?.scope === "paths" &&
-          cumulative.baseSha === bases[index] &&
+          cumulative.baseSha === base &&
           cumulative.paths.some(
             (entry) => entry.path === path && entry.diffDigest === expected,
           )
         );
       });
-      if (covered) continue;
-      const group = uncovered.get(tag.position) ?? {
-        security: [],
-        follow: [],
-        mainPaths: [],
-      };
-      if (tag.origin === "follow") {
-        group.follow.push(path);
-        group.mainPaths.push(...tag.mainPaths);
-      } else group.security.push(path);
-      uncovered.set(tag.position, group);
+      if (!covered)
+        uncovered.set(tagged, [...(uncovered.get(tagged) ?? []), path]);
     }
-    for (const [index, group] of [...uncovered].sort(([a], [b]) => a - b)) {
+    for (const [index, paths] of [...uncovered].sort(([a], [b]) => a - b)) {
       const position = positions[index]!;
-      if (group.follow.length > 0)
-        add(
-          REUSE_KIND.follow,
-          position.linkFrom,
-          position.toSha,
-          group.follow,
-          { mainPaths: group.mainPaths },
-        );
-      if (group.security.length > 0)
-        add(
-          REUSE_KIND.cumulative,
-          position.fromSha,
-          position.toSha,
-          group.security,
-        );
+      add(REUSE_KIND.cumulative, position.fromSha, position.toSha, paths);
     }
   }
   return Object.freeze({
@@ -421,58 +340,38 @@ export function judgeReviewReuse(input: ReuseJudgeInput): ReuseVerdict {
   });
 }
 
-export type InspectionAssignment =
-  | { readonly followOnly: true; readonly derivedBaseSha: string }
-  | {
-      readonly inspection: ReviewInspection;
-      readonly derivedBaseSha: string;
-      readonly reviewRequired: readonly ReviewRequiredItem[];
-    };
+export interface InspectionAssignment {
+  readonly inspection: ReviewInspection;
+  readonly reviewRequired: readonly ReviewRequiredItem[];
+}
 
 /**
  * 雛形の検分割当（02 §4.1）。記録しようとするroundを仮の末尾positionとして`judgeReviewReuse`
- * で評価し、残る該当から`inspection`（必要時`cumulative`）を決める。clean追随は先に
- * `followOnly` linkとして評価し、該当が無ければ`followOnly`にする。別規則を持たない。
+ * で評価し、残る該当から`inspection`（必要時`cumulative`）を決める。別規則を持たない。
+ * 比較基点が動いていれば（`基点不一致`）`actualAuditBase`からの全体検分を割り当てる（AMD-001）。
  */
 export function assignInspectionForRound(input: {
   readonly session: ReviewSessionState;
+  readonly actualAuditBase?: string;
   readonly fromSha: string;
   readonly toSha: string;
   readonly focus: ReviewRoundFocus;
   readonly observer: ReuseObserver;
-  readonly allowFollowOnly: boolean;
 }): InspectionAssignment {
   const { observer, toSha } = input;
-  const prospective = (kind: ProspectiveRound["kind"]): ProspectiveRound => ({
-    kind,
-    fromSha: input.fromSha,
-    toSha,
-    focus: input.focus,
-  });
-  if (input.allowFollowOnly && input.fromSha !== toSha) {
-    const follow = judgeReviewReuse({
-      session: input.session,
-      effectiveHeadSha: toSha,
-      observer,
-      prospective: prospective("follow"),
-    });
-    if (follow.reviewRequired.length === 0)
-      return { followOnly: true, derivedBaseSha: follow.derivedBaseSha };
-  }
   const transition = observer.transition(input.fromSha, toSha);
   const verdict = judgeReviewReuse({
     session: input.session,
+    ...(input.actualAuditBase === undefined
+      ? {}
+      : { actualAuditBase: input.actualAuditBase }),
     effectiveHeadSha: toSha,
     observer,
-    prospective: prospective("counted"),
+    prospective: { fromSha: input.fromSha, toSha, focus: input.focus },
   });
-  const baseSha = verdict.derivedBaseSha;
   const pending = byteSorted(
     verdict.reviewRequired
-      .filter(
-        ({ kind }) =>
-          kind === REUSE_KIND.follow || kind === REUSE_KIND.cumulative,
-      )
+      .filter(({ kind }) => kind === REUSE_KIND.cumulative)
       .flatMap(({ paths }) => paths),
   );
   let cumulative: ReviewCumulativeInspection | undefined;
@@ -480,13 +379,15 @@ export function assignInspectionForRound(input: {
     transition.unbounded ||
     pending.length > REVIEW_CUMULATIVE_PATH_LIMIT ||
     verdict.reviewRequired.some(({ kind }) => WHOLE_KINDS.has(kind))
-  )
+  ) {
+    const baseSha = input.actualAuditBase ?? input.session.anchor.diffBaseSha;
     cumulative = {
       baseSha,
       scope: "all",
       diffDigest: observer.wholeDigest(baseSha, toSha),
     };
-  else if (pending.length > 0) {
+  } else if (pending.length > 0) {
+    const baseSha = verdict.derivedBaseSha;
     const sections = observer.sections(baseSha, toSha);
     cumulative = {
       baseSha,
@@ -503,7 +404,6 @@ export function assignInspectionForRound(input: {
       diffDigest: transition.digest,
       ...(cumulative ? { cumulative } : {}),
     },
-    derivedBaseSha: baseSha,
     reviewRequired: verdict.reviewRequired,
   };
 }
@@ -530,7 +430,7 @@ export function formatReuseDiagnostic(
     `review再利用条件が成立しません: verdict=${verdict.verdict} 該当=${verdict.reviewRequired.length}件 session=${context.sessionId.slice(0, 12)} 導出基点=${verdict.derivedBaseSha} actualAuditBase=${context.actualAuditBase} 実効H_impl=${context.effectiveHeadSha}`,
     ...verdict.reviewRequired.map(
       (item) =>
-        `[${item.kind}] path=${listPaths(item.paths)}${item.mainPaths ? ` 既定branch側path=${listPaths(item.mainPaths)}` : ""} transition=${item.fromSha}..${item.toSha} 再計算digest=${item.recomputedDigest ?? "なし"} 次の操作: ${item.nextAction}`,
+        `[${item.kind}] path=${listPaths(item.paths)} transition=${item.fromSha}..${item.toSha} 再計算digest=${item.recomputedDigest ?? "なし"} 次の操作: ${item.nextAction}`,
     ),
   ];
   if (verdict.reviewRequired.some(({ kind }) => kind === REUSE_KIND.base))

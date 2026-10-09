@@ -2738,7 +2738,8 @@ function inspectAuthorizedPullRequestMerge(input: {
   /**
    * **旧形式sessionは暫定guardの5条件を変更前の文言で評価する（FR-10）。** 新形式sessionは
    * 5条件が成立すれば高速経路で認可し（FR-11）、不成立ならreview再利用判定（Issue #1544）を
-   * 検証済み`authority.defaultBranchTipOid`・`actualAuditBase`・実効`H_impl`で行い、
+   * 検証済み`authority.defaultBranchTipOid`から求めた`actualAuditBase`と実効`H_impl`で行い（比較基点が
+   * 動いていれば`actualAuditBase`からの全体検分を要求する、AMD-001）、
    * 証跡の比較基点が`actualAuditBase`と一致することを要求する（FR-09、TB-1544-04）。
    * 2回目の`rechecked`評価でも同じ判定をGitから再計算する。
    */
@@ -2749,7 +2750,6 @@ function inspectAuthorizedPullRequestMerge(input: {
       root: input.root,
       session: auditReviewSession,
       issue: stagingTrackerIssue(input.staging),
-      tipSha: authority.defaultBranchTipOid,
       actualAuditBase,
       effectiveHeadSha: effectiveImplementationHeadSha,
     });

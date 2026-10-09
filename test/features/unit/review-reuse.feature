@@ -12,17 +12,17 @@ Feature: review再利用判定はround記録とGit観測だけからtransition�
     When "SCN-UNIT-REVREUSE-002"のreview再利用unit検査を実行する
     Then review再利用unit検査は期待結果になる
 
-  Scenario: SCN-UNIT-REVREUSE-003 linkは同一と内容非変化と追随と断絶に分類される
+  Scenario: SCN-UNIT-REVREUSE-003 linkは同一と内容非変化と断絶に分類される
     Given review再利用unit検査の準備がある
     When "SCN-UNIT-REVREUSE-003"のreview再利用unit検査を実行する
     Then review再利用unit検査は期待結果になる
 
-  Scenario: SCN-UNIT-REVREUSE-004 導出基点はclean追随だけで前進しactualAuditBaseと末尾headに一致しなければならない
+  Scenario: SCN-UNIT-REVREUSE-004 追随mergeのcounted transitionでも基点は前進せずactualAuditBaseと末尾headに一致しなければならない
     Given review再利用unit検査の準備がある
     When "SCN-UNIT-REVREUSE-004"のreview再利用unit検査を実行する
     Then review再利用unit検査は期待結果になる
 
-  Scenario: SCN-UNIT-REVREUSE-005 全体検分は最も後ろの基点とdigestが一致するroundだけを起点にする
+  Scenario: SCN-UNIT-REVREUSE-005 全体検分はactualAuditBaseからでdigestが一致する最も後ろのroundだけを起点にする
     Given review再利用unit検査の準備がある
     When "SCN-UNIT-REVREUSE-005"のreview再利用unit検査を実行する
     Then review再利用unit検査は期待結果になる
@@ -32,7 +32,7 @@ Feature: review再利用判定はround記録とGit観測だけからtransition�
     When "SCN-UNIT-REVREUSE-006"のreview再利用unit検査を実行する
     Then review再利用unit検査は期待結果になる
 
-  Scenario: SCN-UNIT-REVREUSE-007 追随は既定branch側の変更とPRの変更pathと隣接範囲の交差を求め影響集合fullは判定不能にする
+  Scenario: SCN-UNIT-REVREUSE-007 追随roundは何も被覆せず比較基点が動けばactualAuditBaseからの全体検分を要求する
     Given review再利用unit検査の準備がある
     When "SCN-UNIT-REVREUSE-007"のreview再利用unit検査を実行する
     Then review再利用unit検査は期待結果になる
@@ -47,7 +47,7 @@ Feature: review再利用判定はround記録とGit観測だけからtransition�
     When "SCN-UNIT-REVREUSE-009"のreview再利用unit検査を実行する
     Then review再利用unit検査は期待結果になる
 
-  Scenario: SCN-UNIT-REVREUSE-010 雛形の割当は判定と同じ関数から追随と全体と累積pathと割当なしを決める
+  Scenario: SCN-UNIT-REVREUSE-010 雛形の割当は判定と同じ関数から比較基点が動いたときの全体と影響集合fullの全体と累積pathと割当なしを決める
     Given review再利用unit検査の準備がある
     When "SCN-UNIT-REVREUSE-010"のreview再利用unit検査を実行する
     Then review再利用unit検査は期待結果になる

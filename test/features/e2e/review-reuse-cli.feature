@@ -32,12 +32,12 @@ Feature: review済みexact diffの再利用と再review必須条件によるmerg
     When "SCN-REVIEW-REUSE-006"のreview再利用E2E検査を実行する
     Then review再利用E2E検査は期待結果になる
 
-  Scenario: SCN-REVIEW-REUSE-007 PRの変更と交差しない既定branch追随は再reviewなしに再利用できる
+  Scenario: SCN-REVIEW-REUSE-007 既定branch追随で比較基点が動いたPRは同じsessionの全体検分roundが無ければmergeできずあればmergeできる
     Given review再利用E2Eの隔離環境がある
     When "SCN-REVIEW-REUSE-007"のreview再利用E2E検査を実行する
     Then review再利用E2E検査は期待結果になる
 
-  Scenario: SCN-REVIEW-REUSE-009 PRの依存先と交差する既定branch追随は交差pathを検分しなければmergeできない
+  Scenario: SCN-REVIEW-REUSE-009 PRの依存先と交差する既定branch追随も全体検分roundが無ければmergeできず前headを第1親としない追随mergeはfollowOnlyにできない
     Given review再利用E2Eの隔離環境がある
     When "SCN-REVIEW-REUSE-009"のreview再利用E2E検査を実行する
     Then review再利用E2E検査は期待結果になる

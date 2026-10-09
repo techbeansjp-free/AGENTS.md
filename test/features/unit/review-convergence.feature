@@ -115,7 +115,7 @@ Feature: Review sessionを固定契約へ収束させる
     When "SCN-UNIT-REVIEWCONV-014"のreview再利用unit検査を実行する
     Then review再利用unit検査は期待結果になる
 
-  Scenario: SCN-UNIT-REVIEWCONV-015 追随mergeの第1親は前headの証跡だけのsuffixを受理し第2親は指定tipで判定する
+  Scenario: SCN-UNIT-REVIEWCONV-015 追随mergeの第1親は前headそのものに限り証跡形のfileだけを足したcommitを受理しない
     Given review再利用unit検査の準備がある
     When "SCN-UNIT-REVIEWCONV-015"のreview再利用unit検査を実行する
     Then review再利用unit検査は期待結果になる

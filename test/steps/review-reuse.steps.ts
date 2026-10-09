@@ -23,7 +23,6 @@ import {
   type ReuseVerdict,
   type TransitionObservation,
 } from "../../src/domain/review-reuse.js";
-import type { FollowObservation } from "../../src/domain/review-reuse-follow.js";
 import {
   GIT_ENV,
   diffSectionDigests,
@@ -148,10 +147,9 @@ function sessionOf(
 class FakeObserver implements ReuseObserver {
   readonly calls: string[] = [];
   readonly links = new Map<string, "evidence-suffix" | "tree-equal">();
-  readonly parents = new Map<string, string>();
   readonly transitions = new Map<string, TransitionObservation>();
-  readonly follows = new Map<string, FollowObservation>();
   readonly wholes = new Map<string, string>();
+  readonly ancestors = new Set<string>();
   readonly changed = new Map<string, string[]>();
   sectionMap = new Map<string, string>();
   readonly failing = new Set<string>();
@@ -167,11 +165,6 @@ class FakeObserver implements ReuseObserver {
     return this.links.get(`${previousHeadSha}..${nextSha}`) ?? "break";
   }
 
-  followParent(previousHeadSha: string, mergeSha: string, baseSha: string) {
-    this.observe("followParent", `${previousHeadSha}..${mergeSha}@${baseSha}`);
-    return this.parents.get(`${previousHeadSha}..${mergeSha}`);
-  }
-
   transition(fromSha: string, toSha: string) {
     this.observe("transition", `${fromSha}..${toSha}`);
     const observed = this.transitions.get(`${fromSha}..${toSha}`);
@@ -179,16 +172,14 @@ class FakeObserver implements ReuseObserver {
     return observed;
   }
 
-  follow(baseSha: string, secondParent: string, mergeSha: string) {
-    this.observe("follow", `${baseSha}..${secondParent}..${mergeSha}`);
-    const observed = this.follows.get(`${secondParent}..${mergeSha}`);
-    if (!observed) throw new Error("未登録の追随です");
-    return observed;
-  }
-
   wholeDigest(baseSha: string, toSha: string) {
     this.observe("wholeDigest", `${baseSha}..${toSha}`);
     return this.wholes.get(`${baseSha}..${toSha}`) ?? digest("0");
+  }
+
+  isAncestor(ancestorSha: string, descendantSha: string) {
+    this.observe("isAncestor", `${ancestorSha}..${descendantSha}`);
+    return this.ancestors.has(`${ancestorSha}..${descendantSha}`);
   }
 
   changedPaths(fromSha: string, toSha: string) {
@@ -279,56 +270,27 @@ function linkClassification(): void {
   const same = fixedObserver();
   assertReusable(judge(fixedSession(), same));
   assert.ok(!same.calls.some((call) => call.startsWith("link:")));
-  const followed = sessionOf([{ candidate: HM, kind: "follow" }]);
-  const follow = new FakeObserver();
-  follow.parents.set(`${H1}..${HM}`, M);
-  follow.follows.set(`${M}..${HM}`, {
-    mainChanged: ["docs/main.md"],
-    impactPaths: ["src/x.ts"],
-    unbounded: false,
-  });
-  const verdict = judge(followed, follow, { actual: M });
-  assertReusable(verdict);
-  assert.equal(verdict.derivedBaseSha, M);
-  assert.ok(follow.calls.includes(`follow:${T}..${M}..${HM}`));
-  assert.deepEqual(kinds(judge(followed, new FakeObserver())), [
-    "断絶||11..cc",
-  ]);
 }
 
 /** SCN-UNIT-REVREUSE-004 */
 function derivedBase(): void {
-  const followed = sessionOf([{ candidate: HM, kind: "follow" }]);
-  const follow = new FakeObserver();
-  follow.parents.set(`${H1}..${HM}`, M);
-  follow.follows.set(`${M}..${HM}`, {
-    mainChanged: [],
-    impactPaths: [],
-    unbounded: false,
-  });
-  follow.changed.set(`${M}..${T}`, ["docs/main.md"]);
-  const mismatch = judge(followed, follow, { actual: T });
-  assert.equal(mismatch.derivedBaseSha, M);
-  assert.deepEqual(kinds(mismatch), ["基点不一致|docs/main.md|11..cc"]);
   assert.deepEqual(
     kinds(judge(fixedSession(), fixedObserver(), { effective: H3 })),
     ["断絶||22..33"],
   );
-  // counted transitionが追随mergeならC4が真のときだけ基点を前進させ、追随Xを求めない（RC-01・RC-02）。
+  // counted transitionが追随mergeでも基点は前進しない（AMD-001）。被覆されたtransitionでも
+  // 実際のmerge-baseが動いていれば基点不一致で全体検分を要求する。
   const countedMerge = sessionOf([
     { candidate: HM, inspection: { fromSha: H1, diffDigest: digest("c") } },
   ]);
-  const clean = new FakeObserver();
-  clean.parents.set(`${H1}..${HM}`, M);
-  clean.transitions.set(`${H1}..${HM}`, observation("c"));
-  assertReusable(judge(countedMerge, clean, { actual: M }));
-  assert.ok(!clean.calls.some((call) => call.startsWith("follow:")));
-  const resolved = new FakeObserver();
-  resolved.transitions.set(`${H1}..${HM}`, observation("c"));
-  resolved.changed.set(`${T}..${M}`, ["f.txt"]);
-  assert.deepEqual(kinds(judge(countedMerge, resolved, { actual: M })), [
-    "基点不一致|f.txt|11..cc",
-  ]);
+  const merged = new FakeObserver();
+  merged.transitions.set(`${H1}..${HM}`, observation("c"));
+  merged.changed.set(`${T}..${M}`, ["f.txt"]);
+  const moved = judge(countedMerge, merged, { actual: M });
+  assert.equal(moved.derivedBaseSha, T);
+  assert.deepEqual(kinds(moved), ["基点不一致|f.txt|11..cc"]);
+  assert.ok(moved.reviewRequired[0]?.nextAction.includes("全体検分"));
+  assertReusable(judge(countedMerge, merged, { actual: T }));
 }
 
 /** SCN-UNIT-REVREUSE-005 */
@@ -363,17 +325,17 @@ function wholeInspection(): void {
   const last = new FakeObserver();
   last.wholes.set(`${T}..${H3}`, digest("8"));
   assertReusable(judge(twice, last));
-  assert.deepEqual(last.calls, [
-    `followParent:${H1}..${H2}@${T}`,
-    `followParent:${H2}..${H3}@${T}`,
-    `wholeDigest:${T}..${H3}`,
-  ]);
+  assert.deepEqual(last.calls, [`wholeDigest:${T}..${H3}`]);
+  // 記録digestが別基点からの差分として正しくても、actualAuditBaseからでなければ全体検分にしない。
   const wrongBase = sessionOf([{ candidate: H2, inspection: whole(X) }]);
   const rebased = fixedObserver();
-  // 記録digestが別基点からの差分として正しくても、導出基点と異なれば全体検分にしない。
+  rebased.transitions.set(`${H1}..${H2}`, observation("8"));
   rebased.wholes.set(`${X}..${H2}`, digest("9"));
-  assert.deepEqual(kinds(judge(wrongBase, rebased)), ["digest不一致||ee..22"]);
-  assert.ok(rebased.calls.includes(`transition:${H1}..${H2}`));
+  assert.deepEqual(kinds(judge(wrongBase, rebased)), ["digest不一致||11..22"]);
+  assert.ok(!rebased.calls.includes(`wholeDigest:${X}..${H2}`));
+  const atX = judge(wrongBase, rebased, { actual: X });
+  assertReusable(atX);
+  assert.equal(atX.derivedBaseSha, X);
   const tampered = sessionOf([{ candidate: H2, inspection: whole(T) }]);
   const recomputed = fixedObserver();
   recomputed.wholes.set(`${T}..${H2}`, digest("7"));
@@ -427,48 +389,69 @@ function transitionVerification(): void {
   );
 }
 
-function followObserver(observed: FollowObservation): FakeObserver {
-  const observer = new FakeObserver();
-  observer.parents.set(`${H1}..${HM}`, M);
-  observer.follows.set(`${M}..${HM}`, observed);
-  return observer;
-}
-
 /** SCN-UNIT-REVREUSE-007 */
-function followCrossingCheck(): void {
+function followRequiresWhole(): void {
+  // 追随roundは何も被覆せず基点も前進させない。merge-baseが動けば基点不一致になる（AMD-001）。
   const followed = sessionOf([{ candidate: HM, kind: "follow" }]);
-  const crossing = judge(
-    followed,
-    followObserver({
-      mainChanged: ["docs/z.md", "src/a.ts"],
-      impactPaths: ["src/a.ts", "src/b.ts"],
-      unbounded: false,
-    }),
-    { actual: M },
+  const observer = new FakeObserver();
+  observer.changed.set(`${T}..${M}`, ["docs/main.md"]);
+  const moved = judge(followed, observer, { actual: M });
+  assert.equal(moved.verdict, "review-required");
+  assert.equal(moved.derivedBaseSha, T);
+  assert.deepEqual(kinds(moved), ["基点不一致|docs/main.md|11..cc"]);
+  assert.ok(
+    !observer.calls.some((call) => call.includes(`..${HM}`)),
+    observer.calls.join(),
   );
-  assert.deepEqual(kinds(crossing), ["追随交差|src/a.ts|11..cc"]);
-  assert.deepEqual(crossing.reviewRequired[0]?.mainPaths, [
-    "docs/z.md",
-    "src/a.ts",
+  // merge-baseが動かない追随（既定branch側の変化が既に基点に含まれる）は鎖を連続させるだけ。
+  assertReusable(judge(followed, new FakeObserver(), { actual: T }));
+  // 追随より後ろのactualAuditBaseからの全体検分が鎖を被覆する。
+  const whole = (baseSha: string) =>
+    sessionOf([
+      { candidate: HM, kind: "follow" },
+      {
+        candidate: H3,
+        inspection: {
+          fromSha: HM,
+          diffDigest: digest("3"),
+          cumulative: { baseSha, scope: "all", diffDigest: digest("9") },
+        },
+      },
+    ]);
+  const covered = new FakeObserver();
+  covered.wholes.set(`${M}..${H3}`, digest("9"));
+  const reviewed = judge(whole(M), covered, { actual: M });
+  assertReusable(reviewed);
+  assert.equal(reviewed.derivedBaseSha, M);
+  // 追随前の基点からの全体検分は、基点が動いた後の監査範囲を被覆しない。
+  const stale = new FakeObserver();
+  stale.wholes.set(`${T}..${H3}`, digest("9"));
+  stale.transitions.set(`${HM}..${H3}`, observation("3"));
+  stale.changed.set(`${T}..${M}`, ["docs/main.md"]);
+  assert.deepEqual(kinds(judge(whole(T), stale, { actual: M })), [
+    "基点不一致|docs/main.md|cc..33",
   ]);
-  const unbounded = judge(
-    followed,
-    followObserver({ mainChanged: [], impactPaths: [], unbounded: true }),
-    { actual: M },
-  );
-  assert.equal(unbounded.verdict, "undecidable");
-  assert.deepEqual(kinds(unbounded), ["判定不能||11..cc"]);
-  assertReusable(
-    judge(
-      followed,
-      followObserver({
-        mainChanged: ["docs/z.md"],
-        impactPaths: ["src/a.ts"],
-        unbounded: false,
-      }),
-      { actual: M },
-    ),
-  );
+  // round 1のheadが既にactualAuditBaseを含む（round 1の前に取り込まれた）基点は全体検分でも
+  // 動かさない（SCN-MERGE-BASE-AUDIT-009の形）。観測できなければ判定不能にする。
+  const preexisting = new FakeObserver();
+  preexisting.wholes.set(`${M}..${H3}`, digest("9"));
+  preexisting.ancestors.add(`${M}..${H1}`);
+  preexisting.transitions.set(`${HM}..${H3}`, observation("3"));
+  preexisting.changed.set(`${T}..${M}`, ["docs/main.md"]);
+  assert.deepEqual(kinds(judge(whole(M), preexisting, { actual: M })), [
+    "基点不一致|docs/main.md|cc..33",
+  ]);
+  assert.ok(!preexisting.calls.includes(`wholeDigest:${M}..${H3}`));
+  const unobservable = new FakeObserver();
+  unobservable.failing.add("isAncestor");
+  unobservable.transitions.set(`${HM}..${H3}`, observation("3"));
+  unobservable.changed.set(`${T}..${M}`, ["docs/main.md"]);
+  const failed = judge(whole(M), unobservable, { actual: M });
+  assert.equal(failed.verdict, "undecidable");
+  assert.deepEqual(kinds(failed), [
+    "判定不能||aa..11",
+    "基点不一致|docs/main.md|cc..33",
+  ]);
 }
 
 function pathsInspection(
@@ -533,7 +516,7 @@ function cumulativeCoverage(): void {
         securityObserver([[SECURITY, digest("5")]]),
       ),
     ),
-    ["digest不一致||ee..22", `累積差分未検分|${SECURITY}|11..22`],
+    [`累積差分未検分|${SECURITY}|11..22`],
   );
   // sectionが無いpathは空差分のsha256と照合する（照合を省略しない）。
   assert.deepEqual(
@@ -578,59 +561,6 @@ function cumulativeCoverage(): void {
       { effective: H3 },
     ),
   );
-  // 追随で交差したpathは追随より後ろの同head累積検分roundが被覆する。
-  const followed = (inspection?: ReviewInspection) =>
-    sessionOf([
-      { candidate: HM, kind: "follow" },
-      ...(inspection ? [{ candidate: HM, inspection }] : []),
-    ]);
-  const crossing = () => {
-    const observer = followObserver({
-      mainChanged: ["src/a.ts"],
-      impactPaths: ["src/a.ts"],
-      unbounded: false,
-    });
-    observer.transitions.set(`${HM}..${HM}`, observation("0", { changed: [] }));
-    return observer;
-  };
-  assertReusable(
-    judge(
-      followed(pathsInspection(HM, "0", M, [["src/a.ts", EMPTY_DIFF_DIGEST]])),
-      crossing(),
-      { actual: M },
-    ),
-  );
-  // 追随で交差したpathを後続transitionが変えたら、そのtransition以降の累積検分が要る。
-  const changedAfter = sessionOf([
-    { candidate: HM, kind: "follow" },
-    {
-      candidate: HM,
-      inspection: pathsInspection(HM, "0", M, [["src/a.ts", digest("5")]]),
-    },
-    { candidate: H3, inspection: { fromSha: HM, diffDigest: digest("3") } },
-  ]);
-  const later = crossing();
-  later.transitions.set(
-    `${HM}..${H3}`,
-    observation("3", { changed: ["src/a.ts"] }),
-  );
-  later.sectionMap = new Map([["src/a.ts", digest("5")]]);
-  assert.deepEqual(
-    kinds(judge(changedAfter, later, { actual: M, effective: H3 })),
-    ["追随交差|src/a.ts|cc..33"],
-  );
-  assert.deepEqual(
-    kinds(
-      judge(
-        followed(
-          pathsInspection(HM, "0", T, [["src/a.ts", EMPTY_DIFF_DIGEST]]),
-        ),
-        crossing(),
-        { actual: M },
-      ),
-    ),
-    ["追随交差|src/a.ts|11..cc"],
-  );
 }
 
 /** SCN-UNIT-REVREUSE-009 */
@@ -659,13 +589,12 @@ function verdictAndDiagnostic(): void {
           nextAction: "次の操作の案内",
         },
         {
-          kind: "追随交差",
-          paths: ["src/a.ts"],
-          mainPaths: ["src/a.ts", "docs/z.md"],
+          kind: "digest不一致",
+          paths: [],
           fromSha: H1,
           toSha: HM,
           recomputedDigest: digest("4"),
-          nextAction: "累積検分",
+          nextAction: "全体検分",
         },
       ],
     },
@@ -675,7 +604,7 @@ function verdictAndDiagnostic(): void {
     `実際のmerge-base(${M})がreview sessionの比較基点(${T})と一致しません。`,
     `review再利用条件が成立しません: verdict=review-required 該当=2件 session=${"f".repeat(12)} 導出基点=${T} actualAuditBase=${M} 実効H_impl=${H2}`,
     `[基点不一致] path=${many.slice(0, 20).join(",")} ほか5件 transition=${H1}..${H2} 再計算digest=なし 次の操作: 次の操作の案内`,
-    `[追随交差] path=src/a.ts 既定branch側path=src/a.ts,docs/z.md transition=${H1}..${HM} 再計算digest=${digest("4")} 次の操作: 累積検分`,
+    `[digest不一致] path=なし transition=${H1}..${HM} 再計算digest=${digest("4")} 次の操作: 全体検分`,
   ]);
   assert.doesNotMatch(text, /counted round数|初回H_impl/u);
 }
@@ -690,42 +619,32 @@ function assignment(): void {
   };
   const assign = (
     observer: FakeObserver,
-    input: {
-      to?: string;
-      allowFollowOnly?: boolean;
-      session?: ReviewSessionState;
-    } = {},
+    input: { to?: string; actual?: string } = {},
   ) =>
     assignInspectionForRound({
-      session: input.session ?? previous,
+      session: previous,
+      ...(input.actual ? { actualAuditBase: input.actual } : {}),
       fromSha: H1,
       toSha: input.to ?? HM,
       focus,
       observer,
-      allowFollowOnly: input.allowFollowOnly ?? true,
     });
-  const disjoint = followObserver({
-    mainChanged: ["docs/z.md"],
-    impactPaths: ["src/x.ts"],
-    unbounded: false,
-  });
-  disjoint.transitions.set(`${H1}..${HM}`, observation("c"));
-  assert.deepEqual(assign(disjoint), { followOnly: true, derivedBaseSha: M });
-  const notAllowed = assign(disjoint, { allowFollowOnly: false });
-  assert.ok("inspection" in notAllowed);
-  assert.deepEqual(notAllowed.inspection, {
+  // 既定branch追随で比較基点が動いたら、followOnlyにせずactualAuditBaseからの全体検分を割り当てる。
+  const followed = new FakeObserver();
+  followed.transitions.set(`${H1}..${HM}`, observation("c"));
+  followed.changed.set(`${T}..${M}`, ["docs/z.md"]);
+  followed.wholes.set(`${M}..${HM}`, digest("7"));
+  const moved = assign(followed, { actual: M });
+  assert.deepEqual(moved.inspection, {
     fromSha: H1,
     diffDigest: digest("c"),
+    cumulative: { baseSha: M, scope: "all", diffDigest: digest("7") },
   });
-  const intersecting = followObserver({
-    mainChanged: ["src/a.ts"],
-    impactPaths: ["src/a.ts"],
-    unbounded: false,
-  });
-  intersecting.transitions.set(`${H1}..${HM}`, observation("c"));
-  const counted = assign(intersecting);
-  assert.ok("inspection" in counted);
-  assert.deepEqual(counted.inspection, {
+  assert.deepEqual(
+    moved.reviewRequired.map(({ kind }) => kind),
+    ["基点不一致"],
+  );
+  assert.deepEqual(assign(followed, { actual: T }).inspection, {
     fromSha: H1,
     diffDigest: digest("c"),
   });
@@ -736,7 +655,6 @@ function assignment(): void {
   );
   unbounded.wholes.set(`${T}..${H2}`, digest("9"));
   const whole = assign(unbounded, { to: H2 });
-  assert.ok("inspection" in whole);
   assert.deepEqual(whole.inspection.cumulative, {
     baseSha: T,
     scope: "all",
@@ -749,7 +667,6 @@ function assignment(): void {
   );
   security.sectionMap = new Map([[SECURITY, digest("5")]]);
   const paths = assign(security, { to: H2 });
-  assert.ok("inspection" in paths);
   assert.deepEqual(paths.inspection.cumulative, {
     baseSha: T,
     scope: "paths",
@@ -757,7 +674,6 @@ function assignment(): void {
   });
   const plain = fixedObserver();
   const none = assign(plain, { to: H2 });
-  assert.ok("inspection" in none);
   assert.equal(none.inspection.cumulative, undefined);
   // 鎖の断絶が残っていれば全体検分を割り当てる。
   const broken = sessionOf([
@@ -773,41 +689,8 @@ function assignment(): void {
     toSha: H3,
     focus,
     observer: breakObserver,
-    allowFollowOnly: true,
   });
-  assert.ok("inspection" in repaired);
   assert.equal(repaired.inspection.cumulative?.scope, "all");
-  // 未被覆の追随交差は同headの累積検分pathとして割り当てる。
-  const followed = sessionOf([{ candidate: HM, kind: "follow" }]);
-  const crossing = followObserver({
-    mainChanged: ["src/a.ts"],
-    impactPaths: ["src/a.ts"],
-    unbounded: false,
-  });
-  crossing.transitions.set(`${HM}..${HM}`, {
-    digest: EMPTY_DIFF_DIGEST,
-    changedPaths: [],
-    adjacentScope: [],
-    unbounded: false,
-  });
-  const sameHead = assignInspectionForRound({
-    session: followed,
-    fromSha: HM,
-    toSha: HM,
-    focus,
-    observer: crossing,
-    allowFollowOnly: true,
-  });
-  assert.ok("inspection" in sameHead);
-  assert.deepEqual(sameHead.inspection, {
-    fromSha: HM,
-    diffDigest: EMPTY_DIFF_DIGEST,
-    cumulative: {
-      baseSha: M,
-      scope: "paths",
-      paths: [{ path: "src/a.ts", diffDigest: EMPTY_DIFF_DIGEST }],
-    },
-  });
 }
 
 /** 固定Git環境の`git`（利用者のglobal configに左右されない）。 */
@@ -932,38 +815,26 @@ function mergeDefault(root: string, advanced: string): string {
   return git(root, ["rev-parse", "HEAD"]);
 }
 
-/** SCN-UNIT-REVIEWCONV-015 */
-function followMergeExtension(world: ReuseWorld): void {
+/**
+ * SCN-UNIT-REVIEWCONV-015: 追随mergeの第1親は前headそのものに限る（0a6d111eの受理条件、
+ * AMD-001・R1544-N1-01）。前headの証跡形のfileだけを足したcommitを第1親にしたmergeは受理しない。
+ */
+function followMergeFirstParent(world: ReuseWorld): void {
   const root = world.initRepo();
   const base = git(root, ["rev-parse", "HEAD"]);
   const reviewed = commitFiles(root, { "p.txt": "reviewed\n" }, "reviewed");
-  commitFiles(
-    root,
-    { "docs/reviews/1544_review.json": "{}\n" },
-    "review evidence",
-  );
   const advanced = advanceDefault(root, base, { "m.txt": "main\n" });
+  const direct = mergeDefault(root, advanced);
+  assert.equal(isDefaultBranchFollowMerge(root, reviewed, direct), true);
+  git(root, ["reset", "-q", "--hard", reviewed]);
+  const suffix = commitFiles(
+    root,
+    { "docs/reviews/helper.ts": "export const LIMIT = 100;\n" },
+    "evidence-shaped suffix",
+  );
   const followed = mergeDefault(root, advanced);
-  assert.equal(isDefaultBranchFollowMerge(root, reviewed, followed), true);
-  assert.equal(
-    isDefaultBranchFollowMerge(root, reviewed, followed, advanced),
-    true,
-  );
-  assert.equal(
-    isDefaultBranchFollowMerge(root, reviewed, followed, base),
-    false,
-  );
-  commitFiles(root, { "p.txt": "implementation change\n" }, "implementation");
-  const advancedAgain = advanceDefault(root, advanced, { "n.txt": "main\n" });
-  const throughImplementation = mergeDefault(root, advancedAgain);
-  assert.equal(
-    isDefaultBranchFollowMerge(root, followed, throughImplementation),
-    false,
-  );
-  assert.equal(
-    isDefaultBranchFollowMerge(root, reviewed, throughImplementation),
-    false,
-  );
+  assert.equal(isDefaultBranchFollowMerge(root, reviewed, followed), false);
+  assert.equal(isDefaultBranchFollowMerge(root, suffix, followed), true);
 }
 
 function realInspection(
@@ -984,11 +855,10 @@ function adapterObservation(world: ReuseWorld): void {
   const root = world.initRepo();
   const base = git(root, ["rev-parse", "HEAD"]);
   const first = commitFiles(root, { "p.txt": "first\n" }, "first");
-  const firstMain = advanceDefault(root, base, { "m1.txt": "main 1\n" });
-  const firstFollow = mergeDefault(root, firstMain);
   const fixed = commitFiles(root, { "q.txt": "fixed\n" }, "fix");
-  const secondMain = advanceDefault(root, firstMain, { "m2.txt": "main 2\n" });
-  const secondFollow = mergeDefault(root, secondMain);
+  const again = commitFiles(root, { "q.txt": "fixed again\n" }, "fix again");
+  const main = advanceDefault(root, base, { "m1.txt": "main 1\n" });
+  const followed = mergeDefault(root, main);
   const anchor: ReviewSessionAnchor = {
     ...ANCHOR,
     diffBaseSha: base,
@@ -1005,11 +875,7 @@ function adapterObservation(world: ReuseWorld): void {
     };
   };
   const session = sessionOf(
-    [
-      { candidate: firstFollow, kind: "follow" },
-      counted(firstFollow, fixed),
-      counted(fixed, secondFollow),
-    ],
+    [counted(first, fixed), counted(fixed, again)],
     anchor,
   );
   const counter: ReuseObservationCounter = {
@@ -1020,16 +886,65 @@ function adapterObservation(world: ReuseWorld): void {
     root,
     session,
     issue: 1544,
-    tipSha: secondMain,
-    actualAuditBase: secondMain,
-    effectiveHeadSha: secondFollow,
+    actualAuditBase: base,
+    effectiveHeadSha: again,
     counter,
   });
-  assert.equal(verdict.derivedBaseSha, secondMain, JSON.stringify(verdict));
+  assert.equal(verdict.verdict, "reusable", JSON.stringify(verdict));
   const rounds = session.rounds.length;
   assert.ok(counter.contentDiffs <= rounds + 1, JSON.stringify(counter));
   assert.ok(counter.impactDerivations <= rounds, JSON.stringify(counter));
-  assert.equal(counter.impactDerivations, 3);
+  assert.equal(counter.impactDerivations, 2);
+  // 実Gitの追随merge: counted transitionで被覆しても基点は前進せず、actualAuditBaseからの
+  // 全体検分roundだけが鎖を被覆する（AMD-001）。
+  const followSession = sessionOf(
+    [counted(first, fixed), counted(fixed, again), counted(again, followed)],
+    anchor,
+  );
+  const moved = judgeReviewReuseAtMerge({
+    root,
+    session: followSession,
+    issue: 1544,
+    actualAuditBase: main,
+    effectiveHeadSha: followed,
+  });
+  assert.deepEqual(
+    moved.reviewRequired.map(({ kind, paths }) => `${kind}|${paths.join()}`),
+    ["基点不一致|m1.txt"],
+  );
+  const wholeSession = sessionOf(
+    [
+      counted(first, fixed),
+      counted(fixed, again),
+      {
+        ...counted(again, followed),
+        inspection: {
+          ...counted(again, followed).inspection!,
+          cumulative: {
+            baseSha: main,
+            scope: "all",
+            diffDigest: observeReviewDiff(root, main, followed).digest,
+          },
+        },
+      },
+    ],
+    anchor,
+  );
+  const wholeCounter: ReuseObservationCounter = {
+    contentDiffs: 0,
+    impactDerivations: 0,
+  };
+  const reviewed = judgeReviewReuseAtMerge({
+    root,
+    session: wholeSession,
+    issue: 1544,
+    actualAuditBase: main,
+    effectiveHeadSha: followed,
+    counter: wholeCounter,
+  });
+  assert.equal(reviewed.verdict, "reusable", JSON.stringify(reviewed));
+  assert.equal(reviewed.derivedBaseSha, main);
+  assert.deepEqual(wholeCounter, { contentDiffs: 1, impactDerivations: 0 });
   const unobservable = sessionOf(
     [
       {
@@ -1043,7 +958,6 @@ function adapterObservation(world: ReuseWorld): void {
     root,
     session: unobservable,
     issue: 1544,
-    tipSha: base,
     actualAuditBase: base,
     effectiveHeadSha: fixed,
   });
@@ -1323,7 +1237,7 @@ function draftAndApply(world: ReuseWorld): void {
     }).rounds.at(-1)?.inspection,
     expected,
   );
-  // clean追随で交差が無ければ雛形はfollowOnlyを立てる。
+  // clean追随でも雛形はfollowOnlyを立てず、動いた比較基点からの全体検分を割り当てる（AMD-001）。
   const lib = stagedRepository(world, {
     "src/lib.ts": "export const lib = (): number => 1;\n",
   });
@@ -1338,13 +1252,26 @@ function draftAndApply(world: ReuseWorld): void {
     staging: lib.staging,
     headSha: followed,
   });
-  assert.equal(follow.round.followOnly, true, follow.notes.join("\n"));
-  assert.equal(follow.round.inspection, undefined);
-  assert.equal(
+  assert.equal(follow.round.followOnly, undefined, follow.notes.join("\n"));
+  const whole = {
+    fromSha: lib.first,
+    diffDigest: observeReviewDiff(lib.root, lib.first, followed).digest,
+    cumulative: {
+      baseSha: advanced,
+      scope: "all",
+      diffDigest: observeReviewDiff(lib.root, advanced, followed).digest,
+    },
+  };
+  assert.deepEqual(follow.round.inspection, whole);
+  assert.ok(
+    follow.notes.some((note) => note.includes(`--base=${advanced}`)),
+    follow.notes.join("\n"),
+  );
+  assert.deepEqual(
     recordReviewRound({ staging: lib.staging, round: follow.round }).rounds.at(
       -1,
-    )?.followOnly,
-    true,
+    )?.inspection,
+    whole,
   );
 }
 
@@ -1362,7 +1289,7 @@ When(
       "SCN-UNIT-REVREUSE-004": derivedBase,
       "SCN-UNIT-REVREUSE-005": wholeInspection,
       "SCN-UNIT-REVREUSE-006": transitionVerification,
-      "SCN-UNIT-REVREUSE-007": followCrossingCheck,
+      "SCN-UNIT-REVREUSE-007": followRequiresWhole,
       "SCN-UNIT-REVREUSE-008": cumulativeCoverage,
       "SCN-UNIT-REVREUSE-009": verdictAndDiagnostic,
       "SCN-UNIT-REVREUSE-010": assignment,
@@ -1370,7 +1297,7 @@ When(
       "SCN-UNIT-REVIEWCONV-012": inspectionShape,
       "SCN-UNIT-REVIEWCONV-013": legacyDetection,
       "SCN-UNIT-REVIEWCONV-014": sameHeadAfterConvergence,
-      "SCN-UNIT-REVIEWCONV-015": () => followMergeExtension(this),
+      "SCN-UNIT-REVIEWCONV-015": () => followMergeFirstParent(this),
       "SCN-INT-REVREUSE-001": () => draftAndApply(this),
     };
     const check = checks[scenarioId];
