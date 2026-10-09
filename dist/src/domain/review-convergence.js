@@ -25,6 +25,7 @@ const STABLE_ID = /^[A-Z][A-Z0-9._-]{1,127}$/u;
 const SEVERITIES = ["Critical", "High", "Medium", "Low"];
 const STATUSES = ["valid", "resolved", "duplicate", "false-positive"];
 const SOURCES = ["review", "consultation", "audit"];
+const CUMULATIVE_SCOPES = ["all", "paths"];
 const RELATIONS = [
     "acceptance-violation",
     "invariant-violation",
@@ -32,6 +33,8 @@ const RELATIONS = [
     "improvement",
     "out-of-scope",
 ];
+/** 累積検分pathの上限。超える割当は全体検分（`scope="all"`）にする。 */
+export const REVIEW_CUMULATIVE_PATH_LIMIT = 256;
 /** 非収束の原因と、ownerが受容する対象を混同させない診断を返す。 */
 export function unconvergedReviewSessionDiagnostic(session) {
     if (typeof session !== "string") {
@@ -305,6 +308,76 @@ function parseFinding(value, index) {
             : {}),
     });
 }
+function parseCumulative(value) {
+    const label = "review round.inspection.cumulative";
+    const { required, optional } = childFields(REVIEW_ROUND_INPUT_FIELDS, "inspection.cumulative");
+    const cumulative = exactObject(value, label, required, optional);
+    if (!OID.test(String(cumulative.baseSha ?? "")))
+        throw new Error(`${label}.baseShaが不正です`);
+    const scope = oneOf(cumulative.scope, CUMULATIVE_SCOPES, `${label}.scope`);
+    if (scope === "all") {
+        if (cumulative.paths !== undefined ||
+            !SHA256.test(String(cumulative.diffDigest ?? "")))
+            throw new Error(`${label}はscope=allのときdiffDigestだけを持ちます`);
+        return Object.freeze({
+            baseSha: String(cumulative.baseSha),
+            scope,
+            diffDigest: String(cumulative.diffDigest),
+        });
+    }
+    if (cumulative.diffDigest !== undefined ||
+        !Array.isArray(cumulative.paths) ||
+        cumulative.paths.length < 1 ||
+        cumulative.paths.length > REVIEW_CUMULATIVE_PATH_LIMIT)
+        throw new Error(`${label}はscope=pathsのとき1〜${REVIEW_CUMULATIVE_PATH_LIMIT}件のpathsだけを持ちます`);
+    const paths = cumulative.paths.map((item, index) => {
+        const entry = exactObject(item, `${label}.paths[${index}]`, childFields(REVIEW_ROUND_INPUT_FIELDS, "inspection.cumulative.paths[]")
+            .required);
+        const path = safePath(entry.path, `${label}.paths[${index}].path`);
+        if (path.includes("\0") || !SHA256.test(String(entry.diffDigest ?? "")))
+            throw new Error(`${label}.paths[${index}]が不正です`);
+        return Object.freeze({ path, diffDigest: String(entry.diffDigest) });
+    });
+    for (let index = 1; index < paths.length; index += 1)
+        if (Buffer.compare(Buffer.from(paths[index - 1].path), Buffer.from(paths[index].path)) >= 0)
+            throw new Error(`${label}.pathsはpathのbyte昇順・重複なしが必要です`);
+    return Object.freeze({
+        baseSha: String(cumulative.baseSha),
+        scope,
+        paths: Object.freeze(paths),
+    });
+}
+function parseInspection(value) {
+    const { required, optional } = childFields(REVIEW_ROUND_INPUT_FIELDS, "inspection");
+    const inspection = exactObject(value, "review round.inspection", required, optional);
+    if (!OID.test(String(inspection.fromSha ?? "")))
+        throw new Error("review round.inspection.fromShaが不正です");
+    if (!SHA256.test(String(inspection.diffDigest ?? "")))
+        throw new Error("review round.inspection.diffDigestが不正です");
+    return Object.freeze({
+        fromSha: String(inspection.fromSha),
+        diffDigest: String(inspection.diffDigest),
+        ...(inspection.cumulative === undefined
+            ? {}
+            : { cumulative: parseCumulative(inspection.cumulative) }),
+    });
+}
+/** round 1の検分identityはanchorだけから決まる（比較基点→初回HEADの全体）。 */
+export function roundOneInspection(anchor) {
+    return Object.freeze({
+        fromSha: anchor.diffBaseSha,
+        diffDigest: anchor.initialDiffDigest,
+    });
+}
+/**
+ * counted roundのうち1件でも検分identityを欠くsessionは旧形式である（FR-10）。
+ * 混在も旧形式とし、受理範囲を暫定guardの5条件より広げない。
+ */
+export function isLegacyReviewSession(state) {
+    return state.rounds.some((record) => !record.followOnly &&
+        !record.recordLayerOnly &&
+        record.inspection === undefined);
+}
 /** `review round --file`の項目定義。`--help`と検証が共有する。 */
 export const REVIEW_ROUND_INPUT_FIELDS = Object.freeze([
     field("round", "integer（1以上）"),
@@ -339,6 +412,22 @@ export const REVIEW_ROUND_INPUT_FIELDS = Object.freeze([
     field("findings[].decisionRef", "DR-ID | null", { required: false }),
     field("followOnly", "true", { required: false }),
     field("recordLayerOnly", "true", { required: false }),
+    field("inspection", "object（counted roundの検分identity）", {
+        required: false,
+    }),
+    field("inspection.fromSha", "commit SHA"),
+    field("inspection.diffDigest", "sha256"),
+    field("inspection.cumulative", "object", { required: false }),
+    field("inspection.cumulative.baseSha", "commit SHA"),
+    field("inspection.cumulative.scope", "string", {
+        values: CUMULATIVE_SCOPES,
+    }),
+    field("inspection.cumulative.diffDigest", "sha256（scope=all）", {
+        required: false,
+    }),
+    field("inspection.cumulative.paths", "object[]（scope=paths、1〜256件、pathのbyte昇順）", { required: false }),
+    field("inspection.cumulative.paths[].path", "repository相対path"),
+    field("inspection.cumulative.paths[].diffDigest", "sha256"),
 ]);
 export function parseReviewRoundInput(value) {
     const { required, optional } = childFields(REVIEW_ROUND_INPUT_FIELDS, "");
@@ -349,6 +438,9 @@ export function parseReviewRoundInput(value) {
         throw new Error("review round.recordLayerOnlyはtrueだけを受理します");
     if (round.followOnly === true && round.recordLayerOnly === true)
         throw new Error("followOnlyとrecordLayerOnlyは併用できません");
+    if (round.inspection !== undefined &&
+        (round.followOnly === true || round.recordLayerOnly === true))
+        throw new Error("followOnly・recordLayerOnlyのroundはinspectionを持てません（検分identityはcounted roundだけが持つ）");
     if (!Number.isInteger(round.round) || Number(round.round) < 1)
         throw new Error("review round.roundは1以上の整数が必要です");
     if (round.previousRoundDigest !== null &&
@@ -374,6 +466,9 @@ export function parseReviewRoundInput(value) {
         ...(round.recordLayerOnly === true
             ? { recordLayerOnly: true }
             : {}),
+        ...(round.inspection === undefined
+            ? {}
+            : { inspection: parseInspection(round.inspection) }),
     });
 }
 export function reviewSessionId(anchor) {
@@ -536,8 +631,15 @@ export function countedRounds(state) {
         return 0;
     return state.rounds.filter((record) => !record.followOnly && !record.recordLayerOnly).length;
 }
+/** round 1が検分identityを省略した場合はanchorから補う（保存済みsessionの再生では補わない）。 */
 export function advanceReviewSession(previous, round) {
-    return advanceReviewSessionWithPolicy(previous, round, 2);
+    const filled = previous === null &&
+        round.inspection === undefined &&
+        !round.followOnly &&
+        !round.recordLayerOnly
+        ? { ...round, inspection: roundOneInspection(round.anchor) }
+        : round;
+    return advanceReviewSessionWithPolicy(previous, filled, 2);
 }
 /** Historical replay is private: callers cannot choose the legacy policy. */
 function advanceReviewSessionWithPolicy(previous, round, policyVersion) {
@@ -571,6 +673,10 @@ function advanceReviewSessionWithPolicy(previous, round, policyVersion) {
             round.focus.adjacentScope.length > 0 ||
             round.focus.adjacentScopeUnbounded === true)
             throw new Error("round 1は固定initial HEADの全scope reviewで開始します");
+        if (round.inspection !== undefined &&
+            stableJson(round.inspection) !==
+                stableJson(roundOneInspection(round.anchor)))
+            throw new Error("round 1のinspectionはanchorの比較基点と初回diff digestに一致しなければなりません");
     }
     else {
         if (previous.sessionId !== sessionId)
@@ -580,7 +686,8 @@ function advanceReviewSessionWithPolicy(previous, round, policyVersion) {
         if (previous.status === "converged" &&
             pending.length === 0 &&
             (round.candidateHeadSha === previous.latestCandidateHeadSha ||
-                round.focus.fixedDiff.length === 0))
+                round.focus.fixedDiff.length === 0) &&
+            round.inspection?.cumulative === undefined)
             throw new Error("収束後の追加reviewは前roundと異なるcandidate HEADと空でない実Git fixedDiffが必要です");
         const prior = priorIds;
         if (!sameStrings(round.focus.previousBlocking, [...prior].sort()))
@@ -631,6 +738,7 @@ function advanceReviewSessionWithPolicy(previous, round, policyVersion) {
         recordOnly,
         ...(round.followOnly ? { followOnly: true } : {}),
         ...(round.recordLayerOnly ? { recordLayerOnly: true } : {}),
+        ...(round.inspection ? { inspection: round.inspection } : {}),
     };
     const roundDigest = crypto
         .createHash("sha256")
@@ -691,7 +799,7 @@ export function parseReviewSessionState(value) {
             "blocking",
             "recordOnly",
             "roundDigest",
-        ], ["followOnly", "recordLayerOnly", "admissionPolicyVersion"]);
+        ], ["followOnly", "recordLayerOnly", "admissionPolicyVersion", "inspection"]);
         if (record.admissionPolicyVersion !== undefined &&
             record.admissionPolicyVersion !== 2)
             throw new Error("review round.admissionPolicyVersionは2だけを受理します");
@@ -729,6 +837,9 @@ export function parseReviewSessionState(value) {
             findings,
             ...(record.followOnly === true ? { followOnly: true } : {}),
             ...(record.recordLayerOnly === true ? { recordLayerOnly: true } : {}),
+            ...(record.inspection === undefined
+                ? {}
+                : { inspection: record.inspection }),
         });
         rebuilt = advanceReviewSessionWithPolicy(rebuilt, round, record.admissionPolicyVersion === 2 ? 2 : 1);
         const rebuiltRecord = rebuilt.rounds.at(-1);

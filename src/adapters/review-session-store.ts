@@ -15,6 +15,7 @@ import { git } from "../lib/process.js";
 import { assertWorkflowStaging } from "./workflow-journal.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { recordLayerSuffix } from "./review-record-layer.js";
+import { evidenceOnlySuffix } from "./review-diff.js";
 
 export const REVIEW_SESSION_FILE = "review-session.json";
 const EVIDENCE_REANCHOR_FILE = "journal/reanchor.jsonl";
@@ -29,11 +30,18 @@ const GIT_ENV: NodeJS.ProcessEnv = {
   GIT_OPTIONAL_LOCKS: "0",
 };
 
-/** 保存済みfollow-only recordをcaller申告ではなく実Gitから再検証する。 */
+/**
+ * 保存済みfollow-only recordをcaller申告ではなく実Gitから再検証する。
+ *
+ * 第1親は前head、または前headのevidence-only suffix（`H_final`）を受理する（Issue #1544 C4）。
+ * `tipSha`を渡すとその既定branch tipに対して判定する（`pr merge`は検証済み
+ * `authority.defaultBranchTipOid`を渡す）。省略時はlocal `refs/remotes/origin/HEAD`を使う。
+ */
 export function isDefaultBranchFollowMerge(
   root: string,
   previousHeadSha: string,
   candidateHeadSha: string,
+  tipSha?: string,
 ): boolean {
   const parents = git(
     ["rev-list", "--parents", "-n", "1", `${candidateHeadSha}^{commit}`],
@@ -47,14 +55,18 @@ export function isDefaultBranchFollowMerge(
     first === undefined ||
     second === undefined ||
     rest.length > 0 ||
-    first !== previousHeadSha
+    (first !== previousHeadSha &&
+      evidenceOnlySuffix(root, previousHeadSha, first) === undefined)
   )
     return false;
-  const defaultTip = git(
-    ["rev-parse", "--verify", "refs/remotes/origin/HEAD^{commit}"],
-    root,
-    { env: GIT_ENV, allowFailure: true },
-  );
+  const defaultTip =
+    tipSha === undefined
+      ? git(
+          ["rev-parse", "--verify", "refs/remotes/origin/HEAD^{commit}"],
+          root,
+          { env: GIT_ENV, allowFailure: true },
+        )
+      : { status: 0, stdout: tipSha };
   if (defaultTip.status !== 0) return false;
   if (
     git(
