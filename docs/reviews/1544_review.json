@@ -6,10 +6,10 @@
     "implementationHeadSha": "440705d5e028204831c816f34c3dc3685f5b5b29",
     "diffDigest": "62b6af507213b1648d1a9b16ea29fae9e63ebb90dd3d231c172d970f8fb476bc",
     "session": {
-      "sessionId": "e4e2d92899bca88e8d56b9111d8be4433991396f6fff1f69c0ef592d4a1bb75a",
-      "latestRoundDigest": "399299b3f79c54c6fcda311820d37b0ece59d6eef996c064d089419b5d7ef97f",
+      "sessionId": "d82c7fc41e5b7f1ea3d7472f75786452598be017f75bb18a1214d880ffdef23e",
+      "latestRoundDigest": "96c73403d5807e1657b36c4824ec31b1ccc2993b8774574b21ba1985a9a34ea3",
       "status": "converged",
-      "countedRounds": 3
+      "countedRounds": 1
     },
     "impact": {
       "digest": "a8832fda188fd70b3ec2170862080dbe9a649d0749f08aab48e87b56562d9ba4",
@@ -32,28 +32,12 @@
   },
   "findings": [
     {
-      "id": "R1544-N1-01",
-      "severity": "Medium",
-      "status": "resolved",
-      "relation": "invariant-violation",
-      "path": "src/adapters/review-session-store.ts",
-      "contractId": "INV-01"
-    },
-    {
-      "id": "R1544-N1-02",
+      "id": "R1544-M1-01",
       "severity": "Low",
       "status": "valid",
       "relation": "improvement",
       "path": "src/domain/review-reuse.ts",
       "contractId": null
-    },
-    {
-      "id": "R1544-N2-01",
-      "severity": "Medium",
-      "status": "resolved",
-      "relation": "acceptance-violation",
-      "path": "docs/specs/02_要件/01_ワークフロー要件.md",
-      "contractId": "AC-12"
     }
   ],
   "unresolvedCriticalHigh": [],
@@ -64,5 +48,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "19ea7cd602b4f7383936b9869352adc66a378064ce7b64ceef35209d97b6a688"
+  "evidenceDigest": "f1d9f104ec6ccf75162dce31e766ed066fabb28d2339009d6bdd744f860873d7"
 }
