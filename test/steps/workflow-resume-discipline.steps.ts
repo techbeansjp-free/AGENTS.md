@@ -235,6 +235,22 @@ Then(
           "05_計画変更.md",
         ]);
         assert.equal(quick.read?.skill, implementation.read?.skill);
+        for (const inputStaging of [staging, quickStaging]) {
+          const request = observeWorkflowHandoff(inputStaging, 1, {
+            ...preview.resume,
+            staging: inputStaging,
+          });
+          assert.ok(request && "kind" in request);
+          assert.deepEqual(request.read?.staging, [
+            "00_モード判定.json",
+            "00_要求定義.md",
+          ]);
+          for (const input of request.read!.staging)
+            assert.ok(fs.existsSync(path.join(inputStaging, input)));
+          assert.equal(request.read?.skill, DOCUMENTS.step1);
+          assert.equal(request.authority, "advisory");
+          assert.equal(request.workUnit.freshContextRequired, true);
+        }
         assert.ok(fs.existsSync(path.resolve(implementation.read!.skill)));
         assert.equal(implementation.authority, "advisory");
         const dispatch = workflowAgentDispatch(implementation);

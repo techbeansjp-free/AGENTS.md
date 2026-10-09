@@ -8,7 +8,7 @@ import {
   PLAN_SEAL_ARTIFACTS,
   PLAN_AMENDMENT_FILE,
 } from "../domain/plan-seal.js";
-import { STEP_JOURNAL_FILE } from "../domain/workflow.js";
+import { MODE_DECISION_FILE, STEP_JOURNAL_FILE } from "../domain/workflow.js";
 import type { WorkflowResume } from "../domain/workflow-resume.js";
 import {
   readStoredReviewSession,
@@ -59,7 +59,7 @@ function handoffReads(
   const plans = mode === undefined ? [] : PLAN_SEAL_ARTIFACTS[mode];
   const inputs =
     step === 1
-      ? []
+      ? [MODE_DECISION_FILE, "00_要求定義.md"]
       : step < 9
         ? plans.slice(0, step <= 2 ? 1 : step <= 5 ? 2 : step === 6 ? 3 : 4)
         : role === "correction" || (step === 10 && (reviewRound ?? 1) > 1)
