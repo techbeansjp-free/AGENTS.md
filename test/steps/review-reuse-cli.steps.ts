@@ -152,6 +152,24 @@ function fixOnTopOfEvidence(
   );
 }
 
+/**
+ * PR作成後の実運用どおり、証跡commitの上に是正内容だけを足す（証跡fileは残す）。
+ * 前roundのH_implからのtransitionは証跡pathを含む（Issue #1544 INV-07）。
+ */
+function fixRetainingEvidence(
+  prepared: PreparedDeliveryCli,
+  files: Record<string, string>,
+): string {
+  const fixed = commit(prepared, files, "fix: round 1 finding");
+  // 前提の自己確認: transitionが証跡pathと是正pathの両方を含む。
+  assert.deepEqual(
+    observeReviewDiff(prepared.root, prepared.implementationCommitSha, fixed)
+      .changedPaths,
+    [EVIDENCE, ...Object.keys(files)].sort(),
+  );
+  return fixed;
+}
+
 function draft(prepared: PreparedDeliveryCli, headSha: string) {
   return buildReviewRoundDraft({ staging: prepared.staging, headSha });
 }
@@ -362,11 +380,20 @@ const ADJACENT_FILES = {
 };
 const FIXED_B = { "src/b.ts": "export const b = (): number => 2;\n" };
 
-/** SCN-REVIEW-REUSE-001: focused round 2（公開CLIの`review round --init`・`--apply`）。 */
-function focusedRoundTwo(world: WorkflowStepWorld): void {
+/**
+ * SCN-REVIEW-REUSE-001: focused round 2（公開CLIの`review round --init`・`--apply`）。
+ * `retainEvidence`は証跡fileを残した是正（transitionが証跡pathを含む）で、証跡pathを
+ * 影響の導出から除くため同じtargetedの割当になる。
+ */
+function focusedRoundTwo(
+  world: WorkflowStepWorld,
+  retainEvidence: boolean,
+): void {
   const prepared = prepare(world, [ADJACENT_FILES]);
   const first = prepared.implementationCommitSha;
-  const fixed = fixOnTopOfEvidence(prepared, FIXED_B);
+  const fixed = retainEvidence
+    ? fixRetainingEvidence(prepared, FIXED_B)
+    : fixOnTopOfEvidence(prepared, FIXED_B);
   const out = path.join(world.temp("asc-1544-round-"), "round.json");
   const init = executeCli(
     [
@@ -390,6 +417,11 @@ function focusedRoundTwo(world: WorkflowStepWorld): void {
   assert.deepEqual(
     written.focus.adjacentScope.map(({ path: item }) => item),
     ["src/c.ts", "src/d.ts"],
+  );
+  assert.equal(written.focus.adjacentScopeUnbounded, undefined);
+  assert.deepEqual(
+    written.focus.fixedDiff,
+    retainEvidence ? [EVIDENCE, "src/b.ts"] : ["src/b.ts"],
   );
   const applied = executeCli(
     [
@@ -783,6 +815,7 @@ function singleRoundFastPath(world: WorkflowStepWorld): void {
 function securityPathCumulative(
   world: WorkflowStepWorld,
   dropCumulative: boolean,
+  retainEvidence = false,
 ): void {
   const prepared = prepare(world, [
     {
@@ -790,9 +823,12 @@ function securityPathCumulative(
       ...scaffold("src/merge-gate.ts", "import"),
     },
   ]);
-  const fixed = fixOnTopOfEvidence(prepared, {
+  const fix = {
     "src/merge-gate.ts": "export const gate = (): boolean => false;\n",
-  });
+  };
+  const fixed = retainEvidence
+    ? fixRetainingEvidence(prepared, fix)
+    : fixOnTopOfEvidence(prepared, fix);
   const built = draft(prepared, fixed).round;
   assert.deepEqual(built.inspection?.cumulative, {
     baseSha: prepared.baseSha,
@@ -835,7 +871,8 @@ When(
   function (this: WorkflowStepWorld, scenarioId: string) {
     switch (scenarioId) {
       case "SCN-REVIEW-REUSE-001":
-        focusedRoundTwo(this);
+        focusedRoundTwo(this, false);
+        focusedRoundTwo(this, true);
         break;
       case "SCN-REVIEW-REUSE-002":
         revertedDefaultBranchHunk(this, false);
@@ -874,6 +911,7 @@ When(
       case "SCN-REVIEW-REUSE-011":
         securityPathCumulative(this, false);
         securityPathCumulative(this, true);
+        securityPathCumulative(this, false, true);
         break;
       default:
         throw new Error(`未対応のreview再利用E2E scenarioです: ${scenarioId}`);

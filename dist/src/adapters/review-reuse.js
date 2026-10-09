@@ -1,7 +1,6 @@
 import { git } from "../lib/process.js";
-import { reviewAdjacentScope } from "../domain/impact-set.js";
 import { EMPTY_DIFF_DIGEST, assignInspectionForRound, judgeReviewReuse, } from "../domain/review-reuse.js";
-import { computeImpactSet } from "./impact-set.js";
+import { deriveReviewRoundImpact } from "./impact-set.js";
 import { GIT_ENV, evidenceOnlySuffix, observeReviewDiff, observeReviewDiffSections, } from "./review-diff.js";
 import { changedPathsBetween, createFollowObservations, } from "./review-reuse-follow.js";
 /**
@@ -36,17 +35,17 @@ export function createReuseObserver(root, tipSha, counter) {
                     counter.contentDiffs += 1;
                     counter.impactDerivations += 1;
                 }
-                const impact = computeImpactSet({
+                // 雛形・記録前照合と同じ導出（evidence-only pathの除外を含む）を使う（02 A-01）。
+                const derived = deriveReviewRoundImpact({
                     root,
-                    baseSha: fromSha,
+                    previousHeadSha: fromSha,
                     headSha: toSha,
                 });
-                const changed = impact.changedPaths.length > 0;
                 observed = {
-                    digest: impact.changeDigest,
-                    changedPaths: impact.changedPaths,
-                    adjacentScope: changed ? reviewAdjacentScope(impact) : [],
-                    unbounded: changed && impact.mode === "full",
+                    digest: derived.impact.changeDigest,
+                    changedPaths: derived.impact.changedPaths,
+                    adjacentScope: derived.adjacentScope,
+                    unbounded: derived.adjacentScopeUnbounded,
                 };
             }
             transitions.set(key, observed);

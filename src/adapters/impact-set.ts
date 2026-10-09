@@ -11,6 +11,7 @@ import {
   type StepDefinitionFileSummary,
 } from "../domain/impact-set.js";
 import type { ReviewAdjacentScope } from "../domain/review-convergence.js";
+import { isEvidenceOnlyPath } from "../domain/review.js";
 import { semanticGraphContentHash } from "../domain/semantic-graph.js";
 import {
   DEFAULT_STAGING_LAYOUT,
@@ -239,8 +240,8 @@ export function computeImpactSet(input: {
   baseSha: string;
   headSha: string;
   /**
-   * 影響の導出から外すpath（Issue #1544、追随交差の判定でevidence-only pathを実装内容に
-   * 含めないため。INV-07）。`changeDigest`は除外前の全diffのままにする。
+   * 影響の導出から外すpath（Issue #1544、追随交差とround transitionの判定でevidence-only pathを
+   * 実装内容に含めないため。INV-07）。`changeDigest`は除外前の全diffのままにする。
    */
   excludePath?: (path: string) => boolean;
 }): ImpactSet {
@@ -328,10 +329,16 @@ export function computeImpactSet(input: {
 /**
  * **review round 2以降の隣接範囲をGitから導出する**（REQ-WF-039）。
  *
- * 雛形作成（`buildReviewRoundDraft`）と記録前検証（`previewReviewRound`）が
+ * 雛形作成（`buildReviewRoundDraft`）と記録前検証（`previewReviewRound`）と、
+ * 再利用判定のtransition観測（`createReuseObserver`。`review round`の検分割当と`pr merge`）が
  * 同じ関数を呼ぶ。記録前検証は提出された`adjacentScope`をこの戻り値と照合し、
  * 不一致を拒否する。**呼び出し側が任意のGraph Evidence digestを注入しても
  * 隣接範囲として受理されない。**
+ *
+ * **evidence-only pathは影響の導出から外す**（Issue #1544 INV-07）。review証跡は実装内容でも
+ * 検分identityの対象でもないため、PR作成後の是正transitionが証跡commitを含むだけで
+ * `full`へ倒さない。`impact.changeDigest`は除外前の全diffのままで、内容の束縛は弱めない。
+ * 除外後に変更pathが残らないtransitionは隣接範囲を持たず、無制限にもしない。
  */
 export function deriveReviewRoundImpact(input: {
   root: string;
@@ -346,10 +353,12 @@ export function deriveReviewRoundImpact(input: {
     root: input.root,
     baseSha: input.previousHeadSha,
     headSha: input.headSha,
+    excludePath: isEvidenceOnlyPath,
   });
+  const changed = impact.changedPaths.length > 0;
   return {
     impact,
-    adjacentScope: reviewAdjacentScope(impact),
-    adjacentScopeUnbounded: impact.mode === "full",
+    adjacentScope: changed ? reviewAdjacentScope(impact) : [],
+    adjacentScopeUnbounded: changed && impact.mode === "full",
   };
 }

@@ -1,5 +1,6 @@
 import { bindFeaturesToStepDefinitions, } from "../domain/cucumber-binding.js";
 import { deriveImpactSet, referenceNames, reviewAdjacentScope, } from "../domain/impact-set.js";
+import { isEvidenceOnlyPath } from "../domain/review.js";
 import { semanticGraphContentHash } from "../domain/semantic-graph.js";
 import { DEFAULT_STAGING_LAYOUT, stagingLayoutFromManifestText, } from "../domain/staging-layout.js";
 import { git } from "../lib/process.js";
@@ -253,21 +254,29 @@ export function computeImpactSet(input) {
 /**
  * **review round 2以降の隣接範囲をGitから導出する**（REQ-WF-039）。
  *
- * 雛形作成（`buildReviewRoundDraft`）と記録前検証（`previewReviewRound`）が
+ * 雛形作成（`buildReviewRoundDraft`）と記録前検証（`previewReviewRound`）と、
+ * 再利用判定のtransition観測（`createReuseObserver`。`review round`の検分割当と`pr merge`）が
  * 同じ関数を呼ぶ。記録前検証は提出された`adjacentScope`をこの戻り値と照合し、
  * 不一致を拒否する。**呼び出し側が任意のGraph Evidence digestを注入しても
  * 隣接範囲として受理されない。**
+ *
+ * **evidence-only pathは影響の導出から外す**（Issue #1544 INV-07）。review証跡は実装内容でも
+ * 検分identityの対象でもないため、PR作成後の是正transitionが証跡commitを含むだけで
+ * `full`へ倒さない。`impact.changeDigest`は除外前の全diffのままで、内容の束縛は弱めない。
+ * 除外後に変更pathが残らないtransitionは隣接範囲を持たず、無制限にもしない。
  */
 export function deriveReviewRoundImpact(input) {
     const impact = computeImpactSet({
         root: input.root,
         baseSha: input.previousHeadSha,
         headSha: input.headSha,
+        excludePath: isEvidenceOnlyPath,
     });
+    const changed = impact.changedPaths.length > 0;
     return {
         impact,
-        adjacentScope: reviewAdjacentScope(impact),
-        adjacentScopeUnbounded: impact.mode === "full",
+        adjacentScope: changed ? reviewAdjacentScope(impact) : [],
+        adjacentScopeUnbounded: changed && impact.mode === "full",
     };
 }
 //# sourceMappingURL=impact-set.js.map
