@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1544,
+  "observed": {
+    "baseSha": "0a6d111ecc3196db5e26876868b27e5ab715e721",
+    "implementationHeadSha": "e449fa205401fd2c088f205368e8ee89e209bc45",
+    "diffDigest": "ed678a8092dc9a1c3ba590b08f1efdf5b45a7c772caa4b8bf8728bec261f7e3f",
+    "session": {
+      "sessionId": "66539c3acf9076a82f1b42bc74c772b5e56d83d896d5dd09888adab5e087d72c",
+      "latestRoundDigest": "036d4a2445d3da153d9c3835deb4b24fc5d1741403b99b5746a61f991781338d",
+      "status": "converged",
+      "countedRounds": 3
+    },
+    "impact": {
+      "digest": "b7038166e631b3273c92e41ae0f4c2c32a227cf77ecb89ba53f442e984a1c6d5",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "e449fa205401fd2c088f205368e8ee89e209bc45",
+        "impactDigest": "b7038166e631b3273c92e41ae0f4c2c32a227cf77ecb89ba53f442e984a1c6d5",
+        "finishedAt": "2026-10-09T09:34:23.227Z",
+        "recordDigest": "e35d32b50cd07df1f08cc07d96e5a57db6e02f61794274bd202ff2027cfe2cec"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "R1544-1-01",
+      "severity": "Medium",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "src/adapters/impact-set.ts",
+      "contractId": "INV-03"
+    },
+    {
+      "id": "R1544-1-02",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/adapters/review-reuse-follow.ts",
+      "contractId": null
+    },
+    {
+      "id": "R1544-2-01",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "invariant-violation",
+      "path": "src/adapters/impact-set.ts",
+      "contractId": "INV-03"
+    },
+    {
+      "id": "R1544-3-01",
+      "severity": "Low",
+      "status": "valid",
+      "relation": "improvement",
+      "path": "src/adapters/impact-set.ts",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "claude-opus-context-isolated-review-rounds",
+    "implementer": "claude-opus-implementation-correction-workers",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "d8e9cf29b577b2ce3de2b06fdc113ea4a866e873fd97a927820f41c45e2f99f3"
+}
