@@ -33,7 +33,7 @@
   ],
   "details": {
     "path": "docs/reviews/1576_performance.raw.json",
-    "sha256": "3b6dcd2e9a2f87753fe987a9e57a1255febfc7be7b99d69eefe376be04b0f62c",
+    "sha256": "f764a5bed4d935e1a2456f0bf76fc58716a1c934dc71deb66b199643fc0306fa",
     "keys": [
       "benchmark",
       "methodology",
@@ -45,7 +45,15 @@
       "revisionLiveLifecycle",
       "revisionIndependentReview",
       "revisionLiveLifecycleV2",
-      "revisionSafetyMutations"
+      "revisionSafetyMutations",
+      "revisionFirstCompleteE2E",
+      "revisionMeasuredSkillReview",
+      "revisionMeasuredSkillInstallation",
+      "revisionMeasuredSkillsE2E",
+      "revisionConfirmatoryA",
+      "revisionEntryReuseReview",
+      "revisionExperimentAccountingSnapshot",
+      "revisionReproducibilityAudit"
     ]
   },
   "limitations": [
@@ -92,6 +100,74 @@
         "escaping require remains unknown",
         "every dynamic branch must be bounded"
       ]
+    },
+    "firstCompleteE2E": {
+      "case": "A",
+      "repeatsPerArm": 1,
+      "candidateSha": "5ddd2590fbd9e467618da77f26ed2a98050234c8",
+      "rows": [
+        {
+          "arm": "baseline",
+          "requestToCiObservedSeconds": 509.238,
+          "allWorkerProcessedTokens": 3401347
+        },
+        {
+          "arm": "candidate",
+          "requestToCiObservedSeconds": 496.601,
+          "allWorkerProcessedTokens": 3620085
+        },
+        {
+          "arm": "no-ASC",
+          "requestToCiObservedSeconds": 84.195,
+          "allWorkerProcessedTokens": 179979
+        }
+      ],
+      "quality": "All three: independent review, real PR, CI success, common external 9-test suite/oracle, added regression fails on original production source, clean HEAD.",
+      "conclusion": "Candidate time decreased 2.48%, total tokens increased 6.43%; token target not met. Not a repeated or statistically established improvement.",
+      "nextCandidate": "262ca069"
+    },
+    "measuredSkillTrial": {
+      "candidateSha": "262ca0696df58c4a01d67f314db6fd359b3eaff1",
+      "case": "A",
+      "repeats": 1,
+      "requestToPrSeconds": 441.888,
+      "requestToCiObservedSeconds": 453.343,
+      "allWorkerProcessedTokens": 2534052,
+      "relativeToInitialBaseline": {
+        "ciElapsedReductionPercent": 10.98,
+        "workerTokenReductionPercent": 25.5
+      },
+      "scope": "Exploratory fixed non-LLM coordinator trial; parent AI overhead not included. Not final repeated acceptance.",
+      "quality": "Real PR/CI/terminal, independent review, common external suite/oracle and regression-on-old-source all passed.",
+      "remainingFixedCost": "Step11 retry guidance refined after four tool errors; remeasure beb8911c."
+    },
+    "confirmatoryA": {
+      "candidateSha": "beb8911c465b3376d668762cce5f1137f2145b28",
+      "repeatsPerArm": 3,
+      "allNineTrialsPassedQuality": true,
+      "medianRequestToPrSeconds": {
+        "baseline": 437.662749,
+        "candidate": 433.592263,
+        "noASC": 75.133317
+      },
+      "medianRequestToCiObservedSeconds": {
+        "baseline": 449.049155,
+        "candidate": 434.251294,
+        "noASC": 96.896001
+      },
+      "medianAllWorkerProcessedTokens": {
+        "baseline": 2749733,
+        "candidate": 2822205,
+        "noASC": 180979
+      },
+      "candidateChangePercent": {
+        "requestToPr": -0.93,
+        "requestToCi": -3.3,
+        "allWorkerTokens": 2.64
+      },
+      "acceptance": "NOT MET: total worker tokens increased. B was stopped before paid execution; subsequent candidate must be measured separately.",
+      "scope": "Fixed non-LLM coordinator. All actual Issue workers included; experiment setup and normal AI coordinator overhead excluded. Three repeats in a small controlled fixture, not a general guarantee.",
+      "nextCandidate": "c60e81b21afadf1dfc418bb7cd032c4de28036b8"
     }
   }
 }
