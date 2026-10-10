@@ -2026,6 +2026,7 @@ Given("tracked Phase A review recordを読む", function () {
   this.phaseAReview = [
     ".agent-skill-chain/skills/step-10-review/SKILL.md",
     ".agent-skill-chain/skills/step-11-pr/SKILL.md",
+    ".agent-skill-chain/skills/step-11-pr/delivery-details.md",
   ]
     .map((file) => fs.readFileSync(file, "utf8"))
     .join("\n");

@@ -239,9 +239,10 @@ Given(
 );
 
 When("round 2で既存findingを解消し範囲外audit改善提案を追加する", function () {
+  // feature traceの欠落だけでなく、解決不能な依存でreview範囲をfullにする。
   const candidate = commitFile(
     this.root,
-    "export const reviewed = 2;\n",
+    "export const reviewed = 2;\nexport const load = (name: string) => import(name);\n",
     "fix: review finding",
   );
   this.session = recordReviewRound({
