@@ -7,6 +7,12 @@ description: 承認済みexact-headでPRを作成し、modeとtrusted delivery p
 
 入力は承認済みStep 10、同じ対象HEADの検証記録、固定repository・Issue・head/base、trusted delivery policyと操作authority。finalizerは製品・計画・review判断を変更しない。`workflow advance --staging=<staging>`のpreviewとhandoffを照合して開始する。`05_計画変更.md`は計画変更がない場合には存在しないため、存在確認後に読む。PR本文と`--evidence`用JSONは封印済みstagingの外に作成する。
 
+## 読取の入口と終了
+
+最初に読むのは本Skill、下記2template、承認済み要求の要約・AC・仕様影響の該当節、`resume`が指すreview/verificationの結果である。PR本文を作るためにreviewをやり直さず、正式証跡にある同じ結果をjournal/session全文やtest再実行から集め直さない。必要な記録が欠ける・矛盾する場合だけ対象記録へ戻る。CLIの拒否がなければ、trusted policyの合成をmanifestのpath一覧から手で再実装しない。作成previewの対象repository・Issue・head/base・本文と`authorityStatus`を確認する。previewは操作authorityの成立を証明しない。policy・停止点は既に確定した入力を使い、不明・矛盾なら推測せず該当正本へ戻る。
+
+既知のrepository・Issue・head/base、正式review、検証、仕様影響、所有者が揃ったら、templateの必須欄を短く埋めて作成previewへ進む。規約にない追加の確認表・解説文を作らない。previewが拒否した入力や権限を推測で埋めない。
+
 ## PR作成の実行順
 
 1. 以下のtemplate契約に従い、確定済み要求・変更差分・`review export`の証跡から本文と事前確認を作る。既存のreview/verification証拠を参照し、同じHEAD・policy・scopeに対する調査やtestを再実行しない。不一致・欠測・最新失敗があればStep 10へ戻す。独立reviewの代行や自己承認をしない。
