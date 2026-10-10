@@ -503,6 +503,11 @@ export function scenarioKeywords(dialect) {
         throw new Error(`gherkinDialectが未対応です: ${dialect}。対応する方言は${Object.keys(GHERKIN_SCENARIO_KEYWORDS).join("、")}です`);
     return keywords;
 }
+/** Shared dialect vocabulary for observing Gherkin step/Doc String boundaries. */
+export function gherkinStepKeywords(dialect) {
+    scenarioKeywords(dialect);
+    return GHERKIN_BLOCK_KEYWORDS[dialect].step;
+}
 function scenarioIdPattern(dialect) {
     const alternatives = scenarioKeywords(dialect)
         .map((keyword) => escapeRegExp(keyword))

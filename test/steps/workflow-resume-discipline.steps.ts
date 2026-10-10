@@ -402,3 +402,174 @@ When(
     }
   },
 );
+
+When(
+  "作成後の{string}失敗から同じstagingを再開する",
+  async function (point: string) {
+    const root = this.documents.intakeRoot!;
+    const assessment = path.join(root, "assessment.json");
+    fs.writeFileSync(
+      assessment,
+      JSON.stringify(
+        Object.fromEntries(
+          QUESTIONS.map((id) => [
+            id,
+            { answer: "unknown", evidence: "隔離fixtureでは未確認" },
+          ]),
+        ),
+      ),
+    );
+    const originalRead = fs.readFileSync;
+    const originalRename = fs.renameSync;
+    const originalStringify = JSON.stringify;
+    const originalWrite = process.stdout.write;
+    const previousMode = process.env.ASC_EXECUTION_CONTEXT_MODE;
+    process.env.ASC_EXECUTION_CONTEXT_MODE = "short-lived";
+    let published = "";
+    let before: Record<string, string> = {};
+    let reads = 0;
+    let injected = false;
+    let output = "";
+    let result: Record<string, unknown>;
+    function snapshot(directory: string): Record<string, string> {
+      const files: Record<string, string> = {};
+      const visit = (current: string) => {
+        for (const item of fs.readdirSync(current, { withFileTypes: true })) {
+          const file = path.join(current, item.name);
+          if (item.isDirectory()) visit(file);
+          else
+            files[path.relative(directory, file)] =
+              originalRead(file).toString("base64");
+        }
+      };
+      visit(directory);
+      return files;
+    }
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    fs.renameSync = ((from, to) => {
+      originalRename(from, to);
+      if (
+        String(to).includes(`${path.sep}tmp${path.sep}issues${path.sep}`) &&
+        !path.basename(String(to)).startsWith(".")
+      ) {
+        before = snapshot(String(to));
+        published = String(to);
+      }
+    }) as typeof fs.renameSync;
+    fs.readFileSync = ((...args: Parameters<typeof fs.readFileSync>) => {
+      if (
+        published &&
+        String(args[0]) === path.join(published, "journal/steps.jsonl")
+      ) {
+        reads++;
+        if (
+          reads ===
+          ({ journal: 1, resume: 2, handoff: 3 } as Record<string, number>)[
+            point
+          ]
+        ) {
+          injected = true;
+          throw new Error(`injected ${point} failure`);
+        }
+      }
+      return originalRead(...args);
+    }) as typeof fs.readFileSync;
+    JSON.stringify = ((...args: Parameters<typeof JSON.stringify>) => {
+      const value = args[0] as { handoff?: unknown; prompt?: unknown } | null;
+      if (
+        point === "dispatch" &&
+        published &&
+        value &&
+        typeof value === "object" &&
+        value.handoff &&
+        typeof value.prompt === "string"
+      ) {
+        injected = true;
+        throw new Error("injected dispatch failure");
+      }
+      return originalStringify(...args);
+    }) as typeof JSON.stringify;
+    try {
+      assert.equal(
+        await main([
+          "issue",
+          "create",
+          `--root=${root}`,
+          "--title=recovery",
+          "--mode=full",
+          `--assessment=${assessment}`,
+          "--prepare-next",
+        ]),
+        1,
+      );
+      result = JSON.parse(output) as Record<string, unknown>;
+    } finally {
+      fs.readFileSync = originalRead;
+      fs.renameSync = originalRename;
+      JSON.stringify = originalStringify;
+      process.stdout.write = originalWrite;
+      if (previousMode === undefined)
+        delete process.env.ASC_EXECUTION_CONTEXT_MODE;
+      else process.env.ASC_EXECUTION_CONTEXT_MODE = previousMode;
+    }
+    assert.equal(injected, true);
+    assert.equal(result.path, published);
+    assert.equal(result.durable, false);
+    assert.equal(result.synced, false);
+    assert.equal(result.agentDispatch, undefined);
+    const preparation = result.preparation as {
+      status: string;
+      errors: string[];
+      recovery: { argv: string[]; createsStaging: boolean };
+    };
+    assert.equal(preparation.status, "blocked");
+    assert.ok(
+      preparation.errors.some((error) =>
+        error.includes(`injected ${point} failure`),
+      ),
+    );
+    assert.equal(preparation.recovery.createsStaging, false);
+    assert.deepEqual(preparation.recovery.argv, [
+      "workflow",
+      "advance",
+      `--staging=${published}`,
+    ]);
+    assert.deepEqual(
+      snapshot(published),
+      before,
+      "failure must preserve published records byte-for-byte",
+    );
+    const siblings = fs.readdirSync(path.dirname(published)).sort();
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        output = "";
+        assert.equal(await main(preparation.recovery.argv), 0);
+        const preview = JSON.parse(output) as {
+          handoff: {
+            staging: string;
+            step: number;
+            workUnit: { freshContextRequired: boolean };
+          };
+        };
+        assert.equal(preview.handoff.staging, published);
+        assert.equal(preview.handoff.step, 1);
+        assert.equal(preview.handoff.workUnit.freshContextRequired, true);
+        assert.deepEqual(snapshot(published), before);
+        assert.deepEqual(
+          fs.readdirSync(path.dirname(published)).sort(),
+          siblings,
+        );
+      }
+      this.checked = true;
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+  },
+);

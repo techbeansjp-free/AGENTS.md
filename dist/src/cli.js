@@ -5508,20 +5508,47 @@ export async function main(argv, dependencies = {}) {
             ...(typeof flags.name === "string" ? { name: flags.name } : {}),
         });
         if (flags["prepare-next"] === true) {
-            const journal = readWorkflowJournal(created.path);
-            const resume = observeWorkflowResume(created.path);
-            const handoff = observeWorkflowHandoff(created.path, 1, resume);
-            print({
-                ...created,
-                step0: {
-                    recorded: journal.errors.length === 0 &&
-                        journal.entries.some((entry) => entry.step === 0),
-                    errors: journal.errors,
-                },
-                resume,
-                handoff,
-                agentDispatch: workflowAgentDispatch(handoff),
-            });
+            const recovery = {
+                command: "workflow advance",
+                argv: ["workflow", "advance", `--staging=${created.path}`],
+                staging: created.path,
+                createsStaging: false,
+            };
+            try {
+                const journal = readWorkflowJournal(created.path);
+                const resume = observeWorkflowResume(created.path);
+                const handoff = observeWorkflowHandoff(created.path, 1, resume);
+                const errors = [
+                    ...journal.errors,
+                    ...resume.errors,
+                    ...(handoff && "errors" in handoff ? (handoff.errors ?? []) : []),
+                ];
+                if (!journal.entries.some((entry) => entry.step === 0))
+                    errors.push("作成済みstagingのStep 0記録を確認できません");
+                if (errors.length > 0)
+                    throw new Error([...new Set(errors)].join("; "));
+                const agentDispatch = workflowAgentDispatch(handoff);
+                print({
+                    ...created,
+                    step0: { recorded: true, errors: [] },
+                    resume,
+                    handoff,
+                    agentDispatch,
+                });
+            }
+            catch (error) {
+                // Creation is already committed. Preserve its records and expose a
+                // read-only retry of the existing staging, never a second creation.
+                print({
+                    ...created,
+                    preparation: {
+                        status: "blocked",
+                        errors: [error instanceof Error ? error.message : String(error)],
+                        recovery,
+                    },
+                });
+                return 1;
+            }
         }
         else
             print(created);

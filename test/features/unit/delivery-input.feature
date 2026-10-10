@@ -14,6 +14,7 @@ Feature: delivery summaryの厳密な入力契約
       | duplicate-placeholder |
       | unknown-placeholder   |
       | missing-consistent    |
+      | missing-trace-tests   |
       | short-rationale       |
       | false-consistent      |
       | wrong-issue           |

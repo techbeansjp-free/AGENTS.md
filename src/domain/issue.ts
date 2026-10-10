@@ -667,6 +667,12 @@ export function scenarioKeywords(dialect: string): readonly string[] {
   return keywords;
 }
 
+/** Shared dialect vocabulary for observing Gherkin step/Doc String boundaries. */
+export function gherkinStepKeywords(dialect: string): readonly string[] {
+  scenarioKeywords(dialect);
+  return GHERKIN_BLOCK_KEYWORDS[dialect]!.step;
+}
+
 function scenarioIdPattern(dialect: string): RegExp {
   const alternatives = scenarioKeywords(dialect)
     .map((keyword) => escapeRegExp(keyword))

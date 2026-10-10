@@ -1,4 +1,9 @@
 import path from "node:path";
+import fs from "node:fs";
+import crypto from "node:crypto";
+import { readWorkflowJournal } from "./workflow-journal.js";
+import { assertPlanFrozenForEntries } from "./plan-seal.js";
+import { latestPlanSeal, PLAN_AMENDMENT_FILE, planAmendmentDigests, } from "../domain/plan-seal.js";
 import { git } from "../lib/process.js";
 import { parseJsonStrict } from "../lib/security.js";
 import { isRecord } from "../types.js";
@@ -6,6 +11,8 @@ import { validateDeliveryEvidence } from "../domain/delivery.js";
 import { parseReviewEvidence, } from "../domain/review-evidence.js";
 import { verifyReviewEvidenceWithStaging } from "./review-evidence.js";
 import { GIT_ENV } from "./review-diff.js";
+import { scenarioKeywords, gherkinStepKeywords } from "../domain/issue.js";
+import { loadProjectPolicySetAtCommit } from "../domain/policy.js";
 const MAX_BYTES = 256 * 1024;
 const TOKENS = ["ASC_VERIFICATION", "ASC_REVIEW", "ASC_HEAD"];
 function fields(value, required, optional = []) {
@@ -24,7 +31,7 @@ function strings(value) {
     return value;
 }
 /** Only an immutable regular Git blob is input; filesystem edits are never read. */
-export function readDeliveryBlob(root, commit, relative) {
+export function readDeliveryBlob(root, commit, relative, maximumBytes = MAX_BYTES) {
     if (!/^[a-f0-9]{40}$/u.test(commit) ||
         relative === "" ||
         path.posix.normalize(relative) !== relative ||
@@ -44,11 +51,11 @@ export function readDeliveryBlob(root, commit, relative) {
         throw new Error("delivery summary/reviewは対象commitの通常Git blobが必要です");
     const oid = match[2];
     const size = Number(git(["cat-file", "-s", oid], root, { env: GIT_ENV }).stdout.trim());
-    if (!Number.isSafeInteger(size) || size < 1 || size > MAX_BYTES)
-        throw new Error("delivery summary/reviewは256KiB以下が必要です");
+    if (!Number.isSafeInteger(size) || size < 1 || size > maximumBytes)
+        throw new Error(`delivery Git blobは${maximumBytes}byte以下が必要です`);
     return git(["cat-file", "blob", oid], root, {
         env: GIT_ENV,
-        maxBufferBytes: MAX_BYTES,
+        maxBufferBytes: maximumBytes,
     }).stdout;
 }
 export function parseDeliverySummary(source, issue) {
@@ -71,22 +78,238 @@ export function parseDeliverySummary(source, issue) {
         !["updated", "no-spec-impact"].includes(String(spec.impact)) ||
         (spec.rationale !== undefined && typeof spec.rationale !== "string"))
         throw new Error("delivery summaryのspec明示宣言が不正です");
-    if (spec.trace !== undefined) {
-        const trace = fields(spec.trace, ["requirements", "scenarios", "tests"]);
-        for (const key of ["requirements", "scenarios", "tests"])
+    const trace = fields(spec.trace, ["tests"], ["requirements", "scenarios"]);
+    strings(trace.tests);
+    for (const key of ["requirements", "scenarios"])
+        if (trace[key] !== undefined)
             strings(trace[key]);
-    }
     let ownership;
     if (value.ownership !== undefined) {
         ownership = fields(value.ownership, ["classified", "owner", "targetLayer"]);
-        if (typeof ownership.classified !== "boolean" ||
+        if (ownership.classified !== true ||
             typeof ownership.owner !== "string" ||
             ownership.owner.trim() === "" ||
             typeof ownership.targetLayer !== "string" ||
-            ownership.targetLayer.trim() === "")
+            !["package", "project", "spec", "evidence"].includes(ownership.targetLayer))
             throw new Error("delivery summaryのownership明示宣言が不正です");
     }
     return { body, scenarioIds, spec, ownership };
+}
+const SOURCE_BYTES = 4 * 1024 * 1024;
+function containsId(text, id) {
+    return new RegExp(`(^|[^A-Z0-9-])${id.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?=$|[^A-Za-z0-9-])`, "mu").test(text);
+}
+/** Only sealed planning definitions register SCNs; test comments never do. */
+function planningScenarioIds(staging, head, keywords, steps) {
+    const journal = readWorkflowJournal(staging);
+    if (journal.errors.length)
+        throw new Error(journal.errors.join("; "));
+    const seal = latestPlanSeal(journal.entries);
+    if (!seal)
+        throw new Error("delivery summaryには正式計画の封印が必要です");
+    const generation = assertPlanFrozenForEntries(staging, journal.entries, head, { delivery: true });
+    const read = (name) => {
+        const file = path.join(staging, name);
+        const stat = fs.lstatSync(file, { throwIfNoEntry: false });
+        if (!stat)
+            return undefined;
+        if (!stat.isFile() ||
+            stat.isSymbolicLink() ||
+            stat.size > SOURCE_BYTES ||
+            fs.realpathSync(file) !== path.join(fs.realpathSync(staging), name))
+            throw new Error("delivery summaryの正式計画は境界内の通常fileが必要です");
+        return fs.readFileSync(file, "utf8");
+    };
+    const name = journal.entries[seal.index]?.mode === "full"
+        ? "01_要件定義.md"
+        : "00_要求定義.md";
+    const source = read(name);
+    if (source === undefined ||
+        crypto.createHash("sha256").update(source).digest("hex") !== seal.seal[name])
+        throw new Error("delivery summaryの正式計画が封印と一致しません");
+    const texts = [source];
+    const amendment = read(PLAN_AMENDMENT_FILE);
+    if (JSON.stringify(planAmendmentDigests(amendment)) !==
+        JSON.stringify(generation?.amendments ?? []))
+        throw new Error("delivery summaryのAMDがreview済み世代と一致しません");
+    // Include only digest-bound AMD entries, never the unbound document preamble.
+    if (amendment !== undefined) {
+        let fenced = false;
+        let current;
+        const blocks = [];
+        for (const line of amendment.split("\n")) {
+            const plain = line.replace(/\r$/u, "");
+            if (/^\s*(?:```|~~~)/u.test(plain))
+                fenced = !fenced;
+            if (!fenced && /^##\s/u.test(plain)) {
+                current = /^##\s+AMD-\d{3}(?:\s|$)/u.test(plain) ? [] : undefined;
+                if (current)
+                    blocks.push(current);
+            }
+            current?.push(line);
+        }
+        texts.push(...blocks.map((block) => block.join("\n")));
+    }
+    const ids = new Set();
+    for (const text of texts) {
+        let docString;
+        let rawScenario = false;
+        let markdownFence;
+        for (const line of text.split(/\r?\n/u)) {
+            const trimmed = line.trim();
+            if (docString !== undefined) {
+                if (trimmed === docString)
+                    docString = undefined;
+                continue;
+            }
+            if (/^ {0,3}#{1,6}\s/u.test(line))
+                rawScenario = false;
+            if (markdownFence === undefined &&
+                (trimmed.startsWith("* ") ||
+                    steps.some((keyword) => trimmed === keyword ||
+                        (trimmed.startsWith(keyword) &&
+                            /^\s/u.test(trimmed.slice(keyword.length))))))
+                rawScenario = true;
+            // Raw Gherkin also accepts backtick Doc Strings. Once a raw Scenario
+            // starts, an ambiguous triple backtick belongs to it, not a new wrapper.
+            if (markdownFence === undefined &&
+                rawScenario &&
+                trimmed.startsWith("```")) {
+                docString = "```";
+                continue;
+            }
+            const fence = /^ {0,3}(`{3,}|~{3,})(.*)$/u.exec(line);
+            if (markdownFence !== undefined &&
+                fence?.[1] === markdownFence.marker &&
+                fence[2]?.trim() === "") {
+                markdownFence = undefined;
+                rawScenario = false;
+                continue;
+            }
+            if (markdownFence === undefined && fence !== null) {
+                markdownFence = {
+                    marker: fence[1],
+                    gherkin: ["", "gherkin"].includes(fence[2].trim().toLowerCase()),
+                };
+                continue;
+            }
+            if (markdownFence !== undefined && !markdownFence.gherkin)
+                continue;
+            if (trimmed.startsWith('"""') || trimmed.startsWith("```")) {
+                docString = trimmed.slice(0, 3);
+                continue;
+            }
+            if (!keywords.some((keyword) => trimmed.startsWith(`${keyword}:`)))
+                continue;
+            const id = trimmed
+                .slice(trimmed.indexOf(":") + 1)
+                .trim()
+                .split(/\s+/u)[0];
+            if (id) {
+                ids.add(id);
+                if (markdownFence === undefined)
+                    rawScenario = true;
+            }
+        }
+    }
+    return ids;
+}
+/** Resolve declarations against bounded Git sources; execution semantics remain the trusted runner/review contract. */
+function assertSummarySources(input, summary, review) {
+    const trace = fields(summary.spec.trace, ["tests"], ["requirements", "scenarios"]);
+    const tests = strings(trace.tests);
+    if (tests.length > 256)
+        throw new Error("delivery summaryのtest根拠は256file以下が必要です");
+    const dialect = loadProjectPolicySetAtCommit(input.root, input.implementationHeadSha).policy
+        .projectChoices?.gherkinDialect ?? "en";
+    const keywords = scenarioKeywords(dialect);
+    const registered = planningScenarioIds(input.staging, input.headSha, keywords, gherkinStepKeywords(dialect));
+    for (const id of summary.scenarioIds)
+        if (!registered.has(id))
+            throw new Error(`delivery summaryのSCNが正式計画にありません: ${id}`);
+    const found = new Set();
+    let hasFeature = false;
+    let totalBytes = 0;
+    for (const file of tests) {
+        if (file === input.summaryPath ||
+            file.startsWith("docs/reviews/") ||
+            file.startsWith(".agent-skill-chain/reviews/"))
+            throw new Error("delivery summary/reviewをtest根拠へ自己参照できません");
+        if (!review.observed.verification.some((record) => record.scope === "full" || record.command.includes(file)))
+            throw new Error(`delivery summaryのtest根拠が正式検証範囲にありません: ${file}`);
+        const text = readDeliveryBlob(input.root, input.implementationHeadSha, file, SOURCE_BYTES);
+        totalBytes += Buffer.byteLength(text, "utf8");
+        if (totalBytes > 16 * 1024 * 1024)
+            throw new Error("delivery summaryのsource観測が16MiBを超えました");
+        let observed = "";
+        if (file.endsWith(".feature")) {
+            hasFeature = true;
+            let fence;
+            observed = text
+                .split(/\r?\n/u)
+                .filter((line) => {
+                const trimmed = line.trim();
+                if (fence !== undefined) {
+                    if (trimmed.startsWith(fence))
+                        fence = undefined;
+                    return false;
+                }
+                if (trimmed.startsWith('"""') || trimmed.startsWith("```")) {
+                    fence = trimmed.slice(0, 3);
+                    return false;
+                }
+                return keywords.some((keyword) => trimmed.startsWith(`${keyword}:`));
+            })
+                .map((line) => line
+                .slice(line.indexOf(":") + 1)
+                .trim()
+                .split(/\s+/u)[0] ?? "")
+                .join("\n");
+        }
+        for (const id of summary.scenarioIds)
+            if (containsId(observed, id))
+                found.add(id);
+    }
+    for (const id of summary.scenarioIds)
+        if (hasFeature && !found.has(id))
+            throw new Error(`delivery summaryのSCNが固定test根拠にありません: ${id}`);
+    if (trace.scenarios !== undefined) {
+        const declared = strings(trace.scenarios);
+        if (declared.length !== summary.scenarioIds.length ||
+            declared.some((id) => !summary.scenarioIds.includes(id)))
+            throw new Error("delivery summaryのtrace.scenariosとscenarioIdsが一致しません");
+    }
+    if (summary.spec.impact === "updated") {
+        const requirements = strings(trace.requirements);
+        const files = git([
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "-z",
+            input.implementationHeadSha,
+            "--",
+            "docs/specs/02_要件/",
+        ], input.root, { env: GIT_ENV })
+            .stdout.split("\0")
+            .filter(Boolean);
+        if (files.length > 256)
+            throw new Error("delivery summaryの正式要件観測は256file以下が必要です");
+        const known = new Set();
+        for (const file of files) {
+            if (!file.endsWith(".md"))
+                continue;
+            const text = readDeliveryBlob(input.root, input.implementationHeadSha, file, SOURCE_BYTES);
+            totalBytes += Buffer.byteLength(text, "utf8");
+            if (totalBytes > 16 * 1024 * 1024)
+                throw new Error("delivery summaryのsource観測が16MiBを超えました");
+            for (const id of requirements)
+                if (containsId(text, id))
+                    known.add(id);
+        }
+        for (const id of requirements)
+            if (!known.has(id))
+                throw new Error(`delivery summaryの要件IDが正式仕様にありません: ${id}`);
+    }
 }
 /** Semantic declarations come from the reviewed implementation blob; success comes from observations. */
 export function generateDeliveryInput(input) {
@@ -103,6 +326,21 @@ export function generateDeliveryInput(input) {
     });
     if (errors.length > 0)
         throw new Error(`delivery summaryの正式review/検証が不正です: ${errors.join("; ")}`);
+    const changedPaths = git([
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "-z",
+        review.observed.baseSha,
+        input.implementationHeadSha,
+        "--",
+    ], input.root, { env: GIT_ENV })
+        .stdout.split("\0")
+        .filter(Boolean);
+    if (summary.spec.impact === "no-spec-impact" &&
+        changedPaths.some((file) => file.startsWith("docs/specs/")))
+        throw new Error("delivery summaryのno-spec-impactは正式docs/specs変更と矛盾します");
+    assertSummarySources(input, summary, review);
     const evidence = {
         headSha: input.headSha,
         review: { approved: true, headSha: input.headSha },

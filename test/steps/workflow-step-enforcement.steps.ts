@@ -2653,6 +2653,7 @@ function preparePullRequest(
    * scenarioの観測値は1byteも変わらない。
    */
   customImplementationCommit?: (root: string, baseSha: string) => void,
+  preSealPlanning?: (staging: string) => void,
 ): PreparedPullRequest {
   const fixturePast = fixtureInstant({ hoursAgo: 1 });
   const fixtureNow = fixtureInstant();
@@ -2916,6 +2917,7 @@ function preparePullRequest(
     });
   }
   const journalFile = path.join(staging, STEP_JOURNAL_FILE);
+  preSealPlanning?.(staging);
   if (missingStep4) {
     const preReviewEntries = [0, 1, 9].map((step) => ({
       ...entry(step, "quick", fixturePast),
@@ -3399,6 +3401,7 @@ export function prepareDeliveryCli(
   separateArtifact = false,
   /** `preparePullRequest`の同名引数への素通し（Issue #1495）。 */
   customImplementationCommit?: (root: string, baseSha: string) => void,
+  preSealPlanning?: (staging: string) => void,
 ): PreparedDeliveryCli {
   const prepared = preparePullRequest(
     world,
@@ -3411,6 +3414,7 @@ export function prepareDeliveryCli(
     artifactDisposition,
     separateArtifact,
     customImplementationCommit,
+    preSealPlanning,
   );
   const stubDirectory = world.temp("asc-delivery-cli-gh-");
   const stub = path.join(stubDirectory, "gh");

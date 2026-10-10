@@ -334,7 +334,7 @@ export interface VerificationRunResult {
  * 3. commandを実行する。出力は標準エラーへ中継し、記録にはdigestだけを残す
  * 4. 実行後もHEADとworktreeが変わっていないことを確かめてから記録する
  */
-export async function runVerification(input: {
+interface VerificationRunInput {
   staging: string;
   argv: readonly string[];
   scope: VerificationScope;
@@ -342,7 +342,18 @@ export async function runVerification(input: {
   now?: () => Date;
   output?: NodeJS.WritableStream;
   reuse?: boolean;
-}): Promise<VerificationRunResult> {
+}
+
+export async function runVerification(
+  input: VerificationRunInput,
+): Promise<VerificationRunResult> {
+  const staging = assertWorkflowStaging(input.staging);
+  return withStagingMutationLock(staging, () => runObservedVerification(input));
+}
+
+async function runObservedVerification(
+  input: VerificationRunInput,
+): Promise<VerificationRunResult> {
   const staging = assertWorkflowStaging(input.staging);
   const root = stagingRepositoryRoot(staging);
   const argv = validateVerificationArgv([...input.argv], "verify runのcommand");

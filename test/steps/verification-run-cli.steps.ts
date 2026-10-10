@@ -1,6 +1,8 @@
 import { inspectWorkflowReadiness } from "../../src/domain/lifecycle.js";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import os from "node:os";
+import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -26,6 +28,7 @@ import {
   calculateStagingDigest,
   listStagingArtifacts,
   readStoredStagingRecord,
+  withStagingMutationLock,
 } from "../../src/domain/staging.js";
 import {
   VERIFICATION_RUN_FILE,
@@ -62,6 +65,7 @@ const SHELL_TEXT = "$(touch pwned)";
 const MODE_VARIABLE = "ASC_VERIFY_FIXTURE_MODE";
 const FIXTURE_SCRIPT = [
   `const mode = process.env.${MODE_VARIABLE};`,
+  `if (process.env.ASC_VERIFY_CONCURRENCY_DIR) { const fs = require("node:fs"); const p = require("node:path"); const d = process.env.ASC_VERIFY_CONCURRENCY_DIR; fs.appendFileSync(p.join(d, "executions"), "run\\n"); process.stderr.write("VERIFY-BARRIER-READY\\n"); const timer = setInterval(() => { if (fs.existsSync(p.join(d, "release"))) clearInterval(timer); }, 20); }`,
   `if (mode === "fail") { process.stdout.write(${JSON.stringify(SECRET_OUTPUT.split("-"))}.join("-")); process.exit(3); }`,
   `if (mode === "signal") process.kill(process.pid, "SIGTERM");`,
   `if (mode === "head") require("node:child_process").execFileSync("git", ["commit", "--allow-empty", "-q", "-m", "move fixture HEAD"]);`,
@@ -675,5 +679,159 @@ Then(
     );
     assert.ok(this.results.reuseCorrupt?.error);
     assert.ok(this.results.reuseDirty?.error);
+  },
+);
+
+When(
+  "同じstagingへ複数processでreuseと通常runを同時要求する",
+  async function () {
+    const directory = fs.mkdtempSync(
+      path.join(os.tmpdir(), "asc-verify-race-"),
+    );
+    const sourceCli = fileURLToPath(
+      new URL("../../bin/agent-skill-chain.ts", import.meta.url),
+    );
+    const cli = fs.existsSync(sourceCli)
+      ? sourceCli
+      : fileURLToPath(
+          new URL("../../bin/agent-skill-chain.js", import.meta.url),
+        );
+    const flags = [`--base=${this.base}`, "--scope=full"];
+    const start = (reuse: boolean) => {
+      const child = spawn(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          cli,
+          ...verifyArgs(
+            this,
+            [...flags, ...(reuse ? ["--reuse"] : [])],
+            FULL_COMMAND,
+          ),
+        ],
+        {
+          env: { ...process.env, ASC_VERIFY_CONCURRENCY_DIR: directory },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let stdout = "";
+      let stderr = "";
+      let signalReady!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        signalReady = resolve;
+      });
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+        if (stderr.includes("VERIFY-BARRIER-READY")) signalReady();
+      });
+      const done = new Promise<{
+        code: number | null;
+        output: Record<string, unknown>;
+      }>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          child.kill();
+          reject(new Error("verification race fixture timed out"));
+        }, 30_000);
+        child.once("error", (error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+        child.once("close", (code) => {
+          clearTimeout(timer);
+          try {
+            resolve({
+              code,
+              output: JSON.parse(stdout) as Record<string, unknown>,
+            });
+          } catch (error) {
+            reject(error);
+          }
+        });
+      });
+      return { ready, done };
+    };
+    const first = start(true);
+    try {
+      await Promise.race([
+        first.ready,
+        first.done.then(() => {
+          throw new Error("first run exited before barrier");
+        }),
+      ]);
+      const contenders = await Promise.all([
+        start(true).done,
+        start(false).done,
+      ]);
+      for (const result of contenders) {
+        assert.equal(result.code, 1);
+        assert.match(JSON.stringify(result.output), /stagingを更新中/u);
+      }
+      assert.equal(
+        fs.readFileSync(path.join(directory, "executions"), "utf8"),
+        "run\n",
+      );
+      assert.equal(readVerificationRuns(this.staging).length, 0);
+      fs.writeFileSync(path.join(directory, "release"), "release");
+      const finished = await first.done;
+      assert.equal(finished.code, 0);
+      assert.equal(finished.output.recorded, true);
+      const reused = await start(true).done;
+      assert.equal(reused.code, 0);
+      assert.equal(reused.output.reused, true);
+      assert.equal(reused.output.recorded, false);
+      assert.equal(reused.output.recordDigest, finished.output.recordDigest);
+      assert.equal(
+        fs.readFileSync(path.join(directory, "executions"), "utf8"),
+        "run\n",
+      );
+      const legacy = await start(false).done;
+      assert.equal(legacy.code, 0);
+      assert.equal(legacy.output.recorded, true);
+      assert.equal(legacy.output.reused, undefined);
+      assert.equal(
+        fs.readFileSync(path.join(directory, "executions"), "utf8"),
+        "run\nrun\n",
+      );
+      assert.equal(readVerificationRuns(this.staging).length, 2);
+      // Independent asynchronous calls in one process must not inherit another owner's lock.
+      let release!: () => void;
+      const blocked = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const owner = withStagingMutationLock(this.staging, async () => {
+        await blocked;
+      });
+      try {
+        assert.throws(
+          () => withStagingMutationLock(this.staging, () => undefined),
+          /stagingを更新中/u,
+        );
+      } finally {
+        release();
+        await owner;
+      }
+      this.stagingDigests.concurrent = readStoredStagingRecord(
+        this.staging,
+      ).digest;
+    } finally {
+      fs.writeFileSync(path.join(directory, "release"), "release");
+      await first.done.catch(() => undefined);
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+Then(
+  "競合要求は実行前に拒否され終了後だけ再利用し通常runは再実行する",
+  function () {
+    assert.equal(readVerificationRuns(this.staging).length, 2);
+    assert.equal(
+      this.stagingDigests.concurrent,
+      calculateStagingDigest(this.staging, listStagingArtifacts(this.staging)),
+    );
   },
 );

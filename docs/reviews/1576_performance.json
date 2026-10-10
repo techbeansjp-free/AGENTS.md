@@ -33,14 +33,26 @@
   ],
   "details": {
     "path": "docs/reviews/1576_performance.raw.json",
-    "sha256": "9c34db50d1053d761bfbcf2b323333d7d00c2cacb08fe1abfb0429ad11bb64e9",
+    "sha256": "37c59c3ca23b51ea77d999b95658723cec1ae578cc48fea36cc1f7d03b7e767e",
     "keys": [
+      "kind",
+      "issue",
+      "status",
+      "baseSha",
+      "supersededAttempt",
+      "sourceIdentity",
+      "scope",
       "benchmark",
       "methodology",
+      "expectedSafetyDifference",
+      "decisions",
+      "tokenMeasurement",
       "missingAcceptanceEvidence",
+      "regressionInventory",
+      "mutationObservations",
+      "reproduction",
       "regressionExecution",
       "workflowObservations",
-      "reproduction",
       "revisionCacheAdoption",
       "revisionLiveLifecycle",
       "revisionIndependentReview",
@@ -49,6 +61,8 @@
       "revisionFirstCompleteE2E",
       "revisionMeasuredSkillReview",
       "revisionMeasuredSkillInstallation",
+      "priorScope",
+      "priorMissingAcceptanceEvidence",
       "revisionMeasuredSkillsE2E",
       "revisionConfirmatoryA",
       "revisionEntryReuseReview",
@@ -62,7 +76,8 @@
       "revisionFollowupHarnessReview",
       "revisionMetricCoverage",
       "revisionBPilotRepairReview",
-      "revisionFinalSpecTestReview"
+      "revisionFinalSpecTestReview",
+      "revisionExecutionModel"
     ]
   },
   "limitations": [
@@ -244,6 +259,12 @@
         "pooledIntoBaseline": false
       },
       "conclusion": "A median time and worker tokens decreased in this small sequential sample. Slow r1 retained. B-H, bounded parent and seeded-review confirmation remain pending; no general speed or cost guarantee."
+    },
+    "executionModel": {
+      "implementationSha": "87670fb54887b64fa4079a07df68213bca42ea7d",
+      "status": "implemented; new measurements pending",
+      "detailKey": "revisionExecutionModel",
+      "candidateSha": "a974d0d0f969154bb67758648e78f902105ba5a2"
     }
   }
 }

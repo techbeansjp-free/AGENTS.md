@@ -242,20 +242,11 @@ export function planVerification(input) {
         required,
     };
 }
-/**
- * 検証commandを**shellを通さず**argvのまま実行し、結果を機械記録へ追記する
- * （`verify run`、REQ-WF-040）。
- *
- * 0. merge段階以降のdelivery stateと、trusted policyに検証command宣言が無い場合は拒否する
- * 1. 候補worktreeが現在HEADと完全一致することを要求し、HEADのexact SHAを記録する
- * 2. 比較基点..HEADの影響集合を導出する。影響集合がfullなら`scope=targeted`を拒否する。
- *    argvは既定branchのtrusted policyの宣言に一致しなければならない。`scope=full`は
- *    `verification.fullCommand`と完全一致、`scope=targeted`は`verification.targetedRunner`
- *    で始まり影響集合の選んだfeatureを全部含む
- * 3. commandを実行する。出力は標準エラーへ中継し、記録にはdigestだけを残す
- * 4. 実行後もHEADとworktreeが変わっていないことを確かめてから記録する
- */
 export async function runVerification(input) {
+    const staging = assertWorkflowStaging(input.staging);
+    return withStagingMutationLock(staging, () => runObservedVerification(input));
+}
+async function runObservedVerification(input) {
     const staging = assertWorkflowStaging(input.staging);
     const root = stagingRepositoryRoot(staging);
     const argv = validateVerificationArgv([...input.argv], "verify runのcommand");

@@ -48,6 +48,8 @@ scope内の通常問題は自律修正し、実装中はtargeted feedbackを優�
 
 ## 提出入力の作成
 
+要約の`spec.trace.tests`は`no-spec-impact`でも必要で、scenario IDの根拠となるGit管理下のtest pathを指定する。CLIはseal・AMD検証済みの正式計画のSCN登録、Git固定のtest根拠file、観測commandのcoverageと明白な仕様差分矛盾を照合するが、任意runnerでの実行意味、所有者名の正当性、潜在的な仕様影響は独立reviewで判断する。申告値の型検査だけで意味の正しさを保証したとは扱わない。
+
 決定論的なPR作成を使う場合は、実装の文脈があるこのStepで`pr create --help`の`asc-delivery-summary/v1`入力例と[PR本文template](../../templates/issue/11_プルリクエスト本文.md)を読み、提出要約JSONを通常のGit成果物として`H_impl`に含める。たとえば`docs/reviews/<Issue番号>_delivery.json`を使い、封印された計画文書は変更しない。目的・変更前後・仕様影響と限定根拠・SCN・残存リスク・所有者は実態から記述する。本文の検証・review・HEAD欄には`{{ASC_VERIFICATION}}`・`{{ASC_REVIEW}}`・`{{ASC_HEAD}}`を各1回置き、未完了の独立reviewや検証を合格と書かない。
 
 要約はStep 10の独立review対象である。提出時に同じ説明を別workerへ作り直させず、coordinatorが`pr create --from-summary=<path>`で正式記録と照合して機械欄を埋める。意味判断が未確定なら要約へ成功値を補わず、通常の是正・確認へ戻す。

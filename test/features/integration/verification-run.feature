@@ -37,3 +37,8 @@ Feature: verify runで検証をshellを通さず実行し観測だけを記録�
     Given verify run用のIssue stagingを持つrepositoryがある
     When reuse付きrunで未実行・成功・最新失敗・policy変更・HEAD変更・破損を検査する
     Then 再利用だけは実commandも記録追記も行わず不一致と破損を拒否する
+
+  Scenario: SCN-INT-VERIFYRUN-008 同時要求を既存writer lockで拒否して二重実行を防ぐ
+    Given verify run用のIssue stagingを持つrepositoryがある
+    When 同じstagingへ複数processでreuseと通常runを同時要求する
+    Then 競合要求は実行前に拒否され終了後だけ再利用し通常runは再実行する

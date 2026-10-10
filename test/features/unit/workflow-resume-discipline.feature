@@ -13,3 +13,15 @@ Feature: 再開状態を起点にする読取規律
     Given 初期引継ぎを検証する隔離repositoryがある
     When issue createはStep0記録と同じStep1 handoffを一度に返す
     Then 初期引継ぎの正式previewとの一致を確認できる
+
+  Scenario Outline: SCN-UNIT-RESUME-003 作成後の観測失敗でも正式記録を保持して再開する
+    Given 初期引継ぎを検証する隔離repositoryがある
+    When 作成後の"<地点>"失敗から同じstagingを再開する
+    Then 初期引継ぎの正式previewとの一致を確認できる
+
+    Examples:
+      | 地点     |
+      | journal  |
+      | resume   |
+      | handoff  |
+      | dispatch |
