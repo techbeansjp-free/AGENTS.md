@@ -3,16 +3,16 @@
   "issue": 1576,
   "observed": {
     "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
-    "implementationHeadSha": "3a3ede46c6ddd8dcc9273d16bf31f0b7d03494d7",
-    "diffDigest": "a2e6cc256acf1e03ce3edf44f288fc60971dc884519eef32198f400facde0cbd",
+    "implementationHeadSha": "67a9497e3354f639600a93f6ceb45f1b7bb539e9",
+    "diffDigest": "4e2aac2ea4a6ff43cd9b80dd27577cf301fdad0fb05c62b702b37fd481ea2af5",
     "session": {
       "sessionId": "b6132d9f716e35694e0a3977507c4bb86c81c535f3b9ba5dcaba69f6dcddca3a",
-      "latestRoundDigest": "38742d63ee8ce43fa21b834cfa1678ab4079f21d85e349d8b4e38966c14deba5",
+      "latestRoundDigest": "4a9892011f1061942c6d62df68bdfc1ef6fb270bf86ec5be47fc5d0ada4e124d",
       "status": "converged",
-      "countedRounds": 2
+      "countedRounds": 3
     },
     "impact": {
-      "digest": "9a9f34c9fd1d9e548496796a747719460be5ba52679671c14b45482acc570228",
+      "digest": "634069f0c9eec6a332ed64bd383519edff04553bd6f3fd2065212742f6c67dba",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "3a3ede46c6ddd8dcc9273d16bf31f0b7d03494d7",
-        "impactDigest": "9a9f34c9fd1d9e548496796a747719460be5ba52679671c14b45482acc570228",
-        "finishedAt": "2026-10-09T22:03:50.813Z",
-        "recordDigest": "5c35262f3f6db670a314addb3e83219d01f05029b8879cbe24fd7af095c3ae13"
+        "headSha": "67a9497e3354f639600a93f6ceb45f1b7bb539e9",
+        "impactDigest": "634069f0c9eec6a332ed64bd383519edff04553bd6f3fd2065212742f6c67dba",
+        "finishedAt": "2026-10-10T19:45:45.866Z",
+        "recordDigest": "c6ea2dbc06711ded18d8b5356941b6b706e7d88b2a853d8ae561fa0ada35184b"
       }
     ]
   },
@@ -51,10 +51,10 @@
   "unresolvedCriticalHigh": [],
   "verdict": "approved",
   "declared": {
-    "reviewer": "codex-review-1576",
+    "reviewer": "codex-baseline_regression-1576",
     "implementer": "codex-impl-1576",
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "79bc5607197993c82ad2c09dbf0c6bbfd01d11542f9509635114d43ac2b7ff0a"
+  "evidenceDigest": "792d145e97fbeeaa60eba361cbb44257b56811b1bf7cc5e7773678b299d88e26"
 }
