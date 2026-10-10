@@ -303,6 +303,18 @@ Given(/^validなquick Issueの本文に(.+)がある$/u, function (kind: string)
     templateのラベル行:
       "\n- ドメイン用語台帳の候補差分。列は用語ID、標準語候補、定義、コンテキスト、出典、類義語・禁止表現、状態とする: 追加しない\n- project policyが選択した静的検査。対象外なら理由を書く: lint\n",
   };
+  if (kind === "templateのラベル行") {
+    const designTemplate = fs.readFileSync(
+      path.join(templateDirectory, "02_設計.md"),
+      "utf8",
+    );
+    const performanceLabel = designTemplate
+      .split("\n")
+      .find((line) => line.startsWith("- 性能・負荷確認"));
+    assert.ok(performanceLabel, "設計テンプレートに性能確認のラベルがある");
+    additions[kind] +=
+      `\n${performanceLabel} 対象外。純粋関数の文言修正で計算量とI/Oは変わらない。\n`;
+  }
   fs.appendFileSync(
     path.join(this.issuePath, "00_要求定義.md"),
     additions[kind] ?? "",
