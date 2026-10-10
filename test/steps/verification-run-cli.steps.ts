@@ -537,3 +537,63 @@ Then(
     assert.equal(result?.output?.recordDigest, record.recordDigest);
   },
 );
+
+When(
+  "verify planで未実行・成功・最新失敗・policy変更・HEAD変更を観測する",
+  async function () {
+    const args = [
+      "verify",
+      "plan",
+      `--staging=${this.staging}`,
+      `--base=${this.base}`,
+    ];
+    this.results.planMissing = await captureCli(args);
+    assert.equal(fs.existsSync(recordFile(this)), false);
+    await captureCli(
+      verifyArgs(this, [`--base=${this.base}`, "--scope=full"], FULL_COMMAND),
+    );
+    const before = fs.readFileSync(recordFile(this), "utf8");
+    // If plan accidentally executes the command, this mode would dirty the worktree.
+    this.results.planSuccess = await captureCli(args, "write");
+    assert.equal(fs.existsSync(path.join(this.root, "generated.txt")), false);
+    assert.equal(fs.readFileSync(recordFile(this), "utf8"), before);
+    await captureCli(
+      verifyArgs(this, [`--base=${this.base}`, "--scope=full"], FULL_COMMAND),
+      "fail",
+    );
+    this.results.planFailure = await captureCli(args);
+    await captureCli(
+      verifyArgs(this, [`--base=${this.base}`, "--scope=full"], FULL_COMMAND),
+    );
+    retargetTrustedPolicy(this, {
+      fullCommand: [process.execPath, "-e", "process.exit(0)"],
+      targetedRunner: POLICY.targetedRunner,
+    });
+    this.results.planPolicy = await captureCli(args);
+    // A failed old command and a changed policy must name the actual blocker.
+    const rows = fs
+      .readFileSync(recordFile(this), "utf8")
+      .trimEnd()
+      .split("\n");
+    fs.writeFileSync(recordFile(this), rows.slice(0, -1).join("\n") + "\n");
+    this.results.planFailedPolicy = await captureCli(args);
+    git(this.root, ["commit", "--allow-empty", "-q", "-m", "new HEAD"]);
+    this.results.planHead = await captureCli(args);
+    fs.appendFileSync(recordFile(this), "invalid JSON\n");
+    this.results.planCorrupt = await captureCli(args);
+  },
+);
+
+Then("planはcommandも記録追記も行わず同一条件の成功だけを返す", function () {
+  assert.equal(this.results.planSuccess?.output?.status, "observed");
+  assert.deepEqual(this.results.planSuccess?.output?.required, []);
+  for (const key of ["planMissing", "planFailure", "planHead"])
+    assert.equal(this.results[key]?.output?.status, "required", key);
+  assert.equal(this.results.planPolicy?.output?.status, "blocked");
+  assert.equal(this.results.planFailedPolicy?.output?.status, "blocked");
+  assert.match(
+    String(this.results.planFailedPolicy?.output?.reason),
+    /trusted policy不一致/u,
+  );
+  assert.ok(this.results.planCorrupt?.error);
+});

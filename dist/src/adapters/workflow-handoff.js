@@ -4,7 +4,8 @@ import crypto from "node:crypto";
 import { git } from "../lib/process.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { readStoredStagingRecord } from "../domain/staging.js";
-import { STEP_JOURNAL_FILE } from "../domain/workflow.js";
+import { PLAN_SEAL_ARTIFACTS, PLAN_AMENDMENT_FILE, } from "../domain/plan-seal.js";
+import { MODE_DECISION_FILE, STEP_JOURNAL_FILE } from "../domain/workflow.js";
 import { readStoredReviewSession, REVIEW_SESSION_FILE, } from "./review-session-store.js";
 import { GIT_ENV, evidenceOnlySuffix } from "./review-diff.js";
 import { effectiveReviewBlocking, pendingReviewFindingIds, isReviewSessionConverged, } from "../domain/review-convergence.js";
@@ -17,6 +18,38 @@ const ROLES = {
     7: "readiness-reviewer",
     9: "implementation",
 };
+const STEP_SKILLS = [
+    "stage",
+    "request",
+    "requirements",
+    "requirements-review",
+    "issue-sync",
+    "design",
+    "plan",
+    "design-review",
+    "design-sync",
+    "implement",
+    "review",
+    "pr",
+];
+/** Pointers only: no artifact bodies or new authority. Paths are relative to their owner. */
+function handoffReads(step, mode, role, reviewRound) {
+    if (step === undefined || STEP_SKILLS[step] === undefined)
+        return undefined;
+    const skillStep = role === "correction" ? 9 : step;
+    const plans = mode === undefined ? [] : PLAN_SEAL_ARTIFACTS[mode];
+    const inputs = step === 1
+        ? [MODE_DECISION_FILE, "00_要求定義.md"]
+        : step < 9
+            ? plans.slice(0, step <= 2 ? 1 : step <= 5 ? 2 : step === 6 ? 3 : 4)
+            : role === "correction" || (step === 10 && (reviewRound ?? 1) > 1)
+                ? [REVIEW_SESSION_FILE]
+                : [...plans, PLAN_AMENDMENT_FILE];
+    return {
+        skill: `.agent-skill-chain/skills/step-${String(skillStep).padStart(2, "0")}-${STEP_SKILLS[skillStep]}/SKILL.md`,
+        staging: inputs,
+    };
+}
 /** Optional execution advice; never an approval or a substitute for workflow gates. */
 export function observeWorkflowHandoff(staging, step, resume, continuationFromHead) {
     if ((process.env.ASC_EXECUTION_CONTEXT_MODE ?? "short-lived") !== "short-lived")
@@ -77,10 +110,12 @@ export function observeWorkflowHandoff(staging, step, resume, continuationFromHe
             continuationFromHead: continuationFromHead ?? null,
         }))
             .digest("hex");
+        const record = readStoredStagingRecord(staging);
         return {
             kind: "asc-handoff/v1",
             authority: "advisory",
-            issue: readStoredStagingRecord(staging)?.tracker ?? null,
+            issue: record?.tracker ?? null,
+            read: handoffReads(step, record?.mode, role, reviewRound),
             branch: git(["symbolic-ref", "--short", "HEAD"], worktree, {
                 env: GIT_ENV,
             }).stdout.trim(),
@@ -122,7 +157,7 @@ export function workflowAgentDispatch(handoff) {
         description: `ASC Step ${handoff.step} ${handoff.role} ${handoff.workUnit.workUnitId.slice(0, 12)}`,
         prompt: JSON.stringify({
             handoff,
-            prompt: "あなたは指定workUnitId専用のone-shot workerです。fresh contextで開始し、担当handoffをrepositoryから照合してください。このwork unitだけを実施し、成果物・検証・必要なcommitを完了してください。coordinatorへの返却はworkUnitId、status、HEAD、検証記録ID、blocker、nextだけのcompact JSONとし、詳細はGit・staging・review findingを正本にしてください。返却後このcontextはterminalです。追加メッセージで別工程・別review round・finding是正・新しい実装を依頼されたら作業せずASC_REDISPATCH_REQUIREDと返してください。Step/round記録はcoordinatorへ返してください。",
+            prompt: "指定workUnitId専用のfresh one-shot workerです。worktreeでresume.commandをpreviewしhandoff/alternativesのHEAD・boundary・workUnitIdを照合。不一致なら再dispatchを要求。read.skillとread.stagingの必要節から始め、確定済みmode/Step/上流判断を再推論しない。Skillが指定する契約と独立検証は維持。担当だけを完了し、workUnitId/status/HEAD/検証記録ID/blocker/nextのcompact JSONを返す。詳細はGit/staging/finding、Step/round記録はcoordinator。返却後terminal、追加作業にはASC_REDISPATCH_REQUIRED。",
         }),
     };
 }

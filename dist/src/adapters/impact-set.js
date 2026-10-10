@@ -189,6 +189,7 @@ export function computeImpactSet(input) {
             status: "built",
             snapshot: built.snapshot,
             contentHash: semanticGraphContentHash(built.snapshot),
+            unresolvedImportPaths: built.unresolvedImportPaths,
         };
         sources = built.sources;
     }
@@ -197,6 +198,20 @@ export function computeImpactSet(input) {
             status: "unavailable",
             reason: error instanceof Error ? error.message : String(error),
         };
+    }
+    /**
+     * **staging rootは差分と同じ`headSha`の版から読む。** 作業treeのpolicyを読むと、
+     * 同じcommit差分でも作業treeの状態で分類が変わり、`full`が`targeted`へ狭まりうる。
+     */
+    let stagingRootPattern;
+    try {
+        const manifest = git(["show", `${input.headSha}:.agent-skill-chain/project-policy.json`], input.root, { allowFailure: true });
+        stagingRootPattern = (manifest.status === 0
+            ? stagingLayoutFromManifestText(manifest.stdout)
+            : DEFAULT_STAGING_LAYOUT).rootPattern;
+    }
+    catch {
+        stagingRootPattern = undefined;
     }
     const graphFiles = graph.status === "built"
         ? graph.snapshot.nodes
@@ -217,21 +232,7 @@ export function computeImpactSet(input) {
     const features = [...sources]
         .filter(([file]) => file.endsWith(".feature"))
         .map(([file, text]) => ({ path: file, text }));
-    /**
-     * **staging rootは差分と同じ`headSha`の版から読む。** 作業treeのpolicyを読むと、
-     * 同じcommit差分でも作業treeの状態で分類が変わり、`full`が`targeted`へ狭まりうる。
-     */
-    let stagingRootPattern;
-    try {
-        const manifest = git(["show", `${input.headSha}:.agent-skill-chain/project-policy.json`], input.root, { allowFailure: true });
-        stagingRootPattern = (manifest.status === 0
-            ? stagingLayoutFromManifestText(manifest.stdout)
-            : DEFAULT_STAGING_LAYOUT).rootPattern;
-    }
-    catch {
-        stagingRootPattern = undefined;
-    }
-    return deriveImpactSet({
+    const impact = deriveImpactSet({
         baseSha: input.baseSha,
         headSha: input.headSha,
         changeDigest: observed.digest,
@@ -247,6 +248,7 @@ export function computeImpactSet(input) {
         scripts: packageScripts(sources),
         stagingRootPattern,
     });
+    return impact;
 }
 /**
  * **review round 2以降の隣接範囲をGitから導出する**（REQ-WF-039）。
@@ -287,7 +289,7 @@ export function deriveReviewRoundImpact(input) {
             }
             : derived,
         adjacentScope: changed ? reviewAdjacentScope(derived) : [],
-        adjacentScopeUnbounded: changed && derived.mode === "full",
+        adjacentScopeUnbounded: changed && (derived.reviewMode ?? derived.mode) === "full",
     };
 }
 /**

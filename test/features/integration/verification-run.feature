@@ -27,3 +27,8 @@ Feature: verify runで検証をshellを通さず実行し観測だけを記録�
     Given verify run用のIssue stagingを持つrepositoryがある
     When review sessionを作成せず固定比較基点を明示してverify runを実行する
     Then review sessionなしで同じ比較基点とHEADと影響集合の合格観測を記録する
+
+  Scenario: SCN-INT-VERIFYRUN-006 読み取り専用planで有効な既存検証を発見し重複実行を防ぐ
+    Given verify run用のIssue stagingを持つrepositoryがある
+    When verify planで未実行・成功・最新失敗・policy変更・HEAD変更を観測する
+    Then planはcommandも記録追記も行わず同一条件の成功だけを返す

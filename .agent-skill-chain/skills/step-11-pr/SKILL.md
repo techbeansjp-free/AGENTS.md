@@ -5,29 +5,26 @@ description: 承認済みexact-headでPRを作成し、modeとtrusted delivery p
 
 # ステップ11: PR作成とdelivery進行
 
-`pr create --evidence`で`spec.impact="no-spec-impact"`を使う場合は、`spec.rationale`に対象範囲を限定した12文字以上の根拠を記録する。
+入力は承認済みStep 10、同じ対象HEADの検証記録、固定repository・Issue・head/base、trusted delivery policyと操作authority。finalizerは製品・計画・review判断を変更しない。`workflow advance --staging=<staging>`のpreviewとhandoffを照合して開始する。`05_計画変更.md`は計画変更がない場合には存在しないため、存在確認後に読む。PR本文と`--evidence`用JSONは封印済みstagingの外に作成する。
 
-入力は承認済みステップ10、合格したテスト・仕様ゲート、正確なリポジトリ・基点・先頭、事前表示、操作authority。PR作成前にstaging journalがStep 10まで有効で、特にStep 4と10が存在し、staging recordが`sync-verified`であることを検証する。quickでもStep 4を省略せず、無条件bypassを持たない。成果物はPR URLと`pull-request / merge-requested / merged`の観測証拠であり、本文のIssue参照は[開発ワークフロー](../../docs/01_開発ワークフロー.md)の規約に従う。指定stagingは現在project内の検証済みIssue stagingでなければならず、project外、別Issue、symlink経由をprovider呼出し前に拒否する。
+## 読取の入口と終了
 
-`poc`はPoCであることと期限を本文に保持して必ずPRで停止し、release、自動merge、本番cleanupを要求しない。full/quickの`merge.mode=disabled`もPRで停止する。この2経路だけは固定PR bindingのdigestを`outcome=pull-request`の終端EvidenceとしてStep 11へ一度記録する。`assisted`で対象PR authorityが無い場合は必要authorityと再開条件を返し、`pr-bound`のままStep 11を記録しない。
+最初に読むのは本Skill、下記2template、承認済み要求の要約・AC・仕様影響の該当節、`resume`が指すreview/verificationの結果である。PR本文を作るためにreviewをやり直さず、正式証跡にある同じ結果をjournal/session全文やtest再実行から集め直さない。必要な記録が欠ける・矛盾する場合だけ対象記録へ戻る。CLIの拒否がなければ、trusted policyの合成をmanifestのpath一覧から手で再実装しない。作成previewの対象repository・Issue・head/base・本文と`authorityStatus`を確認する。previewは操作authorityの成立を証明しない。policy・停止点は既に確定した入力を使い、不明・矛盾なら推測せず該当正本へ戻る。
 
-full/quickの`automatic`は、適用された`pr create`後を`merge_pending`としてStep 11をまだ記録せず、PR URLと再開コマンドを返す。既定branch上のtrusted policyを耐久的authorityとし、required checks、review記録、current HEAD、classic protectionまたはactive ruleset、mergeable状態を再観測し、別の`pr merge --staging=<PR作成時と同じstaging>`操作またはGitHub auto-merge / merge queue登録へ継続する。auto-mergeはmethodとenabledAt、queueはentry ID・state・時刻・head/base OIDを`merge-observed`へ保存するが、Step 11成功として記録しない。同じPRのprovider read-backで`merged`、provider mergedAt、merge commit SHAを観測し、固定identityを再確認した後だけ`outcome=merged`のStep 11を記録する。PR URLの取得だけをautomaticの正常終了にしない。
+既知のrepository・Issue・head/base、正式review、検証、仕様影響、所有者が揃ったら、templateの必須欄を短く埋めて作成previewへ進む。規約にない追加の確認表・解説文を作らない。previewが拒否した入力や権限を推測で埋めない。
 
-`pr create`と`pr merge`を同じ外部操作へ連結せず、それぞれの直前に状態とauthorityを検証する。create intentより前にproviderのwrite authority、default branch/tip、remote head SHAを指定repository・base、trusted policy commit、exact HEADへ一致させる。その後repository、canonical IssueとURL、head ref/SHA、base refと作成時base SHA、canonical title/body digest、closing契約digestを`journal/delivery-state.json`の`create-prepared`へ耐久化する。作成後read-backでrepository、PR番号・URL、Issue、same-repository HEAD、canonical title/body、base ref、closing Issue 1件を一致確認して`pr-bound`へ固定する。canonical title/bodyの全文一致は作成直後のread-backだけで要求し、`pr-bound`以後の`pr merge`の再観測は本文のclosing契約とidentityだけを照合するため、closing契約を保つタイトル・本文の訂正はmergeを妨げない。canonical Issueの終端参照はcode領域を除いた本文で1件だけ数え、canonical Issue以外への終端keyword参照は`pr create`と`pr-bound`以後の両方でcode領域を除かずに本文全体から拒否する（code判定の近似に安全判定を依存させない）。`pr merge`は同じstagingのStep 0〜10と`sync-verified`を再検証し、`poc`では必ず拒否する。ブランチ削除、Issue手動終了、release、公開、完了処理、後片付けはmerge authorityへ含めない。`context-isolated`で`requiredReviews`が2以上ならformal approval 1件と同じHEADへのprovider approvalを合算する。`assisted`はformal quality approvalとは別に、対象PRへの`--authorize=approved`とrepository write authority照合を要求する。
+## PR作成の実行順
 
-`pr-bound`後にreview証跡のpathだけを是正してHEADが動いた場合は、`pr reanchor`で同一SHAのreview済み`H_impl`、証跡のbyte一致、保存済み収束sessionと最新Step 10 binding、evidence-only配置とmodeを再検証してから再固定する。同一pathの前進修正で変わってよいのは検証記録（`verification`）だけであり、finding、判定、独立性、session束縛は完全一致させる。一般のrebase、review判断の変更、`H_impl`差替え、証跡外差分を`pr-bound`で許可せず、既存のPR binding、delivery state、Step journalを書き換えない。
+1. 以下のtemplate契約に従い、確定済み要求・変更差分・`review export`の証跡から本文と事前確認を作る。既存のreview/verification証拠を参照し、同じHEAD・policy・scopeに対する調査やtestを再実行しない。不一致・欠測・最新失敗があればStep 10へ戻す。独立reviewの代行や自己承認をしない。
+2. `pr create --help`を一度全文読み、掲載された`--evidence`の入力例と必須引数を使う。rootから段階的にhelpを探索せず、先頭だけを切り出して型を実装ソースで探さない。Evidenceの各値は実際の承認・検証・仕様証拠に対応させる。この入力JSONの`headSha`と`review/tests/spec.headSha`はすべてPR対象のexact HEADへ揃える。`review export`が生成した証跡の`implementationHeadSha`や検証記録は変更しない。CLIが認めるevidence-only suffixだけは既存のreview・検証を再利用でき、一般のHEAD移動を同等に扱わない。`no-spec-impact`は文言等の限定された変更に限り、対象範囲を限定した12文字以上の`spec.rationale`を記録する。
+3. exact HEADをpushした後、同じstagingを指定して`pr create ... --dry-run`を実行し、成功した入力と操作authorityで`--apply`へ進む。CLIがStep 4/10、sync、seal、trusted policy、独立性、exact HEAD、remote、本文、provider read-backを検証する。CLIで成立したremote照合を、認証情報のないworkerからの`git ls-remote`等で重複実行しない。journalやdelivery stateを手で作成・修正しない。拒否時は診断された不一致を解決する。
+4. `poc`と`merge.mode=disabled`はPRで停止する。PoCはその旨と期限をPR本文に保持する。PR URLだけで完了を宣言せず、CLIが固定PR bindingと`outcome=pull-request`のStep 11終端を記録したことを確認する。merge・Issue手動終了・branch削除・release・cleanupを追加しない。
 
-merge直前に固定HEADでpolicy、checks、独立review、methodを再認可する。`context-isolated`ではtracked review証跡（`review export`が生成したJSON）・保存済みreview session・Step 10 bindingからformal approvalを導出し、`actor-independent`ではprovider `APPROVED`とstable actor分離を観測する。candidate申告だけのapprovalは受理しない。外部merge要求より前に認可HEAD、method、intent IDを`merge-prepared`へ耐久化する。base refは固定し、provider default branch tip、PR base SHA、trusted policy commitが一致する場合だけ進める。timeout、通信切断、応答不明では外部create/mergeを再送せずprovider read-backで照合する。一度もdispatchしていないprepared intentで該当PR、auto-merge、queue entryが存在しないことを決定的に確認できた場合だけ、同じimmutable intentを一度再試行してよい。`reconciliation-required`または曖昧状態では再送しない。
+## merge・復旧が必要な場合
 
-PR停止またはmerged終端ではjournalを先にfsyncし、そのdigestと`outcome`・`evidenceId`をdelivery stateへ保存する。journal保存後・state保存前に停止した場合は同じ`pr create`または`pr merge`コマンドを同じ入力で再実行し、既存Step 11 entryを検証してstateだけを前向きに復旧する。PR create、merge要求、Step 11追記を再送しない。
+full/quickの`assisted`または`automatic`では、create前に[Delivery詳細契約](delivery-details.md)を全文読み、policyとauthorityに従って継続する。`merge-observed`のauto-merge/queue登録は終端ではなく、providerのmerged read-back後だけStep 11を記録する。assistedで必要authorityがなければ再開条件を返す。
 
-`pr merge`適用後にauto-mergeまたはqueue entryだけが観測できる場合は`merge-observed`と再開条件を返し、Step 11へ進めない。再実行はprovider read-backだけを行い、merged終端Evidenceへ単調更新する。GitHubがHEAD以外のPR metadata CASを提供しない最終窓は、二重read、HEAD CAS、保護規則、事後read-backで検出する残余競合として明示し、完全予防と報告しない。
-
-固定済みPRがASCの`pr merge`を経由せずmerge済みになった`pr-bound`のstagingは、`pr record-external-merge --repo=<o/r> --pr=<n> --staging=<staging> --dry-run`で7項目の`checks`を確認してから、同じ入力の`--apply`で外部merge取り込みのStep 11を追記する。取り込みはGitHubへ書き込まず、Step 11は`external-merge observation`の区別子付きで配送gateを経由していないことを残す。記録後はStep 11の封印が適用され元に戻せない。1項目でも不一致なら何も書かれないので、不一致の項目を解消してから再実行する。`merge-prepared`以後のstagingは`pr merge`の再実行（provider read-back）で終端させる。
-
-`merge.mode=disabled`で既に`outcome=pull-request`へ終端化したfull/quickのopen PRは、後からtrusted policyが変わっても通常の`pr merge`では再開しない。repository ownerが同じPRへの新しいdelivery判断を行う場合だけ`--reopen-terminal=approved`を明示し、旧Step 11 evidence、現在のtrusted policy commit、同一PR identity、exact HEADを固定した`redelivery`として通常のmerge認可とone-shot dispatchを通す。旧Step 11 journalは変更・重複追記せず、merged再観測後は`redelivery`だけを完了へ進める。PoC、現在もdisabled、closed/merged PR、identity不一致、flag欠落・未知値を迂回しない。
-
-terminal redeliveryのauthority recordには、明示flagのsourceと`repository.assert-write`で観測したactor、repository、write Evidence IDを保存する。authority Evidenceが欠けるrecordをowner判断として受理しない。
+通信失敗・応答不明・`reconciliation-required`、既存PRの再固定、外部merge取り込み、終端後のredeliveryでは、同じ[Delivery詳細契約](delivery-details.md)の該当段落を操作前に読む。外部create/mergeを盲目的に再送せず、provider read-backと保存済みintentから復旧する。CLIが示す復旧以外のjournal/state書換えは行わない。
 
 ## role・tier入力契約
 

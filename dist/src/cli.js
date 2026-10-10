@@ -17,7 +17,7 @@ import { judgeReviewReuseAtMerge } from "./adapters/review-reuse.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
 import { parseReviewEvidence, } from "./domain/review-evidence.js";
 import { exportReviewEvidence, stagingTrackerIssue, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
-import { runVerification } from "./adapters/verification-run.js";
+import { planVerification, runVerification, } from "./adapters/verification-run.js";
 import { observeWorkflowHandoff, workflowAgentDispatch, } from "./adapters/workflow-handoff.js";
 import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, nonCanonicalClosingReferences, resolveMergeMethod, } from "./domain/delivery.js";
@@ -4601,14 +4601,23 @@ export async function main(argv, dependencies = {}) {
             throw new Error(`workflow advanceの未知optionです: --${unknown.join(", --")}`);
         const staging = path.resolve(required(flags, "staging"));
         const inspected = inspectWorkflowStaging(staging);
-        const initialRecord = readStoredStagingRecord(staging);
-        const initialArtifacts = listStagingArtifacts(staging);
-        const initialContentDigest = calculateStagingDigest(staging, initialArtifacts);
+        // Only apply compares a pre-lock snapshot; advisory preview needs no
+        // full artifact inventory or content hashing.
+        const initialSnapshot = apply
+            ? (() => {
+                const record = readStoredStagingRecord(staging);
+                const artifacts = listStagingArtifacts(staging);
+                return {
+                    record,
+                    artifacts,
+                    contentDigest: calculateStagingDigest(staging, artifacts),
+                };
+            })()
+            : undefined;
         const initialJournal = readWorkflowJournal(staging);
-        const initialJournalDigest = crypto
-            .createHash("sha256")
-            .update(initialJournal.source)
-            .digest("hex");
+        const initialJournalDigest = apply
+            ? crypto.createHash("sha256").update(initialJournal.source).digest("hex")
+            : undefined;
         const continuationFromHead = flags["continue-from"];
         if (continuationFromHead !== undefined) {
             if (apply || artifacts.length > 0 || flags.evidence !== undefined)
@@ -4696,6 +4705,10 @@ export async function main(argv, dependencies = {}) {
                 ? {
                     ...handoff,
                     role: "reviewer",
+                    read: {
+                        skill: ".agent-skill-chain/skills/step-10-review/SKILL.md",
+                        staging: ["review-session.json"],
+                    },
                     reviewRound: (handoff.reviewRound ?? 0) + 1,
                     workUnit: {
                         ...handoff.workUnit,
@@ -4729,6 +4742,9 @@ export async function main(argv, dependencies = {}) {
                 : { ...plan, sync: syncPreview, resume, ...execution });
             return plan.state === "blocked" ? 1 : 0;
         }
+        if (initialSnapshot === undefined || initialJournalDigest === undefined)
+            throw new Error("workflow advanceのapply snapshotがありません");
+        const { record: initialRecord, artifacts: initialArtifacts, contentDigest: initialContentDigest, } = initialSnapshot;
         return withStagingMutationLock(staging, () => {
             const lockedStoredRecord = readStoredStagingRecord(staging);
             const lockedArtifacts = listStagingArtifacts(staging);
@@ -6128,6 +6144,24 @@ export async function main(argv, dependencies = {}) {
             evidenceDigest: exported.evidence.evidenceDigest,
             next: "この1 fileだけを実装commitの後にcommitしてH_finalにする",
         });
+        return 0;
+    }
+    if (command === "verify" && subcommand === "plan") {
+        const { flags, positionals } = parse(rest);
+        const unknown = Object.keys(flags).filter((flag) => !["staging", "base", "root"].includes(flag));
+        if (unknown.length > 0 || positionals.length > 0)
+            throw new Error("verify planは--staging、--base、--rootだけを受理します");
+        if (flags.base !== undefined && typeof flags.base !== "string")
+            throw new Error("verify planの--baseにはcommitが必要です");
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const staging = path.resolve(root, required(flags, "staging"));
+        if (flags.root !== undefined &&
+            fs.realpathSync(stagingRepositoryRoot(staging)) !== fs.realpathSync(root))
+            throw new Error("verify planの--rootはstagingのrepositoryと一致する必要があります");
+        print(planVerification({
+            staging,
+            ...(typeof flags.base === "string" ? { base: flags.base } : {}),
+        }));
         return 0;
     }
     if (command === "verify" && subcommand === "run") {

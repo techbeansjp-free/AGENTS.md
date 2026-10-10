@@ -1075,6 +1075,30 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "verify",
+    subcommand: "plan",
+    summary:
+      "現在HEAD・影響集合・trusted policyに一致する既存検証記録と、無ければ必要なscope/argvを読み取り専用で返す。結果は助言であり実行・記録・merge認可ではない",
+    requiredFlags: [flag("staging", "path", "対象Issue staging")],
+    conditionalFlags: [],
+    optionalFlags: [
+      optional(
+        "base",
+        "sha",
+        "影響集合の比較基点",
+        "review sessionの比較基点（sessionが無ければ必須）",
+      ),
+      optional(
+        "root",
+        "path",
+        "stagingを置いたrepositoryのroot",
+        "現在の作業directory",
+      ),
+    ],
+    example:
+      "npx agent-skill-chain verify plan --staging=.agent-skill-chain/tmp/issues/20260911_change --base=<SHA>",
+  },
+  {
+    command: "verify",
     subcommand: "run",
     summary:
       "`--`の後の検証commandをshellを通さずH_implで実行し、HEAD・影響集合digest・終了値をstagingの観測記録（journal/verification-runs.jsonl）へ追記する。commandは既定branchのtrusted policyが宣言したものだけを受理し、merge段階以降は拒否する。終了値はcommandの終了値",

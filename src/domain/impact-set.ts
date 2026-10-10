@@ -46,7 +46,13 @@ export interface ImpactSet {
   readonly scenarios: readonly string[];
   /** 実行する検査（package.jsonのscript名） */
   readonly checks: readonly string[];
+  /** Verification selection; review may be narrower only for test-selection failures. */
   readonly mode: ImpactMode;
+  /** Absent in legacy results: conservatively use mode and reasons. */
+  readonly reviewMode?: ImpactMode;
+  readonly reviewReasons?: readonly string[];
+  /** Static graph remains valid; these dependency boundaries remain unproven. */
+  readonly unresolvedImportPaths?: readonly string[];
   readonly reasons: readonly string[];
   /**
    * `adjacent[].graphEvidence`を除いた本体の`sha256(stableJson(...))`。
@@ -71,6 +77,7 @@ export interface ImpactDerivationInput {
         readonly status: "built";
         readonly snapshot: SemanticGraphSnapshot;
         readonly contentHash: string;
+        readonly unresolvedImportPaths?: readonly string[];
       }
     | { readonly status: "unavailable"; readonly reason: string };
   /** basename（`review.ts`等）→ その字面を含むECMAScript file（dist除外） */
@@ -454,6 +461,15 @@ export function deriveImpactSet(input: ImpactDerivationInput): ImpactSet {
   const changedPaths = sortedUnique(input.changedPaths);
   const changed = new Set(changedPaths);
   const reasons: string[] = [];
+  const verificationOnlyReasons = new Set<string>();
+  const unresolvedImportPaths =
+    input.graph.status === "built"
+      ? sortedUnique(input.graph.unresolvedImportPaths ?? [])
+      : [];
+  if (unresolvedImportPaths.length > 0)
+    reasons.push(
+      `影響境界を証明できない動的import/require: ${unresolvedImportPaths.slice(0, 8).join(", ")}${unresolvedImportPaths.length > 8 ? `（ほか${unresolvedImportPaths.length - 8}件）` : ""}`,
+    );
   let index: GraphIndex | undefined;
   let graphContentHash: string | null = null;
   if (input.graph.status === "unavailable")
@@ -523,8 +539,11 @@ export function deriveImpactSet(input: ImpactDerivationInput): ImpactSet {
         stepDefinitionFiles,
       );
       reasons.push(...selection.reasons);
-      if (selection.features.size === 0)
-        reasons.push(`変更sourceから検証featureへ到達できません: ${source}`);
+      if (selection.features.size === 0) {
+        const reason = `変更sourceから検証featureへ到達できません: ${source}`;
+        reasons.push(reason);
+        verificationOnlyReasons.add(reason);
+      }
       for (const feature of selection.features) features.add(feature);
       for (const scenario of selection.scenarios) scenarios.add(scenario);
       for (const name of scriptsReferencing(input.scripts, closure.affected))
@@ -579,6 +598,14 @@ export function deriveImpactSet(input: ImpactDerivationInput): ImpactSet {
   );
   const finalReasons = sortedUnique(reasons);
   const mode: ImpactMode = finalReasons.length === 0 ? "targeted" : "full";
+  // A missing test mapping cannot erase known source dependencies. Unknown graph,
+  // dynamic loading, infrastructure and security keep the conservative review scope.
+  const reviewReasons =
+    securityPaths.length > 0
+      ? finalReasons
+      : finalReasons.filter((reason) => !verificationOnlyReasons.has(reason));
+  const reviewMode: ImpactMode =
+    reviewReasons.length === 0 ? "targeted" : "full";
   return withDigest({
     schemaVersion: IMPACT_SET_SCHEMA_VERSION,
     baseSha: input.baseSha,
@@ -594,15 +621,19 @@ export function deriveImpactSet(input: ImpactDerivationInput): ImpactSet {
     checks: mode === "targeted" ? sortedUnique(checks) : [],
     mode,
     reasons: finalReasons,
+    ...(reviewMode !== mode ? { reviewMode, reviewReasons } : {}),
+    ...(unresolvedImportPaths.length > 0 ? { unresolvedImportPaths } : {}),
   });
 }
 
 /**
- * **review roundへ渡す隣接範囲。** targetedのときだけ影響集合の隣接範囲を返し、
- * fullのときは空にする（全体reviewが適用される）。
+ * **review roundへ渡す隣接範囲。** review判定がtargetedなら既知の隣接範囲を返す。
+ * 旧結果はverificationのmodeへ保守的に戻す。fullなら全体reviewが適用される。
  */
 export function reviewAdjacentScope(
   impact: ImpactSet,
 ): readonly ReviewAdjacentScope[] {
-  return impact.mode === "targeted" ? impact.adjacent : [];
+  return (impact.reviewMode ?? impact.mode) === "targeted"
+    ? impact.adjacent
+    : [];
 }

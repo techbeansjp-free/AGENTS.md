@@ -614,39 +614,131 @@ function requireIsShadowed(scope: EcmaScriptScope): boolean {
   return scope.effectiveRequireShadow || scope.effectiveRequireAmbiguity;
 }
 
+/** 括弧・型表現は呼出し先を変えないため、依存不明の判定で同じcalleeへ戻す。 */
+function unwrappedCallTarget(
+  compiler: TypeScriptApi,
+  target: TypeScriptNode,
+): TypeScriptNode {
+  let current = target;
+  while (
+    compiler.isParenthesizedExpression(current) ||
+    compiler.isAsExpression(current) ||
+    compiler.isTypeAssertionExpression(current) ||
+    compiler.isNonNullExpression(current) ||
+    compiler.isSatisfiesExpression(current)
+  )
+    current = current.expression;
+  return current;
+}
+
+/** Every branch must be a literal; unknown branches never acquire a guessed boundary. */
+function finiteImportSpecifiers(
+  compiler: TypeScriptApi,
+  expression: TypeScriptNode,
+  depth = 0,
+): string[] | undefined {
+  if (depth > 32) return undefined;
+  const value = unwrappedCallTarget(compiler, expression);
+  if (compiler.isStringLiteralLike(value)) return [value.text];
+  if (!compiler.isConditionalExpression(value)) return undefined;
+  const yes = finiteImportSpecifiers(compiler, value.whenTrue, depth + 1);
+  const no = finiteImportSpecifiers(compiler, value.whenFalse, depth + 1);
+  if (yes === undefined || no === undefined) return undefined;
+  const candidates = [...new Set([...yes, ...no])];
+  return candidates.length <= 32 ? candidates : undefined;
+}
+
 function ecmaScriptImportSpecifiers(
   source: string,
   sourcePath: string,
+  onUnresolvedImport?: (sourcePath: string) => void,
 ): string[] {
   const compiler = loadTypeScriptCompiler();
   const sourceFile = parseEcmaScriptSource(compiler, source, sourcePath);
   const scopes = collectEcmaScriptScopes(compiler, sourceFile, sourcePath);
   const located: LocatedSpecifier[] = [];
+  const handledRequireCallees = new Set<TypeScriptNode>();
   const stack: Array<{
     readonly node: TypeScriptNode;
     readonly scope: EcmaScriptScope;
-  }> = [{ node: sourceFile, scope: scopes.get(sourceFile)! }];
+    readonly inType: boolean;
+  }> = [{ node: sourceFile, scope: scopes.get(sourceFile)!, inType: false }];
   let nodeCount = 0;
   while (stack.length > 0) {
-    const { node, scope: inherited } = stack.pop()!;
+    const { node, scope: inherited, inType } = stack.pop()!;
     nodeCount += 1;
     if (nodeCount > MAX_ECMASCRIPT_IMPORT_SCAN_TOKENS)
       throw new Error(
         `ECMAScript import scanのAST node件数上限を超えました: ${sourcePath}`,
       );
     const current = scopes.get(node) ?? inherited;
+    const typeOnly = inType || compiler.isTypeNode(node);
     const value = literalImportSpecifier(
       compiler,
       node,
       requireIsShadowed(current),
     );
     if (value !== undefined) located.push({ position: node.pos, value });
+    if (compiler.isCallExpression(node)) {
+      const callee = unwrappedCallTarget(compiler, node.expression);
+      const isImport = callee.kind === compiler.SyntaxKind.ImportKeyword;
+      const isRequire =
+        compiler.isIdentifier(callee) &&
+        callee.text === "require" &&
+        !current.effectiveRequireShadow;
+      if (isRequire) handledRequireCallees.add(callee);
+      if (value === undefined && (isImport || isRequire)) {
+        const validArity = isImport
+          ? node.arguments.length === 1 || node.arguments.length === 2
+          : node.arguments.length === 1;
+        const candidates =
+          validArity &&
+          (isImport || !requireIsShadowed(current)) &&
+          node.arguments[0] !== undefined
+            ? finiteImportSpecifiers(compiler, node.arguments[0])
+            : undefined;
+        if (candidates === undefined) onUnresolvedImport?.(sourcePath);
+        else
+          for (const candidate of candidates)
+            located.push({ position: node.pos, value: candidate });
+      }
+    }
+    // Property access does not resolve through the lexical require binding.
+    // Computed access on the CommonJS module object cannot prove that the
+    // selected capability excludes require, so it is also conservative.
+    if (!typeOnly) {
+      const propertyRequire =
+        compiler.isPropertyAccessExpression(node) &&
+        node.name.text === "require";
+      let computedRequire = false;
+      if (compiler.isElementAccessExpression(node)) {
+        const object = unwrappedCallTarget(compiler, node.expression);
+        computedRequire =
+          finiteImportSpecifiers(compiler, node.argumentExpression)?.includes(
+            "require",
+          ) === true ||
+          (compiler.isIdentifier(object) && object.text === "module");
+      }
+      if (propertyRequire || computedRequire) onUnresolvedImport?.(sourcePath);
+    }
+    // A require value escaping the supported callee forms has no proven import
+    // boundary (aliases, comma expressions, call/apply/bind, etc.). Do not infer
+    // safety from the absence of a direct call. Property names may also
+    // conservatively expand the scope; lexical shadowing remains authoritative.
+    if (
+      !typeOnly &&
+      compiler.isIdentifier(node) &&
+      node.text === "require" &&
+      !current.effectiveRequireShadow &&
+      !handledRequireCallees.has(node)
+    )
+      onUnresolvedImport?.(sourcePath);
     const children: TypeScriptNode[] = [];
     compiler.forEachChild(node, (child) => {
       children.push(child);
     });
     for (let index = children.length - 1; index >= 0; index -= 1)
-      stack.push({ node: children[index]!, scope: current });
+      stack.push({ node: children[index]!, scope: current, inType: typeOnly });
   }
   return located
     .sort(
@@ -1068,6 +1160,7 @@ function projectRepositorySemanticGraph(input: {
   readonly oversized: readonly string[];
   readonly oversizedRegularFiles: readonly string[];
   readonly source: GraphSourceIdentity;
+  readonly onUnresolvedImport?: (sourcePath: string) => void;
 }): SemanticGraphSnapshot {
   const { files, oversized, oversizedRegularFiles, source } = input;
   /**
@@ -1204,27 +1297,31 @@ function projectRepositorySemanticGraph(input: {
       addNode(nodeId(kind, id), kind, occurrence.file, occurrence.line, {
         externalId: id,
       });
+      // node作成で観測した位置を共有し、全sourceを同じpatternで再走査しない。
+      for (const value of values)
+        addEdge(
+          nodeId(kind, id),
+          nodeId("file", value.file),
+          "supported-by",
+          value.file,
+          value.line,
+        );
     }
 
   for (const file of files) {
     if (file.text === undefined) continue;
     const fileNode = nodeId("file", file.path);
-    const groups = [
-      ["requirement", REQUIREMENT_ID],
-      ["acceptance-criteria", ACCEPTANCE_ID],
-      ["scenario", SCENARIO_ID],
-    ] as const;
-    for (const [kind, pattern] of groups)
-      for (const [id, line] of lineOccurrences(file.text, pattern))
-        addEdge(nodeId(kind, id), fileNode, "supported-by", file.path, line);
     if (
       ECMASCRIPT_EXTENSIONS.has(path.posix.extname(file.path).toLowerCase())
     ) {
       for (const specifier of ecmaScriptImportSpecifiers(
         file.text,
         file.path,
+        input.onUnresolvedImport,
       )) {
         const target = resolveImport(file.path, specifier, knownFiles);
+        if (target === undefined && specifier.startsWith("."))
+          input.onUnresolvedImport?.(file.path);
         if (target !== undefined)
           addEdge(
             fileNode,
@@ -1494,6 +1591,8 @@ function readCommitBlobs(
  */
 export interface CommitSemanticGraphBuild extends RepositorySemanticGraphBuild {
   readonly sources: ReadonlyMap<string, string>;
+  /** literalとして依存先を固定できないimport/非shadowed requireの所在。 */
+  readonly unresolvedImportPaths: readonly string[];
 }
 
 /**
@@ -1551,15 +1650,18 @@ export function buildCommitSemanticGraph(
     ),
     dirty: false,
   };
+  const unresolvedImportPaths = new Set<string>();
   const snapshot = projectRepositorySemanticGraph({
     files,
     oversized,
     oversizedRegularFiles,
     source,
+    onUnresolvedImport: (file) => unresolvedImportPaths.add(file),
   });
   return {
     snapshot,
     oversizedPaths: oversized,
+    unresolvedImportPaths: [...unresolvedImportPaths].sort(compareText),
     sources: new Map(
       files.flatMap(({ path: file, text }) =>
         text === undefined ? [] : [[file, text] as const],

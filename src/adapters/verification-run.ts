@@ -27,6 +27,7 @@ import {
   parseVerificationRuns,
   renderVerificationRuns,
   sealVerificationRun,
+  selectObservedVerification,
   validateVerificationArgv,
   verificationCommandViolation,
   VERIFICATION_RUN_FILE,
@@ -224,6 +225,93 @@ export function resolveVerificationTarget(input: {
   return {
     baseSha,
     impact: computeImpactSet({ root, baseSha, headSha: input.headSha }),
+  };
+}
+
+/** Read-only advice using the same observations consumed by review export. */
+export function planVerification(input: { staging: string; base?: string }) {
+  const staging = assertWorkflowStaging(input.staging);
+  const root = stagingRepositoryRoot(staging);
+  verificationDeliveryPhase(staging);
+  const policy = loadTrustedVerificationPolicy(root);
+  if (worktreeDifferences(root) !== "")
+    throw new Error("verify planは現在HEADと完全一致するworktreeが必要です");
+  const headSha = resolveCommit(root, "current HEAD", "HEAD");
+  const { baseSha, impact } = resolveVerificationTarget({ ...input, headSha });
+  // Parse errors are not a missing observation: corrupted records stay fatal.
+  const records = readVerificationRuns(staging);
+  let observed: ReturnType<typeof selectObservedVerification> = [];
+  let reason: string | null = null;
+  try {
+    observed = selectObservedVerification(records, {
+      headSha,
+      impactDigest: impact.digest,
+      impactMode: impact.mode,
+      impactFeatures: impact.features,
+      policy,
+    });
+  } catch (error) {
+    reason = error instanceof Error ? error.message : String(error);
+  }
+  if (
+    resolveCommit(root, "current HEAD", "HEAD") !== headSha ||
+    worktreeDifferences(root) !== ""
+  )
+    throw new Error("verify planの観測中にHEADまたはworktreeが変わりました");
+  const latest = new Map<string, VerificationRunRecord>();
+  for (const item of records)
+    if (item.headSha === headSha && item.impactDigest === impact.digest)
+      latest.set(JSON.stringify(item.command), item);
+  const violations = [...latest.values()]
+    .map((item) =>
+      verificationCommandViolation(
+        item.command,
+        item.scope,
+        policy,
+        impact.features,
+      ),
+    )
+    .filter((value): value is string => value !== undefined);
+  const blocked = violations.length > 0;
+  if (blocked) reason = `trusted policy不一致: ${violations.join("; ")}`;
+  const required: { scope: VerificationScope; command: readonly string[] }[] =
+    [];
+  if (observed.length === 0 && !blocked) {
+    for (const item of latest.values())
+      if (item.exitCode !== 0 || item.signal !== null)
+        required.push({ scope: item.scope, command: item.command });
+    if (
+      required.length === 0 ||
+      (impact.mode === "full" &&
+        !required.some((item) => item.scope === "full"))
+    ) {
+      const scope =
+        impact.mode === "targeted" && impact.features.length > 0
+          ? "targeted"
+          : "full";
+      required.push({
+        scope,
+        command:
+          scope === "full"
+            ? policy.fullCommand
+            : [...policy.targetedRunner, ...impact.features],
+      });
+    }
+  }
+  return {
+    authority: "advisory" as const,
+    headSha,
+    baseSha,
+    impactDigest: impact.digest,
+    impactMode: impact.mode,
+    status: blocked
+      ? ("blocked" as const)
+      : observed.length > 0
+        ? ("observed" as const)
+        : ("required" as const),
+    observed,
+    reason,
+    required,
   };
 }
 

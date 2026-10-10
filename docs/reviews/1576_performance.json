@@ -1,0 +1,173 @@
+{
+  "kind": "asc-integrated-performance-summary/v1",
+  "issue": 1576,
+  "status": "revision-measurement-in-progress",
+  "baselineSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
+  "previousCandidateSha": "5e51700b2a36b54d710ce0cc0e0f38ff8fbd5aa2",
+  "readPolicy": "通常はこのsummaryだけを読む。反例・数値監査・再現に必要な場合だけ詳細証跡の該当keyを読む。",
+  "priorMeasurements": {
+    "scope": "局所測定。Issue全体のE2E/token改善ではない。",
+    "workflowPreview": {
+      "fileReadsBefore": 23,
+      "fileReadsAfter": 9,
+      "bytesBefore": 82115,
+      "bytesAfter": 3697
+    },
+    "impactLowRiskThreeCallsMedianMs": {
+      "before": 606.0,
+      "after": 609.7
+    },
+    "priorQuality": {
+      "passed": 2741,
+      "skipped": 17,
+      "failed": 0,
+      "independentReviewRounds": 2
+    }
+  },
+  "revisionFocus": [
+    "workerとSkillの重複探索",
+    "reviewとverificationの用途別導出",
+    "有限動的依存候補と境界不明の分離",
+    "実CLIでのcache採否",
+    "Codex/Claudeによる隔離dummy Issue全工程の実測"
+  ],
+  "details": {
+    "path": "docs/reviews/1576_performance.raw.json",
+    "sha256": "f764a5bed4d935e1a2456f0bf76fc58716a1c934dc71deb66b199643fc0306fa",
+    "keys": [
+      "benchmark",
+      "methodology",
+      "missingAcceptanceEvidence",
+      "regressionExecution",
+      "workflowObservations",
+      "reproduction",
+      "revisionCacheAdoption",
+      "revisionLiveLifecycle",
+      "revisionIndependentReview",
+      "revisionLiveLifecycleV2",
+      "revisionSafetyMutations",
+      "revisionFirstCompleteE2E",
+      "revisionMeasuredSkillReview",
+      "revisionMeasuredSkillInstallation",
+      "revisionMeasuredSkillsE2E",
+      "revisionConfirmatoryA",
+      "revisionEntryReuseReview",
+      "revisionExperimentAccountingSnapshot",
+      "revisionReproducibilityAudit"
+    ]
+  },
+  "limitations": [
+    "従来のprocess-local Impact局所測定ではE2E短縮を証明できない",
+    "providerのinput/cache包含関係を区別し欠測値はnullとする",
+    "新規GraphDB・永続cache・Hook・session監視は導入しない"
+  ],
+  "revisionMeasurements": {
+    "actualCliAnalysis": {
+      "command": "review round --init",
+      "impactCallsBefore": 2,
+      "impactCallsAfter": 1,
+      "gitSourceObservationsBefore": 2,
+      "gitSourceObservationsAfter": 1,
+      "structuredClonesBefore": 4,
+      "structuredClonesAfter": 0,
+      "medianWallMsBefore": 7608,
+      "medianWallMsAfter": 6959,
+      "repeats": 3,
+      "scope": "実CLI局所測定。Issue全体E2Eではない。",
+      "decision": "process-global cacheを撤去し、既存の一操作内review observerを共有する"
+    },
+    "liveLifecycle": {
+      "candidateSha": "7189b0a300dd4054f740e6dfb6244cd3b353bcf0",
+      "provider": "codex",
+      "operations": [
+        "update",
+        "delete"
+      ],
+      "trialsPerOperation": 1,
+      "passed": 2,
+      "headAndHandoffPreserved": true,
+      "userSettingsPreserved": true,
+      "unexpectedChangedPaths": 0,
+      "scope": "隔離dummy内の実workerとlifecycle操作の競合。全工程E2E・provider timeoutの実証ではない。",
+      "isolation": "filesystem/PID/mountを隔離。API接続用networkは共有し宛先制限なし。",
+      "reproducibleHarness": "revisionLiveLifecycleV2.harnessSources"
+    },
+    "safetyMutations": {
+      "mutations": 2,
+      "killed": 2,
+      "sourceSha": "7189b0a300dd4054f740e6dfb6244cd3b353bcf0",
+      "contracts": [
+        "escaping require remains unknown",
+        "every dynamic branch must be bounded"
+      ]
+    },
+    "firstCompleteE2E": {
+      "case": "A",
+      "repeatsPerArm": 1,
+      "candidateSha": "5ddd2590fbd9e467618da77f26ed2a98050234c8",
+      "rows": [
+        {
+          "arm": "baseline",
+          "requestToCiObservedSeconds": 509.238,
+          "allWorkerProcessedTokens": 3401347
+        },
+        {
+          "arm": "candidate",
+          "requestToCiObservedSeconds": 496.601,
+          "allWorkerProcessedTokens": 3620085
+        },
+        {
+          "arm": "no-ASC",
+          "requestToCiObservedSeconds": 84.195,
+          "allWorkerProcessedTokens": 179979
+        }
+      ],
+      "quality": "All three: independent review, real PR, CI success, common external 9-test suite/oracle, added regression fails on original production source, clean HEAD.",
+      "conclusion": "Candidate time decreased 2.48%, total tokens increased 6.43%; token target not met. Not a repeated or statistically established improvement.",
+      "nextCandidate": "262ca069"
+    },
+    "measuredSkillTrial": {
+      "candidateSha": "262ca0696df58c4a01d67f314db6fd359b3eaff1",
+      "case": "A",
+      "repeats": 1,
+      "requestToPrSeconds": 441.888,
+      "requestToCiObservedSeconds": 453.343,
+      "allWorkerProcessedTokens": 2534052,
+      "relativeToInitialBaseline": {
+        "ciElapsedReductionPercent": 10.98,
+        "workerTokenReductionPercent": 25.5
+      },
+      "scope": "Exploratory fixed non-LLM coordinator trial; parent AI overhead not included. Not final repeated acceptance.",
+      "quality": "Real PR/CI/terminal, independent review, common external suite/oracle and regression-on-old-source all passed.",
+      "remainingFixedCost": "Step11 retry guidance refined after four tool errors; remeasure beb8911c."
+    },
+    "confirmatoryA": {
+      "candidateSha": "beb8911c465b3376d668762cce5f1137f2145b28",
+      "repeatsPerArm": 3,
+      "allNineTrialsPassedQuality": true,
+      "medianRequestToPrSeconds": {
+        "baseline": 437.662749,
+        "candidate": 433.592263,
+        "noASC": 75.133317
+      },
+      "medianRequestToCiObservedSeconds": {
+        "baseline": 449.049155,
+        "candidate": 434.251294,
+        "noASC": 96.896001
+      },
+      "medianAllWorkerProcessedTokens": {
+        "baseline": 2749733,
+        "candidate": 2822205,
+        "noASC": 180979
+      },
+      "candidateChangePercent": {
+        "requestToPr": -0.93,
+        "requestToCi": -3.3,
+        "allWorkerTokens": 2.64
+      },
+      "acceptance": "NOT MET: total worker tokens increased. B was stopped before paid execution; subsequent candidate must be measured separately.",
+      "scope": "Fixed non-LLM coordinator. All actual Issue workers included; experiment setup and normal AI coordinator overhead excluded. Three repeats in a small controlled fixture, not a general guarantee.",
+      "nextCandidate": "c60e81b21afadf1dfc418bb7cd032c4de28036b8"
+    }
+  }
+}

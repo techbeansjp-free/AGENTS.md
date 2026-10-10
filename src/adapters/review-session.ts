@@ -60,8 +60,7 @@ import type {
   ReviewRoundFinding,
 } from "../domain/review-convergence.js";
 import type { ImpactSet } from "../domain/impact-set.js";
-import { deriveReviewRoundImpact } from "./impact-set.js";
-import { assignReviewInspection } from "./review-reuse.js";
+import { assignReviewInspection, createReuseObserver } from "./review-reuse.js";
 import { stagingTrackerIssue } from "./review-evidence.js";
 import type { InspectionAssignment } from "../domain/review-reuse.js";
 
@@ -109,13 +108,13 @@ function assertStoredStagingDigest(staging: string): void {
  */
 function impactNotes(impact: ImpactSet): string[] {
   const notes: string[] = [];
-  if (impact.mode === "targeted")
+  if ((impact.reviewMode ?? impact.mode) === "targeted")
     notes.push(
       `影響集合（digest ${impact.digest.slice(0, 12)}）から隣接範囲${impact.adjacent.length}件をfocus.adjacentScopeへ設定した。隣接範囲の前round blocker起因のHigh回帰と固定契約違反はcurrent blockerになる`,
     );
   else
     notes.push(
-      `影響集合を証明できないため全体reviewを適用する（focus.adjacentScopeUnbounded=true。全pathを隣接範囲として扱い、前round blocker起因のHigh回帰と固定契約違反は修正差分外でもcurrent blockerになる）: ${impact.reasons.slice(0, 3).join("; ")}${impact.reasons.length > 3 ? ` ほか${impact.reasons.length - 3}件` : ""}`,
+      `影響集合を証明できないため全体reviewを適用する（focus.adjacentScopeUnbounded=true。全pathを隣接範囲として扱い、前round blocker起因のHigh回帰と固定契約違反は修正差分外でもcurrent blockerになる）: ${(impact.reviewReasons ?? impact.reasons).slice(0, 3).join("; ")}${(impact.reviewReasons ?? impact.reasons).length > 3 ? ` ほか${(impact.reviewReasons ?? impact.reasons).length - 3}件` : ""}`,
     );
   if (impact.securitySensitive)
     notes.push(
@@ -447,6 +446,10 @@ export function buildReviewRoundDraft(input: {
       notes.push(
         "sessionがあるため--base・--scope・--ac・--invariantは無視し、anchorをsessionから写した",
       );
+    const observer = createReuseObserver(root, {
+      issue: stagingTrackerIssue(staging),
+      session: previous,
+    });
     const previousHeadSha = deriveEffectiveHead({
       records: readEvidenceReanchorChain(staging),
       anchoredHeadSha: previous.latestCandidateHeadSha,
@@ -505,12 +508,7 @@ export function buildReviewRoundDraft(input: {
     let adjacentScope: readonly ReviewAdjacentScope[] = [];
     let adjacentScopeUnbounded = false;
     if (fixed.length > 0) {
-      const derived = deriveReviewRoundImpact({
-        root,
-        previousHeadSha,
-        headSha,
-        records: { issue: stagingTrackerIssue(staging), session: previous },
-      });
+      const derived = observer.deriveImpact(previousHeadSha, headSha);
       adjacentScope = derived.adjacentScope;
       adjacentScopeUnbounded = derived.adjacentScopeUnbounded;
       notes.push(...impactNotes(derived.impact));
@@ -541,6 +539,7 @@ export function buildReviewRoundDraft(input: {
             fromSha: previousHeadSha,
             toSha: headSha,
             focus,
+            observer,
           });
     if (assignment)
       notes.push(
@@ -802,6 +801,10 @@ export function previewReviewRound(input: {
      * **正規経路が再び塞がる**（Issue #1172）。chainが空なら
      * `latestCandidateHeadSha`そのものになり、判定は変更前と同一である。
      */
+    const observer = createReuseObserver(root, {
+      issue: stagingTrackerIssue(staging),
+      session: previous,
+    });
     const previousHeadSha = deriveEffectiveHead({
       records: readEvidenceReanchorChain(staging),
       anchoredHeadSha: previous.latestCandidateHeadSha,
@@ -826,15 +829,7 @@ export function previewReviewRound(input: {
     const expectedImpact =
       fixed.length === 0
         ? { adjacentScope: [], adjacentScopeUnbounded: false }
-        : deriveReviewRoundImpact({
-            root,
-            previousHeadSha,
-            headSha: input.round.candidateHeadSha,
-            records: {
-              issue: stagingTrackerIssue(staging),
-              session: previous,
-            },
-          });
+        : observer.deriveImpact(previousHeadSha, input.round.candidateHeadSha);
     if (
       stableJson(expectedImpact.adjacentScope) !==
       stableJson(input.round.focus.adjacentScope)
@@ -909,6 +904,7 @@ export function previewReviewRound(input: {
         fromSha: previousHeadSha,
         toSha: round.candidateHeadSha,
         focus: round.focus,
+        observer,
       });
       if (round.inspection === undefined)
         round = { ...round, inspection: assignment.inspection };

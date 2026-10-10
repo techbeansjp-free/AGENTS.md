@@ -49,6 +49,8 @@ import {
   observeReviewDiff,
   readStoredReviewSession,
 } from "../../src/adapters/review-session.js";
+import { observeWorkflowHandoff } from "../../src/adapters/workflow-handoff.js";
+import { observeWorkflowResume } from "../../src/adapters/workflow-resume.js";
 import { main } from "../../src/cli.js";
 
 interface PocModeWorld extends WorkflowWorld {
@@ -622,6 +624,30 @@ Then("stagingのモードはpocである", function () {
 });
 
 Then("stagingには00要求定義とstaging記録が存在する", function () {
+  const previousMode = process.env.ASC_EXECUTION_CONTEXT_MODE;
+  process.env.ASC_EXECUTION_CONTEXT_MODE = "short-lived";
+  try {
+    const handoff = observeWorkflowHandoff(
+      this.issue.path,
+      1,
+      observeWorkflowResume(this.issue.path),
+    );
+    assert.ok(handoff && "kind" in handoff);
+    assert.deepEqual(handoff.read?.staging, [
+      "00_モード判定.json",
+      "00_要求定義.md",
+    ]);
+    assert.equal(
+      handoff.read?.skill,
+      ".agent-skill-chain/skills/step-01-request/SKILL.md",
+    );
+    assert.equal(handoff.authority, "advisory");
+    assert.equal(handoff.workUnit.freshContextRequired, true);
+  } finally {
+    if (previousMode === undefined)
+      delete process.env.ASC_EXECUTION_CONTEXT_MODE;
+    else process.env.ASC_EXECUTION_CONTEXT_MODE = previousMode;
+  }
   assert.deepEqual(fs.readdirSync(this.issue.path), [
     "00_モード判定.json",
     "00_要求定義.md",

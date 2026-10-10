@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
+import {
+  observeWorkflowHandoff,
+  workflowAgentDispatch,
+} from "../../src/adapters/workflow-handoff.js";
+import type { WorkflowResume } from "../../src/domain/workflow-resume.js";
+import { main } from "../../src/cli.js";
+import { createIssueStaging } from "../../src/domain/issue.js";
+import { QUESTIONS } from "../../src/domain/mode.js";
+
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class ResumeDisciplineWorld extends WorkflowWorld {
@@ -131,5 +140,167 @@ Then(
   "context境界・再開順・拡大条件があり、adapterは全文読みを指示しない",
   function () {
     assert.equal(this.checked, true);
+  },
+);
+
+Then(
+  "advanceのpreviewは計画本文を読まずapplyはlock前後の変更を拒否する",
+  async function () {
+    const root = this.initRepo();
+    const staging = createIssueStaging(root, {
+      title: "preview-read-boundary",
+      answers: Object.fromEntries(
+        QUESTIONS.map((id) => [id, { answer: true, evidence: "fixture" }]),
+      ),
+      requestedMode: "full",
+      now: new Date("2026-08-25T12:00:00Z"),
+    }).path;
+    const documents = [
+      "00_要求定義.md",
+      "01_要件定義.md",
+      "02_設計.md",
+      "03_実装計画.md",
+    ].map((name) => path.join(staging, name));
+    const reads: string[] = [];
+    const originalRead = fs.readFileSync;
+    const originalLink = fs.linkSync;
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    let output = "";
+    let mutated = false;
+    fs.readFileSync = new Proxy(originalRead, {
+      apply(
+        target,
+        thisArg: unknown,
+        args: Parameters<typeof fs.readFileSync>,
+      ) {
+        if (typeof args[0] === "string" && documents.includes(args[0]))
+          reads.push(args[0]);
+        return Reflect.apply(target, thisArg, args) as ReturnType<
+          typeof fs.readFileSync
+        >;
+      },
+    });
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      assert.equal(
+        await main(["workflow", "advance", `--staging=${staging}`]),
+        0,
+      );
+      assert.equal(
+        (JSON.parse(output) as { targetStep: number }).targetStep,
+        1,
+      );
+      const preview = JSON.parse(output) as { resume: WorkflowResume };
+      const previousMode = process.env.ASC_EXECUTION_CONTEXT_MODE;
+      process.env.ASC_EXECUTION_CONTEXT_MODE = "short-lived";
+      try {
+        const requirements = observeWorkflowHandoff(staging, 2, preview.resume);
+        const implementation = observeWorkflowHandoff(
+          staging,
+          9,
+          preview.resume,
+        );
+        assert.ok(requirements && "kind" in requirements);
+        assert.ok(implementation && "kind" in implementation);
+        assert.deepEqual(requirements.read?.staging, ["00_要求定義.md"]);
+        assert.deepEqual(implementation.read?.staging, [
+          "00_要求定義.md",
+          "01_要件定義.md",
+          "02_設計.md",
+          "03_実装計画.md",
+          "05_計画変更.md",
+        ]);
+        assert.match(
+          implementation.read!.skill,
+          /step-09-implement\/SKILL.md$/u,
+        );
+        const quickStaging = createIssueStaging(root, {
+          title: "quick-read-boundary",
+          answers: Object.fromEntries(
+            QUESTIONS.map((id) => [id, { answer: true, evidence: "fixture" }]),
+          ),
+          requestedMode: "quick",
+          now: new Date("2026-08-25T12:01:00Z"),
+        }).path;
+        const quick = observeWorkflowHandoff(quickStaging, 9, {
+          ...preview.resume,
+          staging: quickStaging,
+        });
+        assert.ok(quick && "kind" in quick);
+        assert.deepEqual(quick.read?.staging, [
+          "00_要求定義.md",
+          "05_計画変更.md",
+        ]);
+        assert.equal(quick.read?.skill, implementation.read?.skill);
+        for (const inputStaging of [staging, quickStaging]) {
+          const request = observeWorkflowHandoff(inputStaging, 1, {
+            ...preview.resume,
+            staging: inputStaging,
+          });
+          assert.ok(request && "kind" in request);
+          assert.deepEqual(request.read?.staging, [
+            "00_モード判定.json",
+            "00_要求定義.md",
+          ]);
+          for (const input of request.read!.staging)
+            assert.ok(fs.existsSync(path.join(inputStaging, input)));
+          assert.equal(request.read?.skill, DOCUMENTS.step1);
+          assert.equal(request.authority, "advisory");
+          assert.equal(request.workUnit.freshContextRequired, true);
+        }
+        assert.ok(fs.existsSync(path.resolve(implementation.read!.skill)));
+        assert.equal(implementation.authority, "advisory");
+        const dispatch = workflowAgentDispatch(implementation);
+        assert.ok(dispatch);
+        assert.deepEqual(
+          (JSON.parse(dispatch.prompt) as { handoff: unknown }).handoff,
+          implementation,
+        );
+        assert.notEqual(
+          requirements.workUnit!.workUnitId,
+          implementation.workUnit.workUnitId,
+        );
+        assert.equal(implementation.workUnit.freshContextRequired, true);
+        const otherHead = observeWorkflowHandoff(staging, 9, {
+          ...preview.resume,
+          headSha: "a".repeat(40),
+        });
+        assert.ok(otherHead && "kind" in otherHead);
+        assert.notEqual(
+          otherHead.workUnit!.workUnitId,
+          implementation.workUnit.workUnitId,
+        );
+        const blocked = observeWorkflowHandoff(staging, 9, {
+          ...preview.resume,
+          errors: ["journal mismatch"],
+        });
+        assert.equal(workflowAgentDispatch(blocked), undefined);
+      } finally {
+        if (previousMode === undefined)
+          delete process.env.ASC_EXECUTION_CONTEXT_MODE;
+        else process.env.ASC_EXECUTION_CONTEXT_MODE = previousMode;
+      }
+      assert.equal(reads.length, 0);
+      fs.linkSync = (existingPath, newPath) => {
+        originalLink(existingPath, newPath);
+        if (String(newPath).endsWith(".mutation.lock")) {
+          fs.appendFileSync(documents[0]!, "\nconcurrent change\n");
+          mutated = true;
+        }
+      };
+      await assert.rejects(
+        main(["workflow", "advance", `--staging=${staging}`, "--apply"]),
+        /writer lock取得前にstagingまたはjournalが変更/,
+      );
+      assert.equal(mutated, true);
+      for (const document of documents) assert.ok(reads.includes(document));
+    } finally {
+      fs.readFileSync = originalRead;
+      fs.linkSync = originalLink;
+      process.stdout.write = originalWrite;
+    }
   },
 );
