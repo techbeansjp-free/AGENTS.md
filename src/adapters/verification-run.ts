@@ -1,4 +1,7 @@
-import { spawn } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import os from "node:os";
+import { once } from "node:events";
+import { finished } from "node:stream/promises";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -331,7 +334,7 @@ export interface VerificationRunResult {
  *    argvは既定branchのtrusted policyの宣言に一致しなければならない。`scope=full`は
  *    `verification.fullCommand`と完全一致、`scope=targeted`は`verification.targetedRunner`
  *    で始まり影響集合の選んだfeatureを全部含む
- * 3. commandを実行する。出力は標準エラーへ中継し、記録にはdigestだけを残す
+ * 3. commandを同期実行する。出力は終了後に標準エラーへ中継し、記録にはdigestだけを残す
  * 4. 実行後もHEADとworktreeが変わっていないことを確かめてから記録する
  */
 interface VerificationRunInput {
@@ -348,17 +351,62 @@ export async function runVerification(
   input: VerificationRunInput,
 ): Promise<VerificationRunResult> {
   const staging = assertWorkflowStaging(input.staging);
-  return withStagingMutationLock(staging, () => runObservedVerification(input));
+  const transcripts: { descriptor: number; bytes: number }[] = [];
+  try {
+    return withStagingMutationLock(staging, () =>
+      runObservedVerification(input, transcripts),
+    );
+  } finally {
+    // Replay after the synchronous transaction, respecting stream backpressure.
+    // The unlinked descriptors disappear even if this process is killed.
+    try {
+      const output = input.output ?? process.stderr;
+      for (const { descriptor, bytes: limit } of transcripts) {
+        let position = 0;
+        while (position < limit) {
+          const buffer = Buffer.allocUnsafe(64 * 1024);
+          const bytes = fs.readSync(
+            descriptor,
+            buffer,
+            0,
+            Math.min(buffer.length, limit - position),
+            position,
+          );
+          if (bytes === 0) break;
+          if (!output.write(buffer.subarray(0, bytes))) {
+            const controller = new AbortController();
+            try {
+              await Promise.race([
+                once(output, "drain", { signal: controller.signal }),
+                finished(output, {
+                  readable: false,
+                  cleanup: true,
+                  signal: controller.signal,
+                }).then(() => {
+                  throw new Error("verification output ended before drain");
+                }),
+              ]);
+            } finally {
+              controller.abort();
+            }
+          }
+          position += bytes;
+        }
+      }
+    } finally {
+      for (const { descriptor } of transcripts) fs.closeSync(descriptor);
+    }
+  }
 }
 
-async function runObservedVerification(
+function runObservedVerification(
   input: VerificationRunInput,
-): Promise<VerificationRunResult> {
+  transcripts: { descriptor: number; bytes: number }[],
+): VerificationRunResult {
   const staging = assertWorkflowStaging(input.staging);
   const root = stagingRepositoryRoot(staging);
   const argv = validateVerificationArgv([...input.argv], "verify runのcommand");
   const now = input.now ?? (() => new Date());
-  const output = input.output ?? process.stderr;
   if (input.scope !== "targeted" && input.scope !== "full")
     throw new Error("verify runの--scopeはtargetedまたはfullが必要です");
   verificationDeliveryPhase(staging);
@@ -445,35 +493,58 @@ async function runObservedVerification(
   const startedAt = now().toISOString();
   const stdout = crypto.createHash("sha256");
   const stderr = crypto.createHash("sha256");
-  const outcome = await new Promise<{
-    exitCode: number | null;
-    signal: string | null;
-  }>((resolve, reject) => {
-    const child = spawn(file, args, {
-      cwd: root,
-      env: process.env,
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout.update(chunk);
-      output.write(chunk);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr.update(chunk);
-      output.write(chunk);
-    });
-    child.once("error", (error) =>
-      reject(
-        new Error(
-          `verify runのcommandを起動できません: ${file}（${(error as NodeJS.ErrnoException).code ?? error.name}）`,
-        ),
-      ),
-    );
-    child.once("close", (code, signal) =>
-      resolve({ exitCode: signal === null ? code : null, signal }),
-    );
+  // The existing writer lock is synchronous. Private file descriptors avoid
+  // holding unbounded command output in RAM while keeping the lock until record.
+  // Relay only after completion; never retain a transcript in formal evidence.
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "asc-verification-"));
+  try {
+    for (const name of ["stdout", "stderr"]) {
+      const file = path.join(temporary, name);
+      transcripts.push({
+        descriptor: fs.openSync(file, "wx+", 0o600),
+        bytes: 0,
+      });
+      fs.unlinkSync(file);
+    }
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+  const child = spawnSync(file, args, {
+    cwd: root,
+    env: process.env,
+    shell: false,
+    stdio: ["ignore", transcripts[0]!.descriptor, transcripts[1]!.descriptor],
   });
+  // Freeze the observed length when the main command exits. Detached descendants
+  // may still append through inherited descriptors; those later bytes are not
+  // part of this command observation and must not appear in its replay either.
+  for (const transcript of transcripts)
+    transcript.bytes = fs.fstatSync(transcript.descriptor).size;
+  if (child.error)
+    throw new Error(
+      `verify runのcommandを起動できません: ${file}（${(child.error as NodeJS.ErrnoException).code ?? child.error.name}）`,
+    );
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  for (const [index, digest] of [stdout, stderr].entries()) {
+    let position = 0;
+    const transcript = transcripts[index]!;
+    while (position < transcript.bytes) {
+      const bytes = fs.readSync(
+        transcript.descriptor,
+        buffer,
+        0,
+        Math.min(buffer.length, transcript.bytes - position),
+        position,
+      );
+      if (bytes === 0) break;
+      digest.update(buffer.subarray(0, bytes));
+      position += bytes;
+    }
+  }
+  const outcome = {
+    exitCode: child.signal === null ? child.status : null,
+    signal: child.signal,
+  };
   const finishedAt = now().toISOString();
   if (resolveCommit(root, "current HEAD", "HEAD") !== headSha)
     throw new Error(

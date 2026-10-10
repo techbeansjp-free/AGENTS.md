@@ -2,6 +2,7 @@ import { inspectWorkflowReadiness } from "../../src/domain/lifecycle.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import os from "node:os";
+import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -16,7 +17,10 @@ import {
   recordStoredStep11,
 } from "../../src/adapters/delivery-state.js";
 import { readStoredReviewSession } from "../../src/adapters/review-session.js";
-import { readVerificationRuns } from "../../src/adapters/verification-run.js";
+import {
+  readVerificationRuns,
+  runVerification,
+} from "../../src/adapters/verification-run.js";
 import {
   canonicalDigest,
   closingContractDigest,
@@ -28,7 +32,6 @@ import {
   calculateStagingDigest,
   listStagingArtifacts,
   readStoredStagingRecord,
-  withStagingMutationLock,
 } from "../../src/domain/staging.js";
 import {
   VERIFICATION_RUN_FILE,
@@ -68,6 +71,8 @@ const FIXTURE_SCRIPT = [
   `if (process.env.ASC_VERIFY_CONCURRENCY_DIR) { const fs = require("node:fs"); const p = require("node:path"); const d = process.env.ASC_VERIFY_CONCURRENCY_DIR; fs.appendFileSync(p.join(d, "executions"), "run\\n"); process.stderr.write("VERIFY-BARRIER-READY\\n"); const timer = setInterval(() => { if (fs.existsSync(p.join(d, "release"))) clearInterval(timer); }, 20); }`,
   `if (mode === "fail") { process.stdout.write(${JSON.stringify(SECRET_OUTPUT.split("-"))}.join("-")); process.exit(3); }`,
   `if (mode === "signal") process.kill(process.pid, "SIGTERM");`,
+  `if (mode === "late") { const fs = require("node:fs"); fs.writeSync(1, "observed"); const source = 'const fs=require("node:fs"),path=require("node:path"),d=process.env.ASC_VERIFY_LATE_DIR; const t=setInterval(()=>{if(fs.existsSync(path.join(d,"release"))){clearInterval(t);fs.writeSync(1,"late");fs.writeFileSync(path.join(d,"done"),"done");}},10);'; require("node:child_process").spawn(process.execPath,["-e",source],{detached:true,stdio:["ignore",1,2]}).unref(); }`,
+  `if (mode === "large") { const fs = require("node:fs"); for (const fd of [1, 2]) { const stat = fs.fstatSync(fd); if (!stat.isFile() || (stat.mode & 0o777) !== 0o600 || stat.nlink !== 0) throw new Error("output descriptor must be private and unlinked"); } fs.writeSync(1, Buffer.alloc(3 * 1024 * 1024, 65)); fs.writeSync(2, Buffer.alloc(2 * 1024 * 1024, 66)); }`,
   `if (mode === "head") require("node:child_process").execFileSync("git", ["commit", "--allow-empty", "-q", "-m", "move fixture HEAD"]);`,
   `if (mode === "write") require("node:fs").writeFileSync("generated.txt", "x");`,
 ].join(" ");
@@ -684,6 +689,7 @@ Then(
 
 When(
   "同じstagingへ複数processでreuseと通常runを同時要求する",
+  { timeout: 30_000 },
   async function () {
     const directory = fs.mkdtempSync(
       path.join(os.tmpdir(), "asc-verify-race-"),
@@ -716,18 +722,19 @@ When(
         },
       );
       let stdout = "";
-      let stderr = "";
-      let signalReady!: () => void;
+      let readyTimer: ReturnType<typeof setInterval>;
       const ready = new Promise<void>((resolve) => {
-        signalReady = resolve;
+        readyTimer = setInterval(() => {
+          if (fs.existsSync(path.join(directory, "executions"))) {
+            clearInterval(readyTimer);
+            resolve();
+          }
+        }, 20);
       });
       child.stdout.on("data", (chunk: Buffer) => {
         stdout += chunk.toString();
       });
-      child.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString();
-        if (stderr.includes("VERIFY-BARRIER-READY")) signalReady();
-      });
+      child.stderr.resume();
       const done = new Promise<{
         code: number | null;
         output: Record<string, unknown>;
@@ -741,6 +748,7 @@ When(
           reject(error);
         });
         child.once("close", (code) => {
+          clearInterval(readyTimer);
           clearTimeout(timer);
           try {
             resolve({
@@ -797,23 +805,23 @@ When(
         "run\nrun\n",
       );
       assert.equal(readVerificationRuns(this.staging).length, 2);
-      // Independent asynchronous calls in one process must not inherit another owner's lock.
-      let release!: () => void;
-      const blocked = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      const owner = withStagingMutationLock(this.staging, async () => {
-        await blocked;
-      });
-      try {
-        assert.throws(
-          () => withStagingMutationLock(this.staging, () => undefined),
-          /stagingを更新中/u,
-        );
-      } finally {
-        release();
-        await owner;
-      }
+      // Same-process calls serialize synchronously; the second sees the first record.
+      const input = {
+        staging: this.staging,
+        base: this.base,
+        scope: "full" as const,
+        argv: FULL_COMMAND,
+      };
+      const [executed, sameProcessReuse] = await Promise.all([
+        runVerification(input),
+        runVerification({ ...input, reuse: true }),
+      ]);
+      assert.equal(sameProcessReuse.reused, true);
+      assert.equal(
+        sameProcessReuse.record.recordDigest,
+        executed.record.recordDigest,
+      );
+      assert.equal(readVerificationRuns(this.staging).length, 3);
       this.stagingDigests.concurrent = readStoredStagingRecord(
         this.staging,
       ).digest;
@@ -828,10 +836,147 @@ When(
 Then(
   "競合要求は実行前に拒否され終了後だけ再利用し通常runは再実行する",
   function () {
-    assert.equal(readVerificationRuns(this.staging).length, 2);
+    assert.equal(readVerificationRuns(this.staging).length, 3);
     assert.equal(
       this.stagingDigests.concurrent,
       calculateStagingDigest(this.staging, listStagingArtifacts(this.staging)),
     );
   },
 );
+
+When("大量の検証出力を遅い出力先へ中継する", async function () {
+  const digest = crypto.createHash("sha256");
+  const staging = this.staging;
+  let bytes = 0;
+  const output = new Writable({
+    highWaterMark: 1024,
+    write(chunk: Buffer, _encoding, callback) {
+      assert.ok(chunk.length <= 64 * 1024);
+      assert.equal(
+        readVerificationRuns(staging).length,
+        1,
+        "record committed before output relay",
+      );
+      bytes += chunk.length;
+      digest.update(chunk);
+      setImmediate(callback);
+    },
+  });
+  process.env[MODE_VARIABLE] = "large";
+  try {
+    const result = await runVerification({
+      staging: this.staging,
+      base: this.base,
+      scope: "full",
+      argv: FULL_COMMAND,
+      output,
+    });
+    assert.equal(result.record.exitCode, 0);
+    const stdout = Buffer.alloc(3 * 1024 * 1024, 65);
+    const stderr = Buffer.alloc(2 * 1024 * 1024, 66);
+    assert.equal(
+      result.record.stdoutDigest,
+      crypto.createHash("sha256").update(stdout).digest("hex"),
+    );
+    assert.equal(
+      result.record.stderrDigest,
+      crypto.createHash("sha256").update(stderr).digest("hex"),
+    );
+    assert.equal(bytes, stdout.length + stderr.length);
+    assert.equal(
+      digest.digest("hex"),
+      crypto.createHash("sha256").update(stdout).update(stderr).digest("hex"),
+    );
+  } finally {
+    delete process.env[MODE_VARIABLE];
+    output.destroy();
+  }
+});
+
+Then("出力を欠落させず個別digestを記録し一時出力を公開しない", function () {
+  assert.equal(readVerificationRuns(this.staging).length, 1);
+  assert.ok(fs.statSync(recordFile(this)).size < 20_000);
+});
+
+When("中継先がdrain前に閉じても停止し後続要求を処理できる", async function () {
+  process.env[MODE_VARIABLE] = "large";
+  try {
+    for (const emitClose of [true, false]) {
+      const output = new Writable({
+        highWaterMark: 1,
+        emitClose,
+        write(_chunk, _encoding, callback) {
+          this.destroy();
+          callback();
+        },
+      });
+      await assert.rejects(
+        runVerification({
+          staging: this.staging,
+          base: this.base,
+          scope: "full",
+          argv: FULL_COMMAND,
+          output,
+        }),
+        /premature close|ended before drain/i,
+      );
+      for (const event of ["drain", "close", "error", "finish"])
+        assert.equal(output.listenerCount(event), 0);
+    }
+    assert.equal(readVerificationRuns(this.staging).length, 2);
+  } finally {
+    delete process.env[MODE_VARIABLE];
+  }
+});
+
+When("main終了後の子孫追記を観測digestと中継から除外する", async function () {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "asc-late-output-"));
+  const chunks: Buffer[] = [];
+  const output = new Writable({
+    highWaterMark: 1,
+    write(chunk: Buffer, _encoding, callback) {
+      chunks.push(Buffer.from(chunk));
+      fs.writeFileSync(path.join(directory, "release"), "release");
+      let attempts = 0;
+      const timer = setInterval(() => {
+        if (fs.existsSync(path.join(directory, "done"))) {
+          clearInterval(timer);
+          callback();
+        } else if (++attempts > 500) {
+          clearInterval(timer);
+          callback(new Error("late descendant did not finish"));
+        }
+      }, 10);
+    },
+  });
+  process.env[MODE_VARIABLE] = "late";
+  process.env.ASC_VERIFY_LATE_DIR = directory;
+  try {
+    const result = await runVerification({
+      staging: this.staging,
+      base: this.base,
+      scope: "full",
+      argv: FULL_COMMAND,
+      output,
+    });
+    assert.equal(fs.readFileSync(path.join(directory, "done"), "utf8"), "done");
+    assert.equal(Buffer.concat(chunks).toString(), "observed");
+    assert.equal(
+      result.record.stdoutDigest,
+      crypto.createHash("sha256").update("observed").digest("hex"),
+    );
+    assert.equal(
+      result.record.stderrDigest,
+      crypto.createHash("sha256").update("").digest("hex"),
+    );
+  } finally {
+    delete process.env[MODE_VARIABLE];
+    delete process.env.ASC_VERIFY_LATE_DIR;
+    output.destroy();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+Then("中継失敗後も2回の実検証記録が保持される", function () {
+  assert.equal(readVerificationRuns(this.staging).length, 2);
+});

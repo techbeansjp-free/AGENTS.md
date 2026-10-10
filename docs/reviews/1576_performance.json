@@ -33,7 +33,7 @@
   ],
   "details": {
     "path": "docs/reviews/1576_performance.raw.json",
-    "sha256": "37c59c3ca23b51ea77d999b95658723cec1ae578cc48fea36cc1f7d03b7e767e",
+    "sha256": "f594199bfc71e6f91c4c83e2b46e5b03165612edb27cc84026079ca05fc8d315",
     "keys": [
       "kind",
       "issue",
@@ -77,7 +77,8 @@
       "revisionMetricCoverage",
       "revisionBPilotRepairReview",
       "revisionFinalSpecTestReview",
-      "revisionExecutionModel"
+      "revisionExecutionModel",
+      "revisionWorkUnitExecutionContract"
     ]
   },
   "limitations": [
@@ -265,6 +266,11 @@
       "status": "implemented; new measurements pending",
       "detailKey": "revisionExecutionModel",
       "candidateSha": "a974d0d0f969154bb67758648e78f902105ba5a2"
+    },
+    "workUnitExecutionContract": {
+      "status": "implementation in progress; not performance validated",
+      "detailKey": "revisionWorkUnitExecutionContract",
+      "paidTrials": 0
     }
   }
 }

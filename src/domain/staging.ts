@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -85,10 +84,7 @@ const ROOT_META = /[\0\p{Cc}\p{Cf}%$*?{}~]/u;
 const CURRENT_TRACKER =
   /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/[1-9]\d*$/u;
 const LEGACY_TRACKER = /^#?([1-9]\d*)$/u;
-const mutationLockContext = new AsyncLocalStorage<
-  ReadonlyMap<string, string>
->();
-const heldMutationLocks = new Map<string, string>();
+const heldMutationLocks = new Set<string>();
 
 function processIsAlive(pid: number): boolean {
   try {
@@ -105,8 +101,7 @@ function processIsAlive(pid: number): boolean {
 
 /**
  * staging単位のwriter lock。lock自体は成果物digestへ混ぜないようissues直下へ置く。
- * 同一呼出しcontext内は再入可能とし、Promiseは完了まで保持する。
- * process停止で残ったlockだけをPID確認後に回収する。
+ * 同一process内は再入可能とし、process停止で残ったlockだけをPID確認後に回収する。
  */
 export function withStagingMutationLock<Result>(
   directory: string,
@@ -122,12 +117,7 @@ export function withStagingMutationLock<Result>(
     path.dirname(staging),
     `.${path.basename(staging)}.mutation.lock`,
   );
-  const contextOwner = mutationLockContext.getStore()?.get(lockPath);
-  if (
-    contextOwner !== undefined &&
-    heldMutationLocks.get(lockPath) === contextOwner
-  )
-    return mutate();
+  if (heldMutationLocks.has(lockPath)) return mutate();
 
   const nonce = crypto.randomBytes(16).toString("hex");
   const source = `${stableJson({
@@ -197,43 +187,34 @@ export function withStagingMutationLock<Result>(
   }
   if (!acquired) throw new Error("staging writer lockを取得できませんでした");
 
-  heldMutationLocks.set(lockPath, nonce);
-  const release = (mutationError?: unknown): void => {
-    heldMutationLocks.delete(lockPath);
-    if (fs.existsSync(lockPath)) {
-      const current = fs.readFileSync(lockPath, "utf8");
-      if (current !== source)
-        throw new Error("staging writer lockの所有権が実行中に変化しました", {
-          ...(mutationError === undefined ? {} : { cause: mutationError }),
-        });
-      fs.unlinkSync(lockPath);
-    }
-  };
-  let result: Result;
+  heldMutationLocks.add(lockPath);
+  let result: Result | undefined;
+  let mutationError: unknown;
+  let mutationFailed = false;
   try {
-    result = mutationLockContext.run(
-      new Map([...(mutationLockContext.getStore() ?? []), [lockPath, nonce]]),
-      mutate,
-    );
+    result = mutate();
   } catch (error) {
-    release(error);
-    throw error;
+    mutationFailed = true;
+    mutationError = error;
   }
-  // Keep the same writer lock through asynchronous command completion and recording.
-  // Context-local reentrancy permits nested writes, never unrelated concurrent calls.
-  if (result instanceof Promise)
-    return result.then(
-      (value: unknown) => {
-        release();
-        return value;
-      },
-      (error: unknown) => {
-        release(error);
-        throw error;
-      },
-    ) as Result;
-  release();
-  return result;
+  heldMutationLocks.delete(lockPath);
+  if (fs.existsSync(lockPath)) {
+    const current = fs.readFileSync(lockPath, "utf8");
+    if (current !== source)
+      throw new Error("staging writer lockの所有権が実行中に変化しました", {
+        ...(!mutationFailed
+          ? {}
+          : {
+              cause:
+                mutationError instanceof Error
+                  ? mutationError
+                  : new Error(String(mutationError)),
+            }),
+      });
+    fs.unlinkSync(lockPath);
+  }
+  if (mutationFailed) throw mutationError;
+  return result as Result;
 }
 
 interface InventoryEntry {

@@ -62,8 +62,10 @@ import {
 import {
   observeWorkflowHandoff,
   workflowAgentDispatch,
+  workflowReviewerAlternative,
 } from "./adapters/workflow-handoff.js";
 import { observeWorkflowResume } from "./adapters/workflow-resume.js";
+import { observeWorkflowExecutionPlan } from "./adapters/workflow-execution-plan.js";
 import {
   assertPullRequestTrackerBinding,
   createPullRequest,
@@ -399,6 +401,8 @@ function workflowArguments(args: string[]): {
     "init",
     "apply",
     "dry-run",
+    "plan",
+    "prepare-next",
     "post-terminal-intake",
     "post-pr-intake",
     /**
@@ -417,6 +421,8 @@ function workflowArguments(args: string[]): {
     const equal = argument.indexOf("=");
     const key = argument.slice(2, equal === -1 ? undefined : equal);
     let value = equal === -1 ? undefined : argument.slice(equal + 1);
+    if (equal !== -1 && (key === "plan" || key === "prepare-next"))
+      throw new Error(`--${key}は値を付けずに指定してください`);
     if (value === undefined && booleanFlags.has(key)) {
       if (flags[key] !== undefined)
         throw new Error(`オプションが重複しています: --${key}`);
@@ -6454,11 +6460,29 @@ export async function main(
           "apply",
           "dry-run",
           "continue-from",
+          "plan",
+          "prepare-next",
         ].includes(flag),
     );
     if (unknown.length > 0)
       throw new Error(
         `workflow advanceの未知optionです: --${unknown.join(", --")}`,
+      );
+    const planOnly = presentFlag(flags, "plan");
+    const prepareNext = presentFlag(flags, "prepare-next");
+    if (prepareNext && !apply)
+      throw new Error("workflow advance --prepare-nextには--applyが必要です");
+    if (
+      planOnly &&
+      (apply ||
+        artifacts.length > 0 ||
+        Object.keys(flags).some(
+          (key) =>
+            !["staging", "plan", "continue-from", "dry-run"].includes(key),
+        ))
+    )
+      throw new Error(
+        "workflow advance --planは副作用なしの作業契約観測専用です",
       );
     const staging = path.resolve(required(flags, "staging"));
     const inspected = inspectWorkflowStaging(staging);
@@ -6526,6 +6550,47 @@ export async function main(
       )
         throw new Error("continuationにはtracked変更のcommitが必要です");
     }
+    if (planOnly) {
+      const executionPlan = observeWorkflowExecutionPlan(
+        staging,
+        inspected,
+        continuationFromHead,
+      );
+      print(executionPlan);
+      return executionPlan.state === "blocked" ? 1 : 0;
+    }
+    // A completed transition is preserved even if observing its successor fails.
+    const printApplied = (result: Record<string, unknown>): number => {
+      if (!prepareNext) {
+        print(result);
+        return 0;
+      }
+      const recovery = {
+        command: "workflow advance",
+        argv: ["workflow", "advance", `--staging=${staging}`, "--plan"],
+        appliesTransition: false,
+      };
+      let preparation: Record<string, unknown>;
+      let blocked: boolean;
+      try {
+        const executionPlan = observeWorkflowExecutionPlan(staging);
+        blocked = executionPlan.state === "blocked";
+        preparation = {
+          status: blocked ? "blocked" : "ready",
+          executionPlan,
+          ...(blocked ? { recovery } : {}),
+        };
+      } catch (error) {
+        blocked = true;
+        preparation = {
+          status: "blocked",
+          errors: [error instanceof Error ? error.message : String(error)],
+          recovery,
+        };
+      }
+      print({ ...result, preparation });
+      return blocked ? 1 : 0;
+    };
     const plan = planWorkflowAdvance({
       mode: inspected.mode,
       currentStep: inspected.currentStep,
@@ -6611,35 +6676,7 @@ export async function main(
         resume,
         continuationFromHead,
       );
-      const reviewerHandoff =
-        handoff &&
-        "kind" in handoff &&
-        handoff.role === "correction" &&
-        handoff.workUnit
-          ? {
-              ...handoff,
-              role: "reviewer",
-              read: {
-                skill: ".agent-skill-chain/skills/step-10-review/SKILL.md",
-                staging: ["review-session.json"],
-                optionalStaging: [],
-              },
-              reviewRound: (handoff.reviewRound ?? 0) + 1,
-              workUnit: {
-                ...handoff.workUnit,
-                workUnitId: crypto
-                  .createHash("sha256")
-                  .update(
-                    JSON.stringify({
-                      from: handoff.workUnit.workUnitId,
-                      role: "reviewer",
-                      reviewRound: (handoff.reviewRound ?? 0) + 1,
-                    }),
-                  )
-                  .digest("hex"),
-              },
-            }
-          : undefined;
+      const reviewerHandoff = workflowReviewerAlternative(handoff);
       const execution =
         handoff === undefined
           ? {}
@@ -6775,8 +6812,7 @@ export async function main(
           headSha: candidateHeadSha,
           expectedStagingDigest: initialContentDigest,
         });
-        print({ ...plan, state: "applied", result });
-        return 0;
+        return printApplied({ ...plan, state: "applied", result });
       }
       if (flags.authorize !== "approved")
         throw new Error("Issue同期には--authorize=approvedが必要です");
@@ -6919,7 +6955,7 @@ export async function main(
             entry,
             expectedStagingDigest: initialContentDigest,
           });
-          print({
+          resultCode = printApplied({
             ...plan,
             state: "applied",
             result: {
@@ -6936,7 +6972,6 @@ export async function main(
                 : {}),
             },
           });
-          resultCode = 0;
         } catch (error) {
           let publicationState: "published" | "unpublished" | "unknown" =
             syncConfirmed ? "published" : "unknown";
@@ -6989,7 +7024,7 @@ export async function main(
                 "公開済みworkflow journal transactionの復旧後検査に失敗しました",
                 { cause: error },
               );
-            print({
+            resultCode = printApplied({
               ...plan,
               state: "applied",
               result: {
@@ -7010,7 +7045,6 @@ export async function main(
                 },
               },
             });
-            resultCode = 0;
           } else {
             const retry =
               publicationState === "published"

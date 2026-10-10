@@ -676,8 +676,13 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "人が補足する検証証拠",
         "Step 1〜3・5〜9を--applyするとき",
       ),
-      conditional("repo", "owner/name", "同期先repository", "Step 4/8"),
-      conditional("issue", "整数", "同期先Issue番号", "Step 4/8"),
+      conditional(
+        "repo",
+        "owner/name",
+        "同期先repository",
+        "Step 4/8（--plan以外）",
+      ),
+      conditional("issue", "整数", "同期先Issue番号", "Step 4/8（--plan以外）"),
       conditional(
         "authorize",
         "approved",
@@ -700,6 +705,18 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "40hex",
         "Step 9のcheckpoint前HEADからfresh continuationを発行",
         "通常の次Step preview",
+      ),
+      optional(
+        "plan",
+        "",
+        "外部参照や書込なしで次の知的作業・CLI操作の契約を返す",
+        "従来のStep preview",
+      ),
+      optional(
+        "prepare-next",
+        "",
+        "apply済みの1遷移に続けて次の作業契約を観測する。失敗時も遷移を保持し--planで再開",
+        "--apply時だけ指定可",
       ),
       optional("apply", "", "次の1 Stepだけを適用", "preview"),
     ],
@@ -1139,6 +1156,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "現在の作業directory",
       ),
     ],
+    note: "同じstagingの実行と記録は既存lockで直列化します。出力はmain command終了時の範囲を記録後に中継し、実行中の逐次表示やstdout/stderrの相互順序は保持しません。中継だけ失敗した場合も正式検証記録を残し、--reuseで再照合できます",
     acceptsCommandArgv: true,
     example:
       "npx agent-skill-chain verify run --staging=.agent-skill-chain/tmp/issues/20260911_change --scope=full -- npm test",

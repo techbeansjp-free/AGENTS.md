@@ -48838,5 +48838,335 @@
         "next-model/bounded/decision.py": "6f40b186edc3d67bbd9ca880a6c37a4c331892b576a5b0c911b8a47297b90c46"
       }
     }
+  },
+  "revisionWorkUnitExecutionContract": {
+    "status": "source implemented; independent product review resolved; paid trial count zero",
+    "previousPackagedCandidateSha": "933643a74fd13a1f114e54532c7fa4e44000ea26",
+    "intent": "Separate logical obligations, existing gates, and short-lived AI work; no Full/Quick eligibility relaxation or new long-lived worker.",
+    "changes": [
+      "workflow advance --plan derives read-only execution advice from formal state; does not contact tracker or apply gates.",
+      "workflow advance --apply --prepare-next validates and records one existing transition and observes next work; semantic or authority boundaries are not automatically passed.",
+      "Contracts separate scoped semantic work, independent review, CLI observations and human/policy authority; formal inputs remain references.",
+      "Completed transitions survive next-plan observation failure; recovery is read-only and does not repeat application.",
+      "Verification uses existing protected synchronous lock without altering trusted staging contract; output relayed after recorded main-process observation."
+    ],
+    "measurementPlan": {
+      "firstCases": [
+        "A",
+        "G"
+      ],
+      "arms": [
+        "baseline official npm package",
+        "candidate official npm package",
+        "no ASC"
+      ],
+      "repetitionsInitially": 1,
+      "interpretation": "Functional and diagnostic first observations, not stable population estimates. Preserve them in predeclared subsequent repetitions; no cherry-picking.",
+      "timingAndTokens": "All actual parent/worker/retry usage plus wall time, context proxies and missingness; no unsupported exact context or cost claims."
+    },
+    "evidence": {
+      "verificationImplementation": {
+        "sha256": "7e897515cb6d767e923fcf2ae5e197bfed4bcd11ed0124fc8ea90b982e3b4f97",
+        "report": {
+          "at": "2026-10-10T18:48:59.681788+00:00",
+          "purpose": "F4 without protected staging implementation changes; preserve trusted quality gate",
+          "changes": [
+            "Reversed only own933643a7 staging lock patch. src/domain/staging.ts byte-equals933643a7 parent; no proposal/gate modification.",
+            "runVerification remains Promise API; all observations/reuse/command/digest/record execute synchronously inside existing writer lock. Competing processes fail before spawn. Same-process requests serialize; explicit reuse observes completed record.",
+            "spawnSync writes directly to0600 file descriptors opened in0700mkdtemp, unlinked immediately, empty directory immediately removed. No named raw transcript remains while command executes. Descriptors close in outer finally, OS reclaims on process exit.",
+            "After successful command/HEAD+clean checks/record append and lock release, replay each stream in64KiB chunks honoring output backpressure. Record is already visible before first relayed byte.",
+            "Replay races drain against finished/close/error, aborts remaining listeners, and always closes anonymous descriptors on relay rejection. Successful command record is retained even when output destination fails."
+          ],
+          "behaviorChanges": [
+            "Output delayed until command termination and recording; stdout replay precedes stderr, preserving individual bytes/digests but not cross-stream arrival order.",
+            "Executing command blocks the in-process event loop. Other processes still receive existing busy-lock diagnostic."
+          ],
+          "boundaries": [
+            "No new timeout: existing command lifetime contract retained. Disk consumption tracks total command output and available temp filesystem capacity, while memory queue is bounded by replay chunks/backpressure.",
+            "Child failure/signal records retain old exitCode/signal semantics. Spawn/dirty/HEAD/corruption/policy errors fail closed.",
+            "No build/full suite/paid execution or new background worker/daemon.",
+            "Observed stdout/stderr lengths freeze via fstat immediately after main process exit. Later inherited-fd appends are excluded from both digest and replay. No descendant supervision or promise of descendant completion; existing runner likewise did not guarantee descendants which close stdio."
+          ],
+          "validation": {
+            "initialWholeImportTarget": "9 scenarios81steps PASS",
+            "finalFocusedTarget": "11 scenarios / 53 steps PASS (16.15s), including010 output closure and011 inherited-fd late append",
+            "largeOutput": "Actual trusted command wrote3MiB stdout+2MiB stderr; child asserts file0600/nlink0. Slow1024-byte-highWaterMark Writable receives all bytes in<=64KiB chunks; separate SHA256 correct; record exists before relay; journal remains<20KB.",
+            "concurrency": "3 realCLI processes: ownercommand barrier, reuse andlegacy contenders rejected beforeexec, postcompletionreuse same digest/noappend, legacy reexec; sameprocessnormal+reuse binds same newrecord.",
+            "lint": "targeted ESLint and git diff --check PASS",
+            "typecheck": "npx tsc --noEmit PASS",
+            "outputClosure": "emitClose true and false both reject premature close without waiting forever; drain/close/error/finish listeners cleaned; second ordinary run completes and records despite first relay rejection.",
+            "lateAppend": "Actual detached child inherits stdout/stderr; main writes observed and exits; relay releases child to append late and waits for done before draining. Display and stdout digest contain observed only.",
+            "traceRepair": "010/011 Then assertions added; late descendant wait uses bounded counter instead of wall clock; focused2scenarios10steps PASS after prettier.",
+            "ciTimeoutRepair": "Only multi-process concurrency When sets timeout30_000; existing child timeout/barrier/cleanup retained. SCN-INT-VERIFYRUN-008 focused1scenario5stepsPASS (4.155s). TargetPrettierPASS."
+          },
+          "sha256": {
+            "src/adapters/verification-run.ts": "2e69abffde786eccc587ff95b678b756b2e040b640d33d139a27430c46673d45",
+            "src/domain/staging.ts": "b99d0156422b18b2e259e0082a943c2145d0b4550edda8fdcb457f4f16f752c4",
+            "test/steps/verification-run-cli.steps.ts": "119972d3babc4f0d8cc8d8bd64c9a47fbffadf2b299828a2db067c7ea159ba50",
+            "test/features/integration/verification-run.feature": "11ca755f36e895ffa0ac7639c9231415811b28eb46d557ead6ae7a4bfb5c7b5a"
+          }
+        }
+      },
+      "verificationIndependentReview": {
+        "sha256": "d3a110b33928826b8dd6ed97583e73665c8be5881d4d92fa066a683e7e6ef90e",
+        "report": {
+          "reviewedAt": "2026-10-10T18:45:32.965895+00:00",
+          "scope": "read-only sync F4 adapter review; no product changes/build/paid",
+          "sourceSha256": {
+            "src/adapters/verification-run.ts": "bf4c75003a4572b60b53ce54858b15f2f11a3ae450a8f447be76007541f9617c",
+            "src/domain/staging.ts": "b99d0156422b18b2e259e0082a943c2145d0b4550edda8fdcb457f4f16f752c4",
+            "test/steps/verification-run-cli.steps.ts": "877bcddb974c29bd57ac408d84fcad7503ef98bbc2ab2ea85524e791275b100c",
+            "test/features/integration/verification-run.feature": "6d87d62627cb8fdeed19f696bb3fac2849ea736ea837f5d4788889ae8bfc6b74"
+          },
+          "protectedStagingByteEqualParentOf933": true,
+          "findings": [
+            {
+              "id": "F4-SYNC-OUTPUT-CLOSE",
+              "severity": "Medium",
+              "status": "resolved",
+              "location": "runVerification finally replay await once(output,drain)",
+              "problem": "Writable.destroy without error emits close but no drain/error. Promise remains pending and descriptor finally is never reached.",
+              "reproduction": "Native Node Writable highWaterMark=1; write destroys itself then calls callback; output.write returns false; 30ms race observes neither drain nor error.",
+              "requestedFix": "Observe output close/destroyed/end, reject deterministically, clean listeners and descriptors; keep existing formal record and do not rerun command.",
+              "resolution": "finished(readable:false,cleanup:true,signal) raced with drain; AbortController finally cleans remaining listeners. Independent native Node probes emitClose true/false both reject and all four listener counts0."
+            }
+          ],
+          "additionalBoundaryObservation": {
+            "classification": "requires design decision; not claimed production exploit",
+            "fact": "An unref detached descendant can inherit output fd after main spawnSync returns; standalone probe size grew0 to9 after160ms.",
+            "risk": "Live file EOF relay can include bytes appended after hash; main process completion does not mean descendants closed stdout.",
+            "proposal": "Define output observation lifetime explicitly; consider frozen prefix bounds and document main-versus-descendant behavior.",
+            "resolution": "Main-exit fstat length frozen for both digest and replay; later append outside fixed prefix excluded. Test011 releases descendant only during slow relay and asserts displayed bytes and digest remain observed prefix."
+          },
+          "confirmed": [
+            "Public Promise API retained; command argv/shell=false/trusted policy unchanged.",
+            "Reuse and actual command/HEAD/worktree/append execute under existing synchronous staging lock.",
+            "Command exit code/signal preserved; spawn error throws without success record.",
+            "Failed command nonzero/signal record remains formal if HEAD/worktree stable.",
+            "0700 mkdtemp and 0600 exclusive output files immediately unlink before spawn; no named transcript at command runtime.",
+            "Digest reads fd bytes in64KiB buffers; output replay bounded64KiB and normal drain handling.",
+            "Ordinary success/error outer finally closes collected descriptors, subject to reported output-close hang.",
+            "Output is delayed until command termination and transaction release; stdout precedes stderr, no cross-stream order; event loop blocks during command.",
+            "009 added to future packaged-contract required IDs; existing933 result retained, not rerun."
+          ],
+          "testBoundary": "Existing implementer 9scenario evidence read; independent cheap stream-close and inherited-fd lifetime probes only. No full/BDD run by this reviewer.",
+          "paidInvocations": 0,
+          "recheckedAt": "2026-10-10T18:49:40.528129+00:00",
+          "activeFindings": [],
+          "nextPackagedRequired": [
+            "SCN-INT-VERIFYRUN-009",
+            "SCN-INT-VERIFYRUN-010",
+            "SCN-INT-VERIFYRUN-011"
+          ]
+        }
+      },
+      "cliIndependentReview": {
+        "sha256": "e82e3d291fb0a02035380eea25eaecbec5b70842bf12b87a86b35af40de605e1",
+        "report": {
+          "at": "2026-10-10T18:44:45.972482+00:00",
+          "scope": "Root CLI --plan / advance --apply --prepare-next and ISSUEGHK002 delta only; new adapter/handoff and ownF4 excluded",
+          "findings": [],
+          "confirmed": [
+            "Flags are boolean-only through presentFlag; prepare-next requires apply; plan rejects apply, artifact/evidence, remote credentials/bindings and unrelated flags before remote operations. plan+dry-run/valid continuation remain observation-only.",
+            "Plan-only branch returns before existing sync preview/provider calls. inspectWorkflowStaging and initial journal reads are local observations, initial digest inventory is still apply-only.",
+            "Application still passes pre-lock snapshot/content/journal/HEAD validation, artifact gates, trusted sync authorization and original one-transition planner. Added printApplied does not execute a successor.",
+            "After successful record or sync-journal publication, successor observation exception/blocked state is converted to preparation.blocked and exit1 while retaining outer state applied. Recovery argv contains workflow advance --plan and no apply, repo call or creation.",
+            "Observation failures are caught inside printApplied, so they do not throw into existing external-sync recovery or repeat provider mutation. Existing published-transaction recovery still routes through the same printApplied handling.",
+            "ISSUEGHK002 injects failure after Step1 publication during Step2 handoff derivation; asserts exit1/applied, journal [0,1], exact no-apply recovery, two identical plans and byte-identical journal.",
+            "Help accurately separates ordinary sync preview needing repo/issue from --plan and states single-transition application followed by observation."
+          ],
+          "limitations": [
+            "Read-only source review; tests/typecheck not run by reviewer.",
+            "Detailed WorkUnit semantics and helper behavior remain separate workflowagent review scope."
+          ],
+          "sha256": {
+            "src/cli.ts": "1d9a1683aa0520fe5be3ae1ece0a91def28777dbce1afb5dec42f94606993834",
+            "src/cli-usage.ts": "68ed8ebbf5cb5c876c7259f9b23f3fdb72cb15b08d0e0949d74474b9e6dddb78",
+            "test/steps/issue-development-considerations.steps.ts": "25ffd950db1044dd0c8b8447862e0f1ed17cabb9c030af5321c59df110a904a6",
+            "test/features/integration/issue-request-stage.feature": "161acd74def27a129b871938f04e093491b5d5426484d2e0ab0c4521cb18e35e"
+          }
+        }
+      },
+      "workUnitImplementation": {
+        "sha256": "90e2aa79021f7c24a5d99182841a82acdf092cdde6306a77eb6d80395be965c2",
+        "report": {
+          "topic": "Contract-driven advisory Work Unit and executionPlan implementation",
+          "notIndependentApproval": true,
+          "head": "933643a74fd13a1f114e54532c7fa4e44000ea26",
+          "filesSha256": {
+            "src/adapters/workflow-handoff.ts": "75ce0875054c82b3f66677239e35d331853c365f1c5e5a130edc72e1bebba5e2",
+            "src/adapters/workflow-execution-plan.ts": "6f4ed71a94adceb564f842e600cf4c2e92122c28b5e8e76067588ba33c73c1e6",
+            "test/steps/workflow-execution-plan.steps.ts": "461fba8cb68d8fea053c3d9060c4330dce40ead759da39d7e4bf72c4e402059f",
+            "test/features/unit/workflow-execution-plan.feature": "440a501db6df125ace04f25d2c43648806429ac187dca4a70dfcb56866ed03ae",
+            "test/features/integration/workflow-execution-plan.feature": "a0c9450aba610c8fa3488667a8efb9bde074c1081165fa67ec07610a03d49a6e",
+            ".agent-skill-chain/skills/asc-step/SKILL.md": "dc83832db7bdb93052ddf28243a5f080b88a3dce89a4cd780f38fed82a4b1e3e",
+            "docs/specs/02_要件/01_ワークフロー要件.md": "bd812218595ce33dd5693684fa6fd0189206362983e36898ae0d19859c287b5c",
+            "docs/specs/15_要件追跡/00_追跡表.md": "da980c30c3a987aeac779c702fe9c3ca4d30c907f8093936ffdbf5ba5914e507"
+          },
+          "validation": [
+            {
+              "command": "cucumber --name SCN-(UNIT|INT)-EXECPLAN-|SCN-UNIT-RESUME-001",
+              "scenariosPassed": 25,
+              "stepsPassed": 226,
+              "log": "/tmp/asc-1576-execution-plan-tests.log"
+            },
+            {
+              "command": "cucumber --name SCN-INT-EXECPLAN-002",
+              "log": "/tmp/asc-1576-execution-plan-flags-tests.log"
+            },
+            {
+              "command": "check_trace.ts",
+              "valid": true
+            },
+            {
+              "command": "check_skill_templates.ts",
+              "valid": true
+            },
+            {
+              "command": "/usr/bin/python3 skill-creator/scripts/quick_validate.py .agent-skill-chain/skills/asc-step",
+              "result": "Skill is valid!"
+            },
+            {
+              "command": "targeted ESLint",
+              "result": "pass"
+            },
+            {
+              "command": "git diff --check",
+              "result": "pass"
+            },
+            {
+              "command": "cucumber --name SCN-UNIT-EXECPLAN-001 (WU-PROOF-01 and coordinatorCompletion final)",
+              "scenariosPassed": 14,
+              "stepsPassed": 126,
+              "log": "/tmp/asc-1576-workunit-proof-tests.log"
+            },
+            {
+              "command": "cucumber --name SCN-(UNIT|INT)-EXECPLAN-|SCN-UNIT-RESUME-001 after start/completion separation",
+              "scenariosPassed": 25,
+              "stepsPassed": 226,
+              "log": "/tmp/asc-1576-execution-plan-tests.log"
+            }
+          ],
+          "invariants": [
+            "No new scheduler, worker process, model, daemon, cache or persisted authority.",
+            "Existing planWorkflowAdvance/inspection/resume/journal and review-convergence roles determine dispatch. Formal mutation gates stay authoritative.",
+            "Semantic steps retain fresh-worker boundaries; sync and reviewed-summary delivery list real CLI previews then gated applies with missing authorization/digest inputs explicit.",
+            "Proof obligations name only current responsibilities and reference requiredInputs. Semantic judgment, independent review, CLI observation and human-policy authority remain distinct; no fulfilled/approved values generated.",
+            "Standard asc-step consumes --plan or prior preparation.executionPlan; compatible old preview stays supported. Reviewer alternatives carry reviewer contract, separate ID and read scope.",
+            "Full Step1 and Step5 never recommend unsupported issue validate stage; their existing advance apply gate validates current-stage artifacts.",
+            "Verification semantic obligation judges test sufficiency for AC/invariants/risk; separate CLI-only machineChecks observe HEAD/scope/trusted-command/result, refusing self-declared substitutes. Planning phases do not require premature execution.",
+            "Known formally required verification commands use verify run --reuse directly; verify plan is needed only when the required command is unknown.",
+            "coordinatorCompletion separates worker operations from formal step/round recording; complete/checkpoint/correction/reviewer/converged states name real gated argv and formal input references. Step10 includes final readonly plan, while Step1..9 reuse prepare-next output.",
+            "boundary-current is a work-start precondition only. Completion re-observes the resulting HEAD through existing gates and Step9 bindings; a successful implementation commit need not preserve entry HEAD."
+          ],
+          "limitations": [
+            "Own implementation evidence, not independent approval.",
+            "Root owns CLI --plan/prepare-next implementation and apply/recovery integration scenarios separately.",
+            "No build/compile/full suite or paid worker executed by this task.",
+            "Contracts are advisory input/completion requirements; they do not prove semantic satisfaction or authorize external changes."
+          ]
+        }
+      },
+      "workUnitIndependentReview": {
+        "sha256": "dfab23e60c80851644b624ebf398bf261629c994b73492942f84a74634e306f1",
+        "report": {
+          "at": "2026-10-10T19:00:02.987248+00:00",
+          "scope": "Independent read-only review of new WorkUnit adapter/handoff/canonical asc-step/requirements and focused BDD; root CLI reviewed separately. Own F4 excluded. No test/build/paid execution.",
+          "activeFindings": [],
+          "checks": [
+            {
+              "area": "authority and proof",
+              "result": "advisory contract declares unconfirmed obligations and existing formal gate; no fulfilled/approved evidence or authority is generated. Human/policy delivery authorization remains explicit."
+            },
+            {
+              "area": "fresh and coordinator boundaries",
+              "result": "semantic Steps1/2/3/5/6/7/9 and Step10 review/correction dispatch fresh worker; Steps4/8/11 and converged Step10 assign cli. Semantic worker must return terminal; coordinator records after return. Existing role derivation and evidence-only suffix checks retained."
+            },
+            {
+              "area": "unknown/compatible/failure",
+              "result": "unknown step contract none; incompatible execution context yields no handoff, noncomplete plan blocked/no dispatch. Resume, journal and handoff errors propagate to blocked action none. Complete plan none is terminal, not an authority grant."
+            },
+            {
+              "area": "allowed argv",
+              "result": "sync preview/apply required flags match existing workflow CLI including expected-body-sha256 sourced from preview.sync.bodySha256 and existing authorize. Delivery from-summary apply/preview flags accepted. Verification commands retain trusted plan argv and explicit --reuse. Review export accepted flags and existing independence gate retained. Artifact stage validators only steps2/3/6/7, avoiding prior premature full Step1/5 validation."
+            },
+            {
+              "area": "review alternative",
+              "result": "alternative uses new reviewer workUnitId, Step10 review reads, separate workflowExecutionContract(10,reviewer,...), read-only artifact operation and independent-reviewer proof classification; correction artifact-write contract is not inherited."
+            },
+            {
+              "area": "references and payload",
+              "result": "requiredInputs refer to package/staging/Git, not full artifact bodies; optional missing AMD remains optional; present AMD already in staging refs. Plan top-level handoff contract removed; worker prompt retains contract needed for its own role."
+            },
+            {
+              "area": "BDD coverage",
+              "result": "read-only repeated real CLI plan byte/state invariance, invalid flags and corrupt journal rejection, reviewer alternative role/id/read operation, and per-step contract table inspected. Reported25scenarios226steps not rerun by reviewer."
+            }
+          ],
+          "nonBlockingObservations": [
+            {
+              "id": "WU-PAYLOAD-01",
+              "detail": "The same contract is represented once as executionPlan.action and again inside agentDispatch.prompt.handoff.workUnit.contract. This is intentional context transfer but serialized response token size should count both; no token reduction claim validated in this review. No safety change requested."
+            }
+          ],
+          "limits": [
+            "No claim that advisory observation is an atomic authorization snapshot; actual mutations continue to reobserve existing gates.",
+            "Static review plus inspection of BDD source; no paid or end-to-end performance result inferred."
+          ],
+          "sha256": {
+            "src/adapters/workflow-execution-plan.ts": "6f4ed71a94adceb564f842e600cf4c2e92122c28b5e8e76067588ba33c73c1e6",
+            "src/adapters/workflow-handoff.ts": "75ce0875054c82b3f66677239e35d331853c365f1c5e5a130edc72e1bebba5e2",
+            ".agent-skill-chain/skills/asc-step/SKILL.md": "dc83832db7bdb93052ddf28243a5f080b88a3dce89a4cd780f38fed82a4b1e3e",
+            "docs/specs/02_要件/01_ワークフロー要件.md": "bd812218595ce33dd5693684fa6fd0189206362983e36898ae0d19859c287b5c",
+            "test/steps/workflow-execution-plan.steps.ts": "461fba8cb68d8fea053c3d9060c4330dce40ead759da39d7e4bf72c4e402059f",
+            "test/features/integration/workflow-execution-plan.feature": "a0c9450aba610c8fa3488667a8efb9bde074c1081165fa67ec07610a03d49a6e",
+            "test/features/unit/workflow-execution-plan.feature": "440a501db6df125ace04f25d2c43648806429ac187dca4a70dfcb56866ed03ae"
+          },
+          "resolvedFindings": [
+            {
+              "id": "WU-PROOF-01",
+              "resolution": "Verification semantic question now asks adequacy for AC/invariants/risk. Separate machineChecks restrict HEAD/scope/trusted-command/result attribution to CLI with selfDeclarationAccepted:false; limited to Step9/10, so planning obligations do not force early verification execution."
+            }
+          ],
+          "followupChecks": [
+            {
+              "area": "coordinatorCompletion",
+              "result": "Separate coordinator ownership/gateReobservationRequired retains worker terminal boundary. Step1..9 advance apply prepare-next, Step9 conditional checkpoint continuation, Step10 correction record9, independent review round file apply, converged export→artifact-only commit→record10 all retain existing CLI gates. Export.path/latestRoundDigest bindings match actual CLI JSON. Git commit --only -- path limits evidence commit."
+            },
+            {
+              "area": "boundary precondition",
+              "result": "Entry HEAD/journal/review/workUnitId matching moved to preconditions. Completion reobserves result HEAD/formal evidence through existing gate, allowing legitimate implementation commit and Step9 derived binding."
+            },
+            {
+              "area": "boolean equals guards",
+              "result": "workflowArguments rejects any = syntax for plan/prepare-next before marker normalization, including =__present__. Existing presentFlag/lifecycle parsing and forbidden combinations retained; issue create prepare-next also rejects equals form."
+            }
+          ]
+        }
+      }
+    },
+    "limitations": [
+      "Final source/package proof, real A/G trials, final exact-HEAD full verification and formal review are pending.",
+      "933 trusted-quality CI rejected modified protected staging.ts. Gate unchanged; implementation now restores original bytes and keeps verification lifetime under existing synchronous lock.",
+      "Output delivery occurs after command recording; stream interleaving is not preserved, late descendant bytes outside observed main-exit lengths excluded."
+    ],
+    "validation": {
+      "build": "PASS latest source",
+      "typecheck": "PASS",
+      "skills": "PASS",
+      "docsFormat": "PASS",
+      "trace": "PASS after Then role repair",
+      "trustedBaseValidator": "PASS; protected staging restored to prior bytes",
+      "independentReview": "WorkUnit proof ownership, start/completion boundary and formal coordinator operations reviewed; active findings zero",
+      "paid": "not started",
+      "finalFullAndEvidence": "pending final source/metrics HEAD",
+      "testFormat": "PASS after explicit Then roles and bounded counter replacing wall-clock test deadline"
+    },
+    "priorCandidateCi": {
+      "head": "933643a74fd13a1f114e54532c7fa4e44000ea26",
+      "trustedGate": "failed protected staging change; corrected by restoring protected code, not changing gate",
+      "mainQuality": "2836 scenarios, one failure: VERIFYRUN008 default5000ms timeout under parallel CI. Specific multi-CLI step now timeout30000ms, bounded child/barrier unchanged; targeted 1scenario5steps PASS (4.155s).",
+      "portability": "three OS pass"
+    }
   }
 }

@@ -42,3 +42,18 @@ Feature: verify runで検証をshellを通さず実行し観測だけを記録�
     Given verify run用のIssue stagingを持つrepositoryがある
     When 同じstagingへ複数processでreuseと通常runを同時要求する
     Then 競合要求は実行前に拒否され終了後だけ再利用し通常runは再実行する
+
+  Scenario: SCN-INT-VERIFYRUN-009 大量出力をprivate一時fdで観測しbackpressureを守って中継する
+    Given verify run用のIssue stagingを持つrepositoryがある
+    When 大量の検証出力を遅い出力先へ中継する
+    Then 出力を欠落させず個別digestを記録し一時出力を公開しない
+
+  Scenario: SCN-INT-VERIFYRUN-010 中継先closeで無期限待機せず記録とlock解放を維持する
+    Given verify run用のIssue stagingを持つrepositoryがある
+    When 中継先がdrain前に閉じても停止し後続要求を処理できる
+    Then 中継失敗後も2回の実検証記録が保持される
+
+  Scenario: SCN-INT-VERIFYRUN-011 main終了後の出力追記を観測へ混入させない
+    Given verify run用のIssue stagingを持つrepositoryがある
+    When main終了後の子孫追記を観測digestと中継から除外する
+    Then 出力を欠落させず個別digestを記録し一時出力を公開しない

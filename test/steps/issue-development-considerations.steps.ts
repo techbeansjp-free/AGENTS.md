@@ -533,13 +533,17 @@ Then("Gherkin IDの文法エラーで拒否する", function () {
   );
 });
 
-When("full要求を正規のworkflow advanceで記録する", async function () {
-  const root = this.initRepo();
+async function recordFullRequest(
+  world: DevelopmentConsiderationWorld,
+  prepareNext = false,
+  failNext = false,
+): Promise<void> {
+  const root = world.initRepo();
   const requirement = fs.readFileSync(
-    path.join(this.issuePath, "00_要求定義.md"),
+    path.join(world.issuePath, "00_要求定義.md"),
     "utf8",
   );
-  this.issuePath = createIssueStaging(root, {
+  world.issuePath = createIssueStaging(root, {
     title: "full-request-stage",
     answers: Object.fromEntries(
       QUESTIONS.map((id) => [
@@ -550,27 +554,140 @@ When("full要求を正規のworkflow advanceで記録する", async function () 
     requestedMode: "full",
     now: new Date(fixtureInstant()),
   }).path;
-  fs.writeFileSync(path.join(this.issuePath, "00_要求定義.md"), requirement);
+  fs.writeFileSync(path.join(world.issuePath, "00_要求定義.md"), requirement);
   const originalWrite = process.stdout.write;
+  const originalStringify = JSON.stringify;
+  const previousContext = process.env.ASC_EXECUTION_CONTEXT_MODE;
+  process.env.ASC_EXECUTION_CONTEXT_MODE = "short-lived";
+  let injected = false;
+  if (failNext)
+    JSON.stringify = new Proxy(originalStringify, {
+      apply(
+        target,
+        receiver: unknown,
+        args: Parameters<typeof JSON.stringify>,
+      ) {
+        const value: unknown = args[0];
+        if (
+          !injected &&
+          isRecord(value) &&
+          value.step === 2 &&
+          value.role === "requirements" &&
+          "boundary" in value
+        ) {
+          injected = true;
+          throw new Error("injected next Work Unit observation failure");
+        }
+        return Reflect.apply(target, receiver, args) as string | undefined;
+      },
+    });
   let output = "";
   process.stdout.write = ((chunk: string | Uint8Array) => {
     output += String(chunk);
     return true;
   }) as typeof process.stdout.write;
   try {
-    this.cliStatus = await main([
+    world.cliStatus = await main([
       "workflow",
       "advance",
-      `--staging=${this.issuePath}`,
+      `--staging=${world.issuePath}`,
       "--artifact=00_要求定義.md",
       "--evidence=full要求が完成し後工程のGherkinを先取りしない",
       "--apply",
+      ...(prepareNext ? ["--prepare-next"] : []),
     ]);
-    this.cliOutput = output;
+    world.cliOutput = output;
+    if (failNext) assert.equal(injected, true);
   } finally {
     process.stdout.write = originalWrite;
+    JSON.stringify = originalStringify;
+    if (previousContext === undefined)
+      delete process.env.ASC_EXECUTION_CONTEXT_MODE;
+    else process.env.ASC_EXECUTION_CONTEXT_MODE = previousContext;
   }
+}
+
+When("full要求を正規のworkflow advanceで記録する", async function () {
+  await recordFullRequest(this);
 });
+
+When("full要求を記録して次Work Unitを返す", async function () {
+  await recordFullRequest(this, true);
+});
+
+Then("次の知的作業を返し追加のStepを適用しない", function () {
+  const result: unknown = JSON.parse(this.cliOutput);
+  assert.ok(isRecord(result) && isRecord(result.preparation));
+  assert.equal(result.preparation.status, "ready");
+  const plan = result.preparation.executionPlan;
+  assert.ok(isRecord(plan) && isRecord(plan.action));
+  assert.equal(plan.kind, "asc-execution-plan/v1");
+  assert.equal(plan.authority, "advisory");
+  assert.equal(plan.state, "ready");
+  assert.equal(plan.step, 2);
+  assert.equal(plan.action.executor, "fresh-worker");
+  assert.equal(plan.action.maxTransitions, 1);
+});
+
+When("full要求の記録後に次Work Unitの観測が失敗する", async function () {
+  await recordFullRequest(this, true, true);
+});
+
+Then(
+  "適用済みStepを保持し読取だけで同じ次Work Unitを回復する",
+  async function () {
+    assert.equal(this.cliStatus, 1, this.cliOutput);
+    const result: unknown = JSON.parse(this.cliOutput);
+    assert.ok(isRecord(result) && isRecord(result.preparation));
+    assert.equal(result.state, "applied");
+    assert.equal(result.preparation.status, "blocked");
+    assert.ok(isRecord(result.preparation.recovery));
+    assert.equal(result.preparation.recovery.appliesTransition, false);
+    assert.deepEqual(result.preparation.recovery.argv, [
+      "workflow",
+      "advance",
+      `--staging=${this.issuePath}`,
+      "--plan",
+    ]);
+    const journalPath = path.join(this.issuePath, STEP_JOURNAL_FILE);
+    const before = fs.readFileSync(journalPath, "utf8");
+    assert.deepEqual(
+      parseStepJournal(before).entries.map(({ step }) => step),
+      [0, 1],
+    );
+    const originalWrite = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const plans: unknown[] = [];
+      for (let i = 0; i < 2; i++) {
+        output = "";
+        assert.equal(
+          await main([
+            "workflow",
+            "advance",
+            `--staging=${this.issuePath}`,
+            "--plan",
+          ]),
+          0,
+          output,
+        );
+        const plan: unknown = JSON.parse(output);
+        assert.ok(isRecord(plan) && isRecord(plan.action));
+        assert.equal(plan.step, 2);
+        assert.equal(plan.action.executor, "fresh-worker");
+        plans.push(plan);
+        assert.equal(fs.readFileSync(journalPath, "utf8"), before);
+      }
+      assert.deepEqual(plans[0], plans[1]);
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+  },
+);
 
 Then("Step 1だけが記録され後工程は未完了のままである", function () {
   assert.equal(this.cliStatus, 0, this.cliOutput);
