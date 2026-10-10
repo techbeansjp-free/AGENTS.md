@@ -510,7 +510,7 @@ export const COMMAND_USAGE = Object.freeze([
         requiredFlags: [
             flag("title", "text", "Issueのtitle"),
             flag("mode", "quick|full|poc", "要求するworkflow mode"),
-            flag("assessment", "path", '質問IDをキーにした回答mapのJSON file。{"Q-01":{"answer":true|false|"unknown","evidence":"根拠"},…}の形式で、mode決定記録そのものは受理しない。回答か根拠が欠けたIDは不明として扱いfullへ倒す'),
+            flag("assessment", "path", '質問IDをキーにした回答mapのJSON file。{"Q-01":{"answer":true|false|"unknown","evidence":"根拠"},…}の形式で、mode決定記録そのものは受理しない。Q-01〜Q-08をすべて明示する。判断できない回答はanswer="unknown"と不明理由のevidenceを記すとfullへ倒す。ID自体の欠落は拒否する'),
         ],
         conditionalFlags: [
             conditional("poc-declaration", "path", "strict PocDeclaration JSON file", "--mode=pocのとき"),
