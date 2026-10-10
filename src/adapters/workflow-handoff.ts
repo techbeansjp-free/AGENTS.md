@@ -49,6 +49,7 @@ const STEP_SKILLS = [
 
 /** Pointers only: no artifact bodies or new authority. Paths are relative to their owner. */
 function handoffReads(
+  staging: string,
   step: number | undefined,
   mode: "full" | "quick" | "poc" | undefined,
   role: string,
@@ -65,9 +66,20 @@ function handoffReads(
         : role === "correction" || (step === 10 && (reviewRound ?? 1) > 1)
           ? [REVIEW_SESSION_FILE]
           : [...plans, PLAN_AMENDMENT_FILE];
+  const amendmentPresent =
+    fs
+      .lstatSync(path.join(staging, PLAN_AMENDMENT_FILE), {
+        throwIfNoEntry: false,
+      })
+      ?.isFile() ?? false;
   return {
     skill: `.agent-skill-chain/skills/step-${String(skillStep).padStart(2, "0")}-${STEP_SKILLS[skillStep]}/SKILL.md`,
-    staging: inputs,
+    staging: inputs.filter(
+      (file) => file !== PLAN_AMENDMENT_FILE || amendmentPresent,
+    ),
+    optionalStaging: inputs.includes(PLAN_AMENDMENT_FILE)
+      ? [{ path: PLAN_AMENDMENT_FILE, present: amendmentPresent }]
+      : [],
   };
 }
 
@@ -151,7 +163,7 @@ export function observeWorkflowHandoff(
       kind: "asc-handoff/v1",
       authority: "advisory",
       issue: record?.tracker ?? null,
-      read: handoffReads(step, record?.mode, role, reviewRound),
+      read: handoffReads(staging, step, record?.mode, role, reviewRound),
       branch: git(["symbolic-ref", "--short", "HEAD"], worktree, {
         env: GIT_ENV,
       }).stdout.trim(),

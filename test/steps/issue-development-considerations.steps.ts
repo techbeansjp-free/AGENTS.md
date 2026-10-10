@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { fixtureInstant } from "../support/fixture-instant.js";
 import fs from "node:fs";
 import path from "node:path";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
@@ -7,7 +8,13 @@ import {
   DEVELOPMENT_CONSIDERATION_REFERENCE_LINE,
   validateDevelopmentConsiderations,
 } from "../../src/domain/conformance.js";
-import { validateIssue } from "../../src/domain/issue.js";
+import { createIssueStaging, validateIssue } from "../../src/domain/issue.js";
+import { QUESTIONS } from "../../src/domain/mode.js";
+import { isRecord } from "../../src/types.js";
+import {
+  STEP_JOURNAL_FILE,
+  parseStepJournal,
+} from "../../src/domain/workflow.js";
 import { evaluateReview } from "../../src/domain/review.js";
 
 type Validation = ReturnType<typeof validateIssue>;
@@ -468,4 +475,118 @@ Then("gherkinDialectが未対応のerrorで拒否する", function () {
 Then("ja Outlineのplaceholder errorなしでIssue検証は合格する", function () {
   assert.equal(this.validationError, undefined);
   assert.equal(this.validation.valid, true, this.validation.errors.join("; "));
+});
+
+Given("Gherkinを含まない完成済みfull要求だけがある", function () {
+  this.issuePath = this.temp("asc-full-request-");
+  fs.writeFileSync(
+    path.join(this.issuePath, "00_要求定義.md"),
+    filledTemplate("full"),
+  );
+});
+
+Given("Gherkinを含まない「{word}」要求がある", function (mode: string) {
+  assert.ok(["full", "quick", "poc"].includes(mode));
+  this.issuePath = this.temp("asc-required-scenario-");
+  const document = filledTemplate(mode === "full" ? "full" : "quick");
+  fs.writeFileSync(
+    path.join(this.issuePath, "00_要求定義.md"),
+    mode === "poc"
+      ? document.replace(/\|\s*モード\s*\|[^\n]+/u, "| モード | poc |")
+      : document,
+  );
+});
+
+When("request段階でIssueを検証する", function () {
+  this.validation = validateIssue(this.issuePath, { stage: "request" });
+});
+
+When("「{word}」段階でIssueを検証する", function (stage: string) {
+  assert.ok(["request", "requirements", "default"].includes(stage));
+  this.validation = validateIssue(this.issuePath, {
+    ...(stage === "default"
+      ? {}
+      : { stage: stage as "request" | "requirements" }),
+  });
+});
+
+Then("full要求だけで検証が成功する", function () {
+  assert.equal(this.validation.valid, true, this.validation.errors.join("; "));
+  assert.equal(this.validation.mode, "full");
+  assert.deepEqual(this.validation.errors, []);
+});
+
+When("不正なGherkin IDを追記してrequest段階で検証する", function () {
+  fs.appendFileSync(
+    path.join(this.issuePath, "00_要求定義.md"),
+    "\nScenario: SCN-invalid 不正ID\n",
+  );
+  this.validation = validateIssue(this.issuePath, { stage: "request" });
+});
+
+Then("Gherkin IDの文法エラーで拒否する", function () {
+  assert.equal(this.validation.valid, false);
+  assert.ok(
+    this.validation.errors.some((error) =>
+      error.includes("GherkinシナリオIDの文法が不正"),
+    ),
+  );
+});
+
+When("full要求を正規のworkflow advanceで記録する", async function () {
+  const root = this.initRepo();
+  const requirement = fs.readFileSync(
+    path.join(this.issuePath, "00_要求定義.md"),
+    "utf8",
+  );
+  this.issuePath = createIssueStaging(root, {
+    title: "full-request-stage",
+    answers: Object.fromEntries(
+      QUESTIONS.map((id) => [
+        id,
+        { answer: false, evidence: "隔離fixtureの要求範囲で確認済み" },
+      ]),
+    ),
+    requestedMode: "full",
+    now: new Date(fixtureInstant()),
+  }).path;
+  fs.writeFileSync(path.join(this.issuePath, "00_要求定義.md"), requirement);
+  const originalWrite = process.stdout.write;
+  let output = "";
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    output += String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    this.cliStatus = await main([
+      "workflow",
+      "advance",
+      `--staging=${this.issuePath}`,
+      "--artifact=00_要求定義.md",
+      "--evidence=full要求が完成し後工程のGherkinを先取りしない",
+      "--apply",
+    ]);
+    this.cliOutput = output;
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+});
+
+Then("Step 1だけが記録され後工程は未完了のままである", function () {
+  assert.equal(this.cliStatus, 0, this.cliOutput);
+  const result: unknown = JSON.parse(this.cliOutput);
+  assert.ok(isRecord(result));
+  assert.equal(result.state, "applied");
+  assert.equal(result.targetStep, 1);
+  assert.equal(result.validationStage, "request");
+  const journal = parseStepJournal(
+    fs.readFileSync(path.join(this.issuePath, STEP_JOURNAL_FILE), "utf8"),
+  );
+  assert.deepEqual(
+    journal.entries.map(({ step }) => step),
+    [0, 1],
+  );
+  const downstream = validateIssue(this.issuePath, { stage: "requirements" });
+  assert.equal(downstream.valid, false);
+  assert.ok(downstream.errors.includes("GherkinシナリオIDがありません"));
 });

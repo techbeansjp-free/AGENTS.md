@@ -318,6 +318,7 @@ export function planVerification(input: { staging: string; base?: string }) {
 export interface VerificationRunResult {
   readonly record: VerificationRunRecord;
   readonly impact: ImpactSet;
+  readonly reused?: true;
 }
 
 /**
@@ -340,6 +341,7 @@ export async function runVerification(input: {
   base?: string;
   now?: () => Date;
   output?: NodeJS.WritableStream;
+  reuse?: boolean;
 }): Promise<VerificationRunResult> {
   const staging = assertWorkflowStaging(input.staging);
   const root = stagingRepositoryRoot(staging);
@@ -376,6 +378,58 @@ export async function runVerification(input: {
   );
   if (violation !== undefined)
     throw new Error(`verify runを拒否しました: ${violation}`);
+  if (input.reuse === true) {
+    const reusable = withStagingMutationLock(staging, () => {
+      // Corrupt records are fatal even when executing the command could repair a failure.
+      const records = readVerificationRuns(staging);
+      const latest = new Map<string, VerificationRunRecord>();
+      for (const record of records)
+        if (record.headSha === headSha && record.impactDigest === impact.digest)
+          latest.set(JSON.stringify(record.command), record);
+      for (const record of latest.values()) {
+        const violation = verificationCommandViolation(
+          record.command,
+          record.scope,
+          policy,
+          impact.features,
+        );
+        if (violation !== undefined)
+          throw new Error(`trusted policy不一致: ${violation}`);
+      }
+      let observed: ReturnType<typeof selectObservedVerification>;
+      try {
+        observed = selectObservedVerification(records, {
+          headSha,
+          impactDigest: impact.digest,
+          impactMode: impact.mode,
+          impactFeatures: impact.features,
+          policy,
+        });
+      } catch {
+        // Missing coverage or a latest failure requires an actual execution.
+        // Parsing and policy errors were rejected above, outside this fallback.
+        return undefined;
+      }
+      const selected = observed.find(
+        (record) =>
+          record.scope === input.scope &&
+          stableJson(record.command) === stableJson(argv),
+      );
+      if (selected === undefined) return undefined;
+      if (
+        resolveCommit(root, "current HEAD", "HEAD") !== headSha ||
+        worktreeDifferences(root) !== ""
+      )
+        throw new Error(
+          "verify runの再利用観測中にHEADまたはworktreeが変わりました",
+        );
+      return records.find(
+        (record) => record.recordDigest === selected.recordDigest,
+      );
+    });
+    if (reusable !== undefined)
+      return { record: reusable, impact, reused: true };
+  }
   const [file, ...args] = argv as [string, ...string[]];
   const startedAt = now().toISOString();
   const stdout = crypto.createHash("sha256");

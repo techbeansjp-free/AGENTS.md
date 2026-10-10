@@ -15,7 +15,9 @@ Q-01〜Q-08へ答える前に[モード判定質問](../../docs/01_開発ワー�
 
 1. `asc-step`で確認済みのdoctor結果と正本の節を再利用する。同じcontextで読んだ質問文・同じ資料の範囲を読み直さず、doctorが診断した不足だけを調べる。初回の導入hash・trusted検証宣言・PR rule確認は省略しない。
 2. Q回答の根拠に不足する事実だけ、対象code・直接caller・関係するproject choiceから確認する。file一覧・全Skill一覧・全仕様の探索を固定手順にしない。必要な証拠を調べても公開境界やconsumerを限定できないときは、不明を隠してquickを選ばず既存のfull判定へ進む。quickを選ぶために無関係な領域まで全探索せず、独立reviewが担う全体検分をこの時点で先取りしない。
-3. CLI入力が不明な場合だけ`issue create --help`を一度確認し、根拠付き入力で`issue create`を実行する。成功結果のstaging・mode・Step 0記録を次工程へ渡して終了する。機械検証済みの入力を別commandや手作業で再判定せず、拒否時は理由が指す入力だけを是正する。tracker起票・内容文書の起草はこのStepへ持ち込まない。
+3. CLI入力が不明な場合だけ`issue create --help`を一度確認し、根拠付き入力で`issue create`を実行する。`issue create --prepare-next`は実観測のStep 0記録とStep 1のresume・handoffを一緒に返す。その結果を次工程へ渡し、生成済みjournalやmodeを別commandで読み直さず終了する。機械検証済みの入力を別commandや手作業で再判定せず、拒否時は理由が指す入力だけを是正する。tracker起票・内容文書の起草はこのStepへ持ち込まない。
+
+Q回答と根拠はAIまたは人の意味判断であり、CLIやdriverが既定値で代筆しない。入力が揃っているcoordinatorはdoctorの機械確認と`issue create --prepare-next`を実行でき、形式的入力生成のためだけの専用LLMは要らない。別の入口AIがQ判断を担当する場合も、そのtokenをIssue全体へ計上し、Step 1のfresh contextや独立reviewの境界を変えない。
 
 ## テンプレート契約
 

@@ -1777,7 +1777,11 @@ export function validateIssue(
     errors.push(
       `GherkinシナリオIDの文法が不正です: ${id}（SCN-に大文字英数字とハイフンだけを続ける）`,
     );
-  if (!scenarioId.test(allText)) errors.push("GherkinシナリオIDがありません");
+  if (
+    !(declared === "full" && options.stage === "request") &&
+    !scenarioId.test(allText)
+  )
+    errors.push("GherkinシナリオIDがありません");
   const disqualifiers = detectQuickDisqualifiers(options.changedFiles ?? []);
   if (
     (declared === "quick" || declared === "poc") &&

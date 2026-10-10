@@ -95,3 +95,25 @@ Feature: 開発考慮事項の理由・証拠の具体性とGherkin方言のscen
     Given gherkinDialectがjaのproject choiceを4階層上に持つquick stagingがある
     When CLIでIssueを検証する
     Then GherkinシナリオIDがありませんのerrorを含まない
+
+  Scenario: SCN-UNIT-ISSUEGHK-009 full要求工程は後工程のGherkinを先取りしない
+    Given Gherkinを含まない完成済みfull要求だけがある
+    When request段階でIssueを検証する
+    Then full要求だけで検証が成功する
+
+  Scenario Outline: SCN-UNIT-ISSUEGHK-010 集約モードと後工程はGherkinを引き続き必須にする
+    Given Gherkinを含まない「<mode>」要求がある
+    When 「<stage>」段階でIssueを検証する
+    Then GherkinシナリオIDがありませんのerrorを含む
+
+    Examples:
+      | mode  | stage        |
+      | full  | requirements |
+      | full  | default      |
+      | quick | request      |
+      | poc   | request      |
+
+  Scenario: SCN-UNIT-ISSUEGHK-011 full要求工程でも記載した不正なGherkin IDは拒否する
+    Given Gherkinを含まない完成済みfull要求だけがある
+    When 不正なGherkin IDを追記してrequest段階で検証する
+    Then Gherkin IDの文法エラーで拒否する

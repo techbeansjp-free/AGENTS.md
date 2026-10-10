@@ -1,3 +1,4 @@
+import { generateDeliveryInput } from "./adapters/delivery-input.js";
 import { launchCodex } from "./adapters/codex-launch.js";
 import { launchReview } from "./adapters/review-launch.js";
 import { launchDelegatedReview } from "./adapters/delegated-review-launch.js";
@@ -4708,6 +4709,7 @@ export async function main(argv, dependencies = {}) {
                     read: {
                         skill: ".agent-skill-chain/skills/step-10-review/SKILL.md",
                         staging: ["review-session.json"],
+                        optionalStaging: [],
                     },
                     reviewRound: (handoff.reviewRound ?? 0) + 1,
                     workUnit: {
@@ -5469,6 +5471,8 @@ export async function main(argv, dependencies = {}) {
         throw new Error(`不明なgraph subcommandです: ${subcommand ?? ""}`);
     if (command === "issue" && subcommand === "create") {
         const { flags } = parse(rest);
+        if (flags["prepare-next"] !== undefined && flags["prepare-next"] !== true)
+            throw new Error("--prepare-nextは値を付けずに指定してください");
         const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
         const assessment = readModeAssessment(required(flags, "assessment"));
         const requestedMode = required(flags, "mode");
@@ -5488,7 +5492,7 @@ export async function main(argv, dependencies = {}) {
         const projectChoices = fs.existsSync(policyManifest)
             ? loadProjectPolicySet(root).policy.projectChoices
             : undefined;
-        print(createIssueStaging(root, {
+        const created = createIssueStaging(root, {
             title: required(flags, "title"),
             answers: assessment,
             requestedMode,
@@ -5502,7 +5506,25 @@ export async function main(argv, dependencies = {}) {
                 ? { stagingRoot: flags["staging-root"] }
                 : {}),
             ...(typeof flags.name === "string" ? { name: flags.name } : {}),
-        }));
+        });
+        if (flags["prepare-next"] === true) {
+            const journal = readWorkflowJournal(created.path);
+            const resume = observeWorkflowResume(created.path);
+            const handoff = observeWorkflowHandoff(created.path, 1, resume);
+            print({
+                ...created,
+                step0: {
+                    recorded: journal.errors.length === 0 &&
+                        journal.entries.some((entry) => entry.step === 0),
+                    errors: journal.errors,
+                },
+                resume,
+                handoff,
+                agentDispatch: workflowAgentDispatch(handoff),
+            });
+        }
+        else
+            print(created);
         /**
          * **既定配置（版管理外・全文同期）には1行の通知だけを出す。** 判定も終了値も
          * 変えず、JSON出力（stdout）にも混ぜない。
@@ -6175,7 +6197,7 @@ export async function main(argv, dependencies = {}) {
         const { flags, positionals } = parse(rest.slice(0, separator));
         if (positionals.length > 0)
             throw new Error(`verify runの位置引数は\`--\`の後に置いてください: ${positionals[0]}`);
-        const unknown = Object.keys(flags).filter((flag) => !["staging", "scope", "base", "root"].includes(flag));
+        const unknown = Object.keys(flags).filter((flag) => !["staging", "scope", "base", "root", "reuse"].includes(flag));
         if (unknown.length > 0)
             throw new Error(`verify runの未知optionです: --${unknown.join(", --")}`);
         /**
@@ -6189,6 +6211,8 @@ export async function main(argv, dependencies = {}) {
             throw new Error("verify runの--scopeはtargetedまたはfullが必要です");
         if (flags.base !== undefined && typeof flags.base !== "string")
             throw new Error("verify runの--baseにはcommitが必要です");
+        if (flags.reuse !== undefined && flags.reuse !== true)
+            throw new Error("verify runの--reuseは値を取らないflagです");
         const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
         const staging = path.resolve(root, required(flags, "staging"));
         if (flags.root !== undefined &&
@@ -6198,10 +6222,12 @@ export async function main(argv, dependencies = {}) {
             staging,
             argv: rest.slice(separator + 1),
             scope,
+            ...(flags.reuse === true ? { reuse: true } : {}),
             ...(typeof flags.base === "string" ? { base: flags.base } : {}),
         });
         print({
-            recorded: true,
+            recorded: result.reused !== true,
+            ...(flags.reuse === true ? { reused: result.reused === true } : {}),
             headSha: result.record.headSha,
             baseSha: result.record.baseSha,
             command: result.record.command,
@@ -7150,6 +7176,22 @@ export async function main(argv, dependencies = {}) {
         const { flags } = parse(rest);
         const apply = applyMode(flags);
         const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const summaryPath = flags["from-summary"];
+        if (summaryPath !== undefined) {
+            if (typeof summaryPath !== "string" ||
+                ["evidence", "body-file", "head-sha"].some((key) => flags[key] !== undefined))
+                throw new Error("--from-summaryはpathが必要で、--evidence/--body-file/--head-shaと併用できません");
+            const observedHead = git(["symbolic-ref", "--short", "HEAD"], root, {
+                env: GIT_ENV,
+            }).stdout.trim();
+            const observedBase = defaultBranch(root);
+            if ((flags.head !== undefined && flags.head !== observedHead) ||
+                (flags.base !== undefined && flags.base !== observedBase))
+                throw new Error("--from-summaryのhead/baseは現在branch/既定branchと一致する必要があります");
+            flags.head = observedHead;
+            flags.base = observedBase;
+            flags["head-sha"] = git(["rev-parse", "--verify", "HEAD^{commit}"], root, { env: GIT_ENV }).stdout.trim();
+        }
         const issueRaw = required(flags, "issue");
         if (!/^[1-9]\d*$/u.test(issueRaw))
             throw new Error("--issueは正のIssue番号で指定してください");
@@ -7161,6 +7203,22 @@ export async function main(argv, dependencies = {}) {
             issue,
             repository,
         });
+        let generatedInput;
+        if (typeof summaryPath === "string") {
+            const headSha = required(flags, "head-sha");
+            const binding = assertCurrentReviewJournalBinding(staging, headSha);
+            const trusted = loadEffectiveTrustedPolicySet(root, required(flags, "base"));
+            generatedInput = generateDeliveryInput({
+                root,
+                staging,
+                issue,
+                summaryPath,
+                headSha,
+                implementationHeadSha: binding.implementationHeadSha,
+                independenceMode: resolveReviewIndependence(trusted.policy),
+                verificationPolicy: trustedVerificationPolicy(trusted),
+            });
+        }
         const replayState = readStoredDeliveryState(staging);
         if (replayState?.pr) {
             const replayHead = required(flags, "head");
@@ -7303,8 +7361,8 @@ export async function main(argv, dependencies = {}) {
             ]));
             return 1;
         }
-        const evidenceFile = path.resolve(required(flags, "evidence"));
-        const evidence = readDeliveryEvidence(evidenceFile);
+        const evidence = generatedInput?.evidence ??
+            readDeliveryEvidence(path.resolve(required(flags, "evidence")));
         const headSha = required(flags, "head-sha");
         if (!/^[a-f0-9]{40}$/u.test(headSha))
             throw new Error("--head-shaは小文字の完全な40桁Git SHAで指定してください");
@@ -7325,9 +7383,13 @@ export async function main(argv, dependencies = {}) {
         const canonicalIssue = Number(canonicalRaw);
         if (canonicalIssue !== issue)
             throw new Error("--canonical-issueは--issueと一致させてください");
-        const bodyFile = path.resolve(required(flags, "body-file"));
-        if (!fs.existsSync(bodyFile))
-            throw new Error(`--body-fileがありません: ${bodyFile}`);
+        let body = generatedInput?.body;
+        if (body === undefined) {
+            const bodyFile = path.resolve(required(flags, "body-file"));
+            if (!fs.existsSync(bodyFile))
+                throw new Error(`--body-fileがありません: ${bodyFile}`);
+            body = fs.readFileSync(bodyFile, "utf8");
+        }
         const head = required(flags, "head");
         const base = required(flags, "base");
         const localDefaultBranch = defaultBranch(root);
@@ -7345,7 +7407,7 @@ export async function main(argv, dependencies = {}) {
             head,
             headSha,
             base,
-            body: fs.readFileSync(bodyFile, "utf8"),
+            body,
             title: typeof flags.title === "string" ? flags.title : undefined,
             evidence,
             trustedPolicy: trustedSet.policy,

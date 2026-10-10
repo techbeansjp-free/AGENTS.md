@@ -597,3 +597,83 @@ Then("planはcommandも記録追記も行わず同一条件の成功だけを返
   );
   assert.ok(this.results.planCorrupt?.error);
 });
+
+When(
+  "reuse付きrunで未実行・成功・最新失敗・policy変更・HEAD変更・破損を検査する",
+  async function () {
+    const flags = [`--base=${this.base}`, "--scope=full"];
+    const args = verifyArgs(this, [...flags, "--reuse"], FULL_COMMAND);
+    this.results.reuseMissing = await captureCli(args);
+    assert.equal(readVerificationRuns(this.staging).length, 1);
+    const original = fs.readFileSync(recordFile(this), "utf8");
+    // Execution would create a dirty file, so this proves reuse did not spawn it.
+    this.results.reuseSuccess = await captureCli(args, "write");
+    assert.equal(fs.existsSync(path.join(this.root, "generated.txt")), false);
+    assert.equal(fs.readFileSync(recordFile(this), "utf8"), original);
+    this.results.reuseAlways = await captureCli(
+      verifyArgs(this, flags, FULL_COMMAND),
+      "fail",
+    );
+    this.results.reuseLatestFailure = await captureCli(args, "fail");
+    assert.equal(readVerificationRuns(this.staging).length, 3);
+    this.results.reuseRepair = await captureCli(args);
+    assert.equal(readVerificationRuns(this.staging).length, 4);
+    const beforePolicy = fs.readFileSync(recordFile(this), "utf8");
+    const newCommand = [
+      process.execPath,
+      "-e",
+      "process.stdout.write('POLICY-EXECUTED')",
+    ];
+    retargetTrustedPolicy(this, {
+      fullCommand: newCommand,
+      targetedRunner: POLICY.targetedRunner,
+    });
+    // Even a newly trusted argv must not bypass a same-target incompatible record.
+    this.results.reusePolicy = await captureCli(
+      verifyArgs(this, [...flags, "--reuse"], newCommand),
+    );
+    assert.equal(fs.readFileSync(recordFile(this), "utf8"), beforePolicy);
+    assert.equal(this.results.reusePolicy.relayed, "");
+    git(this.root, ["update-ref", "refs/remotes/origin/main", this.base]);
+    git(this.root, ["commit", "--allow-empty", "-q", "-m", "reuse new HEAD"]);
+    this.results.reuseNewHead = await captureCli(args);
+    assert.equal(readVerificationRuns(this.staging).length, 5);
+    assert.notEqual(this.results.reuseNewHead.output?.headSha, this.head);
+    fs.writeFileSync(path.join(this.root, "dirty.txt"), "dirty");
+    this.results.reuseDirty = await captureCli(args);
+    fs.rmSync(path.join(this.root, "dirty.txt"));
+    fs.appendFileSync(recordFile(this), "broken JSON\n");
+    const corrupt = fs.readFileSync(recordFile(this), "utf8");
+    this.results.reuseCorrupt = await captureCli(args, "write");
+    assert.equal(fs.readFileSync(recordFile(this), "utf8"), corrupt);
+    assert.equal(fs.existsSync(path.join(this.root, "generated.txt")), false);
+  },
+);
+
+Then(
+  "再利用だけは実commandも記録追記も行わず不一致と破損を拒否する",
+  function () {
+    for (const key of ["reuseMissing", "reuseRepair", "reuseNewHead"]) {
+      assert.equal(this.results[key]?.error, undefined, key);
+      assert.equal(this.results[key]?.exitCode, 0, key);
+      assert.equal(this.results[key]?.output?.recorded, true, key);
+      assert.equal(this.results[key]?.output?.reused, false, key);
+    }
+    assert.equal(this.results.reuseSuccess?.output?.recorded, false);
+    assert.equal(this.results.reuseSuccess?.output?.reused, true);
+    assert.equal(
+      this.results.reuseSuccess?.output?.recordDigest,
+      this.results.reuseMissing?.output?.recordDigest,
+    );
+    assert.equal(this.results.reuseAlways?.exitCode, 3);
+    assert.equal(this.results.reuseAlways?.output?.reused, undefined);
+    assert.equal(this.results.reuseLatestFailure?.exitCode, 3);
+    assert.equal(this.results.reuseLatestFailure?.output?.recorded, true);
+    assert.match(
+      this.results.reusePolicy?.error?.message ?? "",
+      /trusted policy不一致/u,
+    );
+    assert.ok(this.results.reuseCorrupt?.error);
+    assert.ok(this.results.reuseDirty?.error);
+  },
+);

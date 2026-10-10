@@ -32,3 +32,8 @@ Feature: verify runで検証をshellを通さず実行し観測だけを記録�
     Given verify run用のIssue stagingを持つrepositoryがある
     When verify planで未実行・成功・最新失敗・policy変更・HEAD変更を観測する
     Then planはcommandも記録追記も行わず同一条件の成功だけを返す
+
+  Scenario: SCN-INT-VERIFYRUN-007 明示したreuseは有効な最新成功だけを再利用し安全条件を維持する
+    Given verify run用のIssue stagingを持つrepositoryがある
+    When reuse付きrunで未実行・成功・最新失敗・policy変更・HEAD変更・破損を検査する
+    Then 再利用だけは実commandも記録追記も行わず不一致と破損を拒否する

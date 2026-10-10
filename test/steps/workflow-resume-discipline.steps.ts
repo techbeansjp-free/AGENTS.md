@@ -211,7 +211,9 @@ Then(
           "01_要件定義.md",
           "02_設計.md",
           "03_実装計画.md",
-          "05_計画変更.md",
+        ]);
+        assert.deepEqual(implementation.read?.optionalStaging, [
+          { path: "05_計画変更.md", present: false },
         ]);
         assert.match(
           implementation.read!.skill,
@@ -230,10 +232,25 @@ Then(
           staging: quickStaging,
         });
         assert.ok(quick && "kind" in quick);
-        assert.deepEqual(quick.read?.staging, [
+        assert.deepEqual(quick.read?.staging, ["00_要求定義.md"]);
+        assert.deepEqual(quick.read?.optionalStaging, [
+          { path: "05_計画変更.md", present: false },
+        ]);
+        const amendment = path.join(quickStaging, "05_計画変更.md");
+        fs.writeFileSync(amendment, "# Existing amendment\n");
+        const amended = observeWorkflowHandoff(quickStaging, 9, {
+          ...preview.resume,
+          staging: quickStaging,
+        });
+        assert.ok(amended && "kind" in amended);
+        assert.deepEqual(amended.read?.staging, [
           "00_要求定義.md",
           "05_計画変更.md",
         ]);
+        assert.deepEqual(amended.read?.optionalStaging, [
+          { path: "05_計画変更.md", present: true },
+        ]);
+        fs.unlinkSync(amendment);
         assert.equal(quick.read?.skill, implementation.read?.skill);
         for (const inputStaging of [staging, quickStaging]) {
           const request = observeWorkflowHandoff(inputStaging, 1, {
@@ -301,6 +318,87 @@ Then(
       fs.readFileSync = originalRead;
       fs.linkSync = originalLink;
       process.stdout.write = originalWrite;
+    }
+  },
+);
+
+Given("初期引継ぎを検証する隔離repositoryがある", function () {
+  this.documents = { intakeRoot: this.initRepo() };
+});
+
+Then("初期引継ぎの正式previewとの一致を確認できる", function () {
+  assert.equal(this.checked, true);
+});
+
+When(
+  "issue createはStep0記録と同じStep1 handoffを一度に返す",
+  async function () {
+    const root = this.documents.intakeRoot!;
+    const assessment = path.join(root, "assessment.json");
+    fs.writeFileSync(
+      assessment,
+      JSON.stringify(
+        Object.fromEntries(
+          QUESTIONS.map((id) => [
+            id,
+            { answer: id === "Q-01" ? "unknown" : true, evidence: "fixture" },
+          ]),
+        ),
+      ),
+    );
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    const previousMode = process.env.ASC_EXECUTION_CONTEXT_MODE;
+    process.env.ASC_EXECUTION_CONTEXT_MODE = "short-lived";
+    try {
+      assert.equal(
+        await main([
+          "issue",
+          "create",
+          `--root=${root}`,
+          "--title=Prepared intake",
+          "--mode=quick",
+          `--assessment=${assessment}`,
+          "--prepare-next",
+        ]),
+        0,
+      );
+      const created = JSON.parse(output) as {
+        path: string;
+        mode: string;
+        durable: boolean;
+        synced: boolean;
+        step0: { recorded: boolean; errors: string[] };
+        handoff: { step: number; workUnit: { freshContextRequired: boolean } };
+        agentDispatch: unknown;
+      };
+      assert.equal(created.mode, "full", "unknown must not become quick");
+      assert.deepEqual(created.step0, { recorded: true, errors: [] });
+      assert.equal(created.durable, false);
+      assert.equal(created.synced, false);
+      assert.equal(created.handoff.step, 1);
+      assert.equal(created.handoff.workUnit.freshContextRequired, true);
+      output = "";
+      assert.equal(
+        await main(["workflow", "advance", `--staging=${created.path}`]),
+        0,
+      );
+      const preview = JSON.parse(output) as {
+        handoff: unknown;
+        agentDispatch: unknown;
+      };
+      assert.deepEqual(created.handoff, preview.handoff);
+      assert.deepEqual(created.agentDispatch, preview.agentDispatch);
+      this.checked = true;
+    } finally {
+      process.stdout.write = originalWrite;
+      if (previousMode === undefined)
+        delete process.env.ASC_EXECUTION_CONTEXT_MODE;
+      else process.env.ASC_EXECUTION_CONTEXT_MODE = previousMode;
     }
   },
 );

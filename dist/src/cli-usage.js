@@ -517,6 +517,7 @@ export const COMMAND_USAGE = Object.freeze([
         ],
         optionalFlags: [
             ROOT_FLAG,
+            optional("prepare-next", "", "作成済みStep 0記録と現在のStep 1 handoffを同じ呼出しで返す。Q回答を推測せず、次工程のgateを省略しない", "なし"),
             optional("changed", "path,path", "既知の変更path", "なし"),
             optional("staging-root", "path", "stagingを作る親directory（repository相対）。project policyのstaging.rootに一致させる。rootが*を含むときは必須", "project policyのstaging.root（既定 .agent-skill-chain/tmp/issues）"),
             optional("name", "text", "staging directory名。版管理下のstagingで人が読む名前（例: S1-T02_安定ID）を付けるときに使う", "<JST timestamp>_<title slug>"),
@@ -693,6 +694,7 @@ export const COMMAND_USAGE = Object.freeze([
         ],
         conditionalFlags: [],
         optionalFlags: [
+            optional("reuse", "", "同じHEAD・影響集合・trusted policy・scope・argvの最新成功が有効なら再実行せず返す。記録は追記しない。破損記録とpolicy不整合は拒否する", "指定なしでは必ず実行"),
             optional("base", "sha", "影響集合の比較基点。rebase後または既定branch追随後はreview exportと同じ基点を指定する", "review sessionの比較基点（sessionが無ければ必須）"),
             optional("root", "path", "対象repositoryのroot。stagingを置いたrepositoryと一致させる", "現在の作業directory"),
         ],
@@ -968,15 +970,17 @@ export const COMMAND_USAGE = Object.freeze([
         requiredFlags: [
             flag("issue", "整数", "対象Issue番号"),
             flag("repo", "owner/name", "対象repository"),
-            flag("base", "text", "base branch"),
-            flag("head", "text", "head branch"),
-            flag("head-sha", "sha", "headのSHA"),
-            flag("evidence", "path", "PR証跡のJSON file。構造はinputContractを参照"),
-            flag("body-file", "path", "template構造を満たすPR本文"),
         ],
-        conditionalFlags: [],
+        conditionalFlags: [
+            conditional("base", "text", "base branch", "--from-summaryなし", (provided) => provided["from-summary"] === undefined),
+            conditional("head", "text", "head branch", "--from-summaryなし", (provided) => provided["from-summary"] === undefined),
+            conditional("head-sha", "sha", "headのSHA", "--from-summaryなし", (provided) => provided["from-summary"] === undefined),
+            conditional("evidence", "path", "PR証跡JSON", "--from-summaryなし", (provided) => provided["from-summary"] === undefined),
+            conditional("body-file", "path", "template構造を満たすPR本文", "--from-summaryなし", (provided) => provided["from-summary"] === undefined),
+        ],
         optionalFlags: [
             ROOT_FLAG,
+            optional("from-summary", "repo-relative-path", "H_implでreview済みasc-delivery-summary/v1 JSONから本文と機械Evidenceを生成。evidence/body-file/head-shaと排他", "legacy入力"),
             optional("title", "text", "PRタイトル", "本文のH1見出し"),
             optional("authorize", "approved", "作成の承認", "承認なし"),
             optional("canonical-issue", "整数", "正本Issue番号", "--issueと同じ"),
@@ -985,9 +989,10 @@ export const COMMAND_USAGE = Object.freeze([
             optional("workflow-override", "path", "欠落StepのHumanOverride", "overrideなし"),
             ...APPLY_MODE,
         ],
-        example: "npx agent-skill-chain pr create --issue=886 --repo=owner/name --base=main --head=feature/886-cli-usage --head-sha=$(git rev-parse HEAD) --evidence=./evidence.json --body-file=./PR.md --dry-run",
+        example: "npx agent-skill-chain pr create --issue=886 --repo=owner/name --staging=<staging> --from-summary=delivery-summary.json --dry-run",
         inputContract: {
-            description: "--evidenceのJSON。headShaは--head-shaと同じexact HEAD。tests.scenarioIdsとspec.trace.scenariosは同じSCN集合。spec.impactはupdated|no-spec-impactで、no-spec-impactではspec.rationaleに対象範囲を限定した12文字以上の根拠が必要。ownershipは変更pathの所有者と層",
+            description: "--evidenceのJSON。headShaは--head-shaと同じexact HEAD。tests.scenarioIdsとspec.trace.scenariosは同じSCN集合。spec.impactはupdated|no-spec-impactで、no-spec-impactではspec.rationaleに対象範囲を限定した12文字以上の根拠が必要。ownershipは変更pathの所有者と層。--from-summaryはStep9でcommitしStep10で独立reviewした通常Git blob(256KiB以下)をH_implから読む。worktreeの変更は読まない。必須schemaVersion/issue/body/scenarioIds/specと任意ownershipだけを受理。specはconsistent(boolean明示),impactと任意rationale/trace(requirements,scenarios,tests)だけ。ownershipはclassified(boolean),owner,targetLayer。本文はPR template全必須節とASC_HEAD/ASC_VERIFICATION/ASC_REVIEWの二重波括弧placeholderを各1回持つ。headSha/review/testsを要約に申告できない。以下のsummaryExampleは別JSONとして保存する例でありlegacy evidenceへ混ぜない。from-summaryではhead/baseを省略すると現在branch/既定branchを観測し、指定時も一致が必要。CLI例: pr create --issue=886 --repo=owner/name --staging=<staging> --from-summary=delivery-summary.json --dry-run" +
+                ' summaryExample: {"schemaVersion": "asc-delivery-summary/v1", "issue": 886, "body": "# fix: 表示文言を訂正\\n\\n## 概要\\n表示文言を訂正する。\\nCloses #886\\n\\n## 変更内容\\n誤字を訂正。\\n\\n## 変更前後\\n誤字から正しい表記へ変更。\\n\\n## テスト結果\\n{{ASC_VERIFICATION}}\\n\\n## レビュー結果\\n{{ASC_REVIEW}}\\n{{ASC_HEAD}}\\n\\n## 仕様更新\\n公開仕様は変更しない。\\n\\n## 残存リスクと確認してほしい点\\n表記の確認。\\n\\n## 停止点\\ntrusted delivery policyの停止点に従う。", "scenarioIds": ["SCN-UNIT-EXAMPLE-001"], "spec": {"consistent": true, "impact": "no-spec-impact", "rationale": "表示文言の誤字訂正のみで製品の振る舞いと公開契約を変更しない"}, "ownership": {"classified": true, "owner": "project", "targetLayer": "project"}}',
             example: {
                 headSha: "<40hex>",
                 review: { approved: true, headSha: "<40hex>" },

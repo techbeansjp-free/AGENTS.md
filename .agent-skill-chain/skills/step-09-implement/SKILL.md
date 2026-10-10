@@ -46,6 +46,12 @@ Search Before Createの探索既定値は、symbol/既存patternを検索 → �
 
 scope内の通常問題は自律修正し、実装中はtargeted feedbackを優先する。最終完了条件は既存Verification Set・project policyに従い、読取の省略を検証やsecurity境界確認の省略に使わない。
 
+## 提出入力の作成
+
+決定論的なPR作成を使う場合は、実装の文脈があるこのStepで`pr create --help`の`asc-delivery-summary/v1`入力例と[PR本文template](../../templates/issue/11_プルリクエスト本文.md)を読み、提出要約JSONを通常のGit成果物として`H_impl`に含める。たとえば`docs/reviews/<Issue番号>_delivery.json`を使い、封印された計画文書は変更しない。目的・変更前後・仕様影響と限定根拠・SCN・残存リスク・所有者は実態から記述する。本文の検証・review・HEAD欄には`{{ASC_VERIFICATION}}`・`{{ASC_REVIEW}}`・`{{ASC_HEAD}}`を各1回置き、未完了の独立reviewや検証を合格と書かない。
+
+要約はStep 10の独立review対象である。提出時に同じ説明を別workerへ作り直させず、coordinatorが`pr create --from-summary=<path>`で正式記録と照合して機械欄を埋める。意味判断が未確定なら要約へ成功値を補わず、通常の是正・確認へ戻す。
+
 ## execution context境界
 
 標準の`short-lived`方式では、[開発ワークフローのexecution context境界](../../docs/01_開発ワークフロー.md#execution-context境界)に従い、この担当work unitへfresh contextを割り当てる。repository/stagingから復元し、完了後に別工程・別review round・finding是正を同じcontextへ追加しない。workerの成果物・検証・必要なcommit・返却・終了の後でcoordinatorがStep/roundを記録する。`compatible`の既存動作と品質gateは維持する。

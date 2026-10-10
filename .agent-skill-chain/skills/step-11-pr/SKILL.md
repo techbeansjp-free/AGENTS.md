@@ -7,6 +7,14 @@ description: 承認済みexact-headでPRを作成し、modeとtrusted delivery p
 
 入力は承認済みStep 10、同じ対象HEADの検証記録、固定repository・Issue・head/base、trusted delivery policyと操作authority。finalizerは製品・計画・review判断を変更しない。`workflow advance --staging=<staging>`のpreviewとhandoffを照合して開始する。`05_計画変更.md`は計画変更がない場合には存在しないため、存在確認後に読む。PR本文と`--evidence`用JSONは封印済みstagingの外に作成する。
 
+## レビュー済み提出要約がある場合
+
+`H_impl`へcommitされStep 10で検分済みの`asc-delivery-summary/v1`がある場合は、coordinatorが`pr create --from-summary=<repository相対path> --staging=<staging> --repo=<repo> --issue=<番号> --dry-run`を実行する。CLIはGitのレビュー済み要約と正式review・検証を照合し、現在HEAD・branch/baseと機械Evidenceを組み立てる。未commitの要約は使わず、意味判断・承認・仕様整合性を既定値で補わない。`--evidence`・`--body-file`・`--head-sha`との混在は拒否する。
+
+previewの対象と本文を確認し、exact HEADのpushと既存の操作authorityを満たして同じ入力を`--apply`する。Step 4/10、seal、trusted policy、独立性、remote、read-back、停止点の既存gateはそのまま適用する。拒否時は不足を是正し、未審査の要約を提出時に書き足さない。この経路では本文の再要約・Evidence JSON手組み・専用finalizer LLMを追加しない。必要な意味判断は要約の作成と独立reviewへ含める。
+
+以下の手動入力手順は、レビュー済み要約を持たない既存作業の互換経路である。いずれの経路も事前確認templateの成立条件と末尾のmerge・復旧契約を維持する。いずれの経路でも、`poc`の場合はPoCの旨と期限を本文に保持する。`poc`と`merge.mode=disabled`はPRで停止し、この場合はCLIの固定PR bindingと`outcome=pull-request`のStep 11終端を確認する。
+
 ## 読取の入口と終了
 
 最初に読むのは本Skill、下記2template、承認済み要求の要約・AC・仕様影響の該当節、`resume`が指すreview/verificationの結果である。PR本文を作るためにreviewをやり直さず、正式証跡にある同じ結果をjournal/session全文やtest再実行から集め直さない。必要な記録が欠ける・矛盾する場合だけ対象記録へ戻る。CLIの拒否がなければ、trusted policyの合成をmanifestのpath一覧から手で再実装しない。作成previewの対象repository・Issue・head/base・本文と`authorityStatus`を確認する。previewは操作authorityの成立を証明しない。policy・停止点は既に確定した入力を使い、不明・矛盾なら推測せず該当正本へ戻る。

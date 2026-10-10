@@ -8,3 +8,8 @@ Feature: 再開状態を起点にする読取規律
     When 本文を検査する
     Then context境界・再開順・拡大条件があり、adapterは全文読みを指示しない
     And advanceのpreviewは計画本文を読まずapplyはlock前後の変更を拒否する
+
+  Scenario: SCN-UNIT-RESUME-002 初期記録と次工程入力を一度のCLIで返す
+    Given 初期引継ぎを検証する隔離repositoryがある
+    When issue createはStep0記録と同じStep1 handoffを一度に返す
+    Then 初期引継ぎの正式previewとの一致を確認できる

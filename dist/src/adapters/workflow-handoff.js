@@ -33,7 +33,7 @@ const STEP_SKILLS = [
     "pr",
 ];
 /** Pointers only: no artifact bodies or new authority. Paths are relative to their owner. */
-function handoffReads(step, mode, role, reviewRound) {
+function handoffReads(staging, step, mode, role, reviewRound) {
     if (step === undefined || STEP_SKILLS[step] === undefined)
         return undefined;
     const skillStep = role === "correction" ? 9 : step;
@@ -45,9 +45,17 @@ function handoffReads(step, mode, role, reviewRound) {
             : role === "correction" || (step === 10 && (reviewRound ?? 1) > 1)
                 ? [REVIEW_SESSION_FILE]
                 : [...plans, PLAN_AMENDMENT_FILE];
+    const amendmentPresent = fs
+        .lstatSync(path.join(staging, PLAN_AMENDMENT_FILE), {
+        throwIfNoEntry: false,
+    })
+        ?.isFile() ?? false;
     return {
         skill: `.agent-skill-chain/skills/step-${String(skillStep).padStart(2, "0")}-${STEP_SKILLS[skillStep]}/SKILL.md`,
-        staging: inputs,
+        staging: inputs.filter((file) => file !== PLAN_AMENDMENT_FILE || amendmentPresent),
+        optionalStaging: inputs.includes(PLAN_AMENDMENT_FILE)
+            ? [{ path: PLAN_AMENDMENT_FILE, present: amendmentPresent }]
+            : [],
     };
 }
 /** Optional execution advice; never an approval or a substitute for workflow gates. */
@@ -115,7 +123,7 @@ export function observeWorkflowHandoff(staging, step, resume, continuationFromHe
             kind: "asc-handoff/v1",
             authority: "advisory",
             issue: record?.tracker ?? null,
-            read: handoffReads(step, record?.mode, role, reviewRound),
+            read: handoffReads(staging, step, record?.mode, role, reviewRound),
             branch: git(["symbolic-ref", "--short", "HEAD"], worktree, {
                 env: GIT_ENV,
             }).stdout.trim(),
