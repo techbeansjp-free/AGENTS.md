@@ -5,13 +5,13 @@ description: 承認済みexact-headでPRを作成し、modeとtrusted delivery p
 
 # ステップ11: PR作成とdelivery進行
 
-入力は承認済みStep 10、同じ対象HEADの検証記録、固定repository・Issue・head/base、trusted delivery policyと操作authority。finalizerは製品・計画・review判断を変更しない。`workflow advance --staging=<staging>`のpreviewとhandoffを照合して開始する。
+入力は承認済みStep 10、同じ対象HEADの検証記録、固定repository・Issue・head/base、trusted delivery policyと操作authority。finalizerは製品・計画・review判断を変更しない。`workflow advance --staging=<staging>`のpreviewとhandoffを照合して開始する。`05_計画変更.md`は計画変更がない場合には存在しないため、存在確認後に読む。PR本文と`--evidence`用JSONは封印済みstagingの外に作成する。
 
 ## PR作成の実行順
 
 1. 以下のtemplate契約に従い、確定済み要求・変更差分・`review export`の証跡から本文と事前確認を作る。既存のreview/verification証拠を参照し、同じHEAD・policy・scopeに対する調査やtestを再実行しない。不一致・欠測・最新失敗があればStep 10へ戻す。独立reviewの代行や自己承認をしない。
-2. `pr create --help`を一度全文読み、掲載された`--evidence`の入力例と必須引数を使う。rootから段階的にhelpを探索せず、先頭だけを切り出して型を実装ソースで探さない。Evidenceの各値は実際の承認・検証・仕様証拠に対応させる。`no-spec-impact`は文言等の限定された変更に限り、対象範囲を限定した12文字以上の`spec.rationale`を記録する。
-3. exact HEADをpushした後、同じstagingを指定して`pr create ... --dry-run`を実行し、成功した入力と操作authorityで`--apply`へ進む。CLIがStep 4/10、sync、seal、trusted policy、独立性、exact HEAD、remote、本文、provider read-backを検証する。journalやdelivery stateを手で作成・修正しない。拒否時は診断された不一致を解決する。
+2. `pr create --help`を一度全文読み、掲載された`--evidence`の入力例と必須引数を使う。rootから段階的にhelpを探索せず、先頭だけを切り出して型を実装ソースで探さない。Evidenceの各値は実際の承認・検証・仕様証拠に対応させる。この入力JSONの`headSha`と`review/tests/spec.headSha`はすべてPR対象のexact HEADへ揃える。`review export`が生成した証跡の`implementationHeadSha`や検証記録は変更しない。CLIが認めるevidence-only suffixだけは既存のreview・検証を再利用でき、一般のHEAD移動を同等に扱わない。`no-spec-impact`は文言等の限定された変更に限り、対象範囲を限定した12文字以上の`spec.rationale`を記録する。
+3. exact HEADをpushした後、同じstagingを指定して`pr create ... --dry-run`を実行し、成功した入力と操作authorityで`--apply`へ進む。CLIがStep 4/10、sync、seal、trusted policy、独立性、exact HEAD、remote、本文、provider read-backを検証する。CLIで成立したremote照合を、認証情報のないworkerからの`git ls-remote`等で重複実行しない。journalやdelivery stateを手で作成・修正しない。拒否時は診断された不一致を解決する。
 4. `poc`と`merge.mode=disabled`はPRで停止する。PoCはその旨と期限をPR本文に保持する。PR URLだけで完了を宣言せず、CLIが固定PR bindingと`outcome=pull-request`のStep 11終端を記録したことを確認する。merge・Issue手動終了・branch削除・release・cleanupを追加しない。
 
 ## merge・復旧が必要な場合
