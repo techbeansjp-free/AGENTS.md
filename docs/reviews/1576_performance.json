@@ -33,7 +33,7 @@
   ],
   "details": {
     "path": "docs/reviews/1576_performance.raw.json",
-    "sha256": "f764a5bed4d935e1a2456f0bf76fc58716a1c934dc71deb66b199643fc0306fa",
+    "sha256": "9c34db50d1053d761bfbcf2b323333d7d00c2cacb08fe1abfb0429ad11bb64e9",
     "keys": [
       "benchmark",
       "methodology",
@@ -53,7 +53,16 @@
       "revisionConfirmatoryA",
       "revisionEntryReuseReview",
       "revisionExperimentAccountingSnapshot",
-      "revisionReproducibilityAudit"
+      "revisionReproducibilityAudit",
+      "revisionReproductionBundle",
+      "revisionEntryReuseE2E",
+      "revisionCiTestRepair",
+      "revisionFinalWorkflowSourceReview",
+      "revisionFinalRegressionCoverage",
+      "revisionFollowupHarnessReview",
+      "revisionMetricCoverage",
+      "revisionBPilotRepairReview",
+      "revisionFinalSpecTestReview"
     ]
   },
   "limitations": [
@@ -168,6 +177,73 @@
       "acceptance": "NOT MET: total worker tokens increased. B was stopped before paid execution; subsequent candidate must be measured separately.",
       "scope": "Fixed non-LLM coordinator. All actual Issue workers included; experiment setup and normal AI coordinator overhead excluded. Three repeats in a small controlled fixture, not a general guarantee.",
       "nextCandidate": "c60e81b21afadf1dfc418bb7cd032c4de28036b8"
+    },
+    "entryReuseTrial": {
+      "candidateSha": "c60e81b21afadf1dfc418bb7cd032c4de28036b8",
+      "repeats": 1,
+      "case": "A",
+      "requestToPrSeconds": 1088.357,
+      "requestToCiObservedSeconds": 1089.061,
+      "allWorkerProcessedTokens": 2416311,
+      "step0Seconds": 729.71,
+      "qualityPassed": true,
+      "relativeToBaselineThreeTrialMedianTokenChangePercent": -12.12,
+      "acceptance": "Not established: one exploratory trial, elapsed time increased. Keep this observation in the next candidate sample; no exclusion or subtraction of waiting time.",
+      "step11": {
+        "seconds": 94.19,
+        "tokens": 497751,
+        "toolCalls": 13,
+        "directJournalReads": 0,
+        "recursiveListings": 0
+      },
+      "followupOrder": [
+        "candidate r2",
+        "additional baseline r4, separately reported as a temporal check",
+        "candidate r3"
+      ]
+    },
+    "entryReuseA": {
+      "candidateSha": "c60e81b21afadf1dfc418bb7cd032c4de28036b8",
+      "repeats": 3,
+      "case": "A",
+      "design": "Sequential additional observations, not fully counterbalanced; r1 long elapsed retained",
+      "medianRequestToPrSeconds": 414.487,
+      "medianRequestToCiObservedSeconds": 425.899,
+      "medianAllWorkerProcessedTokens": 2416311,
+      "changePercentVersusOriginalBaselineThreeMedian": {
+        "requestToPrSeconds": -5.3,
+        "requestToCiSeconds": -5.16,
+        "tokens": -12.13
+      },
+      "range": {
+        "requestToPrSeconds": [
+          338.771841,
+          1088.356965
+        ],
+        "requestToCiSeconds": [
+          350.227898,
+          1089.060809
+        ],
+        "tokens": [
+          1957708,
+          2541949
+        ]
+      },
+      "empiricalNearestRankP95": {
+        "requestToPrSeconds": 1088.356965,
+        "requestToCiSeconds": 1089.060809,
+        "tokens": 2541949
+      },
+      "percentileLimit": "With n=3, empirical nearest-rank p95 equals the observed maximum; it is not a reliable population p95 estimate.",
+      "allQualityPassed": true,
+      "threeMinuteTargetMet": false,
+      "scope": "Controlled fixed non-LLM coordinator worker totals; no ordinary AI coordinator token claim",
+      "additionalBaselineDiagnostic": {
+        "requestToCiObservedSeconds": 418.380816,
+        "allWorkerProcessedTokens": 2790479,
+        "pooledIntoBaseline": false
+      },
+      "conclusion": "A median time and worker tokens decreased in this small sequential sample. Slow r1 retained. B-H, bounded parent and seeded-review confirmation remain pending; no general speed or cost guarantee."
     }
   }
 }
