@@ -221,7 +221,9 @@ export function workflowExecutionContract(step, role, read, mode) {
         sourceRefs: ["requiredInputs"],
         question: cli
             ? "正式入力と保存済みEvidenceを既存gateで照合する。意味判断を生成しない"
-            : questions[kind],
+            : kind === "Design" && step !== undefined && [5, 6, 7].includes(step)
+                ? `${questions[kind]}。仕様影響がupdatedなら提出時のtrace.requirementsの要件IDはGit上のdocs/specs/02_要件/に存在する必要がある。既存の要件IDで足りるなら参照し、足りない場合だけ設計・計画の許可pathと仕様更新taskにdocs/specs/02_要件/を含める。開始前に独立確認する。no-spec-impactはdocs/specs/の変更と両立しない。分類の意味的妥当性はAIが判断する`
+                : questions[kind],
     }));
     if (step === 11)
         proofObligations.push({

@@ -113,6 +113,14 @@ Then(
     );
     assert.ok(this.action.proofObligations.length > 0);
     assert.ok(this.action.proofObligations.length < 7);
+    if ([5, 6, 7].includes(this.step)) {
+      const design = this.action.proofObligations.find(
+        (item) => item.kind === "Design",
+      );
+      assert.match(design?.question ?? "", /docs\/specs\/02_要件\//u);
+      assert.match(design?.question ?? "", /no-spec-impact/u);
+      assert.match(design?.question ?? "", /既存の要件IDで足りるなら参照/u);
+    }
     assert.equal(
       this.action.unconfirmed.length,
       this.action.proofObligations.length,

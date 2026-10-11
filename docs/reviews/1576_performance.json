@@ -33,7 +33,7 @@
   ],
   "details": {
     "path": "docs/reviews/1576_performance.raw.json",
-    "sha256": "f594199bfc71e6f91c4c83e2b46e5b03165612edb27cc84026079ca05fc8d315",
+    "sha256": "dcabf9cc86c61d09391f17dfccbab307b05ca6ca9258d0bab7cc14bad6753e45",
     "keys": [
       "kind",
       "issue",
@@ -78,13 +78,15 @@
       "revisionBPilotRepairReview",
       "revisionFinalSpecTestReview",
       "revisionExecutionModel",
-      "revisionWorkUnitExecutionContract"
+      "revisionWorkUnitExecutionContract",
+      "revisionWorkUnitDiagnostic"
     ]
   },
   "limitations": [
     "従来のprocess-local Impact局所測定ではE2E短縮を証明できない",
     "providerのinput/cache包含関係を区別し欠測値はnullとする",
-    "新規GraphDB・永続cache・Hook・session監視は導入しない"
+    "新規GraphDB・永続cache・Hook・session監視は導入しない",
+    "最新実行モデルのA診断は未完走で、失敗した呼出しを含む10回・6,091,238処理tokenを観測した。全Issue比較・請求額・通常AI親agentの総tokenは未測定。"
   ],
   "revisionMeasurements": {
     "actualCliAnalysis": {
@@ -268,9 +270,11 @@
       "candidateSha": "a974d0d0f969154bb67758648e78f902105ba5a2"
     },
     "workUnitExecutionContract": {
-      "status": "implementation in progress; not performance validated",
-      "detailKey": "revisionWorkUnitExecutionContract",
-      "paidTrials": 0
+      "status": "source implemented; actual diagnostic A stopped before Delivery; performance acceptance not met",
+      "detailKey": "revisionWorkUnitDiagnostic",
+      "eligibleCompletedE2ETrials": 0,
+      "observedProcessedTokenSubtotalAllAttempts": 6091238,
+      "observedActualModelInvocations": 10
     }
   }
 }

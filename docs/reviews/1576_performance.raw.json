@@ -48840,7 +48840,7 @@
     }
   },
   "revisionWorkUnitExecutionContract": {
-    "status": "source implemented; independent product review resolved; paid trial count zero",
+    "status": "cf12 source snapshot before paid trials; later diagnostic observations are recorded in revisionWorkUnitDiagnostic",
     "previousPackagedCandidateSha": "933643a74fd13a1f114e54532c7fa4e44000ea26",
     "intent": "Separate logical obligations, existing gates, and short-lived AI work; no Full/Quick eligibility relaxation or new long-lived worker.",
     "changes": [
@@ -49146,7 +49146,7 @@
       }
     },
     "limitations": [
-      "Final source/package proof, real A/G trials, final exact-HEAD full verification and formal review are pending.",
+      "At the cf12 source snapshot, real A/G trials and final evidence were pending. Later A diagnostic is incomplete; G and controlled comparisons remain pending.",
       "933 trusted-quality CI rejected modified protected staging.ts. Gate unchanged; implementation now restores original bytes and keeps verification lifetime under existing synchronous lock.",
       "Output delivery occurs after command recording; stream interleaving is not preserved, late descendant bytes outside observed main-exit lengths excluded."
     ],
@@ -49158,8 +49158,8 @@
       "trace": "PASS after Then role repair",
       "trustedBaseValidator": "PASS; protected staging restored to prior bytes",
       "independentReview": "WorkUnit proof ownership, start/completion boundary and formal coordinator operations reviewed; active findings zero",
-      "paid": "not started",
-      "finalFullAndEvidence": "pending final source/metrics HEAD",
+      "paid": "not started at cf12 source snapshot; later 10 observed model invocations are in revisionWorkUnitDiagnostic",
+      "finalFullAndEvidence": "pending at cf12 source snapshot; cf12 implementation subsequently reached exact-HEAD full verification and review",
       "testFormat": "PASS after explicit Then roles and bounded counter replacing wall-clock test deadline"
     },
     "priorCandidateCi": {
@@ -49168,5 +49168,57 @@
       "mainQuality": "2836 scenarios, one failure: VERIFYRUN008 default5000ms timeout under parallel CI. Specific multi-CLI step now timeout30000ms, bounded child/barrier unchanged; targeted 1scenario5steps PASS (4.155s).",
       "portability": "three OS pass"
     }
+  },
+  "revisionWorkUnitDiagnostic": {
+    "status": "stopped before independent Step10 review and PR Delivery; no complete Issue E2E or performance comparison",
+    "candidateSourceSha": "cf12de241edb89effcb5da3d59a27bd512a90fad",
+    "diagnosticTemplateAmendment": "template label corrected after the source package was frozen; continuation is diagnostic, not a controlled cohort",
+    "sourceOutcomeSha256": "3072a1355cc6b8f56a2474768b74358477c60ad769d246f1702e232c7af71c6f",
+    "observedActualModelInvocations": 10,
+    "observedProcessedSubtotalAllAttempts": 6091238,
+    "counting": "2 first stopped + 4 second stopped + 3 indexed diagnostic + 1 Step5 final provider usage; prior attempts and the orphan usage count once each; no imputation for missing process measurement",
+    "groups": [
+      {
+        "group": "initial-failed-harness",
+        "reportSha256": "c57870eab015ca70a384bf83e57f990275a5c498bf322780d66d325417bd5547",
+        "measurementIndexedInvocationCount": 2,
+        "measurementIndexedObservedTokens": 642448,
+        "performanceComparisonEligible": false
+      },
+      {
+        "group": "second-failed-harness",
+        "reportSha256": "90ec8703a0f4fdbb05eae602ad2591cf083a9f64799e6e42f8cc9289402c4871",
+        "measurementIndexedInvocationCount": 4,
+        "measurementIndexedObservedTokens": 1311100,
+        "performanceComparisonEligible": false
+      },
+      {
+        "group": "diagnostic-continuation",
+        "reportSha256": "874fd378603fea275f567238995b39f77fd2153610f829cd3546a18f84ac3827",
+        "measurementIndexedInvocationCount": 3,
+        "measurementIndexedObservedTokens": 2971986,
+        "performanceComparisonEligible": false
+      }
+    ],
+    "step5OrphanFinalUsage": {
+      "sourceRawSha256": "7f51d8ff13250548027e4a3808a094c05a448068cd9d6aee71635a24dfcf8300",
+      "observedProcessedTokens": 1165704,
+      "wallSeconds": null
+    },
+    "observedOutcome": "Step9 implementation and 9 dummy tests passed at be94795b; planning did not include docs/specs/02_要件/ for updated requirement IDs. Worker stopped before formal Step9 record, independent Step10 review and PR create.",
+    "classification": "Step2 worker chose updated for an observable return change; original issue semantic classification remains uncertain. no-spec-impact cannot be substituted after three docs/specs changes. No AMD, spec reclassification or formal Delivery refusal is claimed.",
+    "comparisonMissing": [
+      "same A on normalized baseline and noASC",
+      "security G",
+      "completed Delivery and full parent-worker cost",
+      "repetitions"
+    ],
+    "billedCostUSD": null,
+    "totalIssueTokens": null,
+    "producerPaidInvocations": 0,
+    "sourcePathsLocalOnly": [
+      "/tmp/asc-1576-e2e/cf12-diagnostic-outcome.json",
+      "/tmp/asc-1576-e2e/workunit-cf12-diagnostic/A-candidate-continuation/delivery-blocker-diagnosis.json"
+    ]
   }
 }
