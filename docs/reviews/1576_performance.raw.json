@@ -1,7 +1,7 @@
 {
   "kind": "asc-integrated-performance-observations/v1",
   "issue": 1576,
-  "status": "partial-acceptance-evidence",
+  "status": "latest-completed-e37-trial-recorded; work-selection-revision-pending-measurement",
   "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
   "supersededAttempt": {
     "status": "aborted-and-replaced-by-the-current-fixed-source-run",
@@ -49289,5 +49289,65 @@
     ],
     "billedCostUSD": null,
     "totalIssueTokens": null
+  },
+  "revisionConsistentAFullE37": {
+    "status": "completed-on-frozen-e37-source; latest work-selection revision not measured",
+    "candidateSourceSha": "e37bdf8c7bf9cb99dd44813678a0900a61339bae",
+    "fixedFixtureSha": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+    "privateTrialPr": "https://github.com/adachi-tatsuru/asc-1576-consistent-a-20261011/pull/11",
+    "resultSha256": "5e81ede9b2a8f79bfa42c48c6e4727890ff53d962474366e5d5bed83de5c329d",
+    "packageSha256": "2eb8da8a033a5e2c51ac6f700624702c5a875cf4f53b50753867b1974155abe4",
+    "officialPackageFileCount": 625,
+    "requestToPrSeconds": 1172.236,
+    "requestToCiObservedSeconds": 1194.33,
+    "allWorkerProcessedTokens": 6673928,
+    "workerCalls": 9,
+    "sameStepRetries": 0,
+    "quality": {
+      "passed": true,
+      "case": "A-full",
+      "fullSuite": "10/10",
+      "immutableOracle": "passed",
+      "independentReview": "passed",
+      "realPrAndCi": "passed",
+      "changedPaths": [
+        "docs/reviews/10_delivery.json",
+        "docs/reviews/10_review.json",
+        "src/greeting.js",
+        "test/greeting.test.js"
+      ],
+      "specFileCount": 0
+    },
+    "targetedBehavior": {
+      "step1ActualWorkflowPlanExecutions": 1,
+      "step1SameStateSplitPlanRetrievalExecutions": 0,
+      "step1ToolCalls": 11,
+      "step2ToolCalls": 15,
+      "step2DistributionSourceContractSearchExecutions": 0,
+      "countBoundary": "Manual read-only inspection of actual tool commands; excludes heredoc contents/evidence strings and counts shell execution intent. General document headings/application searches remain. Source IDs and lines stored in phaseComparison.targetedToolEvidence.",
+      "priorC6fComparison": {
+        "step1ToolCalls": 16,
+        "step2ToolCalls": 20,
+        "step1HeadSedPlanRetrievalExecutions": 2,
+        "step2DistributionContractSearchToolCalls": 3
+      },
+      "noNewModelCallsForAnalysis": true
+    },
+    "comparison": {
+      "baselineSourceSha": "5d3e69257473dd6dcce9d2249cc779c02dcb6700",
+      "sameFixtureSingleObservation": true,
+      "baselineAllWorkerProcessedTokens": 6727585,
+      "baselineRequestToCiSeconds": 1282.09,
+      "candidateTokenDifference": -53657,
+      "candidateCiSecondsDifference": -87.76,
+      "noAscAllWorkerProcessedTokens": 168829,
+      "noAscRequestToCiSeconds": 94.06
+    },
+    "measurementLimits": [
+      "Each arm is one observation and order/time differ; no causal improvement claim.",
+      "Fixed non-LLM coordinator used; normal parent agent tokens and billed cost unmeasured.",
+      "Provider processed token total counts all workers and cache with provider-specific rules; active context high-water and reinjection exact values unavailable.",
+      "This source snapshot precedes the new Evidence-driven Step 10 verification selector; its effect needs a separate matched trial."
+    ]
   }
 }

@@ -1,7 +1,7 @@
 {
   "kind": "asc-integrated-performance-summary/v1",
   "issue": 1576,
-  "status": "revision-measurement-in-progress",
+  "status": "latest-completed-e37-trial-recorded; work-selection-revision-pending-measurement",
   "baselineSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
   "previousCandidateSha": "5e51700b2a36b54d710ce0cc0e0f38ff8fbd5aa2",
   "readPolicy": "通常はこのsummaryだけを読む。反例・数値監査・再現に必要な場合だけ詳細証跡の該当keyを読む。",
@@ -33,7 +33,7 @@
   ],
   "details": {
     "path": "docs/reviews/1576_performance.raw.json",
-    "sha256": "3debe64bd586bbb4c1ac90bb8c45b2f30bb41100f661861621b73bae8a2e3bde",
+    "sha256": "28c52466d357c4f13aa81c45a316734a0e6f9447312549dea7566951b7785a71",
     "keys": [
       "kind",
       "issue",
@@ -80,15 +80,16 @@
       "revisionExecutionModel",
       "revisionWorkUnitExecutionContract",
       "revisionWorkUnitDiagnostic",
-      "revisionPlanningGuidanceTrials"
+      "revisionPlanningGuidanceTrials",
+      "revisionConsistentAFullE37"
     ]
   },
   "limitations": [
     "従来のprocess-local Impact局所測定ではE2E短縮を証明できない",
     "providerのinput/cache包含関係を区別し欠測値はnullとする",
     "新規GraphDB・永続cache・Hook・session監視は導入しない",
-    "最新実行モデルのA診断は未完走で、失敗した呼出しを含む10回・6,091,238処理tokenを観測した。全Issue比較・請求額・通常AI親agentの総tokenは未測定。",
-    "最新5d候補は隔離A quick・G fullでPR/CI/外部品質に到達したが、比較baselineはなく改善率は未算定。過去失敗を含む累計25実呼出し・19,440,755処理tokenを保持し、親AI全体・請求額は未測定。"
+    "e37候補の同条件A Fullは1回完走し全worker処理token 6,673,928、CI到達1194.33秒。単発・順序差があり有意な改善率は未証明。",
+    "新しいEvidence駆動Step 10選択はe37スナップショット後の変更であり、この測定値を最新HEADの性能として扱わない。親agent総token、正確なcontext high-water/reinjection、請求額は未測定。"
   ],
   "revisionMeasurements": {
     "actualCliAnalysis": {
@@ -286,6 +287,49 @@
       "cumulativeObservedModelInvocationsAllAttempts": 25,
       "cumulativeObservedProcessedTokensAllAttempts": 19440755,
       "matchedPerformanceComparisonAvailable": false
+    },
+    "consistentAFullE37": {
+      "status": "completed-on-frozen-e37-source; latest work-selection revision not measured",
+      "candidateSourceSha": "e37bdf8c7bf9cb99dd44813678a0900a61339bae",
+      "fixedFixtureSha": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+      "privateTrialPr": "https://github.com/adachi-tatsuru/asc-1576-consistent-a-20261011/pull/11",
+      "resultSha256": "5e81ede9b2a8f79bfa42c48c6e4727890ff53d962474366e5d5bed83de5c329d",
+      "requestToPrSeconds": 1172.236,
+      "requestToCiObservedSeconds": 1194.33,
+      "allWorkerProcessedTokens": 6673928,
+      "workerCalls": 9,
+      "quality": {
+        "passed": true,
+        "case": "A-full",
+        "fullSuite": "10/10",
+        "immutableOracle": "passed",
+        "independentReview": "passed",
+        "realPrAndCi": "passed",
+        "changedPaths": [
+          "docs/reviews/10_delivery.json",
+          "docs/reviews/10_review.json",
+          "src/greeting.js",
+          "test/greeting.test.js"
+        ],
+        "specFileCount": 0
+      },
+      "comparison": {
+        "baselineSourceSha": "5d3e69257473dd6dcce9d2249cc779c02dcb6700",
+        "sameFixtureSingleObservation": true,
+        "baselineAllWorkerProcessedTokens": 6727585,
+        "baselineRequestToCiSeconds": 1282.09,
+        "candidateTokenDifference": -53657,
+        "candidateCiSecondsDifference": -87.76,
+        "noAscAllWorkerProcessedTokens": 168829,
+        "noAscRequestToCiSeconds": 94.06
+      },
+      "measurementLimits": [
+        "Each arm is one observation and order/time differ; no causal improvement claim.",
+        "Fixed non-LLM coordinator used; normal parent agent tokens and billed cost unmeasured.",
+        "Provider processed token total counts all workers and cache with provider-specific rules; active context high-water and reinjection exact values unavailable.",
+        "This source snapshot precedes the new Evidence-driven Step 10 verification selector; its effect needs a separate matched trial."
+      ],
+      "detailKey": "revisionConsistentAFullE37"
     }
   }
 }

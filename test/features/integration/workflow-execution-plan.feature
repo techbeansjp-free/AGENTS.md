@@ -45,3 +45,8 @@ Feature: 保存済み状態から次のexecutionPlanだけを副作用なく返�
     Given executionPlan用の隔離full stagingがある
     When 同じStep10で検証とreviewの有効性を変えて投影する
     Then 有効な検証だけ選択から外しreview exportは残す
+
+  Scenario: SCN-INT-EXECPLAN-008 正式EvidenceからCLI検証を選び実行後に独立reviewへ戻る
+    Given 正式検証未実施のStep10 reviewer候補が隔離repositoryにある
+    When 実CLIのplanから必要検証を実行して再planする
+    Then CLIだけが検証を一度実行しStep10未記録で独立reviewerへ復帰する

@@ -12,7 +12,34 @@ import {
   workflowAgentDispatch,
   workflowExecutionContract,
   workflowReviewerAlternative,
+  workflowVerificationContract,
 } from "./workflow-handoff.js";
+
+/** Formal verification evidence may choose CLI work before an independent reviewer. */
+export function shouldVerifyBeforeReview(input: {
+  state: "ready" | "blocked" | "complete";
+  step: number | undefined;
+  role: string | undefined;
+  verificationObligationStatus:
+    "satisfied" | "unsatisfied" | "unknown" | "invalidated" | undefined;
+  verificationPlan:
+    | Pick<
+        ReturnType<typeof planVerification>,
+        "status" | "required" | "latestFailed"
+      >
+    | undefined;
+}): boolean {
+  return (
+    input.state === "ready" &&
+    input.step === 10 &&
+    input.role === "reviewer" &&
+    (input.verificationObligationStatus === "unsatisfied" ||
+      input.verificationObligationStatus === "invalidated") &&
+    input.verificationPlan?.status === "required" &&
+    input.verificationPlan.required.length > 0 &&
+    !input.verificationPlan.latestFailed
+  );
+}
 
 /** Read-only dispatch advice. Every mutation still re-observes its existing gate. */
 export function observeWorkflowExecutionPlan(
@@ -62,27 +89,36 @@ export function observeWorkflowExecutionPlan(
     : plan.state === "complete"
       ? "complete"
       : "ready";
-  const action =
+  const candidateAction =
     state === "ready" && known
       ? known.workUnit!.contract
       : workflowExecutionContract(undefined, "coordinator", undefined);
   // Only Step 10 needs these expensive read-only gates. In particular, an
   // ordinary --plan must not rebuild the Impact graph just to show advice.
   let verificationGate:
-    | { status: "satisfied" | "invalidated" | "unknown"; reason: string }
+    | {
+        status: "satisfied" | "unsatisfied" | "invalidated" | "unknown";
+        reason: string;
+      }
     | undefined;
+  let verificationPlan: ReturnType<typeof planVerification> | undefined;
   if (
     state === "ready" &&
     inspection.nextStep === 10 &&
-    resume.verification !== null &&
     resume.baseSha !== null
   ) {
     try {
       const check = planVerification({ staging });
       if (check.headSha !== resume.headSha)
         throw new Error("verify gateの観測HEADが最初のplan HEADから変化した");
+      verificationPlan = check;
       verificationGate = {
-        status: check.status === "observed" ? "satisfied" : "invalidated",
+        status:
+          check.status === "observed"
+            ? "satisfied"
+            : check.status === "required" && resume.verification === null
+              ? "unsatisfied"
+              : "invalidated",
         reason:
           check.status === "observed"
             ? "既存verify gateが現在HEAD・impact・trusted policyの合格記録を再照合した"
@@ -122,20 +158,53 @@ export function observeWorkflowExecutionPlan(
       };
     }
   }
-  const assurance = deriveAssuranceProjection({
+  // Project the existing formal observations before selecting who works next.
+  // The projection is advisory; the verified plan still owns runnable argv.
+  const projection = deriveAssuranceProjection({
     staging,
     mode: inspection.mode,
     nextStep: inspection.nextStep,
     journalSteps: journal.entries.map((entry) => entry.step),
     journalValid: journal.errors.length === 0 && inspection.valid,
     resume,
-    action,
+    action: candidateAction,
     role: known?.role,
     verificationGate,
     reviewGate,
   });
+  const verificationFirst = shouldVerifyBeforeReview({
+    state,
+    step: inspection.nextStep,
+    role: known?.role,
+    verificationObligationStatus: projection.obligations.find(
+      (item) => item.id === "O-06",
+    )?.status,
+    verificationPlan,
+  });
+  const action =
+    verificationFirst && verificationPlan
+      ? workflowVerificationContract({
+          headSha: verificationPlan.headSha,
+          impactDigest: verificationPlan.impactDigest,
+          required: verificationPlan.required,
+        })
+      : candidateAction;
+  const assurance = verificationFirst
+    ? {
+        ...projection,
+        selectedWork: {
+          obligationIds: ["O-06"],
+          kind: "deterministic" as const,
+          evidenceRefs:
+            projection.obligations.find((item) => item.id === "O-06")
+              ?.evidenceRefs ?? [],
+        },
+      }
+    : projection;
   const alternative =
-    state === "ready" ? workflowReviewerAlternative(handoff) : undefined;
+    state === "ready" && !verificationFirst
+      ? workflowReviewerAlternative(handoff)
+      : undefined;
   return {
     kind: "asc-execution-plan/v1" as const,
     authority: "advisory" as const,
@@ -144,11 +213,13 @@ export function observeWorkflowExecutionPlan(
     step: inspection.nextStep ?? null,
     headSha: resume.headSha,
     boundary: known?.boundary ?? null,
-    workUnitId: known?.workUnit?.workUnitId ?? null,
+    workUnitId: verificationFirst
+      ? null
+      : (known?.workUnit?.workUnitId ?? null),
     action,
     assurance,
     handoff:
-      state === "ready" && known
+      state === "ready" && known && !verificationFirst
         ? {
             ...known,
             workUnit: {

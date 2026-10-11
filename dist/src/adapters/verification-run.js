@@ -204,6 +204,9 @@ export function planVerification(input) {
     for (const item of records)
         if (item.headSha === headSha && item.impactDigest === impact.digest)
             latest.set(JSON.stringify(item.command), item);
+    // A resume record cannot represent the latest result of every command.
+    // Keep the retry guard tied to this exact HEAD and impact digest.
+    const latestFailed = [...latest.values()].some((item) => item.exitCode !== 0 || item.signal !== null);
     const violations = [...latest.values()]
         .map((item) => verificationCommandViolation(item.command, item.scope, policy, impact.features))
         .filter((value) => value !== undefined);
@@ -241,6 +244,7 @@ export function planVerification(input) {
                 ? "observed"
                 : "required",
         observed,
+        latestFailed,
         reason,
         required,
     };

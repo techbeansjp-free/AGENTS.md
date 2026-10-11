@@ -4,8 +4,14 @@ import path from "node:path";
 import { main } from "../../src/cli.js";
 import { createIssueStaging } from "../../src/domain/issue.js";
 import { QUESTIONS } from "../../src/domain/mode.js";
-import { STEP_JOURNAL_FILE } from "../../src/domain/workflow.js";
-import { observeWorkflowExecutionPlan } from "../../src/adapters/workflow-execution-plan.js";
+import {
+  STEP_JOURNAL_FILE,
+  WORKFLOW_STEPS,
+} from "../../src/domain/workflow.js";
+import {
+  observeWorkflowExecutionPlan,
+  shouldVerifyBeforeReview,
+} from "../../src/adapters/workflow-execution-plan.js";
 import {
   deriveAssuranceProjection,
   type AssuranceProjection,
@@ -14,12 +20,19 @@ import {
   observeWorkflowHandoff,
   workflowExecutionContract,
   workflowReviewerAlternative,
+  workflowVerificationContract,
   type WorkflowExecutionContract,
 } from "../../src/adapters/workflow-handoff.js";
 import { observeWorkflowResume } from "../../src/adapters/workflow-resume.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 import { fixtureInstant } from "../support/fixture-instant.js";
 import { git } from "../../src/lib/process.js";
+import { appendWorkflowJournalEntry } from "../../src/adapters/workflow-journal.js";
+import {
+  buildReviewRoundDraft,
+  recordReviewRound,
+} from "../../src/adapters/review-session.js";
+import { installTrustedVerificationPolicy } from "../support/trusted-verification-policy.js";
 
 class ExecutionPlanWorld extends WorkflowWorld {
   root = "";
@@ -38,6 +51,11 @@ class ExecutionPlanWorld extends WorkflowWorld {
   alternative?: ReturnType<typeof workflowReviewerAlternative>;
   originalId = "";
   refusal = false;
+  verificationGateKind = "";
+  verificationObligationStatus:
+    "satisfied" | "unsatisfied" | "unknown" | "invalidated" = "unknown";
+  latestVerificationFailed = false;
+  verificationSelected = false;
 }
 const { Given, When, Then } = stepDefinitions<ExecutionPlanWorld>();
 function snapshot(world: ExecutionPlanWorld): string {
@@ -526,3 +544,224 @@ Then("有効な検証だけ選択から外しreview exportは残す", function (
     "unknown",
   );
 });
+
+Given(
+  "Step10の候補role「{word}」とgate「{word}」と責務「{word}」と最新失敗「{word}」がある",
+  function (role: string, gate: string, obligation: string, failed: string) {
+    this.role = role;
+    this.verificationGateKind = gate;
+    this.verificationObligationStatus = obligation as
+      "satisfied" | "unsatisfied" | "unknown" | "invalidated";
+    this.latestVerificationFailed = failed === "true";
+  },
+);
+When("Evidenceから次のWork Unitを選ぶ", function () {
+  const candidate = workflowExecutionContract(10, this.role, undefined, "full");
+  const plan =
+    this.verificationGateKind === "none"
+      ? undefined
+      : {
+          status: this.verificationGateKind as
+            "required" | "observed" | "blocked",
+          required: [{ scope: "full" as const, command: ["npm", "test"] }],
+          latestFailed: this.latestVerificationFailed,
+        };
+  this.verificationSelected = shouldVerifyBeforeReview({
+    state: "ready",
+    step: 10,
+    role: this.role,
+    verificationObligationStatus: this.verificationObligationStatus,
+    verificationPlan: plan,
+  });
+  this.action = this.verificationSelected
+    ? workflowVerificationContract({
+        headSha: "a".repeat(40),
+        impactDigest: "b".repeat(64),
+        required: plan!.required,
+      })
+    : candidate;
+});
+Then(
+  "検証先行の選択は「{word}」で正式reviewの記録を先行しない",
+  function (selected: string) {
+    assert.ok(this.action);
+    assert.equal(this.verificationSelected, selected === "true");
+    if (this.verificationSelected) {
+      assert.equal(this.action.executor, "cli");
+      assert.deepEqual(
+        this.action.proofObligations.map((item) => item.kind),
+        ["Verification"],
+      );
+      assert.deepEqual(
+        this.action.allowedOperations.find(
+          (item) => item.operation === "run-required-verification",
+        )?.argv,
+        ["verify", "run", "--reuse"],
+      );
+      assert.equal(this.action.coordinatorCompletion, undefined);
+      assert.equal(JSON.stringify(this.action).includes("--step=10"), false);
+      assert.equal(
+        JSON.stringify(this.action).includes("review export"),
+        false,
+      );
+      assert.ok(
+        this.action.completionConditions.some(
+          (item) => item.id === "replan-before-review",
+        ),
+      );
+    } else if (this.role === "reviewer") {
+      assert.equal(this.action.executor, "fresh-worker");
+    }
+  },
+);
+
+Given("正式検証未実施のStep10 reviewer候補が隔離repositoryにある", function () {
+  this.root = this.initRepo();
+  const command = [
+    process.execPath,
+    "-e",
+    "require('node:fs').appendFileSync('.verify-count', 'run\\n')",
+  ];
+  fs.writeFileSync(
+    path.join(this.root, ".gitignore"),
+    ".agent-skill-chain/tmp/\n.verify-count\n",
+  );
+  git(["add", ".gitignore"], this.root);
+  git(["commit", "-qm", "ignore fixture observations"], this.root);
+  const base = installTrustedVerificationPolicy(this.root, {
+    fullCommand: command,
+    targetedRunner: [process.execPath, "-e", "process.exit(0)"],
+  });
+  fs.writeFileSync(
+    path.join(this.root, "implementation.txt"),
+    "first implementation\n",
+  );
+  git(["add", "implementation.txt"], this.root);
+  git(["commit", "-qm", "implementation"], this.root);
+  const head = git(["rev-parse", "HEAD"], this.root).stdout.trim();
+  this.staging = createIssueStaging(this.root, {
+    title: "verification before review",
+    requestedMode: "quick",
+    answers: Object.fromEntries(
+      QUESTIONS.map((id) => [
+        id,
+        { answer: true, evidence: "bounded fixture scope" },
+      ]),
+    ),
+    now: new Date(fixtureInstant()),
+  }).path;
+  for (const step of [1, 4, 9]) {
+    appendWorkflowJournalEntry({
+      staging: this.staging,
+      entry: {
+        step,
+        skillId: WORKFLOW_STEPS.find((item) => item.step === step)!.skillId,
+        mode: "quick",
+        recordedAt: fixtureInstant(),
+        artifacts: [`artifact-${step}`],
+        evidence: `fixture step ${step} evidence`,
+        ...(step === 9 ? { implementationHeadSha: head } : {}),
+      },
+    });
+  }
+  const draft = buildReviewRoundDraft({
+    staging: this.staging,
+    headSha: head,
+    baseSha: base,
+    scopeIds: ["fixture"],
+    acceptanceCriteriaIds: ["AC-fixture"],
+    invariantIds: [],
+  });
+  recordReviewRound({
+    staging: this.staging,
+    round: { ...draft.round, findings: [] },
+  });
+  fs.appendFileSync(
+    path.join(this.root, "implementation.txt"),
+    "additional implementation\n",
+  );
+  git(["add", "implementation.txt"], this.root);
+  git(["commit", "-qm", "additional implementation needs review"], this.root);
+  this.snapshot = fs.readFileSync(
+    path.join(this.staging, STEP_JOURNAL_FILE),
+    "utf8",
+  );
+  this.plans = [];
+});
+
+When("実CLIのplanから必要検証を実行して再planする", async function () {
+  const first = await runPlan(this.staging);
+  assert.equal(first.status, 0, first.text);
+  const plan = JSON.parse(first.text) as ReturnType<
+    typeof observeWorkflowExecutionPlan
+  >;
+  this.plans.push(plan);
+  assert.equal(plan.step, 10);
+  assert.equal(plan.action.executor, "cli");
+  assert.equal(plan.agentDispatch, undefined);
+  assert.equal(plan.handoff, undefined);
+  assert.equal(plan.alternatives, undefined);
+  assert.equal(plan.workUnitId, null);
+  assert.deepEqual(plan.assurance.selectedWork.obligationIds, ["O-06"]);
+  assert.equal(
+    plan.assurance.obligations.find((item) => item.id === "O-06")?.status,
+    "unsatisfied",
+  );
+  assert.equal(plan.action.coordinatorCompletion, undefined);
+  const operations = plan.action.allowedOperations.filter(
+    (item) => item.operation === "run-required-verification",
+  );
+  assert.equal(operations.length, 1);
+  for (const operation of operations) {
+    const output = process.stdout.write;
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    try {
+      const status = await main([
+        ...operation.argv,
+        `--staging=${this.staging}`,
+        `--scope=${operation.inputBindings!.scope}`,
+        "--",
+        ...(JSON.parse(operation.requiredTrailingArgv!) as string[]),
+      ]);
+      assert.equal(status, 0);
+    } finally {
+      process.stdout.write = output;
+    }
+  }
+  const after = await runPlan(this.staging);
+  assert.equal(after.status, 0, after.text);
+  this.plans.push(
+    JSON.parse(after.text) as ReturnType<typeof observeWorkflowExecutionPlan>,
+  );
+  const repeated = await runPlan(this.staging);
+  assert.equal(repeated.status, 0, repeated.text);
+  this.plans.push(
+    JSON.parse(repeated.text) as ReturnType<
+      typeof observeWorkflowExecutionPlan
+    >,
+  );
+});
+
+Then(
+  "CLIだけが検証を一度実行しStep10未記録で独立reviewerへ復帰する",
+  function () {
+    for (const plan of this.plans.slice(1)) {
+      assert.equal(plan.step, 10);
+      assert.equal(plan.action.executor, "fresh-worker");
+      assert.equal(plan.handoff?.role, "reviewer");
+      assert.ok(plan.agentDispatch);
+      assert.equal(
+        plan.assurance.obligations.find((item) => item.id === "O-06")?.status,
+        "satisfied",
+      );
+    }
+    assert.equal(
+      fs.readFileSync(path.join(this.root, ".verify-count"), "utf8"),
+      "run\n",
+    );
+    assert.equal(
+      fs.readFileSync(path.join(this.staging, STEP_JOURNAL_FILE), "utf8"),
+      this.snapshot,
+    );
+  },
+);

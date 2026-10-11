@@ -398,6 +398,88 @@ export function workflowExecutionContract(step, role, read, mode) {
         maxTransitions: 1,
     };
 }
+/** CLI-only pre-review work. It records verification, never a review or Step 10. */
+export function workflowVerificationContract(input) {
+    const base = workflowExecutionContract(10, "coordinator", undefined);
+    const contract = { ...base };
+    delete contract.coordinatorCompletion;
+    return {
+        ...contract,
+        purpose: "独立review前の正式検証を完了する",
+        semanticReason: "既存verify gateが現在HEADの必要検証を導出したためCLIで実行する",
+        allowedOperations: [
+            {
+                operation: "observe-verification",
+                argv: ["verify", "plan"],
+                requiredFlags: ["staging"],
+                mode: "read",
+            },
+            ...input.required.map((item) => ({
+                operation: "run-required-verification",
+                argv: ["verify", "run", "--reuse"],
+                requiredFlags: ["staging", "scope"],
+                requiredTrailingArgv: JSON.stringify(item.command),
+                inputBindings: {
+                    scope: item.scope,
+                    command: "同じHEADのverify plan.requiredで再照合したargv。shell文字列へ変換しない",
+                },
+                mode: "gated-apply",
+            })),
+            {
+                operation: "reobserve-work",
+                argv: ["workflow", "advance", "--plan"],
+                requiredFlags: ["staging"],
+                mode: "read",
+            },
+        ],
+        requiredInputs: [
+            { owner: "git", path: "HEAD", required: true },
+            {
+                owner: "staging",
+                path: "journal/verification-runs.jsonl",
+                required: false,
+            },
+        ],
+        preconditions: [
+            ...base.preconditions,
+            {
+                id: "verification-plan-current",
+                observedBy: "verify plan",
+                expected: `HEAD=${input.headSha}、impact=${input.impactDigest}とtrusted policyの必要commandが一致`,
+            },
+        ],
+        completionConditions: [
+            {
+                id: "verification-observed",
+                observedBy: "verify plan",
+                expected: "現在HEAD・impact・trusted policyに有効な正式成功記録を再観測する",
+            },
+            {
+                id: "replan-before-review",
+                observedBy: "workflow advance --plan",
+                expected: "Step 10を記録せず、次の独立review作業を再選択する",
+            },
+        ],
+        proofObligations: [
+            {
+                kind: "Verification",
+                judgedBy: "cli",
+                sourceRefs: ["verify plan.required", "journal/verification-runs.jsonl"],
+                question: "現在HEADの必要検証がtrusted policyどおり正式に成功したか",
+            },
+        ],
+        machineChecks: [
+            {
+                observedBy: "cli",
+                commands: ["verify plan", "verify run --reuse"],
+                facts: ["HEAD", "impact", "trusted-command", "result"],
+                selfDeclarationAccepted: false,
+            },
+        ],
+        unconfirmed: ["Verification:cli:formal-evidence-required"],
+        scopeExpansionTriggers: [],
+    };
+}
 /** Optional execution advice; never an approval or a substitute for workflow gates. */
 export function observeWorkflowHandoff(staging, step, resume, continuationFromHead) {
     if ((process.env.ASC_EXECUTION_CONTEXT_MODE ?? "short-lived") !== "short-lived")
