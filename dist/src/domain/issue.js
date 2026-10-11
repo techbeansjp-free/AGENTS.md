@@ -659,8 +659,13 @@ function withoutPlaceholderCodeAndComments(text, preserveLines = false) {
 function unresolvedPlaceholders(text, dialect = DEFAULT_GHERKIN_DIALECT) {
     const prose = withoutGherkin(withoutPlaceholderCodeAndComments(text), dialect);
     const found = new Set();
-    for (const match of prose.matchAll(/<[^>\n]+>|\{[^}\n]+\}/gu))
+    for (const match of prose.matchAll(/<[^>\n]+>|\{[^}\n]+\}/gu)) {
+        // A statement such as `function f() { return "value"; }` may be cited in
+        // ordinary prose. A semicolon makes the brace content code, not a slot.
+        if (match[0].startsWith("{") && match[0].includes(";"))
+            continue;
         found.add(match[0]);
+    }
     for (const match of prose.matchAll(/（[^）\n]+）/gu))
         if (TEMPLATE_PARENTHETICAL_PLACEHOLDERS.has(match[0]))
             found.add(match[0]);

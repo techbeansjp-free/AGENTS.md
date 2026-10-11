@@ -291,6 +291,8 @@ Given(/^validなquick Issueの本文に(.+)がある$/u, function (kind: string)
       "\n技術メモ: `Promise<T>` と ``Map<`key`, T>`` を利用する。\n",
     "code blockのobject literal":
       "\n```ts\nconst value = { key: true };\n```\n",
+    関数bodyの引用:
+      '\n既存コードは export function greeting() { return "Helo"; } である。\n',
     説明文の変更しない条件: "\n既存契約（変更しない条件）を維持する。\n",
     "Scenario Outlineのparameter":
       "\nScenario Outline: SCN-FIXTURE-ISSUE-002 入力を検証する\n  Given <parameter>を受け取る\n  Then 正常に扱う\n\n  Examples:\n    | parameter |\n    | value |\n",

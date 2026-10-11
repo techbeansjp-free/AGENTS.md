@@ -61,6 +61,11 @@ Feature: Issue templateと段階別検証の契約
     When quick Issueのplaceholderを検証する
     Then placeholder errorなしでIssue検証は合格する
 
+  Scenario: SCN-UNIT-ISSUEPLC-017 本文に引用した関数bodyはplaceholderとしない
+    Given validなquick Issueの本文に関数bodyの引用がある
+    When quick Issueのplaceholderを検証する
+    Then placeholder errorなしでIssue検証は合格する
+
   Scenario: SCN-UNIT-ISSUEPLC-003 説明文の変更しない条件はplaceholderとしない
     Given validなquick Issueの本文に説明文の変更しない条件がある
     When quick Issueのplaceholderを検証する
