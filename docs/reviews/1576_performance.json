@@ -33,7 +33,7 @@
   ],
   "details": {
     "path": "docs/reviews/1576_performance.raw.json",
-    "sha256": "dcabf9cc86c61d09391f17dfccbab307b05ca6ca9258d0bab7cc14bad6753e45",
+    "sha256": "3debe64bd586bbb4c1ac90bb8c45b2f30bb41100f661861621b73bae8a2e3bde",
     "keys": [
       "kind",
       "issue",
@@ -79,14 +79,16 @@
       "revisionFinalSpecTestReview",
       "revisionExecutionModel",
       "revisionWorkUnitExecutionContract",
-      "revisionWorkUnitDiagnostic"
+      "revisionWorkUnitDiagnostic",
+      "revisionPlanningGuidanceTrials"
     ]
   },
   "limitations": [
     "従来のprocess-local Impact局所測定ではE2E短縮を証明できない",
     "providerのinput/cache包含関係を区別し欠測値はnullとする",
     "新規GraphDB・永続cache・Hook・session監視は導入しない",
-    "最新実行モデルのA診断は未完走で、失敗した呼出しを含む10回・6,091,238処理tokenを観測した。全Issue比較・請求額・通常AI親agentの総tokenは未測定。"
+    "最新実行モデルのA診断は未完走で、失敗した呼出しを含む10回・6,091,238処理tokenを観測した。全Issue比較・請求額・通常AI親agentの総tokenは未測定。",
+    "最新5d候補は隔離A quick・G fullでPR/CI/外部品質に到達したが、比較baselineはなく改善率は未算定。過去失敗を含む累計25実呼出し・19,440,755処理tokenを保持し、親AI全体・請求額は未測定。"
   ],
   "revisionMeasurements": {
     "actualCliAnalysis": {
@@ -275,6 +277,15 @@
       "eligibleCompletedE2ETrials": 0,
       "observedProcessedTokenSubtotalAllAttempts": 6091238,
       "observedActualModelInvocations": 10
+    },
+    "planningGuidanceTrials": {
+      "sourceSha": "5d3e69257473dd6dcce9d2249cc779c02dcb6700",
+      "status": "A quick and G full completed E2E; functional safety demonstrated in these two cases; comparative performance unproven",
+      "detailKey": "revisionPlanningGuidanceTrials",
+      "completedE2ETrials": 2,
+      "cumulativeObservedModelInvocationsAllAttempts": 25,
+      "cumulativeObservedProcessedTokensAllAttempts": 19440755,
+      "matchedPerformanceComparisonAvailable": false
     }
   }
 }

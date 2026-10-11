@@ -49220,5 +49220,74 @@
       "/tmp/asc-1576-e2e/cf12-diagnostic-outcome.json",
       "/tmp/asc-1576-e2e/workunit-cf12-diagnostic/A-candidate-continuation/delivery-blocker-diagnosis.json"
     ]
+  },
+  "revisionPlanningGuidanceTrials": {
+    "status": "A quick and G full reached independent review, official Delivery and CI with external quality passed; no matched baseline or full parent AI accounting, so performance acceptance is not established",
+    "entries": [
+      {
+        "kind": "A-full-stopped",
+        "sourceSha": "dd4b390ba4feab9253624c3acd60c690117b4872",
+        "reportSha256": "e92dc6000a9e9eae5ae57c85c47a2a54217ec10b9b7bbe42152a715984406ca6",
+        "actualModelCalls": 2,
+        "processedTokens": 625380,
+        "mode": "full",
+        "status": "blocked-before-target-planning-steps",
+        "performanceComparisonEligible": false,
+        "sourcePathLocalOnly": "/tmp/asc-1576-e2e/planning-guidance-dd4b390b-A/planning-guidance-result.json"
+      },
+      {
+        "kind": "A-quick-complete",
+        "sourceSha": "5d3e69257473dd6dcce9d2249cc779c02dcb6700",
+        "reportSha256": "15f6ac0858e6a60015bd4a5ea1833b5fe8aab0d621f6899c7ff453a690bc6861",
+        "actualModelCalls": 4,
+        "processedTokens": 1565593,
+        "mode": "quick",
+        "status": "complete",
+        "performanceComparisonEligible": false,
+        "sourcePathLocalOnly": "/tmp/asc-1576-e2e/planning-guidance-5d3e6925-A/planning-guidance-result.json",
+        "requestToPrObservedSeconds": 345.5350399017334,
+        "requestToCiObservedSeconds": 367.5899410247803,
+        "prUrl": "https://github.com/adachi-tatsuru/asc-1576-isolated-benchmark-20261010/pull/49",
+        "ciRunUrl": "https://github.com/adachi-tatsuru/asc-1576-isolated-benchmark-20261010/actions/runs/38100500480",
+        "externalQualityPassed": true
+      },
+      {
+        "kind": "G-full-complete",
+        "sourceSha": "5d3e69257473dd6dcce9d2249cc779c02dcb6700",
+        "reportSha256": "25aaa41d43f80c0a65384a87e026004eb46278b1e4fde1d5d02c799be4cfae1b",
+        "actualModelCalls": 9,
+        "processedTokens": 11158544,
+        "mode": "full",
+        "status": "complete",
+        "performanceComparisonEligible": false,
+        "sourcePathLocalOnly": "/tmp/asc-1576-e2e/planning-guidance-5d3e6925-G/planning-guidance-result.json",
+        "requestToPrObservedSeconds": 1792.601977109909,
+        "requestToCiObservedSeconds": 1814.2967700958252,
+        "prUrl": "https://github.com/adachi-tatsuru/asc-1576-isolated-benchmark-20261010/pull/51",
+        "ciRunUrl": "https://github.com/adachi-tatsuru/asc-1576-isolated-benchmark-20261010/actions/runs/38102370999",
+        "externalQualityPassed": true
+      }
+    ],
+    "additionalActualModelCalls": 15,
+    "additionalObservedProcessedTokens": 13349517,
+    "cumulativeWithEarlierFailedAttempts": {
+      "actualModelCalls": 25,
+      "observedProcessedTokens": 19440755,
+      "completedE2ETrials": 2
+    },
+    "diagnosticLimitations": [
+      "dd4 full A stopped at Step1 because the old template graph-label parenthetical was classified as an unresolved placeholder; the old rejection remains and the new filled label passes",
+      "5d A selected quick through the real mode assessment, so Steps5/6/7 were not exercised",
+      "5d G selected full; actual Step5 design, Step6 plan and independent Step7 checked updated requirement IDs and docs/specs/02_要件/ path before seal; Delivery accepted the trace",
+      "G took about 30 minutes and 11.16m processed tokens and generated about 50 spec artifacts after bootstrap; no performance benefit is claimed",
+      "G external evaluation helper initially failed on Git-quoted Japanese paths; failure retained and same-HEAD recheck passed with per-process core.quotepath=false; host/product unchanged"
+    ],
+    "comparisonMissing": [
+      "normalized baseline and noASC with identical official package/source access",
+      "repeated candidate A/G trials",
+      "ordinary parent AI total/context high-water and billed cost"
+    ],
+    "billedCostUSD": null,
+    "totalIssueTokens": null
   }
 }
