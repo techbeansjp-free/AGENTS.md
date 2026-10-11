@@ -526,6 +526,11 @@ const TEMPLATE_PLACEHOLDER_TERM =
 
 function templateParentheticalPlaceholders(): ReadonlySet<string> {
   const placeholders = new Set<string>();
+  // 配布済みfullテンプレートの旧ラベルを残す。更新前のstagingに残った
+  // 未記入の説明文も、テンプレート修正によって検査から漏らさない。
+  placeholders.add(
+    "（node・edgeの正方向、cycle、self-loop、unknown node、自己評価・自己SHAの拒否、rollback/retryの上限。該当時だけ）",
+  );
   for (const name of fs.readdirSync(templateRoot)) {
     if (!name.endsWith(".md")) continue;
     const template = fs.readFileSync(path.join(templateRoot, name), "utf8");

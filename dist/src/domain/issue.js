@@ -379,6 +379,9 @@ export function issueRequiredHeadings(mode) {
 const TEMPLATE_PLACEHOLDER_TERM = /記載|記入|件名|名称|内容|役割|日時|ISO 8601形式|状態|結果|根拠|条件|パス|URL|SHA|値|対象/u;
 function templateParentheticalPlaceholders() {
     const placeholders = new Set();
+    // 配布済みfullテンプレートの旧ラベルを残す。更新前のstagingに残った
+    // 未記入の説明文も、テンプレート修正によって検査から漏らさない。
+    placeholders.add("（node・edgeの正方向、cycle、self-loop、unknown node、自己評価・自己SHAの拒否、rollback/retryの上限。該当時だけ）");
     for (const name of fs.readdirSync(templateRoot)) {
         if (!name.endsWith(".md"))
             continue;

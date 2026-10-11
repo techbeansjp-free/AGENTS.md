@@ -77,6 +77,12 @@ Feature: Issue templateと段階別検証の契約
     Then placeholder errorを示してIssue検証が失敗する
     And placeholder errorが原因の字面"（人が識別できる件名）"を示す
 
+  Scenario: SCN-UNIT-ISSUEPLC-016 旧graph制約の未記入説明は引き続き拒否する
+    Given validなquick Issueの本文に旧graph制約のplaceholderがある
+    When quick Issueのplaceholderを検証する
+    Then placeholder errorを示してIssue検証が失敗する
+    And placeholder errorが原因の字面"（node・edgeの正方向、cycle、self-loop、unknown node、自己評価・自己SHAの拒否、rollback/retryの上限。該当時だけ）"を示す
+
   Scenario: SCN-UNIT-ISSUEPLC-006 placeholderが6件のとき先頭5件とほか1件を示す
     Given validなquick Issueの本文にplaceholder6件がある
     When quick Issueのplaceholderを検証する

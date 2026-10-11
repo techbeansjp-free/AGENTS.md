@@ -296,6 +296,8 @@ Given(/^validなquick Issueの本文に(.+)がある$/u, function (kind: string)
       "\nScenario Outline: SCN-FIXTURE-ISSUE-002 入力を検証する\n  Given <parameter>を受け取る\n  Then 正常に扱う\n\n  Examples:\n    | parameter |\n    | value |\n",
     テンプレート由来のplaceholder:
       "\n件名は（人が識別できる件名）のままである。\n",
+    旧graph制約のplaceholder:
+      "\n- 依存/authority/evidence graphの制約（node・edgeの正方向、cycle、self-loop、unknown node、自己評価・自己SHAの拒否、rollback/retryの上限。該当時だけ）: 該当なし\n",
     "対象・変更・理由を含む説明文":
       "\n他の文書では、変更点を（対象・変更・理由）の3項目で説明している。\n",
     placeholder6件: "\n未解決は<a>と<b>と<e>と{c}と{d}と{f}である。\n",
@@ -304,6 +306,17 @@ Given(/^validなquick Issueの本文に(.+)がある$/u, function (kind: string)
       "\n- ドメイン用語台帳の候補差分。列は用語ID、標準語候補、定義、コンテキスト、出典、類義語・禁止表現、状態とする: 追加しない\n- project policyが選択した静的検査。対象外なら理由を書く: lint\n",
   };
   if (kind === "templateのラベル行") {
+    const requirementsTemplate = fs.readFileSync(
+      path.join(templateDirectory, "00_要求定義_full.md"),
+      "utf8",
+    );
+    const graphLabel = requirementsTemplate
+      .split("\n")
+      .find((line) =>
+        line.startsWith("- 依存/authority/evidence graphの制約:"),
+      );
+    assert.ok(graphLabel, "要求定義テンプレートにgraph制約のラベルがある");
+    additions[kind] += `\n${graphLabel} 該当なし\n`;
     const designTemplate = fs.readFileSync(
       path.join(templateDirectory, "02_設計.md"),
       "utf8",
