@@ -418,17 +418,19 @@ export const COMMAND_USAGE = Object.freeze([
         requiredFlags: [
             flag("input", "path", "preflightまたはpostのJSON入力"),
             flag("repo", "path", "隔離Git worktreeのtop-level"),
+            flag("session", "path", "候補worktree外に排他的に保存するpreflight引継ぎfile"),
         ],
         conditionalFlags: [],
         optionalFlags: [],
-        example: "npx agent-skill-chain workflow candidate --repo=./candidate --input=./candidate-preflight.json",
+        example: "npx agent-skill-chain workflow candidate --repo=./candidate --session=./candidate-session.json --input=./candidate-preflight.json",
         acceptsSpaceSeparatedFlags: true,
         inputContract: {
-            description: "preflight: intent, correctnessCriterion, risk（全14領域のcleared/triggered/unknown）, unresolved。post: baseSha, allowedPaths, targetTestsPassed, gaps。risk・tests・gapsは申告であり正式Evidenceではない。Git HEAD・差分・cleanは再観測する。",
+            description: "preflight: intent, correctnessCriterion, allowedPaths, risk（全14領域のcleared/triggered/unknown）, unresolved。post: targetTest（argv）, gaps。base・許可path・成功フラグの事後申告を拒否し、CLIがGitと対象テストを観測する。risk・gapsは申告であり、sessionとテスト観測は正式Evidenceではない。",
             example: {
                 phase: "preflight",
                 intent: "内部ラベルをHelloに修正",
                 correctnessCriterion: "label() === Hello",
+                allowedPaths: ["src/label.ts"],
                 risk: {
                     authentication: "cleared",
                     authorization: "cleared",

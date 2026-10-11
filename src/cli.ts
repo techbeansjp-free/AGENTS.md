@@ -79,6 +79,12 @@ import {
   observeCandidateGit,
 } from "./adapters/candidate-git.js";
 import {
+  candidateAllowedPaths,
+  createCandidateSession,
+  loadCandidateSession,
+  runCandidateTargetTest,
+} from "./adapters/candidate-session.js";
+import {
   assertPullRequestTrackerBinding,
   createPullRequest,
   authorizeMerge,
@@ -6454,9 +6460,13 @@ export async function main(
     const { flags, artifacts } = workflowArguments(rest);
     if (
       artifacts.length > 0 ||
-      Object.keys(flags).some((key) => !["input", "repo"].includes(key))
+      Object.keys(flags).some(
+        (key) => !["input", "repo", "session"].includes(key),
+      )
     )
-      throw new Error("workflow candidateは--inputと--repoだけを受け付けます");
+      throw new Error(
+        "workflow candidateは--input、--repo、--sessionだけを受け付けます",
+      );
     const inputFile = path.resolve(required(flags, "input"));
     const fd = fs.openSync(
       inputFile,
@@ -6492,6 +6502,7 @@ export async function main(
     const input = parseJsonStrict(source, "candidate input");
     if (!isRecord(input)) throw new Error("candidate inputはobjectが必要です");
     const repo = path.resolve(required(flags, "repo"));
+    const sessionFile = path.resolve(required(flags, "session"));
     if (input.phase === "preflight") {
       const baseSha = observeCandidateBoundary(repo).headSha;
       const risk = input.risk;
@@ -6531,9 +6542,23 @@ export async function main(
             ? (input.unresolved as string[])
             : ["未解決事項の形式が不正です"],
       });
+      const allowedPaths = candidateAllowedPaths(input.allowedPaths);
+      const session =
+        decision.route === "candidate"
+          ? createCandidateSession(sessionFile, {
+              repo,
+              baseSha,
+              intent: input.intent as string,
+              correctnessCriterion: input.correctnessCriterion as string,
+              allowedPaths,
+              risk: validated,
+            })
+          : undefined;
       print({
         ...decision,
         baseSha,
+        allowedPaths,
+        sessionId: session?.id,
         formalWorkflowUnchanged: true,
         independentReviewRequired: true,
         riskAssessmentSource: "caller-asserted",
@@ -6541,15 +6566,16 @@ export async function main(
       return decision.route === "candidate" ? 0 : 1;
     }
     if (input.phase === "post") {
-      const observed = observeCandidateGit(
-        repo,
-        typeof input.baseSha === "string" ? input.baseSha : "",
-      );
-      const allowedPaths =
-        Array.isArray(input.allowedPaths) &&
-        input.allowedPaths.every((value) => typeof value === "string")
-          ? (input.allowedPaths as string[])
-          : [];
+      if (
+        "baseSha" in input ||
+        "allowedPaths" in input ||
+        "targetTestsPassed" in input
+      )
+        throw new Error(
+          "candidate postはbase、変更範囲、テスト結果の自己申告を受け付けません",
+        );
+      const session = loadCandidateSession(sessionFile, repo);
+      const observed = observeCandidateGit(repo, session.baseSha);
       const validGaps: CandidateGap[] = [
         "implementation",
         "verification",
@@ -6563,15 +6589,23 @@ export async function main(
         !input.gaps.every((value) => validGaps.includes(value as CandidateGap))
       )
         throw new Error("candidate gapsが不正です");
+      const testEvidence = runCandidateTargetTest(repo, input.targetTest);
+      if (testEvidence.headSha !== observed.headSha)
+        throw new Error("candidate差分と対象テストのHEADが一致しません");
       const decision = decideCandidatePost({
         observedPaths: observed.changedPaths,
-        allowedPaths,
-        targetTestsPassed: input.targetTestsPassed === true,
+        allowedPaths: session.allowedPaths,
+        targetTestsPassed: testEvidence.exitCode === 0,
         gaps: input.gaps as CandidateGap[],
       });
       print({
         ...decision,
         ...observed,
+        sessionId: session.id,
+        intent: session.intent,
+        correctnessCriterion: session.correctnessCriterion,
+        allowedPaths: session.allowedPaths,
+        targetTest: testEvidence,
         formalWorkflowUnchanged: true,
         independentReviewRequired: true,
       });

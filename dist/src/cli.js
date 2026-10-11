@@ -24,6 +24,7 @@ import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import { observeWorkflowExecutionPlan } from "./adapters/workflow-execution-plan.js";
 import { decideCandidatePreflight, decideCandidatePost, CANDIDATE_RISKS, } from "./domain/candidate-workflow.js";
 import { observeCandidateBoundary, observeCandidateGit, } from "./adapters/candidate-git.js";
+import { candidateAllowedPaths, createCandidateSession, loadCandidateSession, runCandidateTargetTest, } from "./adapters/candidate-session.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, nonCanonicalClosingReferences, resolveMergeMethod, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, VERIFICATION_SET_INPUT_EXAMPLE, } from "./domain/agile-verification.js";
 import { isPlanFrozenCheckStep, latestPlanSeal } from "./domain/plan-seal.js";
@@ -4586,8 +4587,8 @@ export async function main(argv, dependencies = {}) {
     if (command === "workflow" && subcommand === "candidate") {
         const { flags, artifacts } = workflowArguments(rest);
         if (artifacts.length > 0 ||
-            Object.keys(flags).some((key) => !["input", "repo"].includes(key)))
-            throw new Error("workflow candidateは--inputと--repoだけを受け付けます");
+            Object.keys(flags).some((key) => !["input", "repo", "session"].includes(key)))
+            throw new Error("workflow candidateは--input、--repo、--sessionだけを受け付けます");
         const inputFile = path.resolve(required(flags, "input"));
         const fd = fs.openSync(inputFile, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
         let source;
@@ -4621,6 +4622,7 @@ export async function main(argv, dependencies = {}) {
         if (!isRecord(input))
             throw new Error("candidate inputはobjectが必要です");
         const repo = path.resolve(required(flags, "repo"));
+        const sessionFile = path.resolve(required(flags, "session"));
         if (input.phase === "preflight") {
             const baseSha = observeCandidateBoundary(repo).headSha;
             const risk = input.risk;
@@ -4653,9 +4655,22 @@ export async function main(argv, dependencies = {}) {
                     ? input.unresolved
                     : ["未解決事項の形式が不正です"],
             });
+            const allowedPaths = candidateAllowedPaths(input.allowedPaths);
+            const session = decision.route === "candidate"
+                ? createCandidateSession(sessionFile, {
+                    repo,
+                    baseSha,
+                    intent: input.intent,
+                    correctnessCriterion: input.correctnessCriterion,
+                    allowedPaths,
+                    risk: validated,
+                })
+                : undefined;
             print({
                 ...decision,
                 baseSha,
+                allowedPaths,
+                sessionId: session?.id,
                 formalWorkflowUnchanged: true,
                 independentReviewRequired: true,
                 riskAssessmentSource: "caller-asserted",
@@ -4663,11 +4678,12 @@ export async function main(argv, dependencies = {}) {
             return decision.route === "candidate" ? 0 : 1;
         }
         if (input.phase === "post") {
-            const observed = observeCandidateGit(repo, typeof input.baseSha === "string" ? input.baseSha : "");
-            const allowedPaths = Array.isArray(input.allowedPaths) &&
-                input.allowedPaths.every((value) => typeof value === "string")
-                ? input.allowedPaths
-                : [];
+            if ("baseSha" in input ||
+                "allowedPaths" in input ||
+                "targetTestsPassed" in input)
+                throw new Error("candidate postはbase、変更範囲、テスト結果の自己申告を受け付けません");
+            const session = loadCandidateSession(sessionFile, repo);
+            const observed = observeCandidateGit(repo, session.baseSha);
             const validGaps = [
                 "implementation",
                 "verification",
@@ -4679,15 +4695,23 @@ export async function main(argv, dependencies = {}) {
             if (!Array.isArray(input.gaps) ||
                 !input.gaps.every((value) => validGaps.includes(value)))
                 throw new Error("candidate gapsが不正です");
+            const testEvidence = runCandidateTargetTest(repo, input.targetTest);
+            if (testEvidence.headSha !== observed.headSha)
+                throw new Error("candidate差分と対象テストのHEADが一致しません");
             const decision = decideCandidatePost({
                 observedPaths: observed.changedPaths,
-                allowedPaths,
-                targetTestsPassed: input.targetTestsPassed === true,
+                allowedPaths: session.allowedPaths,
+                targetTestsPassed: testEvidence.exitCode === 0,
                 gaps: input.gaps,
             });
             print({
                 ...decision,
                 ...observed,
+                sessionId: session.id,
+                intent: session.intent,
+                correctnessCriterion: session.correctnessCriterion,
+                allowedPaths: session.allowedPaths,
+                targetTest: testEvidence,
                 formalWorkflowUnchanged: true,
                 independentReviewRequired: true,
             });

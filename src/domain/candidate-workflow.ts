@@ -1,3 +1,5 @@
+import { isSecuritySensitivePath } from "./impact-set.js";
+
 /** Candidate work is advisory until the existing formal workflow accepts its evidence. */
 export const CANDIDATE_RISKS = [
   "authentication",
@@ -38,6 +40,7 @@ export interface CandidateDecision {
   route: "candidate" | "clarify" | "upstream" | "repair" | "independent-review";
   reasons: string[];
   responsibility?: CandidateGap | "independent-review";
+  pendingResponsibilities?: CandidateGap[];
 }
 const SHA = /^[0-9a-f]{40}$/;
 /** No aggregate score can offset a single material risk or missing criterion. */
@@ -85,6 +88,13 @@ export function decideCandidatePost(
   const unexpected = [...changed].filter(
     (item) => !input.allowedPaths.includes(item),
   );
+  const pending = new Set<CandidateGap>(input.gaps);
+  if (unexpected.length > 0)
+    pending.add(
+      unexpected.some(isSecuritySensitivePath) ? "security-risk" : "design",
+    );
+  if (!input.targetTestsPassed) pending.add("verification");
+  if (changed.size === 0) pending.add("implementation");
   const priority: readonly CandidateGap[] = [
     "security-risk",
     "intent",
@@ -93,44 +103,30 @@ export function decideCandidatePost(
     "verification",
     "implementation",
   ];
-  const gap = priority.find((item) => input.gaps.includes(item));
-  if (unexpected.length > 0 || gap) {
+  const pendingResponsibilities = priority.filter((item) => pending.has(item));
+  if (pendingResponsibilities.length > 0) {
     const reasons = [
       ...(unexpected.length > 0
         ? [`想定外のGit差分: ${unexpected.join(", ")}`]
         : []),
-      ...(gap ? [`候補実装後の不足責務: ${gap}`] : []),
+      ...input.gaps.map((gap) => `候補実装後の不足責務: ${gap}`),
+      ...(!input.targetTestsPassed ? ["対象テストが失敗しました"] : []),
+      ...(changed.size === 0 ? ["候補実装の差分がありません"] : []),
     ];
-    const responsibility =
-      gap === "security-risk" || gap === "intent" || gap === "requirement"
-        ? gap
-        : unexpected.length > 0
-          ? "design"
-          : gap;
+    const responsibility = pendingResponsibilities[0];
     return {
       kind: "asc-candidate-decision/v1",
       authority: "none",
-      route:
-        unexpected.length > 0 ||
-        (gap !== "implementation" && gap !== "verification")
-          ? "upstream"
-          : "repair",
+      route: pendingResponsibilities.some((gap) =>
+        ["security-risk", "intent", "requirement", "design"].includes(gap),
+      )
+        ? "upstream"
+        : "repair",
       reasons,
       responsibility,
+      pendingResponsibilities,
     };
   }
-  if (!input.targetTestsPassed || changed.size === 0)
-    return {
-      kind: "asc-candidate-decision/v1",
-      authority: "none",
-      route: "repair",
-      reasons: [
-        changed.size === 0
-          ? "候補実装の差分がありません"
-          : "対象テストが失敗しました",
-      ],
-      responsibility: changed.size === 0 ? "implementation" : "verification",
-    };
   return {
     kind: "asc-candidate-decision/v1",
     authority: "none",
