@@ -31,6 +31,11 @@ Feature: Verification Set riskに比例した02/03短縮形式
     When risk比例のIssue成果物を検証する
     Then risk比例のIssue検証は合格する
 
+  Scenario: SCN-WF-1334-013 Step 5でrisk入力がまだ無い場合は詳細記述を維持する
+    Given Verification Set入力が無く02と03の対象節が詳細記述である
+    When risk比例のIssue成果物を検証する
+    Then risk比例のIssue検証は合格する
+
   Scenario: SCN-WF-1334-006 Verification Set入力のsymlinkを拒否する
     Given low-risk短縮行のVerification Set入力がsymlinkである
     When risk比例のIssue成果物を検証する

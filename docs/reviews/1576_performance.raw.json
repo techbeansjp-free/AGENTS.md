@@ -1,7 +1,7 @@
 {
   "kind": "asc-integrated-performance-observations/v1",
   "issue": 1576,
-  "status": "077-full-trial-stopped-at-step2; exact-output-contract-followup-pending-measurement",
+  "status": "b12-source-trials-stopped-auth-and-step5; template-order-correction-under-validation",
   "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
   "supersededAttempt": {
     "status": "aborted-and-replaced-by-the-current-fixed-source-run",
@@ -49377,5 +49377,43 @@
       "Fixed benchmark-specific handback artifacts schema contributed to exposure; one observation does not prove the newest Evidence selector caused the worker error.",
       "Corrected source is a new candidate and needs its own isolated trial."
     ]
+  },
+  "revisionB12ClaudeAuthStop": {
+    "sourceSha": "b12a46bf117a4a6467c3cc63eb57cc2de21cdcc6",
+    "fixedFixtureSha": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+    "status": "stopped-provider-authentication-step1",
+    "e2eCompleted": false,
+    "trialResultSha256": "25cba6b8c315760814f93022f19c3af5e962d762ef4b5879da06c288e4476c6b",
+    "officialPackageSha256": "cbe41c0030046dc54cafa8b4ccd7463bd03e0e50e60f35b9fc0bf3fc753e6220",
+    "actualWorkerCalls": 2,
+    "providerInternalRetryEvents": 2,
+    "sameStepPaidRelaunches": 0,
+    "observedProcessedSubtotal": 487323,
+    "completeTotalProcessed": null,
+    "allWorkerUsageCollected": false,
+    "elapsedToStopSeconds": 147.93547797203064,
+    "qualityBoundary": "Step0 Full; Step1 provider OAuth 401 before formal Step1 handback. Step2/implementation/review/PR/CI not reached.",
+    "comparisonMissing": "Provider authentication failure is not source performance or quality evidence. Missing terminal usage is not estimated."
+  },
+  "revisionB12CodexStep5Stop": {
+    "sourceSha": "b12a46bf117a4a6467c3cc63eb57cc2de21cdcc6",
+    "fixedFixtureSha": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+    "status": "stopped-formal-step5-risk-short-form-gate",
+    "e2eCompleted": false,
+    "trialResultSha256": "5ad60d5e203e674e71eb4a5c26cff847a7d7cbaae4d598d893063ded3eff584b",
+    "officialPackageSha256": "cbe41c0030046dc54cafa8b4ccd7463bd03e0e50e60f35b9fc0bf3fc753e6220",
+    "provider": "codex",
+    "actualWorkerCalls": 5,
+    "sameStepPaidRetries": 0,
+    "allWorkerUsageCollected": true,
+    "completeTotalProcessed": 1412316,
+    "inputTokens": 1379556,
+    "outputTokens": 32760,
+    "cacheReadTokensIncludedInInput": 1180416,
+    "elapsedToFirstBlockerSeconds": 853.5018379688263,
+    "actualToolCalls": 55,
+    "formalOutcome": "Step0 Full, Step1/2 and independent Step3 accepted, Step4 sync accepted. Step2 handback contained only formal 01 output. Step5 worker used official template short form in design §§4.2/8; formal advance rejected because verification-input.json did not exist, so risk=low could not be established.",
+    "classification": "Template guidance was inconsistent with Step5-before-Step6 input availability. Validator refused safely; no gate bypass or artifact rewrite. Follow-up source clarifies ordinary detailed prose while risk input is absent.",
+    "comparisonMissing": "Codex provider differs from prior Claude cohorts; stopped before implementation/review/PR/CI; no causal E2E performance comparison."
   }
 }
