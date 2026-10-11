@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { git } from "../lib/process.js";
 import { validateVerificationArgv } from "../domain/verification-run.js";
@@ -91,6 +92,11 @@ export function executeCandidate(input: CandidateExecutionInput) {
     unresolved: input.unresolved,
   });
   if (preflight.route !== "candidate") return { ...preflight, baseSha };
+  // Reject malformed verification before the Worker can mutate its disposable worktree.
+  const command = validateVerificationArgv(
+    input.targetTest,
+    "candidate targetTest",
+  );
   if (
     Object.keys(input.risk).some(
       (key) => !CANDIDATE_RISKS.includes(key as CandidateRisk),
@@ -125,22 +131,179 @@ export function executeCandidate(input: CandidateExecutionInput) {
     );
   for (const relative of changedPaths) {
     const absolute = path.join(root, relative);
-    if (fs.existsSync(absolute) && !fs.lstatSync(absolute).isFile())
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(absolute);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
+    if (!stat.isFile() || stat.nlink !== 1)
       throw new Error(
         `candidate Workerの差分は通常fileが必要です: ${relative}`,
       );
   }
-  git(["add", "-A", "--", ...allowedPaths], root, { env: GIT_ENV });
-  git(["commit", "-m", "asc: isolated candidate implementation"], root, {
-    env: GIT_ENV,
-  });
+  // A private index keeps staging failures out of the caller's index. commit-tree
+  // never executes repository hooks, and update-ref compares the exact preflight
+  // HEAD so a concurrent move cannot be silently committed over.
+  const indexDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "asc-candidate-index-"),
+  );
+  const indexEnv = { ...GIT_ENV, GIT_INDEX_FILE: path.join(indexDir, "index") };
+  try {
+    git(["read-tree", baseSha], root, { env: indexEnv });
+    const stagedBlobs = new Map<string, { sha: string; mode: number } | null>();
+    // Bypass repository-defined clean filters and Git hooks. Only the observed
+    // regular-file bytes enter this private index.
+    for (const relative of changedPaths) {
+      const absolute = path.join(root, relative);
+      let stat: fs.Stats;
+      try {
+        stat = fs.lstatSync(absolute);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          git(["update-index", "--force-remove", "--", relative], root, {
+            env: indexEnv,
+          });
+          stagedBlobs.set(relative, null);
+          continue;
+        }
+        throw error;
+      }
+      if (!stat.isFile() || stat.nlink !== 1)
+        throw new Error(
+          `candidate staging対象が通常fileではありません: ${relative}`,
+        );
+      const blobSha = git(
+        ["hash-object", "-w", "--no-filters", "--", relative],
+        root,
+        {
+          env: indexEnv,
+        },
+      ).stdout.trim();
+      if (!/^[0-9a-f]{40}$/.test(blobSha))
+        throw new Error(`candidate blob SHAが不正です: ${relative}`);
+      git(
+        [
+          "update-index",
+          "--add",
+          "--cacheinfo",
+          stat.mode & 0o111 ? "100755" : "100644",
+          blobSha,
+          relative,
+        ],
+        root,
+        { env: indexEnv },
+      );
+      stagedBlobs.set(relative, { sha: blobSha, mode: stat.mode & 0o111 });
+    }
+    const stagedPaths = git(
+      ["diff", "--cached", "--name-only", "-z", "--no-renames", "--"],
+      root,
+      { env: indexEnv },
+    )
+      .stdout.split("\0")
+      .filter(Boolean)
+      .sort();
+    if (stagedPaths.join("\0") !== changedPaths.join("\0"))
+      throw new Error(
+        "candidate staging中に差分が変更されました。隔離worktreeを破棄してください",
+      );
+    const stagedEntries = git(
+      ["ls-files", "--stage", "-z", "--", ...allowedPaths],
+      root,
+      { env: indexEnv },
+    )
+      .stdout.split("\0")
+      .filter(Boolean);
+    if (
+      stagedEntries.some(
+        (entry) => !/^100(?:644|755) [0-9a-f]{40} 0\t/u.test(entry),
+      )
+    )
+      throw new Error(
+        "candidate stagingに通常file以外があります。隔離worktreeを破棄してください",
+      );
+    for (const relative of changedPaths) {
+      const absolute = path.join(root, relative);
+      const staged = stagedBlobs.get(relative);
+      let stat: fs.Stats;
+      try {
+        stat = fs.lstatSync(absolute);
+      } catch (error) {
+        if (
+          (error as NodeJS.ErrnoException).code === "ENOENT" &&
+          staged === null
+        )
+          continue;
+        throw new Error(
+          `candidate staging後に作業fileが変更されました: ${relative}`,
+          { cause: error },
+        );
+      }
+      if (
+        !staged ||
+        !stat.isFile() ||
+        stat.nlink !== 1 ||
+        (stat.mode & 0o111) !== staged.mode ||
+        git(["hash-object", "--no-filters", "--", relative], root, {
+          env: indexEnv,
+        }).stdout.trim() !== staged.sha
+      )
+        throw new Error(
+          `candidate staging後に作業fileが変更されました: ${relative}`,
+        );
+    }
+    const treeSha = git(["write-tree"], root, { env: indexEnv }).stdout.trim();
+    if (
+      git(["rev-parse", "HEAD"], root, { env: GIT_ENV }).stdout.trim() !==
+      baseSha
+    )
+      throw new Error(
+        "candidate commit前にHEADが移動しました。隔離worktreeを破棄してください",
+      );
+    const commitEnv = {
+      ...GIT_ENV,
+      GIT_AUTHOR_NAME: "ASC Candidate",
+      GIT_AUTHOR_EMAIL: "candidate@localhost.invalid",
+      GIT_COMMITTER_NAME: "ASC Candidate",
+      GIT_COMMITTER_EMAIL: "candidate@localhost.invalid",
+    };
+    const commitSha = git(
+      [
+        "commit-tree",
+        treeSha,
+        "-p",
+        baseSha,
+        "-m",
+        "asc: isolated candidate implementation",
+      ],
+      root,
+      { env: commitEnv },
+    ).stdout.trim();
+    if (!/^[0-9a-f]{40}$/.test(commitSha))
+      throw new Error("candidate commit objectが不正です");
+    git(
+      [
+        "-c",
+        "core.hooksPath=/dev/null",
+        "update-ref",
+        "HEAD",
+        commitSha,
+        baseSha,
+      ],
+      root,
+      { env: GIT_ENV },
+    );
+    // An interruption here leaves a visibly dirty disposable worktree;
+    // observeCandidateBoundary rejects it on the next run.
+    git(["read-tree", treeSha], root, { env: GIT_ENV });
+  } finally {
+    fs.rmSync(indexDir, { recursive: true, force: true });
+  }
   const observed = observeCandidateGit(root, baseSha);
   if (observed.changedPaths.join("\0") !== changedPaths.join("\0"))
     throw new Error("candidate Workerの差分とcommitが一致しません");
-  const command = validateVerificationArgv(
-    input.targetTest,
-    "candidate targetTest",
-  );
   const testResult = runCandidateWorkerBoundary({
     root,
     allowedPaths: [],

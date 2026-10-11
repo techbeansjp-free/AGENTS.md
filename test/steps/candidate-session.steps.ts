@@ -468,9 +468,20 @@ Then("Coordinatorは許可外差分をcommitしない", function () {
       path.join(this.candidate, "src", "authorization.js"),
       "utf8",
     ) === "disabled"
-  )
+  ) {
     assert.ok(reasons(this).some((reason) => reason.includes("許可範囲外")));
-  else assert.ok(reasons(this).some((reason) => reason.includes("Worker")));
+    assert.equal(
+      run(
+        "git",
+        ["diff", "--cached", "--name-only"],
+        this.candidate,
+      ).stdout.trim(),
+      "",
+    );
+    invokeExecute(this);
+    assert.equal(this.result?.status, 1);
+    assert.ok(reasons(this).some((reason) => reason.includes("未記録の変更")));
+  } else assert.ok(reasons(this).some((reason) => reason.includes("Worker")));
 });
 
 When("隔離WorkerがGit metadataへ書き込もうとする", function () {
@@ -562,5 +573,86 @@ Then("外部directoryへ書込権限を付与しない", function () {
       "utf8",
     ),
     "outside\n",
+  );
+});
+
+When("悪意あるcommit hookを設定して隔離Workerが文言を修正する", function () {
+  const hookDirectory = path.join(this.home, "hooks");
+  fs.mkdirSync(hookDirectory);
+  fs.writeFileSync(
+    path.join(hookDirectory, "pre-commit"),
+    `#!/bin/sh\nprintf attack > '${path.join(this.home, "hook-ran")}'\nexit 8\n`,
+    { mode: 0o755 },
+  );
+  fs.writeFileSync(
+    path.join(hookDirectory, "reference-transaction"),
+    `#!/bin/sh\nprintf attack > '${path.join(this.home, "ref-hook-ran")}'\nexit 8\n`,
+    { mode: 0o755 },
+  );
+  run("git", ["config", "core.hooksPath", hookDirectory], this.candidate);
+  invokeExecute(this);
+});
+
+Then("Coordinatorはhookを実行せず候補だけをcommitする", function () {
+  if (this.result?.status !== 0) {
+    assert.ok(
+      reasons(this).some((reason) => reason.includes("candidate Worker")),
+      JSON.stringify(this.output),
+    );
+    return;
+  }
+  assert.equal(this.output?.route, "independent-review");
+  assert.equal(fs.existsSync(path.join(this.home, "hook-ran")), false);
+  assert.equal(fs.existsSync(path.join(this.home, "ref-hook-ran")), false);
+  assert.notEqual(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+});
+
+When("不正な対象テストで隔離Workerを起動しようとする", function () {
+  invokeExecute(this, { targetTest: [] });
+});
+
+Then("Workerは差分を作らずHEADも変わらない", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+  assert.equal(
+    fs.readFileSync(path.join(this.candidate, "src", "label.js"), "utf8"),
+    'export const label = "Helo";\n',
+  );
+});
+
+When("隔離Workerが許可fileを壊れたsymlinkにする", function () {
+  invokeExecute(this, {
+    workerArgv: [
+      "/bin/sh",
+      "-c",
+      "rm src/label.js; ln -s missing-target src/label.js",
+    ],
+  });
+});
+
+Then("CoordinatorはsymlinkをindexとHEADへ採用しない", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+  assert.equal(
+    run(
+      "git",
+      ["diff", "--cached", "--name-only"],
+      this.candidate,
+    ).stdout.trim(),
+    "",
+  );
+  assert.ok(
+    reasons(this).some(
+      (reason) => reason.includes("通常file") || reason.includes("Worker"),
+    ),
   );
 });

@@ -88,3 +88,18 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When Workerの書込pathの祖先を外部directoryへのsymlinkにする
     Then 外部directoryへ書込権限を付与しない
+
+  Scenario: SCN-INT-CANDIDATE-016 Coordinatorのcommitはrepository hookを起動しない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 悪意あるcommit hookを設定して隔離Workerが文言を修正する
+    Then Coordinatorはhookを実行せず候補だけをcommitする
+
+  Scenario: SCN-INT-CANDIDATE-017 不正な対象テストはWorker起動前に拒否する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 不正な対象テストで隔離Workerを起動しようとする
+    Then Workerは差分を作らずHEADも変わらない
+
+  Scenario: SCN-INT-CANDIDATE-018 Workerが作った壊れたsymlinkはcommitしない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 隔離Workerが許可fileを壊れたsymlinkにする
+    Then CoordinatorはsymlinkをindexとHEADへ採用しない
