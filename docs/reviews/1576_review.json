@@ -3,16 +3,16 @@
   "issue": 1576,
   "observed": {
     "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
-    "implementationHeadSha": "2e888a3730fa6e88f33a3852a4598713b6c8c65d",
-    "diffDigest": "45c7ef91c9e6e9da689af2dd2330e716fe419427b67dd1d8ced35c3449956687",
+    "implementationHeadSha": "bd1d058cf868552d7c036b6035b8d4325c00350f",
+    "diffDigest": "62fdbce3977d39131ee6dd0b6303eab0fe0a5227a53e5c29a8c0c161742adaf2",
     "session": {
       "sessionId": "b6132d9f716e35694e0a3977507c4bb86c81c535f3b9ba5dcaba69f6dcddca3a",
-      "latestRoundDigest": "f2fd88b056cdb10207205be49949dc8cc95c03f5ca05ba93b86a39ffd02d949f",
+      "latestRoundDigest": "060b026ff912e755a345af67a74267a21d3a1d3759a800397b055647f9d472d2",
       "status": "converged",
-      "countedRounds": 12
+      "countedRounds": 13
     },
     "impact": {
-      "digest": "8c8dab387244c1c0a944ee0d0d9bdadf99b01ab88a51643fbafad1283a8a65ba",
+      "digest": "90c2b029eb298e5867ee94cababa23ba75bf2bc41d23c4387ac4515e6b040b9a",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "2e888a3730fa6e88f33a3852a4598713b6c8c65d",
-        "impactDigest": "8c8dab387244c1c0a944ee0d0d9bdadf99b01ab88a51643fbafad1283a8a65ba",
-        "finishedAt": "2026-10-11T10:14:57.561Z",
-        "recordDigest": "fd9ab12d5ab42dc58e12908e7fe20fb44224d48c2198f42ff68570024666623e"
+        "headSha": "bd1d058cf868552d7c036b6035b8d4325c00350f",
+        "impactDigest": "90c2b029eb298e5867ee94cababa23ba75bf2bc41d23c4387ac4515e6b040b9a",
+        "finishedAt": "2026-10-11T12:45:05.265Z",
+        "recordDigest": "d262388913c53c1a60ed677954c1d7c9568f916eaef04dafa3749795976ade4b"
       }
     ]
   },
@@ -51,10 +51,10 @@
   "unresolvedCriticalHigh": [],
   "verdict": "approved",
   "declared": {
-    "reviewer": "codex-impact_revision-1576",
-    "implementer": "codex-root-1576",
+    "reviewer": "independent-reviewer",
+    "implementer": "codex",
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "43875db81a632d90361d72d3154bd843241740226a63140df45c0e5d36bc317a"
+  "evidenceDigest": "a3c99d5806f5e169b017bf33a3ac13edd8487c6e79677cd912de0a9048249c34"
 }
