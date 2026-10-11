@@ -77,6 +77,7 @@ import {
 import {
   observeCandidateBoundary,
   observeCandidateGit,
+  observeCandidateForkBase,
 } from "./adapters/candidate-git.js";
 import {
   candidateAllowedPaths,
@@ -6543,6 +6544,11 @@ export async function main(
             : ["未解決事項の形式が不正です"],
       });
       const allowedPaths = candidateAllowedPaths(input.allowedPaths);
+      if (
+        decision.route === "candidate" &&
+        observeCandidateForkBase(repo, baseSha) !== baseSha
+      )
+        throw new Error("candidate事前HEADがGit分岐点と一致しません");
       const session =
         decision.route === "candidate"
           ? createCandidateSession(sessionFile, {

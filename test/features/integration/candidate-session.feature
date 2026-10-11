@@ -39,3 +39,17 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When 上限超過の事前Intentを与える
     Then sessionは生成されず拒否される
+
+  Scenario: SCN-INT-CANDIDATE-007 sessionのbase改ざんでもGit分岐点を隠せない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When dummyの文言修正をcommitする
+    And dummyの認可処理へ想定外の変更をcommitする
+    And sessionのbaseと許可範囲を事後改ざんする
+    Then Git分岐点の再計算でbase改ざんを拒否する
+
+  Scenario: SCN-INT-CANDIDATE-008 許可範囲だけ改ざんしても認可差分を上流へ戻す
+    Given 候補用の隔離dummyと事前sessionを作る
+    When dummyの文言修正をcommitする
+    And dummyの認可処理へ想定外の変更をcommitする
+    And sessionの許可範囲だけを事後改ざんする
+    Then 許可済みと偽装した認可差分も上流へ戻す

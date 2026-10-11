@@ -23,7 +23,7 @@ import { observeWorkflowHandoff, workflowAgentDispatch, workflowReviewerAlternat
 import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import { observeWorkflowExecutionPlan } from "./adapters/workflow-execution-plan.js";
 import { decideCandidatePreflight, decideCandidatePost, CANDIDATE_RISKS, } from "./domain/candidate-workflow.js";
-import { observeCandidateBoundary, observeCandidateGit, } from "./adapters/candidate-git.js";
+import { observeCandidateBoundary, observeCandidateGit, observeCandidateForkBase, } from "./adapters/candidate-git.js";
 import { candidateAllowedPaths, createCandidateSession, loadCandidateSession, runCandidateTargetTest, } from "./adapters/candidate-session.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, nonCanonicalClosingReferences, resolveMergeMethod, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, VERIFICATION_SET_INPUT_EXAMPLE, } from "./domain/agile-verification.js";
@@ -4656,6 +4656,9 @@ export async function main(argv, dependencies = {}) {
                     : ["未解決事項の形式が不正です"],
             });
             const allowedPaths = candidateAllowedPaths(input.allowedPaths);
+            if (decision.route === "candidate" &&
+                observeCandidateForkBase(repo, baseSha) !== baseSha)
+                throw new Error("candidate事前HEADがGit分岐点と一致しません");
             const session = decision.route === "candidate"
                 ? createCandidateSession(sessionFile, {
                     repo,

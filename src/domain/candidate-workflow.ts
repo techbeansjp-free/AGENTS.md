@@ -89,10 +89,9 @@ export function decideCandidatePost(
     (item) => !input.allowedPaths.includes(item),
   );
   const pending = new Set<CandidateGap>(input.gaps);
-  if (unexpected.length > 0)
-    pending.add(
-      unexpected.some(isSecuritySensitivePath) ? "security-risk" : "design",
-    );
+  if ([...changed].some(isSecuritySensitivePath)) pending.add("security-risk");
+  if (unexpected.length > 0 && !unexpected.some(isSecuritySensitivePath))
+    pending.add("design");
   if (!input.targetTestsPassed) pending.add("verification");
   if (changed.size === 0) pending.add("implementation");
   const priority: readonly CandidateGap[] = [
@@ -108,6 +107,9 @@ export function decideCandidatePost(
     const reasons = [
       ...(unexpected.length > 0
         ? [`想定外のGit差分: ${unexpected.join(", ")}`]
+        : []),
+      ...([...changed].some(isSecuritySensitivePath)
+        ? ["セキュリティ上の注意を要するGit差分を上流で確認する"]
         : []),
       ...input.gaps.map((gap) => `候補実装後の不足責務: ${gap}`),
       ...(!input.targetTestsPassed ? ["対象テストが失敗しました"] : []),

@@ -280,3 +280,51 @@ Then("sessionは生成されず拒否される", function () {
   assert.ok(reasons(this).some((reason) => reason.includes("64 KiB")));
   assert.equal(fs.existsSync(this.session), false);
 });
+
+When("sessionのbaseと許可範囲を事後改ざんする", function () {
+  const session = JSON.parse(fs.readFileSync(this.session, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  session.baseSha = run(
+    "git",
+    ["rev-parse", "HEAD^"],
+    this.candidate,
+  ).stdout.trim();
+  session.allowedPaths = ["src/label.js", "src/authorization.js"];
+  fs.writeFileSync(this.session, `${JSON.stringify(session)}\n`);
+});
+
+Then("Git分岐点の再計算でbase改ざんを拒否する", function () {
+  invoke(this, {
+    phase: "post",
+    gaps: [],
+    targetTest: [process.execPath, "test.js"],
+  });
+  assert.equal(this.result?.status, 1);
+  assert.ok(reasons(this).some((reason) => reason.includes("Git分岐点")));
+});
+
+When("sessionの許可範囲だけを事後改ざんする", function () {
+  const session = JSON.parse(fs.readFileSync(this.session, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  session.allowedPaths = ["src/label.js", "src/authorization.js"];
+  fs.writeFileSync(this.session, `${JSON.stringify(session)}\n`);
+});
+
+Then("許可済みと偽装した認可差分も上流へ戻す", function () {
+  const output = invoke(this, {
+    phase: "post",
+    gaps: [],
+    targetTest: [process.execPath, "test.js"],
+  });
+  assert.equal(this.result?.status, 1);
+  assert.equal(output.route, "upstream");
+  assert.deepEqual(output.pendingResponsibilities, ["security-risk"]);
+  assert.deepEqual(output.changedPaths, [
+    "src/authorization.js",
+    "src/label.js",
+  ]);
+});
