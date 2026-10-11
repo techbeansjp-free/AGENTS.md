@@ -3,16 +3,16 @@
   "issue": 1576,
   "observed": {
     "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
-    "implementationHeadSha": "e37bdf8c7bf9cb99dd44813678a0900a61339bae",
-    "diffDigest": "ddfb2cd6188b70962f794f180768c565a5c70a18b2f4736cea5d628ad258ff75",
+    "implementationHeadSha": "b12a46bf117a4a6467c3cc63eb57cc2de21cdcc6",
+    "diffDigest": "306a6038fa5d97be3c9d0daeaf85a37dc7fdfa130fb0f94234dc23adbecff862",
     "session": {
       "sessionId": "b6132d9f716e35694e0a3977507c4bb86c81c535f3b9ba5dcaba69f6dcddca3a",
-      "latestRoundDigest": "e8f58fea3d66fbfde318874040d15b4d384f287eceb51dca7fcb450fcfb80646",
+      "latestRoundDigest": "3e1acc255c06a46c61946928a8a7b45391f8494863881774a8783711f6f2d9cd",
       "status": "converged",
-      "countedRounds": 8
+      "countedRounds": 10
     },
     "impact": {
-      "digest": "85147134cad52e56ec1ec7c5d92bdf409a8a590756a3eff8552c9229a3740f14",
+      "digest": "a44c6e6167e9da76a82cc6f5f33d9d7a349aa313b8abed077bc7a69ba3bc9379",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "e37bdf8c7bf9cb99dd44813678a0900a61339bae",
-        "impactDigest": "85147134cad52e56ec1ec7c5d92bdf409a8a590756a3eff8552c9229a3740f14",
-        "finishedAt": "2026-10-11T06:03:24.437Z",
-        "recordDigest": "1a6bb31ce429574236161b33390a003ed360595704b71c1d555153fee0063cac"
+        "headSha": "b12a46bf117a4a6467c3cc63eb57cc2de21cdcc6",
+        "impactDigest": "a44c6e6167e9da76a82cc6f5f33d9d7a349aa313b8abed077bc7a69ba3bc9379",
+        "finishedAt": "2026-10-11T07:30:47.210Z",
+        "recordDigest": "6b4c5a2267476900134681e336f351e1758dd682218bea4dccd070e5e5a016a4"
       }
     ]
   },
@@ -51,10 +51,10 @@
   "unresolvedCriticalHigh": [],
   "verdict": "approved",
   "declared": {
-    "reviewer": "codex-baseline_regression-1576",
-    "implementer": "codex-impl-1576",
+    "reviewer": "codex-impact_revision-1576",
+    "implementer": "codex-root-1576",
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "272ab30c1717c48fcd222376dd6f4238393fce6872bf1a7fece648fdfcfa6423"
+  "evidenceDigest": "66209a95953cedf5749a12a4ae87c68aec1f6c8ac879a2c2d442a1fd6f21f4b0"
 }
