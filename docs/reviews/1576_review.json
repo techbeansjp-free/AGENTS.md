@@ -3,16 +3,16 @@
   "issue": 1576,
   "observed": {
     "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
-    "implementationHeadSha": "96b1576f4e4cfd41de142c94e3f5ac23f6aaaffc",
-    "diffDigest": "ed108fe1dc0539b58ce98c22fe8c8831f79c44af68a42633094c78d21c4dc362",
+    "implementationHeadSha": "2e888a3730fa6e88f33a3852a4598713b6c8c65d",
+    "diffDigest": "45c7ef91c9e6e9da689af2dd2330e716fe419427b67dd1d8ced35c3449956687",
     "session": {
       "sessionId": "b6132d9f716e35694e0a3977507c4bb86c81c535f3b9ba5dcaba69f6dcddca3a",
-      "latestRoundDigest": "7b1dcb237d3a23783dc0357a81fc55af9d7b0382282be87dc3a0cdac53b1fa13",
+      "latestRoundDigest": "f2fd88b056cdb10207205be49949dc8cc95c03f5ca05ba93b86a39ffd02d949f",
       "status": "converged",
-      "countedRounds": 11
+      "countedRounds": 12
     },
     "impact": {
-      "digest": "0548559ae8e26aa908e28e5ffc7b84d7c9c02cf427a7120a66d98e6089f99b93",
+      "digest": "8c8dab387244c1c0a944ee0d0d9bdadf99b01ab88a51643fbafad1283a8a65ba",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "96b1576f4e4cfd41de142c94e3f5ac23f6aaaffc",
-        "impactDigest": "0548559ae8e26aa908e28e5ffc7b84d7c9c02cf427a7120a66d98e6089f99b93",
-        "finishedAt": "2026-10-11T08:18:00.914Z",
-        "recordDigest": "3e726b2057f06303fee2948099150653b7cb841274e8deb86c70f998814a9d03"
+        "headSha": "2e888a3730fa6e88f33a3852a4598713b6c8c65d",
+        "impactDigest": "8c8dab387244c1c0a944ee0d0d9bdadf99b01ab88a51643fbafad1283a8a65ba",
+        "finishedAt": "2026-10-11T10:14:57.561Z",
+        "recordDigest": "fd9ab12d5ab42dc58e12908e7fe20fb44224d48c2198f42ff68570024666623e"
       }
     ]
   },
@@ -56,5 +56,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "e465617d7eddb61a19d7bf5ffc9a2312b17fbf5d0a7ba1cd0b18b2c2fec683e9"
+  "evidenceDigest": "43875db81a632d90361d72d3154bd843241740226a63140df45c0e5d36bc317a"
 }
