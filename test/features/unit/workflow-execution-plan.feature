@@ -40,3 +40,8 @@ Feature: 正式gateを維持する機械可読Work Unit契約
       | reviewer    | none     | unsatisfied | false  | false    |
       | correction  | required | unsatisfied | false  | false    |
       | coordinator | required | unsatisfied | false  | false    |
+
+  Scenario: SCN-UNIT-EXECPLAN-003 参照入力を正式記録artifactへ混入させない
+    Given execution契約のStep「2」とrole「requirements」がある
+    When Step2の参照入力と正式出力を持つ実行契約を導出する
+    Then Step2の正式artifactは01だけで00は参照入力に留まる

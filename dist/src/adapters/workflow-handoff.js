@@ -5,7 +5,7 @@ import { git } from "../lib/process.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { readStoredStagingRecord } from "../domain/staging.js";
 import { PLAN_SEAL_ARTIFACTS, PLAN_AMENDMENT_FILE, } from "../domain/plan-seal.js";
-import { MODE_DECISION_FILE, STEP_JOURNAL_FILE, WORKFLOW_STEPS, } from "../domain/workflow.js";
+import { MODE_DECISION_FILE, STEP_JOURNAL_FILE, WORKFLOW_STEPS, WORKFLOW_EXACT_ARTIFACTS, } from "../domain/workflow.js";
 import { readStoredReviewSession, REVIEW_SESSION_FILE, } from "./review-session-store.js";
 import { GIT_ENV, evidenceOnlySuffix } from "./review-diff.js";
 import { effectiveReviewBlocking, pendingReviewFindingIds, isReviewSessionConverged, } from "../domain/review-convergence.js";
@@ -238,7 +238,9 @@ export function workflowExecutionContract(step, role, read, mode) {
             argv: ["workflow", "advance", "--apply", "--prepare-next"],
             requiredFlags: ["staging", "artifact", "evidence"],
             inputBindings: {
-                artifact: "worker handback formal artifact paths",
+                artifact: WORKFLOW_EXACT_ARTIFACTS[step]
+                    ? "action.recordArtifactsのみ。requiredInputs/read.stagingは参照であり正式artifactに含めない"
+                    : "worker handback formal artifact paths",
                 evidence: "worker handback observed evidence references; not approval",
             },
             when: "worker-complete-and-terminal",
@@ -336,6 +338,9 @@ export function workflowExecutionContract(step, role, read, mode) {
                 ? "意味判断済みの正式入力を既存CLI gateで処理する"
                 : "実行可能な工程が特定されていない",
         allowedOperations: operations,
+        ...(step !== undefined && WORKFLOW_EXACT_ARTIFACTS[step]
+            ? { recordArtifacts: WORKFLOW_EXACT_ARTIFACTS[step] }
+            : {}),
         requiredInputs,
         preconditions: executor === "none"
             ? []
@@ -635,7 +640,7 @@ export function workflowAgentDispatch(handoff) {
                     reuseForbidden: handoff.workUnit.reuseForbidden,
                 },
             },
-            prompt: "指定workUnitId専用のfresh one-shot workerです。worktreeでworkflow advance --plan --staging=<staging>を観測する。continuationFromHeadがあれば同値の--continue-fromも付ける。plan.handoffまたはplan.alternatives[].handoffから同じrole・workUnitIdの候補がちょうど1件の場合だけ選び、HEAD・boundaryも照合。0件・複数件・不一致なら再dispatchを要求。同じ状態の--planを出力分割だけのため再実行せず、一度の観測から担当候補とactionを読む。照合後、primaryならplan.action、alternativeなら対応するalternatives[i].actionを正式契約として読み、handoff.read.skill・read.stagingと未充足責務の必要節を確認する。契約読込後もHEADを再確認し、担当だけを完了する。Skillの契約と独立検証を維持。workUnitId/status/HEAD/検証記録ID/blocker/nextのcompact JSONを返す。詳細はGit/staging/finding、Step/round記録はcoordinator。返却後terminal、追加作業にはASC_REDISPATCH_REQUIRED。",
+            prompt: "指定workUnitId専用のfresh one-shot workerです。worktreeでworkflow advance --plan --staging=<staging>を観測する。continuationFromHeadがあれば同値の--continue-fromも付ける。plan.handoffまたはplan.alternatives[].handoffから同じrole・workUnitIdの候補がちょうど1件の場合だけ選び、HEAD・boundaryも照合。0件・複数件・不一致なら再dispatchを要求。同じ状態の--planを出力分割だけのため再実行せず、一度の観測から担当候補とactionを読む。照合後、primaryならplan.action、alternativeなら対応するalternatives[i].actionを正式契約として読み、handoff.read.skill・read.stagingと未充足責務の必要節を確認する。契約読込後もHEADを再確認し、担当だけを完了する。Skillの契約と独立検証を維持。action.recordArtifactsがある場合、正式返却artifactはその集合だけとしrequiredInputs/read.stagingを混ぜない。workUnitId/status/HEAD/検証記録ID/blocker/nextのcompact JSONを返す。詳細はGit/staging/finding、Step/round記録はcoordinator。返却後terminal、追加作業にはASC_REDISPATCH_REQUIRED。",
         }),
     };
 }

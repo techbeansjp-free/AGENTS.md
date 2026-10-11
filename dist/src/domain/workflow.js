@@ -86,6 +86,13 @@ export const MODE_STEP_SEQUENCES = Object.freeze({
     quick: Object.freeze([0, 1, 4, 9, 10, 11]),
     poc: Object.freeze([0, 1, 4, 9, 10, 11]),
 });
+/** Exact formal artifact paths shared by workflow advance and Work Unit advice. */
+export const WORKFLOW_EXACT_ARTIFACTS = Object.freeze({
+    1: Object.freeze(["00_要求定義.md"]),
+    2: Object.freeze(["01_要件定義.md"]),
+    5: Object.freeze(["02_設計.md"]),
+    6: Object.freeze(["03_実装計画.md"]),
+});
 export const NEVER_SKIPPABLE_STEPS = Object.freeze([
     0, 1, 4, 9, 10, 11,
 ]);

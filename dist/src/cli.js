@@ -71,7 +71,7 @@ import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
 import { replaceReviewSession, ReviewSessionReplacementError, } from "./adapters/review-session-replacement.js";
 import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, completeStoredTerminalRedelivery, observeStoredMerge, observeStoredDeliveryState, prepareStoredMergeIntent, recordStoredExternalMergeStep11, prepareStoredTerminalRedeliveryMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
 import { DELIVERY_STATE_FILE, assertImmutablePullRequestBinding, canonicalDigest, closingContractDigest, externalMergeObservationId, pullRequestContentDigest, pullRequestTerminalEvidenceId, } from "./domain/delivery-state.js";
-import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, } from "./domain/workflow.js";
+import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, WORKFLOW_EXACT_ARTIFACTS, } from "./domain/workflow.js";
 import { reconcileFixedMergeRun, CI_DELIVERY_GRACE_MINUTES, inspectCiDelivery, } from "./domain/ci-delivery.js";
 function workflowArguments(args) {
     const flags = {};
@@ -188,17 +188,11 @@ function assertUniqueStep4Tracker(entries, tracker) {
 function assertWorkflowAdvanceArtifacts(staging, targetStep, artifacts) {
     if (new Set(artifacts).size !== artifacts.length)
         throw new Error(`Step ${targetStep}のartifact重複を拒否しました`);
-    const exactByStep = new Map([
-        [1, ["00_要求定義.md"]],
-        [2, ["01_要件定義.md"]],
-        [5, ["02_設計.md"]],
-        [6, ["03_実装計画.md"]],
-    ]);
     const allowedByStep = new Map([
         [3, new Set(["00_要求定義.md", "01_要件定義.md"])],
         [7, new Set(["02_設計.md", "03_実装計画.md"])],
     ]);
-    const exact = exactByStep.get(targetStep);
+    const exact = WORKFLOW_EXACT_ARTIFACTS[targetStep];
     if (exact && stableJson(artifacts) !== stableJson(exact))
         throw new Error(`Step ${targetStep}のartifactは${exact.join("、")}と完全一致する必要があります`);
     const allowed = allowedByStep.get(targetStep);

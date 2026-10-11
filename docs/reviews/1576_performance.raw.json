@@ -1,7 +1,7 @@
 {
   "kind": "asc-integrated-performance-observations/v1",
   "issue": 1576,
-  "status": "latest-completed-e37-trial-recorded; work-selection-revision-pending-measurement",
+  "status": "077-full-trial-stopped-at-step2; exact-output-contract-followup-pending-measurement",
   "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
   "supersededAttempt": {
     "status": "aborted-and-replaced-by-the-current-fixed-source-run",
@@ -49348,6 +49348,34 @@
       "Fixed non-LLM coordinator used; normal parent agent tokens and billed cost unmeasured.",
       "Provider processed token total counts all workers and cache with provider-specific rules; active context high-water and reinjection exact values unavailable.",
       "This source snapshot precedes the new Evidence-driven Step 10 verification selector; its effect needs a separate matched trial."
+    ]
+  },
+  "revision077StoppedAFull": {
+    "sourceSha": "077f47c57d3b2f1458f4a1d98539d5c584e36464",
+    "fixedFixtureSha": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+    "status": "stopped-at-first-artifact-contract-blocker",
+    "e2eCompleted": false,
+    "trialResultSha256": "b4b2d4befc6aeb0476df305e0c0c380d9b53dfdeb4ec0830a2b5cf8397e79826",
+    "officialPackageSha256": "9a33fa03c80288b199999106d968c48b2ca83e45d29c81aaf4cfa16fb00365b2",
+    "actualWorkerCalls": 3,
+    "allWorkerUsageCollected": true,
+    "observedProcessedTokensIncludingFailure": 1445592,
+    "elapsedToFirstBlockerSeconds": 307.9815740585327,
+    "sameStepPaidRetries": 0,
+    "stopReason": "Step2 handback included00 reference plus01 formal output; harness exact-set rejected; unchanged handback independently rejected by official CLI on no-paid copy",
+    "formalCopyDiagnostic": {
+      "paidCalls": 0,
+      "exitCode": 1,
+      "originalJournalUnchanged": true,
+      "handbackUnchangedSha256": "219198ecae64a3d75fa33cf08fdd2122376d2c8baaf0862bd05245a2f70a61cc",
+      "note": "Both returned paths passed unchanged to official CLI on isolated copied project; no remote mutation"
+    },
+    "qualityBoundary": "Step0 Full; Step1 formal gate passed; Step2 handback included read-only 00 and output 01; packaged CLI rejected both paths. Step3/review/implementation/PR/CI not reached.",
+    "diagnosis": "Read-only input and exact formal output were not structurally separate in Work Unit contract; no paid retry or handback rewriting. Latest follow-up source adds shared exact recordArtifacts mapping.",
+    "limitations": [
+      "This is not an E2E performance comparison. All three calls and tokens are retained as failed-work cost.",
+      "Fixed benchmark-specific handback artifacts schema contributed to exposure; one observation does not prove the newest Evidence selector caused the worker error.",
+      "Corrected source is a new candidate and needs its own isolated trial."
     ]
   }
 }

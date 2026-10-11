@@ -1,7 +1,7 @@
 {
   "kind": "asc-integrated-performance-summary/v1",
   "issue": 1576,
-  "status": "latest-completed-e37-trial-recorded; work-selection-revision-pending-measurement",
+  "status": "077-full-trial-stopped-at-step2; exact-output-contract-followup-pending-measurement",
   "baselineSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
   "previousCandidateSha": "5e51700b2a36b54d710ce0cc0e0f38ff8fbd5aa2",
   "readPolicy": "通常はこのsummaryだけを読む。反例・数値監査・再現に必要な場合だけ詳細証跡の該当keyを読む。",
@@ -33,7 +33,7 @@
   ],
   "details": {
     "path": "docs/reviews/1576_performance.raw.json",
-    "sha256": "28c52466d357c4f13aa81c45a316734a0e6f9447312549dea7566951b7785a71",
+    "sha256": "e8c772601e394d07e887b9c43baf1a4bf67f12098403e934e7d3a0547836259e",
     "keys": [
       "kind",
       "issue",
@@ -81,7 +81,8 @@
       "revisionWorkUnitExecutionContract",
       "revisionWorkUnitDiagnostic",
       "revisionPlanningGuidanceTrials",
-      "revisionConsistentAFullE37"
+      "revisionConsistentAFullE37",
+      "revision077StoppedAFull"
     ]
   },
   "limitations": [
@@ -89,7 +90,8 @@
     "providerのinput/cache包含関係を区別し欠測値はnullとする",
     "新規GraphDB・永続cache・Hook・session監視は導入しない",
     "e37候補の同条件A Fullは1回完走し全worker処理token 6,673,928、CI到達1194.33秒。単発・順序差があり有意な改善率は未証明。",
-    "新しいEvidence駆動Step 10選択はe37スナップショット後の変更であり、この測定値を最新HEADの性能として扱わない。親agent総token、正確なcontext high-water/reinjection、請求額は未測定。"
+    "新しいEvidence駆動Step 10選択はe37スナップショット後の変更であり、この測定値を最新HEADの性能として扱わない。親agent総token、正確なcontext high-water/reinjection、請求額は未測定。",
+    "077候補の同条件A FullはStep2の正式artifact不一致で停止（3 worker call・1,445,592処理tokens）。PR/CI未到達であり改善率へ含めない。後続の正式出力契約修正版は未測定。"
   ],
   "revisionMeasurements": {
     "actualCliAnalysis": {
@@ -330,6 +332,24 @@
         "This source snapshot precedes the new Evidence-driven Step 10 verification selector; its effect needs a separate matched trial."
       ],
       "detailKey": "revisionConsistentAFullE37"
+    },
+    "stopped077AFull": {
+      "sourceSha": "077f47c57d3b2f1458f4a1d98539d5c584e36464",
+      "fixedFixtureSha": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+      "status": "stopped-at-first-artifact-contract-blocker",
+      "e2eCompleted": false,
+      "trialResultSha256": "b4b2d4befc6aeb0476df305e0c0c380d9b53dfdeb4ec0830a2b5cf8397e79826",
+      "actualWorkerCalls": 3,
+      "observedProcessedTokensIncludingFailure": 1445592,
+      "elapsedToFirstBlockerSeconds": 307.9815740585327,
+      "sameStepPaidRetries": 0,
+      "qualityBoundary": "Step0 Full; Step1 formal gate passed; Step2 handback included read-only 00 and output 01; packaged CLI rejected both paths. Step3/review/implementation/PR/CI not reached.",
+      "limitations": [
+        "This is not an E2E performance comparison. All three calls and tokens are retained as failed-work cost.",
+        "Fixed benchmark-specific handback artifacts schema contributed to exposure; one observation does not prove the newest Evidence selector caused the worker error.",
+        "Corrected source is a new candidate and needs its own isolated trial."
+      ],
+      "detailKey": "revision077StoppedAFull"
     }
   }
 }

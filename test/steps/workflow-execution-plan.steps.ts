@@ -765,3 +765,29 @@ Then(
     );
   },
 );
+
+When("Step2の参照入力と正式出力を持つ実行契約を導出する", function () {
+  this.action = workflowExecutionContract(
+    2,
+    "requirements",
+    {
+      skill: ".agent-skill-chain/skills/step-02-requirements/SKILL.md",
+      staging: ["00_要求定義.md"],
+      optionalStaging: [],
+    },
+    "full",
+  );
+});
+Then("Step2の正式artifactは01だけで00は参照入力に留まる", function () {
+  assert.ok(this.action);
+  assert.deepEqual(this.action.recordArtifacts, ["01_要件定義.md"]);
+  assert.ok(
+    this.action.requiredInputs.some((item) => item.path === "00_要求定義.md"),
+  );
+  assert.equal(this.action.recordArtifacts?.includes("00_要求定義.md"), false);
+  assert.match(
+    this.action.coordinatorCompletion?.operations[0]?.inputBindings.artifact ??
+      "",
+    /action\.recordArtifacts/u,
+  );
+});

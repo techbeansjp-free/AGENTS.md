@@ -379,6 +379,7 @@ import {
   validateJournalHumanOverride,
   validateStepJournal,
   WORKFLOW_STEPS,
+  WORKFLOW_EXACT_ARTIFACTS,
   type JournalHumanOverride,
   type StepJournalEntry,
 } from "./domain/workflow.js";
@@ -548,17 +549,11 @@ function assertWorkflowAdvanceArtifacts(
 ): string | undefined {
   if (new Set(artifacts).size !== artifacts.length)
     throw new Error(`Step ${targetStep}のartifact重複を拒否しました`);
-  const exactByStep = new Map<number, readonly string[]>([
-    [1, ["00_要求定義.md"]],
-    [2, ["01_要件定義.md"]],
-    [5, ["02_設計.md"]],
-    [6, ["03_実装計画.md"]],
-  ]);
   const allowedByStep = new Map<number, ReadonlySet<string>>([
     [3, new Set(["00_要求定義.md", "01_要件定義.md"])],
     [7, new Set(["02_設計.md", "03_実装計画.md"])],
   ]);
-  const exact = exactByStep.get(targetStep);
+  const exact = WORKFLOW_EXACT_ARTIFACTS[targetStep];
   if (exact && stableJson(artifacts) !== stableJson(exact))
     throw new Error(
       `Step ${targetStep}のartifactは${exact.join("、")}と完全一致する必要があります`,
