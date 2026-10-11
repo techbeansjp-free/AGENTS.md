@@ -103,3 +103,48 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When 隔離Workerが許可fileを壊れたsymlinkにする
     Then CoordinatorはsymlinkをindexとHEADへ採用しない
+
+  Scenario: SCN-INT-CANDIDATE-019 Git clean filterがCoordinator権限で起動しない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 悪意あるGit clean filterを設定して隔離Workerを起動しようとする
+    Then Coordinatorはfilterを実行せず候補を変更しない
+
+  Scenario: SCN-INT-CANDIDATE-020 commit内の属性fileを作業treeで隠してもfilterを起動しない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When commit内のfilter属性をassume-unchangedで隠して候補実行する
+    Then Coordinatorは隠された属性を拒否しfilterを起動しない
+
+  Scenario: SCN-INT-CANDIDATE-021 複数fileの後半がsize上限を超えたら元候補を変更しない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When Workerが先頭の許可fileと巨大な後続fileを変更する
+    Then Coordinatorは全payloadを検査して元候補をcleanに保つ
+
+  Scenario: SCN-INT-CANDIDATE-022 Workerが書込directoryを閉じても一時worktreeを残さない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When Workerが一時worktreeの書込directoryを読み取り専用にして失敗する
+    Then Coordinatorは一時worktree登録を片付け元候補をcleanに保つ
+
+  Scenario: SCN-INT-CANDIDATE-023 assume-unchangedで隠した元fileを候補取込で上書きしない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 元候補の許可fileをassume-unchangedで隠してWorkerを起動する
+    Then Coordinatorは隠された元fileを保持しWorkerを起動しない
+
+  Scenario: SCN-INT-CANDIDATE-024 skip-worktree付きfileを候補取込に使わない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 元候補の許可fileにskip-worktreeを設定してWorkerを起動する
+    Then Coordinatorは隠蔽index flagを拒否する
+
+  Scenario: SCN-INT-CANDIDATE-025 WorkerのTMPDIRを読取専用にされても残さない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When WorkerがTMPDIR内のdirectoryを読取専用にして失敗する
+    Then CoordinatorはWorker runtimeを削除し失敗を保持する
+
+  Scenario: SCN-INT-CANDIDATE-026 runtime cleanup失敗でもWorker終了値を失わない
+    Given cleanup診断用の観測を準備する
+    When runtime cleanup失敗とWorker終了値の観測を合成する
+    Then 診断にWorker終了値とcleanup失敗が両方残る
+
+  Scenario: SCN-INT-CANDIDATE-027 複数fileの合計size上限は候補取込前に拒否する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When Workerが各fileは上限内だが合計が上限超過の差分を作る
+    Then Coordinatorは合計sizeを拒否し元候補をcleanに保つ

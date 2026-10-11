@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { CANDIDATE_RISKS } from "../../src/domain/candidate-workflow.js";
-import { runCandidateWorkerBoundary } from "../../src/adapters/candidate-worker-boundary.js";
+import {
+  finalizeCandidateWorkerBoundary,
+  runCandidateWorkerBoundary,
+} from "../../src/adapters/candidate-worker-boundary.js";
 import { run, type ProcessResult } from "../../src/lib/process.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
@@ -388,6 +391,20 @@ Then("Coordinatorが差分と対象テストを観測し独立reviewへ送る", 
     return;
   }
   assert.equal(this.output?.route, "independent-review");
+  assert.equal(
+    run("git", ["symbolic-ref", "-q", "HEAD"], this.candidate, {
+      allowFailure: true,
+    }).status,
+    1,
+  );
+  assert.equal(
+    run(
+      "git",
+      ["rev-parse", "refs/heads/candidate"],
+      this.candidate,
+    ).stdout.trim(),
+    this.baseSha,
+  );
   assert.equal(this.output?.workerBoundary, "host-enforced");
   assert.equal(this.output?.baseSha, this.baseSha);
   assert.deepEqual(this.output?.changedPaths, ["src/label.js"]);
@@ -463,25 +480,27 @@ Then("Coordinatorは許可外差分をcommitしない", function () {
     run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
     this.baseSha,
   );
-  if (
+  assert.equal(
     fs.readFileSync(
       path.join(this.candidate, "src", "authorization.js"),
       "utf8",
-    ) === "disabled"
-  ) {
-    assert.ok(reasons(this).some((reason) => reason.includes("許可範囲外")));
-    assert.equal(
-      run(
-        "git",
-        ["diff", "--cached", "--name-only"],
-        this.candidate,
-      ).stdout.trim(),
-      "",
-    );
-    invokeExecute(this);
-    assert.equal(this.result?.status, 1);
-    assert.ok(reasons(this).some((reason) => reason.includes("未記録の変更")));
-  } else assert.ok(reasons(this).some((reason) => reason.includes("Worker")));
+    ),
+    "export const authorized = true;\n",
+  );
+  assert.equal(
+    fs.readFileSync(path.join(this.candidate, "src", "label.js"), "utf8"),
+    'export const label = "Helo";\n',
+  );
+  assert.equal(
+    run("git", ["status", "--porcelain"], this.candidate).stdout.trim(),
+    "",
+  );
+  assert.ok(
+    reasons(this).some(
+      (reason) =>
+        reason.includes("許可範囲外") || reason.includes("candidate Worker"),
+    ),
+  );
 });
 
 When("隔離WorkerがGit metadataへ書き込もうとする", function () {
@@ -585,6 +604,11 @@ When("悪意あるcommit hookを設定して隔離Workerが文言を修正する
     { mode: 0o755 },
   );
   fs.writeFileSync(
+    path.join(hookDirectory, "post-index-change"),
+    `#!/bin/sh\nprintf attack > '${path.join(this.home, "index-hook-ran")}'\nexit 8\n`,
+    { mode: 0o755 },
+  );
+  fs.writeFileSync(
     path.join(hookDirectory, "reference-transaction"),
     `#!/bin/sh\nprintf attack > '${path.join(this.home, "ref-hook-ran")}'\nexit 8\n`,
     { mode: 0o755 },
@@ -594,16 +618,24 @@ When("悪意あるcommit hookを設定して隔離Workerが文言を修正する
 });
 
 Then("Coordinatorはhookを実行せず候補だけをcommitする", function () {
+  assert.equal(fs.existsSync(path.join(this.home, "hook-ran")), false);
+  assert.equal(fs.existsSync(path.join(this.home, "ref-hook-ran")), false);
+  assert.equal(fs.existsSync(path.join(this.home, "index-hook-ran")), false);
   if (this.result?.status !== 0) {
-    assert.ok(
-      reasons(this).some((reason) => reason.includes("candidate Worker")),
-      JSON.stringify(this.output),
-    );
-    return;
+    if (
+      reasons(this).some(
+        (reason) =>
+          reason.includes("host隔離を起動できません") ||
+          reason.includes("このhostで強制できません"),
+      )
+    )
+      return "skipped";
+    assert.fail(JSON.stringify(this.output));
   }
   assert.equal(this.output?.route, "independent-review");
   assert.equal(fs.existsSync(path.join(this.home, "hook-ran")), false);
   assert.equal(fs.existsSync(path.join(this.home, "ref-hook-ran")), false);
+  assert.equal(fs.existsSync(path.join(this.home, "index-hook-ran")), false);
   assert.notEqual(
     run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
     this.baseSha,
@@ -654,5 +686,323 @@ Then("CoordinatorはsymlinkをindexとHEADへ採用しない", function () {
     reasons(this).some(
       (reason) => reason.includes("通常file") || reason.includes("Worker"),
     ),
+  );
+});
+
+When(
+  "悪意あるGit clean filterを設定して隔離Workerを起動しようとする",
+  function () {
+    const infoPath = run(
+      "git",
+      ["rev-parse", "--git-path", "info/attributes"],
+      this.candidate,
+    ).stdout.trim();
+    fs.writeFileSync(
+      path.isAbsolute(infoPath)
+        ? infoPath
+        : path.resolve(this.candidate, infoPath),
+      "src/label.js filter=attack\n",
+    );
+    run(
+      "git",
+      [
+        "config",
+        "filter.attack.clean",
+        `sh -c 'cat; touch ${path.join(this.home, "filter-ran")}'`,
+      ],
+      this.candidate,
+    );
+    invokeExecute(this);
+  },
+);
+
+Then("Coordinatorはfilterを実行せず候補を変更しない", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(fs.existsSync(path.join(this.home, "filter-ran")), false);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+  assert.equal(
+    fs.readFileSync(path.join(this.candidate, "src", "label.js"), "utf8"),
+    'export const label = "Helo";\n',
+  );
+});
+
+When("commit内のfilter属性をassume-unchangedで隠して候補実行する", function () {
+  const attribute = path.join(this.candidate, ".gitattributes");
+  fs.writeFileSync(attribute, "src/label.js filter=attack\n");
+  run("git", ["add", ".gitattributes"], this.candidate);
+  run("git", ["commit", "-qm", "add attributes"], this.candidate);
+  this.baseSha = run(
+    "git",
+    ["rev-parse", "HEAD"],
+    this.candidate,
+  ).stdout.trim();
+  run(
+    "git",
+    ["update-index", "--assume-unchanged", ".gitattributes"],
+    this.candidate,
+  );
+  fs.writeFileSync(attribute, "# harmless working copy\n");
+  run(
+    "git",
+    [
+      "config",
+      "filter.attack.smudge",
+      `sh -c 'cat; touch ${path.join(this.home, "hidden-filter-ran")}'`,
+    ],
+    this.candidate,
+  );
+  invokeExecute(this);
+});
+
+Then("Coordinatorは隠された属性を拒否しfilterを起動しない", function () {
+  assert.equal(this.result?.status, 1);
+  assert.ok(
+    reasons(this).some(
+      (reason) => reason.includes("Git属性file") || reason.includes("隠蔽flag"),
+    ),
+  );
+  assert.equal(fs.existsSync(path.join(this.home, "hidden-filter-ran")), false);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+});
+
+When("Workerが先頭の許可fileと巨大な後続fileを変更する", function () {
+  invokeExecute(this, {
+    allowedPaths: ["src/label.js", "src/authorization.js"],
+    workerArgv: [
+      "/bin/sh",
+      "-c",
+      "printf denied > src/authorization.js; dd if=/dev/zero of=src/label.js bs=1048576 count=17 2>/dev/null",
+    ],
+  });
+});
+
+Then("Coordinatorは全payloadを検査して元候補をcleanに保つ", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+  assert.equal(
+    run("git", ["status", "--porcelain"], this.candidate).stdout.trim(),
+    "",
+  );
+  assert.equal(
+    fs.readFileSync(path.join(this.candidate, "src", "label.js"), "utf8"),
+    'export const label = "Helo";\n',
+  );
+  assert.equal(
+    fs.readFileSync(
+      path.join(this.candidate, "src", "authorization.js"),
+      "utf8",
+    ),
+    "export const authorized = true;\n",
+  );
+  if (
+    reasons(this).some((reason) => reason.includes("host隔離を起動できません"))
+  )
+    return "skipped";
+  assert.ok(
+    reasons(this).some((reason) => reason.includes("size上限")),
+    JSON.stringify(this.output),
+  );
+});
+
+When(
+  "Workerが一時worktreeの書込directoryを読み取り専用にして失敗する",
+  function () {
+    invokeExecute(this, {
+      workerArgv: ["/bin/sh", "-c", "chmod 0555 src; exit 8"],
+    });
+  },
+);
+
+Then("Coordinatorは一時worktree登録を片付け元候補をcleanに保つ", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+  assert.equal(
+    run("git", ["status", "--porcelain"], this.candidate).stdout.trim(),
+    "",
+  );
+  const registered = run(
+    "git",
+    ["worktree", "list", "--porcelain"],
+    this.candidate,
+  ).stdout;
+  assert.equal(
+    registered.split("\n").filter((line) => line.startsWith("worktree "))
+      .length,
+    2,
+  );
+  if (
+    reasons(this).some((reason) => reason.includes("host隔離を起動できません"))
+  )
+    return "skipped";
+  assert.ok(
+    reasons(this).some((reason) => reason.includes("candidate Workerが失敗")),
+    JSON.stringify(this.output),
+  );
+});
+
+When("元候補の許可fileをassume-unchangedで隠してWorkerを起動する", function () {
+  run(
+    "git",
+    ["update-index", "--assume-unchanged", "src/label.js"],
+    this.candidate,
+  );
+  fs.writeFileSync(
+    path.join(this.candidate, "src", "label.js"),
+    "private edit\n",
+  );
+  invokeExecute(this);
+});
+
+Then("Coordinatorは隠された元fileを保持しWorkerを起動しない", function () {
+  assert.equal(this.result?.status, 1);
+  assert.ok(reasons(this).some((reason) => reason.includes("隠蔽flag")));
+  assert.equal(
+    fs.readFileSync(path.join(this.candidate, "src", "label.js"), "utf8"),
+    "private edit\n",
+  );
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+});
+
+When("元候補の許可fileにskip-worktreeを設定してWorkerを起動する", function () {
+  run(
+    "git",
+    ["update-index", "--skip-worktree", "src/label.js"],
+    this.candidate,
+  );
+  invokeExecute(this);
+});
+
+Then("Coordinatorは隠蔽index flagを拒否する", function () {
+  assert.equal(this.result?.status, 1);
+  assert.ok(reasons(this).some((reason) => reason.includes("隠蔽flag")));
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+});
+
+When("WorkerがTMPDIR内のdirectoryを読取専用にして失敗する", function () {
+  invokeExecute(this, {
+    workerArgv: [
+      "/bin/sh",
+      "-c",
+      'mkdir "$TMPDIR/locked"; printf x > "$TMPDIR/locked/file"; chmod 0555 "$TMPDIR/locked"; printf "%s" "$TMPDIR" >&2; exit 8',
+    ],
+  });
+});
+
+Then("CoordinatorはWorker runtimeを削除し失敗を保持する", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+  assert.equal(
+    run("git", ["status", "--porcelain"], this.candidate).stdout.trim(),
+    "",
+  );
+  const detail = reasons(this).join("\n");
+  if (detail.includes("host隔離を起動できません")) return "skipped";
+  assert.ok(detail.includes("candidate Workerが失敗"), detail);
+  const runtime = detail.match(
+    /\/tmp\/asc-candidate-worker-[A-Za-z0-9]+/u,
+  )?.[0];
+  assert.ok(runtime, detail);
+  assert.equal(fs.existsSync(runtime), false);
+});
+
+Given("cleanup診断用の観測を準備する", function () {
+  this.rejectionReasons = [];
+});
+
+When("runtime cleanup失敗とWorker終了値の観測を合成する", function () {
+  try {
+    finalizeCandidateWorkerBoundary({
+      result: {
+        boundary: "host-enforced",
+        status: 8,
+        stdout: "",
+        stderr: "worker failed",
+      },
+      primaryError: undefined,
+      cleanupErrors: [new Error("permission denied")],
+    });
+    assert.fail("cleanup失敗が拒否されませんでした");
+  } catch (error) {
+    assert.ok(error instanceof AggregateError);
+    this.rejectionReasons = [error.message, ...error.errors.map(String)];
+  }
+});
+
+Then("診断にWorker終了値とcleanup失敗が両方残る", function () {
+  const detail = this.rejectionReasons.join("\n");
+  assert.match(detail, /終了値8/u);
+  assert.match(detail, /worker failed/u);
+  assert.match(detail, /permission denied/u);
+});
+
+When("Workerが各fileは上限内だが合計が上限超過の差分を作る", function () {
+  for (let index = 0; index < 5; index += 1)
+    fs.writeFileSync(
+      path.join(this.primary, "src", `payload-${index}.bin`),
+      "base\n",
+    );
+  run("git", ["add", "."], this.primary);
+  run("git", ["commit", "-qm", "add payload fixtures"], this.primary);
+  this.baseSha = run("git", ["rev-parse", "HEAD"], this.primary).stdout.trim();
+  run("git", ["reset", "--hard", this.baseSha], this.candidate);
+  invokeExecute(this, {
+    allowedPaths: Array.from(
+      { length: 5 },
+      (_, index) => `src/payload-${index}.bin`,
+    ),
+    workerArgv: [
+      "/bin/sh",
+      "-c",
+      "for i in 0 1 2 3 4; do dd if=/dev/zero of=src/payload-$i.bin bs=1048576 count=15 2>/dev/null; done",
+    ],
+  });
+});
+
+Then("Coordinatorは合計sizeを拒否し元候補をcleanに保つ", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+  assert.equal(
+    run("git", ["status", "--porcelain"], this.candidate).stdout.trim(),
+    "",
+  );
+  for (let index = 0; index < 5; index += 1)
+    assert.equal(
+      fs.readFileSync(
+        path.join(this.candidate, "src", `payload-${index}.bin`),
+        "utf8",
+      ),
+      "base\n",
+    );
+  if (
+    reasons(this).some((reason) => reason.includes("host隔離を起動できません"))
+  )
+    return "skipped";
+  assert.ok(
+    reasons(this).some((reason) => reason.includes("size上限")),
+    JSON.stringify(this.output),
   );
 });

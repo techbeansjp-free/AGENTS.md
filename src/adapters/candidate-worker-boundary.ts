@@ -8,6 +8,22 @@ import { resolveGitWorkspace } from "./review-workspace.js";
 
 const MAX_WORKER_MS = 30 * 60 * 1000;
 
+export function makeDirectoriesRemovable(root: string): void {
+  if (!fs.existsSync(root)) return;
+  let entries = 0;
+  const visit = (directory: string): void => {
+    fs.chmodSync(directory, 0o700);
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      entries += 1;
+      if (entries > 100_000)
+        throw new Error("candidate一時worktreeのcleanup上限を超えました");
+      const absolute = path.join(directory, entry.name);
+      if (fs.lstatSync(absolute).isDirectory()) visit(absolute);
+    }
+  };
+  visit(root);
+}
+
 function workerExecutable(argv: readonly string[]): string {
   const command = argv[0]!;
   const candidates = path.isAbsolute(command)
@@ -97,6 +113,40 @@ function workerWriteRoots(root: string, paths: readonly string[]): string[] {
   return [...roots].sort();
 }
 
+export interface CandidateWorkerResult {
+  boundary: "host-enforced";
+  status: number;
+  stdout: string;
+  stderr: string;
+}
+
+/** Keep the Worker exit observation even when runtime cleanup also fails. */
+export function finalizeCandidateWorkerBoundary(input: {
+  result: CandidateWorkerResult | undefined;
+  primaryError: unknown;
+  cleanupErrors: readonly unknown[];
+}): CandidateWorkerResult {
+  const workerFailure =
+    input.result !== undefined && input.result.status !== 0
+      ? new Error(
+          `candidate Workerが失敗しました（終了値${input.result.status}）: ${input.result.stderr.slice(0, 300)}`,
+        )
+      : undefined;
+  const primary = input.primaryError ?? workerFailure;
+  if (input.cleanupErrors.length > 0)
+    throw new AggregateError(
+      primary === undefined
+        ? [...input.cleanupErrors]
+        : [primary, ...input.cleanupErrors],
+      `candidate Worker runtimeのcleanupが失敗しました: primary=${String(primary ?? "none").slice(0, 300)}; cleanup=${input.cleanupErrors.map(String).join("; ").slice(0, 500)}`,
+      { cause: primary ?? input.cleanupErrors[0] },
+    );
+  if (input.primaryError !== undefined) throw input.primaryError;
+  if (input.result === undefined)
+    throw new Error("candidate Workerの実行結果がありません");
+  return input.result;
+}
+
 /** Run one worker with source-only write access; the coordinator keeps preflight state in memory. */
 export function runCandidateWorkerBoundary(input: {
   root: string;
@@ -161,6 +211,15 @@ export function runCandidateWorkerBoundary(input: {
     TMPDIR: runtime,
     LANG: process.env.LANG ?? "C.UTF-8",
   };
+  let primaryError: unknown;
+  let result:
+    | {
+        boundary: "host-enforced";
+        status: number;
+        stdout: string;
+        stderr: string;
+      }
+    | undefined;
   try {
     fs.writeFileSync(sentinel, "trusted\n", { flag: "wx", mode: 0o600 });
     const healthy = run("codex", [...prefix, "/bin/true"], root, {
@@ -186,14 +245,34 @@ export function runCandidateWorkerBoundary(input: {
       maxBufferBytes: 4 * 1024 * 1024,
       env,
     });
-    return {
-      boundary: "host-enforced" as const,
+    result = {
+      boundary: "host-enforced",
       status: worker.status,
       stdout: worker.stdout,
       stderr: worker.stderr,
     };
-  } finally {
-    fs.rmSync(sentinel, { force: true });
-    fs.rmSync(runtime, { recursive: true, force: true });
+  } catch (error) {
+    primaryError = error;
   }
+  const cleanupErrors: unknown[] = [];
+  try {
+    fs.rmSync(sentinel, { force: true });
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+  try {
+    fs.rmSync(runtime, { recursive: true, force: true });
+  } catch (first) {
+    try {
+      makeDirectoriesRemovable(runtime);
+      fs.rmSync(runtime, { recursive: true, force: true });
+    } catch (second) {
+      cleanupErrors.push(first, second);
+    }
+  }
+  return finalizeCandidateWorkerBoundary({
+    result,
+    primaryError,
+    cleanupErrors,
+  });
 }

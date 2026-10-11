@@ -13,13 +13,17 @@ import {
   type CandidateRiskStatus,
 } from "../domain/candidate-workflow.js";
 import {
+  CANDIDATE_GIT_ENV,
+  assertNoCandidateFilters,
   observeCandidateBoundary,
   observeCandidateForkBase,
   observeCandidateGit,
 } from "./candidate-git.js";
 import { candidateAllowedPaths } from "./candidate-session.js";
-import { runCandidateWorkerBoundary } from "./candidate-worker-boundary.js";
-import { GIT_ENV } from "./review-diff.js";
+import {
+  makeDirectoriesRemovable,
+  runCandidateWorkerBoundary,
+} from "./candidate-worker-boundary.js";
 
 export interface CandidateExecutionInput {
   root: string;
@@ -51,7 +55,7 @@ function assertNoIgnoredWorkerInputs(
       ...directories,
     ],
     root,
-    { env: GIT_ENV },
+    { env: CANDIDATE_GIT_ENV },
   )
     .stdout.split("\0")
     .filter(Boolean);
@@ -70,16 +74,177 @@ function uncommittedPaths(root: string): string[] {
   return [
     ...new Set(
       commands.flatMap((argv) =>
-        git(argv, root, { env: GIT_ENV }).stdout.split("\0").filter(Boolean),
+        git(argv, root, { env: CANDIDATE_GIT_ENV })
+          .stdout.split("\0")
+          .filter(Boolean),
       ),
     ),
   ].sort();
+}
+
+function gitWorktreePath(root: string, name: "HEAD" | "index"): string {
+  const value = git(["rev-parse", "--git-path", name], root, {
+    env: CANDIDATE_GIT_ENV,
+  }).stdout.trim();
+  return path.isAbsolute(value) ? value : path.resolve(root, value);
+}
+
+/** Publish only while Git's ordinary index and symbolic HEAD are locked and unchanged. */
+function publishCandidateCommit(input: {
+  root: string;
+  baseSha: string;
+  commitSha: string;
+  headFile: string;
+  headBytes: Buffer;
+  indexFile: string;
+  indexDigest: string;
+  privateIndex: string;
+}): void {
+  const indexLock = `${input.indexFile}.lock`;
+  let indexFd: number | undefined;
+  try {
+    indexFd = fs.openSync(indexLock, "wx", 0o600);
+    const currentIndex = fs.readFileSync(input.indexFile);
+    if (
+      crypto.createHash("sha256").update(currentIndex).digest("hex") !==
+        input.indexDigest ||
+      !fs.readFileSync(input.headFile).equals(input.headBytes) ||
+      git(["rev-parse", "HEAD"], input.root, {
+        env: CANDIDATE_GIT_ENV,
+      }).stdout.trim() !== input.baseSha
+    )
+      throw new Error(
+        "candidate publication前にHEADまたはindexが変更されました",
+      );
+    fs.writeFileSync(indexFd, fs.readFileSync(input.privateIndex));
+    fs.fsyncSync(indexFd);
+    // Update only this linked worktree's HEAD. --no-deref detaches it and
+    // cannot publish to a different branch after a symbolic-ref race.
+    git(
+      [
+        "-c",
+        "core.hooksPath=/dev/null",
+        "update-ref",
+        "--no-deref",
+        "HEAD",
+        input.commitSha,
+        input.baseSha,
+      ],
+      input.root,
+      { env: CANDIDATE_GIT_ENV },
+    );
+    if (
+      git(["rev-parse", "HEAD"], input.root, {
+        env: CANDIDATE_GIT_ENV,
+      }).stdout.trim() !== input.commitSha ||
+      git(["symbolic-ref", "--quiet", "HEAD"], input.root, {
+        env: CANDIDATE_GIT_ENV,
+        allowFailure: true,
+      }).status === 0
+    )
+      throw new Error("candidate publication中にHEADが変更されました");
+    fs.renameSync(indexLock, input.indexFile);
+  } finally {
+    if (indexFd !== undefined) fs.closeSync(indexFd);
+    if (indexFd !== undefined) fs.rmSync(indexLock, { force: true });
+  }
+}
+
+interface CandidateFileSnapshot {
+  bytes: Buffer;
+  mode: number;
+}
+
+function readCandidateFile(
+  file: string,
+  relative: string,
+  remainingBytes: number,
+): CandidateFileSnapshot | null {
+  let fd: number;
+  try {
+    fd = fs.openSync(
+      file,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  try {
+    const before = fs.fstatSync(fd);
+    if (
+      !before.isFile() ||
+      before.nlink !== 1 ||
+      before.size > Math.min(16 * 1024 * 1024, remainingBytes)
+    )
+      throw new Error(
+        `candidate import対象が通常fileではないかsize上限を超えます: ${relative}`,
+      );
+    const bytes = Buffer.alloc(before.size);
+    let readBytes = 0;
+    while (readBytes < bytes.length) {
+      const count = fs.readSync(
+        fd,
+        bytes,
+        readBytes,
+        bytes.length - readBytes,
+        null,
+      );
+      if (count === 0) break;
+      readBytes += count;
+    }
+    const extra = Buffer.alloc(1);
+    const extraBytes = fs.readSync(fd, extra, 0, 1, null);
+    const after = fs.fstatSync(fd);
+    if (
+      readBytes !== before.size ||
+      extraBytes !== 0 ||
+      after.size !== before.size ||
+      after.mtimeMs !== before.mtimeMs ||
+      after.ctimeMs !== before.ctimeMs
+    )
+      throw new Error(
+        `candidate import対象が読取中に変更されました: ${relative}`,
+      );
+    return { bytes, mode: before.mode & 0o777 };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function installCandidateFile(
+  root: string,
+  relative: string,
+  file: CandidateFileSnapshot | null,
+): void {
+  const destination = path.join(root, relative);
+  const parent = path.dirname(destination);
+  if (fs.realpathSync(parent) !== parent)
+    throw new Error(`candidate import先にsymlink祖先があります: ${relative}`);
+  if (file === null) {
+    fs.rmSync(destination, { force: true });
+    return;
+  }
+  const temporary = path.join(parent, `.asc-import-${crypto.randomUUID()}`);
+  try {
+    fs.writeFileSync(temporary, file.bytes, { flag: "wx", mode: file.mode });
+    fs.renameSync(temporary, destination);
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
 }
 
 /** Preflight, isolated Worker and Git observation share one trusted Coordinator invocation. */
 export function executeCandidate(input: CandidateExecutionInput) {
   const root = fs.realpathSync(input.root);
   const baseSha = observeCandidateBoundary(root).headSha;
+  const headFile = gitWorktreePath(root, "HEAD");
+  const headBytes = fs.readFileSync(headFile);
+  const indexFile = gitWorktreePath(root, "index");
+  const indexDigest = crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(indexFile))
+    .digest("hex");
   const allowedPaths = candidateAllowedPaths(input.allowedPaths);
   if (observeCandidateForkBase(root, baseSha) !== baseSha)
     throw new Error("candidate事前HEADがGit分岐点と一致しません");
@@ -104,54 +269,174 @@ export function executeCandidate(input: CandidateExecutionInput) {
   )
     throw new Error("未知のcandidateリスク項目があります");
   assertNoIgnoredWorkerInputs(root, allowedPaths);
-  const worker = runCandidateWorkerBoundary({
-    root,
-    allowedPaths,
-    argv: input.workerArgv,
-  });
-  if (worker.status !== 0)
-    throw new Error(
-      `candidate Workerが失敗しました（終了値${worker.status}）: ${worker.stderr.slice(0, 500)}`,
-    );
-  assertNoIgnoredWorkerInputs(root, allowedPaths);
-  const currentSha = git(["rev-parse", "HEAD"], root, {
-    env: GIT_ENV,
-  }).stdout.trim();
-  if (currentSha !== baseSha)
-    throw new Error("candidate Workerが事前HEADを変更しました");
-  const changedPaths = uncommittedPaths(root);
-  if (changedPaths.length === 0)
-    throw new Error("candidate Workerが候補差分を作成しませんでした");
-  const unexpected = changedPaths.filter(
-    (item) => !allowedPaths.includes(item),
+  // The Worker can write an allowed parent directory. Run it in a separate
+  // throwaway worktree and import only the validated allowed files.
+  const workerRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "asc-candidate-copy-"),
   );
-  if (unexpected.length > 0)
-    throw new Error(
-      `candidate Workerが許可範囲外を変更しました: ${unexpected.join(", ")}`,
+  let workerRegistered = false;
+  let workerBoundary: "host-enforced" | undefined;
+  let changedPaths: string[] = [];
+  let workerFailure: unknown;
+  try {
+    git(["worktree", "add", "--detach", "--", workerRoot, baseSha], root, {
+      env: CANDIDATE_GIT_ENV,
+    });
+    workerRegistered = true;
+    assertNoIgnoredWorkerInputs(workerRoot, allowedPaths);
+    const worker = runCandidateWorkerBoundary({
+      root: workerRoot,
+      allowedPaths,
+      argv: input.workerArgv,
+    });
+    workerBoundary = worker.boundary;
+    if (worker.status !== 0)
+      throw new Error(
+        `candidate Workerが失敗しました（終了値${worker.status}）: ${worker.stderr.slice(0, 500)}`,
+      );
+    assertNoCandidateFilters(workerRoot);
+    assertNoIgnoredWorkerInputs(workerRoot, allowedPaths);
+    if (
+      git(["rev-parse", "HEAD"], workerRoot, {
+        env: CANDIDATE_GIT_ENV,
+      }).stdout.trim() !== baseSha
+    )
+      throw new Error("candidate Workerが事前HEADを変更しました");
+    changedPaths = uncommittedPaths(workerRoot);
+    if (changedPaths.length === 0)
+      throw new Error("candidate Workerが候補差分を作成しませんでした");
+    const unexpected = changedPaths.filter(
+      (item) => !allowedPaths.includes(item),
     );
-  for (const relative of changedPaths) {
-    const absolute = path.join(root, relative);
-    let stat: fs.Stats;
+    if (unexpected.length > 0)
+      throw new Error(
+        `candidate Workerが許可範囲外を変更しました: ${unexpected.join(", ")}`,
+      );
+    for (const relative of changedPaths) {
+      const source = path.join(workerRoot, relative);
+      let stat: fs.Stats;
+      try {
+        stat = fs.lstatSync(source);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+      if (!stat.isFile() || stat.nlink !== 1)
+        throw new Error(
+          `candidate Workerの差分は通常fileが必要です: ${relative}`,
+        );
+    }
+    let remainingBytes = 64 * 1024 * 1024;
+    const imports = changedPaths.map((relative) => {
+      const file = readCandidateFile(
+        path.join(workerRoot, relative),
+        relative,
+        remainingBytes,
+      );
+      remainingBytes -= file?.bytes.length ?? 0;
+      const original = readCandidateFile(
+        path.join(root, relative),
+        relative,
+        remainingBytes,
+      );
+      remainingBytes -= original?.bytes.length ?? 0;
+      return { relative, file, original };
+    });
+    if (observeCandidateBoundary(root).headSha !== baseSha)
+      throw new Error("candidate import前に元worktreeが変更されました");
+    const applied: typeof imports = [];
     try {
-      stat = fs.lstatSync(absolute);
+      for (const item of imports) {
+        installCandidateFile(root, item.relative, item.file);
+        applied.push(item);
+      }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      const rollbackErrors: unknown[] = [];
+      for (const item of applied.reverse()) {
+        try {
+          installCandidateFile(root, item.relative, item.original);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError);
+        }
+      }
+      if (rollbackErrors.length > 0)
+        throw new AggregateError(
+          [error, ...rollbackErrors],
+          "candidate importとrollbackが失敗しました",
+          { cause: error },
+        );
       throw error;
     }
-    if (!stat.isFile() || stat.nlink !== 1)
-      throw new Error(
-        `candidate Workerの差分は通常fileが必要です: ${relative}`,
-      );
+  } catch (error) {
+    workerFailure = error;
   }
+  const cleanupErrors: unknown[] = [];
+  if (workerRegistered) {
+    try {
+      git(["worktree", "remove", "--force", "--", workerRoot], root, {
+        env: CANDIDATE_GIT_ENV,
+      });
+    } catch (first) {
+      try {
+        // Git may already have removed registration before deletion fails.
+        // Remove the owned temp directory, then verify both artifacts are gone.
+        makeDirectoriesRemovable(workerRoot);
+        fs.rmSync(workerRoot, { recursive: true, force: true });
+        const registered = git(["worktree", "list", "--porcelain"], root, {
+          env: CANDIDATE_GIT_ENV,
+        })
+          .stdout.split("\n")
+          .some((line) => line === `worktree ${workerRoot}`);
+        if (registered)
+          throw new Error("candidate一時worktreeのGit登録が残っています", {
+            cause: first,
+          });
+      } catch (second) {
+        cleanupErrors.push(first, second);
+      }
+    }
+  }
+  try {
+    fs.rmSync(workerRoot, { recursive: true, force: true });
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+  if (workerFailure !== undefined && cleanupErrors.length > 0)
+    throw new AggregateError(
+      [workerFailure, ...cleanupErrors],
+      `candidate Workerとcleanupが失敗しました: ${cleanupErrors.map(String).join("; ").slice(0, 800)}`,
+    );
+  if (workerFailure !== undefined) throw workerFailure;
+  if (cleanupErrors.length > 0)
+    throw new AggregateError(
+      cleanupErrors,
+      `candidate一時worktreeのcleanupが失敗しました: ${cleanupErrors.map(String).join("; ").slice(0, 800)}`,
+    );
+  if (workerBoundary === undefined)
+    throw new Error("candidate Worker境界を観測できません");
+  assertNoCandidateFilters(root);
+  const currentSha = git(["rev-parse", "HEAD"], root, {
+    env: CANDIDATE_GIT_ENV,
+  }).stdout.trim();
+  if (currentSha !== baseSha)
+    throw new Error("candidate import中にHEADが変更されました");
+  if (uncommittedPaths(root).join("\0") !== changedPaths.join("\0"))
+    throw new Error("candidate importと許可差分が一致しません");
   // A private index keeps staging failures out of the caller's index. commit-tree
   // never executes repository hooks, and update-ref compares the exact preflight
   // HEAD so a concurrent move cannot be silently committed over.
   const indexDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "asc-candidate-index-"),
   );
-  const indexEnv = { ...GIT_ENV, GIT_INDEX_FILE: path.join(indexDir, "index") };
+  const indexEnv = {
+    ...CANDIDATE_GIT_ENV,
+    GIT_INDEX_FILE: path.join(indexDir, "index"),
+  };
+  let publishedCommitSha: string;
   try {
-    git(["read-tree", baseSha], root, { env: indexEnv });
+    git(["-c", "core.hooksPath=/dev/null", "read-tree", baseSha], root, {
+      env: indexEnv,
+    });
     const stagedBlobs = new Map<string, { sha: string; mode: number } | null>();
     // Bypass repository-defined clean filters and Git hooks. Only the observed
     // regular-file bytes enter this private index.
@@ -162,9 +447,20 @@ export function executeCandidate(input: CandidateExecutionInput) {
         stat = fs.lstatSync(absolute);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-          git(["update-index", "--force-remove", "--", relative], root, {
-            env: indexEnv,
-          });
+          git(
+            [
+              "-c",
+              "core.hooksPath=/dev/null",
+              "update-index",
+              "--force-remove",
+              "--",
+              relative,
+            ],
+            root,
+            {
+              env: indexEnv,
+            },
+          );
           stagedBlobs.set(relative, null);
           continue;
         }
@@ -185,6 +481,8 @@ export function executeCandidate(input: CandidateExecutionInput) {
         throw new Error(`candidate blob SHAが不正です: ${relative}`);
       git(
         [
+          "-c",
+          "core.hooksPath=/dev/null",
           "update-index",
           "--add",
           "--cacheinfo",
@@ -256,14 +554,15 @@ export function executeCandidate(input: CandidateExecutionInput) {
     }
     const treeSha = git(["write-tree"], root, { env: indexEnv }).stdout.trim();
     if (
-      git(["rev-parse", "HEAD"], root, { env: GIT_ENV }).stdout.trim() !==
-      baseSha
+      git(["rev-parse", "HEAD"], root, {
+        env: CANDIDATE_GIT_ENV,
+      }).stdout.trim() !== baseSha
     )
       throw new Error(
         "candidate commit前にHEADが移動しました。隔離worktreeを破棄してください",
       );
     const commitEnv = {
-      ...GIT_ENV,
+      ...CANDIDATE_GIT_ENV,
       GIT_AUTHOR_NAME: "ASC Candidate",
       GIT_AUTHOR_EMAIL: "candidate@localhost.invalid",
       GIT_COMMITTER_NAME: "ASC Candidate",
@@ -283,25 +582,23 @@ export function executeCandidate(input: CandidateExecutionInput) {
     ).stdout.trim();
     if (!/^[0-9a-f]{40}$/.test(commitSha))
       throw new Error("candidate commit objectが不正です");
-    git(
-      [
-        "-c",
-        "core.hooksPath=/dev/null",
-        "update-ref",
-        "HEAD",
-        commitSha,
-        baseSha,
-      ],
+    publishCandidateCommit({
       root,
-      { env: GIT_ENV },
-    );
-    // An interruption here leaves a visibly dirty disposable worktree;
-    // observeCandidateBoundary rejects it on the next run.
-    git(["read-tree", treeSha], root, { env: GIT_ENV });
+      baseSha,
+      commitSha,
+      headFile,
+      headBytes,
+      indexFile,
+      indexDigest,
+      privateIndex: indexEnv.GIT_INDEX_FILE,
+    });
+    publishedCommitSha = commitSha;
   } finally {
     fs.rmSync(indexDir, { recursive: true, force: true });
   }
   const observed = observeCandidateGit(root, baseSha);
+  if (observed.headSha !== publishedCommitSha)
+    throw new Error("candidate publication後にHEADが変更されました");
   if (observed.changedPaths.join("\0") !== changedPaths.join("\0"))
     throw new Error("candidate Workerの差分とcommitが一致しません");
   const testResult = runCandidateWorkerBoundary({
@@ -310,7 +607,7 @@ export function executeCandidate(input: CandidateExecutionInput) {
     argv: command,
   });
   const afterTest = observeCandidateBoundary(root).headSha;
-  if (afterTest !== observed.headSha)
+  if (afterTest !== publishedCommitSha)
     throw new Error("candidate差分と対象テストのHEADが一致しません");
   const targetTest = {
     headSha: afterTest,
@@ -338,7 +635,7 @@ export function executeCandidate(input: CandidateExecutionInput) {
     correctnessCriterion: input.correctnessCriterion,
     allowedPaths,
     targetTest,
-    workerBoundary: worker.boundary,
+    workerBoundary,
     formalWorkflowUnchanged: true,
     independentReviewRequired: true,
     riskAssessmentSource: "caller-asserted" as const,
