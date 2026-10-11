@@ -66,6 +66,24 @@ Feature: Issue templateと段階別検証の契約
     When quick Issueのplaceholderを検証する
     Then placeholder errorなしでIssue検証は合格する
 
+  Scenario: SCN-UNIT-ISSUEPLC-018 セミコロンを含む未記入欄は拒否する
+    Given placeholder検査用のMarkdownがある
+      """
+      担当は{担当者;期日}のままである。
+      """
+    When IssueとPR本文の共有placeholder境界を検証する
+    Then Issueのplaceholder候補は"{担当者;期日}"だけになる
+    And PR本文のplaceholder候補は"{担当者;期日}"だけになる
+
+  Scenario: SCN-UNIT-ISSUEPLC-019 未記入欄の中のangleも判定を回避しない
+    Given placeholder検査用のMarkdownがある
+      """
+      承認は{申請先; <承認者>}のままである。
+      """
+    When IssueとPR本文の共有placeholder境界を検証する
+    Then Issueのplaceholder候補は"{申請先; <承認者>}"だけになる
+    And PR本文のplaceholder候補は"{申請先; <承認者>}"だけになる
+
   Scenario: SCN-UNIT-ISSUEPLC-003 説明文の変更しない条件はplaceholderとしない
     Given validなquick Issueの本文に説明文の変更しない条件がある
     When quick Issueのplaceholderを検証する

@@ -859,9 +859,14 @@ function unresolvedPlaceholders(
   );
   const found = new Set<string>();
   for (const match of prose.matchAll(/<[^>\n]+>|\{[^}\n]+\}/gu)) {
-    // A statement such as `function f() { return "value"; }` may be cited in
-    // ordinary prose. A semicolon makes the brace content code, not a slot.
-    if (match[0].startsWith("{") && match[0].includes(";")) continue;
+    // Only a clear return statement is code when cited without Markdown ticks.
+    // A semicolon alone also appears in unfinished template fields.
+    if (
+      /^\{\s*return\s+(?:"[^"\n]*"|'[^'\n]*'|[A-Za-z_$][\w.$]*)\s*;\s*\}$/u.test(
+        match[0],
+      )
+    )
+      continue;
     found.add(match[0]);
   }
   for (const match of prose.matchAll(/（[^）\n]+）/gu))
