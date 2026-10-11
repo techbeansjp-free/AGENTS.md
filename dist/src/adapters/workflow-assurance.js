@@ -47,43 +47,55 @@ export function deriveAssuranceProjection(input) {
             "実装HEADと現在HEADが異なる。evidence-only後続commitか未review差分かは既存gateで判定する",
         ]
         : [], "deterministic");
-    const verificationStatus = resume.errors.length > 0
-        ? "unknown"
-        : resume.verification === null
-            ? "unsatisfied"
-            : !resume.verification.passed
-                ? "invalidated"
-                : "unknown";
-    add("O-06", verificationStatus, ["staging:verification-runs", "git:HEAD", "trusted:verification-policy"], verificationStatus === "unknown"
-        ? [
-            "記録の存在だけではpolicy・scope・impactの有効性を確定できない。既存verify gateで再照合する",
-        ]
-        : verificationStatus === "invalidated"
-            ? ["検証失敗"]
-            : [], "deterministic");
-    const reviewStatus = resume.errors.length > 0
-        ? "unknown"
-        : resume.review === null || resume.review.status !== "converged"
-            ? "unsatisfied"
-            : "unknown";
-    add("O-07", reviewStatus, ["staging:review-session", "git:HEAD", "tracked:review-evidence"], reviewStatus === "unknown"
-        ? ["収束sessionだけでは独立性・差分・検証Evidenceの有効性を確定できない"]
-        : resume.review?.matchesImplementationHead === false
+    const verificationStatus = input.verificationGate?.status ??
+        (resume.errors.length > 0
+            ? "unknown"
+            : resume.verification === null
+                ? "unsatisfied"
+                : !resume.verification.passed
+                    ? "invalidated"
+                    : "unknown");
+    add("O-06", verificationStatus, ["staging:verification-runs", "git:HEAD", "trusted:verification-policy"], input.verificationGate !== undefined
+        ? [input.verificationGate.reason]
+        : verificationStatus === "unknown"
             ? [
-                "review対象HEADと実装HEADが異なる。既存review gateで正当な後続commitか照合する",
+                "記録の存在だけではpolicy・scope・impactの有効性を確定できない。既存verify gateで再照合する",
             ]
-            : [], "independent-review");
+            : verificationStatus === "invalidated"
+                ? ["検証失敗"]
+                : [], "deterministic");
+    const reviewStatus = input.reviewGate?.status ??
+        (resume.errors.length > 0
+            ? "unknown"
+            : resume.review === null || resume.review.status !== "converged"
+                ? "unsatisfied"
+                : "unknown");
+    if (mode === "full") {
+        add("O-R3", recorded(3), stepEvidence(3), ["要件readinessの独立確認。実装後のexact HEADレビューとは別の責務"], "independent-review");
+        add("O-R7", recorded(7), stepEvidence(7), ["設計readinessの独立確認。実装後のexact HEADレビューとは別の責務"], "independent-review");
+    }
+    add("O-07", reviewStatus, ["staging:review-session", "git:HEAD", "tracked:review-evidence"], input.reviewGate !== undefined
+        ? [input.reviewGate.reason]
+        : reviewStatus === "unknown"
+            ? [
+                "収束sessionだけでは独立性・差分・検証Evidenceの有効性を確定できない",
+            ]
+            : resume.review?.matchesImplementationHead === false
+                ? [
+                    "review対象HEADと実装HEADが異なる。既存review gateで正当な後続commitか照合する",
+                ]
+                : [], "independent-review");
     add("O-08", "unknown", ["git:HEAD:docs/specs/02_要件/"], ["仕様影響と必要IDは意味判断し、既存spec gateで照合する"], "semantic");
     add("O-09", "unknown", ["git:merge-base", "staging:review-session"], ["実差分と監査済み範囲は既存review/delivery gateで照合する"], "deterministic");
     add("O-10", "unknown", ["trusted:delivery-policy", "staging:delivery-state"], ["外部操作のauthorityは既存Delivery gateで再照合する"], "human-authorization");
     const byStep = {
         1: ["O-01", "O-02"],
         2: ["O-02"],
-        3: ["O-02", "O-07"],
+        3: ["O-02", "O-R3"],
         4: ["O-02"],
         5: ["O-03", "O-08"],
         6: ["O-04", "O-08"],
-        7: ["O-03", "O-04", "O-07", "O-08"],
+        7: ["O-03", "O-04", "O-R7", "O-08"],
         8: ["O-04"],
         9: ["O-05", "O-06"],
         10: ["O-06", "O-07", "O-09"],

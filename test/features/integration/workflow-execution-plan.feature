@@ -35,3 +35,13 @@ Feature: 保存済み状態から次のexecutionPlanだけを副作用なく返�
     Given executionPlan用の隔離full stagingがある
     When 後続HEADと失敗検証記録を投影する
     Then 失敗検証だけが失効し後続HEADは判定不能になる
+
+  Scenario: SCN-INT-EXECPLAN-006 readinessと実装後reviewを別責務にする
+    Given executionPlan用の隔離full stagingがある
+    When 要件readinessと最終reviewの責務を投影する
+    Then readinessだけをStep3に割り当て最終reviewを混同しない
+
+  Scenario: SCN-INT-EXECPLAN-007 同じStep10でも有効Evidenceに応じ必要作業が減る
+    Given executionPlan用の隔離full stagingがある
+    When 同じStep10で検証とreviewの有効性を変えて投影する
+    Then 有効な検証だけ選択から外しreview exportは残す

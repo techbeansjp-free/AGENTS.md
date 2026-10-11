@@ -526,8 +526,8 @@ export function workflowReviewerAlternative(handoff) {
         },
     };
 }
-/** Ready-to-use one-shot Agent arguments derived from repository state. */
-export function workflowAgentDispatch(handoff, assurance) {
+/** One-shot pointer; the worker re-observes the full contract at the same boundary. */
+export function workflowAgentDispatch(handoff) {
     if (!handoff ||
         !("kind" in handoff) ||
         !handoff.workUnit ||
@@ -537,17 +537,23 @@ export function workflowAgentDispatch(handoff, assurance) {
         subagent_type: "general-purpose",
         description: `ASC Step ${handoff.step} ${handoff.role} ${handoff.workUnit.workUnitId.slice(0, 12)}`,
         prompt: JSON.stringify({
-            handoff,
-            ...(assurance === undefined
-                ? {}
-                : {
-                    assurance: {
-                        authority: assurance.authority,
-                        selectedWork: assurance.selectedWork,
-                        pending: assurance.obligations.filter((item) => assurance.selectedWork.obligationIds.includes(item.id)),
-                    },
-                }),
-            prompt: "指定workUnitId専用のfresh one-shot workerです。worktreeでresume.commandを--planで観測しhandoff/alternativesのHEAD・boundary・workUnitIdを照合。continuationFromHeadがあれば--continue-fromへ渡す。不一致なら再dispatchを要求。read.skillとread.stagingの必要節から始め、確定済みmode/Step/上流判断を再推論しない。Skillが指定する契約と独立検証は維持。担当だけを完了し、workUnitId/status/HEAD/検証記録ID/blocker/nextのcompact JSONを返す。詳細はGit/staging/finding、Step/round記録はcoordinator。返却後terminal、追加作業にはASC_REDISPATCH_REQUIRED。",
+            handoff: {
+                kind: handoff.kind,
+                worktree: handoff.worktree,
+                staging: handoff.staging,
+                headSha: handoff.headSha,
+                step: handoff.step,
+                role: handoff.role,
+                boundary: handoff.boundary,
+                continuationFromHead: handoff.continuationFromHead,
+                workUnit: {
+                    workUnitId: handoff.workUnit.workUnitId,
+                    freshContextRequired: handoff.workUnit.freshContextRequired,
+                    terminalAfterHandback: handoff.workUnit.terminalAfterHandback,
+                    reuseForbidden: handoff.workUnit.reuseForbidden,
+                },
+            },
+            prompt: "指定workUnitId専用のfresh one-shot workerです。worktreeでworkflow advance --plan --staging=<staging>を観測する。continuationFromHeadがあれば同値の--continue-fromも付ける。plan.handoffまたはplan.alternatives[].handoffから同じrole・workUnitIdの候補がちょうど1件の場合だけ選び、HEAD・boundaryも照合。0件・複数件・不一致なら再dispatchを要求。契約読込後もHEADを再確認。照合後、そのhandoff.read.skill・read.stagingとplan.assuranceの未充足責務の必要節を読み、担当だけを完了する。Skillの契約と独立検証を維持。workUnitId/status/HEAD/検証記録ID/blocker/nextのcompact JSONを返す。詳細はGit/staging/finding、Step/round記録はcoordinator。返却後terminal、追加作業にはASC_REDISPATCH_REQUIRED。",
         }),
     };
 }

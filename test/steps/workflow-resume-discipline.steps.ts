@@ -272,10 +272,22 @@ Then(
         assert.equal(implementation.authority, "advisory");
         const dispatch = workflowAgentDispatch(implementation);
         assert.ok(dispatch);
-        assert.deepEqual(
-          (JSON.parse(dispatch.prompt) as { handoff: unknown }).handoff,
-          implementation,
+        const dispatched = (
+          JSON.parse(dispatch.prompt) as {
+            handoff: {
+              kind: string;
+              headSha: string;
+              workUnit: { workUnitId: string };
+            };
+          }
+        ).handoff;
+        assert.equal(dispatched.kind, implementation.kind);
+        assert.equal(dispatched.headSha, implementation.headSha);
+        assert.equal(
+          dispatched.workUnit.workUnitId,
+          implementation.workUnit.workUnitId,
         );
+        assert.equal(JSON.stringify(dispatched).includes('"contract"'), false);
         assert.notEqual(
           requirements.workUnit!.workUnitId,
           implementation.workUnit.workUnitId,

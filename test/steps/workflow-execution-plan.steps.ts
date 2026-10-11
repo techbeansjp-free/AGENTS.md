@@ -30,6 +30,11 @@ class ExecutionPlanWorld extends WorkflowWorld {
   action?: WorkflowExecutionContract;
   plans: ReturnType<typeof observeWorkflowExecutionPlan>[] = [];
   assurance?: AssuranceProjection;
+  evidenceProjections?: {
+    unresolved: AssuranceProjection;
+    valid: AssuranceProjection;
+    stale: AssuranceProjection;
+  };
   alternative?: ReturnType<typeof workflowReviewerAlternative>;
   originalId = "";
   refusal = false;
@@ -323,7 +328,13 @@ Then("同じHEAD境界のfresh契約だけが返り保存内容は不変であ�
   assert.deepEqual(plan.assurance.selectedWork.obligationIds, ["O-01", "O-02"]);
   assert.equal(plan.assurance.selectedWork.kind, "semantic");
   assert.ok(plan.agentDispatch);
-  assert.match(plan.agentDispatch.prompt, /"assurance"/u);
+  const dispatched = JSON.parse(plan.agentDispatch.prompt) as {
+    handoff: { headSha: string; workUnit: { workUnitId: string } };
+  };
+  assert.equal(dispatched.handoff.headSha, plan.headSha);
+  assert.equal(dispatched.handoff.workUnit.workUnitId, plan.workUnitId);
+  assert.equal(plan.agentDispatch.prompt.includes('"contract"'), false);
+  assert.ok(Buffer.byteLength(plan.agentDispatch.prompt) < 2500);
   assert.match(plan.workUnitId!, /^[a-f0-9]{64}$/u);
   assert.ok(
     plan.action.requiredInputs.some((input) => input.path === "00_要求定義.md"),
@@ -441,4 +452,77 @@ Then("失敗検証だけが失効し後続HEADは判定不能になる", functio
   );
   assert.equal(this.assurance.selectedWork.kind, "independent-review");
   assert.equal(snapshot(this), this.snapshot);
+});
+
+When("要件readinessと最終reviewの責務を投影する", function () {
+  this.assurance = deriveAssuranceProjection({
+    staging: this.staging,
+    mode: "full",
+    nextStep: 3,
+    journalSteps: [0, 1, 2],
+    journalValid: true,
+    resume: observeWorkflowResume(this.staging),
+    action: workflowExecutionContract(
+      3,
+      "readiness-reviewer",
+      undefined,
+      "full",
+    ),
+    role: "readiness-reviewer",
+  });
+});
+Then("readinessだけをStep3に割り当て最終reviewを混同しない", function () {
+  assert.ok(this.assurance);
+  assert.equal(this.assurance.selectedWork.kind, "independent-review");
+  assert.deepEqual(this.assurance.selectedWork.obligationIds, ["O-R3"]);
+  assert.equal(
+    this.assurance.obligations.find((item) => item.id === "O-07")?.status,
+    "unsatisfied",
+  );
+  assert.equal(snapshot(this), this.snapshot);
+});
+
+When("同じStep10で検証とreviewの有効性を変えて投影する", function () {
+  const resume = observeWorkflowResume(this.staging);
+  const common = {
+    staging: this.staging,
+    mode: "full" as const,
+    nextStep: 10,
+    journalSteps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    journalValid: true,
+    resume,
+    action: workflowExecutionContract(10, "reviewer", undefined, "full"),
+    role: "reviewer",
+  };
+  const unresolved = deriveAssuranceProjection(common);
+  const valid = deriveAssuranceProjection({
+    ...common,
+    verificationGate: { status: "satisfied", reason: "verify gate observed" },
+    reviewGate: { status: "unknown", reason: "review export pending" },
+  });
+  const stale = deriveAssuranceProjection({
+    ...common,
+    verificationGate: { status: "invalidated", reason: "policy changed" },
+    reviewGate: { status: "unknown", reason: "review export pending" },
+  });
+  this.evidenceProjections = { unresolved, valid, stale };
+});
+Then("有効な検証だけ選択から外しreview exportは残す", function () {
+  assert.ok(this.evidenceProjections);
+  const { unresolved, valid, stale } = this.evidenceProjections;
+  assert.deepEqual(unresolved.selectedWork.obligationIds, [
+    "O-06",
+    "O-07",
+    "O-09",
+  ]);
+  assert.deepEqual(valid.selectedWork.obligationIds, ["O-07", "O-09"]);
+  assert.deepEqual(stale.selectedWork.obligationIds, ["O-06", "O-07", "O-09"]);
+  assert.equal(
+    stale.obligations.find((item) => item.id === "O-06")?.status,
+    "invalidated",
+  );
+  assert.equal(
+    valid.obligations.find((item) => item.id === "O-07")?.status,
+    "unknown",
+  );
 });

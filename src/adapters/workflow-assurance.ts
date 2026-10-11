@@ -48,6 +48,8 @@ export function deriveAssuranceProjection(input: {
   resume: WorkflowResume;
   action: { executor: "fresh-worker" | "cli" | "none" };
   role?: string;
+  verificationGate?: { status: Status; reason: string };
+  reviewGate?: { status: Status; reason: string };
 }): AssuranceProjection {
   const { mode, resume } = input;
   const recorded = (step: number): Status =>
@@ -119,43 +121,67 @@ export function deriveAssuranceProjection(input: {
     "deterministic",
   );
   const verificationStatus: Status =
-    resume.errors.length > 0
+    input.verificationGate?.status ??
+    (resume.errors.length > 0
       ? "unknown"
       : resume.verification === null
         ? "unsatisfied"
         : !resume.verification.passed
           ? "invalidated"
-          : "unknown";
+          : "unknown");
   add(
     "O-06",
     verificationStatus,
     ["staging:verification-runs", "git:HEAD", "trusted:verification-policy"],
-    verificationStatus === "unknown"
-      ? [
-          "記録の存在だけではpolicy・scope・impactの有効性を確定できない。既存verify gateで再照合する",
-        ]
-      : verificationStatus === "invalidated"
-        ? ["検証失敗"]
-        : [],
+    input.verificationGate !== undefined
+      ? [input.verificationGate.reason]
+      : verificationStatus === "unknown"
+        ? [
+            "記録の存在だけではpolicy・scope・impactの有効性を確定できない。既存verify gateで再照合する",
+          ]
+        : verificationStatus === "invalidated"
+          ? ["検証失敗"]
+          : [],
     "deterministic",
   );
   const reviewStatus: Status =
-    resume.errors.length > 0
+    input.reviewGate?.status ??
+    (resume.errors.length > 0
       ? "unknown"
       : resume.review === null || resume.review.status !== "converged"
         ? "unsatisfied"
-        : "unknown";
+        : "unknown");
+  if (mode === "full") {
+    add(
+      "O-R3",
+      recorded(3),
+      stepEvidence(3),
+      ["要件readinessの独立確認。実装後のexact HEADレビューとは別の責務"],
+      "independent-review",
+    );
+    add(
+      "O-R7",
+      recorded(7),
+      stepEvidence(7),
+      ["設計readinessの独立確認。実装後のexact HEADレビューとは別の責務"],
+      "independent-review",
+    );
+  }
   add(
     "O-07",
     reviewStatus,
     ["staging:review-session", "git:HEAD", "tracked:review-evidence"],
-    reviewStatus === "unknown"
-      ? ["収束sessionだけでは独立性・差分・検証Evidenceの有効性を確定できない"]
-      : resume.review?.matchesImplementationHead === false
+    input.reviewGate !== undefined
+      ? [input.reviewGate.reason]
+      : reviewStatus === "unknown"
         ? [
-            "review対象HEADと実装HEADが異なる。既存review gateで正当な後続commitか照合する",
+            "収束sessionだけでは独立性・差分・検証Evidenceの有効性を確定できない",
           ]
-        : [],
+        : resume.review?.matchesImplementationHead === false
+          ? [
+              "review対象HEADと実装HEADが異なる。既存review gateで正当な後続commitか照合する",
+            ]
+          : [],
     "independent-review",
   );
   add(
@@ -182,11 +208,11 @@ export function deriveAssuranceProjection(input: {
   const byStep: Record<number, string[]> = {
     1: ["O-01", "O-02"],
     2: ["O-02"],
-    3: ["O-02", "O-07"],
+    3: ["O-02", "O-R3"],
     4: ["O-02"],
     5: ["O-03", "O-08"],
     6: ["O-04", "O-08"],
-    7: ["O-03", "O-04", "O-07", "O-08"],
+    7: ["O-03", "O-04", "O-R7", "O-08"],
     8: ["O-04"],
     9: ["O-05", "O-06"],
     10: ["O-06", "O-07", "O-09"],
