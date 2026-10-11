@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { CANDIDATE_RISKS } from "../../src/domain/candidate-workflow.js";
+import { runCandidateWorkerBoundary } from "../../src/adapters/candidate-worker-boundary.js";
 import { run, type ProcessResult } from "../../src/lib/process.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
@@ -74,7 +75,7 @@ Given("候補用の隔離dummyと事前sessionを作る", function () {
   );
   fs.writeFileSync(
     path.join(this.primary, "test.js"),
-    'if (process.argv.includes("--fail")) process.exit(7);\n',
+    'const fs = require("node:fs"); if (!fs.readFileSync("src/label.js", "utf8").includes("Hello") || process.argv.includes("--fail")) process.exit(7);\n',
   );
   run("git", ["add", "."], this.primary);
   run("git", ["commit", "-qm", "base"], this.primary);
@@ -327,4 +328,239 @@ Then("許可済みと偽装した認可差分も上流へ戻す", function () {
     "src/authorization.js",
     "src/label.js",
   ]);
+});
+
+function invokeExecute(
+  world: CandidateSessionWorld,
+  overrides: Record<string, unknown> = {},
+) {
+  const inputFile = path.join(world.home, "execute-input.json");
+  const input = {
+    phase: "execute",
+    intent: "文言をHelloに修正",
+    correctnessCriterion: "label === Hello",
+    allowedPaths: ["src/label.js"],
+    risk: Object.fromEntries(CANDIDATE_RISKS.map((risk) => [risk, "cleared"])),
+    unresolved: [],
+    workerArgv: [
+      "/bin/sh",
+      "-c",
+      "printf '%s\\n' 'export const label = \"Hello\";' > src/label.js",
+    ],
+    targetTest: [process.execPath, "test.js"],
+    gaps: [],
+    ...overrides,
+  };
+  fs.writeFileSync(inputFile, JSON.stringify(input));
+  world.result = run(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      path.resolve("bin/agent-skill-chain.ts"),
+      "workflow",
+      "candidate",
+      `--input=${inputFile}`,
+      `--repo=${world.candidate}`,
+    ],
+    process.cwd(),
+    { allowFailure: true, timeoutMs: 60_000 },
+  );
+  world.output = JSON.parse(world.result.stdout) as Record<string, unknown>;
+  return world.output;
+}
+
+When("隔離Workerが低riskの文言だけを修正する", function () {
+  invokeExecute(this);
+});
+
+Then("Coordinatorが差分と対象テストを観測し独立reviewへ送る", function () {
+  if (this.result?.status !== 0) {
+    // Codex sandbox is an optional host capability; its absence must fail closed.
+    assert.ok(
+      reasons(this).some((reason) => reason.includes("candidate Worker")),
+      JSON.stringify(this.output),
+    );
+    assert.equal(
+      run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+      this.baseSha,
+    );
+    return;
+  }
+  assert.equal(this.output?.route, "independent-review");
+  assert.equal(this.output?.workerBoundary, "host-enforced");
+  assert.equal(this.output?.baseSha, this.baseSha);
+  assert.deepEqual(this.output?.changedPaths, ["src/label.js"]);
+  const test = this.output?.targetTest as Record<string, unknown>;
+  assert.equal(test.exitCode, 0);
+  assert.equal(test.formalEvidence, false);
+  assert.equal(this.output?.authority, "none");
+});
+
+When("隔離WorkerがCoordinatorのsessionへ書き込もうとする", function () {
+  invokeExecute(this, {
+    workerArgv: [
+      "/bin/sh",
+      "-c",
+      'printf attack >> "$1"',
+      "worker",
+      this.session,
+    ],
+  });
+});
+
+Then("Coordinatorの事前契約を変更できずcandidateをcommitしない", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+  const session = JSON.parse(fs.readFileSync(this.session, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  assert.equal(session.baseSha, this.baseSha);
+  assert.ok(!fs.readFileSync(this.session, "utf8").includes("attack"));
+});
+
+When("事前判定で認可riskを未解決にする", function () {
+  invokeExecute(this, {
+    risk: Object.fromEntries(
+      CANDIDATE_RISKS.map((risk) => [
+        risk,
+        risk === "authorization" ? "triggered" : "cleared",
+      ]),
+    ),
+  });
+});
+
+Then("Worker起動前に上流へ戻してGitを変更しない", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(this.output?.route, "upstream");
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+  assert.equal(
+    fs.readFileSync(path.join(this.candidate, "src", "label.js"), "utf8"),
+    'export const label = "Helo";\n',
+  );
+});
+
+When("隔離Workerが許可外の認可fileも変更する", function () {
+  invokeExecute(this, {
+    workerArgv: [
+      "/bin/sh",
+      "-c",
+      "printf changed > src/label.js; printf disabled > src/authorization.js",
+    ],
+  });
+});
+
+Then("Coordinatorは許可外差分をcommitしない", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+  if (
+    fs.readFileSync(
+      path.join(this.candidate, "src", "authorization.js"),
+      "utf8",
+    ) === "disabled"
+  )
+    assert.ok(reasons(this).some((reason) => reason.includes("許可範囲外")));
+  else assert.ok(reasons(this).some((reason) => reason.includes("Worker")));
+});
+
+When("隔離WorkerがGit metadataへ書き込もうとする", function () {
+  invokeExecute(this, {
+    workerArgv: ["/bin/sh", "-c", "printf attack >> .git"],
+  });
+});
+
+Then("Git metadataは変更されずcandidateをcommitしない", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+  assert.ok(
+    !fs
+      .readFileSync(path.join(this.candidate, ".git"), "utf8")
+      .includes("attack"),
+  );
+});
+
+When("隔離Workerが無視対象のfileを作る", function () {
+  fs.writeFileSync(
+    path.join(this.candidate, ".gitignore"),
+    "src/generated.log\n",
+  );
+  run("git", ["add", ".gitignore"], this.candidate);
+  run("git", ["commit", "-qm", "ignore generated"], this.candidate);
+  this.baseSha = run(
+    "git",
+    ["rev-parse", "HEAD"],
+    this.candidate,
+  ).stdout.trim();
+  run(
+    "git",
+    ["update-ref", "refs/remotes/origin/main", this.baseSha],
+    this.primary,
+  );
+  run(
+    "git",
+    ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+    this.primary,
+  );
+  invokeExecute(this, {
+    workerArgv: [
+      "/bin/sh",
+      "-c",
+      "printf changed > src/label.js; printf hidden > src/generated.log",
+    ],
+  });
+});
+
+Then("ignored差分も拒否しcandidateをcommitしない", function () {
+  assert.equal(this.result?.status, 1);
+  assert.ok(
+    reasons(this).some(
+      (reason) =>
+        reason.includes("Git ignored") ||
+        reason.includes("candidate Worker隔離"),
+    ),
+    JSON.stringify(this.output),
+  );
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+});
+
+When("Workerの書込pathの祖先を外部directoryへのsymlinkにする", function () {
+  const external = path.join(this.home, "external");
+  fs.mkdirSync(path.join(external, "nested"), { recursive: true });
+  fs.writeFileSync(path.join(external, "nested", "label.js"), "outside\n");
+  fs.symlinkSync(external, path.join(this.candidate, "src", "redirect"));
+  assert.throws(
+    () =>
+      runCandidateWorkerBoundary({
+        root: this.candidate,
+        allowedPaths: ["src/redirect/nested/label.js"],
+        argv: ["/bin/true"],
+      }),
+    /symlink祖先/,
+  );
+});
+
+Then("外部directoryへ書込権限を付与しない", function () {
+  assert.equal(
+    fs.readFileSync(
+      path.join(this.home, "external", "nested", "label.js"),
+      "utf8",
+    ),
+    "outside\n",
+  );
 });

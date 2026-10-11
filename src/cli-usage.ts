@@ -665,20 +665,22 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     requiredFlags: [
       flag("input", "path", "preflightまたはpostのJSON入力"),
       flag("repo", "path", "隔離Git worktreeのtop-level"),
-      flag(
+    ],
+    conditionalFlags: [
+      conditional(
         "session",
         "path",
-        "候補worktree外に排他的に保存するpreflight引継ぎfile",
+        "候補worktree外に保存する引継ぎfile",
+        "input.phaseがpreflightまたはpostのとき。executeでは指定しない",
       ),
     ],
-    conditionalFlags: [],
     optionalFlags: [],
     example:
       "npx agent-skill-chain workflow candidate --repo=./candidate --session=./candidate-session.json --input=./candidate-preflight.json",
     acceptsSpaceSeparatedFlags: true,
     inputContract: {
       description:
-        "preflight: intent, correctnessCriterion, allowedPaths, risk（全14領域のcleared/triggered/unknown）, unresolved。post: targetTest（argv）, gaps。base・許可path・成功フラグの事後申告を拒否し、CLIがGitと対象テストを観測する。risk・gapsは申告であり、sessionとテスト観測は正式Evidenceではない。",
+        "preflight: intent, correctnessCriterion, allowedPaths, risk（全14領域のcleared/triggered/unknown）, unresolved。execute: 同じ事前項目とworkerArgv、targetTest、gapsを単一Coordinator呼出しで実行する（LinuxのCodex sandbox必須、sessionなし、正式Evidenceではない）。post: targetTest（argv）, gaps。base・許可path・成功フラグの事後申告を拒否し、CLIがGitと対象テストを観測する。risk・gapsは申告であり、sessionとテスト観測は正式Evidenceではない。",
       example: {
         phase: "preflight",
         intent: "内部ラベルをHelloに修正",

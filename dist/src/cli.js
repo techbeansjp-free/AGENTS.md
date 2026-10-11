@@ -24,6 +24,7 @@ import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import { observeWorkflowExecutionPlan } from "./adapters/workflow-execution-plan.js";
 import { decideCandidatePreflight, decideCandidatePost, CANDIDATE_RISKS, } from "./domain/candidate-workflow.js";
 import { observeCandidateBoundary, observeCandidateGit, observeCandidateForkBase, } from "./adapters/candidate-git.js";
+import { executeCandidate } from "./adapters/candidate-execution.js";
 import { candidateAllowedPaths, createCandidateSession, loadCandidateSession, runCandidateTargetTest, } from "./adapters/candidate-session.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, nonCanonicalClosingReferences, resolveMergeMethod, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, VERIFICATION_SET_INPUT_EXAMPLE, } from "./domain/agile-verification.js";
@@ -4622,6 +4623,62 @@ export async function main(argv, dependencies = {}) {
         if (!isRecord(input))
             throw new Error("candidate inputはobjectが必要です");
         const repo = path.resolve(required(flags, "repo"));
+        if (input.phase === "execute") {
+            if (flags.session !== undefined)
+                throw new Error("candidate executeはsessionを使用しません");
+            const risk = input.risk;
+            if (typeof risk !== "object" || risk === null || Array.isArray(risk))
+                throw new Error("riskの全項目が必要です");
+            const statuses = risk;
+            if (Object.keys(statuses).some((key) => !CANDIDATE_RISKS.includes(key)))
+                throw new Error("未知のcandidateリスク項目があります");
+            const validated = {};
+            for (const key of CANDIDATE_RISKS) {
+                const value = statuses[key];
+                if (value !== undefined &&
+                    value !== "cleared" &&
+                    value !== "triggered" &&
+                    value !== "unknown")
+                    throw new Error(`candidateリスク値が不正です: ${key}`);
+                if (value !== undefined)
+                    validated[key] = value;
+            }
+            const validGaps = [
+                "implementation",
+                "verification",
+                "design",
+                "requirement",
+                "intent",
+                "security-risk",
+            ];
+            if (!Array.isArray(input.gaps) ||
+                !input.gaps.every((value) => validGaps.includes(value)))
+                throw new Error("candidate gapsが不正です");
+            if (!Array.isArray(input.workerArgv) ||
+                input.workerArgv.some((value) => typeof value !== "string"))
+                throw new Error("candidate workerArgvが不正です");
+            if (!Array.isArray(input.targetTest) ||
+                input.targetTest.some((value) => typeof value !== "string"))
+                throw new Error("candidate targetTestが不正です");
+            const decision = executeCandidate({
+                root: repo,
+                intent: typeof input.intent === "string" ? input.intent : "",
+                correctnessCriterion: typeof input.correctnessCriterion === "string"
+                    ? input.correctnessCriterion
+                    : "",
+                allowedPaths: candidateAllowedPaths(input.allowedPaths),
+                risk: validated,
+                unresolved: Array.isArray(input.unresolved) &&
+                    input.unresolved.every((value) => typeof value === "string")
+                    ? input.unresolved
+                    : ["未解決事項の形式が不正です"],
+                workerArgv: input.workerArgv,
+                targetTest: input.targetTest,
+                gaps: input.gaps,
+            });
+            print(decision);
+            return decision.route === "independent-review" ? 0 : 1;
+        }
         const sessionFile = path.resolve(required(flags, "session"));
         if (input.phase === "preflight") {
             const baseSha = observeCandidateBoundary(repo).headSha;

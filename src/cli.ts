@@ -79,6 +79,7 @@ import {
   observeCandidateGit,
   observeCandidateForkBase,
 } from "./adapters/candidate-git.js";
+import { executeCandidate } from "./adapters/candidate-execution.js";
 import {
   candidateAllowedPaths,
   createCandidateSession,
@@ -6503,6 +6504,75 @@ export async function main(
     const input = parseJsonStrict(source, "candidate input");
     if (!isRecord(input)) throw new Error("candidate inputはobjectが必要です");
     const repo = path.resolve(required(flags, "repo"));
+    if (input.phase === "execute") {
+      if (flags.session !== undefined)
+        throw new Error("candidate executeはsessionを使用しません");
+      const risk = input.risk;
+      if (typeof risk !== "object" || risk === null || Array.isArray(risk))
+        throw new Error("riskの全項目が必要です");
+      const statuses = risk as Record<string, unknown>;
+      if (
+        Object.keys(statuses).some(
+          (key) => !CANDIDATE_RISKS.includes(key as CandidateRisk),
+        )
+      )
+        throw new Error("未知のcandidateリスク項目があります");
+      const validated: Partial<Record<CandidateRisk, CandidateRiskStatus>> = {};
+      for (const key of CANDIDATE_RISKS) {
+        const value = statuses[key];
+        if (
+          value !== undefined &&
+          value !== "cleared" &&
+          value !== "triggered" &&
+          value !== "unknown"
+        )
+          throw new Error(`candidateリスク値が不正です: ${key}`);
+        if (value !== undefined) validated[key] = value;
+      }
+      const validGaps: CandidateGap[] = [
+        "implementation",
+        "verification",
+        "design",
+        "requirement",
+        "intent",
+        "security-risk",
+      ];
+      if (
+        !Array.isArray(input.gaps) ||
+        !input.gaps.every((value) => validGaps.includes(value as CandidateGap))
+      )
+        throw new Error("candidate gapsが不正です");
+      if (
+        !Array.isArray(input.workerArgv) ||
+        input.workerArgv.some((value) => typeof value !== "string")
+      )
+        throw new Error("candidate workerArgvが不正です");
+      if (
+        !Array.isArray(input.targetTest) ||
+        input.targetTest.some((value) => typeof value !== "string")
+      )
+        throw new Error("candidate targetTestが不正です");
+      const decision = executeCandidate({
+        root: repo,
+        intent: typeof input.intent === "string" ? input.intent : "",
+        correctnessCriterion:
+          typeof input.correctnessCriterion === "string"
+            ? input.correctnessCriterion
+            : "",
+        allowedPaths: candidateAllowedPaths(input.allowedPaths),
+        risk: validated,
+        unresolved:
+          Array.isArray(input.unresolved) &&
+          input.unresolved.every((value) => typeof value === "string")
+            ? (input.unresolved as string[])
+            : ["未解決事項の形式が不正です"],
+        workerArgv: input.workerArgv as string[],
+        targetTest: input.targetTest as string[],
+        gaps: input.gaps as CandidateGap[],
+      });
+      print(decision);
+      return decision.route === "independent-review" ? 0 : 1;
+    }
     const sessionFile = path.resolve(required(flags, "session"));
     if (input.phase === "preflight") {
       const baseSha = observeCandidateBoundary(repo).headSha;

@@ -53,3 +53,38 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     And dummyの認可処理へ想定外の変更をcommitする
     And sessionの許可範囲だけを事後改ざんする
     Then 許可済みと偽装した認可差分も上流へ戻す
+
+  Scenario: SCN-INT-CANDIDATE-009 単一Coordinator呼出しで隔離実装とGit観測を行う
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 隔離Workerが低riskの文言だけを修正する
+    Then Coordinatorが差分と対象テストを観測し独立reviewへ送る
+
+  Scenario: SCN-INT-CANDIDATE-010 WorkerはCoordinatorの事前契約を書き換えられない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 隔離WorkerがCoordinatorのsessionへ書き込もうとする
+    Then Coordinatorの事前契約を変更できずcandidateをcommitしない
+
+  Scenario: SCN-INT-CANDIDATE-011 高risk要求はWorker起動前に上流へ戻る
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 事前判定で認可riskを未解決にする
+    Then Worker起動前に上流へ戻してGitを変更しない
+
+  Scenario: SCN-INT-CANDIDATE-012 同じ書込dirの許可外差分はCoordinatorが拒否する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 隔離Workerが許可外の認可fileも変更する
+    Then Coordinatorは許可外差分をcommitしない
+
+  Scenario: SCN-INT-CANDIDATE-013 WorkerはGit metadataを書き換えられない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 隔離WorkerがGit metadataへ書き込もうとする
+    Then Git metadataは変更されずcandidateをcommitしない
+
+  Scenario: SCN-INT-CANDIDATE-014 ignored fileへの副作用も候補採用前に拒否する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 隔離Workerが無視対象のfileを作る
+    Then ignored差分も拒否しcandidateをcommitしない
+
+  Scenario: SCN-INT-CANDIDATE-015 書込pathのsymlink祖先を拒否する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When Workerの書込pathの祖先を外部directoryへのsymlinkにする
+    Then 外部directoryへ書込権限を付与しない
