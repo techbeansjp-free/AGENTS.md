@@ -3,16 +3,16 @@
   "issue": 1576,
   "observed": {
     "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
-    "implementationHeadSha": "bd1d058cf868552d7c036b6035b8d4325c00350f",
-    "diffDigest": "62fdbce3977d39131ee6dd0b6303eab0fe0a5227a53e5c29a8c0c161742adaf2",
+    "implementationHeadSha": "17e66ab5bd87bb6d96ae745d933a0e24a7a65f8f",
+    "diffDigest": "100b17a9fd59f8e4d4df4a72e0f9b5b4cf7e864d37e8ec2f1592011e3f5c2161",
     "session": {
       "sessionId": "b6132d9f716e35694e0a3977507c4bb86c81c535f3b9ba5dcaba69f6dcddca3a",
-      "latestRoundDigest": "060b026ff912e755a345af67a74267a21d3a1d3759a800397b055647f9d472d2",
+      "latestRoundDigest": "eaed32964958ecb605ea857d3d82b3baac3fd72093c7d1eeb27d525fbd290696",
       "status": "converged",
-      "countedRounds": 13
+      "countedRounds": 14
     },
     "impact": {
-      "digest": "90c2b029eb298e5867ee94cababa23ba75bf2bc41d23c4387ac4515e6b040b9a",
+      "digest": "1ba881cfe54350c9e4e743803e7ec013f48d65707790f11b35168b50c22ccb83",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "bd1d058cf868552d7c036b6035b8d4325c00350f",
-        "impactDigest": "90c2b029eb298e5867ee94cababa23ba75bf2bc41d23c4387ac4515e6b040b9a",
-        "finishedAt": "2026-10-11T12:45:05.265Z",
-        "recordDigest": "d262388913c53c1a60ed677954c1d7c9568f916eaef04dafa3749795976ade4b"
+        "headSha": "17e66ab5bd87bb6d96ae745d933a0e24a7a65f8f",
+        "impactDigest": "1ba881cfe54350c9e4e743803e7ec013f48d65707790f11b35168b50c22ccb83",
+        "finishedAt": "2026-10-11T17:33:17.076Z",
+        "recordDigest": "bfae1c3edd48aa5a39b64188f22d53b088628f34aa129bfeb83fbb89d689c0a3"
       }
     ]
   },
@@ -56,5 +56,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "a3c99d5806f5e169b017bf33a3ac13edd8487c6e79677cd912de0a9048249c34"
+  "evidenceDigest": "ffc5ca45401a25da5e2052c03fa88ff2eca10bd54d2b8618c024f6ad729863ea"
 }
