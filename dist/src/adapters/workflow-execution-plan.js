@@ -54,6 +54,8 @@ export function observeWorkflowExecutionPlan(staging, inspection = inspectWorkfl
         resume.baseSha !== null) {
         try {
             const check = planVerification({ staging });
+            if (check.headSha !== resume.headSha)
+                throw new Error("verify gateの観測HEADが最初のplan HEADから変化した");
             verificationGate = {
                 status: check.status === "observed" ? "satisfied" : "invalidated",
                 reason: check.status === "observed"
