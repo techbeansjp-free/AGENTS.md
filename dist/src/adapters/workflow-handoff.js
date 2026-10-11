@@ -527,7 +527,7 @@ export function workflowReviewerAlternative(handoff) {
     };
 }
 /** Ready-to-use one-shot Agent arguments derived from repository state. */
-export function workflowAgentDispatch(handoff) {
+export function workflowAgentDispatch(handoff, assurance) {
     if (!handoff ||
         !("kind" in handoff) ||
         !handoff.workUnit ||
@@ -538,6 +538,15 @@ export function workflowAgentDispatch(handoff) {
         description: `ASC Step ${handoff.step} ${handoff.role} ${handoff.workUnit.workUnitId.slice(0, 12)}`,
         prompt: JSON.stringify({
             handoff,
+            ...(assurance === undefined
+                ? {}
+                : {
+                    assurance: {
+                        authority: assurance.authority,
+                        selectedWork: assurance.selectedWork,
+                        pending: assurance.obligations.filter((item) => assurance.selectedWork.obligationIds.includes(item.id)),
+                    },
+                }),
             prompt: "指定workUnitId専用のfresh one-shot workerです。worktreeでresume.commandを--planで観測しhandoff/alternativesのHEAD・boundary・workUnitIdを照合。continuationFromHeadがあれば--continue-fromへ渡す。不一致なら再dispatchを要求。read.skillとread.stagingの必要節から始め、確定済みmode/Step/上流判断を再推論しない。Skillが指定する契約と独立検証は維持。担当だけを完了し、workUnitId/status/HEAD/検証記録ID/blocker/nextのcompact JSONを返す。詳細はGit/staging/finding、Step/round記録はcoordinator。返却後terminal、追加作業にはASC_REDISPATCH_REQUIRED。",
         }),
     };

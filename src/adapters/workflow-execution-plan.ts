@@ -1,4 +1,5 @@
 import { planWorkflowAdvance } from "../domain/workflow.js";
+import { deriveAssuranceProjection } from "./workflow-assurance.js";
 import {
   inspectWorkflowStaging,
   readWorkflowJournal,
@@ -63,6 +64,16 @@ export function observeWorkflowExecutionPlan(
     state === "ready" && known
       ? known.workUnit!.contract
       : workflowExecutionContract(undefined, "coordinator", undefined);
+  const assurance = deriveAssuranceProjection({
+    staging,
+    mode: inspection.mode,
+    nextStep: inspection.nextStep,
+    journalSteps: journal.entries.map((entry) => entry.step),
+    journalValid: journal.errors.length === 0 && inspection.valid,
+    resume,
+    action,
+    role: known?.role,
+  });
   const alternative =
     state === "ready" ? workflowReviewerAlternative(handoff) : undefined;
   return {
@@ -75,6 +86,7 @@ export function observeWorkflowExecutionPlan(
     boundary: known?.boundary ?? null,
     workUnitId: known?.workUnit?.workUnitId ?? null,
     action,
+    assurance,
     handoff:
       state === "ready" && known
         ? {
@@ -89,7 +101,7 @@ export function observeWorkflowExecutionPlan(
         : undefined,
     agentDispatch:
       state === "ready" && action.executor === "fresh-worker"
-        ? workflowAgentDispatch(handoff)
+        ? workflowAgentDispatch(handoff, assurance)
         : undefined,
     ...(alternative === undefined
       ? {}

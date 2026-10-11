@@ -7,6 +7,10 @@ import { QUESTIONS } from "../../src/domain/mode.js";
 import { STEP_JOURNAL_FILE } from "../../src/domain/workflow.js";
 import { observeWorkflowExecutionPlan } from "../../src/adapters/workflow-execution-plan.js";
 import {
+  deriveAssuranceProjection,
+  type AssuranceProjection,
+} from "../../src/adapters/workflow-assurance.js";
+import {
   observeWorkflowHandoff,
   workflowExecutionContract,
   workflowReviewerAlternative,
@@ -25,6 +29,7 @@ class ExecutionPlanWorld extends WorkflowWorld {
   role = "";
   action?: WorkflowExecutionContract;
   plans: ReturnType<typeof observeWorkflowExecutionPlan>[] = [];
+  assurance?: AssuranceProjection;
   alternative?: ReturnType<typeof workflowReviewerAlternative>;
   originalId = "";
   refusal = false;
@@ -308,7 +313,17 @@ Then("同じHEAD境界のfresh契約だけが返り保存内容は不変であ�
     false,
   );
   assert.equal(plan.action.executor, "fresh-worker");
+  assert.equal(plan.assurance.authority, "advisory");
+  assert.equal(plan.assurance.observedHeadSha, plan.headSha);
+  assert.equal(plan.assurance.observedMode, "full");
+  assert.equal(
+    plan.assurance.obligations.find((item) => item.id === "O-01")?.status,
+    "unsatisfied",
+  );
+  assert.deepEqual(plan.assurance.selectedWork.obligationIds, ["O-01", "O-02"]);
+  assert.equal(plan.assurance.selectedWork.kind, "semantic");
   assert.ok(plan.agentDispatch);
+  assert.match(plan.agentDispatch.prompt, /"assurance"/u);
   assert.match(plan.workUnitId!, /^[a-f0-9]{64}$/u);
   assert.ok(
     plan.action.requiredInputs.some((input) => input.path === "00_要求定義.md"),
@@ -341,6 +356,11 @@ Then("executorはnoneでdispatchがなくblocked理由を返す", function () {
   assert.equal(plan.state, "blocked");
   assert.equal(plan.action.executor, "none");
   assert.equal(plan.agentDispatch, undefined);
+  assert.equal(plan.assurance.selectedWork.kind, "none");
+  assert.equal(
+    plan.assurance.obligations.find((item) => item.id === "O-01")?.status,
+    "unknown",
+  );
   assert.ok(plan.errors.length > 0);
 });
 When("correction handoffのreviewer代替を導出する", function () {
@@ -361,6 +381,16 @@ When("correction handoffのreviewer代替を導出する", function () {
   };
   this.originalId = correction.workUnit.workUnitId;
   this.alternative = workflowReviewerAlternative(correction);
+  this.assurance = deriveAssuranceProjection({
+    staging: this.staging,
+    mode: "full",
+    nextStep: 10,
+    journalSteps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    journalValid: true,
+    resume: observeWorkflowResume(this.staging),
+    action: correction.workUnit.contract,
+    role: correction.role,
+  });
 });
 Then("reviewerには別workUnitIdと独立read契約だけがある", function () {
   assert.ok(this.alternative);
@@ -372,4 +402,43 @@ Then("reviewerには別workUnitIdと独立read契約だけがある", function (
     "read",
   );
   assert.match(this.alternative.read.skill, /step-10-review/u);
+  assert.equal(this.assurance?.selectedWork.kind, "semantic");
+});
+
+When("後続HEADと失敗検証記録を投影する", function () {
+  const resume = observeWorkflowResume(this.staging);
+  this.assurance = deriveAssuranceProjection({
+    staging: this.staging,
+    mode: "full",
+    nextStep: 10,
+    journalSteps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    journalValid: true,
+    resume: {
+      ...resume,
+      implementation: { headSha: "a".repeat(40), matchesHead: false },
+      verification: {
+        headSha: "b".repeat(40),
+        scope: "full",
+        passed: false,
+        recordDigest: "c".repeat(64),
+        matchesImplementationHead: false,
+      },
+    },
+    action: workflowExecutionContract(10, "reviewer", undefined, "full"),
+    role: "reviewer",
+  });
+});
+Then("失敗検証だけが失効し後続HEADは判定不能になる", function () {
+  assert.ok(this.assurance);
+  assert.equal(this.assurance.authority, "advisory");
+  assert.equal(
+    this.assurance.obligations.find((item) => item.id === "O-05")?.status,
+    "unknown",
+  );
+  assert.equal(
+    this.assurance.obligations.find((item) => item.id === "O-06")?.status,
+    "invalidated",
+  );
+  assert.equal(this.assurance.selectedWork.kind, "independent-review");
+  assert.equal(snapshot(this), this.snapshot);
 });

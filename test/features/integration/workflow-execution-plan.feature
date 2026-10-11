@@ -30,3 +30,8 @@ Feature: 保存済み状態から次のexecutionPlanだけを副作用なく返�
     Given executionPlan用の隔離full stagingがある
     When correction handoffのreviewer代替を導出する
     Then reviewerには別workUnitIdと独立read契約だけがある
+
+  Scenario: SCN-INT-EXECPLAN-005 失効と判定不能を区別し既存gateに委ねる
+    Given executionPlan用の隔離full stagingがある
+    When 後続HEADと失敗検証記録を投影する
+    Then 失敗検証だけが失効し後続HEADは判定不能になる
