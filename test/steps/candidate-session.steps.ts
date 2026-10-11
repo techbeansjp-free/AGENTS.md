@@ -262,3 +262,21 @@ Then("対象テスト中のtracked変更を拒否する", function () {
   assert.equal(this.result?.status, 1);
   assert.ok(reasons(this).some((reason) => reason.includes("未記録")));
 });
+
+When("上限超過の事前Intentを与える", function () {
+  fs.unlinkSync(this.session);
+  invoke(this, {
+    phase: "preflight",
+    intent: "a".repeat(70_000),
+    correctnessCriterion: "label === Hello",
+    allowedPaths: ["src/label.js"],
+    risk: Object.fromEntries(CANDIDATE_RISKS.map((risk) => [risk, "cleared"])),
+    unresolved: [],
+  });
+});
+
+Then("sessionは生成されず拒否される", function () {
+  assert.equal(this.result?.status, 1);
+  assert.ok(reasons(this).some((reason) => reason.includes("64 KiB")));
+  assert.equal(fs.existsSync(this.session), false);
+});

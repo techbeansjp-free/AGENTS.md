@@ -34,3 +34,8 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When dummyの文言修正をcommitする
     Then 対象テスト中のtracked変更を拒否する
+
+  Scenario: SCN-INT-CANDIDATE-006 読み戻せない巨大sessionを作らない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 上限超過の事前Intentを与える
+    Then sessionは生成されず拒否される

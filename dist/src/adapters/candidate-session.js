@@ -5,6 +5,7 @@ import { run } from "../lib/process.js";
 import { validateVerificationArgv } from "../domain/verification-run.js";
 import { observeCandidateBoundary } from "./candidate-git.js";
 import { CANDIDATE_RISKS, } from "../domain/candidate-workflow.js";
+const SESSION_MAX_BYTES = 64 * 1024;
 export function candidateAllowedPaths(value) {
     if (!Array.isArray(value) || value.length === 0 || value.length > 256)
         throw new Error("candidate allowedPathsは事前に1〜256個のpathが必要です");
@@ -38,12 +39,15 @@ export function createCandidateSession(file, input) {
         id: crypto.randomUUID(),
         repo: realRepo,
     };
+    const serialized = `${JSON.stringify(session)}\n`;
+    if (Buffer.byteLength(serialized, "utf8") > SESSION_MAX_BYTES)
+        throw new Error("candidate sessionが64 KiBの上限を超えます");
     const fd = fs.openSync(file, fs.constants.O_WRONLY |
         fs.constants.O_CREAT |
         fs.constants.O_EXCL |
         fs.constants.O_NOFOLLOW, 0o600);
     try {
-        fs.writeFileSync(fd, `${JSON.stringify(session)}\n`);
+        fs.writeFileSync(fd, serialized);
         fs.fsyncSync(fd);
     }
     finally {
@@ -57,15 +61,29 @@ export function loadCandidateSession(file, repo) {
     try {
         const stat = fs.fstatSync(fd);
         if (!stat.isFile() ||
-            stat.size > 64 * 1024 ||
+            stat.size > SESSION_MAX_BYTES ||
             stat.size === 0 ||
             (stat.mode & 0o077) !== 0 ||
             (process.getuid !== undefined && stat.uid !== process.getuid()))
             throw new Error("candidate sessionは所有者だけが書ける通常fileが必要です");
-        value = JSON.parse(fs.readFileSync(fd, "utf8"));
+        const buffer = Buffer.alloc(SESSION_MAX_BYTES + 1);
+        let size = 0;
+        while (size < buffer.length) {
+            const count = fs.readSync(fd, buffer, size, buffer.length - size, null);
+            if (count === 0)
+                break;
+            size += count;
+        }
         const after = fs.fstatSync(fd);
-        if (after.size !== stat.size || after.mtimeMs !== stat.mtimeMs)
+        if (size > SESSION_MAX_BYTES ||
+            size !== stat.size ||
+            after.size !== stat.size ||
+            after.dev !== stat.dev ||
+            after.ino !== stat.ino ||
+            after.mtimeMs !== stat.mtimeMs ||
+            after.ctimeMs !== stat.ctimeMs)
             throw new Error("candidate sessionの読取境界が変更されました");
+        value = JSON.parse(buffer.subarray(0, size).toString("utf8"));
     }
     finally {
         fs.closeSync(fd);
