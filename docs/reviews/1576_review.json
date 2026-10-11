@@ -3,16 +3,16 @@
   "issue": 1576,
   "observed": {
     "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
-    "implementationHeadSha": "214ea09328a5caa10ac7f284851479073c422c27",
-    "diffDigest": "84cf9d284ddb8707f778640568a4bd1320b0d5891538aeabee0134926435690d",
+    "implementationHeadSha": "aef698e751d7b8c6f634ddb7d10d6e079c1dd368",
+    "diffDigest": "408572036d9fe0a51022acf789af4e131c4b5c9c397ad7cfbbb0db640f25ec48",
     "session": {
       "sessionId": "b6132d9f716e35694e0a3977507c4bb86c81c535f3b9ba5dcaba69f6dcddca3a",
-      "latestRoundDigest": "8cb2f04a503611e9a00422ffcfdd58a1803507a6ee624f6c237d4a1990b5a40c",
+      "latestRoundDigest": "146802b2fa78869c5baf462b004b636b1b580920ddf1689a22473003b5dda2f1",
       "status": "converged",
-      "countedRounds": 5
+      "countedRounds": 6
     },
     "impact": {
-      "digest": "5017e78d0ce351d622b80d311ba4698bb8dc7f826e3db39769a2cbfe83c89d66",
+      "digest": "055ece7b8368950cd0afa8b8845916d75793976f7098309e50ec7a77a96cc608",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "214ea09328a5caa10ac7f284851479073c422c27",
-        "impactDigest": "5017e78d0ce351d622b80d311ba4698bb8dc7f826e3db39769a2cbfe83c89d66",
-        "finishedAt": "2026-10-11T03:25:38.062Z",
-        "recordDigest": "f8263894fabb72741f161097959a236a3676cefcd49568e30f48112a9fc40bbb"
+        "headSha": "aef698e751d7b8c6f634ddb7d10d6e079c1dd368",
+        "impactDigest": "055ece7b8368950cd0afa8b8845916d75793976f7098309e50ec7a77a96cc608",
+        "finishedAt": "2026-10-11T04:14:56.166Z",
+        "recordDigest": "03521cf60d06d4456f7ea114fa121d0a15335c311e8d125348861b73810cc1fe"
       }
     ]
   },
@@ -56,5 +56,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "b1bafb7c187e96e1f56ee2804f18b1c90606463395bff95cfdc8244e8a2e313d"
+  "evidenceDigest": "aed2a761bfd85e821e86dbbd1f3a667ffee9231e3a14ad67ee21e55484a1acc0"
 }
