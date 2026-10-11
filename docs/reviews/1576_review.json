@@ -3,16 +3,16 @@
   "issue": 1576,
   "observed": {
     "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
-    "implementationHeadSha": "b12a46bf117a4a6467c3cc63eb57cc2de21cdcc6",
-    "diffDigest": "306a6038fa5d97be3c9d0daeaf85a37dc7fdfa130fb0f94234dc23adbecff862",
+    "implementationHeadSha": "96b1576f4e4cfd41de142c94e3f5ac23f6aaaffc",
+    "diffDigest": "ed108fe1dc0539b58ce98c22fe8c8831f79c44af68a42633094c78d21c4dc362",
     "session": {
       "sessionId": "b6132d9f716e35694e0a3977507c4bb86c81c535f3b9ba5dcaba69f6dcddca3a",
-      "latestRoundDigest": "3e1acc255c06a46c61946928a8a7b45391f8494863881774a8783711f6f2d9cd",
+      "latestRoundDigest": "7b1dcb237d3a23783dc0357a81fc55af9d7b0382282be87dc3a0cdac53b1fa13",
       "status": "converged",
-      "countedRounds": 10
+      "countedRounds": 11
     },
     "impact": {
-      "digest": "a44c6e6167e9da76a82cc6f5f33d9d7a349aa313b8abed077bc7a69ba3bc9379",
+      "digest": "0548559ae8e26aa908e28e5ffc7b84d7c9c02cf427a7120a66d98e6089f99b93",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "b12a46bf117a4a6467c3cc63eb57cc2de21cdcc6",
-        "impactDigest": "a44c6e6167e9da76a82cc6f5f33d9d7a349aa313b8abed077bc7a69ba3bc9379",
-        "finishedAt": "2026-10-11T07:30:47.210Z",
-        "recordDigest": "6b4c5a2267476900134681e336f351e1758dd682218bea4dccd070e5e5a016a4"
+        "headSha": "96b1576f4e4cfd41de142c94e3f5ac23f6aaaffc",
+        "impactDigest": "0548559ae8e26aa908e28e5ffc7b84d7c9c02cf427a7120a66d98e6089f99b93",
+        "finishedAt": "2026-10-11T08:18:00.914Z",
+        "recordDigest": "3e726b2057f06303fee2948099150653b7cb841274e8deb86c70f998814a9d03"
       }
     ]
   },
@@ -56,5 +56,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "66209a95953cedf5749a12a4ae87c68aec1f6c8ac879a2c2d442a1fd6f21f4b0"
+  "evidenceDigest": "e465617d7eddb61a19d7bf5ffc9a2312b17fbf5d0a7ba1cd0b18b2c2fec683e9"
 }
