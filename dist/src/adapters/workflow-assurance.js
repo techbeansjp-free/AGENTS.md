@@ -85,7 +85,9 @@ export function deriveAssuranceProjection(input) {
                     "review対象HEADと実装HEADが異なる。既存review gateで正当な後続commitか照合する",
                 ]
                 : [], "independent-review");
-    add("O-08", "unknown", ["git:HEAD:docs/specs/02_要件/"], ["仕様影響と必要IDは意味判断し、既存spec gateで照合する"], "semantic");
+    add("O-08", "unknown", ["git:HEAD:docs/specs/02_要件/"], [
+        "仕様影響を要求と既存契約から判定する。文言のみの訂正は限定根拠付きno-spec-impactが可能。docs/specs未作成だけではbootstrapを要求しない。updatedの場合は必要IDを既存spec gateで照合する",
+    ], "semantic");
     add("O-09", "unknown", ["git:merge-base", "staging:review-session"], ["実差分と監査済み範囲は既存review/delivery gateで照合する"], "deterministic");
     add("O-10", "unknown", ["trusted:delivery-policy", "staging:delivery-state"], ["外部操作のauthorityは既存Delivery gateで再照合する"], "human-authorization");
     const byStep = {

@@ -188,7 +188,9 @@ export function deriveAssuranceProjection(input: {
     "O-08",
     "unknown",
     ["git:HEAD:docs/specs/02_要件/"],
-    ["仕様影響と必要IDは意味判断し、既存spec gateで照合する"],
+    [
+      "仕様影響を要求と既存契約から判定する。文言のみの訂正は限定根拠付きno-spec-impactが可能。docs/specs未作成だけではbootstrapを要求しない。updatedの場合は必要IDを既存spec gateで照合する",
+    ],
     "semantic",
   );
   add(
