@@ -1,0 +1,46 @@
+import { git } from "../lib/process.js";
+import { GIT_ENV } from "./review-diff.js";
+import { resolveGitWorkspace } from "./review-workspace.js";
+
+/** Verify linked worktree registration and clean state without inherited Git overrides. */
+export function observeCandidateBoundary(root: string) {
+  const workspace = resolveGitWorkspace(root);
+  if (workspace.activeRoot === workspace.primaryRoot)
+    throw new Error("candidateは主worktreeではなく専用Git worktreeが必要です");
+  const headSha = git(["rev-parse", "HEAD"], root, {
+    env: GIT_ENV,
+  }).stdout.trim();
+  if (!/^[0-9a-f]{40}$/.test(headSha))
+    throw new Error("candidate HEADが不正です");
+  if (
+    git(["status", "--porcelain", "-z"], root, { env: GIT_ENV }).stdout.length >
+    0
+  )
+    throw new Error("candidate worktreeに未記録の変更があります");
+  return { headSha };
+}
+
+/** Inspect a committed candidate. Dirty state, diverged base and changed HEAD stop assessment. */
+export function observeCandidateGit(root: string, baseSha: string) {
+  if (!/^[0-9a-f]{40}$/.test(baseSha))
+    throw new Error("candidate base SHAが不正です");
+  const { headSha } = observeCandidateBoundary(root);
+  const resolved = git(["rev-parse", "--verify", `${baseSha}^{commit}`], root, {
+    env: GIT_ENV,
+  }).stdout.trim();
+  if (resolved !== baseSha)
+    throw new Error("candidate baseをexact commitへ解決できません");
+  git(["merge-base", "--is-ancestor", baseSha, headSha], root, {
+    env: GIT_ENV,
+  });
+  const changedPaths = git(
+    ["diff", "--no-renames", "--name-only", "-z", baseSha, headSha],
+    root,
+    { env: GIT_ENV },
+  )
+    .stdout.split("\0")
+    .filter(Boolean);
+  if (observeCandidateBoundary(root).headSha !== headSha)
+    throw new Error("candidate Git観測中にHEADが変更されました");
+  return { baseSha, headSha, changedPaths };
+}

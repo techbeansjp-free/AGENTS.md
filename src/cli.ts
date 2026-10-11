@@ -67,6 +67,18 @@ import {
 import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import { observeWorkflowExecutionPlan } from "./adapters/workflow-execution-plan.js";
 import {
+  decideCandidatePreflight,
+  decideCandidatePost,
+  CANDIDATE_RISKS,
+  type CandidateRisk,
+  type CandidateRiskStatus,
+  type CandidateGap,
+} from "./domain/candidate-workflow.js";
+import {
+  observeCandidateBoundary,
+  observeCandidateGit,
+} from "./adapters/candidate-git.js";
+import {
   assertPullRequestTrackerBinding,
   createPullRequest,
   authorizeMerge,
@@ -6437,6 +6449,135 @@ export async function main(
       neverSkippableSteps: NEVER_SKIPPABLE_STEPS,
     });
     return 0;
+  }
+  if (command === "workflow" && subcommand === "candidate") {
+    const { flags, artifacts } = workflowArguments(rest);
+    if (
+      artifacts.length > 0 ||
+      Object.keys(flags).some((key) => !["input", "repo"].includes(key))
+    )
+      throw new Error("workflow candidateは--inputと--repoだけを受け付けます");
+    const inputFile = path.resolve(required(flags, "input"));
+    const fd = fs.openSync(
+      inputFile,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+    );
+    let source: string;
+    try {
+      const before = fs.fstatSync(fd);
+      if (!before.isFile() || before.size > 256 * 1024)
+        throw new Error("candidate inputは256 KiB以下の通常fileが必要です");
+      const limit = 256 * 1024 + 1;
+      const buffer = Buffer.alloc(limit);
+      let size = 0;
+      while (size < limit) {
+        const count = fs.readSync(fd, buffer, size, limit - size, null);
+        if (count === 0) break;
+        size += count;
+      }
+      const after = fs.fstatSync(fd);
+      if (
+        size > 256 * 1024 ||
+        size !== before.size ||
+        after.size !== before.size ||
+        after.dev !== before.dev ||
+        after.ino !== before.ino ||
+        after.mtimeMs !== before.mtimeMs
+      )
+        throw new Error("candidate inputの読取境界が変更されました");
+      source = buffer.subarray(0, size).toString("utf8");
+    } finally {
+      fs.closeSync(fd);
+    }
+    const input = parseJsonStrict(source, "candidate input");
+    if (!isRecord(input)) throw new Error("candidate inputはobjectが必要です");
+    const repo = path.resolve(required(flags, "repo"));
+    if (input.phase === "preflight") {
+      const baseSha = observeCandidateBoundary(repo).headSha;
+      const risk = input.risk;
+      if (typeof risk !== "object" || risk === null || Array.isArray(risk))
+        throw new Error("riskの全項目が必要です");
+      const statuses = risk as Record<string, unknown>;
+      if (
+        Object.keys(statuses).some(
+          (key) => !CANDIDATE_RISKS.includes(key as CandidateRisk),
+        )
+      )
+        throw new Error("未知のcandidateリスク項目があります");
+      const validated: Partial<Record<CandidateRisk, CandidateRiskStatus>> = {};
+      for (const key of CANDIDATE_RISKS) {
+        const value = statuses[key];
+        if (
+          value !== undefined &&
+          value !== "cleared" &&
+          value !== "triggered" &&
+          value !== "unknown"
+        )
+          throw new Error(`candidateリスク値が不正です: ${key}`);
+        if (value !== undefined) validated[key] = value;
+      }
+      const decision = decideCandidatePreflight({
+        intent: typeof input.intent === "string" ? input.intent : "",
+        correctnessCriterion:
+          typeof input.correctnessCriterion === "string"
+            ? input.correctnessCriterion
+            : "",
+        baseSha,
+        isolatedWorktree: true,
+        risk: validated,
+        unresolved:
+          Array.isArray(input.unresolved) &&
+          input.unresolved.every((value) => typeof value === "string")
+            ? (input.unresolved as string[])
+            : ["未解決事項の形式が不正です"],
+      });
+      print({
+        ...decision,
+        baseSha,
+        formalWorkflowUnchanged: true,
+        independentReviewRequired: true,
+        riskAssessmentSource: "caller-asserted",
+      });
+      return decision.route === "candidate" ? 0 : 1;
+    }
+    if (input.phase === "post") {
+      const observed = observeCandidateGit(
+        repo,
+        typeof input.baseSha === "string" ? input.baseSha : "",
+      );
+      const allowedPaths =
+        Array.isArray(input.allowedPaths) &&
+        input.allowedPaths.every((value) => typeof value === "string")
+          ? (input.allowedPaths as string[])
+          : [];
+      const validGaps: CandidateGap[] = [
+        "implementation",
+        "verification",
+        "design",
+        "requirement",
+        "intent",
+        "security-risk",
+      ];
+      if (
+        !Array.isArray(input.gaps) ||
+        !input.gaps.every((value) => validGaps.includes(value as CandidateGap))
+      )
+        throw new Error("candidate gapsが不正です");
+      const decision = decideCandidatePost({
+        observedPaths: observed.changedPaths,
+        allowedPaths,
+        targetTestsPassed: input.targetTestsPassed === true,
+        gaps: input.gaps as CandidateGap[],
+      });
+      print({
+        ...decision,
+        ...observed,
+        formalWorkflowUnchanged: true,
+        independentReviewRequired: true,
+      });
+      return decision.route === "independent-review" ? 0 : 1;
+    }
+    throw new Error("workflow candidate phaseはpreflightまたはpostです");
   }
   if (command === "workflow" && subcommand === "advance") {
     const { flags, artifacts } = workflowArguments(rest);
