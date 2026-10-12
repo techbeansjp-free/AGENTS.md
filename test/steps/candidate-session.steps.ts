@@ -1265,3 +1265,77 @@ When("元worktreeの親に実行fileを複製して元のtestを指定する", f
     ],
   });
 });
+
+When(
+  "結果用worktreeのclean・変更済み・登録のみ・未登録directory・同名fileを作る",
+  function () {
+    const names = ["clean", "modified", "missing"];
+    for (const name of names) {
+      const target = path.join(this.home, `.asc-candidate-result-${name}`);
+      run(
+        "git",
+        ["worktree", "add", "--detach", target, this.baseSha],
+        this.primary,
+      );
+      if (name === "modified")
+        fs.writeFileSync(
+          path.join(target, "src", "label.js"),
+          'export const label = "Changed";\n',
+        );
+      if (name === "missing")
+        fs.rmSync(target, { recursive: true, force: true });
+    }
+    fs.mkdirSync(path.join(this.home, ".asc-candidate-result-orphan"));
+    fs.writeFileSync(
+      path.join(this.home, ".asc-candidate-result-file"),
+      "not a worktree",
+    );
+    this.rejectionReasons = [
+      run("git", ["rev-parse", "HEAD"], this.primary).stdout,
+      run("git", ["worktree", "list", "--porcelain"], this.primary).stdout,
+    ];
+    this.result = run(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        path.resolve("bin/agent-skill-chain.ts"),
+        "workflow",
+        "candidate-inventory",
+        `--repo=${this.candidate}`,
+      ],
+      process.cwd(),
+      { allowFailure: true, timeoutMs: 30_000 },
+    );
+    this.output = JSON.parse(this.result.stdout) as Record<string, unknown>;
+  },
+);
+
+Then("Candidate inventoryは5状態を区別しGit状態を変更しない", function () {
+  assert.equal(this.result?.status, 0);
+  assert.equal(this.output?.authority, "observation-only");
+  const entries = this.output?.entries as Array<Record<string, unknown>>;
+  assert.deepEqual(
+    Object.fromEntries(
+      entries.map((entry) => [
+        path.basename(entry.path as string),
+        entry.state,
+      ]),
+    ),
+    {
+      ".asc-candidate-result-clean": "registered-clean",
+      ".asc-candidate-result-missing": "registered-missing",
+      ".asc-candidate-result-modified": "registered-modified",
+      ".asc-candidate-result-file": "unregistered-path",
+      ".asc-candidate-result-orphan": "unregistered-directory",
+    },
+  );
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.primary).stdout,
+    this.rejectionReasons[0],
+  );
+  assert.equal(
+    run("git", ["worktree", "list", "--porcelain"], this.primary).stdout,
+    this.rejectionReasons[1],
+  );
+});

@@ -198,3 +198,8 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When 元worktreeの親に実行fileを複製して元のtestを指定する
     Then Coordinatorは元worktreeの成功を候補成功へ昇格しない
+
+  Scenario: SCN-INT-CANDIDATE-038 結果用worktreeの登録・変更・孤立を副作用なしで観測する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 結果用worktreeのclean・変更済み・登録のみ・未登録directory・同名fileを作る
+    Then Candidate inventoryは5状態を区別しGit状態を変更しない

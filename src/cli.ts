@@ -80,6 +80,7 @@ import {
   observeCandidateForkBase,
 } from "./adapters/candidate-git.js";
 import { executeCandidate } from "./adapters/candidate-execution.js";
+import { inventoryCandidateWorktrees } from "./adapters/candidate-worktree-inventory.js";
 import {
   candidateAllowedPaths,
   createCandidateSession,
@@ -6457,6 +6458,19 @@ export async function main(
       neverSkippableSteps: NEVER_SKIPPABLE_STEPS,
     });
     return 0;
+  }
+  if (command === "workflow" && subcommand === "candidate-inventory") {
+    const { flags, artifacts } = workflowArguments(rest);
+    if (
+      artifacts.length > 0 ||
+      Object.keys(flags).some((key) => key !== "repo")
+    )
+      throw new Error("workflow candidate-inventoryは--repoだけを受け付けます");
+    const report = inventoryCandidateWorktrees(
+      path.resolve(required(flags, "repo")),
+    );
+    print(report);
+    return report.errors.length === 0 ? 0 : 1;
   }
   if (command === "workflow" && subcommand === "candidate") {
     const { flags, artifacts } = workflowArguments(rest);

@@ -25,6 +25,7 @@ import { observeWorkflowExecutionPlan } from "./adapters/workflow-execution-plan
 import { decideCandidatePreflight, decideCandidatePost, CANDIDATE_RISKS, } from "./domain/candidate-workflow.js";
 import { observeCandidateBoundary, observeCandidateGit, observeCandidateForkBase, } from "./adapters/candidate-git.js";
 import { executeCandidate } from "./adapters/candidate-execution.js";
+import { inventoryCandidateWorktrees } from "./adapters/candidate-worktree-inventory.js";
 import { candidateAllowedPaths, createCandidateSession, loadCandidateSession, runCandidateTargetTest, } from "./adapters/candidate-session.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, nonCanonicalClosingReferences, resolveMergeMethod, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, VERIFICATION_SET_INPUT_EXAMPLE, } from "./domain/agile-verification.js";
@@ -4584,6 +4585,15 @@ export async function main(argv, dependencies = {}) {
             neverSkippableSteps: NEVER_SKIPPABLE_STEPS,
         });
         return 0;
+    }
+    if (command === "workflow" && subcommand === "candidate-inventory") {
+        const { flags, artifacts } = workflowArguments(rest);
+        if (artifacts.length > 0 ||
+            Object.keys(flags).some((key) => key !== "repo"))
+            throw new Error("workflow candidate-inventoryは--repoだけを受け付けます");
+        const report = inventoryCandidateWorktrees(path.resolve(required(flags, "repo")));
+        print(report);
+        return report.errors.length === 0 ? 0 : 1;
     }
     if (command === "workflow" && subcommand === "candidate") {
         const { flags, artifacts } = workflowArguments(rest);

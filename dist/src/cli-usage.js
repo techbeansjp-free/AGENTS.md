@@ -413,6 +413,15 @@ export const COMMAND_USAGE = Object.freeze([
     },
     {
         command: "workflow",
+        subcommand: "candidate-inventory",
+        summary: "Candidate結果用worktreeの登録・変更・孤立状態を読み取り専用で観測する。削除や正式採用は行わない",
+        requiredFlags: [flag("repo", "path", "Candidateを作成したGit worktree")],
+        conditionalFlags: [],
+        optionalFlags: [],
+        example: "npx agent-skill-chain workflow candidate-inventory --repo=.",
+    },
+    {
+        command: "workflow",
         subcommand: "candidate",
         summary: "正式Stepの前に隔離候補の事前安全判定を行い、commit後の実Git差分から不足責務を分類する。出力に正式権限はない",
         requiredFlags: [
