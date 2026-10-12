@@ -25,7 +25,7 @@ export function makeDirectoriesRemovable(root: string): void {
   visit(root);
 }
 
-function workerExecutable(argv: readonly string[]): string {
+export function workerExecutable(argv: readonly string[]): string {
   const command = argv[0]!;
   const candidates = path.isAbsolute(command)
     ? [command]
@@ -43,7 +43,7 @@ function workerExecutable(argv: readonly string[]): string {
   return actual;
 }
 
-function codexPackageRoot(): string {
+export function codexPackageRoot(): string {
   const executable = (process.env.PATH ?? "")
     .split(path.delimiter)
     .map((directory) => path.join(directory, "codex"))
@@ -76,7 +76,10 @@ function assertNoWriteAlias(directory: string): void {
   visit(directory);
 }
 
-function workerWriteRoots(root: string, paths: readonly string[]): string[] {
+export function workerWriteRoots(
+  root: string,
+  paths: readonly string[],
+): string[] {
   const roots = new Set<string>();
   for (const relative of paths.length === 0
     ? []
@@ -251,12 +254,17 @@ export function runCandidateWorkerBoundary(input: {
     );
     if (probe.status === 0 || fs.readFileSync(sentinel, "utf8") !== "trusted\n")
       throw new Error("candidate WorkerのCoordinator書込禁止を確認できません");
-    const worker = run("codex", [...prefix, ...input.argv], root, {
-      allowFailure: true,
-      timeoutMs: MAX_WORKER_MS,
-      maxBufferBytes: 4 * 1024 * 1024,
-      env,
-    });
+    const worker = run(
+      "codex",
+      [...prefix, executable, ...input.argv.slice(1)],
+      root,
+      {
+        allowFailure: true,
+        timeoutMs: MAX_WORKER_MS,
+        maxBufferBytes: 4 * 1024 * 1024,
+        env,
+      },
+    );
     result = {
       boundary: "host-enforced",
       status: worker.status,

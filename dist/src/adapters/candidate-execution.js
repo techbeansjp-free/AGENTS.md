@@ -7,6 +7,7 @@ import { validateVerificationArgv } from "../domain/verification-run.js";
 import { CANDIDATE_RISKS, decideCandidatePost, decideCandidatePreflight, } from "../domain/candidate-workflow.js";
 import { CANDIDATE_GIT_ENV, assertNoCandidateFilters, observeCandidateBoundary, observeCandidateForkBase, observeCandidateGit, } from "./candidate-git.js";
 import { candidateAllowedPaths } from "./candidate-session.js";
+import { runCandidateCodexWorker, } from "./candidate-codex-worker.js";
 import { makeDirectoriesRemovable, runCandidateWorkerBoundary, } from "./candidate-worker-boundary.js";
 function assertNoIgnoredWorkerInputs(root, allowedPaths) {
     const directories = [
@@ -104,6 +105,8 @@ export function executeCandidate(input) {
     const workerRoot = fs.mkdtempSync(path.join(os.tmpdir(), "asc-candidate-copy-"));
     let workerRegistered = false;
     let workerBoundary;
+    let workerUsage = null;
+    let workerElapsedMs = null;
     let changedPaths = [];
     let imports = [];
     let workerFailure;
@@ -113,12 +116,21 @@ export function executeCandidate(input) {
         });
         workerRegistered = true;
         assertNoIgnoredWorkerInputs(workerRoot, allowedPaths);
-        const worker = runCandidateWorkerBoundary({
-            root: workerRoot,
-            allowedPaths,
-            argv: input.workerArgv,
-        });
+        const worker = input.workerProvider === "codex"
+            ? runCandidateCodexWorker({
+                root: workerRoot,
+                allowedPaths,
+                intent: input.intent,
+                correctnessCriterion: input.correctnessCriterion,
+            })
+            : runCandidateWorkerBoundary({
+                root: workerRoot,
+                allowedPaths,
+                argv: input.workerArgv ?? [],
+            });
         workerBoundary = worker.boundary;
+        workerUsage = "usage" in worker ? worker.usage : null;
+        workerElapsedMs = "elapsedMs" in worker ? worker.elapsedMs : null;
         if (worker.status !== 0)
             throw new Error(`candidate Workerが失敗しました（終了値${worker.status}）: ${worker.stderr.slice(0, 500)}`);
         assertNoCandidateFilters(workerRoot);
@@ -361,6 +373,8 @@ export function executeCandidate(input) {
             allowedPaths,
             targetTest,
             workerBoundary,
+            workerUsage,
+            workerElapsedMs,
             formalWorkflowUnchanged: true,
             independentReviewRequired: true,
             riskAssessmentSource: "caller-asserted",

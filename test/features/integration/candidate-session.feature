@@ -256,3 +256,23 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When 採用済みCandidateのquick stagingを正式にfull昇格する
     Then 昇格後も採用時の旧要求を照合しjournalを有効に保つ
+
+  Scenario: SCN-INT-CANDIDATE-049 symlinkのNode実行fileも実体pathで隔離対象testを実行する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When symlinkのNode実行fileを対象testに指定する
+    Then Candidateは実体Nodeで対象testを観測する
+
+  Scenario: SCN-INT-CANDIDATE-050 Codex token記録は欠測や不正値を成功量として数えない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When Codexの正常・破損・範囲外usageイベントを解析する
+    Then 有効なusageだけを合算し不正イベントは欠測にする
+
+  Scenario: SCN-INT-CANDIDATE-051 Codex Workerと任意argvの混在をWorker起動前に拒否する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When Codex ProviderとworkerArgvを同時に申告する
+    Then Workerを起動せず入力混在を拒否する
+
+  Scenario: SCN-INT-CANDIDATE-052 project-local Codex設定をProvider起動前に拒否する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 候補worktreeにproject-local Codex設定を置く
+    Then Codex Workerはその設定を読まず停止する

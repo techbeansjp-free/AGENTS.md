@@ -21,6 +21,10 @@ import {
 } from "./candidate-git.js";
 import { candidateAllowedPaths } from "./candidate-session.js";
 import {
+  runCandidateCodexWorker,
+  type CodexCandidateUsage,
+} from "./candidate-codex-worker.js";
+import {
   makeDirectoriesRemovable,
   runCandidateWorkerBoundary,
 } from "./candidate-worker-boundary.js";
@@ -32,7 +36,8 @@ export interface CandidateExecutionInput {
   allowedPaths: string[];
   risk: Partial<Record<CandidateRisk, CandidateRiskStatus>>;
   unresolved: string[];
-  workerArgv: string[];
+  workerArgv?: string[];
+  workerProvider?: "codex";
   targetTest: string[];
   gaps: CandidateGap[];
 }
@@ -184,7 +189,9 @@ export function executeCandidate(input: CandidateExecutionInput) {
     path.join(os.tmpdir(), "asc-candidate-copy-"),
   );
   let workerRegistered = false;
-  let workerBoundary: "host-enforced" | undefined;
+  let workerBoundary: "host-enforced" | "codex-profile" | undefined;
+  let workerUsage: CodexCandidateUsage | null = null;
+  let workerElapsedMs: number | null = null;
   let changedPaths: string[] = [];
   let imports: CandidateImport[] = [];
   let workerFailure: unknown;
@@ -194,12 +201,22 @@ export function executeCandidate(input: CandidateExecutionInput) {
     });
     workerRegistered = true;
     assertNoIgnoredWorkerInputs(workerRoot, allowedPaths);
-    const worker = runCandidateWorkerBoundary({
-      root: workerRoot,
-      allowedPaths,
-      argv: input.workerArgv,
-    });
+    const worker =
+      input.workerProvider === "codex"
+        ? runCandidateCodexWorker({
+            root: workerRoot,
+            allowedPaths,
+            intent: input.intent,
+            correctnessCriterion: input.correctnessCriterion,
+          })
+        : runCandidateWorkerBoundary({
+            root: workerRoot,
+            allowedPaths,
+            argv: input.workerArgv ?? [],
+          });
     workerBoundary = worker.boundary;
+    workerUsage = "usage" in worker ? worker.usage : null;
+    workerElapsedMs = "elapsedMs" in worker ? worker.elapsedMs : null;
     if (worker.status !== 0)
       throw new Error(
         `candidate Workerが失敗しました（終了値${worker.status}）: ${worker.stderr.slice(0, 500)}`,
@@ -507,6 +524,8 @@ export function executeCandidate(input: CandidateExecutionInput) {
       allowedPaths,
       targetTest,
       workerBoundary,
+      workerUsage,
+      workerElapsedMs,
       formalWorkflowUnchanged: true,
       independentReviewRequired: true,
       riskAssessmentSource: "caller-asserted" as const,

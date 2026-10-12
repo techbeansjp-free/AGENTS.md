@@ -24,7 +24,7 @@ export function makeDirectoriesRemovable(root) {
     };
     visit(root);
 }
-function workerExecutable(argv) {
+export function workerExecutable(argv) {
     const command = argv[0];
     const candidates = path.isAbsolute(command)
         ? [command]
@@ -39,7 +39,7 @@ function workerExecutable(argv) {
         throw new Error(`candidate Worker実行fileが通常fileではありません: ${command}`);
     return actual;
 }
-function codexPackageRoot() {
+export function codexPackageRoot() {
     const executable = (process.env.PATH ?? "")
         .split(path.delimiter)
         .map((directory) => path.join(directory, "codex"))
@@ -69,7 +69,7 @@ function assertNoWriteAlias(directory) {
     };
     visit(directory);
 }
-function workerWriteRoots(root, paths) {
+export function workerWriteRoots(root, paths) {
     const roots = new Set();
     for (const relative of paths.length === 0
         ? []
@@ -185,7 +185,7 @@ export function runCandidateWorkerBoundary(input) {
         const probe = run("codex", [...prefix, "/bin/sh", "-c", 'printf x >> "$1"', "probe", sentinel], root, { allowFailure: true, timeoutMs: 20_000, env });
         if (probe.status === 0 || fs.readFileSync(sentinel, "utf8") !== "trusted\n")
             throw new Error("candidate WorkerのCoordinator書込禁止を確認できません");
-        const worker = run("codex", [...prefix, ...input.argv], root, {
+        const worker = run("codex", [...prefix, executable, ...input.argv.slice(1)], root, {
             allowFailure: true,
             timeoutMs: MAX_WORKER_MS,
             maxBufferBytes: 4 * 1024 * 1024,

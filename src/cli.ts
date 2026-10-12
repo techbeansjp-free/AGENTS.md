@@ -6655,11 +6655,24 @@ export async function main(
         !input.gaps.every((value) => validGaps.includes(value as CandidateGap))
       )
         throw new Error("candidate gapsが不正です");
-      if (
+      if (input.workerProvider === "codex") {
+        if (input.workerArgv !== undefined)
+          throw new Error("candidate Codex WorkerはworkerArgvを受け付けません");
+        if (
+          typeof input.intent !== "string" ||
+          input.intent.length > 32_768 ||
+          typeof input.correctnessCriterion !== "string" ||
+          input.correctnessCriterion.length > 32_768
+        )
+          throw new Error(
+            "candidate Codex WorkerのIntentまたは正しさの基準が不正です",
+          );
+      } else if (
+        input.workerProvider !== undefined ||
         !Array.isArray(input.workerArgv) ||
         input.workerArgv.some((value) => typeof value !== "string")
       )
-        throw new Error("candidate workerArgvが不正です");
+        throw new Error("candidate workerArgvまたはworkerProviderが不正です");
       if (
         !Array.isArray(input.targetTest) ||
         input.targetTest.some((value) => typeof value !== "string")
@@ -6679,7 +6692,9 @@ export async function main(
           input.unresolved.every((value) => typeof value === "string")
             ? (input.unresolved as string[])
             : ["未解決事項の形式が不正です"],
-        workerArgv: input.workerArgv as string[],
+        ...(input.workerProvider === "codex"
+          ? { workerProvider: "codex" as const }
+          : { workerArgv: input.workerArgv as string[] }),
         targetTest: input.targetTest as string[],
         gaps: input.gaps as CandidateGap[],
       });

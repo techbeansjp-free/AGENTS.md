@@ -3,6 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { CANDIDATE_RISKS } from "../../src/domain/candidate-workflow.js";
 import {
+  parseCodexCandidateUsage,
+  runCandidateCodexWorker,
+} from "../../src/adapters/candidate-codex-worker.js";
+import {
   createIssueStaging,
   recordStagingSync,
 } from "../../src/domain/issue.js";
@@ -1738,4 +1742,118 @@ Then("昇格後も採用時の旧要求を照合しjournalを有効に保つ", f
   assert.equal(journal.mode, "full");
   assert.deepEqual(journal.errors, []);
   assert.ok(journal.entries.some((entry) => entry.candidateAdoption));
+});
+
+When("symlinkのNode実行fileを対象testに指定する", function () {
+  const alias = path.join(this.home, "node-alias");
+  fs.symlinkSync(process.execPath, alias);
+  invokeExecute(this, { targetTest: [alias, "test.js"] });
+});
+
+Then("Candidateは実体Nodeで対象testを観測する", function () {
+  if (this.result?.status !== 0) {
+    assert.ok(
+      reasons(this).some((reason) => reason.includes("candidate Worker")),
+      JSON.stringify(this.output),
+    );
+    return;
+  }
+  assert.equal(this.output?.route, "independent-review");
+  const observed = this.output?.targetTest as Record<string, unknown>;
+  assert.equal(observed.exitCode, 0);
+  assert.equal(observed.formalEvidence, false);
+});
+
+When("Codexの正常・破損・範囲外usageイベントを解析する", function () {
+  const valid = [
+    JSON.stringify({ type: "thread.started", thread_id: "dummy" }),
+    JSON.stringify({
+      type: "turn.completed",
+      usage: {
+        input_tokens: 100,
+        cached_input_tokens: 40,
+        cache_write_input_tokens: 0,
+        output_tokens: 20,
+        reasoning_output_tokens: 5,
+      },
+    }),
+    JSON.stringify({
+      type: "turn.completed",
+      usage: {
+        input_tokens: 80,
+        cached_input_tokens: 20,
+        cache_write_input_tokens: 5,
+        output_tokens: 10,
+        reasoning_output_tokens: 2,
+      },
+    }),
+  ].join("\n");
+  const malformed = `${valid}\nnot-json`;
+  const impossible = JSON.stringify({
+    type: "turn.completed",
+    usage: {
+      input_tokens: 10,
+      cached_input_tokens: 11,
+      cache_write_input_tokens: 0,
+      output_tokens: 1,
+      reasoning_output_tokens: 0,
+    },
+  });
+  this.output = {
+    valid: parseCodexCandidateUsage(valid),
+    malformed: parseCodexCandidateUsage(malformed),
+    impossible: parseCodexCandidateUsage(impossible),
+  };
+});
+
+Then("有効なusageだけを合算し不正イベントは欠測にする", function () {
+  assert.deepEqual(this.output?.valid, {
+    inputTokens: 180,
+    cachedInputTokens: 60,
+    cacheWriteInputTokens: 5,
+    outputTokens: 30,
+    reasoningOutputTokens: 7,
+    source: "codex-turn-completed",
+  });
+  assert.equal(this.output?.malformed, null);
+  assert.equal(this.output?.impossible, null);
+});
+
+When("Codex ProviderとworkerArgvを同時に申告する", function () {
+  invokeExecute(this, { workerProvider: "codex" });
+});
+
+Then("Workerを起動せず入力混在を拒否する", function () {
+  assert.equal(this.result?.status, 1);
+  assert.ok(
+    reasons(this).some((reason) => reason.includes("workerArgv")),
+    JSON.stringify(this.output),
+  );
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+});
+
+When("候補worktreeにproject-local Codex設定を置く", function () {
+  const config = path.join(this.candidate, ".codex", "config.toml");
+  fs.mkdirSync(path.dirname(config), { recursive: true });
+  fs.writeFileSync(config, 'sandbox_mode = "danger-full-access"\n');
+});
+
+Then("Codex Workerはその設定を読まず停止する", function () {
+  assert.throws(
+    () =>
+      runCandidateCodexWorker({
+        root: this.candidate,
+        allowedPaths: ["src/label.js"],
+        intent: "文言を直す",
+        correctnessCriterion: "label === Hello",
+      }),
+    /project-local Codex config/u,
+  );
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
 });

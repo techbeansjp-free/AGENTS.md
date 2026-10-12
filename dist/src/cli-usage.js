@@ -449,7 +449,7 @@ export const COMMAND_USAGE = Object.freeze([
         example: "npx agent-skill-chain workflow candidate --repo=./candidate --session=./candidate-session.json --input=./candidate-preflight.json",
         acceptsSpaceSeparatedFlags: true,
         inputContract: {
-            description: "preflight: intent, correctnessCriterion, allowedPaths, risk（全14領域のcleared/triggered/unknown）, unresolved。execute: 同じ事前項目とworkerArgv、targetTest、gapsを単一Coordinator呼出しで実行する（LinuxのCodex sandbox必須、sessionなし、正式Evidenceではない）。post: targetTest（argv）, gaps。base・許可path・成功フラグの事後申告を拒否し、CLIがGitと対象テストを観測する。risk・gapsは申告であり、sessionとテスト観測は正式Evidenceではない。",
+            description: "preflight: intent, correctnessCriterion, allowedPaths, risk（全14領域のcleared/triggered/unknown）, unresolved。execute: 同じ事前項目とworkerArgv（またはworkerProvider: codex）、targetTest、gapsを単一Coordinator呼出しで実行する（LinuxのCodex permission profile必須、sessionなし、正式Evidenceではない）。Codex Workerのtoolだけを隔離し、provider報告usageとWorker時間を返す。post: targetTest（argv）, gaps。base・許可path・成功フラグの事後申告を拒否し、CLIがGitと対象テストを観測する。risk・gapsは申告であり、sessionとテスト観測は正式Evidenceではない。",
             example: {
                 phase: "preflight",
                 intent: "内部ラベルをHelloに修正",
