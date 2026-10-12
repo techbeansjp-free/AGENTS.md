@@ -413,6 +413,20 @@ export const COMMAND_USAGE = Object.freeze([
     },
     {
         command: "workflow",
+        subcommand: "candidate-adopt",
+        summary: "低リスクquickで実装済みCandidate結果をGit差分と要求digestから正式採用する。実装時刻は偽装せず、独立reviewとtrusted検証は後続gateに残す",
+        requiredFlags: [
+            flag("staging", "path", "結果用worktree内のStep 4封印済みIssue staging"),
+        ],
+        conditionalFlags: [],
+        optionalFlags: [
+            optional("apply", "", "観測した採用記録をjournalへ追記する", "指定しない限りpreview"),
+        ],
+        example: "npx agent-skill-chain workflow candidate-adopt --staging=.agent-skill-chain/tmp/issues/20261012_candidate --apply",
+        acceptsSpaceSeparatedFlags: true,
+    },
+    {
+        command: "workflow",
         subcommand: "candidate-inventory",
         summary: "Candidate結果用worktreeの登録・変更・孤立状態を読み取り専用で観測する。削除や正式採用は行わない",
         requiredFlags: [flag("repo", "path", "Candidateを作成したGit worktree")],

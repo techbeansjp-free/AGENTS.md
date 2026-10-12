@@ -218,3 +218,25 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When 結果worktreeを壊れたsymlinkに置換してinventoryする
     Then Candidate inventoryはsymlinkを不明として停止する
+
+
+  Scenario: SCN-INT-CANDIDATE-042 低リスク候補の採用はStep 9に履歴を明示し独立reviewを要求する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 結果用worktreeにquick stagingを作りCandidateを正式採用する
+    Then Candidate採用記録はGitと要求に束縛されStep 10 reviewが残る
+
+  Scenario: SCN-INT-CANDIDATE-043 採用後の要求改ざんはjournal読取で拒否する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 結果用worktreeのCandidateを採用後に要求成果物を改変する
+    Then Candidate採用記録の要求digest不一致を検出する
+
+  Scenario: SCN-INT-CANDIDATE-044 認可fileを変更したCandidateは正式採用を拒否する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 認可変更を含む結果用worktreeのCandidate採用を試す
+    Then Candidate採用は拒否されStep 9記録を残さない
+
+
+  Scenario: SCN-INT-CANDIDATE-045 直前commitで認可変更を隠した候補は採用できない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 認可変更を前のcommitに隠したCandidate採用を試す
+    Then Candidate採用は拒否されStep 9記録を残さない

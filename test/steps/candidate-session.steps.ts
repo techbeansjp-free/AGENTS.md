@@ -3,6 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { CANDIDATE_RISKS } from "../../src/domain/candidate-workflow.js";
 import {
+  createIssueStaging,
+  recordStagingSync,
+} from "../../src/domain/issue.js";
+import {
+  appendWorkflowJournalEntry,
+  readWorkflowJournal,
+} from "../../src/adapters/workflow-journal.js";
+import {
   finalizeCandidateWorkerBoundary,
   runCandidateWorkerBoundary,
 } from "../../src/adapters/candidate-worker-boundary.js";
@@ -11,6 +19,7 @@ import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class CandidateSessionWorld extends WorkflowWorld {
   home = "";
+  staging = "";
   primary = "";
   candidate = "";
   sourceCandidate = "";
@@ -1433,4 +1442,189 @@ When("結果worktreeを壊れたsymlinkに置換してinventoryする", function
 Then("Candidate inventoryはsymlinkを不明として停止する", function () {
   assert.equal(this.result?.status, 1);
   assert.equal(inventoryState(this), "registered-unknown");
+});
+
+function prepareCandidateAdoption(
+  world: CandidateSessionWorld,
+  security = false,
+  inheritedSecurity = false,
+): void {
+  if (inheritedSecurity) {
+    fs.writeFileSync(
+      path.join(world.candidate, "src/authorization.js"),
+      "export const authorized = false;\n",
+    );
+    run("git", ["add", "src/authorization.js"], world.candidate);
+    run("git", ["commit", "-qm", "authorization change"], world.candidate);
+  }
+  const changed = security ? "src/authorization.js" : "src/label.js";
+  fs.writeFileSync(
+    path.join(world.candidate, changed),
+    security
+      ? "export const authorized = false;\n"
+      : 'export const label = "Hello";\n',
+  );
+  run("git", ["add", changed], world.candidate);
+  run(
+    "git",
+    ["commit", "-qm", "asc: isolated candidate implementation"],
+    world.candidate,
+  );
+  const candidateHead = run(
+    "git",
+    ["rev-parse", "HEAD"],
+    world.candidate,
+  ).stdout.trim();
+  run("git", ["reset", "--hard", world.baseSha], world.candidate);
+  run(
+    "git",
+    ["update-ref", "refs/remotes/origin/main", world.baseSha],
+    world.primary,
+  );
+  run(
+    "git",
+    ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+    world.primary,
+  );
+  const resultRoot = path.join(world.home, ".asc-candidate-result-adoption");
+  run(
+    "git",
+    ["worktree", "add", "--detach", resultRoot, candidateHead],
+    world.primary,
+  );
+  world.staging = createIssueStaging(resultRoot, {
+    title: "Candidate adoption",
+    requestedMode: "quick",
+    answers: Object.fromEntries(
+      Array.from({ length: 8 }, (_, i) => [
+        `Q-${String(i + 1).padStart(2, "0")}`,
+        { answer: true as const, evidence: "isolated fixture" },
+      ]),
+    ),
+    now: new Date("2026-10-12T00:00:00.000Z"),
+  }).path;
+  for (const step of [1, 4]) {
+    appendWorkflowJournalEntry({
+      staging: world.staging,
+      entry: {
+        step,
+        skillId: step === 1 ? "step-01-request" : "step-04-issue-sync",
+        mode: "quick",
+        recordedAt: "2026-10-12T00:01:00.000Z",
+        artifacts: ["00_要求定義.md"],
+        evidence:
+          step === 1 ? "fixture request" : "fixture tracker sync digest",
+      },
+    });
+  }
+  recordStagingSync(world.staging, {
+    tracker: "https://github.com/dummy/repo/issues/1",
+    checkpoint: 4,
+    syncedAt: "2026-10-12T00:02:00.000Z",
+    bodyDigest: "a".repeat(64),
+    readBackDigest: "a".repeat(64),
+  });
+}
+
+function invokeCandidateAdoption(
+  world: CandidateSessionWorld,
+  apply: boolean,
+): void {
+  world.result = run(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      path.resolve("bin/agent-skill-chain.ts"),
+      "workflow",
+      "candidate-adopt",
+      `--staging=${world.staging}`,
+      ...(apply ? ["--apply"] : []),
+    ],
+    process.cwd(),
+    { allowFailure: true, timeoutMs: 30_000 },
+  );
+  if (world.result.stdout.trim().startsWith("{"))
+    world.output = JSON.parse(world.result.stdout) as Record<string, unknown>;
+}
+
+When("結果用worktreeにquick stagingを作りCandidateを正式採用する", function () {
+  prepareCandidateAdoption(this);
+  invokeCandidateAdoption(this, false);
+  assert.equal(this.result?.status, 0, this.result?.stdout);
+  assert.equal(this.output?.state, "independent-review-required");
+  assert.equal(
+    readWorkflowJournal(this.staging).entries.some((entry) => entry.step === 9),
+    false,
+  );
+  invokeCandidateAdoption(this, true);
+});
+
+Then("Candidate採用記録はGitと要求に束縛されStep 10 reviewが残る", function () {
+  assert.equal(this.result?.status, 0, this.result?.stdout);
+  const journal = readWorkflowJournal(this.staging);
+  assert.deepEqual(journal.errors, []);
+  const adoption = journal.entries.find((entry) => entry.step === 9);
+  assert.ok(adoption?.candidateAdoption);
+  assert.equal(adoption.implementationHeadSha, this.output?.headSha);
+  assert.equal(this.output?.independentReviewRequired, true);
+  assert.equal(
+    journal.entries.some((entry) => entry.step === 10),
+    false,
+  );
+  const reviewInput = path.join(this.home, "candidate-review-input.json");
+  const reviewInit = run(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      path.resolve("bin/agent-skill-chain.ts"),
+      "review",
+      "round",
+      `--staging=${this.staging}`,
+      "--init",
+      `--out=${reviewInput}`,
+      `--head=${adoption.implementationHeadSha}`,
+      `--base=${adoption.candidateAdoption.baseSha}`,
+      "--scope=SCOPE-CANDIDATE-DUMMY",
+      "--ac=AC-CANDIDATE-DUMMY",
+    ],
+    process.cwd(),
+    { allowFailure: true, timeoutMs: 30_000 },
+  );
+  assert.equal(reviewInit.status, 0, reviewInit.stdout);
+  assert.equal(fs.existsSync(reviewInput), true);
+});
+
+When("結果用worktreeのCandidateを採用後に要求成果物を改変する", function () {
+  prepareCandidateAdoption(this);
+  invokeCandidateAdoption(this, true);
+  assert.equal(this.result?.status, 0, this.result?.stdout);
+  fs.appendFileSync(path.join(this.staging, "00_要求定義.md"), "\n改変\n");
+});
+
+Then("Candidate採用記録の要求digest不一致を検出する", function () {
+  assert.ok(
+    readWorkflowJournal(this.staging).errors.some((error) =>
+      error.includes("要求digestが一致しません"),
+    ),
+  );
+});
+
+When("認可変更を含む結果用worktreeのCandidate採用を試す", function () {
+  prepareCandidateAdoption(this, true);
+  invokeCandidateAdoption(this, true);
+});
+
+Then("Candidate採用は拒否されStep 9記録を残さない", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(
+    readWorkflowJournal(this.staging).entries.some((entry) => entry.step === 9),
+    false,
+  );
+});
+
+When("認可変更を前のcommitに隠したCandidate採用を試す", function () {
+  prepareCandidateAdoption(this, false, true);
+  invokeCandidateAdoption(this, true);
 });

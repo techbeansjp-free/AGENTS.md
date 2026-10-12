@@ -26,6 +26,7 @@ import { decideCandidatePreflight, decideCandidatePost, CANDIDATE_RISKS, } from 
 import { observeCandidateBoundary, observeCandidateGit, observeCandidateForkBase, } from "./adapters/candidate-git.js";
 import { executeCandidate } from "./adapters/candidate-execution.js";
 import { inventoryCandidateWorktrees } from "./adapters/candidate-worktree-inventory.js";
+import { observeCandidateAdoption } from "./adapters/candidate-adoption.js";
 import { candidateAllowedPaths, createCandidateSession, loadCandidateSession, runCandidateTargetTest, } from "./adapters/candidate-session.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, nonCanonicalClosingReferences, resolveMergeMethod, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, VERIFICATION_SET_INPUT_EXAMPLE, } from "./domain/agile-verification.js";
@@ -4584,6 +4585,66 @@ export async function main(argv, dependencies = {}) {
             ])),
             neverSkippableSteps: NEVER_SKIPPABLE_STEPS,
         });
+        return 0;
+    }
+    if (command === "workflow" && subcommand === "candidate-adopt") {
+        const { flags, artifacts } = workflowArguments(rest);
+        if (artifacts.length > 0 ||
+            Object.keys(flags).some((key) => !["staging", "apply"].includes(key)))
+            throw new Error("workflow candidate-adoptは--stagingと--applyだけを受け付けます");
+        const staging = path.resolve(required(flags, "staging"));
+        const journal = readWorkflowJournal(staging);
+        if (journal.errors.length > 0)
+            throw new Error(`candidate採用前のjournalが不正です: ${journal.errors.join("; ")}`);
+        if (journal.mode !== "quick")
+            throw new Error("実装先行の正式採用は低リスクquickだけで許可します");
+        const stagingRecord = readStoredStagingRecord(staging);
+        if (stagingRecord.state !== "sync-verified" ||
+            stagingRecord.checkpoint !== 4)
+            throw new Error("candidate採用にはStep 4の書き込み後読み取り済み同期が必要です");
+        const progress = validateStepJournal({
+            mode: "quick",
+            entries: journal.entries,
+            upToStep: 4,
+        });
+        if (!progress.valid ||
+            !journal.entries.some((entry) => entry.step === 4 && entry.planSeal))
+            throw new Error("candidate採用にはStep 0/1/4とPlanning Sealが必要です");
+        if (journal.entries.some((entry) => entry.step >= 9))
+            throw new Error("candidate採用は初回Step 9相当の状態遷移にだけ許可します");
+        const root = stagingRepositoryRoot(staging);
+        const observed = observeCandidateAdoption(root, path.join(staging, "00_要求定義.md"));
+        const plan = {
+            state: "independent-review-required",
+            authority: "formal-adoption-gate",
+            root,
+            ...observed,
+            planningSealed: true,
+            next: "独立review、trusted full verification、Delivery gateを実行してください",
+        };
+        if (!presentFlag(flags, "apply")) {
+            print(plan);
+            return 0;
+        }
+        const result = appendWorkflowJournalEntry({
+            staging,
+            headSha: observed.headSha,
+            entry: {
+                step: 9,
+                skillId: "step-09-implement",
+                mode: "quick",
+                recordedAt: new Date().toISOString(),
+                artifacts: [...observed.changedPaths],
+                evidence: `candidate implementation adopted after Step 4 seal; base=${observed.baseSha}; independent review and trusted verification pending`,
+                implementationHeadSha: observed.headSha,
+                candidateAdoption: {
+                    baseSha: observed.baseSha,
+                    diffDigest: observed.diffDigest,
+                    requestDigest: observed.requestDigest,
+                },
+            },
+        });
+        print({ ...plan, applied: true, journalDigest: result.journalDigest });
         return 0;
     }
     if (command === "workflow" && subcommand === "candidate-inventory") {

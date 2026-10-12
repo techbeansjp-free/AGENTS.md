@@ -319,6 +319,12 @@ export interface StepJournalEntry {
   evidence: string;
   /** Step 9で検証したexact implementation HEAD。 */
   implementationHeadSha?: string;
+  /** 実装済みCandidateを後から正式採用した事実。実装時刻を偽装しない。 */
+  candidateAdoption?: {
+    baseSha: string;
+    diffDigest: string;
+    requestDigest: string;
+  };
   pocObservation?: { headSha: string; evidenceDigest: string };
   reviewSession?: {
     sessionId: string;
@@ -389,6 +395,7 @@ const JOURNAL_FIELDS = new Set([
   "artifacts",
   "evidence",
   "implementationHeadSha",
+  "candidateAdoption",
   "pocObservation",
   "reviewSession",
   "humanOverride",
@@ -565,6 +572,30 @@ function parseJournalEntry(
       errors.push(`${label}.implementationHeadShaはStep 9にだけ指定できます`);
     else implementationHeadSha = value.implementationHeadSha as string;
   }
+  let candidateAdoption: StepJournalEntry["candidateAdoption"];
+  if (value.candidateAdoption !== undefined) {
+    const adoption = value.candidateAdoption;
+    if (
+      Number(value.step) !== 9 ||
+      !implementationHeadSha ||
+      !isRecord(adoption) ||
+      unknownFields(
+        adoption,
+        new Set(["baseSha", "diffDigest", "requestDigest"]),
+      ).length > 0 ||
+      Object.keys(adoption).length !== 3 ||
+      !/^[a-f0-9]{40}$/u.test(String(adoption.baseSha ?? "")) ||
+      !/^[a-f0-9]{64}$/u.test(String(adoption.diffDigest ?? "")) ||
+      !/^[a-f0-9]{64}$/u.test(String(adoption.requestDigest ?? ""))
+    )
+      errors.push(`${label}.candidateAdoptionが不正です`);
+    else
+      candidateAdoption = {
+        baseSha: adoption.baseSha as string,
+        diffDigest: adoption.diffDigest as string,
+        requestDigest: adoption.requestDigest as string,
+      };
+  }
   const parsedOverride =
     value.humanOverride === undefined
       ? { errors: [] as string[] }
@@ -684,6 +715,7 @@ function parseJournalEntry(
       artifacts: [...(value.artifacts as string[])],
       evidence: value.evidence as string,
       ...(implementationHeadSha ? { implementationHeadSha } : {}),
+      ...(candidateAdoption ? { candidateAdoption } : {}),
       ...(pocObservation ? { pocObservation } : {}),
       ...(reviewSession ? { reviewSession } : {}),
       ...(parsedOverride.value ? { humanOverride: parsedOverride.value } : {}),
