@@ -1600,6 +1600,8 @@ Then("Candidate採用記録はGitと要求に束縛されStep 10 reviewが残る
   assert.ok(adoption?.candidateAdoption);
   assert.equal(adoption.implementationHeadSha, this.output?.headSha);
   assert.equal(this.output?.independentReviewRequired, true);
+  assert.equal(this.output?.provenance, "git-lineage-only");
+  assert.equal(this.output?.coordinatorOriginVerified, false);
   assert.equal(
     journal.entries.some((entry) => entry.step === 10),
     false,

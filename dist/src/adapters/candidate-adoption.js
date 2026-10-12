@@ -24,7 +24,7 @@ function resolveTrustedForkBase(root, headSha, pinnedTip) {
         throw new Error("Candidate結果とtrusted既定branchの一意な分岐点がありません");
     return { baseSha: bases[0], trustedTipSha: trustedTip };
 }
-/** The first result commit is Coordinator-owned; later commits are review corrections. */
+/** Validate Git history shape, not the identity of the first commit's author. */
 function assertCandidateLineage(root, baseSha, headSha) {
     const commits = git(["rev-list", "--first-parent", "--reverse", `${baseSha}..${headSha}`], root, { env: CANDIDATE_GIT_ENV })
         .stdout.trim()
@@ -108,6 +108,8 @@ export function observeCandidateAdoption(rootInput, requestFile) {
         baseSha,
         trustedTipSha: trustedFork.trustedTipSha,
         headSha,
+        provenance: "git-lineage-only",
+        coordinatorOriginVerified: false,
         changedPaths: diff.changedPaths,
         diffDigest: diff.digest,
         requestDigest,

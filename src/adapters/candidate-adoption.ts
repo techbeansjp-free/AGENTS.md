@@ -40,7 +40,7 @@ function resolveTrustedForkBase(
   return { baseSha: bases[0]!, trustedTipSha: trustedTip };
 }
 
-/** The first result commit is Coordinator-owned; later commits are review corrections. */
+/** Validate Git history shape, not the identity of the first commit's author. */
 function assertCandidateLineage(
   root: string,
   baseSha: string,
@@ -148,6 +148,8 @@ export function observeCandidateAdoption(
     baseSha,
     trustedTipSha: trustedFork.trustedTipSha,
     headSha,
+    provenance: "git-lineage-only" as const,
+    coordinatorOriginVerified: false as const,
     changedPaths: diff.changedPaths,
     diffDigest: diff.digest,
     requestDigest,
