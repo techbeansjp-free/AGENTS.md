@@ -2,7 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { git } from "../lib/process.js";
 import { parseWorktreeHeads } from "../domain/worktree-survey.js";
-import { CANDIDATE_GIT_ENV } from "./candidate-git.js";
+import {
+  CANDIDATE_GIT_ENV,
+  assertNoCandidateFilters,
+} from "./candidate-git.js";
 import { resolveGitWorkspace } from "./review-workspace.js";
 
 const RESULT_PREFIX = ".asc-candidate-result-";
@@ -43,18 +46,29 @@ export function inventoryCandidateWorktrees(rootInput: string): {
   const registered = new Set(relevant.map((entry) => entry.path));
   const entries: CandidateWorktreeInventoryEntry[] = [];
   for (const item of relevant) {
-    if (!fs.existsSync(item.path)) {
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(item.path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        entries.push({
+          path: item.path,
+          headSha: item.headSha,
+          state: "registered-missing",
+          reason:
+            "Git登録だけが残っています。自動pruneせず所有者が確認してください",
+        });
+        continue;
+      }
       entries.push({
         path: item.path,
         headSha: item.headSha,
-        state: "registered-missing",
-        reason:
-          "Git登録だけが残っています。自動pruneせず所有者が確認してください",
+        state: "registered-unknown",
+        reason: `pathを確認できないため保持します: ${error instanceof Error ? error.message : String(error)}`,
       });
       continue;
     }
     try {
-      const stat = fs.lstatSync(item.path);
       if (
         !stat.isDirectory() ||
         stat.isSymbolicLink() ||
@@ -73,6 +87,9 @@ export function inventoryCandidateWorktrees(rootInput: string): {
         });
         continue;
       }
+      // status can execute a configured clean filter. Reuse the Candidate
+      // boundary guard before Git may read worktree contents.
+      assertNoCandidateFilters(item.path);
       const status = git(
         ["status", "--porcelain=v1", "--untracked-files=all", "--ignored"],
         item.path,
@@ -115,6 +132,11 @@ export function inventoryCandidateWorktrees(rootInput: string): {
     authority: "observation-only",
     root,
     entries: entries.sort((left, right) => left.path.localeCompare(right.path)),
-    errors: observed.errors,
+    errors: [
+      ...observed.errors,
+      ...entries
+        .filter((entry) => entry.state === "registered-unknown")
+        .map((entry) => `${entry.path}: ${entry.reason}`),
+    ],
   };
 }

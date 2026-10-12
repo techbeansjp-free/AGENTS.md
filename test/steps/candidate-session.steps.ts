@@ -1339,3 +1339,98 @@ Then("Candidate inventoryは5状態を区別しGit状態を変更しない", fun
     this.rejectionReasons[1],
   );
 });
+
+function runCandidateInventory(world: CandidateSessionWorld): void {
+  world.result = run(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      path.resolve("bin/agent-skill-chain.ts"),
+      "workflow",
+      "candidate-inventory",
+      `--repo=${world.candidate}`,
+    ],
+    process.cwd(),
+    { allowFailure: true, timeoutMs: 30_000 },
+  );
+  world.output = JSON.parse(world.result.stdout) as Record<string, unknown>;
+}
+
+function inventoryState(world: CandidateSessionWorld): unknown {
+  const entries = world.output?.entries as Array<Record<string, unknown>>;
+  return entries.find((entry) =>
+    (entry.path as string).endsWith(".asc-candidate-result-adversarial"),
+  )?.state;
+}
+
+When("clean filterを設定した結果worktreeをinventoryする", function () {
+  const target = path.join(this.home, ".asc-candidate-result-adversarial");
+  run(
+    "git",
+    ["worktree", "add", "--detach", target, this.baseSha],
+    this.primary,
+  );
+  const marker = path.join(this.home, "filter-ran");
+  run(
+    "git",
+    ["config", "filter.attack.clean", `sh -c 'cat; touch ${marker}'`],
+    this.primary,
+  );
+  const infoPath = run(
+    "git",
+    ["rev-parse", "--git-path", "info/attributes"],
+    target,
+  ).stdout.trim();
+  fs.mkdirSync(path.dirname(infoPath), { recursive: true });
+  fs.writeFileSync(infoPath, "src/label.js filter=attack\n");
+  fs.writeFileSync(
+    path.join(target, "src", "label.js"),
+    'export const label = "Changed";\n',
+  );
+  this.rejectionReasons = [marker];
+  runCandidateInventory(this);
+});
+
+Then("Candidate inventoryはfilterを起動せず不明として停止する", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(inventoryState(this), "registered-unknown");
+  assert.equal(fs.existsSync(this.rejectionReasons[0]), false);
+});
+
+When("隠蔽indexを設定した結果worktreeをinventoryする", function () {
+  const target = path.join(this.home, ".asc-candidate-result-adversarial");
+  run(
+    "git",
+    ["worktree", "add", "--detach", target, this.baseSha],
+    this.primary,
+  );
+  run("git", ["update-index", "--assume-unchanged", "src/label.js"], target);
+  fs.writeFileSync(
+    path.join(target, "src", "label.js"),
+    'export const label = "Changed";\n',
+  );
+  runCandidateInventory(this);
+});
+
+Then("Candidate inventoryは隠蔽indexを不明として停止する", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(inventoryState(this), "registered-unknown");
+});
+
+When("結果worktreeを壊れたsymlinkに置換してinventoryする", function () {
+  const target = path.join(this.home, ".asc-candidate-result-adversarial");
+  run(
+    "git",
+    ["worktree", "add", "--detach", target, this.baseSha],
+    this.primary,
+  );
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.symlinkSync(path.join(this.home, "missing-target"), target);
+  runCandidateInventory(this);
+});
+
+Then("Candidate inventoryはsymlinkを不明として停止する", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(inventoryState(this), "registered-unknown");
+});

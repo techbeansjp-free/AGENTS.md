@@ -203,3 +203,18 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When 結果用worktreeのclean・変更済み・登録のみ・未登録directory・同名fileを作る
     Then Candidate inventoryは5状態を区別しGit状態を変更しない
+
+  Scenario: SCN-INT-CANDIDATE-039 inventoryはGit clean filterを実行せず不明として停止する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When clean filterを設定した結果worktreeをinventoryする
+    Then Candidate inventoryはfilterを起動せず不明として停止する
+
+  Scenario: SCN-INT-CANDIDATE-040 inventoryは隠蔽indexをcleanと誤認しない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 隠蔽indexを設定した結果worktreeをinventoryする
+    Then Candidate inventoryは隠蔽indexを不明として停止する
+
+  Scenario: SCN-INT-CANDIDATE-041 inventoryは壊れたsymlinkを登録欠落と誤認しない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 結果worktreeを壊れたsymlinkに置換してinventoryする
+    Then Candidate inventoryはsymlinkを不明として停止する
