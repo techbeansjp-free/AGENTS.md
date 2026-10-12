@@ -3,16 +3,16 @@
   "issue": 1576,
   "observed": {
     "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
-    "implementationHeadSha": "596015ee792a3833162cb13367eea7395c231a79",
-    "diffDigest": "724aec7c61b4469ae7f6049204932a3736864d82b2d50f0e7a499042342f35af",
+    "implementationHeadSha": "a88507fa03da8bc344ba1d5bc99deb8a234ad9a6",
+    "diffDigest": "5a5b49fda2230ba931b9919bc418c6f9923c489675f6696e0b7bd1ab37f452e9",
     "session": {
       "sessionId": "b6132d9f716e35694e0a3977507c4bb86c81c535f3b9ba5dcaba69f6dcddca3a",
-      "latestRoundDigest": "e74a1f8bc64c37e39b8f359191e2fe941bb267a72455d0954bb8148b1c58b23e",
+      "latestRoundDigest": "4529a1ac5d2ae647dfe57a4f29c2d97e20f6fbfbcf1593a761580d60579b6a61",
       "status": "converged",
-      "countedRounds": 17
+      "countedRounds": 18
     },
     "impact": {
-      "digest": "8ccf9888e5acf28b764bc5ecb8b854755519f4fd061ff2803397812bcc3040a1",
+      "digest": "87914525b9d9597f81845cdada420a0fc05f63d80766c5502ace084051284030",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "596015ee792a3833162cb13367eea7395c231a79",
-        "impactDigest": "8ccf9888e5acf28b764bc5ecb8b854755519f4fd061ff2803397812bcc3040a1",
-        "finishedAt": "2026-10-12T01:38:36.089Z",
-        "recordDigest": "9b77cefb5dd40f2e0375ac6609711e83ef7d332670dd25af886f773c88417e8a"
+        "headSha": "a88507fa03da8bc344ba1d5bc99deb8a234ad9a6",
+        "impactDigest": "87914525b9d9597f81845cdada420a0fc05f63d80766c5502ace084051284030",
+        "finishedAt": "2026-10-12T02:07:03.129Z",
+        "recordDigest": "661bf7d48ce3f05d7d781d1580e3cf64e4b0d8b8ac37750f0bd39e9007e7bc0f"
       }
     ]
   },
@@ -56,5 +56,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "5cf9b67a1f8cf9cb745b5f2088ebf8cc2f4999522171a7c60969cd5b8d1638de"
+  "evidenceDigest": "a905608ba34228501f1187eba9c4474de59edf2babe1497a96b426c74b78d051"
 }
