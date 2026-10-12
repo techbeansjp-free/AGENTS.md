@@ -4618,9 +4618,7 @@ export async function main(argv, dependencies = {}) {
         const review = readStoredReviewSession(staging);
         const reviewReady = review !== null &&
             isReviewSessionConverged(review) &&
-            review.anchor.initialHeadSha === observed.headSha &&
             review.anchor.diffBaseSha === observed.baseSha &&
-            review.anchor.initialDiffDigest === observed.diffDigest &&
             review.latestCandidateHeadSha === observed.headSha;
         const plan = {
             state: reviewReady

@@ -246,3 +246,8 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When Candidate採用後に既定branch参照が候補HEADへ進む
     Then Candidate採用記録は固定したtrusted tipで有効なままである
+
+  Scenario: SCN-INT-CANDIDATE-047 候補をreview後に修正し再reviewしたHEADを正式採用する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When Candidateを事前review後に修正し同じsessionで再reviewして採用する
+    Then 採用記録は再review済みHEADと修正履歴のGit差分に束縛される

@@ -1662,3 +1662,45 @@ Then("Candidate採用記録は固定したtrusted tipで有効なままである
   assert.ok(adoption);
   assert.equal(adoption.trustedTipSha, this.baseSha);
 });
+
+When(
+  "Candidateを事前review後に修正し同じsessionで再reviewして採用する",
+  function () {
+    prepareCandidateAdoption(this);
+    recordCandidatePreAdoptionReview(this);
+    const root = run(
+      "git",
+      ["rev-parse", "--show-toplevel"],
+      this.staging,
+    ).stdout.trim();
+    fs.writeFileSync(
+      path.join(root, "src/label.js"),
+      'export const label = "Hello, reviewed";\n',
+    );
+    run("git", ["add", "src/label.js"], root);
+    run("git", ["commit", "-qm", "fix: address candidate review"], root);
+    const headSha = run("git", ["rev-parse", "HEAD"], root).stdout.trim();
+    const draft = buildReviewRoundDraft({ staging: this.staging, headSha });
+    recordReviewRound({
+      staging: this.staging,
+      round: { ...draft.round, findings: [] },
+    });
+    invokeCandidateAdoption(this, true);
+  },
+);
+
+Then("採用記録は再review済みHEADと修正履歴のGit差分に束縛される", function () {
+  assert.equal(this.result?.status, 0, this.result?.stdout);
+  const journal = readWorkflowJournal(this.staging);
+  assert.deepEqual(journal.errors, []);
+  const adoption = journal.entries.find((entry) => entry.step === 9);
+  assert.ok(adoption?.candidateAdoption);
+  assert.equal(adoption.implementationHeadSha, this.output?.headSha);
+  const session = readStoredReviewSession(this.staging);
+  assert.ok(session);
+  assert.equal(session.latestCandidateHeadSha, adoption.implementationHeadSha);
+  assert.notEqual(
+    session.anchor.initialHeadSha,
+    adoption.implementationHeadSha,
+  );
+});

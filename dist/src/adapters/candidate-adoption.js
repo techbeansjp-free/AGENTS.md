@@ -24,6 +24,36 @@ function resolveTrustedForkBase(root, headSha, pinnedTip) {
         throw new Error("Candidate結果とtrusted既定branchの一意な分岐点がありません");
     return { baseSha: bases[0], trustedTipSha: trustedTip };
 }
+/** The first result commit is Coordinator-owned; later commits are review corrections. */
+function assertCandidateLineage(root, baseSha, headSha) {
+    const commits = git(["rev-list", "--first-parent", "--reverse", `${baseSha}..${headSha}`], root, { env: CANDIDATE_GIT_ENV })
+        .stdout.trim()
+        .split("\n")
+        .filter(Boolean);
+    const total = Number(git(["rev-list", "--count", `${baseSha}..${headSha}`], root, {
+        env: CANDIDATE_GIT_ENV,
+    }).stdout.trim());
+    if (commits.length === 0 || commits.length !== total)
+        throw new Error("Candidate修正履歴にmergeまたは欠落があります");
+    let parent = baseSha;
+    for (const [index, commit] of commits.entries()) {
+        const parents = git(["rev-list", "--parents", "-n", "1", commit], root, {
+            env: CANDIDATE_GIT_ENV,
+        })
+            .stdout.trim()
+            .split(" ");
+        if (parents.length !== 2 || parents[1] !== parent)
+            throw new Error("Candidate修正履歴が単一直列ではありません");
+        if (index === 0) {
+            const subject = git(["show", "-s", "--format=%B", commit], root, {
+                env: CANDIDATE_GIT_ENV,
+            }).stdout.trim();
+            if (subject !== "asc: isolated candidate implementation")
+                throw new Error("Candidate結果commitの形式が一致しません");
+        }
+        parent = commit;
+    }
+}
 /** Re-observe a result commit; caller risk, gaps and target test are never promoted. */
 export function observeCandidateAdoption(rootInput, requestFile) {
     const root = fs.realpathSync(rootInput);
@@ -39,22 +69,9 @@ export function observeCandidateAdoption(rootInput, requestFile) {
     const headSha = git(["rev-parse", "--verify", "HEAD^{commit}"], root, {
         env: CANDIDATE_GIT_ENV,
     }).stdout.trim();
-    const parents = git(["rev-list", "--parents", "-n", "1", headSha], root, {
-        env: CANDIDATE_GIT_ENV,
-    })
-        .stdout.trim()
-        .split(" ");
-    if (parents.length !== 2 || parents[0] !== headSha)
-        throw new Error("Candidate結果commitは基点を1つだけ持つ必要があります");
-    const baseSha = parents[1];
     const trustedFork = resolveTrustedForkBase(root, headSha);
-    if (baseSha !== trustedFork.baseSha)
-        throw new Error("Candidate結果の直前commitがtrusted既定branchとの分岐点と一致しません");
-    const message = git(["show", "-s", "--format=%B", headSha], root, {
-        env: CANDIDATE_GIT_ENV,
-    }).stdout.trim();
-    if (message !== "asc: isolated candidate implementation")
-        throw new Error("Candidate結果commitの形式が一致しません");
+    const baseSha = trustedFork.baseSha;
+    assertCandidateLineage(root, baseSha, headSha);
     const status = git([
         "status",
         "--porcelain=v1",
@@ -113,21 +130,10 @@ export function verifyRecordedCandidateAdoption(root, requestFile, entry) {
         if (observed.changedPaths.length === 0 ||
             observed.changedPaths.some(isSecuritySensitivePath))
             errors.push("採用対象の差分が空かセキュリティ関連です");
-        const parents = git(["rev-list", "--parents", "-n", "1", headSha], root, {
-            env: CANDIDATE_GIT_ENV,
-        })
-            .stdout.trim()
-            .split(" ");
-        if (parents.length !== 2 || parents[1] !== entry.candidateAdoption.baseSha)
-            errors.push("採用commitの基点が記録と一致しません");
+        assertCandidateLineage(root, entry.candidateAdoption.baseSha, headSha);
         if (entry.candidateAdoption.baseSha !==
             resolveTrustedForkBase(root, headSha, entry.candidateAdoption.trustedTipSha).baseSha)
             errors.push("採用commitの基点がtrusted既定branchとの分岐点と一致しません");
-        const message = git(["show", "-s", "--format=%B", headSha], root, {
-            env: CANDIDATE_GIT_ENV,
-        }).stdout.trim();
-        if (message !== "asc: isolated candidate implementation")
-            errors.push("採用commitの形式が一致しません");
         const requestStat = fs.lstatSync(requestFile);
         if (!requestStat.isFile() ||
             requestStat.isSymbolicLink() ||
