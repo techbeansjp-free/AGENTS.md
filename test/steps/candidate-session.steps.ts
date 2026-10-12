@@ -9,6 +9,7 @@ import {
 import {
   appendWorkflowJournalEntry,
   readWorkflowJournal,
+  promoteWorkflowStagingToFull,
 } from "../../src/adapters/workflow-journal.js";
 import {
   finalizeCandidateWorkerBoundary,
@@ -1703,4 +1704,38 @@ Then("採用記録は再review済みHEADと修正履歴のGit差分に束縛さ�
     session.anchor.initialHeadSha,
     adoption.implementationHeadSha,
   );
+});
+
+When("採用済みCandidateのquick stagingを正式にfull昇格する", function () {
+  prepareCandidateAdoption(this);
+  recordCandidatePreAdoptionReview(this);
+  invokeCandidateAdoption(this, true);
+  assert.equal(this.result?.status, 0, this.result?.stdout);
+  promoteWorkflowStagingToFull({
+    staging: this.staging,
+    promotedAt: "2026-10-12T02:00:00.000Z",
+    discovery: {
+      discoveryId: "DISC-CANDIDATE-FULL-PROMOTION",
+      workflowMode: "quick",
+      modeDisqualifiers: [
+        {
+          id: "security-boundary",
+          evidence: "Candidate再評価で権限境界の影響を発見した",
+        },
+      ],
+      changedContractKinds: ["interface"],
+      changesGoal: false,
+      changesScope: false,
+      changesAcceptanceCriteria: false,
+      expandsSecurityBoundary: true,
+      introducesIrreversibleOperation: false,
+    },
+  });
+});
+
+Then("昇格後も採用時の旧要求を照合しjournalを有効に保つ", function () {
+  const journal = readWorkflowJournal(this.staging);
+  assert.equal(journal.mode, "full");
+  assert.deepEqual(journal.errors, []);
+  assert.ok(journal.entries.some((entry) => entry.candidateAdoption));
 });

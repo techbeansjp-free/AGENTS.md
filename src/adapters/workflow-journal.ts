@@ -387,7 +387,12 @@ export function readWorkflowJournal(staging: string): {
     entry.candidateAdoption
       ? verifyRecordedCandidateAdoption(
           stagingRepositoryRoot(resolved),
-          path.join(resolved, "00_要求定義.md"),
+          path.join(
+            resolved,
+            record.mode === "full" && entry.mode === "quick"
+              ? "00_要求定義_昇格前_quick.md"
+              : "00_要求定義.md",
+          ),
           entry,
         )
       : [],

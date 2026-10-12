@@ -251,3 +251,8 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When Candidateを事前review後に修正し同じsessionで再reviewして採用する
     Then 採用記録は再review済みHEADと修正履歴のGit差分に束縛される
+
+  Scenario: SCN-INT-CANDIDATE-048 採用後のquickからfull昇格では保存済み旧要求を照合する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 採用済みCandidateのquick stagingを正式にfull昇格する
+    Then 昇格後も採用時の旧要求を照合しjournalを有効に保つ
