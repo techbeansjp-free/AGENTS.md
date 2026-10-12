@@ -53,6 +53,15 @@ function reasons(world: CandidateSessionWorld): string[] {
   return (diagnostic?.reasons as string[] | undefined) ?? [];
 }
 
+function lacksHostIsolation(world: CandidateSessionWorld): boolean {
+  return reasons(world).some(
+    (reason) =>
+      reason.includes("candidate Worker隔離にはCodex sandboxが必要です") ||
+      reason.includes("host隔離を起動できません") ||
+      reason.includes("このhostで強制できません"),
+  );
+}
+
 Given("候補用の隔離dummyと事前sessionを作る", function () {
   this.rejectionReasons = [];
   this.home = this.temp("asc-candidate-dummy-");
@@ -622,14 +631,7 @@ Then("Coordinatorはhookを実行せず候補だけをcommitする", function ()
   assert.equal(fs.existsSync(path.join(this.home, "ref-hook-ran")), false);
   assert.equal(fs.existsSync(path.join(this.home, "index-hook-ran")), false);
   if (this.result?.status !== 0) {
-    if (
-      reasons(this).some(
-        (reason) =>
-          reason.includes("host隔離を起動できません") ||
-          reason.includes("このhostで強制できません"),
-      )
-    )
-      return "skipped";
+    if (lacksHostIsolation(this)) return "skipped";
     assert.fail(JSON.stringify(this.output));
   }
   assert.equal(this.output?.route, "independent-review");
@@ -803,10 +805,7 @@ Then("Coordinatorは全payloadを検査して元候補をcleanに保つ", functi
     ),
     "export const authorized = true;\n",
   );
-  if (
-    reasons(this).some((reason) => reason.includes("host隔離を起動できません"))
-  )
-    return "skipped";
+  if (lacksHostIsolation(this)) return "skipped";
   assert.ok(
     reasons(this).some((reason) => reason.includes("size上限")),
     JSON.stringify(this.output),
@@ -842,10 +841,7 @@ Then("Coordinatorは一時worktree登録を片付け元候補をcleanに保つ",
       .length,
     2,
   );
-  if (
-    reasons(this).some((reason) => reason.includes("host隔離を起動できません"))
-  )
-    return "skipped";
+  if (lacksHostIsolation(this)) return "skipped";
   assert.ok(
     reasons(this).some((reason) => reason.includes("candidate Workerが失敗")),
     JSON.stringify(this.output),
@@ -917,7 +913,7 @@ Then("CoordinatorはWorker runtimeを削除し失敗を保持する", function (
     "",
   );
   const detail = reasons(this).join("\n");
-  if (detail.includes("host隔離を起動できません")) return "skipped";
+  if (lacksHostIsolation(this)) return "skipped";
   assert.ok(detail.includes("candidate Workerが失敗"), detail);
   const runtime = detail.match(
     /\/tmp\/asc-candidate-worker-[A-Za-z0-9]+/u,
@@ -997,10 +993,7 @@ Then("Coordinatorは合計sizeを拒否し元候補をcleanに保つ", function 
       ),
       "base\n",
     );
-  if (
-    reasons(this).some((reason) => reason.includes("host隔離を起動できません"))
-  )
-    return "skipped";
+  if (lacksHostIsolation(this)) return "skipped";
   assert.ok(
     reasons(this).some((reason) => reason.includes("size上限")),
     JSON.stringify(this.output),
