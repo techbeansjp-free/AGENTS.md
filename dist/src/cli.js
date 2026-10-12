@@ -4593,6 +4593,7 @@ export async function main(argv, dependencies = {}) {
             Object.keys(flags).some((key) => !["staging", "apply"].includes(key)))
             throw new Error("workflow candidate-adoptは--stagingと--applyだけを受け付けます");
         const staging = path.resolve(required(flags, "staging"));
+        const expectedStagingDigest = calculateStagingDigest(staging, listStagingArtifacts(staging));
         const journal = readWorkflowJournal(staging);
         if (journal.errors.length > 0)
             throw new Error(`candidate採用前のjournalが不正です: ${journal.errors.join("; ")}`);
@@ -4614,21 +4615,36 @@ export async function main(argv, dependencies = {}) {
             throw new Error("candidate採用は初回Step 9相当の状態遷移にだけ許可します");
         const root = stagingRepositoryRoot(staging);
         const observed = observeCandidateAdoption(root, path.join(staging, "00_要求定義.md"));
+        const review = readStoredReviewSession(staging);
+        const reviewReady = review !== null &&
+            isReviewSessionConverged(review) &&
+            review.anchor.initialHeadSha === observed.headSha &&
+            review.anchor.diffBaseSha === observed.baseSha &&
+            review.anchor.initialDiffDigest === observed.diffDigest &&
+            review.latestCandidateHeadSha === observed.headSha;
         const plan = {
-            state: "independent-review-required",
+            state: reviewReady
+                ? "ready-for-formal-adoption"
+                : "independent-review-required",
             authority: "formal-adoption-gate",
             root,
             ...observed,
             planningSealed: true,
-            next: "独立review、trusted full verification、Delivery gateを実行してください",
+            reviewRoundDigest: reviewReady ? review.latestRoundDigest : null,
+            next: reviewReady
+                ? "正式採用後にtrusted full verificationとDelivery gateを実行してください"
+                : "元Intent・実差分・既存契約の独立reviewを収束させてください",
         };
         if (!presentFlag(flags, "apply")) {
             print(plan);
             return 0;
         }
+        if (!reviewReady)
+            throw new Error("Candidateの正式採用にはexact HEAD・実差分に束縛された収束済み独立reviewが必要です");
         const result = appendWorkflowJournalEntry({
             staging,
             headSha: observed.headSha,
+            expectedStagingDigest,
             entry: {
                 step: 9,
                 skillId: "step-09-implement",

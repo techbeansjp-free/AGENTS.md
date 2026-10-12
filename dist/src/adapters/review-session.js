@@ -22,6 +22,8 @@ import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { recordLayerSuffix } from "./review-record-layer.js";
 import { readReviewSessionReplacements } from "./review-session-replacement-store.js";
+import { observeCandidateAdoption } from "./candidate-adoption.js";
+import { validateStepJournal } from "../domain/workflow.js";
 const GIT_ENV = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     LANG: "C",
@@ -102,8 +104,36 @@ function roundOneImplementationBinding(staging) {
             headSha: replacement.implementationHeadSha,
             source: `review session置換記録${replacement.sequence}件目のimplementation HEAD`,
         };
+    const implementation = latestImplementationEntry(staging);
+    if (implementation)
+        return {
+            headSha: implementation.implementationHeadSha,
+            source: "Step 9 implementation HEAD",
+        };
+    // A Candidate can be inspected before adoption. This does not record Step 9:
+    // the same sealed request, real Git diff, and fresh review session must be
+    // accepted by candidate-adopt before any formal implementation transition.
+    const journal = readWorkflowJournal(staging);
+    const record = readStoredStagingRecord(staging);
+    if (journal.errors.length === 0 &&
+        journal.mode === "quick" &&
+        record.state === "sync-verified" &&
+        record.checkpoint === 4 &&
+        validateStepJournal({
+            mode: "quick",
+            entries: journal.entries,
+            upToStep: 4,
+        }).valid &&
+        journal.entries.some((entry) => entry.step === 4 && entry.planSeal)) {
+        const root = stagingRepositoryRoot(staging);
+        const observed = observeCandidateAdoption(root, path.join(staging, "00_要求定義.md"));
+        return {
+            headSha: observed.headSha,
+            source: "sealed Candidate pre-adoption HEAD",
+        };
+    }
     return {
-        headSha: latestImplementationEntry(staging)?.implementationHeadSha,
+        headSha: undefined,
         source: "Step 9 implementation HEAD",
     };
 }
@@ -156,7 +186,7 @@ export function buildReviewRoundDraft(input) {
     if (previous === null) {
         const implementation = roundOneImplementationBinding(staging);
         if (!implementation.headSha)
-            throw new Error("初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください");
+            throw new Error("初回reviewにはStep 9のimplementation HEAD、または封印済みquick Candidateの採用前HEADが必要です");
         if (implementation.headSha !== headSha)
             throw new Error(`review round --initの--headは${implementation.source} ${implementation.headSha} と一致する必要があります`);
         if (typeof input.baseSha !== "string")
@@ -554,7 +584,7 @@ export function previewReviewRound(input) {
     if (previous === null) {
         const implementation = roundOneImplementationBinding(staging);
         if (!implementation.headSha)
-            throw new Error("初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください");
+            throw new Error("初回reviewにはStep 9のimplementation HEAD、または封印済みquick Candidateの採用前HEADが必要です");
         if (implementation.headSha !== input.round.candidateHeadSha)
             throw new Error(`review round candidate HEADが${implementation.source}と一致しません`);
         const observed = observeReviewDiff(root, input.round.anchor.diffBaseSha, input.round.anchor.initialHeadSha);

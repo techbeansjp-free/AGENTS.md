@@ -15,6 +15,11 @@ import {
   runCandidateWorkerBoundary,
 } from "../../src/adapters/candidate-worker-boundary.js";
 import { run, type ProcessResult } from "../../src/lib/process.js";
+import {
+  buildReviewRoundDraft,
+  readStoredReviewSession,
+  recordReviewRound,
+} from "../../src/adapters/review-session.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class CandidateSessionWorld extends WorkflowWorld {
@@ -1526,6 +1531,25 @@ function prepareCandidateAdoption(
   });
 }
 
+function recordCandidatePreAdoptionReview(world: CandidateSessionWorld): void {
+  const headSha = run(
+    "git",
+    ["rev-parse", "HEAD"],
+    path.dirname(path.dirname(world.staging)),
+  ).stdout.trim();
+  const draft = buildReviewRoundDraft({
+    staging: world.staging,
+    headSha,
+    baseSha: world.baseSha,
+    scopeIds: ["SCOPE-CANDIDATE-DUMMY"],
+    acceptanceCriteriaIds: ["AC-CANDIDATE-DUMMY"],
+  });
+  recordReviewRound({
+    staging: world.staging,
+    round: { ...draft.round, findings: [] },
+  });
+}
+
 function invokeCandidateAdoption(
   world: CandidateSessionWorld,
   apply: boolean,
@@ -1558,6 +1582,9 @@ When("結果用worktreeにquick stagingを作りCandidateを正式採用する",
     false,
   );
   invokeCandidateAdoption(this, true);
+  assert.equal(this.result?.status, 1);
+  recordCandidatePreAdoptionReview(this);
+  invokeCandidateAdoption(this, true);
 });
 
 Then("Candidate採用記録はGitと要求に束縛されStep 10 reviewが残る", function () {
@@ -1572,32 +1599,15 @@ Then("Candidate採用記録はGitと要求に束縛されStep 10 reviewが残る
     journal.entries.some((entry) => entry.step === 10),
     false,
   );
-  const reviewInput = path.join(this.home, "candidate-review-input.json");
-  const reviewInit = run(
-    process.execPath,
-    [
-      "--import",
-      "tsx",
-      path.resolve("bin/agent-skill-chain.ts"),
-      "review",
-      "round",
-      `--staging=${this.staging}`,
-      "--init",
-      `--out=${reviewInput}`,
-      `--head=${adoption.implementationHeadSha}`,
-      `--base=${adoption.candidateAdoption.baseSha}`,
-      "--scope=SCOPE-CANDIDATE-DUMMY",
-      "--ac=AC-CANDIDATE-DUMMY",
-    ],
-    process.cwd(),
-    { allowFailure: true, timeoutMs: 30_000 },
-  );
-  assert.equal(reviewInit.status, 0, reviewInit.stdout);
-  assert.equal(fs.existsSync(reviewInput), true);
+  const session = readStoredReviewSession(this.staging);
+  assert.ok(session);
+  assert.equal(session.latestCandidateHeadSha, adoption.implementationHeadSha);
+  assert.equal(session.anchor.diffBaseSha, adoption.candidateAdoption.baseSha);
 });
 
 When("結果用worktreeのCandidateを採用後に要求成果物を改変する", function () {
   prepareCandidateAdoption(this);
+  recordCandidatePreAdoptionReview(this);
   invokeCandidateAdoption(this, true);
   assert.equal(this.result?.status, 0, this.result?.stdout);
   fs.appendFileSync(path.join(this.staging, "00_要求定義.md"), "\n改変\n");
@@ -1631,6 +1641,7 @@ When("認可変更を前のcommitに隠したCandidate採用を試す", function
 
 When("Candidate採用後に既定branch参照が候補HEADへ進む", function () {
   prepareCandidateAdoption(this);
+  recordCandidatePreAdoptionReview(this);
   invokeCandidateAdoption(this, true);
   assert.equal(this.result?.status, 0, this.result?.stdout);
   const head = this.output?.headSha;

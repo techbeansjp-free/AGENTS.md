@@ -220,7 +220,7 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Then Candidate inventoryはsymlinkを不明として停止する
 
 
-  Scenario: SCN-INT-CANDIDATE-042 低リスク候補の採用はStep 9に履歴を明示し独立reviewを要求する
+  Scenario: SCN-INT-CANDIDATE-042 低リスク候補の採用は事前review収束後だけStep 9に履歴を明示する
     Given 候補用の隔離dummyと事前sessionを作る
     When 結果用worktreeにquick stagingを作りCandidateを正式採用する
     Then Candidate採用記録はGitと要求に束縛されStep 10 reviewが残る
