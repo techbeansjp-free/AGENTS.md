@@ -3,16 +3,16 @@
   "issue": 1576,
   "observed": {
     "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
-    "implementationHeadSha": "a88507fa03da8bc344ba1d5bc99deb8a234ad9a6",
-    "diffDigest": "5a5b49fda2230ba931b9919bc418c6f9923c489675f6696e0b7bd1ab37f452e9",
+    "implementationHeadSha": "bc1c194fa26d6314c42088bdf506b7b44c7974b5",
+    "diffDigest": "63677c472d9f3c629c7867f5465067bcb3f20f19cd9501ed523439f51695f395",
     "session": {
       "sessionId": "b6132d9f716e35694e0a3977507c4bb86c81c535f3b9ba5dcaba69f6dcddca3a",
-      "latestRoundDigest": "4529a1ac5d2ae647dfe57a4f29c2d97e20f6fbfbcf1593a761580d60579b6a61",
+      "latestRoundDigest": "11553fcd4a4f9d236173b3215b571fe503bcfee0635809f96692a2e7da217a3a",
       "status": "converged",
-      "countedRounds": 18
+      "countedRounds": 19
     },
     "impact": {
-      "digest": "87914525b9d9597f81845cdada420a0fc05f63d80766c5502ace084051284030",
+      "digest": "74cff83edecc1004e707c2c6a9ee4747d6223aed52c2098121a713e253503cae",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "a88507fa03da8bc344ba1d5bc99deb8a234ad9a6",
-        "impactDigest": "87914525b9d9597f81845cdada420a0fc05f63d80766c5502ace084051284030",
-        "finishedAt": "2026-10-12T02:07:03.129Z",
-        "recordDigest": "661bf7d48ce3f05d7d781d1580e3cf64e4b0d8b8ac37750f0bd39e9007e7bc0f"
+        "headSha": "bc1c194fa26d6314c42088bdf506b7b44c7974b5",
+        "impactDigest": "74cff83edecc1004e707c2c6a9ee4747d6223aed52c2098121a713e253503cae",
+        "finishedAt": "2026-10-12T02:53:04.960Z",
+        "recordDigest": "11fe68b6f666354f525bb9bc5ed9b871b40ed69466de93b5a870c28bafe65f63"
       }
     ]
   },
@@ -56,5 +56,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "a905608ba34228501f1187eba9c4474de59edf2babe1497a96b426c74b78d051"
+  "evidenceDigest": "1425886cd2b7bea64e7713c42860d124a64f362e092e7596ba5612970e6238d0"
 }
