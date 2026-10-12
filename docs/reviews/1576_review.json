@@ -3,16 +3,16 @@
   "issue": 1576,
   "observed": {
     "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
-    "implementationHeadSha": "bc1c194fa26d6314c42088bdf506b7b44c7974b5",
-    "diffDigest": "63677c472d9f3c629c7867f5465067bcb3f20f19cd9501ed523439f51695f395",
+    "implementationHeadSha": "26992637d2eb7e3bea76844702cf72599e0ba768",
+    "diffDigest": "37296e1a40c9b3a9334d994e4145fb7a68489b946c613d64f100faf12b9f2166",
     "session": {
       "sessionId": "b6132d9f716e35694e0a3977507c4bb86c81c535f3b9ba5dcaba69f6dcddca3a",
-      "latestRoundDigest": "11553fcd4a4f9d236173b3215b571fe503bcfee0635809f96692a2e7da217a3a",
+      "latestRoundDigest": "7fe751d0a34781f3deac9e38dbc620b8860b5988fbb05406274c000875974447",
       "status": "converged",
-      "countedRounds": 19
+      "countedRounds": 20
     },
     "impact": {
-      "digest": "74cff83edecc1004e707c2c6a9ee4747d6223aed52c2098121a713e253503cae",
+      "digest": "2ed31e305b61783f1a289dc605c23dd253fa592c494e669cee68b78f459e4ea1",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "bc1c194fa26d6314c42088bdf506b7b44c7974b5",
-        "impactDigest": "74cff83edecc1004e707c2c6a9ee4747d6223aed52c2098121a713e253503cae",
-        "finishedAt": "2026-10-12T02:53:04.960Z",
-        "recordDigest": "11fe68b6f666354f525bb9bc5ed9b871b40ed69466de93b5a870c28bafe65f63"
+        "headSha": "26992637d2eb7e3bea76844702cf72599e0ba768",
+        "impactDigest": "2ed31e305b61783f1a289dc605c23dd253fa592c494e669cee68b78f459e4ea1",
+        "finishedAt": "2026-10-12T04:21:35.068Z",
+        "recordDigest": "9f220ba64b2923ae0405f6c041effda3715f0f88c7a69c456d755fc631136562"
       }
     ]
   },
@@ -56,5 +56,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "1425886cd2b7bea64e7713c42860d124a64f362e092e7596ba5612970e6238d0"
+  "evidenceDigest": "e24bd3c083499f3d9a9c7a1d96604a6de9e176da370eaf4664be960a099450cc"
 }
