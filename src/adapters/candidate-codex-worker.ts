@@ -147,6 +147,10 @@ export function runCandidateCodexWorker(input: {
     `permissions.${profile}.filesystem={ ${table} }`,
     "-c",
     `permissions.${profile}.network.enabled=false`,
+    "-c",
+    "features.multi_agent=false",
+    "-c",
+    "features.multi_agent_v2=false",
   ];
   const env: NodeJS.ProcessEnv = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
