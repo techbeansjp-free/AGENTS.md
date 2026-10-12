@@ -105,6 +105,10 @@ export function runCandidateCodexWorker(input) {
         "features.multi_agent=false",
         "-c",
         "features.multi_agent_v2=false",
+        "-c",
+        'web_search="disabled"',
+        "-c",
+        "features.enable_mcp_apps=false",
     ];
     const env = {
         PATH: process.env.PATH ?? "/usr/bin:/bin",
@@ -131,7 +135,7 @@ export function runCandidateCodexWorker(input) {
             `Intent: ${input.intent}`,
             `Correctness criterion: ${input.correctnessCriterion}`,
             `Writable source paths: ${input.allowedPaths.join(", ")}`,
-            "Modify only the listed source paths. Do not commit, alter Git metadata, or claim tests passed without running them.",
+            "Modify only the listed source paths. Do not commit, alter Git metadata, use web search, browser, connectors, MCP, or subagents, or claim tests passed without running them.",
         ].join("\n");
         const startedAt = performance.now();
         const worker = run(codexExecutable, [
