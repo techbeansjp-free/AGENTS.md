@@ -1778,6 +1778,26 @@ Then("Candidateは実体Nodeで対象testを観測する", function () {
   assert.equal(observed.formalEvidence, false);
 });
 
+When("shのsymlink起動名に依存する対象testを指定する", function () {
+  if (process.platform !== "linux") return;
+  const alias = path.join(this.home, "candidate-sh-alias");
+  fs.symlinkSync("/bin/sh", alias);
+  invokeExecute(this, {
+    targetTest: [alias, "-c", 'test "${0##*/}" = candidate-sh-alias'],
+  });
+});
+
+Then("実体fileを読取許可しつつsymlink起動名で対象testが成功する", function () {
+  if (process.platform !== "linux") return;
+  if (this.result?.status !== 0 && lacksHostIsolation(this)) return;
+  assert.equal(this.result?.status, 0, JSON.stringify(this.output));
+  assert.equal(this.output?.route, "independent-review");
+  assert.equal(
+    (this.output?.targetTest as Record<string, unknown>).exitCode,
+    0,
+  );
+});
+
 When("Codexの正常・破損・範囲外usageイベントを解析する", function () {
   const valid = [
     JSON.stringify({ type: "thread.started", thread_id: "dummy" }),

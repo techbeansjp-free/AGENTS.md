@@ -276,3 +276,8 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When 候補worktreeにproject-local Codex設定を置く
     Then Codex Workerはその設定を読まず停止する
+
+  Scenario: SCN-INT-CANDIDATE-053 symlink実行fileの起動名を保持して対象testを隔離実行する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When shのsymlink起動名に依存する対象testを指定する
+    Then 実体fileを読取許可しつつsymlink起動名で対象testが成功する

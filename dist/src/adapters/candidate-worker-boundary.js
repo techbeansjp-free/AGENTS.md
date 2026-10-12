@@ -24,7 +24,7 @@ export function makeDirectoriesRemovable(root) {
     };
     visit(root);
 }
-export function workerExecutable(argv) {
+function resolveWorkerExecutable(argv) {
     const command = argv[0];
     const candidates = path.isAbsolute(command)
         ? [command]
@@ -37,7 +37,10 @@ export function workerExecutable(argv) {
     const actual = fs.realpathSync(found);
     if (!fs.statSync(actual).isFile())
         throw new Error(`candidate Worker実行fileが通常fileではありません: ${command}`);
-    return actual;
+    return { invocation: path.resolve(found), actual };
+}
+export function workerExecutable(argv) {
+    return resolveWorkerExecutable(argv).actual;
 }
 export function codexPackageRoot() {
     const executable = (process.env.PATH ?? "")
@@ -129,10 +132,10 @@ export function runCandidateWorkerBoundary(input) {
     const parent = path.dirname(root);
     const writes = workerWriteRoots(root, input.allowedPaths);
     const packageRoot = codexPackageRoot();
-    const executable = workerExecutable(input.argv);
+    const { invocation, actual: executable } = resolveWorkerExecutable(input.argv);
     const executableRepo = git(["-C", path.dirname(executable), "rev-parse", "--show-toplevel"], root, { env: CANDIDATE_GIT_ENV, allowFailure: true });
-    if (executableRepo.status === 0 &&
-        fs.realpathSync(executableRepo.stdout.trim()) !== root)
+    const invocationRepo = git(["-C", path.dirname(invocation), "rev-parse", "--show-toplevel"], root, { env: CANDIDATE_GIT_ENV, allowFailure: true });
+    if ([executableRepo, invocationRepo].some((result) => result.status === 0 && fs.realpathSync(result.stdout.trim()) !== root))
         throw new Error("candidate対象commandは別worktreeの実行fileを参照できません");
     const runtime = fs.mkdtempSync(path.join(os.tmpdir(), "asc-candidate-worker-"));
     const sentinel = path.join(parent, `.asc-candidate-boundary-${crypto.randomUUID()}`);
@@ -141,6 +144,7 @@ export function runCandidateWorkerBoundary(input) {
         [":minimal", "read"],
         [packageRoot, "read"],
         [executable, "read"],
+        [invocation, "read"],
         [sentinel, "read"],
         [root, "read"],
         [runtime, "write"],
@@ -185,7 +189,7 @@ export function runCandidateWorkerBoundary(input) {
         const probe = run("codex", [...prefix, "/bin/sh", "-c", 'printf x >> "$1"', "probe", sentinel], root, { allowFailure: true, timeoutMs: 20_000, env });
         if (probe.status === 0 || fs.readFileSync(sentinel, "utf8") !== "trusted\n")
             throw new Error("candidate WorkerのCoordinator書込禁止を確認できません");
-        const worker = run("codex", [...prefix, executable, ...input.argv.slice(1)], root, {
+        const worker = run("codex", [...prefix, invocation, ...input.argv.slice(1)], root, {
             allowFailure: true,
             timeoutMs: MAX_WORKER_MS,
             maxBufferBytes: 4 * 1024 * 1024,

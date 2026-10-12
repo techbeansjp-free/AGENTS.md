@@ -25,7 +25,10 @@ export function makeDirectoriesRemovable(root: string): void {
   visit(root);
 }
 
-export function workerExecutable(argv: readonly string[]): string {
+function resolveWorkerExecutable(argv: readonly string[]): {
+  invocation: string;
+  actual: string;
+} {
   const command = argv[0]!;
   const candidates = path.isAbsolute(command)
     ? [command]
@@ -40,7 +43,11 @@ export function workerExecutable(argv: readonly string[]): string {
     throw new Error(
       `candidate Worker実行fileが通常fileではありません: ${command}`,
     );
-  return actual;
+  return { invocation: path.resolve(found), actual };
+}
+
+export function workerExecutable(argv: readonly string[]): string {
+  return resolveWorkerExecutable(argv).actual;
 }
 
 export function codexPackageRoot(): string {
@@ -171,15 +178,24 @@ export function runCandidateWorkerBoundary(input: {
   const parent = path.dirname(root);
   const writes = workerWriteRoots(root, input.allowedPaths);
   const packageRoot = codexPackageRoot();
-  const executable = workerExecutable(input.argv);
+  const { invocation, actual: executable } = resolveWorkerExecutable(
+    input.argv,
+  );
   const executableRepo = git(
     ["-C", path.dirname(executable), "rev-parse", "--show-toplevel"],
     root,
     { env: CANDIDATE_GIT_ENV, allowFailure: true },
   );
+  const invocationRepo = git(
+    ["-C", path.dirname(invocation), "rev-parse", "--show-toplevel"],
+    root,
+    { env: CANDIDATE_GIT_ENV, allowFailure: true },
+  );
   if (
-    executableRepo.status === 0 &&
-    fs.realpathSync(executableRepo.stdout.trim()) !== root
+    [executableRepo, invocationRepo].some(
+      (result) =>
+        result.status === 0 && fs.realpathSync(result.stdout.trim()) !== root,
+    )
   )
     throw new Error(
       "candidate対象commandは別worktreeの実行fileを参照できません",
@@ -196,6 +212,7 @@ export function runCandidateWorkerBoundary(input: {
     [":minimal", "read"],
     [packageRoot, "read"],
     [executable, "read"],
+    [invocation, "read"],
     [sentinel, "read"],
     [root, "read"],
     [runtime, "write"],
@@ -256,7 +273,7 @@ export function runCandidateWorkerBoundary(input: {
       throw new Error("candidate WorkerのCoordinator書込禁止を確認できません");
     const worker = run(
       "codex",
-      [...prefix, executable, ...input.argv.slice(1)],
+      [...prefix, invocation, ...input.argv.slice(1)],
       root,
       {
         allowFailure: true,
