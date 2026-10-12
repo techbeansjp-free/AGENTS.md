@@ -205,11 +205,11 @@ export function executeCandidate(input) {
         throw new Error("candidate Worker境界を観測できません");
     if (observeCandidateBoundary(root).headSha !== baseSha)
         throw new Error("candidate staging前に元worktreeが変更されました");
-    // Build the private index and commit object from bounded Worker snapshots
-    // before modifying the caller's worktree. Git failures here leave it intact.
-    // A private index keeps staging failures out of the caller's index. commit-tree
-    // never executes repository hooks, and update-ref compares the exact preflight
-    // HEAD so a concurrent move cannot be silently committed over.
+    // Build the private index and commit object from bounded Worker snapshots.
+    // The caller's worktree is never modified. Git failures leave it intact.
+    // A private index keeps staging failures out of the caller's index, while
+    // commit-tree never executes repository hooks. A later HEAD observation
+    // rejects concurrent changes before the result worktree is returned.
     const indexDir = fs.mkdtempSync(path.join(os.tmpdir(), "asc-candidate-index-"));
     const indexEnv = {
         ...CANDIDATE_GIT_ENV,
