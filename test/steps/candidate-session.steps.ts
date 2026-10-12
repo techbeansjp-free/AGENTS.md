@@ -25,6 +25,7 @@ import {
   readStoredReviewSession,
   recordReviewRound,
 } from "../../src/adapters/review-session.js";
+import { observeWorkflowExecutionPlan } from "../../src/adapters/workflow-execution-plan.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class CandidateSessionWorld extends WorkflowWorld {
@@ -1589,6 +1590,17 @@ When("結果用worktreeにquick stagingを作りCandidateを正式採用する",
   invokeCandidateAdoption(this, true);
   assert.equal(this.result?.status, 1);
   recordCandidatePreAdoptionReview(this);
+  const plan = observeWorkflowExecutionPlan(this.staging);
+  assert.equal(plan.state, "ready", JSON.stringify(plan));
+  assert.equal(plan.step, 9);
+  assert.equal(plan.action.executor, "cli");
+  assert.equal(plan.assurance.selectedWork.kind, "deterministic");
+  assert.equal(plan.agentDispatch, undefined);
+  assert.ok(
+    plan.action.allowedOperations.some(
+      (item) => item.operation === "adopt-reviewed-candidate",
+    ),
+  );
   invokeCandidateAdoption(this, true);
 });
 

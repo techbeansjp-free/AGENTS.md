@@ -1,4 +1,12 @@
+import path from "node:path";
 import { planWorkflowAdvance } from "../domain/workflow.js";
+import { stagingRepositoryRoot } from "../domain/staging-layout.js";
+import { isReviewSessionConverged } from "../domain/review-convergence.js";
+import { observeCandidateAdoption } from "./candidate-adoption.js";
+import {
+  readStoredReviewSession,
+  REVIEW_SESSION_FILE,
+} from "./review-session-store.js";
 import { deriveAssuranceProjection } from "./workflow-assurance.js";
 import {
   inspectWorkflowStaging,
@@ -13,6 +21,7 @@ import {
   workflowExecutionContract,
   workflowReviewerAlternative,
   workflowVerificationContract,
+  type WorkflowExecutionContract,
 } from "./workflow-handoff.js";
 
 /** Formal verification evidence may choose CLI work before an independent reviewer. */
@@ -41,6 +50,77 @@ export function shouldVerifyBeforeReview(input: {
   );
 }
 
+/** Advisory only: candidate-adopt rechecks every gate when it mutates the journal. */
+function candidateAdoptionWork(
+  staging: string,
+): WorkflowExecutionContract | null {
+  const root = stagingRepositoryRoot(staging);
+  if (!path.basename(root).startsWith(".asc-candidate-result-")) return null;
+  const candidate = observeCandidateAdoption(
+    root,
+    path.join(staging, "00_要求定義.md"),
+  );
+  const review = readStoredReviewSession(staging);
+  if (
+    review === null ||
+    !isReviewSessionConverged(review) ||
+    review.anchor.diffBaseSha !== candidate.baseSha ||
+    review.latestCandidateHeadSha !== candidate.headSha
+  )
+    return null;
+  const base = workflowExecutionContract(9, "coordinator", undefined, "quick");
+  return {
+    ...base,
+    executor: "cli",
+    purpose: "独立review済みCandidateを正式なStep 9採用記録へ進める",
+    semanticReason:
+      "隔離Candidateの実差分と収束reviewが同じbase・HEADに拘束されている",
+    allowedOperations: [
+      {
+        operation: "preview-candidate-adoption",
+        argv: ["workflow", "candidate-adopt"],
+        requiredFlags: ["staging"],
+        mode: "read",
+      },
+      {
+        operation: "adopt-reviewed-candidate",
+        argv: ["workflow", "candidate-adopt", "--apply"],
+        requiredFlags: ["staging"],
+        mode: "gated-apply",
+      },
+    ],
+    requiredInputs: [
+      { owner: "staging", path: "00_要求定義.md", required: true },
+      { owner: "staging", path: REVIEW_SESSION_FILE, required: true },
+      { owner: "git", path: "HEAD", required: true },
+    ],
+    preconditions: [
+      {
+        id: "candidate-adoption-gate",
+        observedBy: "workflow candidate-adopt",
+        expected: `quick Step 4 sealと同期、収束review、base=${candidate.baseSha}、HEAD=${candidate.headSha}を再検証する`,
+      },
+    ],
+    completionConditions: [
+      {
+        id: "candidate-adoption-recorded",
+        observedBy: "workflow advance --plan",
+        expected:
+          "Step 9のcandidateAdoption記録後にStep 10と正式検証を選択する",
+      },
+    ],
+    machineChecks: [
+      {
+        observedBy: "cli",
+        commands: ["workflow candidate-adopt"],
+        facts: ["Git差分、要求digest、Planning Seal、収束review、exact HEAD"],
+        selfDeclarationAccepted: false,
+      },
+    ],
+    unconfirmed: ["正式検証、Step 10 review、Deliveryは未完了"],
+  };
+}
+
 /** Read-only dispatch advice. Every mutation still re-observes its existing gate. */
 export function observeWorkflowExecutionPlan(
   staging: string,
@@ -65,12 +145,20 @@ export function observeWorkflowExecutionPlan(
     implementationHeadBound:
       implementation?.implementationHeadSha !== undefined,
   });
-  const handoff = observeWorkflowHandoff(
-    staging,
-    inspection.nextStep,
-    resume,
-    continuationFromHead,
-  );
+  const adoptionAction =
+    plan.state !== "blocked" &&
+    inspection.mode === "quick" &&
+    inspection.nextStep === 9
+      ? candidateAdoptionWork(staging)
+      : null;
+  const handoff = adoptionAction
+    ? undefined
+    : observeWorkflowHandoff(
+        staging,
+        inspection.nextStep,
+        resume,
+        continuationFromHead,
+      );
   const known =
     handoff !== undefined && "kind" in handoff && handoff.workUnit
       ? handoff
@@ -81,7 +169,7 @@ export function observeWorkflowExecutionPlan(
     ...journal.errors,
     ...(handoff && "errors" in handoff ? (handoff.errors ?? []) : []),
   ];
-  if (plan.state !== "complete" && !known)
+  if (plan.state !== "complete" && !known && adoptionAction === null)
     errors.push("short-lived handoffを観測できないためdispatchできません");
   const blocked = plan.state === "blocked" || errors.length > 0;
   const state = blocked
@@ -90,8 +178,10 @@ export function observeWorkflowExecutionPlan(
       ? "complete"
       : "ready";
   const candidateAction =
-    state === "ready" && known
-      ? known.workUnit!.contract
+    state === "ready"
+      ? (adoptionAction ??
+        known?.workUnit?.contract ??
+        workflowExecutionContract(undefined, "coordinator", undefined))
       : workflowExecutionContract(undefined, "coordinator", undefined);
   // Only Step 10 needs these expensive read-only gates. In particular, an
   // ordinary --plan must not rebuild the Impact graph just to show advice.
@@ -189,20 +279,30 @@ export function observeWorkflowExecutionPlan(
           required: verificationPlan.required,
         })
       : candidateAction;
-  const assurance = verificationFirst
-    ? {
-        ...projection,
-        selectedWork: {
-          obligationIds: ["O-06"],
-          kind: "deterministic" as const,
-          evidenceRefs:
-            projection.obligations.find((item) => item.id === "O-06")
-              ?.evidenceRefs ?? [],
-        },
-      }
-    : projection;
+  const assurance =
+    state === "ready" && adoptionAction
+      ? {
+          ...projection,
+          selectedWork: {
+            obligationIds: ["O-05"],
+            kind: "deterministic" as const,
+            evidenceRefs: ["git:HEAD", "staging:review-session"],
+          },
+        }
+      : verificationFirst
+        ? {
+            ...projection,
+            selectedWork: {
+              obligationIds: ["O-06"],
+              kind: "deterministic" as const,
+              evidenceRefs:
+                projection.obligations.find((item) => item.id === "O-06")
+                  ?.evidenceRefs ?? [],
+            },
+          }
+        : projection;
   const alternative =
-    state === "ready" && !verificationFirst
+    state === "ready" && !verificationFirst && adoptionAction === null
       ? workflowReviewerAlternative(handoff)
       : undefined;
   return {
@@ -212,14 +312,18 @@ export function observeWorkflowExecutionPlan(
     state,
     step: inspection.nextStep ?? null,
     headSha: resume.headSha,
-    boundary: known?.boundary ?? null,
-    workUnitId: verificationFirst
-      ? null
-      : (known?.workUnit?.workUnitId ?? null),
+    boundary: adoptionAction ? null : (known?.boundary ?? null),
+    workUnitId:
+      verificationFirst || adoptionAction
+        ? null
+        : (known?.workUnit?.workUnitId ?? null),
     action,
     assurance,
     handoff:
-      state === "ready" && known && !verificationFirst
+      state === "ready" &&
+      known &&
+      !verificationFirst &&
+      adoptionAction === null
         ? {
             ...known,
             workUnit: {
