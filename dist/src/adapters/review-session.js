@@ -186,7 +186,7 @@ export function buildReviewRoundDraft(input) {
     if (previous === null) {
         const implementation = roundOneImplementationBinding(staging);
         if (!implementation.headSha)
-            throw new Error("初回reviewにはStep 9のimplementation HEAD、または封印済みquick Candidateの採用前HEADが必要です");
+            throw new Error("初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。封印済みquick Candidateの採用前reviewだけは別経路で許可します");
         if (implementation.headSha !== headSha)
             throw new Error(`review round --initの--headは${implementation.source} ${implementation.headSha} と一致する必要があります`);
         if (typeof input.baseSha !== "string")
@@ -584,7 +584,7 @@ export function previewReviewRound(input) {
     if (previous === null) {
         const implementation = roundOneImplementationBinding(staging);
         if (!implementation.headSha)
-            throw new Error("初回reviewにはStep 9のimplementation HEAD、または封印済みquick Candidateの採用前HEADが必要です");
+            throw new Error("初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。封印済みquick Candidateの採用前reviewだけは別経路で許可します");
         if (implementation.headSha !== input.round.candidateHeadSha)
             throw new Error(`review round candidate HEADが${implementation.source}と一致しません`);
         const observed = observeReviewDiff(root, input.round.anchor.diffBaseSha, input.round.anchor.initialHeadSha);

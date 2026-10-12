@@ -292,7 +292,7 @@ export function buildReviewRoundDraft(input: {
     const implementation = roundOneImplementationBinding(staging);
     if (!implementation.headSha)
       throw new Error(
-        "初回reviewにはStep 9のimplementation HEAD、または封印済みquick Candidateの採用前HEADが必要です",
+        "初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。封印済みquick Candidateの採用前reviewだけは別経路で許可します",
       );
     if (implementation.headSha !== headSha)
       throw new Error(
@@ -787,7 +787,7 @@ export function previewReviewRound(input: {
     const implementation = roundOneImplementationBinding(staging);
     if (!implementation.headSha)
       throw new Error(
-        "初回reviewにはStep 9のimplementation HEAD、または封印済みquick Candidateの採用前HEADが必要です",
+        "初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。封印済みquick Candidateの採用前reviewだけは別経路で許可します",
       );
     if (implementation.headSha !== input.round.candidateHeadSha)
       throw new Error(
