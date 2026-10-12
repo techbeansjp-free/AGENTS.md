@@ -391,15 +391,17 @@ function parseJournalEntry(value, line) {
         if (Number(value.step) !== 9 ||
             !implementationHeadSha ||
             !isRecord(adoption) ||
-            unknownFields(adoption, new Set(["baseSha", "diffDigest", "requestDigest"])).length > 0 ||
-            Object.keys(adoption).length !== 3 ||
+            unknownFields(adoption, new Set(["baseSha", "trustedTipSha", "diffDigest", "requestDigest"])).length > 0 ||
+            Object.keys(adoption).length !== 4 ||
             !/^[a-f0-9]{40}$/u.test(String(adoption.baseSha ?? "")) ||
+            !/^[a-f0-9]{40}$/u.test(String(adoption.trustedTipSha ?? "")) ||
             !/^[a-f0-9]{64}$/u.test(String(adoption.diffDigest ?? "")) ||
             !/^[a-f0-9]{64}$/u.test(String(adoption.requestDigest ?? "")))
             errors.push(`${label}.candidateAdoptionが不正です`);
         else
             candidateAdoption = {
                 baseSha: adoption.baseSha,
+                trustedTipSha: adoption.trustedTipSha,
                 diffDigest: adoption.diffDigest,
                 requestDigest: adoption.requestDigest,
             };

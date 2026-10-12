@@ -6529,6 +6529,7 @@ export async function main(
         implementationHeadSha: observed.headSha,
         candidateAdoption: {
           baseSha: observed.baseSha,
+          trustedTipSha: observed.trustedTipSha,
           diffDigest: observed.diffDigest,
           requestDigest: observed.requestDigest,
         },

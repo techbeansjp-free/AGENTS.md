@@ -4639,6 +4639,7 @@ export async function main(argv, dependencies = {}) {
                 implementationHeadSha: observed.headSha,
                 candidateAdoption: {
                     baseSha: observed.baseSha,
+                    trustedTipSha: observed.trustedTipSha,
                     diffDigest: observed.diffDigest,
                     requestDigest: observed.requestDigest,
                 },

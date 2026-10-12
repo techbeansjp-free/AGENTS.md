@@ -1628,3 +1628,26 @@ When("認可変更を前のcommitに隠したCandidate採用を試す", function
   prepareCandidateAdoption(this, false, true);
   invokeCandidateAdoption(this, true);
 });
+
+When("Candidate採用後に既定branch参照が候補HEADへ進む", function () {
+  prepareCandidateAdoption(this);
+  invokeCandidateAdoption(this, true);
+  assert.equal(this.result?.status, 0, this.result?.stdout);
+  const head = this.output?.headSha;
+  assert.equal(typeof head, "string");
+  run(
+    "git",
+    ["update-ref", "refs/remotes/origin/main", head as string],
+    this.primary,
+  );
+});
+
+Then("Candidate採用記録は固定したtrusted tipで有効なままである", function () {
+  const journal = readWorkflowJournal(this.staging);
+  assert.deepEqual(journal.errors, []);
+  const adoption = journal.entries.find(
+    (entry) => entry.step === 9,
+  )?.candidateAdoption;
+  assert.ok(adoption);
+  assert.equal(adoption.trustedTipSha, this.baseSha);
+});

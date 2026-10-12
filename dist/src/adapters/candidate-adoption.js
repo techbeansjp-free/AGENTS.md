@@ -7,8 +7,13 @@ import { CANDIDATE_GIT_ENV, assertNoCandidateFilters, } from "./candidate-git.js
 import { observeReviewDiff } from "./review-diff.js";
 import { resolveGitWorkspace } from "./review-workspace.js";
 import { readStagingLayout, stagingExcludePathspec, } from "../domain/staging-layout.js";
-function resolveTrustedForkBase(root, headSha) {
-    const trustedTip = git(["rev-parse", "--verify", "refs/remotes/origin/HEAD^{commit}"], root, { env: CANDIDATE_GIT_ENV }).stdout.trim();
+function resolveTrustedForkBase(root, headSha, pinnedTip) {
+    const trustedTip = pinnedTip ??
+        git(["rev-parse", "--verify", "refs/remotes/origin/HEAD^{commit}"], root, {
+            env: CANDIDATE_GIT_ENV,
+        }).stdout.trim();
+    if (!/^[a-f0-9]{40}$/u.test(trustedTip))
+        throw new Error("trusted既定branch tipが不正です");
     const bases = git(["merge-base", "--all", headSha, trustedTip], root, {
         env: CANDIDATE_GIT_ENV,
     })
@@ -17,7 +22,7 @@ function resolveTrustedForkBase(root, headSha) {
         .filter(Boolean);
     if (bases.length !== 1 || !/^[a-f0-9]{40}$/u.test(bases[0]))
         throw new Error("Candidate結果とtrusted既定branchの一意な分岐点がありません");
-    return bases[0];
+    return { baseSha: bases[0], trustedTipSha: trustedTip };
 }
 /** Re-observe a result commit; caller risk, gaps and target test are never promoted. */
 export function observeCandidateAdoption(rootInput, requestFile) {
@@ -42,7 +47,8 @@ export function observeCandidateAdoption(rootInput, requestFile) {
     if (parents.length !== 2 || parents[0] !== headSha)
         throw new Error("Candidate結果commitは基点を1つだけ持つ必要があります");
     const baseSha = parents[1];
-    if (baseSha !== resolveTrustedForkBase(root, headSha))
+    const trustedFork = resolveTrustedForkBase(root, headSha);
+    if (baseSha !== trustedFork.baseSha)
         throw new Error("Candidate結果の直前commitがtrusted既定branchとの分岐点と一致しません");
     const message = git(["show", "-s", "--format=%B", headSha], root, {
         env: CANDIDATE_GIT_ENV,
@@ -83,6 +89,7 @@ export function observeCandidateAdoption(rootInput, requestFile) {
         throw new Error("Candidate採用観測中にHEADが変更されました");
     return {
         baseSha,
+        trustedTipSha: trustedFork.trustedTipSha,
         headSha,
         changedPaths: diff.changedPaths,
         diffDigest: diff.digest,
@@ -113,7 +120,8 @@ export function verifyRecordedCandidateAdoption(root, requestFile, entry) {
             .split(" ");
         if (parents.length !== 2 || parents[1] !== entry.candidateAdoption.baseSha)
             errors.push("採用commitの基点が記録と一致しません");
-        if (entry.candidateAdoption.baseSha !== resolveTrustedForkBase(root, headSha))
+        if (entry.candidateAdoption.baseSha !==
+            resolveTrustedForkBase(root, headSha, entry.candidateAdoption.trustedTipSha).baseSha)
             errors.push("採用commitの基点がtrusted既定branchとの分岐点と一致しません");
         const message = git(["show", "-s", "--format=%B", headSha], root, {
             env: CANDIDATE_GIT_ENV,

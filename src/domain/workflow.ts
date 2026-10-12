@@ -322,6 +322,7 @@ export interface StepJournalEntry {
   /** 実装済みCandidateを後から正式採用した事実。実装時刻を偽装しない。 */
   candidateAdoption?: {
     baseSha: string;
+    trustedTipSha: string;
     diffDigest: string;
     requestDigest: string;
   };
@@ -581,10 +582,11 @@ function parseJournalEntry(
       !isRecord(adoption) ||
       unknownFields(
         adoption,
-        new Set(["baseSha", "diffDigest", "requestDigest"]),
+        new Set(["baseSha", "trustedTipSha", "diffDigest", "requestDigest"]),
       ).length > 0 ||
-      Object.keys(adoption).length !== 3 ||
+      Object.keys(adoption).length !== 4 ||
       !/^[a-f0-9]{40}$/u.test(String(adoption.baseSha ?? "")) ||
+      !/^[a-f0-9]{40}$/u.test(String(adoption.trustedTipSha ?? "")) ||
       !/^[a-f0-9]{64}$/u.test(String(adoption.diffDigest ?? "")) ||
       !/^[a-f0-9]{64}$/u.test(String(adoption.requestDigest ?? ""))
     )
@@ -592,6 +594,7 @@ function parseJournalEntry(
     else
       candidateAdoption = {
         baseSha: adoption.baseSha as string,
+        trustedTipSha: adoption.trustedTipSha as string,
         diffDigest: adoption.diffDigest as string,
         requestDigest: adoption.requestDigest as string,
       };
