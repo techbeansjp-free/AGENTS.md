@@ -547,14 +547,18 @@ export function observeWorkflowHandoff(staging, step, resume, continuationFromHe
             .digest("hex");
         const record = readStoredStagingRecord(staging);
         const read = handoffReads(staging, step, record?.mode, role, reviewRound);
+        const branch = git(["symbolic-ref", "-q", "--short", "HEAD"], worktree, {
+            env: GIT_ENV,
+            allowFailure: true,
+        });
+        if (branch.status !== 0 && branch.status !== 1)
+            throw new Error(`handoff branchを観測できません: ${branch.stderr.trim()}`);
         return {
             kind: "asc-handoff/v1",
             authority: "advisory",
             issue: record?.tracker ?? null,
             read,
-            branch: git(["symbolic-ref", "--short", "HEAD"], worktree, {
-                env: GIT_ENV,
-            }).stdout.trim(),
+            branch: branch.status === 0 ? branch.stdout.trim() : null,
             worktree,
             staging,
             headSha: resume.headSha,

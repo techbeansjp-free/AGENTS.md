@@ -56,14 +56,25 @@ function candidateAdoptionWork(
 ): WorkflowExecutionContract | null {
   const root = stagingRepositoryRoot(staging);
   if (!path.basename(root).startsWith(".asc-candidate-result-")) return null;
-  const candidate = observeCandidateAdoption(
-    root,
-    path.join(staging, "00_要求定義.md"),
-  );
   const review = readStoredReviewSession(staging);
+  if (review === null || !isReviewSessionConverged(review)) return null;
+  let candidate: ReturnType<typeof observeCandidateAdoption>;
+  try {
+    candidate = observeCandidateAdoption(
+      root,
+      path.join(staging, "00_要求定義.md"),
+    );
+  } catch (error) {
+    // A reviewer correction may be uncommitted. Keep the Step 9 work unit
+    // available; the formal adoption command still rejects the dirty tree.
+    if (
+      error instanceof Error &&
+      error.message === "Candidate結果worktreeに未記録の変更があります"
+    )
+      return null;
+    throw error;
+  }
   if (
-    review === null ||
-    !isReviewSessionConverged(review) ||
     review.anchor.diffBaseSha !== candidate.baseSha ||
     review.latestCandidateHeadSha !== candidate.headSha
   )

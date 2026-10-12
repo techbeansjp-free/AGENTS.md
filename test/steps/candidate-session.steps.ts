@@ -39,6 +39,7 @@ class CandidateSessionWorld extends WorkflowWorld {
   result?: ProcessResult;
   output?: Record<string, unknown>;
   rejectionReasons: string[] = [];
+  adoptionPlan?: ReturnType<typeof observeWorkflowExecutionPlan>;
 }
 const { Given, When, Then } = stepDefinitions<CandidateSessionWorld>();
 
@@ -1583,6 +1584,9 @@ When("結果用worktreeにquick stagingを作りCandidateを正式採用する",
   invokeCandidateAdoption(this, false);
   assert.equal(this.result?.status, 0, this.result?.stdout);
   assert.equal(this.output?.state, "independent-review-required");
+  const beforeReview = observeWorkflowExecutionPlan(this.staging);
+  assert.equal(beforeReview.state, "ready", JSON.stringify(beforeReview));
+  assert.equal(beforeReview.action.executor, "fresh-worker");
   assert.equal(
     readWorkflowJournal(this.staging).entries.some((entry) => entry.step === 9),
     false,
@@ -1622,6 +1626,34 @@ Then("Candidate採用記録はGitと要求に束縛されStep 10 reviewが残る
   assert.ok(session);
   assert.equal(session.latestCandidateHeadSha, adoption.implementationHeadSha);
   assert.equal(session.anchor.diffBaseSha, adoption.candidateAdoption.baseSha);
+});
+
+When("Candidate結果をreview後に未commit修正してplanを観測する", function () {
+  prepareCandidateAdoption(this);
+  recordCandidatePreAdoptionReview(this);
+  const resultRoot = path.join(this.home, ".asc-candidate-result-adoption");
+  fs.writeFileSync(
+    path.join(resultRoot, "src/label.js"),
+    'export const label = "Correction";\n',
+  );
+  this.adoptionPlan = observeWorkflowExecutionPlan(this.staging);
+  invokeCandidateAdoption(this, true);
+});
+
+Then("planは採用せずStep9のfresh workerへ戻し正式採用は拒否する", function () {
+  assert.equal(
+    this.adoptionPlan?.state,
+    "ready",
+    JSON.stringify(this.adoptionPlan),
+  );
+  assert.equal(this.adoptionPlan?.step, 9);
+  assert.equal(this.adoptionPlan?.action.executor, "fresh-worker");
+  assert.equal(this.adoptionPlan?.handoff?.branch, null);
+  assert.equal(this.result?.status, 1);
+  assert.equal(
+    readWorkflowJournal(this.staging).entries.some((entry) => entry.step === 9),
+    false,
+  );
 });
 
 When("結果用worktreeのCandidateを採用後に要求成果物を改変する", function () {

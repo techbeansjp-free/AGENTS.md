@@ -281,3 +281,8 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When shのsymlink起動名に依存する対象testを指定する
     Then 実体fileを読取許可しつつsymlink起動名で対象testが成功する
+
+  Scenario: SCN-INT-CANDIDATE-054 review後の未commit修正はplanを止めず正式採用だけを拒否する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When Candidate結果をreview後に未commit修正してplanを観測する
+    Then planは採用せずStep9のfresh workerへ戻し正式採用は拒否する
