@@ -59,6 +59,33 @@ export function parseCodexCandidateUsage(source) {
     }
     return completed > 0 ? { ...sums, source: "codex-turn-completed" } : null;
 }
+/** Keep provider authentication on Codex itself, not on its spawned tools. */
+export function codexCandidateEnvironment(runtime, parent = process.env) {
+    const env = {
+        PATH: parent.PATH ?? "/usr/bin:/bin",
+        HOME: parent.HOME,
+        LANG: parent.LANG ?? "C.UTF-8",
+        TMPDIR: runtime,
+        ...(parent.CODEX_HOME ? { CODEX_HOME: parent.CODEX_HOME } : {}),
+    };
+    for (const name of [
+        "OPENAI_API_KEY",
+        "CODEX_API_KEY",
+        "CODEX_ACCESS_TOKEN",
+    ]) {
+        if (parent[name])
+            env[name] = parent[name];
+    }
+    return {
+        env,
+        toolPolicy: [
+            "-c",
+            'shell_environment_policy.inherit="none"',
+            "-c",
+            `shell_environment_policy.set={ PATH=${JSON.stringify(env.PATH)}, HOME=${JSON.stringify(env.HOME ?? "")}, LANG=${JSON.stringify(env.LANG)}, TMPDIR=${JSON.stringify(runtime)} }`,
+        ],
+    };
+}
 /** Codex talks to its provider outside the tool sandbox; every model tool uses this profile. */
 export function runCandidateCodexWorker(input) {
     if (process.platform !== "linux")
@@ -109,14 +136,11 @@ export function runCandidateCodexWorker(input) {
         'web_search="disabled"',
         "-c",
         "features.enable_mcp_apps=false",
+        "-c",
+        "features.shell_snapshot=false",
     ];
-    const env = {
-        PATH: process.env.PATH ?? "/usr/bin:/bin",
-        HOME: process.env.HOME,
-        LANG: process.env.LANG ?? "C.UTF-8",
-        TMPDIR: runtime,
-        ...(process.env.CODEX_HOME ? { CODEX_HOME: process.env.CODEX_HOME } : {}),
-    };
+    const { env, toolPolicy } = codexCandidateEnvironment(runtime);
+    config.push(...toolPolicy);
     try {
         fs.writeFileSync(sentinel, "trusted\n", { flag: "wx", mode: 0o600 });
         const sandbox = ["sandbox", "-P", profile, ...config, "-C", root, "--"];

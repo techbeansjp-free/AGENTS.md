@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { CANDIDATE_RISKS } from "../../src/domain/candidate-workflow.js";
 import {
+  codexCandidateEnvironment,
   parseCodexCandidateUsage,
   runCandidateCodexWorker,
 } from "../../src/adapters/candidate-codex-worker.js";
@@ -40,6 +41,7 @@ class CandidateSessionWorld extends WorkflowWorld {
   output?: Record<string, unknown>;
   rejectionReasons: string[] = [];
   adoptionPlan?: ReturnType<typeof observeWorkflowExecutionPlan>;
+  authEnvironment?: ReturnType<typeof codexCandidateEnvironment>;
 }
 const { Given, When, Then } = stepDefinitions<CandidateSessionWorld>();
 
@@ -1925,5 +1927,37 @@ Then("Codex Workerはその設定を読まず停止する", function () {
   assert.equal(
     run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
     this.baseSha,
+  );
+});
+
+When("環境変数で認証するCodex Workerの起動環境を作る", function () {
+  const secret = "test-secret-do-not-forward";
+  const built = codexCandidateEnvironment(path.join(this.home, "runtime"), {
+    PATH: "/usr/bin:/bin",
+    HOME: this.home,
+    LANG: "C.UTF-8",
+    OPENAI_API_KEY: secret,
+    CODEX_API_KEY: secret,
+    CODEX_ACCESS_TOKEN: secret,
+    UNRELATED_SECRET: secret,
+  });
+  this.authEnvironment = built;
+});
+
+Then("Providerは認証できツール環境から認証情報を除外する", function () {
+  const built = this.authEnvironment;
+  assert.ok(built);
+  assert.equal(built.env.OPENAI_API_KEY, "test-secret-do-not-forward");
+  assert.equal(built.env.CODEX_API_KEY, "test-secret-do-not-forward");
+  assert.equal(built.env.CODEX_ACCESS_TOKEN, "test-secret-do-not-forward");
+  assert.equal(built.env.UNRELATED_SECRET, undefined);
+  assert.ok(
+    built.toolPolicy.includes('shell_environment_policy.inherit="none"'),
+  );
+  assert.ok(built.toolPolicy.some((item: string) => item.includes("PATH=")));
+  assert.ok(
+    built.toolPolicy.every(
+      (item: string) => !item.includes("test-secret-do-not-forward"),
+    ),
   );
 });

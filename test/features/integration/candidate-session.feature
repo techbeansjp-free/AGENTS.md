@@ -286,3 +286,8 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When Candidate結果をreview後に未commit修正してplanを観測する
     Then planは採用せずStep9のfresh workerへ戻し正式採用は拒否する
+
+  Scenario: SCN-INT-CANDIDATE-055 Codex認証はProviderにのみ渡して実行ツールから除外する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 環境変数で認証するCodex Workerの起動環境を作る
+    Then Providerは認証できツール環境から認証情報を除外する
