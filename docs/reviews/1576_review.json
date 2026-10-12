@@ -3,16 +3,16 @@
   "issue": 1576,
   "observed": {
     "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
-    "implementationHeadSha": "fbfdaea5e20928a972aebbb2f8bee3e1b7fb1fdb",
-    "diffDigest": "ef110a062d313577e937b591131754fa4ea3241da6549a42a090cd2c48105f19",
+    "implementationHeadSha": "6aa60f15f8190a762605fc2381697feb96f9ced0",
+    "diffDigest": "c9515f5b75035ee688fa3dd8417ed1d5c0bc81743ca006b24fb655a8a2c0719a",
     "session": {
       "sessionId": "b6132d9f716e35694e0a3977507c4bb86c81c535f3b9ba5dcaba69f6dcddca3a",
-      "latestRoundDigest": "5c91d80c982d3f5caade566ffd1a4283d4d6ea39641d18bf634069a9731928a0",
+      "latestRoundDigest": "d381b0a14fd55b79ee7418ec6b39c4606f001938444153525529f39cfa396158",
       "status": "converged",
-      "countedRounds": 15
+      "countedRounds": 16
     },
     "impact": {
-      "digest": "d9ce8b0030649a4a8a224b5ff04d7c0b7d1388b4312e3f1ccdc45e8736e8f712",
+      "digest": "72016aa391730476988c5dfe07c08e1d6063d3b877311acd574400af829f3e8c",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "fbfdaea5e20928a972aebbb2f8bee3e1b7fb1fdb",
-        "impactDigest": "d9ce8b0030649a4a8a224b5ff04d7c0b7d1388b4312e3f1ccdc45e8736e8f712",
-        "finishedAt": "2026-10-12T00:03:56.876Z",
-        "recordDigest": "b30348939c0a8a35fe13b762c959ab1b32b1bdc4ae9b23408136a8518ed00dff"
+        "headSha": "6aa60f15f8190a762605fc2381697feb96f9ced0",
+        "impactDigest": "72016aa391730476988c5dfe07c08e1d6063d3b877311acd574400af829f3e8c",
+        "finishedAt": "2026-10-12T00:32:56.103Z",
+        "recordDigest": "8a85349f34b0b71ab7b26c21c20c031be01c616f57377dbccee2eb11ef1e6cbb"
       }
     ]
   },
@@ -56,5 +56,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "51dec9c6ebd05e9f4b23ff942c6d2a68ede9322b12590a0c120c8548840cdf94"
+  "evidenceDigest": "3413333dd5eff73c7cf513ff7e29e9f1b68ed3d72255dc0f31a65da8dc36246b"
 }
