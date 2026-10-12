@@ -13,6 +13,7 @@ class CandidateSessionWorld extends WorkflowWorld {
   home = "";
   primary = "";
   candidate = "";
+  sourceCandidate = "";
   session = "";
   baseSha = "";
   result?: ProcessResult;
@@ -67,6 +68,7 @@ Given("候補用の隔離dummyと事前sessionを作る", function () {
   this.home = this.temp("asc-candidate-dummy-");
   this.primary = path.join(this.home, "source");
   this.candidate = path.join(this.home, "candidate");
+  this.sourceCandidate = this.candidate;
   this.session = path.join(this.home, "session.json");
   fs.mkdirSync(this.primary);
   run(
@@ -345,6 +347,8 @@ Then("許可済みと偽装した認可差分も上流へ戻す", function () {
 function invokeExecute(
   world: CandidateSessionWorld,
   overrides: Record<string, unknown> = {},
+  environment: NodeJS.ProcessEnv = process.env,
+  compiled = false,
 ) {
   const inputFile = path.join(world.home, "execute-input.json");
   const input = {
@@ -367,18 +371,20 @@ function invokeExecute(
   world.result = run(
     process.execPath,
     [
-      "--import",
-      "tsx",
-      path.resolve("bin/agent-skill-chain.ts"),
+      ...(compiled
+        ? [path.resolve("dist/bin/agent-skill-chain.js")]
+        : ["--import", "tsx", path.resolve("bin/agent-skill-chain.ts")]),
       "workflow",
       "candidate",
       `--input=${inputFile}`,
       `--repo=${world.candidate}`,
     ],
     process.cwd(),
-    { allowFailure: true, timeoutMs: 60_000 },
+    { allowFailure: true, timeoutMs: 60_000, env: environment },
   );
   world.output = JSON.parse(world.result.stdout) as Record<string, unknown>;
+  if (typeof world.output.candidateWorktree === "string")
+    world.candidate = world.output.candidateWorktree;
   return world.output;
 }
 
@@ -998,4 +1004,264 @@ Then("Coordinatorは合計sizeを拒否し元候補をcleanに保つ", function 
     reasons(this).some((reason) => reason.includes("size上限")),
     JSON.stringify(this.output),
   );
+});
+
+function candidateGitFaultEnvironment(
+  world: CandidateSessionWorld,
+  command: "commit-tree" | "result-worktree",
+  action: string,
+): NodeJS.ProcessEnv {
+  const shimDir = path.join(world.home, `fault-bin-${command}`);
+  fs.mkdirSync(shimDir);
+  const matcher =
+    command === "commit-tree"
+      ? '*" commit-tree "*'
+      : '*" worktree add "*".asc-candidate-result-"*';
+  fs.writeFileSync(
+    path.join(shimDir, "git"),
+    `#!/bin/sh\ncase " $* " in ${matcher}) ${action};; esac\nexec /usr/bin/git "$@"\n`,
+    { mode: 0o755 },
+  );
+  return {
+    ...process.env,
+    PATH: `${shimDir}${path.delimiter}${process.env.PATH}`,
+  };
+}
+
+When("Coordinatorのcommit-tree失敗を注入する", function () {
+  invokeExecute(
+    this,
+    {},
+    candidateGitFaultEnvironment(this, "commit-tree", "exit 73"),
+  );
+});
+
+When("Coordinatorの出力worktree生成失敗を注入する", function () {
+  invokeExecute(
+    this,
+    {},
+    candidateGitFaultEnvironment(this, "result-worktree", "exit 73"),
+  );
+});
+
+When("Coordinatorの出力生成中に元HEADを移動する", function () {
+  fs.writeFileSync(
+    path.join(this.primary, "src", "other.js"),
+    "export const other = true;\n",
+  );
+  run("git", ["add", "src/other.js"], this.primary);
+  run("git", ["commit", "-qm", "concurrent move"], this.primary);
+  const movedSha = run(
+    "git",
+    ["rev-parse", "HEAD"],
+    this.primary,
+  ).stdout.trim();
+  this.rejectionReasons = [movedSha];
+  invokeExecute(
+    this,
+    {},
+    candidateGitFaultEnvironment(
+      this,
+      "result-worktree",
+      `/usr/bin/git -C '${this.sourceCandidate}' -c core.hooksPath=/dev/null update-ref --no-deref HEAD ${movedSha} ${this.baseSha}`,
+    ),
+  );
+});
+
+When("Coordinatorの出力生成中に元fileを編集する", function () {
+  invokeExecute(
+    this,
+    {},
+    candidateGitFaultEnvironment(
+      this,
+      "result-worktree",
+      `printf '%s\\n' 'export const label = "Concurrent edit";' > '${path.join(this.sourceCandidate, "src", "label.js")}'`,
+    ),
+  );
+});
+
+Then("Coordinatorは元候補のHEAD・index・fileを保持する", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.sourceCandidate).stdout.trim(),
+    this.baseSha,
+  );
+  assert.equal(
+    run("git", ["status", "--porcelain"], this.sourceCandidate).stdout.trim(),
+    "",
+  );
+  assert.equal(
+    fs.readFileSync(path.join(this.sourceCandidate, "src", "label.js"), "utf8"),
+    'export const label = "Helo";\n',
+  );
+  if (lacksHostIsolation(this)) return "skipped";
+  assert.ok(
+    reasons(this).some((reason) => reason.includes("73")),
+    JSON.stringify(this.output),
+  );
+});
+
+Then("Coordinatorは元HEAD変更を保持し出力を拒否する", function () {
+  assert.equal(this.result?.status, 1);
+  if (lacksHostIsolation(this)) return "skipped";
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.sourceCandidate).stdout.trim(),
+    this.rejectionReasons[0],
+  );
+  assert.equal(this.output?.candidateWorktree, undefined);
+});
+
+Then("Coordinatorは元file変更を保持し出力を拒否する", function () {
+  assert.equal(this.result?.status, 1);
+  if (lacksHostIsolation(this)) return "skipped";
+  assert.equal(
+    fs.readFileSync(path.join(this.sourceCandidate, "src", "label.js"), "utf8"),
+    'export const label = "Concurrent edit";\n',
+  );
+  assert.equal(this.output?.candidateWorktree, undefined);
+});
+
+When("対象テストが失敗する候補実装を実行する", function () {
+  invokeExecute(this, { targetTest: [process.execPath, "test.js", "--fail"] });
+});
+
+Then("失敗したcommitを同じ候補worktreeの新規executeへ流用しない", function () {
+  if (this.output?.route !== "repair") {
+    assert.equal(this.result?.status, 1);
+    if (lacksHostIsolation(this)) return "skipped";
+    assert.fail(JSON.stringify(this.output));
+  }
+  assert.equal(this.result?.status, 1);
+  assert.equal(
+    (this.output?.targetTest as Record<string, unknown>).exitCode,
+    7,
+  );
+  assert.notEqual(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+  invokeExecute(this);
+  assert.equal(this.result?.status, 1);
+  assert.ok(
+    reasons(this).some((reason) => reason.includes("Git分岐点")),
+    JSON.stringify(this.output),
+  );
+});
+
+Then("Coordinatorは元候補を維持し別worktreeへcommitを公開する", function () {
+  if (this.result?.status !== 0) {
+    assert.equal(this.result?.status, 1);
+    if (lacksHostIsolation(this)) return "skipped";
+    assert.fail(JSON.stringify(this.output));
+  }
+  assert.notEqual(this.candidate, this.sourceCandidate);
+  assert.equal(this.output?.candidateWorktree, this.candidate);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.sourceCandidate).stdout.trim(),
+    this.baseSha,
+  );
+  assert.equal(
+    run("git", ["status", "--porcelain"], this.sourceCandidate).stdout.trim(),
+    "",
+  );
+  assert.notEqual(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
+});
+
+When("元worktreeだけなら成功する絶対test pathを候補で実行する", function () {
+  fs.writeFileSync(
+    path.join(this.primary, "test-original.cjs"),
+    'const fs = require("node:fs"); const path = require("node:path"); if (!fs.readFileSync(path.join(__dirname, "src/label.js"), "utf8").includes("Helo")) process.exit(7);\n',
+  );
+  run("git", ["add", "test-original.cjs"], this.primary);
+  run("git", ["commit", "-qm", "add original-only oracle"], this.primary);
+  this.baseSha = run("git", ["rev-parse", "HEAD"], this.primary).stdout.trim();
+  run("git", ["reset", "--hard", this.baseSha], this.sourceCandidate);
+  invokeExecute(this, {
+    targetTest: [
+      process.execPath,
+      path.join(this.sourceCandidate, "test-original.cjs"),
+    ],
+  });
+});
+
+Then("Coordinatorは元worktreeの成功を候補成功へ昇格しない", function () {
+  if (this.output?.route !== "repair") {
+    assert.equal(this.result?.status, 1);
+    if (lacksHostIsolation(this)) return "skipped";
+    assert.fail(JSON.stringify(this.output));
+  }
+  assert.equal(this.output?.authority, "none");
+  assert.notEqual(
+    (this.output?.targetTest as Record<string, unknown>).exitCode,
+    0,
+  );
+  assert.equal(
+    run("git", ["status", "--porcelain"], this.sourceCandidate).stdout.trim(),
+    "",
+  );
+});
+
+When("配布CLIで隔離Workerの文言修正を実行する", function () {
+  invokeExecute(this, {}, process.env, true);
+});
+
+When("元worktreeでだけ成功する実行testを絶対pathで指定する", function () {
+  const script = path.join(this.primary, "test-original.sh");
+  fs.writeFileSync(
+    script,
+    '#!/bin/sh\nIFS= read -r line < "${0%/*}/src/label.js"\ncase "$line" in *Helo*) exit 0;; *) exit 7;; esac\n',
+    { mode: 0o755 },
+  );
+  run("git", ["add", "test-original.sh"], this.primary);
+  run("git", ["commit", "-qm", "add executable original oracle"], this.primary);
+  this.baseSha = run("git", ["rev-parse", "HEAD"], this.primary).stdout.trim();
+  run("git", ["reset", "--hard", this.baseSha], this.sourceCandidate);
+  invokeExecute(this, {
+    targetTest: [path.join(this.sourceCandidate, "test-original.sh")],
+  });
+});
+
+Then("Coordinatorは別worktreeの実行testを拒否する", function () {
+  assert.equal(this.result?.status, 1);
+  if (lacksHostIsolation(this)) {
+    assert.equal(
+      run("git", ["status", "--porcelain"], this.sourceCandidate).stdout.trim(),
+      "",
+    );
+    return "skipped";
+  }
+  assert.ok(
+    reasons(this).some((reason) => reason.includes("別worktreeの実行file")),
+    JSON.stringify(this.output),
+  );
+  assert.equal(this.output?.candidateWorktree, undefined);
+  assert.equal(
+    run("git", ["status", "--porcelain"], this.sourceCandidate).stdout.trim(),
+    "",
+  );
+});
+
+When("元worktreeの親に実行fileを複製して元のtestを指定する", function () {
+  const script = path.join(this.primary, "test-original.sh");
+  fs.writeFileSync(
+    script,
+    '#!/bin/sh\nIFS= read -r line < "${0%/*}/src/label.js"\ncase "$line" in *Helo*) exit 0;; *) exit 7;; esac\n',
+    { mode: 0o755 },
+  );
+  run("git", ["add", "test-original.sh"], this.primary);
+  run("git", ["commit", "-qm", "add original oracle"], this.primary);
+  this.baseSha = run("git", ["rev-parse", "HEAD"], this.primary).stdout.trim();
+  run("git", ["reset", "--hard", this.baseSha], this.sourceCandidate);
+  const copiedShell = path.join(this.home, "copied-sh");
+  fs.copyFileSync("/bin/sh", copiedShell);
+  fs.chmodSync(copiedShell, 0o755);
+  invokeExecute(this, {
+    targetTest: [
+      copiedShell,
+      path.join(this.sourceCandidate, "test-original.sh"),
+    ],
+  });
 });

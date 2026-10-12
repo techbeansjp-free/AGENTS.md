@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { run } from "../lib/process.js";
+import { git, run } from "../lib/process.js";
+import { CANDIDATE_GIT_ENV } from "./candidate-git.js";
 import { candidateAllowedPaths } from "./candidate-session.js";
 import { resolveGitWorkspace } from "./review-workspace.js";
 
@@ -168,6 +169,18 @@ export function runCandidateWorkerBoundary(input: {
   const writes = workerWriteRoots(root, input.allowedPaths);
   const packageRoot = codexPackageRoot();
   const executable = workerExecutable(input.argv);
+  const executableRepo = git(
+    ["-C", path.dirname(executable), "rev-parse", "--show-toplevel"],
+    root,
+    { env: CANDIDATE_GIT_ENV, allowFailure: true },
+  );
+  if (
+    executableRepo.status === 0 &&
+    fs.realpathSync(executableRepo.stdout.trim()) !== root
+  )
+    throw new Error(
+      "candidate対象commandは別worktreeの実行fileを参照できません",
+    );
   const runtime = fs.mkdtempSync(
     path.join(os.tmpdir(), "asc-candidate-worker-"),
   );
@@ -178,10 +191,9 @@ export function runCandidateWorkerBoundary(input: {
   const profile = `asc_candidate_${crypto.randomUUID().replaceAll("-", "")}`;
   const filesystem = new Map<string, "read" | "write">([
     [":minimal", "read"],
-    [os.tmpdir(), "read"],
     [packageRoot, "read"],
-    [path.dirname(executable), "read"],
-    [parent, "read"],
+    [executable, "read"],
+    [sentinel, "read"],
     [root, "read"],
     [runtime, "write"],
     ...writes.map((item): [string, "write"] => [item, "write"]),

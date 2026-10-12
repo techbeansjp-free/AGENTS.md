@@ -148,3 +148,53 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When Workerが各fileは上限内だが合計が上限超過の差分を作る
     Then Coordinatorは合計sizeを拒否し元候補をcleanに保つ
+
+  Scenario: SCN-INT-CANDIDATE-028 commit object生成の失敗は元候補を変更しない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When Coordinatorのcommit-tree失敗を注入する
+    Then Coordinatorは元候補のHEAD・index・fileを保持する
+
+  Scenario: SCN-INT-CANDIDATE-029 出力worktree生成の失敗は元候補を変更しない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When Coordinatorの出力worktree生成失敗を注入する
+    Then Coordinatorは元候補のHEAD・index・fileを保持する
+
+  Scenario: SCN-INT-CANDIDATE-030 出力生成中の元HEAD競合は公開を拒否する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When Coordinatorの出力生成中に元HEADを移動する
+    Then Coordinatorは元HEAD変更を保持し出力を拒否する
+
+  Scenario: SCN-INT-CANDIDATE-031 出力生成中の元file編集を上書きしない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When Coordinatorの出力生成中に元fileを編集する
+    Then Coordinatorは元file変更を保持し出力を拒否する
+
+  Scenario: SCN-INT-CANDIDATE-032 対象テスト失敗後の候補は新規executeに再利用しない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 対象テストが失敗する候補実装を実行する
+    Then 失敗したcommitを同じ候補worktreeの新規executeへ流用しない
+
+  Scenario: SCN-INT-CANDIDATE-033 元候補を変更せず別worktreeへcommitを公開する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 隔離Workerが低riskの文言だけを修正する
+    Then Coordinatorは元候補を維持し別worktreeへcommitを公開する
+
+  Scenario: SCN-INT-CANDIDATE-034 元worktreeの絶対test pathを候補HEADの成功証拠にしない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 元worktreeだけなら成功する絶対test pathを候補で実行する
+    Then Coordinatorは元worktreeの成功を候補成功へ昇格しない
+
+  Scenario: SCN-INT-CANDIDATE-035 配布CLIも元候補を上書きせず新規worktreeを返す
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 配布CLIで隔離Workerの文言修正を実行する
+    Then Coordinatorは元候補を維持し別worktreeへcommitを公開する
+
+  Scenario: SCN-INT-CANDIDATE-036 元worktreeの絶対実行test pathも候補成功証拠にしない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 元worktreeでだけ成功する実行testを絶対pathで指定する
+    Then Coordinatorは別worktreeの実行testを拒否する
+
+  Scenario: SCN-INT-CANDIDATE-037 実行fileの親directory経由で元worktreeを読ませない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 元worktreeの親に実行fileを複製して元のtestを指定する
+    Then Coordinatorは元worktreeの成功を候補成功へ昇格しない
