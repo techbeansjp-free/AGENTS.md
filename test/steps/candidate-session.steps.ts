@@ -1802,6 +1802,9 @@ When("Codexの正常・破損・範囲外usageイベントを解析する", func
   this.output = {
     valid: parseCodexCandidateUsage(valid),
     malformed: parseCodexCandidateUsage(malformed),
+    missing: parseCodexCandidateUsage(
+      `${valid}\n${JSON.stringify({ type: "turn.completed" })}`,
+    ),
     impossible: parseCodexCandidateUsage(impossible),
   };
 });
@@ -1816,6 +1819,7 @@ Then("有効なusageだけを合算し不正イベントは欠測にする", fun
     source: "codex-turn-completed",
   });
   assert.equal(this.output?.malformed, null);
+  assert.equal(this.output?.missing, null);
   assert.equal(this.output?.impossible, null);
 });
 

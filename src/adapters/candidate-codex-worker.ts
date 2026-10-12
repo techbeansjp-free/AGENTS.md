@@ -46,12 +46,15 @@ export function parseCodexCandidateUsage(
       typeof event !== "object" ||
       event === null ||
       !("type" in event) ||
-      event.type !== "turn.completed" ||
+      event.type !== "turn.completed"
+    )
+      continue;
+    if (
       !("usage" in event) ||
       typeof event.usage !== "object" ||
       event.usage === null
     )
-      continue;
+      return null;
     const usage = event.usage as Record<string, unknown>;
     const fields = [
       ["inputTokens", "input_tokens"],

@@ -29,11 +29,12 @@ export function parseCodexCandidateUsage(source) {
         if (typeof event !== "object" ||
             event === null ||
             !("type" in event) ||
-            event.type !== "turn.completed" ||
-            !("usage" in event) ||
+            event.type !== "turn.completed")
+            continue;
+        if (!("usage" in event) ||
             typeof event.usage !== "object" ||
             event.usage === null)
-            continue;
+            return null;
         const usage = event.usage;
         const fields = [
             ["inputTokens", "input_tokens"],
