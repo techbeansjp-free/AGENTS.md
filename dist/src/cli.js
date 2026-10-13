@@ -23,7 +23,7 @@ import { observeWorkflowHandoff, workflowAgentDispatch, } from "./adapters/workf
 import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import { observeWorkflowExecutionPlan } from "./adapters/workflow-execution-plan.js";
 import { decideCandidatePreflight, decideCandidatePost, CANDIDATE_RISKS, } from "./domain/candidate-workflow.js";
-import { observeCandidateBoundary, observeCandidateGit, observeCandidateForkBase, } from "./adapters/candidate-git.js";
+import { observeCandidateBoundary, observeCandidateGit, observeCandidateForkBase, observeRemovedAccessGuard, } from "./adapters/candidate-git.js";
 import { executeCandidate } from "./adapters/candidate-execution.js";
 import { inventoryCandidateWorktrees } from "./adapters/candidate-worktree-inventory.js";
 import { observeCandidateAdoption } from "./adapters/candidate-adoption.js";
@@ -4862,6 +4862,7 @@ export async function main(argv, dependencies = {}) {
                 allowedPaths: session.allowedPaths,
                 targetTestsPassed: testEvidence.exitCode === 0,
                 gaps: input.gaps,
+                removedAccessGuard: observeRemovedAccessGuard(repo, session.baseSha, observed.headSha),
             });
             print({
                 ...decision,

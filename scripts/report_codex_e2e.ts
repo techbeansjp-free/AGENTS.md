@@ -78,6 +78,8 @@ function observations(agent: Agent): ObservationSet | null {
   let taskEnd: number | null = null;
   let taskStarts = 0;
   let taskEnds = 0;
+  let openTasks = 0;
+  let invalidTaskOrder = false;
   let finalCumulative: Counter | null = null;
   let generatedItems = 0;
   let lastGeneratedAt: number | null = null;
@@ -99,13 +101,18 @@ function observations(agent: Agent): ObservationSet | null {
         const payload = object(value.payload);
         if (value.type === "event_msg" && payload?.type === "task_started") {
           taskStarts += 1;
-          taskStart =
-            typeof value.timestamp === "string" ? time(value.timestamp) : null;
+          openTasks += 1;
+          if (typeof value.timestamp !== "string") return null;
+          const startedAt = time(value.timestamp);
+          taskStart = Math.min(taskStart ?? startedAt, startedAt);
         }
         if (value.type === "event_msg" && payload?.type === "task_complete") {
           taskEnds += 1;
-          taskEnd =
-            typeof value.timestamp === "string" ? time(value.timestamp) : null;
+          openTasks -= 1;
+          if (openTasks < 0) invalidTaskOrder = true;
+          if (typeof value.timestamp !== "string") return null;
+          const endedAt = time(value.timestamp);
+          taskEnd = Math.max(taskEnd ?? endedAt, endedAt);
         }
         if (
           value.type === "response_item" &&
@@ -189,8 +196,10 @@ function observations(agent: Agent): ObservationSet | null {
   const calls = [...found.values()];
   if (agent.format === "codex-rollout") {
     const complete =
-      taskStarts === 1 &&
-      taskEnds === 1 &&
+      taskStarts > 0 &&
+      taskStarts === taskEnds &&
+      openTasks === 0 &&
+      !invalidTaskOrder &&
       taskStart !== null &&
       taskEnd !== null &&
       taskEnd >= taskStart &&

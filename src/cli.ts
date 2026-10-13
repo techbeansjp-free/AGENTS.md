@@ -77,6 +77,7 @@ import {
   observeCandidateBoundary,
   observeCandidateGit,
   observeCandidateForkBase,
+  observeRemovedAccessGuard,
 } from "./adapters/candidate-git.js";
 import { executeCandidate } from "./adapters/candidate-execution.js";
 import { inventoryCandidateWorktrees } from "./adapters/candidate-worktree-inventory.js";
@@ -6801,6 +6802,11 @@ export async function main(
         allowedPaths: session.allowedPaths,
         targetTestsPassed: testEvidence.exitCode === 0,
         gaps: input.gaps as CandidateGap[],
+        removedAccessGuard: observeRemovedAccessGuard(
+          repo,
+          session.baseSha,
+          observed.headSha,
+        ),
       });
       print({
         ...decision,

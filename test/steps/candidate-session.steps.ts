@@ -1746,6 +1746,48 @@ When("中立名のserviceから認可guardを削除したCandidate採用を試�
   assert.match(this.result?.stdout ?? "", /認可・認証guard/);
 });
 
+When("中立名のserviceから認可guardを削除した単独postを試す", function () {
+  fs.writeFileSync(
+    path.join(this.primary, "src/service.js"),
+    "export const service = (user) => { authorize(user); return true; };\n",
+  );
+  run("git", ["add", "src/service.js"], this.primary);
+  run("git", ["commit", "-qm", "base service guard"], this.primary);
+  this.baseSha = run("git", ["rev-parse", "HEAD"], this.primary).stdout.trim();
+  run("git", ["reset", "--hard", this.baseSha], this.candidate);
+  this.session = path.join(this.home, "neutral-session.json");
+  const pre = invoke(this, {
+    phase: "preflight",
+    intent: "文言を修正する",
+    correctnessCriterion: "label === Hello",
+    allowedPaths: ["src/label.js", "src/service.js"],
+    risk: Object.fromEntries(CANDIDATE_RISKS.map((risk) => [risk, "cleared"])),
+    unresolved: [],
+  });
+  assert.equal(pre.route, "candidate");
+  fs.writeFileSync(
+    path.join(this.candidate, "src/service.js"),
+    "export const service = (_user) => true;\n",
+  );
+  fs.writeFileSync(
+    path.join(this.candidate, "src/label.js"),
+    'export const label = "Hello";\n',
+  );
+  run("git", ["commit", "-qam", "remove access guard"], this.candidate);
+  run("git", ["config", "color.ui", "always"], this.candidate);
+  invoke(this, {
+    phase: "post",
+    gaps: [],
+    targetTest: [process.execPath, "test.js"],
+  });
+});
+
+Then("単独postは認可riskをGit差分から検出し上流へ戻す", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(this.output?.route, "upstream");
+  assert.deepEqual(this.output?.pendingResponsibilities, ["security-risk"]);
+});
+
 When("Candidate採用後に既定branch参照が候補HEADへ進む", function () {
   prepareCandidateAdoption(this);
   recordCandidatePreAdoptionReview(this);

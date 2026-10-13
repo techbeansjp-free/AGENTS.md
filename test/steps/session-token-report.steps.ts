@@ -791,6 +791,46 @@ Given("完了と不完全のCodex rollout logがある", function () {
     path.join(this.tokenRoot, "partial.jsonl"),
     [started, response].map((event) => JSON.stringify(event)).join("\n"),
   );
+  const secondUsage = {
+    input_tokens: 60,
+    cached_input_tokens: 40,
+    cache_write_input_tokens: 0,
+    output_tokens: 10,
+    reasoning_output_tokens: 2,
+  };
+  fs.writeFileSync(
+    path.join(this.tokenRoot, "two-turns.jsonl"),
+    [
+      started,
+      response,
+      completed,
+      {
+        ...started,
+        timestamp: "2026-10-13T00:00:04.000Z",
+      },
+      {
+        ...response,
+        timestamp: "2026-10-13T00:00:05.000Z",
+        payload: {
+          response_id: "response-2",
+          usage: secondUsage,
+          thread_token_usage: {
+            input_tokens: 160,
+            cached_input_tokens: 120,
+            cache_write_input_tokens: 0,
+            output_tokens: 30,
+            reasoning_output_tokens: 7,
+          },
+        },
+      },
+      {
+        ...completed,
+        timestamp: "2026-10-13T00:00:06.000Z",
+      },
+    ]
+      .map((event) => JSON.stringify(event))
+      .join("\n"),
+  );
   fs.writeFileSync(
     path.join(this.tokenRoot, "builtin-missing.jsonl"),
     [
@@ -918,4 +958,22 @@ Then("rolloutの完全性とAgent列挙の未検証を区別する", function ()
   assert.equal(builtin.agents[0]?.coverage, "missing");
   assert.equal(builtin.phases[0]?.hostAgentUsage[0]?.coverage, "missing");
   assert.equal(builtin.allDeclaredAgentProcessedTokens, null);
+  const twoTurns = reportCodexE2E({
+    agents: [
+      {
+        id: "two-turns",
+        format: "codex-rollout",
+        files: [path.join(this.tokenRoot, "two-turns.jsonl")],
+        startedAt: null,
+        endedAt: null,
+      },
+    ],
+    phases: [
+      { name: "between", at: "2026-10-13T00:00:03.000Z" },
+      { name: "end", at: "2026-10-13T00:00:04.000Z" },
+    ],
+  });
+  assert.equal(twoTurns.agents[0]?.coverage, "complete");
+  assert.equal(twoTurns.phases[0]?.hostAgentUsage[0]?.processedTokens, 0);
+  assert.equal(twoTurns.allDeclaredAgentProcessedTokens, 190);
 });

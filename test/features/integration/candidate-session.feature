@@ -246,6 +246,11 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     When 中立名のserviceから認可guardを削除したCandidate採用を試す
     Then Candidate採用は拒否されStep 9記録を残さない
 
+  Scenario: SCN-INT-CANDIDATE-064 中立名のserviceで認可guardを削除した単独postを上流へ戻す
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 中立名のserviceから認可guardを削除した単独postを試す
+    Then 単独postは認可riskをGit差分から検出し上流へ戻す
+
 
   Scenario: SCN-INT-CANDIDATE-046 既定branchが進んでも採用時のtrusted tipで記録を検証する
     Given 候補用の隔離dummyと事前sessionを作る
