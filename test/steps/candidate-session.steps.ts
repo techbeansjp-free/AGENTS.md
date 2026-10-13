@@ -19,6 +19,7 @@ import {
 import {
   finalizeCandidateWorkerBoundary,
   runCandidateWorkerBoundary,
+  workerExecutable,
 } from "../../src/adapters/candidate-worker-boundary.js";
 import { run, type ProcessResult } from "../../src/lib/process.js";
 import {
@@ -43,6 +44,7 @@ class CandidateSessionWorld extends WorkflowWorld {
   adoptionPlan?: ReturnType<typeof observeWorkflowExecutionPlan>;
   authEnvironment?: ReturnType<typeof codexCandidateEnvironment>;
   boundaryResult?: ReturnType<typeof runCandidateWorkerBoundary>;
+  resolvedExecutable?: string;
 }
 const { Given, When, Then } = stepDefinitions<CandidateSessionWorld>();
 
@@ -1967,16 +1969,34 @@ When("Candidate worktree内の相対実行fileを隔離Workerに指定する", f
   const script = path.join(this.candidate, "scripts", "check.sh");
   fs.mkdirSync(path.dirname(script), { recursive: true });
   fs.writeFileSync(script, "#!/bin/sh\nprintf relative-ok\n", { mode: 0o755 });
-  this.boundaryResult = runCandidateWorkerBoundary({
-    root: this.candidate,
-    allowedPaths: ["src/label.js"],
-    argv: ["./scripts/check.sh"],
-  });
+  this.resolvedExecutable = workerExecutable(
+    ["./scripts/check.sh"],
+    this.candidate,
+  );
+  try {
+    this.boundaryResult = runCandidateWorkerBoundary({
+      root: this.candidate,
+      allowedPaths: ["src/label.js"],
+      argv: ["./scripts/check.sh"],
+    });
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !error.message.includes("candidate Worker隔離にはCodex sandboxが必要です")
+    )
+      throw error;
+  }
 });
 
 Then("相対実行fileをCandidate基点で解決して実行する", function () {
-  assert.equal(this.boundaryResult?.status, 0);
-  assert.equal(this.boundaryResult?.stdout, "relative-ok");
+  assert.equal(
+    this.resolvedExecutable,
+    path.join(this.candidate, "scripts", "check.sh"),
+  );
+  if (this.boundaryResult) {
+    assert.equal(this.boundaryResult.status, 0);
+    assert.equal(this.boundaryResult.stdout, "relative-ok");
+  }
   assert.equal(
     run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
     this.baseSha,

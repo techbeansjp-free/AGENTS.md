@@ -292,7 +292,7 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     When 環境変数で認証するCodex Workerの起動環境を作る
     Then Providerは認証できツール環境から認証情報を除外する
 
-  Scenario: SCN-INT-CANDIDATE-056 Candidate内の相対実行fileを隔離Workerが実行できる
+  Scenario: SCN-INT-CANDIDATE-056 Candidate内の相対実行fileをworktree基点で解決する
     Given 候補用の隔離dummyと事前sessionを作る
     When Candidate worktree内の相対実行fileを隔離Workerに指定する
     Then 相対実行fileをCandidate基点で解決して実行する
