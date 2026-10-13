@@ -14,7 +14,7 @@ review inputとround digestへ、CLIが再計算する`planningDigest`を追加�
 - SCN-INT-CANDIDATE-066: review input生成後AMD追加の記録拒否。
 - SCN-INT-CANDIDATE-067: review後の封印済み00直接改変の拒否。
 - SCN-INT-CANDIDATE-068: 同HEADの計画再reviewでHigh固定AC違反をblocker化。
-- SCN-INT-REVEVID-012: AMD追加後のexportとmerge共通Evidence照合の拒否、既存Evidence不変。
+- SCN-INT-REVEVID-015: AMD追加後のexportとmerge共通Evidence照合の拒否、既存Evidence不変。
 - 独立read-only Codex contextでAMD抜け道を再現し、修正後の拒否・旧sessionからの再review復旧を確認。最終差分の未修正High/Medium指摘なし。full/CIの結果は最終PR記録を参照する。
 
 ## 保証の境界

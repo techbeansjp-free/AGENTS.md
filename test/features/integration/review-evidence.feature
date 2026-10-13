@@ -55,7 +55,7 @@ Feature: review exportとreview validateでreview証跡を生成・照合する
     When "SCN-INT-REVREUSE-001"のreview再利用unit検査を実行する
     Then review再利用unit検査は期待結果になる
 
-  Scenario: SCN-INT-REVEVID-012 review後のAMDを正式Evidenceへ載せない
+  Scenario: SCN-INT-REVEVID-015 review後のAMDを正式Evidenceへ載せない
     Given review証跡用に収束済みsessionを持つrepositoryがある
     When H_implでreview exportを実行する
     And review後にAMDを追加してexportとEvidence照合を行う

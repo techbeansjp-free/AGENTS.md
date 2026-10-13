@@ -3,6 +3,7 @@ import path from "node:path";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { fixturePlanningDigest } from "../support/review-planning-fixture.js";
 import { WorkflowWorld, stepDefinitions } from "../support/world.js";
 import {
   POC_HIGH_RISK_IDS,
@@ -1279,6 +1280,7 @@ When("公開CLIでPoC観測Evidenceを固定してStep 10まで進める", async
         initialDiffDigest: observed.digest,
       },
       candidateHeadSha: this.headSha,
+      planningDigest: fixturePlanningDigest(this.issue.path),
       focus: {
         previousBlocking: [],
         fixedDiff: [],
