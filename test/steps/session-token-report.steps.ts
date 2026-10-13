@@ -1016,4 +1016,23 @@ Then("rolloutの完全性とAgent列挙の未検証を区別する", function ()
   });
   assert.equal(bounded.phases[0]?.hostAgentUsage[0]?.coverage, "missing");
   assert.equal(bounded.phases[1]?.hostAgentUsage[0]?.processedTokens, 0);
+  const outside = reportCodexE2E({
+    agents: [
+      {
+        id: "outside",
+        format: "codex-rollout",
+        files: [path.join(this.tokenRoot, "complete.jsonl")],
+        startedAt: "2026-10-13T01:00:00.000Z",
+        endedAt: "2026-10-13T02:00:00.000Z",
+      },
+    ],
+    phases: [
+      { name: "unobserved", at: "2026-10-13T01:00:00.000Z" },
+      { name: "end", at: "2026-10-13T02:00:00.000Z" },
+    ],
+  });
+  assert.equal(outside.agents[0]?.coverage, "missing");
+  assert.equal(outside.agents[0]?.processedTokens, null);
+  assert.equal(outside.phases[0]?.hostAgentUsage[0]?.coverage, "missing");
+  assert.equal(outside.allDeclaredAgentProcessedTokens, null);
 });

@@ -216,7 +216,7 @@ function observations(agent: Agent): ObservationSet | null {
         )
       : allCalls;
   if (agent.format === "codex-rollout") {
-    const complete =
+    const fullLogComplete =
       taskStarts > 0 &&
       taskStarts === taskEnds &&
       openTasks === 0 &&
@@ -232,7 +232,6 @@ function observations(agent: Agent): ObservationSet | null {
           JSON.stringify(sum(allCalls.map((call) => call.usage))) ===
             JSON.stringify(finalCumulative));
     if (agent.rootTurnId && calls.length === 0) return null;
-    if (!complete && calls.length === 0) return null;
     const coveredIntervals = agent.rootTurnId
       ? taskIntervals.filter((interval) =>
           calls.some(
@@ -245,6 +244,18 @@ function observations(agent: Agent): ObservationSet | null {
       : taskStart !== null && taskEnd !== null
         ? [{ start: taskStart, end: taskEnd }]
         : [];
+    const requestedStart = from ?? coveredIntervals[0]?.start;
+    const requestedEnd = to ?? coveredIntervals.at(-1)?.end;
+    const requestedCovered =
+      requestedStart !== undefined &&
+      requestedEnd !== undefined &&
+      requestedStart <= requestedEnd &&
+      coveredIntervals.some(
+        (interval) =>
+          interval.start <= requestedStart && interval.end >= requestedEnd,
+      );
+    const complete = fullLogComplete && requestedCovered;
+    if (!complete && calls.length === 0) return null;
     const boundedIntervals = coveredIntervals
       .map((interval) => ({
         start: Math.max(interval.start, from ?? Number.NEGATIVE_INFINITY),
