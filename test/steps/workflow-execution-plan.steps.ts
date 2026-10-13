@@ -985,11 +985,15 @@ When("review sessionを破損させ通常advanceを観測する", async function
   this.error = result.status;
   this.value = JSON.parse(result.output) as Record<string, unknown>;
 });
-Then("停止状態と修復可能な理由を返す", function () {
+Then("実行選択の停止と修復可能な理由を返す", function () {
   const result = this.value as Record<string, unknown>;
-  assert.equal(this.error, 1);
-  assert.equal(result.state, "blocked");
-  assert.ok(Array.isArray(result.errors));
-  assert.ok((result.errors as string[]).length > 0);
+  assert.equal(this.error, 0);
+  assert.equal(result.state, "delegated");
+  assert.equal(result.executionState, "blocked");
+  assert.ok(Array.isArray(result.executionErrors));
+  assert.ok((result.executionErrors as string[]).length > 0);
   assert.equal(result.handoff, undefined);
+  assert.equal(result.agentDispatch, undefined);
+  assert.equal((result.action as { executor: string }).executor, "none");
+  assert.match(String(result.next), /workflow advance --plan/u);
 });

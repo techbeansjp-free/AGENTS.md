@@ -5085,9 +5085,8 @@ export async function main(argv, dependencies = {}) {
                 ...plan,
                 ...(selectedBlocked
                     ? {
-                        state: "blocked",
-                        reasons: [...plan.reasons, ...selected.errors],
-                        errors: selected.errors,
+                        executionState: "blocked",
+                        executionErrors: selected.errors,
                         next: "workflow advance --planで停止理由を確認し、正式状態を修復してください",
                     }
                     : {}),
@@ -5096,7 +5095,7 @@ export async function main(argv, dependencies = {}) {
                 ...execution,
             };
             print(result);
-            return plan.state === "blocked" || selectedBlocked ? 1 : 0;
+            return plan.state === "blocked" ? 1 : 0;
         }
         if (initialSnapshot === undefined || initialJournalDigest === undefined)
             throw new Error("workflow advanceのapply snapshotがありません");

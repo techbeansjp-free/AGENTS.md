@@ -61,10 +61,10 @@ Feature: 保存済み状態から次のexecutionPlanだけを副作用なく返�
     When compatible文脈で通常advanceを観測する
     Then 互換previewは成功しdispatchを持たない
 
-  Scenario: SCN-INT-EXECPLAN-011 selectionが停止した通常previewは理由を返す
+  Scenario: SCN-INT-EXECPLAN-011 selection停止時も互換previewの判定を保ち理由を返す
     Given 正式検証未実施のStep10 reviewer候補が隔離repositoryにある
     When review sessionを破損させ通常advanceを観測する
-    Then 停止状態と修復可能な理由を返す
+    Then 実行選択の停止と修復可能な理由を返す
 
   Scenario: SCN-INT-EXECPLAN-012 Candidate採用後の収束reviewでも正式検証を先に実行できる
     Given 正式検証未実施のStep10 reviewer候補が隔離repositoryにある
