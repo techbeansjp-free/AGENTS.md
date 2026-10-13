@@ -998,4 +998,22 @@ Then("rolloutの完全性とAgent列挙の未検証を区別する", function ()
   assert.equal(selectedTurn.phases[0]?.hostAgentUsage[0]?.processedTokens, 0);
   assert.equal(selectedTurn.phases[1]?.hostAgentUsage[0]?.processedTokens, 70);
   assert.equal(selectedTurn.allDeclaredAgentProcessedTokens, 70);
+  const bounded = reportCodexE2E({
+    agents: [
+      {
+        id: "bounded",
+        format: "codex-rollout",
+        files: [path.join(this.tokenRoot, "complete.jsonl")],
+        startedAt: "2026-10-13T00:00:02.000Z",
+        endedAt: "2026-10-13T00:00:03.000Z",
+      },
+    ],
+    phases: [
+      { name: "excluded", at: "2026-10-13T00:00:00.000Z" },
+      { name: "selected", at: "2026-10-13T00:00:02.000Z" },
+      { name: "end", at: "2026-10-13T00:00:03.000Z" },
+    ],
+  });
+  assert.equal(bounded.phases[0]?.hostAgentUsage[0]?.coverage, "missing");
+  assert.equal(bounded.phases[1]?.hostAgentUsage[0]?.processedTokens, 0);
 });

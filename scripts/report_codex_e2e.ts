@@ -245,10 +245,16 @@ function observations(agent: Agent): ObservationSet | null {
       : taskStart !== null && taskEnd !== null
         ? [{ start: taskStart, end: taskEnd }]
         : [];
+    const boundedIntervals = coveredIntervals
+      .map((interval) => ({
+        start: Math.max(interval.start, from ?? Number.NEGATIVE_INFINITY),
+        end: Math.min(interval.end, to ?? Number.POSITIVE_INFINITY),
+      }))
+      .filter((interval) => interval.start <= interval.end);
     return {
       calls,
       coverage: complete ? "complete" : "partial",
-      coveredIntervals,
+      coveredIntervals: boundedIntervals,
     };
   }
   if (calls.length === 0) return null;

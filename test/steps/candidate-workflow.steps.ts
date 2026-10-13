@@ -21,6 +21,7 @@ class CandidateWorld extends WorkflowWorld {
   pre?: CandidatePreflightInput;
   post?: CandidatePostInput;
   decision?: CandidateDecision;
+  removedAccessGuard?: boolean;
   repo = "";
   source = "";
   baseSha = "";
@@ -180,10 +181,15 @@ Given("著者名fieldを変更する隔離Git dummyがある", function () {
   run("git", ["commit", "-qam", "rename field"], this.source);
 });
 
-Then("著者名の削除を認可guard削除と誤判定しない", function () {
+When("著者名fieldの差分を観測する", function () {
   const head = run("git", ["rev-parse", "HEAD"], this.source).stdout.trim();
-  assert.equal(
-    observeRemovedAccessGuard(this.source, this.baseSha, head),
-    false,
+  this.removedAccessGuard = observeRemovedAccessGuard(
+    this.source,
+    this.baseSha,
+    head,
   );
+});
+
+Then("著者名の削除を認可guard削除と誤判定しない", function () {
+  assert.equal(this.removedAccessGuard, false);
 });

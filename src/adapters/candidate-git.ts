@@ -25,6 +25,12 @@ export function observeRemovedAccessGuard(
 ): boolean {
   const patch = git(
     [
+      "-c",
+      "diff.outputIndicatorOld=-",
+      "-c",
+      "diff.outputIndicatorNew=+",
+      "-c",
+      "diff.outputIndicatorContext= ",
       "diff",
       "--no-color",
       "--text",

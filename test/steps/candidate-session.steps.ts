@@ -1742,6 +1742,7 @@ When("認可変更を前のcommitに隠したCandidate採用を試す", function
 When("中立名のserviceから認可guardを削除したCandidate採用を試す", function () {
   prepareCandidateAdoption(this, false, false, true);
   run("git", ["config", "color.ui", "always"], this.candidate);
+  run("git", ["config", "diff.outputIndicatorOld", "!"], this.candidate);
   const attributes = run(
     "git",
     ["rev-parse", "--git-path", "info/attributes"],

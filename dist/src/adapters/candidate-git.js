@@ -18,6 +18,12 @@ export const CANDIDATE_GIT_ENV = {
 /** Catch obvious access-control removal even when the changed file name is neutral. */
 export function observeRemovedAccessGuard(root, baseSha, headSha) {
     const patch = git([
+        "-c",
+        "diff.outputIndicatorOld=-",
+        "-c",
+        "diff.outputIndicatorNew=+",
+        "-c",
+        "diff.outputIndicatorContext= ",
         "diff",
         "--no-color",
         "--text",

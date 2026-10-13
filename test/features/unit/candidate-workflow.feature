@@ -56,4 +56,5 @@ Feature: 実装先行候補は実差分と不足責務から次の仕事を選�
 
   Scenario: SCN-UNIT-CANDIDATE-006 著者名fieldの変更を認可guard削除と誤認しない
     Given 著者名fieldを変更する隔離Git dummyがある
+    When 著者名fieldの差分を観測する
     Then 著者名の削除を認可guard削除と誤判定しない
