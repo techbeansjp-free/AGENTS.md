@@ -80,7 +80,9 @@ function observations(agent: Agent): ObservationSet | null {
   let taskEnds = 0;
   let openTasks = 0;
   let currentTaskStart: number | null = null;
-  const taskIntervals: { start: number; end: number }[] = [];
+  let currentTaskTurnId: string | null = null;
+  const taskIntervals: { start: number; end: number; turnId: string | null }[] =
+    [];
   let invalidTaskOrder = false;
   let finalCumulative: Counter | null = null;
   let generatedItems = 0;
@@ -109,6 +111,8 @@ function observations(agent: Agent): ObservationSet | null {
           if (typeof value.timestamp !== "string") return null;
           const startedAt = time(value.timestamp);
           currentTaskStart = startedAt;
+          currentTaskTurnId =
+            typeof payload.turn_id === "string" ? payload.turn_id : null;
           taskStart = Math.min(taskStart ?? startedAt, startedAt);
         }
         if (value.type === "event_msg" && payload?.type === "task_complete") {
@@ -120,8 +124,18 @@ function observations(agent: Agent): ObservationSet | null {
           const endedAt = time(value.timestamp);
           if (currentTaskStart !== null && openTasks === 0) {
             if (endedAt < currentTaskStart) invalidTaskOrder = true;
-            taskIntervals.push({ start: currentTaskStart, end: endedAt });
+            if (
+              currentTaskTurnId !== null &&
+              payload.turn_id !== currentTaskTurnId
+            )
+              invalidTaskOrder = true;
+            taskIntervals.push({
+              start: currentTaskStart,
+              end: endedAt,
+              turnId: currentTaskTurnId,
+            });
             currentTaskStart = null;
+            currentTaskTurnId = null;
           }
           taskEnd = Math.max(taskEnd ?? endedAt, endedAt);
         }
@@ -234,15 +248,16 @@ function observations(agent: Agent): ObservationSet | null {
             (lastUsageAt !== null && lastUsageAt >= lastGeneratedAt)) &&
           JSON.stringify(sum(allCalls.map((call) => call.usage))) ===
             JSON.stringify(finalCumulative));
-    if (agent.rootTurnId && turnCalls.length === 0) return null;
     const coveredIntervals = agent.rootTurnId
-      ? taskIntervals.filter((interval) =>
-          turnCalls.some(
-            (call) =>
-              call.at !== null &&
-              call.at >= interval.start &&
-              call.at <= interval.end,
-          ),
+      ? taskIntervals.filter(
+          (interval) =>
+            interval.turnId === agent.rootTurnId ||
+            turnCalls.some(
+              (call) =>
+                call.at !== null &&
+                call.at >= interval.start &&
+                call.at <= interval.end,
+            ),
         )
       : taskStart !== null && taskEnd !== null
         ? [{ start: taskStart, end: taskEnd }]

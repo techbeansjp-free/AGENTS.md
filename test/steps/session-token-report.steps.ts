@@ -799,6 +799,15 @@ Given("完了と不完全のCodex rollout logがある", function () {
     reasoning_output_tokens: 2,
   };
   fs.writeFileSync(
+    path.join(this.tokenRoot, "empty-turn.jsonl"),
+    [
+      { ...started, payload: { type: "task_started", turn_id: "empty" } },
+      { ...completed, payload: { type: "task_complete", turn_id: "empty" } },
+    ]
+      .map((event) => JSON.stringify(event))
+      .join("\n"),
+  );
+  fs.writeFileSync(
     path.join(this.tokenRoot, "two-turns.jsonl"),
     [
       started,
@@ -1035,6 +1044,25 @@ Then("rolloutの完全性とAgent列挙の未検証を区別する", function ()
   assert.equal(boundedTurn.agents[0]?.coverage, "complete");
   assert.equal(boundedTurn.phases[0]?.hostAgentUsage[0]?.processedTokens, 0);
   assert.equal(boundedTurn.allDeclaredAgentProcessedTokens, 0);
+  const emptyTurn = reportCodexE2E({
+    agents: [
+      {
+        id: "empty-turn",
+        format: "codex-rollout",
+        files: [path.join(this.tokenRoot, "empty-turn.jsonl")],
+        startedAt: null,
+        endedAt: null,
+        rootTurnId: "empty",
+      },
+    ],
+    phases: [
+      { name: "idle", at: "2026-10-13T00:00:00.000Z" },
+      { name: "end", at: "2026-10-13T00:00:03.000Z" },
+    ],
+  });
+  assert.equal(emptyTurn.agents[0]?.coverage, "complete");
+  assert.equal(emptyTurn.phases[0]?.hostAgentUsage[0]?.processedTokens, 0);
+  assert.equal(emptyTurn.allDeclaredAgentProcessedTokens, 0);
   const outside = reportCodexE2E({
     agents: [
       {
