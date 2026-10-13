@@ -109,10 +109,9 @@ function observations(agent: Agent): ObservationSet | null {
         }
         if (
           value.type === "response_item" &&
-          (payload?.type === "reasoning" ||
-            payload?.type === "custom_tool_call" ||
-            payload?.type === "function_call" ||
-            (payload?.type === "message" && payload.role === "assistant"))
+          !(payload?.type === "message" && payload.role !== "assistant") &&
+          payload?.type !== "custom_tool_call_output" &&
+          payload?.type !== "function_call_output"
         ) {
           generatedItems += 1;
           if (typeof value.timestamp !== "string") return null;

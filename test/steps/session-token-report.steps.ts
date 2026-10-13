@@ -792,6 +792,20 @@ Given("完了と不完全のCodex rollout logがある", function () {
     [started, response].map((event) => JSON.stringify(event)).join("\n"),
   );
   fs.writeFileSync(
+    path.join(this.tokenRoot, "builtin-missing.jsonl"),
+    [
+      started,
+      {
+        type: "response_item",
+        timestamp: "2026-10-13T00:00:02.000Z",
+        payload: { type: "web_search_call" },
+      },
+      completed,
+    ]
+      .map((event) => JSON.stringify(event))
+      .join("\n"),
+  );
+  fs.writeFileSync(
     path.join(this.tokenRoot, "trailing-missing.jsonl"),
     [
       started,
@@ -886,4 +900,22 @@ Then("rolloutの完全性とAgent列挙の未検証を区別する", function ()
   assert.equal(trailing.agents[0]?.coverage, "partial");
   assert.equal(trailing.phases[0]?.hostAgentUsage[0]?.coverage, "missing");
   assert.equal(trailing.allDeclaredAgentProcessedTokens, null);
+  const builtin = reportCodexE2E({
+    agents: [
+      {
+        id: "builtin-missing",
+        format: "codex-rollout",
+        files: [path.join(this.tokenRoot, "builtin-missing.jsonl")],
+        startedAt: null,
+        endedAt: null,
+      },
+    ],
+    phases: [
+      { name: "builtin", at: "2026-10-13T00:00:02.000Z" },
+      { name: "end", at: "2026-10-13T00:00:03.000Z" },
+    ],
+  });
+  assert.equal(builtin.agents[0]?.coverage, "missing");
+  assert.equal(builtin.phases[0]?.hostAgentUsage[0]?.coverage, "missing");
+  assert.equal(builtin.allDeclaredAgentProcessedTokens, null);
 });
