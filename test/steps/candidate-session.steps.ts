@@ -114,6 +114,10 @@ Given("候補用の隔離dummyと事前sessionを作る", function () {
     "export const authorized = true;\n",
   );
   fs.writeFileSync(
+    path.join(this.primary, "src", "secondary.js"),
+    "export const secondary = true;\n",
+  );
+  fs.writeFileSync(
     path.join(this.primary, "test.js"),
     'const fs = require("node:fs"); if (!fs.readFileSync("src/label.js", "utf8").includes("Hello") || process.argv.includes("--fail")) process.exit(7);\n',
   );
@@ -272,6 +276,28 @@ Then("同じsessionを事前判定で上書きできない", function () {
   });
   assert.equal(this.result?.status, 1);
   assert.ok(reasons(this).some((reason) => reason.includes("EEXIST")));
+});
+
+When("認可pathを低riskと誤申告する", function () {
+  this.session = path.join(this.home, "unsafe-session.json");
+  invoke(this, {
+    phase: "preflight",
+    intent: "認可処理を変更する",
+    correctnessCriterion: "既存の認可testが通る",
+    allowedPaths: ["src/authorization.js"],
+    risk: Object.fromEntries(CANDIDATE_RISKS.map((risk) => [risk, "cleared"])),
+    unresolved: [],
+  });
+});
+
+Then("新しいCandidate sessionを作らず上流へ戻す", function () {
+  assert.equal(this.result?.status, 1);
+  assert.equal(this.output?.route, "upstream");
+  assert.equal(fs.existsSync(this.session), false);
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
+  );
 });
 
 When("sessionをsymlinkへ置き換える", function () {
@@ -807,11 +833,11 @@ Then("Coordinatorは隠された属性を拒否しfilterを起動しない", fun
 
 When("Workerが先頭の許可fileと巨大な後続fileを変更する", function () {
   invokeExecute(this, {
-    allowedPaths: ["src/label.js", "src/authorization.js"],
+    allowedPaths: ["src/label.js", "src/secondary.js"],
     workerArgv: [
       "/bin/sh",
       "-c",
-      "printf denied > src/authorization.js; dd if=/dev/zero of=src/label.js bs=1048576 count=17 2>/dev/null",
+      "printf denied > src/secondary.js; dd if=/dev/zero of=src/label.js bs=1048576 count=17 2>/dev/null",
     ],
   });
 });
@@ -831,11 +857,8 @@ Then("Coordinatorは全payloadを検査して元候補をcleanに保つ", functi
     'export const label = "Helo";\n',
   );
   assert.equal(
-    fs.readFileSync(
-      path.join(this.candidate, "src", "authorization.js"),
-      "utf8",
-    ),
-    "export const authorized = true;\n",
+    fs.readFileSync(path.join(this.candidate, "src", "secondary.js"), "utf8"),
+    "export const secondary = true;\n",
   );
   if (lacksHostIsolation(this)) return "skipped";
   assert.ok(

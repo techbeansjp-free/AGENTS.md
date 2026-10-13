@@ -6704,6 +6704,7 @@ export async function main(
     const sessionFile = path.resolve(required(flags, "session"));
     if (input.phase === "preflight") {
       const baseSha = observeCandidateBoundary(repo).headSha;
+      const allowedPaths = candidateAllowedPaths(input.allowedPaths);
       const risk = input.risk;
       if (typeof risk !== "object" || risk === null || Array.isArray(risk))
         throw new Error("riskの全項目が必要です");
@@ -6734,6 +6735,7 @@ export async function main(
             : "",
         baseSha,
         isolatedWorktree: true,
+        allowedPaths,
         risk: validated,
         unresolved:
           Array.isArray(input.unresolved) &&
@@ -6741,7 +6743,6 @@ export async function main(
             ? (input.unresolved as string[])
             : ["未解決事項の形式が不正です"],
       });
-      const allowedPaths = candidateAllowedPaths(input.allowedPaths);
       if (
         decision.route === "candidate" &&
         observeCandidateForkBase(repo, baseSha) !== baseSha

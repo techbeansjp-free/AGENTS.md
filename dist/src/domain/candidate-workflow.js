@@ -28,6 +28,7 @@ export function decideCandidatePreflight(input) {
         reasons.push("Git base HEADが不正です");
     if (!input.isolatedWorktree)
         reasons.push("隔離worktreeが必要です");
+    const sensitivePaths = input.allowedPaths.filter(isSecuritySensitivePath);
     const triggered = [];
     for (const key of CANDIDATE_RISKS) {
         const status = input.risk[key] ?? "unknown";
@@ -37,12 +38,14 @@ export function decideCandidatePreflight(input) {
             reasons.push(`未確認リスク: ${key}`);
     }
     reasons.push(...input.unresolved.map((value) => `未解決事項: ${value}`));
+    if (sensitivePaths.length > 0)
+        reasons.push(`事前の上流検討が必要なpath: ${sensitivePaths.join(", ")}`);
     if (triggered.length > 0)
         reasons.push(`事前の上流検討が必要: ${triggered.join(", ")}`);
     return {
         kind: "asc-candidate-decision/v1",
         authority: "none",
-        route: triggered.length > 0
+        route: triggered.length > 0 || sensitivePaths.length > 0
             ? "upstream"
             : reasons.length > 0
                 ? "clarify"

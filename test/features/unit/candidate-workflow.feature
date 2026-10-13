@@ -8,13 +8,14 @@ Feature: 実装先行候補は実差分と不足責務から次の仕事を選�
     Then 候補の経路は「<route>」で正式権限を持たない
 
     Examples:
-      | condition      | route     |
-      | safe           | candidate |
-      | auth           | upstream  |
-      | no-criterion   | clarify   |
-      | unknown-risk   | clarify   |
-      | no-isolation   | clarify   |
-      | vague-intent   | clarify   |
+      | condition               | route     |
+      | safe                    | candidate |
+      | auth                    | upstream  |
+      | no-criterion            | clarify   |
+      | unknown-risk            | clarify   |
+      | no-isolation            | clarify   |
+      | vague-intent            | clarify   |
+      | misclassified-auth-path | upstream  |
 
   Scenario Outline: SCN-UNIT-CANDIDATE-002 実差分と独立reviewの前に正式完了にしない
     Given 候補実装後の差分と対象テストを用意する

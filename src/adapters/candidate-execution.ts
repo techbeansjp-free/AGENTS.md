@@ -167,6 +167,7 @@ export function executeCandidate(input: CandidateExecutionInput) {
     correctnessCriterion: input.correctnessCriterion,
     baseSha,
     isolatedWorktree: true,
+    allowedPaths,
     risk: input.risk,
     unresolved: input.unresolved,
   });

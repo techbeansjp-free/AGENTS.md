@@ -296,3 +296,8 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When Candidate worktree内の相対実行fileを隔離Workerに指定する
     Then 相対実行fileをCandidate基点で解決して実行する
+
+  Scenario: SCN-INT-CANDIDATE-057 認可riskをclearedと誤申告しても既知の認可pathは起動前に停止する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 認可pathを低riskと誤申告する
+    Then 新しいCandidate sessionを作らず上流へ戻す

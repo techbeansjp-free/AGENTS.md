@@ -15,3 +15,8 @@ Feature: session logのtoken集計
     Given 異なるcache包含方式と欠測のprovider usageがある
     When CodexとClaudeの観測済みusageを正規化する
     Then provider別のcache包含関係を守り欠測値を補わずに集計する
+
+  Scenario: SCN-UNIT-TOKENS-003 Codex E2Eの重複応答・工程・欠測を区別する
+    Given Codex HostとWorkerのusage logと欠測Reviewerがある
+    When Codex E2E計測を集計する
+    Then cacheを二重計上せず工程別使用量を示し全Agent合計は欠測にする

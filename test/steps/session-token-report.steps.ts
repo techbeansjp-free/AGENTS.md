@@ -8,6 +8,7 @@ import {
   normalizeReadPath,
   normalizeProviderUsage,
 } from "../../scripts/report_session_tokens.js";
+import { reportCodexE2E } from "../../scripts/report_codex_e2e.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class SessionTokenWorld extends WorkflowWorld {
@@ -17,6 +18,7 @@ class SessionTokenWorld extends WorkflowWorld {
   tokenStaging = "";
   tokenStdout = "";
   tokenStatus: number | null = null;
+  codexReport?: ReturnType<typeof reportCodexE2E>;
 }
 
 const { Given, When, Then } = stepDefinitions<SessionTokenWorld>();
@@ -627,3 +629,125 @@ Then("provider別のcache包含関係を守り欠測値を補わずに集計す�
   assert.equal(missing?.totalProcessed, null);
   assert.equal(invalid?.totalProcessed, null);
 });
+
+Given("Codex HostとWorkerのusage logと欠測Reviewerがある", function () {
+  this.tokenRoot = this.temp("asc-e2e-tokens-");
+  const usage = {
+    input_tokens: 100,
+    cached_input_tokens: 90,
+    cache_write_input_tokens: 0,
+    output_tokens: 20,
+    reasoning_output_tokens: 5,
+  };
+  const event = JSON.stringify({
+    type: "token_usage_record",
+    timestamp: "2026-10-13T00:00:01.000Z",
+    payload: { response_id: "same", root_turn_id: "target", usage },
+  });
+  fs.writeFileSync(
+    path.join(this.tokenRoot, "host.jsonl"),
+    `${event}\n${event}\n`,
+  );
+  fs.writeFileSync(
+    path.join(this.tokenRoot, "reviewer.jsonl"),
+    `${JSON.stringify({
+      type: "turn.completed",
+      usage: {
+        input_tokens: 10,
+        cached_input_tokens: 0,
+        output_tokens: 1,
+        reasoning_output_tokens: 0,
+      },
+    })}\n`,
+  );
+  fs.writeFileSync(
+    path.join(this.tokenRoot, "zero.jsonl"),
+    `${JSON.stringify({
+      type: "turn.completed",
+      usage: {
+        input_tokens: 0,
+        cached_input_tokens: 0,
+        cache_write_input_tokens: 0,
+        output_tokens: 0,
+        reasoning_output_tokens: 0,
+      },
+    })}\n`,
+  );
+  fs.writeFileSync(
+    path.join(this.tokenRoot, "worker.jsonl"),
+    `${JSON.stringify({
+      type: "turn.completed",
+      usage: {
+        input_tokens: 50,
+        cached_input_tokens: 40,
+        cache_write_input_tokens: 0,
+        output_tokens: 10,
+        reasoning_output_tokens: 2,
+      },
+    })}\n`,
+  );
+});
+When("Codex E2E計測を集計する", function () {
+  this.codexReport = reportCodexE2E({
+    agents: [
+      {
+        id: "parent",
+        format: "codex-host",
+        files: [path.join(this.tokenRoot, "host.jsonl")],
+        startedAt: "2026-10-13T00:00:00.000Z",
+        endedAt: "2026-10-13T00:00:03.000Z",
+        rootTurnId: "target",
+      },
+      {
+        id: "worker",
+        format: "codex-exec",
+        files: [path.join(this.tokenRoot, "worker.jsonl")],
+        startedAt: "2026-10-13T00:00:01.000Z",
+        endedAt: "2026-10-13T00:00:02.000Z",
+      },
+      {
+        id: "reviewer",
+        format: "codex-exec",
+        files: [path.join(this.tokenRoot, "reviewer.jsonl")],
+        startedAt: null,
+        endedAt: null,
+      },
+      {
+        id: "zero-usage-review",
+        format: "codex-exec",
+        files: [path.join(this.tokenRoot, "zero.jsonl")],
+        startedAt: null,
+        endedAt: null,
+      },
+      {
+        id: "missing-worker",
+        format: "codex-exec",
+        files: [path.join(this.tokenRoot, "missing.jsonl")],
+        startedAt: null,
+        endedAt: null,
+      },
+    ],
+    phases: [
+      { name: "work", at: "2026-10-13T00:00:00.000Z" },
+      { name: "complete", at: "2026-10-13T00:00:03.000Z" },
+    ],
+  });
+});
+Then(
+  "cacheを二重計上せず工程別使用量を示し全Agent合計は欠測にする",
+  function () {
+    const report = this.codexReport;
+    assert.ok(report);
+    assert.equal(report.agents[0]?.calls, 1);
+    assert.equal(report.agents[0]?.processedTokens, 120);
+    assert.equal(report.agents[1]?.processedTokens, 60);
+    assert.equal(report.agents[2]?.processedTokens, null);
+    assert.equal(report.agents[2]?.wallMs, null);
+    assert.equal(report.agents[3]?.processedTokens, null);
+    assert.equal(report.agents[4]?.processedTokens, null);
+    assert.equal(report.observedLowerBound, 180);
+    assert.equal(report.allDeclaredAgentProcessedTokens, null);
+    assert.equal(report.phases[0]?.wallMs, 3000);
+    assert.equal(report.phases[0]?.hostAgentUsage[0]?.processedTokens, 120);
+  },
+);

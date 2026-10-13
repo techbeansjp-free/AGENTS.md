@@ -16,7 +16,11 @@
 
 Candidate WorkerのProvider報告値はinput 99,063、うちcache read 90,112、cache write 0、output 576、reasoning output 10 tokens。Worker実行時間は34,853 ms。これはWorker一人分で、Coordinator、独立reviewer、CLI内処理を含む全Agent総tokensではない。未観測値は`null`として扱い、inputとcache readを足して二重計上しない。
 
-quick staging作成時刻は2026-10-13 01:03:16 UTC、PRのGitHub作成時刻は01:09:15 UTC、PR CI完了は01:09:32 UTCで、**staging作成→PR CI完了は376秒**。Candidate実装はstaging作成より前に行ったため、これを要求→CI時間とは呼ばない。候補実装開始時刻、親Agent tokens、全Agent tokens、context high-water mark、同一条件の旧ASC・ASCなし試行は未測定。この一例から速度やコストの削減率は算出しない。
+quick staging作成時刻は2026-10-13 01:03:16 UTC、PRのGitHub作成時刻は01:09:15 UTC、PR CI完了は01:09:32 UTCで、**staging作成→PR CI完了は376秒**。Candidate実装はstaging作成より前に行ったため、これを要求→CI時間とは呼ばない。候補実装開始時刻、独立Reviewer tokens、全Agent tokens、正確なcontext high-water mark、同一条件の旧ASC・ASCなし試行は未測定。この一例から速度やコストの削減率は算出しない。
+
+親Codexのlocal session JSONLに残る`token_usage_record`を、Issue作成（00:59:17 UTC）からCI完了（01:09:32 UTC）までの同一`root_turn_id`に限定し、`response_id`重複を除いて再集計した。45 call、input 4,503,186（うちcache read 4,303,616）、cache write 0、output 4,050（うちreasoning 1,405）、処理tokens 4,507,236。cache readはinputの約95.6%で、新規inputとoutputの和は203,620 tokens。最大観測input/callは136,145であり、正確なcontext high-waterではない。Candidate Workerと合わせた観測下限は4,606,875で、独立Reviewer usageが欠測のため全Agent合計ではない。請求額・tool待ちは未取得で、cache readをinputへ再加算しない。
+
+この親ログを取得可能な2区間だけで切ると、Issue作成→quick staging作成の239秒に10 call・1,128,773処理tokens、staging作成→CI完了の376秒に35 call・3,378,463処理tokensがある。後者に親処理tokensの約75%が集中した。ただし、Candidate実装・review・verification・Deliveryの個別開始終了時刻は揃わず、後者のどの操作が主因かは特定できない。`scripts/report_codex_e2e.ts`はhost JSONLと`codex exec --json`の`turn.completed`を同じ計数規則で集計し、manifestに列挙したAgentの欠測を`null`で示す。次回は各Worker/Reviewerの生JSONLと工程境界時刻をその場で保存して比較する。会話本文とtool入出力は集計結果に含めない。
 
 基点commitは既存のAケース試行（`docs/reviews/1576_performance.raw.json`の`revisionConsistentAFullE37.fixedFixtureSha`）と一致する。旧ASCは要求→CI 1,194.33秒、全Worker処理tokens 6,673,928、ASCなしは94.06秒・168,829 tokensの各単発観測が記録されている。一方、今回の新方式はCandidate開始を含む要求→CIと全Agent総tokensを取得しておらず、前後の配布物とアクセス可能資料も同一と証明できないため、数値を同条件の改善率へ変換しない。
 

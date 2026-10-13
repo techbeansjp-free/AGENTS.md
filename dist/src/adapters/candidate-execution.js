@@ -90,6 +90,7 @@ export function executeCandidate(input) {
         correctnessCriterion: input.correctnessCriterion,
         baseSha,
         isolatedWorktree: true,
+        allowedPaths,
         risk: input.risk,
         unresolved: input.unresolved,
     });

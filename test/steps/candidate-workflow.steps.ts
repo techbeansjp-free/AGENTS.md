@@ -31,6 +31,7 @@ Given("隔離候補の事前条件を用意する", function () {
     correctnessCriterion: "label() === Hello",
     baseSha: "a".repeat(40),
     isolatedWorktree: true,
+    allowedPaths: ["src/label.ts"],
     risk: Object.fromEntries(CANDIDATE_RISKS.map((key) => [key, "cleared"])),
     unresolved: [],
   };
@@ -42,6 +43,8 @@ Given("事前条件「{word}」を設定する", function (condition: string) {
   if (condition === "unknown-risk") delete this.pre.risk.authorization;
   if (condition === "no-isolation") this.pre.isolatedWorktree = false;
   if (condition === "vague-intent") this.pre.intent = "";
+  if (condition === "misclassified-auth-path")
+    this.pre.allowedPaths = ["src/auth.ts"];
 });
 When("候補実装の事前判定を行う", function () {
   assert.ok(this.pre);
