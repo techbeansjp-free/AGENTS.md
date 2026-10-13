@@ -45,3 +45,19 @@ Feature: 正式gateを維持する機械可読Work Unit契約
     Given execution契約のStep「2」とrole「requirements」がある
     When Step2の参照入力と正式出力を持つ実行契約を導出する
     Then Step2の正式artifactは01だけで00は参照入力に留まる
+
+  Scenario Outline: SCN-UNIT-EXECPLAN-004 Step11の操作はPRとtrusted merge方針に従う
+    Given Step11のdelivery状態「<state>」とmerge方針「<mode>」がある
+    When Step11の実行契約を導出する
+    Then 最初の操作は「<operation>」で承認flagは「<authorize>」である
+
+    Examples:
+      | state          | mode      | operation                 | authorize |
+      | none           | automatic | preview-reviewed-summary  | true      |
+      | pr-bound       | automatic | preview-merge-or-readback | false     |
+      | pr-bound       | assisted  | preview-merge-or-readback | true      |
+      | pr-bound       | disabled  | preview-reviewed-summary  | true      |
+      | pr-bound       | poc       | preview-reviewed-summary  | true      |
+      | merge-prepared | automatic | preview-merge-or-readback | false     |
+      | merge-prepared | disabled  | preview-merge-or-readback | false     |
+      | merge-observed | assisted  | preview-merge-or-readback | false     |

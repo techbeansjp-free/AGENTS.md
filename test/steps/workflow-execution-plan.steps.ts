@@ -108,6 +108,58 @@ Given(
 When("execution契約を導出する", function () {
   this.action = workflowExecutionContract(this.step, this.role, undefined);
 });
+
+Given(
+  "Step11のdelivery状態「{word}」とmerge方針「{word}」がある",
+  function (state: string, mode: string) {
+    this.step = 11;
+    this.role = "coordinator";
+    this.value = { state, mode };
+  },
+);
+When("Step11の実行契約を導出する", function () {
+  const value = this.value as { state: string; mode: string };
+  const trustedMergeMode =
+    value.mode === "poc"
+      ? "disabled"
+      : (value.mode as "disabled" | "assisted" | "automatic");
+  this.action = workflowExecutionContract(
+    11,
+    "coordinator",
+    undefined,
+    value.mode === "poc" ? "poc" : "quick",
+    value.state === "none"
+      ? undefined
+      : {
+          state: value.state as
+            "pr-bound" | "merge-prepared" | "merge-observed",
+          pr: 2,
+          trustedMergeMode,
+        },
+  );
+});
+Then(
+  "最初の操作は「{word}」で承認flagは「{word}」である",
+  function (operation: string, authorize: string) {
+    assert.ok(this.action);
+    assert.equal(
+      this.action.allowedOperations[0]?.operation ?? "none",
+      operation,
+    );
+    assert.equal(
+      this.action.allowedOperations.some((item) =>
+        item.requiredFlags.includes("authorize"),
+      ),
+      authorize === "true",
+    );
+    const value = this.value as { state: string; mode: string };
+    if (value.state === "pr-bound" && value.mode === "assisted")
+      assert.equal(
+        this.action.allowedOperations[0]?.requiredFlags.includes("authorize"),
+        true,
+      );
+  },
+);
 Then(
   "executorは「{word}」で最大1遷移と正式gate完了条件を持つ",
   function (executor: string) {
@@ -790,4 +842,100 @@ Then("Step2の正式artifactは01だけで00は参照入力に留まる", functi
       "",
     /action\.recordArtifacts/u,
   );
+});
+
+async function runPreview(staging: string) {
+  const original = process.stdout.write;
+  let output = "";
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    output += String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    const status = await main([
+      "workflow",
+      "advance",
+      `--staging=${staging}`,
+      "--dry-run",
+    ]);
+    return { status, output };
+  } finally {
+    process.stdout.write = original;
+  }
+}
+
+When("通常advanceとplanを同じ状態で観測する", async function () {
+  const original = process.stdout.write;
+  let output = "";
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    output += String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    const status = await main([
+      "workflow",
+      "advance",
+      `--staging=${this.staging}`,
+      "--dry-run",
+    ]);
+    assert.equal(status, 0, output);
+  } finally {
+    process.stdout.write = original;
+  }
+  this.value = JSON.parse(output) as Record<string, unknown>;
+  const planned = await runPlan(this.staging);
+  assert.equal(planned.status, 0, planned.text);
+  this.plans = [
+    JSON.parse(planned.text) as ReturnType<typeof observeWorkflowExecutionPlan>,
+  ];
+});
+Then("どちらもCLI検証を選びreviewer dispatchを提示しない", function () {
+  const preview = this.value as Record<string, unknown>;
+  const plan = this.plans[0];
+  assert.ok(plan);
+  assert.equal(preview.handoff, undefined);
+  assert.equal(preview.agentDispatch, undefined);
+  assert.deepEqual(preview.action, plan.action);
+  assert.equal(plan.action.executor, "cli");
+  assert.equal(plan.handoff, undefined);
+  assert.equal(plan.agentDispatch, undefined);
+  assert.ok(
+    plan.action.allowedOperations.some(
+      (operation) => operation.operation === "run-required-verification",
+    ),
+  );
+});
+
+When("compatible文脈で通常advanceを観測する", async function () {
+  const previous = process.env.ASC_EXECUTION_CONTEXT_MODE;
+  process.env.ASC_EXECUTION_CONTEXT_MODE = "compatible";
+  try {
+    const result = await runPreview(this.staging);
+    this.error = result.status;
+    this.value = JSON.parse(result.output) as Record<string, unknown>;
+  } finally {
+    if (previous === undefined) delete process.env.ASC_EXECUTION_CONTEXT_MODE;
+    else process.env.ASC_EXECUTION_CONTEXT_MODE = previous;
+  }
+});
+Then("互換previewは成功しdispatchを持たない", function () {
+  const result = this.value as Record<string, unknown>;
+  assert.equal(this.error, 0);
+  assert.equal(result.handoff, undefined);
+  assert.equal(result.agentDispatch, undefined);
+});
+
+When("review sessionを破損させ通常advanceを観測する", async function () {
+  fs.writeFileSync(path.join(this.staging, "review-session.json"), "broken");
+  const result = await runPreview(this.staging);
+  this.error = result.status;
+  this.value = JSON.parse(result.output) as Record<string, unknown>;
+});
+Then("停止状態と修復可能な理由を返す", function () {
+  const result = this.value as Record<string, unknown>;
+  assert.equal(this.error, 1);
+  assert.equal(result.state, "blocked");
+  assert.ok(Array.isArray(result.errors));
+  assert.ok((result.errors as string[]).length > 0);
+  assert.equal(result.handoff, undefined);
 });

@@ -15,6 +15,7 @@ import {
   WORKFLOW_EXACT_ARTIFACTS,
 } from "../domain/workflow.js";
 import type { WorkflowResume } from "../domain/workflow-resume.js";
+import { loadOperationPolicy } from "../domain/policy.js";
 import {
   readStoredReviewSession,
   REVIEW_SESSION_FILE,
@@ -155,6 +156,11 @@ export function workflowExecutionContract(
   role: string,
   read: ReturnType<typeof handoffReads>,
   mode?: "full" | "quick" | "poc",
+  delivery?: {
+    state: NonNullable<WorkflowResume["delivery"]>["state"];
+    pr: number | null;
+    trustedMergeMode: "disabled" | "assisted" | "automatic";
+  },
 ): WorkflowExecutionContract {
   const semantic: Record<number, string> = {
     1: "要求の範囲・完了条件を判断する",
@@ -204,21 +210,72 @@ export function workflowExecutionContract(
       mode: "gated-apply",
     });
   } else if (step === 11) {
-    operations.push({
-      operation: "preview-reviewed-summary",
-      argv: ["pr", "create", "--dry-run"],
-      requiredFlags: ["staging", "issue", "repo", "from-summary"],
-      mode: "read",
-    });
-    operations.push({
-      operation: "deliver-reviewed-summary",
-      argv: ["pr", "create", "--apply"],
-      requiredFlags: ["staging", "issue", "repo", "from-summary", "authorize"],
-      inputBindings: {
-        authorize: "existing human/policy authorization; never generated",
-      },
-      mode: "gated-apply",
-    });
+    const mergePending =
+      delivery !== undefined &&
+      ((delivery.state === "pr-bound" &&
+        mode !== "poc" &&
+        delivery.trustedMergeMode !== "disabled") ||
+        delivery.state === "merge-prepared" ||
+        delivery.state === "merge-observed");
+    if (mergePending) {
+      const flags =
+        delivery.trustedMergeMode === "assisted" &&
+        delivery.state === "pr-bound"
+          ? ["staging", "repo", "pr", "method", "authorize"]
+          : ["staging", "repo", "pr", "method"];
+      const inputBindings = {
+        pr: "保存済みdelivery stateのPR番号",
+        method:
+          delivery.state === "pr-bound"
+            ? "trusted merge policyで許可された方式を選び、pr merge gateで再検証"
+            : "保存済みmerge intentの方式と一致。変更しない",
+        ...(delivery.trustedMergeMode === "assisted" &&
+        delivery.state === "pr-bound"
+          ? { authorize: "対象PRへの既存owner承認。自動生成しない" }
+          : {}),
+      };
+      operations.push({
+        operation: "preview-merge-or-readback",
+        argv: ["pr", "merge", "--dry-run"],
+        requiredFlags: flags,
+        inputBindings,
+        mode: "read",
+      });
+      operations.push({
+        operation: "merge-or-readback",
+        argv: ["pr", "merge", "--apply"],
+        requiredFlags: flags,
+        inputBindings,
+        mode: "gated-apply",
+      });
+    } else if (
+      delivery === undefined ||
+      delivery.state === "create-prepared" ||
+      (delivery.state === "pr-bound" &&
+        (mode === "poc" || delivery.trustedMergeMode === "disabled"))
+    ) {
+      operations.push({
+        operation: "preview-reviewed-summary",
+        argv: ["pr", "create", "--dry-run"],
+        requiredFlags: ["staging", "issue", "repo", "from-summary"],
+        mode: "read",
+      });
+      operations.push({
+        operation: "deliver-reviewed-summary",
+        argv: ["pr", "create", "--apply"],
+        requiredFlags: [
+          "staging",
+          "issue",
+          "repo",
+          "from-summary",
+          "authorize",
+        ],
+        inputBindings: {
+          authorize: "existing human/policy authorization; never generated",
+        },
+        mode: "gated-apply",
+      });
+    }
   } else if (executor === "fresh-worker") {
     operations.push({
       operation:
@@ -477,7 +534,7 @@ export function workflowExecutionContract(
               id: "formal-gate",
               observedBy:
                 step === 11
-                  ? "pr create / delivery status"
+                  ? "pr create / pr merge / delivery status"
                   : step === 10
                     ? "review session / workflow record --step=10"
                     : "workflow advance --apply",
@@ -701,6 +758,26 @@ export function observeWorkflowHandoff(
       .digest("hex");
     const record = readStoredStagingRecord(staging);
     const read = handoffReads(staging, step, record?.mode, role, reviewRound);
+    const delivery =
+      step === 11 && resume.delivery !== null
+        ? {
+            ...resume.delivery,
+            trustedMergeMode: loadOperationPolicy(worktree).policy.merge.mode,
+          }
+        : undefined;
+    if (step === 11 && delivery !== undefined) {
+      if (
+        ![
+          "create-prepared",
+          "pr-bound",
+          "merge-prepared",
+          "merge-observed",
+        ].includes(delivery.state)
+      )
+        throw new Error(
+          `delivery state ${delivery.state}は専用復旧経路で再観測してください`,
+        );
+    }
     const branch = git(["symbolic-ref", "-q", "--short", "HEAD"], worktree, {
       env: GIT_ENV,
       allowFailure: true,
@@ -730,7 +807,13 @@ export function observeWorkflowHandoff(
         freshContextRequired: true,
         terminalAfterHandback: true,
         reuseForbidden: true,
-        contract: workflowExecutionContract(step, role, read, record?.mode),
+        contract: workflowExecutionContract(
+          step,
+          role,
+          read,
+          record?.mode,
+          delivery,
+        ),
       },
       resume: { command: "workflow advance", staging },
     };

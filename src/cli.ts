@@ -62,7 +62,6 @@ import {
 import {
   observeWorkflowHandoff,
   workflowAgentDispatch,
-  workflowReviewerAlternative,
 } from "./adapters/workflow-handoff.js";
 import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import { observeWorkflowExecutionPlan } from "./adapters/workflow-execution-plan.js";
@@ -7044,35 +7043,72 @@ export async function main(
       };
     }
     if (!apply || plan.state !== "preview") {
-      const resume = observeWorkflowResume(staging);
-      const handoff = observeWorkflowHandoff(
+      if (
+        (process.env.ASC_EXECUTION_CONTEXT_MODE ?? "short-lived") !==
+        "short-lived"
+      ) {
+        const resume = observeWorkflowResume(staging);
+        print(
+          syncPreview === undefined
+            ? { ...plan, resume }
+            : { ...plan, sync: syncPreview, resume },
+        );
+        return plan.state === "blocked" ? 1 : 0;
+      }
+      const selected = observeWorkflowExecutionPlan(
         staging,
-        inspected.nextStep,
-        resume,
+        inspected,
         continuationFromHead,
       );
-      const reviewerHandoff = workflowReviewerAlternative(handoff);
-      const execution =
-        handoff === undefined
+      const handoff =
+        selected.handoff === undefined
+          ? undefined
+          : {
+              ...selected.handoff,
+              workUnit: {
+                ...selected.handoff.workUnit,
+                contract: selected.action,
+              },
+            };
+      const alternatives = selected.alternatives?.map((item) => ({
+        ...item.handoff,
+        workUnit: {
+          ...item.handoff.workUnit,
+          contract: item.action,
+        },
+      }));
+      const execution = {
+        action: selected.action,
+        assurance: selected.assurance,
+        ...(handoff === undefined
+          ? {}
+          : { handoff, agentDispatch: selected.agentDispatch }),
+        ...(alternatives === undefined
           ? {}
           : {
-              handoff,
-              agentDispatch: workflowAgentDispatch(handoff),
-              ...(reviewerHandoff === undefined
-                ? {}
-                : {
-                    agentDispatchAlternatives: [
-                      workflowAgentDispatch(reviewerHandoff),
-                    ],
-                    handoffAlternatives: [reviewerHandoff],
-                  }),
-            };
-      print(
-        syncPreview === undefined
-          ? { ...plan, resume, ...execution }
-          : { ...plan, sync: syncPreview, resume, ...execution },
-      );
-      return plan.state === "blocked" ? 1 : 0;
+              handoffAlternatives: alternatives,
+              agentDispatchAlternatives: selected.alternatives?.map(
+                (item) => item.agentDispatch,
+              ),
+            }),
+      };
+      const selectedBlocked = selected.state === "blocked";
+      const result = {
+        ...plan,
+        ...(selectedBlocked
+          ? {
+              state: "blocked",
+              reasons: [...plan.reasons, ...selected.errors],
+              errors: selected.errors,
+              next: "workflow advance --planで停止理由を確認し、正式状態を修復してください",
+            }
+          : {}),
+        ...(syncPreview === undefined ? {} : { sync: syncPreview }),
+        resume: selected.resume,
+        ...execution,
+      };
+      print(result);
+      return plan.state === "blocked" || selectedBlocked ? 1 : 0;
     }
     if (initialSnapshot === undefined || initialJournalDigest === undefined)
       throw new Error("workflow advanceのapply snapshotがありません");

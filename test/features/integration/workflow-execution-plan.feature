@@ -50,3 +50,18 @@ Feature: 保存済み状態から次のexecutionPlanだけを副作用なく返�
     Given 正式検証未実施のStep10 reviewer候補が隔離repositoryにある
     When 実CLIのplanから必要検証を実行して再planする
     Then CLIだけが検証を一度実行しStep10未記録で独立reviewerへ復帰する
+
+  Scenario: SCN-INT-EXECPLAN-009 通常previewも検証先行時に矛盾したreviewerをdispatchしない
+    Given 正式検証未実施のStep10 reviewer候補が隔離repositoryにある
+    When 通常advanceとplanを同じ状態で観測する
+    Then どちらもCLI検証を選びreviewer dispatchを提示しない
+
+  Scenario: SCN-INT-EXECPLAN-010 compatible文脈の通常previewはdispatchなしで成功する
+    Given executionPlan用の隔離full stagingがある
+    When compatible文脈で通常advanceを観測する
+    Then 互換previewは成功しdispatchを持たない
+
+  Scenario: SCN-INT-EXECPLAN-011 selectionが停止した通常previewは理由を返す
+    Given 正式検証未実施のStep10 reviewer候補が隔離repositoryにある
+    When review sessionを破損させ通常advanceを観測する
+    Then 停止状態と修復可能な理由を返す
