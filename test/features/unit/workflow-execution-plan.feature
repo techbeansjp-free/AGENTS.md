@@ -67,7 +67,7 @@ Feature: 正式gateを維持する機械可読Work Unit契約
   Scenario: SCN-UNIT-EXECPLAN-005 完成済みQuick要求は追加Workerなしで正式記録へ進む
     Given Step1の隔離quick stagingと未完成の00がある
     When 00を完成させてEvidenceから次のWork Unitを選ぶ
-    Then 未完成時はfresh Workerで完成後はCLIのみを示し正式記録はまだ行わない
+    Then 未完成時は限定Coordinatorで完成後はCLIのみを示し正式記録はまだ行わない
 
   Scenario: SCN-UNIT-EXECPLAN-006 完成済みQuick要求も既存Step1 gateを通る
     Given Step1の隔離quick stagingと未完成の00がある
@@ -95,3 +95,8 @@ Feature: 正式gateを維持する機械可読Work Unit契約
     Given Quick reviewの隔離fixtureがある
     When Quick reviewの現在HEAD拘束と失効を証明責務へ投影する
     Then 古いreviewは未確定で修正後の正式reviewだけが責務を満たす
+
+  Scenario: SCN-UNIT-EXECPLAN-011 Quick要求の不足を解消できない場合はfresh Workerへ委譲する
+    Given Step1の隔離quick stagingと未完成の00がある
+    When 未確定のQuick要求を明示的にfresh Workerへ委譲する
+    Then 委譲は正式記録を変えず独立Worker dispatchを返す

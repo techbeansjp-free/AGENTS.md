@@ -717,7 +717,7 @@ export function workflowReviewerAlternative(handoff) {
     };
 }
 /** One-shot pointer; the worker re-observes the full contract at the same boundary. */
-export function workflowAgentDispatch(handoff) {
+export function workflowAgentDispatch(handoff, delegateRequest = false) {
     if (!handoff ||
         !("kind" in handoff) ||
         !handoff.workUnit ||
@@ -743,7 +743,7 @@ export function workflowAgentDispatch(handoff) {
                     reuseForbidden: handoff.workUnit.reuseForbidden,
                 },
             },
-            prompt: "指定workUnitId専用のfresh one-shot workerです。worktreeでworkflow advance --plan --staging=<staging>を観測する。continuationFromHeadがあれば同値の--continue-fromも付ける。plan.handoffまたはplan.alternatives[].handoffから同じrole・workUnitIdの候補がちょうど1件の場合だけ選び、HEAD・boundaryも照合。0件・複数件・不一致なら再dispatchを要求。同じ状態の--planを出力分割だけのため再実行せず、一度の観測から担当候補とactionを読む。照合後、primaryならplan.action、alternativeなら対応するalternatives[i].actionを正式契約として読み、handoff.read.skill・read.stagingと未充足責務の必要節を確認する。契約読込後もHEADを再確認し、担当だけを完了する。Skillの契約と独立検証を維持。action.recordArtifactsがある場合、正式返却artifactはその集合だけとしrequiredInputs/read.stagingを混ぜない。workUnitId/status/HEAD/検証記録ID/blocker/nextのcompact JSONを返す。詳細はGit/staging/finding、Step/round記録はcoordinator。返却後terminal、追加作業にはASC_REDISPATCH_REQUIRED。",
+            prompt: `指定workUnitId専用のfresh one-shot workerです。worktreeでworkflow advance --plan${delegateRequest ? " --delegate-request" : ""} --staging=<staging>を観測する。continuationFromHeadがあれば同値の--continue-fromも付ける。plan.handoffまたはplan.alternatives[].handoffから同じrole・workUnitIdの候補がちょうど1件の場合だけ選び、HEAD・boundaryも照合。0件・複数件・不一致なら再dispatchを要求。同じ状態の--planを出力分割だけのため再実行せず、一度の観測から担当候補とactionを読む。照合後、primaryならplan.action、alternativeなら対応するalternatives[i].actionを正式契約として読み、handoff.read.skill・read.stagingと未充足責務の必要節を確認する。契約読込後もHEADを再確認し、担当だけを完了する。Skillの契約と独立検証を維持。action.recordArtifactsがある場合、正式返却artifactはその集合だけとしrequiredInputs/read.stagingを混ぜない。workUnitId/status/HEAD/検証記録ID/blocker/nextのcompact JSONを返す。詳細はGit/staging/finding、Step/round記録はcoordinator。返却後terminal、追加作業にはASC_REDISPATCH_REQUIRED。`,
         }),
     };
 }

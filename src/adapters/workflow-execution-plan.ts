@@ -53,35 +53,97 @@ export function shouldVerifyBeforeReview(input: {
   );
 }
 
-/** A completed Quick artifact needs a gate transition, not another semantic worker. */
-function completedQuickRequestWork(
+/** Choose bounded Coordinator completion or a CLI gate from trusted Candidate facts. */
+function quickCandidateRequestWork(
   staging: string,
 ): WorkflowExecutionContract | null {
   const root = stagingRepositoryRoot(staging);
   const manifest = path.join(root, ".agent-skill-chain", "project-policy.json");
   let gherkinDialect: string | undefined;
   let candidateHeadSha: string;
+  let checked: ReturnType<typeof validateIssue>;
   try {
-    gherkinDialect = fs.existsSync(manifest)
-      ? loadProjectPolicySet(root).policy.projectChoices?.gherkinDialect
-      : undefined;
-    const checked = validateIssue(staging, {
-      stage: "requirements",
-      ...(gherkinDialect ? { gherkinDialect } : {}),
-    });
-    if (!checked.valid || checked.mode !== "quick") return null;
-    // A syntactically complete document alone never bypasses semantic work.
-    // Re-observe the isolated Candidate lineage and actual Git risk before
-    // selecting the already-completed Quick planning artifact.
+    // A document alone never authorizes skipping a worker. Observe isolated
+    // Candidate lineage, current Git risk, then the current Quick artifact.
     candidateHeadSha = observeCandidateAdoption(
       root,
       path.join(staging, "00_要求定義.md"),
     ).headSha;
+    gherkinDialect = fs.existsSync(manifest)
+      ? loadProjectPolicySet(root).policy.projectChoices?.gherkinDialect
+      : undefined;
+    checked = validateIssue(staging, {
+      stage: "requirements",
+      ...(gherkinDialect ? { gherkinDialect } : {}),
+    });
+    if (checked.mode !== "quick") return null;
   } catch {
-    // Unknown validity never authorizes a deterministic transition.
+    // Unknown lineage or validity keeps the independent fresh-worker path.
     return null;
   }
   const base = workflowExecutionContract(1, "request", undefined, "quick");
+  if (!checked.valid)
+    return {
+      ...base,
+      executor: "coordinator",
+      purpose: "隔離Candidateの既存根拠からQuick要求00の不足欄だけを確定する",
+      semanticReason:
+        "CandidateのGit出自と危険差分不在を再観測した。00の形式不足を現在のCoordinatorが限定修正し、意味的なunknownは停止する",
+      allowedOperations: [
+        {
+          operation: "complete-request-artifact",
+          argv: [],
+          requiredFlags: [],
+          inputBindings: {
+            artifact:
+              "00_要求定義.mdの不足欄のみ。Candidateのintent・AC・Git差分・既存仕様を根拠にする",
+          },
+          mode: "artifact-write",
+        },
+        {
+          operation: "validate-request-artifact",
+          argv: ["issue", "validate", "--stage=requirements"],
+          requiredFlags: ["path"],
+          mode: "read",
+        },
+        {
+          operation: "delegate-incomplete-request",
+          argv: ["workflow", "advance", "--plan", "--delegate-request"],
+          requiredFlags: ["staging"],
+          mode: "read",
+        },
+      ],
+      requiredInputs: [
+        { owner: "staging", path: "00_要求定義.md", required: true },
+        { owner: "staging", path: "00_モード判定.json", required: true },
+        { owner: "git", path: candidateHeadSha, required: true },
+      ],
+      proofObligations: base.proofObligations.map((item) => ({
+        ...item,
+        judgedBy: "independent-reviewer" as const,
+        sourceRefs: ["staging:00_要求定義.md", "git:HEAD"],
+      })),
+      coordinatorCompletion: undefined,
+      preconditions: [
+        {
+          id: "candidate-current",
+          observedBy: "workflow advance --plan",
+          expected: `隔離Candidateの出自と危険差分不在をHEAD=${candidateHeadSha}で再観測`,
+        },
+      ],
+      completionConditions: [
+        {
+          id: "request-replanned",
+          observedBy: "issue validate / workflow advance --plan",
+          expected:
+            "00を一度だけ補完後に再検証し、CLI gateを選ぶか明示的にfresh Workerへ委譲する。Step記録はこのWork Unitの完了条件ではない",
+        },
+      ],
+      unconfirmed: [
+        ...checked.errors,
+        "根拠のない要求・AC・設計判断は補完しない。解消できなければfresh Workerまたは上流確認へ戻す",
+      ],
+    };
   return {
     ...base,
     executor: "cli",
@@ -221,6 +283,7 @@ export function observeWorkflowExecutionPlan(
   staging: string,
   inspection = inspectWorkflowStaging(staging),
   continuationFromHead?: string,
+  delegateRequest = false,
 ) {
   const resume = observeWorkflowResume(staging);
   const journal = readWorkflowJournal(staging);
@@ -240,11 +303,12 @@ export function observeWorkflowExecutionPlan(
     implementationHeadBound:
       implementation?.implementationHeadSha !== undefined,
   });
-  const completedRequestAction =
+  const quickRequestAction =
     plan.state !== "blocked" &&
     inspection.mode === "quick" &&
-    inspection.nextStep === 1
-      ? completedQuickRequestWork(staging)
+    inspection.nextStep === 1 &&
+    !delegateRequest
+      ? quickCandidateRequestWork(staging)
       : null;
   const adoptionAction =
     plan.state !== "blocked" &&
@@ -280,7 +344,7 @@ export function observeWorkflowExecutionPlan(
       : "ready";
   const candidateAction =
     state === "ready"
-      ? (completedRequestAction ??
+      ? (quickRequestAction ??
         adoptionAction ??
         known?.workUnit?.contract ??
         workflowExecutionContract(undefined, "coordinator", undefined))
@@ -389,7 +453,7 @@ export function observeWorkflowExecutionPlan(
     journalValid: journal.errors.length === 0 && inspection.valid,
     resume,
     action: candidateAction,
-    quickRequestArtifactValidated: completedRequestAction !== null,
+    quickRequestArtifactValidated: quickRequestAction?.executor === "cli",
     quickReviewBindingValid,
     role: known?.role,
     verificationGate,
@@ -413,12 +477,15 @@ export function observeWorkflowExecutionPlan(
         })
       : candidateAction;
   const assurance =
-    state === "ready" && completedRequestAction
+    state === "ready" && quickRequestAction
       ? {
           ...projection,
           selectedWork: {
             obligationIds: ["O-01", "O-02", "O-03"],
-            kind: "deterministic" as const,
+            kind:
+              quickRequestAction.executor === "cli"
+                ? ("deterministic" as const)
+                : ("semantic" as const),
             evidenceRefs: ["staging:00_要求定義.md", "git:HEAD"],
           },
         }
@@ -447,7 +514,7 @@ export function observeWorkflowExecutionPlan(
     state === "ready" &&
     !verificationFirst &&
     adoptionAction === null &&
-    completedRequestAction === null
+    quickRequestAction === null
       ? workflowReviewerAlternative(handoff)
       : undefined;
   return {
@@ -458,11 +525,9 @@ export function observeWorkflowExecutionPlan(
     step: inspection.nextStep ?? null,
     headSha: resume.headSha,
     boundary:
-      adoptionAction || completedRequestAction
-        ? null
-        : (known?.boundary ?? null),
+      adoptionAction || quickRequestAction ? null : (known?.boundary ?? null),
     workUnitId:
-      verificationFirst || adoptionAction || completedRequestAction
+      verificationFirst || adoptionAction || quickRequestAction
         ? null
         : (known?.workUnit?.workUnitId ?? null),
     action,
@@ -472,7 +537,7 @@ export function observeWorkflowExecutionPlan(
       known &&
       !verificationFirst &&
       adoptionAction === null &&
-      completedRequestAction === null
+      quickRequestAction === null
         ? {
             ...known,
             workUnit: {
@@ -485,7 +550,7 @@ export function observeWorkflowExecutionPlan(
         : undefined,
     agentDispatch:
       state === "ready" && action.executor === "fresh-worker"
-        ? workflowAgentDispatch(handoff)
+        ? workflowAgentDispatch(handoff, delegateRequest)
         : undefined,
     ...(alternative === undefined
       ? {}

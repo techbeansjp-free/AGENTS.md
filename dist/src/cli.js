@@ -88,6 +88,7 @@ function workflowArguments(args) {
         "dry-run",
         "plan",
         "prepare-next",
+        "delegate-request",
         "post-terminal-intake",
         "post-pr-intake",
         /**
@@ -4897,12 +4898,16 @@ export async function main(argv, dependencies = {}) {
             "plan",
             "prepare-next",
             "candidate-head",
+            "delegate-request",
         ].includes(flag));
         if (unknown.length > 0)
             throw new Error(`workflow advanceの未知optionです: --${unknown.join(", --")}`);
         const planOnly = presentFlag(flags, "plan");
         const prepareNext = presentFlag(flags, "prepare-next");
         const expectedCandidateHead = flags["candidate-head"];
+        const delegateRequest = presentFlag(flags, "delegate-request");
+        if (delegateRequest && !planOnly)
+            throw new Error("--delegate-requestはworkflow advance --plan専用です");
         if (expectedCandidateHead !== undefined && !apply)
             throw new Error("--candidate-headには--applyが必要です");
         if (prepareNext && !apply)
@@ -4910,7 +4915,13 @@ export async function main(argv, dependencies = {}) {
         if (planOnly &&
             (apply ||
                 artifacts.length > 0 ||
-                Object.keys(flags).some((key) => !["staging", "plan", "continue-from", "dry-run"].includes(key))))
+                Object.keys(flags).some((key) => ![
+                    "staging",
+                    "plan",
+                    "continue-from",
+                    "dry-run",
+                    "delegate-request",
+                ].includes(key))))
             throw new Error("workflow advance --planは副作用なしの作業契約観測専用です");
         const staging = path.resolve(required(flags, "staging"));
         const inspected = inspectWorkflowStaging(staging);
@@ -4961,7 +4972,10 @@ export async function main(argv, dependencies = {}) {
                 throw new Error("continuationにはtracked変更のcommitが必要です");
         }
         if (planOnly) {
-            const executionPlan = observeWorkflowExecutionPlan(staging, inspected, continuationFromHead);
+            if (delegateRequest &&
+                (inspected.mode !== "quick" || inspected.nextStep !== 1))
+                throw new Error("--delegate-requestはQuick Step 1だけで使用できます");
+            const executionPlan = observeWorkflowExecutionPlan(staging, inspected, continuationFromHead, delegateRequest);
             print(executionPlan);
             return executionPlan.state === "blocked" ? 1 : 0;
         }

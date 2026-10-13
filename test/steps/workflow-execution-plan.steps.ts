@@ -1078,12 +1078,30 @@ When("00を完成させてEvidenceから次のWork Unitを選ぶ", async functio
   );
 });
 Then(
-  "未完成時はfresh Workerで完成後はCLIのみを示し正式記録はまだ行わない",
+  "未完成時は限定Coordinatorで完成後はCLIのみを示し正式記録はまだ行わない",
   function () {
     const before = this.plans[0]!;
     const after = this.plans[1]!;
     assert.equal(before.state, "ready");
-    assert.equal(before.action.executor, "fresh-worker");
+    assert.equal(before.action.executor, "coordinator");
+    assert.equal(before.agentDispatch, undefined);
+    assert.equal(before.handoff, undefined);
+    assert.equal(before.assurance.selectedWork.kind, "semantic");
+    assert.equal(
+      before.action.allowedOperations[0]?.operation,
+      "complete-request-artifact",
+    );
+    assert.ok(before.action.unconfirmed.length > 0);
+    assert.equal(before.action.coordinatorCompletion, undefined);
+    assert.deepEqual(
+      before.action.completionConditions.map((item) => item.id),
+      ["request-replanned"],
+    );
+    assert.ok(
+      before.action.allowedOperations.some(
+        (item) => item.operation === "delegate-incomplete-request",
+      ),
+    );
     assert.equal(after.state, "ready", after.errors.join("; "));
     assert.equal(after.action.executor, "cli");
     assert.equal(after.agentDispatch, undefined);
@@ -1290,4 +1308,22 @@ Then("古いreviewは未確定で修正後の正式reviewだけが責務を満�
     assert.equal(status(this.quickReviewProjections.corrected), "satisfied");
     assert.equal(status(this.quickReviewProjections.invalidated), "unknown");
   }
+});
+
+When("未確定のQuick要求を明示的にfresh Workerへ委譲する", async function () {
+  this.snapshot = snapshot(this);
+  const result = await runPlan(this.staging, ["--delegate-request"]);
+  assert.equal(result.status, 0, result.text);
+  this.plans.push(
+    JSON.parse(result.text) as ReturnType<typeof observeWorkflowExecutionPlan>,
+  );
+});
+Then("委譲は正式記録を変えず独立Worker dispatchを返す", function () {
+  const selected = this.plans.at(-1)!;
+  assert.equal(selected.step, 1);
+  assert.equal(selected.action.executor, "fresh-worker");
+  assert.ok(selected.agentDispatch);
+  assert.match(selected.agentDispatch.prompt, /--plan --delegate-request/u);
+  assert.ok(selected.handoff);
+  assert.equal(snapshot(this), this.snapshot);
 });

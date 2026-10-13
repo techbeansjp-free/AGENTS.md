@@ -44,3 +44,9 @@ Step 1の長い出力は、既存の基準やCandidate差分から確定でき�
 00の形式とStep 1 journal記録は要求・受け入れ条件・設計の意味的妥当性を証明しない。O-01〜O-03は記録後も`unknown`とし、現在HEADに拘束したStep 10独立review sessionが正式記録と一致するまで充足扱いにしない。Step 4の同期、Planning Seal、検証、独立review、Deliveryの既存gateは維持する。今回の変更はProof責務に基づく実行選択の一経路であり、全工程の実行制御を置換したものではない。
 
 確認したBDDは、正常なCandidateでのWorker省略、Step 1だけの正式記録、Candidate出自欠落、危険path、plan後のHEAD移動、review失効とreview後修正commitを含む。これらは機能・安全の検証であり、実際の要求からPR/CIまでの時間や全Agent tokensの削減結果ではない。同条件の隔離E2Eと比較試行が完了するまでは性能受入条件を未達として扱う。
+
+隔離dummy Issue #8で最初の試行を始めたところ、Candidate Worker 23.564秒で対象2ファイルの修正と対象テストを終えたが、生成済み00にGherkin Scenario IDがなく、`issue validate`が拒否してStep 1 fresh Workerへ戻った。ここから、完成済み00だけをCLIへ送る選択では固定費を削減できないことが分かった。実行計画を追加修正し、出自と危険差分不在をGitから確認できるCandidateのQuick Step 1では、形式不足を`executor=coordinator`の限定Work Unitとして返す。Coordinatorは不足欄を既存根拠から一度だけ補完し、形式検証後に再planする。意味的なunknown、出自不明、危険差分は補完を強制しない。この修正後のE2E時間・tokensは未測定であり、先の試行は修正前配布物による負例として区別する。
+
+独立reviewでは、Coordinatorの補完に失敗した後の明示的なfresh Worker fallbackと、補完Work Unitの終了条件が不足と指摘された。`workflow advance --plan --delegate-request`をQuick Step 1専用のread-only再選択として追加し、fresh Workerの再観測promptにも同じflagを固定した。補完Work Unitは00の検証・再planだけで終了し、Step 1記録を自己完了条件に含めない。正式記録はその後のCLI gateで再照合する。この変更も実走上の速度効果は未測定である。
+
+修正前配布物`4a5a27c2`の隔離dummy Issue #8は[Draft PR #9](https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/pull/9)とCI 10/10まで完走した。Candidate Workerは23.564秒、開始観測からDraftとCI確認まで1,010.460秒。初回の00形式不備によるfresh Step 1 Worker、Worker起動引数の失敗、Candidate結果worktreeの依存物欠落による初回full失敗、reviewer初回結果の欠測をすべて時間に含める。全Agent usageは欠測で`null`。さらにreviewer選択のdecision記録が共有Git primary rootのseed側に保存され、厳密な隔離条件を破った。該当するIssue #8の単一runtime記録を確認して削除し、seedの追跡差分がないことを確認した。この試行を新経路の性能効果や清浄な比較として扱わない。修正後の配布物での再実走は独立Git cloneを用い、Git共通directoryも隔離する。

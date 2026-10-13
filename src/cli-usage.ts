@@ -799,6 +799,12 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "--apply時だけ指定可",
       ),
       optional(
+        "delegate-request",
+        "",
+        "Candidate由来のQuick Step 1不足欄を現在contextで確定できない場合にfresh Workerを選ぶ",
+        "--plan時のQuick Step 1だけ指定可",
+      ),
+      optional(
         "candidate-head",
         "40hex",
         "隔離CandidateのQuick Step 1を記録するときにplanのHEADを再照合",

@@ -46,7 +46,7 @@ export function deriveAssuranceProjection(input: {
   journalSteps: readonly number[];
   journalValid: boolean;
   resume: WorkflowResume;
-  action: { executor: "fresh-worker" | "cli" | "none" };
+  action: { executor: "fresh-worker" | "coordinator" | "cli" | "none" };
   quickRequestArtifactValidated?: boolean;
   quickReviewBindingValid?: boolean;
   role?: string;

@@ -426,6 +426,7 @@ function workflowArguments(args: string[]): {
     "dry-run",
     "plan",
     "prepare-next",
+    "delegate-request",
     "post-terminal-intake",
     "post-pr-intake",
     /**
@@ -6843,6 +6844,7 @@ export async function main(
           "plan",
           "prepare-next",
           "candidate-head",
+          "delegate-request",
         ].includes(flag),
     );
     if (unknown.length > 0)
@@ -6852,6 +6854,9 @@ export async function main(
     const planOnly = presentFlag(flags, "plan");
     const prepareNext = presentFlag(flags, "prepare-next");
     const expectedCandidateHead = flags["candidate-head"];
+    const delegateRequest = presentFlag(flags, "delegate-request");
+    if (delegateRequest && !planOnly)
+      throw new Error("--delegate-requestはworkflow advance --plan専用です");
     if (expectedCandidateHead !== undefined && !apply)
       throw new Error("--candidate-headには--applyが必要です");
     if (prepareNext && !apply)
@@ -6862,7 +6867,13 @@ export async function main(
         artifacts.length > 0 ||
         Object.keys(flags).some(
           (key) =>
-            !["staging", "plan", "continue-from", "dry-run"].includes(key),
+            ![
+              "staging",
+              "plan",
+              "continue-from",
+              "dry-run",
+              "delegate-request",
+            ].includes(key),
         ))
     )
       throw new Error(
@@ -6935,10 +6946,16 @@ export async function main(
         throw new Error("continuationにはtracked変更のcommitが必要です");
     }
     if (planOnly) {
+      if (
+        delegateRequest &&
+        (inspected.mode !== "quick" || inspected.nextStep !== 1)
+      )
+        throw new Error("--delegate-requestはQuick Step 1だけで使用できます");
       const executionPlan = observeWorkflowExecutionPlan(
         staging,
         inspected,
         continuationFromHead,
+        delegateRequest,
       );
       print(executionPlan);
       return executionPlan.state === "blocked" ? 1 : 0;
