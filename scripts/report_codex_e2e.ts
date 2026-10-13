@@ -206,11 +206,14 @@ function observations(agent: Agent): ObservationSet | null {
     }
   }
   const allCalls = [...found.values()];
+  const turnCalls =
+    agent.format === "codex-rollout" && agent.rootTurnId
+      ? allCalls.filter((call) => call.rootTurnId === agent.rootTurnId)
+      : allCalls;
   const calls =
     agent.format === "codex-rollout"
-      ? allCalls.filter(
+      ? turnCalls.filter(
           (call) =>
-            (!agent.rootTurnId || call.rootTurnId === agent.rootTurnId) &&
             (from === null || (call.at !== null && call.at >= from)) &&
             (to === null || (call.at !== null && call.at <= to)),
         )
@@ -231,10 +234,10 @@ function observations(agent: Agent): ObservationSet | null {
             (lastUsageAt !== null && lastUsageAt >= lastGeneratedAt)) &&
           JSON.stringify(sum(allCalls.map((call) => call.usage))) ===
             JSON.stringify(finalCumulative));
-    if (agent.rootTurnId && calls.length === 0) return null;
+    if (agent.rootTurnId && turnCalls.length === 0) return null;
     const coveredIntervals = agent.rootTurnId
       ? taskIntervals.filter((interval) =>
-          calls.some(
+          turnCalls.some(
             (call) =>
               call.at !== null &&
               call.at >= interval.start &&
