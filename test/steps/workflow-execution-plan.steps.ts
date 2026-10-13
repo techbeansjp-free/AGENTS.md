@@ -48,6 +48,11 @@ class ExecutionPlanWorld extends WorkflowWorld {
     valid: AssuranceProjection;
     stale: AssuranceProjection;
   };
+  quickReviewProjections?: {
+    stale: AssuranceProjection;
+    corrected: AssuranceProjection;
+    invalidated: AssuranceProjection;
+  };
   alternative?: ReturnType<typeof workflowReviewerAlternative>;
   originalId = "";
   refusal = false;
@@ -87,7 +92,9 @@ async function runPlan(staging: string, extras: string[] = []) {
         "workflow",
         "advance",
         `--staging=${staging}`,
-        ...(extras.some((option) => option.startsWith("--plan="))
+        ...(extras.some(
+          (option) => option.startsWith("--plan=") || option === "--apply",
+        )
           ? []
           : ["--plan"]),
         ...extras,
@@ -996,4 +1003,291 @@ Then("実行選択の停止と修復可能な理由を返す", function () {
   assert.equal(result.agentDispatch, undefined);
   assert.equal((result.action as { executor: string }).executor, "none");
   assert.match(String(result.next), /workflow advance --plan/u);
+});
+
+function prepareQuickRequest(
+  world: ExecutionPlanWorld,
+  candidate: boolean,
+  sensitive = false,
+): void {
+  const primary = world.initRepo();
+  if (candidate) {
+    const base = git(["rev-parse", "HEAD"], primary).stdout.trim();
+    const changedPath = sensitive ? "src/authorization.js" : "README.md";
+    if (sensitive) fs.mkdirSync(path.join(primary, "src"));
+    fs.writeFileSync(path.join(primary, changedPath), "# Candidate result\n");
+    git(["add", changedPath], primary);
+    git(["commit", "-qm", "asc: isolated candidate implementation"], primary);
+    const head = git(["rev-parse", "HEAD"], primary).stdout.trim();
+    git(["reset", "--hard", base], primary);
+    const result = path.join(
+      path.dirname(primary),
+      `.asc-candidate-result-${path.basename(primary)}`,
+    );
+    git(["worktree", "add", "--detach", result, head], primary);
+    world.root = result;
+  } else {
+    world.root = primary;
+  }
+  world.staging = createIssueStaging(world.root, {
+    title: "completed-quick-request",
+    requestedMode: "quick",
+    answers: Object.fromEntries(
+      QUESTIONS.map((id) => [
+        id,
+        { answer: true, evidence: "既存仕様と対象差分から確認済み" },
+      ]),
+    ),
+    now: new Date(fixtureInstant()),
+  }).path;
+  world.plans = [observeWorkflowExecutionPlan(world.staging)];
+}
+Given("Step1の隔離quick stagingと未完成の00がある", function () {
+  prepareQuickRequest(this, true);
+});
+Given("Candidate出自のないStep1の隔離quick stagingがある", function () {
+  prepareQuickRequest(this, false);
+});
+Given("Candidateの危険差分があるStep1の隔離quick stagingがある", function () {
+  prepareQuickRequest(this, true, true);
+});
+When("00を完成させてEvidenceから次のWork Unitを選ぶ", async function () {
+  const file = path.join(this.staging, "00_要求定義.md");
+  const filled = fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .map((line) =>
+      line.startsWith("## ")
+        ? line
+        : line
+            .replaceAll("applicable / not-applicable", "not-applicable")
+            .replace(/（[^）\n]+）/gu, "既存仕様と対象差分で確認済み")
+            .replace(/<[^>\n]+>/gu, "確認済み")
+            .replace(/\{[^}\n]+\}/gu, "確認済み"),
+    )
+    .join("\n");
+  fs.writeFileSync(
+    file,
+    `${filled}\nScenario: SCN-FIXTURE-EXECPLAN-001 完成済みQuick要求を検証する\n  Given 正式要求がある\n  When 対象差分を確認する\n  Then 受け入れ条件を満たす\n`,
+  );
+  this.snapshot = snapshot(this);
+  const planned = await runPlan(this.staging);
+  assert.equal(planned.status, 0, planned.text);
+  this.plans.push(
+    JSON.parse(planned.text) as ReturnType<typeof observeWorkflowExecutionPlan>,
+  );
+});
+Then(
+  "未完成時はfresh Workerで完成後はCLIのみを示し正式記録はまだ行わない",
+  function () {
+    const before = this.plans[0]!;
+    const after = this.plans[1]!;
+    assert.equal(before.state, "ready");
+    assert.equal(before.action.executor, "fresh-worker");
+    assert.equal(after.state, "ready", after.errors.join("; "));
+    assert.equal(after.action.executor, "cli");
+    assert.equal(after.agentDispatch, undefined);
+    assert.equal(after.handoff, undefined);
+    assert.equal(after.workUnitId, null);
+    assert.equal(
+      after.action.allowedOperations[0]?.operation,
+      "record-completed-request",
+    );
+    assert.equal(after.action.allowedOperations.length, 1);
+    assert.equal(after.assurance.selectedWork.kind, "deterministic");
+    assert.deepEqual(after.assurance.selectedWork.obligationIds, [
+      "O-01",
+      "O-02",
+      "O-03",
+    ]);
+    for (const id of ["O-01", "O-02", "O-03"]) {
+      const obligation = after.assurance.obligations.find(
+        (item) => item.id === id,
+      );
+      assert.ok(obligation);
+      assert.equal(obligation.status, "unsatisfied");
+      assert.equal(obligation.requiredWork, "deterministic");
+      assert.match(obligation.reasons.join("; "), /独立reviewで未確認/u);
+    }
+    assert.match(after.action.unconfirmed.join("; "), /独立review/u);
+    const latest = JSON.parse(
+      fs
+        .readFileSync(path.join(this.staging, STEP_JOURNAL_FILE), "utf8")
+        .trim()
+        .split("\n")
+        .at(-1)!,
+    ) as { step: number };
+    assert.equal(latest.step, 0);
+    assert.equal(snapshot(this), this.snapshot);
+  },
+);
+
+When("完成済み00を正式gateで1回記録する", async function () {
+  const operation = this.plans[1]?.action.allowedOperations[0];
+  const candidateHead = operation?.argv.find((arg) =>
+    arg.startsWith("--candidate-head="),
+  );
+  assert.ok(candidateHead);
+  const output = await runPlan(this.staging, [
+    "--apply",
+    "--prepare-next",
+    candidateHead,
+    "--artifact=00_要求定義.md",
+    "--evidence=既存基準とCandidate差分から要求を確認した",
+  ]);
+  assert.equal(output.status, 0, output.text);
+  this.value = JSON.parse(output.text) as Record<string, unknown>;
+});
+Then("Step1だけが記録されStep4以降の契約は維持される", function () {
+  const entries = fs
+    .readFileSync(path.join(this.staging, STEP_JOURNAL_FILE), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { step: number });
+  assert.deepEqual(
+    entries.map((entry) => entry.step),
+    [0, 1],
+  );
+  const next = observeWorkflowExecutionPlan(this.staging);
+  assert.equal(next.step, 4);
+  assert.equal(next.action.executor, "cli");
+  assert.equal(
+    next.assurance.obligations.find((item) => item.id === "O-01")?.status,
+    "unknown",
+  );
+  for (const id of ["O-02", "O-03"]) {
+    const obligation = next.assurance.obligations.find(
+      (item) => item.id === id,
+    );
+    assert.equal(obligation?.status, "unknown");
+    assert.equal(obligation?.requiredWork, "independent-review");
+  }
+  assert.equal(
+    next.assurance.obligations.find((item) => item.id === "O-07")?.status,
+    "unsatisfied",
+  );
+  assert.equal(
+    next.assurance.obligations.find((item) => item.id === "O-06")?.status,
+    "unsatisfied",
+  );
+});
+
+Then(
+  "Candidate出自がなければ完成済み00でもfresh Workerを維持する",
+  function () {
+    const after = this.plans[1]!;
+    assert.equal(after.state, "ready", after.errors.join("; "));
+    assert.equal(after.action.executor, "fresh-worker");
+    assert.ok(after.agentDispatch);
+    assert.equal(after.assurance.selectedWork.kind, "semantic");
+    assert.equal(snapshot(this), this.snapshot);
+  },
+);
+
+Then("危険差分があれば完成済み00でもCLI記録へ進まない", function () {
+  const after = this.plans[1]!;
+  assert.equal(after.state, "ready", after.errors.join("; "));
+  assert.equal(after.action.executor, "fresh-worker");
+  assert.ok(after.agentDispatch);
+  assert.equal(snapshot(this), this.snapshot);
+});
+
+When("plan後にCandidate HEADが変わった状態で正式記録を試す", async function () {
+  const operation = this.plans[1]?.action.allowedOperations[0];
+  const candidateHead = operation?.argv.find((arg) =>
+    arg.startsWith("--candidate-head="),
+  );
+  assert.ok(candidateHead);
+  fs.appendFileSync(path.join(this.root, "README.md"), "changed after plan\n");
+  git(["add", "README.md"], this.root);
+  git(["commit", "-qm", "candidate moved after plan"], this.root);
+  this.snapshot = fs.readFileSync(
+    path.join(this.staging, STEP_JOURNAL_FILE),
+    "utf8",
+  );
+  await assert.rejects(
+    runPlan(this.staging, [
+      "--apply",
+      candidateHead,
+      "--artifact=00_要求定義.md",
+      "--evidence=plan後の状態を再確認した",
+    ]),
+    /Candidate HEADがplan時から変更/u,
+  );
+});
+Then("古いCandidate計画ではStep1を記録しない", function () {
+  assert.equal(
+    fs.readFileSync(path.join(this.staging, STEP_JOURNAL_FILE), "utf8"),
+    this.snapshot,
+  );
+});
+
+Given("Quick reviewの隔離fixtureがある", function () {
+  this.root = this.initRepo();
+  this.staging = createIssueStaging(this.root, {
+    title: "quick review binding",
+    requestedMode: "quick",
+    answers: Object.fromEntries(
+      QUESTIONS.map((id) => [id, { answer: true, evidence: "fixture" }]),
+    ),
+    now: new Date(fixtureInstant()),
+  }).path;
+});
+When("Quick reviewの現在HEAD拘束と失効を証明責務へ投影する", function () {
+  const base = observeWorkflowResume(this.staging);
+  const oldHead = "a".repeat(40);
+  const currentHead = "b".repeat(40);
+  const common = {
+    staging: this.staging,
+    mode: "quick" as const,
+    nextStep: 11,
+    journalSteps: [0, 1, 4, 9, 10],
+    journalValid: true,
+    action: { executor: "cli" as const },
+    resume: {
+      ...base,
+      headSha: currentHead,
+      implementation: { headSha: oldHead, matchesHead: false },
+      review: {
+        status: "converged" as const,
+        latestRoundDigest: "digest",
+        candidateHeadSha: currentHead,
+        rounds: 2,
+        matchesImplementationHead: false,
+      },
+    },
+  };
+  this.quickReviewProjections = {
+    stale: deriveAssuranceProjection({
+      ...common,
+      resume: {
+        ...common.resume,
+        review: {
+          ...common.resume.review,
+          candidateHeadSha: oldHead,
+          matchesImplementationHead: true,
+        },
+      },
+      quickReviewBindingValid: false,
+    }),
+    corrected: deriveAssuranceProjection({
+      ...common,
+      quickReviewBindingValid: true,
+    }),
+    invalidated: deriveAssuranceProjection({
+      ...common,
+      quickReviewBindingValid: true,
+      reviewGate: { status: "invalidated", reason: "review失効" },
+    }),
+  };
+});
+Then("古いreviewは未確定で修正後の正式reviewだけが責務を満たす", function () {
+  assert.ok(this.quickReviewProjections);
+  for (const id of ["O-01", "O-02", "O-03"]) {
+    const status = (value: AssuranceProjection) =>
+      value.obligations.find((item) => item.id === id)?.status;
+    assert.equal(status(this.quickReviewProjections.stale), "unknown");
+    assert.equal(status(this.quickReviewProjections.corrected), "satisfied");
+    assert.equal(status(this.quickReviewProjections.invalidated), "unknown");
+  }
 });

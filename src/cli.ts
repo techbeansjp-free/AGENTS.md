@@ -6842,6 +6842,7 @@ export async function main(
           "continue-from",
           "plan",
           "prepare-next",
+          "candidate-head",
         ].includes(flag),
     );
     if (unknown.length > 0)
@@ -6850,6 +6851,9 @@ export async function main(
       );
     const planOnly = presentFlag(flags, "plan");
     const prepareNext = presentFlag(flags, "prepare-next");
+    const expectedCandidateHead = flags["candidate-head"];
+    if (expectedCandidateHead !== undefined && !apply)
+      throw new Error("--candidate-headには--applyが必要です");
     if (prepareNext && !apply)
       throw new Error("workflow advance --prepare-nextには--applyが必要です");
     if (
@@ -7183,6 +7187,18 @@ export async function main(
           "workflow advanceのpreview後にstaging stateが変更されました。新しいpreviewから再実行してください",
         );
       const targetStep = plan.targetStep!;
+      if (expectedCandidateHead !== undefined) {
+        if (targetStep !== 1 || current.mode !== "quick")
+          throw new Error("--candidate-headはQuick Step 1だけで使用できます");
+        const observed = observeCandidateAdoption(
+          stagingRepositoryRoot(staging),
+          path.join(staging, "00_要求定義.md"),
+        );
+        if (observed.headSha !== expectedCandidateHead)
+          throw new Error(
+            "Candidate HEADがplan時から変更されました。新しいplanで再確認してください",
+          );
+      }
       /** 封印済みの封印Stepは外部同期より前に拒否する（REQ-WF-036） */
       assertPlanSealOpen(staging, targetStep);
       const definition = workflowStep(targetStep);

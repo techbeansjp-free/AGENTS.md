@@ -1,5 +1,8 @@
+import fs from "node:fs";
 import path from "node:path";
 import { planWorkflowAdvance } from "../domain/workflow.js";
+import { validateIssue } from "../domain/issue.js";
+import { loadProjectPolicySet } from "../domain/policy.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { isReviewSessionConverged } from "../domain/review-convergence.js";
 import { observeCandidateAdoption } from "./candidate-adoption.js";
@@ -20,6 +23,81 @@ export function shouldVerifyBeforeReview(input) {
         input.verificationPlan?.status === "required" &&
         input.verificationPlan.required.length > 0 &&
         !input.verificationPlan.latestFailed);
+}
+/** A completed Quick artifact needs a gate transition, not another semantic worker. */
+function completedQuickRequestWork(staging) {
+    const root = stagingRepositoryRoot(staging);
+    const manifest = path.join(root, ".agent-skill-chain", "project-policy.json");
+    let gherkinDialect;
+    let candidateHeadSha;
+    try {
+        gherkinDialect = fs.existsSync(manifest)
+            ? loadProjectPolicySet(root).policy.projectChoices?.gherkinDialect
+            : undefined;
+        const checked = validateIssue(staging, {
+            stage: "requirements",
+            ...(gherkinDialect ? { gherkinDialect } : {}),
+        });
+        if (!checked.valid || checked.mode !== "quick")
+            return null;
+        // A syntactically complete document alone never bypasses semantic work.
+        // Re-observe the isolated Candidate lineage and actual Git risk before
+        // selecting the already-completed Quick planning artifact.
+        candidateHeadSha = observeCandidateAdoption(root, path.join(staging, "00_要求定義.md")).headSha;
+    }
+    catch {
+        // Unknown validity never authorizes a deterministic transition.
+        return null;
+    }
+    const base = workflowExecutionContract(1, "request", undefined, "quick");
+    return {
+        ...base,
+        executor: "cli",
+        purpose: "完成済みQuick要求成果物を正式検証してStep 1へ記録する",
+        semanticReason: "現stagingの00が既存issue validateに合格した。意味的な妥当性は後続の独立reviewで確認する",
+        allowedOperations: [
+            {
+                operation: "record-completed-request",
+                argv: [
+                    "workflow",
+                    "advance",
+                    "--apply",
+                    "--prepare-next",
+                    `--candidate-head=${candidateHeadSha}`,
+                ],
+                requiredFlags: ["staging", "artifact", "evidence"],
+                inputBindings: {
+                    artifact: "00_要求定義.md only",
+                    evidence: "既存の要求、Git差分、対象検証の参照。承認ではない",
+                },
+                mode: "gated-apply",
+            },
+        ],
+        recordArtifacts: ["00_要求定義.md"],
+        requiredInputs: [
+            { owner: "staging", path: "00_要求定義.md", required: true },
+            { owner: "staging", path: "00_モード判定.json", required: true },
+            { owner: "git", path: "HEAD", required: true },
+        ],
+        preconditions: [
+            ...base.preconditions,
+            {
+                id: "request-artifact-current",
+                observedBy: "issue validate",
+                expected: "現stagingのQuick要求成果物が正式検証に合格。記録時に再照合する",
+            },
+        ],
+        completionConditions: base.completionConditions,
+        proofObligations: base.proofObligations.map((item) => ({
+            ...item,
+            judgedBy: "independent-reviewer",
+            sourceRefs: ["staging:00_要求定義.md", "git:HEAD"],
+        })),
+        coordinatorCompletion: undefined,
+        unconfirmed: [
+            "要求・AC・設計の意味的妥当性は独立reviewと正式gateで確認する",
+        ],
+    };
 }
 /** Advisory only: candidate-adopt rechecks every gate when it mutates the journal. */
 function candidateAdoptionWork(staging) {
@@ -113,6 +191,11 @@ export function observeWorkflowExecutionPlan(staging, inspection = inspectWorkfl
         errors: inspection.errors,
         implementationHeadBound: implementation?.implementationHeadSha !== undefined,
     });
+    const completedRequestAction = plan.state !== "blocked" &&
+        inspection.mode === "quick" &&
+        inspection.nextStep === 1
+        ? completedQuickRequestWork(staging)
+        : null;
     const adoptionAction = plan.state !== "blocked" &&
         inspection.mode === "quick" &&
         inspection.nextStep === 9
@@ -139,7 +222,8 @@ export function observeWorkflowExecutionPlan(staging, inspection = inspectWorkfl
             ? "complete"
             : "ready";
     const candidateAction = state === "ready"
-        ? (adoptionAction ??
+        ? (completedRequestAction ??
+            adoptionAction ??
             known?.workUnit?.contract ??
             workflowExecutionContract(undefined, "coordinator", undefined))
         : workflowExecutionContract(undefined, "coordinator", undefined);
@@ -196,6 +280,34 @@ export function observeWorkflowExecutionPlan(staging, inspection = inspectWorkfl
             };
         }
     }
+    // A Step 10 journal entry alone does not prove a currently valid review.
+    // Recheck its exact saved session binding against the current HEAD; this
+    // also accepts the existing evidence-only suffix when the formal gate does.
+    let quickReviewBindingValid = false;
+    if (inspection.mode === "quick" &&
+        journal.errors.length === 0 &&
+        resume.errors.length === 0 &&
+        resume.headSha !== null) {
+        const binding = [...journal.entries]
+            .reverse()
+            .find((entry) => entry.step === 10)?.reviewSession;
+        if (binding) {
+            try {
+                const session = assertConvergedReviewSession({
+                    staging,
+                    expectedDigest: binding.roundDigest,
+                    currentHeadSha: resume.headSha,
+                });
+                quickReviewBindingValid =
+                    session.sessionId === binding.sessionId &&
+                        session.latestRoundDigest === binding.roundDigest &&
+                        session.latestCandidateHeadSha === binding.headSha;
+            }
+            catch {
+                // A stale or unreadable review cannot satisfy semantic obligations.
+            }
+        }
+    }
     // Project the existing formal observations before selecting who works next.
     // The projection is advisory; the verified plan still owns runnable argv.
     const projection = deriveAssuranceProjection({
@@ -206,6 +318,8 @@ export function observeWorkflowExecutionPlan(staging, inspection = inspectWorkfl
         journalValid: journal.errors.length === 0 && inspection.valid,
         resume,
         action: candidateAction,
+        quickRequestArtifactValidated: completedRequestAction !== null,
+        quickReviewBindingValid,
         role: known?.role,
         verificationGate,
         reviewGate,
@@ -224,27 +338,39 @@ export function observeWorkflowExecutionPlan(staging, inspection = inspectWorkfl
             required: verificationPlan.required,
         })
         : candidateAction;
-    const assurance = state === "ready" && adoptionAction
+    const assurance = state === "ready" && completedRequestAction
         ? {
             ...projection,
             selectedWork: {
-                obligationIds: ["O-05"],
+                obligationIds: ["O-01", "O-02", "O-03"],
                 kind: "deterministic",
-                evidenceRefs: ["git:HEAD", "staging:review-session"],
+                evidenceRefs: ["staging:00_要求定義.md", "git:HEAD"],
             },
         }
-        : verificationFirst
+        : state === "ready" && adoptionAction
             ? {
                 ...projection,
                 selectedWork: {
-                    obligationIds: ["O-06"],
+                    obligationIds: ["O-05"],
                     kind: "deterministic",
-                    evidenceRefs: projection.obligations.find((item) => item.id === "O-06")
-                        ?.evidenceRefs ?? [],
+                    evidenceRefs: ["git:HEAD", "staging:review-session"],
                 },
             }
-            : projection;
-    const alternative = state === "ready" && !verificationFirst && adoptionAction === null
+            : verificationFirst
+                ? {
+                    ...projection,
+                    selectedWork: {
+                        obligationIds: ["O-06"],
+                        kind: "deterministic",
+                        evidenceRefs: projection.obligations.find((item) => item.id === "O-06")
+                            ?.evidenceRefs ?? [],
+                    },
+                }
+                : projection;
+    const alternative = state === "ready" &&
+        !verificationFirst &&
+        adoptionAction === null &&
+        completedRequestAction === null
         ? workflowReviewerAlternative(handoff)
         : undefined;
     return {
@@ -254,8 +380,10 @@ export function observeWorkflowExecutionPlan(staging, inspection = inspectWorkfl
         state,
         step: inspection.nextStep ?? null,
         headSha: resume.headSha,
-        boundary: adoptionAction ? null : (known?.boundary ?? null),
-        workUnitId: verificationFirst || adoptionAction
+        boundary: adoptionAction || completedRequestAction
+            ? null
+            : (known?.boundary ?? null),
+        workUnitId: verificationFirst || adoptionAction || completedRequestAction
             ? null
             : (known?.workUnit?.workUnitId ?? null),
         action,
@@ -263,7 +391,8 @@ export function observeWorkflowExecutionPlan(staging, inspection = inspectWorkfl
         handoff: state === "ready" &&
             known &&
             !verificationFirst &&
-            adoptionAction === null
+            adoptionAction === null &&
+            completedRequestAction === null
             ? {
                 ...known,
                 workUnit: {

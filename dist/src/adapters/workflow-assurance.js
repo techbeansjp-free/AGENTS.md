@@ -22,11 +22,38 @@ export function deriveAssuranceProjection(input) {
         });
     };
     const stepEvidence = (step) => [`journal:step-${step}`];
-    add("O-01", recorded(1), stepEvidence(1), [], "semantic");
+    const preparedQuick = mode === "quick" &&
+        input.nextStep === 1 &&
+        input.quickRequestArtifactValidated === true;
+    const quickReviewCompleted = mode === "quick" &&
+        recorded(10) === "satisfied" &&
+        input.quickReviewBindingValid === true &&
+        input.reviewGate?.status !== "invalidated";
+    const quickSemanticStatus = (step) => {
+        const formal = recorded(step);
+        return mode !== "quick" || formal !== "satisfied"
+            ? formal
+            : quickReviewCompleted
+                ? "satisfied"
+                : "unknown";
+    };
+    const requestWork = preparedQuick
+        ? "deterministic"
+        : mode === "quick" && recorded(1) === "satisfied"
+            ? "independent-review"
+            : "semantic";
+    const requestReason = mode === "quick" && !quickReviewCompleted
+        ? [
+            preparedQuick
+                ? "00は形式検証済み。意味的な正しさは独立reviewで未確認"
+                : "Step 1記録は意味的な正しさの証明ではない。独立reviewは未完了",
+        ]
+        : [];
+    add("O-01", quickSemanticStatus(1), stepEvidence(1), requestReason, requestWork);
     const contractStep = mode === "full" ? 2 : 1;
-    add("O-02", recorded(contractStep), stepEvidence(contractStep), [], "semantic");
+    add("O-02", quickSemanticStatus(contractStep), stepEvidence(contractStep), requestReason, requestWork);
     const designStep = mode === "full" ? 7 : 1;
-    add("O-03", recorded(designStep), stepEvidence(designStep), [], "semantic");
+    add("O-03", quickSemanticStatus(designStep), stepEvidence(designStep), requestReason, requestWork);
     const planningStep = mode === "full" ? 8 : 4;
     const planningStatus = recorded(planningStep);
     add("O-04", planningStatus === "satisfied" && resume.planning?.sealed !== true
@@ -91,10 +118,10 @@ export function deriveAssuranceProjection(input) {
     add("O-09", "unknown", ["git:merge-base", "staging:review-session"], ["実差分と監査済み範囲は既存review/delivery gateで照合する"], "deterministic");
     add("O-10", "unknown", ["trusted:delivery-policy", "staging:delivery-state"], ["外部操作のauthorityは既存Delivery gateで再照合する"], "human-authorization");
     const byStep = {
-        1: ["O-01", "O-02"],
+        1: mode === "full" ? ["O-01", "O-02"] : ["O-01", "O-02", "O-03"],
         2: ["O-02"],
         3: ["O-02", "O-R3"],
-        4: ["O-02"],
+        4: ["O-04"],
         5: ["O-03", "O-08"],
         6: ["O-04", "O-08"],
         7: ["O-03", "O-04", "O-R7", "O-08"],

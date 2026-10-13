@@ -63,3 +63,35 @@ Feature: 正式gateを維持する機械可読Work Unit契約
       | merge-prepared | automatic | preview-merge-or-readback | false     |
       | merge-prepared | disabled  | preview-merge-or-readback | false     |
       | merge-observed | assisted  | preview-merge-or-readback | false     |
+
+  Scenario: SCN-UNIT-EXECPLAN-005 完成済みQuick要求は追加Workerなしで正式記録へ進む
+    Given Step1の隔離quick stagingと未完成の00がある
+    When 00を完成させてEvidenceから次のWork Unitを選ぶ
+    Then 未完成時はfresh Workerで完成後はCLIのみを示し正式記録はまだ行わない
+
+  Scenario: SCN-UNIT-EXECPLAN-006 完成済みQuick要求も既存Step1 gateを通る
+    Given Step1の隔離quick stagingと未完成の00がある
+    When 00を完成させてEvidenceから次のWork Unitを選ぶ
+    And 完成済み00を正式gateで1回記録する
+    Then Step1だけが記録されStep4以降の契約は維持される
+
+  Scenario: SCN-UNIT-EXECPLAN-007 Candidate出自なしの完成済みQuickはWorkerを省かない
+    Given Candidate出自のないStep1の隔離quick stagingがある
+    When 00を完成させてEvidenceから次のWork Unitを選ぶ
+    Then Candidate出自がなければ完成済み00でもfresh Workerを維持する
+
+  Scenario: SCN-UNIT-EXECPLAN-008 危険差分のCandidateはQuick完成文書だけでWorkerを省かない
+    Given Candidateの危険差分があるStep1の隔離quick stagingがある
+    When 00を完成させてEvidenceから次のWork Unitを選ぶ
+    Then 危険差分があれば完成済み00でもCLI記録へ進まない
+
+  Scenario: SCN-UNIT-EXECPLAN-009 Candidateのplan後にHEADが動いたら記録を拒否する
+    Given Step1の隔離quick stagingと未完成の00がある
+    When 00を完成させてEvidenceから次のWork Unitを選ぶ
+    And plan後にCandidate HEADが変わった状態で正式記録を試す
+    Then 古いCandidate計画ではStep1を記録しない
+
+  Scenario: SCN-UNIT-EXECPLAN-010 Quickの意味的責務は現在HEADへ拘束したreviewでだけ充足する
+    Given Quick reviewの隔離fixtureがある
+    When Quick reviewの現在HEAD拘束と失効を証明責務へ投影する
+    Then 古いreviewは未確定で修正後の正式reviewだけが責務を満たす
