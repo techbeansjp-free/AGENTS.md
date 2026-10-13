@@ -798,6 +798,12 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "apply済みの1遷移に続けて次の作業契約を観測する。失敗時も遷移を保持し--planで再開",
         "--apply時だけ指定可",
       ),
+      optional(
+        "candidate-head",
+        "40hex",
+        "隔離CandidateのQuick Step 1を記録するときにplanのHEADを再照合",
+        "通常のStep 1記録では指定しない",
+      ),
       optional("apply", "", "次の1 Stepだけを適用", "preview"),
     ],
     example:

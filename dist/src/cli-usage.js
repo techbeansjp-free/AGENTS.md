@@ -495,6 +495,7 @@ export const COMMAND_USAGE = Object.freeze([
             optional("continue-from", "40hex", "Step 9のcheckpoint前HEADからfresh continuationを発行", "通常の次Step preview"),
             optional("plan", "", "外部参照や書込なしで次の知的作業・CLI操作の契約を返す", "従来のStep preview"),
             optional("prepare-next", "", "apply済みの1遷移に続けて次の作業契約を観測する。失敗時も遷移を保持し--planで再開", "--apply時だけ指定可"),
+            optional("candidate-head", "40hex", "隔離CandidateのQuick Step 1を記録するときにplanのHEADを再照合", "通常のStep 1記録では指定しない"),
             optional("apply", "", "次の1 Stepだけを適用", "preview"),
         ],
         example: "npx agent-skill-chain workflow advance --staging=.agent-skill-chain/tmp/issues/20260912_change --artifact=01_要件定義.md --evidence='requirements validated' --apply",
