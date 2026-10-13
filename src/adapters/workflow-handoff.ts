@@ -99,7 +99,7 @@ export interface WorkflowExecutionContract {
     requiredFlags: string[];
     requiredTrailingArgv?: string;
     inputBindings?: Record<string, string>;
-    when?: "required-command-unknown";
+    when?: "required-command-unknown" | "reviewed-summary-available";
     mode: "read" | "artifact-write" | "gated-apply";
   }>;
   /** Exact formal record outputs; never include read-only requiredInputs. */
@@ -255,13 +255,49 @@ export function workflowExecutionContract(
         (mode === "poc" || delivery.trustedMergeMode === "disabled"))
     ) {
       operations.push({
+        operation: "preview-manual-delivery",
+        argv: ["pr", "create", "--dry-run"],
+        requiredFlags: [
+          "staging",
+          "issue",
+          "repo",
+          "base",
+          "head",
+          "head-sha",
+          "evidence",
+          "body-file",
+        ],
+        mode: "read",
+      });
+      operations.push({
+        operation: "deliver-manual-evidence",
+        argv: ["pr", "create", "--apply"],
+        requiredFlags: [
+          "staging",
+          "issue",
+          "repo",
+          "base",
+          "head",
+          "head-sha",
+          "evidence",
+          "body-file",
+          "authorize",
+        ],
+        inputBindings: {
+          authorize: "existing human/policy authorization; never generated",
+        },
+        mode: "gated-apply",
+      });
+      operations.push({
         operation: "preview-reviewed-summary",
+        when: "reviewed-summary-available",
         argv: ["pr", "create", "--dry-run"],
         requiredFlags: ["staging", "issue", "repo", "from-summary"],
         mode: "read",
       });
       operations.push({
         operation: "deliver-reviewed-summary",
+        when: "reviewed-summary-available",
         argv: ["pr", "create", "--apply"],
         requiredFlags: [
           "staging",
@@ -340,7 +376,7 @@ export function workflowExecutionContract(
     requiredInputs.push({ owner: "git", path: "HEAD", required: true });
   if (step === 11)
     requiredInputs.push(
-      { owner: "git", path: "H_impl:--from-summary", required: true },
+      { owner: "git", path: "H_impl:--from-summary", required: false },
       {
         owner: "git",
         path: "HEAD:docs/reviews/<issue>_review.json",
@@ -657,7 +693,7 @@ export function workflowVerificationContract(input: {
       {
         id: "replan-before-review",
         observedBy: "workflow advance --plan",
-        expected: "Step 10を記録せず、次の独立review作業を再選択する",
+        expected: "Step 10を記録せず、reviewまたはexportの次作業を再選択する",
       },
     ],
     proofObligations: [

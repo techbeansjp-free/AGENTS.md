@@ -39,7 +39,9 @@ Feature: 正式gateを維持する機械可読Work Unit契約
       | reviewer    | required | invalidated | true   | false    |
       | reviewer    | none     | unsatisfied | false  | false    |
       | correction  | required | unsatisfied | false  | false    |
-      | coordinator | required | unsatisfied | false  | false    |
+      | coordinator | required | unsatisfied | false  | true     |
+      | coordinator | required | invalidated | false  | true     |
+      | coordinator | required | invalidated | true   | false    |
 
   Scenario: SCN-UNIT-EXECPLAN-003 参照入力を正式記録artifactへ混入させない
     Given execution契約のStep「2」とrole「requirements」がある
@@ -53,11 +55,11 @@ Feature: 正式gateを維持する機械可読Work Unit契約
 
     Examples:
       | state          | mode      | operation                 | authorize |
-      | none           | automatic | preview-reviewed-summary  | true      |
+      | none           | automatic | preview-manual-delivery   | true      |
       | pr-bound       | automatic | preview-merge-or-readback | false     |
       | pr-bound       | assisted  | preview-merge-or-readback | true      |
-      | pr-bound       | disabled  | preview-reviewed-summary  | true      |
-      | pr-bound       | poc       | preview-reviewed-summary  | true      |
+      | pr-bound       | disabled  | preview-manual-delivery   | true      |
+      | pr-bound       | poc       | preview-manual-delivery   | true      |
       | merge-prepared | automatic | preview-merge-or-readback | false     |
       | merge-prepared | disabled  | preview-merge-or-readback | false     |
       | merge-observed | assisted  | preview-merge-or-readback | false     |

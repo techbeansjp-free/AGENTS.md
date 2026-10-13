@@ -65,3 +65,8 @@ Feature: 保存済み状態から次のexecutionPlanだけを副作用なく返�
     Given 正式検証未実施のStep10 reviewer候補が隔離repositoryにある
     When review sessionを破損させ通常advanceを観測する
     Then 停止状態と修復可能な理由を返す
+
+  Scenario: SCN-INT-EXECPLAN-012 Candidate採用後の収束reviewでも正式検証を先に実行できる
+    Given 正式検証未実施のStep10 reviewer候補が隔離repositoryにある
+    When 収束reviewの実装HEADへ戻して検証と再planを実行する
+    Then 検証後は独立reviewを繰り返さずcoordinatorがexportへ進む

@@ -10,11 +10,11 @@ import { observeWorkflowResume } from "./workflow-resume.js";
 import { planVerification } from "./verification-run.js";
 import { assertConvergedReviewSession } from "./review-session.js";
 import { observeWorkflowHandoff, workflowAgentDispatch, workflowExecutionContract, workflowReviewerAlternative, workflowVerificationContract, } from "./workflow-handoff.js";
-/** Formal verification evidence may choose CLI work before an independent reviewer. */
+/** Formal verification evidence may choose CLI work before review or export. */
 export function shouldVerifyBeforeReview(input) {
     return (input.state === "ready" &&
         input.step === 10 &&
-        input.role === "reviewer" &&
+        (input.role === "reviewer" || input.role === "coordinator") &&
         (input.verificationObligationStatus === "unsatisfied" ||
             input.verificationObligationStatus === "invalidated") &&
         input.verificationPlan?.status === "required" &&

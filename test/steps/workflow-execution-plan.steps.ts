@@ -236,12 +236,23 @@ Then(
         "advance",
         "--dry-run",
       ]);
-    if (this.step === 11)
+    if (this.step === 11) {
       assert.ok(
-        this.action.allowedOperations[0]?.requiredFlags.includes(
-          "from-summary",
+        this.action.allowedOperations[0]?.requiredFlags.includes("evidence"),
+      );
+      assert.ok(
+        this.action.allowedOperations.some(
+          (item) =>
+            item.when === "reviewed-summary-available" &&
+            item.requiredFlags.includes("from-summary"),
         ),
       );
+      assert.ok(
+        this.action.requiredInputs.some(
+          (item) => item.path === "H_impl:--from-summary" && !item.required,
+        ),
+      );
+    }
     if (this.step === 4 || this.step === 8) {
       const apply = this.action.allowedOperations[1]!;
       assert.ok(apply.requiredFlags.includes("expected-body-sha256"));
@@ -739,6 +750,49 @@ Given("正式検証未実施のStep10 reviewer候補が隔離repositoryにある
     "utf8",
   );
   this.plans = [];
+});
+
+When("収束reviewの実装HEADへ戻して検証と再planを実行する", async function () {
+  git(["reset", "--hard", "HEAD~1"], this.root);
+  const before = observeWorkflowExecutionPlan(this.staging);
+  assert.equal(before.step, 10);
+  assert.equal(before.action.executor, "cli");
+  assert.deepEqual(before.assurance.selectedWork.obligationIds, ["O-06"]);
+  assert.equal(before.agentDispatch, undefined);
+  const run = before.action.allowedOperations.find(
+    (item) => item.operation === "run-required-verification",
+  );
+  assert.ok(run);
+  const output = process.stdout.write;
+  process.stdout.write = (() => true) as typeof process.stdout.write;
+  try {
+    const status = await main([
+      ...run.argv,
+      `--staging=${this.staging}`,
+      `--scope=${run.inputBindings!.scope}`,
+      "--",
+      ...(JSON.parse(run.requiredTrailingArgv!) as string[]),
+    ]);
+    assert.equal(status, 0);
+  } finally {
+    process.stdout.write = output;
+  }
+  this.plans = [before, observeWorkflowExecutionPlan(this.staging)];
+});
+Then("検証後は独立reviewを繰り返さずcoordinatorがexportへ進む", function () {
+  const after = this.plans[1]!;
+  assert.equal(after.state, "ready");
+  assert.equal(after.action.executor, "cli");
+  assert.equal(after.agentDispatch, undefined);
+  assert.ok(
+    after.action.coordinatorCompletion?.operations.some(
+      (item) => item.argv.join(" ") === "review export",
+    ),
+  );
+  assert.equal(
+    after.assurance.obligations.find((item) => item.id === "O-06")?.status,
+    "satisfied",
+  );
 });
 
 When("実CLIのplanから必要検証を実行して再planする", async function () {
