@@ -74,6 +74,28 @@ Feature: 正式gateを維持する機械可読Work Unit契約
     When Candidate結果で新たなIssueをprepare-next付きで作成する
     Then 作成時と通常planは同じ限定Coordinatorを示しworkerをdispatchしない
 
+  Scenario Outline: SCN-UNIT-EXECPLAN-013 形式上有効な誤要求はStep1の機械記録で意味的承認にならない
+    Given Step1の隔離quick stagingと未完成の00がある
+    When 形式上有効な00に"<逸脱>"を含めて正式記録する
+    Then 意味的責務は未確認でQuick独立reviewに元Issueとの突合を要求する
+
+    Examples:
+      | 逸脱 |
+      | 元Intentと異なる実装 |
+      | 誤った受け入れ条件 |
+      | Candidate後の要求拡大 |
+      | 未承認の設計判断 |
+
+  Scenario: SCN-UNIT-EXECPLAN-014 Quickの代替Reviewerも一次要求との意味的突合を引き継ぐ
+    Given Step1の隔離quick stagingと未完成の00がある
+    When Quick correctionから代替Reviewer契約を導出する
+    Then 代替ReviewerはIntent・Contract・Designを一次要求と照合する
+
+  Scenario: SCN-UNIT-EXECPLAN-015 Step4の再同期でも利用者所有の一次要求を保持する
+    Given 利用者所有の一次要求を持つcanonical Issue本文がある
+    When canonical Issue本文を2回同期する
+    Then marker前の一次要求は保持され生成領域だけが更新される
+
   Scenario: SCN-UNIT-EXECPLAN-006 完成済みQuick要求も既存Step1 gateを通る
     Given Step1の隔離quick stagingと未完成の00がある
     When 00を完成させてEvidenceから次のWork Unitを選ぶ

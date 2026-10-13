@@ -399,7 +399,10 @@ export function workflowExecutionContract(
     7: ["Design", "Verification", "Review"],
     8: ["Design"],
     9: ["Implementation", "Verification"],
-    10: ["Verification", "Review"],
+    10:
+      mode === "quick" && role === "reviewer"
+        ? ["Intent", "Contract", "Design", "Verification", "Review"]
+        : ["Verification", "Review"],
     11: ["Delivery"],
   };
   const questions: Record<
@@ -425,12 +428,23 @@ export function workflowExecutionContract(
       : role === "reviewer" || role === "readiness-reviewer"
         ? "independent-reviewer"
         : "worker",
-    sourceRefs: ["requiredInputs"],
+    sourceRefs:
+      step === 10 &&
+      mode === "quick" &&
+      role === "reviewer" &&
+      ["Intent", "Contract", "Design"].includes(kind)
+        ? ["handoff.issue", "staging:00_要求定義.md", "git:HEAD"]
+        : ["requiredInputs"],
     question: cli
       ? "正式入力と保存済みEvidenceを既存gateで照合する。意味判断を生成しない"
-      : kind === "Design" && step !== undefined && [5, 6, 7].includes(step)
-        ? `${questions[kind]}。仕様影響がupdatedなら提出時のtrace.requirementsの要件IDはGit上のdocs/specs/02_要件/に存在する必要がある。既存の要件IDで足りるなら参照し、足りない場合だけ設計・計画の許可pathと仕様更新taskにdocs/specs/02_要件/を含める。開始前に独立確認する。no-spec-impactはdocs/specs/の変更と両立しない。分類の意味的妥当性はAIが判断する`
-        : questions[kind],
+      : step === 10 &&
+          mode === "quick" &&
+          role === "reviewer" &&
+          ["Intent", "Contract", "Design"].includes(kind)
+        ? `${questions[kind]}。canonical Issue本文のworkflow-advance生成markerより前にある利用者所有の一次要求と封印済み00・実差分を独立に突合し、後付けのAC、要求拡大、未承認の設計判断を検出する。元の要求を参照できなければ不明として収束させない`
+        : kind === "Design" && step !== undefined && [5, 6, 7].includes(step)
+          ? `${questions[kind]}。仕様影響がupdatedなら提出時のtrace.requirementsの要件IDはGit上のdocs/specs/02_要件/に存在する必要がある。既存の要件IDで足りるなら参照し、足りない場合だけ設計・計画の許可pathと仕様更新taskにdocs/specs/02_要件/を含める。開始前に独立確認する。no-spec-impactはdocs/specs/の変更と両立しない。分類の意味的妥当性はAIが判断する`
+          : questions[kind],
   }));
   if (step === 11)
     proofObligations.push({
@@ -872,6 +886,8 @@ export function workflowReviewerAlternative(
     handoff.role !== "correction"
   )
     return undefined;
+  const record = readStoredStagingRecord(handoff.staging);
+  if (record === null) return undefined;
   const read = {
     skill: ".agent-skill-chain/skills/step-10-review/SKILL.md",
     staging: [REVIEW_SESSION_FILE],
@@ -894,7 +910,7 @@ export function workflowReviewerAlternative(
           }),
         )
         .digest("hex"),
-      contract: workflowExecutionContract(10, "reviewer", read),
+      contract: workflowExecutionContract(10, "reviewer", read, record.mode),
     },
   };
 }

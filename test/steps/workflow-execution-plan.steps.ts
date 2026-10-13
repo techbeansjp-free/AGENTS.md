@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { main } from "../../src/cli.js";
-import { createIssueStaging } from "../../src/domain/issue.js";
+import { main, composeWorkflowAdvanceIssueBody } from "../../src/cli.js";
+import { createIssueStaging, validateIssue } from "../../src/domain/issue.js";
 import { QUESTIONS } from "../../src/domain/mode.js";
 import {
   STEP_JOURNAL_FILE,
@@ -55,6 +55,7 @@ class ExecutionPlanWorld extends WorkflowWorld {
   };
   alternative?: ReturnType<typeof workflowReviewerAlternative>;
   originalId = "";
+  syncedIssueBody = "";
   refusal = false;
   verificationGateKind = "";
   verificationObligationStatus:
@@ -1117,6 +1118,136 @@ Then(
     assert.equal(after.handoff, undefined);
   },
 );
+
+When(
+  "形式上有効な00に{string}を含めて正式記録する",
+  async function (deviation: string) {
+    const file = path.join(this.staging, "00_要求定義.md");
+    const filled = fs
+      .readFileSync(file, "utf8")
+      .split("\n")
+      .map((line) =>
+        line.startsWith("## ")
+          ? line
+          : line
+              .replaceAll("applicable / not-applicable", "not-applicable")
+              .replace(/（[^）\n]+）/gu, "既存仕様と対象差分で確認済み")
+              .replace(/<[^>\n]+>/gu, "確認済み")
+              .replace(/\{[^}\n]+\}/gu, "確認済み"),
+      )
+      .join("\n");
+    fs.writeFileSync(
+      file,
+      `${filled}\nScenario: SCN-FIXTURE-EXECPLAN-ADVERSARIAL 形式だけ満たす要求\n  Given 元の要求がある\n  When Candidate差分を確認する\n  Then ${deviation}を許可する\n`,
+    );
+    const checked = validateIssue(this.staging, { stage: "requirements" });
+    assert.equal(checked.valid, true, checked.errors.join("; "));
+    const selected = observeWorkflowExecutionPlan(this.staging);
+    assert.equal(selected.action.executor, "cli");
+    const candidateHead = selected.action.allowedOperations[0]?.argv.find(
+      (arg) => arg.startsWith("--candidate-head="),
+    );
+    assert.ok(candidateHead);
+    const applied = await runPlan(this.staging, [
+      "--apply",
+      candidateHead,
+      "--artifact=00_要求定義.md",
+      "--evidence=形式検証は意味判断の承認ではない",
+    ]);
+    assert.equal(applied.status, 0, applied.text);
+  },
+);
+Then(
+  "意味的責務は未確認でQuick独立reviewに元Issueとの突合を要求する",
+  function () {
+    const after = observeWorkflowExecutionPlan(this.staging);
+    for (const id of ["O-01", "O-02", "O-03"]) {
+      const obligation = after.assurance.obligations.find(
+        (item) => item.id === id,
+      );
+      assert.equal(obligation?.status, "unknown");
+      assert.equal(obligation?.requiredWork, "independent-review");
+    }
+    const review = workflowExecutionContract(
+      10,
+      "reviewer",
+      undefined,
+      "quick",
+    );
+    for (const kind of ["Intent", "Contract", "Design"] as const) {
+      const obligation = review.proofObligations.find(
+        (item) => item.kind === kind,
+      );
+      assert.equal(obligation?.judgedBy, "independent-reviewer");
+      assert.deepEqual(obligation?.sourceRefs, [
+        "handoff.issue",
+        "staging:00_要求定義.md",
+        "git:HEAD",
+      ]);
+      assert.match(
+        obligation.question,
+        /markerより前にある利用者所有の一次要求/u,
+      );
+    }
+  },
+);
+
+When("Quick correctionから代替Reviewer契約を導出する", function () {
+  const handoff = observeWorkflowHandoff(
+    this.staging,
+    9,
+    observeWorkflowResume(this.staging),
+  );
+  assert.ok(handoff && "kind" in handoff && handoff.workUnit);
+  this.alternative = workflowReviewerAlternative({
+    ...handoff,
+    step: 10,
+    role: "correction",
+    workUnit: {
+      ...handoff.workUnit,
+      contract: workflowExecutionContract(10, "correction", handoff.read),
+    },
+  });
+});
+Then("代替ReviewerはIntent・Contract・Designを一次要求と照合する", function () {
+  const alternative = this.alternative;
+  assert.ok(alternative);
+  const contract: WorkflowExecutionContract = alternative.workUnit.contract;
+  for (const kind of ["Intent", "Contract", "Design"] as const) {
+    const obligation = contract.proofObligations.find(
+      (item) => item.kind === kind,
+    );
+    assert.ok(obligation);
+    assert.equal(obligation.judgedBy, "independent-reviewer");
+    assert.deepEqual(obligation?.sourceRefs, [
+      "handoff.issue",
+      "staging:00_要求定義.md",
+      "git:HEAD",
+    ]);
+    assert.match(obligation.question, /markerより前/u);
+  }
+});
+Given("利用者所有の一次要求を持つcanonical Issue本文がある", function () {
+  this.syncedIssueBody = "User intent: HeloをHelloへ変更する。ACは完全一致。";
+});
+When("canonical Issue本文を2回同期する", function () {
+  const once = composeWorkflowAdvanceIssueBody(
+    this.syncedIssueBody,
+    "ASC generated v1",
+  );
+  this.syncedIssueBody = composeWorkflowAdvanceIssueBody(
+    once,
+    "ASC generated v2",
+  );
+});
+Then("marker前の一次要求は保持され生成領域だけが更新される", function () {
+  assert.match(
+    this.syncedIssueBody,
+    /^User intent: HeloをHelloへ変更する。ACは完全一致。\n\n<!-- agent-skill-chain:workflow-advance:start -->/u,
+  );
+  assert.doesNotMatch(this.syncedIssueBody, /ASC generated v1/u);
+  assert.match(this.syncedIssueBody, /ASC generated v2/u);
+});
 
 When("00を完成させてEvidenceから次のWork Unitを選ぶ", async function () {
   const file = path.join(this.staging, "00_要求定義.md");

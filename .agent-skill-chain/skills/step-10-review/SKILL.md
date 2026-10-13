@@ -17,6 +17,7 @@ description: exact-headの実装をGitから直接reviewし、finding状態と�
 coordinatorは生成済み`agentDispatch`と正式round骨子のpointerを渡し、実装説明を再生成しない。reviewerは以下をGit・骨子・関連契約から確認する。新しい探索表や報告書は作らない。
 
 - 対象と契約: `inspection`/`cumulative`の比較基点・HEAD・pathとanchorのAC/Invariant。契約IDで該当節を検索し、既知の要求全体を再起草しない。
+- 実装先行Quickの意味的責務: `handoff.issue`の本文で`workflow-advance:start` markerより前にある利用者所有の一次要求、封印済み`00_要求定義.md`、CandidateのGit差分と対象テストを照合する。目的のすり替え、形式上有効だが誤ったAC、実装後の要求拡大、Coordinatorが加えた未承認の設計判断を反例として確認する。一次要求が空・参照不能・根拠不足の場合はIntent/Contract/Designを未確定としてfindingに記録し、reviewを収束させない。文書の形式検証や実装者の説明を意味的承認にしない。
 - 失敗経路と反例: 変更の入力境界・error path・security・data整合性、既存testの見落とす反例。round 2以降は`previousBlocking`、修正差分、失効した契約から始める。
 - 必要な既存code: `focus.adjacentScope`の根拠を起点に直接依存・consumerを読む。範囲外の根拠は生成された割当に求め、到達不能だけで安全と判断しない。
 - 拡張: 契約矛盾、未知のconsumer、security/trust境界、反例、隣接範囲の証明不能があれば該当依存へ広げる。割当済みの全体/累積検分を狭めない。

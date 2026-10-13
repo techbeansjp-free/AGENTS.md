@@ -25,3 +25,11 @@ quick staging作成時刻は2026-10-13 01:03:16 UTC、PRのGitHub作成時刻は
 基点commitは既存のAケース試行（`docs/reviews/1576_performance.raw.json`の`revisionConsistentAFullE37.fixedFixtureSha`）と一致する。旧ASCは要求→CI 1,194.33秒、全Worker処理tokens 6,673,928、ASCなしは94.06秒・168,829 tokensの各単発観測が記録されている。一方、今回の新方式はCandidate開始を含む要求→CIと全Agent総tokensを取得しておらず、前後の配布物とアクセス可能資料も同一と証明できないため、数値を同条件の改善率へ変換しない。
 
 このE2Eは一件の明確な低リスク変更で、実装先行の正式Delivery到達とreview再利用を示す。認可や未確定仕様は既存のrisk判定・quick失格と上流Stepへ送る。標準入口の広範な性能優位性や安全同等性を、この一件だけで主張しない。
+
+## 2026-10-14: Quick Step 1のEvidence選択を通した独立clone実走
+
+配布元`3327f6e1`を独立Git cloneへ導入し、同じAケースの固定基点`fabdfaae0c7d854b7b8336d3ed22288d0b283b66`から[private dummy Issue #10](https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/issues/10)を実施した。Candidateから正式Step 0/1/4、Planning Seal、正式採用、独立review、trusted full検証、Step 10/11、[Draft PR #11](https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/pull/11)、[GitHub CI 10/10](https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/actions/runs/38449169559)まで完走した。merge・releaseはしていない。Step 1では不足欄の限定補完を1回行い、再plan後にCLIで正式記録した。fresh Step 1 Workerの起動は0回。Candidate Workerは37.422秒、報告input 82,330（cache read 73,728を内包）、output 451だった。
+
+開始観測からCI完了まで659秒、最後の再観測まで698秒。独立reviewerのusageとCoordinatorの全usageを完全に列挙できず、全Agent総tokensは`null`。この試行の配布資産、Provider障害、観測開始点は旧ASC・ASCなしの過去試行と完全には一致しないため、659秒を同条件の改善率や最新PR HEADの性能とは扱わない。失敗した先行dummy #8では、00形式不足によるfresh Workerへの逆戻りや共有seedへの記録があり、1,010.460秒を改善根拠に混ぜない。今回の独立cloneはその混入を避けた機能・品質上のE2E証拠である。
+
+追加のQuick意味的責務では、Step 1の形式検証後もIntent/Contract/Designを`unknown`に保ち、Step 10の独立Reviewerにcanonical Issue本文の`workflow-advance` markerより前の利用者所有要求、封印済み00、実Git差分を突合させる。Step 4同期関数はmarkerより前の元本文を保持することを対象BDDで確認した。これは性能改善の実測ではなく、実装先行時に後付け要求を見逃さないための品質修正である。
