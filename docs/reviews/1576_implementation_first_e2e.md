@@ -10,6 +10,7 @@
 - quick Step 0/1/4、private Issue同期の読み戻し、Planning Sealを通し、`candidate-adopt`が同一base・HEAD・reviewの収束を再観測して正式Step 9を記録。採用previewの出自表示は`git-lineage-only`、`coordinatorOriginVerified:false`であり、Coordinator出自を証明済みとは扱わない。
 - trusted `verify run --scope=full -- node --test`は実装HEADで9件成功、0件失敗。記録digestは`edea740a450d449f5dac5637c38d602354aec371aeacea9ce8bcc8316392c8df`。Step 10は採用前と同じreview sessionを再利用し、fresh reviewerを再起動せず、review exportとEvidence-only commitを正式記録した。別途、実装済み`greeting()`をimportして`assert.equal(greeting(), "Hello")`を実行する独立oracleも成功した。
 - `pr create`の正式gateでPR #2を作成し、Step 11は`pull_request_complete`。GitHub Actions `test`はbranch pushとPRに対応する2 runとも成功（11秒・12秒）。
+- 同じ基点の別隔離worktreeで認可変更を事前判定し、`authorization:triggered`に対して`route=upstream`、Worker・Git変更なしを観測した。正しさの基準が空で認可riskが`unknown`の入力は`route=clarify`で停止した。両結果とも`authority:none`、`formalWorkflowUnchanged:true`で、riskの出所はcaller申告として表示された。
 
 ## 測定値と限界
 

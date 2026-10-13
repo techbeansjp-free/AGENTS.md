@@ -392,6 +392,7 @@
       "fullVerification": "9/9",
       "independentReview": "converged-at-implementation-head; reused-at-step10",
       "privateCi": "2/2 success",
+      "highRiskPreflight": "authorization triggered -> upstream; unknown criterion and risk -> clarify; no worker or Git mutation",
       "requestToCiSeconds": null,
       "allAgentProcessedTokens": null,
       "parentAgentTokens": null,
