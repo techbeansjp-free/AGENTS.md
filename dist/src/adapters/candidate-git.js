@@ -20,6 +20,7 @@ export function observeRemovedAccessGuard(root, baseSha, headSha) {
     const patch = git([
         "diff",
         "--no-color",
+        "--text",
         "--no-ext-diff",
         "--no-textconv",
         "--no-renames",

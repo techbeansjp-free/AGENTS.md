@@ -27,6 +27,7 @@ export function observeRemovedAccessGuard(
     [
       "diff",
       "--no-color",
+      "--text",
       "--no-ext-diff",
       "--no-textconv",
       "--no-renames",
