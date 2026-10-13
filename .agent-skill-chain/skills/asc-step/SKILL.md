@@ -1,6 +1,6 @@
 ---
 name: asc-step
-description: agent-skill-chainの新規開発指示を安全判定してCandidate実装または必要な上流Stepへ振り分け、正式Stepでは現在の工程に対応するskillを読む。
+description: agent-skill-chainの新規開発指示を安全判定してCandidate実装または必要な上流Stepへ振り分け、正式な各Stepの開始時に対応するskillを読む。
 ---
 
 # agent-skill-chain Step選択
