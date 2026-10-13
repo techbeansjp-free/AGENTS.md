@@ -949,7 +949,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       optional(
         "prepare-next",
         "",
-        "作成済みStep 0記録と現在のStep 1 handoffを同じ呼出しで返す。作成後の観測失敗は終了値1とpath・preparation.recovery.argvを返す。既存stagingから再開し、createを繰り返さない。Q回答を推測せず、次工程のgateを省略しない",
+        "作成済みStep 0記録とEvidenceから選んだ次のactionを同じ呼出しで返す。fresh-worker選択時だけhandoffとagentDispatchを返す。作成後の観測失敗は終了値1とpath・preparation.recovery.argvを返す。既存stagingから再開し、createを繰り返さない。Q回答を推測せず、次工程のgateを省略しない",
         "なし",
       ),
       optional("changed", "path,path", "既知の変更path", "なし"),

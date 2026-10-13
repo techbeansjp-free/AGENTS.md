@@ -1051,6 +1051,73 @@ Given("Candidate出自のないStep1の隔離quick stagingがある", function (
 Given("Candidateの危険差分があるStep1の隔離quick stagingがある", function () {
   prepareQuickRequest(this, true, true);
 });
+When(
+  "Candidate結果で新たなIssueをprepare-next付きで作成する",
+  async function () {
+    const assessment = path.join(
+      path.dirname(this.root),
+      `assessment-entry-parity-${path.basename(this.root)}.json`,
+    );
+    fs.writeFileSync(
+      assessment,
+      JSON.stringify(
+        Object.fromEntries(
+          QUESTIONS.map((id) => [
+            id,
+            { answer: true, evidence: "既存仕様とCandidate差分" },
+          ]),
+        ),
+      ),
+    );
+    const originalWrite = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      assert.equal(
+        await main([
+          "issue",
+          "create",
+          `--root=${this.root}`,
+          "--title=Candidate-entry-parity",
+          "--mode=quick",
+          `--assessment=${assessment}`,
+          "--prepare-next",
+        ]),
+        0,
+      );
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+    this.value = JSON.parse(output) as Record<string, unknown>;
+  },
+);
+Then(
+  "作成時と通常planは同じ限定Coordinatorを示しworkerをdispatchしない",
+  async function () {
+    const created = this.value as {
+      path: string;
+      action: WorkflowExecutionContract;
+      agentDispatch?: unknown;
+      handoff?: unknown;
+    };
+    const planned = await runPlan(created.path);
+    assert.equal(planned.status, 0, planned.text);
+    const after = JSON.parse(planned.text) as ReturnType<
+      typeof observeWorkflowExecutionPlan
+    >;
+    assert.equal(created.action.executor, "coordinator");
+    assert.equal(after.action.executor, "coordinator");
+    assert.deepEqual(created.action, after.action);
+    assert.equal(created.agentDispatch, undefined);
+    assert.equal(created.handoff, undefined);
+    assert.equal(after.agentDispatch, undefined);
+    assert.equal(after.handoff, undefined);
+  },
+);
+
 When("00を完成させてEvidenceから次のWork Unitを選ぶ", async function () {
   const file = path.join(this.staging, "00_要求定義.md");
   const filled = fs

@@ -69,6 +69,11 @@ Feature: 正式gateを維持する機械可読Work Unit契約
     When 00を完成させてEvidenceから次のWork Unitを選ぶ
     Then 未完成時は限定Coordinatorで完成後はCLIのみを示し正式記録はまだ行わない
 
+  Scenario: SCN-UNIT-EXECPLAN-012 Issue作成入口もCandidate根拠から同じCoordinatorを選ぶ
+    Given Step1の隔離quick stagingと未完成の00がある
+    When Candidate結果で新たなIssueをprepare-next付きで作成する
+    Then 作成時と通常planは同じ限定Coordinatorを示しworkerをdispatchしない
+
   Scenario: SCN-UNIT-EXECPLAN-006 完成済みQuick要求も既存Step1 gateを通る
     Given Step1の隔離quick stagingと未完成の00がある
     When 00を完成させてEvidenceから次のWork Unitを選ぶ

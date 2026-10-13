@@ -50,3 +50,7 @@ Step 1の長い出力は、既存の基準やCandidate差分から確定でき�
 独立reviewでは、Coordinatorの補完に失敗した後の明示的なfresh Worker fallbackと、補完Work Unitの終了条件が不足と指摘された。`workflow advance --plan --delegate-request`をQuick Step 1専用のread-only再選択として追加し、fresh Workerの再観測promptにも同じflagを固定した。補完Work Unitは00の検証・再planだけで終了し、Step 1記録を自己完了条件に含めない。正式記録はその後のCLI gateで再照合する。この変更も実走上の速度効果は未測定である。
 
 修正前配布物`4a5a27c2`の隔離dummy Issue #8は[Draft PR #9](https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/pull/9)とCI 10/10まで完走した。Candidate Workerは23.564秒、開始観測からDraftとCI確認まで1,010.460秒。初回の00形式不備によるfresh Step 1 Worker、Worker起動引数の失敗、Candidate結果worktreeの依存物欠落による初回full失敗、reviewer初回結果の欠測をすべて時間に含める。全Agent usageは欠測で`null`。さらにreviewer選択のdecision記録が共有Git primary rootのseed側に保存され、厳密な隔離条件を破った。該当するIssue #8の単一runtime記録を確認して削除し、seedの追跡差分がないことを確認した。この試行を新経路の性能効果や清浄な比較として扱わない。修正後の配布物での再実走は独立Git cloneを用い、Git共通directoryも隔離する。
+
+Issue作成入口の追加検分では、`issue create --prepare-next`が旧handoffを直接作り、Candidate根拠を評価する`workflow advance --plan`と異なる担当を返す不整合が見つかった。同一状態で前者がfresh Workerを起動し、後者が限定Coordinatorを選ぶと再dispatchが必要になる。入口を同じexecutionPlanへ統一し、隔離Candidateの新規Issueと通常planが同じ担当を返す回帰シナリオを追加した。これは起動の重複を防ぐ機能修正であり、削減秒数・tokensは未測定。
+
+実装HEADを確定する前にtrusted full検証を開始したが、独立reviewでこの入口欠陥が見つかり旧HEADの検証を停止した。HEAD拘束は最終Evidenceの整合性に必要だが、reviewで変更可能性が残る段階のfull実行は避けるべき固定費だった。対象テスト・読取専用検分を先に行い、変更が収束してから正式full、review Evidence、CIの順にする。

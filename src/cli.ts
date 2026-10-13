@@ -59,10 +59,6 @@ import {
   planVerification,
   runVerification,
 } from "./adapters/verification-run.js";
-import {
-  observeWorkflowHandoff,
-  workflowAgentDispatch,
-} from "./adapters/workflow-handoff.js";
 import { observeWorkflowResume } from "./adapters/workflow-resume.js";
 import { observeWorkflowExecutionPlan } from "./adapters/workflow-execution-plan.js";
 import {
@@ -8095,23 +8091,30 @@ export async function main(
       };
       try {
         const journal = readWorkflowJournal(created.path);
-        const resume = observeWorkflowResume(created.path);
-        const handoff = observeWorkflowHandoff(created.path, 1, resume);
-        const errors = [
-          ...journal.errors,
-          ...resume.errors,
-          ...(handoff && "errors" in handoff ? (handoff.errors ?? []) : []),
-        ];
+        const executionPlan = observeWorkflowExecutionPlan(created.path);
+        const errors = [...journal.errors, ...executionPlan.errors];
         if (!journal.entries.some((entry) => entry.step === 0))
           errors.push("作成済みstagingのStep 0記録を確認できません");
-        if (errors.length > 0) throw new Error([...new Set(errors)].join("; "));
-        const agentDispatch = workflowAgentDispatch(handoff);
+        if (executionPlan.state === "blocked" || errors.length > 0)
+          throw new Error([...new Set(errors)].join("; "));
+        const handoff =
+          executionPlan.handoff === undefined
+            ? undefined
+            : {
+                ...executionPlan.handoff,
+                workUnit: {
+                  ...executionPlan.handoff.workUnit,
+                  contract: executionPlan.action,
+                },
+              };
         print({
           ...created,
           step0: { recorded: true, errors: [] },
-          resume,
+          resume: executionPlan.resume,
+          action: executionPlan.action,
+          assurance: executionPlan.assurance,
           handoff,
-          agentDispatch,
+          agentDispatch: executionPlan.agentDispatch,
         });
       } catch (error) {
         // Creation is already committed. Preserve its records and expose a

@@ -585,7 +585,7 @@ export const COMMAND_USAGE = Object.freeze([
         ],
         optionalFlags: [
             ROOT_FLAG,
-            optional("prepare-next", "", "作成済みStep 0記録と現在のStep 1 handoffを同じ呼出しで返す。作成後の観測失敗は終了値1とpath・preparation.recovery.argvを返す。既存stagingから再開し、createを繰り返さない。Q回答を推測せず、次工程のgateを省略しない", "なし"),
+            optional("prepare-next", "", "作成済みStep 0記録とEvidenceから選んだ次のactionを同じ呼出しで返す。fresh-worker選択時だけhandoffとagentDispatchを返す。作成後の観測失敗は終了値1とpath・preparation.recovery.argvを返す。既存stagingから再開し、createを繰り返さない。Q回答を推測せず、次工程のgateを省略しない", "なし"),
             optional("changed", "path,path", "既知の変更path", "なし"),
             optional("staging-root", "path", "stagingを作る親directory（repository相対）。project policyのstaging.rootに一致させる。rootが*を含むときは必須", "project policyのstaging.root（既定 .agent-skill-chain/tmp/issues）"),
             optional("name", "text", "staging directory名。版管理下のstagingで人が読む名前（例: S1-T02_安定ID）を付けるときに使う", "<JST timestamp>_<title slug>"),
