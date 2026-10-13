@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { main, composeWorkflowAdvanceIssueBody } from "../../src/cli.js";
 import { createIssueStaging, validateIssue } from "../../src/domain/issue.js";
 import { QUESTIONS } from "../../src/domain/mode.js";
@@ -419,7 +420,29 @@ Then("同じHEAD境界のfresh契約だけが返り保存内容は不変であ�
   assert.ok(plan.agentDispatch);
   const dispatched = JSON.parse(plan.agentDispatch.prompt) as {
     handoff: { headSha: string; workUnit: { workUnitId: string } };
+    previewArgv: string[];
   };
+  assert.equal(dispatched.previewArgv[0], process.execPath);
+  assert.ok(fs.statSync(dispatched.previewArgv[1]!).isFile());
+  assert.deepEqual(dispatched.previewArgv.slice(2), [
+    "workflow",
+    "advance",
+    "--plan",
+    `--staging=${this.staging}`,
+  ]);
+  const preview = spawnSync(
+    dispatched.previewArgv[0]!,
+    dispatched.previewArgv.slice(1),
+    {
+      cwd: this.root,
+      encoding: "utf8",
+    },
+  );
+  assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+  assert.equal(
+    (JSON.parse(preview.stdout) as { workUnitId: string }).workUnitId,
+    plan.workUnitId,
+  );
   assert.equal(dispatched.handoff.headSha, plan.headSha);
   assert.equal(dispatched.handoff.workUnit.workUnitId, plan.workUnitId);
   assert.equal(plan.agentDispatch.prompt.includes('"contract"'), false);
@@ -1521,7 +1544,11 @@ Then("委譲は正式記録を変えず独立Worker dispatchを返す", function
   assert.equal(selected.step, 1);
   assert.equal(selected.action.executor, "fresh-worker");
   assert.ok(selected.agentDispatch);
-  assert.match(selected.agentDispatch.prompt, /--plan --delegate-request/u);
+  assert.ok(
+    (
+      JSON.parse(selected.agentDispatch.prompt) as { previewArgv: string[] }
+    ).previewArgv.includes("--delegate-request"),
+  );
   assert.ok(selected.handoff);
   assert.equal(snapshot(this), this.snapshot);
 });

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { git } from "../lib/process.js";
+import { findPackageRoot } from "../lib/package-root.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { readStoredStagingRecord } from "../domain/staging.js";
 import { PLAN_SEAL_ARTIFACTS, PLAN_AMENDMENT_FILE, } from "../domain/plan-seal.js";
@@ -742,6 +743,18 @@ export function workflowAgentDispatch(handoff, delegateRequest = false) {
         subagent_type: "general-purpose",
         description: `ASC Step ${handoff.step} ${handoff.role} ${handoff.workUnit.workUnitId.slice(0, 12)}`,
         prompt: JSON.stringify({
+            previewArgv: [
+                process.execPath,
+                path.join(findPackageRoot(import.meta.url), "dist", "bin", "agent-skill-chain.js"),
+                "workflow",
+                "advance",
+                "--plan",
+                ...(delegateRequest ? ["--delegate-request"] : []),
+                `--staging=${handoff.staging}`,
+                ...(handoff.continuationFromHead
+                    ? [`--continue-from=${handoff.continuationFromHead}`]
+                    : []),
+            ],
             handoff: {
                 kind: handoff.kind,
                 worktree: handoff.worktree,
@@ -758,7 +771,7 @@ export function workflowAgentDispatch(handoff, delegateRequest = false) {
                     reuseForbidden: handoff.workUnit.reuseForbidden,
                 },
             },
-            prompt: `指定workUnitId専用のfresh one-shot workerです。worktreeでworkflow advance --plan${delegateRequest ? " --delegate-request" : ""} --staging=<staging>を観測する。continuationFromHeadがあれば同値の--continue-fromも付ける。plan.handoffまたはplan.alternatives[].handoffから同じrole・workUnitIdの候補がちょうど1件の場合だけ選び、HEAD・boundaryも照合。0件・複数件・不一致なら再dispatchを要求。同じ状態の--planを出力分割だけのため再実行せず、一度の観測から担当候補とactionを読む。照合後、primaryならplan.action、alternativeなら対応するalternatives[i].actionを正式契約として読み、handoff.read.skill・read.stagingと未充足責務の必要節を確認する。契約読込後もHEADを再確認し、担当だけを完了する。Skillの契約と独立検証を維持。action.recordArtifactsがある場合、正式返却artifactはその集合だけとしrequiredInputs/read.stagingを混ぜない。workUnitId/status/HEAD/検証記録ID/blocker/nextのcompact JSONを返す。詳細はGit/staging/finding、Step/round記録はcoordinator。返却後terminal、追加作業にはASC_REDISPATCH_REQUIRED。`,
+            prompt: "指定WorkUnit専用のfresh worker。handoff.worktreeでpreviewArgvを引数配列のまま実行し、入口を推測しない。sandboxのEPERM等は境界不一致と区別し、Hostの正式な承認経路が利用できる場合だけ同じ読取を再実行する。承認拒否は迂回しない。成功したplanを再観測・全文再出力しない。plan.handoffまたはalternatives[].handoffから同じrole・workUnitIdがちょうど1件の場合だけHEAD・boundaryを照合。0件・複数件・不一致はASC_REDISPATCH_REQUIRED。primaryのactionまたは対応alternative.actionを読み、read.skill・read.stagingの必要節を取得しHEADを再確認。担当だけを完了し、Skillと独立検証を維持。正式返却artifactはaction.recordArtifactsだけ。workUnitId/status/HEAD/検証記録ID/blocker/nextのcompact JSONを返す。詳細はGit/staging/finding、Step/round記録はcoordinator。返却後terminal、追加作業は再dispatch。",
         }),
     };
 }
