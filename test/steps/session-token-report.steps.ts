@@ -791,6 +791,21 @@ Given("完了と不完全のCodex rollout logがある", function () {
     path.join(this.tokenRoot, "partial.jsonl"),
     [started, response].map((event) => JSON.stringify(event)).join("\n"),
   );
+  fs.writeFileSync(
+    path.join(this.tokenRoot, "trailing-missing.jsonl"),
+    [
+      started,
+      response,
+      {
+        type: "response_item",
+        timestamp: "2026-10-13T00:00:02.000Z",
+        payload: { type: "message", role: "assistant" },
+      },
+      completed,
+    ]
+      .map((event) => JSON.stringify(event))
+      .join("\n"),
+  );
 });
 
 When("rolloutの工程別usageを集計する", function () {
@@ -853,4 +868,22 @@ Then("rolloutの完全性とAgent列挙の未検証を区別する", function ()
   assert.equal(report.allDeclaredAgentProcessedTokens, null);
   assert.equal(report.agentInventoryCoverage, "unverified");
   assert.equal(report.actualAllAgentProcessedTokens, null);
+  const trailing = reportCodexE2E({
+    agents: [
+      {
+        id: "trailing-missing",
+        format: "codex-rollout",
+        files: [path.join(this.tokenRoot, "trailing-missing.jsonl")],
+        startedAt: null,
+        endedAt: null,
+      },
+    ],
+    phases: [
+      { name: "trailing", at: "2026-10-13T00:00:02.000Z" },
+      { name: "end", at: "2026-10-13T00:00:03.000Z" },
+    ],
+  });
+  assert.equal(trailing.agents[0]?.coverage, "partial");
+  assert.equal(trailing.phases[0]?.hostAgentUsage[0]?.coverage, "missing");
+  assert.equal(trailing.allDeclaredAgentProcessedTokens, null);
 });

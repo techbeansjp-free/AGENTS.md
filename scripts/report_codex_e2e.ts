@@ -79,7 +79,9 @@ function observations(agent: Agent): ObservationSet | null {
   let taskStarts = 0;
   let taskEnds = 0;
   let finalCumulative: Counter | null = null;
-  let responseItems = 0;
+  let generatedItems = 0;
+  let lastGeneratedAt: number | null = null;
+  let lastUsageAt: number | null = null;
   for (const file of agent.files) {
     if (!fs.existsSync(file)) return null;
     for (const line of fs.readFileSync(file, "utf8").split("\n")) {
@@ -105,7 +107,21 @@ function observations(agent: Agent): ObservationSet | null {
           taskEnd =
             typeof value.timestamp === "string" ? time(value.timestamp) : null;
         }
-        if (value.type === "response_item") responseItems += 1;
+        if (
+          value.type === "response_item" &&
+          (payload?.type === "reasoning" ||
+            payload?.type === "custom_tool_call" ||
+            payload?.type === "function_call" ||
+            (payload?.type === "message" && payload.role === "assistant"))
+        ) {
+          generatedItems += 1;
+          if (typeof value.timestamp !== "string") return null;
+          const generatedAt = time(value.timestamp);
+          lastGeneratedAt = Math.max(
+            lastGeneratedAt ?? generatedAt,
+            generatedAt,
+          );
+        }
       }
       if (
         agent.format === "codex-host" &&
@@ -143,6 +159,7 @@ function observations(agent: Agent): ObservationSet | null {
         id = payload.response_id;
         usage = payload.usage;
         at = time(value.timestamp);
+        lastUsageAt = Math.max(lastUsageAt ?? at, at);
         try {
           finalCumulative = counter(payload.thread_token_usage);
         } catch {
@@ -181,8 +198,10 @@ function observations(agent: Agent): ObservationSet | null {
       (from === null || from <= taskStart) &&
       (to === null || to >= taskEnd) &&
       (calls.length === 0
-        ? responseItems === 0
+        ? generatedItems === 0
         : finalCumulative !== null &&
+          (lastGeneratedAt === null ||
+            (lastUsageAt !== null && lastUsageAt >= lastGeneratedAt)) &&
           JSON.stringify(sum(calls.map((call) => call.usage))) ===
             JSON.stringify(finalCumulative));
     if (!complete && calls.length === 0) return null;

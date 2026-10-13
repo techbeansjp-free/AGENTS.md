@@ -1741,6 +1741,7 @@ When("認可変更を前のcommitに隠したCandidate採用を試す", function
 
 When("中立名のserviceから認可guardを削除したCandidate採用を試す", function () {
   prepareCandidateAdoption(this, false, false, true);
+  run("git", ["config", "color.ui", "always"], this.candidate);
   invokeCandidateAdoption(this, true);
   assert.match(this.result?.stdout ?? "", /認可・認証guard/);
 });

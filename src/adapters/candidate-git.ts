@@ -26,6 +26,7 @@ export function observeRemovedAccessGuard(
   const patch = git(
     [
       "diff",
+      "--no-color",
       "--no-ext-diff",
       "--no-textconv",
       "--no-renames",
