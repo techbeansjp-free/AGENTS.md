@@ -311,3 +311,26 @@ Feature: 実装先行候補は隔離Gitと事前契約・実行済みテスト�
     Given 候補用の隔離dummyと事前sessionを作る
     When 認可pathを低riskと誤申告する
     Then 新しいCandidate sessionを作らず上流へ戻す
+
+  Scenario: SCN-INT-CANDIDATE-065 採用前review後の計画変更を古いreviewで採用しない
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 封印済みCandidateのreview後にAMDを追加する
+    Then 古いreviewではCandidate採用できずjournalを変更しない
+    When 現在の計画と累積差分を同じHEADで再reviewする
+    Then 現在の計画に拘束されたreviewだけでCandidateを採用できる
+
+  Scenario: SCN-INT-CANDIDATE-066 review入力生成後の計画変更を拒否する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 封印済みCandidateのreview入力生成後にAMDを追加する
+    Then 古い計画digestのreview入力は記録できない
+
+  Scenario: SCN-INT-CANDIDATE-067 review後の要求本文の直接改変を拒否する
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 封印済みCandidateのreview後に要求本文を変更する
+    Then 古いreviewではCandidate採用できずjournalを変更しない
+
+  Scenario: SCN-INT-CANDIDATE-068 計画変更の再reviewで実差分外の重大契約違反を止める
+    Given 候補用の隔離dummyと事前sessionを作る
+    When 封印済みCandidateのreview後にAMDを追加する
+    And 同じHEADの計画再reviewで固定ACへの重大違反を検出する
+    Then 重大違反はblockerとなりCandidateを採用できない

@@ -1,3 +1,4 @@
+import { fixturePlanningDigest } from "../support/review-planning-fixture.js";
 import assert from "node:assert/strict";
 import {
   appendLegacyJournal,
@@ -2476,9 +2477,15 @@ function preparedMergeReviewEvidence(prepared: PreparedPullRequest) {
   };
 }
 
-function reviewRoundFixture(root: string, baseSha: string, headSha: string) {
+function reviewRoundFixture(
+  root: string,
+  baseSha: string,
+  headSha: string,
+  staging?: string,
+) {
   const observed = observeReviewDiff(root, baseSha, headSha);
   return parseReviewRoundInput({
+    planningDigest: fixturePlanningDigest(staging),
     round: 1,
     previousRoundDigest: null,
     anchor: {
@@ -2505,10 +2512,11 @@ function contextIsolatedReviewEvidence(
   baseSha: string,
   implementationSha: string,
   independenceMode: "context-isolated" | "actor-independent",
+  staging: string,
 ) {
   const session = advanceReviewSession(
     null,
-    reviewRoundFixture(root, baseSha, implementationSha),
+    reviewRoundFixture(root, baseSha, implementationSha, staging),
   );
   const observed = observeFixtureVerification(root, {
     baseSha,
@@ -2536,7 +2544,7 @@ function convergedReviewBinding(
 ): NonNullable<StepJournalEntry["reviewSession"]> {
   const session = recordReviewRound({
     staging,
-    round: reviewRoundFixture(root, baseSha, headSha),
+    round: reviewRoundFixture(root, baseSha, headSha, staging),
   });
   return {
     sessionId: session.sessionId,
@@ -2764,6 +2772,24 @@ function preparePullRequest(
         poc: pocDeclaration,
       }).path
     : undefined;
+  const staging =
+    pocStaging ??
+    fullStaging ??
+    createIssueStaging(root, {
+      title: "workflow-test",
+      answers: answers(),
+      now: new Date(fixtureInstantMs()),
+      requestedMode: "quick",
+    }).path;
+  if (!pocDeclaration) {
+    preSealPlanning?.(staging);
+    if (!fullStaging && !missingStep4)
+      for (const step of [1, 4])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: entry(step, "quick", fixturePast),
+        });
+  }
   let reviewFixture:
     ReturnType<typeof contextIsolatedReviewEvidence> | undefined;
   if (pocDeclaration) {
@@ -2777,6 +2803,7 @@ function preparePullRequest(
       baseSha,
       implementationCommitSha,
       reviewIndependence ?? "context-isolated",
+      staging,
     );
     const reviewEvidence = reviewFixture.evidence;
     const reviewArtifact = renderReviewEvidence(reviewEvidence);
@@ -2858,15 +2885,6 @@ function preparePullRequest(
     spawnSync("git", ["checkout", "-q", "--detach", implementationCommitSha], {
       cwd: root,
     });
-  const staging =
-    pocStaging ??
-    fullStaging ??
-    createIssueStaging(root, {
-      title: "workflow-test",
-      answers: answers(),
-      now: new Date(fixtureInstantMs()),
-      requestedMode: "quick",
-    }).path;
   if (pocDeclaration) {
     for (const step of [1, 4])
       appendWorkflowJournalEntry({
@@ -2917,7 +2935,6 @@ function preparePullRequest(
     });
   }
   const journalFile = path.join(staging, STEP_JOURNAL_FILE);
-  preSealPlanning?.(staging);
   if (missingStep4) {
     const preReviewEntries = [0, 1, 9].map((step) => ({
       ...entry(step, "quick", fixturePast),
@@ -2944,7 +2961,7 @@ function preparePullRequest(
     refreshStoredStagingDigest(staging);
   } else {
     const journalMode = fullStaging ? "full" : "quick";
-    for (const step of fullStaging ? [9] : [1, 4, 9])
+    for (const step of [9])
       appendWorkflowJournalEntry({
         staging,
         entry: entry(step, journalMode, fixturePast),

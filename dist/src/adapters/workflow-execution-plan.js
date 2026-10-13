@@ -11,7 +11,7 @@ import { deriveAssuranceProjection } from "./workflow-assurance.js";
 import { inspectWorkflowStaging, readWorkflowJournal, } from "./workflow-journal.js";
 import { observeWorkflowResume } from "./workflow-resume.js";
 import { planVerification } from "./verification-run.js";
-import { assertConvergedReviewSession } from "./review-session.js";
+import { assertConvergedReviewSession, assertReviewPlanningBinding, } from "./review-session.js";
 import { observeWorkflowHandoff, workflowAgentDispatch, workflowExecutionContract, workflowReviewerAlternative, workflowVerificationContract, } from "./workflow-handoff.js";
 /** Formal verification evidence may choose CLI work before review or export. */
 export function shouldVerifyBeforeReview(input) {
@@ -181,6 +181,7 @@ function candidateAdoptionWork(staging) {
     if (review.anchor.diffBaseSha !== candidate.baseSha ||
         review.latestCandidateHeadSha !== candidate.headSha)
         return null;
+    assertReviewPlanningBinding(staging, review, candidate.headSha);
     const base = workflowExecutionContract(9, "coordinator", undefined, "quick");
     return {
         ...base,

@@ -1,3 +1,4 @@
+import { fixturePlanningDigest } from "../support/review-planning-fixture.js";
 import assert from "node:assert/strict";
 import { createReuseObserver } from "../../src/adapters/review-reuse.js";
 import crypto from "node:crypto";
@@ -874,6 +875,7 @@ Given(
     this.session = recordReviewRound({
       staging: this.staging,
       round: parseReviewRoundInput({
+        planningDigest: fixturePlanningDigest(this.staging),
         round: 1,
         previousRoundDigest: null,
         anchor: {
@@ -934,6 +936,7 @@ When(
       recordReviewRound({
         staging: this.staging,
         round: parseReviewRoundInput({
+          planningDigest: fixturePlanningDigest(this.staging),
           ...this.draft,
           focus: {
             ...this.draft.focus,
@@ -961,6 +964,7 @@ When("雛形へ隣接範囲の修正起因High findingを加えて記録する",
   this.session = recordReviewRound({
     staging: this.staging,
     round: parseReviewRoundInput({
+      planningDigest: fixturePlanningDigest(this.staging),
       ...this.draft,
       findings: [
         reviewFinding({ path: "src/lib.ts", status: "resolved" }),

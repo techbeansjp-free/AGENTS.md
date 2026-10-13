@@ -1,3 +1,5 @@
+import { verifyReviewEvidenceWithStaging } from "../../src/adapters/review-evidence.js";
+import { fixturePlanningDigest } from "../support/review-planning-fixture.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -49,6 +51,8 @@ interface ReviewEvidenceCliWorld extends WorkflowWorld {
   /** trusted policyの`verification.fullCommand`。marker fileがあれば同じargvで失敗する */
   fullCommand: string[];
   marker: string;
+  planningEvidenceBefore?: string;
+  planningBindingErrors?: string[];
   /** 操作ごとの`git diff --binary`呼出し（比較区間の完全差分導出）のargv */
   derivations?: { export: string[][]; validate: string[][] };
 }
@@ -157,6 +161,7 @@ function prepare(world: ReviewEvidenceCliWorld, blocking: boolean): void {
   world.session = recordReviewRound({
     staging: world.staging,
     round: parseReviewRoundInput({
+      planningDigest: fixturePlanningDigest(world.staging),
       round: 1,
       previousRoundDigest: null,
       anchor: {
@@ -320,6 +325,7 @@ Given(
     this.session = recordReviewRound({
       staging: this.staging,
       round: parseReviewRoundInput({
+        planningDigest: fixturePlanningDigest(this.staging),
         round: 1,
         previousRoundDigest: null,
         anchor: {
@@ -942,3 +948,34 @@ Then(
     );
   },
 );
+
+When("review後にAMDを追加してexportとEvidence照合を行う", async function () {
+  const file = path.join(this.root, "docs", "reviews", `${ISSUE}_review.json`);
+  this.planningEvidenceBefore = fs.readFileSync(file, "utf8");
+  fs.writeFileSync(
+    path.join(this.staging, "05_計画変更.md"),
+    "# 05 計画変更\n\n## AMD-001 変更\n\n- 対象: 固定AC\n- 変更: 追加仕様を要求\n- 理由: review後の計画変更\n",
+  );
+  this.reexported = await captureCli(exportArgs(this));
+  this.planningBindingErrors = verifyReviewEvidenceWithStaging({
+    staging: this.staging,
+    evidence: parseReviewEvidence(this.planningEvidenceBefore),
+  });
+});
+Then("両方が古い計画のreviewを拒否し既存Evidenceを変更しない", function () {
+  assert.notEqual(this.reexported?.exitCode, 0);
+  assert.match(
+    this.reexported?.error?.message ?? JSON.stringify(this.reexported),
+    /計画digest/,
+  );
+  assert.ok(
+    this.planningBindingErrors?.some((error) => error.includes("計画digest")),
+  );
+  assert.equal(
+    fs.readFileSync(
+      path.join(this.root, "docs", "reviews", `${ISSUE}_review.json`),
+      "utf8",
+    ),
+    this.planningEvidenceBefore,
+  );
+});

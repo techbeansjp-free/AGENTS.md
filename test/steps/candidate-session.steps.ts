@@ -26,6 +26,7 @@ import {
   buildReviewRoundDraft,
   readStoredReviewSession,
   recordReviewRound,
+  assertConvergedReviewSession,
 } from "../../src/adapters/review-session.js";
 import { observeWorkflowExecutionPlan } from "../../src/adapters/workflow-execution-plan.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
@@ -42,6 +43,8 @@ class CandidateSessionWorld extends WorkflowWorld {
   output?: Record<string, unknown>;
   rejectionReasons: string[] = [];
   adoptionPlan?: ReturnType<typeof observeWorkflowExecutionPlan>;
+  planningReviewDraft?: ReturnType<typeof buildReviewRoundDraft>;
+  planningJournalBefore?: string;
   authEnvironment?: ReturnType<typeof codexCandidateEnvironment>;
   boundaryResult?: ReturnType<typeof runCandidateWorkerBoundary>;
   resolvedExecutable?: string;
@@ -2100,5 +2103,145 @@ Then("相対実行fileをCandidate基点で解決して実行する", function (
   assert.equal(
     run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
     this.baseSha,
+  );
+});
+
+function appendUnreviewedAmendment(world: CandidateSessionWorld): void {
+  fs.writeFileSync(
+    path.join(world.staging, "05_計画変更.md"),
+    "# 05 計画変更\n\n## AMD-001 変更\n\n- 対象: 文言の受入条件\n- 変更: 追加仕様を要求する\n- 理由: review後の計画変更を検出する\n",
+  );
+}
+
+When("封印済みCandidateのreview後にAMDを追加する", function () {
+  prepareCandidateAdoption(this);
+  recordCandidatePreAdoptionReview(this);
+  this.planningJournalBefore = JSON.stringify(
+    readWorkflowJournal(this.staging),
+  );
+  appendUnreviewedAmendment(this);
+});
+When("封印済みCandidateのreview後に要求本文を変更する", function () {
+  prepareCandidateAdoption(this);
+  recordCandidatePreAdoptionReview(this);
+  this.planningJournalBefore = JSON.stringify(
+    readWorkflowJournal(this.staging),
+  );
+  fs.appendFileSync(
+    path.join(this.staging, "00_要求定義.md"),
+    "\n未承認の受入条件を追加\n",
+  );
+});
+Then("古いreviewではCandidate採用できずjournalを変更しない", function () {
+  invokeCandidateAdoption(this, true);
+  assert.equal(this.result?.status, 1, this.result?.stdout);
+  assert.equal(
+    JSON.stringify(readWorkflowJournal(this.staging)),
+    this.planningJournalBefore,
+  );
+  assert.match(this.result?.stdout ?? "", /計画digest|封印|Planning/);
+});
+When("現在の計画と累積差分を同じHEADで再reviewする", function () {
+  const prior = readStoredReviewSession(this.staging)!;
+  const draft = buildReviewRoundDraft({
+    staging: this.staging,
+    headSha: prior.latestCandidateHeadSha,
+  });
+  assert.notEqual(
+    draft.round.planningDigest,
+    prior.rounds.at(-1)?.planningDigest,
+  );
+  assert.equal(draft.round.inspection?.cumulative?.scope, "all");
+  assert.throws(
+    () =>
+      recordReviewRound({
+        staging: this.staging,
+        round: { ...draft.round, recordLayerOnly: true },
+      }),
+    /計画変更/,
+  );
+  recordReviewRound({
+    staging: this.staging,
+    round: { ...draft.round, findings: [] },
+  });
+});
+Then("現在の計画に拘束されたreviewだけでCandidateを採用できる", function () {
+  invokeCandidateAdoption(this, true);
+  assert.equal(this.result?.status, 0, this.result?.stdout);
+  const session = readStoredReviewSession(this.staging)!;
+  assertConvergedReviewSession({
+    staging: this.staging,
+    expectedDigest: session.latestRoundDigest,
+    currentHeadSha: session.latestCandidateHeadSha,
+  });
+  assert.equal(
+    readWorkflowJournal(this.staging).entries.at(-1)?.planGeneration
+      ?.generation,
+    2,
+  );
+});
+When("封印済みCandidateのreview入力生成後にAMDを追加する", function () {
+  prepareCandidateAdoption(this);
+  const headSha = run(
+    "git",
+    ["rev-parse", "HEAD"],
+    path.dirname(path.dirname(this.staging)),
+  ).stdout.trim();
+  this.planningReviewDraft = buildReviewRoundDraft({
+    staging: this.staging,
+    headSha,
+    baseSha: this.baseSha,
+    scopeIds: ["SCOPE-CANDIDATE-DUMMY"],
+    acceptanceCriteriaIds: ["AC-CANDIDATE-DUMMY"],
+  });
+  appendUnreviewedAmendment(this);
+});
+Then("古い計画digestのreview入力は記録できない", function () {
+  assert.throws(
+    () =>
+      recordReviewRound({
+        staging: this.staging,
+        round: this.planningReviewDraft!.round,
+      }),
+    /計画digest/,
+  );
+  assert.equal(readStoredReviewSession(this.staging), null);
+});
+
+When("同じHEADの計画再reviewで固定ACへの重大違反を検出する", function () {
+  const previous = readStoredReviewSession(this.staging)!;
+  const draft = buildReviewRoundDraft({
+    staging: this.staging,
+    headSha: previous.latestCandidateHeadSha,
+  });
+  assert.deepEqual(draft.round.focus.fixedDiff, []);
+  const session = recordReviewRound({
+    staging: this.staging,
+    round: {
+      ...draft.round,
+      findings: [
+        {
+          id: "REV-AMD-1",
+          severity: "High",
+          status: "valid",
+          source: "review",
+          relation: "acceptance-violation",
+          evidence: "現計画の固定ACを既存実装が満たさない",
+          path: "src/label.js",
+          contractId: "AC-CANDIDATE-DUMMY",
+          causedByFindingId: null,
+        },
+      ],
+    },
+  });
+  assert.equal(session.status, "active");
+  assert.deepEqual(session.rounds.at(-1)?.blocking, ["REV-AMD-1"]);
+});
+Then("重大違反はblockerとなりCandidateを採用できない", function () {
+  invokeCandidateAdoption(this, true);
+  assert.equal(this.result?.status, 1, this.result?.stdout);
+  assert.equal(
+    readWorkflowJournal(this.staging).entries.some((entry) => entry.step === 9),
+    false,
   );
 });

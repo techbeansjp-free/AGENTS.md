@@ -65,7 +65,7 @@ import { appendCompletionRecord, appendEvidenceStateRecord, applyEvidencePrune, 
 import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssignment, validateTierSelection, validateCodexTier, validateClaudeTier, CODEX_ADOPTION_SELECTOR, CLAUDE_ADOPTION_SELECTOR, } from "./domain/role.js";
 import { readDeliveryEvidence, readEnforcementInput, readFinalizeEvidence, isPolicyInput, readJsonInput, readMigrationManifest, readMigrationState, readModeAssessment, readPolicyFileInput, readPolicyJson, readSpecReview, } from "./adapters/json-input.js";
 import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPlanFrozen, assertPlanSealOpen, assertPocDeliveryChangeScope, assertWorkflowStaging, describeStagingDigestDrift, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
-import { assertConvergedReviewSession, buildReviewRoundDraft, previewReviewRound, readStoredReviewSession, recordReviewRound, } from "./adapters/review-session.js";
+import { assertConvergedReviewSession, assertReviewPlanningBinding, buildReviewRoundDraft, previewReviewRound, readStoredReviewSession, recordReviewRound, } from "./adapters/review-session.js";
 import { appendMetricsEvent, buildMetricsReport, writeMetricsReport, } from "./adapters/metrics-journal.js";
 import { METRICS_EVENT_KINDS, METRICS_EVENT_PHASES, } from "./domain/metrics.js";
 import { GIT_ENV, evidenceOnlySuffix, observeReviewDiff, resolveUniqueMergeBase, } from "./adapters/review-diff.js";
@@ -4616,6 +4616,8 @@ export async function main(argv, dependencies = {}) {
         const root = stagingRepositoryRoot(staging);
         const observed = observeCandidateAdoption(root, path.join(staging, "00_要求定義.md"));
         const review = readStoredReviewSession(staging);
+        if (review !== null)
+            assertReviewPlanningBinding(staging, review, observed.headSha);
         const reviewReady = review !== null &&
             isReviewSessionConverged(review) &&
             review.anchor.diffBaseSha === observed.baseSha &&

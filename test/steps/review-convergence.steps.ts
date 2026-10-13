@@ -1,3 +1,4 @@
+import { fixturePlanningDigest } from "../support/review-planning-fixture.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -116,6 +117,7 @@ function roundInput(input: {
       ? []
       : [...(input.world.session.rounds.at(-1)?.blocking ?? [])].sort();
   return parseReviewRoundInput({
+    planningDigest: fixturePlanningDigest(input.world.staging),
     round: input.round,
     previousRoundDigest: input.previousRoundDigest,
     anchor: input.anchor ?? input.world.anchor,

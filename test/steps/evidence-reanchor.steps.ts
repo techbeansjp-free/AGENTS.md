@@ -1,3 +1,4 @@
+import { fixturePlanningDigest } from "../support/review-planning-fixture.js";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -393,6 +394,7 @@ function recordForwardRound(
   recordReviewRound({
     staging: world.staging,
     round: parseReviewRoundInput({
+      planningDigest: fixturePlanningDigest(world.staging),
       round: 2,
       previousRoundDigest: previous.latestRoundDigest,
       anchor: previous.anchor,
@@ -1828,6 +1830,7 @@ function buildReviewSession(
   recordReviewRound({
     staging: world.staging,
     round: parseReviewRoundInput({
+      planningDigest: fixturePlanningDigest(world.staging),
       round: 1,
       previousRoundDigest: null,
       anchor: {

@@ -1,3 +1,4 @@
+import { fixturePlanningDigest } from "../support/review-planning-fixture.js";
 import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
@@ -168,6 +169,7 @@ Given("pass済みreview、tests、specのPR引数がある", function () {
   const reviewSession = recordReviewRound({
     staging,
     round: parseReviewRoundInput({
+      planningDigest: fixturePlanningDigest(staging),
       round: 1,
       previousRoundDigest: null,
       anchor: {

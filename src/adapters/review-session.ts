@@ -71,7 +71,34 @@ import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { recordLayerSuffix } from "./review-record-layer.js";
 import { readReviewSessionReplacements } from "./review-session-replacement-store.js";
 import { observeCandidateAdoption } from "./candidate-adoption.js";
+import {
+  currentPlanningDigest,
+  assertReviewPlanningBinding,
+} from "./review-planning.js";
+export { assertReviewPlanningBinding } from "./review-planning.js";
 import { validateStepJournal } from "../domain/workflow.js";
+
+function assignBoundReviewInspection(
+  input: Parameters<typeof assignReviewInspection>[0],
+  planningChanged: boolean,
+): InspectionAssignment {
+  const assignment = assignReviewInspection(input);
+  if (!planningChanged) return assignment;
+  const baseSha =
+    assignment.inspection.cumulative?.baseSha ??
+    input.session.anchor.diffBaseSha;
+  return {
+    ...assignment,
+    inspection: {
+      ...assignment.inspection,
+      cumulative: {
+        baseSha,
+        scope: "all",
+        diffDigest: observeReviewDiff(input.root, baseSha, input.toSha).digest,
+      },
+    },
+  };
+}
 
 const GIT_ENV: NodeJS.ProcessEnv = {
   PATH: process.env.PATH ?? "/usr/bin:/bin",
@@ -268,6 +295,10 @@ export function buildReviewRoundDraft(input: {
   const root = stagingRepositoryRoot(staging);
   const headSha = resolveCommit(root, "--head", input.headSha);
   const previous = readStoredReviewSession(staging);
+  const planningDigest = currentPlanningDigest(staging, headSha);
+  const planningChanged =
+    previous !== null &&
+    previous.rounds.at(-1)?.planningDigest !== planningDigest;
   const notes: string[] = [];
   /**
    * progress不成立の案内。**`round`へは入れない。**
@@ -557,6 +588,7 @@ export function buildReviewRoundDraft(input: {
         : {}),
     };
     const recordLayer =
+      !planningChanged &&
       isReviewSessionConverged(previous) &&
       recordLayerSuffix(staging, root, previousHeadSha, headSha, previous) !==
         undefined;
@@ -565,17 +597,20 @@ export function buildReviewRoundDraft(input: {
      * record layerは割り当てない。既定branch追随で比較基点が動けば全体検分を割り当てる（AMD-001）。
      */
     const assignment =
-      recordLayer || isLegacyReviewSession(previous)
+      recordLayer || (isLegacyReviewSession(previous) && !planningChanged)
         ? undefined
-        : assignReviewInspection({
-            root,
-            session: previous,
-            issue: stagingTrackerIssue(staging),
-            fromSha: previousHeadSha,
-            toSha: headSha,
-            focus,
-            observer,
-          });
+        : assignBoundReviewInspection(
+            {
+              root,
+              session: previous,
+              issue: stagingTrackerIssue(staging),
+              fromSha: previousHeadSha,
+              toSha: headSha,
+              focus,
+              observer,
+            },
+            planningChanged,
+          );
     if (assignment)
       notes.push(
         ...assignmentNotes(assignment, {
@@ -622,7 +657,14 @@ export function buildReviewRoundDraft(input: {
     `このroundは ${headSha.slice(0, 8)} (${commitSubject(root, headSha)}) を検分したものとして記録します。レビュー結果を反映したcommitを、このroundの記録より先に作らないでください`,
   );
   notes.push(...progressNotes);
-  const parsed = parseReviewRoundInput(round);
+  if (planningChanged)
+    notes.push(
+      "Planning Seal・AMDの変更により旧reviewは再利用できません。現在の封印済み要求・AMD・元Intentと実装の累積差分を独立検分してください",
+    );
+  const parsed = parseReviewRoundInput({
+    ...(round as ReviewRoundInput),
+    ...(planningDigest === undefined ? {} : { planningDigest }),
+  });
   /** CLIが保存するreviewer input bundleの実byte列（末尾改行を含む）へ固定する。 */
   const canonical = `${stableJson(parsed)}\n`;
   const bundleBytes = Buffer.byteLength(canonical, "utf8");
@@ -768,7 +810,20 @@ export function previewReviewRound(input: {
   const staging = assertWorkflowStaging(input.staging);
   refixStagingDigestForRound(staging);
   const previous = readStoredReviewSession(staging);
+  const planningChanged =
+    previous !== null &&
+    previous.rounds.at(-1)?.planningDigest !==
+      currentPlanningDigest(staging, input.round.candidateHeadSha);
   let round = input.round;
+  if (planningChanged && (round.followOnly || round.recordLayerOnly))
+    throw new Error("計画変更は非消費review roundで検分済みにできません");
+  if (
+    round.planningDigest !==
+    currentPlanningDigest(staging, round.candidateHeadSha)
+  )
+    throw new Error(
+      "review inputの計画digestが現在のPlanning Seal・AMDと一致しません。入力を再生成し独立reviewしてください",
+    );
   const root = stagingRepositoryRoot(staging);
   const currentHeadSha = git(["rev-parse", "--verify", "HEAD^{commit}"], root, {
     env: GIT_ENV,
@@ -930,17 +985,20 @@ export function previewReviewRound(input: {
     if (
       !round.followOnly &&
       !round.recordLayerOnly &&
-      !isLegacyReviewSession(previous)
+      (!isLegacyReviewSession(previous) || planningChanged)
     ) {
-      const assignment = assignReviewInspection({
-        root,
-        session: previous,
-        issue: stagingTrackerIssue(staging),
-        fromSha: previousHeadSha,
-        toSha: round.candidateHeadSha,
-        focus: round.focus,
-        observer,
-      });
+      const assignment = assignBoundReviewInspection(
+        {
+          root,
+          session: previous,
+          issue: stagingTrackerIssue(staging),
+          fromSha: previousHeadSha,
+          toSha: round.candidateHeadSha,
+          focus: round.focus,
+          observer,
+        },
+        planningChanged,
+      );
       if (round.inspection === undefined)
         round = { ...round, inspection: assignment.inspection };
       else if (
@@ -985,6 +1043,7 @@ export function assertConvergedReviewSession(input: {
   const session = readStoredReviewSession(staging);
   if (session === null)
     throw new Error("Step 10には永続review sessionが必要です");
+  assertReviewPlanningBinding(staging, session, input.currentHeadSha);
   if (!isReviewSessionConverged(session))
     throw new Error(unconvergedReviewSessionDiagnostic(session));
   if (session.latestRoundDigest !== input.expectedDigest)

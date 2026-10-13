@@ -17,7 +17,10 @@ import {
 } from "./workflow-journal.js";
 import { observeWorkflowResume } from "./workflow-resume.js";
 import { planVerification } from "./verification-run.js";
-import { assertConvergedReviewSession } from "./review-session.js";
+import {
+  assertConvergedReviewSession,
+  assertReviewPlanningBinding,
+} from "./review-session.js";
 import {
   observeWorkflowHandoff,
   workflowAgentDispatch,
@@ -225,6 +228,7 @@ function candidateAdoptionWork(
     review.latestCandidateHeadSha !== candidate.headSha
   )
     return null;
+  assertReviewPlanningBinding(staging, review, candidate.headSha);
   const base = workflowExecutionContract(9, "coordinator", undefined, "quick");
   return {
     ...base,

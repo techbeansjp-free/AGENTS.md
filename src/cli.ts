@@ -325,6 +325,7 @@ import {
 } from "./adapters/workflow-journal.js";
 import {
   assertConvergedReviewSession,
+  assertReviewPlanningBinding,
   buildReviewRoundDraft,
   previewReviewRound,
   readStoredReviewSession,
@@ -6506,6 +6507,8 @@ export async function main(
       path.join(staging, "00_要求定義.md"),
     );
     const review = readStoredReviewSession(staging);
+    if (review !== null)
+      assertReviewPlanningBinding(staging, review, observed.headSha);
     const reviewReady =
       review !== null &&
       isReviewSessionConverged(review) &&
