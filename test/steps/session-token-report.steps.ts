@@ -751,3 +751,106 @@ Then(
     assert.equal(report.phases[0]?.hostAgentUsage[0]?.processedTokens, 120);
   },
 );
+
+Given("完了と不完全のCodex rollout logがある", function () {
+  this.tokenRoot = this.temp("asc-e2e-rollout-");
+  const usage = {
+    input_tokens: 100,
+    cached_input_tokens: 80,
+    cache_write_input_tokens: 0,
+    output_tokens: 20,
+    reasoning_output_tokens: 5,
+  };
+  const started = {
+    type: "event_msg",
+    timestamp: "2026-10-13T00:00:00.000Z",
+    payload: { type: "task_started" },
+  };
+  const response = {
+    type: "token_usage_record",
+    timestamp: "2026-10-13T00:00:01.000Z",
+    payload: {
+      response_id: "response-1",
+      root_turn_id: "turn-1",
+      usage,
+      thread_token_usage: usage,
+    },
+  };
+  const completed = {
+    type: "event_msg",
+    timestamp: "2026-10-13T00:00:03.000Z",
+    payload: { type: "task_complete" },
+  };
+  fs.writeFileSync(
+    path.join(this.tokenRoot, "complete.jsonl"),
+    [started, response, completed]
+      .map((event) => JSON.stringify(event))
+      .join("\n"),
+  );
+  fs.writeFileSync(
+    path.join(this.tokenRoot, "partial.jsonl"),
+    [started, response].map((event) => JSON.stringify(event)).join("\n"),
+  );
+});
+
+When("rolloutの工程別usageを集計する", function () {
+  this.codexReport = reportCodexE2E({
+    agents: [
+      {
+        id: "complete",
+        format: "codex-rollout",
+        files: [path.join(this.tokenRoot, "complete.jsonl")],
+        startedAt: null,
+        endedAt: null,
+        rootTurnId: "turn-1",
+      },
+      {
+        id: "partial",
+        format: "codex-rollout",
+        files: [path.join(this.tokenRoot, "partial.jsonl")],
+        startedAt: null,
+        endedAt: null,
+        rootTurnId: "turn-1",
+      },
+    ],
+    phases: [
+      { name: "before", at: "2026-10-13T00:00:00.000Z" },
+      { name: "response", at: "2026-10-13T00:00:01.000Z" },
+      { name: "after", at: "2026-10-13T00:00:02.000Z" },
+      { name: "end", at: "2026-10-13T00:00:03.000Z" },
+    ],
+  });
+});
+
+Then("rolloutの完全性とAgent列挙の未検証を区別する", function () {
+  const report = this.codexReport;
+  assert.ok(report);
+  assert.equal(report.agents[0]?.coverage, "complete");
+  assert.equal(report.agents[1]?.coverage, "partial");
+  assert.deepEqual(
+    report.phases.map((phase) =>
+      phase.hostAgentUsage.map((agent) => [
+        agent.coverage,
+        agent.processedTokens,
+      ]),
+    ),
+    [
+      [
+        ["complete", 0],
+        ["missing", null],
+      ],
+      [
+        ["complete", 120],
+        ["partial", 120],
+      ],
+      [
+        ["complete", 0],
+        ["missing", null],
+      ],
+    ],
+  );
+  assert.equal(report.observedLowerBound, 240);
+  assert.equal(report.allDeclaredAgentProcessedTokens, null);
+  assert.equal(report.agentInventoryCoverage, "unverified");
+  assert.equal(report.actualAllAgentProcessedTokens, null);
+});

@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { isExecutionEntry } from "../src/lib/entrypoint.js";
 
-type Format = "codex-host" | "codex-exec";
+type Format = "codex-host" | "codex-exec" | "codex-rollout";
+type Coverage = "complete" | "partial" | "missing";
 type Counter = {
   input: number;
   cacheRead: number;
@@ -27,6 +28,12 @@ type Observation = {
   id: string;
   at: number | null;
   usage: Counter;
+};
+type ObservationSet = {
+  calls: Observation[];
+  coverage: Coverage;
+  taskStart: number | null;
+  taskEnd: number | null;
 };
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -61,12 +68,18 @@ function counter(value: unknown): Counter {
     throw new Error("usageの包含関係が不正です");
   return result;
 }
-function observations(agent: Agent): Observation[] | null {
+function observations(agent: Agent): ObservationSet | null {
   const from = agent.startedAt === null ? null : time(agent.startedAt);
   const to = agent.endedAt === null ? null : time(agent.endedAt);
   if (from !== null && to !== null && to < from)
     throw new Error(`agent ${agent.id}の終了が開始より前です`);
   const found = new Map<string, Observation>();
+  let taskStart: number | null = null;
+  let taskEnd: number | null = null;
+  let taskStarts = 0;
+  let taskEnds = 0;
+  let finalCumulative: Counter | null = null;
+  let responseItems = 0;
   for (const file of agent.files) {
     if (!fs.existsSync(file)) return null;
     for (const line of fs.readFileSync(file, "utf8").split("\n")) {
@@ -80,6 +93,20 @@ function observations(agent: Agent): Observation[] | null {
       let id: string | null = null;
       let usage: unknown;
       let at: number | null = null;
+      if (agent.format === "codex-rollout") {
+        const payload = object(value.payload);
+        if (value.type === "event_msg" && payload?.type === "task_started") {
+          taskStarts += 1;
+          taskStart =
+            typeof value.timestamp === "string" ? time(value.timestamp) : null;
+        }
+        if (value.type === "event_msg" && payload?.type === "task_complete") {
+          taskEnds += 1;
+          taskEnd =
+            typeof value.timestamp === "string" ? time(value.timestamp) : null;
+        }
+        if (value.type === "response_item") responseItems += 1;
+      }
       if (
         agent.format === "codex-host" &&
         value.type === "token_usage_record"
@@ -101,6 +128,27 @@ function observations(agent: Agent): Observation[] | null {
       ) {
         id = `${file}:${found.size}`;
         usage = value.usage;
+      } else if (
+        agent.format === "codex-rollout" &&
+        value.type === "token_usage_record"
+      ) {
+        const payload = object(value.payload);
+        if (
+          typeof payload?.response_id !== "string" ||
+          typeof value.timestamp !== "string"
+        )
+          return null;
+        if (agent.rootTurnId && payload.root_turn_id !== agent.rootTurnId)
+          continue;
+        id = payload.response_id;
+        usage = payload.usage;
+        at = time(value.timestamp);
+        try {
+          finalCumulative = counter(payload.thread_token_usage);
+        } catch {
+          finalCumulative = null;
+        }
+        if ((from !== null && at < from) || (to !== null && at > to)) continue;
       }
       if (id === null) continue;
       let parsedUsage: Counter;
@@ -122,7 +170,36 @@ function observations(agent: Agent): Observation[] | null {
       found.set(id, item);
     }
   }
-  return found.size ? [...found.values()] : null;
+  const calls = [...found.values()];
+  if (agent.format === "codex-rollout") {
+    const complete =
+      taskStarts === 1 &&
+      taskEnds === 1 &&
+      taskStart !== null &&
+      taskEnd !== null &&
+      taskEnd >= taskStart &&
+      (from === null || from <= taskStart) &&
+      (to === null || to >= taskEnd) &&
+      (calls.length === 0
+        ? responseItems === 0
+        : finalCumulative !== null &&
+          JSON.stringify(sum(calls.map((call) => call.usage))) ===
+            JSON.stringify(finalCumulative));
+    if (!complete && calls.length === 0) return null;
+    return {
+      calls,
+      coverage: complete ? "complete" : "partial",
+      taskStart,
+      taskEnd,
+    };
+  }
+  if (calls.length === 0) return null;
+  return {
+    calls,
+    coverage: agent.format === "codex-exec" ? "complete" : "partial",
+    taskStart: null,
+    taskEnd: null,
+  };
 }
 function sum(items: readonly Counter[]): Counter {
   return items.reduce(
@@ -144,14 +221,15 @@ export function reportCodexE2E(manifest: Manifest) {
   )
     throw new Error("1件以上のagentsとphasesが必要です");
   const names = new Set<string>();
-  const callsByAgent = new Map<string, Observation[] | null>();
+  const callsByAgent = new Map<string, ObservationSet | null>();
   const agents = manifest.agents.map((agent) => {
     if (names.has(agent.id))
       throw new Error(`agent IDが重複しています: ${agent.id}`);
     names.add(agent.id);
-    const calls = observations(agent);
-    callsByAgent.set(agent.id, calls);
-    const usage = calls === null ? null : sum(calls.map((call) => call.usage));
+    const observed = observations(agent);
+    callsByAgent.set(agent.id, observed);
+    const usage =
+      observed === null ? null : sum(observed.calls.map((call) => call.usage));
     return {
       id: agent.id,
       format: agent.format,
@@ -162,13 +240,14 @@ export function reportCodexE2E(manifest: Manifest) {
           ? null
           : time(agent.endedAt) - time(agent.startedAt),
       toolWaitMs: null,
-      calls: calls?.length ?? null,
+      coverage: observed?.coverage ?? "missing",
+      calls: observed?.calls.length ?? null,
       usage,
       processedTokens: usage === null ? null : usage.input + usage.output,
       maxObservedInputPerCall:
-        calls === null
+        observed === null || observed.calls.length === 0
           ? null
-          : Math.max(...calls.map((call) => call.usage.input)),
+          : Math.max(...observed.calls.map((call) => call.usage.input)),
       costUsd: null,
       // Codex input already contains cache reads; do not add them again.
       inputIncludesCacheRead: true,
@@ -189,19 +268,35 @@ export function reportCodexE2E(manifest: Manifest) {
       to: ordered[index + 1]!.at,
       wallMs: end - phase.ms,
       hostAgentUsage: manifest.agents
-        .filter((agent) => agent.format === "codex-host")
+        .filter(
+          (agent) =>
+            agent.format === "codex-host" || agent.format === "codex-rollout",
+        )
         .map((agent) => {
-          const calls = callsByAgent.get(agent.id);
-          const selected = calls?.filter(
+          const observed = callsByAgent.get(agent.id);
+          const selected = observed?.calls.filter(
             (call) => call.at !== null && call.at >= phase.ms && call.at < end,
           );
+          const coverage: Coverage =
+            observed == null
+              ? "missing"
+              : observed.coverage === "complete" &&
+                  observed.taskStart !== null &&
+                  observed.taskEnd !== null &&
+                  observed.taskStart <= phase.ms &&
+                  observed.taskEnd >= end
+                ? "complete"
+                : selected && selected.length > 0
+                  ? "partial"
+                  : "missing";
           const usage =
-            selected === null || selected === undefined
+            coverage === "missing"
               ? null
-              : sum(selected.map((call) => call.usage));
+              : sum((selected ?? []).map((call) => call.usage));
           return {
             id: agent.id,
-            calls: selected?.length ?? null,
+            coverage,
+            calls: usage === null ? null : (selected?.length ?? 0),
             usage,
             processedTokens: usage === null ? null : usage.input + usage.output,
           };
@@ -218,14 +313,20 @@ export function reportCodexE2E(manifest: Manifest) {
     agents,
     phases,
     observedLowerBound,
+    agentInventoryCoverage: "unverified" as const,
+    actualAllAgentProcessedTokens: null,
     allDeclaredAgentProcessedTokens:
-      measured.length === agents.length ? observedLowerBound : null,
+      measured.length === agents.length &&
+      agents.every((agent) => agent.coverage === "complete")
+        ? observedLowerBound
+        : null,
     actualCostUsd: null,
     limitations: [
       "missing usage stays null; the observed lower bound is not an all-agent total; the manifest must enumerate every agent",
       "input includes cache reads; cache writes and reasoning output are subsets, not additive totals",
       "tool wait and provider billing are not available from these event streams",
       "maxObservedInputPerCall is not an exact context high-water mark",
+      "declared agents may omit launched agents; actual all-agent total remains null without independent inventory evidence",
     ],
   };
 }

@@ -15,6 +15,24 @@ export const CANDIDATE_GIT_ENV = {
     GIT_CONFIG_KEY_2: "core.attributesFile",
     GIT_CONFIG_VALUE_2: "/dev/null",
 };
+/** Catch obvious access-control removal even when the changed file name is neutral. */
+export function observeRemovedAccessGuard(root, baseSha, headSha) {
+    const patch = git([
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--no-renames",
+        "--unified=0",
+        baseSha,
+        headSha,
+        "--",
+    ], root, { env: CANDIDATE_GIT_ENV, maxBufferBytes: 8 * 1024 * 1024 }).stdout;
+    return patch
+        .split("\n")
+        .some((line) => line.startsWith("-") &&
+        !line.startsWith("---") &&
+        /\b(?:auth\w*|permission\w*|acl\w*|canAccess|isAdmin|hasRole)\b/iu.test(line.slice(1)));
+}
 /** Reject executable clean filters before any worktree status/diff can invoke them. */
 export function assertNoCandidateFilters(root) {
     const paths = git(["ls-files", "-z"], root, {

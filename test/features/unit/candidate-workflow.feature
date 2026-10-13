@@ -16,6 +16,7 @@ Feature: 実装先行候補は実差分と不足責務から次の仕事を選�
       | no-isolation            | clarify   |
       | vague-intent            | clarify   |
       | misclassified-auth-path | upstream  |
+      | misclassified-neutral-path | candidate |
 
   Scenario Outline: SCN-UNIT-CANDIDATE-002 実差分と独立reviewの前に正式完了にしない
     Given 候補実装後の差分と対象テストを用意する
@@ -33,6 +34,7 @@ Feature: 実装先行候補は実差分と不足責務から次の仕事を選�
       | verification-gap | repair             |
       | no-diff          | repair             |
       | hidden-scope-and-implementation-gap | upstream |
+      | removed-access-guard | upstream |
 
   Scenario: SCN-UNIT-CANDIDATE-003 未追跡ファイルを含む候補worktreeのGit証拠を拒否する
     Given 専用Git worktreeに候補実装をcommitする

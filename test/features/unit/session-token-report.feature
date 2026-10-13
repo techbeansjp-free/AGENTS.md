@@ -20,3 +20,8 @@ Feature: session logのtoken集計
     Given Codex HostとWorkerのusage logと欠測Reviewerがある
     When Codex E2E計測を集計する
     Then cacheを二重計上せず工程別使用量を示し全Agent合計は欠測にする
+
+  Scenario: SCN-UNIT-TOKENS-004 完了したrolloutの無応答区間だけを0とし不完全な区間は欠測にする
+    Given 完了と不完全のCodex rollout logがある
+    When rolloutの工程別usageを集計する
+    Then rolloutの完全性とAgent列挙の未検証を区別する

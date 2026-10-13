@@ -7,6 +7,7 @@ import { isSecuritySensitivePath } from "../domain/impact-set.js";
 import {
   CANDIDATE_GIT_ENV,
   assertNoCandidateFilters,
+  observeRemovedAccessGuard,
 } from "./candidate-git.js";
 import { observeReviewDiff } from "./review-diff.js";
 import { resolveGitWorkspace } from "./review-workspace.js";
@@ -124,6 +125,8 @@ export function observeCandidateAdoption(
     throw new Error("Candidate結果に実装差分がありません");
   if (diff.changedPaths.some(isSecuritySensitivePath))
     throw new Error("セキュリティ関連差分は実装先行採用せず上流確認が必要です");
+  if (observeRemovedAccessGuard(root, baseSha, headSha))
+    throw new Error("認可・認証guardの削除を示す差分は上流確認が必要です");
   const requestStat = fs.lstatSync(requestFile);
   if (
     !requestStat.isFile() ||
@@ -178,7 +181,8 @@ export function verifyRecordedCandidateAdoption(
       errors.push("採用記録のGit差分digestが一致しません");
     if (
       observed.changedPaths.length === 0 ||
-      observed.changedPaths.some(isSecuritySensitivePath)
+      observed.changedPaths.some(isSecuritySensitivePath) ||
+      observeRemovedAccessGuard(root, entry.candidateAdoption.baseSha, headSha)
     )
       errors.push("採用対象の差分が空かセキュリティ関連です");
     assertCandidateLineage(root, entry.candidateAdoption.baseSha, headSha);

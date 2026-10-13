@@ -1488,7 +1488,22 @@ function prepareCandidateAdoption(
   world: CandidateSessionWorld,
   security = false,
   inheritedSecurity = false,
+  neutralGuardRemoval = false,
 ): void {
+  if (neutralGuardRemoval) {
+    fs.writeFileSync(
+      path.join(world.primary, "src/service.js"),
+      "export const service = (user) => { authorize(user); return true; };\n",
+    );
+    run("git", ["add", "src/service.js"], world.primary);
+    run("git", ["commit", "-qm", "base service guard"], world.primary);
+    world.baseSha = run(
+      "git",
+      ["rev-parse", "HEAD"],
+      world.primary,
+    ).stdout.trim();
+    run("git", ["reset", "--hard", world.baseSha], world.candidate);
+  }
   if (inheritedSecurity) {
     fs.writeFileSync(
       path.join(world.candidate, "src/authorization.js"),
@@ -1497,12 +1512,18 @@ function prepareCandidateAdoption(
     run("git", ["add", "src/authorization.js"], world.candidate);
     run("git", ["commit", "-qm", "authorization change"], world.candidate);
   }
-  const changed = security ? "src/authorization.js" : "src/label.js";
+  const changed = neutralGuardRemoval
+    ? "src/service.js"
+    : security
+      ? "src/authorization.js"
+      : "src/label.js";
   fs.writeFileSync(
     path.join(world.candidate, changed),
-    security
-      ? "export const authorized = false;\n"
-      : 'export const label = "Hello";\n',
+    neutralGuardRemoval
+      ? "export const service = (_user) => true;\n"
+      : security
+        ? "export const authorized = false;\n"
+        : 'export const label = "Hello";\n',
   );
   run("git", ["add", changed], world.candidate);
   run(
@@ -1716,6 +1737,12 @@ Then("Candidate採用は拒否されStep 9記録を残さない", function () {
 When("認可変更を前のcommitに隠したCandidate採用を試す", function () {
   prepareCandidateAdoption(this, false, true);
   invokeCandidateAdoption(this, true);
+});
+
+When("中立名のserviceから認可guardを削除したCandidate採用を試す", function () {
+  prepareCandidateAdoption(this, false, false, true);
+  invokeCandidateAdoption(this, true);
+  assert.match(this.result?.stdout ?? "", /認可・認証guard/);
 });
 
 When("Candidate採用後に既定branch参照が候補HEADへ進む", function () {

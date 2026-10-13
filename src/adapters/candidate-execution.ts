@@ -18,6 +18,7 @@ import {
   observeCandidateBoundary,
   observeCandidateForkBase,
   observeCandidateGit,
+  observeRemovedAccessGuard,
 } from "./candidate-git.js";
 import { candidateAllowedPaths } from "./candidate-session.js";
 import {
@@ -514,6 +515,11 @@ export function executeCandidate(input: CandidateExecutionInput) {
       allowedPaths,
       targetTestsPassed: targetTest.exitCode === 0,
       gaps: input.gaps,
+      removedAccessGuard: observeRemovedAccessGuard(
+        outputRoot,
+        baseSha,
+        publishedCommitSha,
+      ),
     });
     if (observeCandidateBoundary(root).headSha !== baseSha)
       throw new Error("candidate元worktreeが実行中に変更されました");

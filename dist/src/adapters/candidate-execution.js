@@ -5,7 +5,7 @@ import path from "node:path";
 import { git } from "../lib/process.js";
 import { validateVerificationArgv } from "../domain/verification-run.js";
 import { CANDIDATE_RISKS, decideCandidatePost, decideCandidatePreflight, } from "../domain/candidate-workflow.js";
-import { CANDIDATE_GIT_ENV, assertNoCandidateFilters, observeCandidateBoundary, observeCandidateForkBase, observeCandidateGit, } from "./candidate-git.js";
+import { CANDIDATE_GIT_ENV, assertNoCandidateFilters, observeCandidateBoundary, observeCandidateForkBase, observeCandidateGit, observeRemovedAccessGuard, } from "./candidate-git.js";
 import { candidateAllowedPaths } from "./candidate-session.js";
 import { runCandidateCodexWorker, } from "./candidate-codex-worker.js";
 import { makeDirectoriesRemovable, runCandidateWorkerBoundary, } from "./candidate-worker-boundary.js";
@@ -363,6 +363,7 @@ export function executeCandidate(input) {
             allowedPaths,
             targetTestsPassed: targetTest.exitCode === 0,
             gaps: input.gaps,
+            removedAccessGuard: observeRemovedAccessGuard(outputRoot, baseSha, publishedCommitSha),
         });
         if (observeCandidateBoundary(root).headSha !== baseSha)
             throw new Error("candidate元worktreeが実行中に変更されました");

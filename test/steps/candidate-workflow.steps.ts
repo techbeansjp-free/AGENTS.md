@@ -45,6 +45,8 @@ Given("事前条件「{word}」を設定する", function (condition: string) {
   if (condition === "vague-intent") this.pre.intent = "";
   if (condition === "misclassified-auth-path")
     this.pre.allowedPaths = ["src/auth.ts"];
+  if (condition === "misclassified-neutral-path")
+    this.pre.allowedPaths = ["src/service.ts"];
 });
 When("候補実装の事前判定を行う", function () {
   assert.ok(this.pre);
@@ -71,6 +73,11 @@ Given("事後条件「{word}」を設定する", function (condition: string) {
     this.post.observedPaths = ["src/auth.ts"];
     this.post.gaps = ["implementation"];
     this.post.targetTestsPassed = false;
+  }
+  if (condition === "removed-access-guard") {
+    this.post.observedPaths = ["src/service.ts"];
+    this.post.allowedPaths = ["src/service.ts"];
+    this.post.removedAccessGuard = true;
   }
 });
 When("候補実装の事後判定を行う", function () {

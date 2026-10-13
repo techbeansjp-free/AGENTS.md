@@ -60,6 +60,8 @@ export function decideCandidatePost(input) {
     const pending = new Set(input.gaps);
     if ([...changed].some(isSecuritySensitivePath))
         pending.add("security-risk");
+    if (input.removedAccessGuard)
+        pending.add("security-risk");
     if (unexpected.length > 0 && !unexpected.some(isSecuritySensitivePath))
         pending.add("design");
     if (!input.targetTestsPassed)
@@ -82,6 +84,9 @@ export function decideCandidatePost(input) {
                 : []),
             ...([...changed].some(isSecuritySensitivePath)
                 ? ["セキュリティ上の注意を要するGit差分を上流で確認する"]
+                : []),
+            ...(input.removedAccessGuard
+                ? ["認可・認証guardの削除を示すGit差分を上流で確認する"]
                 : []),
             ...input.gaps.map((gap) => `候補実装後の不足責務: ${gap}`),
             ...(!input.targetTestsPassed ? ["対象テストが失敗しました"] : []),
