@@ -42,6 +42,7 @@ class CandidateSessionWorld extends WorkflowWorld {
   rejectionReasons: string[] = [];
   adoptionPlan?: ReturnType<typeof observeWorkflowExecutionPlan>;
   authEnvironment?: ReturnType<typeof codexCandidateEnvironment>;
+  boundaryResult?: ReturnType<typeof runCandidateWorkerBoundary>;
 }
 const { Given, When, Then } = stepDefinitions<CandidateSessionWorld>();
 
@@ -1959,5 +1960,25 @@ Then("Providerは認証できツール環境から認証情報を除外する", 
     built.toolPolicy.every(
       (item: string) => !item.includes("test-secret-do-not-forward"),
     ),
+  );
+});
+
+When("Candidate worktree内の相対実行fileを隔離Workerに指定する", function () {
+  const script = path.join(this.candidate, "scripts", "check.sh");
+  fs.mkdirSync(path.dirname(script), { recursive: true });
+  fs.writeFileSync(script, "#!/bin/sh\nprintf relative-ok\n", { mode: 0o755 });
+  this.boundaryResult = runCandidateWorkerBoundary({
+    root: this.candidate,
+    allowedPaths: ["src/label.js"],
+    argv: ["./scripts/check.sh"],
+  });
+});
+
+Then("相対実行fileをCandidate基点で解決して実行する", function () {
+  assert.equal(this.boundaryResult?.status, 0);
+  assert.equal(this.boundaryResult?.stdout, "relative-ok");
+  assert.equal(
+    run("git", ["rev-parse", "HEAD"], this.candidate).stdout.trim(),
+    this.baseSha,
   );
 });

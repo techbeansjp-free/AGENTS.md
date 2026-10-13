@@ -25,16 +25,21 @@ export function makeDirectoriesRemovable(root: string): void {
   visit(root);
 }
 
-function resolveWorkerExecutable(argv: readonly string[]): {
+function resolveWorkerExecutable(
+  argv: readonly string[],
+  root: string,
+): {
   invocation: string;
   actual: string;
 } {
   const command = argv[0]!;
   const candidates = path.isAbsolute(command)
     ? [command]
-    : (process.env.PATH ?? "")
-        .split(path.delimiter)
-        .map((directory) => path.join(directory, command));
+    : command.includes(path.sep)
+      ? [path.resolve(root, command)]
+      : (process.env.PATH ?? "")
+          .split(path.delimiter)
+          .map((directory) => path.resolve(root, directory, command));
   const found = candidates.find((candidate) => fs.existsSync(candidate));
   if (!found)
     throw new Error(`candidate Worker実行fileがありません: ${command}`);
@@ -46,8 +51,11 @@ function resolveWorkerExecutable(argv: readonly string[]): {
   return { invocation: path.resolve(found), actual };
 }
 
-export function workerExecutable(argv: readonly string[]): string {
-  return resolveWorkerExecutable(argv).actual;
+export function workerExecutable(
+  argv: readonly string[],
+  root: string,
+): string {
+  return resolveWorkerExecutable(argv, root).actual;
 }
 
 export function codexPackageRoot(): string {
@@ -180,6 +188,7 @@ export function runCandidateWorkerBoundary(input: {
   const packageRoot = codexPackageRoot();
   const { invocation, actual: executable } = resolveWorkerExecutable(
     input.argv,
+    root,
   );
   const executableRepo = git(
     ["-C", path.dirname(executable), "rev-parse", "--show-toplevel"],

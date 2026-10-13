@@ -140,7 +140,7 @@ export function runCandidateCodexWorker(input: {
       "candidate Codex Workerはproject-local Codex configを読み込めません",
     );
   const writes = workerWriteRoots(root, input.allowedPaths);
-  const codexExecutable = workerExecutable(["codex"]);
+  const codexExecutable = workerExecutable(["codex"], root);
   if (
     codexExecutable === root ||
     codexExecutable.startsWith(`${root}${path.sep}`) ||

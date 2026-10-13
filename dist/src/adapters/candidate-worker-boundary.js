@@ -24,13 +24,15 @@ export function makeDirectoriesRemovable(root) {
     };
     visit(root);
 }
-function resolveWorkerExecutable(argv) {
+function resolveWorkerExecutable(argv, root) {
     const command = argv[0];
     const candidates = path.isAbsolute(command)
         ? [command]
-        : (process.env.PATH ?? "")
-            .split(path.delimiter)
-            .map((directory) => path.join(directory, command));
+        : command.includes(path.sep)
+            ? [path.resolve(root, command)]
+            : (process.env.PATH ?? "")
+                .split(path.delimiter)
+                .map((directory) => path.resolve(root, directory, command));
     const found = candidates.find((candidate) => fs.existsSync(candidate));
     if (!found)
         throw new Error(`candidate Worker実行fileがありません: ${command}`);
@@ -39,8 +41,8 @@ function resolveWorkerExecutable(argv) {
         throw new Error(`candidate Worker実行fileが通常fileではありません: ${command}`);
     return { invocation: path.resolve(found), actual };
 }
-export function workerExecutable(argv) {
-    return resolveWorkerExecutable(argv).actual;
+export function workerExecutable(argv, root) {
+    return resolveWorkerExecutable(argv, root).actual;
 }
 export function codexPackageRoot() {
     const executable = (process.env.PATH ?? "")
@@ -132,7 +134,7 @@ export function runCandidateWorkerBoundary(input) {
     const parent = path.dirname(root);
     const writes = workerWriteRoots(root, input.allowedPaths);
     const packageRoot = codexPackageRoot();
-    const { invocation, actual: executable } = resolveWorkerExecutable(input.argv);
+    const { invocation, actual: executable } = resolveWorkerExecutable(input.argv, root);
     const executableRepo = git(["-C", path.dirname(executable), "rev-parse", "--show-toplevel"], root, { env: CANDIDATE_GIT_ENV, allowFailure: true });
     const invocationRepo = git(["-C", path.dirname(invocation), "rev-parse", "--show-toplevel"], root, { env: CANDIDATE_GIT_ENV, allowFailure: true });
     if ([executableRepo, invocationRepo].some((result) => result.status === 0 && fs.realpathSync(result.stdout.trim()) !== root))
