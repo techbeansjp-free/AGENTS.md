@@ -33,7 +33,7 @@ export function observeRemovedAccessGuard(root, baseSha, headSha) {
         .split("\n")
         .some((line) => line.startsWith("-") &&
         !line.startsWith("---") &&
-        /\b(?:auth\w*|permission\w*|acl\w*|canAccess|isAdmin|hasRole)\b/iu.test(line.slice(1)));
+        /\b(?:auth\b|authn\b|authz\b|authenticat\w*|authoriz\w*|permission\w*|acl\b|canAccess\b|isAdmin\b|hasRole\b|(?:check|require|verify|ensure)Auth\b)/iu.test(line.slice(1)));
 }
 /** Reject executable clean filters before any worktree status/diff can invoke them. */
 export function assertNoCandidateFilters(root) {

@@ -13,6 +13,7 @@ import {
 import {
   observeCandidateBoundary,
   observeCandidateGit,
+  observeRemovedAccessGuard,
 } from "../../src/adapters/candidate-git.js";
 import { run } from "../../src/lib/process.js";
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
@@ -158,4 +159,31 @@ Then("renameの旧新両pathをGitから観測する", function () {
     "renamed.txt",
   ]);
   fs.rmSync(this.source, { recursive: true, force: true });
+});
+
+Given("著者名fieldを変更する隔離Git dummyがある", function () {
+  this.source = fs.mkdtempSync(path.join(os.tmpdir(), "asc-author-test-"));
+  run("git", ["init", "-q"], this.source);
+  run("git", ["config", "user.name", "Author Test"], this.source);
+  run("git", ["config", "user.email", "author@example.invalid"], this.source);
+  fs.writeFileSync(
+    path.join(this.source, "book.js"),
+    "export const field = book.author;\n",
+  );
+  run("git", ["add", "."], this.source);
+  run("git", ["commit", "-qm", "base"], this.source);
+  this.baseSha = run("git", ["rev-parse", "HEAD"], this.source).stdout.trim();
+  fs.writeFileSync(
+    path.join(this.source, "book.js"),
+    "export const field = book.title;\n",
+  );
+  run("git", ["commit", "-qam", "rename field"], this.source);
+});
+
+Then("著者名の削除を認可guard削除と誤判定しない", function () {
+  const head = run("git", ["rev-parse", "HEAD"], this.source).stdout.trim();
+  assert.equal(
+    observeRemovedAccessGuard(this.source, this.baseSha, head),
+    false,
+  );
 });

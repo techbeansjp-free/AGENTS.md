@@ -813,6 +813,7 @@ Given("完了と不完全のCodex rollout logがある", function () {
         timestamp: "2026-10-13T00:00:05.000Z",
         payload: {
           response_id: "response-2",
+          root_turn_id: "turn-2",
           usage: secondUsage,
           thread_token_usage: {
             input_tokens: 160,
@@ -976,4 +977,25 @@ Then("rolloutの完全性とAgent列挙の未検証を区別する", function ()
   assert.equal(twoTurns.agents[0]?.coverage, "complete");
   assert.equal(twoTurns.phases[0]?.hostAgentUsage[0]?.processedTokens, 0);
   assert.equal(twoTurns.allDeclaredAgentProcessedTokens, 190);
+  const selectedTurn = reportCodexE2E({
+    agents: [
+      {
+        id: "selected-turn",
+        format: "codex-rollout",
+        files: [path.join(this.tokenRoot, "two-turns.jsonl")],
+        startedAt: null,
+        endedAt: null,
+        rootTurnId: "turn-2",
+      },
+    ],
+    phases: [
+      { name: "second-idle", at: "2026-10-13T00:00:04.000Z" },
+      { name: "second-response", at: "2026-10-13T00:00:05.000Z" },
+      { name: "end", at: "2026-10-13T00:00:06.000Z" },
+    ],
+  });
+  assert.equal(selectedTurn.agents[0]?.coverage, "complete");
+  assert.equal(selectedTurn.phases[0]?.hostAgentUsage[0]?.processedTokens, 0);
+  assert.equal(selectedTurn.phases[1]?.hostAgentUsage[0]?.processedTokens, 70);
+  assert.equal(selectedTurn.allDeclaredAgentProcessedTokens, 70);
 });

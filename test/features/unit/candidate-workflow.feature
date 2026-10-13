@@ -53,3 +53,7 @@ Feature: 実装先行候補は実差分と不足責務から次の仕事を選�
     Given 専用Git worktreeに候補実装をcommitする
     When 候補worktreeでファイルをrenameしてcommitする
     Then renameの旧新両pathをGitから観測する
+
+  Scenario: SCN-UNIT-CANDIDATE-006 著者名fieldの変更を認可guard削除と誤認しない
+    Given 著者名fieldを変更する隔離Git dummyがある
+    Then 著者名の削除を認可guard削除と誤判定しない

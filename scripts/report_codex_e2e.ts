@@ -28,12 +28,12 @@ type Observation = {
   id: string;
   at: number | null;
   usage: Counter;
+  rootTurnId?: string | null;
 };
 type ObservationSet = {
   calls: Observation[];
   coverage: Coverage;
-  taskStart: number | null;
-  taskEnd: number | null;
+  coveredIntervals: { start: number; end: number }[];
 };
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -79,6 +79,8 @@ function observations(agent: Agent): ObservationSet | null {
   let taskStarts = 0;
   let taskEnds = 0;
   let openTasks = 0;
+  let currentTaskStart: number | null = null;
+  const taskIntervals: { start: number; end: number }[] = [];
   let invalidTaskOrder = false;
   let finalCumulative: Counter | null = null;
   let generatedItems = 0;
@@ -97,21 +99,30 @@ function observations(agent: Agent): ObservationSet | null {
       let id: string | null = null;
       let usage: unknown;
       let at: number | null = null;
+      let rootTurnId: string | null = null;
       if (agent.format === "codex-rollout") {
         const payload = object(value.payload);
         if (value.type === "event_msg" && payload?.type === "task_started") {
           taskStarts += 1;
+          if (openTasks > 0) invalidTaskOrder = true;
           openTasks += 1;
           if (typeof value.timestamp !== "string") return null;
           const startedAt = time(value.timestamp);
+          currentTaskStart = startedAt;
           taskStart = Math.min(taskStart ?? startedAt, startedAt);
         }
         if (value.type === "event_msg" && payload?.type === "task_complete") {
           taskEnds += 1;
           openTasks -= 1;
-          if (openTasks < 0) invalidTaskOrder = true;
+          if (openTasks < 0 || currentTaskStart === null)
+            invalidTaskOrder = true;
           if (typeof value.timestamp !== "string") return null;
           const endedAt = time(value.timestamp);
+          if (currentTaskStart !== null && openTasks === 0) {
+            if (endedAt < currentTaskStart) invalidTaskOrder = true;
+            taskIntervals.push({ start: currentTaskStart, end: endedAt });
+            currentTaskStart = null;
+          }
           taskEnd = Math.max(taskEnd ?? endedAt, endedAt);
         }
         if (
@@ -160,8 +171,10 @@ function observations(agent: Agent): ObservationSet | null {
           typeof value.timestamp !== "string"
         )
           return null;
-        if (agent.rootTurnId && payload.root_turn_id !== agent.rootTurnId)
-          continue;
+        rootTurnId =
+          typeof payload.root_turn_id === "string"
+            ? payload.root_turn_id
+            : null;
         id = payload.response_id;
         usage = payload.usage;
         at = time(value.timestamp);
@@ -171,7 +184,6 @@ function observations(agent: Agent): ObservationSet | null {
         } catch {
           finalCumulative = null;
         }
-        if ((from !== null && at < from) || (to !== null && at > to)) continue;
       }
       if (id === null) continue;
       let parsedUsage: Counter;
@@ -183,7 +195,7 @@ function observations(agent: Agent): ObservationSet | null {
       // A completed model response with zero input and output cannot substantiate
       // a usage total; some Codex hosts emit this placeholder on review runs.
       if (parsedUsage.input === 0 && parsedUsage.output === 0) return null;
-      const item = { id, at, usage: parsedUsage };
+      const item = { id, at, usage: parsedUsage, rootTurnId };
       const previous = found.get(id);
       if (
         previous &&
@@ -193,7 +205,16 @@ function observations(agent: Agent): ObservationSet | null {
       found.set(id, item);
     }
   }
-  const calls = [...found.values()];
+  const allCalls = [...found.values()];
+  const calls =
+    agent.format === "codex-rollout"
+      ? allCalls.filter(
+          (call) =>
+            (!agent.rootTurnId || call.rootTurnId === agent.rootTurnId) &&
+            (from === null || (call.at !== null && call.at >= from)) &&
+            (to === null || (call.at !== null && call.at <= to)),
+        )
+      : allCalls;
   if (agent.format === "codex-rollout") {
     const complete =
       taskStarts > 0 &&
@@ -203,29 +224,38 @@ function observations(agent: Agent): ObservationSet | null {
       taskStart !== null &&
       taskEnd !== null &&
       taskEnd >= taskStart &&
-      (from === null || from <= taskStart) &&
-      (to === null || to >= taskEnd) &&
-      (calls.length === 0
+      (allCalls.length === 0
         ? generatedItems === 0
         : finalCumulative !== null &&
           (lastGeneratedAt === null ||
             (lastUsageAt !== null && lastUsageAt >= lastGeneratedAt)) &&
-          JSON.stringify(sum(calls.map((call) => call.usage))) ===
+          JSON.stringify(sum(allCalls.map((call) => call.usage))) ===
             JSON.stringify(finalCumulative));
+    if (agent.rootTurnId && calls.length === 0) return null;
     if (!complete && calls.length === 0) return null;
+    const coveredIntervals = agent.rootTurnId
+      ? taskIntervals.filter((interval) =>
+          calls.some(
+            (call) =>
+              call.at !== null &&
+              call.at >= interval.start &&
+              call.at <= interval.end,
+          ),
+        )
+      : taskStart !== null && taskEnd !== null
+        ? [{ start: taskStart, end: taskEnd }]
+        : [];
     return {
       calls,
       coverage: complete ? "complete" : "partial",
-      taskStart,
-      taskEnd,
+      coveredIntervals,
     };
   }
   if (calls.length === 0) return null;
   return {
     calls,
     coverage: agent.format === "codex-exec" ? "complete" : "partial",
-    taskStart: null,
-    taskEnd: null,
+    coveredIntervals: [],
   };
 }
 function sum(items: readonly Counter[]): Counter {
@@ -308,10 +338,10 @@ export function reportCodexE2E(manifest: Manifest) {
             observed == null
               ? "missing"
               : observed.coverage === "complete" &&
-                  observed.taskStart !== null &&
-                  observed.taskEnd !== null &&
-                  observed.taskStart <= phase.ms &&
-                  observed.taskEnd >= end
+                  observed.coveredIntervals.some(
+                    (interval) =>
+                      interval.start <= phase.ms && interval.end >= end,
+                  )
                 ? "complete"
                 : selected && selected.length > 0
                   ? "partial"
