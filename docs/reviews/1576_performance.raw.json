@@ -1,7 +1,7 @@
 {
   "kind": "asc-integrated-performance-observations/v1",
   "issue": 1576,
-  "status": "b12-source-trials-stopped-auth-and-step5; template-order-correction-under-validation",
+  "status": "historical-and-current-observations; matched-20261014-complete; performance-acceptance-not-established",
   "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
   "supersededAttempt": {
     "status": "aborted-and-replaced-by-the-current-fixed-source-run",
@@ -49415,5 +49415,11 @@
     "formalOutcome": "Step0 Full, Step1/2 and independent Step3 accepted, Step4 sync accepted. Step2 handback contained only formal 01 output. Step5 worker used official template short form in design §§4.2/8; formal advance rejected because verification-input.json did not exist, so risk=low could not be established.",
     "classification": "Template guidance was inconsistent with Step5-before-Step6 input availability. Validator refused safely; no gate bypass or artifact rewrite. Follow-up source clarifies ordinary detailed prose while risk input is absent.",
     "comparisonMissing": "Codex provider differs from prior Claude cohorts; stopped before implementation/review/PR/CI; no causal E2E performance comparison."
+  },
+  "matched20261014": {
+    "path": "docs/reviews/1576_matched_20261014.json",
+    "sha256": "1eb768634c6302e5cabae365f8ab2b07cbf3e8b7715a2648c91c7f8c2ab7650d",
+    "summary": "docs/reviews/1576_matched_20261014.md",
+    "acceptance": "not-established"
   }
 }

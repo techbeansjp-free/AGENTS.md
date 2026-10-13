@@ -1,7 +1,7 @@
 {
   "kind": "asc-integrated-performance-summary/v1",
   "issue": 1576,
-  "status": "implementation-first-low-risk-standard-entry-and-private-e2e-complete; matched-performance-pending",
+  "status": "implementation-first-functional; matched-exploratory-comparison-complete; performance-acceptance-not-established",
   "baselineSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
   "previousCandidateSha": "5e51700b2a36b54d710ce0cc0e0f38ff8fbd5aa2",
   "readPolicy": "通常はこのsummaryだけを読む。反例・数値監査・再現に必要な場合だけ詳細証跡の該当keyを読む。",
@@ -33,7 +33,7 @@
   ],
   "details": {
     "path": "docs/reviews/1576_performance.raw.json",
-    "sha256": "3e73555db0149b13aa9766cb7aa59e45d6be9b5388e0b31fcbfacb5b30af707f",
+    "sha256": "1d559ddca4c13d73ddd5113ffa3ea49b28a813859b60ecdc7a0d954e95f31176",
     "keys": [
       "kind",
       "issue",
@@ -400,5 +400,11 @@
       "comparison": "same fixture base as previous A case, but request-to-CI boundary, total agent tokens and access parity are not established; no improvement percentage",
       "detailPath": "docs/reviews/1576_implementation_first_e2e.md"
     }
+  },
+  "latestMatchedComparison": {
+    "path": "docs/reviews/1576_matched_20261014.json",
+    "sha256": "1eb768634c6302e5cabae365f8ab2b07cbf3e8b7715a2648c91c7f8c2ab7650d",
+    "summary": "docs/reviews/1576_matched_20261014.md",
+    "acceptance": "not-established"
   }
 }
