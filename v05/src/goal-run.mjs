@@ -74,6 +74,12 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
    demand(unit.readPaths.includes(ref.path)||unit.writePaths.includes(ref.path),'Shared contract absent from unit scope');
   }
  };
+ // Bind provider methods to their original receiver. Check immutable shared
+   // contracts whenever workflow checks Intent, including before Delivery.
+   const checkedRemote=new Proxy(remote,{get(target,key){
+    if(key==='intent')return async()=>{await checkIntent();checkContracts();return c.contract.intent;};
+    const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+   }});
  await checkIntent();checkContracts();
  const initial=c.target({allowEmpty:true});demand(initial.head===c.base,'Goal execution requires clean starting HEAD; no receipt-based resume');
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-goal-')),results=[],events=[],contexts=new Set(priorContexts),started=performance.now();
@@ -89,12 +95,6 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
    new AssetController({...request,contract:request.unitRequests[unit.id].contract,implementer:'unit-contract-validation'}).assertContract();
    if(request.unitCandidates?.[unit.id])emit('unit-candidate',{id:unit.id,status:'invalidated',reason:'unit-contract-changed'});
    emit('single-unit-execution',{id:unit.id,contract:digest(combined)});
-   // Bind provider methods to their original receiver. Check immutable shared
-   // contracts whenever workflow checks Intent, including before Delivery.
-   const checkedRemote=new Proxy(remote,{get(target,key){
-    if(key==='intent')return async()=>{await checkIntent();checkContracts();return c.contract.intent;};
-    const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
-   }});
    const record={id:unit.id,repo:c.repo,mode:'combined-goal-contract'};results.push(record);
    let delivery;
    try{delivery=await runWorkflow({...request,contract:combined},{executionBudget:budget,agent:freshAgent,provider:checkedRemote,onEvent:event=>{if(event.type==='run-started')record.workflowRoot=event.root;emit('single-unit-event',{id:unit.id,event});}});}
@@ -182,7 +182,7 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
   // A risk check identical to the parent test is still an explicit risk obligation.
   if(risks.length&&!checks.length)checks.push(request.contract.testArgv);
   const finalRequest={...request,contract:{...request.contract,criteria,risks,requiresDesign,design:designs.join('\n\n'),riskTestArgv:checks}};
-  const delivery=await runWorkflow(finalRequest,{executionBudget:budget,agent:freshAgent,provider:remote,onEvent:e=>emit('integration-event',{event:e})});
+  const delivery=await runWorkflow(finalRequest,{executionBudget:budget,agent:freshAgent,provider:checkedRemote,onEvent:e=>emit('integration-event',{event:e})});
   demand(delivery.status==='draft-ci-passed','Goal delivery incomplete');return save({status:'draft-ci-passed',delivery});
  }catch(error){emit('blocked',{error:String(error)});error.goalDiagnostic=save({status:'blocked',error:String(error),diagnostic:error.workflowDiagnostic??null});throw error;}
 }

@@ -676,3 +676,29 @@ test('review-only API rejects deferred candidate import before any mutation',asy
  await assert.rejects(runWorkflow(f.request, {reviewOnly:true,candidateReuse:{}}),/Review-only mode prohibits candidate import/);
  assert.deepEqual({head:f.git('rev-parse','HEAD'),status:f.git('status','--porcelain'),bytes:fs.readFileSync(path.join(f.root,'a.txt'),'utf8')},before);
 });
+
+
+test('whole Goal repair preserves shared pins even when scope permits editing them',{skip:!enabled},async t=>{
+ for(const drift of [false,true]){
+  const f=fixture(t);f.request.goal.units=f.request.goal.units.filter(u=>u.id!=='sum');delete f.request.unitRequests.sum;
+  f.request.contract.allowedPaths.push('contract.txt');f.request.contract.testArgv=['/bin/sh','-c','test "$(cat sum.txt)" = 2'];f.request.maxRepairs=1;
+  let calls=0,repairs=0,deliveries=0,root;
+  class Provider {
+   #intent=f.request.contract.intent;
+   intent(){return this.#intent;}
+   createDraft(){assert.equal(this.#intent,f.request.contract.intent);deliveries++;return 1;}
+   observe(){assert.ok(this.#intent);return f.provider.observe();}
+  }
+  const agent=async({workspace,writable,prompt})=>{
+   if(writable){const intent=JSON.parse(prompt).intent;
+    if(intent==='Write a'||intent==='Write b')fs.writeFileSync(path.join(workspace,intent.slice(-1)+'.txt'),'1');
+    else {repairs++;fs.writeFileSync(path.join(workspace,'sum.txt'),'2');if(drift)fs.writeFileSync(path.join(workspace,'contract.txt'),'BROKEN SHARED PIN');}
+   }
+   return {context:'pin-repair-'+(++calls),usage:[],seconds:0,answer:JSON.stringify({verdict:'pass',findings:[]})};
+  };
+  const execution=runGoal(f.request,{agent,provider:new Provider(),onEvent:e=>{if(e.type==='goal-started')root=e.root;}});
+  if(drift){await assert.rejects(execution,/Shared contract changed/);assert.equal(deliveries,0);}
+  else {assert.equal((await execution).status,'draft-ci-passed');assert.equal(deliveries,1);}
+  assert.equal(repairs,1);t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ }
+});
