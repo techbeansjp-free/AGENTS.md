@@ -2,7 +2,7 @@
 
 ASCは、目的と受入条件、許可された変更範囲、既存規約を入力として、必要な実装・検証・独立レビューを選択します。固定Step列や工程ごとのAgent起動は要求しません。小規模変更は実装と独立Reviewerを基本とし、複雑なGoalでは依存関係に従ってWork Unitを実行・統合します。
 
-**現在は非公開のalpha候補です。正式リリース可能とは判定していません。** [受入状態](RELEASE_READINESS.json)には、検証済み範囲と未達項目を記録しています。`capabilities`も`releaseReady: false`を返します。
+**現在は本体PRでレビュー中のalpha候補です。正式リリース可能とは判定していません。** [受入状態](RELEASE_READINESS.json)には、検証済み範囲と未達項目を記録しています。`capabilities`も`releaseReady: false`を返します。
 
 ## 導入と入口
 
@@ -47,10 +47,14 @@ npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/ag
 
 ## 未完了の受入
 
-同条件の性能比較、広範な移行と復旧、複雑な開発の受入、比較製品に対するレビュー品質評価、対応OS別の隔離、最終GitHub CIは未完了です。小規模fixtureの完走時間やテスト件数を、すべての利用条件への保証として扱いません。現在の制約・Evidence参照は[受入状態](RELEASE_READINESS.json)を正本とします。
+同条件の性能比較、広範な移行と復旧、複雑な開発の受入、比較製品に対するレビュー品質評価、Linux実行環境の隔離、最終GitHub CIは未完了です。小規模fixtureの完走時間やテスト件数を、すべての利用条件への保証として扱いません。現在の制約・Evidence参照は[受入状態](RELEASE_READINESS.json)を正本とします。
 
 ## ソースcheckoutでの開発
 
-`npm test`はNodeのGit・検証・レビュー・Goal・移行・配布テストです。Python試作の回帰は`python3 -m unittest -v`、共通fixtureは`python3 fixture/check.py`で実行します。これらのテストと実験ログはソースrepository用であり、インストール済みtarballに全評価資産を同梱するものではありません。
+`npm test`はNodeのGit・検証・レビュー・Goal・移行・配布テストです。Python試作と歴史的fixtureは旧検証リポジトリにあり、このcheckoutのコマンドではありません。これらのテストと実験ログはソースrepository用であり、インストール済みtarballに全評価資産を同梱するものではありません。
 
 設計上の判断は[アーキテクチャ原則](ARCHITECTURE_DECISION_0002.md)を参照してください。過去の試行・失敗・実測値はソースrepositoryのEvidenceに残し、通常実行で全文読込みを要求しません。
+
+## Linux限定の初回受入
+
+初回リリース判定はnative Linuxを対象とします。macOS・Windows・WSL2は未対応として停止し、別途受入するまでサポートを主張しません。これらのOSは初回Linux版の判定条件に含めません。Linuxでも実行時のファイル・通信・子プロセスの隔離成立を確認し、失敗時に権限を緩めません。Ubuntu 24.04のCI構成を維持して互換性を検証します。

@@ -26,9 +26,83 @@
   "remaining": [
     "This repository integration and CI must be verified",
     "Switch canonical v0.5 packaging/installation only after integration review",
-    "Supported-OS whole-Agent acceptance",
+    "Linux whole-Agent acceptance on final distribution",
     "Final matched PR/CI performance comparison",
     "External review product quality comparison"
   ],
-  "evidenceNote": "Historical local measurements are not evidence that this integration branch CI passed. See REVIEW.md."
+  "evidenceNote": "Historical local measurements are not evidence that this integration branch CI passed. See REVIEW.md.",
+  "releaseTarget": {
+    "platform": "native-linux",
+    "excluded": [
+      "macos",
+      "windows-native",
+      "wsl2"
+    ],
+    "ownerDecision": "Linux-only release acceptance; other OS validation is deferred. Isolation remains mandatory."
+  },
+  "packagedLinuxTrial": {
+    "implementationSourceHead": "38163df8ae56caf1797cfe034842eaebb75ce49b",
+    "packageSha256": "5812dedb38ab6465bc0064082676131d1d1c2cd4b73894daa2bea5ac9de80976",
+    "base": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+    "model": "gpt-5.6-sol",
+    "status": "BLOCKED",
+    "endpoint": "Draft PR created; CI could not start because private account billing blocked execution",
+    "wallSecondsIncludingFailure": 62.132228376,
+    "setupIncluded": false,
+    "agentCalls": 2,
+    "agents": [
+      {
+        "role": "implementation",
+        "seconds": 16.670397226000002,
+        "usage": [
+          {
+            "input_tokens": 63673,
+            "cached_input_tokens": 54784,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 747,
+            "reasoning_output_tokens": 194
+          }
+        ]
+      },
+      {
+        "role": "review",
+        "seconds": 23.212618843000005,
+        "usage": [
+          {
+            "input_tokens": 60872,
+            "cached_input_tokens": 42496,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 979,
+            "reasoning_output_tokens": 533
+          }
+        ]
+      }
+    ],
+    "observedProcessedTokens": 126271,
+    "observedFreshTokens": 28991,
+    "allAgentTotalTokens": null,
+    "independentReview": "pass",
+    "localVerificationExits": [
+      0,
+      0
+    ],
+    "comparisonClaim": null,
+    "limitations": [
+      "Single run; not causal speed comparison",
+      "Setup excluded from wallSeconds",
+      "Provider-internal tokens not certified complete",
+      "Private dummy only; no merge/release"
+    ]
+  },
+  "currentLocalLinuxValidation": {
+    "node": {
+      "pass": 199,
+      "fail": 0,
+      "skip": 0,
+      "cgroupEnabled": true,
+      "seconds": 104.21805065
+    },
+    "scope": "Integration working tree including transient service lifecycle; Ubuntu 24.04 GitHub CI still pending",
+    "lint": "pass"
+  }
 }

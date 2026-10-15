@@ -1,5 +1,4 @@
 import {performance} from 'node:perf_hooks';
-import {clearTimeout,setTimeout} from 'node:timers';
 import {assertExecutionHost} from './execution-host.mjs';
 /** Experimental Linux host adapter. No permission fallback; no Python runtime. */
 import fs from 'node:fs';
@@ -7,15 +6,8 @@ import path from 'node:path';
 import os from 'node:os';
 import {codexRuntimeRoots} from './codex-runtime.mjs';
 import {networkPreflight} from './agent-network-preflight.mjs';
-import {StringDecoder} from 'node:string_decoder';
-import {spawn,spawnSync} from 'node:child_process';
+import {runServiceProcess} from './agent-lifecycle.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
-// Lifecycle only: the provider retains its existing host access. Tool isolation remains
-// the separate Codex profile. PID namespace teardown also kills detached descendants.
-function lifecycleArgv(executable,argv){
-  demand(process.platform==='linux','Agent lifecycle requires Linux');
-  return ['--die-with-parent','--unshare-pid','--bind','/','/','--proc','/proc','--dev','/dev','--',executable,...argv];
-}
 const contains=(parent,child)=>{const r=path.relative(parent,child);return !r || (!r.startsWith('..'+path.sep) && r!=='..' && !path.isAbsolute(r));};
 export function configuration({workspace,runtime,executable,writable}) {
   const root=fs.realpathSync(workspace),temp=fs.realpathSync(runtime),binary=fs.realpathSync(executable);
@@ -58,21 +50,20 @@ export async function runAgent({workspace,logs,executable,model,prompt,writable=
   try {
     const c=configuration({workspace,runtime,executable,writable});
     const sandbox=['sandbox','-P',c.profile,...c.options,'-C',root,'--'];
-    const healthy=spawnSync('/usr/bin/bwrap',lifecycleArgv(c.binary,[...sandbox,'/bin/true']),{env:c.env,timeout:20000,maxBuffer:1048576});
-    demand(!healthy.error && healthy.status===0,'Isolation positive control failed');
+    const preflightRun=(binary,args,options)=>runBoundedProcess(binary,args,{...options,timeout:Math.min(options.timeout,remainingDeadline(deadline))});
+    await preflightRun(c.binary,[...sandbox,'/bin/true'],{env:c.env,input:'',timeout:20000});
     const sentinel=path.join(logRoot,'controller-sentinel');fs.writeFileSync(sentinel,'trusted',{flag:'wx'});
     // Fixed POSIX diagnostic: both cat and shell first pass positive controls.
     // No candidate script, Python dependency or permission relaxation.
-    const cat=spawnSync('/usr/bin/bwrap',lifecycleArgv(c.binary,[...sandbox,'/bin/cat','/dev/null']),{env:c.env,timeout:20000,maxBuffer:1048576});
-    demand(!cat.error && cat.status===0,'Read diagnostic positive control failed');
+    await preflightRun(c.binary,[...sandbox,'/bin/cat','/dev/null'],{env:c.env,input:'',timeout:20000});
     const code=`if /bin/cat "$1" >/dev/null 2>&1; then r=accessible; else r=denied; fi
 if (printf changed >"$1") 2>/dev/null; then w=private-write-completed; else w=denied; fi
 printf '{"completed":true,"read":"%s","write":"%s"}\\n' "$r" "$w"`;
-    const probe=spawnSync('/usr/bin/bwrap',lifecycleArgv(c.binary,[...sandbox,'/bin/sh','-c',code,'asc-preflight',sentinel]),{env:c.env,timeout:20000,maxBuffer:1048576,encoding:'utf8'});
+    const probe={status:0,...await preflightRun(c.binary,[...sandbox,'/bin/sh','-c',code,'asc-preflight',sentinel],{env:c.env,input:'',timeout:20000})};
     const hostValue=fs.readFileSync(sentinel,'utf8');
     fs.writeFileSync(path.join(logRoot,'preflight.json'),JSON.stringify({status:probe.status,stdout:probe.stdout,stderr:probe.stderr,hostUnchanged:hostValue==='trusted'},null,2));
     assertPreflight(probe,hostValue);
-    const network=await networkPreflight({executable:c.binary,sandbox,env:c.env,run:runBoundedProcess});
+    const network=await networkPreflight({executable:c.binary,sandbox,env:c.env,run:preflightRun});
     fs.writeFileSync(path.join(logRoot,'network-preflight.json'),JSON.stringify(network,null,2));
     const answerPath=path.join(logRoot,'answer.txt');
     const argv=['exec','--ignore-user-config','--ignore-rules','--ephemeral','--skip-git-repo-check','--json',
@@ -100,29 +91,5 @@ printf '{"completed":true,"read":"%s","write":"%s"}\\n' "$r" "$w"`;
 
 function remainingDeadline(deadline){const remaining=Math.ceil(deadline-performance.now());demand(remaining>0,'Agent deadline exceeded during preflight');return remaining;}
 
-/** Deadline bounds the host wait even if a detached descendant holds a pipe. */
-export function runBoundedProcess(executable,argv,{env,input,timeout}) {
-  demand(Number.isSafeInteger(timeout) && timeout>0 && timeout<=360000,'Invalid Agent deadline');
-  return new Promise((resolve,reject)=>{
-    const p=spawn('/usr/bin/bwrap',lifecycleArgv(executable,argv),{env,stdio:[input===''?'ignore':'pipe','pipe','pipe'],detached:true});
-    let stdout='',stderr='',outBytes=0,errBytes=0,settled=false;
-    const outDecoder=new StringDecoder('utf8'),errDecoder=new StringDecoder('utf8');
-    const finish=error=>{
-      if(settled)return;settled=true;clearTimeout(timer);
-      stdout+=outDecoder.end();stderr+=errDecoder.end();
-      if(error){
-        try{process.kill(-p.pid,'SIGKILL');}catch{p.kill('SIGKILL');}
-        p.stdin?.destroy();p.stdout.destroy();p.stderr.destroy();
-        reject(Object.assign(error,{stdout,stderr}));
-      }else resolve({stdout,stderr});
-    };
-    const timer=setTimeout(()=>finish(Error('Agent deadline exceeded')),timeout);
-    p.stdout.on('data',b=>{if(settled)return;outBytes+=b.length;
-      if(outBytes>8*1024*1024){finish(Error('Agent output limit exceeded'));return;}stdout+=outDecoder.write(b);});
-    p.stderr.on('data',b=>{if(settled)return;errBytes+=b.length;
-      if(errBytes>1048576){finish(Error('Agent error output limit exceeded'));return;}stderr+=errDecoder.write(b);});
-    p.stdin?.on('error',e=>finish(e));p.on('error',e=>finish(e));
-    p.on('close',status=>finish(status===0?undefined:Error('Fresh Agent failed')));
-    p.stdin?.end(input);
-  });
-}
+/** Transient service owns provider descendants; Codex still owns tool confinement. */
+export const runBoundedProcess=runServiceProcess;

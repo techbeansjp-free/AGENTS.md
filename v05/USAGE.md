@@ -1,6 +1,6 @@
 # v0.5評価CLIの実行手順
 
-正式リリース前の評価用。現在、要求からDraft PR/CIまで実証した実行環境はLinux。Node.js 20以上、Git、GitHub CLI、Codex CLI、bubblewrap、prlimitが必要。Codex 0.153.4で検証した。macOS/Windowsのpackage・移行テストと、AgentのOS隔離対応は別である。
+正式リリース前の評価用。現在、要求からDraft PR/CIまで実証した実行環境はLinux。Node.js 20以上、Git、GitHub CLI、Codex CLI、bubblewrap、prlimit、稼働中のsystemd user managerとcgroup v2が必要。Codex 0.153.4で検証した。macOS/Windowsのpackage・移行テストと、AgentのOS隔離対応は別である。
 
 ## 作業場所
 
@@ -143,6 +143,10 @@ Source observation supports at most 10,000 regular Git files and 64,000,000 tota
 信頼するhost管理のprefixをcandidate worktree外に用意し、固定したlocal tarballをnpmで導入する。例: `npm install --prefix <host-prefix> --offline --ignore-scripts --no-audit --no-fund --save-exact <tarball>`。入口は`<host-prefix>/node_modules/.bin/asc-v05`。Nodeはhostが用意する。更新も同じコマンドで新tarballを指定し、差し戻しでは保持した旧tarballを指定する。package.jsonとlockfileはnpmが更新するため、旧tarballとそのhashを保持する。全世界へのglobal installやcandidate側からの自己更新は行わない。
 
 `NODE_PACKAGE_UPGRADE_EVIDENCE.json`ではLinuxの同一prefixで2つのprivate alpha snapshotを往復し、配布37fileの一覧とbytes、npmのCLI入口、利用者file保持を確認した。公開registry、他OS、v0.4のpolicy/Skill/CI変換、実行中プロセスのhot upgradeは対象外。既存プロセス終了後に切り替え、新しい実行では現在のContractとEvidenceを再確認する。これによって旧版のレビューや承認が新しい変更に引き継がれるわけではない。
+
+### Agentの寿命管理
+
+Providerは呼出しごとの一時user serviceで起動し、Controller専有pipeの切断・期限超過・終了時に同じcgroupの子孫を停止する。常駐ASC daemonやsession共通lockは作らない。Agentのファイル・通信権限は別のCodex sandboxで強制し、user service自体を隔離の証拠とは扱わない。user manager不在や停止未確認では安全停止し、process groupだけの方式へ退避しない。終了確認には最大3回×5秒の制御処理が追加され得るため、設定deadlineは後片付け込みの厳密なwall time上限ではない。
 
 ### ブラウザ向け検証資源（Linux限定・明示選択）
 

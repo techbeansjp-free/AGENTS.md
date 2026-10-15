@@ -66,7 +66,7 @@
     "trial_oracle.mjs": "cd9394d71711334cf44cfebca69a74418051b5e83195dd01838202f517ddcaa0"
   },
   "scope": "Product source, Node tests, package scripts and user docs. Raw private experimental logs excluded. No v0.4 entrypoint switch or release approval.",
-  "hashScope": "files records original source bytes; integrationChanges records integration adjustments after import (lint, isolation fixture, shared-contract repair guard).",
+  "hashScope": "files records original source bytes; integrationChanges records modified imported files; integrationAdditions records new integration files, not original source.",
   "integrationChanges": {
     "bin/asc-v05.mjs": "61c3009e6a5cbefae1656890e00eb3fbf13fe2b5bb9c9fe5dd393c15f10cc272",
     "src/adaptive-run.mjs": "6eb3917f936ab7f52c824def9d15808067b7933e03e396631768ee6c0f2301b6",
@@ -77,15 +77,23 @@
     "src/goal-restart.mjs": "fb1c2e9f9c67e9269020fde8302cb4de41f0dffe07359f754f164f4fc1d55752",
     "src/goal-run.mjs": "7b2dfea5d52be39b906ea19c2905d6f183adca7b72c2cdc0edf925e21cc64c46",
     "src/issue-run.mjs": "3583af005dbcd38f20f6891c398490b99b66b3e591dd7d39f7f6be69239800f5",
-    "src/restricted-agent.mjs": "8b497cbcc205178cfd725597d7ec6495a2cc6faa4e7eecd7dd5f54eb19c8f456",
+    "src/restricted-agent.mjs": "0702280987a50167e8fcc9c902ed142487dbef8a1f654a03e413f88ae5d5a05d",
     "src/verification-resources.mjs": "ea96a975c17b2aa48f02496e69b4da077fb2dc6fcd72fa7d33d7552acc340522",
     "src/workflow.mjs": "0187950567dcd27c708ef7500f0ca20105daa5efa9bc6a9ad1310b7ebe7ad316",
     "test_controller.mjs": "6d92506c5e2b3ed211f36442599b4cd788e522a5ce007ca8613d48b275a55b78",
     "test_goal_run.mjs": "70544e80c74ebd29a418f9eaed8f47966c1631b5033eb1ef0401cfe9fc0d0013",
     "test_issue_run.mjs": "d4a5fdb24580bf0c2cb8a1af17238b4b79252125a23be027250885afd4aada3f",
     "test_migration.mjs": "1b9cc65fbf2285fdccf5ccad8929a9c7a93f7ab8c4fa32d889b8d146492613cb",
-    "test_restricted_agent_node.mjs": "c5d66547d8ec535b773946ef3b9f3a29c1c42dace0e8a3aeb5832c032855df0c",
+    "test_restricted_agent_node.mjs": "8ab1ad1266bee3aed2f0cd3783a71a819ad594bcb1740c1e4cd22a2e45b15636",
     "test_verification_assets.mjs": "49e375a3914b412fd8101c98f631c1697b8231591a2347061d7a6e2953851be9",
-    "test_workflow.mjs": "43b9908d391571f1f1feddd5ed3bc629c1776777151ce8029541d7c38bc87368"
+    "test_workflow.mjs": "43b9908d391571f1f1feddd5ed3bc629c1776777151ce8029541d7c38bc87368",
+    "README.md": "403ab4579b16698bcb7d604b3378f5e0e7c67715c0ac8c531be130359c616ace",
+    "USAGE.md": "29c256f5805e78bc40e455d05c92f20005027d3ccaf724ebb45a061563422fdd",
+    "package.json": "e4772706115174abc3c517739df109ad14fd7472bfc68df67979da07fb98b81e"
+  },
+  "integrationAdditions": {
+    "src/agent-lifecycle.mjs": "bd043ce3b64bf2b844d9dc22fd66c6d9e5dd2ee7dde0e3ab6f738b1d017b0459",
+    "src/agent-lifecycle-supervisor.mjs": "55114da140fcc2e328ba1eb0b9ef47715ecd4f6af53e7d5b14bd8795bfdaa2ff",
+    "test_agent_lifecycle.mjs": "0c1bdf776e53a590bb33346abb680f8222a293687bd987cec7c9bc7f9ac46642"
   }
 }

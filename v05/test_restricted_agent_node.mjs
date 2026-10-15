@@ -65,8 +65,7 @@ test('real loopback test rejects unconfined command and accepts network namespac
  const {networkPreflight}=await import('./src/agent-network-preflight.mjs');
  const {runBoundedProcess}=await import('./src/restricted-agent.mjs');
  await assert.rejects(networkPreflight({executable:'/usr/bin/env',sandbox:[],env:{},run:runBoundedProcess}),/not established/);
- // The lifecycle runner already entered a user namespace and dropped capabilities.
- // Explicitly create a nested user namespace before creating its network namespace.
+ // The lifecycle service does not add a namespace; this is the tool isolation boundary.
  const result=await networkPreflight({executable:'/usr/bin/bwrap',sandbox:['--unshare-user','--unshare-net','--ro-bind','/','/','--'],env:{},run:runBoundedProcess});
  assert.equal(result.negative.network,'denied');assert.equal(result.sandboxConnections,0);
 });
@@ -83,22 +82,25 @@ test('WSL cannot silently inherit native Linux acceptance',async()=>{
  }
 });
 
-test('Controller termination stops Agent and detached descendants through the PID namespace',
+test('Controller termination stops Agent and detached descendants through the transient service cgroup',
  {skip:process.platform!=='linux'||process.env.ASC_TEST_ISOLATION==='0'},async t=>{
  const {spawn}=await import('node:child_process');const {once}=await import('node:events');
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-lifecycle-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const state=pid=>{try{const raw=fs.readFileSync(`/proc/${pid}/stat`,'utf8'),fields=raw.slice(raw.lastIndexOf(')')+2).split(' ');return {live:fields[0]!=='Z',start:fields[19]};}catch{return null;}};
- const descendants=pid=>{let children=[];try{children=fs.readFileSync(`/proc/${pid}/task/${pid}/children`,'utf8').trim().split(/\s+/).filter(Boolean).map(Number);}catch{ /* The child may already have exited; cleanup is best effort. */ }return children.flatMap(p=>[p,...descendants(p)]);};
  for(const signal of ['SIGTERM','SIGKILL']){
   const ready=path.join(root,signal+'.ready'),driver=path.join(root,signal+'.mjs');
-  const detached=`require('node:fs').writeFileSync(${JSON.stringify(ready)},'started');setInterval(()=>{},1000);`;
+  const detached=`const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(ready)},JSON.stringify({pid:process.pid,cgroup:fs.readFileSync('/proc/self/cgroup','utf8')}));setInterval(()=>{},1000);`;
   const program=`require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(detached)}],{detached:true,stdio:'ignore'});setInterval(()=>{},1000);`;
   fs.writeFileSync(driver,`import {runBoundedProcess} from ${JSON.stringify(new URL('./src/restricted-agent.mjs',import.meta.url).href)};await runBoundedProcess(process.execPath,['-e',${JSON.stringify(program)}],{env:{},input:'',timeout:30000});`);
   const parent=spawn(process.execPath,[driver],{stdio:'ignore'});let owned=[];
   try{
    const limit=Date.now()+5000;while(!fs.existsSync(ready)&&Date.now()<limit)await new Promise(r=>setTimeout(r,10));
    assert(fs.existsSync(ready),'detached Agent descendant did not start');
-   owned=descendants(parent.pid).map(pid=>({pid,...state(pid)}));assert(owned.length>=3,'must observe provider plus detached descendant');
+   const observed=JSON.parse(fs.readFileSync(ready,'utf8'));
+   const group=observed.cgroup.split('\n').find(line=>line.startsWith('0::'))?.slice(3);
+   assert(group&&/^asc-agent-[a-f0-9-]+\.service$/.test(path.basename(group)),'must observe the invocation service');
+   owned=fs.readFileSync(path.join('/sys/fs/cgroup',group,'cgroup.procs'),'utf8').trim().split(/\s+/).map(Number).map(pid=>({pid,...state(pid)}));
+   assert(owned.some(p=>p.pid===observed.pid)&&owned.length>=3,'must observe supervisor, provider and detached descendant');
    const exited=once(parent,'exit');assert(parent.kill(signal));await exited;
    const deadline=Date.now()+3000;const survivors=()=>owned.filter(p=>{const now=state(p.pid);return now?.live&&now.start===p.start;});
    while(survivors().length&&Date.now()<deadline)await new Promise(r=>setTimeout(r,10));

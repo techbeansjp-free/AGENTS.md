@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -20,8 +20,16 @@ jobs:
           sudo apt-get install --yes --no-install-recommends apparmor-profiles bubblewrap
           sudo apparmor_parser -r /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
           /usr/bin/bwrap --unshare-all --die-with-parent --new-session --ro-bind / / -- /bin/true
+      - name: Prepare per-invocation lifecycle and resource verification
+        run: |
+          sudo systemctl start "user@$(id -u).service"
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+          systemctl --user show --property=Version
       - name: Test harness including Linux isolation
         working-directory: v05
+        env:
+          ASC_TEST_CGROUP: "1"
         run: npm test
       - name: Build unpublished distribution candidate
         working-directory: v05
