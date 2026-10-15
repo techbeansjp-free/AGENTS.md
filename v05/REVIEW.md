@@ -23,10 +23,16 @@ Node 20以上。Linuxの隔離テストはbubblewrap等を必要とします。m
 
 ## 未達
 
-本体の既存品質チェックとの統合、正式配布入口の切替、OS別whole-Agent隔離、最終PR/CI性能比較、外部レビュー製品との品質比較は完了していません。Draftのまま検分し、merge/releaseしないでください。
+本体の既存品質チェックとの統合、正式配布入口の切替、Linux最終配布物のwhole-Agent隔離、最終PR/CI性能比較、レビュー品質受入は別途確認します（外部製品比較はowner承認で将来課題へ変更）。Draftのまま検分し、merge/releaseしないでください。
 
 ## レビュー品質の評価用fixture
 
 `evaluation/`には既存PoCから再利用した計算・認可・重大度前提・指示混入・SQLite永続化の合成fixtureを置きます。`test_review_corpus.mjs`でbaselineと21候補の期待結果・具体的な失敗理由を検証します。単なる非zero終了を欠陥検出と扱いません。重大度・指示混入の群は認可mutationを再利用するため、21種類の独立した欠陥という意味ではありません。
 
 これは評価器の正しさの確認であり、AI ReviewerのPrecision/RecallやCodeRabbit等との同等性の証明ではありません。比較時は同じ候補・Intent・oracleを使用し、oracleと期待ラベルをReviewerへ渡さず、指摘を独立に裁定してください。環境失敗を欠陥の正検出に数えず、欠測をゼロにしません。通常の製品配布にこの評価用ディレクトリは含めません。
+
+## 現行統合の実測（aa64d9e3）
+
+Ubuntu24 CIは207成功・失敗0・skip0。新規公開合成fixtureのDraft PR/CIまで83.48秒・2 Agentで完走しました。setupは時間から除外し、旧private fixtureとの速度比較には使用しません。公開対象は新規合成5ファイルのみでprivate履歴・生ログは含めません。
+
+既知欠陥・正常対照17試行の独立裁定はTP9/TN8/FP0/FN0でした。7種類の欠陥変異であり、指示混入群は認可変異を再利用しています。正解oracleはReviewerに渡していません。指摘はstatic-analysisで、実行再現は評価器と裁定者が担当しました。合成単発評価の範囲外の品質・外部製品同等性は未証明です。詳細な計数と制限はRELEASE_READINESS.jsonを参照してください。

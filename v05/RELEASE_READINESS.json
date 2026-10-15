@@ -24,11 +24,10 @@
     "causalImprovementProven": false
   },
   "remaining": [
-    "This repository integration and CI must be verified",
-    "Switch canonical v0.5 packaging/installation only after integration review",
-    "Linux whole-Agent acceptance on final distribution",
-    "Final matched PR/CI performance comparison",
-    "External review product quality comparison"
+    "Complete formal current-HEAD review Evidence and audit CI",
+    "Switch canonical v0.5 packaging/installation after integration review",
+    "Revalidate final distribution when runtime changes",
+    "Final matched performance acceptance; public synthetic observation is not matched old ASC comparison"
   ],
   "evidenceNote": "Historical local measurements are not evidence that this integration branch CI passed. See REVIEW.md.",
   "releaseTarget": {
@@ -210,5 +209,68 @@
     "externalComparator": "NOT VERIFIED",
     "scope": "Synthetic fixtures only; impact/injection cohorts reuse authorization mutations, not 21 independent defect classes",
     "defaultRuntimeCost": "none; evaluator-only, excluded from product package"
+  },
+  "ownerAcceptanceAmendment": {
+    "externalReviewProductComparison": "Deferred; replace release acceptance with known-defect and clean-control absolute evaluation",
+    "publicSyntheticFixture": "Authorized fresh synthetic-only public repository; no private assets or logs",
+    "paidActions": "Not authorized"
+  },
+  "verifiedLinuxIntegrationLatest": {
+    "implementationHead": "aa64d9e35eb79160c3566bfa71caac52c0a6c938",
+    "ciRun": 38799568694,
+    "pass": 207,
+    "fail": 0,
+    "skip": 0,
+    "cgroupEnabled": true,
+    "ciSeconds": 104.688185818,
+    "packageSha256": "a82b1927cf1d2970774c6d1a32d76e62850eadd6b9adf2ade449bccf1a86aa3d"
+  },
+  "publicSyntheticTrial": {
+    "sourceHead": "aa64d9e35eb79160c3566bfa71caac52c0a6c938",
+    "packageSha256": "a82b1927cf1d2970774c6d1a32d76e62850eadd6b9adf2ade449bccf1a86aa3d",
+    "fixture": "new public synthetic greeting; not previous private matched fixture",
+    "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+    "target": {
+      "head": "5cac144ced75bbe3b7f02e74836b33fc1f185dcf",
+      "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+      "contract": "fccdde88674c406843029f46a3e9dcad756c3190e35d57286c4975ab03ee4e83",
+      "diff": "04cca1820e625ccb6f34a590c2904c7d72b7f3852584484974ef758604462505",
+      "empty": false
+    },
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/2",
+    "status": "draft-ci-passed",
+    "wallSeconds": 83.47529638999998,
+    "setupIncluded": false,
+    "agentCalls": 2,
+    "observedProcessedTokens": 138935,
+    "observedCacheReadTokens": 104064,
+    "observedFreshTokens": 34871,
+    "allAgentTotalTokens": null,
+    "repairs": 0,
+    "comparisonClaim": null,
+    "publication": "five newly authored synthetic files; fresh history; candidate only changes greeting.py and test_greeting.py; raw logs not published"
+  },
+  "absoluteReviewEvaluation": {
+    "implementationHead": "aa64d9e35eb79160c3566bfa71caac52c0a6c938",
+    "model": "gpt-5.6-sol",
+    "trials": 17,
+    "distinctDefectMutations": 7,
+    "truePositive": 9,
+    "trueNegative": 8,
+    "falsePositive": 0,
+    "falseNegative": 0,
+    "independentAdjudication": true,
+    "oracleWithheldFromReviewer": true,
+    "reviewerReproduction": "static-analysis; runtime reproduction by evaluator and adjudicator",
+    "sumCaseSeconds": 413.529205748,
+    "observedProcessedTokens": 1065761,
+    "observedFreshTokens": 278689,
+    "allAgentTotalTokens": null,
+    "limits": [
+      "Selected synthetic single trials, not general precision or external product equivalence",
+      "Authorization mutations reused in injection cohort",
+      "Case duration sum is not wall time due to parallel cohorts",
+      "Severity accuracy calibrated only for explicit authorization impact scenario"
+    ]
   }
 }

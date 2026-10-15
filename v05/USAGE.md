@@ -173,7 +173,7 @@ stderrのエラーと終了コード1は維持する。`status: blocked`は成�
 呼出し側は終了コードとstatusの両方を確認し、失敗した検証・Agent起動・観測usageを保存する。
 入力検査などController開始前の失敗では構造化診断がない場合もあり、欠測をゼロと扱わない。
 
-LinuxのProvider subprocessと隔離preflightは、既存bubblewrapのPID namespaceと`--die-with-parent`でControllerの寿命に拘束する。ControllerがSIGTERM/SIGKILLで終了した場合、別session化した子孫もnamespace終了で停止する。外側のwrapperは寿命管理であり、ProviderのHostアクセスを隔離したという意味ではない。Toolのfilesystem/network制限は従来のCodex profileが担当する。途中終了時のsnapshot・ログは残り得る。次の実行はGitの実状態から検証・独立レビューをやり直し、未完成ログを承認として使わない。
+LinuxのProvider subprocessと隔離preflightの寿命管理は、上記「Agentの寿命管理」の呼出しごとのsystemd user service・cgroupとController専有pipeを使用する。Toolのfilesystem/network隔離は別のCodex profileが担当する。途中終了時のsnapshot・ログは残り得る。次の実行はGitの実状態から検証・独立レビューをやり直し、未完成ログを承認として使わない。
 
 OwnerはContractの`verificationLimits`で検証の有限予算を指定できる。`timeoutMilliseconds`は既定25000・最大300000、`cpuSeconds`は既定15・最大300、`fileBytes`は通常既定1048576（browser profileは8388608）・最大64000000。指定する各値は正の安全整数で、未知key・null・無制限指定を拒否する。Agentの出力・source容量・stdout上限・cgroupのpids・通信権限は変更しない。CPUはprocess単位、fileBytesは生成する単一fileの上限で、合計disk消費を保証するものではない。
 
