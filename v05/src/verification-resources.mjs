@@ -32,9 +32,10 @@ function worker(requestPath){
  const timedOut=p.error?.code==='ETIMEDOUT';
  demand((!p.error&&Number.isInteger(p.status))||timedOut,`Verification execution failed: ${p.error?.code??'invalid-exit-status'}`);
  // Killing the namespace leader and reaping its descendants are not atomic.
- // Wait only for teardown after timeout, within the existing 5s service grace.
+ // Normal exit also races namespace teardown. Confirm actual emptiness within
+ // the existing service grace; a surviving descendant still rejects the result.
  let after=observe(request.unit,request.memoryBytes);
- if(timedOut){
+ if(after.processes.some(pid=>pid!==process.pid)){
   const deadline=performance.now()+1000,pause=new Int32Array(new SharedArrayBuffer(4));
   while(after.processes.some(pid=>pid!==process.pid)&&performance.now()<deadline){
    Atomics.wait(pause,0,0,20);after=observe(request.unit,request.memoryBytes);

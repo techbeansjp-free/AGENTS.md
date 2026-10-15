@@ -40,60 +40,6 @@
     ],
     "ownerDecision": "Linux-only release acceptance; other OS validation is deferred. Isolation remains mandatory."
   },
-  "packagedLinuxTrial": {
-    "implementationSourceHead": "38163df8ae56caf1797cfe034842eaebb75ce49b",
-    "packageSha256": "5812dedb38ab6465bc0064082676131d1d1c2cd4b73894daa2bea5ac9de80976",
-    "base": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
-    "model": "gpt-5.6-sol",
-    "status": "BLOCKED",
-    "endpoint": "Draft PR created; CI could not start because private account billing blocked execution",
-    "wallSecondsIncludingFailure": 62.132228376,
-    "setupIncluded": false,
-    "agentCalls": 2,
-    "agents": [
-      {
-        "role": "implementation",
-        "seconds": 16.670397226000002,
-        "usage": [
-          {
-            "input_tokens": 63673,
-            "cached_input_tokens": 54784,
-            "cache_write_input_tokens": 0,
-            "output_tokens": 747,
-            "reasoning_output_tokens": 194
-          }
-        ]
-      },
-      {
-        "role": "review",
-        "seconds": 23.212618843000005,
-        "usage": [
-          {
-            "input_tokens": 60872,
-            "cached_input_tokens": 42496,
-            "cache_write_input_tokens": 0,
-            "output_tokens": 979,
-            "reasoning_output_tokens": 533
-          }
-        ]
-      }
-    ],
-    "observedProcessedTokens": 126271,
-    "observedFreshTokens": 28991,
-    "allAgentTotalTokens": null,
-    "independentReview": "pass",
-    "localVerificationExits": [
-      0,
-      0
-    ],
-    "comparisonClaim": null,
-    "limitations": [
-      "Single run; not causal speed comparison",
-      "Setup excluded from wallSeconds",
-      "Provider-internal tokens not certified complete",
-      "Private dummy only; no merge/release"
-    ]
-  },
   "currentLocalLinuxValidation": {
     "node": {
       "pass": 199,
@@ -104,5 +50,125 @@
     },
     "scope": "Integration working tree including transient service lifecycle; Ubuntu 24.04 GitHub CI still pending",
     "lint": "pass"
+  },
+  "packagedLinuxTrials": [
+    {
+      "implementationSourceHead": "38163df8ae56caf1797cfe034842eaebb75ce49b",
+      "packageSha256": "5812dedb38ab6465bc0064082676131d1d1c2cd4b73894daa2bea5ac9de80976",
+      "base": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+      "model": "gpt-5.6-sol",
+      "status": "BLOCKED",
+      "endpoint": "Draft PR created; CI could not start because private account billing blocked execution",
+      "wallSecondsIncludingFailure": 62.132228376,
+      "setupIncluded": false,
+      "agentCalls": 2,
+      "agents": [
+        {
+          "role": "implementation",
+          "seconds": 16.670397226000002,
+          "usage": [
+            {
+              "input_tokens": 63673,
+              "cached_input_tokens": 54784,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 747,
+              "reasoning_output_tokens": 194
+            }
+          ]
+        },
+        {
+          "role": "review",
+          "seconds": 23.212618843000005,
+          "usage": [
+            {
+              "input_tokens": 60872,
+              "cached_input_tokens": 42496,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 979,
+              "reasoning_output_tokens": 533
+            }
+          ]
+        }
+      ],
+      "observedProcessedTokens": 126271,
+      "observedFreshTokens": 28991,
+      "allAgentTotalTokens": null,
+      "independentReview": "pass",
+      "localVerificationExits": [
+        0,
+        0
+      ],
+      "comparisonClaim": null,
+      "limitations": [
+        "Single run; not causal speed comparison",
+        "Setup excluded from wallSeconds",
+        "Provider-internal tokens not certified complete",
+        "Private dummy only; no merge/release"
+      ]
+    },
+    {
+      "implementationSourceHead": "a524cfca79ded42fae230d1bb79a37e32fe7ccda",
+      "packageSha256": "ff5639d362022d994a22b8f0461439a1e35b21e1b69d040390443e697671677a",
+      "base": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+      "model": "gpt-5.6-sol",
+      "status": "BLOCKED",
+      "endpoint": "Draft PR created; CI could not start because private account billing blocked execution",
+      "wallSecondsIncludingFailure": 77.84824311,
+      "setupIncluded": false,
+      "agentCalls": 2,
+      "agents": [
+        {
+          "role": "implementation",
+          "seconds": 25.370259372,
+          "usage": [
+            {
+              "input_tokens": 63236,
+              "cached_input_tokens": 50048,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 635,
+              "reasoning_output_tokens": 121
+            }
+          ]
+        },
+        {
+          "role": "review",
+          "seconds": 29.084606317000006,
+          "usage": [
+            {
+              "input_tokens": 76128,
+              "cached_input_tokens": 42240,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 1029,
+              "reasoning_output_tokens": 466
+            }
+          ]
+        }
+      ],
+      "observedProcessedTokens": 141028,
+      "observedFreshTokens": 48740,
+      "allAgentTotalTokens": null,
+      "independentReview": "pass",
+      "localVerificationExits": [
+        0,
+        0
+      ],
+      "comparisonClaim": null,
+      "limitations": [
+        "Single run; not causal speed comparison",
+        "Setup excluded from wallSeconds",
+        "Provider-internal tokens not certified complete",
+        "Private dummy only; no merge/release"
+      ]
+    }
+  ],
+  "ubuntu24Ci": {
+    "head": "a524cfca79ded42fae230d1bb79a37e32fe7ccda",
+    "run": 38796503216,
+    "pass": 196,
+    "fail": 3,
+    "skip": 0,
+    "failure": "Verification namespace descendant teardown observation raced normal exit; Agent lifecycle/network tests passed",
+    "correction": "Bounded actual cgroup reobservation also after normal exit; surviving descendants still reject",
+    "retest": "pending"
   }
 }

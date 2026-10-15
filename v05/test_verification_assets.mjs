@@ -143,3 +143,12 @@ test('owner memory budget is observed by kernel and OOM cannot become success',{
  for(const memoryBytes of [0,67108863,134217729,4294967297,Infinity])assert.throws(()=>new AssetController({...f,contract:{...f.contract,verificationResourceProfile:'browser-cgroup-v1',verificationLimits:{memoryBytes}},implementer:'worker'}).target(),/Invalid verification/);
  assert.throws(()=>new AssetController({...f,contract:{...f.contract,verificationLimits:{memoryBytes:134217728}},implementer:'worker'}).target(),/requires cgroup/);
 });
+
+
+test('normal exit waits for finite teardown but rejects a surviving descendant',{skip:!enabled||process.env.ASC_TEST_CGROUP!=='1'},async()=>{
+ const {runBoundedVerification}=await import('./src/verification-resources.mjs');
+ const invoke=seconds=>runBoundedVerification(['--','/bin/sh','-c',`sleep ${seconds} >/dev/null 2>&1 & exit 0`],5000);
+ const good=invoke('0.15');assert.equal(good.status,0);assert.equal(good.resourceBoundary.after.processes.length,1);assert.equal(good.resourceBoundary.cleanupConfirmed,true);
+ assert.throws(()=>invoke('30'),/Verification descendants remain/);
+ const retry=invoke('0.05');assert.equal(retry.status,0);assert.notEqual(retry.resourceBoundary.unit,good.resourceBoundary.unit);
+});
