@@ -1,3 +1,4 @@
+import {performance} from 'node:perf_hooks';
 import {createExecutionBudget} from './execution-budget.mjs';
 import {runUnitThread} from './unit-thread.mjs';
 import {importUnitCandidate,candidateMatchesContract} from './unit-candidate.mjs';

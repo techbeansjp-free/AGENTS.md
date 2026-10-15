@@ -1,3 +1,4 @@
+import {performance} from 'node:perf_hooks';
 /** Optional read-only decomposition. Suggestions never become execution authority. */
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Controller,digest,hash,safeName} from './controller.mjs';

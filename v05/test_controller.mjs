@@ -1,3 +1,4 @@
+import {setImmediate} from 'node:timers';
 import {test} from 'node:test';
 import {createVerificationGit} from './src/verification-git.mjs';
 import assert from 'node:assert/strict';

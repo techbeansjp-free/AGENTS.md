@@ -1,3 +1,4 @@
+import {setTimeout} from 'node:timers';
 import {generateKeyPairSync} from 'node:crypto';
 import {keyFingerprint} from './src/approval.mjs';
 import {executionHost} from './src/execution-host.mjs';

@@ -1,3 +1,5 @@
+import {performance} from 'node:perf_hooks';
+import {setTimeout} from 'node:timers';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

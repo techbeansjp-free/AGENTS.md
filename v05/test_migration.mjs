@@ -1,3 +1,4 @@
+import {setTimeout} from 'node:timers';
 import {Controller} from './src/controller.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';import {prepareMigration,rollbackMigration,createWorktree} from './src/migration.mjs';
 function fixture(t){

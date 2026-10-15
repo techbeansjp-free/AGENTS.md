@@ -1,3 +1,5 @@
+import {performance} from 'node:perf_hooks';
+import {clearTimeout,setTimeout} from 'node:timers';
 import {assertExecutionHost} from './execution-host.mjs';
 /** Experimental Linux host adapter. No permission fallback; no Python runtime. */
 import fs from 'node:fs';

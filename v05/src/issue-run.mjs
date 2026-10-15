@@ -1,3 +1,4 @@
+import {performance} from 'node:perf_hooks';
 /** Owner-enumerated Issues only. No discovery daemon, merge or imported completion receipts. */
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Controller} from './controller.mjs';

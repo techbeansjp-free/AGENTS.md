@@ -1,3 +1,4 @@
+import {setTimeout} from 'node:timers';
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';import {compileIssues,runIssues} from './src/issue-run.mjs';
 function fixture(t){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-issues-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const source=path.join(root,'source');fs.mkdirSync(source);

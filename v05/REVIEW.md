@@ -19,7 +19,7 @@ node scripts/pack-candidate.mjs /absolute/existing/output-directory
 
 Node 20以上。Linuxの隔離テストはbubblewrap等を必要とします。macOS/Windowsの構造テストで `ASC_TEST_ISOLATION=0` を使うことは隔離受入成功を意味しません。
 
-移植先でLinux隔離・cgroupを含むNode 195テストが成功しました（106.06秒、skip 0）。本体ESLintへの適合としてNode globalsを宣言し、未使用引数と空catchを整理しています。元hashと移植時変更後hashを分けて記録しています。
+移植先でLinux隔離・cgroupを含むNode 195テストが成功しました（106.06秒、skip 0）。本体ESLintへの適合としてNode標準機能を明示的にimportし、未使用引数と空catchを整理しています。元hashと移植時変更後hashを分けて記録しています。
 
 ## 未達
 

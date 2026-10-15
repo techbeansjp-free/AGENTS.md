@@ -1,3 +1,4 @@
+import {performance} from 'node:perf_hooks';
 import {importUnitCandidate} from './unit-candidate.mjs';
 import {SOURCE_TOTAL_BYTES} from './source-limits.mjs';
 import {reviewSchema,parseReview} from './review-result.mjs';

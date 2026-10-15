@@ -1,3 +1,4 @@
+import {performance} from 'node:perf_hooks';
 /** Restart in a new owner-selected clone. Old results select candidate bytes only. */
 import fs from 'node:fs';import path from 'node:path';
 import {createExecutionBudget} from './execution-budget.mjs';

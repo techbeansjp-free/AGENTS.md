@@ -1,3 +1,4 @@
+import {performance} from 'node:perf_hooks';
 /** Node evaluation engine. Host owns this object and all adapters; Agents never do. */
 import {createVerificationGit} from './verification-git.mjs';
 import {SOURCE_FILE_BYTES,SOURCE_TOTAL_BYTES,SOURCE_BATCH_BYTES} from './source-limits.mjs';

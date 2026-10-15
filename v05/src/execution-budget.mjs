@@ -1,3 +1,4 @@
+import {performance} from 'node:perf_hooks';
 /** Invocation-local admission limits, shared only with trusted unit controllers. */
 const now=()=>performance.timeOrigin+performance.now();
 export function createExecutionBudget(input={}){

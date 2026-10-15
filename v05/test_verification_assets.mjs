@@ -1,3 +1,4 @@
+import {setTimeout} from 'node:timers';
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';
 import {inspectAssets,AssetController} from './src/verification-assets.mjs';import {hash} from './src/controller.mjs';
 const enabled=process.platform==='linux'&&process.env.ASC_TEST_ISOLATION!=='0';

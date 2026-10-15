@@ -1,3 +1,4 @@
+import {setTimeout} from 'node:timers';
 /** Host-owned Draft-only adapter; candidate code never receives GitHub credentials. */
 import {execFileSync} from 'node:child_process';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));

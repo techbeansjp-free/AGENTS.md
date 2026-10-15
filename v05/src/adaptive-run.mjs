@@ -1,3 +1,4 @@
+import {performance} from 'node:perf_hooks';
 /** Explicit owner delegation, composed from the existing proposal and Goal runners. */
 import fs from 'node:fs';import path from 'node:path';
 import {Controller,digest,hash,safeName} from './controller.mjs';

@@ -1,3 +1,5 @@
+import {performance} from 'node:perf_hooks';
+import {setTimeout} from 'node:timers';
 import {parseReview} from './src/review-result.mjs';
 const finding=message=>({location:'code.txt',condition:message,evidence:message,impact:'Fixture contract violated',action:message,counterevidence:'Fixture content directly violates the stated contract',severity:'P2',verification:'static-analysis',blocking:true});
 /** Real Git/verification with explicit Agent/provider test doubles. */
