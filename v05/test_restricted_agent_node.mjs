@@ -65,7 +65,9 @@ test('real loopback test rejects unconfined command and accepts network namespac
  const {networkPreflight}=await import('./src/agent-network-preflight.mjs');
  const {runBoundedProcess}=await import('./src/restricted-agent.mjs');
  await assert.rejects(networkPreflight({executable:'/usr/bin/env',sandbox:[],env:{},run:runBoundedProcess}),/not established/);
- const result=await networkPreflight({executable:'/usr/bin/bwrap',sandbox:['--unshare-net','--ro-bind','/','/','--'],env:{},run:runBoundedProcess});
+ // The lifecycle runner already entered a user namespace and dropped capabilities.
+ // Explicitly create a nested user namespace before creating its network namespace.
+ const result=await networkPreflight({executable:'/usr/bin/bwrap',sandbox:['--unshare-user','--unshare-net','--ro-bind','/','/','--'],env:{},run:runBoundedProcess});
  assert.equal(result.negative.network,'denied');assert.equal(result.sandboxConnections,0);
 });
 

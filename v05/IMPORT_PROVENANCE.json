@@ -84,7 +84,7 @@
     "test_goal_run.mjs": "586d93bbae6183543976d54778d9420324dfc860c495794554a8113452d3e1a6",
     "test_issue_run.mjs": "d4a5fdb24580bf0c2cb8a1af17238b4b79252125a23be027250885afd4aada3f",
     "test_migration.mjs": "1b9cc65fbf2285fdccf5ccad8929a9c7a93f7ab8c4fa32d889b8d146492613cb",
-    "test_restricted_agent_node.mjs": "feac530a9e1fc519894da88a1f543a01b53ce95077d9df2d6896a08ed9fb5730",
+    "test_restricted_agent_node.mjs": "c5d66547d8ec535b773946ef3b9f3a29c1c42dace0e8a3aeb5832c032855df0c",
     "test_verification_assets.mjs": "49e375a3914b412fd8101c98f631c1697b8231591a2347061d7a6e2953851be9",
     "test_workflow.mjs": "43b9908d391571f1f1feddd5ed3bc629c1776777151ce8029541d7c38bc87368"
   }
