@@ -3,16 +3,16 @@
   "issue": 1579,
   "observed": {
     "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
-    "implementationHeadSha": "46ed0816a45031467a82254550b3da51a99bd413",
-    "diffDigest": "a37dd5dee996405587a9663fd4ba16f7607b1914a6cd987f7a7fcd77c9c82a64",
+    "implementationHeadSha": "03be3d803828fb7ef5cc8d73949464e79e5c375e",
+    "diffDigest": "dfdb7b6cb6efbb460d7b98d173c9b4d59b7db32c810c101d52f55a4902b6b237",
     "session": {
       "sessionId": "b7680e81927bd451d4a2363be3b26d5cc36a0aa6cb7bce79779edc08ad1b407d",
-      "latestRoundDigest": "5d4b04e107b651c5c066aaf4cc3eabb69ca296da87a99df4fd08a55ab3cf33e5",
+      "latestRoundDigest": "8b144fa1e1d4f43e34ee0df0431d62fc66450a23e5c315d6995e28523351d4cd",
       "status": "converged",
-      "countedRounds": 4
+      "countedRounds": 5
     },
     "impact": {
-      "digest": "0acc87f603cbf4b099b943858364fc125898ff749ba5011091f1f8ea2a0c40c5",
+      "digest": "8c0470e6ff8c9e6de37c92871772f8089b0f5c51e57d753433638ff4bd505e4c",
       "mode": "full"
     },
     "verification": [
@@ -23,10 +23,10 @@
         ],
         "scope": "full",
         "exitCode": 0,
-        "headSha": "46ed0816a45031467a82254550b3da51a99bd413",
-        "impactDigest": "0acc87f603cbf4b099b943858364fc125898ff749ba5011091f1f8ea2a0c40c5",
-        "finishedAt": "2026-10-15T23:07:34.556Z",
-        "recordDigest": "8314394daa365a6ba229b068ef7d12d8cd940b882b90f34b1a89f8495190f4f7"
+        "headSha": "03be3d803828fb7ef5cc8d73949464e79e5c375e",
+        "impactDigest": "8c0470e6ff8c9e6de37c92871772f8089b0f5c51e57d753433638ff4bd505e4c",
+        "finishedAt": "2026-10-15T23:41:18.528Z",
+        "recordDigest": "045ffd2a144edd072a42ce9c95b2977bc426801a492ebe0dbb221e69241fea8d"
       }
     ]
   },
@@ -48,5 +48,5 @@
     "independenceMode": "context-isolated",
     "reviewerModifiedCandidate": false
   },
-  "evidenceDigest": "c5ad2118fcc23e81c3ca36d92352d699a96fd225093d9c7df2260d8c8cb18ef7"
+  "evidenceDigest": "1e84c5b82c185a57430a31315b236c9680d8de0b5986c0a4d0f6557c452f0dbc"
 }
