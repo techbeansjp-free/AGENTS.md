@@ -48,7 +48,10 @@ export function runServiceProcess(executable,argv,{env,input,timeout}){
   p.stderr.on('data',data=>{if(settled)return;errBytes+=data.length;if(errBytes>1048576){finish(Error('Agent error output limit exceeded'));return;}stderr+=err.write(data);});
   p.once('error',()=>finish(Error('Agent lifecycle launch failed')));
   p.stdin.on('error',()=>finish(Error('Agent lifecycle request pipe failed')));
-  p.once('close',code=>finish(code===0?undefined:Error('Fresh Agent failed')));
+  p.once('close',(code,signal)=>{
+   const diagnostic=stderr.match(/^ASC_LIFECYCLE:[a-z-]+(?: code=\d+ signal=(?:[A-Z0-9]+|none))?$/m)?.[0]??'no-supervisor-diagnostic';
+   finish(code===0?undefined:Error(`Fresh Agent failed (exit=${code??'none'}, signal=${signal??'none'}, ${diagnostic})`));
+  });
   p.stdin.write(request+'\n');
  });
 }

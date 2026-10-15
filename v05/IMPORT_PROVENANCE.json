@@ -92,8 +92,8 @@
     "package.json": "e4772706115174abc3c517739df109ad14fd7472bfc68df67979da07fb98b81e"
   },
   "integrationAdditions": {
-    "src/agent-lifecycle.mjs": "bd043ce3b64bf2b844d9dc22fd66c6d9e5dd2ee7dde0e3ab6f738b1d017b0459",
-    "src/agent-lifecycle-supervisor.mjs": "55114da140fcc2e328ba1eb0b9ef47715ecd4f6af53e7d5b14bd8795bfdaa2ff",
-    "test_agent_lifecycle.mjs": "0c1bdf776e53a590bb33346abb680f8222a293687bd987cec7c9bc7f9ac46642"
+    "src/agent-lifecycle.mjs": "eb7b118c8d4903a658ee4d3c4a26fc5f56d757c996cba1d8a5963bea92c97db3",
+    "src/agent-lifecycle-supervisor.mjs": "c8c756c143f56879ad73e941143a93613bdcc90a56cc300c5a7a7f0ec121ac6f",
+    "test_agent_lifecycle.mjs": "a20257e0e011d201bdde315db015283fb1bd0f4822734256de8f8526a49a147a"
   }
 }

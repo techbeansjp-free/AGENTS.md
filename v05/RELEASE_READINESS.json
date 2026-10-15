@@ -170,5 +170,25 @@
     "failure": "Verification namespace descendant teardown observation raced normal exit; Agent lifecycle/network tests passed",
     "correction": "Bounded actual cgroup reobservation also after normal exit; surviving descendants still reject",
     "retest": "pending"
+  },
+  "ubuntu24CiRetest": {
+    "head": "9254745999e2548fa899e42148cc2acf44c69e5a",
+    "run": 38797448460,
+    "pass": 199,
+    "fail": 1,
+    "skip": 0,
+    "failure": "Empty stdin write races fast child exit: EPIPE masks valid exit status; reproduced locally",
+    "correction": "No input pipe when input is empty; nonempty prompt delivery errors remain fatal",
+    "focusedTests": {
+      "pass": 13,
+      "fail": 0,
+      "skip": 0
+    },
+    "stress": {
+      "fastCommands": 80,
+      "correctUnconfinedNetworkRejections": 40,
+      "retries": 0
+    },
+    "nextCi": "pending"
   }
 }

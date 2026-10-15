@@ -35,3 +35,19 @@ test('Controller SIGTERM and SIGKILL stop detached service descendants',{skip:!l
   }finally{controller.kill('SIGKILL');}
  }
 });
+
+test('lifecycle failure diagnostics are fixed labels and preserve provider exit status',{skip:!linux},async()=>{
+ const secret='private-request-diagnostic-sentinel';
+ await assert.rejects(runServiceProcess('/nonexistent-asc-provider',[secret],{env:{PRIVATE:secret},input:secret,timeout:5000}),error=>{
+  assert.match(error.message,/ASC_LIFECYCLE:provider-spawn/);assert(!error.message.includes(secret));assert(!error.stderr.includes(secret));return true;
+ });
+ await assert.rejects(runServiceProcess('/bin/sh',['-c','exit 42'],{env:{},input:'',timeout:5000}),error=>{
+  assert.match(error.message,/ASC_LIFECYCLE:provider-exit code=42 signal=none/);return true;
+ });
+});
+test('concurrent short-lived providers retain successful output and status',{skip:!linux},async()=>{
+ for(let round=0;round<3;round++)await Promise.all(Array.from({length:4},async()=>{
+  const result=await runServiceProcess('/bin/sh',['-c','printf complete'],{env:{},input:'',timeout:5000});
+  assert.equal(result.stdout,'complete');
+ }));
+});
