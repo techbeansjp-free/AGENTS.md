@@ -187,3 +187,5 @@ compile/buildせず、隔離コピー内に20万件の入力イベントを生�
 破損tarballの導入は実際のarchiveエラーで拒否され、既知の配布file内容・package.json・lockfileを保持した。後続のconsumerTreeFailureTrialでは、破損導入直後のconsumer全56項目について追加・削除、内容、type、mode、2つのbin symlinkの参照先が不変と確認した。timestamp/inode、consumer外のnpm cache/log、任意の中断点の原子性は対象外。
 `NODE_PACKAGE_UPGRADE_EVIDENCE.json.canonicalNameTrial`に記録した。これはLinux上の
 非公開v0.5候補間の往復であり、v0.4の意味的移行・registry公開・他OSの保証ではない。
+
+正式version番号での候補確認は`node scripts/pack-candidate.mjs <出力directory> --version=0.5.0`で行える。省略時は評価版のversionを維持する。番号指定は公開承認ではなく、生成物は引き続きprivate・unapproved-candidateである。source manifestと変換後manifestのhashを両方保存し、既存インストールを変更せず別consumerへ導入する。registry公開・tag・releaseは実行しない。

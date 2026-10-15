@@ -205,8 +205,8 @@
     "cohorts": 5,
     "cases": 21,
     "oracleLabelConsistency": "PASS",
-    "liveReviewOnCurrentHead": "NOT VERIFIED",
-    "externalComparator": "NOT VERIFIED",
+    "liveReviewOnCurrentHead": "See absoluteReviewEvaluation: 17 trials on aa64d9e3; not 21 independent mutations",
+    "externalComparator": "Deferred by explicit owner acceptance amendment",
     "scope": "Synthetic fixtures only; impact/injection cohorts reuse authorization mutations, not 21 independent defect classes",
     "defaultRuntimeCost": "none; evaluator-only, excluded from product package"
   },
@@ -216,14 +216,15 @@
     "paidActions": "Not authorized"
   },
   "verifiedLinuxIntegrationLatest": {
-    "implementationHead": "aa64d9e35eb79160c3566bfa71caac52c0a6c938",
-    "ciRun": 38799568694,
+    "implementationHead": "b4182ca607bcd304428b3e73fe62a2ea5e31658c",
+    "evidenceHead": "cde93f4c34da799360df80e9b24d545617a2ab94",
+    "ciRun": 38816132731,
     "pass": 207,
     "fail": 0,
     "skip": 0,
     "cgroupEnabled": true,
-    "ciSeconds": 104.688185818,
-    "packageSha256": "a82b1927cf1d2970774c6d1a32d76e62850eadd6b9adf2ade449bccf1a86aa3d"
+    "ciSeconds": 100.651540544,
+    "packageSha256": "578361bd833344cc46ca8a6b854d6953ae7fcd311a0f2f7c3e3e896218450e9b"
   },
   "publicSyntheticTrial": {
     "sourceHead": "aa64d9e35eb79160c3566bfa71caac52c0a6c938",
@@ -272,5 +273,82 @@
       "Case duration sum is not wall time due to parallel cohorts",
       "Severity accuracy calibrated only for explicit authorization impact scenario"
     ]
+  },
+  "publicSyntheticGoalTrial": {
+    "sourceHead": "b4182ca607bcd304428b3e73fe62a2ea5e31658c",
+    "packageSha256": "578361bd833344cc46ca8a6b854d6953ae7fcd311a0f2f7c3e3e896218450e9b",
+    "base": "beacdb5379ff9db3c8f33019d3dbe4fa9f1a7f28",
+    "repository": "adachi-tatsuru/asc-public-synthetic-eval-20261016",
+    "issue": 3,
+    "branch": "test/goal-candidate-1792102597565",
+    "baseBranch": "test/goal-base-1792102597565",
+    "exit": 0,
+    "error": null,
+    "wallSeconds": 185.672657521,
+    "setupIncluded": false,
+    "comparisonClaim": null,
+    "status": "draft-ci-passed",
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/4",
+    "ciRun": 38816320745,
+    "ciTests": 19,
+    "agentCalls": 7,
+    "distinctContexts": 7,
+    "observedProcessedTokens": 513575,
+    "observedCacheReadTokens": 422400,
+    "observedFreshTokens": 91175,
+    "allAgentTotalTokens": null,
+    "limits": [
+      "synthetic pure Python modules, not deployed services or React/DB",
+      "setup excluded",
+      "single run, no comparative speed claim",
+      "provider internal usage not certified complete"
+    ]
+  },
+  "publicSyntheticGoalRecovery": {
+    "bounded": {
+      "exit": 1,
+      "error": null,
+      "seconds": 41.243550248,
+      "status": "blocked",
+      "agentCalls": 3,
+      "observedProcessedTokens": 181445,
+      "observedFreshTokens": 31045,
+      "allAgentTotalTokens": null
+    },
+    "resumed": {
+      "exit": 0,
+      "error": null,
+      "seconds": 114.150327857,
+      "status": "draft-ci-passed",
+      "agentCalls": 5,
+      "observedProcessedTokens": 322841,
+      "observedFreshTokens": 63257,
+      "allAgentTotalTokens": null
+    },
+    "sourceHead": "b4182ca607bcd304428b3e73fe62a2ea5e31658c",
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/5",
+    "sourcePreserved": true,
+    "totalAttemptSeconds": 155.393878105,
+    "limits": [
+      "explicit admission budget interruption, not arbitrary crash",
+      "owner-supplied plan and restart budget, not autonomous replanning",
+      "setup excluded; sum of measured attempts, not calendar total"
+    ]
+  },
+  "canonicalFinalNumberCandidate": {
+    "version": "0.5.0",
+    "private": true,
+    "published": false,
+    "offlineInstallTests": 4,
+    "lint": "pass",
+    "independentReview": "no confirmed findings",
+    "linuxRegression": {
+      "pass": 209,
+      "fail": 0,
+      "skip": 0,
+      "seconds": 116.352624549,
+      "cgroupEnabled": true
+    },
+    "scope": "local working tree; not a release approval or GitHub CI result"
   }
 }

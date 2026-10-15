@@ -43,11 +43,11 @@ npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/ag
 - テスト・規約・文書はプロジェクトの契約に応じて適用します。全変更に専用DDD層、Gherkin、設計書、ADRを生成させません。仕様変更に必要な文書更新はレビュー対象です。
 - 再開時に旧Evidenceを承認として読み戻しません。候補の内容を保持し、新しい条件で検証・レビューします。再開は無料の処理ではなく、再検証コストが発生します。
 
-実Agentと検証の隔離は現在Linuxで評価しています。Git、GitHub CLI、host固定のCodex CLI、bubblewrap、prlimit等が必要です。資源制限を追加する検証profileにはcgroup v2/systemd環境が必要です。対応条件の詳細は[実行手順](USAGE.md)に従ってください。OS名だけで安全性を認定せず、実行時preflightを行います。WSL2・macOS等のAgent全体の隔離は別途受入中で、未成立の環境では停止します。
+実Agentと検証の隔離は現在Linuxで評価しています。Git、GitHub CLI、host固定のCodex CLI、bubblewrap、prlimit等が必要です。Agentの実行寿命管理にもsystemd user serviceとcgroup v2環境が必要です。追加の資源制限profileの有無とは別の実行条件です。対応条件の詳細は[実行手順](USAGE.md)に従ってください。OS名だけで安全性を認定せず、実行時preflightを行います。WSL2・macOS等のAgent全体の隔離は別途受入中で、未成立の環境では停止します。
 
 ## 未完了の受入
 
-同条件の性能比較、広範な移行と復旧、複雑な開発の受入、比較製品に対するレビュー品質評価、Linux実行環境の隔離、最終GitHub CIは未完了です。小規模fixtureの完走時間やテスト件数を、すべての利用条件への保証として扱いません。現在の制約・Evidence参照は[受入状態](RELEASE_READINESS.json)を正本とします。
+同条件の性能比較、広範な移行と復旧、複雑な開発の受入、正式配布への切替は未完了です。Linux隔離のCIと合成fixtureの実走は確認済みですが、全利用環境の保証ではありません。外部比較製品との評価はowner判断で延期し、既知欠陥と正常対照による絶対評価を実施しています。小規模fixtureの完走時間やテスト件数を、すべての利用条件への保証として扱いません。現在の制約・Evidence参照は[受入状態](RELEASE_READINESS.json)を正本とします。
 
 ## ソースcheckoutでの開発
 

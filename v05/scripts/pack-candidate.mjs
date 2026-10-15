@@ -1,8 +1,9 @@
 /** Build an unpublished canonical-name candidate from npm's explicit file inventory. */
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {execFileSync} from 'node:child_process';import {createHash} from 'node:crypto';
-const output=process.argv[2];
-if(process.argv.length!==3||!path.isAbsolute(output))throw Error('Usage: node scripts/pack-candidate.mjs <absolute-existing-output-directory>');
+const output=process.argv[2], versionOption=process.argv[3];
+if(![3,4].includes(process.argv.length)||!path.isAbsolute(output??'')||(versionOption!==undefined&&!/^--version=0\.5\.(?:0|[1-9][0-9]*)$/.test(versionOption)))throw Error('Usage: node scripts/pack-candidate.mjs <absolute-existing-output-directory> [--version=0.5.N]');
+const candidateVersion=versionOption?.slice('--version='.length);
 const destination=fs.realpathSync(output),root=process.cwd(),temporary=fs.mkdtempSync(path.join(os.tmpdir(),'asc-release-pack-'));
 const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),process.platform==='win32'?'node_modules/npm/bin/npm-cli.js':'../lib/node_modules/npm/bin/npm-cli.js');
 const run=(args,cwd)=>execFileSync(process.execPath,[npm,...args],{cwd,encoding:'utf8',timeout:120000,maxBuffer:8e6,stdio:['ignore','pipe','pipe']});
@@ -19,7 +20,8 @@ try{
  const sourceManifestSha256=sourceFiles['package.json'];delete sourceFiles['package.json'];
  manifest.name='agent-skill-chain';manifest.private=true;manifest.bin={'agent-skill-chain':'bin/asc-v05.mjs','asc-v05':'bin/asc-v05.mjs'};
  // Distribution is a candidate, never evidence of release approval.
- if(!/^0\.5\.\d+-[a-z0-9.-]+$/.test(manifest.version))throw Error('Explicit v0.5 prerelease version required');
+ if(!/^0\.5\.\d+-[a-z0-9.-]+$/.test(manifest.version))throw Error('Explicit v0.5 prerelease source required');
+ if(candidateVersion)manifest.version=candidateVersion;
  delete manifest.scripts;
  manifest.files=[...Object.keys(sourceFiles).filter(p=>p!=='package.json'),'release-identity.json'];
  fs.writeFileSync(manifestPath,JSON.stringify(manifest,null,2)+'\n');

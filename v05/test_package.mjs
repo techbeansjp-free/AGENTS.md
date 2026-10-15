@@ -54,9 +54,10 @@ test('packed Node distribution runs without source checkout, Python or dependenc
 
 });
 
-test('canonical candidate installs both CLI names without enabling legacy commands or publication',t=>{
+for(const version of [null,'0.5.0'])test(`canonical ${version??'alpha'} candidate installs both CLI names without enabling legacy commands or publication`,t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-canonical-package-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
- const output=JSON.parse(execFileSync(process.execPath,['scripts/pack-candidate.mjs',root],{encoding:'utf8'}));
+ const packArgs=['scripts/pack-candidate.mjs',root,...(version?[`--version=${version}`]:[])];
+ const output=JSON.parse(execFileSync(process.execPath,packArgs,{encoding:'utf8'}));
  assert.equal(output.name,'agent-skill-chain');assert.equal(output.publishAuthorized,false);
  const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),process.platform==='win32'?'node_modules/npm/bin/npm-cli.js':'../lib/node_modules/npm/bin/npm-cli.js');
  const consumer=path.join(root,'consumer');fs.mkdirSync(consumer);
@@ -65,7 +66,7 @@ test('canonical candidate installs both CLI names without enabling legacy comman
  const skillRoot=path.join(installed,'skills/asc'),skill=fs.readFileSync(path.join(skillRoot,'SKILL.md'),'utf8');
  for(const match of skill.matchAll(/\]\(([^)]+)\)/g))assert(fs.existsSync(path.resolve(skillRoot,match[1])),match[1]);
  assert.equal(path.resolve(skillRoot,'../../bin/asc-v05.mjs'),path.join(installed,'bin/asc-v05.mjs'));
- assert.equal(pkg.private,true);assert.deepEqual(Object.keys(pkg.bin),['agent-skill-chain','asc-v05']);
+ assert.equal(pkg.version,version??'0.5.0-alpha.0');assert.equal(pkg.private,true);assert.deepEqual(Object.keys(pkg.bin),['agent-skill-chain','asc-v05']);
  for(const [name,entry] of Object.entries(pkg.bin)){
   const link=path.join(consumer,'node_modules/.bin',name);assert(fs.existsSync(link+(process.platform==='win32'?'.cmd':'')));
   const capability=JSON.parse(process.platform==='win32'?execFileSync(process.execPath,[path.join(installed,entry),'capabilities'],{encoding:'utf8'}):execFileSync(link,['capabilities'],{encoding:'utf8'}));assert.equal(capability.releaseReady,false);assert.equal(capability.legacyFallback,false);
@@ -76,5 +77,12 @@ test('canonical candidate installs both CLI names without enabling legacy comman
  assert.equal(hash(fs.readFileSync(path.join(installed,'package.json'))),identity.distributionManifestSha256);
  assert.equal(identity.schema,'asc-candidate-identity/v2');assert.equal(identity.sourceManifestSha256,hash(fs.readFileSync('package.json')));assert.equal(Object.hasOwn(identity.sourceFiles,'package.json'),false);
  for(const [name,digest] of Object.entries(identity.sourceFiles))assert.equal(hash(fs.readFileSync(path.join(installed,name))),digest,name);
- assert.throws(()=>execFileSync(process.execPath,['scripts/pack-candidate.mjs',root],{stdio:'pipe'}),/Command failed/);
+ assert.throws(()=>execFileSync(process.execPath,packArgs,{stdio:'pipe'}),/Command failed/);
+});
+
+test('canonical version override rejects invalid or out-of-line versions before packaging',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-invalid-version-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ for(const version of ['../escape','0.4.9','0.5.01','0.6.0','0.5.0 --publish']){
+  const result=spawnSync(process.execPath,['scripts/pack-candidate.mjs',root,`--version=${version}`],{encoding:'utf8'});assert.equal(result.status,1);assert.match(result.stderr,/Usage:/);assert.deepEqual(fs.readdirSync(root),[]);
+ }
 });
