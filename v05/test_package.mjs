@@ -17,6 +17,9 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  execFileSync(process.execPath,[npm,'install','--prefix',install,'--ignore-scripts','--no-audit','--no-fund','--offline',path.join(root,tarballs[0].filename)],{stdio:'pipe'});
  const packageRoot=path.join(install,'node_modules/asc-v05-evaluation');
  const cli=path.join(packageRoot,'bin/asc-v05.mjs');
+ fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({version:'99.0.0'}));
+ assert.equal(execFileSync(process.execPath,[cli,'--version'],{cwd:root,encoding:'utf8'}).trim(),'0.5.0-alpha.0');
+ const extraVersion=spawnSync(process.execPath,[cli,'--version','ignored'],{cwd:root,encoding:'utf8'});assert.equal(extraVersion.status,1);
  const result=JSON.parse(execFileSync(process.execPath,[cli,'capabilities'],{cwd:root,encoding:'utf8'}));
  assert(result.commands.includes('review'));assert.equal(result.releaseReady,false);assert.equal(result.legacyFallback,false);
  assert.equal(fs.existsSync(path.join(packageRoot,'harness.py')),false);
@@ -70,6 +73,7 @@ for(const version of [null,'0.5.0'])test(`canonical ${version??'alpha'} candidat
  for(const [name,entry] of Object.entries(pkg.bin)){
   const link=path.join(consumer,'node_modules/.bin',name);assert(fs.existsSync(link+(process.platform==='win32'?'.cmd':'')));
   const capability=JSON.parse(process.platform==='win32'?execFileSync(process.execPath,[path.join(installed,entry),'capabilities'],{encoding:'utf8'}):execFileSync(link,['capabilities'],{encoding:'utf8'}));assert.equal(capability.releaseReady,false);assert.equal(capability.legacyFallback,false);
+  const reported=process.platform==='win32'?execFileSync(process.execPath,[path.join(installed,entry),'--version'],{cwd:root,encoding:'utf8'}):execFileSync(link,['--version'],{cwd:root,encoding:'utf8'});assert.equal(reported.trim(),pkg.version);
   const legacy=spawnSync(process.execPath,[path.join(installed,entry),'workflow','advance'],{encoding:'utf8'});assert.equal(legacy.status,1);assert.match(legacy.stderr,/Usage:/);
  }
  const identity=JSON.parse(fs.readFileSync(path.join(installed,'release-identity.json')));assert.equal(identity.status,'unapproved-candidate');assert.equal(identity.published,false);

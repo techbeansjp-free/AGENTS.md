@@ -17,7 +17,11 @@ import path from 'node:path';
 import {verifyApproval} from '../src/approval.mjs';
 try {
   const [command,...args]=process.argv.slice(2);
-  if(command==='worktree-create'&&args.length===5){
+  if(command==='--version'&&args.length===0){
+    const manifest=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));
+    if(typeof manifest.version!=='string'||!/^0\.5\.\d+(?:-[a-z0-9.-]+)?$/.test(manifest.version))throw Error('Invalid installed package version');
+    console.log(manifest.version);
+  } else if(command==='worktree-create'&&args.length===5){
     console.log(JSON.stringify(createWorktree(args[0],{issue:Number(args[1]),type:args[2],slug:args[3],base:args[4]}),null,2));
   } else if(command==='goal-plan' && args.length===1){
     console.log(JSON.stringify(compileGoal(JSON.parse(fs.readFileSync(args[0]))),null,2));
@@ -78,7 +82,7 @@ try {
       commands:['worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
       execution:'linux-evaluation-runner',host:executionHost(),legacyFallback:false}));
   } else {
-    throw Error('Usage: asc-v05 worktree-create <root> <issue> <type> <slug> <base> | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run <external-owner-request.json> | review <external-owner-request.json> | restart-goal <external-owner-request.json> | run-adaptive <external-owner-request.json> | goal-propose <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal <external-owner-request.json> | run-issues <external-owner-issue-request.json> | capabilities');
+    throw Error('Usage: asc-v05 --version | worktree-create <root> <issue> <type> <slug> <base> | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run <external-owner-request.json> | review <external-owner-request.json> | restart-goal <external-owner-request.json> | run-adaptive <external-owner-request.json> | goal-propose <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal <external-owner-request.json> | run-issues <external-owner-issue-request.json> | capabilities');
   }
 } catch (e) {
   // Preserve existing controller observations without turning a failed run into success.

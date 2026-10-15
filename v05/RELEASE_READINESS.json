@@ -24,10 +24,10 @@
     "causalImprovementProven": false
   },
   "remaining": [
-    "Complete formal current-HEAD review Evidence and audit CI",
-    "Switch canonical v0.5 packaging/installation after integration review",
-    "Revalidate final distribution when runtime changes",
-    "Final matched performance acceptance; public synthetic observation is not matched old ASC comparison"
+    "Canonical release activation and documented legacy migration boundaries",
+    "Final matched performance acceptance; public synthetic observations are not matched old ASC comparison",
+    "Current changes require independent review and CI; retain previous evidence with its exact HEAD",
+    "Complex acceptance must be supported by its actual fixture and runtime, not inferred from tiny text Issues"
   ],
   "evidenceNote": "Historical local measurements are not evidence that this integration branch CI passed. See REVIEW.md.",
   "releaseTarget": {
@@ -216,15 +216,24 @@
     "paidActions": "Not authorized"
   },
   "verifiedLinuxIntegrationLatest": {
-    "implementationHead": "b4182ca607bcd304428b3e73fe62a2ea5e31658c",
-    "evidenceHead": "cde93f4c34da799360df80e9b24d545617a2ab94",
-    "ciRun": 38816132731,
-    "pass": 207,
-    "fail": 0,
-    "skip": 0,
-    "cgroupEnabled": true,
-    "ciSeconds": 100.651540544,
-    "packageSha256": "578361bd833344cc46ca8a6b854d6953ae7fcd311a0f2f7c3e3e896218450e9b"
+    "head": "1f64d9060d456a0828ccc77c5205f416a0c98ea9",
+    "implementationHead": "b0d3b2e67195e415eca56382a0b909b48f4973e5",
+    "rootQualityRun": 38818925715,
+    "linuxRun": 38818925759,
+    "conclusion": "success",
+    "linuxTests": {
+      "pass": 209,
+      "fail": 0,
+      "skip": 0,
+      "seconds": 106.43851596
+    },
+    "trustedFull": {
+      "pass": 2730,
+      "skip": 17,
+      "fail": 0
+    },
+    "audit": "passed",
+    "scope": "Prior reviewed implementation; later changes need their own verification"
   },
   "publicSyntheticTrial": {
     "sourceHead": "aa64d9e35eb79160c3566bfa71caac52c0a6c938",
@@ -350,5 +359,75 @@
       "cgroupEnabled": true
     },
     "scope": "local working tree; not a release approval or GitHub CI result"
+  },
+  "publicSyntheticFinalCandidateTrial": {
+    "implementationHead": "b0d3b2e67195e415eca56382a0b909b48f4973e5",
+    "packageSha256": "0978f3515ac9ab79f39d4cef2ba92de9dbe073a8a46de8ddc60aa3a25493d7fc",
+    "status": "draft-ci-passed",
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/6",
+    "ciRun": 38819211901,
+    "wallSeconds": 56.716004347,
+    "agentCalls": 2,
+    "observedProcessedTokens": 121672,
+    "observedFreshTokens": 17352,
+    "allAgentTotalTokens": null,
+    "limits": [
+      "Setup excluded",
+      "Single same-fixture repetition; not causal or v0.4 comparison",
+      "Independent adjudication verified diff, contexts and actual CI"
+    ]
+  },
+  "publicSyntheticIssueRecovery": {
+    "sourceHead": "b0d3b2e67195e415eca56382a0b909b48f4973e5",
+    "packageSha256": "0978f3515ac9ab79f39d4cef2ba92de9dbe073a8a46de8ddc60aa3a25493d7fc",
+    "status": "draft-ci-passed",
+    "wallSeconds": 145.636971534,
+    "setupIncluded": false,
+    "firstSeconds": 58.528773749,
+    "secondSeconds": 85.53753210799998,
+    "agentCalls": 8,
+    "observedProcessedTokens": 417353,
+    "observedFreshTokens": 91593,
+    "allAgentTotalTokens": null,
+    "prs": [
+      "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/10",
+      "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/11",
+      "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/12"
+    ],
+    "baseUpdate": "explicit owner cherry-pick and new base branch; no merge",
+    "initialDependentBlocked": true,
+    "initialDependentAgentCalls": 0,
+    "independentHeadsPreserved": true,
+    "limitations": [
+      "Synthetic text Issues, not complex services",
+      "Explicit owner integration and base update; no autonomous merge",
+      "Each invocation has a separate budget",
+      "Provider-internal usage unknown; not matched performance comparison"
+    ],
+    "preparationFailures": [
+      "missing HTTPS credential helper",
+      "workflow scope unavailable; used existing workflow",
+      "request missing Issue body note",
+      "request trailing newline dropped by driver"
+    ],
+    "preparationTimeIncluded": false,
+    "independentAdjudication": "Confirmed actual diff, contexts, tokens, CI oracle and sibling HEAD preservation"
+  },
+  "canonicalMigrationTrial": {
+    "implementationHead": "b0d3b2e67195e415eca56382a0b909b48f4973e5",
+    "packageSha256": "0978f3515ac9ab79f39d4cef2ba92de9dbe073a8a46de8ddc60aa3a25493d7fc",
+    "ownerConfigurationStaging": "passed with fresh independent review",
+    "emptyCacheOfflineInstall": "passed",
+    "ordinaryDevelopment": "reviewed-candidate; exact app and formatting oracle passed",
+    "configurationAndDevelopmentSeconds": 115.002501956,
+    "rollback": "Repeated selection rollback preserves legacy, staged candidate, developed clone and dirty sibling including nonignored untracked files",
+    "legacyApprovalRestored": false,
+    "limits": [
+      "Single synthetic local migration; no remote PR/CI in this migration trial",
+      "Explicit owner configuration; not automatic semantic policy translation",
+      "Selection rollback, not production activation reversal",
+      "Ignored files and original untracked dependency tree not comprehensively snapshotted",
+      "115 seconds excludes earlier staging and installation"
+    ]
   }
 }

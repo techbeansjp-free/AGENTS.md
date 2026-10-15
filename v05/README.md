@@ -10,8 +10,11 @@ Node.js 20以上を使用します。承認された候補tarballを、開発対
 
 ```sh
 npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/agent-skill-chain-0.5.0-alpha.0.tgz
+/absolute/asc-tools/node_modules/.bin/agent-skill-chain --version
 /absolute/asc-tools/node_modules/.bin/agent-skill-chain capabilities
 ```
+
+`--version`は現在の作業projectではなく、実行した配布物自身のversionを表示します。version番号は正式公開やリリース受入の証明ではありません。
 
 正式名の候補には`agent-skill-chain`と`asc-v05`の両入口があります。評価用`asc-v05-evaluation`パッケージには`asc-v05`入口があります。同じv0.5 CLIの操作に使えますが、v0.4の`workflow advance`などのコマンドは引き継ぎません。未対応コマンドで旧版へfallbackしません。候補の生成・非互換・rollbackは[移行手順](MIGRATION_PLAN.md)を参照してください。
 
