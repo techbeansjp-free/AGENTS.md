@@ -24,6 +24,6 @@
     "skills/"
   ],
   "scripts": {
-    "test": "node --test test_approval.mjs test_migration_inspect.mjs test_package.mjs test_controller.mjs test_restricted_agent_node.mjs test_agent_lifecycle.mjs test_github_node.mjs test_snapshot.mjs test_migration.mjs test_candidate.mjs test_workflow.mjs test_verification_assets.mjs test_report_workflow.mjs test_goal_plan.mjs test_goal_propose.mjs test_trial_oracle.mjs test_goal_run.mjs test_unit_thread.mjs test_issue_run.mjs"
+    "test": "node --test test_approval.mjs test_migration_inspect.mjs test_package.mjs test_controller.mjs test_restricted_agent_node.mjs test_agent_lifecycle.mjs test_github_node.mjs test_snapshot.mjs test_migration.mjs test_candidate.mjs test_workflow.mjs test_verification_assets.mjs test_report_workflow.mjs test_goal_plan.mjs test_goal_propose.mjs test_trial_oracle.mjs test_goal_run.mjs test_unit_thread.mjs test_issue_run.mjs test_review_corpus.mjs"
   }
 }

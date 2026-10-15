@@ -190,5 +190,25 @@
       "retries": 0
     },
     "nextCi": "pending"
+  },
+  "verifiedLinuxIntegration": {
+    "implementationHead": "42c5c8faf6407361dce4691a715750f8fd3b6a21",
+    "ciRun": 38798461118,
+    "pass": 202,
+    "fail": 0,
+    "skip": 0,
+    "cgroupEnabled": true,
+    "ciSeconds": 99.266997716,
+    "localSeconds": 104.797684413,
+    "packageSha256": "d39a021b1db04e705a5d99d058be809dd18716a6d06d349d5f06f60b65fe107d"
+  },
+  "reviewCorpusAcceptance": {
+    "cohorts": 5,
+    "cases": 21,
+    "oracleLabelConsistency": "PASS",
+    "liveReviewOnCurrentHead": "NOT VERIFIED",
+    "externalComparator": "NOT VERIFIED",
+    "scope": "Synthetic fixtures only; impact/injection cohorts reuse authorization mutations, not 21 independent defect classes",
+    "defaultRuntimeCost": "none; evaluator-only, excluded from product package"
   }
 }

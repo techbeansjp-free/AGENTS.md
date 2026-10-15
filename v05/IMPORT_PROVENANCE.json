@@ -89,11 +89,21 @@
     "test_workflow.mjs": "43b9908d391571f1f1feddd5ed3bc629c1776777151ce8029541d7c38bc87368",
     "README.md": "403ab4579b16698bcb7d604b3378f5e0e7c67715c0ac8c531be130359c616ace",
     "USAGE.md": "29c256f5805e78bc40e455d05c92f20005027d3ccaf724ebb45a061563422fdd",
-    "package.json": "e4772706115174abc3c517739df109ad14fd7472bfc68df67979da07fb98b81e"
+    "package.json": "be57dea383943f61d7dbddc5fe269261a773e4534799b457bd846b1d79684458"
   },
   "integrationAdditions": {
     "src/agent-lifecycle.mjs": "eb7b118c8d4903a658ee4d3c4a26fc5f56d757c996cba1d8a5963bea92c97db3",
     "src/agent-lifecycle-supervisor.mjs": "c8c756c143f56879ad73e941143a93613bdcc90a56cc300c5a7a7f0ec121ac6f",
-    "test_agent_lifecycle.mjs": "a20257e0e011d201bdde315db015283fb1bd0f4822734256de8f8526a49a147a"
+    "test_agent_lifecycle.mjs": "a20257e0e011d201bdde315db015283fb1bd0f4822734256de8f8526a49a147a",
+    "test_review_corpus.mjs": "79064a2c07de838db037b4380a2d98f2e7e12f79f92d4c644f1cb47b6662ee07"
+  },
+  "evaluationImports": {
+    "source": "existing architecture-lab evaluation fixtures; not product runtime",
+    "files": {
+      "review-corpus.mjs": "1d087f27ba777f453396f34294b8f6281271bdd8ff9d24679f93a84d8552c08e",
+      "authorization-corpus.mjs": "adbef7216387b8e59a009111671403b195e9243cef9311743e8e0a1b5cc7ee5a",
+      "review-injection-corpus.mjs": "aa426b4f7646c48fab5e26598b3282ec08c769b10d0dfd2df20aff7558ad2e7b",
+      "persistence-corpus.mjs": "90d09ae3854359ff465388240bdd35c61f58668d600043cfa48a83eb33892bb4"
+    }
   }
 }
