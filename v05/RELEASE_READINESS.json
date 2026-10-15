@@ -429,5 +429,24 @@
       "Ignored files and original untracked dependency tree not comprehensively snapshotted",
       "115 seconds excludes earlier staging and installation"
     ]
+  },
+  "currentComplexScreenTrial": {
+    "implementation": "46ed0816a45031467a82254550b3da51a99bd413",
+    "artifactSha256": "c977b375844d285843c9f338a11d37f5ffcc563daa1e3ce99c79738f2e0420fc",
+    "status": "FAIL",
+    "wallSeconds": 756.70787752,
+    "declaredCalls": 7,
+    "observedProcessedTokens": 1461810,
+    "observedFreshTokens": 288690,
+    "allAgentTotalTokens": null,
+    "deliveryAttempted": false,
+    "failure": "Reload race reported, repair violated existing no-browser-storage rule, next repair reintroduced reload race; stopped at repair limit",
+    "proposedCorrection": "Reuse invocation-local failed review assessments as non-authoritative repair and review context; live effect not yet verified",
+    "limitations": [
+      "Synthetic browser/API/SQLite journey only",
+      "Initial run overlapped local full verification",
+      "Not a matched performance comparison",
+      "Local raw evidence is not published"
+    ]
   }
 }

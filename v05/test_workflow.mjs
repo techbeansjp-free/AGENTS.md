@@ -256,3 +256,48 @@ fs.appendFileSync(${JSON.stringify(audit)},'signed\\n');console.log(JSON.stringi
  let contexts=0;const result=await runWorkflow(f.request,{provider:f.provider,agent:async({workspace,writable})=>{if(writable)fs.writeFileSync(path.join(workspace,'code.txt'),'after\n');return {context:'expiry-recovery-'+(++contexts),usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};}});
  t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert.equal(result.status,'draft-ci-passed');assert.equal(contexts,2);assert.equal(fs.readFileSync(audit,'utf8'),'signed\nsigned\n');
 });
+
+test('successive repairs retain earlier review claims without making them approval',{skip:!enabled},async t=>{
+ const f=fixture(t);f.request.maxRepairs=2;let workers=0,reviews=0;
+ const agent=async({workspace,writable,prompt})=>{
+  const input=writable?JSON.parse(prompt):JSON.parse(fs.readFileSync(path.join(workspace,'.asc-review.json')));
+  const expected=writable?workers:reviews;
+  if(expected===0){assert.equal(input.priorReviewsRef,undefined);assert.equal(fs.existsSync(path.join(workspace,'.asc-prior-reviews.json')),false);}
+  else{
+   assert.equal(input.priorReviewsRef,'.asc-prior-reviews.json');
+   const history=JSON.parse(fs.readFileSync(path.join(workspace,input.priorReviewsRef)));
+   assert.match(history.authority,/not approval/);assert.equal(history.assessments.length,expected);
+   assert.equal(history.assessments[0].findings[0].condition,'Preserve newline fix');
+   assert(history.assessments.every(a=>a.target.head&&a.target.contract));
+   if(expected===2)assert.equal(history.assessments[1].findings[0].condition,'Preserve design boundary');
+  }
+  if(writable){workers++;fs.writeFileSync(path.join(workspace,'code.txt'),workers===1?'after':workers===2?'after\n':'after\n\n');return {context:'history-worker-'+workers,usage:[],seconds:0};}
+  reviews++;return {context:'history-reviewer-'+reviews,usage:[],seconds:0,answer:JSON.stringify({verdict:reviews<3?'fail':'pass',findings:reviews<3?[finding(reviews===1?'Preserve newline fix':'Preserve design boundary')]:[]})};
+ };
+ const r=await runWorkflow(f.request,{agent,provider:f.provider});t.after(()=>fs.rmSync(r.root,{recursive:true,force:true}));
+ assert.equal(r.status,'draft-ci-passed');assert.equal(r.repairs,2);assert.equal(reviews,3);assert.equal(f.creates(),1);
+ assert.equal(fs.existsSync(path.join(f.root,'.asc-prior-reviews.json')),false);
+ assert.equal(f.git('diff','--name-only',f.request.base),'code.txt');
+});
+
+test('repair cannot rewrite historical review context',{skip:!enabled},async t=>{
+ const f=fixture(t);let workers=0;
+ const agent=async({workspace,writable,prompt})=>{
+  if(writable){workers++;const input=JSON.parse(prompt);fs.writeFileSync(path.join(workspace,'code.txt'),'after\n');if(workers===2)fs.writeFileSync(path.join(workspace,input.priorReviewsRef),'forged approval');return {context:'tamper-worker-'+workers,usage:[],seconds:0};}
+  return {context:'tamper-reviewer',usage:[],seconds:0,answer:JSON.stringify({verdict:'fail',findings:[finding('Requires repair')]})};
+ };
+ await assert.rejects(runWorkflow(f.request,{agent,provider:f.provider}),/Read-only context was modified/);
+ assert.equal(f.creates(),0);assert.equal(fs.existsSync(path.join(f.root,'.asc-prior-reviews.json')),false);
+});
+
+
+test('uncreated allowed path cannot capture host review diagnostics',{skip:!enabled},async t=>{
+ const f=fixture(t);f.request.contract.allowedPaths.push('.asc-prior-reviews.json');let workers=0;
+ const agent=async({workspace,writable})=>{
+  if(writable){workers++;fs.writeFileSync(path.join(workspace,'code.txt'),'after');return {context:'collision-worker',usage:[],seconds:0};}
+  return {context:'collision-reviewer',usage:[],seconds:0,answer:JSON.stringify({verdict:'fail',findings:[finding('Required newline missing')]})};
+ };
+ await assert.rejects(runWorkflow(f.request,{agent,provider:f.provider}),/Reserved prior-review context path is allowed/);
+ assert.equal(workers,1);assert.equal(f.creates(),0);assert.equal(fs.existsSync(path.join(f.root,'.asc-prior-reviews.json')),false);
+ assert.equal(f.git('diff','--name-only',f.request.base),'code.txt');
+});

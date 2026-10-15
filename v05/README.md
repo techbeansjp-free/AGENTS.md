@@ -20,6 +20,8 @@ npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/ag
 
 開発対象には専用のcleanなlinked worktreeを使います。owner入力、実行ツール、認証情報、検証用依存物は対象worktreeの外へ配置します。移行用の独立cloneは明示指定で利用できます。複数Issueの状態は分離し、別worktreeの失敗を理由に全作業を拒否しません。
 
+修正時は、その実行内の過去の失敗レビューを参照し、直前の指摘を直して以前の欠陥を再導入することを避けます。参照は診断情報であり、現在の承認や確定した欠陥ではありません。新しいReviewerが現在の契約・差分で再評価します。正常完走では履歴ファイルを追加せず、修正回数・権限・予算も拡張しません。
+
 ## Skillから使う
 
 配布物の`skills/asc/SKILL.md`を絶対pathで明示し、「このASC Skillを使って、指定したowner入力で実行して」とHost AIへ指示できます。Skillは同じ配布物のCLIを参照します。global Skill登録・Hook登録は行いません。相対参照を保つため、Skill単体を別directoryへコピーしないでください。自動発見・Host固有の登録方法は、この明示呼出しの対応範囲には含みません。
