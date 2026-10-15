@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "agent-skill-chain/review-evidence/v2",
+  "issue": 1579,
+  "observed": {
+    "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
+    "implementationHeadSha": "b4182ca607bcd304428b3e73fe62a2ea5e31658c",
+    "diffDigest": "09b1ebdeb0735be84b019c5f5ed7d5ad402211e7dbb2214a8ca5b27cb36e09d5",
+    "session": {
+      "sessionId": "b7680e81927bd451d4a2363be3b26d5cc36a0aa6cb7bce79779edc08ad1b407d",
+      "latestRoundDigest": "cfacc917c0dba1a3ca795b55c5c09e970c62e34585344927eeecadcf38ba6ae8",
+      "status": "converged",
+      "countedRounds": 2
+    },
+    "impact": {
+      "digest": "c66426c03b2a66e26cb05ebc2a70873d48a4c9313bc721016aaffd4e09e79599",
+      "mode": "full"
+    },
+    "verification": [
+      {
+        "command": [
+          "npm",
+          "test"
+        ],
+        "scope": "full",
+        "exitCode": 0,
+        "headSha": "b4182ca607bcd304428b3e73fe62a2ea5e31658c",
+        "impactDigest": "c66426c03b2a66e26cb05ebc2a70873d48a4c9313bc721016aaffd4e09e79599",
+        "finishedAt": "2026-10-15T22:16:32.406Z",
+        "recordDigest": "fc57d6cbc85a40f28cffee300aa36d1ae32a271deab2fca88fff10d21964ecd9"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "REV-LIFETIME-DOC-01",
+      "severity": "Low",
+      "status": "resolved",
+      "relation": "improvement",
+      "path": "v05/USAGE.md",
+      "contractId": null
+    }
+  ],
+  "unresolvedCriticalHigh": [],
+  "verdict": "approved",
+  "declared": {
+    "reviewer": "codex-context-planning-readiness",
+    "implementer": "codex-context-root",
+    "independenceMode": "context-isolated",
+    "reviewerModifiedCandidate": false
+  },
+  "evidenceDigest": "ffc7bbb94b275ccab558b3ee96c5c8b5ee1b75670eece45ef1fc05a99b58a7f5"
+}
