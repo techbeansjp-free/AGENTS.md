@@ -1,0 +1,34 @@
+{
+  "status": "draft-integration-not-release-ready",
+  "publishAuthorized": false,
+  "sourceCommit": "f6506f7b1c22a8a8af3fbca8ba243f2a62c972c3",
+  "priorLinuxValidation": {
+    "node": {
+      "pass": 195,
+      "fail": 0,
+      "skip": 0,
+      "cgroupEnabled": true
+    },
+    "pythonPrototypeTests": 43,
+    "fixtureExit": 0
+  },
+  "localComparison": {
+    "endpoint": "reviewed-candidate, no PR/CI",
+    "baseline": "historical v0.5 PoC, not v0.4",
+    "runsPerArm": 2,
+    "baselineMeanSeconds": 61.4521404065,
+    "currentMeanSeconds": 49.460024226,
+    "baselineMeanObservedProcessedTokens": 121776,
+    "currentMeanObservedProcessedTokens": 115793,
+    "providerTotalTokens": null,
+    "causalImprovementProven": false
+  },
+  "remaining": [
+    "This repository integration and CI must be verified",
+    "Switch canonical v0.5 packaging/installation only after integration review",
+    "Supported-OS whole-Agent acceptance",
+    "Final matched PR/CI performance comparison",
+    "External review product quality comparison"
+  ],
+  "evidenceNote": "Historical local measurements are not evidence that this integration branch CI passed. See REVIEW.md."
+}

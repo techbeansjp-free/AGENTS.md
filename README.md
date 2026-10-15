@@ -129,3 +129,7 @@ mainへのpushによる自動releaseは維持します。releaseは`verify:distr
 PRのCIと通常の`verify:distribution`は従来のレビュー証跡監査を維持します。手動releaseでは`version`と`dry_run`を指定できます。工程監査例外のSHA・理由はreleaseの入力として不要です。
 
 release workflowの検証stepだけが`ASC_RELEASE_INTEGRITY_ONLY=true`を設定する。既定branchのpushまたは手動Actionsで、実HEADと実行SHAが一致するときだけ切り替える。PR event・別branch・不完全な実行情報では切り替えを拒否する。
+
+## v0.5 統合レビュー
+
+Goal・Contract・Evidence駆動の次期実装は [v05/REVIEW.md](v05/REVIEW.md) にまとめています。現在の標準CLIとは分離したDraft段階であり、正式リリース・移行はまだ完了していません。

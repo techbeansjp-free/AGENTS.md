@@ -1,0 +1,30 @@
+name: v0.5 harness integration
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Prepare Linux isolation
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends apparmor-profiles bubblewrap
+          sudo apparmor_parser -r /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+          /usr/bin/bwrap --unshare-all --die-with-parent --new-session --ro-bind / / -- /bin/true
+      - name: Test harness including Linux isolation
+        working-directory: v05
+        run: npm test
+      - name: Build unpublished distribution candidate
+        working-directory: v05
+        run: |
+          mkdir -p "$RUNNER_TEMP/v05-package"
+          node scripts/pack-candidate.mjs "$RUNNER_TEMP/v05-package"

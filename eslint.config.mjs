@@ -11,6 +11,17 @@ export default tseslint.config(
       "memo/**",
     ],
   },
+  {
+    files: ["v05/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        performance: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setImmediate: "readonly",
+      },
+    },
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
