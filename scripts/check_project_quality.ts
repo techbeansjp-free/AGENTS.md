@@ -36,6 +36,9 @@ interface QualityContractProposalRegistry {
 
 const PROPOSAL_REGISTRY = ".github/trusted-quality-proposals.json";
 const PROTECTED_FILES = [
+  "scripts/quality-support/lib/security.ts",
+  "scripts/quality-support/lib/entrypoint.ts",
+  "scripts/quality-support/types.ts",
   ".github/workflows/ci.yml",
   ".github/workflows/trusted-quality.yml",
   ".prettierignore",
@@ -52,6 +55,7 @@ const PROTECTED_FILES = [
   "tsconfig.build.json",
 ] as const;
 const V05_PROTECTED_FILES = [
+  "scripts/quality-support/legacy-policy-metadata.json",
   ".github/workflows/ci.yml",
   ".github/workflows/trusted-quality.yml",
   ".github/workflows/release.yml",
@@ -226,6 +230,8 @@ function packageField(
 ): unknown {
   if (field !== "agentSkillChain.qualityContractVersion")
     return metadata[field];
+  if (typeof metadata.version === "string" && /^0\.5\./u.test(metadata.version))
+    return metadata.qualityContractVersion;
   return isRecord(metadata.agentSkillChain)
     ? metadata.agentSkillChain.qualityContractVersion
     : undefined;
@@ -238,7 +244,7 @@ function qualityContractVersion(metadata: Record<string, unknown>): number {
   );
   if (!Number.isInteger(value) || typeof value !== "number" || value < 1)
     throw new Error(
-      "package.json.agentSkillChain.qualityContractVersionは1以上の整数でなければなりません",
+      "品質契約のqualityContractVersionは1以上の整数でなければなりません",
     );
   return value;
 }
@@ -297,6 +303,7 @@ function protectedFileContent(
     const value = parseJsonStrict(raw.toString("utf8"), relative);
     if (!isRecord(value)) return { reason: "manifest is not an object" };
     delete value.version;
+    delete value.qualityContractVersion;
     if (isRecord(value.agentSkillChain))
       delete value.agentSkillChain.qualityContractVersion;
     return { content: stableJson(value) };
@@ -714,6 +721,8 @@ function validateTrustedQualityMigration(
  * This is not a version-based exemption: every listed file must match exactly.
  */
 const V05_CUTOVER_CONFIGURATION: Readonly<Record<string, string>> = {
+  "scripts/quality-support/legacy-policy-metadata.json":
+    "7b967462998ef8b3ce35f1699129819855e1e59281cbe83d4da4acc94f15ae97",
   ".github/workflows/ci.yml":
     "48e1461112ffc30847a7bde6b16b40989471c11bcbb91a1cc3aea6b816707fb5",
   ".github/workflows/trusted-quality.yml":
@@ -723,7 +732,7 @@ const V05_CUTOVER_CONFIGURATION: Readonly<Record<string, string>> = {
   "eslint.config.mjs":
     "6466cbe9cc2b060e19842a2ed0ec1746e64185456bc0561a11a27b4e3ab7b77b",
   "package.json":
-    "3bff6bf52bc75497af5774e562f85a2a326cc6a9595fe6b73ac7c99d50c061f7",
+    "581732f382bf91f7a704a6137377527d7aa16f73f8c83430b0fdefcab575ac04",
   "package-lock.json":
     "f4d9b7dacbc6bf0ad5d2a534119068e4bf8270ccd6701c7f3e96e68c77fa880a",
   "scripts/check_source_quality.ts":

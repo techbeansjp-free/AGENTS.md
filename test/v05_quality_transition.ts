@@ -6,8 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { parseJsonStrict } from "../src/lib/security.js";
-import { isRecord } from "../src/types.js";
+import { parseJsonStrict } from "../scripts/quality-support/lib/security.js";
+import { isRecord } from "../scripts/quality-support/types.js";
 
 function argument(name: string): string {
   const value = process.argv.find((arg) => arg.startsWith(`--${name}=`));
@@ -93,9 +93,46 @@ const hash = (value: string | Buffer): string =>
   crypto.createHash("sha256").update(value).digest("hex");
 try {
   check("legacy remains valid", proposed, proposed, true);
+  const legacy = path.join(fixture, "legacy");
+  const legacyBlock = source
+    .split("const PROTECTED_FILES = [")[1]
+    ?.split("] as const;")[0];
+  assert.ok(legacyBlock);
+  const legacyFiles = [...legacyBlock.matchAll(/"([^"\n]+)"/gu)].map(
+    (m) => m[1],
+  );
+  for (const name of [
+    ...legacyFiles,
+    "package.json",
+    ".github/trusted-quality-proposals.json",
+    ".agent-skill-chain/project/choices/development.json",
+  ]) {
+    fs.mkdirSync(path.dirname(path.join(legacy, name)), { recursive: true });
+    fs.copyFileSync(path.join(proposed, name), path.join(legacy, name));
+  }
+  fs.cpSync(
+    path.join(proposed, "test/steps"),
+    path.join(legacy, "test/steps"),
+    { recursive: true },
+  );
+  check("legacy copied configuration", legacy, proposed, true);
+  for (const name of [
+    "scripts/quality-support/lib/security.ts",
+    "scripts/quality-support/lib/entrypoint.ts",
+    "scripts/quality-support/types.ts",
+  ]) {
+    const original = fs.readFileSync(path.join(legacy, name));
+    fs.appendFileSync(
+      path.join(legacy, name),
+      "\n// unauthorized intermediate-generation edit\n",
+    );
+    check(`legacy helper edit ${name}`, legacy, proposed, false);
+    fs.writeFileSync(path.join(legacy, name), original);
+  }
+
   check("first cutover", base, proposed, true);
   check("missing trusted base", base, undefined, false);
-  manifest.agentSkillChain = { qualityContractVersion: 16 };
+  manifest.qualityContractVersion = 16;
   write(path.join(base, "package.json"), manifest);
   check("new base unchanged", base, base, true);
   reset();
@@ -156,7 +193,7 @@ try {
     after,
   );
   const changed = object(path.join(candidate, "package.json"));
-  changed.agentSkillChain = { qualityContractVersion: 17 };
+  changed.qualityContractVersion = 17;
   write(path.join(candidate, "package.json"), changed);
   check("self activation rejected", candidate, base, false);
   check("registered maintenance", candidate, approved, true);
@@ -170,6 +207,7 @@ try {
     "scripts/quality-support/lib/security.ts",
     "scripts/quality-support/lib/entrypoint.ts",
     "scripts/quality-support/types.ts",
+    "scripts/quality-support/legacy-policy-metadata.json",
   ]) {
     reset();
     fs.appendFileSync(

@@ -32,12 +32,32 @@
   "rootLayoutProposalRevision": {
     "status": "local-adversarial-tests-passed-not-activated",
     "candidateHead": "e79de17550f0b95ff84d2fa8499f3b44fe0a0376",
-    "checkerSha256": "280539b0edcf2361ddba3ceed39bb75f600c8e69680d5664fe93f9b02d577f59",
+    "checkerSha256": "77c45a314a908c522e2094af6d9b4c8f57da6b1875d647e28a8bd7ed5296a385",
     "tests": [
       {
         "name": "legacy remains valid",
         "accepted": true,
         "expected": true
+      },
+      {
+        "name": "legacy copied configuration",
+        "accepted": true,
+        "expected": true
+      },
+      {
+        "name": "legacy helper edit scripts/quality-support/lib/security.ts",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "legacy helper edit scripts/quality-support/lib/entrypoint.ts",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "legacy helper edit scripts/quality-support/types.ts",
+        "accepted": false,
+        "expected": false
       },
       {
         "name": "first cutover",
@@ -95,6 +115,11 @@
         "expected": false
       },
       {
+        "name": "unapproved helper scripts/quality-support/legacy-policy-metadata.json",
+        "accepted": false,
+        "expected": false
+      },
+      {
         "name": "legacy version rejected",
         "accepted": false,
         "expected": false
@@ -140,18 +165,33 @@
         "expected": false
       }
     ],
-    "passed": 21,
+    "passed": 26,
     "standaloneRootChecker": "valid true without legacy src imports",
     "legacyBaseSourceValidatorAgainstCandidate": {
       "valid": true,
       "files": 91
     },
     "outstanding": [
-      "Independent inspection pending",
-      "Staged registration target digest must be revised before activation",
-      "Candidate checker and proposal registry must be synchronized with approved base proposal",
-      "No base merge or release performed"
+      "Unmerged staged registration and cutover proposals still require base activation",
+      "No merge or release performed"
     ],
-    "authority": "Local synthetic configuration tests only; not owner approval"
+    "authority": "Local synthetic configuration tests only; not owner approval",
+    "independentReview": "Read-only review found no blocking metadata boundary defect; legacy-path diagnostic corrected. Prior helper protection, runner imports and metadata pin findings corrected.",
+    "registrationToTransition": "valid true using registration checker against transition and registration trusted root",
+    "transitionToActualCandidate": "valid true using proposed transition checker against synchronized root candidate",
+    "actualCandidateAsTrustedBase": "valid true; v0.5 top-level qualityContractVersion=16, no legacy agentSkillChain metadata",
+    "candidateState": "recorded source HEAD plus synchronized checker/registry and explicit root quality generation in working tree",
+    "candidateConfigurationSha256": {
+      "package.json": "581732f382bf91f7a704a6137377527d7aa16f73f8c83430b0fdefcab575ac04",
+      "scripts/check_project_quality.ts": "77c45a314a908c522e2094af6d9b4c8f57da6b1875d647e28a8bd7ed5296a385",
+      ".github/trusted-quality-proposals.json": "54b49a192d6ae10c165bab9c81995ce6ad75d79236becbd9964cdf3ca2304d00"
+    },
+    "packageValidation": {
+      "command": "npm run package:check",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 9536.624586
+    }
   }
 }
