@@ -398,3 +398,13 @@ requirements/design discovery, distributed transactions or large-system release
 acceptance. The fixed and adaptive trials have different Unit contracts and an
 additional compile check; single-run timings do not establish a speedup. All ten
 declared calls have usage, but provider-wide all-Agent usage remains unknown.
+
+## 既定制限の採用条件（2026-10-17）
+
+目的は要求からDraft PR・CI完了まで自走継続し、品質を保った総費用を減らすこと。個別Agentの短時間化だけを成功としない。既定制限は、終了後の成果引継ぎ・回復が成立し、同条件比較で総時間・観測tokens・成功率・再試行の費用対効果が確認できた場合に限って採用する。未取得usageは欠測として残す。利用者が指定した全体予算は更新・超過しない。
+
+現時点の調査では、run-adaptiveは分解と実行を組み合わせるが、例外を受けた自動再計画ループを持たない。restart-goalは候補を保存して再検証する入口であり、自動で呼ばれる保証ではない。従って個別Agent期限を既定化する根拠には不足する。RELEASE_READINESSの過去比較も既定制限あり／なしの比較ではなく、総tokens欠測があるため採用根拠として流用しない。
+
+追加の決定論的回帰試験では、4回の内容改善を経てDeliveryまで進めることと、A→B→Aという拒否済み内容の循環を新commit・新しい指摘文言でも検出できることを確認した。AgentとGitHubはテストダブルであり、モデル品質・実PR完走・実tokensの費用対効果は証明していない。
+
+残る評価は、個別Agent終了・Context引継ぎ・循環からの再評価を含む共通fixtureについて、上限なしと候補制限ありを同じモデル・権限・テスト・レビュー・PR/CI条件で比較すること。新たな証拠が得られるまでは既定の全体時間・起動回数・個別Agent時間制限を追加しない。

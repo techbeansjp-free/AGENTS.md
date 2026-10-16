@@ -365,3 +365,42 @@ test('large text change reaches independent review without stdout quota',{skip:!
  };
  const result=await runWorkflow(f.request,{agent,provider:f.provider});t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert(reviewed);assert.equal(result.status,'draft-ci-passed');
 });
+
+
+test('unbounded repairs stop content cycles despite new commit and finding wording',{skip:!enabled},async t=>{
+ const f=fixture(t);delete f.request.maxRepairs;let workers=0,reviews=0;
+ const agent=async({workspace,writable})=>{
+  if(writable){workers++;fs.writeFileSync(path.join(workspace,'code.txt'),workers%2?'after':'after\n');return {context:'cycle-worker-'+workers,usage:[],seconds:0};}
+  reviews++;return {context:'cycle-review-'+reviews,usage:[],seconds:0,answer:JSON.stringify({verdict:'fail',findings:[finding('Unresolved issue phrased '+reviews)]})};
+ };
+ await assert.rejects(runWorkflow(f.request,{agent,provider:f.provider}),error=>{
+  t.after(()=>fs.rmSync(error.workflowDiagnostic.root,{recursive:true,force:true}));
+  assert.match(error.message,/Repair stalled/);assert.equal(error.workflowDiagnostic.events.at(-2).type,'repair-stalled');return true;
+ });
+ assert.equal(workers,3);assert.equal(reviews,3);assert.equal(f.creates(),0);
+});
+
+test('unbounded repairs can make more than three distinct improvements',{skip:!enabled},async t=>{
+ const f=fixture(t);delete f.request.maxRepairs;let workers=0;
+ const agent=async({workspace,writable})=>{
+  if(writable){workers++;fs.writeFileSync(path.join(workspace,'code.txt'),'after'+'\n'.repeat(workers));return {context:'progress-worker-'+workers,usage:[],seconds:0};}
+  return {context:'progress-review-'+workers,usage:[],seconds:0,answer:JSON.stringify({verdict:workers===5?'pass':'fail',findings:workers===5?[]:[finding('Remaining acceptance defect')]})};
+ };
+ const result=await runWorkflow(f.request,{agent,provider:f.provider});t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));
+ assert.equal(result.status,'draft-ci-passed');assert.equal(result.repairs,4);assert.equal(workers,5);
+});
+
+
+test('failed implementation exposes all partial files without accepting or deleting them',{skip:!enabled},async t=>{
+ const f=fixture(t);f.request.contract.allowedPaths=Array.from({length:19},(_,i)=>`partial-${i}.txt`);
+ await assert.rejects(runWorkflow(f.request,{provider:f.provider,agent:async({workspace})=>{
+  for(const name of f.request.contract.allowedPaths)fs.writeFileSync(path.join(workspace,name),'partial result');
+  throw Error('Agent deadline exceeded');
+ }}),error=>{
+  const diagnostic=error.workflowDiagnostic,partial=diagnostic.interruptedCandidate;
+  t.after(()=>fs.rmSync(diagnostic.root,{recursive:true,force:true}));
+  assert.equal(partial.status,'unverified-interrupted-output');assert.equal(partial.source.head,f.request.base);
+  for(const name of f.request.contract.allowedPaths)assert.equal(fs.readFileSync(path.join(partial.workspace,name),'utf8'),'partial result');
+  assert.equal(f.git('rev-parse','HEAD'),f.request.base);assert.equal(f.creates(),0);return true;
+ });
+});

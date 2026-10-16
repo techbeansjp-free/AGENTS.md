@@ -368,3 +368,5 @@ MacのNode起動に必要な `/System/Library/OpenSSL` の読取りを診断・A
 Agent時間・検証時間・CPU時間・生成ファイル容量・修正回数は、未指定なら上限を設けない。必要な場合だけ `budget.agentTimeoutMilliseconds`、`contract.verificationLimits.timeoutMilliseconds` / `cpuSeconds` / `fileBytes`、`maxRepairs` を指定する。`budget.maxElapsedSeconds` と `maxAgentCalls` も明示指定した場合だけ適用する。時間予算の残りは各Agent・検証に引き継ぐ。CI待機の期限は別の `delivery.ciTimeoutMilliseconds`。
 
 ミリ秒指定はNodeタイマーが扱える正の整数（最大2147483647）。未指定はこの最大値の代入ではなく、タイマー自体を設定しない。`maxRepairs: 0` は修正再試行なし。実行環境自身の資源上限、通信処理・起動診断・終了確認の期限、プロトコル出力バッファの保護は別である。明示選択した `browser-cgroup-v1` のメモリ・プロセス数制限も維持する。権限・変更範囲・独立レビュー・対象commitの一致は予算の有無で解除しない。
+
+修正の回数上限が未指定でも、同一実行中に、同じbase・契約・差分の拒否済み候補へ戻った場合は `repair-stalled` として停止する。commit IDや指摘の文言だけを変えても回避しない。候補と未解決事項を保持し、Deliveryは行わない。異なる内容へ進む修正は回数だけでは止めない。この検出は内容の循環を扱い、無限に異なる内容を生成する意味的な停滞を完全に判定するものではない。Reviewerには解決済み指摘の再提示の根拠を求め、Hostも進展を評価する。
