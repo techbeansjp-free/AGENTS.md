@@ -1,0 +1,2594 @@
+{
+  "status": "linux-release-ready-unpublished",
+  "publishAuthorized": false,
+  "sourceCommit": "f6506f7b1c22a8a8af3fbca8ba243f2a62c972c3",
+  "priorLinuxValidation": {
+    "node": {
+      "pass": 195,
+      "fail": 0,
+      "skip": 0,
+      "cgroupEnabled": true
+    },
+    "pythonPrototypeTests": 43,
+    "fixtureExit": 0
+  },
+  "localComparison": {
+    "endpoint": "reviewed-candidate, no PR/CI",
+    "baseline": "historical v0.5 PoC, not v0.4",
+    "runsPerArm": 2,
+    "baselineMeanSeconds": 61.4521404065,
+    "currentMeanSeconds": 49.460024226,
+    "baselineMeanObservedProcessedTokens": 121776,
+    "currentMeanObservedProcessedTokens": 115793,
+    "providerTotalTokens": null,
+    "causalImprovementProven": false
+  },
+  "remaining": [],
+  "evidenceNote": "Historical local measurements are not evidence that this integration branch CI passed. See REVIEW.md.",
+  "releaseTarget": {
+    "platform": "native-linux",
+    "excluded": [
+      "macos",
+      "windows-native",
+      "wsl2"
+    ],
+    "ownerDecision": "Linux-only release acceptance; other OS validation is deferred. Isolation remains mandatory."
+  },
+  "currentLocalLinuxValidation": {
+    "node": {
+      "pass": 199,
+      "fail": 0,
+      "skip": 0,
+      "cgroupEnabled": true,
+      "seconds": 104.21805065
+    },
+    "scope": "Integration working tree including transient service lifecycle; Ubuntu 24.04 GitHub CI still pending",
+    "lint": "pass"
+  },
+  "packagedLinuxTrials": [
+    {
+      "implementationSourceHead": "38163df8ae56caf1797cfe034842eaebb75ce49b",
+      "packageSha256": "5812dedb38ab6465bc0064082676131d1d1c2cd4b73894daa2bea5ac9de80976",
+      "base": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+      "model": "gpt-5.6-sol",
+      "status": "BLOCKED",
+      "endpoint": "Draft PR created; CI could not start because private account billing blocked execution",
+      "wallSecondsIncludingFailure": 62.132228376,
+      "setupIncluded": false,
+      "agentCalls": 2,
+      "agents": [
+        {
+          "role": "implementation",
+          "seconds": 16.670397226000002,
+          "usage": [
+            {
+              "input_tokens": 63673,
+              "cached_input_tokens": 54784,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 747,
+              "reasoning_output_tokens": 194
+            }
+          ]
+        },
+        {
+          "role": "review",
+          "seconds": 23.212618843000005,
+          "usage": [
+            {
+              "input_tokens": 60872,
+              "cached_input_tokens": 42496,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 979,
+              "reasoning_output_tokens": 533
+            }
+          ]
+        }
+      ],
+      "observedProcessedTokens": 126271,
+      "observedFreshTokens": 28991,
+      "allAgentTotalTokens": null,
+      "independentReview": "pass",
+      "localVerificationExits": [
+        0,
+        0
+      ],
+      "comparisonClaim": null,
+      "limitations": [
+        "Single run; not causal speed comparison",
+        "Setup excluded from wallSeconds",
+        "Provider-internal tokens not certified complete",
+        "Private dummy only; no merge/release"
+      ]
+    },
+    {
+      "implementationSourceHead": "a524cfca79ded42fae230d1bb79a37e32fe7ccda",
+      "packageSha256": "ff5639d362022d994a22b8f0461439a1e35b21e1b69d040390443e697671677a",
+      "base": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+      "model": "gpt-5.6-sol",
+      "status": "BLOCKED",
+      "endpoint": "Draft PR created; CI could not start because private account billing blocked execution",
+      "wallSecondsIncludingFailure": 77.84824311,
+      "setupIncluded": false,
+      "agentCalls": 2,
+      "agents": [
+        {
+          "role": "implementation",
+          "seconds": 25.370259372,
+          "usage": [
+            {
+              "input_tokens": 63236,
+              "cached_input_tokens": 50048,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 635,
+              "reasoning_output_tokens": 121
+            }
+          ]
+        },
+        {
+          "role": "review",
+          "seconds": 29.084606317000006,
+          "usage": [
+            {
+              "input_tokens": 76128,
+              "cached_input_tokens": 42240,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 1029,
+              "reasoning_output_tokens": 466
+            }
+          ]
+        }
+      ],
+      "observedProcessedTokens": 141028,
+      "observedFreshTokens": 48740,
+      "allAgentTotalTokens": null,
+      "independentReview": "pass",
+      "localVerificationExits": [
+        0,
+        0
+      ],
+      "comparisonClaim": null,
+      "limitations": [
+        "Single run; not causal speed comparison",
+        "Setup excluded from wallSeconds",
+        "Provider-internal tokens not certified complete",
+        "Private dummy only; no merge/release"
+      ]
+    }
+  ],
+  "ubuntu24Ci": {
+    "head": "a524cfca79ded42fae230d1bb79a37e32fe7ccda",
+    "run": 38796503216,
+    "pass": 196,
+    "fail": 3,
+    "skip": 0,
+    "failure": "Verification namespace descendant teardown observation raced normal exit; Agent lifecycle/network tests passed",
+    "correction": "Bounded actual cgroup reobservation also after normal exit; surviving descendants still reject",
+    "retest": "pending"
+  },
+  "ubuntu24CiRetest": {
+    "head": "9254745999e2548fa899e42148cc2acf44c69e5a",
+    "run": 38797448460,
+    "pass": 199,
+    "fail": 1,
+    "skip": 0,
+    "failure": "Empty stdin write races fast child exit: EPIPE masks valid exit status; reproduced locally",
+    "correction": "No input pipe when input is empty; nonempty prompt delivery errors remain fatal",
+    "focusedTests": {
+      "pass": 13,
+      "fail": 0,
+      "skip": 0
+    },
+    "stress": {
+      "fastCommands": 80,
+      "correctUnconfinedNetworkRejections": 40,
+      "retries": 0
+    },
+    "nextCi": "pending"
+  },
+  "verifiedLinuxIntegration": {
+    "implementationHead": "42c5c8faf6407361dce4691a715750f8fd3b6a21",
+    "ciRun": 38798461118,
+    "pass": 202,
+    "fail": 0,
+    "skip": 0,
+    "cgroupEnabled": true,
+    "ciSeconds": 99.266997716,
+    "localSeconds": 104.797684413,
+    "packageSha256": "d39a021b1db04e705a5d99d058be809dd18716a6d06d349d5f06f60b65fe107d"
+  },
+  "reviewCorpusAcceptance": {
+    "cohorts": 5,
+    "cases": 21,
+    "oracleLabelConsistency": "PASS",
+    "liveReviewOnCurrentHead": "See absoluteReviewEvaluation: 17 trials on aa64d9e3; not 21 independent mutations",
+    "externalComparator": "Deferred by explicit owner acceptance amendment",
+    "scope": "Synthetic fixtures only; impact/injection cohorts reuse authorization mutations, not 21 independent defect classes",
+    "defaultRuntimeCost": "none; evaluator-only, excluded from product package"
+  },
+  "ownerAcceptanceAmendment": {
+    "externalReviewProductComparison": "Deferred; replace release acceptance with known-defect and clean-control absolute evaluation",
+    "publicSyntheticFixture": "Authorized fresh synthetic-only public repository; no private assets or logs",
+    "paidActions": "Not authorized"
+  },
+  "verifiedLinuxIntegrationLatest": {
+    "head": "6e47eabf2a387b83b981cfcea9852298c568a779",
+    "implementationHead": "56d0be169e4daf4f13aaf5d45c33acfb2675adbb",
+    "rootQualityRun": 38829711725,
+    "linuxRun": 38829711726,
+    "conclusion": "success",
+    "linuxTests": {
+      "pass": 213,
+      "fail": 0,
+      "skip": 0
+    },
+    "trustedFull": {
+      "pass": 2730,
+      "skip": 17,
+      "fail": 0
+    },
+    "audit": "passed",
+    "scope": "Reviewed delivery boundary implementation; subsequent documentation changes are not covered by this exact HEAD"
+  },
+  "publicSyntheticTrial": {
+    "sourceHead": "aa64d9e35eb79160c3566bfa71caac52c0a6c938",
+    "packageSha256": "a82b1927cf1d2970774c6d1a32d76e62850eadd6b9adf2ade449bccf1a86aa3d",
+    "fixture": "new public synthetic greeting; not previous private matched fixture",
+    "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+    "target": {
+      "head": "5cac144ced75bbe3b7f02e74836b33fc1f185dcf",
+      "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+      "contract": "fccdde88674c406843029f46a3e9dcad756c3190e35d57286c4975ab03ee4e83",
+      "diff": "04cca1820e625ccb6f34a590c2904c7d72b7f3852584484974ef758604462505",
+      "empty": false
+    },
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/2",
+    "status": "draft-ci-passed",
+    "wallSeconds": 83.47529638999998,
+    "setupIncluded": false,
+    "agentCalls": 2,
+    "observedProcessedTokens": 138935,
+    "observedCacheReadTokens": 104064,
+    "observedFreshTokens": 34871,
+    "allAgentTotalTokens": null,
+    "repairs": 0,
+    "comparisonClaim": null,
+    "publication": "five newly authored synthetic files; fresh history; candidate only changes greeting.py and test_greeting.py; raw logs not published"
+  },
+  "absoluteReviewEvaluation": {
+    "implementationHead": "aa64d9e35eb79160c3566bfa71caac52c0a6c938",
+    "model": "gpt-5.6-sol",
+    "trials": 17,
+    "distinctDefectMutations": 7,
+    "truePositive": 9,
+    "trueNegative": 8,
+    "falsePositive": 0,
+    "falseNegative": 0,
+    "independentAdjudication": true,
+    "oracleWithheldFromReviewer": true,
+    "reviewerReproduction": "static-analysis; runtime reproduction by evaluator and adjudicator",
+    "sumCaseSeconds": 413.529205748,
+    "observedProcessedTokens": 1065761,
+    "observedFreshTokens": 278689,
+    "allAgentTotalTokens": null,
+    "limits": [
+      "Selected synthetic single trials, not general precision or external product equivalence",
+      "Authorization mutations reused in injection cohort",
+      "Case duration sum is not wall time due to parallel cohorts",
+      "Severity accuracy calibrated only for explicit authorization impact scenario"
+    ]
+  },
+  "publicSyntheticGoalTrial": {
+    "sourceHead": "b4182ca607bcd304428b3e73fe62a2ea5e31658c",
+    "packageSha256": "578361bd833344cc46ca8a6b854d6953ae7fcd311a0f2f7c3e3e896218450e9b",
+    "base": "beacdb5379ff9db3c8f33019d3dbe4fa9f1a7f28",
+    "repository": "adachi-tatsuru/asc-public-synthetic-eval-20261016",
+    "issue": 3,
+    "branch": "test/goal-candidate-1792102597565",
+    "baseBranch": "test/goal-base-1792102597565",
+    "exit": 0,
+    "error": null,
+    "wallSeconds": 185.672657521,
+    "setupIncluded": false,
+    "comparisonClaim": null,
+    "status": "draft-ci-passed",
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/4",
+    "ciRun": 38816320745,
+    "ciTests": 19,
+    "agentCalls": 7,
+    "distinctContexts": 7,
+    "observedProcessedTokens": 513575,
+    "observedCacheReadTokens": 422400,
+    "observedFreshTokens": 91175,
+    "allAgentTotalTokens": null,
+    "limits": [
+      "synthetic pure Python modules, not deployed services or React/DB",
+      "setup excluded",
+      "single run, no comparative speed claim",
+      "provider internal usage not certified complete"
+    ]
+  },
+  "publicSyntheticGoalRecovery": {
+    "bounded": {
+      "exit": 1,
+      "error": null,
+      "seconds": 41.243550248,
+      "status": "blocked",
+      "agentCalls": 3,
+      "observedProcessedTokens": 181445,
+      "observedFreshTokens": 31045,
+      "allAgentTotalTokens": null
+    },
+    "resumed": {
+      "exit": 0,
+      "error": null,
+      "seconds": 114.150327857,
+      "status": "draft-ci-passed",
+      "agentCalls": 5,
+      "observedProcessedTokens": 322841,
+      "observedFreshTokens": 63257,
+      "allAgentTotalTokens": null
+    },
+    "sourceHead": "b4182ca607bcd304428b3e73fe62a2ea5e31658c",
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/5",
+    "sourcePreserved": true,
+    "totalAttemptSeconds": 155.393878105,
+    "limits": [
+      "explicit admission budget interruption, not arbitrary crash",
+      "owner-supplied plan and restart budget, not autonomous replanning",
+      "setup excluded; sum of measured attempts, not calendar total"
+    ]
+  },
+  "canonicalFinalNumberCandidate": {
+    "version": "0.5.0",
+    "private": true,
+    "published": false,
+    "offlineInstallTests": 4,
+    "lint": "pass",
+    "independentReview": "no confirmed findings",
+    "linuxRegression": {
+      "pass": 209,
+      "fail": 0,
+      "skip": 0,
+      "seconds": 116.352624549,
+      "cgroupEnabled": true
+    },
+    "scope": "local working tree; not a release approval or GitHub CI result"
+  },
+  "publicSyntheticFinalCandidateTrial": {
+    "implementationHead": "b0d3b2e67195e415eca56382a0b909b48f4973e5",
+    "packageSha256": "0978f3515ac9ab79f39d4cef2ba92de9dbe073a8a46de8ddc60aa3a25493d7fc",
+    "status": "draft-ci-passed",
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/6",
+    "ciRun": 38819211901,
+    "wallSeconds": 56.716004347,
+    "agentCalls": 2,
+    "observedProcessedTokens": 121672,
+    "observedFreshTokens": 17352,
+    "allAgentTotalTokens": null,
+    "limits": [
+      "Setup excluded",
+      "Single same-fixture repetition; not causal or v0.4 comparison",
+      "Independent adjudication verified diff, contexts and actual CI"
+    ]
+  },
+  "publicSyntheticIssueRecovery": {
+    "sourceHead": "b0d3b2e67195e415eca56382a0b909b48f4973e5",
+    "packageSha256": "0978f3515ac9ab79f39d4cef2ba92de9dbe073a8a46de8ddc60aa3a25493d7fc",
+    "status": "draft-ci-passed",
+    "wallSeconds": 145.636971534,
+    "setupIncluded": false,
+    "firstSeconds": 58.528773749,
+    "secondSeconds": 85.53753210799998,
+    "agentCalls": 8,
+    "observedProcessedTokens": 417353,
+    "observedFreshTokens": 91593,
+    "allAgentTotalTokens": null,
+    "prs": [
+      "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/10",
+      "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/11",
+      "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/12"
+    ],
+    "baseUpdate": "explicit owner cherry-pick and new base branch; no merge",
+    "initialDependentBlocked": true,
+    "initialDependentAgentCalls": 0,
+    "independentHeadsPreserved": true,
+    "limitations": [
+      "Synthetic text Issues, not complex services",
+      "Explicit owner integration and base update; no autonomous merge",
+      "Each invocation has a separate budget",
+      "Provider-internal usage unknown; not matched performance comparison"
+    ],
+    "preparationFailures": [
+      "missing HTTPS credential helper",
+      "workflow scope unavailable; used existing workflow",
+      "request missing Issue body note",
+      "request trailing newline dropped by driver"
+    ],
+    "preparationTimeIncluded": false,
+    "independentAdjudication": "Confirmed actual diff, contexts, tokens, CI oracle and sibling HEAD preservation"
+  },
+  "canonicalMigrationTrial": {
+    "implementationHead": "b0d3b2e67195e415eca56382a0b909b48f4973e5",
+    "packageSha256": "0978f3515ac9ab79f39d4cef2ba92de9dbe073a8a46de8ddc60aa3a25493d7fc",
+    "ownerConfigurationStaging": "passed with fresh independent review",
+    "emptyCacheOfflineInstall": "passed",
+    "ordinaryDevelopment": "reviewed-candidate; exact app and formatting oracle passed",
+    "configurationAndDevelopmentSeconds": 115.002501956,
+    "rollback": "Repeated selection rollback preserves legacy, staged candidate, developed clone and dirty sibling including nonignored untracked files",
+    "legacyApprovalRestored": false,
+    "limits": [
+      "Single synthetic local migration; no remote PR/CI in this migration trial",
+      "Explicit owner configuration; not automatic semantic policy translation",
+      "Selection rollback, not production activation reversal",
+      "Ignored files and original untracked dependency tree not comprehensively snapshotted",
+      "115 seconds excludes earlier staging and installation"
+    ]
+  },
+  "currentComplexScreenTrial": {
+    "implementation": "46ed0816a45031467a82254550b3da51a99bd413",
+    "artifactSha256": "c977b375844d285843c9f338a11d37f5ffcc563daa1e3ce99c79738f2e0420fc",
+    "status": "FAIL",
+    "wallSeconds": 756.70787752,
+    "declaredCalls": 7,
+    "observedProcessedTokens": 1461810,
+    "observedFreshTokens": 288690,
+    "allAgentTotalTokens": null,
+    "deliveryAttempted": false,
+    "failure": "Reload race reported, repair violated existing no-browser-storage rule, next repair reintroduced reload race; stopped at repair limit",
+    "proposedCorrection": "Reuse invocation-local failed review assessments as non-authoritative repair and review context; live effect not yet verified",
+    "limitations": [
+      "Synthetic browser/API/SQLite journey only",
+      "Initial run overlapped local full verification",
+      "Not a matched performance comparison",
+      "Local raw evidence is not published"
+    ]
+  },
+  "matchedSmallRegression": {
+    "order": "ABBA",
+    "baseline": "b0d3b2e67195e415eca56382a0b909b48f4973e5",
+    "candidate": "03be3d803828fb7ef5cc8d73949464e79e5c375e",
+    "fixtureBase": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+    "model": "gpt-5.6-sol",
+    "trials": [
+      {
+        "order": "A1",
+        "status": "draft-ci-passed",
+        "wallSeconds": 80.93918092,
+        "pr": 13,
+        "agentCalls": 2,
+        "observedProcessedTokens": 169309,
+        "observedFreshTokens": 33757,
+        "allAgentTotalTokens": null
+      },
+      {
+        "order": "B1",
+        "status": "draft-ci-passed",
+        "wallSeconds": 98.23970575999999,
+        "pr": 14,
+        "agentCalls": 2,
+        "observedProcessedTokens": 122518,
+        "observedFreshTokens": 17814,
+        "allAgentTotalTokens": null
+      },
+      {
+        "order": "B2",
+        "status": "draft-ci-passed",
+        "wallSeconds": 89.038720068,
+        "pr": 15,
+        "agentCalls": 2,
+        "observedProcessedTokens": 134003,
+        "observedFreshTokens": 29939,
+        "allAgentTotalTokens": null
+      },
+      {
+        "order": "A2",
+        "status": "blocked",
+        "wallSeconds": 106.791770968,
+        "pr": null,
+        "agentCalls": 3,
+        "observedProcessedTokens": 150548,
+        "observedFreshTokens": 37140,
+        "allAgentTotalTokens": null
+      }
+    ],
+    "limitations": [
+      "Two trials per v0.5 artifact only; no causal improvement or v0.4 equivalence claim",
+      "Provider internal enumeration unknown; all Agent totals null",
+      "A1 and B1/B2 partly overlapped short local browser oracle calibration; model trials did not overlap",
+      "Setup excluded; failed A2 retained, no successful-completion time imputed"
+    ],
+    "failure": "A2 review demanded future Draft PR state before controlled Delivery; repair produced no change. Preserve as failed baseline, not speed evidence.",
+    "conclusion": "Candidate succeeded twice; baseline succeeded once and failed once. No causal speed or token reduction conclusion."
+  },
+  "screenRecoveryValidation": {
+    "implementationHead": "03be3d803828fb7ef5cc8d73949464e79e5c375e",
+    "candidateHead": "9959a316aaed26a24dc6ab140d851b6b5a165793",
+    "priorRecoverySeconds": 393.260854866,
+    "priorOutcome": "Failed on oracle overconstraint requiring immediate hash navigation while PATCH pending; not retroactively marked pass",
+    "calibratedOracle": "Known-bad candidate still fails after server commit; candidate passes existing browser oracle with corrected navigation observation",
+    "additionalCounterexample": "Pending mutation followed by browser Back loses Forward destination; reproduced with actual browser",
+    "currentAcceptance": "FAIL; repair and fresh review in progress",
+    "limits": [
+      "Synthetic UI/API/SQLite; no external Delivery in this trial",
+      "Server latch covers UPDATE under lock, not every request ordering",
+      "No speed claim for correction chain"
+    ]
+  },
+  "preDeliveryReviewBoundary": {
+    "reason": "Matched baseline trial demanded future PR evidence before controlled Delivery and stopped on no-change repair",
+    "change": "Clarify candidate review vs conditional Controller Delivery checks; review-only is not Delivery evidence",
+    "focusedTests": {
+      "pass": 27,
+      "fail": 0,
+      "skip": 0
+    },
+    "linuxRegression": {
+      "pass": 213,
+      "fail": 0,
+      "skip": 0,
+      "seconds": 109.47095827,
+      "cgroupEnabled": true
+    },
+    "independentReview": "Conditional Delivery wording correction applied; no confirmed remaining blocker",
+    "liveModelEffect": "NOT VERIFIED",
+    "scope": "Working-tree revision; CI for this change pending"
+  },
+  "deliveryBoundaryLiveTrial": {
+    "implementationHead": "56d0be169e4daf4f13aaf5d45c33acfb2675adbb",
+    "packageSha256": "d3af6fc885497c6e46882f6f8c3cc330333d6fa4c7422f5a82c4eb9d80922d19",
+    "status": "draft-ci-passed",
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/16",
+    "target": "c024ed4443e2c41c9dfe179589bf38b803c154e7",
+    "seconds": 107.669463334,
+    "agentCalls": 2,
+    "observedProcessedTokens": 122778,
+    "observedFreshTokens": 26010,
+    "allAgentTotalTokens": null,
+    "limitations": [
+      "Setup excluded",
+      "Overlapped trusted full; not matched performance comparison",
+      "Fresh synthetic files/history only; no private code or raw logs published"
+    ]
+  },
+  "migrationBoundaryDocumentation": {
+    "status": "documented-not-global-activation",
+    "independentReview": "no implementation contradiction",
+    "packageTests": {
+      "pass": 4,
+      "fail": 0,
+      "skip": 0
+    },
+    "approach": "External fixed CLI prefix; owner-reviewed configuration candidate; Git configuration revert separate from selection rollback; no new activation daemon",
+    "limitations": [
+      "No arbitrary production project cutover claim",
+      "No tag, registry publication or release approval"
+    ]
+  },
+  "publicScreenRecovery": {
+    "implementationSourceHead": "0e6091c7baf0daf3bb4346d57ffb7a95711be9b6",
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/18",
+    "base": "c21cf78609316689a4724327733755a1b5a36ba8",
+    "head": "5c83c05b1695c0c962c80c298b5b5e2c06f3c6c3",
+    "status": "draft-ci-passed",
+    "seconds": 296.747684272,
+    "calls": 3,
+    "repairs": 1,
+    "observedProcessedTokens": 445932,
+    "observedFreshTokens": 119532,
+    "allAgentTotalTokens": null,
+    "scope": "Existing synthetic candidate; isolated browser/API/SQLite verification, independent review, transient refresh failure repair, re-review, Draft PR and public Python CI",
+    "priorAttempt": {
+      "seconds": 1.737939934,
+      "status": "blocked",
+      "cause": "Host pre-test generated ignored bytecode in otherwise clean source; preserved outside candidate before retry"
+    },
+    "limitations": [
+      "Not initial Goal-to-implementation timing",
+      "Not matched performance comparison",
+      "Browser checks ran on local isolated Linux, not hosted CI",
+      "No general complex-project equivalence claim"
+    ]
+  },
+  "rootDistributionCutover": {
+    "status": "working-tree-acceptance",
+    "standardCli": "agent-skill-chain -> bin/asc-v05.mjs",
+    "legacyRuntimePackaged": false,
+    "remaining": [
+      "legacy root CI and release workflow transition",
+      "root package exact-artifact live execution",
+      "migration acceptance and final review"
+    ]
+  },
+  "canonicalCutoverValidation": {
+    "head": "433b776c0e6c5724d83a11d2fe017fc4f1ffa7cf",
+    "linuxCI": {
+      "run": 38839434019,
+      "result": "success"
+    },
+    "trustedBaseCI": {
+      "run": 38839431781,
+      "result": "failure",
+      "reason": "legacy quality contract transition incomplete"
+    },
+    "releaseReady": false
+  },
+  "hostArtifactObservation": {
+    "implementationHead": "ee5784e0",
+    "fullQualityBeforeLazyOptimization": {
+      "passed": 216,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 111.941378298
+    },
+    "lazyOptimization": {
+      "controllerSha256": "05672049d4eabc9a7e8cf2e3cafab7bae37ebbabb54e66112568a1ab693938d7",
+      "controllerTests": {
+        "passed": 27,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 6.543190737
+      },
+      "lint": "passed"
+    },
+    "performance": {
+      "scope": "local source observation; 101 tracked files; ABBA 30 observations per group; no model calls",
+      "beforeMeanMs": 15.9920088,
+      "afterMeanMs": 16.22310405,
+      "normalPathExtraGitCalls": 0,
+      "ignoredFixture": "before rejected; after accepted; host bytes preserved",
+      "causalE2ESpeedupClaim": false
+    },
+    "boundary": "Ignored subtrees remain on host and are not read/transferred; overlap with allowed write paths is rejected. This is not a recursive safety inspection of ignored contents."
+  },
+  "canonicalScriptCleanup": {
+    "scope": "standard development scripts now target v0.5; old commands retained only as explicit test:legacy/build:legacy diagnostics",
+    "packageTests": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 7.879824072
+    },
+    "lint": "passed",
+    "independentReview": {
+      "reviewer": "integration_review",
+      "result": "no confirmed blocker",
+      "scope": "uncommitted script/package-test/migration-document delta; read-only, tests not independently rerun"
+    },
+    "releaseReady": false
+  },
+  "standardRootDistributionTrial": {
+    "sourceHead": "f669a826c53bcdba7a7eb414cd09421140d175db",
+    "packageSha256": "88a99ce6e69311ccebd2448995689a9aa0dc7af2cda35c749bcd6a3d2adac36b",
+    "pack": "npm pack (normal root lifecycle)",
+    "install": "offline npm install (normal lifecycle)",
+    "status": "draft-ci-passed",
+    "wallSeconds": 78.951773527,
+    "setupIncluded": false,
+    "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+    "model": "gpt-5.6-sol",
+    "pullRequest": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/19",
+    "submittedHead": "e1317064bc60587bfa8f1af14ed5d5b64a0a7222",
+    "draft": true,
+    "ciRun": 38838979493,
+    "ciResult": "success",
+    "metrics": {
+      "status": "draft-ci-passed",
+      "wallSeconds": 78.880054575,
+      "adapterAttempts": 2,
+      "completedAdapterCalls": 2,
+      "usageCoverage": {
+        "declaredCalls": 2,
+        "completeCalls": 2,
+        "observedTurns": 2,
+        "state": "complete",
+        "enumeration": "controller-dispatched calls only"
+      },
+      "observed": {
+        "input": 110365,
+        "output": 1408,
+        "cacheRead": 96768,
+        "cacheWrite": 0,
+        "reasoning": 503,
+        "processed": 111773,
+        "fresh": 15005
+      },
+      "allDeclaredCallProcessedTokens": 111773,
+      "allAgentTotalTokens": null,
+      "roles": {
+        "implementation": {
+          "attempts": 1,
+          "completeUsageCalls": 1,
+          "observedProcessedTokens": 53044
+        },
+        "review": {
+          "attempts": 1,
+          "completeUsageCalls": 1,
+          "observedProcessedTokens": 58729
+        }
+      },
+      "stages": [
+        {
+          "work": "implementation",
+          "seconds": 23.611171547
+        },
+        {
+          "work": "verify",
+          "seconds": 0.5846176679999999
+        },
+        {
+          "work": "independent-review",
+          "seconds": 31.029798071000005
+        },
+        {
+          "work": "delivery",
+          "seconds": 23.229711761999987
+        }
+      ],
+      "contextHighWaterMark": null,
+      "limitations": [
+        "Input includes cache read/write; output includes reasoning; subsets are not added twice",
+        "Declared-call coverage does not certify provider-internal or external Agent enumeration",
+        "Stage intervals include observation and waiting; they are not pure model computation",
+        "No pricing or causal performance claim"
+      ]
+    },
+    "comparisonClaim": null,
+    "limitations": [
+      "Single synthetic small-change trial; not a matched v0.4 comparison",
+      "Does not verify later migration metadata changes",
+      "No merge or release"
+    ]
+  },
+  "migrationMetadataBoundary": {
+    "sourceParent": "f669a826c53bcdba7a7eb414cd09421140d175db",
+    "migrationSourceSha256": "ffa1cb0640e37ef161a8ddfdd9064ed9a83f14679de11d69d509cbcf1617f151",
+    "counterexample": "Before fix, prepareMigration accepted destination inside linked worktree shared .git; disposable fixture only",
+    "fix": "prepare/stage/clone reject canonical destination overlap with common and per-worktree Git metadata before writes",
+    "coverage": "3 entrypoints x shared metadata, per-worktree metadata and parent symlink alias; source/worktree registrations preserved",
+    "fullLinuxQuality": {
+      "passed": 218,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 106.317218072,
+      "cgroupEnabled": true,
+      "lint": "passed"
+    },
+    "independentReview": "integration_review read-only; no confirmed blocker",
+    "failedTestAttempt": "Direct node test invocation from integration root had wrong cwd and failed; preserved locally, not counted as success. Standard npm run quality from root uses v05 cwd and passed.",
+    "remaining": "Owner configuration add/remove and full setting rollback acceptance remain distinct from selection rollback"
+  },
+  "configurationGitRoundtrip": {
+    "runtimeSourceHead": "433b776c0e6c5724d83a11d2fe017fc4f1ffa7cf",
+    "scope": "owner-directed synthetic settings transition using installed canonical package; ordinary Git handles additions/removals",
+    "trials": [
+      {
+        "schema": "asc-configuration-roundtrip/v1",
+        "status": "passed",
+        "policyFormat": "flat",
+        "preparationCommand": "migration-prepare",
+        "version": "0.5.0-alpha.0",
+        "base": "1f701c6a44439ddd6ae85ce99b266880c787ffb4",
+        "cutover": "87943ed5dbf27e3989fdf9a5494eb7e56459fd86",
+        "restoredHead": "64a973abc9d7232c3e180322af9748b2dde4eaf2",
+        "seconds": 0.677758178,
+        "agentCalls": 0,
+        "guarantees": [
+          "installed CLI migration preparation/rollback",
+          "old entry removed, new fixed-path entry added",
+          "owner rule, permission and unrelated hook preserved",
+          "configuration reverted while later application commit survives",
+          "source and dirty sibling worktree preserved",
+          "conflicting settings revert stops; abort restores later owner settings"
+        ],
+        "limitations": [
+          "Synthetic owner-directed configuration only; no actual legacy runtime or host Skill discovery executed",
+          "No model, remote CI or release; does not prove arbitrary configuration migration",
+          "Git conflict resolution remains an owner-reviewed operation; no forced rollback"
+        ]
+      },
+      {
+        "schema": "asc-configuration-roundtrip/v1",
+        "status": "passed",
+        "policyFormat": "manifest",
+        "preparationCommand": "migration-stage",
+        "version": "0.5.0-alpha.0",
+        "base": "f17f2de32d70e0b62dc83d9dfb37ccbdc0c72954",
+        "cutover": "6389c4f9a7dedf4328b40cf0a0070e74e7f99b1b",
+        "restoredHead": "3a80be4c497f410c859fc7eebbc7b30519797601",
+        "seconds": 0.606706369,
+        "agentCalls": 0,
+        "guarantees": [
+          "installed CLI migration preparation/rollback",
+          "old entry removed, new fixed-path entry added",
+          "owner rule, permission and unrelated hook preserved",
+          "configuration reverted while later application commit survives",
+          "source and dirty sibling worktree preserved",
+          "conflicting settings revert stops; abort restores later owner settings"
+        ],
+        "limitations": [
+          "Synthetic owner-directed configuration only; no actual legacy runtime or host Skill discovery executed",
+          "No model, remote CI or release; does not prove arbitrary configuration migration",
+          "Git conflict resolution remains an owner-reviewed operation; no forced rollback"
+        ]
+      }
+    ],
+    "finalPackageTests": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 9.330717736
+    },
+    "lint": "passed",
+    "independentReview": "integration_review found manifest entry mismatch; corrected to stage for manifest and prepare for flat, re-reviewed with no major issue",
+    "failedDevelopmentChecks": "Initial missing performance import and accidental fixture-string edit failed lint; both corrected, final lint and package tests passed",
+    "releaseReady": false,
+    "realLegacyInstallation": {
+      "schema": "asc-real-legacy-roundtrip/v1",
+      "status": "passed",
+      "legacySourceCommit": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
+      "candidateSourceCommit": "6f61b8ee7ff783f534f152c4994102171526ca17",
+      "legacyInstallation": "actual source-built legacy install CLI, not a published tagged release",
+      "sourceHead": "d917e07fdfe96180aea14ee7f1dad298ab664821",
+      "cutoverHead": "243c0e01b38d8e3b0bdc077ff8d53df3d372cd9a",
+      "restoredHead": "edfac0a4c5d78ff7d525ad7e5499fa9f2d4742d8",
+      "inventoryCount": 40,
+      "seconds": 20.302014243090525,
+      "agentCalls": 0,
+      "checks": [
+        "installed v0.5 CLI prepares actual legacy installation",
+        "explicit dummy owner policy; no inferred authorization",
+        "old Skill and observer registration retired",
+        "owner rule, deny permission and unrelated hook retained",
+        "settings revert restores original bytes while later work survives",
+        "source and dirty sibling unchanged"
+      ],
+      "limitations": [
+        "No model execution or Host Skill autodiscovery",
+        "No remote CI or release",
+        "Explicit known fixture configuration, not arbitrary migration"
+      ],
+      "driverSha256": "43baead1b3bbb904a115c4afb23317e2fa40ade57ea0dd29297e6a25f7c4ec15",
+      "localEvidence": "/tmp/asc-real-legacy-migration-n7vlqew6/real-roundtrip-evidence.json"
+    }
+  },
+  "adaptiveScreenInitialSourceTrial": {
+    "status": "FAIL",
+    "productHead": "a8dc098d91fc95b7daeb7aae4f72225380a0f2dd",
+    "candidateHead": "ae57b186cd6ea29b01f15a8bd49d844fc62f3ef5",
+    "baseHead": "2f86988d532c18aaa7b2aa0d2b584ad74ad12470",
+    "execution": "runAdaptive from initial synthetic list/detail source; planner selected one cohesive summary journey",
+    "wallSeconds": 500.795587358,
+    "declaredAgentCalls": 4,
+    "roles": {
+      "goalProposal": 1,
+      "implementation": 1,
+      "repair": 2,
+      "reviewer": 0
+    },
+    "observedProcessedTokens": 618733,
+    "observedFreshTokens": 155501,
+    "declaredUsageCoverage": "4/4",
+    "allAgentTotalTokens": null,
+    "verificationAttempts": 3,
+    "deliveryAttempted": false,
+    "failure": "All verification attempts stopped at reload convergence after an already-received valid PATCH committed. No independent review or Delivery was reached.",
+    "reproduction": {
+      "agentCalls": 0,
+      "sameCandidateHead": true,
+      "oracleExit": 1,
+      "assertionsChanged": false,
+      "expectedCounts": {
+        "total": 3,
+        "completed": 3,
+        "pending": 0
+      },
+      "observedCounts": {
+        "total": 3,
+        "completed": 2,
+        "pending": 1
+      },
+      "schedule": "Owner probe holds BaseHTTPRequestHandler.parse_request before application do_PATCH for 2500ms after new Document request; checks convergence for 5000ms after commit.",
+      "sourceFinding": "Candidate locks inside do_PATCH; a fresh document reads twice 100ms apart, then never refreshes. Both reads can finish before the held mutation enters the handler."
+    },
+    "artifactSha256": {
+      "originalEvidence": "945232c7054be737bd971a1e0ca5a23bd5e8c07333586993eb395d3c8a059684",
+      "originalOracle": "48aa1a38cdff8746f82f98bd71fd96b3b790378a1fa693afef7e479020c1d546",
+      "diagnosticOracle": "f72952db350937d530e63645905d11541ee9dc3bc061983b21d1e38abf8264c7",
+      "reproduction": "46a60de18a391f56e1544621d67e420f1a4b1e7d6d3540fb29df8538447be48a"
+    },
+    "limitations": [
+      "Source execution, not installed package or PR/CI acceptance",
+      "Existing detailed owner screen/API contract; not ambiguous design-from-scratch acceptance",
+      "One cohesive Work Unit; not multi-unit integration evidence",
+      "Finite synthetic timing probe is not a universal concurrency guarantee",
+      "Failure is preserved; no quality or comparative performance pass is claimed"
+    ]
+  },
+  "adaptiveScreenRecoveryTrial": {
+    "status": "FAIL",
+    "productHead": "7afdd78c4cf2977f79b58fd91abc01f86116adf8",
+    "startingCandidate": "ae57b186cd6ea29b01f15a8bd49d844fc62f3ef5",
+    "finalCandidate": "89bcd0c1a0ad2dcd3771c5ae9b6f277666418793",
+    "wallSeconds": 561.5931070150001,
+    "declaredAgentCalls": 3,
+    "roles": {
+      "repair": 2,
+      "independentReview": 1
+    },
+    "observedProcessedTokens": 884811,
+    "observedFreshTokens": 143819,
+    "allAgentTotalTokens": null,
+    "verificationAttempts": 3,
+    "deliveryAttempted": false,
+    "sourceUnchanged": true,
+    "outcomes": [
+      "First repair passed browser and Python checks but independent review rejected ordering correctness and identified availability risk",
+      "Additional isolated counterexample: partial HTTP header blocked unrelated GET until the connection closed at candidate 798d43530c014bcf9ab0951eb7ced27873ddca69; preceding candidate ae57b186 passed the same counterexample",
+      "Second repair passed browser verification but failed Python -I test_core.py: ModuleNotFoundError for candidate app import",
+      "Repair limit stopped safely before final review or Delivery"
+    ],
+    "productFinding": "Implementation and repair prompts omitted host verification argv. Provide these as diagnostic environment context without granting execution or authority. Their effect on live recovery remains unverified.",
+    "limitations": [
+      "Recovery of an existing failed candidate, not initial implementation or matched performance",
+      "Later candidate availability and independent review not established",
+      "No PR or CI for this candidate"
+    ],
+    "artifactSha256": {
+      "evidence": "676314bc9c6c3963b093624f978094130d9c2855e246458f257662b4329103ec",
+      "counterexample": "c2386b968e45d22b0a61163ed754e30dd174b66b304e4670714550eb3f8703d1"
+    }
+  },
+  "adaptiveScreenCommandContextRecovery": {
+    "status": "FAIL",
+    "productHead": "0e3b859902956558bd126d51c4d45b6f2f4468ce",
+    "wallSeconds": 586.709924749,
+    "sourceUnchanged": true,
+    "candidateHead": "935778cb3fea2e88c292f7d67061c76dcd2d624d",
+    "declaredAgentCalls": 4,
+    "observedProcessedTokens": 1034050,
+    "observedFreshTokens": 190018,
+    "allAgentTotalTokens": null,
+    "deliveryAttempted": false,
+    "outcomes": [
+      "Verification command context enabled repair of Python isolated-mode import failure; subsequent browser and Python checks passed.",
+      "First independent review rejected transport reordering convergence. Additional isolated browser reproduction confirmed stale DOM after the PATCH committed.",
+      "Second repair passed existing checks but independent review rejected stale pending intent retained in browser history. The formal review was static analysis; a subsequent independent browser probe reproduced an obsolete PATCH overwriting a newer opposite toggle after revisiting and reloading an old history entry.",
+      "Four-call admission budget and repair limit stopped without accepting review or submitting changes."
+    ],
+    "evidenceSha256": "3b22afbdf18d478eca0ba72c61ef2a7a23798eaf6611a2456c2ea922be0ffc6b",
+    "limitations": [
+      "Recovery from an existing failed candidate, not initial implementation or matched performance",
+      "Back traversal alone did not reproduce the write; runtime confirmation requires reload of the old entry. History and transport-order probes are separate; neither result establishes combined acceptance.",
+      "No external Delivery or CI for candidate"
+    ],
+    "historyReproduction": {
+      "candidateHead": "935778cb3fea2e88c292f7d67061c76dcd2d624d",
+      "status": "CONFIRMED_WITH_RELOAD",
+      "scenario": "Hold completion=true PATCH, navigate to summary, release and confirm commit; toggle false and confirm commit; return through older history and reload. Reload sends obsolete completion=true and SQLite changes back to true.",
+      "qualification": "Back traversal alone did not reproduce a write in the first probe; the confirmed counterexample includes reload of the stale history entry.",
+      "oracleExit": 1,
+      "newModelCalls": 0,
+      "resourceExhaustion": false,
+      "oracleSha256": "910e11434129f84994977a68d9d8324c78c5db068714a91a351f2b95f24e9d4b",
+      "resultSha256": "fb9f46f130edd17701a6d8eb3a480962611000261a66a97903271e5bbede7f03",
+      "independentReview": "Read-only integration_review confirmed trace and fixed-candidate source alignment; did not rerun the probe."
+    }
+  },
+  "adaptiveScreenHistoryRecovery": {
+    "status": "FAIL",
+    "productHead": "9957ddb017f8c7fbc9605d46e4af3420712ec856",
+    "wallSeconds": 251.36307892600001,
+    "agentCalls": 2,
+    "observedProcessedTokens": 479857,
+    "observedFreshTokens": 95857,
+    "allAgentTotalTokens": null,
+    "candidateHead": "ac3096382fc6bd069bbaa8afe3d85d150dbbd4a7",
+    "verificationAttempts": 3,
+    "deliveryAttempted": false,
+    "sourceUnchanged": true,
+    "finding": "Both repairs still replay obsolete pending intent after history traversal followed by reload. Verification rejected all candidates before independent review.",
+    "nextAction": "Diagnostic output must state the complete observed history+reload schedule; previous assertion name only said history traversal. Preserve the same assertion and owner contract.",
+    "evidenceSha256": "a867b9401e7ea05f92f81d273d6ddaea1ccc0e093112250278e6f81b5a12201b"
+  },
+  "currentScreenClarificationBoundary": {
+    "status": "PASS_FOR_PLANNING_BOUNDARY_ONLY",
+    "productHead": "9957ddb017f8c7fbc9605d46e4af3420712ec856",
+    "baseHead": "2f86988d532c18aaa7b2aa0d2b584ad74ad12470",
+    "clarificationSeconds": 15.872400657999998,
+    "proposalSeconds": 46.869372557000005,
+    "agentCalls": 2,
+    "observedProcessedTokens": 107746,
+    "observedFreshTokens": 32098,
+    "allAgentTotalTokens": null,
+    "questions": [
+      "Should overview counts cover all tasks or only pending tasks?",
+      "Should the overview be read-only, or may it provide bulk actions that change task completion?"
+    ],
+    "oldProposalRejected": true,
+    "sourceUnchanged": true,
+    "selectedUnits": [
+      {
+        "id": "accurate-summary-journey",
+        "intent": "Let a user move through list, summary, and detail views, toggle one task only from detail, and revisit a freshly fetched summary that accurately reflects the persisted SQLite state.",
+        "writePaths": [
+          "app.py",
+          "screen.html",
+          "test_core.py",
+          "design.md"
+        ]
+      }
+    ],
+    "limitations": [
+      "Two separate bounded read-only invocations, not cumulative budget enforcement",
+      "Owner clarification uses already authorized synthetic fixture choices; not production approval",
+      "No implementation, independent semantic design approval, PR/CI or overall Screen-First acceptance established"
+    ],
+    "artifactSha256": {
+      "evidence.json": "82b75344268cdc78cc98b485a3b023819eff234e6fb506fae7b7c8c5c7b7f183",
+      "owner-decision.json": "fc846db3302a7871b31952efa77358634ce8bdef8f79640a9b2afb3104f26f6f",
+      "proposal-result.json": "dd9cff1d215de91f994be6a434314e278271177731a497a3130cef05ac7c2dbc"
+    }
+  },
+  "nativeHistoryCounterexample": {
+    "status": "FIX_OBSERVED_FOR_NATIVE_LINK_PATH",
+    "baselineHead": "935778cb3fea2e88c292f7d67061c76dcd2d624d",
+    "candidateHead": "15a5e959bf1c15dbacf6448a680b3eff1bdeb0c4",
+    "baselineExit": 1,
+    "candidateExit": 0,
+    "newAgentCalls": 0,
+    "scenario": "Click native summary link while toggle is held; release; navigate summary-list-detail through native anchors; commit opposite toggle; traverse list-summary-original-detail history; reload. Baseline replays obsolete true; candidate preserves false without PATCH.",
+    "limitations": [
+      "Separate diagnostic, not replacement of original acceptance oracle",
+      "Programmatic hash traversal is a different input path; this pass does not prove that path safe",
+      "Not a completed independent review or Delivery"
+    ],
+    "artifactSha256": {
+      "check.mjs": "7948d98325f9f5abadf9d5f1831d31a6ff4420ff1378104dcabc1cfb5455036a",
+      "result.json": "b950bded8b4c64ec1092ebd622681d6fb53ac11c507bfc0ade9f32f6ea02ec0d",
+      "baseline-result.json": "ef2bcd896301256c5f25aba307b86804da8dd5a5d81b9f4661e0d62f74912134"
+    }
+  },
+  "screenHistoryRecoveryLatest": {
+    "productHead": "de9a2dd2386622f1c677a12d6ae2e208a0b34a5e",
+    "candidateHead": "ee52a57f1836e1e9a24c465d0233fcd7effee47b",
+    "status": "FAIL",
+    "wallSeconds": 584.4905785980001,
+    "agentCalls": 3,
+    "observedProcessedTokens": 864138,
+    "observedFreshTokens": 165002,
+    "allAgentTotalTokens": null,
+    "verificationExits": [
+      0,
+      0
+    ],
+    "independentReview": "fail",
+    "finding": {
+      "location": "screen.html:198-218,262-288,388-398,444-451",
+      "condition": "A completion PATCH is unsettled when the document reloads, and the user changes hash route or traverses browser history before recovery has replayed or confirmed that update.",
+      "evidence": "requestForRoute clears recoveryIntent before awaiting its initial GET, then discards the claimed intent when routeVersion changes without replaying it. Click navigation restores the marker only when mutationInFlight is non-null, but recovery has not created that promise yet. Browser-history navigation is not handled by prepareRouteNavigation, and popstate only removes markers. Thus the active route can render a pre-commit snapshot; if the original keepalive PATCH subsequently commits, nothing refetches that route. test_core.py:283-354 asserts the discard/cleanup structure but does not cover delayed commit after route invalidation. design.md:5 also explicitly documents discarding the claimed intent.",
+      "impact": "The active list or summary can remain visibly stale after the completion change commits, violating the mandatory acceptance criteria that completion changes, reload, and back/forward navigation remain consistent.",
+      "action": "Preserve or transfer an unsettled completion intent across route invalidation and browser-history traversal, or otherwise ensure the active route is confirmed again after the corresponding write commits. Add regression coverage for route changes and history traversal during reload recovery with the original PATCH committing after the initial snapshot.",
+      "counterevidence": "Normal same-document routing waits for mutationInFlight, and an uninterrupted reload replays the PATCH and refetches. Server FIFO also orders connections already accepted. These defenses do not cover this race because no recovery mutation exists yet, and FIFO cannot order an original PATCH connection the server has not accepted. The passing host verification does not exercise this interleaving.",
+      "severity": "P2",
+      "verification": "static-analysis",
+      "blocking": true
+    },
+    "sourceUnchanged": true,
+    "deliveryAttempted": false,
+    "limits": [
+      "Recovery from a failed candidate, not initial implementation E2E",
+      "Reviewer static finding subsequently reproduced by host browser diagnostic; independent adjudication pending",
+      "Passing history oracle does not cover route invalidation during reload recovery"
+    ],
+    "hostReproduction": {
+      "candidateHead": "ee52a57f1836e1e9a24c465d0233fcd7effee47b",
+      "exit": 1,
+      "oracleSha256": "b5461b7cb0e00adebdee3745c83fe173d4bbe01d3fb015f3572715954c78328b",
+      "resultSha256": "29958afc2ae41608ccca3c534ca7d5375d50736c4da2eefbd83c194af0a8ca72",
+      "schedule": [
+        "Hold original completion PATCH before server acceptance",
+        "Reload with initial recovery GET held",
+        "Navigate list then summary before releasing GET",
+        "Release GET while original PATCH remains held",
+        "Observe old summary",
+        "Release PATCH and verify persisted completion",
+        "Observe summary remains stale for five seconds"
+      ],
+      "expected": {
+        "total": 3,
+        "completed": 3,
+        "pending": 0
+      },
+      "actual": {
+        "total": 3,
+        "completed": 2,
+        "pending": 1
+      },
+      "scope": "Actual Chromium execution in existing isolated verifier; no external Delivery. Native summary link is used; list navigation has fallback hash assignment.",
+      "independentAdjudication": "Confirmed commit-before-stale-DOM counterexample; initial intermediate navigation path not fully recorded",
+      "followup": {
+        "oracle": "v05/evaluation/screen-recovery-oracle.mjs",
+        "oracleSha256": "5c1d8a322801974d700c0546eb1f5798878f7673d933e93727efd934869aae48",
+        "resultSha256": "a0475f872891afedbcd789af17f1757cd6c2fbafba897723ae1afddafc09f97b",
+        "exit": 1,
+        "navigation": "Explicit location.hash transitions to list then summary, each hash asserted; not a claim of native visible link clicks",
+        "loadingAllowed": true,
+        "priorHistoryReplayCounterexampleRetained": true,
+        "result": "Committed completed count 3; visible completed count remains 2",
+        "oracleSourceCommit": "df4faa5a",
+        "subsequentSourceChange": "4111a806 only makes Node globals explicit and replaces equivalent conditional expressions for lint; recorded oracle hash is the executed df4faa5a source."
+      }
+    }
+  },
+  "transportConvergenceDiagnostic": {
+    "oracleSha256": "a12675b2e538e5d9138d88a77a7c7f4b98df7d445da5c6d006458e046d6970de",
+    "results": [
+      {
+        "head": "ffac6fc681f274b953cb536e7fde68e8e359f212",
+        "exit": 1,
+        "artifactSha256": "1b22385f37271dc77095b6fe2cebcec1d78a4a0b9000e096261468364bf33e51"
+      },
+      {
+        "head": "ee52a57f1836e1e9a24c465d0233fcd7effee47b",
+        "exit": 0,
+        "artifactSha256": "71b681fe2d556d697651f0b4e6a6360d7c6839642aeae0247b3a9eae29533bcf"
+      }
+    ],
+    "contract": "Hold original PATCH before server acceptance, reload, release writes, require committed state and visible convergence",
+    "calibration": "Removed requirement to display stale summary before release: a correct implementation may wait in Loading. Retained commit and convergence assertions. Baseline still fails.",
+    "limits": [
+      "Prior oracle precondition timeout on repaired candidate is inconclusive, not a confirmed regression",
+      "Does not prove recovery interrupted by another route change",
+      "Does not override failed independent review"
+    ]
+  },
+  "currentPackagedLocalComparison": {
+    "head": "de9a2dd2386622f1c677a12d6ae2e208a0b34a5e",
+    "archives": {
+      "baseline": {
+        "sha256": "4a9ad82173ec611a7c8a0346306ff558b55c3a07a4f4e4d315a7aad2829e808b"
+      },
+      "current": {
+        "sha256": "f8aa6cec326bce6e0c4f3afed0e87862912130bf49fdd50de2d2ef061c348cfa"
+      }
+    },
+    "rows": [
+      {
+        "arm": "baseline",
+        "wallSeconds": 64.29003065,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 139187,
+        "observedFreshTokens": 27955,
+        "allAgentTotalTokens": null
+      },
+      {
+        "arm": "current",
+        "wallSeconds": 59.89415500100001,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 161834,
+        "observedFreshTokens": 44458,
+        "allAgentTotalTokens": null
+      },
+      {
+        "arm": "current",
+        "wallSeconds": 50.876825194999995,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 143302,
+        "observedFreshTokens": 44614,
+        "allAgentTotalTokens": null
+      },
+      {
+        "arm": "baseline",
+        "wallSeconds": 52.23658481999999,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 121069,
+        "observedFreshTokens": 31085,
+        "allAgentTotalTokens": null
+      }
+    ],
+    "means": {
+      "baseline": {
+        "wallSeconds": 58.263307735,
+        "observedProcessedTokens": 130128,
+        "observedFreshTokens": 29520
+      },
+      "current": {
+        "wallSeconds": 55.385490098000005,
+        "observedProcessedTokens": 152568,
+        "observedFreshTokens": 44536
+      }
+    },
+    "limitations": [
+      "Packaged runWorkflow API, not CLI request loader or GitHub Delivery",
+      "Endpoint is independently reviewed candidate; cannot compare these times directly to prior92second PR/CI observations",
+      "Two runs per arm, counterbalanced order, not statistical performance acceptance",
+      "Setup excluded, failed run costs retained; provider internal usage may be missing",
+      "Existing owner-pinned runtime/dependency assets reused identically; no GraphDB",
+      "Baseline is historical v0.5 PoC, not v0.4; root current distribution uses normal packaging lifecycle; package preparation excluded equally",
+      "Short browser diagnostic runs overlapped comparison; model trials were sequential",
+      "Current observed tokens increased; no joint speed/token acceptance claim"
+    ]
+  },
+  "ciTransitionAncestry": {
+    "registrationHead": "6d7e3bc8cdb93795acd40f1bf6943f8bd26e4c42",
+    "transitionHead": "ada76bdc274ad84e38ef4fd6f3809b824d4b5895",
+    "previousPullRequestBase": "ed660d327ee14a68d343bc197231232810be8498",
+    "currentPullRequestBase": "6d7e3bc8cdb93795acd40f1bf6943f8bd26e4c42",
+    "localValidator": "PASS against latest registration",
+    "remoteValidator": "PASS",
+    "change": "Merge registration into transition work branch to align ancestry; no content change",
+    "mainMerged": false,
+    "rulesetChanged": false,
+    "releaseReady": false,
+    "remoteRun": 38862455635,
+    "remaining": "Registration full quality stopped at missing formal review Evidence. Transition full quality run 38862461354 rejected nondefault PR base as trusted policy authority. No trust rule weakened, no main merge.",
+    "registrationIndependentInspection": {
+      "head": "6d7e3bc8cdb93795acd40f1bf6943f8bd26e4c42",
+      "base": "2d64b8d5",
+      "reviewer": "/root/integration_review",
+      "filesInspected": 4,
+      "blockingFindings": 0,
+      "scope": "Read-only independent source review; no formal export or execution evidence implied."
+    },
+    "registrationTrustedFull": {
+      "recorded": true,
+      "headSha": "6d7e3bc8cdb93795acd40f1bf6943f8bd26e4c42",
+      "baseSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
+      "command": [
+        "npm",
+        "test"
+      ],
+      "scope": "full",
+      "impactDigest": "855eabb8c8aa18faedfcf4c3beb63ce84578d0ae666e632f3c2cd774c19cac4c",
+      "impactMode": "full",
+      "exitCode": 0,
+      "signal": null,
+      "recordDigest": "c5d1431c02ddf27ccd4001e421465e99e23764fea3ee4d1d32e3f1b4e68f7cd2",
+      "status": "PASS",
+      "scopeNote": "Legacy CI contract registration branch only; not v0.5 product acceptance. Formal review export and remote aggregate check remain incomplete.",
+      "assignedScenarios": 2747,
+      "executedScenarios": 2747,
+      "shards": 6
+    }
+  },
+  "screenRouteRecoveryAttempt": {
+    "status": "FAIL",
+    "runtimeSourceHeadAtLaunch": "df4faa5a",
+    "reportedProductHeadAtEnd": "97654e7d684711740bbca03a83769644154a0750",
+    "candidateHead": "3188d9af44cedb971af81077916e868e73b25113",
+    "wallSeconds": 504.723380787,
+    "agentCalls": 2,
+    "observedProcessedTokens": 972398,
+    "observedFreshTokens": 130926,
+    "allAgentTotalTokens": null,
+    "repairs": 2,
+    "sourceUnchanged": true,
+    "independentReview": "NOT RUN; verification remained failed",
+    "deliveryAttempted": false,
+    "failure": "Original PATCH committed after reload/route invalidation, but summary remained 3/2/1 rather than 3/3/0",
+    "nextAction": "No automatic additional run. Diagnostic now includes exact interleaving, which previous filtered output omitted; evaluate before retry.",
+    "limits": [
+      "Generated synthetic app defect; not evidence of harness isolation breach",
+      "Runtime source unchanged during trial; only evaluation/docs commits advanced end-of-run HEAD",
+      "Repair output claims are not verification Evidence"
+    ]
+  },
+  "currentLinuxCi": {
+    "head": "fe5f59d6c439fde297122dc1324af4bcc4695767",
+    "run": 38864609171,
+    "status": "SUCCESS",
+    "passed": 224,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 114915.244318,
+    "scope": "Linux isolation, product quality and standard unpublished package. Legacy trusted-base validator remains failed; not all PR checks passed."
+  },
+  "historicalComplexAcceptance": {
+    "status": "historical-local-observations-not-current-release-acceptance",
+    "provenance": "Selected aggregate fields from retained historical evaluation records; raw SHA256 checked locally. Raw private artifacts are not published; hashes do not make them publicly reproducible.",
+    "replanning": {
+      "status": "PASS_LOCAL_REPLANNING_INTEGRATION_NO_DELIVERY",
+      "productHead": "da0692768b4a2756f82ef3a840ee680f1ca19f79",
+      "rawSha256": "b98c6ee86ac08a5f8367a52e18bbe71091ff04982b51423586eeffa578ff2e88",
+      "wallSeconds": 382.870637319,
+      "agentCalls": 10,
+      "observedProcessedTokens": 633389,
+      "observedFreshTokens": 159405,
+      "allAgentTotalTokens": null,
+      "delivery": "Deliberately denied; no PR/CI",
+      "limitations": [
+        "Real historical failed adaptive fixture, new owner-delegated restart budget; not automatic budget renewal",
+        "Same original owner intent, criteria, verification assets and commands; planner may only change decomposition",
+        "Sequential local provider; no external Draft/CI, not matched performance comparison",
+        "Historical failure/operator gap excluded from this restart interval; prior failure retained",
+        "Observed Controller calls only; provider-wide total unknown",
+        "Two CommonJS/ESM repairs; prompt correction c1eeb2c was not active in this process",
+        "Old candidate invalidated because replanned unit contract differed; no reuse-speed claim",
+        "One historical synthetic fixture, not broad self-directed production acceptance"
+      ],
+      "originalFailureSeconds": 152.018749112,
+      "target": {
+        "head": "59d23dcb9c465cb0fd46dff4f586cea2390bb594",
+        "base": "2b3e87dd2d4bff504b017ae6082690604467e34a",
+        "contract": "733a28f40226352d9834c87c3442cbd9fde631c02eb6e8e7e243c8b3e3fa4c2b",
+        "diff": "eff396e5913487d5d8d658aea7ede5588849e499570c3dc25bb37d6e3db69884",
+        "empty": false
+      }
+    },
+    "advisoryPlan": {
+      "status": "PASS_LOCAL_REPLANNING_INTEGRATION_NO_DELIVERY",
+      "productHead": "f7082c8291659fa9038f3458d7ca63b0e36cd306",
+      "rawSha256": "eacb9921e801a86f4de39eab93f85e3b55d187ee7bdd9051c35e2f6debf8540b",
+      "wallSeconds": 257.179807832,
+      "agentCalls": 7,
+      "observedProcessedTokens": 459742,
+      "observedFreshTokens": 114910,
+      "allAgentTotalTokens": null,
+      "delivery": "Deliberately denied; no PR/CI",
+      "limitations": [
+        "One sequential local trial per revision; not statistical or causal speedup evidence",
+        "Both advisory-plan hint and earlier runtime-convention prompt differ from prior trial",
+        "Planner preserved inventory contract but may change other decomposition details",
+        "257.18 seconds excludes original 152.02-second failure, operator gap and external Delivery",
+        "No PR/CI; provider deliberately rejects Delivery. All-Agent total remains unknown"
+      ],
+      "target": {
+        "head": "03c6a439cb47e742642b32d31b9cefd7bd60fd1e",
+        "base": "2b3e87dd2d4bff504b017ae6082690604467e34a",
+        "contract": "dc2a7a07b8a12f3b33ee4e196b037aba55997ff4665c8a0db594162a5fc004a9",
+        "diff": "7dd999623ca8953421738d17a7a757d44e2acae8aa5a34f45eaff5f9d31314b9",
+        "empty": false
+      }
+    },
+    "multidomainAdaptive": {
+      "status": "PASS_LOCAL_DELEGATED_DECOMPOSITION_NOT_RELEASE",
+      "productHead": "5eabdbadd86761f035b2ff7a0c25fcda711ff7f3",
+      "rawSha256": "697ab6ae10b92a88fef9a187de8c860dcb0d01e945b07586ca4286e507a615ea",
+      "wallSeconds": 811.551784676,
+      "agentCalls": 10,
+      "observedUsage": {
+        "input": 1105826,
+        "output": 36236,
+        "cacheRead": 869632,
+        "cacheWrite": 0,
+        "reasoning": 19160,
+        "processed": 1142062,
+        "fresh": 272430
+      },
+      "allAgentTotalTokens": null,
+      "delivery": "Explicitly denied by evaluation provider; no PR or CI",
+      "limitations": [
+        "Synthetic fixed owner requirements/design; grouping and dependencies delegated to a fresh planner, not autonomous requirement or architecture discovery",
+        "Sequential live dispatch, not parallel model execution or multi-Issue acceptance",
+        "SQLite transaction boundaries, not distributed cross-service transactions or production payment/auth",
+        "No external PR/CI; no comparative performance claim; concurrent host work may affect timing",
+        "Unit tests and integrated oracle do not establish full enterprise-scale acceptance",
+        "Single observation, not matched performance acceptance. Fixed owner design remains; no autonomous architecture discovery.",
+        "Compared with fixed decomposition, test-authoring obligations were moved into parent criteria and compileall was added to unit checks. Contracts/check counts are not identical.",
+        "Declared-call coverage does not prove provider-wide all-Agent total."
+      ],
+      "bindings": [
+        {
+          "id": "idempotent-billing",
+          "target": {
+            "head": "74830ee4f7c355435a1fcca74d28388c345324c6",
+            "base": "bd6e96f4e59815f01a011cb1888f77fe27a9d90a",
+            "contract": "bd052bad4dae5a87d2743172e77adc30457e8aaba1ee55004055da028f954512",
+            "diff": "ced2a87465b9a60fc300f7e4bbbe84bdbb1d7b808d5691585c2ab0849a7ccd72",
+            "empty": false
+          },
+          "checks": 3,
+          "repairs": 0
+        },
+        {
+          "id": "inventory-reservation",
+          "target": {
+            "head": "b1067d017435722ad1d195a128496501decdb1ec",
+            "base": "95e2a3785ca2143fc4607bf3fa28d7607f377ff0",
+            "contract": "1fc3aafaafca60685147a10429cbd0730f120e9b66ba4a579031b691f4f03d39",
+            "diff": "645add3bd931580bb63f833a47e7846cc66b3c529cb0320bc253bb24dfb46d53",
+            "empty": false
+          },
+          "checks": 3,
+          "repairs": 0
+        },
+        {
+          "id": "atomic-order-acceptance",
+          "target": {
+            "head": "07e035d0ee4ab7a0d8d8b07a8f0cd3f85b6fc229",
+            "base": "006b2cdd398e11490781bf5bf76e795c8b08749c",
+            "contract": "b876df44847c3250cca460fcd48ce6ce8b0122daa3d28e5cca54aab750020cee",
+            "diff": "c596bf63aed50286ed86dc37693e58598b64a03c19499153e96c3ca9016c65d9",
+            "empty": false
+          },
+          "checks": 3,
+          "repairs": 0
+        },
+        {
+          "id": "durable-order-reporting",
+          "target": {
+            "head": "cc69b115ab7fab6bed5f80f99a8e3ab6ddcb7f09",
+            "base": "692c6db7256d0773ccaecacc2d8d14e72de84146",
+            "contract": "b39ef95c4642f2c5fedc1bcfb79e707806353c17da04134d07a792d3f39f7c86",
+            "diff": "495e1c11dfca5e11eac793e3de9ea1095e7b178b9561ceeb4bb2908acbd6da26",
+            "empty": false
+          },
+          "checks": 3,
+          "repairs": 0
+        },
+        {
+          "id": "whole-goal",
+          "target": {
+            "head": "32d308fc195776dd3f61524e04314b2c82ffbe3b",
+            "base": "bd6e96f4e59815f01a011cb1888f77fe27a9d90a",
+            "contract": "8851ca87d5a0e6d5f462a44388f9fc8a9424353fb217b6c8669b3cb62a8ce605",
+            "diff": "5ce1410c43345f6c26b4e412959fb0cdc68c9ad6b213383ad48cd5787c8425fa",
+            "empty": false
+          },
+          "checks": 11,
+          "repairs": 0
+        }
+      ]
+    }
+  },
+  "sourceLayoutReplacement": {
+    "status": "working-tree-validated",
+    "runtime": "src/*.mjs",
+    "cli": "bin/asc-v05.mjs",
+    "tests": "test/test_*.mjs",
+    "legacyStepRuntimePresent": false,
+    "legacyHooksPresent": false,
+    "legacyStepSkillsPresent": false,
+    "linuxNodeTests": {
+      "passed": 220,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 119.147832233
+    },
+    "lint": "passed",
+    "sourceQuality": "passed",
+    "remaining": [
+      "independent review of replacement",
+      "trusted base quality contract transition",
+      "PR CI on committed replacement"
+    ],
+    "releaseReady": false
+  },
+  "rootPackagedScreenRecovery": {
+    "status": "FAIL",
+    "runtimeSourceHead": "4bcec485bf0271521d6bdd9fc38d2ae945d50d0e",
+    "packageSha256": "6216d0499cf8065dea7aed8ce0917b8bc5cce50ccb08bebd384e603d56244c0c",
+    "rawEvidenceSha256": "accd85f4c0fa89d61dd54946f71cc36ef933b3ffb29afac5429a1eb72b583e01",
+    "wallSecondsIncludingPlanning": 330.660956975,
+    "agentCalls": 4,
+    "observedProcessedTokens": 662614,
+    "observedFreshTokens": 142294,
+    "allAgentTotalTokens": null,
+    "sourceUnchanged": true,
+    "candidateHead": "e5a7eb9c8be0145f0b12446444d041b4681c5d33",
+    "deliveryAttempted": false,
+    "failure": "Verification could not confirm the oracle precondition: server received full known-valid PATCH body before reload. No successful post-repair independent review.",
+    "limits": [
+      "Same contract and verification assets as the preceding failed trial",
+      "Repaired candidate may require oracle instrumentation compatibility analysis; precondition failure alone does not prove stale-state defect",
+      "Recovery only; not initial implementation E2E or matched performance acceptance",
+      "Runtime is the fixed packaged 4bcec485, not the subsequent restart-diagnostic changes",
+      "Provider internal Agent enumeration remains unknown"
+    ],
+    "oracleDiagnosis": {
+      "status": "instrumentation-mismatch-confirmed-by-source",
+      "candidateBodyRead": "app.py:210 uses self.rfile.read1(remaining)",
+      "observerCoverage": "ObserveBody intercepts read only; __getattr__ delegates read1 without recording receipt",
+      "implication": "Receipt precondition failure does not establish candidate convergence failure. Repair observer coverage and calibrate before another provider run. Prior failed trial remains failed; no acceptance result inferred."
+    },
+    "calibratedVerification": {
+      "status": "verification-passed-not-delivered",
+      "runtimeHead": "b7c6da29d63cc1dff4c60b9ddf6b7d701b2008c8",
+      "candidateHead": "e5a7eb9c8be0145f0b12446444d041b4681c5d33",
+      "evidencePath": "/tmp/asc-body-observer-v2-8wsbww_u/verification.json",
+      "evidenceSha256": "e92dfd0a091d939c333f7359d9819440feaf33d5bcd758531b17407aff7c9646",
+      "oracleDigest": "1d805c1b0766309dc213d437d2d6c54a45c6ab4f7f4b392dd03207a9a2700c72",
+      "calibration": {
+        "read": "pass",
+        "read1": "pass",
+        "partialBodyDoesNotTrigger": true,
+        "fullBodyTriggers": true
+      },
+      "wallSeconds": 9.100315399,
+      "exitCodes": [
+        0,
+        0
+      ],
+      "sourceUnchanged": true,
+      "agentCalls": 0,
+      "limitations": [
+        "No Agent calls, no independent review, no Delivery. Verification only. Original failed trial retained."
+      ],
+      "oracleSource": "v05/evaluation/screen-body-read-oracle.mjs",
+      "oracleSourceSha256": "2248ac397207fc9c876d727b6f02ed5cc4d58f963030a2923f5aa98be75ced70",
+      "archivedSourceDifference": "Explicit globalThis bindings and equivalent if/else replacing two conditional expressions for repository lint; oracle acceptance conditions unchanged.",
+      "independentInspection": "Read-only independent review confirmed only read/read1 observer routing changed, with acceptance checks unchanged; this is not candidate review."
+    },
+    "latestDriverFailure": {
+      "runtimeSourceHead": "93670caeff0d4135ed8f0086c18531b69cabcda8",
+      "packageSha256": "47af12d3ca24f06c6c1f296092189d3e3c06d1b1b6b11decd76f3b6d7a4df5c9",
+      "rawEvidenceSha256": "e2f3d4a2979c14095f2e384f86180ec4781e59970b0b2442ee926da6a37e66d7",
+      "error": "Error: Invalid asset pin",
+      "cause": "Evaluation driver copied inspectAssets entries/bytes into strict dependency pin; product correctly rejected extra fields. Driver corrected without changing product validation.",
+      "wallSeconds": 13.862826362,
+      "agentCalls": 1,
+      "observedProcessedTokens": 17085,
+      "allAgentTotalTokens": null,
+      "sourceUnchanged": true,
+      "status": "FAIL",
+      "limits": [
+        "Not a product performance comparison or completed screen acceptance",
+        "Corrected rerun is separate; this cost is retained"
+      ]
+    },
+    "correctedDriverTrial": {
+      "status": "FAIL",
+      "runtimeSourceHead": "93670caeff0d4135ed8f0086c18531b69cabcda8",
+      "packageSha256": "47af12d3ca24f06c6c1f296092189d3e3c06d1b1b6b11decd76f3b6d7a4df5c9",
+      "rawEvidenceSha256": "085855f53377165f6393b45dad26843161ab746fe270e7e53a790bbd15913db8",
+      "wallSeconds": 819.374868126,
+      "agentCalls": 6,
+      "observedProcessedTokens": 969829,
+      "observedFreshTokens": 207205,
+      "allAgentTotalTokens": null,
+      "sourceUnchanged": true,
+      "deliveryAttempted": false,
+      "candidateHead": "53ee862793f5226cef387186445d6efb438a0480",
+      "failure": "Error: Independent review absent, stale or blocked",
+      "remainingFinding": "Confirmed in isolated browser/API/SQLite execution: after the held PATCH commits, the reloaded summary remains total=3,completed=2,pending=1 instead of completed=3,pending=0 throughout the 5-second observation. Candidate source unchanged.",
+      "oracleGap": "The calibrated read/read1 observer pauses after the application lock. The existing pre-handler oracle covers the earlier scheduling boundary and must be run against this candidate.",
+      "limits": [
+        "Verification passed but final independent review blocked; not screen acceptance or Delivery success",
+        "Failed trials and their costs remain recorded",
+        "Controller-dispatched usage only; provider-internal enumeration unknown"
+      ],
+      "preHandlerReproduction": {
+        "status": "FAIL",
+        "candidateHead": "53ee862793f5226cef387186445d6efb438a0480",
+        "wallSeconds": 12.920735603999999,
+        "sourceUnchanged": true,
+        "agentCalls": 0,
+        "evidencePath": "/tmp/asc-prehandler-repro-l5haeqsu/verification.json",
+        "oracleDigest": "c461eba869f18c565f309d7c52078a5c82c86324710de38a799e615067d52810",
+        "boundary": "PATCH received and held before application handler; reload GET completes before release; SQLite commit observed before DOM assertion",
+        "observerCompatibility": "ReplayBody supports read1 as well as read; acceptance assertions unchanged",
+        "repairCheck": {
+          "candidateHead": "55b7e9915abf50af03925e957497270d8393a65e",
+          "status": "PASS-verification-only",
+          "wallSeconds": 14.322583362,
+          "sourceUnchanged": true,
+          "exitCodes": [
+            0,
+            0
+          ],
+          "agentCalls": 0,
+          "limitation": "Same pre-handler oracle now passes, but independent review subsequently found lost mutation-error feedback; no overall acceptance claimed."
+        }
+      }
+    },
+    "sameContractRestart": {
+      "status": "FAIL",
+      "runtimeSourceHead": "2b6a3d5f2",
+      "runtimeKind": "source-worktree",
+      "rawEvidenceSha256": "99127ec1d4a366dc065904f3317e54daf5332b884803bb6e06e52d3be874e7c9",
+      "wallSeconds": 577.913709774,
+      "agentCalls": 5,
+      "observedProcessedTokens": 1110270,
+      "observedFreshTokens": 265342,
+      "allAgentTotalTokens": null,
+      "sourceUnchanged": true,
+      "deliveryAttempted": false,
+      "candidateHead": "ddf1dd1bf2afa9d5d788ba60c0805c727633fe8c",
+      "replanned": false,
+      "improvement": "Candidate bytes reused; no goal-proposal or initial implementation call. Fresh reviews identified stale summary, lost mutation error, then incompatible one-second PATCH body deadline.",
+      "remainingFinding": "Existing valid bounded PATCH requests can fail solely because receipt exceeds one second; base source has no such deadline. Lock is still held during request receipt.",
+      "limits": [
+        "Not successful recovery or Delivery acceptance",
+        "Previous trial costs retained; no speedup claim",
+        "Two bounded repairs exhausted; candidate preserved"
+      ]
+    },
+    "explicitPlanRecovery": {
+      "status": "verification-and-independent-reviews-passed-no-delivery",
+      "runtimeSourceHead": "57799207",
+      "candidateHead": "3e1a5ee9a2ebd551d4be8d1aaac8c06da217419e",
+      "originalEvidenceSha256": "32b1e1757368fc108f47641d6178beeca8e3e900b5296e37364d0190d3f25c2e",
+      "wallSeconds": 421.600634601,
+      "agentCalls": 4,
+      "roles": {
+        "review": 3,
+        "repair": 1
+      },
+      "observedProcessedTokens": 807739,
+      "observedFreshTokens": 161467,
+      "allAgentTotalTokens": null,
+      "sourceUnchanged": true,
+      "unitReview": "PASS after API compatibility repair",
+      "integratedReview": "PASS at integrated HEAD",
+      "verificationExits": [
+        0,
+        0
+      ],
+      "delivery": "Intentionally stopped by evaluation provider before external PR/CI",
+      "driverPostprocessing": "Failed on nonexistent unit.workflowRoot; original failure retained. Separate adjudication checks unit.result and whole-Goal diagnostic target/verification/review binding without rerunning model. Future driver corrected.",
+      "preHandlerCounterexample": {
+        "status": "PASS",
+        "head": "3e1a5ee9a2ebd551d4be8d1aaac8c06da217419e",
+        "sourceUnchanged": true,
+        "wallSeconds": 14.518735081,
+        "exitCodes": [
+          0,
+          0
+        ],
+        "evidenceSha256": "b40900a2b8b72da338b0e0d0d42f992e3a5cd1e2bab5f21e7bcba337a3087939"
+      },
+      "limits": [
+        "Recovery trial, not initial implementation timing",
+        "Earlier failed runs and costs remain recorded",
+        "No Draft PR/CI acceptance or matched performance claim",
+        "Historical plan supplied explicitly through supported restart API; no historical Evidence rewritten"
+      ]
+    }
+  },
+  "restartDiagnosticsValidation": {
+    "runtimeHead": "b7c6da29d63cc1dff4c60b9ddf6b7d701b2008c8",
+    "command": "ASC_TEST_CGROUP=1 npm test",
+    "passed": 224,
+    "failed": 0,
+    "skipped": 0,
+    "durationSeconds": 107.452038564,
+    "logSha256": "966a3879de8602142f4ae510e5df517468b6d16f783865867481fc073cd813d2",
+    "lint": "pass",
+    "independentReview": "No blocking findings after repeated-restart persistence and envelope byte-limit corrections",
+    "limitations": [
+      "Local Linux regression only; not a performance acceptance comparison or release approval"
+    ]
+  },
+  "proposalAssetPreflight": {
+    "implementationHead": "dc6c914f4df7d399d2b17154b1edb8c504754e95",
+    "change": "Reuse AssetController validation before proposal Agent; include input observation in proposal elapsed time and budget.",
+    "counterexample": "Malformed asset pin previously consumed one planning call and 17085 observed processed tokens before rejection; regression now asserts no Agent call.",
+    "standardTests": {
+      "passed": 216,
+      "failed": 0,
+      "skipped": 8,
+      "durationMs": 101755.739718,
+      "scope": "Asset preflight implementation before subsequent timing-start relocation"
+    },
+    "timingRelocationTests": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "Goal proposal suite after timing-start relocation"
+    },
+    "cgroupFollowup": {
+      "passed": 41,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 91490.526085,
+      "command": "ASC_TEST_CGROUP=1 node --test test/test_controller.mjs test/test_verification_assets.mjs",
+      "scope": "Includes all eight cgroup cases skipped in standard invocation; counts overlap, do not add"
+    },
+    "independentReview": "No blocking findings; inventory cost included in timing after review note",
+    "limits": [
+      "No measured E2E speedup claim",
+      "Valid asset contracts incur an additional read-only inventory validation before model startup",
+      "Live screen trial still uses fixed 93670cae package, not this later implementation"
+    ]
+  },
+  "repeatedGoalRestart": {
+    "implementationHead": "57799207",
+    "status": "targeted-regression-passed",
+    "failureObserved": "Second non-replanning restart failed Prior proposal required before Agent launch because previous restart omitted adopted proposal.",
+    "fix": "Retain only revalidated plan and binding plus source reference; reset per-invocation proposal calls/time to zero. Fresh verification and review remain mandatory.",
+    "tests": {
+      "goalSuiteBeforeFinalCatchFix": {
+        "passed": 51,
+        "failed": 0,
+        "skipped": 0,
+        "durationMs": 76500.030233
+      },
+      "finalRepeatedRestartAndEarlyFailure": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "durationMs": 7180.346624
+      },
+      "lint": "pass"
+    },
+    "independentReview": "Initial P2 on early-error masking corrected; read-only follow-up found no additional blockers.",
+    "limits": [
+      "Not live provider acceptance of repeated recovery",
+      "Earlier historical result without proposal is not rewritten"
+    ],
+    "fullLinuxCi": {
+      "head": "0d9e198f42fdc1b8e206b0644a2ff985cb4b0d55",
+      "run": 38863579279,
+      "status": "SUCCESS",
+      "passed": 224,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 116525.106198,
+      "scope": "Linux isolation, product quality and standard unpublished package. Legacy trusted-base validator remains failed; not all PR checks passed."
+    }
+  },
+  "publicScreenRecoveryLatest": {
+    "status": "draft-ci-passed",
+    "runtimeImplementationHead": "57799207",
+    "repositoryHeadAtExecution": "fe5f59d6c439fde297122dc1324af4bcc4695767",
+    "candidateHead": "f1f5b28f6e2f09b58f2aaccf5d7b4c3a6d2b53fe",
+    "base": "c21cf78609316689a4724327733755a1b5a36ba8",
+    "diffDigest": "54f3ef2907b7f2ed34d6770fe63791efbadb8a6301c51046384d92bc9c220c9c",
+    "contractDigest": "ee714522020b75bf35800f2445a6601b46b636722dd254b4915b18b96f8d9059",
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/20",
+    "ciRun": 38865345294,
+    "remoteTests": {
+      "passed": 11,
+      "failed": 0,
+      "scope": "Python app and greeting suite plus independent greeting oracle; browser checks local only"
+    },
+    "wallSeconds": 208.697460137,
+    "agentCalls": 1,
+    "observedProcessedTokens": 214512,
+    "observedFreshTokens": 78832,
+    "allAgentTotalTokens": null,
+    "stages": [
+      {
+        "work": "verify",
+        "seconds": 20.718969838000003
+      },
+      {
+        "work": "independent-review",
+        "seconds": 162.90428062499998
+      },
+      {
+        "work": "delivery",
+        "seconds": 23.241835810999987
+      }
+    ],
+    "rawEvidenceSha256": "36e79ffd32448758187a2f267bb2747b490209015e5004102becc511f03bcbe6",
+    "publicBoundary": "Copied only four inspected synthetic file blobs onto existing public baseline in a new linked worktree. No private history, logs or local settings copied. Existing owner policy and baseline app bytes match.",
+    "verification": "Both calibrated body-receipt and pre-handler reload oracles plus Python app tests passed in Linux isolation; fresh independent review bound to new public HEAD passed. Controller observed Draft/unmerged PR and PR-bound CI.",
+    "limitations": [
+      "Existing repaired candidate; not initial Goal-to-Delivery timing",
+      "Prior failed and recovery trial costs remain separate; no speedup claim",
+      "No general complex-system acceptance or provider-internal total usage claim"
+    ]
+  },
+  "compactReviewMetadata": {
+    "status": "content-equivalence-and-workflow-regression-passed",
+    "change": "Serialize complete review metadata without indentation; no field omitted or evidence weakened.",
+    "sample": {
+      "source": "Public synthetic screen delivery review metadata",
+      "originalBytes": 13978,
+      "compactBytes": 9418,
+      "jsonValuesEqual": true
+    },
+    "tests": {
+      "passed": 29,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 25854.323867
+    },
+    "independentReview": "No blockers; line-oriented partial reading is less convenient; JSON field access remains available.",
+    "limits": [
+      "Byte reduction is not measured token or speed reduction",
+      "No matched provider performance acceptance for this change yet"
+    ]
+  },
+  "latestPackagedLocalComparison": {
+    "head": "76793b6a5c59ddc4931a8491c2d79248bf6f38a5",
+    "archives": {
+      "baseline": {
+        "sha256": "4a9ad82173ec611a7c8a0346306ff558b55c3a07a4f4e4d315a7aad2829e808b"
+      },
+      "current": {
+        "sha256": "956f49a45c6eb8ef7b7ced26606156c1b984b068cf36c621b05083c2a63933b0"
+      }
+    },
+    "rows": [
+      {
+        "arm": "baseline",
+        "wallSeconds": 59.009234644,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 120770,
+        "observedFreshTokens": 41410,
+        "allAgentTotalTokens": null
+      },
+      {
+        "arm": "current",
+        "wallSeconds": 70.015213239,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 148934,
+        "observedFreshTokens": 27334,
+        "allAgentTotalTokens": null
+      },
+      {
+        "arm": "current",
+        "wallSeconds": 64.860381589,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 145384,
+        "observedFreshTokens": 26728,
+        "allAgentTotalTokens": null
+      },
+      {
+        "arm": "baseline",
+        "wallSeconds": 67.96703860900001,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 109236,
+        "observedFreshTokens": 54452,
+        "allAgentTotalTokens": null
+      }
+    ],
+    "means": {
+      "baseline": {
+        "wallSeconds": 63.48813662650001,
+        "observedProcessedTokens": 115003.0,
+        "observedFreshTokens": 47931.0
+      },
+      "current": {
+        "wallSeconds": 67.437797414,
+        "observedProcessedTokens": 147159.0,
+        "observedFreshTokens": 27031.0
+      }
+    },
+    "limitations": [
+      "Packaged runWorkflow API, not CLI request loader or GitHub Delivery",
+      "Endpoint is independently reviewed candidate; cannot compare these times directly to prior92second PR/CI observations",
+      "Two runs per arm, counterbalanced order, not statistical performance acceptance",
+      "Setup excluded, failed run costs retained; provider internal usage may be missing",
+      "Existing owner-pinned runtime/dependency assets reused identically; no GraphDB",
+      "Baseline is historical v0.5 PoC, not v0.4; root current distribution uses normal packaging lifecycle; package preparation excluded equally",
+      "Four fresh runs completed successfully, not statistical acceptance",
+      "All-Agent totals remain unknown; observations only",
+      "No demonstrated joint speed/token reduction"
+    ]
+  },
+  "latestLinuxCi": {
+    "head": "76793b6a5c59ddc4931a8491c2d79248bf6f38a5",
+    "run": 38866640345,
+    "status": "PASS",
+    "tests": 224,
+    "passed": 224,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 112872.778377,
+    "scope": "Linux product CI only; base validator still fails the pending CI contract transition"
+  },
+  "optionalTemplatesAndBatchedReviewComparison": {
+    "sourceCommit": "0bef3f973cf714ed7e14ac6b238b9d8de4d589eb",
+    "endpoint": "independently-reviewed-candidate; no Delivery or CI",
+    "model": "gpt-5.6-sol",
+    "fixtureBase": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+    "archiveSha256": {
+      "baseline": "4a9ad82173ec611a7c8a0346306ff558b55c3a07a4f4e4d315a7aad2829e808b",
+      "current": "e9bc64fb4a9a36c545295e0d2623b1703f909a6c4c69da01195f7b881617e70d"
+    },
+    "rawEvidenceSha256": "0354a0f39fff7ad0a06b059379678a23f572c5585affd4f664bf98084e825b01",
+    "rows": [
+      {
+        "index": 0,
+        "arm": "baseline",
+        "wallSeconds": 55.672751923999996,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "calls": [
+          {
+            "role": "implementation",
+            "seconds": 17.740608852999998,
+            "processedTokens": 62409,
+            "freshTokens": 8777
+          },
+          {
+            "role": "review",
+            "seconds": 29.467009316,
+            "processedTokens": 58116,
+            "freshTokens": 17156
+          }
+        ],
+        "observedProcessedTokens": 120525,
+        "observedFreshTokens": 25933,
+        "allAgentTotalTokens": null
+      },
+      {
+        "index": 1,
+        "arm": "current",
+        "wallSeconds": 48.523843898,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "calls": [
+          {
+            "role": "implementation",
+            "seconds": 19.551534634,
+            "processedTokens": 65923,
+            "freshTokens": 26883
+          },
+          {
+            "role": "review",
+            "seconds": 22.980172542000002,
+            "processedTokens": 44205,
+            "freshTokens": 16301
+          }
+        ],
+        "observedProcessedTokens": 110128,
+        "observedFreshTokens": 43184,
+        "allAgentTotalTokens": null
+      },
+      {
+        "index": 2,
+        "arm": "current",
+        "wallSeconds": 56.991462669000015,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "calls": [
+          {
+            "role": "implementation",
+            "seconds": 21.030815955999998,
+            "processedTokens": 55347,
+            "freshTokens": 7091
+          },
+          {
+            "role": "review",
+            "seconds": 30.226424343999998,
+            "processedTokens": 63086,
+            "freshTokens": 26990
+          }
+        ],
+        "observedProcessedTokens": 118433,
+        "observedFreshTokens": 34081,
+        "allAgentTotalTokens": null
+      },
+      {
+        "index": 3,
+        "arm": "baseline",
+        "wallSeconds": 58.181934439,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "calls": [
+          {
+            "role": "implementation",
+            "seconds": 20.953119831999995,
+            "processedTokens": 51756,
+            "freshTokens": 6060
+          },
+          {
+            "role": "review",
+            "seconds": 28.240604917,
+            "processedTokens": 58571,
+            "freshTokens": 24267
+          }
+        ],
+        "observedProcessedTokens": 110327,
+        "observedFreshTokens": 30327,
+        "allAgentTotalTokens": null
+      }
+    ],
+    "means": {
+      "baseline": {
+        "wallSeconds": 56.9273431815,
+        "observedProcessedTokens": 115426,
+        "observedFreshTokens": 28130
+      },
+      "current": {
+        "wallSeconds": 52.757653283500005,
+        "observedProcessedTokens": 114280.5,
+        "observedFreshTokens": 38632.5
+      }
+    },
+    "limitations": [
+      "Packaged runWorkflow API, not CLI request loader or GitHub Delivery",
+      "Endpoint is independently reviewed candidate; cannot compare these times directly to prior92second PR/CI observations",
+      "Two runs per arm, counterbalanced order, not statistical performance acceptance",
+      "Setup excluded, failed run costs retained; provider internal usage may be missing",
+      "Existing owner-pinned runtime/dependency assets reused identically; no GraphDB",
+      "Baseline is historical v0.5 PoC, not v0.4; root current distribution uses normal packaging lifecycle; package preparation excluded equally"
+    ],
+    "assessment": "Both arms completed two trials with two agents each. Current mean time and observed processed tokens are lower, while observed fresh tokens are higher. Total usage remains missing. No performance acceptance or causal improvement claim.",
+    "templateValidation": {
+      "packageTestsPassed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMilliseconds": 9928.844727,
+      "independentReview": "no blocking findings; read-only review of templates and packaging"
+    },
+    "linuxCi": {
+      "head": "0bef3f973cf714ed7e14ac6b238b9d8de4d589eb",
+      "status": "success",
+      "url": "https://github.com/techbeansjp-free/AGENTS.md/actions/runs/38868798206"
+    },
+    "baseValidator": {
+      "status": "failure",
+      "reason": "trusted main still requires legacy package.json.agentSkillChain.qualityContractVersion",
+      "url": "https://github.com/techbeansjp-free/AGENTS.md/actions/runs/38868794272"
+    }
+  },
+  "latestUnpublishedCandidateCutover": {
+    "sourceCommit": "698579624b2e97d4e3a64717ae212ba99b380134",
+    "packageSha256": "5378ca75b8b9d98feb843cad6ed9915dbf4e8591c690085516257b745b35f976",
+    "packageVersion": "0.5.0",
+    "published": false,
+    "publishAuthorized": false,
+    "evidenceSha256": "445c25a6afbc79edb3570c1193e12a911f45f09b9c81c13e3c3193aa67ecd42e",
+    "externalAgentCalls": 0,
+    "formats": [
+      {
+        "format": "flat",
+        "status": "passed",
+        "seconds": 0.6784532350000001,
+        "guarantees": [
+          "installed CLI migration preparation/rollback",
+          "old entry removed, new fixed-path entry added",
+          "owner rule, permission and unrelated hook preserved",
+          "configuration reverted while later application commit survives",
+          "source and dirty sibling worktree preserved",
+          "conflicting settings revert stops; abort restores later owner settings"
+        ],
+        "limitations": [
+          "Synthetic owner-directed configuration only; no actual legacy runtime or host Skill discovery executed",
+          "No model, remote CI or release; does not prove arbitrary configuration migration",
+          "Git conflict resolution remains an owner-reviewed operation; no forced rollback"
+        ]
+      },
+      {
+        "format": "manifest",
+        "status": "passed",
+        "seconds": 0.5945879150000001,
+        "guarantees": [
+          "installed CLI migration preparation/rollback",
+          "old entry removed, new fixed-path entry added",
+          "owner rule, permission and unrelated hook preserved",
+          "configuration reverted while later application commit survives",
+          "source and dirty sibling worktree preserved",
+          "conflicting settings revert stops; abort restores later owner settings"
+        ],
+        "limitations": [
+          "Synthetic owner-directed configuration only; no actual legacy runtime or host Skill discovery executed",
+          "No model, remote CI or release; does not prove arbitrary configuration migration",
+          "Git conflict resolution remains an owner-reviewed operation; no forced rollback"
+        ]
+      }
+    ],
+    "releaseReady": false
+  },
+  "projectAssetUpdateValidation": {
+    "sourceCommit": "4fefdb60e32c4fa18896cc8cdbb1c24907b5e0a6",
+    "implementationCommit": "ea9cc0bc",
+    "localQuality": {
+      "tests": 238,
+      "pass": 230,
+      "fail": 0,
+      "skip": 8,
+      "seconds": 91.388137486
+    },
+    "covered": [
+      "Unedited distribution assets update; edited/deleted assets conflict without applying other changes",
+      "Project-owned rules, authored specifications, custom assets and Git indexes preserved",
+      "Two linked worktrees update concurrently; one conflict does not reject the other",
+      "Offline packed installation with explicit Host Skill entry and stable update inventory",
+      "Package relocation regenerates references without editing authored specifications"
+    ],
+    "limitations": [
+      "Host automatic Skill discovery and model execution not verified by file/link tests",
+      "Concurrent tests cover selected interleavings, not every same-file race",
+      "No model E2E performance conclusion; updater itself launches no model",
+      "Local skipped isolation tests are not counted as passed"
+    ],
+    "releaseReady": false,
+    "linuxCi": {
+      "head": "4fefdb60e32c4fa18896cc8cdbb1c24907b5e0a6",
+      "run": "https://github.com/techbeansjp-free/AGENTS.md/actions/runs/38878429847",
+      "status": "PASS",
+      "tests": 238,
+      "pass": 238,
+      "fail": 0,
+      "skip": 0,
+      "testSeconds": 115.840688297,
+      "distributionInspection": "PASS",
+      "scope": "Linux CI suite including isolation; not external model E2E or full release acceptance"
+    }
+  },
+  "ciCutoverConfigurationAudit": {
+    "status": "PASS",
+    "checkedFiles": 29,
+    "mismatches": [],
+    "baseValidatorRun": "https://github.com/techbeansjp-free/AGENTS.md/actions/runs/38878426392",
+    "baseFailure": "Current trusted main expects package.json.agentSkillChain.qualityContractVersion; v0.5 uses root qualityContractVersion",
+    "distinction": "The two stale proposed hashes are a separate future cutover failure, not the cause of this current main-validator failure",
+    "authorization": "User explicitly authorized the fixed configuration hashes and proposal validator hash update. This does not authorize merge, release, or active main gate replacement.",
+    "nextAction": "CI cutover completed: PR #1580 and #1581 merged into main by explicit owner authorization. Required contexts are linux and base validator. Both checks succeeded at commit 37e1d48f1 (runs 38887765421 and 38887762878). This is not final product release acceptance.",
+    "previousAudit": {
+      "sourceCommit": "4fefdb60e32c4fa18896cc8cdbb1c24907b5e0a6",
+      "mismatches": [
+        {
+          "path": "package.json",
+          "proposedSha256": "581732f382bf91f7a704a6137377527d7aa16f73f8c83430b0fdefcab575ac04",
+          "actualSha256": "30124caa46864c28fa26df7146ea4a79a253b98cdcd98e583c1b440e857cdaee"
+        },
+        {
+          "path": "scripts/quality-support/domain/conformance.ts",
+          "proposedSha256": "b49bd9add80c45ff100ac530adaaf9b230d0524b54a7954bc0ad1f463bed8c6c",
+          "actualSha256": "5bbe6b3806b4d9c055b856fb159b126acb267744044c8e5e7885da787dda87fc"
+        }
+      ]
+    },
+    "validatorSha256": "495b321569cce4890cc6aa9f9c83e9a064e8bd7977abf72a67cd68d62fa09b37",
+    "validation": "node --import tsx scripts/check_project_quality.ts --root=$PWD --trusted-root=$PWD: valid true; all 29 pinned files recomputed and matched",
+    "baseFailureScope": "Historical pre-cutover observation; the existing baseFailure text is retained as history, not the current main validator result."
+  },
+  "projectSkillHostDiscovery": {
+    "status": "PASS",
+    "root": "/tmp/asc-skill-discovery-2mi5gpqq",
+    "codexVersion": "codex-cli 0.153.4",
+    "sourceCommit": "7c14838316daf378f7ce3f4c4922dca6a372e4af",
+    "methods": [
+      "initialize",
+      "skills/list"
+    ],
+    "network": "unshare user+net namespace",
+    "modelCalls": 0,
+    "cases": [
+      {
+        "cwd": "/tmp/asc-skill-discovery-2mi5gpqq/worktree",
+        "asc": [
+          {
+            "name": "asc",
+            "description": "ASCで許可された開発・再開・独立レビューを実行するとき、プロジェクトのASC入口を使う。通常作業へASC導入を強制しない。",
+            "path": "/tmp/asc-skill-discovery-2mi5gpqq/worktree/.agents/skills/asc/SKILL.md",
+            "scope": "repo",
+            "enabled": true,
+            "pluginId": null
+          }
+        ],
+        "errors": []
+      },
+      {
+        "cwd": "/tmp/asc-skill-discovery-2mi5gpqq/other-worktree",
+        "asc": [],
+        "errors": []
+      }
+    ],
+    "limitations": [
+      "CLI app-server discovery only; no IDE or Claude validation",
+      "No model invocation or end-to-end development execution"
+    ],
+    "driverSha256": "5f94b226a221d869e09241b863d1853922dc6c403501e93edb2244af24e8b389",
+    "driverPath": "/tmp/asc-skill-discovery.py",
+    "setup": "Fresh synthetic repository with two linked worktrees; project-assets --register-skill --apply on the first only; credential-free temporary Codex state; local skills/list with both cwds and forceReload=true in one app-server process"
+  },
+  "projectAssetPackageRoundtrip": {
+    "status": "PASS",
+    "root": "/tmp/asc-assets-roundtrip-omaqje1a",
+    "trials": [
+      {
+        "sourceCommit": "5d320369a7f3343c687cfd4777e8373313880c51",
+        "packageSha256": "572e321ea03fd14204abc16db00fe2fb5dbff96701293eb33af14773a2ea3a1f",
+        "seconds": 0.6341276520397514,
+        "managedFiles": 58,
+        "ownerFilesPreserved": true
+      },
+      {
+        "sourceCommit": "bf95c9414390686cd2eafc098081cfe13cb84e18",
+        "packageSha256": "9063159dca88cdd9fceec27cae591dd2d4b5b5b11df48d938dd8dc25d1a90891",
+        "seconds": 0.600464059971273,
+        "managedFiles": 59,
+        "ownerFilesPreserved": true
+      },
+      {
+        "sourceCommit": "5d320369a7f3343c687cfd4777e8373313880c51",
+        "packageSha256": "572e321ea03fd14204abc16db00fe2fb5dbff96701293eb33af14773a2ea3a1f",
+        "seconds": 0.593693281058222,
+        "managedFiles": 58,
+        "ownerFilesPreserved": true
+      }
+    ],
+    "managedAssetsRestored": true,
+    "newOptionalEntryRetained": true,
+    "ownerEditStopsWholeUpdate": true,
+    "network": "npm offline; no models or remotes",
+    "limitations": [
+      "Two unpublished v0.5 snapshots, not v0.4 runtime rollback",
+      "Explicit installation and project-assets calls; no hot upgrade or automatic settings migration",
+      "No model or E2E performance conclusion"
+    ],
+    "driverPath": "/tmp/asc-assets-package-roundtrip.py",
+    "driverSha256": "df299ed6c4770b5e0b5a91e33ef3363442cce93650313cc493fd6bd3ce553c10"
+  },
+  "latestCanonicalDummyDelivery": {
+    "status": "PASS",
+    "sourceCommit": "024846b5d24c44af4cae039b3fb513827e46cb78",
+    "sourceIdentityVerification": "Every packaged source file and source manifest matched git objects of this commit. Driver sourceHead was sampled at completion and refers to a later CI-only commit; it is not used as package provenance.",
+    "packageSha256": "49d0ae9428fc91d394d323c883cc19c7d99963259688cf09fa6079a9e10c5ca5",
+    "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+    "target": {
+      "head": "52f288c9775bd0e20c283f6adbdf356e53ab9fab",
+      "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+      "contract": "fccdde88674c406843029f46a3e9dcad756c3190e35d57286c4975ab03ee4e83",
+      "diff": "04cca1820e625ccb6f34a590c2904c7d72b7f3852584484974ef758604462505",
+      "empty": false
+    },
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/21",
+    "draft": true,
+    "ci": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/38882110859",
+    "wallSeconds": 68.396375789,
+    "setupIncluded": false,
+    "model": "gpt-5.6-sol",
+    "agentCalls": 2,
+    "calls": [
+      {
+        "role": "implementation",
+        "seconds": 26.449466527000002,
+        "context": "01a14415-20e1-7ce2-9739-9aac8f65ef47",
+        "usage": [
+          {
+            "input_tokens": 64640,
+            "cached_input_tokens": 50944,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 998,
+            "reasoning_output_tokens": 420
+          }
+        ]
+      },
+      {
+        "role": "review",
+        "seconds": 15.850352964,
+        "context": "01a14415-8ead-7852-a33b-9d9893b7b9ff",
+        "usage": [
+          {
+            "input_tokens": 57665,
+            "cached_input_tokens": 42112,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 523,
+            "reasoning_output_tokens": 191
+          }
+        ]
+      }
+    ],
+    "observedProcessedTokens": 123826,
+    "observedFreshTokens": 30770,
+    "allAgentTotalTokens": null,
+    "repairs": 0,
+    "verificationExitCodes": [
+      0,
+      0
+    ],
+    "review": {
+      "type": "review-assessment",
+      "seconds": 46.050547087,
+      "target": {
+        "head": "52f288c9775bd0e20c283f6adbdf356e53ab9fab",
+        "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+        "contract": "fccdde88674c406843029f46a3e9dcad756c3190e35d57286c4975ab03ee4e83",
+        "diff": "04cca1820e625ccb6f34a590c2904c7d72b7f3852584484974ef758604462505",
+        "empty": false
+      },
+      "context": "01a14415-8ead-7852-a33b-9d9893b7b9ff",
+      "verdict": "pass",
+      "findings": [],
+      "blockers": [],
+      "evidenceAuthority": "reviewer assessment; not host-reproduced evidence"
+    },
+    "limitations": [
+      "Single small synthetic trial; no comparative speedup or complex-development acceptance claim.",
+      "Package/install setup excluded from runtime; outer development-agent usage is not included."
+    ],
+    "rawEvidence": "/tmp/asc-public-trial-dehonV"
+  },
+  "acceptanceEvidenceReuse": {
+    "authorization": "Owner explicitly authorized reusing existing verification results with tested commit, intervening diff and applicability recorded; not permission to waive requirements or publish.",
+    "assessedCommit": "3283809ae64ac90abe62db546d8415057733a8fb",
+    "currentCi": {
+      "linuxRun": 38889005871,
+      "baseValidatorRun": 38889001097,
+      "conclusion": "success",
+      "scope": "CI on assessedCommit; not a substitute for semantic acceptance"
+    },
+    "screen": {
+      "result": "accepted-for-tested-screen-api-sqlite-scenario",
+      "testedCandidate": "f1f5b28f6e2f09b58f2aaccf5d7b4c3a6d2b53fe",
+      "runtimeImplementation": "57799207",
+      "evidenceRef": "publicScreenRecoveryLatest",
+      "rawEvidenceSha256": "36e79ffd32448758187a2f267bb2747b490209015e5004102becc511f03bcbe6",
+      "ownerDecisionSha256": "fc846db3302a7871b31952efa77358634ce8bdef8f79640a9b2afb3104f26f6f",
+      "proposalSha256": "dd9cff1d215de91f994be6a434314e278271177731a497a3130cef05ac7c2dbc",
+      "contractDifference": "Final Intent omitted the owner clarification suffix; oracle assets changed and prehandler verification was added. Contract digests are not identical. Criteria, paths, design, policy references and revision, required checks and risk declarations match.",
+      "supplementalIndependentInspection": {
+        "context": "/root/integration_review",
+        "method": "read-only final source and existing oracle inspection; no execution",
+        "findings": [],
+        "verified": [
+          "app.py:98-109 counts all persisted tasks",
+          "screen.html:113-120,288-312 keeps summary read-only",
+          "app.py:138-175 has only single-task mutation, no bulk endpoint",
+          "screen.html:332-351 invokes PATCH only from detail toggle",
+          "Owner design tokens, native anchors, labels, responsive layout and document headings retained; only four authorized files changed"
+        ]
+      },
+      "runtimeDiff": "Since 57799207, runtime changes are project-assets CLI integration plus compact review JSON and batched-read prompting in workflow.mjs. Goal/restart, Controller, Git, isolation, migration and verification implementation are unchanged. Current CI covers runtime regressions; the historical complex trial is not relabelled as execution on the current commit.",
+      "limits": [
+        "Earlier failed attempts remain failed and retain their costs",
+        "Not initial-run performance or universal complex-project equivalence",
+        "Supplemental inspection does not claim the earlier reviewer read the omitted suffix"
+      ]
+    },
+    "migration": {
+      "result": "accepted-for-documented-owner-directed-paths",
+      "evidenceRefs": [
+        "configurationGitRoundtrip.realLegacyInstallation",
+        "latestUnpublishedCandidateCutover",
+        "canonicalMigrationTrial",
+        "projectSkillHostDiscovery",
+        "projectAssetPackageRoundtrip"
+      ],
+      "parallelIssueTest": "test/test_migration.mjs:159: clean selected worktree migration and rollback preserve sibling dirty files, untracked work and runtime",
+      "applicability": "Migration implementation unchanged since the cited trials; current CI includes migration and project-asset update tests. Select a clean worktree, preserve owner rules, and use explicit configuration decisions.",
+      "limits": [
+        "No automatic transfer of uncommitted work or legacy approval",
+        "No arbitrary configuration conversion guarantee"
+      ]
+    },
+    "performance": {
+      "result": "measurements-available-no-causal-speedup-claim",
+      "evidenceRefs": [
+        "optionalTemplatesAndBatchedReviewComparison",
+        "latestCanonicalDummyDelivery",
+        "publicSyntheticGoalTrial",
+        "publicSyntheticGoalRecovery",
+        "publicScreenRecoveryLatest"
+      ],
+      "applicability": "Small paired comparison and complex/recovery observations remain scoped to their recorded commits, models and endpoints. Usage gaps and failed attempts are retained.",
+      "limits": [
+        "No claim of total-Agent token reduction",
+        "No claim of causal superiority over v0.4",
+        "No 92-second guarantee for complex work"
+      ]
+    },
+    "releaseDecision": "Scoped evidence is incorporated into finalAcceptanceAudit; this is neither publication authorization nor proof of universal quality or causal performance superiority.",
+    "historicalSemanticTrials": [
+      {
+        "requirement": "13.2",
+        "rawEvidence": "/tmp/asc-screen-trial-UVOlmx/evidence.json",
+        "sha256": "772576e044c4e08a3c95b963deaa9cf8e590f6a533086ce3e48fc04e52be2451",
+        "recordingCommit": "923c749fe225499fb38c8ce13bd146fb1f707d24",
+        "recordingCommitIsExecutedRuntimeProof": false,
+        "driver": "node_screen_proposal_trial.mjs",
+        "testedTarget": {
+          "head": "4f9b139e462fa7936f29f729c5e26acbbc3ae2d6",
+          "base": "d8056cc4ed46ebe5c85140b0bac995814cf904b8",
+          "contract": "e04fb578925e42e36a98442f092a74ea322a1e36a57c741bcc67143d2ae8bc0f",
+          "diff": "4247be6ea3b19dbf44869feee72d6ee7ba2a4abf111a5e1331f1f57ead22fe80",
+          "empty": false
+        },
+        "acceptedByTrial": true,
+        "agentCalls": 4,
+        "repairs": 1,
+        "wallSeconds": 215.779335464,
+        "scope": "Static unapproved inventory screen proposal from an empty scenario/design outline; labelled states, owner questions and user-value slices; repair followed by independent review.",
+        "delivery": "Explicit provider/CI test double (PR 0), not remote PR/CI evidence",
+        "runtimeProvenance": "Driver imports PoC working-tree runtime. Exact execution-time runtime tree is not captured in raw evidence; recording commit is not substituted for it. Historical semantic capability evidence only, not exact current-runtime regression proof.",
+        "allAgentTotalTokens": null,
+        "observedDesignProposal": "# Purpose\nPropose an explicitly **UNAPPROVED**, static screen for reviewing synthetic store inventory. The proposal explores user-visible behavior only; it does not define production behavior, connect to real inventory, decide permissions, or represent owner approval.\n\n# Scenarios\n## Choose a store and search\n\n- A team member encounters labelled **Store** and **Search inventory** controls and can understand that a search may use a product name or SKU.\n- Store choices and search content in the static proposal are illustrative. The proposal does not imply that any role may access any listed store.\n- The controls are presented in a structurally non-submitting group. Changing them has no production effect, and activating the illustrative review button cannot submit, navigate, or request data; the screen is a review artifact with no JavaScript or backend.\n\n## Loading\n\n- After a future search begins, the member sees the selected-store context, a visible loading message, and a programmatically exposed status while results are pending.\n- Search context should remain understandable while loading so the member knows which request is in progress.\n\n## Empty result\n\n- If a future search succeeds with no matches, the member sees the query that produced no results and suggestions to revise it or choose another store, if that store is available to them.\n- The empty state is distinct from an error and does not imply that the item is unavailable at stores the member cannot see.\n\n## Error\n\n- If a future inventory request fails, the member sees a clear error rather than an empty result.\n- The proposal suggests preserving the selected store and query for a retry. Retry behavior is not implemented or approved.\n\n## Results\n\n- If a future search returns matches, the member sees product identity, store context, inventory status, and an update time in a scannable result set.\n- The sample uses synthetic products, SKUs, stores, times, and quantities. Exact quantity display is illustrative and remains subject to an owner decision.\n- Results must not reveal stores or inventory information outside whatever visibility rules the owner eventually approves.\n\n## Accessibility and static review\n\n- Controls have explicit labels and supporting descriptions; state examples use headings and status/error semantics; table headers identify sample result columns.\n- All loading, empty, error, and sample-results examples are deliberately visible at once for proposal review. That arrangement is not a claim about production interaction behavior.\n\n# Open questions\n- Which roles, if any, may access store inventory review?\n- Which stores may each eligible role see and select?\n- For eligible role/store combinations, may the experience disclose exact quantities, only availability bands, another representation, or no quantity?\n\nThese are owner decisions. This proposal does not answer them or imply approval.\n\n# Slices\n## Find inventory in an allowed store\n\n**User value:** An eligible team member can narrow the review to a store they are permitted to see and search by product name or SKU, reducing time spent locating relevant inventory.\n\n**Acceptance examples:**\n\n- Given a member and store combination permitted by future owner-approved rules, when the member starts a search, then the selected store and query remain clear during loading.\n- Given a store the member is not permitted to see under future owner-approved rules, then the store is not disclosed in the selector, results, empty-state suggestions, or error details.\n- Given labelled store and search controls, then keyboard and assistive-technology users can identify each control and its purpose.\n- This slice remains blocked for production definition until role/store visibility is decided by the owner.\n\n## Understand a no-match outcome\n\n**User value:** A member can distinguish “no matching items” from a failed request and adjust the search without losing store context.\n\n**Acceptance examples:**\n\n- Given a successful search with no visible matches, then the member sees an empty-state message that includes the query and offers a safe next step.\n- Given a failed request, then the member sees an error state rather than a claim that no inventory exists.\n- Given an error, then the selected store and query remain available for a future retry.\n\n## Review useful inventory results\n\n**User value:** A permitted member can quickly identify matching products and understand the approved level of inventory availability for the selected store.\n\n**Acceptance examples:**\n\n- Given matching inventory that the member is permitted to see, then each result identifies the product, store, approved availability representation, and freshness context.\n- Given multiple results, then product and status information is presented with semantic headers and does not rely on color alone.\n- Given that quantity disclosure is not yet decided, then the static proposal labels all exact counts as synthetic and illustrative; production acceptance remains blocked until the owner decides the allowed representation.\n- Given no permission to see a store or its inventory under future owner-approved rules, then no product, status, quantity, update time, or existence signal for that store is disclosed.\n"
+      },
+      {
+        "requirement": "13.3",
+        "rawEvidence": "/tmp/asc-document-trial-Uw7jnB/evidence.json",
+        "sha256": "13d458cc03ccb4180299ab1503ca39a69fee939b420263d05d9f75bc1456abb2",
+        "recordingCommit": "6f8a3b678bbb0446a4f298575eba51da517fd680",
+        "recordingCommitIsExecutedRuntimeProof": false,
+        "driver": "node_document_trial.mjs",
+        "testedTarget": {
+          "head": "d2b73f109762c81a79bcee56af1b57cf25c53719",
+          "base": "8ed5497a28803608eb4128adbccce58bd2b0a1ac",
+          "contract": "c38f96058f03c076d390f126960110626279d25e3b47471c30aeba25ebf2c602",
+          "diff": "3a099ed3e41906c696b704cad2f571aa46fb0b549f4820bdf6c6eec195032131",
+          "empty": false
+        },
+        "acceptedByTrial": true,
+        "agentCalls": 4,
+        "repairs": 1,
+        "wallSeconds": 75.844803738,
+        "scope": "Seeded stale retry design detected despite passing code test; existing document repaired, unrelated document preserved, fresh review passed.",
+        "delivery": "Explicit provider/CI test double (PR 0), not remote PR/CI evidence",
+        "runtimeProvenance": "Driver imports PoC working-tree runtime. Exact execution-time runtime tree is not captured in raw evidence; recording commit is not substituted for it. Historical semantic capability evidence only, not exact current-runtime regression proof.",
+        "allAgentTotalTokens": null,
+        "initialIndependentFinding": {
+          "verdict": "fail",
+          "findings": [
+            {
+              "location": "design.md:2",
+              "condition": "Whenever maintainers or callers consult the retry-policy design after this change.",
+              "evidence": "The host-observed diff changes retry.txt from 1 to 3 but does not modify design.md, which still says, “The retry count is 1.” This contradicts the stated intent and acceptance criterion that the design document state the current retry count.",
+              "impact": "The implementation value and canonical design documentation disagree, leaving the requested change incomplete and potentially causing future work to restore or rely on the obsolete value.",
+              "action": "Update the existing statement in design.md so the retry count is 3, while preserving unrelated display design and the existing no-public-API-change statement.",
+              "counterevidence": "Host verification passed the configured test, but that test checks only that retry.txt equals 3; it does not validate design.md. The accurate “No external API changes” sentence also does not resolve the stale retry-count statement. No contract.policyRefs were present to add further constraints.",
+              "severity": "P2",
+              "verification": "static-analysis",
+              "blocking": true
+            }
+          ]
+        },
+        "repairedDocument": "# Internal retry policy\nThe retry count is 3. No external API changes.\n",
+        "finalIndependentReview": {
+          "verdict": "pass",
+          "findings": []
+        }
+      }
+    ]
+  },
+  "finalAcceptanceAudit": {
+    "objectiveSha256": "2bf6b190dedabc8c0d70bd3835f1f87c0d4949eb22df56b4dc3039c9346bbc81",
+    "assessedCommit": "d24dbe2eecfef8d0cf276a797c7bdb1ab796db2f",
+    "status": "PASS",
+    "runtimeCi": {
+      "head": "d24dbe2eecfef8d0cf276a797c7bdb1ab796db2f",
+      "run": 38895660369,
+      "conclusion": "success",
+      "baseValidatorRun": 38895655137,
+      "baseValidatorConclusion": "success",
+      "scope": "Linux isolation/cgroup, lint, tests and distribution at assessed commit. Subsequent display/acceptance metadata changes separately package-tested; next PR CI remains required before merge."
+    },
+    "requirements": [
+      {
+        "id": "13.1",
+        "status": "PASS",
+        "evidence": [
+          "latestCanonicalDummyDelivery"
+        ],
+        "currentSources": [
+          "test/test_workflow.mjs",
+          "test/test_controller.mjs",
+          "test/test_github_node.mjs"
+        ],
+        "scope": "2 fresh contexts, real verification and Draft PR21/CI; 68.396s excludes setup; one synthetic small change."
+      },
+      {
+        "id": "13.2",
+        "status": "PASS",
+        "evidence": [
+          "acceptanceEvidenceReuse.historicalSemanticTrials[0]",
+          "currentScreenClarificationBoundary",
+          "acceptanceEvidenceReuse.screen"
+        ],
+        "currentSources": [
+          "src/goal-propose.mjs",
+          "src/workflow.mjs",
+          "test/test_goal_propose.mjs"
+        ],
+        "scope": "Unapproved proposal, owner questions and value slices; separate UI/API/SQLite runtime trial. Historical semantic output is not a current-runtime replay."
+      },
+      {
+        "id": "13.3",
+        "status": "PASS",
+        "evidence": [
+          "acceptanceEvidenceReuse.historicalSemanticTrials[1]",
+          "projectAssetUpdateValidation",
+          "projectAssetPackageRoundtrip"
+        ],
+        "currentSources": [
+          "src/restricted-agent.mjs",
+          "src/workflow.mjs",
+          "test/test_workflow.mjs",
+          "test/test_project_assets.mjs"
+        ],
+        "scope": "Actual stale-design finding and repaired existing document; current contract propagation and repair controls retain this responsibility. Not a guarantee that every semantic defect is detected."
+      },
+      {
+        "id": "13.4",
+        "status": "PASS",
+        "evidence": [
+          "absoluteReviewEvaluation",
+          "acceptanceEvidenceReuse.currentCi"
+        ],
+        "currentSources": [
+          "test/test_controller.mjs",
+          "test/test_restricted_agent_node.mjs",
+          "test/test_snapshot.mjs",
+          "test/test_approval.mjs",
+          "test/test_agent_lifecycle.mjs"
+        ],
+        "scope": "Native Linux only; namespace, credentials, descendants, policy/source/receipt changes, scope and independent contexts. Host administrator remains trusted."
+      },
+      {
+        "id": "13.5",
+        "status": "PASS",
+        "evidence": [
+          "publicSyntheticGoalTrial",
+          "publicScreenRecoveryLatest",
+          "acceptanceEvidenceReuse.screen"
+        ],
+        "currentSources": [
+          "test/test_goal_plan.mjs",
+          "test/test_goal_run.mjs",
+          "test/test_approval.mjs"
+        ],
+        "scope": "Dependent and independent units, integration, full-Goal review, shared contracts and risk approval. Synthetic modules plus UI/API/SQLite scenario; not arbitrary-scale service qualification."
+      },
+      {
+        "id": "13.6",
+        "status": "PASS",
+        "evidence": [
+          "publicSyntheticIssueRecovery",
+          "publicSyntheticGoalRecovery",
+          "repeatedGoalRestart"
+        ],
+        "currentSources": [
+          "test/test_issue_run.mjs",
+          "test/test_goal_run.mjs"
+        ],
+        "scope": "Separate worktrees, conflict/stale dependency refusal confined to affected Issue, explicit owner base updates, partial-candidate preservation, bounded restart and fresh review. No autonomous merge authority."
+      },
+      {
+        "id": "13.7",
+        "status": "PASS",
+        "evidence": [
+          "optionalTemplatesAndBatchedReviewComparison",
+          "latestCanonicalDummyDelivery",
+          "publicSyntheticGoalTrial",
+          "publicSyntheticIssueRecovery"
+        ],
+        "currentSources": [
+          "test/test_report_workflow.mjs",
+          "test/test_workflow.mjs"
+        ],
+        "scope": "Measured small paired runs and complex/recovery runs with quality results. Provider-internal total remains unknown; fresh-token mean increased in paired runs. No causal v0.4 superiority or universal speed claim."
+      },
+      {
+        "id": "13.8",
+        "status": "PASS",
+        "evidence": [
+          "canonicalMigrationTrial",
+          "configurationGitRoundtrip",
+          "latestUnpublishedCandidateCutover",
+          "projectSkillHostDiscovery",
+          "projectAssetPackageRoundtrip",
+          "acceptanceEvidenceReuse.migration"
+        ],
+        "currentSources": [
+          "test/test_migration.mjs",
+          "test/test_migration_inspect.mjs",
+          "test/test_project_assets.mjs",
+          "test/test_package.mjs"
+        ],
+        "scope": "Documented owner-directed clean-worktree migration, Git configuration revert and selection rollback, preserved siblings and project edits. No automatic semantic translation or legacy approval import."
+      },
+      {
+        "id": "13.9",
+        "status": "PASS",
+        "scope": "No outstanding mandatory Linux acceptance gap identified by requirement audit and independent review. Supported environments and explicit owner deferrals apply. Current target CI required for merge; release authorization not granted."
+      }
+    ],
+    "independentReview": {
+      "context": "/root/integration_review",
+      "scope": "Read-only objective sections 13.1–13.9 and independent-review requirements; current semantic responsibilities and existing trial reuse",
+      "result": "No concrete invalidating implementation change requiring a new semantic trial; scoped 13.2/13.3 reuse accepted. Not a new provider run or universal defect-free proof."
+    },
+    "exceptions": {
+      "otherOperatingSystems": "NOT APPLICABLE: owner limits initial acceptance to native Linux",
+      "externalReviewProductEquivalence": "NOT APPLICABLE to this release decision: owner deferred comparison and accepted known-defect absolute evaluation"
+    },
+    "publicationAuthorized": false,
+    "remaining": [],
+    "finalDisplayValidation": {
+      "packageTests": {
+        "pass": 6,
+        "fail": 0,
+        "skip": 0,
+        "durationMs": 11908.334723
+      },
+      "lint": "pass",
+      "scope": "CLI releaseTarget/publishAuthorized and release-ready display; no permission or execution gate changed"
+    }
+  }
+}

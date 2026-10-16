@@ -1,0 +1,13 @@
+{
+  "version": "0.4.4-managed-by-tag",
+  "agentSkillChain": {
+    "qualityContractVersion": 14,
+    "policySchemaVersion": "0.3.1",
+    "compatiblePolicySchemaVersions": [
+      "0.3.0"
+    ],
+    "deprecatedPolicySchemaAliases": {
+      "0.3": "0.3.0"
+    }
+  }
+}
