@@ -2113,7 +2113,7 @@
     "baseFailure": "Current trusted main expects package.json.agentSkillChain.qualityContractVersion; v0.5 uses root qualityContractVersion",
     "distinction": "The two stale proposed hashes are a separate future cutover failure, not the cause of this current main-validator failure",
     "authorization": "User explicitly authorized the fixed configuration hashes and proposal validator hash update. This does not authorize merge, release, or active main gate replacement.",
-    "nextAction": "Reconcile registration/transition PRs; active main validator remains unswitched. No release readiness claim.",
+    "nextAction": "CI cutover completed: PR #1580 and #1581 merged into main by explicit owner authorization. Required contexts are linux and base validator. Both checks succeeded at commit 37e1d48f1 (runs 38887765421 and 38887762878). This is not final product release acceptance.",
     "previousAudit": {
       "sourceCommit": "4fefdb60e32c4fa18896cc8cdbb1c24907b5e0a6",
       "mismatches": [
@@ -2130,7 +2130,8 @@
       ]
     },
     "validatorSha256": "495b321569cce4890cc6aa9f9c83e9a064e8bd7977abf72a67cd68d62fa09b37",
-    "validation": "node --import tsx scripts/check_project_quality.ts --root=$PWD --trusted-root=$PWD: valid true; all 29 pinned files recomputed and matched"
+    "validation": "node --import tsx scripts/check_project_quality.ts --root=$PWD --trusted-root=$PWD: valid true; all 29 pinned files recomputed and matched",
+    "baseFailureScope": "Historical pre-cutover observation; the existing baseFailure text is retained as history, not the current main validator result."
   },
   "projectSkillHostDiscovery": {
     "status": "PASS",
