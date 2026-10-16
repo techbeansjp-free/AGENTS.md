@@ -1277,5 +1277,14 @@
       "literalOrBasenameReferences": [],
       "legacyExecutionMentions": 0
     }
-  ]
+  ],
+  "cleanup": {
+    "baseline": "fa0e72082",
+    "removedTrackedAssets": 61,
+    "removedTemplateFiles": 54,
+    "removedLegacySchemas": 7,
+    "remainingDependency": "quality-support/domain/conformance.ts still reads templates/issue; issue and common retained pending CI transition",
+    "validation": "Workflow 29 pass; package 6 pass; no skip/fail; lint and diff check pass",
+    "scope": "Only tracked product assets removed. Prior inventory describes its recorded historical commit; ignored user files and other worktrees unchanged."
+  }
 }
