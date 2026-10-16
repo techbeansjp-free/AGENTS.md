@@ -25,7 +25,7 @@ export function hostExecution(controller,configuration,authorityRoots=[]){
  // Host configuration is explicit; never forward credentials, SSH sockets, NODE_OPTIONS or shell startup state.
  if(process.platform==='win32')for(const name of ['SystemRoot','WINDIR'])if(process.env[name])env[name]=process.env[name];
  const invoke=(operation,payload,timeout,asynchronous)=>{
-  demand(Number.isSafeInteger(timeout)&&timeout>0&&timeout<=360000,'Invalid Host execution timeout');
+  demand(timeout===null||(Number.isSafeInteger(timeout)&&timeout>0&&timeout<=2147483647),'Invalid Host execution timeout');
   const roots=validateHostCommand(controller,command,authorityRoots);
   const id=randomUUID(),message={schema:'asc-host-execution/v1',id,operation,payload,authorityRoots:roots};
   const input=JSON.stringify(message)+'\n';demand(Buffer.byteLength(input)<=8*1024*1024,'Host request limit exceeded');
@@ -36,11 +36,11 @@ export function hostExecution(controller,configuration,authorityRoots=[]){
    demand(response.result&&typeof response.result==='object','Host result missing');return response.result;
   };
   const options={cwd:path.dirname(command[0]),env,windowsHide:true,maxBuffer:8*1024*1024};
-  if(!asynchronous){const p=spawnSync(command[0],command.slice(1),{...options,input,timeout,killSignal:'SIGKILL'});demand(!p.error,'Host verification transport failed');return decode(p.status,p.stdout);}
+  if(!asynchronous){const p=spawnSync(command[0],command.slice(1),{...options,input,timeout:timeout??0,killSignal:'SIGKILL'});demand(!p.error,'Host verification transport failed');return decode(p.status,p.stdout);}
   return new Promise((resolve,reject)=>{
    const p=spawn(command[0],command.slice(1),{...options,stdio:['pipe','pipe','pipe']});const output=[];let bytes=0,settled=false;
    const finish=(error,code)=>{if(settled)return;settled=true;clearTimeout(timer);p.stdin.destroy();p.stdout.destroy();p.stderr.destroy();p.kill();if(error)reject(error);else{try{resolve(decode(code,Buffer.concat(output).toString()));}catch(e){reject(e);}}};
-   const timer=setTimeout(()=>finish(Error('Host execution deadline exceeded')),timeout);
+   const timer=timeout===null?undefined:setTimeout(()=>finish(Error('Host execution deadline exceeded')),timeout);
    p.stdout.on('data',b=>{bytes+=b.length;if(bytes>8*1024*1024)finish(Error('Host output limit'));else output.push(b);});
    p.stderr.on('data',b=>{bytes+=b.length;if(bytes>8*1024*1024)finish(Error('Host output limit'));});
    p.on('error',()=>finish(Error('Host transport could not start')));p.stdin.on('error',()=>finish(Error('Host request failed')));
@@ -48,7 +48,7 @@ export function hostExecution(controller,configuration,authorityRoots=[]){
   });
  };
  return {
-  agent:request=>invoke('agent',request,request.timeout??360000,true),
+  agent:request=>invoke('agent',request,request.timeout??null,true),
   verify:request=>{
    const result=invoke('verify',request,request.timeout,false);
    demand(Number.isInteger(result.exit)&&result.exit>=0&&result.exit<=255&&typeof result.stdout==='string'&&typeof result.stderr==='string','Invalid Host verification result');

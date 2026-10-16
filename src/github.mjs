@@ -4,13 +4,14 @@ import {execFileSync} from 'node:child_process';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function demand(ok,message){if(!ok)throw Error(message);}
 export class Github {
-  constructor({repository,issue,repo,branch,baseBranch,base,workflowPath,command}) {
+  constructor({repository,issue,repo,branch,baseBranch,base,workflowPath,command,ciTimeoutMilliseconds=null}) {
     demand(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository),'Invalid repository');
     demand(Number.isSafeInteger(issue)&&issue>0,'Invalid Issue');
     demand(/^[A-Za-z0-9][A-Za-z0-9_/-]*$/.test(branch) && /^[A-Za-z0-9][A-Za-z0-9_/-]*$/.test(baseBranch) && branch!==baseBranch,'Invalid branch');
     demand(/^[a-f0-9]{40}$/.test(base),'Invalid base');
     demand(/^\.github\/workflows\/[A-Za-z0-9_-]+\.ya?ml$/.test(workflowPath),'Invalid workflow');
-    Object.assign(this,{repository,issue,repo,branch,baseBranch,base,workflowPath});
+    demand(ciTimeoutMilliseconds===null||(Number.isSafeInteger(ciTimeoutMilliseconds)&&ciTimeoutMilliseconds>=0),'Invalid CI observation timeout');
+    Object.assign(this,{repository,issue,repo,branch,baseBranch,base,workflowPath,ciTimeoutMilliseconds});
     this.command=command ?? ((argv,cwd)=>execFileSync(argv[0],argv.slice(1),{cwd,encoding:'utf8',timeout:90000,maxBuffer:4*1024*1024}).trim());
   }
   api(route){return JSON.parse(this.command(['gh','api',route]));}
@@ -55,8 +56,10 @@ export class Github {
     demand(match && match[1]===this.repository,'Unexpected PR response');const pr=Number(match[2]);
     this.assertPr(this.api(`repos/${this.repository}/pulls/${pr}`));return pr;
   }
-  async observe(pr,{timeout=300000,interval=5000}={}){
-    const started=Date.now(),deadline=started+timeout,transportFailures=[];
+  async observe(pr,{timeout=this.ciTimeoutMilliseconds,interval=5000}={}){
+    demand(timeout===null||(Number.isSafeInteger(timeout)&&timeout>=0),'Invalid CI observation timeout');
+    demand(Number.isSafeInteger(interval)&&interval>=0,'Invalid CI observation interval');
+    const started=Date.now(),deadline=timeout===null?Infinity:started+timeout,transportFailures=[];
     do {
       try {
       const data=this.api(`repos/${this.repository}/pulls/${pr}`);this.assertPr(data);

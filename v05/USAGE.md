@@ -1,6 +1,14 @@
+## 利用中のAIと実行経路
+
+対話型開発は利用中のHostで実施する。Claude Code利用者にCodexを必須にしない。配布Skill `skills/asc/SKILL.md` は、専用worktree・既存依存関係・実テスト・別コンテキストの独立レビュー・Draft PR/CIを現在のHostで行う入口である。
+
+以下の `run` 等は別途選択するControllerの自動実行APIである。同梱のCodexアダプターを選ぶときだけ `codexExecutable` と `model` が必要になる。owner指定の `hostExecution` または埋込みHostのAgent関数では、そのHostが実行製品とモデルを決める。汎用Hostプロトコルの提供だけを、Claude Code CLIアダプターの実装済み保証とみなさない。
+
+CI観測は既定では時間上限を持たず、対象PR・commitに拘束されたCIの完了まで待つ。ownerが待機期限を必要とする場合だけ `delivery.ciTimeoutMilliseconds` に非負の整数（ミリ秒）を指定する。`null` または省略は無期限、`0` は一度だけ観測する。期限到達はCI失敗や合格とは別の観測終了である。OS・プロセス自体の終了や通信障害は別途起こり得る。
+
 # v0.5評価CLIの実行手順
 
-正式リリース前の評価用。現在、要求からDraft PR/CIまで実証した実行環境はLinux。Node.js 20以上、Git、GitHub CLI、Codex CLI、bubblewrap、prlimit、稼働中のsystemd user managerとcgroup v2が必要。Codex 0.153.4で検証した。macOS/Windowsのpackage・移行テストと、AgentのOS隔離対応は別である。
+正式リリース前の評価用。現在、要求からDraft PR/CIまで実証した実行環境はLinux。同梱のLinux Codex自動実行アダプターにはNode.js 20以上、Git、GitHub CLI、Codex CLI、bubblewrap、prlimit、稼働中のsystemd user managerとcgroup v2が必要。これは全Host共通の必要条件ではない。Codex 0.153.4で検証した。macOS/Windowsのpackage・移行テストと、AgentのOS隔離対応は別である。
 
 `agent-skill-chain --help`（別名`asc-v05 --help`）で開始・再開・移行の入口と、この手順書の配布先を確認できます。引数なしも案内のみを表示し、Agent起動やGit変更は行いません。
 
@@ -134,7 +142,7 @@ GitHubのPR/CI読取り中に一時的な通信失敗が発生した場合、観
 
 owner requestの`budget`に`maxAgentCalls`と`maxElapsedSeconds`を指定できる（各0〜1,000,000の整数、省略時はその上限なし）。run-goalではGoal全体で1つの予算を共有し、個別unitRequests内へのbudget指定は拒否する。実装・修復・独立レビュー・全体レビューの起動を数え、失敗した起動も返却しない。別のrun/Issueの拒否へ波及させない。
 
-起動回数上限は新規Agent起動を拒否する。既に起動した処理、検証、レビュー済みのDeliveryを起動回数到達だけで取り消さない。時間上限は次の作業・Agent起動・Agent応答後・Goal統合の境界で停止する。Agentへは残り時間（最大360秒）を渡し、隔離preflightに使った時間を差し引いてモデル子プロセスの待機期限を設定する。preflight中に使い切った場合はモデルを起動しない。検証コマンドにもsnapshot準備後の残り時間（既定最大25秒、明示したverificationLimitsでも残予算以下）を渡す。通常・browser-cgroup両方に適用し、複数コマンドでは毎回残り時間を再計算する。ただしpreflight・snapshot準備・cgroup起動/後片付け・外部CI呼出しまで一括で強制終了する厳密な全体deadlineではなく、それらのtimeoutは別に存在する。失敗時もGit候補と診断は保持するが、未検証・未レビューの出力を提出しない。
+起動回数上限は新規Agent起動を拒否する。既に起動した処理、検証、レビュー済みのDeliveryを起動回数到達だけで取り消さない。時間上限は次の作業・Agent起動・Agent応答後・Goal統合の境界で停止する。Agentへは明示予算の残り時間を渡し、隔離preflightに使った時間を差し引いてモデル子プロセスの待機期限を設定する。preflight中に使い切った場合はモデルを起動しない。検証コマンドにもsnapshot準備後の残り時間（明示したverificationLimitsがあれば残予算との小さい方、両方未指定なら無期限）を渡す。通常・browser-cgroup両方に適用し、複数コマンドでは毎回残り時間を再計算する。ただしpreflight・snapshot準備・cgroup起動/後片付け・外部CI呼出しまで一括で強制終了する厳密な全体deadlineではなく、それらのtimeoutは別に存在する。失敗時もGit候補と診断は保持するが、未検証・未レビューの出力を提出しない。
 
 結果の`budget`は当該実行の観測であり、承認や再開権限ではない。新しい実行では予算も新規になるため、複数実行にまたがる累積費用を制限したことにはならない。料金・tokens上限ではなく、Provider内部起動の数を保証するものでもない。継続/増枠はowner入力を更新し、有効なGit状態から再実行する。自動再試行で予算をリセットしない。
 
@@ -156,7 +164,7 @@ Providerは呼出しごとの一時user serviceで起動し、Controller専有pi
 
 所有者のContractに `"verificationResourceProfile": "browser-cgroup-v1"` を指定すると、各検証コマンドを別のsystemd user一時サービスで実行する。既定の検証経路は変更しない。Linuxのuser service/cgroup v2が利用できなければ停止し、通常経路へ自動退避しない。Work UnitとGoalは同じプロファイルを使用する。
 
-既定上限は実メモリ1 GiB、swapなし、256タスク、仮想アドレス8 TiB、既定1ファイル8 MiB（通常プロファイルは1 MiB）。既存のnamespace・通信・ファイル・環境変数隔離、既定25秒command timeout、CPU・出力制限は維持する。大きな仮想アドレス予約を必要とするChrome向けであり、8 TiBの実メモリ使用を許すものではない。必要なブラウザ/runtimeは従来どおりownerがdigestで固定する。
+既定上限は実メモリ1 GiB、swapなし、256タスク、仮想アドレス8 TiB。既存のnamespace・通信・ファイル・環境変数隔離、明示したcommand timeout・CPU・file予算とプロトコル出力保護は維持する。大きな仮想アドレス予約を必要とするChrome向けであり、8 TiBの実メモリ使用を許すものではない。必要なブラウザ/runtimeは従来どおりownerがdigestで固定する。
 
 実効command期限の時間超過は`executionError: ETIMEDOUT`と失敗終了値125で記録する。子プロセス消滅を確認できない場合は記録済み失敗への変換もせず停止する。
 
@@ -179,7 +187,7 @@ stderrのエラーと終了コード1は維持する。`status: blocked`は成�
 
 LinuxのProvider subprocessと隔離preflightの寿命管理は、上記「Agentの寿命管理」の呼出しごとのsystemd user service・cgroupとController専有pipeを使用する。Toolのfilesystem/network隔離は別のCodex profileが担当する。途中終了時のsnapshot・ログは残り得る。次の実行はGitの実状態から検証・独立レビューをやり直し、未完成ログを承認として使わない。
 
-OwnerはContractの`verificationLimits`で検証の有限予算を指定できる。`timeoutMilliseconds`は既定25000・最大300000、`cpuSeconds`は既定15・最大300、`fileBytes`は通常既定1048576（browser profileは8388608）・最大64000000。指定する各値は正の安全整数で、未知key・null・無制限指定を拒否する。Agentの出力・source容量・stdout上限・cgroupのpids・通信権限は変更しない。CPUはprocess単位、fileBytesは生成する単一fileの上限で、合計disk消費を保証するものではない。
+OwnerはContractの`verificationLimits`で検証の有限予算を指定できる。`timeoutMilliseconds`・`cpuSeconds`・`fileBytes` は未指定なら制限しない。指定する各値は正の安全整数で、時間はNodeタイマーの表現限界2147483647以下。未知keyや明示nullは拒否する（無制限はkeyを省略する）。Agentの出力・source容量・stdout上限・cgroupのpids・通信権限は変更しない。CPUはprocess単位、fileBytesは生成する単一fileの上限で、合計disk消費を保証するものではない。
 
 検証設定はContract digestへ拘束し、変更後は以前のEvidenceを再利用しない。Goalの各Unitは親と同じverificationLimitsを継承する。実効timeoutはowner値と現在の残予算の小さい方。cgroupは実効timeoutに起動・観測猶予5秒、observerは10秒を加え、失敗時も固有unitをcleanupする。既定値を無断で拡大せず、実projectのbuild/full検証に必要な場合だけownerが明示する。
 
@@ -353,3 +361,10 @@ Mac/Windows実機でのモデルE2Eは、OS間のプロトコルCIやLinux診断
 ### 0.5.0-alpha.1修正
 
 MacのNode起動に必要な `/System/Library/OpenSSL` の読取りを診断・Agent実行で共通化した。秘密情報や通信の許可は増やさない。repo容量の一律拒否を除去したが、Mac実機の再確認と大規模実案件の完走は別途必要。
+
+
+## 明示予算だけを適用する
+
+Agent時間・検証時間・CPU時間・生成ファイル容量・修正回数は、未指定なら上限を設けない。必要な場合だけ `budget.agentTimeoutMilliseconds`、`contract.verificationLimits.timeoutMilliseconds` / `cpuSeconds` / `fileBytes`、`maxRepairs` を指定する。`budget.maxElapsedSeconds` と `maxAgentCalls` も明示指定した場合だけ適用する。時間予算の残りは各Agent・検証に引き継ぐ。CI待機の期限は別の `delivery.ciTimeoutMilliseconds`。
+
+ミリ秒指定はNodeタイマーが扱える正の整数（最大2147483647）。未指定はこの最大値の代入ではなく、タイマー自体を設定しない。`maxRepairs: 0` は修正再試行なし。実行環境自身の資源上限、通信処理・起動診断・終了確認の期限、プロトコル出力バッファの保護は別である。明示選択した `browser-cgroup-v1` のメモリ・プロセス数制限も維持する。権限・変更範囲・独立レビュー・対象commitの一致は予算の有無で解除しない。

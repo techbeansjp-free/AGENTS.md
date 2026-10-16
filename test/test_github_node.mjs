@@ -52,3 +52,21 @@ test('identity is checked again after a transient observation failure',async()=>
  provider.api=()=>{reads++;if(reads===1)throw Object.assign(Error('timeout'),{code:'ETIMEDOUT'});return {...data,draft:false};};
  await assert.rejects(provider.observe(1,{timeout:1000,interval:0}),/identity/);assert.equal(reads,2);
 });
+
+
+test('default CI observation survives twenty minutes; explicit owner deadline still applies',async t=>{
+ const {provider,data}=setup();provider.expectedHead=head;
+ let elapsed=0,observations=0;
+ t.mock.method(Date,'now',()=>elapsed);
+ provider.api=route=>{
+  if(route.includes('/actions/runs?')){
+   observations++;elapsed+=20*60*1000;
+   return {workflow_runs:observations===1?[]:[{id:10,head_sha:head,event:'pull_request',path:'.github/workflows/safety.yml',repository:{full_name:repository},pull_requests:[{number:1,head:{sha:head},base:{sha:base}}],status:'completed',conclusion:'success',html_url:'fixture-run'}]};
+  }
+  return route.includes('/jobs?')?{total_count:1,jobs:[{name:'check',status:'completed',conclusion:'success'}]}:data;
+ };
+ assert.equal((await provider.observe(1,{interval:0})).checks.check,'success');assert.equal(observations,2);
+ observations=0;provider.ciTimeoutMilliseconds=300000;
+ await assert.rejects(provider.observe(1,{interval:0}),/deadline exceeded/);assert.equal(observations,1);
+ for(const timeout of [-1,NaN,'300000'])await assert.rejects(provider.observe(1,{timeout}),/Invalid CI/);
+});

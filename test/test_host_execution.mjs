@@ -23,7 +23,7 @@ if(q.operation==='agent'){
 process.stdout.write(JSON.stringify({schema:q.schema,id:q.id,operation:q.operation,result}));`);
  const contract={intent:'Change text',criteria:['after'],allowedPaths:['code.txt'],testArgv:[process.execPath,'-e',`if(require('node:fs').readFileSync('code.txt','utf8')!=='after')process.exit(1)`],riskTestArgv:[],requiredChecks:['test'],policyRevision:'v1',unresolved:[],risks:[],requiresDesign:false,design:''};
  const configuration={protocol:'asc-host-execution/v1',command:[process.execPath,script]};
- const request={repo,base:git('rev-parse','HEAD'),contract,codexExecutable:process.execPath,model:'fixture',hostExecution:configuration,commitIdentity:{name:'Fixture',email:'fixture@example.invalid'}};
+ const request={repo,base:git('rev-parse','HEAD'),contract,hostExecution:configuration,commitIdentity:{name:'Fixture',email:'fixture@example.invalid'}};
  return {root,repo,git,script,configuration,request,c:new Controller({...request,implementer:'worker'})};
 }
 test('Host path completes actual verification and independent contexts without Linux execution backend',async t=>{

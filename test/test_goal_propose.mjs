@@ -10,7 +10,7 @@ test('unresolved questions cannot masquerade as an executable plan',()=>{const p
 test('read-only proposal binds source and cannot mutate Git or use exhausted budget',{skip:process.platform!=='linux'},async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-proposal-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const git=(...a)=>execFileSync('git',a,{cwd:root,encoding:'utf8',stdio:'pipe'}).trim();git('init','-q');git('config','user.name','Test');git('config','user.email','test@example.invalid');fs.writeFileSync(path.join(root,'search.js'),'before');git('add','.');git('commit','-qm','base');
- const head=git('rev-parse','HEAD'),request={repo:root,base:head,contract,model:'test-double',codexExecutable:process.execPath};let calls=0;
+ const head=git('rev-parse','HEAD'),request={repo:root,base:head,contract};let calls=0;
  const agent=async options=>{calls++;assert.equal(options.writable,false);assert(!fs.existsSync(path.join(options.workspace,'.git')));return {answer:JSON.stringify(proposal()),context:'planner',seconds:0,usage:[]};};
  const result=await proposeGoal(request,{agent});t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert.equal(result.binding.head,head);assert.equal(result.calls[0].usage,null);assert.match(result.authority,/advisory/);assert.equal(git('rev-parse','HEAD'),head);assert.equal(git('status','--porcelain'),'');
  await assert.rejects(proposeGoal({...request,budget:{maxAgentCalls:0}},{agent}),/budget/);assert.equal(calls,1);

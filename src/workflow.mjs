@@ -42,10 +42,13 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
  if(reviewOnly)submit=false;
  const budget=executionBudget??createExecutionBudget(request.budget);
 
- demand(request&&typeof request==='object'&&typeof request.codexExecutable==='string'&&path.isAbsolute(request.codexExecutable),'Host-pinned Codex executable required');
- demand(typeof request.model==='string'&&request.model,'Explicit model required');
+ demand(request&&typeof request==='object','Workflow request required');
+ if(agent===runAgent&&!request.hostExecution){
+  demand(typeof request.codexExecutable==='string'&&path.isAbsolute(request.codexExecutable),'Host-pinned Codex executable required for the Codex adapter');
+  demand(typeof request.model==='string'&&request.model,'Explicit model required for the Codex adapter');
+ }
  demand(Array.isArray(request.contract?.allowedPaths)&&request.contract.allowedPaths.every(p=>typeof p==='string'&&(reviewOnly||!['.codex','.agents'].includes(p.split('/')[0].toLowerCase()))),'Agent control paths require owner-managed migration');
- const limit=reviewOnly?0:(request.maxRepairs??1);demand(Number.isSafeInteger(limit)&&limit>=0&&limit<=3,'Repair bound must be 0..3');
+ const limit=reviewOnly?0:(request.maxRepairs??Infinity);demand(limit===Infinity||(Number.isSafeInteger(limit)&&limit>=0),'Repair bound must be a nonnegative safe integer');
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-v05-run-')),calls=[],events=[];
  const started=performance.now();let repairs=0,workOverride,failure,candidateAttempted=false,approvalWithoutProgress=false;
  const c=new AssetController({repo:request.repo,base:request.base,contract:request.contract,

@@ -41,10 +41,10 @@ export function assertPreflight(result,hostValue) {
   const data=JSON.parse(result.stdout);
   demand(data.completed===true && data.read==='denied' && ['denied','private-write-completed'].includes(data.write) && hostValue==='trusted','Isolation not established');
 }
-export async function runAgent({workspace,logs,executable,model,prompt,writable=true,schema,timeout=360000},processRunner=runBoundedProcess) {
+export async function runAgent({workspace,logs,executable,model,prompt,writable=true,schema,timeout=null},processRunner=runBoundedProcess) {
   assertExecutionHost();
-  demand(Number.isSafeInteger(timeout)&&timeout>0&&timeout<=360000,'Invalid Agent deadline');
-  const deadline=performance.now()+timeout;
+  demand(timeout===null||(Number.isSafeInteger(timeout)&&timeout>0&&timeout<=2147483647),'Invalid Agent deadline');
+  const deadline=timeout===null?Infinity:performance.now()+timeout;
   demand(typeof model==='string' && model.length && typeof prompt==='string','Explicit model and prompt required');
   const logRoot=fs.realpathSync(logs),root=fs.realpathSync(workspace);
   demand(!contains(root,logRoot),'Logs must be outside source');
@@ -52,7 +52,7 @@ export async function runAgent({workspace,logs,executable,model,prompt,writable=
   try {
     const c=configuration({workspace,runtime,executable,writable});
     const sandbox=['sandbox','-P',c.profile,...c.options,'-C',root,'--'];
-    const preflightRun=(binary,args,options)=>processRunner(binary,args,{...options,timeout:Math.min(options.timeout,remainingDeadline(deadline))});
+    const preflightRun=(binary,args,options)=>processRunner(binary,args,{...options,timeout:Math.min(options.timeout,remainingDeadline(deadline)??Infinity)});
     await preflightRun(c.binary,[...sandbox,c.node,'-e','process.exit(0)'],{env:c.env,input:'',timeout:20000});
     const sentinel=path.join(logRoot,'controller-sentinel');fs.writeFileSync(sentinel,'trusted',{flag:'wx'});
     const code=`const fs=require('node:fs');let read='denied',write='denied';
@@ -89,7 +89,7 @@ fs.writeSync(1,JSON.stringify({completed:true,read,write}));`;
   }finally{fs.rmSync(runtime,{recursive:true,force:true});}
 }
 
-function remainingDeadline(deadline){const remaining=Math.ceil(deadline-performance.now());demand(remaining>0,'Agent deadline exceeded during preflight');return remaining;}
+function remainingDeadline(deadline){if(deadline===Infinity)return null;const remaining=Math.ceil(deadline-performance.now());demand(remaining>0,'Agent deadline exceeded during preflight');return remaining;}
 
 /** Transient service owns provider descendants; Codex still owns tool confinement. */
 export const runBoundedProcess=runServiceProcess;

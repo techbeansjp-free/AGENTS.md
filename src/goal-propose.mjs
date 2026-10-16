@@ -31,7 +31,7 @@ export async function proposeGoal(input,{agent=runAgent,executionBudget,replanni
  const started=performance.now();
  const request=structuredClone(input),contract=request.contract;
  const budget=executionBudget??createExecutionBudget(request.budget);
- demand(typeof request.codexExecutable==='string'&&path.isAbsolute(request.codexExecutable)&&typeof request.model==='string'&&request.model,'Explicit model and host executable required');
+ if(agent===runAgent&&!request.hostExecution)demand(typeof request.codexExecutable==='string'&&path.isAbsolute(request.codexExecutable)&&typeof request.model==='string'&&request.model,'Explicit model and host executable required');
  demand(contract&&typeof contract.intent==='string'&&contract.intent.trim()&&Array.isArray(contract.criteria)&&contract.criteria.length&&contract.criteria.every(s=>typeof s==='string'&&s.trim()),'Owner intent and criteria required');
  demand(Array.isArray(contract.allowedPaths)&&contract.allowedPaths.length&&contract.allowedPaths.every(p=>typeof p==='string'),'Owner scope required');contract.allowedPaths.forEach(safeName);
  const c=new AssetController({repo:request.repo,base:request.base,contract,implementer:'proposal-only'});
