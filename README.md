@@ -18,6 +18,28 @@ agent-skill-chain run /absolute/path/to/owner-request.json
 
 入力・前提条件は[実行手順](v05/USAGE.md)、権限は[承認契約](v05/OWNER_APPROVAL.md)、分解と統合は[Goal実行](v05/GOAL_EXECUTION.md)を参照してください。[ASC Skill](skills/asc/SKILL.md)は同じ配布物内のCLIを利用します。
 
+## 利用者プロジェクトの配置と更新
+
+利用者側の入口は従来と同じ`.agent-skill-chain/`です。このリポジトリの`v05/`は開発・配布元の配置であり、利用者プロジェクトに`v05/`を作る必要はありません。
+
+```text
+利用者プロジェクト/
+├── .agent-skill-chain/
+│   ├── 00_利用案内.md
+│   ├── project/             利用者固有ルール（保持）
+│   ├── skills/asc/          v0.5の実行案内
+│   ├── templates/specs/     仕様書の雛形
+│   └── distribution.json   配布資産の更新判定用
+├── .agents/skills/asc/      Host向け入口（明示登録時のみ）
+├── docs/specs/              作成済み仕様書（既存配置を優先）
+├── src/                     利用者のアプリ
+└── .worktrees/              Issue別作業先
+```
+
+ASCのプログラムはプロジェクト外の固定npmインストール先に置きます。パッケージ更新と、プロジェクトへ配った案内・Skill・雛形の更新は分かれています。専用worktreeで、インストール済みCLIの`project-assets <worktree>`で差分を確認し、`--apply`で適用します。Host向け入口も配置する場合だけ`--register-skill`を指定します。
+
+未編集の配布資産だけを更新し、利用者が編集・削除した資産は競合として停止します。`project/`、作成済み仕様書、独自の雛形、アプリは上書きしません。旧Step専用の設定・Hook・Skillの撤去はこの更新操作に含めません。具体的な操作と制約は[配布資産の導入・更新](v05/USAGE.md#プロジェクト内の配布資産を導入更新する)を参照してください。
+
 ## 品質と移行
 
 実装者とReviewerのContextを分離し、元要求・実差分・テスト・規約を検分します。Controllerは変更範囲、Evidence、提出commitの一致を検証します。文書やGherkin・DDD等は利用プロジェクトの契約と変更内容に応じて適用し、毎回の生成や専用Agent起動を強制しません。
