@@ -724,7 +724,7 @@ const V05_CUTOVER_CONFIGURATION: Readonly<Record<string, string>> = {
   "scripts/quality-support/legacy-policy-metadata.json":
     "7b967462998ef8b3ce35f1699129819855e1e59281cbe83d4da4acc94f15ae97",
   ".github/workflows/ci.yml":
-    "48e1461112ffc30847a7bde6b16b40989471c11bcbb91a1cc3aea6b816707fb5",
+    "dabfeab4a8c9689324f81089e88ee8335d6f6af83030ada9aad2e47a08dc9059",
   ".github/workflows/trusted-quality.yml":
     "4db2dffa88db797f6a5946b9fa57aaee77f0494ed000fa12a7cfbea6211f80b0",
   ".github/workflows/release.yml":
