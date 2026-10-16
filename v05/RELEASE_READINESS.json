@@ -942,5 +942,41 @@
       "evidence": "676314bc9c6c3963b093624f978094130d9c2855e246458f257662b4329103ec",
       "counterexample": "c2386b968e45d22b0a61163ed754e30dd174b66b304e4670714550eb3f8703d1"
     }
+  },
+  "adaptiveScreenCommandContextRecovery": {
+    "status": "FAIL",
+    "productHead": "0e3b859902956558bd126d51c4d45b6f2f4468ce",
+    "wallSeconds": 586.709924749,
+    "sourceUnchanged": true,
+    "candidateHead": "935778cb3fea2e88c292f7d67061c76dcd2d624d",
+    "declaredAgentCalls": 4,
+    "observedProcessedTokens": 1034050,
+    "observedFreshTokens": 190018,
+    "allAgentTotalTokens": null,
+    "deliveryAttempted": false,
+    "outcomes": [
+      "Verification command context enabled repair of Python isolated-mode import failure; subsequent browser and Python checks passed.",
+      "First independent review rejected transport reordering convergence. Additional isolated browser reproduction confirmed stale DOM after the PATCH committed.",
+      "Second repair passed existing checks but independent review rejected stale pending intent retained in browser history. The formal review was static analysis; a subsequent independent browser probe reproduced an obsolete PATCH overwriting a newer opposite toggle after revisiting and reloading an old history entry.",
+      "Four-call admission budget and repair limit stopped without accepting review or submitting changes."
+    ],
+    "evidenceSha256": "3b22afbdf18d478eca0ba72c61ef2a7a23798eaf6611a2456c2ea922be0ffc6b",
+    "limitations": [
+      "Recovery from an existing failed candidate, not initial implementation or matched performance",
+      "Back traversal alone did not reproduce the write; runtime confirmation requires reload of the old entry. History and transport-order probes are separate; neither result establishes combined acceptance.",
+      "No external Delivery or CI for candidate"
+    ],
+    "historyReproduction": {
+      "candidateHead": "935778cb3fea2e88c292f7d67061c76dcd2d624d",
+      "status": "CONFIRMED_WITH_RELOAD",
+      "scenario": "Hold completion=true PATCH, navigate to summary, release and confirm commit; toggle false and confirm commit; return through older history and reload. Reload sends obsolete completion=true and SQLite changes back to true.",
+      "qualification": "Back traversal alone did not reproduce a write in the first probe; the confirmed counterexample includes reload of the stale history entry.",
+      "oracleExit": 1,
+      "newModelCalls": 0,
+      "resourceExhaustion": false,
+      "oracleSha256": "910e11434129f84994977a68d9d8324c78c5db068714a91a351f2b95f24e9d4b",
+      "resultSha256": "fb9f46f130edd17701a6d8eb3a480962611000261a66a97903271e5bbede7f03",
+      "independentReview": "Read-only integration_review confirmed trace and fixed-candidate source alignment; did not rerun the probe."
+    }
   }
 }
