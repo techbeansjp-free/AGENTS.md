@@ -2358,6 +2358,54 @@
         "No 92-second guarantee for complex work"
       ]
     },
-    "releaseDecision": "Not a blanket release-ready decision; final requirement coverage must remain distinct from this authorized evidence reuse."
+    "releaseDecision": "Not a blanket release-ready decision; final requirement coverage must remain distinct from this authorized evidence reuse.",
+    "historicalSemanticTrials": [
+      {
+        "requirement": "13.2",
+        "rawEvidence": "/tmp/asc-screen-trial-UVOlmx/evidence.json",
+        "sha256": "772576e044c4e08a3c95b963deaa9cf8e590f6a533086ce3e48fc04e52be2451",
+        "recordingCommit": "923c749fe225499fb38c8ce13bd146fb1f707d24",
+        "recordingCommitIsExecutedRuntimeProof": false,
+        "driver": "node_screen_proposal_trial.mjs",
+        "testedTarget": {
+          "head": "4f9b139e462fa7936f29f729c5e26acbbc3ae2d6",
+          "base": "d8056cc4ed46ebe5c85140b0bac995814cf904b8",
+          "contract": "e04fb578925e42e36a98442f092a74ea322a1e36a57c741bcc67143d2ae8bc0f",
+          "diff": "4247be6ea3b19dbf44869feee72d6ee7ba2a4abf111a5e1331f1f57ead22fe80",
+          "empty": false
+        },
+        "acceptedByTrial": true,
+        "agentCalls": 4,
+        "repairs": 1,
+        "wallSeconds": 215.779335464,
+        "scope": "Static unapproved inventory screen proposal from an empty scenario/design outline; labelled states, owner questions and user-value slices; repair followed by independent review.",
+        "delivery": "Explicit provider/CI test double (PR 0), not remote PR/CI evidence",
+        "runtimeProvenance": "Driver imports PoC working-tree runtime. Exact execution-time runtime tree is not captured in raw evidence; recording commit is not substituted for it. Historical semantic capability evidence only, not exact current-runtime regression proof.",
+        "allAgentTotalTokens": null
+      },
+      {
+        "requirement": "13.3",
+        "rawEvidence": "/tmp/asc-document-trial-Uw7jnB/evidence.json",
+        "sha256": "13d458cc03ccb4180299ab1503ca39a69fee939b420263d05d9f75bc1456abb2",
+        "recordingCommit": "6f8a3b678bbb0446a4f298575eba51da517fd680",
+        "recordingCommitIsExecutedRuntimeProof": false,
+        "driver": "node_document_trial.mjs",
+        "testedTarget": {
+          "head": "d2b73f109762c81a79bcee56af1b57cf25c53719",
+          "base": "8ed5497a28803608eb4128adbccce58bd2b0a1ac",
+          "contract": "c38f96058f03c076d390f126960110626279d25e3b47471c30aeba25ebf2c602",
+          "diff": "3a099ed3e41906c696b704cad2f571aa46fb0b549f4820bdf6c6eec195032131",
+          "empty": false
+        },
+        "acceptedByTrial": true,
+        "agentCalls": 4,
+        "repairs": 1,
+        "wallSeconds": 75.844803738,
+        "scope": "Seeded stale retry design detected despite passing code test; existing document repaired, unrelated document preserved, fresh review passed.",
+        "delivery": "Explicit provider/CI test double (PR 0), not remote PR/CI evidence",
+        "runtimeProvenance": "Driver imports PoC working-tree runtime. Exact execution-time runtime tree is not captured in raw evidence; recording commit is not substituted for it. Historical semantic capability evidence only, not exact current-runtime regression proof.",
+        "allAgentTotalTokens": null
+      }
+    ]
   }
 }
