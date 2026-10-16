@@ -67,3 +67,22 @@ test('bundled Codex Host rejects candidate executable hidden inside owner config
  const adapter=new URL('../bin/asc-codex-host.mjs',import.meta.url);
  assert.throws(()=>execFileSync(process.execPath,[fileURLToPath(adapter),'--config',config],{input:JSON.stringify({schema:'asc-host-execution/v1',id:'test',operation:'agent',authorityRoots:[f.repo],payload:{workspace:f.root}}),stdio:['pipe','pipe','pipe']}),e=>String(e.stderr).includes('Candidate or Git metadata'));
 });
+
+
+test('Host preserves resolved temporary root without forwarding arbitrary environment',async t=>{
+ const f=fixture(t);fs.writeFileSync(f.script,`import fs from 'node:fs';const q=JSON.parse(fs.readFileSync(0,'utf8'));process.stdout.write(JSON.stringify({schema:q.schema,id:q.id,operation:q.operation,result:{temporary:[process.env.TMPDIR,process.env.TEMP,process.env.TMP],secret:process.env.ASC_SECRET_FOR_TEST??null}}));`);
+ process.env.ASC_SECRET_FOR_TEST='private';t.after(()=>delete process.env.ASC_SECRET_FOR_TEST);
+ const result=await hostExecution(f.c,f.configuration).agent({timeout:3000});
+ assert.deepEqual(result.temporary,Array(3).fill(fs.realpathSync(os.tmpdir())));assert.equal(result.secret,null);
+});
+
+test('Host verification startup failure does not trigger implementation repairs',async t=>{
+ const f=fixture(t);fs.appendFileSync(f.script,`
+`);
+ fs.writeFileSync(f.script,fs.readFileSync(f.script,'utf8').replace("}else{const p=q.payload", "}else{throw Error('sandbox capability unavailable');const p=q.payload"));
+ await assert.rejects(runWorkflow(f.request,{provider:{intent:()=>f.request.contract.intent}}),error=>{
+  const d=error.workflowDiagnostic;t.after(()=>fs.rmSync(d.root,{recursive:true,force:true}));
+  assert.equal(d.calls.length,1);assert.equal(d.repairs,0);assert.match(d.events.find(e=>e.type==='verification-unavailable').hostStderr,/sandbox capability unavailable/);
+  assert.match(error.message,/Host verification could not execute/);return true;
+ });
+});

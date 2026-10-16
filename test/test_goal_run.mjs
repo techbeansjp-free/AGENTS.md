@@ -727,3 +727,19 @@ test('whole Goal repair preserves shared pins even when scope permits editing th
   assert.equal(repairs,1);t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  }
 });
+
+
+test('parallel Goal keeps interrupted Unit output and reaches final Delivery',{skip:!enabled},async t=>{
+ const f=fixture(t);delete f.request.maxRepairs;let context=0;const starts={a:0,b:0,sum:0};
+ const result=await runGoal(f.request,{provider:f.provider,agent:async({workspace,writable,prompt})=>{
+  const id='fresh-recovery-'+(++context);
+  if(writable){const unit=JSON.parse(prompt).unitAssignment.current.id;starts[unit]++;
+   if(unit==='a'&&starts.a===2)assert.equal(fs.readFileSync(path.join(workspace,'a.txt'),'utf8'),'1','partial result was lost');
+   fs.writeFileSync(path.join(workspace,unit+'.txt'),unit==='sum'?'2':'1');
+   if(unit==='a'&&starts.a===1)throw Object.assign(Error('context full'),{code:'ASC_CONTEXT_EXHAUSTED'});
+  }
+  return {context:id,seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};
+ }});
+ t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert.equal(result.status,'draft-ci-passed');assert.deepEqual(starts,{a:2,b:1,sum:1});assert.equal(f.deliveries(),1);
+ assert.equal(result.units.find(u=>u.id==='a').result.calls[0].status,'failed');
+});

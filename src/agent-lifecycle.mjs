@@ -43,7 +43,7 @@ export function runServiceProcess(executable,argv,{env,input,timeout=null}){
    stdout+=out.end();stderr+=err.end();
    if(error)reject(Object.assign(error,{stdout,stderr}));else resolve({stdout,stderr});
   };
-  const timer=timeout===null?undefined:setTimeout(()=>finish(Error('Agent deadline exceeded')),remaining);
+  const timer=timeout===null?undefined:setTimeout(()=>finish(Object.assign(Error('Agent deadline exceeded'),{code:'ASC_AGENT_TIMEOUT'})),remaining);
   p.stdout.on('data',data=>{if(settled)return;outBytes+=data.length;if(outBytes>8*1024*1024){finish(Error('Agent output limit exceeded'));return;}stdout+=out.write(data);});
   p.stderr.on('data',data=>{if(settled)return;errBytes+=data.length;if(errBytes>1048576){finish(Error('Agent error output limit exceeded'));return;}stderr+=err.write(data);});
   p.once('error',()=>finish(Error('Agent lifecycle launch failed')));
