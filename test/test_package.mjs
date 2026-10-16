@@ -34,7 +34,7 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  const extraHelp=spawnSync(process.execPath,[cli,'--help','ignored'],{cwd:root,encoding:'utf8'});assert.equal(extraHelp.status,1);
  const extraVersion=spawnSync(process.execPath,[cli,'--version','ignored'],{cwd:root,encoding:'utf8'});assert.equal(extraVersion.status,1);
  const result=JSON.parse(execFileSync(process.execPath,[cli,'capabilities'],{cwd:root,encoding:'utf8'}));
- assert(result.commands.includes('review'));assert.equal(result.releaseReady,false);assert.equal(result.legacyFallback,false);
+ assert(result.commands.includes('review'));assert.equal(result.releaseReady,true);assert.equal(result.releaseTarget,'native-linux');assert.equal(result.publishAuthorized,false);assert.equal(result.legacyFallback,false);
  assert.equal(fs.existsSync(path.join(packageRoot,'harness.py')),false);
  const bad=spawnSync(process.execPath,[cli,'run'],{cwd:root,encoding:'utf8'});
  assert.equal(bad.status,1);
@@ -94,7 +94,7 @@ for(const version of [null,'0.5.0'])test(`canonical ${version??'alpha'} candidat
  assert.equal(pkg.version,version??'0.5.0-alpha.0');assert.equal(pkg.private,true);assert.deepEqual(Object.keys(pkg.bin),['agent-skill-chain','asc-v05']);
  for(const [name,entry] of Object.entries(pkg.bin)){
   const link=path.join(consumer,'node_modules/.bin',name);assert(fs.existsSync(link+(process.platform==='win32'?'.cmd':'')));
-  const capability=JSON.parse(process.platform==='win32'?execFileSync(process.execPath,[path.join(installed,entry),'capabilities'],{encoding:'utf8'}):execFileSync(link,['capabilities'],{encoding:'utf8'}));assert.equal(capability.releaseReady,false);assert.equal(capability.legacyFallback,false);
+  const capability=JSON.parse(process.platform==='win32'?execFileSync(process.execPath,[path.join(installed,entry),'capabilities'],{encoding:'utf8'}):execFileSync(link,['capabilities'],{encoding:'utf8'}));assert.equal(capability.releaseReady,true);assert.equal(capability.releaseTarget,'native-linux');assert.equal(capability.publishAuthorized,false);assert.equal(capability.legacyFallback,false);
   const reported=process.platform==='win32'?execFileSync(process.execPath,[path.join(installed,entry),'--version'],{cwd:root,encoding:'utf8'}):execFileSync(link,['--version'],{cwd:root,encoding:'utf8'});assert.equal(reported.trim(),pkg.version);
   const legacy=spawnSync(process.execPath,[path.join(installed,entry),'workflow','advance'],{encoding:'utf8'});assert.equal(legacy.status,1);assert.match(legacy.stderr,/Usage:/);
  }

@@ -2,7 +2,7 @@
 import {projectAssets} from '../src/project-assets.mjs';
 import {restartGoal} from '../src/goal-restart.mjs';
 import {runIssues} from '../src/issue-run.mjs';
-/** Evaluation distribution. Unsupported operations stop; never invoke v0.4 implicitly. */
+/** Linux distribution candidate. Unsupported operations stop; never invoke v0.4 implicitly. */
 import fs from 'node:fs';
 import {executionHost} from '../src/execution-host.mjs';
 import {inspectMigration} from '../migration_inspect.mjs';
@@ -51,7 +51,7 @@ try {
 
 owner入力は作業repoの外に置きます。通常実行は専用worktreeを使用します。
 必要環境・入力例・承認・検証資産の準備: ${new URL('../v05/USAGE.md',import.meta.url).pathname}
-Linux評価版です。正式リリース判定は未完了。merge・releaseは行いません。`);
+Linux限定のリリース候補です。実行時の隔離検査は必須です。公開・merge・releaseの承認は別途必要です。`);
   } else if(command==='project-assets'&&args.length>=1&&args.length<=3&&args.slice(1).every(a=>['--apply','--register-skill'].includes(a))&&new Set(args.slice(1)).size===args.length-1){
     const result=projectAssets(args[0],{apply:args.includes('--apply'),registerSkill:args.includes('--register-skill')});console.log(JSON.stringify(result,null,2));if(result.conflicts.length)process.exitCode=2;
   } else if(command==='--version'&&args.length===0){
@@ -115,9 +115,9 @@ Linux評価版です。正式リリース判定は未完了。merge・releaseは
     console.log(JSON.stringify(result,null,2));
     if(!(command==='review'?result.status==='reviewed-candidate':['draft-ci-passed','proposed'].includes(result.status)))process.exitCode=2;
   } else if (command==='capabilities'   && args.length===0) {
-    console.log(JSON.stringify({schema:'asc-v05-capabilities/v1',releaseReady:false,
+    console.log(JSON.stringify({schema:'asc-v05-capabilities/v1',releaseReady:true,releaseTarget:'native-linux',publishAuthorized:false,
       commands:['project-assets','worktree-create','assets-inspect','migration-inspect','migration-prepare','migration-stage','migration-rollback','approval-verify','plan','goal-plan','goal-propose','restart-goal','run-adaptive','run','review','run-goal','run-issues','capabilities'],
-      execution:'linux-evaluation-runner',host:executionHost(),legacyFallback:false}));
+      execution:'linux-runner',host:executionHost(),legacyFallback:false}));
   } else {
     throw Error('Usage: asc-v05 --version | worktree-create <root> <issue> <type> <slug> <base> | assets-inspect <owner-assets> | migration-inspect <root> | migration-prepare <source> <new-location> | migration-stage <source> <new-location> <external-owner-plan> | migration-rollback <location> | approval-verify < trusted-input.json | plan <root> <base> <external-owner-contract> | run <external-owner-request.json> | review <external-owner-request.json> | restart-goal <external-owner-request.json> | run-adaptive <external-owner-request.json> | goal-propose <external-owner-request.json> | goal-plan <owner-plan.json> | run-goal <external-owner-request.json> | run-issues <external-owner-issue-request.json> | capabilities');
   }

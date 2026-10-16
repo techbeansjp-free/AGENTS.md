@@ -2,7 +2,7 @@
 
 ASCは、Goal・要求・リスク・プロジェクト契約・検証Evidenceから必要な開発作業を選ぶAI開発ハーネスです。固定Step 0〜11を実行する旧runtimeは、新版の標準CLIと配布物には含めません。
 
-現在は正式リリース前の候補です。Linuxでの受入を進めており、既存Releaseのlatestがv0.5であることを意味しません。merge・公開・releaseはまだ行っていません。
+現在は正式リリース前の候補です。Linux限定の受入範囲を記録しており、既存Releaseのlatestがv0.5であることを意味しません。merge・公開・releaseはまだ行っていません。
 
 ## 利用入口
 
@@ -50,7 +50,7 @@ v0.4の`workflow advance`等とは非互換です。旧設定や利用者の成�
 
 `src/`と`bin/`はv0.5 runtime、`test/`はv0.5のテストです。`npm test`（別名`npm run test:v05`）と`npm run quality`で検証します。旧Step専用runtime・テスト・Hook・Skill・ビルドスクリプトは現行treeから削除し、旧版の参照はGit履歴で行います。
 
-`scripts/check_project_quality.ts`・`check_source_quality.ts`と`quality-support/`はbase側CIの契約移行に必要な互換検査です。製品runtimeや配布物には含めません。既存CI契約の移行と全受入完了は別途確認が必要です。
+`scripts/check_project_quality.ts`・`check_source_quality.ts`と`quality-support/`はbase側CIの契約移行に必要な互換検査です。製品runtimeや配布物には含めません。必須CIはv0.5のLinux検証とbase validatorへ切替済みです。
 
 詳細な構成・保証境界は[v0.5利用案内](v05/README.md)を参照してください。
 
@@ -58,4 +58,4 @@ v0.4の`workflow advance`等とは非互換です。旧設定や利用者の成�
 
 ルートから`node scripts/pack-candidate.mjs /absolute/existing/output --version=0.5.0`で、版番号を揃えた候補tarballを作成できます。元のmanifestは変更せず、変換前後のhashを配布物に残します。候補は`private: true`・未承認のままであり、正式版の番号を指定してもリリース承認にはなりません。
 
-GitHubの候補生成workflowも手動実行のみです。指定commitの一致とLinux品質検証を確認してartifactを保存します。commit一致は独立レビューの合格を証明するものではありません。正式公開経路と旧base品質契約の移行は未完了です。
+GitHubの候補生成workflowも手動実行のみです。指定commitの一致とLinux品質検証を確認してartifactを保存します。commit一致は独立レビューの合格を証明するものではありません。旧base品質契約の切替は完了しています。正式公開には別途ownerの承認が必要です。

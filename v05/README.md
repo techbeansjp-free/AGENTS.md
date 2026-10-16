@@ -2,7 +2,7 @@
 
 ASCは、目的と受入条件、許可された変更範囲、既存規約を入力として、必要な実装・検証・独立レビューを選択します。固定Step列や工程ごとのAgent起動は要求しません。小規模変更は実装と独立Reviewerを基本とし、複雑なGoalでは依存関係に従ってWork Unitを実行・統合します。
 
-**現在は本体PRでレビュー中のalpha候補です。正式リリース可能とは判定していません。** [受入状態](RELEASE_READINESS.json)には、検証済み範囲と未達項目を記録しています。`capabilities`も`releaseReady: false`を返します。
+**Linux限定のリリース候補です。公開・merge・releaseは未実施です。** [受入状態](RELEASE_READINESS.json)の`finalAcceptanceAudit`に対象commit、受入根拠、制限を記録しています。`capabilities.releaseReady`は製品のLinux受入を表し、現在のHostの隔離成立や公開承認ではありません。`host.releaseReady: false`はOS識別だけで個別環境の隔離を認定しないことを表し、各runのpreflightは引き続き必須です。
 
 ## 導入と入口
 
@@ -50,9 +50,9 @@ npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/ag
 
 実Agentと検証の隔離は現在Linuxで評価しています。Git、GitHub CLI、host固定のCodex CLI、bubblewrap、prlimit等が必要です。Agentの実行寿命管理にもsystemd user serviceとcgroup v2環境が必要です。追加の資源制限profileの有無とは別の実行条件です。対応条件の詳細は[実行手順](USAGE.md)に従ってください。OS名だけで安全性を認定せず、実行時preflightを行います。WSL2・macOS等のAgent全体の隔離は別途受入中で、未成立の環境では停止します。
 
-## 未完了の受入
+## 受入範囲と制限
 
-標準CLI・配布対象・必須CIはv0.5へ切替済みです。移行と復旧、複雑な開発、小規模の対照性能測定には既存結果があり、その対象commit・適用範囲と現行実装の対応を最終照合しています。Linux隔離のCIと合成fixtureの実走は確認済みですが、全利用環境の保証ではありません。外部比較製品との評価はowner判断で延期し、既知欠陥と正常対照による絶対評価を実施しています。小規模fixtureの完走時間やテスト件数を、すべての利用条件への保証として扱いません。現在の制約・Evidence参照は[受入状態](RELEASE_READINESS.json)を正本とします。
+標準CLI・配布対象・必須CIはv0.5へ切替済みです。移行と復旧、複雑な開発、小規模の対照性能測定には既存結果があり、その対象commit・適用範囲と現行実装の対応は受入記録に明示しています。Linux隔離のCIと合成fixtureの実走は確認済みですが、全利用環境の保証ではありません。外部比較製品との評価はowner判断で延期し、既知欠陥と正常対照による絶対評価を実施しています。小規模fixtureの完走時間やテスト件数を、すべての利用条件への保証として扱いません。現在の制約・Evidence参照は[受入状態](RELEASE_READINESS.json)を正本とします。
 
 ## ソースcheckoutでの開発
 

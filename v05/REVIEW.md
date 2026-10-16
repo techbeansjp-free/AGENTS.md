@@ -1,6 +1,6 @@
 # v0.5 本体統合レビュー
 
-Goal・Contract・Evidence駆動のv0.5実装はルートの`src/`、CLIは`bin/`、テストは`test/`にあります。本体の標準CLIと配布対象はv0.5へ切り替え済みで、v0.4を呼び出すfallbackはありません。旧品質契約との接続用資産がリポジトリに残りますが、旧runtimeを配布・実行するものではありません。PR #1577は凍結を維持します。必須CI契約はv0.5の`linux`とbase validatorへ切り替え済みです。正式リリース判定は、受入記録の最終照合中です。
+Goal・Contract・Evidence駆動のv0.5実装はルートの`src/`、CLIは`bin/`、テストは`test/`にあります。本体の標準CLIと配布対象はv0.5へ切り替え済みで、v0.4を呼び出すfallbackはありません。旧品質契約との接続用資産がリポジトリに残りますが、旧runtimeを配布・実行するものではありません。PR #1577は凍結を維持します。必須CI契約はv0.5の`linux`とbase validatorへ切り替え済みです。Linux限定の受入判定と根拠は`RELEASE_READINESS.json`の`finalAcceptanceAudit`に記録しています。公開・merge・releaseは未承認のままです。
 
 repositoryルートの`README.md`、`src/controller.mjs`、`src/workflow.mjs`、Goal/Issue関連実装、対応する`test/test_*.mjs`、`v05/MIGRATION_PLAN.md`を参照してください。固定Step列を再現せず、必要な作業と独立レビューを選択します。
 
@@ -21,9 +21,9 @@ Node 20以上。Linuxの隔離テストはbubblewrap等を必要とします。m
 
 初回移植時にはLinux隔離・cgroupを含むNode 195テストが成功しました（106.06秒、skip 0）。本体ESLintへの適合としてNode標準機能を明示的にimportし、未使用引数と空catchを整理しています。元hashと移植時変更後hashを分けて記録しています。
 
-## 未達
+## 受入範囲
 
-CI切替は完了しています。小規模Draft PR/CI、複数Work Unitの統合、Issue競合後の復旧、移行、性能測定の既存結果は、RELEASE_READINESS.jsonの`acceptanceEvidenceReuse`に対象と適用範囲を記録しています。画面提案・古い文書検出の歴史的試行は実Agentによるものですが、そのDelivery/CIはtest doubleであり、実行時の製品treeを固定した証拠ではありません。現在の実装・テストとの対応確認を含めて最終判定し、過去の成功を現行HEADの実走と表示しません。外部レビュー製品との比較はowner承認で将来課題へ変更しています。各試験の対象HEAD・成功・失敗・限定はRELEASE_READINESS.jsonを参照してください。Draftを維持し、merge/releaseしないでください。
+CI切替は完了しています。小規模Draft PR/CI、複数Work Unitの統合、Issue競合後の復旧、移行、性能測定の既存結果は、RELEASE_READINESS.jsonの`acceptanceEvidenceReuse`に対象と適用範囲を記録しています。画面提案・古い文書検出の歴史的試行は実Agentによるものですが、そのDelivery/CIはtest doubleであり、実行時の製品treeを固定した証拠ではありません。現在の実装・テストとの対応と独立レビューに基づく限定的な受入であり、過去の成功を現行HEADの実走と表示しません。外部レビュー製品との比較はowner承認で将来課題へ変更しています。各試験の対象HEAD・成功・失敗・限定はRELEASE_READINESS.jsonを参照してください。Draftを維持し、merge/releaseしないでください。
 
 ## レビュー品質の評価用fixture
 

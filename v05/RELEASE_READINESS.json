@@ -1,5 +1,5 @@
 {
-  "status": "draft-integration-not-release-ready",
+  "status": "linux-release-ready-unpublished",
   "publishAuthorized": false,
   "sourceCommit": "f6506f7b1c22a8a8af3fbca8ba243f2a62c972c3",
   "priorLinuxValidation": {
@@ -23,10 +23,7 @@
     "providerTotalTokens": null,
     "causalImprovementProven": false
   },
-  "remaining": [
-    "Complete final requirement-by-requirement release decision using scoped evidence and explicitly recorded limitations; do not impose blanket reruns of successful scenarios",
-    "Keep product merge and publication separate from release-readiness acceptance; neither is authorized by evidence reuse"
-  ],
+  "remaining": [],
   "evidenceNote": "Historical local measurements are not evidence that this integration branch CI passed. See REVIEW.md.",
   "releaseTarget": {
     "platform": "native-linux",
@@ -2358,7 +2355,7 @@
         "No 92-second guarantee for complex work"
       ]
     },
-    "releaseDecision": "Not a blanket release-ready decision; final requirement coverage must remain distinct from this authorized evidence reuse.",
+    "releaseDecision": "Scoped evidence is incorporated into finalAcceptanceAudit; this is neither publication authorization nor proof of universal quality or causal performance superiority.",
     "historicalSemanticTrials": [
       {
         "requirement": "13.2",
@@ -2429,5 +2426,169 @@
         }
       }
     ]
+  },
+  "finalAcceptanceAudit": {
+    "objectiveSha256": "2bf6b190dedabc8c0d70bd3835f1f87c0d4949eb22df56b4dc3039c9346bbc81",
+    "assessedCommit": "d24dbe2eecfef8d0cf276a797c7bdb1ab796db2f",
+    "status": "PASS",
+    "runtimeCi": {
+      "head": "d24dbe2eecfef8d0cf276a797c7bdb1ab796db2f",
+      "run": 38895660369,
+      "conclusion": "success",
+      "baseValidatorRun": 38895655137,
+      "baseValidatorConclusion": "success",
+      "scope": "Linux isolation/cgroup, lint, tests and distribution at assessed commit. Subsequent display/acceptance metadata changes separately package-tested; next PR CI remains required before merge."
+    },
+    "requirements": [
+      {
+        "id": "13.1",
+        "status": "PASS",
+        "evidence": [
+          "latestCanonicalDummyDelivery"
+        ],
+        "currentSources": [
+          "test/test_workflow.mjs",
+          "test/test_controller.mjs",
+          "test/test_github_node.mjs"
+        ],
+        "scope": "2 fresh contexts, real verification and Draft PR21/CI; 68.396s excludes setup; one synthetic small change."
+      },
+      {
+        "id": "13.2",
+        "status": "PASS",
+        "evidence": [
+          "acceptanceEvidenceReuse.historicalSemanticTrials[0]",
+          "currentScreenClarificationBoundary",
+          "acceptanceEvidenceReuse.screen"
+        ],
+        "currentSources": [
+          "src/goal-propose.mjs",
+          "src/workflow.mjs",
+          "test/test_goal_propose.mjs"
+        ],
+        "scope": "Unapproved proposal, owner questions and value slices; separate UI/API/SQLite runtime trial. Historical semantic output is not a current-runtime replay."
+      },
+      {
+        "id": "13.3",
+        "status": "PASS",
+        "evidence": [
+          "acceptanceEvidenceReuse.historicalSemanticTrials[1]",
+          "projectAssetUpdateValidation",
+          "projectAssetPackageRoundtrip"
+        ],
+        "currentSources": [
+          "src/restricted-agent.mjs",
+          "src/workflow.mjs",
+          "test/test_workflow.mjs",
+          "test/test_project_assets.mjs"
+        ],
+        "scope": "Actual stale-design finding and repaired existing document; current contract propagation and repair controls retain this responsibility. Not a guarantee that every semantic defect is detected."
+      },
+      {
+        "id": "13.4",
+        "status": "PASS",
+        "evidence": [
+          "absoluteReviewEvaluation",
+          "acceptanceEvidenceReuse.currentCi"
+        ],
+        "currentSources": [
+          "test/test_controller.mjs",
+          "test/test_restricted_agent_node.mjs",
+          "test/test_snapshot.mjs",
+          "test/test_approval.mjs",
+          "test/test_agent_lifecycle.mjs"
+        ],
+        "scope": "Native Linux only; namespace, credentials, descendants, policy/source/receipt changes, scope and independent contexts. Host administrator remains trusted."
+      },
+      {
+        "id": "13.5",
+        "status": "PASS",
+        "evidence": [
+          "publicSyntheticGoalTrial",
+          "publicScreenRecoveryLatest",
+          "acceptanceEvidenceReuse.screen"
+        ],
+        "currentSources": [
+          "test/test_goal_plan.mjs",
+          "test/test_goal_run.mjs",
+          "test/test_approval.mjs"
+        ],
+        "scope": "Dependent and independent units, integration, full-Goal review, shared contracts and risk approval. Synthetic modules plus UI/API/SQLite scenario; not arbitrary-scale service qualification."
+      },
+      {
+        "id": "13.6",
+        "status": "PASS",
+        "evidence": [
+          "publicSyntheticIssueRecovery",
+          "publicSyntheticGoalRecovery",
+          "repeatedGoalRestart"
+        ],
+        "currentSources": [
+          "test/test_issue_run.mjs",
+          "test/test_goal_run.mjs"
+        ],
+        "scope": "Separate worktrees, conflict/stale dependency refusal confined to affected Issue, explicit owner base updates, partial-candidate preservation, bounded restart and fresh review. No autonomous merge authority."
+      },
+      {
+        "id": "13.7",
+        "status": "PASS",
+        "evidence": [
+          "optionalTemplatesAndBatchedReviewComparison",
+          "latestCanonicalDummyDelivery",
+          "publicSyntheticGoalTrial",
+          "publicSyntheticIssueRecovery"
+        ],
+        "currentSources": [
+          "test/test_report_workflow.mjs",
+          "test/test_workflow.mjs"
+        ],
+        "scope": "Measured small paired runs and complex/recovery runs with quality results. Provider-internal total remains unknown; fresh-token mean increased in paired runs. No causal v0.4 superiority or universal speed claim."
+      },
+      {
+        "id": "13.8",
+        "status": "PASS",
+        "evidence": [
+          "canonicalMigrationTrial",
+          "configurationGitRoundtrip",
+          "latestUnpublishedCandidateCutover",
+          "projectSkillHostDiscovery",
+          "projectAssetPackageRoundtrip",
+          "acceptanceEvidenceReuse.migration"
+        ],
+        "currentSources": [
+          "test/test_migration.mjs",
+          "test/test_migration_inspect.mjs",
+          "test/test_project_assets.mjs",
+          "test/test_package.mjs"
+        ],
+        "scope": "Documented owner-directed clean-worktree migration, Git configuration revert and selection rollback, preserved siblings and project edits. No automatic semantic translation or legacy approval import."
+      },
+      {
+        "id": "13.9",
+        "status": "PASS",
+        "scope": "No outstanding mandatory Linux acceptance gap identified by requirement audit and independent review. Supported environments and explicit owner deferrals apply. Current target CI required for merge; release authorization not granted."
+      }
+    ],
+    "independentReview": {
+      "context": "/root/integration_review",
+      "scope": "Read-only objective sections 13.1–13.9 and independent-review requirements; current semantic responsibilities and existing trial reuse",
+      "result": "No concrete invalidating implementation change requiring a new semantic trial; scoped 13.2/13.3 reuse accepted. Not a new provider run or universal defect-free proof."
+    },
+    "exceptions": {
+      "otherOperatingSystems": "NOT APPLICABLE: owner limits initial acceptance to native Linux",
+      "externalReviewProductEquivalence": "NOT APPLICABLE to this release decision: owner deferred comparison and accepted known-defect absolute evaluation"
+    },
+    "publicationAuthorized": false,
+    "remaining": [],
+    "finalDisplayValidation": {
+      "packageTests": {
+        "pass": 6,
+        "fail": 0,
+        "skip": 0,
+        "durationMs": 11908.334723
+      },
+      "lint": "pass",
+      "scope": "CLI releaseTarget/publishAuthorized and release-ready display; no permission or execution gate changed"
+    }
   }
 }
