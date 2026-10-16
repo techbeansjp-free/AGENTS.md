@@ -445,3 +445,16 @@ test('fresh reassessment resolves unsupported cyclic findings without repeating 
  }});
  t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));assert.equal(workers,3);assert.equal(reviews,4);assert.equal(result.status,'draft-ci-passed');
 });
+
+
+test('Delivery passes remaining total budget to CI and rejects over-budget completion',{skip:!enabled},async t=>{
+ const f=fixture(t);let expired=false,options;const observe=f.provider.observe;
+ f.provider.ciTimeoutMilliseconds=5000;
+ f.provider.observe=(pr,input)=>{options=input;expired=true;return observe(pr);};
+ const executionBudget={check(){if(expired)throw Error('Execution time budget exhausted');},admit(){this.check();},agentTimeout:()=>null,verificationTimeout:()=>null,snapshot:()=>({remainingMilliseconds:1234})};
+ let calls=0;const agent=async({workspace,writable})=>{if(writable)fs.writeFileSync(path.join(workspace,'code.txt'),'after\n');return {context:'budget-delivery-'+(++calls),usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};};
+ await assert.rejects(runWorkflow(f.request,{provider:f.provider,agent,executionBudget}),error=>{
+  t.after(()=>fs.rmSync(error.workflowDiagnostic.root,{recursive:true,force:true}));assert.match(error.message,/time budget exhausted/);assert.equal(error.workflowDiagnostic.status,'blocked');return true;
+ });
+ assert.deepEqual(options,{timeout:1234});assert.equal(calls,2);assert.equal(f.creates(),1);
+});

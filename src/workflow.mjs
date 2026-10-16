@@ -213,7 +213,19 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
    }
    if(work.work==='delivery'){
     if(!submit)return save({status:'reviewed-candidate',root,target:c.ready(await remote.intent()),calls,events,controllerEvents:c.events,repairs,allAgentTotalTokens:null});
-    const delivery=await c.delivery(remote);emit('delivery-complete',{pr:delivery.pr});
+    const deliveryProvider=new Proxy(remote,{get(target,key){
+     const value=Reflect.get(target,key,target);
+     if(!['intent','createDraft','observe'].includes(key)||typeof value!=='function')return value;
+     return async(...args)=>{
+      budget.check();
+      if(key==='observe'){
+       const remaining=budget.snapshot().remainingMilliseconds;
+       if(remaining!==null)args[1]={timeout:Math.max(0,Math.floor(Math.min(remaining,target.ciTimeoutMilliseconds??Infinity)))};
+      }
+      const result=await value.apply(target,args);budget.check();return result;
+     };
+    }});
+    const delivery=await c.delivery(deliveryProvider);emit('delivery-complete',{pr:delivery.pr});
     return save({status:'draft-ci-passed',root,wallSeconds:(performance.now()-started)/1000,...delivery,calls,events,controllerEvents:delivery.events,repairs,allAgentTotalTokens:null});
    }
    return save({status:'owner-work-required',root,work,approvalBinding:c.binding(),calls,events,allAgentTotalTokens:null});
