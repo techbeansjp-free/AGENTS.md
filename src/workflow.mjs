@@ -1,10 +1,11 @@
+import {hostExecution} from './host-execution.mjs';
 import {performance} from 'node:perf_hooks';
 import {importUnitCandidate} from './unit-candidate.mjs';
 import {SOURCE_TOTAL_BYTES} from './source-limits.mjs';
 import {reviewSchema,parseReview,reviewDiagnostics,reviewDiagnosticContext} from './review-result.mjs';
 import {createExecutionBudget} from './execution-budget.mjs';
 import {authorityCommandValidator} from './authority-command.mjs';
-import {assertExecutionHost} from './execution-host.mjs';
+
 /** Host-owned orchestration of proof obligations. No Step counter or receipt import. */
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawnSync} from 'node:child_process';
 import {AssetController} from './verification-assets.mjs';import {runAgent} from './restricted-agent.mjs';import {readSnapshotFile} from './snapshot.mjs';import {commitCandidate} from './candidate.mjs';import {Github} from './github.mjs';
@@ -32,7 +33,7 @@ export function checkOutput(root,original,allowed){
  }};walk(root);
  for(const name of original.keys())demand(seen.has(name)||allowed.includes(name),'Read-only context was deleted');
 }
-export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{},submit=true,executionBudget,reviewOnly=false,unitAssignment,candidateReuse}={}){
+export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{},submit=true,executionBudget,reviewOnly=false,unitAssignment,candidateReuse,hostVerification}={}){
  request=structuredClone(request);
  candidateReuse=candidateReuse===undefined?undefined:structuredClone(candidateReuse);
  unitAssignment=unitAssignment===undefined?undefined:structuredClone(unitAssignment);
@@ -41,7 +42,7 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
  demand(!reviewOnly||candidateReuse===undefined,'Review-only mode prohibits candidate import');
  if(reviewOnly)submit=false;
  const budget=executionBudget??createExecutionBudget(request.budget);
- assertExecutionHost();
+
  demand(request&&typeof request==='object'&&typeof request.codexExecutable==='string'&&path.isAbsolute(request.codexExecutable),'Host-pinned Codex executable required');
  demand(typeof request.model==='string'&&request.model,'Explicit model required');
  demand(Array.isArray(request.contract?.allowedPaths)&&request.contract.allowedPaths.every(p=>typeof p==='string'&&(reviewOnly||!['.codex','.agents'].includes(p.split('/')[0].toLowerCase()))),'Agent control paths require owner-managed migration');
@@ -51,6 +52,7 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
  const c=new AssetController({repo:request.repo,base:request.base,contract:request.contract,
   implementer:request.implementerContext??'owner-supplied-candidate',trustedKeys:request.trustedKeys??[]});
  authorityCommandValidator(c)(request.approvalCommand);
+ const host=hostExecution(c,request.hostExecution);if(host){if(agent===runAgent)agent=host.agent;c.setHostVerification(hostVerification??host.verify);}
  const remote=provider??new Github({...request.delivery,repo:c.repo,base:c.base});
  const emit=(type,data={})=>{const e={type,seconds:(performance.now()-started)/1000,...data};events.push(e);onEvent(e);};
  const save=result=>{result.wallSeconds??=(performance.now()-started)/1000;result.budget=budget.snapshot();result.priorReviews=reviewDiagnostics([...inheritedReviews,...events.filter(e=>e.type==='review-assessment')]);fs.writeFileSync(path.join(root,'result.json'),JSON.stringify(result,null,2));return result;};

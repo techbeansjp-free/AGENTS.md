@@ -1,3 +1,4 @@
+import {hostExecution} from './host-execution.mjs';
 import {performance} from 'node:perf_hooks';
 import {createExecutionBudget} from './execution-budget.mjs';
 import {runUnitThread} from './unit-thread.mjs';
@@ -6,7 +7,7 @@ import {authorityCommandValidator} from './authority-command.mjs';
 /** Bounded owner-supplied Goal execution. No imported approval/review receipts. */
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawnSync} from 'node:child_process';
 import {compileGoal} from './goal-plan.mjs';import {AssetController} from './verification-assets.mjs';import {hash,digest,safeName} from './controller.mjs';
-import {cloneSource} from './migration.mjs';import {commitCandidate} from './candidate.mjs';import {runWorkflow} from './workflow.mjs';import {runAgent} from './restricted-agent.mjs';import {Github} from './github.mjs';import {assertExecutionHost} from './execution-host.mjs';
+import {cloneSource} from './migration.mjs';import {commitCandidate} from './candidate.mjs';import {runWorkflow} from './workflow.mjs';import {runAgent} from './restricted-agent.mjs';import {Github} from './github.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 // A single unit needs no integration copy when it has the same execution authority.
 // Keep all semantic obligations and verification commands in one fresh contract.
@@ -27,10 +28,11 @@ export function singleUnitContract(request,plan){
  return {...parent,criteria:[...new Set([...parent.criteria,...(child.intent===parent.intent?[]:['Work Unit intent: '+child.intent]),...child.criteria])],riskTestArgv:checks};
 }
 export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},executionBudget,priorContexts=[]}={}){
- assertExecutionHost();const request=structuredClone(input),compiled=compileGoal(request.goal);
+ const request=structuredClone(input),compiled=compileGoal(request.goal);
  const budget=executionBudget??createExecutionBudget(request.budget);budget.check();
  demand(compiled.plan.intent===request.contract?.intent,'Goal and owner contract intent differ');
  const parallel=request.parallelism??2;demand(Number.isSafeInteger(parallel)&&parallel>0&&parallel<=4,'Parallelism must be 1..4');
+ const host=hostExecution(new AssetController({...request,implementer:'host-selection'}),request.hostExecution);if(host&&agent===runAgent)agent=host.agent;
  const threadedUnits=agent===runAgent&&provider===undefined;
  demand(agent!==runAgent||provider===undefined||parallel===1,'Parallel live units require isolated default provider');
  const c=new AssetController({...request,implementer:'goal-not-yet-implemented'});c.assertContract();
@@ -39,9 +41,11 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
  demand(!request.unitCandidates||(typeof request.unitCandidates==='object'&&!Array.isArray(request.unitCandidates)&&Object.keys(request.unitCandidates).every(id=>units.has(id))),'Unknown candidate unit');
  const assertAuthority=authorityCommandValidator(c);
  assertAuthority(request.approvalCommand);
+ assertAuthority(request.hostExecution?.command);
  for(const u of units.values()){
   const specification=request.unitRequests?.[u.id];demand(specification?.contract,'Owner unit contract missing');
   assertAuthority(specification.approvalCommand??request.approvalCommand);
+  demand(specification.hostExecution===undefined||digest(specification.hostExecution)===digest(request.hostExecution??null),'Unit Host execution authority differs from Goal');
   demand(specification.budget===undefined,'Configure execution budget on the Goal, not individual units');
   const uc=specification.contract;
   demand(uc.intent===u.intent&&digest(uc.criteria)===digest(u.criteria)&&digest([...uc.allowedPaths].sort())===digest([...u.writePaths].sort()),'Unit contract does not match plan');
@@ -97,7 +101,7 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
    emit('single-unit-execution',{id:unit.id,contract:digest(combined)});
    const record={id:unit.id,repo:c.repo,mode:'combined-goal-contract'};results.push(record);
    let delivery;
-   try{delivery=await runWorkflow({...request,contract:combined,priorReviews:request.unitCandidates?.[unit.id]?.priorReviews},{executionBudget:budget,agent:freshAgent,provider:checkedRemote,onEvent:event=>{if(event.type==='run-started')record.workflowRoot=event.root;emit('single-unit-event',{id:unit.id,event});}});}
+   try{delivery=await runWorkflow({...request,contract:combined,priorReviews:request.unitCandidates?.[unit.id]?.priorReviews},{executionBudget:budget,hostVerification:host?.verify,agent:freshAgent,provider:checkedRemote,onEvent:event=>{if(event.type==='run-started')record.workflowRoot=event.root;emit('single-unit-event',{id:unit.id,event});}});}
    catch(error){record.diagnostic=error.workflowDiagnostic;throw error;}
    finally{
     // Candidate bytes only: observe current Git, never export review/approval authority.
@@ -127,7 +131,7 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
       status:u.id===id?'current':results.some(r=>r.id===u.id&&r.result?.status==='reviewed-candidate')?'integrated':'pending'}))};
     const result=threadedUnits
      ?await runUnitThread(unitRequest,c.contract.intent,event=>emit('unit-event',{id,event}),budget.shared,unitAssignment,candidateReuse)
-     :await runWorkflow(unitRequest,{submit:false,unitAssignment,candidateReuse,executionBudget:budget,agent:freshAgent,onEvent:event=>emit('unit-event',{id,event}),provider:{intent:async()=>{await checkIntent();return units.get(id).intent;}}});
+     :await runWorkflow(unitRequest,{submit:false,unitAssignment,candidateReuse,executionBudget:budget,hostVerification:host?.verify,agent:freshAgent,onEvent:event=>emit('unit-event',{id,event}),provider:{intent:async()=>{await checkIntent();return units.get(id).intent;}}});
     if(threadedUnits)for(const call of result.calls??[]){demand(typeof call.context==='string'&&!contexts.has(call.context),'Goal requires fresh Agent contexts');contexts.add(call.context);}
     if(result.status!=='reviewed-candidate'){const failure=Error('Unit did not satisfy its obligations: '+id);failure.workflowDiagnostic=result;throw failure;}
     return {id,repo:candidate,result};
@@ -183,7 +187,7 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
   // A risk check identical to the parent test is still an explicit risk obligation.
   if(risks.length&&!checks.length)checks.push(request.contract.testArgv);
   const finalRequest={...request,contract:{...request.contract,criteria,risks,requiresDesign,design:designs.join('\n\n'),riskTestArgv:checks}};
-  const delivery=await runWorkflow(finalRequest,{executionBudget:budget,agent:freshAgent,provider:checkedRemote,onEvent:e=>emit('integration-event',{event:e})});
+  const delivery=await runWorkflow(finalRequest,{executionBudget:budget,hostVerification:host?.verify,agent:freshAgent,provider:checkedRemote,onEvent:e=>emit('integration-event',{event:e})});
   demand(delivery.status==='draft-ci-passed','Goal delivery incomplete');return save({status:'draft-ci-passed',delivery});
  }catch(error){emit('blocked',{error:String(error)});error.goalDiagnostic=save({status:'blocked',error:String(error),diagnostic:error.workflowDiagnostic??null});throw error;}
 }

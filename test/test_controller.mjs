@@ -237,7 +237,7 @@ test('verification Git reconstructs nested binary executable trees in both objec
  for(const format of ['sha1','sha256']){
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-git-view-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const source=path.join(root,'source'),view=path.join(root,'view');fs.mkdirSync(source);fs.mkdirSync(view);
-  const git=(...args)=>execFileSync('/usr/bin/git',args,{cwd:source,encoding:'utf8',stdio:'pipe'}).trim();
+  const git=(...args)=>execFileSync('git',args,{cwd:source,encoding:'utf8',stdio:'pipe'}).trim();
   git('init','-q','--object-format='+format);git('config','user.name','Fixture');git('config','user.email','test@example.invalid');
   fs.mkdirSync(path.join(source,'nested'));fs.mkdirSync(path.join(source,'nested','deep'));
   fs.writeFileSync(path.join(source,'nested','deep','binary'),Buffer.from([0,255,128,1]));
@@ -247,9 +247,9 @@ test('verification Git reconstructs nested binary executable trees in both objec
   const c=new Controller({repo:source,base:head,contract:{},implementer:'test'});
   const commit=c.git('cat-file','commit',head),blobs=c.blobs(head);
   createVerificationGit(view,head,commit,blobs);
-  const observed=execFileSync('/usr/bin/git',['ls-files','--stage','-z'],{cwd:view});
+  const observed=execFileSync('git',['ls-files','--stage','-z'],{cwd:view});
   assert.deepEqual(observed,c.git('ls-files','--stage','-z'));
-  assert.equal(execFileSync('/usr/bin/git',['rev-parse','HEAD'],{cwd:view,encoding:'utf8'}).trim(),head);
+  assert.equal(execFileSync('git',['rev-parse','HEAD'],{cwd:view,encoding:'utf8'}).trim(),head);
   const bad=path.join(root,'bad');fs.mkdirSync(bad);
   const changed=new Map(blobs);changed.set('nested.txt',{...blobs.get('nested.txt'),bytes:Buffer.from('tampered')});
   assert.throws(()=>createVerificationGit(bad,head,commit,changed),/identity mismatch/);

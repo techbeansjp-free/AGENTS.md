@@ -1,3 +1,4 @@
+import {hostExecution} from './host-execution.mjs';
 import {performance} from 'node:perf_hooks';
 /** Optional read-only decomposition. Suggestions never become execution authority. */
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
@@ -6,7 +7,7 @@ import {AssetController} from './verification-assets.mjs';
 import {compileGoal} from './goal-plan.mjs';
 import {exportSource,checkOutput} from './workflow.mjs';
 import {runAgent} from './restricted-agent.mjs';
-import {assertExecutionHost} from './execution-host.mjs';
+
 import {createExecutionBudget} from './execution-budget.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
 export function validateProposal(answer,contract,pins={}){
@@ -28,12 +29,13 @@ export function validateProposal(answer,contract,pins={}){
 }
 export async function proposeGoal(input,{agent=runAgent,executionBudget,replanning}={}){
  const started=performance.now();
- assertExecutionHost();const request=structuredClone(input),contract=request.contract;
+ const request=structuredClone(input),contract=request.contract;
  const budget=executionBudget??createExecutionBudget(request.budget);
  demand(typeof request.codexExecutable==='string'&&path.isAbsolute(request.codexExecutable)&&typeof request.model==='string'&&request.model,'Explicit model and host executable required');
  demand(contract&&typeof contract.intent==='string'&&contract.intent.trim()&&Array.isArray(contract.criteria)&&contract.criteria.length&&contract.criteria.every(s=>typeof s==='string'&&s.trim()),'Owner intent and criteria required');
  demand(Array.isArray(contract.allowedPaths)&&contract.allowedPaths.length&&contract.allowedPaths.every(p=>typeof p==='string'),'Owner scope required');contract.allowedPaths.forEach(safeName);
  const c=new AssetController({repo:request.repo,base:request.base,contract,implementer:'proposal-only'});
+ const host=hostExecution(c,request.hostExecution);if(host&&agent===runAgent)agent=host.agent;
  const observe=()=>c.observeSource();
  const head=observe(),blobs=c.blobs(head),pins={};
  for(const [name,ref] of Object.entries(request.contractFiles??{})){

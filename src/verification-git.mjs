@@ -7,6 +7,7 @@ import {spawnSync} from 'node:child_process';
 export function createVerificationGit(root,head,commit,blobs) {
  const algorithm=head.length===40?'sha1':head.length===64?'sha256':null;
  if(!algorithm||!/^[a-f0-9]+$/.test(head))throw Error('Invalid verification commit');
+ const nullDevice=process.platform==='win32'?'NUL':'/dev/null';
  const dir=path.join(root,'.git');fs.mkdirSync(dir);fs.mkdirSync(path.join(dir,'objects'));fs.mkdirSync(path.join(dir,'refs'));
  const object=(type,bytes)=>{
   const raw=Buffer.concat([Buffer.from(`${type} ${bytes.length}\0`),bytes]);
@@ -34,9 +35,10 @@ export function createVerificationGit(root,head,commit,blobs) {
  const treeOid=writeTree(tree);
  if(commit.toString('utf8').split('\n')[0]!==`tree ${treeOid}`)throw Error('Verification tree identity mismatch');
  fs.writeFileSync(path.join(dir,'HEAD'),head+'\n');fs.writeFileSync(path.join(dir,'shallow'),head+'\n');
- fs.writeFileSync(path.join(dir,'config'),`[core]\n repositoryformatversion = ${algorithm==='sha256'?1:0}\n bare = false\n hooksPath = /dev/null\n${algorithm==='sha256'?'[extensions]\n objectFormat = sha256\n':''}`);
- const env={PATH:'/usr/bin:/bin',HOME:'/nonexistent',GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_ALLOW_PROTOCOL:'',GIT_TERMINAL_PROMPT:'0'};
- const result=spawnSync('/usr/bin/git',['-c','core.fsmonitor=false','read-tree',head],{cwd:root,env,timeout:20000,maxBuffer:1048576});
+ fs.writeFileSync(path.join(dir,'config'),`[core]\n repositoryformatversion = ${algorithm==='sha256'?1:0}\n bare = false\n hooksPath = ${nullDevice}\n${algorithm==='sha256'?'[extensions]\n objectFormat = sha256\n':''}`);
+ const env={PATH:process.env.PATH,HOME:root,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:nullDevice,GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_ALLOW_PROTOCOL:'',GIT_TERMINAL_PROMPT:'0'};
+ if(process.platform==='win32'&&process.env.SystemRoot)env.SystemRoot=process.env.SystemRoot;
+ const result=spawnSync('git',['-c','core.fsmonitor=false','read-tree',head],{cwd:root,env,timeout:20000,maxBuffer:1048576});
  if(result.error||result.status!==0)throw Error('Verification Git index failed');
  return dir;
 }

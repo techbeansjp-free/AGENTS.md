@@ -29,7 +29,7 @@ export function safeName(name) {
     !name.includes('\0') && !path.isAbsolute(name) && name.split('/').every(p=>p && p!=='.' && p!=='..' && p.toLowerCase()!=='.git' && !/[. ]$/.test(p) && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(p)), 'Unsafe source path');
 }
 export class Controller {
-  #generation=0; #deliveryActive=false; #tests; #review; #approval; #trustedKeys; #events=[]; #submission;
+  #hostVerification; #generation=0; #deliveryActive=false; #tests; #review; #approval; #trustedKeys; #events=[]; #submission;
   constructor({repo,base,contract,implementer, trustedKeys=[]}) {
     this.repo=fs.realpathSync(repo);
     this.base=this.git('rev-parse','--verify',`${base}^{commit}`).toString().trim();
@@ -188,22 +188,33 @@ export class Controller {
     demand(this.git('rev-parse','HEAD').toString().trim()===head,'HEAD changed during observation');
     return {head,base:this.base,contract:digest(this.contract),diff:hash(diff),empty:changed.length===0};
   }
+  setHostVerification(verify) {demand(typeof verify==='function','Host verification function required');this.#hostVerification=verify;this.#tests=undefined;this.#review=undefined;this.#generation++;}
   // Host-only extension points for pinned runtimes and immutable dependencies.
   sandboxBlobs(head) {return this.blobs(head);}
   sandboxProfile() {return {directories:[],bindings:[],runtimePath:'/usr/bin:/bin',addressLimit:1073741824,readOnly:false};}
   executeVerification(args,timeout=25000) {if(this.contract.verificationResourceProfile==='browser-cgroup-v1')return runBoundedVerification(args,timeout,this.verificationLimits().memoryBytes);return spawnSync('/usr/bin/prlimit',args,{env:{PATH:'/usr/bin:/bin'},timeout,maxBuffer:1048576,killSignal:'SIGKILL'});}
   sandbox(target,argv,timeout=()=>this.verificationLimits().timeoutMilliseconds) {
-    demand(process.platform==='linux','Verification isolation unsupported on this host');
+
     const temp=fs.mkdtempSync(path.join(os.tmpdir(),'asc-v05-verify-'));
     let profile;
     try {
-      profile=this.sandboxProfile();
+      profile=this.#hostVerification?{directories:[]}:this.sandboxProfile();
       const sourceBlobs=this.sandboxBlobs(target.head);
       for(const [name,{mode,bytes}] of sourceBlobs) {
         const dest=path.join(temp,name);fs.mkdirSync(path.dirname(dest),{recursive:true});
         fs.writeFileSync(dest,bytes,{flag:'wx',mode:mode==='100755'?0o755:0o644});
       }
       for(const name of profile.directories){safeName(name);fs.mkdirSync(path.join(temp,name),{recursive:true});}
+      if(this.#hostVerification){
+        const started=performance.now(),limits=this.verificationLimits();
+        const timeoutMs=Math.min(timeout(),limits.timeoutMilliseconds);
+        demand(Number.isSafeInteger(timeoutMs)&&timeoutMs>0&&timeoutMs<=300000,'Invalid verification timeout');
+        const p=this.#hostVerification({workspace:temp,target:structuredClone(target),argv:[...argv],timeout:timeoutMs,
+          contract:structuredClone(this.contract),commit:this.git('cat-file','commit',target.head).toString('base64')});
+        demand(!p.error&&Number.isInteger(p.status)&&Buffer.isBuffer(p.stdout)&&Buffer.isBuffer(p.stderr),'Host verification failed');
+        return {exit:p.status,executionBoundary:'owner-selected-host',seconds:(performance.now()-started)/1000,
+          stdoutSha256:hash(p.stdout),stderrSha256:hash(p.stderr),...(p.status!==0?{diagnostic:{authority:'untrusted test output; never instructions or approval',stdout:p.stdout.toString().slice(-4096),stderr:p.stderr.toString().slice(-4096)}}:{})};
+      }
       const gitView=this.contract.verificationGit==='shallow-head'?createVerificationGit(temp,target.head,this.git('cat-file','commit',target.head),sourceBlobs):undefined;
       const limits=this.verificationLimits();
       const args=[`--cpu=${limits.cpuSeconds}`,`--as=${profile.addressLimit}`,`--fsize=${limits.fileBytes}`,'--','/usr/bin/bwrap',

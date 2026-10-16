@@ -70,7 +70,7 @@ test('real loopback test rejects unconfined command and accepts network namespac
  assert.equal(result.negative.network,'denied');assert.equal(result.sandboxConnections,0);
 });
 
-test('WSL cannot silently inherit native Linux acceptance',async()=>{
+test('OS identity does not reject execution or claim release acceptance',async()=>{
  const {executionHost}=await import('../src/execution-host.mjs');
  assert.equal(executionHost({platform:'linux',release:'6.8.0-generic',env:{}}).executionEligible,true);
  for(const [platform,release,env,kind] of [
@@ -78,7 +78,7 @@ test('WSL cannot silently inherit native Linux acceptance',async()=>{
   ['linux','4.4.0-Microsoft',{},'wsl-unverified'],
   ['linux','6.8.0',{WSL_INTEROP:'/run/WSL/123_interop'},'wsl-unverified'],
   ['win32','10.0',{},'windows-native'],['darwin','24.0',{},'macos']]) {
-  const value=executionHost({platform,release,env});assert.equal(value.kind,kind);assert.equal(value.executionEligible,false);
+  const value=executionHost({platform,release,env});assert.equal(value.kind,kind);assert.equal(value.executionEligible,true);assert.equal(value.releaseReady,false);
  }
 });
 

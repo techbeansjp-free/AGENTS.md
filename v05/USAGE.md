@@ -272,3 +272,61 @@ Linuxで2つの未公開v0.5候補を旧→新→旧とoffline導入し、配布
 既存の旧ASC Skillを自動削除・無効化する機能ではない。旧入口を使っている場合は移行差分として確認する。配置後はHostの新しいセッションでSkillの認識と参照先を確認する。ファイル配置・リンク整合性の試験は、実Hostによる自動発見や実モデルでの実行成功とは区別する。
 
 LinuxのCodex CLI 0.153.4では、通信を遮断した`app-server`の`skills/list`で、この入口がrepoスコープの有効なSkillとして認識されることを確認した。同じHostプロセスから別の未登録worktreeを照会すると、そこにはASC Skillが現れない。これはローカル一覧取得の実測であり、IDE・Claudeでの認識や、モデルがSkillを選んで開発を完走することの実証ではない。対象commitと条件は`RELEASE_READINESS.json`の`projectSkillHostDiscovery`に記録する。
+
+## Mac・Windowsネイティブ対応の検証入口
+
+対応対象はmacOS（Apple Silicon・Intel）とWindows 10／11。VM・WSL2を必須にしない。
+現行Alphaの開発実行はまだLinux限定であり、以下はネイティブ実装を進めるための診断入口である。
+
+```text
+agent-skill-chain probe-native <Codex実行ファイルの絶対パス>
+```
+
+Windowsでは`codex.exe`またはnpmパッケージの`bin/codex.js`を指定する。`.cmd`／`.bat`のshell wrapperは使用しない。
+診断はモデルや利用者のソースを使用せず、一時ダミーファイルとloopback通信だけを検査する。
+正常動作のpositive control、隔離下での読取り拒否、Host実体の不変、通信拒否をそれぞれ確認する。
+私有コピーへの書込みとHost実体への書込みを区別し、欠測やtimeoutを成功扱いしない。
+
+`passed:true`はこの部品検査の成功だけを表す。Agentの子プロセス終了保証、検証用資産、Git検証、
+開発からDraft PRまでの実走を証明せず、`executionAuthorized:false`を返す。
+OS別の実行アダプターが完成するまで`run`の対応済み表示には使用しない。
+
+実装予定の残りは、ネイティブのAgent起動・終了管理、テスト隔離、依存資産とGitの取扱い、
+各実機での実装・独立レビュー・Draft PRの確認。公開済みAlphaやLinux受入記録をMac／Windows合格へ転用しない。
+
+## OS名で拒否しないHost実行経路
+
+OS情報は診断用であり、`executionEligible:true`だけで隔離や実機受入を証明しない。
+owner入力に`hostExecution`を明示すると、Agentと実テストの実行をそのHostへ委譲する。
+未指定時の既存Linux実行方式は維持する。Mac／Windowsで無隔離実行へ自動fallbackするものではない。
+
+```json
+{
+  "hostExecution": {
+    "protocol": "asc-host-execution/v1",
+    "command": ["<Hostの実行ファイル絶対パス>", "<必要ならHost所有スクリプトの絶対パス>"]
+  }
+}
+```
+
+この設定はownerが管理するrepo外の入力に置く。候補repo・Gitメタデータ・同時実行Issueの
+作業領域内のコマンドは指定できない。GoalのUnitから別Hostへ切替できない。
+HostにはPATHとWindowsの必須システム値のみ渡し、認証情報・SSH socket・NODE_OPTIONS等を
+環境変数から丸ごと継承しない。認証とsandboxは明示選択したHost自身が管理する。
+
+HostはstdinのJSON `{schema,id,operation,payload}` に対し、同じschema/id/operationと
+`result`を含むJSONをstdoutへ返す。診断ログはstderrへ出す。
+`agent`のpayloadはworkspace・logs・prompt・model・executable・writable・timeout等、
+結果はcontext・answer・seconds・usage。実装とレビューには別Contextを使う。
+`verify`のpayloadはsnapshot workspace・target・argv・timeout・contract・base64 commit。
+結果は実コマンドの整数exitと文字列stdout/stderr。要求された依存資産・Git表示・資源制限を
+Hostが提供できない場合は非0終了し、省略して成功を返してはならない。
+
+Hostは信頼された実行主体であり、candidateやモデルが返した自己申告を実検証として転送してはならない。
+Host自身が操作権限、ネットワーク・秘密情報の境界、子プロセス・中断時の終了を管理する。
+ASCは輸送のtimeout・出力量、要求応答の対応、対象commit・変更範囲、独立レビューと提出整合性を検証する。
+輸送プロセスの終了だけで全子孫の終了を保証したとは扱わない。
+
+Linuxでは代替Hostを用いたプロトコル試験で実Node検証と独立Contextの制御を確認。
+モデル・リモートPRはテスト用代替であり、Mac／Windows実機の開発完走や同等隔離の受入ではない。
+同梱Codex Hostアダプターはまだ追加されていない。公開済みAlphaタグも変更していない。

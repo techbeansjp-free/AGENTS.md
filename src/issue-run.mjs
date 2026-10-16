@@ -48,7 +48,8 @@ export async function runIssues(input,{onEvent=()=>{},execute}={}){
  const assertAuthority=authorityCommandRootsValidator([...authorityRoots]);
  const checkAuthority=issue=>{
   assertAuthority(issue.request.approvalCommand);
-  for(const unit of Object.values(issue.request.unitRequests??{}))assertAuthority(unit.approvalCommand??issue.request.approvalCommand);
+  assertAuthority(issue.request.hostExecution?.command);
+  for(const unit of Object.values(issue.request.unitRequests??{})){assertAuthority(unit.approvalCommand??issue.request.approvalCommand);assertAuthority(unit.hostExecution?.command);}
  };
  // Check before any candidate runs, and again at dispatch after earlier Issues finish.
  for(const issue of plan.issues)try{checkAuthority(issue);}catch(error){states.set(issue.id,{id:issue.id,status:'blocked',error:String(error)});}

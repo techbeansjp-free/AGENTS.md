@@ -34,3 +34,24 @@ jobs:
         run: npm run quality
       - name: Inspect standard unpublished distribution
         run: npm pack --dry-run --json
+  host-protocol:
+    name: Host protocol (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Record actual platform
+        run: node -e "console.log(JSON.stringify({platform:process.platform,arch:process.arch,release:require('node:os').release()}))"
+      - name: Host transport, native diagnostic result validation and real Git
+        run: node --test test/test_host_execution.mjs test/test_native_probe.mjs
+      - name: Exact verification Git reconstruction
+        run: node --test --test-name-pattern="verification Git reconstructs" test/test_controller.mjs
