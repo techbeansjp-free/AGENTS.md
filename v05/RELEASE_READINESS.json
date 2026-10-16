@@ -826,6 +826,34 @@
     "lint": "passed",
     "independentReview": "integration_review found manifest entry mismatch; corrected to stage for manifest and prepare for flat, re-reviewed with no major issue",
     "failedDevelopmentChecks": "Initial missing performance import and accidental fixture-string edit failed lint; both corrected, final lint and package tests passed",
-    "releaseReady": false
+    "releaseReady": false,
+    "realLegacyInstallation": {
+      "schema": "asc-real-legacy-roundtrip/v1",
+      "status": "passed",
+      "legacySourceCommit": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
+      "candidateSourceCommit": "6f61b8ee7ff783f534f152c4994102171526ca17",
+      "legacyInstallation": "actual source-built legacy install CLI, not a published tagged release",
+      "sourceHead": "d917e07fdfe96180aea14ee7f1dad298ab664821",
+      "cutoverHead": "243c0e01b38d8e3b0bdc077ff8d53df3d372cd9a",
+      "restoredHead": "edfac0a4c5d78ff7d525ad7e5499fa9f2d4742d8",
+      "inventoryCount": 40,
+      "seconds": 20.302014243090525,
+      "agentCalls": 0,
+      "checks": [
+        "installed v0.5 CLI prepares actual legacy installation",
+        "explicit dummy owner policy; no inferred authorization",
+        "old Skill and observer registration retired",
+        "owner rule, deny permission and unrelated hook retained",
+        "settings revert restores original bytes while later work survives",
+        "source and dirty sibling unchanged"
+      ],
+      "limitations": [
+        "No model execution or Host Skill autodiscovery",
+        "No remote CI or release",
+        "Explicit known fixture configuration, not arbitrary migration"
+      ],
+      "driverSha256": "43baead1b3bbb904a115c4afb23317e2fa40ade57ea0dd29297e6a25f7c4ec15",
+      "localEvidence": "/tmp/asc-real-legacy-migration-n7vlqew6/real-roundtrip-evidence.json"
+    }
   }
 }

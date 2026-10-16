@@ -220,3 +220,5 @@ PR #1578のbase `2d64b8d50b173f29914a8f231c0c5efa9a7e0af5` は、v0.4のscript�
 設定の復元は`git revert <設定切替commit>`で行い、後続のアプリcommitをresetしない。設定が競合すれば停止してownerが解決し、無条件のours/theirs選択や強制復元は行わない。操作を取り消す場合はrevertをabortする。`migration-rollback`はこの設定復元を代行せず、入口の選択記録だけを戻す。旧版の承認Evidenceも復活しない。
 
 `node evaluation/configuration-roundtrip.mjs <導入済みagent-skill-chain packageの絶対path> [flat|manifest]`で合成fixtureの実証を再現できる。省略時はmanifest型を使い、通常のroot配布テストからは両形式を検証する。検証範囲は、配布CLIのprepareまたはstage／rollback、新旧Skill登録の追加・削除、規約・権限・他Hookの保持、後続アプリ変更を残した設定revert、競合停止・abort、元projectとdirtyな別worktreeの保持。HostによるSkillの自動発見・実際の旧CLI起動・任意の利用者設定の意味的移行・remote CIはこのfixtureの検証対象外である。
+
+2026-10-16: 旧本体commit `2d64b8d5`をsource buildし、実際の旧`install --apply`で導入した隔離dummyでも、新版`6f61b8ee`の標準tarballから設定切替・Git revert・入口rollbackを確認した。dummy ownerが旧既定policyを明示選択した後、40件の設定を棚卸しし、旧Skill・observer登録を外し、新CLIへ切り替えた。利用者規約・deny permission・無関係なHookを保持し、切戻し後も後続のアプリcommit・元project・dirtyな別worktreeが不変だった。配布物作成・offline導入を含む観測時間20.30秒、Agent起動0回。これは実旧版導入資産の設定往復であり、HostのSkill自動発見・実モデル開発・任意設定の移行・remote CIの証明ではない。結果は`RELEASE_READINESS.json.configurationGitRoundtrip.realLegacyInstallation`に保存した。
