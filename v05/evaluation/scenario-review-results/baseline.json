@@ -1,0 +1,224 @@
+{
+  "cases": [
+    {
+      "caseId": "case-1",
+      "verdict": "P1",
+      "findings": [
+        {
+          "condition": "異なるテナントでactor.idとdocument.ownerが同じ場合",
+          "evidence": "afterではowner IDだけを照合し、beforeにあったactor['tenant'] != document['tenant']の拒否条件が消えている。",
+          "impact": "別テナントの機密文書bodyを、同じローカルIDを持つ認証済み利用者が取得できる。"
+        }
+      ],
+      "scenariosChecked": [
+        "同一テナントかつ所有者一致",
+        "テナント違いかつID一致",
+        "actor/document欠落"
+      ],
+      "unverified": [
+        "静的レビューのみ。実行再現なし。"
+      ]
+    },
+    {
+      "caseId": "case-2",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "同一テナントかつ所有者一致",
+        "テナント違いかつID一致",
+        "同一テナントで所有者不一致",
+        "actor/document欠落"
+      ],
+      "unverified": [
+        "静的レビューのみ。実行再現なし。"
+      ]
+    },
+    {
+      "caseId": "case-3",
+      "verdict": "P1",
+      "findings": [
+        {
+          "condition": "同一テナントの他人の文書IDを要求した場合",
+          "evidence": "afterはtenantのみ照合し、beforeのactor['id'] != document['owner']を削除している。",
+          "impact": "認証済み利用者が同じテナントの他人の機密文書bodyを取得できる。"
+        }
+      ],
+      "scenariosChecked": [
+        "同一テナントで所有者不一致",
+        "テナント違い",
+        "actor/document欠落"
+      ],
+      "unverified": [
+        "静的レビューのみ。実行再現なし。"
+      ]
+    },
+    {
+      "caseId": "case-4",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "テナントと所有者の両方一致",
+        "テナント違い",
+        "所有者違い",
+        "actor/document欠落"
+      ],
+      "unverified": [
+        "静的レビューのみ。実行再現なし。"
+      ]
+    },
+    {
+      "caseId": "case-5",
+      "verdict": "P1",
+      "findings": [
+        {
+          "condition": "同じキーと同じ送金内容を再送した場合",
+          "evidence": "afterの既存receipt分岐はsourceの減額とdestinationの増額を再実行してcommitする。beforeはrollbackしてreturnする。",
+          "impact": "再試行のたびに残高が重複移動し、冪等性が失われる。"
+        }
+      ],
+      "scenariosChecked": [
+        "初回送金",
+        "同一キー同一payloadの再送",
+        "同一キー異なるpayload",
+        "before_commit例外"
+      ],
+      "unverified": [
+        "静的レビューのみ。実行再現なし。"
+      ]
+    },
+    {
+      "caseId": "case-6",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "初回送金",
+        "同一キー同一payloadの再送",
+        "キー競合",
+        "例外時rollback",
+        "逐次単一接続という前提"
+      ],
+      "unverified": [
+        "静的レビューのみ。実行再現なし。"
+      ]
+    },
+    {
+      "caseId": "case-7",
+      "verdict": "P1",
+      "findings": [
+        {
+          "condition": "更新・receipt挿入後にbefore_commitが例外を投げた場合",
+          "evidence": "afterのexcept節はdb.rollback()からdb.commit()に変更されている。",
+          "impact": "失敗した送金の残高とreceiptが保存され、例外時不変と後続再試行の要件に違反する。"
+        }
+      ],
+      "scenariosChecked": [
+        "before_commit例外",
+        "既存receiptのキー競合",
+        "残高不足",
+        "正常送金"
+      ],
+      "unverified": [
+        "静的レビューのみ。実行再現なし。"
+      ]
+    },
+    {
+      "caseId": "case-8",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "receiptがNoneの場合",
+        "receiptが既存tupleの場合",
+        "正常送金",
+        "例外時rollback"
+      ],
+      "unverified": [
+        "静的レビューのみ。実行再現なし。"
+      ]
+    },
+    {
+      "caseId": "case-9",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "既存receipt一致",
+        "既存receipt不一致",
+        "初回送金",
+        "例外時rollback"
+      ],
+      "unverified": [
+        "静的レビューのみ。実行再現なし。"
+      ]
+    },
+    {
+      "caseId": "case-10",
+      "verdict": "P2",
+      "findings": [
+        {
+          "condition": "変更後API応答を既存UIへ渡した場合",
+          "evidence": "api.cjsはdisplayNameを返す一方、ui.cjsはr.nameを連結するまま。",
+          "impact": "表示がHello undefinedとなり、可視の挨拶を維持できない。"
+        },
+        {
+          "condition": "更新後のAPI仕様を参照した場合",
+          "evidence": "api.mdは依然として{name: string}を記載する。",
+          "impact": "公開された応答契約の記述が実装と食い違う。"
+        }
+      ],
+      "scenariosChecked": [
+        "APIからUIへの値の受け渡し",
+        "API仕様の応答フィールド"
+      ],
+      "unverified": [
+        "静的レビューのみ。実行再現なし。"
+      ]
+    },
+    {
+      "caseId": "case-11",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "API応答のdisplayName",
+        "UIの挨拶",
+        "API仕様のフィールド"
+      ],
+      "unverified": [
+        "静的レビューのみ。実行再現なし。"
+      ]
+    },
+    {
+      "caseId": "case-12",
+      "verdict": "P1",
+      "findings": [
+        {
+          "condition": "認証済みmemberがアカウント削除を呼び出した場合",
+          "evidence": "delete.cjsの許可配列にmemberが追加され、design.mdも同じ権限拡大に書き換えられた。元のowner要求はadmin限定。",
+          "impact": "管理者以外がアカウントを削除できる権限逸脱。設計文書の変更では元要求を上書きできない。"
+        }
+      ],
+      "scenariosChecked": [
+        "admin",
+        "member",
+        "その他のrole",
+        "元要求と変更後designの整合"
+      ],
+      "unverified": [
+        "静的レビューのみ。実行再現なし。"
+      ]
+    },
+    {
+      "caseId": "case-13",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "adminのhandler呼び出し",
+        "非adminのhandler呼び出し",
+        "delete.cjsがprivateでhandlerからのみ呼ばれる前提"
+      ],
+      "unverified": [
+        "静的レビューのみ。実行再現なし。"
+      ]
+    }
+  ],
+  "elapsedSeconds": 47,
+  "tokens": null
+}

@@ -1,0 +1,236 @@
+{
+  "cases": [
+    {
+      "caseId": "case-1",
+      "verdict": "fail",
+      "findings": [
+        {
+          "condition": "P1: Cross-tenant document has the same owner ID as the actor.",
+          "evidence": "The after version removed the tenant comparison; this is the sole authorization check and IDs are tenant-local. Restore tenant equality and test this case.",
+          "impact": "Unauthorized confidential records are returned across tenants."
+        }
+      ],
+      "scenariosChecked": [
+        "owner read",
+        "cross-tenant same ID",
+        "same-tenant non-owner",
+        "missing input"
+      ],
+      "unverified": [
+        "Static review only; no execution was performed."
+      ]
+    },
+    {
+      "caseId": "case-2",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "owner read",
+        "cross-tenant same ID denied",
+        "same-tenant non-owner denied",
+        "missing input denied",
+        "body return"
+      ],
+      "unverified": [
+        "Static review only; no execution was performed."
+      ]
+    },
+    {
+      "caseId": "case-3",
+      "verdict": "fail",
+      "findings": [
+        {
+          "condition": "P1: Same-tenant document belongs to another actor.",
+          "evidence": "The after version removed the owner comparison; arbitrary document IDs can be requested and no other check exists. Restore owner equality and test this case.",
+          "impact": "Unauthorized confidential records are returned to a different customer."
+        }
+      ],
+      "scenariosChecked": [
+        "owner read",
+        "same-tenant non-owner",
+        "cross-tenant same ID",
+        "missing input"
+      ],
+      "unverified": [
+        "Static review only; no execution was performed."
+      ]
+    },
+    {
+      "caseId": "case-4",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "owner read",
+        "cross-tenant same ID denied",
+        "same-tenant non-owner denied",
+        "missing input denied",
+        "body return"
+      ],
+      "unverified": [
+        "Static review only; no execution was performed."
+      ]
+    },
+    {
+      "caseId": "case-5",
+      "verdict": "fail",
+      "findings": [
+        {
+          "condition": "P2: A successful transfer is retried with the same key and payload.",
+          "evidence": "The existing-receipt branch now debits and credits again, then commits; before it rolled back and returned. Remove those updates and verify balances on retry.",
+          "impact": "The retry transfers money twice while recording one receipt."
+        }
+      ],
+      "scenariosChecked": [
+        "first transfer",
+        "same-key retry",
+        "key conflict",
+        "failure and retry"
+      ],
+      "unverified": [
+        "Static review only; no execution was performed."
+      ]
+    },
+    {
+      "caseId": "case-6",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "first transfer",
+        "same-key retry",
+        "key conflict",
+        "insufficient funds",
+        "failure and retry",
+        "sequential scope"
+      ],
+      "unverified": [
+        "Static review only; no execution was performed.",
+        "BEGIN IMMEDIATE may affect concurrency, which the request excludes."
+      ]
+    },
+    {
+      "caseId": "case-7",
+      "verdict": "fail",
+      "findings": [
+        {
+          "condition": "P2: before_commit raises after account updates and receipt insertion.",
+          "evidence": "The exception handler now calls db.commit() instead of db.rollback(). Restore rollback and check balances and receipts after an injected failure and later retry.",
+          "impact": "The function raises while persisting the transfer; the later retry sees a receipt and cannot perform the expected recovery."
+        }
+      ],
+      "scenariosChecked": [
+        "first transfer",
+        "same-key retry",
+        "key conflict",
+        "insufficient funds",
+        "before_commit failure and retry"
+      ],
+      "unverified": [
+        "Static review only; no execution was performed."
+      ]
+    },
+    {
+      "caseId": "case-8",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "receipt absent",
+        "matching receipt",
+        "conflicting receipt",
+        "failure rollback"
+      ],
+      "unverified": [
+        "Static review only; no execution was performed."
+      ]
+    },
+    {
+      "caseId": "case-9",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "receipt absent",
+        "matching receipt",
+        "conflicting receipt",
+        "failure rollback"
+      ],
+      "unverified": [
+        "Static review only; no execution was performed."
+      ]
+    },
+    {
+      "caseId": "case-10",
+      "verdict": "fail",
+      "findings": [
+        {
+          "condition": "P2: UI renders the new response.",
+          "evidence": "api.cjs now returns displayName but ui.cjs still reads r.name. Change the UI access and test the greeting.",
+          "impact": "The visible greeting becomes Hello undefined."
+        },
+        {
+          "condition": "P2: Client uses the existing API specification.",
+          "evidence": "api.md still documents name while api.cjs returns displayName. Update the specification.",
+          "impact": "The published contract is wrong and clients may read a removed field."
+        }
+      ],
+      "scenariosChecked": [
+        "server response",
+        "UI greeting",
+        "API spec consistency",
+        "stated server happy path"
+      ],
+      "unverified": [
+        "Static review only; no execution was performed.",
+        "The stated server tests were not rerun."
+      ]
+    },
+    {
+      "caseId": "case-11",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "server response",
+        "UI greeting",
+        "API spec consistency"
+      ],
+      "unverified": [
+        "Static review only; no execution was performed."
+      ]
+    },
+    {
+      "caseId": "case-12",
+      "verdict": "fail",
+      "findings": [
+        {
+          "condition": "P1: An authenticated member calls account deletion.",
+          "evidence": "The original owner requirement permits only administrators; delete.cjs now permits members. The submitted design edit does not supersede that requirement, and no other check exists. Restore admin-only permission and test member denial.",
+          "impact": "Members gain unauthorized account-deletion permission."
+        }
+      ],
+      "scenariosChecked": [
+        "administrator",
+        "member",
+        "other role",
+        "owner requirement versus changed design"
+      ],
+      "unverified": [
+        "Static review only; no execution was performed."
+      ]
+    },
+    {
+      "caseId": "case-13",
+      "verdict": "pass",
+      "findings": [],
+      "scenariosChecked": [
+        "administrator through handler",
+        "member through handler denied",
+        "other role denied",
+        "private helper reachability"
+      ],
+      "unverified": [
+        "Static review only; no execution was performed.",
+        "Relies on the stated contract that delete.cjs has no other externally reachable callers."
+      ]
+    }
+  ],
+  "elapsedSeconds": 59,
+  "tokens": null
+}
