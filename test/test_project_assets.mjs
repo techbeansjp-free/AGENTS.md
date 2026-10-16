@@ -127,3 +127,19 @@ test('explicit Skill registration preserves existing entries and remains linked 
  assert.equal(fs.readFileSync(path.join(f.work,'.agents/skills/custom/SKILL.md'),'utf8'),'Custom skill');assert.equal(fs.readFileSync(path.join(f.work,'.codex/config.toml'),'utf8'),'Owner configuration');
  f.write(registration,'Owner customized registration');const conflict=projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true});assert.equal(conflict.applied,false);assert.deepEqual(conflict.conflicts,[registration]);
 });
+
+test('review Skill update reaches registered and project entries without altering another Issue',t=>{
+ const f=fixture(t),options={packageRoot:f.pkg,apply:true,registerSkill:true};
+ projectAssets(f.work,options);
+ const other=path.join(f.root,'review-other');f.git('worktree','add','-qb','review-other',other);projectAssets(other,options);
+ const otherBefore=fs.readFileSync(path.join(other,'.agent-skill-chain/skills/asc/SKILL.md'));
+ fs.appendFileSync(path.join(f.pkg,'skills/asc/SKILL.md'),'\nReview contract revision fixture\n');
+ const changed=projectAssets(f.work,options);assert.equal(changed.applied,true);
+ const registered=path.join(f.work,'.agents/skills/asc/SKILL.md');
+ const relative=fs.readFileSync(registered,'utf8').match(/\]\(([^)]+)\)/)[1];
+ const resolved=path.resolve(path.dirname(registered),relative);
+ assert.equal(resolved,path.join(f.work,'.agent-skill-chain/skills/asc/SKILL.md'));
+ assert(fs.readFileSync(resolved,'utf8').endsWith('Review contract revision fixture\n'));
+ assert.deepEqual(fs.readFileSync(path.join(other,'.agent-skill-chain/skills/asc/SKILL.md')),otherBefore);
+ assert.equal(projectAssets(f.work,options).changes.length,0);
+});
