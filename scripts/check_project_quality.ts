@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { parseJsonStrict, stableJson } from "../src/lib/security.js";
-import { isExecutionEntry } from "../src/lib/entrypoint.js";
-import { isRecord } from "../src/types.js";
+import { parseJsonStrict, stableJson } from "./quality-support/lib/security.js";
+import { isExecutionEntry } from "./quality-support/lib/entrypoint.js";
+import { isRecord } from "./quality-support/types.js";
 
 interface ProjectQualityResult {
   valid: boolean;
@@ -57,13 +57,30 @@ const V05_PROTECTED_FILES = [
   ".github/workflows/release.yml",
   "eslint.config.mjs",
   "package.json",
-  "v05/package.json",
   "package-lock.json",
   "scripts/check_project_quality.ts",
   "scripts/check_source_quality.ts",
-  "src/lib/security.ts",
-  "src/lib/entrypoint.ts",
-  "src/types.ts",
+  "scripts/quality-support/domain/conformance.ts",
+  "scripts/quality-support/domain/enforcement.ts",
+  "scripts/quality-support/domain/policy.ts",
+  "scripts/quality-support/domain/project-choice-diff.ts",
+  "scripts/quality-support/domain/project-choice-shrink.ts",
+  "scripts/quality-support/domain/project-rule-retirement.ts",
+  "scripts/quality-support/domain/provider-capability.ts",
+  "scripts/quality-support/domain/reviewer-provider.ts",
+  "scripts/quality-support/domain/role.ts",
+  "scripts/quality-support/domain/routing-independence.ts",
+  "scripts/quality-support/domain/staging-layout.ts",
+  "scripts/quality-support/domain/staging.ts",
+  "scripts/quality-support/domain/verification-run.ts",
+  "scripts/quality-support/domain/worktree-removal-safety.ts",
+  "scripts/quality-support/lib/atomic.ts",
+  "scripts/quality-support/lib/entrypoint.ts",
+  "scripts/quality-support/lib/package-root.ts",
+  "scripts/quality-support/lib/process.ts",
+  "scripts/quality-support/lib/security.ts",
+  "scripts/quality-support/lib/version.ts",
+  "scripts/quality-support/types.ts",
 ] as const;
 const PROTECTED_PACKAGE_FIELDS = [
   "agentSkillChain.qualityContractVersion",
@@ -697,41 +714,87 @@ function validateTrustedQualityMigration(
  * This is not a version-based exemption: every listed file must match exactly.
  */
 const V05_CUTOVER_CONFIGURATION: Readonly<Record<string, string>> = {
-  "src/types.ts":
-    "6a8aa7654cc1c215ecd00e792fa8a5042cf5456c053db61ba25a7ef0225a4858",
   ".github/workflows/ci.yml":
     "48e1461112ffc30847a7bde6b16b40989471c11bcbb91a1cc3aea6b816707fb5",
   ".github/workflows/trusted-quality.yml":
     "4db2dffa88db797f6a5946b9fa57aaee77f0494ed000fa12a7cfbea6211f80b0",
-  ".prettierignore":
-    "b3cd838edf734df86ec71cf7f207a14642709f469762e373ead4ba239f3594f8",
-  "cucumber.mjs":
-    "1faba54c8df74ab4f766f3e2822a13fa5165102fb7ca31289907549122d78a6c",
+  ".github/workflows/release.yml":
+    "97e94d828f62ebd2b2180bcdfa372385cb28d67197d9ad29592d92332baca72a",
   "eslint.config.mjs":
     "6466cbe9cc2b060e19842a2ed0ec1746e64185456bc0561a11a27b4e3ab7b77b",
-  "package-lock.json":
-    "d3a32eee5ac37709e5230eaf011d62fd2c52eeedc482d622857599de7403a81c",
-  "scripts/check_source_quality.ts":
-    "a853f3917651391ad0d1794acf1c9e2a45a5e5918de8f03cc14d35895ff681ba",
-  "scripts/run_cucumber_shards.ts":
-    "d67918f9e058bf2f3f8f53298e27697e534fa63df53778249df132c7b1da42ff",
-  "src/domain/staging.ts":
-    "b99d0156422b18b2e259e0082a943c2145d0b4550edda8fdcb457f4f16f752c4",
-  "src/lib/entrypoint.ts":
-    "178ce8b5865a9e07da7172aeae4bd64b5b9613832c9641e50760ef84cf3db115",
-  "src/lib/security.ts":
-    "0bf1c277de25b2ec13481d92f472f89c9ca0111a0cef9eb8d7afd3c92e2c38eb",
-  "tsconfig.json":
-    "03a02301047f5fc0c906713d7f8fb940dfe6a789529ececc172d5e1cbf0fa658",
-  "tsconfig.build.json":
-    "cb6306e206f46cce8e20e180ef913a70b1569471ad01ccaa7006493f6b234f20",
   "package.json":
-    "6b0f16cc537f9b1e4d32f96838b29de7c6f211279aa278877baf8898d1ea02ee",
-  "v05/package.json":
-    "be57dea383943f61d7dbddc5fe269261a773e4534799b457bd846b1d79684458",
-  ".github/workflows/release.yml":
-    "bf343c15171b3d43c599f5966196e2f210a97fe9a4bb42fe31e5ab3ee9aca0e5",
+    "3bff6bf52bc75497af5774e562f85a2a326cc6a9595fe6b73ac7c99d50c061f7",
+  "package-lock.json":
+    "f4d9b7dacbc6bf0ad5d2a534119068e4bf8270ccd6701c7f3e96e68c77fa880a",
+  "scripts/check_source_quality.ts":
+    "08e7676f45b33fd1173701b0f9092465bd8056ffff093509fefd4412ce45135b",
+  "scripts/quality-support/domain/conformance.ts":
+    "b49bd9add80c45ff100ac530adaaf9b230d0524b54a7954bc0ad1f463bed8c6c",
+  "scripts/quality-support/domain/enforcement.ts":
+    "dc2fa3b719229ece859e0625b60e20523febf7518ef96cde3997457db0f77acf",
+  "scripts/quality-support/domain/policy.ts":
+    "81a141e0ce58a6704abfc5ce38a533b356d447ee6907096c0bd9458441509eb3",
+  "scripts/quality-support/domain/project-choice-diff.ts":
+    "59ac6f602c7be18d9ab771aabd7887be34bd4820cc76087e594aabb33ce6aaf3",
+  "scripts/quality-support/domain/project-choice-shrink.ts":
+    "4e07cdcc92eb4d6c9830434cad564cf314711578d7977def1053f248df54b3c0",
+  "scripts/quality-support/domain/project-rule-retirement.ts":
+    "e4d768c435da819b2719b5cba4c023aa716d8b81fc72d7c7aaab73c1a5625d8f",
+  "scripts/quality-support/domain/provider-capability.ts":
+    "4afec4da34bb5d2558779725e90b1c7ba8b6f13ce33048af26c941f512b7bac0",
+  "scripts/quality-support/domain/reviewer-provider.ts":
+    "d8d7010b12312de83187449b824d61216421efc8d7d8b117cf6692f8309f0227",
+  "scripts/quality-support/domain/role.ts":
+    "8b4d9f92a90730e141d6b5bf42f4b07b693153541cc20a82384ccf57cd544055",
+  "scripts/quality-support/domain/routing-independence.ts":
+    "73b04ad25954df0ca943f7ae1af1c88133866d2f41b5a063e1a163049e2f01a2",
+  "scripts/quality-support/domain/staging-layout.ts":
+    "df050ab3be7d0728a52aa22f83f5aca27b6c22d9f823f61013145d829be5bf83",
+  "scripts/quality-support/domain/staging.ts":
+    "b99d0156422b18b2e259e0082a943c2145d0b4550edda8fdcb457f4f16f752c4",
+  "scripts/quality-support/domain/verification-run.ts":
+    "120ffe54e27e1af91129b7654df76b9537743014465b45598173b30ffd78f6f1",
+  "scripts/quality-support/domain/worktree-removal-safety.ts":
+    "803f64ffe577cf55d9afe235fd80e46d870f3ccebb4cda265a58148522fee44c",
+  "scripts/quality-support/lib/atomic.ts":
+    "41689691a044bcc1ad96b004809f01f49b7429c8f8c7501e2a0b98af0c9f0929",
+  "scripts/quality-support/lib/entrypoint.ts":
+    "178ce8b5865a9e07da7172aeae4bd64b5b9613832c9641e50760ef84cf3db115",
+  "scripts/quality-support/lib/package-root.ts":
+    "15ae8198a1cee21dd81b33a0a2049a8b1f4da15fc8a79cdfbd4f4ade86de0437",
+  "scripts/quality-support/lib/process.ts":
+    "1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2",
+  "scripts/quality-support/lib/security.ts":
+    "0bf1c277de25b2ec13481d92f472f89c9ca0111a0cef9eb8d7afd3c92e2c38eb",
+  "scripts/quality-support/lib/version.ts":
+    "c138a851f4b7faa09b0278cac292a83492a44b03e5d11b69de1b40a1f4a71db7",
+  "scripts/quality-support/types.ts":
+    "6a8aa7654cc1c215ecd00e792fa8a5042cf5456c053db61ba25a7ef0225a4858",
 };
+
+const V05_RETIRED_CONFIGURATION = [
+  "src/types.ts",
+  "cucumber.mjs",
+  "scripts/run_cucumber_shards.ts",
+  "src/domain/staging.ts",
+  "src/lib/entrypoint.ts",
+  "src/lib/security.ts",
+  "tsconfig.build.json",
+  "v05/package.json",
+] as const;
+
+function retiredConfigurationErrors(root: string): string[] {
+  return V05_RETIRED_CONFIGURATION.flatMap((name) => {
+    try {
+      fs.lstatSync(path.join(root, name));
+      return [`retired v0.4 configuration must be absent: ${name}`];
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code === "ENOENT"
+        ? []
+        : [`cannot inspect retired configuration: ${name}`];
+    }
+  });
+}
 
 function checkV05Cutover(
   root: string,
@@ -744,6 +807,7 @@ function checkV05Cutover(
       errors: ["v0.5 cutover requires trusted base"],
       checks: [],
     };
+  errors.push(...retiredConfigurationErrors(root));
   const expected = { ...V05_CUTOVER_CONFIGURATION };
   for (const name of ["scripts/check_project_quality.ts", PROPOSAL_REGISTRY]) {
     try {
@@ -798,7 +862,6 @@ export function checkProjectQualityContract(
         errors: ["v0.5 base cannot silently return to a legacy contract"],
         checks: [],
       };
-    const nested = readObject(path.join(root, "v05/package.json"), root);
     const errors = validateTrustedQualityMigration(
       root,
       trustedRoot,
@@ -806,8 +869,7 @@ export function checkProjectQualityContract(
       trustedMetadata,
       V05_PROTECTED_FILES,
     );
-    if (nested.version !== metadata.version)
-      errors.push("root and v0.5 package versions must match");
+    errors.push(...retiredConfigurationErrors(root));
     return {
       valid: errors.length === 0,
       errors,

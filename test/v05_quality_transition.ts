@@ -52,8 +52,7 @@ for (const name of [
 ])
   fs.copyFileSync(path.join(proposed, name), path.join(base, name));
 const manifest = object(path.join(base, "package.json"));
-manifest.agentSkillChain = { qualityContractVersion: 16 };
-write(path.join(base, "package.json"), manifest);
+
 const results: {
   name: string;
   accepted: boolean;
@@ -96,9 +95,11 @@ try {
   check("legacy remains valid", proposed, proposed, true);
   check("first cutover", base, proposed, true);
   check("missing trusted base", base, undefined, false);
+  manifest.agentSkillChain = { qualityContractVersion: 16 };
+  write(path.join(base, "package.json"), manifest);
   check("new base unchanged", base, base, true);
   reset();
-  for (const name of ["package.json", "v05/package.json"]) {
+  for (const name of ["package.json"]) {
     const file = path.join(candidate, name);
     const value = object(file);
     value.version = "0.5.0";
@@ -165,14 +166,25 @@ try {
     path.join(candidate, "scripts/check_project_quality.ts"),
   );
   check("old checker rejected", candidate, base, false);
+  for (const name of [
+    "scripts/quality-support/lib/security.ts",
+    "scripts/quality-support/lib/entrypoint.ts",
+    "scripts/quality-support/types.ts",
+  ]) {
+    reset();
+    fs.appendFileSync(
+      path.join(candidate, name),
+      "\n// unauthorized helper change\n",
+    );
+    check(`unapproved helper ${name}`, candidate, base, false);
+  }
   reset();
   const reverted = object(path.join(candidate, "package.json"));
   reverted.version = "0.4.99";
   write(path.join(candidate, "package.json"), reverted);
   check("legacy version rejected", candidate, base, false);
   for (const [name, from, to] of [
-    ["package.json", "npm --prefix v05 test", "echo skipped"],
-    ["v05/package.json", "node --test", "echo"],
+    ["package.json", "node --test test/test_*.mjs", "echo skipped"],
     [
       ".github/workflows/ci.yml",
       'ASC_TEST_CGROUP: "1"',
@@ -193,7 +205,6 @@ try {
   }
   for (const name of [
     "package.json",
-    "v05/package.json",
     registryFile,
     ".github/workflows/ci.yml",
   ]) {
@@ -203,6 +214,10 @@ try {
     fs.symlinkSync(path.join(base, name), file);
     check(`identical symlink ${name}`, candidate, base, false);
   }
+  reset();
+  fs.mkdirSync(path.join(candidate, "v05"), { recursive: true });
+  write(path.join(candidate, "v05/package.json"), { version: "0.5.0" });
+  check("retired sidecar rejected", candidate, base, false);
   reset();
   fs.rmSync(path.join(candidate, ".github"), { recursive: true });
   fs.symlinkSync(

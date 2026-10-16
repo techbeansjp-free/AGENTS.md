@@ -28,5 +28,130 @@
     ],
     "nextAction": "Revise the explicit root-layout cutover proposal and adversarial tests before requesting base activation; do not restore retired runtime or waive the validator. Prior local success applies only to its recorded historical heads.",
     "authority": "Read-only compatibility result, not permission to change or activate base protections"
+  },
+  "rootLayoutProposalRevision": {
+    "status": "local-adversarial-tests-passed-not-activated",
+    "candidateHead": "e79de17550f0b95ff84d2fa8499f3b44fe0a0376",
+    "checkerSha256": "280539b0edcf2361ddba3ceed39bb75f600c8e69680d5664fe93f9b02d577f59",
+    "tests": [
+      {
+        "name": "legacy remains valid",
+        "accepted": true,
+        "expected": true
+      },
+      {
+        "name": "first cutover",
+        "accepted": true,
+        "expected": true
+      },
+      {
+        "name": "missing trusted base",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "new base unchanged",
+        "accepted": true,
+        "expected": true
+      },
+      {
+        "name": "coordinated version bump",
+        "accepted": true,
+        "expected": true
+      },
+      {
+        "name": "proposal registration",
+        "accepted": true,
+        "expected": true
+      },
+      {
+        "name": "self activation rejected",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "registered maintenance",
+        "accepted": true,
+        "expected": true
+      },
+      {
+        "name": "old checker rejected",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "unapproved helper scripts/quality-support/lib/security.ts",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "unapproved helper scripts/quality-support/lib/entrypoint.ts",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "unapproved helper scripts/quality-support/types.ts",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "legacy version rejected",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "unapproved package.json",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "unapproved .github/workflows/ci.yml",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "unapproved .github/workflows/trusted-quality.yml",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "identical symlink package.json",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "identical symlink .github/trusted-quality-proposals.json",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "identical symlink .github/workflows/ci.yml",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "retired sidecar rejected",
+        "accepted": false,
+        "expected": false
+      },
+      {
+        "name": "parent symlink",
+        "accepted": false,
+        "expected": false
+      }
+    ],
+    "passed": 21,
+    "standaloneRootChecker": "valid true without legacy src imports",
+    "legacyBaseSourceValidatorAgainstCandidate": {
+      "valid": true,
+      "files": 91
+    },
+    "outstanding": [
+      "Independent inspection pending",
+      "Staged registration target digest must be revised before activation",
+      "Candidate checker and proposal registry must be synchronized with approved base proposal",
+      "No base merge or release performed"
+    ],
+    "authority": "Local synthetic configuration tests only; not owner approval"
   }
 }
