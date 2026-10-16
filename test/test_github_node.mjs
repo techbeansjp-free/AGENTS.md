@@ -70,3 +70,14 @@ test('default CI observation survives twenty minutes; explicit owner deadline st
  await assert.rejects(provider.observe(1,{interval:0}),/deadline exceeded/);assert.equal(observations,1);
  for(const timeout of [-1,NaN,'300000'])await assert.rejects(provider.observe(1,{timeout}),/Invalid CI/);
 });
+
+
+test('completed run waits for job completion without accepting incomplete evidence',async()=>{
+ const {provider,data}=setup();provider.expectedHead=head;let reads=0;
+ const run={id:10,head_sha:head,event:'pull_request',path:'.github/workflows/safety.yml',repository:{full_name:repository},pull_requests:[{number:1,head:{sha:head},base:{sha:base}}],status:'completed',conclusion:'success'};
+ provider.api=route=>route.includes('/actions/runs?')?{workflow_runs:[run]}:route.includes('/jobs?')?{total_count:1,jobs:[{name:'check',status:++reads===1?'in_progress':'completed',conclusion:reads===1?null:'success'}]}:data;
+ assert.equal((await provider.observe(1,{timeout:1000,interval:0})).checks.check,'success');assert.equal(reads,2);
+ reads=0;await assert.rejects(provider.observe(1,{timeout:0}),/deadline/);
+ provider.api=route=>route.includes('/actions/runs?')?{workflow_runs:[run]}:route.includes('/jobs?')?{total_count:2,jobs:[{name:'check',status:'completed'},{name:'check',status:'completed'}]}:data;
+ await assert.rejects(provider.observe(1,{timeout:1000,interval:0}),/Ambiguous jobs/);
+});
