@@ -2019,5 +2019,53 @@
       "reason": "trusted main still requires legacy package.json.agentSkillChain.qualityContractVersion",
       "url": "https://github.com/techbeansjp-free/AGENTS.md/actions/runs/38868794272"
     }
+  },
+  "latestUnpublishedCandidateCutover": {
+    "sourceCommit": "698579624b2e97d4e3a64717ae212ba99b380134",
+    "packageSha256": "5378ca75b8b9d98feb843cad6ed9915dbf4e8591c690085516257b745b35f976",
+    "packageVersion": "0.5.0",
+    "published": false,
+    "publishAuthorized": false,
+    "evidenceSha256": "445c25a6afbc79edb3570c1193e12a911f45f09b9c81c13e3c3193aa67ecd42e",
+    "externalAgentCalls": 0,
+    "formats": [
+      {
+        "format": "flat",
+        "status": "passed",
+        "seconds": 0.6784532350000001,
+        "guarantees": [
+          "installed CLI migration preparation/rollback",
+          "old entry removed, new fixed-path entry added",
+          "owner rule, permission and unrelated hook preserved",
+          "configuration reverted while later application commit survives",
+          "source and dirty sibling worktree preserved",
+          "conflicting settings revert stops; abort restores later owner settings"
+        ],
+        "limitations": [
+          "Synthetic owner-directed configuration only; no actual legacy runtime or host Skill discovery executed",
+          "No model, remote CI or release; does not prove arbitrary configuration migration",
+          "Git conflict resolution remains an owner-reviewed operation; no forced rollback"
+        ]
+      },
+      {
+        "format": "manifest",
+        "status": "passed",
+        "seconds": 0.5945879150000001,
+        "guarantees": [
+          "installed CLI migration preparation/rollback",
+          "old entry removed, new fixed-path entry added",
+          "owner rule, permission and unrelated hook preserved",
+          "configuration reverted while later application commit survives",
+          "source and dirty sibling worktree preserved",
+          "conflicting settings revert stops; abort restores later owner settings"
+        ],
+        "limitations": [
+          "Synthetic owner-directed configuration only; no actual legacy runtime or host Skill discovery executed",
+          "No model, remote CI or release; does not prove arbitrary configuration migration",
+          "Git conflict resolution remains an owner-reviewed operation; no forced rollback"
+        ]
+      }
+    ],
+    "releaseReady": false
   }
 }
