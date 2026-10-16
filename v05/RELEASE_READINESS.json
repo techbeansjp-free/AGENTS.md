@@ -1119,7 +1119,9 @@
         "navigation": "Explicit location.hash transitions to list then summary, each hash asserted; not a claim of native visible link clicks",
         "loadingAllowed": true,
         "priorHistoryReplayCounterexampleRetained": true,
-        "result": "Committed completed count 3; visible completed count remains 2"
+        "result": "Committed completed count 3; visible completed count remains 2",
+        "oracleSourceCommit": "df4faa5a",
+        "subsequentSourceChange": "4111a806 only makes Node globals explicit and replaces equivalent conditional expressions for lint; recorded oracle hash is the executed df4faa5a source."
       }
     }
   },
@@ -1215,5 +1217,19 @@
       "Short browser diagnostic runs overlapped comparison; model trials were sequential",
       "Current observed tokens increased; no joint speed/token acceptance claim"
     ]
+  },
+  "ciTransitionAncestry": {
+    "registrationHead": "d280cdfcdd75084f0d1b312608e4d3aced5c4bb7",
+    "transitionHead": "4860fc581b63ffec89aed95c760da7b67d82e2dd",
+    "previousPullRequestBase": "ed660d327ee14a68d343bc197231232810be8498",
+    "currentPullRequestBase": "d280cdfcdd75084f0d1b312608e4d3aced5c4bb7",
+    "localValidator": "PASS against latest registration",
+    "remoteValidator": "PASS",
+    "change": "Merge registration into transition work branch to align ancestry; no content change",
+    "mainMerged": false,
+    "rulesetChanged": false,
+    "releaseReady": false,
+    "remoteRun": 38851803285,
+    "remaining": "Formal audit review evidence and owner main activation; full quality job still running"
   }
 }
