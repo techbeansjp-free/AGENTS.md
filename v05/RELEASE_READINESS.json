@@ -2166,5 +2166,43 @@
     "driverSha256": "5f94b226a221d869e09241b863d1853922dc6c403501e93edb2244af24e8b389",
     "driverPath": "/tmp/asc-skill-discovery.py",
     "setup": "Fresh synthetic repository with two linked worktrees; project-assets --register-skill --apply on the first only; credential-free temporary Codex state; local skills/list with both cwds and forceReload=true in one app-server process"
+  },
+  "projectAssetPackageRoundtrip": {
+    "status": "PASS",
+    "root": "/tmp/asc-assets-roundtrip-omaqje1a",
+    "trials": [
+      {
+        "sourceCommit": "5d320369a7f3343c687cfd4777e8373313880c51",
+        "packageSha256": "572e321ea03fd14204abc16db00fe2fb5dbff96701293eb33af14773a2ea3a1f",
+        "seconds": 0.6341276520397514,
+        "managedFiles": 58,
+        "ownerFilesPreserved": true
+      },
+      {
+        "sourceCommit": "bf95c9414390686cd2eafc098081cfe13cb84e18",
+        "packageSha256": "9063159dca88cdd9fceec27cae591dd2d4b5b5b11df48d938dd8dc25d1a90891",
+        "seconds": 0.600464059971273,
+        "managedFiles": 59,
+        "ownerFilesPreserved": true
+      },
+      {
+        "sourceCommit": "5d320369a7f3343c687cfd4777e8373313880c51",
+        "packageSha256": "572e321ea03fd14204abc16db00fe2fb5dbff96701293eb33af14773a2ea3a1f",
+        "seconds": 0.593693281058222,
+        "managedFiles": 58,
+        "ownerFilesPreserved": true
+      }
+    ],
+    "managedAssetsRestored": true,
+    "newOptionalEntryRetained": true,
+    "ownerEditStopsWholeUpdate": true,
+    "network": "npm offline; no models or remotes",
+    "limitations": [
+      "Two unpublished v0.5 snapshots, not v0.4 runtime rollback",
+      "Explicit installation and project-assets calls; no hot upgrade or automatic settings migration",
+      "No model or E2E performance conclusion"
+    ],
+    "driverPath": "/tmp/asc-assets-package-roundtrip.py",
+    "driverSha256": "df299ed6c4770b5e0b5a91e33ef3363442cce93650313cc493fd6bd3ce553c10"
   }
 }

@@ -254,6 +254,10 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 通常の更新ではHostのSkill入口・AGENTS.md・Hook・権限設定は変更しない。Skillはインストール先の絶対パスを参照するため、別Hostや別prefixへ移した場合はそのHostのCLIで再生成する。実行中のAgentと並行して設定更新しない。中断・I/Oエラー時はworktreeを確認し、再度previewする。途中状態を成功と扱わず、競合がある場合は自動復旧やresetを行わない。正常な別worktreeの変更だけで更新を拒否することはない。
 
 
+配布資産も前の候補へ戻す場合は、保持した旧tarballを同じprefixへ再インストールしてから、そのCLIで`project-assets <worktree>`の差分を確認し、`--apply`する。利用者が編集した資産は差し戻し時も競合として停止する。旧版にない新規資産は自動削除しない。必要なら変更を確認して別途撤去する。CLIの再インストールだけでプロジェクト内の資産が戻ったとは扱わない。
+
+Linuxで2つの未公開v0.5候補を旧→新→旧とoffline導入し、配布資産の復元、固有ルール・作成済み仕様書・アプリの保持、編集済み資産での全体停止を確認した（`RELEASE_READINESS.json`の`projectAssetPackageRoundtrip`）。v0.4 runtimeへの復帰、実行中の更新、任意の設定変換を保証する試験ではない。
+
 ### HostからASC Skillを選べるようにする
 
 `.agents/skills/`を認識するHostでは、次の明示オプションでプロジェクト内の入口を配置できる。
