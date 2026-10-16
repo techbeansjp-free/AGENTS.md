@@ -86,3 +86,11 @@ test('Host verification startup failure does not trigger implementation repairs'
   assert.match(error.message,/Host verification could not execute/);return true;
  });
 });
+
+test('asynchronous Host failure retains bounded stderr and preserves output cap',async t=>{
+ const f=fixture(t);
+ fs.writeFileSync(f.script,"import fs from 'node:fs';fs.readFileSync(0);fs.writeSync(2,'x'.repeat(9000)+'diagnostic');process.exitCode=1;");
+ await assert.rejects(hostExecution(f.c,f.configuration).agent({timeout:3000}),e=>{assert.match(e.message,/Host execution failed/);assert.equal(e.hostStderr.length,8192);assert.ok(e.hostStderr.endsWith('diagnostic'));return true;});
+ fs.writeFileSync(f.script,"import fs from 'node:fs';fs.readFileSync(0);fs.writeSync(2,'x'.repeat(9*1024*1024));");
+ await assert.rejects(hostExecution(f.c,f.configuration).agent({timeout:3000}),/Host output limit/);
+});

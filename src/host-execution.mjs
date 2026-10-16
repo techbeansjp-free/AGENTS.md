@@ -40,11 +40,11 @@ export function hostExecution(controller,configuration,authorityRoots=[]){
   const options={cwd:path.dirname(command[0]),env,windowsHide:true,maxBuffer:8*1024*1024};
   if(!asynchronous){const p=spawnSync(command[0],command.slice(1),{...options,input,timeout:timeout??0,killSignal:'SIGKILL'});demand(!p.error,'Host verification transport failed');return decode(p.status,p.stdout,p.stderr);}
   return new Promise((resolve,reject)=>{
-   const p=spawn(command[0],command.slice(1),{...options,stdio:['pipe','pipe','pipe']});const output=[];let bytes=0,settled=false;
-   const finish=(error,code)=>{if(settled)return;settled=true;clearTimeout(timer);p.stdin.destroy();p.stdout.destroy();p.stderr.destroy();p.kill();if(error)reject(error);else{try{resolve(decode(code,Buffer.concat(output).toString()));}catch(e){reject(e);}}};
+   const p=spawn(command[0],command.slice(1),{...options,stdio:['pipe','pipe','pipe']});const output=[],errors=[];let bytes=0,settled=false;
+   const finish=(error,code)=>{if(settled)return;settled=true;clearTimeout(timer);p.stdin.destroy();p.stdout.destroy();p.stderr.destroy();p.kill();if(error)reject(error);else{try{resolve(decode(code,Buffer.concat(output).toString(),Buffer.concat(errors).toString()));}catch(e){reject(e);}}};
    const timer=timeout===null?undefined:setTimeout(()=>finish(Object.assign(Error('Host execution deadline exceeded'),{code:'ASC_HOST_TRANSPORT_TIMEOUT'})),timeout);
    p.stdout.on('data',b=>{bytes+=b.length;if(bytes>8*1024*1024)finish(Error('Host output limit'));else output.push(b);});
-   p.stderr.on('data',b=>{bytes+=b.length;if(bytes>8*1024*1024)finish(Error('Host output limit'));});
+   p.stderr.on('data',b=>{bytes+=b.length;if(bytes>8*1024*1024)finish(Error('Host output limit'));else errors.push(b);});
    p.on('error',()=>finish(Error('Host transport could not start')));p.stdin.on('error',()=>finish(Error('Host request failed')));
    p.on('close',code=>finish(undefined,code));p.stdin.end(input);
   });
