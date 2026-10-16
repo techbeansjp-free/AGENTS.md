@@ -335,3 +335,23 @@ test('review receives exact plain Git diff without JSON duplication',{skip:!enab
  const result=await runWorkflow(f.request,{agent,provider:f.provider});t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));
  assert.equal(result.status,'draft-ci-passed');assert.equal(reviews,1);
 });
+
+test('inherited findings survive repeated failure before a fresh review', {skip:!enabled},async t=>{
+ const f=fixture(t);f.request.maxRepairs=0;
+ const claim={verdict:'fail',findings:[finding('Earlier correction must survive')],target:{head:f.request.base,base:f.request.base,contract:'a'.repeat(64),diff:'b'.repeat(64)}};
+ f.request.priorReviews=[claim];let calls=0;
+ for(let attempt=0;attempt<2;attempt++){
+  await assert.rejects(runWorkflow(f.request,{provider:f.provider,agent:async({workspace,writable,prompt})=>{
+   assert.equal(writable,true);calls++;
+   const history=JSON.parse(fs.readFileSync(path.join(workspace,JSON.parse(prompt).priorReviewsRef)));
+   assert.equal(history.assessments[0].findings[0].condition,'Earlier correction must survive');
+   fs.writeFileSync(path.join(workspace,'code.txt'),'wrong-'+attempt);
+   return {context:'failure-'+attempt,seconds:0,usage:[]};
+  }}),error=>{
+   const saved=error.workflowDiagnostic;assert.deepEqual(saved.priorReviews,[claim]);
+   assert.equal(saved.events.some(e=>e.type==='review-assessment'),false);
+   f.request.priorReviews=saved.priorReviews;t.after(()=>fs.rmSync(saved.root,{recursive:true,force:true}));return true;
+  });
+ }
+ assert.equal(calls,1);assert.equal(f.creates(),0);
+});

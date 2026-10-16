@@ -43,13 +43,24 @@ test('failed unit preserves candidate bytes for fresh repair on restart',{skip:!
  try{await runGoal(f.request,{agent:worker,provider:f.provider});assert.fail('expected verification failure');}catch(error){prior=error.goalDiagnostic;}
  t.after(()=>fs.rmSync(prior.root,{recursive:true,force:true}));
  const failed=prior.units.find(u=>u.id==='b');assert.ok(failed.candidate,'failed unit candidate missing');
+ // Saved review claims are untrusted diagnostics, not receipts; a fresh review is still required.
+ const priorFinding={location:'b.txt:1',condition:'retain prior correction',evidence:'synthetic historical finding',impact:'regression',action:'reassess source',counterevidence:'tests incomplete',severity:'P2',verification:'static-analysis',blocking:true};
+ failed.diagnostic.events.push({type:'review-assessment',verdict:'fail',target:{head:failed.candidate.head,base:failed.candidate.base,contract:'a'.repeat(64),diff:'b'.repeat(64)},findings:[priorFinding]});
+ fs.writeFileSync(path.join(prior.root,'result.json'),JSON.stringify(prior));
  const destination=fs.mkdtempSync(path.join(os.tmpdir(),'asc-failed-unit-restart-'));t.after(()=>fs.rmSync(destination,{recursive:true,force:true}));
  const prepared=prepareGoalRestart({...f.request,maxRepairs:1,restart:{directory:path.join(destination,'work'),resultFile:path.join(prior.root,'result.json')}});
  assert.equal(prepared.request.unitCandidates.b.head,failed.candidate.head);
+ // A later interruption may have inherited findings but no new review event.
+ failed.diagnostic.priorReviews=prepared.request.unitCandidates.b.priorReviews;
+ failed.diagnostic.events=[];
+ fs.writeFileSync(path.join(prior.root,'result.json'),JSON.stringify(prior));
+ const resumedAgain=prepareGoalRestart({...f.request,maxRepairs:1,restart:{directory:path.join(destination,'again'),resultFile:path.join(prior.root,'result.json')}});
+ assert.deepEqual(resumedAgain.request.unitCandidates.b.priorReviews,prepared.request.unitCandidates.b.priorReviews);
+
  const repairs=[];let reviews=0;
  const agent=async({workspace,writable,prompt})=>{
   if(writable){const input=JSON.parse(prompt),id=input.intent.split(' ').at(-1);repairs.push(id);
-   if(id==='b'){assert.equal(fs.readFileSync(path.join(workspace,'b.txt'),'utf8'),'wrong');assert.equal(input.previousFailure.kind,'verification');}
+   if(id==='b'){assert.equal(fs.readFileSync(path.join(workspace,'b.txt'),'utf8'),'wrong');assert.equal(input.previousFailure.kind,'verification');const history=JSON.parse(fs.readFileSync(path.join(workspace,input.priorReviewsRef)));assert.match(history.authority,/not approval/);assert.equal(history.assessments[0].findings[0].condition,'retain prior correction');}
    fs.writeFileSync(path.join(workspace,id+'.txt'),id==='sum'?'2':'1');
   }else reviews++;
   return {context:'restart-failed-unit-'+(++calls),usage:[],seconds:0,answer:JSON.stringify({verdict:'pass',findings:[]})};

@@ -1,4 +1,5 @@
 import {performance} from 'node:perf_hooks';
+import {reviewDiagnostics} from './review-result.mjs';
 /** Restart in a new owner-selected clone. Old results select candidate bytes only. */
 import fs from 'node:fs';import path from 'node:path';
 import {createExecutionBudget} from './execution-budget.mjs';
@@ -13,7 +14,13 @@ function candidateReferences(previous,plan){
   if(!ids.has(unit.id)||typeof unit.repo!=='string')continue;
   const target=unit.result?.target;
   const candidate=target?{base:target.base,head:target.head,contractDigest:target.contract}:unit.candidate;
-  if(candidate)candidates[unit.id]={repo:unit.repo,base:candidate.base,head:candidate.head,contractDigest:candidate.contractDigest};
+  if(candidate){
+   const nested=(Array.isArray(previous.events)?previous.events:[]).filter(e=>e?.id===unit.id&&['unit-event','single-unit-event'].includes(e.type)).map(e=>e.event);
+   const local=unit.result?.events??unit.diagnostic?.events;
+   const inherited=unit.result?.priorReviews??unit.diagnostic?.priorReviews;
+   const priorReviews=reviewDiagnostics([...(Array.isArray(inherited)?inherited:[]),...(Array.isArray(local)?local:[]).filter(e=>e?.type==='review-assessment'),...nested.filter(e=>e?.type==='review-assessment')]);
+   candidates[unit.id]={repo:unit.repo,base:candidate.base,head:candidate.head,contractDigest:candidate.contractDigest,priorReviews};
+  }
  }
  return candidates;
 }

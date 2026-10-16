@@ -97,7 +97,8 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
    emit('single-unit-execution',{id:unit.id,contract:digest(combined)});
    const record={id:unit.id,repo:c.repo,mode:'combined-goal-contract'};results.push(record);
    let delivery;
-   try{delivery=await runWorkflow({...request,contract:combined},{executionBudget:budget,agent:freshAgent,provider:checkedRemote,onEvent:event=>{if(event.type==='run-started')record.workflowRoot=event.root;emit('single-unit-event',{id:unit.id,event});}});}
+   try{delivery=await runWorkflow({...request,contract:combined,priorReviews:request.unitCandidates?.[unit.id]?.priorReviews},{executionBudget:budget,agent:freshAgent,provider:checkedRemote,onEvent:event=>{if(event.type==='run-started')record.workflowRoot=event.root;emit('single-unit-event',{id:unit.id,event});}});}
+   catch(error){record.diagnostic=error.workflowDiagnostic;throw error;}
    finally{
     // Candidate bytes only: observe current Git, never export review/approval authority.
     // Preserve the original failure if a dirty or out-of-scope candidate cannot be observed.
@@ -119,7 +120,7 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
      const imported=importUnitCandidate({reference:request.unitCandidates[id],unit:units.get(id),contract:spec.contract,candidate,base:before.head,workspace:path.join(root,'imports',id),commitIdentity:request.commitIdentity});
      emit('unit-candidate',{id,...imported});
     }
-    const unitRequest={...request,...spec,repo:candidate,base:before.head};
+    const unitRequest={...request,...spec,repo:candidate,base:before.head,priorReviews:request.unitCandidates?.[id]?.priorReviews};
     // Explain an owner-compiled partial assignment; this never waives whole-Goal gates.
     const unitAssignment={planDigest:compiled.digest,goalIntent:c.contract.intent,deliveryAllowed:false,
      current:units.get(id),units:compiled.plan.units.map(u=>({id:u.id,intent:u.intent,criteria:u.criteria,dependsOn:u.dependsOn,writePaths:u.writePaths,
