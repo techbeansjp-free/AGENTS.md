@@ -24,10 +24,8 @@
     "causalImprovementProven": false
   },
   "remaining": [
-    "Canonical release activation and documented legacy migration boundaries",
-    "Final matched performance acceptance; public synthetic observations are not matched old ASC comparison",
-    "Current changes require independent review and CI; retain previous evidence with its exact HEAD",
-    "Complex acceptance must be supported by its actual fixture and runtime, not inferred from tiny text Issues"
+    "Complete final requirement-by-requirement release decision using scoped evidence and explicitly recorded limitations; do not impose blanket reruns of successful scenarios",
+    "Keep product merge and publication separate from release-readiness acceptance; neither is authorized by evidence reuse"
   ],
   "evidenceNote": "Historical local measurements are not evidence that this integration branch CI passed. See REVIEW.md.",
   "releaseTarget": {
@@ -2290,5 +2288,76 @@
       "Package/install setup excluded from runtime; outer development-agent usage is not included."
     ],
     "rawEvidence": "/tmp/asc-public-trial-dehonV"
+  },
+  "acceptanceEvidenceReuse": {
+    "authorization": "Owner explicitly authorized reusing existing verification results with tested commit, intervening diff and applicability recorded; not permission to waive requirements or publish.",
+    "assessedCommit": "3283809ae64ac90abe62db546d8415057733a8fb",
+    "currentCi": {
+      "linuxRun": 38889005871,
+      "baseValidatorRun": 38889001097,
+      "conclusion": "success",
+      "scope": "CI on assessedCommit; not a substitute for semantic acceptance"
+    },
+    "screen": {
+      "result": "accepted-for-tested-screen-api-sqlite-scenario",
+      "testedCandidate": "f1f5b28f6e2f09b58f2aaccf5d7b4c3a6d2b53fe",
+      "runtimeImplementation": "57799207",
+      "evidenceRef": "publicScreenRecoveryLatest",
+      "rawEvidenceSha256": "36e79ffd32448758187a2f267bb2747b490209015e5004102becc511f03bcbe6",
+      "ownerDecisionSha256": "fc846db3302a7871b31952efa77358634ce8bdef8f79640a9b2afb3104f26f6f",
+      "proposalSha256": "dd9cff1d215de91f994be6a434314e278271177731a497a3130cef05ac7c2dbc",
+      "contractDifference": "Final Intent omitted the owner clarification suffix; oracle assets changed and prehandler verification was added. Contract digests are not identical. Criteria, paths, design, policy references and revision, required checks and risk declarations match.",
+      "supplementalIndependentInspection": {
+        "context": "/root/integration_review",
+        "method": "read-only final source and existing oracle inspection; no execution",
+        "findings": [],
+        "verified": [
+          "app.py:98-109 counts all persisted tasks",
+          "screen.html:113-120,288-312 keeps summary read-only",
+          "app.py:138-175 has only single-task mutation, no bulk endpoint",
+          "screen.html:332-351 invokes PATCH only from detail toggle",
+          "Owner design tokens, native anchors, labels, responsive layout and document headings retained; only four authorized files changed"
+        ]
+      },
+      "runtimeDiff": "Since 57799207, runtime changes are project-assets CLI integration plus compact review JSON and batched-read prompting in workflow.mjs. Goal/restart, Controller, Git, isolation, migration and verification implementation are unchanged. Current CI covers runtime regressions; the historical complex trial is not relabelled as execution on the current commit.",
+      "limits": [
+        "Earlier failed attempts remain failed and retain their costs",
+        "Not initial-run performance or universal complex-project equivalence",
+        "Supplemental inspection does not claim the earlier reviewer read the omitted suffix"
+      ]
+    },
+    "migration": {
+      "result": "accepted-for-documented-owner-directed-paths",
+      "evidenceRefs": [
+        "configurationGitRoundtrip.realLegacyInstallation",
+        "latestUnpublishedCandidateCutover",
+        "canonicalMigrationTrial",
+        "projectSkillHostDiscovery",
+        "projectAssetPackageRoundtrip"
+      ],
+      "parallelIssueTest": "test/test_migration.mjs:159: clean selected worktree migration and rollback preserve sibling dirty files, untracked work and runtime",
+      "applicability": "Migration implementation unchanged since the cited trials; current CI includes migration and project-asset update tests. Select a clean worktree, preserve owner rules, and use explicit configuration decisions.",
+      "limits": [
+        "No automatic transfer of uncommitted work or legacy approval",
+        "No arbitrary configuration conversion guarantee"
+      ]
+    },
+    "performance": {
+      "result": "measurements-available-no-causal-speedup-claim",
+      "evidenceRefs": [
+        "optionalTemplatesAndBatchedReviewComparison",
+        "latestCanonicalDummyDelivery",
+        "publicSyntheticGoalTrial",
+        "publicSyntheticGoalRecovery",
+        "publicScreenRecoveryLatest"
+      ],
+      "applicability": "Small paired comparison and complex/recovery observations remain scoped to their recorded commits, models and endpoints. Usage gaps and failed attempts are retained.",
+      "limits": [
+        "No claim of total-Agent token reduction",
+        "No claim of causal superiority over v0.4",
+        "No 92-second guarantee for complex work"
+      ]
+    },
+    "releaseDecision": "Not a blanket release-ready decision; final requirement coverage must remain distinct from this authorized evidence reuse."
   }
 }
