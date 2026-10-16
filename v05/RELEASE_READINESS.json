@@ -2209,5 +2209,85 @@
     ],
     "driverPath": "/tmp/asc-assets-package-roundtrip.py",
     "driverSha256": "df299ed6c4770b5e0b5a91e33ef3363442cce93650313cc493fd6bd3ce553c10"
+  },
+  "latestCanonicalDummyDelivery": {
+    "status": "PASS",
+    "sourceCommit": "024846b5d24c44af4cae039b3fb513827e46cb78",
+    "sourceIdentityVerification": "Every packaged source file and source manifest matched git objects of this commit. Driver sourceHead was sampled at completion and refers to a later CI-only commit; it is not used as package provenance.",
+    "packageSha256": "49d0ae9428fc91d394d323c883cc19c7d99963259688cf09fa6079a9e10c5ca5",
+    "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+    "target": {
+      "head": "52f288c9775bd0e20c283f6adbdf356e53ab9fab",
+      "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+      "contract": "fccdde88674c406843029f46a3e9dcad756c3190e35d57286c4975ab03ee4e83",
+      "diff": "04cca1820e625ccb6f34a590c2904c7d72b7f3852584484974ef758604462505",
+      "empty": false
+    },
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/21",
+    "draft": true,
+    "ci": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/actions/runs/38882110859",
+    "wallSeconds": 68.396375789,
+    "setupIncluded": false,
+    "model": "gpt-5.6-sol",
+    "agentCalls": 2,
+    "calls": [
+      {
+        "role": "implementation",
+        "seconds": 26.449466527000002,
+        "context": "01a14415-20e1-7ce2-9739-9aac8f65ef47",
+        "usage": [
+          {
+            "input_tokens": 64640,
+            "cached_input_tokens": 50944,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 998,
+            "reasoning_output_tokens": 420
+          }
+        ]
+      },
+      {
+        "role": "review",
+        "seconds": 15.850352964,
+        "context": "01a14415-8ead-7852-a33b-9d9893b7b9ff",
+        "usage": [
+          {
+            "input_tokens": 57665,
+            "cached_input_tokens": 42112,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 523,
+            "reasoning_output_tokens": 191
+          }
+        ]
+      }
+    ],
+    "observedProcessedTokens": 123826,
+    "observedFreshTokens": 30770,
+    "allAgentTotalTokens": null,
+    "repairs": 0,
+    "verificationExitCodes": [
+      0,
+      0
+    ],
+    "review": {
+      "type": "review-assessment",
+      "seconds": 46.050547087,
+      "target": {
+        "head": "52f288c9775bd0e20c283f6adbdf356e53ab9fab",
+        "base": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+        "contract": "fccdde88674c406843029f46a3e9dcad756c3190e35d57286c4975ab03ee4e83",
+        "diff": "04cca1820e625ccb6f34a590c2904c7d72b7f3852584484974ef758604462505",
+        "empty": false
+      },
+      "context": "01a14415-8ead-7852-a33b-9d9893b7b9ff",
+      "verdict": "pass",
+      "findings": [],
+      "blockers": [],
+      "evidenceAuthority": "reviewer assessment; not host-reproduced evidence"
+    },
+    "limitations": [
+      "Single small synthetic trial; no comparative speedup or complex-development acceptance claim.",
+      "Package/install setup excluded from runtime; outer development-agent usage is not included."
+    ],
+    "rawEvidence": "/tmp/asc-public-trial-dehonV"
   }
 }
