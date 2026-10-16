@@ -18,14 +18,28 @@ try{
  }
  const manifestPath=path.join(temporary,'package.json'),manifest=JSON.parse(fs.readFileSync(manifestPath));
  const sourceManifestSha256=sourceFiles['package.json'];delete sourceFiles['package.json'];
- manifest.name='agent-skill-chain';manifest.private=true;manifest.bin={'agent-skill-chain':'bin/asc-v05.mjs','asc-v05':'bin/asc-v05.mjs'};
+ const nested=manifest.bin?.['agent-skill-chain']==='./v05/bin/asc-v05.mjs';
+ const entry=nested?'v05/bin/asc-v05.mjs':'bin/asc-v05.mjs';
+ if(!Object.hasOwn(sourceFiles,entry))throw Error('Candidate CLI missing from package inventory');
+ manifest.name='agent-skill-chain';manifest.private=true;manifest.bin={'agent-skill-chain':entry,'asc-v05':entry};
  // Distribution is a candidate, never evidence of release approval.
  if(!/^0\.5\.\d+-[a-z0-9.-]+$/.test(manifest.version))throw Error('Explicit v0.5 prerelease source required');
+ const sourceVersion=manifest.version;
  if(candidateVersion)manifest.version=candidateVersion;
+ const transformedManifests={};
+ if(nested){
+  const name='v05/package.json',file=path.join(temporary,name);
+  const runtime=JSON.parse(fs.readFileSync(file));
+  if(runtime.version!==sourceVersion)throw Error('Root and runtime source versions differ');
+  runtime.version=manifest.version;
+  fs.writeFileSync(file,JSON.stringify(runtime,null,2)+'\n');
+  transformedManifests[name]={sourceSha256:sourceFiles[name],distributionSha256:hash(fs.readFileSync(file))};
+  delete sourceFiles[name];
+ }
  delete manifest.scripts;
- manifest.files=[...Object.keys(sourceFiles).filter(p=>p!=='package.json'),'release-identity.json'];
+ manifest.files=[...Object.keys(transformedManifests),...Object.keys(sourceFiles).filter(p=>p!=='package.json'),'release-identity.json'];
  fs.writeFileSync(manifestPath,JSON.stringify(manifest,null,2)+'\n');
- fs.writeFileSync(path.join(temporary,'release-identity.json'),JSON.stringify({schema:'asc-candidate-identity/v2',status:'unapproved-candidate',sourceManifestSha256,sourceFiles,distributionManifestSha256:hash(fs.readFileSync(manifestPath)),published:false},null,2)+'\n');
+ fs.writeFileSync(path.join(temporary,'release-identity.json'),JSON.stringify({schema:'asc-candidate-identity/v2',status:'unapproved-candidate',sourceManifestSha256,sourceFiles,transformedManifests,distributionManifestSha256:hash(fs.readFileSync(manifestPath)),published:false},null,2)+'\n');
  const filename=`agent-skill-chain-${manifest.version}.tgz`;
  if(fs.existsSync(path.join(destination,filename)))throw Error('Candidate output already exists');
  const packed=JSON.parse(run(['pack','--ignore-scripts','--json','--pack-destination',temporary],temporary))[0];

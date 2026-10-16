@@ -90,3 +90,54 @@ test('canonical version override rejects invalid or out-of-line versions before 
   const result=spawnSync(process.execPath,['scripts/pack-candidate.mjs',root,`--version=${version}`],{encoding:'utf8'});assert.equal(result.status,1);assert.match(result.stderr,/Usage:/);assert.deepEqual(fs.readdirSync(root),[]);
  }
 });
+
+test('repository root package installs only the v0.5 runtime through the canonical CLI',t=>{
+ const repository=path.resolve(process.cwd(),'..');
+ if(!fs.existsSync(path.join(repository,'v05/package.json')))return t.skip('standalone evaluation checkout has no integration root');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-root-package-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),'../lib/node_modules/npm/bin/npm-cli.js');
+ // Normal pack/install: lifecycle scripts must not build the legacy runtime.
+ const packed=JSON.parse(execFileSync(process.execPath,[npm,'pack','--json','--pack-destination',root],{cwd:repository,encoding:'utf8'}))[0];
+ assert(packed.files.every(f=>f.path==='package.json'||f.path==='README.md'||f.path==='LICENSE'||f.path.startsWith('v05/')), 'legacy assets must not be distributed');
+ assert(!packed.files.some(f=>/test_|\.agent-skill-chain\/|^dist\//.test(f.path)));
+ const consumer=path.join(root,'consumer');fs.mkdirSync(consumer);
+ execFileSync(process.execPath,[npm,'install','--prefix',consumer,'--offline','--no-audit','--no-fund',path.join(root,packed.filename)],{stdio:'pipe'});
+ const installed=path.join(consumer,'node_modules/agent-skill-chain');const pkg=JSON.parse(fs.readFileSync(path.join(installed,'package.json')));
+ assert.equal(pkg.version,JSON.parse(fs.readFileSync(path.join(installed,'v05/package.json'))).version);
+ assert.equal(Object.hasOwn(pkg,'agentSkillChain'),false,'legacy quality-contract metadata must not claim v0.5 compatibility');
+ const project=path.join(root,'legacy-project');fs.mkdirSync(project);
+ const git=(...args)=>execFileSync('git',args,{cwd:project,stdio:'pipe'});git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');fs.writeFileSync(path.join(project,'README.md'),'Synthetic migration inspection fixture\n');fs.mkdirSync(path.join(project,'.agent-skill-chain'));fs.writeFileSync(path.join(project,'.agent-skill-chain/project-policy.json'),JSON.stringify({schemaVersion:'agent-skill-chain/project-policy/v0.3.1'}));git('add','README.md','.agent-skill-chain/project-policy.json');git('commit','-qm','baseline');
+ const migration=JSON.parse(execFileSync(process.execPath,[path.join(installed,pkg.bin['agent-skill-chain']),'migration-inspect',project],{encoding:'utf8'}));assert.equal(migration.readyToMigrate,false);assert.deepEqual(migration.dirty,[]);assert.deepEqual(migration.blockers,['migration-execution-not-performed']);
+ for(const name of ['agent-skill-chain','asc-v05']){
+  const cli=path.join(installed,pkg.bin[name]);
+  assert.equal(execFileSync(process.execPath,[cli,'--version'],{encoding:'utf8'}).trim(),pkg.version);
+  const capabilities=JSON.parse(execFileSync(process.execPath,[cli,'capabilities'],{encoding:'utf8'}));assert.equal(capabilities.legacyFallback,false);
+  const old=spawnSync(process.execPath,[cli,'workflow','advance'],{encoding:'utf8'});assert.equal(old.status,1);
+ }
+ const skill=path.join(installed,'v05/skills/asc/SKILL.md');assert(fs.existsSync(skill));assert(fs.existsSync(path.resolve(path.dirname(skill),'../../bin/asc-v05.mjs')));
+});
+
+
+test('root release candidate stamps both manifests without modifying source or enabling publication',t=>{
+ const repository=path.resolve(process.cwd(),'..');
+ if(!fs.existsSync(path.join(repository,'v05/package.json')))return t.skip('standalone evaluation checkout');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-root-release-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const source=fs.readFileSync('package.json'),rootSource=fs.readFileSync(path.join(repository,'package.json'));
+ const output=JSON.parse(execFileSync(process.execPath,['v05/scripts/pack-candidate.mjs',root,'--version=0.5.0'],{cwd:repository,encoding:'utf8'}));
+ const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),'../lib/node_modules/npm/bin/npm-cli.js');
+ const consumer=path.join(root,'consumer');fs.mkdirSync(consumer);
+ execFileSync(process.execPath,[npm,'install','--prefix',consumer,'--offline','--no-audit','--no-fund',output.file],{stdio:'pipe'});
+ const installed=path.join(consumer,'node_modules/agent-skill-chain');
+ const pkg=JSON.parse(fs.readFileSync(path.join(installed,'package.json')));
+ assert.equal(pkg.version,'0.5.0');assert.equal(pkg.private,true);assert.equal(output.publishAuthorized,false);
+ assert.equal(pkg.scripts,undefined);
+ for(const entry of Object.values(pkg.bin))assert.equal(execFileSync(process.execPath,[path.join(installed,entry),'--version'],{encoding:'utf8'}).trim(),'0.5.0');
+ const identity=JSON.parse(fs.readFileSync(path.join(installed,'release-identity.json')));
+ const {createHash}=createRequire(import.meta.url)('node:crypto');const hash=b=>createHash('sha256').update(b).digest('hex');
+ assert.equal(identity.published,false);assert.equal(identity.status,'unapproved-candidate');
+ assert.equal(identity.transformedManifests['v05/package.json'].sourceSha256,hash(source));
+ assert.equal(identity.transformedManifests['v05/package.json'].distributionSha256,hash(fs.readFileSync(path.join(installed,'v05/package.json'))));
+ for(const [name,digest] of Object.entries(identity.sourceFiles))assert.equal(hash(fs.readFileSync(path.join(installed,name))),digest);
+ assert.deepEqual(fs.readFileSync('package.json'),source);
+ assert.deepEqual(fs.readFileSync(path.join(repository,'package.json')),rootSource);
+});

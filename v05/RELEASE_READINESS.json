@@ -568,5 +568,40 @@
       "No arbitrary production project cutover claim",
       "No tag, registry publication or release approval"
     ]
+  },
+  "publicScreenRecovery": {
+    "implementationSourceHead": "0e6091c7baf0daf3bb4346d57ffb7a95711be9b6",
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/18",
+    "base": "c21cf78609316689a4724327733755a1b5a36ba8",
+    "head": "5c83c05b1695c0c962c80c298b5b5e2c06f3c6c3",
+    "status": "draft-ci-passed",
+    "seconds": 296.747684272,
+    "calls": 3,
+    "repairs": 1,
+    "observedProcessedTokens": 445932,
+    "observedFreshTokens": 119532,
+    "allAgentTotalTokens": null,
+    "scope": "Existing synthetic candidate; isolated browser/API/SQLite verification, independent review, transient refresh failure repair, re-review, Draft PR and public Python CI",
+    "priorAttempt": {
+      "seconds": 1.737939934,
+      "status": "blocked",
+      "cause": "Host pre-test generated ignored bytecode in otherwise clean source; preserved outside candidate before retry"
+    },
+    "limitations": [
+      "Not initial Goal-to-implementation timing",
+      "Not matched performance comparison",
+      "Browser checks ran on local isolated Linux, not hosted CI",
+      "No general complex-project equivalence claim"
+    ]
+  },
+  "rootDistributionCutover": {
+    "status": "working-tree-acceptance",
+    "standardCli": "agent-skill-chain -> v05/bin/asc-v05.mjs",
+    "legacyRuntimePackaged": false,
+    "remaining": [
+      "legacy root CI and release workflow transition",
+      "root package exact-artifact live execution",
+      "migration acceptance and final review"
+    ]
   }
 }

@@ -90,10 +90,10 @@
     "README.md": "8205c2919a4d21cdd4dff0d277ded0d3f30ec20b7f32f429a6de1e40e541b53e",
     "USAGE.md": "8808571a9e20aaeb4b20003aecbe19d6291daf0abd69a261eac90fa05336a965",
     "package.json": "be57dea383943f61d7dbddc5fe269261a773e4534799b457bd846b1d79684458",
-    "scripts/pack-candidate.mjs": "c981a646705074c148970b36c1b4217b9c7ab392676bf7f65bf432495bf39df4",
-    "test_package.mjs": "7389d5ac3ebbdc50d6007005a6fe3c1edcdab084f689f94c64d319fe69991a84",
+    "scripts/pack-candidate.mjs": "b1bd5ceff93b660bd72128761af977d5e8bac12dcade96494f7442498ab69a07",
+    "test_package.mjs": "7fa72c6cb9aa0b4c732886d7968142611287ac83cf1e92ded82f91a49e368ce8",
     "MIGRATION_PLAN.md": "03715ffac4f1a44476b10f64de94ed3366518fe1da5ae998f3d39fc05eaaafde",
-    "RELEASE_READINESS.json": "5e9d47767c1dcf14b256b0039582d68a84892831c627c6a1ca06b393b0138dca"
+    "RELEASE_READINESS.json": "d92aeaffc354a1e28c30f19db989879194e1ae5305c9234aacc14ec194debbae"
   },
   "integrationAdditions": {
     "src/agent-lifecycle.mjs": "eb7b118c8d4903a658ee4d3c4a26fc5f56d757c996cba1d8a5963bea92c97db3",

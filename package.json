@@ -1,45 +1,36 @@
 {
   "name": "agent-skill-chain",
-  "version": "0.4.4-managed-by-tag",
-  "description": "人とAIエージェントが使う、安全側に倒す軽量開発ワークフロー。",
+  "version": "0.5.0-alpha.0",
+  "description": "Goal・契約・Evidenceから必要な開発作業を選ぶAI開発ハーネス。",
   "type": "module",
   "private": true,
-  "agentSkillChain": {
-    "qualityContractVersion": 14,
-    "policySchemaVersion": "0.3.1",
-    "compatiblePolicySchemaVersions": [
-      "0.3.0"
-    ],
-    "deprecatedPolicySchemaAliases": {
-      "0.3": "0.3.0"
-    }
-  },
   "engines": {
     "node": ">=20"
   },
   "bin": {
-    "agent-skill-chain": "./dist/bin/agent-skill-chain.js"
+    "agent-skill-chain": "./v05/bin/asc-v05.mjs",
+    "asc-v05": "./v05/bin/asc-v05.mjs"
   },
   "files": [
-    "dist/bin/",
-    "dist/src/",
-    "dist/vendor/",
-    ".agent-skill-chain/00_利用案内.md",
-    ".agent-skill-chain/skills/",
-    ".agent-skill-chain/templates/",
-    ".agent-skill-chain/schemas/",
-    ".agent-skill-chain/policy/",
-    ".agent-skill-chain/hooks/",
-    ".agent-skill-chain/docs/",
-    "README.md",
-    "AGENTS.md",
-    "CLAUDE.md",
-    "release-identity.json"
+    "v05/package.json",
+    "v05/bin/",
+    "v05/src/",
+    "v05/migration_inspect.mjs",
+    "v05/README.md",
+    "v05/OWNER_APPROVAL.md",
+    "v05/RELEASE_READINESS.json",
+    "v05/USAGE.md",
+    "v05/MIGRATION_PLAN.md",
+    "v05/GOAL_EXECUTION.md",
+    "v05/ARCHITECTURE_DECISION_0001.md",
+    "v05/ARCHITECTURE_DECISION_0002.md",
+    "v05/skills/",
+    "README.md"
   ],
   "scripts": {
     "clean": "node --import tsx scripts/clean.ts",
     "compile": "node --import tsx scripts/compile.ts",
-    "build": "npm run compile && node --import tsx scripts/build.ts",
+    "build": "npm run package:check",
     "directories:check": "node --import tsx scripts/check_directory_guides.ts",
     "skills:check": "node --import tsx scripts/check_skill_templates.ts",
     "cli:check": "node --import tsx scripts/check_cli_contract.ts",
@@ -52,9 +43,9 @@
     "source:check": "node --import tsx scripts/check_source_quality.ts",
     "docs:format": "node --import tsx scripts/check_japanese_docs.ts",
     "test:format": "node --import tsx scripts/check_gherkin_format.ts",
-    "package:check": "node --import tsx scripts/check_package_contents.ts",
+    "package:check": "cd v05 && node --test test_package.mjs",
     "scan-boundary:report": "node --import tsx scripts/report_scan_boundary.ts",
-    "test": "npm run compile --silent && node --import tsx scripts/run_cucumber_shards.ts",
+    "test": "npm --prefix v05 test",
     "test:unit": "npm run compile --silent && node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs --tags @unit",
     "test:integration": "npm run compile --silent && node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs --tags @integration",
     "test:e2e": "npm run compile --silent && node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs --tags @e2e",
@@ -62,10 +53,13 @@
     "architecture:check": "node --import tsx scripts/check_dependency_graph.ts",
     "audit:check": "node --import tsx scripts/check_file_audit.ts",
     "conformance:check": "node --import tsx scripts/check_conformance.ts",
-    "quality": "npm run lint && npm run format:check && npm run typecheck && npm run source:check && npm test",
-    "verify:distribution": "npm run project:quality && npm run quality && npm run build && npm run docs:format && npm run test:format && npm run trace:check && npm run architecture:check && npm run conformance:check && npm run audit:check && npm run package:check",
-    "prepare": "npm run build",
-    "prepack": "npm run build"
+    "quality": "npm run lint:v05 && npm test",
+    "verify:distribution": "npm run quality",
+    "test:v05": "npm --prefix v05 test",
+    "test:legacy": "npm run compile --silent && node --import tsx scripts/run_cucumber_shards.ts",
+    "quality:legacy": "npm run lint && npm run format:check && npm run typecheck && npm run source:check && npm run test:legacy",
+    "build:legacy": "npm run compile && node --import tsx scripts/build.ts",
+    "lint:v05": "eslint v05"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",
