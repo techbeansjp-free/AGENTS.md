@@ -70,7 +70,7 @@
   "integrationChanges": {
     "bin/asc-v05.mjs": "592da8df17a4c3605919767a0a70a18591c2710120ef5b3336d173f3d0a15878",
     "src/adaptive-run.mjs": "6eb3917f936ab7f52c824def9d15808067b7933e03e396631768ee6c0f2301b6",
-    "src/controller.mjs": "571e0ba7a2557d06972a423532c73392f35fae154168606290b36c407a474073",
+    "src/controller.mjs": "05672049d4eabc9a7e8cf2e3cafab7bae37ebbabb54e66112568a1ab693938d7",
     "src/execution-budget.mjs": "3b16ecde3de06a35d5af8f79f1e59f7885668f7b3df77c418b6718caec22f6c9",
     "src/github.mjs": "d7c8b31edee482c2ac63ad780e9091afe585c8a4336d14dbc4bccd8573f1878b",
     "src/goal-propose.mjs": "d1835d7c5afe0741165808ebfb8eb1888ad2272c630a98e8159cbc845f2c348e",
@@ -80,7 +80,7 @@
     "src/restricted-agent.mjs": "0702280987a50167e8fcc9c902ed142487dbef8a1f654a03e413f88ae5d5a05d",
     "src/verification-resources.mjs": "6d6574d373a46d3dd9b4b5573cb60cb2886379f68263616ae1e802278508d989",
     "src/workflow.mjs": "5c7f110616d7b5c98997f16cb3cfcb6d7d5fffbadf8532e2a9e1b831988d1e76",
-    "test_controller.mjs": "84f43daaf0647dae000dc925e0240461e9eb15737d92f27cfb8f87772cc7333a",
+    "test_controller.mjs": "b09b43549998bc281111f0d50aa9b2e330788698c6e1a611da283e286e9facc6",
     "test_goal_run.mjs": "70544e80c74ebd29a418f9eaed8f47966c1631b5033eb1ef0401cfe9fc0d0013",
     "test_issue_run.mjs": "d4a5fdb24580bf0c2cb8a1af17238b4b79252125a23be027250885afd4aada3f",
     "test_migration.mjs": "1b9cc65fbf2285fdccf5ccad8929a9c7a93f7ab8c4fa32d889b8d146492613cb",
@@ -93,7 +93,7 @@
     "scripts/pack-candidate.mjs": "b1bd5ceff93b660bd72128761af977d5e8bac12dcade96494f7442498ab69a07",
     "test_package.mjs": "7fa72c6cb9aa0b4c732886d7968142611287ac83cf1e92ded82f91a49e368ce8",
     "MIGRATION_PLAN.md": "03715ffac4f1a44476b10f64de94ed3366518fe1da5ae998f3d39fc05eaaafde",
-    "RELEASE_READINESS.json": "d92aeaffc354a1e28c30f19db989879194e1ae5305c9234aacc14ec194debbae"
+    "RELEASE_READINESS.json": "587cfbed0c3f62e519159a335e2355bc98b1ba0b80bcdbcb868dbde0f1f1f50b"
   },
   "integrationAdditions": {
     "src/agent-lifecycle.mjs": "eb7b118c8d4903a658ee4d3c4a26fc5f56d757c996cba1d8a5963bea92c97db3",

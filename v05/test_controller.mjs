@@ -293,3 +293,11 @@ test('ignored host build products stay outside snapshots without blocking clean 
  assert.throws(()=>collision.target(),/overlaps allowed write scope/);
  fs.writeFileSync(path.join(root,'untracked.txt'),'human work');assert.throws(()=>controller.target(),/Untracked or special/);
 });
+
+
+test('tracked-only trees do not spend an extra Git process on ignored inventory',t=>{
+ const {c,root,git}=fixture(t);fs.mkdirSync(path.join(root,'nested'));fs.writeFileSync(path.join(root,'nested','source'),'tracked');git('add','nested/source');git('commit','-qm','nested source');
+ const original=c.git.bind(c);let ignoredQueries=0;c.git=(...args)=>{if(args.includes('--ignored'))ignoredQueries++;return original(...args);};
+ c.observeSource();assert.equal(ignoredQueries,0);
+ fs.writeFileSync(path.join(root,'unexpected'),'untracked');assert.throws(()=>c.observeSource(),/Untracked or special/);assert.equal(ignoredQueries,1);
+});

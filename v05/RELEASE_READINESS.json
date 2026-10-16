@@ -603,5 +603,46 @@
       "root package exact-artifact live execution",
       "migration acceptance and final review"
     ]
+  },
+  "canonicalCutoverValidation": {
+    "head": "fce222e448f53478589ad27c1aed26012dcaec6e",
+    "linuxCI": {
+      "run": 38837304656,
+      "result": "success"
+    },
+    "trustedBaseCI": {
+      "run": 38837301766,
+      "result": "failure",
+      "reason": "legacy qualityContractVersion required; contract transition incomplete"
+    },
+    "releaseReady": false
+  },
+  "hostArtifactObservation": {
+    "implementationHead": "ee5784e0",
+    "fullQualityBeforeLazyOptimization": {
+      "passed": 216,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 111.941378298
+    },
+    "lazyOptimization": {
+      "controllerSha256": "05672049d4eabc9a7e8cf2e3cafab7bae37ebbabb54e66112568a1ab693938d7",
+      "controllerTests": {
+        "passed": 27,
+        "failed": 0,
+        "skipped": 0,
+        "seconds": 6.543190737
+      },
+      "lint": "passed"
+    },
+    "performance": {
+      "scope": "local source observation; 101 tracked files; ABBA 30 observations per group; no model calls",
+      "beforeMeanMs": 15.9920088,
+      "afterMeanMs": 16.22310405,
+      "normalPathExtraGitCalls": 0,
+      "ignoredFixture": "before rejected; after accepted; host bytes preserved",
+      "causalE2ESpeedupClaim": false
+    },
+    "boundary": "Ignored subtrees remain on host and are not read/transferred; overlap with allowed write paths is rejected. This is not a recursive safety inspection of ignored contents."
   }
 }
