@@ -225,7 +225,7 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 
 詳細雛形はAPI・データ・セキュリティ・運用などの記入項目が必要な場合だけ選ぶ。選んだ雛形を利用者の仕様書としてコピーした後は、その文書は利用者の成果物であり、ASCのパッケージ更新で上書き・再生成しない。雛形の更新と、作成済み仕様書の更新は別の作業である。
 
-同一prefixでのnpm更新は配布パッケージの交換であり、利用者側の固有ルール・Skill登録・旧Hook・CI設定を自動移行する機能ではない。既存の`.agent-skill-chain/`を丸ごと新しい配布物で置換してはならない。設定移行には[移行手順](MIGRATION_PLAN.md)を使用する。利用者側の案内・Skill・雛形は、以下の`project-assets`で配置・更新する。HostへのSkill登録、既存Hook・CI・権限設定の変換はこの操作に含まれない。
+同一prefixでのnpm更新は配布パッケージの交換であり、利用者側の固有ルール・Skill登録・旧Hook・CI設定を自動移行する機能ではない。既存の`.agent-skill-chain/`を丸ごと新しい配布物で置換してはならない。設定移行には[移行手順](MIGRATION_PLAN.md)を使用する。利用者側の案内・Skill・雛形は、以下の`project-assets`で配置・更新する。`.agents/skills/`を使うHost向けの入口は明示オプションで配置できる。既存Hook・CI・権限設定の変換はこの操作に含まれない。
 
 
 ### プロジェクト内の配布資産を導入・更新する
@@ -249,6 +249,20 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 
 前回配布時の内容から変わっていない資産だけを更新する。既存の異なるファイル、利用者が編集・削除した配布資産があれば、競合を表示して一切適用しない（終了コード2）。強制上書きオプションはない。競合は利用者の編集内容を確認して解決し、再度差分を確認する。旧v0.4の同名ファイルも自動的にASC所有とみなさない。
 
-`project/`、利用者作成の仕様書、カスタム雛形、アプリコード、他worktree、Git indexは変更しない。新しい配布版からなくなった資産も自動削除せず`retained`に表示する。不要ならGit差分を確認して別途削除する。適用はcommit・pushを行わないため、通常のGitレビューで確認し、必要ならその変更だけを戻せる。
+`project/`、利用者作成の仕様書、カスタム雛形、アプリコード、他worktree、Git indexは変更しない。新しい配布版からなくなった資産や、今回のオプションで更新対象に選ばなかった資産も自動削除せず`retained`に表示する。不要ならGit差分を確認して別途削除する。適用はcommit・pushを行わないため、通常のGitレビューで確認し、必要ならその変更だけを戻せる。
 
-HostのSkill登録・AGENTS.md・Hook・権限設定は変更しない。Skillはインストール先の絶対パスを参照するため、別Hostや別prefixへ移した場合はそのHostのCLIで再生成する。実行中のAgentと並行して設定更新しない。中断・I/Oエラー時はworktreeを確認し、再度previewする。途中状態を成功と扱わず、競合がある場合は自動復旧やresetを行わない。正常な別worktreeの変更だけで更新を拒否することはない。
+通常の更新ではHostのSkill入口・AGENTS.md・Hook・権限設定は変更しない。Skillはインストール先の絶対パスを参照するため、別Hostや別prefixへ移した場合はそのHostのCLIで再生成する。実行中のAgentと並行して設定更新しない。中断・I/Oエラー時はworktreeを確認し、再度previewする。途中状態を成功と扱わず、競合がある場合は自動復旧やresetを行わない。正常な別worktreeの変更だけで更新を拒否することはない。
+
+
+### HostからASC Skillを選べるようにする
+
+`.agents/skills/`を認識するHostでは、次の明示オプションでプロジェクト内の入口を配置できる。
+
+```text
+<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <worktree> --register-skill
+<host-prefix>/node_modules/.bin/agent-skill-chain project-assets <worktree> --register-skill --apply
+```
+
+追加対象は`.agents/skills/asc/SKILL.md`だけ。この短い入口は`.agent-skill-chain/skills/asc/SKILL.md`を相対参照するため、通常の配布資産更新後も新しい本文へ辿れる。既存の同名Skillが異なる内容なら競合として停止し、他Skill・ユーザー全体の設定・AGENTS.md・Hook・権限は変更しない。通常の更新で登録入口が`retained`に出ても、不要になったという意味ではない。
+
+既存の旧ASC Skillを自動削除・無効化する機能ではない。旧入口を使っている場合は移行差分として確認する。配置後はHostの新しいセッションでSkillの認識と参照先を確認する。ファイル配置・リンク整合性の試験は、実Hostによる自動発見や実モデルでの実行成功とは区別する。

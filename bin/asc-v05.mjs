@@ -41,7 +41,7 @@ try {
   --version                                配布版を表示
 
 導入・更新:
-  project-assets <worktree> [--apply]       配布資産の差分表示／未編集資産だけ更新
+  project-assets <worktree> [--register-skill] [--apply]       配布資産の差分表示／未編集資産だけ更新
 
 移行:
   migration-inspect <root>                  旧設定と移行境界を確認
@@ -52,8 +52,8 @@ try {
 owner入力は作業repoの外に置きます。通常実行は専用worktreeを使用します。
 必要環境・入力例・承認・検証資産の準備: ${new URL('../v05/USAGE.md',import.meta.url).pathname}
 Linux評価版です。正式リリース判定は未完了。merge・releaseは行いません。`);
-  } else if(command==='project-assets'&&(args.length===1||(args.length===2&&args[1]==='--apply'))){
-    const result=projectAssets(args[0],{apply:args[1]==='--apply'});console.log(JSON.stringify(result,null,2));if(result.conflicts.length)process.exitCode=2;
+  } else if(command==='project-assets'&&args.length>=1&&args.length<=3&&args.slice(1).every(a=>['--apply','--register-skill'].includes(a))&&new Set(args.slice(1)).size===args.length-1){
+    const result=projectAssets(args[0],{apply:args.includes('--apply'),registerSkill:args.includes('--register-skill')});console.log(JSON.stringify(result,null,2));if(result.conflicts.length)process.exitCode=2;
   } else if(command==='--version'&&args.length===0){
     const manifest=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));
     if(typeof manifest.version!=='string'||!/^0\.5\.\d+(?:-[a-z0-9.-]+)?$/.test(manifest.version))throw Error('Invalid installed package version');

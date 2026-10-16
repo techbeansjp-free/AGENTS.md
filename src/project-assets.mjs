@@ -22,7 +22,7 @@ function read(root,name){
  const fd=fs.openSync(cursor,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
  try{const st=fs.fstatSync(fd);demand(st.isFile()&&st.nlink===1&&st.size<=2000000,'Asset changed during read');return fs.readFileSync(fd);}finally{fs.closeSync(fd);}
 }
-function catalog(packageRoot){
+function catalog(packageRoot,registerSkill){
  const assets=new Map(),templates='v05/templates/specs';
  const visit=relative=>{
   const directory=path.join(packageRoot,relative);demand(fs.lstatSync(directory).isDirectory()&&!fs.lstatSync(directory).isSymbolicLink(),'Unsafe template directory');
@@ -40,16 +40,23 @@ function catalog(packageRoot){
   .replace(/\]\(\.\.\/\.\.\/([^)]*)\)/g,(_match,relative)=>`](${url(relative)})`)
   .replace('このSkillは配布パッケージ内の場所で使用する。CLIはこのファイルから相対の','このSkillは固定した配布パッケージを参照する。CLIは');
  assets.set(prefix+'skills/asc/SKILL.md',Buffer.from(skill));
- assets.set(prefix+'00_利用案内.md',Buffer.from(`# ASC v0.5 利用案内\n\n- [実行手順](${url('v05/USAGE.md')})\n- [移行手順](${url('v05/MIGRATION_PLAN.md')})\n- [実行Skill](skills/asc/SKILL.md)\n- [任意の仕様書雛形](templates/specs/00_利用案内.md)\n\nproject/と既存の固有ルールは利用者が所有し、ASC更新では変更しない。作成済み仕様書も利用者の成果物として保持する。配布SkillのHost登録は別操作であり、この配置だけでは登録完了を意味しない。\n`));
+ assets.set(prefix+'00_利用案内.md',Buffer.from(`# ASC v0.5 利用案内\n\n- [実行手順](${url('v05/USAGE.md')})\n- [移行手順](${url('v05/MIGRATION_PLAN.md')})\n- [実行Skill](skills/asc/SKILL.md)\n- [任意の仕様書雛形](templates/specs/00_利用案内.md)\n\nproject/と既存の固有ルールは利用者が所有し、ASC更新では変更しない。作成済み仕様書も利用者の成果物として保持する。Host用入口は明示した--register-skillで配置する。ファイル配置だけで実際のHost認識を確認したことにはならない。\n`));
+ if(registerSkill)assets.set('.agents/skills/asc/SKILL.md',Buffer.from(`---
+name: asc
+description: ASCで許可された開発・再開・独立レビューを実行するとき、プロジェクトのASC入口を使う。通常作業へASC導入を強制しない。
+---
+
+[プロジェクトのASC Skill](../../../.agent-skill-chain/skills/asc/SKILL.md)を読み、指定されたGoalと権限の範囲で実行する。入口が欠落していれば導入状態を確認し、旧WorkflowやPATH上の別版へ推測で切り替えない。Skillの登録は外部操作や権限拡張の承認ではない。
+`));
  demand(assets.size<=256&&[...assets.values()].every(v=>Buffer.isBuffer(v)),'Invalid distribution assets');return assets;
 }
 function git(repo,args,input){
  const result=spawnSync('git',['-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-c','core.attributesFile=/dev/null',...args],{cwd:repo,input,encoding:null,maxBuffer:16000000,timeout:20000,env:{PATH:process.env.PATH,HOME:os.tmpdir(),GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_ATTR_NOSYSTEM:'1',GIT_NO_REPLACE_OBJECTS:'1',GIT_NO_LAZY_FETCH:'1',GIT_TERMINAL_PROMPT:'0'}});
  demand(!result.error&&result.status===0,'Asset Git operation failed; inspect worktree before retry');return result.stdout;
 }
-export function projectAssets(directory,{apply=false,packageRoot=defaultPackage}={}){
+export function projectAssets(directory,{apply=false,registerSkill=false,packageRoot=defaultPackage}={}){
  const {repo}=assertWorkLocation(directory);packageRoot=fs.realpathSync(packageRoot);
- const assets=catalog(packageRoot),priorBytes=read(repo,record);
+ const assets=catalog(packageRoot,registerSkill),priorBytes=read(repo,record);
  let previous={};
  if(priorBytes){
   const parsed=JSON.parse(priorBytes);demand(parsed.schema==='asc-project-assets/v1'&&parsed.files&&typeof parsed.files==='object'&&!Array.isArray(parsed.files),'Invalid distribution record');
@@ -57,6 +64,10 @@ export function projectAssets(directory,{apply=false,packageRoot=defaultPackage}
   for(const [name,value] of Object.entries(previous)){safeName(name);demand(typeof value==='string'&&/^[a-f0-9]{64}$/.test(value),'Invalid asset digest');}
  }
  const changes=[],conflicts=[],before=new Map(),files={};
+ // A normal package update preserves the explicitly installed Host entry and its
+ // preimage, without gaining permission to rewrite it.
+ const registration='.agents/skills/asc/SKILL.md';
+ if(!registerSkill&&Object.hasOwn(previous,registration))files[registration]=previous[registration];
  for(const [name,bytes] of assets){
   const current=read(repo,name),actual=current===null?null:hash(current),next=hash(bytes);before.set(name,current);files[name]=next;
   if(actual===next)continue;
@@ -64,7 +75,7 @@ export function projectAssets(directory,{apply=false,packageRoot=defaultPackage}
   else changes.push({path:name,action:current===null?'create':'update',beforeSha256:actual,afterSha256:next});
  }
  const retained=Object.keys(previous).filter(name=>!assets.has(name));
- const nextRecord=Buffer.from(JSON.stringify({schema:'asc-project-assets/v1',files},null,2)+'\n');
+ const nextRecord=Buffer.from(JSON.stringify({schema:'asc-project-assets/v1',files:Object.fromEntries(Object.entries(files).sort(([a],[b])=>a<b?-1:a>b?1:0))},null,2)+'\n');
  const result={schema:'asc-project-assets-plan/v1',repo,applied:false,changes,conflicts,retained,recordChanged:!priorBytes?.equals(nextRecord)};
  if(!apply||conflicts.length)return result;
  // No candidate hooks, network, index changes, deletion, or global/session locks.

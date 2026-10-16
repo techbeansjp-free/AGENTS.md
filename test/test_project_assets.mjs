@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawn} from 'node:child_process';
 import {projectAssets} from '../src/project-assets.mjs';
 function fixture(t){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'asc-assets-test-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -68,4 +68,62 @@ test('project asset installation does not execute repository clean filters',t=>{
  f.write('.gitattributes','*.md filter=asset-probe\n');
  assert.equal(projectAssets(f.work,{packageRoot:f.pkg,apply:true}).applied,true);
  assert.equal(fs.existsSync(marker),false);
+});
+
+// Synchronize starts over IPC: no session reservation or shared lock is needed.
+async function simultaneous(t,worktrees,pkg){
+ const jobs=worktrees.map(repo=>{
+  const script=`import {projectAssets} from ${JSON.stringify(new URL('../src/project-assets.mjs',import.meta.url).href)};process.once('message',()=>{try{console.log(JSON.stringify(projectAssets(process.argv[1],{packageRoot:process.argv[2],apply:true})));process.disconnect();}catch(e){console.error(e.message);process.exitCode=1;process.disconnect();}});process.send('ready');`;
+  const child=spawn(process.execPath,['--input-type=module','-e',script,repo,pkg],{stdio:['ignore','pipe','pipe','ipc']});
+  t.after(()=>{if(child.exitCode===null)child.kill();});
+  let stdout='',stderr='';child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);
+  const ready=new Promise((resolve,reject)=>{child.once('message',resolve);child.once('error',reject);});
+  const done=new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',code=>{try{assert.equal(code,0,stderr);resolve(JSON.parse(stdout));}catch(e){reject(e);}});});
+  return {child,ready,done};
+ });
+ await Promise.all(jobs.map(j=>j.ready));for(const job of jobs)job.child.send('start');
+ return Promise.all(jobs.map(j=>j.done));
+}
+test('concurrent worktrees update independently and one conflict does not block another',{timeout:15000},async t=>{
+ const f=fixture(t),other=path.join(f.root,'other');f.git('worktree','add','-qb','other-task',other);
+ f.write('.agent-skill-chain/project/rules.md','First owner');
+ fs.mkdirSync(path.join(other,'.agent-skill-chain/project'),{recursive:true});fs.writeFileSync(path.join(other,'.agent-skill-chain/project/rules.md'),'Second owner');
+ const indexPaths=['work','other'].map(name=>path.join(f.repo,'.git/worktrees',name,'index'));
+ const indexes=indexPaths.map(p=>fs.readFileSync(p));
+ assert((await simultaneous(t,[f.work,other],f.pkg)).every(r=>r.applied));
+ fs.appendFileSync(path.join(f.pkg,'v05/templates/specs/01_要求定義.md'),'\nNext distribution\n');
+ f.write(asset,'First owner custom edit');
+ const [first,second]=await simultaneous(t,[f.work,other],f.pkg);
+ assert.equal(first.applied,false);assert.deepEqual(first.conflicts,[asset]);assert.equal(second.applied,true);
+ assert.equal(fs.readFileSync(path.join(f.work,asset),'utf8'),'First owner custom edit');
+ assert.match(fs.readFileSync(path.join(other,asset),'utf8'),/Next distribution/);
+ for(const [work,value] of [[f.work,'First owner'],[other,'Second owner']])assert.equal(fs.readFileSync(path.join(work,'.agent-skill-chain/project/rules.md'),'utf8'),value);
+ indexPaths.forEach((p,i)=>assert.deepEqual(fs.readFileSync(p),indexes[i]));
+ assert.equal(projectAssets(other,{packageRoot:f.pkg}).recordChanged,false);
+});
+test('moving the package prefix updates references without replacing authored documents',t=>{
+ const f=fixture(t);projectAssets(f.work,{packageRoot:f.pkg,apply:true});
+ f.write('docs/specs/API.md','Authored specification');
+ const moved=path.join(f.root,'別の prefix');fs.cpSync(f.pkg,moved,{recursive:true});
+ const result=projectAssets(f.work,{packageRoot:moved,apply:true});assert.equal(result.applied,true);
+ assert.deepEqual(result.changes.map(c=>c.path).sort(),['.agent-skill-chain/00_利用案内.md','.agent-skill-chain/skills/asc/SKILL.md'].sort());
+ const skill=fs.readFileSync(path.join(f.work,'.agent-skill-chain/skills/asc/SKILL.md'),'utf8');
+ assert(skill.includes(path.join(moved,'bin/asc-v05.mjs')));assert(!skill.includes(f.pkg));
+ assert.equal(fs.readFileSync(path.join(f.work,'docs/specs/API.md'),'utf8'),'Authored specification');
+});
+
+test('explicit Skill registration preserves existing entries and remains linked across package updates',t=>{
+ const f=fixture(t),registration='.agents/skills/asc/SKILL.md';
+ f.write('.agents/skills/custom/SKILL.md','Custom skill');f.write('.codex/config.toml','Owner configuration');
+ projectAssets(f.work,{packageRoot:f.pkg,apply:true});assert.equal(fs.existsSync(path.join(f.work,registration)),false);
+ const preview=projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true});assert.deepEqual(preview.changes.map(c=>c.path),[registration]);assert.equal(preview.applied,false);
+ assert.equal(projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true}).applied,true);
+ assert.equal(projectAssets(f.work,{packageRoot:f.pkg}).recordChanged,false);
+ const entry=fs.readFileSync(path.join(f.work,registration),'utf8');const ref=/\]\(([^)]+)\)/.exec(entry)[1];
+ assert.equal(path.resolve(path.dirname(path.join(f.work,registration)),ref),path.join(f.work,'.agent-skill-chain/skills/asc/SKILL.md'));
+ fs.appendFileSync(path.join(f.pkg,'skills/asc/SKILL.md'),'\nUpdated packaged guidance\n');projectAssets(f.work,{packageRoot:f.pkg,apply:true});
+ assert.equal(fs.readFileSync(path.join(f.work,registration),'utf8'),entry);
+ assert.match(fs.readFileSync(path.resolve(path.dirname(path.join(f.work,registration)),ref),'utf8'),/Updated packaged guidance/);
+ assert.equal(fs.readFileSync(path.join(f.work,'.agents/skills/custom/SKILL.md'),'utf8'),'Custom skill');assert.equal(fs.readFileSync(path.join(f.work,'.codex/config.toml'),'utf8'),'Owner configuration');
+ f.write(registration,'Owner customized registration');const conflict=projectAssets(f.work,{packageRoot:f.pkg,registerSkill:true,apply:true});assert.equal(conflict.applied,false);assert.deepEqual(conflict.conflicts,[registration]);
 });
