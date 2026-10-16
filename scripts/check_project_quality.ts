@@ -774,7 +774,7 @@ const V05_CUTOVER_CONFIGURATION: Readonly<Record<string, string>> = {
   "scripts/quality-support/lib/process.ts":
     "1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2",
   "scripts/quality-support/lib/security.ts":
-    "0bf1c277de25b2ec13481d92f472f89c9ca0111a0cef9eb8d7afd3c92e2c38eb",
+    "b1a4a142955ea7d215ce7d051cf0ad17ec3f03d5e1c62ac5539da1139d6bb873",
   "scripts/quality-support/lib/version.ts":
     "c138a851f4b7faa09b0278cac292a83492a44b03e5d11b69de1b40a1f4a71db7",
   "scripts/quality-support/types.ts":

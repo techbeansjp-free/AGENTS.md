@@ -6,7 +6,10 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { parseJsonStrict } from "../scripts/quality-support/lib/security.js";
+import {
+  parseJsonStrict,
+  stableJson,
+} from "../scripts/quality-support/lib/security.js";
 import { isRecord } from "../scripts/quality-support/types.js";
 
 function argument(name: string): string {
@@ -22,6 +25,21 @@ function object(file: string): Record<string, unknown> {
 function write(file: string, value: unknown): void {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 }
+// JSON keys must remain own data properties, including prototype-special names.
+for (const text of [
+  '{"__proto__":{"polluted":true}}',
+  '{"__proto__":null}',
+  '{"constructor":1,"prototype":2}',
+]) {
+  const parsed = parseJsonStrict(text, "prototype-key regression");
+  assert.deepEqual(parsed, JSON.parse(text));
+  assert.deepEqual(JSON.parse(stableJson(parsed)), JSON.parse(text));
+  assert.equal(Object.getPrototypeOf(parsed), Object.prototype);
+}
+assert.throws(() =>
+  parseJsonStrict('{"__proto__":1,"__proto__":2}', "duplicate key"),
+);
+
 const trusted = argument("trusted-root");
 const candidateSource = argument("candidate-root");
 const output = argument("output");

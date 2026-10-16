@@ -136,7 +136,12 @@ export function parseJsonStrict(source: string, label = "JSON"): JsonValue {
         keys.add(key);
         whitespace();
         if (source[index++] !== ":") fail("colonが必要です");
-        object[key] = value();
+        Object.defineProperty(object, key, {
+          value: value(),
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
         whitespace();
         const separator = source[index++];
         if (separator === "}") return object;
