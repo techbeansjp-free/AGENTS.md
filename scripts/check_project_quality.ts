@@ -36,6 +36,9 @@ interface QualityContractProposalRegistry {
 
 const PROPOSAL_REGISTRY = ".github/trusted-quality-proposals.json";
 const PROTECTED_FILES = [
+  "scripts/quality-support/lib/security.ts",
+  "scripts/quality-support/lib/entrypoint.ts",
+  "scripts/quality-support/types.ts",
   ".github/workflows/ci.yml",
   ".github/workflows/trusted-quality.yml",
   ".prettierignore",
@@ -50,6 +53,38 @@ const PROTECTED_FILES = [
   "src/lib/security.ts",
   "tsconfig.json",
   "tsconfig.build.json",
+] as const;
+const V05_PROTECTED_FILES = [
+  "scripts/quality-support/legacy-policy-metadata.json",
+  ".github/workflows/ci.yml",
+  ".github/workflows/trusted-quality.yml",
+  ".github/workflows/release.yml",
+  "eslint.config.mjs",
+  "package.json",
+  "package-lock.json",
+  "scripts/check_project_quality.ts",
+  "scripts/check_source_quality.ts",
+  "scripts/quality-support/domain/conformance.ts",
+  "scripts/quality-support/domain/enforcement.ts",
+  "scripts/quality-support/domain/policy.ts",
+  "scripts/quality-support/domain/project-choice-diff.ts",
+  "scripts/quality-support/domain/project-choice-shrink.ts",
+  "scripts/quality-support/domain/project-rule-retirement.ts",
+  "scripts/quality-support/domain/provider-capability.ts",
+  "scripts/quality-support/domain/reviewer-provider.ts",
+  "scripts/quality-support/domain/role.ts",
+  "scripts/quality-support/domain/routing-independence.ts",
+  "scripts/quality-support/domain/staging-layout.ts",
+  "scripts/quality-support/domain/staging.ts",
+  "scripts/quality-support/domain/verification-run.ts",
+  "scripts/quality-support/domain/worktree-removal-safety.ts",
+  "scripts/quality-support/lib/atomic.ts",
+  "scripts/quality-support/lib/entrypoint.ts",
+  "scripts/quality-support/lib/package-root.ts",
+  "scripts/quality-support/lib/process.ts",
+  "scripts/quality-support/lib/security.ts",
+  "scripts/quality-support/lib/version.ts",
+  "scripts/quality-support/types.ts",
 ] as const;
 const PROTECTED_PACKAGE_FIELDS = [
   "agentSkillChain.qualityContractVersion",
@@ -161,7 +196,25 @@ function validateDistributionScripts(
   return [];
 }
 
-function readObject(file: string): Record<string, unknown> {
+function assertDirectFile(root: string, relative: string): void {
+  const parts = relative.split(path.sep);
+  for (let end = 1; end <= parts.length; end++) {
+    if (fs.lstatSync(path.join(root, ...parts.slice(0, end))).isSymbolicLink())
+      throw new Error(`indirect configuration path: ${relative}`);
+  }
+  const stat = fs.lstatSync(path.join(root, relative));
+  if (!stat.isFile())
+    throw Object.assign(
+      new Error(`configuration is not a regular file: ${relative}`),
+      { code: stat.isDirectory() ? "EISDIR" : "EINVAL" },
+    );
+}
+
+function readObject(
+  file: string,
+  root = path.dirname(file),
+): Record<string, unknown> {
+  assertDirectFile(root, path.relative(root, file));
   const value = parseJsonStrict(fs.readFileSync(file, "utf8"), file);
   if (!isRecord(value)) throw new Error(`${file}はobjectでなければなりません`);
   return value;
@@ -177,6 +230,8 @@ function packageField(
 ): unknown {
   if (field !== "agentSkillChain.qualityContractVersion")
     return metadata[field];
+  if (typeof metadata.version === "string" && /^0\.5\./u.test(metadata.version))
+    return metadata.qualityContractVersion;
   return isRecord(metadata.agentSkillChain)
     ? metadata.agentSkillChain.qualityContractVersion
     : undefined;
@@ -189,7 +244,7 @@ function qualityContractVersion(metadata: Record<string, unknown>): number {
   );
   if (!Number.isInteger(value) || typeof value !== "number" || value < 1)
     throw new Error(
-      "package.json.agentSkillChain.qualityContractVersionは1以上の整数でなければなりません",
+      "品質契約のqualityContractVersionは1以上の整数でなければなりません",
     );
   return value;
 }
@@ -233,6 +288,7 @@ function protectedFileContent(
   const absolute = path.join(root, relative);
   let raw: Buffer;
   try {
+    assertDirectFile(root, relative);
     raw = fs.readFileSync(absolute);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
@@ -242,6 +298,15 @@ function protectedFileContent(
           ? "存在しません"
           : `読み取れません（${code ?? "不明"}）`,
     };
+  }
+  if (relative === "package.json" || relative === "v05/package.json") {
+    const value = parseJsonStrict(raw.toString("utf8"), relative);
+    if (!isRecord(value)) return { reason: "manifest is not an object" };
+    delete value.version;
+    delete value.qualityContractVersion;
+    if (isRecord(value.agentSkillChain))
+      delete value.agentSkillChain.qualityContractVersion;
+    return { content: stableJson(value) };
   }
   return {
     content:
@@ -297,6 +362,7 @@ function protectedFileText(
  */
 function candidateProtectedFiles(
   root: string,
+  v05 = false,
 ): { files: readonly string[] } | { reason: string } {
   const relative = "scripts/check_project_quality.ts";
   /**
@@ -307,9 +373,10 @@ function candidateProtectedFiles(
   const read = protectedFileText(root, relative);
   if ("reason" in read)
     return { reason: protectedReadError("candidate", relative, read.reason) };
-  const block = /const PROTECTED_FILES = \[([^\]]*)\] as const;/u.exec(
-    read.text,
-  );
+  const block = new RegExp(
+    `const ${v05 ? "V05_PROTECTED_FILES" : "PROTECTED_FILES"} = \\[([^\\]]*)\\] as const;`,
+    "u",
+  ).exec(read.text);
   if (!block?.[1])
     return {
       reason:
@@ -336,9 +403,10 @@ function protectedSnapshot(
   metadata: Record<string, unknown>,
   side: "trusted" | "candidate",
   errors: string[],
+  files: readonly string[] = PROTECTED_FILES,
 ): Map<string, string> {
   const snapshot = new Map<string, string>();
-  for (const relative of PROTECTED_FILES) {
+  for (const relative of files) {
     const read = protectedFileContent(root, relative);
     if ("reason" in read) {
       errors.push(protectedReadError(side, relative, read.reason));
@@ -362,7 +430,7 @@ function exactKeys(value: Record<string, unknown>, keys: string[]): boolean {
 }
 
 function readProposalRegistry(file: string): QualityContractProposalRegistry {
-  const value = readObject(file);
+  const value = readObject(file, path.dirname(path.dirname(file)));
   if (
     !exactKeys(value, ["schemaVersion", "proposals"]) ||
     value.schemaVersion !== "agent-skill-chain/trusted-quality-proposals/v1" ||
@@ -425,7 +493,9 @@ function readProposalRegistry(file: string): QualityContractProposalRegistry {
         throw new Error(`${file}のtrusted品質proposal targetが不正です`);
       const allowed =
         rawTarget.kind === "file"
-          ? PROTECTED_FILES.some((item) => item === rawTarget.name)
+          ? [...PROTECTED_FILES, ...V05_PROTECTED_FILES].some(
+              (item) => item === rawTarget.name,
+            )
           : PROTECTED_PACKAGE_FIELDS.some((item) => item === rawTarget.name);
       const key = `${rawTarget.kind}:${rawTarget.name}`;
       if (!allowed || targetKeys.has(key))
@@ -500,12 +570,16 @@ function sameMap(
 function validateProtectionBootstrap(
   root: string,
   trustedRoot: string,
+  files: readonly string[] = PROTECTED_FILES,
 ): string[] {
-  const candidateProtected = candidateProtectedFiles(root);
+  const candidateProtected = candidateProtectedFiles(
+    root,
+    files === V05_PROTECTED_FILES,
+  );
   if ("reason" in candidateProtected) return [candidateProtected.reason];
   const errors: string[] = [];
   for (const relative of candidateProtected.files) {
-    if (PROTECTED_FILES.some((item) => item === relative)) continue;
+    if (files.some((item) => item === relative)) continue;
     const trustedFile = path.join(trustedRoot, relative);
     const candidateFile = path.join(root, relative);
     if (!fs.existsSync(trustedFile) || !fs.existsSync(candidateFile)) {
@@ -530,6 +604,7 @@ function validateTrustedQualityMigration(
   trustedRoot: string,
   metadata: Record<string, unknown>,
   trustedMetadata: Record<string, unknown>,
+  files: readonly string[] = PROTECTED_FILES,
 ): string[] {
   const errors: string[] = [];
   const trustedRegistry = readProposalRegistry(
@@ -576,14 +651,16 @@ function validateTrustedQualityMigration(
     trustedMetadata,
     "trusted",
     errors,
+    files,
   );
   const candidateSnapshot = protectedSnapshot(
     root,
     metadata,
     "candidate",
     errors,
+    files,
   );
-  errors.push(...validateProtectionBootstrap(root, trustedRoot));
+  errors.push(...validateProtectionBootstrap(root, trustedRoot, files));
   for (const proposal of candidateRegistry.proposals) {
     if (trustedById.has(proposal.proposalId)) continue;
     if (
@@ -638,6 +715,139 @@ function validateTrustedQualityMigration(
   return errors;
 }
 
+/**
+ * Proposed base-first v0.5 cutover. Never execute candidate code here.
+ * These configuration bytes require owner review before this validator reaches base.
+ * This is not a version-based exemption: every listed file must match exactly.
+ */
+const V05_CUTOVER_CONFIGURATION: Readonly<Record<string, string>> = {
+  "scripts/quality-support/legacy-policy-metadata.json":
+    "7b967462998ef8b3ce35f1699129819855e1e59281cbe83d4da4acc94f15ae97",
+  ".github/workflows/ci.yml":
+    "48e1461112ffc30847a7bde6b16b40989471c11bcbb91a1cc3aea6b816707fb5",
+  ".github/workflows/trusted-quality.yml":
+    "4db2dffa88db797f6a5946b9fa57aaee77f0494ed000fa12a7cfbea6211f80b0",
+  ".github/workflows/release.yml":
+    "97e94d828f62ebd2b2180bcdfa372385cb28d67197d9ad29592d92332baca72a",
+  "eslint.config.mjs":
+    "6466cbe9cc2b060e19842a2ed0ec1746e64185456bc0561a11a27b4e3ab7b77b",
+  "package.json":
+    "581732f382bf91f7a704a6137377527d7aa16f73f8c83430b0fdefcab575ac04",
+  "package-lock.json":
+    "f4d9b7dacbc6bf0ad5d2a534119068e4bf8270ccd6701c7f3e96e68c77fa880a",
+  "scripts/check_source_quality.ts":
+    "08e7676f45b33fd1173701b0f9092465bd8056ffff093509fefd4412ce45135b",
+  "scripts/quality-support/domain/conformance.ts":
+    "b49bd9add80c45ff100ac530adaaf9b230d0524b54a7954bc0ad1f463bed8c6c",
+  "scripts/quality-support/domain/enforcement.ts":
+    "dc2fa3b719229ece859e0625b60e20523febf7518ef96cde3997457db0f77acf",
+  "scripts/quality-support/domain/policy.ts":
+    "81a141e0ce58a6704abfc5ce38a533b356d447ee6907096c0bd9458441509eb3",
+  "scripts/quality-support/domain/project-choice-diff.ts":
+    "59ac6f602c7be18d9ab771aabd7887be34bd4820cc76087e594aabb33ce6aaf3",
+  "scripts/quality-support/domain/project-choice-shrink.ts":
+    "4e07cdcc92eb4d6c9830434cad564cf314711578d7977def1053f248df54b3c0",
+  "scripts/quality-support/domain/project-rule-retirement.ts":
+    "e4d768c435da819b2719b5cba4c023aa716d8b81fc72d7c7aaab73c1a5625d8f",
+  "scripts/quality-support/domain/provider-capability.ts":
+    "4afec4da34bb5d2558779725e90b1c7ba8b6f13ce33048af26c941f512b7bac0",
+  "scripts/quality-support/domain/reviewer-provider.ts":
+    "d8d7010b12312de83187449b824d61216421efc8d7d8b117cf6692f8309f0227",
+  "scripts/quality-support/domain/role.ts":
+    "8b4d9f92a90730e141d6b5bf42f4b07b693153541cc20a82384ccf57cd544055",
+  "scripts/quality-support/domain/routing-independence.ts":
+    "73b04ad25954df0ca943f7ae1af1c88133866d2f41b5a063e1a163049e2f01a2",
+  "scripts/quality-support/domain/staging-layout.ts":
+    "df050ab3be7d0728a52aa22f83f5aca27b6c22d9f823f61013145d829be5bf83",
+  "scripts/quality-support/domain/staging.ts":
+    "b99d0156422b18b2e259e0082a943c2145d0b4550edda8fdcb457f4f16f752c4",
+  "scripts/quality-support/domain/verification-run.ts":
+    "120ffe54e27e1af91129b7654df76b9537743014465b45598173b30ffd78f6f1",
+  "scripts/quality-support/domain/worktree-removal-safety.ts":
+    "803f64ffe577cf55d9afe235fd80e46d870f3ccebb4cda265a58148522fee44c",
+  "scripts/quality-support/lib/atomic.ts":
+    "41689691a044bcc1ad96b004809f01f49b7429c8f8c7501e2a0b98af0c9f0929",
+  "scripts/quality-support/lib/entrypoint.ts":
+    "178ce8b5865a9e07da7172aeae4bd64b5b9613832c9641e50760ef84cf3db115",
+  "scripts/quality-support/lib/package-root.ts":
+    "15ae8198a1cee21dd81b33a0a2049a8b1f4da15fc8a79cdfbd4f4ade86de0437",
+  "scripts/quality-support/lib/process.ts":
+    "1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2",
+  "scripts/quality-support/lib/security.ts":
+    "0bf1c277de25b2ec13481d92f472f89c9ca0111a0cef9eb8d7afd3c92e2c38eb",
+  "scripts/quality-support/lib/version.ts":
+    "c138a851f4b7faa09b0278cac292a83492a44b03e5d11b69de1b40a1f4a71db7",
+  "scripts/quality-support/types.ts":
+    "6a8aa7654cc1c215ecd00e792fa8a5042cf5456c053db61ba25a7ef0225a4858",
+};
+
+const V05_RETIRED_CONFIGURATION = [
+  "src/types.ts",
+  "cucumber.mjs",
+  "scripts/run_cucumber_shards.ts",
+  "src/domain/staging.ts",
+  "src/lib/entrypoint.ts",
+  "src/lib/security.ts",
+  "tsconfig.build.json",
+  "v05/package.json",
+] as const;
+
+function retiredConfigurationErrors(root: string): string[] {
+  return V05_RETIRED_CONFIGURATION.flatMap((name) => {
+    try {
+      fs.lstatSync(path.join(root, name));
+      return [`retired v0.4 configuration must be absent: ${name}`];
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code === "ENOENT"
+        ? []
+        : [`cannot inspect retired configuration: ${name}`];
+    }
+  });
+}
+
+function checkV05Cutover(
+  root: string,
+  trustedRoot?: string,
+): ProjectQualityResult {
+  const errors: string[] = [];
+  if (!trustedRoot)
+    return {
+      valid: false,
+      errors: ["v0.5 cutover requires trusted base"],
+      checks: [],
+    };
+  errors.push(...retiredConfigurationErrors(root));
+  const expected = { ...V05_CUTOVER_CONFIGURATION };
+  for (const name of ["scripts/check_project_quality.ts", PROPOSAL_REGISTRY]) {
+    try {
+      expected[name] = sha256(fs.readFileSync(path.join(trustedRoot, name)));
+    } catch {
+      errors.push(`trusted configuration unavailable: ${name}`);
+    }
+  }
+  for (const [name, digest] of Object.entries(expected)) {
+    try {
+      const absolute = path.join(root, name);
+      assertDirectFile(root, name);
+      if (
+        !fs.lstatSync(absolute).isFile() ||
+        sha256(fs.readFileSync(absolute)) !== digest
+      )
+        errors.push(`unapproved v0.5 configuration: ${name}`);
+    } catch {
+      errors.push(`unreadable or indirect v0.5 configuration: ${name}`);
+    }
+  }
+  return {
+    valid: errors.length === 0,
+    errors,
+    checks: [
+      "owner-reviewed v0.5 configuration bytes",
+      "base validator and proposal registry preserved; candidate code not executed",
+    ],
+  };
+}
+
 export function checkProjectQualityContract(
   root = process.cwd(),
   trustedRoot?: string,
@@ -645,6 +855,37 @@ export function checkProjectQualityContract(
   const errors: string[] = [];
   const checks: string[] = [];
   const metadata = readObject(path.join(root, "package.json"));
+  const candidateV05 =
+    typeof metadata.version === "string" &&
+    /^0\.5\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(metadata.version);
+  const trustedMetadata = trustedRoot
+    ? readObject(path.join(trustedRoot, "package.json"))
+    : undefined;
+  const trustedV05 =
+    typeof trustedMetadata?.version === "string" &&
+    /^0\.5\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(trustedMetadata.version);
+  if (trustedV05 && trustedRoot && trustedMetadata) {
+    if (!candidateV05)
+      return {
+        valid: false,
+        errors: ["v0.5 base cannot silently return to a legacy contract"],
+        checks: [],
+      };
+    const errors = validateTrustedQualityMigration(
+      root,
+      trustedRoot,
+      metadata,
+      trustedMetadata,
+      V05_PROTECTED_FILES,
+    );
+    errors.push(...retiredConfigurationErrors(root));
+    return {
+      valid: errors.length === 0,
+      errors,
+      checks: ["base-approved v0.5 configuration and staged maintenance"],
+    };
+  }
+  if (candidateV05) return checkV05Cutover(root, trustedRoot);
   const scripts = isRecord(metadata.scripts) ? metadata.scripts : {};
   const choices = readObject(
     path.join(root, ".agent-skill-chain/project/choices/development.json"),
