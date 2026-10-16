@@ -262,7 +262,7 @@ print(json.dumps(True))`,db],{encoding:'utf8',timeout:3000,maxBuffer:4096}));che
  intercept='hold-patch';
  for(const id of held.filter(id=>id!==originalHeldPatch)){held.splice(held.indexOf(id),1);await send('Fetch.continueRequest',{requestId:id});}
  await delay(100);
- checks.push({name:'transport pre-release observation',passed:true,oldSummaryVisible:await evaluate(summaryDOM(2,3)),dom:await evaluate("({counts:{...document.querySelector('#summary')?.dataset},status:document.querySelector('#status')?.textContent})"),heldRequests:held.length});
+ checks.push({name:'transport pre-release observation',passed:true,schedule:['hold original PATCH before server acceptance','reload with recovery GET held','set hash to list and confirm hash','set hash to summary and confirm hash','release GETs while keeping original PATCH held','observe state, then release PATCH and require convergence'],oldSummaryVisible:await evaluate(summaryDOM(2,3)),dom:await evaluate("({counts:{...document.querySelector('#summary')?.dataset},status:document.querySelector('#status')?.textContent})"),heldRequests:held.length});
  check('transport probe original update remains uncommitted before release',stored()[0][2]===0);
  await release();
  for(let i=0;i<150&&stored()[0][2]!==1;i++)await delay(20);

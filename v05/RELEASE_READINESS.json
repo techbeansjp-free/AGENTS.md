@@ -1231,5 +1231,33 @@
     "releaseReady": false,
     "remoteRun": 38851803285,
     "remaining": "Formal audit review evidence and owner main activation; full quality job still running"
+  },
+  "screenRouteRecoveryAttempt": {
+    "status": "FAIL",
+    "runtimeSourceHeadAtLaunch": "df4faa5a",
+    "reportedProductHeadAtEnd": "97654e7d684711740bbca03a83769644154a0750",
+    "candidateHead": "3188d9af44cedb971af81077916e868e73b25113",
+    "wallSeconds": 504.723380787,
+    "agentCalls": 2,
+    "observedProcessedTokens": 972398,
+    "observedFreshTokens": 130926,
+    "allAgentTotalTokens": null,
+    "repairs": 2,
+    "sourceUnchanged": true,
+    "independentReview": "NOT RUN; verification remained failed",
+    "deliveryAttempted": false,
+    "failure": "Original PATCH committed after reload/route invalidation, but summary remained 3/2/1 rather than 3/3/0",
+    "nextAction": "No automatic additional run. Diagnostic now includes exact interleaving, which previous filtered output omitted; evaluate before retry.",
+    "limits": [
+      "Generated synthetic app defect; not evidence of harness isolation breach",
+      "Runtime source unchanged during trial; only evaluation/docs commits advanced end-of-run HEAD",
+      "Repair output claims are not verification Evidence"
+    ]
+  },
+  "currentLinuxCi": {
+    "head": "4111a806",
+    "run": 38851574928,
+    "status": "SUCCESS",
+    "scope": "Linux product workflow; legacy base validator still fails pending migration. Not all checks passed."
   }
 }
