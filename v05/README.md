@@ -6,10 +6,12 @@ ASCは、目的と受入条件、許可された変更範囲、既存規約を�
 
 ## 導入と入口
 
+標準worktree入口は0.5.0-alpha.3からの機能です。既公開alpha.2以前には含まれません。候補のversion更新だけでGitHub Releaseが公開されたことにはなりません。
+
 Node.js 20以上を使用します。承認された候補tarballを、開発対象のworktreeとは別のprefixへ導入してください。npmのlifecycle scriptは実行しません。
 
 ```sh
-npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/agent-skill-chain-0.5.0-alpha.0.tgz
+npm install --prefix /absolute/asc-tools --offline --ignore-scripts /absolute/agent-skill-chain-0.5.0-alpha.3.tgz
 /absolute/asc-tools/node_modules/.bin/agent-skill-chain --version
 /absolute/asc-tools/node_modules/.bin/agent-skill-chain capabilities
 ```
