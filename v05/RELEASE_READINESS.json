@@ -908,5 +908,39 @@
       "Finite synthetic timing probe is not a universal concurrency guarantee",
       "Failure is preserved; no quality or comparative performance pass is claimed"
     ]
+  },
+  "adaptiveScreenRecoveryTrial": {
+    "status": "FAIL",
+    "productHead": "7afdd78c4cf2977f79b58fd91abc01f86116adf8",
+    "startingCandidate": "ae57b186cd6ea29b01f15a8bd49d844fc62f3ef5",
+    "finalCandidate": "89bcd0c1a0ad2dcd3771c5ae9b6f277666418793",
+    "wallSeconds": 561.5931070150001,
+    "declaredAgentCalls": 3,
+    "roles": {
+      "repair": 2,
+      "independentReview": 1
+    },
+    "observedProcessedTokens": 884811,
+    "observedFreshTokens": 143819,
+    "allAgentTotalTokens": null,
+    "verificationAttempts": 3,
+    "deliveryAttempted": false,
+    "sourceUnchanged": true,
+    "outcomes": [
+      "First repair passed browser and Python checks but independent review rejected ordering correctness and identified availability risk",
+      "Additional isolated counterexample: partial HTTP header blocked unrelated GET until the connection closed at candidate 798d43530c014bcf9ab0951eb7ced27873ddca69; preceding candidate ae57b186 passed the same counterexample",
+      "Second repair passed browser verification but failed Python -I test_core.py: ModuleNotFoundError for candidate app import",
+      "Repair limit stopped safely before final review or Delivery"
+    ],
+    "productFinding": "Implementation and repair prompts omitted host verification argv. Provide these as diagnostic environment context without granting execution or authority. Their effect on live recovery remains unverified.",
+    "limitations": [
+      "Recovery of an existing failed candidate, not initial implementation or matched performance",
+      "Later candidate availability and independent review not established",
+      "No PR or CI for this candidate"
+    ],
+    "artifactSha256": {
+      "evidence": "676314bc9c6c3963b093624f978094130d9c2855e246458f257662b4329103ec",
+      "counterexample": "c2386b968e45d22b0a61163ed754e30dd174b66b304e4670714550eb3f8703d1"
+    }
   }
 }

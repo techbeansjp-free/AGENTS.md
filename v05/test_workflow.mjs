@@ -15,9 +15,9 @@ function fixture(t){
  return {root,git,request,provider,creates:()=>creates};
 }
 test('minor mandatory contract finding causes repair, revalidation and fresh review',{skip:!enabled},async t=>{
- const f=fixture(t);let workers=0,reviews=0;
- const agent=async({workspace,writable})=>{
-  if(writable){workers++;fs.writeFileSync(path.join(workspace,'code.txt'),workers===1?'after':'after\n');return {context:'worker-'+workers,seconds:0,usage:[]};}
+ const f=fixture(t);f.request.contract.riskTestArgv=[['/bin/sh','-c','test -f code.txt']];let workers=0,reviews=0;
+ const agent=async({workspace,writable,prompt})=>{
+  if(writable){const input=JSON.parse(prompt);assert.deepEqual(input.verification.testArgv,f.request.contract.testArgv);assert.deepEqual(input.verification.riskTestArgv,f.request.contract.riskTestArgv);assert.match(input.verification.execution,/Controller only/);input.verification.testArgv[0]='/not-authorized';workers++;fs.writeFileSync(path.join(workspace,'code.txt'),workers===1?'after':'after\n');return {context:'worker-'+workers,seconds:0,usage:[]};}
   reviews++;const pass=fs.readFileSync(path.join(workspace,'code.txt'),'utf8')==='after\n';
   return {context:'review-'+reviews,answer:JSON.stringify({verdict:pass?'pass':'fail',findings:pass?[]:[{...finding('Required newline missing'),severity:'P3'}]}),seconds:0,usage:[]};
  };
