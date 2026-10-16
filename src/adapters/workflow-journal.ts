@@ -48,6 +48,7 @@ import {
 } from "../domain/staging-layout.js";
 import { parseJsonStrict, stableJson } from "../lib/security.js";
 import { isRecord } from "../types.js";
+import { verifyRecordedCandidateAdoption } from "./candidate-adoption.js";
 import {
   DELIVERY_STATE_FILE,
   parseDeliveryState,
@@ -382,7 +383,26 @@ export function readWorkflowJournal(staging: string): {
   assertRegularJournalPath(journal);
   const source = fs.readFileSync(journal, "utf8");
   const parsed = parseStepJournal(source);
-  return { mode: record.mode, ...parsed, source };
+  const adoptionErrors = parsed.entries.flatMap((entry) =>
+    entry.candidateAdoption
+      ? verifyRecordedCandidateAdoption(
+          stagingRepositoryRoot(resolved),
+          path.join(
+            resolved,
+            record.mode === "full" && entry.mode === "quick"
+              ? "00_要求定義_昇格前_quick.md"
+              : "00_要求定義.md",
+          ),
+          entry,
+        )
+      : [],
+  );
+  return {
+    mode: record.mode,
+    ...parsed,
+    errors: [...parsed.errors, ...adoptionErrors],
+    source,
+  };
 }
 
 /**

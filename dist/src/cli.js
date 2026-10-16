@@ -1,3 +1,4 @@
+import { generateDeliveryInput } from "./adapters/delivery-input.js";
 import { launchCodex } from "./adapters/codex-launch.js";
 import { launchReview } from "./adapters/review-launch.js";
 import { launchDelegatedReview } from "./adapters/delegated-review-launch.js";
@@ -17,9 +18,15 @@ import { judgeReviewReuseAtMerge } from "./adapters/review-reuse.js";
 import { appendReviewProgress, projectReviewProgress, sealReviewProgress, verifyStoredReviewProgress, } from "./adapters/review-progress.js";
 import { parseReviewEvidence, } from "./domain/review-evidence.js";
 import { exportReviewEvidence, stagingTrackerIssue, verifyReviewEvidenceWithStaging, } from "./adapters/review-evidence.js";
-import { runVerification } from "./adapters/verification-run.js";
-import { observeWorkflowHandoff, workflowAgentDispatch, } from "./adapters/workflow-handoff.js";
+import { planVerification, runVerification, } from "./adapters/verification-run.js";
 import { observeWorkflowResume } from "./adapters/workflow-resume.js";
+import { observeWorkflowExecutionPlan } from "./adapters/workflow-execution-plan.js";
+import { decideCandidatePreflight, decideCandidatePost, CANDIDATE_RISKS, } from "./domain/candidate-workflow.js";
+import { observeCandidateBoundary, observeCandidateGit, observeCandidateForkBase, observeRemovedAccessGuard, } from "./adapters/candidate-git.js";
+import { executeCandidate } from "./adapters/candidate-execution.js";
+import { inventoryCandidateWorktrees } from "./adapters/candidate-worktree-inventory.js";
+import { observeCandidateAdoption } from "./adapters/candidate-adoption.js";
+import { candidateAllowedPaths, createCandidateSession, loadCandidateSession, runCandidateTargetTest, } from "./adapters/candidate-session.js";
 import { assertPullRequestTrackerBinding, createPullRequest, authorizeMerge, authorizeContextIsolatedAdminMerge, diagnoseBranchFollowCost, extractIssueClosingNumbers, nonCanonicalClosingReferences, resolveMergeMethod, } from "./domain/delivery.js";
 import { assessImplementationDiscovery, assertWorkflowMergeAllowed, decideDeliveryContinuation, parseImplementationDiscoveryInput, parseVerificationSelectionInput, selectVerificationSet, VERIFICATION_SET_INPUT_EXAMPLE, } from "./domain/agile-verification.js";
 import { isPlanFrozenCheckStep, latestPlanSeal } from "./domain/plan-seal.js";
@@ -58,7 +65,7 @@ import { appendCompletionRecord, appendEvidenceStateRecord, applyEvidencePrune, 
 import { MODEL_TIERS, requiredTier, validateProviderSelection, validateRoleAssignment, validateTierSelection, validateCodexTier, validateClaudeTier, CODEX_ADOPTION_SELECTOR, CLAUDE_ADOPTION_SELECTOR, } from "./domain/role.js";
 import { readDeliveryEvidence, readEnforcementInput, readFinalizeEvidence, isPolicyInput, readJsonInput, readMigrationManifest, readMigrationState, readModeAssessment, readPolicyFileInput, readPolicyJson, readSpecReview, } from "./adapters/json-input.js";
 import { appendDeliveryTerminalJournalEntry, appendWorkflowJournalEntry, assertPlanFrozen, assertPlanSealOpen, assertPocDeliveryChangeScope, assertWorkflowStaging, describeStagingDigestDrift, executePocObservation, inspectCurrentPocJournalBinding, inspectWorkflowStaging, inspectPendingJournalTransaction, inspectStoredPocObservationEvidence, previewWorkflowStagingPromotion, promoteWorkflowStagingToFull, readWorkflowJournal, recoverPendingJournalTransaction, resolvePullRequestStaging, workflowStep, } from "./adapters/workflow-journal.js";
-import { assertConvergedReviewSession, buildReviewRoundDraft, previewReviewRound, readStoredReviewSession, recordReviewRound, } from "./adapters/review-session.js";
+import { assertConvergedReviewSession, assertReviewPlanningBinding, buildReviewRoundDraft, previewReviewRound, readStoredReviewSession, recordReviewRound, } from "./adapters/review-session.js";
 import { appendMetricsEvent, buildMetricsReport, writeMetricsReport, } from "./adapters/metrics-journal.js";
 import { METRICS_EVENT_KINDS, METRICS_EVENT_PHASES, } from "./domain/metrics.js";
 import { GIT_ENV, evidenceOnlySuffix, observeReviewDiff, resolveUniqueMergeBase, } from "./adapters/review-diff.js";
@@ -69,7 +76,7 @@ import { deriveEffectiveHead } from "./domain/evidence-reanchor.js";
 import { replaceReviewSession, ReviewSessionReplacementError, } from "./adapters/review-session-replacement.js";
 import { bindStoredPullRequest, claimStoredMergeDispatch, claimStoredPullRequestCreationDispatch, completeStoredTerminalRedelivery, observeStoredMerge, observeStoredDeliveryState, prepareStoredMergeIntent, recordStoredExternalMergeStep11, prepareStoredTerminalRedeliveryMergeIntent, prepareStoredPullRequestCreation, readStoredDeliveryState, recordStoredStep11, requireStoredDeliveryReconciliation, resumeStoredPullRequestCreationAfterConfirmedAbsence, } from "./adapters/delivery-state.js";
 import { DELIVERY_STATE_FILE, assertImmutablePullRequestBinding, canonicalDigest, closingContractDigest, externalMergeObservationId, pullRequestContentDigest, pullRequestTerminalEvidenceId, } from "./domain/delivery-state.js";
-import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, } from "./domain/workflow.js";
+import { MODE_STEP_SEQUENCES, NEVER_SKIPPABLE_STEPS, requiredSteps, planWorkflowAdvance, skippableSteps, validateJournalHumanOverride, validateStepJournal, WORKFLOW_STEPS, WORKFLOW_EXACT_ARTIFACTS, } from "./domain/workflow.js";
 import { reconcileFixedMergeRun, CI_DELIVERY_GRACE_MINUTES, inspectCiDelivery, } from "./domain/ci-delivery.js";
 function workflowArguments(args) {
     const flags = {};
@@ -78,6 +85,9 @@ function workflowArguments(args) {
         "init",
         "apply",
         "dry-run",
+        "plan",
+        "prepare-next",
+        "delegate-request",
         "post-terminal-intake",
         "post-pr-intake",
         /**
@@ -94,6 +104,8 @@ function workflowArguments(args) {
         const equal = argument.indexOf("=");
         const key = argument.slice(2, equal === -1 ? undefined : equal);
         let value = equal === -1 ? undefined : argument.slice(equal + 1);
+        if (equal !== -1 && (key === "plan" || key === "prepare-next"))
+            throw new Error(`--${key}は値を付けずに指定してください`);
         if (value === undefined && booleanFlags.has(key)) {
             if (flags[key] !== undefined)
                 throw new Error(`オプションが重複しています: --${key}`);
@@ -182,17 +194,11 @@ function assertUniqueStep4Tracker(entries, tracker) {
 function assertWorkflowAdvanceArtifacts(staging, targetStep, artifacts) {
     if (new Set(artifacts).size !== artifacts.length)
         throw new Error(`Step ${targetStep}のartifact重複を拒否しました`);
-    const exactByStep = new Map([
-        [1, ["00_要求定義.md"]],
-        [2, ["01_要件定義.md"]],
-        [5, ["02_設計.md"]],
-        [6, ["03_実装計画.md"]],
-    ]);
     const allowedByStep = new Map([
         [3, new Set(["00_要求定義.md", "01_要件定義.md"])],
         [7, new Set(["02_設計.md", "03_実装計画.md"])],
     ]);
-    const exact = exactByStep.get(targetStep);
+    const exact = WORKFLOW_EXACT_ARTIFACTS[targetStep];
     if (exact && stableJson(artifacts) !== stableJson(exact))
         throw new Error(`Step ${targetStep}のartifactは${exact.join("、")}と完全一致する必要があります`);
     const allowed = allowedByStep.get(targetStep);
@@ -4581,6 +4587,300 @@ export async function main(argv, dependencies = {}) {
         });
         return 0;
     }
+    if (command === "workflow" && subcommand === "candidate-adopt") {
+        const { flags, artifacts } = workflowArguments(rest);
+        if (artifacts.length > 0 ||
+            Object.keys(flags).some((key) => !["staging", "apply"].includes(key)))
+            throw new Error("workflow candidate-adoptは--stagingと--applyだけを受け付けます");
+        const staging = path.resolve(required(flags, "staging"));
+        const expectedStagingDigest = calculateStagingDigest(staging, listStagingArtifacts(staging));
+        const journal = readWorkflowJournal(staging);
+        if (journal.errors.length > 0)
+            throw new Error(`candidate採用前のjournalが不正です: ${journal.errors.join("; ")}`);
+        if (journal.mode !== "quick")
+            throw new Error("実装先行の正式採用は低リスクquickだけで許可します");
+        const stagingRecord = readStoredStagingRecord(staging);
+        if (stagingRecord.state !== "sync-verified" ||
+            stagingRecord.checkpoint !== 4)
+            throw new Error("candidate採用にはStep 4の書き込み後読み取り済み同期が必要です");
+        const progress = validateStepJournal({
+            mode: "quick",
+            entries: journal.entries,
+            upToStep: 4,
+        });
+        if (!progress.valid ||
+            !journal.entries.some((entry) => entry.step === 4 && entry.planSeal))
+            throw new Error("candidate採用にはStep 0/1/4とPlanning Sealが必要です");
+        if (journal.entries.some((entry) => entry.step >= 9))
+            throw new Error("candidate採用は初回Step 9相当の状態遷移にだけ許可します");
+        const root = stagingRepositoryRoot(staging);
+        const observed = observeCandidateAdoption(root, path.join(staging, "00_要求定義.md"));
+        const review = readStoredReviewSession(staging);
+        if (review !== null)
+            assertReviewPlanningBinding(staging, review, observed.headSha);
+        const reviewReady = review !== null &&
+            isReviewSessionConverged(review) &&
+            review.anchor.diffBaseSha === observed.baseSha &&
+            review.latestCandidateHeadSha === observed.headSha;
+        const plan = {
+            state: reviewReady
+                ? "ready-for-formal-adoption"
+                : "independent-review-required",
+            authority: "formal-adoption-gate",
+            root,
+            ...observed,
+            planningSealed: true,
+            reviewRoundDigest: reviewReady ? review.latestRoundDigest : null,
+            next: reviewReady
+                ? "正式採用後にtrusted full verificationとDelivery gateを実行してください"
+                : "元Intent・実差分・既存契約の独立reviewを収束させてください",
+        };
+        if (!presentFlag(flags, "apply")) {
+            print(plan);
+            return 0;
+        }
+        if (!reviewReady)
+            throw new Error("Candidateの正式採用にはexact HEAD・実差分に束縛された収束済み独立reviewが必要です");
+        const result = appendWorkflowJournalEntry({
+            staging,
+            headSha: observed.headSha,
+            expectedStagingDigest,
+            entry: {
+                step: 9,
+                skillId: "step-09-implement",
+                mode: "quick",
+                recordedAt: new Date().toISOString(),
+                artifacts: [...observed.changedPaths],
+                evidence: `candidate implementation adopted after Step 4 seal; base=${observed.baseSha}; independent review and trusted verification pending`,
+                implementationHeadSha: observed.headSha,
+                candidateAdoption: {
+                    baseSha: observed.baseSha,
+                    trustedTipSha: observed.trustedTipSha,
+                    diffDigest: observed.diffDigest,
+                    requestDigest: observed.requestDigest,
+                },
+            },
+        });
+        print({ ...plan, applied: true, journalDigest: result.journalDigest });
+        return 0;
+    }
+    if (command === "workflow" && subcommand === "candidate-inventory") {
+        const { flags, artifacts } = workflowArguments(rest);
+        if (artifacts.length > 0 ||
+            Object.keys(flags).some((key) => key !== "repo"))
+            throw new Error("workflow candidate-inventoryは--repoだけを受け付けます");
+        const report = inventoryCandidateWorktrees(path.resolve(required(flags, "repo")));
+        print(report);
+        return report.errors.length === 0 ? 0 : 1;
+    }
+    if (command === "workflow" && subcommand === "candidate") {
+        const { flags, artifacts } = workflowArguments(rest);
+        if (artifacts.length > 0 ||
+            Object.keys(flags).some((key) => !["input", "repo", "session"].includes(key)))
+            throw new Error("workflow candidateは--input、--repo、--sessionだけを受け付けます");
+        const inputFile = path.resolve(required(flags, "input"));
+        const fd = fs.openSync(inputFile, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+        let source;
+        try {
+            const before = fs.fstatSync(fd);
+            if (!before.isFile() || before.size > 256 * 1024)
+                throw new Error("candidate inputは256 KiB以下の通常fileが必要です");
+            const limit = 256 * 1024 + 1;
+            const buffer = Buffer.alloc(limit);
+            let size = 0;
+            while (size < limit) {
+                const count = fs.readSync(fd, buffer, size, limit - size, null);
+                if (count === 0)
+                    break;
+                size += count;
+            }
+            const after = fs.fstatSync(fd);
+            if (size > 256 * 1024 ||
+                size !== before.size ||
+                after.size !== before.size ||
+                after.dev !== before.dev ||
+                after.ino !== before.ino ||
+                after.mtimeMs !== before.mtimeMs)
+                throw new Error("candidate inputの読取境界が変更されました");
+            source = buffer.subarray(0, size).toString("utf8");
+        }
+        finally {
+            fs.closeSync(fd);
+        }
+        const input = parseJsonStrict(source, "candidate input");
+        if (!isRecord(input))
+            throw new Error("candidate inputはobjectが必要です");
+        const repo = path.resolve(required(flags, "repo"));
+        if (input.phase === "execute") {
+            if (flags.session !== undefined)
+                throw new Error("candidate executeはsessionを使用しません");
+            const risk = input.risk;
+            if (typeof risk !== "object" || risk === null || Array.isArray(risk))
+                throw new Error("riskの全項目が必要です");
+            const statuses = risk;
+            if (Object.keys(statuses).some((key) => !CANDIDATE_RISKS.includes(key)))
+                throw new Error("未知のcandidateリスク項目があります");
+            const validated = {};
+            for (const key of CANDIDATE_RISKS) {
+                const value = statuses[key];
+                if (value !== undefined &&
+                    value !== "cleared" &&
+                    value !== "triggered" &&
+                    value !== "unknown")
+                    throw new Error(`candidateリスク値が不正です: ${key}`);
+                if (value !== undefined)
+                    validated[key] = value;
+            }
+            const validGaps = [
+                "implementation",
+                "verification",
+                "design",
+                "requirement",
+                "intent",
+                "security-risk",
+            ];
+            if (!Array.isArray(input.gaps) ||
+                !input.gaps.every((value) => validGaps.includes(value)))
+                throw new Error("candidate gapsが不正です");
+            if (input.workerProvider === "codex") {
+                if (input.workerArgv !== undefined)
+                    throw new Error("candidate Codex WorkerはworkerArgvを受け付けません");
+                if (typeof input.intent !== "string" ||
+                    input.intent.length > 32_768 ||
+                    typeof input.correctnessCriterion !== "string" ||
+                    input.correctnessCriterion.length > 32_768)
+                    throw new Error("candidate Codex WorkerのIntentまたは正しさの基準が不正です");
+            }
+            else if (input.workerProvider !== undefined ||
+                !Array.isArray(input.workerArgv) ||
+                input.workerArgv.some((value) => typeof value !== "string"))
+                throw new Error("candidate workerArgvまたはworkerProviderが不正です");
+            if (!Array.isArray(input.targetTest) ||
+                input.targetTest.some((value) => typeof value !== "string"))
+                throw new Error("candidate targetTestが不正です");
+            const decision = executeCandidate({
+                root: repo,
+                intent: typeof input.intent === "string" ? input.intent : "",
+                correctnessCriterion: typeof input.correctnessCriterion === "string"
+                    ? input.correctnessCriterion
+                    : "",
+                allowedPaths: candidateAllowedPaths(input.allowedPaths),
+                risk: validated,
+                unresolved: Array.isArray(input.unresolved) &&
+                    input.unresolved.every((value) => typeof value === "string")
+                    ? input.unresolved
+                    : ["未解決事項の形式が不正です"],
+                ...(input.workerProvider === "codex"
+                    ? { workerProvider: "codex" }
+                    : { workerArgv: input.workerArgv }),
+                targetTest: input.targetTest,
+                gaps: input.gaps,
+            });
+            print(decision);
+            return decision.route === "independent-review" ? 0 : 1;
+        }
+        const sessionFile = path.resolve(required(flags, "session"));
+        if (input.phase === "preflight") {
+            const baseSha = observeCandidateBoundary(repo).headSha;
+            const allowedPaths = candidateAllowedPaths(input.allowedPaths);
+            const risk = input.risk;
+            if (typeof risk !== "object" || risk === null || Array.isArray(risk))
+                throw new Error("riskの全項目が必要です");
+            const statuses = risk;
+            if (Object.keys(statuses).some((key) => !CANDIDATE_RISKS.includes(key)))
+                throw new Error("未知のcandidateリスク項目があります");
+            const validated = {};
+            for (const key of CANDIDATE_RISKS) {
+                const value = statuses[key];
+                if (value !== undefined &&
+                    value !== "cleared" &&
+                    value !== "triggered" &&
+                    value !== "unknown")
+                    throw new Error(`candidateリスク値が不正です: ${key}`);
+                if (value !== undefined)
+                    validated[key] = value;
+            }
+            const decision = decideCandidatePreflight({
+                intent: typeof input.intent === "string" ? input.intent : "",
+                correctnessCriterion: typeof input.correctnessCriterion === "string"
+                    ? input.correctnessCriterion
+                    : "",
+                baseSha,
+                isolatedWorktree: true,
+                allowedPaths,
+                risk: validated,
+                unresolved: Array.isArray(input.unresolved) &&
+                    input.unresolved.every((value) => typeof value === "string")
+                    ? input.unresolved
+                    : ["未解決事項の形式が不正です"],
+            });
+            if (decision.route === "candidate" &&
+                observeCandidateForkBase(repo, baseSha) !== baseSha)
+                throw new Error("candidate事前HEADがGit分岐点と一致しません");
+            const session = decision.route === "candidate"
+                ? createCandidateSession(sessionFile, {
+                    repo,
+                    baseSha,
+                    intent: input.intent,
+                    correctnessCriterion: input.correctnessCriterion,
+                    allowedPaths,
+                    risk: validated,
+                })
+                : undefined;
+            print({
+                ...decision,
+                baseSha,
+                allowedPaths,
+                sessionId: session?.id,
+                formalWorkflowUnchanged: true,
+                independentReviewRequired: true,
+                riskAssessmentSource: "caller-asserted",
+            });
+            return decision.route === "candidate" ? 0 : 1;
+        }
+        if (input.phase === "post") {
+            if ("baseSha" in input ||
+                "allowedPaths" in input ||
+                "targetTestsPassed" in input)
+                throw new Error("candidate postはbase、変更範囲、テスト結果の自己申告を受け付けません");
+            const session = loadCandidateSession(sessionFile, repo);
+            const observed = observeCandidateGit(repo, session.baseSha);
+            const validGaps = [
+                "implementation",
+                "verification",
+                "design",
+                "requirement",
+                "intent",
+                "security-risk",
+            ];
+            if (!Array.isArray(input.gaps) ||
+                !input.gaps.every((value) => validGaps.includes(value)))
+                throw new Error("candidate gapsが不正です");
+            const testEvidence = runCandidateTargetTest(repo, input.targetTest);
+            if (testEvidence.headSha !== observed.headSha)
+                throw new Error("candidate差分と対象テストのHEADが一致しません");
+            const decision = decideCandidatePost({
+                observedPaths: observed.changedPaths,
+                allowedPaths: session.allowedPaths,
+                targetTestsPassed: testEvidence.exitCode === 0,
+                gaps: input.gaps,
+                removedAccessGuard: observeRemovedAccessGuard(repo, session.baseSha, observed.headSha),
+            });
+            print({
+                ...decision,
+                ...observed,
+                sessionId: session.id,
+                intent: session.intent,
+                correctnessCriterion: session.correctnessCriterion,
+                allowedPaths: session.allowedPaths,
+                targetTest: testEvidence,
+                formalWorkflowUnchanged: true,
+                independentReviewRequired: true,
+            });
+            return decision.route === "independent-review" ? 0 : 1;
+        }
+        throw new Error("workflow candidate phaseはpreflightまたはpostです");
+    }
     if (command === "workflow" && subcommand === "advance") {
         const { flags, artifacts } = workflowArguments(rest);
         const apply = workflowLifecycleApplyMode(flags);
@@ -4596,19 +4896,53 @@ export async function main(argv, dependencies = {}) {
             "apply",
             "dry-run",
             "continue-from",
+            "plan",
+            "prepare-next",
+            "candidate-head",
+            "delegate-request",
         ].includes(flag));
         if (unknown.length > 0)
             throw new Error(`workflow advanceの未知optionです: --${unknown.join(", --")}`);
+        const planOnly = presentFlag(flags, "plan");
+        const prepareNext = presentFlag(flags, "prepare-next");
+        const expectedCandidateHead = flags["candidate-head"];
+        const delegateRequest = presentFlag(flags, "delegate-request");
+        if (delegateRequest && !planOnly)
+            throw new Error("--delegate-requestはworkflow advance --plan専用です");
+        if (expectedCandidateHead !== undefined && !apply)
+            throw new Error("--candidate-headには--applyが必要です");
+        if (prepareNext && !apply)
+            throw new Error("workflow advance --prepare-nextには--applyが必要です");
+        if (planOnly &&
+            (apply ||
+                artifacts.length > 0 ||
+                Object.keys(flags).some((key) => ![
+                    "staging",
+                    "plan",
+                    "continue-from",
+                    "dry-run",
+                    "delegate-request",
+                ].includes(key))))
+            throw new Error("workflow advance --planは副作用なしの作業契約観測専用です");
         const staging = path.resolve(required(flags, "staging"));
         const inspected = inspectWorkflowStaging(staging);
-        const initialRecord = readStoredStagingRecord(staging);
-        const initialArtifacts = listStagingArtifacts(staging);
-        const initialContentDigest = calculateStagingDigest(staging, initialArtifacts);
+        // Only apply compares a pre-lock snapshot; advisory preview needs no
+        // full artifact inventory or content hashing.
+        const initialSnapshot = apply
+            ? (() => {
+                const record = readStoredStagingRecord(staging);
+                const artifacts = listStagingArtifacts(staging);
+                return {
+                    record,
+                    artifacts,
+                    contentDigest: calculateStagingDigest(staging, artifacts),
+                };
+            })()
+            : undefined;
         const initialJournal = readWorkflowJournal(staging);
-        const initialJournalDigest = crypto
-            .createHash("sha256")
-            .update(initialJournal.source)
-            .digest("hex");
+        const initialJournalDigest = apply
+            ? crypto.createHash("sha256").update(initialJournal.source).digest("hex")
+            : undefined;
         const continuationFromHead = flags["continue-from"];
         if (continuationFromHead !== undefined) {
             if (apply || artifacts.length > 0 || flags.evidence !== undefined)
@@ -4638,6 +4972,47 @@ export async function main(argv, dependencies = {}) {
             }).stdout.trim() !== "")
                 throw new Error("continuationにはtracked変更のcommitが必要です");
         }
+        if (planOnly) {
+            if (delegateRequest &&
+                (inspected.mode !== "quick" || inspected.nextStep !== 1))
+                throw new Error("--delegate-requestはQuick Step 1だけで使用できます");
+            const executionPlan = observeWorkflowExecutionPlan(staging, inspected, continuationFromHead, delegateRequest);
+            print(executionPlan);
+            return executionPlan.state === "blocked" ? 1 : 0;
+        }
+        // A completed transition is preserved even if observing its successor fails.
+        const printApplied = (result) => {
+            if (!prepareNext) {
+                print(result);
+                return 0;
+            }
+            const recovery = {
+                command: "workflow advance",
+                argv: ["workflow", "advance", `--staging=${staging}`, "--plan"],
+                appliesTransition: false,
+            };
+            let preparation;
+            let blocked;
+            try {
+                const executionPlan = observeWorkflowExecutionPlan(staging);
+                blocked = executionPlan.state === "blocked";
+                preparation = {
+                    status: blocked ? "blocked" : "ready",
+                    executionPlan,
+                    ...(blocked ? { recovery } : {}),
+                };
+            }
+            catch (error) {
+                blocked = true;
+                preparation = {
+                    status: "blocked",
+                    errors: [error instanceof Error ? error.message : String(error)],
+                    recovery,
+                };
+            }
+            print({ ...result, preparation });
+            return blocked ? 1 : 0;
+        };
         const plan = planWorkflowAdvance({
             mode: inspected.mode,
             currentStep: inspected.currentStep,
@@ -4687,48 +5062,64 @@ export async function main(argv, dependencies = {}) {
             };
         }
         if (!apply || plan.state !== "preview") {
-            const resume = observeWorkflowResume(staging);
-            const handoff = observeWorkflowHandoff(staging, inspected.nextStep, resume, continuationFromHead);
-            const reviewerHandoff = handoff &&
-                "kind" in handoff &&
-                handoff.role === "correction" &&
-                handoff.workUnit
-                ? {
-                    ...handoff,
-                    role: "reviewer",
-                    reviewRound: (handoff.reviewRound ?? 0) + 1,
-                    workUnit: {
-                        ...handoff.workUnit,
-                        workUnitId: crypto
-                            .createHash("sha256")
-                            .update(JSON.stringify({
-                            from: handoff.workUnit.workUnitId,
-                            role: "reviewer",
-                            reviewRound: (handoff.reviewRound ?? 0) + 1,
-                        }))
-                            .digest("hex"),
-                    },
-                }
-                : undefined;
-            const execution = handoff === undefined
-                ? {}
+            if ((process.env.ASC_EXECUTION_CONTEXT_MODE ?? "short-lived") !==
+                "short-lived") {
+                const resume = observeWorkflowResume(staging);
+                print(syncPreview === undefined
+                    ? { ...plan, resume }
+                    : { ...plan, sync: syncPreview, resume });
+                return plan.state === "blocked" ? 1 : 0;
+            }
+            const selected = observeWorkflowExecutionPlan(staging, inspected, continuationFromHead);
+            const handoff = selected.handoff === undefined
+                ? undefined
                 : {
-                    handoff,
-                    agentDispatch: workflowAgentDispatch(handoff),
-                    ...(reviewerHandoff === undefined
-                        ? {}
-                        : {
-                            agentDispatchAlternatives: [
-                                workflowAgentDispatch(reviewerHandoff),
-                            ],
-                            handoffAlternatives: [reviewerHandoff],
-                        }),
+                    ...selected.handoff,
+                    workUnit: {
+                        ...selected.handoff.workUnit,
+                        contract: selected.action,
+                    },
                 };
-            print(syncPreview === undefined
-                ? { ...plan, resume, ...execution }
-                : { ...plan, sync: syncPreview, resume, ...execution });
+            const alternatives = selected.alternatives?.map((item) => ({
+                ...item.handoff,
+                workUnit: {
+                    ...item.handoff.workUnit,
+                    contract: item.action,
+                },
+            }));
+            const execution = {
+                action: selected.action,
+                assurance: selected.assurance,
+                ...(handoff === undefined
+                    ? {}
+                    : { handoff, agentDispatch: selected.agentDispatch }),
+                ...(alternatives === undefined
+                    ? {}
+                    : {
+                        handoffAlternatives: alternatives,
+                        agentDispatchAlternatives: selected.alternatives?.map((item) => item.agentDispatch),
+                    }),
+            };
+            const selectedBlocked = selected.state === "blocked";
+            const result = {
+                ...plan,
+                ...(selectedBlocked
+                    ? {
+                        executionState: "blocked",
+                        executionErrors: selected.errors,
+                        next: "workflow advance --planで停止理由を確認し、正式状態を修復してください",
+                    }
+                    : {}),
+                ...(syncPreview === undefined ? {} : { sync: syncPreview }),
+                resume: selected.resume,
+                ...execution,
+            };
+            print(result);
             return plan.state === "blocked" ? 1 : 0;
         }
+        if (initialSnapshot === undefined || initialJournalDigest === undefined)
+            throw new Error("workflow advanceのapply snapshotがありません");
+        const { record: initialRecord, artifacts: initialArtifacts, contentDigest: initialContentDigest, } = initialSnapshot;
         return withStagingMutationLock(staging, () => {
             const lockedStoredRecord = readStoredStagingRecord(staging);
             const lockedArtifacts = listStagingArtifacts(staging);
@@ -4768,6 +5159,13 @@ export async function main(argv, dependencies = {}) {
                 currentPlan.operation !== plan.operation)
                 throw new Error("workflow advanceのpreview後にstaging stateが変更されました。新しいpreviewから再実行してください");
             const targetStep = plan.targetStep;
+            if (expectedCandidateHead !== undefined) {
+                if (targetStep !== 1 || current.mode !== "quick")
+                    throw new Error("--candidate-headはQuick Step 1だけで使用できます");
+                const observed = observeCandidateAdoption(stagingRepositoryRoot(staging), path.join(staging, "00_要求定義.md"));
+                if (observed.headSha !== expectedCandidateHead)
+                    throw new Error("Candidate HEADがplan時から変更されました。新しいplanで再確認してください");
+            }
             /** 封印済みの封印Stepは外部同期より前に拒否する（REQ-WF-036） */
             assertPlanSealOpen(staging, targetStep);
             const definition = workflowStep(targetStep);
@@ -4800,8 +5198,7 @@ export async function main(argv, dependencies = {}) {
                     headSha: candidateHeadSha,
                     expectedStagingDigest: initialContentDigest,
                 });
-                print({ ...plan, state: "applied", result });
-                return 0;
+                return printApplied({ ...plan, state: "applied", result });
             }
             if (flags.authorize !== "approved")
                 throw new Error("Issue同期には--authorize=approvedが必要です");
@@ -4901,7 +5298,7 @@ export async function main(argv, dependencies = {}) {
                         entry,
                         expectedStagingDigest: initialContentDigest,
                     });
-                    print({
+                    resultCode = printApplied({
                         ...plan,
                         state: "applied",
                         result: {
@@ -4918,7 +5315,6 @@ export async function main(argv, dependencies = {}) {
                                 : {}),
                         },
                     });
-                    resultCode = 0;
                 }
                 catch (error) {
                     let publicationState = syncConfirmed ? "published" : "unknown";
@@ -4964,7 +5360,7 @@ export async function main(argv, dependencies = {}) {
                         const recoveredEntry = recoveredJournal.entries.at(-1);
                         if (!recoveredEntry || recoveredEntry.step !== targetStep)
                             throw new Error("公開済みworkflow journal transactionの復旧後検査に失敗しました", { cause: error });
-                        print({
+                        resultCode = printApplied({
                             ...plan,
                             state: "applied",
                             result: {
@@ -4985,7 +5381,6 @@ export async function main(argv, dependencies = {}) {
                                 },
                             },
                         });
-                        resultCode = 0;
                     }
                     else {
                         const retry = publicationState === "published"
@@ -5453,6 +5848,8 @@ export async function main(argv, dependencies = {}) {
         throw new Error(`不明なgraph subcommandです: ${subcommand ?? ""}`);
     if (command === "issue" && subcommand === "create") {
         const { flags } = parse(rest);
+        if (flags["prepare-next"] !== undefined && flags["prepare-next"] !== true)
+            throw new Error("--prepare-nextは値を付けずに指定してください");
         const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
         const assessment = readModeAssessment(required(flags, "assessment"));
         const requestedMode = required(flags, "mode");
@@ -5472,7 +5869,7 @@ export async function main(argv, dependencies = {}) {
         const projectChoices = fs.existsSync(policyManifest)
             ? loadProjectPolicySet(root).policy.projectChoices
             : undefined;
-        print(createIssueStaging(root, {
+        const created = createIssueStaging(root, {
             title: required(flags, "title"),
             answers: assessment,
             requestedMode,
@@ -5486,7 +5883,57 @@ export async function main(argv, dependencies = {}) {
                 ? { stagingRoot: flags["staging-root"] }
                 : {}),
             ...(typeof flags.name === "string" ? { name: flags.name } : {}),
-        }));
+        });
+        if (flags["prepare-next"] === true) {
+            const recovery = {
+                command: "workflow advance",
+                argv: ["workflow", "advance", `--staging=${created.path}`],
+                staging: created.path,
+                createsStaging: false,
+            };
+            try {
+                const journal = readWorkflowJournal(created.path);
+                const executionPlan = observeWorkflowExecutionPlan(created.path);
+                const errors = [...journal.errors, ...executionPlan.errors];
+                if (!journal.entries.some((entry) => entry.step === 0))
+                    errors.push("作成済みstagingのStep 0記録を確認できません");
+                if (executionPlan.state === "blocked" || errors.length > 0)
+                    throw new Error([...new Set(errors)].join("; "));
+                const handoff = executionPlan.handoff === undefined
+                    ? undefined
+                    : {
+                        ...executionPlan.handoff,
+                        workUnit: {
+                            ...executionPlan.handoff.workUnit,
+                            contract: executionPlan.action,
+                        },
+                    };
+                print({
+                    ...created,
+                    step0: { recorded: true, errors: [] },
+                    resume: executionPlan.resume,
+                    action: executionPlan.action,
+                    assurance: executionPlan.assurance,
+                    handoff,
+                    agentDispatch: executionPlan.agentDispatch,
+                });
+            }
+            catch (error) {
+                // Creation is already committed. Preserve its records and expose a
+                // read-only retry of the existing staging, never a second creation.
+                print({
+                    ...created,
+                    preparation: {
+                        status: "blocked",
+                        errors: [error instanceof Error ? error.message : String(error)],
+                        recovery,
+                    },
+                });
+                return 1;
+            }
+        }
+        else
+            print(created);
         /**
          * **既定配置（版管理外・全文同期）には1行の通知だけを出す。** 判定も終了値も
          * 変えず、JSON出力（stdout）にも混ぜない。
@@ -6130,6 +6577,24 @@ export async function main(argv, dependencies = {}) {
         });
         return 0;
     }
+    if (command === "verify" && subcommand === "plan") {
+        const { flags, positionals } = parse(rest);
+        const unknown = Object.keys(flags).filter((flag) => !["staging", "base", "root"].includes(flag));
+        if (unknown.length > 0 || positionals.length > 0)
+            throw new Error("verify planは--staging、--base、--rootだけを受理します");
+        if (flags.base !== undefined && typeof flags.base !== "string")
+            throw new Error("verify planの--baseにはcommitが必要です");
+        const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const staging = path.resolve(root, required(flags, "staging"));
+        if (flags.root !== undefined &&
+            fs.realpathSync(stagingRepositoryRoot(staging)) !== fs.realpathSync(root))
+            throw new Error("verify planの--rootはstagingのrepositoryと一致する必要があります");
+        print(planVerification({
+            staging,
+            ...(typeof flags.base === "string" ? { base: flags.base } : {}),
+        }));
+        return 0;
+    }
     if (command === "verify" && subcommand === "run") {
         /**
          * **実行するcommandは`--`の後のargvだけで受け取り、shellを通さない。**
@@ -6141,7 +6606,7 @@ export async function main(argv, dependencies = {}) {
         const { flags, positionals } = parse(rest.slice(0, separator));
         if (positionals.length > 0)
             throw new Error(`verify runの位置引数は\`--\`の後に置いてください: ${positionals[0]}`);
-        const unknown = Object.keys(flags).filter((flag) => !["staging", "scope", "base", "root"].includes(flag));
+        const unknown = Object.keys(flags).filter((flag) => !["staging", "scope", "base", "root", "reuse"].includes(flag));
         if (unknown.length > 0)
             throw new Error(`verify runの未知optionです: --${unknown.join(", --")}`);
         /**
@@ -6155,6 +6620,8 @@ export async function main(argv, dependencies = {}) {
             throw new Error("verify runの--scopeはtargetedまたはfullが必要です");
         if (flags.base !== undefined && typeof flags.base !== "string")
             throw new Error("verify runの--baseにはcommitが必要です");
+        if (flags.reuse !== undefined && flags.reuse !== true)
+            throw new Error("verify runの--reuseは値を取らないflagです");
         const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
         const staging = path.resolve(root, required(flags, "staging"));
         if (flags.root !== undefined &&
@@ -6164,10 +6631,12 @@ export async function main(argv, dependencies = {}) {
             staging,
             argv: rest.slice(separator + 1),
             scope,
+            ...(flags.reuse === true ? { reuse: true } : {}),
             ...(typeof flags.base === "string" ? { base: flags.base } : {}),
         });
         print({
-            recorded: true,
+            recorded: result.reused !== true,
+            ...(flags.reuse === true ? { reused: result.reused === true } : {}),
             headSha: result.record.headSha,
             baseSha: result.record.baseSha,
             command: result.record.command,
@@ -7116,6 +7585,22 @@ export async function main(argv, dependencies = {}) {
         const { flags } = parse(rest);
         const apply = applyMode(flags);
         const root = path.resolve(typeof flags.root === "string" ? flags.root : process.cwd());
+        const summaryPath = flags["from-summary"];
+        if (summaryPath !== undefined) {
+            if (typeof summaryPath !== "string" ||
+                ["evidence", "body-file", "head-sha"].some((key) => flags[key] !== undefined))
+                throw new Error("--from-summaryはpathが必要で、--evidence/--body-file/--head-shaと併用できません");
+            const observedHead = git(["symbolic-ref", "--short", "HEAD"], root, {
+                env: GIT_ENV,
+            }).stdout.trim();
+            const observedBase = defaultBranch(root);
+            if ((flags.head !== undefined && flags.head !== observedHead) ||
+                (flags.base !== undefined && flags.base !== observedBase))
+                throw new Error("--from-summaryのhead/baseは現在branch/既定branchと一致する必要があります");
+            flags.head = observedHead;
+            flags.base = observedBase;
+            flags["head-sha"] = git(["rev-parse", "--verify", "HEAD^{commit}"], root, { env: GIT_ENV }).stdout.trim();
+        }
         const issueRaw = required(flags, "issue");
         if (!/^[1-9]\d*$/u.test(issueRaw))
             throw new Error("--issueは正のIssue番号で指定してください");
@@ -7127,6 +7612,22 @@ export async function main(argv, dependencies = {}) {
             issue,
             repository,
         });
+        let generatedInput;
+        if (typeof summaryPath === "string") {
+            const headSha = required(flags, "head-sha");
+            const binding = assertCurrentReviewJournalBinding(staging, headSha);
+            const trusted = loadEffectiveTrustedPolicySet(root, required(flags, "base"));
+            generatedInput = generateDeliveryInput({
+                root,
+                staging,
+                issue,
+                summaryPath,
+                headSha,
+                implementationHeadSha: binding.implementationHeadSha,
+                independenceMode: resolveReviewIndependence(trusted.policy),
+                verificationPolicy: trustedVerificationPolicy(trusted),
+            });
+        }
         const replayState = readStoredDeliveryState(staging);
         if (replayState?.pr) {
             const replayHead = required(flags, "head");
@@ -7269,8 +7770,8 @@ export async function main(argv, dependencies = {}) {
             ]));
             return 1;
         }
-        const evidenceFile = path.resolve(required(flags, "evidence"));
-        const evidence = readDeliveryEvidence(evidenceFile);
+        const evidence = generatedInput?.evidence ??
+            readDeliveryEvidence(path.resolve(required(flags, "evidence")));
         const headSha = required(flags, "head-sha");
         if (!/^[a-f0-9]{40}$/u.test(headSha))
             throw new Error("--head-shaは小文字の完全な40桁Git SHAで指定してください");
@@ -7291,9 +7792,13 @@ export async function main(argv, dependencies = {}) {
         const canonicalIssue = Number(canonicalRaw);
         if (canonicalIssue !== issue)
             throw new Error("--canonical-issueは--issueと一致させてください");
-        const bodyFile = path.resolve(required(flags, "body-file"));
-        if (!fs.existsSync(bodyFile))
-            throw new Error(`--body-fileがありません: ${bodyFile}`);
+        let body = generatedInput?.body;
+        if (body === undefined) {
+            const bodyFile = path.resolve(required(flags, "body-file"));
+            if (!fs.existsSync(bodyFile))
+                throw new Error(`--body-fileがありません: ${bodyFile}`);
+            body = fs.readFileSync(bodyFile, "utf8");
+        }
         const head = required(flags, "head");
         const base = required(flags, "base");
         const localDefaultBranch = defaultBranch(root);
@@ -7311,7 +7816,7 @@ export async function main(argv, dependencies = {}) {
             head,
             headSha,
             base,
-            body: fs.readFileSync(bodyFile, "utf8"),
+            body,
             title: typeof flags.title === "string" ? flags.title : undefined,
             evidence,
             trustedPolicy: trustedSet.policy,

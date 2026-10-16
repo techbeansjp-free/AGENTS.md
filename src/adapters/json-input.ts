@@ -109,7 +109,7 @@ export function readPolicyFileInput(file: string): Policy | PolicySet {
  * 記録をそのまま渡すと`mode`を尊重するのか無視するのかが曖昧になるため受理しない。
  */
 const MODE_ASSESSMENT_SHAPE =
-  '質問IDをキーに{"answer":true|false|"unknown","evidence":"根拠"}を持つobjectを渡してください。回答か根拠が欠けたIDは不明として扱いfullへ倒します';
+  '質問IDをキーに{"answer":true|false|"unknown","evidence":"根拠"}を持つobjectを渡してください。mode判定は回答か根拠が欠ければfullへ倒します。issue createではQ-01〜Q-08すべての入力が必要です。不明ならanswer="unknown"と不明理由のevidenceを明示してください';
 
 export function readModeAssessment(file: string): Record<string, ModeAnswer> {
   const value = readJsonInput(file);

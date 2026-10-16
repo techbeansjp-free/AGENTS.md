@@ -410,6 +410,7 @@ export const REVIEW_ROUND_INPUT_FIELDS = Object.freeze([
     field("findings[].contractId", "stableId | null"),
     field("findings[].causedByFindingId", "stableId | null"),
     field("findings[].decisionRef", "DR-ID | null", { required: false }),
+    field("planningDigest", "sha256", { required: false }),
     field("followOnly", "true", { required: false }),
     field("recordLayerOnly", "true", { required: false }),
     field("inspection", "object（counted roundの検分identity）", {
@@ -448,6 +449,10 @@ export function parseReviewRoundInput(value) {
         throw new Error("review round.previousRoundDigestが不正です");
     if (!OID.test(String(round.candidateHeadSha ?? "")))
         throw new Error("review round.candidateHeadShaが不正です");
+    if (round.planningDigest !== undefined &&
+        (typeof round.planningDigest !== "string" ||
+            !SHA256.test(round.planningDigest)))
+        throw new Error("review round.planningDigestが不正です");
     if (!Array.isArray(round.findings) || round.findings.length > 256)
         throw new Error("review round.findingsは256件以下の配列が必要です");
     const findings = round.findings.map(parseFinding);
@@ -460,6 +465,9 @@ export function parseReviewRoundInput(value) {
             : String(round.previousRoundDigest),
         anchor: parseAnchor(round.anchor),
         candidateHeadSha: String(round.candidateHeadSha),
+        ...(round.planningDigest === undefined
+            ? {}
+            : { planningDigest: String(round.planningDigest) }),
         focus: parseFocus(round.focus),
         findings: Object.freeze(findings),
         ...(round.followOnly === true ? { followOnly: true } : {}),
@@ -515,7 +523,8 @@ function findingAdmission(input) {
      */
     const inAdjacentScope = round >= 2 &&
         !inFixedDiff &&
-        (focus.adjacentScopeUnbounded === true ||
+        (input.planningChanged ||
+            focus.adjacentScopeUnbounded === true ||
             focus.adjacentScope.some(({ path }) => path === finding.path));
     if (round >= 2 && !inFixedDiff && !inAdjacentScope)
         return {
@@ -596,6 +605,9 @@ export function pendingReviewFindingIds(state) {
                 focus: round.focus,
                 priorBlocking,
                 policyVersion: 2,
+                planningChanged: round.planningDigest !== undefined &&
+                    round.planningDigest !==
+                        state.rounds[round.round - 2]?.planningDigest,
             });
             if (admission === "block-current")
                 blocking.add(finding.id);
@@ -703,6 +715,8 @@ function advanceReviewSessionWithPolicy(previous, round, policyVersion) {
             focus: round.focus,
             priorBlocking,
             policyVersion,
+            planningChanged: round.planningDigest !== undefined &&
+                round.planningDigest !== previous?.rounds.at(-1)?.planningDigest,
         }),
     }));
     if (round.round >= 2 && !nonCounting) {
@@ -732,6 +746,9 @@ function advanceReviewSessionWithPolicy(previous, round, policyVersion) {
         round: round.round,
         previousRoundDigest: round.previousRoundDigest,
         candidateHeadSha: round.candidateHeadSha,
+        ...(round.planningDigest === undefined
+            ? {}
+            : { planningDigest: round.planningDigest }),
         focus: round.focus,
         findings: admittedFindings,
         blocking,
@@ -799,7 +816,13 @@ export function parseReviewSessionState(value) {
             "blocking",
             "recordOnly",
             "roundDigest",
-        ], ["followOnly", "recordLayerOnly", "admissionPolicyVersion", "inspection"]);
+        ], [
+            "followOnly",
+            "recordLayerOnly",
+            "admissionPolicyVersion",
+            "inspection",
+            "planningDigest",
+        ]);
         if (record.admissionPolicyVersion !== undefined &&
             record.admissionPolicyVersion !== 2)
             throw new Error("review round.admissionPolicyVersionは2だけを受理します");
@@ -833,6 +856,9 @@ export function parseReviewSessionState(value) {
             previousRoundDigest: record.previousRoundDigest,
             anchor: state.anchor,
             candidateHeadSha: record.candidateHeadSha,
+            ...(record.planningDigest === undefined
+                ? {}
+                : { planningDigest: record.planningDigest }),
             focus: record.focus,
             findings,
             ...(record.followOnly === true ? { followOnly: true } : {}),

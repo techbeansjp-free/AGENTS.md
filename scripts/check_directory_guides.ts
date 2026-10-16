@@ -13,6 +13,7 @@ const STEP_PREFIXES = Array.from(
 const ENTRY_DOCUMENTS = new Map([
   [".agent-skill-chain", INDEX],
   [MANAGED_RUNTIME, INDEX],
+  [".agent-skill-chain/managed-assets-records", INDEX],
   [".agent-skill-chain/docs", ".agent-skill-chain/docs/00_運用ポリシー.md"],
   /** 強制点hookの正本directory（Issue #1105）。 */
   [".agent-skill-chain/hooks", ".agent-skill-chain/hooks/00_利用案内.md"],

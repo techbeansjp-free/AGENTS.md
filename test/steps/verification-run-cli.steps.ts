@@ -1,6 +1,9 @@
 import { inspectWorkflowReadiness } from "../../src/domain/lifecycle.js";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import os from "node:os";
+import { Writable } from "node:stream";
+import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -14,7 +17,10 @@ import {
   recordStoredStep11,
 } from "../../src/adapters/delivery-state.js";
 import { readStoredReviewSession } from "../../src/adapters/review-session.js";
-import { readVerificationRuns } from "../../src/adapters/verification-run.js";
+import {
+  readVerificationRuns,
+  runVerification,
+} from "../../src/adapters/verification-run.js";
 import {
   canonicalDigest,
   closingContractDigest,
@@ -62,8 +68,11 @@ const SHELL_TEXT = "$(touch pwned)";
 const MODE_VARIABLE = "ASC_VERIFY_FIXTURE_MODE";
 const FIXTURE_SCRIPT = [
   `const mode = process.env.${MODE_VARIABLE};`,
+  `if (process.env.ASC_VERIFY_CONCURRENCY_DIR) { const fs = require("node:fs"); const p = require("node:path"); const d = process.env.ASC_VERIFY_CONCURRENCY_DIR; fs.appendFileSync(p.join(d, "executions"), "run\\n"); process.stderr.write("VERIFY-BARRIER-READY\\n"); const timer = setInterval(() => { if (fs.existsSync(p.join(d, "release"))) clearInterval(timer); }, 20); }`,
   `if (mode === "fail") { process.stdout.write(${JSON.stringify(SECRET_OUTPUT.split("-"))}.join("-")); process.exit(3); }`,
   `if (mode === "signal") process.kill(process.pid, "SIGTERM");`,
+  `if (mode === "late") { const fs = require("node:fs"); fs.writeSync(1, "observed"); const source = 'const fs=require("node:fs"),path=require("node:path"),d=process.env.ASC_VERIFY_LATE_DIR; const t=setInterval(()=>{if(fs.existsSync(path.join(d,"release"))){clearInterval(t);fs.writeSync(1,"late");fs.writeFileSync(path.join(d,"done"),"done");}},10);'; require("node:child_process").spawn(process.execPath,["-e",source],{detached:true,stdio:["ignore",1,2]}).unref(); }`,
+  `if (mode === "large") { const fs = require("node:fs"); for (const fd of [1, 2]) { const stat = fs.fstatSync(fd); if (!stat.isFile() || (stat.mode & 0o777) !== 0o600 || stat.nlink !== 0) throw new Error("output descriptor must be private and unlinked"); } fs.writeSync(1, Buffer.alloc(3 * 1024 * 1024, 65)); fs.writeSync(2, Buffer.alloc(2 * 1024 * 1024, 66)); }`,
   `if (mode === "head") require("node:child_process").execFileSync("git", ["commit", "--allow-empty", "-q", "-m", "move fixture HEAD"]);`,
   `if (mode === "write") require("node:fs").writeFileSync("generated.txt", "x");`,
 ].join(" ");
@@ -537,3 +546,437 @@ Then(
     assert.equal(result?.output?.recordDigest, record.recordDigest);
   },
 );
+
+When(
+  "verify planで未実行・成功・最新失敗・policy変更・HEAD変更を観測する",
+  async function () {
+    const args = [
+      "verify",
+      "plan",
+      `--staging=${this.staging}`,
+      `--base=${this.base}`,
+    ];
+    this.results.planMissing = await captureCli(args);
+    assert.equal(fs.existsSync(recordFile(this)), false);
+    await captureCli(
+      verifyArgs(this, [`--base=${this.base}`, "--scope=full"], FULL_COMMAND),
+    );
+    const before = fs.readFileSync(recordFile(this), "utf8");
+    // If plan accidentally executes the command, this mode would dirty the worktree.
+    this.results.planSuccess = await captureCli(args, "write");
+    assert.equal(fs.existsSync(path.join(this.root, "generated.txt")), false);
+    assert.equal(fs.readFileSync(recordFile(this), "utf8"), before);
+    await captureCli(
+      verifyArgs(this, [`--base=${this.base}`, "--scope=full"], FULL_COMMAND),
+      "fail",
+    );
+    this.results.planFailure = await captureCli(args);
+    await captureCli(
+      verifyArgs(this, [`--base=${this.base}`, "--scope=full"], FULL_COMMAND),
+    );
+    retargetTrustedPolicy(this, {
+      fullCommand: [process.execPath, "-e", "process.exit(0)"],
+      targetedRunner: POLICY.targetedRunner,
+    });
+    this.results.planPolicy = await captureCli(args);
+    // A failed old command and a changed policy must name the actual blocker.
+    const rows = fs
+      .readFileSync(recordFile(this), "utf8")
+      .trimEnd()
+      .split("\n");
+    fs.writeFileSync(recordFile(this), rows.slice(0, -1).join("\n") + "\n");
+    this.results.planFailedPolicy = await captureCli(args);
+    git(this.root, ["commit", "--allow-empty", "-q", "-m", "new HEAD"]);
+    this.results.planHead = await captureCli(args);
+    fs.appendFileSync(recordFile(this), "invalid JSON\n");
+    this.results.planCorrupt = await captureCli(args);
+  },
+);
+
+Then("planはcommandも記録追記も行わず同一条件の成功だけを返す", function () {
+  assert.equal(this.results.planSuccess?.output?.status, "observed");
+  assert.deepEqual(this.results.planSuccess?.output?.required, []);
+  for (const key of ["planMissing", "planFailure", "planHead"])
+    assert.equal(this.results[key]?.output?.status, "required", key);
+  assert.equal(this.results.planPolicy?.output?.status, "blocked");
+  assert.equal(this.results.planFailedPolicy?.output?.status, "blocked");
+  assert.match(
+    String(this.results.planFailedPolicy?.output?.reason),
+    /trusted policy不一致/u,
+  );
+  assert.ok(this.results.planCorrupt?.error);
+});
+
+When(
+  "reuse付きrunで未実行・成功・最新失敗・policy変更・HEAD変更・破損を検査する",
+  async function () {
+    const flags = [`--base=${this.base}`, "--scope=full"];
+    const args = verifyArgs(this, [...flags, "--reuse"], FULL_COMMAND);
+    this.results.reuseMissing = await captureCli(args);
+    assert.equal(readVerificationRuns(this.staging).length, 1);
+    const original = fs.readFileSync(recordFile(this), "utf8");
+    // Execution would create a dirty file, so this proves reuse did not spawn it.
+    this.results.reuseSuccess = await captureCli(args, "write");
+    assert.equal(fs.existsSync(path.join(this.root, "generated.txt")), false);
+    assert.equal(fs.readFileSync(recordFile(this), "utf8"), original);
+    this.results.reuseAlways = await captureCli(
+      verifyArgs(this, flags, FULL_COMMAND),
+      "fail",
+    );
+    this.results.reuseLatestFailure = await captureCli(args, "fail");
+    assert.equal(readVerificationRuns(this.staging).length, 3);
+    this.results.reuseRepair = await captureCli(args);
+    assert.equal(readVerificationRuns(this.staging).length, 4);
+    const beforePolicy = fs.readFileSync(recordFile(this), "utf8");
+    const newCommand = [
+      process.execPath,
+      "-e",
+      "process.stdout.write('POLICY-EXECUTED')",
+    ];
+    retargetTrustedPolicy(this, {
+      fullCommand: newCommand,
+      targetedRunner: POLICY.targetedRunner,
+    });
+    // Even a newly trusted argv must not bypass a same-target incompatible record.
+    this.results.reusePolicy = await captureCli(
+      verifyArgs(this, [...flags, "--reuse"], newCommand),
+    );
+    assert.equal(fs.readFileSync(recordFile(this), "utf8"), beforePolicy);
+    assert.equal(this.results.reusePolicy.relayed, "");
+    git(this.root, ["update-ref", "refs/remotes/origin/main", this.base]);
+    git(this.root, ["commit", "--allow-empty", "-q", "-m", "reuse new HEAD"]);
+    this.results.reuseNewHead = await captureCli(args);
+    assert.equal(readVerificationRuns(this.staging).length, 5);
+    assert.notEqual(this.results.reuseNewHead.output?.headSha, this.head);
+    fs.writeFileSync(path.join(this.root, "dirty.txt"), "dirty");
+    this.results.reuseDirty = await captureCli(args);
+    fs.rmSync(path.join(this.root, "dirty.txt"));
+    fs.appendFileSync(recordFile(this), "broken JSON\n");
+    const corrupt = fs.readFileSync(recordFile(this), "utf8");
+    this.results.reuseCorrupt = await captureCli(args, "write");
+    assert.equal(fs.readFileSync(recordFile(this), "utf8"), corrupt);
+    assert.equal(fs.existsSync(path.join(this.root, "generated.txt")), false);
+  },
+);
+
+Then(
+  "再利用だけは実commandも記録追記も行わず不一致と破損を拒否する",
+  function () {
+    for (const key of ["reuseMissing", "reuseRepair", "reuseNewHead"]) {
+      assert.equal(this.results[key]?.error, undefined, key);
+      assert.equal(this.results[key]?.exitCode, 0, key);
+      assert.equal(this.results[key]?.output?.recorded, true, key);
+      assert.equal(this.results[key]?.output?.reused, false, key);
+    }
+    assert.equal(this.results.reuseSuccess?.output?.recorded, false);
+    assert.equal(this.results.reuseSuccess?.output?.reused, true);
+    assert.equal(
+      this.results.reuseSuccess?.output?.recordDigest,
+      this.results.reuseMissing?.output?.recordDigest,
+    );
+    assert.equal(this.results.reuseAlways?.exitCode, 3);
+    assert.equal(this.results.reuseAlways?.output?.reused, undefined);
+    assert.equal(this.results.reuseLatestFailure?.exitCode, 3);
+    assert.equal(this.results.reuseLatestFailure?.output?.recorded, true);
+    assert.match(
+      this.results.reusePolicy?.error?.message ?? "",
+      /trusted policy不一致/u,
+    );
+    assert.ok(this.results.reuseCorrupt?.error);
+    assert.ok(this.results.reuseDirty?.error);
+  },
+);
+
+When(
+  "同じstagingへ複数processでreuseと通常runを同時要求する",
+  { timeout: 30_000 },
+  async function () {
+    const directory = fs.mkdtempSync(
+      path.join(os.tmpdir(), "asc-verify-race-"),
+    );
+    const sourceCli = fileURLToPath(
+      new URL("../../bin/agent-skill-chain.ts", import.meta.url),
+    );
+    const cli = fs.existsSync(sourceCli)
+      ? sourceCli
+      : fileURLToPath(
+          new URL("../../bin/agent-skill-chain.js", import.meta.url),
+        );
+    const flags = [`--base=${this.base}`, "--scope=full"];
+    const start = (reuse: boolean) => {
+      const child = spawn(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          cli,
+          ...verifyArgs(
+            this,
+            [...flags, ...(reuse ? ["--reuse"] : [])],
+            FULL_COMMAND,
+          ),
+        ],
+        {
+          env: { ...process.env, ASC_VERIFY_CONCURRENCY_DIR: directory },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let stdout = "";
+      let readyTimer: ReturnType<typeof setInterval>;
+      const ready = new Promise<void>((resolve) => {
+        readyTimer = setInterval(() => {
+          if (fs.existsSync(path.join(directory, "executions"))) {
+            clearInterval(readyTimer);
+            resolve();
+          }
+        }, 20);
+      });
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+      child.stderr.resume();
+      const done = new Promise<{
+        code: number | null;
+        output: Record<string, unknown>;
+      }>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          child.kill();
+          reject(new Error("verification race fixture timed out"));
+        }, 30_000);
+        child.once("error", (error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+        child.once("close", (code) => {
+          clearInterval(readyTimer);
+          clearTimeout(timer);
+          try {
+            resolve({
+              code,
+              output: JSON.parse(stdout) as Record<string, unknown>,
+            });
+          } catch (error) {
+            reject(error);
+          }
+        });
+      });
+      return { ready, done };
+    };
+    const first = start(true);
+    try {
+      await Promise.race([
+        first.ready,
+        first.done.then(() => {
+          throw new Error("first run exited before barrier");
+        }),
+      ]);
+      const contenders = await Promise.all([
+        start(true).done,
+        start(false).done,
+      ]);
+      for (const result of contenders) {
+        assert.equal(result.code, 1);
+        assert.match(JSON.stringify(result.output), /stagingを更新中/u);
+      }
+      assert.equal(
+        fs.readFileSync(path.join(directory, "executions"), "utf8"),
+        "run\n",
+      );
+      assert.equal(readVerificationRuns(this.staging).length, 0);
+      fs.writeFileSync(path.join(directory, "release"), "release");
+      const finished = await first.done;
+      assert.equal(finished.code, 0);
+      assert.equal(finished.output.recorded, true);
+      const reused = await start(true).done;
+      assert.equal(reused.code, 0);
+      assert.equal(reused.output.reused, true);
+      assert.equal(reused.output.recorded, false);
+      assert.equal(reused.output.recordDigest, finished.output.recordDigest);
+      assert.equal(
+        fs.readFileSync(path.join(directory, "executions"), "utf8"),
+        "run\n",
+      );
+      const legacy = await start(false).done;
+      assert.equal(legacy.code, 0);
+      assert.equal(legacy.output.recorded, true);
+      assert.equal(legacy.output.reused, undefined);
+      assert.equal(
+        fs.readFileSync(path.join(directory, "executions"), "utf8"),
+        "run\nrun\n",
+      );
+      assert.equal(readVerificationRuns(this.staging).length, 2);
+      // Same-process calls serialize synchronously; the second sees the first record.
+      const input = {
+        staging: this.staging,
+        base: this.base,
+        scope: "full" as const,
+        argv: FULL_COMMAND,
+      };
+      const [executed, sameProcessReuse] = await Promise.all([
+        runVerification(input),
+        runVerification({ ...input, reuse: true }),
+      ]);
+      assert.equal(sameProcessReuse.reused, true);
+      assert.equal(
+        sameProcessReuse.record.recordDigest,
+        executed.record.recordDigest,
+      );
+      assert.equal(readVerificationRuns(this.staging).length, 3);
+      this.stagingDigests.concurrent = readStoredStagingRecord(
+        this.staging,
+      ).digest;
+    } finally {
+      fs.writeFileSync(path.join(directory, "release"), "release");
+      await first.done.catch(() => undefined);
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+Then(
+  "競合要求は実行前に拒否され終了後だけ再利用し通常runは再実行する",
+  function () {
+    assert.equal(readVerificationRuns(this.staging).length, 3);
+    assert.equal(
+      this.stagingDigests.concurrent,
+      calculateStagingDigest(this.staging, listStagingArtifacts(this.staging)),
+    );
+  },
+);
+
+When("大量の検証出力を遅い出力先へ中継する", async function () {
+  const digest = crypto.createHash("sha256");
+  const staging = this.staging;
+  let bytes = 0;
+  const output = new Writable({
+    highWaterMark: 1024,
+    write(chunk: Buffer, _encoding, callback) {
+      assert.ok(chunk.length <= 64 * 1024);
+      assert.equal(
+        readVerificationRuns(staging).length,
+        1,
+        "record committed before output relay",
+      );
+      bytes += chunk.length;
+      digest.update(chunk);
+      setImmediate(callback);
+    },
+  });
+  process.env[MODE_VARIABLE] = "large";
+  try {
+    const result = await runVerification({
+      staging: this.staging,
+      base: this.base,
+      scope: "full",
+      argv: FULL_COMMAND,
+      output,
+    });
+    assert.equal(result.record.exitCode, 0);
+    const stdout = Buffer.alloc(3 * 1024 * 1024, 65);
+    const stderr = Buffer.alloc(2 * 1024 * 1024, 66);
+    assert.equal(
+      result.record.stdoutDigest,
+      crypto.createHash("sha256").update(stdout).digest("hex"),
+    );
+    assert.equal(
+      result.record.stderrDigest,
+      crypto.createHash("sha256").update(stderr).digest("hex"),
+    );
+    assert.equal(bytes, stdout.length + stderr.length);
+    assert.equal(
+      digest.digest("hex"),
+      crypto.createHash("sha256").update(stdout).update(stderr).digest("hex"),
+    );
+  } finally {
+    delete process.env[MODE_VARIABLE];
+    output.destroy();
+  }
+});
+
+Then("出力を欠落させず個別digestを記録し一時出力を公開しない", function () {
+  assert.equal(readVerificationRuns(this.staging).length, 1);
+  assert.ok(fs.statSync(recordFile(this)).size < 20_000);
+});
+
+When("中継先がdrain前に閉じても停止し後続要求を処理できる", async function () {
+  process.env[MODE_VARIABLE] = "large";
+  try {
+    for (const emitClose of [true, false]) {
+      const output = new Writable({
+        highWaterMark: 1,
+        emitClose,
+        write(_chunk, _encoding, callback) {
+          this.destroy();
+          callback();
+        },
+      });
+      await assert.rejects(
+        runVerification({
+          staging: this.staging,
+          base: this.base,
+          scope: "full",
+          argv: FULL_COMMAND,
+          output,
+        }),
+        /premature close|ended before drain/i,
+      );
+      for (const event of ["drain", "close", "error", "finish"])
+        assert.equal(output.listenerCount(event), 0);
+    }
+    assert.equal(readVerificationRuns(this.staging).length, 2);
+  } finally {
+    delete process.env[MODE_VARIABLE];
+  }
+});
+
+When("main終了後の子孫追記を観測digestと中継から除外する", async function () {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "asc-late-output-"));
+  const chunks: Buffer[] = [];
+  const output = new Writable({
+    highWaterMark: 1,
+    write(chunk: Buffer, _encoding, callback) {
+      chunks.push(Buffer.from(chunk));
+      fs.writeFileSync(path.join(directory, "release"), "release");
+      let attempts = 0;
+      const timer = setInterval(() => {
+        if (fs.existsSync(path.join(directory, "done"))) {
+          clearInterval(timer);
+          callback();
+        } else if (++attempts > 500) {
+          clearInterval(timer);
+          callback(new Error("late descendant did not finish"));
+        }
+      }, 10);
+    },
+  });
+  process.env[MODE_VARIABLE] = "late";
+  process.env.ASC_VERIFY_LATE_DIR = directory;
+  try {
+    const result = await runVerification({
+      staging: this.staging,
+      base: this.base,
+      scope: "full",
+      argv: FULL_COMMAND,
+      output,
+    });
+    assert.equal(fs.readFileSync(path.join(directory, "done"), "utf8"), "done");
+    assert.equal(Buffer.concat(chunks).toString(), "observed");
+    assert.equal(
+      result.record.stdoutDigest,
+      crypto.createHash("sha256").update("observed").digest("hex"),
+    );
+    assert.equal(
+      result.record.stderrDigest,
+      crypto.createHash("sha256").update("").digest("hex"),
+    );
+  } finally {
+    delete process.env[MODE_VARIABLE];
+    delete process.env.ASC_VERIFY_LATE_DIR;
+    output.destroy();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+Then("中継失敗後も2回の実検証記録が保持される", function () {
+  assert.equal(readVerificationRuns(this.staging).length, 2);
+});

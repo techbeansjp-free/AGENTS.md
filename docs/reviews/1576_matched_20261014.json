@@ -1,0 +1,2039 @@
+{
+  "kind": "asc-matched-exploratory-evaluation/v1",
+  "issue": 1576,
+  "date": "2026-10-14",
+  "acceptance": "not-established",
+  "protocol": {
+    "baseline": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+    "old": "5d3e69257473dd6dcce9d2249cc779c02dcb6700",
+    "new": "284c50b609fba51fc45e2aad54b6e3438bd6daad",
+    "model": "gpt-5.6-sol",
+    "effort": "high",
+    "request": "Change greeting() result from Helo to Hello. Add an exact regression assertion. No public API change.",
+    "oracle": [
+      "node",
+      "--test"
+    ],
+    "distribution": "package.files only; no repository source/tests/review docs",
+    "gitIsolation": "three independent clones, no shared git metadata",
+    "timing": "request dispatch through successful draft PR CI; provisioning excluded identically",
+    "status": "completed-exploratory; acceptance-not-established",
+    "supersedesInvalidTrial": "/tmp/asc-1576-matched-20261014-v3",
+    "remoteHeadVerified": "refs/remotes/origin/main",
+    "reviewerExecution": "fresh context, no writes; automatic approval for read-only CLI observations; before/after mutation audit",
+    "providerRuntime": "copied installed package; wrapper inside package/bin, preserving sandbox runtime detection",
+    "newFixed": "1bad2a90e202a187294d96551647cf8c12285569",
+    "newFixedChange": "Concrete CLI argv and supported read-only sandbox-error recovery in fresh Work Unit dispatch; 73 targeted scenarios pass."
+  },
+  "sampleCountPerArm": 1,
+  "distributionDigestMethod": "sha256 of sorted relative file path UTF-8 + NUL + file bytes, concatenated for each file",
+  "limitations": [
+    "This is a sequential, single-run exploratory comparison, not a statistically established general speedup.",
+    "All task CLI model calls use the same model/effort and automatic approval profile; host internal approval-model usage and unobserved launches cannot be proven complete.",
+    "Observed task tokens cover agent exit, including post-CI reporting. Wall time ends at the last successful submitted-HEAD CI completion. These windows differ.",
+    "Missing usage remains null; observed processed/fresh totals are lower bounds, not all-agent totals or billing cost.",
+    "Task reviewer Git HEAD/status/diff checks do not prove all ignored staging files were immutable; read-only instructions and observed command audit are additional bounded evidence.",
+    "The common oracle checks greeting behavior, mutation sensitivity, full fixture tests and unchanged baseline files. It is not an independent proof of every ASC policy gate.",
+    "Candidate use is explicitly requested in new-arm prompts, so this does not measure automatic route-selection frequency.",
+    "No-ASC maintains the common oracle, independent review and PR CI, but does not supply ASC planning seals, journal or policy evidence.",
+    "Host load and external provider/GitHub latency are not controlled; all outages and retries remain in wall time.",
+    "The new-fixed arm is an additional post-observation correction trial, not a replacement of the first new arm."
+  ],
+  "arms": {
+    "old": {
+      "timing": {
+        "startedAt": 1791926395.9757197,
+        "endedAt": 1791928077.5044897,
+        "exitCode": 0
+      },
+      "orchestrationWallSeconds": 1681.5287699699402,
+      "agents": [
+        {
+          "id": "04544cd4-537c-4772-8204-fe7110978422",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": null,
+          "wallSeconds": null,
+          "usage": null,
+          "coverage": "missing",
+          "commandCalls": 10,
+          "failedCommandCalls": 3,
+          "localLogRef": "old-agents/04544cd4-537c-4772-8204-fe7110978422.jsonl",
+          "logSha256": "02661a9e40a511d73930bfcd42b0ffd0f7ed18d5623f769f9fcbc79065bf5fca",
+          "startedAt": 1791926542.1800764,
+          "endedAt": null,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "1bd1e3c9-a5b6-4c7b-8c38-2c2ca71874a7",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 224.93723154067993,
+          "usage": {
+            "input_tokens": 1363313,
+            "cached_input_tokens": 1297920,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 11844,
+            "reasoning_output_tokens": 6156
+          },
+          "coverage": "complete",
+          "commandCalls": 53,
+          "failedCommandCalls": 1,
+          "localLogRef": "old-agents/1bd1e3c9-a5b6-4c7b-8c38-2c2ca71874a7.jsonl",
+          "logSha256": "7e91728a2c37981b3f504b0e49936c396047472ee91fcf47574675eff47a1fd9",
+          "startedAt": 1791927363.2604144,
+          "endedAt": 1791927588.197646,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "439949d0-20f9-40a7-8ab7-971882a4af8f",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": null,
+          "wallSeconds": null,
+          "usage": null,
+          "coverage": "missing",
+          "commandCalls": 11,
+          "failedCommandCalls": 3,
+          "localLogRef": "old-agents/439949d0-20f9-40a7-8ab7-971882a4af8f.jsonl",
+          "logSha256": "298290a0da4af961c76efcfa58ee355f5ac18405371d2281eb1c7d26afe265c2",
+          "startedAt": 1791926872.2673368,
+          "endedAt": null,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "48b3f6e2-e8f3-443c-a7f9-4ff410ce1cda",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 196.46262907981873,
+          "usage": {
+            "input_tokens": 755951,
+            "cached_input_tokens": 703360,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 10978,
+            "reasoning_output_tokens": 3253
+          },
+          "coverage": "complete",
+          "commandCalls": 17,
+          "failedCommandCalls": 5,
+          "localLogRef": "old-agents/48b3f6e2-e8f3-443c-a7f9-4ff410ce1cda.jsonl",
+          "logSha256": "6bc4f3b45664d8745d12b676c01bf160d18763ea273b1a3b18a1444e1575eced",
+          "startedAt": 1791926609.281824,
+          "endedAt": 1791926805.7444532,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "6bdc187c-eb90-4f6d-8b0f-fa731fdd753b",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 2,
+          "wallSeconds": 0.04074501991271973,
+          "usage": null,
+          "coverage": "missing",
+          "commandCalls": 0,
+          "failedCommandCalls": 0,
+          "localLogRef": "old-agents/6bdc187c-eb90-4f6d-8b0f-fa731fdd753b.jsonl",
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "startedAt": 1791927349.950597,
+          "endedAt": 1791927349.991342,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "73a5c122-2880-4faf-978d-6c0f333c1d1a",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 214.36974358558655,
+          "usage": {
+            "input_tokens": 1432325,
+            "cached_input_tokens": 1381760,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 8570,
+            "reasoning_output_tokens": 2313
+          },
+          "coverage": "complete",
+          "commandCalls": 36,
+          "failedCommandCalls": 15,
+          "localLogRef": "old-agents/73a5c122-2880-4faf-978d-6c0f333c1d1a.jsonl",
+          "logSha256": "78a4f075327c6b4bb3ee7b6a9ccc11b51d7220f10abc8799a5549e50892a16cb",
+          "startedAt": 1791927060.2240107,
+          "endedAt": 1791927274.5937543,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "8f13a541-d004-4de2-8f77-b22eeb757224",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": null,
+          "wallSeconds": null,
+          "usage": null,
+          "coverage": "missing",
+          "commandCalls": 9,
+          "failedCommandCalls": 2,
+          "localLogRef": "old-agents/8f13a541-d004-4de2-8f77-b22eeb757224.jsonl",
+          "logSha256": "0b39148b915e909b30baeaba18fef0ed985cc4c7056e57c4cb59649a050aa05f",
+          "startedAt": 1791926979.642568,
+          "endedAt": null,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "d8fa4571-51a4-4bde-a31b-47332c116122",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 1,
+          "wallSeconds": 0.08875298500061035,
+          "usage": null,
+          "coverage": "missing",
+          "commandCalls": 0,
+          "failedCommandCalls": 0,
+          "localLogRef": "old-agents/d8fa4571-51a4-4bde-a31b-47332c116122.jsonl",
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "startedAt": 1791926526.211206,
+          "endedAt": 1791926526.299959,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "d93ad6b1-f946-4766-8ff4-d6992b931f36",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 1681.4972324371338,
+          "usage": {
+            "input_tokens": 10496640,
+            "cached_input_tokens": 10168192,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 46974,
+            "reasoning_output_tokens": 14546
+          },
+          "coverage": "complete",
+          "commandCalls": 113,
+          "failedCommandCalls": 14,
+          "localLogRef": "old-agents/d93ad6b1-f946-4766-8ff4-d6992b931f36.jsonl",
+          "logSha256": "31aceaa9bfb880e2c3804a5b45b8333043cefb5322ca4f04436032272ffe7bb8",
+          "startedAt": 1791926396.001761,
+          "endedAt": 1791928077.4989934,
+          "role": "coordinator"
+        }
+      ],
+      "observedTaskAgentUsage": {
+        "input_tokens": 14048229,
+        "cached_input_tokens": 13551232,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 78366,
+        "reasoning_output_tokens": 26268
+      },
+      "observedTaskAgentProcessedTokens": 14126595,
+      "observedTaskAgentFreshTokens": 575363,
+      "completeTaskAgentUsage": null,
+      "allAgentUsage": null,
+      "allAgentCoverageNote": "Task CLI launches are instrumented; any missing launch usage stays null. Host automatic approval/reviewer internal usage is not exposed by CLI and is not counted as zero.",
+      "instrumentationValidFromStart": true,
+      "requestToCiSeconds": 1457.0242803096771,
+      "ciCompletionUtc": "2026-10-13T21:44:13+00:00",
+      "github": {
+        "createdAt": "2026-10-13T21:43:55Z",
+        "headRefOid": "ac869d85805c9d733c5df269610d5b8f21d47fde",
+        "isDraft": true,
+        "mergedAt": null,
+        "state": "OPEN",
+        "statusCheckRollup": [
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-13T21:44:13Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/actions/runs/38472781785/job/115555860902",
+            "name": "test",
+            "startedAt": "2026-10-13T21:44:01Z",
+            "status": "COMPLETED",
+            "workflowName": "Dummy tests"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-13T21:42:53Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/actions/runs/38472624631/job/115555308871",
+            "name": "test",
+            "startedAt": "2026-10-13T21:42:41Z",
+            "status": "COMPLETED",
+            "workflowName": "Dummy tests"
+          }
+        ],
+        "url": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/pull/25",
+        "draftEvents": [
+          {
+            "event": "convert_to_draft",
+            "created_at": "2026-10-13T21:44:22Z"
+          }
+        ]
+      },
+      "commonOracle": {
+        "baseline": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+        "head": "ac869d85805c9d733c5df269610d5b8f21d47fde",
+        "changedPaths": [
+          "docs/reviews/20_review.json",
+          "src/greeting.js",
+          "test/greeting.test.js"
+        ],
+        "unchangedBaselinePaths": [
+          ".agent-skill-chain/policy/default.json",
+          ".agent-skill-chain/project-policy.json",
+          ".agent-skill-chain/project/choices/development.json",
+          ".agent-skill-chain/project/providers/capability-mapping.json",
+          ".github/workflows/test.yml",
+          ".gitignore",
+          "app/Http/Controllers/StatusController.php",
+          "benchmark-cases.json",
+          "composer.json",
+          "composer.lock",
+          "database/migrations/001_create_items.sql",
+          "package-lock.json",
+          "package.json",
+          "php/check.php",
+          "python/check.py",
+          "python/check_migration.py",
+          "python/normalizer.py",
+          "scripts/targeted.mjs",
+          "src/Badge.js",
+          "src/api.js",
+          "src/authorization.js",
+          "src/clamp.js",
+          "test/authorization-baseline.test.js",
+          "test/stacks.test.js"
+        ],
+        "scopeViolations": [],
+        "full": {
+          "exitCode": 0,
+          "outputSha256": "e50e73716abda642316d91e760a8abfc036680371697b302f9477e9b9a4718ff",
+          "output": "✔ authorization preserves declared inactive denial and active access (0.762279ms)\n✔ greeting returns exact corrected text (0.700683ms)\n✔ clamp lower boundary (0.80375ms)\n✔ React badge server rendering (4.851561ms)\n✔ API preserves stable fields (0.66765ms)\n✔ authorization owner (0.156843ms)\n✔ Laravel controller (24.26945ms)\n✔ Python module (47.371687ms)\n✔ SQLite migration (51.355715ms)\nℹ tests 9\nℹ suites 0\nℹ pass 9\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 437.235467\n"
+        },
+        "exactGreeting": {
+          "exitCode": 0,
+          "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "output": ""
+        },
+        "regressionMutation": {
+          "exitCode": 1,
+          "outputSha256": "afb06196116a51a1addef476a92fa631b2ece26dfd096701cc713410653f5bf1",
+          "output": "✖ greeting returns exact corrected text (1.387764ms)\nℹ tests 1\nℹ suites 0\nℹ pass 0\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 57.187901\n\n✖ failing tests:\n\ntest at test/greeting.test.js:4:1\n✖ greeting returns exact corrected text (1.387764ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  'Helo' !== 'Hello'\n  \n      at TestContext.<anonymous> (file:///tmp/asc-1576-oracle-kxsffx24/test/greeting.test.js:4:57)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.start (node:internal/test_runner/test:1242:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 'Helo',\n    expected: 'Hello',\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n"
+        },
+        "passed": true
+      },
+      "agentReportedResult": {
+        "benchmark": "asc-1576-matched-old-arm",
+        "issue": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/issues/20",
+        "repository": "adachi-tatsuru/asc-1576-matched-e2e-20261013",
+        "baseline": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+        "status": "completed",
+        "startedAt": "2026-10-13T21:20:24Z",
+        "endedAt": "2026-10-13T21:47:17Z",
+        "ascFinalState": "complete",
+        "phases": {
+          "step0": {
+            "startedAt": "2026-10-13T21:20:24Z",
+            "endedAt": "2026-10-13T21:21:29Z",
+            "result": "quick mode selected; staging created"
+          },
+          "step1": {
+            "startedAt": "2026-10-13T21:21:29Z",
+            "endedAt": "2026-10-13T21:26:55.958Z",
+            "result": "sealed quick requirements define exact Hello result, exact assertion, and no API change"
+          },
+          "step4": {
+            "startedAt": "2026-10-13T21:26:56Z",
+            "endedAt": "2026-10-13T21:27:36.911Z",
+            "result": "Issue synchronized, read back, and plan sealed"
+          },
+          "step9": {
+            "startedAt": "2026-10-13T21:27:42Z",
+            "endedAt": "2026-10-13T21:34:50.229Z",
+            "result": "implementation and exact regression assertion committed; full verification passed"
+          },
+          "step10": {
+            "startedAt": "2026-10-13T21:34:50Z",
+            "endedAt": "2026-10-13T21:41:20.765Z",
+            "result": "fresh independent read-only review approved with zero findings; formal evidence committed and recorded"
+          },
+          "step11": {
+            "startedAt": "2026-10-13T21:41:21Z",
+            "endedAt": "2026-10-13T21:44:13Z",
+            "result": "Draft PR created, exact head read back, CI succeeded, stopped without merge or release"
+          }
+        },
+        "candidate": {
+          "worktree": "/tmp/asc-1576-matched-20261014-v4/old/.worktrees/20261014_062900-20-greeting-hello",
+          "branch": "fix/20-greeting-hello",
+          "implementationHead": "ceb5d714784cbcfcabab0950e5f61dddb49a85e9",
+          "finalHead": "ac869d85805c9d733c5df269610d5b8f21d47fde",
+          "applicationFiles": [
+            "src/greeting.js",
+            "test/greeting.test.js"
+          ],
+          "reviewEvidence": "docs/reviews/20_review.json",
+          "finalStatusClean": true
+        },
+        "verification": {
+          "command": [
+            "node",
+            "--test"
+          ],
+          "passed": true,
+          "testsPassed": 9,
+          "testsFailed": 0,
+          "implementationHead": "ceb5d714784cbcfcabab0950e5f61dddb49a85e9",
+          "recordDigest": "797aaeaa968be9169328a9e23250770e81670d2dffd2fafa2392ea115ede7ec9"
+        },
+        "review": {
+          "tool": "codex exec --json --approve-for-me",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "implementerContext": "01a1372d-07ad-7811-b700-c626afe04d76",
+          "reviewerContext": "01a13731-a764-7493-b80b-640fea24d113",
+          "independent": true,
+          "readOnly": true,
+          "decision": "approve",
+          "findings": [],
+          "originalIssueCompared": true,
+          "sealedRequirementsCompared": true,
+          "amendmentPresent": false,
+          "actualDiffCompared": true,
+          "beforeStatusClean": true,
+          "afterStatusClean": true,
+          "beforeBinaryDiffSha256": "7f4c90a50e77d1215427d221f28a7ca9eed853c8e70cc07e307412b1e4f25109",
+          "afterBinaryDiffSha256": "7f4c90a50e77d1215427d221f28a7ca9eed853c8e70cc07e307412b1e4f25109",
+          "ascDiffSha256": "84eec224eafb07acaa1eedb83b892274fe382bdc37ca81cd0ec939438e336dc2",
+          "sessionId": "13c3f552a8e3791c5052435787f081497a97c88958e06878620f7040debb961d",
+          "roundDigest": "0dc8805561d55168b5c543aaa8cdcb7fa0e00b22dfcb716bb740a9181ca26655",
+          "evidenceDigest": "e2ff973f45f464d851e2a16ef03f8eb8d897895e6102a337758bcf9b3de740a5"
+        },
+        "pullRequest": {
+          "number": 25,
+          "url": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/pull/25",
+          "draft": true,
+          "state": "OPEN",
+          "mergedAt": null,
+          "baseRef": "main",
+          "baseSha": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+          "headRef": "fix/20-greeting-hello",
+          "headSha": "ac869d85805c9d733c5df269610d5b8f21d47fde",
+          "ascOutcome": "pull-request",
+          "ascDeliveryEvidenceId": "8c0873e79890b4a6ff371b150960ba31450f1c1e222cec711e1694851aab7fa9"
+        },
+        "ci": {
+          "requiredChecksPolicy": [],
+          "allObservedChecksPassed": true,
+          "latestCheck": "test",
+          "latestConclusion": "SUCCESS",
+          "latestStartedAt": "2026-10-13T21:44:01Z",
+          "latestCompletedAt": "2026-10-13T21:44:13Z"
+        },
+        "failures": [
+          {
+            "at": "2026-10-13T21:20:24Z",
+            "phase": "step0-doctor",
+            "operation": "ASC doctor in managed sandbox",
+            "failure": "Child process execution for git and gh failed with EPERM; workflowReadiness was false.",
+            "recovery": "Retried the same doctor command with host approval; readiness became true."
+          },
+          {
+            "phase": "step1-worker",
+            "operation": "first fresh request worker startup",
+            "failure": "Instrumented Codex state database was read-only.",
+            "recovery": "Stopped the context and launched a new fresh worker."
+          },
+          {
+            "phase": "step1-worker",
+            "operation": "second request worker CLI discovery",
+            "failure": "The worker drifted into sibling-path discovery while looking for the CLI.",
+            "recovery": "Stopped the context, excluded its output, and relaunched with the fixed old-distribution CLI path."
+          },
+          {
+            "phase": "step9-worker",
+            "operation": "first implementation worker",
+            "failure": "The worker edited the main worktree test before creating a Candidate worktree.",
+            "recovery": "Stopped it and restored the exact original file before creating the CLI-managed Candidate worktree."
+          },
+          {
+            "phase": "step9-worker",
+            "operation": "first Candidate worker",
+            "failure": "Installed ASC assets were absent in the new ignored worktree and the worker drifted into sibling-path discovery.",
+            "recovery": "Stopped the context, excluded its output, installed the authorized old ASC distribution into the Candidate, and launched a new fresh worker."
+          },
+          {
+            "phase": "step9-dependencies",
+            "operation": "composer install",
+            "failure": "Sandbox DNS could not resolve api.github.com.",
+            "recovery": "Retried with host approval; dependencies installed without tracked-file changes."
+          },
+          {
+            "phase": "step9-verification",
+            "operation": "verify plan and first verify run",
+            "failure": "The initial invocations omitted the required explicit base before a review session existed.",
+            "recovery": "Retried with the baseline binding; formal full verification passed."
+          },
+          {
+            "phase": "step10-reviewer",
+            "operation": "first reviewer launch",
+            "failure": "The Codex CLI rejected combining --approve-for-me with an explicit sandbox option.",
+            "recovery": "Launched a new fresh reviewer with the required --approve-for-me command and no bypass flags."
+          },
+          {
+            "phase": "step10-coordinator",
+            "operation": "review round, workflow preview, review export, and review validation sandbox probes",
+            "failure": "Managed sandbox child-process probes returned EPERM or could not resolve Git HEAD.",
+            "recovery": "Each unchanged command was retried with host approval; all formal gates passed."
+          },
+          {
+            "phase": "step10-coordinator",
+            "operation": "stage review evidence",
+            "failure": "The sandbox could not create the linked-worktree index.lock.",
+            "recovery": "Retried the single-file git add with host approval."
+          },
+          {
+            "phase": "step10-coordinator",
+            "operation": "first evidence commit invocation",
+            "failure": "An unquoted multiword commit message was parsed as pathspecs.",
+            "recovery": "Retried with a quoted message and committed only docs/reviews/20_review.json."
+          },
+          {
+            "phase": "step11-delivery",
+            "operation": "first PR dry-run",
+            "failure": "The evidence-only suffix had not yet passed the explicit review validate gate.",
+            "recovery": "Validated the generated review artifact against Git and retried."
+          },
+          {
+            "phase": "step11-delivery",
+            "operation": "review validate sandbox probe",
+            "failure": "Managed sandbox git spawn returned EPERM.",
+            "recovery": "Retried the same validation with host approval; it passed."
+          },
+          {
+            "phase": "step11-delivery",
+            "operation": "second PR dry-run",
+            "failure": "The legacy body-file path rejected unresolved ASC placeholders.",
+            "recovery": "Materialized the already-recorded verification, review, and head values and reran preview successfully."
+          },
+          {
+            "phase": "step11-delivery",
+            "operation": "Draft-state read-back",
+            "failure": "ASC created PR #25 as open but not Draft because this old CLI exposes no Draft flag.",
+            "recovery": "Converted only PR #25 to Draft with the supported GitHub CLI operation, then verified isDraft=true."
+          },
+          {
+            "phase": "final-diagnostics",
+            "operation": "local remote-tracking comparison",
+            "failure": "The local origin/fix/20-greeting-hello tracking ref was absent even though push configured the branch.",
+            "recovery": "Used the already-required GitHub provider read-back, which confirmed PR #25 at the exact final head SHA; no duplicate push or fetch was performed."
+          }
+        ],
+        "retries": [
+          {
+            "phase": "step0-doctor",
+            "count": 1,
+            "reason": "sandbox child-process EPERM"
+          },
+          {
+            "phase": "step1-worker",
+            "count": 2,
+            "reason": "state database failure and invalid CLI discovery context"
+          },
+          {
+            "phase": "step9-worker",
+            "count": 2,
+            "reason": "wrong worktree mutation and missing installed ASC assets"
+          },
+          {
+            "phase": "step9-dependencies",
+            "count": 1,
+            "reason": "sandbox DNS outage"
+          },
+          {
+            "phase": "step9-verification",
+            "count": 2,
+            "reason": "missing explicit base binding"
+          },
+          {
+            "phase": "step10-reviewer",
+            "count": 1,
+            "reason": "incompatible reviewer CLI options"
+          },
+          {
+            "phase": "step10-coordinator",
+            "count": 6,
+            "reason": "sandbox probes, linked-worktree index permission, and commit-message quoting"
+          },
+          {
+            "phase": "step11-delivery",
+            "count": 4,
+            "reason": "explicit artifact validation, sandbox probe, legacy body materialization, and Draft conversion"
+          }
+        ],
+        "ciCompletedAt": "2026-10-13T21:44:13Z",
+        "logs": [
+          "doctor.log",
+          "doctor-retry.log",
+          "step0-create.log",
+          "step1-worker.jsonl",
+          "step1-worker-retry.jsonl",
+          "step1-worker-retry2.jsonl",
+          "step1-apply.log",
+          "step4-issue-read.log",
+          "step4-preview.log",
+          "step4-apply.log",
+          "step9-worker.jsonl",
+          "step9-worktree-create.log",
+          "candidate-install.log",
+          "step9-worker-retry.jsonl",
+          "step9-worker-retry2.jsonl",
+          "step9-apply.log",
+          "step10-reviewer.jsonl",
+          "step10-reviewer-retry.jsonl"
+        ]
+      },
+      "phaseCoverage": "agent-reported timestamps, not independently reconstructed critical path",
+      "allAgentProcessedTokens": null,
+      "cost": null,
+      "contextHighWaterMark": null,
+      "distributionSha256": "ce6c2e04b9d477d289c93d53f6c9ab2f42fe92ad041cd05eba447a87eff2c186",
+      "requestToDraftAndCiSeconds": 1466.0242803096771,
+      "coordinatorLogSha256": "31aceaa9bfb880e2c3804a5b45b8333043cefb5322ca4f04436032272ffe7bb8",
+      "promptSha256": "2e3815c1d5a9935e8faa7d4b0c87efd2ca183000da367788b7fa2babf48d2f01"
+    },
+    "new": {
+      "timing": {
+        "startedAt": 1791924652.1953804,
+        "endedAt": 1791926395.9444954,
+        "exitCode": 0
+      },
+      "orchestrationWallSeconds": 1743.7491149902344,
+      "agents": [
+        {
+          "id": "08c1c5bc-62b8-4f71-9565-781b269c22fd",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 41.12309384346008,
+          "usage": {
+            "input_tokens": 171450,
+            "cached_input_tokens": 154752,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1564,
+            "reasoning_output_tokens": 621
+          },
+          "coverage": "complete",
+          "commandCalls": 6,
+          "failedCommandCalls": 3,
+          "localLogRef": "new-agents/08c1c5bc-62b8-4f71-9565-781b269c22fd.jsonl",
+          "logSha256": "93878f54ca795669c3e4c3f6eb5878d17a669294ae520f337f89414cdcc7116f",
+          "startedAt": 1791925252.040403,
+          "endedAt": 1791925293.1634967,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "1f4f0e0e-c43c-4d3f-b484-666aeca4ebfc",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 25.534733533859253,
+          "usage": {
+            "input_tokens": 78564,
+            "cached_input_tokens": 67456,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1095,
+            "reasoning_output_tokens": 298
+          },
+          "coverage": "complete",
+          "commandCalls": 4,
+          "failedCommandCalls": 1,
+          "localLogRef": "new-agents/1f4f0e0e-c43c-4d3f-b484-666aeca4ebfc.jsonl",
+          "logSha256": "9204f8c5ba24511a56c185e31ef0474f743349804837b9c472178f515420ca14",
+          "startedAt": 1791924804.8627262,
+          "endedAt": 1791924830.3974597,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "244c6df4-dc6c-4830-aae9-147da8b1cc93",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 34.804171085357666,
+          "usage": {
+            "input_tokens": 65829,
+            "cached_input_tokens": 51200,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1433,
+            "reasoning_output_tokens": 616
+          },
+          "coverage": "complete",
+          "commandCalls": 3,
+          "failedCommandCalls": 1,
+          "localLogRef": "new-agents/244c6df4-dc6c-4830-aae9-147da8b1cc93.jsonl",
+          "logSha256": "e096f95e92221d0b8fd69a18d74a0553142e0cd98d590b52133a2fbfdb908480",
+          "startedAt": 1791924934.735585,
+          "endedAt": 1791924969.539756,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "3fd2112f-f687-496a-b862-f170218127da",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 2,
+          "wallSeconds": 0.0440363883972168,
+          "usage": null,
+          "coverage": "missing",
+          "commandCalls": 0,
+          "failedCommandCalls": 0,
+          "localLogRef": "new-agents/3fd2112f-f687-496a-b862-f170218127da.jsonl",
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "startedAt": 1791925703.842508,
+          "endedAt": 1791925703.8865445,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "6f6eaef2-eb86-4633-93bc-55e1928d26a3",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 1743.7170102596283,
+          "usage": {
+            "input_tokens": 16424181,
+            "cached_input_tokens": 16105984,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 63821,
+            "reasoning_output_tokens": 18996
+          },
+          "coverage": "complete",
+          "commandCalls": 127,
+          "failedCommandCalls": 17,
+          "localLogRef": "new-agents/6f6eaef2-eb86-4633-93bc-55e1928d26a3.jsonl",
+          "logSha256": "55502e815582abed996f353d4077953089c9c113199355ec97f5e3891c45c25b",
+          "startedAt": 1791924652.2218378,
+          "endedAt": 1791926395.938848,
+          "role": "coordinator"
+        },
+        {
+          "id": "80c03911-6112-41f2-b8f2-17918e4edce1",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 24.551024198532104,
+          "usage": {
+            "input_tokens": 42177,
+            "cached_input_tokens": 27520,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 706,
+            "reasoning_output_tokens": 307
+          },
+          "coverage": "complete",
+          "commandCalls": 1,
+          "failedCommandCalls": 1,
+          "localLogRef": "new-agents/80c03911-6112-41f2-b8f2-17918e4edce1.jsonl",
+          "logSha256": "1d240800db097d44a650a504175cc3688940115d18d4d084915ed200383daeec",
+          "startedAt": 1791925330.5488932,
+          "endedAt": 1791925355.0999174,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "8ff5c6cb-5b5d-41c8-9217-490e8e21a090",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 137.5005829334259,
+          "usage": {
+            "input_tokens": 626412,
+            "cached_input_tokens": 575744,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 8296,
+            "reasoning_output_tokens": 3890
+          },
+          "coverage": "complete",
+          "commandCalls": 33,
+          "failedCommandCalls": 4,
+          "localLogRef": "new-agents/8ff5c6cb-5b5d-41c8-9217-490e8e21a090.jsonl",
+          "logSha256": "f6e117d38e5e6df8874665b250106ccdc7eb945442c03dbcfe8f94d9ee02edf2",
+          "startedAt": 1791925726.365479,
+          "endedAt": 1791925863.866062,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "d2560083-fbfe-4c93-bd85-4a6ecf75e599",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 146.2791042327881,
+          "usage": {
+            "input_tokens": 556355,
+            "cached_input_tokens": 530432,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 7022,
+            "reasoning_output_tokens": 2142
+          },
+          "coverage": "complete",
+          "commandCalls": 31,
+          "failedCommandCalls": 3,
+          "localLogRef": "new-agents/d2560083-fbfe-4c93-bd85-4a6ecf75e599.jsonl",
+          "logSha256": "808e392983d1bdfb3582d519308165419c45f1466aaf6e988feb38c1a00793ff",
+          "startedAt": 1791925439.6036851,
+          "endedAt": 1791925585.8827894,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "d36cf92b-2ffe-4351-96a2-24e81b73a550",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 22.259145498275757,
+          "usage": {
+            "input_tokens": 39098,
+            "cached_input_tokens": 29696,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 991,
+            "reasoning_output_tokens": 662
+          },
+          "coverage": "complete",
+          "commandCalls": 1,
+          "failedCommandCalls": 1,
+          "localLogRef": "new-agents/d36cf92b-2ffe-4351-96a2-24e81b73a550.jsonl",
+          "logSha256": "8d0b4ebd2e15bad20085548828b8f10a2032d47dab4bf3421f16530181591bd1",
+          "startedAt": 1791925384.455015,
+          "endedAt": 1791925406.7141604,
+          "role": "nested agent; exact role requires log inspection"
+        }
+      ],
+      "observedTaskAgentUsage": {
+        "input_tokens": 18004066,
+        "cached_input_tokens": 17542784,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 84928,
+        "reasoning_output_tokens": 27532
+      },
+      "observedTaskAgentProcessedTokens": 18088994,
+      "observedTaskAgentFreshTokens": 546210,
+      "completeTaskAgentUsage": null,
+      "allAgentUsage": null,
+      "allAgentCoverageNote": "Task CLI launches are instrumented; any missing launch usage stays null. Host automatic approval/reviewer internal usage is not exposed by CLI and is not counted as zero.",
+      "instrumentationValidFromStart": true,
+      "requestToCiSeconds": 1683.804619550705,
+      "ciCompletionUtc": "2026-10-13T21:18:56+00:00",
+      "github": {
+        "createdAt": "2026-10-13T21:16:18Z",
+        "headRefOid": "43531d9b378eb9bdf4f40bc3a5550c5bb9f1f0ac",
+        "isDraft": true,
+        "mergedAt": null,
+        "state": "OPEN",
+        "statusCheckRollup": [
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-13T21:16:34Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/actions/runs/38469325907/job/115543976826",
+            "name": "test",
+            "startedAt": "2026-10-13T21:16:24Z",
+            "status": "COMPLETED",
+            "workflowName": "Dummy tests"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-13T21:18:56Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/actions/runs/38469154863/job/115543413818",
+            "name": "test",
+            "startedAt": "2026-10-13T21:15:07Z",
+            "status": "COMPLETED",
+            "workflowName": "Dummy tests"
+          }
+        ],
+        "url": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/pull/24",
+        "draftEvents": [
+          {
+            "event": "convert_to_draft",
+            "created_at": "2026-10-13T21:16:42Z"
+          }
+        ]
+      },
+      "commonOracle": {
+        "baseline": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+        "head": "43531d9b378eb9bdf4f40bc3a5550c5bb9f1f0ac",
+        "changedPaths": [
+          "docs/reviews/21_review.json",
+          "src/greeting.js",
+          "test/greeting.test.js"
+        ],
+        "unchangedBaselinePaths": [
+          ".agent-skill-chain/policy/default.json",
+          ".agent-skill-chain/project-policy.json",
+          ".agent-skill-chain/project/choices/development.json",
+          ".agent-skill-chain/project/providers/capability-mapping.json",
+          ".github/workflows/test.yml",
+          ".gitignore",
+          "app/Http/Controllers/StatusController.php",
+          "benchmark-cases.json",
+          "composer.json",
+          "composer.lock",
+          "database/migrations/001_create_items.sql",
+          "package-lock.json",
+          "package.json",
+          "php/check.php",
+          "python/check.py",
+          "python/check_migration.py",
+          "python/normalizer.py",
+          "scripts/targeted.mjs",
+          "src/Badge.js",
+          "src/api.js",
+          "src/authorization.js",
+          "src/clamp.js",
+          "test/authorization-baseline.test.js",
+          "test/stacks.test.js"
+        ],
+        "scopeViolations": [],
+        "full": {
+          "exitCode": 0,
+          "outputSha256": "3c8e73714ac872258d82b865baafd628daba2d6905ebe3db66d1ab820fd38844",
+          "output": "✔ authorization preserves declared inactive denial and active access (0.756825ms)\n✔ greeting returns text (0.826477ms)\n✔ greeting returns the exact greeting (0.165825ms)\n✔ clamp lower boundary (0.815512ms)\n✔ React badge server rendering (5.110192ms)\n✔ API preserves stable fields (0.764834ms)\n✔ authorization owner (0.171208ms)\n✔ Laravel controller (25.217318ms)\n✔ Python module (49.912128ms)\n✔ SQLite migration (53.860527ms)\nℹ tests 10\nℹ suites 0\nℹ pass 10\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 469.258839\n"
+        },
+        "exactGreeting": {
+          "exitCode": 0,
+          "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "output": ""
+        },
+        "regressionMutation": {
+          "exitCode": 1,
+          "outputSha256": "acb075afd154c6836c47d2841ab2156b8d0abe064f8dec3b8c0d213baf65ed3e",
+          "output": "✔ greeting returns text (0.748426ms)\n✖ greeting returns the exact greeting (0.903096ms)\nℹ tests 2\nℹ suites 0\nℹ pass 1\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 68.246644\n\n✖ failing tests:\n\ntest at test/greeting.test.js:5:1\n✖ greeting returns the exact greeting (0.903096ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  'Helo' !== 'Hello'\n  \n      at TestContext.<anonymous> (file:///tmp/asc-1576-oracle-42ipdcia/test/greeting.test.js:5:55)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)\n      at Test.postRun (node:internal/test_runner/test:1522:19)\n      at Test.run (node:internal/test_runner/test:1447:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 'Helo',\n    expected: 'Hello',\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n"
+        },
+        "passed": true
+      },
+      "agentReportedResult": {
+        "benchmark": "asc-1576-matched-20261014-v4-new",
+        "issue": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/issues/21",
+        "baseline": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+        "phaseTimestamps": {
+          "workflow": {
+            "start": "2026-10-13T20:51:04Z",
+            "end": "2026-10-13T21:19:25Z"
+          },
+          "candidate": {
+            "start": "2026-10-13T20:52:17Z",
+            "end": "2026-10-13T20:56:13Z"
+          },
+          "formalWorkflow": {
+            "start": "2026-10-13T20:57:17Z",
+            "end": "2026-10-13T21:19:25Z"
+          },
+          "implementationWorker": {
+            "start": "2026-10-13T21:00:33Z",
+            "end": "2026-10-13T21:01:29Z"
+          },
+          "implementationWorkerRetry": {
+            "start": "2026-10-13T21:01:48Z",
+            "end": "2026-10-13T21:02:35Z"
+          },
+          "implementationWorkerRetry2": {
+            "start": "2026-10-13T21:02:42Z",
+            "end": "2026-10-13T21:03:26Z"
+          },
+          "implementationWorkerRetry3": {
+            "start": "2026-10-13T21:03:37Z",
+            "end": "2026-10-13T21:06:24Z"
+          },
+          "independentReview": {
+            "start": "2026-10-13T21:07:50Z",
+            "end": "2026-10-13T21:11:02Z"
+          },
+          "reviewEvidence": {
+            "start": "2026-10-13T21:12:31Z",
+            "end": "2026-10-13T21:13:20Z"
+          },
+          "delivery": {
+            "start": "2026-10-13T21:14:14Z",
+            "end": "2026-10-13T21:16:45Z"
+          },
+          "ciWait": {
+            "start": "2026-10-13T21:16:45Z",
+            "end": "2026-10-13T21:18:56Z"
+          }
+        },
+        "failures": [
+          {
+            "timestamp": "2026-10-13T20:51:04Z",
+            "phase": "doctor",
+            "summary": "Sandbox child-process execution denied: git and gh spawnSync returned EPERM; readiness could not be established"
+          },
+          {
+            "timestamp": "2026-10-13T20:53:59Z",
+            "phase": "candidate-execute",
+            "summary": "Candidate target test exited 1 because the detached result worktree did not contain provisioned node_modules"
+          },
+          {
+            "timestamp": "2026-10-13T20:53:59Z",
+            "phase": "candidate-diagnosis",
+            "summary": "First diagnostic git -C command used a path relative to the already-selected Candidate worktree and failed; corrected immediately with worktree-local paths"
+          },
+          {
+            "timestamp": "2026-10-13T20:55:23Z",
+            "phase": "candidate-post",
+            "summary": "ASC rejected post observation because the preflight session was correctly bound to the original Candidate worktree, not the detached result worktree"
+          },
+          {
+            "timestamp": "2026-10-13T20:59:09Z",
+            "phase": "step-1-validation",
+            "summary": "Initial requirements validation rejected the inline Gherkin sentence because no structured Scenario ID was detected"
+          },
+          {
+            "timestamp": "2026-10-13T20:59:38Z",
+            "phase": "step-1-record",
+            "summary": "First Step 1 apply passed a staging-relative artifact path; ASC requires the exact artifact basename 00_要求定義.md"
+          },
+          {
+            "timestamp": "2026-10-13T21:01:29Z",
+            "phase": "step-9-worker",
+            "summary": "Fresh worker's ASC plan preview was blocked because sandboxed spawnSync git returned EPERM; worker preserved HEAD and returned ASC_REDISPATCH_REQUIRED"
+          },
+          {
+            "timestamp": "2026-10-13T21:02:35Z",
+            "phase": "step-9-worker-redispatch",
+            "summary": "Fresh redispatch requested approval correctly but guessed a nonexistent .agent-skill-chain/bin/asc executable and stopped without changes"
+          },
+          {
+            "timestamp": "2026-10-13T21:03:26Z",
+            "phase": "step-9-worker-redispatch-2",
+            "summary": "Fresh worker used the exact ASC executable but issued the preview in the default sandbox; nested git spawnSync again returned EPERM and no changes were made"
+          },
+          {
+            "timestamp": "2026-10-13T21:05:13Z",
+            "phase": "step-9-verification",
+            "summary": "First formal verify run omitted the required comparison base and ASC rejected it without recording a run"
+          },
+          {
+            "timestamp": "2026-10-13T21:05:20Z",
+            "phase": "step-9-verification",
+            "summary": "Full node --test recorded 9/10 passing; Laravel controller failed because package-lock-independent Composer vendor/autoload.php was not restored in the Candidate worktree"
+          },
+          {
+            "timestamp": "2026-10-13T21:06:17Z",
+            "phase": "step-9-worker",
+            "summary": "Provider stream disconnected before response completion; instrumented Codex retried sampling once and completed"
+          },
+          {
+            "timestamp": "2026-10-13T21:08:31Z",
+            "phase": "independent-review-launch",
+            "summary": "Codex CLI rejected the pre-model invocation because --approve-for-me cannot be combined with an explicit --sandbox read-only option"
+          },
+          {
+            "timestamp": "2026-10-13T21:10:29Z",
+            "phase": "independent-review-test",
+            "summary": "Reviewer's first direct full test run in the nested sandbox failed because child PHP/Python spawnSync calls returned EPERM"
+          },
+          {
+            "timestamp": "2026-10-13T21:13:07Z",
+            "phase": "step-10-record",
+            "summary": "First Step 10 record attempt left semicolons unquoted in the evidence argument; the shell split the command and ASC made no journal change"
+          },
+          {
+            "timestamp": "2026-10-13T21:13:32Z",
+            "phase": "candidate-adopt-help",
+            "summary": "Initial help lookup used unsupported top-level candidate-adopt; ASC rejected it without state change"
+          },
+          {
+            "timestamp": "2026-10-13T21:14:03Z",
+            "phase": "candidate-adopt-preview",
+            "summary": "Required read-only adoption preview correctly rejected because the workflow had already passed the initial Step 9 adoption transition; no apply was attempted"
+          },
+          {
+            "timestamp": "2026-10-13T21:15:28Z",
+            "phase": "pr-create-preview",
+            "summary": "First PR dry-run rejected the literal ASC placeholders as unresolved in the legacy body input; no PR was created"
+          },
+          {
+            "timestamp": "2026-10-13T21:16:39Z",
+            "phase": "pr-draft-readback",
+            "summary": "ASC created and bound PR #24 as an ordinary open PR; GitHub read-back showed isDraft=false, contrary to the explicit Draft requirement"
+          }
+        ],
+        "retries": [
+          {
+            "timestamp": "2026-10-13T20:51:04Z",
+            "phase": "doctor",
+            "reason": "Retry read-only ASC diagnosis with host approval after sandbox EPERM"
+          },
+          {
+            "timestamp": "2026-10-13T20:53:59Z",
+            "phase": "candidate-execute",
+            "reason": "Restore package-lock-pinned npm dependencies in the detached Candidate result worktree, then rerun ASC Candidate post observation"
+          },
+          {
+            "timestamp": "2026-10-13T20:55:23Z",
+            "phase": "candidate-execute",
+            "reason": "Rerun execute with the dependency-independent exact greeting test and no predeclared post-worker gaps; full suite remains reserved for trusted verification after dependency restore"
+          },
+          {
+            "timestamp": "2026-10-13T20:59:09Z",
+            "phase": "step-1-validation",
+            "reason": "Replace only the inline acceptance example with structured Scenario/Given/When/Then lines and revalidate"
+          },
+          {
+            "timestamp": "2026-10-13T20:59:38Z",
+            "phase": "step-1-record",
+            "reason": "Retry the same gated apply with artifact=00_要求定義.md exactly as required by the diagnostic"
+          },
+          {
+            "timestamp": "2026-10-13T21:01:48Z",
+            "phase": "step-9-worker",
+            "reason": "Redispatch a fresh worker with the same handoff and explicit instruction to request automatic host approval for the read-only ASC preview rather than accepting sandbox EPERM"
+          },
+          {
+            "timestamp": "2026-10-13T21:02:42Z",
+            "phase": "step-9-worker",
+            "reason": "Redispatch with the exact user-authorized ASC CLI executable and complete plan preview argv to remove executable ambiguity"
+          },
+          {
+            "timestamp": "2026-10-13T21:03:37Z",
+            "phase": "step-9-worker",
+            "reason": "Redispatch with an explicit requirement that the single read-only preview tool call request sandbox_permissions=require_escalated under automatic approval"
+          },
+          {
+            "timestamp": "2026-10-13T21:05:13Z",
+            "phase": "step-9-verification",
+            "reason": "Retry verify run with the baseline from verify plan as --base"
+          },
+          {
+            "timestamp": "2026-10-13T21:05:20Z",
+            "phase": "step-9-verification",
+            "reason": "Restore composer.lock-pinned vendor dependencies without tracked changes and rerun the same full trusted verification"
+          },
+          {
+            "timestamp": "2026-10-13T21:06:17Z",
+            "phase": "step-9-worker",
+            "reason": "Codex internal sampling retry after transient websocket disconnect"
+          },
+          {
+            "timestamp": "2026-10-13T21:08:31Z",
+            "phase": "independent-review-launch",
+            "reason": "Retry with required --approve-for-me, no bypass flags, prompt-enforced read-only behavior, and before/after mutation validation"
+          },
+          {
+            "timestamp": "2026-10-13T21:10:29Z",
+            "phase": "independent-review-test",
+            "reason": "Rerun the same read-only full node --test with automatic host approval so child PHP/Python checks can execute"
+          },
+          {
+            "timestamp": "2026-10-13T21:13:07Z",
+            "phase": "step-10-record",
+            "reason": "Retry the identical record action with the evidence flag safely quoted as one argument"
+          },
+          {
+            "timestamp": "2026-10-13T21:13:34Z",
+            "phase": "candidate-adopt-help",
+            "reason": "Use root help discovery and then the supported workflow candidate-adopt --help form"
+          },
+          {
+            "timestamp": "2026-10-13T21:15:28Z",
+            "phase": "pr-create-preview",
+            "reason": "Replace the unresolved legacy body placeholders with the already sealed exact HEAD, verification, and review evidence, then rerun the same dry-run"
+          },
+          {
+            "timestamp": "2026-10-13T21:16:40Z",
+            "phase": "pr-draft-readback",
+            "reason": "Convert the same bound PR to Draft with the provider CLI, then re-read isDraft and exact HEAD"
+          }
+        ],
+        "reviewIntegrity": {
+          "beforeHead": "b8a67bfa53b62f17a0deffc998f166ac583eb10c",
+          "afterHead": "b8a67bfa53b62f17a0deffc998f166ac583eb10c",
+          "beforeStatus": "",
+          "afterStatus": "",
+          "beforeDiffDigest": "097c2fad915441dc55799eeee199d010f4c7bb541eae6c35bf9dfac4b5e3590c",
+          "afterDiffDigest": "097c2fad915441dc55799eeee199d010f4c7bb541eae6c35bf9dfac4b5e3590c",
+          "valid": true
+        },
+        "ciCompletionTimestamp": "2026-10-13T21:18:56Z",
+        "result": {
+          "pullRequest": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/pull/24",
+          "pullRequestNumber": 24,
+          "draft": true,
+          "state": "OPEN",
+          "merged": false,
+          "issueState": "OPEN",
+          "branch": "fix/21-greeting-hello-candidate",
+          "headSha": "43531d9b378eb9bdf4f40bc3a5550c5bb9f1f0ac",
+          "implementationHeadSha": "b8a67bfa53b62f17a0deffc998f166ac583eb10c",
+          "ciSuccessful": 2,
+          "ciPending": 0,
+          "ciFailing": 0,
+          "localFullTestPassed": 10,
+          "reviewApproved": true,
+          "reviewFindings": 0,
+          "finalDiffDigest": "dd54492f95dd5ebb1801b5b567347a3d2d30af4ea0b7ae33b82b5749392c9e0a"
+        }
+      },
+      "phaseCoverage": "agent-reported timestamps, not independently reconstructed critical path",
+      "allAgentProcessedTokens": null,
+      "cost": null,
+      "contextHighWaterMark": null,
+      "distributionSha256": "dad8d1dc433aa06e6754b314dffb9a083980fdd06cffcb1c6ff201e7db1d8013",
+      "requestToDraftAndCiSeconds": 1683.804619550705,
+      "coordinatorLogSha256": "55502e815582abed996f353d4077953089c9c113199355ec97f5e3891c45c25b",
+      "promptSha256": "d59eb85e20e636f1df8d6b5036c9825673ac1d5eca4cd186d0924de87ce1fd15"
+    },
+    "none": {
+      "timing": {
+        "startedAt": 1791928077.5337582,
+        "endedAt": 1791928495.0249224,
+        "exitCode": 0
+      },
+      "orchestrationWallSeconds": 417.4911642074585,
+      "agents": [
+        {
+          "id": "03e7821d-ab03-49db-8483-1a27fb83f472",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 56.87793445587158,
+          "usage": {
+            "input_tokens": 202856,
+            "cached_input_tokens": 165632,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2367,
+            "reasoning_output_tokens": 701
+          },
+          "coverage": "complete",
+          "commandCalls": 8,
+          "failedCommandCalls": 3,
+          "localLogRef": "none-agents/03e7821d-ab03-49db-8483-1a27fb83f472.jsonl",
+          "logSha256": "f5062d19a6166d81245d95c5053b2725c90063c49b96a1dbf7ee78e5d4778d2f",
+          "startedAt": 1791928205.6949208,
+          "endedAt": 1791928262.5728552,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "052443b6-9b2c-45a0-bc93-47c318d3dd77",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 417.4604959487915,
+          "usage": {
+            "input_tokens": 1651877,
+            "cached_input_tokens": 1593088,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 17353,
+            "reasoning_output_tokens": 6544
+          },
+          "coverage": "complete",
+          "commandCalls": 34,
+          "failedCommandCalls": 2,
+          "localLogRef": "none-agents/052443b6-9b2c-45a0-bc93-47c318d3dd77.jsonl",
+          "logSha256": "73cdfc73ac16d579de745c8e040e47893ed1b854a69e93ee1a36957653bdf1f5",
+          "startedAt": 1791928077.5586362,
+          "endedAt": 1791928495.0191321,
+          "role": "coordinator"
+        },
+        {
+          "id": "4c76876e-9b2d-47c3-96ef-6e37f34ed349",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 2,
+          "wallSeconds": 0.04067182540893555,
+          "usage": null,
+          "coverage": "missing",
+          "commandCalls": 0,
+          "failedCommandCalls": 0,
+          "localLogRef": "none-agents/4c76876e-9b2d-47c3-96ef-6e37f34ed349.jsonl",
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "startedAt": 1791928314.2280698,
+          "endedAt": 1791928314.2687416,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "850f94c6-5729-445d-aeaf-50a88e0f3559",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 48.099854946136475,
+          "usage": {
+            "input_tokens": 142376,
+            "cached_input_tokens": 129536,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2319,
+            "reasoning_output_tokens": 847
+          },
+          "coverage": "complete",
+          "commandCalls": 6,
+          "failedCommandCalls": 3,
+          "localLogRef": "none-agents/850f94c6-5729-445d-aeaf-50a88e0f3559.jsonl",
+          "logSha256": "60c224a936ed3069fdb86d65c01a2d3b262acf1836b14b06f190852fd54436d0",
+          "startedAt": 1791928321.9849997,
+          "endedAt": 1791928370.0848546,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "c3c0279b-0541-469f-bcd6-3794b4ca680a",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 1,
+          "wallSeconds": 0.09127283096313477,
+          "usage": null,
+          "coverage": "missing",
+          "commandCalls": 0,
+          "failedCommandCalls": 0,
+          "localLogRef": "none-agents/c3c0279b-0541-469f-bcd6-3794b4ca680a.jsonl",
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "startedAt": 1791928191.6047854,
+          "endedAt": 1791928191.6960583,
+          "role": "nested agent; exact role requires log inspection"
+        }
+      ],
+      "observedTaskAgentUsage": {
+        "input_tokens": 1997109,
+        "cached_input_tokens": 1888256,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 22039,
+        "reasoning_output_tokens": 8092
+      },
+      "observedTaskAgentProcessedTokens": 2019148,
+      "observedTaskAgentFreshTokens": 130892,
+      "completeTaskAgentUsage": null,
+      "allAgentUsage": null,
+      "allAgentCoverageNote": "Task CLI launches are instrumented; any missing launch usage stays null. Host automatic approval/reviewer internal usage is not exposed by CLI and is not counted as zero.",
+      "instrumentationValidFromStart": true,
+      "requestToCiSeconds": 350.46624183654785,
+      "ciCompletionUtc": "2026-10-13T21:53:48+00:00",
+      "github": {
+        "createdAt": "2026-10-13T21:53:32Z",
+        "headRefOid": "82d865b98d25ea66473a847e9cfdc1edc5209647",
+        "isDraft": true,
+        "mergedAt": null,
+        "state": "OPEN",
+        "statusCheckRollup": [
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-13T21:53:48Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/actions/runs/38473934158/job/115559777605",
+            "name": "test",
+            "startedAt": "2026-10-13T21:53:37Z",
+            "status": "COMPLETED",
+            "workflowName": "Dummy tests"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-13T21:53:33Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/actions/runs/38473911552/job/115559698849",
+            "name": "test",
+            "startedAt": "2026-10-13T21:53:26Z",
+            "status": "COMPLETED",
+            "workflowName": "Dummy tests"
+          }
+        ],
+        "url": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/pull/26",
+        "draftEvents": []
+      },
+      "commonOracle": {
+        "baseline": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+        "head": "82d865b98d25ea66473a847e9cfdc1edc5209647",
+        "changedPaths": [
+          "src/greeting.js",
+          "test/greeting.test.js"
+        ],
+        "unchangedBaselinePaths": [
+          ".agent-skill-chain/policy/default.json",
+          ".agent-skill-chain/project-policy.json",
+          ".agent-skill-chain/project/choices/development.json",
+          ".agent-skill-chain/project/providers/capability-mapping.json",
+          ".github/workflows/test.yml",
+          ".gitignore",
+          "app/Http/Controllers/StatusController.php",
+          "benchmark-cases.json",
+          "composer.json",
+          "composer.lock",
+          "database/migrations/001_create_items.sql",
+          "package-lock.json",
+          "package.json",
+          "php/check.php",
+          "python/check.py",
+          "python/check_migration.py",
+          "python/normalizer.py",
+          "scripts/targeted.mjs",
+          "src/Badge.js",
+          "src/api.js",
+          "src/authorization.js",
+          "src/clamp.js",
+          "test/authorization-baseline.test.js",
+          "test/stacks.test.js"
+        ],
+        "scopeViolations": [],
+        "full": {
+          "exitCode": 0,
+          "outputSha256": "7025b3e68107e8e1366a355db73b2ba0ffbfdec70d163f1d8c14cdba93791b68",
+          "output": "✔ authorization preserves declared inactive denial and active access (0.794253ms)\n✔ greeting returns text (0.835949ms)\n✔ greeting returns Hello (0.155511ms)\n✔ clamp lower boundary (0.918521ms)\n✔ React badge server rendering (5.627272ms)\n✔ API preserves stable fields (0.827637ms)\n✔ authorization owner (0.179891ms)\n✔ Laravel controller (24.722364ms)\n✔ Python module (47.619642ms)\n✔ SQLite migration (51.696324ms)\nℹ tests 10\nℹ suites 0\nℹ pass 10\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 434.20305\n"
+        },
+        "exactGreeting": {
+          "exitCode": 0,
+          "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "output": ""
+        },
+        "regressionMutation": {
+          "exitCode": 1,
+          "outputSha256": "c039a3f8d4055acec9f42e365920e2772e36ec5d04f4bdc0a06d2c01e579dda9",
+          "output": "✔ greeting returns text (0.763535ms)\n✖ greeting returns Hello (0.885484ms)\nℹ tests 2\nℹ suites 0\nℹ pass 1\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 58.732842\n\n✖ failing tests:\n\ntest at test/greeting.test.js:5:1\n✖ greeting returns Hello (0.885484ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  'Helo' !== 'Hello'\n  \n      at TestContext.<anonymous> (file:///tmp/asc-1576-oracle-ku99u6w8/test/greeting.test.js:5:42)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)\n      at Test.postRun (node:internal/test_runner/test:1522:19)\n      at Test.run (node:internal/test_runner/test:1447:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 'Helo',\n    expected: 'Hello',\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n"
+        },
+        "passed": true
+      },
+      "agentReportedResult": {
+        "benchmark": "asc-1576-matched",
+        "arm": "none",
+        "issue": 22,
+        "baseline": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+        "started_at": "2026-10-14T06:48:21+09:00",
+        "completed_at": "2026-10-14T06:54:08+09:00",
+        "ci_completed_at": "2026-10-13T21:53:48Z",
+        "status": "completed",
+        "phases": {
+          "setup": {
+            "started_at": "2026-10-14T06:48:21+09:00",
+            "ended_at": "2026-10-14T06:49:31+09:00"
+          },
+          "worker": {
+            "started_at": "2026-10-14T06:49:31+09:00",
+            "ended_at": "2026-10-14T06:51:01+09:00"
+          },
+          "verification": {
+            "started_at": "2026-10-14T06:50:31+09:00",
+            "ended_at": "2026-10-14T06:51:26+09:00"
+          },
+          "review": {
+            "started_at": "2026-10-14T06:51:26+09:00",
+            "ended_at": "2026-10-14T06:52:55+09:00"
+          },
+          "delivery": {
+            "started_at": "2026-10-14T06:52:55+09:00",
+            "ended_at": "2026-10-14T06:54:08+09:00"
+          },
+          "ci": {
+            "started_at": "2026-10-14T06:53:26+09:00",
+            "ended_at": "2026-10-14T06:53:48+09:00"
+          }
+        },
+        "failures": [
+          {
+            "at": "2026-10-14T06:48:21+09:00",
+            "phase": "setup",
+            "operation": "gh issue view",
+            "summary": "Initial sandboxed request could not connect to api.github.com",
+            "retry": "require_escalated"
+          },
+          {
+            "at": "2026-10-14T06:49:00+09:00",
+            "phase": "setup",
+            "operation": "git worktree add with nested branch",
+            "summary": "Could not create nested refs/heads directory in managed clone",
+            "retry": "flat branch name"
+          },
+          {
+            "at": "2026-10-14T06:49:00+09:00",
+            "phase": "setup",
+            "operation": "git worktree add with flat branch",
+            "summary": "Sandbox blocked writing Git refs in managed clone",
+            "retry": "require_escalated"
+          },
+          {
+            "at": "2026-10-14T06:49:51+09:00",
+            "phase": "worker",
+            "operation": "instrumented codex worker",
+            "summary": "Codex state DB initialization failed because host state directory was read-only",
+            "retry": "require_escalated with identical command and prompt"
+          },
+          {
+            "at": "2026-10-14T06:50:36+09:00",
+            "phase": "worker",
+            "operation": "node --test",
+            "summary": "Worker's initial full suite could not spawn PHP/Python child processes under the restricted sandbox",
+            "retry": "automatic approved execution; full suite passed 10/10"
+          },
+          {
+            "at": "2026-10-14T06:51:10+09:00",
+            "phase": "verification",
+            "operation": "node --test",
+            "summary": "Independent restricted run visibly failed test/stacks.test.js; tee masked the command exit status",
+            "retry": "require_escalated with pipefail"
+          },
+          {
+            "at": "2026-10-14T06:51:55+09:00",
+            "phase": "review",
+            "operation": "instrumented codex reviewer",
+            "summary": "CLI rejected combining the required --approve-for-me with an explicit --sandbox read-only flag; no model ran",
+            "retry": "removed conflicting sandbox flag and validated read-only behavior by Git state digest"
+          },
+          {
+            "at": "2026-10-14T06:52:30+09:00",
+            "phase": "review",
+            "operation": "reviewer node --test",
+            "summary": "Reviewer's initial restricted suite could not spawn PHP/Python child processes",
+            "retry": "supported automatic approval; full suite passed 10/10"
+          }
+        ],
+        "retries": [
+          {
+            "at": "2026-10-14T06:48:21+09:00",
+            "operation": "gh issue view",
+            "reason": "sandbox network boundary"
+          },
+          {
+            "at": "2026-10-14T06:49:00+09:00",
+            "operation": "git worktree add",
+            "reason": "nested branch ref unavailable; retried with flat branch"
+          },
+          {
+            "at": "2026-10-14T06:49:00+09:00",
+            "operation": "git worktree add",
+            "reason": "managed Git metadata required approved execution"
+          },
+          {
+            "at": "2026-10-14T06:49:51+09:00",
+            "operation": "instrumented codex worker",
+            "reason": "host Codex state initialization required approved execution"
+          },
+          {
+            "at": "2026-10-14T06:50:36+09:00",
+            "operation": "worker node --test",
+            "reason": "sandbox denied PHP/Python child process spawning"
+          },
+          {
+            "at": "2026-10-14T06:51:10+09:00",
+            "operation": "independent node --test",
+            "reason": "sandbox denied stack-test child process spawning; rerun with pipefail and approved execution"
+          },
+          {
+            "at": "2026-10-14T06:51:55+09:00",
+            "operation": "instrumented codex reviewer",
+            "reason": "required approve-for-me mode is mutually exclusive with an explicit sandbox flag"
+          },
+          {
+            "at": "2026-10-14T06:52:30+09:00",
+            "operation": "reviewer node --test",
+            "reason": "sandbox denied stack-test child process spawning"
+          }
+        ],
+        "candidate": {
+          "worktree": ".worktrees/issue-22-greeting-hello",
+          "branch": "issue-22-greeting-hello",
+          "before_status": "## issue-22-greeting-hello",
+          "before_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "pre_review_status": "## issue-22-greeting-hello; M src/greeting.js; M test/greeting.test.js",
+          "pre_review_diff_sha256": "388e2dc3ba504721868badb57b0f852e4d5fc746a4c831c1bf824b063b9ad67f",
+          "post_review_status": "## issue-22-greeting-hello; M src/greeting.js; M test/greeting.test.js",
+          "post_review_diff_sha256": "388e2dc3ba504721868badb57b0f852e4d5fc746a4c831c1bf824b063b9ad67f",
+          "review_mutations": false,
+          "review_verdict": "APPROVE; no findings",
+          "tests": {
+            "command": "node --test",
+            "passed": 10,
+            "failed": 0
+          },
+          "final_status": "## issue-22-greeting-hello",
+          "final_diff_sha256": "388e2dc3ba504721868badb57b0f852e4d5fc746a4c831c1bf824b063b9ad67f",
+          "commit": "82d865b98d25ea66473a847e9cfdc1edc5209647"
+        },
+        "pull_request": {
+          "number": 26,
+          "url": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/pull/26",
+          "state": "OPEN",
+          "draft": true,
+          "merge_state": "CLEAN",
+          "merged": false,
+          "checks": [
+            {
+              "name": "test",
+              "workflow": "Dummy tests",
+              "conclusion": "SUCCESS",
+              "completed_at": "2026-10-13T21:53:48Z"
+            },
+            {
+              "name": "test",
+              "workflow": "Dummy tests",
+              "conclusion": "SUCCESS",
+              "completed_at": "2026-10-13T21:53:33Z"
+            }
+          ]
+        }
+      },
+      "phaseCoverage": "agent-reported timestamps, not independently reconstructed critical path",
+      "allAgentProcessedTokens": null,
+      "cost": null,
+      "contextHighWaterMark": null,
+      "distributionSha256": null,
+      "requestToDraftAndCiSeconds": 350.46624183654785,
+      "coordinatorLogSha256": "73cdfc73ac16d579de745c8e040e47893ed1b854a69e93ee1a36957653bdf1f5",
+      "promptSha256": "63b2f04de024552cbe885ed6a722b9e18cdc85f045800430387eaa14c30edafc"
+    },
+    "new-fixed": {
+      "timing": {
+        "startedAt": 1791928497.387372,
+        "endedAt": 1791929741.9648144,
+        "exitCode": 0
+      },
+      "orchestrationWallSeconds": 1244.577442407608,
+      "agents": [
+        {
+          "id": "1b96238d-ee72-4c63-9c62-ad76892255fa",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 106.34984850883484,
+          "usage": {
+            "input_tokens": 561767,
+            "cached_input_tokens": 506112,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 5638,
+            "reasoning_output_tokens": 1939
+          },
+          "coverage": "complete",
+          "commandCalls": 26,
+          "failedCommandCalls": 3,
+          "localLogRef": "new-fixed-agents/1b96238d-ee72-4c63-9c62-ad76892255fa.jsonl",
+          "logSha256": "6fa55f3045babdf17d1651333884dc90f8109d98da507672a635ad77408db873",
+          "startedAt": 1791929334.3610275,
+          "endedAt": 1791929440.710876,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "25c90020-48d9-410f-b6b5-ff223074f79e",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 2,
+          "wallSeconds": 0.03985238075256348,
+          "usage": null,
+          "coverage": "missing",
+          "commandCalls": 0,
+          "failedCommandCalls": 0,
+          "localLogRef": "new-fixed-agents/25c90020-48d9-410f-b6b5-ff223074f79e.jsonl",
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "startedAt": 1791928639.5903585,
+          "endedAt": 1791928639.6302109,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "533d1605-ed71-45ce-9df6-6cddf8528731",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 1244.5479936599731,
+          "usage": {
+            "input_tokens": 14951239,
+            "cached_input_tokens": 14718592,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 51324,
+            "reasoning_output_tokens": 15839
+          },
+          "coverage": "complete",
+          "commandCalls": 150,
+          "failedCommandCalls": 1,
+          "localLogRef": "new-fixed-agents/533d1605-ed71-45ce-9df6-6cddf8528731.jsonl",
+          "logSha256": "87dc87ab6e35e5e0dff1275a6f49090eeffac9f9c7f5ea589e584106f1c19590",
+          "startedAt": 1791928497.4114232,
+          "endedAt": 1791929741.9594169,
+          "role": "coordinator"
+        },
+        {
+          "id": "5b700427-b5f8-44c1-91f6-0d48f736fe8d",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 29.08259081840515,
+          "usage": {
+            "input_tokens": 78464,
+            "cached_input_tokens": 59520,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1014,
+            "reasoning_output_tokens": 262
+          },
+          "coverage": "complete",
+          "commandCalls": 4,
+          "failedCommandCalls": 1,
+          "localLogRef": "new-fixed-agents/5b700427-b5f8-44c1-91f6-0d48f736fe8d.jsonl",
+          "logSha256": "c461534cc4eae041059481811678598f662a976762fcfd4f00b6052e42424c44",
+          "startedAt": 1791928674.3658183,
+          "endedAt": 1791928703.448409,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "854762ff-f404-44d9-b259-b90841a25524",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 2,
+          "wallSeconds": 0.04028058052062988,
+          "usage": null,
+          "coverage": "missing",
+          "commandCalls": 0,
+          "failedCommandCalls": 0,
+          "localLogRef": "new-fixed-agents/854762ff-f404-44d9-b259-b90841a25524.jsonl",
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "startedAt": 1791929080.7468545,
+          "endedAt": 1791929080.7871351,
+          "role": "nested agent; exact role requires log inspection"
+        },
+        {
+          "id": "d715de0f-cecd-4968-9321-19894158a63d",
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "exitCode": 0,
+          "wallSeconds": 142.5909812450409,
+          "usage": {
+            "input_tokens": 593237,
+            "cached_input_tokens": 534912,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 6977,
+            "reasoning_output_tokens": 3184
+          },
+          "coverage": "complete",
+          "commandCalls": 13,
+          "failedCommandCalls": 3,
+          "localLogRef": "new-fixed-agents/d715de0f-cecd-4968-9321-19894158a63d.jsonl",
+          "logSha256": "d39cc2cb9cc4031aad22e3c430b1f61ed93977b01851cd81348d7f57123da810",
+          "startedAt": 1791929111.522778,
+          "endedAt": 1791929254.1137593,
+          "role": "nested agent; exact role requires log inspection"
+        }
+      ],
+      "observedTaskAgentUsage": {
+        "input_tokens": 16184707,
+        "cached_input_tokens": 15819136,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 64953,
+        "reasoning_output_tokens": 21224
+      },
+      "observedTaskAgentProcessedTokens": 16249660,
+      "observedTaskAgentFreshTokens": 430524,
+      "completeTaskAgentUsage": null,
+      "allAgentUsage": null,
+      "allAgentCoverageNote": "Task CLI launches are instrumented; any missing launch usage stays null. Host automatic approval/reviewer internal usage is not exposed by CLI and is not counted as zero.",
+      "instrumentationValidFromStart": true,
+      "requestToCiSeconds": 1166.6126279830933,
+      "ciCompletionUtc": "2026-10-13T22:14:24+00:00",
+      "github": {
+        "createdAt": "2026-10-13T22:14:08Z",
+        "headRefOid": "dc8b2c2174230b972c914fe369172ac954d36bff",
+        "isDraft": true,
+        "mergedAt": null,
+        "state": "OPEN",
+        "statusCheckRollup": [
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-13T22:14:24Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/actions/runs/38476384948/job/115567988276",
+            "name": "test",
+            "startedAt": "2026-10-13T22:14:14Z",
+            "status": "COMPLETED",
+            "workflowName": "Dummy tests"
+          },
+          {
+            "__typename": "CheckRun",
+            "completedAt": "2026-10-13T22:13:33Z",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/actions/runs/38476279983/job/115567643663",
+            "name": "test",
+            "startedAt": "2026-10-13T22:13:21Z",
+            "status": "COMPLETED",
+            "workflowName": "Dummy tests"
+          }
+        ],
+        "url": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/pull/27",
+        "draftEvents": [
+          {
+            "event": "convert_to_draft",
+            "created_at": "2026-10-13T22:14:35Z"
+          }
+        ]
+      },
+      "commonOracle": {
+        "baseline": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+        "head": "dc8b2c2174230b972c914fe369172ac954d36bff",
+        "changedPaths": [
+          "docs/reviews/23_review.json",
+          "src/greeting.js",
+          "test/greeting.test.js"
+        ],
+        "unchangedBaselinePaths": [
+          ".agent-skill-chain/policy/default.json",
+          ".agent-skill-chain/project-policy.json",
+          ".agent-skill-chain/project/choices/development.json",
+          ".agent-skill-chain/project/providers/capability-mapping.json",
+          ".github/workflows/test.yml",
+          ".gitignore",
+          "app/Http/Controllers/StatusController.php",
+          "benchmark-cases.json",
+          "composer.json",
+          "composer.lock",
+          "database/migrations/001_create_items.sql",
+          "package-lock.json",
+          "package.json",
+          "php/check.php",
+          "python/check.py",
+          "python/check_migration.py",
+          "python/normalizer.py",
+          "scripts/targeted.mjs",
+          "src/Badge.js",
+          "src/api.js",
+          "src/authorization.js",
+          "src/clamp.js",
+          "test/authorization-baseline.test.js",
+          "test/stacks.test.js"
+        ],
+        "scopeViolations": [],
+        "full": {
+          "exitCode": 0,
+          "outputSha256": "aaa417718fc70594a832601141d19df08cd8ab318faed0284d4d8a64a642cf45",
+          "output": "✔ authorization preserves declared inactive denial and active access (0.839404ms)\n✔ greeting returns text (0.802768ms)\n✔ greeting returns Hello (0.146433ms)\n✔ clamp lower boundary (0.816657ms)\n✔ React badge server rendering (4.895585ms)\n✔ API preserves stable fields (0.689198ms)\n✔ authorization owner (0.152114ms)\n✔ Laravel controller (24.038004ms)\n✔ Python module (47.202592ms)\n✔ SQLite migration (51.400402ms)\nℹ tests 10\nℹ suites 0\nℹ pass 10\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 435.395768\n"
+        },
+        "exactGreeting": {
+          "exitCode": 0,
+          "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "output": ""
+        },
+        "regressionMutation": {
+          "exitCode": 1,
+          "outputSha256": "a057e2f746e20999c0b1bb498112a8d61b6278df694b344793822de1b3d1d50c",
+          "output": "✔ greeting returns text (0.768536ms)\n✖ greeting returns Hello (0.889689ms)\nℹ tests 2\nℹ suites 0\nℹ pass 1\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 61.190067\n\n✖ failing tests:\n\ntest at test/greeting.test.js:5:1\n✖ greeting returns Hello (0.889689ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  'Helo' !== 'Hello'\n  \n      at TestContext.<anonymous> (file:///tmp/asc-1576-oracle-c0qzil7r/test/greeting.test.js:5:42)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)\n      at Test.postRun (node:internal/test_runner/test:1522:19)\n      at Test.run (node:internal/test_runner/test:1447:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 'Helo',\n    expected: 'Hello',\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n"
+        },
+        "passed": true
+      },
+      "agentReportedResult": {
+        "benchmark": "asc-1576-matched-20261014-v4-new-fixed",
+        "issue": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/issues/23",
+        "baseline": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+        "startedAt": "2026-10-13T21:55:14Z",
+        "phases": [
+          {
+            "name": "initialization",
+            "startedAt": "2026-10-13T21:55:14Z",
+            "endedAt": "2026-10-13T21:55:53Z",
+            "status": "completed"
+          },
+          {
+            "name": "candidate-preflight",
+            "startedAt": "2026-10-13T21:55:53Z",
+            "endedAt": "2026-10-13T21:58:35Z",
+            "status": "completed"
+          },
+          {
+            "name": "formal-workflow",
+            "startedAt": "2026-10-13T21:58:35Z",
+            "endedAt": "2026-10-13T22:03:45Z",
+            "status": "completed",
+            "candidateHead": "2767ada3c9af168cbb30e17695ae4897edc3d1f8",
+            "candidateWorktree": ".worktrees/.asc-candidate-result-AWQiI1"
+          },
+          {
+            "name": "independent-review",
+            "startedAt": "2026-10-13T22:03:45Z",
+            "endedAt": "2026-10-13T22:10:46Z",
+            "status": "completed",
+            "reviewedHead": "2767ada3c9af168cbb30e17695ae4897edc3d1f8",
+            "verdict": "pass",
+            "findings": 0,
+            "mutationCheck": "valid"
+          },
+          {
+            "name": "verification-and-adoption",
+            "startedAt": "2026-10-13T22:10:46Z",
+            "endedAt": "2026-10-13T22:14:11Z",
+            "status": "completed",
+            "implementationHead": "2767ada3c9af168cbb30e17695ae4897edc3d1f8",
+            "finalHead": "dc8b2c2174230b972c914fe369172ac954d36bff",
+            "trustedVerification": "10 passed, 0 failed"
+          },
+          {
+            "name": "delivery-and-ci",
+            "startedAt": "2026-10-13T22:14:05Z",
+            "endedAt": "2026-10-13T22:15:11Z",
+            "status": "completed",
+            "pullRequest": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/pull/27",
+            "draft": true,
+            "unmerged": true,
+            "ci": "all observed checks succeeded"
+          }
+        ],
+        "failures": [
+          {
+            "phase": "initialization",
+            "at": "2026-10-13T21:55:41Z",
+            "operation": "doctor sandbox probe",
+            "reason": "ASC child-process probes for git and gh failed with EPERM; workflow readiness could not be established in the sandbox"
+          },
+          {
+            "phase": "candidate-preflight",
+            "at": "2026-10-13T21:57:40Z",
+            "operation": "candidate execute with explicit workerArgv",
+            "reason": "ASC provider argument construction appended unsupported -P to codex; worker exited 2 before modifying the worktree"
+          },
+          {
+            "phase": "formal-workflow",
+            "at": "2026-10-13T21:59:40Z",
+            "operation": "read Step 1 skill in detached result worktree",
+            "reason": "Git-ignored ASC managed assets were absent from the newly created detached Candidate result worktree"
+          },
+          {
+            "phase": "independent-review",
+            "at": "2026-10-13T22:04:48Z",
+            "operation": "fresh Codex reviewer launch",
+            "reason": "codex rejected the incompatible combination of --approve-for-me and --sandbox read-only before starting a model session"
+          },
+          {
+            "phase": "independent-review",
+            "at": "2026-10-13T22:07:56Z",
+            "operation": "first completed fresh Codex review",
+            "reason": "review invalid: full test failed because vendor/autoload.php was absent, and test execution created an ignored Python bytecode cache mutation"
+          },
+          {
+            "phase": "verification-and-adoption",
+            "at": "2026-10-13T22:13:35Z",
+            "operation": "Draft PR creation preview",
+            "reason": "manual delivery body retained ASC machine placeholders, which pr create rejected as unresolved before external PR creation"
+          },
+          {
+            "phase": "delivery-and-ci",
+            "at": "2026-10-13T22:14:39Z",
+            "operation": "provider PR read-back",
+            "reason": "ASC created PR #27 open but non-draft, contrary to the requested Draft stop state"
+          }
+        ],
+        "retries": [
+          {
+            "phase": "initialization",
+            "at": "2026-10-13T21:55:41Z",
+            "operation": "doctor host retry",
+            "result": "completed at 2026-10-13T21:55:53Z with workflowReadiness.ready=true"
+          },
+          {
+            "phase": "candidate-preflight",
+            "at": "2026-10-13T21:57:40Z",
+            "operation": "candidate execute retry through supported workerProvider=codex",
+            "result": "completed at 2026-10-13T21:58:35Z; targeted test passed; candidate HEAD 2767ada3c9af168cbb30e17695ae4897edc3d1f8"
+          },
+          {
+            "phase": "formal-workflow",
+            "at": "2026-10-13T21:59:40Z",
+            "operation": "restore ASC managed assets with install lifecycle",
+            "result": "completed; Candidate HEAD and tracked status remained unchanged"
+          },
+          {
+            "phase": "independent-review",
+            "at": "2026-10-13T22:04:48Z",
+            "operation": "fresh Codex reviewer retry with --approve-for-me and prompt-enforced read-only contract",
+            "result": "completed but invalid at 2026-10-13T22:07:56Z"
+          },
+          {
+            "phase": "independent-review",
+            "at": "2026-10-13T22:07:56Z",
+            "operation": "restore fixed Composer dependencies and rerun review in a fresh context with bytecode writes disabled",
+            "result": "completed at 2026-10-13T22:10:46Z; exact HEAD review passed with 0 findings and no mutations"
+          },
+          {
+            "phase": "verification-and-adoption",
+            "at": "2026-10-13T22:13:35Z",
+            "operation": "replace manual PR placeholders with formal review/verification values and rerun preview",
+            "result": "completed; preview passed and PR #27 was created"
+          },
+          {
+            "phase": "delivery-and-ci",
+            "at": "2026-10-13T22:14:39Z",
+            "operation": "convert PR #27 to Draft",
+            "result": "completed"
+          }
+        ],
+        "ciCompletedAt": "2026-10-13T22:14:24Z",
+        "completedAt": "2026-10-13T22:15:11Z",
+        "status": "completed",
+        "result": {
+          "pullRequest": "https://github.com/adachi-tatsuru/asc-1576-matched-e2e-20261013/pull/27",
+          "branch": "fix/23-greeting-hello",
+          "implementationHead": "2767ada3c9af168cbb30e17695ae4897edc3d1f8",
+          "finalHead": "dc8b2c2174230b972c914fe369172ac954d36bff",
+          "candidateDiffSha256": "4a9a93bb0088f215bdd6aff369dd20865464b2e29ac338e6ab6b64104fcc0092",
+          "reviewSessionId": "145e514c5e96eba5f7b73034c07496d808d1986570a57f3b02fd640e251abbcb",
+          "reviewRoundDigest": "564d320056b026655173e5465021193e221301b32b78e1142702854aa65baee7",
+          "verificationRecordDigest": "d459a19a2790ad09bdf995995c57dfde6fa4d0eee926705e572f415ec947ca41"
+        }
+      },
+      "phaseCoverage": "agent-reported timestamps, not independently reconstructed critical path",
+      "allAgentProcessedTokens": null,
+      "cost": null,
+      "contextHighWaterMark": null,
+      "distributionSha256": "2dd607cbd355a85e8142c51e25a96d56601c270ceb1e4ba3112d4d9af05f4e63",
+      "requestToDraftAndCiSeconds": 1177.6126279830933,
+      "coordinatorLogSha256": "87dc87ab6e35e5e0dff1275a6f49090eeffac9f9c7f5ea589e584106f1c19590",
+      "promptSha256": "9ec879794cd09266b709b607f7af66d2766806260ea4e397f7664ed5a943084c"
+    }
+  },
+  "invalidAndInterruptedTrials": [
+    {
+      "trial": "v2",
+      "status": "invalid setup",
+      "reason": "Local clone inherited non-baseline origin/HEAD. Excluded from matched estimates; records retained."
+    },
+    {
+      "trial": "v3 old",
+      "status": "incomplete",
+      "reason": "Step 3 read-only sandbox could not spawn Git; no PR/CI completion."
+    },
+    {
+      "trial": "v3 new",
+      "status": "invalid instrumentation, stopped",
+      "reason": "Wrapper outside provider package changed sandbox runtime discovery; mandatory probe failed. Stopped only the recorded trial processes."
+    },
+    {
+      "trial": "v3 none",
+      "status": "completed but excluded from matched comparison",
+      "reason": "Initial instrumentation/provider argument and sandbox startup errors differ from v4. Draft PR #18 retained; common oracle passed."
+    },
+    {
+      "trial": "v3 none-confirm",
+      "status": "not started",
+      "reason": "Prepared Issue #19; queued driver cancelled before model execution."
+    }
+  ],
+  "priorTimingRecords": [
+    {
+      "trial": "v2",
+      "arm": "old",
+      "record": {
+        "startedAt": 1791922184.157417,
+        "endedAt": 1791922891.2265224,
+        "exitCode": -15
+      },
+      "sha256": "b901b57dfe56b273305aef5d7c87a4910f7ad818586c0323d8bf111a86899b91"
+    },
+    {
+      "trial": "v3",
+      "arm": "new",
+      "record": {
+        "startedAt": 1791924161.3354084,
+        "endedAt": 1791924648.3335693,
+        "exitCode": 0
+      },
+      "sha256": "fe234829bbeae64aee01908998b5b179964d67dcd9c8f55e4c364ab5e90ec54f"
+    },
+    {
+      "trial": "v3",
+      "arm": "none",
+      "record": {
+        "startedAt": 1791923010.3350663,
+        "endedAt": 1791923465.5169802,
+        "exitCode": 0
+      },
+      "sha256": "767cfba14295abcf188d815ac6648b58087849e6ef0b929604f497b5d16a699d"
+    },
+    {
+      "trial": "v3",
+      "arm": "old",
+      "record": {
+        "startedAt": 1791923470.2481904,
+        "endedAt": 1791924161.303526,
+        "exitCode": 0
+      },
+      "sha256": "a14bc7c444f01ef1d5491660430120429ed3d0353072c0bc505a7f569f9dc7b4"
+    }
+  ]
+}

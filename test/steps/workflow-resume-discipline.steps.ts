@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
+import {
+  observeWorkflowHandoff,
+  workflowAgentDispatch,
+} from "../../src/adapters/workflow-handoff.js";
+import type { WorkflowResume } from "../../src/domain/workflow-resume.js";
+import { main } from "../../src/cli.js";
+import { createIssueStaging } from "../../src/domain/issue.js";
+import { QUESTIONS } from "../../src/domain/mode.js";
+
 import { stepDefinitions, WorkflowWorld } from "../support/world.js";
 
 class ResumeDisciplineWorld extends WorkflowWorld {
@@ -131,5 +140,448 @@ Then(
   "context境界・再開順・拡大条件があり、adapterは全文読みを指示しない",
   function () {
     assert.equal(this.checked, true);
+  },
+);
+
+Then(
+  "advanceのpreviewは計画本文を読まずapplyはlock前後の変更を拒否する",
+  async function () {
+    const root = this.initRepo();
+    const staging = createIssueStaging(root, {
+      title: "preview-read-boundary",
+      answers: Object.fromEntries(
+        QUESTIONS.map((id) => [id, { answer: true, evidence: "fixture" }]),
+      ),
+      requestedMode: "full",
+      now: new Date("2026-08-25T12:00:00Z"),
+    }).path;
+    const documents = [
+      "00_要求定義.md",
+      "01_要件定義.md",
+      "02_設計.md",
+      "03_実装計画.md",
+    ].map((name) => path.join(staging, name));
+    const reads: string[] = [];
+    const originalRead = fs.readFileSync;
+    const originalLink = fs.linkSync;
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    let output = "";
+    let mutated = false;
+    fs.readFileSync = new Proxy(originalRead, {
+      apply(
+        target,
+        thisArg: unknown,
+        args: Parameters<typeof fs.readFileSync>,
+      ) {
+        if (typeof args[0] === "string" && documents.includes(args[0]))
+          reads.push(args[0]);
+        return Reflect.apply(target, thisArg, args) as ReturnType<
+          typeof fs.readFileSync
+        >;
+      },
+    });
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      assert.equal(
+        await main(["workflow", "advance", `--staging=${staging}`]),
+        0,
+      );
+      assert.equal(
+        (JSON.parse(output) as { targetStep: number }).targetStep,
+        1,
+      );
+      const preview = JSON.parse(output) as { resume: WorkflowResume };
+      const previousMode = process.env.ASC_EXECUTION_CONTEXT_MODE;
+      process.env.ASC_EXECUTION_CONTEXT_MODE = "short-lived";
+      try {
+        const requirements = observeWorkflowHandoff(staging, 2, preview.resume);
+        const implementation = observeWorkflowHandoff(
+          staging,
+          9,
+          preview.resume,
+        );
+        assert.ok(requirements && "kind" in requirements);
+        assert.ok(implementation && "kind" in implementation);
+        assert.deepEqual(requirements.read?.staging, ["00_要求定義.md"]);
+        assert.deepEqual(implementation.read?.staging, [
+          "00_要求定義.md",
+          "01_要件定義.md",
+          "02_設計.md",
+          "03_実装計画.md",
+        ]);
+        assert.deepEqual(implementation.read?.optionalStaging, [
+          { path: "05_計画変更.md", present: false },
+        ]);
+        assert.match(
+          implementation.read!.skill,
+          /step-09-implement\/SKILL.md$/u,
+        );
+        const quickStaging = createIssueStaging(root, {
+          title: "quick-read-boundary",
+          answers: Object.fromEntries(
+            QUESTIONS.map((id) => [id, { answer: true, evidence: "fixture" }]),
+          ),
+          requestedMode: "quick",
+          now: new Date("2026-08-25T12:01:00Z"),
+        }).path;
+        const quick = observeWorkflowHandoff(quickStaging, 9, {
+          ...preview.resume,
+          staging: quickStaging,
+        });
+        assert.ok(quick && "kind" in quick);
+        assert.deepEqual(quick.read?.staging, ["00_要求定義.md"]);
+        assert.deepEqual(quick.read?.optionalStaging, [
+          { path: "05_計画変更.md", present: false },
+        ]);
+        const amendment = path.join(quickStaging, "05_計画変更.md");
+        fs.writeFileSync(amendment, "# Existing amendment\n");
+        const amended = observeWorkflowHandoff(quickStaging, 9, {
+          ...preview.resume,
+          staging: quickStaging,
+        });
+        assert.ok(amended && "kind" in amended);
+        assert.deepEqual(amended.read?.staging, [
+          "00_要求定義.md",
+          "05_計画変更.md",
+        ]);
+        assert.deepEqual(amended.read?.optionalStaging, [
+          { path: "05_計画変更.md", present: true },
+        ]);
+        fs.unlinkSync(amendment);
+        assert.equal(quick.read?.skill, implementation.read?.skill);
+        for (const inputStaging of [staging, quickStaging]) {
+          const request = observeWorkflowHandoff(inputStaging, 1, {
+            ...preview.resume,
+            staging: inputStaging,
+          });
+          assert.ok(request && "kind" in request);
+          assert.deepEqual(request.read?.staging, [
+            "00_モード判定.json",
+            "00_要求定義.md",
+          ]);
+          for (const input of request.read!.staging)
+            assert.ok(fs.existsSync(path.join(inputStaging, input)));
+          assert.equal(request.read?.skill, DOCUMENTS.step1);
+          assert.equal(request.authority, "advisory");
+          assert.equal(request.workUnit.freshContextRequired, true);
+        }
+        assert.ok(fs.existsSync(path.resolve(implementation.read!.skill)));
+        assert.equal(implementation.authority, "advisory");
+        const dispatch = workflowAgentDispatch(implementation);
+        assert.ok(dispatch);
+        const dispatched = (
+          JSON.parse(dispatch.prompt) as {
+            handoff: {
+              kind: string;
+              headSha: string;
+              workUnit: { workUnitId: string };
+            };
+          }
+        ).handoff;
+        assert.equal(dispatched.kind, implementation.kind);
+        assert.equal(dispatched.headSha, implementation.headSha);
+        assert.equal(
+          dispatched.workUnit.workUnitId,
+          implementation.workUnit.workUnitId,
+        );
+        assert.equal(JSON.stringify(dispatched).includes('"contract"'), false);
+        assert.notEqual(
+          requirements.workUnit!.workUnitId,
+          implementation.workUnit.workUnitId,
+        );
+        assert.equal(implementation.workUnit.freshContextRequired, true);
+        const otherHead = observeWorkflowHandoff(staging, 9, {
+          ...preview.resume,
+          headSha: "a".repeat(40),
+        });
+        assert.ok(otherHead && "kind" in otherHead);
+        assert.notEqual(
+          otherHead.workUnit!.workUnitId,
+          implementation.workUnit.workUnitId,
+        );
+        const blocked = observeWorkflowHandoff(staging, 9, {
+          ...preview.resume,
+          errors: ["journal mismatch"],
+        });
+        assert.equal(workflowAgentDispatch(blocked), undefined);
+      } finally {
+        if (previousMode === undefined)
+          delete process.env.ASC_EXECUTION_CONTEXT_MODE;
+        else process.env.ASC_EXECUTION_CONTEXT_MODE = previousMode;
+      }
+      assert.equal(reads.length, 0);
+      fs.linkSync = (existingPath, newPath) => {
+        originalLink(existingPath, newPath);
+        if (String(newPath).endsWith(".mutation.lock")) {
+          fs.appendFileSync(documents[0]!, "\nconcurrent change\n");
+          mutated = true;
+        }
+      };
+      await assert.rejects(
+        main(["workflow", "advance", `--staging=${staging}`, "--apply"]),
+        /writer lock取得前にstagingまたはjournalが変更/,
+      );
+      assert.equal(mutated, true);
+      for (const document of documents) assert.ok(reads.includes(document));
+    } finally {
+      fs.readFileSync = originalRead;
+      fs.linkSync = originalLink;
+      process.stdout.write = originalWrite;
+    }
+  },
+);
+
+Given("初期引継ぎを検証する隔離repositoryがある", function () {
+  this.documents = { intakeRoot: this.initRepo() };
+});
+
+Then("初期引継ぎの正式previewとの一致を確認できる", function () {
+  assert.equal(this.checked, true);
+});
+
+When(
+  "issue createはStep0記録と同じStep1 handoffを一度に返す",
+  async function () {
+    const root = this.documents.intakeRoot!;
+    const assessment = path.join(root, "assessment.json");
+    fs.writeFileSync(
+      assessment,
+      JSON.stringify(
+        Object.fromEntries(
+          QUESTIONS.map((id) => [
+            id,
+            { answer: id === "Q-01" ? "unknown" : true, evidence: "fixture" },
+          ]),
+        ),
+      ),
+    );
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    const previousMode = process.env.ASC_EXECUTION_CONTEXT_MODE;
+    process.env.ASC_EXECUTION_CONTEXT_MODE = "short-lived";
+    try {
+      assert.equal(
+        await main([
+          "issue",
+          "create",
+          `--root=${root}`,
+          "--title=Prepared intake",
+          "--mode=quick",
+          `--assessment=${assessment}`,
+          "--prepare-next",
+        ]),
+        0,
+      );
+      const created = JSON.parse(output) as {
+        path: string;
+        mode: string;
+        durable: boolean;
+        synced: boolean;
+        step0: { recorded: boolean; errors: string[] };
+        handoff: { step: number; workUnit: { freshContextRequired: boolean } };
+        agentDispatch: unknown;
+      };
+      assert.equal(created.mode, "full", "unknown must not become quick");
+      assert.deepEqual(created.step0, { recorded: true, errors: [] });
+      assert.equal(created.durable, false);
+      assert.equal(created.synced, false);
+      assert.equal(created.handoff.step, 1);
+      assert.equal(created.handoff.workUnit.freshContextRequired, true);
+      output = "";
+      assert.equal(
+        await main(["workflow", "advance", `--staging=${created.path}`]),
+        0,
+      );
+      const preview = JSON.parse(output) as {
+        handoff: unknown;
+        agentDispatch: unknown;
+      };
+      assert.deepEqual(created.handoff, preview.handoff);
+      assert.deepEqual(created.agentDispatch, preview.agentDispatch);
+      this.checked = true;
+    } finally {
+      process.stdout.write = originalWrite;
+      if (previousMode === undefined)
+        delete process.env.ASC_EXECUTION_CONTEXT_MODE;
+      else process.env.ASC_EXECUTION_CONTEXT_MODE = previousMode;
+    }
+  },
+);
+
+When(
+  "作成後の{string}失敗から同じstagingを再開する",
+  async function (point: string) {
+    const root = this.documents.intakeRoot!;
+    const assessment = path.join(root, "assessment.json");
+    fs.writeFileSync(
+      assessment,
+      JSON.stringify(
+        Object.fromEntries(
+          QUESTIONS.map((id) => [
+            id,
+            { answer: "unknown", evidence: "隔離fixtureでは未確認" },
+          ]),
+        ),
+      ),
+    );
+    const originalRead = fs.readFileSync;
+    const originalRename = fs.renameSync;
+    const originalStringify = JSON.stringify;
+    const originalWrite = process.stdout.write;
+    const previousMode = process.env.ASC_EXECUTION_CONTEXT_MODE;
+    process.env.ASC_EXECUTION_CONTEXT_MODE = "short-lived";
+    let published = "";
+    let before: Record<string, string> = {};
+    let reads = 0;
+    let injected = false;
+    let output = "";
+    let result: Record<string, unknown>;
+    function snapshot(directory: string): Record<string, string> {
+      const files: Record<string, string> = {};
+      const visit = (current: string) => {
+        for (const item of fs.readdirSync(current, { withFileTypes: true })) {
+          const file = path.join(current, item.name);
+          if (item.isDirectory()) visit(file);
+          else
+            files[path.relative(directory, file)] =
+              originalRead(file).toString("base64");
+        }
+      };
+      visit(directory);
+      return files;
+    }
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    fs.renameSync = ((from, to) => {
+      originalRename(from, to);
+      if (
+        String(to).includes(`${path.sep}tmp${path.sep}issues${path.sep}`) &&
+        !path.basename(String(to)).startsWith(".")
+      ) {
+        before = snapshot(String(to));
+        published = String(to);
+      }
+    }) as typeof fs.renameSync;
+    fs.readFileSync = ((...args: Parameters<typeof fs.readFileSync>) => {
+      if (
+        published &&
+        String(args[0]) === path.join(published, "journal/steps.jsonl")
+      ) {
+        reads++;
+        if (
+          reads ===
+          ({ journal: 1, resume: 2, handoff: 3 } as Record<string, number>)[
+            point
+          ]
+        ) {
+          injected = true;
+          throw new Error(`injected ${point} failure`);
+        }
+      }
+      return originalRead(...args);
+    }) as typeof fs.readFileSync;
+    JSON.stringify = ((...args: Parameters<typeof JSON.stringify>) => {
+      const value = args[0] as { handoff?: unknown; prompt?: unknown } | null;
+      if (
+        point === "dispatch" &&
+        published &&
+        value &&
+        typeof value === "object" &&
+        value.handoff &&
+        typeof value.prompt === "string"
+      ) {
+        injected = true;
+        throw new Error("injected dispatch failure");
+      }
+      return originalStringify(...args);
+    }) as typeof JSON.stringify;
+    try {
+      assert.equal(
+        await main([
+          "issue",
+          "create",
+          `--root=${root}`,
+          "--title=recovery",
+          "--mode=full",
+          `--assessment=${assessment}`,
+          "--prepare-next",
+        ]),
+        1,
+      );
+      result = JSON.parse(output) as Record<string, unknown>;
+    } finally {
+      fs.readFileSync = originalRead;
+      fs.renameSync = originalRename;
+      JSON.stringify = originalStringify;
+      process.stdout.write = originalWrite;
+      if (previousMode === undefined)
+        delete process.env.ASC_EXECUTION_CONTEXT_MODE;
+      else process.env.ASC_EXECUTION_CONTEXT_MODE = previousMode;
+    }
+    assert.equal(injected, true);
+    assert.equal(result.path, published);
+    assert.equal(result.durable, false);
+    assert.equal(result.synced, false);
+    assert.equal(result.agentDispatch, undefined);
+    const preparation = result.preparation as {
+      status: string;
+      errors: string[];
+      recovery: { argv: string[]; createsStaging: boolean };
+    };
+    assert.equal(preparation.status, "blocked");
+    assert.ok(
+      preparation.errors.some((error) =>
+        error.includes(`injected ${point} failure`),
+      ),
+    );
+    assert.equal(preparation.recovery.createsStaging, false);
+    assert.deepEqual(preparation.recovery.argv, [
+      "workflow",
+      "advance",
+      `--staging=${published}`,
+    ]);
+    assert.deepEqual(
+      snapshot(published),
+      before,
+      "failure must preserve published records byte-for-byte",
+    );
+    const siblings = fs.readdirSync(path.dirname(published)).sort();
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        output = "";
+        assert.equal(await main(preparation.recovery.argv), 0);
+        const preview = JSON.parse(output) as {
+          handoff: {
+            staging: string;
+            step: number;
+            workUnit: { freshContextRequired: boolean };
+          };
+        };
+        assert.equal(preview.handoff.staging, published);
+        assert.equal(preview.handoff.step, 1);
+        assert.equal(preview.handoff.workUnit.freshContextRequired, true);
+        assert.deepEqual(snapshot(published), before);
+        assert.deepEqual(
+          fs.readdirSync(path.dirname(published)).sort(),
+          siblings,
+        );
+      }
+      this.checked = true;
+    } finally {
+      process.stdout.write = originalWrite;
+    }
   },
 );

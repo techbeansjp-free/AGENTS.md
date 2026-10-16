@@ -253,6 +253,7 @@ export function computeImpactSet(input: {
         status: "built";
         snapshot: ReturnType<typeof buildCommitSemanticGraph>["snapshot"];
         contentHash: string;
+        unresolvedImportPaths: readonly string[];
       }
     | { status: "unavailable"; reason: string };
   let sources: ReadonlyMap<string, string> = new Map();
@@ -262,6 +263,7 @@ export function computeImpactSet(input: {
       status: "built",
       snapshot: built.snapshot,
       contentHash: semanticGraphContentHash(built.snapshot),
+      unresolvedImportPaths: built.unresolvedImportPaths,
     };
     sources = built.sources;
   } catch (error) {
@@ -270,24 +272,6 @@ export function computeImpactSet(input: {
       reason: error instanceof Error ? error.message : String(error),
     };
   }
-  const graphFiles =
-    graph.status === "built"
-      ? graph.snapshot.nodes
-          .filter(({ kind }) => kind === "file")
-          .map(({ id }) => id.slice("file:".length))
-      : [];
-  const definitions: (StepDefinitionSource & StepDefinitionFileSummary)[] = [];
-  if (graph.status === "built") {
-    const compiler = loadTypeScriptCompiler();
-    for (const [file, text] of sources) {
-      if (!isScannedSource(file)) continue;
-      const summary = summarizeStepDefinitionFile(compiler, file, text);
-      if (summary !== undefined) definitions.push(summary);
-    }
-  }
-  const features = [...sources]
-    .filter(([file]) => file.endsWith(".feature"))
-    .map(([file, text]) => ({ path: file, text }));
   /**
    * **staging rootは差分と同じ`headSha`の版から読む。** 作業treeのpolicyを読むと、
    * 同じcommit差分でも作業treeの状態で分類が変わり、`full`が`targeted`へ狭まりうる。
@@ -307,7 +291,25 @@ export function computeImpactSet(input: {
   } catch {
     stagingRootPattern = undefined;
   }
-  return deriveImpactSet({
+  const graphFiles =
+    graph.status === "built"
+      ? graph.snapshot.nodes
+          .filter(({ kind }) => kind === "file")
+          .map(({ id }) => id.slice("file:".length))
+      : [];
+  const definitions: (StepDefinitionSource & StepDefinitionFileSummary)[] = [];
+  if (graph.status === "built") {
+    const compiler = loadTypeScriptCompiler();
+    for (const [file, text] of sources) {
+      if (!isScannedSource(file)) continue;
+      const summary = summarizeStepDefinitionFile(compiler, file, text);
+      if (summary !== undefined) definitions.push(summary);
+    }
+  }
+  const features = [...sources]
+    .filter(([file]) => file.endsWith(".feature"))
+    .map(([file, text]) => ({ path: file, text }));
+  const impact = deriveImpactSet({
     baseSha: input.baseSha,
     headSha: input.headSha,
     changeDigest: observed.digest,
@@ -323,6 +325,7 @@ export function computeImpactSet(input: {
     scripts: packageScripts(sources),
     stagingRootPattern,
   });
+  return impact;
 }
 
 /**
@@ -379,7 +382,8 @@ export function deriveReviewRoundImpact(input: {
         }
       : derived,
     adjacentScope: changed ? reviewAdjacentScope(derived) : [],
-    adjacentScopeUnbounded: changed && derived.mode === "full",
+    adjacentScopeUnbounded:
+      changed && (derived.reviewMode ?? derived.mode) === "full",
   };
 }
 

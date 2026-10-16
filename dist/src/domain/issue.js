@@ -379,6 +379,9 @@ export function issueRequiredHeadings(mode) {
 const TEMPLATE_PLACEHOLDER_TERM = /記載|記入|件名|名称|内容|役割|日時|ISO 8601形式|状態|結果|根拠|条件|パス|URL|SHA|値|対象/u;
 function templateParentheticalPlaceholders() {
     const placeholders = new Set();
+    // 配布済みfullテンプレートの旧ラベルを残す。更新前のstagingに残った
+    // 未記入の説明文も、テンプレート修正によって検査から漏らさない。
+    placeholders.add("（node・edgeの正方向、cycle、self-loop、unknown node、自己評価・自己SHAの拒否、rollback/retryの上限。該当時だけ）");
     for (const name of fs.readdirSync(templateRoot)) {
         if (!name.endsWith(".md"))
             continue;
@@ -502,6 +505,11 @@ export function scenarioKeywords(dialect) {
     if (!keywords)
         throw new Error(`gherkinDialectが未対応です: ${dialect}。対応する方言は${Object.keys(GHERKIN_SCENARIO_KEYWORDS).join("、")}です`);
     return keywords;
+}
+/** Shared dialect vocabulary for observing Gherkin step/Doc String boundaries. */
+export function gherkinStepKeywords(dialect) {
+    scenarioKeywords(dialect);
+    return GHERKIN_BLOCK_KEYWORDS[dialect].step;
 }
 function scenarioIdPattern(dialect) {
     const alternatives = scenarioKeywords(dialect)
@@ -651,8 +659,13 @@ function withoutPlaceholderCodeAndComments(text, preserveLines = false) {
 function unresolvedPlaceholders(text, dialect = DEFAULT_GHERKIN_DIALECT) {
     const prose = withoutGherkin(withoutPlaceholderCodeAndComments(text), dialect);
     const found = new Set();
-    for (const match of prose.matchAll(/<[^>\n]+>|\{[^}\n]+\}/gu))
+    for (const match of prose.matchAll(/<[^>\n]+>|\{[^}\n]+\}/gu)) {
+        // Only a clear return statement is code when cited without Markdown ticks.
+        // A semicolon alone also appears in unfinished template fields.
+        if (/^\{\s*return\s+(?:"[^"\n]*"|'[^'\n]*'|[A-Za-z_$][\w.$]*)\s*;\s*\}$/u.test(match[0]))
+            continue;
         found.add(match[0]);
+    }
     for (const match of prose.matchAll(/（[^）\n]+）/gu))
         if (TEMPLATE_PARENTHETICAL_PLACEHOLDERS.has(match[0]))
             found.add(match[0]);
@@ -1299,7 +1312,8 @@ export function validateIssue(issuePath, options = {}) {
     }
     for (const id of malformedScenarioIds(allText, gherkinDialect))
         errors.push(`GherkinシナリオIDの文法が不正です: ${id}（SCN-に大文字英数字とハイフンだけを続ける）`);
-    if (!scenarioId.test(allText))
+    if (!(declared === "full" && options.stage === "request") &&
+        !scenarioId.test(allText))
         errors.push("GherkinシナリオIDがありません");
     const disqualifiers = detectQuickDisqualifiers(options.changedFiles ?? []);
     if ((declared === "quick" || declared === "poc") &&

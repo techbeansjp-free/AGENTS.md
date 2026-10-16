@@ -805,6 +805,8 @@ Then("handoffは全pendingを持つ次roundのreviewerを指定する", function
     assert.equal(handoff.role, "reviewer");
     assert.equal(handoff.reviewRound, 3);
     assert.deepEqual(handoff.findingIds, ["F-LEGACY-01"]);
+    assert.match(handoff.read!.skill, /step-10-review\/SKILL.md$/u);
+    assert.deepEqual(handoff.read?.staging, ["review-session.json"]);
   } finally {
     if (oldMode === undefined) delete process.env.ASC_EXECUTION_CONTEXT_MODE;
     else process.env.ASC_EXECUTION_CONTEXT_MODE = oldMode;
@@ -974,5 +976,7 @@ Then("旧Highのhandoffは再評価ではなくcorrectionへblockerを渡す", f
   assert.equal(this.handoff.role, "correction");
   assert.equal(this.handoff.reviewRound, 1);
   assert.deepEqual(this.handoff.findingIds, ["F-LEGACY-01"]);
+  assert.match(this.handoff.read!.skill, /step-09-implement\/SKILL.md$/u);
+  assert.deepEqual(this.handoff.read?.staging, ["review-session.json"]);
   assert.deepEqual(pendingReviewFindingIds(this.session), []);
 });

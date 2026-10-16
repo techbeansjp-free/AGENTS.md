@@ -1,8 +1,27 @@
 @unit
 Feature: 再開状態を起点にする読取規律
   進行の正本を会話ではなく保存記録に置き、再開時に読む範囲を正本とadapterで定める。
+  fullとquickのworkerには必要な正式成果物pointerだけを渡し、計画本文をpreviewで読まない。
 
   Scenario: SCN-UNIT-RESUME-001 読取規律が正本とadapterに在る
     Given 配布する正本・asc-step adapter・Step 1/2 skillがある
     When 本文を検査する
     Then context境界・再開順・拡大条件があり、adapterは全文読みを指示しない
+    And advanceのpreviewは計画本文を読まずapplyはlock前後の変更を拒否する
+
+  Scenario: SCN-UNIT-RESUME-002 初期記録と次工程入力を一度のCLIで返す
+    Given 初期引継ぎを検証する隔離repositoryがある
+    When issue createはStep0記録と同じStep1 handoffを一度に返す
+    Then 初期引継ぎの正式previewとの一致を確認できる
+
+  Scenario Outline: SCN-UNIT-RESUME-003 作成後の観測失敗でも正式記録を保持して再開する
+    Given 初期引継ぎを検証する隔離repositoryがある
+    When 作成後の"<地点>"失敗から同じstagingを再開する
+    Then 初期引継ぎの正式previewとの一致を確認できる
+
+    Examples:
+      | 地点     |
+      | journal  |
+      | resume   |
+      | handoff  |
+      | dispatch |

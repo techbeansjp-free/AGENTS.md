@@ -61,6 +61,29 @@ Feature: Issue templateと段階別検証の契約
     When quick Issueのplaceholderを検証する
     Then placeholder errorなしでIssue検証は合格する
 
+  Scenario: SCN-UNIT-ISSUEPLC-017 本文に引用した関数bodyはplaceholderとしない
+    Given validなquick Issueの本文に関数bodyの引用がある
+    When quick Issueのplaceholderを検証する
+    Then placeholder errorなしでIssue検証は合格する
+
+  Scenario: SCN-UNIT-ISSUEPLC-018 セミコロンを含む未記入欄は拒否する
+    Given placeholder検査用のMarkdownがある
+      """
+      担当は{担当者;期日}のままである。
+      """
+    When IssueとPR本文の共有placeholder境界を検証する
+    Then Issueのplaceholder候補は"{担当者;期日}"だけになる
+    And PR本文のplaceholder候補は"{担当者;期日}"だけになる
+
+  Scenario: SCN-UNIT-ISSUEPLC-019 未記入欄の中のangleも判定を回避しない
+    Given placeholder検査用のMarkdownがある
+      """
+      承認は{申請先; <承認者>}のままである。
+      """
+    When IssueとPR本文の共有placeholder境界を検証する
+    Then Issueのplaceholder候補は"{申請先; <承認者>}"だけになる
+    And PR本文のplaceholder候補は"{申請先; <承認者>}"だけになる
+
   Scenario: SCN-UNIT-ISSUEPLC-003 説明文の変更しない条件はplaceholderとしない
     Given validなquick Issueの本文に説明文の変更しない条件がある
     When quick Issueのplaceholderを検証する
@@ -76,6 +99,12 @@ Feature: Issue templateと段階別検証の契約
     When quick Issueのplaceholderを検証する
     Then placeholder errorを示してIssue検証が失敗する
     And placeholder errorが原因の字面"（人が識別できる件名）"を示す
+
+  Scenario: SCN-UNIT-ISSUEPLC-016 旧graph制約の未記入説明は引き続き拒否する
+    Given validなquick Issueの本文に旧graph制約のplaceholderがある
+    When quick Issueのplaceholderを検証する
+    Then placeholder errorを示してIssue検証が失敗する
+    And placeholder errorが原因の字面"（node・edgeの正方向、cycle、self-loop、unknown node、自己評価・自己SHAの拒否、rollback/retryの上限。該当時だけ）"を示す
 
   Scenario: SCN-UNIT-ISSUEPLC-006 placeholderが6件のとき先頭5件とほか1件を示す
     Given validなquick Issueの本文にplaceholder6件がある

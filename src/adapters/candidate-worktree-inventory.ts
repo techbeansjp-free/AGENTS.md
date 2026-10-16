@@ -1,0 +1,142 @@
+import fs from "node:fs";
+import path from "node:path";
+import { git } from "../lib/process.js";
+import { parseWorktreeHeads } from "../domain/worktree-survey.js";
+import {
+  CANDIDATE_GIT_ENV,
+  assertNoCandidateFilters,
+} from "./candidate-git.js";
+import { resolveGitWorkspace } from "./review-workspace.js";
+
+const RESULT_PREFIX = ".asc-candidate-result-";
+
+export interface CandidateWorktreeInventoryEntry {
+  path: string;
+  headSha: string | null;
+  state:
+    | "registered-clean"
+    | "registered-modified"
+    | "registered-missing"
+    | "registered-unknown"
+    | "unregistered-directory"
+    | "unregistered-path";
+  reason: string;
+}
+
+/** Read-only recovery inventory. It never prunes or removes Git metadata. */
+export function inventoryCandidateWorktrees(rootInput: string): {
+  authority: "observation-only";
+  root: string;
+  entries: CandidateWorktreeInventoryEntry[];
+  errors: string[];
+} {
+  const root = fs.realpathSync(rootInput);
+  const primaryRoot = resolveGitWorkspace(root).primaryRoot;
+  const parent = path.dirname(root);
+  const observed = parseWorktreeHeads(
+    git(["worktree", "list", "--porcelain"], root, {
+      env: CANDIDATE_GIT_ENV,
+    }).stdout,
+  );
+  const relevant = observed.heads.filter(
+    (entry) =>
+      path.dirname(entry.path) === parent &&
+      path.basename(entry.path).startsWith(RESULT_PREFIX),
+  );
+  const registered = new Set(relevant.map((entry) => entry.path));
+  const entries: CandidateWorktreeInventoryEntry[] = [];
+  for (const item of relevant) {
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(item.path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        entries.push({
+          path: item.path,
+          headSha: item.headSha,
+          state: "registered-missing",
+          reason:
+            "Git登録だけが残っています。自動pruneせず所有者が確認してください",
+        });
+        continue;
+      }
+      entries.push({
+        path: item.path,
+        headSha: item.headSha,
+        state: "registered-unknown",
+        reason: `pathを確認できないため保持します: ${error instanceof Error ? error.message : String(error)}`,
+      });
+      continue;
+    }
+    try {
+      if (
+        !stat.isDirectory() ||
+        stat.isSymbolicLink() ||
+        fs.realpathSync(item.path) !== item.path ||
+        item.headState !== "detached" ||
+        resolveGitWorkspace(item.path).primaryRoot !== primaryRoot ||
+        git(["rev-parse", "HEAD"], item.path, {
+          env: CANDIDATE_GIT_ENV,
+        }).stdout.trim() !== item.headSha
+      ) {
+        entries.push({
+          path: item.path,
+          headSha: item.headSha,
+          state: "registered-unknown",
+          reason: "結果worktreeの登録・HEAD・実pathが一致しません",
+        });
+        continue;
+      }
+      // status can execute a configured clean filter. Reuse the Candidate
+      // boundary guard before Git may read worktree contents.
+      assertNoCandidateFilters(item.path);
+      const status = git(
+        ["status", "--porcelain=v1", "--untracked-files=all", "--ignored"],
+        item.path,
+        { env: CANDIDATE_GIT_ENV },
+      ).stdout;
+      entries.push({
+        path: item.path,
+        headSha: item.headSha,
+        state: status === "" ? "registered-clean" : "registered-modified",
+        reason:
+          status === ""
+            ? "候補結果の所有者が独立レビュー・正式採用または明示破棄を決定します"
+            : "作業file・未追跡file・ignored fileを含む変更があるため保持します",
+      });
+    } catch (error) {
+      entries.push({
+        path: item.path,
+        headSha: item.headSha,
+        state: "registered-unknown",
+        reason: `状態を確認できないため保持します: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  }
+  for (const entry of fs.readdirSync(parent, { withFileTypes: true })) {
+    if (
+      !entry.name.startsWith(RESULT_PREFIX) ||
+      registered.has(path.join(parent, entry.name))
+    )
+      continue;
+    entries.push({
+      path: path.join(parent, entry.name),
+      headSha: null,
+      state: entry.isDirectory()
+        ? "unregistered-directory"
+        : "unregistered-path",
+      reason: "Git登録のない同名pathです。自動削除せず所有者が確認してください",
+    });
+  }
+  return {
+    authority: "observation-only",
+    root,
+    entries: entries.sort((left, right) => left.path.localeCompare(right.path)),
+    errors: [
+      ...observed.errors,
+      ...entries
+        .filter((entry) => entry.state === "registered-unknown")
+        .map((entry) => `${entry.path}: ${entry.reason}`),
+    ],
+  };
+}

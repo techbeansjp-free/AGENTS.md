@@ -253,6 +253,11 @@ Given(
   },
 );
 
+Given("Verification Set入力が無く02と03の対象節が詳細記述である", function () {
+  writeStaging(this, "high", "detailed");
+  fs.unlinkSync(path.join(this.issuePath, "verification-input.json"));
+});
+
 When("risk比例のIssue成果物を検証する", function () {
   const originalReadSync = fs.readSync;
   let replaced = false;
@@ -372,4 +377,6 @@ Then("両templateがlow限定とissue validateを明記する", function () {
     );
     assert.match(template, /`issue validate`/u);
   }
+  assert.match(this.templates[0], /Step 5でrisk入力がまだ無い場合/u);
+  assert.match(this.templates[0], /短縮行を使わず/u);
 });

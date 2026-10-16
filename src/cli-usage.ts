@@ -659,6 +659,86 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "workflow",
+    subcommand: "candidate-adopt",
+    summary:
+      "低リスクquickで実装済みCandidate結果をGit差分と要求digestから正式採用する。実装時刻は偽装せず、独立reviewとtrusted検証は後続gateに残す",
+    requiredFlags: [
+      flag("staging", "path", "結果用worktree内のStep 4封印済みIssue staging"),
+    ],
+    conditionalFlags: [],
+    optionalFlags: [
+      optional(
+        "apply",
+        "",
+        "観測した採用記録をjournalへ追記する",
+        "指定しない限りpreview",
+      ),
+    ],
+    example:
+      "npx agent-skill-chain workflow candidate-adopt --staging=.agent-skill-chain/tmp/issues/20261012_candidate --apply",
+    acceptsSpaceSeparatedFlags: true,
+  },
+  {
+    command: "workflow",
+    subcommand: "candidate-inventory",
+    summary:
+      "Candidate結果用worktreeの登録・変更・孤立状態を読み取り専用で観測する。削除や正式採用は行わない",
+    requiredFlags: [flag("repo", "path", "Candidateを作成したGit worktree")],
+    conditionalFlags: [],
+    optionalFlags: [],
+    example: "npx agent-skill-chain workflow candidate-inventory --repo=.",
+  },
+  {
+    command: "workflow",
+    subcommand: "candidate",
+    summary:
+      "正式Stepの前に隔離候補の事前安全判定を行い、commit後の実Git差分から不足責務を分類する。出力に正式権限はない",
+    requiredFlags: [
+      flag("input", "path", "preflightまたはpostのJSON入力"),
+      flag("repo", "path", "隔離Git worktreeのtop-level"),
+    ],
+    conditionalFlags: [
+      conditional(
+        "session",
+        "path",
+        "候補worktree外に保存する引継ぎfile",
+        "input.phaseがpreflightまたはpostのとき。executeでは指定しない",
+      ),
+    ],
+    optionalFlags: [],
+    example:
+      "npx agent-skill-chain workflow candidate --repo=./candidate --session=./candidate-session.json --input=./candidate-preflight.json",
+    acceptsSpaceSeparatedFlags: true,
+    inputContract: {
+      description:
+        "preflight: intent, correctnessCriterion, allowedPaths, risk（全14領域のcleared/triggered/unknown）, unresolved。execute: 同じ事前項目とworkerArgv（またはworkerProvider: codex）、targetTest、gapsを単一Coordinator呼出しで実行する（LinuxのCodex permission profile必須、sessionなし、正式Evidenceではない）。Codex Workerのtoolだけを隔離し、provider報告usageとWorker時間を返す。post: targetTest（argv）, gaps。base・許可path・成功フラグの事後申告を拒否し、CLIがGitと対象テストを観測する。risk・gapsは申告であり、sessionとテスト観測は正式Evidenceではない。",
+      example: {
+        phase: "preflight",
+        intent: "内部ラベルをHelloに修正",
+        correctnessCriterion: "label() === Hello",
+        allowedPaths: ["src/label.ts"],
+        risk: {
+          authentication: "cleared",
+          authorization: "cleared",
+          secrets: "cleared",
+          "personal-data": "cleared",
+          "destructive-data": "cleared",
+          "data-integrity": "cleared",
+          migration: "cleared",
+          "async-concurrency": "cleared",
+          "state-transition": "cleared",
+          "production-impact": "cleared",
+          "legal-financial": "cleared",
+          "trust-boundary": "cleared",
+          "external-api": "cleared",
+          "irreversible-action": "cleared",
+        },
+        unresolved: [],
+      },
+    },
+  },
+  {
+    command: "workflow",
     subcommand: "advance",
     summary:
       "保存済みstateから次の1 Stepを検証・記録し、review/deliveryは専用commandへ委譲する。既定はpreview",
@@ -676,8 +756,13 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "人が補足する検証証拠",
         "Step 1〜3・5〜9を--applyするとき",
       ),
-      conditional("repo", "owner/name", "同期先repository", "Step 4/8"),
-      conditional("issue", "整数", "同期先Issue番号", "Step 4/8"),
+      conditional(
+        "repo",
+        "owner/name",
+        "同期先repository",
+        "Step 4/8（--plan以外）",
+      ),
+      conditional("issue", "整数", "同期先Issue番号", "Step 4/8（--plan以外）"),
       conditional(
         "authorize",
         "approved",
@@ -700,6 +785,30 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "40hex",
         "Step 9のcheckpoint前HEADからfresh continuationを発行",
         "通常の次Step preview",
+      ),
+      optional(
+        "plan",
+        "",
+        "外部参照や書込なしで次の知的作業・CLI操作の契約を返す",
+        "従来のStep preview",
+      ),
+      optional(
+        "prepare-next",
+        "",
+        "apply済みの1遷移に続けて次の作業契約を観測する。失敗時も遷移を保持し--planで再開",
+        "--apply時だけ指定可",
+      ),
+      optional(
+        "delegate-request",
+        "",
+        "Candidate由来のQuick Step 1不足欄を現在contextで確定できない場合にfresh Workerを選ぶ",
+        "--plan時のQuick Step 1だけ指定可",
+      ),
+      optional(
+        "candidate-head",
+        "40hex",
+        "隔離CandidateのQuick Step 1を記録するときにplanのHEADを再照合",
+        "通常のStep 1記録では指定しない",
       ),
       optional("apply", "", "次の1 Stepだけを適用", "preview"),
     ],
@@ -824,7 +933,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       flag(
         "assessment",
         "path",
-        '質問IDをキーにした回答mapのJSON file。{"Q-01":{"answer":true|false|"unknown","evidence":"根拠"},…}の形式で、mode決定記録そのものは受理しない。回答か根拠が欠けたIDは不明として扱いfullへ倒す',
+        '質問IDをキーにした回答mapのJSON file。{"Q-01":{"answer":true|false|"unknown","evidence":"根拠"},…}の形式で、mode決定記録そのものは受理しない。Q-01〜Q-08をすべて明示する。判断できない回答はanswer="unknown"と不明理由のevidenceを記すとfullへ倒す。ID自体の欠落は拒否する',
       ),
     ],
     conditionalFlags: [
@@ -837,6 +946,12 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     ],
     optionalFlags: [
       ROOT_FLAG,
+      optional(
+        "prepare-next",
+        "",
+        "作成済みStep 0記録とEvidenceから選んだ次のactionを同じ呼出しで返す。fresh-worker選択時だけhandoffとagentDispatchを返す。作成後の観測失敗は終了値1とpath・preparation.recovery.argvを返す。既存stagingから再開し、createを繰り返さない。Q回答を推測せず、次工程のgateを省略しない",
+        "なし",
+      ),
       optional("changed", "path,path", "既知の変更path", "なし"),
       optional(
         "staging-root",
@@ -1075,6 +1190,30 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
   },
   {
     command: "verify",
+    subcommand: "plan",
+    summary:
+      "現在HEAD・影響集合・trusted policyに一致する既存検証記録と、無ければ必要なscope/argvを読み取り専用で返す。結果は助言であり実行・記録・merge認可ではない",
+    requiredFlags: [flag("staging", "path", "対象Issue staging")],
+    conditionalFlags: [],
+    optionalFlags: [
+      optional(
+        "base",
+        "sha",
+        "影響集合の比較基点",
+        "review sessionの比較基点（sessionが無ければ必須）",
+      ),
+      optional(
+        "root",
+        "path",
+        "stagingを置いたrepositoryのroot",
+        "現在の作業directory",
+      ),
+    ],
+    example:
+      "npx agent-skill-chain verify plan --staging=.agent-skill-chain/tmp/issues/20260911_change --base=<SHA>",
+  },
+  {
+    command: "verify",
     subcommand: "run",
     summary:
       "`--`の後の検証commandをshellを通さずH_implで実行し、HEAD・影響集合digest・終了値をstagingの観測記録（journal/verification-runs.jsonl）へ追記する。commandは既定branchのtrusted policyが宣言したものだけを受理し、merge段階以降は拒否する。終了値はcommandの終了値",
@@ -1091,6 +1230,12 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     conditionalFlags: [],
     optionalFlags: [
       optional(
+        "reuse",
+        "",
+        "同じHEAD・影響集合・trusted policy・scope・argvの最新成功が有効なら再実行せず返す。記録は追記しない。破損記録とpolicy不整合は拒否する",
+        "指定なしでは必ず実行",
+      ),
+      optional(
         "base",
         "sha",
         "影響集合の比較基点。rebase後または既定branch追随後はreview exportと同じ基点を指定する",
@@ -1103,6 +1248,7 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
         "現在の作業directory",
       ),
     ],
+    note: "同じstagingの実行と記録は既存lockで直列化します。出力はmain command終了時の範囲を記録後に中継し、実行中の逐次表示やstdout/stderrの相互順序は保持しません。中継だけ失敗した場合も正式検証記録を残し、--reuseで再照合できます",
     acceptsCommandArgv: true,
     example:
       "npx agent-skill-chain verify run --staging=.agent-skill-chain/tmp/issues/20260911_change --scope=full -- npm test",
@@ -1568,15 +1714,52 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
     requiredFlags: [
       flag("issue", "整数", "対象Issue番号"),
       flag("repo", "owner/name", "対象repository"),
-      flag("base", "text", "base branch"),
-      flag("head", "text", "head branch"),
-      flag("head-sha", "sha", "headのSHA"),
-      flag("evidence", "path", "PR証跡のJSON file。構造はinputContractを参照"),
-      flag("body-file", "path", "template構造を満たすPR本文"),
     ],
-    conditionalFlags: [],
+    conditionalFlags: [
+      conditional(
+        "base",
+        "text",
+        "base branch",
+        "--from-summaryなし",
+        (provided) => provided["from-summary"] === undefined,
+      ),
+      conditional(
+        "head",
+        "text",
+        "head branch",
+        "--from-summaryなし",
+        (provided) => provided["from-summary"] === undefined,
+      ),
+      conditional(
+        "head-sha",
+        "sha",
+        "headのSHA",
+        "--from-summaryなし",
+        (provided) => provided["from-summary"] === undefined,
+      ),
+      conditional(
+        "evidence",
+        "path",
+        "PR証跡JSON",
+        "--from-summaryなし",
+        (provided) => provided["from-summary"] === undefined,
+      ),
+      conditional(
+        "body-file",
+        "path",
+        "template構造を満たすPR本文",
+        "--from-summaryなし",
+        (provided) => provided["from-summary"] === undefined,
+      ),
+    ],
     optionalFlags: [
       ROOT_FLAG,
+      optional(
+        "from-summary",
+        "repo-relative-path",
+        "H_implでreview済みasc-delivery-summary/v1 JSONから本文と機械Evidenceを生成。evidence/body-file/head-shaと排他",
+        "legacy入力",
+      ),
       optional("title", "text", "PRタイトル", "本文のH1見出し"),
       optional("authorize", "approved", "作成の承認", "承認なし"),
       optional("canonical-issue", "整数", "正本Issue番号", "--issueと同じ"),
@@ -1591,10 +1774,11 @@ export const COMMAND_USAGE: readonly CommandUsage[] = Object.freeze([
       ...APPLY_MODE,
     ],
     example:
-      "npx agent-skill-chain pr create --issue=886 --repo=owner/name --base=main --head=feature/886-cli-usage --head-sha=$(git rev-parse HEAD) --evidence=./evidence.json --body-file=./PR.md --dry-run",
+      "npx agent-skill-chain pr create --issue=886 --repo=owner/name --staging=<staging> --from-summary=delivery-summary.json --dry-run",
     inputContract: {
       description:
-        "--evidenceのJSON。headShaは--head-shaと同じexact HEAD。tests.scenarioIdsとspec.trace.scenariosは同じSCN集合。spec.impactはupdated|no-spec-impactで、no-spec-impactではspec.rationaleに対象範囲を限定した12文字以上の根拠が必要。ownershipは変更pathの所有者と層",
+        "--evidenceのJSON。headShaは--head-shaと同じexact HEAD。tests.scenarioIdsとspec.trace.scenariosは同じSCN集合。spec.impactはupdated|no-spec-impactで、no-spec-impactではspec.rationaleに対象範囲を限定した12文字以上の根拠が必要。ownershipは変更pathの所有者と層。--from-summaryはStep9でcommitしStep10で独立reviewした通常Git blob(256KiB以下)をH_implから読む。worktreeの変更は読まない。必須schemaVersion/issue/body/scenarioIds/specと任意ownershipだけを受理。specはconsistent(boolean明示),impact,traceと任意rationaleだけ。trace.testsはno-spec-impactでも必須で、H_implの通常Git fileを名指す。updatedではtrace.requirements/scenariosも必須。SCNは封印済み正式計画(fullは01、quick/pocは00)またはreview済みAMDのScenario定義に存在すること。test根拠は正式full検証またはtargeted argvの対象でなければ拒否。native runnerも利用でき、testコメントをSCN登録証明にしない。.feature根拠はScenario定義の一致も検査する。updatedの要件IDはdocs/specs/02_要件の正式要件に存在すること。no-spec-impactとdocs/specs差分の矛盾は拒否。ownershipはclassified(true),owner,targetLayer(package|project|spec|evidence)。SCN表記実在とtrusted command成功は各scenarioの実行結果そのものではない。任意owner名の真偽、未記載の仕様影響、spec.consistentの意味は独立reviewで確認し、CLIが自動証明したと扱わない。本文はPR template全必須節とASC_HEAD/ASC_VERIFICATION/ASC_REVIEWの二重波括弧placeholderを各1回持つ。headSha/review/testsを要約に申告できない。以下のsummaryExampleは別JSONとして保存する例でありlegacy evidenceへ混ぜない。from-summaryではhead/baseを省略すると現在branch/既定branchを観測し、指定時も一致が必要。CLI例: pr create --issue=886 --repo=owner/name --staging=<staging> --from-summary=delivery-summary.json --dry-run" +
+        ' summaryExample: {"schemaVersion": "asc-delivery-summary/v1", "issue": 886, "body": "# fix: 表示文言を訂正\\n\\n## 概要\\n表示文言を訂正する。\\nCloses #886\\n\\n## 変更内容\\n誤字を訂正。\\n\\n## 変更前後\\n誤字から正しい表記へ変更。\\n\\n## テスト結果\\n{{ASC_VERIFICATION}}\\n\\n## レビュー結果\\n{{ASC_REVIEW}}\\n{{ASC_HEAD}}\\n\\n## 仕様更新\\n公開仕様は変更しない。\\n\\n## 残存リスクと確認してほしい点\\n表記の確認。\\n\\n## 停止点\\ntrusted delivery policyの停止点に従う。", "scenarioIds": ["SCN-UNIT-EXAMPLE-001"], "spec": {"consistent": true, "impact": "no-spec-impact", "rationale": "表示文言の誤字訂正のみで製品の振る舞いと公開契約を変更しない", "trace": {"tests": ["test/features/unit/example.feature"]}}, "ownership": {"classified": true, "owner": "project", "targetLayer": "project"}}',
       example: {
         headSha: "<40hex>",
         review: { approved: true, headSha: "<40hex>" },

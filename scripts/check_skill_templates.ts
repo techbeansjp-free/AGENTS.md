@@ -252,6 +252,7 @@ const EXPECTED_TEMPLATE_LINKS = new Map<string, string[]>([
   [
     "step-09-implement",
     [
+      "../../templates/issue/11_プルリクエスト本文.md",
       "../../templates/specs/00_仕様書構成/00_仕様書索引.md",
       "../../templates/specs/00_仕様書構成/01_記入・分割ルール.md",
     ],

@@ -1,3 +1,4 @@
+import { fixturePlanningDigest } from "../support/review-planning-fixture.js";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -331,6 +332,7 @@ function rewriteRound(
       previousRoundDigest: rebuilt?.latestRoundDigest ?? null,
       anchor: stored.anchor,
       candidateHeadSha: record.candidateHeadSha,
+      planningDigest: record.planningDigest,
       focus: record.focus,
       findings: record.findings.map((finding) => {
         const copy: Record<string, unknown> = { ...finding };
@@ -992,6 +994,7 @@ function legacySession(world: WorkflowStepWorld): void {
       previousRoundDigest: null,
       anchor,
       candidateHeadSha: head,
+      planningDigest: fixturePlanningDigest(prepared.staging),
       focus: { previousBlocking: [], fixedDiff: [], adjacentScope: [] },
       findings: [finding("valid")],
     }),
@@ -1003,6 +1006,7 @@ function legacySession(world: WorkflowStepWorld): void {
       previousRoundDigest: roundOne.latestRoundDigest,
       anchor,
       candidateHeadSha: head,
+      planningDigest: fixturePlanningDigest(prepared.staging),
       focus: {
         previousBlocking: ["H-1544"],
         fixedDiff: [],

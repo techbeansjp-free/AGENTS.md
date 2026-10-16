@@ -7,11 +7,31 @@ import { GIT_ENV, evidenceOnlySuffix, observeReviewDiff, observeReviewDiffSectio
  * 例外はC2が該当positionの`判定不能`へ変換する。transitionの観測は同じ範囲を2回導出しない。
  */
 export function createReuseObserver(root, records, counter) {
+    const impacts = new Map();
+    const deriveImpact = (fromSha, toSha) => {
+        const key = `${fromSha}..${toSha}`;
+        const known = impacts.get(key);
+        if (known)
+            return known;
+        if (counter) {
+            counter.contentDiffs += 1;
+            counter.impactDerivations += 1;
+        }
+        const observed = deriveReviewRoundImpact({
+            root,
+            previousHeadSha: fromSha,
+            headSha: toSha,
+            records,
+        });
+        impacts.set(key, observed);
+        return observed;
+    };
     const transitions = new Map();
     const tree = (sha) => git(["rev-parse", "--verify", `${sha}^{tree}`], root, {
         env: GIT_ENV,
     }).stdout.trim();
     return {
+        deriveImpact,
         link(previousHeadSha, nextSha) {
             if (evidenceOnlySuffix(root, previousHeadSha, nextSha) !== undefined)
                 return "evidence-suffix";
@@ -29,17 +49,7 @@ export function createReuseObserver(root, records, counter) {
                 unbounded: false,
             };
             if (fromSha !== toSha) {
-                if (counter) {
-                    counter.contentDiffs += 1;
-                    counter.impactDerivations += 1;
-                }
-                // 雛形・記録前照合と同じ導出を使う（02 A-01）。
-                const derived = deriveReviewRoundImpact({
-                    root,
-                    previousHeadSha: fromSha,
-                    headSha: toSha,
-                    records,
-                });
+                const derived = deriveImpact(fromSha, toSha);
                 observed = {
                     digest: derived.impact.changeDigest,
                     changedPaths: derived.impact.changedPaths,
@@ -120,10 +130,11 @@ export function assignReviewInspection(input) {
         fromSha: input.fromSha,
         toSha: input.toSha,
         focus: input.focus,
-        observer: createReuseObserver(input.root, {
-            issue: input.issue,
-            session: input.session,
-        }),
+        observer: input.observer ??
+            createReuseObserver(input.root, {
+                issue: input.issue,
+                session: input.session,
+            }),
     });
 }
 //# sourceMappingURL=review-reuse.js.map

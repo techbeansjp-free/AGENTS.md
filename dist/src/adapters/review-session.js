@@ -14,8 +14,7 @@ import { resolveGitWorkspace } from "./review-workspace.js";
 import { findDecisionJournalRecord } from "./decision-journal-store.js";
 import { LIGHTWEIGHT_TIER_PROVIDER_VERSION } from "./decision-invoke.js";
 import { computeFindingClassificationInputDigest, verifyDecisionRefBinding, } from "../domain/decision-journal.js";
-import { deriveReviewRoundImpact } from "./impact-set.js";
-import { assignReviewInspection } from "./review-reuse.js";
+import { assignReviewInspection, createReuseObserver } from "./review-reuse.js";
 import { stagingTrackerIssue } from "./review-evidence.js";
 export { observeReviewDiff, REVIEW_SESSION_FILE, readStoredReviewSession };
 import { deriveEffectiveHead } from "../domain/evidence-reanchor.js";
@@ -23,6 +22,28 @@ import { readEvidenceReanchorChain } from "./evidence-reanchor.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { recordLayerSuffix } from "./review-record-layer.js";
 import { readReviewSessionReplacements } from "./review-session-replacement-store.js";
+import { observeCandidateAdoption } from "./candidate-adoption.js";
+import { currentPlanningDigest, assertReviewPlanningBinding, } from "./review-planning.js";
+export { assertReviewPlanningBinding } from "./review-planning.js";
+import { validateStepJournal } from "../domain/workflow.js";
+function assignBoundReviewInspection(input, planningChanged) {
+    const assignment = assignReviewInspection(input);
+    if (!planningChanged)
+        return assignment;
+    const baseSha = assignment.inspection.cumulative?.baseSha ??
+        input.session.anchor.diffBaseSha;
+    return {
+        ...assignment,
+        inspection: {
+            ...assignment.inspection,
+            cumulative: {
+                baseSha,
+                scope: "all",
+                diffDigest: observeReviewDiff(input.root, baseSha, input.toSha).digest,
+            },
+        },
+    };
+}
 const GIT_ENV = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     LANG: "C",
@@ -53,10 +74,10 @@ function assertStoredStagingDigest(staging) {
  */
 function impactNotes(impact) {
     const notes = [];
-    if (impact.mode === "targeted")
+    if ((impact.reviewMode ?? impact.mode) === "targeted")
         notes.push(`影響集合（digest ${impact.digest.slice(0, 12)}）から隣接範囲${impact.adjacent.length}件をfocus.adjacentScopeへ設定した。隣接範囲の前round blocker起因のHigh回帰と固定契約違反はcurrent blockerになる`);
     else
-        notes.push(`影響集合を証明できないため全体reviewを適用する（focus.adjacentScopeUnbounded=true。全pathを隣接範囲として扱い、前round blocker起因のHigh回帰と固定契約違反は修正差分外でもcurrent blockerになる）: ${impact.reasons.slice(0, 3).join("; ")}${impact.reasons.length > 3 ? ` ほか${impact.reasons.length - 3}件` : ""}`);
+        notes.push(`影響集合を証明できないため全体reviewを適用する（focus.adjacentScopeUnbounded=true。全pathを隣接範囲として扱い、前round blocker起因のHigh回帰と固定契約違反は修正差分外でもcurrent blockerになる）: ${(impact.reviewReasons ?? impact.reasons).slice(0, 3).join("; ")}${(impact.reviewReasons ?? impact.reasons).length > 3 ? ` ほか${(impact.reviewReasons ?? impact.reasons).length - 3}件` : ""}`);
     if (impact.securitySensitive)
         notes.push(`security上の注意を要するpathが変更または隣接範囲にある。縮小せず確認する: ${impact.securityPaths.join(", ")}`);
     return notes;
@@ -103,8 +124,36 @@ function roundOneImplementationBinding(staging) {
             headSha: replacement.implementationHeadSha,
             source: `review session置換記録${replacement.sequence}件目のimplementation HEAD`,
         };
+    const implementation = latestImplementationEntry(staging);
+    if (implementation)
+        return {
+            headSha: implementation.implementationHeadSha,
+            source: "Step 9 implementation HEAD",
+        };
+    // A Candidate can be inspected before adoption. This does not record Step 9:
+    // the same sealed request, real Git diff, and fresh review session must be
+    // accepted by candidate-adopt before any formal implementation transition.
+    const journal = readWorkflowJournal(staging);
+    const record = readStoredStagingRecord(staging);
+    if (journal.errors.length === 0 &&
+        journal.mode === "quick" &&
+        record.state === "sync-verified" &&
+        record.checkpoint === 4 &&
+        validateStepJournal({
+            mode: "quick",
+            entries: journal.entries,
+            upToStep: 4,
+        }).valid &&
+        journal.entries.some((entry) => entry.step === 4 && entry.planSeal)) {
+        const root = stagingRepositoryRoot(staging);
+        const observed = observeCandidateAdoption(root, path.join(staging, "00_要求定義.md"));
+        return {
+            headSha: observed.headSha,
+            source: "sealed Candidate pre-adoption HEAD",
+        };
+    }
     return {
-        headSha: latestImplementationEntry(staging)?.implementationHeadSha,
+        headSha: undefined,
         source: "Step 9 implementation HEAD",
     };
 }
@@ -136,6 +185,9 @@ export function buildReviewRoundDraft(input) {
     const root = stagingRepositoryRoot(staging);
     const headSha = resolveCommit(root, "--head", input.headSha);
     const previous = readStoredReviewSession(staging);
+    const planningDigest = currentPlanningDigest(staging, headSha);
+    const planningChanged = previous !== null &&
+        previous.rounds.at(-1)?.planningDigest !== planningDigest;
     const notes = [];
     /**
      * progress不成立の案内。**`round`へは入れない。**
@@ -157,7 +209,7 @@ export function buildReviewRoundDraft(input) {
     if (previous === null) {
         const implementation = roundOneImplementationBinding(staging);
         if (!implementation.headSha)
-            throw new Error("初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください");
+            throw new Error("初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。封印済みquick Candidateの採用前reviewだけは別経路で許可します");
         if (implementation.headSha !== headSha)
             throw new Error(`review round --initの--headは${implementation.source} ${implementation.headSha} と一致する必要があります`);
         if (typeof input.baseSha !== "string")
@@ -307,6 +359,10 @@ export function buildReviewRoundDraft(input) {
             input.acceptanceCriteriaIds ||
             input.invariantIds)
             notes.push("sessionがあるため--base・--scope・--ac・--invariantは無視し、anchorをsessionから写した");
+        const observer = createReuseObserver(root, {
+            issue: stagingTrackerIssue(staging),
+            session: previous,
+        });
         const previousHeadSha = deriveEffectiveHead({
             records: readEvidenceReanchorChain(staging),
             anchoredHeadSha: previous.latestCandidateHeadSha,
@@ -359,12 +415,7 @@ export function buildReviewRoundDraft(input) {
         let adjacentScope = [];
         let adjacentScopeUnbounded = false;
         if (fixed.length > 0) {
-            const derived = deriveReviewRoundImpact({
-                root,
-                previousHeadSha,
-                headSha,
-                records: { issue: stagingTrackerIssue(staging), session: previous },
-            });
+            const derived = observer.deriveImpact(previousHeadSha, headSha);
             adjacentScope = derived.adjacentScope;
             adjacentScopeUnbounded = derived.adjacentScopeUnbounded;
             notes.push(...impactNotes(derived.impact));
@@ -377,23 +428,25 @@ export function buildReviewRoundDraft(input) {
                 ? { adjacentScopeUnbounded: true }
                 : {}),
         };
-        const recordLayer = isReviewSessionConverged(previous) &&
+        const recordLayer = !planningChanged &&
+            isReviewSessionConverged(previous) &&
             recordLayerSuffix(staging, root, previousHeadSha, headSha, previous) !==
                 undefined;
         /**
          * **検分割当は`pr merge`と同じ判定関数から導出する**（Issue #1544 C5）。旧形式sessionと
          * record layerは割り当てない。既定branch追随で比較基点が動けば全体検分を割り当てる（AMD-001）。
          */
-        const assignment = recordLayer || isLegacyReviewSession(previous)
+        const assignment = recordLayer || (isLegacyReviewSession(previous) && !planningChanged)
             ? undefined
-            : assignReviewInspection({
+            : assignBoundReviewInspection({
                 root,
                 session: previous,
                 issue: stagingTrackerIssue(staging),
                 fromSha: previousHeadSha,
                 toSha: headSha,
                 focus,
-            });
+                observer,
+            }, planningChanged);
         if (assignment)
             notes.push(...assignmentNotes(assignment, {
                 fromSha: previousHeadSha,
@@ -426,7 +479,12 @@ export function buildReviewRoundDraft(input) {
     }
     notes.push(`このroundは ${headSha.slice(0, 8)} (${commitSubject(root, headSha)}) を検分したものとして記録します。レビュー結果を反映したcommitを、このroundの記録より先に作らないでください`);
     notes.push(...progressNotes);
-    const parsed = parseReviewRoundInput(round);
+    if (planningChanged)
+        notes.push("Planning Seal・AMDの変更により旧reviewは再利用できません。現在の封印済み要求・AMD・元Intentと実装の累積差分を独立検分してください");
+    const parsed = parseReviewRoundInput({
+        ...round,
+        ...(planningDigest === undefined ? {} : { planningDigest }),
+    });
     /** CLIが保存するreviewer input bundleの実byte列（末尾改行を含む）へ固定する。 */
     const canonical = `${stableJson(parsed)}\n`;
     const bundleBytes = Buffer.byteLength(canonical, "utf8");
@@ -544,7 +602,15 @@ export function previewReviewRound(input) {
     const staging = assertWorkflowStaging(input.staging);
     refixStagingDigestForRound(staging);
     const previous = readStoredReviewSession(staging);
+    const planningChanged = previous !== null &&
+        previous.rounds.at(-1)?.planningDigest !==
+            currentPlanningDigest(staging, input.round.candidateHeadSha);
     let round = input.round;
+    if (planningChanged && (round.followOnly || round.recordLayerOnly))
+        throw new Error("計画変更は非消費review roundで検分済みにできません");
+    if (round.planningDigest !==
+        currentPlanningDigest(staging, round.candidateHeadSha))
+        throw new Error("review inputの計画digestが現在のPlanning Seal・AMDと一致しません。入力を再生成し独立reviewしてください");
     const root = stagingRepositoryRoot(staging);
     const currentHeadSha = git(["rev-parse", "--verify", "HEAD^{commit}"], root, {
         env: GIT_ENV,
@@ -555,7 +621,7 @@ export function previewReviewRound(input) {
     if (previous === null) {
         const implementation = roundOneImplementationBinding(staging);
         if (!implementation.headSha)
-            throw new Error("初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。current HEADでworkflow record --step=9を実行してください");
+            throw new Error("初回reviewにはimplementationHeadSha bindingを持つStep 9が必要です。封印済みquick Candidateの採用前reviewだけは別経路で許可します");
         if (implementation.headSha !== input.round.candidateHeadSha)
             throw new Error(`review round candidate HEADが${implementation.source}と一致しません`);
         const observed = observeReviewDiff(root, input.round.anchor.diffBaseSha, input.round.anchor.initialHeadSha);
@@ -592,6 +658,10 @@ export function previewReviewRound(input) {
          * **正規経路が再び塞がる**（Issue #1172）。chainが空なら
          * `latestCandidateHeadSha`そのものになり、判定は変更前と同一である。
          */
+        const observer = createReuseObserver(root, {
+            issue: stagingTrackerIssue(staging),
+            session: previous,
+        });
         const previousHeadSha = deriveEffectiveHead({
             records: readEvidenceReanchorChain(staging),
             anchoredHeadSha: previous.latestCandidateHeadSha,
@@ -609,15 +679,7 @@ export function previewReviewRound(input) {
          */
         const expectedImpact = fixed.length === 0
             ? { adjacentScope: [], adjacentScopeUnbounded: false }
-            : deriveReviewRoundImpact({
-                root,
-                previousHeadSha,
-                headSha: input.round.candidateHeadSha,
-                records: {
-                    issue: stagingTrackerIssue(staging),
-                    session: previous,
-                },
-            });
+            : observer.deriveImpact(previousHeadSha, input.round.candidateHeadSha);
         if (stableJson(expectedImpact.adjacentScope) !==
             stableJson(input.round.focus.adjacentScope))
             throw new Error("review roundのadjacentScopeが実Gitから導出した影響集合の隣接範囲と一致しません。review round --initの雛形を書き換えずに使ってください");
@@ -654,15 +716,16 @@ export function previewReviewRound(input) {
          */
         if (!round.followOnly &&
             !round.recordLayerOnly &&
-            !isLegacyReviewSession(previous)) {
-            const assignment = assignReviewInspection({
+            (!isLegacyReviewSession(previous) || planningChanged)) {
+            const assignment = assignBoundReviewInspection({
                 root,
                 session: previous,
                 issue: stagingTrackerIssue(staging),
                 fromSha: previousHeadSha,
                 toSha: round.candidateHeadSha,
                 focus: round.focus,
-            });
+                observer,
+            }, planningChanged);
             if (round.inspection === undefined)
                 round = { ...round, inspection: assignment.inspection };
             else if (stableJson(round.inspection) !== stableJson(assignment.inspection))
@@ -694,6 +757,7 @@ export function assertConvergedReviewSession(input) {
     const session = readStoredReviewSession(staging);
     if (session === null)
         throw new Error("Step 10には永続review sessionが必要です");
+    assertReviewPlanningBinding(staging, session, input.currentHeadSha);
     if (!isReviewSessionConverged(session))
         throw new Error(unconvergedReviewSessionDiagnostic(session));
     if (session.latestRoundDigest !== input.expectedDigest)

@@ -1,4 +1,7 @@
-import { spawn } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import os from "node:os";
+import { once } from "node:events";
+import { finished } from "node:stream/promises";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -9,7 +12,7 @@ import { calculateStagingDigest, listStagingArtifacts, readStoredStagingRecord, 
 import { readStagingLayout, stagingExcludePathspec, stagingRepositoryRoot, } from "../domain/staging-layout.js";
 import { DELIVERY_STATE_FILE, parseDeliveryState, } from "../domain/delivery-state.js";
 import { loadTrustedVerificationPolicy } from "../domain/policy.js";
-import { parseVerificationRuns, renderVerificationRuns, sealVerificationRun, validateVerificationArgv, verificationCommandViolation, VERIFICATION_RUN_FILE, VERIFICATION_RUN_SCHEMA_VERSION, } from "../domain/verification-run.js";
+import { parseVerificationRuns, renderVerificationRuns, sealVerificationRun, selectObservedVerification, validateVerificationArgv, verificationCommandViolation, VERIFICATION_RUN_FILE, VERIFICATION_RUN_SCHEMA_VERSION, } from "../domain/verification-run.js";
 import { computeImpactSet } from "./impact-set.js";
 import { GIT_ENV } from "./review-diff.js";
 import { readStoredReviewSession } from "./review-session-store.js";
@@ -168,25 +171,135 @@ export function resolveVerificationTarget(input) {
         impact: computeImpactSet({ root, baseSha, headSha: input.headSha }),
     };
 }
-/**
- * 検証commandを**shellを通さず**argvのまま実行し、結果を機械記録へ追記する
- * （`verify run`、REQ-WF-040）。
- *
- * 0. merge段階以降のdelivery stateと、trusted policyに検証command宣言が無い場合は拒否する
- * 1. 候補worktreeが現在HEADと完全一致することを要求し、HEADのexact SHAを記録する
- * 2. 比較基点..HEADの影響集合を導出する。影響集合がfullなら`scope=targeted`を拒否する。
- *    argvは既定branchのtrusted policyの宣言に一致しなければならない。`scope=full`は
- *    `verification.fullCommand`と完全一致、`scope=targeted`は`verification.targetedRunner`
- *    で始まり影響集合の選んだfeatureを全部含む
- * 3. commandを実行する。出力は標準エラーへ中継し、記録にはdigestだけを残す
- * 4. 実行後もHEADとworktreeが変わっていないことを確かめてから記録する
- */
+/** Read-only advice using the same observations consumed by review export. */
+export function planVerification(input) {
+    const staging = assertWorkflowStaging(input.staging);
+    const root = stagingRepositoryRoot(staging);
+    verificationDeliveryPhase(staging);
+    const policy = loadTrustedVerificationPolicy(root);
+    if (worktreeDifferences(root) !== "")
+        throw new Error("verify planは現在HEADと完全一致するworktreeが必要です");
+    const headSha = resolveCommit(root, "current HEAD", "HEAD");
+    const { baseSha, impact } = resolveVerificationTarget({ ...input, headSha });
+    // Parse errors are not a missing observation: corrupted records stay fatal.
+    const records = readVerificationRuns(staging);
+    let observed = [];
+    let reason = null;
+    try {
+        observed = selectObservedVerification(records, {
+            headSha,
+            impactDigest: impact.digest,
+            impactMode: impact.mode,
+            impactFeatures: impact.features,
+            policy,
+        });
+    }
+    catch (error) {
+        reason = error instanceof Error ? error.message : String(error);
+    }
+    if (resolveCommit(root, "current HEAD", "HEAD") !== headSha ||
+        worktreeDifferences(root) !== "")
+        throw new Error("verify planの観測中にHEADまたはworktreeが変わりました");
+    const latest = new Map();
+    for (const item of records)
+        if (item.headSha === headSha && item.impactDigest === impact.digest)
+            latest.set(JSON.stringify(item.command), item);
+    // A resume record cannot represent the latest result of every command.
+    // Keep the retry guard tied to this exact HEAD and impact digest.
+    const latestFailed = [...latest.values()].some((item) => item.exitCode !== 0 || item.signal !== null);
+    const violations = [...latest.values()]
+        .map((item) => verificationCommandViolation(item.command, item.scope, policy, impact.features))
+        .filter((value) => value !== undefined);
+    const blocked = violations.length > 0;
+    if (blocked)
+        reason = `trusted policy不一致: ${violations.join("; ")}`;
+    const required = [];
+    if (observed.length === 0 && !blocked) {
+        for (const item of latest.values())
+            if (item.exitCode !== 0 || item.signal !== null)
+                required.push({ scope: item.scope, command: item.command });
+        if (required.length === 0 ||
+            (impact.mode === "full" &&
+                !required.some((item) => item.scope === "full"))) {
+            const scope = impact.mode === "targeted" && impact.features.length > 0
+                ? "targeted"
+                : "full";
+            required.push({
+                scope,
+                command: scope === "full"
+                    ? policy.fullCommand
+                    : [...policy.targetedRunner, ...impact.features],
+            });
+        }
+    }
+    return {
+        authority: "advisory",
+        headSha,
+        baseSha,
+        impactDigest: impact.digest,
+        impactMode: impact.mode,
+        status: blocked
+            ? "blocked"
+            : observed.length > 0
+                ? "observed"
+                : "required",
+        observed,
+        latestFailed,
+        reason,
+        required,
+    };
+}
 export async function runVerification(input) {
+    const staging = assertWorkflowStaging(input.staging);
+    const transcripts = [];
+    try {
+        return withStagingMutationLock(staging, () => runObservedVerification(input, transcripts));
+    }
+    finally {
+        // Replay after the synchronous transaction, respecting stream backpressure.
+        // The unlinked descriptors disappear even if this process is killed.
+        try {
+            const output = input.output ?? process.stderr;
+            for (const { descriptor, bytes: limit } of transcripts) {
+                let position = 0;
+                while (position < limit) {
+                    const buffer = Buffer.allocUnsafe(64 * 1024);
+                    const bytes = fs.readSync(descriptor, buffer, 0, Math.min(buffer.length, limit - position), position);
+                    if (bytes === 0)
+                        break;
+                    if (!output.write(buffer.subarray(0, bytes))) {
+                        const controller = new AbortController();
+                        try {
+                            await Promise.race([
+                                once(output, "drain", { signal: controller.signal }),
+                                finished(output, {
+                                    readable: false,
+                                    cleanup: true,
+                                    signal: controller.signal,
+                                }).then(() => {
+                                    throw new Error("verification output ended before drain");
+                                }),
+                            ]);
+                        }
+                        finally {
+                            controller.abort();
+                        }
+                    }
+                    position += bytes;
+                }
+            }
+        }
+        finally {
+            for (const { descriptor } of transcripts)
+                fs.closeSync(descriptor);
+        }
+    }
+}
+function runObservedVerification(input, transcripts) {
     const staging = assertWorkflowStaging(input.staging);
     const root = stagingRepositoryRoot(staging);
     const argv = validateVerificationArgv([...input.argv], "verify runのcommand");
     const now = input.now ?? (() => new Date());
-    const output = input.output ?? process.stderr;
     if (input.scope !== "targeted" && input.scope !== "full")
         throw new Error("verify runの--scopeはtargetedまたはfullが必要です");
     verificationDeliveryPhase(staging);
@@ -208,28 +321,96 @@ export async function runVerification(input) {
     const violation = verificationCommandViolation(argv, input.scope, policy, impact.features);
     if (violation !== undefined)
         throw new Error(`verify runを拒否しました: ${violation}`);
+    if (input.reuse === true) {
+        const reusable = withStagingMutationLock(staging, () => {
+            // Corrupt records are fatal even when executing the command could repair a failure.
+            const records = readVerificationRuns(staging);
+            const latest = new Map();
+            for (const record of records)
+                if (record.headSha === headSha && record.impactDigest === impact.digest)
+                    latest.set(JSON.stringify(record.command), record);
+            for (const record of latest.values()) {
+                const violation = verificationCommandViolation(record.command, record.scope, policy, impact.features);
+                if (violation !== undefined)
+                    throw new Error(`trusted policy不一致: ${violation}`);
+            }
+            let observed;
+            try {
+                observed = selectObservedVerification(records, {
+                    headSha,
+                    impactDigest: impact.digest,
+                    impactMode: impact.mode,
+                    impactFeatures: impact.features,
+                    policy,
+                });
+            }
+            catch {
+                // Missing coverage or a latest failure requires an actual execution.
+                // Parsing and policy errors were rejected above, outside this fallback.
+                return undefined;
+            }
+            const selected = observed.find((record) => record.scope === input.scope &&
+                stableJson(record.command) === stableJson(argv));
+            if (selected === undefined)
+                return undefined;
+            if (resolveCommit(root, "current HEAD", "HEAD") !== headSha ||
+                worktreeDifferences(root) !== "")
+                throw new Error("verify runの再利用観測中にHEADまたはworktreeが変わりました");
+            return records.find((record) => record.recordDigest === selected.recordDigest);
+        });
+        if (reusable !== undefined)
+            return { record: reusable, impact, reused: true };
+    }
     const [file, ...args] = argv;
     const startedAt = now().toISOString();
     const stdout = crypto.createHash("sha256");
     const stderr = crypto.createHash("sha256");
-    const outcome = await new Promise((resolve, reject) => {
-        const child = spawn(file, args, {
-            cwd: root,
-            env: process.env,
-            shell: false,
-            stdio: ["ignore", "pipe", "pipe"],
-        });
-        child.stdout.on("data", (chunk) => {
-            stdout.update(chunk);
-            output.write(chunk);
-        });
-        child.stderr.on("data", (chunk) => {
-            stderr.update(chunk);
-            output.write(chunk);
-        });
-        child.once("error", (error) => reject(new Error(`verify runのcommandを起動できません: ${file}（${error.code ?? error.name}）`)));
-        child.once("close", (code, signal) => resolve({ exitCode: signal === null ? code : null, signal }));
+    // The existing writer lock is synchronous. Private file descriptors avoid
+    // holding unbounded command output in RAM while keeping the lock until record.
+    // Relay only after completion; never retain a transcript in formal evidence.
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "asc-verification-"));
+    try {
+        for (const name of ["stdout", "stderr"]) {
+            const file = path.join(temporary, name);
+            transcripts.push({
+                descriptor: fs.openSync(file, "wx+", 0o600),
+                bytes: 0,
+            });
+            fs.unlinkSync(file);
+        }
+    }
+    finally {
+        fs.rmSync(temporary, { recursive: true, force: true });
+    }
+    const child = spawnSync(file, args, {
+        cwd: root,
+        env: process.env,
+        shell: false,
+        stdio: ["ignore", transcripts[0].descriptor, transcripts[1].descriptor],
     });
+    // Freeze the observed length when the main command exits. Detached descendants
+    // may still append through inherited descriptors; those later bytes are not
+    // part of this command observation and must not appear in its replay either.
+    for (const transcript of transcripts)
+        transcript.bytes = fs.fstatSync(transcript.descriptor).size;
+    if (child.error)
+        throw new Error(`verify runのcommandを起動できません: ${file}（${child.error.code ?? child.error.name}）`);
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    for (const [index, digest] of [stdout, stderr].entries()) {
+        let position = 0;
+        const transcript = transcripts[index];
+        while (position < transcript.bytes) {
+            const bytes = fs.readSync(transcript.descriptor, buffer, 0, Math.min(buffer.length, transcript.bytes - position), position);
+            if (bytes === 0)
+                break;
+            digest.update(buffer.subarray(0, bytes));
+            position += bytes;
+        }
+    }
+    const outcome = {
+        exitCode: child.signal === null ? child.status : null,
+        signal: child.signal,
+    };
     const finishedAt = now().toISOString();
     if (resolveCommit(root, "current HEAD", "HEAD") !== headSha)
         throw new Error("verify runの実行中にHEADが変わりました。観測を記録しません");

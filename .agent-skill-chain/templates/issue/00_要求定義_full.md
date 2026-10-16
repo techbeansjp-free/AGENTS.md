@@ -107,7 +107,9 @@
 
 ### 6.2 その他の制約
 
-- 依存/authority/evidence graphの制約（node・edgeの正方向、cycle、self-loop、unknown node、自己評価・自己SHAの拒否、rollback/retryの上限。該当時だけ）:
+依存/authority/evidence graphが該当する場合は、node・edgeの正方向、cycle、self-loop、unknown node、自己評価・自己SHAの拒否、rollback/retryの上限を確認する。該当しなければ項目に「該当なし」と記入する。
+
+- 依存/authority/evidence graphの制約:
 - 技術的制約:
 - 期間・運用上の制約:
 - 外部サービス・組織への依存:

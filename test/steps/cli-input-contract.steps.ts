@@ -189,6 +189,7 @@ const EXPECTED_PATHS: Readonly<Record<string, readonly string[]>> = {
     "findings[].contractId",
     "findings[].causedByFindingId",
     "findings[].decisionRef?",
+    "planningDigest?",
     "followOnly?",
     "recordLayerOnly?",
     "inspection?",

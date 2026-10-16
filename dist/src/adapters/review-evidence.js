@@ -1,3 +1,4 @@
+import { assertReviewPlanningBinding } from "./review-planning.js";
 import fs from "node:fs";
 import path from "node:path";
 import { writeFileAtomic } from "../lib/atomic.js";
@@ -168,6 +169,12 @@ export function verifyReviewEvidenceWithStaging(input) {
             : { independenceMode: input.independenceMode }),
     });
     if (session !== null) {
+        try {
+            assertReviewPlanningBinding(staging, session, input.evidence.observed.implementationHeadSha);
+        }
+        catch (error) {
+            errors.push(error instanceof Error ? error.message : String(error));
+        }
         const root = stagingRepositoryRoot(staging);
         const binding = reviewEvidenceBindingErrors(root, session, input.evidence.observed);
         errors.push(...binding);
@@ -235,6 +242,7 @@ export function exportReviewEvidence(input) {
     if (!isReviewSessionConverged(session))
         throw new Error(unconvergedReviewSessionDiagnostic(session));
     const currentHeadSha = resolveCommit(gitRoot, "current HEAD", "HEAD");
+    assertReviewPlanningBinding(staging, session, currentHeadSha);
     const implementationHeadSha = resolveImplementationHead(gitRoot, currentHeadSha, relative);
     const baseSha = input.baseSha === undefined
         ? session.anchor.diffBaseSha

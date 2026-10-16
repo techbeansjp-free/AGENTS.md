@@ -52,7 +52,7 @@ export function readPolicyFileInput(file) {
  * 配布schemaの`workflow-mode-decision.schema.json`はmode決定の**記録**であって入力ではない。
  * 記録をそのまま渡すと`mode`を尊重するのか無視するのかが曖昧になるため受理しない。
  */
-const MODE_ASSESSMENT_SHAPE = '質問IDをキーに{"answer":true|false|"unknown","evidence":"根拠"}を持つobjectを渡してください。回答か根拠が欠けたIDは不明として扱いfullへ倒します';
+const MODE_ASSESSMENT_SHAPE = '質問IDをキーに{"answer":true|false|"unknown","evidence":"根拠"}を持つobjectを渡してください。mode判定は回答か根拠が欠ければfullへ倒します。issue createではQ-01〜Q-08すべての入力が必要です。不明ならanswer="unknown"と不明理由のevidenceを明示してください';
 export function readModeAssessment(file) {
     const value = readJsonInput(file);
     if (!isRecord(value))

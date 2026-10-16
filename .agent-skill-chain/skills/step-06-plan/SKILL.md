@@ -31,4 +31,6 @@ Codex実装taskは起動ごとに`routing launch`へ渡す計画にする。最�
 
 作業開始前に[03_実装計画.md](../../templates/issue/03_実装計画.md)を全文読み、その見出し構造と必須欄を使って`03_実装計画.md`を作る。計画項目を独自の自由形式へ置き換えない。
 
+計画封印前に、仕様影響`updated`なら提出時に使う`trace.requirements`の要件IDがGit上の`docs/specs/02_要件/`へ存在するよう、必要な要件ファイルの更新・許可path・検証を計画に含める。既存要件で充足するならその参照を示す。`no-spec-impact`なら`docs/specs/`を変更しない計画と限定根拠を示す。不明なら確定せずreviewへ渡す。文言訂正の`no-spec-impact`を選んだ場合、未作成の`docs/specs/`を埋めるだけのbootstrap taskを足さない。
+
 project choicesを読み、作業開始前に[脅威・対策・監査](../../templates/specs/10_セキュリティ/02_脅威・対策・監査.md)、[非機能要件一覧](../../templates/specs/11_非機能/00_非機能要件一覧.md)、[監視・障害対応](../../templates/specs/12_運用保守/01_監視・障害対応.md)、[コーディング標準](../../templates/specs/14_開発・品質/01_コーディング標準.md)、[テスト標準](../../templates/specs/14_開発・品質/02_テスト標準.md)を全文読む。UIまたはtoken capabilityが`not-applicable`でない場合は[デザイントークン](../../templates/specs/17_デザイン/00_デザイントークン.md)と[レイアウトトークン](../../templates/specs/18_レイアウト/00_レイアウトトークン.md)も全文読み、各DC行へtask・SCN・検証コマンドを割り当てる。

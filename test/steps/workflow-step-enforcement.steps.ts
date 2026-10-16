@@ -1,3 +1,4 @@
+import { fixturePlanningDigest } from "../support/review-planning-fixture.js";
 import assert from "node:assert/strict";
 import {
   appendLegacyJournal,
@@ -2476,9 +2477,15 @@ function preparedMergeReviewEvidence(prepared: PreparedPullRequest) {
   };
 }
 
-function reviewRoundFixture(root: string, baseSha: string, headSha: string) {
+function reviewRoundFixture(
+  root: string,
+  baseSha: string,
+  headSha: string,
+  staging?: string,
+) {
   const observed = observeReviewDiff(root, baseSha, headSha);
   return parseReviewRoundInput({
+    planningDigest: fixturePlanningDigest(staging),
     round: 1,
     previousRoundDigest: null,
     anchor: {
@@ -2505,10 +2512,11 @@ function contextIsolatedReviewEvidence(
   baseSha: string,
   implementationSha: string,
   independenceMode: "context-isolated" | "actor-independent",
+  staging: string,
 ) {
   const session = advanceReviewSession(
     null,
-    reviewRoundFixture(root, baseSha, implementationSha),
+    reviewRoundFixture(root, baseSha, implementationSha, staging),
   );
   const observed = observeFixtureVerification(root, {
     baseSha,
@@ -2536,7 +2544,7 @@ function convergedReviewBinding(
 ): NonNullable<StepJournalEntry["reviewSession"]> {
   const session = recordReviewRound({
     staging,
-    round: reviewRoundFixture(root, baseSha, headSha),
+    round: reviewRoundFixture(root, baseSha, headSha, staging),
   });
   return {
     sessionId: session.sessionId,
@@ -2653,6 +2661,7 @@ function preparePullRequest(
    * scenarioの観測値は1byteも変わらない。
    */
   customImplementationCommit?: (root: string, baseSha: string) => void,
+  preSealPlanning?: (staging: string) => void,
 ): PreparedPullRequest {
   const fixturePast = fixtureInstant({ hoursAgo: 1 });
   const fixtureNow = fixtureInstant();
@@ -2763,6 +2772,24 @@ function preparePullRequest(
         poc: pocDeclaration,
       }).path
     : undefined;
+  const staging =
+    pocStaging ??
+    fullStaging ??
+    createIssueStaging(root, {
+      title: "workflow-test",
+      answers: answers(),
+      now: new Date(fixtureInstantMs()),
+      requestedMode: "quick",
+    }).path;
+  if (!pocDeclaration) {
+    preSealPlanning?.(staging);
+    if (!fullStaging && !missingStep4)
+      for (const step of [1, 4])
+        appendWorkflowJournalEntry({
+          staging,
+          entry: entry(step, "quick", fixturePast),
+        });
+  }
   let reviewFixture:
     ReturnType<typeof contextIsolatedReviewEvidence> | undefined;
   if (pocDeclaration) {
@@ -2776,6 +2803,7 @@ function preparePullRequest(
       baseSha,
       implementationCommitSha,
       reviewIndependence ?? "context-isolated",
+      staging,
     );
     const reviewEvidence = reviewFixture.evidence;
     const reviewArtifact = renderReviewEvidence(reviewEvidence);
@@ -2857,15 +2885,6 @@ function preparePullRequest(
     spawnSync("git", ["checkout", "-q", "--detach", implementationCommitSha], {
       cwd: root,
     });
-  const staging =
-    pocStaging ??
-    fullStaging ??
-    createIssueStaging(root, {
-      title: "workflow-test",
-      answers: answers(),
-      now: new Date(fixtureInstantMs()),
-      requestedMode: "quick",
-    }).path;
   if (pocDeclaration) {
     for (const step of [1, 4])
       appendWorkflowJournalEntry({
@@ -2882,20 +2901,37 @@ function preparePullRequest(
       entry: entry(9, "poc", fixturePast),
       headSha,
     });
+    if (missingStep4) {
+      const journalFile = path.join(staging, STEP_JOURNAL_FILE);
+      const entries = unchainedJournalText(journalFile)
+        .trimEnd()
+        .split("\n")
+        .filter((line) => (JSON.parse(line) as { step: number }).step !== 4);
+      fs.writeFileSync(journalFile, `${entries.join("\n")}\n`);
+      refreshStoredStagingDigest(staging);
+    }
     const pocReviewSession = convergedReviewBinding(
       root,
       staging,
       baseSha,
       headSha,
     );
-    appendWorkflowJournalEntry({
-      staging,
-      entry: {
-        ...entry(10, "poc", fixturePast),
-        reviewSession: pocReviewSession,
-      },
-      headSha,
-    });
+    const pocReviewEntry = {
+      ...entry(10, "poc", fixturePast),
+      reviewSession: pocReviewSession,
+      pocObservation: parseStepJournal(
+        fs.readFileSync(path.join(staging, STEP_JOURNAL_FILE), "utf8"),
+      ).entries.find((item) => item.step === 9)?.pocObservation,
+    };
+    if (missingStep4) {
+      appendLegacyJournal(
+        path.join(staging, STEP_JOURNAL_FILE),
+        `${JSON.stringify(pocReviewEntry)}\n`,
+      );
+      refreshStoredStagingDigest(staging);
+    } else {
+      appendWorkflowJournalEntry({ staging, entry: pocReviewEntry, headSha });
+    }
     recordStagingSync(staging, {
       tracker: "https://github.com/o/r/issues/877",
       checkpoint: 4,
@@ -2942,7 +2978,7 @@ function preparePullRequest(
     refreshStoredStagingDigest(staging);
   } else {
     const journalMode = fullStaging ? "full" : "quick";
-    for (const step of fullStaging ? [9] : [1, 4, 9])
+    for (const step of [9])
       appendWorkflowJournalEntry({
         staging,
         entry: entry(step, journalMode, fixturePast),
@@ -3399,10 +3435,12 @@ export function prepareDeliveryCli(
   separateArtifact = false,
   /** `preparePullRequest`の同名引数への素通し（Issue #1495）。 */
   customImplementationCommit?: (root: string, baseSha: string) => void,
+  preSealPlanning?: (staging: string) => void,
+  missingStep4 = false,
 ): PreparedDeliveryCli {
   const prepared = preparePullRequest(
     world,
-    false,
+    missingStep4,
     mergeMode,
     mergeMethod,
     reviewIndependence,
@@ -3411,6 +3449,7 @@ export function prepareDeliveryCli(
     artifactDisposition,
     separateArtifact,
     customImplementationCommit,
+    preSealPlanning,
   );
   const stubDirectory = world.temp("asc-delivery-cli-gh-");
   const stub = path.join(stubDirectory, "gh");
@@ -6794,7 +6833,20 @@ When("{string}のE2E検査を実行する", async function (scenarioId: string) 
       break;
     }
     case "SCN-E2E-WFSTEP-064": {
-      const prepared = prepareDeliveryCli(this, {}, "automatic");
+      const prepared = prepareDeliveryCli(
+        this,
+        {},
+        "automatic",
+        "merge",
+        undefined,
+        "quick",
+        0,
+        "valid",
+        false,
+        undefined,
+        undefined,
+        true,
+      );
       const journalFile = removeDeliveryStep4(prepared);
       const overrideFile = path.join(
         this.temp("asc-anchor-override-"),
@@ -6846,6 +6898,12 @@ When("{string}のE2E検査を実行する", async function (scenarioId: string) 
         "merge",
         undefined,
         "poc",
+        0,
+        "valid",
+        false,
+        undefined,
+        undefined,
+        true,
       );
       const journalFile = removeDeliveryStep4(prepared);
       const overrideFile = path.join(
@@ -7743,6 +7801,7 @@ if (exact(["auth", "status"])) {
           previousRoundDigest: previous.latestRoundDigest,
           anchor: previous.anchor,
           candidateHeadSha: forwardImplementation,
+          planningDigest: fixturePlanningDigest(prepared.staging),
           focus: {
             previousBlocking: [],
             fixedDiff: [amendmentPath, reviewArtifactPath].sort(),
@@ -12825,7 +12884,12 @@ if (exact(["auth", "status"])) {
       fs.writeFileSync(
         roundFile,
         JSON.stringify(
-          reviewRoundFixture(root, implementationHeadSha, movedHeadSha),
+          reviewRoundFixture(
+            root,
+            implementationHeadSha,
+            movedHeadSha,
+            staging,
+          ),
         ),
       );
       await assert.rejects(

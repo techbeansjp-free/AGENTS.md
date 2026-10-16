@@ -1,3 +1,4 @@
+import { fixturePlanningDigest } from "../support/review-planning-fixture.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -116,6 +117,7 @@ function roundInput(input: {
       ? []
       : [...(input.world.session.rounds.at(-1)?.blocking ?? [])].sort();
   return parseReviewRoundInput({
+    planningDigest: fixturePlanningDigest(input.world.staging),
     round: input.round,
     previousRoundDigest: input.previousRoundDigest,
     anchor: input.anchor ?? input.world.anchor,
@@ -239,9 +241,10 @@ Given(
 );
 
 When("round 2で既存findingを解消し範囲外audit改善提案を追加する", function () {
+  // feature traceの欠落だけでなく、解決不能な依存でreview範囲をfullにする。
   const candidate = commitFile(
     this.root,
-    "export const reviewed = 2;\n",
+    "export const reviewed = 2;\nexport const load = (name: string) => import(name);\n",
     "fix: review finding",
   );
   this.session = recordReviewRound({

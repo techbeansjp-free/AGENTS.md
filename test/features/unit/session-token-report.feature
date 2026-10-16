@@ -9,3 +9,19 @@ Feature: session logのtoken集計
     And subagent logの明示指定・同じlogの二重指定・別名pathでも同じcallを一度だけ数えsubagentの親を保つ
     And Step別の稼働時間は異なるsessionのcall間隔を数えずsession内の間隔をStep区間で分ける
     And 追跡済みfileだけを出力しtoken様の名前や未追跡のpathを出さない
+    And 重複tool記録を再読込と誤認せず孫workerのcacheを一度だけ集計する
+
+  Scenario: SCN-UNIT-TOKENS-002 providerによるcache包含と欠測を区別する
+    Given 異なるcache包含方式と欠測のprovider usageがある
+    When CodexとClaudeの観測済みusageを正規化する
+    Then provider別のcache包含関係を守り欠測値を補わずに集計する
+
+  Scenario: SCN-UNIT-TOKENS-003 Codex E2Eの重複応答・工程・欠測を区別する
+    Given Codex HostとWorkerのusage logと欠測Reviewerがある
+    When Codex E2E計測を集計する
+    Then cacheを二重計上せず工程別使用量を示し全Agent合計は欠測にする
+
+  Scenario: SCN-UNIT-TOKENS-004 完了したrolloutの無応答区間だけを0とし不完全な区間は欠測にする
+    Given 完了と不完全のCodex rollout logがある
+    When rolloutの工程別usageを集計する
+    Then rolloutの完全性とAgent列挙の未検証を区別する

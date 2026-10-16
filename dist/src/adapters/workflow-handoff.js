@@ -2,9 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { git } from "../lib/process.js";
+import { findPackageRoot } from "../lib/package-root.js";
 import { stagingRepositoryRoot } from "../domain/staging-layout.js";
 import { readStoredStagingRecord } from "../domain/staging.js";
-import { STEP_JOURNAL_FILE } from "../domain/workflow.js";
+import { PLAN_SEAL_ARTIFACTS, PLAN_AMENDMENT_FILE, } from "../domain/plan-seal.js";
+import { MODE_DECISION_FILE, STEP_JOURNAL_FILE, WORKFLOW_STEPS, WORKFLOW_EXACT_ARTIFACTS, } from "../domain/workflow.js";
+import { loadOperationPolicy } from "../domain/policy.js";
 import { readStoredReviewSession, REVIEW_SESSION_FILE, } from "./review-session-store.js";
 import { GIT_ENV, evidenceOnlySuffix } from "./review-diff.js";
 import { effectiveReviewBlocking, pendingReviewFindingIds, isReviewSessionConverged, } from "../domain/review-convergence.js";
@@ -17,6 +20,568 @@ const ROLES = {
     7: "readiness-reviewer",
     9: "implementation",
 };
+const STEP_SKILLS = [
+    "stage",
+    "request",
+    "requirements",
+    "requirements-review",
+    "issue-sync",
+    "design",
+    "plan",
+    "design-review",
+    "design-sync",
+    "implement",
+    "review",
+    "pr",
+];
+/** Pointers only: no artifact bodies or new authority. Paths are relative to their owner. */
+function handoffReads(staging, step, mode, role, reviewRound) {
+    if (step === undefined || STEP_SKILLS[step] === undefined)
+        return undefined;
+    const skillStep = role === "correction" ? 9 : step;
+    const plans = mode === undefined ? [] : PLAN_SEAL_ARTIFACTS[mode];
+    const inputs = step === 1
+        ? [MODE_DECISION_FILE, "00_要求定義.md"]
+        : step < 9
+            ? plans.slice(0, step <= 2 ? 1 : step <= 5 ? 2 : step === 6 ? 3 : 4)
+            : role === "correction" || (step === 10 && (reviewRound ?? 1) > 1)
+                ? [REVIEW_SESSION_FILE]
+                : [...plans, PLAN_AMENDMENT_FILE];
+    const amendmentPresent = fs
+        .lstatSync(path.join(staging, PLAN_AMENDMENT_FILE), {
+        throwIfNoEntry: false,
+    })
+        ?.isFile() ?? false;
+    return {
+        skill: `.agent-skill-chain/skills/step-${String(skillStep).padStart(2, "0")}-${STEP_SKILLS[skillStep]}/SKILL.md`,
+        staging: inputs.filter((file) => file !== PLAN_AMENDMENT_FILE || amendmentPresent),
+        optionalStaging: inputs.includes(PLAN_AMENDMENT_FILE)
+            ? [{ path: PLAN_AMENDMENT_FILE, present: amendmentPresent }]
+            : [],
+    };
+}
+/** A machine-readable task boundary, never evidence that its conditions hold. */
+export function workflowExecutionContract(step, role, read, mode, delivery) {
+    const semantic = {
+        1: "要求の範囲・完了条件を判断する",
+        2: "要求を受け入れ条件とドメイン規則へ具体化する",
+        3: "独立した反例探索で要求・要件の開始可能性を判断する",
+        5: "依存・失敗・安全性を設計する",
+        6: "実装順序とrisk比例検証を選ぶ",
+        7: "独立した反例探索で実装開始可能性を判断する",
+        9: "封印済み計画に従い実装と検証を行う",
+        10: role === "correction"
+            ? "記録済みfindingの成立根拠を確認して是正する"
+            : "実装・仕様・検証の意味を独立reviewする",
+    };
+    const cli = step === 4 ||
+        step === 8 ||
+        step === 11 ||
+        (step === 10 && role === "coordinator");
+    const executor = cli
+        ? "cli"
+        : step !== undefined && semantic[step] !== undefined
+            ? "fresh-worker"
+            : "none";
+    const operations = [];
+    if (step === 4 || step === 8) {
+        operations.push({
+            operation: "preview-sync",
+            argv: ["workflow", "advance", "--dry-run"],
+            requiredFlags: ["staging", "repo", "issue"],
+            mode: "read",
+        });
+        operations.push({
+            operation: "sync-checkpoint",
+            argv: ["workflow", "advance", "--apply", "--prepare-next"],
+            requiredFlags: [
+                "staging",
+                "repo",
+                "issue",
+                "authorize",
+                "expected-body-sha256",
+            ],
+            inputBindings: {
+                "expected-body-sha256": "preview-sync.sync.bodySha256",
+                authorize: "existing human/policy authorization; never generated",
+            },
+            mode: "gated-apply",
+        });
+    }
+    else if (step === 11) {
+        const mergePending = delivery !== undefined &&
+            ((delivery.state === "pr-bound" &&
+                mode !== "poc" &&
+                delivery.trustedMergeMode !== "disabled") ||
+                delivery.state === "merge-prepared" ||
+                delivery.state === "merge-observed");
+        if (mergePending) {
+            const flags = delivery.trustedMergeMode === "assisted" &&
+                delivery.state === "pr-bound"
+                ? ["staging", "repo", "pr", "method", "authorize"]
+                : ["staging", "repo", "pr", "method"];
+            const inputBindings = {
+                pr: "保存済みdelivery stateのPR番号",
+                method: delivery.state === "pr-bound"
+                    ? "trusted merge policyで許可された方式を選び、pr merge gateで再検証"
+                    : "保存済みmerge intentの方式と一致。変更しない",
+                ...(delivery.trustedMergeMode === "assisted" &&
+                    delivery.state === "pr-bound"
+                    ? { authorize: "対象PRへの既存owner承認。自動生成しない" }
+                    : {}),
+            };
+            operations.push({
+                operation: "preview-merge-or-readback",
+                argv: ["pr", "merge", "--dry-run"],
+                requiredFlags: flags,
+                inputBindings,
+                mode: "read",
+            });
+            operations.push({
+                operation: "merge-or-readback",
+                argv: ["pr", "merge", "--apply"],
+                requiredFlags: flags,
+                inputBindings,
+                mode: "gated-apply",
+            });
+        }
+        else if (delivery === undefined ||
+            delivery.state === "create-prepared" ||
+            (delivery.state === "pr-bound" &&
+                (mode === "poc" || delivery.trustedMergeMode === "disabled"))) {
+            operations.push({
+                operation: "preview-manual-delivery",
+                argv: ["pr", "create", "--dry-run"],
+                requiredFlags: [
+                    "staging",
+                    "issue",
+                    "repo",
+                    "base",
+                    "head",
+                    "head-sha",
+                    "evidence",
+                    "body-file",
+                ],
+                mode: "read",
+            });
+            operations.push({
+                operation: "deliver-manual-evidence",
+                argv: ["pr", "create", "--apply"],
+                requiredFlags: [
+                    "staging",
+                    "issue",
+                    "repo",
+                    "base",
+                    "head",
+                    "head-sha",
+                    "evidence",
+                    "body-file",
+                    "authorize",
+                ],
+                inputBindings: {
+                    authorize: "existing human/policy authorization; never generated",
+                },
+                mode: "gated-apply",
+            });
+            operations.push({
+                operation: "preview-reviewed-summary",
+                when: "reviewed-summary-available",
+                argv: ["pr", "create", "--dry-run"],
+                requiredFlags: ["staging", "issue", "repo", "from-summary"],
+                mode: "read",
+            });
+            operations.push({
+                operation: "deliver-reviewed-summary",
+                when: "reviewed-summary-available",
+                argv: ["pr", "create", "--apply"],
+                requiredFlags: [
+                    "staging",
+                    "issue",
+                    "repo",
+                    "from-summary",
+                    "authorize",
+                ],
+                inputBindings: {
+                    authorize: "existing human/policy authorization; never generated",
+                },
+                mode: "gated-apply",
+            });
+        }
+    }
+    else if (executor === "fresh-worker") {
+        operations.push({
+            operation: role === "reviewer" || role === "readiness-reviewer"
+                ? "review-referenced-artifacts"
+                : "complete-scoped-artifacts",
+            argv: [],
+            requiredFlags: [],
+            mode: role === "reviewer" || role === "readiness-reviewer"
+                ? "read"
+                : "artifact-write",
+        });
+        if (step === 9 || step === 10)
+            operations.push({
+                operation: "observe-verification",
+                when: "required-command-unknown",
+                argv: ["verify", "plan"],
+                requiredFlags: ["staging"],
+                mode: "read",
+            });
+        if (step === 9 || step === 10)
+            operations.push({
+                operation: "run-required-verification",
+                argv: ["verify", "run", "--reuse"],
+                requiredFlags: ["staging", "scope"],
+                requiredTrailingArgv: "known formally required trusted command after --; if unknown use verify plan.required[].command",
+                mode: "gated-apply",
+            });
+        if (step !== undefined && [2, 3, 6, 7].includes(step))
+            operations.push({
+                operation: "validate-artifact",
+                argv: [
+                    "issue",
+                    "validate",
+                    `--stage=${step <= 3 ? "requirements" : "design"}`,
+                ],
+                requiredFlags: ["path"],
+                mode: "read",
+            });
+    }
+    const requiredInputs = read === undefined
+        ? []
+        : [
+            { owner: "package", path: read.skill, required: true },
+            ...read.staging.map((file) => ({
+                owner: "staging",
+                path: file,
+                required: true,
+            })),
+            ...read.optionalStaging
+                .filter((file) => !file.present)
+                .map((file) => ({
+                owner: "staging",
+                path: file.path,
+                required: false,
+            })),
+        ];
+    if (step !== undefined && step >= 9)
+        requiredInputs.push({ owner: "git", path: "HEAD", required: true });
+    if (step === 11)
+        requiredInputs.push({ owner: "git", path: "H_impl:--from-summary", required: false }, {
+            owner: "git",
+            path: "HEAD:docs/reviews/<issue>_review.json",
+            required: true,
+        });
+    const proofKinds = {
+        1: mode === "quick" || mode === "poc"
+            ? ["Intent", "Contract", "Design", "Verification"]
+            : ["Intent", "Contract"],
+        2: ["Contract"],
+        3: ["Intent", "Contract", "Review"],
+        4: ["Contract"],
+        5: ["Design"],
+        6: ["Design", "Verification"],
+        7: ["Design", "Verification", "Review"],
+        8: ["Design"],
+        9: ["Implementation", "Verification"],
+        10: mode === "quick" && role === "reviewer"
+            ? ["Intent", "Contract", "Design", "Verification", "Review"]
+            : ["Verification", "Review"],
+        11: ["Delivery"],
+    };
+    const questions = {
+        Intent: "要求の目的・対象外・完了条件が正式要求に一致するか",
+        Contract: "受け入れ条件と不変条件が明示され、上流の目的を保持するか",
+        Design: "既存設計の適用可能性を根拠で示し、依存・失敗・安全性と不変条件を保つか",
+        Implementation: "差分が承認済み計画・AC・不変条件を具体化し、未知の依存を残していないか",
+        Verification: "選択したテストがAC・不変条件・riskに対して十分か",
+        Review: "独立した反例探索で仕様適合・安全性・正しさを確認したか",
+        Delivery: "既存policy権限・exact HEAD・正式Evidence・終端条件を満たすか",
+    };
+    const proofObligations = (step === undefined ? [] : (proofKinds[step] ?? [])).map((kind) => ({
+        kind,
+        judgedBy: cli
+            ? "cli"
+            : role === "reviewer" || role === "readiness-reviewer"
+                ? "independent-reviewer"
+                : "worker",
+        sourceRefs: step === 10 &&
+            mode === "quick" &&
+            role === "reviewer" &&
+            ["Intent", "Contract", "Design"].includes(kind)
+            ? ["handoff.issue", "staging:00_要求定義.md", "git:HEAD"]
+            : ["requiredInputs"],
+        question: cli
+            ? "正式入力と保存済みEvidenceを既存gateで照合する。意味判断を生成しない"
+            : step === 10 &&
+                mode === "quick" &&
+                role === "reviewer" &&
+                ["Intent", "Contract", "Design"].includes(kind)
+                ? `${questions[kind]}。canonical Issue本文のworkflow-advance生成markerより前にある利用者所有の一次要求と封印済み00・実差分を独立に突合し、後付けのAC、要求拡大、未承認の設計判断を検出する。元の要求を参照できなければ不明として収束させない`
+                : kind === "Design" && step !== undefined && [5, 6, 7].includes(step)
+                    ? `${questions[kind]}。仕様影響がupdatedなら提出時のtrace.requirementsの要件IDはGit上のdocs/specs/02_要件/に存在する必要がある。既存の要件IDで足りるなら参照し、足りない場合だけ設計・計画の許可pathと仕様更新taskにdocs/specs/02_要件/を含める。開始前に独立確認する。no-spec-impactはdocs/specs/の変更と両立しない。分類の意味的妥当性はAIが判断する`
+                    : questions[kind],
+    }));
+    if (step === 11)
+        proofObligations.push({
+            kind: "Delivery",
+            judgedBy: "human-policy",
+            sourceRefs: ["project:trusted delivery policy"],
+            question: "既存の人間・policy authorityが外部変更を許可するか",
+        });
+    const completion = [];
+    if (step !== undefined && [1, 2, 3, 5, 6, 7, 9].includes(step)) {
+        completion.push({
+            argv: ["workflow", "advance", "--apply", "--prepare-next"],
+            requiredFlags: ["staging", "artifact", "evidence"],
+            inputBindings: {
+                artifact: WORKFLOW_EXACT_ARTIFACTS[step]
+                    ? "action.recordArtifactsのみ。requiredInputs/read.stagingは参照であり正式artifactに含めない"
+                    : "worker handback formal artifact paths",
+                evidence: "worker handback observed evidence references; not approval",
+            },
+            when: "worker-complete-and-terminal",
+        });
+        if (step === 9)
+            completion.push({
+                argv: ["workflow", "advance", "--plan"],
+                requiredFlags: ["staging", "continue-from"],
+                inputBindings: {
+                    "continue-from": "executionPlan.headSha at work-unit entry",
+                },
+                when: "worker-checkpoint-and-terminal",
+            });
+    }
+    else if (step === 10 && role === "correction") {
+        completion.push({
+            argv: ["workflow", "record", "--step=9"],
+            requiredFlags: ["staging", "artifact", "evidence"],
+            inputBindings: {
+                artifact: "correction handback committed artifact paths",
+                evidence: "correction handback observed verification and finding references",
+            },
+            when: "correction-complete-and-terminal",
+        });
+    }
+    else if (step === 10 && role === "reviewer") {
+        completion.push({
+            argv: ["review", "round", "--apply"],
+            requiredFlags: ["staging", "file"],
+            inputBindings: {
+                file: "independent reviewer handback completed review round --init assignment",
+            },
+            when: "independent-reviewer-complete-and-terminal",
+        });
+    }
+    else if (step === 10 && role === "coordinator") {
+        completion.push({
+            argv: ["review", "export"],
+            requiredFlags: ["staging", "issue", "reviewer", "implementer"],
+            inputBindings: {
+                reviewer: "completed independent reviewer label; not authority",
+                implementer: "implementation worker label; not authority",
+            },
+            when: "converged-session-at-H_impl-and-required-verification",
+        });
+        completion.push({
+            argv: ["git", "add", "--"],
+            requiredFlags: [],
+            requiredTrailingArgv: "review export.path",
+            inputBindings: { path: "review export.path" },
+            when: "review-export-succeeded",
+        });
+        completion.push({
+            argv: ["git", "commit", "--only"],
+            requiredFlags: ["message"],
+            requiredTrailingArgv: "-- review export.path",
+            inputBindings: {
+                path: "review export.path (only this file)",
+                message: "review evidence commit message",
+            },
+            when: "exported-artifact-staged",
+        });
+        completion.push({
+            argv: ["workflow", "record", "--step=10"],
+            requiredFlags: [
+                "staging",
+                "artifact",
+                "evidence",
+                "review-session-digest",
+            ],
+            inputBindings: {
+                artifact: "review export.path",
+                evidence: "formal export and verification record references",
+                "review-session-digest": "review export.latestRoundDigest",
+            },
+            when: "artifact-only-final-commit-observed",
+        });
+    }
+    if (step === 10 && completion.length > 0)
+        completion.push({
+            argv: ["workflow", "advance", "--plan"],
+            requiredFlags: ["staging"],
+            inputBindings: {},
+            when: "completion-operation-succeeded",
+        });
+    return {
+        executor,
+        purpose: step === undefined
+            ? "完了状態を確認する"
+            : (WORKFLOW_STEPS.find((entry) => entry.step === step)
+                ?.responsibility ?? "不明な状態で停止する"),
+        semanticReason: executor === "fresh-worker"
+            ? semantic[step]
+            : cli
+                ? "意味判断済みの正式入力を既存CLI gateで処理する"
+                : "実行可能な工程が特定されていない",
+        allowedOperations: operations,
+        ...(step !== undefined && WORKFLOW_EXACT_ARTIFACTS[step]
+            ? { recordArtifacts: WORKFLOW_EXACT_ARTIFACTS[step] }
+            : {}),
+        requiredInputs,
+        preconditions: executor === "none"
+            ? []
+            : [
+                {
+                    id: "boundary-current",
+                    observedBy: "workflow advance --plan",
+                    expected: "作業開始前のHEAD・journal/review digest・workUnitIdが受領契約と一致",
+                },
+            ],
+        completionConditions: executor === "none"
+            ? []
+            : [
+                {
+                    id: "formal-gate",
+                    observedBy: step === 11
+                        ? "pr create / pr merge / delivery status"
+                        : step === 10
+                            ? "review session / workflow record --step=10"
+                            : "workflow advance --apply",
+                    expected: "終了時の結果HEADと正式artifact/evidenceを既存gateが再観測し、Step9等のbindingを導出してcoordinatorが対象1工程を記録。開始HEADの維持やadvisory・自己申告を代用しない",
+                },
+                {
+                    id: "terminal",
+                    observedBy: "coordinator",
+                    expected: "返却後終了。次semantic work unitへ同じcontextで継続しない",
+                },
+            ],
+        proofObligations,
+        ...(completion.length === 0
+            ? {}
+            : {
+                coordinatorCompletion: {
+                    owner: "coordinator",
+                    gateReobservationRequired: true,
+                    operations: completion,
+                },
+            }),
+        machineChecks: step === 9 || step === 10
+            ? [
+                {
+                    observedBy: "cli",
+                    commands: ["verify run", "review export"],
+                    facts: ["HEAD", "scope", "trusted-command", "result"],
+                    selfDeclarationAccepted: false,
+                },
+            ]
+            : [],
+        unconfirmed: executor === "none"
+            ? []
+            : proofObligations.map((item) => `${item.kind}:${item.judgedBy}:formal-evidence-required`),
+        scopeExpansionTriggers: executor === "fresh-worker"
+            ? [
+                "unknown-dependency",
+                "invariant-conflict",
+                "verification-failure",
+                "unresolved-review-finding",
+            ]
+            : [],
+        maxTransitions: 1,
+    };
+}
+/** CLI-only pre-review work. It records verification, never a review or Step 10. */
+export function workflowVerificationContract(input) {
+    const base = workflowExecutionContract(10, "coordinator", undefined);
+    const contract = { ...base };
+    delete contract.coordinatorCompletion;
+    return {
+        ...contract,
+        purpose: "独立review前の正式検証を完了する",
+        semanticReason: "既存verify gateが現在HEADの必要検証を導出したためCLIで実行する",
+        allowedOperations: [
+            {
+                operation: "observe-verification",
+                argv: ["verify", "plan"],
+                requiredFlags: ["staging"],
+                mode: "read",
+            },
+            ...input.required.map((item) => ({
+                operation: "run-required-verification",
+                argv: ["verify", "run", "--reuse"],
+                requiredFlags: ["staging", "scope"],
+                requiredTrailingArgv: JSON.stringify(item.command),
+                inputBindings: {
+                    scope: item.scope,
+                    command: "同じHEADのverify plan.requiredで再照合したargv。shell文字列へ変換しない",
+                },
+                mode: "gated-apply",
+            })),
+            {
+                operation: "reobserve-work",
+                argv: ["workflow", "advance", "--plan"],
+                requiredFlags: ["staging"],
+                mode: "read",
+            },
+        ],
+        requiredInputs: [
+            { owner: "git", path: "HEAD", required: true },
+            {
+                owner: "staging",
+                path: "journal/verification-runs.jsonl",
+                required: false,
+            },
+        ],
+        preconditions: [
+            ...base.preconditions,
+            {
+                id: "verification-plan-current",
+                observedBy: "verify plan",
+                expected: `HEAD=${input.headSha}、impact=${input.impactDigest}とtrusted policyの必要commandが一致`,
+            },
+        ],
+        completionConditions: [
+            {
+                id: "verification-observed",
+                observedBy: "verify plan",
+                expected: "現在HEAD・impact・trusted policyに有効な正式成功記録を再観測する",
+            },
+            {
+                id: "replan-before-review",
+                observedBy: "workflow advance --plan",
+                expected: "Step 10を記録せず、reviewまたはexportの次作業を再選択する",
+            },
+        ],
+        proofObligations: [
+            {
+                kind: "Verification",
+                judgedBy: "cli",
+                sourceRefs: ["verify plan.required", "journal/verification-runs.jsonl"],
+                question: "現在HEADの必要検証がtrusted policyどおり正式に成功したか",
+            },
+        ],
+        machineChecks: [
+            {
+                observedBy: "cli",
+                commands: ["verify plan", "verify run --reuse"],
+                facts: ["HEAD", "impact", "trusted-command", "result"],
+                selfDeclarationAccepted: false,
+            },
+        ],
+        unconfirmed: ["Verification:cli:formal-evidence-required"],
+        scopeExpansionTriggers: [],
+    };
+}
 /** Optional execution advice; never an approval or a substitute for workflow gates. */
 export function observeWorkflowHandoff(staging, step, resume, continuationFromHead) {
     if ((process.env.ASC_EXECUTION_CONTEXT_MODE ?? "short-lived") !== "short-lived")
@@ -77,13 +642,35 @@ export function observeWorkflowHandoff(staging, step, resume, continuationFromHe
             continuationFromHead: continuationFromHead ?? null,
         }))
             .digest("hex");
+        const record = readStoredStagingRecord(staging);
+        const read = handoffReads(staging, step, record?.mode, role, reviewRound);
+        const delivery = step === 11 && resume.delivery !== null
+            ? {
+                ...resume.delivery,
+                trustedMergeMode: loadOperationPolicy(worktree).policy.merge.mode,
+            }
+            : undefined;
+        if (step === 11 && delivery !== undefined) {
+            if (![
+                "create-prepared",
+                "pr-bound",
+                "merge-prepared",
+                "merge-observed",
+            ].includes(delivery.state))
+                throw new Error(`delivery state ${delivery.state}は専用復旧経路で再観測してください`);
+        }
+        const branch = git(["symbolic-ref", "-q", "--short", "HEAD"], worktree, {
+            env: GIT_ENV,
+            allowFailure: true,
+        });
+        if (branch.status !== 0 && branch.status !== 1)
+            throw new Error(`handoff branchを観測できません: ${branch.stderr.trim()}`);
         return {
             kind: "asc-handoff/v1",
             authority: "advisory",
-            issue: readStoredStagingRecord(staging)?.tracker ?? null,
-            branch: git(["symbolic-ref", "--short", "HEAD"], worktree, {
-                env: GIT_ENV,
-            }).stdout.trim(),
+            issue: record?.tracker ?? null,
+            read,
+            branch: branch.status === 0 ? branch.stdout.trim() : null,
             worktree,
             staging,
             headSha: resume.headSha,
@@ -99,6 +686,7 @@ export function observeWorkflowHandoff(staging, step, resume, continuationFromHe
                 freshContextRequired: true,
                 terminalAfterHandback: true,
                 reuseForbidden: true,
+                contract: workflowExecutionContract(step, role, read, record?.mode, delivery),
             },
             resume: { command: "workflow advance", staging },
         };
@@ -110,8 +698,42 @@ export function observeWorkflowHandoff(staging, step, resume, continuationFromHe
         };
     }
 }
-/** Ready-to-use one-shot Agent arguments derived from repository state. */
-export function workflowAgentDispatch(handoff) {
+/** Existing correction/reviewer choice, with an independent role and contract. */
+export function workflowReviewerAlternative(handoff) {
+    if (!handoff ||
+        !("kind" in handoff) ||
+        !handoff.workUnit ||
+        handoff.role !== "correction")
+        return undefined;
+    const record = readStoredStagingRecord(handoff.staging);
+    if (record === null)
+        return undefined;
+    const read = {
+        skill: ".agent-skill-chain/skills/step-10-review/SKILL.md",
+        staging: [REVIEW_SESSION_FILE],
+        optionalStaging: [],
+    };
+    return {
+        ...handoff,
+        role: "reviewer",
+        read,
+        reviewRound: (handoff.reviewRound ?? 0) + 1,
+        workUnit: {
+            ...handoff.workUnit,
+            workUnitId: crypto
+                .createHash("sha256")
+                .update(JSON.stringify({
+                from: handoff.workUnit.workUnitId,
+                role: "reviewer",
+                reviewRound: (handoff.reviewRound ?? 0) + 1,
+            }))
+                .digest("hex"),
+            contract: workflowExecutionContract(10, "reviewer", read, record.mode),
+        },
+    };
+}
+/** One-shot pointer; the worker re-observes the full contract at the same boundary. */
+export function workflowAgentDispatch(handoff, delegateRequest = false) {
     if (!handoff ||
         !("kind" in handoff) ||
         !handoff.workUnit ||
@@ -121,8 +743,35 @@ export function workflowAgentDispatch(handoff) {
         subagent_type: "general-purpose",
         description: `ASC Step ${handoff.step} ${handoff.role} ${handoff.workUnit.workUnitId.slice(0, 12)}`,
         prompt: JSON.stringify({
-            handoff,
-            prompt: "あなたは指定workUnitId専用のone-shot workerです。fresh contextで開始し、担当handoffをrepositoryから照合してください。このwork unitだけを実施し、成果物・検証・必要なcommitを完了してください。coordinatorへの返却はworkUnitId、status、HEAD、検証記録ID、blocker、nextだけのcompact JSONとし、詳細はGit・staging・review findingを正本にしてください。返却後このcontextはterminalです。追加メッセージで別工程・別review round・finding是正・新しい実装を依頼されたら作業せずASC_REDISPATCH_REQUIREDと返してください。Step/round記録はcoordinatorへ返してください。",
+            previewArgv: [
+                process.execPath,
+                path.join(findPackageRoot(import.meta.url), "dist", "bin", "agent-skill-chain.js"),
+                "workflow",
+                "advance",
+                "--plan",
+                ...(delegateRequest ? ["--delegate-request"] : []),
+                `--staging=${handoff.staging}`,
+                ...(handoff.continuationFromHead
+                    ? [`--continue-from=${handoff.continuationFromHead}`]
+                    : []),
+            ],
+            handoff: {
+                kind: handoff.kind,
+                worktree: handoff.worktree,
+                staging: handoff.staging,
+                headSha: handoff.headSha,
+                step: handoff.step,
+                role: handoff.role,
+                boundary: handoff.boundary,
+                continuationFromHead: handoff.continuationFromHead,
+                workUnit: {
+                    workUnitId: handoff.workUnit.workUnitId,
+                    freshContextRequired: handoff.workUnit.freshContextRequired,
+                    terminalAfterHandback: handoff.workUnit.terminalAfterHandback,
+                    reuseForbidden: handoff.workUnit.reuseForbidden,
+                },
+            },
+            prompt: "指定WorkUnit専用のfresh worker。handoff.worktreeでpreviewArgvを引数配列のまま実行し、入口を推測しない。sandboxのEPERM等は境界不一致と区別し、Hostの正式な承認経路が利用できる場合だけ同じ読取を再実行する。承認拒否は迂回しない。成功したplanを再観測・全文再出力しない。plan.handoffまたはalternatives[].handoffから同じrole・workUnitIdがちょうど1件の場合だけHEAD・boundaryを照合。0件・複数件・不一致はASC_REDISPATCH_REQUIRED。primaryのactionまたは対応alternative.actionを読み、read.skill・read.stagingの必要節を取得しHEADを再確認。担当だけを完了し、Skillと独立検証を維持。正式返却artifactはaction.recordArtifactsだけ。workUnitId/status/HEAD/検証記録ID/blocker/nextのcompact JSONを返す。詳細はGit/staging/finding、Step/round記録はcoordinator。返却後terminal、追加作業は再dispatch。",
         }),
     };
 }

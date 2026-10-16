@@ -14,6 +14,50 @@ import { isExecutionEntry } from "../src/lib/entrypoint.js";
  * （Claude Codeは1 messageのcontent blockごとに行を書き、usageを重複して載せる）。
  */
 
+/** Provider counters have different inclusion rules; missing data stays null. */
+export function normalizeProviderUsage(
+  provider: "codex" | "claude",
+  raw: unknown,
+  actualCostUsd?: unknown,
+) {
+  const usage = record(raw);
+  const input = count(usage?.input_tokens) ?? null;
+  const output = count(usage?.output_tokens) ?? null;
+  const cacheRead =
+    count(
+      provider === "codex"
+        ? usage?.cached_input_tokens
+        : usage?.cache_read_input_tokens,
+    ) ?? null;
+  const cacheWrite =
+    count(
+      provider === "codex"
+        ? usage?.cache_write_input_tokens
+        : usage?.cache_creation_input_tokens,
+    ) ?? null;
+  const complete =
+    input !== null &&
+    output !== null &&
+    (provider === "codex" || (cacheRead !== null && cacheWrite !== null));
+  return {
+    provider,
+    input,
+    output,
+    cacheRead,
+    cacheWrite,
+    inputIncludesCache: provider === "codex",
+    totalProcessed: complete
+      ? input + output + (provider === "claude" ? cacheRead! + cacheWrite! : 0)
+      : null,
+    costUsd:
+      typeof actualCostUsd === "number" &&
+      Number.isFinite(actualCostUsd) &&
+      actualCostUsd >= 0
+        ? actualCostUsd
+        : null,
+  };
+}
+
 /** call間隔がこれ以下の区間だけを稼働時間へ数える。 */
 const ACTIVE_GAP_MS = 5 * 60 * 1000;
 const REPEATED_READ_LIMIT = 10;
@@ -170,6 +214,7 @@ function parseLog(
 ): ParsedLog {
   const byId = new Map<string, Call>();
   const reads: string[] = [];
+  const seenTools = new Set<string>();
   let skippedLines = 0;
   for (const line of fs.readFileSync(file, "utf8").split("\n")) {
     if (line.trim() === "") continue;
@@ -216,8 +261,15 @@ function parseLog(
     const content = Array.isArray(message?.content) ? message.content : [];
     for (const block of content) {
       const item = record(block);
-      if (item?.type === "tool_use")
-        reads.push(...readPaths(item, cwd, root, tracked));
+      if (item?.type !== "tool_use") continue;
+      // Streaming/replayed message blocks can repeat one tool invocation.
+      // Without an ID, preserve the observation instead of guessing identity.
+      if (typeof item.id === "string" && item.id !== "") {
+        const key = JSON.stringify([id, item.id]);
+        if (seenTools.has(key)) continue;
+        seenTools.add(key);
+      }
+      reads.push(...readPaths(item, cwd, root, tracked));
     }
   }
   return {
@@ -359,7 +411,7 @@ function logKind(file: string): {
 }
 
 /**
- * 本体logの`<session>/subagents/*.jsonl`を自動で含める。**同じfileは実pathで1回だけ
+ * 各logの`<session>/subagents/*.jsonl`を子孫まで自動で含める。**同じfileは実pathで1回だけ
  * 数える**（明示指定と自動包含の重複、同じlogの二重指定）。
  */
 function expandLogs(
@@ -369,19 +421,16 @@ function expandLogs(
     string,
     { file: string; kind: "main" | "subagent"; parent: string | null }
   >();
-  const add = (file: string): string => {
-    const real = fs.realpathSync(file);
-    if (!expanded.has(real))
-      expanded.set(real, { file: real, ...logKind(real) });
-    return real;
-  };
-  for (const file of files) {
-    const real = add(file);
+  const pending = [...files];
+  for (let index = 0; index < pending.length; index += 1) {
+    const real = fs.realpathSync(pending[index]!);
+    if (expanded.has(real)) continue;
+    expanded.set(real, { file: real, ...logKind(real) });
     const id = path.basename(real, ".jsonl");
     const directory = path.join(path.dirname(real), id, "subagents");
     if (!fs.existsSync(directory)) continue;
     for (const name of fs.readdirSync(directory).sort())
-      if (name.endsWith(".jsonl")) add(path.join(directory, name));
+      if (name.endsWith(".jsonl")) pending.push(path.join(directory, name));
   }
   return [...expanded.values()];
 }

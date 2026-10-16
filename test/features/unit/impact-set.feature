@@ -68,6 +68,7 @@ Feature: 実Git差分から影響集合を一度だけ導出し影響を証明�
     Given import鎖と追跡表とstep定義を持つ意味Graphがある
     When どこからもimportされないsrc/orphan.tsを変更した影響集合を導出する
     Then 影響集合はfullで理由に"検証featureへ到達できません: src/orphan.ts"を含む
+    And 検証はfullのままレビューの未知範囲を拡大しない
 
   Scenario: SCN-UNIT-IMPACT-008 意味Graphを構築できない場合は隣接範囲を持たず全体へ倒れる
     Given import鎖と追跡表とstep定義を持つ意味Graphがある

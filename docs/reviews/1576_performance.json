@@ -1,0 +1,410 @@
+{
+  "kind": "asc-integrated-performance-summary/v1",
+  "issue": 1576,
+  "status": "implementation-first-functional; matched-exploratory-comparison-complete; performance-acceptance-not-established",
+  "baselineSha": "2d64b8d50b173f29914a8f231c0c5efa9a7e0af5",
+  "previousCandidateSha": "5e51700b2a36b54d710ce0cc0e0f38ff8fbd5aa2",
+  "readPolicy": "通常はこのsummaryだけを読む。反例・数値監査・再現に必要な場合だけ詳細証跡の該当keyを読む。",
+  "priorMeasurements": {
+    "scope": "局所測定。Issue全体のE2E/token改善ではない。",
+    "workflowPreview": {
+      "fileReadsBefore": 23,
+      "fileReadsAfter": 9,
+      "bytesBefore": 82115,
+      "bytesAfter": 3697
+    },
+    "impactLowRiskThreeCallsMedianMs": {
+      "before": 606.0,
+      "after": 609.7
+    },
+    "priorQuality": {
+      "passed": 2741,
+      "skipped": 17,
+      "failed": 0,
+      "independentReviewRounds": 2
+    }
+  },
+  "revisionFocus": [
+    "workerとSkillの重複探索",
+    "reviewとverificationの用途別導出",
+    "有限動的依存候補と境界不明の分離",
+    "実CLIでのcache採否",
+    "Codex/Claudeによる隔離dummy Issue全工程の実測"
+  ],
+  "details": {
+    "path": "docs/reviews/1576_performance.raw.json",
+    "sha256": "1d559ddca4c13d73ddd5113ffa3ea49b28a813859b60ecdc7a0d954e95f31176",
+    "keys": [
+      "kind",
+      "issue",
+      "status",
+      "baseSha",
+      "supersededAttempt",
+      "sourceIdentity",
+      "scope",
+      "benchmark",
+      "methodology",
+      "expectedSafetyDifference",
+      "decisions",
+      "tokenMeasurement",
+      "missingAcceptanceEvidence",
+      "regressionInventory",
+      "mutationObservations",
+      "reproduction",
+      "regressionExecution",
+      "workflowObservations",
+      "revisionCacheAdoption",
+      "revisionLiveLifecycle",
+      "revisionIndependentReview",
+      "revisionLiveLifecycleV2",
+      "revisionSafetyMutations",
+      "revisionFirstCompleteE2E",
+      "revisionMeasuredSkillReview",
+      "revisionMeasuredSkillInstallation",
+      "priorScope",
+      "priorMissingAcceptanceEvidence",
+      "revisionMeasuredSkillsE2E",
+      "revisionConfirmatoryA",
+      "revisionEntryReuseReview",
+      "revisionExperimentAccountingSnapshot",
+      "revisionReproducibilityAudit",
+      "revisionReproductionBundle",
+      "revisionEntryReuseE2E",
+      "revisionCiTestRepair",
+      "revisionFinalWorkflowSourceReview",
+      "revisionFinalRegressionCoverage",
+      "revisionFollowupHarnessReview",
+      "revisionMetricCoverage",
+      "revisionBPilotRepairReview",
+      "revisionFinalSpecTestReview",
+      "revisionExecutionModel",
+      "revisionWorkUnitExecutionContract",
+      "revisionWorkUnitDiagnostic",
+      "revisionPlanningGuidanceTrials",
+      "revisionConsistentAFullE37",
+      "revision077StoppedAFull",
+      "revisionB12ClaudeAuthStop",
+      "revisionB12CodexStep5Stop"
+    ]
+  },
+  "limitations": [
+    "従来のprocess-local Impact局所測定ではE2E短縮を証明できない",
+    "providerのinput/cache包含関係を区別し欠測値はnullとする",
+    "新規GraphDB・永続cache・Hook・session監視は導入しない",
+    "e37候補の同条件A Fullは1回完走し全worker処理token 6,673,928、CI到達1194.33秒。単発・順序差があり有意な改善率は未証明。",
+    "新しいEvidence駆動Step 10選択はe37スナップショット後の変更であり、この測定値を最新HEADの性能として扱わない。親agent総token、正確なcontext high-water/reinjection、請求額は未測定。",
+    "077候補はStep2の正式artifact不一致で停止（3 worker call・1,445,592処理tokens）。b12候補のClaude試行はOAuth 401でStep1停止（2 call・観測下限487,323 tokens、総量欠測）。別providerのCodex診断はStep5のrisk短縮形式で正式拒否（5 call・1,412,316 tokens）。いずれもPR/CI未到達であり改善率へ含めない。"
+  ],
+  "revisionMeasurements": {
+    "actualCliAnalysis": {
+      "command": "review round --init",
+      "impactCallsBefore": 2,
+      "impactCallsAfter": 1,
+      "gitSourceObservationsBefore": 2,
+      "gitSourceObservationsAfter": 1,
+      "structuredClonesBefore": 4,
+      "structuredClonesAfter": 0,
+      "medianWallMsBefore": 7608,
+      "medianWallMsAfter": 6959,
+      "repeats": 3,
+      "scope": "実CLI局所測定。Issue全体E2Eではない。",
+      "decision": "process-global cacheを撤去し、既存の一操作内review observerを共有する"
+    },
+    "liveLifecycle": {
+      "candidateSha": "7189b0a300dd4054f740e6dfb6244cd3b353bcf0",
+      "provider": "codex",
+      "operations": [
+        "update",
+        "delete"
+      ],
+      "trialsPerOperation": 1,
+      "passed": 2,
+      "headAndHandoffPreserved": true,
+      "userSettingsPreserved": true,
+      "unexpectedChangedPaths": 0,
+      "scope": "隔離dummy内の実workerとlifecycle操作の競合。全工程E2E・provider timeoutの実証ではない。",
+      "isolation": "filesystem/PID/mountを隔離。API接続用networkは共有し宛先制限なし。",
+      "reproducibleHarness": "revisionLiveLifecycleV2.harnessSources"
+    },
+    "safetyMutations": {
+      "mutations": 2,
+      "killed": 2,
+      "sourceSha": "7189b0a300dd4054f740e6dfb6244cd3b353bcf0",
+      "contracts": [
+        "escaping require remains unknown",
+        "every dynamic branch must be bounded"
+      ]
+    },
+    "firstCompleteE2E": {
+      "case": "A",
+      "repeatsPerArm": 1,
+      "candidateSha": "5ddd2590fbd9e467618da77f26ed2a98050234c8",
+      "rows": [
+        {
+          "arm": "baseline",
+          "requestToCiObservedSeconds": 509.238,
+          "allWorkerProcessedTokens": 3401347
+        },
+        {
+          "arm": "candidate",
+          "requestToCiObservedSeconds": 496.601,
+          "allWorkerProcessedTokens": 3620085
+        },
+        {
+          "arm": "no-ASC",
+          "requestToCiObservedSeconds": 84.195,
+          "allWorkerProcessedTokens": 179979
+        }
+      ],
+      "quality": "All three: independent review, real PR, CI success, common external 9-test suite/oracle, added regression fails on original production source, clean HEAD.",
+      "conclusion": "Candidate time decreased 2.48%, total tokens increased 6.43%; token target not met. Not a repeated or statistically established improvement.",
+      "nextCandidate": "262ca069"
+    },
+    "measuredSkillTrial": {
+      "candidateSha": "262ca0696df58c4a01d67f314db6fd359b3eaff1",
+      "case": "A",
+      "repeats": 1,
+      "requestToPrSeconds": 441.888,
+      "requestToCiObservedSeconds": 453.343,
+      "allWorkerProcessedTokens": 2534052,
+      "relativeToInitialBaseline": {
+        "ciElapsedReductionPercent": 10.98,
+        "workerTokenReductionPercent": 25.5
+      },
+      "scope": "Exploratory fixed non-LLM coordinator trial; parent AI overhead not included. Not final repeated acceptance.",
+      "quality": "Real PR/CI/terminal, independent review, common external suite/oracle and regression-on-old-source all passed.",
+      "remainingFixedCost": "Step11 retry guidance refined after four tool errors; remeasure beb8911c."
+    },
+    "confirmatoryA": {
+      "candidateSha": "beb8911c465b3376d668762cce5f1137f2145b28",
+      "repeatsPerArm": 3,
+      "allNineTrialsPassedQuality": true,
+      "medianRequestToPrSeconds": {
+        "baseline": 437.662749,
+        "candidate": 433.592263,
+        "noASC": 75.133317
+      },
+      "medianRequestToCiObservedSeconds": {
+        "baseline": 449.049155,
+        "candidate": 434.251294,
+        "noASC": 96.896001
+      },
+      "medianAllWorkerProcessedTokens": {
+        "baseline": 2749733,
+        "candidate": 2822205,
+        "noASC": 180979
+      },
+      "candidateChangePercent": {
+        "requestToPr": -0.93,
+        "requestToCi": -3.3,
+        "allWorkerTokens": 2.64
+      },
+      "acceptance": "NOT MET: total worker tokens increased. B was stopped before paid execution; subsequent candidate must be measured separately.",
+      "scope": "Fixed non-LLM coordinator. All actual Issue workers included; experiment setup and normal AI coordinator overhead excluded. Three repeats in a small controlled fixture, not a general guarantee.",
+      "nextCandidate": "c60e81b21afadf1dfc418bb7cd032c4de28036b8"
+    },
+    "entryReuseTrial": {
+      "candidateSha": "c60e81b21afadf1dfc418bb7cd032c4de28036b8",
+      "repeats": 1,
+      "case": "A",
+      "requestToPrSeconds": 1088.357,
+      "requestToCiObservedSeconds": 1089.061,
+      "allWorkerProcessedTokens": 2416311,
+      "step0Seconds": 729.71,
+      "qualityPassed": true,
+      "relativeToBaselineThreeTrialMedianTokenChangePercent": -12.12,
+      "acceptance": "Not established: one exploratory trial, elapsed time increased. Keep this observation in the next candidate sample; no exclusion or subtraction of waiting time.",
+      "step11": {
+        "seconds": 94.19,
+        "tokens": 497751,
+        "toolCalls": 13,
+        "directJournalReads": 0,
+        "recursiveListings": 0
+      },
+      "followupOrder": [
+        "candidate r2",
+        "additional baseline r4, separately reported as a temporal check",
+        "candidate r3"
+      ]
+    },
+    "entryReuseA": {
+      "candidateSha": "c60e81b21afadf1dfc418bb7cd032c4de28036b8",
+      "repeats": 3,
+      "case": "A",
+      "design": "Sequential additional observations, not fully counterbalanced; r1 long elapsed retained",
+      "medianRequestToPrSeconds": 414.487,
+      "medianRequestToCiObservedSeconds": 425.899,
+      "medianAllWorkerProcessedTokens": 2416311,
+      "changePercentVersusOriginalBaselineThreeMedian": {
+        "requestToPrSeconds": -5.3,
+        "requestToCiSeconds": -5.16,
+        "tokens": -12.13
+      },
+      "range": {
+        "requestToPrSeconds": [
+          338.771841,
+          1088.356965
+        ],
+        "requestToCiSeconds": [
+          350.227898,
+          1089.060809
+        ],
+        "tokens": [
+          1957708,
+          2541949
+        ]
+      },
+      "empiricalNearestRankP95": {
+        "requestToPrSeconds": 1088.356965,
+        "requestToCiSeconds": 1089.060809,
+        "tokens": 2541949
+      },
+      "percentileLimit": "With n=3, empirical nearest-rank p95 equals the observed maximum; it is not a reliable population p95 estimate.",
+      "allQualityPassed": true,
+      "threeMinuteTargetMet": false,
+      "scope": "Controlled fixed non-LLM coordinator worker totals; no ordinary AI coordinator token claim",
+      "additionalBaselineDiagnostic": {
+        "requestToCiObservedSeconds": 418.380816,
+        "allWorkerProcessedTokens": 2790479,
+        "pooledIntoBaseline": false
+      },
+      "conclusion": "A median time and worker tokens decreased in this small sequential sample. Slow r1 retained. B-H, bounded parent and seeded-review confirmation remain pending; no general speed or cost guarantee."
+    },
+    "executionModel": {
+      "implementationSha": "87670fb54887b64fa4079a07df68213bca42ea7d",
+      "status": "implemented; new measurements pending",
+      "detailKey": "revisionExecutionModel",
+      "candidateSha": "a974d0d0f969154bb67758648e78f902105ba5a2"
+    },
+    "workUnitExecutionContract": {
+      "status": "source implemented; actual diagnostic A stopped before Delivery; performance acceptance not met",
+      "detailKey": "revisionWorkUnitDiagnostic",
+      "eligibleCompletedE2ETrials": 0,
+      "observedProcessedTokenSubtotalAllAttempts": 6091238,
+      "observedActualModelInvocations": 10
+    },
+    "planningGuidanceTrials": {
+      "sourceSha": "5d3e69257473dd6dcce9d2249cc779c02dcb6700",
+      "status": "A quick and G full completed E2E; functional safety demonstrated in these two cases; comparative performance unproven",
+      "detailKey": "revisionPlanningGuidanceTrials",
+      "completedE2ETrials": 2,
+      "cumulativeObservedModelInvocationsAllAttempts": 25,
+      "cumulativeObservedProcessedTokensAllAttempts": 19440755,
+      "matchedPerformanceComparisonAvailable": false
+    },
+    "consistentAFullE37": {
+      "status": "completed-on-frozen-e37-source; latest work-selection revision not measured",
+      "candidateSourceSha": "e37bdf8c7bf9cb99dd44813678a0900a61339bae",
+      "fixedFixtureSha": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+      "privateTrialPr": "https://github.com/adachi-tatsuru/asc-1576-consistent-a-20261011/pull/11",
+      "resultSha256": "5e81ede9b2a8f79bfa42c48c6e4727890ff53d962474366e5d5bed83de5c329d",
+      "requestToPrSeconds": 1172.236,
+      "requestToCiObservedSeconds": 1194.33,
+      "allWorkerProcessedTokens": 6673928,
+      "workerCalls": 9,
+      "quality": {
+        "passed": true,
+        "case": "A-full",
+        "fullSuite": "10/10",
+        "immutableOracle": "passed",
+        "independentReview": "passed",
+        "realPrAndCi": "passed",
+        "changedPaths": [
+          "docs/reviews/10_delivery.json",
+          "docs/reviews/10_review.json",
+          "src/greeting.js",
+          "test/greeting.test.js"
+        ],
+        "specFileCount": 0
+      },
+      "comparison": {
+        "baselineSourceSha": "5d3e69257473dd6dcce9d2249cc779c02dcb6700",
+        "sameFixtureSingleObservation": true,
+        "baselineAllWorkerProcessedTokens": 6727585,
+        "baselineRequestToCiSeconds": 1282.09,
+        "candidateTokenDifference": -53657,
+        "candidateCiSecondsDifference": -87.76,
+        "noAscAllWorkerProcessedTokens": 168829,
+        "noAscRequestToCiSeconds": 94.06
+      },
+      "measurementLimits": [
+        "Each arm is one observation and order/time differ; no causal improvement claim.",
+        "Fixed non-LLM coordinator used; normal parent agent tokens and billed cost unmeasured.",
+        "Provider processed token total counts all workers and cache with provider-specific rules; active context high-water and reinjection exact values unavailable.",
+        "This source snapshot precedes the new Evidence-driven Step 10 verification selector; its effect needs a separate matched trial."
+      ],
+      "detailKey": "revisionConsistentAFullE37"
+    },
+    "stopped077AFull": {
+      "sourceSha": "077f47c57d3b2f1458f4a1d98539d5c584e36464",
+      "fixedFixtureSha": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+      "status": "stopped-at-first-artifact-contract-blocker",
+      "e2eCompleted": false,
+      "trialResultSha256": "b4b2d4befc6aeb0476df305e0c0c380d9b53dfdeb4ec0830a2b5cf8397e79826",
+      "actualWorkerCalls": 3,
+      "observedProcessedTokensIncludingFailure": 1445592,
+      "elapsedToFirstBlockerSeconds": 307.9815740585327,
+      "sameStepPaidRetries": 0,
+      "qualityBoundary": "Step0 Full; Step1 formal gate passed; Step2 handback included read-only 00 and output 01; packaged CLI rejected both paths. Step3/review/implementation/PR/CI not reached.",
+      "limitations": [
+        "This is not an E2E performance comparison. All three calls and tokens are retained as failed-work cost.",
+        "Fixed benchmark-specific handback artifacts schema contributed to exposure; one observation does not prove the newest Evidence selector caused the worker error.",
+        "Corrected source is a new candidate and needs its own isolated trial."
+      ],
+      "detailKey": "revision077StoppedAFull"
+    },
+    "stoppedB12ClaudeAuth": {
+      "sourceSha": "b12a46bf117a4a6467c3cc63eb57cc2de21cdcc6",
+      "status": "stopped-provider-authentication-step1",
+      "trialResultSha256": "25cba6b8c315760814f93022f19c3af5e962d762ef4b5879da06c288e4476c6b",
+      "actualWorkerCalls": 2,
+      "observedProcessedSubtotal": 487323,
+      "completeTotalProcessed": null,
+      "elapsedToStopSeconds": 147.93547797203064,
+      "e2eCompleted": false,
+      "detailKey": "revisionB12ClaudeAuthStop"
+    },
+    "stoppedB12CodexStep5": {
+      "sourceSha": "b12a46bf117a4a6467c3cc63eb57cc2de21cdcc6",
+      "status": "stopped-formal-step5-risk-short-form-gate",
+      "trialResultSha256": "5ad60d5e203e674e71eb4a5c26cff847a7d7cbaae4d598d893063ded3eff584b",
+      "provider": "codex",
+      "actualWorkerCalls": 5,
+      "completeTotalProcessed": 1412316,
+      "elapsedToFirstBlockerSeconds": 853.5018379688263,
+      "e2eCompleted": false,
+      "qualityBoundary": "Step2 formal output passed; Step5 official template short form rejected without risk input; no PR/CI.",
+      "detailKey": "revisionB12CodexStep5Stop"
+    },
+    "implementationFirstPrivateE2E": {
+      "sourceSha": "98ce609771d393d94612c6dd5d3f11198f3c71c7",
+      "fixedFixtureSha": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+      "status": "candidate-through-formal-private-pr-and-ci-passed",
+      "privateTrialPr": "https://github.com/adachi-tatsuru/asc-1576-implementation-first-e2e-20261013/pull/2",
+      "candidateWorkerElapsedMs": 34853,
+      "candidateWorkerUsage": {
+        "inputTokens": 99063,
+        "cachedInputTokensIncludedInInput": 90112,
+        "cacheWriteInputTokens": 0,
+        "outputTokens": 576,
+        "reasoningOutputTokensIncludedInOutput": 10
+      },
+      "fullVerification": "9/9",
+      "independentReview": "converged-at-implementation-head; reused-at-step10",
+      "privateCi": "2/2 success",
+      "highRiskPreflight": "authorization triggered -> upstream; unknown criterion and risk -> clarify; no worker or Git mutation",
+      "requestToCiSeconds": null,
+      "allAgentProcessedTokens": null,
+      "parentAgentTokens": null,
+      "contextHighWater": null,
+      "comparison": "same fixture base as previous A case, but request-to-CI boundary, total agent tokens and access parity are not established; no improvement percentage",
+      "detailPath": "docs/reviews/1576_implementation_first_e2e.md"
+    }
+  },
+  "latestMatchedComparison": {
+    "path": "docs/reviews/1576_matched_20261014.json",
+    "sha256": "1eb768634c6302e5cabae365f8ab2b07cbf3e8b7715a2648c91c7f8c2ab7650d",
+    "summary": "docs/reviews/1576_matched_20261014.md",
+    "acceptance": "not-established"
+  }
+}
