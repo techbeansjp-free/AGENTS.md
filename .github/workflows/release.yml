@@ -58,7 +58,7 @@ jobs:
           CANDIDATE_VERSION: ${{ inputs.version }}
         run: |
           mkdir candidate-output
-          node v05/scripts/pack-candidate.mjs "$PWD/candidate-output" "--version=$CANDIDATE_VERSION" > candidate-output/package-result.json
+          node scripts/pack-candidate.mjs "$PWD/candidate-output" "--version=$CANDIDATE_VERSION" > candidate-output/package-result.json
           git rev-parse HEAD > candidate-output/source-commit.txt
           cd candidate-output
           sha256sum agent-skill-chain-*.tgz > SHA256SUMS

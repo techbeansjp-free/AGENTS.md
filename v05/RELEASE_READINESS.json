@@ -596,7 +596,7 @@
   },
   "rootDistributionCutover": {
     "status": "working-tree-acceptance",
-    "standardCli": "agent-skill-chain -> v05/bin/asc-v05.mjs",
+    "standardCli": "agent-skill-chain -> bin/asc-v05.mjs",
     "legacyRuntimePackaged": false,
     "remaining": [
       "legacy root CI and release workflow transition",
@@ -1407,5 +1407,28 @@
         }
       ]
     }
+  },
+  "sourceLayoutReplacement": {
+    "status": "working-tree-validated",
+    "runtime": "src/*.mjs",
+    "cli": "bin/asc-v05.mjs",
+    "tests": "test/test_*.mjs",
+    "legacyStepRuntimePresent": false,
+    "legacyHooksPresent": false,
+    "legacyStepSkillsPresent": false,
+    "linuxNodeTests": {
+      "passed": 220,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 119.147832233
+    },
+    "lint": "passed",
+    "sourceQuality": "passed",
+    "remaining": [
+      "independent review of replacement",
+      "trusted base quality contract transition",
+      "PR CI on committed replacement"
+    ],
+    "releaseReady": false
   }
 }

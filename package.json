@@ -8,14 +8,10 @@
     "node": ">=20"
   },
   "bin": {
-    "agent-skill-chain": "./v05/bin/asc-v05.mjs",
-    "asc-v05": "./v05/bin/asc-v05.mjs"
+    "agent-skill-chain": "./bin/asc-v05.mjs",
+    "asc-v05": "./bin/asc-v05.mjs"
   },
   "files": [
-    "v05/package.json",
-    "v05/bin/",
-    "v05/src/",
-    "v05/migration_inspect.mjs",
     "v05/README.md",
     "v05/OWNER_APPROVAL.md",
     "v05/RELEASE_READINESS.json",
@@ -24,20 +20,21 @@
     "v05/GOAL_EXECUTION.md",
     "v05/ARCHITECTURE_DECISION_0001.md",
     "v05/ARCHITECTURE_DECISION_0002.md",
-    "v05/skills/",
-    "README.md"
+    "README.md",
+    "bin/",
+    "src/",
+    "migration_inspect.mjs",
+    "skills/"
   ],
   "scripts": {
     "build": "npm run package:check",
-    "lint": "eslint v05",
+    "lint": "eslint src bin test v05",
     "lint:v05": "npm run lint",
-    "package:check": "cd v05 && node --test test_package.mjs",
-    "test": "npm --prefix v05 test",
+    "package:check": "node --test test/test_package.mjs",
+    "test": "node --test test/test_*.mjs",
     "quality": "npm run lint && npm test",
     "verify:distribution": "npm run quality",
-    "test:v05": "npm --prefix v05 test",
-    "test:legacy": "node --import tsx scripts/compile.ts && node --import tsx scripts/run_cucumber_shards.ts",
-    "build:legacy": "node --import tsx scripts/compile.ts && node --import tsx scripts/build.ts"
+    "test:v05": "npm test"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",

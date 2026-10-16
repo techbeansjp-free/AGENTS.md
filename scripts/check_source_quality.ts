@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { loadProjectPolicySet } from "../src/domain/policy.js";
-import { isStagingLifecycleScanPath } from "../src/domain/staging.js";
-import { isExecutionEntry } from "../src/lib/entrypoint.js";
+import { loadProjectPolicySet } from "./quality-support/domain/policy.js";
+import { isStagingLifecycleScanPath } from "./quality-support/domain/staging.js";
+import { isExecutionEntry } from "./quality-support/lib/entrypoint.js";
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".mjs"]);
 const SOURCE_FILE_EXTENSIONS = new Set([

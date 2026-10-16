@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { parseJsonStrict, stableJson } from "../src/lib/security.js";
-import { isExecutionEntry } from "../src/lib/entrypoint.js";
-import { isRecord } from "../src/types.js";
+import { parseJsonStrict, stableJson } from "./quality-support/lib/security.js";
+import { isExecutionEntry } from "./quality-support/lib/entrypoint.js";
+import { isRecord } from "./quality-support/types.js";
 
 interface ProjectQualityResult {
   valid: boolean;
