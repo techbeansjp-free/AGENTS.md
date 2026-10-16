@@ -423,7 +423,7 @@
           "kind": "file",
           "name": "scripts/check_project_quality.ts",
           "beforeSha256": "21fa07b9ff78d0ba1da7f163ce213b24331dacbdea6e51f0cc088f4411b6404f",
-          "afterSha256": "973bac6e4ac9fdffe2c708ae8e192a708fc9e825fbb9967443d1c54bf3241d83"
+          "afterSha256": "f026c47e1ff8942ec35b65670ff7ac13ab9525014242cc02afd47993b45881dc"
         },
         {
           "kind": "packageField",
