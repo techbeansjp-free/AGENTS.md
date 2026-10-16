@@ -1533,8 +1533,42 @@
         "evidencePath": "/tmp/asc-prehandler-repro-l5haeqsu/verification.json",
         "oracleDigest": "c461eba869f18c565f309d7c52078a5c82c86324710de38a799e615067d52810",
         "boundary": "PATCH received and held before application handler; reload GET completes before release; SQLite commit observed before DOM assertion",
-        "observerCompatibility": "ReplayBody supports read1 as well as read; acceptance assertions unchanged"
+        "observerCompatibility": "ReplayBody supports read1 as well as read; acceptance assertions unchanged",
+        "repairCheck": {
+          "candidateHead": "55b7e9915abf50af03925e957497270d8393a65e",
+          "status": "PASS-verification-only",
+          "wallSeconds": 14.322583362,
+          "sourceUnchanged": true,
+          "exitCodes": [
+            0,
+            0
+          ],
+          "agentCalls": 0,
+          "limitation": "Same pre-handler oracle now passes, but independent review subsequently found lost mutation-error feedback; no overall acceptance claimed."
+        }
       }
+    },
+    "sameContractRestart": {
+      "status": "FAIL",
+      "runtimeSourceHead": "2b6a3d5f2",
+      "runtimeKind": "source-worktree",
+      "rawEvidenceSha256": "99127ec1d4a366dc065904f3317e54daf5332b884803bb6e06e52d3be874e7c9",
+      "wallSeconds": 577.913709774,
+      "agentCalls": 5,
+      "observedProcessedTokens": 1110270,
+      "observedFreshTokens": 265342,
+      "allAgentTotalTokens": null,
+      "sourceUnchanged": true,
+      "deliveryAttempted": false,
+      "candidateHead": "ddf1dd1bf2afa9d5d788ba60c0805c727633fe8c",
+      "replanned": false,
+      "improvement": "Candidate bytes reused; no goal-proposal or initial implementation call. Fresh reviews identified stale summary, lost mutation error, then incompatible one-second PATCH body deadline.",
+      "remainingFinding": "Existing valid bounded PATCH requests can fail solely because receipt exceeds one second; base source has no such deadline. Lock is still held during request receipt.",
+      "limits": [
+        "Not successful recovery or Delivery acceptance",
+        "Previous trial costs retained; no speedup claim",
+        "Two bounded repairs exhausted; candidate preserved"
+      ]
     }
   },
   "restartDiagnosticsValidation": {
@@ -1581,6 +1615,33 @@
       "No measured E2E speedup claim",
       "Valid asset contracts incur an additional read-only inventory validation before model startup",
       "Live screen trial still uses fixed 93670cae package, not this later implementation"
+    ]
+  },
+  "repeatedGoalRestart": {
+    "implementationHead": "57799207",
+    "status": "targeted-regression-passed",
+    "failureObserved": "Second non-replanning restart failed Prior proposal required before Agent launch because previous restart omitted adopted proposal.",
+    "fix": "Retain only revalidated plan and binding plus source reference; reset per-invocation proposal calls/time to zero. Fresh verification and review remain mandatory.",
+    "tests": {
+      "goalSuiteBeforeFinalCatchFix": {
+        "passed": 51,
+        "failed": 0,
+        "skipped": 0,
+        "durationMs": 76500.030233
+      },
+      "finalRepeatedRestartAndEarlyFailure": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "durationMs": 7180.346624
+      },
+      "lint": "pass"
+    },
+    "independentReview": "Initial P2 on early-error masking corrected; read-only follow-up found no additional blockers.",
+    "limits": [
+      "Not live provider acceptance of repeated recovery",
+      "Earlier historical result without proposal is not rewritten",
+      "Full Linux CI pending"
     ]
   }
 }
