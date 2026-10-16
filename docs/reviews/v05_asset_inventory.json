@@ -1,0 +1,1281 @@
+{
+  "scope": "All Git-tracked .agent-skill-chain files at db49ed048; untracked local/runtime/tmp contents excluded to protect user data",
+  "coverage": "Every tracked file read and hashed; JSON parsed; static literal/basename references and conformance enforcement paths checked. This is not exhaustive semantic or dynamic reachability proof.",
+  "files": 122,
+  "groups": {
+    "updated-v05-guidance": 4,
+    "legacy-catalog-review-required": 2,
+    "legacy-policy-compatibility": 4,
+    "project-contract-migration-required": 25,
+    "legacy-schema-no-v05-runtime-loader": 19,
+    "optional-document-template-review-required": 58,
+    "legacy-step-template-compatibility-dependency": 10
+  },
+  "missingConformanceEnforcement": [
+    {
+      "binding": "I1",
+      "path": "src/domain/enforcement.ts",
+      "export": "validateRule"
+    },
+    {
+      "binding": "I2",
+      "path": "src/domain/enforcement.ts",
+      "export": "validateOwnershipBoundary"
+    },
+    {
+      "binding": "I2",
+      "path": "scripts/check_file_audit.ts",
+      "export": "checkFileAudit"
+    },
+    {
+      "binding": "I2",
+      "path": "scripts/check_conformance.ts",
+      "export": "findPackageModelSlugViolations"
+    },
+    {
+      "binding": "I3",
+      "path": "src/domain/trace.ts",
+      "export": "validateScenarioTrace"
+    },
+    {
+      "binding": "I3",
+      "path": "scripts/check_trace.ts",
+      "export": "collectProjectTrace"
+    },
+    {
+      "binding": "I4",
+      "path": "src/domain/enforcement.ts",
+      "export": "compareTrustedPolicy"
+    },
+    {
+      "binding": "I4",
+      "path": "src/domain/project-choice-diff.ts",
+      "export": "classifyProjectChoiceDiff"
+    },
+    {
+      "binding": "I4",
+      "path": "src/domain/enforcement.ts",
+      "export": "enforceTrustedBoundary"
+    },
+    {
+      "binding": "I4",
+      "path": "src/domain/review.ts",
+      "export": "evaluateReview"
+    },
+    {
+      "binding": "I4",
+      "path": "src/domain/delivery.ts",
+      "export": "authorizeMerge"
+    },
+    {
+      "binding": "I4",
+      "path": "src/domain/finalize.ts",
+      "export": "applyFinalize"
+    },
+    {
+      "binding": "I5",
+      "path": "src/lib/security.ts",
+      "export": "resolveContained"
+    },
+    {
+      "binding": "I5",
+      "path": "src/domain/worktree.ts",
+      "export": "createWorktree"
+    },
+    {
+      "binding": "I6",
+      "path": "src/domain/enforcement.ts",
+      "export": "planValidation"
+    },
+    {
+      "binding": "I6",
+      "path": "src/domain/review.ts",
+      "export": "evaluateReview"
+    },
+    {
+      "binding": "I6",
+      "path": "src/domain/conformance.ts",
+      "export": "validateDevelopmentConsiderations"
+    },
+    {
+      "binding": "I7",
+      "path": "src/lib/version.ts",
+      "export": "CURRENT_POLICY_SCHEMA_VERSION"
+    },
+    {
+      "binding": "I7",
+      "path": "src/lib/version.ts",
+      "export": "isPackageVersion"
+    },
+    {
+      "binding": "I7",
+      "path": "src/domain/migration.ts",
+      "export": "planFileMigration"
+    },
+    {
+      "binding": "I7",
+      "path": "src/domain/migration.ts",
+      "export": "applyFileMigration"
+    },
+    {
+      "binding": "I8",
+      "path": "src/domain/enforcement.ts",
+      "export": "validatePackageManifest"
+    },
+    {
+      "binding": "I9",
+      "path": "src/domain/enforcement.ts",
+      "export": "planOfflineGates"
+    },
+    {
+      "binding": "I10",
+      "path": "src/domain/trace.ts",
+      "export": "validateDependencyGraph"
+    },
+    {
+      "binding": "I10",
+      "path": "scripts/check_dependency_graph.ts",
+      "export": "collectTypeScriptDependencyGraph"
+    },
+    {
+      "binding": "I10",
+      "path": "src/domain/enforcement.ts",
+      "export": "classifyPackageAssets"
+    },
+    {
+      "binding": "I11",
+      "path": "src/domain/enforcement.ts",
+      "export": "serializeDiagnostic"
+    },
+    {
+      "binding": "I12",
+      "path": "src/domain/enforcement.ts",
+      "export": "resolveEffectivePolicy"
+    }
+  ],
+  "items": [
+    {
+      "path": ".agent-skill-chain/00_利用案内.md",
+      "sha256": "bbe53b4c27403dcf301908469674b498ee74c194822ef521b4f12e8682101dc5",
+      "bytes": 945,
+      "classification": "updated-v05-guidance",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/enforcement.ts"
+      ],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/canonical-contracts.json",
+      "sha256": "dfb519004c717f7bea7a3e97b48bb75c7e338463ea860047f5c1e73243cdcebd",
+      "bytes": 720,
+      "classification": "legacy-catalog-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 1,
+      "jsonValid": true,
+      "schemaVersion": "agent-skill-chain/canonical-contracts/v1"
+    },
+    {
+      "path": ".agent-skill-chain/docs/00_運用ポリシー.md",
+      "sha256": "4d2a01bd67dc2be9b6fc45e845a7e2467eb85d26daf81a4f08650617e57b6def",
+      "bytes": 976,
+      "classification": "updated-v05-guidance",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/conformance.ts"
+      ],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/docs/01_開発ワークフロー.md",
+      "sha256": "4c2888655f997478d1f6590e2ec353a53acaa44a88bc2cae12a40775fdc1c290",
+      "bytes": 921,
+      "classification": "updated-v05-guidance",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 1
+    },
+    {
+      "path": ".agent-skill-chain/docs/02_品質基準.md",
+      "sha256": "453bc790bdc171e83d411258f9ddf9ab091efc013a886b6a4d7ac839faac13f2",
+      "bytes": 1319,
+      "classification": "updated-v05-guidance",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/policy/00_利用案内.md",
+      "sha256": "eb4651ce27a3e1008cb881d2fb36fcbdf4d49bd33a63941a8cde298becc7ac04",
+      "bytes": 2679,
+      "classification": "legacy-policy-compatibility",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/enforcement.ts"
+      ],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/policy/conformance.json",
+      "sha256": "2d8bb9ec3a3636992e2939197dc7cbc6827cabfac05d5acc8a68328a7ef99365",
+      "bytes": 5602,
+      "classification": "legacy-policy-compatibility",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": "agent-skill-chain/conformance/v1"
+    },
+    {
+      "path": ".agent-skill-chain/policy/default.json",
+      "sha256": "2ae948c1ee444f0526c8df4595c730e580227d72a8a4dc4870c9c67fca5ac739",
+      "bytes": 3797,
+      "classification": "legacy-policy-compatibility",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/policy.ts"
+      ],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": "agent-skill-chain/project-policy/v0.3.1"
+    },
+    {
+      "path": ".agent-skill-chain/policy/sample.json",
+      "sha256": "2d21f0ec0af07ffc8f97e15cc432351a8b045d060fb7b19f17310e41992d97ed",
+      "bytes": 1135,
+      "classification": "legacy-policy-compatibility",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": "agent-skill-chain/project-policy/v0.3.1"
+    },
+    {
+      "path": ".agent-skill-chain/project-policy.json",
+      "sha256": "820bf4d34de0283484bab4efdd918b7fe76c2d9b4b969731ddda3610b3832ac9",
+      "bytes": 2392,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/policy.ts",
+        "scripts/quality-support/domain/staging-layout.ts",
+        "scripts/quality-support/domain/enforcement.ts",
+        "test/test_migration_inspect.mjs",
+        "test/test_package.mjs",
+        "test/test_migration.mjs"
+      ],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": "agent-skill-chain/project-policy-manifest/v1"
+    },
+    {
+      "path": ".agent-skill-chain/project/choices/development.json",
+      "sha256": "4f6ab5d6dc5045ae987e44dce75431a68aa3e10a12e6d55a88828e54363deabf",
+      "bytes": 6882,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [
+        "scripts/check_project_quality.ts",
+        "scripts/quality-support/domain/routing-independence.ts"
+      ],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/conformance/bindings.json",
+      "sha256": "6d78c9e7a31af01e3043c951fde4d0876c158260a3cf25b2643c17e7f2a14438",
+      "bytes": 7011,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/routing-independence.ts"
+      ],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": "agent-skill-chain/project-conformance/v1"
+    },
+    {
+      "path": ".agent-skill-chain/project/providers/capability-mapping.json",
+      "sha256": "0d5855c072d925acc87ddb04bf0882f5a931b66b2865236800eeca11d72f9002",
+      "bytes": 259,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/routing-independence.ts"
+      ],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": "agent-skill-chain/provider-capability-mapping/v2"
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/canonical-source.json",
+      "sha256": "c329becccc31cf881add2738d3892d571c70dd783680f14e69b086f2ae21f54c",
+      "bytes": 634,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/ci-permission.json",
+      "sha256": "5cf1077ac51fb905364c8764def2f4185beea1d7b8aee18ede26ca5d4e6a6794",
+      "bytes": 843,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/ci-trigger.json",
+      "sha256": "afae04353ad4c7a0892b8cde8ed9d78536d8b9b1dc96d58a0c09602c555f5e77",
+      "bytes": 830,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/code-quality.json",
+      "sha256": "ca6589ac20c314def82625fc5e24343940d593d098ed7f636f81b7cd2cc0cd58",
+      "bytes": 947,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/distribution-boundary.json",
+      "sha256": "b4bd67e066716a9c67b53555f2f433166f709130efdd32d3cfb3d389b87a3ce3",
+      "bytes": 1136,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/distribution-impact.json",
+      "sha256": "0aeaed22d9e45fe5beb3cddc9a486da0046ac1c201230cd28636cd917454a48f",
+      "bytes": 1194,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/docs.json",
+      "sha256": "fa3fe16486297a494c47d82b8ccbb226d7c1267174f3a634f5b2f6323aea2761",
+      "bytes": 491,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/dogfooding.json",
+      "sha256": "e39a6bc2a4ecda17c38688b38a23a4d7a2c691dc930cc96e8bd280cd1228d5a2",
+      "bytes": 1058,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/japanese-docs.json",
+      "sha256": "373b67434dd0f1fc38e888a36be2896627210ce290a943f591a1fb7fa67cd10e",
+      "bytes": 837,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/lockfile.json",
+      "sha256": "bf3790bc2f932840ae584b4d250e737f8f51ed66b9966ecc14be8e61c3d69abf",
+      "bytes": 821,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/naming-exception.json",
+      "sha256": "5e506600bc2f3f9f9a3632823c1a6ac5aa798166becb65e093384b228556cd3f",
+      "bytes": 940,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/no-registry-publish.json",
+      "sha256": "592c4026c4a2047cfb465ea8390f69ad4ad074617272c5247c0b5505ea457985",
+      "bytes": 808,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/numbered-markdown.json",
+      "sha256": "ada0fb50687dc658b97e0b9aa0af70ff4e55b8e954f45fd7fa75d848d1aaa71d",
+      "bytes": 887,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/ownership-local.json",
+      "sha256": "03d6443bbfcdef65bffbfd16cc8af651aacf5b3c1f5184291b8402bc92c41b7b",
+      "bytes": 503,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/ownership-pr.json",
+      "sha256": "99108a3b33402ca8b709c3b21692bfdab2ac07e1ac19e05369cc5e0798893b4b",
+      "bytes": 531,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/package-manager.json",
+      "sha256": "721e2b9d1a7b2d1b93425c90f1ac330a8f44fcaf961c33b26bb38c5b5ee4d0d5",
+      "bytes": 908,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/package.json",
+      "sha256": "d58a9e505283a2fb04f16078ab6bf6ff4f9185bc49922772aa8a1dd87da75072",
+      "bytes": 767,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [
+        "src/codex-runtime.mjs",
+        "src/workflow.mjs",
+        "bin/asc-v05.mjs",
+        "scripts/check_project_quality.ts",
+        "scripts/pack-candidate.mjs",
+        "scripts/quality-support/README.md",
+        "scripts/quality-support/domain/conformance.ts",
+        "scripts/quality-support/domain/enforcement.ts",
+        "scripts/quality-support/lib/package-root.ts",
+        "scripts/quality-support/lib/version.ts",
+        "test/test_migration_inspect.mjs",
+        "test/test_restricted_agent_node.mjs",
+        "test/test_package.mjs",
+        "test/test_migration.mjs"
+      ],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/quality-command.json",
+      "sha256": "b4541d9bffb33c2c0a1dc297c57987ad15d5686a11071e19c9e29d960916d2bc",
+      "bytes": 1037,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/review-exception.json",
+      "sha256": "66f988c2c24a91d0da0a0851c60b9a681982a9339186330290169879e61558fd",
+      "bytes": 1099,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/runtime.json",
+      "sha256": "13a1a3048699ed627e3af37b74abe2e0e7fd4584a5847585318fc04db78d0ad5",
+      "bytes": 920,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/project/rules/safety.json",
+      "sha256": "97ae2c4f9f7c8940d9514492faf05e8079468a035f4d1eba3e9d6eb98a9c8f10",
+      "bytes": 541,
+      "classification": "project-contract-migration-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/review-exceptions.json",
+      "sha256": "2dd3341f15a6c6fc770999056f7ef92fd5eecfe0f6f7d289f748344f6329b82b",
+      "bytes": 1355,
+      "classification": "legacy-catalog-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": "agent-skill-chain/project-review-exceptions/v1"
+    },
+    {
+      "path": ".agent-skill-chain/schemas/00_利用案内.md",
+      "sha256": "de69bf2b8be2f0ef1315aa6cbb55561f41cf5f3c268e612d5f073ab15a8038f5",
+      "bytes": 9411,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/enforcement.ts"
+      ],
+      "legacyExecutionMentions": 3
+    },
+    {
+      "path": ".agent-skill-chain/schemas/canonical-contracts.schema.json",
+      "sha256": "83ebafb9e1afa06d42d0298000c4516726e0be0d457ec0742982d8db6495f10b",
+      "bytes": 1862,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/conformance-contract.schema.json",
+      "sha256": "938605a974b7979246968541243cc5d2e72cc34e119e3607aa92149682a84b00",
+      "bytes": 3856,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/delivery-state.schema.json",
+      "sha256": "a0efc90d7b508ac88d54687328304ebe04bcf3a3be6348eded3bbf307ab05787",
+      "bytes": 21735,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 2,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/poc-observation.schema.json",
+      "sha256": "9145886fb84519ccb391012858c2828b1f2d6f5a327c2c98c367683d8a37f34a",
+      "bytes": 4308,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/project-choice.schema.json",
+      "sha256": "937e1196b77dccb68ae7878d1bdb2246d41af5e9bbb9085708a956b4455e19ea",
+      "bytes": 10980,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/project-conformance-binding.schema.json",
+      "sha256": "9f74f9001a5fcf5fb1c16830ed8ca3997dcf2e6f4624c6afc6d0a42a9bb02805",
+      "bytes": 6450,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/project-policy-manifest.schema.json",
+      "sha256": "cded504257f91cbe28277cf6ac44f94e295ae6232caf5da21bbdad19c131119b",
+      "bytes": 12780,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/project-policy.schema.json",
+      "sha256": "ed5dcb287aa51789187522a042618f3e3ff096fc2886798429a10a92dded76df",
+      "bytes": 18470,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/project-review-exception.schema.json",
+      "sha256": "4d0c74448438af57c38bbd117a578ae05b73e991eb5dbc9587fe7e7c42bdd96b",
+      "bytes": 2856,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/project-rule.schema.json",
+      "sha256": "a789ca523601ff5b26958b5162bd29a9eeab25f2b0799f2e72df28aa7c9a365e",
+      "bytes": 1912,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/provider-capability-mapping.schema.json",
+      "sha256": "9b4f9cd1ecf75040ecd0cdfb31297b50980fb5119106d7f1f2f9539257881e37",
+      "bytes": 1195,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/review-evidence.schema.json",
+      "sha256": "b7ba14ca5989608b7d2d9c0921659461b0fac8778032f847e79949ffdd25dc4a",
+      "bytes": 5451,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 1,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/review-progress-record.schema.json",
+      "sha256": "1b27752cc26401cc78999f8f6363da597ec97e6dad4d5026d6b0d910700371a4",
+      "bytes": 2213,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/routing-evidence.schema.json",
+      "sha256": "cb3c64d5ff0a8d736bfd7d0ce48fa3c0d6e4353917bc321131029f2fea12fc30",
+      "bytes": 5858,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/staging-record.schema.json",
+      "sha256": "e91d8d7d68b2a0c69242da569735c1ab11b46178ebb76892d3e418689dcccf55",
+      "bytes": 3484,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/supplemental-review-config.schema.json",
+      "sha256": "b4882de762130a7475011e7e7aa534b2e0cea057572c25a090f776222f235e77",
+      "bytes": 2303,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 1,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/workflow-mode-decision.schema.json",
+      "sha256": "796d9b62c194b90b611d38c718a8af090abf4676c5c848277e21e458028a2670",
+      "bytes": 8223,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/schemas/workflow-step-journal.schema.json",
+      "sha256": "54e944e73c97de6477633fe3470d5b9d3b032fd6a1a7e3478342e0ba1ae86760",
+      "bytes": 10985,
+      "classification": "legacy-schema-no-v05-runtime-loader",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 28,
+      "jsonValid": true,
+      "schemaVersion": null
+    },
+    {
+      "path": ".agent-skill-chain/templates/00_利用案内.md",
+      "sha256": "46aa078dc59ea2553b912322273a4cf5e42de4400eb70b9f0f66f657fef0addb",
+      "bytes": 1620,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/enforcement.ts"
+      ],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/common/00_図表設計ガイド.md",
+      "sha256": "c05236f054ae8736a0de9c9defc118cb8dc62ce7dc28533e4c8cce154af768f8",
+      "bytes": 1580,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/common/01_識別子設計ガイド.md",
+      "sha256": "977001ec9121546ecb773d38786de276b91d7aa69274cadd0905543a1ddaae5f",
+      "bytes": 1472,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/common/02_利用案内.md",
+      "sha256": "d6b6280199bd7765fb7ccf2e09be0f8458fa82448c2c3f103489f49fa49adcf1",
+      "bytes": 1176,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/issue/00_要求定義_full.md",
+      "sha256": "ad9f7233109a72c431c7bfc1d500cbf63d3af794e6c9333f5fb5daf0e1b26d37",
+      "bytes": 9056,
+      "classification": "legacy-step-template-compatibility-dependency",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 2
+    },
+    {
+      "path": ".agent-skill-chain/templates/issue/00_要求定義_poc.md",
+      "sha256": "e92647a71a33f1305b8e0bb0a268d316ac88741e7c5d5da2910b3e3c3b4c7929",
+      "bytes": 12413,
+      "classification": "legacy-step-template-compatibility-dependency",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 6
+    },
+    {
+      "path": ".agent-skill-chain/templates/issue/00_要求定義_quick.md",
+      "sha256": "c91cbd5f67e7f9c17bed5b7f5c83ad507e243be356b5ced289888df763dfffa9",
+      "bytes": 7384,
+      "classification": "legacy-step-template-compatibility-dependency",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 5
+    },
+    {
+      "path": ".agent-skill-chain/templates/issue/01_要件定義.md",
+      "sha256": "e12e174795d3c865ae1555ab9c65c78f8d958eb1d8b3bf92fad1805c4c26c97b",
+      "bytes": 7741,
+      "classification": "legacy-step-template-compatibility-dependency",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/staging.ts"
+      ],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/issue/02_設計.md",
+      "sha256": "d3bf2ac41e5fc00220e9a344c17d3167fc139485bc01cefd9f31cc319696c954",
+      "bytes": 10494,
+      "classification": "legacy-step-template-compatibility-dependency",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/staging.ts"
+      ],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/issue/03_実装計画.md",
+      "sha256": "ef42b1dad7052ec6ff2f6a7b83633a17eb494b1b7ee7a4d0ff31e1114b06f0df",
+      "bytes": 10922,
+      "classification": "legacy-step-template-compatibility-dependency",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/staging.ts"
+      ],
+      "legacyExecutionMentions": 2
+    },
+    {
+      "path": ".agent-skill-chain/templates/issue/05_計画変更.md",
+      "sha256": "c3140a069b8ddca94b7061dccf6f40dcd00cd1ec6ecd6e279de0ad37bd1f2cac",
+      "bytes": 1210,
+      "classification": "legacy-step-template-compatibility-dependency",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/issue/11_プルリクエスト事前確認.md",
+      "sha256": "47e66721c403f77bd9ab12a6dba3dd640c04ac01991991a0fe16817007092092",
+      "bytes": 4037,
+      "classification": "legacy-step-template-compatibility-dependency",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 1
+    },
+    {
+      "path": ".agent-skill-chain/templates/issue/11_プルリクエスト本文.md",
+      "sha256": "7d0e951e6c37135b47cc9d31a6a67cdd8be87fb89d607d03445d911cd1038d22",
+      "bytes": 1814,
+      "classification": "legacy-step-template-compatibility-dependency",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/issue/12_利用案内.md",
+      "sha256": "7b815f8365c9059d4d54b7f9755ce1d54fada67f0a9cfd34a734a8409cfd233e",
+      "bytes": 2522,
+      "classification": "legacy-step-template-compatibility-dependency",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 11
+    },
+    {
+      "path": ".agent-skill-chain/templates/planning/00_利用案内.md",
+      "sha256": "61065e32b2d572cf04db1aabe46dc3b5e1d424651c7f27c8cdd60bcfe8985e29",
+      "bytes": 1722,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/enforcement.ts"
+      ],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/planning/01_計画単位.md",
+      "sha256": "037b2f89488e2ce3633d937d971e8761cc52c72629340857a381fbf07cf0049e",
+      "bytes": 2729,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/00_仕様書構成/00_仕様書索引.md",
+      "sha256": "6a906bff9a6bf5364f30212003f566e4a3d305cc63786f86ec2c9bbe1e190b7b",
+      "bytes": 2741,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/00_仕様書構成/01_記入・分割ルール.md",
+      "sha256": "ef6736d309f648c9cfcdc824363ad4b494479cdc72f1314245877363fb906733",
+      "bytes": 1599,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/00_利用案内.md",
+      "sha256": "6e14579a603580c3668a564a060c590dbf27d628443428e6fb42bae2a0db66f8",
+      "bytes": 3623,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [
+        "scripts/quality-support/domain/enforcement.ts"
+      ],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/01_システム概要/00_概要.md",
+      "sha256": "2ae94d563271923eb0b49fc9bae668ff61de37b0605366150ca8a404c5a37590",
+      "bytes": 609,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/01_システム概要/01_業務・利用者フロー.md",
+      "sha256": "a7ab90d8c3b4b3e61b4668055f2e2144962c84e0dc39b004cf005464c11a11db",
+      "bytes": 1647,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/01_システム概要/02_用語・略語.md",
+      "sha256": "b21124a6f151aacda9cfb9129be21b41064b4d21bc831781a41eda36c679d638",
+      "bytes": 1481,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/02_要件/00_要件一覧.md",
+      "sha256": "86c000d7e02f5a1bfdee10b9f344c99f6f51a50a3beec19a11b8797824a00eb7",
+      "bytes": 1311,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/02_要件/01_受け入れ条件.md",
+      "sha256": "e453e14cb134e6a7d80eb2a1d16fbc61a061efadb097b64b6c249615809858b2",
+      "bytes": 942,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/02_要件/02_制約・前提・対象外.md",
+      "sha256": "fbf9926556fe06d1bdd2719c8f7786c3e961826f8314d18d022f8c12a295e2aa",
+      "bytes": 216,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/03_アーキテクチャ/00_全体構成.md",
+      "sha256": "a2031f06179a66b5b9a24637625c7ae6f500d678ac0067712cf65f5c7bdf94eb",
+      "bytes": 1166,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/03_アーキテクチャ/01_システムコンテキスト.md",
+      "sha256": "26841b47ae18abe0c59a1c0c1e8a901486c6bc42b8bf7ac34c91a848855ead70",
+      "bytes": 434,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/03_アーキテクチャ/02_配置・依存.md",
+      "sha256": "964374ab8be8ab2abd0940e50aefa09ae9c88c2045641c58e844c6ce91135e71",
+      "bytes": 451,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/04_機能/00_機能一覧.md",
+      "sha256": "5d3604aa6f9da06dbe153f5276d64c2988379f365c9a25c16f073fd330eda624",
+      "bytes": 254,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/04_機能/01_個別機能テンプレート.md",
+      "sha256": "72d054ea4a63e49afe75c568bee8d8ef8df7cc524df5e6f612d6d8838dc9a0bf",
+      "bytes": 1294,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/04_機能/02_状態遷移.md",
+      "sha256": "ded3893767bdcc6145ddad613a891e61058e374de00847cac3edd6c0fdefeec3",
+      "bytes": 635,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/05_画面/00_画面一覧.md",
+      "sha256": "d4178b73ec84c10b88e51c127dcca57cba51526b2a2a4e2153bf74d208e25404",
+      "bytes": 323,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/05_画面/01_画面遷移.md",
+      "sha256": "fc6af48eb50e05867b3227909d7b3df4d934162c0f986aef72b3e51346f4081d",
+      "bytes": 527,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/05_画面/02_個別画面テンプレート.md",
+      "sha256": "e8a18d569958230fe2ba4dd855c9ef84008e50e15563bcacf541852e48a2570d",
+      "bytes": 1145,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/06_外部インターフェース/00_インターフェース一覧.md",
+      "sha256": "9ac845c1bcb2609dab5f2a688fafded3256382e054c5c6efbb671d088c783b72",
+      "bytes": 610,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/06_外部インターフェース/01_共通契約.md",
+      "sha256": "63882f89baaecbe0169204b844d30a978175d63223937a4885cfb999e565cfb0",
+      "bytes": 1080,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/06_外部インターフェース/02_個別APIテンプレート.md",
+      "sha256": "39e88c5cdececcd474446541ed736c3fcc24a16b5d5111817b791993b014703b",
+      "bytes": 1150,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/06_外部インターフェース/03_ファイル・イベント連携.md",
+      "sha256": "50d82ac0560ef7e219b39d27f340473638d7ddc60bb3b77955ffffa8a33afaf3",
+      "bytes": 518,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/07_データ/00_データ一覧.md",
+      "sha256": "152ea817f1b56f8614be4ebc95331138dc832101f6f641813aef74c48c17ddb2",
+      "bytes": 585,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/07_データ/01_データモデル.md",
+      "sha256": "78b09acd97ba0d4b5dae3cab9341a438c1a91c213cf285667ac2933f4f614340",
+      "bytes": 339,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/07_データ/02_データ項目テンプレート.md",
+      "sha256": "cd569ccfaa3f2e3606c4798737f68754880a7e1a7d1fcc0c4a678b156de2691a",
+      "bytes": 491,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/07_データ/03_ライフサイクル.md",
+      "sha256": "7bc1836f55769e4d8f9eb342e9bc930709e9ab8858c644d8562958909667f07a",
+      "bytes": 845,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/08_バッチ・ジョブ/00_ジョブ一覧.md",
+      "sha256": "3d804d2449526a3dab770b93b0b6e38820aa2a7de0fb9c7b545afa203688a170",
+      "bytes": 292,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/08_バッチ・ジョブ/01_個別ジョブテンプレート.md",
+      "sha256": "8ebec91e3ba0d87223c34b74fc74e8626f46c797e193083f288e0926f5058520",
+      "bytes": 1018,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/09_基盤・ネットワーク/00_環境・基盤一覧.md",
+      "sha256": "9977caaaf6e9cf69849395cd9aba72b1fba55bfcd277f3bfe5cb2ba3b6280905",
+      "bytes": 569,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/09_基盤・ネットワーク/01_論理ネットワーク.md",
+      "sha256": "bb0103a0e4416c332c454aab332001a8cc7fe92d839a6f246847545e020d2c50",
+      "bytes": 656,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/09_基盤・ネットワーク/02_物理・配備構成.md",
+      "sha256": "b4881cfb8f504cb5744c927ae349283eed911ca5f68687719e3b74ed7189e6bf",
+      "bytes": 624,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/09_基盤・ネットワーク/03_データフロー.md",
+      "sha256": "affd192988fdf73f437bee396c02d13d4d1608d3c49f371132b60b0c8036b1fa",
+      "bytes": 672,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/10_セキュリティ/00_セキュリティ方針・資産.md",
+      "sha256": "853d6140c76a672ee3f29bed0d56c52a9f0708254fe6aeaeed62be2f35b67031",
+      "bytes": 751,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/10_セキュリティ/01_信頼境界・認証認可.md",
+      "sha256": "91bd3b23af1fbbe0aafc1b06f46466155c9be9a52d421e322b7f0f4b573e9081",
+      "bytes": 622,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/10_セキュリティ/02_脅威・対策・監査.md",
+      "sha256": "cd912abe174e8c611b20984cdf2979eaf0b344396ae909b5e7611381ca7b86ef",
+      "bytes": 690,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/11_非機能/00_非機能要件一覧.md",
+      "sha256": "06a7d07b4d198a520561a3a11e8fdc5f9bd5c25d55163d82de14e68f7dbe270b",
+      "bytes": 3275,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/11_非機能/01_性能・容量・可用性.md",
+      "sha256": "a30c08bea650a92df6962321b7290700a92f98fa05689659a5c93aca2e33eb70",
+      "bytes": 404,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/11_非機能/02_利用性・互換性・保守性.md",
+      "sha256": "31b6243b403fbc63a7fc4d3bf749e15e73fc782daca49e12cb0c6df3eb766c65",
+      "bytes": 774,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/12_運用保守/00_運用設計.md",
+      "sha256": "648feb5836bd55d9ce22d14ddb421c669991af46feba07daa4df8320b62d3cfe",
+      "bytes": 844,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/12_運用保守/01_監視・障害対応.md",
+      "sha256": "f0c77ecf09ca35612221c5709196bef6df6a08b20e59dc21b019d35069046430",
+      "bytes": 774,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/12_運用保守/02_バックアップ・定期作業.md",
+      "sha256": "9a0474b0e07cafba68de6594c5671e8f73b3b9cd2438c2fbd2de774786596cdc",
+      "bytes": 416,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/13_移行・廃止/00_移行計画.md",
+      "sha256": "84887c93e463e451e0e1c7f32637e2d7081602e54656bd45ccc19c32182afbbe",
+      "bytes": 449,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/13_移行・廃止/01_互換・廃止.md",
+      "sha256": "1d3b6cc38dd116f8cdf1af88a72c8138bd806e770aaf242063f2e5be6d6e9a49",
+      "bytes": 454,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/14_開発・品質/00_ディレクトリ構成.md",
+      "sha256": "7cc9660c243c754a9f0f1b922bf4e94001f05e8a544e72a53043665bd7c47d35",
+      "bytes": 627,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/14_開発・品質/01_コーディング標準.md",
+      "sha256": "789e3d9c15f66b909607ca890bad9dbc1b913127b9ec34f0810cf73506345923",
+      "bytes": 1030,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/14_開発・品質/02_テスト標準.md",
+      "sha256": "6f7ae152a39c5328d514a9934576b874421d97ce421bedbbcc98d4aea95689c4",
+      "bytes": 884,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/14_開発・品質/03_安全・配布標準.md",
+      "sha256": "3a79551265693e83e1ae85838f83152288c33a384a4909d66562ab18e4f4e516",
+      "bytes": 805,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/15_要件追跡/00_追跡表.md",
+      "sha256": "d00f43a9c953bc22c4ff4fbef646461a0e63f6373061cefed2c79330275f308e",
+      "bytes": 2227,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/15_要件追跡/01_変更履歴.md",
+      "sha256": "c07a8e7a051878e7822abdeecd40edabcb42e868739bbed32f88e434f9e5369d",
+      "bytes": 306,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/16_参照資料/00_官公庁一次資料台帳.md",
+      "sha256": "50cbc5f60c8ffc829ce7c5ed8a092d6ce5f7e85ffa5f01daf1880de89cbd8b5e",
+      "bytes": 2587,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/17_デザイン/00_デザイントークン.md",
+      "sha256": "b21d3d45b63456267cdcc018445686d6402dd5e0ec054c8b88ef004f67d13006",
+      "bytes": 795,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    },
+    {
+      "path": ".agent-skill-chain/templates/specs/18_レイアウト/00_レイアウトトークン.md",
+      "sha256": "4035d59d66098fccd1263cdfe6e246b1a2b9d18f187b999bce261b0728f30f40",
+      "bytes": 807,
+      "classification": "optional-document-template-review-required",
+      "literalOrBasenameReferences": [],
+      "legacyExecutionMentions": 0
+    }
+  ]
+}
