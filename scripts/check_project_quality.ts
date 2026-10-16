@@ -181,8 +181,12 @@ function assertDirectFile(root: string, relative: string): void {
     if (fs.lstatSync(path.join(root, ...parts.slice(0, end))).isSymbolicLink())
       throw new Error(`indirect configuration path: ${relative}`);
   }
-  if (!fs.lstatSync(path.join(root, relative)).isFile())
-    throw new Error(`configuration is not a regular file: ${relative}`);
+  const stat = fs.lstatSync(path.join(root, relative));
+  if (!stat.isFile())
+    throw Object.assign(
+      new Error(`configuration is not a regular file: ${relative}`),
+      { code: stat.isDirectory() ? "EISDIR" : "EINVAL" },
+    );
 }
 
 function readObject(
