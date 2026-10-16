@@ -196,3 +196,7 @@ This option reconstructs only the target commit, its trees/blobs and an index in
 ### Hostに残る生成物
 
 Gitの無視対象である未追跡の生成物はHostに保持し、Agent・検証snapshotには転送しません。snapshotはcommitのblobから生成します。除外したディレクトリ内部は読み取り検査しないため、内部のsymlinkや特殊ファイルを個別に拒否したという保証ではありません。対象と許可された変更範囲が一致・親子関係にある場合は上書きを防ぐため停止します。通常の未追跡ファイル、tracked内容やindexの変更は引き続き停止対象です。
+
+### 仕様書の雛形
+
+既存書式がない場合は[任意の仕様書テンプレート](templates/specs/00_利用案内.md)から必要な内容だけ選ぶ。要求・要件・基本設計・詳細設計・画面・検証運用の雛形を配布するが、全種類の生成やAgentへの一括読込みは行わない。既存文書とプロジェクト規約を優先する。

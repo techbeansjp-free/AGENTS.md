@@ -17,6 +17,14 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  execFileSync(process.execPath,[npm,'install','--prefix',install,'--ignore-scripts','--no-audit','--no-fund','--offline',path.join(root,tarballs[0].filename)],{stdio:'pipe'});
  const packageRoot=path.join(install,'node_modules/agent-skill-chain');
  const cli=path.join(packageRoot,'bin/asc-v05.mjs');
+ const templates=path.join(packageRoot,'v05/templates/specs');
+ const guide=fs.readFileSync(path.join(templates,'00_利用案内.md'),'utf8');
+ for(const match of guide.matchAll(/\]\(([^)]+)\)/g)){
+  const relative=match[1];assert(!path.isAbsolute(relative)&&!relative.split('/').includes('..'));
+  const installedTemplate=fs.readFileSync(path.join(templates,relative),'utf8');
+  assert.equal(installedTemplate,fs.readFileSync(path.join('v05/templates/specs',relative),'utf8'));
+ }
+
  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({version:'99.0.0'}));
  assert.equal(execFileSync(process.execPath,[cli,'--version'],{cwd:root,encoding:'utf8'}).trim(),'0.5.0-alpha.0');
  for(const args of [[],['--help'],['-h']]){

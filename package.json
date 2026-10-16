@@ -24,7 +24,8 @@
     "bin/",
     "src/",
     "migration_inspect.mjs",
-    "skills/"
+    "skills/",
+    "v05/templates/specs/"
   ],
   "scripts": {
     "build": "npm run package:check",
