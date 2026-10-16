@@ -1,6 +1,6 @@
 # v0.4.xからv0.5への移行・復旧
 
-v0.5は固定Step実行系の置換であり、旧`workflow advance`等とのCLI互換を提供しない。現在はLinux向け未公開候補で、正式切替・全CIの受入は未完了。[受入記録](RELEASE_READINESS.json)の対象HEADと制約を確認する。以下は現行CLIの手順であり、実施しただけで本番適合を証明するものではない。
+v0.5は固定Step実行系の置換であり、旧`workflow advance`等とのCLI互換を提供しない。現在はLinux向け未公開候補で、製品の正式リリース受入は未完了。[受入記録](RELEASE_READINESS.json)の対象HEADと制約を確認する。以下は現行CLIの手順であり、実施しただけで本番適合を証明するものではない。
 
 ## 引き継ぐものと廃止するもの
 
@@ -93,10 +93,10 @@ node v05/evaluation/configuration-roundtrip.mjs /absolute/installed/agent-skill-
 
 過去の実モデル試行・実旧版導入資産の往復・失敗履歴は[受入記録](RELEASE_READINESS.json)に対象HEADと限界付きで残す。PoC専用driverはこのcheckoutや配布物の実行手順ではない。整理前の詳細履歴はGit commit `fa8e3b85`の同文書で参照でき、現在のコマンドと混同しない。
 
-## 本体CI契約の切替（未完了）
+## 本体CI契約
 
-旧baseの検査はv0.4のscript・qualityContractVersion・保護fileを要求し、新標準入口への置換を拒否する。candidateのvalidator変更だけではbase検査は変わらない。Linux CI成功とbase検査失敗を分けて扱う。
+main側の契約はPR #1580・#1581でv0.5配布構成を受理する検査へ切替済み。必須checkは`linux`と`base validatorで品質自己緩和を拒否`。旧Step・Journal・Sealの監査記録を新製品のために作成する必要はない。
 
-ownerによる新CIの保護対象・必須check・移行差分のレビュー、base側契約の先行更新、対象HEADの再検証が必要。candidateだけの登録を承認とみなさない。旧Step専用commandを復活させて通過させず、branch保護変更・失敗check免除・mergeは本作業では行わない。
+`linux`は新版の実テスト・Lint・隔離・配布物を検査する。base validatorは候補側コードを実行せず、承認された品質設定との一致を確認する。どちらも対象commitの結果を確認し、旧版の検証件数や別commitの成功と混同しない。
 
-`scripts/quality-support/`等の旧資産はこのCI移行用であり、利用者データ・rollback用・v0.5配布物ではない。契約移行の未完了を理由に、全CI成功や正式リリース可能とは報告しない。
+`scripts/quality-support/`等はこのrepositoryのbase検査用であり、利用者データ・rollback用・v0.5配布物ではない。CI契約の切替自体は製品のmerge・release承認を意味しない。
