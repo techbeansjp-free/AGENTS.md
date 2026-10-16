@@ -329,7 +329,7 @@ test('review receives exact plain Git diff without JSON duplication',{skip:!enab
   const actual=fs.readFileSync(path.join(workspace,meta.diffRef),'utf8');
   const expected=execFileSync('git',['diff','--no-ext-diff','--no-textconv',f.request.base,meta.target.head],{cwd:f.root,encoding:'utf8'});
   assert.equal(actual,expected);assert.match(actual,/\+after/);assert.equal(meta.contract.intent,f.request.contract.intent);
-  assert.match(prompt,/diffRef first/);
+  assert.match(prompt,/\.asc-review\.json and \.asc-review\.diff together/);
   return {context:'plain-diff-reviewer',seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};
  };
  const result=await runWorkflow(f.request,{agent,provider:f.provider});t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));
