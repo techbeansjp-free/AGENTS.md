@@ -1748,5 +1748,26 @@
       "Prior failed and recovery trial costs remain separate; no speedup claim",
       "No general complex-system acceptance or provider-internal total usage claim"
     ]
+  },
+  "compactReviewMetadata": {
+    "status": "content-equivalence-and-workflow-regression-passed",
+    "change": "Serialize complete review metadata without indentation; no field omitted or evidence weakened.",
+    "sample": {
+      "source": "Public synthetic screen delivery review metadata",
+      "originalBytes": 13978,
+      "compactBytes": 9418,
+      "jsonValuesEqual": true
+    },
+    "tests": {
+      "passed": 29,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 25854.323867
+    },
+    "independentReview": "No blockers; line-oriented partial reading is less convenient; JSON field access remains available.",
+    "limits": [
+      "Byte reduction is not measured token or speed reduction",
+      "No matched provider performance acceptance for this change yet"
+    ]
   }
 }
