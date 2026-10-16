@@ -1255,10 +1255,10 @@
     ]
   },
   "currentLinuxCi": {
-    "head": "96683f54716d0f203ceb4b72d273aaef18a28f50",
-    "run": 38852206683,
+    "head": "93670caeff0d4135ed8f0086c18531b69cabcda8",
+    "run": 38859585299,
     "status": "SUCCESS",
-    "scope": "Product quality workflow only; trusted project contract run 38852204354 failed. Not all checks passed."
+    "scope": "Product Linux quality and package workflow only; trusted base contract run 38859580754 failed on legacy metadata. Not all checks passed."
   },
   "historicalComplexAcceptance": {
     "status": "historical-local-observations-not-current-release-acceptance",
@@ -1485,6 +1485,23 @@
       "oracleSourceSha256": "2248ac397207fc9c876d727b6f02ed5cc4d58f963030a2923f5aa98be75ced70",
       "archivedSourceDifference": "Explicit globalThis bindings and equivalent if/else replacing two conditional expressions for repository lint; oracle acceptance conditions unchanged.",
       "independentInspection": "Read-only independent review confirmed only read/read1 observer routing changed, with acceptance checks unchanged; this is not candidate review."
+    },
+    "latestDriverFailure": {
+      "runtimeSourceHead": "93670caeff0d4135ed8f0086c18531b69cabcda8",
+      "packageSha256": "47af12d3ca24f06c6c1f296092189d3e3c06d1b1b6b11decd76f3b6d7a4df5c9",
+      "rawEvidenceSha256": "e2f3d4a2979c14095f2e384f86180ec4781e59970b0b2442ee926da6a37e66d7",
+      "error": "Error: Invalid asset pin",
+      "cause": "Evaluation driver copied inspectAssets entries/bytes into strict dependency pin; product correctly rejected extra fields. Driver corrected without changing product validation.",
+      "wallSeconds": 13.862826362,
+      "agentCalls": 1,
+      "observedProcessedTokens": 17085,
+      "allAgentTotalTokens": null,
+      "sourceUnchanged": true,
+      "status": "FAIL",
+      "limits": [
+        "Not a product performance comparison or completed screen acceptance",
+        "Corrected rerun is separate; this cost is retained"
+      ]
     }
   },
   "restartDiagnosticsValidation": {
