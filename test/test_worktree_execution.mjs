@@ -18,7 +18,7 @@ test('standard worktree verifies actual project with large pnpm-shaped dependenc
  const fd=fs.openSync(path.join(bulk,'large'),'w');fs.ftruncateSync(fd,560000000);fs.closeSync(fd);
  f.contract.commands=[[process.execPath,'-e',"require('assert').equal(require('./src/frontend/node_modules/pkg'),require('./feature.cjs'));require('fs').mkdirSync('build');require('fs').writeFileSync('build/result','42');"]];f.save();
  const info=startWorktree(f.work);assert.equal(info.snapshot,false);assert.equal(info.providerLaunch,false);
- const r=verifyWorktree(f.work,f.base,f.owner);assert.equal(r.passed,true);assert.equal(r.head,f.git(f.work,'rev-parse','HEAD'));assert.equal(r.independentReview,'required');assert.equal(fs.readFileSync(path.join(f.work,'build/result'),'utf8'),'42');assert.equal(fs.realpathSync(path.join(frontend,'pkg')),store);
+ const r=verifyWorktree(f.work,f.base,f.owner);assert.equal(r.passed,true);assert.equal(r.head,f.git(f.work,'rev-parse','HEAD'));assert.equal(r.independentReview,'required');assert.equal(fs.readFileSync(path.join(f.work,'build/result'),'utf8'),'42');assert.equal(fs.realpathSync(path.join(frontend,'pkg')),fs.realpathSync(store));
 });
 test('worktree verification refuses unrelated changes and invalidates source changed by tests',t=>{
  const f=fixture(t);f.contract.allowedPaths=['other'];f.save();assert.throws(()=>verifyWorktree(f.work,f.base,f.owner),/scope/);
