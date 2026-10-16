@@ -92,8 +92,8 @@
     "package.json": "be57dea383943f61d7dbddc5fe269261a773e4534799b457bd846b1d79684458",
     "scripts/pack-candidate.mjs": "c981a646705074c148970b36c1b4217b9c7ab392676bf7f65bf432495bf39df4",
     "test_package.mjs": "7389d5ac3ebbdc50d6007005a6fe3c1edcdab084f689f94c64d319fe69991a84",
-    "MIGRATION_PLAN.md": "ef10c76059a6002dd232c4fef846cf6cfefba34390b73e92d167381a9f51474f",
-    "RELEASE_READINESS.json": "a0167a01944a193e28e21c96e656c69fc370b25c0b8eeae4c79d7b6ecd8eceb6"
+    "MIGRATION_PLAN.md": "03715ffac4f1a44476b10f64de94ed3366518fe1da5ae998f3d39fc05eaaafde",
+    "RELEASE_READINESS.json": "5e9d47767c1dcf14b256b0039582d68a84892831c627c6a1ca06b393b0138dca"
   },
   "integrationAdditions": {
     "src/agent-lifecycle.mjs": "eb7b118c8d4903a658ee4d3c4a26fc5f56d757c996cba1d8a5963bea92c97db3",

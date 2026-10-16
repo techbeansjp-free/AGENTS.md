@@ -34,7 +34,7 @@ v0.5が実装したsource変更を無条件にresetしない。成果物はGit b
 - v0.4の証拠をコピーしてもv0.5の承認にならないこと。
 - 文書だけでなく実行可能なmigration/rollbackのEvidence。
 
-現段階でPython prototypeを正式なNode配布物の代替として導入しない。現行はNode.js >=20のCLI配布であり、PoCのLinux/Python/bubblewrap依存は互換性の確定事項ではない。対応OSを縮小しない前提で継続し、現行のNode配布を維持する。
+Python prototypeを正式なNode配布物の代替として導入しない。v0.5.0の現在の受入対象はowner指定のnative Linuxで、Node.js >=20のCLI配布を維持する。必要なLinux隔離・実行依存はUSAGE.mdに従う。macOS・Windows・WSL2は今回の正式実行対象に含めず、旧版のOS対応を自動継承したとは扱わない。
 
 ## 読取り専用入口（実装済み）
 
@@ -189,3 +189,16 @@ compile/buildせず、隔離コピー内に20万件の入力イベントを生�
 非公開v0.5候補間の往復であり、v0.4の意味的移行・registry公開・他OSの保証ではない。
 
 正式version番号での候補確認は`node scripts/pack-candidate.mjs <出力directory> --version=0.5.0`で行える。省略時は評価版のversionを維持する。番号指定は公開承認ではなく、生成物は引き続きprivate・unapproved-candidateである。source manifestと変換後manifestのhashを両方保存し、既存インストールを変更せず別consumerへ導入する。registry公開・tag・releaseは実行しない。
+
+
+## 配布とプロジェクト切替の境界
+
+配布する対象は本体repositoryの`v05/`から生成した`agent-skill-chain`のtarballであり、repository rootのv0.4 packageをversion変更する方式ではない。`agent-skill-chain`と`asc-v05`は同じv0.5 CLIを指す。旧CLIのStep command互換は提供しない。現在のtarballは未承認候補で、生成・offline install・動作成功だけでは公開可能にならない。
+
+導入先は候補repositoryの外にある専用prefixとし、実行時はその固定CLIの絶対pathを用いる。global PATHや既存のv0.4インストールを上書きしない。project側は専用worktreeで、新しいowner requestに要求・許可範囲・規約参照・検証方法・Delivery先を明示する。旧Step用SkillやHookが残っていることを、新Controllerがそれらを実行・承認した根拠にはしない。
+
+プロジェクト設定を変える必要がある場合だけ、`migration-stage`で全設定の保持／置換をownerが指定し、その差分を通常のGitレビューと検証にかける。stageは設定変更を承認・commit・mergeしない。既存のGitレビューで足りる範囲に別のactivate daemonや全セッション共通の切替状態は追加しない。進行中の旧Issueは旧入口、新Issueは新入口という併用時も、実行対象worktreeとContractを分ける。
+
+切戻しは旧版の固定CLIを再選択することと、必要ならレビュー済みの設定差分をGitで戻すことを分ける。`migration-rollback`は保存先の選択記録を戻すだけで、source・設定commit・利用者の作業をresetしない。設定差分のrevertはownerが対象と影響を確認し、旧版で必要な再検証を行う。候補の成果はbranchに保持する。
+
+この境界は導入手順の定義であり、任意の既存projectでの全面切替を実証した宣言ではない。Linuxの配布CLI実走、設定候補、通常開発、利用者成果保持、選択rollbackの証拠と、未検証の本番設定切戻しを区別する。正式な公開・tag・releaseは別の承認操作として残す。

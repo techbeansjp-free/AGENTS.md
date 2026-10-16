@@ -216,16 +216,15 @@
     "paidActions": "Not authorized"
   },
   "verifiedLinuxIntegrationLatest": {
-    "head": "266fdf2b727e495cd74f323fa3e5bf032ea585ec",
-    "implementationHead": "03be3d803828fb7ef5cc8d73949464e79e5c375e",
-    "rootQualityRun": 38825184956,
-    "linuxRun": 38825184958,
+    "head": "6e47eabf2a387b83b981cfcea9852298c568a779",
+    "implementationHead": "56d0be169e4daf4f13aaf5d45c33acfb2675adbb",
+    "rootQualityRun": 38829711725,
+    "linuxRun": 38829711726,
     "conclusion": "success",
     "linuxTests": {
-      "pass": 212,
+      "pass": 213,
       "fail": 0,
-      "skip": 0,
-      "seconds": 107.700874694
+      "skip": 0
     },
     "trustedFull": {
       "pass": 2730,
@@ -233,7 +232,7 @@
       "fail": 0
     },
     "audit": "passed",
-    "scope": "Prior reviewed implementation; pending prompt clarification requires new review and verification"
+    "scope": "Reviewed delivery boundary implementation; subsequent documentation changes are not covered by this exact HEAD"
   },
   "publicSyntheticTrial": {
     "sourceHead": "aa64d9e35eb79160c3566bfa71caac52c0a6c938",
@@ -538,5 +537,36 @@
     "independentReview": "Conditional Delivery wording correction applied; no confirmed remaining blocker",
     "liveModelEffect": "NOT VERIFIED",
     "scope": "Working-tree revision; CI for this change pending"
+  },
+  "deliveryBoundaryLiveTrial": {
+    "implementationHead": "56d0be169e4daf4f13aaf5d45c33acfb2675adbb",
+    "packageSha256": "d3af6fc885497c6e46882f6f8c3cc330333d6fa4c7422f5a82c4eb9d80922d19",
+    "status": "draft-ci-passed",
+    "pr": "https://github.com/adachi-tatsuru/asc-public-synthetic-eval-20261016/pull/16",
+    "target": "c024ed4443e2c41c9dfe179589bf38b803c154e7",
+    "seconds": 107.669463334,
+    "agentCalls": 2,
+    "observedProcessedTokens": 122778,
+    "observedFreshTokens": 26010,
+    "allAgentTotalTokens": null,
+    "limitations": [
+      "Setup excluded",
+      "Overlapped trusted full; not matched performance comparison",
+      "Fresh synthetic files/history only; no private code or raw logs published"
+    ]
+  },
+  "migrationBoundaryDocumentation": {
+    "status": "documented-not-global-activation",
+    "independentReview": "no implementation contradiction",
+    "packageTests": {
+      "pass": 4,
+      "fail": 0,
+      "skip": 0
+    },
+    "approach": "External fixed CLI prefix; owner-reviewed configuration candidate; Git configuration revert separate from selection rollback; no new activation daemon",
+    "limitations": [
+      "No arbitrary production project cutover claim",
+      "No tag, registry publication or release approval"
+    ]
   }
 }
