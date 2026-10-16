@@ -301,3 +301,20 @@ test('uncreated allowed path cannot capture host review diagnostics',{skip:!enab
  assert.equal(workers,1);assert.equal(f.creates(),0);assert.equal(fs.existsSync(path.join(f.root,'.asc-prior-reviews.json')),false);
  assert.equal(f.git('diff','--name-only',f.request.base),'code.txt');
 });
+
+test('pre-delivery review approval cannot waive actual Draft and CI checks',{skip:!enabled},async t=>{
+ for(const observed of [{draft:false},{merged:true},{checks:{test:'failure'}}]){
+  const f=fixture(t);let reviews=0,runRoot;
+  const observe=f.provider.observe;f.provider.observe=()=>({...observe(),...observed});
+  const agent=async({workspace,writable,prompt})=>{
+   if(writable){fs.writeFileSync(path.join(workspace,'code.txt'),'after\n');return {context:'implementation',seconds:0,usage:[]};}
+   reviews++;assert.equal(f.creates(),0);
+   assert(prompt.includes('This review precedes controlled Delivery'));
+   assert(prompt.includes('Missing future PR/CI observations alone are not a candidate defect'));
+   return {context:'reviewer',seconds:0,usage:[],answer:JSON.stringify({verdict:'pass',findings:[]})};
+  };
+  await assert.rejects(runWorkflow(f.request,{agent,provider:f.provider,onEvent:e=>{if(e.type==='run-started')runRoot=e.root;}}),/Remote PR\/CI not bound/);
+  t.after(()=>fs.rmSync(runRoot,{recursive:true,force:true}));assert.equal(reviews,1);assert.equal(f.creates(),1);
+  const result=JSON.parse(fs.readFileSync(path.join(runRoot,'result.json')));assert.equal(result.status,'blocked');
+ }
+});

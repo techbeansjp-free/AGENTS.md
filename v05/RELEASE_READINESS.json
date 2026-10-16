@@ -216,16 +216,16 @@
     "paidActions": "Not authorized"
   },
   "verifiedLinuxIntegrationLatest": {
-    "head": "1f64d9060d456a0828ccc77c5205f416a0c98ea9",
-    "implementationHead": "b0d3b2e67195e415eca56382a0b909b48f4973e5",
-    "rootQualityRun": 38818925715,
-    "linuxRun": 38818925759,
+    "head": "266fdf2b727e495cd74f323fa3e5bf032ea585ec",
+    "implementationHead": "03be3d803828fb7ef5cc8d73949464e79e5c375e",
+    "rootQualityRun": 38825184956,
+    "linuxRun": 38825184958,
     "conclusion": "success",
     "linuxTests": {
-      "pass": 209,
+      "pass": 212,
       "fail": 0,
       "skip": 0,
-      "seconds": 106.43851596
+      "seconds": 107.700874694
     },
     "trustedFull": {
       "pass": 2730,
@@ -233,7 +233,7 @@
       "fail": 0
     },
     "audit": "passed",
-    "scope": "Prior reviewed implementation; later changes need their own verification"
+    "scope": "Prior reviewed implementation; pending prompt clarification requires new review and verification"
   },
   "publicSyntheticTrial": {
     "sourceHead": "aa64d9e35eb79160c3566bfa71caac52c0a6c938",
@@ -448,5 +448,95 @@
       "Not a matched performance comparison",
       "Local raw evidence is not published"
     ]
+  },
+  "matchedSmallRegression": {
+    "order": "ABBA",
+    "baseline": "b0d3b2e67195e415eca56382a0b909b48f4973e5",
+    "candidate": "03be3d803828fb7ef5cc8d73949464e79e5c375e",
+    "fixtureBase": "c37e08e05abc46b5a26af131f134d42a3c8a3b80",
+    "model": "gpt-5.6-sol",
+    "trials": [
+      {
+        "order": "A1",
+        "status": "draft-ci-passed",
+        "wallSeconds": 80.93918092,
+        "pr": 13,
+        "agentCalls": 2,
+        "observedProcessedTokens": 169309,
+        "observedFreshTokens": 33757,
+        "allAgentTotalTokens": null
+      },
+      {
+        "order": "B1",
+        "status": "draft-ci-passed",
+        "wallSeconds": 98.23970575999999,
+        "pr": 14,
+        "agentCalls": 2,
+        "observedProcessedTokens": 122518,
+        "observedFreshTokens": 17814,
+        "allAgentTotalTokens": null
+      },
+      {
+        "order": "B2",
+        "status": "draft-ci-passed",
+        "wallSeconds": 89.038720068,
+        "pr": 15,
+        "agentCalls": 2,
+        "observedProcessedTokens": 134003,
+        "observedFreshTokens": 29939,
+        "allAgentTotalTokens": null
+      },
+      {
+        "order": "A2",
+        "status": "blocked",
+        "wallSeconds": 106.791770968,
+        "pr": null,
+        "agentCalls": 3,
+        "observedProcessedTokens": 150548,
+        "observedFreshTokens": 37140,
+        "allAgentTotalTokens": null
+      }
+    ],
+    "limitations": [
+      "Two trials per v0.5 artifact only; no causal improvement or v0.4 equivalence claim",
+      "Provider internal enumeration unknown; all Agent totals null",
+      "A1 and B1/B2 partly overlapped short local browser oracle calibration; model trials did not overlap",
+      "Setup excluded; failed A2 retained, no successful-completion time imputed"
+    ],
+    "failure": "A2 review demanded future Draft PR state before controlled Delivery; repair produced no change. Preserve as failed baseline, not speed evidence.",
+    "conclusion": "Candidate succeeded twice; baseline succeeded once and failed once. No causal speed or token reduction conclusion."
+  },
+  "screenRecoveryValidation": {
+    "implementationHead": "03be3d803828fb7ef5cc8d73949464e79e5c375e",
+    "candidateHead": "9959a316aaed26a24dc6ab140d851b6b5a165793",
+    "priorRecoverySeconds": 393.260854866,
+    "priorOutcome": "Failed on oracle overconstraint requiring immediate hash navigation while PATCH pending; not retroactively marked pass",
+    "calibratedOracle": "Known-bad candidate still fails after server commit; candidate passes existing browser oracle with corrected navigation observation",
+    "additionalCounterexample": "Pending mutation followed by browser Back loses Forward destination; reproduced with actual browser",
+    "currentAcceptance": "FAIL; repair and fresh review in progress",
+    "limits": [
+      "Synthetic UI/API/SQLite; no external Delivery in this trial",
+      "Server latch covers UPDATE under lock, not every request ordering",
+      "No speed claim for correction chain"
+    ]
+  },
+  "preDeliveryReviewBoundary": {
+    "reason": "Matched baseline trial demanded future PR evidence before controlled Delivery and stopped on no-change repair",
+    "change": "Clarify candidate review vs conditional Controller Delivery checks; review-only is not Delivery evidence",
+    "focusedTests": {
+      "pass": 27,
+      "fail": 0,
+      "skip": 0
+    },
+    "linuxRegression": {
+      "pass": 213,
+      "fail": 0,
+      "skip": 0,
+      "seconds": 109.47095827,
+      "cgroupEnabled": true
+    },
+    "independentReview": "Conditional Delivery wording correction applied; no confirmed remaining blocker",
+    "liveModelEffect": "NOT VERIFIED",
+    "scope": "Working-tree revision; CI for this change pending"
   }
 }
