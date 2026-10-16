@@ -19,6 +19,11 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  const cli=path.join(packageRoot,'bin/asc-v05.mjs');
  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({version:'99.0.0'}));
  assert.equal(execFileSync(process.execPath,[cli,'--version'],{cwd:root,encoding:'utf8'}).trim(),'0.5.0-alpha.0');
+ for(const args of [[],['--help'],['-h']]){
+  const help=spawnSync(process.execPath,[cli,...args],{cwd:root,encoding:'utf8'});
+  assert.equal(help.status,0);assert.equal(help.stderr,'');assert.match(help.stdout,/run-adaptive/);assert.match(help.stdout,/USAGE\.md/);
+ }
+ const extraHelp=spawnSync(process.execPath,[cli,'--help','ignored'],{cwd:root,encoding:'utf8'});assert.equal(extraHelp.status,1);
  const extraVersion=spawnSync(process.execPath,[cli,'--version','ignored'],{cwd:root,encoding:'utf8'});assert.equal(extraVersion.status,1);
  const result=JSON.parse(execFileSync(process.execPath,[cli,'capabilities'],{cwd:root,encoding:'utf8'}));
  assert(result.commands.includes('review'));assert.equal(result.releaseReady,false);assert.equal(result.legacyFallback,false);

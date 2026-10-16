@@ -2,6 +2,8 @@
 
 正式リリース前の評価用。現在、要求からDraft PR/CIまで実証した実行環境はLinux。Node.js 20以上、Git、GitHub CLI、Codex CLI、bubblewrap、prlimit、稼働中のsystemd user managerとcgroup v2が必要。Codex 0.153.4で検証した。macOS/Windowsのpackage・移行テストと、AgentのOS隔離対応は別である。
 
+`agent-skill-chain --help`（別名`asc-v05 --help`）で開始・再開・移行の入口と、この手順書の配布先を確認できます。引数なしも案内のみを表示し、Agent起動やGit変更は行いません。
+
 ## 作業場所
 
 通常入口の`run`/`run-goal`はlinked worktreeを要求する。新規作成時の標準命名はv0.4と同じく、directoryを`.worktrees/<YYYYMMDD_HHMMSS>-<Issue番号>-<slug>`、作業branchを`<type>/<Issue番号>-<slug>`とする。時刻は作成環境のlocal time、slugは小文字英数字とハイフン、標準typeは`feature`・`fix`・`refactor`・`test`・`docs`・`chore`。Issue番号とslugはdirectoryとbranchで揃える。プロジェクトが明示した命名規約を優先する。同じIssueを並列分担する場合はslugへ担当名を含める（例: `account-api` / `account-ui`）。

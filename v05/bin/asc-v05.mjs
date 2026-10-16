@@ -17,7 +17,38 @@ import path from 'node:path';
 import {verifyApproval} from '../src/approval.mjs';
 try {
   const [command,...args]=process.argv.slice(2);
-  if(command==='--version'&&args.length===0){
+  if((command===undefined||command==='--help'||command==='-h')&&args.length===0){
+    console.log(`ASC v0.5 — Goal・契約・Evidenceに基づく開発ハーネス
+
+使い方: agent-skill-chain <command> [arguments]
+
+開始:
+  worktree-create <root> <issue> <type> <slug> <base>
+      専用worktreeを作成（既存branch・作業場所は上書きしない）
+  run <external-owner-request.json>
+      範囲が明確な変更を実装・検証・独立レビューし、Draft PR/CIへ進める
+  run-adaptive <external-owner-request.json>
+      許可されたGoalを必要なWork Unitへ分解して実行
+  run-issues <external-owner-issue-request.json>
+      ownerが列挙した複数Issueを依存関係に従って実行
+
+確認・再開:
+  review <external-owner-request.json>       現在の変更を独立レビュー
+  goal-propose <external-owner-request.json> Goal分解を提案
+  restart-goal <external-owner-request.json> 明示した再開条件・予算で再開
+  capabilities                             対応コマンドとHost情報をJSON表示
+  --version                                配布版を表示
+
+移行:
+  migration-inspect <root>                  旧設定と移行境界を確認
+  migration-prepare <source> <new-location>  元repoを保持して移行先を準備
+  migration-stage <source> <new-location> <external-owner-plan>
+  migration-rollback <location>
+
+owner入力は作業repoの外に置きます。通常実行は専用worktreeを使用します。
+必要環境・入力例・承認・検証資産の準備: ${new URL('../USAGE.md',import.meta.url).pathname}
+Linux評価版です。正式リリース判定は未完了。merge・releaseは行いません。`);
+  } else if(command==='--version'&&args.length===0){
     const manifest=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));
     if(typeof manifest.version!=='string'||!/^0\.5\.\d+(?:-[a-z0-9.-]+)?$/.test(manifest.version))throw Error('Invalid installed package version');
     console.log(manifest.version);
