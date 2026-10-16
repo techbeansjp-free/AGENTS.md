@@ -2091,7 +2091,19 @@
       "No model E2E performance conclusion; updater itself launches no model",
       "Local skipped isolation tests are not counted as passed"
     ],
-    "releaseReady": false
+    "releaseReady": false,
+    "linuxCi": {
+      "head": "4fefdb60e32c4fa18896cc8cdbb1c24907b5e0a6",
+      "run": "https://github.com/techbeansjp-free/AGENTS.md/actions/runs/38878429847",
+      "status": "PASS",
+      "tests": 238,
+      "pass": 238,
+      "fail": 0,
+      "skip": 0,
+      "testSeconds": 115.840688297,
+      "distributionInspection": "PASS",
+      "scope": "Linux CI suite including isolation; not external model E2E or full release acceptance"
+    }
   },
   "ciCutoverConfigurationAudit": {
     "sourceCommit": "4fefdb60e32c4fa18896cc8cdbb1c24907b5e0a6",
