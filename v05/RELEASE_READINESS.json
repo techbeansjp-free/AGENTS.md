@@ -855,5 +855,58 @@
       "driverSha256": "43baead1b3bbb904a115c4afb23317e2fa40ade57ea0dd29297e6a25f7c4ec15",
       "localEvidence": "/tmp/asc-real-legacy-migration-n7vlqew6/real-roundtrip-evidence.json"
     }
+  },
+  "adaptiveScreenInitialSourceTrial": {
+    "status": "FAIL",
+    "productHead": "a8dc098d91fc95b7daeb7aae4f72225380a0f2dd",
+    "candidateHead": "ae57b186cd6ea29b01f15a8bd49d844fc62f3ef5",
+    "baseHead": "2f86988d532c18aaa7b2aa0d2b584ad74ad12470",
+    "execution": "runAdaptive from initial synthetic list/detail source; planner selected one cohesive summary journey",
+    "wallSeconds": 500.795587358,
+    "declaredAgentCalls": 4,
+    "roles": {
+      "goalProposal": 1,
+      "implementation": 1,
+      "repair": 2,
+      "reviewer": 0
+    },
+    "observedProcessedTokens": 618733,
+    "observedFreshTokens": 155501,
+    "declaredUsageCoverage": "4/4",
+    "allAgentTotalTokens": null,
+    "verificationAttempts": 3,
+    "deliveryAttempted": false,
+    "failure": "All verification attempts stopped at reload convergence after an already-received valid PATCH committed. No independent review or Delivery was reached.",
+    "reproduction": {
+      "agentCalls": 0,
+      "sameCandidateHead": true,
+      "oracleExit": 1,
+      "assertionsChanged": false,
+      "expectedCounts": {
+        "total": 3,
+        "completed": 3,
+        "pending": 0
+      },
+      "observedCounts": {
+        "total": 3,
+        "completed": 2,
+        "pending": 1
+      },
+      "schedule": "Owner probe holds BaseHTTPRequestHandler.parse_request before application do_PATCH for 2500ms after new Document request; checks convergence for 5000ms after commit.",
+      "sourceFinding": "Candidate locks inside do_PATCH; a fresh document reads twice 100ms apart, then never refreshes. Both reads can finish before the held mutation enters the handler."
+    },
+    "artifactSha256": {
+      "originalEvidence": "945232c7054be737bd971a1e0ca5a23bd5e8c07333586993eb395d3c8a059684",
+      "originalOracle": "48aa1a38cdff8746f82f98bd71fd96b3b790378a1fa693afef7e479020c1d546",
+      "diagnosticOracle": "f72952db350937d530e63645905d11541ee9dc3bc061983b21d1e38abf8264c7",
+      "reproduction": "46a60de18a391f56e1544621d67e420f1a4b1e7d6d3540fb29df8538447be48a"
+    },
+    "limitations": [
+      "Source execution, not installed package or PR/CI acceptance",
+      "Existing detailed owner screen/API contract; not ambiguous design-from-scratch acceptance",
+      "One cohesive Work Unit; not multi-unit integration evidence",
+      "Finite synthetic timing probe is not a universal concurrency guarantee",
+      "Failure is preserved; no quality or comparative performance pass is claimed"
+    ]
   }
 }

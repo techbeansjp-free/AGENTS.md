@@ -93,7 +93,7 @@
     "scripts/pack-candidate.mjs": "b1bd5ceff93b660bd72128761af977d5e8bac12dcade96494f7442498ab69a07",
     "test_package.mjs": "abf027b7b680fbf5e21d09a7850246b2b53a9ed7e3ab1248d88a17555bfa7658",
     "MIGRATION_PLAN.md": "20316d22bf03493c6cbf7062d1f4217e6ef3f0048d05fc16d29f0db677804819",
-    "RELEASE_READINESS.json": "6ac926957aa6b36bb51812701029b7c1ccb6d2c4b30c34b8f8964ab4775059a8",
+    "RELEASE_READINESS.json": "28671f8c9849e61194fb8613ca8b21f120aaec34e3bfd3edc9ac5dd6526f33bd",
     "src/migration.mjs": "ffa1cb0640e37ef161a8ddfdd9064ed9a83f14679de11d69d509cbcf1617f151",
     "migration_inspect.mjs": "b96314404f1a532dfff1337b2a532567ef62fd173e21e8ee3b713f971f12ad0d",
     "test_migration_inspect.mjs": "08e68f7f4df7559c1b0e3b5bc4bc89ccffd91191e9e575fcdc7211665d241d47"
