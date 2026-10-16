@@ -1,9 +1,9 @@
 /** Descriptor-based reads without mutable symlink parents (Linux adapter). */
 import {SOURCE_FILE_BYTES} from './source-limits.mjs';
-import fs from 'node:fs';import {createHash} from 'node:crypto';
+import fs from 'node:fs';import path from 'node:path';import {createHash} from 'node:crypto';
 import {safeName} from './controller.mjs';
 function withFile(root,name,maxBytes,read){
- if(process.platform!=='linux')throw Error('Safe snapshot export unsupported on this host');
+ if(process.platform!=='linux')return withNativeFile(root,name,maxBytes,read);
  safeName(name);
  const flags=fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK;
  let dir=fs.openSync(root,flags|fs.constants.O_DIRECTORY);
@@ -36,4 +36,26 @@ export function pinAssetFile(root,name,destination){
    return {bytes,mode:stat.mode&0o777,digest:hash.digest('hex')};
   }finally{if(output!==undefined)fs.closeSync(output);}
  });
+}
+
+/** Native descriptor read with before/after path and identity checks; no symlink traversal accepted. */
+function withNativeFile(root,name,maxBytes,read){
+ safeName(name);const base=fs.realpathSync(root),parts=name.split('/'),observed=[];let file=base;
+ for(const part of ['',...parts]){
+  if(part)file=path.join(file,part);
+  const stat=fs.lstatSync(file,{bigint:true});
+  if(stat.isSymbolicLink()||(file!==path.join(base,...parts)&&!stat.isDirectory()))throw Error('Unsafe snapshot parent');
+  observed.push({file,stat});
+ }
+ const expected=observed.at(-1).stat;
+ const same=(a,b)=>a.dev===b.dev&&a.ino===b.ino&&a.mode===b.mode&&a.size===b.size&&a.mtimeNs===b.mtimeNs&&a.ctimeNs===b.ctimeNs;
+ if(!expected.isFile()||expected.nlink!==1n||expected.size>BigInt(maxBytes))throw Error('Unsafe snapshot file');
+ const fd=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0)|(fs.constants.O_NONBLOCK??0));
+ try{
+  if(!same(expected,fs.fstatSync(fd,{bigint:true})))throw Error('Snapshot changed before observation');
+  const result=read(fd,fs.fstatSync(fd));
+  if(!same(expected,fs.fstatSync(fd,{bigint:true})))throw Error('Snapshot changed during observation');
+  for(const entry of observed)if(!same(entry.stat,fs.lstatSync(entry.file,{bigint:true})))throw Error('Snapshot path changed during observation');
+  return result;
+ }finally{fs.closeSync(fd);}
 }

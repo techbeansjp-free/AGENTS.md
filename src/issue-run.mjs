@@ -54,7 +54,7 @@ export async function runIssues(input,{onEvent=()=>{},execute}={}){
  // Check before any candidate runs, and again at dispatch after earlier Issues finish.
  for(const issue of plan.issues)try{checkAuthority(issue);}catch(error){states.set(issue.id,{id:issue.id,status:'blocked',error:String(error)});}
  const active=new Map();
- const dispatch=execute??((request,id)=>runControllerThread(new URL('./issue-worker.mjs',import.meta.url),{request,budget:budget.shared},event=>emit('issue-event',{id,event})));
+ const dispatch=execute??((request,id)=>runControllerThread(new URL('./issue-worker.mjs',import.meta.url),{request,budget:budget.shared,authorityRoots:[...authorityRoots]},event=>emit('issue-event',{id,event})));
  const contains=(a,b)=>{const rel=path.relative(a,b);return !rel||(!rel.startsWith('..'+path.sep)&&rel!=='..'&&!path.isAbsolute(rel));};
  const checkDependencyInputs=issue=>{
   const ancestors=new Set(),visit=id=>{for(const dep of plan.issues.find(i=>i.id===id).dependsOn)if(!ancestors.has(dep)){ancestors.add(dep);visit(dep);}};visit(issue.id);

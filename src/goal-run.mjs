@@ -27,12 +27,12 @@ export function singleUnitContract(request,plan){
  for(const argv of [child.testArgv,...child.riskTestArgv])if(!seen.has(digest(argv))){seen.add(digest(argv));checks.push(argv);}
  return {...parent,criteria:[...new Set([...parent.criteria,...(child.intent===parent.intent?[]:['Work Unit intent: '+child.intent]),...child.criteria])],riskTestArgv:checks};
 }
-export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},executionBudget,priorContexts=[]}={}){
+export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},executionBudget,priorContexts=[],authorityRoots=[]}={}){
  const request=structuredClone(input),compiled=compileGoal(request.goal);
  const budget=executionBudget??createExecutionBudget(request.budget);budget.check();
  demand(compiled.plan.intent===request.contract?.intent,'Goal and owner contract intent differ');
  const parallel=request.parallelism??2;demand(Number.isSafeInteger(parallel)&&parallel>0&&parallel<=4,'Parallelism must be 1..4');
- const host=hostExecution(new AssetController({...request,implementer:'host-selection'}),request.hostExecution);if(host&&agent===runAgent)agent=host.agent;
+ const host=hostExecution(new AssetController({...request,implementer:'host-selection'}),request.hostExecution,authorityRoots);if(host&&agent===runAgent)agent=host.agent;
  const threadedUnits=agent===runAgent&&provider===undefined;
  demand(agent!==runAgent||provider===undefined||parallel===1,'Parallel live units require isolated default provider');
  const c=new AssetController({...request,implementer:'goal-not-yet-implemented'});c.assertContract();
@@ -101,7 +101,7 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
    emit('single-unit-execution',{id:unit.id,contract:digest(combined)});
    const record={id:unit.id,repo:c.repo,mode:'combined-goal-contract'};results.push(record);
    let delivery;
-   try{delivery=await runWorkflow({...request,contract:combined,priorReviews:request.unitCandidates?.[unit.id]?.priorReviews},{executionBudget:budget,hostVerification:host?.verify,agent:freshAgent,provider:checkedRemote,onEvent:event=>{if(event.type==='run-started')record.workflowRoot=event.root;emit('single-unit-event',{id:unit.id,event});}});}
+   try{delivery=await runWorkflow({...request,contract:combined,priorReviews:request.unitCandidates?.[unit.id]?.priorReviews},{executionBudget:budget,hostVerification:host?.verify,authorityRoots,agent:freshAgent,provider:checkedRemote,onEvent:event=>{if(event.type==='run-started')record.workflowRoot=event.root;emit('single-unit-event',{id:unit.id,event});}});}
    catch(error){record.diagnostic=error.workflowDiagnostic;throw error;}
    finally{
     // Candidate bytes only: observe current Git, never export review/approval authority.
@@ -131,7 +131,7 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
       status:u.id===id?'current':results.some(r=>r.id===u.id&&r.result?.status==='reviewed-candidate')?'integrated':'pending'}))};
     const result=threadedUnits
      ?await runUnitThread(unitRequest,c.contract.intent,event=>emit('unit-event',{id,event}),budget.shared,unitAssignment,candidateReuse)
-     :await runWorkflow(unitRequest,{submit:false,unitAssignment,candidateReuse,executionBudget:budget,hostVerification:host?.verify,agent:freshAgent,onEvent:event=>emit('unit-event',{id,event}),provider:{intent:async()=>{await checkIntent();return units.get(id).intent;}}});
+     :await runWorkflow(unitRequest,{submit:false,unitAssignment,candidateReuse,executionBudget:budget,hostVerification:host?.verify,authorityRoots,agent:freshAgent,onEvent:event=>emit('unit-event',{id,event}),provider:{intent:async()=>{await checkIntent();return units.get(id).intent;}}});
     if(threadedUnits)for(const call of result.calls??[]){demand(typeof call.context==='string'&&!contexts.has(call.context),'Goal requires fresh Agent contexts');contexts.add(call.context);}
     if(result.status!=='reviewed-candidate'){const failure=Error('Unit did not satisfy its obligations: '+id);failure.workflowDiagnostic=result;throw failure;}
     return {id,repo:candidate,result};
@@ -187,7 +187,7 @@ export async function runGoal(input,{agent=runAgent,provider,onEvent=()=>{},exec
   // A risk check identical to the parent test is still an explicit risk obligation.
   if(risks.length&&!checks.length)checks.push(request.contract.testArgv);
   const finalRequest={...request,contract:{...request.contract,criteria,risks,requiresDesign,design:designs.join('\n\n'),riskTestArgv:checks}};
-  const delivery=await runWorkflow(finalRequest,{executionBudget:budget,hostVerification:host?.verify,agent:freshAgent,provider:checkedRemote,onEvent:e=>emit('integration-event',{event:e})});
+  const delivery=await runWorkflow(finalRequest,{executionBudget:budget,hostVerification:host?.verify,authorityRoots,agent:freshAgent,provider:checkedRemote,onEvent:e=>emit('integration-event',{event:e})});
   demand(delivery.status==='draft-ci-passed','Goal delivery incomplete');return save({status:'draft-ci-passed',delivery});
  }catch(error){emit('blocked',{error:String(error)});error.goalDiagnostic=save({status:'blocked',error:String(error),diagnostic:error.workflowDiagnostic??null});throw error;}
 }

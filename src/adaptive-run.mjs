@@ -36,7 +36,7 @@ export async function runAdaptive(input,options={}){
  const c=new Controller({...request,implementer:'delegation-preflight'});c.assertContract();demand(c.observeSource()===c.base,'Delegation requires starting HEAD');
  const budget=options.executionBudget??createExecutionBudget(request.budget),started=performance.now();
  let proposal;
- try{proposal=await proposeGoal(request,{agent:options.agent,executionBudget:budget});}
+ try{proposal=await proposeGoal(request,{agent:options.agent,executionBudget:budget,authorityRoots:options.authorityRoots});}
  catch(error){if(error.proposalDiagnostic){const p=error.proposalDiagnostic;error.goalDiagnostic={status:'blocked',root:p.root,units:[],proposal:p,error:String(error),budget:budget.snapshot(),wallSeconds:(performance.now()-started)/1000,allAgentTotalTokens:null};}throw error;}
  if(proposal.status==='needs-owner')return {...proposal,status:'owner-work-required',work:{work:'clarify',actor:'owner',questions:proposal.questions},wallSeconds:(performance.now()-started)/1000};
  const save=result=>{const output={...result,proposal,wallSeconds:(performance.now()-started)/1000,budget:budget.snapshot(),adoption:'owner-delegated scope and verification policy; not model approval'};fs.writeFileSync(path.join(result.root,'result.json'),JSON.stringify(output,null,2));return output;};

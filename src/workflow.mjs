@@ -33,7 +33,7 @@ export function checkOutput(root,original,allowed){
  }};walk(root);
  for(const name of original.keys())demand(seen.has(name)||allowed.includes(name),'Read-only context was deleted');
 }
-export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{},submit=true,executionBudget,reviewOnly=false,unitAssignment,candidateReuse,hostVerification}={}){
+export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{},submit=true,executionBudget,reviewOnly=false,unitAssignment,candidateReuse,hostVerification,authorityRoots=[]}={}){
  request=structuredClone(request);
  candidateReuse=candidateReuse===undefined?undefined:structuredClone(candidateReuse);
  unitAssignment=unitAssignment===undefined?undefined:structuredClone(unitAssignment);
@@ -52,7 +52,7 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
  const c=new AssetController({repo:request.repo,base:request.base,contract:request.contract,
   implementer:request.implementerContext??'owner-supplied-candidate',trustedKeys:request.trustedKeys??[]});
  authorityCommandValidator(c)(request.approvalCommand);
- const host=hostExecution(c,request.hostExecution);if(host){if(agent===runAgent)agent=host.agent;c.setHostVerification(hostVerification??host.verify);}
+ const host=hostExecution(c,request.hostExecution,authorityRoots);if(host){if(agent===runAgent)agent=host.agent;c.setHostVerification(hostVerification??host.verify);}
  const remote=provider??new Github({...request.delivery,repo:c.repo,base:c.base});
  const emit=(type,data={})=>{const e={type,seconds:(performance.now()-started)/1000,...data};events.push(e);onEvent(e);};
  const save=result=>{result.wallSeconds??=(performance.now()-started)/1000;result.budget=budget.snapshot();result.priorReviews=reviewDiagnostics([...inheritedReviews,...events.filter(e=>e.type==='review-assessment')]);fs.writeFileSync(path.join(root,'result.json'),JSON.stringify(result,null,2));return result;};

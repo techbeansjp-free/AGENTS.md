@@ -27,7 +27,7 @@ export function validateProposal(answer,contract,pins={}){
  const goal={schema:'asc-goal/v1',intent:contract.intent,units:compiled.plan.units.map(u=>({id:u.id,intent:u.intent,criteria:u.criteria,dependsOn:u.dependsOn,readPaths:u.readPaths,writePaths:u.writePaths,contracts:u.contracts}))};
  return {status:'proposed',goal,batches:compiled.batches};
 }
-export async function proposeGoal(input,{agent=runAgent,executionBudget,replanning}={}){
+export async function proposeGoal(input,{agent=runAgent,executionBudget,replanning,authorityRoots=[]}={}){
  const started=performance.now();
  const request=structuredClone(input),contract=request.contract;
  const budget=executionBudget??createExecutionBudget(request.budget);
@@ -35,7 +35,7 @@ export async function proposeGoal(input,{agent=runAgent,executionBudget,replanni
  demand(contract&&typeof contract.intent==='string'&&contract.intent.trim()&&Array.isArray(contract.criteria)&&contract.criteria.length&&contract.criteria.every(s=>typeof s==='string'&&s.trim()),'Owner intent and criteria required');
  demand(Array.isArray(contract.allowedPaths)&&contract.allowedPaths.length&&contract.allowedPaths.every(p=>typeof p==='string'),'Owner scope required');contract.allowedPaths.forEach(safeName);
  const c=new AssetController({repo:request.repo,base:request.base,contract,implementer:'proposal-only'});
- const host=hostExecution(c,request.hostExecution);if(host&&agent===runAgent)agent=host.agent;
+ const host=hostExecution(c,request.hostExecution,authorityRoots);if(host&&agent===runAgent)agent=host.agent;
  const observe=()=>c.observeSource();
  const head=observe(),blobs=c.blobs(head),pins={};
  for(const [name,ref] of Object.entries(request.contractFiles??{})){

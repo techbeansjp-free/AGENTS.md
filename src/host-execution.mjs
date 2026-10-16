@@ -6,19 +6,19 @@ import {randomUUID} from 'node:crypto';
 import {setTimeout,clearTimeout} from 'node:timers';
 import {authorityCommandValidator,authorityCommandRootsValidator} from './authority-command.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
-function validateHostCommand(controller,command){
+function validateHostCommand(controller,command,additionalRoots=[]){
  authorityCommandValidator(controller)(command);
  // Other registered worktrees are candidate code, not Host authority.
  const records=controller.git('worktree','list','--porcelain','-z').toString().split('\0');
- const roots=records.filter(r=>r.startsWith('worktree ')).map(r=>r.slice(9));
+ const roots=[...additionalRoots,...records.filter(r=>r.startsWith('worktree ')).map(r=>r.slice(9))];
  authorityCommandRootsValidator(roots)(command);
  return [...roots,...['--absolute-git-dir','--git-common-dir'].map(arg=>path.resolve(controller.repo,controller.git('rev-parse','--path-format=absolute',arg).toString().trim()))];
 }
 
-export function hostExecution(controller,configuration){
+export function hostExecution(controller,configuration,authorityRoots=[]){
  if(configuration===undefined)return undefined;
  demand(configuration&&Object.keys(configuration).sort().join(',')==='command,protocol'&&configuration.protocol==='asc-host-execution/v1','Invalid Host execution configuration');
- validateHostCommand(controller,configuration.command);
+ validateHostCommand(controller,configuration.command,authorityRoots);
  const command=[...configuration.command];
  for(const [index,value] of command.entries())if(index===0||!value.startsWith('-'))demand(fs.statSync(value).isFile(),'Host command file missing');
  const env={PATH:path.dirname(command[0])+path.delimiter+path.dirname(process.execPath)};
@@ -26,8 +26,8 @@ export function hostExecution(controller,configuration){
  if(process.platform==='win32')for(const name of ['SystemRoot','WINDIR'])if(process.env[name])env[name]=process.env[name];
  const invoke=(operation,payload,timeout,asynchronous)=>{
   demand(Number.isSafeInteger(timeout)&&timeout>0&&timeout<=360000,'Invalid Host execution timeout');
-  const authorityRoots=validateHostCommand(controller,command);
-  const id=randomUUID(),message={schema:'asc-host-execution/v1',id,operation,payload,authorityRoots};
+  const roots=validateHostCommand(controller,command,authorityRoots);
+  const id=randomUUID(),message={schema:'asc-host-execution/v1',id,operation,payload,authorityRoots:roots};
   const input=JSON.stringify(message)+'\n';demand(Buffer.byteLength(input)<=8*1024*1024,'Host request limit exceeded');
   const decode=(code,stdout)=>{
    demand(code===0,'Host execution failed');
