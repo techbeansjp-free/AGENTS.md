@@ -35,3 +35,43 @@ test('combined single unit counts final calls once and requires the referenced d
  result.delivery.root='/run/other';assert.deepEqual(summarizeGoal(result).missingUnitDiagnostics,['one']);
  delete result.delivery;assert.deepEqual(summarizeGoal(result).missingUnitDiagnostics,['one']);
 });
+
+
+test('missing invocation records are not proof of zero model usage',()=>{
+ for(const calls of [undefined,null,{}]){
+  const report=summarize({status:'blocked',calls});
+  assert.equal(report.usageCoverage.state,'missing');
+  assert.equal(report.usageCoverage.declaredCalls,null);
+  assert.equal(report.allDeclaredCallProcessedTokens,null);
+ }
+ const empty=summarize({status:'blocked',calls:[]});
+ assert.equal(empty.usageCoverage.state,'complete');
+ assert.equal(empty.usageCoverage.declaredCalls,0);
+ assert.equal(empty.allDeclaredCallProcessedTokens,0);
+});
+
+test('missing final Goal diagnostics cannot disappear from usage coverage',()=>{
+ const call={role:'implementation',status:'completed',usage:[usage]};
+ for(const finalKey of ['delivery','diagnostic']){
+  const report=summarizeGoal({units:[{id:'a',result:{calls:[call]}}],[finalKey]:{status:'blocked'}});
+  assert.equal(report.observed.processed,120);
+  assert.equal(report.usageCoverage.state,'partial');
+  assert.deepEqual(report.missingUnitDiagnostics,['whole-goal']);
+  assert.equal(report.allDeclaredCallProcessedTokens,null);
+ }
+ const missing=summarizeGoal({status:'blocked'});
+ assert.equal(missing.usageCoverage.state,'missing');
+ assert.equal(missing.allDeclaredCallProcessedTokens,null);
+});
+
+
+test('completed Goal requires final usage while an interrupted Goal may not reach it',()=>{
+ const units=[{id:'a',result:{calls:[]}}];
+ const completed=summarizeGoal({status:'draft-ci-passed',units});
+ assert.equal(completed.usageCoverage.state,'missing');
+ assert.deepEqual(completed.missingUnitDiagnostics,['whole-goal']);
+ assert.equal(completed.allDeclaredCallProcessedTokens,null);
+ const interrupted=summarizeGoal({status:'blocked',units});
+ assert.equal(interrupted.usageCoverage.state,'complete');
+ assert.equal(interrupted.allDeclaredCallProcessedTokens,0);
+});

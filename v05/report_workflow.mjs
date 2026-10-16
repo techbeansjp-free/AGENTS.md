@@ -1,7 +1,7 @@
 /** Read-only metrics. Reports never become verification or approval authority. */
 import fs from 'node:fs';import {pathToFileURL} from 'node:url';
 export function summarize(result){
- const calls=result.calls??[],events=result.events??[],roles={};let validCalls=0,turns=0;
+ const callsDeclared=Array.isArray(result.calls),calls=callsDeclared?result.calls:[],events=result.events??[],roles={};let validCalls=0,turns=0;
  const total={input:0,output:0,cacheRead:0,cacheWrite:0,reasoning:0};
  const names={input:'input_tokens',output:'output_tokens',cacheRead:'cached_input_tokens',cacheWrite:'cache_write_input_tokens',reasoning:'reasoning_output_tokens'};
  for(const call of calls){
@@ -20,9 +20,9 @@ export function summarize(result){
   const elapsed=next?next.seconds-event.seconds:null;
   stages.push({work:event.work,seconds:Number.isFinite(elapsed)&&elapsed>=0?elapsed:null});
  }
- const complete=validCalls===calls.length;
+ const complete=callsDeclared&&validCalls===calls.length;
  return {status:result.status,wallSeconds:result.wallSeconds??null,adapterAttempts:calls.length,completedAdapterCalls:calls.filter(c=>c.status==='completed').length,
-  usageCoverage:{declaredCalls:calls.length,completeCalls:validCalls,observedTurns:turns,state:complete?'complete':validCalls?'partial':'missing',enumeration:'controller-dispatched calls only'},
+  usageCoverage:{declaredCalls:callsDeclared?calls.length:null,completeCalls:validCalls,observedTurns:turns,state:complete?'complete':validCalls?'partial':'missing',enumeration:'controller-dispatched calls only'},
   observed:{...total,processed:total.input+total.output,fresh:total.input-total.cacheRead+total.output},
   allDeclaredCallProcessedTokens:complete?total.input+total.output:null,allAgentTotalTokens:null,roles,stages,
   contextHighWaterMark:null,limitations:['Input includes cache read/write; output includes reasoning; subsets are not added twice','Declared-call coverage does not certify provider-internal or external Agent enumeration','Stage intervals include observation and waiting; they are not pure model computation','No pricing or causal performance claim']};
@@ -38,7 +38,9 @@ export function summarizeGoal(result){
   if(record&&Array.isArray(record.calls))groups.push({id:unit.id,record});else missing.push(unit.id);
  }
  const final=result.delivery??result.diagnostic;
- if(final&&Array.isArray(final.calls))groups.push({id:'whole-goal',record:final});
+ if(final){if(Array.isArray(final.calls))groups.push({id:'whole-goal',record:final});else missing.push('whole-goal');}
+ else if(result.status==='draft-ci-passed')missing.push('whole-goal');
+ if(!Array.isArray(result.units))missing.push('units');
  const report=summarize({status:result.status,wallSeconds:result.wallSeconds,calls:groups.flatMap(g=>g.record.calls)});
  report.groups=groups.map(g=>({id:g.id,...summarize(g.record)}));report.missingUnitDiagnostics=missing;
  if(missing.length){report.usageCoverage.state=report.usageCoverage.completeCalls?'partial':'missing';report.allDeclaredCallProcessedTokens=null;}
