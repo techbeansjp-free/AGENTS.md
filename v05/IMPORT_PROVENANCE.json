@@ -79,7 +79,7 @@
     "src/issue-run.mjs": "3583af005dbcd38f20f6891c398490b99b66b3e591dd7d39f7f6be69239800f5",
     "src/restricted-agent.mjs": "0702280987a50167e8fcc9c902ed142487dbef8a1f654a03e413f88ae5d5a05d",
     "src/verification-resources.mjs": "6d6574d373a46d3dd9b4b5573cb60cb2886379f68263616ae1e802278508d989",
-    "src/workflow.mjs": "430bfde3b2849801f7ab5c93b6c67dfac8ebe98198e06ed55c912b2ef7a0986d",
+    "src/workflow.mjs": "5c7f110616d7b5c98997f16cb3cfcb6d7d5fffbadf8532e2a9e1b831988d1e76",
     "test_controller.mjs": "6d92506c5e2b3ed211f36442599b4cd788e522a5ce007ca8613d48b275a55b78",
     "test_goal_run.mjs": "70544e80c74ebd29a418f9eaed8f47966c1631b5033eb1ef0401cfe9fc0d0013",
     "test_issue_run.mjs": "d4a5fdb24580bf0c2cb8a1af17238b4b79252125a23be027250885afd4aada3f",
