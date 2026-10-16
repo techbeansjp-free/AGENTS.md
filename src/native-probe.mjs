@@ -6,7 +6,7 @@ import net from 'node:net';
 import {spawn} from 'node:child_process';
 import {setTimeout,clearTimeout} from 'node:timers';
 import {performance} from 'node:perf_hooks';
-import {codexRuntimeRoots} from './codex-runtime.mjs';
+import {codexRuntimeRoots,nodeRuntimeRoots} from './codex-runtime.mjs';
 
 export function probeVerdict({positive,negative,hostUnchanged,connections}) {
  return positive?.completed===true && positive.read==='allowed' && positive.write==='allowed' && positive.network==='connected' &&
@@ -50,7 +50,7 @@ export async function probeNativeSandbox(executable) {
  Object.assign(env,{HOME:workspace,USERPROFILE:workspace,CODEX_HOME:workspace,TMPDIR:workspace,TEMP:workspace,TMP:workspace});
  const roots=codexRuntimeRoots(binary);
  if(roots.some(r=>path.parse(r).root===r)){fs.rmSync(root,{recursive:true,force:true});throw Error('Codex runtime root is too broad');}
- const permissions={':root':'deny',':minimal':'read',...Object.fromEntries(roots.map(r=>[r,'read'])),[node]:'read',[workspace]:'write'};
+ const permissions={':root':'deny',':minimal':'read',...Object.fromEntries(nodeRuntimeRoots().map(p=>[p,'read'])),...Object.fromEntries(roots.map(r=>[r,'read'])),[node]:'read',[workspace]:'write'};
  const table='{ '+Object.entries(permissions).map(([k,v])=>JSON.stringify(k)+'='+JSON.stringify(v)).join(', ')+' }';
  const options=['-c',`permissions.asc_native_probe.filesystem=${table}`,'-c','permissions.asc_native_probe.network.enabled=false'];
  const server=net.createServer(s=>{connections++;s.end();});let connections=0;

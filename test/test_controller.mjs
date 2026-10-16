@@ -192,27 +192,19 @@ test('batched source observation preserves binary, empty and duplicate blobs and
  const actual=f.c.gitInput.bind(f.c);f.c.gitInput=(input,...args)=>{const result=actual(input,...args);return args[0]==='cat-file'?result.subarray(0,result.length-1):result;};
  assert.throws(()=>f.c.blobs(f.git('rev-parse','HEAD')),/Truncated blob/);
 });
-test('source byte bound rejects inventory before batch contents are requested',t=>{
- const f=fixture(t);fs.writeFileSync(path.join(f.root,'large.bin'),Buffer.alloc(12000001));f.git('add','.');f.git('commit','-qm','oversize');
- const original=f.c.gitInput.bind(f.c);let contentCalls=0;f.c.gitInput=(input,...args)=>{if(args[0]==='cat-file')contentCalls++;return original(input,...args);};
- assert.throws(()=>f.c.blobs(f.git('rev-parse','HEAD')),/Source byte limit/);assert.equal(contentCalls,0);
+test('large individual source uses file-backed Git output without a size rejection',t=>{
+ const f=fixture(t);fs.writeFileSync(path.join(f.root,'large.bin'),Buffer.alloc(17_000_000,7));f.git('add','.');f.git('commit','-qm','large');
+ const blob=f.c.blobs(f.git('rev-parse','HEAD')).get('large.bin');assert.equal(blob.bytes.length,17_000_000);assert.equal(blob.bytes.at(-1),7);
 });
 
-
-test('source inventory remains bounded before requesting any contents',t=>{
- const f=fixture(t);let reads=0;const oid='0'.repeat(40);
- f.c.gitInput=(_input,...args)=>{if(args[0]==='ls-tree')return Buffer.from(Array.from({length:10001},(_,i)=>`100644 blob ${oid}       0\tf-${i}\0`).join(''));reads++;throw Error('Unexpected content read');};
- assert.throws(()=>f.c.blobs(f.base),/Inventory limit/);assert.equal(reads,0);
-});
-
-test('oversized candidate is rejected before any Git publication',async t=>{
+test('candidate above the former aggregate limit retains scope and publishes correctly',async t=>{
  const {commitCandidate}=await import('../src/candidate.mjs');
  const names=Array.from({length:6},(_,i)=>`large-${i}.txt`);
  const {c,git,root,base}=fixture(t,{allowedPaths:names});
  const space=fs.mkdtempSync(path.join(os.tmpdir(),'asc-output-cap-'));t.after(()=>fs.rmSync(space,{recursive:true,force:true}));
  for(const name of names)fs.writeFileSync(path.join(space,name),Buffer.alloc(11_000_000,97));
- assert.throws(()=>commitCandidate(c,space),/Candidate source limit/);
- assert.equal(git('rev-parse','HEAD'),base);assert.equal(git('status','--porcelain'),'');
+ commitCandidate(c,space);
+ assert.notEqual(git('rev-parse','HEAD'),base);assert.equal(git('status','--porcelain'),'');
  assert.equal(fs.readFileSync(path.join(root,'code.txt'),'utf8'),'before');
 });
 

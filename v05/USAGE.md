@@ -58,7 +58,7 @@
 
 runtime-binにはhostが信頼するNode実行file等を用意し、`asc-v05 assets-inspect <directory>` でdigestを取得する。共有libraryはLinux検証環境の/usr・/lib等を使う。依存物が必要なら同様に固定し、`dependencies`へ `{source,digest,target:"node_modules"}` 等を指定する。検証中のmountは読み取り専用。CLIはnpm/composer installやinstall hookを自動実行しない。
 
-許可pathは完全一致。変更数は最大500 tracked files、総source量64MB・単一file12MB。runtime・依存物は各inventory最大50,000 entries・512MiB。大きなprojectを黙って切り捨てず停止する。これらの評価上限があるため、任意規模の既存projectに対応済みとはしない。
+許可pathは完全一致。変更数は最大500 tracked files。repo全体64MB・単一file12MB・10,000件というソース観測上限は撤廃した。worktreeと移行のファイル展開はGit blobをストリームで書き出す。runtime・依存物は各inventory最大50,000 entries・512MiB。大きなprojectを黙って切り捨てず停止する。これらの評価上限があるため、任意規模の既存projectに対応済みとはしない。
 
 不明な業務判断は `unresolved` に残す。認可・移行・公開契約は `risks` に `authorization` / `data-migration` / `public-contract` を指定し、設計・固有検証・[署名承認](OWNER_APPROVAL.md)を用意する。低リスクの自己申告だけから承認を生成する機能はない。
 
@@ -140,7 +140,7 @@ owner requestの`budget`に`maxAgentCalls`と`maxElapsedSeconds`を指定でき�
 
 実装中に未確定のowner判断が判明した場合、workerは`{"status":"needs-owner","questions":["具体的な質問"]}`を返せる。Controllerは今回のworker出力をGitへ反映せず、`owner-work-required`と質問を返して停止する。snapshotは診断用に保持し、回答を新しいowner要求へ反映して再開する。repair前に存在した候補commitは保持するため、`candidateApplied:false`は今回出力の未反映のみを表す。質問やsnapshotは承認・検証Evidenceではない。通常の実装要約は引き続き承認として扱わない。
 
-Source observation supports at most 10,000 regular Git files and 64,000,000 total source bytes and 12,000,000 bytes per file. These are bounded-resource limits, not a risk classification. Symlinks, submodules, unsafe paths and case aliases remain refused. Host-pinned dependencies use the separate verification-assets contract. This does not yet establish arbitrary large-repository support.
+Source observation has no fixed repository byte/file-count quota. Git contents are read in batches, with large blobs spooled through files. The current Controller still retains observed contents in memory; actual memory and disk capacity remain operational constraints. Symlinks, submodules, unsafe paths and case aliases remain refused. Host-pinned dependencies use the separate verification-assets contract. This does not yet establish arbitrary large-repository support.
 
 ## 評価配布物の更新・差し戻し
 
@@ -349,3 +349,7 @@ VM・WSL2・systemdはこの経路の必須条件ではない。未対応sandbox
 明示的なCPU・メモリ・ファイルサイズ制限、依存資産のmount、Git検証環境は未対応のため拒否する。
 時間上限は適用する。従来Linux backendは別経路として保持する。
 Mac/Windows実機でのモデルE2Eは、OS間のプロトコルCIやLinux診断だけでは合格と扱わない。
+
+### 0.5.0-alpha.1修正
+
+MacのNode起動に必要な `/System/Library/OpenSSL` の読取りを診断・Agent実行で共通化した。秘密情報や通信の許可は増やさない。repo容量の一律拒否を除去したが、Mac実機の再確認と大規模実案件の完走は別途必要。

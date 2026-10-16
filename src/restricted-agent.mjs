@@ -4,7 +4,7 @@ import {assertExecutionHost} from './execution-host.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {codexRuntimeRoots} from './codex-runtime.mjs';
+import {codexRuntimeRoots,nodeRuntimeRoots} from './codex-runtime.mjs';
 import {networkPreflight} from './agent-network-preflight.mjs';
 import {runServiceProcess} from './agent-lifecycle.mjs';
 function demand(ok,message){if(!ok)throw Error(message);}
@@ -23,7 +23,7 @@ export function configuration({workspace,runtime,executable,writable}) {
   for(const name of ['.git','.codex','.agents']) demand(!fs.existsSync(path.join(root,name)),'Control directory in snapshot');
   walk(root);
   const profile='asc_minimal_agent';
-  const filesystem={':root':'deny',':minimal':'read',...Object.fromEntries(providerRoots.map(p=>[p,'read'])),[node]:'read',[root]:writable?'write':'read',[temp]:'write'};
+  const filesystem={':root':'deny',':minimal':'read',...Object.fromEntries(nodeRuntimeRoots().map(p=>[p,'read'])),...Object.fromEntries(providerRoots.map(p=>[p,'read'])),[node]:'read',[root]:writable?'write':'read',[temp]:'write'};
   const table=object=>'{ '+Object.entries(object).map(([k,v])=>JSON.stringify(k)+'='+JSON.stringify(v)).join(', ')+' }';
   const toolEnv={PATH:[path.dirname(node),...(process.platform==='win32'?[path.join(process.env.SystemRoot??'C:\\Windows','System32')]:['/usr/bin','/bin'])].join(path.delimiter),HOME:temp,USERPROFILE:temp,TMPDIR:temp,TEMP:temp,TMP:temp,LANG:'C.UTF-8'};
   if(process.platform==='win32')for(const key of ['SystemRoot','WINDIR'])if(process.env[key])toolEnv[key]=process.env[key];

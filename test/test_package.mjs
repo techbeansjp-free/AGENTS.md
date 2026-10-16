@@ -26,7 +26,7 @@ test('packed Node distribution runs without source checkout, Python or dependenc
  }
 
  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({version:'99.0.0'}));
- assert.equal(execFileSync(process.execPath,[cli,'--version'],{cwd:root,encoding:'utf8'}).trim(),'0.5.0-alpha.0');
+ assert.equal(execFileSync(process.execPath,[cli,'--version'],{cwd:root,encoding:'utf8'}).trim(),JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url))).version);
  for(const args of [[],['--help'],['-h']]){
   const help=spawnSync(process.execPath,[cli,...args],{cwd:root,encoding:'utf8'});
   assert.equal(help.status,0);assert.equal(help.stderr,'');assert.match(help.stdout,/run-adaptive/);assert.match(help.stdout,/USAGE\.md/);
@@ -91,7 +91,7 @@ for(const version of [null,'0.5.0'])test(`canonical ${version??'alpha'} candidat
  const skillRoot=path.join(installed,'skills/asc'),skill=fs.readFileSync(path.join(skillRoot,'SKILL.md'),'utf8');
  for(const match of skill.matchAll(/\]\(([^)]+)\)/g))assert(fs.existsSync(path.resolve(skillRoot,match[1])),match[1]);
  assert.equal(path.resolve(skillRoot,'../../bin/asc-v05.mjs'),path.join(installed,'bin/asc-v05.mjs'));
- assert.equal(pkg.version,version??'0.5.0-alpha.0');assert.equal(pkg.private,true);assert.deepEqual(Object.keys(pkg.bin),['agent-skill-chain','asc-v05']);
+ assert.equal(pkg.version,version??JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url))).version);assert.equal(pkg.private,true);assert.deepEqual(Object.keys(pkg.bin),['agent-skill-chain','asc-v05']);
  for(const [name,entry] of Object.entries(pkg.bin)){
   const link=path.join(consumer,'node_modules/.bin',name);assert(fs.existsSync(link+(process.platform==='win32'?'.cmd':'')));
   const capability=JSON.parse(process.platform==='win32'?execFileSync(process.execPath,[path.join(installed,entry),'capabilities'],{encoding:'utf8'}):execFileSync(link,['capabilities'],{encoding:'utf8'}));assert.equal(capability.releaseReady,true);assert.equal(capability.releaseTarget,'native-linux');assert.equal(capability.publishAuthorized,false);assert.equal(capability.legacyFallback,false);
