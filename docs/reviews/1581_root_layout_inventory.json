@@ -1,0 +1,58 @@
+{
+  "status": "proposal-inventory-not-activated",
+  "candidateHead": "e79de17550f0b95ff84d2fa8499f3b44fe0a0376",
+  "retainedConfiguration": {
+    ".github/workflows/ci.yml": "48e1461112ffc30847a7bde6b16b40989471c11bcbb91a1cc3aea6b816707fb5",
+    ".github/workflows/trusted-quality.yml": "4db2dffa88db797f6a5946b9fa57aaee77f0494ed000fa12a7cfbea6211f80b0",
+    ".github/workflows/release.yml": "97e94d828f62ebd2b2180bcdfa372385cb28d67197d9ad29592d92332baca72a",
+    "eslint.config.mjs": "6466cbe9cc2b060e19842a2ed0ec1746e64185456bc0561a11a27b4e3ab7b77b",
+    "package.json": "3bff6bf52bc75497af5774e562f85a2a326cc6a9595fe6b73ac7c99d50c061f7",
+    "package-lock.json": "f4d9b7dacbc6bf0ad5d2a534119068e4bf8270ccd6701c7f3e96e68c77fa880a",
+    "scripts/check_project_quality.ts": "c9c8b5765cd5262713b9c1d2b06f0c7c52966a33320477caf8d0c0c53ebdbc5f",
+    "scripts/check_source_quality.ts": "08e7676f45b33fd1173701b0f9092465bd8056ffff093509fefd4412ce45135b",
+    "scripts/quality-support/domain/conformance.ts": "b49bd9add80c45ff100ac530adaaf9b230d0524b54a7954bc0ad1f463bed8c6c",
+    "scripts/quality-support/domain/enforcement.ts": "dc2fa3b719229ece859e0625b60e20523febf7518ef96cde3997457db0f77acf",
+    "scripts/quality-support/domain/policy.ts": "81a141e0ce58a6704abfc5ce38a533b356d447ee6907096c0bd9458441509eb3",
+    "scripts/quality-support/domain/project-choice-diff.ts": "59ac6f602c7be18d9ab771aabd7887be34bd4820cc76087e594aabb33ce6aaf3",
+    "scripts/quality-support/domain/project-choice-shrink.ts": "4e07cdcc92eb4d6c9830434cad564cf314711578d7977def1053f248df54b3c0",
+    "scripts/quality-support/domain/project-rule-retirement.ts": "e4d768c435da819b2719b5cba4c023aa716d8b81fc72d7c7aaab73c1a5625d8f",
+    "scripts/quality-support/domain/provider-capability.ts": "4afec4da34bb5d2558779725e90b1c7ba8b6f13ce33048af26c941f512b7bac0",
+    "scripts/quality-support/domain/reviewer-provider.ts": "d8d7010b12312de83187449b824d61216421efc8d7d8b117cf6692f8309f0227",
+    "scripts/quality-support/domain/role.ts": "8b4d9f92a90730e141d6b5bf42f4b07b693153541cc20a82384ccf57cd544055",
+    "scripts/quality-support/domain/routing-independence.ts": "73b04ad25954df0ca943f7ae1af1c88133866d2f41b5a063e1a163049e2f01a2",
+    "scripts/quality-support/domain/staging-layout.ts": "df050ab3be7d0728a52aa22f83f5aca27b6c22d9f823f61013145d829be5bf83",
+    "scripts/quality-support/domain/staging.ts": "b99d0156422b18b2e259e0082a943c2145d0b4550edda8fdcb457f4f16f752c4",
+    "scripts/quality-support/domain/verification-run.ts": "120ffe54e27e1af91129b7654df76b9537743014465b45598173b30ffd78f6f1",
+    "scripts/quality-support/domain/worktree-removal-safety.ts": "803f64ffe577cf55d9afe235fd80e46d870f3ccebb4cda265a58148522fee44c",
+    "scripts/quality-support/lib/atomic.ts": "41689691a044bcc1ad96b004809f01f49b7429c8f8c7501e2a0b98af0c9f0929",
+    "scripts/quality-support/lib/entrypoint.ts": "178ce8b5865a9e07da7172aeae4bd64b5b9613832c9641e50760ef84cf3db115",
+    "scripts/quality-support/lib/package-root.ts": "15ae8198a1cee21dd81b33a0a2049a8b1f4da15fc8a79cdfbd4f4ade86de0437",
+    "scripts/quality-support/lib/process.ts": "1387cacafc2927d175157fcc7d49654310a236300588fbb197cb337dc989a8e2",
+    "scripts/quality-support/lib/security.ts": "0bf1c277de25b2ec13481d92f472f89c9ca0111a0cef9eb8d7afd3c92e2c38eb",
+    "scripts/quality-support/lib/version.ts": "c138a851f4b7faa09b0278cac292a83492a44b03e5d11b69de1b40a1f4a71db7",
+    "scripts/quality-support/types.ts": "6a8aa7654cc1c215ecd00e792fa8a5042cf5456c053db61ba25a7ef0225a4858"
+  },
+  "retiredConfiguration": [
+    "src/types.ts",
+    "cucumber.mjs",
+    "scripts/run_cucumber_shards.ts",
+    "src/domain/staging.ts",
+    "src/lib/entrypoint.ts",
+    "src/lib/security.ts",
+    "tsconfig.build.json",
+    "v05/package.json"
+  ],
+  "requiredTransitionChanges": [
+    "Replace sidecar cutover pins with reviewed root-layout pins and explicit retirement checks",
+    "Preserve trusted-base-only execution and reject missing or changed unapproved quality configuration",
+    "Make checker and its relocated helper imports executable after cutover; do not require old src runtime",
+    "Remove root/nested manifest equality assumption; validate one root package",
+    "Exercise unchanged configuration, rejected script weakening, changed checker, symlink substitution, retired-path resurrection and staged maintenance before activation"
+  ],
+  "limits": [
+    "Inventory is not owner approval or an accepted cutover",
+    "Current candidate checker is still the legacy checker; do not activate this inventory alone",
+    "Existing staged proposal registry and checker-byte equality must be reconciled; no trust exemption",
+    "No merge, ruleset edit or release performed"
+  ]
+}
