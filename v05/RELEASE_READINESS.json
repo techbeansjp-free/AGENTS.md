@@ -1502,6 +1502,39 @@
         "Not a product performance comparison or completed screen acceptance",
         "Corrected rerun is separate; this cost is retained"
       ]
+    },
+    "correctedDriverTrial": {
+      "status": "FAIL",
+      "runtimeSourceHead": "93670caeff0d4135ed8f0086c18531b69cabcda8",
+      "packageSha256": "47af12d3ca24f06c6c1f296092189d3e3c06d1b1b6b11decd76f3b6d7a4df5c9",
+      "rawEvidenceSha256": "085855f53377165f6393b45dad26843161ab746fe270e7e53a790bbd15913db8",
+      "wallSeconds": 819.374868126,
+      "agentCalls": 6,
+      "observedProcessedTokens": 969829,
+      "observedFreshTokens": 207205,
+      "allAgentTotalTokens": null,
+      "sourceUnchanged": true,
+      "deliveryAttempted": false,
+      "candidateHead": "53ee862793f5226cef387186445d6efb438a0480",
+      "failure": "Error: Independent review absent, stale or blocked",
+      "remainingFinding": "Confirmed in isolated browser/API/SQLite execution: after the held PATCH commits, the reloaded summary remains total=3,completed=2,pending=1 instead of completed=3,pending=0 throughout the 5-second observation. Candidate source unchanged.",
+      "oracleGap": "The calibrated read/read1 observer pauses after the application lock. The existing pre-handler oracle covers the earlier scheduling boundary and must be run against this candidate.",
+      "limits": [
+        "Verification passed but final independent review blocked; not screen acceptance or Delivery success",
+        "Failed trials and their costs remain recorded",
+        "Controller-dispatched usage only; provider-internal enumeration unknown"
+      ],
+      "preHandlerReproduction": {
+        "status": "FAIL",
+        "candidateHead": "53ee862793f5226cef387186445d6efb438a0480",
+        "wallSeconds": 12.920735603999999,
+        "sourceUnchanged": true,
+        "agentCalls": 0,
+        "evidencePath": "/tmp/asc-prehandler-repro-l5haeqsu/verification.json",
+        "oracleDigest": "c461eba869f18c565f309d7c52078a5c82c86324710de38a799e615067d52810",
+        "boundary": "PATCH received and held before application handler; reload GET completes before release; SQLite commit observed before DOM assertion",
+        "observerCompatibility": "ReplayBody supports read1 as well as read; acceptance assertions unchanged"
+      }
     }
   },
   "restartDiagnosticsValidation": {
