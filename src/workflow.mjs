@@ -148,7 +148,7 @@ export async function runWorkflow(request,{agent=runAgent,provider,onEvent=()=>{
      const ownerManagedControls=reviewOnly?Object.fromEntries([...c.blobs(target.head)].filter(([name])=>c.contract.allowedPaths.includes(name)&&['.codex','.agents'].includes(name.split('/')[0].toLowerCase())).map(([name,blob])=>[name,blob.bytes.toString('utf8')])):undefined;
      const diffRef='.asc-review.diff';
      demand(!fs.existsSync(path.join(space,diffRef)),'Reserved review diff path exists');
-     fs.writeFileSync(path.join(space,diffRef),c.git('diff','--no-ext-diff','--no-textconv',c.base,target.head),{flag:'wx'});
+     fs.writeFileSync(path.join(space,diffRef),c.gitLarge('diff','--no-ext-diff','--no-textconv',c.base,target.head),{flag:'wx'});
      fs.writeFileSync(path.join(space,metadata),JSON.stringify({priorReviewsRef,unitAssignment,ownerManagedControls,intent:await remote.intent(),contract:c.contract,target,diffRef,verification:c.events.filter(e=>e.operation==='verify').slice(-1)}));
 
      const r=await dispatch('review',{workspace:space,logs,executable:request.codexExecutable,model:request.model,writable:false,schema:reviewSchema,
