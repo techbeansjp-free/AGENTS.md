@@ -1,0 +1,291 @@
+export type Enforcement = "deny" | "require" | "assist" | "warn" | "record";
+export type Activation = "active" | "staged" | "disabled";
+export type TargetLayer = "package" | "project" | "spec" | "evidence";
+
+export interface ApplicabilityDecision {
+  status: "applicable" | "not-applicable";
+  reason: string;
+  evidence: string;
+}
+
+export interface NotApplicableDecision extends ApplicabilityDecision {
+  status: "not-applicable";
+}
+
+export type QualityCommandChoice = string | NotApplicableDecision;
+
+export type RoutingRole = "coordinator" | "implementer" | "reviewer";
+export type RoutingRouteMode = "preferred" | "fallback";
+export type RoutingModelSelection =
+  "provider_recommended_default" | "project_default";
+export type RoutingReason =
+  | "preferred_implementer_available"
+  | "preferred_implementer_unavailable"
+  | "preferred_capability_mapping_missing"
+  | "preferred_capability_unconfirmed"
+  | "preferred_selection_source_unconfirmed"
+  | "preferred_model_catalog_empty"
+  | "preferred_recommended_default_missing"
+  | "preferred_recommended_default_ambiguous"
+  | "preferred_reasoning_effort_unsupported";
+
+export interface RoleModelChoice {
+  provider: string;
+  logicalTier: "project_default" | "highest_available";
+  reasoningEffort: "high";
+  speed: "standard";
+}
+
+export interface ReviewerIndependence {
+  differentFrom: "implementer";
+}
+
+export interface AgentReviewerRoleModelChoice extends RoleModelChoice {
+  independence: ReviewerIndependence;
+}
+
+/** reviewer役割をローカルLLM providerへ差し替え/補強するための選択値。TERM-ASC-122, TERM-ASC-123参照。 */
+export interface LocalLlmReviewerRoleModelChoice {
+  provider: "ollama";
+  mode: "supplement" | "replace";
+  endpoint: string;
+  model: string;
+  independence: ReviewerIndependence;
+}
+
+export type ReviewerRoleModelChoice =
+  AgentReviewerRoleModelChoice | LocalLlmReviewerRoleModelChoice;
+
+export interface RoutingEvidenceRetentionChoice {
+  retentionDays: number;
+  maxRecordsPerIssue: number;
+  maxRecordBytes: number;
+  rotationCondition: "oldest_first";
+  deletionMethod: "preview_then_explicit";
+}
+
+export type ModelTierChoice = "routine" | "standard" | "advanced" | "critical";
+
+export interface RoleContractChoice {
+  allowedPaths: string[];
+  allowedOperations: string[];
+  forbiddenOperations: string[];
+  requiredEvidence: string[];
+}
+
+export interface ModelMappingChoice {
+  roles: {
+    coordinator: RoleModelChoice;
+    implementer: RoleModelChoice;
+    reviewer: ReviewerRoleModelChoice;
+  };
+  fallback: {
+    when: "implementer_unavailable";
+    role: "coordinator";
+    modelSelection: "project_default";
+  };
+  evidenceStoreRoot: string;
+  retention: RoutingEvidenceRetentionChoice;
+  roleContracts?: Record<string, RoleContractChoice>;
+  tierMapping?: Record<string, ModelTierChoice>;
+  minimumTierByRisk?: Record<string, ModelTierChoice>;
+}
+
+export interface ProviderCapability {
+  provider: string;
+  capabilities: string[];
+  selectionSource: "provider_recommended_default";
+}
+
+export interface ProviderCapabilityMapping {
+  schemaVersion: "agent-skill-chain/provider-capability-mapping/v2";
+  mappingVersion: string;
+  providers: ProviderCapability[];
+}
+
+export interface ProviderModelObservation {
+  model: string;
+  recommended: boolean;
+  supportedReasoningEfforts: string[];
+}
+
+export interface Rule {
+  ruleId: string;
+  purpose: string;
+  riskClass: string;
+  scope: string[];
+  enforcement: Enforcement;
+  activation: Activation;
+  owner: string;
+  targetLayer: TargetLayer;
+  evidence: string;
+  remediation: string;
+  overridePolicy: "never" | "bound";
+  rollback: string;
+}
+
+export interface ProjectChoices {
+  language: string;
+  testRunner: string;
+  gherkinDialect: string;
+  testLayers: string[];
+  forbiddenTestFileSuffixes: string[];
+  naming: string;
+  packageManager: string;
+  runtime: string;
+  ci: string;
+  modelMapping?: string | ModelMappingChoice;
+  release: string;
+  projectKind: string;
+  capabilities: {
+    privacySecurity: ApplicabilityDecision;
+    observability: ApplicabilityDecision;
+    humanCenteredUi: ApplicabilityDecision;
+    designTokens: ApplicabilityDecision;
+  };
+  quality: {
+    implementationLanguage: string;
+    strictTypecheck: true | NotApplicableDecision;
+    forbiddenTypes: string[];
+    lintCommand: QualityCommandChoice;
+    formatCheckCommand: QualityCommandChoice;
+    formatWriteCommand: QualityCommandChoice;
+    typecheckCommand: QualityCommandChoice;
+    runtimeValidation: QualityCommandChoice;
+    auxiliaryLanguages: Record<string, ApplicabilityDecision>;
+  };
+}
+
+/**
+ * 利用側project ownerが既定branch側へ事前登録する縮小提案。
+ *
+ * **`projectChoices`の内側へ置かない。** `classifyProjectChoiceDiff`が
+ * `rejectUnknownFields`で未知fieldをfail-closedに弱化へ分類するため、
+ * 内側へ置くと提案の存在自体が拒否を生む。
+ */
+export interface ProjectChoiceShrinkProposal {
+  fieldPath: string;
+  afterSha256: string;
+  reason: string;
+  owner: string;
+}
+
+export interface Policy {
+  schemaVersion: string;
+  delivery: { stopAt: "pull_request" };
+  issueProject?: {
+    owner: string;
+    number: number;
+    statusField: string;
+    startedStatus: string;
+  };
+  merge: {
+    mode: "disabled" | "assisted" | "automatic";
+    branches: string[];
+    methods: Array<"merge" | "squash" | "rebase">;
+    branchMethods?: Array<{
+      branches: string[];
+      methods: Array<"merge" | "squash" | "rebase">;
+    }>;
+    requiredChecks: string[];
+    requiredReviews: number;
+    /**
+     * reviewの独立性の要求水準（Issue #1317）。
+     *
+     * `context-isolated`はimplementerと別session/contextを要求し同一actorでも成立する。
+     * `actor-independent`はPR authorおよびimplementation commit authorと別のstable
+     * actor IDを要求する。**未宣言の既定は`context-isolated`である。**
+     */
+    reviewIndependence?: "context-isolated" | "actor-independent";
+  };
+  budgets?: { localFeedbackMs?: number; prGateMs?: number };
+  /**
+   * Issue stagingの配置（`staging-layout.ts`が所有）。`root`はrepository相対の
+   * staging root（`*`は1 segment）、`tracked`はrootが版管理下か、`issueBody`は
+   * Issue同期本文を全文にするか要点と配置へのpointerにするか。
+   */
+  staging?: {
+    root?: string;
+    tracked?: boolean;
+    issueBody?: "full" | "pointer";
+  };
+  worktree?: {
+    root: string;
+    namePattern: string;
+    branchPattern: string;
+    allowedBranchTypes: string[];
+    base: string;
+    cleanup: string;
+    finalizeIgnoredPathAllowlist?: string[];
+  };
+  rules: Rule[];
+  projectChoices?: ProjectChoices;
+  projectChoiceShrinkProposals?: ProjectChoiceShrinkProposal[];
+  projectRuleRetirementProposals?: ProjectRuleRetirementProposal[];
+}
+
+/** trusted branchへ先行登録するproject rule廃止提案。 */
+export interface ProjectRuleRetirementProposal {
+  ruleId: string;
+  beforeSha256: string;
+  reason: string;
+  owner: string;
+}
+
+export interface AutoFix {
+  description: string;
+  dryRunDiff: string;
+}
+
+export interface Diagnostic {
+  ruleId: string;
+  purpose: string;
+  risk: string;
+  reasons: string[];
+  scope: string[];
+  checks: string[];
+  autoFixes: AutoFix[];
+  next: string;
+  requiredAuthority: string;
+  rollback: string;
+}
+
+export interface RuleObservation {
+  ruleId: string;
+  violated: boolean;
+  reasons?: string[];
+  checks?: string[];
+}
+
+export interface OverrideRecord {
+  ruleId?: string;
+  issue?: number;
+  scope?: string;
+  actor?: string;
+  reason?: string;
+  expiresAt?: string;
+  sha?: string;
+}
+
+export interface ValidationEvidence {
+  sha?: string;
+  policyHash?: string;
+  tool?: string;
+  scope?: string[];
+  passed?: boolean;
+}
+
+export interface ValidationInput {
+  kind: "targeted" | "final";
+  changedFiles: string[];
+  risk: string[];
+  evidence: ValidationEvidence;
+  successfulFingerprints?: string[];
+  successfulEvidence?: Array<
+    ValidationEvidence & { fingerprint: string; passed: boolean }
+  >;
+}
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
