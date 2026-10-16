@@ -40,7 +40,7 @@ Optional `unitCandidates` maps a unit ID to `{repo, base, head, contractDigest}`
 
 The host refuses a candidate whose source diff exceeds unit write scope. A changed contract invalidates import, and changed write preimages prevent overwriting newer edits. Changed read inputs may retain candidate bytes, but never old verification or review authority. High-risk/design-approved candidates are imported only after fresh owner approval and current binding checks, as described below. New isolated verification and fresh independent review are mandatory for every imported candidate. Unknown or undeclared dependencies are not proven unchanged by this check; the new reviewer must inspect semantic suitability.
 
-This supports explicit restart from a clean base after a failed group, without repeating implementation of a compatible successful unit. It does not resume a partly integrated root in place or reuse old approval/review authority. `restart-goal` can select candidate references from saved diagnostics into a new clean-baseline clone; those diagnostics do not grant authority. Reverification costs remain intentional. `node_goal_recovery_trial.mjs` targets only the recorded disposable failed experiment.
+This supports explicit restart from a clean base after a failed group, without repeating implementation of a compatible successful unit. It does not resume a partly integrated root in place or reuse old approval/review authority. `restart-goal` can select candidate references from saved diagnostics into a new clean-baseline clone; those diagnostics do not grant authority. Reverification costs remain intentional. The historical PoC driver `node_goal_recovery_trial.mjs` targeted only its disposable experiment; it is not a command in this checkout or installed package.
 
 `NODE_GOAL_RECOVERY_EVIDENCE.json` records recovery of the actual network-timeout attempt: six new contexts reached Draft PR67/CI in 289.340 seconds. Pricing reused candidate bytes but received fresh verification/review. The prior 105.483-second failed attempt is retained separately; adding the measured attempts does not include the operator gap and is not calendar E2E time.
 
@@ -108,8 +108,8 @@ The fixture now selects the full existing suite and runs fixed assertions under
 an isolated Python parent that requires a completion marker. An early successful
 Node exit, wrong result and candidate Python import shadowing are regression
 cases. This marker does not prove immunity to arbitrary malicious output forgery.
-`node_proposed_goal_cli_trial.mjs` remains an explicit fixture-owner adoption
-policy, not a general policy for converting model proposals into authority.
+The historical PoC driver `node_proposed_goal_cli_trial.mjs` used an explicit fixture-owner adoption
+policy (not shipped in this checkout or package), not a general policy for converting model proposals into authority.
 
 
 The corrected checkout trial reached real Draft PR91 and matching CI at
@@ -227,7 +227,8 @@ downstream implementation runs normally. A real-Git/isolated-verification regres
 covers this sequence and preservation of upstream/sibling HEADs. Its Agent and
 GitHub responses are doubles; real-model dependent-Issue Draft/CI remains unverified.
 
-`evaluation/check-dependent-issues.mjs` repeats this dependency recovery with real
+The historical PoC driver `evaluation/check-dependent-issues.mjs` (not shipped
+in this checkout or package) repeated this dependency recovery with real
 Codex contexts and isolated checks. The initial dependent Issue stops before Agent
 dispatch; after fixture-owner integration only it is implemented, and all three
 Issues receive fresh reviews without changing the two completed candidate HEADs.
