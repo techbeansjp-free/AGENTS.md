@@ -39,3 +39,14 @@ test('Host canonicalizes temporary-directory aliases before declaring asset root
  for(const dir of result.readOnlyRoots)assert.equal(dir,fs.realpathSync(dir));
  assert.equal(result.runtimeRoot,path.join(fs.realpathSync(f.runtime),'verification-runtime'));
 });
+
+test('A missing sibling worktree does not block current Host verification',t=>{
+ const f=fixture(t);f.options.authorityRoots.push(path.join(f.root,'future','sibling'));
+ assert.deepEqual(stageHostVerificationAssets(undefined,f.options),{readOnlyRoots:[],runtimeRoot:null});
+ assert.equal(stageHostVerificationAssets(f.assets,f.options).readOnlyRoots.length,2);
+});
+test('Missing authority under an alias still excludes its source ancestors',t=>{
+ const f=fixture(t),alias=path.join(f.root,'alias');fs.symlinkSync(f.dependencies,alias,'junction');
+ f.options.authorityRoots.push(path.join(alias,'future','worktree'));
+ assert.throws(()=>stageHostVerificationAssets(f.assets,f.options),/overlap/);
+});

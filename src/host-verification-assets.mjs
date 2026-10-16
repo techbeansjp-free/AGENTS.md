@@ -4,9 +4,16 @@ import {inspectAssets} from './verification-assets.mjs';
 import {safeName} from './controller.mjs';
 const contains=(a,b)=>{const r=path.relative(a,b);return !r||(!r.startsWith('..'+path.sep)&&r!=='..'&&!path.isAbsolute(r));};
 function demand(ok,message){if(!ok)throw Error(message);}
+function physicalBoundary(root){
+ let ancestor=path.resolve(root);const suffix=[];
+ while(true){try{fs.lstatSync(ancestor);break;}catch(error){if(error.code!=='ENOENT')throw error;}
+  const parent=path.dirname(ancestor);demand(parent!==ancestor,'Unresolvable asset authority');suffix.unshift(path.basename(ancestor));ancestor=parent;
+ }
+ return path.resolve(fs.realpathSync(ancestor),...suffix);
+}
 export function stageHostVerificationAssets(assets,{workspace,runtime,authorityRoots}){
- workspace=fs.realpathSync(workspace);runtime=fs.realpathSync(runtime);authorityRoots=authorityRoots.map(r=>fs.realpathSync(r));
  if(assets===undefined)return {readOnlyRoots:[],runtimeRoot:null};
+ workspace=fs.realpathSync(workspace);runtime=fs.realpathSync(runtime);authorityRoots=authorityRoots.flatMap(r=>[path.resolve(r),physicalBoundary(r)]);
  demand(assets&&Object.keys(assets).sort().join(',')==='dependencies,runtime'&&Array.isArray(assets.dependencies),'Invalid verification assets');
  const readOnlyRoots=[],targets=[];
  const copy=(entry,destination,isRuntime)=>{

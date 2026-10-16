@@ -466,3 +466,7 @@ ASC本体はv0.4ではコンパイル済みdist、v0.5では直接実行でき�
 ownerがdigestを指定したruntime・依存資産を検証呼出し専用領域へコピーし、sandbox内で読取り専用にする。指定runtimeは検証子プロセスのPATH先頭に置く。既存sourceの上書き、権限領域との重複、外向きsymlink、pin不一致を拒否する。trackedな`.codex`・`.agents`は検証データとして保持し、Codexの起動場所を候補の外へ分離する。Agent実装経路の設定注入拒否は維持する。
 
 Linux full検証268件成功・失敗0・skip0（119.558秒）。その後のruntime PATH指摘修正はlintと実Codex sandbox試験で確認した。実Nodeをpinしたruntimeへコピーし、裸のnode指定がコピーを選ぶこと、実ESLintが正常・構文異常を判別すること、依存物への書込み拒否、tracked設定データの保持を確認した。独立読み取りレビューのPATH指摘は解消。モデル通信は行っていない。Macについて同じnative試験をCIへ追加したが、このローカル試験をMac実機・実モデルE2Eの成功とは扱わない。
+
+Mac hosted runnerの実Codex sandbox試験は、初回7ccef9d3で一時領域のaliasと実path差による`Invalid asset root`を検出した。d9f2b3ccで正規化を修正後、[run 38929076065](https://github.com/techbeansjp-free/AGENTS.md/actions/runs/38929076065)が成功。裸のnodeがpin済みruntimeを選び、実ESLint・依存物書込み拒否・tracked設定データ保持まで確認した。モデル実装からPRまでのMac E2Eとは区別する。
+
+追加レビューで、未存在の別Issue worktreeへrealpathを要求すると正常Issueも拒否する反例を是正した。lexical境界と既存祖先から再構成した物理境界を保持し、依存物未指定時には不要な解決を行わない。正常siblingの継続とalias経由の資産重複拒否を含む6件成功。限定差分の独立読み取りレビューで確定blockerなし。既存必須ci.ymlは変更せず、追加Mac試験はnative-verification.ymlに分離している。
