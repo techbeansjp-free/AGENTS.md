@@ -2067,5 +2067,52 @@
       }
     ],
     "releaseReady": false
+  },
+  "projectAssetUpdateValidation": {
+    "sourceCommit": "4fefdb60e32c4fa18896cc8cdbb1c24907b5e0a6",
+    "implementationCommit": "ea9cc0bc",
+    "localQuality": {
+      "tests": 238,
+      "pass": 230,
+      "fail": 0,
+      "skip": 8,
+      "seconds": 91.388137486
+    },
+    "covered": [
+      "Unedited distribution assets update; edited/deleted assets conflict without applying other changes",
+      "Project-owned rules, authored specifications, custom assets and Git indexes preserved",
+      "Two linked worktrees update concurrently; one conflict does not reject the other",
+      "Offline packed installation with explicit Host Skill entry and stable update inventory",
+      "Package relocation regenerates references without editing authored specifications"
+    ],
+    "limitations": [
+      "Host automatic Skill discovery and model execution not verified by file/link tests",
+      "Concurrent tests cover selected interleavings, not every same-file race",
+      "No model E2E performance conclusion; updater itself launches no model",
+      "Local skipped isolation tests are not counted as passed"
+    ],
+    "releaseReady": false
+  },
+  "ciCutoverConfigurationAudit": {
+    "sourceCommit": "4fefdb60e32c4fa18896cc8cdbb1c24907b5e0a6",
+    "status": "FAIL",
+    "checkedFiles": 29,
+    "mismatches": [
+      {
+        "path": "package.json",
+        "proposedSha256": "581732f382bf91f7a704a6137377527d7aa16f73f8c83430b0fdefcab575ac04",
+        "actualSha256": "30124caa46864c28fa26df7146ea4a79a253b98cdcd98e583c1b440e857cdaee"
+      },
+      {
+        "path": "scripts/quality-support/domain/conformance.ts",
+        "proposedSha256": "b49bd9add80c45ff100ac530adaaf9b230d0524b54a7954bc0ad1f463bed8c6c",
+        "actualSha256": "5bbe6b3806b4d9c055b856fb159b126acb267744044c8e5e7885da787dda87fc"
+      }
+    ],
+    "baseValidatorRun": "https://github.com/techbeansjp-free/AGENTS.md/actions/runs/38878426392",
+    "baseFailure": "Current trusted main expects package.json.agentSkillChain.qualityContractVersion; v0.5 uses root qualityContractVersion",
+    "distinction": "The two stale proposed hashes are a separate future cutover failure, not the cause of this current main-validator failure",
+    "authorization": "Proposed hash correction rejected by automatic approval review; explicit owner permission requested. No checker, registry, or active gate modified.",
+    "nextAction": "After specific authorization, reconcile proposed configuration and registration/transition PRs; do not self-approve, merge, or bypass trusted base"
   }
 }
