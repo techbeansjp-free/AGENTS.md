@@ -1052,5 +1052,168 @@
       "result.json": "b950bded8b4c64ec1092ebd622681d6fb53ac11c507bfc0ade9f32f6ea02ec0d",
       "baseline-result.json": "ef2bcd896301256c5f25aba307b86804da8dd5a5d81b9f4661e0d62f74912134"
     }
+  },
+  "screenHistoryRecoveryLatest": {
+    "productHead": "de9a2dd2386622f1c677a12d6ae2e208a0b34a5e",
+    "candidateHead": "ee52a57f1836e1e9a24c465d0233fcd7effee47b",
+    "status": "FAIL",
+    "wallSeconds": 584.4905785980001,
+    "agentCalls": 3,
+    "observedProcessedTokens": 864138,
+    "observedFreshTokens": 165002,
+    "allAgentTotalTokens": null,
+    "verificationExits": [
+      0,
+      0
+    ],
+    "independentReview": "fail",
+    "finding": {
+      "location": "screen.html:198-218,262-288,388-398,444-451",
+      "condition": "A completion PATCH is unsettled when the document reloads, and the user changes hash route or traverses browser history before recovery has replayed or confirmed that update.",
+      "evidence": "requestForRoute clears recoveryIntent before awaiting its initial GET, then discards the claimed intent when routeVersion changes without replaying it. Click navigation restores the marker only when mutationInFlight is non-null, but recovery has not created that promise yet. Browser-history navigation is not handled by prepareRouteNavigation, and popstate only removes markers. Thus the active route can render a pre-commit snapshot; if the original keepalive PATCH subsequently commits, nothing refetches that route. test_core.py:283-354 asserts the discard/cleanup structure but does not cover delayed commit after route invalidation. design.md:5 also explicitly documents discarding the claimed intent.",
+      "impact": "The active list or summary can remain visibly stale after the completion change commits, violating the mandatory acceptance criteria that completion changes, reload, and back/forward navigation remain consistent.",
+      "action": "Preserve or transfer an unsettled completion intent across route invalidation and browser-history traversal, or otherwise ensure the active route is confirmed again after the corresponding write commits. Add regression coverage for route changes and history traversal during reload recovery with the original PATCH committing after the initial snapshot.",
+      "counterevidence": "Normal same-document routing waits for mutationInFlight, and an uninterrupted reload replays the PATCH and refetches. Server FIFO also orders connections already accepted. These defenses do not cover this race because no recovery mutation exists yet, and FIFO cannot order an original PATCH connection the server has not accepted. The passing host verification does not exercise this interleaving.",
+      "severity": "P2",
+      "verification": "static-analysis",
+      "blocking": true
+    },
+    "sourceUnchanged": true,
+    "deliveryAttempted": false,
+    "limits": [
+      "Recovery from a failed candidate, not initial implementation E2E",
+      "Reviewer static finding subsequently reproduced by host browser diagnostic; independent adjudication pending",
+      "Passing history oracle does not cover route invalidation during reload recovery"
+    ],
+    "hostReproduction": {
+      "candidateHead": "ee52a57f1836e1e9a24c465d0233fcd7effee47b",
+      "exit": 1,
+      "oracleSha256": "b5461b7cb0e00adebdee3745c83fe173d4bbe01d3fb015f3572715954c78328b",
+      "resultSha256": "29958afc2ae41608ccca3c534ca7d5375d50736c4da2eefbd83c194af0a8ca72",
+      "schedule": [
+        "Hold original completion PATCH before server acceptance",
+        "Reload with initial recovery GET held",
+        "Navigate list then summary before releasing GET",
+        "Release GET while original PATCH remains held",
+        "Observe old summary",
+        "Release PATCH and verify persisted completion",
+        "Observe summary remains stale for five seconds"
+      ],
+      "expected": {
+        "total": 3,
+        "completed": 3,
+        "pending": 0
+      },
+      "actual": {
+        "total": 3,
+        "completed": 2,
+        "pending": 1
+      },
+      "scope": "Actual Chromium execution in existing isolated verifier; no external Delivery. Native summary link is used; list navigation has fallback hash assignment.",
+      "independentAdjudication": "Confirmed commit-before-stale-DOM counterexample; initial intermediate navigation path not fully recorded",
+      "followup": {
+        "oracle": "v05/evaluation/screen-recovery-oracle.mjs",
+        "oracleSha256": "5c1d8a322801974d700c0546eb1f5798878f7673d933e93727efd934869aae48",
+        "resultSha256": "a0475f872891afedbcd789af17f1757cd6c2fbafba897723ae1afddafc09f97b",
+        "exit": 1,
+        "navigation": "Explicit location.hash transitions to list then summary, each hash asserted; not a claim of native visible link clicks",
+        "loadingAllowed": true,
+        "priorHistoryReplayCounterexampleRetained": true,
+        "result": "Committed completed count 3; visible completed count remains 2"
+      }
+    }
+  },
+  "transportConvergenceDiagnostic": {
+    "oracleSha256": "a12675b2e538e5d9138d88a77a7c7f4b98df7d445da5c6d006458e046d6970de",
+    "results": [
+      {
+        "head": "ffac6fc681f274b953cb536e7fde68e8e359f212",
+        "exit": 1,
+        "artifactSha256": "1b22385f37271dc77095b6fe2cebcec1d78a4a0b9000e096261468364bf33e51"
+      },
+      {
+        "head": "ee52a57f1836e1e9a24c465d0233fcd7effee47b",
+        "exit": 0,
+        "artifactSha256": "71b681fe2d556d697651f0b4e6a6360d7c6839642aeae0247b3a9eae29533bcf"
+      }
+    ],
+    "contract": "Hold original PATCH before server acceptance, reload, release writes, require committed state and visible convergence",
+    "calibration": "Removed requirement to display stale summary before release: a correct implementation may wait in Loading. Retained commit and convergence assertions. Baseline still fails.",
+    "limits": [
+      "Prior oracle precondition timeout on repaired candidate is inconclusive, not a confirmed regression",
+      "Does not prove recovery interrupted by another route change",
+      "Does not override failed independent review"
+    ]
+  },
+  "currentPackagedLocalComparison": {
+    "head": "de9a2dd2386622f1c677a12d6ae2e208a0b34a5e",
+    "archives": {
+      "baseline": {
+        "sha256": "4a9ad82173ec611a7c8a0346306ff558b55c3a07a4f4e4d315a7aad2829e808b"
+      },
+      "current": {
+        "sha256": "f8aa6cec326bce6e0c4f3afed0e87862912130bf49fdd50de2d2ef061c348cfa"
+      }
+    },
+    "rows": [
+      {
+        "arm": "baseline",
+        "wallSeconds": 64.29003065,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 139187,
+        "observedFreshTokens": 27955,
+        "allAgentTotalTokens": null
+      },
+      {
+        "arm": "current",
+        "wallSeconds": 59.89415500100001,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 161834,
+        "observedFreshTokens": 44458,
+        "allAgentTotalTokens": null
+      },
+      {
+        "arm": "current",
+        "wallSeconds": 50.876825194999995,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 143302,
+        "observedFreshTokens": 44614,
+        "allAgentTotalTokens": null
+      },
+      {
+        "arm": "baseline",
+        "wallSeconds": 52.23658481999999,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "observedProcessedTokens": 121069,
+        "observedFreshTokens": 31085,
+        "allAgentTotalTokens": null
+      }
+    ],
+    "means": {
+      "baseline": {
+        "wallSeconds": 58.263307735,
+        "observedProcessedTokens": 130128,
+        "observedFreshTokens": 29520
+      },
+      "current": {
+        "wallSeconds": 55.385490098000005,
+        "observedProcessedTokens": 152568,
+        "observedFreshTokens": 44536
+      }
+    },
+    "limitations": [
+      "Packaged runWorkflow API, not CLI request loader or GitHub Delivery",
+      "Endpoint is independently reviewed candidate; cannot compare these times directly to prior92second PR/CI observations",
+      "Two runs per arm, counterbalanced order, not statistical performance acceptance",
+      "Setup excluded, failed run costs retained; provider internal usage may be missing",
+      "Existing owner-pinned runtime/dependency assets reused identically; no GraphDB",
+      "Baseline is historical v0.5 PoC, not v0.4; root current distribution uses normal packaging lifecycle; package preparation excluded equally",
+      "Short browser diagnostic runs overlapped comparison; model trials were sequential",
+      "Current observed tokens increased; no joint speed/token acceptance claim"
+    ]
   }
 }
