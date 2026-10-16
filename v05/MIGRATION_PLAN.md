@@ -210,3 +210,11 @@ PR #1578のbase `2d64b8d50b173f29914a8f231c0c5efa9a7e0af5` は、v0.4のscript�
 切替レビューでは、旧Step専用コマンドと旧qualityContractVersionを新版に復活させて通過させない。必要な保証は、検査の自己緩和を独立して確認すること、権限を持つ実行で候補codeを動かさないこと、新版の実テスト・隔離試験を実行すること、提出commitを固定することである。旧Cucumber全件実行そのものは新版の受入条件にしない。
 
 実施順は、(1) repository ownerが新版CIの保護対象・必須checkと移行差分をレビュー、(2) base側の検査契約を先に更新、(3) 同じ候補HEADでbase検査とLinux CIを再実行、(4) 実結果に基づいてrelease readinessを更新、とする。既存の保護変更承認はbaseへの事前登録を要求するため、candidateだけの登録を承認成立と扱わない。baseへのmerge・branch保護の変更・失敗checkの免除は本実装作業では実行しない。必要なowner操作が未実施の間、全CI成功・正式release可能とは報告しない。
+
+## 旧入口の除去・新入口の追加と設定の復元
+
+`migration-stage`は既存inventoryのretain/replaceを扱い、新規file追加・旧file削除は扱わない。この場合は、flat policyなら`migration-prepare`、manifest型policyなら全inventoryのretain/replaceをownerが指定した`migration-stage`で独立cloneを作る。その作業branchで、ownerが指定した追加・削除を通常のGit変更として作る。manifest型を`migration-prepare`で強行しない。旧Step用登録を除去し、新Skill登録は配布済み`skills/asc/SKILL.md`とCLIの固定pathへの案内にする。配布Skill本文を登録先へそのままコピーすると相対linkの基準が変わるため、行わない。利用者固有のAGENTS規約・permissions・無関係なHookは残す。設定差分をアプリ変更とは別commitにし、その内容の独立レビューと必要なHost設定検証を経て選択する。
+
+設定の復元は`git revert <設定切替commit>`で行い、後続のアプリcommitをresetしない。設定が競合すれば停止してownerが解決し、無条件のours/theirs選択や強制復元は行わない。操作を取り消す場合はrevertをabortする。`migration-rollback`はこの設定復元を代行せず、入口の選択記録だけを戻す。旧版の承認Evidenceも復活しない。
+
+`node evaluation/configuration-roundtrip.mjs <導入済みagent-skill-chain packageの絶対path> [flat|manifest]`で合成fixtureの実証を再現できる。省略時はmanifest型を使い、通常のroot配布テストからは両形式を検証する。検証範囲は、配布CLIのprepareまたはstage／rollback、新旧Skill登録の追加・削除、規約・権限・他Hookの保持、後続アプリ変更を残した設定revert、競合停止・abort、元projectとdirtyな別worktreeの保持。HostによるSkillの自動発見・実際の旧CLI起動・任意の利用者設定の意味的移行・remote CIはこのfixtureの検証対象外である。

@@ -91,16 +91,17 @@
     "USAGE.md": "c2e92cb1e4c69b21e845d74b1d6837cfc8304c6575dedae0064210bb409f7ec3",
     "package.json": "be57dea383943f61d7dbddc5fe269261a773e4534799b457bd846b1d79684458",
     "scripts/pack-candidate.mjs": "b1bd5ceff93b660bd72128761af977d5e8bac12dcade96494f7442498ab69a07",
-    "test_package.mjs": "ec5cea56018e47a227d8679c404a8e348ee4583be42303baef427140a69899bc",
-    "MIGRATION_PLAN.md": "b2864b7b93fa057058f0066bd737441f6bd51f075ce9720f19ef145929a2a8be",
-    "RELEASE_READINESS.json": "94de8698390e9810d4b606233627d7bb3b047fe547bbfaf588b32289095a945e",
+    "test_package.mjs": "abf027b7b680fbf5e21d09a7850246b2b53a9ed7e3ab1248d88a17555bfa7658",
+    "MIGRATION_PLAN.md": "91f5f34e04f978bf4f0cfe4143184602f0297c15c5ef47c4ce5383c8d6196ccd",
+    "RELEASE_READINESS.json": "a79b5d52c53659422444ee4570b1d29f12a158e709a1a5d419827d38d300241b",
     "src/migration.mjs": "ffa1cb0640e37ef161a8ddfdd9064ed9a83f14679de11d69d509cbcf1617f151"
   },
   "integrationAdditions": {
     "src/agent-lifecycle.mjs": "eb7b118c8d4903a658ee4d3c4a26fc5f56d757c996cba1d8a5963bea92c97db3",
     "src/agent-lifecycle-supervisor.mjs": "c8c756c143f56879ad73e941143a93613bdcc90a56cc300c5a7a7f0ec121ac6f",
     "test_agent_lifecycle.mjs": "a20257e0e011d201bdde315db015283fb1bd0f4822734256de8f8526a49a147a",
-    "test_review_corpus.mjs": "79064a2c07de838db037b4380a2d98f2e7e12f79f92d4c644f1cb47b6662ee07"
+    "test_review_corpus.mjs": "79064a2c07de838db037b4380a2d98f2e7e12f79f92d4c644f1cb47b6662ee07",
+    "evaluation/configuration-roundtrip.mjs": "e57170c24a5f0ab4daeb45c7baedcc7088d5730cfa489e01559aef0f016d51ff"
   },
   "evaluationImports": {
     "source": "existing architecture-lab evaluation fixtures; not product runtime",

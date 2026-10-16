@@ -605,15 +605,15 @@
     ]
   },
   "canonicalCutoverValidation": {
-    "head": "f669a826c53bcdba7a7eb414cd09421140d175db",
+    "head": "433b776c0e6c5724d83a11d2fe017fc4f1ffa7cf",
     "linuxCI": {
-      "run": 38838727378,
+      "run": 38839434019,
       "result": "success"
     },
     "trustedBaseCI": {
-      "run": 38838725411,
+      "run": 38839431781,
       "result": "failure",
-      "reason": "legacy qualityContractVersion required; contract transition incomplete"
+      "reason": "legacy quality contract transition incomplete"
     },
     "releaseReady": false
   },
@@ -761,5 +761,71 @@
     "independentReview": "integration_review read-only; no confirmed blocker",
     "failedTestAttempt": "Direct node test invocation from integration root had wrong cwd and failed; preserved locally, not counted as success. Standard npm run quality from root uses v05 cwd and passed.",
     "remaining": "Owner configuration add/remove and full setting rollback acceptance remain distinct from selection rollback"
+  },
+  "configurationGitRoundtrip": {
+    "runtimeSourceHead": "433b776c0e6c5724d83a11d2fe017fc4f1ffa7cf",
+    "scope": "owner-directed synthetic settings transition using installed canonical package; ordinary Git handles additions/removals",
+    "trials": [
+      {
+        "schema": "asc-configuration-roundtrip/v1",
+        "status": "passed",
+        "policyFormat": "flat",
+        "preparationCommand": "migration-prepare",
+        "version": "0.5.0-alpha.0",
+        "base": "1f701c6a44439ddd6ae85ce99b266880c787ffb4",
+        "cutover": "87943ed5dbf27e3989fdf9a5494eb7e56459fd86",
+        "restoredHead": "64a973abc9d7232c3e180322af9748b2dde4eaf2",
+        "seconds": 0.677758178,
+        "agentCalls": 0,
+        "guarantees": [
+          "installed CLI migration preparation/rollback",
+          "old entry removed, new fixed-path entry added",
+          "owner rule, permission and unrelated hook preserved",
+          "configuration reverted while later application commit survives",
+          "source and dirty sibling worktree preserved",
+          "conflicting settings revert stops; abort restores later owner settings"
+        ],
+        "limitations": [
+          "Synthetic owner-directed configuration only; no actual legacy runtime or host Skill discovery executed",
+          "No model, remote CI or release; does not prove arbitrary configuration migration",
+          "Git conflict resolution remains an owner-reviewed operation; no forced rollback"
+        ]
+      },
+      {
+        "schema": "asc-configuration-roundtrip/v1",
+        "status": "passed",
+        "policyFormat": "manifest",
+        "preparationCommand": "migration-stage",
+        "version": "0.5.0-alpha.0",
+        "base": "f17f2de32d70e0b62dc83d9dfb37ccbdc0c72954",
+        "cutover": "6389c4f9a7dedf4328b40cf0a0070e74e7f99b1b",
+        "restoredHead": "3a80be4c497f410c859fc7eebbc7b30519797601",
+        "seconds": 0.606706369,
+        "agentCalls": 0,
+        "guarantees": [
+          "installed CLI migration preparation/rollback",
+          "old entry removed, new fixed-path entry added",
+          "owner rule, permission and unrelated hook preserved",
+          "configuration reverted while later application commit survives",
+          "source and dirty sibling worktree preserved",
+          "conflicting settings revert stops; abort restores later owner settings"
+        ],
+        "limitations": [
+          "Synthetic owner-directed configuration only; no actual legacy runtime or host Skill discovery executed",
+          "No model, remote CI or release; does not prove arbitrary configuration migration",
+          "Git conflict resolution remains an owner-reviewed operation; no forced rollback"
+        ]
+      }
+    ],
+    "finalPackageTests": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 9.330717736
+    },
+    "lint": "passed",
+    "independentReview": "integration_review found manifest entry mismatch; corrected to stage for manifest and prepare for flat, re-reviewed with no major issue",
+    "failedDevelopmentChecks": "Initial missing performance import and accidental fixture-string edit failed lint; both corrected, final lint and package tests passed",
+    "releaseReady": false
   }
 }

@@ -112,6 +112,11 @@ test('repository root package installs only the v0.5 runtime through the canonic
  }
  for(const name of ['workflow:check','test:unit','test:integration','test:e2e','quality:legacy'])assert.equal(Object.hasOwn(pkg.scripts,name),false,name);
  assert.equal(pkg.scripts.lint,'eslint v05');
+ for(const policyFormat of ['flat','manifest']){
+  const roundtrip=JSON.parse(execFileSync(process.execPath,['evaluation/configuration-roundtrip.mjs',installed,policyFormat],{encoding:'utf8'}));
+  t.after(()=>fs.rmSync(roundtrip.root,{recursive:true,force:true}));
+  assert.equal(roundtrip.status,'passed');
+ }
  const project=path.join(root,'legacy-project');fs.mkdirSync(project);
  const git=(...args)=>execFileSync('git',args,{cwd:project,stdio:'pipe'});git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');fs.writeFileSync(path.join(project,'README.md'),'Synthetic migration inspection fixture\n');fs.mkdirSync(path.join(project,'.agent-skill-chain'));fs.writeFileSync(path.join(project,'.agent-skill-chain/project-policy.json'),JSON.stringify({schemaVersion:'agent-skill-chain/project-policy/v0.3.1'}));git('add','README.md','.agent-skill-chain/project-policy.json');git('commit','-qm','baseline');
  const migration=JSON.parse(execFileSync(process.execPath,[path.join(installed,pkg.bin['agent-skill-chain']),'migration-inspect',project],{encoding:'utf8'}));assert.equal(migration.readyToMigrate,false);assert.deepEqual(migration.dirty,[]);assert.deepEqual(migration.blockers,['migration-execution-not-performed']);
