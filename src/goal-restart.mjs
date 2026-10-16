@@ -74,12 +74,12 @@ export function prepareGoalRestart(input){
   next.unitCandidates=candidateReferences(previous,(suppliedPlan??compileGoal(next.goal)).plan);
  }
  fs.writeFileSync(requestFile,JSON.stringify(next,null,2),{flag:'wx',mode:0o600});
- return {request:next,source,...(restart.replan?{previous,replanning:{authority:'untrusted historical diagnostic data; not approval or completion',priorPlan:priorPlanHint(previous),units:previous.units.map(u=>({id:u.id.slice(0,128),status:String(u.result?.status??u.diagnostic?.status??'unknown').slice(0,128),error:String(u.error??u.diagnostic?.error??'').slice(0,2000)}))}}:{}),authority:'candidate bytes only; every unit and whole Goal require new verification and review'};
+ return {request:next,source,...(request.decomposition&&!request.goal&&!restart.replan?{proposal:{status:previous.proposal.status,goal:next.goal,binding:previous.proposal.binding,calls:[],wallSeconds:0,reusedFrom:restart.resultFile}}:{}),...(restart.replan?{previous,replanning:{authority:'untrusted historical diagnostic data; not approval or completion',priorPlan:priorPlanHint(previous),units:previous.units.map(u=>({id:u.id.slice(0,128),status:String(u.result?.status??u.diagnostic?.status??'unknown').slice(0,128),error:String(u.error??u.diagnostic?.error??'').slice(0,2000)}))}}:{}),authority:'candidate bytes only; every unit and whole Goal require new verification and review'};
 }
 export async function restartGoal(input,options={}){
  const started=performance.now(),prepared=prepareGoalRestart(input);
  const budget=options.executionBudget??createExecutionBudget(prepared.request.budget);
- let proposal;
+ let proposal=prepared.proposal;
  const save=result=>{const output={...result,...(proposal?{proposal}:{}),wallSeconds:(performance.now()-started)/1000,budget:budget.snapshot(),restart:{sourceRepo:input.repo,source:prepared.source,candidate:prepared.request.repo,authority:prepared.authority,replanned:!!prepared.replanning}};fs.writeFileSync(path.join(result.root,'result.json'),JSON.stringify(output,null,2));return output;};
  try{
   let next=prepared.request,contexts=options.priorContexts??[];
@@ -94,7 +94,7 @@ export async function restartGoal(input,options={}){
   return save(await runGoal(next,{...options,executionBudget:budget,priorContexts:contexts}));
  }catch(error){
   if(error.proposalDiagnostic)proposal=error.proposalDiagnostic;
-  const diagnostic=error.goalDiagnostic??(error.proposalDiagnostic?{status:'blocked',root:proposal.root,units:[],error:String(error)}:null)??(proposal?{status:'blocked',root:proposal.root,units:[],error:String(error)}:null);
+  const diagnostic=error.goalDiagnostic??(error.proposalDiagnostic?{status:'blocked',root:proposal.root,units:[],error:String(error)}:null)??(proposal?.root?{status:'blocked',root:proposal.root,units:[],error:String(error)}:null);
   if(diagnostic)error.goalDiagnostic=save(diagnostic);
   throw error;
  }

@@ -648,7 +648,21 @@ test('delegated restart replans once within original authority and shares its ne
    const result=await restartGoal(f.request,{agent,provider});t.after(()=>fs.rmSync(result.root,{recursive:true,force:true}));
    assert.equal(result.restart.replanned,true);assert.equal(result.proposal.calls.length,1);
    assert.equal(result.status,mode==='clarify'?'owner-work-required':'draft-ci-passed');
-   if(mode==='complete'){assert.equal(result.budget.admittedAgentCalls,8);assert.equal(writes,3);assert.equal(deliveries,1);}
+   if(mode==='complete'){
+    assert.equal(result.budget.admittedAgentCalls,8);assert.equal(writes,3);assert.equal(deliveries,1);
+    let saved=result;
+    const priorBytes=fs.readFileSync(path.join(saved.root,'result.json'));
+    await assert.rejects(restartGoal({...f.request,restart:{directory:path.join(root,'early-failure'),resultFile:path.join(saved.root,'result.json'),replan:false,budget:{maxAgentCalls:8,maxElapsedSeconds:120}}},{agent,provider:{...provider,intent:()=> 'changed intent'}}),/Primary Goal intent changed/);
+    assert.deepEqual(fs.readFileSync(path.join(saved.root,'result.json')),priorBytes,'early failure must not overwrite historical evidence');
+    for(let iteration=0;iteration<2;iteration++){
+     const nextDirectory=path.join(root,'resume-'+iteration);
+     const resumed=await restartGoal({...f.request,restart:{directory:nextDirectory,resultFile:path.join(saved.root,'result.json'),replan:false,budget:{maxAgentCalls:8,maxElapsedSeconds:120}}},{agent,provider:{...provider,observe:()=>({head:execFileSync('git',['rev-parse','HEAD'],{cwd:nextDirectory,encoding:'utf8'}).trim(),draft:true,merged:false,boundToPr:true,checks:{test:'success'}})}});
+     t.after(()=>fs.rmSync(resumed.root,{recursive:true,force:true}));
+     assert.equal(resumed.status,'draft-ci-passed');assert.equal(resumed.restart.replanned,false);
+     assert.deepEqual(resumed.proposal.goal,saved.proposal.goal);assert.deepEqual(resumed.proposal.binding,saved.proposal.binding);assert.deepEqual(resumed.proposal.calls,[]);assert.equal(resumed.proposal.wallSeconds,0);assert.equal(resumed.proposal.reusedFrom,path.join(saved.root,'result.json'));assert.equal(plans,1);assert.equal(writes,3);
+     assert(resumed.budget.admittedAgentCalls>0,'historical proposal must not bypass fresh review');saved=resumed;
+    }
+   }
   }
   assert.equal(plans,1);if(mode!=='complete'){if(mode!=='context')assert.equal(writes,0);assert.equal(deliveries,0);}
   assert.equal(f.git('rev-parse','HEAD'),f.request.base);assert.equal(f.git('status','--porcelain'),'');
