@@ -2001,7 +2001,7 @@
       "Existing owner-pinned runtime/dependency assets reused identically; no GraphDB",
       "Baseline is historical v0.5 PoC, not v0.4; root current distribution uses normal packaging lifecycle; package preparation excluded equally"
     ],
-    "assessment": "Both arms completed two trials with two agents each. Current mean time is lower but observed processed and fresh tokens are higher. Total usage remains missing. No performance acceptance or causal improvement claim.",
+    "assessment": "Both arms completed two trials with two agents each. Current mean time and observed processed tokens are lower, while observed fresh tokens are higher. Total usage remains missing. No performance acceptance or causal improvement claim.",
     "templateValidation": {
       "packageTestsPassed": 6,
       "failed": 0,
