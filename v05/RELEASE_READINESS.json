@@ -1517,5 +1517,37 @@
     "limitations": [
       "Local Linux regression only; not a performance acceptance comparison or release approval"
     ]
+  },
+  "proposalAssetPreflight": {
+    "implementationHead": "dc6c914f4df7d399d2b17154b1edb8c504754e95",
+    "change": "Reuse AssetController validation before proposal Agent; include input observation in proposal elapsed time and budget.",
+    "counterexample": "Malformed asset pin previously consumed one planning call and 17085 observed processed tokens before rejection; regression now asserts no Agent call.",
+    "standardTests": {
+      "passed": 216,
+      "failed": 0,
+      "skipped": 8,
+      "durationMs": 101755.739718,
+      "scope": "Asset preflight implementation before subsequent timing-start relocation"
+    },
+    "timingRelocationTests": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "Goal proposal suite after timing-start relocation"
+    },
+    "cgroupFollowup": {
+      "passed": 41,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 91490.526085,
+      "command": "ASC_TEST_CGROUP=1 node --test test/test_controller.mjs test/test_verification_assets.mjs",
+      "scope": "Includes all eight cgroup cases skipped in standard invocation; counts overlap, do not add"
+    },
+    "independentReview": "No blocking findings; inventory cost included in timing after review note",
+    "limits": [
+      "No measured E2E speedup claim",
+      "Valid asset contracts incur an additional read-only inventory validation before model startup",
+      "Live screen trial still uses fixed 93670cae package, not this later implementation"
+    ]
   }
 }
