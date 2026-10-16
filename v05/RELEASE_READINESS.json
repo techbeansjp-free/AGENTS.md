@@ -1872,5 +1872,152 @@
     "skipped": 0,
     "durationMs": 112872.778377,
     "scope": "Linux product CI only; base validator still fails the pending CI contract transition"
+  },
+  "optionalTemplatesAndBatchedReviewComparison": {
+    "sourceCommit": "0bef3f973cf714ed7e14ac6b238b9d8de4d589eb",
+    "endpoint": "independently-reviewed-candidate; no Delivery or CI",
+    "model": "gpt-5.6-sol",
+    "fixtureBase": "fabdfaae0c7d854b7b8336d3ed22288d0b283b66",
+    "archiveSha256": {
+      "baseline": "4a9ad82173ec611a7c8a0346306ff558b55c3a07a4f4e4d315a7aad2829e808b",
+      "current": "e9bc64fb4a9a36c545295e0d2623b1703f909a6c4c69da01195f7b881617e70d"
+    },
+    "rawEvidenceSha256": "0354a0f39fff7ad0a06b059379678a23f572c5585affd4f664bf98084e825b01",
+    "rows": [
+      {
+        "index": 0,
+        "arm": "baseline",
+        "wallSeconds": 55.672751923999996,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "calls": [
+          {
+            "role": "implementation",
+            "seconds": 17.740608852999998,
+            "processedTokens": 62409,
+            "freshTokens": 8777
+          },
+          {
+            "role": "review",
+            "seconds": 29.467009316,
+            "processedTokens": 58116,
+            "freshTokens": 17156
+          }
+        ],
+        "observedProcessedTokens": 120525,
+        "observedFreshTokens": 25933,
+        "allAgentTotalTokens": null
+      },
+      {
+        "index": 1,
+        "arm": "current",
+        "wallSeconds": 48.523843898,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "calls": [
+          {
+            "role": "implementation",
+            "seconds": 19.551534634,
+            "processedTokens": 65923,
+            "freshTokens": 26883
+          },
+          {
+            "role": "review",
+            "seconds": 22.980172542000002,
+            "processedTokens": 44205,
+            "freshTokens": 16301
+          }
+        ],
+        "observedProcessedTokens": 110128,
+        "observedFreshTokens": 43184,
+        "allAgentTotalTokens": null
+      },
+      {
+        "index": 2,
+        "arm": "current",
+        "wallSeconds": 56.991462669000015,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "calls": [
+          {
+            "role": "implementation",
+            "seconds": 21.030815955999998,
+            "processedTokens": 55347,
+            "freshTokens": 7091
+          },
+          {
+            "role": "review",
+            "seconds": 30.226424343999998,
+            "processedTokens": 63086,
+            "freshTokens": 26990
+          }
+        ],
+        "observedProcessedTokens": 118433,
+        "observedFreshTokens": 34081,
+        "allAgentTotalTokens": null
+      },
+      {
+        "index": 3,
+        "arm": "baseline",
+        "wallSeconds": 58.181934439,
+        "status": "reviewed-candidate",
+        "agentCalls": 2,
+        "calls": [
+          {
+            "role": "implementation",
+            "seconds": 20.953119831999995,
+            "processedTokens": 51756,
+            "freshTokens": 6060
+          },
+          {
+            "role": "review",
+            "seconds": 28.240604917,
+            "processedTokens": 58571,
+            "freshTokens": 24267
+          }
+        ],
+        "observedProcessedTokens": 110327,
+        "observedFreshTokens": 30327,
+        "allAgentTotalTokens": null
+      }
+    ],
+    "means": {
+      "baseline": {
+        "wallSeconds": 56.9273431815,
+        "observedProcessedTokens": 115426,
+        "observedFreshTokens": 28130
+      },
+      "current": {
+        "wallSeconds": 52.757653283500005,
+        "observedProcessedTokens": 114280.5,
+        "observedFreshTokens": 38632.5
+      }
+    },
+    "limitations": [
+      "Packaged runWorkflow API, not CLI request loader or GitHub Delivery",
+      "Endpoint is independently reviewed candidate; cannot compare these times directly to prior92second PR/CI observations",
+      "Two runs per arm, counterbalanced order, not statistical performance acceptance",
+      "Setup excluded, failed run costs retained; provider internal usage may be missing",
+      "Existing owner-pinned runtime/dependency assets reused identically; no GraphDB",
+      "Baseline is historical v0.5 PoC, not v0.4; root current distribution uses normal packaging lifecycle; package preparation excluded equally"
+    ],
+    "assessment": "Both arms completed two trials with two agents each. Current mean time is lower but observed processed and fresh tokens are higher. Total usage remains missing. No performance acceptance or causal improvement claim.",
+    "templateValidation": {
+      "packageTestsPassed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "durationMilliseconds": 9928.844727,
+      "independentReview": "no blocking findings; read-only review of templates and packaging"
+    },
+    "linuxCi": {
+      "head": "0bef3f973cf714ed7e14ac6b238b9d8de4d589eb",
+      "status": "success",
+      "url": "https://github.com/techbeansjp-free/AGENTS.md/actions/runs/38868798206"
+    },
+    "baseValidator": {
+      "status": "failure",
+      "reason": "trusted main still requires legacy package.json.agentSkillChain.qualityContractVersion",
+      "url": "https://github.com/techbeansjp-free/AGENTS.md/actions/runs/38868794272"
+    }
   }
 }
