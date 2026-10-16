@@ -266,3 +266,5 @@ Gitの無視対象である未追跡の生成物はHostに保持し、Agent・�
 追加対象は`.agents/skills/asc/SKILL.md`だけ。この短い入口は`.agent-skill-chain/skills/asc/SKILL.md`を相対参照するため、通常の配布資産更新後も新しい本文へ辿れる。既存の同名Skillが異なる内容なら競合として停止し、他Skill・ユーザー全体の設定・AGENTS.md・Hook・権限は変更しない。通常の更新で登録入口が`retained`に出ても、不要になったという意味ではない。
 
 既存の旧ASC Skillを自動削除・無効化する機能ではない。旧入口を使っている場合は移行差分として確認する。配置後はHostの新しいセッションでSkillの認識と参照先を確認する。ファイル配置・リンク整合性の試験は、実Hostによる自動発見や実モデルでの実行成功とは区別する。
+
+LinuxのCodex CLI 0.153.4では、通信を遮断した`app-server`の`skills/list`で、この入口がrepoスコープの有効なSkillとして認識されることを確認した。同じHostプロセスから別の未登録worktreeを照会すると、そこにはASC Skillが現れない。これはローカル一覧取得の実測であり、IDE・Claudeでの認識や、モデルがSkillを選んで開発を完走することの実証ではない。対象commitと条件は`RELEASE_READINESS.json`の`projectSkillHostDiscovery`に記録する。

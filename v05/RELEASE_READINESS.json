@@ -2126,5 +2126,45 @@
     "distinction": "The two stale proposed hashes are a separate future cutover failure, not the cause of this current main-validator failure",
     "authorization": "Proposed hash correction rejected by automatic approval review; explicit owner permission requested. No checker, registry, or active gate modified.",
     "nextAction": "After specific authorization, reconcile proposed configuration and registration/transition PRs; do not self-approve, merge, or bypass trusted base"
+  },
+  "projectSkillHostDiscovery": {
+    "status": "PASS",
+    "root": "/tmp/asc-skill-discovery-2mi5gpqq",
+    "codexVersion": "codex-cli 0.153.4",
+    "sourceCommit": "7c14838316daf378f7ce3f4c4922dca6a372e4af",
+    "methods": [
+      "initialize",
+      "skills/list"
+    ],
+    "network": "unshare user+net namespace",
+    "modelCalls": 0,
+    "cases": [
+      {
+        "cwd": "/tmp/asc-skill-discovery-2mi5gpqq/worktree",
+        "asc": [
+          {
+            "name": "asc",
+            "description": "ASCで許可された開発・再開・独立レビューを実行するとき、プロジェクトのASC入口を使う。通常作業へASC導入を強制しない。",
+            "path": "/tmp/asc-skill-discovery-2mi5gpqq/worktree/.agents/skills/asc/SKILL.md",
+            "scope": "repo",
+            "enabled": true,
+            "pluginId": null
+          }
+        ],
+        "errors": []
+      },
+      {
+        "cwd": "/tmp/asc-skill-discovery-2mi5gpqq/other-worktree",
+        "asc": [],
+        "errors": []
+      }
+    ],
+    "limitations": [
+      "CLI app-server discovery only; no IDE or Claude validation",
+      "No model invocation or end-to-end development execution"
+    ],
+    "driverSha256": "5f94b226a221d869e09241b863d1853922dc6c403501e93edb2244af24e8b389",
+    "driverPath": "/tmp/asc-skill-discovery.py",
+    "setup": "Fresh synthetic repository with two linked worktrees; project-assets --register-skill --apply on the first only; credential-free temporary Codex state; local skills/list with both cwds and forceReload=true in one app-server process"
   }
 }
