@@ -84,7 +84,7 @@ export async function restartGoal(input,options={}){
  try{
   let next=prepared.request,contexts=options.priorContexts??[];
   if(prepared.replanning){
-   proposal=await proposeGoal(next,{agent:options.agent,executionBudget:budget,replanning:prepared.replanning});
+   proposal=await proposeGoal(next,{agent:options.agent,executionBudget:budget,replanning:prepared.replanning,authorityRoots:options.authorityRoots});
    if(proposal.status==='needs-owner')return save({...proposal,status:'owner-work-required',units:[],work:{work:'clarify',actor:'owner',questions:proposal.questions}});
    next=adoptProposal(next,proposal);
    next.unitCandidates=candidateReferences(prepared.previous,compileGoal(next.goal).plan);
