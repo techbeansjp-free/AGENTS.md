@@ -43,7 +43,7 @@ try {
   migration-inspect <root>                  旧設定と移行境界を確認
   migration-prepare <source> <new-location>  元repoを保持して移行先を準備
   migration-stage <source> <new-location> <external-owner-plan>
-  migration-rollback <location>
+  migration-rollback <location>  評価の選択記録のみを戻す（再導入・設定復元はしない）
 
 owner入力は作業repoの外に置きます。通常実行は専用worktreeを使用します。
 必要環境・入力例・承認・検証資産の準備: ${new URL('../v05/USAGE.md',import.meta.url).pathname}

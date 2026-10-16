@@ -4,7 +4,7 @@
 
 ## 保持するもの
 
-利用者所有の要求、仕様、Gherkin、テスト、project policy、ドメイン知識、Git履歴は保持する。v0.4の管理資産を自動削除しない。v0.4のreview/session/Journal/Sealをv0.5の有効な承認Evidenceへ自動変換しない。履歴資料として参照する場合も、新しい要求・policy・HEADへの有効性は改めて検証する。
+利用者所有の要求、仕様、Gherkin、テスト、project policy、ドメイン知識、Git履歴は保持する。利用者が変更した旧設定を製品既定値と区別せず自動削除しない。旧版の実装・Step・Hook・テンプレートをv0.5へ同梱する必要はなく、旧タグまたは固定版の配布物から再導入する。v0.4のreview/session/Journal/Sealをv0.5の有効な承認Evidenceへ自動変換しない。履歴資料として参照する場合も、新しい要求・policy・HEADへの有効性は改めて検証する。
 
 ## テストの継承と契約変更
 
@@ -24,7 +24,7 @@ v0.4のテスト全件をv0.5製品のrelease gateとして継承するわけで
 
 ## Rollback
 
-v0.5が実装したsource変更を無条件にresetしない。成果物はGit branchに保持し、起動入口と管理資産だけを検証済み旧版へ戻す。旧版の品質判断を新しいHEADに流用せず、旧版が必要とする検証を実行する。失敗した移行でも利用者file・未commit変更が不変であることをtestで確認する。
+ASC本体は、利用していた正確な旧versionの配布物を再インストールするか、保持している固定CLIを再選択する。v0.5内に旧実行系を残すことは切戻しの条件ではない。プロジェクトの設定を変更していなければ、設定復元は不要である。変更していれば、その設定commitだけをGitでrevertし、競合は解決してから進める。再インストールだけでは利用者が変更した設定は復元されない。v0.5が実装したsource変更を無条件にresetせず、成果物はGit branchに保持する。旧版の品質判断を新しいHEADに流用せず、旧版が必要とする検証を実行する。失敗した移行でも利用者file・未commit変更が不変であることをtestで確認する。
 
 ## リリースまでの必須試験
 
@@ -195,7 +195,7 @@ compile/buildせず、隔離コピー内に20万件の入力イベントを生�
 
 ## 配布とプロジェクト切替の境界
 
-本体repository rootの標準packageはv0.5へ切り替え済みで、通常の`npm pack`も`v05/`にある新実装だけを`agent-skill-chain`として配布対象にする。旧実装のversion番号だけを変更する方式ではない。`agent-skill-chain`と`asc-v05`は同じv0.5 CLIを指す。旧CLIのStep command互換は提供しない。現在のtarballは未承認候補で、生成・offline install・動作成功だけでは公開可能にならない。
+本体repository rootの標準packageはv0.5へ切り替え済みで、通常の`npm pack`もrootの`src/`・`bin/`・`skills/`にある新実装と選択された文書・移行入口を`agent-skill-chain`として配布対象にする。旧実装のversion番号だけを変更する方式ではない。`agent-skill-chain`と`asc-v05`は同じv0.5 CLIを指す。旧CLIのStep command互換は提供しない。現在のtarballは未承認候補で、生成・offline install・動作成功だけでは公開可能にならない。
 
 導入先は候補repositoryの外にある専用prefixとし、実行時はその固定CLIの絶対pathを用いる。global PATHや既存のv0.4インストールを上書きしない。project側は専用worktreeで、新しいowner requestに要求・許可範囲・規約参照・検証方法・Delivery先を明示する。旧Step用SkillやHookが残っていることを、新Controllerがそれらを実行・承認した根拠にはしない。
 
@@ -206,6 +206,8 @@ compile/buildせず、隔離コピー内に20万件の入力イベントを生�
 この境界は導入手順の定義であり、任意の既存projectでの全面切替を実証した宣言ではない。Linuxの配布CLI実走、設定候補、通常開発、利用者成果保持、選択rollbackの証拠と、未検証の本番設定切戻しを区別する。正式な公開・tag・releaseは別の承認操作として残す。
 
 ## 本体CI契約の切替（未完了）
+
+本体repositoryの`scripts/quality-support/`や旧形式のpolicy資産は、既存CI契約への対応用である。利用者データでも、製品のrollback用データでもなく、v0.5配布物には含めない。CI契約の切替とは別に、利用者の設定保護を理由としてこれらを恒久保持しない。
 
 PR #1578のbase `2d64b8d50b173f29914a8f231c0c5efa9a7e0af5` は、v0.4のscript文字列・qualityContractVersion・保護fileのhashを検査する。この検査は新版の標準入口への置換を拒否する。candidate内のvalidatorを変更しても、baseから実行する検査の結果は変わらない。新版のLinux CI成功と、このbase検査の失敗は別々に報告する。
 

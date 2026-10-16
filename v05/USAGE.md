@@ -74,7 +74,7 @@ runtime-binにはhostが信頼するNode実行file等を用意し、`asc-v05 ass
 
 作成するのはDraft PRのみ。PRのrepo・branch・base・HEAD・状態を確認し、そのPRに結び付いた必要CIを待つ。merge・releaseは実施しない。CIの成功は、指定oracleを超える品質やASC旧版との完全同等性の証明ではない。
 
-`asc-v05 migration-rollback <移行保存先>` は旧版を選び直し、元repoと新しい候補変更を保持する。旧版の承認を復元せず、必要な再検証を要求する。利用者のCLI/Skill/CI設定を本番切替する機能はまだ含まれない。
+`asc-v05 migration-rollback <移行保存先>` は評価用の選択記録だけを旧版へ戻し、元repoと新しい候補変更を保持する。旧パッケージの再インストール、PATHの変更、設定の復元は実行しない。実際の切戻しは旧版の再導入・入口の再選択と、変更した場合だけ設定commitのrevertで行う（[移行手順](MIGRATION_PLAN.md#rollback)）。旧版の承認を復元せず、必要な再検証を要求する。利用者のCLI/Skill/CI設定を本番切替する機能はまだ含まれない。
 
 
 ## Host対応の現在地
